@@ -25,6 +25,7 @@ static const char *version =
 #include <linux/string.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -54,7 +55,7 @@ static const char *version =
 								 */
 
 /* Decoding of the configuration register. */
-static unsigned char config2irqmap[8] = {15, 12, 11, 10, 9, 7, 5, 3};
+static unsigned char config2irqmap[8] __initdata = {15, 12, 11, 10, 9, 7, 5, 3};
 static int addrmap[8] =
 {0xFF0000, 0xFE0000, 0xFD0000, 0xFFF0000, 0xFFE0000, 0xFFC0000,  0xD0000, 0 };
 static const char *port_name[4] = { "10baseT", "invalid", "AUI", "10base2"};
@@ -88,7 +89,7 @@ static int ac_close_card(struct device *dev);
 	or the unique value in the station address PROM.
 	*/
 
-int ac3200_probe(struct device *dev)
+__initfunc(int ac3200_probe(struct device *dev))
 {
 	unsigned short ioaddr = dev->base_addr;
 
@@ -111,7 +112,7 @@ int ac3200_probe(struct device *dev)
 	return ENODEV;
 }
 
-static int ac_probe1(int ioaddr, struct device *dev)
+__initfunc(static int ac_probe1(int ioaddr, struct device *dev))
 {
 	int i;
 

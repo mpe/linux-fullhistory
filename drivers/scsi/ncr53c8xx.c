@@ -1735,7 +1735,7 @@ static int ncr_debug = SCSI_NCR_DEBUG_FLAGS;
 
 static char *ncr_name (ncb_p np)
 {
-	static char name[10];
+	static char name[16];
 	sprintf(name, "ncr53c%d-%d", np->chip, np->unit);
 	return (name);
 }

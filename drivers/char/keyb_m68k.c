@@ -27,6 +27,7 @@
 #include <linux/tty_flip.h>
 #include <linux/mm.h>
 #include <linux/random.h>
+#include <linux/init.h>
 
 #include <asm/bitops.h>
 #include <asm/machdep.h>
@@ -848,7 +849,7 @@ static void kbd_bh(void)
 	}
 }
 
-int kbd_init(void)
+__initfunc(int kbd_init(void))
 {
 	int i;
 	struct kbd_struct kbd0;

@@ -32,6 +32,7 @@
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/string.h>
+#include <linux/init.h>
 #include <asm/io.h>
 #include <asm/system.h>
 
@@ -66,7 +67,7 @@ static int ultramca_close_card(struct device *dev);
 #define EN0_ERWCNT      0x08  /* Early receive warning count. */
 
 
-int ultramca_probe(struct device *dev)
+__initfunc(int ultramca_probe(struct device *dev))
 {
 	unsigned short ioaddr;
 	unsigned char reg4, num_pages;

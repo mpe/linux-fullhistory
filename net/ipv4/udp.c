@@ -446,10 +446,16 @@ void udp_err(struct sk_buff *skb, unsigned char *dp)
 			kfree_skb(skb2, FREE_READ);
 	}
   	
-	if (type == ICMP_SOURCE_QUENCH) 
-	{	/* Slow down! */
+	if (type == ICMP_SOURCE_QUENCH) {
+#if 0 /* FIXME:	If you check the rest of the code, this is a NOP!
+       * 	Someone figure out what we were trying to be doing
+       * 	here.  Besides, cong_window is a TCP thing and thus
+       * 	I moved it out of normal sock and into tcp_opt.
+       */
+		/* Slow down! */
 		if (sk->cong_window > 1) 
 			sk->cong_window = sk->cong_window/2;
+#endif
 		return;
 	}
 

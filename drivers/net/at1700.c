@@ -48,13 +48,14 @@ static const char *version =
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <linux/errno.h>
+#include <linux/init.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
 /* This unusual address order is used to verify the CONFIG register. */
-static int at1700_probe_list[] =
+static int at1700_probe_list[] __initdata =
 {0x260, 0x280, 0x2a0, 0x240, 0x340, 0x320, 0x380, 0x300, 0};
 
 /* use 0 for production, 1 for verification, >2 for debug */
@@ -136,8 +137,8 @@ static void set_multicast_list(struct device *dev);
 struct netdev_entry at1700_drv =
 {"at1700", at1700_probe1, AT1700_IO_EXTENT, at1700_probe_list};
 #else
-int
-at1700_probe(struct device *dev)
+__initfunc(int
+at1700_probe(struct device *dev))
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -167,7 +168,7 @@ at1700_probe(struct device *dev)
    that can be done is checking a few bits and then diving right into an
    EEPROM read. */
 
-int at1700_probe1(struct device *dev, short ioaddr)
+__initfunc(int at1700_probe1(struct device *dev, short ioaddr))
 {
 	char irqmap[8] = {3, 4, 5, 9, 10, 11, 14, 15};
 	unsigned int i, irq;
@@ -275,7 +276,7 @@ int at1700_probe1(struct device *dev, short ioaddr)
 	return 0;
 }
 
-static int read_eeprom(int ioaddr, int location)
+__initfunc(static int read_eeprom(int ioaddr, int location))
 {
 	int i;
 	unsigned short retval = 0;

@@ -34,6 +34,12 @@ do {	int ent = nr;		\
 	bh_mask |= 1 << ent;	\
 } while(0)
 
+#define remove_bh(nr)		\
+do {	int ent = nr;		\
+	bh_base[ent] = NULL;	\
+	bh_mask &= ~(1 << ent);	\
+} while(0)
+
 #define mark_bh(nr)		(bh_active |= (1 << (nr)))
 
 #define disable_bh(nr)		\

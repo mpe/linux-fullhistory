@@ -414,10 +414,8 @@ asmlinkage void schedule(void)
  */
 asmlinkage int sys_pause(void)
 {
-	lock_kernel();
 	current->state = TASK_INTERRUPTIBLE;
 	schedule();
-	unlock_kernel();
 	return -ERESTARTNOHAND;
 }
 
@@ -1190,7 +1188,6 @@ asmlinkage unsigned int sys_alarm(unsigned int seconds)
 	struct itimerval it_new, it_old;
 	unsigned int oldalarm;
 
-	lock_kernel();
 	it_new.it_interval.tv_sec = it_new.it_interval.tv_usec = 0;
 	it_new.it_value.tv_sec = seconds;
 	it_new.it_value.tv_usec = 0;
@@ -1200,7 +1197,6 @@ asmlinkage unsigned int sys_alarm(unsigned int seconds)
 	/* And we'd better return too much than too little anyway */
 	if (it_old.it_value.tv_usec)
 		oldalarm++;
-	unlock_kernel();
 	return oldalarm;
 }
 
@@ -1348,13 +1344,15 @@ static struct task_struct *find_process_by_pid(pid_t pid)
 
 	p = current;
 	if (pid) {
+		read_lock(&tasklist_lock);
 		for_each_task(p) {
 			if (p->pid == pid)
 				goto found;
 		}
 		p = NULL;
-	}
 found:
+		read_unlock(&tasklist_lock);
+	}
 	return p;
 }
 
@@ -1410,64 +1408,42 @@ static int setscheduler(pid_t pid, int policy,
 asmlinkage int sys_sched_setscheduler(pid_t pid, int policy, 
 				      struct sched_param *param)
 {
-	int ret;
-
-	lock_kernel();
-	ret = setscheduler(pid, policy, param);
-	unlock_kernel();
-	return ret;
+	return setscheduler(pid, policy, param);
 }
 
 asmlinkage int sys_sched_setparam(pid_t pid, struct sched_param *param)
 {
-	int ret;
-
-	lock_kernel();
-	ret = setscheduler(pid, -1, param);
-	unlock_kernel();
-	return ret;
+	return setscheduler(pid, -1, param);
 }
 
 asmlinkage int sys_sched_getscheduler(pid_t pid)
 {
 	struct task_struct *p;
-	int ret = -EINVAL;
 
-	lock_kernel();
 	if (pid < 0)
-		goto out;
+		return -EINVAL;
 
 	p = find_process_by_pid(pid);
-	ret = -ESRCH;
 	if (!p)
-		goto out;
+		return -ESRCH;
 			
-	ret = p->policy;
-out:
-	unlock_kernel();
-	return ret;
+	return p->policy;
 }
 
 asmlinkage int sys_sched_getparam(pid_t pid, struct sched_param *param)
 {
 	struct task_struct *p;
 	struct sched_param lp;
-	int ret = -EINVAL;
 
-	lock_kernel();
 	if (!param || pid < 0)
-		goto out;
+		return -EINVAL;
 
 	p = find_process_by_pid(pid);
-	ret = -ESRCH;
 	if (!p)
-		goto out;
+		return -ESRCH;
 
 	lp.sched_priority = p->rt_priority;
-	ret = copy_to_user(param, &lp, sizeof(struct sched_param)) ? -EFAULT : 0;
-out:
-	unlock_kernel();
-	return ret;
+	return copy_to_user(param, &lp, sizeof(struct sched_param)) ? -EFAULT : 0;
 }
 
 asmlinkage int sys_sched_yield(void)
@@ -1543,7 +1519,6 @@ static void jiffiestotimespec(unsigned long jiffies, struct timespec *value)
 {
 	value->tv_nsec = (jiffies % HZ) * (1000000000L / HZ);
 	value->tv_sec = jiffies / HZ;
-	return;
 }
 
 asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
@@ -1572,11 +1547,10 @@ asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 	}
 
 	expire = timespectojiffies(&t) + (t.tv_sec || t.tv_nsec) + jiffies;
-	lock_kernel();
+
 	current->timeout = expire;
 	current->state = TASK_INTERRUPTIBLE;
 	schedule();
-	unlock_kernel();
 
 	if (expire > jiffies) {
 		if (rmtp) {

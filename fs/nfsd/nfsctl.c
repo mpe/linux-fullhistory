@@ -35,6 +35,8 @@
 # define copy_to_user		memcpy_tofs
 # define access_ok		!verify_area
 #endif
+#include <asm/smp.h>
+#include <asm/smp_lock.h>
 
 extern long sys_call_table[];
 
@@ -126,20 +128,30 @@ nfsctl_getfh(struct nfsctl_fhparm *data, struct knfs_fh *res)
 	return err;
 }
 
+#ifdef CONFIG_NFSD
+#define handle_sys_nfsservctl sys_nfsservctl
+#endif
+
 int
-asmlinkage sys_nfsservctl(int cmd, struct nfsctl_arg *argp, union nfsctl_res *resp)
+asmlinkage handle_sys_nfsservctl(int cmd, struct nfsctl_arg *argp,
+			         union nfsctl_res *resp)
 {
 	struct nfsctl_arg *	arg = NULL;
 	union nfsctl_res *	res = NULL;
 	int			err;
 
+	lock_kernel ();
 	if (!initialized)
 		nfsd_init();
-	if (!suser())
-		return -EPERM;
+	if (!suser()) {
+		err = -EPERM;
+		goto done;
+	}
 	if (!access_ok(VERIFY_READ, argp, sizeof(*argp))
-	 || (resp && !access_ok(VERIFY_WRITE, resp, sizeof(*resp))))
-		return -EFAULT;
+	 || (resp && !access_ok(VERIFY_WRITE, resp, sizeof(*resp)))) {
+		err = -EFAULT;
+		goto done;
+	}
 	if (!(arg = kmalloc(sizeof(*arg), GFP_USER)) ||
 	    (resp && !(res = kmalloc(sizeof(*res), GFP_USER)))) {
 		err = -ENOMEM;	/* ??? */
@@ -191,6 +203,7 @@ done:
 	if (res)
 		kfree(res);
 
+	unlock_kernel ();
 	return err;
 }
 
@@ -203,6 +216,8 @@ MODULE_AUTHOR("Olaf Kirch <okir@monad.swb.de>");
 
 static unsigned long	old_syscallvec;
 
+extern int (*do_nfsservctl)(int, void *, void *);
+
 /*
  * Initialize the module
  */
@@ -210,10 +225,8 @@ int
 init_module(void)
 {
 	printk("Installing knfsd (copyright (C) 1996 okir@monad.swb.de).\n");
-
-	old_syscallvec = sys_call_table[__NR_nfsservctl];
-	sys_call_table[__NR_nfsservctl] = (unsigned long) sys_nfsservctl;
 	nfsd_init();
+	do_nfsservctl = handle_sys_nfsservctl;
 	return 0;
 }
 
@@ -227,7 +240,7 @@ cleanup_module(void)
 		printk("nfsd: nfsd busy, remove delayed\n");
 		return;
 	}
-	sys_call_table[__NR_nfsservctl] = old_syscallvec;
+	do_nfsservctl = NULL;
 	nfsd_export_shutdown();
 	nfsd_cache_shutdown();
 #ifdef CONFIG_PROC_FS

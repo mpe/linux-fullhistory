@@ -150,7 +150,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	start_mem = PAGE_ALIGN(start_mem);
 
 	/*
-	 * Mark the pages used by the kernel as reserved..
+	 * Mark the pages used by the kernel as reserved.
 	 */
 	tmp = KERNEL_START;
 	while (tmp < start_mem) {
@@ -171,9 +171,19 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	return;
 }
 
-void free_initmem(void)
+void free_initmem (void)
 {
-	/* To be written */
+        extern char __init_begin, __init_end;
+        unsigned long addr;
+
+        addr = (unsigned long)(&__init_begin);
+        for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
+                mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
+                atomic_set(&mem_map[MAP_NR(addr)].count, 1);
+                free_page(addr);
+        }
+        printk ("Freeing unused kernel memory: %dk freed\n",
+		(&__init_end - &__init_begin) >> 10);
 }
 
 void si_meminfo(struct sysinfo *val)

@@ -219,6 +219,7 @@ static const char *version = "depca.c:v0.43 96/8/16 davies@maniac.ultranet.com\n
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
+#include <linux/init.h>
 #include <asm/uaccess.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -418,9 +419,9 @@ int           init_module(void);
 void          cleanup_module(void);
 static int    autoprobed = 1, loading_module = 1;
 # else
-static u_char de1xx_irq[] = {2,3,4,5,7,9,0};
-static u_char de2xx_irq[] = {5,9,10,11,15,0};
-static u_char de422_irq[] = {5,9,10,11,0};
+static u_char de1xx_irq[] __initdata = {2,3,4,5,7,9,0};
+static u_char de2xx_irq[] __initdata = {5,9,10,11,15,0};
+static u_char de422_irq[] __initdata = {5,9,10,11,0};
 static u_char *depca_irq;
 static int    autoprobed = 0, loading_module = 0;
 #endif /* MODULE */
@@ -441,7 +442,7 @@ static char   *adapter_name = '\0';        /* If no PROM when loadable module
 
 
 
-int depca_probe(struct device *dev)
+__initfunc(int depca_probe(struct device *dev))
 {
   int tmp = num_depcas, status = -ENODEV;
   u_long iobase = dev->base_addr;
@@ -471,8 +472,8 @@ int depca_probe(struct device *dev)
   return status;
 }
 
-static int
-depca_hw_init(struct device *dev, u_long ioaddr)
+__initfunc(static int
+depca_hw_init(struct device *dev, u_long ioaddr))
 {
   struct depca_private *lp;
   int i, j, offset, netRAM, mem_len, status=0;
@@ -1207,7 +1208,7 @@ static void SetMulticastFilter(struct device *dev)
 /*
 ** ISA bus I/O device probe
 */
-static void isa_probe(struct device *dev, u_long ioaddr)
+__initfunc(static void isa_probe(struct device *dev, u_long ioaddr))
 {
   int i = num_depcas, maxSlots;
   s32 ports[] = DEPCA_IO_PORTS;
@@ -1245,7 +1246,7 @@ static void isa_probe(struct device *dev, u_long ioaddr)
 ** EISA bus I/O device probe. Probe from slot 1 since slot 0 is usually
 ** the motherboard. Upto 15 EISA devices are supported.
 */
-static void eisa_probe(struct device *dev, u_long ioaddr)
+__initfunc(static void eisa_probe(struct device *dev, u_long ioaddr))
 {
   int i, maxSlots;
   u_long iobase;
@@ -1291,8 +1292,8 @@ static void eisa_probe(struct device *dev, u_long ioaddr)
 ** are not available then insert a new device structure at the end of
 ** the current list.
 */
-static struct device *
-alloc_device(struct device *dev, u_long iobase)
+__initfunc(static struct device *
+alloc_device(struct device *dev, u_long iobase))
 {
     struct device *adev = NULL;
     int fixed = 0, new_dev = 0;
@@ -1336,8 +1337,8 @@ alloc_device(struct device *dev, u_long iobase)
 ** If at end of eth device list and can't use current entry, malloc
 ** one up. If memory could not be allocated, print an error message.
 */
-static struct device *
-insert_device(struct device *dev, u_long iobase, int (*init)(struct device *))
+__initfunc(static struct device *
+insert_device(struct device *dev, u_long iobase, int (*init)(struct device *)))
 {
     struct device *new;
 
@@ -1362,8 +1363,8 @@ insert_device(struct device *dev, u_long iobase, int (*init)(struct device *))
     return dev;
 }
 
-static int
-depca_dev_index(char *s)
+__initfunc(static int
+depca_dev_index(char *s))
 {
     int i=0, j=0;
 
@@ -1382,7 +1383,7 @@ depca_dev_index(char *s)
 ** and Boot (readb) ROM. This will also give us a clue to the network RAM
 ** base address.
 */
-static void DepcaSignature(char *name, u_long paddr)
+__initfunc(static void DepcaSignature(char *name, u_long paddr))
 {
   u_int i,j,k;
   const char *signatures[] = DEPCA_SIGNATURE;
@@ -1434,7 +1435,7 @@ static void DepcaSignature(char *name, u_long paddr)
 ** PROM address counter is correctly positioned at the start of the
 ** ethernet address for later read out.
 */
-static int DevicePresent(u_long ioaddr)
+__initfunc(static int DevicePresent(u_long ioaddr))
 {
   union {
     struct {
@@ -1486,7 +1487,7 @@ static int DevicePresent(u_long ioaddr)
 ** reason: access the upper half of the PROM with x=0; access the lower half
 ** with x=1.
 */
-static int get_hw_addr(struct device *dev)
+__initfunc(static int get_hw_addr(struct device *dev))
 {
   u_long ioaddr = dev->base_addr;
   int i, k, tmp, status = 0;
@@ -1574,7 +1575,7 @@ static int load_packet(struct device *dev, struct sk_buff *skb)
 /*
 ** Look for a particular board name in the EISA configuration space
 */
-static int EISA_signature(char *name, s32 eisa_id)
+__initfunc(static int EISA_signature(char *name, s32 eisa_id))
 {
   u_int i;
   const char *signatures[] = DEPCA_SIGNATURE;

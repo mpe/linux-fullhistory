@@ -40,6 +40,7 @@ static const char *version =
 #include <linux/in.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
+#include <linux/init.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -53,7 +54,7 @@ static const char *version =
 
 /* First, a few definitions that the brave might change. */
 /* A zero-terminated list of I/O addresses to be probed. */
-static unsigned int seeq8005_portlist[] =
+static unsigned int seeq8005_portlist[] __initdata =
    { 0x300, 0x320, 0x340, 0x360, 0};
 
 /* use 0 for production, 1 for verification, >2 for debug */
@@ -106,8 +107,8 @@ static inline void wait_for_buffer(struct device *dev);
 struct netdev_entry seeq8005_drv =
 {"seeq8005", seeq8005_probe1, SEEQ8005_IO_EXTENT, seeq8005_portlist};
 #else
-int
-seeq8005_probe(struct device *dev)
+__initfunc(int
+seeq8005_probe(struct device *dev))
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -133,7 +134,7 @@ seeq8005_probe(struct device *dev)
    probes on the ISA bus.  A good device probes avoids doing writes, and
    verifies that the correct device exists and functions.  */
 
-static int seeq8005_probe1(struct device *dev, int ioaddr)
+__initfunc(static int seeq8005_probe1(struct device *dev, int ioaddr))
 {
 	static unsigned version_printed = 0;
 	int i,j;

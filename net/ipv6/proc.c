@@ -7,7 +7,7 @@
  *		PROC file system.  This is very similar to the IPv4 version,
  *		except it reports the sockets in the INET6 address family.
  *
- * Version:	$Id: proc.c,v 1.2 1997/04/12 04:32:55 davem Exp $
+ * Version:	$Id: proc.c,v 1.4 1997/04/20 22:50:44 schenk Exp $
  *
  * Authors:	David S. Miller (davem@caip.rutgers.edu)
  *
@@ -61,15 +61,15 @@ static int get__netinfo6(struct proto *pro, char *buffer, int format, char **sta
 		destp = ntohs(sp->dummy_th.dest);
 		srcp  = ntohs(sp->dummy_th.source);
 
-		timer_active1 = del_timer(&sp->retransmit_timer);
+		timer_active1 = del_timer(&tp->retransmit_timer);
 		timer_active2 = del_timer(&sp->timer);
-		if(!timer_active1) sp->retransmit_timer.expires = 0;
+		if(!timer_active1) tp->retransmit_timer.expires = 0;
 		if(!timer_active2) sp->timer.expires = 0;
 		timer_active = 0;
 		timer_expires = (unsigned) -1;
-		if(timer_active1 && sp->retransmit_timer.expires < timer_expires) {
+		if(timer_active1 && tp->retransmit_timer.expires < timer_expires) {
 			timer_active = timer_active1;
-			timer_expires = sp->retransmit_timer.expires;
+			timer_expires = tp->retransmit_timer.expires;
 		}
 		if(timer_active2 && sp->timer.expires < timer_expires) {
 			timer_active = timer_active2;
@@ -86,12 +86,12 @@ static int get__netinfo6(struct proto *pro, char *buffer, int format, char **sta
 			format==0?sp->write_seq-tp->snd_una:atomic_read(&sp->wmem_alloc),
 			format==0?tp->rcv_nxt-sp->copied_seq:atomic_read(&sp->rmem_alloc),
 			timer_active, timer_expires-jiffies,
-			(unsigned) atomic_read(&sp->retransmits),
+			tp->retransmits,
 			sp->socket ? sp->socket->inode->i_uid:0,
 			timer_active?sp->timeout:0,
 			sp->socket ? sp->socket->inode->i_ino:0);
 
-		if(timer_active1) add_timer(&sp->retransmit_timer);
+		if(timer_active1) add_timer(&tp->retransmit_timer);
 		if(timer_active2) add_timer(&sp->timer);
 		len += sprintf(buffer+len, "%-148s\n", tmpbuf);
 		if(len >= length)

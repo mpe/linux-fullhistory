@@ -118,7 +118,8 @@
 #include "NCR5380.h"
 #include "constants.h"
 #include "sd.h"
-#include<linux/stat.h>
+#include <linux/stat.h>
+#include <linux/init.h>
 
 struct proc_dir_entry proc_scsi_t128 = {
     PROC_SCSI_T128, 4, "t128",
@@ -131,10 +132,10 @@ static struct override {
     int irq;
 } overrides 
 #ifdef T128_OVERRIDE
-    [] = T128_OVERRIDE;
+    [] __initdata = T128_OVERRIDE;
 #else
-    [4] = {{NULL,IRQ_AUTO}, {NULL,IRQ_AUTO}, {NULL,IRQ_AUTO},
-	{NULL,IRQ_AUTO}};
+    [4] __initdata = {{NULL,IRQ_AUTO}, {NULL,IRQ_AUTO}, 
+        {NULL,IRQ_AUTO}, {NULL,IRQ_AUTO}};
 #endif
 
 #define NO_OVERRIDES (sizeof(overrides) / sizeof(struct override))
@@ -142,7 +143,8 @@ static struct override {
 static struct base {
     unsigned char *address;
     int noauto;
-} bases[] = {{(unsigned char *) 0xcc000, 0}, {(unsigned char *) 0xc8000, 0},
+} bases[] __initdata = {
+    {(unsigned char *) 0xcc000, 0}, {(unsigned char *) 0xc8000, 0},
     {(unsigned char *) 0xdc000, 0}, {(unsigned char *) 0xd8000, 0}};
 
 #define NO_BASES (sizeof (bases) / sizeof (struct base))
@@ -150,7 +152,7 @@ static struct base {
 static const struct signature {
     const char *string;
     int offset;
-} signatures[] = {
+} signatures[] __initdata = {
 {"TSROM: SCSI BIOS, Version 1.12", 0x36},
 };
 
@@ -166,7 +168,7 @@ static const struct signature {
  *
  */
 
-void t128_setup(char *str, int *ints) {
+__initfunc(void t128_setup(char *str, int *ints)) {
     static int commandline_current = 0;
     int i;
     if (ints[0] != 2) 
@@ -197,7 +199,7 @@ void t128_setup(char *str, int *ints) {
  *
  */
 
-int t128_detect(Scsi_Host_Template * tpnt) {
+__initfunc(int t128_detect(Scsi_Host_Template * tpnt)) {
     static int current_override = 0, current_base = 0;
     struct Scsi_Host *instance;
     unsigned char *base;

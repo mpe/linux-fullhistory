@@ -46,6 +46,7 @@ static const char *version =
 #include <linux/in.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
+#include <linux/init.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -57,7 +58,7 @@ static const char *version =
 #include <linux/skbuff.h>
 #include <linux/delay.h>
 
-static int fmv18x_probe_list[] =
+static int fmv18x_probe_list[] __initdata =
 {0x220, 0x240, 0x260, 0x280, 0x2a0, 0x2c0, 0x300, 0x340, 0};
 
 /* use 0 for production, 1 for verification, >2 for debug */
@@ -129,8 +130,8 @@ static void set_multicast_list(struct device *dev);
 struct netdev_entry fmv18x_drv =
 {"fmv18x", fmv18x_probe1, FMV18X_IO_EXTENT, fmv18x_probe_list};
 #else
-int
-fmv18x_probe(struct device *dev)
+__initfunc(int
+fmv18x_probe(struct device *dev))
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -160,7 +161,7 @@ fmv18x_probe(struct device *dev)
    that can be done is checking a few bits and then diving right into MAC
    address check. */
 
-int fmv18x_probe1(struct device *dev, short ioaddr)
+__initfunc(int fmv18x_probe1(struct device *dev, short ioaddr))
 {
 	char irqmap[4] = {3, 7, 10, 15};
 	unsigned int i, irq;

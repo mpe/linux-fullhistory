@@ -1,4 +1,4 @@
-/*  $Id: irq.c,v 1.68 1997/04/16 05:55:58 davem Exp $
+/*  $Id: irq.c,v 1.72 1997/04/20 11:41:26 ecd Exp $
  *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
@@ -292,7 +292,11 @@ void free_irq(unsigned int irq, void *dev_id)
 
 /* Per-processor IRQ locking depth, both SMP and non-SMP code use this. */
 unsigned int local_irq_count[NR_CPUS];
+#ifdef __SMP__
 atomic_t __sparc_bh_counter = ATOMIC_INIT(0);
+#else
+int __sparc_bh_counter = 0;
+#endif
 
 #ifdef __SMP__
 /* SMP interrupt locking on Sparc. */
@@ -309,47 +313,8 @@ spinlock_t global_bh_lock = SPIN_LOCK_UNLOCKED;
 /* Global IRQ locking depth. */
 atomic_t global_irq_count = ATOMIC_INIT(0);
 
-#define irq_active(cpu) \
-	(atomic_read(&global_irq_count) != local_irq_count[cpu])
-
-static unsigned long previous_irqholder;
-
-#define INIT_STUCK 10000000
-
-#define STUCK \
-if (!--stuck) { \
-	printk("wait_on_irq CPU#%d stuck at %08lx, waiting for [%08lx:%x] " \
-	       "(local=[%d(%x:%x:%x:%x)], global=[%d:%x]) ", \
-	       cpu, where, previous_irqholder, global_irq_holder, \
-	       local_count, local_irq_count[0], local_irq_count[1], \
-	       local_irq_count[2], local_irq_count[3], \
-	       atomic_read(&global_irq_count), global_irq_lock); \
-	printk("g[%d:%x]\n", atomic_read(&global_irq_count), global_irq_lock); \
-	stuck = INIT_STUCK; \
-}
-
-static inline void wait_on_irq(int cpu, unsigned long where)
-{
-	int stuck = INIT_STUCK;
-	int local_count = local_irq_count[cpu];
-
-	while(local_count != atomic_read(&global_irq_count)) {
-		atomic_sub(local_count, &global_irq_count);
-		spin_unlock(&global_irq_lock);
-		while(1) {
-			STUCK;
-			if(atomic_read(&global_irq_count))
-				continue;
-			if(global_irq_lock)
-				continue;
-			if(spin_trylock(&global_irq_lock))
-				break;
-		}
-		atomic_add(local_count, &global_irq_count);
-	}
-}
-
 /* There has to be a better way. */
+/* XXX Must write faster version in irqlock.S -DaveM */
 void synchronize_irq(void)
 {
 	int cpu = smp_processor_id();
@@ -365,127 +330,6 @@ void synchronize_irq(void)
 		restore_flags(flags);
 	}
 }
-
-#undef INIT_STUCK
-#define INIT_STUCK 10000000
-
-#undef STUCK
-#define STUCK \
-if (!--stuck) {printk("get_irqlock stuck at %08lx, waiting for %08lx\n", where, previous_irqholder); stuck = INIT_STUCK;}
-
-static inline void get_irqlock(int cpu, unsigned long where)
-{
-	int stuck = INIT_STUCK;
-
-	if(!spin_trylock(&global_irq_lock)) {
-		if((unsigned char) cpu == global_irq_holder)
-			return;
-		do {
-			do {
-				STUCK;
-				barrier();
-			} while(global_irq_lock);
-		} while(!spin_trylock(&global_irq_lock));
-	}
-	wait_on_irq(cpu, where);
-	global_irq_holder = cpu;
-	previous_irqholder = where;
-}
-
-void __global_cli(void)
-{
-	int cpu = smp_processor_id();
-	unsigned long where;
-
-	__asm__ __volatile__("mov %%i7, %0\n\t" : "=r" (where));
-	__cli();
-	get_irqlock(cpu, where);
-}
-
-void __global_sti(void)
-{
-	release_irqlock(smp_processor_id());
-	__sti();
-}
-
-/* Yes, I know this is broken, but for the time being...
- *
- * On Sparc we must differentiate between real local processor
- * interrupts being disabled and global interrupt locking, this
- * is so that interrupt handlers which call this stuff don't get
- * interrupts turned back on when restore_flags() runs because
- * our current drivers will be very surprised about this, yes I
- * know they need to be fixed... -DaveM
- */
-unsigned long __global_save_flags(void)
-{
-	unsigned long flags, retval = 0;
-
-	__save_flags(flags);
-	if(global_irq_holder == (unsigned char) smp_processor_id())
-		retval |= 1;
-	if(flags & PSR_PIL)
-		retval |= 2;
-	return retval;
-}
-
-void __global_restore_flags(unsigned long flags)
-{
-	if(flags & 1) {
-		__global_cli();
-	} else {
-		release_irqlock(smp_processor_id());
-
-		if(flags & 2)
-			__cli();
-		else
-			__sti();
-	}
-}
-
-#undef INIT_STUCK
-#define INIT_STUCK 200000000
-
-#undef STUCK
-#define STUCK \
-if (!--stuck) { \
-	printk("irq_enter stuck (irq=%d, cpu=%d, global=%d)\n", \
-	       irq, cpu, global_irq_holder); \
-	stuck = INIT_STUCK; \
-}
-
-static void irq_enter(int cpu, int irq)
-{
-	extern void smp_irq_rotate(int cpu);
-	int stuck = INIT_STUCK;
-
-#ifdef __SMP_PROF__
-	int_count[cpu][irq]++;
-#endif
-
-	smp_irq_rotate(cpu);
-	hardirq_enter(cpu);
-	while(global_irq_lock) {
-		if((unsigned char) cpu == global_irq_holder) {
-			printk("YEEEE Local interrupts enabled, global disabled\n");
-			break;
-		}
-		STUCK;
-		barrier();
-	}
-}
-
-static void irq_exit(int cpu, int irq)
-{
-	__cli();
-	hardirq_exit(cpu);
-	release_irqlock(cpu);
-}
-
-#else /* !__SMP__ */
-
-#define irq_enter(cpu, irq)	(local_irq_count[cpu]++)
-#define irq_exit(cpu, irq)	(local_irq_count[cpu]--)
 
 #endif /* __SMP__ */
 
@@ -517,8 +361,16 @@ void handler_irq(int irq, struct pt_regs * regs)
 	struct irqaction * action;
 	unsigned int cpu_irq = irq & NR_IRQS;
 	int cpu = smp_processor_id();
+#ifdef __SMP__
+	extern void smp_irq_rotate(int cpu);
+#endif
 	
 	disable_pil_irq(cpu_irq);
+#ifdef __SMP__
+	/* Only rotate on lower priority IRQ's (scsi, ethernet, etc.). */
+	if(irq < 10)
+		smp_irq_rotate(cpu);
+#endif
 	irq_enter(cpu, cpu_irq);
 	action = *(cpu_irq + irq_action);
 	kstat.interrupts[cpu_irq]++;
@@ -543,7 +395,7 @@ void sparc_floppy_irq(int irq, void *dev_id, struct pt_regs *regs)
 	irq_enter(cpu, irq);
 	floppy_interrupt(irq, dev_id, regs);
 	irq_exit(cpu, irq);
-	disable_pil_irq(irq);
+	enable_pil_irq(irq);
 }
 #endif
 
@@ -707,12 +559,12 @@ int request_irq(unsigned int irq,
  */
 unsigned long probe_irq_on(void)
 {
-  return 0;
+	return 0;
 }
 
 int probe_irq_off(unsigned long mask)
 {
-  return 0;
+	return 0;
 }
 
 /* djhr

@@ -42,6 +42,7 @@
 #include <linux/string.h>
 #include <linux/skbuff.h>
 #include <linux/if_arp.h>
+#include <linux/init.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <net/br.h>
@@ -699,7 +700,7 @@ static void hold_timer_expiry(int port_no)	  /* (4.7.8)	 */
 	}					  /* (4.6.1.2.3)	 */
 }
 
-void br_init(void)
+__initfunc(void br_init(void))
 {						  /* (4.8.1)	 */
 	int             port_no;
 

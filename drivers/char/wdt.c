@@ -43,6 +43,7 @@
 #include <asm/system.h>
 #include <linux/notifier.h>
 #include <linux/reboot.h>
+#include <linux/init.h>
 
 static int wdt_is_open=0;
 
@@ -352,22 +353,7 @@ static struct notifier_block wdt_notifier=
 
 #ifdef MODULE
 
-int init_module(void)
-{
-	printk("WDT501-P module at %X(Interrupt %d)\n", io,irq);
-	if(request_irq(irq, wdt_interrupt, SA_INTERRUPT, "wdt501p", NULL))
-	{
-		printk("IRQ %d is not free.\n", irq);
-		return -EIO;
-	}
-	misc_register(&wdt_miscdev);
-#ifdef CONFIG_WDT_501	
-	misc_register(&temp_miscdev);
-#endif	
-	request_region(io, 8, "wdt501");
-	notifier_chain_register(&boot_notifier_list, &wdt_notifier);
-	return 0;
-}
+#define wdt_init init_module
 
 void cleanup_module(void)
 {
@@ -380,9 +366,9 @@ void cleanup_module(void)
 	free_irq(irq, NULL);
 }
 
-#else
+#endif
 
-int wdt_init(void)
+__initfunc(int wdt_init(void))
 {
 	printk("WDT500/501-P driver at %X(Interrupt %d)\n", io,irq);
 	if(request_irq(irq, wdt_interrupt, SA_INTERRUPT, "wdt501p", NULL))
@@ -399,4 +385,3 @@ int wdt_init(void)
 	return 0;
 }
 
-#endif

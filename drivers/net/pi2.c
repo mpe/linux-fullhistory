@@ -112,6 +112,7 @@
 #include <linux/timer.h>
 #include <linux/if_arp.h>
 #include <linux/pi2.h>
+#include <linux/init.h>
 #include "z8530.h"
 #include <net/ax25.h>
 
@@ -564,7 +565,6 @@ static void a_rxint(struct device *dev, struct pi_local *lp)
 		   pkt_len - 1);
 	    skb->protocol=htons(ETH_P_AX25);
 	    skb->mac.raw=skb->data;
-	    IS_SKB(skb);
 	    netif_rx(skb);
 	    lp->stats.rx_packets++;
 	}			/* end good frame */
@@ -652,7 +652,6 @@ static void b_rxint(struct device *dev, struct pi_local *lp)
 		memcpy(cfix, lp->rcvbuf->data, pkt_len - 1);
 		skb->protocol=ntohs(ETH_P_AX25);
 		skb->mac.raw=skb->data;
-		IS_SKB(skb);
 		netif_rx(skb);
 		lp->stats.rx_packets++;
 		/* packet queued - initialize buffer for next frame */
@@ -933,7 +932,7 @@ static void b_exint(struct pi_local *lp)
 /* Probe for a PI card. */
 /* This routine also initializes the timer chip */
 
-static int hw_probe(int ioaddr)
+__initfunc(static int hw_probe(int ioaddr))
 {
     int time = 1000;		/* Number of milliseconds for test */
     unsigned long start_time, end_time;
@@ -1188,13 +1187,12 @@ static void chipset_init(struct device *dev)
 }
 
 
-int pi_init(void)
+__initfunc(int pi_init(void))
 {
     int *port;
     int ioaddr = 0;
     int card_type = 0;
-    int ports[] =
-    {0x380, 0x300, 0x320, 0x340, 0x360, 0x3a0, 0};
+    int ports[] = {0x380, 0x300, 0x320, 0x340, 0x360, 0x3a0, 0};
 
     printk(KERN_INFO "PI: V0.8 ALPHA April 23 1995 David Perry (dp@hydra.carleton.ca)\n");
 

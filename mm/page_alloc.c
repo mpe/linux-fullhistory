@@ -276,8 +276,8 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 	 * with a minimum of 16 pages. This is totally arbitrary
 	 */
 	i = (end_mem - PAGE_OFFSET) >> (PAGE_SHIFT+7);
-	if (i < 16)
-		i = 16;
+	if (i < 48)
+		i = 48;
 	min_free_pages = i;
 	free_pages_low = i + (i>>1);
 	free_pages_high = i + i;

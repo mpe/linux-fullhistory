@@ -39,6 +39,7 @@
 #include <linux/errno.h>
 #include <linux/fcntl.h>
 #include <linux/in.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -114,7 +115,7 @@ static int loopback_open(struct device *dev)
 }
 
 /* Initialize the rest of the LOOPBACK device. */
-int loopback_init(struct device *dev)
+__initfunc(int loopback_init(struct device *dev))
 {
 	dev->mtu		= LOOPBACK_MTU;
 	dev->tbusy		= 0;

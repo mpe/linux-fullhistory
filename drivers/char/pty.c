@@ -13,6 +13,7 @@
 #include <linux/string.h>
 #include <linux/major.h>
 #include <linux/mm.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -224,7 +225,7 @@ static void pty_set_termios(struct tty_struct *tty, struct termios *old_termios)
         tty->termios->c_cflag |= (CS8 | CREAD);
 }
 
-int pty_init(void)
+__initfunc(int pty_init(void))
 {
 	memset(&pty_state, 0, sizeof(pty_state));
 	memset(&pty_driver, 0, sizeof(struct tty_driver));

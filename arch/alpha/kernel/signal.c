@@ -80,18 +80,17 @@ asmlinkage int do_sigsuspend(unsigned long mask, struct pt_regs * regs, struct s
 {
 	unsigned long oldmask;
 
-	lock_kernel();
+	spin_lock_irq(&current->sigmask_lock);
 	oldmask = current->blocked;
 	current->blocked = mask & _BLOCKABLE;
+	spin_unlock_irq(&current->sigmask_lock);
+
 	while (1) {
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
-		if (do_signal(oldmask,regs, sw, 0, 0))
-			goto out;
+		if (do_signal(oldmask, regs, sw, 0, 0))
+			return -EINTR;
 	}
-out:
-	unlock_kernel();
-	return -EINTR;
 }
 
 /*
@@ -104,59 +103,63 @@ asmlinkage void do_sigreturn(struct sigcontext * sc,
 	int i;
 
 	/* verify that it's a good sigcontext before using it */
-	lock_kernel();
 	if (verify_area(VERIFY_READ, sc, sizeof(*sc)))
-		do_exit(SIGSEGV);
-	get_user(ps, &sc->sc_ps);
-	if (ps != 8)
-		do_exit(SIGSEGV);
-	get_user(mask, &sc->sc_mask);
-	if (mask & ~_BLOCKABLE)
-		do_exit(SIGSEGV);
+		goto give_sigsegv;
+	if (__get_user(ps, &sc->sc_ps) || ps != 8)
+		goto give_sigsegv;
+	if (__get_user(mask, &sc->sc_mask) || (mask & ~_BLOCKABLE))
+		goto give_sigsegv;
 
 	/* ok, looks fine, start restoring */
-	get_user(usp, sc->sc_regs+30);
+	__get_user(usp, sc->sc_regs+30);
 	wrusp(usp);
-	get_user(regs->pc, &sc->sc_pc);
+	__get_user(regs->pc, &sc->sc_pc);
 	sw->r26 = (unsigned long) ret_from_sys_call;
 	current->blocked = mask;
 
-	get_user(regs->r0, sc->sc_regs+0);
-	get_user(regs->r1, sc->sc_regs+1);
-	get_user(regs->r2, sc->sc_regs+2);
-	get_user(regs->r3, sc->sc_regs+3);
-	get_user(regs->r4, sc->sc_regs+4);
-	get_user(regs->r5, sc->sc_regs+5);
-	get_user(regs->r6, sc->sc_regs+6);
-	get_user(regs->r7, sc->sc_regs+7);
-	get_user(regs->r8, sc->sc_regs+8);
-	get_user(sw->r9, sc->sc_regs+9);
-	get_user(sw->r10, sc->sc_regs+10);
-	get_user(sw->r11, sc->sc_regs+11);
-	get_user(sw->r12, sc->sc_regs+12);
-	get_user(sw->r13, sc->sc_regs+13);
-	get_user(sw->r14, sc->sc_regs+14);
-	get_user(sw->r15, sc->sc_regs+15);
-	get_user(regs->r16, sc->sc_regs+16);
-	get_user(regs->r17, sc->sc_regs+17);
-	get_user(regs->r18, sc->sc_regs+18);
-	get_user(regs->r19, sc->sc_regs+19);
-	get_user(regs->r20, sc->sc_regs+20);
-	get_user(regs->r21, sc->sc_regs+21);
-	get_user(regs->r22, sc->sc_regs+22);
-	get_user(regs->r23, sc->sc_regs+23);
-	get_user(regs->r24, sc->sc_regs+24);
-	get_user(regs->r25, sc->sc_regs+25);
-	get_user(regs->r26, sc->sc_regs+26);
-	get_user(regs->r27, sc->sc_regs+27);
-	get_user(regs->r28, sc->sc_regs+28);
-	get_user(regs->gp, sc->sc_regs+29);
+	__get_user(regs->r0, sc->sc_regs+0);
+	__get_user(regs->r1, sc->sc_regs+1);
+	__get_user(regs->r2, sc->sc_regs+2);
+	__get_user(regs->r3, sc->sc_regs+3);
+	__get_user(regs->r4, sc->sc_regs+4);
+	__get_user(regs->r5, sc->sc_regs+5);
+	__get_user(regs->r6, sc->sc_regs+6);
+	__get_user(regs->r7, sc->sc_regs+7);
+	__get_user(regs->r8, sc->sc_regs+8);
+	__get_user(sw->r9, sc->sc_regs+9);
+	__get_user(sw->r10, sc->sc_regs+10);
+	__get_user(sw->r11, sc->sc_regs+11);
+	__get_user(sw->r12, sc->sc_regs+12);
+	__get_user(sw->r13, sc->sc_regs+13);
+	__get_user(sw->r14, sc->sc_regs+14);
+	__get_user(sw->r15, sc->sc_regs+15);
+	__get_user(regs->r16, sc->sc_regs+16);
+	__get_user(regs->r17, sc->sc_regs+17);
+	__get_user(regs->r18, sc->sc_regs+18);
+	__get_user(regs->r19, sc->sc_regs+19);
+	__get_user(regs->r20, sc->sc_regs+20);
+	__get_user(regs->r21, sc->sc_regs+21);
+	__get_user(regs->r22, sc->sc_regs+22);
+	__get_user(regs->r23, sc->sc_regs+23);
+	__get_user(regs->r24, sc->sc_regs+24);
+	__get_user(regs->r25, sc->sc_regs+25);
+	__get_user(regs->r26, sc->sc_regs+26);
+	__get_user(regs->r27, sc->sc_regs+27);
+	__get_user(regs->r28, sc->sc_regs+28);
+	__get_user(regs->gp, sc->sc_regs+29);
 	for (i = 0; i < 31; i++)
-		get_user(sw->fp[i], sc->sc_fpregs+i);
+		__get_user(sw->fp[i], sc->sc_fpregs+i);
 
 	/* send SIGTRAP if we're single-stepping: */
+	lock_kernel();
 	if (ptrace_cancel_bpt (current))
 		send_sig(SIGTRAP, current, 1);
+	unlock_kernel();
+	return;
+
+give_sigsegv:
+	lock_kernel();
+	do_exit(SIGSEGV);
 	unlock_kernel();
 }
 
@@ -181,46 +184,46 @@ static void setup_frame(struct sigaction * sa,
 
 	wrusp((unsigned long) sc);
 
-	put_user(oldmask, &sc->sc_mask);
-	put_user(8, &sc->sc_ps);
-	put_user(regs->pc, &sc->sc_pc);
-	put_user(oldsp, sc->sc_regs+30);
+	__put_user(oldmask, &sc->sc_mask);
+	__put_user(8, &sc->sc_ps);
+	__put_user(regs->pc, &sc->sc_pc);
+	__put_user(oldsp, sc->sc_regs+30);
 
-	put_user(regs->r0 , sc->sc_regs+0);
-	put_user(regs->r1 , sc->sc_regs+1);
-	put_user(regs->r2 , sc->sc_regs+2);
-	put_user(regs->r3 , sc->sc_regs+3);
-	put_user(regs->r4 , sc->sc_regs+4);
-	put_user(regs->r5 , sc->sc_regs+5);
-	put_user(regs->r6 , sc->sc_regs+6);
-	put_user(regs->r7 , sc->sc_regs+7);
-	put_user(regs->r8 , sc->sc_regs+8);
-	put_user(sw->r9   , sc->sc_regs+9);
-	put_user(sw->r10  , sc->sc_regs+10);
-	put_user(sw->r11  , sc->sc_regs+11);
-	put_user(sw->r12  , sc->sc_regs+12);
-	put_user(sw->r13  , sc->sc_regs+13);
-	put_user(sw->r14  , sc->sc_regs+14);
-	put_user(sw->r15  , sc->sc_regs+15);
-	put_user(regs->r16, sc->sc_regs+16);
-	put_user(regs->r17, sc->sc_regs+17);
-	put_user(regs->r18, sc->sc_regs+18);
-	put_user(regs->r19, sc->sc_regs+19);
-	put_user(regs->r20, sc->sc_regs+20);
-	put_user(regs->r21, sc->sc_regs+21);
-	put_user(regs->r22, sc->sc_regs+22);
-	put_user(regs->r23, sc->sc_regs+23);
-	put_user(regs->r24, sc->sc_regs+24);
-	put_user(regs->r25, sc->sc_regs+25);
-	put_user(regs->r26, sc->sc_regs+26);
-	put_user(regs->r27, sc->sc_regs+27);
-	put_user(regs->r28, sc->sc_regs+28);
-	put_user(regs->gp , sc->sc_regs+29);
+	__put_user(regs->r0 , sc->sc_regs+0);
+	__put_user(regs->r1 , sc->sc_regs+1);
+	__put_user(regs->r2 , sc->sc_regs+2);
+	__put_user(regs->r3 , sc->sc_regs+3);
+	__put_user(regs->r4 , sc->sc_regs+4);
+	__put_user(regs->r5 , sc->sc_regs+5);
+	__put_user(regs->r6 , sc->sc_regs+6);
+	__put_user(regs->r7 , sc->sc_regs+7);
+	__put_user(regs->r8 , sc->sc_regs+8);
+	__put_user(sw->r9   , sc->sc_regs+9);
+	__put_user(sw->r10  , sc->sc_regs+10);
+	__put_user(sw->r11  , sc->sc_regs+11);
+	__put_user(sw->r12  , sc->sc_regs+12);
+	__put_user(sw->r13  , sc->sc_regs+13);
+	__put_user(sw->r14  , sc->sc_regs+14);
+	__put_user(sw->r15  , sc->sc_regs+15);
+	__put_user(regs->r16, sc->sc_regs+16);
+	__put_user(regs->r17, sc->sc_regs+17);
+	__put_user(regs->r18, sc->sc_regs+18);
+	__put_user(regs->r19, sc->sc_regs+19);
+	__put_user(regs->r20, sc->sc_regs+20);
+	__put_user(regs->r21, sc->sc_regs+21);
+	__put_user(regs->r22, sc->sc_regs+22);
+	__put_user(regs->r23, sc->sc_regs+23);
+	__put_user(regs->r24, sc->sc_regs+24);
+	__put_user(regs->r25, sc->sc_regs+25);
+	__put_user(regs->r26, sc->sc_regs+26);
+	__put_user(regs->r27, sc->sc_regs+27);
+	__put_user(regs->r28, sc->sc_regs+28);
+	__put_user(regs->gp , sc->sc_regs+29);
 	for (i = 0; i < 31; i++)
-		put_user(sw->fp[i], sc->sc_fpregs+i);
-	put_user(regs->trap_a0, &sc->sc_traparg_a0);
-	put_user(regs->trap_a1, &sc->sc_traparg_a1);
-	put_user(regs->trap_a2, &sc->sc_traparg_a2);
+		__put_user(sw->fp[i], sc->sc_fpregs+i);
+	__put_user(regs->trap_a0, &sc->sc_traparg_a0);
+	__put_user(regs->trap_a1, &sc->sc_traparg_a1);
+	__put_user(regs->trap_a2, &sc->sc_traparg_a2);
 
 	/*
 	 * The following is:
@@ -231,8 +234,8 @@ static void setup_frame(struct sigaction * sa,
 	 *
 	 * ie, "sigreturn(stack-pointer)"
 	 */
-	put_user(0x43ecf40047de0410, sc->sc_retcode+0);
-	put_user(0x0000000000000083, sc->sc_retcode+1);
+	__put_user(0x43ecf40047de0410, sc->sc_retcode+0);
+	__put_user(0x0000000000000083, sc->sc_retcode+1);
 	imb();
 
 	/* "return" to the handler */

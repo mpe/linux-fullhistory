@@ -296,10 +296,8 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			if (sk->ip_recverr && !val) {
 				struct sk_buff *skb;
 				/* Drain queued errors */
-				while((skb=skb_dequeue(&sk->error_queue))!=NULL) {
-					IS_SKB(skb);
+				while((skb=skb_dequeue(&sk->error_queue))!=NULL)
 					kfree_skb(skb, FREE_READ);
-				}
 			}
 			sk->ip_recverr = val?1:0;
 			release_sock(sk);

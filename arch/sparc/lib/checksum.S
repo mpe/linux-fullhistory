@@ -471,8 +471,6 @@ ccslow:	cmp	%g1, 0
 	 addx	%g0, %g7, %o0
 C_LABEL(__csum_partial_copy_end):
 
-        .section .fixup,#alloc,#execinstr
-        .align  4
 /* We do these strange calculations for the csum_*_from_user case only, ie.
  * we only bother with faults on loads... */
 
@@ -568,6 +566,7 @@ C_LABEL(__csum_partial_copy_end):
 	add	%i1, %i2, %i1
 2:
 	mov	%i1, %o0
+6:
 	call	C_LABEL(__bzero)
 	 mov	%i3, %o1
 1:
@@ -579,3 +578,4 @@ C_LABEL(__csum_partial_copy_end):
         .section __ex_table,#alloc
         .align 4
         .word 5b,2
+	.word 6b,2

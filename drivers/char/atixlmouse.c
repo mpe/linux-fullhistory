@@ -19,6 +19,7 @@
 #include <linux/miscdevice.h>
 #include <linux/random.h>
 #include <linux/poll.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -201,7 +202,7 @@ static struct miscdevice atixl_mouse = {
 };
 
 
-int atixl_busmouse_init(void)
+__initfunc(int atixl_busmouse_init(void))
 {
 	unsigned char a,b,c;
 

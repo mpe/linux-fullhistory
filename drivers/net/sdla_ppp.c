@@ -25,6 +25,7 @@
 #include <linux/router.h>	/* WAN router definitions */
 #include <linux/wanpipe.h>	/* WANPIPE common user API definitions */
 #include <linux/if_arp.h>	/* ARPHRD_* defines */
+#include <linux/init.h>		/* __initfunc et al. */
 #include <asm/byteorder.h>	/* htons(), etc. */
 
 #define	_GNUC_
@@ -107,7 +108,7 @@ static unsigned char bps_to_speed_code (unsigned long bps);
  * Return:	0	o.k.
  *		< 0	failure.
  */
-int wpp_init (sdla_t* card, wandev_conf_t* conf)
+__initfunc(int wpp_init (sdla_t* card, wandev_conf_t* conf))
 {
 	union
 	{

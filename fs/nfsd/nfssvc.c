@@ -116,7 +116,7 @@ nfsd(struct svc_rqst *rqstp)
 	/*
 	 * The main request loop
 	 */
-	do {
+	for (;;) {
 		/*
 		 * Find a socket with data available and call its
 		 * recvfrom routine.
@@ -150,7 +150,7 @@ nfsd(struct svc_rqst *rqstp)
 
 		/* Unlock export hash tables */
 		exp_unlock();
-	} while (err >= 0);
+	}
 
 	if (err != -EINTR) {
 		printk(KERN_WARNING "nfsd: terminating on error %d\n", -err);

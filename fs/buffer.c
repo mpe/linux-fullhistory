@@ -14,7 +14,12 @@
 /* Start bdflush() with kernel_thread not syscall - Paul Gortmaker, 12/95 */
 
 /* Removed a lot of unnecessary code and simplified things now that
-   the buffer cache isn't our primary cache - Andrew Tridgell 12/96 */
+ * the buffer cache isn't our primary cache - Andrew Tridgell 12/96
+ */
+
+/* Speed up hash, lru, and free list operations.  Use gfp() for allocating
+ * hash table, use SLAB cache for buffer heads. -DaveM
+ */
 
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -23,6 +28,7 @@
 #include <linux/locks.h>
 #include <linux/errno.h>
 #include <linux/malloc.h>
+#include <linux/slab.h>
 #include <linux/pagemap.h>
 #include <linux/swap.h>
 #include <linux/swapctl.h>
@@ -45,6 +51,7 @@ static char buffersize_index[17] =
 #define MAX_UNUSED_BUFFERS 30 /* don't ever have more than this number of 
 				 unused buffer heads */
 #define HASH_PAGES         4  /* number of pages to use for the hash table */
+#define HASH_PAGES_ORDER   2
 #define NR_HASH (HASH_PAGES*PAGE_SIZE/sizeof(struct buffer_head *))
 #define HASH_MASK (NR_HASH-1)
 
@@ -53,6 +60,8 @@ static int grow_buffers(int pri, int size);
 static struct buffer_head ** hash_table;
 static struct buffer_head * lru_list[NR_LIST] = {NULL, };
 static struct buffer_head * free_list[NR_SIZES] = {NULL, };
+
+static kmem_cache_t *bh_cachep;
 
 static struct buffer_head * unused_list = NULL;
 static struct buffer_head * reuse_list = NULL;
@@ -65,7 +74,7 @@ static int nr_unused_buffer_heads = 0;
 static int refilled = 0;       /* Set NZ when a buffer freelist is refilled 
 				  this is used by the loop device */
 
-/* this is used by some architectures to estimate available memory */
+/* This is used by some architectures to estimate available memory. */
 int buffermem = 0;
 
 /* Here is the parameter block for the bdflush process. If you add or
@@ -76,8 +85,9 @@ static void wakeup_bdflush(int);
 
 #define N_PARAM 9
 
-/* the dummy values in this structure are left in there for compatibility
-   with old programs that play with the /proc entries */
+/* The dummy values in this structure are left in there for compatibility
+ * with old programs that play with the /proc entries.
+ */
 union bdflush_param{
 	struct {
 		int nfract;  /* Percentage of buffer cache dirty to 
@@ -131,29 +141,31 @@ repeat:
 }
 
 /* Call sync_buffers with wait!=0 to ensure that the call does not
-   return until all buffer writes have completed.  Sync() may return
-   before the writes have finished; fsync() may not. */
-
+ * return until all buffer writes have completed.  Sync() may return
+ * before the writes have finished; fsync() may not.
+ */
 
 /* Godamity-damn.  Some buffers (bitmaps for filesystems)
-   spontaneously dirty themselves without ever brelse being called.
-   We will ultimately want to put these in a separate list, but for
-   now we search all of the lists for dirty buffers */
-
+ * spontaneously dirty themselves without ever brelse being called.
+ * We will ultimately want to put these in a separate list, but for
+ * now we search all of the lists for dirty buffers.
+ */
 static int sync_buffers(kdev_t dev, int wait)
 {
 	int i, retry, pass = 0, err = 0;
 	struct buffer_head * bh, *next;
 
 	/* One pass for no-wait, three for wait:
-	   0) write out all dirty, unlocked buffers;
-	   1) write out all dirty buffers, waiting if locked;
-	   2) wait for completion by waiting for all buffers to unlock. */
+	 * 0) write out all dirty, unlocked buffers;
+	 * 1) write out all dirty buffers, waiting if locked;
+	 * 2) wait for completion by waiting for all buffers to unlock.
+	 */
 	do {
 		retry = 0;
 repeat:
-	/* We search all lists as a failsafe mechanism, not because we expect
-	   there to be dirty buffers on any of the other lists. */
+		/* We search all lists as a failsafe mechanism, not because we expect
+		 * there to be dirty buffers on any of the other lists.
+		 */
 		bh = lru_list[BUF_DIRTY];
 		if (!bh)
 			goto repeat2;
@@ -167,7 +179,8 @@ repeat:
 				continue;
 			if (buffer_locked(bh)) {
 				/* Buffer is locked; skip it unless wait is
-				   requested AND pass > 0. */
+				 * requested AND pass > 0.
+				 */
 				if (!wait || !pass) {
 					retry = 1;
 					continue;
@@ -175,18 +188,27 @@ repeat:
 				wait_on_buffer (bh);
 				goto repeat;
 			}
+
 			/* If an unlocked buffer is not uptodate, there has
-			    been an IO error. Skip it. */
+			 * been an IO error. Skip it.
+			 */
 			if (wait && buffer_req(bh) && !buffer_locked(bh) &&
 			    !buffer_dirty(bh) && !buffer_uptodate(bh)) {
 				err = 1;
 				continue;
 			}
+
 			/* Don't write clean buffers.  Don't write ANY buffers
-			   on the third pass. */
+			 * on the third pass.
+			 */
 			if (!buffer_dirty(bh) || pass >= 2)
 				continue;
-			/* don't bother about locked buffers */
+
+			/* Don't bother about locked buffers.
+			 *
+			 * XXX We checked if it was locked above and there is no
+			 * XXX way we could have slept in between. -DaveM
+			 */
 			if (buffer_locked(bh))
 				continue;
 			bh->b_count++;
@@ -212,7 +234,8 @@ repeat:
 				continue;
 			if (buffer_locked(bh)) {
 				/* Buffer is locked; skip it unless wait is
-				   requested AND pass > 0. */
+				 * requested AND pass > 0.
+				 */
 				if (!wait || !pass) {
 					retry = 1;
 					continue;
@@ -222,10 +245,11 @@ repeat:
 			}
 		}
 
-	/* If we are waiting for the sync to succeed, and if any dirty
-	   blocks were written, then repeat; on the second pass, only
-	   wait for buffers being written (do not pass to write any
-	   more buffers on the second pass). */
+		/* If we are waiting for the sync to succeed, and if any dirty
+		 * blocks were written, then repeat; on the second pass, only
+		 * wait for buffers being written (do not pass to write any
+		 * more buffers on the second pass).
+		 */
 	} while (wait && retry && ++pass<=2);
 	return err;
 }
@@ -330,13 +354,12 @@ void invalidate_buffers(kdev_t dev)
 
 static inline void remove_from_hash_queue(struct buffer_head * bh)
 {
-	if (bh->b_next)
-		bh->b_next->b_prev = bh->b_prev;
-	if (bh->b_prev)
-		bh->b_prev->b_next = bh->b_next;
-	if (hash(bh->b_dev,bh->b_blocknr) == bh)
-		hash(bh->b_dev,bh->b_blocknr) = bh->b_next;
-	bh->b_next = bh->b_prev = NULL;
+	if (bh->b_pprev) {
+		if(bh->b_next)
+			bh->b_next->b_pprev = bh->b_pprev;
+		*bh->b_pprev = bh->b_next;
+		bh->b_pprev = NULL;
+	}
 }
 
 static inline void remove_from_lru_list(struct buffer_head * bh)
@@ -389,46 +412,49 @@ static inline void remove_from_queues(struct buffer_head * bh)
 
 static inline void put_last_lru(struct buffer_head * bh)
 {
-	if (!bh)
-		return;
-	if (bh == lru_list[bh->b_list]) {
-		lru_list[bh->b_list] = bh->b_next_free;
-		return;
-	}
-	if(bh->b_dev == B_FREE)
-		panic("Wrong block for lru list");
-	remove_from_lru_list(bh);
-/* add to back of free list */
+	if (bh) {
+		struct buffer_head **bhp = &lru_list[bh->b_list];
 
-	if(!lru_list[bh->b_list]) {
-		lru_list[bh->b_list] = bh;
-		lru_list[bh->b_list]->b_prev_free = bh;
-	}
+		if (bh == *bhp) {
+			*bhp = bh->b_next_free;
+			return;
+		}
 
-	bh->b_next_free = lru_list[bh->b_list];
-	bh->b_prev_free = lru_list[bh->b_list]->b_prev_free;
-	lru_list[bh->b_list]->b_prev_free->b_next_free = bh;
-	lru_list[bh->b_list]->b_prev_free = bh;
+		if(bh->b_dev == B_FREE)
+			panic("Wrong block for lru list");
+
+		/* Add to back of free list. */
+		remove_from_lru_list(bh);
+		if(!*bhp) {
+			*bhp = bh;
+			(*bhp)->b_prev_free = bh;
+		}
+
+		bh->b_next_free = *bhp;
+		bh->b_prev_free = (*bhp)->b_prev_free;
+		(*bhp)->b_prev_free->b_next_free = bh;
+		(*bhp)->b_prev_free = bh;
+	}
 }
 
 static inline void put_last_free(struct buffer_head * bh)
 {
-	int isize;
-	if (!bh)
-		return;
+	if (bh) {
+		struct buffer_head **bhp = &free_list[BUFSIZE_INDEX(bh->b_size)];
 
-	isize = BUFSIZE_INDEX(bh->b_size);	
-	bh->b_dev = B_FREE;  /* So it is obvious we are on the free list */
-	/* add to back of free list */
-	if(!free_list[isize]) {
-		free_list[isize] = bh;
-		bh->b_prev_free = bh;
+		bh->b_dev = B_FREE;  /* So it is obvious we are on the free list. */
+
+		/* Add to back of free list. */
+		if(!*bhp) {
+			*bhp = bh;
+			bh->b_prev_free = bh;
+		}
+
+		bh->b_next_free = *bhp;
+		bh->b_prev_free = (*bhp)->b_prev_free;
+		(*bhp)->b_prev_free->b_next_free = bh;
+		(*bhp)->b_prev_free = bh;
 	}
-
-	bh->b_next_free = free_list[isize];
-	bh->b_prev_free = free_list[isize]->b_prev_free;
-	free_list[isize]->b_prev_free->b_next_free = bh;
-	free_list[isize]->b_prev_free = bh;
 }
 
 static inline void insert_into_queues(struct buffer_head * bh)
@@ -436,28 +462,34 @@ static inline void insert_into_queues(struct buffer_head * bh)
 	/* put at end of free list */
 	if(bh->b_dev == B_FREE) {
 		put_last_free(bh);
-		return;
-	}
-	if(!lru_list[bh->b_list]) {
-		lru_list[bh->b_list] = bh;
-		bh->b_prev_free = bh;
-	}
+	} else {
+		struct buffer_head **bhp = &lru_list[bh->b_list];
 
-	if (bh->b_next_free) panic("VFS: buffer LRU pointers corrupted");
-	bh->b_next_free = lru_list[bh->b_list];
-	bh->b_prev_free = lru_list[bh->b_list]->b_prev_free;
-	lru_list[bh->b_list]->b_prev_free->b_next_free = bh;
-	lru_list[bh->b_list]->b_prev_free = bh;
-	nr_buffers_type[bh->b_list]++;
-/* put the buffer in new hash-queue if it has a device */
-	bh->b_prev = NULL;
-	bh->b_next = NULL;
-	if (!(bh->b_dev))
-		return;
-	bh->b_next = hash(bh->b_dev,bh->b_blocknr);
-	hash(bh->b_dev,bh->b_blocknr) = bh;
-	if (bh->b_next)
-		bh->b_next->b_prev = bh;
+		if(!*bhp) {
+			*bhp = bh;
+			bh->b_prev_free = bh;
+		}
+
+		if (bh->b_next_free)
+			panic("VFS: buffer LRU pointers corrupted");
+
+		bh->b_next_free = *bhp;
+		bh->b_prev_free = (*bhp)->b_prev_free;
+		(*bhp)->b_prev_free->b_next_free = bh;
+		(*bhp)->b_prev_free = bh;
+
+		nr_buffers_type[bh->b_list]++;
+
+		/* Put the buffer in new hash-queue if it has a device. */
+		if (bh->b_dev) {
+			struct buffer_head **bhp = &hash(bh->b_dev, bh->b_blocknr);
+			if((bh->b_next = *bhp) != NULL)
+				(*bhp)->b_pprev = &bh->b_next;
+			*bhp = bh;
+			bh->b_pprev = bhp;	/* Exists in bh hashes. */
+		} else
+			bh->b_pprev = NULL;	/* Not in bh hashes. */
+	}
 }
 
 static inline struct buffer_head * find_buffer(kdev_t dev, int block, int size)
@@ -465,14 +497,14 @@ static inline struct buffer_head * find_buffer(kdev_t dev, int block, int size)
 	struct buffer_head * tmp;
 
 	for (tmp = hash(dev,block) ; tmp != NULL ; tmp = tmp->b_next)
-		if (tmp->b_blocknr == block && tmp->b_dev == dev)
+		if (tmp->b_blocknr == block && tmp->b_dev == dev) {
 			if (tmp->b_size == size)
 				return tmp;
-			else {
-				printk("VFS: Wrong blocksize on device %s\n",
-					kdevname(dev));
-				return NULL;
-			}
+
+			printk("VFS: Wrong blocksize on device %s\n",
+			       kdevname(dev));
+			return NULL;
+		}
 	return NULL;
 }
 
@@ -492,8 +524,9 @@ struct buffer_head * get_hash_table(kdev_t dev, int block, int size)
 			return NULL;
 		bh->b_count++;
 		wait_on_buffer(bh);
-		if (bh->b_dev == dev && bh->b_blocknr == block
-					     && bh->b_size == size)
+		if (bh->b_dev == dev		&&
+		    bh->b_blocknr == block	&&
+		    bh->b_size == size)
 			return bh;
 		bh->b_count--;
 	}
@@ -501,27 +534,21 @@ struct buffer_head * get_hash_table(kdev_t dev, int block, int size)
 
 unsigned int get_hardblocksize(kdev_t dev)
 {
-  int blksize = 0;
-
-  /*
-   * Get the hard sector size for the given device.  If we don't know
-   * what it is, return 0.
-   */
-
-  if (hardsect_size[MAJOR(dev)] != NULL)
-    {
-      blksize = hardsect_size[MAJOR(dev)][MINOR(dev)];
-      if (blksize != 0)
-	{
-	  return blksize;
+	/*
+	 * Get the hard sector size for the given device.  If we don't know
+	 * what it is, return 0.
+	 */
+	if (hardsect_size[MAJOR(dev)] != NULL) {
+		int blksize = hardsect_size[MAJOR(dev)][MINOR(dev)];
+		if (blksize != 0)
+			return blksize;
 	}
-  }
 
-  /*
-   * We don't know what the hardware sector size for this device is.
-   * Return 0 indicating that we don't know.
-   */
-  return 0;
+	/*
+	 * We don't know what the hardware sector size for this device is.
+	 * Return 0 indicating that we don't know.
+	 */
+	return 0;
 }
 
 void set_blocksize(kdev_t dev, int size)
@@ -550,13 +577,15 @@ void set_blocksize(kdev_t dev, int size)
 	sync_buffers(dev, 2);
 	blksize_size[MAJOR(dev)][MINOR(dev)] = size;
 
-  /* We need to be quite careful how we do this - we are moving entries
-     around on the free list, and we can get in a loop if we are not careful.*/
-
+	/* We need to be quite careful how we do this - we are moving entries
+	 * around on the free list, and we can get in a loop if we are not careful.
+	 */
 	for(nlist = 0; nlist < NR_LIST; nlist++) {
 		bh = lru_list[nlist];
 		for (i = nr_buffers_type[nlist]*2 ; --i > 0 ; bh = bhnext) {
-			if(!bh) break;
+			if(!bh)
+				break;
+
 			bhnext = bh->b_next_free; 
 			if (bh->b_dev != dev)
 				 continue;
@@ -575,12 +604,12 @@ void set_blocksize(kdev_t dev, int size)
 	}
 }
 
-
-/* check if a buffer is OK to be reclaimed */
+/* Check if a buffer is OK to be reclaimed. */
 static inline int can_reclaim(struct buffer_head *bh, int size)
 {
-	if (bh->b_count || 
-	    buffer_protected(bh) || buffer_locked(bh))
+	if (bh->b_count			|| 
+	    buffer_protected(bh)	||
+	    buffer_locked(bh))
 		return 0;
 			 
 	if (atomic_read(&mem_map[MAP_NR((unsigned long) bh->b_data)].count) != 1 ||
@@ -595,8 +624,9 @@ static inline int can_reclaim(struct buffer_head *bh, int size)
 	return 1;
 }
 
-/* find a candidate buffer to be reclaimed */
-static struct buffer_head *find_candidate(struct buffer_head *list,int *list_len,int size)
+/* Find a candidate buffer to be reclaimed. */
+static struct buffer_head *find_candidate(struct buffer_head *list,
+					  int *list_len, int size)
 {
 	struct buffer_head *bh;
 	
@@ -604,19 +634,23 @@ static struct buffer_head *find_candidate(struct buffer_head *list,int *list_len
 	     bh && (*list_len) > 0; 
 	     bh = bh->b_next_free, (*list_len)--) {
 		if (size != bh->b_size) {
-			/* this provides a mechanism for freeing blocks
-			   of other sizes, this is necessary now that we
-			   no longer have the lav code. */
+			/* This provides a mechanism for freeing blocks
+			 * of other sizes, this is necessary now that we
+			 * no longer have the lav code.
+			 */
 			try_to_free_buffer(bh,&bh,1);
+			if (!bh)
+				break;
 			continue;
 		}
 
 		if (buffer_locked(bh) && 
 		    (bh->b_list == BUF_LOCKED || bh->b_list == BUF_LOCKED1)) {
 			/* Buffers are written in the order they are placed 
-			   on the locked list. If we encounter a locked
-			   buffer here, this means that the rest of them
-			   are also locked */
+			 * on the locked list. If we encounter a locked
+			 * buffer here, this means that the rest of them
+			 * are also locked.
+			 */
 			(*list_len) = 0;
 			return NULL;
 		}
@@ -639,74 +673,81 @@ static void refill_freelist(int size)
 
 	refilled = 1;
 	/* If there are too many dirty buffers, we wake up the update process
-	   now so as to ensure that there are still clean buffers available
-	   for user processes to use (and dirty) */
+	 * now so as to ensure that there are still clean buffers available
+	 * for user processes to use (and dirty).
+	 */
 	
-	/* We are going to try to locate this much memory */
-	needed =bdf_prm.b_un.nrefill * size;  
+	/* We are going to try to locate this much memory. */
+	needed = bdf_prm.b_un.nrefill * size;  
 
-	while (nr_free_pages > min_free_pages*2 && needed > 0 &&
-	       grow_buffers(GFP_BUFFER, size)) {
+	while ((nr_free_pages > min_free_pages*2)	&&
+	       (needed > 0)				&&
+	       grow_buffers(GFP_BUFFER, size))
 		needed -= PAGE_SIZE;
-	}
 
 repeat:
 	/* OK, we cannot grow the buffer cache, now try to get some
-	   from the lru list */
+	 * from the lru list.
+	 *
+	 * First set the candidate pointers to usable buffers.  This
+	 * should be quick nearly all of the time.
+	 */
 
-	/* First set the candidate pointers to usable buffers.  This
-	   should be quick nearly all of the time. */
+	if(needed <= 0)
+		return;
 
-	if(needed <= 0) return;
-
-	for(i=0; i<BUF_DIRTY; i++){
+	for(i=0; i<BUF_DIRTY; i++) {
 		buffers[i] = nr_buffers_type[i];
 		candidate[i] = find_candidate(lru_list[i], &buffers[i], size);
 	}
 	
-	/* Now see which candidate wins the election */
+	/* Now see which candidate wins the election. */
 	
 	winner = best_time = UINT_MAX;	
-	for(i=0; i<BUF_DIRTY; i++){
-		if(!candidate[i]) continue;
-		if(candidate[i]->b_lru_time < best_time){
+	for(i=0; i<BUF_DIRTY; i++) {
+		if(!candidate[i])
+			continue;
+		if(candidate[i]->b_lru_time < best_time) {
 			best_time = candidate[i]->b_lru_time;
 			winner = i;
 		}
 	}
 	
-	/* If we have a winner, use it, and then get a new candidate from that list */
+	/* If we have a winner, use it, and then get a new candidate from that list. */
 	if(winner != UINT_MAX) {
 		i = winner;
 		while (needed>0 && (bh=candidate[i])) {
 			candidate[i] = bh->b_next_free;
-			if(candidate[i] == bh) candidate[i] = NULL;  /* Got last one */		
+			if(candidate[i] == bh)
+				candidate[i] = NULL;  /* Got last one */		
 			remove_from_queues(bh);
 			bh->b_dev = B_FREE;
 			put_last_free(bh);
 			needed -= bh->b_size;
 			buffers[i]--;
-			if(buffers[i] == 0) candidate[i] = NULL;
+			if(buffers[i] == 0)
+				candidate[i] = NULL;
 		
 			if (candidate[i] && !can_reclaim(candidate[i],size))
-				candidate[i] = find_candidate(candidate[i],&buffers[i], size);
+				candidate[i] = find_candidate(candidate[i],
+							      &buffers[i], size);
 		}
 		if (needed >= 0)
 			goto repeat;
 	}
 	
-	if(needed <= 0) return;
+	if(needed <= 0)
+		return;
 	
 	/* Too bad, that was not enough. Try a little harder to grow some. */
-	
 	if (nr_free_pages > min_free_pages + 5) {
 		if (grow_buffers(GFP_BUFFER, size)) {
 			needed -= PAGE_SIZE;
 			goto repeat;
-		};
+		}
 	}
 	
-	/* and repeat until we find something good */
+	/* And repeat until we find something good. */
 	if (!grow_buffers(GFP_ATOMIC, size))
 		wakeup_bdflush(1);
 	needed -= PAGE_SIZE;
@@ -729,8 +770,9 @@ struct buffer_head * getblk(kdev_t dev, int block, int size)
 	int isize = BUFSIZE_INDEX(size);
 
 	/* If there are too many dirty buffers, we wake up the update process
-	   now so as to ensure that there are still clean buffers available
-	   for user processes to use (and dirty) */
+	 * now so as to ensure that there are still clean buffers available
+	 * for user processes to use (and dirty).
+	 */
 repeat:
 	bh = get_hash_table(dev, block, size);
 	if (bh) {
@@ -743,9 +785,8 @@ repeat:
 		return bh;
 	}
 
-	while(!free_list[isize]) {
+	while(!free_list[isize])
 		refill_freelist(size);
-	}
 	
 	if (find_buffer(dev,block,size))
 		 goto repeat;
@@ -753,8 +794,9 @@ repeat:
 	bh = free_list[isize];
 	remove_from_free_list(bh);
 
-/* OK, FINALLY we know that this buffer is the only one of its kind, */
-/* and that it's unused (b_count=0), unlocked (buffer_locked=0), and clean */
+	/* OK, FINALLY we know that this buffer is the only one of its kind,
+	 * and that it's unused (b_count=0), unlocked (buffer_locked=0), and clean.
+	 */
 	bh->b_count=1;
 	bh->b_flushtime=0;
 	bh->b_state=(1<<BH_Touched);
@@ -769,7 +811,7 @@ void set_writetime(struct buffer_head * buf, int flag)
 	int newtime;
 
 	if (buffer_dirty(buf)) {
-		/* Move buffer to dirty list if jiffies is clear */
+		/* Move buffer to dirty list if jiffies is clear. */
 		newtime = jiffies + (flag ? bdf_prm.b_un.age_super : 
 				     bdf_prm.b_un.age_buffer);
 		if(!buf->b_flushtime || buf->b_flushtime > newtime)
@@ -798,8 +840,9 @@ void refile_buffer(struct buffer_head * buf)
 		dispose = BUF_LOCKED;
 	else
 		dispose = BUF_CLEAN;
-	if(dispose == BUF_CLEAN) buf->b_lru_time = jiffies;
-	if(dispose != buf->b_list)  {
+	if(dispose == BUF_CLEAN)
+		buf->b_lru_time = jiffies;
+	if(dispose != buf->b_list) {
 		if(dispose == BUF_DIRTY)
 			 buf->b_lru_time = jiffies;
 		if(dispose == BUF_LOCKED && 
@@ -809,16 +852,21 @@ void refile_buffer(struct buffer_head * buf)
 		buf->b_list = dispose;
 		insert_into_queues(buf);
 		if (dispose == BUF_DIRTY) {
-		/* This buffer is dirty, maybe we need to start flushing. */
-		/* If too high a percentage of the buffers are dirty... */
-		if (nr_buffers_type[BUF_DIRTY] > nr_buffers * bdf_prm.b_un.nfract/100)
-			 wakeup_bdflush(0);
-		/* If this is a loop device, and
-		 * more than half of the buffers are dirty... */ 
-		/* (Prevents no-free-buffers deadlock with loop device.) */
-		if (MAJOR(buf->b_dev) == LOOP_MAJOR &&
-		    nr_buffers_type[BUF_DIRTY]*2>nr_buffers)
-			wakeup_bdflush(1);
+			int too_many = (nr_buffers * bdf_prm.b_un.nfract/100);
+
+			/* This buffer is dirty, maybe we need to start flushing.
+			 * If too high a percentage of the buffers are dirty...
+			 */
+			if (nr_buffers_type[BUF_DIRTY] > too_many)
+				wakeup_bdflush(0);
+
+			/* If this is a loop device, and
+			 * more than half of the buffers are dirty...
+			 * (Prevents no-free-buffers deadlock with loop device.)
+			 */
+			if (MAJOR(buf->b_dev) == LOOP_MAJOR &&
+			    nr_buffers_type[BUF_DIRTY]*2>nr_buffers)
+				wakeup_bdflush(1);
 		}
 	}
 }
@@ -830,7 +878,7 @@ void __brelse(struct buffer_head * buf)
 {
 	wait_on_buffer(buf);
 
-	/* If dirty, mark the time this buffer should be written back */
+	/* If dirty, mark the time this buffer should be written back. */
 	set_writetime(buf, 0);
 	refile_buffer(buf);
 
@@ -929,13 +977,13 @@ struct buffer_head * breada(kdev_t dev, int block, int bufsize,
 		else bhlist[j++] = bh;
 	}
 
-	/* Request the read for these buffers, and then release them */
+	/* Request the read for these buffers, and then release them. */
 	if (j>1)  
 		ll_rw_block(READA, (j-1), bhlist+1); 
 	for(i=1; i<j; i++)
 		brelse(bhlist[i]);
 
-	/* Wait for this buffer, and then continue on */
+	/* Wait for this buffer, and then continue on. */
 	bh = bhlist[0];
 	wait_on_buffer(bh);
 	if (buffer_uptodate(bh))
@@ -948,7 +996,7 @@ static void put_unused_buffer_head(struct buffer_head * bh)
 {
 	if (nr_unused_buffer_heads >= MAX_UNUSED_BUFFERS) {
 		nr_buffer_heads--;
-		kfree(bh);
+		kmem_cache_free(bh_cachep, bh);
 		return;
 	}
 	memset(bh,0,sizeof(*bh));
@@ -963,23 +1011,17 @@ static void get_more_buffer_heads(void)
 	struct buffer_head * bh;
 
 	while (!unused_list) {
-		/*
-		 * This is critical.  We can't swap out pages to get
+		/* This is critical.  We can't swap out pages to get
 		 * more buffer heads, because the swap-out may need
-		 * more buffer-heads itself.  Thus GFP_ATOMIC.
+		 * more buffer-heads itself.  Thus SLAB_ATOMIC.
 		 */
-		/* we now use kmalloc() here instead of gfp as we want
-                   to be able to easily release buffer heads - they
-                   took up quite a bit of memory (tridge) */
-		bh = (struct buffer_head *) kmalloc(sizeof(*bh),GFP_ATOMIC);
-		if (bh) {
+		if((bh = kmem_cache_alloc(bh_cachep, SLAB_ATOMIC)) != NULL) {
 			put_unused_buffer_head(bh);
 			nr_buffer_heads++;
 			return;
 		}
 
-		/*
-		 * Uhhuh. We're _really_ low on memory. Now we just
+		/* Uhhuh. We're _really_ low on memory. Now we just
 		 * wait for old buffer heads to become free due to
 		 * finishing IO..
 		 */
@@ -1414,12 +1456,11 @@ int try_to_free_buffer(struct buffer_head * bh, struct buffer_head ** bhp,
 		p = tmp;
 		tmp = tmp->b_this_page;
 		nr_buffers--;
-		if (p == *bhp)
-		  {
-		    *bhp = p->b_prev_free;
-		    if (p == *bhp) /* Was this the last in the list? */
-		      *bhp = NULL;
-		  }
+		if (p == *bhp) {
+			*bhp = p->b_prev_free;
+			if (p == *bhp) /* Was this the last in the list? */
+				*bhp = NULL;
+		}
 		remove_from_queues(p);
 		put_unused_buffer_head(p);
 	} while (tmp != bh);
@@ -1472,13 +1513,23 @@ void show_buffers(void)
 
 /*
  * allocate the hash table and init the free list
+ * Use gfp() for the hash table to decrease TLB misses, use
+ * SLAB cache for buffer heads.
  */
 void buffer_init(void)
 {
-	hash_table = (struct buffer_head **)vmalloc(NR_HASH*sizeof(struct buffer_head *));
+	hash_table = (struct buffer_head **)
+		__get_free_pages(GFP_ATOMIC, HASH_PAGES_ORDER, 0);
 	if (!hash_table)
 		panic("Failed to allocate buffer hash table\n");
 	memset(hash_table,0,NR_HASH*sizeof(struct buffer_head *));
+
+	bh_cachep = kmem_cache_create("buffer_head",
+				      sizeof(struct buffer_head),
+				      sizeof(unsigned long) * 4,
+				      SLAB_HWCACHE_ALIGN, NULL, NULL);
+	if(!bh_cachep)
+		panic("Cannot create buffer head SLAB cache\n");
 
 	lru_list[BUF_CLEAN] = 0;
 	grow_buffers(GFP_KERNEL, BLOCK_SIZE);
@@ -1745,21 +1796,3 @@ int bdflush(void * unused)
 		}
 	}
 }
-
-
-/*
- * Overrides for Emacs so that we follow Linus's tabbing style.
- * Emacs will notice this stuff at the end of the file and automatically
- * adjust the settings for this buffer only.  This must remain at the end
- * of the file.
- * ---------------------------------------------------------------------------
- * Local variables:
- * c-indent-level: 8
- * c-brace-imaginary-offset: 0
- * c-brace-offset: -8
- * c-argdecl-indent: 8
- * c-label-offset: -8
- * c-continued-statement-offset: 8
- * c-continued-brace-offset: 0
- * End:
- */

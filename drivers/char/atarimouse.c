@@ -20,6 +20,7 @@
 #include <linux/mm.h>
 #include <linux/random.h>
 #include <linux/poll.h>
+#include <linux/init.h>
 
 #include <asm/setup.h>
 #include <asm/atarikb.h>
@@ -158,7 +159,7 @@ static struct miscdevice atari_mouse = {
     ATARIMOUSE_MINOR, "atarimouse", &atari_mouse_fops
 };
 
-int atari_mouse_init(void)
+__initfunc(int atari_mouse_init(void))
 {
     mouse.active = 0;
     mouse.ready = 0;

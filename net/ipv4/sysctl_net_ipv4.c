@@ -36,6 +36,12 @@ extern int sysctl_arp_confirm_interval;
 extern int sysctl_arp_confirm_timeout;
 
 extern int sysctl_tcp_cong_avoidance;
+extern int sysctl_tcp_hoe_retransmits;
+extern int sysctl_tcp_sack;
+extern int sysctl_tcp_tsack;
+extern int sysctl_tcp_timestamps;
+extern int sysctl_tcp_window_scaling;
+
 extern int tcp_sysctl_congavoid(ctl_table *ctl, int write, struct file * filp,
 				void *buffer, size_t *lenp);
 
@@ -80,6 +86,21 @@ ctl_table ipv4_table[] = {
          &proc_dointvec},
         {NET_IPV4_ARP_CONFIRM_TIMEOUT, "arp_confirm_timeout",
          &sysctl_arp_confirm_timeout, sizeof(int), 0644, NULL,
+         &proc_dointvec},
+        {NET_IPV4_TCP_HOE_RETRANSMITS, "tcp_hoe_retransmits",
+         &sysctl_tcp_hoe_retransmits, sizeof(int), 0644, NULL,
+         &proc_dointvec},
+        {NET_IPV4_TCP_SACK, "tcp_sack",
+         &sysctl_tcp_sack, sizeof(int), 0644, NULL,
+         &proc_dointvec},
+        {NET_IPV4_TCP_TSACK, "tcp_tsack",
+         &sysctl_tcp_tsack, sizeof(int), 0644, NULL,
+         &proc_dointvec},
+        {NET_IPV4_TCP_TIMESTAMPS, "tcp_timestamps",
+         &sysctl_tcp_timestamps, sizeof(int), 0644, NULL,
+         &proc_dointvec},
+        {NET_IPV4_TCP_WINDOW_SCALING, "tcp_window_scaling",
+         &sysctl_tcp_window_scaling, sizeof(int), 0644, NULL,
          &proc_dointvec},
 	{NET_IPV4_TCP_VEGAS_CONG_AVOID, "tcp_vegas_cong_avoid",
 	 &sysctl_tcp_cong_avoidance, sizeof(int), 0644,

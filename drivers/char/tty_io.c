@@ -71,6 +71,7 @@
 #ifdef CONFIG_PROC_FS
 #include <linux/proc_fs.h>
 #endif
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -1704,7 +1705,7 @@ static struct tty_driver dev_tty_driver, dev_console_driver;
  * Ok, now we can initialize the rest of the tty devices and can count
  * on memory allocations, interrupts etc..
  */
-int tty_init(void)
+__initfunc(int tty_init(void))
 {
 	if (sizeof(struct tty_struct) > PAGE_SIZE)
 		panic("size of tty structure > PAGE_SIZE!");

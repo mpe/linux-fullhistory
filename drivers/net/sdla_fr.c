@@ -25,6 +25,7 @@
 #include <linux/router.h>	/* WAN router definitions */
 #include <linux/wanpipe.h>	/* WANPIPE common user API definitions */
 #include <linux/if_arp.h>	/* ARPHRD_* defines */
+#include <linux/init.h>		/* __initfunc et al. */
 #include <asm/byteorder.h>	/* htons(), etc. */
 #include <asm/io.h>		/* for inb(), outb(), etc. */
 
@@ -135,7 +136,7 @@ static unsigned int hex_to_uint (unsigned char* str, int len);
  * Return:	0	o.k.
  *		< 0	failure.
  */
-int wpf_init (sdla_t* card, wandev_conf_t* conf)
+__initfunc(int wpf_init (sdla_t* card, wandev_conf_t* conf))
 {
 	union
 	{

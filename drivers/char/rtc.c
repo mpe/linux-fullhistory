@@ -50,6 +50,7 @@
 #include <linux/ioport.h>
 #include <linux/fcntl.h>
 #include <linux/mc146818rtc.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -531,7 +532,7 @@ static struct miscdevice rtc_dev=
 	&rtc_fops
 };
 
-int rtc_init(void)
+__initfunc(int rtc_init(void))
 {
 	unsigned long flags;
 

@@ -12,6 +12,7 @@ typedef struct { } spinlock_t;
 #define spin_lock_init(lock)	do { } while(0)
 #define spin_lock(lock)		do { } while(0)
 #define spin_trylock(lock)	do { } while(0)
+#define spin_unlock_wait(lock)	do { } while(0)
 #define spin_unlock(lock)	do { } while(0)
 #define spin_lock_irq(lock)	cli()
 #define spin_unlock_irq(lock)	sti()
@@ -69,6 +70,7 @@ typedef struct {
 #define SPIN_LOCK_UNLOCKED { 0, 0 }
 
 #define spin_lock_init(x)	do { (x)->lock = 0; (x)->previous = 0; } while(0)
+#define spin_unlock_wait(x)	do { barrier(); } while(((volatile spinlock_t *)(x))->lock)
 
 typedef struct { unsigned long a[100]; } __dummy_lock_t;
 #define __dummy_lock(lock) (*(__dummy_lock_t *)(lock))

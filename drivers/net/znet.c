@@ -69,6 +69,7 @@ static const char *version = "znet.c:v1.02 9/23/94 becker@cesdis.gsfc.nasa.gov\n
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
+#include <linux/init.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -199,7 +200,7 @@ static struct sigaction znet_sigaction = { &znet_interrupt, 0, 0, NULL, };
    BIOS area.  We just scan for the signature, and pull the vital parameters
    out of the structure. */
 
-int znet_probe(struct device *dev)
+__initfunc(int znet_probe(struct device *dev))
 {
 	int i;
 	struct netidblk *netinfo;

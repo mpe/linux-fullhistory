@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.48 1997/04/12 04:28:37 davem Exp $
+/*  $Id: init.c,v 1.49 1997/04/17 21:49:31 jj Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -33,6 +33,9 @@ extern void show_net_buffers(void);
 
 struct sparc_phys_banks sp_banks[SPARC_PHYS_BANKS];
 unsigned long sparc_unmapped_base;
+
+/* References to section boundaries */
+extern char __init_begin, __init_end, etext;
 
 /*
  * BAD_PAGE is the page that is used for page faults when linux
@@ -208,8 +211,8 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 {
 	int codepages = 0;
 	int datapages = 0;
+	int initpages = 0; 
 	unsigned long tmp2, addr;
-	extern char etext;
 
 	/* Saves us work later. */
 	memset((void *) ZERO_PAGE, 0, PAGE_SIZE);
@@ -237,7 +240,9 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 		if(PageReserved(mem_map + MAP_NR(addr))) {
 			if ((addr < (unsigned long) &etext) && (addr >= KERNBASE))
 				codepages++;
-			else if((addr < start_mem) && (addr >= KERNBASE))
+                        else if((addr >= (unsigned long)&__init_begin && addr < (unsigned long)&__init_end))
+                                initpages++;
+                        else if((addr < start_mem) && (addr >= KERNBASE))
 				datapages++;
 			continue;
 		}
@@ -252,10 +257,12 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 
 	tmp2 = nr_free_pages << PAGE_SHIFT;
 
-	printk("Memory: %luk available (%dk kernel code, %dk data) [%08lx,%08lx]\n",
+	printk("Memory: %luk available (%dk kernel code, %dk data, %dk init) [%08lx,%08lx]\n",
 	       tmp2 >> 10,
 	       codepages << (PAGE_SHIFT-10),
-	       datapages << (PAGE_SHIFT-10), PAGE_OFFSET, end_mem);
+	       datapages << (PAGE_SHIFT-10), 
+	       initpages << (PAGE_SHIFT-10),
+	       PAGE_OFFSET, end_mem);
 
 	min_free_pages = nr_free_pages >> 7;
 	if(min_free_pages < 16)
@@ -266,7 +273,6 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 
 void free_initmem (void)
 {
-	extern char __init_begin, __init_end;
 	unsigned long addr;
 	
 	addr = (unsigned long)(&__init_begin);
@@ -275,7 +281,6 @@ void free_initmem (void)
 		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
 		free_page(addr);
 	}
-	printk ("Freeing unused kernel memory: %dk freed\n", (&__init_end - &__init_begin) >> 10);
 }
 
 void si_meminfo(struct sysinfo *val)

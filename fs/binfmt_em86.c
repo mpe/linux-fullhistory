@@ -14,6 +14,8 @@
 #include <linux/malloc.h>
 #include <linux/binfmts.h>
 #include <linux/elf.h>
+#include <linux/init.h>
+
 
 #define EM86_INTERP	"/usr/bin/em86"
 #define EM86_I_NAME	"em86"

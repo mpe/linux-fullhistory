@@ -48,6 +48,7 @@ static char *version = "3c509.c:1.07 6/15/95 becker@cesdis.gsfc.nasa.gov\n";
 #include <linux/skbuff.h>
 #include <linux/config.h>	/* for CONFIG_MCA */
 #include <linux/delay.h>	/* for udelay() */
+#include <linux/init.h>
 
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -132,7 +133,7 @@ static void set_multicast_list(struct device *dev);
 
 
 
-int el3_probe(struct device *dev)
+__initfunc(int el3_probe(struct device *dev))
 {
 	short lrs_state = 0xff, i;
 	ushort ioaddr, irq, if_port;
@@ -312,7 +313,7 @@ int el3_probe(struct device *dev)
 /* Read a word from the EEPROM using the regular EEPROM access register.
    Assume that we are in register window zero.
  */
-static ushort read_eeprom(short ioaddr, int index)
+__initfunc(static ushort read_eeprom(short ioaddr, int index))
 {
 	outw(EEPROM_READ + index, ioaddr + 10);
 	/* Pause for at least 162 us. for the read to take place. */
@@ -321,7 +322,7 @@ static ushort read_eeprom(short ioaddr, int index)
 }
 
 /* Read a word from the EEPROM when in the ISA ID probe state. */
-static ushort id_read_eeprom(int index)
+__initfunc(static ushort id_read_eeprom(int index))
 {
 	int bit, word = 0;
 

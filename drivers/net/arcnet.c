@@ -162,6 +162,7 @@ static const char *version =
 #include <linux/if_arp.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/bitops.h>
@@ -711,7 +712,7 @@ void arcnet_dump_packet(struct device *dev,u_char *buffer,int ext,char *desc)
  * need to be passed a specific shmem address, IRQ, and node ID (stored in
  * dev->base_addr)
  */
-int arcnet_probe(struct device *dev)
+__initfunc(int arcnet_probe(struct device *dev))
 {
 	BUGLVL(D_NORMAL) printk(version);
 	BUGMSG(D_NORMAL,"Compiled for ARCnet RIM I (autoprobe disabled)\n");
@@ -749,11 +750,13 @@ int arcnet_probe(struct device *dev)
  *
  * FIXME: grab all devices in one shot and eliminate the big static array.
  */
-int arcnet_probe(struct device *dev)
+
+static int ports[(0x3f0 - 0x200) / 16 + 1] __initdata;
+static u_long shmems[(0xFF800 - 0xA0000) / 2048 + 1] __initdata;
+
+__initfunc(int arcnet_probe(struct device *dev))
 {
 	static int init_once = 0;
-	static int ports[(0x3f0 - 0x200) / 16 + 1];
-	static u_long shmems[(0xFF800 - 0xA0000) / 2048 + 1];
 	static int numports=sizeof(ports)/sizeof(ports[0]),
 	    	   numshmems=sizeof(shmems)/sizeof(shmems[0]);
 
@@ -1126,7 +1129,7 @@ int arcnet_probe(struct device *dev)
 /* Set up the struct device associated with this card.  Called after
  * probing succeeds.
  */
-int arcnet_found(struct device *dev,int port,int airq, u_long shmem)
+__initfunc(int arcnet_found(struct device *dev,int port,int airq, u_long shmem))
 {
 	u_long first_mirror,last_mirror;
 	struct arcnet_local *lp;

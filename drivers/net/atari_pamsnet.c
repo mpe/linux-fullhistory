@@ -102,6 +102,7 @@ static char *version =
 
 #include <linux/delay.h>
 #include <linux/timer.h>
+#include <linux/init.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -560,8 +561,8 @@ bad:
 /* Check for a network adaptor of this type, and return '0' if one exists.
  */
 
-extern int
-pamsnet_probe (dev)
+__initfunc(extern int
+pamsnet_probe (dev))
 	struct device *dev;
 {
 	int i;

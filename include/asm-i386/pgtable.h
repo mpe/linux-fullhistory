@@ -205,6 +205,7 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 #define _PAGE_ACCESSED	0x020
 #define _PAGE_DIRTY	0x040
 #define _PAGE_4M	0x080	/* 4 MB page, Pentium+.. */
+#define _PAGE_GLOBAL	0x100	/* Global TLB entry PPro+ */
 
 #define _PAGE_TABLE	(_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | _PAGE_ACCESSED | _PAGE_DIRTY)
 #define _KERNPG_TABLE	(_PAGE_PRESENT | _PAGE_RW | _PAGE_ACCESSED | _PAGE_DIRTY)
@@ -374,6 +375,8 @@ extern inline void pte_free_kernel(pte_t * pte)
 	free_page((unsigned long) pte);
 }
 
+extern const char bad_pmd_string[];
+
 extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 {
 	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
@@ -390,7 +393,7 @@ extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 		free_page((unsigned long) page);
 	}
 	if (pmd_bad(*pmd)) {
-		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
+		printk(bad_pmd_string, pmd_val(*pmd));
 		pmd_val(*pmd) = _KERNPG_TABLE + __pa(BAD_PAGETABLE);
 		return NULL;
 	}
@@ -443,7 +446,7 @@ freenew:
 }
 
 fix:
-	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
+	printk(bad_pmd_string, pmd_val(*pmd));
 oom:
 	pmd_val(*pmd) = _PAGE_TABLE + __pa(BAD_PAGETABLE);
 	return NULL;

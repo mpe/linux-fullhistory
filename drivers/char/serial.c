@@ -45,6 +45,7 @@
 #include <linux/ioport.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -2917,7 +2918,7 @@ done:
  * number, and identifies which options were configured into this
  * driver.
  */
-static void show_serial_version(void)
+static _INLINE_ void show_serial_version(void)
 {
  	printk(KERN_INFO "%s version %s with", serial_name, serial_version);
 #ifdef CONFIG_HUB6
@@ -3216,7 +3217,7 @@ EXPORT_SYMBOL(unregister_serial);
 /*
  * The serial driver boot-time initialization code!
  */
-int rs_init(void)
+__initfunc(int rs_init(void))
 {
 	int i;
 	struct serial_state * state;
@@ -3410,6 +3411,7 @@ void cleanup_module(void)
 	timer_active &= ~(1 << RS_TIMER);
 	timer_table[RS_TIMER].fn = NULL;
 	timer_table[RS_TIMER].expires = 0;
+        remove_bh(SERIAL_BH);
 	if ((e1 = tty_unregister_driver(&serial_driver)))
 		printk("SERIAL: failed to unregister serial driver (%d)\n",
 		       e1);

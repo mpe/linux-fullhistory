@@ -30,6 +30,7 @@
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/mm.h>
+#include <linux/init.h>
 #include <asm/uaccess.h>
 #include "vt_kern.h"
 #include "selection.h"
@@ -251,7 +252,7 @@ static struct file_operations vcs_fops = {
 	NULL		/* fsync */
 };
 
-int vcs_init(void)
+__initfunc(int vcs_init(void))
 {
 	int error;
 

@@ -266,6 +266,7 @@ static const char *version = "de4x5.c:V0.5 97/1/30 davies@maniac.ultranet.com\n"
 #include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
+#include <linux/init.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
@@ -861,8 +862,8 @@ static int (*dc_infoblock[])(struct device *dev, u_char, u_char *) = {
 ** more info. Until I fix (un)register_netdevice() we won't be able to use it
 ** though.
 */
-int
-de4x5_probe(struct device *dev)
+__initfunc(int
+de4x5_probe(struct device *dev))
 {
     int status = -ENODEV;
     u_long iobase = dev->base_addr;
@@ -882,8 +883,8 @@ de4x5_probe(struct device *dev)
     return status;
 }
 
-static int
-de4x5_hw_init(struct device *dev, u_long iobase)
+__initfunc(static int
+de4x5_hw_init(struct device *dev, u_long iobase))
 {
     struct bus_type *lp = &bus;
     int i, status=0;
@@ -1797,8 +1798,8 @@ SetMulticastFilter(struct device *dev)
 ** EISA bus I/O device probe. Probe from slot 1 since slot 0 is usually
 ** the motherboard. Upto 15 EISA devices are supported.
 */
-static void
-eisa_probe(struct device *dev, u_long ioaddr)
+__initfunc(static void
+eisa_probe(struct device *dev, u_long ioaddr))
 {
     int i, maxSlots, status, device;
     u_short vendor;
@@ -1874,8 +1875,8 @@ eisa_probe(struct device *dev, u_long ioaddr)
 #define PCI_DEVICE    (dev_num << 3)
 #define PCI_LAST_DEV  32
 
-static void
-pci_probe(struct device *dev, u_long ioaddr)
+__initfunc(static void
+pci_probe(struct device *dev, u_long ioaddr))
 {
     u_char irq;
     u_char pb, pbus, dev_num, dnum, dev_fn;
@@ -1974,8 +1975,8 @@ pci_probe(struct device *dev, u_long ioaddr)
 ** are not available then insert a new device structure at the end of
 ** the current list.
 */
-static struct device *
-alloc_device(struct device *dev, u_long iobase)
+__initfunc(static struct device *
+alloc_device(struct device *dev, u_long iobase))
 {
     struct device *adev = NULL;
     int fixed = 0, new_dev = 0;
@@ -2027,8 +2028,8 @@ alloc_device(struct device *dev, u_long iobase)
 ** If at end of eth device list and can't use current entry, malloc
 ** one up. If memory could not be allocated, print an error message.
 */
-static struct device *
-insert_device(struct device *dev, u_long iobase, int (*init)(struct device *))
+__initfunc(static struct device *
+insert_device(struct device *dev, u_long iobase, int (*init)(struct device *)))
 {
     struct device *new;
 
@@ -2055,8 +2056,8 @@ insert_device(struct device *dev, u_long iobase, int (*init)(struct device *))
     return new;
 }
 
-static int
-de4x5_dev_index(char *s)
+__initfunc(static int
+de4x5_dev_index(char *s))
 {
     int i=0, j=0;
 
@@ -2070,8 +2071,8 @@ de4x5_dev_index(char *s)
     return i;
 }
 
-static void
-link_modules(struct device *dev, struct device *tmp)
+__initfunc(static void
+link_modules(struct device *dev, struct device *tmp))
 {
     struct device *p=dev;
 

@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.135 1997/04/14 05:38:49 davem Exp $
+/* $Id: srmmu.c,v 1.136 1997/04/20 14:11:51 ecd Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -74,7 +74,10 @@ static char *srmmu_name;
 ctxd_t *srmmu_ctx_table_phys;
 ctxd_t *srmmu_context_table;
 
-static struct srmmu_trans {
+/* Don't change this without changing access to this
+ * in arch/sparc/mm/viking.S
+ */
+struct srmmu_trans {
 	unsigned long vbase;
 	unsigned long pbase;
 	unsigned long size;
@@ -705,7 +708,7 @@ static void srmmu_set_pte_nocache_cypress(pte_t *ptep, pte_t pteval)
 	} while(line != page);
 }
 
-static void srmmu_set_pte_nocache_nomxccvik(pte_t *ptep, pte_t pteval)
+static void srmmu_set_pte_nocache_viking(pte_t *ptep, pte_t pteval)
 {
 	unsigned long vaddr;
 	int set;
@@ -1083,255 +1086,6 @@ static void swift_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
  * with respect to cache coherency.
  */
 
-/* Viking flushes.  For Sun's mainline MBUS processor it is pretty much
- * a crappy mmu.  The on-chip I&D caches only have full flushes, no fine
- * grained cache invalidations.  It only has these "flash clear" things
- * just like the MicroSparcI.  Added to this many revs of the chip are
- * teaming with hardware buggery.  Someday maybe we'll do direct
- * diagnostic tag accesses for page level flushes as those should
- * be painless and will increase performance due to the frequency of
- * page level flushes. This is a must to _really_ flush the caches,
- * crazy hardware ;-)
- */
-
-static void viking_flush_cache_all(void)
-{
-}
-
-static void viking_flush_cache_mm(struct mm_struct *mm)
-{
-}
-
-static void viking_flush_cache_range(struct mm_struct *mm, unsigned long start, unsigned long end)
-{
-}
-
-static void viking_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
-{
-}
-
-/* Non-mxcc vikings are copy-back but are pure-physical so no flushing. */
-static void viking_flush_page_to_ram(unsigned long page)
-{
-}
-
-static void viking_mxcc_flush_chunk(unsigned long chunk)
-{
-}
-
-/* All vikings have an icache which snoops the processor bus and is fully
- * coherent with the dcache, so no flush is necessary at all.
- */
-static void viking_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr)
-{
-}
-
-static void viking_mxcc_flush_page(unsigned long page)
-{
-	unsigned long ppage = srmmu_v2p(page & PAGE_MASK);
-	unsigned long paddr0, paddr1;
-
-	if (ppage == 0xffffffffUL)
-		return;
-
-	paddr0 = 0x10;			/* Set cacheable bit. */
-	paddr1 = ppage;
-
-	/* Read the page's data through the stream registers,
-	 * and write it back to memory. This will issue
-	 * coherent write invalidates to all other caches, thus
-         * should also be sufficient in an MP system.
-	 */
-	__asm__ __volatile__ ("or %%g0, %0, %%g2\n\t"
-			      "or %%g0, %1, %%g3\n"
-			      "1:\n\t"
-			      "stda %%g2, [%2] %5\n\t"
-			      "stda %%g2, [%3] %5\n\t"
-			      "add %%g3, %4, %%g3\n\t"
-			      "btst 0xfff, %%g3\n\t"
-			      "bne 1b\n\t"
-			      "nop\n\t" : :
-			      "r" (paddr0), "r" (paddr1),
-			      "r" (MXCC_SRCSTREAM),
-			      "r" (MXCC_DESSTREAM),
-			      "r" (MXCC_STREAM_SIZE),
-			      "i" (ASI_M_MXCC) : "g2", "g3", "cc");
-
-	/* This was handcoded after a look at the gcc output from
-	 *
-	 *	do {
-	 *		mxcc_set_stream_src(paddr);
-	 *		mxcc_set_stream_dst(paddr);
-	 *		paddr[1] += MXCC_STREAM_SIZE;
-	 *	} while (paddr[1] & ~PAGE_MASK);
-	 */
-}
-
-static void viking_no_mxcc_flush_page(unsigned long page)
-{
-	unsigned long ppage = srmmu_v2p(page & PAGE_MASK);
-	int set, block;
-	unsigned long ptag[2];
-	unsigned long vaddr;
-	int i;
-
-	if (ppage == 0xffffffffUL)
-		return;
-	ppage >>= 12;
-
-	for (set = 0; set < 128; set++) {
-		for (block = 0; block < 4; block++) {
-
-			viking_get_dcache_ptag(set, block, ptag);
-
-			if (ptag[1] != ppage)
-				continue;
-			if (!(ptag[0] & VIKING_PTAG_VALID))
-				continue;
-			if (!(ptag[0] & VIKING_PTAG_DIRTY))
-				continue;
-
-			/* There was a great cache from TI
-			 * with comfort as much as vi,
-			 * 4 pages to flush,
-			 * 4 pages, no rush,
-			 * since anything else makes him die.
-			 */
-			vaddr = (KERNBASE + PAGE_SIZE) | (set << 5);
-			for (i = 0; i < 8; i++) {
-				__asm__ __volatile__ ("ld [%0], %%g2\n\t" : :
-						      "r" (vaddr) : "g2");
-				vaddr += PAGE_SIZE;
-			}
-
-			/* Continue with next set. */
-			break;
-		}
-	}
-}
-
-static void viking_nomxcc_flush_chunk(unsigned long chunk)
-{
-	viking_no_mxcc_flush_page(chunk);
-}
-
-/* Viking is IO cache coherent, but really only on MXCC. */
-static void viking_flush_page_for_dma(unsigned long page)
-{
-}
-
-static void viking_flush_tlb_all(void)
-{
-	register int ctr asm("g5");
-
-	ctr = 0;
-	__asm__ __volatile__("
-	1:	ld	[%%g6 + %2], %%g4	! flush user windows
-		orcc	%%g0, %%g4, %%g0
-		add	%0, 1, %0
-		bne	1b
-		 save	%%sp, -64, %%sp
-	2:	subcc	%0, 1, %0
-		bne	2b
-		 restore %%g0, %%g0, %%g0"
-	: "=&r" (ctr) : "0" (ctr), "i" (UWINMASK_OFFSET) : "g4", "cc");
-	srmmu_flush_whole_tlb();
-	module_stats.invall++;
-}
-
-static void viking_flush_tlb_mm(struct mm_struct *mm)
-{
-	register int ctr asm("g5");
-
-	FLUSH_BEGIN(mm)
-	ctr = 0;
-	__asm__ __volatile__("
-1:	ld	[%%g6 + %7], %%g4	! flush user windows
-	orcc	%%g0, %%g4, %%g0
-	add	%0, 1, %0
-	bne	1b
-	 save	%%sp, -64, %%sp
-2:	subcc	%0, 1, %0
-	bne	2b
-	 restore %%g0, %%g0, %%g0
-	lda	[%1] %4, %0
-	sta	%3, [%1] %4
-	sta	%%g0, [%2] %5
-	sta	%0, [%1] %4"
-	: "=&r" (ctr)
-	: "r" (SRMMU_CTX_REG), "r" (0x300), "r" (mm->context),
-	  "i" (ASI_M_MMUREGS), "i" (ASI_M_FLUSH_PROBE), "0" (ctr),
-	  "i" (UWINMASK_OFFSET)
-	: "g4", "cc");
-	module_stats.invmm++;
-	FLUSH_END
-}
-
-static void viking_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
-{
-	register int ctr asm("g5");
-	unsigned long size;
-
-	FLUSH_BEGIN(mm)
-	ctr = 0;
-	__asm__ __volatile__("
-	1:	ld	[%%g6 + %2], %%g4	! flush user windows
-		orcc	%%g0, %%g4, %%g0
-		add	%0, 1, %0
-		bne	1b
-		 save	%%sp, -64, %%sp
-	2:	subcc	%0, 1, %0
-		bne	2b
-		 restore %%g0, %%g0, %%g0"
-	: "=&r" (ctr) : "0" (ctr), "i" (UWINMASK_OFFSET) : "g4", "cc");
-	start &= SRMMU_PGDIR_MASK;
-	size = SRMMU_PGDIR_ALIGN(end) - start;
-	__asm__ __volatile__("
-		lda	[%0] %5, %%g5
-		sta	%1, [%0] %5
-	1:	subcc	%3, %4, %3
-		bne	1b
-		 sta	%%g0, [%2 + %3] %6
-		sta	%%g5, [%0] %5"
-	: /* no outputs */
-	: "r" (SRMMU_CTX_REG), "r" (mm->context), "r" (start | 0x200),
-	  "r" (size), "r" (SRMMU_PGDIR_SIZE), "i" (ASI_M_MMUREGS),
-	  "i" (ASI_M_FLUSH_PROBE)
-	: "g5", "cc");
-	module_stats.invrnge++;
-	FLUSH_END
-}
-
-static void viking_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
-{
-	struct mm_struct *mm = vma->vm_mm;
-	register int ctr asm("g5");
-
-	FLUSH_BEGIN(mm)
-	ctr = 0;
-	__asm__ __volatile__("
-	1:	ld	[%%g6 + %2], %%g4	! flush user windows
-		orcc	%%g0, %%g4, %%g0
-		add	%0, 1, %0
-		bne	1b
-		 save	%%sp, -64, %%sp
-	2:	subcc	%0, 1, %0
-		bne	2b
-		 restore %%g0, %%g0, %%g0"
-	: "=&r" (ctr) : "0" (ctr), "i" (UWINMASK_OFFSET) : "g4", "cc");
-	__asm__ __volatile__("
-	lda	[%0] %3, %%g5
-	sta	%1, [%0] %3
-	sta	%%g0, [%2] %4
-	sta	%%g5, [%0] %3"
-	: /* no outputs */
-	: "r" (SRMMU_CTX_REG), "r" (mm->context), "r" (page & PAGE_MASK),
-	  "i" (ASI_M_MMUREGS), "i" (ASI_M_FLUSH_PROBE)
-	: "g5");
-	module_stats.invpg++;
-	FLUSH_END
-}
-
 /* Cypress flushes. */
 static void cypress_flush_cache_all(void)
 {
@@ -1576,6 +1330,27 @@ static void cypress_flush_tlb_page(struct vm_area_struct *vma, unsigned long pag
 	FLUSH_END
 }
 
+/* viking.S */
+extern void viking_flush_cache_all(void);
+extern void viking_flush_cache_mm(struct mm_struct *mm);
+extern void viking_flush_cache_range(struct mm_struct *mm, unsigned long start,
+				     unsigned long end);
+extern void viking_flush_cache_page(struct vm_area_struct *vma,
+				    unsigned long page);
+extern void viking_flush_page_to_ram(unsigned long page);
+extern void viking_flush_page_for_dma(unsigned long page);
+extern void viking_flush_sig_insns(struct mm_struct *mm, unsigned long addr);
+extern void viking_flush_page(unsigned long page);
+extern void viking_mxcc_flush_page(unsigned long page);
+extern void viking_flush_chunk(unsigned long chunk);
+extern void viking_mxcc_flush_chunk(unsigned long chunk);
+extern void viking_flush_tlb_all(void);
+extern void viking_flush_tlb_mm(struct mm_struct *mm);
+extern void viking_flush_tlb_range(struct mm_struct *mm, unsigned long start,
+				   unsigned long end);
+extern void viking_flush_tlb_page(struct vm_area_struct *vma,
+				  unsigned long page);
+
 /* hypersparc.S */
 extern void hypersparc_flush_cache_all(void);
 extern void hypersparc_flush_cache_mm(struct mm_struct *mm);
@@ -1608,9 +1383,9 @@ static void hypersparc_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp)
 	}
 }
 
-static void viking_no_mxcc_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp) 
+static void viking_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp) 
 {
-	viking_no_mxcc_flush_page((unsigned long)pgdp);
+	viking_flush_page((unsigned long)pgdp);
 	if(tsk->mm->context != NO_CONTEXT) {
 		flush_cache_mm(current->mm);
 		ctxd_set(&srmmu_context_table[tsk->mm->context], pgdp);
@@ -1768,11 +1543,11 @@ unsigned long iommu_init(int iommund, unsigned long memory_start,
 			viking_mxcc_flush_page(start);
 			start += PAGE_SIZE;
 		}
-	} else if(flush_page_for_dma == viking_no_mxcc_flush_page) {
+	} else if(flush_page_for_dma == viking_flush_page) {
 		unsigned long start = (unsigned long) iommu->page_table;
 		unsigned long end = (start + ptsize);
 		while(start < end) {
-			viking_no_mxcc_flush_page(start);
+			viking_flush_page(start);
 			start += PAGE_SIZE;
 		}
 	}
@@ -1809,11 +1584,11 @@ void iommu_sun4d_init(int sbi_node, struct linux_sbus *sbus)
 			viking_mxcc_flush_page(start);
 			start += PAGE_SIZE;
 		}
-	} else if(flush_page_for_dma == viking_no_mxcc_flush_page) {
+	} else if(flush_page_for_dma == viking_flush_page) {
 		unsigned long start = (unsigned long) iommu;
 		unsigned long end = (start + 16 * PAGE_SIZE);
 		while(start < end) {
-			viking_no_mxcc_flush_page(start);
+			viking_flush_page(start);
 			start += PAGE_SIZE;
 		}
 	}
@@ -2029,11 +1804,11 @@ static void srmmu_map_dma_area(unsigned long addr, int len)
 			viking_mxcc_flush_page(start);
 			start += PAGE_SIZE;
 		}
-	} else if(flush_page_for_dma == viking_no_mxcc_flush_page) {
+	} else if(flush_page_for_dma == viking_flush_page) {
 		unsigned long start = ((unsigned long) iopte_first) & PAGE_MASK;
 		unsigned long end = PAGE_ALIGN(((unsigned long) iopte));
 		while(start < end) {
-			viking_no_mxcc_flush_page(start);
+			viking_flush_page(start);
 			start += PAGE_SIZE;
 		}
 	}
@@ -2449,12 +2224,12 @@ unsigned long srmmu_paging_init(unsigned long start_mem, unsigned long end_mem)
 	start_mem = PAGE_ALIGN(mempool);
 
 	flush_cache_all();
-	if(flush_page_for_dma == viking_no_mxcc_flush_page) {
+	if(flush_page_for_dma == viking_flush_page) {
 		unsigned long start = ptables_start;
 		unsigned long end = start_mem;
 
 		while(start < end) {
-			viking_no_mxcc_flush_page(start);
+			viking_flush_page(start);
 			start += PAGE_SIZE;
 		}
 	}
@@ -2999,10 +2774,10 @@ __initfunc(static void init_viking(void))
 
 		msi_set_sync();
 
-		set_pte = srmmu_set_pte_nocache_nomxccvik;
-		sparc_update_rootmmu_dir = viking_no_mxcc_update_rootmmu_dir;
+		set_pte = srmmu_set_pte_nocache_viking;
+		sparc_update_rootmmu_dir = viking_update_rootmmu_dir;
 
-		flush_chunk = viking_nomxcc_flush_chunk; /* local flush _only_ */
+		flush_chunk = viking_flush_chunk; /* local flush _only_ */
 
 		/* We need this to make sure old viking takes no hits
 		 * on it's cache for dma snoops to workaround the
@@ -3010,7 +2785,7 @@ __initfunc(static void init_viking(void))
 		 * This is only necessary because of the new way in
 		 * which we use the IOMMU.
 		 */
-		flush_page_for_dma = viking_no_mxcc_flush_page;
+		flush_page_for_dma = viking_flush_page;
 	} else {
 		srmmu_name = "TI Viking/MXCC";
 		viking_mxcc_present = 1;

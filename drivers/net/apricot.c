@@ -34,6 +34,7 @@ static const char *version = "apricot.c:v0.2 05/12/94\n";
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#include <linux/init.h>
 
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -675,7 +676,7 @@ static void print_eth(char *add)
     printk ("type %2.2X%2.2X\n", (unsigned char)add[12], (unsigned char)add[13]);
 }
 
-int apricot_probe(struct device *dev)
+__initfunc(int apricot_probe(struct device *dev))
 {
     int i;
     struct i596_private *lp;
@@ -1001,7 +1002,7 @@ static void set_multicast_list(struct device *dev)
 }
 
 #ifdef HAVE_DEVLIST
-static unsigned int apricot_portlist[] = {0x300, 0};
+static unsigned int apricot_portlist[] __initdata = {0x300, 0};
 struct netdev_entry apricot_drv =
 {"apricot", apricot_probe, APRICOT_TOTAL_SIZE, apricot_portlist};
 #endif

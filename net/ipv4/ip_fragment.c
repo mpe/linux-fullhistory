@@ -177,7 +177,6 @@ static void ip_free(struct ipq *qp)
 	while (fp != NULL)
 	{
 		xp = fp->next;
-		IS_SKB(fp->skb);
 		frag_kfree_skb(fp->skb,FREE_READ);
 		frag_kfree_s(fp, sizeof(struct ipfrag));
 		fp = xp;

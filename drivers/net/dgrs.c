@@ -88,6 +88,7 @@ static char *version = "$Id: dgrs.c,v 1.12 1996/12/21 13:43:58 rick Exp $";
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/bios32.h>
+#include <linux/init.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/byteorder.h>
@@ -990,8 +991,8 @@ ack_intr:
 /*
  *	Download the board firmware
  */
-static int
-dgrs_download(struct device *dev0)
+__initfunc(static int
+dgrs_download(struct device *dev0))
 {
 	DGRS_PRIV	*priv0 = (DGRS_PRIV *) dev0->priv;
 	int		is;
@@ -1149,8 +1150,8 @@ dgrs_download(struct device *dev0)
 /*
  *	Probe (init) a board
  */
-int
-dgrs_probe1(struct device *dev)
+__initfunc(int
+dgrs_probe1(struct device *dev))
 {
 	DGRS_PRIV	*priv = (DGRS_PRIV *) dev->priv;
 	int		i;
@@ -1223,8 +1224,8 @@ dgrs_probe1(struct device *dev)
 	return (0);
 }
 
-int
-dgrs_initclone(struct device *dev)
+__initfunc(int
+dgrs_initclone(struct device *dev))
 {
 	DGRS_PRIV	*priv = (DGRS_PRIV *) dev->priv;
 	int		i;
@@ -1238,7 +1239,7 @@ dgrs_initclone(struct device *dev)
 	return (0);
 }
 
-static int
+__initfunc(static int
 dgrs_found_device(
 	struct device	*dev,
 	int		io,
@@ -1246,7 +1247,7 @@ dgrs_found_device(
 	int		irq,
 	ulong		plxreg,
 	ulong		plxdma
-)
+))
 {
 	DGRS_PRIV	*priv;
 	int		i;
@@ -1357,8 +1358,8 @@ dgrs_found_device(
 /*
  *	Scan for all boards
  */
-static int
-dgrs_scan(struct device *dev)
+__initfunc(static int
+dgrs_scan(struct device *dev))
 {
 	int	cards_found = 0;
 	uint	io;
@@ -1462,7 +1463,7 @@ dgrs_scan(struct device *dev)
 	 */
 	if (EISA_bus)
 	{
-		static int      is2iv[8] = { 0, 3, 5, 7, 10, 11, 12, 15 };
+		static int      is2iv[8] __initdata = { 0, 3, 5, 7, 10, 11, 12, 15 };
 
 		for (io = 0x1000; io < 0x9000; io += 0x1000)
 		{
@@ -1600,8 +1601,8 @@ cleanup_module(void)
 
 #else
 
-int
-dgrs_probe(struct device *dev)
+__initfunc(int
+dgrs_probe(struct device *dev))
 {
 	int	cards_found;
 

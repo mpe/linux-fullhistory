@@ -20,14 +20,16 @@ int vread(char *buf, char *addr, int count);
 
 extern inline void set_pgdir(unsigned long address, pgd_t entry)
 {
-#ifndef __mc68000__
+#if !defined(__mc68000__) && !defined(__sparc_v9__)
 	struct task_struct * p;
 
+	read_lock(&tasklist_lock);
 	for_each_task(p) {
 		if (!p->mm)
 			continue;
 		*pgd_offset(p->mm,address) = entry;
 	}
+	read_unlock(&tasklist_lock);
 #endif
 }
 

@@ -215,6 +215,7 @@ static const char *version = "defxx.c:v1.04 09/16/96  Lawrence V. Stefani (stefa
 #include <linux/pci.h>
 #include <linux/bios32.h>
 #include <linux/delay.h>
+#include <linux/init.h>
 #include <asm/byteorder.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -437,9 +438,9 @@ static inline void dfx_port_read_long(
  *   the device structure.
  */
 
-int dfx_probe(
+__initfunc(int dfx_probe(
 	struct device *dev
-	)
+	))
 
 	{
 	int				i;				/* used in for loops */
@@ -636,10 +637,10 @@ int dfx_probe(
  *   None
  */
 
-struct device *dfx_alloc_device(
+__initfunc(struct device *dfx_alloc_device(
 	struct device	*dev,
 	u16				iobase
-	)
+	))
 
 	{
 	struct device *tmp_dev;		/* pointer to a device structure */
@@ -731,9 +732,9 @@ struct device *dfx_alloc_device(
  *   enabled yet.
  */
 
-void dfx_bus_init(
+__initfunc(void dfx_bus_init(
 	struct device *dev
-	)
+	))
 
 	{
 	DFX_board_t *bp = (DFX_board_t *)dev->priv;
@@ -865,9 +866,9 @@ void dfx_bus_init(
  *   None
  */
 
-void dfx_bus_config_check(
+__initfunc(void dfx_bus_config_check(
 	DFX_board_t *bp
-	)
+	))
 
 	{
 	int	status;				/* return code from adapter port control call */
@@ -969,9 +970,9 @@ void dfx_bus_config_check(
  *   returning from this routine.
  */
 
-int dfx_driver_init(
+__initfunc(int dfx_driver_init(
 	struct device *dev
-	)
+	))
 
 	{
 	DFX_board_t *bp = (DFX_board_t *)dev->priv;

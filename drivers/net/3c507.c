@@ -59,6 +59,7 @@ static const char *version =
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/malloc.h>
+#include <linux/init.h>
 
 
 /* use 0 for production, 1 for verification, 2..7 for debug */
@@ -68,7 +69,7 @@ static const char *version =
 static unsigned int net_debug = NET_DEBUG;
 
 /* A zero-terminated list of common I/O addresses to be probed. */
-static unsigned int netcard_portlist[] =
+static unsigned int netcard_portlist[] __initdata =
 	{ 0x300, 0x320, 0x340, 0x280, 0};
 
 /*
@@ -301,7 +302,7 @@ struct netdev_entry netcard_drv =
 	device and return success.
 	*/
 
-int el16_probe(struct device *dev)
+__initfunc(int el16_probe(struct device *dev))
 {
 	int base_addr = dev ? dev->base_addr : 0;
 	int i;
@@ -322,7 +323,7 @@ int el16_probe(struct device *dev)
 	return ENODEV;
 }
 
-int el16_probe1(struct device *dev, int ioaddr)
+__initfunc(int el16_probe1(struct device *dev, int ioaddr))
 {
 	static unsigned char init_ID_done = 0, version_printed = 0;
 	int i, irq, irqval;

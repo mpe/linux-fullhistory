@@ -53,6 +53,7 @@ static const char *version =
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/string.h>
+#include <linux/init.h>
 #include <asm/io.h>
 #include <asm/system.h>
 
@@ -114,8 +115,8 @@ static void es_block_output(struct device *dev, int count, const unsigned char *
 
 #define ES_DEBUG	0
 
-static unsigned char lo_irq_map[] = {3, 4, 5, 6, 7, 9, 10};
-static unsigned char hi_irq_map[] = {11, 12, 0, 14, 0, 0, 0, 15};
+static unsigned char lo_irq_map[] __initdata = {3, 4, 5, 6, 7, 9, 10};
+static unsigned char hi_irq_map[] __initdata = {11, 12, 0, 14, 0, 0, 0, 15};
 
 /*
  *	Probe for the card. The best way is to read the EISA ID if it
@@ -123,7 +124,7 @@ static unsigned char hi_irq_map[] = {11, 12, 0, 14, 0, 0, 0, 15};
  *	PROM for a match against the Racal-Interlan assigned value.
  */
 
-int es_probe(struct device *dev)
+__initfunc(int es_probe(struct device *dev))
 {
 	unsigned short ioaddr = dev->base_addr;
 
@@ -150,7 +151,7 @@ int es_probe(struct device *dev)
 	return ENODEV;
 }
 
-int es_probe1(struct device *dev, int ioaddr)
+__initfunc(int es_probe1(struct device *dev, int ioaddr))
 {
 	int i;
 	unsigned long eisa_id;

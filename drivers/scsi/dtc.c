@@ -84,8 +84,9 @@
 #include "NCR5380.h"
 #include "constants.h"
 #include "sd.h"
-#include<linux/stat.h>
-#include<linux/string.h>
+#include <linux/stat.h>
+#include <linux/string.h>
+#include <linux/init.h>
 
 
 #define DTC_PUBLIC_RELEASE 2
@@ -145,9 +146,9 @@ static struct override {
    int irq;
 } overrides
 #ifdef OVERRIDE
-[] = OVERRIDE;
+[] __initdata = OVERRIDE;
 #else
-[4] = {{0, IRQ_AUTO}, {0, IRQ_AUTO}, {0, IRQ_AUTO}, {0, IRQ_AUTO}};
+[4] __initdata = {{0, IRQ_AUTO}, {0, IRQ_AUTO}, {0, IRQ_AUTO}, {0, IRQ_AUTO}};
 #endif
 
 #define NO_OVERRIDES (sizeof(overrides) / sizeof(struct override))
@@ -155,7 +156,7 @@ static struct override {
 static struct base {
    unsigned int address;
    int noauto;
-} bases[] = {{0xcc000, 0}, {0xc8000, 0}, {0xdc000, 0}, {0xd8000, 0}};
+} bases[] __initdata = {{0xcc000, 0}, {0xc8000, 0}, {0xdc000, 0}, {0xd8000, 0}};
 
 #define NO_BASES (sizeof (bases) / sizeof (struct base))
 
@@ -176,7 +177,7 @@ static const struct signature {
  *
 */
 
-void dtc_setup(char *str, int *ints) {
+__initfunc(void dtc_setup(char *str, int *ints)) {
    static int commandline_current = 0;
    int i;
    if (ints[0] != 2)
@@ -208,7 +209,7 @@ void dtc_setup(char *str, int *ints) {
 */
 
 
-int dtc_detect(Scsi_Host_Template * tpnt) {
+__initfunc(int dtc_detect(Scsi_Host_Template * tpnt)) {
    static int current_override = 0, current_base = 0;
    struct Scsi_Host *instance;
    unsigned int base;

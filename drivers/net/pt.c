@@ -92,6 +92,7 @@
 #include <linux/timer.h>
 #include <linux/if_arp.h>
 #include <linux/pt.h>
+#include <linux/init.h>
 #include "z8530.h"
 #include <net/ax25.h>
 
@@ -480,7 +481,7 @@ static void chipset_init(struct device *dev)
 
 
 
-int pt_init(void)
+__initfunc(int pt_init(void))
 {
     int *port;
     int ioaddr = 0;
@@ -542,7 +543,7 @@ int pt_init(void)
 /*
  * Probe for PT card.  Also initialises the timers
  */
-static int hw_probe(int ioaddr)
+__initfunc(static int hw_probe(int ioaddr))
 {
     int time = 1000;		/* Number of milliseconds to test */
     int a = 1;
@@ -1380,7 +1381,6 @@ static void pt_rxisr(struct device *dev)
                  skb->protocol = ntohs(ETH_P_AX25);
                  skb->mac.raw=skb->data;
                  lp->stats.rx_bytes+=skb->len;
-                 IS_SKB(skb);
                  netif_rx(skb);
                  lp->stats.rx_packets++;
                  if (!lp->dmachan)

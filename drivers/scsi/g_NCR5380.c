@@ -103,7 +103,8 @@
 #include "NCR5380.h"
 #include "constants.h"
 #include "sd.h"
-#include<linux/stat.h>
+#include <linux/stat.h>
+#include <linux/init.h>
 
 struct proc_dir_entry proc_scsi_g_ncr5380 = {
     PROC_SCSI_GENERIC_NCR5380, 9, "g_NCR5380",
@@ -124,9 +125,9 @@ static struct override {
     int board;	/* Use NCR53c400, Ricoh, etc. extensions ? */
 } overrides 
 #ifdef GENERIC_NCR5380_OVERRIDE 
-    [] = GENERIC_NCR5380_OVERRIDE
+    [] __initdata = GENERIC_NCR5380_OVERRIDE
 #else
-    [1] = {{0,},};
+    [1] __initdata = {{0,},};
 #endif
 
 #define NO_OVERRIDES (sizeof(overrides) / sizeof(struct override))
@@ -142,7 +143,7 @@ static struct override {
  *
  */
 
-static void internal_setup(int board, char *str, int *ints) {
+__initfunc(static void internal_setup(int board, char *str, int *ints)) {
     static int commandline_current = 0;
     switch (board) {
     case BOARD_NCR5380:
@@ -178,7 +179,7 @@ static void internal_setup(int board, char *str, int *ints) {
  * 	equal to the number of ints.
  */
 
-void generic_NCR5380_setup (char *str, int *ints) {
+__initfunc(void generic_NCR5380_setup (char *str, int *ints)) {
     internal_setup (BOARD_NCR5380, str, ints);
 }
 
@@ -191,7 +192,7 @@ void generic_NCR5380_setup (char *str, int *ints) {
  * 	equal to the number of ints.
  */
 
-void generic_NCR53C400_setup (char *str, int *ints) {
+__initfunc(void generic_NCR53C400_setup (char *str, int *ints)) {
     internal_setup (BOARD_NCR53C400, str, ints);
 }
 
@@ -207,7 +208,7 @@ void generic_NCR53C400_setup (char *str, int *ints) {
  *
  */
 
-int generic_NCR5380_detect(Scsi_Host_Template * tpnt) {
+__initfunc(int generic_NCR5380_detect(Scsi_Host_Template * tpnt)) {
     static int current_override = 0;
     int count;
     int flags = 0;

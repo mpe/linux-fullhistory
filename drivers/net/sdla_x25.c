@@ -24,6 +24,7 @@
 #include <linux/malloc.h>	/* kmalloc(), kfree() */
 #include <linux/router.h>	/* WAN router definitions */
 #include <linux/wanpipe.h>	/* WANPIPE common user API definitions */
+#include <linux/init.h>		/* __initfunc et al. */
 #include <asm/byteorder.h>	/* htons(), etc. */
 
 #define	_GNUC_
@@ -168,7 +169,7 @@ static void parse_call_info (unsigned char* str, x25_call_info_t* info);
  * Return:	0	o.k.
  *		< 0	failure.
  */
-int wpx_init (sdla_t* card, wandev_conf_t* conf)
+__initfunc(int wpx_init (sdla_t* card, wandev_conf_t* conf))
 {
 	union
 	{

@@ -63,19 +63,6 @@ extern __inline__ void lock_kernel(void)
 	register int proc asm("g5");
 	klip = &klock_info;
 	proc = smp_processor_id();
-
-#if 1 /* Debugging */
-	if(local_irq_count[proc]) {
-		__label__ l1;
-l1:		printk("lock from interrupt context at %p\n", &&l1);
-	}
-	if(proc == global_irq_holder) {
-		__label__ l2;
-l2:		printk("Ugh at %p\n", &&l2);
-		sti();
-	}
-#endif
-
 	__asm__ __volatile__("
 	mov	%%o7, %%g4
 	call	___lock_kernel

@@ -42,6 +42,7 @@ static const char *version =
 #include <linux/delay.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
@@ -56,7 +57,7 @@ int el2_pio_probe(struct device *dev);
 int el2_probe1(struct device *dev, int ioaddr);
 
 /* A zero-terminated list of I/O addresses to be probed in PIO mode. */
-static unsigned int netcard_portlist[] =
+static unsigned int netcard_portlist[] __initdata =
 	{ 0x300,0x310,0x330,0x350,0x250,0x280,0x2a0,0x2e0,0};
 
 #define EL2_IO_EXTENT	16
@@ -89,8 +90,8 @@ static void el2_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
    If the ethercard isn't found there is an optional probe for
    ethercard jumpered to programmed-I/O mode.
    */
-int
-el2_probe(struct device *dev)
+__initfunc(int
+el2_probe(struct device *dev))
 {
     int *addr, addrs[] = { 0xddffe, 0xd9ffe, 0xcdffe, 0xc9ffe, 0};
     int base_addr = dev->base_addr;
@@ -124,8 +125,8 @@ el2_probe(struct device *dev)
 #ifndef HAVE_DEVLIST
 /*  Try all of the locations that aren't obviously empty.  This touches
     a lot of locations, and is much riskier than the code above. */
-int
-el2_pio_probe(struct device *dev)
+__initfunc(int
+el2_pio_probe(struct device *dev))
 {
     int i;
     int base_addr = dev ? dev->base_addr : 0;
@@ -150,8 +151,8 @@ el2_pio_probe(struct device *dev)
 /* Probe for the Etherlink II card at I/O port base IOADDR,
    returning non-zero on success.  If found, set the station
    address and memory parameters in DEVICE. */
-int
-el2_probe1(struct device *dev, int ioaddr)
+__initfunc(int
+el2_probe1(struct device *dev, int ioaddr))
 {
     int i, iobase_reg, membase_reg, saved_406, wordlength;
     static unsigned version_printed = 0;

@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.23 1997/04/16 10:27:18 jj Exp $
+/*  $Id: init.c,v 1.24 1997/04/17 21:49:41 jj Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -706,7 +706,6 @@ void free_initmem (void)
 		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
 		free_page(addr);
 	}
-	printk ("Freeing unused kernel memory: %dk freed\n", (unsigned)((&__init_end - &__init_begin) >> 10));
 }
 
 void si_meminfo(struct sysinfo *val)

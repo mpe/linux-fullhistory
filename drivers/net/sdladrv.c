@@ -90,6 +90,7 @@
 #include <linux/sched.h>	/* for jiffies, HZ, etc. */
 #include <linux/sdladrv.h>	/* API definitions */
 #include <linux/sdlasfm.h>	/* SDLA firmware module definitions */
+#include <linux/init.h>
 #include <asm/io.h>		/* for inb(), outb(), etc. */
 #define _INB(port)		(inb(port))
 #define _OUTB(port, byte)	(outb((byte),(port)))
@@ -289,7 +290,8 @@ static unsigned char s507_irqmask[] =
 #ifdef MODULE
 int init_module (void)
 #else
-int wanpipe_init(void)
+__initfunc(int wanpipe_init(void))
+#endif
 {
 	printk(KERN_INFO "%s v%u.%u %s\n",
 		fullname, MOD_VERSION, MOD_RELEASE, copyright);

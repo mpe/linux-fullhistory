@@ -67,16 +67,14 @@ void tcp_reset_xmit_timer(struct sock *sk, int what, unsigned long when)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 
-	if((long)when <= 0)
-	{		
+	if((long)when <= 0) {
 		printk(KERN_DEBUG "xmit_timer <= 0 - timer:%d when:%lx\n", what, when);
 		when=HZ/50;
 	}
 
 	switch (what) {
 	case TIME_RETRANS:
-		/*
-		 * When seting the transmit timer the probe timer 
+		/* When seting the transmit timer the probe timer 
 		 * should not be set.
 		 * The delayed ack timer can be set if we are changing the
 		 * retransmit timer when removing acked frames.
@@ -105,7 +103,7 @@ void tcp_reset_xmit_timer(struct sock *sk, int what, unsigned long when)
 
 	default:
 		printk(KERN_DEBUG "bug: unknown timer value\n");
-	}
+	};
 }
 
 void tcp_clear_xmit_timer(struct sock *sk, int what)
@@ -124,7 +122,7 @@ void tcp_clear_xmit_timer(struct sock *sk, int what)
 		break;	
 	default:
 		printk(KERN_DEBUG "bug: unknown timer value\n");
-	}
+	};
 }
 
 int tcp_timer_is_set(struct sock *sk, int what)
@@ -143,7 +141,7 @@ int tcp_timer_is_set(struct sock *sk, int what)
 		break;	
 	default:
 		printk(KERN_DEBUG "bug: unknown timer value\n");
-	}
+	};
 	return 0;
 }
 
@@ -162,28 +160,25 @@ void tcp_clear_xmit_timers(struct sock *sk)
 
 static int tcp_write_timeout(struct sock *sk)
 {
+	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+
 	/*
 	 *	Look for a 'soft' timeout.
 	 */
 	if ((sk->state == TCP_ESTABLISHED &&
-	     atomic_read(&sk->retransmits) &&
-	     !(atomic_read(&sk->retransmits) & 7)) ||
-	    (sk->state != TCP_ESTABLISHED &&
-	     atomic_read(&sk->retransmits) > TCP_RETR1)) 
-	{
-		/*
-		 *	Attempt to recover if arp has changed (unlikely!) or
+
+	     /* Eric, what the heck is this doing?!?! */
+	     tp->retransmits && !(tp->retransmits & 7)) ||
+
+	    (sk->state != TCP_ESTABLISHED && tp->retransmits > TCP_RETR1)) {
+		/*	Attempt to recover if arp has changed (unlikely!) or
 		 *	a route has shifted (not supported prior to 1.3).
 		 */
 		ip_rt_advice((struct rtable**)&sk->dst_cache, 0);
 	}
 	
-	/*
-	 *	Have we tried to SYN too many times (repent repent 8))
-	 */
-	 
-	if(atomic_read(&sk->retransmits) > TCP_SYN_RETRIES && sk->state==TCP_SYN_SENT)
-	{
+	/* Have we tried to SYN too many times (repent repent 8)) */
+	if(tp->retransmits > TCP_SYN_RETRIES && sk->state==TCP_SYN_SENT) {
 		if(sk->err_soft)
 			sk->err=sk->err_soft;
 		else
@@ -199,11 +194,9 @@ static int tcp_write_timeout(struct sock *sk)
 		/* Don't FIN, we got nothing back */
 		return 0;
 	}
-	/*
-	 *	Has it gone just too far ?
-	 */
-	if (atomic_read(&sk->retransmits) > TCP_RETR2) 
-	{
+
+	/* Has it gone just too far? */
+	if (tp->retransmits > TCP_RETR2) {
 		if(sk->err_soft)
 			sk->err = sk->err_soft;
 		else
@@ -212,19 +205,12 @@ static int tcp_write_timeout(struct sock *sk)
 
 		tcp_clear_xmit_timers(sk);
 
-		/*
-		 *	Time wait the socket 
-		 */
-		if (sk->state == TCP_FIN_WAIT1 || sk->state == TCP_FIN_WAIT2 || sk->state == TCP_CLOSING ) 
-		{
+		/* Time wait the socket. */
+		if (sk->state == TCP_FIN_WAIT1 || sk->state == TCP_FIN_WAIT2 || sk->state == TCP_CLOSING) {
 			tcp_set_state(sk,TCP_TIME_WAIT);
 			tcp_reset_msl_timer (sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
-		}
-		else
-		{
-			/*
-			 *	Clean up time.
-			 */
+		} else {
+			/* Clean up time. */
 			tcp_set_state(sk, TCP_CLOSE);
 			return 0;
 		}
@@ -238,14 +224,10 @@ void tcp_delack_timer(unsigned long data) {
 	struct sock *sk = (struct sock*)data;
 
 	if(sk->zapped)
-	{
 		return;
-	}
 	
-	if (sk->delayed_acks)
-	{
+	if (sk->tp_pinfo.af_tcp.delayed_acks)
 		tcp_read_wakeup(sk); 		
-	}
 }
 
 void tcp_probe_timer(unsigned long data) {
@@ -254,16 +236,10 @@ void tcp_probe_timer(unsigned long data) {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 
 	if(sk->zapped) 
-	{		
 		return;
-	}
 	
-	if (sk->sock_readers) 
-	{
-		/* 
-		 * Try again in second 
-		 */
-
+	if (sk->sock_readers) {
+		/* Try again in second. */
 		tcp_reset_xmit_timer(sk, TIME_PROBE0, HZ);
 		return;
 	}
@@ -273,28 +249,20 @@ void tcp_probe_timer(unsigned long data) {
 	 *	FIXME: We ought not to do it, Solaris 2.5 actually has fixing
 	 *	this behaviour in Solaris down as a bug fix. [AC]
 	 */
-	if (tp->probes_out > TCP_RETR2) 
-	{
+	if (tp->probes_out > TCP_RETR2) {
 		if(sk->err_soft)
 			sk->err = sk->err_soft;
 		else
 			sk->err = ETIMEDOUT;
 		sk->error_report(sk);
 
-		/*
-		 *	Time wait the socket 
-		 */
+		/* Time wait the socket. */
 		if (sk->state == TCP_FIN_WAIT1 || sk->state == TCP_FIN_WAIT2 
-		    || sk->state == TCP_CLOSING ) 
-		{
+		    || sk->state == TCP_CLOSING) {
 			tcp_set_state(sk, TCP_TIME_WAIT);
 			tcp_reset_msl_timer (sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
-		}
-		else
-		{
-			/*
-			 *	Clean up time.
-			 */
+		} else {
+			/* Clean up time. */
 			tcp_set_state(sk, TCP_CLOSE);
 		}
 	}
@@ -307,24 +275,19 @@ static __inline__ int tcp_keepopen_proc(struct sock *sk)
 	int res = 0;
 
 	if (sk->state == TCP_ESTABLISHED || sk->state == TCP_CLOSE_WAIT ||
-	    sk->state == TCP_FIN_WAIT2)
-	{
+	    sk->state == TCP_FIN_WAIT2) {
 		struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 		__u32 elapsed = jiffies - tp->rcv_tstamp;
 
-		if (elapsed >= TCP_KEEPALIVE_TIME)
-		{
-			if (tp->probes_out > TCP_KEEPALIVE_PROBES)
-			{
+		if (elapsed >= TCP_KEEPALIVE_TIME) {
+			if (tp->probes_out > TCP_KEEPALIVE_PROBES) {
 				if(sk->err_soft)
 					sk->err = sk->err_soft;
 				else
 					sk->err = ETIMEDOUT;
 
 				tcp_set_state(sk, TCP_CLOSE);
-			}
-			else
-			{
+			} else {
 				tp->probes_out++;
 				tp->pending = TIME_KEEPOPEN;
 				tcp_write_wakeup(sk);
@@ -354,6 +317,16 @@ static __inline__ int tcp_keepopen_proc(struct sock *sk)
 /* Keepopen's are only valid for "established" TCP's, nicely our listener
  * hash gets rid of most of the useless testing, so we run through a couple
  * of the established hash chains each clock tick.  -DaveM
+ *
+ * And now, even more magic... TIME_WAIT TCP's cannot have keepalive probes
+ * going off for them, so we only need check the first half of the established
+ * hash table, even less testing under heavy load.
+ *
+ * I _really_ would rather do this by adding a new timer_struct to struct sock,
+ * and this way only those who set the keepalive option will get the overhead.
+ * The idea is you set it for 2 hours when the sock is first connected, when it
+ * does fire off (if at all, most sockets die earlier) you check for the keepalive
+ * option and also if the sock has been idle long enough to start probing.
  */
 static void tcp_keepalive(unsigned long data)
 {
@@ -361,7 +334,7 @@ static void tcp_keepalive(unsigned long data)
 	int count = 0;
 	int i;
 	
-	for(i = chain_start; i < (chain_start + (TCP_HTABLE_SIZE >> 2)); i++) {
+	for(i = chain_start; i < (chain_start + ((TCP_HTABLE_SIZE/2) >> 2)); i++) {
 		struct sock *sk = tcp_established_hash[i];
 		while(sk) {
 			if(sk->keepopen) {
@@ -373,7 +346,8 @@ static void tcp_keepalive(unsigned long data)
 		}
 	}
 out:
-	chain_start = ((chain_start + (TCP_HTABLE_SIZE>>2)) & (TCP_HTABLE_SIZE - 1));
+	chain_start = ((chain_start + ((TCP_HTABLE_SIZE/2)>>2)) &
+		       ((TCP_HTABLE_SIZE/2) - 1));
 }
 
 /*
@@ -394,48 +368,35 @@ void tcp_retransmit_timer(unsigned long data)
 	struct sock *sk = (struct sock*)data;
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 
-	/*
-	 *	We are reset. We will send no more retransmits.
-	 */
-
-	if(sk->zapped)
-	{
+	/* We are reset. We will send no more retransmits. */
+	if(sk->zapped) {
 		tcp_clear_xmit_timer(sk, TIME_RETRANS);
 		return;
 	}
 
 	lock_sock(sk);
 
-	/*
-	 * Clear delay ack timer
-	 */
-
+	/* Clear delay ack timer. */
 	tcp_clear_xmit_timer(sk, TIME_DACK);
 
-	/*
-	 *	Retransmission
-	 */
-
+	/* Retransmission. */
 	tp->retrans_head = NULL;
-
-	if (atomic_read(&sk->retransmits) == 0)
-	{
-		/*
-		 * remember window where we lost
+	if (tp->retransmits == 0) {
+		/* remember window where we lost
 		 * "one half of the current window but at least 2 segments"
 		 */
-
-		sk->ssthresh = max(tp->snd_cwnd >> 1, 2);
-		sk->cong_count = 0;
+		tp->snd_ssthresh = max(tp->snd_cwnd >> 1, 2);
+		tp->snd_cwnd_cnt = 0;
 		tp->snd_cwnd = 1;
 	}
 
-	atomic_inc(&sk->retransmits);
+	tp->retransmits++;
 
+	tp->dup_acks = 0;
+	tp->high_seq = tp->snd_nxt;
 	tcp_do_retransmit(sk, 0);
 
-	/*
-	 * Increase the timeout each time we retransmit.  Note that
+	/* Increase the timeout each time we retransmit.  Note that
 	 * we do not increase the rtt estimate.  rto is initialized
 	 * from rtt, but increases here.  Jacobson (SIGCOMM 88) suggests
 	 * that doubling rto each time is the least we can get away with.
@@ -450,8 +411,7 @@ void tcp_retransmit_timer(unsigned long data)
 	 * implemented ftp to mars will work nicely. We will have to fix
 	 * the 120 second clamps though!
 	 */
-
-	tp->backoff++;
+	tp->backoff++;	/* FIXME: always same as retransmits? -- erics */
 	tp->rto = min(tp->rto << 1, 120*HZ);
 	tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
 
@@ -521,7 +481,7 @@ static void tcp_syn_recv_timer(unsigned long data)
 						conn->expires = now + timeo;
 						tcp_synq_queue(tp, conn);
 					}
-				} while (req != tp->syn_wait_queue);
+				} while (req);
 			}
 			sk = sk->next;
 		}
@@ -535,16 +495,13 @@ void tcp_sltimer_handler(unsigned long data)
 	unsigned long now = jiffies;
 	int i;
 
-	for (i=0; i < TCP_SLT_MAX; i++, slt++)
-	{
-		if (atomic_read(&slt->count))
-		{
+	for (i=0; i < TCP_SLT_MAX; i++, slt++) {
+		if (atomic_read(&slt->count)) {
 			long trigger;
 
 			trigger = slt->period - ((long)(now - slt->last));
 
-			if (trigger <= 0)
-			{
+			if (trigger <= 0) {
 				(*slt->handler)((unsigned long) slt);
 				slt->last = now;
 				trigger = slt->period;
@@ -553,8 +510,7 @@ void tcp_sltimer_handler(unsigned long data)
 		}
 	}
 
-	if (next != ~0UL)
-	{
+	if (next != ~0UL) {
 		tcp_slow_timer.expires = now + next;
 		add_timer(&tcp_slow_timer);
 	}
@@ -570,13 +526,10 @@ void __tcp_inc_slow_timer(struct tcp_sl_timer *slt)
 		
 	when = now + slt->period;
 	if (del_timer(&tcp_slow_timer))
-	{
 		next = tcp_slow_timer.expires;
-	}
+
 	if (next && ((long)(next - when) < 0))
-	{
 		when = next;
-	}
 		
 	tcp_slow_timer.expires = when;
 	add_timer(&tcp_slow_timer);

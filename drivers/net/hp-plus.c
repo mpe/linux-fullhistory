@@ -30,6 +30,7 @@ static const char *version =
 #include <linux/ioport.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -38,7 +39,7 @@ static const char *version =
 #include "8390.h"
 
 /* A zero-terminated list of I/O addresses to be probed. */
-static unsigned int hpplus_portlist[] =
+static unsigned int hpplus_portlist[] __initdata =
 {0x200, 0x240, 0x280, 0x2C0, 0x300, 0x320, 0x340, 0};
 
 /*
@@ -121,7 +122,7 @@ struct netdev_entry hpplus_drv =
 {"hpplus", hpp_probe1, HP_IO_EXTENT, hpplus_portlist};
 #else
 
-int hp_plus_probe(struct device *dev)
+__initfunc(int hp_plus_probe(struct device *dev))
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -144,7 +145,7 @@ int hp_plus_probe(struct device *dev)
 #endif
 
 /* Do the interesting part of the probe at a single address. */
-int hpp_probe1(struct device *dev, int ioaddr)
+__initfunc(int hpp_probe1(struct device *dev, int ioaddr))
 {
 	int i;
 	unsigned char checksum = 0;

@@ -42,6 +42,7 @@
 #include <linux/in.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
+#include <linux/init.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -72,7 +73,7 @@ static void set_multicast_list(struct device *dev)
 {
 }
 
-int dummy_init(struct device *dev)
+__initfunc(int dummy_init(struct device *dev))
 {
 	/* Initialize the device structure. */
 	dev->hard_start_xmit	= dummy_xmit;
@@ -115,7 +116,7 @@ static struct net_device_stats *dummy_get_stats(struct device *dev)
 
 #ifdef MODULE
 
-static int dummy_probe(struct device *dev)
+__initfunc(static int dummy_probe(struct device *dev))
 {
 	dummy_init(dev);
 	return 0;

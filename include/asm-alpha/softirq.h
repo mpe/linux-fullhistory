@@ -31,6 +31,12 @@ extern inline void init_bh(int nr, void (*routine)(void))
 	bh_mask |= 1 << nr;
 }
 
+extern inline void remove_bh(int nr)
+{
+	bh_base[nr] = NULL;
+	bh_mask &= ~(1 << nr);
+}
+
 extern inline void mark_bh(int nr)
 {
 	set_bit(nr, &bh_active);

@@ -1,7 +1,7 @@
 int dgrs_firmnum = 550;
 char dgrs_firmver[] = "$Version$";
 char dgrs_firmdate[] = "11/16/96 03:45:15";
-unsigned char dgrs_code[] = {
+unsigned char dgrs_code[] __initdata = {
 	213,5,192,8,0,0,0,0,0,0,0,0,
 	0,0,0,0,0,0,0,0,0,0,0,0,
 	0,0,0,0,0,0,0,0,64,40,35,41,

@@ -47,6 +47,7 @@
 #include <linux/malloc.h>
 #include <linux/string.h>
 #include <linux/config.h>
+#include <linux/init.h>
 
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -734,7 +735,7 @@ static void lance_set_multicast (struct device *dev)
 }
 
 
-int a2065_probe(struct device *dev)
+__initfunc(int a2065_probe(struct device *dev))
 {
 	int key1, key2 = 0;
 	struct ConfigDev *cd;

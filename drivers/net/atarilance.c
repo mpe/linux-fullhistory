@@ -55,6 +55,7 @@ static char *version = "atarilance.c: v1.3 04/04/96 "
 #include <linux/errno.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
+#include <linux/init.h>
 
 #include <asm/setup.h>
 #include <asm/irq.h>
@@ -369,7 +370,7 @@ void *slow_memcpy( void *dst, const void *src, size_t len )
 }
 
 
-int atarilance_probe( struct device *dev )
+__initfunc(int atarilance_probe( struct device *dev ))
 
 {	int i;
 	static int found = 0;
@@ -392,7 +393,7 @@ int atarilance_probe( struct device *dev )
 
 /* Derived from hwreg_present() in atari/config.c: */
 
-static int addr_accessible( volatile void *regp, int wordflag, int writeflag )
+__initfunc(static int addr_accessible( volatile void *regp, int wordflag, int writeflag ))
 
 {	int		ret;
 	long	flags;
@@ -442,8 +443,8 @@ static int addr_accessible( volatile void *regp, int wordflag, int writeflag )
 }
 
 
-static unsigned long lance_probe1( struct device *dev,
-								   struct lance_addr *init_rec )
+__initfunc(static unsigned long lance_probe1( struct device *dev,
+								   struct lance_addr *init_rec ))
 
 {	volatile unsigned short *memaddr =
 		(volatile unsigned short *)init_rec->memaddr;

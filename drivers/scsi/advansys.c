@@ -542,6 +542,7 @@
 #include <linux/malloc.h>
 #if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(1,3,0)
 #include <linux/proc_fs.h>
+#include <linux/init.h>
 #endif /* version >= v1.3.0 */
 #include <asm/io.h>
 #include <asm/system.h>
@@ -2953,8 +2954,8 @@ advansys_proc_info(char *buffer, char **start, off_t offset, int length,
  * it must not call SCSI mid-level functions including scsi_malloc()
  * and scsi_free().
  */
-int
-advansys_detect(Scsi_Host_Template *tpnt)
+__initfunc(int
+advansys_detect(Scsi_Host_Template *tpnt))
 {
 	static int			detect_called = ASC_FALSE;
 	int					iop;
@@ -5022,8 +5023,8 @@ asc_init_dev(ASC_DVC_VAR *asc_dvc_varp, Scsi_Cmnd *scp)
 /*
  * Search for an AdvanSys PCI device in the PCI configuration space.
  */
-STATIC int
-asc_srch_pci_dev(PCI_DEVICE *pciDevice)
+__initfunc(STATIC int
+asc_srch_pci_dev(PCI_DEVICE *pciDevice))
 {
 	int ret;
 
@@ -5059,8 +5060,8 @@ asc_srch_pci_dev(PCI_DEVICE *pciDevice)
 /*
  * Determine the access method to be used for 'pciDevice'.
  */
-STATIC uchar
-asc_scan_method(void)
+__initfunc(STATIC uchar
+asc_scan_method(void))
 {
 	ushort data;
 	PCI_DATA pciData;
@@ -5089,8 +5090,8 @@ asc_scan_method(void)
  *
  * Return PCI_DEVICE_FOUND if found, otherwise return PCI_DEVICE_NOT_FOUND.
  */
-STATIC int
-asc_pci_find_dev(PCI_DEVICE *pciDevice)
+__initfunc(STATIC int
+asc_pci_find_dev(PCI_DEVICE *pciDevice))
 {
 	PCI_DATA pciData;
 	ushort vendorid, deviceid;
@@ -5138,8 +5139,8 @@ asc_pci_find_dev(PCI_DEVICE *pciDevice)
 /*
  * Read PCI configuration data into 'pciConfig'.
  */
-STATIC void
-asc_get_pci_cfg(PCI_DEVICE *pciDevice, PCI_CONFIG_SPACE *pciConfig)
+__initfunc(STATIC void
+asc_get_pci_cfg(PCI_DEVICE *pciDevice, PCI_CONFIG_SPACE *pciConfig))
 {
 	PCI_DATA pciData;
 	uchar counter;
@@ -5168,8 +5169,8 @@ asc_get_pci_cfg(PCI_DEVICE *pciDevice, PCI_CONFIG_SPACE *pciConfig)
  *
  * The configuration mechanism is checked for the correct access method.
  */
-STATIC ushort
-asc_get_cfg_word(PCI_DATA *pciData)
+__initfunc(STATIC ushort
+asc_get_cfg_word(PCI_DATA *pciData))
 {
 	ushort	tmp;
 	ulong	address;
@@ -5249,8 +5250,8 @@ asc_get_cfg_word(PCI_DATA *pciData)
  *
  * The configuration mechanism is checked for the correct access method.
  */
-STATIC uchar
-asc_get_cfg_byte(PCI_DATA *pciData)
+__initfunc(STATIC uchar
+asc_get_cfg_byte(PCI_DATA *pciData))
 {
 	uchar tmp;
 	ulong address;
@@ -5327,8 +5328,8 @@ asc_get_cfg_byte(PCI_DATA *pciData)
 /*
  * Write a byte to the PCI configuration space.
  */
-void
-asc_put_cfg_byte(PCI_DATA *pciData, uchar byte_data)
+__initfunc(void
+asc_put_cfg_byte(PCI_DATA *pciData, uchar byte_data))
 {
 	ulong tmpl;
 	ulong address;
@@ -6375,10 +6376,10 @@ DvcOutPortDWords(PortAddr port, ulong *pdw, int dwords)
 /*
  * Read a PCI configuration byte.
  */
-uchar
+__initfunc(uchar
 DvcReadPCIConfigByte( 
         ASC_DVC_VAR asc_ptr_type *asc_dvc, 
-        ushort offset )
+        ushort offset ))
 {
     PCI_DATA	pciData;
 
@@ -6393,11 +6394,11 @@ DvcReadPCIConfigByte(
 /*
  * Write a PCI configuration byte.
  */
-void
+__initfunc(void
 DvcWritePCIConfigByte(
         ASC_DVC_VAR asc_ptr_type *asc_dvc, 
         ushort offset, 
-        uchar  byte_data )
+        uchar  byte_data ))
 {
     PCI_DATA	pciData;
 
@@ -6413,11 +6414,11 @@ DvcWritePCIConfigByte(
  * Return the BIOS address of the adapter at the specified
  * I/O port and with the specified bus type.
  */
-ushort
+__initfunc(ushort
 AscGetChipBiosAddress(
         PortAddr iop_base,
         ushort bus_type
-    )
+    ))
 {
     ushort  cfg_lsw ;
     ushort  bios_addr ;
@@ -6927,11 +6928,11 @@ AscGetChipScsiCtrl(
 	return (sc);
 }
 
-uchar
+__initfunc(uchar
 AscGetChipVersion(
 					 PortAddr iop_base,
 					 ushort bus_type
-)
+))
 {
 	if ((bus_type & ASC_IS_EISA) != 0) {
 		PortAddr            eisa_iop;
@@ -6976,13 +6977,13 @@ AscGetChipBusType(
 	return (0);
 }
 
-ulong
+__initfunc(ulong
 AscLoadMicroCode(
 					PortAddr iop_base,
 					ushort s_addr,
 					ushort dosfar * mcode_buf,
 					ushort mcode_size
-)
+))
 {
 	ulong               chksum;
 	ushort              mcode_word_size;
@@ -6999,10 +7000,10 @@ AscLoadMicroCode(
 	return (chksum);
 }
 
-int
+__initfunc(int
 AscFindSignature(
 					PortAddr iop_base
-)
+))
 {
 	ushort              sig_word;
 	if (AscGetChipSignatureByte(iop_base) == (uchar) ASC_1000_ID1B) {
@@ -7022,11 +7023,11 @@ PortAddr            _asc_def_iop_base[ASC_IOADR_TABLE_MAX_IX] =
 	ASC_IOADR_5, ASC_IOADR_6, ASC_IOADR_7, ASC_IOADR_8
 };
 
-PortAddr
+__initfunc(PortAddr
 AscSearchIOPortAddr(
 					   PortAddr iop_beg,
 					   ushort bus_type
-)
+))
 {
 	if (bus_type & ASC_IS_VL) {
 		while ((iop_beg = AscSearchIOPortAddr11(iop_beg)) != 0) {
@@ -7057,10 +7058,10 @@ AscSearchIOPortAddr(
 	return (0);
 }
 
-PortAddr
+__initfunc(PortAddr
 AscSearchIOPortAddr11(
 						 PortAddr s_addr
-)
+))
 {
 	int                 i;
 	PortAddr            iop_base;
@@ -7103,9 +7104,9 @@ uchar               _hextbl_[16] =
 };
 #endif
 
-void
+__initfunc(void
 AscSetISAPNPWaitForKey(
-	void)
+	void))
 {
 	outp(ASC_ISA_PNP_PORT_ADDR, 0x02);
 	outp(ASC_ISA_PNP_PORT_WRITE, 0x02);
@@ -7768,7 +7769,7 @@ AscScsiSetupCmdQ(
 	return (0);
 }
 
-uchar _mcode_buf[ ] = {
+uchar _mcode_buf[ ] __initdata = {
   0x01,  0x03,  0x01,  0x19,  0x0F,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,
   0x0F,  0x0F,  0x0F,  0x0F,  0x0F,  0x0F,  0x0F,  0x0F,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,
   0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,  0x00,
@@ -9192,10 +9193,10 @@ DvcDelayNanoSecond(
 	return;
 }
 
-ulong
+__initfunc(ulong
 AscGetEisaProductID(
 					   PortAddr iop_base
-)
+))
 {
 	PortAddr            eisa_iop;
 	ushort              product_id_high, product_id_low;
@@ -9207,10 +9208,10 @@ AscGetEisaProductID(
 	return (product_id);
 }
 
-PortAddr
+__initfunc(PortAddr
 AscSearchIOPortAddrEISA(
 						   PortAddr iop_base
-)
+))
 {
 	ulong               eisa_product_id;
 	if (iop_base == 0) {
@@ -9469,10 +9470,10 @@ AscGetIsaDmaSpeed(
 	return (speed_value);
 }
 
-ushort
+__initfunc(ushort
 AscInitGetConfig(
 					ASC_DVC_VAR asc_ptr_type * asc_dvc
-)
+))
 {
 	ushort              warn_code;
 	warn_code = 0;
@@ -9500,10 +9501,10 @@ AscInitGetConfig(
 	return (warn_code);
 }
 
-ushort
+__initfunc(ushort
 AscInitSetConfig(
 					ASC_DVC_VAR asc_ptr_type * asc_dvc
-)
+))
 {
 	ushort              warn_code;
 	warn_code = 0;
@@ -9519,10 +9520,10 @@ AscInitSetConfig(
 	return (warn_code);
 }
 
-ushort
+__initfunc(ushort
 AscInitFromAscDvcVar(
 						ASC_DVC_VAR asc_ptr_type * asc_dvc
-)
+))
 {
 	PortAddr            iop_base;
 	ushort              cfg_msw;
@@ -9603,10 +9604,10 @@ AscInitFromAscDvcVar(
 	return (warn_code);
 }
 
-ushort
+__initfunc(ushort
 AscInitAsc1000Driver(
 						ASC_DVC_VAR asc_ptr_type * asc_dvc
-)
+))
 {
 	ushort              warn_code;
 	PortAddr            iop_base;
@@ -9642,10 +9643,10 @@ AscInitAsc1000Driver(
 	return (warn_code);
 }
 
-ushort
+__initfunc(ushort
 AscInitAscDvcVar(
 					ASC_DVC_VAR asc_ptr_type * asc_dvc
-)
+))
 {
 	int                 i;
 	PortAddr            iop_base;

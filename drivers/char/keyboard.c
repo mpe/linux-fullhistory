@@ -28,6 +28,7 @@
 #include <linux/string.h>
 #include <linux/ioport.h>
 #include <linux/random.h>
+#include <linux/init.h>
 
 #include <asm/bitops.h>
 
@@ -1192,7 +1193,7 @@ static void kbd_bh(void)
 	}
 }
 
-int kbd_init(void)
+__initfunc(int kbd_init(void))
 {
 	int i;
 	struct kbd_struct kbd0;
@@ -1306,7 +1307,7 @@ static void kbd_write(int address, int data)
 	outb(data, address);               /* write out the data*/
 }
 
-static int initialize_kbd(void)
+__initfunc(static int initialize_kbd(void))
 {
 	unsigned long flags;
 

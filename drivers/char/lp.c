@@ -23,6 +23,7 @@
 #include <linux/ioport.h>
 #include <linux/fcntl.h>
 #include <linux/delay.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -678,7 +679,7 @@ static int inline lp_searchfor(int list[], int a)
 	return 0;
 }
 
-int lp_init(void)
+__initfunc(int lp_init(void))
 {
 	int count = 0;
 	struct parport *pb;

@@ -48,6 +48,7 @@
 #include <linux/blk.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/irq.h>
@@ -2537,7 +2538,7 @@ void scsi_build_commandblocks(Scsi_Device * SDpnt)
  * initialization, bus scanning, and sd/st initialization routines.
  */
 
-int scsi_dev_init(void)
+__initfunc(int scsi_dev_init(void))
 {
     Scsi_Device * SDpnt;
     struct Scsi_Host * shpnt;

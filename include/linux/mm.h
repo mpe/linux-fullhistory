@@ -125,7 +125,7 @@ typedef struct page {
 	unsigned dirty:16,
 		 age:8;
 	struct wait_queue *wait;
-	struct page *prev_hash;
+	struct page **pprev_hash;
 	struct buffer_head * buffers;
 	unsigned long swap_unlock_entry;
 	unsigned long map_nr;	/* page->map_nr == page - mem_map */

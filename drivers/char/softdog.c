@@ -34,6 +34,7 @@
 #include <linux/miscdevice.h>
 #include <linux/watchdog.h>
 #include <linux/reboot.h>
+#include <linux/init.h>
 #include <asm/uaccess.h>
 
 #define WATCHDOG_MINOR	130
@@ -172,7 +173,7 @@ static struct miscdevice softdog_miscdev=
 	&softdog_fops
 };
 
-void watchdog_init(void)
+__initfunc(void watchdog_init(void))
 {
 	misc_register(&softdog_miscdev);
 	init_timer(&watchdog_ticktock);

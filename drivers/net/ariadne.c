@@ -49,6 +49,7 @@
 #include <linux/etherdevice.h>
 #include <linux/interrupt.h>
 #include <linux/skbuff.h>
+#include <linux/init.h>
 
 #include <asm/bitops.h>
 #include <asm/amigaints.h>
@@ -145,7 +146,7 @@ static void memcpyw(u_short *dest, u_short *src, int len)
 }
 
 
-int ariadne_probe(struct device *dev)
+__initfunc(int ariadne_probe(struct device *dev))
 {
     int key;
     struct ConfigDev *cd;

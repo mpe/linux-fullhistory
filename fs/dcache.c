@@ -4,6 +4,8 @@
  *  (C) Copyright 1994 Linus Torvalds
  */
 
+/* Speeded up searches a bit and threaded the mess. -DaveM */
+
 /*
  * The directory cache is a "two-level" cache, each level doing LRU on
  * its entries.  Adding new entries puts them at the end of the LRU
@@ -22,6 +24,9 @@
 #include <linux/string.h>
 
 #include <asm/unaligned.h>
+#include <asm/spinlock.h>
+
+spinlock_t dcache_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  * Don't bother caching long names.. They just take up space in the cache, and
@@ -30,18 +35,14 @@
  */
 #define DCACHE_NAME_LEN	15
 #define DCACHE_SIZE 1024
-#define DCACHE_HASH_QUEUES 256
-
-struct hash_list {
-	struct dir_cache_entry * next;
-	struct dir_cache_entry * prev;
-};
+#define DCACHE_HASH_QUEUES 256	/* keep this a pow2 */
 
 /*
  * The dir_cache_entry must be in this order: we do ugly things with the pointers
  */
 struct dir_cache_entry {
-	struct hash_list h;
+	struct dir_cache_entry *next;
+	struct dir_cache_entry **pprev;
 	kdev_t dc_dev;
 	unsigned long dir;
 	unsigned long version;
@@ -68,13 +69,34 @@ static struct dir_cache_entry level2_cache[DCACHE_SIZE];
 static struct dir_cache_entry * level1_head;
 static struct dir_cache_entry * level2_head;
 
-/*
- * The hash-queues are also doubly-linked circular lists, but the head is
- * itself on the doubly-linked list, not just a pointer to the first entry.
- */
-#define hash_fn(dev,dir,namehash) ((HASHDEV(dev) ^ (dir) ^ (namehash)) % DCACHE_HASH_QUEUES)
+/* The hash queues are layed out in a slightly different manner. */
+static struct dir_cache_entry *hash_table[DCACHE_HASH_QUEUES];
 
-static struct hash_list hash_table[DCACHE_HASH_QUEUES];
+#define hash_fn(dev,dir,namehash) \
+	((HASHDEV(dev) ^ (dir) ^ (namehash)) & (DCACHE_HASH_QUEUES - 1))
+
+/*
+ * Stupid name"hash" algorithm. Write something better if you want to,
+ * but I doubt it matters that much.
+ */
+static unsigned long namehash(const char * name, int len)
+{
+	unsigned long hash = 0;
+
+	while ((len -= sizeof(unsigned long)) > 0) {
+		hash += get_unaligned((unsigned long *)name);
+		name += sizeof(unsigned long);
+	}
+	return hash +
+		(get_unaligned((unsigned long *)name) &
+		 ~(~0UL << ((len + sizeof(unsigned long)) << 3)));
+}
+
+static inline struct dir_cache_entry **get_hlist(struct inode *dir,
+						 const char *name, int len)
+{
+	return hash_table + hash_fn(dir->i_dev, dir->i_ino, namehash(name, len));
+}
 
 static inline void remove_lru(struct dir_cache_entry * de)
 {
@@ -106,78 +128,50 @@ static inline void update_lru(struct dir_cache_entry * de)
 }
 
 /*
- * Stupid name"hash" algorithm. Write something better if you want to,
- * but I doubt it matters that much
- */
-static inline unsigned long namehash(const char * name, int len)
-{
-	if (len >= sizeof(unsigned long))
-		return len +
-			get_unaligned((unsigned long *) name) +
-			get_unaligned((unsigned long *) (name + len - sizeof(unsigned long)));
-	return len +
-		((const unsigned char *) name)[0]+
-		((const unsigned char *) name)[len-1];
-}
-
-/*
  * Hash queue manipulation. Look out for the casts..
+ *
+ * What casts? 8-) -DaveM
  */
 static inline void remove_hash(struct dir_cache_entry * de)
 {
-	struct dir_cache_entry * next = de->h.next;
-
-	if (next) {
-		struct dir_cache_entry * prev = de->h.prev;
-		next->h.prev = prev;
-		prev->h.next = next;
-		de->h.next = NULL;
+	if(de->pprev) {
+		if(de->next)
+			de->next->pprev = de->pprev;
+		*de->pprev = de->next;
+		de->pprev = NULL;
 	}
 }
 
-static inline void add_hash(struct dir_cache_entry * de, struct hash_list * hash)
+static inline void add_hash(struct dir_cache_entry * de, struct dir_cache_entry ** hash)
 {
-	struct dir_cache_entry * next = hash->next;
-	de->h.next = next;
-	de->h.prev = (struct dir_cache_entry *) hash;
-	next->h.prev = de;
-	hash->next = de;
+	if((de->next = *hash) != NULL)
+		(*hash)->pprev = &de->next;
+	*hash = de;
+	de->pprev = hash;
 }
 
 /*
  * Find a directory cache entry given all the necessary info.
  */
-static inline struct dir_cache_entry * find_entry(struct inode * dir, const char * name, int len, struct hash_list * hash)
+static inline struct dir_cache_entry * find_entry(struct inode * dir, const char * name, int len, struct dir_cache_entry ** hash)
 {
-	struct dir_cache_entry * nextde = hash->next;
+	struct dir_cache_entry *de;
 
-	for (;;) {
-		struct dir_cache_entry * de;
-
-		if (nextde == (struct dir_cache_entry *) hash)
+	for(de = *hash; de; de = de->next)
+		if((de->name_len == (unsigned char) len)	&&
+		   (de->dc_dev == dir->i_dev)			&&
+		   (de->dir == dir->i_ino)			&&
+		   (de->version == dir->i_version)		&&
+		   (!memcmp(de->name, name, len)))
 			break;
-		de = nextde;
-		nextde = nextde->h.next;
-		if (de->name_len != (unsigned char) len)
-			continue;
-		if (de->dc_dev != dir->i_dev)
-			continue;
-		if (de->dir != dir->i_ino)
-			continue;
-		if (de->version != dir->i_version)
-			continue;
-		if (memcmp(de->name, name, len))
-			continue;
-		return de;
-	}
-	return NULL;
+	return de;
 }
 
 /*
  * Move a successfully used entry to level2. If already at level2,
  * move it to the end of the LRU queue..
  */
-static inline void move_to_level2(struct dir_cache_entry * old_de, struct hash_list * hash)
+static inline void move_to_level2(struct dir_cache_entry * old_de, struct dir_cache_entry ** hash)
 {
 	struct dir_cache_entry * de;
 
@@ -194,43 +188,49 @@ static inline void move_to_level2(struct dir_cache_entry * old_de, struct hash_l
 
 int dcache_lookup(struct inode * dir, const char * name, int len, unsigned long * ino)
 {
-	struct hash_list * hash;
-	struct dir_cache_entry *de;
+	int ret = 0;
 
-	if (len > DCACHE_NAME_LEN)
-		return 0;
-	hash = hash_table + hash_fn(dir->i_dev, dir->i_ino, namehash(name,len));
-	de = find_entry(dir, name, len, hash);
-	if (!de)
-		return 0;
-	*ino = de->ino;
-	move_to_level2(de, hash);
-	return 1;
+	if(len <= DCACHE_NAME_LEN) {
+		struct dir_cache_entry **hash = get_hlist(dir, name, len);
+		struct dir_cache_entry *de;
+
+		spin_lock(&dcache_lock);
+		de = find_entry(dir, name, len, hash);
+		if(de) {
+			*ino = de->ino;
+			move_to_level2(de, hash);
+			ret = 1;
+		}
+		spin_unlock(&dcache_lock);
+	}
+	return ret;
 }
 
 void dcache_add(struct inode * dir, const char * name, int len, unsigned long ino)
 {
-	struct hash_list * hash;
-	struct dir_cache_entry *de;
+	if (len <= DCACHE_NAME_LEN) {
+		struct dir_cache_entry **hash = get_hlist(dir, name, len);
+		struct dir_cache_entry *de;
 
-	if (len > DCACHE_NAME_LEN)
-		return;
-	hash = hash_table + hash_fn(dir->i_dev, dir->i_ino, namehash(name,len));
-	if ((de = find_entry(dir, name, len, hash)) != NULL) {
-		de->ino = ino;
-		update_lru(de);
-		return;
+		spin_lock(&dcache_lock);
+		de = find_entry(dir, name, len, hash);
+		if (de) {
+			de->ino = ino;
+			update_lru(de);
+		} else {
+			de = level1_head;
+			level1_head = de->next_lru;
+			remove_hash(de);
+			de->dc_dev = dir->i_dev;
+			de->dir = dir->i_ino;
+			de->version = dir->i_version;
+			de->ino = ino;
+			de->name_len = len;
+			memcpy(de->name, name, len);
+			add_hash(de, hash);
+		}
+		spin_unlock(&dcache_lock);
 	}
-	de = level1_head;
-	level1_head = de->next_lru;
-	remove_hash(de);
-	de->dc_dev = dir->i_dev;
-	de->dir = dir->i_ino;
-	de->version = dir->i_version;
-	de->ino = ino;
-	de->name_len = len;
-	memcpy(de->name, name, len);
-	add_hash(de, hash);
 }
 
 unsigned long name_cache_init(unsigned long mem_start, unsigned long mem_end)
@@ -270,7 +270,7 @@ unsigned long name_cache_init(unsigned long mem_start, unsigned long mem_end)
 	 * Empty hash queues..
 	 */
 	for (i = 0 ; i < DCACHE_HASH_QUEUES ; i++)
-		hash_table[i].next = hash_table[i].next =
-			(struct dir_cache_entry *) &hash_table[i];
+		hash_table[i] = NULL;
+
 	return mem_start;
 }

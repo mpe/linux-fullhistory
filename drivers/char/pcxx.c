@@ -69,6 +69,7 @@
 #include <linux/tty_driver.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
+#include <linux/init.h>
 
 #ifndef MODULE
 #include <linux/ctype.h> /* We only need it for parsing the "digi="-line */
@@ -217,6 +218,7 @@ void cleanup_module()
 	timer_active &= ~(1 << DIGI_TIMER);
 	timer_table[DIGI_TIMER].fn = NULL;
 	timer_table[DIGI_TIMER].expires = 0;
+	remove_bh(DIGI_BH);
 
 	if ((e1 = tty_unregister_driver(&pcxe_driver)))
 		printk("SERIAL: failed to unregister serial driver (%d)\n", e1);
@@ -1084,7 +1086,7 @@ void pcxx_setup(char *str, int *ints)
  * function to initialize the driver with the given parameters, which are either
  * the default values from this file or the parameters given at boot.
  */
-int pcxe_init(void)
+__initfunc(int pcxe_init(void))
 {
 	ulong memory_seg=0, memory_size=0;
 	int lowwater, enabled_cards=0, i, crd, shrinkmem=0, topwin = 0xff00L, botwin=0x100L;

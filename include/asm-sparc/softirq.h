@@ -13,17 +13,16 @@
  * is entirely private to an implementation, it should not be
  * referenced at all outside of this file.
  */
+#define get_active_bhs()	(bh_mask & bh_active)
+
+#ifdef __SMP__
+
 extern atomic_t __sparc_bh_counter;
 
-/* Linus, I'd _really_ like to get rid of this synchronize_irq() -DaveM */
 #define start_bh_atomic() \
 	do { atomic_inc(&__sparc_bh_counter); synchronize_irq(); } while(0)
 
 #define end_bh_atomic()		atomic_dec(&__sparc_bh_counter)
-
-#define get_active_bhs()	(bh_mask & bh_active)
-
-#ifdef __SMP__
 
 #include <asm/spinlock.h>
 
@@ -36,6 +35,15 @@ do {	unsigned long flags;				\
 	bh_base[ent] = routine;				\
 	bh_mask_count[ent] = 0;				\
 	bh_mask |= 1 << ent;				\
+	spin_unlock_irqrestore(&global_bh_lock, flags);	\
+} while(0)
+
+#define remove_bh(nr)					\
+do {	unsigned long flags;				\
+	int ent = nr;					\
+	spin_lock_irqsave(&global_bh_lock, flags);	\
+	bh_base[ent] = NULL;				\
+	bh_mask &= ~(1 << ent);				\
 	spin_unlock_irqrestore(&global_bh_lock, flags);	\
 } while(0)
 
@@ -83,10 +91,13 @@ do {	unsigned long flags;				\
 
 #else /* !(__SMP__) */
 
-#define softirq_trylock() \
-	(atomic_read(&__sparc_bh_counter) ? 0 : ((atomic_set(&__sparc_bh_counter,1)),1))
+extern int __sparc_bh_counter;
 
-#define softirq_endlock()	(atomic_set(&__sparc_bh_counter, 0))
+#define start_bh_atomic()	do { __sparc_bh_counter++; barrier(); } while(0)
+#define end_bh_atomic()		do { barrier(); __sparc_bh_counter--; } while(0)
+
+#define softirq_trylock() (__sparc_bh_counter ? 0 : (__sparc_bh_counter=1))
+#define softirq_endlock() (__sparc_bh_counter = 0)
 #define clear_active_bhs(x)	(bh_active &= ~(x))
 
 #define init_bh(nr, routine)	\
@@ -94,6 +105,12 @@ do {	int ent = nr;		\
 	bh_base[ent] = routine;	\
 	bh_mask_count[ent] = 0;	\
 	bh_mask |= 1 << ent;	\
+} while(0)
+
+#define remove_bh(nr)		\
+do {	int ent = nr;		\
+	bh_base[ent] = NULL;	\
+	bh_mask &= ~(1 << ent);	\
 } while(0)
 
 #define mark_bh(nr)		(bh_active |= (1 << (nr)))

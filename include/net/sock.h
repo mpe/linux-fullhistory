@@ -179,6 +179,7 @@ struct raw6_opt {
 
 #endif /* IPV6 */
 
+
 struct tcp_opt
 {
 /*
@@ -197,6 +198,7 @@ struct tcp_opt
 
 	__u32	rcv_wup;	/* rcv_nxt on last window update sent	*/
 
+	__u32	fin_seq;	/* XXX This one should go, we don't need it. -DaveM */
 
 	__u32	srtt;		/* smothed round trip time << 3		*/
 	__u32	mdev;		/* medium deviation			*/
@@ -207,6 +209,28 @@ struct tcp_opt
  */
  	__u32	snd_cwnd;	/* Sending congestion window		*/
  	__u32	snd_ssthresh;	/* Slow start size threshold		*/
+	__u16	snd_cwnd_cnt;
+	__u16	max_window;
+
+/*
+ *      Options received (usually on last packet, some only on SYN packets).
+ */
+	char	tstamp_ok,	/* TIMESTAMP seen on SYN packet		*/
+		sack_ok;	/* SACK_PERM seen on SYN packet		*/
+	char	saw_tstamp;	/* Saw TIMESTAMP on last packet		*/
+        __u16	in_mss;		/* MSS option received from sender	*/
+        __u8	snd_wscale;	/* Window scaling received from sender	*/
+        __u8	rcv_wscale;	/* Window scaling to send to receiver	*/
+        __u32	rcv_tsval;	/* Time stamp value             	*/
+        __u32	rcv_tsecr;	/* Time stamp echo reply        	*/
+        __u32	ts_recent;	/* Time stamp to echo next		*/
+        __u32	ts_recent_stamp;/* Time we stored ts_recent (for aging) */
+	__u32	last_ack_sent;	/* last ack we sent			*/
+        int	sacks;		/* Number of SACK blocks if any		*/
+        __u32	left_sack[4];	/* Left edges of blocks         	*/
+        __u32	right_sack[4];	/* Right edges of blocks        	*/
+	int	tcp_header_len;      /* Bytes of tcp header to send 	*/
+
 /*
  *	Timers used by the TCP protocol layer
  */
@@ -217,17 +241,21 @@ struct tcp_opt
  	struct timer_list	retransmit_timer;	/* Resend (no ack) */
 
 	__u32	basertt;	/* Vegas baseRTT */
+	__u32	packets_out;	/* Packets which are "in flight" */
+	__u32	window_clamp;	/* XXX Document this... -DaveM */
 
+	__u8	pending;	/* pending events */
 	__u8	delayed_acks;
-	__u8	dup_acks;
+	__u8	dup_acks;	/* Consequetive duplicate acks seen from other end */
+	__u8	retransmits;
 
 	__u32	lrcvtime;	/* timestamp of last received data packet  */
 	__u32	rcv_tstamp;	/* timestamp of last received packet  */
 	__u32	iat_mdev;	/* interarrival time medium deviation */
 	__u32	iat;		/* interarrival time */
 	__u32	ato;		/* delayed ack timeout */
+	__u32	high_seq;	/* highest sequence number sent by onset of congestion */
 
-	__u32	high_seq;
 /*
  *	new send pointers
  */
@@ -238,11 +266,6 @@ struct tcp_opt
 						 * fast retransmit
 						 */
 /*
- * pending events
- */
-	__u8	pending;
-
-/*
  *	Header prediction flags
  *	0x5?10 << 16 + snd_wnd in net byte order
  */
@@ -252,6 +275,7 @@ struct tcp_opt
 	__u32	probes_out;		/* unanswered 0 window probes	   */
 
 	struct open_request	*syn_wait_queue;
+	struct open_request	**syn_wait_last;
 	struct tcp_func		*af_specific;
 };
 
@@ -311,29 +335,29 @@ struct sock
 	atomic_t		wmem_alloc;
 	atomic_t		rmem_alloc;
 	unsigned long		allocation;		/* Allocation mode */
+
+	/* The following stuff should probably move to the tcp private area */
 	__u32			write_seq;
 	__u32			copied_seq;
-	__u32			fin_seq;
 	__u32			syn_seq;
 	__u32			urg_seq;
 	__u32			urg_data;
+	unsigned char		delayed_acks;
+	/* End of block to move */
+
 	int			sock_readers;		/* user count */
 
-	unsigned char		delayed_acks,
-				dup_acks;
   /*
    *	Not all are volatile, but some are, so we
    * 	might as well say they all are.
    */
 	volatile char		dead,
 				urginline,
-				intr,
 				done,
 				reuse,
 				keepopen,
 				linger,
 				destroy,
-				ack_timed,
 				no_check,
 				zapped,	/* In ax25 & ipx means not linked */
 				broadcast,
@@ -350,12 +374,7 @@ struct sock
 	int			hashent;
 	struct sock		*pair;
 
-	struct sk_buff		* send_head;
-
 	struct sk_buff_head	back_log;
-	struct sk_buff		*partial;
-	struct timer_list	partial_timer;
-	atomic_t		retransmits;
 
 	struct sk_buff_head	write_queue,
 				receive_queue,
@@ -374,22 +393,14 @@ struct sock
 
 	unsigned short		max_unacked;
 
-
-	unsigned short		bytes_rcv;
 /*
  *	mss is min(mtu, max_window) 
  */
 	unsigned short		mtu;       /* mss negotiated in the syn's */
 	unsigned short		mss;       /* current eff. mss - can change */
 	unsigned short		user_mss;  /* mss requested by user in ioctl */
-	unsigned short		max_window;
-	unsigned long 		window_clamp;
-	unsigned int		ssthresh;
 	unsigned short		num;
 
-	unsigned short		cong_window;
-	unsigned short		cong_count;
-	int			packets_out;
 	unsigned short		shutdown;
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
@@ -404,13 +415,7 @@ struct sock
 		struct raw6_opt		tp_raw;
 #endif
 	} tp_pinfo;
-/*
- *	currently backoff isn't used, but I'm maintaining it in case
- *	we want to go back to a backoff formula that needs it
- */
-/* 
-	unsigned short		backoff;
- */
+
 	int			err, err_soft;	/* Soft holds errors that don't
 						   cause failure but are the cause
 						   of a persistent failure not just
@@ -426,6 +431,7 @@ struct sock
 	unsigned short		type;
 	unsigned char		localroute;	/* Route locally only */
 	struct ucred		peercred;
+
 	/* What the user has tried to set with the security API */
 	short			authentication;
 	short			encryption;  
@@ -471,10 +477,6 @@ struct sock
 	int			ip_tos;			/* TOS */
 	unsigned	   	ip_cmsg_flags;
 	struct tcphdr		dummy_th;
-	struct timer_list	keepalive_timer;	/* TCP keepalive hack */
-	struct timer_list	retransmit_timer;	/* TCP retransmit timer */
-	struct timer_list	delack_timer;		/* TCP delayed ack timer */
-	int			ip_xmit_timeout;	/* Why the timeout is running */
 	struct ip_options	*opt;
 	unsigned char		ip_hdrincl;		/* Include headers ? */
 	__u8			ip_mc_ttl;		/* Multicasting TTL */
@@ -491,8 +493,8 @@ struct sock
  
 	int			timeout;	/* What are we waiting for? */
 	struct timer_list	timer;		/* This is the TIME_WAIT/receive timer
-					 * when we are doing IP
-					 */
+						 * when we are doing IP
+						 */
 	struct timeval		stamp;
 
  /*

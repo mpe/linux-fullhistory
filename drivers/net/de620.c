@@ -131,6 +131,7 @@ static const char *version =
 #include <linux/ptrace.h>
 #include <asm/system.h>
 #include <linux/errno.h>
+#include <linux/init.h>
 
 #include <linux/inet.h>
 #include <linux/netdevice.h>
@@ -822,8 +823,8 @@ adapter_init(struct device *dev)
  *
  * Check if there is a DE-620 connected
  */
-int
-de620_probe(struct device *dev)
+__initfunc(int
+de620_probe(struct device *dev))
 {
 	static struct net_device_stats de620_netstats;
 	int i;
@@ -915,8 +916,8 @@ de620_probe(struct device *dev)
  */
 #define sendit(dev,data) de620_set_register(dev, W_EIP, data | EIPRegister);
 
-static unsigned short
-ReadAWord(struct device *dev, int from)
+__initfunc(static unsigned short
+ReadAWord(struct device *dev, int from))
 {
 	unsigned short data;
 	int nbits;
@@ -958,8 +959,8 @@ ReadAWord(struct device *dev, int from)
 	return data;
 }
 
-static int
-read_eeprom(struct device *dev)
+__initfunc(static int
+read_eeprom(struct device *dev))
 {
 	unsigned short wrd;
 

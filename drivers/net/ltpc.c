@@ -201,6 +201,7 @@ static int debug=0;
 #include <asm/bitops.h>
 #include <asm/dma.h>
 #include <linux/errno.h>
+#include <linux/init.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -956,12 +957,12 @@ static struct net_device_stats *ltpc_get_stats(struct device *dev)
 
 static unsigned short irqhitmask;
 
-static void lt_probe_handler(int irq, void *dev_id, struct pt_regs *reg_ptr)
+__initfunc(static void lt_probe_handler(int irq, void *dev_id, struct pt_regs *reg_ptr))
 {
 	irqhitmask |= 1<<irq;
 }
 
-int ltpc_probe(struct device *dev)
+__initfunc(int ltpc_probe(struct device *dev))
 {
 	int err;
 	unsigned char dma=0;

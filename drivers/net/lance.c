@@ -46,6 +46,7 @@ static const char *version = "lance.c:v1.09 Aug 20 1996 dplatt@3do.com, becker@c
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/bios32.h>
+#include <linux/init.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
@@ -54,7 +55,7 @@ static const char *version = "lance.c:v1.09 Aug 20 1996 dplatt@3do.com, becker@c
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
-static unsigned int lance_portlist[] = {0x300, 0x320, 0x340, 0x360, 0};
+static unsigned int lance_portlist[] __initdata = {0x300, 0x320, 0x340, 0x360, 0};
 void lance_probe1(int ioaddr);
 
 #ifdef HAVE_DEVLIST
@@ -308,7 +309,7 @@ static void set_multicast_list(struct device *dev);
    before the memory management system is started, and thus well before the
    other probes. */
 
-int lance_init(void)
+__initfunc(int lance_init(void))
 {
 	int *port;
 
@@ -371,7 +372,7 @@ int lance_init(void)
 	return 0;
 }
 
-void lance_probe1(int ioaddr)
+__initfunc(void lance_probe1(int ioaddr))
 {
 	struct device *dev;
 	struct lance_private *lp;

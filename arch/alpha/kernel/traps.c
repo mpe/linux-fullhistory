@@ -16,6 +16,9 @@
 #include <asm/gentrap.h>
 #include <asm/uaccess.h>
 #include <asm/unaligned.h>
+#include <asm/sysinfo.h>
+#include <asm/smp_lock.h>
+
 
 void die_if_kernel(char * str, struct pt_regs * regs, long err,
 		   unsigned long *r9_15)
@@ -81,10 +84,13 @@ asmlinkage void do_entArith(unsigned long summary, unsigned long write_mask,
 			return;		/* emulation was successful */
 		}
 	}
+
+	lock_kernel();
 	printk("%s: arithmetic trap at %016lx: %02lx %016lx\n",
 		current->comm, regs.pc, summary, write_mask);
 	die_if_kernel("Arithmetic fault", &regs, 0, 0);
 	force_sig(SIGFPE, current);
+	unlock_kernel();
 }
 
 asmlinkage void do_entIF(unsigned long type, unsigned long a1,
@@ -93,6 +99,7 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1,
 {
 	extern int ptrace_cancel_bpt (struct task_struct *who);
 
+	lock_kernel();
 	die_if_kernel("Instruction fault", &regs, type, 0);
 	switch (type) {
 	      case 0: /* breakpoint */
@@ -171,6 +178,7 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1,
 	      default:
 		panic("do_entIF: unexpected instruction-fault type");
 	}
+	unlock_kernel();
 }
 
 /*
@@ -204,20 +212,9 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 	unsigned long a3, unsigned long a4, unsigned long a5,
 	struct allregs regs)
 {
-	static int cnt = 0;
-	static long last_time = 0;
 	long error, tmp1, tmp2, tmp3, tmp4;
 	unsigned long pc = regs.pc - 4;
 	unsigned fixup;
-
-	if (cnt >= 5 && jiffies - last_time > 5*HZ) {
-		cnt = 0;
-	}
-	if (++cnt < 5) {
-		printk("kernel: unaligned trap at %016lx: %p %lx %ld\n",
-		       pc, va, opcode, reg);
-	}
-	last_time = jiffies;
 
 	unaligned[0].count++;
 	unaligned[0].va = (unsigned long) va;
@@ -228,7 +225,6 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 	   exception will we decide whether we should have caught it.  */
 
 	switch (opcode) {
-#ifdef __HAVE_CPU_BWX
 	case 0x0c: /* ldwu */
 		__asm__ __volatile__(
 		"1:	ldq_u %1,0(%3)\n"
@@ -248,7 +244,6 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 			goto got_exception;
 		una_reg(reg) = tmp1|tmp2;
 		return;
-#endif
 
 	case 0x28: /* ldl */
 		__asm__ __volatile__(
@@ -293,7 +288,6 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 	/* Note that the store sequences do not indicate that they change
 	   memory because it _should_ be affecting nothing in this context.
 	   (Otherwise we have other, much larger, problems.)  */
-#ifdef __HAVE_CPU_BWX
 	case 0x0d: /* stw */
 		__asm__ __volatile__(
 		"1:	ldq_u %2,1(%5)\n"
@@ -323,7 +317,6 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 		if (error)
 			goto got_exception;
 		return;
-#endif
 
 	case 0x2c: /* stl */
 		__asm__ __volatile__(
@@ -385,9 +378,12 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 			goto got_exception;
 		return;
 	}
+
+	lock_kernel();
 	printk("Bad unaligned kernel access at %016lx: %p %lx %ld\n",
 		pc, va, opcode, reg);
 	do_exit(SIGSEGV);
+	unlock_kernel();
 	return;
 
 got_exception:
@@ -396,17 +392,23 @@ got_exception:
 	if ((fixup = search_exception_table(pc)) != 0) {
 		unsigned long newpc;
 		newpc = fixup_exception(una_reg, fixup, pc);
+
+		lock_kernel();
 		printk("Forwarding unaligned exception at %lx (%lx)\n",
 		       pc, newpc);
+		unlock_kernel();
+
 		(&regs)->pc = newpc;
 		return;
 	}
 
 	/* Yikes!  No one to forward the exception to.  */
+	lock_kernel();
 	printk("%s: unhandled unaligned exception at pc=%lx ra=%lx"
 	       " (bad address = %p)\n", current->comm,
 	       pc, una_reg(26), va);
 	do_exit(SIGSEGV);
+	unlock_kernel();
 }
 
 /*
@@ -466,50 +468,68 @@ static inline unsigned long s_reg_to_mem (unsigned long s_reg)
  * uses them as temporary storage for integer memory to memory copies.
  * However, we need to deal with stt/ldt and sts/lds only.
  */
-asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg,
-			      unsigned long * frame)
+
+#define OP_INT_MASK	( 1L << 0x28 | 1L << 0x2c   /* ldl stl */	\
+			| 1L << 0x29 | 1L << 0x2d   /* ldq stq */	\
+			| 1L << 0x0c | 1L << 0x0d ) /* ldwu stw */
+
+#define OP_WRITE_MASK	( 1L << 0x26 | 1L << 0x27   /* sts stt */	\
+			| 1L << 0x2c | 1L << 0x2d   /* stl stq */	\
+			| 1L << 0xd )		    /* stw */
+
+asmlinkage void do_entUnaUser(void * va, unsigned long opcode,
+			      unsigned long reg, unsigned long * frame)
 {
-	long dir, size;
-	unsigned long *reg_addr, *pc_addr, usp, zero = 0;
-	static int cnt = 0;
-	static long last_time = 0;
 	extern void alpha_write_fp_reg (unsigned long reg, unsigned long val);
 	extern unsigned long alpha_read_fp_reg (unsigned long reg);
 
+	static int cnt = 0;
+	static long last_time = 0;
+
+	unsigned long tmp1, tmp2, tmp3, tmp4;
+	unsigned long *reg_addr, *pc_addr, fake_reg;
+	unsigned long uac_bits;
+	long error;
+
 	pc_addr = frame + 7 + 20 + 1;			/* pc in PAL frame */
 
-	if (cnt >= 5 && jiffies - last_time > 5*HZ) {
-		cnt = 0;
-	}
-	if (++cnt < 5) {
-		printk("%s(%d): unaligned trap at %016lx: %p %lx %ld\n",
-		       current->comm, current->pid,
-		       *pc_addr - 4, va, opcode, reg);
-	}
-	last_time = jiffies;
+	/* Check the UAC bits to decide what the user wants us to do
+	   with the unaliged access.  */
 
-	++unaligned[1].count;
-	unaligned[1].va = (unsigned long) va - 4;
-	unaligned[1].pc = *pc_addr;
-
-	dir = VERIFY_READ;
-	if (opcode & 0x4) {
-		/* it's a stl, stq, stt, or sts */
-		dir = VERIFY_WRITE;
+	uac_bits = (current->tss.flags >> UAC_SHIFT) & UAC_BITMASK;
+	if (!(uac_bits & UAC_NOPRINT)) {
+		if (cnt >= 5 && jiffies - last_time > 5*HZ) {
+			cnt = 0;
+		}
+		if (++cnt < 5) {
+			lock_kernel();
+			printk("%s(%d): unaligned trap at %016lx: %p %lx %ld\n",
+			       current->comm, current->pid,
+			       *pc_addr - 4, va, opcode, reg);
+			unlock_kernel();
+		}
+		last_time = jiffies;
 	}
-	size = 4;
-	if (opcode & 0x1) {
-		/* it's a quadword op */
-		size = 8;
+	if (uac_bits & UAC_SIGBUS) {
+		goto give_sigbus;
 	}
-	if (verify_area(dir, va, size)) {
-		*pc_addr -= 4;	/* make pc point to faulting insn */
-		force_sig(SIGSEGV, current);
+	if (uac_bits & UAC_NOFIX) {
+		/* Not sure why you'd want to use this, but... */
 		return;
 	}
 
+	/* Don't bother reading ds in the access check since we already
+	   know that this came from the user.  Also rely on the fact that
+	   the page at TASK_SIZE is unmapped and so can't be touched anyway. */
+	if (!__access_ok((unsigned long)va, 0, USER_DS))
+		goto give_sigsegv;
+
+	++unaligned[1].count;
+	unaligned[1].va = (unsigned long)va;
+	unaligned[1].pc = *pc_addr - 4;
+
 	reg_addr = frame;
-	if (opcode >= 0x28) {
+	if ((1L << opcode) & OP_INT_MASK) {
 		/* it's an integer load/store */
 		switch (reg) {
 		      case 0: case 1: case 2: case 3: case 4:
@@ -542,57 +562,249 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg
 
 		      case 30:
 			/* usp in PAL regs */
-			usp = rdusp();
-			reg_addr = &usp;
+			fake_reg = rdusp();
+			reg_addr = &fake_reg;
 			break;
 
 		      case 31:
 			/* zero "register" */
-			reg_addr = &zero;
+			fake_reg = 0;
+			reg_addr = &fake_reg;
 			break;
 		}
 	}
 
+	/* We don't want to use the generic get/put unaligned macros as
+	   we want to trap exceptions.  Only if we actually get an
+	   exception will we decide whether we should have caught it.  */
+
 	switch (opcode) {
-	      case 0x22: /* lds */
-		alpha_write_fp_reg(reg, s_mem_to_reg(
-			get_unaligned((unsigned int *)va)));
-		break;
-	      case 0x26: /* sts */
-		put_unaligned(s_reg_to_mem(alpha_read_fp_reg(reg)),
-			      (unsigned int *)va);
-		break;
-
-	      case 0x23: /* ldt */
-		alpha_write_fp_reg(reg, get_unaligned((unsigned long *)va));
-		break;
-	      case 0x27: /* stt */
-		put_unaligned(alpha_read_fp_reg(reg), (unsigned long *)va);
-		break;
-
-	      case 0x28: /* ldl */
-		*reg_addr = get_unaligned((int *)va);
-		break;
-	      case 0x2c: /* stl */
-		put_unaligned(*reg_addr, (int *)va);
+	case 0x0c: /* ldwu */
+		__asm__ __volatile__(
+		"1:	ldq_u %1,0(%3)\n"
+		"2:	ldq_u %2,1(%3)\n"
+		"	extwl %1,%3,%1\n"
+		"	extwh %2,%3,%2\n"
+		"3:\n"
+		".section __ex_table,\"a\"\n"
+		"	.gprel32 1b\n"
+		"	lda %1,3b-1b(%0)\n"
+		"	.gprel32 2b\n"
+		"	lda %2,3b-2b(%0)\n"
+		".previous"
+			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2)
+			: "r"(va), "0"(0));
+		if (error)
+			goto give_sigsegv;
+		*reg_addr = tmp1|tmp2;
 		break;
 
-	      case 0x29: /* ldq */
-		*reg_addr = get_unaligned((long *)va);
-		break;
-	      case 0x2d: /* stq */
-		put_unaligned(*reg_addr, (long *)va);
-		break;
-
-	      default:
-		*pc_addr -= 4;	/* make pc point to faulting insn */
-		force_sig(SIGBUS, current);
+	case 0x22: /* lds */
+		__asm__ __volatile__(
+		"1:	ldq_u %1,0(%3)\n"
+		"2:	ldq_u %2,3(%3)\n"
+		"	extll %1,%3,%1\n"
+		"	extlh %2,%3,%2\n"
+		"3:\n"
+		".section __ex_table,\"a\"\n"
+		"	.gprel32 1b\n"
+		"	lda %1,3b-1b(%0)\n"
+		"	.gprel32 2b\n"
+		"	lda %2,3b-2b(%0)\n"
+		".previous"
+			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2)
+			: "r"(va), "0"(0));
+		if (error)
+			goto give_sigsegv;
+		alpha_write_fp_reg(reg, s_mem_to_reg((int)(tmp1|tmp2)));
 		return;
+
+	case 0x23: /* ldt */
+		__asm__ __volatile__(
+		"1:	ldq_u %1,0(%3)\n"
+		"2:	ldq_u %2,7(%3)\n"
+		"	extql %1,%3,%1\n"
+		"	extqh %2,%3,%2\n"
+		"3:\n"
+		".section __ex_table,\"a\"\n"
+		"	.gprel32 1b\n"
+		"	lda %1,3b-1b(%0)\n"
+		"	.gprel32 2b\n"
+		"	lda %2,3b-2b(%0)\n"
+		".previous"
+			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2)
+			: "r"(va), "0"(0));
+		if (error)
+			goto give_sigsegv;
+		alpha_write_fp_reg(reg, tmp1|tmp2);
+		return;
+
+	case 0x28: /* ldl */
+		__asm__ __volatile__(
+		"1:	ldq_u %1,0(%3)\n"
+		"2:	ldq_u %2,3(%3)\n"
+		"	extll %1,%3,%1\n"
+		"	extlh %2,%3,%2\n"
+		"3:\n"
+		".section __ex_table,\"a\"\n"
+		"	.gprel32 1b\n"
+		"	lda %1,3b-1b(%0)\n"
+		"	.gprel32 2b\n"
+		"	lda %2,3b-2b(%0)\n"
+		".previous"
+			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2)
+			: "r"(va), "0"(0));
+		if (error)
+			goto give_sigsegv;
+		*reg_addr = (int)(tmp1|tmp2);
+		break;
+
+	case 0x29: /* ldq */
+		__asm__ __volatile__(
+		"1:	ldq_u %1,0(%3)\n"
+		"2:	ldq_u %2,7(%3)\n"
+		"	extql %1,%3,%1\n"
+		"	extqh %2,%3,%2\n"
+		"3:\n"
+		".section __ex_table,\"a\"\n"
+		"	.gprel32 1b\n"
+		"	lda %1,3b-1b(%0)\n"
+		"	.gprel32 2b\n"
+		"	lda %2,3b-2b(%0)\n"
+		".previous"
+			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2)
+			: "r"(va), "0"(0));
+		if (error)
+			goto give_sigsegv;
+		*reg_addr = tmp1|tmp2;
+		break;
+
+	/* Note that the store sequences do not indicate that they change
+	   memory because it _should_ be affecting nothing in this context.
+	   (Otherwise we have other, much larger, problems.)  */
+	case 0x0d: /* stw */
+		__asm__ __volatile__(
+		"1:	ldq_u %2,1(%5)\n"
+		"2:	ldq_u %1,0(%5)\n"
+		"	inswh %6,%5,%4\n"
+		"	inswl %6,%5,%3\n"
+		"	mskwh %2,%5,%2\n"
+		"	mskwl %1,%5,%1\n"
+		"	or %2,%4,%2\n"
+		"	or %1,%3,%1\n"
+		"3:	stq_u %2,1(%5)\n"
+		"4:	stq_u %1,0(%5)\n"
+		"5:\n"
+		".section __ex_table,\"a\"\n"
+		"	.gprel32 1b\n"
+		"	lda %2,5b-1b(%0)\n"
+		"	.gprel32 2b\n"
+		"	lda %1,5b-2b(%0)\n"
+		"	.gprel32 3b\n"
+		"	lda $31,5b-3b(%0)\n"
+		"	.gprel32 4b\n"
+		"	lda $31,5b-4b(%0)\n"
+		".previous"
+			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2),
+			  "=&r"(tmp3), "=&r"(tmp4)
+			: "r"(va), "r"(*reg_addr), "0"(0));
+		if (error)
+			goto give_sigsegv;
+		return;
+
+	case 0x26: /* sts */
+		fake_reg = s_reg_to_mem(alpha_read_fp_reg(reg));
+		reg_addr = &fake_reg;
+		/* FALLTHRU */
+
+	case 0x2c: /* stl */
+		__asm__ __volatile__(
+		"1:	ldq_u %2,3(%5)\n"
+		"2:	ldq_u %1,0(%5)\n"
+		"	inslh %6,%5,%4\n"
+		"	insll %6,%5,%3\n"
+		"	msklh %2,%5,%2\n"
+		"	mskll %1,%5,%1\n"
+		"	or %2,%4,%2\n"
+		"	or %1,%3,%1\n"
+		"3:	stq_u %2,3(%5)\n"
+		"4:	stq_u %1,0(%5)\n"
+		"5:\n"
+		".section __ex_table,\"a\"\n"
+		"	.gprel32 1b\n"
+		"	lda %2,5b-1b(%0)\n"
+		"	.gprel32 2b\n"
+		"	lda %1,5b-2b(%0)\n"
+		"	.gprel32 3b\n"
+		"	lda $31,5b-3b(%0)\n"
+		"	.gprel32 4b\n"
+		"	lda $31,5b-4b(%0)\n"
+		".previous"
+			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2),
+			  "=&r"(tmp3), "=&r"(tmp4)
+			: "r"(va), "r"(*reg_addr), "0"(0));
+		if (error)
+			goto give_sigsegv;
+		return;
+
+	case 0x27: /* stt */
+		fake_reg = alpha_read_fp_reg(reg);
+		reg_addr = &fake_reg;
+		/* FALLTHRU */
+
+	case 0x2d: /* stq */
+		__asm__ __volatile__(
+		"1:	ldq_u %2,7(%5)\n"
+		"2:	ldq_u %1,0(%5)\n"
+		"	insqh %6,%5,%4\n"
+		"	insql %6,%5,%3\n"
+		"	mskqh %2,%5,%2\n"
+		"	mskql %1,%5,%1\n"
+		"	or %2,%4,%2\n"
+		"	or %1,%3,%1\n"
+		"3:	stq_u %2,7(%5)\n"
+		"4:	stq_u %1,0(%5)\n"
+		"5:\n"
+		".section __ex_table,\"a\"\n\t"
+		"	.gprel32 1b\n"
+		"	lda %2,5b-1b(%0)\n"
+		"	.gprel32 2b\n"
+		"	lda %1,5b-2b(%0)\n"
+		"	.gprel32 3b\n"
+		"	lda $31,5b-3b(%0)\n"
+		"	.gprel32 4b\n"
+		"	lda $31,5b-4b(%0)\n"
+		".previous"
+			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2),
+			  "=&r"(tmp3), "=&r"(tmp4)
+			: "r"(va), "r"(*reg_addr), "0"(0));
+		if (error)
+			goto give_sigsegv;
+		return;
+
+	default:
+		/* What instruction were you trying to use, exactly?  */
+		goto give_sigbus;
 	}
 
-	if (opcode >= 0x28 && reg == 30 && dir == VERIFY_WRITE) {
-		wrusp(usp);
-	}
+	/* Only integer loads should get here; everyone else returns early. */
+	if (reg == 30)
+		wrusp(fake_reg);
+	return;
+
+give_sigsegv:
+	*pc_addr -= 4;  /* make pc point to faulting insn */
+	lock_kernel();
+	force_sig(SIGSEGV, current);
+	unlock_kernel();
+	return;
+
+give_sigbus:
+	*pc_addr -= 4;
+	lock_kernel();
+	force_sig(SIGBUS, current);
+	unlock_kernel();
+	return;
 }
 
 /*
@@ -610,8 +822,11 @@ asmlinkage long do_entSys(unsigned long a0, unsigned long a1, unsigned long a2,
 			  unsigned long a3, unsigned long a4, unsigned long a5,
 			  struct pt_regs regs)
 {
-	if (regs.r0 != 112)
+	lock_kernel();
+	/* Only report OSF system calls.  */
+	if (regs.r0 != 112 && regs.r0 < 300)
 		printk("<sc %ld(%lx,%lx,%lx)>", regs.r0, a0, a1, a2);
+	unlock_kernel();
 	return -1;
 }
 
@@ -621,16 +836,11 @@ extern asmlinkage void entArith(void);
 extern asmlinkage void entUna(void);
 extern asmlinkage void entSys(void);
 
+register unsigned long gptr __asm__("$29");
+
 void trap_init(void)
 {
-	unsigned long gptr;
-
-	/*
-	 * Tell PAL-code what global pointer we want in the kernel..
-	 */
-	__asm__("br %0,___tmp\n"
-		"___tmp:\tldgp %0,0(%0)"
-		: "=r" (gptr));
+	/* Tell PAL-code what global pointer we want in the kernel.  */
 	wrkgp(gptr);
 
 	wrent(entArith, 1);

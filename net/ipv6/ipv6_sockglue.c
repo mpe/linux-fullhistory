@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.10 1997/04/15 09:06:33 davem Exp $
+ *	$Id: ipv6_sockglue.c,v 1.11 1997/04/20 09:44:33 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -53,7 +53,7 @@
 struct ipv6_mib ipv6_statistics={0, };
 struct packet_type ipv6_packet_type =
 {
-	0, 
+	__constant_htons(ETH_P_IPV6), 
 	NULL,					/* All devices */
 	ipv6_rcv,
 	NULL,
@@ -241,8 +241,6 @@ extern void ipv6_sysctl_unregister(void);
 
 void ipv6_init(void)
 {
-	ipv6_packet_type.type = ntohs(ETH_P_IPV6);
-
 	dev_add_pack(&ipv6_packet_type);
 
 #if defined(MODULE) && defined(CONFIG_SYSCTL)

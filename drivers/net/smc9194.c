@@ -66,6 +66,7 @@ static const char *version =
 #include <linux/malloc.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
+#include <linux/init.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <linux/errno.h>
@@ -108,7 +109,7 @@ static const char *version =
  .for a slightly different card, you can add it to the array.  Keep in
  .mind that the array must end in zero.
 */
-static unsigned int smc_portlist[] =
+static unsigned int smc_portlist[] __initdata =
    { 0x200, 0x220, 0x240, 0x260, 0x280, 0x2A0, 0x2C0, 0x2E0,
 	  0x300, 0x320, 0x340, 0x360, 0x380, 0x3A0, 0x3C0, 0x3E0, 0};
 
@@ -750,7 +751,7 @@ static void smc_hardware_send_packet( struct device * dev )
  |
  ---------------------------------------------------------------------------
 */
-int smc_init(struct device *dev)
+__initfunc(int smc_init(struct device *dev))
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -795,7 +796,7 @@ int smc_init(struct device *dev)
  . interrupt, so an auto-detect routine can detect it, and find the IRQ,
  ------------------------------------------------------------------------
 */
-int smc_findirq( int ioaddr )
+__initfunc(int smc_findirq( int ioaddr ))
 {
 	int	timeout = 20;
 
@@ -877,7 +878,7 @@ int smc_findirq( int ioaddr )
  .---------------------------------------------------------------------
  */
 
-static int smc_probe( int ioaddr )
+__initfunc(static int smc_probe( int ioaddr ))
 {
 	unsigned int	bank;
 	word	revision_register;
@@ -942,7 +943,7 @@ static int smc_probe( int ioaddr )
  . o  GRAB the region
  .-----------------------------------------------------------------
 */
-static int  smc_initcard(struct device *dev, int ioaddr)
+__initfunc(static int  smc_initcard(struct device *dev, int ioaddr))
 {
 	int i;
 

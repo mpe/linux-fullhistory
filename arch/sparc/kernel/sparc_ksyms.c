@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.55 1997/04/17 03:28:56 davem Exp $
+/* $Id: sparc_ksyms.c,v 1.56 1997/04/18 05:44:35 davem Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -91,6 +91,14 @@ EXPORT_SYMBOL_PRIVATE(_rw_read_enter);
 EXPORT_SYMBOL_PRIVATE(_rw_read_exit);
 EXPORT_SYMBOL_PRIVATE(_rw_write_enter);
 EXPORT_SYMBOL(__sparc_bh_counter);
+#ifdef __SMP__
+EXPORT_SYMBOL_PRIVATE(_irq_enter);
+EXPORT_SYMBOL_PRIVATE(_irq_exit);
+EXPORT_SYMBOL_PRIVATE(_global_restore_flags);
+EXPORT_SYMBOL_PRIVATE(_global_sti);
+EXPORT_SYMBOL_PRIVATE(_global_cli);
+#endif
+
 EXPORT_SYMBOL(page_offset);
 EXPORT_SYMBOL(stack_top);
 
@@ -113,10 +121,6 @@ EXPORT_SYMBOL(global_irq_holder);
 EXPORT_SYMBOL(global_irq_lock);
 EXPORT_SYMBOL(global_bh_lock);
 EXPORT_SYMBOL(global_irq_count);
-EXPORT_SYMBOL(__global_cli);
-EXPORT_SYMBOL(__global_sti);
-EXPORT_SYMBOL(__global_save_flags);
-EXPORT_SYMBOL(__global_restore_flags);
 EXPORT_SYMBOL(synchronize_irq);
 #endif
 

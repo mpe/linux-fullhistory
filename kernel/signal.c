@@ -95,9 +95,9 @@ asmlinkage int sys_sigpending(sigset_t *set)
 	int ret;
 
 	/* fill in "set" with signals pending but blocked. */
-	lock_kernel();
+	spin_lock_irq(&current->sigmask_lock);
 	ret = put_user(current->blocked & current->signal, set);
-	unlock_kernel();
+	spin_unlock_irq(&current->sigmask_lock);
 	return ret;
 }
 

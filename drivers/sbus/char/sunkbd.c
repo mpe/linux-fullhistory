@@ -1149,7 +1149,7 @@ static void sunkbd_kd_mksound(unsigned int hz, unsigned int ticks)
 
 extern void (*kd_mksound)(unsigned int hz, unsigned int ticks);
 
-int kbd_init(void)
+__initfunc(int kbd_init(void))
 {
 	int i, opt_node;
 	struct kbd_struct kbd0;

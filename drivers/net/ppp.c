@@ -85,6 +85,7 @@
 #include <linux/skbuff.h>
 #include <linux/inet.h>
 #include <linux/ioctl.h>
+#include <linux/init.h>
 
 typedef struct sk_buff	     sk_buff;
 #define skb_data(skb)	     ((__u8 *) (skb)->data)
@@ -334,8 +335,8 @@ extern inline __u8 * store_long (register __u8 *p, register int value) {
  * accessing the ppp protocol.
  */
 
-static int
-ppp_first_time (void)
+__initfunc(static int
+ppp_first_time (void))
 {
 	static struct tty_ldisc	ppp_ldisc;
 	int    status;

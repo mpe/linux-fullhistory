@@ -40,6 +40,7 @@
 #include <linux/in.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
+#include <linux/init.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -606,7 +607,7 @@ int dlci_init(struct device *dev)
 	return(0);
 }
 
-int dlci_setup(void)
+__initfunc(int dlci_setup(void))
 {
 	int i;
 

@@ -1,4 +1,4 @@
-/* $Id: signal.h,v 1.2 1997/03/03 16:51:57 jj Exp $ */
+/* $Id: signal.h,v 1.3 1997/04/18 14:34:47 jj Exp $ */
 #ifndef _ASMSPARC64_SIGNAL_H
 #define _ASMSPARC64_SIGNAL_H
 
@@ -83,7 +83,7 @@
 #ifndef __ASSEMBLY__
 
 typedef unsigned long sigset_t;
-typedef unsigned int sigset32_t;
+typedef unsigned int sigset_t32;
 
 #ifdef __KERNEL__
 #include <asm/sigcontext.h>
@@ -165,10 +165,8 @@ struct sigaction {
 
 struct sigaction32 {
 	unsigned	sa_handler;
-	sigset32_t      sa_mask;
+	sigset_t32      sa_mask;
 	unsigned int    sa_flags;
-
-	/* XXX 32-bit func ptr... */
 	unsigned	sa_restorer;     /* not used by Linux/SPARC yet */
 };
 

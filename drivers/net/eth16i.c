@@ -87,6 +87,7 @@ static char *version =
 #include <linux/malloc.h>
 #include <linux/string.h>
 #include <linux/errno.h>
+#include <linux/init.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -275,22 +276,22 @@ static char *version =
 #define RESET                  ID_ROM_0
 
 /* This is the I/O address list to be probed when seeking the card */
-static unsigned int eth16i_portlist[] = {
+static unsigned int eth16i_portlist[] __initdata = {
 	0x260, 0x280, 0x2A0, 0x240, 0x340, 0x320, 0x380, 0x300, 0
 };
 
-static unsigned int eth32i_portlist[] = {
+static unsigned int eth32i_portlist[] __initdata = {
 	0x1000, 0x2000, 0x3000, 0x4000, 0x5000, 0x6000, 0x7000, 0x8000,
 	0x9000, 0xA000, 0xB000, 0xC000, 0xD000, 0xE000, 0xF000, 0
 };
 
 /* This is the Interrupt lookup table for Eth16i card */
-static unsigned int eth16i_irqmap[] = {
+static unsigned int eth16i_irqmap[] __initdata = {
 	9, 10, 5, 15
 };
 
 /* This is the Interrupt lookup table for Eth32i card */
-static unsigned int eth32i_irqmap[] = {
+static unsigned int eth32i_irqmap[] __initdata = {
 	3, 5, 7, 9, 10, 11, 12, 15
 };
 
@@ -350,7 +351,7 @@ static char *cardname = "ICL EtherTeam 16i/32";
    {"eth16i", eth16i_probe1, ETH16I_IO_EXTENT, eth16i_probe_list};
 
 #else  /* Not HAVE_DEVLIST */
-int eth16i_probe(struct device *dev)
+__initfunc(int eth16i_probe(struct device *dev))
 {
 	int i;
 	int ioaddr;
@@ -384,7 +385,7 @@ int eth16i_probe(struct device *dev)
 }
 #endif	/* Not HAVE_DEVLIST */
 
-static int eth16i_probe1(struct device *dev, short ioaddr)
+__initfunc(static int eth16i_probe1(struct device *dev, short ioaddr))
 {
 	static unsigned version_printed = 0;
 	unsigned int irq = 0;

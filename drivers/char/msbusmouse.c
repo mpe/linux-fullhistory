@@ -41,6 +41,7 @@
 #include <linux/miscdevice.h>
 #include <linux/random.h>
 #include <linux/poll.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -183,7 +184,7 @@ static struct miscdevice ms_bus_mouse = {
 	MICROSOFT_BUSMOUSE, "msbusmouse", &ms_bus_mouse_fops
 };
 
-int ms_bus_mouse_init(void)
+__initfunc(int ms_bus_mouse_init(void))
 {
 	int mse_byte, i;
 

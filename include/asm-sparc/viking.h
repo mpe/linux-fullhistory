@@ -1,4 +1,4 @@
-/* $Id: viking.h,v 1.18 1997/04/11 00:42:23 davem Exp $
+/* $Id: viking.h,v 1.19 1997/04/20 14:11:48 ecd Exp $
  * viking.h:  Defines specific to the GNU/Viking MBUS module.
  *            This is SRMMU stuff.
  *
@@ -107,6 +107,8 @@
 #define VIKING_PTAG_VALID   0x01000000   /* Cache block is valid */
 #define VIKING_PTAG_DIRTY   0x00010000   /* Block has been modified */
 #define VIKING_PTAG_SHARED  0x00000100   /* Shared with some other cache */
+
+#ifndef __ASSEMBLY__
 
 extern __inline__ void viking_flush_icache(void)
 {
@@ -234,5 +236,7 @@ extern __inline__ unsigned long viking_hwprobe(unsigned long vaddr)
 			     "r" (vaddr), "i" (ASI_M_FLUSH_PROBE));
 	return val;
 }
+
+#endif /* !__ASSEMBLY__ */
 
 #endif /* !(_SPARC_VIKING_H) */

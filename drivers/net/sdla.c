@@ -46,6 +46,7 @@
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/errno.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/bitops.h>
@@ -64,9 +65,10 @@ static const char* version = "SDLA driver v0.30, 12 Sep 1996, mike.mclagan@linux
 
 static const char* devname = "sdla";
 
-static unsigned int valid_port[] = { 0x250, 0x270, 0x280, 0x300, 0x350, 0x360, 0x380, 0x390};
+static unsigned int valid_port[] __initdata = { 0x250, 0x270, 0x280, 0x300, 0x350, 0x360, 0x380, 0x390};
 
-static unsigned int valid_mem[]  = {0xA0000, 0xA2000, 0xA4000, 0xA6000, 0xA8000, 0xAA000, 0xAC000, 0xAE000, 
+static unsigned int valid_mem[]  __initdata = {
+				    0xA0000, 0xA2000, 0xA4000, 0xA6000, 0xA8000, 0xAA000, 0xAC000, 0xAE000, 
                                     0xB0000, 0xB2000, 0xB4000, 0xB6000, 0xB8000, 0xBA000, 0xBC000, 0xBE000,
                                     0xC0000, 0xC2000, 0xC4000, 0xC6000, 0xC8000, 0xCA000, 0xCC000, 0xCE000,
                                     0xD0000, 0xD2000, 0xD4000, 0xD6000, 0xD8000, 0xDA000, 0xDC000, 0xDE000,
@@ -1621,7 +1623,7 @@ static struct net_device_stats *sdla_stats(struct device *dev)
 	return(&flp->stats);
 }
 
-int sdla_init(struct device *dev)
+__initfunc(int sdla_init(struct device *dev))
 {
 	struct frad_local *flp;
 
@@ -1669,7 +1671,7 @@ int sdla_init(struct device *dev)
 	return(0);
 }
 
-void sdla_setup(void)
+__initfunc(void sdla_setup(void))
 {
 	printk("%s.\n", version);
 	register_frad(devname);

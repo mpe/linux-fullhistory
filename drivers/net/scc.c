@@ -153,6 +153,7 @@
 #include <linux/if_ether.h>
 #include <linux/if_arp.h>
 #include <linux/socket.h>
+#include <linux/init.h>
 
 #include <linux/scc.h>
 #include "z8530.h"
@@ -2153,7 +2154,7 @@ struct proc_dir_entry scc_proc_dir_entry =
 /* * 			Init SCC driver 			      * */
 /* ******************************************************************** */
 
-int scc_init (void)
+__initfunc(int scc_init (void))
 {
 	int chip, chan, k, result;
 	char devname[10];

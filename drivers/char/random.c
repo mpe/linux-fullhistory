@@ -234,6 +234,7 @@
 #include <linux/malloc.h>
 #include <linux/random.h>
 #include <linux/poll.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/irq.h>
@@ -451,7 +452,7 @@ static void rand_clear_pool(void)
 	init_std_data(&random_state);
 }
 
-void rand_initialize(void)
+__initfunc(void rand_initialize(void))
 {
 	int i;
 
@@ -1388,8 +1389,9 @@ static inline unsigned long long get_clock_cnt(void)
 	return (((unsigned long long) high << 31) | low); 
 }
 
-static void initialize_benchmark(struct random_benchmark *bench,
-				 const char *descr, int unit)
+__initfunc(static void
+initialize_benchmark(struct random_benchmark *bench,
+	             const char *descr, int unit))
 {
 	bench->times = 0;
 	bench->accum = 0;

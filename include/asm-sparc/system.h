@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.57 1997/04/15 09:03:45 davem Exp $ */
+/* $Id: system.h,v 1.58 1997/04/18 05:44:54 davem Exp $ */
 #ifndef __SPARC_SYSTEM_H
 #define __SPARC_SYSTEM_H
 
@@ -124,9 +124,7 @@ extern __inline__ void setipl(unsigned long __orig_psr)
 {
 	__asm__ __volatile__("
 		wr	%0, 0x0, %%psr
-		nop
-		nop
-		nop
+		nop; nop; nop
 "		: /* no outputs */
 		: "r" (__orig_psr)
 		: "memory", "cc");
@@ -138,14 +136,9 @@ extern __inline__ void __cli(void)
 
 	__asm__ __volatile__("
 		rd	%%psr, %0
-		andcc	%0, %1, %%g0
-		bne	1f
-		 nop
-		wr	%0, %1, %%psr
-		nop
-		nop
-		nop
-1:
+		or	%0, %1, %0
+		wr	%0, 0x0, %%psr
+		nop; nop; nop
 "		: "=r" (tmp)
 		: "i" (PSR_PIL)
 		: "memory");
@@ -157,14 +150,9 @@ extern __inline__ void __sti(void)
 
 	__asm__ __volatile__("
 		rd	%%psr, %0
-		andcc	%0, %1, %%g0
-		be	1f
-		 nop
-		wr	%0, %1, %%psr
-		nop
-		nop
-		nop
-1:
+		andn	%0, %1, %0
+		wr	%0, 0x0, %%psr
+		nop; nop; nop
 "		: "=r" (tmp)
 		: "i" (PSR_PIL)
 		: "memory");
@@ -189,7 +177,7 @@ extern __inline__ unsigned long swap_pil(unsigned long __new_psr)
 		xorcc	%1, %2, %%g0
 		be	1f
 		 nop
-		wr %0, %4, %%psr
+		wr	%0, %4, %%psr
 		nop
 		nop
 		nop
@@ -207,22 +195,15 @@ extern __inline__ unsigned long read_psr_and_cli(void)
 
 	__asm__ __volatile__("
 		rd	%%psr, %0
-		andcc	%0, %1, %%g0
-		bne	1f
-		 nop
-		wr	%0, %1, %%psr
-		nop
-		nop
-		nop
-1:
+		or	%0, %1, %%g1
+		wr	%%g1, 0x0, %%psr
+		nop; nop; nop
 "		: "=r" (retval)
 		: "i" (PSR_PIL)
-		: "memory");
+		: "g1", "memory");
 
 	return retval;
 }
-
-extern char spdeb_buf[256];
 
 #define __save_flags(flags)	((flags) = getipl())
 #define __save_and_cli(flags)	((flags) = read_psr_and_cli())
@@ -230,15 +211,48 @@ extern char spdeb_buf[256];
 
 #ifdef __SMP__
 
-extern void __global_cli(void);
-extern void __global_sti(void);
-extern unsigned long __global_save_flags(void);
-extern void __global_restore_flags(unsigned long);
-#define cli() __global_cli()
-#define sti() __global_sti()
-#define save_flags(x)	  ((x)=__global_save_flags())
-#define restore_flags(x)  __global_restore_flags(x)
-#define save_and_cli(x)   do { (x)=__global_save_flags(); __global_cli(); } while(0)
+/* Visit arch/sparc/lib/irqlock.S for all the fun details... */
+#define cli()      __asm__ __volatile__("mov	%%o7, %%g4\n\t"			\
+					"call	___global_cli\n\t"		\
+					" rd	%%tbr, %%g7" : :		\
+					: "g1", "g2", "g3", "g4", "g5", "g7",	\
+					  "memory", "cc")
+
+#define sti()							\
+do {	register unsigned long bits asm("g7");			\
+	bits = 0;						\
+	__asm__ __volatile__("mov	%%o7, %%g4\n\t"		\
+			     "call	___global_sti\n\t"	\
+			     " rd	%%tbr, %%g2"		\
+			     : /* no outputs */			\
+			     : "r" (bits)			\
+			     : "g1", "g2", "g3", "g4", "g5",	\
+			       "memory", "cc");			\
+} while(0)
+
+extern unsigned char global_irq_holder;
+
+#define save_flags(x) \
+do {	int cpuid; \
+	__asm__ __volatile__("rd %%tbr, %0; srl %0, 12, %0; and %0, 3, %0" \
+			     : "=r" (cpuid)); \
+	((x) = ((global_irq_holder == (unsigned char) cpuid) ? 1 : \
+		((getipl() & PSR_PIL) ? 2 : 0))); \
+} while(0)
+
+#define restore_flags(flags)						\
+do {	register unsigned long bits asm("g7");				\
+	bits = flags;							\
+	__asm__ __volatile__("mov	%%o7, %%g4\n\t"			\
+			     "call	___global_restore_flags\n\t"	\
+			     " andcc	%%g7, 0x1, %%g0"		\
+			     : "=&r" (bits)				\
+			     : "0" (bits)				\
+			     : "g1", "g2", "g3", "g4", "g5",		\
+			       "memory", "cc");				\
+} while(0)
+
+#define save_and_cli(flags)   do { save_flags(flags); cli(); } while(0)
 
 #else
 

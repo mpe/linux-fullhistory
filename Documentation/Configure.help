@@ -290,12 +290,13 @@ CONFIG_BLK_DEV_RZ1000
 Intel 82371 PIIX (Triton I/II) DMA support
 CONFIG_BLK_DEV_TRITON
   If your PCI system uses an IDE harddrive (as opposed to SCSI, say)
-  and includes the Intel Triton I/II IDE interface chipset (i82371FB
-  or i82371SB), you will want to enable this option to allow use of
-  bus-mastering DMA data transfers. Read the comments at the beginning
-  of drivers/block/triton.c and Documentation/ide.txt.  You can get
-  the latest version of the hdparm utility via ftp (user: anonymous)
-  from sunsite.unc.edu/pub/Linux/kernel/patches/diskdrives/; it is
+  and includes the Intel Triton I/II IDE interface chipset (i82371FB,
+  i82371SB or i82371AB), you will want to enable this option to allow
+  use of bus-mastering DMA data transfers. Read the comments at the
+  beginning of drivers/block/triton.c and Documentation/ide.txt.
+  You can get the latest version of the hdparm utility via 
+  ftp (user: anonymous) from
+  sunsite.unc.edu/pub/Linux/kernel/patches/diskdrives/; it is
   used to tune your harddisk. It is safe to say Y to this question.
 
 Other IDE chipset support

@@ -33,6 +33,7 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
+#include <asm/sysinfo.h>
 
 extern int do_mount(kdev_t, const char *, const char *, char *, int, void *);
 extern int do_pipe(int *);
@@ -840,62 +841,91 @@ out:
 	return err;
 }
 
-asmlinkage unsigned long osf_getsysinfo(unsigned long op, void *buffer, unsigned long nbytes,
+asmlinkage unsigned long osf_getsysinfo(unsigned long op, void *buffer,
+					unsigned long nbytes,
 					int *start, void *arg)
 {
 	extern unsigned long rdfpcr(void);
-	unsigned long fpcw;
-	unsigned long ret = -EOPNOTSUPP;
+	unsigned long w;
 
-	lock_kernel();
 	switch (op) {
-	case 45:		/* GSI_IEEE_FP_CONTROL */
+	case GSI_IEEE_FP_CONTROL:
 		/* build and return current fp control word: */
-		fpcw = current->tss.flags & IEEE_TRAP_ENABLE_MASK;
-		fpcw |= ((rdfpcr() >> 52) << 17) & IEEE_STATUS_MASK;
-		put_user(fpcw, (unsigned long *) buffer);
-		ret = 0;
-		break;
-	case 46:		/* GSI_IEEE_STATE_AT_SIGNAL */
+		w = current->tss.flags & IEEE_TRAP_ENABLE_MASK;
+		w |= ((rdfpcr() >> 52) << 17) & IEEE_STATUS_MASK;
+		if (put_user(w, (unsigned long *) buffer))
+			return -EFAULT;
+		return 0;
+
+	case GSI_IEEE_STATE_AT_SIGNAL:
 		/*
 		 * Not sure anybody will ever use this weird stuff.  These
 		 * ops can be used (under OSF/1) to set the fpcr that should
 		 * be used when a signal handler starts executing.
 		 */
 		break;
+
+ 	case GSI_UACPROC:
+ 		w = (current->tss.flags >> UAC_SHIFT) & UAC_BITMASK;
+ 		if (put_user(w, (unsigned int *)buffer))
+ 			return -EFAULT;
+ 		return 0;
+
 	default:
 		break;
 	}
-	unlock_kernel();
-	return ret;
+
+	return -EOPNOTSUPP;
 }
 
 
-asmlinkage unsigned long osf_setsysinfo(unsigned long op, void *buffer, unsigned long nbytes,
+asmlinkage unsigned long osf_setsysinfo(unsigned long op, void *buffer,
+					unsigned long nbytes,
 					int *start, void *arg)
 {
-	unsigned long fpcw;
-	unsigned long ret = -EOPNOTSUPP;
+	unsigned long v, w, i;
 
-	lock_kernel();
 	switch (op) {
-	case 14:		/* SSI_IEEE_FP_CONTROL */
+	case SSI_IEEE_FP_CONTROL:
 		/* update trap enable bits: */
-		get_user(fpcw, (unsigned long *) buffer);
+		if (get_user(w, (unsigned long *) buffer))
+			return -EFAULT;
 		current->tss.flags &= ~IEEE_TRAP_ENABLE_MASK;
-		current->tss.flags |= (fpcw & IEEE_TRAP_ENABLE_MASK);
-		ret = 0;
-		break;
-	case 15:		/* SSI_IEEE_STATE_AT_SIGNAL */
-	case 16:		/* SSI_IEEE_IGNORE_STATE_AT_SIGNAL */
+		current->tss.flags |= (w & IEEE_TRAP_ENABLE_MASK);
+		return 0;
+
+	case SSI_IEEE_STATE_AT_SIGNAL:
+	case SSI_IEEE_IGNORE_STATE_AT_SIGNAL:
 		/*
 		 * Not sure anybody will ever use this weird stuff.  These
 		 * ops can be used (under OSF/1) to set the fpcr that should
 		 * be used when a signal handler starts executing.
 		 */
+		break;
+
+ 	case SSI_NVPAIRS:
+ 		for (i = 0; i < nbytes; ++i) {
+ 			if (get_user(v, 2*i + (unsigned int *)buffer))
+ 				return -EFAULT;
+ 			if (get_user(w, 2*i + 1 + (unsigned int *)buffer))
+ 				return -EFAULT;
+ 			switch (v) {
+ 			case SSIN_UACPROC:
+ 				current->tss.flags &=
+ 					~(UAC_BITMASK << UAC_SHIFT);
+ 				current->tss.flags |=
+ 					(w & UAC_BITMASK) << UAC_SHIFT;
+ 				break;
+ 
+ 			default:
+ 				return -EOPNOTSUPP;
+ 			}
+ 		}
+ 		return 0;
+ 
 	default:
 		break;
 	}
-	unlock_kernel();
-	return ret;
+
+	return -EOPNOTSUPP;
 }

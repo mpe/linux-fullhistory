@@ -167,20 +167,21 @@ asmlinkage int sys_settimeofday(struct timeval *tv, struct timezone *tz)
 	if (tz) {
 		if (copy_from_user(&new_tz, tz, sizeof(*tz)))
 			return -EFAULT;
-		lock_kernel();
+
+		/* SMP safe, global irq locking makes it work. */
 		sys_tz = new_tz;
 		if (firsttime) {
 			firsttime = 0;
 			if (!tv)
 				warp_clock();
 		}
-		unlock_kernel();
 	}
 	if (tv)
 	{
-		lock_kernel();
+		/* SMP safe, again the code in arch/foo/time.c should
+		 * globally block out interrupts when it runs.
+		 */
 		do_settimeofday(&new_tv);
-		unlock_kernel();
 	}
 	return 0;
 }
@@ -234,9 +235,7 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 		if (txc.tick < 900000/HZ || txc.tick > 1100000/HZ)
 			return -EINVAL;
 
-	lock_kernel();
-
-	cli();
+	cli(); /* SMP: global cli() is enough protection. */
 
 	/* Save for later - semantics of adjtime is to return old value */
 	save_adjust = time_adjust;
@@ -351,6 +350,6 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 	txc.stbcnt	   = pps_stbcnt;
 
 	sti();
-	unlock_kernel();
+
 	return copy_to_user(txc_p, &txc, sizeof(struct timex)) ? -EFAULT : time_state;
 }

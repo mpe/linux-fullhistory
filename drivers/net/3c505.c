@@ -108,6 +108,7 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#include <linux/init.h>
 
 #include "3c505.h"
 
@@ -178,7 +179,7 @@ static const int elp_debug = 0;
  * Last element MUST BE 0!
  *****************************************************************/
 
-static const int addr_list[] = {0x300, 0x280, 0x310, 0};
+static const int addr_list[] __initdata = {0x300, 0x280, 0x310, 0};
 
 /* Dma Memory related stuff */
 
@@ -1305,7 +1306,7 @@ static void elp_set_mc_list(struct device *dev)
  *
  ******************************************************/
 
-static void elp_init(struct device *dev)
+static inline void elp_init(struct device *dev)
 {
 	elp_device *adapter = dev->priv;
 
@@ -1338,7 +1339,7 @@ static void elp_init(struct device *dev)
  * Called only by elp_autodetect
  ************************************************************/
 
-static int elp_sense(struct device *dev)
+__initfunc(static int elp_sense(struct device *dev))
 {
 	int timeout;
 	int addr = dev->base_addr;
@@ -1405,7 +1406,7 @@ static int elp_sense(struct device *dev)
  * Called only by eplus_probe
  *************************************************************/
 
-static int elp_autodetect(struct device *dev)
+__initfunc(static int elp_autodetect(struct device *dev))
 {
 	int idx = 0;
 
@@ -1449,7 +1450,7 @@ static int elp_autodetect(struct device *dev)
  * work at all if it was in a weird state).
  */
 
-int elplus_probe(struct device *dev)
+__initfunc(int elplus_probe(struct device *dev))
 {
 	elp_device *adapter;
 	int i, tries, tries1, timeout, okay;

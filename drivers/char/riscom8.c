@@ -40,6 +40,7 @@
 #include <linux/serial.h>
 #include <linux/fcntl.h>
 #include <linux/major.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 
@@ -231,7 +232,7 @@ extern inline void rc_long_delay(unsigned long delay)
 }
 
 /* Reset and setup CD180 chip */
-static void rc_init_CD180(struct riscom_board const * bp)
+__initfunc(static void rc_init_CD180(struct riscom_board const * bp))
 {
 	unsigned long flags;
 	
@@ -256,7 +257,7 @@ static void rc_init_CD180(struct riscom_board const * bp)
 }
 
 /* Main probing routine, also sets irq. */
-static int rc_probe(struct riscom_board *bp)
+__initfunc(static int rc_probe(struct riscom_board *bp))
 {
 	unsigned char val1, val2;
 	int irqs = 0;
@@ -264,7 +265,7 @@ static int rc_probe(struct riscom_board *bp)
 	
 	bp->irq = 0;
 
-	if (rc_check_io_range(bp)) 
+	if (rc_check_io_range(bp))
 		return 1;
 	
 	/* Are the I/O ports here ? */
@@ -1718,7 +1719,7 @@ static void do_softint(void *private_)
 	}
 }
 
-static int rc_init_drivers(void)
+static inline int rc_init_drivers(void)
 {
 	int error;
 	int i;
@@ -1799,9 +1800,15 @@ static int rc_init_drivers(void)
 
 static void rc_release_drivers(void)
 {
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+	remove_bh(RISCOM8_BH);
 	free_page((unsigned long)tmp_buf);
 	tty_unregister_driver(&riscom_driver);
 	tty_unregister_driver(&riscom_callout_driver);
+	restore_flags(flags);
 }
 
 #ifndef MODULE
@@ -1830,7 +1837,7 @@ void riscom8_setup(char *str, int * ints)
 /* 
  * This routine must be called by kernel at boot time 
  */
-int riscom8_init(void) 
+__initfunc(int riscom8_init(void))
 {
 	int i;
 	int found = 0;

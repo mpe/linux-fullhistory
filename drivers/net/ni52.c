@@ -114,6 +114,7 @@ static int fifo=0x8;	/* don't change */
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
+#include <linux/init.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 
@@ -359,7 +360,7 @@ void alloc586(struct device *dev)
 /**********************************************
  * probe the ni5210-card
  */
-int ni52_probe(struct device *dev)
+__initfunc(int ni52_probe(struct device *dev))
 {
 #ifndef MODULE
 	int *port;
@@ -410,7 +411,7 @@ int ni52_probe(struct device *dev)
 	return ENODEV;
 }
 
-static int ni52_probe1(struct device *dev,int ioaddr)
+__initfunc(static int ni52_probe1(struct device *dev,int ioaddr))
 {
 	int i,size;
 
@@ -455,7 +456,7 @@ static int ni52_probe1(struct device *dev,int ioaddr)
 	else
 	{
 		static long memaddrs[] = { 0xc8000,0xca000,0xcc000,0xce000,0xd0000,0xd2000,
-															0xd4000,0xd6000,0xd8000,0xda000,0xdc000, 0 };
+					0xd4000,0xd6000,0xd8000,0xda000,0xdc000, 0 };
 		for(i=0;;i++)
 		{
 			if(!memaddrs[i]) {

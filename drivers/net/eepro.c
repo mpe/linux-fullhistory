@@ -101,6 +101,7 @@ static const char *version =
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <linux/errno.h>
+#include <linux/init.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -109,7 +110,7 @@ static const char *version =
 
 /* First, a few definitions that the brave might change. */
 /* A zero-terminated list of I/O addresses to be probed. */
-static unsigned int eepro_portlist[] =
+static unsigned int eepro_portlist[] __initdata =
    { 0x200, 0x240, 0x280, 0x2C0, 0x300, 0x320, 0x340, 0x360, 0};
 
 /* use 0 for production, 1 for verification, >2 for debug */
@@ -305,8 +306,8 @@ buffer (transmit-buffer = 32K - receive-buffer).
 struct netdev_entry netcard_drv =
 {"eepro", eepro_probe1, EEPRO_IO_EXTENT, eepro_portlist};
 #else
-int
-eepro_probe(struct device *dev)
+__initfunc(int
+eepro_probe(struct device *dev))
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -332,7 +333,7 @@ eepro_probe(struct device *dev)
    probes on the ISA bus.  A good device probes avoids doing writes, and
    verifies that the correct device exists and functions.  */
 
-int eepro_probe1(struct device *dev, short ioaddr)
+__initfunc(int eepro_probe1(struct device *dev, short ioaddr))
 {
 	unsigned short station_addr[6], id, counter;
 	int i;

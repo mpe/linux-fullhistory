@@ -457,6 +457,7 @@ struct seeprom_config {
  * sections.
  */
 #define PAUSE_SEQUENCER(p) \
+  synchronize_irq();					\
   outb(p->pause, HCNTRL + p->base);			\
   while ((inb(HCNTRL + p->base) & PAUSE) == 0)		\
     ;							\

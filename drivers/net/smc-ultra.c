@@ -53,6 +53,7 @@ static const char *version =
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/string.h>
+#include <linux/init.h>
 #include <asm/io.h>
 #include <asm/system.h>
 
@@ -61,7 +62,7 @@ static const char *version =
 #include "8390.h"
 
 /* A zero-terminated list of I/O addresses to be probed. */
-static unsigned int ultra_portlist[] =
+static unsigned int ultra_portlist[] __initdata =
 {0x200, 0x220, 0x240, 0x280, 0x300, 0x340, 0x380, 0};
 
 int ultra_probe(struct device *dev);
@@ -104,7 +105,7 @@ struct netdev_entry ultra_drv =
 {"ultra", ultra_probe1, NETCARD_IO_EXTENT, netcard_portlist};
 #else
 
-int ultra_probe(struct device *dev)
+__initfunc(int ultra_probe(struct device *dev))
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -126,7 +127,7 @@ int ultra_probe(struct device *dev)
 }
 #endif
 
-int ultra_probe1(struct device *dev, int ioaddr)
+__initfunc(int ultra_probe1(struct device *dev, int ioaddr))
 {
 	int i;
 	int checksum = 0;

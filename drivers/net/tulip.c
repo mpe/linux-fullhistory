@@ -62,6 +62,7 @@ static char *version =
 #include <linux/pci.h>
 #include <linux/bios32.h>
 #include <linux/delay.h>
+#include <linux/init.h>
 #include <asm/byteorder.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -473,8 +474,8 @@ tio_sia_write(u32 ioaddr, u32 val13, u32 val14, u32 val15)
    card_type returns 1 if the card is 'etherarray'
 */
 
-static int
-card_type(struct tulip_private *tp, int device_id, int vendor_id)
+__initfunc(static int
+card_type(struct tulip_private *tp, int device_id, int vendor_id))
 {
 	int n;
 
@@ -488,8 +489,8 @@ card_type(struct tulip_private *tp, int device_id, int vendor_id)
 	return(cardVendor[n].array ? 1: 0);
 }
 
-static int
-read_eeprom(int ioaddr, struct eeprom *eepp)
+__initfunc(static int
+read_eeprom(int ioaddr, struct eeprom *eepp))
 {
     int i, n;
     unsigned short val = 0;
@@ -1188,9 +1189,9 @@ static void set_multicast_list(struct device *dev)
 	}
 }
 
-int
+__initfunc(int
 tulip_hwinit(struct device *dev, int ioaddr,
-			 int irq, int device_id)
+			 int irq, int device_id))
 {
 	/* See note below on the Znyx 315 etherarray. */
 	static unsigned char last_phys_addr[6] = {0x00, 'L', 'i', 'n', 'u', 'x'};
@@ -1319,7 +1320,7 @@ tulip_hwinit(struct device *dev, int ioaddr,
 	return(0);
 }
 
-int tulip_probe(struct device *dev)
+__initfunc(int tulip_probe(struct device *dev))
 {
 	static struct device *tulip_head=NULL;
 	u_char pci_bus, pci_device_fn, pci_latency, pci_irq;

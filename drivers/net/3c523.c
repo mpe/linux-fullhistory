@@ -100,6 +100,7 @@ History:
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#include <linux/init.h>
 
 #include "3c523.h"
 
@@ -115,9 +116,9 @@ History:
 /*
     Tables to which we can map values in the configuration registers.
 */
-static int irq_table[] = {12, 7, 3, 9};
-static int csr_table[] = {0x300, 0x1300, 0x2300, 0x3300};
-static int shm_table[] = {0x0c0000, 0x0c8000, 0x0d0000, 0x0d8000};
+static int irq_table[] __initdata = {12, 7, 3, 9};
+static int csr_table[] __initdata = {0x300, 0x1300, 0x2300, 0x3300};
+static int shm_table[] __initdata = {0x0c0000, 0x0c8000, 0x0d0000, 0x0d8000};
 
 /******************* how to calculate the buffers *****************************
 
@@ -308,9 +309,9 @@ elmc_open(struct device *dev) {
  * Check to see if there's an 82586 out there.
  */
 
-static
+__initfunc(static
 int
-check586( struct device *dev, char *where, unsigned size) {
+check586( struct device *dev, char *where, unsigned size)) {
   struct priv *p = (struct priv *) dev->priv;
   char *iscp_addrs[2];
   int i = 0;
@@ -382,8 +383,8 @@ alloc586( struct device *dev ) {
 }
 
 /*****************************************************************/
-static int
-elmc_getinfo( char* buf, int slot, void* d ) {
+__initfunc(static int
+elmc_getinfo( char* buf, int slot, void* d )) {
 	int len = 0;
 	struct device* dev = (struct device*) d;
 	int i;
@@ -411,8 +412,8 @@ elmc_getinfo( char* buf, int slot, void* d ) {
 } /* elmc_getinfo() */
 
 /*****************************************************************/
-int
-elmc_probe(struct device *dev) {
+__initfunc(int
+elmc_probe(struct device *dev)) {
     static int slot = 0;
     int base_addr = dev ? dev->base_addr : 0;
     int irq = dev ? dev->irq : 0;

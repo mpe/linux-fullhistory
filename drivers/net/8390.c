@@ -58,6 +58,7 @@ static const char *version =
 #include <linux/fcntl.h>
 #include <linux/in.h>
 #include <linux/interrupt.h>
+#include <linux/init.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -771,7 +772,7 @@ static void set_multicast_list(struct device *dev)
 }
 
 /* Initialize the rest of the 8390 device structure. */
-int ethdev_init(struct device *dev)
+__initfunc(int ethdev_init(struct device *dev))
 {
     if (ei_debug > 1)
 		printk(version);

@@ -896,7 +896,6 @@ __initfunc(asmlinkage void start_kernel(void))
 	memory_start = kmem_cache_init(memory_start, memory_end);
 	sti();
 	calibrate_delay();
-	memory_start = inode_init(memory_start,memory_end);
 	memory_start = file_table_init(memory_start,memory_end);
 	memory_start = name_cache_init(memory_start,memory_end);
 #ifdef CONFIG_BLK_DEV_INITRD
@@ -913,6 +912,7 @@ __initfunc(asmlinkage void start_kernel(void))
 	kmem_cache_sizes_init();
 	vma_init();
 	buffer_init();
+	inode_init();
 	sock_init();
 #if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
 	ipc_init();

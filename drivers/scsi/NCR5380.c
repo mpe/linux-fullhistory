@@ -596,7 +596,7 @@ void NCR5380_timer_fn(void) {
 }
 #endif /* def USLEEP */
 
-static void NCR5380_all_init (void) {
+static inline void NCR5380_all_init (void) {
     static int done = 0;
     if (!done) {
 #if (NDEBUG & NDEBUG_INIT)
@@ -625,12 +625,12 @@ static void NCR5380_all_init (void) {
  */
 
 
-static int probe_irq;
-static void probe_intr (int irq, void *dev_id, struct pt_regs * regs) {
+static int probe_irq __initdata;
+__initfunc(static void probe_intr (int irq, void *dev_id, struct pt_regs * regs)) {
     probe_irq = irq;
 };
 
-static int NCR5380_probe_irq (struct Scsi_Host *instance, int possible) {
+__initfunc(static int NCR5380_probe_irq (struct Scsi_Host *instance, int possible)) {
     NCR5380_local_declare();
     struct NCR5380_hostdata *hostdata = (struct NCR5380_hostdata *)
 	 instance->hostdata;
@@ -685,7 +685,7 @@ static int NCR5380_probe_irq (struct Scsi_Host *instance, int possible) {
  * Inputs : instance, pointer to this instance.  Unused.
  */
 
-static void NCR5380_print_options (struct Scsi_Host *instance) {
+__initfunc(static void NCR5380_print_options (struct Scsi_Host *instance)) {
     printk(" generic options"
 #ifdef AUTOPROBE_IRQ
     " AUTOPROBE_IRQ"
@@ -900,7 +900,7 @@ char *lprint_opcode(int opcode, char *pos, char *buffer, int length) {
  * 
  */
 
-static void NCR5380_init (struct Scsi_Host *instance, int flags) {
+__initfunc(static void NCR5380_init (struct Scsi_Host *instance, int flags)) {
     NCR5380_local_declare();
     int i, pass;
     unsigned long timeout;

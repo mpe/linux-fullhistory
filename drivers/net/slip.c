@@ -70,6 +70,7 @@
 #include <linux/skbuff.h>
 #include <linux/if_arp.h>
 #include <linux/if_slip.h>
+#include <linux/init.h>
 #include "slip.h"
 #ifdef CONFIG_INET
 #include <linux/ip.h>
@@ -1087,7 +1088,7 @@ static int sl_open_dev(struct device *dev)
 #ifdef MODULE
 static int slip_init_ctrl_dev(void)
 #else	/* !MODULE */
-int slip_init_ctrl_dev(struct device *dummy)
+__initfunc(int slip_init_ctrl_dev(struct device *dummy))
 #endif	/* !MODULE */
 {
 	int status;

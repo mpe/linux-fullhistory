@@ -47,11 +47,15 @@ static inline int find_empty_process(void)
 		max_tasks--;	/* count the new process.. */
 		if (max_tasks < nr_tasks) {
 			struct task_struct *p;
+			read_lock(&tasklist_lock);
 			for_each_task (p) {
 				if (p->uid == current->uid)
-					if (--max_tasks < 0)
+					if (--max_tasks < 0) {
+						read_unlock(&tasklist_lock);
 						return -EAGAIN;
+					}
 			}
+			read_unlock(&tasklist_lock);
 		}
 	}
 	for (i = 0 ; i < NR_TASKS ; i++) {
@@ -67,6 +71,8 @@ static int get_pid(unsigned long flags)
 
 	if (flags & CLONE_PID)
 		return current->pid;
+
+	read_lock(&tasklist_lock);
 repeat:
 	if ((++last_pid) & 0xffff8000)
 		last_pid=1;
@@ -76,6 +82,8 @@ repeat:
 		    p->session == last_pid)
 			goto repeat;
 	}
+	read_unlock(&tasklist_lock);
+
 	return last_pid;
 }
 

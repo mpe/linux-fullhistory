@@ -27,6 +27,9 @@
 #include <linux/major.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
 
 extern void device_setup(void);
 extern void binfmt_setup(void);
@@ -42,7 +45,7 @@ asmlinkage int sys_setup(void)
 	if (!callable)
 		goto out;
 	callable = 0;
-
+	
 	device_setup();
 
 	binfmt_setup();
@@ -129,3 +132,32 @@ out:
 	return err;
 }
 
+#ifndef CONFIG_NFSD
+#ifdef CONFIG_NFSD_MODULE
+int (*do_nfsservctl)(int, void *, void *) = NULL;
+#endif
+int
+asmlinkage sys_nfsservctl(int cmd, void *argp, void *resp)
+{
+#ifndef CONFIG_NFSD_MODULE
+	return -ENOSYS;
+#else
+	int ret = -ENOSYS;
+	
+	lock_kernel();
+	if (do_nfsservctl) {
+		ret = do_nfsservctl(cmd, argp, resp);
+		goto out;
+	}
+#ifdef CONFIG_KERNELD
+	if (request_module ("nfsd") == 0) {
+		if (do_nfsservctl)
+			ret = do_nfsservctl(cmd, argp, resp);
+	}
+#endif /* CONFIG_KERNELD */
+out:
+	unlock_kernel();
+	return ret;
+#endif /* CONFIG_NFSD_MODULE */
+}
+#endif /* CONFIG_NFSD */

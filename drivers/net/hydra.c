@@ -27,6 +27,7 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#include <linux/init.h>
 
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -156,7 +157,7 @@ static void memcpyw(u16 *dest, u16 *src, int len)
 
 #endif
 
-int hydra_probe(struct device *dev)
+__initfunc(int hydra_probe(struct device *dev))
 {
 	struct hydra_private *priv;
 	u32 board;

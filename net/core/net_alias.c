@@ -43,6 +43,7 @@
 #include <linux/in.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/init.h>
 
 #include <linux/net_alias.h>
 
@@ -1359,7 +1360,7 @@ static struct proc_dir_entry proc_net_aliases = {
  *	Net_alias initialisation called from net_dev_init().
  */
 
-void net_alias_init(void)
+__initfunc(void net_alias_init(void))
 {
 
 	/*

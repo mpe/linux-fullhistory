@@ -27,6 +27,8 @@
 #include <asm/pgtable.h>
 #include <asm/dma.h>
 
+const char bad_pmd_string[] = "Bad pmd in pte_alloc: %08lx\n";
+
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
 
@@ -102,6 +104,48 @@ extern unsigned long free_area_init(unsigned long, unsigned long);
 extern char _text, _etext, _edata, __bss_start, _end;
 extern char __init_begin, __init_end;
 
+#define X86_CR4_VME		0x0001		/* enable vm86 extensions */
+#define X86_CR4_PVI		0x0002		/* virtual interrupts flag enable */
+#define X86_CR4_TSD		0x0004		/* disable time stamp at ipl 3 */
+#define X86_CR4_DE		0x0008		/* enable debugging extensions */
+#define X86_CR4_PSE		0x0010		/* enable page size extensions */
+#define X86_CR4_PAE		0x0020		/* enable physical address extensions */
+#define X86_CR4_MCE		0x0040		/* Machine check enable */
+#define X86_CR4_PGE		0x0080		/* enable global pages */
+#define X86_CR4_PCE		0x0100		/* enable performance counters at ipl 3 */
+
+#define X86_FEATURE_FPU		0x0001		/* internal FPU */
+#define X86_FEATURE_VME		0x0002		/* vm86 extensions */
+#define X86_FEATURE_DE		0x0004		/* debugging extensions */
+#define X86_FEATURE_PSE		0x0008		/* Page size extensions */
+#define X86_FEATURE_TSC		0x0010		/* Time stamp counter */
+#define X86_FEATURE_MSR		0x0020		/* RDMSR/WRMSR */
+#define X86_FEATURE_PAE		0x0040		/* Physical address extension */
+#define X86_FEATURE_MCE		0x0080		/* Machine check exception */
+#define X86_FEATURE_CXS		0x0100		/* cmpxchg8 available */
+#define X86_FEATURE_APIC	0x0200		/* internal APIC */
+#define X86_FEATURE_10		0x0400
+#define X86_FEATURE_11		0x0800
+#define X86_FEATURE_MTRR	0x1000		/* memory type registers */
+#define X86_FEATURE_PGE		0x2000		/* Global page */
+#define X86_FEATURE_MCA		0x4000		/* Machine Check Architecture */
+#define X86_FEATURE_CMOV	0x8000		/* Cmov/fcomi */
+
+#ifdef GAS_KNOWS_CR4
+#define read_cr4	"movl %%cr4,%%eax"
+#define write_cr4	"movl %%eax,%%cr4"
+#else
+#define read_cr4	".byte 0x0f,0x20,0xe0"
+#define write_cr4	".byte 0x0f,0x22,0xe0"
+#endif
+
+#define set_in_cr4(x) \
+__asm__(read_cr4 "\n\t" \
+	"orl %0,%%eax\n\t" \
+	write_cr4 \
+	: : "i" (x) \
+	:"ax");
+
 /*
  * paging_init() sets up the page tables - note that the first 4MB are
  * already mapped by head.S.
@@ -156,27 +200,25 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 	/* Map whole memory from 0xC0000000 */
 
 	while (address < end_mem) {
-		if (x86_capability & 8) {
-			/*
-			 * If we're running on a Pentium CPU, we can use the 4MB
-			 * page tables. 
-			 *
-			 * The page tables we create span up to the next 4MB
-			 * virtual memory boundary, but that's OK as we won't
-			 * use that memory anyway.
-			 */
-#ifdef GAS_KNOWS_CR4
-			__asm__("movl %%cr4,%%eax\n\t"
-				"orl $16,%%eax\n\t"
-				"movl %%eax,%%cr4"
-				: : :"ax");
-#else
-			__asm__(".byte 0x0f,0x20,0xe0\n\t"
-				"orl $16,%%eax\n\t"
-				".byte 0x0f,0x22,0xe0"
-				: : :"ax");
-#endif
+		/*
+		 * If we're running on a Pentium CPU, we can use the 4MB
+		 * page tables. 
+		 *
+		 * The page tables we create span up to the next 4MB
+		 * virtual memory boundary, but that's OK as we won't
+		 * use that memory anyway.
+		 */
+		if (x86_capability & X86_FEATURE_PSE) {
+			unsigned long __pe;
+
+			set_in_cr4(X86_CR4_PSE);
 			wp_works_ok = 1;
+			__pe = _PAGE_TABLE + _PAGE_4M + __pa(address);
+			/* Make it "global" too if supported */
+			if (x86_capability & X86_FEATURE_PGE) {
+				set_in_cr4(X86_CR4_PGE);
+				__pe += _PAGE_GLOBAL;
+			}
 			pgd_val(pg_dir[768]) = _PAGE_TABLE + _PAGE_4M + __pa(address);
 			pg_dir++;
 			address += 4*1024*1024;

@@ -16,6 +16,7 @@
 #include <asm/errno.h>
 #include <asm/head.h>
 #include <asm/ptrace.h>
+#include <asm/asi.h>
 
 #define CSUM_BIGCHUNK(buf, offset, sum, t0, t1, t2, t3, t4, t5)	\
 	ldd	[buf + offset + 0x00], t0;			\
@@ -547,22 +548,18 @@ __csum_partial_copy_end:
 	brz,pn	%i2, 2f
 	 mov	%i0, %o1
 	mov	%i1, %o0
-5:
-	call	__memcpy
+	call	__copy_from_user
 	 mov	%i2, %o2
 	brnz,a,pn %o0, 2f
 	 add	%i3, %i2, %i3
 	add	%i1, %i2, %i1
 2:
 	mov	%i1, %o0
-	call	__bzero
+        wr	%%g0, ASI_S, %%asi
+        call	__bzero_noasi
 	 mov	%i3, %o1
 1:
 	ldx	[%sp + STACK_BIAS + 264], %o2		! struct_ptr of parent
 	st	%i5, [%o2]
 	ret
 	 restore
-
-        .section __ex_table,#alloc
-        .align 4
-        .word 5b,2

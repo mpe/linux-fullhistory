@@ -7,6 +7,7 @@
 #include <linux/pci.h>
 #include <linux/string.h>
 #include <linux/blk.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
@@ -461,8 +462,8 @@ static void AM53C974_print_queues(struct Scsi_Host *instance);
 #endif /* AM53C974_DEBUG */
 static void AM53C974_print(struct Scsi_Host *instance);
 static void AM53C974_keywait(void);
-static int AM53C974_bios_detect(Scsi_Host_Template *tpnt);
-static int AM53C974_nobios_detect(Scsi_Host_Template *tpnt);
+static __inline__ int AM53C974_bios_detect(Scsi_Host_Template *tpnt);
+static __inline__ int AM53C974_nobios_detect(Scsi_Host_Template *tpnt);
 static int AM53C974_init(Scsi_Host_Template *tpnt, pci_config_t pci_config);
 static void AM53C974_config_after_reset(struct Scsi_Host *instance);
 static __inline__ void initialize_SCp(Scsi_Cmnd *cmd);
@@ -739,7 +740,7 @@ if (ints[0] < 4)
 * 
 * Returns : number of host adapters detected
 **************************************************************************/
-int AM53C974_bios_detect(Scsi_Host_Template *tpnt)
+static __inline__ int AM53C974_bios_detect(Scsi_Host_Template *tpnt)
 {
 int count = 0;        /* number of boards detected */
 int pci_index;
@@ -804,7 +805,7 @@ return (count);
 *
 * Origin: Robin Cutshaw (robin@xfree86.org)
 **************************************************************************/
-int AM53C974_nobios_detect(Scsi_Host_Template *tpnt)
+static __inline__ int AM53C974_nobios_detect(Scsi_Host_Template *tpnt)
 {
 int          count = 0;		/* number of boards detected */
 pci_config_t pci_config;
@@ -902,7 +903,7 @@ return(count);
 * 
 * Returns : number of host adapters detected
 **************************************************************************/
-int AM53C974_detect(Scsi_Host_Template *tpnt)
+__initfunc(int AM53C974_detect(Scsi_Host_Template *tpnt))
 {
 int count;        /* number of boards detected */
 
@@ -931,7 +932,7 @@ return (count);
 *       set up by the BIOS (as reflected by contents of register CNTLREG1).
 *       This is the only BIOS assistance we need.
 **************************************************************************/
-static int AM53C974_init(Scsi_Host_Template *tpnt, pci_config_t pci_config)
+__initfunc(static int AM53C974_init(Scsi_Host_Template *tpnt, pci_config_t pci_config))
 {
 AM53C974_local_declare();
 int                      i, j;

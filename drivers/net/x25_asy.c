@@ -24,6 +24,7 @@
 #include <linux/if_arp.h>
 #include <linux/x25.h>
 #include <linux/lapb.h>
+#include <linux/init.h>
 #include "x25_asy.h"
 
 typedef struct x25_ctrl {
@@ -808,7 +809,7 @@ static int x25_asy_open_dev(struct device *dev)
 #ifdef MODULE
 static int x25_asy_init_ctrl_dev(void)
 #else	/* !MODULE */
-int x25_asy_init_ctrl_dev(struct device *dummy)
+__initfunc(int x25_asy_init_ctrl_dev(struct device *dummy))
 #endif	/* !MODULE */
 {
 	int status;

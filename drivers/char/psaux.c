@@ -46,6 +46,7 @@
 #include <linux/miscdevice.h>
 #include <linux/random.h>
 #include <linux/poll.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -529,7 +530,7 @@ static struct miscdevice psaux_mouse = {
 	PSMOUSE_MINOR, "ps2aux", &psaux_fops
 };
 
-int psaux_init(void)
+__initfunc(int psaux_init(void))
 {
 	int qp_found = 0;
 
@@ -653,7 +654,7 @@ static inline unsigned char read_710(unsigned char index)
  * See if we can find a 82C710 device. Read mouse address.
  */
 
-static int probe_qp(void)
+__initfunc(static int probe_qp(void))
 {
 	outb_p(0x55, 0x2fa);			/* Any value except 9, ff or 36 */
 	outb_p(0xaa, 0x3fa);			/* Inverse of 55 */

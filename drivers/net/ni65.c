@@ -69,6 +69,7 @@
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
+#include <linux/init.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
@@ -232,8 +233,8 @@ static void ni65_free_buffer(struct priv *p);
 static struct net_device_stats *ni65_get_stats(struct device *);
 static void set_multicast_list(struct device *dev);
 
-static int irqtab[] = { 9,12,15,5 }; /* irq config-translate */
-static int dmatab[] = { 0,3,5,6,7 }; /* dma config-translate and autodetect */
+static int irqtab[] __initdata = { 9,12,15,5 }; /* irq config-translate */
+static int dmatab[] __initdata = { 0,3,5,6,7 }; /* dma config-translate and autodetect */
 
 static int debuglevel = 1;
 
@@ -327,7 +328,7 @@ static int ni65_close(struct device *dev)
 #ifdef MODULE
 static
 #endif
-int ni65_probe(struct device *dev)
+__initfunc(int ni65_probe(struct device *dev))
 {
 	int *port;
 	static int ports[] = {0x360,0x300,0x320,0x340, 0};
@@ -349,7 +350,7 @@ int ni65_probe(struct device *dev)
 /*
  * this is the real card probe ..
  */
-static int ni65_probe1(struct device *dev,int ioaddr)
+__initfunc(static int ni65_probe1(struct device *dev,int ioaddr))
 {
 	int i,j;
 	struct priv *p;

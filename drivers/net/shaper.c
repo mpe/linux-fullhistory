@@ -68,6 +68,7 @@
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/if_arp.h>
+#include <linux/init.h>
 #include <net/dst.h>
 #include "shaper.h"
 
@@ -545,7 +546,7 @@ static struct shaper *shaper_alloc(struct device *dev)
  *	Add a shaper device to the system
  */
  
-int shaper_probe(struct device *dev)
+__initfunc(int shaper_probe(struct device *dev))
 {
 	/*
 	 *	Set up the shaper.

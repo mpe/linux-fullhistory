@@ -77,6 +77,9 @@ extern char *get_options(char *str, int *ints);
 extern void set_device_ro(int dev,int flag);
 extern struct file_operations * get_blkfops(unsigned int);
 extern int blkdev_release(struct inode * inode);
+#if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
+extern int (*do_nfsservctl)(int, void *, void *);
+#endif
 
 extern void *sys_call_table;
 
@@ -178,6 +181,10 @@ EXPORT_SYMBOL(posix_lock_file);
 EXPORT_SYMBOL(posix_test_lock);
 EXPORT_SYMBOL(posix_block_lock);
 EXPORT_SYMBOL(posix_unblock_lock);
+
+#if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
+EXPORT_SYMBOL(do_nfsservctl);
+#endif
 
 /* device registration */
 EXPORT_SYMBOL(register_chrdev);

@@ -746,7 +746,7 @@ int pnp_parport_init(void)
 	if (io[0] == PARPORT_DISABLE) return 1; 
 
 #ifdef CONFIG_PROC_FS
-	parport_proc_register(NULL);
+	parport_proc_init();
 #endif
 
 	/* Run probes to ensure parport does exist */

@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.16 1997/04/15 09:03:40 davem Exp $
+/* $Id: irq.h,v 1.17 1997/04/18 05:44:52 davem Exp $
  * irq.h: IRQ registers on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -12,6 +12,38 @@
 #include <asm/system.h>     /* For NCPUS */
 
 #define NR_IRQS    15
+
+/* IRQ handler dispatch entry and exit. */
+#ifdef __SMP__
+extern __inline__ void irq_enter(int cpu, int irq)
+{
+	register int proc asm("g1");
+	proc = cpu;
+	__asm__ __volatile__("
+	mov	%%o7, %%g4
+	call	___irq_enter
+	 add	%%o7, 8, %%o7
+"	: "=&r" (proc)
+	: "0" (proc)
+	: "g2", "g3", "g4", "g5", "memory", "cc");
+}
+
+extern __inline__ void irq_exit(int cpu, int irq)
+{
+	register int proc asm("g7");
+	proc = cpu;
+	__asm__ __volatile__("
+	mov	%%o7, %%g4
+	call	___irq_exit
+	 add	%%o7, 8, %%o7
+"	: "=&r" (proc)
+	: "0" (proc)
+	: "g1", "g2", "g3", "g4", "g5", "memory", "cc");
+}
+#else
+#define irq_enter(cpu, irq)	(local_irq_count[cpu]++)
+#define irq_exit(cpu, irq)	(local_irq_count[cpu]--)
+#endif
 
 /* Dave Redman (djhr@tadpole.co.uk)
  * changed these to function pointers.. it saves cycles and will allow

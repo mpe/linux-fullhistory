@@ -64,6 +64,7 @@
 #include <linux/in.h>
 #include <net/ip.h>
 #include <linux/if_arp.h>
+#include <linux/init.h>
 
 /*#define TUNNEL_DEBUG*/
 
@@ -213,7 +214,7 @@ static struct net_device_stats *tunnel_get_stats(struct device *dev)
  *	The new tunnel device structure is passed to us.
  */
  
-int tunnel_init(struct device *dev)
+__initfunc(int tunnel_init(struct device *dev))
 {
 	/* Oh, just say we're here, in case anyone cares */
 	static int tun_msg=0;

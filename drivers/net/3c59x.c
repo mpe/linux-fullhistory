@@ -36,6 +36,7 @@ static char *version = "3c59x.c:v0.25 5/17/96 becker@cesdis.gsfc.nasa.gov\n";
 #include <linux/ioport.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
+#include <linux/init.h>
 
 #ifdef CONFIG_PCI
 #include <linux/pci.h>
@@ -84,7 +85,7 @@ static int vortex_debug = 1;
 #endif
 
 #ifdef CONFIG_PCI
-static int product_ids[] = {0x5900, 0x5950, 0x5951, 0x5952, 0, 0};
+static int product_ids[] __initdata = {0x5900, 0x5950, 0x5951, 0x5952, 0, 0};
 #endif
 
 static const char *product_names[] = {
@@ -326,7 +327,7 @@ init_module(void)
 }
 
 #else
-int tc59x_probe(struct device *dev)
+__initfunc(int tc59x_probe(struct device *dev))
 {
 	int cards_found = 0;
 
@@ -339,7 +340,7 @@ int tc59x_probe(struct device *dev)
 }
 #endif  /* not MODULE */
 
-static int vortex_scan(struct device *dev)
+__initfunc(static int vortex_scan(struct device *dev))
 {
 	int cards_found = 0;
 
@@ -420,8 +421,8 @@ static int vortex_scan(struct device *dev)
 	return cards_found;
 }
 
-static int vortex_found_device(struct device *dev, int ioaddr, int irq,
-							   int product_index, int options)
+__initfunc(static int vortex_found_device(struct device *dev, int ioaddr, int irq,
+							   int product_index, int options))
 {
 	struct vortex_private *vp;
 
@@ -480,7 +481,7 @@ static int vortex_found_device(struct device *dev, int ioaddr, int irq,
 	return 0;
 }
 
-static int vortex_probe1(struct device *dev)
+__initfunc(static int vortex_probe1(struct device *dev))
 {
 	int ioaddr = dev->base_addr;
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;

@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.59 1997/02/14 03:12:54 davem Exp $
+/* $Id: systbls.S,v 1.60 1997/04/19 08:52:15 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -113,7 +113,7 @@ C_LABEL(sys_call_table):
 	.long C_LABEL(sys_sched_rr_get_interval), C_LABEL(sys_nanosleep)
 /*250*/	.long C_LABEL(sys_mremap)
 	.long C_LABEL(sys_sysctl)
-	.long C_LABEL(sys_getsid), C_LABEL(sys_fdatasync), C_LABEL(sys_nis_syscall)
+	.long C_LABEL(sys_getsid), C_LABEL(sys_fdatasync), C_LABEL(sys_nfsservctl)
 	.long C_LABEL(sys_aplib), C_LABEL(sys_nis_syscall)
 
 	/* Now the SunOS syscall table. */

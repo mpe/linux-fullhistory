@@ -479,9 +479,6 @@ void sk_init(void)
 void sock_wfree(struct sk_buff *skb)
 {
 	struct sock *sk = skb->sk;
-#if CONFIG_SKB_CHECK
-	IS_SKB(skb);
-#endif
 #if 1
 	if (!sk) {
 		printk(KERN_DEBUG "sock_wfree: sk==NULL\n");
@@ -497,9 +494,6 @@ void sock_wfree(struct sk_buff *skb)
 void sock_rfree(struct sk_buff *skb)
 {
 	struct sock *sk = skb->sk;
-#if CONFIG_SKB_CHECK
-	IS_SKB(skb);
-#endif	
 #if 1
 	if (!sk) {
 		printk(KERN_DEBUG "sock_rfree: sk==NULL\n");

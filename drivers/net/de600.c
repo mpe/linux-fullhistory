@@ -103,6 +103,7 @@ static const char *version =
 #include <linux/ptrace.h>
 #include <asm/system.h>
 #include <linux/errno.h>
+#include <linux/init.h>
 
 #include <linux/inet.h>
 #include <linux/netdevice.h>
@@ -624,8 +625,8 @@ de600_rx_intr(struct device *dev)
 	 */
 }
 
-int
-de600_probe(struct device *dev)
+__initfunc(int
+de600_probe(struct device *dev))
 {
 	int	i;
 	static struct net_device_stats de600_netstats;

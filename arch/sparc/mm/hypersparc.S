@@ -1,4 +1,4 @@
-/* $Id: hypersparc.S,v 1.3 1997/04/13 06:38:13 davem Exp $
+/* $Id: hypersparc.S,v 1.4 1997/04/19 04:33:39 davem Exp $
  * hypersparc.S: High speed Hypersparc mmu/cache operations.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -271,10 +271,15 @@ hypersparc_flush_page_for_dma:
 	retl
 	 nop
 
+	/* It was noted that at boot time a TLB flush all in a delay slot
+	 * can deliver an illegal instruction to the processor if the timing
+	 * is just right...
+	 */
 hypersparc_flush_tlb_all:
 	mov	0x400, %g1
+	sta	%g0, [%g1] ASI_M_FLUSH_PROBE
 	retl
-	 sta	%g0, [%g1] ASI_M_FLUSH_PROBE
+	 nop
 
 hypersparc_flush_tlb_mm:
 	mov	SRMMU_CTX_REG, %g1

@@ -23,7 +23,7 @@ asmlinkage int sys_sysinfo(struct sysinfo *info)
 
 	memset((char *)&val, 0, sizeof(struct sysinfo));
 
-	lock_kernel();
+	cli();
 	val.uptime = jiffies / HZ;
 
 	val.loads[0] = avenrun[0] << (SI_LOAD_SHIFT - FSHIFT);
@@ -31,10 +31,10 @@ asmlinkage int sys_sysinfo(struct sysinfo *info)
 	val.loads[2] = avenrun[2] << (SI_LOAD_SHIFT - FSHIFT);
 
 	val.procs = nr_tasks-1;
+	sti();
 
 	si_meminfo(&val);
 	si_swapinfo(&val);
-	unlock_kernel();
 
 	if (copy_to_user(info, &val, sizeof(struct sysinfo)))
 		return -EFAULT;

@@ -39,6 +39,7 @@
 #include <linux/malloc.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/init.h>
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>
 #endif
@@ -184,7 +185,7 @@ EXPORT_SYMBOL(misc_deregister);
 static struct proc_dir_entry *proc_misc;	
 #endif
 
-int misc_init(void)
+__initfunc(int misc_init(void))
 {
 #ifndef MODULE
 #ifdef CONFIG_PROC_FS

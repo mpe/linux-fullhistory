@@ -45,6 +45,7 @@
 #include <linux/malloc.h>
 #include <linux/ioport.h>
 #include <linux/config.h>
+#include <linux/init.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -389,10 +390,10 @@ static void	stl_flushbuffer(struct tty_struct *tty);
 static void	stl_hangup(struct tty_struct *tty);
 static int	stl_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsigned long arg);
 
-static int	stl_initbrds(void);
+static inline int stl_initbrds(void);
 static int	stl_brdinit(stlbrd_t *brdp);
-static int	stl_initeio(stlbrd_t *brdp);
-static int	stl_initech(stlbrd_t *brdp);
+static inline int stl_initeio(stlbrd_t *brdp);
+static inline int stl_initech(stlbrd_t *brdp);
 static int	stl_initports(stlbrd_t *brdp, stlpanel_t *panelp);
 static int	stl_mapirq(int irq);
 static void	stl_getserial(stlport_t *portp, struct serial_struct *sp);
@@ -414,7 +415,7 @@ static void	*stl_memalloc(int len);
 static stlport_t *stl_getport(int brdnr, int panelnr, int portnr);
 
 #ifdef	CONFIG_PCI
-static int	stl_findpcibrds(void);
+static inline int stl_findpcibrds(void);
 #endif
 
 /*
@@ -1745,7 +1746,7 @@ static void stl_offintr(void *private)
  *	interrupt across multiple boards.
  */
 
-static int stl_mapirq(int irq)
+__initfunc(static int stl_mapirq(int irq))
 {
 	int	rc, i;
 
@@ -1775,7 +1776,7 @@ static int stl_mapirq(int irq)
  *	Initialize all the ports on a panel.
  */
 
-static int stl_initports(stlbrd_t *brdp, stlpanel_t *panelp)
+__initfunc(static int stl_initports(stlbrd_t *brdp, stlpanel_t *panelp))
 {
 	stlport_t	*portp;
 	int		chipmask, i;
@@ -1827,7 +1828,7 @@ static int stl_initports(stlbrd_t *brdp, stlpanel_t *panelp)
  *	Try to find and initialize an EasyIO board.
  */
 
-static int stl_initeio(stlbrd_t *brdp)
+static inline int stl_initeio(stlbrd_t *brdp)
 {
 	stlpanel_t	*panelp;
 	unsigned int	status;
@@ -1929,7 +1930,7 @@ static int stl_initeio(stlbrd_t *brdp)
  *	dealing with all types of ECH board.
  */
 
-static int stl_initech(stlbrd_t *brdp)
+static inline int stl_initech(stlbrd_t *brdp)
 {
 	stlpanel_t	*panelp;
 	unsigned int	status, nxtid, ioaddr, conflict;
@@ -2096,7 +2097,7 @@ static int stl_initech(stlbrd_t *brdp)
  *	since the initial search and setup is very different.
  */
 
-static int stl_brdinit(stlbrd_t *brdp)
+__initfunc(static int stl_brdinit(stlbrd_t *brdp))
 {
 	int	i;
 
@@ -2141,7 +2142,7 @@ static int stl_brdinit(stlbrd_t *brdp)
 
 #ifdef	CONFIG_PCI
 
-static int stl_findpcibrds()
+static inline int stl_findpcibrds()
 {
 	stlbrd_t	*brdp;
 	unsigned char	busnr, devnr, irq;
@@ -2228,7 +2229,7 @@ static int stl_findpcibrds()
  *	since the initial search and setup is too different.
  */
 
-static int stl_initbrds()
+static inline int stl_initbrds()
 {
 	stlbrd_t	*brdp;
 	stlconf_t	*confp;
@@ -2514,7 +2515,7 @@ static int stl_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, uns
 
 /*****************************************************************************/
 
-int stl_init(void)
+__initfunc(int stl_init(void))
 {
 	printk(KERN_INFO "%s: version %s\n", stl_drvname, stl_drvversion);
 

@@ -46,6 +46,7 @@
 #include <linux/random.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -246,7 +247,7 @@ static struct miscdevice bus_mouse = {
 	LOGITECH_BUSMOUSE, "busmouse", &bus_mouse_fops
 };
 
-int bus_mouse_init(void)
+__initfunc(int bus_mouse_init(void))
 {
 	if (check_region(LOGIBM_BASE, LOGIBM_EXTENT)) {
 	  mouse.present = 0;

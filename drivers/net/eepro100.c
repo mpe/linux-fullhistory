@@ -55,6 +55,7 @@ static int rxdmacount = 0;	/* Rx DMA length, 0 means no preemption. */
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/bios32.h>
+#include <linux/init.h>
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -458,7 +459,7 @@ static int debug = -1;			/* The debug level */
 static struct device *root_speedo_dev = NULL;
 #endif
 
-int eepro100_init(struct device *dev)
+__initfunc(int eepro100_init(struct device *dev))
 {
 	int cards_found = 0;
 
@@ -521,7 +522,7 @@ int eepro100_init(struct device *dev)
 	return cards_found;
 }
 
-static void speedo_found1(struct device *dev, int ioaddr, int irq, int options)
+__initfunc(static void speedo_found1(struct device *dev, int ioaddr, int irq, int options))
 {
 	static int did_version = 0;			/* Already printed version info. */
 	struct speedo_private *sp;
@@ -714,7 +715,7 @@ static void speedo_found1(struct device *dev, int ioaddr, int irq, int options)
 #define EE_READ_CMD		(6 << 6)
 #define EE_ERASE_CMD	(7 << 6)
 
-static int read_eeprom(int ioaddr, int location)
+__initfunc(static int read_eeprom(int ioaddr, int location))
 {
 	int i;
 	unsigned short retval = 0;
@@ -1710,7 +1711,7 @@ cleanup_module(void)
 	}
 }
 #else   /* not MODULE */
-int eepro100_probe(struct device *dev)
+__initfunc(int eepro100_probe(struct device *dev))
 {
 	int cards_found = 0;
 

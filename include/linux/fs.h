@@ -36,7 +36,7 @@
 /* And dynamically-tunable limits and defaults: */
 extern int max_inodes, nr_inodes;
 extern int max_files, nr_files;
-#define NR_INODE 3072	/* this should be bigger than NR_FILE */
+#define NR_INODE 4096	/* this should be bigger than NR_FILE */
 #define NR_FILE 1024	/* this can well be larger on a larger system */
 
 #define MAY_EXEC 1
@@ -128,7 +128,7 @@ extern int max_files, nr_files;
 #include <asm/bitops.h>
 
 extern void buffer_init(void);
-extern unsigned long inode_init(unsigned long start, unsigned long end);
+extern void inode_init(void);
 extern unsigned long file_table_init(unsigned long start, unsigned long end);
 extern unsigned long name_cache_init(unsigned long start, unsigned long end);
 
@@ -179,7 +179,7 @@ struct buffer_head {
 	unsigned long b_lru_time;       /* Time when this buffer was 
 					 * last used. */
 	struct wait_queue * b_wait;
-	struct buffer_head * b_prev;		/* doubly linked list of hash-queue */
+	struct buffer_head ** b_pprev;		/* doubly linked list of hash-queue */
 	struct buffer_head * b_prev_free;	/* doubly linked list of buffers */
 	struct buffer_head * b_reqnext;		/* request queue */
 };
@@ -270,8 +270,13 @@ struct iattr {
 #include <linux/quota.h>
 
 struct inode {
-	kdev_t		i_dev;
+	struct inode 	*i_hash_next;
+	struct inode	**i_hash_pprev;
+	struct inode	*i_next;
+	struct inode	**i_pprev;
 	unsigned long	i_ino;
+	kdev_t		i_dev;
+	unsigned short	i_count;
 	umode_t		i_mode;
 	nlink_t		i_nlink;
 	uid_t		i_uid;
@@ -293,11 +298,8 @@ struct inode {
 	struct vm_area_struct *i_mmap;
 	struct page *i_pages;
 	struct dquot *i_dquot[MAXQUOTAS];
-	struct inode *i_next, *i_prev;
-	struct inode *i_hash_next, *i_hash_prev;
 	struct inode *i_bound_to, *i_bound_by;
 	struct inode *i_mount;
-	unsigned short i_count;
 	unsigned short i_flags;
 	unsigned char i_lock;
 	unsigned char i_dirt;

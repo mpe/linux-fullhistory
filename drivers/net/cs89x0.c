@@ -78,6 +78,7 @@ static char *version =
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <linux/errno.h>
+#include <linux/init.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -86,7 +87,7 @@ static char *version =
 
 /* First, a few definitions that the brave might change. */
 /* A zero-terminated list of I/O addresses to be probed. */
-static unsigned int netcard_portlist[] =
+static unsigned int netcard_portlist[] __initdata =
    { 0x300, 0x320, 0x340, 0x200, 0x220, 0x240, 0x260, 0x280, 0x2a0, 0x2c0, 0x2e0, 0};
 
 static unsigned int net_debug = NET_DEBUG;
@@ -145,8 +146,8 @@ static int set_mac_address(struct device *dev, void *addr);
 struct netdev_entry netcard_drv =
 {"netcard", cs89x0_probe1, NETCARD_IO_EXTENT, netcard_portlist};
 #else
-int
-cs89x0_probe(struct device *dev)
+__initfunc(int
+cs89x0_probe(struct device *dev))
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -195,8 +196,8 @@ writeword(struct device *dev, int portno, int value)
 	outw(value, dev->base_addr + portno);
 }
 
-static int
-wait_eeprom_ready(struct device *dev)
+__initfunc(static int
+wait_eeprom_ready(struct device *dev))
 {
 	int timeout = jiffies;
 	/* check to see if the EEPROM is ready, a timeout is used -
@@ -208,8 +209,8 @@ wait_eeprom_ready(struct device *dev)
 	return 0;
 }
 
-int
-get_eeprom_data(struct device *dev, int off, int len, int *buffer)
+__initfunc(static int
+get_eeprom_data(struct device *dev, int off, int len, int *buffer))
 {
 	int i;
 
@@ -226,8 +227,8 @@ get_eeprom_data(struct device *dev, int off, int len, int *buffer)
         return 0;
 }
 
-int
-get_eeprom_cksum(int off, int len, int *buffer)
+__initfunc(static int
+get_eeprom_cksum(int off, int len, int *buffer))
 {
 	int i, cksum;
 
@@ -244,7 +245,7 @@ get_eeprom_cksum(int off, int len, int *buffer)
    probes on the ISA bus.  A good device probes avoids doing writes, and
    verifies that the correct device exists and functions.  */
 
-static int cs89x0_probe1(struct device *dev, int ioaddr)
+__initfunc(static int cs89x0_probe1(struct device *dev, int ioaddr))
 {
 	struct net_local *lp;
 	static unsigned version_printed = 0;
@@ -392,8 +393,8 @@ static int cs89x0_probe1(struct device *dev, int ioaddr)
 
 
 
-void
-reset_chip(struct device *dev)
+__initfunc(void
+reset_chip(struct device *dev))
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;

@@ -73,6 +73,7 @@
 #endif
 #include <linux/miscdevice.h>
 #include <linux/apm_bios.h>
+#include <linux/init.h>
 
 EXPORT_SYMBOL(apm_register_callback);
 EXPORT_SYMBOL(apm_unregister_callback);
@@ -451,7 +452,7 @@ static int apm_set_display_power_state(u_short state)
 
 #ifdef CONFIG_APM_DO_ENABLE
 /* Called by apm_setup if apm_enabled will be true. */
-static int apm_enable_power_management(void)
+static inline int apm_enable_power_management(void)
 {
 	u_short	error;
 
@@ -474,7 +475,7 @@ static int apm_get_power_status(u_short *status, u_short *bat, u_short *life)
 	return APM_SUCCESS;
 }
 
-static int apm_engage_power_management(u_short device)
+static inline int apm_engage_power_management(u_short device)
 {
 	u_short	error;
 
@@ -1059,7 +1060,7 @@ int apm_get_info(char *buf, char **start, off_t fpos, int length, int dummy)
 }
 #endif
 
-void apm_bios_init(void)
+__initfunc(void apm_bios_init(void))
 {
 	unsigned short	bx;
 	unsigned short	cx;

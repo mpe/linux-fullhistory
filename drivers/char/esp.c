@@ -55,6 +55,7 @@
 #include <linux/ptrace.h>
 #include <linux/ioport.h>
 #include <linux/mm.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -2312,7 +2313,8 @@ static int esp_open(struct tty_struct *tty, struct file * filp)
  * number, and identifies which options were configured into this
  * driver.
  */
-static void show_serial_version(void)
+ 
+static _INLINE_ void show_serial_version(void)
 {
  	printk(KERN_INFO "%s version %s (DMA %u, trigger level %u)\n",
 		serial_name, serial_version, dma, trigger);
@@ -2380,7 +2382,7 @@ static _INLINE_ int autoconfig(struct esp_struct * info, int *region_start)
 /*
  * The serial driver boot-time initialization code!
  */
-int espserial_init(void)
+__initfunc(int espserial_init(void))
 {
 	int i, offset;
 	int region_start;
@@ -2565,6 +2567,7 @@ void cleanup_module(void)
 	/* printk("Unloading %s: version %s\n", serial_name, serial_version); */
 	save_flags(flags);
 	cli();
+	remove_bh(ESP_BH);
 	if ((e1 = tty_unregister_driver(&esp_driver)))
 		printk("SERIAL: failed to unregister serial driver (%d)\n",
 		       e1);

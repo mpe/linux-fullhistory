@@ -524,6 +524,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_vm86)
 	.long SYMBOL_NAME(sys_query_module)
 	.long SYMBOL_NAME(sys_poll)
-	.rept NR_syscalls-168
+	.long SYMBOL_NAME(sys_nfsservctl)
+	.rept NR_syscalls-169
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

@@ -89,6 +89,7 @@
 #include <linux/netdevice.h>
 #include <linux/hdlcdrv.h>
 #include <linux/baycom.h>
+#include <linux/init.h>
 
 /* --------------------------------------------------------------------- */
 
@@ -936,7 +937,7 @@ static int baycom_ioctl(struct device *dev, struct ifreq *ifr,
 
 /* --------------------------------------------------------------------- */
 
-int baycom_init(void)
+__initfunc(int baycom_init(void))
 {
 	int i, j, found = 0;
 	char set_hw = 1;
@@ -1038,7 +1039,7 @@ void cleanup_module(void)
  * * indicates sofware DCD
  */
 
-void baycom_setup(char *str, int *ints)
+__initfunc(void baycom_setup(char *str, int *ints))
 {
 	int i;
 

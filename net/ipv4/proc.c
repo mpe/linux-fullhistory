@@ -124,7 +124,7 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 			format==0?sp->write_seq-tp->snd_una:atomic_read(&sp->wmem_alloc), 
 			format==0?tp->rcv_nxt-sp->copied_seq:atomic_read(&sp->rmem_alloc),
 			timer_active, timer_expires-jiffies,
-			(unsigned) atomic_read(&sp->retransmits),
+			tp->retransmits,
 			sp->socket ? sp->socket->inode->i_uid:0,
 			timer_active?sp->timeout:0,
 			sp->socket ? sp->socket->inode->i_ino:0);

@@ -47,6 +47,7 @@
 #include <linux/module.h>
 #include <linux/net_alias.h>
 #include <linux/lapb.h>
+#include <linux/init.h>
 
 static char bcast_addr[6]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 
@@ -410,7 +411,7 @@ static int lapbeth_close(struct device *dev)
 	return 0;
 }
 
-static int lapbeth_dev_init(struct device *dev)
+__initfunc(static int lapbeth_dev_init(struct device *dev))
 {
 	return 0;
 }

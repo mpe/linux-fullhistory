@@ -1,4 +1,4 @@
-/* $Id: mxcc.h,v 1.6 1996/08/29 09:48:27 davem Exp $
+/* $Id: mxcc.h,v 1.7 1997/04/20 14:11:46 ecd Exp $
  * mxcc.h:  Definitions of the Viking MXCC registers
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -83,6 +83,8 @@
  * MID: The moduleID of the cpu your read this from.
  */
 
+#ifndef __ASSEMBLY__
+
 extern __inline__ void mxcc_set_stream_src(unsigned long *paddr)
 {
 	unsigned long data0 = paddr[0];
@@ -129,5 +131,7 @@ extern __inline__ void mxcc_set_creg(unsigned long mxcc_control)
 			     "r" (mxcc_control), "r" (MXCC_CREG),
 			     "i" (ASI_M_MXCC));
 }
+
+#endif /* !__ASSEMBLY__ */
 
 #endif /* !(_SPARC_MXCC_H) */

@@ -20,11 +20,8 @@
 #include <asm/atomic.h>
 #include <asm/types.h>
 
-#define CONFIG_SKB_CHECK 0
-
 #define HAVE_ALLOC_SKB		/* For the drivers to know */
 #define HAVE_ALIGNABLE_SKB	/* Ditto 8)		   */
-
 
 #define FREE_READ	1
 #define FREE_WRITE	0
@@ -39,9 +36,6 @@ struct sk_buff_head
 	struct sk_buff	* prev;
 	__u32		qlen;		/* Must be same length as a pointer
 					   for using debugging */
-#if CONFIG_SKB_CHECK
-	int		magic_debug_cookie;
-#endif
 };
 
 struct sk_buff 
@@ -49,9 +43,6 @@ struct sk_buff
 	struct sk_buff	* next;			/* Next buffer in list 				*/
 	struct sk_buff	* prev;			/* Previous buffer in list 			*/
 	struct sk_buff_head * list;		/* List we are on				*/
-#if CONFIG_SKB_CHECK
-	int		magic_debug_cookie;
-#endif
 	struct sock	*sk;			/* Socket we are owned by 			*/
 	unsigned long	when;			/* used to compute rtt's			*/
 	struct timeval	stamp;			/* Time we arrived				*/
@@ -95,8 +86,7 @@ struct sk_buff
   
 	unsigned int 	len;			/* Length of actual data			*/
 	unsigned int	csum;			/* Checksum 					*/
-	volatile char 	acked,			/* Are we acked ?				*/
-			used,			/* Are we in use ?				*/
+	volatile char 	used,			/* Are we in use ?				*/
 			arp;			/* Has IP/ARP resolution finished		*/
 	unsigned char	tries,			/* Times tried					*/
   			inclone,		/* Inline clone					*/
@@ -139,12 +129,6 @@ struct sk_buff
 #else
 #define SK_WMEM_MAX	32767
 #define SK_RMEM_MAX	32767
-#endif
-
-#if CONFIG_SKB_CHECK
-#define SK_FREED_SKB	0x0DE2C0DE
-#define SK_GOOD_SKB	0xDEC0DED1
-#define SK_HEAD_SKB	0x12231298
 #endif
 
 #ifdef __KERNEL__
@@ -244,14 +228,6 @@ extern __inline__ __u32 skb_queue_len(struct sk_buff_head *list_)
 {
 	return(list_->qlen);
 }
-
-#if CONFIG_SKB_CHECK
-extern int 			skb_check(struct sk_buff *skb,int,int, char *);
-#define IS_SKB(skb)		skb_check((skb), 0, __LINE__,__FILE__)
-#define IS_SKB_HEAD(skb)	skb_check((skb), 1, __LINE__,__FILE__)
-#else
-#define IS_SKB(skb)		
-#define IS_SKB_HEAD(skb)	
 
 extern __inline__ void skb_queue_head_init(struct sk_buff_head *list)
 {
@@ -534,9 +510,6 @@ extern __inline__ void skb_orphan(struct sk_buff *skb)
 	skb->destructor = NULL;
 	skb->sk = NULL;
 }
-
-
-#endif
 
 extern struct sk_buff *		skb_recv_datagram(struct sock *sk,unsigned flags,int noblock, int *err);
 extern unsigned int		datagram_poll(struct socket *sock, poll_table *wait);

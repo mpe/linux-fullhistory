@@ -120,7 +120,8 @@
 #include "constants.h"
 #include "sd.h"
 
-#include<linux/stat.h>
+#include <linux/stat.h>
+#include <linux/init.h>
 
 struct proc_dir_entry proc_scsi_pas16 = {
     PROC_SCSI_PAS16, 5, "pas16",
@@ -138,20 +139,21 @@ int scsi_irq_translate[] =
  * irq jumpers on the board).  The first value in the array will be
  * assigned to logical board 0, the next to board 1, etc.
  */
-int default_irqs[] = {  PAS16_DEFAULT_BOARD_1_IRQ,
-			PAS16_DEFAULT_BOARD_2_IRQ,
-			PAS16_DEFAULT_BOARD_3_IRQ,
-			PAS16_DEFAULT_BOARD_4_IRQ
-		     };
+int default_irqs[] __initdata = 
+	{  PAS16_DEFAULT_BOARD_1_IRQ,
+	   PAS16_DEFAULT_BOARD_2_IRQ,
+	   PAS16_DEFAULT_BOARD_3_IRQ,
+	   PAS16_DEFAULT_BOARD_4_IRQ
+	};
 
 static struct override {
     unsigned short io_port;
     int  irq;
 } overrides 
 #ifdef PAS16_OVERRIDE
-    [] = PAS16_OVERRIDE;
+    [] __initdata = PAS16_OVERRIDE;
 #else
-    [4] = {{0,IRQ_AUTO}, {0,IRQ_AUTO}, {0,IRQ_AUTO},
+    [4] __initdata = {{0,IRQ_AUTO}, {0,IRQ_AUTO}, {0,IRQ_AUTO},
 	{0,IRQ_AUTO}};
 #endif
 
@@ -160,11 +162,12 @@ static struct override {
 static struct base {
     unsigned short io_port;
     int noauto;
-} bases[] = { {PAS16_DEFAULT_BASE_1, 0},
-	      {PAS16_DEFAULT_BASE_2, 0},
-	      {PAS16_DEFAULT_BASE_3, 0},
-	      {PAS16_DEFAULT_BASE_4, 0}
-	    };
+} bases[] __initdata = 
+	{ {PAS16_DEFAULT_BASE_1, 0},
+	  {PAS16_DEFAULT_BASE_2, 0},
+	  {PAS16_DEFAULT_BASE_3, 0},
+	  {PAS16_DEFAULT_BASE_4, 0}
+	};
 
 #define NO_BASES (sizeof (bases) / sizeof (struct base))
 
@@ -210,7 +213,8 @@ unsigned short  pas16_offset[ 8 ] =
  *
  */
 
-void	enable_board( int  board_num,  unsigned short port )
+__initfunc(static void
+	enable_board( int  board_num,  unsigned short port ))
 {
     outb( 0xbc + board_num, MASTER_ADDRESS_PTR );
     outb( port >> 2, MASTER_ADDRESS_PTR );
@@ -229,7 +233,8 @@ void	enable_board( int  board_num,  unsigned short port )
  *
  */
 
-void	init_board( unsigned short io_port, int irq, int force_irq )
+__initfunc (static void
+	init_board( unsigned short io_port, int irq, int force_irq ))
 {
 	unsigned int	tmp;
 	unsigned int	pas_irq_code;
@@ -277,7 +282,8 @@ void	init_board( unsigned short io_port, int irq, int force_irq )
  * Returns : 0 if board not found, 1 if found.
  */
 
-int     pas16_hw_detect( unsigned short  board_num )
+__initfunc(static int
+     pas16_hw_detect( unsigned short  board_num ))
 {
     unsigned char	board_rev, tmp;
     unsigned short	io_port = bases[ board_num ].io_port;
@@ -336,7 +342,7 @@ int     pas16_hw_detect( unsigned short  board_num )
  *
  */
 
-void pas16_setup(char *str, int *ints) {
+__initfunc(void pas16_setup(char *str, int *ints)) {
     static int commandline_current = 0;
     int i;
     if (ints[0] != 2) 
@@ -367,7 +373,7 @@ void pas16_setup(char *str, int *ints) {
  *
  */
 
-int pas16_detect(Scsi_Host_Template * tpnt) {
+__initfunc(int pas16_detect(Scsi_Host_Template * tpnt)) {
     static int current_override = 0;
     static unsigned short current_base = 0;
     struct Scsi_Host *instance;

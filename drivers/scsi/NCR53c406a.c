@@ -45,6 +45,7 @@
 #include <linux/interrupt.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/init.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <asm/bitops.h>
@@ -238,7 +239,7 @@ struct signature {
     char *signature;
     int  sig_offset;
     int  sig_length;
-} signatures[] = {
+} signatures[] __initdata = {
     /*          1         2         3         4         5         6 */
     /* 123456789012345678901234567890123456789012345678901234567890 */
     { "Copyright (C) Acculogic, Inc.\r\n2.8M Diskette Extension Bios ver 4.04.03 03/01/1993", 61, 82 },
@@ -458,8 +459,8 @@ static __inline__ int NCR53c406a_pio_write(unsigned char *request,
 }
 #endif USE_PIO
 
-int 
-NCR53c406a_detect(Scsi_Host_Template * tpnt){
+__initfunc(int 
+NCR53c406a_detect(Scsi_Host_Template * tpnt)){
     struct Scsi_Host *shpnt;
 #ifndef PORT_BASE
     int i;
@@ -590,7 +591,7 @@ NCR53c406a_detect(Scsi_Host_Template * tpnt){
 }
 
 /* called from init/main.c */
-void NCR53c406a_setup(char *str, int *ints)
+__initfunc(void NCR53c406a_setup(char *str, int *ints))
 {
     static size_t setup_idx = 0;
     size_t i;
@@ -1011,7 +1012,7 @@ static void chip_init()
     outb(SYNC_MODE, SYNCOFF);   /* synchronous mode */  
 }
 
-void calc_port_addr()
+__initfunc(void calc_port_addr())
 {
     /* Control Register Set 0 */
     TC_LSB		= (port_base+0x00);

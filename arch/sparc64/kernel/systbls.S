@@ -1,8 +1,9 @@
-/* $Id: systbls.S,v 1.6 1997/04/16 10:27:15 jj Exp $
+/* $Id: systbls.S,v 1.8 1997/04/21 08:34:23 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
  * Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  *
  * Based upon preliminary work which is:
  *
@@ -66,7 +67,7 @@ sys_call_table32:
 	.xword sys_nis_syscall, sys32_llseek, sys32_mlock, sys32_munlock, sys_mlockall
 /*240*/	.xword sys_munlockall, sys32_sched_setparam, sys32_sched_getparam, sys_nis_syscall, sys_nis_syscall
 	.xword sys_nis_syscall, sys_sched_get_priority_max, sys_sched_get_priority_min, sys32_sched_rr_get_interval, sys_nanosleep
-/*250*/	.xword sys32_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys_nis_syscall
+/*250*/	.xword sys32_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys32_nfsservctl
 	.xword sys_aplib, sys_nis_syscall
 
 	/* Now the 64-bit native Linux syscall table. */
@@ -114,8 +115,8 @@ sys_call_table:
 	.xword sys_setpgid, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_newuname
 /*190*/	.xword sys_init_module, sys_personality, sys_prof, sys_break, sys_lock
 	.xword sys_mpx, sys_ulimit, sys_getppid, sparc_sigaction, sys_sgetmask
-/*200*/	.xword sys_ssetmask, sys_sigsuspend, sys_newlstat, sys_uselib, old_readdir
-	.xword sys_nis_syscall, sys_socketcall, sys_syslog, sys_olduname, sys_nis_syscall
+/*200*/	.xword sys_ssetmask, sys_sigsuspend, sys_newlstat, sys_uselib, sys_nis_syscall
+	.xword sys_nis_syscall, sys_socketcall, sys_syslog, sys_nis_syscall, sys_nis_syscall
 /*210*/	.xword sys_idle, sys_nis_syscall, sys_waitpid, sys_swapoff, sys_sysinfo
 	.xword sys_ipc, sys_sigreturn, sys_clone, sys_nis_syscall, sys_adjtimex
 /*220*/	.xword sys_sigprocmask, sys_create_module, sys_delete_module, sys_get_kernel_syms, sys_getpgid
@@ -124,7 +125,7 @@ sys_call_table:
 	.xword sys_nis_syscall, sys_llseek, sys_mlock, sys_munlock, sys_mlockall
 /*240*/	.xword sys_munlockall, sys_sched_setparam, sys_sched_getparam, sys_nis_syscall, sys_nis_syscall
 	.xword sys_nis_syscall, sys_sched_get_priority_max, sys_sched_get_priority_min, sys_sched_rr_get_interval, sys_nanosleep
-/*250*/	.xword sys_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys_nis_syscall
+/*250*/	.xword sys_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys_nfsservctl
 	.xword sys_aplib, sys_nis_syscall
 
 	/* Now the 32-bit SunOS syscall table. */

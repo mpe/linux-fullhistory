@@ -30,6 +30,7 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/proc_fs.h>
+#include <linux/init.h>
 
 #include "scsi.h"
 
@@ -433,7 +434,7 @@ scsi_register_device(struct Scsi_Device_Template * sdpnt)
     return 0;
 }
 
-unsigned int scsi_init()
+__initfunc(unsigned int scsi_init(void))
 {
     static int called = 0;
     int i, pcount;

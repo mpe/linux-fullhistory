@@ -41,6 +41,7 @@ static const char *version =
 #include <linux/errno.h>
 #include <linux/pci.h>
 #include <linux/bios32.h>
+#include <linux/init.h>
 #include <asm/system.h>
 #include <asm/io.h>
 
@@ -64,14 +65,14 @@ static const char *version =
 
 /* A zero-terminated list of I/O addresses to be probed at boot. */
 #ifndef MODULE
-static unsigned int netcard_portlist[] =
-{ 0x300, 0x280, 0x320, 0x340, 0x360, 0};
+static unsigned int netcard_portlist[] __initdata =
+{ 0x300, 0x280, 0x320, 0x340, 0x360, 0x380, 0};
 #endif
 
 #ifdef CONFIG_PCI
 /* Ack! People are making PCI ne2000 clones! Oh the horror, the horror... */
 static struct { unsigned short vendor, dev_id;}
-pci_clone_list[] = {
+pci_clone_list[] __initdata = {
 	{PCI_VENDOR_ID_REALTEK,		PCI_DEVICE_ID_REALTEK_8029},
 	{PCI_VENDOR_ID_WINBOND2,	PCI_DEVICE_ID_WINBOND2_89C940},
 	{PCI_VENDOR_ID_COMPEX,		PCI_DEVICE_ID_COMPEX_RL2000},
@@ -83,7 +84,7 @@ pci_clone_list[] = {
 #ifdef SUPPORT_NE_BAD_CLONES
 /* A list of bad clones that we none-the-less recognize. */
 static struct { const char *name8, *name16; unsigned char SAprefix[4];}
-bad_clone_list[] = {
+bad_clone_list[] __initdata = {
     {"DE100", "DE200", {0x00, 0xDE, 0x01,}},
     {"DE120", "DE220", {0x00, 0x80, 0xc8,}},
     {"DFI1000", "DFI2000", {'D', 'F', 'I',}}, /* Original, eh?  */
@@ -166,7 +167,7 @@ struct netdev_entry netcard_drv =
  * the card.
  */
 
-int ne_probe(struct device *dev)
+__initfunc(int ne_probe(struct device *dev))
 {
     int base_addr = dev ? dev->base_addr : 0;
 
@@ -198,7 +199,7 @@ int ne_probe(struct device *dev)
 #endif
 
 #ifdef CONFIG_PCI
-static int ne_probe_pci(struct device *dev)
+__initfunc(static int ne_probe_pci(struct device *dev))
 {
 	int i;
 
@@ -240,7 +241,7 @@ static int ne_probe_pci(struct device *dev)
 }
 #endif  /* CONFIG_PCI */
 
-static int ne_probe1(struct device *dev, int ioaddr)
+__initfunc(static int ne_probe1(struct device *dev, int ioaddr))
 {
     int i;
     unsigned char SA_prom[32];

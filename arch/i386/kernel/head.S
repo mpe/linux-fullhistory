@@ -38,15 +38,16 @@ startup_32:
 	orw %bx,%bx
 	jz 1f
 /*
- *	New page tables may be in 4Mbyte page mode
+ *	New page tables may be in 4Mbyte page mode and may
+ *	be using the global pages.
  */
 #ifdef GAS_KNOWS_CR4
 	movl %cr4,%eax		# Turn on 4Mb pages
-	orl $16,%eax
+	orl $16+128,%eax
 	movl %eax,%cr4
 #else
 	.byte 0x0f,0x20,0xe0
-	orl $16,%eax
+	orl $16+128,%eax
 	.byte 0x0f,0x22,0xe0
 #endif
 	movl %eax,%cr3		/* flush TLB as per app note */

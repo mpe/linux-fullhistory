@@ -136,6 +136,12 @@ void release(struct task_struct * p)
 	}
 	for (i=1 ; i<NR_TASKS ; i++)
 		if (task[i] == p) {
+#ifdef __SMP__
+			/* FIXME! Cheesy, but kills the window... -DaveM */
+			while(p->processor != NO_PROC_ID)
+				barrier();
+			spin_unlock_wait(&scheduler_lock);
+#endif
 			nr_tasks--;
 			task[i] = NULL;
 			REMOVE_LINKS(p);
@@ -693,10 +699,10 @@ asmlinkage int sys_wait4(pid_t pid,unsigned int * stat_addr, int options, struct
 	if (options & ~(WNOHANG|WUNTRACED|__WCLONE))
 		return -EINVAL;
 
-	lock_kernel();
 	add_wait_queue(&current->wait_chldexit,&wait);
 repeat:
-	flag = retval = 0;
+	flag = 0;
+	read_lock(&tasklist_lock);
  	for (p = current->p_cptr ; p ; p = p->p_osptr) {
 		if (pid>0) {
 			if (p->pid != pid)
@@ -718,23 +724,28 @@ repeat:
 					continue;
 				if (!(options & WUNTRACED) && !(p->flags & PF_PTRACED))
 					continue;
+				read_unlock(&tasklist_lock);
 				if (ru != NULL)
 					getrusage(p, RUSAGE_BOTH, ru);
 				if (stat_addr)
-					put_user((p->exit_code << 8) | 0x7f,
-						stat_addr);
+					__put_user((p->exit_code << 8) | 0x7f,
+						   stat_addr);
 				p->exit_code = 0;
 				retval = p->pid;
 				goto end_wait4;
 			case TASK_ZOMBIE:
 				current->cutime += p->utime + p->cutime;
 				current->cstime += p->stime + p->cstime;
+				read_unlock(&tasklist_lock);
 				if (ru != NULL)
 					getrusage(p, RUSAGE_BOTH, ru);
 				if (stat_addr)
-					put_user(p->exit_code, stat_addr);
+					__put_user(p->exit_code, stat_addr);
 				retval = p->pid;
 				if (p->p_opptr != p->p_pptr) {
+					/* Note this grabs tasklist_lock
+					 * as a writer... (twice!)
+					 */
 					REMOVE_LINKS(p);
 					p->p_pptr = p->p_opptr;
 					SET_LINKS(p);
@@ -749,6 +760,7 @@ repeat:
 				continue;
 		}
 	}
+	read_unlock(&tasklist_lock);
 	if (flag) {
 		retval = 0;
 		if (options & WNOHANG)
@@ -763,7 +775,6 @@ repeat:
 	retval = -ECHILD;
 end_wait4:
 	remove_wait_queue(&current->wait_chldexit,&wait);
-	unlock_kernel();
 	return retval;
 }
 

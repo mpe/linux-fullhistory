@@ -48,6 +48,7 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/watchdog.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -96,7 +97,7 @@ static int is_open, initial_status, supports_temp, mode_debug;
  * This routine checks the "current_readport" to see if the card lies there.
  * If it does, it returns accordingly.
  */
-static int pcwd_checkcard(void)
+__initfunc(static int pcwd_checkcard(void))
 {
 	int card_dat, prev_card_dat, found = 0, count = 0, done = 0;
 
@@ -400,13 +401,13 @@ static int pcwd_close(struct inode *ino, struct file *filep)
 	return 0;
 }
 
-static void get_support(void)
+static inline void get_support(void)
 {
 	if (inb(current_readport) != 0xF0)
 		supports_temp = 1;
 }
 
-static int get_revision(void)
+static inline int get_revision(void)
 {
 	if ((inb(current_readport + 2) == 0xFF) ||
 	    (inb(current_readport + 3) == 0xFF))
@@ -415,7 +416,7 @@ static int get_revision(void)
 	return(PCWD_REVISION_C);
 }
 
-static int send_command(int cmd)
+__initfunc(static int send_command(int cmd))
 {
 	int i;
 
@@ -428,7 +429,7 @@ static int send_command(int cmd)
 	return(i);
 }
 
-static char *get_firmware(void)
+static inline char *get_firmware(void)
 {
 	int i, found = 0, count = 0, one, ten, hund, minor;
 	char *ret;
@@ -498,7 +499,7 @@ static struct miscdevice temp_miscdev = {
 #ifdef	MODULE
 int init_module(void)
 #else
-int pcwatchdog_init(void)
+__initfunc(int pcwatchdog_init(void))
 #endif
 {
 	int i, found = 0;

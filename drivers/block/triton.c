@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/triton.c	Version 2.00  March 9, 1997
+ *  linux/drivers/block/triton.c	Version 2.10  April 22, 1997
  *
  *  Copyright (c) 1995-1997  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
@@ -8,8 +8,8 @@
 /*
  * This module provides support for the bus-master IDE DMA function
  * of the Intel PCI Triton chipset families, which use the PIIX (i82371FB,
- * for the 430 FX chipset), and the enhanced PIIX3 (i82371SB for the 430 HX/VX
- * and 440 chipsets).
+ * for the 430 FX chipset), the PIIX3 (i82371SB for the 430 HX/VX and 
+ * 440 chipsets), and the PIIX4 (i82371AB for the 430 TX chipset).
  *
  * "PIIX" stands for "PCI ISA IDE Xcellerator".
  *
@@ -18,12 +18,12 @@
  *
  * DMA is supported for all IDE devices (disk drives, cdroms, tapes, floppies).
  *
- * Up to four drives may be enabled for DMA, and the PIIX/PIIX3 chips
+ * Up to four drives may be enabled for DMA, and the PIIX* chips
  * will arbitrate the PCI bus among them.  Note that the PIIX/PIIX3
  * provides a single "line buffer" for the BM IDE function, so performance of
  * multiple (two) drives doing DMA simultaneously will suffer somewhat,
  * as they contest for that resource bottleneck.  This is handled transparently
- * inside the PIIX/PIIX3.
+ * inside the PIIX/PIIX3.  The PIIX4 does not have this problem.
  *
  * By default, DMA support is prepared for use, but is currently enabled only
  * for drives which support DMA mode2 (multi/single word), or which are
@@ -59,6 +59,9 @@
  *
  * Thanks to "Christopher J. Reimer" <reimer@doe.carleton.ca> for fixing the
  * problem with some (all?) ACER motherboards/BIOSs.
+ *
+ * Thanks to "Benoit Poulot-Cazajous" <poulot@chorus.fr> for testing
+ * "TX" chipset compatibility and for providing patches for the "TX" chipset.
  *
  * And, yes, Intel Zappa boards really *do* use both PIIX IDE ports.
  */
@@ -342,7 +345,7 @@ static int config_drive_for_dma (ide_drive_t *drive)
 #ifdef DISPLAY_PIIX_TIMINGS
 /*
  * print_piix_drive_flags() displays the currently programmed options
- * in the PIIX/PIIX3 for a given drive.
+ * in the PIIX/PIIX3/PIIX4 for a given drive.
  */
 static void print_piix_drive_flags (const char *unit, byte dflags)
 {
@@ -448,7 +451,13 @@ void ide_init_triton (byte bus, byte fn)
 
 	if (pcibios_read_config_word(bus, fn, 0x02, &devid))
 		goto quit;
-	chipset = (devid == PCI_DEVICE_ID_INTEL_82371SB_1) ? "PIIX3" : "PIIX";
+
+	if (devid == PCI_DEVICE_ID_INTEL_82371AB)
+		chipset = "PIIX4";
+	else if (devid == PCI_DEVICE_ID_INTEL_82371SB_1)
+		chipset = "PIIX3";
+	else
+		chipset = "PIIX";
 
 	printk("%s: bus-master IDE device on PCI bus %d function %d\n", chipset, bus, fn);
 
@@ -532,10 +541,11 @@ void ide_init_triton (byte bus, byte fn)
 			piix_sidetim_t sidetim;
 			byte sample   = 5 - timing.sample;
 			byte recovery = 4 - timing.recovery;
-			if (devid == PCI_DEVICE_ID_INTEL_82371SB_1
+			if ((devid == PCI_DEVICE_ID_INTEL_82371SB_1
+			     || devid == PCI_DEVICE_ID_INTEL_82371AB)
 			 && timing.sidetim_enabled
 			 && !pcibios_read_config_byte(bus, fn, 0x44, (byte *) &sidetim))
-				slave = "";		/* PIIX3 */
+				slave = "";		/* PIIX3 and later */
 			else
 				slave = "/slave";	/* PIIX, or PIIX3 in compatibility mode */
 			printk("    %s master%s: sample_CLKs=%d, recovery_CLKs=%d\n", hwif->name, slave, sample, recovery);

@@ -253,6 +253,7 @@ typedef unsigned int  u32;
 #include <linux/ioport.h>
 #include <linux/time.h>
 #include <linux/blk.h>
+#include <linux/init.h>
 #undef current
 
 #include "scsi.h"
@@ -877,7 +878,7 @@ clock_to_ccf (int clock) {
  * Returns : 0 on success, -1 on failure.
  */
 
-static int 
+static inline int 
 NCR53c7x0_init (struct Scsi_Host *host) {
     NCR53c7x0_local_declare();
     int i, ccf, expected_ccf;
@@ -1187,10 +1188,10 @@ NCR53c7x0_init (struct Scsi_Host *host) {
  *
  */
 
-static int 
+__initfunc(static int 
 normal_init (Scsi_Host_Template *tpnt, int board, int chip, 
     u32 base, int io_port, int irq, int dma, int pci_valid, 
-    unsigned char pci_bus, unsigned char pci_device_fn, long long options) {
+    unsigned char pci_bus, unsigned char pci_device_fn, long long options)) {
     struct Scsi_Host *instance;
     struct NCR53c7x0_hostdata *hostdata;
     char chip_str[80];
@@ -1400,9 +1401,9 @@ normal_init (Scsi_Host_Template *tpnt, int board, int chip,
  *
  */
 
-static int 
+__initfunc(static int 
 ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip, 
-    unsigned char bus, unsigned char device_fn, long long options) {
+    unsigned char bus, unsigned char device_fn, long long options)) {
     unsigned short vendor_id, device_id, command;
 #ifdef LINUX_1_2
     unsigned long
@@ -1539,8 +1540,8 @@ ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip,
  *
  */
 
-int 
-NCR53c7xx_detect(Scsi_Host_Template *tpnt) {
+__initfunc(int 
+NCR53c7xx_detect(Scsi_Host_Template *tpnt)) {
     int i;
     int current_override;
     int count;			/* Number of boards detected */

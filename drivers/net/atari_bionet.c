@@ -95,6 +95,7 @@ static char *version =
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/timer.h>
+#include <linux/init.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -321,8 +322,8 @@ end:
 
 /* Check for a network adaptor of this type, and return '0' if one exists.
  */
-int
-bionet_probe(struct device *dev) {
+__initfunc(int
+bionet_probe(struct device *dev)) {
 	unsigned char station_addr[6];
 	static unsigned version_printed = 0;
 	static int no_more_found = 0; /* avoid "Probing for..." printed 4 times */

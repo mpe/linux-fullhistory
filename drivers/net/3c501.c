@@ -102,12 +102,13 @@ static const char *version =
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#include <linux/init.h>
 
 #define BLOCKOUT_2
 
 /* A zero-terminated list of I/O addresses to be probed.
    The 3c501 can be at many locations, but here are the popular ones. */
-static unsigned int netcard_portlist[] =
+static unsigned int netcard_portlist[] __initdata =
    { 0x280, 0x300, 0};
 
 
@@ -208,7 +209,7 @@ struct net_local
 struct netdev_entry el1_drv = {"3c501", el1_probe1, EL1_IO_EXTENT, netcard_portlist};
 #else
 
-int el1_probe(struct device *dev)
+__initfunc(int el1_probe(struct device *dev))
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -235,7 +236,7 @@ int el1_probe(struct device *dev)
  *	The actual probe.
  */
 
-static int el1_probe1(struct device *dev, int ioaddr)
+__initfunc(static int el1_probe1(struct device *dev, int ioaddr))
 {
 	const char *mname;		/* Vendor name */
 	unsigned char station_addr[6];

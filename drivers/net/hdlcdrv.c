@@ -277,7 +277,6 @@ static void hdlc_rx_flag(struct device *dev, struct hdlcdrv_state *s)
 	memcpy(cp, s->hdlcrx.buffer, pkt_len - 1);
 	skb->protocol = htons(ETH_P_AX25);
 	skb->mac.raw = skb->data;
-	IS_SKB(skb);
 	netif_rx(skb);
 	s->stats.rx_packets++;
 }

@@ -43,6 +43,7 @@
 #include <linux/miscdevice.h>
 #include <linux/random.h>
 #include <linux/poll.h>
+#include <linux/init.h>
 
 #include <asm/setup.h>
 #include <asm/system.h>
@@ -308,7 +309,7 @@ static struct miscdevice amiga_mouse = {
 	AMIGAMOUSE_MINOR, "amigamouse", &amiga_mouse_fops
 };
 
-int amiga_mouse_init(void)
+__initfunc(int amiga_mouse_init(void))
 {
 	if (!MACH_IS_AMIGA || !AMIGAHW_PRESENT(AMI_MOUSE))
 		return -ENODEV;

@@ -149,6 +149,7 @@ static const char *version = "ewrk3.c:v0.43 96/8/16 davies@maniac.ultranet.com\n
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
+#include <linux/init.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
@@ -344,7 +345,7 @@ static int num_ewrk3s = 0, num_eth = 0;
 
 
 
-int ewrk3_probe(struct device *dev)
+__initfunc(int ewrk3_probe(struct device *dev))
 {
   int tmp = num_ewrk3s, status = -ENODEV;
   u_long iobase = dev->base_addr;
@@ -375,8 +376,8 @@ int ewrk3_probe(struct device *dev)
   return status;
 }
 
-static int
-ewrk3_hw_init(struct device *dev, u_long iobase)
+__initfunc(static int
+ewrk3_hw_init(struct device *dev, u_long iobase))
 {
   struct ewrk3_private *lp;
   int i, status=0;
@@ -1289,7 +1290,7 @@ static void SetMulticastFilter(struct device *dev)
 /*
 ** ISA bus I/O device probe
 */
-static void isa_probe(struct device *dev, u_long ioaddr)
+__initfunc(static void isa_probe(struct device *dev, u_long ioaddr))
 {
   int i = num_ewrk3s, maxSlots;
   u_long iobase;
@@ -1327,7 +1328,7 @@ static void isa_probe(struct device *dev, u_long ioaddr)
 ** EISA bus I/O device probe. Probe from slot 1 since slot 0 is usually
 ** the motherboard.
 */
-static void eisa_probe(struct device *dev, u_long ioaddr)
+__initfunc(static void eisa_probe(struct device *dev, u_long ioaddr))
 {
   int i, maxSlots;
   u_long iobase;
@@ -1372,8 +1373,8 @@ static void eisa_probe(struct device *dev, u_long ioaddr)
 ** are not available then insert a new device structure at the end of
 ** the current list.
 */
-static struct device *
-alloc_device(struct device *dev, u_long iobase)
+__initfunc(static struct device *
+alloc_device(struct device *dev, u_long iobase))
 {
     struct device *adev = NULL;
     int fixed = 0, new_dev = 0;
@@ -1417,8 +1418,8 @@ alloc_device(struct device *dev, u_long iobase)
 ** If at end of eth device list and can't use current entry, malloc
 ** one up. If memory could not be allocated, print an error message.
 */
-static struct device *
-insert_device(struct device *dev, u_long iobase, int (*init)(struct device *))
+__initfunc(static struct device *
+insert_device(struct device *dev, u_long iobase, int (*init)(struct device *)))
 {
     struct device *new;
 
@@ -1443,8 +1444,8 @@ insert_device(struct device *dev, u_long iobase, int (*init)(struct device *))
     return dev;
 }
 
-static int
-ewrk3_dev_index(char *s)
+__initfunc(static int
+ewrk3_dev_index(char *s))
 {
     int i=0, j=0;
 
@@ -1494,7 +1495,7 @@ static int Write_EEPROM(short data, u_long iobase, u_char eaddr)
 /*
 ** Look for a particular board name in the on-board EEPROM.
 */
-static void EthwrkSignature(char *name, char *eeprom_image)
+__initfunc(static void EthwrkSignature(char *name, char *eeprom_image))
 {
   u_long i,j,k;
   char *signatures[] = EWRK3_SIGNATURE;
@@ -1531,7 +1532,7 @@ static void EthwrkSignature(char *name, char *eeprom_image)
 ** ethernet address for later read out.
 */
 
-static int DevicePresent(u_long iobase)
+__initfunc(static int DevicePresent(u_long iobase))
 {
   union {
     struct {
@@ -1568,7 +1569,7 @@ static int DevicePresent(u_long iobase)
   return status;
 }
 
-static u_char get_hw_addr(struct device *dev, u_char *eeprom_image, char chipType)
+__initfunc(static u_char get_hw_addr(struct device *dev, u_char *eeprom_image, char chipType))
 {
   int i, j, k;
   u_short chksum;
@@ -1614,7 +1615,7 @@ static u_char get_hw_addr(struct device *dev, u_char *eeprom_image, char chipTyp
 /*
 ** Look for a particular board name in the EISA configuration space
 */
-static int EISA_signature(char *name, s32 eisa_id)
+__initfunc(static int EISA_signature(char *name, s32 eisa_id))
 {
   u_long i;
   char *signatures[] = EWRK3_SIGNATURE;

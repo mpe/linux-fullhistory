@@ -754,7 +754,7 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	if(__ip_chk_addr(iph->daddr)==IS_BROADCAST)
 	{
 		printk("%s sent an invalid ICMP error to a broadcast.\n",
-			in_ntoa(iph->daddr));
+			in_ntoa(skb->nh.iph->saddr));
 		kfree_skb(skb, FREE_READ);
 	}
 

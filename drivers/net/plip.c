@@ -95,6 +95,7 @@ static const char *version = "NET3 PLIP version 2.2-parport gniibe@mri.co.jp\n";
 #include <linux/errno.h>
 #include <linux/delay.h>
 #include <linux/lp.h>
+#include <linux/init.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -223,8 +224,8 @@ struct net_local {
    then calls us here.
 
    */
-int
-plip_init_dev(struct device *dev, struct parport *pb)
+__initfunc(int
+plip_init_dev(struct device *dev, struct parport *pb))
 {
 	struct net_local *nl;
 	struct ppd *pardev;
@@ -1190,38 +1191,8 @@ plip_searchfor(int list[], int a)
 	return 0;
 }
 
-static int
-plip_init_one(int i, struct parport *pb)
-{
-	if (i == PLIP_MAX) {
-		printk(KERN_ERR "plip: too many devices\n");
-		return 1;
-	}
-	dev_plip[i] = kmalloc(sizeof(struct device),
-			      GFP_KERNEL);
-	if (!dev_plip[i]) {
-		printk(KERN_ERR "plip: memory squeeze\n");
-		return 1;
-	}
-	memset(dev_plip[i], 0, sizeof(struct device));
-	dev_plip[i]->name = kmalloc(strlen("plipXXX"), GFP_KERNEL);
-	if (!dev_plip[i]->name) {
-		printk(KERN_ERR "plip: memory squeeze.\n");
-		kfree(dev_plip[i]);
-		return 1;
-	}
-	sprintf(dev_plip[i]->name, "plip%d", i);
-	dev_plip[i]->priv = pb;
-	if (plip_init_dev(dev_plip[i],pb) || register_netdev(dev_plip[i])) {
-		kfree(dev_plip[i]->name);
-		kfree(dev_plip[i]);
-		return 1; 
-	}
-	return 0;
-}
-
-int
-plip_init(void)
+__initfunc(int
+plip_init(void))
 {
 	struct parport *pb = parport_enumerate();
 	int devices=0;
@@ -1237,17 +1208,38 @@ plip_init(void)
 
 	/* When user feeds parameters, use them */
 	while (pb) {
-		if (pb->modes & PARPORT_MODE_SPP) {
-			if ((parport[0] == -1 && (!timid || !pb->devices)) || 
-			    plip_searchfor(parport, i)) {
-				if (plip_init_one(i, pb))
-					continue;
+		if ((parport[0] == -1 && (!timid || !pb->devices)) || 
+		    plip_searchfor(parport, i)) {
+			if (i == PLIP_MAX) {
+				printk(KERN_ERR "plip: too many devices\n");
+				break;
+			}
+			dev_plip[i] = kmalloc(sizeof(struct device),
+					      GFP_KERNEL);
+			if (!dev_plip[i]) {
+				printk(KERN_ERR "plip: memory squeeze\n");
+				break;
+			}
+			memset(dev_plip[i], 0, sizeof(struct device));
+			dev_plip[i]->name = 
+				kmalloc(strlen("plipXXX"), GFP_KERNEL);
+			if (!dev_plip[i]->name) {
+				printk(KERN_ERR "plip: memory squeeze.\n");
+				kfree(dev_plip[i]);
+				break;
+			}
+			sprintf(dev_plip[i]->name, "plip%d", i);
+			dev_plip[i]->priv = pb;
+			if (plip_init_dev(dev_plip[i],pb) || register_netdev(dev_plip[i])) {
+				kfree(dev_plip[i]->name);
+				kfree(dev_plip[i]);
+			} else {
 				devices++;
 			}
-			i++;
 		}
+		i++;
 		pb = pb->next;
-	}
+  	}
 
 	if (devices == 0) {
 		printk(KERN_INFO "plip: no devices registered\n");

@@ -288,6 +288,7 @@ static char rcsid[] =
 #include <linux/kernel.h>
 #include <linux/bios32.h>
 #include <linux/pci.h>
+#include <linux/init.h>
 
 #define small_delay(x) for(j=0;j<x;j++)k++;
 
@@ -2696,7 +2697,7 @@ cy_open(struct tty_struct *tty, struct file * filp)
  * number, and identifies which options were configured into this
  * driver.
  */
-static void
+static inline void
 show_version(void)
 {
     printk("Cyclom driver %s\n",rcsid);
@@ -2704,8 +2705,8 @@ show_version(void)
 
 /* initialize chips on card -- return number of valid
    chips (which is number of ports/4) */
-int
-cy_init_card(unsigned char *true_base_addr,int index)
+__initfunc(static int
+cy_init_card(unsigned char *true_base_addr,int index))
 {
   unsigned int chip_number;
   unsigned char* base_addr;
@@ -2785,8 +2786,8 @@ cy_init_card(unsigned char *true_base_addr,int index)
     If there are more cards with more ports than have been statically
     allocated above, a warning is printed and the extra ports are ignored.
  */
-int
-cy_init(void)
+__initfunc(int
+cy_init(void))
 {
   struct cyclades_port	*info;
   struct cyclades_card *cinfo;
@@ -2941,13 +2942,17 @@ init_module(void)
 void
 cleanup_module(void)
 {
+    unsigned long flags;
     int i;
 
-
+    save_flags(flags);
+    cli();
+    remove_bh(CYCLADES_BH); 
     if (tty_unregister_driver(&cy_callout_driver))
 	    printk("Couldn't unregister Cyclom callout driver\n");
     if (tty_unregister_driver(&cy_serial_driver))
 	    printk("Couldn't unregister Cyclom serial driver\n");
+    restore_flags(flags);
 
     for (i = 0; i < NR_CARDS; i++) {
         if (cy_card[i].base_addr != 0)
@@ -2964,8 +2969,8 @@ cleanup_module(void)
  * sets global variables and return the number of ISA boards found.
  * ---------------------------------------------------------------------
  */
-int
-cy_detect_isa()
+__initfunc(int
+cy_detect_isa())
 {
   unsigned int		cy_isa_irq,nboard;
   unsigned char		*cy_isa_address;
@@ -3043,8 +3048,8 @@ cy_detect_isa()
  * sets global variables and return the number of PCI boards found.
  * ---------------------------------------------------------------------
  */
-int
-cy_detect_pci()
+__initfunc(int
+cy_detect_pci())
 {
 #ifdef CONFIG_PCI
   unsigned char		cyy_bus, cyy_dev_fn, cyy_rev_id;

@@ -130,6 +130,7 @@ static const char *version =
 #include <asm/dma.h>
 #include <asm/uaccess.h>
 #include <linux/errno.h>              
+#include <linux/init.h>
 
 #include <linux/netdevice.h>
 #include <linux/if.h>
@@ -208,7 +209,7 @@ static void eql_timer(unsigned long param);	/*  */
    ---------------------------------------------------------
    */
 
-int eql_init(struct device *dev)
+__initfunc(int eql_init(struct device *dev))
 {
 	static unsigned version_printed = 0;
 	/* static unsigned num_masters     = 0; */

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.22 1997/03/14 21:04:17 jj Exp $
+# $Id: Makefile,v 1.23 1997/04/18 05:44:39 davem Exp $
 # Makefile for Sparc library files..
 #
 
@@ -8,6 +8,10 @@ OBJS  = mul.o rem.o sdiv.o udiv.o umul.o urem.o ashrdi3.o memcpy.o memset.o \
         strlen.o checksum.o blockops.o memscan.o memcmp.o strncmp.o \
 	strncpy_from_user.o divdi3.o udivdi3.o strlen_user.o \
 	copy_user.o locks.o atomic.o bitops.o
+
+ifdef SMP
+OBJS += irqlock.o
+endif
 
 lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)
@@ -53,6 +57,9 @@ atomic.o: atomic.S
 
 bitops.o: bitops.S
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c -o bitops.o bitops.S
+
+irqlock.o: irqlock.S
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c -o irqlock.o irqlock.S
 
 else
 

@@ -23,8 +23,11 @@
 #include <linux/slab.h>
 #include <net/checksum.h>
 
-/* This is for all connections with a full identity, no wildcards. */
-#define TCP_HTABLE_SIZE		256
+/* This is for all connections with a full identity, no wildcards.
+ * New scheme, half the table is for TIME_WAIT, the other half is
+ * for the rest.  I'll experiment with dynamic table growth later.
+ */
+#define TCP_HTABLE_SIZE		1024
 
 /* This is for listening sockets, thus all sockets which possess wildcards. */
 #define TCP_LHTABLE_SIZE	32	/* Yes, really, this is all you need. */
@@ -52,9 +55,7 @@ static __inline__ int tcp_sk_bhashfn(struct sock *sk)
 	return tcp_bhashfn(lport);
 }
 
-/* These can have wildcards, don't try too hard.
- * XXX deal with thousands of IP aliases for listening ports later
- */
+/* These can have wildcards, don't try too hard. */
 static __inline__ int tcp_lhashfn(unsigned short num)
 {
 	return num & (TCP_LHTABLE_SIZE - 1);
@@ -95,11 +96,13 @@ static __inline__ void tcp_sk_unbindify(struct sock *sk)
 
 /*
  * 40 is maximal IP options size
- * 4  is TCP option size (MSS)
+ * 20 is the maximum TCP options size we can currently construct on a SYN.
+ * 40 is the maximum possible TCP options size.
  */
 
-#define MAX_SYN_SIZE	(NETHDR_SIZE + sizeof(struct tcphdr) + 4 + MAX_HEADER + 15)
+#define MAX_SYN_SIZE	(NETHDR_SIZE + sizeof(struct tcphdr) + 20 + MAX_HEADER + 15)
 #define MAX_FIN_SIZE	(NETHDR_SIZE + sizeof(struct tcphdr) + MAX_HEADER + 15)
+#define BASE_ACK_SIZE	(NETHDR_SIZE + MAX_HEADER + 15)
 #define MAX_ACK_SIZE	(NETHDR_SIZE + sizeof(struct tcphdr) + MAX_HEADER + 15)
 #define MAX_RESET_SIZE	(NETHDR_SIZE + sizeof(struct tcphdr) + MAX_HEADER + 15)
 
@@ -163,6 +166,8 @@ static __inline__ void tcp_sk_unbindify(struct sock *sk)
  *	We don't use these yet, but they are for PAWS and big windows
  */
 #define TCPOPT_WINDOW		3	/* Window scaling */
+#define TCPOPT_SACK_PERM        4       /* SACK Permitted */
+#define TCPOPT_SACK             5       /* SACK Block */
 #define TCPOPT_TIMESTAMP	8	/* Better RTT estimations/PAWS */
 
 /*
@@ -171,8 +176,15 @@ static __inline__ void tcp_sk_unbindify(struct sock *sk)
 
 #define TCPOLEN_MSS            4
 #define TCPOLEN_WINDOW         3
+#define TCPOLEN_SACK_PERM      2
 #define TCPOLEN_TIMESTAMP      10
 
+/*
+ *      TCP option flags for parsed options.
+ */
+
+#define TCPOPTF_SACK_PERM       1
+#define TCPOPTF_TIMESTAMP       2
 
 /*
  *	TCP Vegas constants
@@ -206,11 +218,15 @@ struct tcp_v6_open_req {
 
 struct open_request {
 	struct open_request	*dl_next;
-	struct open_request	*dl_prev;
+	struct open_request	**dl_pprev;
 	__u32			rcv_isn;
 	__u32			snt_isn;
 	__u16			rmt_port;
 	__u16			mss;
+	__u8			snd_wscale;
+	char			sack_ok;
+	char			tstamp_ok;
+	__u32			ts_recent;
 	unsigned long		expires;
 	int			retrans;
 	struct or_calltable	*class;
@@ -354,7 +370,7 @@ extern int			tcp_recvmsg(struct sock *sk,
 					    int len, int nonblock, 
 					    int flags, int *addr_len);
 
-extern int			tcp_parse_options(struct tcphdr *th);
+extern void			tcp_parse_options(struct tcphdr *th, struct tcp_opt *tp);
 
 /*
  *	TCP v4 functions exported for the inet6 API
@@ -511,9 +527,8 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 
 	switch (state) {
 	case TCP_ESTABLISHED:
-		if (oldstate != TCP_ESTABLISHED) {
+		if (oldstate != TCP_ESTABLISHED)
 			tcp_statistics.TcpCurrEstab++;
-		}
 		break;
 
 	case TCP_CLOSE:
@@ -523,47 +538,68 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 	default:
 		if (oldstate==TCP_ESTABLISHED)
 			tcp_statistics.TcpCurrEstab--;
+		if (state == TCP_TIME_WAIT)
+			sk->prot->rehash(sk);
 	}
+}
+
+/*
+ * Construct a tcp options header for a SYN or SYN_ACK packet.
+ * If this is every changed make sure to change the definition of
+ * MAX_SYN_SIZE to match the new maximum number of options that you
+ * can generate.
+ * FIXME: This is completely disgusting.
+ * This is probably a good candidate for a bit of assembly magic.
+ * It would be especially magical to compute the checksum for this
+ * stuff on the fly here.
+ */
+extern __inline__ int tcp_syn_build_options(struct sk_buff *skb, int mss, int sack, int ts, int wscale)
+{
+	int count = 4 + (wscale ? 4 : 0) +  ((ts || sack) ? 4 : 0) +  (ts ? 8 : 0);
+	unsigned char *optr = skb_put(skb,count);
+	__u32 *ptr = (__u32 *)optr;
+
+	/*
+	 * We always get an MSS option.
+	 */
+	*ptr++ = htonl((TCPOPT_MSS << 24) | (TCPOLEN_MSS << 16) | mss);
+	if (ts) {
+		if (sack) {
+			*ptr++ = htonl((TCPOPT_SACK_PERM << 24) | (TCPOLEN_SACK_PERM << 16)
+					| (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP);
+			*ptr++ = htonl(jiffies);	/* TSVAL */
+			*ptr++ = htonl(0);		/* TSECR */
+		} else {
+			*ptr++ = htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16)
+					| (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP);
+			*ptr++ = htonl(jiffies);	/* TSVAL */
+			*ptr++ = htonl(0);		/* TSECR */
+		}
+	} else if (sack) {
+		*ptr++ = htonl((TCPOPT_SACK_PERM << 24) | (TCPOLEN_SACK_PERM << 16)
+				| (TCPOPT_NOP << 8) | TCPOPT_NOP);
+	}
+	if (wscale)
+		*ptr++ = htonl((TCPOPT_WINDOW << 24) | (TCPOLEN_WINDOW << 16) | wscale);
+	skb->csum = csum_partial(optr, count, 0);
+	return count;
 }
 
 extern __inline__ void tcp_synq_unlink(struct tcp_opt *tp, struct open_request *req)
 {
-	if (req->dl_next == req)
-	{
-		tp->syn_wait_queue = NULL;
-	}
+	if(req->dl_next)
+		req->dl_next->dl_pprev = req->dl_pprev;
 	else
-	{
-		req->dl_prev->dl_next = req->dl_next;
-		req->dl_next->dl_prev = req->dl_prev;
-		
-		if (tp->syn_wait_queue == req)
-		{
-			tp->syn_wait_queue = req->dl_next;
-		}
-	}
-
-	req->dl_prev = req->dl_next = NULL;
+		tp->syn_wait_last = req->dl_pprev;
+	*req->dl_pprev = req->dl_next;
 }
 
 extern __inline__ void tcp_synq_queue(struct tcp_opt *tp, struct open_request *req)
 {
-	if (!tp->syn_wait_queue)
-	{
-		req->dl_next = req;
-		req->dl_prev = req;
-		tp->syn_wait_queue = req;
-	}
-	else
-	{
-		struct open_request *list = tp->syn_wait_queue;
-		
-		req->dl_next = list;
-		req->dl_prev = list->dl_prev;
-		list->dl_prev->dl_next = req;
-		list->dl_prev = req;
-	}
-
+	req->dl_next = NULL;
+	req->dl_pprev = tp->syn_wait_last;
+	*tp->syn_wait_last = req;
+	tp->syn_wait_last = &req->dl_next;
 }
 
 extern void __tcp_inc_slow_timer(struct tcp_sl_timer *slt);
@@ -587,4 +623,3 @@ extern __inline__ void tcp_dec_slow_timer(int timer)
 }
 
 #endif	/* _TCP_H */
-

@@ -45,6 +45,7 @@
 #include <linux/malloc.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
+#include <linux/init.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -540,13 +541,13 @@ static void	stli_start(struct tty_struct *tty);
 static void	stli_flushbuffer(struct tty_struct *tty);
 static void	stli_hangup(struct tty_struct *tty);
 
-static int	stli_initbrds(void);
+static inline int stli_initbrds(void);
 static int	stli_brdinit(stlibrd_t *brdp);
-static int	stli_initecp(stlibrd_t *brdp);
-static int	stli_initonb(stlibrd_t *brdp);
+static inline int stli_initecp(stlibrd_t *brdp);
+static inline int stli_initonb(stlibrd_t *brdp);
 static int	stli_eisamemprobe(stlibrd_t *brdp);
-static int	stli_findeisabrds(void);
-static int	stli_initports(stlibrd_t *brdp);
+static inline int stli_findeisabrds(void);
+static inline int stli_initports(stlibrd_t *brdp);
 static int	stli_startbrd(stlibrd_t *brdp);
 static long	stli_memread(struct inode *ip, struct file *fp, char *buf, unsigned long count);
 static long	stli_memwrite(struct inode *ip, struct file *fp, const char *buf, unsigned long count);
@@ -2781,7 +2782,7 @@ static long stli_mktiocm(unsigned long sigvalue)
  *	we need to do here is set up the appropriate per port data structures.
  */
 
-static int stli_initports(stlibrd_t *brdp)
+static inline int stli_initports(stlibrd_t *brdp)
 {
 	stliport_t	*portp;
 	int		i, panelnr, panelport;
@@ -3335,7 +3336,7 @@ static void stli_stalreset(stlibrd_t *brdp)
  *	board types.
  */
 
-static int stli_initecp(stlibrd_t *brdp)
+static inline int stli_initecp(stlibrd_t *brdp)
 {
 	cdkecpsig_t	sig;
 	cdkecpsig_t	*sigsp;
@@ -3472,7 +3473,7 @@ static int stli_initecp(stlibrd_t *brdp)
  *	This handles only these board types.
  */
 
-static int stli_initonb(stlibrd_t *brdp)
+static inline int stli_initonb(stlibrd_t *brdp)
 {
 	cdkonbsig_t	sig;
 	cdkonbsig_t	*sigsp;
@@ -3737,7 +3738,7 @@ stli_donestartup:
  *	Probe and initialize the specified board.
  */
 
-static int stli_brdinit(stlibrd_t *brdp)
+__initfunc(static int stli_brdinit(stlibrd_t *brdp))
 {
 #if DEBUG
 	printk("stli_brdinit(brdp=%x)\n", (int) brdp);
@@ -3791,7 +3792,7 @@ static int stli_brdinit(stlibrd_t *brdp)
  *	might be. This is a bit if hack, but it is the best we can do.
  */
 
-static int stli_eisamemprobe(stlibrd_t *brdp)
+__initfunc(static int stli_eisamemprobe(stlibrd_t *brdp))
 {
 	cdkecpsig_t	ecpsig, *ecpsigp;
 	cdkonbsig_t	onbsig, *onbsigp;
@@ -3890,7 +3891,7 @@ static int stli_eisamemprobe(stlibrd_t *brdp)
  *	do is go probing around in the usual places hoping we can find it.
  */
 
-static int stli_findeisabrds()
+static inline int stli_findeisabrds()
 {
 	stlibrd_t	*brdp;
 	unsigned int	iobase, eid;
@@ -3979,7 +3980,7 @@ static int stli_findeisabrds()
  *	can find.
  */
 
-static int stli_initbrds()
+static inline int stli_initbrds()
 {
 	stlibrd_t	*brdp, *nxtbrdp;
 	stlconf_t	*confp;
@@ -4471,7 +4472,7 @@ static int stli_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, un
 
 /*****************************************************************************/
 
-int stli_init()
+__initfunc(int stli_init())
 {
 	printk(KERN_INFO "%s: version %s\n", stli_drvname, stli_drvversion);
 

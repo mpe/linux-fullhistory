@@ -38,9 +38,9 @@
  *
  * Keep these three variables contiguous for sysctl(2).  
  */
-int min_free_pages = 20;
-int free_pages_low = 30;
-int free_pages_high = 40;
+int min_free_pages = 48;
+int free_pages_low = 72;
+int free_pages_high = 96;
 
 /* We track the number of pages currently being asynchronously swapped
    out, so that we don't try to swap TOO many pages out at once */

@@ -26,6 +26,7 @@ static const char *version = "pcnet32.c:v0.23 8.2.97 tsbogend@alpha.franken.de\n
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/bios32.h>
+#include <linux/init.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
@@ -34,7 +35,7 @@ static const char *version = "pcnet32.c:v0.23 8.2.97 tsbogend@alpha.franken.de\n
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
-static unsigned int pcnet32_portlist[] = {0x300, 0x320, 0x340, 0x360, 0};
+static unsigned int pcnet32_portlist[] __initdata = {0x300, 0x320, 0x340, 0x360, 0};
 
 #ifdef PCNET32_DEBUG
 static int pcnet32_debug = PCNET32_DEBUG;
@@ -168,7 +169,7 @@ static void pcnet32_set_multicast_list(struct device *dev);
 
 
 
-int pcnet32_probe (struct device *dev)
+__initfunc(int pcnet32_probe (struct device *dev))
 {
     unsigned int  ioaddr = dev ? dev->base_addr: 0;
     unsigned char irq_line = dev ? dev->irq : 0;
@@ -246,7 +247,7 @@ int pcnet32_probe (struct device *dev)
 
 
 /* pcnet32_probe1 */
-int pcnet32_probe1(struct device *dev, unsigned int ioaddr, unsigned char irq_line, int shared)
+__initfunc(static int pcnet32_probe1(struct device *dev, unsigned int ioaddr, unsigned char irq_line, int shared))
 {
     struct pcnet32_private *lp;
     int i;

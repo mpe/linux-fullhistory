@@ -35,6 +35,7 @@
 #include <linux/errno.h>
 #include <linux/netdevice.h>
 #include <linux/major.h>
+#include <linux/init.h>
 
 #include <linux/timer.h>
 
@@ -816,7 +817,7 @@ static int ax_open_dev(struct device *dev)
 }
 
 /* Initialize AX25 control device -- register AX25 line discipline */
-int mkiss_init_ctrl_dev(void)
+__initfunc(int mkiss_init_ctrl_dev(void))
 {
 	int status;
 
@@ -1038,7 +1039,7 @@ static void mkiss_set_termios(struct tty_struct *tty, struct termios *old_termio
 /* * 			Init MKISS driver 			      * */
 /* ******************************************************************** */
 
-static int mkiss_init(void)
+__initfunc(static int mkiss_init(void))
 {
 	memset(&mkiss_driver, 0, sizeof(struct tty_driver));
 

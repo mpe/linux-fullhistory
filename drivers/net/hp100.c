@@ -93,6 +93,7 @@
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/bios32.h>
+#include <linux/init.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 
@@ -209,7 +210,7 @@ static int hp100_down_vg_link( struct device *dev );
  *  probe functions
  */
 
-int hp100_probe( struct device *dev )
+__initfunc(int hp100_probe( struct device *dev ))
 {
   int base_addr = dev ? dev -> base_addr : 0;
   int ioaddr;
@@ -297,7 +298,7 @@ int hp100_probe( struct device *dev )
   return -ENODEV;
 }
 
-static int hp100_probe1( struct device *dev, int ioaddr, int bus )
+__initfunc(static int hp100_probe1( struct device *dev, int ioaddr, int bus ))
 {
   int i;
   u_char uc, uc_1;

@@ -119,6 +119,7 @@ static char mcchannelid[] = {
 #include <linux/netdevice.h>
 #include <linux/trdevice.h>
 #include <linux/stddef.h>
+#include <linux/init.h>
 #include <net/checksum.h>
 
 #include <asm/io.h>
@@ -134,11 +135,11 @@ static char mcchannelid[] = {
 #if TR_NEWFORMAT
 /* this allows displaying full adapter information */
 
-const char *channel_def[] = { 
+const char *channel_def[] __initdata = { 
 	"ISA", "MCA", "ISA P&P" 
 };
 
-char *adapter_def(char type)
+__initfunc(char *adapter_def(char type))
 {
 	switch (type) 
 	{
@@ -178,13 +179,13 @@ static struct net_device_stats * tok_get_stats(struct device *dev);
 void		ibmtr_readlog(struct device *dev);
 void		ibmtr_reset_timer(struct timer_list *tmr, struct device *dev);
 
-static unsigned int ibmtr_portlist[] = {
+static unsigned int ibmtr_portlist[] __initdata = {
 	0xa20, 0xa24, 0
 };
 
 static __u32 ibmtr_mem_base = 0xd0000;
 
-static void PrtChanID(char *pcid, short stride) 
+__initfunc(static void PrtChanID(char *pcid, short stride) )
 {
 	short i, j;
 	for (i=0, j=0; i<24; i++, j+=stride)
@@ -192,7 +193,7 @@ static void PrtChanID(char *pcid, short stride)
 	printk("\n");
 }
 
-static void HWPrtChanID (__u32 pcid, short stride)
+__initfunc(static void HWPrtChanID (__u32 pcid, short stride))
 {
 	short i, j;
 	for (i=0, j=0; i<24; i++, j+=stride)
@@ -213,7 +214,7 @@ static void HWPrtChanID (__u32 pcid, short stride)
  *	which references it.
  */
  
-int ibmtr_probe(struct device *dev)
+__initfunc(int ibmtr_probe(struct device *dev))
 {
         int i;
         int base_addr = dev ? dev->base_addr : 0;
@@ -252,7 +253,7 @@ int ibmtr_probe(struct device *dev)
         return -ENODEV;
 }
 
-static int ibmtr_probe1(struct device *dev, int PIOaddr)
+__initfunc(static int ibmtr_probe1(struct device *dev, int PIOaddr))
 {
 	unsigned char segment=0, intr=0, irq=0, i=0, j=0, cardpresent=NOTOK,temp=0;
 	__u32 t_mmio=0;
@@ -597,7 +598,7 @@ static int ibmtr_probe1(struct device *dev, int PIOaddr)
 
 /* query the adapter for the size of shared RAM  */
 
-unsigned char get_sram_size(struct tok_info *adapt_info)
+__initfunc(static unsigned char get_sram_size(struct tok_info *adapt_info))
 {
 
 	unsigned char avail_sram_code;
@@ -617,7 +618,7 @@ unsigned char get_sram_size(struct tok_info *adapt_info)
 		return 1<<((readb(adapt_info->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD)>>2)+4);
 }
 
-int trdev_init(struct device *dev)
+__initfunc(static int trdev_init(struct device *dev))
 {
 	struct tok_info *ti=(struct tok_info *)dev->priv;
 

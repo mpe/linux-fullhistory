@@ -30,6 +30,7 @@ static const char *version =
 #include <linux/ioport.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -37,7 +38,7 @@ static const char *version =
 #include "8390.h"
 
 /* A zero-terminated list of I/O addresses to be probed. */
-static unsigned int hppclan_portlist[] =
+static unsigned int hppclan_portlist[] __initdata =
 { 0x300, 0x320, 0x340, 0x280, 0x2C0, 0x200, 0x240, 0};
 
 #define HP_IO_EXTENT	32
@@ -70,8 +71,8 @@ static void hp_block_output(struct device *dev, int count,
 static void hp_init_card(struct device *dev);
 
 /* The map from IRQ number to HP_CONFIGURE register setting. */
-/* My default is IRQ5	   0  1	 2  3  4  5  6	7  8  9 10 11 */
-static char irqmap[16] = { 0, 0, 4, 6, 8,10, 0,14, 0, 4, 2,12,0,0,0,0};
+/* My default is IRQ5	             0  1  2  3  4  5  6  7  8  9 10 11 */
+static char irqmap[16] __initdata= { 0, 0, 4, 6, 8,10, 0,14, 0, 4, 2,12,0,0,0,0};
 
 
 /*	Probe for an HP LAN adaptor.
@@ -82,7 +83,7 @@ struct netdev_entry netcard_drv =
 {"hp", hp_probe1, HP_IO_EXTENT, hppclan_portlist};
 #else
 
-int hp_probe(struct device *dev)
+__initfunc(int hp_probe(struct device *dev))
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -104,7 +105,7 @@ int hp_probe(struct device *dev)
 }
 #endif
 
-int hp_probe1(struct device *dev, int ioaddr)
+__initfunc(int hp_probe1(struct device *dev, int ioaddr))
 {
 	int i, board_id, wordmode;
 	const char *name;

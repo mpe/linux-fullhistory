@@ -82,6 +82,7 @@
 #include <linux/firewall.h>
 #include <linux/module.h>
 #include <linux/net_alias.h>
+#include <linux/init.h>
 
 #include <net/ip.h>
 #include <net/arp.h>
@@ -632,7 +633,7 @@ static int bpq_device_event(struct notifier_block *this,unsigned long event, voi
  * Initialize driver. To be called from af_ax25 if not compiled as a
  * module
  */
-int bpq_init(void)
+__initfunc(int bpq_init(void))
 {
 	struct device *dev;
 
