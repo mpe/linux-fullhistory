@@ -48,6 +48,7 @@ void init_rz1000 (byte bus, byte fn)
 			ide_hwifs[0].no_unmask = 1;
 			ide_hwifs[1].no_unmask = 1;
 			ide_hwifs[0].serialized = 1;
+			ide_hwifs[1].serialized = 1;
 			ide_pci_access_error (rc);
 			printk("serialized, disabled unmasking\n");
 		} else

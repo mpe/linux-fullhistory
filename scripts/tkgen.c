@@ -14,9 +14,15 @@
  * Avery Pennarun - The int and hex config.in commands work right.
  *                - Choice buttons are more user-friendly.
  *                - Disabling a text entry line greys it out properly.
- *		  - dep_tristate now works like in Configure. (not pretty)
+ *                - dep_tristate now works like in Configure. (not pretty)
  *                - No warnings in gcc -Wall. (Fixed some "interesting" bugs.)
  *                - Faster/prettier "Help" lookups.
+ *
+ * 1996 03 15
+ * Avery Pennarun - Added new sed script from Axel Boldt to make help even
+ *                  faster. (Actually awk is downright slow on some machines.)
+ *                - Fixed a bug I introduced into Choice dependencies.  Thanks
+ *                  to Robert Krawitz for pointing this out.
  *
  * TO DO:
  *   - clean up - there are useless ifdef's everywhere.

@@ -179,25 +179,33 @@ static inline u32 tcp_init_seq(void)
  *  
  *	1. The window can never be shrunk once it is offered (RFC 793)
  *	2. We limit memory per socket
+ *	3. No reason to raise the window if the other side has
+ *	   lots of room to play with.
  */
 
 static __inline__ unsigned short tcp_raise_window(struct sock *sk)
 {
-	long free_space = sock_rspace(sk);
+	long free_space;
 	long window;
 
+
+	/* 
+         * compute the actual window i.e. 
+         * old_window - received_bytes_on_that_win.
+	 *
+	 * Don't raise the window if we have lots left:
+	 * that only results in unnecessary packets.
+	 */
+	window = sk->window - (sk->acked_seq - sk->lastwin_seq);	
+	if (window >= MAX_WINDOW/2)
+		return 0;
+
+	free_space = sock_rspace(sk);
 	if (free_space > 1024)
 		free_space &= ~0x3FF; /* make free space a multiple of 1024 */
 
 	if(sk->window_clamp)
 		free_space = min(sk->window_clamp, free_space);
- 
-	/* 
-         * compute the actual window i.e. 
-         * old_window - received_bytes_on_that_win 
-	 */
-
-	window = sk->window - (sk->acked_seq - sk->lastwin_seq);
 
 	if (sk->mss == 0)
 		sk->mss = sk->mtu;

@@ -12,6 +12,15 @@
  *		Alan Cox	:	destructor hook for AF_UNIX etc.
  *		Linus Torvalds	:	Better skb_clone.
  *		Alan Cox	:	Added skb_copy.
+ *		Alan Cox	:	Added all the changed routines Linus
+ *					only put in the headers
+ *		Ray VanTassle	:	Fixed --skb->lock in free
+ *
+ *	TO FIX:
+ *		The __skb_ routines ought to check interrupts are disabled
+ *	when called, and bitch like crazy if not. Unfortunately I don't think
+ *	we currently have a portable way to check if interrupts are off - 
+ *	Linus ???
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -20,9 +29,7 @@
  */
 
 /*
- *	Note: There are a load of cli()/sti() pairs protecting the net_memory type
- *	variables. Without them for some reason the ++/-- operators do not come out
- *	atomic. Also with gcc 2.4.5 these counts can come out wrong anyway - use 2.5.8!!
+ *	The functions in this file will not compile correctly with gcc 2.4.x
  */
 
 #include <linux/config.h>
@@ -224,6 +231,26 @@ void skb_queue_head(struct sk_buff_head *list_,struct sk_buff *newsk)
 	restore_flags(flags);
 }
 
+void __skb_queue_head(struct sk_buff_head *list_,struct sk_buff *newsk)
+{
+	struct sk_buff *list = (struct sk_buff *)list_;
+
+
+	IS_SKB(newsk);
+	IS_SKB_HEAD(list);
+	if (newsk->next || newsk->prev)
+		printk("Suspicious queue head: sk_buff on list!\n");
+
+	newsk->next = list->next;
+	newsk->prev = list;
+
+	newsk->next->prev = newsk;
+	newsk->prev->next = newsk;
+	newsk->list = list_;
+	list_->qlen++;
+
+}
+
 /*
  *	Insert an sk_buff at the end of a list.
  */
@@ -250,6 +277,26 @@ void skb_queue_tail(struct sk_buff_head *list_, struct sk_buff *newsk)
 	list_->qlen++;
 
 	restore_flags(flags);
+}
+
+void __skb_queue_tail(struct sk_buff_head *list_, struct sk_buff *newsk)
+{
+	unsigned long flags;
+	struct sk_buff *list = (struct sk_buff *)list_;
+
+	if (newsk->next || newsk->prev)
+		printk("Suspicious queue tail: sk_buff on list!\n");
+	IS_SKB(newsk);
+	IS_SKB_HEAD(list);
+
+	newsk->next = list;
+	newsk->prev = list->prev;
+
+	newsk->next->prev = newsk;
+	newsk->prev->next = newsk;
+	
+	newsk->list = list_;
+	list_->qlen++;
 }
 
 /*
@@ -288,6 +335,30 @@ struct sk_buff *skb_dequeue(struct sk_buff_head *list_)
 	return result;
 }
 
+struct sk_buff *__skb_dequeue(struct sk_buff_head *list_)
+{
+	struct sk_buff *result;
+	struct sk_buff *list = (struct sk_buff *)list_;
+
+	IS_SKB_HEAD(list);
+
+	result = list->next;
+	if (result == list) {
+		return NULL;
+	}
+
+	result->next->prev = list;
+	list->next = result->next;
+
+	result->next = NULL;
+	result->prev = NULL;
+	list_->qlen--;
+	result->list = NULL;
+	
+	IS_SKB(result);
+	return result;
+}
+
 /*
  *	Insert a packet before another one in a list.
  */
@@ -316,6 +387,29 @@ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 }
 
 /*
+ *	Insert a packet before another one in a list.
+ */
+
+void __skb_insert(struct sk_buff *old, struct sk_buff *newsk)
+{
+	IS_SKB(old);
+	IS_SKB(newsk);
+
+	if(!old->next || !old->prev)
+		printk("insert before unlisted item!\n");
+	if(newsk->next || newsk->prev)
+		printk("inserted item is already on a list.\n");
+
+	newsk->next = old;
+	newsk->prev = old->prev;
+	old->prev = newsk;
+	newsk->prev->next = newsk;
+	newsk->list = old->list;
+	newsk->list->qlen++;
+
+}
+
+/*
  *	Place a packet after a given packet in a list.
  */
 void skb_append(struct sk_buff *old, struct sk_buff *newsk)
@@ -341,6 +435,25 @@ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 	newsk->list->qlen++;
 
 	restore_flags(flags);
+}
+
+void __skb_append(struct sk_buff *old, struct sk_buff *newsk)
+{
+	IS_SKB(old);
+	IS_SKB(newsk);
+
+	if(!old->next || !old->prev)
+		printk("append before unlisted item!\n");
+	if(newsk->next || newsk->prev)
+		printk("append item is already on a list.\n");
+
+	newsk->prev = old;
+	newsk->next = old->next;
+	newsk->next->prev = newsk;
+	old->next = newsk;
+	newsk->list = old->list;
+	newsk->list->qlen++;
+
 }
 
 /*
@@ -372,6 +485,25 @@ void skb_unlink(struct sk_buff *skb)
 		printk("skb_unlink: not a linked element\n");
 #endif
 	restore_flags(flags);
+}
+
+void __skb_unlink(struct sk_buff *skb)
+{
+	IS_SKB(skb);
+
+	if(skb->list)
+	{
+		skb->list->qlen--;
+		skb->next->prev = skb->prev;
+		skb->prev->next = skb->next;
+		skb->next = NULL;
+		skb->prev = NULL;
+		skb->list = NULL;
+	}
+#ifdef PARANOID_BUGHUNT_MODE	/* This is legal but we sometimes want to watch it */
+	else
+		printk("skb_unlink: not a linked element\n");
+#endif
 }
 
 /*
@@ -649,7 +781,6 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	n->next = n->prev = n->link3 = NULL;
 	n->list = NULL;
 	n->sk = NULL;
-	n->truesize = sizeof(*n);
 	n->free = 1;
 	n->tries = 0;
 	n->lock = 0;
@@ -745,10 +876,12 @@ void dev_kfree_skb(struct sk_buff *skb, int mode)
 
 	save_flags(flags);
 	cli();
-	if(skb->lock==1)
+	if(skb->lock)
+	{
 		net_locked--;
-
-	if (!--skb->lock && (skb->free == 1 || skb->free == 3))
+		skb->lock--;
+	}
+	if (!skb->lock && (skb->free == 1 || skb->free == 3))
 	{
 		restore_flags(flags);
 		kfree_skb(skb,mode);

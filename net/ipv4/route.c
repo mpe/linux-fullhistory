@@ -40,6 +40,7 @@
  *		
  *		Olaf Erb	:	irtt wasnt being copied right.
  *		Bjorn Ekwall	:	Kerneld route support.
+ *		Alan Cox	:	Multicast fixed (I hope)
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -1556,6 +1557,11 @@ struct rtable * ip_rt_slow_route (__u32 daddr, int local)
 
 	if (!(rth->rt_flags & RTF_GATEWAY))
 		rth->rt_gateway = rth->rt_dst;
+	/*
+	 *	Multicast is never gatewayed.
+	 */
+	if (MULTICAST(daddr))
+		rth->rt_gateway = rth->rt_dst;
 
 	if (ip_rt_lock == 1)
 		rt_cache_add(hash, rth);
@@ -1714,7 +1720,7 @@ int ip_rt_new(struct rtentry *r)
  *	Remove a route, as requested by the user.
  */
 
-static int rt_kill(struct rtentry *r)
+int ip_rt_kill(struct rtentry *r)
 {
 	struct sockaddr_in *trg;
 	struct sockaddr_in *msk;
@@ -1764,7 +1770,7 @@ int ip_rt_ioctl(unsigned int cmd, void *arg)
 			if (err)
 				return err;
 			memcpy_fromfs(&rt, arg, sizeof(struct rtentry));
-			return (cmd == SIOCDELRT) ? rt_kill(&rt) : ip_rt_new(&rt);
+			return (cmd == SIOCDELRT) ? ip_rt_kill(&rt) : ip_rt_new(&rt);
 	}
 
 	return -EINVAL;

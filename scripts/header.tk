@@ -287,7 +287,7 @@ proc minimenu { w mnum line text variable } {
 	frame $w.x$line
 	option_name $w $mnum $line $text $variable
 	menubutton $w.x$line.x -textvariable $variable -menu \
-		$w.x$line.x.menu -relief raised -indicatoron 1 \
+		$w.x$line.x.menu -relief raised \
 		-width 15 -anchor w
 	pack $w.x$line.x -anchor w -side right -fill y
 	pack $w.x$line -anchor w -fill both -expand on
@@ -301,70 +301,7 @@ proc do_make { w line option dir target target } {
 #nothing to do for now.
 }
 
-proc dohelp_old_version_ignore_me {w varname }  {
-	catch {destroy $w}
-	toplevel $w -class Dialog
-
-	set filefound 0
-	set found 0
-	set lineno 0
-	if { [file readable Documentation/Configure.help] == 1} then {
-		set f [open Documentation/Configure.help r]
-		set filefound 1	
-		while {![eof $f]} {
-			gets $f line
-		        set line1 [string trim $line]
-			if { $line1 == $varname } then {
-				set found 1
-			} else {
-				if { $found == 0 } continue 
-			}
-			if { [string length $line1 ] == 0 } break
-			if { [string  range $line1 0 0 ] == "#" } continue
-			if { $lineno == 0 } then {
-			    append message $line1
- 			    append message ":"
-			} else {
- 			    append message " "
-			    append message $line1
-			}
-			set lineno [expr $lineno + 1]
-		}
-		close $f
-	}
-
-	if { $found == 0 } then {
-		if { $filefound == 0 } then {
-		message $w.m -width 750 -aspect 300 -text \
-			"No help available - unable to open file Documentation/Configure.help.  This file is available from http://math-www.uni-paderborn.de/~axel/config_help.html or ftp://sunsite.unc.edu/pub/Linux/kernel/config/krnl_cnfg_hlp_1.X.XX.tgz"  -relief raised 
-		} else {
-		message $w.m -width 400 -aspect 300 -text \
-			"No help available for $varname"  -relief raised 
-		}
-		label $w.bm -bitmap error
-		pack $w.bm $w.m -pady 10 -side top -padx 10
-		wm title $w "RTFM" 
-	} else {
-		message $w.m -width 400 -aspect 300 -text $message \
-			 -relief raised 
-		label $w.bm -bitmap info
-		pack $w.bm $w.m -pady 10 -side top -padx 10
-		wm title $w "Configuration help" 
-	}
-	set oldFocus [focus]
-	frame $w.f
-	button $w.f.back -text "OK" -activebackground green \
-		-width 10 -command "destroy $w; focus $oldFocus"
-	pack $w.f.back -side bottom -pady 10 -anchor s
-	pack $w.f -pady 10 -side top -padx 10 -anchor s
-	focus $w
-	global winx; global winy
-	set winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]
-	wm geometry $w +$winx+$winy
-}
-
-
-proc dohelp {w varname }  {
+proc dohelp {w var }  {
 	catch {destroy $w}
 	toplevel $w -class Dialog
 
@@ -374,22 +311,21 @@ proc dohelp {w varname }  {
 
 	if { [file readable Documentation/Configure.help] == 1} then {
 		set filefound 1
-		set message [exec awk "
-			BEGIN {
-				start=0;
+		set message [exec sed -n "
+			/^$var\[ 	\]*\$/,\${
+				/^$var\[ 	\]*\$/c\\
+${var}:\\
+
+				/^#.*/d
+				/^\[ 	\]*\$/bL
+                		H
 			}
-			/^$varname\[ 	\]*\$/ {
-				start=1;
-				printf(\"%s:\\n\\n\",\$0);
-				next;
-			}
-			!/^\[ 	\]/ {
-				start=0;
-			}
-			/^\[ 	\]*/ && start==1 {
-				gsub(\"^\[ 	\]*\",\"\");
-				printf(\"%s \",\$0);
-			}
+			d
+			:L x
+			s/\\n  //
+			s/\\n  / /g
+			p
+			q
 			" Documentation/Configure.help]
 		set found [expr [string length "$message"] > 0]
 	}
@@ -402,7 +338,7 @@ proc dohelp {w varname }  {
 			"No help available - unable to open file Documentation/Configure.help.  This file should have come with your kernel."
 		} else {
 		message $w.f1.m -width 400 -aspect 300 -relief flat -text \
-			"No help available for $varname"
+			"No help available for $var"
 		}
 		label $w.f1.bm -bitmap error
 		wm title $w "RTFM"

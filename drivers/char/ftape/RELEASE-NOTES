@@ -1,3 +1,12 @@
+===== Release notes for ftape-2.08, 14/03/96 =====
+
+If you correct a problem with ftape, please send your patch to
+khp@pip.dknet.dk too.
+
+- Updated to reflect that NR_MEM_LISTS is gone in 1.3.74
+- Teac 700 added to list of known drives.
+- The registered device name is now "ft" rather than "ftape".
+
 ===== Release notes for ftape-2.07a, 14/03/96 =====
 
 Bugfixes by Marcin Dalecki <dalecki@namu03.gwdg.de>:

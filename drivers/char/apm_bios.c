@@ -1127,6 +1127,8 @@ static int apm_setup(void)
 	error = apm_enable_power_management();
 	if (error)
 		apm_error("enable power management", error);
+	if (error == APM_DISABLED)
+		return -1;
 #endif
 
 	init_timer(&apm_timer);

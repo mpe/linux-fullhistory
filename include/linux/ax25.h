@@ -32,6 +32,23 @@ struct ax25_routes_struct
 	ax25_address digi_addr[AX25_MAX_DIGIS];
 };
 
+struct ax25_route_opt_struct
+{
+	ax25_address port_addr;
+	ax25_address dest_addr;
+	int cmd;
+	int arg;
+};
+
+struct ax25_ctl_struct
+{
+	ax25_address port_addr;
+	ax25_address source_addr;
+	ax25_address dest_addr;
+	unsigned int cmd;
+	unsigned long arg;
+};
+
 struct ax25_bpqaddr_struct
 {
 	char dev[16];
@@ -49,6 +66,8 @@ struct ax25_bpqaddr_struct
 #define AX25_IDLE	9
 #define AX25_PACLEN	10
 
+#define AX25_KILL	99
+
 #define SIOCAX25GETUID		(SIOCPROTOPRIVATE)
 #define SIOCAX25ADDUID		(SIOCPROTOPRIVATE+1)
 #define SIOCAX25DELUID		(SIOCPROTOPRIVATE+2)
@@ -56,6 +75,18 @@ struct ax25_bpqaddr_struct
 #define	SIOCAX25BPQADDR		(SIOCPROTOPRIVATE+4)
 #define	SIOCAX25GETPARMS	(SIOCPROTOPRIVATE+5)
 #define	SIOCAX25SETPARMS	(SIOCPROTOPRIVATE+6)
+#define SIOCAX25OPTRT		(SIOCPROTOPRIVATE+7)
+#define SIOCAX25CTLCON		(SIOCPROTOPRIVATE+8)
+
+#define AX25_SET_RT_PERMANENT	1
+#define AX25_SET_RT_IPMODE	2
+
+#define AX25_RT_DYNAMIC		0
+#define AX25_RT_PERMANENT	1
+
+#define AX25_RT_IPMODE_DEFAULT	' '
+#define AX25_RT_IPMODE_DATAGRAM	'D'
+#define AX25_RT_IPMODE_VC	'V'
 
 #define AX25_NOUID_DEFAULT	0
 #define AX25_NOUID_BLOCK	1

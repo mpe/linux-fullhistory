@@ -65,7 +65,7 @@ setup: setup.o
 setup.o: setup.s
 	$(AS86) -o $@ $<
 
-setup.s: setup.S $(CONFIGURE) $(TOPDIR)/include/linux/config.h Makefile
+setup.s: setup.S video.S $(CONFIGURE) $(TOPDIR)/include/linux/config.h Makefile
 	$(CPP) -traditional $(SVGA_MODE) $(RAMDISK) $< -o $@
 
 bootsect: bootsect.o

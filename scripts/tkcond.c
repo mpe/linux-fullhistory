@@ -123,7 +123,7 @@ void fix_choice_cond()
 	   * be one operator inbetween.
 	   */
 	  cond2 = cond->next->next;
-	  sprintf(tmpbuf, "%d", cond->variable.cfg->choice_value);
+	  strcpy(tmpbuf, cond->variable.cfg->label);
 
 	  if( strcmp(cond2->variable.str, "y") == 0 )
 	    {

@@ -37,7 +37,7 @@ struct exec_domain {
 	unsigned char pers_low, pers_high;
 	unsigned long * signal_map;
 	unsigned long * signal_invmap;
-	int *use_count;
+	long *use_count;
 	struct exec_domain *next;
 };
 

@@ -123,6 +123,8 @@ static int console_refcount;
 static struct tty_struct *console_table[MAX_NR_CONSOLES];
 static struct termios *console_termios[MAX_NR_CONSOLES];
 static struct termios *console_termios_locked[MAX_NR_CONSOLES];
+unsigned short *vc_scrbuf[MAX_NR_CONSOLES];
+struct vc vc_cons [MAX_NR_CONSOLES];
 
 static void con_setsize(unsigned long rows, unsigned long cols);
 static void vc_init(unsigned int console, unsigned long rows,
@@ -153,30 +155,25 @@ extern int set_get_cmap(unsigned char *, int);
 extern int set_get_font(unsigned char *, int, int);
 
 /* Description of the hardware situation */
-/* used in vga.c/tga.c/etc.c... :-) */
-       unsigned char	video_type;		/* Type of display being used	*/
-       unsigned long	video_mem_base;		/* Base of video memory		*/
-       unsigned long	video_mem_term;		/* End of video memory		*/
-static unsigned char	video_page;		/* Initial video page (unused)  */
-       /* these two also used in vesa_blank.c */
-       unsigned short	video_port_reg;		/* Video register select port	*/
-       unsigned short	video_port_val;		/* Video register value port	*/
-       /* these three also used in selection.c */
-       unsigned long	video_num_columns;	/* Number of text columns	*/
-       unsigned long	video_num_lines;	/* Number of text lines		*/
-       unsigned long	video_size_row;
-       unsigned long	video_screen_size;
-       int can_do_color = 0;
-static int printable = 0;			/* Is console ready for printing? */
-	/* these also used in in vt.c */
-       int		video_mode_512ch = 0;	/* 512-character mode */
-       unsigned long	video_font_height;	/* Height of current screen font */
-       unsigned long	video_scan_lines;	/* Number of scan lines on screen */
-       unsigned long    default_font_height;    /* Height of default screen font */
-       int		video_font_is_default = 1;
-static unsigned short console_charmask = 0x0ff;
+unsigned char	video_type;		/* Type of display being used	*/
+unsigned long	video_mem_base;		/* Base of video memory		*/
+unsigned long	video_mem_term;		/* End of video memory		*/
+unsigned short	video_port_reg;		/* Video register select port	*/
+unsigned short	video_port_val;		/* Video register value port	*/
+unsigned long	video_num_columns;	/* Number of text columns	*/
+unsigned long	video_num_lines;	/* Number of text lines		*/
+unsigned long	video_size_row;
+unsigned long	video_screen_size;
 
-       unsigned short *vc_scrbuf[MAX_NR_CONSOLES];
+int can_do_color = 0;
+static int printable = 0;		/* Is console ready for printing? */
+
+int		video_mode_512ch = 0;	/* 512-character mode */
+unsigned long	video_font_height;	/* Height of current screen font */
+unsigned long	video_scan_lines;	/* Number of scan lines on screen */
+unsigned long   default_font_height;    /* Height of default screen font */
+int		video_font_is_default = 1;
+static unsigned short console_charmask = 0x0ff;
 
 /* used by kbd_bh - set by keyboard_interrupt */
        int do_poke_blanked_console = 0;
@@ -184,8 +181,6 @@ static unsigned short console_charmask = 0x0ff;
 static int blankinterval = 10*60*HZ;
 static int vesa_off_interval = 0;
 static long blank_origin, blank__origin, unblank_origin;
-
-struct vc vc_cons [MAX_NR_CONSOLES];
 
 
 #ifdef CONFIG_SERIAL_ECHO
@@ -515,63 +510,68 @@ static void gotoxy(int currcons, int new_x, int new_y)
 /*
  * Hardware scrollback support
  */
-unsigned short __real_origin;
-unsigned short __origin;	   /* offset of currently displayed screen */
-#define last_lpos (((video_mem_term-video_mem_base)/video_num_columns/2)-video_num_lines+1)
-#define last_origin_rel ( last_lpos * video_num_columns )
-#define last_origin ( video_mem_base + last_origin_rel * 2 )
-unsigned short __scrollback_mode;   /* 1 means scrollback can wrap */
 extern void __set_origin(unsigned short);
+unsigned short __real_origin;       /* offset of non-scrolled screen */
+unsigned short __origin;	    /* offset of currently displayed screen */
+unsigned char has_wrapped;          /* all of videomem is data of fg_console */
+static unsigned char hardscroll_enabled;
+static unsigned char hardscroll_disabled_by_init = 0;
+
+void no_scroll(char *str, int *ints)
+{
+  /*
+   * Disabling scrollback is required for the Braillex ib80-piezo
+   * Braille reader made by F.H. Papenmeier (Germany).
+   * Use the "no-scroll" bootflag.
+   */
+	hardscroll_disabled_by_init = 1;
+	hardscroll_enabled = 0;
+}
+
+static void scrolldelta(int lines)
+{
+	int new_origin;
+	int last_origin_rel = (((video_mem_term - video_mem_base)
+         / video_num_columns / 2) - (video_num_lines - 1)) * video_num_columns;
+
+	new_origin = __origin + lines * video_num_columns;
+	if (__origin > __real_origin)
+		new_origin -= last_origin_rel;
+	if (new_origin < 0) {
+		int s_top = __real_origin + video_num_lines*video_num_columns;
+		new_origin += last_origin_rel;
+		if (new_origin < s_top)
+			new_origin = s_top;
+		if (new_origin > last_origin_rel - video_num_columns
+		    || has_wrapped == 0)
+			new_origin = 0;
+		else {
+			unsigned short * d = (unsigned short *) video_mem_base;
+			unsigned short * s = d + last_origin_rel;
+			int count = (video_num_lines-1)*video_num_columns;
+			while (count) {
+				count--;
+				scr_writew(scr_readw(d++),s++);
+			}
+		}
+	} else if (new_origin > __real_origin)
+		new_origin = __real_origin;
+
+	__set_origin(new_origin);
+}
 
 void scrollback(int lines)
 {
 	if (!lines)
 		lines = video_num_lines/2;
-	lines *= video_num_columns;
-	lines = __origin - lines;
-	if (__scrollback_mode == 0) {
-		if (lines < 0)
-			lines = 0;
-	} else {
-		int s_top = __real_origin+video_num_lines*video_num_columns ;
-		if (lines < 0) {
-			int count ;
-			unsigned short * d = (unsigned short *) video_mem_base;
-			unsigned short * s = (unsigned short *) last_origin;
-
-			lines += last_origin_rel;
-			/* in case the top part of the screen has been modified since
-			 * the scroll wrapped, copy the top bit back to the bottom */
-			count = (video_num_lines-1)*video_num_columns;
-			while (count) {
-				count--;
-				scr_writew(scr_readw(d++),s++);
-			}
-		} else if (__origin > __real_origin && lines < s_top)
-			lines = s_top ;
-	}
-	__set_origin(lines);
+	scrolldelta(-lines);
 }
 
 void scrollfront(int lines)
 {
 	if (!lines)
 		lines = video_num_lines/2;
-	lines *= video_num_columns;
-	if (__origin > __real_origin) {
-		/* assume __scrollback_mode == 1 */
-		lines += __origin;
-		if (lines >= last_origin_rel) {
-			lines -= last_origin_rel ;
-			if (lines > __real_origin)
-				lines = __real_origin;
-		}
-	} else {
-		lines += __origin;
-		if (lines > __real_origin)
-			lines = __real_origin;
-	}
-	__set_origin(lines);
+	scrolldelta(lines);
 }
 
 static void set_origin(int currcons)
@@ -587,20 +587,17 @@ static void set_origin(int currcons)
 
 void scrup(int currcons, unsigned int t, unsigned int b)
 {
-	int hardscroll = 1;
+	int hardscroll = hardscroll_enabled;
 
 	if (b > video_num_lines || t >= b)
 		return;
-	if (video_type != VIDEO_TYPE_EGAC && video_type != VIDEO_TYPE_VGAC
-	    && video_type != VIDEO_TYPE_EGAM)
-		hardscroll = 0;
-	else if (t || b != video_num_lines)
+	if (t || b != video_num_lines)
 		hardscroll = 0;
 	if (hardscroll) {
 		origin += video_size_row;
 		pos += video_size_row;
 		scr_end += video_size_row;
-		if (origin >= last_origin) {
+		if (scr_end > video_mem_end) {
 			unsigned short * d = (unsigned short *) video_mem_start;
 			unsigned short * s = (unsigned short *) origin;
 			unsigned int count;
@@ -620,7 +617,7 @@ void scrup(int currcons, unsigned int t, unsigned int b)
 			origin = video_mem_start;
 			has_scrolled = 1;
 			if (currcons == fg_console)
-				__scrollback_mode = 1;
+				has_wrapped = 1;
 		} else {
 			unsigned short * d;
 			unsigned int count;
@@ -631,8 +628,6 @@ void scrup(int currcons, unsigned int t, unsigned int b)
 				count--;
 				scr_writew(video_erase_char, d++);
 			}
-			if (scr_end > last_origin)   /* we've wrapped into kept region */
-				__scrollback_mode = 0;
 		}
 		set_origin(currcons);
 	} else {
@@ -2021,8 +2016,6 @@ unsigned long con_init(unsigned long kmem_start)
 		panic("Couldn't register console driver\n");
 
 	con_setsize(ORIG_VIDEO_LINES, ORIG_VIDEO_COLS);
-	video_page = ORIG_VIDEO_PAGE; 			/* never used */
-	__scrollback_mode = 0 ;
 
 	timer_table[BLANK_TIMER].fn = blank_screen;
 	timer_table[BLANK_TIMER].expires = 0;
@@ -2033,7 +2026,11 @@ unsigned long con_init(unsigned long kmem_start)
 
 	kmem_start = con_type_init(kmem_start, &display_desc);
 
-	/* Initialize the variables used for scrolling (mostly EGA/VGA)	*/
+	hardscroll_enabled = (hardscroll_disabled_by_init ? 0 :
+	  (video_type == VIDEO_TYPE_EGAC
+	    || video_type == VIDEO_TYPE_VGAC
+	    || video_type == VIDEO_TYPE_EGAM));
+	has_wrapped = 0 ;
 
 	/* Due to kmalloc roundup allocating statically is more efficient -
 	   so provide MIN_NR_CONSOLES for people with very little memory */

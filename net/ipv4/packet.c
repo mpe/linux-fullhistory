@@ -5,6 +5,9 @@
  *
  *		PACKET - implements raw packet sockets.
  *
+ *		Doesn't belong in IP but its currently too hooked into ip
+ *		to seperate.
+ *
  * Version:	@(#)packet.c	1.0.6	05/25/93
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
@@ -30,6 +33,7 @@
  *	Richard Kooijman	:	Timestamp fixes.
  *		Alan Cox	:	New buffers. Use sk->mac.raw.
  *		Alan Cox	:	sendmsg/recvmsg support.
+ *		Alan Cox	:	Protocol setting support
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -46,6 +50,7 @@
 #include <linux/in.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
+#include <linux/if_packet.h>
 #include <net/ip.h>
 #include <net/protocol.h>
 #include <linux/skbuff.h>
@@ -124,7 +129,8 @@ static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len,
 {
 	struct sk_buff *skb;
 	struct device *dev;
-	struct sockaddr *saddr=(struct sockaddr *)msg->msg_name;
+	struct sockaddr_pkt *saddr=(struct sockaddr_pkt *)msg->msg_name;
+	unsigned short proto=0;
 
 	/*
 	 *	Check the flags. 
@@ -139,8 +145,10 @@ static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len,
 	 
 	if (saddr) 
 	{
-		if (msg->msg_namelen < sizeof(*saddr)) 
+		if (msg->msg_namelen < sizeof(struct sockaddr)) 
 			return(-EINVAL);
+		if (msg->msg_namelen==sizeof(struct sockaddr_pkt))
+			proto=saddr->spkt_protocol;
 	} 
 	else
 		return(-ENOTCONN);	/* SOCK_PACKET must be sent giving an address */
@@ -149,8 +157,8 @@ static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len,
 	 *	Find the device first to size check it 
 	 */
 
-	saddr->sa_data[13] = 0;
-	dev = dev_get(saddr->sa_data);
+	saddr->spkt_device[13] = 0;
+	dev = dev_get(saddr->spkt_device);
 	if (dev == NULL) 
 	{
 		return(-ENODEV);
@@ -185,6 +193,7 @@ static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len,
 	skb->free = 1;
 	memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
 	skb->arp = 1;		/* No ARP needs doing on this (complete) frame */
+	skb->protocol = proto;
 
 	/*
 	 *	Now send it
@@ -393,7 +402,7 @@ int packet_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 {
 	int copied=0;
 	struct sk_buff *skb;
-	struct sockaddr *saddr=(struct sockaddr *)msg->msg_name;
+	struct sockaddr_pkt *saddr=(struct sockaddr_pkt *)msg->msg_name;
 	int err;
 
 	if (sk->shutdown & RCV_SHUTDOWN) 
@@ -447,8 +456,9 @@ int packet_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	 
 	if (saddr) 
 	{
-		saddr->sa_family = skb->dev->type;
-		strncpy(saddr->sa_data,skb->dev->name, 15);
+		saddr->spkt_family = skb->dev->type;
+		strncpy(saddr->spkt_device,skb->dev->name, 15);
+		saddr->spkt_protocol = skb->protocol;
 	}
 	
 	/*

@@ -15,8 +15,10 @@
 
 #ifdef __SMP__
 #define LOCK_PREFIX "lock ; "
+#define SMPVOL volatile
 #else
 #define LOCK_PREFIX ""
+#define SMPVOL
 #endif
 
 /*
@@ -26,7 +28,7 @@ struct __dummy { unsigned long a[100]; };
 #define ADDR (*(struct __dummy *) addr)
 #define CONST_ADDR (*(const struct __dummy *) addr)
 
-extern __inline__ int set_bit(int nr, void * addr)
+extern __inline__ int set_bit(int nr, SMPVOL void * addr)
 {
 	int oldbit;
 
@@ -37,7 +39,7 @@ extern __inline__ int set_bit(int nr, void * addr)
 	return oldbit;
 }
 
-extern __inline__ int clear_bit(int nr, void * addr)
+extern __inline__ int clear_bit(int nr, SMPVOL void * addr)
 {
 	int oldbit;
 
@@ -48,7 +50,7 @@ extern __inline__ int clear_bit(int nr, void * addr)
 	return oldbit;
 }
 
-extern __inline__ int change_bit(int nr, void * addr)
+extern __inline__ int change_bit(int nr, SMPVOL void * addr)
 {
 	int oldbit;
 
@@ -62,7 +64,7 @@ extern __inline__ int change_bit(int nr, void * addr)
 /*
  * This routine doesn't need to be atomic.
  */
-extern __inline__ int test_bit(int nr, const void * addr)
+extern __inline__ int test_bit(int nr, const SMPVOL void * addr)
 {
 	return 1UL & (((const unsigned int *) addr)[nr >> 5] >> (nr & 31));
 }

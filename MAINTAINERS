@@ -107,6 +107,12 @@ M:	net-patches@lxorguk.ukuu.org.uk
 L:	linux-ipx@vger.rutgers.edu [will change]
 S:	Maintained
 
+IDE DRIVER [GENERAL]
+P:	Mark Lord
+M:	mlord@pobox.com
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
 ISDN SUBSYSTEM
 P:	Fritz Elfert
 M:	fritz@wuemaus.franken.de

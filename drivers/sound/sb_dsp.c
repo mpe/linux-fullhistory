@@ -827,9 +827,6 @@ sb_dsp_open (int dev, int mode)
       return -ENXIO;
     }
 
-  if (!sb_midi_busy)
-    sb_reset_dsp ();
-
   if (sb_no_recording && mode & OPEN_READ)
     {
       printk ("SB Warning: Recording not supported by this device\n");
@@ -837,9 +834,12 @@ sb_dsp_open (int dev, int mode)
 
   if (sb_intr_active || (sb_midi_busy && sb_midi_mode == UART_MIDI))
     {
-      printk ("SB: PCM not possible during MIDI input\n");
+      printk ("SB: Audio device or MIDI already in use\n");
       return -EBUSY;
     }
+
+  if (!sb_midi_busy)
+    sb_reset_dsp ();
 
   if (!irq_verified)
     {

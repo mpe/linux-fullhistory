@@ -85,6 +85,10 @@ ifeq ($(CONFIG_BLK_DEV_ALI14XX),y)
 L_OBJS += ali14xx.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_PROMISE),y)
+L_OBJS += promise.o
+endif
+
 ifeq ($(CONFIG_BLK_DEV_IDECD),y)
 L_OBJS += ide-cd.o
 endif

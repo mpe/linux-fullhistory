@@ -182,7 +182,7 @@ static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
 /*
  * On SMP boards, irq13 is used for interprocessor interrupts (IPI's).
  */
-static struct irqaction irq13 = { smp_message_irq, SA_INTERRUPT, 0, "IPI", NULL, NULL }:
+static struct irqaction irq13 = { smp_message_irq, SA_INTERRUPT, 0, "IPI", NULL, NULL };
 
 #else
 

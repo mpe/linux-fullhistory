@@ -1,7 +1,16 @@
 /*
  * The Mitsumi CDROM interface
  * Copyright (C) 1995 Heiko Schlittermann <heiko@lotte.sax.de>
- * VERSION: 1.7
+ * VERSION: 1.8
+ *
+ ****************** H E L P *********************************
+ * If you ever plan to update your CD ROM drive and perhaps
+ * want to sell or simply give away your Mitsumi FX-001[DS] 
+ * -- Please, Please --
+ * mail me (heiko@lotte.sax.de).  When my last drive goes 
+ * ballistic no more driver support will be available from me !!!
+ *************************************************************
+ *
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,7 +44,7 @@
 
 #if RCS
 static const char *mcdx_c_version
-		= "mcdx.c,v 1.31 1996/03/02 00:21:18 heiko Exp";
+		= "$Id: mcdx.c,v 1.39 1996/03/15 00:00:59 heiko Exp $";
 #endif
 
 #include <linux/version.h>
@@ -582,13 +591,14 @@ void do_mcdx_request()
 				      CURRENT->buffer,
 				      CURRENT->sector,
 				      CURRENT->nr_sectors))) {
-              INFO(("do_request() read error\n"));
+              /*INFO(("do_request() read error\n"));*/
+			  xwarn("do_requst() read error\n");
               if (stuffp->status & MCDX_ST_EOM) {
                   CURRENT->sector += CURRENT->nr_sectors;
                   CURRENT->nr_sectors = 0;
               } 
+			  invalidate_buffers(CURRENT->rq_dev);
               end_request(0);
-			  /* return; */
               goto again;
 	      }
 	      CURRENT->sector += i;
@@ -820,12 +830,8 @@ int check_mcdx_media_change(kdev_t full_dev)
 	stuffp = mcdx_stuffp[MINOR(full_dev)];
 	mcdx_getstatus(stuffp, 1);
 
-	if (stuffp->yyy == 0) {
-		INFO((" ... not changed\n"));
-		return 0;
-	}
+	if (stuffp->yyy == 0) return 0;
 
-	INFO((" ... changed\n"));
 	stuffp->yyy = 0;
 	return 1;
 }
@@ -844,9 +850,9 @@ static void mcdx_delay(struct s_drive_stuff *stuff, long jifs)
 	I wanna make this independend of cpu speed. [1 jiffie is 1/HZ] sec */
 {
     unsigned long tout = jiffies + jifs;
+	if (jifs < 0) printk ("********\n");
 
     /* TRACE((INIT, "mcdx_delay %d\n", jifs)); */
-    if (jifs <= 0) return;
 
     if (current->pid == 0) {        /* no sleep allowed */
 		while (jiffies < tout) {
@@ -873,7 +879,7 @@ mcdx_intr(int irq, void *dev_id, struct pt_regs* regs)
     stuffp = mcdx_irq_map[irq];
 
     if (stuffp == NULL ) {
-		WARN(("mcdx: no device for intr %d\n", irq));
+		xwarn("mcdx: no device for intr %d\n", irq);
 		return;
     }
 
@@ -890,10 +896,10 @@ mcdx_intr(int irq, void *dev_id, struct pt_regs* regs)
 	if (!stuffp->introk) {
 		TRACE((IRQ, "intr() irq %d hw status 0x%02x\n", irq, b));
 		if (~b & MCDX_RBIT_STEN) {
-			INFO((  "intr() irq %d    status 0x%02x\n", 
-					irq, inb((unsigned int) stuffp->rreg_data)));
+			xinfo(  "intr() irq %d    status 0x%02x\n", 
+					irq, inb((unsigned int) stuffp->rreg_data));
 		} else {
-			INFO((  "intr() irq %d ambigous hw status\n", irq));
+			xinfo(  "intr() irq %d ambigous hw status\n", irq);
 		}
 	} else {
 		TRACE((IRQ, "irq() irq %d ok, status %02x\n", irq, b));
@@ -988,7 +994,7 @@ mcdx_talk (
 
         /* now actually get the data */
         while (sz--) {
-            if (-1 == mcdx_getval(stuffp, timeout, -1, bp)) {
+            if (-1 == mcdx_getval(stuffp, timeout, 0, bp)) {
                 INFO(("talk() %02x timed out (data), %d tr%s left\n", 
                         cmd[0], tries - 1, tries == 2 ? "y" : "ies"));
                 st = -1; break;
@@ -1095,8 +1101,13 @@ int mcdx_init(void)
 {
 	int drive;
 
-	WARN(("Version 1.7 for %s\n", kernel_version));
-	WARN(("mcdx.c,v 1.31 1996/03/02 00:21:18 heiko Exp\n"));
+#ifdef MODULE
+	WARN(("Version 1.8 for %s\n", kernel_version));
+#else
+	WARN(("Version 1.8\n"));
+#endif
+
+	WARN(("$Id: mcdx.c,v 1.39 1996/03/15 00:00:59 heiko Exp $\n"));
 
 	/* zero the pointer array */
 	for (drive = 0; drive < MCDX_NDRIVES; drive++)
@@ -1677,7 +1688,7 @@ mcdx_requestmultidiskinfo(struct s_drive_stuff *stuffp, struct s_multi *multi, i
 	int ans;
 
     if (stuffp->present & MULTI) {
-		ans = mcdx_talk(stuffp, "\x11", 1, buf, sizeof(buf), 1 * HZ, tries);
+		ans = mcdx_talk(stuffp, "\x11", 1, buf, sizeof(buf), 2 * HZ, tries);
 		multi->multi = buf[1];
         multi->msf_last.minute = buf[2];
         multi->msf_last.second = buf[3];
@@ -1694,7 +1705,7 @@ mcdx_requesttocdata(struct s_drive_stuff *stuffp, struct s_diskinfo *info, int t
 {
 	char buf[9];
 	int ans;
-	ans = mcdx_talk(stuffp, "\x10", 1, buf, sizeof(buf), 1 * HZ, tries);
+	ans = mcdx_talk(stuffp, "\x10", 1, buf, sizeof(buf), 2 * HZ, tries);
 	if (ans == -1) {
 		info->n_first = 0;
 		info->n_last = 0;
@@ -1775,7 +1786,7 @@ mcdx_requestversion(struct s_drive_stuff *stuffp, struct s_version *ver, int tri
 	int ans;
 
 	if (-1 == (ans = mcdx_talk(stuffp, "\xdc", 
-			1, buf, sizeof(buf), 1 * HZ, tries)))
+			1, buf, sizeof(buf), 2 * HZ, tries)))
 		return ans;
 
 	ver->code = buf[1];

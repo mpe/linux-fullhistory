@@ -13,6 +13,7 @@ else
   bool '   Use old disk-only driver on primary interface' CONFIG_BLK_DEV_HD_IDE
   bool '   Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD
   bool '   Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE
+  bool '   Support removeable IDE interfaces (PCMCIA)' CONFIG_BLK_DEV_IDE_PCMCIA
   bool '   CMD640 chipset bugfix/support' CONFIG_BLK_DEV_CMD640
   if [ "$CONFIG_PCI" = "y" ]; then
     bool '   RZ1000 chipset bugfix/support' CONFIG_BLK_DEV_RZ1000
@@ -26,6 +27,7 @@ else
     bool '      QDI QD6580      support' CONFIG_BLK_DEV_QD6580
     bool '      UMC 8672        support' CONFIG_BLK_DEV_UMC8672
     bool '      ALI M1439/M1445 support' CONFIG_BLK_DEV_ALI14XX
+    bool '      PROMISE DC4030  support (ALPHA)' CONFIG_BLK_DEV_PROMISE
   fi
 fi
 

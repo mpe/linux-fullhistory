@@ -436,7 +436,7 @@ el2_block_output(struct device *dev, int count,
 {
     unsigned short int *wrd;
     int boguscount;		/* timeout counter */
-    unsigned short tmp_rev;	/* temporary for reversed values */
+    unsigned short word;	/* temporary for better machine code */
 
     if (ei_status.word16)      /* Tx packets go into bank 0 on EL2/16 card */
 	outb(EGACFR_RSEL|EGACFR_TCM, E33G_GACFR);
@@ -456,9 +456,9 @@ el2_block_output(struct device *dev, int count,
  *  Set up then start the internal memory transfer to Tx Start Page
  */
 
-    tmp_rev = (unsigned short)start_page;
-    outb(tmp_rev&0xFF, E33G_DMAAL);
-    outb(tmp_rev>>8, E33G_DMAAH);
+    word = (unsigned short)start_page;
+    outb(word&0xFF, E33G_DMAAH);
+    outb(word>>8, E33G_DMAAL);
 
     outb_p((ei_status.interface_num ? ECNTRL_AUI : ECNTRL_THIN ) | ECNTRL_OUTPUT
 	   | ECNTRL_START, E33G_CNTRL);
@@ -508,7 +508,7 @@ el2_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
     int boguscount;
     unsigned long hdr_start = dev->mem_start + ((ring_page - EL2_MB1_START_PG)<<8);
-    unsigned short tmp_rev;
+    unsigned short word;
 
     if (dev->mem_start) {       /* Use the shared memory. */
 	memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
@@ -519,9 +519,9 @@ el2_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
  *  No shared memory, use programmed I/O.
  */
 
-    tmp_rev = (unsigned short)ring_page;
-    outb(tmp_rev&0xFF, E33G_DMAAL);
-    outb(tmp_rev>>8, E33G_DMAAH);
+    word = (unsigned short)ring_page;
+    outb(word&0xFF, E33G_DMAAH);
+    outb(word>>8, E33G_DMAAL);
 
     outb_p((ei_status.interface_num == 0 ? ECNTRL_THIN : ECNTRL_AUI) | ECNTRL_INPUT
 	   | ECNTRL_START, E33G_CNTRL);
@@ -547,7 +547,7 @@ el2_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_off
 {
     int boguscount = 0;
     unsigned short int *buf;
-    unsigned short tmp_rev;
+    unsigned short word;
 
     int end_of_ring = dev->rmem_end;
 
@@ -570,9 +570,9 @@ el2_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_off
 /*
  *  No shared memory, use programmed I/O.
  */
-    tmp_rev = (unsigned short) ring_offset;
-    outb(tmp_rev&0xFF, E33G_DMAAL);
-    outb(tmp_rev>>8, E33G_DMAAH);
+    word = (unsigned short) ring_offset;
+    outb(word>>8, E33G_DMAAH);
+    outb(word&0xFF, E33G_DMAAL);
 
     outb_p((ei_status.interface_num == 0 ? ECNTRL_THIN : ECNTRL_AUI) | ECNTRL_INPUT
 	   | ECNTRL_START, E33G_CNTRL);

@@ -24,6 +24,7 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <asm/pgtable.h>
+#include <asm/dma.h>
 
 /*
  * The SMP kernel can't handle the 4MB page table optimizations yet
@@ -236,7 +237,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 		start_mem += PAGE_SIZE;
 	}
 	for (tmp = 0 ; tmp < high_memory ; tmp += PAGE_SIZE) {
-		if (tmp >= 16*1024*1024)
+		if (tmp >= MAX_DMA_ADDRESS)
 			mem_map[MAP_NR(tmp)].dma = 0;
 		if (mem_map[MAP_NR(tmp)].reserved) {
 			if (tmp >= 0xA0000 && tmp < 0x100000)

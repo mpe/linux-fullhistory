@@ -26,7 +26,7 @@
  * Improved loadable font/UTF-8 support by H. Peter Anvin 
  * Feb-Sep 1995 <peter.anvin@linux.org>
  *
- * improved scrollback, plus colour palette handling, by Simon Tatham
+ * Colour palette handling, by Simon Tatham
  * 17-Jun-95 <sgt20@cam.ac.uk>
  *
  */
@@ -190,8 +190,11 @@ con_type_init(unsigned long kmem_start, const char **display_desc)
 				outb_p (6, 0x3cf) ;
 #endif
 
-				/* normalise the palette registers, to point the
-				 * 16 screen colours to the first 16 DAC entries */
+				/*
+				 * Normalise the palette registers, to point
+				 * the 16 screen colours to the first 16
+				 * DAC entries.
+				 */
 
 				for (i=0; i<16; i++) {
 					inb_p (0x3da) ;
@@ -200,8 +203,8 @@ con_type_init(unsigned long kmem_start, const char **display_desc)
 				}
 				outb_p (0x20, 0x3c0) ;
 
-				/* now set the DAC registers back to their default
-				 * values */
+				/* now set the DAC registers back to their
+				 * default values */
 
 				for (i=0; i<16; i++) {
 					outb_p (color_table[i], 0x3c8) ;
@@ -227,7 +230,6 @@ get_scrmem(int currcons)
 {
 	memcpyw((unsigned short *)vc_scrbuf[currcons],
 		(unsigned short *)origin, video_screen_size);
-	__scrollback_mode = 0 ;
 	origin = video_mem_start = (unsigned long)vc_scrbuf[currcons];
 	scr_end = video_mem_end = video_mem_start + video_screen_size;
 	pos = origin + y*video_size_row + (x<<1);
@@ -276,6 +278,7 @@ set_scrmem(int currcons, long offset)
 	origin = video_mem_base + offset;
 	scr_end = origin + video_screen_size;
 	pos = origin + y*video_size_row + (x<<1);
+	has_wrapped = 0;
 }
 
 /*

@@ -192,6 +192,7 @@ extern int		rt_get_info(char * buffer, char **start, off_t offset, int length, i
 extern int		rt_cache_get_info(char *buffer, char **start, off_t offset, int length, int dummy);
 extern int		ip_rt_ioctl(unsigned int cmd, void *arg);
 extern int		ip_rt_new(struct rtentry *rt);
+extern int		ip_rt_kill(struct rtentry *rt);
 extern void		ip_rt_check_expire(void);
 extern void		ip_rt_advice(struct rtable **rp, int advice);
 

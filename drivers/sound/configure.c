@@ -3,7 +3,7 @@
  *
  *	 AEDSP16 will not work without significant changes.
  */
-#define DISABLED_OPTIONS 	(B(OPT_PNP)|B(OPT_AEDSP16)|B(OPT_UNUSED1)|B(OPT_UNUSED2))
+#define DISABLED_OPTIONS 	(B(OPT_SPNP)|B(OPT_AEDSP16)|B(OPT_UNUSED1)|B(OPT_UNUSED2))
 /*
  * sound/configure.c  - Configuration program for the Linux Sound Driver
  */
@@ -38,7 +38,7 @@
 #define OPT_MAD16	12
 #define OPT_CS4232	13
 #define OPT_MAUI	14
-#define OPT_PNP		15
+#define OPT_SPNP		15
 
 #define OPT_HIGHLEVEL   16	/* This must be same than the next one */
 #define OPT_UNUSED1	16
@@ -64,10 +64,10 @@
 		    B (OPT_GUS) | B (OPT_TRIX) | B (OPT_SSCAPE)|B(OPT_MAD16) | \
 		    B (OPT_CS4232)|B(OPT_MAUI))
 #define MPU_DEVS (B(OPT_PSS)|B(OPT_SSCAPE)|B(OPT_TRIX)|B(OPT_MAD16)|\
-		  B(OPT_CS4232)|B(OPT_PNP)|B(OPT_MAUI))
+		  B(OPT_CS4232)|B(OPT_SPNP)|B(OPT_MAUI))
 #define AD1848_DEVS (B(OPT_GUS16)|B(OPT_MSS)|B(OPT_PSS)|B(OPT_GUSMAX)|\
 		     B(OPT_SSCAPE)|B(OPT_TRIX)|B(OPT_MAD16)|B(OPT_CS4232)|\
-		     B(OPT_PNP))
+		     B(OPT_SPNP))
 #define SEQUENCER_DEVS (OPT_MIDI|OPT_YM3812|OPT_ADLIB|OPT_GUS|OPT_MAUI|MIDI_CARDS)
 /*
  * Options that have been disabled for some reason (incompletely implemented
@@ -123,7 +123,7 @@ hw_entry        hw_table[] =
   {0, 0, "MAD16", 1, 0, 0},
   {0, 0, "CS4232", 1, 0, 0},
   {0, 0, "MAUI", 1, 0, 0},
-  {0, 0, "PNP", 1, 0, 0},
+  {0, 0, "SPNP", 1, 0, 0},
 
   {B (OPT_SB), B (OPT_PAS), "UNUSED1", 1, 0, 1},
   {B (OPT_SB) | B (OPT_UNUSED1), B (OPT_PAS), "UNUSED2", 1, 0, 1},
@@ -418,6 +418,7 @@ ask_int_choice (int mask, char *macro,
     {
 
       for (i = 0; i < OPT_LAST; i++)
+      if (!(DISABLED_OPTIONS & B (i)))
 	if (mask == B (i))
 	  {
 	    unsigned int             j;

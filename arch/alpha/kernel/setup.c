@@ -128,8 +128,22 @@ void setup_arch(char **cmdline_p,
 
 	ROOT_DEV = to_kdev_t(0x0802);		/* sda2 */
 	command_line[COMMAND_LINE_SIZE - 1] = '\0';
-	strcpy(command_line, COMMAND_LINE);
-	strcpy(saved_command_line, COMMAND_LINE);
+
+	/* Hack for Jensen... since we're restricted to 8 or 16 
+	 * chars for boot flags depending on the boot mode,
+	 * we need some shorthand.  This should do for 
+	 * installation.  Later we'll add other abbreviaitions
+	 * as well...
+	 */
+	if(strcmp(COMMAND_LINE, "INSTALL") == 0) {
+		strcpy(command_line, "root=/dev/fd0 load_ramdisk=1");
+		strcpy(saved_command_line, command_line);
+	}
+	else {
+		strcpy(command_line, COMMAND_LINE);
+		strcpy(saved_command_line, COMMAND_LINE);
+	}
+	printk("Command line: %s\n", command_line);
 
 	*cmdline_p = command_line;
 	*memory_start_p = (unsigned long) &_end;

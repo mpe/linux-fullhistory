@@ -52,6 +52,7 @@
  *		Alan Cox	:	Missing unlock in device events.
  *		Eckes		:	ARP ioctl control errors.
  *		Alexey Kuznetsov:	Arp free fix.
+ *		Manuel Rodriguez:	Gratutious ARP.
  */
 
 /* RFC1122 Status:
@@ -783,7 +784,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	unsigned char *arp_ptr= (unsigned char *)(arp+1);
 	struct arp_table *entry;
 	struct arp_table *proxy_entry;
-	unsigned long hash;
+	unsigned long hash, grat=0;
 	unsigned char ha[MAX_ADDR_LEN];	/* So we can enable ints again. */
 	unsigned char *sha,*tha;
 	u32 sip,tip;
@@ -928,6 +929,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  * 	check if that someone else is one of our proxies.  If it isn't,
  * 	we can toss it.
  */
+			grat = (sip == tip) && (sha == tha);
 			arp_fast_lock();
 
 			for (proxy_entry=arp_proxy_list;
@@ -949,6 +951,12 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			}
 			if (proxy_entry)
 			{
+				if (grat)
+				{
+					if(!(proxy_entry->flags&ATF_PERM))
+						arp_destroy(proxy_entry);
+					goto gratuitous;
+				}
 				memcpy(ha, proxy_entry->ha, dev->addr_len);
 				arp_unlock();
 				arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,ha, sha);
@@ -957,6 +965,8 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			}
 			else
 			{
+				if (grat) 
+					goto gratuitous;
 				arp_unlock();
 				kfree_skb(skb, FREE_READ);
 				return 0;
@@ -988,6 +998,8 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  */
 
 	arp_fast_lock();
+
+gratuitous:
 
 	hash = HASH(sip);
 
@@ -1026,6 +1038,10 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 /*
  * 	No entry found.  Need to add a new entry to the arp table.
  */
+
+		if (grat) 
+			goto end;
+
 		entry = (struct arp_table *)kmalloc(sizeof(struct arp_table),GFP_ATOMIC);
 		if(entry == NULL)
 		{
@@ -1072,6 +1088,8 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 /*
  *	Replies have been sent, and entries have been added.  All done.
  */
+
+end:
 	kfree_skb(skb, FREE_READ);
 	arp_unlock();
 	return 0;

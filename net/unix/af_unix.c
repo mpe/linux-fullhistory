@@ -24,12 +24,12 @@
  *		Alan Cox	:	Sorted out a proper draft version of
  *					file descriptor passing hacked up from
  *					Mike Shaver's work.
- *
+ *		Marty Leisner	:	Fixes to fd passing
+ *		Nick Nevin	:	recvmsg bugfix.
  *
  * Known differences from reference BSD that was tested:
  *
  *	[TO FIX]
- *	No fd passing yet.
  *	ECONNREFUSED is not returned from one end of a connected() socket to the
  *		other the moment one end closes.
  *	fstat() doesn't return st_dev=NODEV, and give the blksize as high water mark
@@ -40,6 +40,7 @@
  *	accept() returns 0 length path for an unbound connector. BSD returns 16
  *		and a null first byte in the path (but not for gethost/peername - BSD bug ??)
  *	socketpair(...SOCK_RAW..) doesnt panic the kernel.
+ *	BSD af_unix apprently has connect forgetting to block properly.
  */
 
 #include <linux/config.h>
@@ -1156,7 +1157,7 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 						*addr_len=sizeof(short);
 			}
 
-			num=min(skb->len,size-copied);
+			num=min(skb->len,len-done);
 			memcpy_tofs(sp, skb->data, num);
 
 			if (skb->h.filp!=NULL)

@@ -511,7 +511,7 @@ typedef struct {
 #define POLL_HWIF_TAPE_DRIVE							\
 	if (hwif->tape_drive != NULL) {						\
 		if (hwif->tape_drive->tape.request_status) {			\
-			OUT_BYTE(hwif->tape_drive->select.all,IDE_SELECT_REG);	\
+			SELECT_DRIVE(hwif,hwif->tape_drive);			\
 			hwif->tape_drive->tape.last_status=GET_STAT();		\
 			hwif->tape_drive->tape.request_status=0;		\
 		}								\

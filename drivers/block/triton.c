@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/triton.c	Version 1.06  Feb 6, 1996
+ *  linux/drivers/block/triton.c	Version 1.08  Mar 13, 1996
  *
  *  Copyright (c) 1995-1996  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
@@ -142,6 +142,7 @@ const char *good_dma_drives[] = {"Micropolis 2112A",
  */
 #define PRD_BYTES	8
 #define PRD_ENTRIES	(PAGE_SIZE / (2 * PRD_BYTES))
+#define DEFAULT_BMIBA	0xe800	/* in case BIOS did not init it */
 
 /*
  * dma_intr() is the handler for disk read/write DMA interrupts
@@ -321,7 +322,7 @@ static int triton_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 
 /*
  * print_triton_drive_flags() displays the currently programmed options
- * in the Triton chipset for a given drive.
+ * in the 430FX (Triton) chipset for a given drive.
  *
  *	If fastDMA  is "no", then slow ISA timings are used for DMA data xfers.
  *	If fastPIO  is "no", then slow ISA timings are used for PIO data xfers.
@@ -345,11 +346,11 @@ static void init_triton_dma (ide_hwif_t *hwif, unsigned short base)
 {
 	static unsigned long dmatable = 0;
 
-	printk("    %s: BusMaster DMA at 0x%04x-0x%04x", hwif->name, base, base+7);
+	printk("    %s: BM-DMA at 0x%04x-0x%04x", hwif->name, base, base+7);
 	if (check_region(base, 8)) {
 		printk(" -- ERROR, PORTS ALREADY IN USE");
 	} else {
-		request_region(base, 8, "triton DMA");
+		request_region(base, 8, "IDE DMA");
 		hwif->dma_base = base;
 		if (!dmatable) {
 			/*
@@ -370,20 +371,6 @@ static void init_triton_dma (ide_hwif_t *hwif, unsigned short base)
 }
 
 /*
- * calc_mode() returns the ATA PIO mode number, based on the number
- * of cycle clks passed in.  Assumes 33Mhz bus operation (30ns per clk).
- */
-byte calc_mode (byte clks)
-{
-	if (clks == 3)	return 5;
-	if (clks == 4)	return 4;
-	if (clks <  6)	return 3;
-	if (clks <  8)	return 2;
-	if (clks < 13)	return 1;
-	return 0;
-}
-
-/*
  * ide_init_triton() prepares the IDE driver for DMA operation.
  * This routine is called once, from ide.c during driver initialization,
  * for each triton chipset which is found (unlikely to be more than one).
@@ -395,26 +382,38 @@ void ide_init_triton (byte bus, byte fn)
 	unsigned short bmiba, pcicmd;
 	unsigned int timings;
 
-	printk("ide: Triton BM-IDE on PCI bus %d function %d\n", bus, fn);
+	printk("ide: 430FX (Triton) on PCI bus %d function %d\n", bus, fn);
 	/*
 	 * See if IDE and BM-DMA features are enabled:
 	 */
 	if ((rc = pcibios_read_config_word(bus, fn, 0x04, &pcicmd)))
 		goto quit;
 	if ((pcicmd & 1) == 0)  {
-		printk("ide: Triton IDE ports are not enabled\n");
+		printk("ide: ports are not enabled (BIOS)\n");
 		goto quit;
 	}
 	if ((pcicmd & 4) == 0) {
-		printk("ide: Triton BM-DMA feature is not enabled -- upgrade your BIOS\n");
+		printk("ide: BM-DMA feature is not enabled (BIOS)\n");
 	} else {
 		/*
 		 * Get the bmiba base address
 		 */
-		if ((rc = pcibios_read_config_word(bus, fn, 0x20, &bmiba)))
-			goto quit;
-		bmiba &= 0xfff0;	/* extract port base address */
-		dma_enabled = 1;
+		int try_again = 1;
+		do {
+			if ((rc = pcibios_read_config_word(bus, fn, 0x20, &bmiba)))
+				goto quit;
+			bmiba &= 0xfff0;	/* extract port base address */
+			if (bmiba) {
+				dma_enabled = 1;
+			} else {
+				printk("ide: BM-DMA base register is invalid (BIOS problem)\n");
+				if (inb(DEFAULT_BMIBA) == 0xff) {
+					printk("ide: setting BM-DMA base register to 0x%04x\n", DEFAULT_BMIBA);
+					if ((rc = pcibios_write_config_word(bus, fn, 0x20, DEFAULT_BMIBA)))
+						goto quit;
+				}
+			}
+		} while (!dma_enabled && try_again--);
 	}
 
 	/*
@@ -423,7 +422,7 @@ void ide_init_triton (byte bus, byte fn)
 	if ((rc = pcibios_read_config_dword(bus, fn, 0x40, &timings)))
 		goto quit;
 	if (!(timings & 0x80008000)) {
-		printk("ide: neither Triton IDE port is enabled\n");
+		printk("ide: neither port is enabled\n");
 		goto quit;
 	}
 
@@ -452,8 +451,8 @@ void ide_init_triton (byte bus, byte fn)
 			continue;
 		s_clks = ((~time >> 12) & 3) + 2;
 		r_clks = ((~time >>  8) & 3) + 1;
-		printk("    %s timing: (0x%04x) sample_CLKs=%d, recovery_CLKs=%d (PIO mode%d)\n",
-		 hwif->name, time, s_clks, r_clks, calc_mode(s_clks+r_clks));
+		printk("    %s timing: (0x%04x) sample_CLKs=%d, recovery_CLKs=%d\n",
+		 hwif->name, time, s_clks, r_clks);
 		print_triton_drive_flags (0, time & 0xf);
 		print_triton_drive_flags (1, (time >> 4) & 0xf);
 	}

@@ -37,7 +37,7 @@ extern int default_blu[];
 
 extern unsigned short __real_origin;
 extern unsigned short __origin;
-extern unsigned short __scrollback_mode;
+extern unsigned char has_wrapped;
 
 extern unsigned short *vc_scrbuf[MAX_NR_CONSOLES];
 

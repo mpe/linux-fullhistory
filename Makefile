@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 74
+SUBLEVEL = 75
 
 ARCH = i386
 
@@ -72,10 +72,11 @@ ROOT_DEV = CURRENT
 # NFS_ROOT_NAME specifies the default name of the directory to mount
 # as root via NFS, if the kernel does not get the "root=" option from
 # the boot loader. The "%s" will be replaced by the IP-number of the
-# local system.
+# local system. Use empty string for default root path provided by BOOTP.
 #
 
-NFS_ROOT = -DNFS_ROOT="\"/tftpboot/%s\""
+#NFS_ROOT = -DNFS_ROOT="\"/tftpboot/%s\""
+NFS_ROOT = -DNFS_ROOT="\"\""
 
 #
 # INSTALL_PATH specifies where to place the updated kernel and system map

@@ -1,7 +1,7 @@
 /*
- *  linux/drivers/block/cmd640.c	Version 0.07  Jan 27, 1996
+ *  linux/drivers/block/cmd640.c	Version 0.08  Mar 15, 1996
  *
- *  Copyright (C) 1995-1996  Linus Torvalds & author (see below)
+ *  Copyright (C) 1995-1996  Linus Torvalds & authors (see below)
  */
 
 /*
@@ -41,6 +41,8 @@
  *			CMD at their ftp site.
  *
  *  Version 0.08	Added autotune/noautotune support.  -ml
+ *
+ *  Version 0.09	Try to be smarter about 2nd port enabling.  -ml
  *			
  */
 
@@ -300,12 +302,33 @@ static void cmd640_reset_controller(int iface_no)
 }
 
 /*
+ *  Returns 1 if an IDE interface/drive exists at 0x170,
+ *  Returns 0 otherwise.
+ */
+int secondary_port_responding (void)
+{
+	/*
+	 * Test for hardware at 0x170 (secondary IDE port).
+	 * Leave the enable-bit alone if something responds.
+	 */
+	outb_p(0x0a,0x176);		/* select drive0 */
+	udelay(1);
+	if (inb_p(0x176) == 0xff) {
+		outb_p(0x0b,0x176);	/* select drive1 */
+		udelay(1);
+		if (inb_p(0x176) == 0xff)
+			return 0;	/* nothing is there */
+	}
+	return 1;			/* something is there */
+}
+
+/*
  * Probe for Cmd640x and initialize it if found
  */
 
 int ide_probe_for_cmd640x(void)
 {
-	int  second_port;
+	int  second_port_toggled = 0;
         byte b;
 
 	if (probe_for_cmd640_pci1()) {
@@ -320,6 +343,7 @@ int ide_probe_for_cmd640x(void)
 	}
 
 	ide_hwifs[0].serialized = 1;	/* ensure this *always* gets set */
+	ide_hwifs[1].serialized = 1;	/* ensure this *always* gets set */
 	
 #if 0	
 	/* Dump initial state of chip registers */
@@ -359,11 +383,6 @@ int ide_probe_for_cmd640x(void)
 	put_cmd640_reg(ARTTIM23, 0xcc); /* 0xc0? */
 
 	/*
-	 * Do not initialize secondary controller for vlbus
-	 */
-	second_port = (bus_type != vlb);
-
-	/*
 	 * Set the maximum allowed bus speed (it is safest until we
 	 * 				      find how to detect bus speed)
 	 * Normally PCI bus runs at 33MHz, but often works overclocked to 40
@@ -375,10 +394,11 @@ int ide_probe_for_cmd640x(void)
 	 */
 	b = get_cmd640_reg(CNTRL);	
 
-	if (second_port)
-		b |= CNTRL_ENA_2ND;
-	else
-		b &= ~CNTRL_ENA_2ND;
+
+	if (!secondary_port_responding()) {
+		b ^= CNTRL_ENA_2ND;	/* toggle the bit */
+		second_port_toggled = 1;
+	}
 
 	/*
 	 * Disable readahead for drives at primary interface
@@ -401,7 +421,7 @@ int ide_probe_for_cmd640x(void)
 	/*
 	 * Initialize 2nd IDE port, if required
 	 */
-	if (second_port) {
+	if (secondary_port_responding()) {
 		ide_hwifs[1].chipset = ide_cmd640;
 		ide_hwifs[1].tuneproc = &cmd640_tune_drive;
 		if (ide_hwifs[1].drives[0].autotune == 0)
@@ -411,7 +431,6 @@ int ide_probe_for_cmd640x(void)
 		/* We reset timings, and disable read-ahead */
 		put_cmd640_reg(ARTTIM23, (DIS_RA2 | DIS_RA3));
 		put_cmd640_reg(DRWTIM23, 0);
-
 		cmd640_reset_controller(1);
 	}
 
@@ -434,9 +453,10 @@ int ide_probe_for_cmd640x(void)
 	 */
 	put_cmd640_reg(CMDTIM, 0);
 
-	printk("\n ... serialized, secondary interface %s\n",
-	       second_port ? "enabled" : "disabled");
-
+	/*
+	 * Tell everyone what we did to their system
+	 */
+	printk("\n ... serialized, secondary port %s\n", second_port_toggled ? "toggled" : "untouched");
 	return 1;
 }
 

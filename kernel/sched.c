@@ -27,6 +27,7 @@
 #include <linux/mm.h>
 #include <linux/smp.h>
 
+#include <asm/smp.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -101,6 +102,9 @@ struct kernel_stat kstat = { 0 };
 
 static inline void add_to_runqueue(struct task_struct * p)
 {
+#ifdef __SMP__
+	int cpu=smp_processor_id();
+#endif	
 #if 1	/* sanity tests */
 	if (p->next_run || p->prev_run) {
 		printk("task already on run-queue\n");
@@ -115,17 +119,34 @@ static inline void add_to_runqueue(struct task_struct * p)
 	init_task.prev_run = p;
 #ifdef __SMP__
 	/* this is safe only if called with cli()*/
-	while(set_bit(31,&smp_process_available))
-		while(test_bit(31,&smp_process_available));
+	while(set_bit(31,&smp_process_available));
+#if 0	
+	{
+		while(test_bit(31,&smp_process_available))
+		{
+			if(clear_bit(cpu,&smp_invalidate_needed))
+			{
+				local_invalidate();
+				set_bit(cpu,&cpu_callin_map[0]);
+			}
+		}
+	}
+#endif	
 	smp_process_available++;
 	clear_bit(31,&smp_process_available);
-	if ((0!=p->pid) && smp_threads_ready){
-		int i, found=0;
-		for (i=0;i<smp_num_cpus;i++)
-			if (0==current_set[i]->pid) {
+	if ((0!=p->pid) && smp_threads_ready)
+	{
+		int i;
+		for (i=0;i<=smp_top_cpu;i++)
+		{
+			if (cpu_number_map[i]==-1)
+				continue;
+			if (0==current_set[i]->pid) 
+			{
 				smp_message_pass(i, MSG_RESCHEDULE, 0L, 0);
 				break;
 			}
+		}
 	}
 #endif
 }
@@ -885,14 +906,20 @@ void do_timer(struct pt_regs * regs)
 	}
 #else
 	cpu = smp_processor_id();
-	for (i=0;i<(0==smp_num_cpus?1:smp_num_cpus);i++){
+	for (i=0;i<=smp_top_cpu;i++)
+	{
+		if(cpu_number_map[i]==-1)
+			continue;
 #ifdef __SMP_PROF__
-	if (test_bit(i,&smp_idle_map)) smp_idle_count[i]++;
+		if (test_bit(i,&smp_idle_map)) 
+			smp_idle_count[i]++;
 #endif
 		if (((cpu==i) && user_mode(regs)) ||
-			((cpu!=i) && 0==smp_proc_in_lock[i])) {
+			((cpu!=i) && 0==smp_proc_in_lock[i])) 
+		{
 			current_set[i]->utime++;
-			if (current_set[i]->pid) {
+			if (current_set[i]->pid) 
+			{
 				if (current_set[i]->priority < DEF_PRIORITY)
 					kstat.cpu_nice++;
 				else

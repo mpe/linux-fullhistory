@@ -1,3 +1,8 @@
+Sat Mar 16 14:33:13 1996 <aeb@cwi.nl>
+
+	* tty_io.c (disassociate_ctty): If disassociate_ctty is called by
+		exit, do not perform an implicit vhangup on a pty.
+
 Fri Feb  9 14:15:47 1996    <tytso@rsts-11.mit.edu>
 
 	* serial.c (block_til_ready): Fixed another race condition which
@@ -42,7 +47,7 @@ Sat Nov  4 17:14:45 1995    <tytso@rsts-11.mit.edu>
 
 Wed Oct 11 12:45:24 1995    <tytso@rsts-11.mit.edu>
 
-	* tty_io.c (disassociate_ctty): If dissassociate_ctty is called by
+	* tty_io.c (disassociate_ctty): If disassociate_ctty is called by
 		exit, perform an implicit vhangup on the tty.
 
 	* pty.c (pty_close): When the master pty is closed, send a hangup

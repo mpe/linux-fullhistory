@@ -50,8 +50,7 @@
  * NR_BUFFERS chunks of 32Kbyte. --khp
  */
 
-byte *tape_buffer[NR_BUFFERS] =
-{NULL};
+byte *tape_buffer[NR_BUFFERS] = {NULL};
 
 /*      Local vars.
  */
@@ -66,25 +65,16 @@ static int ftape_read(struct inode *ino, struct file *fp, char *buff,
 		      int req_len);
 static int ftape_write(struct inode *ino, struct file *fp, const char *buff,
 		       int req_len);
-static int ftape_lseek(struct inode *ino, struct file *filep,
-		       off_t offset, int origin);
-#if 0
-static int ftape_select(void);
-static int ftape_mmap(int dev, unsigned off, int prot);
-#else
-#define ftape_select NULL
-#define ftape_mmap NULL
-#endif
 
 static struct file_operations ftape_cdev =
 {
-	ftape_lseek,		/* lseek */
+	NULL,			/* lseek */
 	ftape_read,		/* read */
 	ftape_write,		/* write */
 	NULL,			/* readdir */
-	ftape_select,		/* select */
+	NULL,			/* select */
 	ftape_ioctl,		/* ioctl */
-	ftape_mmap,		/* mmap */
+	NULL,			/* mmap */
 	ftape_open,		/* open */
 	ftape_close,		/* release */
 	NULL,			/* fsync */
@@ -94,15 +84,18 @@ static struct file_operations ftape_cdev =
  * DMA'able memory allocation stuff.
  */
 
-static inline
-int __get_order(int size)
+/* Pure 2^n version of get_order */
+static inline int __get_order(unsigned long size)
 {
 	int order;
 
-	for (order = 0; order < NR_MEM_LISTS; ++order)
-		if (size <= (PAGE_SIZE << order))
-			return order;
-	return -1;
+	size >>= (PAGE_SHIFT-1);
+	order = -1;
+	do {
+		size >>= 1;
+		order++;
+	} while (size);
+	return order;
 }
 
 static inline
@@ -130,9 +123,9 @@ int ftape_init(void)
 {
 	int n;
 	int order;
-	TRACE_FUN(5, "init_module");
+	TRACE_FUN(5, "ftape_init");
 #ifdef MODULE
-	printk(KERN_INFO "ftape-2.07 960304\n"
+	printk(KERN_INFO "ftape-2.08 960314\n"
 	       KERN_INFO " (c) 1993-1995 Bas Laarhoven (bas@vimec.nl)\n"
 	       KERN_INFO " (c) 1995-1996 Kai Harrekilde-Petersen (khp@pip.dknet.dk)\n"
 	KERN_INFO " QIC-117 driver for QIC-40/80/3010/3020 tape drives\n"
@@ -141,28 +134,21 @@ int ftape_init(void)
 	       " with versioned symbols"
 #endif
 	       "\n", kernel_version);
-#else				/* !MODULE */
+#else /* !MODULE */
 	/* print a short no-nonsense boot message */
-	printk("ftape-2.07 960304 for Linux 1.3.70\n");
+	printk("ftape-2.08 960314 for Linux 1.3.70\n");
 #endif				/* MODULE */
 	TRACE(3, "installing QIC-117 ftape driver...");
-	if (register_chrdev(QIC117_TAPE_MAJOR, "ftape", &ftape_cdev)) {
+	if (register_chrdev(QIC117_TAPE_MAJOR, "ft", &ftape_cdev)) {
 		TRACE(1, "register_chrdev failed");
 		TRACE_EXIT;
 		return -EIO;
 	}
-	TRACEx1(3, "init_module @ 0x%p", init_module);
+	TRACEx1(3, "ftape_init @ 0x%p", ftape_init);
 	/*
 	 * Allocate the DMA buffers. They are deallocated at cleanup() time.
 	 */
 	order = __get_order(BUFF_SIZE);
-	if (order < 0) {
-		TRACE(1, "__get_order failed (no memory?)");
-		if (unregister_chrdev(QIC117_TAPE_MAJOR, "ftape") != 0) {
-			TRACE(3, "unregister_chrdev failed");
-		}
-		return -ENOMEM;
-	}
 	for (n = 0; n < NR_BUFFERS; n++) {
 		tape_buffer[n] = (byte *) dmaalloc(order);
 		if (!tape_buffer[n]) {
@@ -174,7 +160,7 @@ int ftape_init(void)
 				}
 			}
 			current->blocked = old_sigmask;		/* restore mask */
-			if (unregister_chrdev(QIC117_TAPE_MAJOR, "ftape") != 0) {
+			if (unregister_chrdev(QIC117_TAPE_MAJOR, "ft") != 0) {
 				TRACE(3, "unregister_chrdev failed");
 			}
 			TRACE_EXIT;
@@ -205,23 +191,19 @@ void cleanup_module(void)
 	int order;
 	TRACE_FUN(5, "cleanup_module");
 
-	if (unregister_chrdev(QIC117_TAPE_MAJOR, "ftape") != 0) {
+	if (unregister_chrdev(QIC117_TAPE_MAJOR, "ft") != 0) {
 		TRACE(3, "failed");
 	} else {
 		TRACE(3, "successful");
 	}
 	order = __get_order(BUFF_SIZE);
-	if (order < 0) {
-		TRACE(1, "__get_order failed (but why?!)");
-	} else {
-		for (n = 0; n < NR_BUFFERS; n++) {
-			if (tape_buffer[n]) {
-				dmafree(tape_buffer[n], order);
-				tape_buffer[n] = NULL;
-				TRACEx1(3, "removed dma-buffer #%d", n);
-			} else {
-				TRACEx1(1, "dma-buffer #%d == NULL (bug?)", n);
-			}
+	for (n = 0; n < NR_BUFFERS; n++) {
+		if (tape_buffer[n]) {
+			dmafree(tape_buffer[n], order);
+			tape_buffer[n] = NULL;
+			TRACEx1(3, "removed dma-buffer #%d", n);
+		} else {
+			TRACEx1(1, "dma-buffer #%d == NULL (bug?)", n);
 		}
 	}
 	TRACE_EXIT;
@@ -370,11 +352,4 @@ static int ftape_write(struct inode *ino, struct file *fp, const char *buff, int
 	current->blocked = old_sigmask;		/* restore mask */
 	TRACE_EXIT;
 	return result;
-}
-
-/*      Seek tape device - not implemented !
- */
-static int ftape_lseek(struct inode *ino, struct file *filep, off_t offset, int origin)
-{
-	return -ESPIPE;
 }

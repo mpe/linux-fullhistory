@@ -60,6 +60,7 @@ extern void sock_init(void);
 extern long pci_init(long, long);
 extern void sysctl_init(void);
 
+extern void no_scroll(char *str, int *ints);
 extern void swap_setup(char *str, int *ints);
 extern void buff_setup(char *str, int *ints);
 extern void panic_setup(char *str, int *ints);
@@ -222,6 +223,7 @@ struct {
 	{ "swap=", swap_setup },
 	{ "buff=", buff_setup },
 	{ "panic=", panic_setup },
+	{ "no-scroll", no_scroll },
 #ifdef CONFIG_BUGi386
 	{ "no-hlt", no_halt },
 	{ "no387", no_387 },
@@ -794,6 +796,7 @@ static int init(void * unused)
 	real_root_dev = ROOT_DEV;
 	real_root_mountflags = root_mountflags;
 	if (initrd_start && mount_initrd) root_mountflags &= ~MS_RDONLY;
+	else mount_initrd =0;
 #endif
 	setup();
 
@@ -823,7 +826,7 @@ static int init(void * unused)
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	root_mountflags = real_root_mountflags;
-	if (ROOT_DEV != real_root_dev && ROOT_DEV == MKDEV(RAMDISK_MAJOR,0)) {
+	if (mount_initrd && ROOT_DEV != real_root_dev && ROOT_DEV == MKDEV(RAMDISK_MAJOR,0)) {
 		int error;
 
 		pid = kernel_thread(do_linuxrc, "/linuxrc", SIGCHLD);

@@ -13,6 +13,7 @@
 #include <asm/system.h>
 #include <asm/console.h>
 #include <asm/hwrpb.h>
+#include <asm/pgtable.h>
 
 #include <stdarg.h>
 

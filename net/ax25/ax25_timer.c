@@ -159,7 +159,8 @@ static void ax25_timer(unsigned long param)
 					ax25->sk->state_change(ax25->sk);
 				ax25->sk->dead  = 1;
 			}
-			
+
+			ax25_reset_timer(ax25);
 			return;
 		}
 		
@@ -191,7 +192,6 @@ static void ax25_timer(unsigned long param)
 
 		ax25->t3timer = 0;
 		ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
-		ax25->state   = AX25_STATE_2;
 
 		if (ax25->sk != NULL)
 		{

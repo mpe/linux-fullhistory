@@ -270,7 +270,7 @@ static int unuse_process(struct mm_struct * mm, unsigned int type, unsigned long
 	/*
 	 * Go through process' page directory.
 	 */
-	if (!mm)
+	if (!mm || mm == &init_mm)
 		return 0;
 	vma = mm->mmap;
 	while (vma) {

@@ -42,6 +42,12 @@ rawboot:
 msb my-special-boot:
 	@$(MAKEBOOT) msb
 
+bootimage:
+	@$(MAKEBOOT) bootimage
+
+srmboot:
+	@$(MAKEBOOT) srmboot
+
 archclean:
 	@$(MAKEBOOT) clean
 

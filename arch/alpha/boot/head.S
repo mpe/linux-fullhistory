@@ -129,3 +129,11 @@ dispatch:
 	ret	$31,($26)
 .end    dispatch
 
+	.align 3
+	.globl	tbi
+	.ent	tbi
+tbi:
+	.long PAL_tbi
+	ret	($26)
+	.end tbi
+

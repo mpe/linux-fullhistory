@@ -36,6 +36,18 @@
 #include <asm/pgtable.h>
 #include <asm/smp.h>
 
+/*
+ *	Why isnt this somewhere standard ??
+ */
+ 
+extern __inline int max(int a,int b)
+{
+	if(a>b)
+		return a;
+	return b;
+}
+
+
 int smp_found_config=0;					/* Have we found an SMP box 				*/
 
 unsigned long cpu_present_map = 0;			/* Bitmask of existing CPU's 				*/
@@ -46,7 +58,8 @@ volatile unsigned long cpu_callin_map[NR_CPUS] = {0,};	/* We always use 0 the re
 volatile unsigned long smp_invalidate_needed;		/* Used for the invalidate map thats also checked in the spinlock */
 struct cpuinfo_x86 cpu_data[NR_CPUS];			/* Per cpu bogomips and other parameters 		*/
 static unsigned int num_processors = 1;			/* Internal processor count				*/
-static unsigned long io_apic_addr = 0;			/* Address of the I/O apic (not yet used) 		*/
+int smp_top_cpu = 0;					/* Highest used APIC id 				*/
+static unsigned long io_apic_addr = 0xFEC00000;		/* Address of the I/O apic (not yet used) 		*/
 unsigned char boot_cpu_id = 0;				/* Processor that is doing the boot up 			*/
 static unsigned char *kstack_base,*kstack_end;		/* Kernel stack list pointers 				*/
 static int smp_activated = 0;				/* Tripped once we need to start cross invalidating 	*/
@@ -319,25 +332,19 @@ void smp_scan_config(unsigned long base, unsigned long length)
 				switch(mpf->mpf_feature1)
 				{
 					case 1:
-						printk("ISA");
+					case 5:
+						printk("ISA\n");
 						break;
 					case 2:
-						printk("EISA with no IRQ8 chaining");
-						break;
-					case 3:
-						printk("EISA");
-						break;
-					case 4:
-						printk("MCA");
-						break;
-					case 5:
-						printk("ISA\nBus#1 is PCI");
+						printk("EISA with no IRQ8 chaining\n");
 						break;
 					case 6:
-						printk("EISA\nBus #1 is PCI");
+					case 3:
+						printk("EISA\n");
 						break;
+					case 4:
 					case 7:
-						printk("MCA\nBus #1 is PCI");
+						printk("MCA\n");
 						break;
 					case 0:
 						break;
@@ -346,14 +353,63 @@ void smp_scan_config(unsigned long base, unsigned long length)
 							mpf->mpf_feature1);
 						return;
 				}
+				if(mpf->mpf_feature1>4)
+					printk("Bus #1 is PCI\n");
 				/*
-				 *	Read the physical hardware table. If there isn't one
-				 *	the processors present are 0 and 1.
+				 *	Read the physical hardware table.
 				 */
 				if(mpf->mpf_physptr)
 					smp_read_mpc((void *)mpf->mpf_physptr);
 				else
-					cpu_present_map=3;
+				{
+					unsigned long cfg;
+
+					/*
+					 *	If no table present, determine
+					 *	what the CPU mapping is.
+					 */
+
+/*
+ *
+ *	HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK HACK
+ *
+ */
+					/*
+					 *	Standard page mapping
+					 *	functions don't work yet.
+					 *	We know that page 0 is not
+					 *	used.  Steal it for now!
+					 */
+			 
+					cfg=pg0[0];
+					pg0[0] = (apic_addr | 7);
+					local_invalidate();
+
+					boot_cpu_id = GET_APIC_ID(*((volatile unsigned long *) APIC_ID));
+					nlong = boot_cpu_id<<24;	/* Dummy 'self' for bootup */
+
+					/*
+					 *	Give it back
+					 */
+
+					pg0[0]= cfg;
+					local_invalidate();
+
+/*
+ *
+ *	END OF HACK   END OF HACK   END OF HACK   END OF HACK   END OF HACK
+ *
+ */					
+
+					/*
+					 *	If boot CPU != 0, other CPU
+					 *	is 0, else other CPU is 1.
+					 */
+					if (boot_cpu_id)
+						cpu_present_map=1 | (1 << boot_cpu_id);
+					else
+						cpu_present_map=3;
+				}
 				printk("Processors: %d\n", num_processors);
 				/*
 				 *	Only use the first one found.
@@ -610,8 +666,11 @@ void smp_boot_cpus(void)
 		 *	Don't even attempt to start the boot CPU!
 		 */
 		if (i == boot_cpu_id)
+		{
+			smp_top_cpu=max(smp_top_cpu,i);
 			continue;
-
+		}
+		
 		if (cpu_present_map & (1 << i))
 		{
 			unsigned long send_status, accept_status;
@@ -766,6 +825,8 @@ void smp_boot_cpus(void)
 					cpucount++;
 					/* number CPUs logically, starting from 1 (BSP is 0) */
 					cpu_number_map[i] = cpucount;
+					smp_top_cpu=max(smp_top_cpu,i);
+					
 				}
 				else
 				{
@@ -1098,7 +1159,7 @@ void smp_message_irq(int cpl, void *dev_id, struct pt_regs *regs)
 			if(clear_bit(i,(unsigned long *)&smp_invalidate_needed))
 				local_invalidate();
 			set_bit(i, (unsigned long *)&cpu_callin_map[0]);
-			cpu_callin_map[0]|=1<<smp_processor_id();
+		/*	cpu_callin_map[0]|=1<<smp_processor_id();*/
 			break;
 			
 		/*

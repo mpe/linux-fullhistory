@@ -230,10 +230,10 @@ void tcp_write_xmit(struct sock *sk)
 	 */
 	 
 	while((skb = skb_peek(&sk->write_queue)) != NULL &&
-		before(skb->end_seq, sk->window_seq + 1) &&
+		!after(skb->end_seq, sk->window_seq) &&
 		(sk->retransmits == 0 ||
 		 sk->ip_xmit_timeout != TIME_WRITE ||
-		 before(skb->end_seq, sk->rcv_ack_seq + 1))
+		 !after(skb->end_seq, sk->rcv_ack_seq))
 		&& sk->packets_out < sk->cong_window) 
 	{
 		IS_SKB(skb);

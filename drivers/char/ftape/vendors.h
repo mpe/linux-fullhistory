@@ -88,7 +88,7 @@ typedef struct {
   { 0x001c8,  64, no_wake_up,        "Wangtek 3080F" }, \
   { 0x001c8,  64, wake_up_colorado,  "Wangtek 3080F" }, \
   { 0x001ca,  67, no_wake_up,        "Wangtek 3080F (new)" }, \
-  { 0x001cc,  77, wake_up_colorado,  "Wangtek 3200" }, \
+  { 0x001cc,  77, wake_up_colorado,  "Wangtek 3200 / Teac 700" }, \
   { 0x001cd,  75, wake_up_colorado,  "Reveal TB1400" }, \
   { 0x00380,   0, wake_up_colorado,  "Exabyte EXB-1500" }, \
   { 0x08880,  64, no_wake_up,        "Iomega 250" }, \

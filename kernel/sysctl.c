@@ -192,7 +192,7 @@ int do_sysctl (int *name, int nlen,
 				    newval, newlen, root_table, &context);
 		if (context)
 			kfree(context);
-		if (error != ENOTDIR)
+		if (error != -ENOTDIR)
 			return error;
 		tmp = tmp->DLIST_NEXT(ctl_entry);
 	} while (tmp != &root_table_header);

@@ -74,7 +74,7 @@ typedef unsigned char	byte;	/* used everywhere */
  * Definitions for accessing IDE controller registers
  */
 
-#define HWIF(drive)		((ide_hwif_t *)drive->hwif)
+#define HWIF(drive)		((ide_hwif_t *)((drive)->hwif))
 #define HWGROUP(drive)		((ide_hwgroup_t *)(HWIF(drive)->hwgroup))
 
 #define IDE_DATA_OFFSET		(0)
@@ -102,10 +102,10 @@ typedef unsigned char	byte;	/* used everywhere */
 #define IDE_ALTSTATUS_REG	IDE_CONTROL_REG
 
 #ifdef REALLY_FAST_IO
-#define OUT_BYTE(b,p)		outb((b),p)
+#define OUT_BYTE(b,p)		outb((b),(p))
 #define IN_BYTE(p)		(byte)inb(p)
 #else
-#define OUT_BYTE(b,p)		outb_p((b),p)
+#define OUT_BYTE(b,p)		outb_p((b),(p))
 #define IN_BYTE(p)		(byte)inb_p(p)
 #endif /* REALLY_FAST_IO */
 
@@ -140,6 +140,18 @@ typedef unsigned char	byte;	/* used everywhere */
 #define WAIT_WORSTCASE	(30*HZ)	/* 30sec  - worst case when spinning up */
 #define WAIT_CMD	(10*HZ)	/* 10sec  - maximum wait for an IRQ to happen */
 
+#if defined(CONFIG_BLK_DEV_HT6560B) || defined(CONFIG_BLK_DEV_PROMISE)
+#define SELECT_DRIVE(hwif,drive)				\
+{								\
+	if (hwif->selectproc)					\
+		hwif->selectproc(drive);			\
+	else							\
+		OUT_BYTE((drive)->select.all, hwif->io_base+IDE_SELECT_OFFSET); \
+}
+#else
+#define SELECT_DRIVE(hwif,drive)  OUT_BYTE((drive)->select.all, hwif->io_base+IDE_SELECT_OFFSET);
+#endif	/* CONFIG_BLK_DEV_HT6560B || CONFIG_BLK_DEV_PROMISE */
+		
 #ifdef CONFIG_BLK_DEV_IDETAPE
 #include "ide-tape.h"
 #endif /* CONFIG_BLK_DEV_IDETAPE */
@@ -340,7 +352,6 @@ typedef struct ide_drive_s {
 #ifdef CONFIG_BLK_DEV_IDETAPE
 	idetape_tape_t	tape;		/* for ide-tape.c */
 #endif /* CONFIG_BLK_DEV_IDETAPE */
-
 	} ide_drive_t;
 
 /*
@@ -377,8 +388,7 @@ typedef int (ide_dmaproc_t)(ide_dma_action_t, ide_drive_t *);
 typedef void (ide_tuneproc_t)(ide_drive_t *, byte);
 
 /*
- * This is used to provide HT6560B interface support.
- * It will probably also be used by the DC4030VL driver.
+ * This is used to provide HT6560B & PROMISE interface support.
  */
 typedef void (ide_selectproc_t) (ide_drive_t *);
 
@@ -388,7 +398,8 @@ typedef void (ide_selectproc_t) (ide_drive_t *);
  */
 typedef enum {	ide_unknown,	ide_generic,	ide_triton,
 		ide_cmd640,	ide_dtc2278,	ide_ali14xx,
-		ide_qd6580,	ide_umc8672,	ide_ht6560b }
+		ide_qd6580,	ide_umc8672,	ide_ht6560b,
+		ide_promise }
 	hwif_chipset_t;
 
 typedef struct hwif_s {
@@ -399,9 +410,9 @@ typedef struct hwif_s {
 	ide_drive_t	drives[MAX_DRIVES];	/* drive info */
 	struct gendisk	*gd;		/* gendisk structure */
 	ide_tuneproc_t	*tuneproc;	/* routine to tune PIO mode for drives */
-#ifdef CONFIG_BLK_DEV_HT6560B
+#if defined(CONFIG_BLK_DEV_HT6560B) || defined(CONFIG_BLK_DEV_PROMISE)
 	ide_selectproc_t *selectproc;	/* tweaks hardware to select drive */
-#endif /* CONFIG_BLK_DEV_HT6560B */
+#endif
 	ide_dmaproc_t	*dmaproc;	/* dma read/write/abort routine */
 	unsigned long	*dmatable;	/* dma physical region descriptor table */
 	unsigned short	dma_base;	/* base addr for dma ports (triton) */
@@ -410,10 +421,14 @@ typedef struct hwif_s {
 	char 		name[5];	/* name of interface, eg. "ide0" */
 	byte		index;		/* 0 for ide0; 1 for ide1; ... */
 	hwif_chipset_t	chipset;	/* sub-module for tuning.. */
-	unsigned	noprobe : 1;	/* don't probe for this interface */
-	unsigned	present : 1;	/* this interface exists */
-	unsigned	serialized : 1;	/* valid only for ide_hwifs[0] */
-	unsigned	no_unmask : 1;	/* disallow setting unmask bits */
+	unsigned	noprobe    : 1;	/* don't probe for this interface */
+	unsigned	present    : 1;	/* this interface exists */
+	unsigned	serialized : 1;	/* serialized operation with mate hwif */
+	unsigned	no_unmask  : 1;	/* disallow setting unmask bits */
+	unsigned	got_irq    : 1;	/* 1 = already alloc'd our irq */
+#ifdef CONFIG_BLK_DEV_PROMISE
+	unsigned	is_promise2: 1;	/* 2nd i/f on promose DC4030 */
+#endif /* CONFIG_BLK_DEV_PROMISE */
 #if (DISK_RECOVERY_TIME > 0)
 	unsigned long	last_time;	/* time when previous rq was done */
 #endif
@@ -435,6 +450,7 @@ typedef struct hwgroup_s {
 	ide_handler_t		*handler;/* irq handler, if active */
 	ide_drive_t		*drive;	/* current drive */
 	ide_hwif_t		*hwif;	/* ptr to current hwif in linked-list */
+	ide_hwif_t		*next_hwif; /* next selected hwif (for tape) */
 	struct request		*rq;	/* current request */
 	struct timer_list	timer;	/* failsafe timer */
 	struct request		wrq;	/* local copy of current write rq */
@@ -583,6 +599,12 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
  * stat/err are used only when (HWGROUP(drive)->rq->cmd == IDE_DRIVE_CMD).
  */
 void ide_end_drive_cmd (ide_drive_t *drive, byte stat, byte err);
+
+/*
+ * ide_multwrite() transfers a block of up to mcount sectors of data
+ * to a drive as part of a disk multwrite operation.
+ */
+void ide_multwrite (ide_drive_t *drive, unsigned int mcount);
 
 #ifdef CONFIG_BLK_DEV_IDECD
 /*

@@ -358,7 +358,7 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 				break;
 			case ICMP_PROT_UNREACH:
 /*				printk(KERN_INFO "ICMP: %s:%d: protocol unreachable.\n",
-					in_ntoa(iph->daddr), ntohs(iph->protocol));*/
+					in_ntoa(iph->daddr), (int)iph->protocol);*/
 				break;
 			case ICMP_PORT_UNREACH:
 				break;

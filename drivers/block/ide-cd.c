@@ -1443,44 +1443,6 @@ int cdrom_queue_packet_command (ide_drive_t *drive, struct packet_command *pc)
     }
 }
 
-
-
-/****************************************************************************
- * drive_cmd handling.
- *
- * Most of the functions accessed via drive_cmd are not valid for ATAPI
- * devices.  Only attempt to execute those which actually should be valid.
- */
-
-static
-void cdrom_do_drive_cmd (ide_drive_t *drive)
-{
-  struct request *rq = HWGROUP(drive)->rq;
-  byte *args = rq->buffer;
-
-  if (args)
-    {
-#if 0  /* This bit isn't done yet... */
-      if (args[0] == WIN_SETFEATURES &&
-	  (args[2] == 0x66 || args[2] == 0xcc || args[2] == 0x02 ||
-	   args[2] == 0xdd || args[2] == 0x5d))
-	{
-	  OUT_BYTE (args[2], io_base + IDE_FEATURE_OFFSET);
-	  <send cmd>
-	}
-      else
-#endif
-	{
-	  printk ("%s: Unsupported drive command %02x %02x %02x\n",
-		  drive->name, args[0], args[1], args[2]);
-	  rq->errors = 1;
-	}
-    }
-
-  cdrom_end_request (1, drive);
-}
-
-
 
 /****************************************************************************
  * cdrom driver request routine.
@@ -1499,9 +1461,6 @@ void ide_do_rw_cdrom (ide_drive_t *drive, unsigned long block)
       ide_do_reset (drive);
       return;
     }
-
-  else if (rq -> cmd == IDE_DRIVE_CMD)
-    cdrom_do_drive_cmd (drive);
 
   else if (rq -> cmd != READ)
     {

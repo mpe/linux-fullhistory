@@ -22,6 +22,10 @@
 	packet latency but lower overhead.  If interrupts are disabled for an
 	unusually long time it could also result in missed packets, but in
 	practice this rarely happens.
+	
+	
+	FIXES:
+		Alan Cox:	Removed the 'Unexpected interrupt' bug.
 */
 
 static const  char *version = "3c509.c:1.03 10/8/94 becker@cesdis.gsfc.nasa.gov\n";
@@ -321,9 +325,8 @@ el3_open(struct device *dev)
 	outw(RxReset, ioaddr + EL3_CMD);
 	outw(SetReadZero | 0x00, ioaddr + EL3_CMD);
 
-	if (request_irq(dev->irq, &el3_interrupt, 0, "3c509", NULL)) {
+	if (request_irq(dev->irq, &el3_interrupt, 0, "3c509", dev))
 		return -EAGAIN;
-	}
 
 	EL3WINDOW(0);
 	if (el3_debug > 3)
@@ -333,7 +336,6 @@ el3_open(struct device *dev)
 	/* Activate board: this is probably unnecessary. */
 	outw(0x0001, ioaddr + 4);
 
-	irq2dev_map[dev->irq] = dev;
 
 	/* Set the IRQ line. */
 	outw((dev->irq << 12) | 0x0f00, ioaddr + WN0_IRQ);
@@ -478,7 +480,7 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 static void
 el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)(irq2dev_map[irq]);
+	struct device *dev = (struct device *)dev_id;
 	int ioaddr, status;
 	int i = 0;
 
@@ -687,14 +689,11 @@ el3_close(struct device *dev)
 		outw(inw(ioaddr + WN4_MEDIA) & ~MEDIA_TP, ioaddr + WN4_MEDIA);
 	}
 
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 	/* Switching back to window 0 disables the IRQ. */
 	EL3WINDOW(0);
 	/* But we explicitly zero the IRQ line select anyway. */
 	outw(0x0f00, ioaddr + WN0_IRQ);
-
-
-	irq2dev_map[dev->irq] = 0;
 
 	update_stats(ioaddr, dev);
 	MOD_DEC_USE_COUNT;

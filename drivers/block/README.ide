@@ -1,4 +1,4 @@
-README.ide -- Information regarding ide.c and ide-cd.c (IDE driver in 1.3.xx)
+README.ide -- Information regarding ide.c and ide-cd.c (IDE driver in 1.3/2.0)
 ================================================================================
 Supported by:  mlord@pobox.com        -- disks, interfaces, probing
                snyder@fnald0.fnal.gov -- cdroms, ATAPI, audio
@@ -10,7 +10,7 @@ Supported by:  mlord@pobox.com        -- disks, interfaces, probing
 
 See description later on below for handling BIG IDE drives with >1024 cyls.
 
-Major features of ide.c & ide-cd.c:
+Major features of ide.c & ide-cd.c ("NEW!" marks changes since 1.2.13):
 
 NEW!	- support for IDE ATAPI *tape* drives, courtesy of Gadi Oxman
 		(re-run MAKEDEV.ide to create the tape device entries in /dev/)
@@ -58,6 +58,8 @@ NEW!	- Bus-Master DMA support for Intel PCI Triton chipset IDE interfaces
 NEW!    - ide-cd.c now supports door locking and auto-loading.
 		- Also preliminary support for multisession
 		  and direct reads of audio data.
+NEW!	- experimental support for Promise DC4030VL caching interface card
+NEW!		- email thanks/problems to: peterd@pnd-pc.demon.co.uk
 NEW!	- the hdparm-2.7 package can be used to set PIO modes for some chipsets.
 
 For work in progress, see the comments in ide.c, ide-cd.c, and triton.c.
@@ -233,11 +235,11 @@ Summary of ide driver parameters for kernel "command line":
  "idex=noautotune"	: driver will NOT attempt to tune interface speed
 				This is the default for most chipsets,
 				except the cmd640.
+ "idex=serialize"	: do not overlap operations on idex and ide(x^1)
 
  The following two are valid ONLY on ide0,
  and the defaults for the base,ctl ports must not be altered.
 
- "ide0=serialize"	: do not overlap operations on ide0 and ide1.
  "ide0=dtc2278"		: probe/support DTC2278 interface
  "ide0=ht6560b"		: probe/support HT6560B interface
  "ide0=cmd640_vlb"	: *REQUIRED* for VLB cards with the CMD640 chip

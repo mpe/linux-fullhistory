@@ -383,7 +383,6 @@ endif
 
 ifeq ($(CONFIG_PI),y)
 L_OBJS += pi2.o
-CONFIG_PI = CONFIG_PI
 endif
 
 ifeq ($(CONFIG_PT),y)

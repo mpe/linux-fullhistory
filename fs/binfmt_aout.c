@@ -202,7 +202,7 @@ aout_core_dump(long signr, struct pt_regs * regs)
  * memory and creates the pointer tables from them, and puts their
  * addresses on the "stack", returning the new stack pointer value.
  */
-static unsigned long * create_aout_tables(char * p, struct linux_binprm * bprm, int ibcs)
+static unsigned long * create_aout_tables(char * p, struct linux_binprm * bprm)
 {
 	unsigned long *argv,*envp;
 	unsigned long * sp;
@@ -228,10 +228,8 @@ static unsigned long * create_aout_tables(char * p, struct linux_binprm * bprm, 
 	sp -= argc+1;
 	argv = sp;
 #ifdef __i386__
-	if (!ibcs) {
-		put_user(envp,--sp);
-		put_user(argv,--sp);
-	}
+	put_user(envp,--sp);
+	put_user(argv,--sp);
 #endif
 	put_user(argc,--sp);
 	current->mm->arg_start = (unsigned long) p;
@@ -385,8 +383,7 @@ beyond_if:
 
 	p = setup_arg_pages(p, bprm);
 	
-	p = (unsigned long) create_aout_tables((char *)p, bprm,
-					current->personality != PER_LINUX);
+	p = (unsigned long) create_aout_tables((char *)p, bprm);
 	current->mm->start_stack = p;
 #ifdef __alpha__
 	regs->gp = ex.a_gpvalue;

@@ -240,6 +240,16 @@ CONFIG_BLK_DEV_ALI14XX
   of the chipset, and permits faster I/O speeds to be set as well.
   See the README.ide and ali14xx.c files for more info.
 
+PROMISE DC4030 support (ALPHA)
+CONFIG_BLK_DEV_PROMISE
+  This driver is enabled at runtime using the "ide0=dc4030" kernel
+  boot parameter.  It enables support for the secondary IDE interface
+  of the chipset, and takes advantage of the caching features of the
+  card.  This driver is known to incur timeouts/retries during heavy
+  I/O to drives attached to the secondary interface.  CDROM and
+  TAPE devices are not supported yet.
+  See the README.ide and ali14xx.c files for more info.
+
 XT harddisk support
 CONFIG_BLK_DEV_XD
   Very old 8 bit hard disk controllers used in the IBM XT

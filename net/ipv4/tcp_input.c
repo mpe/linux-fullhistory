@@ -26,6 +26,8 @@
 #include <linux/config.h>
 #include <net/tcp.h>
 
+#include <linux/interrupt.h>
+
 /*
  *	Policy code extracted so its now seperate
  */
@@ -856,10 +858,10 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	 */
 	if (skb_peek(&sk->write_queue) != NULL) 
 	{
-		if (after (sk->window_seq+1, sk->write_queue.next->end_seq) &&
+		if (!before(sk->window_seq, sk->write_queue.next->end_seq) &&
 			(sk->retransmits == 0 || 
 			 sk->ip_xmit_timeout != TIME_WRITE ||
-			 before(sk->write_queue.next->end_seq, sk->rcv_ack_seq + 1))
+			 !after(sk->write_queue.next->end_seq, sk->rcv_ack_seq))
 			&& sk->packets_out < sk->cong_window) 
 		{
 			/*
@@ -1249,25 +1251,34 @@ static void tcp_queue(struct sk_buff * skb, struct sock * sk,
 		 * Ok, we found new data, update acked_seq as
 		 * necessary (and possibly send the actual
 		 * ACK packet).
-		 *
-		 *      rules for delaying an ack:
-		 *      - delay time <= 0.5 HZ
-		 *      - we don't have a window update to send
-		 *      - must send at least every 2 full sized packets
 		 */
 		sk->acked_seq = ack_seq;
-		if (!sk->delay_acks ||
-		    /* sk->ack_backlog >= sk->max_ack_backlog || */
-		    sk->bytes_rcv > sk->max_unacked || th->fin ||
-		    sk->ato > HZ/2) {
+
+		/*
+		 *      rules for delaying an ack:
+		 *      - delay time <= 0.5 HZ
+		 *      - must send at least every 2 full sized packets
+		 *      - we don't have a window update to send
+		 *
+		 * We handle the window update in the actual read
+		 * side, so we only have to worry about the first two.
+		 */
+		if (!sk->delay_acks || th->fin) {
 			tcp_send_ack(sk->sent_seq, sk->acked_seq, sk, th, saddr);
 		}
-		else 
-		{	
+		else
+		{
+			int timeout = sk->ato;
+			if (timeout > HZ/2)
+				timeout = HZ/2;
+			if (sk->bytes_rcv > sk->max_unacked) {
+				timeout = 0;
+				mark_bh(TIMER_BH);
+			}
 			sk->ack_backlog++;
-			if(sk->debug)				
+			if(sk->debug)
 				printk("Ack queued.\n");
-			tcp_reset_xmit_timer(sk, TIME_WRITE, sk->ato);	
+			tcp_reset_xmit_timer(sk, TIME_WRITE, timeout);
 		}		
 	}
 }

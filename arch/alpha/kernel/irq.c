@@ -281,7 +281,7 @@ static void unexpected_irq(int irq, struct pt_regs * regs)
 #endif
 }
 
-static inline void handle_irq(int irq, void *dev_id, struct pt_regs * regs)
+static inline void handle_irq(int irq, struct pt_regs * regs)
 {
 	struct irqaction * action = irq_action[irq];
 
@@ -339,6 +339,8 @@ static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
 	}
 	unmask_irq(ack);
 }
+
+#ifdef CONFIG_PCI
 
 /*
  * Handle ISA interrupt via the PICs.
@@ -469,6 +471,8 @@ static inline void eb66_and_eb64p_device_interrupt(unsigned long vector,
 	}
 	restore_flags(flags);
 }
+
+#endif /* CONFIG_PCI */
 
 /*
  * Jensen is special: the vector is 0x8X0 for EISA interrupt X, and

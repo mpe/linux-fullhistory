@@ -32,7 +32,7 @@ struct linux_binprm{
  */
 struct linux_binfmt {
 	struct linux_binfmt * next;
-	int *use_count;
+	long *use_count;
 	int (*load_binary)(struct linux_binprm *, struct  pt_regs * regs);
 	int (*load_shlib)(int fd);
 	int (*core_dump)(long signr, struct pt_regs * regs);

@@ -152,6 +152,7 @@ static void ht6560b_selectproc (ide_drive_t *drive)
                  */
                 outb (timing, IDE_SELECT_REG);
                 (void) inb (IDE_STATUS_REG);
+		OUT_BYTE(drive->select.all,IDE_SELECT_REG);
 		restore_flags (flags);
 	}
 }
@@ -226,6 +227,7 @@ void init_ht6560b (void)
 			ide_hwifs[0].tuneproc = &tune_ht6560b;
 			ide_hwifs[1].tuneproc = &tune_ht6560b;
 			ide_hwifs[0].serialized = 1;
+			ide_hwifs[1].serialized = 1;
 		} else
 			printk("ht6560b: not found\n");
 	}

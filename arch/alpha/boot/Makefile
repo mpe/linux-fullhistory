@@ -34,6 +34,17 @@ msb:	tools/lxboot tools/bootlx vmlinux.nh
 	( cat tools/lxboot tools/bootlx vmlinux.nh ) > /dev/rz0a
 	disklabel -rw rz0 'linux' tools/lxboot tools/bootlx
 
+bootimage:	tools/mkbb tools/lxboot tools/bootlx vmlinux.nh
+	( cat tools/lxboot tools/bootlx vmlinux.nh ) > bootimage
+	tools/mkbb bootimage tools/lxboot
+
+srmboot:	bootdevice bootimage
+	dd if=bootimage of=$(BOOTDEV) bs=512 seek=1 skip=1
+	tools/mkbb $(BOOTDEV) tools/lxboot
+
+bootdevice:
+	@test "$(BOOTDEV)" != ""  || (echo You must specify BOOTDEV ; exit -1)
+
 vmlinux.gz: vmlinux
 	gzip -fv vmlinux
 
@@ -56,6 +67,9 @@ tools/bootlx: bootloader tools/build
 tools/build: tools/build.c
 	$(HOSTCC) tools/build.c -o tools/build
 
+tools/mkbb: tools/mkbb.c
+	$(HOSTCC) tools/mkbb.c -o tools/mkbb
+
 bootloader: $(OBJECTS)
 	$(LD) $(LINKFLAGS) \
 		$(OBJECTS) \
@@ -64,6 +78,7 @@ bootloader: $(OBJECTS)
 		(rm -f bootloader && exit 1)
 
 clean:
-	rm -f $(TARGETS) bootloader tools/build
+	rm -f $(TARGETS) bootloader bootimage vmlinux.nh tools/build \
+		tools/mkbb tools/bootlx tools/lxboot
 
 dep:

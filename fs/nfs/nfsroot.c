@@ -1,31 +1,55 @@
 /*
- *  linux/fs/nfs/nfsroot.c
+ *  linux/fs/nfs/nfsroot.c -- version 2.0
  *
  *  Copyright (C) 1995  Gero Kuhlmann <gero@gkminix.han.de>
+ *  Copyright (C) 1996  Martin Mares <mj@k332.feld.cvut.cz>
  *
- *  Allow an NFS filesystem to be mounted as root. The way this works
- *  is to first determine the local IP address via RARP. Then handle
- *  the RPC negotiation with the system which replied to the RARP. The
- *  actual mounting is done later, when init() is running. In addition
- *  it's possible to avoid using RARP if the necessary addresses are
- *  provided on the kernel command line. This is necessary to use boot-
- *  roms which use bootp instead of RARP.
+ *  Allow an NFS filesystem to be mounted as root. The way this works is:
+ *     (1) Determine the local IP address via RARP or BOOTP or from the
+ *         kernel command line.
+ *     (2) Handle RPC negotiation with the system which replied to RARP or
+ *         was reported as a boot server by BOOTP or manually.
+ *     (3) The actual mounting is done later, when init() is running.
+ *
  *
  *	Changes:
  *
  *	Alan Cox	:	Removed get_address name clash with FPU.
  *	Alan Cox	:	Reformatted a bit.
  *	Michael Rausch  :	Fixed recognition of an incoming RARP answer.
+ *	Martin Mares	: (2.0)	Auto-configuration via BOOTP supported.
+ *	Martin Mares	:	Manual selection of interface & BOOTP/RARP.
+ *	Martin Mares	:	Using network routes instead of host routes,
+ *				allowing the default configuration to be used
+ *				for normal operation of the host.
+ *	Martin Mares	:	Randomized timer with exponential backoff
+ *				installed to minimize network congestion.
+ *	Martin Mares	:	Code cleanup.
+ *
+ *
+ *	Known bugs and caveats:
+ *
+ *	- BOOTP code doesn't handle multiple network interfaces properly.
+ *	  For now, it uses the first one, trying to prefer ethernet-like
+ *	  devices. Not critical as diskless stations are usually single-homed.
  *
  */
 
 
 /* Define this to allow debugging output */
-#undef NFSROOT_DEBUG 1
+#undef NFSROOT_DEBUG
+#undef NFSROOT_MORE_DEBUG
 
-/* Define the timeout for waiting for a RARP reply */
-#define RARP_TIMEOUT	30	/* 30 seconds */
-#define RARP_RETRIES	 5	/* 5 retries */
+/* Choose default protocol(s) */
+#define CONFIG_USE_BOOTP
+#define CONFIG_USE_RARP
+
+/* Define the timeout for waiting for a RARP/BOOTP reply */
+#define CONF_BASE_TIMEOUT	(HZ*5)	/* Initial timeout: 5 seconds */
+#define CONF_RETRIES	 	10	/* 10 retries */
+#define CONF_TIMEOUT_RANDOM	(HZ)	/* Maximum amount of randomization */
+#define CONF_TIMEOUT_MULT	*5/4	/* Speed of timeout growth */
+#define CONF_TIMEOUT_MAX	(HZ*30)	/* Maximum allowed timeout */
 
 #include <linux/config.h>
 #include <linux/types.h>
@@ -53,6 +77,9 @@
 #include <linux/nfs_mount.h>
 #include <linux/in.h>
 #include <net/route.h>
+#include <net/sock.h>
+#include <linux/random.h>
+#include <linux/fcntl.h>
 
 
 /* Range of privileged ports */
@@ -61,7 +88,7 @@
 #define NPORTS		(ENDPORT - STARTPORT + 1)
 
 
-
+/* List of open devices */
 struct open_dev {
 	struct device *dev;
 	unsigned short old_flags;
@@ -69,15 +96,35 @@ struct open_dev {
 };
 
 static struct open_dev *open_base = NULL;
-static struct device *root_dev = NULL;
+
+/* IP configuration */
+static struct device *root_dev = NULL;	/* Device selected for booting */
+static char user_dev_name[IFNAMSIZ];	/* Name of user-selected boot device */
 static struct sockaddr_in myaddr;	/* My IP address */
 static struct sockaddr_in server;	/* Server IP address */
 static struct sockaddr_in gateway;	/* Gateway IP address */
 static struct sockaddr_in netmask;	/* Netmask for local subnet */
+
+/* BOOTP/RARP variables */
+static int bootp_flag;			/* User said: Use BOOTP! */
+static int rarp_flag;			/* User said: Use RARP! */
+static int bootp_dev_count = 0;		/* Number of devices allowing BOOTP */
+static int rarp_dev_count = 0;		/* Number of devices allowing RARP */
+volatile static int pkt_arrived;	/* BOOTP/RARP packet detected */
+
+#define ARRIVED_BOOTP 1
+#define ARRIVED_RARP 2
+
+/* NFS-related data */
 static struct nfs_mount_data nfs_data;	/* NFS mount info */
 static char nfs_path[NFS_MAXPATHLEN];	/* Name of directory to mount */
 static int nfs_port;			/* Port to connect to for NFS service */
 
+/* Macro for formatting of addresses in debug dumps */
+#define IN_NTOA(x) (((x) == INADDR_NONE) ? "none" : in_ntoa(x))
+
+/* Yes, we use sys_socket, but there's no include file for it */
+extern asmlinkage int sys_socket(int family, int type, int protocol);
 
 
 /***************************************************************************
@@ -87,19 +134,21 @@ static int nfs_port;			/* Port to connect to for NFS service */
  ***************************************************************************/
 
 /*
- * Setup and initialize all network devices
+ * Setup and initialize all network devices. If there is a user-prefered
+ * interface, ignore all other interfaces.
  */
 static int root_dev_open(void)
 {
-	struct open_dev *openp;
+	struct open_dev *openp, **last;
 	struct device *dev;
 	unsigned short old_flags;
-	int num = 0;
 
+	last = &open_base;
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
 		if (dev->type < ARPHRD_SLIP &&
 		    dev->family == AF_INET &&
-		    !(dev->flags & (IFF_LOOPBACK | IFF_POINTOPOINT))) {
+		    !(dev->flags & (IFF_LOOPBACK | IFF_POINTOPOINT)) &&
+		    (!user_dev_name[0] || !strcmp(dev->name, user_dev_name))) {
 			/* First up the interface */
 			old_flags = dev->flags;
 			dev->flags = IFF_UP | IFF_BROADCAST | IFF_RUNNING;
@@ -113,19 +162,22 @@ static int root_dev_open(void)
 				continue;
 			openp->dev = dev;
 			openp->old_flags = old_flags;
-			openp->next = open_base;
-			open_base = openp;
-			num++;
+			*last = openp;
+			last = &openp->next;
+			bootp_dev_count++;
+			if (!(dev->flags & IFF_NOARP))
+				rarp_dev_count++;
+#ifdef NFSROOT_DEBUG
+	printk(KERN_NOTICE "Root-NFS: Opened %s\n", dev->name);
+#endif
 		}
 	}
+	*last = NULL;
 
-	if (num == 0) {
-		printk(KERN_ERR "NFS: Unable to open at least one network device\n");
+	if (!bootp_dev_count && !rarp_dev_count) {
+		printk(KERN_ERR "Root-NFS: Unable to open at least one network device\n");
 		return -1;
 	}
-#ifdef NFSROOT_DEBUG
-	printk(KERN_NOTICE "NFS: Opened %d network interfaces\n", num);
-#endif
 	return 0;
 }
 
@@ -154,11 +206,9 @@ static void root_dev_close(void)
 }
 
 
-
-
 /***************************************************************************
 
-			RARP Subroutines
+			      RARP Subroutines
 
  ***************************************************************************/
 
@@ -259,13 +309,14 @@ static int root_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet
 	 * variables.
 	 */
 	cli();
-	if (root_dev != NULL) {
+	if (pkt_arrived) {
 		sti();
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
-	root_dev = dev;
+	pkt_arrived = ARRIVED_RARP;
 	sti();
+	root_dev = dev;
 
 	if (myaddr.sin_addr.s_addr == INADDR_NONE) {
 		myaddr.sin_family = dev->family;
@@ -283,14 +334,12 @@ static int root_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet
 /*
  *  Send RARP request packet over all devices which allow RARP.
  */
-static int root_rarp_send(void)
+static void root_rarp_send(void)
 {
 	struct open_dev *openp;
 	struct device *dev;
 	int num = 0;
 
-	/* always print this message so user knows what's going on... */
-	printk(KERN_NOTICE "NFS: Sending RARP request...\n");
 	for (openp = open_base; openp != NULL; openp = openp->next) {
 		dev = openp->dev;
 		if (!(dev->flags & IFF_NOARP)) {
@@ -299,9 +348,72 @@ static int root_rarp_send(void)
 			num++;
 		}
 	}
+}
 
-	if (num == 0) {
-		printk(KERN_ERR "NFS: Couldn't find device to send RARP request to\n");
+
+/***************************************************************************
+
+			     BOOTP Subroutines
+
+ ***************************************************************************/
+
+static struct device *bootp_dev = NULL;	/* Device selected as best BOOTP target */
+
+static int bootp_xmit_fd = -1;		/* Socket descriptor for transmit */
+static struct socket *bootp_xmit_sock;	/* The socket itself */
+static int bootp_recv_fd = -1;		/* Socket descriptor for receive */
+static struct socket *bootp_recv_sock;	/* The socket itself */
+
+struct bootp_pkt {		/* BOOTP packet format */
+	u8 op;			/* 1=request, 2=reply */
+	u8 htype;		/* HW address type */
+	u8 hlen;		/* HW address length */
+	u8 hops;		/* Used only by gateways */
+	u32 xid;		/* Transaction ID */
+	u16 secs;		/* Seconds since we started */
+	u16 flags;		/* Just what is says */
+	u32 client_ip;		/* Client's IP address if known */
+	u32 your_ip;		/* Assigned IP address */
+	u32 server_ip;		/* Server's IP address */
+	u32 relay_ip;		/* IP address of BOOTP relay */
+	u8 hw_addr[16];		/* Client's HW address */
+	u8 serv_name[64];	/* Server host name */
+	u8 boot_file[128];	/* Name of boot file */
+	u8 vendor_area[128];	/* Area for extensions */
+};
+
+#define BOOTP_REQUEST 1
+#define BOOTP_REPLY 2
+
+static struct bootp_pkt *xmit_bootp;	/* Packet being transmitted */
+static struct bootp_pkt *recv_bootp;	/* Packet being received */
+
+static int bootp_have_route = 0;	/* BOOTP route installed */
+
+/*
+ *  Free BOOTP packet buffers
+ */
+static void root_free_bootp(void)
+{
+	if (xmit_bootp) {
+		kfree_s(xmit_bootp, sizeof(struct bootp_pkt));
+		xmit_bootp = NULL;
+	}
+	if (recv_bootp) {
+		kfree_s(recv_bootp, sizeof(struct bootp_pkt));
+		recv_bootp = NULL;
+	}
+}
+
+
+/*
+ *  Allocate memory for BOOTP packet buffers
+ */
+static inline int root_alloc_bootp(void)
+{
+	if (!(xmit_bootp = kmalloc(sizeof(struct bootp_pkt), GFP_KERNEL)) ||
+	    !(recv_bootp = kmalloc(sizeof(struct bootp_pkt), GFP_KERNEL))) {
+		printk("BOOTP: Out of memory!");
 		return -1;
 	}
 	return 0;
@@ -309,55 +421,525 @@ static int root_rarp_send(void)
 
 
 /*
- *  Determine client and server IP numbers and appropriate device by using
- *  the RARP protocol.
+ *  Create default route for BOOTP sending
  */
-static int do_rarp(void)
+static int root_add_bootp_route(void)
 {
-	int retries = 0;
-	unsigned long timeout = 0;
-	volatile struct device **root_dev_ptr = (volatile struct device **) &root_dev;
+	struct rtentry route;
 
-	/* Setup RARP protocol */
-	root_rarp_open();
+	memset(&route, 0, sizeof(route));
+	route.rt_dev = bootp_dev->name;
+	route.rt_mss = bootp_dev->mtu;
+	route.rt_flags = RTF_UP;
+	((struct sockaddr_in *) &(route.rt_dst)) -> sin_addr.s_addr = 0;
+	((struct sockaddr_in *) &(route.rt_dst)) -> sin_family = AF_INET;
+	((struct sockaddr_in *) &(route.rt_genmask)) -> sin_addr.s_addr = 0;
+	((struct sockaddr_in *) &(route.rt_genmask)) -> sin_family = AF_INET;
+	if (ip_rt_new(&route)) {
+		printk(KERN_ERR "BOOTP: Adding of route failed!\n");
+		return -1;
+	}
+	bootp_have_route = 1;
+	return 0;
+}
+
+
+/*
+ *  Delete default route for BOOTP sending
+ */
+static int root_del_bootp_route(void)
+{
+	struct rtentry route;
+
+	if (!bootp_have_route)
+		return 0;
+	memset(&route, 0, sizeof(route));
+	((struct sockaddr_in *) &(route.rt_dst)) -> sin_addr.s_addr = 0;
+	((struct sockaddr_in *) &(route.rt_genmask)) -> sin_addr.s_addr = 0;
+	if (ip_rt_kill(&route)) {
+		printk(KERN_ERR "BOOTP: Deleting of route failed!\n");
+		return -1;
+	}
+	bootp_have_route = 0;
+	return 0;
+}
+
+
+/*
+ *  Open UDP socket.
+ */
+static int root_open_udp_sock(int *fd, struct socket **sock)
+{
+	struct file *file;
+	struct inode *inode;
+
+	*fd = sys_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if (*fd >= 0) {
+		file = current->files->fd[*fd];
+		inode = file->f_inode;
+		*sock = &inode->u.socket_i;
+		return 0;
+	}
+
+	printk(KERN_ERR "BOOTP: Cannot open UDP socket!\n");
+	return -1;
+}
+
+
+/*
+ *  Connect UDP socket.
+ */
+static int root_connect_udp_sock(struct socket *sock, u32 addr, u16 port)
+{
+	struct sockaddr_in sa;
+	int result;
+
+	sa.sin_family = AF_INET;
+	sa.sin_addr.s_addr = htonl(addr);
+	sa.sin_port = htons(port);
+	result = sock->ops->connect(sock, (struct sockaddr *) &sa, sizeof(sa), 0);
+	if (result < 0) {
+		printk(KERN_ERR "BOOTP: connect() failed\n");
+		return -1;
+	}
+	return 0;
+}
+
+
+/*
+ *  Bind UDP socket.
+ */
+static int root_bind_udp_sock(struct socket *sock, u32 addr, u16 port)
+{
+	struct sockaddr_in sa;
+	int result;
+
+	sa.sin_family = AF_INET;
+	sa.sin_addr.s_addr = htonl(addr);
+	sa.sin_port = htons(port);
+	result = sock->ops->bind(sock, (struct sockaddr *) &sa, sizeof(sa));
+	if (result < 0) {
+		printk(KERN_ERR "BOOTP: bind() failed\n");
+		return -1;
+	}
+	return 0;
+}
+
+
+/*
+ *  Send UDP packet.
+ */
+static inline int root_send_udp(struct socket *sock, void *buf, int size)
+{
+	u32 oldfs;
+	int result;
+	struct msghdr msg;
+	struct iovec iov;
+
+	oldfs = get_fs();
+	set_fs(get_ds());
+	iov.iov_base = buf;
+	iov.iov_len = size;
+	msg.msg_name = NULL;
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+	msg.msg_accrights = NULL;
+	result = sock->ops->sendmsg(sock, &msg, size, 0, 0);
+	set_fs(oldfs);
+	return (result != size);
+}
+
+
+/*
+ *  Try to receive UDP packet.
+ */
+static inline int root_recv_udp(struct socket *sock, void *buf, int size)
+{
+	u32 oldfs;
+	int result;
+	struct msghdr msg;
+	struct iovec iov;
+
+	oldfs = get_fs();
+	set_fs(get_ds());
+	iov.iov_base = buf;
+	iov.iov_len = size;
+	msg.msg_name = NULL;
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+	msg.msg_accrights = NULL;
+	msg.msg_namelen = 0;
+	result = sock->ops->recvmsg(sock, &msg, size, O_NONBLOCK, 0, &msg.msg_namelen);
+	set_fs(oldfs);
+	return result;
+}
+
+
+/*
+ *  Initialize BOOTP extension fields in the request.
+ */
+static void root_bootp_init_ext(u8 *e)
+{
+	*e++ = 99;		/* RFC1048 Magic Cookie */
+	*e++ = 130;
+	*e++ = 83;
+	*e++ = 99;
+	*e++ = 1;		/* Subnet mask request */
+	*e++ = 4;
+	e += 4;
+	*e++ = 3;		/* Default gateway request */
+	*e++ = 4;
+	e += 4;
+	*e++ = 12;		/* Host name request */
+	*e++ = 32;
+	e += 32;
+	*e++ = 15;		/* Domain name request */
+	*e++ = 32;
+	e += 32;
+	*e++ = 17;		/* Boot path */
+	*e++ = 32;
+	e += 32;
+	*e = 255;		/* End of the list */
+}
+
+
+/*
+ *  Deinitialize the BOOTP mechanism.
+ */
+static void root_bootp_close(void)
+{
+	if (bootp_xmit_fd != -1)
+		sys_close(bootp_xmit_fd);
+	if (bootp_recv_fd != -1)
+		sys_close(bootp_recv_fd);
+	root_del_bootp_route();
+	root_free_bootp();
+}
+
+
+/*
+ *  Initialize the BOOTP mechanism.
+ */
+static int root_bootp_open(void)
+{
+	struct open_dev *openp;
+	struct device *dev, *best_dev;
 
 	/*
-	 * Send RARP request and wait, until we get an answer. This loop
-	 * seems to be a terrible waste of cpu time, but actually there is
-	 * no process running at all, so we don't need to use any
+	 * Select the best interface for BOOTP. We try to select a first
+	 * Ethernet-like interface. It's shame I know no simple way how to send
+	 * BOOTP's to all interfaces, but it doesn't apply to usual diskless
+	 * stations as they don't have multiple interfaces.
+	 */
+
+	best_dev = NULL;
+	for (openp = open_base; openp != NULL; openp = openp->next) {
+		dev = openp->dev;
+		if (dev->flags & IFF_BROADCAST) {
+			if (!best_dev ||
+			   ((best_dev->flags & IFF_NOARP) && !(dev->flags & IFF_NOARP)))
+				best_dev = dev;
+			}
+		}
+
+	if (!best_dev) {
+		printk(KERN_ERR "BOOTP: This cannot happen!\n");
+		return -1;
+	}
+	bootp_dev = best_dev;
+
+	/* Allocate memory for BOOTP packets */
+	if (root_alloc_bootp())
+		return -1;
+
+	/* Construct BOOTP request */
+	memset(xmit_bootp, 0, sizeof(struct bootp_pkt));
+	xmit_bootp->op = BOOTP_REQUEST;
+	get_random_bytes(&xmit_bootp->xid, sizeof(xmit_bootp->xid));
+	xmit_bootp->htype = best_dev->type;
+	xmit_bootp->hlen = best_dev->addr_len;
+	memcpy(xmit_bootp->hw_addr, best_dev->dev_addr, best_dev->addr_len);
+	root_bootp_init_ext(xmit_bootp->vendor_area);
+#ifdef NFSROOT_DEBUG
+	{
+		int x;
+		printk(KERN_NOTICE "BOOTP: XID=%08x, DE=%s, HT=%02x, HL=%02x, HA=",
+			xmit_bootp->xid,
+			best_dev->name,
+			xmit_bootp->htype,
+			xmit_bootp->hlen);
+		for(x=0; x<xmit_bootp->hlen; x++)
+			printk("%02x", xmit_bootp->hw_addr[x]);
+		printk("\n");
+	}
+#endif
+
+	/* Create default route to that interface */
+	if (root_add_bootp_route())
+		return -1;
+
+	/* Open the sockets */
+	if (root_open_udp_sock(&bootp_xmit_fd, &bootp_xmit_sock) ||
+	    root_open_udp_sock(&bootp_recv_fd, &bootp_recv_sock))
+		return -1;
+
+	/* Bind/connect the sockets */
+	((struct sock *) bootp_xmit_sock->data) -> broadcast = 1;
+	((struct sock *) bootp_xmit_sock->data) -> reuse = 1;
+	((struct sock *) bootp_recv_sock->data) -> reuse = 1;
+	if (root_bind_udp_sock(bootp_recv_sock, INADDR_ANY, 68) ||
+	    root_bind_udp_sock(bootp_xmit_sock, INADDR_ANY, 68) ||
+	    root_connect_udp_sock(bootp_xmit_sock, INADDR_BROADCAST, 67))
+		return -1;
+
+	return 0;
+}
+
+
+/*
+ *  Send BOOTP request.
+ */
+static int root_bootp_send(u32 jiffies)
+{
+	xmit_bootp->secs = htons(jiffies / HZ);
+	return root_send_udp(bootp_xmit_sock, xmit_bootp, sizeof(struct bootp_pkt));
+}
+
+
+/*
+ *  Copy BOOTP-supplied string if not already set.
+ */
+static int root_bootp_string(char *dest, char *src, int len, int max)
+{
+	if (*dest || !len)
+		return 0;
+	if (len > max-1)
+		len = max-1;
+	strncpy(dest, src, len);
+	dest[len] = '\0';
+	return 1;
+}
+
+
+/*
+ *  Process BOOTP extension.
+ */
+static void root_do_bootp_ext(u8 *ext)
+{
+	u8 *c;
+	static int got_bootp_domain = 0;
+
+#ifdef NFSROOT_MORE_DEBUG
+	printk("BOOTP: Got extension %02x",*ext);
+	for(c=ext+2; c<ext+2+ext[1]; c++)
+		printk(" %02x", *c);
+	printk("\n");
+#endif
+
+	switch (*ext++) {
+		case 1:		/* Subnet mask */
+			if (netmask.sin_addr.s_addr == INADDR_NONE)
+				memcpy(&netmask.sin_addr.s_addr, ext+1, 4);
+			break;
+		case 3:		/* Default gateway */
+			if (gateway.sin_addr.s_addr == INADDR_NONE)
+				memcpy(&gateway.sin_addr.s_addr, ext+1, 4);
+			break;
+		case 12:	/* Host name */
+			if (root_bootp_string(system_utsname.nodename, ext+1, *ext, __NEW_UTS_LEN)) {
+				c = strchr(system_utsname.nodename, '.');
+				if (c) {
+					*c++ = 0;
+					if (!system_utsname.domainname[0]) {
+						strcpy(system_utsname.domainname, c);
+						got_bootp_domain = 1;
+					}
+				}
+			}
+			break;
+		case 15:	/* Domain name */
+			if (got_bootp_domain && *ext && ext[1])
+				system_utsname.domainname[0] = '\0';
+			root_bootp_string(system_utsname.domainname, ext+1, *ext, __NEW_UTS_LEN);
+			break;
+		case 17:	/* Root path */
+			root_bootp_string(nfs_path, ext+1, *ext, NFS_MAXPATHLEN);
+			break;
+	}
+}
+
+
+/*
+ *  Receive BOOTP request.
+ */
+static void root_bootp_recv(void)
+{
+	int len;
+	u8 *ext, *end, *opt;
+
+	len = root_recv_udp(bootp_recv_sock, recv_bootp, sizeof(struct bootp_pkt));
+	if (len < 0)
+		return;
+
+	/* Check consistency of incoming packet */
+	if (len < 300 ||			/* See RFC 1542:2.1 */
+	    recv_bootp->op != BOOTP_REPLY ||
+	    recv_bootp->htype != xmit_bootp->htype ||
+	    recv_bootp->hlen != xmit_bootp->hlen ||
+	    recv_bootp->xid != xmit_bootp->xid) {
+#ifdef NFSROOT_DEBUG
+		printk("?");
+#endif
+		return;
+		}
+
+	/* Record BOOTP packet arrival in the global variables */
+	cli();
+	if (pkt_arrived) {
+		sti();
+		return;
+	}
+	pkt_arrived = ARRIVED_BOOTP;
+	sti();
+	root_dev = bootp_dev;
+
+	/* Extract basic fields */
+	myaddr.sin_addr.s_addr = recv_bootp->your_ip;
+	server.sin_addr.s_addr = recv_bootp->server_ip;
+
+	/* Parse extensions */
+	if (recv_bootp->vendor_area[0] == 99 &&	/* Check magic cookie */
+	    recv_bootp->vendor_area[1] == 130 &&
+	    recv_bootp->vendor_area[2] == 83 &&
+	    recv_bootp->vendor_area[3] == 99) {
+		ext = &recv_bootp->vendor_area[4];
+		end = (u8 *) recv_bootp + len;
+		while (ext < end && *ext != 255) {
+			if (*ext == 0)		/* Padding */
+				ext++;
+			else {
+				opt = ext;
+				ext += ext[1] + 2;
+				if (ext <= end)
+					root_do_bootp_ext(opt);
+			}
+		}
+	}
+}
+
+
+/***************************************************************************
+
+			Dynamic configuration of IP.
+
+ ***************************************************************************/
+
+/*
+ *  Determine client and server IP numbers and appropriate device by using
+ *  the RARP and BOOTP protocols.
+ */
+static int root_auto_config(void)
+{
+	int retries;
+	u32 timeout, jiff;
+	u32 start_jiffies;
+
+	/* Check devices */
+	if (bootp_flag && !bootp_dev_count) {
+		printk(KERN_ERR "BOOTP: No suitable device found.\n");
+		bootp_flag = 0;
+		}
+	if (rarp_flag && !rarp_dev_count) {
+		printk(KERN_ERR "RARP: No suitable device found.\n");
+		rarp_flag = 0;
+		}
+
+	/* If neither BOOTP nor RARP was selected manually, use both of them */
+	if (!bootp_flag && !rarp_flag) {
+#ifdef CONFIG_USE_BOOTP
+		if (bootp_dev_count)
+			bootp_flag = 1;
+#endif
+#ifdef CONFIG_USE_RARP
+		if (rarp_dev_count)
+			rarp_flag = 1;
+#endif
+		if (!bootp_flag && !rarp_flag)
+			return -1;
+	}
+
+	/* Setup RARP and BOOTP protocols */
+	if (rarp_flag)
+		root_rarp_open();
+	if (bootp_flag && root_bootp_open()) {
+		root_bootp_close();
+		return -1;
+	}
+
+	/*
+	 * Send requests and wait, until we get an answer. This loop
+	 * seems to be a terrible waste of CPU time, but actually there is
+	 * only one process running at all, so we don't need to use any
 	 * scheduler functions.
 	 * [Actually we could now, but the nothing else running note still 
 	 *  applies.. - AC]
 	 */
-	for (retries = 0; retries < RARP_RETRIES && *root_dev_ptr == NULL; retries++) {
-		if (root_rarp_send() < 0)
+	printk(KERN_NOTICE "Sending %s%s%s requests...",
+		bootp_flag ? "BOOTP" : "",
+		bootp_flag && rarp_flag ? " and " : "",
+		rarp_flag ? "RARP" : "");
+	start_jiffies = jiffies;
+	retries = CONF_RETRIES;
+	get_random_bytes(&timeout, sizeof(timeout));
+	timeout = CONF_BASE_TIMEOUT + (timeout % (unsigned) CONF_TIMEOUT_RANDOM);
+	for(;;) {
+		if (bootp_flag && root_bootp_send(jiffies - start_jiffies)) {
+			printk("...BOOTP failed!\n");
+			root_bootp_close();
+			bootp_flag = 0;
+			if (!rarp_flag)
+				break;
+		}
+		if (rarp_flag)
+			root_rarp_send();
+		printk(".");
+		jiff = jiffies + timeout;
+		while (jiffies < jiff && !pkt_arrived)
+			root_bootp_recv();
+		if (pkt_arrived)
 			break;
-		timeout = jiffies + (RARP_TIMEOUT * HZ);
-		while (jiffies < timeout && *root_dev_ptr == NULL)
-			;
+		if (! --retries) {
+			printk("timed out!\n");
+			break;
+		}
+		timeout = timeout CONF_TIMEOUT_MULT;
+		if (timeout > CONF_TIMEOUT_MAX)
+			timeout = CONF_TIMEOUT_MAX;
 	}
 
-	root_rarp_close();
-	if (*root_dev_ptr == NULL && timeout > 0) {
-		printk(KERN_ERR "NFS: Timed out while waiting for RARP answer\n");
+	if (rarp_flag)
+		root_rarp_close();
+	if (bootp_flag)
+		root_bootp_close();
+
+	if (!pkt_arrived)
 		return -1;
-	}
-	printk(KERN_NOTICE "NFS: ");
-	printk("Got RARP answer from %s, ", in_ntoa(server.sin_addr.s_addr));
+
+	printk("OK\n");
+	printk(KERN_NOTICE "Root-NFS: Got %s answer from %s, ",
+		(pkt_arrived == ARRIVED_BOOTP) ? "BOOTP" : "RARP",
+		in_ntoa(server.sin_addr.s_addr));
 	printk("my address is %s\n", in_ntoa(myaddr.sin_addr.s_addr));
 
 	return 0;
 }
 
 
-
-
 /***************************************************************************
 
-			Routines to setup NFS
+			     Parsing of options
 
  ***************************************************************************/
-
 
 
 /*
@@ -410,12 +992,7 @@ static int root_nfs_parse(char *name)
 	char buf[NFS_MAXPATHLEN];
 	char *cp, *options, *val;
 
-	/* Set the default system name in case none was previously found */
-	if (!system_utsname.nodename[0]) {
-		strncpy(system_utsname.nodename, in_ntoa(myaddr.sin_addr.s_addr), __NEW_UTS_LEN);
-		system_utsname.nodename[__NEW_UTS_LEN] = '\0';
-	}
-	/* It is possible to override the host IP number here */
+	/* It is possible to override the server IP number here */
 	if (*name >= '0' && *name <= '9' && (cp = strchr(name, ':')) != NULL) {
 		*cp++ = '\0';
 		server.sin_addr.s_addr = in_aton(name);
@@ -432,7 +1009,7 @@ static int root_nfs_parse(char *name)
 	if ((options = strchr(buf, ',')))
 		*options++ = '\0';
 	if (strlen(buf) + strlen(cp) > NFS_MAXPATHLEN) {
-		printk(KERN_ERR "NFS: Pathname for remote directory too long\n");
+		printk(KERN_ERR "Root-NFS: Pathname for remote directory too long\n");
 		return -1;
 	}
 	sprintf(nfs_path, buf, cp);
@@ -480,26 +1057,40 @@ static int root_nfs_parse(char *name)
 /*
  *  Tell the user what's going on.
  */
+#ifdef NFSROOT_DEBUG
 static void root_nfs_print(void)
 {
-#ifdef NFSROOT_DEBUG
-	printk(KERN_NOTICE "NFS: Mounting %s on server %s as root\n",
+	printk(KERN_NOTICE "Root-NFS: IP config: dev=%s, ",
+		root_dev ? root_dev->name : "none");
+	printk("local=%s, ", IN_NTOA(myaddr.sin_addr.s_addr));
+	printk("server=%s, ", IN_NTOA(server.sin_addr.s_addr));
+	printk("gw=%s, ", IN_NTOA(gateway.sin_addr.s_addr));
+	printk("mask=%s, ", IN_NTOA(netmask.sin_addr.s_addr));
+	printk("host=%s, domain=%s\n",
+		system_utsname.nodename[0] ? system_utsname.nodename : "none",
+		system_utsname.domainname[0] ? system_utsname.domainname : "none");
+	printk(KERN_NOTICE "Root-NFS: Mounting %s on server %s as root\n",
 		nfs_path, nfs_data.hostname);
-	printk(KERN_NOTICE "NFS:     rsize = %d, wsize = %d, timeo = %d, retrans = %d\n",
+	printk(KERN_NOTICE "Root-NFS:     rsize = %d, wsize = %d, timeo = %d, retrans = %d\n",
 		nfs_data.rsize, nfs_data.wsize, nfs_data.timeo, nfs_data.retrans);
-	printk(KERN_NOTICE "NFS:     acreg (min,max) = (%d,%d), acdir (min,max) = (%d,%d)\n",
+	printk(KERN_NOTICE "Root-NFS:     acreg (min,max) = (%d,%d), acdir (min,max) = (%d,%d)\n",
 		nfs_data.acregmin, nfs_data.acregmax,
 		nfs_data.acdirmin, nfs_data.acdirmax);
-	printk(KERN_NOTICE "NFS:     port = %d, flags = %08x\n",
+	printk(KERN_NOTICE "Root-NFS:     port = %d, flags = %08x\n",
 		nfs_port, nfs_data.flags);
-#endif
 }
+#endif
 
 
 /*
- *  Parse any IP addresses
+ *  Parse any IP configuration options (the "nfsaddrs" parameter).
+ *  The parameter consists of option fields separated by colons. It can start
+ *  with device name and possibly with auto-config type ("bootp" or "rarp")
+ *  followed by own IP address, IP address of the server, IP address of
+ *  default gateway, local netmask and a host name. Any of the addresses can
+ *  be blank to indicate that default value should be used.
  */
-static void root_nfs_addrs(char *addrs)
+static void root_nfs_ip_config(char *addrs)
 {
 	char *cp, *ip, *dp;
 	int num = 0;
@@ -511,21 +1102,32 @@ static void root_nfs_addrs(char *addrs)
 	    gateway.sin_addr.s_addr = netmask.sin_addr.s_addr = INADDR_NONE;
 	system_utsname.nodename[0] = '\0';
 	system_utsname.domainname[0] = '\0';
+	user_dev_name[0] = '\0';
+	bootp_flag = rarp_flag = 0;
 
-	/*
-	 * Parse the address field. It contains 4 IP addresses which are
-	 * separated by colons: Field 0 = my own address Field 1 = server
-	 * address Field 2 = gateway address Field 3 = netmask address
-	 * Field 4 = client host name
-	 */
+	/* Check for device name and BOOTP/RARP flags */
 	ip = addrs;
+	while (ip && *ip && (*ip < '0' || *ip > '9')) {
+		if ((cp = strchr(ip, ':')))
+			*cp++ = '\0';
+		if (*ip) {
+			if (!strcmp(ip, "rarp"))
+				rarp_flag = 1;
+			else if (!strcmp(ip, "bootp"))
+				bootp_flag = 1;
+			else if (!user_dev_name[0]) {
+				strncpy(user_dev_name, ip, IFNAMSIZ);
+				user_dev_name[IFNAMSIZ-1] = '\0';
+			}
+		}
+		ip = cp;
+	}
+
+	/* Parse the IP addresses */
 	while (ip && *ip) {
 		if ((cp = strchr(ip, ':')))
 			*cp++ = '\0';
 		if (strlen(ip) > 0) {
-#ifdef NFSROOT_DEBUG
-			printk(KERN_NOTICE "NFS: IP address num %d is \"%s\"\n", num, ip);
-#endif
 			switch (num) {
 			case 0:
 				myaddr.sin_addr.s_addr = in_aton(ip);
@@ -555,15 +1157,34 @@ static void root_nfs_addrs(char *addrs)
 		ip = cp;
 		num++;
 	}
+#ifdef NFSROOT_DEBUG
+	printk(KERN_NOTICE "Root-NFS: IP options: dev=%s, RARP=%d, BOOTP=%d, ",
+		user_dev_name[0] ? user_dev_name : "none",
+		rarp_flag,
+		bootp_flag);
+	printk("local=%s, ", IN_NTOA(myaddr.sin_addr.s_addr));
+	printk("server=%s, ", IN_NTOA(server.sin_addr.s_addr));
+	printk("gw=%s, ", IN_NTOA(gateway.sin_addr.s_addr));
+	printk("mask=%s, ", IN_NTOA(netmask.sin_addr.s_addr));
+	printk("host=%s, domain=%s\n",
+		system_utsname.nodename[0] ? system_utsname.nodename : "none",
+		system_utsname.domainname[0] ? system_utsname.domainname : "none");
+#endif
 }
 
 
 /*
  *  Set the interface address and configure a route to the server.
  */
-static void root_nfs_setup(void)
+static int root_nfs_setup(void)
 {
 	struct rtentry route;
+
+	/* Set the default system name in case none was previously found */
+	if (!system_utsname.nodename[0]) {
+		strncpy(system_utsname.nodename, in_ntoa(myaddr.sin_addr.s_addr), __NEW_UTS_LEN);
+		system_utsname.nodename[__NEW_UTS_LEN] = '\0';
+	}
 
 	/* Set the correct netmask */
 	if (netmask.sin_addr.s_addr == INADDR_NONE)
@@ -578,31 +1199,43 @@ static void root_nfs_setup(void)
 
 	/*
 	 * Now add a route to the server. If there is no gateway given,
-	 * the server is on our own local network, so a host route is
-	 * sufficient. Otherwise we first have to create a host route to
-	 * the gateway, and then setup a gatewayed host route to the
-	 * server. Note that it's not possible to setup a network route
-	 * because we don't know the network mask of the server network.
+	 * the server is on the same subnet, so we establish only a route to
+	 * the local network. Otherwise we create a route to the gateway (the
+	 * same local network router as in the former case) and then setup a
+	 * gatewayed default route. Note that this gives sufficient network
+	 * setup even for full system operation in all common cases.
 	 */
-	memset(&route, 0, sizeof(route));
+	memset(&route, 0, sizeof(route));	/* Local subnet route */
 	route.rt_dev = root_dev->name;
 	route.rt_mss = root_dev->mtu;
-	route.rt_flags = RTF_HOST | RTF_UP;
+	route.rt_flags = RTF_UP;
+	*((struct sockaddr_in *) &(route.rt_dst)) = myaddr;
+	(((struct sockaddr_in *) &(route.rt_dst))) -> sin_addr.s_addr &= netmask.sin_addr.s_addr;
 	*((struct sockaddr_in *) &(route.rt_genmask)) = netmask;
-
-	if (gateway.sin_addr.s_addr == INADDR_NONE ||
-	    gateway.sin_addr.s_addr == server.sin_addr.s_addr ||
-	    !((server.sin_addr.s_addr ^ root_dev->pa_addr) & root_dev->pa_mask)) {
-		*((struct sockaddr_in *) &(route.rt_dst)) = server;
-		ip_rt_new(&route);
-	} else {
-		*((struct sockaddr_in *) &(route.rt_dst)) = gateway;
-		ip_rt_new(&route);
-		route.rt_flags |= RTF_GATEWAY;
-		*((struct sockaddr_in *) &(route.rt_gateway)) = gateway;
-		*((struct sockaddr_in *) &(route.rt_dst)) = server;
-		ip_rt_new(&route);
+	if (ip_rt_new(&route)) {
+		printk(KERN_ERR "Root-NFS: Adding of local route failed!\n");
+		return -1;
 	}
+
+	if (gateway.sin_addr.s_addr != INADDR_NONE) {	/* Default route */
+		(((struct sockaddr_in *) &(route.rt_dst))) -> sin_addr.s_addr = 0;
+		(((struct sockaddr_in *) &(route.rt_genmask))) -> sin_addr.s_addr = 0;
+		*((struct sockaddr_in *) &(route.rt_gateway)) = gateway;
+		route.rt_flags |= RTF_GATEWAY;
+		if ((gateway.sin_addr.s_addr ^ myaddr.sin_addr.s_addr) & netmask.sin_addr.s_addr) {
+			printk(KERN_ERR "Root-NFS: Gateway not on local network!\n");
+			return -1;
+		}
+		if (ip_rt_new(&route)) {
+			printk(KERN_ERR "Root-NFS: Adding of default route failed!\n");
+			return -1;
+		}
+	} else if ((server.sin_addr.s_addr ^ myaddr.sin_addr.s_addr) & netmask.sin_addr.s_addr) {
+		printk(KERN_ERR "Root-NFS: Boot server not on local network and no default gateway configured!\n");
+		return -1;
+	}
+
+	return 0;
 }
 
 
@@ -612,27 +1245,36 @@ static void root_nfs_setup(void)
  */
 int nfs_root_init(char *nfsname, char *nfsaddrs)
 {
+	/*
+	 * Get local and server IP address. First check for network config
+	 * parameters in the command line parameter.
+	 */
+	root_nfs_ip_config(nfsaddrs);
+
+	/* Parse NFS options */
+	if (root_nfs_parse(nfsname))
+		return -1;
+
 	/* Setup all network devices */
 	if (root_dev_open() < 0)
 		return -1;
 
 	/*
-	 * Get local and server IP address. First check for addresses in
-	 * command line parameter. If one of the IP addresses is missing,
-	 * or there's more than one network interface in the system, use
-	 * RARP to get the missing values and routing information. If all
-	 * addresses are given, the best way to find a proper routing is
-	 * to use icmp echo requests ("ping"), but that would add a lot of
-	 * code to this module, which is only really necessary in the rare
-	 * case of multiple ethernet devices in the (diskless) system and
-	 * if the server is on another subnet (otherwise RARP can serve as
-	 * a ping substitute). If only one device is installed the routing
-	 * is obvious.
+	 * If the config information is insufficient (e.g., our IP address or
+	 * IP address of the boot server is missing or we have multiple network
+	 * interfaces and no default was set), use BOOTP or RARP to get the
+	 * missing values.
+	 *
+	 * Note that we don't try to set up correct routes for multiple
+	 * interfaces (could be solved by trying icmp echo requests), because
+	 * it's only necessary in the rare case of multiple ethernet devices
+	 * in the (diskless) system and if the server is on another subnet.
+	 * If only one interface is installed, the routing is obvious.
 	 */
-	root_nfs_addrs(nfsaddrs);
 	if ((myaddr.sin_addr.s_addr == INADDR_NONE ||
 	     server.sin_addr.s_addr == INADDR_NONE ||
-	     (open_base != NULL && open_base->next != NULL)) && do_rarp() < 0) {
+	     (open_base != NULL && open_base->next != NULL)) &&
+	     root_auto_config() < 0) {
 		root_dev_close();
 		return -1;
 	}
@@ -640,7 +1282,8 @@ int nfs_root_init(char *nfsname, char *nfsaddrs)
 		if (open_base != NULL && open_base->next == NULL) {
 			root_dev = open_base->dev;
 		} else {
-			printk(KERN_ERR "NFS: Unable to find routing to server\n");
+			/* I hope this cannot happen */
+			printk(KERN_ERR "Root-NFS: 1 == 0!\n");
 			root_dev_close();
 			return -1;
 		}
@@ -651,31 +1294,27 @@ int nfs_root_init(char *nfsname, char *nfsaddrs)
 	 */
 	root_dev_close();
 
-	/*
-	 * Initialize the global variables necessary for NFS. The server
-	 * directory is actually mounted after init() has been started.
-	 */
-	if (root_nfs_parse(nfsname) < 0)
+	/* Setup devices and routes */
+	if (root_nfs_setup())
 		return -1;
+
+#ifdef NFSROOT_DEBUG
 	root_nfs_print();
-	root_nfs_setup();
+#endif
+
 	return 0;
 }
 
 
-
-
 /***************************************************************************
 
-		Routines to actually mount the root directory
+	       Routines to actually mount the root directory
 
  ***************************************************************************/
 
 static struct file nfs_file;		/* File descriptor containing socket */
 static struct inode nfs_inode;		/* Inode containing socket */
 static int *rpc_packet = NULL;		/* RPC packet */
-
-extern asmlinkage int sys_socket(int family, int type, int protocol);
 
 
 /*
@@ -687,7 +1326,7 @@ static int root_nfs_open(void)
 
 	/* Open the socket */
 	if ((nfs_data.fd = sys_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
-		printk(KERN_ERR "NFS: Cannot open UDP socket\n");
+		printk(KERN_ERR "Root-NFS: Cannot open UDP socket!\n");
 		return -1;
 	}
 	/*
@@ -764,12 +1403,12 @@ static int root_nfs_bind(void)
 		}
 	}
 	if (res < 0) {
-		printk(KERN_ERR "NFS: Cannot find a suitable listening port\n");
+		printk(KERN_ERR "Root-NFS: Cannot find a suitable listening port\n");
 		root_nfs_close(1);
 		return -1;
 	}
 #ifdef NFSROOT_DEBUG
-	printk(KERN_NOTICE "NFS: Binding to listening port %d\n", port);
+	printk(KERN_NOTICE "Root-NFS: Binding to listening port %d\n", port);
 #endif
 	return 0;
 }
@@ -840,7 +1479,7 @@ static int *root_nfs_header(int proc, int program, int version)
 
 	if (rpc_packet == NULL) {
 		if (!(rpc_packet = kmalloc(nfs_data.wsize + 1024, GFP_NFS))) {
-			printk(KERN_ERR "NFS: Cannot allocate UDP buffer\n");
+			printk(KERN_ERR "Root-NFS: Cannot allocate UDP buffer\n");
 			return NULL;
 		}
 	}
@@ -884,21 +1523,21 @@ static int root_nfs_ports(void)
 
 	if (nfs_port < 0) {
 		if ((port = root_nfs_get_port(NFS_NFS_PROGRAM, NFS_NFS_VERSION)) < 0) {
-			printk(KERN_ERR "NFS: Unable to get nfsd port number from server, using default\n");
+			printk(KERN_ERR "Root-NFS: Unable to get nfsd port number from server, using default\n");
 			port = NFS_NFS_PORT;
 		}
 		nfs_port = port;
 #ifdef NFSROOT_DEBUG
-		printk(KERN_NOTICE "NFS: Portmapper on server returned %d as nfsd port\n", port);
+		printk(KERN_NOTICE "Root-NFS: Portmapper on server returned %d as nfsd port\n", port);
 #endif
 	}
 	if ((port = root_nfs_get_port(NFS_MOUNT_PROGRAM, NFS_MOUNT_VERSION)) < 0) {
-		printk(KERN_ERR "NFS: Unable to get mountd port number from server, using default\n");
+		printk(KERN_ERR "Root-NFS: Unable to get mountd port number from server, using default\n");
 		port = NFS_MOUNT_PORT;
 	}
 	server.sin_port = htons(port);
 #ifdef NFSROOT_DEBUG
-	printk(KERN_NOTICE "NFS: Portmapper on server returned %d as mountd port\n", port);
+	printk(KERN_NOTICE "Root-NFS: Portmapper on server returned %d as mountd port\n", port);
 #endif
 
 	return 0;
@@ -935,10 +1574,9 @@ static int root_nfs_get_handle(void)
 	status = ntohl(*p++);
 	if (status == 0) {
 		nfs_data.root = *((struct nfs_fh *) p);
-		printk(KERN_NOTICE "NFS: ");
-		printk("Got file handle for %s via RPC\n", nfs_path);
+		printk(KERN_NOTICE "Root-NFS: Got file handle for %s via RPC\n", nfs_path);
 	} else {
-		printk(KERN_ERR "NFS: Server returned error %d while mounting %s\n",
+		printk(KERN_ERR "Root-NFS: Server returned error %d while mounting %s\n",
 			status, nfs_path);
 		root_nfs_close(1);
 		return -1;

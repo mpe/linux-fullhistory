@@ -477,7 +477,7 @@ void disassociate_ctty(int on_exit)
 	struct task_struct *p;
 
 	if (tty) {
-		if (on_exit)
+		if (on_exit && tty->driver.type != TTY_DRIVER_TYPE_PTY)
 			tty_vhangup(tty);
 	} else {
 		if (current->tty_old_pgrp) {

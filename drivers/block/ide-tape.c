@@ -163,7 +163,7 @@
  *                       The recommended user block size is returned by
  *                        the MTIOCGET ioctl.
  *                       Additional minor changes.
- * Ver 1.3   Feb  9  96  Fixed pipelined read mode bug which prevented the
+ * Ver 1.3   Feb  9 96   Fixed pipelined read mode bug which prevented the
  *                        use of some block sizes during a restore procedure.
  *                       The character device interface will now present a
  *                        continuous view of the media - any mix of block sizes
@@ -180,6 +180,7 @@
  *                        and can be enabled by using hdparm -d1 on the tape's
  *                        block device interface. For more info, read the
  *                        comments in triton.c.
+ * Ver 1.4   Mar 13 96   Fixed serialize support.
  *
  * We are currently in an *alpha* stage. The driver is not complete and not
  * much tested. I would strongly suggest to:
@@ -1825,6 +1826,7 @@ void idetape_poll_for_dsc (unsigned long data)
 	unsigned int major = HWIF(drive)->major;
 	idetape_tape_t *tape=&(drive->tape);
 	struct blk_dev_struct *bdev = &blk_dev[major];
+	struct request *next_rq;
 	unsigned long flags;
 	idetape_status_reg_t status;
 
@@ -1839,7 +1841,7 @@ void idetape_poll_for_dsc (unsigned long data)
 	 *	we can safely access the tape.
 	 */
 
-	if (bdev->current_request == NULL) {
+	if (HWGROUP (drive)->rq == NULL) {
 		sti ();
 		idetape_poll_for_dsc_direct (data);
 		return;
@@ -1928,8 +1930,13 @@ void idetape_poll_for_dsc (unsigned long data)
 	/*
 	 *	Fallback to method 1.
 	 */
-	 	
-	if (bdev->current_request->next == NULL) {
+
+	next_rq=bdev->current_request;
+	if (next_rq == HWGROUP (drive)->rq)
+		next_rq=next_rq->next;
+
+	if (next_rq == NULL) {
+
 		/*
 		 *	There will not be another request after the currently
 		 *	ongoing request, so ide.c won't be able to sample
@@ -3383,10 +3390,12 @@ void idetape_wait_for_pipeline (ide_drive_t *drive)
 	if (tape->active_data_request == NULL)
 		idetape_insert_pipeline_into_queue (drive);		
 
-	if (tape->active_data_request == NULL)
-		return;
-
 	save_flags (flags);cli ();
+	if (tape->active_data_request == NULL) {
+		restore_flags (flags);
+		return;
+	}
+	
 	if (tape->last_stage != NULL)
 		idetape_wait_for_request (&(tape->last_stage->rq));
 

@@ -345,7 +345,7 @@ struct sound_timer_operations {
 		{"TRXPROSB", 0, SNDCARD_TRXPRO_SB, "AudioTriX (SB mode)",	attach_trix_sb, probe_trix_sb, unload_trix_sb},
 		{"TRXPROMPU", 0, SNDCARD_TRXPRO_MPU, "AudioTriX MIDI",	attach_trix_mpu, probe_trix_mpu, unload_trix_mpu},
 #endif
-#ifdef CONFIG_PNP
+#ifdef CONFIG_SPNP
 		{"AD1848", 0, 500, "SoundPort",	attach_pnp_ad1848, probe_pnp_ad1848, unload_pnp_ad1848},
 #endif
 		{NULL, 0, 0,		"*?*",			NULL, NULL, NULL}

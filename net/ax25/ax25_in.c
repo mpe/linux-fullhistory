@@ -303,7 +303,6 @@ static int ax25_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			ax25_send_control(ax25, UA, pf, C_RESPONSE);
 			if (ax25->dama_slave) {
 				ax25->state = AX25_STATE_0;
-				ax25->dama_slave = 0;
 				ax25_dama_off(ax25);
 
 				if (ax25->sk != NULL) {
@@ -319,7 +318,6 @@ static int ax25_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 		case UA:
 			if (pf) {
 				ax25->state = AX25_STATE_0;
-				ax25->dama_slave = 0;
 				ax25_dama_off(ax25);
 
 				if (ax25->sk != NULL) {
@@ -335,7 +333,6 @@ static int ax25_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 		case DM:
 			if (pf) {
 				ax25->state = AX25_STATE_0;
-				ax25->dama_slave = 0;
 				ax25_dama_off(ax25);
 					
 				if (ax25->sk != NULL) {
@@ -414,7 +411,6 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			ax25_send_control(ax25, UA, pf, C_RESPONSE);
 			ax25->t3timer = 0;
 			ax25->state   = AX25_STATE_0;
-			ax25->dama_slave = 0;
 			ax25_dama_off(ax25);
 			
 			if (ax25->sk != NULL) {
@@ -430,7 +426,6 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			ax25_clear_queues(ax25);
 			ax25->t3timer = 0;
 			ax25->state   = AX25_STATE_0;
-			ax25->dama_slave = 0;
 			ax25_dama_off(ax25);
 			if (ax25->sk) {
 				ax25->sk->state = TCP_CLOSE;
@@ -612,7 +607,6 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			ax25_send_control(ax25, UA, pf, C_RESPONSE);
 			ax25->t3timer = 0;
 			ax25->state   = AX25_STATE_0;
-			ax25->dama_slave = 0;
 			ax25_dama_off(ax25);
 			
 			if (ax25->sk != NULL) {
@@ -628,7 +622,6 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			ax25_clear_queues(ax25);
 			ax25->t3timer = 0;
 			ax25->state   = AX25_STATE_0;
-			ax25->dama_slave = 0;
 			ax25_dama_off(ax25);
 			
 			if (ax25->sk != NULL) {

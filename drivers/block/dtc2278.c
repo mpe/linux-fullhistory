@@ -117,6 +117,7 @@ void init_dtc2278 (void)
 	restore_flags(flags);
 
 	ide_hwifs[0].serialized = 1;
+	ide_hwifs[1].serialized = 1;
 	ide_hwifs[0].chipset = ide_dtc2278;
 	ide_hwifs[1].chipset = ide_dtc2278;
 	ide_hwifs[0].tuneproc = &tune_dtc2278;

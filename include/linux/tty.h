@@ -52,7 +52,6 @@ extern struct screen_info screen_info;
 
 #define ORIG_X			(screen_info.orig_x)
 #define ORIG_Y			(screen_info.orig_y)
-#define ORIG_VIDEO_PAGE		(screen_info.orig_video_page)
 #define ORIG_VIDEO_MODE		(screen_info.orig_video_mode)
 #define ORIG_VIDEO_COLS 	(screen_info.orig_video_cols)
 #define ORIG_VIDEO_EGA_BX	(screen_info.orig_video_ega_bx)

@@ -26,9 +26,7 @@
 |      fd = 0;
 |    arg.ten = 10;
 |    arg.onoff = 0;
-|    if (!strcmp(argv[1], "on"))
-|      arg.onoff = 1;
-|    else if (!strcmp(argv[1], "vsync"))
+|    if (!strcmp(argv[1], "on") || !strcmp(argv[1], "vsync"))
 |      arg.onoff = 1;
 |    else if (!strcmp(argv[1], "hsync"))
 |      arg.onoff = 2;

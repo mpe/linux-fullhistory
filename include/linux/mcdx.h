@@ -1,7 +1,7 @@
 /*
  * Definitions for the Mitsumi CDROM interface
  * Copyright (C) 1995 Heiko Schlittermann <heiko@lotte.sax.de>
- * VERSION: 1.7
+ * VERSION: 1.8
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -82,12 +82,15 @@
 
 #if MCDX_QUIET == 1
 #define INFO(x)  
-#define WARN(x) warn x
+#define xinfo(fmt, args...)
 #else
 #define INFO(x) warn x
-#define WARN(x) warn x
+#define xinfo(fmt, args...) _warn(fmt, ## args)
 #endif
 
+#define WARN(x) warn x
+#define xwarn(fmt, args...) _warn(fmt, ## args)
+#define _warn warn
 
 #if MCDX_DEBUG == 1
 #define TRACE(x) trace x

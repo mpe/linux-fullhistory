@@ -1042,6 +1042,11 @@ static int do_tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 				copy = sk->mss;
 			if (copy > seglen)
 				copy = seglen;
+			if (copy <= 0) 
+			{
+				printk("TCP: **bug**: copy=%d, sk->mss=%d\n", copy, sk->mss);
+		  		return -EFAULT;
+			}
 
 		/*
 		 *	We should really check the window here also. 

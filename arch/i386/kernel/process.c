@@ -154,7 +154,14 @@ int cpu_idle(void *unused)
                 while(0x80000000 & smp_process_available);
 	        cli();
                 while(set_bit(31,&smp_process_available))
-                	while(test_bit(31,&smp_process_available));
+                	while(test_bit(31,&smp_process_available))
+                {
+                	/*
+                	 *	Oops.. This is kind of important in some cases...
+                	 */
+                	if(clear_bit(smp_processor_id(), &smp_invalidate_needed))
+                		local_invalidate();
+                }
                 if (0==(0x7fffffff & smp_process_available)){
                         clear_bit(31,&smp_process_available);
                         sti();

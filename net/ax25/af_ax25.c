@@ -524,7 +524,123 @@ static int ax25_uid_ioctl(int cmd, struct sockaddr_ax25 *sax)
 	}
 
 	return -EINVAL;	/*NOTREACHED */
-}	
+}
+
+/*
+ * dl1bke 960311: set parameters for existing AX.25 connections,
+ *		  includes a KILL command to abort any connection.
+ *		  VERY useful for debugging ;-)
+ */
+
+static int ax25_ctl_ioctl(const unsigned int cmd, const unsigned long arg)
+{
+	struct ax25_ctl_struct ax25_ctl;
+	struct device *dev;
+	ax25_cb *ax25;
+	unsigned long flags;
+	int err;
+	
+	if ((err = verify_area(VERIFY_READ, (void *)arg, sizeof(ax25_ctl))) != 0)
+		return err;
+
+	memcpy_fromfs(&ax25_ctl, (void *) arg, sizeof(ax25_ctl));
+	
+	if ((dev = ax25rtr_get_dev(&ax25_ctl.port_addr)) == NULL)
+		return -ENODEV;
+
+	if ((ax25 = ax25_find_cb(&ax25_ctl.source_addr, &ax25_ctl.dest_addr, dev)) == NULL)
+		return -ENOTCONN;
+
+	switch (ax25_ctl.cmd) {
+		case AX25_KILL:
+#ifdef CONFIG_NETROM
+			nr_link_failed(&ax25->dest_addr, ax25->device);
+#endif
+			ax25_clear_queues(ax25);
+			ax25_send_control(ax25, DISC, POLLON, C_COMMAND);
+				
+			ax25->state = AX25_STATE_0;
+			if (ax25->sk != NULL) {
+				ax25->sk->state = TCP_CLOSE;
+				ax25->sk->err   = ENETRESET;
+				if (!ax25->sk->dead)
+					ax25->sk->state_change(ax25->sk);
+				ax25->sk->dead  = 1;
+			}
+
+			ax25_dama_off(ax25);
+			ax25_set_timer(ax25);
+	  		break;
+	  	case AX25_WINDOW:
+	  		if (ax25->modulus == MODULUS) {
+	  			if (ax25_ctl.arg < 1 || ax25_ctl.arg > 7) 
+	  				return -EINVAL;
+	  		} else {
+	  			if (ax25_ctl.arg < 1 || ax25_ctl.arg > 63) 
+	  				return -EINVAL;
+	  		}
+	  		ax25->window = ax25_ctl.arg;
+	  		break;
+	  	case AX25_T1:
+  			if (ax25_ctl.arg < 1) 
+  				return -EINVAL;
+  			ax25->rtt = (ax25_ctl.arg * PR_SLOWHZ) / 2;
+  			ax25->t1 = ax25_ctl.arg * PR_SLOWHZ;
+  			save_flags(flags); cli();
+  			if (ax25->t1timer > ax25->t1)
+  				ax25->t1timer = ax25->t1;
+  			restore_flags(flags);
+  			break;
+	  	case AX25_T2:
+	  		if (ax25_ctl.arg < 1) 
+	  			return -EINVAL;
+	  		save_flags(flags); cli();
+	  		ax25->t2 = ax25_ctl.arg * PR_SLOWHZ;
+	  		if (ax25->t2timer > ax25->t2)
+	  			ax25->t2timer = ax25->t2;
+	  		restore_flags(flags);
+	  		break;
+	  	case AX25_N2:
+	  		if (ax25_ctl.arg < 1 || ax25_ctl.arg > 31) 
+	  			return -EINVAL;
+	  		ax25->n2count = 0;
+	  		ax25->n2 = ax25_ctl.arg;
+	  		break;
+	  	case AX25_T3:
+	  		if (ax25_ctl.arg < 1) 
+	  			return -EINVAL;
+	  		save_flags(flags); cli();
+	  		ax25->t3 = ax25_ctl.arg * PR_SLOWHZ;
+	  		if (ax25->t3timer != 0)
+	  			ax25->t3timer = ax25->t3;
+	  		restore_flags(flags);
+	  		break;
+	  	case AX25_IDLE:
+	  		if (ax25_ctl.arg < 1) 
+	  			return -EINVAL;
+	  		if (ax25->idle == 0)
+	  			return 0;
+			save_flags(flags); cli();
+	  		ax25->idle = ax25_ctl.arg * PR_SLOWHZ * 60;
+	  		if (ax25->idletimer != 0)
+	  			ax25->idletimer = ax25->idle;
+	  		restore_flags(flags);
+	  		break;
+	  	case AX25_PACLEN:
+	  		if (ax25_ctl.arg < 16 || ax25_ctl.arg > 65535) 
+	  			return -EINVAL;
+
+	  		if (ax25_ctl.arg > 256) /* we probably want this */
+	  			printk("ax25_ctl_ioctl(): Warning --- huge paclen %d", (int) ax25_ctl.arg);
+	  		ax25->paclen = ax25_ctl.arg;
+	  		break;
+	  	default:
+	  		return -EINVAL;
+	  }
+	  
+	  return 0;
+}
+
 
 /*
  * Create an empty AX.25 control block.
@@ -1501,7 +1617,9 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 	/*
 	 *	Send the frame to the AX.25 auto-router
 	 */
+#ifdef notdef	/* dl1bke 960310 */
 	ax25_rt_rx_frame(&src, dev, &dp);
+#endif
 	
 	/*
 	 *	Ours perhaps ?
@@ -1532,8 +1650,10 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 
 			if (dev == dev_out && (ax25_dev_get_value(dev, AX25_VALUES_DIGI) & AX25_DIGI_INBAND) == 0) {
 				kfree_skb(skb, FREE_READ);
-				return 0;	/* Hey, Alan: look what you're doing below! You forgot this return! */
+				return 0;
 			}
+
+			ax25_rt_rx_frame(&src, dev, &dp);
 
 			build_ax25_addr(skb->data, &src, &dest, &dp, type, MODULUS);
 #ifdef CONFIG_FIREWALL
@@ -1541,7 +1661,8 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 				kfree_skb(skb, FREE_READ);
 				return 0;
 			}
-#endif						
+#endif
+
 			skb->arp = 1;
 			ax25_queue_xmit(skb, dev_out, SOPRI_NORMAL);
 		} else {
@@ -1581,12 +1702,14 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		switch (skb->data[1]) {
 #ifdef CONFIG_INET		
 			case AX25_P_IP:
+				ax25_rt_rx_frame(&src, dev, &dp);
 				skb_pull(skb,2);		/* drop PID/CTRL */
 				ax25_ip_mode_set(&src, dev, 'D');
 				ip_rcv(skb, dev, ptype);	/* Note ptype here is the wrong one, fix me later */
 				break;
 
 			case AX25_P_ARP:
+				ax25_rt_rx_frame(&src, dev, &dp);
 				skb_pull(skb,2);
 				arp_rcv(skb, dev, ptype);	/* Note ptype here is wrong... */
 				break;
@@ -1597,6 +1720,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 					if (sk->rmem_alloc >= sk->rcvbuf) {
 						kfree_skb(skb, FREE_READ);
 					} else {
+						ax25_rt_rx_frame(&src, dev, &dp);
 						/*
 						 *	Remove the control and PID.
 						 */
@@ -1640,6 +1764,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		 *	free it immediately. This routine itself wakes the user context layers so we
 		 *	do no further work
 		 */
+		ax25_rt_rx_frame(&src, dev, &dp);
 		if (ax25_process_rx_frame(ax25, skb, type, dama) == 0)
 			kfree_skb(skb, FREE_READ);
 
@@ -1665,6 +1790,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 	/* b) received SABM(E) */
 	
 	if ((sk = ax25_find_listener(&dest, dev, SOCK_SEQPACKET)) != NULL) {
+		ax25_rt_rx_frame(&src, dev, &dp);
 		if (sk->ack_backlog == sk->max_ack_backlog || (make = ax25_make_new(sk, dev)) == NULL) {
 			if (mine)
 				ax25_return_dm(dev, &src, &dest, &dp);
@@ -1688,6 +1814,8 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 			kfree_skb(skb, FREE_READ);
 			return 0;
 		}
+		
+		ax25_rt_rx_frame(&src, dev, &dp);
 
 		if ((ax25 = ax25_create_cb()) == NULL) {
 			ax25_return_dm(dev, &src, &dest, &dp);
@@ -1698,8 +1826,10 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		ax25_fillin_cb(ax25, dev);
 		ax25->idletimer = ax25->idle = ax25_dev_get_value(ax25->device, AX25_VALUES_IDLE);
 #else
-		if (mine)
+		if (mine) {
+			ax25_rt_rx_frame(&src, dev, &dp);
 			ax25_return_dm(dev, &src, &dest, &dp);
+		}
 
 		kfree_skb(skb, FREE_READ);
 		return 0;
@@ -2104,9 +2234,15 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 		case SIOCADDRT:
 		case SIOCDELRT:
+		case SIOCAX25OPTRT:
 			if (!suser())
 				return -EPERM;
 			return ax25_rt_ioctl(cmd, (void *)arg);
+			
+		case SIOCAX25CTLCON:
+			if (!suser())
+				return -EPERM;
+			return ax25_ctl_ioctl(cmd, arg);
 
 		case SIOCGIFADDR:
 		case SIOCSIFADDR:
@@ -2128,6 +2264,7 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	return(0);
 }
 
+
 static int ax25_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	ax25_cb *ax25;
@@ -2136,7 +2273,8 @@ static int ax25_get_info(char *buffer, char **start, off_t offset, int length, i
 	int len = 0;
 	off_t pos = 0;
 	off_t begin = 0;
-  
+	int idletimer;
+
 	cli();
 
 	len += sprintf(buffer, "dest_addr src_addr  dev  st  vs  vr  va    t1     t2     t3      idle   n2  rtt wnd paclen   dama Snd-Q Rcv-Q\n");
@@ -2146,6 +2284,9 @@ static int ax25_get_info(char *buffer, char **start, off_t offset, int length, i
 			devname = "???";
 		else
 			devname = dev->name;
+			
+		idletimer = ax25->idletimer / (PR_SLOWHZ * 60);
+		idletimer += (ax25->idletimer && ax25->idletimer < ax25->idle)? 1:0;
 
 		len += sprintf(buffer + len, "%-9s ",
 			ax2asc(&ax25->dest_addr));
@@ -2159,7 +2300,7 @@ static int ax25_get_info(char *buffer, char **start, off_t offset, int length, i
 			ax25->t2      / PR_SLOWHZ,
 			ax25->t3timer / PR_SLOWHZ,
 			ax25->t3      / PR_SLOWHZ,
-			(ax25->idletimer / (PR_SLOWHZ*60))+1,
+			idletimer,
 			ax25->idle      / (PR_SLOWHZ*60),
 			ax25->n2count, ax25->n2,
 			ax25->rtt     / PR_SLOWHZ,
@@ -2427,10 +2568,27 @@ int ax25_rebuild_header(unsigned char *bp, struct device *dev, unsigned long des
 
 	if (bp[16] == AX25_P_IP) {
 		mode = ax25_ip_mode_get((ax25_address *)(bp + 1), dev);
-		if (mode == 'V' || mode == 'v' || (mode == ' ' && ax25_dev_get_value(dev, AX25_VALUES_IPDEFMODE) == 'V')) {
-/*			skb_device_unlock(skb); *//* Don't unlock - it might vanish.. TCP will respond correctly to this lock holding */
-			skb_pull(skb, AX25_HEADER_LEN - 1);	/* Keep PID */
-			ax25_send_frame(skb, (ax25_address *)(bp + 8), (ax25_address *)(bp + 1), NULL, dev);
+		if (mode == 'V' || mode == 'v' || (mode == ' ' && ax25_dev_get_value(dev, AX25_VALUES_IPDEFMODE) == 'V')) 
+		{
+			/*
+			 *	This is a workaround to try and keep the device locking
+			 *	straight until skb->free=0 is abolished post 1.4.
+			 *
+			 *	We clone the buffer and release the original thereby
+			 *	keeping it straight
+			 *
+			 *	Note: we report 1 back so the caller will
+			 *	not feed the frame direct to the physical device
+			 *	We don't want that to happen. (It won't be upset
+			 *	as we have pulled the frame from the queue by
+			 *	freeing it).
+			 */
+			struct sk_buff *ourskb=skb_clone(skb, GFP_ATOMIC);
+			dev_kfree_skb(skb, FREE_READ);
+			if(ourskb==NULL)
+				return 1;			
+			skb_pull(ourskb, AX25_HEADER_LEN - 1);	/* Keep PID */
+			ax25_send_frame(ourskb, (ax25_address *)(bp + 8), (ax25_address *)(bp + 1), NULL, dev);
 			return 1;
 		}
 	}

@@ -92,6 +92,7 @@ extern unsigned char aux_device_present, kbd_read_mask;
 extern char *get_options(char *str, int *ints);
 extern void set_device_ro(int dev,int flag);
 extern struct file_operations * get_blkfops(unsigned int);
+extern void blkdev_release(struct inode * inode);
 
 extern void *sys_call_table;
 
@@ -227,6 +228,8 @@ struct symbol_table symbol_table = {
 	X(bmap),
 	X(sync_dev),
 	X(get_blkfops),
+	X(blkdev_open),
+	X(blkdev_release),
 #ifdef CONFIG_SERIAL	
 	/* Module creation of serial units */
 	X(register_serial),
@@ -469,9 +472,13 @@ struct symbol_table symbol_table = {
 	X(tr_type_trans),
 #endif
 
-#ifdef CONFIG_BLK_DEV_IDE
+#ifdef CONFIG_BLK_DEV_IDE_PCMCIA
 	X(ide_register),
 	X(ide_unregister),
+#endif
+
+#ifdef CONFIG_BLK_DEV_MD
+	X(disk_name),	/* for md.c */
 #endif
  	
 	/* bimfm_aout */

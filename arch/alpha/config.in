@@ -56,8 +56,14 @@ then
 	define_bool CONFIG_ALPHA_EV5 y
 	define_bool CONFIG_ALPHA_ALCOR y
 fi
-# This needs to be defined for all EV4 and EV45 CPUs:
+
+if [ "$CONFIG_ALPHA_JENSEN" = "y" ]
+then
+	bool 'Using SRM as bootloader' CONFIG_ALPHA_SRM
+fi
+
 define_bool CONFIG_ALPHA_NEED_ROUNDING_EMULATION y
+
 bool 'Echo console messages on /dev/ttyS1' CONFIG_SERIAL_ECHO
 if [ "$CONFIG_PCI" = "y" ]; then
   bool 'TGA Console Support' CONFIG_TGA_CONSOLE
