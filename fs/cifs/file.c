@@ -35,6 +35,22 @@
 #include "cifs_debug.h"
 #include "cifs_fs_sb.h"
 
+static inline struct cifsFileInfo *cifs_init_private(
+	struct cifsFileInfo *private_data, struct inode *inode,
+	struct file *file, __u16 netfid)
+{
+	memset(private_data, 0, sizeof(struct cifsFileInfo));
+	private_data->netfid = netfid;
+	private_data->pid = current->tgid;	
+	init_MUTEX(&private_data->fh_sem);
+	private_data->pfile = file; /* needed for writepage */
+	private_data->pInode = inode;
+	private_data->invalidHandle = FALSE;
+	private_data->closePend = FALSE;
+
+	return private_data;
+}
+
 int cifs_open(struct inode *inode, struct file *file)
 {
 	int rc = -EACCES;
@@ -56,14 +72,19 @@ int cifs_open(struct inode *inode, struct file *file)
 	pTcon = cifs_sb->tcon;
 
 	if (file->f_flags & O_CREAT) {
-		/* search inode for this file and fill in file->private_data = */
+		/* search inode for this file and fill in file->private_data */
 		pCifsInode = CIFS_I(file->f_dentry->d_inode);
 		read_lock(&GlobalSMBSeslock);
-		list_for_each(tmp, &pCifsInode->openFileList) {            
-			pCifsFile = list_entry(tmp, struct cifsFileInfo, flist);           
-			if ((pCifsFile->pfile == NULL) && (pCifsFile->pid == current->tgid)) {
-			/* mode set in cifs_create */
-				pCifsFile->pfile = file; /* needed for writepage */
+		list_for_each(tmp, &pCifsInode->openFileList) {
+			pCifsFile = list_entry(tmp, struct cifsFileInfo,
+					       flist);
+			if ((pCifsFile->pfile == NULL) &&
+			    (pCifsFile->pid == current->tgid)) {
+				/* mode set in cifs_create */
+
+				/* needed for writepage */
+				pCifsFile->pfile = file;
+				
 				file->private_data = pCifsFile;
 				break;
 			}
@@ -75,7 +96,8 @@ int cifs_open(struct inode *inode, struct file *file)
 			return rc;
 		} else {
 			if (file->f_flags & O_EXCL)
-				cERROR(1, ("could not find file instance for new file %p ", file));
+				cERROR(1, ("could not find file instance for "
+					   "new file %p ", file));
 		}
 	}
 
@@ -139,114 +161,108 @@ int cifs_open(struct inode *inode, struct file *file)
 
 	/* BB pass O_SYNC flag through on file attributes .. BB */
 
-	/* Also refresh inode by passing in file_info buf returned by SMBOpen 
-	   and calling get_inode_info with returned buf (at least 
-	   helps non-Unix server case */
+	/* Also refresh inode by passing in file_info buf returned by SMBOpen
+	   and calling get_inode_info with returned buf (at least helps
+	   non-Unix server case) */
 
 	/* BB we can not do this if this is the second open of a file 
-	and the first handle has writebehind data, we might be 
-	able to simply do a filemap_fdatawrite/filemap_fdatawait first */
+	   and the first handle has writebehind data, we might be 
+	   able to simply do a filemap_fdatawrite/filemap_fdatawait first */
 	buf = kmalloc(sizeof(FILE_ALL_INFO), GFP_KERNEL);
-	if (buf == NULL) {
-		kfree(full_path);
-		FreeXid(xid);
-		return -ENOMEM;
+	if (!buf) {
+		rc = -ENOMEM;
+		goto out;
 	}
 	rc = CIFSSMBOpen(xid, pTcon, full_path, disposition, desiredAccess,
-			CREATE_NOT_DIR, &netfid, &oplock, buf, cifs_sb->local_nls);
+			 CREATE_NOT_DIR, &netfid, &oplock, buf,
+			 cifs_sb->local_nls);
 	if (rc) {
 		cFYI(1, ("cifs_open returned 0x%x ", rc));
-		cFYI(1, ("oplock: %d ", oplock));	
-	} else {
-		file->private_data =
-			kmalloc(sizeof(struct cifsFileInfo), GFP_KERNEL);
-		if (file->private_data) {
-			memset(file->private_data, 0, sizeof(struct cifsFileInfo));
-			pCifsFile = (struct cifsFileInfo *)file->private_data;
-			pCifsFile->netfid = netfid;
-			pCifsFile->pid = current->tgid;
-			init_MUTEX(&pCifsFile->fh_sem);
-			pCifsFile->pfile = file; /* needed for writepage */
-			pCifsFile->pInode = inode;
-			pCifsFile->invalidHandle = FALSE;
-			pCifsFile->closePend = FALSE;
-			write_lock(&file->f_owner.lock);
-			write_lock(&GlobalSMBSeslock);
-			list_add(&pCifsFile->tlist, &pTcon->openFileList);
-			pCifsInode = CIFS_I(file->f_dentry->d_inode);
-			if (pCifsInode) {
-				/* want handles we can use to read with first */
-				/* in the list so we do not have to walk the */
-				/* list to search for one in prepare_write */
-				if ((file->f_flags & O_ACCMODE) == O_WRONLY) {
-					list_add_tail(&pCifsFile->flist, &pCifsInode->openFileList);
-				} else {
-					list_add(&pCifsFile->flist, &pCifsInode->openFileList);
-				}
-				write_unlock(&GlobalSMBSeslock);
-				write_unlock(&file->f_owner.lock);
-				if (pCifsInode->clientCanCacheRead) {
-					/* we have the inode open somewhere else
-					   no need to discard cache data */
-				} else {
-					if (buf) {
-					/* BB need same check in cifs_create too? */
+		goto out;
+	}
+	file->private_data =
+		kmalloc(sizeof(struct cifsFileInfo), GFP_KERNEL);
+	if (file->private_data == NULL) {
+		rc = -ENOMEM;
+		goto out;
+	}
+	pCifsFile = cifs_init_private(file->private_data, inode, file, netfid);
+	write_lock(&file->f_owner.lock);
+	write_lock(&GlobalSMBSeslock);
+	list_add(&pCifsFile->tlist, &pTcon->openFileList);
+	pCifsInode = CIFS_I(file->f_dentry->d_inode);
+	if (pCifsInode) {
+		/* want handles we can use to read with first */
+		/* in the list so we do not have to walk the */
+		/* list to search for one in prepare_write */
+		if ((file->f_flags & O_ACCMODE) == O_WRONLY) {
+			list_add_tail(&pCifsFile->flist, &pCifsInode->openFileList);
+		} else {
+			list_add(&pCifsFile->flist, &pCifsInode->openFileList);
+		}
+		write_unlock(&GlobalSMBSeslock);
+		write_unlock(&file->f_owner.lock);
+		if (pCifsInode->clientCanCacheRead) {
+			/* we have the inode open somewhere else
+			   no need to discard cache data */
+		} else {
+			if (buf) {
+			/* BB need same check in cifs_create too? */
 
-					/* if not oplocked, invalidate inode pages if mtime 
-					   or file size changed */
-						struct timespec temp;
-						temp = cifs_NTtimeToUnix(le64_to_cpu(buf->LastWriteTime));
-						if (timespec_equal(&file->f_dentry->d_inode->i_mtime, &temp) && 
-							(file->f_dentry->d_inode->i_size == (loff_t)le64_to_cpu(buf->EndOfFile))) {
-							cFYI(1, ("inode unchanged on server"));
-						} else {
-							if (file->f_dentry->d_inode->i_mapping) {
-							/* BB no need to lock inode until after invalidate*/
-							/* since namei code should already have it locked?*/
-								filemap_fdatawrite(file->f_dentry->d_inode->i_mapping);
-								filemap_fdatawait(file->f_dentry->d_inode->i_mapping);
-							}
-							cFYI(1, ("invalidating remote inode since open detected it changed"));
-							invalidate_remote_inode(file->f_dentry->d_inode);
-						}
+			/* if not oplocked, invalidate inode pages if mtime 
+				   or file size changed */
+				struct timespec temp;
+				temp = cifs_NTtimeToUnix(le64_to_cpu(buf->LastWriteTime));
+				if (timespec_equal(&file->f_dentry->d_inode->i_mtime, &temp) && 
+					(file->f_dentry->d_inode->i_size == (loff_t)le64_to_cpu(buf->EndOfFile))) {
+					cFYI(1, ("inode unchanged on server"));
+				} else {
+					if (file->f_dentry->d_inode->i_mapping) {
+					/* BB no need to lock inode until after invalidate*/
+					/* since namei code should already have it locked?*/
+						filemap_fdatawrite(file->f_dentry->d_inode->i_mapping);
+						filemap_fdatawait(file->f_dentry->d_inode->i_mapping);
 					}
-				}
-				if (pTcon->ses->capabilities & CAP_UNIX)
-					rc = cifs_get_inode_info_unix(&file->f_dentry->d_inode,
-						full_path, inode->i_sb, xid);
-				else
-					rc = cifs_get_inode_info(&file->f_dentry->d_inode,
-						full_path, buf, inode->i_sb, xid);
-
-				if ((oplock & 0xF) == OPLOCK_EXCLUSIVE) {
-					pCifsInode->clientCanCacheAll = TRUE;
-					pCifsInode->clientCanCacheRead = TRUE;
-					cFYI(1, ("Exclusive Oplock granted on inode %p", file->f_dentry->d_inode));
-				} else if ((oplock & 0xF) == OPLOCK_READ)
-					pCifsInode->clientCanCacheRead = TRUE;
-			} else {
-				write_unlock(&GlobalSMBSeslock);
-				write_unlock(&file->f_owner.lock);
-			}
-			if (oplock & CIFS_CREATE_ACTION) {           
-				/* time to set mode which we can not set earlier due
-				 to problems creating new read-only files */
-				if (cifs_sb->tcon->ses->capabilities & CAP_UNIX) {
-					CIFSSMBUnixSetPerms(xid, pTcon, full_path, inode->i_mode,
-						(__u64)-1, 
-						(__u64)-1,
-						0 /* dev */,
-						cifs_sb->local_nls);
-				} else {
-					/* BB implement via Windows security descriptors eg */
-					/* CIFSSMBWinSetPerms(xid, pTcon, full_path, mode, -1, -1, local_nls); */
-					/* in the meantime could set r/o dos attribute when perms are eg: */
-					/* mode & 0222 == 0 */
+					cFYI(1, ("invalidating remote inode since open detected it changed"));
+					invalidate_remote_inode(file->f_dentry->d_inode);
 				}
 			}
 		}
+		if (pTcon->ses->capabilities & CAP_UNIX)
+			rc = cifs_get_inode_info_unix(&file->f_dentry->d_inode,
+				full_path, inode->i_sb, xid);
+		else
+			rc = cifs_get_inode_info(&file->f_dentry->d_inode,
+				full_path, buf, inode->i_sb, xid);
+
+		if ((oplock & 0xF) == OPLOCK_EXCLUSIVE) {
+			pCifsInode->clientCanCacheAll = TRUE;
+			pCifsInode->clientCanCacheRead = TRUE;
+			cFYI(1, ("Exclusive Oplock granted on inode %p", file->f_dentry->d_inode));
+		} else if ((oplock & 0xF) == OPLOCK_READ)
+			pCifsInode->clientCanCacheRead = TRUE;
+	} else {
+		write_unlock(&GlobalSMBSeslock);
+		write_unlock(&file->f_owner.lock);
+	}
+	if (oplock & CIFS_CREATE_ACTION) {           
+		/* time to set mode which we can not set earlier due to
+		   problems creating new read-only files */
+		if (cifs_sb->tcon->ses->capabilities & CAP_UNIX) {
+			CIFSSMBUnixSetPerms(xid, pTcon, full_path,
+					    inode->i_mode,
+					    (__u64)-1, (__u64)-1, 0 /* dev */,
+					    cifs_sb->local_nls);
+		} else {
+			/* BB implement via Windows security descriptors eg
+			   CIFSSMBWinSetPerms(xid, pTcon, full_path, mode,
+					      -1, -1, local_nls);
+			   in the meantime could set r/o dos attribute when
+			   perms are eg: mode & 0222 == 0 */
+		}
 	}
 
+out:
 	kfree(buf);
 	kfree(full_path);
 	FreeXid(xid);
@@ -859,9 +875,7 @@ static int cifs_partialpagewrite(struct page *page, unsigned from, unsigned to)
 	struct list_head *tmp;
 	struct list_head *tmp1;
 
-	if (!mapping)
-		return -EFAULT;
-	else if (!mapping->host)
+	if (!mapping || !mapping->host)
 		return -EFAULT;
 
 	inode = page->mapping->host;
