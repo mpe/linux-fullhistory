@@ -348,7 +348,6 @@ void oops_end(void)
 	die_owner = -1;
 	bust_spinlocks(0); 
 	spin_unlock(&die_lock); 
-	local_irq_enable();	/* make sure back scroll still works */
 	if (panic_on_oops)
 		panic("Oops"); 
 } 
