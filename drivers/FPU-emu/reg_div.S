@@ -237,7 +237,7 @@ L_return_zero:
 
 #ifdef PARANOID
 L_unknown_tags:
-	push	EX_INTERNAL | 0x208
+	pushl	EX_INTERNAL | 0x208
 	call	EXCEPTION
 
 	/* Generate a NaN for unknown tags */

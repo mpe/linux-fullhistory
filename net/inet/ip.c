@@ -1295,6 +1295,10 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			continue;
 		memcpy(skb2, skb, skb->mem_len);
 		skb2->mem_addr = skb2;
+		skb2->ip_hdr = (struct iphdr *)(
+				(unsigned long)skb2 +
+				(unsigned long) skb->ip_hdr -
+				(unsigned long)skb);
 		skb2->h.raw = (unsigned char *)(
 				(unsigned long)skb2 +
 				(unsigned long) skb->h.raw -

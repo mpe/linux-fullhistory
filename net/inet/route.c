@@ -15,6 +15,7 @@
  *		Alan Cox	:	cli() protects routing changes
  *		Rui Oliveira	:	ICMP routing table updates
  *		(rco@di.uminho.pt)	Routing table insertion and update
+ *		Linus Torvalds	:	Rewrote bits to be sensible
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -133,17 +134,11 @@ static inline unsigned long default_mask(unsigned long dst)
 
 static unsigned long guess_mask(unsigned long dst, struct device * dev)
 {
-	unsigned long mask = 0xffffffff;
+	unsigned long mask;
 
-/* this is a rather ugly optimization: works only on little-endian machines */
-	while (mask & dst)
-		mask <<= 8;
-	if (mask)
-		return ~mask;
-/* ok, no more hacks.. */
+	if (!dst)
+		return 0;
 	mask = default_mask(dst);
-	if (dev->flags & IFF_POINTOPOINT)
-		return mask;
 	if ((dst ^ dev->pa_addr) & mask)
 		return mask;
 	return dev->pa_mask;
@@ -168,8 +163,8 @@ static inline struct device * get_gw_dev(unsigned long gw)
 /*
  * rewrote rt_add(), as the old one was weird. Linus
  */
-void
-rt_add(short flags, unsigned long dst, unsigned long mask, unsigned long gw, struct device *dev)
+void rt_add(short flags, unsigned long dst, unsigned long mask,
+	unsigned long gw, struct device *dev)
 {
 	struct rtable *r, *rt;
 	struct rtable **rp;
@@ -267,12 +262,14 @@ static int rt_new(struct rtentry *r)
 	daddr = ((struct sockaddr_in *) &r->rt_dst)->sin_addr.s_addr;
 	mask = r->rt_genmask;
 	gw = ((struct sockaddr_in *) &r->rt_gateway)->sin_addr.s_addr;
+	dev = (struct device *) r->rt_dev;
 
 	if (flags & RTF_GATEWAY) {
 		if (r->rt_gateway.sa_family != AF_INET)
 			return -EAFNOSUPPORT;
-		dev = get_gw_dev(gw);
-	} else
+		if (!dev)
+			dev = get_gw_dev(gw);
+	} else if (!dev)
 		dev = dev_check(daddr);
 
 	if (dev == NULL)
@@ -286,15 +283,13 @@ static int rt_new(struct rtentry *r)
 }
 
 
-static int
-rt_kill(struct rtentry *r)
+static int rt_kill(struct rtentry *r)
 {
-  struct sockaddr_in *trg;
+	struct sockaddr_in *trg;
 
-  trg = (struct sockaddr_in *) &r->rt_dst;
-  rt_del(trg->sin_addr.s_addr);
-
-  return(0);
+	trg = (struct sockaddr_in *) &r->rt_dst;
+	rt_del(trg->sin_addr.s_addr);
+	return 0;
 }
 
 
@@ -337,8 +332,10 @@ struct rtable * rt_route(unsigned long daddr, struct options *opt)
 		     rt->rt_dev->pa_brdaddr == daddr)
 			break;
 	}
-	if (daddr == rt->rt_dev->pa_addr)
-		rt = rt_loopback;
+	if (daddr == rt->rt_dev->pa_addr) {
+		if ((rt = rt_loopback) == NULL)
+			goto no_route;
+	}
 	rt->rt_use++;
 	return rt;
 no_route:
@@ -346,39 +343,41 @@ no_route:
 }
 
 
-int
-rt_ioctl(unsigned int cmd, void *arg)
+int rt_ioctl(unsigned int cmd, void *arg)
 {
-  struct device *dev;
-  struct rtentry rt;
-  char namebuf[32];
-  int ret;
-  int err;
+	struct device *dev;
+	struct rtentry rt;
+	char *devname;
+	int ret;
+	int err;
 
-  switch(cmd) {
+	switch(cmd) {
 	case DDIOCSDBG:
 		ret = dbg_ioctl(arg, DBG_RT);
 		break;
 	case SIOCADDRT:
 	case SIOCDELRT:
-		if (!suser()) return(-EPERM);
+		if (!suser())
+			return -EPERM;
 		err=verify_area(VERIFY_READ, arg, sizeof(struct rtentry));
-		if(err)
+		if (err)
 			return err;
 		memcpy_fromfs(&rt, arg, sizeof(struct rtentry));
-		if (rt.rt_dev) {
-		    err=verify_area(VERIFY_READ, rt.rt_dev, sizeof namebuf);
-		    if(err)
-		    	return err;
-		    memcpy_fromfs(&namebuf, rt.rt_dev, sizeof namebuf);
-		    dev = dev_get(namebuf);
-		    rt.rt_dev = dev;
+		if ((devname = (char *) rt.rt_dev) != NULL) {
+			err = getname(devname, &devname);
+			if (err)
+				return err;
+			dev = dev_get(devname);
+			putname(devname);
+			if (!dev)
+				return -EINVAL;
+			rt.rt_dev = dev;
 		}
 		ret = (cmd == SIOCDELRT) ? rt_kill(&rt) : rt_new(&rt);
 		break;
 	default:
 		ret = -EINVAL;
-  }
+	}
 
-  return(ret);
+	return ret;
 }

@@ -54,6 +54,9 @@
  *		Alan Cox	:	Handle FIN (more) properly (we hope).
  *		Alan Cox	:	RST frames sent on unsynchronised state ack error/
  *		Alan Cox	:	Put in missing check for SYN bit.
+ *		Alan Cox	:	Added tcp_select_window() aka NET2E 
+ *					window non shrink trick.
+ *		Alan Cox	:	Added a couple of small NET2E timer fixes
  *
  *
  * To Fix:
@@ -61,7 +64,6 @@
  *		it causes a select. Linux can - given the official select semantics I
  *		feel that _really_ its the BSD network programs that are bust (notably
  *		inetd, which hangs occasionally because of this).
- *			Proper processing of piggybacked data on connect.
  *			Add VJ Fastrecovery algorithm ?
  *			Protocol closedown badly messed up.
  *			Incompatiblity with spider ports (tcp hangs on that 
@@ -154,6 +156,31 @@ diff(unsigned long seq1, unsigned long seq2)
   return(~d+1);
 }
 
+/* This routine picks a TCP windows for a socket based on
+   the following constraints
+   
+   1. The window can never be shrunk once it is offered (RFC 793)
+   2. We limit memory per socket
+   
+   For now we use NET2E3's heuristic of offering half the memory
+   we have handy. All is not as bad as this seems however because
+   of two things. Firstly we will bin packets even within the window
+   in order to get the data we are waiting for into the memory limit.
+   Secondly we bin common duplicate forms at receive time
+
+   Better heuristics welcome
+*/
+   
+static int tcp_select_window(struct sock *sk)
+{
+	int new_window=sk->prot->rspace(sk)/2;
+
+	/* Enforce RFC793 - we've offered it we must live with it */	
+	if(new_window<sk->window)
+		return(sk->window);
+	
+	return(new_window);
+}
 
 /* Enter the time wait state. */
 
@@ -308,7 +335,7 @@ tcp_readable(struct sock *sk)
 		if (skb->h.th->syn) amount--;
 		counted += sum;
 	}
-/*	if (amount && skb->h.th->psh) break;*/
+	if (amount && skb->h.th->psh) break;
 	skb =(struct sk_buff *)skb->next;		/* Move along */
   } while(skb != sk->rqueue);
   restore_flags(flags);
@@ -660,7 +687,7 @@ if (inet_debug == DBG_SLIP) printk("\rtcp_ack: build_header failed\n");
   t1->source = th->dest;
   t1->seq = ntohl(sequence);
   t1->ack = 1;
-  sk->window = sk->prot->rspace(sk);
+  sk->window = tcp_select_window(sk);/*sk->prot->rspace(sk);*/
   t1->window = ntohs(sk->window);
   t1->res1 = 0;
   t1->res2 = 0;
@@ -673,8 +700,12 @@ if (inet_debug == DBG_SLIP) printk("\rtcp_ack: build_header failed\n");
 	sk->ack_backlog = 0;
 	sk->bytes_rcv = 0;
 	sk->ack_timed = 0;
-	if (sk->send_head == NULL && sk->wfront == NULL) {
-/*		delete_timer(sk);*/
+	if (sk->send_head == NULL && sk->wfront == NULL && sk->timeout == TIME_WRITE) 
+	{
+		if(sk->keepopen)
+			reset_timer(sk,TIME_KEEPOPEN,TCP_TIMEOUT_LEN);
+		else
+			delete_timer(sk);
 	}
   }
   t1->ack_seq = ntohl(ack);
@@ -702,7 +733,7 @@ tcp_build_header(struct tcphdr *th, struct sock *sk, int push)
   sk->bytes_rcv = 0;
   sk->ack_timed = 0;
   th->ack_seq = htonl(sk->acked_seq);
-  sk->window = sk->prot->rspace(sk);
+  sk->window = tcp_select_window(sk)/*sk->prot->rspace(sk)*/;
   th->window = htons(sk->window);
 
   return(sizeof(*th));
@@ -1049,7 +1080,7 @@ tcp_read_wakeup(struct sock *sk)
   t1->psh = 0;
   sk->ack_backlog = 0;
   sk->bytes_rcv = 0;
-  sk->window = sk->prot->rspace(sk);
+  sk->window = tcp_select_window(sk);/*sk->prot->rspace(sk);*/
   t1->window = ntohs(sk->window);
   t1->ack_seq = ntohl(sk->acked_seq);
   t1->doff = sizeof(*t1)/4;
@@ -1225,7 +1256,7 @@ tcp_read_urg(struct sock * sk, int nonblock,
 		skb =(struct sk_buff *)skb->next;
 	} while(skb != sk->rqueue);
   }
-  sk->urg = 0;
+/*sk->urg = 0;*/
   release_sock(sk);
   return(0);
 }
@@ -1522,7 +1553,7 @@ tcp_shutdown(struct sock *sk, int how)
   buff->h.seq = sk->send_seq;
   t1->ack = 1;
   t1->ack_seq = ntohl(sk->acked_seq);
-  t1->window = ntohs(sk->prot->rspace(sk));
+  t1->window = ntohs(sk->window=tcp_select_window(sk)/*sk->prot->rspace(sk)*/);
   t1->fin = 1;
   t1->rst = 0;
   t1->doff = sizeof(*t1)/4;
@@ -1871,7 +1902,7 @@ tcp_conn_request(struct sock *sk, struct sk_buff *skb,
   t1->source = newsk->dummy_th.source;
   t1->seq = ntohl(newsk->send_seq++);
   t1->ack = 1;
-  newsk->window = newsk->prot->rspace(newsk);
+  newsk->window = tcp_select_window(newsk);/*newsk->prot->rspace(newsk);*/
   t1->window = ntohs(newsk->window);
   t1->res1 = 0;
   t1->res2 = 0;
@@ -2017,7 +2048,7 @@ tcp_close(struct sock *sk, int timeout)
 		/* Ack everything immediately from now on. */
 		sk->delay_acks = 0;
 		t1->ack_seq = ntohl(sk->acked_seq);
-		t1->window = ntohs(sk->prot->rspace(sk));
+		t1->window = ntohs(sk->window=tcp_select_window(sk)/*sk->prot->rspace(sk)*/);
 		t1->fin = 1;
 		t1->rst = need_reset;
 		t1->doff = sizeof(*t1)/4;
@@ -2508,7 +2539,18 @@ tcp_data(struct sk_buff *skb, struct sock *sk,
 		    skb2 = (struct sk_buff *)skb2->next) {
 			if (before(skb2->h.th->seq, sk->acked_seq+1)) {
 				if (after(skb2->h.th->ack_seq, sk->acked_seq))
+				{
+					long old_acked_seq = sk->acked_seq;
 					sk->acked_seq = skb2->h.th->ack_seq;
+					if((int)(sk->acked_seq - old_acked_seq) >0)
+					{
+						int new_window=sk->window-sk->acked_seq+
+							old_acked_seq;
+						if(new_window<0)
+							new_window=0;
+						sk->window = new_window;
+					}
+				}
 				skb2->acked = 1;
 
 				/*
@@ -3369,7 +3411,7 @@ tcp_write_wakeup(struct sock *sk)
   t1->fin = 0;
   t1->syn = 0;
   t1->ack_seq = ntohl(sk->acked_seq);
-  t1->window = ntohs(sk->prot->rspace(sk));
+  t1->window = ntohs(tcp_select_window(sk)/*sk->prot->rspace(sk)*/);
   t1->doff = sizeof(*t1)/4;
   tcp_send_check(t1, sk->saddr, sk->daddr, sizeof(*t1), sk);
 

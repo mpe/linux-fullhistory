@@ -584,6 +584,8 @@ int tty_ioctl(struct inode * inode, struct file * file,
 					(unsigned long *) arg);
 			return 0;
 		case TIOCSTI:
+			if ((current->tty != dev) && !suser())
+				return -EACCES;
 			put_tty_queue(get_fs_byte((char *) arg), &tty->read_q);
 			return 0;
 		case TIOCGWINSZ:

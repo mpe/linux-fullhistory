@@ -350,22 +350,29 @@ dev_get(char *name)
 
 
 /* Find an interface that can handle addresses for a certain address. */
-struct device *
-dev_check(unsigned long addr)
+struct device * dev_check(unsigned long addr)
 {
-  struct device *dev;
+	struct device *dev;
 
-  for (dev = dev_base; dev; dev = dev->next)
-	if ((dev->flags & IFF_UP) && (dev->flags & IFF_POINTOPOINT) &&
-	    (addr == dev->pa_dstaddr))
+	for (dev = dev_base; dev; dev = dev->next) {
+		if (!(dev->flags & IFF_UP))
+			continue;
+		if (!(dev->flags & IFF_POINTOPOINT))
+			continue;
+		if (addr != dev->pa_dstaddr)
+			continue;
 		return dev;
-  for (dev = dev_base; dev; dev = dev->next)
-	if ((dev->flags & IFF_UP) && !(dev->flags & IFF_POINTOPOINT) &&
-	    (dev->flags & IFF_LOOPBACK ? (addr == dev->pa_addr) :
-	    (dev->pa_mask & addr) == (dev->pa_addr & dev->pa_mask)))
-		break;
-  /* no need to check broadcast addresses */
-  return dev;
+	}
+	for (dev = dev_base; dev; dev = dev->next) {
+		if (!(dev->flags & IFF_UP))
+			continue;
+		if (dev->flags & IFF_POINTOPOINT)
+			continue;
+		if (dev->pa_mask & (addr ^ dev->pa_addr))
+			continue;
+		return dev;
+	}
+	return NULL;
 }
 
 
