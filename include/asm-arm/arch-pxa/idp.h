@@ -166,8 +166,6 @@
 
 #define IDP_LEDS_MASK	(IDP_HB_LED | IDP_BUSY_LED)
 
-#define IDP_WRITE_LEDS(value)	(IDP_CPLD_LED_CONTROL = (IDP_CPLD_LED_CONTROL & ((~(IDP_LEDS_MASK)) | value)))
-
 /*
  * macros for MTD driver
  */
