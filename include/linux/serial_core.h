@@ -357,6 +357,7 @@ void uart_unregister_port(struct uart_driver *reg, int line);
 int uart_register_port(struct uart_driver *reg, struct uart_port *port);
 int uart_add_one_port(struct uart_driver *reg, struct uart_port *port);
 int uart_remove_one_port(struct uart_driver *reg, struct uart_port *port);
+int uart_match_port(struct uart_port *port1, struct uart_port *port2);
 
 /*
  * Power Management
