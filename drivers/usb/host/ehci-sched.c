@@ -208,7 +208,7 @@ static int tt_no_collision (
 				here = here.qh->qh_next;
 				continue;
 			case Q_TYPE_SITD:
-				if (same_tt (dev, here.itd->urb->dev)) {
+				if (same_tt (dev, here.sitd->urb->dev)) {
 					u16		mask;
 
 					mask = le32_to_cpu (here.sitd
@@ -218,7 +218,7 @@ static int tt_no_collision (
 					if (mask & uf_mask)
 						break;
 				}
-				type = Q_NEXT_TYPE (here.qh->hw_next);
+				type = Q_NEXT_TYPE (here.sitd->hw_next);
 				here = here.sitd->sitd_next;
 				continue;
 			// case Q_TYPE_FSTN:
@@ -1180,7 +1180,10 @@ fail:
 	return status;
 
 ready:
+	/* report high speed start in uframes; full speed, in frames */
 	urb->start_frame = stream->next_uframe;
+	if (!stream->highspeed)
+		urb->start_frame >>= 3;
 	return 0;
 }
 
@@ -1504,18 +1507,17 @@ sitd_sched_init (
 
 		/* might need to cross a buffer page within a td */
 		packet->bufp = buf;
-		buf += length;
-		packet->buf1 = buf & ~0x0fff;
+		packet->buf1 = (buf + length) & ~0x0fff;
 		if (packet->buf1 != (buf & ~(u64)0x0fff))
 			packet->cross = 1;
 
 		/* OUT uses multiple start-splits */ 
 		if (stream->bEndpointAddress & USB_DIR_IN)
 			continue;
-		length = 1 + (length / 188);
-		packet->buf1 |= length;
+		length = (length + 187) / 188;
 		if (length > 1) /* BEGIN vs ALL */
-			packet->buf1 |= 1 << 3;
+			length |= 1 << 3;
+		packet->buf1 |= length;
 	}
 }
 
@@ -1610,10 +1612,9 @@ sitd_patch (
 	sitd->hw_buf_hi [0] = cpu_to_le32 (bufp >> 32);
 
 	sitd->hw_buf [1] = cpu_to_le32 (uf->buf1);
-	if (uf->cross) {
+	if (uf->cross)
 		bufp += 4096;
-		sitd->hw_buf_hi [1] = cpu_to_le32 (bufp >> 32);
-	}
+	sitd->hw_buf_hi [1] = cpu_to_le32 (bufp >> 32);
 	sitd->index = index;
 }
 
@@ -1650,7 +1651,7 @@ sitd_link_urb (
 		ehci_to_hcd(ehci)->self.bandwidth_allocated
 				+= stream->bandwidth;
 		ehci_vdbg (ehci,
-			"sched dev%s ep%d%s-iso [%d] %dms/%04x\n",
+			"sched devp %s ep%d%s-iso [%d] %dms/%04x\n",
 			urb->dev->devpath, stream->bEndpointAddress & 0x0f,
 			(stream->bEndpointAddress & USB_DIR_IN) ? "in" : "out",
 			(next_uframe >> 3) % ehci->periodic_size,
@@ -1697,7 +1698,7 @@ sitd_link_urb (
 /*-------------------------------------------------------------------------*/
 
 #define	SITD_ERRS (SITD_STS_ERR | SITD_STS_DBE | SITD_STS_BABBLE \
-			| SITD_STS_XACT | SITD_STS_MMF | SITD_STS_STS)
+	       			| SITD_STS_XACT | SITD_STS_MMF)
 
 static unsigned
 sitd_complete (
@@ -1779,12 +1780,6 @@ static int sitd_submit (struct ehci_hcd *ehci, struct urb *urb, int mem_flags)
 	int			status = -EINVAL;
 	unsigned long		flags;
 	struct ehci_iso_stream	*stream;
-
-	// FIXME remove when csplits behave
-	if (usb_pipein(urb->pipe)) {
-		ehci_dbg (ehci, "no iso-IN split transactions yet\n");
-		return -ENOMEM;
-	}
 
 	/* Get iso_stream head */
 	stream = iso_stream_find (ehci, urb);
