@@ -136,14 +136,15 @@ static void snd_rawmidi_trigger(snd_rawmidi_substream_t * substream, int up)
 
 int snd_rawmidi_drop_output(snd_rawmidi_substream_t * substream)
 {
+	unsigned long flags;
 	snd_rawmidi_runtime_t *runtime = substream->runtime;
 
 	snd_rawmidi_trigger(substream, 0);
 	runtime->drain = 0;
-	/* interrupts are not enabled at this moment,
-	   so spinlock is not required */
+	spin_lock_irqsave(&runtime->lock, flags);
 	runtime->appl_ptr = runtime->hw_ptr = 0;
 	runtime->avail = runtime->buffer_size;
+	spin_unlock_irqrestore(&runtime->lock, flags);
 	return 0;
 }
 
@@ -178,13 +179,15 @@ int snd_rawmidi_drain_output(snd_rawmidi_substream_t * substream)
 
 int snd_rawmidi_drain_input(snd_rawmidi_substream_t * substream)
 {
+	unsigned long flags;
 	snd_rawmidi_runtime_t *runtime = substream->runtime;
 
 	snd_rawmidi_trigger(substream, 0);
 	runtime->drain = 0;
-	/* interrupts aren't enabled at this moment, so spinlock isn't needed */
+	spin_lock_irqsave(&runtime->lock, flags);
 	runtime->appl_ptr = runtime->hw_ptr = 0;
 	runtime->avail = 0;
+	spin_unlock_irqrestore(&runtime->lock, flags);
 	return 0;
 }
 
