@@ -125,10 +125,10 @@ struct wic_local {
 	enum wic_nibble_state nibble;
 	union {
 		struct {
-#if defined(LITTLE_ENDIAN)
+#if defined(__LITTLE_ENDIAN)
 			unsigned char lsb;
 			unsigned char msb;
-#elif defined(BIG_ENDIAN)
+#elif defined(__BIG_ENDIAN)
 			unsigned char msb;
 			unsigned char lsb;
 #else

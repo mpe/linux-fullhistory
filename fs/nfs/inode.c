@@ -25,6 +25,7 @@
 #include <linux/errno.h>
 #include <linux/locks.h>
 #include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>

@@ -99,7 +99,19 @@ S:	Maintained
 BUSLOGIC SCSI DRIVER
 P:	Leonard N. Zubkoff
 M:	Leonard N. Zubkoff <lnz@dandelion.com>
-L:	None
+L:	linux-scsi@vger.rutgers.edu
+S:	Maintained
+
+EATA-DMA SCSI DRIVER
+P:	Michael Neuffer
+M:	mike@i-Connect.Net
+L:	linux-scsi@vger.rutgers.edu
+S:	Maintained
+
+EATA-PIO SCSI DRIVER
+P:	Michael Neuffer
+M:	mike@i-Connect.Net
+L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
 
 FRAME RELAY DLCI/FRAD (Sangoma drivers too)

@@ -742,7 +742,7 @@ check_wp_fault_by_hand:
 check_stack:
 	if (!(vma->vm_flags & VM_GROWSDOWN))
 		goto bad_area;
-	if (expand_stack(vma, start))
+	if (expand_stack(vma, start) == 0)
 		goto good_area;
 
 bad_area:

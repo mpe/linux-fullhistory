@@ -507,6 +507,7 @@ char * get_rock_ridge_symlink(struct inode * inode)
 	 if(slen < 2) break;
 	 if(!rootflag) strcat(rpnt,"/");
        };
+       break;
      case SIG('C','E'):
        CHECK_CE; /* This tells is if there is a continuation record */
        break;

@@ -1,5 +1,5 @@
 !
-!	Display adapter & video mode setup, version 2.7 (09-Apr-96)
+!	Display adapter & video mode setup, version 2.8 (14-Apr-96)
 !
 !	Copyright (C) 1995, 1996 Martin Mares <mj@k332.feld.cvut.cz>
 !	Based on the original setup.S code (C) Linus Torvalds
@@ -739,6 +739,19 @@ res1:	ret
 #endif /* CONFIG_VIDEO_RETAIN */
 
 !
+! Write to indexed VGA register (AL=index, AH=data, DX=index reg. port)
+!
+
+outidx:	out	dx,al
+	push	ax
+	mov	al,ah
+	inc	dx
+	out	dx,al
+	dec	dx
+	pop	ax
+	ret
+
+!
 ! Build the table of video modes (stored after the setup.S code at the
 ! `modelist' label. Each video mode record looks like:
 !	.word	MODE-ID		(our special mode ID (see above))
@@ -947,7 +960,12 @@ scm1:	mov	ah,#0		! Test the mode
 	call	inidx
 	and	al,#0x03
 	jnz	scm2
-	mov	dx,#0x3d4		! Cursor location
+	mov	dl,#0xce		! Another set of mode bits
+	mov	al,#0x06
+	call	inidx
+	shr	al,#1
+	jc	scm2
+	mov	dl,#0xd4		! Cursor location
 	mov	al,#0x0f
 	call	inidx
 	or	al,al
@@ -1117,14 +1135,7 @@ no_s3:	movb	al,#0x35	! restore CRT register 0x35
 no_s31:	xor	bp,bp		! Detection failed
 s3rest:	movb	ah,bh
 	movb	al,#0x38	! restore old value of CRT register 0x38
-outidx:	out	dx,al		! Write to indexed VGA register
-	push	ax		! AL=index, AH=data, DX=index reg port
-	mov	al,ah
-	inc	dx
-	out	dx,al
-	dec	dx
-	pop	ax
-	ret
+	br	outidx
 
 idS3:	.byte	0x81, 0x82, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95
 	.byte	0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa8, 0xb0

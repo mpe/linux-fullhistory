@@ -1,25 +1,32 @@
 /*
- * SDLA      An implementation of a driver for the Sangoma S502/S508 series
- *           multi-protocol PC interface card.  Initial offering is with 
- *           the DLCI driver, providing Frame Relay support for linux.
+ * SDLA		An implementation of a driver for the Sangoma S502/S508 series
+ *		multi-protocol PC interface card.  Initial offering is with 
+ *		the DLCI driver, providing Frame Relay support for linux.
  *
- *           Global definitions for the Frame relay interface.
+ *		Global definitions for the Frame relay interface.
  *
- * Version:  @(#)sdla.c   0.10   23 Mar 1996
+ * Version:	@(#)sdla.c   0.20	13 Apr 1996
  *
- * Credits:  Sangoma Technologies, for the use of 2 cards for an extended
- *                                 period of time.
- *           David Mandelstam <dm@sangoma.com> for getting me started on 
- *                            this project, and incentive to complete it.
- *           Gene Kozen <74604.152@compuserve.com> for providing me with
- *                      important information about the cards.
+ * Credits:	Sangoma Technologies, for the use of 2 cards for an extended
+ *			period of time.
+ *		David Mandelstam <dm@sangoma.com> for getting me started on 
+ *			this project, and incentive to complete it.
+ *		Gene Kozen <74604.152@compuserve.com> for providing me with
+ *			important information about the cards.
  *
- * Author:   Mike McLagan <mike.mclagan@linux.org>
+ * Author:	Mike McLagan <mike.mclagan@linux.org>
  *
- *           This program is free software; you can redistribute it and/or
- *           modify it under the terms of the GNU General Public License
- *           as published by the Free Software Foundation; either version
- *           2 of the License, or (at your option) any later version.
+ * Changes:
+ *		0.15	Mike McLagan	Improved error handling, packet dropping
+ *		0.20	Mike McLagan	New transmit/receive flags for config
+ *					If in FR mode, don't accept packets from
+ *					non-DLCI devices.
+ *
+ *
+ *		This program is free software; you can redistribute it and/or
+ *		modify it under the terms of the GNU General Public License
+ *		as published by the Free Software Foundation; either version
+ *		2 of the License, or (at your option) any later version.
  */
 
 #include <linux/module.h>
@@ -49,7 +56,7 @@
 
 #include <linux/sdla.h>
 
-static const char* version = "SDLA driver v0.10, 23 Mar 1996, mike.mclagan@linux.org";
+static const char* version = "SDLA driver v0.20, 13 Apr 1996, mike.mclagan@linux.org";
 
 static const char* devname = "sdla";
 
@@ -78,14 +85,9 @@ static void sdla_read(struct device *dev, int addr, void *buf, short len)
    temp = buf;
    while(len)
    {
-      offset = addr & 0x1FFF;
-      if (offset + len > 0x2000)
-         bytes = 0x2000 - offset;
-      else
-         bytes = len;
-
-      base = (void *) dev->mem_start;
-      base += offset;
+      offset = addr & SDLA_ADDR_MASK;
+      bytes = offset + len > SDLA_WINDOW_SIZE ? SDLA_WINDOW_SIZE - offset : len;
+      base = (void *) (dev->mem_start + offset);
 
       save_flags(flags);
       cli();
@@ -108,14 +110,9 @@ static void sdla_write(struct device *dev, int addr, void *buf, short len)
    temp = buf;
    while(len)
    {
-      offset = addr & 0x1FFF;
-      if (offset + len > 0x2000)
-         bytes = 0x2000 - offset;
-      else
-         bytes = len;
-
-      base = (void *) dev->mem_start;
-      base += offset;
+      offset = addr & SDLA_ADDR_MASK;
+      bytes = offset + len > SDLA_WINDOW_SIZE ? SDLA_WINDOW_SIZE - offset : len;
+      base = (void *) (dev->mem_start + offset);
 
       save_flags(flags);
       cli();
@@ -133,30 +130,24 @@ static void sdla_clear(struct device *dev)
 {
    unsigned long flags;
    char          *base;
-   int           offset, len, addr, bytes;
+   int           len, addr, bytes;
 
    len = 65536;
    addr = 0;
+   bytes = SDLA_WINDOW_SIZE;
+   base = (void *) dev->mem_start;
+
+   save_flags(flags);
+   cli();
    while(len)
    {
-      offset = addr & 0x1FFF;
-      if (offset + len > 0x2000)
-         bytes = offset + len - 0x2000;
-      else
-         bytes = len;
-
-      base = (void *) dev->mem_start;
-      base += offset;
-
-      save_flags(flags);
-      cli();
       SDLA_WINDOW(dev, addr);
       memset(base, 0, bytes);
-      restore_flags(flags);
 
       addr += bytes;
       len  -= bytes;
    }
+   restore_flags(flags);
 }
 
 static char sdla_byte(struct device *dev, int addr)
@@ -164,8 +155,7 @@ static char sdla_byte(struct device *dev, int addr)
    unsigned long flags;
    char          byte, *temp;
 
-   temp = (void *) dev->mem_start;
-   temp += addr & 0x1FFF;
+   temp = (void *) (dev->mem_start + (addr & SDLA_ADDR_MASK));
 
    save_flags(flags);
    cli();
@@ -250,7 +240,7 @@ int sdla_z80_poll(struct device *dev, int z80_addr, int jiffs, char resp1, char 
    done = jiffies + jiffs;
 
    temp = (void *)dev->mem_start;
-   temp += z80_addr & 0x1FFF;
+   temp += z80_addr & SDLA_ADDR_MASK;
 
    resp = ~resp1;
    while ((jiffies < done) && (resp != resp1) && (!resp2 || (resp != resp2)))
@@ -393,18 +383,25 @@ static void sdla_errors(struct device *dev, int cmd, int dlci, int ret, int len,
          printk(KERN_ERR "%s: Command timed out!\n", dev->name);
          break;
 
+      case SDLA_RET_BUF_OVERSIZE:
+         printk(KERN_INFO "%s: Bc/CIR overflow, acceptable size is %i\n", dev->name, len);
+         break;
+
+      case SDLA_RET_BUF_TOO_BIG:
+         printk(KERN_INFO "%s: Buffer size over specified max of %i\n", dev->name, len);
+         break;
+
       case SDLA_RET_CHANNEL_INACTIVE:
       case SDLA_RET_DLCI_INACTIVE:
-      case SDLA_RET_NO_BUFF:
+      case SDLA_RET_CIR_OVERFLOW:
+      case SDLA_RET_NO_BUFS:
          if (cmd == SDLA_INFORMATION_WRITE)
             break;
 
       default: 
-         /*
-          * Further processing could be done here 
-          * printk(KERN_DEBUG "%s: Unhandled return code 0x%2.2X\n", dev->name, ret);
-          *
-          */
+         printk(KERN_DEBUG "%s: Cmd 0x%2.2X generated return code 0x%2.2X\n", dev->name, cmd, ret);
+/* Further processing could be done here */
+         break;
    }
 }
 
@@ -416,16 +413,14 @@ static int sdla_cmd(struct device *dev, int cmd, short dlci, short flags,
    struct sdla_cmd          *cmd_buf;
    unsigned long            pflags;
    int                      jiffs, ret, waiting, len;
-   long                     temp, window;
+   long                     window;
 
    flp = dev->priv;
 
    window = flp->type == SDLA_S508 ? SDLA_508_CMD_BUF : SDLA_502_CMD_BUF;
-   temp = (int) dev->mem_start;
-   temp += window & 0x1FFF;
-   cmd_buf = (struct sdla_cmd *)temp;
+   cmd_buf = (struct sdla_cmd *)(dev->mem_start + (window & SDLA_ADDR_MASK));
    ret = 0;
-   jiffs = jiffies + HZ / 2;  /* 1/2 second timeout */
+   jiffs = jiffies + HZ;  /* 1 second is plenty */
    save_flags(pflags);
    cli();
    SDLA_WINDOW(dev, window);
@@ -445,7 +440,7 @@ static int sdla_cmd(struct device *dev, int cmd, short dlci, short flags,
    len = 0;
    while (waiting && (jiffies <= jiffs))
    {
-      if (waiting++ % 4) 
+      if (waiting++ % 3) 
       {
          save_flags(pflags);
          cli();
@@ -462,13 +457,18 @@ static int sdla_cmd(struct device *dev, int cmd, short dlci, short flags,
       SDLA_WINDOW(dev, window);
       ret = cmd_buf->retval;
       len = cmd_buf->length;
-      if (outbuf && len)
+      if (outbuf && outlen)
       {
          *outlen = *outlen >= len ? len : *outlen;
-         memcpy(outbuf, cmd_buf->data, *outlen);
+
+         if (*outlen)
+            memcpy(outbuf, cmd_buf->data, *outlen);
       }
+
+      /* This is a local copy that's used for error handling */
       if (ret)
-         memcpy(&status, cmd_buf->data, len);
+         memcpy(&status, cmd_buf->data, len > sizeof(status) ? sizeof(status) : len);
+
       restore_flags(pflags);
    }
    else
@@ -520,6 +520,9 @@ int sdla_deactivate(struct device *slave, struct device *master)
    for(i=0;i<CONFIG_DLCI_MAX;i++)
       if (flp->master[i] == master)
          break;
+
+   if (i == CONFIG_DLCI_MAX)
+      return(-ENODEV);
 
    flp->dlci[i] = -abs(flp->dlci[i]);
 
@@ -598,6 +601,7 @@ int sdla_dlci_conf(struct device *slave, struct device *master, int get)
    struct frad_local *flp;
    struct frad_local *dlp;
    int               i;
+   short             len, ret;
 
    flp = slave->priv;
 
@@ -609,11 +613,18 @@ int sdla_dlci_conf(struct device *slave, struct device *master, int get)
       return(-ENODEV);
 
    dlp = master->priv;
-   if (slave->start)
-      sdla_cmd(slave, SDLA_SET_DLCI_CONFIGURATION, flp->dlci[i], 0,  
-                  &dlp->config, sizeof(struct dlci_conf) - 4 * sizeof(short), NULL, NULL);
 
-   return(0);
+   ret = SDLA_RET_OK;
+   len = sizeof(struct dlci_conf);
+   if (slave->start)
+      if (get)
+         ret = sdla_cmd(slave, SDLA_READ_DLCI_CONFIGURATION, abs(flp->dlci[i]), 0,  
+                     NULL, 0, &dlp->config, &len);
+      else
+         ret = sdla_cmd(slave, SDLA_SET_DLCI_CONFIGURATION, abs(flp->dlci[i]), 0,  
+                     &dlp->config, sizeof(struct dlci_conf) - 4 * sizeof(short), NULL, NULL);
+
+   return(ret == SDLA_RET_OK ? 0 : -EIO);
 }
 
 /**************************
@@ -622,6 +633,7 @@ int sdla_dlci_conf(struct device *slave, struct device *master, int get)
  *
  **************************/
 
+/* NOTE: the DLCI driver deals with freeing the SKB!! */
 static int sdla_transmit(struct sk_buff *skb, struct device *dev)
 {
    struct frad_local *flp;
@@ -643,6 +655,31 @@ static int sdla_transmit(struct sk_buff *skb, struct device *dev)
       printk(KERN_WARNING "%s: transmitter access conflict.\n", dev->name);
    else
    {
+ 
+      /*
+       * stupid GateD insists on setting up the multicast router thru us
+       * and we're ill equipped to handle a non Frame Relay packet at this
+       * time!
+       */
+
+      switch (dev->type)
+      {
+         case ARPHRD_FRAD:
+            if (skb->dev->type != ARPHRD_DLCI)
+            {
+               printk(KERN_WARNING "%s: FRAD module accepts packets from DLCI ONLY!\n", dev->name);
+               dev_kfree_skb(skb, FREE_WRITE);
+               return(0);
+            }
+            break;
+
+         default:
+            printk(KERN_WARNING "%s: unknown firmware type 0x%4.4X\n", dev->name, dev->type);
+            dev_kfree_skb(skb, FREE_WRITE);
+            return(0);
+      }
+
+      /* this is frame specific, but till there's a PPP module, it's the default */
       switch (flp->type)
       {
          case SDLA_S502A:
@@ -658,7 +695,7 @@ static int sdla_transmit(struct sk_buff *skb, struct device *dev)
                save_flags(flags); 
                cli();
                SDLA_WINDOW(dev, addr);
-               pbuf = (void *)(((int) dev->mem_start) + (addr & 0x1FFF));
+               pbuf = (void *)(((int) dev->mem_start) + (addr & SDLA_ADDR_MASK));
 
                sdla_write(dev, pbuf->buf_addr, skb->data, skb->len);
 
@@ -673,17 +710,21 @@ static int sdla_transmit(struct sk_buff *skb, struct device *dev)
       {
          case SDLA_RET_OK:
             flp->stats.tx_packets++;
-            ret = 0;
+            ret = DLCI_RET_OK;
             break;
  
+         case SDLA_RET_CIR_OVERFLOW:
+         case SDLA_RET_BUF_OVERSIZE:
+         case SDLA_RET_NO_BUFS:
+            flp->stats.tx_dropped++;
+            ret = DLCI_RET_DROP;
+            break;
+
          default:
             flp->stats.tx_errors++;
-            ret = 1;
+            ret = DLCI_RET_ERR;
+            break;
       }
-
-      /* per Alan Cox, we can drop the packet on the floor if it doesn't go */
-      dev_kfree_skb(skb, FREE_WRITE);
-
       dev->tbusy = 0;
    }
    return(ret);
@@ -701,17 +742,18 @@ static void sdla_receive(struct device *dev)
    struct buf_entry  *pbuf;
 
    unsigned long     flags;
-   int               i, received, success, addr;
-   short             dlci, len, split;
-   char              bogus;
+   int               i, received, success, addr, buf_base, buf_top;
+   short             dlci, len, len2, split;
 
    flp = dev->priv;
-   bogus = 0;
-   success = 0;
-   received = 0;
-   addr = 0;
+   success = 1;
+   received = addr = buf_top = buf_base = 0;
+   len = dlci = 0;
    skb = NULL;
    master = NULL;
+   cmd = NULL;
+   pbufi = NULL;
+   pbuf = NULL;
 
    save_flags(flags);
    cli();
@@ -720,93 +762,89 @@ static void sdla_receive(struct device *dev)
    {
       case SDLA_S502A:
       case SDLA_S502E:
-         cmd = (void *) (dev->mem_start + (SDLA_502_RCV_BUF & 0x1FFF));
+         cmd = (void *) (dev->mem_start + (SDLA_502_RCV_BUF & SDLA_ADDR_MASK));
          SDLA_WINDOW(dev, SDLA_502_RCV_BUF);
-         if (!cmd->opp_flag)
+         success = cmd->opp_flag;
+         if (!success)
             break;
 
          dlci = cmd->dlci;
          len = cmd->length;
-
-         for (i=0;i<CONFIG_DLCI_MAX;i++)
-            if (flp->dlci[i] == dlci)
-               break;
-
-         if (i == CONFIG_DLCI_MAX)
-         {
-            printk(KERN_NOTICE "%s: Received packet from invalid DLCI %i, ignoring.", dev->name, dlci);
-            flp->stats.rx_errors++;
-            cmd->opp_flag = 0;
-            break;
-         }
-
-         master = flp->master[i];
-         skb = dev_alloc_skb(len);
-         if (skb == NULL) 
-         {
-            printk(KERN_NOTICE "%s: Memory squeeze, dropping packet.\n", dev->name);
-            flp->stats.rx_dropped++;
-            cmd->opp_flag = 0;
-            break;
-         }
-
-         /* pick up the data */
-         sdla_read(dev, dev->mem_start + ((SDLA_502_RCV_BUF + SDLA_502_DATA_OFS) & 0x1FFF), skb_put(skb,len), len);
-         cmd->opp_flag = 0;
-         success = 1;
          break;
 
       case SDLA_S508:
-         pbufi = (void *) (dev->mem_start + (SDLA_508_RXBUF_INFO & 0x1FFF));
+         pbufi = (void *) (dev->mem_start + (SDLA_508_RXBUF_INFO & SDLA_ADDR_MASK));
          SDLA_WINDOW(dev, SDLA_508_RXBUF_INFO);
-         pbuf = (void *) (dev->mem_start + ((pbufi->rse_base + flp->buffer * sizeof(struct buf_entry)) & 0x1FFF));
-         if (!pbuf->opp_flag)
+         pbuf = (void *) (dev->mem_start + ((pbufi->rse_base + flp->buffer * sizeof(struct buf_entry)) & SDLA_ADDR_MASK));
+         success = pbuf->opp_flag;
+         if (!success)
             break;
 
+         buf_top = pbufi->buf_top;
+         buf_base = pbufi->buf_base;
          dlci = pbuf->dlci;
          len = pbuf->length;
          addr = pbuf->buf_addr;
+         break;
+   }
 
-         for (i=0;i<CONFIG_DLCI_MAX;i++)
-            if (flp->dlci[i] == dlci)
-               break;
-
-         if (i == CONFIG_DLCI_MAX)
-         {
-            printk(KERN_NOTICE "%s: Received packet from invalid DLCI %i, ignoring.", dev->name, dlci);
-            flp->stats.rx_errors++;
-            pbuf->opp_flag = 0;
+   /* common code, find the DLCI and get the SKB */
+   if (success)
+   {
+      for (i=0;i<CONFIG_DLCI_MAX;i++)
+         if (flp->dlci[i] == dlci)
             break;
-         }
 
-         master = flp->master[i];
-         skb = dev_alloc_skb(len);
-         if (skb == NULL) 
+      if (i == CONFIG_DLCI_MAX)
+      {
+         printk(KERN_NOTICE "%s: Recieved packet from invalid DLCI %i, ignoring.", dev->name, dlci);
+         flp->stats.rx_errors++;
+         success = 0;
+      }
+   }
+
+   if (success)
+   {
+      master = flp->master[i];
+      skb = dev_alloc_skb(len + sizeof(struct frhdr));
+      if (skb == NULL) 
+      {
+         printk(KERN_NOTICE "%s: Memory squeeze, dropping packet.\n", dev->name);
+         flp->stats.rx_dropped++; 
+         success = 0;
+      }
+      else
+         skb_reserve(skb, sizeof(struct frhdr));
+   }
+
+   /* pick up the data */
+   switch (flp->type)
+   {
+      case SDLA_S502A:
+      case SDLA_S502E:
+         if (success)
+            sdla_read(dev, SDLA_502_RCV_BUF + SDLA_502_DATA_OFS, skb_put(skb,len), len);
+
+         SDLA_WINDOW(dev, SDLA_502_RCV_BUF);
+         cmd->opp_flag = 0;
+         break;
+
+      case SDLA_S508:
+         if (success)
          {
-            printk(KERN_NOTICE "%s: Memory squeeze, dropping packet.\n", dev->name);
-            flp->stats.rx_dropped++;
-            pbuf->opp_flag = 0;
-            break;
+            /* is this buffer split off the end of the internal ring buffer */
+            split = addr + len > buf_top + 1 ? len - (buf_top - addr + 1) : 0;
+            len2 = len - split;
+
+            sdla_read(dev, addr, skb_put(skb, len2), len2);
+            if (split)
+               sdla_read(dev, buf_base, skb_put(skb, split), split);
          }
-
-         /* is this buffer split off the end of the internal ring buffer */
-         split = addr + len > pbufi->buf_top + 1 ? pbufi->buf_top - addr + 1 : 0;
-         len -= split;
-
-         /* lets get the data */
-         sdla_read(dev, addr, skb_put(skb, len), len);
-         if (split)
-         {
-            SDLA_WINDOW(dev, SDLA_508_RXBUF_INFO);
-            sdla_read(dev, pbufi->buf_base, skb_put(skb, split), split);
-         }
-
-         SDLA_WINDOW(dev, SDLA_508_RXBUF_INFO);
-         pbuf->opp_flag = 0;
-         success = 1;
 
          /* increment the buffer we're looking at */
+         SDLA_WINDOW(dev, SDLA_508_RXBUF_INFO);
          flp->buffer = (flp->buffer + 1) % pbufi->rse_num;
+         pbuf->opp_flag = 0;
          break;
    }
 
@@ -838,7 +876,7 @@ static void sdla_isr(int irq, void *dev_id, struct pt_regs * regs)
 
    if (!flp->initialized)
    {
-      printk(KERN_WARNING "%s: irq %d for uninitialized device.\n", dev->name, irq);
+      printk(KERN_WARNING "%s: irq %d for unintialiazed device.\n", dev->name, irq);
       return;
    }
 
@@ -872,10 +910,10 @@ static void sdla_isr(int irq, void *dev_id, struct pt_regs * regs)
       outb(flp->state, dev->base_addr + SDLA_REG_CONTROL);
    }
 
-   dev->interrupt = 0;
    /* this clears the byte, informing the Z80 we're done */
    byte = 0;
    sdla_write(dev, flp->type == SDLA_S508 ? SDLA_508_IRQ_INTERFACE : SDLA_502_IRQ_INTERFACE, &byte, sizeof(byte));
+   dev->interrupt = 0;
 }
 
 static void sdla_poll(unsigned long device)
@@ -941,7 +979,6 @@ static int sdla_close(struct device *dev)
    }
 
    sdla_cmd(dev, SDLA_DISABLE_COMMUNICATIONS, 0, 0, NULL, 0, NULL, NULL);
-   sdla_stop(dev);
 
    dev->tbusy = 1;
    dev->start = 0;
@@ -972,9 +1009,6 @@ static int sdla_open(struct device *dev)
 
    if (!flp->configured)
       return(-EPERM);
-
-   /* off to the races! */
-   sdla_start(dev);
 
    /* time to send in the configuration */
    len = 0;
@@ -1116,6 +1150,9 @@ static int sdla_config(struct device *dev, struct frad_conf *conf, int get)
       memcpy(&flp->config, &data.config, sizeof(struct frad_conf));
       flp->config.flags |= SDLA_DIRECT_RECV;
 
+      if (flp->type == SDLA_S508)
+         flp->config.flags |= SDLA_TX70_RX30;
+
       if (dev->mtu != flp->config.mtu)
       {
          /* this is required to change the MTU */
@@ -1125,7 +1162,12 @@ static int sdla_config(struct device *dev, struct frad_conf *conf, int get)
                flp->master[i]->mtu = flp->config.mtu;
       }
 
-      flp->config.mtu += sizeof(struct fradhdr);
+      flp->config.mtu += sizeof(struct frhdr);
+
+      /* off to the races! */
+      if (!flp->configured)
+         sdla_start(dev);
+
       flp->configured = 1;
    }
    else
@@ -1134,7 +1176,7 @@ static int sdla_config(struct device *dev, struct frad_conf *conf, int get)
       if (err)
          return(err);
 
-      /* no sense reading if the CPU isn't started */
+      /* no sense reading if the CPU isnt' started */
       if (dev->start)
       {
          size = sizeof(data);
@@ -1148,8 +1190,8 @@ static int sdla_config(struct device *dev, struct frad_conf *conf, int get)
             memset(&data.config, 0, sizeof(struct frad_conf));
 
       memcpy(&flp->config, &data.config, sizeof(struct frad_conf));
-      data.config.flags &= ~SDLA_DIRECT_RECV;
-      data.config.mtu -= data.config.mtu > sizeof(struct fradhdr) ? sizeof(struct fradhdr) : data.config.mtu;
+      data.config.flags &= FRAD_VALID_FLAGS;
+      data.config.mtu -= data.config.mtu > sizeof(struct frhdr) ? sizeof(struct frhdr) : data.config.mtu;
       memcpy_tofs(conf, &data.config, sizeof(struct frad_conf));
    }
 
@@ -1204,13 +1246,13 @@ static int sdla_reconfig(struct device *dev)
 
    flp = dev->priv;
 
-   memcpy(&data, &flp->config, sizeof(struct frad_conf));
-
    len = 0;
    for(i=0;i<CONFIG_DLCI_MAX;i++)
       if (flp->dlci[i])
          data.dlci[len++] = flp->dlci[i];
    len *= 2;
+
+   memcpy(&data, &flp->config, sizeof(struct frad_conf));
    len += sizeof(struct frad_conf);
 
    sdla_cmd(dev, SDLA_DISABLE_COMMUNICATIONS, 0, 0, NULL, 0, NULL, NULL);
@@ -1244,9 +1286,9 @@ static int sdla_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 
 /* ==========================================================
 NOTE:  This is rather a useless action right now, as the
-       driver does not support protocols other than FR right
-       now.  However, Sangoma has modules for a number of
-       other protocols.
+       current driver does not support protocols other than
+       FR.  However, Sangoma has modules for a number of
+       other protocols in the works.
 ============================================================*/
       case SDLA_PROTOCOL:
          if (flp->configured)
@@ -1605,8 +1647,13 @@ int sdla_init(struct device *dev)
 
    dev->type            = 0xFFFF;
    dev->family          = AF_UNSPEC;
-   dev->pa_alen         = sizeof(unsigned long);
+   dev->pa_alen         = 0;
+   dev->pa_addr         = 0;
+   dev->pa_dstaddr      = 0;
+   dev->pa_brdaddr      = 0;
+   dev->pa_mask         = 0;
    dev->hard_header_len = 0;
+   dev->addr_len        = 0;
    dev->mtu             = SDLA_MAX_MTU;
 
    for (i = 0; i < DEV_NUMBUFFS; i++) 

@@ -62,7 +62,7 @@ void show_mem(void)
 	i = MAP_NR(high_memory);
 	while (i-- > 0) {
 		total++;
-		if (mem_map[i].reserved)
+		if (PageReserved(mem_map+i))
 			reserved++;
 		else if (!mem_map[i].count)
 			free++;
@@ -121,7 +121,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 			continue;
 
 		while (nr--)
-			mem_map[pfn++].reserved = 0;
+			clear_bit(PG_reserved, &mem_map[pfn++].flags);
 	}
 
 	/* unmap the console stuff: we don't need it, and we don't want it */
@@ -152,14 +152,14 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	 */
 	tmp = KERNEL_START;
 	while (tmp < start_mem) {
-		mem_map[MAP_NR(tmp)].reserved = 1;
+		set_bit(PG_reserved, &mem_map[MAP_NR(tmp)].flags);
 		tmp += PAGE_SIZE;
 	}
 
 	for (tmp = PAGE_OFFSET ; tmp < high_memory ; tmp += PAGE_SIZE) {
 		if (tmp >= MAX_DMA_ADDRESS)
-			mem_map[MAP_NR(tmp)].dma = 0;
-		if (mem_map[MAP_NR(tmp)].reserved)
+			clear_bit(PG_DMA, &mem_map[MAP_NR(tmp)].flags);
+		if (PageReserved(mem_map+MAP_NR(tmp)))
 			continue;
 		mem_map[MAP_NR(tmp)].count = 1;
 		free_page(tmp);
@@ -179,7 +179,7 @@ void si_meminfo(struct sysinfo *val)
 	val->freeram = nr_free_pages << PAGE_SHIFT;
 	val->bufferram = buffermem;
 	while (i-- > 0)  {
-		if (mem_map[i].reserved)
+		if (PageReserved(mem_map+i))
 			continue;
 		val->totalram++;
 		if (!mem_map[i].count)

@@ -163,6 +163,7 @@ typedef struct scsi_device {
     struct Scsi_Host * host;
     void (*scsi_request_fn)(void);  /* Used to jumpstart things after an 
 				     * ioctl */
+    struct scsi_cmnd *device_queue; /* queue of SCSI Command structures */
     void *hostdata;                 /* available to low-level driver */
     char type;
     char scsi_level;
@@ -170,6 +171,7 @@ typedef struct scsi_device {
     unsigned char current_tag;      /* current tag */
     unsigned char sync_min_period;  /* Not less than this period */
     unsigned char sync_max_offset;  /* Not greater than this offset */
+    unsigned char queue_depth;	    /* How deep a queue to use */
 
     unsigned writeable:1;
     unsigned removable:1; 
@@ -186,11 +188,12 @@ typedef struct scsi_device {
     unsigned soft_reset:1;          /* Uses soft reset option */
     unsigned sync:1;                /* Negotiate for sync transfers */
     unsigned single_lun:1;          /* Indicates we should only allow I/O to
-                                       one of the luns for the device at a time. */
-    unsigned was_reset:1;	/* There was a bus reset on the bus for this
-                                   device */
-    unsigned expecting_cc_ua:1;    /* Expecting a CHECK_CONDITION/UNIT_ATTN
-                                      because we did a bus reset. */
+                                     * one of the luns for the device at a 
+                                     * time. */
+    unsigned was_reset:1;           /* There was a bus reset on the bus for 
+                                     * this device */
+    unsigned expecting_cc_ua:1;     /* Expecting a CHECK_CONDITION/UNIT_ATTN
+                                     * because we did a bus reset. */
 } Scsi_Device;
 
 /*
@@ -304,8 +307,16 @@ struct scatterlist {
  * should keep the command alive. */
 #define SCSI_RESET_WAKEUP 4
 
+/* The command is not active in the low level code. Command probably
+   finished. */
+#define SCSI_RESET_NOT_RUNNING 5
+
 /* Something went wrong, and we do not know how to fix it. */
-#define SCSI_RESET_ERROR 5
+#define SCSI_RESET_ERROR 6
+
+#define SCSI_RESET_SYNCHRONOUS		0x01
+#define SCSI_RESET_ASYNCHRONOUS		0x02
+#define SCSI_RESET_SUGGEST_BUS_RESET	0x04
 
 /*
  * This is a bitmask that is ored with one of the above codes.
@@ -347,7 +358,7 @@ typedef struct scsi_cmnd {
     unsigned char target, lun, channel;
     unsigned char cmd_len;
     unsigned char old_cmd_len;
-    struct scsi_cmnd *next, *prev;  
+    struct scsi_cmnd *next, *prev, *device_next, *reset_chain;
     
     /* These elements define the operation we are about to perform */
     unsigned char cmnd[12];
@@ -378,6 +389,22 @@ typedef struct scsi_cmnd {
 
     unsigned char sense_buffer[16];  /* Sense for this command, if needed */
 
+    /*
+      A SCSI Command is assigned a nonzero serial_number when internal_cmnd
+      passes it to the driver's queue command function.  The serial_number
+      is cleared when scsi_done is entered indicating that the command has
+      been completed.  If a timeout occurs, the serial number at the moment
+      of timeout is copied into serial_number_at_timeout.  By subseuqently
+      comparing the serial_number and serial_number_at_timeout fields
+      during abort or reset processing, we can detect whether the command
+      has already completed.  This also detects cases where the command has
+      completed and the SCSI Command structure has already being reused
+      for another command, so that we can avoid incorrectly aborting or
+      resetting the new command.
+    */
+
+    unsigned long serial_number;
+    unsigned long serial_number_at_timeout;
 
     int retries;
     int allowed;
@@ -428,7 +455,7 @@ typedef struct scsi_cmnd {
  *  DID_ABORT is returned in the hostbyte.
  */
 
-extern int scsi_abort (Scsi_Cmnd *, int code, int pid);
+extern int scsi_abort (Scsi_Cmnd *, int code);
 
 extern void scsi_do_cmd (Scsi_Cmnd *, const void *cmnd ,
 			 void *buffer, unsigned bufflen, 
@@ -439,7 +466,7 @@ extern void scsi_do_cmd (Scsi_Cmnd *, const void *cmnd ,
 extern Scsi_Cmnd * allocate_device(struct request **, Scsi_Device *, int);
 
 extern Scsi_Cmnd * request_queueable(struct request *, Scsi_Device *);
-extern int scsi_reset (Scsi_Cmnd *, int);
+extern int scsi_reset (Scsi_Cmnd *, unsigned int);
 
 extern int max_scsi_hosts;
 

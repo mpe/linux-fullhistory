@@ -35,6 +35,6 @@ tkgen.o: tkgen.c tkparse.h
 	$(HOSTCC) $(HOSTCFLAGS) -c -o tkgen.o tkgen.c
 
 clean:
-	rm -f kconfig.tk *.o parse
+	rm -f *~ kconfig.tk *.o tkparse
 
 include $(TOPDIR)/Rules.make

@@ -46,6 +46,10 @@
  *                  (Apparently there still are some out there!)
  *                - Tabstops seem sensible now.
  *
+ * 1996 04 14
+ * Avery Pennarun - Reduced flicker when creating windows, even with "update
+ *                  idletasks" hack.
+ *
  * TO DO:
  *   - clean up - there are useless ifdef's everywhere.
  *   - better comments throughout - C code generating tcl is really cryptic.
@@ -93,6 +97,7 @@ static void start_proc(char * label, int menu_num, int flag)
   printf("proc menu%d {w title} {\n", menu_num);
   printf("\tcatch {destroy $w}\n");
   printf("\ttoplevel $w -class Dialog\n");
+  printf("\twm withdraw $w\n");
   printf("\tmessage $w.m -width 400 -aspect 300 -text \\\n");
   printf("\t\t\"%s\"  -relief raised\n",label);
   printf("\tpack $w.m -pady 10 -side top -padx 10\n");
@@ -546,7 +551,8 @@ static void end_proc(int menu_num)
   printf("\tupdate idletasks\n");
   printf("\twm maxsize $w [winfo width $w] [winfo screenheight $w]\n");
   printf("\twm minsize $w [winfo width $w] 100\n\n");
-  
+  printf("\twm deiconify $w\n");
+    
   printf("}\n\n\n");
 
   /*

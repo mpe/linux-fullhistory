@@ -125,6 +125,11 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_RTC),y)
+M = y
+L_OBJS += rtc.o
+endif
+
 ifdef CONFIG_QIC02_TAPE
 L_OBJS += tpqic02.o 
 endif

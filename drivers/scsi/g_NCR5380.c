@@ -122,13 +122,15 @@ static void internal_setup(int board, char *str, int *ints) {
     static int commandline_current = 0;
     switch (board) {
     case BOARD_NCR5380:
-	if (ints[0] != 2 && ints[0] != 3) 
+	if (ints[0] != 2 && ints[0] != 3) {
 	    printk("generic_NCR5380_setup : usage ncr5380=" STRVAL(NCR5380_map_name) ",irq,dma\n");
-	return;
+	    return;
+	}
     case BOARD_NCR53C400:
-	if (ints[0] != 2)
-	    printk("generic_NCR53C400_setup : usage ncr53c400= " STRVAL(NCR5380_map_name) ",irq\n");
-	return;
+	if (ints[0] != 2) {
+	    printk("generic_NCR53C400_setup : usage ncr53c400=" STRVAL(NCR5380_map_name) ",irq\n");
+	    return;
+	}
     }
 
     if (commandline_current < NO_OVERRIDES) {

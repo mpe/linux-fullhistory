@@ -21,7 +21,7 @@ static char *version =
 
 /* A few user-configurable values. */
 
-/* Default to using non-10baseT (i.e. AUI/10base2/100baseT port) port. */
+/* Default to using 10baseT (i.e. non-AUI/10base2/100baseT port) port. */
 #define	TULIP_10TP_PORT		0
 #define	TULIP_100TP_PORT	1
 #define	TULIP_AUI_PORT		1
@@ -561,10 +561,26 @@ static void
 generic21040_select(struct device *dev)
 {
 	int ioaddr = dev->base_addr;
+	const char *if_port;
 
 	dev->if_port &= 3;
-	printk("%s: enabling %s port.\n",
-		   dev->name, dev->if_port ?  "AUI":"10baseT");
+	switch (dev->if_port)
+	{
+	case TULIP_10TP_PORT:
+		if_port = "10baseT";
+		break;
+	case TULIP_100TP_PORT:
+	/* TULIP_AUI_PORT is the same as TULIP_100TP_PORT. */
+		if_port = "100baseT/AUI";
+		break;
+	case TULIP_BNC_PORT:
+		if_port = "BNC";
+		break;
+	default:
+		if_port = "unknown type";
+		break;
+	}
+	printk("%s: enabling %s port.\n", dev->name, if_port);
 	/* Set the full duplex match frame. */
 	tio_write(FULL_DUPLEX_MAGIC, CSR11);
 	tio_write(TSIAC_RESET, CSR13);

@@ -333,6 +333,9 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
     retval->cmd_per_lun = tpnt->cmd_per_lun;
     retval->unchecked_isa_dma = tpnt->unchecked_isa_dma;
     retval->use_clustering = tpnt->use_clustering;   
+
+    retval->select_queue_depths = NULL;
+
     if(!scsi_hostlist)
 	scsi_hostlist = retval;
     else

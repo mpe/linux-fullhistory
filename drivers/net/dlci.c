@@ -5,9 +5,20 @@
  *		interfaces.  Requires 'dlcicfg' program to create usable 
  *		interfaces, the initial one, 'dlci' is for IOCTL use only.
  *
- * Version:	@(#)dlci.c	0.15	31 Mar 1996
+ * Version:	@(#)dlci.c	0.20	13 Apr 1996
  *
  * Author:	Mike McLagan <mike.mclagan@linux.org>
+ *
+ * Changes:
+ *
+ *		0.15	Mike Mclagan	Packet freeing, bug in kmalloc call
+ *					DLCI_RET handling
+ *
+ *		0.20	Mike McLagan	More conservative on which packets
+ *					are returned for retry and whic are
+ *					are dropped.  If DLCI_RET_DROP is
+ *					returned from the FRAD, the packet is
+ *				 	sent back to Linux for re-transmission
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -41,7 +52,7 @@
 #include <net/sock.h>
 
 static const char *devname = "dlci";
-static const char *version = "DLCI driver v0.15, 31 Mar 1996, mike.mclagan@linux.org";
+static const char *version = "DLCI driver v0.20, 13 Apr 1996, mike.mclagan@linux.org";
 
 static struct device *open_dev[CONFIG_DLCI_COUNT];
 
@@ -240,20 +251,26 @@ static int dlci_transmit(struct sk_buff *skb, struct device *dev)
       {
          case DLCI_RET_OK:
             dlp->stats.tx_packets++;
+            ret = 0;
             break;
 
          case DLCI_RET_ERR:
             dlp->stats.tx_errors++;
+            ret = 0;
             break;
 
          case DLCI_RET_DROP:
             dlp->stats.tx_dropped++;
+            ret = 1;
             break;
       }
 
       /* Alan Cox recommends always returning 0, and always freeing the packet */
-      ret = 0;
-      dev_kfree_skb(skb, FREE_WRITE);
+      /* experience suggest a slightly more conservative approach */
+
+      if (!ret)
+         dev_kfree_skb(skb, FREE_WRITE);
+
       dev->tbusy = 0;
    }
 
@@ -406,6 +423,10 @@ int dlci_config(struct device *dev, struct dlci_conf *conf, int get)
 
    if (!get)
    {
+      err = verify_area(VERIFY_READ, conf, sizeof(struct dlci_conf));
+      if (err)
+         return(err);
+
       memcpy_fromfs(&config, conf, sizeof(struct dlci_conf));
       if (config.flags & ~DLCI_VALID_FLAGS)
          return(-EINVAL);
@@ -418,7 +439,13 @@ int dlci_config(struct device *dev, struct dlci_conf *conf, int get)
       return(err);
 
    if (get)
+   {
+      err = verify_area(VERIFY_WRITE, conf, sizeof(struct dlci_conf));
+      if (err)
+         return(err);
+
       memcpy_tofs(conf, &dlp->config, sizeof(struct dlci_conf));
+   }
 
    return(0);
 }

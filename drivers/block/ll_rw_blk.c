@@ -346,7 +346,9 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	cli();
 	req = blk_dev[major].current_request;
 	if (!req) {
-		plug_device(blk_dev + major);
+		/* MD and loop can't handle plugging without deadlocking */
+		if (major != MD_MAJOR && major != LOOP_MAJOR)
+			plug_device(blk_dev + major);
 	} else switch (major) {
 	     case IDE0_MAJOR:	/* same as HD_MAJOR */
 	     case IDE1_MAJOR:

@@ -964,16 +964,17 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 	segs = 0;
 	size = 0;
 	for(vma = current->mm->mmap; vma != NULL; vma = vma->vm_next) {
-		int sz = vma->vm_end-vma->vm_start;
+		if (maydump(vma))
+		{
+			int sz = vma->vm_end-vma->vm_start;
 		
-		if (!maydump(vma))
-			continue;
-
-		if (size+sz > limit)
-			break;
+			if (size+sz >= limit)
+				break;
+			else
+				size += sz;
+		}
 		
 		segs++;
-		size += sz;
 	}
 #ifdef DEBUG
 	printk("elf_core_dump: %d segs taking %d bytes\n", segs, size);
@@ -1152,8 +1153,6 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 		struct elf_phdr phdr;
 		size_t sz;
 
-		if (!maydump(vma))
-			continue;
 		i++;
 
 		sz = vma->vm_end - vma->vm_start;
@@ -1162,9 +1161,9 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 		phdr.p_offset = offset;
 		phdr.p_vaddr = vma->vm_start;
 		phdr.p_paddr = 0;
-		phdr.p_filesz = sz;
+		phdr.p_filesz = maydump(vma) ? sz : 0;
 		phdr.p_memsz = sz;
-		offset += sz;
+		offset += phdr.p_filesz;
 		phdr.p_flags = vma->vm_flags & VM_READ ? PF_R : 0;
 		if (vma->vm_flags & VM_WRITE) phdr.p_flags |= PF_W;
 		if (vma->vm_flags & VM_EXEC) phdr.p_flags |= PF_X;

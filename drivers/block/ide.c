@@ -1808,7 +1808,7 @@ static void ide_release(struct inode * inode, struct file * file)
 	ide_drive_t *drive;
 
 	if ((drive = get_info_ptr(inode->i_rdev)) != NULL) {
-		sync_dev(inode->i_rdev);
+		fsync_dev(inode->i_rdev);
 		drive->usage--;
 #ifdef CONFIG_BLK_DEV_IDECD
 		if (drive->media == ide_cdrom) {
@@ -1822,7 +1822,7 @@ static void ide_release(struct inode * inode, struct file * file)
 			return;
 		}
 #endif	/* CONFIG_BLK_DEV_IDETAPE */
-		if (drive->removable) {
+		if (drive->removable && !drive->usage) {
 			byte door_unlock[] = {WIN_DOORUNLOCK,0,0,0};
 			struct request rq;
 			invalidate_buffers(inode->i_rdev);

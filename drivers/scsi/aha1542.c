@@ -1179,7 +1179,7 @@ int aha1542_abort(Scsi_Cmnd * SCpnt)
    For a first go, we assume that the 1542 notifies us with all of the
    pending commands (it does implement soft reset, after all). */
 
-int aha1542_reset(Scsi_Cmnd * SCpnt)
+int aha1542_reset(Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 {
     unchar ahacmd = CMD_START_SCSI;
     int i;
@@ -1187,7 +1187,7 @@ int aha1542_reset(Scsi_Cmnd * SCpnt)
     /*
      * See if a bus reset was suggested.
      */
-    if( SCpnt->host->suggest_bus_reset )
+    if( reset_flags & SCSI_RESET_SUGGEST_BUS_RESET )
       {
 	/* 
 	 * This does a scsi reset for all devices on the bus.

@@ -1818,9 +1818,11 @@ struct wait_queue * bdflush_done = NULL;
 
 static void wakeup_bdflush(int wait)
 {
-	run_task_queue(&tq_disk);
 	wake_up(&bdflush_wait);
-	if(wait) sleep_on(&bdflush_done);
+	if (wait) {
+		run_task_queue(&tq_disk);
+		sleep_on(&bdflush_done);
+	}
 }
 
 

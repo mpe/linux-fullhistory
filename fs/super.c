@@ -8,6 +8,9 @@
  *                                   - mount systemcall
  *                                   - umount systemcall
  *
+ *  Added options to /proc/mounts
+ *  Torbjörn Lindh (torbjorn.lindh@gopta.se), April 14, 1996.
+ *
  * GK 2/5/95  -  Changed to support mounting the root fs via NFS
  *
  *  Added kerneld support: Jacques Gelinas and Bjorn Ekwall
@@ -36,9 +39,9 @@
 #include <linux/kerneld.h>
 #endif
  
-#ifdef CONFIG_ROOT_NFS
 #include <linux/nfs_fs.h>
-#endif
+#include <linux/nfs_fs_sb.h>
+#include <linux/nfs_mount.h>
 
 extern void wait_for_keypress(void);
 extern struct file_operations * get_blkfops(unsigned int major);
@@ -263,16 +266,94 @@ asmlinkage int sys_sysfs(int option, ...)
 	return retval;
 }
 
+static struct proc_fs_info {
+	int flag;
+	char *str;
+} fs_info[] = {
+	{ MS_NOEXEC, ",noexec" },
+	{ MS_NOSUID, ",nosuid" },
+	{ MS_NODEV, ",nodev" },
+	{ MS_SYNCHRONOUS, ",sync" },
+#ifdef MS_NOSUB			/* Can't find this except in mount.c */
+	{ MS_NOSUB, ",nosub" },
+#endif
+	{ 0, NULL }
+};
+
+static struct proc_nfs_info {
+	int flag;
+	char *str;
+} nfs_info[] = {
+	{ NFS_MOUNT_SOFT, ",soft" },
+	{ NFS_MOUNT_INTR, ",intr" },
+	{ NFS_MOUNT_POSIX, ",posix" },
+	{ NFS_MOUNT_NOCTO, ",nocto" },
+	{ NFS_MOUNT_NOAC, ",noac" },
+	{ 0, NULL }
+};
+
 int get_filesystem_info( char *buf )
 {
 	struct vfsmount *tmp = vfsmntlist;
+	struct proc_fs_info *fs_infop;
+	struct proc_nfs_info *nfs_infop;
+	struct nfs_server *nfss;
 	int len = 0;
 
-	while ( tmp && len < PAGE_SIZE - 80 )
+	while ( tmp && len < PAGE_SIZE - 160)
 	{
 		len += sprintf( buf + len, "%s %s %s %s",
 			tmp->mnt_devname, tmp->mnt_dirname, tmp->mnt_sb->s_type->name,
 			tmp->mnt_flags & MS_RDONLY ? "ro" : "rw" );
+		for (fs_infop = fs_info; fs_infop->flag; fs_infop++) {
+		  if (tmp->mnt_flags & fs_infop->flag) {
+		    strcpy(buf + len, fs_infop->str);
+		    len += strlen(fs_infop->str);
+		  }
+		}
+		if (!strcmp("nfs", tmp->mnt_sb->s_type->name)) {
+			nfss = &tmp->mnt_sb->u.nfs_sb.s_server;
+			if (nfss->rsize != NFS_DEF_FILE_IO_BUFFER_SIZE) {
+				len += sprintf(buf+len, ",rsize=%d",
+					       nfss->rsize);
+			}
+			if (nfss->wsize != NFS_DEF_FILE_IO_BUFFER_SIZE) {
+				len += sprintf(buf+len, ",wsize=%d",
+					       nfss->wsize);
+			}
+			if (nfss->timeo != 7*HZ/10) {
+				len += sprintf(buf+len, ",timeo=%d",
+					       nfss->timeo*10/HZ);
+			}
+			if (nfss->retrans != 3) {
+				len += sprintf(buf+len, ",retrans=%d",
+					       nfss->retrans);
+			}
+			if (nfss->acregmin != 3*HZ) {
+				len += sprintf(buf+len, ",acregmin=%d",
+					       nfss->acregmin/HZ);
+			}
+			if (nfss->acregmax != 60*HZ) {
+				len += sprintf(buf+len, ",acregmax=%d",
+					       nfss->acregmax/HZ);
+			}
+			if (nfss->acdirmin != 30*HZ) {
+				len += sprintf(buf+len, ",acdirmin=%d",
+					       nfss->acdirmin/HZ);
+			}
+			if (nfss->acdirmax != 60*HZ) {
+				len += sprintf(buf+len, ",acdirmax=%d",
+					       nfss->acdirmax/HZ);
+			}
+			for (nfs_infop = nfs_info; nfs_infop->flag; nfs_infop++) {
+				if (nfss->flags & nfs_infop->flag) {
+					strcpy(buf + len, nfs_infop->str);
+					len += strlen(nfs_infop->str);
+				}
+			}
+			len += sprintf(buf+len, ",addr=%s",
+				       nfss->hostname);
+		}
 		len += sprintf( buf + len, " 0 0\n" );
 		tmp = tmp->mnt_next;
 	}

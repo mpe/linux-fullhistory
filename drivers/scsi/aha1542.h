@@ -134,7 +134,7 @@ int aha1542_detect(Scsi_Host_Template *);
 int aha1542_command(Scsi_Cmnd *);
 int aha1542_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int aha1542_abort(Scsi_Cmnd *);
-int aha1542_reset(Scsi_Cmnd *);
+int aha1542_reset(Scsi_Cmnd *, unsigned int);
 int aha1542_biosparam(Disk *, kdev_t, int*);
 
 #define AHA1542_MAILBOXES 8

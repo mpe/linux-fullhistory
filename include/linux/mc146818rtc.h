@@ -106,4 +106,22 @@ outb_p((val),RTC_PORT(1)); \
 #define BIN_TO_BCD(val) ((val)=(((val)/10)<<4) + (val)%10)
 #endif
 
+/*
+ * ioctl calls that are permitted to the /dev/rtc interface, if 
+ * CONFIG_RTC was enabled.
+ */
+
+#define RTC_AIE_ON	0x01		/* Alarm int. enable on		*/
+#define RTC_AIE_OFF	0x02		/* ... off			*/
+#define RTC_UIE_ON	0x03		/* Update int. enable on	*/
+#define RTC_UIE_OFF	0x04		/* ... off			*/
+#define RTC_PIE_ON	0x05		/* Periodic int. enable on	*/
+#define RTC_PIE_OFF	0x06		/* ... off			*/
+#define RTC_ALM_SET	0x07		/* Set alarm (struct tm)	*/
+#define RTC_ALM_READ	0x08		/* Read alarm (struct tm)	*/
+#define RTC_RD_TIME	0x09		/* Read RTC time (struct tm)	*/
+#define RTC_SET_TIME	0x0a		/* Set time of RTC (not used)	*/
+#define RTC_IRQP_READ	0x0b		/* Read periodic IRQ rate (Hz)	*/
+#define RTC_IRQP_SET	0x0c		/* Set periodic IRQ rate (Hz)	*/
+
 #endif /* _MC146818RTC_H */

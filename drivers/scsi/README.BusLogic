@@ -1,5 +1,9 @@
-	       BusLogic MultiMaster SCSI Driver for Linux 1.3.51
-		       Version 1.3.1 ~ 31 December 1995
+		  BusLogic MultiMaster SCSI Driver for Linux
+
+		       Version 1.2.2 for Linux 1.2.13
+		       Version 1.3.2 for Linux 1.3.88
+
+				 13 April 1996
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
@@ -16,7 +20,8 @@ of bus architectures by virtue of their MultiMaster ASIC technology.  This
 driver supports all present BusLogic MultiMaster Host Adapters, and should
 support any future MultiMaster designs with little or no modification.  Host
 adapters based on the new FlashPoint architecture are not supported by this
-driver.
+driver; consult the README.FlashPoint file for information about a program to
+upgrade Linux users from the unsupported FlashPoint LT to the supported BT-948.
 
 My primary goals in writing this completely new BusLogic driver for Linux are
 to achieve the full performance that BusLogic SCSI Host Adapters and modern
@@ -29,7 +34,7 @@ performance and error recovery to their particular needs.
 The most recent versions of this driver will always be available by anonymous
 FTP from ftp.dandelion.com.  While directory listings are not permitted, the
 introductory banner displayed on anonymous FTP login will provide a list of the
-driver versions and any other files available for retrieval.
+driver versions and any other files that are available for retrieval.
 
 Bug reports should be sent via electronic mail to "lnz@dandelion.com".  Please
 include with the bug report the complete configuration messages reported by the
@@ -37,15 +42,25 @@ driver and SCSI subsystem at startup, along with any subsequent system messages
 relevant to SCSI operations, and a detailed description of your system's
 hardware configuration.
 
-I have recently had conversations with the Senior Product Marketing Manager at
-BusLogic regarding the needs of free software developers, and he has reaffirmed
-BusLogic's commitment to providing the technical information and support we
-need to take full advantage of their products.  BusLogic has also been very
-accommodating in providing technical documentation, as well as access to their
-engineering staff for technical questions and advice.  In addition, they have
-loaned me ISA cards for configuration testing, and even allowed me use of their
-technical support lab to test EISA configurations, since I don't have an EISA
-system.  Their interest and support is greatly appreciated.
+BusLogic has been an excellent company to work with and I highly recommend
+their products to the Linux community.  In November 1995, I was offered the
+opportunity to become a beta test site for their latest MultiMaster product,
+the BT-948 PCI Ultra SCSI Host Adapter, and then again for the BT-958 PCI Wide
+Ultra SCSI Host Adapter in January 1996.  This was mutually beneficial since
+BusLogic received a degree and kind of testing that their own testing group
+cannot readily achieve, and the Linux community has available high performance
+host adapters that have been well tested with Linux even before being brought
+to market.  This relationship has also given me the opportunity to interact
+directly with their technical staff, to understand more about the internal
+workings of their products, and in turn to educate them about the needs and
+potential of the Linux community.  Their interest and support is greatly
+appreciated.
+
+Unlike some other vendors, if you contact BusLogic Technical Support with a
+problem and are running Linux, they will not tell you that your use of their
+products is unsupported.  Their latest product marketing literature even states
+"BusLogic SCSI host adapters are compatible with all major operating systems
+including: ... Linux ...".
 
 BusLogic, Inc. is located at 4151 Burton Drive, Santa Clara, California, 95054,
 USA and can be reached by Voice at 408/492-9090 or by FAX at 408/492-1542.
@@ -82,38 +97,43 @@ o Performance Features
   addition, BusLogic's Strict Round Robin Mode is used to optimize host adapter
   performance, and scatter/gather I/O can support as many segments as can be
   effectively utilized by the Linux I/O subsystem.  Control over the use of
-  tagged queuing for each target device as well as selection of the maximum
-  number of concurrent commands per logical unit is available from the kernel
-  command line.  In addition, tagged queuing is automatically disabled whenever
-  the host adapter firmware version is known not to implement it correctly, or
-  whenever a concurrency value of 1 is selected.  Tagged queuing is also
-  disabled for individual target devices if disconnect/reconnect is disabled
-  for that device.  In performance testing, sustained disk writes of 7.3MB per
-  second have been observed to a /dev/sd device.
+  tagged queuing for each target device as well as selection of the tagged
+  queue depth is available from the kernel command line.  By default, the queue
+  depth is automatically determined based on the number, type, speed, and
+  capabilities of the target devices found.  In addition, tagged queuing is
+  automatically disabled whenever the host adapter firmware version is known
+  not to implement it correctly, or whenever a tagged queue depth of 1 is
+  selected.  Tagged queuing is also disabled for individual target devices if
+  disconnect/reconnect is disabled for that device.  In performance testing,
+  sustained disk writes of 7.3MB per second have been observed to a /dev/sd
+  device.
 
 o Robustness Features
 
-  The driver implements extensive error recovery procedures.  By default, when
-  the higher level parts of the SCSI subsystem request that a command be reset,
-  a selection is made between a full host adapter hard reset and SCSI bus reset
-  versus sending a bus device reset message to the individual device based on
-  the recommendation of the SCSI subsystem.  Error recovery options are
-  selectable from the kernel command line individually for each target device,
-  and also include forcing a full host adapter hard reset and SCSI bus reset,
-  sending a bus device reset to the specific target device associated with the
-  command being reset, as well as suppressing error recovery entirely to avoid
+  The driver implements extensive error recovery procedures.  When the higher
+  level parts of the SCSI subsystem request that a command be reset, action is
+  taken to restore proper operation of the host adapter and SCSI bus.  On Linux
+  1.2.13, by default a full host adapter hard reset and SCSI bus reset is
+  performed.  On Linux 1.3.x, by default a selection is made between a full
+  host adapter hard reset and SCSI bus reset versus sending a bus device reset
+  message to the individual target device based on the recommendation of the
+  SCSI subsystem.  Error recovery strategies are selectable from the kernel
+  command line individually for each target device, and also include sending a
+  bus device reset to the specific target device associated with the command
+  being reset, as well as suppressing error recovery entirely to avoid
   perturbing an improperly functioning device.  If the bus device reset error
-  recovery option is selected and sending a bus device reset does not restore
+  recovery strategy is selected and sending a bus device reset does not restore
   correct operation, the next command that is reset will force a full host
   adapter hard reset and SCSI bus reset.  SCSI bus resets caused by other
   devices and detected by the host adapter are also handled by issuing a hard
-  reset to the host adapter and full reinitialization.  Finally, if a command
-  using tagged queuing causes a bus device reset or SCSI bus reset, then tagged
-  queuing will be disabled for that target device.  These error recovery
-  options should improve overall system robustness by preventing individual
-  errant devices from causing the system as a whole to lock up or crash, and
-  thereby allowing a clean shutdown and restart after the offending component
-  is removed.
+  reset to the host adapter and full re-initialization.  Finally, if tagged
+  queuing is active and more than one command reset occurs in a 10 minute
+  interval, or if a command reset occurs within the first 10 minutes of
+  operation, then tagged queuing will be disabled for that target device.
+  These error recovery options should improve overall system robustness by
+  preventing individual errant devices from causing the system as a whole to
+  lock up or crash, and thereby allowing a clean shutdown and restart after the
+  offending component is removed.
 
 o Extensive Testing
 
@@ -132,6 +152,7 @@ o PCI Configuration Support
   port addresses.  The ISA compatible I/O port address is then disabled by the
   driver.  On PCI systems it is also recommended that the AutoSCSI utility be
   used to disable the ISA compatible I/O port entirely as it is not necessary.
+  The ISA compatible I/O port is disabled by default on the BT-948/958/958D.
 
 o Shared Interrupts Support
 
@@ -159,15 +180,21 @@ the date of this document.  It is recommended that anyone purchasing a BusLogic
 Host Adapter not in the following table contact the author beforehand to verify
 that it is or will be supported.
 
+"W" Series Host Adapters:
+
+BT-948	    PCI	    Ultra Fast Single-ended SCSI-2
+BT-958	    PCI	    Ultra Wide Single-ended SCSI-2
+BT-958D	    PCI	    Ultra Wide Differential SCSI-2
+
 "C" Series Host Adapters:
 
 BT-946C	    PCI	    Fast Single-ended SCSI-2
-BT-956C	    PCI	    Fast/Wide Single-ended SCSI-2
-BT-956CD    PCI	    Fast/Wide Differential SCSI-2
+BT-956C	    PCI	    Fast Wide Single-ended SCSI-2
+BT-956CD    PCI	    Fast Wide Differential SCSI-2
 BT-445C	    VLB	    Fast Single-ended SCSI-2
 BT-747C	    EISA    Fast Single-ended SCSI-2
-BT-757C	    EISA    Fast/Wide Single-ended SCSI-2
-BT-757CD    EISA    Fast/Wide Differential SCSI-2
+BT-757C	    EISA    Fast Wide Single-ended SCSI-2
+BT-757CD    EISA    Fast Wide Differential SCSI-2
 BT-545C	    ISA	    Fast Single-ended SCSI-2
 BT-540CF    ISA	    Fast Single-ended SCSI-2
 
@@ -176,8 +203,8 @@ BT-540CF    ISA	    Fast Single-ended SCSI-2
 BT-445S	    VLB	    Fast Single-ended SCSI-2
 BT-747S	    EISA    Fast Single-ended SCSI-2
 BT-747D	    EISA    Fast Differential SCSI-2
-BT-757S	    EISA    Fast/Wide Single-ended SCSI-2
-BT-757D	    EISA    Fast/Wide Differential SCSI-2
+BT-757S	    EISA    Fast Wide Single-ended SCSI-2
+BT-757D	    EISA    Fast Wide Differential SCSI-2
 BT-545S	    ISA	    Fast Single-ended SCSI-2
 BT-542D	    ISA	    Fast Differential SCSI-2
 BT-742A	    EISA    Single-ended SCSI-2 (742A revision H)
@@ -189,10 +216,65 @@ BT-742A	    EISA    Single-ended SCSI-2 (742A revisions A - G)
 BT-542B	    ISA	    Single-ended SCSI-2 (542B revisions A - G)
 
 The FlashPoint LT, also known as the BT-930 Ultra, implements a different host
-interface and is not supported by this driver.
+interface and is not supported by this driver.  Consult the README.FlashPoint
+file for information about a program to upgrade Linux users from the
+unsupported FlashPoint LT to the supported BT-948.
 
-AMI FastDisk Host Adapters are true BusLogic clones and are supported by this
+AMI FastDisk Host Adapters that are true BusLogic clones are supported by this
 driver.
+
+
+		      BT-948/958/958D INSTALLATION NOTES
+
+The BT-948/958/958D PCI Ultra SCSI Host Adapters have some features which may
+require attention in some circumstances when installing Linux.
+
+o PCI I/O Port Assignments
+
+  When configured to factory default settings, the BT-948/958/958D will only
+  recognize the PCI I/O port assignments made by the motherboard's PCI BIOS.
+  The BT-948/958/958D will not respond to any of the ISA compatible I/O ports
+  that previous BusLogic SCSI Host Adapters respond to.  This driver supports
+  the PCI I/O port assignments, so this is the preferred configuration.
+  However, if the obsolete BusLogic driver must be used for any reason, such as
+  a Linux distribution that does not yet use this driver in its boot kernel,
+  BusLogic has provided an AutoSCSI configuration option to enable a legacy ISA
+  compatible I/O port.
+
+  To enable this backward compatibility option, invoke the AutoSCSI utility via
+  Ctrl-B at system startup and select "Adapter Configuration", "View/Modify
+  Configuration", and then change the "ISA Compatible Port" setting from
+  "Disable" to "Primary" or "Alternate".  Once this driver has been installed,
+  the "ISA Compatible Port" option should be set back to "Disable" to avoid
+  possible future I/O port conflicts.  The older BT-946C/956C/956CD also have
+  this configuration option, but the factory default setting is "Primary".
+
+o PCI Slot Scanning Order
+
+  In systems with multiple BusLogic PCI Host Adapters, the order in which the
+  PCI slots are scanned may appear reversed with the BT-948/958/958D as
+  compared to the BT-946C/956C/956CD.  For booting from a SCSI disk to work
+  correctly, it is necessary that the host adapter's BIOS and the kernel agree
+  on which disk is the boot device, which requires that they recognize the PCI
+  host adapters in the same order.  The motherboard's PCI BIOS provides a
+  standard way of enumerating the PCI host adapters, which is used by the Linux
+  kernel.  Some PCI BIOS implementations enumerate the PCI slots in order of
+  increasing bus number and device number, while others do so in the opposite
+  direction.
+
+  Unfortunately, Microsoft decided that Windows 95 would always enumerate the
+  PCI slots in order of increasing bus number and device number regardless of
+  the PCI BIOS enumeration, and requires that their scheme be supported by the
+  host adapter's BIOS to receive Windows 95 certification.  Therefore, the
+  factory default settings of the BT-948/958/958D enumerate the host adapters
+  by increasing bus number and device number.  To disable this feature, invoke
+  the AutoSCSI utility via Ctrl-B at system startup and select "Adapter
+  Configuration", "View/Modify Configuration", press Ctrl-F10, and then change
+  the "Use Bus And Device # For PCI Scanning Seq." option to OFF.
+
+  This driver will interrogate the setting of the PCI Scanning Sequence option
+  so as to recognize the host adapters in the same order as they are enumerated
+  by the host adapter's BIOS.
 
 
 			     COMMAND LINE OPTIONS
@@ -208,49 +290,51 @@ file "BusLogic.c".  The following examples may be useful as a starting point:
 
   "BusLogic=0,1"
 
-    This command line selects default probing and a concurrency of 1 which also
-    disables tagged queuing.  It may be useful if problems arise during
-    installation on a system with a flaky SCSI configuration.  In cases of a
-    marginal SCSI configuration it may also be beneficial to disable fast
-    transfers and/or synchronous negotiation using AutoSCSI on "C" series
-    boards.  Disconnect/reconnect may also be disabled for fast devices such as
-    disk drives, but should not be disabled for tape drives or other devices
-    where a single command may take over a second to execute.
+    This command line selects default probing and a tagged queue depth of 1
+    which also disables tagged queuing.  It may be useful if problems arise
+    during installation on a system with a flaky SCSI configuration.  In cases
+    of a marginal SCSI configuration it may also be beneficial to disable fast
+    transfers and/or synchronous negotiation using AutoSCSI on "W" and "C"
+    series boards.  Disconnect/reconnect may also be disabled for fast devices
+    such as disk drives, but should not be disabled for tape drives or other
+    devices where a single command may take over a second to execute.
 
   "BusLogic=0,0,10"
 
-    This command line selects default probing and concurrency but changes the
-    bus settle time to 10 seconds.  It may be useful with SCSI devices that
-    take an unusually long time to become ready to accept commands after a SCSI
-    bus reset.
+    This command line selects default probing and automatic tagged queue depth
+    selection, but changes the bus settle time to 10 seconds.  It may be useful
+    with SCSI devices that take an unusually long time to become ready to
+    accept commands after a SCSI bus reset.
 
   "BusLogic=TQ:Disable"
 
-    This command line selects default probing and disables tagged queuing,
-    while keeping the default concurrency.
+    This command line selects default probing and disables tagged queuing.
 
   "BusLogic=0,15,TQ:N"
 
-    This command line selects a concurrency of 15 and disables tagged queuing
-    for target 0, while allowing tagged queuing for all other target devices.
+    This command line selects a tagged queue depth of 15 and disables tagged
+    queuing for target 0, while allowing tagged queuing for all other target
+    devices.
 
-Note that limiting the concurrency to 1 or disabling tagged queuing can
+Note that limiting the tagged queue depth or disabling tagged queuing can
 substantially impact performance.
 
 
-				 INSTALLATION
+			     INSTALLATION
 
-This distribution was prepared for Linux kernel version 1.3.51.  Installation
-in later versions will probably be successful as well, though BusLogic.patch
-may not be required.  Installation in Linux 1.3.41 - 1.3.50 will probably be
-successful, but may require minor modifications.
+This distribution was prepared for Linux kernel version 1.2.13
+(BusLogic-1.2.2.tar.gz) or Linux kernel version 1.3.88 (BusLogic-1.3.2.tar.gz).
+Installation in later versions will probably be successful as well, though
+BusLogic.patch may not be required.  Installation in earlier versions is not
+recommended.
 
 To install the BusLogic SCSI driver, you may use the following commands,
-replacing "/usr/src" with wherever you keep your Linux kernel source tree:
+replacing "/usr/src" with wherever you keep your Linux kernel source tree
+(substitute '2' or '3' for 'x' in the tar command as appropriate):
 
   cd /usr/src
-  tar -xvzf BusLogic-1.3.1.tar.gz
-  mv README.BusLogic BusLogic.[ch] linux/drivers/scsi
+  tar -xvzf BusLogic-1.x.2.tar.gz
+  mv README.* BusLogic.[ch] linux/drivers/scsi
   patch -p < BusLogic.patch
   cd linux
   make config
@@ -262,4 +346,14 @@ appropriate, and reboot.
 
 Be sure to answer "y" to the "BusLogic SCSI support" query during the "make
 config" step.  If your system was already configured for the old BusLogic
-driver, you may omit the "make config" step above.
+driver or for an older version of this driver, you may omit the "make config"
+step above.
+
+
+		      BUSLOGIC ANNOUNCEMENTS MAILING LIST
+
+The BusLogic Announcements Mailing List provides a forum for informing Linux
+users of new driver releases and other announcements regarding Linux support
+for BusLogic SCSI Host Adapters.  To join the mailing list, send a message to
+"buslogic-announce-request@dandelion.com" with the line "subscribe" in the
+message body.

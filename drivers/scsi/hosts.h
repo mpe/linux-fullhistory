@@ -156,7 +156,7 @@ typedef struct	SHT
      * and these hosts must call scsi_request_sense(SCpnt) to keep
      * the command alive.
      */ 
-    int (* reset)(Scsi_Cmnd *);
+    int (* reset)(Scsi_Cmnd *, unsigned int);
 
     /*
      * This function is used to select synchronous communications,
@@ -246,7 +246,7 @@ struct Scsi_Host
     char host_no;  /* Used for IOCTL_GET_IDLUN, /proc/scsi et al. */
     int last_reset;
     struct wait_queue *host_wait;
-    Scsi_Cmnd *host_queue; 
+    Scsi_Cmnd *host_queue;
     Scsi_Host_Template * hostt;
     
     /*
@@ -298,13 +298,9 @@ struct Scsi_Host
      * True if this host was loaded as a loadable module
      */
     unsigned loaded_as_module:1;
-    
-    /*
-     * True when we call the low-level reset function, and
-     * the midlevel code suggests a full bus reset.
-     */
-    unsigned suggest_bus_reset:1;
  
+    void (*select_queue_depths)(struct Scsi_Host *, Scsi_Device *);
+
     unsigned long hostdata[0];  /* Used for storage of host specific stuff */
 };
 

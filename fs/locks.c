@@ -861,26 +861,29 @@ static void locks_insert_lock(struct file_lock **pos, struct file_lock *fl)
 static void locks_delete_lock(struct file_lock **fl_p, unsigned int wait)
 {
 	struct file_lock *fl;
-	struct file_lock *bfl;
+	struct file_lock *pfl;
+	struct file_lock *nfl;
 	
 	fl = *fl_p;
-	*fl_p = (*fl_p)->fl_next;
+	*fl_p = fl->fl_next;
+	pfl = fl->fl_prevlink;
+	nfl = fl->fl_nextlink;
 
-	if (fl->fl_nextlink != NULL)
-		fl->fl_nextlink->fl_prevlink = fl->fl_prevlink;
+	if (nfl != NULL)
+		nfl->fl_prevlink = pfl;
 
-	if (fl->fl_prevlink != NULL)
-		fl->fl_prevlink->fl_nextlink = fl->fl_nextlink;
+	if (pfl != NULL)
+		pfl->fl_nextlink = nfl;
 	else {
-		file_lock_table = fl->fl_nextlink;
+		file_lock_table = nfl;
 	}
 	
-	while ((bfl = fl->fl_block) != NULL) {
-		fl->fl_block = bfl->fl_block;
-		bfl->fl_block = NULL;
-		wake_up(&bfl->fl_wait);
+	while ((nfl = fl->fl_block) != NULL) {
+		fl->fl_block = nfl->fl_block;
+		nfl->fl_block = NULL;
+		wake_up(&nfl->fl_wait);
 		if (wait)
-			sleep_on(&bfl->fl_wait);
+			sleep_on(&nfl->fl_wait);
 	}
 
 	wake_up(&fl->fl_wait);

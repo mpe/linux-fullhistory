@@ -187,6 +187,14 @@ S: 3674 Oakwood Terrace #201
 S: Fremont, CA 94536
 S: USA
 
+N: Chih-Jen Chang     
+E: chihjenc@scf.usc.edu
+E: chihjen@iis.sinica.edu.tw
+D: IGMP(Internet Group Management Protocol) version 2
+S: 3F, 65 Tajen street
+S: Tamsui town, Taipei county,
+S: Taiwan 251, Republic of China
+
 N: Raymond Chen
 E: raymondc@microsoft.com
 D: Author of Configure script
@@ -858,10 +866,12 @@ S: Derbyshire DE4 3RL
 S: United Kingdom
 
 N: Michael Neuffer
+E: mike@i-Connect.Net
 E: neuffer@goofy.zdv.uni-mainz.de
+W: http://www.i-Connect.Net/~mike/
 D: Developer and maintainer of the EATA-DMA SCSI driver
 D: Co-developer EATA-PIO SCSI driver
-D: Assorted other snippets 
+D: /proc/scsi and assorted other snippets 
 S: Zum Schiersteiner Grund 2
 S: 55127 Mainz
 S: Germany
@@ -968,6 +978,13 @@ S: 59 Bugden Avenue
 S: Gowrie ACT 2904
 S: Australia
 
+N: Gerard Roudier
+E: groudier@iplus.fr
+D: Contributed to asynchronous read-ahead improvement
+S: 21 Rue Carnot
+S: 95170 Deuil La Barre
+S: France
+
 N: Alessandro Rubini
 E: rubini@ipvvis.unipv.it
 D: the gpm mouse server and kernel support for it
@@ -1004,6 +1021,15 @@ E: sinster@darkwater.com
 D: Whatever I notice needs doing (so far: itimers, /proc)
 S: POB 64132
 S: Sunnyvale, CA 94088-4132
+S: USA
+
+N: Simon Shapiro
+E: shimon@i-Connect.Net
+W: http://www.-i-Connect.Net/~shimon
+D: SCSI debugging
+D: Maintainer of the Debian Kernel packages
+S: 14355 SW Allen Blvd., Suite #140
+S: Beaverton, OR 97008
 S: USA
 
 N: Rick Sladkey
@@ -1125,6 +1151,16 @@ D: Author of loopback device driver
 S: MIT Room E40-343
 S: 1 Amherst Street
 S: Cambridge, Massachusetts 02139
+S: USA
+
+N: Tsu-Sheng Tsao
+E: tsusheng@scf.usc.edu
+D: IGMP(Internet Group Management Protocol) version 2
+S: 2F 14 ALY 31 LN 166 SEC 1 SHIH-PEI RD
+S: Taipei 
+S: Taiwan 112, Republic of China
+S: 24335 Delta Drive
+S: Diamond Bar, CA 91765
 S: USA
 
 N: Simmule Turner
@@ -1305,22 +1341,4 @@ D: BusLogic SCSI driver
 D: Miscellaneous kernel fixes
 S: 3078 Sulphur Spring Court
 S: San Jose, California 95148
-S: USA
-
-N: Chih-Jen Chang     
-E: chihjenc@scf.usc.edu
-E: chihjen@iis.sinica.edu.tw
-D: IGMP(Internet Group Management Protocol) version 2
-S: 3F, 65 Tajen street
-S: Tamsui town, Taipei county,
-S: Taiwan 251, Republic of China
-
-N: Tsu-Sheng Tsao
-E: tsusheng@scf.usc.edu
-D: IGMP(Internet Group Management Protocol) version 2
-S: 2F 14 ALY 31 LN 166 SEC 1 SHIH-PEI RD
-S: Taipei 
-S: Taiwan 112, Republic of China
-S: 24335 Delta Drive
-S: Diamond Bar, CA 91765
 S: USA

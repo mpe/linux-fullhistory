@@ -390,7 +390,7 @@ int chr_dev_init(void)
 #if defined (CONFIG_BUSMOUSE) || defined(CONFIG_UMISC) || \
     defined (CONFIG_PSMOUSE) || defined (CONFIG_MS_BUSMOUSE) || \
     defined (CONFIG_ATIXL_BUSMOUSE) || defined(CONFIG_SOFT_WATCHDOG) || \
-    defined (CONFIG_APM)
+    defined (CONFIG_APM) || defined (CONFIG_RTC)
 	misc_init();
 #endif
 #ifdef CONFIG_SOUND

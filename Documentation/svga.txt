@@ -241,3 +241,5 @@ this must be done manually -- no autodetection mechanisms are available.
 		  original version written by hhanemaa@cs.ruu.nl, patched by
 		  Jeff Chua, rewritten by me).
 		- Screen store/restore fixed.
+2.8 (14-Apr-96)	- Previous release was not compilable without CONFIG_VIDEO_SVGA.
+		- Better recognition of text modes during mode scan.

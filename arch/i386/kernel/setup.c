@@ -199,7 +199,6 @@ void setup_arch(char **cmdline_p,
 	/* request io space for devices used on all i[345]86 PC'S */
 	request_region(0x00,0x20,"dma1");
 	request_region(0x40,0x20,"timer");
-	request_region(0x70,0x10,"rtc");
 	request_region(0x80,0x20,"dma page reg");
 	request_region(0xc0,0x20,"dma2");
 	request_region(0xf0,0x10,"npu");

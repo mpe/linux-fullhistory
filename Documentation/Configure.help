@@ -1225,27 +1225,29 @@ DTC3180/3280 SCSI support
 CONFIG_SCSI_DTC3280
   This is support for DTC 3180/3280 SCSI Host Adaptors.  It does not
   use IRQ's.  It does not support parity on the SCSI bus.
-
-EATA-DMA (DPT,NEC&ATT for ISA,EISA,PCI) support
+ 
+EATA-DMA (DPT, NEC, ATT, Olivetti for ISA, EISA, PCI) support
 CONFIG_SCSI_EATA_DMA
-  This is support for a SCSI host adaptor. Please read the
-  SCSI-HOWTO, available via ftp (user: anonymous) at
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't work out of the
-  box, you may have to change some settings in
-  drivers/scsi/eata_dma.h. This driver is also available as a module (
-  = code which can be inserted in and removed from the running kernel
-  whenever you want). If you want to compile it as a module, say M
-  here and read Documentation/modules.txt.
+  This is support for the EATA-DMA protocol compliant SCSI Host Adaptors
+  like the SmartCache III/IV, SmartRAID controller families and the DPT 
+  PM2011B and PM2012B controllers.  
+  Please read the SCSI-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. 
+  This driver is also available as a module (= code which can be inserted 
+  in and removed from the running kernel whenever you want). If you want 
+  to compile it as a module, say M here and read Documentation/modules.txt.
 
 EATA-PIO (old DPT PM2001, PM2012A) support
 CONFIG_SCSI_EATA_PIO
-  This driver supports all EATA-PIO SCSI host adaptors. You might want
-  to have a look at the settings in drivers/scsi/eata_pio.h and at the
-  SCSI-HOWTO, available via ftp (user: anonymous) at
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
-  as a module ( = code which can be inserted in and removed from the
-  running kernel whenever you want), say M here and read
-  Documentation/modules.txt.
+  This driver supports all EATA-PIO protocol compliant SCSI Host Adaptors
+  like the DPT PM2001 and the PM2012A. EATA-DMA compliant HBAs can also use 
+  this driver but are discuraged from doing so, since this driver only 
+  supports harddisks and lacks numerous features.
+  You might want to have a look at the SCSI-HOWTO, available via ftp 
+  (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO.  
+  If you want to compile this as a module ( = code which can be inserted 
+  in and removed from the running kernel whenever you want), say M here 
+  and read Documentation/modules.txt.
 
 UltraStor 14F/34F support
 CONFIG_SCSI_U14_34F
@@ -3034,6 +3036,20 @@ CONFIG_SOFT_WATCHDOG
   from some situations that the hardware watchdog will recover
   from. Equally it's a lot cheaper to install.
 
+Enhanced Real Time Clock Support
+CONFIG_RTC
+  If you enable this option and create a character special file
+  /dev/rtc with major number 10 and minor number 135 using mknod
+  ("man mknod"), you will get access to the real time clock built
+  into your computer. It can be used to generate signals from as
+  low as 1Hz up to 8192Hz, and can also be used as a 24 hour alarm.
+  It reports status information via the file /proc/rtc and its 
+  behaviour is set by various ioctls on /dev/rtc. People running
+  SMP versions of Linux should enable this option to read and set
+  the RTC clock in a SMP compatible fashion. If you think you
+  have a use for such a device (such as periodic data sampling), then 
+  say Y here, and go read the file Documentation/rtc.txt for details.
+
 Sound card support
 CONFIG_SOUND
   If you have a Sound Card in your Computer, i.e. if it can say more
@@ -3168,7 +3184,7 @@ CONFIG_ISDN_DRV_TELES
 # LocalWords:  pppd Zilog ZS soundcards SRM bootloader ez mainmenu rarp ipfwadm
 # LocalWords:  RTNETLINK mknod xos MTU lwared Macs mac netatalk macs cs Wolff
 # LocalWords:  dartmouth flowerpt MultiMaster FlashPoint tudelft etherexpress
-# LocalWords:  ICL EtherTeam ETH IDESCSI TXC dmesg httpd hlt sjc barlow dlp mtu
+# LocalWords:  ICL EtherTeam ETH IDESCSI TXC SmartRAID SmartCache
 # LocalWords:  thesphere TwoServers BOOTP DHCP ncpfs BPQETHER BPQ chipsets MG
 # LocalWords:  bsd comp Sparcstation le SunOS ie Gracilis PackeTwin PT pt LU FX
 # LocalWords:  FX TEAC SoundBlaster CR CreativeLabs LCS mS ramdisk IDETAPE cmd

@@ -5,9 +5,14 @@
  *
  *		Global definitions for the Frame relay interface.
  *
- * Version:	@(#)if_ifrad.h	0.15	31 Mar 96
+ * Version:	@(#)if_ifrad.h	0.20	13 Apr 96
  *
  * Author:	Mike McLagan <mike.mclagan@linux.org>
+ *
+ * Changes:
+ *		0.15	Mike McLagan	Structure packing
+ *
+ *		0.20	Mike McLagan	New flags for S508 buffer handling
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -216,6 +221,11 @@ void sdla(void *cfg_info, char *dev, struct frad_conf *conf, int quiet);
 
 /* Configuration flags */
 #define SDLA_DIRECT_RECV		0x0080
+#define SDLA_TX_NO_EXCEPT		0x0020
+#define SDLA_NO_ICF_MSGS		0x1000
+#define SDLA_TX50_RX50			0x0000
+#define SDLA_TX70_RX30			0x2000
+#define SDLA_TX30_RX70			0x4000
 
 /* IRQ selection flags */
 #define SDLA_IRQ_RECEIVE		0x01

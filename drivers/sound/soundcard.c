@@ -170,13 +170,13 @@ sound_ioctl (inode_handle * inode, file_handle * file,
 
       len = _IOC_SIZE (cmd);
 
-      if (_IOC_DIR (cmd) == _IOC_WRITE)
+      if (_IOC_DIR (cmd) & _IOC_WRITE)
 	{
 	  if ((err = verify_area (VERIFY_READ, (void *) arg, len)) < 0)
 	    return err;
 	}
 
-      if (_IOC_DIR (cmd) == _IOC_READ)
+      if (_IOC_DIR (cmd) & _IOC_READ)
 	{
 	  if ((err = verify_area (VERIFY_WRITE, (void *) arg, len)) < 0)
 	    return err;

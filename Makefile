@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 88
+SUBLEVEL = 89
 
 ARCH = i386
 
@@ -328,9 +328,9 @@ mrproper: clean
 	
 
 distclean: mrproper
-	rm -f core `find . \( -name '*.orig' -o -name '*~' -o -name '*.bak' \
-		-o -name '#*#' -o -name '.*.orig' \) -print` TAGS
-
+	rm -f core `find . \( -name '*.orig' -o -name '*.rej' -o -name '*~' \
+                -o -name '*.bak' -o -name '#*#' -o -name '.*.orig' \
+                -o -name '.*.rej' -o -name '.SUMS' -o -size 0 \) -print` TAGS
 
 backup: mrproper
 	cd .. && tar cf - linux/ | gzip -9 > backup.gz

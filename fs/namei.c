@@ -388,7 +388,8 @@ int open_namei(const char * pathname, int flag, int mode,
 	/* SunOS, Solaris 2.x and HPUX all deny open() on
 	 * an existing file with mandatory locks.
 	 */
-	if ((error = locks_verify_locked(inode)) != 0) {
+	error = locks_verify_locked(inode);
+	if (error) {
 		iput(inode);
 		return error;
 	}
@@ -443,7 +444,8 @@ int open_namei(const char * pathname, int flag, int mode,
 		 * here. Only O_TRUNC calls can modify the file contents -
 		 * but none of the commercial OS'es seem to do it this way.
 		 */
-		if ((error = locks_verify_locked(inode)) != 0) {
+		error = locks_verify_locked(inode);
+		if (error) {
 			iput(inode);
 			return error;
 		}

@@ -705,10 +705,11 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	 *	right hand window edge of the host.
 	 *	We do a bit of work here to track number of times we've
 	 *	seen this ack without a change in the right edge of the
-	 *	window. This will allow us to do fast retransmits.
+	 *	window and no data in the packet.
+	 *	This will allow us to do fast retransmits.
 	 */
 
-	if (sk->rcv_ack_seq == ack && sk->window_seq == window_seq)
+	if (sk->rcv_ack_seq == ack && sk->window_seq == window_seq && !(flag&1))
 	{
 		/*
 		 * We only want to short cut this once, many
@@ -1318,8 +1319,7 @@ static void tcp_queue(struct sk_buff * skb, struct sock * sk, struct tcphdr *th)
 		    if(sk->debug)
 			    printk("Ack past end of seq packet.\n");
 		    tcp_send_ack(sk);
-		    sk->ack_backlog++;
-		    tcp_reset_xmit_timer(sk, TIME_WRITE, min(sk->ato, HZ/2));
+		    tcp_send_delayed_ack(sk,HZ/2);
 	    }
 	}
 }

@@ -27,7 +27,7 @@
  * in linux/version.h, and should only be used by linux/version.c
  */
 
-/* Don't touch these, unless you really know what your doing. */
+/* Don't touch these, unless you really know what you're doing. */
 #define DEF_INITSEG	0x9000
 #define DEF_SYSSEG	0x1000
 #define DEF_SETUPSEG	0x9020

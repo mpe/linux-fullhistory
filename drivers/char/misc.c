@@ -66,6 +66,7 @@ extern int psaux_init(void);
 extern int ms_bus_mouse_init(void);
 extern int atixl_busmouse_init(void);
 extern void watchdog_init(void);
+extern int rtc_init(void);
 
 #ifdef CONFIG_PROC_FS
 static int proc_misc_read(char *buf, char **start, off_t offset, int len, int unused)
@@ -209,6 +210,9 @@ int misc_init(void)
 #endif	
 #ifdef CONFIG_APM
 	apm_bios_init();
+#endif
+#ifdef CONFIG_RTC
+	rtc_init();
 #endif
 #endif /* !MODULE */
 	if (register_chrdev(MISC_MAJOR,"misc",&misc_fops)) {
