@@ -3278,6 +3278,7 @@ static void __init ncr_prepare_setting(struct ncb *np)
 		tp->usrsync = driver_setup.default_sync;
 		tp->usrwide = driver_setup.max_wide;
 		tp->usrtags = MAX_TAGS;
+		tp->period = 0xffff;
 		if (!driver_setup.disconnection)
 			np->target[i].usrflag = UF_NODISC;
 	}
@@ -4650,7 +4651,6 @@ void ncr_init (struct ncb *np, int reset, char * msg, u_long code)
 		if (tp->usrwide > np->maxwide)
 			tp->usrwide = np->maxwide;
 
-		ncr_negotiate (np, tp);
 	}
 
 	/*
@@ -6900,15 +6900,10 @@ static struct lcb *ncr_setup_lcb (struct ncb *np, struct scsi_device *sdev)
 	unsigned char tn = sdev->id, ln = sdev->lun;
 	struct tcb *tp = &np->target[tn];
 	struct lcb *lp = tp->lp[ln];
-	struct scsi_target *starget = sdev->sdev_target;
 
 	/* If no lcb, try to allocate it.  */
 	if (!lp && !(lp = ncr_alloc_lcb(np, tn, ln)))
 		goto fail;
-
-	/* Prepare negotiation */
-	if (spi_support_wide(starget) || spi_support_sync(starget))
-		ncr_negotiate(np, tp);
 
 	/*
 	**	If unit supports tagged commands, allocate the 
