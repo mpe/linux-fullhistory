@@ -217,7 +217,7 @@ static int igafb_get_fix(struct fb_fix_screeninfo *fix, int con,
         memset(fix, 0, sizeof(struct fb_fix_screeninfo));
         strcpy(fix->id, igafb_name);
 
-        fix->smem_start = (char *)fb->frame_buffer;
+        fix->smem_start = fb->frame_buffer;
         fix->smem_len = fb->total_vram;
         fix->xpanstep = 0;
         fix->ypanstep = 0;

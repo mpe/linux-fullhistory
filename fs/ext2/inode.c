@@ -259,20 +259,22 @@ repeat:
 	}
 	if (metadata) {
 		result = getblk (inode->i_dev, tmp, blocksize);
-		if (*p) {
-			ext2_free_blocks (inode, tmp, 1);
-			brelse (result);
-			goto repeat;
-		}
 		memset(result->b_data, 0, blocksize);
 		mark_buffer_uptodate(result, 1);
 		mark_buffer_dirty(result, 1);
+		if (*p) {
+			ext2_free_blocks (inode, tmp, 1);
+			bforget (result);
+			goto repeat;
+		}
 	} else {
 		if (*p) {
 			/*
 			 * Nobody is allowed to change block allocation
 			 * state from under us:
 			 */
+			ext2_error (inode->i_sb, "block_getblk",
+				    "data block filled under us");
 			BUG();
 			ext2_free_blocks (inode, tmp, 1);
 			goto repeat;
@@ -366,22 +368,28 @@ repeat:
 		goto out;
 	if (metadata) {
 		result = getblk (bh->b_dev, tmp, blocksize);
-		if (*p) {
-			ext2_free_blocks (inode, tmp, 1);
-			brelse (result);
-			goto repeat;
-		}
 		memset(result->b_data, 0, inode->i_sb->s_blocksize);
 		mark_buffer_uptodate(result, 1);
 		mark_buffer_dirty(result, 1);
+		if (*p) {
+			ext2_free_blocks (inode, tmp, 1);
+			bforget (result);
+			goto repeat;
+		}
 	} else {
+		if (*p) {
+			/*
+			 * Nobody is allowed to change block allocation
+			 * state from under us:
+			 */
+			ext2_error (inode->i_sb, "block_getblk",
+				    "data block filled under us");
+			BUG();
+			ext2_free_blocks (inode, tmp, 1);
+			goto repeat;
+		}
 		*phys = tmp;
 		*new = 1;
-	}
-	if (*p) {
-		ext2_free_blocks (inode, tmp, 1);
-		brelse (result);
-		goto repeat;
 	}
 	*p = le32_to_cpu(tmp);
 	mark_buffer_dirty(bh, 1);

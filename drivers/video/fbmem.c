@@ -473,7 +473,7 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 	fb->fb_get_fix(&fix, PROC_CONSOLE(info), info);
 
 	/* frame buffer memory */
-	start = (unsigned long)fix.smem_start;
+	start = fix.smem_start;
 	len = (start & ~PAGE_MASK)+fix.smem_len;
 	start &= PAGE_MASK;
 	len = (len+~PAGE_MASK) & PAGE_MASK;
@@ -483,7 +483,7 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 		fb->fb_get_var(&var, PROC_CONSOLE(info), info);
 		if (var.accel_flags)
 			return -EINVAL;
-		start = (unsigned long)fix.mmio_start;
+		start = fix.mmio_start;
 		len = (start & ~PAGE_MASK)+fix.mmio_len;
 		start &= PAGE_MASK;
 		len = (len+~PAGE_MASK) & PAGE_MASK;
@@ -524,7 +524,7 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 #else
 #warning What do we have to do here??
 #endif
-	if (remap_page_range(vma->vm_start, vma->vm_offset,
+	if (io_remap_page_range(vma->vm_start, vma->vm_offset,
 			     vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -EAGAIN;
 	return 0;

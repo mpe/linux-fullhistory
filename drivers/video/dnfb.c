@@ -169,7 +169,7 @@ static int dnfb_get_fix(struct fb_fix_screeninfo *fix, int con,
 {
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id,"Apollo Mono");
-	fix->smem_start=(char*)(FRAME_BUFFER_START+IO_BASE);
+	fix->smem_start=FRAME_BUFFER_START+IO_BASE;
 	fix->smem_len=FRAME_BUFFER_LEN;
 	fix->type=FB_TYPE_PACKED_PIXELS;
 	fix->type_aux=0;

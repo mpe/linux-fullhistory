@@ -53,7 +53,7 @@ static inline void hardirq_exit(int cpu)
 
 static inline int hardirq_trylock(int cpu)
 {
-	return !atomic_read(&global_irq_count) && !test_bit(0,&global_irq_lock);
+	return !local_irq_count[cpu] && !test_bit(0,&global_irq_lock);
 }
 
 #define hardirq_endlock(cpu)	do { } while (0)

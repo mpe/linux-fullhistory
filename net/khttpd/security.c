@@ -156,7 +156,7 @@ struct file *OpenFileForSecurity(char *Filename)
 	
 	while (List!=NULL)
 	{
-		if (strstr(List->value,Filename)!=NULL)
+		if (strstr(Filename,List->value)!=NULL)
 		{
 			if (filp!=NULL)
 				fput(filp);

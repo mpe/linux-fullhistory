@@ -540,8 +540,10 @@ int map_user_kiobuf(int rw, struct kiobuf *iobuf, unsigned long va, size_t len)
 		wait_on_page(map);
 	}
 	
-	if (++repeat < 16)
+	if (++repeat < 16) {
+		ptr = va & PAGE_MASK;
 		goto repeat;
+	}
 	return -EAGAIN;
 }
 

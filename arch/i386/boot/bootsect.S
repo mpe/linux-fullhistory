@@ -106,12 +106,12 @@ go:	mov	di,#0x4000-12	! 0x4000 is arbitrary value >= length of
 	seg fs
 	lds	si,(bx)			! ds:si is source
 
-	mov	cl,#6			! copy 12 bytes
+	mov	cl,#3			! copy 12 bytes
 	cld
 	push	di
 
 	rep
-	movsw
+	movsd
 
 	pop	di
 	pop	ds
@@ -125,7 +125,7 @@ go:	mov	di,#0x4000-12	! 0x4000 is arbitrary value >= length of
 
 ! load the setup-sectors directly after the bootblock.
 ! Note that 'es' is already set up.
-! Also cx is 0 from rep movsw above.
+! Also cx is 0 from rep movsd above.
 
 load_setup:
 	xor	ah,ah			! reset FDC 

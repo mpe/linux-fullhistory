@@ -837,9 +837,9 @@ static int platinum_encode_fix(struct fb_fix_screeninfo *fix,
 {
 	memset(fix, 0, sizeof(*fix));
 	strcpy(fix->id, "platinum");
-	fix->smem_start = (void *) (info->frame_buffer_phys + 0x1000);
+	fix->smem_start = (info->frame_buffer_phys + 0x1000);
 	fix->smem_len = (u32) info->total_vram - 0x1000;
-	fix->mmio_start = (char *) (info->platinum_regs_phys);
+	fix->mmio_start = (info->platinum_regs_phys);
 	fix->mmio_len = 0x1000;
 	fix->type = FB_TYPE_PACKED_PIXELS;
 	fix->type_aux = 0;

@@ -783,7 +783,7 @@ static void valkyrie_par_to_fix(struct fb_par_valkyrie *par,
 	struct fb_fix_screeninfo *fix,
 	struct fb_info_valkyrie *p)
 {
-	fix->smem_start = (void *)(p->frame_buffer_phys + 0x1000);
+	fix->smem_start = p->frame_buffer_phys + 0x1000;
 #if 1
 	fix->smem_len = valkyrie_vram_reqd(par->vmode, par->cmode);
 #else

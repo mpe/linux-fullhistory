@@ -441,19 +441,19 @@ static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id, virgefb_name);
 	if (cv3d_on_zorro2) {
-		fix->smem_start = (char*) CyberMem_phys;
+		fix->smem_start = CyberMem_phys;
 	} else {
 		switch (par->bpp) {
 			case 8:
-				fix->smem_start = (char*) (CyberMem_phys + CYBMEM_OFFSET_8);
+				fix->smem_start = (CyberMem_phys + CYBMEM_OFFSET_8);
 				break;
 			case 16:
-				fix->smem_start = (char*) (CyberMem_phys + CYBMEM_OFFSET_16);
+				fix->smem_start = (CyberMem_phys + CYBMEM_OFFSET_16);
 				break;
 		}
 	}
 	fix->smem_len = CyberSize;
-	fix->mmio_start = (char*) CyberRegs_phys;
+	fix->mmio_start = CyberRegs_phys;
 	fix->mmio_len = 0x10000; /* TODO: verify this for the CV64/3D */
 
 	fix->type = FB_TYPE_PACKED_PIXELS;

@@ -87,7 +87,7 @@ Replace the sample values as needed.
 
 6. Thanks
 
-   Thanks to Geert Uytterhoeven <Geert.Uytterhoeven@cs.kuleuven.ac.be>
+   Thanks to Geert Uytterhoeven <geert@linux-m68k.org>
    for porting the patches from 2.1.4x to 2.1.6x for taking care of
    the integration of these patches into m68k, ppc and alpha.
 

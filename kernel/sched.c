@@ -224,68 +224,13 @@ static inline int preemption_goodness(struct task_struct * prev, struct task_str
 	return goodness(p, cpu, prev->mm) - goodness(prev, cpu, prev->mm);
 }
 
-/*
- * If there is a dependency between p1 and p2,
- * don't be too eager to go into the slow schedule.
- * In particular, if p1 and p2 both want the kernel
- * lock, there is no point in trying to make them
- * extremely parallel..
- *
- * (No lock - lock_depth < 0)
- *
- * There are two additional metrics here:
- *
- * first, a 'cutoff' interval, currently 0-200 usecs on
- * x86 CPUs, depending on the size of the 'SMP-local cache'.
- * If the current process has longer average timeslices than
- * this, then we utilize the idle CPU.
- *
- * second, if the wakeup comes from a process context,
- * then the two processes are 'related'. (they form a
- * 'gang')
- *
- * An idle CPU is almost always a bad thing, thus we skip
- * the idle-CPU utilization only if both these conditions
- * are true. (ie. a 'process-gang' rescheduling with rather
- * high frequency should stay on the same CPU).
- *
- * [We can switch to something more finegrained in 2.3.]
- *
- * do not 'guess' if the to-be-scheduled task is RT.
- */
-#define related(p1,p2) (((p1)->lock_depth >= 0) && (p2)->lock_depth >= 0) && \
-	(((p2)->policy == SCHED_OTHER) && ((p1)->avg_slice < cacheflush_time))
-
-static inline void reschedule_idle_slow(struct task_struct * p)
+static void reschedule_idle(struct task_struct * p)
 {
 #ifdef __SMP__
-/*
- * (see reschedule_idle() for an explanation first ...)
- *
- * Pass #2
- *
- * We try to find another (idle) CPU for this woken-up process.
- *
- * On SMP, we mostly try to see if the CPU the task used
- * to run on is idle.. but we will use another idle CPU too,
- * at this point we already know that this CPU is not
- * willing to reschedule in the near future.
- *
- * An idle CPU is definitely wasted, especially if this CPU is
- * running long-timeslice processes. The following algorithm is
- * pretty good at finding the best idle CPU to send this process
- * to.
- *
- * [We can try to preempt low-priority processes on other CPUs in
- * 2.3. Also we can try to use the avg_slice value to predict
- * 'likely reschedule' events even on other CPUs.]
- */
 	int this_cpu = smp_processor_id(), target_cpu;
 	struct task_struct *tsk, *target_tsk;
-	int cpu, best_cpu, weight, best_weight, i;
+	int cpu, best_cpu, i;
 	unsigned long flags;
-
-	best_weight = 0; /* prevents negative weight */
 
 	spin_lock_irqsave(&runqueue_lock, flags);
 
@@ -302,14 +247,16 @@ static inline void reschedule_idle_slow(struct task_struct * p)
 	for (i = 0; i < smp_num_cpus; i++) {
 		cpu = cpu_logical_map(i);
 		tsk = cpu_curr(cpu);
-		if (related(tsk, p))
-			goto out_no_target;
-		weight = preemption_goodness(tsk, p, cpu);
-		if (weight > best_weight) {
-			best_weight = weight;
+		if (tsk == idle_task(cpu))
 			target_tsk = tsk;
-		}
 	}
+
+	if (target_tsk && p->avg_slice > cacheflush_time)
+		goto send_now;
+
+	tsk = cpu_curr(best_cpu);
+	if (preemption_goodness(tsk, p, best_cpu) > 0)
+		target_tsk = tsk;
 
 	/*
 	 * found any suitable CPU?
@@ -339,35 +286,6 @@ out_no_target:
 	if (preemption_goodness(tsk, p, this_cpu) > 0)
 		tsk->need_resched = 1;
 #endif
-}
-
-static void reschedule_idle(struct task_struct * p)
-{
-#ifdef __SMP__
-	int cpu = smp_processor_id();
-	/*
-	 * ("wakeup()" should not be called before we've initialized
-	 * SMP completely.
-	 * Basically a not-yet initialized SMP subsystem can be
-	 * considered as a not-yet working scheduler, simply dont use
-	 * it before it's up and running ...)
-	 *
-	 * SMP rescheduling is done in 2 passes:
-	 *  - pass #1: faster: 'quick decisions'
-	 *  - pass #2: slower: 'lets try and find a suitable CPU'
-	 */
-
-	/*
-	 * Pass #1. (subtle. We might be in the middle of __switch_to, so
-	 * to preserve scheduling atomicity we have to use cpu_curr)
-	 */
-	if ((p->processor == cpu) && related(cpu_curr(cpu), p))
-		return;
-#endif /* __SMP__ */
-	/*
-	 * Pass #2
-	 */
-	reschedule_idle_slow(p);
 }
 
 /*

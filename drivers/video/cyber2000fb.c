@@ -765,9 +765,9 @@ cyber2000fb_get_fix(struct fb_fix_screeninfo *fix, int con,
 	else
 		display = &global_disp;
 
-	fix->smem_start	 = (char *)current_par.screen_base_p;
+	fix->smem_start	 = current_par.screen_base_p;
 	fix->smem_len	 = current_par.screen_size;
-	fix->mmio_start	 = (char *)current_par.regs_base_p;
+	fix->mmio_start	 = current_par.regs_base_p;
 	fix->mmio_len	 = 0x000c0000;
 	fix->type	 = display->type;
 	fix->type_aux	 = display->type_aux;

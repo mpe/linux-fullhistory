@@ -328,9 +328,9 @@ static int tgafb_encode_fix(struct fb_fix_screeninfo *fix, const void *fb_par,
 	fix->visual = FB_VISUAL_TRUECOLOR;
 
     fix->line_length = par->xres * (par->bits_per_pixel >> 3);
-    fix->smem_start = ioremap(fb_info.tga_fb_base);
+    fix->smem_start = fb_info.tga_fb_base;
     fix->smem_len = fix->line_length * par->yres;
-    fix->mmio_start = ioremap(fb_info.tga_regs_base);
+    fix->mmio_start = fb_info.tga_regs_base;
     fix->mmio_len = 0x1000;		/* Is this sufficient? */
     fix->xpanstep = fix->ypanstep = fix->ywrapstep = 0;
     fix->accel = FB_ACCEL_DEC_TGA;

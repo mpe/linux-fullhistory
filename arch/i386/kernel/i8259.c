@@ -10,7 +10,6 @@
 #include <linux/malloc.h>
 #include <linux/random.h>
 #include <linux/smp.h>
-#include <linux/tasks.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 

@@ -157,7 +157,7 @@ static void macfb_encode_fix(struct fb_fix_screeninfo *fix,
 	/*
 	 * fbmem.c accepts non page aligned mappings now!
 	 */
-	fix->smem_start=(char *)mac_videobase;
+	fix->smem_start=mac_videobase;
 	fix->smem_len=mac_videosize;
 	fix->type = FB_TYPE_PACKED_PIXELS;
 	if (mac_depth == 1)

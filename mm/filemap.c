@@ -1383,8 +1383,11 @@ page_not_uptodate:
 	 * because there really aren't any performance issues here
 	 * and we need to check for errors.
 	 */
-	if (!PageLocked(page))
-		PAGE_BUG(page);
+	lock_page(page);
+	if (Page_Uptodate(page)) {
+		UnlockPage(page);
+		goto success;
+	}
 	ClearPageError(page);
 	error = inode->i_op->readpage(file, page);
 	if (error)

@@ -507,7 +507,7 @@ static void vfb_encode_fix(struct fb_fix_screeninfo *fix,
 {
     memset(fix, 0, sizeof(struct fb_fix_screeninfo));
     strcpy(fix->id, vfb_name);
-    fix->smem_start = (char *)videomemory;
+    fix->smem_start = videomemory;
     fix->smem_len = videomemorysize;
     fix->type = FB_TYPE_PACKED_PIXELS;
     fix->type_aux = 0;

@@ -446,11 +446,11 @@ void __init s3triofb_init_of(struct device_node *dp)
     s3trio_init(dp);
     address = 0xc6000000;
     s3trio_base = ioremap(address,64*1024*1024);
-    fb_fix.smem_start = (char *)address;
+    fb_fix.smem_start = address;
     fb_fix.type = FB_TYPE_PACKED_PIXELS;
     fb_fix.type_aux = 0;
     fb_fix.accel = FB_ACCEL_S3_TRIO64;
-    fb_fix.mmio_start = (char *)address+0x1000000;
+    fb_fix.mmio_start = address+0x1000000;
     fb_fix.mmio_len = 0x1000000;
 
     fb_fix.xpanstep = 1;

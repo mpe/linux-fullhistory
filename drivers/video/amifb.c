@@ -1981,7 +1981,7 @@ static int ami_encode_fix(struct fb_fix_screeninfo *fix,
 {
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id, amifb_name);
-	fix->smem_start = (char *)videomemory_phys;
+	fix->smem_start = videomemory_phys;
 	fix->smem_len = videomemorysize;
 
 #ifdef FBCON_HAS_MFB

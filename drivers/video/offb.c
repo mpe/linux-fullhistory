@@ -533,7 +533,7 @@ static void offb_init_fb(const char *name, const char *full_name,
     var->yres = var->yres_virtual = height;
     fix->line_length = pitch;
 
-    fix->smem_start = (char *)address;
+    fix->smem_start = address;
     fix->smem_len = pitch * height;
     fix->type = FB_TYPE_PACKED_PIXELS;
     fix->type_aux = 0;

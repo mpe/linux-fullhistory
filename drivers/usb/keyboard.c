@@ -176,7 +176,7 @@ usb_kbd_probe(struct usb_device *dev)
     if (dev->descriptor.bNumConfigurations < 1)
 	return -1;
 
-    interface = &dev->config[0].altsetting[0].interface[0];
+    interface = &dev->config[0].interface[0].altsetting[0];
     endpoint = &interface->endpoint[0];
 
     if(interface->bInterfaceClass != 3

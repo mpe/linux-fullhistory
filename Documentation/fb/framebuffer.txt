@@ -1,7 +1,7 @@
 			The Frame Buffer Device
 			-----------------------
 
-Maintained by Geert Uytterhoeven (Geert.Uytterhoeven@cs.kuleuven.ac.be)
+Maintained by Geert Uytterhoeven <geert@linux-m68k.org>
 Last revised: November 7, 1998
 
 

@@ -2680,7 +2680,7 @@ static void initMatrox(WPMINFO struct display* p) {
 /* --------------------------------------------------------------------- */
 
 static struct fb_var_screeninfo vesafb_defined __initdata = {
-	0,0,0,0,	/* W,H, W, H (virtual) load xres,xres_virtual*/
+	640,480,640,480,/* W,H, W, H (virtual) load xres,xres_virtual*/
 	0,0,		/* virtual -> visible no offset */
 	8,		/* depth -> load bits_per_pixel */
 	0,		/* greyscale ? */
@@ -2692,8 +2692,8 @@ static struct fb_var_screeninfo vesafb_defined __initdata = {
 	FB_ACTIVATE_NOW,
 	-1,-1,
 	FB_ACCELF_TEXT,	/* accel flags */
-	0L,0L,0L,0L,0L,
-	0L,0L,0,	/* No sync info */
+	39721L,48L,16L,33L,10L,
+	96L,2L,~0,	/* No sync info */
 	FB_VMODE_NONINTERLACED,
 	{0,0,0,0,0,0}
 };
@@ -4622,7 +4622,7 @@ static int matroxfb_get_fix(struct fb_fix_screeninfo *fix, int con,
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id,"MATROX");
 
-	fix->smem_start = (void*)ACCESS_FBINFO(video.base) + ACCESS_FBINFO(curr.ydstorg.bytes);
+	fix->smem_start = ACCESS_FBINFO(video.base) + ACCESS_FBINFO(curr.ydstorg.bytes);
 	fix->smem_len = ACCESS_FBINFO(video.len_usable) - ACCESS_FBINFO(curr.ydstorg.bytes);
 	fix->type = p->type;
 	fix->type_aux = p->type_aux;
@@ -4631,7 +4631,7 @@ static int matroxfb_get_fix(struct fb_fix_screeninfo *fix, int con,
 	fix->ypanstep = 1;
 	fix->ywrapstep = 0;
 	fix->line_length = p->line_length;
-	fix->mmio_start = (void*)ACCESS_FBINFO(mmio.base);
+	fix->mmio_start = ACCESS_FBINFO(mmio.base);
 	fix->mmio_len = ACCESS_FBINFO(mmio.len);
 	fix->accel = ACCESS_FBINFO(devflags.accelerator);
 	return 0;
@@ -5207,7 +5207,7 @@ int __init matroxfb_setup(char *options) {
 		else if (!strncmp(this_opt, "vesa:", 5)) 
 			vesa = simple_strtoul(this_opt+5, NULL, 0);
 		else if (!strncmp(this_opt, "font:", 5))
-			strcpy(fontname, this_opt+5);
+			strncpy(fontname, this_opt+5, sizeof(fontname)-1);
 		else if (!strncmp(this_opt, "maxclk:", 7))
 			maxclk = simple_strtoul(this_opt+7, NULL, 0);
 		else if (!strncmp(this_opt, "fh:", 3))
@@ -5217,7 +5217,7 @@ int __init matroxfb_setup(char *options) {
 		else if (!strncmp(this_opt, "mem:", 4)) 
 			mem = simple_strtoul(this_opt+4, NULL, 0);
 		else if (!strncmp(this_opt, "mode:", 5))
-			strcpy(videomode, this_opt+5);
+			strncpy(videomode, this_opt+5, sizeof(videomode)-1);
 #ifdef CONFIG_FB_OF
 		else if (!strncmp(this_opt, "vmode:", 6)) {
 			unsigned int vmode = simple_strtoul(this_opt+6, NULL, 0);
@@ -5289,7 +5289,7 @@ int __init matroxfb_setup(char *options) {
 			else if (!strcmp(this_opt, "grayscale"))
 				grayscale = value;
 			else {
-				printk(KERN_ERR "matroxfb: unknown parameter %s%s\n", value?"":"no", this_opt);
+				strncpy(videomode, this_opt, sizeof(videomode)-1);
 			}
 		}
 	}
@@ -5847,15 +5847,6 @@ static int __init initMatrox2(WPMINFO struct display* d, struct board* b){
 		if (depth == -1)
 			depth = RSDepth(RSptr->info);
 	}
-#if 0	
-	if (sync == -1) {
-		sync = 0;
-		if (yres < 400)
-			sync |= FB_SYNC_HOR_HIGH_ACT;
-		else if (yres < 480)
-			sync |= FB_SYNC_VERT_HIGH_ACT;
-	}
-#endif
 	if ((depth == RSText8) && (!*ACCESS_FBINFO(fbcon.fontname))) {
 		strcpy(ACCESS_FBINFO(fbcon.fontname), "VGA8x8");
 	}
@@ -5879,13 +5870,23 @@ static int __init initMatrox2(WPMINFO struct display* d, struct board* b){
 	ACCESS_FBINFO(fbcon.flags) = FBINFO_FLAG_DEFAULT;
 	ACCESS_FBINFO(video.len_usable) &= PAGE_MASK;
 
-#if 0
-	fb_find_mode(&vesafb_defined, &ACCESS_FBINFO(fbcon), videomode[0]?videomode:NULL,
-		NULL, 0, NULL, vesafb_defined.bits_per_pixel);
+#ifndef MODULE
+	/* mode database is marked __init ... */
+	{
+		/* it cannot be static const struct due to __initdata
+		marker */
+		static struct fb_videomode defaultmode __initdata = {
+			/* 640x480 @ 60Hz, 31.5 kHz */
+			NULL, 60, 640, 480, 39721, 40, 24, 32, 11, 96, 2,
+			0, FB_VMODE_NONINTERLACED
+		};
+
+		fb_find_mode(&vesafb_defined, &ACCESS_FBINFO(fbcon), videomode[0]?videomode:NULL,
+		NULL, 0, &defaultmode, vesafb_defined.bits_per_pixel);
+	}
 #endif
+
 	/* mode modifiers */
-	if (sync != -1)
-		vesafb_defined.sync = sync;
 	if (hslen)
 		vesafb_defined.hsync_len = hslen;
 	if (vslen)
@@ -5902,6 +5903,16 @@ static int __init initMatrox2(WPMINFO struct display* d, struct board* b){
 		vesafb_defined.xres = xres;
 	if (yres)
 		vesafb_defined.yres = yres;
+	if (sync != -1)
+		vesafb_defined.sync = sync;
+	else if (vesafb_defined.sync == ~0) {
+		vesafb_defined.sync = 0;
+		if (yres < 400)
+			vesafb_defined.sync |= FB_SYNC_HOR_HIGH_ACT;
+		else if (yres < 480)
+			vesafb_defined.sync |= FB_SYNC_VERT_HIGH_ACT;
+	}
+	
 	/* fv, fh, maxclk limits was specified */
 	{
 		unsigned int tmp;

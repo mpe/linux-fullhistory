@@ -549,7 +549,7 @@ static void __init init_chips(struct fb_info_chips *p)
 	int i;
 
 	strcpy(p->fix.id, "C&T 65550");
-	p->fix.smem_start = (char *) p->frame_buffer_phys;
+	p->fix.smem_start = p->frame_buffer_phys;
 
 // FIXME: Assumes 1MB frame buffer, but 65550 supports 1MB or 2MB.
 // * "3500" PowerBook G3 (the original PB G3) has 2MB.

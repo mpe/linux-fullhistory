@@ -86,7 +86,7 @@ static int q40fb_get_fix(struct fb_fix_screeninfo *fix, int con,
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 
 	strcpy(fix->id,"Q40");
-	fix->smem_start=(char*)q40_screen_addr;
+	fix->smem_start=q40_screen_addr;
 	fix->smem_len=1024*1024;
 	fix->type=FB_TYPE_PACKED_PIXELS;
 	fix->type_aux=0;

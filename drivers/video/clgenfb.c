@@ -31,7 +31,7 @@
  *
  */
 
-#define CLGEN_VERSION "1.9.4.1"
+#define CLGEN_VERSION "1.9.4.2"
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -98,7 +98,6 @@
         if(!(expr)) { \
         printk( "Assertion failed! %s,%s,%s,line=%d\n",\
         #expr,__FILE__,__FUNCTION__,__LINE__); \
-        *(int*)0 = 0;\
         }
 #else
 #define assert(expr)
@@ -635,18 +634,18 @@ static int clgen_encode_fix (struct fb_fix_screeninfo *fix, const void *par,
 		switch (_par->var.bits_per_pixel) {
 		case 1:
 		case 8:
-			fix->smem_start = (char *) _info->fbmem_phys;
+			fix->smem_start = _info->fbmem_phys;
 			break;
 		case 16:
-			fix->smem_start = (char *) _info->fbmem_phys + 1 * MB_;
+			fix->smem_start = _info->fbmem_phys + 1 * MB_;
 			break;
 		case 24:
 		case 32:
-			fix->smem_start = (char *) _info->fbmem_phys + 2 * MB_;
+			fix->smem_start = _info->fbmem_phys + 2 * MB_;
 			break;
 		}
 	} else {
-		fix->smem_start = (char *) _info->fbmem_phys;
+		fix->smem_start = _info->fbmem_phys;
 	}
 
 	/* monochrome: only 1 memory plane */
@@ -662,7 +661,7 @@ static int clgen_encode_fix (struct fb_fix_screeninfo *fix, const void *par,
 	fix->line_length = _par->line_length;
 
 	/* FIXME: map region at 0xB8000 if available, fill in here */
-	fix->mmio_start = (char *) NULL;
+	fix->mmio_start = 0;
 	fix->mmio_len = 0;
 	fix->accel = FB_ACCEL_NONE;
 
@@ -831,7 +830,7 @@ static int clgen_decode_var (const struct fb_var_screeninfo *var, void *par,
 	if (_par->var.yoffset > _par->var.yres_virtual - _par->var.yres)
 		_par->var.yoffset = _par->var.yres_virtual - _par->var.yres - 1;
 
-	switch (var->bits_per_pixel) {
+	switch (_par->var.bits_per_pixel) {
 	case 1:
 		_par->line_length = _par->var.xres_virtual / 8;
 		_par->visual = FB_VISUAL_MONO10;
@@ -900,7 +899,8 @@ static int clgen_decode_var (const struct fb_var_screeninfo *var, void *par,
 		break;
 
 	default:
-		assert (0);
+		DPRINTK("Unsupported bpp size: %d\n", _par->var.bits_per_pixel);
+		assert (FALSE);
 		/* should never occur */
 		break;
 	}
@@ -951,7 +951,7 @@ static int clgen_decode_var (const struct fb_var_screeninfo *var, void *par,
 
 	bestclock (freq, &_par->freq, &_par->nom, &_par->den, &_par->div,
 		   maxclock);
-	_par->mclk = clgen_get_mclk (freq, var->bits_per_pixel, &_par->divMCLK);
+	_par->mclk = clgen_get_mclk (freq, _par->var.bits_per_pixel, &_par->divMCLK);
 
 	xres = _par->var.xres;
 	hfront = _par->var.right_margin;
@@ -2326,7 +2326,7 @@ static struct pci_dev * __init clgen_pci_dev_get (clgen_board_t *btype)
 					clgen_pci_probe_list[i].device, NULL);
 	
 	if (pdev)
-		*btype = clgen_pci_probe_list[i].btype;
+		*btype = clgen_pci_probe_list[i - 1].btype;
 
 	DPRINTK ("EXIT, returning %p\n", pdev);
 	return pdev;
@@ -2485,7 +2485,7 @@ static int __init clgen_zorro_find (int *key_o, int *key2_o, clgen_board_t *btyp
 			*key2_o = zorro_find (clgen_zorro_probe_list[i].key2, 0, 0);
 		else
 			*key2_o = 0;
-		*btype = clgen_zorro_probe_list[i].btype;
+		*btype = clgen_zorro_probe_list[i - 1].btype;
 		
 		printk (KERN_INFO "clgen: %s board detected; ",
 			clgen_board_info[*btype].name);
@@ -3277,7 +3277,7 @@ void clgen_dbg_print_regs (caddr_t regbase, clgen_dbg_reg_class_t reg_class,...)
 			break;
 		default:
 			/* should never occur */
-			assert (0);
+			assert (FALSE);
 			break;
 		}
 

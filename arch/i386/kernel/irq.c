@@ -149,7 +149,10 @@ atomic_t global_bh_lock;
 static inline void check_smp_invalidate(int cpu)
 {
 	if (test_bit(cpu, &smp_invalidate_needed)) {
+		struct mm_struct *mm = current->mm;
 		clear_bit(cpu, &smp_invalidate_needed);
+		if (mm)
+			atomic_set_mask(1 << cpu, &mm->cpu_vm_mask);
 		local_flush_tlb();
 	}
 }
@@ -617,25 +620,33 @@ int request_irq(unsigned int irq,
 		
 void free_irq(unsigned int irq, void *dev_id)
 {
-	struct irqaction * action, **p;
+	struct irqaction **p;
 	unsigned long flags;
 
 	if (irq >= NR_IRQS)
 		return;
 
 	spin_lock_irqsave(&irq_controller_lock,flags);
-	for (p = &irq_desc[irq].action; (action = *p) != NULL; p = &action->next) {
-		if (action->dev_id != dev_id)
-			continue;
+	p = &irq_desc[irq].action;
+	for (;;) {
+		struct irqaction * action = *p;
+		if (action) {
+			struct irqaction **pp = p;
+			p = &action->next;
+			if (action->dev_id != dev_id)
+				continue;
 
-		/* Found it - now remove it from the list of entries */
-		*p = action->next;
-		if (!irq_desc[irq].action) {
+			/* Found it - now remove it from the list of entries */
+			*pp = action->next;
+			if (irq_desc[irq].action)
+				break;
 			irq_desc[irq].status |= IRQ_DISABLED;
 			irq_desc[irq].handler->shutdown(irq);
+			break;
 		}
+		printk("Trying to free free IRQ%d\n",irq);
+		break;
 	}
-	printk("Trying to free free IRQ%d\n",irq);
 	spin_unlock_irqrestore(&irq_controller_lock,flags);
 }
 

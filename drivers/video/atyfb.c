@@ -1926,7 +1926,7 @@ static int encode_fix(struct fb_fix_screeninfo *fix,
     memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 
     strcpy(fix->id, atyfb_name);
-    fix->smem_start = (char *)info->frame_buffer_phys;
+    fix->smem_start = info->frame_buffer_phys;
     fix->smem_len = (u32)info->total_vram;
 
 #ifdef __LITTLE_ENDIAN
@@ -1943,19 +1943,19 @@ static int encode_fix(struct fb_fix_screeninfo *fix,
      *  Reg Block 1 (multimedia extensions) is at ati_regbase_phys-0x400
      */
     if (Gx == GX_CHIP_ID || Gx == CX_CHIP_ID) {
-	fix->mmio_start = (char *)info->ati_regbase_phys;
+	fix->mmio_start = info->ati_regbase_phys;
 	fix->mmio_len = 0x400;
 	fix->accel = FB_ACCEL_ATI_MACH64GX;
     } else if (Gx == CT_CHIP_ID || Gx == ET_CHIP_ID) {
-	fix->mmio_start = (char *)info->ati_regbase_phys;
+	fix->mmio_start = info->ati_regbase_phys;
 	fix->mmio_len = 0x400;
 	fix->accel = FB_ACCEL_ATI_MACH64CT;
     } else if (Gx == VT_CHIP_ID || Gx == VU_CHIP_ID || Gx == VV_CHIP_ID) {
-	fix->mmio_start = (char *)(info->ati_regbase_phys-0x400);
+	fix->mmio_start = info->ati_regbase_phys-0x400);
 	fix->mmio_len = 0x800;
 	fix->accel = FB_ACCEL_ATI_MACH64VT;
     } else {
-	fix->mmio_start = (char *)(info->ati_regbase_phys-0x400);
+	fix->mmio_start = info->ati_regbase_phys-0x400);
 	fix->mmio_len = 0x800;
 	fix->accel = FB_ACCEL_ATI_MACH64GT;
     }

@@ -1083,7 +1083,7 @@ static int cpia_probe(struct usb_device *dev)
 	if (dev->descriptor.bNumConfigurations != 1)
 		return -1;
 
-	interface = &dev->config[0].altsetting[0].interface[0];
+	interface = &dev->config[0].interface[0].altsetting[0];
 
 	/* Is it a CPiA? */
 	if (dev->descriptor.idVendor != 0x0553)

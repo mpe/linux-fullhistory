@@ -104,7 +104,7 @@ static long free_mem_end_ptr = 0x90000;
 #define LOW_BUFFER_START      0x2000
 #define LOW_BUFFER_END       0x90000
 #define LOW_BUFFER_SIZE      ( LOW_BUFFER_END - LOW_BUFFER_START )
-#define HEAP_SIZE             0x2000
+#define HEAP_SIZE             0x3000
 static int high_loaded =0;
 static uch *high_buffer_start /* = (uch *)(((ulg)&end) + HEAP_SIZE)*/;
 

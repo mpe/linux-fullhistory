@@ -3,8 +3,7 @@
  *					   in Chip RAM with the kernel command
  *					   line option `debug=mem'.
  *
- *  © Copyright 1996 by Geert Uytterhoeven
- *		       (Geert.Uytterhoeven@cs.kuleuven.ac.be)
+ *  © Copyright 1996 by Geert Uytterhoeven <geert@linux-m68k.org>
  *
  *
  *  Usage:

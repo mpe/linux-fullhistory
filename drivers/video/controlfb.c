@@ -998,7 +998,7 @@ static void control_par_to_fix(struct fb_par_control *par, struct fb_fix_screeni
 {
 	memset(fix, 0, sizeof(*fix));
 	strcpy(fix->id, "control");
-	fix->mmio_start = (char *)p->control_regs_phys;
+	fix->mmio_start = p->control_regs_phys;
 	fix->mmio_len = sizeof(struct control_regs);
 	fix->type = FB_TYPE_PACKED_PIXELS;
 	
@@ -1010,7 +1010,7 @@ static void control_par_to_fix(struct fb_par_control *par, struct fb_fix_screeni
 		fix->xpanstep = 0;
 	*/
 
-	fix->smem_start = (void *)(p->frame_buffer_phys
+	fix->smem_start = (p->frame_buffer_phys
 		+ control_reg_init[par->vmode-1]->offset[par->cmode]);
 	fix->smem_len = p->total_vram - control_reg_init[par->vmode-1]->offset[par->cmode];
 	fix->visual = (par->cmode == CMODE_8) ?

@@ -1108,9 +1108,9 @@ static int scsi_probe(struct usb_device *dev)
 	    protocol = US_PR_CB;
 	    subclass = US_SC_8070;	/* an assumption */
 	} else if (dev->descriptor.bDeviceClass != 0 ||
-	    dev->config->altsetting->interface->bInterfaceClass != 8 ||
-	    dev->config->altsetting->interface->bInterfaceSubClass < US_SC_MIN ||
-	    dev->config->altsetting->interface->bInterfaceSubClass > US_SC_MAX) {
+	    dev->config->interface->altsetting->bInterfaceClass != 8 ||
+	    dev->config->interface->altsetting->bInterfaceSubClass < US_SC_MIN ||
+	    dev->config->interface->altsetting->bInterfaceSubClass > US_SC_MAX) {
 	    return -1;
 	}
 
@@ -1143,7 +1143,7 @@ static int scsi_probe(struct usb_device *dev)
 	memset(ss, 0, sizeof(struct us_data));
     }
 
-    interface = dev->config->altsetting->interface;
+    interface = dev->config->interface->altsetting;
     ss->filter = filter;
     ss->fdata = fdata;
     ss->flags = flags;

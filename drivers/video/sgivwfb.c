@@ -501,7 +501,7 @@ static void sgivwfb_encode_fix(struct fb_fix_screeninfo *fix,
 {
   memset(fix, 0, sizeof(struct fb_fix_screeninfo));
   strcpy(fix->id, sgivwfb_name);
-  fix->smem_start = (char *) sgivwfb_mem_phys;
+  fix->smem_start = sgivwfb_mem_phys;
   fix->smem_len = sgivwfb_mem_size;
   fix->type = FB_TYPE_PACKED_PIXELS;
   fix->type_aux = 0;
@@ -517,7 +517,7 @@ static void sgivwfb_encode_fix(struct fb_fix_screeninfo *fix,
   fix->xpanstep = 0;
   fix->ypanstep = ypan;
   fix->line_length = get_line_length(var->xres_virtual, var->bits_per_pixel);
-  fix->mmio_start = (char *) DBE_REG_PHYS;
+  fix->mmio_start = DBE_REG_PHYS;
   fix->mmio_len = DBE_REG_SIZE;
 }
 

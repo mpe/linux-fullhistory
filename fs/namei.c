@@ -250,7 +250,7 @@ static struct dentry * real_lookup(struct dentry * parent, struct qstr * name, i
 	 * FIXME! This could use version numbering or similar to
 	 * avoid unnecessary cache lookups.
 	 */
-	result = cached_lookup(parent, name, flags);
+	result = d_lookup(parent, name);
 	if (!result) {
 		struct dentry * dentry = d_alloc(parent, name);
 		result = ERR_PTR(-ENOMEM);
@@ -261,8 +261,19 @@ static struct dentry * real_lookup(struct dentry * parent, struct qstr * name, i
 			else
 				result = dentry;
 		}
+		up(&dir->i_sem);
+		return result;
 	}
+
+	/*
+	 * Uhhuh! Nasty case: the cache was re-populated while
+	 * we waited on the semaphore. Need to revalidate, but
+	 * we're going to return this entry regardless (same
+	 * as if it was busy).
+	 */
 	up(&dir->i_sem);
+	if (result->d_op && result->d_op->d_revalidate)
+		result->d_op->d_revalidate(result, flags);
 	return result;
 }
 

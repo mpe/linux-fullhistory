@@ -1,5 +1,5 @@
 Smart CONFIG_* Dependencies
-Fri 2 Dec 1997
+1 August 1999
 
 Michael Chastain   <mec@shout.net>
 Werner Almesberger <almesber@lrc.di.epfl.ch>
@@ -44,22 +44,21 @@ Here is the solution:
     It now generates these dependencies:
 
 	drivers/net/foo.c: \
-	    include/config/foo_autofrob.h \
-	    include/config/foo_model_two.h
+	    include/config/foo/autofrob.h \
+	    include/config/foo/model/two.h
 
     So drivers/net/foo.c depends only on the CONFIG_* lines that
     it actually uses.
 
-    A new program, split-include.c, runs at the end of make config (also
-    make oldconfig, make menuconfig, and make xconfig).  split-include
-    reads include/linux/autoconf.h and updates the include/linux/*.h
-    directory, writing one file per option.  It updates only the files
-    that changed.
+    A new program, split-include.c, runs at the beginning of
+    compilation (make bzImage or make zImage).  split-include reads
+    include/linux/autoconf.h and updates the include/config/ tree,
+    writing one file per option.  It updates only the files for options
+    that have changed.
 
-    mkdep.c also generates much better warning messages for missing
-    or unneeded <linux/config.h> lines.  In fact, you can get these
-    messages without generating dependencies with the new top-level
-    target 'make checkconfig'.
+    mkdep.c no longer generates warning messages for missing or unneeded
+    <linux/config.h> lines.  The new top-level target 'make checkconfig'
+    checks for these problems.
 
 Flag Dependencies
 
@@ -68,12 +67,14 @@ Flag Dependencies
     the compilation flags used to build it.  The file foo.o has
     its flags stored in .flags.foo.o.
 
-    Suppose the user changes the foo driver from resident to
-    modular, 'make' will notice that the foo.o was not compiled
-    with -DMODULE and will recompile foo.c.
+    Suppose the user changes the foo driver from resident to modular.
+    'make' will notice that the current foo.o was not compiled with
+    -DMODULE and will recompile foo.c.
 
-    All .a and .o files made from C source or with 'ld' or 'ar'
-    have flag dependencies.  .S files do not have flag dependencies.
+    All .o files made from C source have flag dependencies.  So do .o
+    files made with ld, and .a files made with ar.  However, .o files
+    made from assembly source do not have flag dependencies (nobody
+    needs this yet, but it would be good to fix).
 
 Per-source-file Flags
 
@@ -92,8 +93,8 @@ Credit
     version of this patch.
     
     Michael Chastain picked it up and continued development.  He is
-    now the principal author and maintainer.  Report bugs to him,
-    or to all three people together.
+    now the principal author and maintainer.  Please report any bugs
+    to him.
 
     Martin von Loewis wrote flag dependencies, with some modifications
     by Michael Chastain.

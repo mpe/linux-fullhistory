@@ -1037,7 +1037,7 @@ acornfb_get_fix(struct fb_fix_screeninfo *fix, int con, struct fb_info *info)
 	else
 		display = &global_disp;
 
-	fix->smem_start	 = (char *)current_par.screen_base_p;
+	fix->smem_start	 = current_par.screen_base_p;
 	fix->smem_len	 = current_par.screen_size;
 	fix->type	 = display->type;
 	fix->type_aux	 = display->type_aux;

@@ -647,5 +647,7 @@ extern void kernel_set_cachemode (unsigned long address, unsigned long size,
 #define PageSkip(page)		(0)
 #define kern_addr_valid(addr)	(1)
 
+#define io_remap_page_range remap_page_range 
+
 #endif __ASSEMBLY__
 #endif /* _PPC_PGTABLE_H */

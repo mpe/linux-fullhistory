@@ -406,9 +406,9 @@ static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
 	DPRINTK("ENTER\n");
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id, cyberfb_name);
-	fix->smem_start = (char*) CyberMem_phys;
+	fix->smem_start = CyberMem_phys;
 	fix->smem_len = CyberSize;
-	fix->mmio_start = (char*) CyberRegs_phys;
+	fix->mmio_start = CyberRegs_phys;
 	fix->mmio_len = 0x10000;
 
 	fix->type = FB_TYPE_PACKED_PIXELS;

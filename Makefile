@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 3
-SUBLEVEL = 14
+SUBLEVEL = 15
 EXTRAVERSION =
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
@@ -162,7 +162,7 @@ ifdef CONFIG_PPC
 DRIVERS := $(DRIVERS) drivers/macintosh/macintosh.a
 endif
 
-ifdef CONFIG_PNP
+ifeq ($(CONFIG_PNP),y)
 DRIVERS := $(DRIVERS) drivers/pnp/pnp.a
 endif
 

@@ -621,4 +621,7 @@ extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
 #define PageSkip(page)		(0)
 #define kern_addr_valid(addr)	(1)
 
+#define io_remap_page_range(start, busaddr, size, prot) \
+	remap_page_range(start, virt_to_phys(ioremap(busaddr)), size, prot)
+
 #endif /* _ALPHA_PGTABLE_H */

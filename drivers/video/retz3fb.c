@@ -794,9 +794,9 @@ static int retz3_encode_fix(struct fb_info *info,
 
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id, retz3fb_name);
-	fix->smem_start = (char *)(zinfo->physfbmem);
+	fix->smem_start = zinfo->physfbmem;
 	fix->smem_len = zinfo->fbsize;
-	fix->mmio_start = (char *)(zinfo->physregs);
+	fix->mmio_start = zinfo->physregs;
 	fix->mmio_len = 0x00c00000;
 
 	fix->type = FB_TYPE_PACKED_PIXELS;

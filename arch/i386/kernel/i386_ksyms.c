@@ -76,7 +76,6 @@ EXPORT_SYMBOL(strlen_user);
 #ifdef __SMP__
 EXPORT_SYMBOL(cpu_data);
 EXPORT_SYMBOL(kernel_flag);
-EXPORT_SYMBOL(smp_invalidate_needed);
 EXPORT_SYMBOL(cpu_number_map);
 EXPORT_SYMBOL(__cpu_logical_map);
 EXPORT_SYMBOL(smp_num_cpus);

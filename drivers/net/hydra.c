@@ -3,7 +3,7 @@
 /* also some code & lots of fixes by Timo Rossi (trossi@cc.jyu.fi)          */
 
 /* The code is mostly based on the linux/68k Ariadne driver                 */
-/* copyrighted by Geert Uytterhoeven (Geert.Uytterhoeven@cs.kuleuven.ac.be) */
+/* copyrighted by Geert Uytterhoeven (geert@linux-m68k.org)                 */
 /* and Peter De Schrijver (Peter.DeSchrijver@linux.cc.kuleuven.ac.be)       */
 
 /* This file is subject to the terms and conditions of the GNU General      */

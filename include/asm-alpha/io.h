@@ -121,7 +121,7 @@ extern void _sethae (unsigned long addr);	/* cached version */
 # define __raw_readl	__readl
 # define __raw_readq	__readq
 # define __raw_writeb	__writeb
-# define __raw_writeb	__writew
+# define __raw_writew	__writew
 # define __raw_writel	__writel
 # define __raw_writeq	__writeq
 
@@ -271,7 +271,7 @@ extern unsigned long	___raw_readw(unsigned long addr);
 extern unsigned long	___raw_readl(unsigned long addr);
 extern unsigned long	___raw_readq(unsigned long addr);
 extern void		___raw_writeb(unsigned char b, unsigned long addr);
-extern void		___raw_writeb(unsigned short b, unsigned long addr);
+extern void		___raw_writew(unsigned short b, unsigned long addr);
 extern void		___raw_writel(unsigned int b, unsigned long addr);
 extern void		___raw_writeq(unsigned long b, unsigned long addr);
 
@@ -291,8 +291,8 @@ extern void		___raw_writeq(unsigned long b, unsigned long addr);
 #ifdef __raw_writeb
 # define writeb(v,a)	({ __raw_writeb((v),(a)); mb(); })
 #endif
-#ifdef __raw_writeb
-# define writew(v,a)	({ __raw_writeb((v),(a)); mb(); })
+#ifdef __raw_writew
+# define writew(v,a)	({ __raw_writew((v),(a)); mb(); })
 #endif
 #ifdef __raw_writel
 # define writel(v,a)	({ __raw_writel((v),(a)); mb(); })
@@ -317,8 +317,8 @@ extern void		___raw_writeq(unsigned long b, unsigned long addr);
 #ifndef __raw_writeb
 # define __raw_writeb(v,a)  ___raw_writeb((v),(unsigned long)(a))
 #endif
-#ifndef __raw_writeb
-# define __raw_writeb(v,a)  ___raw_writeb((v),(unsigned long)(a))
+#ifndef __raw_writew
+# define __raw_writew(v,a)  ___raw_writew((v),(unsigned long)(a))
 #endif
 #ifndef __raw_writel
 # define __raw_writel(v,a)  ___raw_writel((v),(unsigned long)(a))

@@ -90,7 +90,7 @@ void ___raw_writeb(unsigned char b, unsigned long addr)
 	__writeb(b, addr);
 }
 
-void ___raw_writeb(unsigned short b, unsigned long addr)
+void ___raw_writew(unsigned short b, unsigned long addr)
 {
 	__writew(b, addr);
 }
@@ -487,7 +487,7 @@ void _memcpy_toio(unsigned long to, const void * from, long count)
 	if (count >= 2 && (to & 1) == ((long)from & 1)) {
 		count -= 2;
 		do {
-			__raw_writeb(*(const u16 *)from, to);
+			__raw_writew(*(const u16 *)from, to);
 			count -= 2;
 			to += 2;
 			from += 2;
@@ -518,7 +518,7 @@ void _memset_c_io(unsigned long to, unsigned long c, long count)
 
 	/* Handle any initial odd halfword */
 	if (count >= 2 && (to & 2)) {
-		__raw_writeb(c, to);
+		__raw_writew(c, to);
 		to += 2;
 		count -= 2;
 	}
@@ -551,7 +551,7 @@ void _memset_c_io(unsigned long to, unsigned long c, long count)
 
 	/* The tail is half-word aligned if we have count >= 2 */
 	if (count >= 2) {
-		__raw_writeb(c, to);
+		__raw_writew(c, to);
 		to += 2;
 		count -= 2;
 	}

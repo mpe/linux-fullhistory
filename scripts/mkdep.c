@@ -8,6 +8,16 @@
  * I make simple dependency lines for #include <*.h> and #include "*.h".
  * I also find instances of CONFIG_FOO and generate dependencies
  *    like include/config/foo.h.
+ *
+ * 1 August 1999, Michael Elizabeth Chastain, <mec@shout.net>
+ * - Keith Owens reported a bug in smart config processing.  There used
+ *   to be an optimization for "#define CONFIG_FOO ... #ifdef CONFIG_FOO",
+ *   so that the file would not depend on CONFIG_FOO because the file defines
+ *   this symbol itself.  But this optimization is bogus!  Consider this code:
+ *   "#if 0 \n #define CONFIG_FOO \n #endif ... #ifdef CONFIG_FOO".  Here
+ *   the definition is inactivated, but I still used it.  It turns out this
+ *   actually happens a few times in the kernel source.  The simple way to
+ *   fix this problem is to remove this particular optimization.
  */
 
 #include <ctype.h>
@@ -93,22 +103,11 @@ int is_defined_config(const char * name, int len)
 /*
  * Add a new value to the configuration string.
  */
-void define_config(int convert, const char * name, int len)
+void define_config(const char * name, int len)
 {
 	grow_config(len + 1);
 
 	memcpy(str_config+len_config, name, len);
-
-	if (convert) {
-		int i;
-		for (i = 0; i < len; i++) {
-			char c = str_config[len_config+i];
-			if (isupper(c)) c = tolower(c);
-			if (c == '_')   c = '/';
-			str_config[len_config+i] = c;
-		}
-	}
-
 	len_config += len;
 	str_config[len_config++] = '\n';
 }
@@ -121,7 +120,7 @@ void define_config(int convert, const char * name, int len)
 void clear_config(void)
 {
 	len_config = 0;
-	define_config(0, "", 0);
+	define_config("", 0);
 }
 
 
@@ -186,7 +185,7 @@ void handle_include(int type, const char * name, int len)
 		return;
 
 	if (len >= 7 && !memcmp(name, "config/", 7))
-		define_config(0, name+7, len-7-2);
+		define_config(name+7, len-7-2);
 
 	memcpy(path->buffer+path->len, name, len);
 	path->buffer[path->len+len] = '\0';
@@ -225,7 +224,7 @@ void use_config(const char * name, int len)
 	if (is_defined_config(pc, len))
 	    return;
 
-	define_config(0, pc, len);
+	define_config(pc, len);
 
 	if (!hasdep) {
 		hasdep = 1;
@@ -409,7 +408,13 @@ pound_u:
 	GETNEXT NOTCASE('f', __start);
 	goto pound_define_undef;
 
-/* #\s*(define|undef)\s*CONFIG_(\w*) */
+/*
+ * #\s*(define|undef)\s*CONFIG_(\w*)
+ *
+ * this does not define the word, because it could be inside another
+ * conditional (#if 0).  But I do parse the word so that this instance
+ * does not count as a use.  -- mec
+ */
 pound_define_undef:
 	GETNEXT
 	CASE(' ',  pound_define_undef);
@@ -428,7 +433,6 @@ pound_define_undef_CONFIG_word:
 	GETNEXT
 	if (isalnum(current) || current == '_')
 		goto pound_define_undef_CONFIG_word;
-	define_config(1, map_dot, next - map_dot - 1);
 	goto __start;
 
 /* \<CONFIG_(\w*) */

@@ -158,7 +158,7 @@ static int vga16fb_get_fix(struct fb_fix_screeninfo *fix, int con,
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id,"VGA16 VGA");
 
-	fix->smem_start = (char *) 0xa0000;
+	fix->smem_start = 0xa0000;
 	fix->smem_len = 65536;
 	fix->type = FB_TYPE_VGA_PLANES;
 	fix->visual = FB_VISUAL_PSEUDOCOLOR;

@@ -33,7 +33,7 @@
  * APM screenblank bug fixed Takashi Manabe <manabe@roy.dsl.tutics.tut.jp>
  *
  * Merge with the abstract console driver by Geert Uytterhoeven
- * <Geert.Uytterhoeven@cs.kuleuven.ac.be>, Jan 1997.
+ * <geert@linux-m68k.org>, Jan 1997.
  *
  *   Original m68k console driver modifications by
  *

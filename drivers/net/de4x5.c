@@ -379,8 +379,7 @@
                           Fix bug in pci_probe() for 64 bit systems reported
 			   by <belliott@accessone.com>.
       0.533   9-Jan-98    Fix more 64 bit bugs reported by <jal@cs.brown.edu>.
-      0.534  24-Jan-98    Fix last (?) endian bug from 
-                           <Geert.Uytterhoeven@cs.kuleuven.ac.be>
+      0.534  24-Jan-98    Fix last (?) endian bug from <geert@linux-m68k.org>
       0.535  21-Feb-98    Fix Ethernet Address PROM reset bug for DC21040.
       0.536  21-Mar-98    Change pci_probe() to use the pci_dev structure.
 			  **Incompatible with 2.0.x from here.**

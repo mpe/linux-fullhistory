@@ -188,9 +188,9 @@ bad_sig:
 	xor	bh,bh
 	mov	bl,[497]	! get setup sects from boot sector
 	sub	bx,#4		! LILO loads 4 sectors of setup
-	shl	bx,#8		! convert to words
+	shl	bx,#7		! convert to dwords (1sect=2^7 dwords)
 	mov	cx,bx
-	shr	bx,#3		! convert to segment
+	shr	bx,#2		! convert to segment
 	add	bx,#SYSSEG
 	seg cs
 	mov	start_sys_seg,bx
@@ -203,7 +203,7 @@ bad_sig:
 	mov	ax,#SYSSEG
 	mov	ds,ax
 	rep
-	movsw
+	movsd
 
 	mov	ax,cs		! aka #SETUPSEG
 	mov	ds,ax
@@ -485,9 +485,9 @@ do_move:
 	add	bx,#0x100
 	sub	di,di
 	sub	si,si
-	mov 	cx,#0x800
+	mov 	cx,#0x400
 	rep
-	movsw
+	movsd
 	cmp	bx,bp		! we assume start_sys_seg > 0x200,
 				! so we will perhaps read one page more then
 				! needed, but never overwrite INITSEG because

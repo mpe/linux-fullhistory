@@ -192,7 +192,7 @@ static void hpfb_encode_fix(struct fb_fix_screeninfo *fix,
 	/*
 	 * X works, but screen wraps ... 
 	 */
-	fix->smem_start=(char *)fb_start;
+	fix->smem_start=fb_start;
 	fix->smem_len=fb_size;
 	fix->type = FB_TYPE_PACKED_PIXELS;
 	fix->visual = FB_VISUAL_PSEUDOCOLOR;

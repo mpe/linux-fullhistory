@@ -345,7 +345,7 @@ int __init g364fb_init(void)
     fb_var.yres = yres;
 
     fb_fix.line_length = (xres / 8) * fb_var.bits_per_pixel;
-    fb_fix.smem_start = (char *)0x40000000; /* physical address */
+    fb_fix.smem_start = 0x40000000; /* physical address */
     /* get size of video memory; this is special for the JAZZ hardware */
     mem = (r4030_read_reg32(JAZZ_R4030_CONFIG) >> 8) & 3;
     fb_fix.smem_len = (1 << (mem*2)) * 512 * 1024;
@@ -355,7 +355,7 @@ int __init g364fb_init(void)
     fb_fix.xpanstep = 0;
     fb_fix.ypanstep = 1;
     fb_fix.ywrapstep = 0;
-    fb_fix.mmio_start = NULL;
+    fb_fix.mmio_start = 0;
     fb_fix.mmio_len = 0;
     fb_fix.accel = FB_ACCEL_NONE;
     

@@ -1797,9 +1797,9 @@ init_imstt(struct fb_info_imstt *p)
 	}
 
 	sprintf(p->fix.id, "IMS TT (%s)", p->ramdac == IBM ? "IBM" : "TVP");
-	p->fix.smem_start = (__u8 *)p->frame_buffer_phys;
+	p->fix.smem_start = p->frame_buffer_phys;
 	p->fix.smem_len = p->total_vram;
-	p->fix.mmio_start = (__u8 *)p->dc_regs_phys;
+	p->fix.mmio_start = p->dc_regs_phys;
 	p->fix.mmio_len = 0x1000;
 	p->fix.accel = FB_ACCEL_IMS_TWINTURBO;
 	p->fix.type = FB_TYPE_PACKED_PIXELS;

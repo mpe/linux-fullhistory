@@ -415,13 +415,13 @@ int __init fm2fb_init(void)
     fb_var = fb_var_modes[fm2fb_mode];
 
     strcpy(fb_fix.id, is_fm ? "FrameMaster II" : "Rainbow II");
-    fb_fix.smem_start = (char *)fm2fb_mem_phys;
+    fb_fix.smem_start = fm2fb_mem_phys;
     fb_fix.smem_len = FRAMEMASTER_REG;
     fb_fix.type = FB_TYPE_PACKED_PIXELS;
     fb_fix.type_aux = 0;
     fb_fix.visual = FB_VISUAL_TRUECOLOR;
     fb_fix.line_length = 768<<2;
-    fb_fix.mmio_start = (char *)fm2fb_reg_phys;
+    fb_fix.mmio_start = fm2fb_reg_phys;
     fb_fix.mmio_len = 8;
     fb_fix.accel = FB_ACCEL_NONE;
 

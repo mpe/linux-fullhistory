@@ -2,7 +2,7 @@
 This is a first start for some documentation about frame buffer device
 internals.
 
-Geert Uytterhoeven <Geert.Uytterhoeven@cs.kuleuven.ac.be>, 21 July 1998
+Geert Uytterhoeven <geert@linux-m68k.org>, 21 July 1998
 
 --------------------------------------------------------------------------------
 

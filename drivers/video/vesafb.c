@@ -166,7 +166,7 @@ static int vesafb_get_fix(struct fb_fix_screeninfo *fix, int con,
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id,"VESA VGA");
 
-	fix->smem_start=(char *) video_base;
+	fix->smem_start=video_base;
 	fix->smem_len=video_size;
 	fix->type = video_type;
 	fix->visual = video_visual;
