@@ -299,11 +299,6 @@ static void idescsi_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 	scsi->pc = NULL;
 }
 
-static inline unsigned long get_timeout(idescsi_pc_t *pc)
-{
-	return IDE_MAX(WAIT_CMD, pc->timeout - jiffies);
-}
-
 /*
  *	Our interrupt handler.
  */
@@ -364,7 +359,8 @@ static void idescsi_pc_intr (ide_drive_t *drive)
 				pc->actually_transferred += temp;
 				pc->current_position += temp;
 				idescsi_discard_data (drive,bcount - temp);
-				ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc));
+				drive->timeout = IDE_MAX(WAIT_CMD, pc->timeout - jiffies);
+				ide_set_handler(drive, &idescsi_pc_intr);
 				return;
 			}
 #if IDESCSI_DEBUG_LOG
@@ -388,7 +384,8 @@ static void idescsi_pc_intr (ide_drive_t *drive)
 	pc->actually_transferred+=bcount;				/* Update the current position */
 	pc->current_position+=bcount;
 
-	ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc));	/* And set the interrupt handler again */
+	drive->timeout = IDE_MAX(WAIT_CMD, pc->timeout - jiffies);
+	ide_set_handler(drive, &idescsi_pc_intr);	/* And set the interrupt handler again */
 }
 
 static void idescsi_transfer_pc (ide_drive_t *drive)
@@ -407,7 +404,8 @@ static void idescsi_transfer_pc (ide_drive_t *drive)
 		ide_do_reset (drive);
 		return;
 	}
-	ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc));	/* Set the interrupt routine */
+	drive->timeout = IDE_MAX(WAIT_CMD, pc->timeout - jiffies);
+	ide_set_handler(drive, &idescsi_pc_intr);	/* Set the interrupt routine */
 	atapi_output_bytes (drive, scsi->pc->c, 12);			/* Send the actual packet */
 }
 
@@ -441,7 +439,8 @@ static void idescsi_issue_pc (ide_drive_t *drive, idescsi_pc_t *pc)
 		(void) (HWIF(drive)->dmaproc(ide_dma_begin, drive));
 	}
 	if (test_bit (IDESCSI_DRQ_INTERRUPT, &scsi->flags)) {
-		ide_set_handler (drive, &idescsi_transfer_pc, get_timeout(pc));
+		drive->timeout = IDE_MAX(WAIT_CMD, pc->timeout - jiffies);
+		ide_set_handler (drive, &idescsi_transfer_pc);
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);		/* Issue the packet command */
 	} else {
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);
@@ -488,7 +487,7 @@ static void idescsi_add_settings(ide_drive_t *drive)
 /*
  *			drive	setting name	read/write	ioctl	ioctl		data type	min	max	mul_factor	div_factor	data pointer		set function
  */
-	ide_add_setting(drive,	"bios_cyl",	SETTING_RW,	-1,	-1,		TYPE_SHORT,	0,	1023,	1,		1,		&drive->bios_cyl,	NULL);
+	ide_add_setting(drive,	"bios_cyl",	SETTING_RW,	-1,	-1,		TYPE_INT,	0,	1023,	1,		1,		&drive->bios_cyl,	NULL);
 	ide_add_setting(drive,	"bios_head",	SETTING_RW,	-1,	-1,		TYPE_BYTE,	0,	255,	1,		1,		&drive->bios_head,	NULL);
 	ide_add_setting(drive,	"bios_sect",	SETTING_RW,	-1,	-1,		TYPE_BYTE,	0,	63,	1,		1,		&drive->bios_sect,	NULL);
 	ide_add_setting(drive,	"transform",	SETTING_RW,	-1,	-1,		TYPE_INT,	0,	3,	1,		1,		&scsi->transform,	NULL);

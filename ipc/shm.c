@@ -462,8 +462,10 @@ static int shm_map (struct vm_area_struct *shmd)
 	   > (unsigned long) current->rlim[RLIMIT_AS].rlim_cur)
 		return -ENOMEM;
 	current->mm->total_vm += tmp >> PAGE_SHIFT;
+	vmlist_modify_lock(current->mm);
 	insert_vm_struct(current->mm, shmd);
 	merge_segments(current->mm, shmd->vm_start, shmd->vm_end);
+	vmlist_modify_unlock(current->mm);
 
 	return 0;
 }

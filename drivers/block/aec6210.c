@@ -1,7 +1,8 @@
 /*
- * linux/drivers/block/aec6210.c		Version 0.01	Nov 17, 1998
+ * linux/drivers/block/aec6210.c	Version 0.02	Sept. 3, 1999
  *
- * Copyright (C) 1998-99	Andre Hedrick
+ * Copyright (C) 1998-99	Andre Hedrick (andre@suse.com)
+ * May be copied or modified under the terms of the GNU General Public License
  *
  *  pio 0 ::       40: 00 07 00 00 00 00 00 00 02 07 a6 04 00 02 00 02
  *  pio 1 ::       40: 0a 07 00 00 00 00 00 00 02 07 a6 05 00 02 00 02
@@ -49,6 +50,10 @@
 
 #include <asm/io.h>
 #include <asm/irq.h>
+
+/*
+ * TO DO: active tuning and correction of cards without a bios.
+ */
 
 unsigned int __init pci_init_aec6210 (struct pci_dev *dev, const char *name)
 {

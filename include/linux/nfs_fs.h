@@ -77,10 +77,13 @@ do { \
 			       : NFS_SERVER(inode)->acregmax)
 
 #define NFS_FLAGS(inode)		((inode)->u.nfs_i.flags)
-#define NFS_REVALIDATING(inode)		(NFS_FLAGS(inode) & NFS_INO_REVALIDATE)
+#define NFS_REVALIDATING(inode)		(NFS_FLAGS(inode) & NFS_INO_REVALIDATING)
 #define NFS_WRITEBACK(inode)		((inode)->u.nfs_i.writeback)
 #define NFS_COOKIES(inode)		((inode)->u.nfs_i.cookies)
 #define NFS_DIREOF(inode)		((inode)->u.nfs_i.direof)
+
+#define NFS_FILEID(inode)		((inode)->u.nfs_i.fileid)
+#define NFS_FSID(inode)			((inode)->u.nfs_i.fsid)
 
 /*
  * These are the default flags for swap requests
@@ -137,7 +140,7 @@ struct nfs_wreq {
 extern int nfs_proc_getattr(struct nfs_server *server, struct nfs_fh *fhandle,
 			struct nfs_fattr *fattr);
 extern int nfs_proc_setattr(struct nfs_server *server, struct nfs_fh *fhandle,
-			struct nfs_sattr *sattr, struct nfs_fattr *fattr);
+			struct nfs_fattr *fattr, struct iattr *sattr);
 extern int nfs_proc_lookup(struct nfs_server *server, struct nfs_fh *dir,
 			const char *name, struct nfs_fh *fhandle,
 			struct nfs_fattr *fattr);
@@ -148,7 +151,7 @@ extern int nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle,
 			int swap, unsigned long offset, unsigned int count,
 			const void *buffer, struct nfs_fattr *fattr);
 extern int nfs_proc_create(struct nfs_server *server, struct nfs_fh *dir,
-			const char *name, struct nfs_sattr *sattr,
+			const char *name, struct iattr *sattr,
 			struct nfs_fh *fhandle, struct nfs_fattr *fattr);
 extern int nfs_proc_remove(struct nfs_server *server, struct nfs_fh *dir,
 			const char *name);
@@ -159,9 +162,9 @@ extern int nfs_proc_link(struct nfs_server *server, struct nfs_fh *fhandle,
 			struct nfs_fh *dir, const char *name);
 extern int nfs_proc_symlink(struct nfs_server *server, struct nfs_fh *dir,
 			const char *name, const char *path,
-			struct nfs_sattr *sattr);
+			struct iattr *sattr);
 extern int nfs_proc_mkdir(struct nfs_server *server, struct nfs_fh *dir,
-			const char *name, struct nfs_sattr *sattr,
+			const char *name, struct iattr *sattr,
 			struct nfs_fh *fhandle, struct nfs_fattr *fattr);
 extern int nfs_proc_rmdir(struct nfs_server *server, struct nfs_fh *dir,
 			const char *name);
@@ -174,13 +177,14 @@ extern int nfs_proc_statfs(struct nfs_server *server, struct nfs_fh *fhandle,
  */
 extern struct super_block *nfs_read_super(struct super_block *, void *, int);
 extern int init_nfs_fs(void);
+extern void nfs_zap_caches(struct inode *);
 extern struct inode *nfs_fhget(struct dentry *, struct nfs_fh *,
 				struct nfs_fattr *);
 extern int nfs_refresh_inode(struct inode *, struct nfs_fattr *);
 extern int nfs_revalidate(struct dentry *);
 extern int nfs_open(struct inode *, struct file *);
 extern int nfs_release(struct inode *, struct file *);
-extern int _nfs_revalidate_inode(struct nfs_server *, struct dentry *);
+extern int __nfs_revalidate_inode(struct nfs_server *, struct dentry *);
 
 /*
  * linux/fs/nfs/file.c
@@ -244,9 +248,9 @@ static inline int
 nfs_revalidate_inode(struct nfs_server *server, struct dentry *dentry)
 {
 	struct inode *inode = dentry->d_inode;
-	if (jiffies - NFS_READTIME(inode) < NFS_ATTRTIMEO(inode))
+	if (time_before(jiffies, NFS_READTIME(inode)+NFS_ATTRTIMEO(inode)))
 		return 0;
-	return _nfs_revalidate_inode(server, dentry);
+	return __nfs_revalidate_inode(server, dentry);
 }
 
 /* NFS root */

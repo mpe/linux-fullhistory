@@ -19,8 +19,8 @@
 #include <linux/vmalloc.h>
 
 #include <asm/pgtable.h>
-#include <asm/mmu_context.h>
 #include <asm/uaccess.h>
+#include <asm/mmu_context.h>
 
 /* The idle threads do not count.. */
 int nr_threads=0;
@@ -693,6 +693,11 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	if (retval)
 		goto bad_fork_cleanup_sighand;
 	p->semundo = NULL;
+	
+	/* Our parent execution domain becomes current domain
+	   These must match for thread signalling to apply */
+	   
+	p->parent_exec_id = p->self_exec_id;
 
 	/* ok, now we should be set up.. */
 	p->swappable = 1;

@@ -5,7 +5,6 @@
  *
  */
 
-#include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <linux/types.h>

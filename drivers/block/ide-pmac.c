@@ -363,7 +363,8 @@ int pmac_ide_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 		drive->waiting_for_dma = 1;
 		if (drive->media != ide_disk)
 			return 0;
-		ide_set_handler(drive, &ide_dma_intr, WAIT_CMD);
+		drive->timeout = WAIT_CMD;
+		ide_set_handler(drive, &ide_dma_intr);
 		OUT_BYTE(func==ide_dma_write? WIN_WRITEDMA: WIN_READDMA,
 			 IDE_COMMAND_REG);
 	case ide_dma_begin:

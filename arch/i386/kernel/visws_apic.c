@@ -37,7 +37,7 @@
 
 #include <asm/cobalt.h>
 
-#include "irq.h"
+#include <linux/irq.h>
 
 /*
  * This is the PIIX4-based 8259 that is wired up indirectly to Cobalt

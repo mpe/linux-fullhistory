@@ -1,21 +1,28 @@
 /*
- * linux/drivers/block/alim15x3.c	Version 0.05	Jun. 29, 1999
+ * linux/drivers/block/alim15x3.c	Version 0.06	Sept. 3, 1999
  *
  *  Copyright (C) 1998-99 Michel Aubry, Maintainer
  *  Copyright (C) 1998-99 Andrzej Krzysztofowicz, Maintainer
- *  Copyright (C) 1998-99 Andre Hedrick, Integrater and Maintainer
  *
- *  (U)DMA capable version of ali 1533/1543(C)
+ *  Copyright (C) 1998-99 Andre Hedrick (andre@suse.com)
+ *  May be copied or modified under the terms of the GNU General Public License
  *
- *  Default disable (U)DMA on all devices execpt hard disks.
- *  This measure of overkill is needed to stablize the chipset code.
+ *  (U)DMA capable version of ali 1533/1543(C), 1535(D)
  *
+ *  version: 1.0 beta2 (Sep. 2, 1999)
+ *	e-mail your problems to cjtsai@ali.com.tw
+ *
+ **********************************************************************
+ *  9/7/99 --Parts from the above author are included and need to be
+ *  converted into standard interface, once I finish the thought.
  */
 
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
+#include <linux/delay.h>
+#include <linux/hdreg.h>
 #include <linux/ide.h>
 
 #include <asm/io.h>
@@ -59,188 +66,7 @@ char *channel_status[8] = {
 	"error DRQ     ",
 	"error DRQ busy"
 };
-#endif  /* defined(DISPLAY_ALI_TIMINGS) && defined(CONFIG_PROC_FS) */
 
-static void ali15x3_tune_drive (ide_drive_t *drive, byte pio)
-{
-	ide_pio_data_t d;
-	ide_hwif_t *hwif = HWIF(drive);
-	struct pci_dev *dev = hwif->pci_dev;
-	int s_time, a_time, c_time;
-	byte s_clc, a_clc, r_clc;
-	unsigned long flags;
-	int bus_speed = ide_system_bus_speed();
-	int port = hwif->index ? 0x5c : 0x58;
-
-	pio = ide_get_best_pio_mode(drive, pio, 5, &d);
-	s_time = ide_pio_timings[pio].setup_time;
-	a_time = ide_pio_timings[pio].active_time;
-	if ((s_clc = (s_time * bus_speed + 999) / 1000) >= 8)
-		s_clc = 0;
-	if ((a_clc = (a_time * bus_speed + 999) / 1000) >= 8)
-		a_clc = 0;
-	c_time = ide_pio_timings[pio].cycle_time;
-
-#if 0
-	if ((r_clc = ((c_time - s_time - a_time) * bus_speed + 999) / 1000) >= 16)
-		r_clc = 0;
-#endif
-
-	if (!(r_clc = (c_time * bus_speed + 999) / 1000 - a_clc - s_clc)) {
-		r_clc = 1;
-	} else {
-		if (r_clc >= 16)
-		r_clc = 0;
-	}
-	save_flags(flags);
-	cli();
-	pci_write_config_byte(dev, port, s_clc);
-	pci_write_config_byte(dev, port+drive->select.b.unit+2, (a_clc << 4) | r_clc);
-	restore_flags(flags);
-
-	/*
-	 * setup   active  rec
-	 * { 70,   165,    365 },   PIO Mode 0
-	 * { 50,   125,    208 },   PIO Mode 1
-	 * { 30,   100,    110 },   PIO Mode 2
-	 * { 30,   80,     70  },   PIO Mode 3 with IORDY
-	 * { 25,   70,     25  },   PIO Mode 4 with IORDY  ns
-	 * { 20,   50,     30  }    PIO Mode 5 with IORDY (nonstandard)
-	 */
-
-}
-
-unsigned int __init pci_init_ali15x3 (struct pci_dev *dev, const char *name)
-{
-	byte confreg0 = 0, confreg1 =0, progif = 0;
-	int errors = 0;
-
-	if (pci_read_config_byte(dev, 0x50, &confreg1))
-		goto veryspecialsettingserror;
-	if (!(confreg1 & 0x02))
-		if (pci_write_config_byte(dev, 0x50, confreg1 | 0x02))
-			goto veryspecialsettingserror;
-
-	if (pci_read_config_byte(dev, PCI_CLASS_PROG, &progif))
-		goto veryspecialsettingserror;
-	if (!(progif & 0x40)) {
-		/*
-		 * The way to enable them is to set progif
-		 * writable at 0x4Dh register, and set bit 6
-		 * of progif to 1:
-		 */
-		if (pci_read_config_byte(dev, 0x4d, &confreg0))
-			goto veryspecialsettingserror;
-		if (confreg0 & 0x80)
-			if (pci_write_config_byte(dev, 0x4d, confreg0 & ~0x80))
-				goto veryspecialsettingserror;
-		if (pci_write_config_byte(dev, PCI_CLASS_PROG, progif | 0x40))
-			goto veryspecialsettingserror;
-		if (confreg0 & 0x80)
-			if (pci_write_config_byte(dev, 0x4d, confreg0))
-				errors++;
-	}
-
-	if ((pci_read_config_byte(dev, PCI_CLASS_PROG, &progif)) || (!(progif & 0x40)))
-		goto veryspecialsettingserror;
-
-	printk("%s: enabled read of IDE channels state (en/dis-abled) %s.\n",
-		name, errors ? "with Error(s)" : "Succeeded" );
-	return 0;
-
-veryspecialsettingserror:
-	printk("%s: impossible to enable read of IDE channels state (en/dis-abled)!\n", name);
-	return 0;
-}
-
-int ali15x3_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
-{
-	switch (func) {
-		case ide_dma_check:
-			if (drive->media == ide_cdrom) {
-				ide_hwif_t *hwif	= HWIF(drive);
-				struct pci_dev *dev	= hwif->pci_dev;
-				struct hd_driveid *id	= drive->id;
-				byte cd_dma_fifo	= 0;
-
-				pci_read_config_byte(dev, 0x53, &cd_dma_fifo);
-
-				if (((id->field_valid & 4) || (id->field_valid & 2)) &&
-				    (id->capability & 1) && hwif->autodma) {
-					unsigned long dma_set_bit  = hwif->dma_base + 2;
-#if 0
-					if (cd_dma_fifo & 0x02)
-						pci_write_config_byte(dev, 0x53, cd_dma_fifo & ~0x02);
-					pci_write_config_byte(dev, 0x53, cd_dma_fifo|0x01);
-#else
-					pci_write_config_byte(dev, 0x53, cd_dma_fifo|0x01|0x02);
-#endif
-					if (drive->select.b.unit & 0x01) {
-						outb(inb(dma_set_bit)|0x40, dma_set_bit);
-					} else {
-						outb(inb(dma_set_bit)|0x20, dma_set_bit);
-					}
-				} else {
-					if (cd_dma_fifo & 0x01)
-						pci_write_config_byte(dev, 0x53, cd_dma_fifo & ~0x01);
-					pci_write_config_byte(dev, 0x53, cd_dma_fifo|0x02);
-				}
-			} else if (drive->media != ide_disk) {
-				return ide_dmaproc(ide_dma_off_quietly, drive);
-			}
-		default:
-			break;
-	}
-	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
-}
-
-void __init ide_init_ali15x3 (ide_hwif_t *hwif)
-{
-	struct pci_dev *dev;
-	byte ideic, inmir, iderev;
-	byte irq_routing_table[] = { -1,  9, 3, 10, 4,  5, 7,  6,
-				      1, 11, 0, 12, 0, 14, 0, 15 };
-
-	pci_read_config_byte(hwif->pci_dev, PCI_REVISION_ID, &iderev);
-
-	hwif->irq = hwif->channel ? 15 : 14;
-	for (dev = pci_devices; dev; dev=dev->next) /* look for ISA bridge */
-		if (dev->vendor==PCI_VENDOR_ID_AL &&
-		    dev->device==PCI_DEVICE_ID_AL_M1533)
-			break;
-	if (dev) {			
-		pci_read_config_byte(dev, 0x58, &ideic);
-		ideic = ideic & 0x03;
-		if ((hwif->channel && ideic == 0x03) ||
-		    (!hwif->channel && !ideic)) {
-			pci_read_config_byte(dev, 0x44, &inmir);
-			inmir = inmir & 0x0f;
-			hwif->irq = irq_routing_table[inmir];
-		} else
-			if (hwif->channel && !(ideic & 0x01)) {
-				pci_read_config_byte(dev, 0x75, &inmir);
-				inmir = inmir & 0x0f;
-				hwif->irq = irq_routing_table[inmir];
-			}
-	}
-#if defined(DISPLAY_ALI_TIMINGS) && defined(CONFIG_PROC_FS)
-	bmide_dev = hwif->pci_dev;
-	ali_display_info = &ali_get_info;
-#endif  /* defined(DISPLAY_ALI_TIMINGS) && defined(CONFIG_PROC_FS) */
-
-	hwif->tuneproc = &ali15x3_tune_drive;
-	if ((hwif->dma_base) && (iderev >= 0xC1)) {
-		/* M1543C or newer for DMAing */
-		hwif->dmaproc = &ali15x3_dmaproc;
-	} else {
-		hwif->autodma = 0;
-		hwif->drives[0].autotune = 1;
-		hwif->drives[1].autotune = 1;
-	}
-	return;
-}
-
-#if defined(DISPLAY_ALI_TIMINGS) && defined(CONFIG_PROC_FS)
 static int ali_get_info(char *buffer, char **addr, off_t offset, int count, int dummy)
 {
 	byte reg53h, reg5xh, reg5yh, reg5xh1, reg5yh1;
@@ -407,3 +233,540 @@ static int ali_get_info(char *buffer, char **addr, off_t offset, int count, int 
 	return p-buffer; /* => must be less than 4k! */
 }
 #endif  /* defined(DISPLAY_ALI_TIMINGS) && defined(CONFIG_PROC_FS) */
+
+static byte m5229_revision	= 0;
+static byte chip_is_1543c_e	= 0;
+static byte cable_80_pin[2]	= { 0, 0 };
+
+byte ali_proc = 0;
+static struct pci_dev *isa_dev;
+
+static void ali15x3_tune_drive (ide_drive_t *drive, byte pio)
+{
+	ide_pio_data_t d;
+	ide_hwif_t *hwif = HWIF(drive);
+	struct pci_dev *dev = hwif->pci_dev;
+	int s_time, a_time, c_time;
+	byte s_clc, a_clc, r_clc;
+	unsigned long flags;
+	int bus_speed = ide_system_bus_speed();
+	int port = hwif->index ? 0x5c : 0x58;
+
+	pio = ide_get_best_pio_mode(drive, pio, 5, &d);
+	s_time = ide_pio_timings[pio].setup_time;
+	a_time = ide_pio_timings[pio].active_time;
+	if ((s_clc = (s_time * bus_speed + 999) / 1000) >= 8)
+		s_clc = 0;
+	if ((a_clc = (a_time * bus_speed + 999) / 1000) >= 8)
+		a_clc = 0;
+	c_time = ide_pio_timings[pio].cycle_time;
+
+#if 0
+	if ((r_clc = ((c_time - s_time - a_time) * bus_speed + 999) / 1000) >= 16)
+		r_clc = 0;
+#endif
+
+	if (!(r_clc = (c_time * bus_speed + 999) / 1000 - a_clc - s_clc)) {
+		r_clc = 1;
+	} else {
+		if (r_clc >= 16)
+		r_clc = 0;
+	}
+	save_flags(flags);
+	cli();
+	pci_write_config_byte(dev, port, s_clc);
+	pci_write_config_byte(dev, port+drive->select.b.unit+2, (a_clc << 4) | r_clc);
+	restore_flags(flags);
+
+	/*
+	 * setup   active  rec
+	 * { 70,   165,    365 },   PIO Mode 0
+	 * { 50,   125,    208 },   PIO Mode 1
+	 * { 30,   100,    110 },   PIO Mode 2
+	 * { 30,   80,     70  },   PIO Mode 3 with IORDY
+	 * { 25,   70,     25  },   PIO Mode 4 with IORDY  ns
+	 * { 20,   50,     30  }    PIO Mode 5 with IORDY (nonstandard)
+	 */
+
+}
+
+static __inline__ unsigned char dma2_bits_to_command(unsigned char bits)
+{
+	if (bits & 0x04)
+		return XFER_MW_DMA_2;
+	if (bits & 0x02)
+		return XFER_MW_DMA_1;
+	return XFER_MW_DMA_0;
+}
+
+static __inline__ unsigned char udma2_bits_to_command(unsigned char bits)
+{
+	if (bits & 0x10)
+		return XFER_UDMA_4;
+	if (bits & 0x08)
+		return XFER_UDMA_3;
+	if (bits & 0x04)
+		return XFER_UDMA_2;
+	if (bits & 0x02)
+		return XFER_UDMA_1;
+	return XFER_UDMA_0;
+}
+
+static __inline__ int wait_for_ready(ide_drive_t *drive)
+{
+	int timeout = 20000;	/* (old value: 100) */
+	byte stat;
+
+	while (--timeout) {
+		stat = GET_STAT();
+		/*
+		 * printk("STAT(%2x) ", stat);
+		 */
+		if (!(stat & BUSY_STAT)) {
+			if ((stat & READY_STAT) || (stat & ERR_STAT)) {
+				break;
+			}
+		}
+		/*
+		 * (old value: 100)
+		 */
+		udelay(150);
+	}
+	if ((stat & ERR_STAT) || timeout <= 0)
+		return 1;
+	return 0;
+}
+
+static void ali15x3_do_setfeature(ide_drive_t *drive, byte command)
+{
+	unsigned long flags;
+	byte old_select;
+
+	save_flags(flags);
+	cli();
+		
+	/* save old selected device */
+	old_select = IN_BYTE(IDE_SELECT_REG);
+	/* "SELECT " */
+	OUT_BYTE(drive->select.all, IDE_SELECT_REG);
+	/* "SETXFER " */
+	OUT_BYTE(SETFEATURES_XFER, IDE_FEATURE_REG);
+	/* "CMND " */
+	OUT_BYTE(command, IDE_NSECTOR_REG);
+
+	if(wait_for_ready(drive))	/* "wait " */
+		goto out;
+
+	/* "SETFEATURE " */
+	OUT_BYTE(WIN_SETFEATURES, IDE_COMMAND_REG);
+	/* "wait " */
+	(void) wait_for_ready(drive);
+
+out:
+	/*
+	 * restore to old "selected device"
+	 */
+	OUT_BYTE(old_select, IDE_SELECT_REG);
+	restore_flags(flags);
+}
+
+static void ali15x3_dma2_enable(ide_drive_t *drive, unsigned long dma_base)
+{
+	byte unit = (drive->select.b.unit & 0x01);
+	byte bits = (drive->id->dma_mword | drive->id->dma_1word) & 0x07;
+	byte tmpbyte;
+	ide_hwif_t *hwif = HWIF(drive);
+	unsigned long flags;
+	int m5229_udma_setting_index = hwif->channel? 0x57 : 0x56;		
+	
+	ali15x3_do_setfeature(drive, dma2_bits_to_command(bits));
+
+	/*
+	 * clear "ultra enable" bit
+	 */
+	pci_read_config_byte(hwif->pci_dev, m5229_udma_setting_index, &tmpbyte);
+	if (unit) {
+		tmpbyte &= 0x7f;
+	} else {
+		tmpbyte &= 0xf7;
+	}
+	save_flags(flags);
+	cli();
+	pci_write_config_byte(hwif->pci_dev, m5229_udma_setting_index, tmpbyte);
+	restore_flags(flags);
+	drive->id->dma_ultra = 0x00;
+
+	/*
+	 * Enable DMA
+	 */
+	outb(inb(dma_base+2)|(1<<(5+unit)), dma_base+2);
+	printk("ALI15X3: MultiWord DMA enabled\n");
+}
+
+static void ali15x3_udma_enable(ide_drive_t *drive, unsigned long dma_base)
+{	
+	byte unit = (drive->select.b.unit & 0x01);
+	byte bits = drive->id->dma_ultra & 0x1f;	
+	byte tmpbyte;
+	ide_hwif_t *hwif = HWIF(drive);
+	unsigned long flags;
+	unsigned char udma_mode = 0;
+	int m5229_udma_setting_index = hwif->channel? 0x57 : 0x56;
+
+	if (bits & 0x18) {
+		/*
+		 * 00011000, disk: ultra66
+		 */
+		if (m5229_revision < 0xc2) {
+			/*
+			 * controller: ultra33
+			 */
+			bits = 0x04;
+			/*
+			 * 00000100, use ultra33, mode 2
+			 */
+			drive->id->dma_ultra &= ~0xFF00;
+			drive->id->dma_ultra |= 0x0004;			
+		} else {
+			/*
+			 * controller: ultra66
+			 *
+			 * Try to detect word93 bit13 and
+			 * 80-pin cable (from host view)
+			 */
+			if (!((drive->id->word93 & 0x2000) &&
+			    cable_80_pin[hwif->channel])) {	
+				bits = 0x04;
+				/*
+				 * 00000100, use ultra33, mode 2
+				 */
+				drive->id->dma_ultra &= ~0xFF00;
+				drive->id->dma_ultra |= 0x0004;
+			}
+		}
+	}
+
+	/*
+	 * set feature regardless
+	 */
+	ali15x3_do_setfeature(drive, udma_mode = udma2_bits_to_command(bits));
+	udma_mode &= 0x0f;	/* get UDMA mode */
+
+	/*
+	 * Enable DMA and UltraDMA
+	 */
+	outb(inb(dma_base+2)|(1<<(5+unit)), dma_base+2);
+	/*
+	 * m5229 ultra
+	 */
+	pci_read_config_byte(hwif->pci_dev, m5229_udma_setting_index, &tmpbyte);
+	/*
+	 * clear bit0~3 or bit 4~7
+	 */
+	tmpbyte &= (0x0f << ((1-unit) << 2));
+	/*
+	 * enable ultra dma and set timing
+	 */
+	tmpbyte |= ((0x08 | (4-udma_mode)) << (unit << 2));
+	/*
+	 * set to m5229
+	 */
+	save_flags(flags);
+	cli();		
+	pci_write_config_byte(hwif->pci_dev, m5229_udma_setting_index, tmpbyte);
+	restore_flags(flags);
+
+	if (udma_mode >= 3) {
+		/*
+		 * ultra 66
+		 */
+		pci_read_config_byte(hwif->pci_dev, 0x4b, &tmpbyte);
+		tmpbyte |= 1;			
+		save_flags(flags);
+		cli();
+		pci_write_config_byte(hwif->pci_dev, 0x4b, tmpbyte);		
+		restore_flags(flags);
+	}
+
+	printk("ALI15X3: Ultra DMA enabled\n");
+}
+
+static int ali15x3_dma_onoff(ide_drive_t *drive, int enable)
+{
+	if (enable) {
+		ide_hwif_t *hwif = HWIF(drive);
+		unsigned long dma_base = hwif->dma_base;
+		struct hd_driveid *id = drive->id;
+				
+		if ((id->field_valid & 0x0004) && 
+		    (id->dma_ultra & 0x001f)) {
+			/*
+			 * 1543C_E, in ultra mode, WDC "harddisk"
+			 * will cause "CRC" errors (even if no CRC problem),
+			 * so we try to use "DMA" here
+			 */
+			if (m5229_revision <= 0x20) {
+				/*
+				 * Normal MultiWord DMA modes.
+				 */
+				ali15x3_dma2_enable(drive, dma_base);
+			} else if ((m5229_revision < 0xC2) && 
+				   ((drive->media!=ide_disk) ||
+				    (chip_is_1543c_e &&
+				     strstr(id->model, "WDC ")))) {
+				/*
+				 * Normal MultiWord DMA modes.
+				 */
+				ali15x3_dma2_enable(drive, dma_base);
+			} else {
+				/*
+				 * m5229_revision >= 0xC2 for UltraDMA modes.
+				 */
+				ali15x3_udma_enable(drive, dma_base);
+			}
+		} else {
+			/*
+			 * Normal MultiWord DMA modes.
+			 */
+			ali15x3_dma2_enable(drive, dma_base);
+		}
+	}
+
+	drive->using_dma = enable;	/* on, off */
+	return 0;
+}
+
+static int ali15x3_config_drive_for_dma(ide_drive_t *drive)
+{
+	struct hd_driveid *id = drive->id;
+	ide_hwif_t *hwif = HWIF(drive);
+
+	if ((m5229_revision<=0x20) && (drive->media!=ide_disk))
+		return hwif->dmaproc(ide_dma_off_quietly, drive);
+	/*
+	 * Even if the drive is not _currently_ in a DMA
+	 * mode, we succeed, and we'll enable it manually
+	 * below in alim15x3_dma_onoff
+	 */
+	if ((id != NULL) && (id->capability & 1) && hwif->autodma) {
+		if (id->field_valid & 0x0004) {
+			if (id->dma_ultra & 0x001F)
+				return hwif->dmaproc(ide_dma_on, drive);
+		}
+		if (id->field_valid & 0x0002) {
+			if ((id->dma_mword & 0x0007) || (id->dma_1word & 0x0007))
+				return hwif->dmaproc(ide_dma_on, drive);
+		}
+	}
+	return hwif->dmaproc(ide_dma_off_quietly, drive);
+}
+
+static int ali15x3_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
+{
+	switch(func) {
+		case ide_dma_check:
+			return ali15x3_config_drive_for_dma(drive);
+		case ide_dma_on:
+		case ide_dma_off:
+		case ide_dma_off_quietly:
+			return ali15x3_dma_onoff(drive, (func == ide_dma_on));
+		case ide_dma_write:
+			if ((m5229_revision < 0xC2) && (drive->media != ide_disk))
+				return 1;	/* try PIO instead of DMA */
+			break;
+		default:
+			break;
+	}
+
+	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
+}
+
+unsigned int __init pci_init_ali15x3 (struct pci_dev *dev, const char *name)
+{
+	struct pci_dev *isa;
+	unsigned long fixdma_base = dev->resource[4].start;
+	byte tmpbyte;
+
+	pci_read_config_byte(dev, PCI_REVISION_ID, &m5229_revision);
+
+	for (isa = pci_devices; isa; isa=isa->next) {
+		/*
+		 * look for ISA bridge
+		 */
+		if (isa->vendor == PCI_VENDOR_ID_AL &&
+		    isa->device == PCI_DEVICE_ID_AL_M1533) {
+			isa_dev = isa;
+			break;
+		}
+	}
+
+	if (!fixdma_base || fixdma_base == PCI_BASE_ADDRESS_IO_MASK) {
+		/*
+		 *
+		 */
+	} else {
+		/*
+		 * enable DMA capable bit, and "not" simplex only
+		 */
+		outb(inb(fixdma_base+2) & 0x60, fixdma_base+2);
+
+		if (inb(fixdma_base+2) & 0x80)
+			printk("%s: simplex device: DMA will fail!!\n", name);
+	}
+
+	/*
+	 * FIXME !!! This detection needs to be in "ata66_ali15x3()"
+	 * below as a standard detection return.
+	 */
+
+	if (m5229_revision >= 0xC2) {
+		unsigned long flags;
+		/*
+		 * 1543C-B?, 1535, 1535D, 1553
+		 * Note 1: not all "motherboard" support this detection
+		 * Note 2: if no udma 66 device, the detection may "error".
+		 *         but in this case, we will not set the device to
+		 *         ultra 66, the detection result is not important
+		 */
+		save_flags(flags);
+		cli();
+
+		/*
+		 * enable "Cable Detection", m5229, 0x4b, bit3
+		 */
+		pci_read_config_byte(dev, 0x4b, &tmpbyte);
+		pci_write_config_byte(dev, 0x4b, tmpbyte | 0x08);
+
+		/*
+		 * set south-bridge's enable bit, m1533, 0x79
+		 */
+		pci_read_config_byte(isa_dev, 0x79, &tmpbyte);
+		if (m5229_revision == 0xC2) {
+			/*
+			 * 1543C-B0 (m1533, 0x79, bit 2)
+			 */
+			pci_write_config_byte(isa_dev, 0x79, tmpbyte | 0x04);
+		} else if (m5229_revision == 0xC3) {
+			/*
+			 * 1553/1535 (m1533, 0x79, bit 1)
+			 */
+			pci_write_config_byte(isa_dev, 0x79, tmpbyte | 0x02);
+		}
+		restore_flags(flags);
+		/*
+		 * Ultra66 cable detection (from Host View)
+		 * m5229, 0x4a, bit0: primary, bit1: secondary 80 pin
+		 */
+		pci_read_config_byte(dev, 0x4a, &tmpbyte);
+		/*
+		 * 0x4a, bit0 is 0 => primary channel
+		 * has 80-pin (from host view)
+		 */
+		if (!(tmpbyte & 0x01))
+			cable_80_pin[0] = 1;
+		/*
+		 * 0x4a, bit1 is 0 => secondary channel
+		 * has 80-pin (from host view)
+		 */
+		if (!(tmpbyte & 0x02))
+			cable_80_pin[1] = 1;
+	} else {
+		unsigned long flags;
+		/*
+		 * revision 0x20 (1543-E, 1543-F)
+		 * revision 0xC0, 0xC1 (1543C-C, 1543C-D, 1543C-E)
+		 * clear CD-ROM DMA write bit, m5229, 0x4b, bit 7
+		 */
+		pci_read_config_byte(dev, 0x4b, &tmpbyte);
+		save_flags(flags);
+		cli();
+		/*
+		 * clear bit 7
+		 */
+		pci_write_config_byte(dev, 0x4b, tmpbyte & 0x7F);
+		restore_flags(flags);
+
+		/*
+		 * check m1533, 0x5e, bit 1~4 == 1001 => & 00011110 = 00010010
+		 */
+		pci_read_config_byte(isa_dev, 0x5e, &tmpbyte);
+		chip_is_1543c_e = ((tmpbyte & 0x1e) == 0x12) ? 1: 0;
+	}
+
+	return 0;
+}
+
+unsigned int __init ata66_ali15x3 (ide_hwif_t *hwif)
+{
+	/*
+	 * FIXME !!!!
+	 * {0x4a,0x01,0x01}, {0x4a,0x02,0x02}
+	 */
+	return 0;
+}
+
+void __init ide_init_ali15x3 (ide_hwif_t *hwif)
+{
+	byte ideic, inmir;
+	byte irq_routing_table[] = { -1,  9, 3, 10, 4,  5, 7,  6,
+				      1, 11, 0, 12, 0, 14, 0, 15 };
+
+	hwif->irq = hwif->channel ? 15 : 14;
+
+	if (isa_dev) {
+		/*
+		 * read IDE interface control
+		 */
+		pci_read_config_byte(isa_dev, 0x58, &ideic);
+
+		/* bit0, bit1 */
+		ideic = ideic & 0x03;
+
+		/* get IRQ for IDE Controller */
+		if ((hwif->channel && ideic == 0x03) ||
+		    (!hwif->channel && !ideic)) {
+			/*
+			 * get SIRQ1 routing table
+			 */
+			pci_read_config_byte(isa_dev, 0x44, &inmir);
+			inmir = inmir & 0x0f;
+			hwif->irq = irq_routing_table[inmir];
+		} else if (hwif->channel && !(ideic & 0x01)) {
+			/*
+			 * get SIRQ2 routing table
+			 */
+			pci_read_config_byte(isa_dev, 0x75, &inmir);
+			inmir = inmir & 0x0f;
+			hwif->irq = irq_routing_table[inmir];
+		}
+	}
+
+	hwif->tuneproc = &ali15x3_tune_drive;
+	if ((hwif->dma_base) && (m5229_revision >= 0xC1)) {
+		/*
+		 * M1543C or newer for DMAing
+		 */
+		hwif->dmaproc = &ali15x3_dmaproc;
+		hwif->autodma = 1;
+	} else {
+		hwif->autodma = 0;
+		hwif->drives[0].autotune = 1;
+		hwif->drives[1].autotune = 1;
+	}
+
+#if defined(DISPLAY_ALI_TIMINGS) && defined(CONFIG_PROC_FS)
+	ali_proc = 1;
+	bmide_dev = hwif->pci_dev;
+	ali_display_info = &ali_get_info;
+#endif  /* defined(DISPLAY_ALI_TIMINGS) && defined(CONFIG_PROC_FS) */
+
+	return;
+}
+
+void ide_dmacapable_ali15x3 (ide_hwif_t *hwif, unsigned long dmabase)
+{
+	if ((dmabase) && (m5229_revision < 0x20)) {
+		return;
+	}
+	ide_setup_dma(hwif, dmabase, 8);
+}

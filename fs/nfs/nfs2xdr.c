@@ -118,19 +118,35 @@ xdr_decode_fattr(u32 *p, struct nfs_fattr *fattr)
 	return p;
 }
 
+
+#define SATTR(p, attr, flag, field) \
+        *p++ = (attr->ia_valid & flag) ? htonl(attr->field) : ~(u32) 0
 static inline u32 *
-xdr_encode_sattr(u32 *p, struct nfs_sattr *sattr)
+xdr_encode_sattr(u32 *p, struct iattr *attr)
 {
-	*p++ = htonl(sattr->mode);
-	*p++ = htonl(sattr->uid);
-	*p++ = htonl(sattr->gid);
-	*p++ = htonl(sattr->size);
-	*p++ = htonl(sattr->atime.seconds);
-	*p++ = htonl(sattr->atime.useconds);
-	*p++ = htonl(sattr->mtime.seconds);
-	*p++ = htonl(sattr->mtime.useconds);
-	return p;
+	SATTR(p, attr, ATTR_MODE, ia_mode);
+	SATTR(p, attr, ATTR_UID, ia_uid);
+	SATTR(p, attr, ATTR_GID, ia_gid);
+	SATTR(p, attr, ATTR_SIZE, ia_size);
+
+	if (attr->ia_valid & (ATTR_ATIME|ATTR_ATIME_SET)) {
+		*p++ = htonl(attr->ia_atime);
+		*p++ = 0;
+	} else {
+		*p++ = ~(u32) 0;
+		*p++ = ~(u32) 0;
+	}
+
+	if (attr->ia_valid & (ATTR_MTIME|ATTR_MTIME_SET)) {
+		*p++ = htonl(attr->ia_mtime);
+		*p++ = 0;
+	} else {
+		*p++ = ~(u32) 0;	
+		*p++ = ~(u32) 0;
+	}
+  	return p;
 }
+#undef SATTR
 
 /*
  * NFS encode functions

@@ -12,28 +12,24 @@ endmenu
 mainmenu_option next_comment
 comment 'Processor type and features'
 choice 'Processor family' \
-	"SH3		CONFIG_CPU_SH3 \
-	 SH4		CONFIG_CPU_SH4" SH3
+   "SH-3	CONFIG_CPU_SH3 \
+    SH-4	CONFIG_CPU_SH4" SH-3
 bool 'Little Endian' CONFIG_LITTLE_ENDIAN
-hex 'Physical memory start address' CONFIG_MEMORY_START 0c000000
+hex 'Physical memory start address' CONFIG_MEMORY_START 08000000
+bool 'Use SH CPU internal real time clock' CONFIG_SH_CPU_RTC
 endmenu
 
 mainmenu_option next_comment
 comment 'Loadable module support'
 bool 'Enable loadable module support' CONFIG_MODULES
 if [ "$CONFIG_MODULES" = "y" ]; then
-   bool '  Set version information on all symbols for modules' CONFIG_MODVERSIONS
-   bool '  Kernel module loader' CONFIG_KMOD
+   bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
+   bool 'Kernel module loader' CONFIG_KMOD
 fi
 endmenu
 
-define_bool CONFIG_SERIAL n
-define_bool CONFIG_SH3SCI_SERIAL y
-define_bool CONFIG_SERIAL_CONSOLE y
-
 mainmenu_option next_comment
-comment 'Floppy, IDE, and other block devices'
-
+comment 'General setup'
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
@@ -41,6 +37,18 @@ bool 'Sysctl support' CONFIG_SYSCTL
 
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
+endmenu
+
+mainmenu_option next_comment
+comment 'Character devices'
+define_bool CONFIG_SERIAL n
+define_bool CONFIG_SERIAL_CONSOLE y
+bool 'SuperH SCI support' CONFIG_SH_SCI_SERIAL
+bool 'SuperH SCIF support' CONFIG_SH_SCIF_SERIAL
+endmenu
+
+mainmenu_option next_comment
+comment 'Floppy, IDE, and other block devices'
 
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
 if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
@@ -75,4 +83,5 @@ mainmenu_option next_comment
 comment 'Kernel hacking'
 
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
+bool 'GDB Stub kernel debug' CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
 endmenu

@@ -75,6 +75,18 @@ static u32			swap_buffer[PAGE_SIZE >> 2];
 static int			swap_buffer_used = 0;
 
 /*
+ * Make allocation of the swap_buffer SMP-safe
+ */
+static __inline__ int rpc_lock_swapbuf(void)
+{
+	return !test_and_set_bit(1, &swap_buffer_used);
+}
+static __inline__ void rpc_unlock_swapbuf(void)
+{
+	clear_bit(1, &swap_buffer_used);
+}
+
+/*
  * Spinlock for wait queues. Access to the latter also has to be
  * interrupt-safe in order to allow timers to wake up sleeping tasks.
  */
@@ -614,7 +626,8 @@ rpc_allocate(unsigned int flags, unsigned int size)
 			dprintk("RPC:      allocated buffer %p\n", buffer);
 			return buffer;
 		}
-		if ((flags & RPC_TASK_SWAPPER) && !swap_buffer_used++) {
+		if ((flags & RPC_TASK_SWAPPER) && size <= sizeof(swap_buffer)
+		    && rpc_lock_swapbuf()) {
 			dprintk("RPC:      used last-ditch swap buffer\n");
 			return swap_buffer;
 		}
@@ -634,7 +647,7 @@ rpc_free(void *buffer)
 		kfree(buffer);
 		return;
 	}
-	swap_buffer_used = 0;
+	rpc_unlock_swapbuf();
 }
 
 /*

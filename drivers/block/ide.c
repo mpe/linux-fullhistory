@@ -149,9 +149,9 @@
 #include <linux/kmod.h>
 #endif /* CONFIG_KMOD */
 
-#ifdef CONFIG_BLK_DEV_VIA82C586
-extern byte fifoconfig;           /* defined in via82c586.c used by ide_setup()*/
-#endif
+#ifdef CONFIG_BLK_DEV_VIA82CXXX
+extern byte fifoconfig;		/* defined in via82cxxx.c used by ide_setup() */
+#endif /* CONFIG_BLK_DEV_VIA82CXXX */
 
 static const byte	ide_hwif_to_major[] = { IDE0_MAJOR, IDE1_MAJOR,
 						IDE2_MAJOR, IDE3_MAJOR,
@@ -504,7 +504,7 @@ void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup)
  * timer is started to prevent us from waiting forever in case
  * something goes wrong (see the ide_timer_expiry() handler later on).
  */
-void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler, unsigned int timeout)
+void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler)
 {
 	unsigned long flags;
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
@@ -517,7 +517,7 @@ void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler, unsigned int t
 	}
 #endif
 	hwgroup->handler       = handler;
-	hwgroup->timer.expires = jiffies + timeout;
+	hwgroup->timer.expires = jiffies + drive->timeout;
 	add_timer(&(hwgroup->timer));
 	spin_unlock_irqrestore(&hwgroup->spinlock, flags);
 }
@@ -565,6 +565,7 @@ static void do_reset1 (ide_drive_t *, int);		/* needed below */
 static void atapi_reset_pollfunc (ide_drive_t *drive)
 {
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
+	unsigned long old_timeout;
 	byte stat;
 
 	SELECT_DRIVE(HWIF(drive),drive);
@@ -574,7 +575,10 @@ static void atapi_reset_pollfunc (ide_drive_t *drive)
 		printk("%s: ATAPI reset complete\n", drive->name);
 	} else {
 		if (0 < (signed long)(hwgroup->poll_timeout - jiffies)) {
-			ide_set_handler (drive, &atapi_reset_pollfunc, HZ/20);
+			old_timeout = drive->timeout;
+			drive->timeout = HZ / 20;
+			ide_set_handler (drive, &atapi_reset_pollfunc);
+			drive->timeout = old_timeout;
 			return;	/* continue polling */
 		}
 		hwgroup->poll_timeout = 0;	/* end of polling */
@@ -595,11 +599,15 @@ static void reset_pollfunc (ide_drive_t *drive)
 {
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
 	ide_hwif_t *hwif = HWIF(drive);
+	unsigned long old_timeout;
 	byte tmp;
 
 	if (!OK_STAT(tmp=GET_STAT(), 0, BUSY_STAT)) {
 		if (0 < (signed long)(hwgroup->poll_timeout - jiffies)) {
-			ide_set_handler (drive, &reset_pollfunc, HZ/20);
+			old_timeout = drive->timeout;
+			drive->timeout = HZ / 20;
+			ide_set_handler (drive, &reset_pollfunc);
+			drive->timeout = old_timeout;
 			return;	/* continue polling */
 		}
 		printk("%s: reset timed-out, status=0x%02x\n", hwif->name, tmp);
@@ -667,6 +675,7 @@ static void do_reset1 (ide_drive_t *drive, int  do_not_try_atapi)
 	unsigned long flags;
 	ide_hwif_t *hwif = HWIF(drive);
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
+	unsigned long old_timeout;
 
 	__save_flags(flags);	/* local CPU only */
 	__cli();		/* local CPU only */
@@ -678,7 +687,10 @@ static void do_reset1 (ide_drive_t *drive, int  do_not_try_atapi)
 		udelay (20);
 		OUT_BYTE (WIN_SRST, IDE_COMMAND_REG);
 		hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
-		ide_set_handler (drive, &atapi_reset_pollfunc, HZ/20);
+		old_timeout = drive->timeout;
+		drive->timeout = HZ / 20;
+		ide_set_handler (drive, &atapi_reset_pollfunc);
+		drive->timeout = old_timeout;
 		__restore_flags (flags);	/* local CPU only */
 		return;
 	}
@@ -708,7 +720,19 @@ static void do_reset1 (ide_drive_t *drive, int  do_not_try_atapi)
 	OUT_BYTE(drive->ctl|2,IDE_CONTROL_REG);	/* clear SRST, leave nIEN */
 	udelay(10);			/* more than enough time */
 	hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
-	ide_set_handler (drive, &reset_pollfunc, HZ/20);
+	old_timeout = drive->timeout;
+	drive->timeout = HZ / 20;
+	ide_set_handler (drive, &reset_pollfunc);
+	drive->timeout = old_timeout;
+
+	/*
+	 * Some weird controller like resetting themselves to a strange
+	 * state when the disks are reset this way. At least, the Winbond
+	 * 553 documentation says that
+	 */
+	if (hwif->resetproc != NULL)
+		hwif->resetproc(drive);
+
 #endif	/* OK_TO_RESET_CONTROLLER */
 
 	__restore_flags (flags);	/* local CPU only */
@@ -899,7 +923,7 @@ void ide_error (ide_drive_t *drive, const char *msg, byte stat)
  */
 void ide_cmd(ide_drive_t *drive, byte cmd, byte nsect, ide_handler_t *handler)
 {
-	ide_set_handler (drive, handler, WAIT_CMD);
+	ide_set_handler (drive, handler);
 	if (IDE_CONTROL_REG)
 		OUT_BYTE(drive->ctl,IDE_CONTROL_REG);	/* clear nIEN */
 	OUT_BYTE(nsect,IDE_NSECTOR_REG);
@@ -1018,6 +1042,10 @@ static void execute_drive_cmd (ide_drive_t *drive, struct request *rq)
 		if (args[0] == WIN_SMART) {
 			OUT_BYTE(0x4f, IDE_LCYL_REG);
 			OUT_BYTE(0xc2, IDE_HCYL_REG);
+			OUT_BYTE(args[2],IDE_FEATURE_REG);
+			OUT_BYTE(args[1],IDE_SECTOR_REG);
+			ide_cmd(drive, args[0], args[3], &drive_cmd_intr);
+			return;
 		}
 		OUT_BYTE(args[2],IDE_FEATURE_REG);
 		ide_cmd(drive, args[0], args[1], &drive_cmd_intr);
@@ -1218,13 +1246,37 @@ static void ide_do_request (ide_hwgroup_t *hwgroup, unsigned long *hwgroup_flags
 		bdev->current_request = hwgroup->rq = drive->queue;
 		spin_unlock_irqrestore(&io_request_lock, io_flags);
 
+#if 0
 		if (hwif->irq != masked_irq)
-			disable_irq(hwif->irq);
+			disable_irq_nosync(hwif->irq);
 		spin_unlock_irqrestore(&hwgroup->spinlock, *hwgroup_flags);
 		start_request(drive);
 		spin_lock_irqsave(&hwgroup->spinlock, *hwgroup_flags);
 		if (hwif->irq != masked_irq)
 			enable_irq(hwif->irq);
+#else
+
+		if (masked_irq && hwif->irq != masked_irq) {
+			printk("%s: (disable_irq) %smasked_irq %d\n",
+				drive->name,
+				masked_irq  ? "" : "un_", hwif->irq);
+
+#if 0
+			disable_irq(hwif->irq);
+#else
+			disable_irq_nosync(hwif->irq);
+#endif
+		}
+		spin_unlock_irqrestore(&hwgroup->spinlock, *hwgroup_flags);
+		start_request(drive);
+		spin_lock_irqsave(&hwgroup->spinlock, *hwgroup_flags);
+		if (masked_irq && hwif->irq != masked_irq) {
+			printk("%s: (enable_irq) %smasked_irq %d\n",
+				drive->name,
+				masked_irq ? "" : "un_", hwif->irq);
+			enable_irq(hwif->irq);
+		}
+#endif
 	}
 }
 
@@ -1373,8 +1425,8 @@ void ide_timer_expiry (unsigned long data)
 	}
 	hwgroup->busy = 1;	/* should already be "1" */
 	hwgroup->handler = NULL;
-	del_timer(&hwgroup->timer);	/* Is this needed?? */
-	if (hwgroup->poll_timeout != 0) {	/* polling in progress? */
+	/* polling in progress or just don't timeout */
+	if (hwgroup->poll_timeout != 0) {
 		spin_unlock_irqrestore(&hwgroup->spinlock, flags);
 		handler(drive);
 	} else if (drive_is_ready(drive)) {
@@ -1612,8 +1664,10 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 	}
 	spin_unlock_irqrestore(&io_request_lock, flags);
 	do_hwgroup_request(hwgroup);
-	if (action == ide_wait && rq->rq_status != RQ_INACTIVE)
+	if (action == ide_wait) {
 		down(&sem);	/* wait for it to be serviced */
+		rq->sem = NULL;
+	}
 	return rq->errors ? -EIO : 0;	/* return -EIO if errors */
 }
 
@@ -2270,7 +2324,12 @@ void ide_delay_50ms (void)
 
 int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 {
+	struct hd_driveid *id = drive->id;
+	unsigned long flags;
 	int err;
+
+	__save_flags(flags);	/* local CPU only */
+	__cli();		/* local CPU only */
 
 	/*
 	 * Don't use ide_wait_cmd here - it will
@@ -2286,6 +2345,109 @@ int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 	OUT_BYTE(WIN_SETFEATURES, IDE_COMMAND_REG);
 
 	err = ide_wait_stat(drive, DRIVE_READY, BUSY_STAT|DRQ_STAT|ERR_STAT, WAIT_CMD);
+
+#if 0
+	if (IDE_CONTROL_REG)
+		OUT_BYTE(drive->ctl, IDE_CONTROL_REG);
+#endif
+
+	__restore_flags(flags);	/* local CPU only */
+
+        switch(speed) {
+		case XFER_UDMA_4:
+			if (!((id->dma_ultra >> 8) & 16)) {
+				drive->id->dma_ultra &= ~0xFF00;
+				drive->id->dma_ultra |= 0x1010;
+			}
+			drive->id->dma_mword &= ~0x0F00;
+			drive->id->dma_1word &= ~0x0F00;
+			break;
+		case XFER_UDMA_3:
+			if (!((id->dma_ultra >> 8) & 8)) {
+				drive->id->dma_ultra &= ~0xFF00;
+				drive->id->dma_ultra |= 0x0808;
+			}
+			drive->id->dma_mword &= ~0x0F00;
+			drive->id->dma_1word &= ~0x0F00;
+			break;
+		case XFER_UDMA_2:
+			if (!((id->dma_ultra >> 8) & 4)) {
+				drive->id->dma_ultra &= ~0xFF00;
+				drive->id->dma_ultra |= 0x0404;
+			}
+			drive->id->dma_mword &= ~0x0F00;
+			drive->id->dma_1word &= ~0x0F00;
+			break;
+		case XFER_UDMA_1:
+			if (!((id->dma_ultra >> 8) & 2)) {
+				drive->id->dma_ultra &= ~0xFF00;
+				drive->id->dma_ultra |= 0x0202;
+			}
+			drive->id->dma_mword &= ~0x0F00;
+			drive->id->dma_1word &= ~0x0F00;
+			break;
+		case XFER_UDMA_0:
+			if (!((id->dma_ultra >> 8) & 1)) {
+				drive->id->dma_ultra &= ~0xFF00;
+				drive->id->dma_ultra |= 0x0101;
+			}
+			drive->id->dma_mword &= ~0x0F00;
+			drive->id->dma_1word &= ~0x0F00;
+			break;
+		case XFER_MW_DMA_2:
+			drive->id->dma_ultra &= ~0xFF00;
+			if (!((id->dma_mword >> 8) & 4)) {
+				drive->id->dma_mword &= ~0x0F00;
+				drive->id->dma_mword |= 0x0404;
+			}
+			drive->id->dma_1word &= ~0x0F00;
+			break;
+		case XFER_MW_DMA_1:
+			drive->id->dma_ultra &= ~0xFF00;
+			if (!((id->dma_mword >> 8) & 2)) {
+				drive->id->dma_mword &= ~0x0F00;
+				drive->id->dma_mword |= 0x0202;
+			}
+			drive->id->dma_1word &= ~0x0F00;
+			break;
+		case XFER_MW_DMA_0:
+			drive->id->dma_ultra &= ~0xFF00;
+			if (!((id->dma_mword >> 8) & 1)) {
+				drive->id->dma_mword &= ~0x0F00;
+				drive->id->dma_mword |= 0x0101;
+			}
+			drive->id->dma_1word &= ~0x0F00;
+			break;
+		case XFER_SW_DMA_2:
+			drive->id->dma_ultra &= ~0xFF00;
+			drive->id->dma_mword &= ~0x0F00;
+			if (!((id->dma_1word >> 8) & 4)) {
+				drive->id->dma_1word &= ~0x0F00;
+				drive->id->dma_1word |= 0x0404;
+			}
+			break;
+		case XFER_SW_DMA_1:
+			drive->id->dma_ultra &= ~0xFF00;
+			drive->id->dma_mword &= ~0x0F00;
+			if (!((id->dma_1word >> 8) & 2)) {
+				drive->id->dma_1word &= ~0x0F00;
+				drive->id->dma_1word |= 0x0202;
+			}
+			break;
+		case XFER_SW_DMA_0:
+			drive->id->dma_ultra &= ~0xFF00;
+			drive->id->dma_mword &= ~0x0F00;
+			if (!((id->dma_1word >> 8) & 1)) {
+				drive->id->dma_1word &= ~0x0F00;
+				drive->id->dma_1word |= 0x0101;
+			}
+			break;
+		default:
+			drive->id->dma_ultra &= ~0xFF00;
+			drive->id->dma_mword &= ~0x0F00;
+			drive->id->dma_1word &= ~0x0F00;
+			break;
+	}
 
 	return(err);
 }
@@ -2803,7 +2965,7 @@ void __init ide_setup (char *s)
 		}
 	}
 
-#if defined(CONFIG_BLK_DEV_VIA82C586)
+#if defined(CONFIG_BLK_DEV_VIA82CXXX)
 	/*
 	 *  Look for drive option "splitfifo=..."
 	 */
@@ -2853,7 +3015,7 @@ void __init ide_setup (char *s)
 		fifoconfig = tmp;		
 		goto done;
 	}
-#endif  /* defined(CONFIG_BLK_DEV_VIA82C586) */
+#endif  /* defined(CONFIG_BLK_DEV_VIA82CXXX) */
 
 	if (s[0] != 'i' || s[1] != 'd' || s[2] != 'e')
 		goto bad_option;
@@ -3393,6 +3555,7 @@ EXPORT_SYMBOL(do_ide9_request);
 EXPORT_SYMBOL(ide_scan_devices);
 EXPORT_SYMBOL(ide_register_subdriver);
 EXPORT_SYMBOL(ide_unregister_subdriver);
+EXPORT_SYMBOL(ide_replace_subdriver);
 EXPORT_SYMBOL(ide_input_data);
 EXPORT_SYMBOL(ide_output_data);
 EXPORT_SYMBOL(atapi_input_bytes);
@@ -3464,7 +3627,11 @@ static void __init parse_options (char *line)
 	while ((line = next) != NULL) {
  		if ((next = strchr(line,' ')) != NULL)
 			*next++ = 0;
-		if (!strncmp(line,"ide",3) || (!strncmp(line,"hd",2) && line[2] != '='))
+		if (!strncmp(line,"ide",3) ||
+#ifdef CONFIG_BLK_DEV_VIA82CXXX
+		    !strncmp(line,"splitfifo",9) ||
+#endif /* CONFIG_BLK_DEV_VIA82CXXX */
+		    (!strncmp(line,"hd",2) && line[2] != '='))
 			ide_setup(line);
 	}
 }

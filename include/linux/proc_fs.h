@@ -550,6 +550,7 @@ extern inline int proc_driver_register(const char *module_name)
         return 0;
 }
 
+extern struct proc_dir_entry proc_root;
 
 #endif /* CONFIG_PROC_FS */
 

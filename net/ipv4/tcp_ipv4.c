@@ -59,8 +59,6 @@
 #include <net/ipv6.h>
 #include <net/inet_common.h>
 
-#include <asm/segment.h>
-
 #include <linux/inet.h>
 #include <linux/stddef.h>
 

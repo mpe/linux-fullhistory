@@ -459,6 +459,7 @@ call_encode(struct rpc_task *task)
 	req->rq_rvec[0].iov_len  = bufsiz;
 	req->rq_rlen		 = bufsiz;
 	req->rq_rnr		 = 1;
+	req->rq_damaged		 = 0;
 
 	if (task->tk_proc > clnt->cl_maxproc) {
 		printk(KERN_WARNING "%s (vers %d): bad procedure number %d\n",
@@ -466,6 +467,9 @@ call_encode(struct rpc_task *task)
 		rpc_exit(task, -EIO);
 		return;
 	}
+
+	/* Zero buffer so we have automatic zero-padding of opaque & string */
+	memset(task->tk_buffer, 0, bufsiz);
 
 	/* Encode header and provided arguments */
 	encode = rpcproc_encode(clnt, task->tk_proc);

@@ -9,6 +9,12 @@
  */
 struct nfs_inode_info {
 	/*
+	 * The 64bit 'inode number'
+	 */
+	__u32 fsid;
+	__u32 fileid;
+
+	/*
 	 * Various flags
 	 */
 	unsigned short		flags;
@@ -49,7 +55,7 @@ struct nfs_inode_info {
 /*
  * Legal inode flag values
  */
-#define NFS_INO_REVALIDATE	0x0001		/* revalidating attrs */
+#define NFS_INO_REVALIDATING	0x0001		/* revalidating attrs */
 #define NFS_IS_SNAPSHOT		0x0010		/* a snapshot file */
 
 /*

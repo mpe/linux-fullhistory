@@ -1,4 +1,5 @@
-/*
+/* $Id: init.c,v 1.3 1999/10/11 10:41:30 gniibe Exp $
+ *
  *  linux/arch/sh/mm/init.c
  *
  *  Copyright (C) 1999  Niibe Yutaka
@@ -29,6 +30,7 @@
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/mmu_context.h>
+#include <asm/io.h>
 
 /*
  * Cache of MMU context last used.
@@ -127,7 +129,7 @@ int do_check_pgt_cache(int low, int high)
  */
 pte_t * __bad_pagetable(void)
 {
-	extern char empty_bad_page_table[PAGE_SIZE];
+	extern unsigned long empty_bad_page_table[PAGE_SIZE];
 	unsigned long page = (unsigned long)empty_bad_page_table;
 
 	clear_page(page);
@@ -202,16 +204,17 @@ paging_init(unsigned long start_mem, unsigned long end_mem)
 	pgd_val(pg_dir[0]) = 0;
 
 	/* Enable MMU */
-	__asm__ __volatile__ ("mov.l	%0,%1"
-			      : /* no output */
-			      : "r" (MMU_CONTROL_INIT), "m" (__m(MMUCR)));
+	ctrl_outl(MMU_CONTROL_INIT, MMUCR);
+
+	mmu_context_cache = MMU_CONTEXT_FIRST_VERSION;
+	set_asid(mmu_context_cache & MMU_CONTEXT_ASID_MASK);
 
 	return free_area_init(start_mem, end_mem);
 }
 
 unsigned long empty_bad_page[1024];
 unsigned long empty_bad_page_table[1024];
-unsigned long empty_zero_page[1024];
+extern unsigned long empty_zero_page[1024];
 
 void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 {

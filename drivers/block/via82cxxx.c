@@ -1,9 +1,12 @@
 /*
- * linux/drivers/block/via82c586.c	Version 0.04	July 11, 1999
+ * linux/drivers/block/via82cxxx.c	Version 0.05	Sept. 03, 1999
  *
- *  Copyright (C) 1998 Michel Aubry, Maintainer
- *  Copyright (C) 1998 Andre Hedrick, Maintainer
+ *  Copyright (C) 1998-99 Michel Aubry, Maintainer
+ *  Copyright (C) 1999 Jeff Garzik, MVP4 Support (jgarzik@pobox.com)
+ *  Copyright (C) 1998-99 Andre Hedrick (andre@suse.com)
+ *  May be copied or modified under the terms of the GNU General Public License
  *
+ *  The VIA MVP-4 is reported OK with UDMA.
  *  The VIA MVP-3 is reported OK with UDMA.
  *  The TX Pro III is also reported OK with UDMA.
  *
@@ -57,8 +60,44 @@
 
 #include <asm/io.h>
 
-static struct pci_dev *host_dev;
-static struct pci_dev *isa_dev;
+static struct pci_dev *host_dev = NULL;
+static struct pci_dev *isa_dev = NULL;
+
+static const struct {
+	const char *name;
+	unsigned short host_id;
+} ApolloHostChipInfo[] = {
+	{ "VT 82C585 Apollo VP1/VPX",	PCI_DEVICE_ID_VIA_82C585, },
+	{ "VT 82C595 Apollo VP2",	PCI_DEVICE_ID_VIA_82C595, },
+	{ "VT 82C597 Apollo VP3",	PCI_DEVICE_ID_VIA_82C597_0, },
+	{ "VT 82C598 Apollo MVP3",	PCI_DEVICE_ID_VIA_82C598_0, },
+	{ "VT 82C680 Apollo P6",	PCI_DEVICE_ID_VIA_82C680, },
+	{ "VT 82C691 Apollo Pro",	PCI_DEVICE_ID_VIA_82C691, },
+	{ "VT 82C693 Apollo Pro Plus",	PCI_DEVICE_ID_VIA_82C693, },
+	{ "Apollo MVP4",		PCI_DEVICE_ID_VIA_8501_0, },
+};
+
+#define NUM_APOLLO_ISA_CHIP_DEVICES	2
+#define VIA_FLAG_CHECK_REV		0x00000001
+#define VIA_FLAG_ATA_66			0x00000002
+
+static const struct {
+	unsigned short host_id;
+	unsigned short isa_id;
+	unsigned int flags;
+} ApolloISAChipInfo[] = {
+	{ PCI_DEVICE_ID_VIA_82C585,	PCI_DEVICE_ID_VIA_82C586_1,	VIA_FLAG_CHECK_REV },
+	{ PCI_DEVICE_ID_VIA_82C595,	PCI_DEVICE_ID_VIA_82C586_1,	VIA_FLAG_CHECK_REV },
+	{ PCI_DEVICE_ID_VIA_82C597_0,	PCI_DEVICE_ID_VIA_82C586_1,	VIA_FLAG_CHECK_REV },
+	{ PCI_DEVICE_ID_VIA_82C598_0,	PCI_DEVICE_ID_VIA_82C586_1,	VIA_FLAG_CHECK_REV },
+	{ PCI_DEVICE_ID_VIA_82C598_0,	PCI_DEVICE_ID_VIA_82C596,	0 },
+	{ PCI_DEVICE_ID_VIA_82C680,	PCI_DEVICE_ID_VIA_82C586_1,	VIA_FLAG_CHECK_REV },
+	{ PCI_DEVICE_ID_VIA_82C691,	PCI_DEVICE_ID_VIA_82C596,	0 },
+	{ PCI_DEVICE_ID_VIA_82C693,	PCI_DEVICE_ID_VIA_82C596,	0 },
+	{ PCI_DEVICE_ID_VIA_8501_0,	PCI_DEVICE_ID_VIA_82C686,	VIA_FLAG_ATA_66 },
+};
+
+#define arraysize(x)	(sizeof(x)/sizeof(*(x)))
 
 #define DISPLAY_VIA_TIMINGS
 
@@ -298,6 +337,7 @@ static int via_get_info (char *buffer, char **addr, off_t offset, int count, int
  *  Used to set Fifo configuration via kernel command line:
  */
 
+byte via_proc = 0;
 byte fifoconfig = 0;
 static byte newfifo = 0;
 
@@ -340,8 +380,8 @@ static void set_via_timings (ide_hwif_t *hwif)
 	/*
 	 * setting Channel read and End-of-sector FIFO flush.
 	 * (This feature ensures that FIFO flush is enabled:
-         *  - for read DMA when interrupt asserts the given channel.
-         *  - at the end of each sector for the given channel.)
+	 *  - for read DMA when interrupt asserts the given channel.
+	 *  - at the end of each sector for the given channel.)
 	 */
 	if ((rc = pci_read_config_byte(dev, 0x46, &via_config)))
 		errors++;
@@ -363,7 +403,7 @@ static void set_via_timings (ide_hwif_t *hwif)
 }
 
 /*
- *  Sets VIA 82c586 FIFO configuration:
+ *  Sets VIA 82cxxx FIFO configuration:
  *  This chipsets gets a splitable fifo. This can be driven either by command
  *  line option (eg "splitfifo=2,2,3" which asks this driver to switch all the 
  *  16 fifo levels to the second drive, and give it a threshold of 3 for (u)dma 
@@ -435,139 +475,71 @@ static int via_set_fifoconfig(ide_hwif_t *hwif)
 		(newfifo & 0x01)		? "1/4" : "1/2"));
 
 #if defined(DISPLAY_VIA_TIMINGS) && defined(CONFIG_PROC_FS)
+	via_proc = 1;
 	bmide_dev = hwif->pci_dev;
 	via_display_info = &via_get_info;
 #endif /* DISPLAY_VIA_TIMINGS &&  CONFIG_PROC_FS*/
 	return 0;
 }
 
-unsigned int __init pci_init_via82c568 (struct pci_dev *dev, const char *name)
+unsigned int __init pci_init_via82cxxx (struct pci_dev *dev, const char *name)
 {
 	struct pci_dev *host;
 	struct pci_dev *isa;
+	int i, j, ata33, ata66;
 
 	byte revision = 0;
 
-	for (host = pci_devices; host; host=host->next) {
-		if (host->vendor == PCI_VENDOR_ID_VIA &&
-		    host->device == PCI_DEVICE_ID_VIA_82C585) {
-			host_dev = host;
-			printk("VT 82C585 Apollo VP1/VPX");
-			for (isa = pci_devices; isa; isa=isa->next) {
-				if (isa->vendor == PCI_VENDOR_ID_VIA &&
-				    isa->device == PCI_DEVICE_ID_VIA_82C586_1) {
-					isa_dev = isa;
-					pci_read_config_byte(isa_dev, 0x0d, &revision);
-					if (revision >= 0x20)
-						printk(" Chipset Core ATA-33");
-					break;
-				}
+	for (i = 0; i < arraysize (ApolloHostChipInfo) && !host_dev; i++) {
+		host = pci_find_device (PCI_VENDOR_ID_VIA,
+					ApolloHostChipInfo[i].host_id,
+					NULL);
+		if (!host)
+			continue;
+
+		host_dev = host;
+		printk(ApolloHostChipInfo[i].name);
+
+		for (j = 0; j < arraysize (ApolloISAChipInfo) && !isa_dev; j++) {
+			if (ApolloISAChipInfo[j].host_id !=
+			    ApolloHostChipInfo[i].host_id)
+				continue;
+
+			isa = pci_find_device (PCI_VENDOR_ID_VIA,
+					ApolloISAChipInfo[i].isa_id,
+					NULL);
+			if (!isa)
+				continue;
+
+			isa_dev = isa;
+
+			ata33 = 1;
+			ata66 = 0;
+
+			if (ApolloISAChipInfo[i].flags & VIA_FLAG_CHECK_REV) {
+				pci_read_config_byte(isa_dev, 0x0d, &revision);
+				ata33 = (revision >= 0x20) ? 1 : 0;
+			} else if (ApolloISAChipInfo[i].flags & VIA_FLAG_ATA_66) {
+				ata33 = 0;
+				ata66 = 1;
 			}
-			printk("\n");
-			break;
-		} else if (host->vendor == PCI_VENDOR_ID_VIA &&
-			   host->device == PCI_DEVICE_ID_VIA_82C595) {
-			host_dev = host;
-			printk("VT 82C595 Apollo VP2");
-			for (isa = pci_devices; isa; isa=isa->next) {
-				if (isa->vendor == PCI_VENDOR_ID_VIA &&
-				    isa->device == PCI_DEVICE_ID_VIA_82C586_1) {
-					isa_dev = isa;
-					pci_read_config_byte(isa_dev, 0x0d, &revision);
-					if (revision >= 0x20)
-						printk(" Chipset Core ATA-33");
-					break;
-				}
-			}
-			printk("\n");
-			break;
-		} else if (host->vendor == PCI_VENDOR_ID_VIA &&
-			   host->device == PCI_DEVICE_ID_VIA_82C597_0) {
-			host_dev = host;
-			printk("VT 82C597 Apollo VP3");
-			for (isa = pci_devices; isa; isa=isa->next) {
-				if (isa->vendor == PCI_VENDOR_ID_VIA &&
-				    isa->device == PCI_DEVICE_ID_VIA_82C586_1) {
-					isa_dev = isa;
-					pci_read_config_byte(isa_dev, 0x0d, &revision);
-					if (revision >= 0x20)
-						printk(" Chipset Core ATA-33");
-					break;
-				}
-			}
-			printk("\n");
-			break;
-	} else if (host->vendor == PCI_VENDOR_ID_VIA &&
-		   host->device == PCI_DEVICE_ID_VIA_82C598_0) {
-			host_dev = host;
-			printk("VT 82C598 Apollo MVP3");
-			for (isa = pci_devices; isa; isa=isa->next) {
-				if (isa->vendor == PCI_VENDOR_ID_VIA &&
-				    isa->device == PCI_DEVICE_ID_VIA_82C586_1) {
-					isa_dev = isa;
-					pci_read_config_byte(isa_dev, 0x0d, &revision);
-					if (revision >= 0x20)
-						printk(" Chipset Core ATA-33");
-					break;
-				} else if (isa->vendor == PCI_VENDOR_ID_VIA &&
-					   isa->device == PCI_DEVICE_ID_VIA_82C596) {
-					isa_dev = isa;
-					printk(" Chipset Core ATA-33");
-					break;
-				}
-			}
-			printk("\n");
-			break;
-	} else if (host->vendor == PCI_VENDOR_ID_VIA &&
-		   host->device == PCI_DEVICE_ID_VIA_82C680) {
-			host_dev = host;
-			printk("VT 82C680 Apollo P6");
-			for (isa = pci_devices; isa; isa=isa->next) {
-				if (isa->vendor == PCI_VENDOR_ID_VIA &&
-				    isa->device == PCI_DEVICE_ID_VIA_82C586_1) {
-					isa_dev = isa;
-					pci_read_config_byte(isa_dev, 0x0d, &revision);
-					if (revision >= 0x20)
-						printk(" Chipset Core ATA-33");
-					break;
-				}
-			}
-			printk("\n");
-			break;
-	} else if (host->vendor == PCI_VENDOR_ID_VIA &&
-		   host->device == PCI_DEVICE_ID_VIA_82C691) {
-			host_dev = host;
-			printk("VT 82C691 Apollo Pro");
-			for (isa = pci_devices; isa; isa=isa->next) {
-				if (isa->vendor == PCI_VENDOR_ID_VIA &&
-				    isa->device == PCI_DEVICE_ID_VIA_82C596) {
-					isa_dev = isa;
-					printk(" Chipset Core ATA-33");
-					break;
-				}
-			}
-			printk("\n");
-			break;
-	} else if (host->vendor == PCI_VENDOR_ID_VIA &&
-		   host->device == PCI_DEVICE_ID_VIA_82C693) {
-			host_dev = host;
-			printk("VT 82C693 Apollo Pro Plus");
-			for (isa = pci_devices; isa; isa=isa->next) {
-				if (isa->vendor == PCI_VENDOR_ID_VIA &&
-				    isa->device == PCI_DEVICE_ID_VIA_82C596) {
-					isa_dev = isa;
-					printk(" Chipset Core ATA-33");
-					break;
-				}
-			}
-			printk("\n");
-			break;
+
+			if (ata33 | ata66)
+				printk(" Chipset Core ATA-%s", ata66 ? "66" : "33");
 		}
+		printk("\n");
 	}
+
 	return 0;
 }
 
-void __init ide_init_via82c586 (ide_hwif_t *hwif)
+unsigned int __init ata66_via82cxxx (ide_hwif_t *hwif)
+{
+	/* (Jeff Garzik) FIXME!!! for MVP4 */
+	return 0;
+}
+
+void __init ide_init_via82cxxx (ide_hwif_t *hwif)
 {
 	set_via_timings(hwif);
 }
@@ -581,7 +553,7 @@ void __init ide_init_via82c586 (ide_hwif_t *hwif)
  *  bypasses the setup if not capable.
  */
 
-void ide_dmacapable_via82c586 (ide_hwif_t *hwif, unsigned long dmabase)
+void ide_dmacapable_via82cxxx (ide_hwif_t *hwif, unsigned long dmabase)
 {
 	if (!done) {
 		via_set_fifoconfig(hwif);

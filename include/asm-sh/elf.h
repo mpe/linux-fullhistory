@@ -5,7 +5,6 @@
  * ELF register definitions..
  */
 
-#include <linux/config.h>
 #include <asm/ptrace.h>
 #include <asm/user.h>
 #include <asm/byteorder.h>
@@ -15,12 +14,10 @@ typedef unsigned long elf_greg_t;
 #define ELF_NGREG (sizeof (struct pt_regs) / sizeof(elf_greg_t))
 typedef elf_greg_t elf_gregset_t[ELF_NGREG];
 
-#ifdef CONFIG_CPU_SH4
+/* Though SH-3 has no floating point regs.. */
+#define ELF_NFPREG 34
 typedef double elf_fpreg_t;
 typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
-#else /* SH 3 has no floating point regs */
-typedef struct { void *null; } elf_fpregset_t;
-#endif
 
 /*
  * This is used to ensure we don't load something for the wrong architecture.
@@ -31,7 +28,7 @@ typedef struct { void *null; } elf_fpregset_t;
  * These are used to set parameters in the core dumps.
  */
 #define ELF_CLASS	ELFCLASS32
-#ifdef __LITTLE_ENDIAN
+#ifdef __LITTLE_ENDIAN__
 #define ELF_DATA	ELFDATA2LSB
 #else
 #define ELF_DATA	ELFDATA2MSB
@@ -67,6 +64,12 @@ typedef struct { void *null; } elf_fpregset_t;
    but that could change... */
 
 #define ELF_PLATFORM  (NULL)
+
+#define ELF_PLAT_INIT(_r) \
+  do { _r->regs[0]=0; _r->regs[1]=0; _r->regs[2]=0; _r->regs[3]=0; \
+       _r->regs[4]=0; _r->regs[5]=0; _r->regs[6]=0; _r->regs[7]=0; \
+       _r->regs[8]=0; _r->regs[9]=0; _r->regs[10]=0; _r->regs[11]=0; \
+       _r->regs[12]=0; _r->regs[13]=0; _r->regs[14]=0; } while (0)
 
 #ifdef __KERNEL__
 #define SET_PERSONALITY(ex, ibcs2) \

@@ -25,7 +25,7 @@ typedef struct { int counter; } atomic_t;
  * on us. We need to use _exactly_ the address the user gave us,
  * not some alias that contains the same information.
  */
-#define __atomic_fool_gcc(x) (*(struct { int a[100]; } *)x)
+#define __atomic_fool_gcc(x) (*(volatile struct { int a[100]; } *)x)
 
 /*
  * To get proper branch prediction for the main line, we must branch
@@ -37,8 +37,7 @@ extern __inline__ void atomic_add(int i, atomic_t * v)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	*(long *)v += i;
 	restore_flags(flags);
 }
@@ -47,8 +46,7 @@ extern __inline__ void atomic_sub(int i, atomic_t *v)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	*(long *)v -= i;
 	restore_flags(flags);
 }
@@ -57,8 +55,7 @@ extern __inline__ int atomic_add_return(int i, atomic_t * v)
 {
 	unsigned long temp, flags;
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	temp = *(long *)v;
 	temp += i;
 	*(long *)v = temp;
@@ -71,8 +68,7 @@ extern __inline__ int atomic_sub_return(int i, atomic_t * v)
 {
 	unsigned long temp, flags;
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	temp = *(long *)v;
 	temp -= i;
 	*(long *)v = temp;
@@ -90,22 +86,20 @@ extern __inline__ int atomic_sub_return(int i, atomic_t * v)
 #define atomic_inc(v) atomic_add(1,(v))
 #define atomic_dec(v) atomic_sub(1,(v))
 
-extern __inline__ void atomic_clear_mask(int mask, atomic_t *v)
+extern __inline__ void atomic_clear_mask(unsigned int mask, atomic_t *v)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	*(long *)v &= ~mask;
 	restore_flags(flags);
 }
 
-extern __inline__ void atomic_set_mask(int mask, atomic_t *v)
+extern __inline__ void atomic_set_mask(unsigned int mask, atomic_t *v)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	*(long *)v |= mask;
 	restore_flags(flags);
 }

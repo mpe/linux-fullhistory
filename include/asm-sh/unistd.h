@@ -222,7 +222,8 @@ type name(void) \
 register long __sc0 __asm__ ("r0") = __NR_##name; \
 __asm__ __volatile__ ("trapa	#0" \
 	: "=z" (__sc0) \
-	: "0" (__sc0)); \
+	: "0" (__sc0) \
+	: "memory" ); \
 __syscall_return(type,__sc0); \
 }
 
@@ -233,7 +234,8 @@ register long __sc0 __asm__ ("r0") = __NR_##name; \
 register long __sc4 __asm__ ("r4") = (long) arg1; \
 __asm__ __volatile__ ("trapa	#0" \
 	: "=z" (__sc0) \
-	: "0" (__sc0), "r" (__sc4)); \
+	: "0" (__sc0), "r" (__sc4) \
+	: "memory"); \
 __syscall_return(type,__sc0); \
 }
 
@@ -245,7 +247,8 @@ register long __sc4 __asm__ ("r4") = (long) arg1; \
 register long __sc5 __asm__ ("r5") = (long) arg2; \
 __asm__ __volatile__ ("trapa	#0" \
 	: "=z" (__sc0) \
-	: "0" (__sc0), "r" (__sc4), "r" (__sc5)); \
+	: "0" (__sc0), "r" (__sc4), "r" (__sc5) \
+	: "memory"); \
 __syscall_return(type,__sc0); \
 }
 
@@ -258,7 +261,8 @@ register long __sc5 __asm__ ("r5") = (long) arg2; \
 register long __sc6 __asm__ ("r6") = (long) arg3; \
 __asm__ __volatile__ ("trapa	#0" \
 	: "=z" (__sc0) \
-	: "0" (__sc0), "r" (__sc4), "r" (__sc5), "r" (__sc6)); \
+	: "0" (__sc0), "r" (__sc4), "r" (__sc5), "r" (__sc6) \
+	: "memory"); \
 __syscall_return(type,__sc0); \
 }
 
@@ -273,7 +277,8 @@ register long __sc6 __asm__ ("r7") = (long) arg4; \
 __asm__ __volatile__ ("trapa	#0" \
 	: "=z" (__sc0) \
 	: "0" (__sc0), "r" (__sc4), "r" (__sc5), "r" (__sc6),  \
-	  "r" (__sc7)); \
+	  "r" (__sc7) \
+	: "memory" ); \
 __syscall_return(type,__sc0); \
 }
 

@@ -1,8 +1,9 @@
 /*
- * linux/drivers/block/piix.c	Version 0.25	July 11, 1999
+ * linux/drivers/block/piix.c	Version 0.27	Sept. 3, 1999
  *
  *  Copyright (C) 1998-1999 Andrzej Krzysztofowicz, Author and Maintainer
- *  Copyright (C) 1998-1999 Andre Hedrick, Author and Maintainer
+ *  Copyright (C) 1998-1999 Andre Hedrick (andre@suse.com)
+ *  May be copied or modified under the terms of the GNU General Public License
  *
  *  PIO mode setting function for Intel chipsets.  
  *  For use instead of BIOS settings.
@@ -182,30 +183,13 @@ static int piix_config_drive_for_dma(ide_drive_t *drive)
 		}
 	}
 
-	if ((id->dma_ultra & 0x0010) && (ultra)) {
-		goto backspeed;
-	} else if ((id->dma_ultra & 0x0008) && (ultra)) {
-		goto backspeed;
-	} else if ((id->dma_ultra & 0x0004) && (ultra)) {
-backspeed:
-		drive->id->dma_mword &= ~0x0F00;
-		drive->id->dma_1word &= ~0x0F00;
-		if (!((id->dma_ultra >> 8) & 4)) {
-			drive->id->dma_ultra &= ~0x0F00;
-			drive->id->dma_ultra |= 0x0404;
-		}
+	if (((id->dma_ultra & 0x0010) || (id->dma_ultra & 0x0008) || (id->dma_ultra & 0x0004)) && (ultra)) {
 		u_speed = 2 << (drive_number * 4);
 		if (!(reg4a & u_speed)) {
 			pci_write_config_word(dev, 0x4a, reg4a|u_speed);
 		}
 		speed = XFER_UDMA_2;
 	} else if ((id->dma_ultra & 0x0002) && (ultra)) {
-		drive->id->dma_mword &= ~0x0F00;
-		drive->id->dma_1word &= ~0x0F00;
-		if (!((id->dma_ultra >> 8) & 2)) {
-			drive->id->dma_ultra &= ~0x0F00;
-			drive->id->dma_ultra |= 0x0202;
-		}
 		u_speed = 1 << (drive_number * 4);
 		if (!(reg4a & u_speed)) {
 			pci_write_config_word(dev, 0x4a, reg4a & ~a_speed);
@@ -213,12 +197,6 @@ backspeed:
 		}
 		speed = XFER_UDMA_1;
 	} else if ((id->dma_ultra & 0x0001) && (ultra)) {
-		drive->id->dma_mword &= ~0x0F00;
-		drive->id->dma_1word &= ~0x0F00;
-		if (!((id->dma_ultra >> 8) & 1)) {
-			drive->id->dma_ultra &= ~0x0F00;
-			drive->id->dma_ultra |= 0x0101;
-		}
 		u_speed = 0 << (drive_number * 4);
 		if (!(reg4a & u_speed)) {
 			pci_write_config_word(dev, 0x4a, reg4a & ~a_speed);
@@ -228,32 +206,14 @@ backspeed:
 	} else if (id->dma_mword & 0x0004) {
 		if (reg4a & a_speed)
 			pci_write_config_word(dev, 0x4a, reg4a & ~a_speed);
-		drive->id->dma_ultra &= ~0x0F00;
-		drive->id->dma_1word &= ~0x0F00;
-		if (!((id->dma_mword >> 8) & 4)) {
-			drive->id->dma_mword &= ~0x0F00;
-			drive->id->dma_mword |= 0x0404;
-		}
 		speed = XFER_MW_DMA_2;
 	} else if (id->dma_mword & 0x0002) {
 		if (reg4a & a_speed)
 			pci_write_config_word(dev, 0x4a, reg4a & ~a_speed);
-		drive->id->dma_ultra &= ~0x0F00;
-		drive->id->dma_1word &= ~0x0F00;
-		if (!((id->dma_mword >> 8) & 2)) {
-			drive->id->dma_mword &= ~0x0F00;
-			drive->id->dma_mword |= 0x0202;
-		}
 		speed = XFER_MW_DMA_1;
 	} else if (id->dma_1word & 0x0004) {
 		if (reg4a & a_speed)
 			pci_write_config_word(dev, 0x4a, reg4a & ~a_speed);
-		drive->id->dma_ultra &= ~0x0F00;
-		drive->id->dma_mword &= ~0x0F00;
-		if (!((id->dma_1word >> 8) & 4)) {
-			drive->id->dma_1word &= ~0x0F00;
-			drive->id->dma_1word |= 0x0404;
-		}
 		speed = XFER_SW_DMA_2;
         } else {
 		speed = XFER_PIO_0 + ide_get_best_pio_mode(drive, 255, 5, NULL);
@@ -264,10 +224,7 @@ backspeed:
 	(void) ide_config_drive_speed(drive, speed);
 
 #if PIIX_DEBUG_DRIVE_INFO
-	printk("%s: %s drive%d ",
-		drive->name,
-		ide_xfer_verbose(speed),
-		drive_number);
+	printk("%s: %s drive%d ", drive->name, ide_xfer_verbose(speed), drive_number);
 	printk("\n");
 #endif /* PIIX_DEBUG_DRIVE_INFO */
 
@@ -291,7 +248,7 @@ static int piix_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 }
 #endif /* CONFIG_BLK_DEV_PIIX_TUNING */
 
-void ide_init_piix (ide_hwif_t *hwif)
+void __init ide_init_piix (ide_hwif_t *hwif)
 {
 	hwif->tuneproc = &piix_tune_drive;
 

@@ -916,7 +916,7 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 			if (temp > pc->buffer_size) {
 				printk (KERN_ERR "ide-floppy: The floppy wants to send us more data than expected - discarding data\n");
 				idefloppy_discard_data (drive,bcount.all);
-				ide_set_handler (drive,&idefloppy_pc_intr,IDEFLOPPY_WAIT_CMD);
+				ide_set_handler (drive,&idefloppy_pc_intr);
 				return;
 			}
 #if IDEFLOPPY_DEBUG_LOG
@@ -938,7 +938,7 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 	pc->actually_transferred+=bcount.all;				/* Update the current position */
 	pc->current_position+=bcount.all;
 
-	ide_set_handler (drive,&idefloppy_pc_intr,IDEFLOPPY_WAIT_CMD);		/* And set the interrupt handler again */
+	ide_set_handler (drive,&idefloppy_pc_intr);		/* And set the interrupt handler again */
 }
 
 static void idefloppy_transfer_pc (ide_drive_t *drive)
@@ -956,7 +956,7 @@ static void idefloppy_transfer_pc (ide_drive_t *drive)
 		ide_do_reset (drive);
 		return;
 	}
-	ide_set_handler (drive, &idefloppy_pc_intr, IDEFLOPPY_WAIT_CMD);	/* Set the interrupt routine */
+	ide_set_handler (drive, &idefloppy_pc_intr);	/* Set the interrupt routine */
 	atapi_output_bytes (drive, floppy->pc->c, 12);		/* Send the actual packet */
 }
 
@@ -1025,7 +1025,7 @@ static void idefloppy_issue_pc (ide_drive_t *drive, idefloppy_pc_t *pc)
 #endif /* CONFIG_BLK_DEV_IDEDMA */
 
 	if (test_bit (IDEFLOPPY_DRQ_INTERRUPT, &floppy->flags)) {
-		ide_set_handler (drive, &idefloppy_transfer_pc, IDEFLOPPY_WAIT_CMD);
+		ide_set_handler (drive, &idefloppy_transfer_pc);
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);		/* Issue the packet command */
 	} else {
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);
@@ -1519,6 +1519,7 @@ static void idefloppy_setup (ide_drive_t *drive, idefloppy_floppy_t *floppy)
 	*((unsigned short *) &gcw) = drive->id->config;
 	drive->driver_data = floppy;
 	drive->ready_stat = 0;
+	drive->timeout = IDEFLOPPY_WAIT_CMD;
 	memset (floppy, 0, sizeof (idefloppy_floppy_t));
 	floppy->drive = drive;
 	floppy->pc = floppy->pc_stack;

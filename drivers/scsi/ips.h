@@ -237,8 +237,8 @@
    #define NO_DISCONNECT                0x00
    #define DISCONNECT_ALLOWED           0x80
    #define NO_AUTO_REQUEST_SENSE        0x40
-   #define DATA_IN                      0x01
-   #define DATA_OUT                     0x02
+   #define IPS_DATA_IN                  0x01
+   #define IPS_DATA_OUT                 0x02
    #define TRANSFER_64K                 0x08
    #define NOTIMEOUT                    0x00
    #define TIMEOUT10                    0x10

@@ -58,6 +58,9 @@ extern int msnd_classic_init(void);
 #ifdef CONFIG_SOUND_MSNDPIN
 extern int msnd_pinnacle_init(void);
 #endif
+#ifdef CONFIG_SOUND_CMPCI
+extern init_cmpci(void);
+#endif
 
 /*
  *	Low level list operator. Scan the ordered list, find a hole and

@@ -113,6 +113,10 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_FB_ATY128),y)
+L_OBJS += aty128fb.o
+endif
+
 ifeq ($(CONFIG_FB_IGA),y)
 L_OBJS += igafb.o
 endif

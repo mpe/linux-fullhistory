@@ -38,6 +38,7 @@
  *
  * aeb@cwi.nl        :  /proc/partitions
  *
+ *
  * Alan Cox	     :  security fixes.
  *			<Alan.Cox@linux.org>
  *
@@ -45,11 +46,6 @@
  *
  * Gerhard Wichert   :  added BIGMEM support
  * Siemens AG           <Gerhard.Wichert@pdb.siemens.de>
- *
- * Chuck Lever       :  safe handling of task_struct
- *                      <cel@monkey.org>
- *
- * Andrea Arcangeli  :	SMP race/security fixes.
  */
 
 #include <linux/types.h>
@@ -71,7 +67,6 @@
 #include <linux/slab.h>
 #include <linux/smp.h>
 #include <linux/signal.h>
-#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -474,7 +469,7 @@ static int get_array(struct mm_struct *mm, unsigned long start, unsigned long en
 				return result;
 			}
 		} while (addr & ~PAGE_MASK);
-		kunmap(addr-1, KM_READ);
+		kunmap(addr, KM_READ);
 	}
 	return result;
 }
@@ -483,9 +478,7 @@ static struct mm_struct *get_mm(int pid)
 {
 	struct task_struct *p;
 	struct mm_struct *mm = NULL;
-
-	/* need kernel lock to avoid the tsk->mm to go away under us */
-	lock_kernel();
+	
 	read_lock(&tasklist_lock);
 	p = find_task_by_pid(pid);
 	if (p)
@@ -493,9 +486,9 @@ static struct mm_struct *get_mm(int pid)
 	if (mm)
 		atomic_inc(&mm->mm_users);
 	read_unlock(&tasklist_lock);
-	unlock_kernel();
 	return mm;
 }
+
 
 static int get_env(int pid, char * buffer)
 {
@@ -849,9 +842,6 @@ static inline char * task_mem(struct mm_struct *mm, char *buffer)
 	return buffer;
 }
 
-/*
- * These next two assume that the task's sigmask_lock is held by the caller.
- */
 static void collect_sigign_sigcatch(struct task_struct *p, sigset_t *ign,
 				    sigset_t *catch)
 {
@@ -904,114 +894,76 @@ extern inline char *task_cap(struct task_struct *p, char *buffer)
 			    cap_t(p->cap_effective));
 }
 
-/*
- * This is somewhat safer than it was before.  However...
- *
- * Embedded pointers in the task structure may reference data that
- * can be changed or that is no longer valid after the tasklist
- * lock is released, or that isn't even protected by the tasklist
- * lock.  Eg. tsk->tty, tsk->sig, and tsk->p_pptr can change after
- * we make our own copy of the task structure.  This doesn't matter
- * unless we are trying to use the pointed-to data as an address.
- * So there are still a few safety issues to be addressed here.
- */
+
 static int get_status(int pid, char * buffer)
 {
 	char * orig = buffer;
 	struct task_struct *tsk;
 	struct mm_struct *mm = NULL;
 
-	/*
-	 * We lock the whole kernel here because p->files and p->mm are still
-	 * protected by the global kernel lock.
-	 */
-	lock_kernel();
-
 	read_lock(&tasklist_lock);
 	tsk = find_task_by_pid(pid);
-	if (tsk) {
+	if (tsk)
 		mm = tsk->mm;
-		if (mm)
-			atomic_inc(&mm->mm_users);
-
-		buffer = task_name(tsk, buffer);
-		buffer = task_state(tsk, buffer);
-
-		spin_lock_irq(&tsk->sigmask_lock);
-		buffer = task_sig(tsk, buffer);
-		spin_unlock_irq(&tsk->sigmask_lock);
-
-		buffer = task_cap(tsk, buffer);
-	}
-	read_unlock(&tasklist_lock);
-
-	unlock_kernel();
-
-	/*
-	 * We can't hold the tasklist_lock and jiggle the mmap_sem --
-	 * that can result in a deadlock.
-	 */
-	if (mm) {
+	if (mm)
+		atomic_inc(&mm->mm_users);
+	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
+	if (!tsk)
+		return 0;
+	buffer = task_name(tsk, buffer);
+	buffer = task_state(tsk, buffer);
+	if (mm)
 		buffer = task_mem(mm, buffer);
+	buffer = task_sig(tsk, buffer);
+	buffer = task_cap(tsk, buffer);
+	if (mm)
 		mmput(mm);
-	}
-
-	/*
-	 * (buffer - orig) will be zero on an error exit.
-	 */
 	return buffer - orig;
 }
 
 static int get_stat(int pid, char * buffer)
 {
 	struct task_struct *tsk;
-	struct mm_struct *mm;
+	struct mm_struct *mm = NULL;
 	unsigned long vsize, eip, esp, wchan;
 	long priority, nice;
-	pid_t ppid = 0;
+	int tty_pgrp;
 	sigset_t sigign, sigcatch;
 	char state;
-	int res = 0;
-	unsigned int tty_device;
-	int tty_pgrp;
+	int res;
 
 	read_lock(&tasklist_lock);
 	tsk = find_task_by_pid(pid);
-	if (!tsk)
-		goto out_unlock;
-	/* avoid the task list to go away under us (security) */
-	get_page(MAP_NR(tsk) + mem_map);
-	ppid = tsk->p_pptr->pid;
-	read_unlock(&tasklist_lock);
-
-	/* we need the big kernel lock to avoid tsk->mm and tsk->tty
-	   to change under us */
-	lock_kernel();
-	mm = tsk->mm;
+	if (tsk)
+		mm = tsk->mm;
 	if (mm)
 		atomic_inc(&mm->mm_users);
-	tty_device = tsk->tty ? kdev_t_to_nr(tsk->tty->device) : 0;
-	tty_pgrp = tsk->tty ? tsk->tty->pgrp : -1;
-	unlock_kernel();
-
-	spin_lock_irq(&tsk->sigmask_lock);
-	collect_sigign_sigcatch(tsk, &sigign, &sigcatch);
-	spin_unlock_irq(&tsk->sigmask_lock);
-
-	eip = KSTK_EIP(tsk);
-	esp = KSTK_ESP(tsk);
-	wchan = get_wchan(tsk);
-
+	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
+	if (!tsk)
+		return 0;
 	state = *get_task_state(tsk);
 	vsize = eip = esp = 0;
-	if (mm)
-	{
+	if (mm) {
 		struct vm_area_struct *vma;
 		down(&mm->mmap_sem);
-		for (vma = mm->mmap; vma; vma = vma->vm_next)
+		vma = mm->mmap;
+		while (vma) {
 			vsize += vma->vm_end - vma->vm_start;
+			vma = vma->vm_next;
+		}
+		eip = KSTK_EIP(tsk);
+		esp = KSTK_ESP(tsk);
 		up(&mm->mmap_sem);
 	}
+
+	wchan = get_wchan(tsk);
+
+	collect_sigign_sigcatch(tsk, &sigign, &sigcatch);
+
+	if (tsk->tty)
+		tty_pgrp = tsk->tty->pgrp;
+	else
+		tty_pgrp = -1;
 
 	/* scale priority and nice values from timeslices to -20..20 */
 	/* to make it look like a "normal" Unix priority/nice value  */
@@ -1026,10 +978,10 @@ static int get_stat(int pid, char * buffer)
 		pid,
 		tsk->comm,
 		state,
-		ppid,
+		tsk->p_pptr->pid,
 		tsk->pgrp,
 		tsk->session,
-		tty_device,
+	        tsk->tty ? kdev_t_to_nr(tsk->tty->device) : 0,
 		tty_pgrp,
 		tsk->flags,
 		tsk->min_flt,
@@ -1066,16 +1018,9 @@ static int get_stat(int pid, char * buffer)
 		tsk->cnswap,
 		tsk->exit_signal,
 		tsk->processor);
-
 	if (mm)
 		mmput(mm);
-	free_task_struct(tsk);
 	return res;
-
-out_unlock:
-	read_unlock(&tasklist_lock);
-	unlock_kernel();
-	return 0;
 }
 		
 static inline void statm_pte_range(pmd_t * pmd, unsigned long address, unsigned long size,
@@ -1223,11 +1168,11 @@ static ssize_t read_maps (int pid, struct file * file, char * buf,
 			  size_t count, loff_t *ppos)
 {
 	struct task_struct *p;
-	struct mm_struct *mm = NULL;
 	struct vm_area_struct * map, * next;
 	char * destptr = buf, * buffer;
 	loff_t lineno;
 	ssize_t column, i;
+	int volatile_task;
 	long retval;
 
 	/*
@@ -1239,30 +1184,24 @@ static ssize_t read_maps (int pid, struct file * file, char * buf,
 		goto out;
 
 	retval = -EINVAL;
-	lock_kernel();
 	read_lock(&tasklist_lock);
 	p = find_task_by_pid(pid);
-	if (p) {
-		mm = p->mm;
-		if (mm)
-			atomic_inc(&mm->mm_users);
-	}
-	read_unlock(&tasklist_lock);
-	unlock_kernel();
+	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
 	if (!p)
 		goto freepage_out;
 
-	/* nothing to map */
-	if (!mm || count == 0)
+	if (!p->mm || count == 0)
 		goto getlen_out;
+
+	/* Check whether the mmaps could change if we sleep */
+	volatile_task = (p != current || atomic_read(&p->mm->mm_users) > 1);
 
 	/* decode f_pos */
 	lineno = *ppos >> MAPS_LINE_SHIFT;
 	column = *ppos & (MAPS_LINE_LENGTH-1);
 
-	down(&mm->mmap_sem);
-	/* quickly go to line "lineno" */
-	for (map = mm->mmap, i = 0; map && (i < lineno); map = map->vm_next, i++)
+	/* quickly go to line lineno */
+	for (map = p->mm->mmap, i = 0; map && (i < lineno); map = map->vm_next, i++)
 		continue;
 
 	for ( ; map ; map = next ) {
@@ -1333,13 +1272,17 @@ static ssize_t read_maps (int pid, struct file * file, char * buf,
 		/* done? */
 		if (count == 0)
 			break;
+
+		/* By writing to user space, we might have slept.
+		 * Stop the loop, to avoid a race condition.
+		 */
+		if (volatile_task)
+			break;
 	}
-	up(&mm->mmap_sem);
 
 	/* encode f_pos */
 	*ppos = (lineno << MAPS_LINE_SHIFT) + column;
 
-	mmput(mm);
 getlen_out:
 	retval = destptr - buf;
 
@@ -1352,31 +1295,28 @@ out:
 #ifdef __SMP__
 static int get_pidcpu(int pid, char * buffer)
 {
-	struct task_struct * tsk;
-	int i, len = 0;
+	struct task_struct * tsk = current ;
+	int i, len;
 
-	/*
-	 * Hold the tasklist_lock to guarantee that the task_struct
-	 * address will remain valid while we examine its contents.
-	 */
 	read_lock(&tasklist_lock);
-	tsk = find_task_by_pid(pid);
-	if (tsk)
-		get_page(MAP_NR(tsk) + mem_map);
-	read_unlock(&tasklist_lock);
-	if (tsk) {
-		len = sprintf(buffer,
-			"cpu  %lu %lu\n",
-			tsk->times.tms_utime,
-			tsk->times.tms_stime);
+	if (pid != tsk->pid)
+		tsk = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
+
+	if (tsk == NULL)
+		return 0;
+
+	len = sprintf(buffer,
+		"cpu  %lu %lu\n",
+		tsk->times.tms_utime,
+		tsk->times.tms_stime);
 		
-		for (i = 0 ; i < smp_num_cpus; i++)
-			len += sprintf(buffer + len, "cpu%d %lu %lu\n",
-				i,
-				tsk->per_cpu_utime[cpu_logical_map(i)],
-				tsk->per_cpu_stime[cpu_logical_map(i)]);
-		free_task_struct(tsk);
-	}
+	for (i = 0 ; i < smp_num_cpus; i++)
+		len += sprintf(buffer + len, "cpu%d %lu %lu\n",
+			i,
+			tsk->per_cpu_utime[cpu_logical_map(i)],
+			tsk->per_cpu_stime[cpu_logical_map(i)]);
+
 	return len;
 }
 #endif
@@ -1513,6 +1453,12 @@ static int process_unauthorized(int type, int pid)
 	int ok = 0;
 		
 	read_lock(&tasklist_lock);
+	
+	/*
+	 *	Grab the lock, find the task, save the uid and
+	 *	check it has an mm still (ie its not dead)
+	 */
+	
 	p = find_task_by_pid(pid);
 	if (p) {
 		euid=p->euid;
@@ -1520,7 +1466,9 @@ static int process_unauthorized(int type, int pid)
 		if(!cap_issubset(p->cap_permitted, current->cap_permitted))
 			ok=0;			
 	}
+		
 	read_unlock(&tasklist_lock);
+
 	if (!p)
 		return 1;
 

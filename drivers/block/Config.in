@@ -62,17 +62,15 @@ else
 	    fi
 	    if [ "$CONFIG_BLK_DEV_IDEDMA_PCI" = "y" ]; then
   	       bool '    HPT34X chipset support' CONFIG_BLK_DEV_HPT34X
-	       if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" -a \
-	 	     "$CONFIG_BLK_DEV_HPT34X" = "y" ]; then
-	       bool '      HPT34X DMA support (DANGEROUS)' CONFIG_BLK_DEV_HPT34X_DMA
+	       if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" -a "$CONFIG_BLK_DEV_HPT34X" = "y" ]; then
+		  bool '      HPT34X DMA support (EXPERIMENTAL)' CONFIG_BLK_DEV_HPT34X_DMA
 	       fi
   	       bool '    HPT366 chipset support' CONFIG_BLK_DEV_HPT366
 	    fi
 	    if [ "$CONFIG_X86" = "y" ]; then
 	       bool '    Intel PIIXn chipsets support' CONFIG_BLK_DEV_PIIX
-	       if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" -a \
-		    "$CONFIG_BLK_DEV_PIIX" = "y" ]; then
-		  bool '      PIIXn Tuning support (EXPERIMENTAL)' CONFIG_BLK_DEV_PIIX_TUNING
+	       if [ "$CONFIG_BLK_DEV_PIIX" = "y" ]; then
+		  bool '      PIIXn Tuning support' CONFIG_BLK_DEV_PIIX_TUNING
 	       fi
 	    fi
 	    if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" ]; then
@@ -83,19 +81,20 @@ else
 	    fi
 	    if [ "$CONFIG_BLK_DEV_IDEDMA_PCI" = "y" ]; then
 	       bool '    PROMISE PDC20246/PDC20262 support' CONFIG_BLK_DEV_PDC202XX
-	       if [ "$CONFIG_EXPERIMENTAL" = "y" -a \
-		    "$CONFIG_BLK_DEV_PDC202XX" = "y" ]; then
-		  bool '      Special UDMA Feature (EXPERIMENTAL)' CONFIG_PDC202XX_FORCE_BURST_BIT
-		  bool '      Special Mode Feature (DANGEROUS)' CONFIG_PDC202XX_FORCE_MASTER_MODE
+	       if [ "$CONFIG_BLK_DEV_PDC202XX" = "y" ]; then
+		  bool '      Special UDMA Feature' CONFIG_PDC202XX_FORCE_BURST_BIT
+		  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+		    bool '      Special Mode Feature (EXPERIMENTAL)' CONFIG_PDC202XX_FORCE_MASTER_MODE
+		  fi
 	       fi
-	    fi
-	    if [ "$CONFIG_X86" = "y" ]; then
-	       bool '    SiS5513 chipset support' CONFIG_BLK_DEV_SIS5513
+  	       if [ "$CONFIG_X86" = "y" ]; then
+	          bool '    SiS5513 chipset support' CONFIG_BLK_DEV_SIS5513
+	       fi
 	    fi
 	    if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" ]; then
 	       bool '    Tekram TRM290 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_TRM290
 	       if [ "$CONFIG_X86" = "y" ]; then
-		  bool '     VIA82C586 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_VIA82C586
+		  bool '     VIA82CXXX chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_VIA82CXXX
 	       fi
 	    fi
          fi
@@ -139,8 +138,7 @@ else
 	 bool '    ALI M14xx support' CONFIG_BLK_DEV_ALI14XX
 	 bool '    DTC-2278 support' CONFIG_BLK_DEV_DTC2278
 	 bool '    Holtek HT6560B support' CONFIG_BLK_DEV_HT6560B
-	 if [ "$CONFIG_BLK_DEV_IDEDISK" = "y" -a \
-	      "$CONFIG_EXPERIMENTAL" = "y" ]; then
+	 if [ "$CONFIG_BLK_DEV_IDEDISK" = "y" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	    bool '    PROMISE DC4030 support (EXPERIMENTAL)' CONFIG_BLK_DEV_PDC4030
 	 fi
 	 bool '    QDI QD6580 support' CONFIG_BLK_DEV_QD6580
@@ -225,6 +223,7 @@ if [ "$CONFIG_IDE_CHIPSETS" = "y" -o \
      "$CONFIG_BLK_DEV_HPT366" = "y" -o \
      "$CONFIG_BLK_DEV_IDE_PMAC" = "y" -o \
      "$CONFIG_BLK_DEV_OPTI621" = "y" -o \
+     "$CONFIG_BLK_DEV_PDC202XX" = "y" -o \
      "$CONFIG_BLK_DEV_PIIX" = "y" -o \
      "$CONFIG_BLK_DEV_SIS5513" = "y" -o \
      "$CONFIG_BLK_DEV_SL82C105" = "y" ]; then

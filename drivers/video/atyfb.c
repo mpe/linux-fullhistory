@@ -2192,7 +2192,7 @@ static int aty_dsp_gt(const struct fb_info_aty *info, u8 bpp,
     }
     dsp_precision -= 5;
     /* fifo_off<<6 */
-    fifo_off = ((xclks_per_row*(fifo_size-1))>>5)+(1<<6);
+    fifo_off = ((xclks_per_row*(fifo_size-1))>>5)+(3<<6);
 
     if (info->total_vram > 1*1024*1024) {
 	if (info->ram_type >= SDRAM) {
@@ -2219,7 +2219,7 @@ static int aty_dsp_gt(const struct fb_info_aty *info, u8 bpp,
     if (xclks_per_row >= (page_size<<11))
 	fifo_on = ((2*page_size+1)<<6)+(xclks_per_row>>5);
     else
-	fifo_on = (3*page_size)<<6;
+	fifo_on = (3*page_size+2)<<6;
 
     dsp_xclks_per_row = xclks_per_row>>dsp_precision;
     dsp_on = fifo_on>>dsp_precision;

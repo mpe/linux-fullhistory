@@ -886,7 +886,14 @@ extern struct dentry * __namei(const char *, unsigned int);
 extern void iput(struct inode *);
 extern struct inode * igrab(struct inode *);
 extern ino_t iunique(struct super_block *, ino_t);
-extern struct inode * iget(struct super_block *, unsigned long);
+
+typedef int (*find_inode_t)(struct inode *, unsigned long, void *);
+extern struct inode * iget4(struct super_block *, unsigned long, find_inode_t, void *);
+static inline struct inode *iget(struct super_block *sb, unsigned long ino)
+{
+	return iget4(sb, ino, NULL, NULL);
+}
+
 extern void clear_inode(struct inode *);
 extern struct inode * get_empty_inode(void);
 

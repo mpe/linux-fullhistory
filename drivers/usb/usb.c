@@ -789,10 +789,7 @@ int usb_set_protocol(struct usb_device *dev, int protocol)
 	dr.index = 1;
 	dr.length = 0;
 
-	if (dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), &dr, NULL, 0, HZ))
-		return -1;
-
-	return 0;
+	return dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), &dr, NULL, 0, HZ);
 }
 
 /* keyboards want a nonzero duration according to HID spec, but
@@ -807,10 +804,7 @@ int usb_set_idle(struct usb_device *dev,  int duration, int report_id)
 	dr.index = 1;
 	dr.length = 0;
 
-	if (dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), &dr, NULL, 0, HZ))
-		return -1;
-
-	return 0;
+	return dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), &dr, NULL, 0, HZ);
 }
 
 static void usb_set_maxpacket(struct usb_device *dev)
@@ -873,8 +867,8 @@ int usb_clear_halt(struct usb_device *dev, int endp)
 
 	if (result)
 	    return result;
-	if (status & 1)
-	    return 1;		/* still halted */
+	if (status & 1)		/* endpoint status is Halted */
+	    return USB_ST_STALL;		/* still halted */
 #endif
 	usb_endpoint_running(dev, endp & 0x0f, usb_endpoint_out(endp));
 
@@ -888,6 +882,7 @@ int usb_clear_halt(struct usb_device *dev, int endp)
 int usb_set_interface(struct usb_device *dev, int interface, int alternate)
 {
 	devrequest dr;
+	int err;
 
 	dr.requesttype = 1;
 	dr.request = USB_REQ_SET_INTERFACE;
@@ -895,8 +890,9 @@ int usb_set_interface(struct usb_device *dev, int interface, int alternate)
 	dr.index = interface;
 	dr.length = 0;
 
-	if (dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), &dr, NULL, 0, HZ))
-		return -1;
+	err = dev->bus->op->control_msg(dev, usb_sndctrlpipe(dev, 0), &dr, NULL, 0, HZ);
+	if (err)
+		return err;
 
 	dev->ifnum = interface;
 	dev->actconfig->interface[interface].act_altsetting = alternate;
@@ -946,10 +942,7 @@ int usb_get_report(struct usb_device *dev, unsigned char type, unsigned char id,
 	dr.index = index;
 	dr.length = size;
 
-	if (dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev, 0), &dr, buf, size, HZ))
-		return -1;
-
-	return 0;
+	return dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev, 0), &dr, buf, size, HZ);
 }
 
 int usb_get_configuration(struct usb_device *dev)
@@ -1056,10 +1049,13 @@ char *usb_string(struct usb_device *dev, int index)
  * By the time we get here, the device has gotten a new device ID
  * and is in the default state. We need to identify the thing and
  * get the ball rolling..
+ *
+ * Returns 0 for success, != 0 for error.
  */
 int usb_new_device(struct usb_device *dev)
 {
 	int addr;
+	int err;
 
 	printk(KERN_INFO "USB new device connect, assigned device number %d\n",
 		dev->devnum);
@@ -1073,8 +1069,10 @@ int usb_new_device(struct usb_device *dev)
 	dev->devnum = 0;
 
 	/* Slow devices */
-	if (usb_get_descriptor(dev, USB_DT_DEVICE, 0, &dev->descriptor, 8)) {
-		printk(KERN_ERR "usbcore: USB device not responding, giving up\n");
+	err = usb_get_descriptor(dev, USB_DT_DEVICE, 0, &dev->descriptor, 8);
+	if (err) {
+		printk(KERN_ERR "usbcore: USB device not responding, giving up (error=%d)\n",
+			err);
 		dev->devnum = -1;
 		return 1;
 	}
@@ -1090,16 +1088,20 @@ int usb_new_device(struct usb_device *dev)
 
 	dev->devnum = addr;
 
-	if (usb_set_address(dev)) {
-		printk(KERN_ERR "usbcore: USB device not accepting new address\n");
+	err = usb_set_address(dev);
+	if (err) {
+		printk(KERN_ERR "usbcore: USB device not accepting new address (error=%d)\n",
+			err);
 		dev->devnum = -1;
 		return 1;
 	}
 
 	wait_ms(10);	/* Let the SET_ADDRESS settle */
 
-	if (usb_get_device_descriptor(dev)) {
-		printk(KERN_ERR "usbcore: unable to get device descriptor\n");
+	err = usb_get_device_descriptor(dev);
+	if (err) {
+		printk(KERN_ERR "usbcore: unable to get device descriptor (error=%d)\n",
+			err);
 		dev->devnum = -1;
 		return 1;
 	}
@@ -1324,7 +1326,6 @@ void usb_major_init(void)
 	if (register_chrdev(180,"usb",&usb_fops)) {
 		printk("unable to get major %d for usb devices\n",
 		       MISC_MAJOR);
-		return -EIO;
 	}
 }
 

@@ -96,7 +96,8 @@ struct ide_cd_state_flags {
 	__u8 media_changed : 1; /* Driver has noticed a media change. */
 	__u8 toc_valid     : 1; /* Saved TOC information is current. */
 	__u8 door_locked   : 1; /* We think that the drive door is locked. */
-	__u8 reserved      : 5;
+	__u8 writing       : 1; /* the drive is currently writing */
+	__u8 reserved      : 4;
 	byte current_speed;	/* Current speed of the drive */
 };
 #define CDROM_STATE_FLAGS(drive) (&(((struct cdrom_info *)(drive->driver_data))->state_flags))

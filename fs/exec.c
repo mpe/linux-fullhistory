@@ -276,7 +276,9 @@ int setup_arg_pages(struct linux_binprm *bprm)
 		mpnt->vm_offset = 0;
 		mpnt->vm_file = NULL;
 		mpnt->vm_private_data = (void *) 0;
+		vmlist_modify_lock(current->mm);
 		insert_vm_struct(current->mm, mpnt);
+		vmlist_modify_unlock(current->mm);
 		current->mm->total_vm = (mpnt->vm_end - mpnt->vm_start) >> PAGE_SHIFT;
 	} 
 
@@ -467,6 +469,11 @@ int flush_old_exec(struct linux_binprm * bprm)
 	    permission(bprm->dentry->d_inode,MAY_READ))
 		current->dumpable = 0;
 
+	/* An exec changes our domain. We are no longer part of the thread
+	   group */
+	   
+	current->self_exec_id++;
+			
 	flush_signal_handlers(current);
 	flush_old_files(current->files);
 

@@ -175,13 +175,13 @@ CONFIG_MATHEMU
   on the Alpha. The only time you would ever not say Y is to say M in
   order to debug the code. Say Y unless you know what you are doing.
 
-Big memory support
+Support for over 1Gig of memory
 CONFIG_BIGMEM
-  Linux can use up to 2 Gigabytes (= 2^31 bytes) of physical memory.
+  Linux can use up to 1 Gigabytes (= 2^30 bytes) of physical memory.
   If you are compiling a kernel which will never run on a machine with
   more than 1 Gigabyte, answer N here. Otherwise, say Y.
 
-  The actual amount of physical memory should be specified using a
+  The actual amount of physical memory may need to be specified using a
   kernel command line option such as "mem=256M". (Try "man bootparam"
   or see the documentation of your boot loader (lilo or loadlin) about
   how to pass options to the kernel at boot time. The lilo procedure
@@ -578,12 +578,6 @@ IDEDMA_NEW_DRIVE_LISTINGS
 
   If in doubt, say N.
 
-Winbond SL82c105 support
-CONFIG_BLK_DEV_SL82C105
-  If you have a Winbond SL82c105 IDE controller, say Y here to enable
-  special configuration for this chip. This is common on various CHRP
-  motherboards, but could be used elsewhere. If in doubt, say Y.
-
 Boot off-board chipsets first support
 CONFIG_BLK_DEV_OFFBOARD
   Normally, IDE controllers built into the motherboard (on-board
@@ -621,82 +615,32 @@ CONFIG_IDEDMA_PCI_AUTO
   It is normally safe to answer Y to this question unless your
   motherboard uses a VIA VP2 chipset, in which case you should say N.
 
-Other IDE chipset support
-CONFIG_IDE_CHIPSETS
-  Say Y here if you want to include enhanced support for various IDE
-  interface chipsets used on motherboards and add-on cards. You can
-  then pick your particular IDE chip from among the following options.
-  This enhanced support may be necessary for Linux to be able to
-  access the 3rd/4th drives in some systems. It may also enable
-  setting of higher speed I/O rates to improve system performance with
-  these chipsets. Most of these also require special kernel boot
-  parameters to actually turn on the support at runtime; you can find
-  a list of these in the file Documentation/ide.txt.
-  
-  People with SCSI-only systems can say N here. 
+AEC6210 chipset support
+CONFIG_BLK_DEV_AEC6210
+  This driver adds up to 4 more EIDE devices sharing a single
+  interrupt. This add-on card is a bootable PCI UDMA controller. In
+  order to get this card to initialize correctly in some cases, you
+  should say Y here, and preferably also to "Use DMA by default when
+  available".
 
-Generic 4 drives/port support
-CONFIG_BLK_DEV_4DRIVES
-  Certain older chipsets, including the Tekram 690CD, use a single set
-  of I/O ports at 0x1f0 to control up to four drives, instead of the
-  customary two drives per port. Support for this can be enabled at
-  runtime using the "ide0=four" kernel boot parameter if you say Y
-  here.
+  Please read the comments at the top of drivers/block/aec6210.c
 
-DTC-2278 support
-CONFIG_BLK_DEV_DTC2278
-  This driver is enabled at runtime using the "ide0=dtc2278" kernel
-  boot parameter. It enables support for the secondary IDE interface
-  of the DTC-2278 card, and permits faster I/O speeds to be set as
-  well. See the Documentation/ide.txt and drivers/block/dtc2278.c
-  files for more info.
+ALI M15x3 chipset support (EXPERIMENTAL)
+CONFIG_BLK_DEV_ALI15X3
+  This driver ensures (U)DMA support for ALI 1543 and 1543C,
+  1535, 1535D onboard chipsets.  It also tests for Simplex mode and
+  enables normal dual channel support.
 
-Holtek HT6560B support
-CONFIG_BLK_DEV_HT6560B
-  This driver is enabled at runtime using the "ide0=ht6560b" kernel
-  boot parameter. It enables support for the secondary IDE interface
-  of the Holtek card, and permits faster I/O speeds to be set as well.
-  See the Documentation/ide.txt and drivers/block/ht6560b.c files for
-  more info.
+  If you say Y here, you also need to say Y to "Use DMA by default
+  when available", above.
 
-PROMISE DC4030 support (EXPERIMENTAL)
-CONFIG_BLK_DEV_PDC4030
-  This driver provides support for the secondary IDE interface and
-  cache of Promise IDE chipsets, e.g. DC4030 and DC5030. This driver
-  is known to incur timeouts/retries during heavy I/O to drives
-  attached to the secondary interface. CDROM and TAPE devices are not
-  supported yet. This driver is enabled at runtime using the
-  "ide0=dc4030" kernel boot parameter. See the Documentation/ide.txt
-  and drivers/block/pdc4030.c files for more info.
+  Please read the comments at the top of drivers/block/alim15x3.c
 
-PS/2 ESDI hard disk support
-CONFIG_BLK_DEV_PS2
-  Say Y here if you have a PS/2 machine with a MCA bus and an ESDI
-  hard disk.
-  
-  If you want to compile the driver as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want),
-  say M here and read Documentation/modules.txt. The module will be
-  called ps2esdi.o.
+  If unsure, say N.
 
-Tekram TRM290 chipset support (EXPERIMENTAL)
-CONFIG_BLK_DEV_TRM290
-  This driver adds support for bus master DMA transfers
-  using the Tekram TRM290 PCI IDE chip. Volunteers are
-  needed for further tweaking and development.
-  Please read the comments at the top of drivers/block/trm290.c.
-
-OPTi 82C621 enhanced support (EXPERIMENTAL)
-CONFIG_BLK_DEV_OPTI621
-  This is a driver for the OPTi 82C621 EIDE controller.
-  Please read the comments at the top of drivers/block/opti621.c.
-
-NS87415 support (EXPERIMENTAL)
-CONFIG_BLK_DEV_NS87415
-  This driver adds detection and support for the NS87415 chip
-  (used in SPARC64, among others).
-
-  Please read the comments at the top of drivers/block/ns87415.c.
+CMD646 chipset support (EXPERIMENTAL)
+CONFIG_BLK_DEV_CMD646
+  Say Y here if you have an IDE controller which uses this chipset.
 
 CY82C693 chipset support (EXPERIMENTAL)
 CONFIG_BLK_DEV_CY82C693
@@ -706,36 +650,80 @@ CONFIG_BLK_DEV_CY82C693
   If you say Y here, you need to say Y to "Use DMA by default
   when available" as well.
 
-VIA82C586 chipset support (EXPERIMENTAL)
-CONFIG_BLK_DEV_VIA82C586
-  Saying Y here adds initial timing settings for VIA (U)DMA onboard
-  IDE controllers that are ATA3 compliant. May work with ATA4 systems,
-  but not tested to date. To use some features of this chipset, you
-  will have to issue a kernel command line as described in the file
-  drivers/block/via82c586.c. Furthermore, if you also say Y to "/proc
-  filesystem support" and set DISPLAY_APOLLO_TIMINGS in via82c586.c,
-  you will be able to read information about the IDE controller from
-  the virtual file /proc/ide/via.
+HPT34X chipset support
+CONFIG_BLK_DEV_HPT34X
+  This driver adds up to 4 more EIDE devices sharing a single
+  interrupt. The HPT343 chipset in its current form is a non-bootable
+  controller; the HPT345/HPT363 chipset is a bootable (needs BIOS FIX)
+  PCI UDMA controllers. This driver requires dynamic tuning of the
+  chipset during the ide-probe at boot time. It is reported to support
+  DVD II drives, by the manufacturer.
 
-  If you say Y here, you also need to say Y to "Use DMA by default
-  when available", above.
+HPT34X DMA support (EXPERIMENTAL)
+CONFIG_BLK_DEV_HPT34X_DMA
+  you need to say Y to "Use DMA by default when available" if you say
+  Y here.
+
+  Please read the comments at the top of drivers/block/hpt34x.c
+
+HPT366 chipset support
+CONFIG_BLK_DEV_HPT366
+  This is an Ultra DMA chipset for ATA-66.
+  
+  This driver adds up to 4 more EIDE devices sharing a single
+  interrupt. The HPT366 chipset in its current form is a non-bootable.
+  This driver requires dynamic tuning of the chipset during the
+  ide-probe at boot. It is reported to support DVD II drives, by the
+  manufacturer.
+
+  Please read the comments at the top of drivers/block/hpt366.c
+
+HPT366 (EXPERIMENTAL)
+CONFIG_BLK_DEV_HPT366_SHARED
+  This requires CONFIG_BLK_DEV_HPT366.
+  It appears that there are different versions or releases of this hardware
+  by ABit.  Since some cases the second channel of the onboard chipset works
+  and others fail, it is default disabled.  This is required to be set if you
+  want to attempt the setup of the second channel.
+
+  JUMBO WARNING, do not boot a kernel with this enabled if it is your only
+  one.  You may not be able to get back into your machine without physically
+  detaching the attached devices.
 
   If unsure, say N.
 
-CMD646 chipset support (EXPERIMENTAL)
-CONFIG_BLK_DEV_CMD646
-  Say Y here if you have an IDE controller which uses this chipset.
+NS87415 support (EXPERIMENTAL)
+CONFIG_BLK_DEV_NS87415
+  This driver adds detection and support for the NS87415 chip
+  (used in SPARC64, among others).
 
-ALI M15x3 chipset support (EXPERIMENTAL)
-CONFIG_BLK_DEV_ALI15X3
-  This driver ensures (U)DMA support for ALI 1533, 1543 and 1543C
-  onboard chipsets.  It also tests for Simplex mode and enables
-  normal dual channel support.
+  Please read the comments at the top of drivers/block/ns87415.c.
 
-  If you say Y here, you also need to say Y to "Use DMA by default
-  when available", above.
+OPTi 82C621 enhanced support (EXPERIMENTAL)
+CONFIG_BLK_DEV_OPTI621
+  This is a driver for the OPTi 82C621 EIDE controller.
+  Please read the comments at the top of drivers/block/opti621.c.
 
-  Please read the comments at the top of drivers/block/alim15x3.c
+Intel PIIXn chipsets support
+CONFIG_BLK_DEV_PIIX
+  This driver adds PIO mode setting and tuning for all PIIX IDE
+  controllers by Intel.  Since the BIOS can sometimes improperly tune
+  PIO 0-4 mode settings, this allows dynamic tuning of the chipset
+  via the standard end-user tool 'hdparm'.
+
+  Please read the comments at the top of drivers/block/piix.c
+
+  If unsure, say N.
+
+PIIXn Tuning support
+CONFIG_BLK_DEV_PIIX_TUNING
+  This driver extension adds DMA mode setting and tuning for all PIIX
+  IDE controllers by Intel. Since the BIOS can sometimes improperly
+  set up the device/adapter combination and speed limits, it has
+  become a necessity to back/forward speed devices as needed.
+
+  Case 430HX/440FX PIIX3 need speed limits to reduce UDMA to DMA mode
+  2 if the BIOS can not perform this task at initialization.
 
   If unsure, say N.
 
@@ -767,7 +755,7 @@ CONFIG_BLK_DEV_PDC202XX
 
   If unsure, say N.
 
-Special UDMA Feature (EXPERIMENTAL)
+Special UDMA Feature
 PDC202XX_FORCE_BURST_BIT
   For PDC20246 and PDC20262 Ultra DMA chipsets. Designed originally
   for PDC20246/Ultra33 that has BIOS setup failures when using 3 or
@@ -777,71 +765,97 @@ PDC202XX_FORCE_BURST_BIT
 
   If unsure, say N.
 
-Special Mode Feature (DANGEROUS)
+Special Mode Feature (EXPERIMENTAL)
 PDC202XX_FORCE_MASTER_MODE
   For PDC20246 and PDC20262 Ultra DMA chipsets. This is reserved for
   possible Hardware RAID 0,1 for the FastTrak Series.
 
   Say N. 
 
-AEC6210 chipset support
-CONFIG_BLK_DEV_AEC6210
-  This driver adds up to 4 more EIDE devices sharing a single
-  interrupt. This add-on card is a bootable PCI UDMA controller. In
-  order to get this card to initialize correctly in some cases, you
-  should say Y here, and preferably also to "Use DMA by default when
-  available".
+Winbond SL82c105 support
+CONFIG_BLK_DEV_SL82C105
+  If you have a Winbond SL82c105 IDE controller, say Y here to enable
+  special configuration for this chip. This is common on various CHRP
+  motherboards, but could be used elsewhere. If in doubt, say Y.
 
-  Please read the comments at the top of drivers/block/aec6210.c
+Tekram TRM290 chipset support (EXPERIMENTAL)
+CONFIG_BLK_DEV_TRM290
+  This driver adds support for bus master DMA transfers
+  using the Tekram TRM290 PCI IDE chip. Volunteers are
+  needed for further tweaking and development.
+  Please read the comments at the top of drivers/block/trm290.c.
 
-HPT366 chipset support
-CONFIG_BLK_DEV_HPT366
-  This is an Ultra DMA chipset for ATA-66.
+VIA82CXXX chipset support (EXPERIMENTAL)
+CONFIG_BLK_DEV_VIA82CXXX
+   This allows you to to configure your chipset for a better use while
+   running (U)DMA: it will allow you to enable efficiently the second
+   channel dma usage, as it is may not be set by BIOS. It allows you to
+   run a kernel command line at boot time in order to set fifo config.
+   If no command line is provided, it will try to set fifo configuration
+   at its best. It will allow you to get a proc/ide/via display
+  (while running a "cat") provided you enabled "proc" support.
+  Please read the comments at the top of drivers/block/via82cxxx.c
+
+  If you say Y here, you also need to say Y to "Use DMA by default
+  when available", above.
+
+  If unsure, say N.
+
+Other IDE chipset support
+CONFIG_IDE_CHIPSETS
+  Say Y here if you want to include enhanced support for various IDE
+  interface chipsets used on motherboards and add-on cards. You can
+  then pick your particular IDE chip from among the following options.
+  This enhanced support may be necessary for Linux to be able to
+  access the 3rd/4th drives in some systems. It may also enable
+  setting of higher speed I/O rates to improve system performance with
+  these chipsets. Most of these also require special kernel boot
+  parameters to actually turn on the support at runtime; you can find
+  a list of these in the file Documentation/ide.txt.
   
-  This driver adds up to 4 more EIDE devices sharing a single
-  interrupt. The HPT366 chipset in its current form is a non-bootable.
-  This driver requires dynamic tuning of the chipset during the
-  ide-probe at boot. It is reported to support DVD II drives, by the
-  manufacturer.
- 
-Intel PIIXn chipsets support
-CONFIG_BLK_DEV_PIIX
-  This driver adds PIO mode setting and tuning for all PIIX IDE
-  controllers by Intel.  Since the BIOS can sometimes improperly tune
-  PIO 0-4 mode settings, this allows dynamic tuning of the chipset
-  via the standard end-user tool 'hdparm'.
+  People with SCSI-only systems can say N here. 
 
-  Please read the comments at the top of drivers/block/piix.c
+Generic 4 drives/port support
+CONFIG_BLK_DEV_4DRIVES
+  Certain older chipsets, including the Tekram 690CD, use a single set
+  of I/O ports at 0x1f0 to control up to four drives, instead of the
+  customary two drives per port. Support for this can be enabled at
+  runtime using the "ide0=four" kernel boot parameter if you say Y
+  here.
 
-  If unsure, say N.
+ALI M14xx support
+CONFIG_BLK_DEV_ALI14XX
+  This driver is enabled at runtime using the "ide0=ali14xx" kernel
+  boot parameter. It enables support for the secondary IDE interface
+  of the ALI M1439/1443/1445/1487/1489 chipsets, and permits faster
+  I/O speeds to be set as well. See the files Documentation/ide.txt
+  and drivers/block/ali14xx.c for more info.
 
-PIIXn Tuning support (EXPERIMENTAL)
-CONFIG_BLK_DEV_PIIX_TUNING
-  This driver extension adds DMA mode setting and tuning for all PIIX
-  IDE controllers by Intel. Since the BIOS can sometimes improperly
-  set up the device/adapter combination and speed limits, it has
-  become a necessity to back/forward speed devices as needed.
+DTC-2278 support
+CONFIG_BLK_DEV_DTC2278
+  This driver is enabled at runtime using the "ide0=dtc2278" kernel
+  boot parameter. It enables support for the secondary IDE interface
+  of the DTC-2278 card, and permits faster I/O speeds to be set as
+  well. See the Documentation/ide.txt and drivers/block/dtc2278.c
+  files for more info.
 
-  Case 430HX/440FX PIIX3 need speed limits to reduce UDMA to DMA mode
-  2 if the BIOS can not perform this task at initialization.
+Holtek HT6560B support
+CONFIG_BLK_DEV_HT6560B
+  This driver is enabled at runtime using the "ide0=ht6560b" kernel
+  boot parameter. It enables support for the secondary IDE interface
+  of the Holtek card, and permits faster I/O speeds to be set as well.
+  See the Documentation/ide.txt and drivers/block/ht6560b.c files for
+  more info.
 
-  If unsure, say N.
-
-HPT34X chipset support
-CONFIG_BLK_DEV_HPT34X
-  This driver adds up to 4 more EIDE devices sharing a single
-  interrupt. The HPT343 chipset in its current form is a non-bootable
-  controller; the HPT345/HPT363 chipset is a bootable (needs BIOS FIX)
-  PCI UDMA controllers. This driver requires dynamic tuning of the
-  chipset during the ide-probe at boot time. It is reported to support
-  DVD II drives, by the manufacturer.
-
-HPT34X DMA support (DANGEROUS)
-CONFIG_BLK_DEV_HPT34X_DMA
-  you need to say Y to "Use DMA by default when available" if you say
-  Y here.
-
-  Please read the comments at the top of drivers/block/hpt343.c
+PROMISE DC4030 support (EXPERIMENTAL)
+CONFIG_BLK_DEV_PDC4030
+  This driver provides support for the secondary IDE interface and
+  cache of Promise IDE chipsets, e.g. DC4030 and DC5030. This driver
+  is known to incur timeouts/retries during heavy I/O to drives
+  attached to the secondary interface. CDROM and TAPE devices are not
+  supported yet. This driver is enabled at runtime using the
+  "ide0=dc4030" kernel boot parameter. See the Documentation/ide.txt
+  and drivers/block/pdc4030.c files for more info.
 
 QDI QD6580 support
 CONFIG_BLK_DEV_QD6580
@@ -858,13 +872,15 @@ CONFIG_BLK_DEV_UMC8672
   See the files Documentation/ide.txt and drivers/block/umc8672.c for
   more info.
 
-ALI M14xx support
-CONFIG_BLK_DEV_ALI14XX
-  This driver is enabled at runtime using the "ide0=ali14xx" kernel
-  boot parameter. It enables support for the secondary IDE interface
-  of the ALI M1439/1443/1445/1487/1489 chipsets, and permits faster
-  I/O speeds to be set as well. See the files Documentation/ide.txt
-  and drivers/block/ali14xx.c for more info.
+PS/2 ESDI hard disk support
+CONFIG_BLK_DEV_PS2
+  Say Y here if you have a PS/2 machine with a MCA bus and an ESDI
+  hard disk.
+  
+  If you want to compile the driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called ps2esdi.o.
 
 Amiga builtin Gayle IDE interface support
 CONFIG_BLK_DEV_GAYLE

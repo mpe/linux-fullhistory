@@ -56,6 +56,10 @@ extern void nubus_init(void);
 #include <linux/isapnp.h>
 #endif
 
+#ifdef CONFIG_IRDA
+#include <net/irda/irda_device.h>
+#endif
+
 /*
  * Versions of gcc older than that listed below may actually compile
  * and link okay, but the end product can have subtle run time bugs.

@@ -117,7 +117,7 @@ else
 endif
 
 ifeq ($(CONFIG_COMPUTONE),y)
-L_OBJS += ip2.o ip2main.o
+O_OBJS += ip2.o ip2main.o
 else
   ifeq ($(CONFIG_COMPUTONE),m)
   M_OBJS += ip2.o ip2main.o
@@ -165,7 +165,7 @@ else
 endif
 
 ifeq ($(CONFIG_SX),y)
-L_OBJS += sx.o generic_serial.o
+O_OBJS += sx.o generic_serial.o
 else
   ifeq ($(CONFIG_SX),m)
   M_OBJS += sx.o

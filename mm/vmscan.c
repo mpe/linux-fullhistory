@@ -47,9 +47,6 @@ static int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pt
 		goto out_failed;
 
 	page = mem_map + MAP_NR(page_addr);
-	spin_lock(&vma->vm_mm->page_table_lock);
-	if (pte_val(pte) != pte_val(*page_table))
-		goto out_failed_unlock;
 
 	/* Don't look at this pte if it's been accessed recently. */
 	if (pte_young(pte)) {
@@ -59,14 +56,14 @@ static int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pt
 		 */
 		set_pte(page_table, pte_mkold(pte));
 		set_bit(PG_referenced, &page->flags);
-		goto out_failed_unlock;
+		goto out_failed;
 	}
 
 	if (PageReserved(page)
 	    || PageLocked(page)
 	    || ((gfp_mask & __GFP_DMA) && !PageDMA(page))
 	    || (!(gfp_mask & __GFP_BIGMEM) && PageBIGMEM(page)))
-		goto out_failed_unlock;
+		goto out_failed;
 
 	/*
 	 * Is the page already in the swap cache? If so, then
@@ -84,7 +81,7 @@ drop_pte:
 		vma->vm_mm->rss--;
 		flush_tlb_page(vma, address);
 		__free_page(page);
-		goto out_failed_unlock;
+		goto out_failed;
 	}
 
 	/*
@@ -111,7 +108,7 @@ drop_pte:
 	 * locks etc.
 	 */
 	if (!(gfp_mask & __GFP_IO))
-		goto out_failed_unlock;
+		goto out_failed;
 
 	/*
 	 * Ok, it's really dirty. That means that
@@ -136,9 +133,9 @@ drop_pte:
 	if (vma->vm_ops && vma->vm_ops->swapout) {
 		int error;
 		pte_clear(page_table);
-		spin_unlock(&vma->vm_mm->page_table_lock);
-		flush_tlb_page(vma, address);
 		vma->vm_mm->rss--;
+		flush_tlb_page(vma, address);
+		vmlist_access_unlock(vma->vm_mm);
 		error = vma->vm_ops->swapout(vma, page);
 		if (!error)
 			goto out_free_success;
@@ -154,14 +151,14 @@ drop_pte:
 	 */
 	entry = acquire_swap_entry(page);
 	if (!entry)
-		goto out_failed_unlock; /* No swap space left */
+		goto out_failed; /* No swap space left */
 		
 	if (!(page = prepare_bigmem_swapout(page)))
-		goto out_swap_free_unlock;
+		goto out_swap_free;
 
 	vma->vm_mm->rss--;
 	set_pte(page_table, __pte(entry));
-	spin_unlock(&vma->vm_mm->page_table_lock);
+	vmlist_access_unlock(vma->vm_mm);
 
 	flush_tlb_page(vma, address);
 	swap_duplicate(entry);	/* One for the process, one for the swap cache */
@@ -175,13 +172,9 @@ drop_pte:
 out_free_success:
 	__free_page(page);
 	return 1;
-out_failed_unlock:
-	spin_unlock(&vma->vm_mm->page_table_lock);
-out_failed:
-	return 0;
-out_swap_free_unlock:
+out_swap_free:
 	swap_free(entry);
-	spin_unlock(&vma->vm_mm->page_table_lock);
+out_failed:
 	return 0;
 
 }
@@ -293,8 +286,10 @@ static int swap_out_mm(struct mm_struct * mm, int gfp_mask)
 	address = mm->swap_address;
 
 	/*
-	 * Find the proper vm-area
+	 * Find the proper vm-area after freezing the vma chain 
+	 * and ptes.
 	 */
+	vmlist_access_lock(mm);
 	vma = find_vma(mm, address);
 	if (vma) {
 		if (address < vma->vm_start)
@@ -310,6 +305,7 @@ static int swap_out_mm(struct mm_struct * mm, int gfp_mask)
 			address = vma->vm_start;
 		}
 	}
+	vmlist_access_unlock(mm);
 
 	/* We didn't find anything for the process */
 	mm->swap_cnt = 0;

@@ -54,6 +54,10 @@ void get_fast_time(struct timeval * t)
 	do_get_fast_time(t);
 }
 
+/* The xtime_lock is not only serializing the xtime read/writes but it's also
+   serializing all accesses to the global NTP variables now. */
+extern rwlock_t xtime_lock;
+
 #if !defined(__alpha__) && !defined(__ia64__)
 
 /*
@@ -93,14 +97,14 @@ asmlinkage long sys_stime(int * tptr)
 		return -EPERM;
 	if (get_user(value, tptr))
 		return -EFAULT;
-	cli();
+	write_lock_irq(&xtime_lock);
 	xtime.tv_sec = value;
 	xtime.tv_usec = 0;
 	time_adjust = 0;	/* stop active adjtime() */
 	time_status |= STA_UNSYNC;
 	time_maxerror = NTP_PHASE_LIMIT;
 	time_esterror = NTP_PHASE_LIMIT;
-	sti();
+	write_unlock_irq(&xtime_lock);
 	return 0;
 }
 
@@ -139,9 +143,9 @@ asmlinkage long sys_gettimeofday(struct timeval *tv, struct timezone *tz)
  */
 inline static void warp_clock(void)
 {
-	cli();
+	write_lock_irq(&xtime_lock);
 	xtime.tv_sec += sys_tz.tz_minuteswest * 60;
-	sti();
+	write_unlock_irq(&xtime_lock);
 }
 
 /*
@@ -222,7 +226,7 @@ void (*hardpps_ptr)(struct timeval *) = (void (*)(struct timeval *))0;
 int do_adjtimex(struct timex *txc)
 {
         long ltemp, mtemp, save_adjust;
-	int result = time_state;	/* mostly `TIME_OK' */
+	int result;
 
 	/* In order to modify anything, you gotta be super-user! */
 	if (txc->modes && !capable(CAP_SYS_TIME))
@@ -240,7 +244,8 @@ int do_adjtimex(struct timex *txc)
 		if (txc->tick < 900000/HZ || txc->tick > 1100000/HZ)
 			return -EINVAL;
 
-	cli(); /* SMP: global cli() is enough protection. */
+	write_lock_irq(&xtime_lock);
+	result = time_state;	/* mostly `TIME_OK' */
 
 	/* Save for later - semantics of adjtime is to return old value */
 	save_adjust = time_adjust;
@@ -385,7 +390,6 @@ leave:	if ((time_status & (STA_UNSYNC|STA_CLOCKERR)) != 0
 	txc->constant	   = time_constant;
 	txc->precision	   = time_precision;
 	txc->tolerance	   = time_tolerance;
-	do_gettimeofday(&txc->time);
 	txc->tick	   = tick;
 	txc->ppsfreq	   = pps_freq;
 	txc->jitter	   = pps_jitter >> PPS_AVG;
@@ -395,8 +399,8 @@ leave:	if ((time_status & (STA_UNSYNC|STA_CLOCKERR)) != 0
 	txc->calcnt	   = pps_calcnt;
 	txc->errcnt	   = pps_errcnt;
 	txc->stbcnt	   = pps_stbcnt;
-
-	sti();
+	write_unlock_irq(&xtime_lock);
+	do_gettimeofday(&txc->time);
 	return(result);
 }
 

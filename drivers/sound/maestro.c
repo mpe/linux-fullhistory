@@ -847,7 +847,7 @@ static void maestro_write(struct ess_state *ess, u16 reg, u16 data)
 
 	__maestro_write(ess->card,reg,data);
 
-	spin_unlock_irqrestore(&card->lock,flags);
+	spin_unlock_irqrestore(&ess->card->lock,flags);
 }
 
 static u16 __maestro_read(struct ess_card *card, u16 reg)

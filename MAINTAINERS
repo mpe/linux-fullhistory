@@ -831,6 +831,16 @@ STARMODE RADIO IP (STRIP) PROTOCOL DRIVER
 W:	http://mosquitonet.Stanford.EDU/strip.html
 S:	Unsupported ?
 
+SUPERH
+P:	Niibe Yutaka
+M:	gniibe@chroot.org
+P:	Kazumoto Kojima
+M:	kkojima@rr.iij4u.or.jp
+L:	linux-sh@m17n.org
+W:	http://www.m17n.org/linux-sh/
+W:	http://www.rr.iij4u.or.jp/~kkojima/linux-sh4.html
+S:	Maintained
+
 SVGA HANDLING
 P:	Martin Mares
 M:	mj@atrey.karlin.mff.cuni.cz

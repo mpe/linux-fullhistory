@@ -11,12 +11,11 @@
 #include <linux/reboot.h>
 #include <linux/delay.h>
 #include <linux/blk.h>
+#include <linux/ide.h>
 
 #include <asm/init.h>
 #include <asm/residual.h>
 #include <asm/io.h>
-#include <linux/ide.h>
-#include <asm/ide.h>
 #include <asm/prom.h>
 #include <asm/processor.h>
 #include <asm/pgtable.h>

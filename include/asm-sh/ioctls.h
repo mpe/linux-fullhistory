@@ -39,9 +39,9 @@
 
 #define TIOCSTI		_IOW('T', 18, char) /* 0x5412 */
 #define TIOCMGET	_IOR('T', 21, unsigned int) /* 0x5415 */
-#define TIOCMBIS	_IOW('T', 22, unsigne int) /* 0x5416 */
-#define TIOCMBIC	_IOW('T', 23, unsigne int) /* 0x5417 */
-#define TIOCMSET	_IOW('T', 24, unsigne int) /* 0x5418 */
+#define TIOCMBIS	_IOW('T', 22, unsigned int) /* 0x5416 */
+#define TIOCMBIC	_IOW('T', 23, unsigned int) /* 0x5417 */
+#define TIOCMSET	_IOW('T', 24, unsigned int) /* 0x5418 */
 # define TIOCM_LE	0x001
 # define TIOCM_DTR	0x002
 # define TIOCM_RTS	0x004

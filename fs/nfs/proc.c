@@ -65,7 +65,7 @@ nfs_proc_getattr(struct nfs_server *server, struct nfs_fh *fhandle,
 
 int
 nfs_proc_setattr(struct nfs_server *server, struct nfs_fh *fhandle,
-			struct nfs_sattr *sattr, struct nfs_fattr *fattr)
+			struct nfs_fattr *fattr, struct iattr *sattr)
 {
 	struct nfs_sattrargs	arg = { fhandle, sattr };
 	int	status;
@@ -123,7 +123,7 @@ nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle, int swap,
 
 int
 nfs_proc_create(struct nfs_server *server, struct nfs_fh *dir,
-			const char *name, struct nfs_sattr *sattr,
+			const char *name, struct iattr *sattr,
 			struct nfs_fh *fhandle, struct nfs_fattr *fattr)
 {
 	struct nfs_createargs	arg = { dir, name, sattr };
@@ -178,7 +178,7 @@ nfs_proc_link(struct nfs_server *server, struct nfs_fh *fhandle,
 int
 nfs_proc_symlink(struct nfs_server *server, struct nfs_fh *dir,
 			const char *name, const char *path,
-			struct nfs_sattr *sattr)
+			struct iattr *sattr)
 {
 	struct nfs_symlinkargs	arg = { dir, name, path, sattr };
 	int			status;
@@ -191,7 +191,7 @@ nfs_proc_symlink(struct nfs_server *server, struct nfs_fh *dir,
 
 int
 nfs_proc_mkdir(struct nfs_server *server, struct nfs_fh *dir,
-			const char *name, struct nfs_sattr *sattr,
+			const char *name, struct iattr *sattr,
 			struct nfs_fh *fhandle, struct nfs_fattr *fattr)
 {
 	struct nfs_createargs	arg = { dir, name, sattr };

@@ -349,8 +349,8 @@ typedef struct orc_scb {	/* Scsi_Ctrl_Blk                */
 #define ORC_BUSDEVRST	0x01	/* SCSI Bus Device Reset  */
 
 /* Status of ORCSCB_Status */
-#define SCB_COMPLETE	0x00	/* SCB request completed  */
-#define SCB_POST	0x01	/* SCB is posted by the HOST      */
+#define ORCSCB_COMPLETE	0x00	/* SCB request completed  */
+#define ORCSCB_POST	0x01	/* SCB is posted by the HOST      */
 
 /* Bit Definition for ORCSCB_Flags */
 #define SCF_DISINT	0x01	/* Disable HOST interrupt */

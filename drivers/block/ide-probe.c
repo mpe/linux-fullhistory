@@ -42,7 +42,6 @@
 #include <linux/delay.h>
 #include <linux/ide.h>
 
-
 #include <asm/byteorder.h>
 #include <asm/irq.h>
 #include <asm/uaccess.h>
@@ -84,6 +83,9 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	ide_fixstring (id->model,     sizeof(id->model),     bswap);
 	ide_fixstring (id->fw_rev,    sizeof(id->fw_rev),    bswap);
 	ide_fixstring (id->serial_no, sizeof(id->serial_no), bswap);
+
+	if (strstr(id->model, "E X A B Y T E N E S T"))
+		return;
 
 	id->model[sizeof(id->model)-1] = '\0';	/* we depend on this a lot! */
 	printk("%s: %s, ", drive->name, id->model);
@@ -324,6 +326,35 @@ static int do_probe (ide_drive_t *drive, byte cmd)
 }
 
 /*
+ *
+ */
+static void enable_nest (ide_drive_t *drive)
+{
+	unsigned long timeout;
+
+	printk("%s: enabling %s -- ", HWIF(drive)->name, drive->id->model);
+	SELECT_DRIVE(HWIF(drive), drive);
+	ide_delay_50ms();
+	OUT_BYTE(EXABYTE_ENABLE_NEST, IDE_COMMAND_REG);
+	timeout = jiffies + WAIT_WORSTCASE;
+	do {
+		if (jiffies > timeout) {
+			printk("failed (timeout)\n");
+			return;
+		}
+		ide_delay_50ms();
+	} while (GET_STAT() & BUSY_STAT);
+	ide_delay_50ms();
+	if (!OK_STAT(GET_STAT(), 0, BAD_STAT))
+		printk("failed (status = 0x%02x)\n", GET_STAT());
+	else
+		printk("success\n");
+	if (do_probe(drive, WIN_IDENTIFY) >= 2) {	/* if !(success||timed-out) */
+		(void) do_probe(drive, WIN_PIDENTIFY);	/* look for ATAPI device */
+	}
+}
+
+/*
  * probe_for_drive() tests for existence of a given drive using do_probe().
  *
  * Returns:	0  no device was found
@@ -336,6 +367,8 @@ static inline byte probe_for_drive (ide_drive_t *drive)
 	if (do_probe(drive, WIN_IDENTIFY) >= 2) { /* if !(success||timed-out) */
 		(void) do_probe(drive, WIN_PIDENTIFY); /* look for ATAPI device */
 	}
+	if (drive->id && strstr(drive->id->model, "E X A B Y T E N E S T"))
+		enable_nest(drive);
 	if (!drive->present)
 		return 0;			/* drive not found */
 	if (drive->id == NULL) {		/* identification failed? */

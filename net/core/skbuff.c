@@ -237,8 +237,10 @@ void __kfree_skb(struct sk_buff *skb)
 	dst_release(skb->dst);
 	if(skb->destructor)
 		skb->destructor(skb);
+#ifdef CONFIG_NET		
 	if(skb->rx_dev)
 		dev_put(skb->rx_dev);
+#endif		
 	skb_headerinit(skb, NULL, 0);  /* clean state */
 	kfree_skbmem(skb);
 }

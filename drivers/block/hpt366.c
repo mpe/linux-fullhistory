@@ -1,11 +1,13 @@
 /*
- * linux/drivers/block/hpt366.c		Version 0.12	August 16, 1999
+ * linux/drivers/block/hpt366.c		Version 0.13	Sept. 3, 1999
  *
  * Copyright (C) 1999			Andre Hedrick <andre@suse.com>
+ * May be copied or modified under the terms of the GNU General Public License
  *
- * drive_number
- *	= ((HWIF(drive)->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
- *	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
+ * Thanks to HighPoint Technologies for their assistance, and hardware.
+ * Special Thanks to Jon Burchmore in SanDiego for the deep pockets, his
+ * donation of an ABit BP6 mainboard, processor, and memory acellerated
+ * development and support.
  */
 
 #include <linux/types.h>
@@ -114,17 +116,18 @@ struct chipset_bus_clock_list_entry twenty_five_base [] = {
 };
 
 #define HPT366_DEBUG_DRIVE_INFO		0
-#define HPT366_ALLOW_ATA66_4		0
+#define HPT366_ALLOW_ATA66_4		1
 #define HPT366_ALLOW_ATA66_3		1
-#define HPT366_ALLOW_ATA33_2		1
-#define HPT366_ALLOW_ATA33_1		1
-#define HPT366_ALLOW_ATA33_0		1
 
 extern char *ide_xfer_verbose (byte xfer_rate);
+byte hpt363_shared_irq = 0;
 
 static int check_in_drive_lists (ide_drive_t *drive, const char **list)
 {
 	struct hd_driveid *id = drive->id;
+#if HPT366_DEBUG_DRIVE_INFO
+	printk("check_in_drive_lists(%s, %p)\n", drive->name, list);
+#endif /* HPT366_DEBUG_DRIVE_INFO */
 
 	while (*list) {
 		if (!strcmp(*list++,id->model)) {
@@ -139,50 +142,62 @@ static int check_in_drive_lists (ide_drive_t *drive, const char **list)
 
 static unsigned int pci_bus_clock_list (byte speed, struct chipset_bus_clock_list_entry * chipset_table)
 {
+#if HPT366_DEBUG_DRIVE_INFO
+	printk("pci_bus_clock_list(speed=0x%02x, table=%p)\n", speed, chipset_table);
+#endif /* HPT366_DEBUG_DRIVE_INFO */
 	for ( ; chipset_table->xfer_speed ; chipset_table++)
-		if (chipset_table->xfer_speed == speed)
+		if (chipset_table->xfer_speed == speed) {
+#if HPT366_DEBUG_DRIVE_INFO
+			printk("pci_bus_clock_list: found match: 0x%08x\n", chipset_table->chipset_settings);
+#endif /* HPT366_DEBUG_DRIVE_INFO */
 			return chipset_table->chipset_settings;
+		}
+#if HPT366_DEBUG_DRIVE_INFO
+	printk("pci_bus_clock_list: using default: 0x%08x\n", 0x01208585);
+#endif /* HPT366_DEBUG_DRIVE_INFO */
 	return 0x01208585;
 }
 
 static int hpt366_tune_chipset (ide_drive_t *drive, byte speed)
 {
 	int			err;
-	byte			busclock;
-
 #if HPT366_DEBUG_DRIVE_INFO
 	int drive_number	= ((HWIF(drive)->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
 #endif /* HPT366_DEBUG_DRIVE_INFO */
-	byte regtime		= (drive->select.b.unit & 0x01) ? 0x43 : 0x40;
+	byte regtime		= (drive->select.b.unit & 0x01) ? 0x44 : 0x40;
 	unsigned int reg1	= 0;
 	unsigned int reg2	= 0;
 
+#if HPT366_DEBUG_DRIVE_INFO
+	printk("hpt366_tune_chipset(%s, speed=0x%02x)\n", drive->name, speed);
+#endif /* HPT366_DEBUG_DRIVE_INFO */
+
 	pci_read_config_dword(HWIF(drive)->pci_dev, regtime, &reg1);
-	pci_read_config_byte(HWIF(drive)->pci_dev, regtime|0x01, &busclock);	
-	switch(busclock) {
-		case 0xd9:
+	/* detect bus speed by looking at control reg timing: */
+	switch((reg1 >> 8) & 7) {
+		case 5:
 			reg2 = pci_bus_clock_list(speed, forty_base);
 			break;
-		case 0x85:
+		case 9:
 			reg2 = pci_bus_clock_list(speed, twenty_five_base);
 			break;
-		case 0xa7:
 		default:
+			printk("hpt366: assuming 33Mhz PCI bus\n");
+		case 7:
 			reg2 = pci_bus_clock_list(speed, thirty_three_base);
 			break;
 	}
-
-	if (drive->id->dword_io & 1)
-		reg2 |= 0x80000000;
-	else
-		reg2 &= ~0x80000000;
+	/*
+	 * Disable on-chip PIO FIFO/buffer (to avoid problems handling I/O errors later)
+	 */
+	reg2 &= ~0x80000000;
 
 	pci_write_config_dword(HWIF(drive)->pci_dev, regtime, reg2);
 	err = ide_config_drive_speed(drive, speed);
 
 #if HPT366_DEBUG_DRIVE_INFO
-	printk("%s: %s drive%d (0x%08x 0x%08x) 0x%04x\n",
-		drive->name, ide_xfer_verbose(speed),
+	printk("%s: speed=0x%02x(%s), drive%d, old=0x%08x, new=0x%08x, err=0x%04x\n",
+		drive->name, speed, ide_xfer_verbose(speed),
 		drive_number, reg1, reg2, err);
 #endif /* HPT366_DEBUG_DRIVE_INFO */
 	return(err);
@@ -203,127 +218,89 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 {
 	struct hd_driveid *id	= drive->id;
 	byte speed		= 0x00;
+	unsigned int reg40 = 0;
+	int  rval;
 
 	if ((id->dma_ultra & 0x0010) &&
 	    (!check_in_drive_lists(drive, bad_ata66_4)) &&
 	    (HPT366_ALLOW_ATA66_4) &&
 	    (HWIF(drive)->udma_four)) {
-		if (!((id->dma_ultra >> 8) & 16)) {
-			drive->id->dma_ultra &= ~0xFF00;
-			drive->id->dma_ultra |= 0x1010;
-			drive->id->dma_mword &= ~0x0F00;
-			drive->id->dma_1word &= ~0x0F00;
-		}
 		speed = XFER_UDMA_4;
 	} else if ((id->dma_ultra & 0x0008) &&
 		   (!check_in_drive_lists(drive, bad_ata66_3)) &&
 		   (HPT366_ALLOW_ATA66_3) &&
 		   (HWIF(drive)->udma_four)) {
-		if (!((id->dma_ultra >> 8) & 8)) {
-			drive->id->dma_ultra &= ~0xFF00;
-			drive->id->dma_ultra |= 0x0808;
-			drive->id->dma_mword &= ~0x0F00;
-			drive->id->dma_1word &= ~0x0F00;
-		}
 		speed = XFER_UDMA_3;
-	} else if ((id->dma_ultra & 0x0004) &&
-		   (HPT366_ALLOW_ATA33_2) &&
-		   (!check_in_drive_lists(drive, bad_ata33))) {
-		if (!((id->dma_ultra >> 8) & 4)) {
-			drive->id->dma_ultra &= ~0xFF00;
-			drive->id->dma_ultra |= 0x0404;
-			drive->id->dma_mword &= ~0x0F00;
-			drive->id->dma_1word &= ~0x0F00;
+	} else if (id->dma_ultra && (!check_in_drive_lists(drive, bad_ata33))) {
+		if (id->dma_ultra & 0x0004) {
+			speed = XFER_UDMA_2;
+		} else if (id->dma_ultra & 0x0002) {
+			speed = XFER_UDMA_1;
+		} else if (id->dma_ultra & 0x0001) {
+			speed = XFER_UDMA_0;
 		}
-		speed = XFER_UDMA_2;
-	} else if ((id->dma_ultra & 0x0002) &&
-		   (HPT366_ALLOW_ATA33_1) &&
-		   (!check_in_drive_lists(drive, bad_ata33))) {
-		if (!((id->dma_ultra >> 8) & 2)) {
-			drive->id->dma_ultra &= ~0xFF00;
-			drive->id->dma_ultra |= 0x0202;
-			drive->id->dma_mword &= ~0x0F00;
-			drive->id->dma_1word &= ~0x0F00;
-		}
-		speed = XFER_UDMA_1;
-	} else if ((id->dma_ultra & 0x0001) &&
-		   (HPT366_ALLOW_ATA33_0) &&
-		   (!check_in_drive_lists(drive, bad_ata33))) {
-		if (!((id->dma_ultra >> 8) & 1)) {
-			drive->id->dma_ultra &= ~0xFF00;
-			drive->id->dma_ultra |= 0x0101;
-			drive->id->dma_mword &= ~0x0F00;
-			drive->id->dma_1word &= ~0x0F00;
-		}
-		speed = XFER_UDMA_0;
 	} else if (id->dma_mword & 0x0004) {
-		drive->id->dma_ultra &= ~0xFF00;
-		if (!((id->dma_mword >> 8) & 4)) {
-			drive->id->dma_mword &= ~0x0F00;
-			drive->id->dma_mword |= 0x0404;
-			drive->id->dma_1word &= ~0x0F00;
-		}
 		speed = XFER_MW_DMA_2;
 	} else if (id->dma_mword & 0x0002) {
-		drive->id->dma_ultra &= ~0xFF00;
-		if (!((id->dma_mword >> 8) & 2)) {
-			drive->id->dma_mword &= ~0x0F00;
-			drive->id->dma_mword |= 0x0202;
-			drive->id->dma_1word &= ~0x0F00;
-		}
 		speed = XFER_MW_DMA_1;
 	} else if (id->dma_mword & 0x0001) {
-		drive->id->dma_ultra &= ~0xFF00;
-		if (!((id->dma_mword >> 8) & 1)) {
-			drive->id->dma_mword &= ~0x0F00;
-			drive->id->dma_mword |= 0x0101;
-			drive->id->dma_1word &= ~0x0F00;
-		}
 		speed = XFER_MW_DMA_0;
 	} else if (id->dma_1word & 0x0004) {
-		drive->id->dma_ultra &= ~0xFF00;
-		if (!((id->dma_1word >> 8) & 4)) {
-			drive->id->dma_1word &= ~0x0F00;
-			drive->id->dma_1word |= 0x0404;
-			drive->id->dma_mword &= ~0x0F00;
-		}
 		speed = XFER_SW_DMA_2;
 	} else if (id->dma_1word & 0x0002) {
-		drive->id->dma_ultra &= ~0xFF00;
-		if (!((id->dma_1word >> 8) & 2)) {
-			drive->id->dma_1word &= ~0x0F00;
-			drive->id->dma_1word |= 0x0202;
-			drive->id->dma_mword &= ~0x0F00;
-		}
 		speed = XFER_SW_DMA_1;
 	} else if (id->dma_1word & 0x0001) {
-		drive->id->dma_ultra &= ~0xFF00;
-		if (!((id->dma_1word >> 8) & 1)) {
-			drive->id->dma_1word &= ~0x0F00;
-			drive->id->dma_1word |= 0x0101;
-			drive->id->dma_mword &= ~0x0F00;
-		}
 		speed = XFER_SW_DMA_0;
         } else {
+#if HPT366_DEBUG_DRIVE_INFO
+		printk("%s: config_chipset_for_dma: returning 'ide_dma_off_quietly'\n", drive->name);
+#endif /* HPT366_DEBUG_DRIVE_INFO */
 		return ((int) ide_dma_off_quietly);
 	}
 
+	/* Disable the "fast interrupt" prediction.
+	 * Instead, always wait for the real interrupt from the drive!
+	 */
+	{
+		byte reg51h = 0;
+		pci_read_config_byte(HWIF(drive)->pci_dev, 0x51, &reg51h);
+		if (reg51h & 0x80)
+			pci_write_config_byte(HWIF(drive)->pci_dev, 0x51, reg51h & ~0x80);
+	}
+
+	/*
+	 * Preserve existing PIO settings:
+	 */
+	pci_read_config_dword(HWIF(drive)->pci_dev, 0x40, &reg40);
+	speed = (speed & ~0xc0000000) | (reg40 & 0xc0000000);
+
+#if HPT366_DEBUG_DRIVE_INFO
+	printk("%s: config_chipset_for_dma:  speed=0x%04x\n", drive->name, speed);
+#endif /* HPT366_DEBUG_DRIVE_INFO */
 	(void) hpt366_tune_chipset(drive, speed);
 
-	return ((int)	((id->dma_ultra >> 11) & 3) ? ide_dma_on :
+	rval = (int)(	((id->dma_ultra >> 11) & 3) ? ide_dma_on :
 			((id->dma_ultra >> 8) & 7) ? ide_dma_on :
 			((id->dma_mword >> 8) & 7) ? ide_dma_on :
 			((id->dma_1word >> 8) & 7) ? ide_dma_on :
 						     ide_dma_off_quietly);
+
+#if HPT366_DEBUG_DRIVE_INFO
+	printk("%s: config_chipset_for_dma: returning %d (%s)\n", drive->name, rval, rval == ide_dma_on ? "dma_on" : "dma_off");
+#endif /* HPT366_DEBUG_DRIVE_INFO */
+	return rval;
 }
 
 static void config_chipset_for_pio (ide_drive_t *drive)
 {
 	unsigned short eide_pio_timing[6] = {960, 480, 240, 180, 120, 90};
 	unsigned short xfer_pio	= drive->id->eide_pio_modes;
-
 	byte			timing, speed, pio;
+	unsigned int reg40 = 0;
 
+#if HPT366_DEBUG_DRIVE_INFO
+	printk("%s: config_chipset_for_pio\n", drive->name);
+#endif /* HPT366_DEBUG_DRIVE_INFO */
 	pio = ide_get_best_pio_mode(drive, 255, 5, NULL);
 
 	if (xfer_pio> 4)
@@ -353,6 +330,14 @@ static void config_chipset_for_pio (ide_drive_t *drive)
 			speed = (!drive->id->tPIO) ? XFER_PIO_0 : XFER_PIO_SLOW;
 			break;
 	}
+	/*
+	 * Preserve existing DMA settings:
+	 */
+	pci_read_config_dword(HWIF(drive)->pci_dev, 0x40, &reg40);
+	speed = (speed & ~0x30070000) | (reg40 & 0x30070000);
+#if HPT366_DEBUG_DRIVE_INFO
+	printk("%s: config_chipset_for_pio:  speed=0x%04x\n", drive->name, speed);
+#endif /* HPT366_DEBUG_DRIVE_INFO */
 	(void) hpt366_tune_chipset(drive, speed);
 }
 
@@ -428,8 +413,9 @@ no_dma_set:
 
 int hpt366_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 {
+#if 0
 	byte reg50h = 0, reg52h = 0;
-
+#endif
 	switch (func) {
 		case ide_dma_check:
 			return config_drive_xfer_rate(drive);
@@ -463,28 +449,81 @@ int hpt366_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 
 unsigned int __init pci_init_hpt366 (struct pci_dev *dev, const char *name)
 {
-	byte ata66 = 0;
+	byte test = 0;
 
-	pci_read_config_byte(dev, 0x5a, &ata66);
 	if (dev->resource[PCI_ROM_RESOURCE].start)
 		pci_write_config_byte(dev, PCI_ROM_ADDRESS, dev->resource[PCI_ROM_RESOURCE].start | PCI_ROM_ADDRESS_ENABLE);
-	printk("%s: reg5ah=0x%02x ATA-%s Cable Port%d\n", name, ata66, (ata66 & 0x02) ? "33" : "66", PCI_FUNC(dev->devfn));
+
+	pci_read_config_byte(dev, PCI_CACHE_LINE_SIZE, &test);
+	if (test != 0x08)
+		pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE, 0x08);
+
+	pci_read_config_byte(dev, PCI_LATENCY_TIMER, &test);
+	if (test != 0x78)
+		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0x78);
+
+	pci_read_config_byte(dev, PCI_MIN_GNT, &test);
+	if (test != 0x08)
+		pci_write_config_byte(dev, PCI_MIN_GNT, 0x08);
+
+	pci_read_config_byte(dev, PCI_MAX_LAT, &test);
+	if (test != 0x08)
+		pci_write_config_byte(dev, PCI_MAX_LAT, 0x08);
+
 	return dev->irq;
+}
+
+unsigned int __init ata66_hpt366 (ide_hwif_t *hwif)
+{
+	byte ata66 = 0;
+
+	pci_read_config_byte(hwif->pci_dev, 0x5a, &ata66);
+#ifdef DEBUG
+	printk("HPT366: reg5ah=0x%02x ATA-%s Cable Port%d\n",
+		ata66, (ata66 & 0x02) ? "33" : "66",
+		PCI_FUNC(hwif->pci_dev->devfn));
+#endif /* DEBUG */
+	return ((ata66 & 0x02) ? 0 : 1);
 }
 
 void __init ide_init_hpt366 (ide_hwif_t *hwif)
 {
+#if 0
+	if ((PCI_FUNC(hwif->pci_dev->devfn) & 1) && (hpt363_shared_irq)) {
+		hwif->mate = &ide_hwifs[hwif->index-1];
+		hwif->mate->mate = hwif;
+		hwif->serialized = hwif->mate->serialized = 1;
+	}
+#endif
+
 	hwif->tuneproc = &hpt366_tune_drive;
 	if (hwif->dma_base) {
-		byte ata66 = 0;
-
 		hwif->dmaproc = &hpt366_dmaproc;
-		pci_read_config_byte(hwif->pci_dev, 0x5a, &ata66);
-		hwif->udma_four = (ata66 & 0x02) ? 0 : 1;
 	} else {
-		hwif->udma_four = 0;
 		hwif->autodma = 0;
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;
 	}
+}
+
+void ide_dmacapable_hpt366 (ide_hwif_t *hwif, unsigned long dmabase)
+{
+	byte masterdma = 0, slavedma = 0;
+	byte dma_new = 0, dma_old = inb(dmabase+2);
+	unsigned long flags;
+
+	__save_flags(flags);	/* local CPU only */
+	__cli();		/* local CPU only */
+
+	dma_new = dma_old;
+	pci_read_config_byte(hwif->pci_dev, 0x43, &masterdma);
+	pci_read_config_byte(hwif->pci_dev, 0x47, &slavedma);
+
+	if (masterdma & 0x30)	dma_new |= 0x20;
+	if (slavedma & 0x30)	dma_new |= 0x40;
+	if (dma_new != dma_old) outb(dma_new, dmabase+2);
+
+	__restore_flags(flags);	/* local CPU only */
+
+	ide_setup_dma(hwif, dmabase, 8);
 }

@@ -30,6 +30,7 @@
 #include <linux/reboot.h>
 #include <linux/init.h>
 #include <linux/blk.h>
+#include <linux/ide.h>
 #include <linux/ioport.h>
 
 #include <asm/mmu.h>
@@ -37,7 +38,6 @@
 #include <asm/residual.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
-#include <asm/ide.h>
 #include <asm/mbx.h>
 #include <asm/machdep.h>
 

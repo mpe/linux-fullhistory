@@ -122,15 +122,6 @@ struct nfs_fattr {
 	struct nfs_time		ctime;
 };
 
-struct nfs_sattr {
-	__u32			mode;
-	__u32			uid;
-	__u32			gid;
-	__u32			size;
-	struct nfs_time		atime;
-	struct nfs_time		mtime;
-};
-
 struct nfs_fsinfo {
 	__u32			tsize;
 	__u32			bsize;
@@ -150,7 +141,7 @@ struct nfs_writeargs {
 
 struct nfs_sattrargs {
 	struct nfs_fh *		fh;
-	struct nfs_sattr *	sattr;
+	struct iattr *		sattr;
 };
 
 struct nfs_diropargs {
@@ -173,7 +164,7 @@ struct nfs_readargs {
 struct nfs_createargs {
 	struct nfs_fh *		fh;
 	const char *		name;
-	struct nfs_sattr *	sattr;
+	struct iattr *		sattr;
 };
 
 struct nfs_renameargs {
@@ -193,7 +184,7 @@ struct nfs_symlinkargs {
 	struct nfs_fh *		fromfh;
 	const char *		fromname;
 	const char *		topath;
-	struct nfs_sattr *	sattr;
+	struct iattr *		sattr;
 };
 
 struct nfs_readdirargs {

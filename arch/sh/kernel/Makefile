@@ -11,7 +11,7 @@
 
 O_TARGET := kernel.o
 O_OBJS   := process.o signal.o entry.o traps.o irq.o irq_onchip.o \
-            ptrace.o setup.o time.o sys_sh.o test-img.o semaphore.o
+            ptrace.o setup.o time.o sys_sh.o semaphore.o
 OX_OBJS  := sh_ksyms.o
 MX_OBJS  :=
 

@@ -533,13 +533,15 @@ static inline int nfs_dentry_force_reval(struct dentry *dentry, int flags)
  * If mtime is close to present time, we revalidate
  * more often.
  */
+#define NFS_REVALIDATE_NEGATIVE (1 * HZ)
 static inline int nfs_neg_need_reval(struct dentry *dentry)
 {
-	unsigned long timeout = 30 * HZ;
-	long diff = CURRENT_TIME - dentry->d_parent->d_inode->i_mtime;
+	struct inode *dir = dentry->d_parent->d_inode;
+	unsigned long timeout = NFS_ATTRTIMEO(dir);
+	long diff = CURRENT_TIME - dir->i_mtime;
 
-	if (diff < 5*60)
-		timeout = 1 * HZ;
+	if (diff < 5*60 && timeout > NFS_REVALIDATE_NEGATIVE)
+		timeout = NFS_REVALIDATE_NEGATIVE;
 
 	return time_after(jiffies, dentry->d_time + timeout);
 }
@@ -581,11 +583,13 @@ static int nfs_lookup_revalidate(struct dentry * dentry, int flags)
 		goto out_bad;
 	}
 
-	if (IS_ROOT(dentry))
-		goto out_valid;
-
 	if (!nfs_dentry_force_reval(dentry, flags))
 		goto out_valid;
+
+	if (IS_ROOT(dentry)) {
+		__nfs_revalidate_inode(NFS_DSERVER(dentry), dentry);
+		goto out_valid_renew;
+	}
 
 	/*
 	 * Do a new lookup and check the dentry attributes.
@@ -596,32 +600,29 @@ static int nfs_lookup_revalidate(struct dentry * dentry, int flags)
 		goto out_bad;
 
 	/* Inode number matches? */
-	if (fattr.fileid != inode->i_ino)
+	if (NFS_FSID(inode) != fattr.fsid ||
+	    NFS_FILEID(inode) != fattr.fileid)
 		goto out_bad;
 
 	/* Filehandle matches? */
-	if (memcmp(dentry->d_fsdata, &fhandle, sizeof(struct nfs_fh))) {
-		if (!list_empty(&dentry->d_subdirs))
-			shrink_dcache_parent(dentry);
-		if (dentry->d_count < 2)
-			goto out_bad;
-	}
+	if (memcmp(dentry->d_fsdata, &fhandle, sizeof(struct nfs_fh)))
+		goto out_bad;
 
 	/* Ok, remeber that we successfully checked it.. */
-	nfs_renew_times(dentry);
 	nfs_refresh_inode(inode, &fattr);
 
+ out_valid_renew:
+	nfs_renew_times(dentry);
 out_valid:
 	return 1;
 out_bad:
+	d_drop(dentry);
+	if (!list_empty(&dentry->d_subdirs))
+		shrink_dcache_parent(dentry);
 	/* Purge readdir caches. */
 	if (dentry->d_parent->d_inode) {
-		invalidate_inode_pages(dentry->d_parent->d_inode);
-		nfs_flush_dircache(dentry->d_parent->d_inode);
-	}
-	if (inode && S_ISDIR(inode->i_mode)) {
-		invalidate_inode_pages(inode);
-		nfs_flush_dircache(inode);
+		nfs_zap_caches(dentry->d_parent->d_inode);
+		NFS_CACHEINV(dentry->d_parent->d_inode);
 	}
 	return 0;
 }
@@ -649,21 +650,6 @@ static void nfs_dentry_delete(struct dentry *dentry)
 				dentry->d_name.name, error);
 	}
 
-#ifdef NFS_PARANOIA
-	/*
-	 * Sanity check: if the dentry has been unhashed and the
-	 * inode still has users, we could have problems ...
-	 */
-	if (list_empty(&dentry->d_hash) && dentry->d_inode) {
-		struct inode *inode = dentry->d_inode;
-		int max_count = (S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink);
-		if (inode->i_count > max_count) {
-printk("nfs_dentry_delete: %s/%s: ino=%ld, count=%d, nlink=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-inode->i_ino, inode->i_count, inode->i_nlink);
-		}
-	}
-#endif
 }
 
 static kmem_cache_t *nfs_fh_cachep;
@@ -750,14 +736,6 @@ static struct dentry *nfs_lookup(struct inode *dir, struct dentry * dentry)
 		error = -EACCES;
 		inode = nfs_fhget(dentry, &fhandle, &fattr);
 		if (inode) {
-#ifdef NFS_PARANOIA
-if (inode->i_count > (S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink)) {
-printk("nfs_lookup: %s/%s ino=%ld in use, count=%d, nlink=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-inode->i_ino, inode->i_count, inode->i_nlink);
-show_dentry(&inode->i_dentry);
-}
-#endif
 	    no_entry:
 			d_add(dentry, inode);
 			nfs_renew_times(dentry);
@@ -779,14 +757,6 @@ static int nfs_instantiate(struct dentry *dentry, struct nfs_fh *fhandle,
 
 	inode = nfs_fhget(dentry, fhandle, fattr);
 	if (inode) {
-#ifdef NFS_PARANOIA
-if (inode->i_count > (S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink)) {
-printk("nfs_instantiate: %s/%s ino=%ld in use, count=%d, nlink=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-inode->i_ino, inode->i_count, inode->i_nlink);
-show_dentry(&inode->i_dentry);
-}
-#endif
 		d_instantiate(dentry, inode);
 		nfs_renew_times(dentry);
 		error = 0;
@@ -803,16 +773,15 @@ show_dentry(&inode->i_dentry);
 static int nfs_create(struct inode *dir, struct dentry *dentry, int mode)
 {
 	int error;
-	struct nfs_sattr sattr;
+	struct iattr attr;
 	struct nfs_fattr fattr;
 	struct nfs_fh fhandle;
 
 	dfprintk(VFS, "NFS: create(%x/%ld, %s\n",
 		dir->i_dev, dir->i_ino, dentry->d_name.name);
 
-	sattr.mode = mode;
-	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
-	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
+	attr.ia_mode = mode;
+	attr.ia_valid = ATTR_MODE;
 
 	/*
 	 * Invalidate the dir cache before the operation to avoid a race.
@@ -820,7 +789,7 @@ static int nfs_create(struct inode *dir, struct dentry *dentry, int mode)
 	invalidate_inode_pages(dir);
 	nfs_flush_dircache(dir);
 	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dentry->d_parent),
-			dentry->d_name.name, &sattr, &fhandle, &fattr);
+			dentry->d_name.name, &attr, &fhandle, &fattr);
 	if (!error)
 		error = nfs_instantiate(dentry, &fhandle, &fattr);
 	if (error)
@@ -834,23 +803,25 @@ static int nfs_create(struct inode *dir, struct dentry *dentry, int mode)
 static int nfs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rdev)
 {
 	int error;
-	struct nfs_sattr sattr;
+	struct iattr attr;
 	struct nfs_fattr fattr;
 	struct nfs_fh fhandle;
 
 	dfprintk(VFS, "NFS: mknod(%x/%ld, %s\n",
 		dir->i_dev, dir->i_ino, dentry->d_name.name);
 
-	sattr.mode = mode;
-	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
-	if (S_ISCHR(mode) || S_ISBLK(mode))
-		sattr.size = rdev; /* get out your barf bag */
-	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
+	attr.ia_mode = mode;
+	attr.ia_valid = ATTR_MODE;
+	/* FIXME: move this to a special nfs_proc_mknod() */
+	if (S_ISCHR(mode) || S_ISBLK(mode)) {
+		attr.ia_size = rdev; /* get out your barf bag */
+		attr.ia_valid |= ATTR_SIZE;
+	}
 
 	invalidate_inode_pages(dir);
 	nfs_flush_dircache(dir);
 	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dentry->d_parent),
-				dentry->d_name.name, &sattr, &fhandle, &fattr);
+				dentry->d_name.name, &attr, &fhandle, &fattr);
 	if (!error)
 		error = nfs_instantiate(dentry, &fhandle, &fattr);
 	if (error)
@@ -864,16 +835,15 @@ static int nfs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rde
 static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
 	int error;
-	struct nfs_sattr sattr;
+	struct iattr attr;
 	struct nfs_fattr fattr;
 	struct nfs_fh fhandle;
 
 	dfprintk(VFS, "NFS: mkdir(%x/%ld, %s\n",
 		dir->i_dev, dir->i_ino, dentry->d_name.name);
 
-	sattr.mode = mode | S_IFDIR;
-	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
-	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
+	attr.ia_valid = ATTR_MODE;
+	attr.ia_mode = mode | S_IFDIR;
 
 	/*
 	 * Always drop the dentry, we can't always depend on
@@ -885,7 +855,7 @@ static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	invalidate_inode_pages(dir);
 	nfs_flush_dircache(dir);
 	error = nfs_proc_mkdir(NFS_DSERVER(dentry), NFS_FH(dentry->d_parent),
-				dentry->d_name.name, &sattr, &fhandle, &fattr);
+				dentry->d_name.name, &attr, &fhandle, &fattr);
 	if (!error)
 		dir->i_nlink++;
 	return error;
@@ -897,13 +867,6 @@ static int nfs_rmdir(struct inode *dir, struct dentry *dentry)
 
 	dfprintk(VFS, "NFS: rmdir(%x/%ld, %s\n",
 		dir->i_dev, dir->i_ino, dentry->d_name.name);
-
-#ifdef NFS_PARANOIA
-if (dentry->d_inode->i_count > 1)
-printk("nfs_rmdir: %s/%s inode busy?? i_count=%d, i_nlink=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-dentry->d_inode->i_count, dentry->d_inode->i_nlink);
-#endif
 
 	invalidate_inode_pages(dir);
 	nfs_flush_dircache(dir);
@@ -1082,12 +1045,6 @@ dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
 #endif
 		goto out;
 	}
-#ifdef NFS_PARANOIA
-if (inode && inode->i_count > inode->i_nlink)
-printk("nfs_safe_remove: %s/%s inode busy?? i_count=%d, i_nlink=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-inode->i_count, inode->i_nlink);
-#endif
 	/*
 	 * Unhash the dentry while we remove the file ...
 	 */
@@ -1141,7 +1098,7 @@ static int nfs_unlink(struct inode *dir, struct dentry *dentry)
 static int
 nfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 {
-	struct nfs_sattr sattr;
+	struct iattr attr;
 	int error;
 
 	dfprintk(VFS, "NFS: symlink(%x/%ld, %s, %s)\n",
@@ -1160,9 +1117,8 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 	 * Fill in the sattr for the call.
  	 * Note: SunOS 4.1.2 crashes if the mode isn't initialized!
 	 */
-	sattr.mode = S_IFLNK | S_IRWXUGO;
-	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
-	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
+	attr.ia_valid = ATTR_MODE;
+	attr.ia_mode = S_IFLNK | S_IRWXUGO;
 
 	/*
 	 * Drop the dentry in advance to force a new lookup.
@@ -1173,7 +1129,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 	invalidate_inode_pages(dir);
 	nfs_flush_dircache(dir);
 	error = nfs_proc_symlink(NFS_SERVER(dir), NFS_FH(dentry->d_parent),
-				dentry->d_name.name, symname, &sattr);
+				dentry->d_name.name, symname, &attr);
 	if (!error) {
 		nfs_renew_times(dentry->d_parent);
 	} else if (error == -EEXIST) {
@@ -1332,13 +1288,6 @@ do_rename:
 	 * To prevent any new references to the target during the rename,
 	 * we unhash the dentry and free the inode in advance.
 	 */
-#ifdef NFS_PARANOIA
-if (new_inode && 
-    new_inode->i_count > (S_ISDIR(new_inode->i_mode) ? 1 : new_inode->i_nlink))
-printk("nfs_rename: %s/%s inode busy?? i_count=%d, i_nlink=%d\n",
-new_dentry->d_parent->d_name.name, new_dentry->d_name.name,
-new_inode->i_count, new_inode->i_nlink);
-#endif
 	if (!list_empty(&new_dentry->d_hash)) {
 		d_drop(new_dentry);
 		rehash = update;

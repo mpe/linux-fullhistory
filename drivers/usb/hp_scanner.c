@@ -192,7 +192,7 @@ read_scanner(struct file * file, char * buffer,
 		
 		if (partial) {
 			count = this_read = partial;
-		} else if (result == USB_ST_TIMEOUT || result == 15) {
+		} else if (result == USB_ST_TIMEOUT || result == 15) { 	/* FIXME: 15 ??? */
 			if(!maxretry--) {
 				printk(KERN_DEBUG "read_scanner: maxretry timeout\n");
 				return -ETIME;

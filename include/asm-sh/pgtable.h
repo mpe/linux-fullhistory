@@ -3,19 +3,18 @@
 
 /* Copyright (C) 1999 Niibe Yutaka */
 
-#include <linux/config.h>
-
 /*
  * This file contains the functions and defines necessary to modify and use
  * the SuperH page table tree.
  */
 #ifndef __ASSEMBLY__
 #include <asm/processor.h>
+#include <asm/addrspace.h>
 #include <linux/threads.h>
 
 extern pgd_t swapper_pg_dir[1024];
 
-#ifdef CONFIG_CPU_SH3
+#if defined(__sh3__)
 /* Cache flushing:
  *
  *  - flush_cache_all() flushes entire cache
@@ -33,17 +32,17 @@ extern pgd_t swapper_pg_dir[1024];
 #define flush_cache_page(vma, vmaddr)		do { } while (0)
 #define flush_page_to_ram(page)			do { } while (0)
 #define flush_icache_range(start, end)		do { } while (0)
-#elif CONFIG_CPU_SH4
+#elif defined(__SH4__)
 /*
  *  Caches are broken on SH-4, so we need them.
- *  You do bad job!
  */
-flush_cache_all()
-flush_cache_mm(mm)
-flush_cache_range(mm, start, end)
-flush_cache_page(vma, vmaddr)
-flush_page_to_ram(page)
-flush_icache_range(start, end)
+extern void flush_cache_all(void);
+extern void flush_cache_mm(struct mm_struct *mm);
+extern void flush_cache_range(struct mm_struct *mm, unsigned long start,
+			      unsigned long end);
+extern void flush_cache_page(struct vm_area_struct *vma, unsigned long addr);
+extern void flush_page_to_ram(unsigned long page);
+extern void flush_icache_range(unsigned long start, unsigned long end);
 #endif
 
 /* TLB flushing:
@@ -86,9 +85,9 @@ extern void flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
 #define USER_PTRS_PER_PGD	(TASK_SIZE/PGDIR_SIZE)
 
 #ifndef __ASSEMBLY__
-#define VMALLOC_START	0xc0000000
+#define VMALLOC_START	P3SEG
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
-#define VMALLOC_END	0xe0000000
+#define VMALLOC_END	P4SEG
 
 #define _PAGE_READ 	0x001  /* software: read access alowed */
 #define _PAGE_ACCESSED	0x002  /* software: page referenced */
@@ -100,11 +99,17 @@ extern void flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
 /*		 	0x080  */
 #define _PAGE_PRESENT	0x100  /* V-bit   : page is valid */
 
+#if defined(__sh3__)
 /* Mask which drop software flags */
-#define _PAGE_FLAGS_HARDWARE_MASK	0xfffff164
+#define _PAGE_FLAGS_HARDWARE_MASK	0x1ffff164
 /* Flags defalult: SZ=1 (4k-byte), C=1 (cachable), SH=0 (not shared) */
 #define _PAGE_FLAGS_HARDWARE_DEFAULT	0x00000018
-
+#elif defined(__SH4__)
+/* Mask which drops software flags */
+#define _PAGE_FLAGS_HARDWARE_MASK	0x1ffff164
+/* Flags defalult: SZ=01 (4k-byte), C=1 (cachable), SH=0 (not shared), WT=0 */
+#define _PAGE_FLAGS_HARDWARE_DEFAULT	0x00000018
+#endif
 
 #define _PAGE_TABLE	(_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | _PAGE_ACCESSED | _PAGE_DIRTY)
 #define _KERNPG_TABLE	(_PAGE_PRESENT | _PAGE_RW | _PAGE_ACCESSED | _PAGE_DIRTY)

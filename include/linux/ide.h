@@ -236,6 +236,7 @@ typedef struct ide_drive_s {
 	unsigned long sleep;		/* sleep until this time */
 	unsigned long service_start;	/* time we started last request */
 	unsigned long service_time;	/* service time of last request */
+	unsigned long timeout;		/* max time to wait for irq */
 	special_t	special;	/* special action flags */
 	byte     keep_settings;		/* restore settings after drive reset */
 	byte     using_dma;		/* disk is using dma for read/write */
@@ -338,6 +339,7 @@ typedef void (ide_tuneproc_t)(ide_drive_t *, byte);
  * This is used to provide support for strange interfaces
  */
 typedef void (ide_selectproc_t) (ide_drive_t *);
+typedef void (ide_resetproc_t) (ide_drive_t *);
 
 /*
  * hwif_chipset_t is used to keep track of the specific hardware
@@ -367,6 +369,7 @@ typedef struct hwif_s {
 	struct gendisk	*gd;		/* gendisk structure */
 	ide_tuneproc_t	*tuneproc;	/* routine to tune PIO mode for drives */
 	ide_selectproc_t *selectproc;	/* tweaks hardware to select drive */
+	ide_resetproc_t	*resetproc;	/* routine to reset controller after a disk reset */
 	ide_dmaproc_t	*dmaproc;	/* dma read/write/abort routine */
 	unsigned long	*dmatable;	/* dma physical region descriptor table */
 	struct hwif_s	*mate;		/* other hwif from same PCI chip */
@@ -581,7 +584,7 @@ void atapi_output_bytes (ide_drive_t *drive, void *buffer, unsigned int bytecoun
  * This is used on exit from the driver, to designate the next irq handler
  * and also to start the safety timer.
  */
-void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler, unsigned int timeout);
+void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler);
 
 /*
  * Error reporting, in human readable form (luxurious, but a memory hog).

@@ -96,6 +96,7 @@ if [ "$CONFIG_FB" = "y" ]; then
 	    bool '    Multihead support' CONFIG_FB_MATROX_MULTIHEAD
 	 fi
 	 tristate '  ATI Mach64 display support (EXPERIMENTAL)' CONFIG_FB_ATY
+	 bool '  ATI Rage 128 display support (EXPERIMENTAL)' CONFIG_FB_ATY128
 	 bool '  3Dfx Banshee/Voodoo3 display support (EXPERIMENTAL)' CONFIG_FB_3DFX
       fi
    fi

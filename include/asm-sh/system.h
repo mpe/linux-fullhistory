@@ -26,6 +26,7 @@ typedef struct {
  register unsigned long *__ts6 __asm__ ("r6") = &next->thread.sp; \
  register unsigned long __ts7 __asm__ ("r7") = next->thread.pc; \
  __asm__ __volatile__ (".balign 4\n\t" \
+		       "stc.l	gbr,@-r15\n\t" \
 		       "sts.l	pr,@-r15\n\t" \
 		       "mov.l	r8,@-r15\n\t" \
 		       "mov.l	r9,@-r15\n\t" \
@@ -41,11 +42,11 @@ typedef struct {
 		       "mov.l	%0,@r2		! save PC\n\t" \
 		       "mov.l	2f,%0\n\t" \
 		       "jmp	@%0		! call __switch_to\n\t" \
-		       " lds	r7,pr		!  with return to new PC\n" \
-		       "2:\n" \
-		       ".long	" "_" "__switch_to\n\t" \
+		       " lds	r7,pr		!  with return to new PC\n\t" \
 		       ".balign	4\n"	\
-		       "1:\n" \
+		       "2:\n\t" \
+		       ".long	" "_" "__switch_to\n" \
+		       "1:\n\t" \
 		       "mov.l	@r15+,%0	! pop R0 from new stack\n\t" \
 		       "mov.l	@r15+,r14\n\t" \
 		       "mov.l	@r15+,r13\n\t" \
@@ -55,6 +56,7 @@ typedef struct {
 		       "mov.l	@r15+,r9\n\t" \
 		       "mov.l	@r15+,r8\n\t" \
 		       "lds.l	@r15+,pr\n\t" \
+		       "ldc.l	@r15+,gbr\n\t" \
 		       :"=&z" (__last) \
 		       :"0" (prev), \
 			"r" (__ts1), "r" (__ts2), \
@@ -84,6 +86,9 @@ extern void __xchg_called_with_bad_pointer(void);
 #define mb()	__asm__ __volatile__ ("": : :"memory")
 #define rmb()	mb()
 #define wmb()	__asm__ __volatile__ ("": : :"memory")
+#define set_rmb(var, value) do { xchg(&var, value); } while (0)
+#define set_mb(var, value) set_rmb(var, value)
+#define set_wmb(var, value) do { var = value; wmb(); } while (0)
 
 /* Interrupt Control */
 extern __inline__ void __sti(void)
@@ -164,7 +169,7 @@ extern __inline__ unsigned long xchg_u32(volatile int * m, unsigned long val)
 	return retval;
 }
 
-static __inline__ unsigned long __xchg(unsigned long x, void * ptr, int size)
+static __inline__ unsigned long __xchg(unsigned long x, volatile void * ptr, int size)
 {
 	switch (size) {
 	case 4:

@@ -14,8 +14,7 @@ extern __inline__ void set_bit(int nr, void * addr)
 
 	a += nr >> 5;
 	mask = 1 << (nr & 0x1f);
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	*a |= mask;
 	restore_flags(flags);
 }
@@ -28,8 +27,7 @@ extern __inline__ void clear_bit(int nr, void * addr)
 
 	a += nr >> 5;
 	mask = 1 << (nr & 0x1f);
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	*a &= ~mask;
 	restore_flags(flags);
 }
@@ -42,8 +40,7 @@ extern __inline__ void change_bit(int nr, void * addr)
 
 	a += nr >> 5;
 	mask = 1 << (nr & 0x1f);
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	*a ^= mask;
 	restore_flags(flags);
 }
@@ -56,8 +53,7 @@ extern __inline__ int test_and_set_bit(int nr, void * addr)
 
 	a += nr >> 5;
 	mask = 1 << (nr & 0x1f);
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	retval = (mask & *a) != 0;
 	*a |= mask;
 	restore_flags(flags);
@@ -73,8 +69,7 @@ extern __inline__ int test_and_clear_bit(int nr, void * addr)
 
 	a += nr >> 5;
 	mask = 1 << (nr & 0x1f);
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	retval = (mask & *a) != 0;
 	*a &= ~mask;
 	restore_flags(flags);
@@ -90,8 +85,7 @@ extern __inline__ int test_and_change_bit(int nr, void * addr)
 
 	a += nr >> 5;
 	mask = 1 << (nr & 0x1f);
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	retval = (mask & *a) != 0;
 	*a ^= mask;
 	restore_flags(flags);
@@ -112,7 +106,7 @@ extern __inline__ unsigned long ffz(unsigned long word)
 	__asm__("1:\n"
 		"shlr	%1\n\t"
 		"bt/s	1b\n\t"
-		"add	#1, %0"
+		" add	#1, %0"
 		: "=r" (result)
 		: "r" (word), "0" (~0L));
 	return result;
@@ -165,7 +159,7 @@ extern __inline__ int ext2_set_bit(int nr,void * addr)
 
 	ADDR += nr >> 3;
 	mask = 1 << (nr & 0x07);
-	save_flags(flags); cli();
+	save_and_cli(flags);
 	retval = (mask & *ADDR) != 0;
 	*ADDR |= mask;
 	restore_flags(flags);
@@ -180,7 +174,7 @@ extern __inline__ int ext2_clear_bit(int nr, void * addr)
 
 	ADDR += nr >> 3;
 	mask = 1 << (nr & 0x07);
-	save_flags(flags); cli();
+	save_and_cli(flags);
 	retval = (mask & *ADDR) != 0;
 	*ADDR &= ~mask;
 	restore_flags(flags);

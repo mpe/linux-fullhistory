@@ -81,6 +81,8 @@
 #define WIN_SRST		0x08	/* ATAPI soft reset command */
 #define WIN_PACKETCMD		0xa0	/* Send a packet command. */
 
+#define EXABYTE_ENABLE_NEST	0xf0
+
 /* WIN_SMART sub-commands */
 
 #define SMART_READ_VALUES	0xd0

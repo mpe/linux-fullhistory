@@ -1,4 +1,4 @@
-/* $Id$
+/* $Id: entry.S,v 1.15 1999/10/17 01:32:52 gniibe Exp $
  *
  *  linux/arch/sh/entry.S
  *
@@ -12,6 +12,7 @@
 
 #include <linux/sys.h>
 #include <linux/linkage.h>
+#include <linux/config.h>
 
 ! NOTE:
 ! GNU as (as of 2.9.1) changes bf/s into bt/s and bra, when the address
@@ -28,18 +29,18 @@
  * Stack layout in 'ret_from_syscall':
  * 	ptrace needs to have all regs on the stack.
  *	if the order here is changed, it needs to be
- *	updated in process.c:copy_thread, signal.c:do_signal,
- *	ptrace.c and ptrace.h
+ *	updated in ptrace.c and ptrace.h
  *
- *	syscall #	
+ *	syscall #
+ *	ssr
+ *	r15 = stack pointer
  *	r0
  *      ...
- *	r15
+ *	r14
  *	gbr
  *	mach
  *	macl
  *	pr
- *	ssr
  *	spc
  *
  */
@@ -57,14 +58,23 @@ PF_TRACESYS  = 0x20
 
 ENOSYS = 38
 
-TRA    = 0xffffffd0
-EXPEVT = 0xffffffd4
-INTEVT = 0xffffffd8
+#if defined(__sh3__)
+TRA     = 0xffffffd0
+EXPEVT  = 0xffffffd4
+INTEVT  = 0xffffffd8
+MMU_TEA = 0xfffffffc		! TLB Exception Address Register
+#elif defined(__SH4__)
+TRA     = 0xff000020
+EXPEVT  = 0xff000024
+INTEVT  = 0xff000028
+MMU_TEA = 0xff00000c		! TLB Exception Address Register
+#endif
 
 /* Offsets to the stack */
 SYSCALL_NR =  0
-R0         =  4
-R15	   =  64
+SR	   =  4
+SP	   =  8
+R0         =  12
 
 #define k0	r0
 #define k1	r1
@@ -99,20 +109,19 @@ R15	   =  64
 ! Although this could be written in assembly language (and it'd be faster),
 ! this first version depends *much* on C implementation.
 !
-MMU_TEA = 0xfffffffc		! TLB Exception Address Register
 
-#define DO_FAULT(write) \
-	mov	#MMU_TEA,r0; \
-	mov.l	@r0,r6; \
-	/* STI */ \
-	mov.l	3f,r1; \
-	stc	sr,r0; \
-	and	r1,r0; \
-	ldc	r0,sr; \
-	/*    */ \
-	mov	r15,r4; \
-	mov.l	2f,r0; \
-	jmp	@r0; \
+#define DO_FAULT(write)			\
+	mov.l	4f,r0;			\
+	mov.l	@r0,r6; 		\
+	/* STI */ 			\
+	mov.l	3f,r1; 			\
+	stc	sr,r0; 			\
+	and	r1,r0; 			\
+	ldc	r0,sr; 			\
+	/*    */ 			\
+	mov	r15,r4; 		\
+	mov.l	2f,r0; 			\
+	jmp	@r0; 			\
 	 mov	#write,r5;
 
 	.balign	4
@@ -133,22 +142,65 @@ initial_page_write:
 	.balign 4
 2:	.long	SYMBOL_NAME(do_page_fault)
 3:	.long	0xefffffff	! BL=0
+4:	.long	MMU_TEA
 
+#ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
+	.balign	4
+	/* Unwind the stack and jmp to the debug entry */
+debug:
+	add	#4,r15		! skip syscall number
+	ldc.l	@r15+,ssr
+	mov.l	@r15+,r10	! original stack
+	mov.l	@r15+,r0
+	mov.l	@r15+,r1
+	mov.l	@r15+,r2
+	mov.l	@r15+,r3
+	mov.l	@r15+,r4
+	mov.l	@r15+,r5
+	mov.l	@r15+,r6
+	mov.l	@r15+,r7
+	stc	sr,r14
+	mov.l	8f,r9			! BL =1, RB=1
+	or	r9,r14
+	ldc	r14,sr			! here, change the register bank
+	mov	r10,k0
+	mov.l	@r15+,r8
+	mov.l	@r15+,r9
+	mov.l	@r15+,r10
+	mov.l	@r15+,r11
+	mov.l	@r15+,r12
+	mov.l	@r15+,r13
+	mov.l	@r15+,r14
+	ldc.l	@r15+,gbr
+	lds.l	@r15+,mach
+	lds.l	@r15+,macl
+	lds.l	@r15+,pr
+	ldc.l	@r15+,spc
+	mov	k0,r15
+	!
+	mov.l	9f,k0
+	jmp	@k0
+	 nop
+	.balign	4
+8:	.long	0x300000f0
+9:	.long	0xa0000100
+#endif
 
 	.balign	4
-error:	mov	#-1,r0
+error:	
 	! STI
 	mov.l	2f,r1
 	stc	sr,r0
 	and	r1,r0
 	ldc	r0,sr
 	!
-	mov.l	r0,@r15		! syscall nr = -1
 	mov.l	1f,r1
+	mov	#-1,r0
 	jmp	@r1
-	 nop
+	 mov.l	r0,@r15		! syscall nr = -1
 	.balign	4
 1:	.long	SYMBOL_NAME(do_exception_error)
+2:	.long	0xefffffff	! BL=0
 
 reschedule:
 	mova	SYMBOL_NAME(ret_from_syscall),r0
@@ -159,12 +211,13 @@ reschedule:
 1:	.long	SYMBOL_NAME(schedule)
 
 badsys:	mov	#-ENOSYS,r0
-	bra	SYMBOL_NAME(ret_from_syscall)
+	rts			! go to ret_from_syscall..
 	 mov.l	r0,@(R0,r15)
 
 signal_return:
 	! We can reach here from an interrupt handler,
 	! so, we need to unblock interrupt.
+	/*  STI */
 	mov.l	1f,r1
 	stc	sr,r0
 	and	r1,r0
@@ -185,15 +238,25 @@ signal_return:
 !
 ENTRY(ret_from_fork)
 	bra	SYMBOL_NAME(ret_from_syscall)
-	 add	#4,r15		! pop down bogus r0
+	 add	#4,r15		! pop down bogus r0 (see switch_to MACRO)
 
 !
 ! The immediate value of "trapa" indicates the number of arguments
 ! placed on the stack.
 !
+! Note that TRA register contains the value = Imm x 4.
+!
 system_call:
-	mov	#TRA,r2
+	mov.l	1f,r2
 	mov.l	@r2,r8
+	!
+#ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
+	mov	#0x20,r1
+	extu.b	r1,r1
+	shll2	r1
+	cmp/hs	r1,r8
+	bt	debug
+#endif
 	! STI
 	mov.l	2f,r1
 	stc	sr,r2
@@ -202,14 +265,15 @@ system_call:
 	!
 	mov.l	__n_sys,r1
 	cmp/ge	r1,r0
-	bt	badsys
+	bt/s	badsys
+	 mov	r0,r2
 	!
 	stc	ksp,r1		!
 	mov.l	__tsk_flags,r0	!
 	add	r0,r1		!
 	mov.l	@r1,r0		! Is it trace?
 	tst	#PF_TRACESYS,r0
-	bt	6f
+	bt	5f
 	!                     Trace system call
 	mov	#-ENOSYS,r1
 	mov.l	r1,@(R0,r15)
@@ -217,32 +281,36 @@ system_call:
 	jsr	@r1
 	 nop
 	mova	4f,r0
-	bra	7f
+	bra	6f
 	 lds	r0,pr
 	!
-6:	mova	1f,r0
+5:	mova	ret,r0		! normal case
 	lds	r0,pr
 	!			Build the stack frame if TRA > 0
-7:	cmp/pl	r8
+	!
+6:	mov	r2,r3
+	mov	r8,r2
+	cmp/pl	r8
 	bf	9f
-	shll2	r8		! x4
-	mov	#R15,r0
-	mov.l	@(r0,r15),r0	! get original stack
-8:	add	#-4,r8
-	mov.l	@(r0,r8),r1
+	mov.l	@(SP,r15),r0	! get original stack
+7:	add	#-4,r8
+8:	mov.l	@(r0,r8),r1	! May cause address error exception..
 	mov.l	r1,@-r15
 	cmp/pl	r8
-	bt	8b
+	bt	7b
 	!
-9:	mov.l	@(SYSCALL_NR,r15),r0
+9:	mov	r3,r0
 	shll2	r0		! x4
 	mov.l	__sct,r1
 	add	r1,r0
 	mov.l	@r0,r1
 	jmp	@r1
-	 nop
+	 mov	r2,r8
+
+	! In case of trace
 	.balign	4
-4:	mov.l	r0,@(R0,r15)	! save the return value
+4:	add	r8,r15		! pop off the arguments
+	mov.l	r0,@(R0,r15)	! save the return value
 	mov.l	3f,r1
 	mova	SYMBOL_NAME(ret_from_syscall),r0
 	jmp	@r1
@@ -250,11 +318,36 @@ system_call:
 	.balign	4
 3:	.long	SYMBOL_NAME(syscall_trace)
 2:	.long	0xefffffff	! BL=0
-1:	mov.l	r0,@(R0,r15)	! save the return value
+1:	.long	TRA
+
+	.section	.fixup,"ax"
+fixup_syscall_argerr:
+	rts
+	 mov.l	1f,r0
+1:	.long	-22	! -EINVAL
+.previous
+
+	.section	__ex_table, "a"
+	.balign	4
+	.long	8b,fixup_syscall_argerr
+.previous
+
+
+ENTRY(ret_from_irq)
+	mov.l	@(SR,r15),r0	! get original stack
+	shll	r0
+	shll	r0		! kernel space?
+	bt	restore_all	! Yes, it's from kernel, go back soon
+	! XXX: Is it better to run through bottom half?
+	! In such a case, we should go "ret_from_syscall" instead
+	bra	ret_with_reschedule
+	 nop
+
+ret:	add	r8,r15		! pop off the arguments
+	mov.l	r0,@(R0,r15)	! save the return value
 	/* fall through */
 
 ENTRY(ret_from_syscall)
-ENTRY(ret_from_irq)
 	mov.l	__bh_mask,r0
 	mov.l	@r0,r1
 	mov.l	__bh_active,r0
@@ -276,9 +369,10 @@ ret_with_reschedule:
 	tst	#0xff,r0
 	bf	signal_return
 	!
-	.balign	4
 restore_all:
 	add	#4,r15		! skip syscall number
+	ldc.l	@r15+,ssr
+	mov.l	@r15+,r10	! original stack
 	mov.l	@r15+,r0
 	mov.l	@r15+,r1
 	mov.l	@r15+,r2
@@ -291,6 +385,7 @@ restore_all:
 	mov.l	__blrb_flags,r9		! BL =1, RB=1
 	or	r9,r14
 	ldc	r14,sr			! here, change the register bank
+	mov	r10,k0
 	mov.l	@r15+,r8
 	mov.l	@r15+,r9
 	mov.l	@r15+,r10
@@ -298,12 +393,10 @@ restore_all:
 	mov.l	@r15+,r12
 	mov.l	@r15+,r13
 	mov.l	@r15+,r14
-	mov.l	@r15+,k0
 	ldc.l	@r15+,gbr
 	lds.l	@r15+,mach
 	lds.l	@r15+,macl
 	lds.l	@r15+,pr
-	ldc.l	@r15+,ssr
 	ldc.l	@r15+,spc
 	mov	k0,r15
 	rte
@@ -330,29 +423,32 @@ ENTRY(vbr_base)
 !
 	.balign 	256,0,256
 general_exception:
-	mov	#EXPEVT,k2
+	mov.l	1f,k2
 	mov.l	2f,k3
 	bra	handle_exception
 	 mov.l	@k2,k2
 	.balign	4
 2:	.long	SYMBOL_NAME(ret_from_syscall)
+1:	.long	EXPEVT
 !
 !
 	.balign 	1024,0,1024
 tlb_miss:
-	mov	#EXPEVT,k2
+	mov.l	1f,k2
 	mov.l	3f,k3
 	bra	handle_exception
 	 mov.l	@k2,k2
 !
 	.balign 	512,0,512
 interrupt:
-	mov	#INTEVT,k2
+	mov.l	2f,k2
 	mov.l	4f,k3
 	bra	handle_exception
 	 mov.l	@k2,k2
 
 	.balign	4
+1:	.long	EXPEVT
+2:	.long	INTEVT
 3:	.long	SYMBOL_NAME(ret_from_syscall)
 4:	.long	SYMBOL_NAME(ret_from_irq)
 
@@ -362,15 +458,13 @@ handle_exception:
 	! Using k0, k1 for scratch registers (r0_bank1, and r1_bank1),
 	! save all registers onto stack.
 	!
-	mov.l	2f,k1
 	stc	ssr,k0		! from kernel space?
 	shll	k0		! Check MD bit (bit30)
 	shll	k0
 	bt/s	1f		! it's from kernel to kernel transition
 	 mov	r15,k0		! save original stack to k0 anyway
 	mov	kernel_sp,r15	! change to kernel stack
-1:	stc.l	spc,@-r15	! save control registers
-	stc.l	ssr,@-r15
+1:	stc.l	spc,@-r15
 	sts.l	pr,@-r15
 	!
 	lds	k3,pr		! Set the return address to pr
@@ -378,9 +472,9 @@ handle_exception:
 	sts.l	macl,@-r15
 	sts.l	mach,@-r15
 	stc.l	gbr,@-r15
-	mov.l	k0,@-r15	! save orignal stack, and general registers
 	mov.l	r14,@-r15
 	!
+	mov.l	2f,k1
 	stc	sr,r14		! back to normal register bank, and
 	and	k1,r14		! ..
 	ldc	r14,sr		! ...changed here.
@@ -399,6 +493,8 @@ handle_exception:
 	mov.l	r2,@-r15
 	mov.l	r1,@-r15
 	mov.l	r0,@-r15
+	stc.l	r0_bank,@-r15	! save orignal stack
+	stc.l	ssr,@-r15
 	mov.l	r0,@-r15	! push r0 again (for syscall number)
 	! Then, dispatch to the handler, according to the excepiton code.
 	stc	k_ex_code,r1
@@ -413,10 +509,14 @@ handle_exception:
 1:	.long	SYMBOL_NAME(exception_handling_table)
 2:	.long	0xdfffffff	! RB=0, BL=1
 
+none:
+	rts
+	 nop
+
 .data
 ENTRY(exception_handling_table)
-	.long	0
-	.long	0
+	.long	none /* XXX: Avoid spurious interrupt */
+	.long	error
 	.long	tlb_miss_load
 	.long	tlb_miss_store
 	.long	initial_page_write
@@ -424,13 +524,13 @@ ENTRY(exception_handling_table)
 	.long	tlb_protection_violation_store
 	.long	error	! address_error_load        (filled by trap_init)
 	.long	error	! address_error_store       (filled by trap_init)
-	.long	0
-	.long	0
+	.long	error	! fpu_exception
+	.long	error
 	.long	system_call			! Unconditional Trap
 	.long	error	! reserved_instruction      (filled by trap_init)
 	.long	error	! illegal_slot_instruction  (filled by trap_init)
 ENTRY(nmi_slot)
-	.long	error				! Not implemented yet
+	.long	none				! Not implemented yet
 ENTRY(user_break_point_trap)
 	.long	error				! Not implemented yet
 ENTRY(interrupt_table)
@@ -450,7 +550,7 @@ ENTRY(interrupt_table)
 	.long	SYMBOL_NAME(do_IRQ)	! 1100
 	.long	SYMBOL_NAME(do_IRQ)	! 1101
 	.long	SYMBOL_NAME(do_IRQ)	! 1110
-	.long	0
+	.long	error
 	! Internal hardware
 	.long	SYMBOL_NAME(do_IRQ)	! TMU0 tuni0
 	.long	SYMBOL_NAME(do_IRQ)	! TMU1 tuni1
@@ -468,14 +568,24 @@ ENTRY(interrupt_table)
 	.long	SYMBOL_NAME(do_IRQ)	!      rovi
 	.long	SYMBOL_NAME(do_IRQ)
 	.long	SYMBOL_NAME(do_IRQ)
+	.long	SYMBOL_NAME(do_IRQ)	! Hitachi UDI
+	.long	SYMBOL_NAME(do_IRQ)	! GPIO
+	.long	SYMBOL_NAME(do_IRQ)	! DMAC dmte0
+	.long	SYMBOL_NAME(do_IRQ)	!      dmte1
+	.long	SYMBOL_NAME(do_IRQ)	!      dmte2
+	.long	SYMBOL_NAME(do_IRQ)	!      dmte3
+	.long	SYMBOL_NAME(do_IRQ)	!      dmae
 	.long	SYMBOL_NAME(do_IRQ)
-	.long	SYMBOL_NAME(do_IRQ)
-	.long	SYMBOL_NAME(do_IRQ)
-	.long	SYMBOL_NAME(do_IRQ)
-	.long	SYMBOL_NAME(do_IRQ)
-	.long	SYMBOL_NAME(do_IRQ)
-	.long	SYMBOL_NAME(do_IRQ)
-	.long	SYMBOL_NAME(do_IRQ)
+	.long	SYMBOL_NAME(do_IRQ)	! SCIF eri
+	.long	SYMBOL_NAME(do_IRQ)	!      rxi
+	.long	SYMBOL_NAME(do_IRQ)	!      bri
+	.long	SYMBOL_NAME(do_IRQ)	!      txi
+	.long	error
+	.long	error
+	.long	error
+	.long	error
+	.long	error ! fpu
+	.long	error ! fpu
 
 ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_ni_syscall)	/* 0  -  old "setup()" system call*/
@@ -568,7 +678,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_swapon)
 	.long SYMBOL_NAME(sys_reboot)
 	.long SYMBOL_NAME(old_readdir)
-	.long SYMBOL_NAME(sys_ni_syscall)	/* old_mmap */	/* 90 */
+	.long SYMBOL_NAME(sys_mmap)		/* 90 */
 	.long SYMBOL_NAME(sys_munmap)
 	.long SYMBOL_NAME(sys_truncate)
 	.long SYMBOL_NAME(sys_ftruncate)

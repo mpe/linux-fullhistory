@@ -1,4 +1,5 @@
-/* ld script to make SuperH Linux kernel
+/* $Id: vmlinux.lds.S,v 1.3 1999/10/05 12:33:48 gniibe Exp $
+ * ld script to make SuperH Linux kernel
  * Written by Niibe Yutaka
  */
 #include <linux/config.h>
@@ -15,6 +16,7 @@ SECTIONS
   __text = .;			/* Text and read-only data */
   _text = .;			/* Text and read-only data */
   .text : {
+	*(.empty_zero_page)
 	*(.text)
 	*(.fixup)
 	*(.gnu.warning)
@@ -65,9 +67,6 @@ SECTIONS
 
   . = ALIGN(32);
   .data.cacheline_aligned : { *(.data.cacheline_aligned) }
-
-  . = ALIGN(4096);
-  .data.disk_image : { *(.data.disk_image) }
 
   . = ALIGN(4);
   ___bss_start = .;		/* BSS */

@@ -162,6 +162,7 @@ int __init setup_pdc4030 (ide_hwif_t *hwif)
 	if (!hwif) return 0;
 
 	drive = &hwif->drives[0];
+	drive->timeout = HZ/100;
 	hwif2 = &ide_hwifs[hwif->index+1];
 	if (hwif->chipset == ide_pdc4030) /* we've already been found ! */
 		return 1;
@@ -169,7 +170,8 @@ int __init setup_pdc4030 (ide_hwif_t *hwif)
 	if (IN_BYTE(IDE_NSECTOR_REG) == 0xFF || IN_BYTE(IDE_SECTOR_REG) == 0xFF) {
 		return 0;
 	}
-	OUT_BYTE(0x08,IDE_CONTROL_REG);
+	if (IDE_CONTROL_REG)
+		OUT_BYTE(0x08,IDE_CONTROL_REG);
 	if (pdc4030_cmd(drive,PROMISE_GET_CONFIG)) {
 		return 0;
 	}
@@ -307,6 +309,9 @@ static void promise_read_intr (ide_drive_t *drive)
 	unsigned int sectors_left, sectors_avail, nsect;
 	struct request *rq;
 
+	/* reset timeout */
+	drive->timeout = HZ/100;
+	
 	if (!OK_STAT(stat=GET_STAT(),DATA_READY,BAD_R_STAT)) {
 		ide_error(drive, "promise_read_intr", stat);
 		return;
@@ -361,7 +366,8 @@ read_next:
 		if (stat & DRQ_STAT)
 			goto read_again;
 		if (stat & BUSY_STAT) {
-			ide_set_handler (drive, &promise_read_intr, WAIT_CMD);
+			drive->timeout = WAIT_CMD;
+			ide_set_handler (drive, &promise_read_intr);
 #ifdef DEBUG_READ
 			printk(KERN_DEBUG "%s: promise_read: waiting for"
 			       "interrupt\n", drive->name);
@@ -390,7 +396,8 @@ static void promise_complete_pollfunc(ide_drive_t *drive)
 
 	if (GET_STAT() & BUSY_STAT) {
 		if (time_before(jiffies, hwgroup->poll_timeout)) {
-			ide_set_handler(drive, &promise_complete_pollfunc, 1);
+			drive->timeout = 1;
+			ide_set_handler(drive, &promise_complete_pollfunc);
 			return; /* continue polling... */
 		}
 		hwgroup->poll_timeout = 0;
@@ -419,7 +426,8 @@ static void promise_write_pollfunc (ide_drive_t *drive)
 
 	if (IN_BYTE(IDE_NSECTOR_REG) != 0) {
 		if (time_before(jiffies, hwgroup->poll_timeout)) {
-			ide_set_handler (drive, &promise_write_pollfunc, 1);
+			drive->timeout = 1;
+			ide_set_handler (drive, &promise_write_pollfunc);
 			return; /* continue polling... */
 		}
 		hwgroup->poll_timeout = 0;
@@ -433,7 +441,8 @@ static void promise_write_pollfunc (ide_drive_t *drive)
 	 */
 	ide_multwrite(drive, 4);
 	hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
-	ide_set_handler(drive, &promise_complete_pollfunc, 1);
+	drive->timeout = 1;
+	ide_set_handler(drive, &promise_complete_pollfunc);
 #ifdef DEBUG_WRITE
 	printk(KERN_DEBUG "%s: Done last 4 sectors - status = %02x\n",
 		drive->name, GET_STAT());
@@ -466,7 +475,8 @@ static void promise_write (ide_drive_t *drive)
 	if (rq->nr_sectors > 4) {
 		ide_multwrite(drive, rq->nr_sectors - 4);
 		hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
-		ide_set_handler (drive, &promise_write_pollfunc, 1);
+		drive->timeout = 1;
+		ide_set_handler (drive, &promise_write_pollfunc);
 	} else {
 	/*
 	 * There are 4 or fewer sectors to transfer, do them all in one go
@@ -474,7 +484,8 @@ static void promise_write (ide_drive_t *drive)
 	 */
 		ide_multwrite(drive, rq->nr_sectors);
 		hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
-		ide_set_handler(drive, &promise_complete_pollfunc, 1);
+		drive->timeout = 1;
+		ide_set_handler(drive, &promise_complete_pollfunc);
 #ifdef DEBUG_WRITE
 		printk(KERN_DEBUG "%s: promise_write: <= 4 sectors, "
 			"status = %02x\n", drive->name, GET_STAT());
@@ -517,7 +528,8 @@ void do_pdc4030_io (ide_drive_t *drive, struct request *rq)
 				printk(KERN_DEBUG "%s: read: waiting for "
 				                  "interrupt\n", drive->name);
 #endif
-				ide_set_handler(drive, &promise_read_intr, WAIT_CMD);
+				drive->timeout = WAIT_CMD;
+				ide_set_handler(drive, &promise_read_intr);
 				return;
 			}
 			udelay(1);

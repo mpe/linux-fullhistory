@@ -5,6 +5,9 @@
 
 #include <asm/io.h>
 
+extern ide_drive_t * get_info_ptr(kdev_t);
+extern unsigned long current_capacity (ide_drive_t *);
+
 /*
  * We query CMOS about hard disks : it could be that we have a SCSI/ESDI/etc
  * controller that is BIOS compatible with ST-506, and thus showing up in our

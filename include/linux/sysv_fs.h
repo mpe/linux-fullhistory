@@ -384,7 +384,6 @@ extern int sysv_new_block(struct super_block * sb);
 extern void sysv_free_block(struct super_block * sb, unsigned int block);
 extern unsigned long sysv_count_free_blocks(struct super_block *sb);
 
-extern struct buffer_head * sysv_getblk(struct inode *, unsigned int, int);
 extern int sysv_get_block(struct inode *, long, struct buffer_head *, int);
 extern struct buffer_head * sysv_file_bread(struct inode *, int, int);
 

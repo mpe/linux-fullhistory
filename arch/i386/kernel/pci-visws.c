@@ -14,6 +14,7 @@
 
 #include <asm/smp.h>
 #include <asm/lithium.h>
+#include <asm/io.h>
 
 #include "pci-i386.h"
 

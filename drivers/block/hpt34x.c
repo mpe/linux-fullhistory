@@ -1,7 +1,9 @@
 /*
- * linux/drivers/block/hpt34x.c		Version 0.25	July 11, 1999
+ * linux/drivers/block/hpt34x.c		Version 0.27	Sept 03, 1999
  *
- * Copyright (C) 1998-99	Andre Hedrick
+ * Copyright (C) 1998-99	Andre Hedrick (andre@suse.com)
+ * May be copied or modified under the terms of the GNU General Public License
+ *
  *
  * 00:12.0 Unknown mass storage controller:
  * Triones Technologies, Inc.
@@ -14,9 +16,6 @@
  * hdg: DMA 1  (0x0012 0x0052) (0x0030 0x0070)
  * hdh: DMA 1  (0x0052 0x0252) (0x0070 0x00f0)
  *
- * drive_number
- *	= ((HWIF(drive)->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
- *	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
  */
 
 #include <linux/config.h>
@@ -58,7 +57,7 @@ static void hpt34x_clear_chipset (ide_drive_t *drive)
 	pci_read_config_dword(HWIF(drive)->pci_dev, 0x44, &reg1);
 	pci_read_config_dword(HWIF(drive)->pci_dev, 0x48, &reg2);
 	tmp1 = ((0x00 << (3*drive_number)) | (reg1 & ~(7 << (3*drive_number))));
-	tmp2 = ((0x00 << drive_number) | reg2);
+	tmp2 = (reg2 & ~(0x11 << drive_number));
 	pci_write_config_dword(HWIF(drive)->pci_dev, 0x44, tmp1);
 	pci_write_config_dword(HWIF(drive)->pci_dev, 0x48, tmp2);
 }
@@ -105,7 +104,7 @@ static int hpt34x_tune_chipset (ide_drive_t *drive, byte speed)
  * after the drive is reported by the OS.  Initally for designed for
  * HPT343 UDMA chipset by HighPoint|Triones Technologies, Inc.
  */
-static int config_chipset_for_dma (ide_drive_t *drive)
+static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 {
 	struct hd_driveid *id	= drive->id;
 	byte speed		= 0x00;
@@ -117,76 +116,29 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 		return ((int) ide_dma_off_quietly);
 #endif /* HPT343_DISABLE_ALL_DMAING */
 
-	if (id->dma_ultra & 0x0010) {
-		goto backspeed;
-	} else if (id->dma_ultra & 0x0008) {
-		goto backspeed;
-	} else if (id->dma_ultra & 0x0004) {
-backspeed:
-		if (!((id->dma_ultra >> 8) & 4)) {
-			drive->id->dma_ultra &= ~0xFF00;
-			drive->id->dma_ultra |= 0x0404;
-			drive->id->dma_mword &= ~0x0F00;
-			drive->id->dma_1word &= ~0x0F00;
-		}
+	hpt34x_clear_chipset(drive);
+
+	if ((id->dma_ultra & 0x0010) && ultra) {
 		speed = XFER_UDMA_2;
-	} else if (id->dma_ultra & 0x0002) {
-		if (!((id->dma_ultra >> 8) & 2)) {
-			drive->id->dma_ultra &= ~0xFF00;
-			drive->id->dma_ultra |= 0x0202;
-			drive->id->dma_mword &= ~0x0F00;
-			drive->id->dma_1word &= ~0x0F00;
-		}
+	} else if ((id->dma_ultra & 0x0008) && ultra) {
+		speed = XFER_UDMA_2;
+	} else if ((id->dma_ultra & 0x0004) && ultra) {
+		speed = XFER_UDMA_2;
+	} else if ((id->dma_ultra & 0x0002) && ultra) {
 		speed = XFER_UDMA_1;
-	} else if (id->dma_ultra & 0x0001) {
-		if (!((id->dma_ultra >> 8) & 1)) {
-			drive->id->dma_ultra &= ~0xFF00;
-			drive->id->dma_ultra |= 0x0101;
-			drive->id->dma_mword &= ~0x0F00;
-			drive->id->dma_1word &= ~0x0F00;
-		}
+	} else if ((id->dma_ultra & 0x0001) && ultra) {
 		speed = XFER_UDMA_0;
 	} else if (id->dma_mword & 0x0004) {
-		if (!((id->dma_mword >> 8) & 4)) {
-			drive->id->dma_mword &= ~0x0F00;
-			drive->id->dma_mword |= 0x0404;
-			drive->id->dma_1word &= ~0x0F00;
-		}
 		speed = XFER_MW_DMA_2;
 	} else if (id->dma_mword & 0x0002) {
-		if (!((id->dma_mword >> 8) & 2)) {
-			drive->id->dma_mword &= ~0x0F00;
-			drive->id->dma_mword |= 0x0202;
-			drive->id->dma_1word &= ~0x0F00;
-		}
 		speed = XFER_MW_DMA_1;
 	} else if (id->dma_mword & 0x0001) {
-		if (!((id->dma_mword >> 8) & 1)) {
-			drive->id->dma_mword &= ~0x0F00;
-			drive->id->dma_mword |= 0x0101;
-			drive->id->dma_1word &= ~0x0F00;
-		}
 		speed = XFER_MW_DMA_0;
 	} else if (id->dma_1word & 0x0004) {
-		if (!((id->dma_1word >> 8) & 4)) {
-			drive->id->dma_1word &= ~0x0F00;
-			drive->id->dma_1word |= 0x0404;
-			drive->id->dma_mword &= ~0x0F00;
-		}
 		speed = XFER_SW_DMA_2;
 	} else if (id->dma_1word & 0x0002) {
-		if (!((id->dma_1word >> 8) & 2)) {
-			drive->id->dma_1word &= ~0x0F00;
-			drive->id->dma_1word |= 0x0202;
-			drive->id->dma_mword &= ~0x0F00;
-		}
 		speed = XFER_SW_DMA_1;
 	} else if (id->dma_1word & 0x0001) {
-		if (!((id->dma_1word >> 8) & 1)) {
-			drive->id->dma_1word &= ~0x0F00;
-			drive->id->dma_1word |= 0x0101;
-			drive->id->dma_mword &= ~0x0F00;
-		}
 		speed = XFER_SW_DMA_0;
         } else {
 		return ((int) ide_dma_off_quietly);
@@ -242,7 +194,6 @@ static void hpt34x_tune_drive (ide_drive_t *drive, byte pio)
 {
 	byte speed;
 
-	hpt34x_clear_chipset(drive);
 	switch(pio) {
 		case 4:		speed = XFER_PIO_4;break;
 		case 3:		speed = XFER_PIO_3;break;
@@ -250,6 +201,7 @@ static void hpt34x_tune_drive (ide_drive_t *drive, byte pio)
 		case 1:		speed = XFER_PIO_1;break;
 		default:	speed = XFER_PIO_0;break;
 	}
+	hpt34x_clear_chipset(drive);
 	(void) hpt34x_tune_chipset(drive, speed);
 }
 
@@ -268,7 +220,7 @@ static int config_drive_xfer_rate (ide_drive_t *drive)
 		if (id->field_valid & 4) {
 			if (id->dma_ultra & 0x0007) {
 				/* Force if Capable UltraDMA */
-				dma_func = config_chipset_for_dma(drive);
+				dma_func = config_chipset_for_dma(drive, 1);
 				if ((id->field_valid & 2) &&
 				    (dma_func != ide_dma_on))
 					goto try_dma_modes;
@@ -278,7 +230,7 @@ try_dma_modes:
 			if ((id->dma_mword & 0x0007) ||
 			    (id->dma_1word & 0x0007)) {
 				/* Force if Capable regular DMA modes */
-				dma_func = config_chipset_for_dma(drive);
+				dma_func = config_chipset_for_dma(drive, 0);
 				if (dma_func != ide_dma_on)
 					goto no_dma_set;
 			}
@@ -287,7 +239,7 @@ try_dma_modes:
 				goto no_dma_set;
 			}
 			/* Consult the list of known "good" drives */
-			dma_func = config_chipset_for_dma(drive);
+			dma_func = config_chipset_for_dma(drive, 0);
 			if (dma_func != ide_dma_on)
 				goto no_dma_set;
 		} else {
@@ -300,6 +252,12 @@ no_dma_set:
 
 		config_chipset_for_pio(drive);
 	}
+
+#if 0
+	if (dma_func == ide_dma_on)
+		dma_func = ide_dma_off;
+#endif
+
 	return HWIF(drive)->dmaproc(dma_func, drive);
 }
 
@@ -313,22 +271,44 @@ no_dma_set:
 
 int hpt34x_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 {
+	ide_hwif_t *hwif = HWIF(drive);
+	unsigned long dma_base = hwif->dma_base;
+	byte unit = (drive->select.b.unit & 0x01);
+	unsigned int count, reading = 0;
+	byte dma_stat;
+
 	switch (func) {
-		case ide_dma_check:
-			hpt34x_clear_chipset(drive);
-			return config_drive_xfer_rate(drive);
-#if 0
 		case ide_dma_off:
 		case ide_dma_off_quietly:
+			outb(inb(dma_base+2) & ~(1<<(5+unit)), dma_base+2);
+			break;
 		case ide_dma_on:
+			outb(inb(dma_base+2)|(1<<(5+unit)), dma_base+2);
+			break;
 		case ide_dma_check:
 			return config_drive_xfer_rate(drive);
 		case ide_dma_read:
+			reading = 1 << 3;
 		case ide_dma_write:
-		case ide_dma_begin:
-		case ide_dma_end:
-		case ide_dma_test_irq:
-#endif
+			if (!(count = ide_build_dmatable(drive, func)))
+				return 1;	/* try PIO instead of DMA */
+			outl(virt_to_bus(hwif->dmatable), dma_base + 4); /* PRD table */
+			reading |= 0x01;
+			outb(reading, dma_base);		/* specify r/w */
+			outb(inb(dma_base+2)|6, dma_base+2);	/* clear INTR & ERROR flags */
+			drive->waiting_for_dma = 1;
+			if (drive->media != ide_disk)
+				return 0;
+			drive->timeout = WAIT_CMD;
+			ide_set_handler(drive, &ide_dma_intr);	/* issue cmd to drive */
+			OUT_BYTE((reading == 9) ? WIN_READDMA : WIN_WRITEDMA, IDE_COMMAND_REG);
+			return 0;
+		case ide_dma_end:	/* returns 1 on error, 0 otherwise */
+			drive->waiting_for_dma = 0;
+			outb(inb(dma_base)&~1, dma_base);	/* stop DMA */
+			dma_stat = inb(dma_base+2);		/* get DMA status */
+			outb(dma_stat|6, dma_base+2);		/* clear the INTR & ERROR bits */
+			return (dma_stat & 7) != 4;		/* verify good DMA status */
 		default:
 			break;
 	}
@@ -342,10 +322,17 @@ int hpt34x_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 
 unsigned int __init pci_init_hpt34x (struct pci_dev *dev, const char *name)
 {
+	int i = 0;
+	unsigned long hpt34xIoBase = dev->resource[4].start;
 	unsigned short cmd;
+	unsigned long flags;
+
+	__save_flags(flags);	/* local CPU only */
+	__cli();		/* local CPU only */
 
 	pci_write_config_byte(dev, HPT34X_PCI_INIT_REG, 0x00);
 	pci_read_config_word(dev, PCI_COMMAND, &cmd);
+
 	if (cmd & PCI_COMMAND_MEMORY) {
 		if (dev->resource[PCI_ROM_RESOURCE].start) {
 			pci_write_config_byte(dev, PCI_ROM_ADDRESS, dev->resource[PCI_ROM_RESOURCE].start | PCI_ROM_ADDRESS_ENABLE);
@@ -353,27 +340,28 @@ unsigned int __init pci_init_hpt34x (struct pci_dev *dev, const char *name)
 		}
 		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0xF0);
 	} else {
-		int i = 0;
-		unsigned long hpt34xIoBase = dev->resource[4].start;
-
-		pci_write_config_word(dev, PCI_COMMAND, cmd & ~PCI_COMMAND_IO);
-		dev->resource[0].start = (hpt34xIoBase + 0x20);
-		dev->resource[1].start = (hpt34xIoBase + 0x34);
-		dev->resource[2].start = (hpt34xIoBase + 0x28);
-		dev->resource[3].start = (hpt34xIoBase + 0x3c);
-		for(i=0; i<4; i++)
-			dev->resource[i].flags |= PCI_BASE_ADDRESS_SPACE_IO;
-		/*
-		 * Since 20-23 can be assigned and are R/W, we correct them.
-		 */
-		pci_write_config_dword(dev, PCI_BASE_ADDRESS_0, dev->resource[0].start);
-		pci_write_config_dword(dev, PCI_BASE_ADDRESS_1, dev->resource[1].start);
-		pci_write_config_dword(dev, PCI_BASE_ADDRESS_2, dev->resource[2].start);
-		pci_write_config_dword(dev, PCI_BASE_ADDRESS_3, dev->resource[3].start);
-
-		pci_write_config_word(dev, PCI_COMMAND, cmd);
 		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0x20);
 	}
+
+	pci_write_config_word(dev, PCI_COMMAND, cmd & ~PCI_COMMAND_IO);
+	dev->resource[0].start = (hpt34xIoBase + 0x20);
+	dev->resource[1].start = (hpt34xIoBase + 0x34);
+	dev->resource[2].start = (hpt34xIoBase + 0x28);
+	dev->resource[3].start = (hpt34xIoBase + 0x3c);
+	for(i=0; i<4; i++)
+		dev->resource[i].flags |= PCI_BASE_ADDRESS_SPACE_IO;
+	/*
+	 * Since 20-23 can be assigned and are R/W, we correct them.
+	 */
+	pci_write_config_dword(dev, PCI_BASE_ADDRESS_0, dev->resource[0].start);
+	pci_write_config_dword(dev, PCI_BASE_ADDRESS_1, dev->resource[1].start);
+	pci_write_config_dword(dev, PCI_BASE_ADDRESS_2, dev->resource[2].start);
+	pci_write_config_dword(dev, PCI_BASE_ADDRESS_3, dev->resource[3].start);
+
+	pci_write_config_word(dev, PCI_COMMAND, cmd);
+
+	__restore_flags(flags);	/* local CPU only */
+
 	return dev->irq;
 }
 

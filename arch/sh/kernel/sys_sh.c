@@ -1,9 +1,11 @@
 /*
- * linux/arch/i386/kernel/sys_i386.c
+ * linux/arch/sh/kernel/sys_sh.c
  *
  * This file contains various random system calls that
- * have a non-standard calling sequence on the Linux/i386
+ * have a non-standard calling sequence on the Linux/SuperH
  * platform.
+ *
+ * Taken from i386 version.
  */
 
 #include <linux/errno.h>
@@ -41,66 +43,32 @@ asmlinkage int sys_pipe(unsigned long * fildes)
 	return error;
 }
 
-/*
- * Perform the select(nd, in, out, ex, tv) and mmap() system
- * calls. Linux/i386 didn't use to be able to handle more than
- * 4 system call parameters, so these system calls used a memory
- * block for parameter passing..
- */
-
-struct mmap_arg_struct {
-	unsigned long addr;
-	unsigned long len;
-	unsigned long prot;
-	unsigned long flags;
-	unsigned long fd;
-	unsigned long offset;
-};
-
-asmlinkage int old_mmap(struct mmap_arg_struct *arg)
+asmlinkage unsigned long
+sys_mmap(int fd, unsigned long addr,
+	 unsigned long len, unsigned long prot,
+	 unsigned long flags, unsigned long off)
 {
 	int error = -EFAULT;
-	struct file * file = NULL;
-	struct mmap_arg_struct a;
-
-	if (copy_from_user(&a, arg, sizeof(a)))
-		return -EFAULT;
+	struct file *file = NULL;
 
 	down(&current->mm->mmap_sem);
 	lock_kernel();
-	if (!(a.flags & MAP_ANONYMOUS)) {
+	if (!(flags & MAP_ANONYMOUS)) {
 		error = -EBADF;
-		file = fget(a.fd);
+		file = fget(fd);
 		if (!file)
 			goto out;
 	}
-	a.flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
+	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 
-	error = do_mmap(file, a.addr, a.len, a.prot, a.flags, a.offset);
+	error = do_mmap(file, addr, len, prot, flags, off);
 	if (file)
 		fput(file);
 out:
 	unlock_kernel();
 	up(&current->mm->mmap_sem);
+
 	return error;
-}
-
-extern asmlinkage int sys_select(int, fd_set *, fd_set *, fd_set *, struct timeval *);
-
-struct sel_arg_struct {
-	unsigned long n;
-	fd_set *inp, *outp, *exp;
-	struct timeval *tvp;
-};
-
-asmlinkage int old_select(struct sel_arg_struct *arg)
-{
-	struct sel_arg_struct a;
-
-	if (copy_from_user(&a, arg, sizeof(a)))
-		return -EFAULT;
-	/* sys_select() does the appropriate kernel locking */
-	return sys_select(a.n, a.inp, a.outp, a.exp, a.tvp);
 }
 
 /*
@@ -198,9 +166,6 @@ asmlinkage int sys_ipc (uint call, int first, int second,
 	return -EINVAL;
 }
 
-/*
- * Old cruft
- */
 asmlinkage int sys_uname(struct old_utsname * name)
 {
 	int err;
@@ -210,35 +175,6 @@ asmlinkage int sys_uname(struct old_utsname * name)
 	err=copy_to_user(name, &system_utsname, sizeof (*name));
 	up(&uts_sem);
 	return err?-EFAULT:0;
-}
-
-asmlinkage int sys_olduname(struct oldold_utsname * name)
-{
-	int error;
-
-	if (!name)
-		return -EFAULT;
-	if (!access_ok(VERIFY_WRITE,name,sizeof(struct oldold_utsname)))
-		return -EFAULT;
-  
-  	down(&uts_sem);
-	
-	error = __copy_to_user(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
-	error |= __put_user(0,name->sysname+__OLD_UTS_LEN);
-	error |= __copy_to_user(&name->nodename,&system_utsname.nodename,__OLD_UTS_LEN);
-	error |= __put_user(0,name->nodename+__OLD_UTS_LEN);
-	error |= __copy_to_user(&name->release,&system_utsname.release,__OLD_UTS_LEN);
-	error |= __put_user(0,name->release+__OLD_UTS_LEN);
-	error |= __copy_to_user(&name->version,&system_utsname.version,__OLD_UTS_LEN);
-	error |= __put_user(0,name->version+__OLD_UTS_LEN);
-	error |= __copy_to_user(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
-	error |= __put_user(0,name->machine+__OLD_UTS_LEN);
-	
-	up(&uts_sem);
-	
-	error = error ? -EFAULT : 0;
-
-	return error;
 }
 
 asmlinkage int sys_pause(void)

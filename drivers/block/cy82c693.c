@@ -1,8 +1,8 @@
 /*
- * linux/drivers/block/cy82c693.c	Version 0.33	Jan. 23, 1999
+ * linux/drivers/block/cy82c693.c	Version 0.34	Sept 3, 1999
  *
- *  Copyright (C) 1998, 1999 Andreas S. Krebs (akrebs@altavista.net), Maintainer
- *  Copyright (C) 1998 Andre Hedrick, Integrater
+ *  Copyright (C) 1998-99 Andreas S. Krebs (akrebs@altavista.net), Maintainer
+ *  Copyright (C) 1998-99 Andre Hedrick, Integrater
  *
  * CYPRESS CY82C693 chipset IDE controller
  *
@@ -31,6 +31,7 @@
  *
  *
  * History:
+ * AMH@1999-08-24: v0.34 init_cy82c693_chip moved to pci_init_cy82c693
  * ASK@1999-01-23: v0.33 made a few minor code clean ups
  *                       removed DMA clock speed setting by default
  *                       added boot message
@@ -53,7 +54,7 @@
 #include "ide_modes.h"
 
 /* the current version */
-#define CY82_VERSION	"CY82C693U driver v0.33 99-01-23 Andreas S. Krebs (akrebs@altavista.net)"
+#define CY82_VERSION	"CY82C693U driver v0.34 99-09-03 Andreas S. Krebs (akrebs@altavista.net)"
 
 /*
  *	The following are used to debug the driver.
@@ -377,19 +378,9 @@ static void cy82c693_tune_drive (ide_drive_t *drive, byte pio)
 
 unsigned int __init pci_init_cy82c693(struct pci_dev *dev, const char *name)
 {
-	return 0;
-}
-
-static void init_cy82c693_chip (struct pci_dev *dev)
-{
-	static int initDone = 0;
 #ifdef CY82C693_SETDMA_CLOCK
         byte data;
 #endif /* CY82C693_SETDMA_CLOCK */ 
-
-	if (initDone != 0)	/* only perform setup once */
-		return;
-	initDone = 1;
 
 	/* write info about this verion of the driver */
 	printk (KERN_INFO CY82_VERSION "\n");
@@ -401,7 +392,7 @@ static void init_cy82c693_chip (struct pci_dev *dev)
         data = IN_BYTE(CY82_DATA_PORT);
 
 #if CY82C693_DEBUG_INFO
-	printk (KERN_INFO "CY82U693: Peripheral Configuration Register: 0x%X\n", data);
+	printk (KERN_INFO "%s: Peripheral Configuration Register: 0x%X\n", name, data);
 #endif /* CY82C693_DEBUG_INFO */
 
         /*
@@ -422,10 +413,11 @@ static void init_cy82c693_chip (struct pci_dev *dev)
         OUT_BYTE(data, CY82_DATA_PORT);
 
 #if CY82C693_DEBUG_INFO
-	printk (KERN_INFO "CY82U693: New Peripheral Configuration Register: 0x%X\n", data);
+	printk (KERN_INFO "%s: New Peripheral Configuration Register: 0x%X\n", name, data);
 #endif /* CY82C693_DEBUG_INFO */
 
-#endif /* CY82C693_SETDMA_CLOCK */ 
+#endif /* CY82C693_SETDMA_CLOCK */
+	return 0;
 }
 
 /*
@@ -437,7 +429,5 @@ void __init ide_init_cy82c693(ide_hwif_t *hwif)
 	if (hwif->dma_base)
 		hwif->dmaproc = &cy82c693_dmaproc;
 	hwif->tuneproc = &cy82c693_tune_drive;
-
-	init_cy82c693_chip(hwif->pci_dev);
 }
 

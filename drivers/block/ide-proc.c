@@ -73,13 +73,20 @@
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #endif
 
-#ifdef CONFIG_BLK_DEV_VIA82C586
-int (*via_display_info)(char *, char **, off_t, int, int) = NULL;
-#endif /* CONFIG_BLK_DEV_VIA82C586 */
-
 #ifdef CONFIG_BLK_DEV_ALI15X3
+extern byte ali_proc;
 int (*ali_display_info)(char *, char **, off_t, int, int) = NULL;
 #endif /* CONFIG_BLK_DEV_ALI15X3 */
+
+#ifdef CONFIG_BLK_DEV_SIS5513
+extern byte sis_proc;
+int (*sis_display_info)(char *, char **, off_t, int, int) = NULL;
+#endif /* CONFIG_BLK_DEV_SIS5513 */
+
+#ifdef CONFIG_BLK_DEV_VIA82CXXX
+extern byte via_proc;
+int (*via_display_info)(char *, char **, off_t, int, int) = NULL;
+#endif /* CONFIG_BLK_DEV_VIA82CXXX */
 
 static int ide_getxdigit(char c)
 {
@@ -243,7 +250,27 @@ static int proc_ide_write_config
 					}
 #endif	/* CONFIG_BLK_DEV_IDEPCI */
 				} else {	/* not pci */
-#ifndef CONFIG_Q40
+#if !defined(__mc68000__) && !defined(CONFIG_APUS)
+
+/*
+ * Geert Uytterhoeven
+ *
+ * unless you can explain me what it really does.
+ * On m68k, we don't have outw() and outl() yet,
+ * and I need a good reason to implement it.
+ * 
+ * BTW, IMHO the main remaining portability problem with the IDE driver 
+ * is that it mixes IO (ioport) and MMIO (iomem) access on different platforms.
+ * 
+ * I think all accesses should be done using
+ * 
+ *     ide_in[bwl](ide_device_instance, offset)
+ *     ide_out[bwl](ide_device_instance, value, offset)
+ * 
+ * so the architecture specific code can #define ide_{in,out}[bwl] to the
+ * appropriate function.
+ * 
+ */
 					switch (digits) {
 						case 2:	outb(val, reg);
 							break;
@@ -252,7 +279,7 @@ static int proc_ide_write_config
 						case 8:	outl(val, reg);
 							break;
 					}
-#endif	/* CONFIG_Q40 */
+#endif /* !__mc68000__ && !CONFIG_APUS */
 				}
 			}
 		}
@@ -750,18 +777,24 @@ void proc_ide_create(void)
 	ent = create_proc_entry("drivers", 0, proc_ide_root);
 	if (!ent) return;
 	ent->read_proc  = proc_ide_read_drivers;
-#ifdef CONFIG_BLK_DEV_VIA82C586
-	if (via_display_info) {
-		ent = create_proc_entry("via", 0, proc_ide_root);
-		ent->get_info = via_display_info;
-	}
-#endif /* CONFIG_BLK_DEV_VIA82C586 */
 #ifdef CONFIG_BLK_DEV_ALI15X3
-	if (ali_display_info) {
+	if ((ali_display_info) && (ali_proc)) {
 		ent = create_proc_entry("ali", 0, proc_ide_root);
 		ent->get_info = ali_display_info;
 	}
 #endif /* CONFIG_BLK_DEV_ALI15X3 */
+#ifdef CONFIG_BLK_DEV_SIS5513
+	if ((sis_display_info) && (sis_proc)) {
+		ent = create_proc_entry("sis", 0, proc_ide_root);
+		ent->get_info = sis_display_info;
+	}
+#endif /* CONFIG_BLK_DEV_SIS5513 */
+#ifdef CONFIG_BLK_DEV_VIA82CXXX
+	if ((via_display_info) && (via_proc)) {
+		ent = create_proc_entry("via", 0, proc_ide_root);
+		ent->get_info = via_display_info;
+	}
+#endif /* CONFIG_BLK_DEV_VIA82CXXX */
 }
 
 void proc_ide_destroy(void)
@@ -770,14 +803,18 @@ void proc_ide_destroy(void)
 	 * Mmmm.. does this free up all resources,
 	 * or do we need to do a more proper cleanup here ??
 	 */
-#ifdef CONFIG_BLK_DEV_VIA82C586
-	if (via_display_info)
-		remove_proc_entry("ide/via",0);
-#endif /* CONFIG_BLK_DEV_VIA82C586 */
 #ifdef CONFIG_BLK_DEV_ALI15X3
-	if (ali_display_info)
+	if ((ali_display_info) && (ali_proc))
 		remove_proc_entry("ide/ali",0);
 #endif /* CONFIG_BLK_DEV_ALI15X3 */
+#ifdef CONFIG_BLK_DEV_SIS5513
+	if ((sis_display_info) && (sis_proc))
+		remove_proc_entry("ide/sis", 0);
+#endif /* CONFIG_BLK_DEV_SIS5513 */
+#ifdef CONFIG_BLK_DEV_VIA82CXXX
+	if ((via_display_info) && (via_proc))
+		remove_proc_entry("ide/via",0);
+#endif /* CONFIG_BLK_DEV_VIA82CXXX */
 	remove_proc_entry("ide/drivers", 0);
 	destroy_proc_ide_interfaces();
 	remove_proc_entry("ide", 0);

@@ -39,6 +39,7 @@
 #include <linux/ioport.h>
 #include <linux/major.h>
 #include <linux/blk.h>
+#include <linux/ide.h>
 #include <linux/vt_kern.h>
 #include <linux/console.h>
 #include <linux/ide.h>
@@ -57,7 +58,6 @@
 #include <asm/ohare.h>
 #include <asm/mediabay.h>
 #include <asm/feature.h>
-#include <asm/ide.h>
 #include <asm/machdep.h>
 #include <asm/keyboard.h>
 #include <asm/dma.h>
@@ -421,7 +421,7 @@ note_scsi_host(struct device_node *node, void *host)
 #if defined(CONFIG_BLK_DEV_IDE) && defined(CONFIG_BLK_DEV_IDE_PMAC)
 extern int pmac_ide_count;
 extern struct device_node *pmac_ide_node[];
-static int ide_majors[] = { 3, 22, 33, 34, 56, 57, 88, 89 };
+static int ide_majors[] = { 3, 22, 33, 34, 56, 57, 88, 89, 90, 91 };
 
 kdev_t __init find_ide_boot(void)
 {

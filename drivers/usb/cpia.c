@@ -356,7 +356,7 @@ goto error;
 			int i;
 			int y, u, y1, v, r, g, b;
 
-			/* We want atleast 2 bytes for the length */
+			/* We want at least 2 bytes for the length */
 			if (scratch_left(data) < 2)
 				goto out;
 
@@ -536,8 +536,9 @@ static int cpia_compress_isochronous(struct usb_cpia *cpia, struct usb_isoc_desc
 	return totlen;
 }
 
-static int cpia_isoc_irq(int status, void *__buffer, int len, void *dev_id)
+static int cpia_isoc_irq(int status, void *__buffer, int len, void *isocdesc)
 {
+	void *dev_id = ((struct usb_isoc_desc *)isocdesc)->context;
 	struct usb_cpia *cpia = (struct usb_cpia *)dev_id;
 	struct cpia_sbuf *sbuf;
 	int i;
@@ -584,6 +585,12 @@ static int cpia_init_isoc(struct usb_cpia *cpia)
 	cpia->cursbuf = 0;
 	cpia->scratchlen = 0;
 
+	/* Alternate interface 3 is is the biggest frame size */
+	if (usb_set_interface(cpia->dev, 1, 3) < 0) {
+		printk("usb_set_interface error\n");
+		return -EBUSY;
+	}
+
 	/* We double buffer the Iso lists */
 	err = usb_init_isoc(dev, usb_rcvisocpipe(dev, 1), FRAMES_PER_DESC,
 		cpia, &cpia->sbuf[0].isodesc);
@@ -618,7 +625,7 @@ static int cpia_init_isoc(struct usb_cpia *cpia)
 	for (fx = 0; fx < FRAMES_PER_DESC; fx++)
 		id->frames[fx].frame_length = FRAME_SIZE_PER_DESC;
 
-	/* and the desc. [1] */
+	/* and for desc. [1] */
 	id = cpia->sbuf[1].isodesc;
 	id->start_type = 0;             /* will follow the first desc. */
 	id->callback_frames = 10;	/* on every 10th frame */
@@ -628,17 +635,16 @@ static int cpia_init_isoc(struct usb_cpia *cpia)
 	for (fx = 0; fx < FRAMES_PER_DESC; fx++)
 		id->frames[fx].frame_length = FRAME_SIZE_PER_DESC;
 
-	usb_run_isoc(cpia->sbuf[0].isodesc, NULL);
-	usb_run_isoc(cpia->sbuf[1].isodesc, cpia->sbuf[0].isodesc);
+	err = usb_run_isoc(cpia->sbuf[0].isodesc, NULL);
+	if (err)
+		printk(KERN_ERR "CPiA USB driver error (%d) on usb_run_isoc\n", err);
+	err = usb_run_isoc(cpia->sbuf[1].isodesc, cpia->sbuf[0].isodesc);
+	if (err)
+		printk(KERN_ERR "CPiA USB driver error (%d) on usb_run_isoc\n", err);
 
 #ifdef CPIA_DEBUG
 	printk("done scheduling\n");
 #endif
-	/* Alternate interface 3 is is the biggest frame size */
-	if (usb_set_interface(cpia->dev, 1, 3) < 0) {
-		printk("usb_set_interface error\n");
-		return -EBUSY;
-	}
 
 #if 0
 	if (usb_cpia_grab_frame(dev, 120) < 0) {
@@ -915,11 +921,8 @@ static int cpia_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			p.brightness = 180 << 8;	/* XXX */
 			p.contrast = 192 << 8;		/* XXX */
 			p.whiteness = 105 << 8;		/* XXX */
-#if 0
 			p.depth = 24;
-#endif
-			p.depth = 16;
-			p.palette = VIDEO_PALETTE_YUYV;
+			p.palette = VIDEO_PALETTE_RGB24;
 
 			if (copy_to_user(arg, &p, sizeof(p)))
 				return -EFAULT;
@@ -940,6 +943,8 @@ static int cpia_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 #ifdef CPIA_DEBUG
 			printk("Attempting to set palette %d, depth %d\n",
 				p.palette, p.depth);
+			printk("SPICT: brightness=%d, hue=%d, colour=%d, contrast=%d, whiteness=%d\n",
+				p.brightness, p.hue, p.colour, p.contrast, p.whiteness);
 #endif
 
 			return 0;
@@ -1008,7 +1013,6 @@ static int cpia_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		case VIDIOCMCAPTURE:
 		{
 			struct video_mmap vm;
-
 
 			if (copy_from_user((void *)&vm, (void *)arg, sizeof(vm)))
 				return -EFAULT;
@@ -1090,11 +1094,26 @@ printk("back from sleeping\n");
 
 			return cpia_new_frame(cpia, -1);
 		}
+		case VIDIOCGFBUF:
+		{
+			struct video_buffer vb;
+
+#ifdef CPIA_DEBUG
+			printk("GFBUF\n");
+#endif
+
+			memset(&vb, 0, sizeof(vb));
+			vb.base = NULL;	/* frame buffer not supported, not used */
+
+			if (copy_to_user((void *)arg, (void *)&vb, sizeof(vb)))
+				return -EFAULT;
+
+ 			return 0;
+ 		}
 		case VIDIOCKEY:
 			return 0;
 		case VIDIOCCAPTURE:
 			return -EINVAL;
-		case VIDIOCGFBUF:
 		case VIDIOCSFBUF:
 			return -EINVAL;
 		case VIDIOCGTUNER:
@@ -1333,4 +1352,3 @@ void cleanup_module(void)
 	usb_cpia_cleanup();
 }
 #endif
-

@@ -6,7 +6,7 @@ OUTPUT_ARCH(i386)
 ENTRY(_start)
 SECTIONS
 {
-  . = PAGE_OFFSET_RAW + 0x100000;
+  . = 0xC0000000 + 0x100000;
   _text = .;			/* Text and read-only data */
   .text : {
 	*(.text)

@@ -34,6 +34,7 @@
 #include <linux/serial.h>
 #include <linux/cdk.h>
 #include <linux/comstats.h>
+#include <linux/version.h>
 #include <linux/istallion.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>

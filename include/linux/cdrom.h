@@ -673,6 +673,8 @@ struct cdrom_device_info {
 /* per-device flags */
         __u8 sanyo_slot		: 2;	/* Sanyo 3 CD changer support */
         __u8 reserved		: 6;	/* not used yet */
+	__u32 packet_size;		/* write out this number of packets */
+	__u32 nwa;			/* next writeable address */
 };
 
 struct cdrom_device_ops {
@@ -760,8 +762,6 @@ typedef struct {
         __u8 uru			: 1;
         __u8 dbc_v			: 1;
 	__u8 did_v			: 1;
-#else
-#error "Please fix <asm/byteorder.h>"
 #endif
 	__u8 disc_type;
 	__u8 n_sessions_msb;
@@ -806,8 +806,6 @@ typedef struct {
 	__u8 nwa_v			: 1;
 	__u8 lra_v			: 1;
 	__u8 reserved3			: 6;
-#else
-#error "Please fix <asm/byteorder.h>"
 #endif
 	__u32 track_start;
 	__u32 next_writable;
@@ -835,14 +833,11 @@ struct cdrom_mechstat_header {
 	__u8 reserved1     : 4;
 	__u8 door_open     : 1;
 	__u8 mech_state    : 3;
-#else
-#error "Please fix <asm/byteorder.h>"
 #endif
 	__u8     curlba[3];
 	__u8     nslots;
 	__u8 short slot_tablelen;
 };
-
 
 struct cdrom_slot {
 #if defined(__BIG_ENDIAN_BITFIELD)
@@ -853,8 +848,6 @@ struct cdrom_slot {
 	__u8 change       : 1;
 	__u8 reserved1    : 6;
 	__u8 disc_present : 1;
-#else
-#error "Please fix <asm/byteorder.h>"
 #endif
 	__u8 reserved2[3];
 };
@@ -871,6 +864,71 @@ typedef enum {
 	mechtype_individual_changer = 4,
 	mechtype_cartridge_changer  = 5
 } mechtype_t;
+
+struct mode_page_header {
+	__u16 mode_data_length;
+	__u8 medium_type;
+	__u8 reserved1;
+	__u8 reserved2;
+	__u8 reserved3;
+	__u16 desc_length;
+};
+
+typedef struct {
+	struct mode_page_header header;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 ps			: 1;
+	__u8 reserved1		: 1;
+	__u8 page_code		: 6;
+        __u8 page_length;
+	__u8 reserved2		: 1;
+	__u8 bufe		: 1;
+	__u8 ls_v		: 1;
+	__u8 test_write		: 1;
+        __u8 write_type		: 4;
+	__u8 multi_session	: 2; /* or border, DVD */
+	__u8 fp			: 1;
+	__u8 copy		: 1;
+	__u8 track_mode		: 4;
+	__u8 reserved3		: 4;
+	__u8 data_block_type	: 4;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 page_code		: 6;
+	__u8 reserved1		: 1;
+	__u8 ps			: 1;
+        __u8 page_length;
+        __u8 write_type		: 4;
+	__u8 test_write		: 1;
+	__u8 ls_v		: 1;
+	__u8 bufe		: 1;
+	__u8 reserved2		: 1;
+	__u8 track_mode		: 4;
+	__u8 copy		: 1;
+	__u8 fp			: 1;
+	__u8 multi_session	: 2; /* or border, DVD */
+	__u8 data_block_type	: 4;
+	__u8 reserved3		: 4;
+#endif
+	__u8 link_size;
+	__u8 reserved4;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 reserved5		: 2;
+	__u8 app_code		: 6;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 app_code		: 6;
+	__u8 reserved5		: 2;
+#endif
+	__u8 session_format;
+	__u8 reserved6;
+	__u32 packet_size;
+	__u16 audio_pause;
+	__u8 mcn[16];
+	__u8 isrc[16];
+	__u8 subhdr0;
+	__u8 subhdr1;
+	__u8 subhdr2;
+	__u8 subhdr3;
+} write_param_page __attribute__((packed));
 
 #endif  /* End of kernel only stuff */ 
 

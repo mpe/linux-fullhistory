@@ -1,7 +1,8 @@
-/*
+/* $Id: uaccess.h,v 1.3 1999/10/12 14:46:20 gniibe Exp $
+ *
  * User space memory access functions
  *
- * Copyright (C) 1999 Niibe Yutaka
+ * Copyright (C) 1999  Niibe Yutaka
  *
  *  Based on:
  *     MIPS implementation version 1.15 by
@@ -48,7 +49,7 @@
 	unsigned long flag,sum; \
 	__asm__("clrt; addc %3,%1; movt %0; cmp/hi %4,%1; rotcl %0" \
 		:"=&r" (flag), "=r" (sum) \
-		:"1" (addr), "r" (size), "r" (current->addr_limit.seg)); \
+		:"1" (addr), "r" ((int)(size)), "r" (current->addr_limit.seg)); \
 	flag; })
 
 #define access_ok(type,addr,size) (__range_ok(addr,size) == 0)
@@ -229,11 +230,11 @@ __copy_user(void *__to, const void *__from, __kernel_size_t __n)
 		"mov.l	5f,%1\n\t"
 		"jmp	@%1\n\t"
 		" mov	%7,%0\n\t"
-		".align 4\n"
+		".balign 4\n"
 		"5:	.long 2b\n"
 		".previous\n"
 		".section __ex_table,\"a\"\n"
-		"	.align 4\n"
+		"	.balign 4\n"
 		"	.long 9b,3b\n"
 		"	.long 1b,2b\n"
 		".previous"
@@ -313,11 +314,11 @@ __clear_user(void *addr, __kernel_size_t size)
 		"mov.l	4f,%0\n\t"
 		"jmp	@%0\n\t"
 		" mov	%7,%0\n"
-		".align 4\n"
+		".balign 4\n"
 		"4:	.long 2b\n"
 		".previous\n"
 		".section __ex_table,\"a\"\n"
-		"	.align 4\n"
+		"	.balign 4\n"
 		"	.long 1b,3b\n"
 		".previous"
 		: "=&r" (res), "=&r" (__a), "=&r" (__s)
@@ -356,11 +357,11 @@ __strncpy_from_user(unsigned long __dest, unsigned long __src, int __count)
 		"mov.l	4f,%1\n\t"
 		"jmp	@%1\n\t"
 		" mov	%8,%0\n\t"
-		".align 4\n"
+		".balign 4\n"
 		"4:	.long 2b\n"
 		".previous\n"
 		".section __ex_table,\"a\"\n"
-		"	.align 4\n"
+		"	.balign 4\n"
 		"	.long 9b,3b\n"
 		"	.long 1b,2b\n"
 		".previous"
@@ -380,46 +381,51 @@ if(__access_ok(__sfu_src, __sfu_count)) { \
 __sfu_res = __strncpy_from_user((unsigned long) (dest), __sfu_src, __sfu_count); \
 } __sfu_res; })
 
+#define strlen_user(str) strnlen_user(str, ~0UL >> 1)
+
 /*
  * Return the size of a string (including the ending 0!)
  */
-extern __inline__ long __strlen_user(const char *__s)
+extern __inline__ long __strnlen_user(const char *__s, long __n)
 {
 	unsigned long res;
 	unsigned long __dummy;
 
 	__asm__ __volatile__(
 		"mov	#-1,%1\n"
-		"9:\n"
+		"9:\n\t"
+		"cmp/eq	%4,%0\n\t"
+		"bt	5f\n\t"
 		"cmp/eq	#0,%1\n\t"
 		"bf/s	9b\n\t"
 		"1:\t"
 		" mov.b	@%0+,%1\n\t"
+		"5:\t"
 		"sub	%3,%0\n"
 		"2:\n"
 		".section .fixup,\"ax\"\n"
 		"3:\n\t"
 		"mov.l	4f,%1\n\t"
 		"jmp	@%1\n\t"
-		" mov	%4,%0\n"
-		".align 4\n"
+		" mov	%5,%0\n"
+		".balign 4\n"
 		"4:	.long 2b\n"
 		".previous\n"
 		".section __ex_table,\"a\"\n"
-		"	.align 4\n"
+		"	.balign 4\n"
 		"	.long 1b,3b\n"
 		".previous"
 		: "=&r" (res), "=&z" (__dummy)
-		: "0" (__s), "r" (__s), "i" (-EFAULT));
+		: "0" (__s), "r" (__s), "r" (__s+__n), "i" (-EFAULT));
 	return res;
 }
 
-extern __inline__ long strlen_user(const char *s)
+extern __inline__ long strnlen_user(const char *s, long n)
 {
-	if(!access_ok(VERIFY_READ, s, 0))
+	if(!access_ok(VERIFY_READ, s, n))
 		return 0;
 	else
-		return __strlen_user(s);
+		return __strnlen_user(s, n);
 }
 
 struct exception_table_entry

@@ -230,8 +230,8 @@ ifeq ($(CONFIG_BLK_DEV_UMC8672),y)
 IDE_OBJS += umc8672.o
 endif
 
-ifeq ($(CONFIG_BLK_DEV_VIA82C586),y)
-IDE_OBJS += via82c586.o
+ifeq ($(CONFIG_BLK_DEV_VIA82CXXX),y)
+IDE_OBJS += via82cxxx.o
 endif
 
 ### if CONFIG_BLK_DEV_IDE is n, IDE_OBJS will be ignored
@@ -379,4 +379,3 @@ ide-mod.o: ide.o $(IDE_OBJS)
 
 ide-probe-mod.o: ide-probe.o ide-geometry.o
 	$(LD) $(LD_RFLAG) -r -o $@ ide-probe.o ide-geometry.o
-

@@ -20,9 +20,20 @@
 /*
  *  CPU type and hardware bug flags. Kept separately for each CPU.
  */
+enum cpu_type {
+	CPU_SH7708,		/* Represents 7708, 7708S, 7708R, 7709 */
+	CPU_SH7729,		/* Represents 7709A, 7729 */
+	CPU_SH7750,
+	CPU_SH_NONE
+};
 
 struct sh_cpuinfo {
+	enum cpu_type type;
 	unsigned long loops_per_sec;
+
+	char	hard_math;
+
+	/* Not yet used */
 	unsigned long *pgd_quick;
 	unsigned long *pte_quick;
 	unsigned long pgtable_cache_sz;
@@ -30,7 +41,7 @@ struct sh_cpuinfo {
 
 extern struct sh_cpuinfo boot_cpu_data;
 
-#define cpu_data &boot_cpu_data
+#define cpu_data (&boot_cpu_data)
 #define current_cpu_data boot_cpu_data
 
 /*
@@ -43,6 +54,33 @@ extern struct sh_cpuinfo boot_cpu_data;
  */
 #define TASK_UNMAPPED_BASE	(TASK_SIZE / 3)
 
+#define NUM_FPU_REGS	16
+
+struct sh_fpu_hard_struct {
+	unsigned long fp_regs[NUM_FPU_REGS];
+	unsigned long xf_regs[NUM_FPU_REGS];
+	unsigned long fpscr;
+	unsigned long fpul;
+
+	long status; /* software status information */
+};
+
+/* Dummy fpu emulator  */
+struct sh_fpu_soft_struct {
+	unsigned long fp_regs[NUM_FPU_REGS];
+	unsigned long xf_regs[NUM_FPU_REGS];
+	unsigned long fpscr;
+	unsigned long fpul;
+
+	unsigned char	lookahead;
+	unsigned long	entry_pc;
+};
+
+union sh_fpu_union {
+	struct sh_fpu_hard_struct hard;
+	struct sh_fpu_soft_struct soft;
+};
+
 struct thread_struct {
 	unsigned long sp;
 	unsigned long pc;
@@ -50,6 +88,9 @@ struct thread_struct {
 	unsigned long trap_no, error_code;
 	unsigned long address;
 	/* Hardware debugging registers may come here */
+
+	/* floating point info */
+	union sh_fpu_union fpu;
 };
 
 #define INIT_MMAP \
@@ -59,6 +100,8 @@ struct thread_struct {
 	sizeof(init_stack) + (long) &init_stack, /* sp */	\
 	0,					 /* pc */	\
 	0, 0, \
+	0, \
+	{{{0,}},} \
 }
 
 /*
@@ -69,7 +112,7 @@ struct thread_struct {
 	regs->pr = 0;   		 	 \
 	regs->sr = 0;		/* User mode. */ \
 	regs->pc = new_pc;			 \
-	regs->u_regs[UREG_SP] = new_sp
+	regs->sp = new_sp
 
 /* Forward declaration, a strange C thing */
 struct task_struct;
@@ -95,6 +138,49 @@ extern int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags);
 #define copy_segments(p, mm)	do { } while(0)
 #define release_segments(mm)	do { } while(0)
 #define forget_segments()	do { } while (0)
+
+/*
+ * FPU lazy state save handling..
+ */
+#define SR_FD	0x00008000
+
+extern __inline__ void release_fpu(void)
+{
+	unsigned long __dummy;
+
+	/* Set FD flag in SR */
+	__asm__ __volatile__ ("stc	sr,%0\n\t"
+			      "or	%1,%0\n\t"
+			      "ldc	%0,sr"
+			      : "=&r" (__dummy)
+			      : "r" (SR_FD));
+}
+
+extern __inline__ void grab_fpu(void)
+{
+	unsigned long __dummy;
+
+	/* Clear out FD flag in SR */
+	__asm__ __volatile__ ("stc	sr,%0\n\t"
+			      "and	%1,%0\n\t"
+			      "ldc	%0,sr"
+			      : "=&r" (__dummy)
+			      : "r" (~SR_FD));
+}
+
+extern void save_fpu(struct task_struct *__tsk);
+
+#define unlazy_fpu(tsk) do { \
+	if (tsk->flags & PF_USEDFPU) \
+		save_fpu(tsk); \
+} while (0)
+
+#define clear_fpu(tsk) do { \
+	if (tsk->flags & PF_USEDFPU) { \
+		tsk->flags &= ~PF_USEDFPU; \
+		release_fpu(); \
+	} \
+} while (0)
 
 /*
  * Return saved PC of a blocked thread.

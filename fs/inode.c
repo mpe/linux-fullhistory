@@ -429,7 +429,7 @@ static inline void __iget(struct inode * inode)
  * by hand after calling find_inode now! This simplify iunique and won't
  * add any additional branch in the common code.
  */
-static struct inode * find_inode(struct super_block * sb, unsigned long ino, struct list_head *head)
+static struct inode * find_inode(struct super_block * sb, unsigned long ino, struct list_head *head, find_inode_t find_actor, void *opaque)
 {
 	struct list_head *tmp;
 	struct inode * inode;
@@ -444,6 +444,8 @@ static struct inode * find_inode(struct super_block * sb, unsigned long ino, str
 		if (inode->i_sb != sb)
 			continue;
 		if (inode->i_ino != ino)
+			continue;
+		if (find_actor && !find_actor(inode, ino, opaque))
 			continue;
 		break;
 	}
@@ -504,7 +506,7 @@ struct inode * get_empty_inode(void)
  * We no longer cache the sb_flags in i_flags - see fs.h
  *	-- rmk@arm.uk.linux.org
  */
-static struct inode * get_new_inode(struct super_block *sb, unsigned long ino, struct list_head *head)
+static struct inode * get_new_inode(struct super_block *sb, unsigned long ino, struct list_head *head, find_inode_t find_actor, void *opaque)
 {
 	struct inode * inode;
 
@@ -514,7 +516,7 @@ static struct inode * get_new_inode(struct super_block *sb, unsigned long ino, s
 
 		spin_lock(&inode_lock);
 		/* We released the lock, so.. */
-		old = find_inode(sb, ino, head);
+		old = find_inode(sb, ino, head, find_actor, opaque);
 		if (!old)
 		{
 			list_add(&inode->i_list, &inode_in_use);
@@ -570,7 +572,7 @@ ino_t iunique(struct super_block *sb, ino_t max_reserved)
 retry:
 	if (counter > max_reserved) {
 		head = inode_hashtable + hash(sb,counter);
-		inode = find_inode(sb, res = counter++, head);
+		inode = find_inode(sb, res = counter++, head, NULL, NULL);
 		if (!inode) {
 			spin_unlock(&inode_lock);
 			return res;
@@ -595,13 +597,13 @@ struct inode *igrab(struct inode *inode)
 	return inode;
 }
 
-struct inode *iget(struct super_block *sb, unsigned long ino)
+struct inode *iget4(struct super_block *sb, unsigned long ino, find_inode_t find_actor, void *opaque)
 {
 	struct list_head * head = inode_hashtable + hash(sb,ino);
 	struct inode * inode;
 
 	spin_lock(&inode_lock);
-	inode = find_inode(sb, ino, head);
+	inode = find_inode(sb, ino, head, find_actor, opaque);
 	if (inode) {
 		__iget(inode);
 		spin_unlock(&inode_lock);
@@ -614,7 +616,7 @@ struct inode *iget(struct super_block *sb, unsigned long ino)
 	 * get_new_inode() will do the right thing, re-trying the search
 	 * in case it had to block at any point.
 	 */
-	return get_new_inode(sb, ino, head);
+	return get_new_inode(sb, ino, head, find_actor, opaque);
 }
 
 void insert_inode_hash(struct inode *inode)

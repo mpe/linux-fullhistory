@@ -1,4 +1,5 @@
-/*
+/* $Id: signal.c,v 1.10 1999/09/27 23:25:44 gniibe Exp $
+ *
  *  linux/arch/sh/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -8,8 +9,6 @@
  *  SuperH version:  Copyright (C) 1999  Niibe Yutaka
  *
  */
-
-#include <linux/config.h>
 
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -24,6 +23,7 @@
 #include <linux/stddef.h>
 #include <asm/ucontext.h>
 #include <asm/uaccess.h>
+#include <asm/pgtable.h>
 
 #define DEBUG_SIG 0
 
@@ -50,7 +50,7 @@ sys_sigsuspend(old_sigset_t mask,
 	recalc_sigpending(current);
 	spin_unlock_irq(&current->sigmask_lock);
 
-	regs.u_regs[0] = -EINTR;
+	regs.regs[0] = -EINTR;
 	while (1) {
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
@@ -80,7 +80,7 @@ sys_rt_sigsuspend(sigset_t *unewset, size_t sigsetsize,
 	recalc_sigpending(current);
 	spin_unlock_irq(&current->sigmask_lock);
 
-	regs.u_regs[0] = -EINTR;
+	regs.regs[0] = -EINTR;
 	while (1) {
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
@@ -126,7 +126,7 @@ sys_sigaltstack(const stack_t *uss, stack_t *uoss,
 		unsigned long r6, unsigned long r7,
 		struct pt_regs regs)
 {
-	return do_sigaltstack(uss, uoss, regs.u_regs[UREG_SP]);
+	return do_sigaltstack(uss, uoss, regs.sp);
 }
 
 
@@ -137,7 +137,7 @@ sys_sigaltstack(const stack_t *uss, stack_t *uoss,
 struct sigframe
 {
 	struct sigcontext sc;
-	/* FPU should come here: SH-3 has no FPU */
+	/* FPU data should come here: SH-3 has no FPU */
 	unsigned long extramask[_NSIG_WORDS-1];
 	char retcode[4];
 };
@@ -158,22 +158,22 @@ restore_sigcontext(struct pt_regs *regs, struct sigcontext *sc, int *r0_p)
 {
 	unsigned int err = 0;
 
-#define COPY(x)		err |= __get_user(regs->x, &sc->x)
-				COPY(u_regs[1]);
-	COPY(u_regs[2]);	COPY(u_regs[3]);
-	COPY(u_regs[4]);	COPY(u_regs[5]);
-	COPY(u_regs[6]);	COPY(u_regs[7]);
-	COPY(u_regs[8]);	COPY(u_regs[9]);
-	COPY(u_regs[10]);	COPY(u_regs[11]);
-	COPY(u_regs[12]);	COPY(u_regs[13]);
-	COPY(u_regs[14]);	COPY(u_regs[15]);
-	COPY(gbr);		COPY(mach);
-	COPY(macl);		COPY(pr);
-	COPY(sr);		COPY(pc);
+#define COPY(x)		err |= __get_user(regs->x, &sc->sc_##x)
+			COPY(regs[1]);
+	COPY(regs[2]);	COPY(regs[3]);
+	COPY(regs[4]);	COPY(regs[5]);
+	COPY(regs[6]);	COPY(regs[7]);
+	COPY(regs[8]);	COPY(regs[9]);
+	COPY(regs[10]);	COPY(regs[11]);
+	COPY(regs[12]);	COPY(regs[13]);
+	COPY(regs[14]);	COPY(sp);
+	COPY(gbr);	COPY(mach);
+	COPY(macl);	COPY(pr);
+	COPY(sr);	COPY(pc);
 #undef COPY
 
 	regs->syscall_nr = -1;		/* disable syscall checks */
-	err |= __get_user(*r0_p, &sc->u_regs[0]);
+	err |= __get_user(*r0_p, &sc->sc_regs[0]);
 
 	return err;
 }
@@ -182,7 +182,7 @@ asmlinkage int sys_sigreturn(unsigned long r4, unsigned long r5,
 			     unsigned long r6, unsigned long r7,
 			     struct pt_regs regs)
 {
-	struct sigframe *frame = (struct sigframe *)regs.u_regs[UREG_SP];
+	struct sigframe *frame = (struct sigframe *)regs.sp;
 	sigset_t set;
 	int r0;
 
@@ -213,7 +213,7 @@ asmlinkage int sys_rt_sigreturn(unsigned long r4, unsigned long r5,
 				unsigned long r6, unsigned long r7,
 				struct pt_regs regs)
 {
-	struct rt_sigframe *frame = (struct rt_sigframe *)regs.u_regs[UREG_SP];
+	struct rt_sigframe *frame = (struct rt_sigframe *)regs.sp;
 	sigset_t set;
 	stack_t st;
 	int r0;
@@ -236,7 +236,7 @@ asmlinkage int sys_rt_sigreturn(unsigned long r4, unsigned long r5,
 		goto badframe;
 	/* It is more difficult to avoid calling this function than to
 	   call it and ignore errors.  */
-	do_sigaltstack(&st, NULL, regs.u_regs[UREG_SP]);
+	do_sigaltstack(&st, NULL, regs.sp);
 
 	return r0;
 
@@ -255,18 +255,18 @@ setup_sigcontext(struct sigcontext *sc, struct pt_regs *regs,
 {
 	int err = 0;
 
-#define COPY(x)		err |= __put_user(regs->x, &sc->x)
-	COPY(u_regs[0]);	COPY(u_regs[1]);
-	COPY(u_regs[2]);	COPY(u_regs[3]);
-	COPY(u_regs[4]);	COPY(u_regs[5]);
-	COPY(u_regs[6]);	COPY(u_regs[7]);
-	COPY(u_regs[8]);	COPY(u_regs[9]);
-	COPY(u_regs[10]);	COPY(u_regs[11]);
-	COPY(u_regs[12]);	COPY(u_regs[13]);
-	COPY(u_regs[14]);	COPY(u_regs[15]);
-	COPY(gbr);		COPY(mach);
-	COPY(macl);		COPY(pr);
-	COPY(sr);		COPY(pc);
+#define COPY(x)		err |= __put_user(regs->x, &sc->sc_##x)
+	COPY(regs[0]);	COPY(regs[1]);
+	COPY(regs[2]);	COPY(regs[3]);
+	COPY(regs[4]);	COPY(regs[5]);
+	COPY(regs[6]);	COPY(regs[7]);
+	COPY(regs[8]);	COPY(regs[9]);
+	COPY(regs[10]);	COPY(regs[11]);
+	COPY(regs[12]);	COPY(regs[13]);
+	COPY(regs[14]);	COPY(sp);
+	COPY(gbr);	COPY(mach);
+	COPY(macl);	COPY(pr);
+	COPY(sr);	COPY(pc);
 #undef COPY
 
 	/* non-iBCS2 extensions.. */
@@ -294,7 +294,7 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 	int err = 0;
 	int signal;
 
-	frame = get_sigframe(ka, regs->u_regs[UREG_SP], sizeof(*frame));
+	frame = get_sigframe(ka, regs->sp, sizeof(*frame));
 
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		goto give_sigsegv;
@@ -318,8 +318,8 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 		regs->pr = (unsigned long) ka->sa.sa_restorer;
 	} else {
 		/* This is ; mov  #__NR_sigreturn,r0 ; trapa #0 */
-#ifdef CONFIG_LITTLE_ENDIAN
-		unsigned long code = 0x00c300e0 | (__NR_sigreturn << 8);
+#ifdef __LITTLE_ENDIAN__
+		unsigned long code = 0xc300e000 | (__NR_sigreturn);
 #else
 		unsigned long code = 0xe000c300 | (__NR_sigreturn << 16);
 #endif
@@ -332,8 +332,8 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 		goto give_sigsegv;
 
 	/* Set up registers for signal handler */
-	regs->u_regs[UREG_SP] = (unsigned long) frame;
-	regs->u_regs[4] = signal; /* Arg for signal handler */
+	regs->sp = (unsigned long) frame;
+	regs->regs[4] = signal; /* Arg for signal handler */
 	regs->pc = (unsigned long) ka->sa.sa_handler;
 
 	set_fs(USER_DS);
@@ -343,6 +343,7 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 		current->comm, current->pid, frame, regs->pc, regs->pr);
 #endif
 
+	flush_icache_range(regs->pr, regs->pr+4);
 	return;
 
 give_sigsegv:
@@ -358,7 +359,7 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	int err = 0;
 	int signal;
 
-	frame = get_sigframe(ka, regs->u_regs[UREG_SP], sizeof(*frame));
+	frame = get_sigframe(ka, regs->sp, sizeof(*frame));
 
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		goto give_sigsegv;
@@ -376,9 +377,9 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	/* Create the ucontext.  */
 	err |= __put_user(0, &frame->uc.uc_flags);
 	err |= __put_user(0, &frame->uc.uc_link);
-	err |= __put_user(current->sas_ss_sp, &frame->uc.uc_stack.ss_sp);
-	err |= __put_user(sas_ss_flags(regs->u_regs[UREG_SP]),
-			  &frame->uc.uc_stack.ss_flags);
+	err |= __put_user((void *)current->sas_ss_sp,
+			  &frame->uc.uc_stack.ss_sp);
+	err |= __put_user(sas_ss_flags(regs->sp), &frame->uc.uc_stack.ss_flags);
 	err |= __put_user(current->sas_ss_size, &frame->uc.uc_stack.ss_size);
 	err |= setup_sigcontext(&frame->uc.uc_mcontext,
 			        regs, set->sig[0]);
@@ -390,8 +391,8 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 		regs->pr = (unsigned long) ka->sa.sa_restorer;
 	} else {
 		/* This is ; mov  #__NR_sigreturn,r0 ; trapa #0 */
-#ifdef CONFIG_LITTLE_ENDIAN
-		unsigned long code = 0x00c300e0 | (__NR_sigreturn << 8);
+#ifdef __LITTLE_ENDIAN__
+		unsigned long code = 0xc300e000 | (__NR_sigreturn);
 #else
 		unsigned long code = 0xe000c300 | (__NR_sigreturn << 16);
 #endif
@@ -404,8 +405,8 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 		goto give_sigsegv;
 
 	/* Set up registers for signal handler */
-	regs->u_regs[UREG_SP] = (unsigned long) frame;
-	regs->u_regs[4] = signal; /* Arg for signal handler */
+	regs->sp = (unsigned long) frame;
+	regs->regs[4] = signal; /* Arg for signal handler */
 	regs->pc = (unsigned long) ka->sa.sa_handler;
 
 	set_fs(USER_DS);
@@ -415,6 +416,7 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 		current->comm, current->pid, frame, regs->pc, regs->pr);
 #endif
 
+	flush_icache_range(regs->pr, regs->pr+4);
 	return;
 
 give_sigsegv:
@@ -434,19 +436,19 @@ handle_signal(unsigned long sig, struct k_sigaction *ka,
 	/* Are we from a system call? */
 	if (regs->syscall_nr >= 0) {
 		/* If so, check system call restarting.. */
-		switch (regs->u_regs[0]) {
+		switch (regs->regs[0]) {
 			case -ERESTARTNOHAND:
-				regs->u_regs[0] = -EINTR;
+				regs->regs[0] = -EINTR;
 				break;
 
 			case -ERESTARTSYS:
 				if (!(ka->sa.sa_flags & SA_RESTART)) {
-					regs->u_regs[0] = -EINTR;
+					regs->regs[0] = -EINTR;
 					break;
 				}
 			/* fallthrough */
 			case -ERESTARTNOINTR:
-				regs->u_regs[0] = regs->syscall_nr;
+				regs->regs[0] = regs->syscall_nr;
 				regs->pc -= 2;
 		}
 	}
@@ -577,7 +579,6 @@ int do_signal(struct pt_regs *regs, sigset_t *oldset)
 				/* NOTREACHED */
 			}
 		}
-
 		/* Whee!  Actually deliver the signal.  */
 		handle_signal(signr, ka, &info, oldset, regs);
 		return 1;
@@ -586,10 +587,10 @@ int do_signal(struct pt_regs *regs, sigset_t *oldset)
 	/* Did we come from a system call? */
 	if (regs->syscall_nr >= 0) {
 		/* Restart the system call - no handlers present */
-		if (regs->u_regs[0] == -ERESTARTNOHAND ||
-		    regs->u_regs[0] == -ERESTARTSYS ||
-		    regs->u_regs[0] == -ERESTARTNOINTR) {
-			regs->u_regs[0] = regs->syscall_nr;
+		if (regs->regs[0] == -ERESTARTNOHAND ||
+		    regs->regs[0] == -ERESTARTSYS ||
+		    regs->regs[0] == -ERESTARTNOINTR) {
+			regs->regs[0] = regs->syscall_nr;
 			regs->pc -= 2;
 		}
 	}

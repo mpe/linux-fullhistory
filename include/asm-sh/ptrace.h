@@ -2,7 +2,7 @@
 #define __ASM_SH_PTRACE_H
 
 /*
- * Copyright (C) 1999 Niibe Yutaka
+ * Copyright (C) 1999  Niibe Yutaka
  *
  */
 
@@ -12,12 +12,13 @@
  */
 struct pt_regs {
 	long syscall_nr;
-	unsigned long u_regs[16];
+	unsigned long sr;
+	unsigned long sp;
+	unsigned long regs[15];
 	unsigned long gbr;
 	unsigned long mach;
 	unsigned long macl;
 	unsigned long pr;
-	unsigned long sr;
 	unsigned long pc;
 };
 
@@ -27,5 +28,4 @@ struct pt_regs {
 extern void show_regs(struct pt_regs *);
 #endif
 
-#define UREG_SP 15
 #endif /* __ASM_SH_PTRACE_H */

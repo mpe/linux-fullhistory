@@ -80,12 +80,14 @@ bad_pmd:
 int access_process_vm(struct task_struct *tsk, unsigned long addr, void *buf, int len, int write)
 {
 	int copied;
-	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
-
-	if (!vma)
-		return 0;
+	struct vm_area_struct * vma;
 
 	down(&tsk->mm->mmap_sem);
+	vma = find_extend_vma(tsk, addr);
+	if (!vma) {
+		up(&tsk->mm->mmap_sem);
+		return 0;
+	}
 	copied = 0;
 	for (;;) {
 		unsigned long offset = addr & ~PAGE_MASK;

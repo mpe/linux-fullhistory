@@ -1,9 +1,10 @@
-/*
+/* $Id: process.c,v 1.7 1999/09/23 00:05:41 gniibe Exp $
+ *
  *  linux/arch/sh/kernel/process.c
  *
  *  Copyright (C) 1995  Linus Torvalds
  *
- *  SuperH version:  Copyright (C) 1999  Niibe Yutaka
+ *  SuperH version:  Copyright (C) 1999  Niibe Yutaka & Kaz Kojima
  */
 
 /*
@@ -40,6 +41,10 @@
 #include <asm/elf.h>
 
 #include <linux/irq.h>
+
+#if defined(__SH4__)
+struct task_struct *last_task_used_math = NULL;
+#endif
 
 static int hlt_counter=0;
 
@@ -92,22 +97,21 @@ void machine_power_off(void)
 void show_regs(struct pt_regs * regs)
 {
 	printk("\n");
-	printk("PC: [<%08lx>]", regs->pc);
-	printk(" SP: %08lx", regs->u_regs[UREG_SP]);
-	printk(" SR: %08lx\n", regs->sr);
-	printk("R0 : %08lx R1 : %08lx R2 : %08lx R3 : %08lx\n",
-	       regs->u_regs[0],regs->u_regs[1],
-	       regs->u_regs[2],regs->u_regs[3]);
-	printk("R4 : %08lx R5 : %08lx R6 : %08lx R7 : %08lx\n",
-	       regs->u_regs[4],regs->u_regs[5],
-	       regs->u_regs[6],regs->u_regs[7]);
-	printk("R8 : %08lx R9 : %08lx R10: %08lx R11: %08lx\n",
-	       regs->u_regs[8],regs->u_regs[9],
-	       regs->u_regs[10],regs->u_regs[11]);
-	printk("R12: %08lx R13: %08lx R14: %08lx\n",
-	       regs->u_regs[12],regs->u_regs[13],
-	       regs->u_regs[14]);
-	printk("MACH: %08lx MACL: %08lx GBR: %08lx PR: %08lx",
+	printk("PC  : %08lx SP  : %08lx SR  : %08lx TEA : %08lx\n",
+	       regs->pc, regs->sp, regs->sr, ctrl_inl(MMU_TEA));
+	printk("R0  : %08lx R1  : %08lx R2  : %08lx R3  : %08lx\n",
+	       regs->regs[0],regs->regs[1],
+	       regs->regs[2],regs->regs[3]);
+	printk("R4  : %08lx R5  : %08lx R6  : %08lx R7  : %08lx\n",
+	       regs->regs[4],regs->regs[5],
+	       regs->regs[6],regs->regs[7]);
+	printk("R8  : %08lx R9  : %08lx R10 : %08lx R11 : %08lx\n",
+	       regs->regs[8],regs->regs[9],
+	       regs->regs[10],regs->regs[11]);
+	printk("R12 : %08lx R13 : %08lx R14 : %08lx\n",
+	       regs->regs[12],regs->regs[13],
+	       regs->regs[14]);
+	printk("MACH: %08lx MACL: %08lx GBR : %08lx PR  : %08lx\n",
 	       regs->mach, regs->macl, regs->gbr, regs->pr);
 }
 
@@ -163,13 +167,35 @@ int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
  */
 void exit_thread(void)
 {
+#if defined(__sh3__)
 	/* nothing to do ... */
+#elif defined(__SH4__)
+#if 0 /* for the time being... */
+	/* Forget lazy fpu state */
+	if (last_task_used_math == current) {
+		set_status_register (SR_FD, 0);
+		write_system_register (fpscr, FPSCR_PR);
+		last_task_used_math = NULL;
+	}
+#endif
+#endif
 }
 
 void flush_thread(void)
 {
+#if defined(__sh3__)
 	/* do nothing */
 	/* Possibly, set clear debug registers */
+#elif defined(__SH4__)
+#if 0 /* for the time being... */
+	/* Forget lazy fpu state */
+	if (last_task_used_math == current) {
+		set_status_register (SR_FD, 0);
+		write_system_register (fpscr, FPSCR_PR);
+		last_task_used_math = NULL;
+	}
+#endif
+#endif
 }
 
 void release_thread(struct task_struct *dead_task)
@@ -180,6 +206,15 @@ void release_thread(struct task_struct *dead_task)
 /* Fill in the fpu structure for a core dump.. */
 int dump_fpu(struct pt_regs *regs, elf_fpregset_t *r)
 {
+#if defined(__SH4__)
+#if 0 /* for the time being... */
+	    /* We store the FPU info in the task->thread area.  */
+	    if (! (regs->sr & SR_FD)) {
+		    memcpy (r, &current->thread.fpu, sizeof (*r));
+		    return 1;
+	    }
+#endif
+#endif
 	return 0; /* Task didn't use the fpu at all. */
 }
 
@@ -191,14 +226,26 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	struct pt_regs *childregs;
 
 	childregs = ((struct pt_regs *)(THREAD_SIZE + (unsigned long) p)) - 1;
-
 	*childregs = *regs;
-	if (user_mode(regs)) {
-		childregs->u_regs[UREG_SP] = usp;
-	} else {
-		childregs->u_regs[UREG_SP] = (unsigned long)p+2*PAGE_SIZE;
+
+#if defined(__SH4__)
+#if 0 /* for the time being... */
+	if (last_task_used_math == current) {
+		set_status_register (SR_FD, 0);
+		sh4_save_fp (p);
 	}
-	childregs->u_regs[0] = 0; /* Set return value for child */
+	/* New tasks loose permission to use the fpu. This accelerates context
+	   switching for most programs since they don't use the fpu.  */
+	p->thread.sr = (read_control_register (sr) &~ SR_MD) | SR_FD;
+	childregs->sr |= SR_FD;
+#endif
+#endif
+	if (user_mode(regs)) {
+		childregs->sp = usp;
+	} else {
+		childregs->sp = (unsigned long)p+2*PAGE_SIZE;
+	}
+	childregs->regs[0] = 0; /* Set return value for child */
 
 	p->thread.sp = (unsigned long) childregs;
 	p->thread.pc = (unsigned long) ret_from_fork;
@@ -215,18 +262,22 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 {
 /* changed the size calculations - should hopefully work better. lbt */
 	dump->magic = CMAGIC;
-	dump->start_code = 0;
-	dump->start_stack = regs->u_regs[UREG_SP] & ~(PAGE_SIZE - 1);
-	dump->u_tsize = ((unsigned long) current->mm->end_code) >> PAGE_SHIFT;
-	dump->u_dsize = ((unsigned long) (current->mm->brk + (PAGE_SIZE-1))) >> PAGE_SHIFT;
-	dump->u_dsize -= dump->u_tsize;
-	dump->u_ssize = 0;
+	dump->start_code = current->mm->start_code;
+	dump->start_data  = current->mm->start_data;
+	dump->start_stack = regs->sp & ~(PAGE_SIZE - 1);
+	dump->u_tsize = (current->mm->end_code - dump->start_code) >> PAGE_SHIFT;
+	dump->u_dsize = (current->mm->brk + (PAGE_SIZE-1) - dump->start_data) >> PAGE_SHIFT;
+	dump->u_ssize = (current->mm->start_stack - dump->start_stack +
+			 PAGE_SIZE - 1) >> PAGE_SHIFT;
 	/* Debug registers will come here. */
 
-	if (dump->start_stack < TASK_SIZE)
-		dump->u_ssize = ((unsigned long) (TASK_SIZE - dump->start_stack)) >> PAGE_SHIFT;
-
 	dump->regs = *regs;
+
+#if 0 /* defined(__SH4__) */
+	/* FPU */
+	memcpy (&dump->regs[EF_SIZE/4], &current->thread.fpu,
+		sizeof (current->thread.fpu));
+#endif
 }
 
 /*
@@ -248,7 +299,7 @@ asmlinkage int sys_fork(unsigned long r4, unsigned long r5,
 			unsigned long r6, unsigned long r7,
 			struct pt_regs regs)
 {
-	return do_fork(SIGCHLD, regs.u_regs[UREG_SP], &regs);
+	return do_fork(SIGCHLD, regs.sp, &regs);
 }
 
 asmlinkage int sys_clone(unsigned long clone_flags, unsigned long newsp,
@@ -256,7 +307,7 @@ asmlinkage int sys_clone(unsigned long clone_flags, unsigned long newsp,
 			 struct pt_regs regs)
 {
 	if (!newsp)
-		newsp = regs.u_regs[UREG_SP];
+		newsp = regs.sp;
 	return do_fork(clone_flags, newsp, &regs);
 }
 
@@ -274,8 +325,7 @@ asmlinkage int sys_vfork(unsigned long r4, unsigned long r5,
 			 unsigned long r6, unsigned long r7,
 			 struct pt_regs regs)
 {
-	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD,
-		       regs.u_regs[UREG_SP], &regs);
+	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs.sp, &regs);
 }
 
 /*

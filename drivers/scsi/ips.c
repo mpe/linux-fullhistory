@@ -1840,10 +1840,10 @@ ips_next(ips_ha_t *ha) {
       }
 
       if ((scb->scsi_cmd->request.cmd == READ) && (SC->request_bufflen))
-         scb->dcdb.cmd_attribute |= DATA_IN;
+         scb->dcdb.cmd_attribute |= IPS_DATA_IN;
 
       if ((scb->scsi_cmd->request.cmd == WRITE) && (SC->request_bufflen))
-         scb->dcdb.cmd_attribute |= DATA_OUT;
+         scb->dcdb.cmd_attribute |= IPS_DATA_OUT;
 
       if (scb->data_len >= IPS_MAX_XFER) {
          scb->dcdb.cmd_attribute |= TRANSFER_64K;
@@ -2274,10 +2274,10 @@ ips_done(ips_ha_t *ha, ips_scb_t *scb) {
          }
 
          if ((scb->scsi_cmd->request.cmd == READ) && (scb->data_len))
-            scb->dcdb.cmd_attribute |= DATA_IN;
+            scb->dcdb.cmd_attribute |= IPS_DATA_IN;
 
          if ((scb->scsi_cmd->request.cmd == WRITE) && (scb->data_len))
-            scb->dcdb.cmd_attribute |= DATA_OUT;
+            scb->dcdb.cmd_attribute |= IPS_DATA_OUT;
 
          if (scb->data_len >= IPS_MAX_XFER) {
             scb->dcdb.cmd_attribute |= TRANSFER_64K;

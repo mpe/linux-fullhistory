@@ -214,8 +214,11 @@ static int pcd_drive_reset(struct cdrom_device_info *cdi);
 static int pcd_get_mcn (struct cdrom_device_info *cdi, struct cdrom_mcn *mcn);
 static int pcd_audio_ioctl(struct cdrom_device_info *cdi,
 				unsigned int cmd, void *arg);
+static int pcd_packet(struct cdrom_device_info *cdi,
+				struct cdrom_generic_command *cgc);
 
 static int 	pcd_detect(void);
+static void 	pcd_probe_capabilities(void);
 static void     do_pcd_read_drq(void);
 static void 	do_pcd_request(void);
 static void 	do_pcd_read(void);
@@ -276,14 +279,18 @@ static struct cdrom_device_ops pcd_dops = {
 	pcd_drive_reset,
 	pcd_audio_ioctl,
 	0,			/* dev_ioctl */
-	CDC_CLOSE_TRAY    |
-	CDC_OPEN_TRAY     |
-	CDC_LOCK          |
-	CDC_MCN		  |
-	CDC_MEDIA_CHANGED |
-	CDC_RESET	  |
-	CDC_PLAY_AUDIO,
-	0
+	CDC_CLOSE_TRAY	   |
+	CDC_OPEN_TRAY	   |
+	CDC_LOCK	   |
+	CDC_MCN		   |
+	CDC_MEDIA_CHANGED  |
+	CDC_RESET	   |
+	CDC_PLAY_AUDIO	   |
+	CDC_GENERIC_PACKET |
+	CDC_CD_R	   |
+	CDC_CD_RW,
+	0,
+	pcd_packet,
 };
 
 static void pcd_init_units( void )
@@ -324,6 +331,9 @@ int pcd_init (void)	/* preliminary initialisation */
 	pcd_init_units();
 
 	if (pcd_detect()) return -1;
+
+	/* get the atapi capabilities page */
+	pcd_probe_capabilities();
 
 	if (register_blkdev(MAJOR_NR,name,&cdrom_fops)) {
 		printk("pcd: unable to get major number %d\n",MAJOR_NR);
@@ -525,6 +535,16 @@ static int pcd_atapi( int unit, char * cmd, int dlen, char * buf, char * fun )
 	return r;
 }
 
+static int pcd_packet(struct cdrom_device_info *cdi,
+				struct cdrom_generic_command *cgc)
+{
+	char	*un_cmd;
+	int	unit = DEVICE_NR(cdi->dev);
+
+	un_cmd = cgc->cmd;
+	return pcd_atapi(unit,un_cmd,cgc->buflen,cgc->buffer, "generic packet");
+}
+
 #define DBMSG(msg)	((verbose>1)?(msg):NULL)
 
 static int pcd_media_changed(struct cdrom_device_info *cdi, int slot_nr)
@@ -665,6 +685,32 @@ static int pcd_probe( int unit, int ms, char * id )
 		return 0;
 	}
 	return -1;
+}
+
+static void pcd_probe_capabilities( void )
+
+{	int	unit, r;
+	char	buffer[32];
+	char 	cmd[12]={0x5a,1<<3,0x2a,0,0,0,0,18,0,0,0,0};
+
+	for (unit=0;unit<PCD_UNITS;unit++) {
+		if (!PCD.present) continue;
+		r = pcd_atapi(unit,cmd,18, buffer,"mode sense capabilities");
+		if (r) continue;
+		/* we should now have the cap page */
+		if ((buffer[11] & 1) == 0)
+			PCD.info.mask |= CDC_CD_R;
+		if ((buffer[11] & 2) == 0)
+			PCD.info.mask |= CDC_CD_RW;
+		if ((buffer[12] & 1) == 0)
+			PCD.info.mask |= CDC_PLAY_AUDIO;
+		if ((buffer[14] & 1) == 0)
+			PCD.info.mask |= CDC_LOCK;
+		if ((buffer[14] & 8) == 0)
+			PCD.info.mask |= CDC_OPEN_TRAY;
+		if ((buffer[14] >> 6) == 0)
+			PCD.info.mask |= CDC_CLOSE_TRAY;
+	}
 }
 
 static int pcd_detect( void )
@@ -836,63 +882,6 @@ static int pcd_audio_ioctl(struct cdrom_device_info *cdi,
  
     	switch (cmd) { 
     
-	case CDROMPAUSE: 
-
-	{       char cmd[12]={GPCMD_PAUSE_RESUME,0,0,0,0,0,0,0,0,0,0,0};
-
-		return (pcd_atapi(unit,cmd,0,NULL,"pause")) * EIO;
-	}
-
-	case CDROMRESUME:
-	
-	{       char cmd[12]={GPCMD_PAUSE_RESUME,0,0,0,0,0,0,0,1,0,0,0};
-
-		return (pcd_atapi(unit,cmd,0,NULL,"resume")) * EIO;
-	}
-	
-	case CDROMPLAYMSF:
-
-	{	char cmd[12]={GPCMD_PLAY_AUDIO_MSF,0,0,0,0,0,0,0,0,0,0,0};
-		struct cdrom_msf* msf = (struct cdrom_msf*)arg;
-
-		cmd[3] = msf->cdmsf_min0;
-		cmd[4] = msf->cdmsf_sec0;
-		cmd[5] = msf->cdmsf_frame0;
-		cmd[6] = msf->cdmsf_min1;
-		cmd[7] = msf->cdmsf_sec1;
-		cmd[8] = msf->cdmsf_frame1;
-	
-		return (pcd_atapi(unit,cmd,0,NULL,"play msf")) * EIO;
-    	}
-
-    	case CDROMPLAYBLK:
-
-    	{	char cmd[12]={GPCMD_PLAY_AUDIO_10,0,0,0,0,0,0,0,0,0,0,0};
-		struct cdrom_blk* blk = (struct cdrom_blk*)arg;
-
-		cmd[2] = blk->from >> 24;
-		cmd[3] = blk->from >> 16;
-		cmd[4] = blk->from >> 8;
-		cmd[5] = blk->from;
-		cmd[7] = blk->len >> 8;
-		cmd[8] = blk->len;
-	
-		return (pcd_atapi(unit,cmd,0,NULL,"play block")) * EIO;
-    	}
-		
-    	case CDROMPLAYTRKIND:
-
-    	{	char cmd[12]={GPCMD_PLAYAUDIO_TI,0,0,0,0,0,0,0,0,0,0,0};
-		struct cdrom_ti* ti = (struct cdrom_ti*)arg;
-
-		cmd[4] = ti->cdti_trk0;
-		cmd[5] = ti->cdti_ind0;
-		cmd[7] = ti->cdti_trk1;
-		cmd[8] = ti->cdti_ind1;
-
-		return (pcd_atapi(unit,cmd,0,NULL,"play track")) * EIO;
-    	}
-	
     	case CDROMREADTOCHDR:
     
 	{	char cmd[12]={GPCMD_READ_TOC_PMA_ATIP,0,0,0,0,0,0,0,12,0,0,0};
@@ -935,97 +924,6 @@ static int pcd_audio_ioctl(struct cdrom_device_info *cdi,
 	
                 return r * EIO;
         }
-
-    	case CDROMSTOP:
-
-	{	char cmd[12]={GPCMD_START_STOP_UNIT,1,0,0,0,0,0,0,0,0,0,0};
-
-                return (pcd_atapi(unit,cmd,0,NULL,"stop")) * EIO;
-        }                                                         
-	
-    	case CDROMSTART:
-
-        {       char cmd[12]={GPCMD_START_STOP_UNIT,1,0,0,1,0,0,0,0,0,0,0};
-
-                return (pcd_atapi(unit,cmd,0,NULL,"start")) * EIO;
-        } 
-	
-    	case CDROMVOLCTRL:
-
-	{	char cmd[12]={GPCMD_MODE_SENSE_10,0,0,0,0,0,0,0,0,0,0,0};
-		char buffer[32];
-		char mask[32];
-		struct cdrom_volctrl* volctrl = (struct cdrom_volctrl*)arg;
-
-		cmd[2] = 0xe;
-		cmd[4] = 28;
-
-                if (pcd_atapi(unit,cmd,28,buffer,"mode sense vol")) 
-			return -EIO;
-
-		cmd[2] = 0x4e;
-	
-		if (pcd_atapi(unit,cmd,28,buffer,"mode sense vol mask"))
-			return -EIO;
-	
-		buffer[0] = 0;
-	
-		buffer[21] = volctrl->channel0 & mask[21];
-		buffer[23] = volctrl->channel1 & mask[23];
-		buffer[25] = volctrl->channel2 & mask[25];
-		buffer[27] = volctrl->channel3 & mask[27];
-	
-		cmd[0] = 0x55;
-		cmd[1] = 0x10;
-
-		return pcd_atapi(unit,cmd,28,buffer,"mode select vol") * EIO;
-    	}
-
-    	case CDROMVOLREAD:
-
-        {       char cmd[12]={GPCMD_MODE_SENSE_10,0,0,0,0,0,0,0,0,0,0,0};
-                char buffer[32];
-                struct cdrom_volctrl* volctrl = (struct cdrom_volctrl*)arg;
-                int     r;
-
-                cmd[2] = 0xe;
-                cmd[4] = 28;
-
-                r = pcd_atapi(unit,cmd,28,buffer,"mode sense vol read");
-
-		volctrl->channel0 = buffer[21];
-		volctrl->channel1 = buffer[23];
-		volctrl->channel2 = buffer[25];
-		volctrl->channel3 = buffer[27];
-
-                return r * EIO;
-        }
-  
-	
-    	case CDROMSUBCHNL:
-
-	{	char cmd[12]={GPCMD_READ_SUBCHANNEL,2,0x40,1,0,0,0,0,16,0,0,0};
-		struct cdrom_subchnl* subchnl = (struct cdrom_subchnl*)arg;
-		char buffer[32];
-	
-                if (pcd_atapi(unit,cmd,16,buffer,"read subchannel"))
-                        return -EIO;
-   	
-		subchnl->cdsc_audiostatus = buffer[1];
-		subchnl->cdsc_format = CDROM_MSF;
-		subchnl->cdsc_ctrl = buffer[5] & 0xf;
-		subchnl->cdsc_trk = buffer[6];
-		subchnl->cdsc_ind = buffer[7];
-	
-		subchnl->cdsc_reladdr.msf.minute = buffer[13];
-		subchnl->cdsc_reladdr.msf.second = buffer[14];
-		subchnl->cdsc_reladdr.msf.frame = buffer[15];
-		subchnl->cdsc_absaddr.msf.minute = buffer[9];
-		subchnl->cdsc_absaddr.msf.second = buffer[10];
-		subchnl->cdsc_absaddr.msf.frame = buffer[11];
-
-		return 0;	
-    	}
 
     	default:
 

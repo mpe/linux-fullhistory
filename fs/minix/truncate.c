@@ -33,7 +33,7 @@
  */
 
 #define DATA_BUFFER_USED(bh) \
-	(atomic_read(&bh->b_count) || buffer_locked(bh))
+	(atomic_read(&bh->b_count) > 1 || buffer_locked(bh))
 
 /*
  * The functions for minix V1 fs truncation.

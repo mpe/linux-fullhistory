@@ -282,6 +282,14 @@ static void chipsfb_blank(int blank, struct fb_info *info)
 	// useful at blank = 1 too (saves battery, extends backlight life)
 	if (blank) {
 		pmu_enable_backlight(0);
+		/* get the palette from the chip */
+		for (i = 0; i < 256; ++i) {
+			out_8(p->io_base + 0x3c7, i);
+			udelay(1);
+			p->palette[i].red = in_8(p->io_base + 0x3c9);
+			p->palette[i].green = in_8(p->io_base + 0x3c9);
+			p->palette[i].blue = in_8(p->io_base + 0x3c9);
+		}
 		for (i = 0; i < 256; ++i) {
 			out_8(p->io_base + 0x3c8, i);
 			udelay(1);
@@ -291,7 +299,13 @@ static void chipsfb_blank(int blank, struct fb_info *info)
 		}
 	} else {
 		pmu_enable_backlight(1);
-		do_install_cmap(currcon, info);
+		for (i = 0; i < 256; ++i) {
+			out_8(p->io_base + 0x3c8, i);
+			udelay(1);
+			out_8(p->io_base + 0x3c9, p->palette[i].red);
+			out_8(p->io_base + 0x3c9, p->palette[i].green);
+			out_8(p->io_base + 0x3c9, p->palette[i].blue);
+		}
 	}
 }
 
@@ -711,20 +725,10 @@ chips_sleep_notify(struct pmu_sleep_notifier *self, int when)
 
 	for (p = all_chips; p != NULL; p = p->next) {
 		int nb = p->var.yres * p->fix.line_length;
-		int i;
 
 		switch (when) {
 		case PBOOK_SLEEP_NOW:
 			chipsfb_blank(1, (struct fb_info *)p);
-			/* get the palette from the chip, Xpmac seems
-			   to set it directly in the chip */
-			for (i = 0; i < 256; ++i) {
-				out_8(p->io_base + 0x3c8, i);
-				udelay(1);
-				p->palette[i].red = in_8(p->io_base + 0x3c9);
-				p->palette[i].green = in_8(p->io_base + 0x3c9);
-				p->palette[i].blue = in_8(p->io_base + 0x3c9);
-			}
 			p->save_framebuffer = vmalloc(nb);
 			if (p->save_framebuffer)
 				memcpy(p->save_framebuffer,

@@ -1,4 +1,5 @@
-/*
+/* $Id: fault.c,v 1.3 1999/09/21 23:09:53 gniibe Exp $
+ *
  *  linux/arch/sh/mm/fault.c
  *  Copyright (C) 1999  Niibe Yutaka
  *
@@ -20,6 +21,7 @@
 #include <linux/interrupt.h>
 
 #include <asm/system.h>
+#include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/hardirq.h>
@@ -225,20 +227,23 @@ void update_mmu_cache(struct vm_area_struct * vma,
 
 	asid = get_asid();
 
-	save_and_cli(flags);
 	address &= PAGE_MASK;
+#if 0/*defined(__SH4__)*//* SH-4 has separate I/D caches: XXX really needed? */
+	if ((vma->vm_flags & VM_EXEC) != 0)
+/*	 &&
+	    ((pte_val(pte) & (_PAGE_PRESENT | _PAGE_DIRTY)) ==
+	    (_PAGE_PRESENT | _PAGE_DIRTY))) */
+		flush_icache_range(address,address+PAGE_SIZE);
+#endif
+	save_and_cli(flags);
 	/* Set PTEH register */
-	asm volatile ("mov.l	%0,%1"
-		      : /* no output */
-		      : "r" (address | asid), "m" (__m(MMU_PTEH)));
+	ctrl_outl((address|asid), MMU_PTEH);
 
 	pteval = pte_val(pte);
 	pteval &= _PAGE_FLAGS_HARDWARE_MASK; /* drop software flags */
 	pteval |= _PAGE_FLAGS_HARDWARE_DEFAULT; /* add default flags */
 	/* Set PTEL register */
-	asm volatile ("mov.l	%0,%1"
-		      : /* no output */
-		      : "r" (pteval), "m" (__m(MMU_PTEL)));
+	ctrl_outl(pteval, MMU_PTEL);
 
 	/* Load the TLB */
 	asm volatile ("ldtlb" : /* no output */ : /* no input */
@@ -250,11 +255,27 @@ static __inline__ void __flush_tlb_page(unsigned long asid, unsigned long page)
 {
 	unsigned long addr, data;
 
+#if defined(__sh3__)
 	addr = MMU_TLB_ADDRESS_ARRAY | (page & 0x1F000) | MMU_PAGE_ASSOC_BIT;
 	data = page | asid; /* VALID bit is off */
-	__asm__ __volatile__ ("mov.l	%0,%1"
-			      : /* no output */
-			      : "r" (data), "m" (__m(addr)));
+	ctrl_outl(data, addr);
+#elif defined(__SH4__)
+	int i;
+
+	addr = MMU_UTLB_ADDRESS_ARRAY | MMU_PAGE_ASSOC_BIT;
+	data = page | asid; /* VALID bit is off */
+	ctrl_outl(data, addr);
+
+	for (i=0; i<4; i++) {
+		addr = MMU_ITLB_ADDRESS_ARRAY | (i<<8);
+		data = ctrl_inl(addr);
+		data &= ~0x30;
+		if (data == (page | asid)) {
+			ctrl_outl(data, addr);
+			break;
+		}
+	}
+#endif
 }
 
 void flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
@@ -262,9 +283,13 @@ void flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 	unsigned long asid;
 
 	if (vma->vm_mm->context != NO_CONTEXT) {
+		unsigned long flags;
+
 		page &= PAGE_MASK;
 		asid = vma->vm_mm->context & MMU_CONTEXT_ASID_MASK;
+		save_and_cli(flags);
 		__flush_tlb_page (asid, page);
+		restore_flags(flags);
 	}
 }
 
@@ -277,7 +302,7 @@ void flush_tlb_range(struct mm_struct *mm, unsigned long start,
 
 		save_and_cli(flags);
 		size = (end - start + (PAGE_SIZE - 1)) >> PAGE_SHIFT;
-		if (size > (MMU_NTLB_ENTRIES/4)) { /* So many TLB to flush */
+		if (size > (MMU_NTLB_ENTRIES/4)) { /* Too many TLB to flush */
 			get_new_mmu_context(mm);
 			if (mm == current->mm)
 				set_asid(mm->context & MMU_CONTEXT_ASID_MASK);
@@ -314,13 +339,11 @@ void flush_tlb_mm(struct mm_struct *mm)
 
 void flush_tlb_all(void)
 {
-	unsigned long flags, __dummy;
+	unsigned long flags, status;
 
 	save_and_cli(flags);
-	asm volatile("mov.l	%1,%0\n\t"
-		     "or	#4,%0\n\t" /* Set TF-bit to flush */
-		     "mov.l	%0,%1"
-		     : "=&z" (__dummy)
-		     : "m" (__m(MMUCR)));
+	status = ctrl_inl(MMUCR);
+	status |= 0x04;		/* Set TF-bit to flush */
+	ctrl_outl(status,MMUCR);
 	restore_flags(flags);
 }

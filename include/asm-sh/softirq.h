@@ -13,8 +13,7 @@ extern unsigned int local_bh_count[NR_CPUS];
 #define local_bh_enable()	cpu_bh_enable(smp_processor_id())
 
 #define get_active_bhs()	(bh_mask & bh_active)
-/* XXX */
-#define clear_active_bhs(x)	atomic_clear_mask((x),&bh_active)
+#define clear_active_bhs(x)	atomic_clear_mask((x),(atomic_t *)&bh_active)
 
 extern inline void init_bh(int nr, void (*routine)(void))
 {

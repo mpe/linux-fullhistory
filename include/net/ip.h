@@ -137,6 +137,7 @@ extern struct linux_mib	net_statistics;
 
 extern int sysctl_local_port_range[2];
 
+#ifdef CONFIG_INET
 extern __inline__ int ip_send(struct sk_buff *skb)
 {
 	if (skb->len > skb->dst->pmtu)
@@ -181,6 +182,7 @@ extern __inline__ void ip_eth_mc_map(u32 addr, char *buf)
 	buf[3]=addr&0x7F;
 }
 
+#endif
 
 extern int	ip_call_ra_chain(struct sk_buff *skb);
 

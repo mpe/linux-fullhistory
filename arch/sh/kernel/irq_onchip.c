@@ -1,4 +1,5 @@
-/*
+/* $Id: irq_onchip.c,v 1.3 1999/10/11 13:12:19 gniibe Exp $
+ *
  * linux/arch/sh/kernel/irq_onchip.c
  *
  * Copyright (C) 1999  Niibe Yutaka
@@ -30,32 +31,6 @@
 #include <asm/delay.h>
 
 #include <linux/irq.h>
-
-
-/*
- * SH (non-)specific no controller code
- */
-
-static void enable_none(unsigned int irq) { }
-static unsigned int startup_none(unsigned int irq) { return 0; }
-static void disable_none(unsigned int irq) { }
-static void ack_none(unsigned int irq)
-{
-}
-
-/* startup is the same as "enable", shutdown is same as "disable" */
-#define shutdown_none	disable_none
-#define end_none	enable_none
-
-struct hw_interrupt_type no_irq_type = {
-	"none",
-	startup_none,
-	shutdown_none,
-	enable_none,
-	disable_none,
-	ack_none,
-	end_none
-};
 
 struct ipr_data {
 	int offset;
@@ -104,22 +79,25 @@ static struct hw_interrupt_type onChip_irq_type = {
  * IPRC  15-12  11-8  7-4  3-0
  *
  */
+#if defined(__sh3__)
 #define INTC_IPR	0xfffffee2UL	/* Word access */
+#define INTC_SIZE	0x2
+#elif defined(__SH4__)
+#define INTC_IPR	0xffd00004UL	/* Word access */
+#define INTC_SIZE	0x4
+#endif
 
 void disable_onChip_irq(unsigned int irq)
 {
 	/* Set priority in IPR to 0 */
 	int offset = ipr_data[irq-TIMER_IRQ].offset;
-	unsigned long intc_ipr_address = INTC_IPR + offset/16;
+	unsigned long intc_ipr_address = INTC_IPR + (offset/16*INTC_SIZE);
 	unsigned short mask = 0xffff ^ (0xf << (offset%16));
-	unsigned long __dummy;
+	unsigned long val;
 
-	asm volatile("mov.w	@%1,%0\n\t"
-		     "and	%2,%0\n\t"
-		     "mov.w	%0,@%1"
-		     : "=&z" (__dummy)
-		     : "r" (intc_ipr_address), "r" (mask)
-		     : "memory" );
+	val = ctrl_inw(intc_ipr_address);
+	val &= mask;
+	ctrl_outw(val, intc_ipr_address);
 }
 
 static void enable_onChip_irq(unsigned int irq)
@@ -127,16 +105,13 @@ static void enable_onChip_irq(unsigned int irq)
 	/* Set priority in IPR back to original value */
 	int offset = ipr_data[irq-TIMER_IRQ].offset;
 	int priority = ipr_data[irq-TIMER_IRQ].priority;
-	unsigned long intc_ipr_address = INTC_IPR + offset/16;
+	unsigned long intc_ipr_address = INTC_IPR + (offset/16*INTC_SIZE);
 	unsigned short value = (priority << (offset%16));
-	unsigned long __dummy;
+	unsigned long val;
 
-	asm volatile("mov.w	@%1,%0\n\t"
-		     "or	%2,%0\n\t"
-		     "mov.w	%0,@%1"
-		     : "=&z" (__dummy)
-		     : "r" (intc_ipr_address), "r" (value)
-		     : "memory" );
+	val = ctrl_inw(intc_ipr_address);
+	val |= value;
+	ctrl_outw(val, intc_ipr_address);
 }
 
 void make_onChip_irq(unsigned int irq)
@@ -149,13 +124,11 @@ void make_onChip_irq(unsigned int irq)
 static void mask_and_ack_onChip(unsigned int irq)
 {
 	disable_onChip_irq(irq);
-	sti();
 }
 
 static void end_onChip_irq(unsigned int irq)
 {
 	enable_onChip_irq(irq);
-	cli();
 }
 
 void __init init_IRQ(void)

@@ -726,7 +726,7 @@ module_exit(cleanup_soundmodem);
 
 static int __init sm_setup(char *str)
 {
-	static unsigned __initdata nr_dev = 0;
+	static unsigned nr_dev = 0;
 	int ints[8];
 
 	if (nr_dev >= NR_PORTS)

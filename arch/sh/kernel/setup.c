@@ -1,4 +1,5 @@
-/*
+/* $Id: setup.c,v 1.4 1999/10/17 02:49:24 gniibe Exp $
+ *
  *  linux/arch/sh/kernel/setup.c
  *
  *  Copyright (C) 1999  Niibe Yutaka
@@ -29,6 +30,7 @@
 #endif
 #include <asm/processor.h>
 #include <linux/console.h>
+#include <asm/pgtable.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/io.h>
@@ -38,8 +40,7 @@
  * Machine setup..
  */
 
-struct sh_cpuinfo boot_cpu_data = { 0, 0, 0, 0, };
-extern int _text, _etext, _edata, _end, _stext, __bss_start;
+struct sh_cpuinfo boot_cpu_data = { CPU_SH_NONE, 0, 0, 0, };
 
 #ifdef CONFIG_BLK_DEV_RAM
 extern int rd_doload;		/* 1 = load ramdisk, 0 = don't load */
@@ -48,12 +49,30 @@ extern int rd_image_start;	/* starting block # of image */
 #endif
 
 extern int root_mountflags;
+extern int _text, _etext, _edata, _end;
 
-#define COMMAND_LINE_SIZE 1024
+/*
+ * This is set up by the setup-routine at boot-time
+ */
+#define PARAM	((unsigned char *)empty_zero_page)
+
+#define MOUNT_ROOT_RDONLY (*(unsigned long *) (PARAM+0x000))
+#define RAMDISK_FLAGS (*(unsigned long *) (PARAM+0x004))
+#define ORIG_ROOT_DEV (*(unsigned long *) (PARAM+0x008))
+#define LOADER_TYPE (*(unsigned long *) (PARAM+0x00c))
+#define INITRD_START (*(unsigned long *) (PARAM+0x010))
+#define INITRD_SIZE (*(unsigned long *) (PARAM+0x014))
+#define MEMORY_END (*(unsigned long *) (PARAM+0x018))
+/* ... */
+#define COMMAND_LINE ((char *) (PARAM+0x100))
+#define COMMAND_LINE_SIZE 256
+
+#define RAMDISK_IMAGE_START_MASK  	0x07FF
+#define RAMDISK_PROMPT_FLAG		0x8000
+#define RAMDISK_LOAD_FLAG		0x4000	
+
 static char command_line[COMMAND_LINE_SIZE] = { 0, };
        char saved_command_line[COMMAND_LINE_SIZE];
-
-extern unsigned char *root_fs_image;
 
 struct resource standard_io_resources[] = {
 	{ "dma1", 0x00, 0x1f },
@@ -67,7 +86,6 @@ struct resource standard_io_resources[] = {
 };
 
 #define STANDARD_IO_RESOURCES (sizeof(standard_io_resources)/sizeof(struct resource))
-
 
 /* System RAM - interrupted by the 640kB-1M hole */
 #define code_resource (ram_resources[3])
@@ -87,17 +105,26 @@ static struct resource rom_resources[MAXROMS] = {
 	{ "Video ROM", 0xc0000, 0xc7fff }
 };
 
-
 void __init setup_arch(char **cmdline_p,
 		       unsigned long * memory_start_p,
 		       unsigned long * memory_end_p)
 {
-	*cmdline_p = command_line;
-	*memory_start_p = (unsigned long) &_end;
-	*memory_end_p = 0x8c400000; /* For my board. */
-	ram_resources[1].end = *memory_end_p-1;
+	unsigned long memory_start, memory_end;
 
-	init_mm.start_code = (unsigned long)&_stext;
+	ROOT_DEV = to_kdev_t(ORIG_ROOT_DEV);
+
+#ifdef CONFIG_BLK_DEV_RAM
+	rd_image_start = RAMDISK_FLAGS & RAMDISK_IMAGE_START_MASK;
+	rd_prompt = ((RAMDISK_FLAGS & RAMDISK_PROMPT_FLAG) != 0);
+	rd_doload = ((RAMDISK_FLAGS & RAMDISK_LOAD_FLAG) != 0);
+#endif
+	if (!MOUNT_ROOT_RDONLY)
+		root_mountflags &= ~MS_RDONLY;
+
+	memory_start = (unsigned long) &_end;
+	memory_end = MEMORY_END;
+
+	init_mm.start_code = (unsigned long)&_text;
 	init_mm.end_code = (unsigned long) &_etext;
 	init_mm.end_data = (unsigned long) &_edata;
 	init_mm.brk = (unsigned long) &_end;
@@ -107,51 +134,25 @@ void __init setup_arch(char **cmdline_p,
 	data_resource.start = virt_to_bus(&_etext);
 	data_resource.end = virt_to_bus(&_edata)-1;
 
- 	ROOT_DEV = MKDEV(FLOPPY_MAJOR, 0);
+	/* Save unparsed command line copy for /proc/cmdline */
+	memcpy(saved_command_line, COMMAND_LINE, COMMAND_LINE_SIZE);
+	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
 
-	initrd_below_start_ok = 1;
-	initrd_start = (long)&root_fs_image;
-	initrd_end = (long)&__bss_start;
-	mount_initrd = 1;
+	memcpy(command_line, COMMAND_LINE, COMMAND_LINE_SIZE);
+	command_line[COMMAND_LINE_SIZE-1] = '\0';
 
+	/* Not support "mem=XXX[kKmM]" command line option. */
+	*cmdline_p = command_line;
 
-#if 0
-	/* Request the standard RAM and ROM resources - they eat up PCI memory space */
-	request_resource(&iomem_resource, ram_resources+0);
-	request_resource(&iomem_resource, ram_resources+1);
-	request_resource(&iomem_resource, ram_resources+2);
-	request_resource(ram_resources+1, &code_resource);
-	request_resource(ram_resources+1, &data_resource);
-#endif
+	memory_end &= PAGE_MASK;
+	ram_resources[1].end = memory_end-1;
 
-#if 0
-	for (i = 0; i < STANDARD_IO_RESOURCES; i++)
-		request_resource(&ioport_resource, standard_io_resources+i);
-#endif
-
-#if 0
-	rd_image_start = (long)root_fs_image;
-	rd_prompt = 0;
-	rd_doload = 1;
-#endif
-
-#if 0
- 	ROOT_DEV = to_kdev_t(ORIG_ROOT_DEV);
-
-#ifdef CONFIG_BLK_DEV_RAM
-	rd_image_start = RAMDISK_FLAGS & RAMDISK_IMAGE_START_MASK;
-	rd_prompt = ((RAMDISK_FLAGS & RAMDISK_PROMPT_FLAG) != 0);
-	rd_doload = ((RAMDISK_FLAGS & RAMDISK_LOAD_FLAG) != 0);
-#endif
-
-	if (!MOUNT_ROOT_RDONLY)
-		root_mountflags &= ~MS_RDONLY;
-#endif
+	*memory_start_p = memory_start;
+	*memory_end_p = memory_end;
 
 #ifdef CONFIG_BLK_DEV_INITRD
-#if 0
 	if (LOADER_TYPE) {
-		initrd_start = INITRD_START ? INITRD_START + PAGE_OFFSET : 0;
+		initrd_start = INITRD_START ? INITRD_START : 0;
 		initrd_end = initrd_start+INITRD_SIZE;
 		if (initrd_end > memory_end) {
 			printk("initrd extends beyond end of memory "
@@ -162,6 +163,29 @@ void __init setup_arch(char **cmdline_p,
 	}
 #endif
 
+#if 0
+	/*
+	 * Request the standard RAM and ROM resources -
+	 * they eat up PCI memory space
+	 */
+	request_resource(&iomem_resource, ram_resources+0);
+	request_resource(&iomem_resource, ram_resources+1);
+	request_resource(&iomem_resource, ram_resources+2);
+	request_resource(ram_resources+1, &code_resource);
+	request_resource(ram_resources+1, &data_resource);
+	probe_roms();
+
+	/* request I/O space for devices used on all i[345]86 PCs */
+	for (i = 0; i < STANDARD_IO_RESOURCES; i++)
+		request_resource(&ioport_resource, standard_io_resources+i);
+#endif
+
+#ifdef CONFIG_VT
+#if defined(CONFIG_VGA_CONSOLE)
+	conswitchp = &vga_con;
+#elif defined(CONFIG_DUMMY_CONSOLE)
+	conswitchp = &dummy_con;
+#endif
 #endif
 }
 
@@ -173,12 +197,12 @@ int get_cpuinfo(char *buffer)
 {
 	char *p = buffer;
 
-#ifdef CONFIG_CPU_SH3
-	p += sprintf(p,"cpu family\t: SH3\n"
+#if defined(__sh3__)
+	p += sprintf(p,"cpu family\t: SH-3\n"
 		       "cache size\t: 8K-byte\n");
-#elif CONFIG_CPU_SH4
-	p += sprintf(p,"cpu family\t: SH4\n"
-		       "cache size\t: ??K-byte\n");
+#elif defined(__SH4__)
+	p += sprintf(p,"cpu family\t: SH-4\n"
+		       "cache size\t: 8K-byte/16K-byte\n");
 #endif
 	p += sprintf(p, "bogomips\t: %lu.%02lu\n\n",
 		     (loops_per_sec+2500)/500000,

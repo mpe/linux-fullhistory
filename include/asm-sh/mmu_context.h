@@ -24,6 +24,8 @@ extern unsigned long mmu_context_cache;
 extern __inline__ void
 get_new_mmu_context(struct mm_struct *mm)
 {
+	extern void flush_tlb_all(void);
+
 	unsigned long mc = ++mmu_context_cache;
 
 	if (!(mc & MMU_CONTEXT_ASID_MASK)) {
@@ -38,7 +40,7 @@ get_new_mmu_context(struct mm_struct *mm)
 	mm->context = mc;
 }
 
-/*P
+/*
  * Get MMU context if needed.
  */
 extern __inline__ void
@@ -53,7 +55,7 @@ get_mmu_context(struct mm_struct *mm)
 	}
 }
 
-/*P
+/*
  * Initialize the context related info for a new mm_struct
  * instance.
  */
@@ -63,7 +65,7 @@ extern __inline__ void init_new_context(struct task_struct *tsk,
 	mm->context = NO_CONTEXT;
 }
 
-/*P
+/*
  * Destroy context related info for an mm_struct that is about
  * to be put to rest.
  */
@@ -74,18 +76,35 @@ extern __inline__ void destroy_context(struct mm_struct *mm)
 
 /* Other MMU related constants. */
 
+#if defined(__sh3__)
 #define MMU_PTEH	0xFFFFFFF0	/* Page table entry register HIGH */
 #define MMU_PTEL	0xFFFFFFF4	/* Page table entry register LOW */
+#define MMU_TTB		0xFFFFFFF8	/* Translation table base register */
+#define MMU_TEA		0xFFFFFFFC	/* TLB Exception Address */
+
 #define MMUCR		0xFFFFFFE0	/* MMU Control Register */
 
 #define MMU_TLB_ADDRESS_ARRAY 0xF2000000
 #define MMU_PAGE_ASSOC_BIT 0x80
 
 #define MMU_NTLB_ENTRIES       128	/* for 7708 */
-
 #define MMU_CONTROL_INIT 0x007	/* SV=0, TF=1, IX=1, AT=1 */
 
-#include <asm/uaccess.h> /* to get the definition of  __m */
+#elif defined(__SH4__)
+#define MMU_PTEH	0xFF000000	/* Page table entry register HIGH */
+#define MMU_PTEL	0xFF000004	/* Page table entry register LOW */
+#define MMU_TTB		0xFF000008	/* Translation table base register */
+#define MMU_TEA		0xFF00000C	/* TLB Exception Address */
+
+#define MMUCR		0xFF000010	/* MMU Control Register */
+
+#define MMU_ITLB_ADDRESS_ARRAY 0xF2000000
+#define MMU_UTLB_ADDRESS_ARRAY 0xF6000000
+#define MMU_PAGE_ASSOC_BIT 0x80
+
+#define MMU_NTLB_ENTRIES       64	/* for 7750 */
+#define MMU_CONTROL_INIT 0x205	/* SQMD=1, SV=0, TI=1, AT=1 */
+#endif
 
 extern __inline__ void set_asid (unsigned long asid)
 {
@@ -105,7 +124,7 @@ extern __inline__ unsigned long get_asid (void)
 	return asid;
 }
 
-/*P
+/*
  * After we have set current->mm to a new value, this activates
  * the context for the new mm so we see the new mappings.
  */
@@ -117,7 +136,6 @@ extern __inline__ void activate_context(struct mm_struct *mm)
 
 /* MMU_TTB can be used for optimizing the fault handling.
    (Currently not used) */
-#define MMU_TTB   0xFFFFFFF8	/* Translation table base register */
 extern __inline__ void switch_mm(struct mm_struct *prev,
 				 struct mm_struct *next,
 				 struct task_struct *tsk, unsigned int cpu)

@@ -293,6 +293,9 @@ static int offb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 #ifdef CONFIG_FB_ATY
 extern void atyfb_of_init(struct device_node *dp);
 #endif /* CONFIG_FB_ATY */
+#ifdef CONFIG_FB_ATY128
+extern void aty128fb_of_init(struct device_node *dp);
+#endif /* CONFIG_FB_ATY */
 #ifdef CONFIG_FB_S3TRIO
 extern void s3triofb_init_of(struct device_node *dp);
 #endif /* CONFIG_FB_S3TRIO */
@@ -349,6 +352,21 @@ int __init offb_init(void)
 		    dp->addrs[0].size = 0x01000000;
 		}
 	    }
+
+	    /*
+	     * The LTPro on the Lombard powerbook has no addresses
+	     * on the display nodes, they are on their parent.
+	     */
+	    if (dp->n_addrs == 0 && device_is_compatible(dp, "ATY,264LTPro")) {
+		int na;
+		unsigned int *ap = (unsigned int *)
+		    get_property(dp, "AAPL,address", &na);
+		if (ap != 0)
+		    for (na /= sizeof(unsigned int); na > 0; --na, ++ap)
+			if (*ap <= addr && addr < *ap + 0x1000000)
+			    goto foundit;
+	    }
+
 	    /*
 	     * See if the display address is in one of the address
 	     * ranges for this display.
@@ -359,6 +377,7 @@ int __init offb_init(void)
 		    break;
 	    }
 	    if (i < dp->n_addrs) {
+	    foundit:
 		printk(KERN_INFO "MacOS display is %s\n", dp->full_name);
 		macos_display = dp;
 		break;
@@ -397,6 +416,12 @@ int __init offb_init(void)
 
 static int __init offb_init_driver(struct device_node *dp)
 {
+#ifdef CONFIG_FB_ATY128
+    if (!strncmp(dp->name, "ATY,Rage128", 11)) {
+	aty128fb_of_init(dp);
+	return 1;
+    }
+#endif
 #ifdef CONFIG_FB_ATY
     if (!strncmp(dp->name, "ATY", 3)) {
 	atyfb_of_init(dp);

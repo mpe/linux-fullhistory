@@ -14,13 +14,13 @@
 #define TIMER_PRIORITY		 1
 
 /*
- * 40 = 24+16
+ * 48 = 32+16
  *
- * 24 for on chip support modules.
+ * 32 for on chip support modules.
  * 16 for external interrupts.
  *
  */
-#define NR_IRQS	40
+#define NR_IRQS	48
 
 extern void disable_irq(unsigned int);
 extern void disable_irq_nosync(unsigned int);

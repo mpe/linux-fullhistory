@@ -83,24 +83,13 @@ typedef unsigned long pgprot_t;
  *
  * A __PAGE_OFFSET of 0xC0000000 means that the kernel has
  * a virtual address space of one gigabyte, which limits the
- * amount of physical memory you can use to about 950MB. If
- * you want to use more physical memory, change this define.
+ * amount of physical memory you can use to about 950MB. 
  *
- * For example, if you have 2GB worth of physical memory, you
- * could change this define to 0x80000000, which gives the
- * kernel 2GB of virtual memory (enough to most of your physical memory
- * as the kernel needs a bit extra for various io-memory mappings)
- *
- * IF YOU CHANGE THIS, PLEASE ALSO CHANGE
- *
- *	arch/i386/vmlinux.lds
- *
- * which has the same constant encoded..
+ * If you want more physical memory than this then see the CONFIG_BIGMEM
+ * option in the kernel configuration.
  */
 
-#include <asm/page_offset.h>
-
-#define __PAGE_OFFSET		(PAGE_OFFSET_RAW)
+#define __PAGE_OFFSET		(0xC0000000)
 
 #ifndef __ASSEMBLY__
 

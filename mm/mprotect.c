@@ -82,8 +82,10 @@ static void change_protection(unsigned long start, unsigned long end, pgprot_t n
 static inline int mprotect_fixup_all(struct vm_area_struct * vma,
 	int newflags, pgprot_t prot)
 {
+	vmlist_modify_lock(vma->vm_mm);
 	vma->vm_flags = newflags;
 	vma->vm_page_prot = prot;
+	vmlist_modify_unlock(vma->vm_mm);
 	return 0;
 }
 
@@ -97,16 +99,18 @@ static inline int mprotect_fixup_start(struct vm_area_struct * vma,
 	if (!n)
 		return -ENOMEM;
 	*n = *vma;
-	vma->vm_start = end;
 	n->vm_end = end;
-	vma->vm_offset += vma->vm_start - n->vm_start;
 	n->vm_flags = newflags;
 	n->vm_page_prot = prot;
 	if (n->vm_file)
 		get_file(n->vm_file);
 	if (n->vm_ops && n->vm_ops->open)
 		n->vm_ops->open(n);
+	vmlist_modify_lock(vma->vm_mm);
+	vma->vm_offset += end - vma->vm_start;
+	vma->vm_start = end;
 	insert_vm_struct(current->mm, n);
+	vmlist_modify_unlock(vma->vm_mm);
 	return 0;
 }
 
@@ -120,7 +124,6 @@ static inline int mprotect_fixup_end(struct vm_area_struct * vma,
 	if (!n)
 		return -ENOMEM;
 	*n = *vma;
-	vma->vm_end = start;
 	n->vm_start = start;
 	n->vm_offset += n->vm_start - vma->vm_start;
 	n->vm_flags = newflags;
@@ -129,7 +132,10 @@ static inline int mprotect_fixup_end(struct vm_area_struct * vma,
 		get_file(n->vm_file);
 	if (n->vm_ops && n->vm_ops->open)
 		n->vm_ops->open(n);
+	vmlist_modify_lock(vma->vm_mm);
+	vma->vm_end = start;
 	insert_vm_struct(current->mm, n);
+	vmlist_modify_unlock(vma->vm_mm);
 	return 0;
 }
 
@@ -150,21 +156,23 @@ static inline int mprotect_fixup_middle(struct vm_area_struct * vma,
 	*left = *vma;
 	*right = *vma;
 	left->vm_end = start;
-	vma->vm_start = start;
-	vma->vm_end = end;
 	right->vm_start = end;
-	vma->vm_offset += vma->vm_start - left->vm_start;
 	right->vm_offset += right->vm_start - left->vm_start;
-	vma->vm_flags = newflags;
-	vma->vm_page_prot = prot;
 	if (vma->vm_file)
 		atomic_add(2,&vma->vm_file->f_count);
 	if (vma->vm_ops && vma->vm_ops->open) {
 		vma->vm_ops->open(left);
 		vma->vm_ops->open(right);
 	}
+	vmlist_modify_lock(vma->vm_mm);
+	vma->vm_offset += start - vma->vm_start;
+	vma->vm_start = start;
+	vma->vm_end = end;
+	vma->vm_flags = newflags;
+	vma->vm_page_prot = prot;
 	insert_vm_struct(current->mm, left);
 	insert_vm_struct(current->mm, right);
+	vmlist_modify_unlock(vma->vm_mm);
 	return 0;
 }
 
@@ -246,7 +254,9 @@ asmlinkage long sys_mprotect(unsigned long start, size_t len, unsigned long prot
 			break;
 		}
 	}
+	vmlist_modify_lock(current->mm);
 	merge_segments(current->mm, start, end);
+	vmlist_modify_unlock(current->mm);
 out:
 	up(&current->mm->mmap_sem);
 	return error;

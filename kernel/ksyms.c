@@ -125,7 +125,7 @@ EXPORT_SYMBOL(getname);
 EXPORT_SYMBOL(_fput);
 EXPORT_SYMBOL(igrab);
 EXPORT_SYMBOL(iunique);
-EXPORT_SYMBOL(iget);
+EXPORT_SYMBOL(iget4);
 EXPORT_SYMBOL(iput);
 EXPORT_SYMBOL(__namei);
 EXPORT_SYMBOL(lookup_dentry);

@@ -1,10 +1,11 @@
-/*
+/* $Id: irq.c,v 1.4 1999/10/11 13:12:14 gniibe Exp $
+ *
  * linux/arch/sh/kernel/irq.c
  *
  *	Copyright (C) 1992, 1998 Linus Torvalds, Ingo Molnar
  *
  *
- *  SuperH version:  Copyright (C) 1999  Niibe Yutaka
+ * SuperH version:  Copyright (C) 1999  Niibe Yutaka
  */
 
 /*
@@ -48,13 +49,44 @@ spinlock_t irq_controller_lock = SPIN_LOCK_UNLOCKED;
 /*
  * Controller mappings for all interrupt sources:
  */
-irq_desc_t irq_desc[NR_IRQS] = { [0 ... NR_IRQS-1] = { 0, &no_irq_type, }};
+irq_desc_t irq_desc[NR_IRQS] __cacheline_aligned = { [0 ... NR_IRQS-1] = { 0, &no_irq_type, }};
 
 /*
  * Special irq handlers.
  */
 
 void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
+
+/*
+ * Generic no controller code
+ */
+
+static void enable_none(unsigned int irq) { }
+static unsigned int startup_none(unsigned int irq) { return 0; }
+static void disable_none(unsigned int irq) { }
+static void ack_none(unsigned int irq)
+{
+/*
+ * 'what should we do if we get a hw irq event on an illegal vector'.
+ * each architecture has to answer this themselves, it doesnt deserve
+ * a generic callback i think.
+ */
+	printk("unexpected IRQ trap at vector %02x\n", irq);
+}
+
+/* startup is the same as "enable", shutdown is same as "disable" */
+#define shutdown_none	disable_none
+#define end_none	enable_none
+
+struct hw_interrupt_type no_irq_type = {
+	"none",
+	startup_none,
+	shutdown_none,
+	enable_none,
+	disable_none,
+	ack_none,
+	end_none
+};
 
 /*
  * Generic, controller-independent functions:
@@ -203,6 +235,8 @@ asmlinkage int do_IRQ(unsigned long r4, unsigned long r5,
 	struct irqaction * action;
 	unsigned int status;
 
+	regs.syscall_nr = -1;	/* It's not system call */
+
 	/* Get IRQ number */
 	asm volatile("stc	r2_bank,%0\n\t"
 		     "shlr2	%0\n\t"
@@ -257,7 +291,7 @@ asmlinkage int do_IRQ(unsigned long r4, unsigned long r5,
 	for (;;) {
 		handle_IRQ_event(irq, &regs, action);
 		spin_lock(&irq_controller_lock);
-		
+
 		if (!(desc->status & IRQ_PENDING))
 			break;
 		desc->status &= ~IRQ_PENDING;
@@ -265,7 +299,7 @@ asmlinkage int do_IRQ(unsigned long r4, unsigned long r5,
 	}
 	desc->status &= ~IRQ_INPROGRESS;
 	if (!(desc->status & IRQ_DISABLED)){
-			irq_desc[irq].handler->end(irq);
+		irq_desc[irq].handler->end(irq);
 	}
 	spin_unlock(&irq_controller_lock);
 
@@ -334,16 +368,22 @@ void free_irq(unsigned int irq, void *dev_id)
 
 			/* Found it - now remove it from the list of entries */
 			*pp = action->next;
-			if (irq_desc[irq].action)
-				break;
-			irq_desc[irq].status |= IRQ_DISABLED;
-			irq_desc[irq].handler->shutdown(irq);
-			break;
+			if (!irq_desc[irq].action) {
+				irq_desc[irq].status |= IRQ_DISABLED;
+				irq_desc[irq].handler->shutdown(irq);
+			}
+			spin_unlock_irqrestore(&irq_controller_lock,flags);
+
+			/* Wait to make sure it's not being used on another CPU */
+			while (irq_desc[irq].status & IRQ_INPROGRESS)
+				barrier();
+			kfree(action);
+			return;
 		}
 		printk("Trying to free free IRQ%d\n",irq);
-		break;
+		spin_unlock_irqrestore(&irq_controller_lock,flags);
+		return;
 	}
-	spin_unlock_irqrestore(&irq_controller_lock,flags);
 }
 
 /*

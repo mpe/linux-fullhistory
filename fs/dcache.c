@@ -169,6 +169,11 @@ out:
 int d_invalidate(struct dentry * dentry)
 {
 	/*
+	 * If it's already been dropped, return OK.
+	 */
+	if (list_empty(&dentry->d_hash))
+		return 0;
+	/*
 	 * Check whether to do a partial shrink_dcache
 	 * to get rid of unused child entries.
 	 */

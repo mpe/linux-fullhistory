@@ -28,6 +28,7 @@
 #include <linux/reboot.h>
 #include <linux/init.h>
 #include <linux/blk.h>
+#include <linux/ide.h>
 #include <linux/ioport.h>
 #include <linux/console.h>
 #include <linux/pci.h>
@@ -40,8 +41,6 @@
 #include <asm/processor.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
-#include <linux/ide.h>
-#include <asm/ide.h>
 #include <asm/prom.h>
 #include <asm/gg2.h>
 #include <asm/pci-bridge.h>

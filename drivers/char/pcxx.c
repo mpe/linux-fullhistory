@@ -1589,8 +1589,8 @@ load_fep:
 			ch->blocked_open = 0;
 			ch->callout_termios = pcxe_callout.init_termios;
 			ch->normal_termios = pcxe_driver.init_termios;
-			init_waitqueue_head(ch->open_wait);
-			init_waitqueue_head(ch->close_wait);
+			init_waitqueue_head(&ch->open_wait);
+			init_waitqueue_head(&ch->close_wait);
 			ch->asyncflags = 0;
 		}
 

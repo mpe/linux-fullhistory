@@ -420,7 +420,8 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 			drive->waiting_for_dma = 1;
 			if (drive->media != ide_disk)
 				return 0;
-			ide_set_handler(drive, &ide_dma_intr, WAIT_CMD);/* issue cmd to drive */
+			drive->timeout = WAIT_CMD;
+			ide_set_handler(drive, &ide_dma_intr);/* issue cmd to drive */
 			OUT_BYTE(reading ? WIN_READDMA : WIN_WRITEDMA, IDE_COMMAND_REG);
 		case ide_dma_begin:
 			/* Note that this is done *after* the cmd has
@@ -537,14 +538,7 @@ unsigned long __init ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const
 
 		switch(dev->device) {
 			case PCI_DEVICE_ID_CMD_643:
-#ifdef CONFIG_BLK_DEV_ALI15X3
 			case PCI_DEVICE_ID_AL_M5219:
-			case PCI_DEVICE_ID_AL_M5229:
-				/*
-				 * Ali 15x3 chipsets know as ALI IV and V report
-				 * this as simplex, skip this test for them.
-				 */
-#endif /* CONFIG_BLK_DEV_ALI15X3 */
 				outb(inb(dma_base+2) & 0x60, dma_base+2);
 				if (inb(dma_base+2) & 0x80) {
 					printk("%s: simplex device: DMA forced\n", name);

@@ -125,6 +125,7 @@ struct uhci_framelist {
 #define TD_TOKEN_TOGGLE		19
 
 #define uhci_maxlen(token)	((token) >> 21)
+#define uhci_expected_length(info) ((info >> 21) + 1)  /* 1-based */ 
 #define uhci_toggle(token)	(((token) >> TD_TOKEN_TOGGLE) & 1)
 #define uhci_endpoint(token)	(((token) >> 15) & 0xf)
 #define uhci_devaddr(token)	(((token) >> 8) & 0x7f)
@@ -181,12 +182,6 @@ struct uhci_td {
  */
 struct uhci;
 
-#if 0
-#define UHCI_MAXTD	64
-
-#define UHCI_MAXQH	16
-#endif
-
 /* The usb device part must be first! Not anymore -jerdfelt */
 struct uhci_device {
 	struct usb_device	*usb;
@@ -194,10 +189,6 @@ struct uhci_device {
 	atomic_t		refcnt;
 
 	struct uhci		*uhci;
-#if 0
-	struct uhci_qh		qh[UHCI_MAXQH];		/* These are the "common" qh's for each device */
-	struct uhci_td		td[UHCI_MAXTD];
-#endif
 
 	unsigned long		data[16];
 };
@@ -278,7 +269,7 @@ struct uhci_device {
  * and we should meet that frequency when requested to do so.
  * This will require some change(s) to the UHCI skeleton.
  */
-static inline int __interval_to_skel(interval)
+static inline int __interval_to_skel(int interval)
 {
 	if (interval < 16) {
 		if (interval < 4) {

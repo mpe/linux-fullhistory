@@ -18,7 +18,9 @@ int u14_34f_biosparam(Disk *, kdev_t, int *);
 
 #define U14_34F_VERSION "5.11.00"
 
+#ifndef LinuxVersionCode
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
+#endif
 
 #define ULTRASTOR_14_34F {                                                   \
                 name:         "UltraStor 14F/34F rev. " U14_34F_VERSION " ", \

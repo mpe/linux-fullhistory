@@ -199,31 +199,32 @@ typedef struct {
 } devrequest __attribute__ ((packed));
 
 /* 
- * Status codes (these follow OHCI controllers condition codes)
+ * Status codes (these [used to] follow OHCI controllers condition codes)
  */
-#define USB_ST_NOERROR		0x0
-#define USB_ST_CRC		0x1
-#define USB_ST_BITSTUFF		0x2
-#define USB_ST_DTMISMATCH	0x3	/* data toggle mismatch */
-#define USB_ST_STALL		0x4
-#define USB_ST_NORESPONSE	0x5	/* device not responding/handshaking */
-#define USB_ST_PIDCHECK		0x6	/* Check bits on PID failed */
-#define USB_ST_PIDUNDEF		0x7	/* PID unexpected/undefined */
-#define USB_ST_DATAOVERRUN	0x8
-#define USB_ST_DATAUNDERRUN	0x9
-#define USB_ST_RESERVED1	0xA
-#define USB_ST_RESERVED2	0xB
-#define USB_ST_BUFFEROVERRUN	0xC
-#define USB_ST_BUFFERUNDERRUN	0xD
-#define USB_ST_RESERVED3	0xE
-#define USB_ST_RESERVED4	0xF
+#define USB_ST_NOERROR		0
+#define USB_ST_CRC		-1
+#define USB_ST_BITSTUFF		-2
+#define USB_ST_DTMISMATCH	-3	/* data toggle mismatch */
+#define USB_ST_STALL		-4
+#define USB_ST_NORESPONSE	-5	/* device not responding/handshaking */
+#define USB_ST_PIDCHECK		-6	/* Check bits on PID failed */
+#define USB_ST_PIDUNDEF		-7	/* PID unexpected/undefined */
+#define USB_ST_DATAOVERRUN	-8
+#define USB_ST_DATAUNDERRUN	-9
+#define USB_ST_RESERVED1	-10
+#define USB_ST_RESERVED2	-11
+#define USB_ST_BUFFEROVERRUN	-12
+#define USB_ST_BUFFERUNDERRUN	-13
+#define USB_ST_RESERVED3	-14
+#define USB_ST_RESERVED4	-15
 
 /* internal errors */
-#define USB_ST_REMOVED		0x100
-#define USB_ST_TIMEOUT		0x110
-#define USB_ST_INTERNALERROR	-1
-#define USB_ST_NOTSUPPORTED	-2
-#define USB_ST_BANDWIDTH_ERROR	-3
+#define USB_ST_REMOVED		-100
+#define USB_ST_TIMEOUT		-101
+#define USB_ST_INTERNALERROR	-200
+#define USB_ST_NOTSUPPORTED	-201
+#define USB_ST_BANDWIDTH_ERROR	-202
+#define USB_ST_NOCHANGE		-203
 
 
 /*
@@ -684,7 +685,6 @@ int usb_get_protocol(struct usb_device *dev);
 int usb_set_protocol(struct usb_device *dev, int protocol);
 int usb_set_interface(struct usb_device *dev, int interface, int alternate);
 int usb_set_idle(struct usb_device *dev, int duration, int report_id);
-int usb_set_interface(struct usb_device *dev, int interface, int alternate);
 int usb_set_configuration(struct usb_device *dev, int configuration);
 int usb_get_report(struct usb_device *dev, unsigned char type, unsigned char id, unsigned char index, void *buf, int size);
 char *usb_string(struct usb_device *dev, int index);

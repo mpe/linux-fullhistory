@@ -1,8 +1,10 @@
-# $Id$
+# $Id: Makefile,v 1.1 1999/09/18 16:55:51 gniibe Exp gniibe $
 #
 # This file is subject to the terms and conditions of the GNU General Public
 # License.  See the file "COPYING" in the main directory of this archive
 # for more details.
+#
+# Copyright (C) 1999  Kaz Kojima
 #
 # This file is included by the global makefile so that you can add your own
 # architecture-specific flags and dependencies. Remember to do have actions
@@ -13,25 +15,35 @@
 #
 # Select the object file format to substitute into the linker script.
 #
-tool-prefix	= sh-gniibe-
-oformat		= elf
+tool-prefix	= sh-elf
+
+ifdef CONFIG_LITTLE_ENDIAN
+CFLAGS		+= -ml
+AFLAGS		+= -ml
+# LINKFLAGS	+= -EL
+LDFLAGS		:= -EL
+
+LD	=$(CROSS_COMPILE)ld $(LDFLAGS)
+
+endif
 
 ifdef CONFIG_CROSSCOMPILE
 CROSS_COMPILE  = $(tool-prefix)
 endif
 
-LINKFLAGS	= # -EL # -static #-N
 MODFLAGS	+=
 
 #
 #
-CFLAGS		+= -m3 # -ml
-LINKFLAGS	+=
-LDFLAGS		+= # -EL
 
-#
-#
-HOSTCC        = cc
+ifdef CONFIG_CPU_SH3
+CFLAGS		+= -m3
+AFLAGS		+= -m3
+endif
+ifdef CONFIG_CPU_SH4
+CFLAGS		+= -m4
+AFLAGS		+= -m4
+endif
 
 #
 # Choosing incompatible machines durings configuration will result in
@@ -52,14 +64,16 @@ HEAD := arch/sh/kernel/head.o arch/sh/kernel/init_task.o
 
 SUBDIRS := $(SUBDIRS) $(addprefix arch/sh/, kernel mm lib)
 CORE_FILES := arch/sh/kernel/kernel.o arch/sh/mm/mm.o $(CORE_FILES)
-LIBS := $(TOPDIR)/arch/sh/lib/lib.a $(LIBS) $(TOPDIR)/arch/sh/lib/lib.a /home/niibe/lib/gcc-lib/sh-gniibe-elf/egcs-2.91.66/libgcc.a
+LIBGCC := $(shell $(CC) $(CFLAGS) -print-libgcc-file-name)
+LIBS := $(TOPDIR)/arch/sh/lib/lib.a $(LIBS) $(TOPDIR)/arch/sh/lib/lib.a \
+	$(LIBGCC)
 
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 
 vmlinux: arch/sh/vmlinux.lds
 
 arch/sh/vmlinux.lds: arch/sh/vmlinux.lds.S FORCE
-	gcc -E -C -P -I$(HPATH) -imacros $(HPATH)/linux/config.h -Ush arch/sh/vmlinux.lds.S >arch/sh/vmlinux.lds
+	gcc -E -C -P -I$(HPATH) -Ush arch/sh/vmlinux.lds.S >arch/sh/vmlinux.lds
 
 FORCE: ;
 
@@ -77,6 +91,7 @@ archclean:
 #	$(MAKE) -C arch/$(ARCH)/tools clean
 
 archmrproper:
+	rm -f arch/sh/vmlinux.lds
 
 archdep:
 	@$(MAKEBOOT) dep

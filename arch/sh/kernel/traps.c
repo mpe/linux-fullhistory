@@ -1,4 +1,5 @@
-/*
+/* $Id: traps.c,v 1.3 1999/09/21 14:37:19 gniibe Exp $
+ *
  *  linux/arch/sh/traps.c
  *
  *  SuperH version: Copyright (C) 1999  Niibe Yutaka
@@ -56,10 +57,6 @@ asmlinkage void do_##name(unsigned long r4, unsigned long r5, \
 #define VMALLOC_OFFSET (8*1024*1024)
 #define MODULE_RANGE (8*1024*1024)
 
-static void show_registers(struct pt_regs *regs)
-{/* Not implemented yet. */
-}	
-
 spinlock_t die_lock;
 
 void die(const char * str, struct pt_regs * regs, long err)
@@ -67,7 +64,7 @@ void die(const char * str, struct pt_regs * regs, long err)
 	console_verbose();
 	spin_lock_irq(&die_lock);
 	printk("%s: %04lx\n", str, err & 0xffff);
-	show_registers(regs);
+	show_regs(regs);
 	spin_unlock_irq(&die_lock);
 	do_exit(SIGSEGV);
 }
