@@ -89,7 +89,6 @@ void __init smp_store_cpu_info(int id)
 	cpu_data(id).pgcache_size		= 0;
 	cpu_data(id).pte_cache[0]		= NULL;
 	cpu_data(id).pte_cache[1]		= NULL;
-	cpu_data(id).pgdcache_size		= 0;
 	cpu_data(id).pgd_cache			= NULL;
 	cpu_data(id).idle_volume		= 1;
 }
