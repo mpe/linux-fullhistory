@@ -268,8 +268,8 @@ static struct dentry * cached_lookup(struct dentry * parent, struct qstr * name)
 {
 	struct dentry * dentry = d_lookup(parent, name);
 
-	if (dentry && dentry->d_revalidate) {
-		int validated, (*revalidate)(struct dentry *) = dentry->d_revalidate;
+	if (dentry && dentry->d_op && dentry->d_op->d_revalidate) {
+		int validated, (*revalidate)(struct dentry *) = dentry->d_op->d_revalidate;
 
 		dentry->d_count++;
 		validated = revalidate(dentry) || d_invalidate(dentry);
@@ -350,16 +350,6 @@ static struct dentry * do_follow_link(struct dentry *base, struct dentry *dentry
 }
 
 /*
- * Allow a filesystem to translate the character set of
- * a file name. This allows for filesystems that are not
- * case-sensitive, for example.
- *
- * This is only a dummy define right now, but eventually
- * it might become something like "(parent)->d_charmap[c]"
- */
-#define name_translate_char(parent, c) (c)
-
-/*
  * Name resolution.
  *
  * This is the basic name resolution function, turning a pathname
@@ -406,16 +396,15 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, int follo
 			break;
 
 		this.name = name;
-		hash = init_name_hash();
 		len = 0;
 		c = *name;
+
+		hash = init_name_hash();
 		do {
 			len++; name++;
-			c = name_translate_char(base, c);
 			hash = partial_name_hash(c, hash);
 			c = *name;
 		} while (c && (c != '/'));
-
 		this.len = len;
 		this.hash = end_name_hash(hash);
 
@@ -426,6 +415,19 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, int follo
 			do {
 				c = *++name;
 			} while (c == '/');
+		}
+
+		/*
+		 * See if the low-level filesystem might want
+		 * to use its own hash..
+		 */
+		if (base->d_op && base->d_op->d_hash) {
+			int error;
+			error = base->d_op->d_hash(base, &this);
+			if (error < 0) {
+				dentry = ERR_PTR(error);
+				break;
+			}
 		}
 
 		dentry = lookup(base, &this);

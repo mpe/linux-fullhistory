@@ -1079,6 +1079,21 @@ scratch_ram {
 	CUR_SCBID {
 		size		1
 	}
+	/*
+	 * Running count of commands placed in
+	 * the QOUTFIFO.  This is cleared by the
+	 * kernel driver every FIFODEPTH commands.
+	 */
+	CMDOUTCNT {
+		size		1
+	}
+	/*
+	 * Maximum number of entries allowed in
+	 * the QOUT/INFIFO.
+	 */
+	FIFODEPTH {
+		size		1
+	}
 	ARG_1 {
 		size		1
 		mask	SEND_MSG	0x80

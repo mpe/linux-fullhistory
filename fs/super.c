@@ -550,16 +550,25 @@ void put_unnamed_dev(kdev_t dev)
 			kdevname(dev));
 }
 
-static void d_umount(struct dentry *dentry)
+static int d_umount(struct super_block * sb)
 {
-	struct dentry * covers = dentry->d_covers;
+	struct dentry * root = sb->s_root;
+	struct dentry * covers = root->d_covers;
 
-	if (covers != dentry) {
-		covers->d_mounts = covers;
-		dentry->d_covers = dentry;
-		dput(covers);
-		dput(dentry);
-	}
+	if (root->d_count != 1)
+		return -EBUSY;
+
+	if (root->d_inode->i_state)
+		return -EBUSY;
+
+	sb->s_root = NULL;
+
+	covers->d_mounts = covers;
+	root->d_covers = root;
+
+	dput(covers);
+	dput(root);
+	return 0;
 }
 
 static void d_mount(struct dentry *covers, struct dentry *dentry)
@@ -599,8 +608,7 @@ static int do_umount(kdev_t dev,int unmount_root)
 			quota_off(dev, -1);
 			fsync_dev(dev);
 			retval = do_remount_sb(sb, MS_RDONLY, 0);
-			if (retval)
-				return retval;
+			return retval;
 		}
 		return 0;
 	}
@@ -611,15 +619,25 @@ static int do_umount(kdev_t dev,int unmount_root)
 	 * too bad there are no quotas running anymore. Turn them on again by hand.
 	 */
 	quota_off(dev, -1);
-	if (!fs_may_umount(sb, sb->s_root))
-		return -EBUSY;
 
-	/* clean up dcache .. */
-	d_umount(sb->s_root);
-	sb->s_root = NULL;
+	/*
+	 * Shrink dcache, then fsync. This guarantees that if the
+	 * filesystem is quiescent at this point, then (a) only the
+	 * root entry should be in use and (b) that root entry is
+	 * clean.
+	 */
+	shrink_dcache();
+	fsync_dev(dev);
+
+	retval = d_umount(sb);
+	if (retval)
+		return retval;
 
 	/* Forget any inodes */
-	invalidate_inodes(dev);
+	if (invalidate_inodes(sb)) {
+		printk("VFS: Busy inodes after unmount. "
+			"Self-destruct in 5 seconds. Bye-bye..\n");
+	}
 
 	if (sb->s_op) {
 		if (sb->s_op->write_super && sb->s_dirt)
@@ -636,9 +654,14 @@ static int umount_dev(kdev_t dev)
 	int retval;
 	struct inode * inode = get_empty_inode();
 
+	retval = -ENOMEM;
+	if (!inode)
+		goto out;
+
 	inode->i_rdev = dev;
+	retval = -ENXIO;
 	if (MAJOR(dev) >= MAX_BLKDEV)
-		return -ENXIO;
+		goto out_iput;
 
 	fsync_dev(dev);
 	retval = do_umount(dev,0);
@@ -649,7 +672,9 @@ static int umount_dev(kdev_t dev)
 			put_unnamed_dev(dev);
 		}
 	}
+out_iput:
 	iput(inode);
+out:
 	return retval;
 }
 
@@ -1118,6 +1143,8 @@ __initfunc(static int do_change_root(kdev_t new_root_dev,const char *put_old))
 		dput(dir_d);
 		error = -ENOTDIR;
 	}
+	printk("do_change_root: old root d_count=%d\n", old_root->d_count);
+	dput(old_root);
 	dput(old_pwd);
 	if (error) {
 		int umount_error;
@@ -1133,15 +1160,15 @@ __initfunc(static int do_change_root(kdev_t new_root_dev,const char *put_old))
 	}
 	remove_vfsmnt(old_root_dev);
 	vfsmnt = add_vfsmnt(old_root_dev,"/dev/root.old",put_old);
-	if (!vfsmnt) printk(KERN_CRIT "Trouble: add_vfsmnt failed\n");
-	else {
+	if (vfsmnt) {
 		vfsmnt->mnt_sb = old_root->d_inode->i_sb;
-		d_mount(dir_d,vfsmnt->mnt_sb->s_root);
 		vfsmnt->mnt_flags = vfsmnt->mnt_sb->s_flags;
+		d_mount(dir_d,old_root);
+		return 0;
 	}
-	d_umount(old_root);
-	d_mount(dir_d,old_root);
-	return 0;
+	printk(KERN_CRIT "Trouble: add_vfsmnt failed\n");
+	dput(old_root);
+	return -ENOMEM;
 }
 
 int change_root(kdev_t new_root_dev,const char *put_old)

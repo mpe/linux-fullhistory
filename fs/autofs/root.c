@@ -176,6 +176,12 @@ static int autofs_revalidate(struct dentry * dentry)
 	return 1;
 }
 
+static struct dentry_operations autofs_dentry_operations = {
+	autofs_revalidate,
+	NULL,			/* d_hash */
+	NULL,			/* d_compare */
+};
+
 static int autofs_root_lookup(struct inode *dir, struct dentry * dentry)
 {
 	struct autofs_sb_info *sbi;
@@ -204,14 +210,23 @@ static int autofs_root_lookup(struct inode *dir, struct dentry * dentry)
 	 *
 	 * We need to do this before we release the directory semaphore.
 	 */
-	dentry->d_revalidate = autofs_revalidate;
+	dentry->d_op = &autofs_dentry_operations;
 	dentry->d_flags |= DCACHE_AUTOFS_PENDING;
 	d_add(dentry, NULL);
 
 	up(&dir->i_sem);
 	autofs_revalidate(dentry);
 	down(&dir->i_sem);
-	
+
+	/*
+	 * If we are still pending, check if we had to handle
+	 * a signal. If so we can force a restart..
+	 */
+	if (dentry->d_flags & DCACHE_AUTOFS_PENDING) {
+		if (current->signal & ~current->blocked)
+			return -ERESTARTNOINTR;
+	}
+
 	return 0;
 }
 

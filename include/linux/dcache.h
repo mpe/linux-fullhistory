@@ -50,8 +50,23 @@ struct dentry {
 	struct list_head d_lru;		/* d_count = 0 LRU list */
 	struct qstr d_name;
 	unsigned long d_time;		/* used by d_revalidate */
-	int (*d_revalidate)(struct dentry *);
+	struct dentry_operations  *d_op;
 };
+
+struct dentry_operations {
+	int (*d_revalidate)(struct dentry *);
+	int (*d_hash) (struct dentry *,struct qstr *);
+	int (*d_compare) (struct dentry *,struct qstr *, struct qstr *);
+};
+
+/* the dentry parameter passed to d_hash and d_compare is the parent
+ * directory of the entries to be compared. It is used in case these
+ * functions need any directory specific information for determining
+ * equivalency classes.  Using the dentry itself might not work, as it
+ * might be a negative dentry which has no information associated with
+ * it */
+
+
 
 /* d_flags entries */
 #define DCACHE_AUTOFS_PENDING 0x0001    /* autofs: "under construction" */

@@ -111,13 +111,13 @@ unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum)
 #define SRC(y...)			\
 "	9999: "#y";			\n \
 	.section __ex_table, \"a\";	\n \
-	.long 9999b, src_access_fault	\n \
+	.long 9999b, 6001f		\n \
 	.previous"
 
 #define DST(y...)			\
 "	9999: "#y";			\n \
 	.section __ex_table, \"a\";	\n \
-	.long 9999b, dst_access_fault	\n \
+	.long 9999b, 6002f		\n \
 	.previous"
 
 unsigned int csum_partial_copy_generic (const char *src, char *dst,
@@ -203,28 +203,28 @@ unsigned int csum_partial_copy_generic (const char *src, char *dst,
 		adcl $0, %%eax
 	7:
 
-end_of_body:
+5000:
 
 # Exception handler:
 ################################################
 						#
 .section .fixup, \"a\"				#
 						#
-common_fixup:					#
+6000:						#
 						#
 	movl	%7, (%%ebx)			#
 						#
 # FIXME: do zeroing of rest of the buffer here. #
 						#
-	jmp	end_of_body			#
+	jmp	5000b				#
 						#
-src_access_fault:				#
+6001:						#
 	movl    %1, %%ebx			#
-	jmp	common_fixup			#
+	jmp	6000b				#
 						#
-dst_access_fault:				#
+6002:						#
 	movl    %2, %%ebx			#
-	jmp	common_fixup			#
+	jmp	6000b				#
 						#
 .previous					#
 						#

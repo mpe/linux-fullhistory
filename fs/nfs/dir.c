@@ -349,6 +349,12 @@ static int nfs_lookup_revalidate(struct dentry * dentry)
 	return time < max;
 }
 
+static struct dentry_operations nfs_dentry_operations = {
+	nfs_lookup_revalidate,
+	0,			/* d_hash */
+	0,			/* d_compare */
+};
+
 static int nfs_lookup(struct inode *dir, struct dentry * dentry)
 {
 	struct inode *inode;
@@ -380,7 +386,7 @@ static int nfs_lookup(struct inode *dir, struct dentry * dentry)
 		return error;
 
 	dentry->d_time = jiffies;
-	dentry->d_revalidate = nfs_lookup_revalidate;
+	dentry->d_op = &nfs_dentry_operations;
 	d_add(dentry, inode);
 	return 0;
 }

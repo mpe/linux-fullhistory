@@ -9283,7 +9283,7 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	*/
 #ifdef NCR_IOMAPPED
 	request_region(io_port, 128, "ncr53c8xx");
-	device->slot.port = ioport;
+	device->slot.port = io_port;
 #else
 	device->slot.reg = (struct ncr_reg *) remap_pci_mem((ulong) base, 128);
 	if (!device->slot.reg)

@@ -23,7 +23,7 @@ M_OBJS   :=
 L_OBJS   := tty_io.o n_tty.o tty_ioctl.o pty.o mem.o random.o
 
 ifdef CONFIG_VT
-L_OBJS += console.o vt.o vc_screen.o consolemap.o
+L_OBJS += console.o vt.o vc_screen.o consolemap.o consolemap_deftbl.o
 LX_OBJS += selection.o
 endif
 
@@ -324,15 +324,16 @@ endif
 
 include $(TOPDIR)/Rules.make
 
-fastdep: uni_hash.tbl
-
-consolemap.o:
+fastdep:
 
 conmakehash: conmakehash.c
 	$(HOSTCC) -o conmakehash conmakehash.c
 
-uni_hash.tbl: $(FONTMAPFILE) conmakehash
-	./conmakehash $(FONTMAPFILE) > uni_hash.tbl
+consolemap_deftbl.c: $(FONTMAPFILE) conmakehash
+	./conmakehash $(FONTMAPFILE) > consolemap_deftbl.c
+
+consolemap_deftbl.o: consolemap_deftbl.c $(TOPDIR)/include/linux/types.h
 
 defkeymap.c: defkeymap.map
 	loadkeys --mktable defkeymap.map > defkeymap.c
+

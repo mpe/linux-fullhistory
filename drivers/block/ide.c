@@ -1611,8 +1611,10 @@ int ide_revalidate_disk(kdev_t i_rdev)
 	for (p = 0; p < (1<<PARTN_BITS); ++p) {
 		if (drive->part[p].nr_sects > 0) {
 			kdev_t devp = MKDEV(major, minor+p);
+			struct super_block * sb = get_super(devp);
 			fsync_dev          (devp);
-			invalidate_inodes  (devp);
+			if (sb)
+				invalidate_inodes(sb);
 			invalidate_buffers (devp);
 		}
 		drive->part[p].start_sect = 0;

@@ -4399,12 +4399,37 @@ CONFIG_ESPSERIAL_DMA_CHANNEL
   host.  One DMA channel is shared between all the ESP ports.  Valid
   values are 1 and 3.
 
-Hayes ESP serial port trigger level
-CONFIG_ESPSERIAL_TRIGGER_LEVEL
-  This is the trigger level (in bytes) of the transmit FIFO and the
-  receive FIFO.  Larger values may result in fewer interrupts;
-  however, a value too high could result in data loss.  Valid values
-  are 1 through 1015.
+Hayes ESP serial port receive trigger level
+CONFIG_ESPSERIAL_RX_TRIGGER
+  This is the trigger level (in bytes) of the receive FIFO.  Larger values
+  may result in fewer interrupts; however, a value too high could result in
+  data loss.  Valid values are 1 through 1023.
+
+Hayes ESP serial port transmit trigger level
+CONFIG_ESPSERIAL_TX_TRIGGER
+  This is the trigger level (in bytes) of the transmit FIFO.  Larger values
+  may result in fewer interrupts; however, a value too high could result in
+  degraded trasmit performance.  Valid values are 1 through 1023.
+
+Hayes ESP serial port flow off level
+CONFIG_ESPSERIAL_FLOW_OFF
+  This is the level (in bytes) at which the ESP port will flow off the remote
+  transmitter.  Valid values are 1 through 1023.  This value should be greater
+  than the receive trigger level and the flow on level.
+
+Hayes ESP serial port flow on level
+CONFIG_ESPSERIAL_FLOW_ON
+  This is the level (in bytes) at which the ESP port will flow on the remote
+  transmitter after having flowed it off.  Valid values are 1 through 1023.
+  This value should be less than the flow off level, but greater than the
+  receive trigger level.
+
+Hayes ESP serial port receiver timeout
+CONFIG_ESPSERIAL_RX_TMOUT
+  This is the amount of time that the ESP port will wait after receiving the
+  final character before signalling an interrupt.  Valid values are 0 through
+  255.  A value too high will increase latency, and a value too low will cause
+  unnecessary interrupts.
 
 Parallel printer support
 CONFIG_PRINTER

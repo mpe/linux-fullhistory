@@ -1582,6 +1582,12 @@ bad_slab:
 	} else
 		kmem_report_free_err("Bad obj addr", objp, cachep);
 	spin_unlock_irqrestore(&cachep->c_spinlock, save_flags);
+
+#if 1
+/* FORCE A KERNEL DUMP WHEN THIS HAPPENS. SPEAK IN ALL CAPS. GET THE CALL CHAIN. */
+*(int *) 0 = 0;
+#endif
+
 	return;
 null_addr:
 	kmem_report_free_err("NULL ptr", objp, cachep);
@@ -1624,7 +1630,7 @@ kfree(const void *objp)
 		goto null_ptr;
 	nr = MAP_NR(objp);
 	if (nr >= max_mapnr)
-		goto null_ptr;
+		goto bad_ptr;
 
 	/* Assume we own the page structure - hence no locking.
 	 * If someone is misbehaving (eg. someone calling us with a bad
@@ -1647,8 +1653,15 @@ kfree(const void *objp)
 			return;
 		}
 	}
-null_ptr:
+bad_ptr:
 	printk(KERN_ERR "kfree: Bad obj %p\n", objp);
+
+#if 1
+/* FORCE A KERNEL DUMP WHEN THIS HAPPENS. SPEAK IN ALL CAPS. GET THE CALL CHAIN. */
+*(int *) 0 = 0;
+#endif
+
+null_ptr:
 	return;
 }
 

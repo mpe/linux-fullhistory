@@ -47,7 +47,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: May 20, 1997}
+\date{Last revised: July 28, 1997}
 \maketitle
 %
 \noindent
@@ -213,7 +213,10 @@ reply.
 \major{82}{}{char }{WiNRADiO communications receiver card}
 \major{83}{}{char }{Teletext/videotext interfaces}
 \major{84}{}{char }{Ikon 1011[57] Versatec Greensheet Interface}
-\major{85}{--119}{}{Unallocated}
+\major{85}{}{char }{Linux/SGI shared memory input queue}
+\major{86}{}{char }{SCSI media changer}
+\major{87}{}{char }{Sony Control-A1 stereo control bus}
+\major{88}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
 \major{128}{--239}{}{Unallocated}
 \major{240}{--254}{}{Local/experimental use}
@@ -356,7 +359,7 @@ the numbers vary.
 
 \begin{devicelist}
 \major{ 4}{}{char }{TTY devices}
-	\minor{0}{/dev/console}{Console device}
+	\minor{0}{/dev/tty0}{Current virtual console}
 	\minor{1}{/dev/tty1}{First virtual console}
 	\minordots
 	\minor{63}{/dev/tty63}{63rd virtual console}
@@ -380,10 +383,15 @@ Linux.  To ensure proper operation, do not mix old and new PTY devices.
 \begin{devicelist}
 \major{ 5}{}{char }{Alternate TTY devices}
 	\minor{0}{/dev/tty}{Current TTY device}
+	\minor{1}{}{Reserved for console device}
 	\minor{64}{/dev/cua0}{Callout device corresponding to {\file ttyS0}}
 	\minordots
 	\minor{127}{/dev/cua63}{Callout device corresponding to {\file ttyS63}}
 \end{devicelist}
+
+\noindent
+Minor number 1 is reserved for a kernel-managed
+{\file /dev/console} in a future version of Linux.
 
 \begin{devicelist}
 \major{ 6}{}{char }{Parallel printer devices}
@@ -511,6 +519,12 @@ physical disks.
 	\minor{142}{/dev/msr}{x86 model specific registers}
 	\minor{143}{/dev/pciconf}{PCI configuration space}
 	\minor{144}{/dev/nvram}{Non-volatile configuration RAM}
+	\minor{145}{/dev/hfmodem}{Soundcard shortwave modem control}
+	\minor{146}{/dev/graphics}{Linux/SGI graphics device}
+	\minor{147}{/dev/opengl}{Linux/SGI OpenGL pipe}
+	\minor{148}{/dev/gfx}{Linux/SGI graphics effects device}
+	\minor{149}{/dev/input/mouse}{Linux/SGI Irix emulation mouse}
+	\minor{150}{/dev/input/keyboard}{Linux/SGI Irix emulation keyboard}
 \end{devicelist}
 
 \begin{devicelist}
@@ -1050,6 +1064,9 @@ use the local/experimental range.  The sudden addition or removal of a
 driver with this number should not cause ill effects to the system
 (bugs excepted.)
 
+IN PARTICULAR, ANY DISTRIBUTION WHICH CONTAINS A DEVICE DRIVER USING
+MAJOR NUMBER 42 IS NONCOMPLIANT.
+
 \begin{devicelist}
 \major{43}{}{char }{isdn4linux virtual modem}
 	\minor{0}{/dev/ttyI0}{First virtual modem}
@@ -1426,7 +1443,29 @@ on {\url http://home.pages.de/~videotext/\/}.
 \end{devicelist}
 
 \begin{devicelist}
-\major{85}{--119}{}{Unallocated}
+\major{85}{}{char }{Linux/SGI shared memory input queue}
+	\minor{0}{/dev/shmiq}{Master shared input queue}
+	\minor{1}{/dev/qcntl0}{First device pushed}
+	\minor{2}{/dev/qcntl1}{Second device pushed}
+	\minordots
+\end{devicelist}
+
+\begin{devicelist}
+\major{86}{}{char }{SCSI media changer}
+	\minor{0}{/dev/sch0}{First SCSI media changer}
+	\minor{1}{/dev/sch1}{Second SCSI media changer}
+	\minordots
+\end{devicelist}
+
+\begin{devicelist}
+\major{87}{}{char }{Sony Control-A1 stereo control bus}
+	\minor{0}{/dev/controla0}{First device on chain}
+	\minor{1}{/dev/controla1}{Second device on chain}
+	\minordots
+\end{devicelist}
+
+\begin{devicelist}
+\major{88}{--119}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}

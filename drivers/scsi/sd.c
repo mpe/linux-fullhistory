@@ -1509,8 +1509,9 @@ int revalidate_scsidisk(kdev_t dev, int maxusage){
     for (i=max_p - 1; i >=0 ; i--) {
 	int minor = start+i;
 	kdev_t devi = MKDEV(MAJOR_NR, minor);
+	struct super_block *sb = get_super(devi);
 	sync_dev(devi);
-	invalidate_inodes(devi);
+	if (sb) invalidate_inodes(sb);
 	invalidate_buffers(devi);
 	gdev->part[minor].start_sect = 0;
 	gdev->part[minor].nr_sects = 0;
@@ -1561,8 +1562,9 @@ static void sd_detach(Scsi_Device * SDp)
 	    for (i=max_p - 1; i >=0 ; i--) {
 		int minor = start+i;
 		kdev_t devi = MKDEV(MAJOR_NR, minor);
+		struct super_block *sb = get_super(devi);
 		sync_dev(devi);
-		invalidate_inodes(devi);
+		if (sb) invalidate_inodes(sb);
 		invalidate_buffers(devi);
 		sd_gendisk.part[minor].start_sect = 0;
 		sd_gendisk.part[minor].nr_sects = 0;

@@ -307,9 +307,10 @@ int con_get_trans_new(ushort * arg)
  * this 3-level paged table scheme to be comparable to a hash table.
  */
 
-#include "uni_hash.tbl"		/* Include hash tables & parameters */
+extern u8 dfont_unicount[];	/* Defined in console_defmap.c */
+extern u16 dfont_unitable[];
 
-int hashtable_contents_valid = 0; /* Use ASCII-only mode for bootup*/
+int hashtable_contents_valid = 0; /* Use ASCII-only mode for bootup */
 
 static u16 **uni_pagedir[32] =
 {

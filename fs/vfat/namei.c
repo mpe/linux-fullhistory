@@ -1413,7 +1413,7 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 		iput(new_inode);
 		if (new_is_dir) {
 			PRINTK(("vfat_rename 7\n"));
-			res = vfat_rmdirx(new_dir,&new_dentry);
+			res = vfat_rmdirx(new_dir,new_dentry);
 			PRINTK(("vfat_rename 8\n"));
 			if (res < 0) goto rename_done;
 		} else {

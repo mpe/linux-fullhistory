@@ -198,6 +198,7 @@ int check_disk_change(kdev_t dev)
 {
 	int i;
 	struct file_operations * fops;
+	struct super_block * sb;
 
 	i = MAJOR(dev);
 	if (i >= MAX_BLKDEV || (fops = blkdevs[i].fops) == NULL)
@@ -210,7 +211,8 @@ int check_disk_change(kdev_t dev)
 	printk(KERN_DEBUG "VFS: Disk change detected on device %s\n",
 		kdevname(dev));
 
-	if (invalidate_inodes(dev))
+	sb = get_super(dev);
+	if (sb && invalidate_inodes(sb))
 		printk("VFS: busy inodes on changed media..\n");
 
 	invalidate_buffers(dev);

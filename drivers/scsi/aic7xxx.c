@@ -829,6 +829,7 @@ struct aic7xxx_host {
   unsigned char            pause;            /* pause value for HCNTRL */
   unsigned char            qcntmask;
   unsigned char            qfullcount;
+  unsigned char            cmdoutcnt;
   unsigned char            curqincnt;
   struct Scsi_Host        *next;             /* allow for multiple IRQs */
   unsigned char            activescbs;       /* active scbs */
@@ -3880,6 +3881,19 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
 #endif
     while (qoutcnt > 0)
     {
+      if ((p->flags & PAGE_ENABLED) != 0)
+      {
+        p->cmdoutcnt += qoutcnt;
+        if (p->cmdoutcnt >= p->qfullcount)
+        {
+          /*
+           * Since paging only occurs on aic78x0 chips, we can use
+           * Auto Access Pause to clear the command count.
+           */
+          outb(0, p->base + CMDOUTCNT);
+          p->cmdoutcnt = 0;
+        }
+      }
       for (i = 0; i < qoutcnt; i++)
       {
         scb_index = inb(p->base + QOUTFIFO);
@@ -5290,6 +5304,9 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p)
    * garbage in the upper bits of their QCNT registers.
     */
   outb(p->qcntmask, p->base + QCNTMASK);
+
+  outb(p->qfullcount, p->base + FIFODEPTH);
+  outb(0, p->base + CMDOUTCNT);
 
   /*
    * We don't have any waiting selections or disconnected SCBs.

@@ -643,6 +643,15 @@ status_ok:
 
 complete:
 	/* Post the SCB and issue an interrupt */
+.if ( SCB_PAGING )
+	/*
+	 * Spin loop until there is space
+	 * in the QOUTFIFO.
+	 */
+	mov	A, FIFODEPTH;
+	cmp	CMDOUTCNT, A	je .;
+	inc	CMDOUTCNT;
+.endif
 	mov	QOUTFIFO,SCB_TAG;
 	mvi	INTSTAT,CMDCMPLT;
 	test	SCB_CONTROL, ABORT_SCB jz dma_next_scb;

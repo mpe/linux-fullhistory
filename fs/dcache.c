@@ -178,7 +178,7 @@ struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
 	dentry->d_name.name = str;
 	dentry->d_name.len = name->len;
 	dentry->d_name.hash = name->hash;
-	dentry->d_revalidate = NULL;
+	dentry->d_op = NULL;
 	return dentry;
 }
 
@@ -233,9 +233,14 @@ static inline struct dentry * __dlookup(struct list_head *head, struct dentry * 
 		tmp = tmp->next;
 		if (dentry->d_name.hash != hash)
 			continue;
-		if (dentry->d_name.len != len)
-			continue;
 		if (dentry->d_parent != parent)
+			continue;
+		if (parent->d_op && parent->d_op->d_compare) {
+			if (parent->d_op->d_compare(parent, &dentry->d_name, name))
+				continue;
+			return dentry;
+		}
+		if (dentry->d_name.len != len)
 			continue;
 		if (memcmp(dentry->d_name.name, str, len))
 			continue;

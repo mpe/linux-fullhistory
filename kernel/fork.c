@@ -266,6 +266,7 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 		init_new_context(mm);
 		mm->count = 1;
 		mm->def_flags = 0;
+		mm->mmap_sem = MUTEX;
 
 		/* It has not run yet, so cannot be present in anyone's
 		 * cache or tlb.

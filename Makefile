@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 49
+SUBLEVEL = 50
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/)
 
@@ -198,6 +198,7 @@ symlinks:
 	fi
 
 oldconfig: symlinks
+	$(MAKE) -C drivers/sound mkscript
 	$(CONFIG_SHELL) scripts/Configure -d arch/$(ARCH)/config.in
 
 xconfig: symlinks
@@ -329,13 +330,13 @@ clean:	archclean
 	rm -f core `find . -type f -name 'core' -print`
 	rm -f vmlinux System.map
 	rm -f .tmp* drivers/sound/configure
+	rm -f drivers/char/consolemap_deftbl.c drivers/char/conmakehash
 	rm -f `find modules/ -type f -print`
 	rm -f submenu*
 
 mrproper: clean
 	rm -f include/linux/autoconf.h include/linux/version.h
 	rm -f drivers/sound/local.h drivers/sound/.defines
-	rm -f drivers/char/uni_hash.tbl drivers/char/conmakehash
 	rm -f drivers/net/soundmodem/sm_tbl_{afsk1200,afsk2666,fsk9600}.h
 	rm -f drivers/net/soundmodem/sm_tbl_{hapn4800,psk4800}.h
 	rm -f drivers/net/soundmodem/sm_tbl_{afsk2400_7,afsk2400_8}.h
@@ -351,7 +352,6 @@ mrproper: clean
 	rm -f $(TOPDIR)/include/linux/modversions.h
 	rm -rf $(TOPDIR)/include/linux/modules
 	rm -rf modules
-
 
 distclean: mrproper
 	rm -f core `find . \( -name '*.orig' -o -name '*.rej' -o -name '*~' \

@@ -113,7 +113,7 @@ union bdflush_param{
 int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  0,   100,   100, 1, 1};
 int bdflush_max[N_PARAM] = {100,5000, 2000, 2000,100, 60000, 60000, 2047, 5};
 
-static void wakeup_bdflush(int);
+void wakeup_bdflush(int);
 
 /*
  * Rewrote the wait-routines to use the "new" wait-queue functionality,
@@ -1663,7 +1663,7 @@ static struct wait_queue * bdflush_wait = NULL;
 static struct wait_queue * bdflush_done = NULL;
 struct task_struct *bdflush_tsk = 0;
 
-static void wakeup_bdflush(int wait)
+void wakeup_bdflush(int wait)
 {
 	if (current == bdflush_tsk)
 		return;

@@ -260,10 +260,9 @@ static void dispose_list(struct list_head * head)
 }
 
 /*
- * Invalidate all inodes for a device, except for the root inode. 
+ * Invalidate all inodes for a device.
  */
-static int invalidate_list(struct list_head *head, kdev_t dev, 
-			struct inode * root, struct list_head * dispose)
+static int invalidate_list(struct list_head *head, struct super_block * sb, struct list_head * dispose)
 {
 	struct list_head *next;
 	int busy = 0;
@@ -277,11 +276,9 @@ static int invalidate_list(struct list_head *head, kdev_t dev,
 		if (tmp == head)
 			break;
 		inode = list_entry(tmp, struct inode, i_list);
-		if (inode->i_dev != dev)
+		if (inode->i_sb != sb)
 			continue;
-		if (inode == root)
-			continue;
-		if (!inode->i_count && !inode->i_state) {
+		if (!inode->i_count) {
 			list_del(&inode->i_hash);
 			INIT_LIST_HEAD(&inode->i_hash);
 			list_del(&inode->i_list);
@@ -300,26 +297,19 @@ static int invalidate_list(struct list_head *head, kdev_t dev,
  * is because we don't want to sleep while messing
  * with the global lists..
  */
-static int invalidate_inodes_except(kdev_t dev, struct inode * root)
+int invalidate_inodes(struct super_block * sb)
 {
-	struct super_block * sb = get_super(dev);
 	int busy;
 	LIST_HEAD(throw_away);
 
 	spin_lock(&inode_lock);
-	busy = invalidate_list(&inode_in_use, dev, root, &throw_away);
-	if (sb)
-		busy |= invalidate_list(&sb->s_dirty, dev, root, &throw_away);
+	busy = invalidate_list(&inode_in_use, sb, &throw_away);
+	busy |= invalidate_list(&sb->s_dirty, sb, &throw_away);
 	spin_unlock(&inode_lock);
 
 	dispose_list(&throw_away);
 
 	return busy;
-}
-
-int invalidate_inodes(kdev_t dev)
-{
-	return invalidate_inodes_except(dev, NULL);
 }
 
 /*
@@ -421,6 +411,7 @@ struct inode * get_empty_inode(void)
 		inode = list_entry(tmp, struct inode, i_list);
 add_new_inode:
 		inode->i_sb = NULL;
+		inode->i_dev = 0;
 		inode->i_ino = ++last_ino;
 		inode->i_count = 1;
 		list_add(&inode->i_list, &inode_in_use);
@@ -578,7 +569,7 @@ void inode_init(void)
  */
 int fs_may_mount(kdev_t dev)
 {
-	return !invalidate_inodes(dev);
+	return 1;
 }
 
 /*
@@ -586,29 +577,14 @@ int fs_may_mount(kdev_t dev)
  */
 int fs_may_umount(struct super_block *sb, struct dentry * root)
 {
-	int busy;
-
 	shrink_dcache();
-
-	if (!root->d_inode || root->d_inode->i_dev != sb->s_dev) {
-		printk("fs_may_umount: root inode not on device??\n");
-		return 0;
-	}
-
-	/*
-	 * Invalidate the inodes for this device. Device has been synced
-	 * prior to call, so there should be no dirty inodes.
-	 */
-	busy = invalidate_inodes_except(sb->s_dev, root->d_inode);
-
-	return (root->d_count == 1) && !busy;
+	return root->d_count == 1;
 }
 
 /* This belongs in file_table.c, not here... */
 int fs_may_remount_ro(struct super_block *sb)
 {
 	struct file *file;
-	kdev_t dev = sb->s_dev;
 
 	/* Check that no files are currently opened for writing. */
 	for (file = inuse_filps; file; file = file->f_next) {
@@ -616,7 +592,7 @@ int fs_may_remount_ro(struct super_block *sb)
 		if (!file->f_dentry)
 			continue;
 		inode = file->f_dentry->d_inode;
-		if (!inode || inode->i_dev != dev)
+		if (!inode || inode->i_sb != sb)
 			continue;
 		if (S_ISREG(inode->i_mode) && file->f_mode & FMODE_WRITE)
 			return 0;

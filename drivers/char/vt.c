@@ -504,7 +504,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		 * If the time is zero, turn off sound ourselves.
 		 */
 		ticks = HZ * ((arg >> 16) & 0xffff) / 1000;
-		count = ticks ? arg : 0;
+		count = ticks ? (arg & 0xffff) : 0;
 		kd_mksound(count, ticks);
 		return 0;
 	}

@@ -158,49 +158,58 @@ unsigned short tcp_good_socknum(void)
 	int retval = 0, i, end, bc;
 
 	SOCKHASH_LOCK();
-	i = tcp_bhashfn(start);
-	end = i + TCP_BHTABLE_SIZE;
-	bc = binding_contour;
-	do {
-		struct sock *sk = tcp_bound_hash[tcp_bhashfn(i)];
-		if(!sk) {
-			retval = (start + i);
-			start  = (retval + 1);
+        i = tcp_bhashfn(start);
+        end = i + TCP_BHTABLE_SIZE;
+        bc = binding_contour;
+        do {
+                struct sock *sk = tcp_bound_hash[i&(TCP_BHTABLE_SIZE-1)];
+                if(!sk) {
+                        /* find the smallest value no smaller than start
+                         * that has this hash value.
+                         */
+                        retval = tcp_bhashnext(start-1,i&(TCP_BHTABLE_SIZE-1));
 
-			/* Check for decreasing load. */
-			if(bc != 0)
-				binding_contour = 0;
-			goto done;
-		} else {
-			int j = 0;
-			do { sk = sk->bind_next; } while(++j < size && sk);
-			if(j < size) {
-				best = (start + i);
-				size = j;
-				if(bc && size <= bc) {
-					start = best + 1;
-					goto verify;
-				}
-			}
-		}
-	} while(++i != end);
+                        /* Check for decreasing load. */
+                        if (bc != 0)
+                                binding_contour = 0;
+                        goto done;
+                } else {
+                        int j = 0;
+                        do { sk = sk->bind_next; } while (++j < size && sk);
+                        if (j < size) {
+                                best = i&(TCP_BHTABLE_SIZE-1);
+                                size = j;
+                                if (bc && size <= bc)
+                                        goto verify;
+                        }
+                }
+        } while(++i != end);
+        i = best;
 
-	/* Socket load is increasing, adjust our load average. */
-	binding_contour = size;
+        /* Socket load is increasing, adjust our load average. */
+        binding_contour = size;
 verify:
-	if(size < binding_contour)
-		binding_contour = size;
+        if (size < binding_contour)
+                binding_contour = size;
 
-	if(best > 32767)
-		best -= (32768 - PROT_SOCK);
+        retval = tcp_bhashnext(start-1,i);
 
-	while(tcp_lport_inuse(best))
-		best += TCP_BHTABLE_SIZE;
-	retval = best;
+	best = retval;	/* mark the starting point to avoid infinite loops */
+        while(tcp_lport_inuse(retval)) {
+               	retval = tcp_bhashnext(retval,i);
+		if (retval > 32767)	/* Upper bound */
+			retval = tcp_bhashnext(PROT_SOCK,i);
+		if (retval == best) {
+			/* This hash chain is full. No answer. */
+			retval = 0;
+			break;
+		}
+        }
+
 done:
-	if(start > 32767)
-		start -= (32768 - PROT_SOCK);
-
+        start = (retval + 1);
+        if (start > 32767 || start < PROT_SOCK)
+                start = PROT_SOCK;
 	SOCKHASH_UNLOCK();
 
 	return retval;

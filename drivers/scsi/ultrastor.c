@@ -1144,8 +1144,13 @@ static void ultrastor_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     else
 	printk("US14F: interrupt: unexpected interrupt\n");
 
-    if (config.slot ? inb(config.icm_address - 1) : (inb(SYS_DOORBELL_INTR(config.doorbell_address)) & 1))
+    if (config.slot ? inb(config.icm_address - 1) :
+       (inb(SYS_DOORBELL_INTR(config.doorbell_address)) & 1))
+#if (ULTRASTOR_DEBUG & UD_MULTI_CMD)
       printk("Ux4F: multiple commands completed\n");
+#else
+      ;
+#endif
 
 #if (ULTRASTOR_DEBUG & UD_INTERRUPT)
     printk("USx4F: interrupt: returning\n");
