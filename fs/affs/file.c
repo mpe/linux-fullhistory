@@ -299,7 +299,7 @@ static int affs_readpage(struct dentry *dentry, struct page *page)
 {
 	return block_read_full_page(page,affs_get_block);
 }
-static int affs_prepare_write(struct page *page, unsigned from, unsigned to)
+static int affs_prepare_write(struct file *file, struct page *page, unsigned from, unsigned to)
 {
 	return cont_prepare_write(page,from,to,affs_get_block,
 		&((struct inode*)page->mapping->host)->u.affs_i.mmu_private);

@@ -483,7 +483,10 @@ exp_rootfh(struct svc_client *clp, kdev_t dev, ino_t ino,
 	 * fh must be initialized before calling fh_compose
 	 */
 	fh_init(&fh, maxsize);
-	err = fh_compose(&fh, exp, dentry);
+	if (fh_compose(&fh, exp, dentry))
+		err = -EINVAL;
+	else
+		err = 0;
 	memcpy(f, &fh.fh_handle, sizeof(struct knfsd_fh));
 	fh_put(&fh);
 	return err;

@@ -2029,7 +2029,7 @@ int block_symlink(struct inode *inode, const char *symname, int len)
 
 	if (!page)
 		goto fail;
-	err = mapping->a_ops->prepare_write(page, 0, len-1);
+	err = mapping->a_ops->prepare_write(NULL, page, 0, len-1);
 	if (err)
 		goto fail_map;
 	kaddr = (char*)page_address(page);

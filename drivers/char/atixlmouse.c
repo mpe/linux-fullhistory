@@ -92,10 +92,14 @@ static int release_mouse(struct inode * inode, struct file * file)
 
 static int open_mouse(struct inode * inode, struct file * file)
 {
-	if (request_irq(ATIXL_MOUSE_IRQ, mouse_interrupt, 0, "ATIXL mouse", NULL))
-		return -EBUSY;
-	ATIXL_MSE_INT_ON(); /* Interrupts are really enabled here */
+	/* Lock module as request_irq may sleep */
 	MOD_INC_USE_COUNT;
+	if (request_irq(ATIXL_MOUSE_IRQ, mouse_interrupt, 0, "ATIXL mouse", NULL))
+	{
+		MOD_DEC_USE_COUNT;
+		return -EBUSY;
+	}
+	ATIXL_MSE_INT_ON(); /* Interrupts are really enabled here */
 	return 0;
 }
 
@@ -107,7 +111,13 @@ static int __init atixl_busmouse_init(void)
 {
 	unsigned char a,b,c;
 
-	if (check_region(ATIXL_MSE_DATA_PORT, 3))
+	/*
+	 *	We must request the resource and claim it atomically
+	 *	nowdays. We can throw it away on error. Otherwise we
+	 *	may race another module load of the same I/O
+	 */
+	 
+	if (request_region(ATIXL_MSE_DATA_PORT, 3))
 		return -EIO;
 
 	a = inb( ATIXL_MSE_SIGNATURE_PORT );	/* Get signature */
@@ -116,16 +126,20 @@ static int __init atixl_busmouse_init(void)
 	if (( a != b ) && ( a == c ))
 		printk(KERN_INFO "\nATI Inport ");
 	else
+	{
+		free_region(ATIXL_MSE_DATA_PORT,3);
 		return -EIO;
+	}
 	outb(0x80, ATIXL_MSE_CONTROL_PORT);	/* Reset the Inport device */
 	outb(0x07, ATIXL_MSE_CONTROL_PORT);	/* Select Internal Register 7 */
 	outb(0x0a, ATIXL_MSE_DATA_PORT);	/* Data Interrupts 8+, 1=30hz, 2=50hz, 3=100hz, 4=200hz rate */
 
-	request_region(ATIXL_MSE_DATA_PORT, 3, "atixl");
-
 	msedev = register_busmouse(&atixlmouse);
 	if (msedev < 0)
+	{
 		printk("Bus mouse initialisation error.\n");
+		free_region(ATIXL_MSE_DATA_PORT,3);	/* Was missing */
+	}
 	else
 		printk("Bus mouse detected and installed.\n");
 	return msedev < 0 ? msedev : 0;

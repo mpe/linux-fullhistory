@@ -12,6 +12,21 @@
 #include <linux/mm.h>
 #include <linux/malloc.h>
 
+static void wait_for_partner(struct inode* inode, unsigned int* cnt)
+{
+	int cur = *cnt;	
+	while(cur == *cnt) {
+		pipe_wait(inode);
+		if(signal_pending(current))
+			break;
+	}
+}
+
+static void wake_up_partner(struct inode* inode)
+{
+	wake_up_interruptible(PIPE_WAIT(*inode));
+}
+
 static int fifo_open(struct inode *inode, struct file *filp)
 {
 	int ret;
@@ -20,29 +35,12 @@ static int fifo_open(struct inode *inode, struct file *filp)
 	if (down_interruptible(PIPE_SEM(*inode)))
 		goto err_nolock_nocleanup;
 
-	if (! inode->i_pipe) {
-		unsigned long page;
-		struct pipe_inode_info *info;
-
-		info = kmalloc(sizeof(struct pipe_inode_info),GFP_KERNEL);
-
+	if (!inode->i_pipe) {
 		ret = -ENOMEM;
-		if (!info)
+		if(!pipe_new(inode))
 			goto err_nocleanup;
-		page = __get_free_page(GFP_KERNEL);
-		if (!page) {
-			kfree(info);
-			goto err_nocleanup;
-		}
-
-		inode->i_pipe = info;
-
-		init_waitqueue_head(PIPE_WAIT(*inode));
-		PIPE_BASE(*inode) = (char *) page;
-		PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
-		PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
-		PIPE_WAITING_WRITERS(*inode) = PIPE_WAITING_READERS(*inode) = 0;
 	}
+	filp->f_version = 0;
 
 	switch (filp->f_mode) {
 	case 1:
@@ -51,27 +49,23 @@ static int fifo_open(struct inode *inode, struct file *filp)
 	 *  POSIX.1 says that O_NONBLOCK means return with the FIFO
 	 *  opened, even when there is no process writing the FIFO.
 	 */
-		filp->f_op = &connecting_fifo_fops;
+		filp->f_op = &read_fifo_fops;
+		PIPE_RCOUNTER(*inode)++;
 		if (PIPE_READERS(*inode)++ == 0)
-			wake_up_interruptible(PIPE_WAIT(*inode));
+			wake_up_partner(inode);
 
-		if (!(filp->f_flags & O_NONBLOCK)) {
-			while (!PIPE_WRITERS(*inode)) {
-				if (signal_pending(current))
+		if (!PIPE_WRITERS(*inode)) {
+			if ((filp->f_flags & O_NONBLOCK)) {
+				/* suppress POLLHUP until we have
+				 * seen a writer */
+				filp->f_version = PIPE_WCOUNTER(*inode);
+			} else 
+			{
+				wait_for_partner(inode, &PIPE_WCOUNTER(*inode));
+				if(signal_pending(current))
 					goto err_rd;
-				up(PIPE_SEM(*inode));
-				interruptible_sleep_on(PIPE_WAIT(*inode));
-
-				/* Note that using down_interruptible here
-				   and similar places below is pointless,
-				   since we have to acquire the lock to clean
-				   up properly.  */
-				down(PIPE_SEM(*inode));
 			}
 		}
-
-		if (PIPE_WRITERS(*inode))
-			filp->f_op = &read_fifo_fops;
 		break;
 	
 	case 2:
@@ -85,15 +79,14 @@ static int fifo_open(struct inode *inode, struct file *filp)
 			goto err;
 
 		filp->f_op = &write_fifo_fops;
+		PIPE_WCOUNTER(*inode)++;
 		if (!PIPE_WRITERS(*inode)++)
-			wake_up_interruptible(PIPE_WAIT(*inode));
+			wake_up_partner(inode);
 
-		while (!PIPE_READERS(*inode)) {
+		if (!PIPE_READERS(*inode)) {
+			wait_for_partner(inode, &PIPE_RCOUNTER(*inode));
 			if (signal_pending(current))
 				goto err_wr;
-			up(PIPE_SEM(*inode));
-			interruptible_sleep_on(PIPE_WAIT(*inode));
-			down(PIPE_SEM(*inode));
 		}
 		break;
 	
@@ -108,8 +101,10 @@ static int fifo_open(struct inode *inode, struct file *filp)
 
 		PIPE_READERS(*inode)++;
 		PIPE_WRITERS(*inode)++;
+		PIPE_RCOUNTER(*inode)++;
+		PIPE_WCOUNTER(*inode)++;
 		if (PIPE_READERS(*inode) == 1 || PIPE_WRITERS(*inode) == 1)
-			wake_up_interruptible(PIPE_WAIT(*inode));
+			wake_up_partner(inode);
 		break;
 
 	default:

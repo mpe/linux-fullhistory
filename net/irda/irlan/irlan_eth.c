@@ -6,13 +6,13 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Oct 15 08:37:58 1998
- * Modified at:   Thu Nov  4 14:50:52 1999
+ * Modified at:   Tue Mar 21 09:06:41 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
  *                          Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
  * 
- *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1998-2000 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -25,6 +25,7 @@
  *     
  ********************************************************************/
 
+#include <linux/config.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/inetdevice.h>
@@ -331,6 +332,7 @@ void irlan_eth_send_gratuitous_arp(struct net_device *dev)
 	 * is useful if we have changed access points on the same
 	 * subnet.  
 	 */
+#ifdef CONFIG_INET
 	IRDA_DEBUG(4, "IrLAN: Sending gratuitous ARP\n");
 	in_dev = in_dev_get(dev);
 	if (in_dev == NULL)
@@ -345,6 +347,7 @@ void irlan_eth_send_gratuitous_arp(struct net_device *dev)
 		 NULL, dev->dev_addr, NULL);
 	read_unlock(&in_dev->lock);
 	in_dev_put(in_dev);
+#endif /* CONFIG_INET */
 }
 
 /*

@@ -595,7 +595,7 @@ static int ntfs_readpage(struct dentry *dentry, struct page *page)
 {
 	return block_read_full_page(page,ntfs_get_block);
 }
-static int ntfs_prepare_write(struct page *page, unsigned from, unsigned to)
+static int ntfs_prepare_write(struct file *file, struct page *page, unsigned from, unsigned to)
 {
 	return cont_prepare_write(page,from,to,ntfs_get_block,
 		&((struct inode*)page->mapping->host)->u.ntfs_i.mmu_private);

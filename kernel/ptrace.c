@@ -44,9 +44,9 @@ repeat:
 	mapnr = pte_pagenr(*pgtable);
 	if (write && (!pte_write(*pgtable) || !pte_dirty(*pgtable)))
 		goto fault_in_page;
-	if (mapnr >= max_mapnr)
-		return 0;
 	page = mem_map + mapnr;
+	if ((mapnr >= max_mapnr) || PageReserved(page))
+		return 0;
 	flush_cache_page(vma, addr);
 
 	if (write) {

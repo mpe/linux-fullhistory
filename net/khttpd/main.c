@@ -198,7 +198,6 @@ static int ManagementDaemon(void *unused)
 	
 	DECLARE_WAIT_QUEUE_HEAD(WQ);
 	
-	MOD_INC_USE_COUNT;
 	
 	sprintf(current->comm,"khttpd manager");
 	lock_kernel();   /* This seems to be required for exit_mm */
@@ -347,6 +346,8 @@ static int ManagementDaemon(void *unused)
 int __init khttpd_init(void)
 {
 	int I;
+
+	MOD_INC_USE_COUNT;
 	
 	I=0;
 	while (I<CONFIG_KHTTPD_NUMCPU)

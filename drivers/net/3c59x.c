@@ -21,8 +21,6 @@
 		
  */
 
-static char *version =
-"3c59x.c:v0.99H+lk1.0 Feb 9, 2000 The Linux Kernel Team http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
 
 /* "Knobs" that adjust features and parameters. */
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
@@ -84,6 +82,9 @@ static int rx_nocopy = 0, rx_copy = 0, queued_packet = 0, rx_csumhits;
 
 #define PCI_SUPPORT_VER2
 #define DEV_FREE_SKB(skb) dev_kfree_skb(skb);
+
+static char *version __initdata =
+"3c59x.c:v0.99H+lk1.0 Feb 9, 2000 The Linux Kernel Team http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
 
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
 MODULE_DESCRIPTION("3Com 3c590/3c900 series Vortex/Boomerang driver");

@@ -111,11 +111,14 @@ nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle, int swap,
 			unsigned long offset, unsigned int count,
 			const void *buffer, struct nfs_fattr *fattr)
 {
-	struct nfs_writeargs	arg = { fhandle, offset, count, buffer };
+	struct nfs_writeargs	arg = { fhandle, offset, count, 1, 1,
+					{{(void *) buffer, count}, {0,0}, {0,0}, {0,0},
+					{0,0}, {0,0}, {0,0}, {0,0}}};
+	struct nfs_writeres	res = {fattr, 0, count};
 	int			status;
 
 	dprintk("NFS call  write %d @ %ld\n", count, offset);
-	status = rpc_call(server->client, NFSPROC_WRITE, &arg, fattr,
+	status = rpc_call(server->client, NFSPROC_WRITE, &arg, &res,
 			swap? (RPC_TASK_SWAPPER|RPC_TASK_ROOTCREDS) : 0);
 	dprintk("NFS reply read: %d\n", status);
 	return status < 0? status : count;

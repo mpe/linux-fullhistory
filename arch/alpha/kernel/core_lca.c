@@ -298,8 +298,12 @@ lca_init_arch(void)
 	pci_isa_hose = hose = alloc_pci_controler();
 	hose->io_space = &ioport_resource;
 	hose->mem_space = &iomem_resource;
-	hose->config_space = LCA_CONF;
 	hose->index = 0;
+
+	hose->sparse_mem_base = LCA_SPARSE_MEM - IDENT_ADDR;
+	hose->dense_mem_base = LCA_DENSE_MEM - IDENT_ADDR;
+	hose->sparse_io_base = LCA_IO - IDENT_ADDR;
+	hose->dense_io_base = 0;
 
 	/*
 	 * Set up the PCI to main memory translation windows.

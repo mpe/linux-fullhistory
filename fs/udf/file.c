@@ -87,7 +87,7 @@ static int udf_adinicb_writepage(struct dentry *dentry, struct page *page)
 	return 0;
 }
 
-static int udf_adinicb_prepare_write(struct page *page, unsigned offset, unsigned to)
+static int udf_adinicb_prepare_write(struct file *file, struct page *page, unsigned offset, unsigned to)
 {
 	kmap(page);
 	return 0;

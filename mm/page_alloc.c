@@ -266,9 +266,17 @@ static int zone_balance_memory(zonelist_t *zonelist)
 /*
  * This is the 'heart' of the zoned buddy allocator:
  */
-struct page * __alloc_pages (zonelist_t *zonelist, unsigned long order)
+struct page * __alloc_pages(zonelist_t *zonelist, unsigned long order)
 {
 	zone_t **zone = zonelist->zones;
+
+	/*
+	 * If this is a recursive call, we'd better
+	 * do our best to just allocate things without
+	 * further thought.
+	 */
+	if (current->flags & PF_MEMALLOC)
+		goto allocate_ok;
 
 	/*
 	 * (If anyone calls gfp from interrupts nonatomically then it
@@ -283,32 +291,22 @@ struct page * __alloc_pages (zonelist_t *zonelist, unsigned long order)
 			break;
 		if (!z->size)
 			BUG();
-		/*
-		 * If this is a recursive call, we'd better
-		 * do our best to just allocate things without
-		 * further thought.
-		 */
-		if (!(current->flags & PF_MEMALLOC)) {
-			/* Are we low on memory? */
-			if (z->free_pages <= z->pages_low)
-				continue;
-		}
-		/*
-		 * This is an optimization for the 'higher order zone
-		 * is empty' case - it can happen even in well-behaved
-		 * systems, think the page-cache filling up all RAM.
-		 * We skip over empty zones. (this is not exact because
-		 * we do not take the spinlock and it's not exact for
-		 * the higher order case, but will do it for most things.)
-		 */
-		if (z->free_pages) {
+
+		/* Are we supposed to free memory? Don't make it worse.. */
+		if (!z->zone_wake_kswapd && z->free_pages > z->pages_low) {
 			struct page *page = rmqueue(z, order);
 			if (page)
 				return page;
 		}
 	}
+
+	/*
+	 * Ok, no obvious zones were available, start
+	 * balancing things a bit..
+	 */
 	if (zone_balance_memory(zonelist)) {
 		zone = zonelist->zones;
+allocate_ok:
 		for (;;) {
 			zone_t *z = *(zone++);
 			if (!z)

@@ -949,7 +949,7 @@ static int sysv_readpage(struct dentry *dentry, struct page *page)
 {
 	return block_read_full_page(page,sysv_get_block);
 }
-static int sysv_prepare_write(struct page *page, unsigned from, unsigned to)
+static int sysv_prepare_write(struct file *file, struct page *page, unsigned from, unsigned to)
 {
 	return block_prepare_write(page,from,to,sysv_get_block);
 }

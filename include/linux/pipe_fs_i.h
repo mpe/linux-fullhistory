@@ -9,6 +9,8 @@ struct pipe_inode_info {
 	unsigned int writers;
 	unsigned int waiting_readers;
 	unsigned int waiting_writers;
+	unsigned int r_counter;
+	unsigned int w_counter;
 };
 
 /* Differs from PIPE_BUF in that PIPE_SIZE is the length of the actual
@@ -24,6 +26,8 @@ struct pipe_inode_info {
 #define PIPE_WRITERS(inode)	((inode).i_pipe->writers)
 #define PIPE_WAITING_READERS(inode)	((inode).i_pipe->waiting_readers)
 #define PIPE_WAITING_WRITERS(inode)	((inode).i_pipe->waiting_writers)
+#define PIPE_RCOUNTER(inode)	((inode).i_pipe->r_counter)
+#define PIPE_WCOUNTER(inode)	((inode).i_pipe->w_counter)
 
 #define PIPE_EMPTY(inode)	(PIPE_LEN(inode) == 0)
 #define PIPE_FULL(inode)	(PIPE_LEN(inode) == PIPE_SIZE)
@@ -31,5 +35,10 @@ struct pipe_inode_info {
 #define PIPE_END(inode)	((PIPE_START(inode) + PIPE_LEN(inode)) & (PIPE_SIZE-1))
 #define PIPE_MAX_RCHUNK(inode)	(PIPE_SIZE - PIPE_START(inode))
 #define PIPE_MAX_WCHUNK(inode)	(PIPE_SIZE - PIPE_END(inode))
+
+/* Drop the inode semaphore and wait for a pipe event, atomically */
+void pipe_wait(struct inode * inode);
+
+struct inode* pipe_new(struct inode* inode);
 
 #endif

@@ -310,9 +310,11 @@ int el3_probe(struct net_device *dev)
 			   with "nopnp=1" before, does not harm if not. */
 			idev->deactivate(idev);
 			idev->activate(idev);
-			if (!idev->resource[0].start || check_region(idev->resource[0].start,16))
+			if (!idev->resource[0].start || check_region(idev->resource[0].start, EL3_IO_EXTENT))
 				continue;
 			ioaddr = idev->resource[0].start;
+			if (!request_region(ioaddr, EL3_IO_EXTENT, "3c509 PnP"))
+				return -EBUSY;
 			irq = idev->irq_resource[0].start;
 			if (el3_debug > 3)
 				printk ("ISAPnP reports %s at i/o 0x%x, irq %d\n",

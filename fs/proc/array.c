@@ -402,7 +402,8 @@ static inline void statm_pte_range(pmd_t * pmd, unsigned long address, unsigned 
 		++*pages;
 		if (pte_dirty(page))
 			++*dirty;
-		if (pte_pagenr(page) >= max_mapnr)
+		if ((pte_pagenr(page) >= max_mapnr) || 
+					PageReserved(pte_pagenr(page) + mem_map))
 			continue;
 		if (page_count(pte_page(page)) > 1)
 			++*shared;

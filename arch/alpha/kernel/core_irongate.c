@@ -346,11 +346,21 @@ irongate_init_arch(void)
 	 * Create our single hose.
 	 */
 
-	hose = alloc_pci_controler();
+	pci_isa_hose = hose = alloc_pci_controler();
 	hose->io_space = &ioport_resource;
 	hose->mem_space = &iomem_resource;
-	hose->config_space = IRONGATE_CONF;
 	hose->index = 0;
+
+	/* This is for userland consumption.  For some reason, the 40-bit
+	   PIO bias that we use in the kernel through KSEG didn't work for
+	   the page table based user mappings.  So make sure we get the
+	   43-bit PIO bias.  */
+	hose->sparse_mem_base = 0;
+	hose->sparse_io_base = 0;
+	hose->dense_mem_base
+	  = (IRONGATE_MEM & 0xffffffffff) | 0x80000000000;
+	hose->dense_io_base
+	  = (IRONGATE_IO & 0xffffffffff) | 0x80000000000;
 
 	hose->sg_isa = hose->sg_pci = NULL;
 	__direct_map_base = 0;

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Apr 14 12:41:42 1998
- * Modified at:   Fri Jan 14 10:46:56 2000
+ * Modified at:   Mon Mar 20 09:08:57 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999-2000 Dag Brattli, All Rights Reserved.
@@ -73,18 +73,18 @@ typedef enum {
 	IRDA_TASK_CHILD_INIT,  /* Initializing child task */
 	IRDA_TASK_CHILD_WAIT,  /* Waiting for child task to finish */
 	IRDA_TASK_CHILD_DONE   /* Child task is finished */
-} TASK_STATE;
+} IRDA_TASK_STATE;
 
 struct irda_task;
-typedef int (*TASK_CALLBACK) (struct irda_task *task);
+typedef int (*IRDA_TASK_CALLBACK) (struct irda_task *task);
 
 struct irda_task {
 	queue_t q;
 	magic_t magic;
 
-	TASK_STATE state;
-	TASK_CALLBACK function;
-	TASK_CALLBACK finished;
+	IRDA_TASK_STATE state;
+	IRDA_TASK_CALLBACK function;
+	IRDA_TASK_CALLBACK finished;
 
 	struct irda_task *parent;
 	struct timer_list timer;
@@ -180,10 +180,11 @@ void setup_dma(int channel, char *buffer, int count, int mode);
 
 void irda_task_delete(struct irda_task *task);
 int  irda_task_kick(struct irda_task *task);
-struct irda_task *irda_task_execute(void *instance, TASK_CALLBACK function, 
-				    TASK_CALLBACK finished, 
+struct irda_task *irda_task_execute(void *instance, 
+				    IRDA_TASK_CALLBACK function, 
+				    IRDA_TASK_CALLBACK finished, 
 				    struct irda_task *parent, void *param);
-void irda_task_next_state(struct irda_task *task, TASK_STATE state);
+void irda_task_next_state(struct irda_task *task, IRDA_TASK_STATE state);
 
 extern const char *infrared_mode[];
 

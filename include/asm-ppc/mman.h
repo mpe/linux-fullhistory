@@ -16,14 +16,20 @@
 
 #define MAP_GROWSDOWN	0x0100		/* stack-like segment */
 #define MAP_DENYWRITE	0x0800		/* ETXTBSY */
-#define MAP_EXECUTABLE	0x1000		/* mark it as a executable */
+#define MAP_EXECUTABLE	0x1000		/* mark it as an executable */
 
 #define MS_ASYNC	1		/* sync memory asynchronously */
 #define MS_INVALIDATE	2		/* invalidate the caches */
 #define MS_SYNC		4		/* synchronous memory sync */
 
-#define MCL_CURRENT     0x2000          /* lock all currently mapped pages */
-#define MCL_FUTURE      0x4000          /* lock all additions to address space */
+#define MCL_CURRENT	1		/* lock all current mappings */
+#define MCL_FUTURE	2		/* lock all future mappings */
+
+#define MADV_NORMAL	0x0		/* default page-in behavior */
+#define MADV_RANDOM	0x1		/* page-in minimum required */
+#define MADV_SEQUENTIAL	0x2		/* read-ahead aggressively */
+#define MADV_WILLNEED	0x3		/* pre-fault pages */
+#define MADV_DONTNEED	0x4		/* discard these pages */
 
 /* compatibility flags */
 #define MAP_ANON	MAP_ANONYMOUS

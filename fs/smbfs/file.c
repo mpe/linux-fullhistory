@@ -268,7 +268,7 @@ out:
  * If the writer ends up delaying the write, the writer needs to
  * increment the page use counts until he is done with the page.
  */
-static int smb_prepare_write(struct page *page, unsigned offset, unsigned to)
+static int smb_prepare_write(struct file *file, struct page *page, unsigned offset, unsigned to)
 {
 	kmap(page);
 	return 0;

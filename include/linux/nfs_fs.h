@@ -11,6 +11,7 @@
 
 #include <linux/signal.h>
 #include <linux/sched.h>
+#include <linux/pagemap.h>
 #include <linux/in.h>
 
 #include <linux/sunrpc/sched.h>
@@ -34,13 +35,16 @@
  */
 #define NFS_MAX_DIRCACHE		16
 
-#define NFS_MAX_FILE_IO_BUFFER_SIZE	16384
+#define NFS_MAX_FILE_IO_BUFFER_SIZE	32768
 #define NFS_DEF_FILE_IO_BUFFER_SIZE	4096
 
 /*
  * The upper limit on timeouts for the exponential backoff algorithm.
  */
 #define NFS_MAX_RPC_TIMEOUT		(6*HZ)
+#define NFS_WRITEBACK_DELAY		(5*HZ)
+#define NFS_WRITEBACK_LOCKDELAY		(60*HZ)
+#define NFS_COMMIT_DELAY		(5*HZ)
 
 /*
  * Size of the lookup cache in units of number of entries cached.
@@ -58,11 +62,13 @@
 #define NFS_DSERVER(dentry)		(&(dentry)->d_sb->u.nfs_sb.s_server)
 #define NFS_SERVER(inode)		(&(inode)->i_sb->u.nfs_sb.s_server)
 #define NFS_CLIENT(inode)		(NFS_SERVER(inode)->client)
+#define NFS_REQUESTLIST(inode)		(NFS_SERVER(inode)->rw_requests)
 #define NFS_ADDR(inode)			(RPC_PEERADDR(NFS_CLIENT(inode)))
 #define NFS_CONGESTED(inode)		(RPC_CONGESTED(NFS_CLIENT(inode)))
 
 #define NFS_READTIME(inode)		((inode)->u.nfs_i.read_cache_jiffies)
 #define NFS_OLDMTIME(inode)		((inode)->u.nfs_i.read_cache_mtime)
+#define NFS_NEXTSCAN(inode)		((inode)->u.nfs_i.nextscan)
 #define NFS_CACHEINV(inode) \
 do { \
 	NFS_READTIME(inode) = jiffies - 1000000; \
@@ -78,7 +84,6 @@ do { \
 
 #define NFS_FLAGS(inode)		((inode)->u.nfs_i.flags)
 #define NFS_REVALIDATING(inode)		(NFS_FLAGS(inode) & NFS_INO_REVALIDATING)
-#define NFS_WRITEBACK(inode)		((inode)->u.nfs_i.writeback)
 #define NFS_COOKIES(inode)		((inode)->u.nfs_i.cookies)
 #define NFS_DIREOF(inode)		((inode)->u.nfs_i.direof)
 
@@ -93,46 +98,31 @@ do { \
 /* Flags in the RPC client structure */
 #define NFS_CLNTF_BUFSIZE	0x0001	/* readdir buffer in longwords */
 
+#define NFS_RW_SYNC		0x0001	/* O_SYNC handling */
+#define NFS_RW_SWAP		0x0002	/* This is a swap request */
+
+/*
+ * When flushing a cluster of dirty pages, there can be different
+ * strategies:
+ */
+#define FLUSH_AGING		0	/* only flush old buffers */
+#define FLUSH_SYNC		1	/* file being synced, or contention */
+#define FLUSH_WAIT		2	/* wait for completion */
+#define FLUSH_STABLE		4	/* commit to stable storage */
+
+static inline
+loff_t page_offset(struct page *page)
+{
+	return ((loff_t)page->index) << PAGE_CACHE_SHIFT;
+}
+
+static inline
+unsigned long page_index(struct page *page)
+{
+	return page->index;
+}
+
 #ifdef __KERNEL__
-
-/*
- * This struct describes a file region to be written.
- * It's kind of a pity we have to keep all these lists ourselves, rather
- * than sticking an extra pointer into struct page.
- */
-struct nfs_wreq {
-	struct rpc_listitem	wb_list;	/* linked list of req's */
-	struct rpc_task		wb_task;	/* RPC task */
-	struct file *		wb_file;	/* dentry referenced */
-	struct page *		wb_page;	/* page to be written */
-	wait_queue_head_t	wb_wait;	/* wait for completion */
-	unsigned int		wb_offset;	/* offset within page */
-	unsigned int		wb_bytes;	/* dirty range */
-	unsigned int		wb_count;	/* user count */
-	int			wb_status;
-	pid_t			wb_pid;		/* owner process */
-	unsigned short		wb_flags;	/* status flags */
-
-	struct nfs_writeargs	wb_args;	/* NFS RPC stuff */
-	struct nfs_fattr	wb_fattr;	/* file attributes */
-};
-
-#define WB_NEXT(req)		((struct nfs_wreq *) ((req)->wb_list.next))
-
-/*
- * Various flags for wb_flags
- */
-#define NFS_WRITE_CANCELLED	0x0004	/* has been cancelled */
-#define NFS_WRITE_UNCOMMITTED	0x0008	/* written but uncommitted (NFSv3) */
-#define NFS_WRITE_INVALIDATE	0x0010	/* invalidate after write */
-#define NFS_WRITE_INPROGRESS	0x0100	/* RPC call in progress */
-#define NFS_WRITE_COMPLETE	0x0200	/* RPC call completed */
-
-#define WB_CANCELLED(req)	((req)->wb_flags & NFS_WRITE_CANCELLED)
-#define WB_UNCOMMITTED(req)	((req)->wb_flags & NFS_WRITE_UNCOMMITTED)
-#define WB_INVALIDATE(req)	((req)->wb_flags & NFS_WRITE_INVALIDATE)
-#define WB_INPROGRESS(req)	((req)->wb_flags & NFS_WRITE_INPROGRESS)
-#define WB_COMPLETE(req)	((req)->wb_flags & NFS_WRITE_COMPLETE)
 
 /*
  * linux/fs/nfs/proc.c
@@ -218,21 +208,54 @@ extern int nfs_lock(struct file *, int, struct file_lock *);
  */
 extern int  nfs_writepage(struct dentry *, struct page *);
 extern int  nfs_check_failed_request(struct inode *);
-
+extern struct nfs_page* nfs_find_request(struct inode *, struct page *);
+extern void nfs_release_request(struct nfs_page *req);
+extern int  nfs_flush_incompatible(struct file *file, struct page *page);
+extern int  nfs_updatepage(struct file *, struct page *, unsigned long, unsigned int);
 /*
  * Try to write back everything synchronously (but check the
  * return value!)
  */
-extern int  nfs_wb_all(struct inode *);
-extern int  nfs_wb_page(struct inode *, struct page *);
-extern int  nfs_wb_file(struct inode *, struct file *);
+extern int  nfs_sync_file(struct inode *, struct file *, unsigned long, unsigned int, int);
+extern int  nfs_flush_file(struct inode *, struct file *, unsigned long, unsigned int, int);
+extern int  nfs_flush_timeout(struct inode *, int);
+#ifdef CONFIG_NFS_V3
+extern int  nfs_commit_file(struct inode *, struct file *, unsigned long, unsigned int, int);
+extern int  nfs_commit_timeout(struct inode *, int);
+#endif
+
+static inline int
+nfs_have_writebacks(struct inode *inode)
+{
+	return !list_empty(&inode->u.nfs_i.writeback);
+}
+
+static inline int
+nfs_wb_all(struct inode *inode)
+{
+	int error = nfs_sync_file(inode, 0, 0, 0, FLUSH_WAIT);
+	return (error < 0) ? error : 0;
+}
 
 /*
- * Invalidate write-backs, possibly trying to write them
- * back first..
+ * Write back all requests on one page - we do this before reading it.
  */
-extern void nfs_inval(struct inode *);
-extern int  nfs_updatepage(struct file *, struct page *, unsigned long, unsigned int);
+static inline int
+nfs_wb_page(struct inode *inode, struct page* page)
+{
+	int error = nfs_sync_file(inode, 0, page_offset(page), PAGE_CACHE_SIZE, FLUSH_WAIT | FLUSH_STABLE);
+	return (error < 0) ? error : 0;
+}
+
+/*
+ * Write back all pending writes for one user.. 
+ */
+static inline int
+nfs_wb_file(struct inode *inode, struct file *file)
+{
+	int error = nfs_sync_file(inode, file, 0, 0, FLUSH_WAIT);
+	return (error < 0) ? error : 0;
+}
 
 /*
  * linux/fs/nfs/read.c
@@ -260,6 +283,19 @@ nfs_revalidate_inode(struct nfs_server *server, struct dentry *dentry)
 /* NFS root */
 
 extern int nfs_root_mount(struct super_block *sb);
+
+#define nfs_wait_event(clnt, wq, condition)				\
+({									\
+	int __retval = 0;						\
+	if (clnt->cl_intr) {						\
+		sigset_t oldmask;					\
+		rpc_clnt_sigmask(clnt, &oldmask);			\
+		__retval = wait_event_interruptible(wq, condition);	\
+		rpc_clnt_sigunmask(clnt, &oldmask);			\
+	} else								\
+		wait_event(wq, condition);				\
+	__retval;							\
+})
 
 #endif /* __KERNEL__ */
 

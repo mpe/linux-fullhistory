@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Jun  7 10:25:11 1999
- * Modified at:   Tue Dec 14 15:26:30 1999
+ * Modified at:   Sun Jan 30 14:32:03 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1999-2000 Dag Brattli, All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -40,19 +40,27 @@
 
 #include <net/irda/ircomm_param.h>
 
-static int ircomm_param_service_type(void *instance, param_t *param, int get);
-static int ircomm_param_port_type(void *instance, param_t *param, int get);
-static int ircomm_param_port_name(void *instance, param_t *param, int get);
-static int ircomm_param_service_type(void *instance, param_t *param, int get);
-static int ircomm_param_data_rate(void *instance, param_t *param, int get);
-static int ircomm_param_data_format(void *instance, param_t *param, int get);
-static int ircomm_param_flow_control(void *instance, param_t *param, int get);
-static int ircomm_param_xon_xoff(void *instance, param_t *param, int get);
-static int ircomm_param_enq_ack(void *instance, param_t *param, int get);
-static int ircomm_param_line_status(void *instance, param_t *param, int get);
-static int ircomm_param_dte(void *instance, param_t *param, int get);
-static int ircomm_param_dce(void *instance, param_t *param, int get);
-static int ircomm_param_poll(void *instance, param_t *param, int get);
+static int ircomm_param_service_type(void *instance, irda_param_t *param, 
+				     int get);
+static int ircomm_param_port_type(void *instance, irda_param_t *param, 
+				  int get);
+static int ircomm_param_port_name(void *instance, irda_param_t *param, 
+				  int get);
+static int ircomm_param_service_type(void *instance, irda_param_t *param, 
+				     int get);
+static int ircomm_param_data_rate(void *instance, irda_param_t *param, 
+				  int get);
+static int ircomm_param_data_format(void *instance, irda_param_t *param, 
+				    int get);
+static int ircomm_param_flow_control(void *instance, irda_param_t *param, 
+				     int get);
+static int ircomm_param_xon_xoff(void *instance, irda_param_t *param, int get);
+static int ircomm_param_enq_ack(void *instance, irda_param_t *param, int get);
+static int ircomm_param_line_status(void *instance, irda_param_t *param, 
+				    int get);
+static int ircomm_param_dte(void *instance, irda_param_t *param, int get);
+static int ircomm_param_dce(void *instance, irda_param_t *param, int get);
+static int ircomm_param_poll(void *instance, irda_param_t *param, int get);
 
 static pi_minor_info_t pi_minor_call_table_common[] = {
 	{ ircomm_param_service_type, PV_INT_8_BITS },
@@ -170,7 +178,8 @@ int ircomm_param_request(struct ircomm_tty_cb *self, __u8 pi, int flush)
  *    query and then the remote device sends its initial paramters
  *
  */
-static int ircomm_param_service_type(void *instance, param_t *param, int get)
+static int ircomm_param_service_type(void *instance, irda_param_t *param, 
+				     int get)
 {
 	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
 	__u8 service_type = param->pv.b; /* We know it's a one byte integer */
@@ -229,7 +238,7 @@ static int ircomm_param_service_type(void *instance, param_t *param, int get)
  *    Since we only advertise serial service, this parameter should only
  *    be equal to IRCOMM_SERIAL.
  */
-static int ircomm_param_port_type(void *instance, param_t *param, int get)
+static int ircomm_param_port_type(void *instance, irda_param_t *param, int get)
 {
 	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
 
@@ -253,7 +262,7 @@ static int ircomm_param_port_type(void *instance, param_t *param, int get)
  *    Exchange port name
  *
  */
-static int ircomm_param_port_name(void *instance, param_t *param, int get)
+static int ircomm_param_port_name(void *instance, irda_param_t *param, int get)
 {
 	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
 	
@@ -276,7 +285,7 @@ static int ircomm_param_port_name(void *instance, param_t *param, int get)
  *    Exchange data rate to be used in this settings
  *
  */
-static int ircomm_param_data_rate(void *instance, param_t *param, int get)
+static int ircomm_param_data_rate(void *instance, irda_param_t *param, int get)
 {
 	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
 	
@@ -299,7 +308,8 @@ static int ircomm_param_data_rate(void *instance, param_t *param, int get)
  *    Exchange data format to be used in this settings
  *
  */
-static int ircomm_param_data_format(void *instance, param_t *param, int get)
+static int ircomm_param_data_format(void *instance, irda_param_t *param, 
+				    int get)
 {
 	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
 
@@ -320,7 +330,8 @@ static int ircomm_param_data_format(void *instance, param_t *param, int get)
  *    Exchange flow control settings to be used in this settings
  *
  */
-static int ircomm_param_flow_control(void *instance, param_t *param, int get)
+static int ircomm_param_flow_control(void *instance, irda_param_t *param, 
+				     int get)
 {
 	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
 
@@ -343,7 +354,7 @@ static int ircomm_param_flow_control(void *instance, param_t *param, int get)
  *    Exchange XON/XOFF characters
  *
  */
-static int ircomm_param_xon_xoff(void *instance, param_t *param, int get)
+static int ircomm_param_xon_xoff(void *instance, irda_param_t *param, int get)
 {
 	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
 
@@ -370,7 +381,7 @@ static int ircomm_param_xon_xoff(void *instance, param_t *param, int get)
  *    Exchange ENQ/ACK characters
  *
  */
-static int ircomm_param_enq_ack(void *instance, param_t *param, int get)
+static int ircomm_param_enq_ack(void *instance, irda_param_t *param, int get)
 {
 	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
 
@@ -397,7 +408,8 @@ static int ircomm_param_enq_ack(void *instance, param_t *param, int get)
  *    
  *
  */
-static int ircomm_param_line_status(void *instance, param_t *param, int get)
+static int ircomm_param_line_status(void *instance, irda_param_t *param, 
+				    int get)
 {
 	IRDA_DEBUG(2, __FUNCTION__ "(), not impl.\n");
 
@@ -410,7 +422,7 @@ static int ircomm_param_line_status(void *instance, param_t *param, int get)
  *    If we get here, there must be some sort of null-modem connection, and
  *    we are probably working in server mode as well.
  */
-static int ircomm_param_dte(void *instance, param_t *param, int get)
+static int ircomm_param_dte(void *instance, irda_param_t *param, int get)
 {
 	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
 	__u8 dte;
@@ -453,7 +465,7 @@ static int ircomm_param_dte(void *instance, param_t *param, int get)
  *    
  *
  */
-static int ircomm_param_dce(void *instance, param_t *param, int get)
+static int ircomm_param_dce(void *instance, irda_param_t *param, int get)
 {
 	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
 	__u8 dce;
@@ -485,7 +497,7 @@ static int ircomm_param_dce(void *instance, param_t *param, int get)
  *    Called when the peer device is polling for the line settings
  *
  */
-static int ircomm_param_poll(void *instance, param_t *param, int get)
+static int ircomm_param_poll(void *instance, irda_param_t *param, int get)
 {
 	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
 

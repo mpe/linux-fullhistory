@@ -63,6 +63,7 @@ static int			nfs_stat_to_errno(int stat);
 #define NFS_diropres_sz		1+NFS_fhandle_sz+NFS_fattr_sz
 #define NFS_readlinkres_sz	1
 #define NFS_readres_sz		1+NFS_fattr_sz+1
+#define NFS_writeres_sz		NFS_attrstat_sz
 #define NFS_stat_sz		1
 #define NFS_readdirres_sz	1
 #define NFS_statfsres_sz	1+NFS_info_sz
@@ -273,6 +274,7 @@ nfs_xdr_readres(struct rpc_rqst *req, u32 *p, struct nfs_readres *res)
 static int
 nfs_xdr_writeargs(struct rpc_rqst *req, u32 *p, struct nfs_writeargs *args)
 {
+	unsigned int nr;
 	u32 count = args->count;
 
 	p = xdr_encode_fhandle(p, args->fh);
@@ -282,28 +284,35 @@ nfs_xdr_writeargs(struct rpc_rqst *req, u32 *p, struct nfs_writeargs *args)
 	*p++ = htonl(count);
 	req->rq_slen = xdr_adjust_iovec(req->rq_svec, p);
 
-	req->rq_svec[1].iov_base = (void *) args->buffer;
-	req->rq_svec[1].iov_len = count;
-	req->rq_slen += count;
-	req->rq_snr = 2;
+	/* Get the number of buffers in the send iovec */
+	nr = args->nriov;
+
+	if (nr+2 > MAX_IOVEC) {
+		printk(KERN_ERR "NFS: Bad number of iov's in xdr_writeargs "
+			"(nr %d max %d)\n", nr, MAX_IOVEC);
+		return -EINVAL;
+	}
+
+	/* Copy the iovec */
+	memcpy(req->rq_svec + 1, args->iov, nr * sizeof(struct iovec));
 
 #ifdef NFS_PAD_WRITES
 	/*
 	 * Some old servers require that the message length
 	 * be a multiple of 4, so we pad it here if needed.
 	 */
-	count = ((count + 3) & ~3) - count;
-	if (count) {
-#if 0
-printk("nfs_writeargs: padding write, len=%d, slen=%d, pad=%d\n",
-req->rq_svec[1].iov_len, req->rq_slen, count);
-#endif
-		req->rq_svec[2].iov_base = (void *) "\0\0\0";
-		req->rq_svec[2].iov_len  = count;
-		req->rq_slen += count;
-		req->rq_snr = 3;
+	if (count & 3) {
+		struct iovec	*iov = req->rq_svec + nr + 1;
+		int		pad = 4 - (count & 3);
+
+		iov->iov_base = (void *) "\0\0\0";
+		iov->iov_len  = pad;
+		count += pad;
+		nr++;
 	}
 #endif
+	req->rq_slen += count;
+	req->rq_snr += nr;
 
 	return 0;
 }
@@ -593,6 +602,16 @@ nfs_xdr_readlinkres(struct rpc_rqst *req, u32 *p, void *dummy)
 }
 
 /*
+ * Decode WRITE reply
+ */
+static int
+nfs_xdr_writeres(struct rpc_rqst *req, u32 *p, struct nfs_writeres *res)
+{
+	res->verf->committed = NFS_FILE_SYNC;
+	return nfs_xdr_attrstat(req, p, res->fattr);
+}
+
+/*
  * Decode STATFS reply
  */
 static int
@@ -678,7 +697,7 @@ static struct rpc_procinfo	nfs_procedures[18] = {
     PROC(readlink,	readlinkargs,	readlinkres),
     PROC(read,		readargs,	readres),
     PROC(writecache,	enc_void,	dec_void),
-    PROC(write,		writeargs,	attrstat),
+    PROC(write,		writeargs,	writeres),
     PROC(create,	createargs,	diropres),
     PROC(remove,	diropargs,	stat),
     PROC(rename,	renameargs,	stat),

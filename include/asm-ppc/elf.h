@@ -38,9 +38,11 @@ typedef elf_greg_t elf_gregset_t[ELF_NGREG];
 typedef double elf_fpreg_t;
 typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 
+#ifdef __KERNEL__
 /* Altivec registers */
 typedef vector128 elf_vrreg_t;
 typedef elf_vrreg_t elf_vrregset_t[ELF_NVRREG];
+#endif /* __KERNEL__ */
 
 #define ELF_CORE_COPY_REGS(gregs, regs) \
 	memcpy(gregs, regs, \

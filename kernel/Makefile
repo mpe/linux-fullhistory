@@ -29,7 +29,7 @@ ifeq ($(CONFIG_MODULES),y)
 OX_OBJS  += ksyms.o
 endif
 
-ifdef CONFIG_PM
+ifeq ($(CONFIG_PM),y)
 OX_OBJS += pm.o
 endif
 

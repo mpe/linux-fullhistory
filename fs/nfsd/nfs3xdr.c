@@ -748,6 +748,7 @@ encode_entry(struct readdir_cd *cd, const char *name,
 		if (fh_compose(&fh, exp, dchild) != 0 || !dchild->d_inode)
 			goto noexec;
 		p = encode_post_op_attr(cd->rqstp, p, fh.fh_dentry);
+		*p++ = xdr_one; /* yes, a file handle follows */
 		p = encode_fh(p, &fh);
 		fh_put(&fh);
 	}

@@ -943,7 +943,7 @@ static int option_setup(char *str) {
 
    ints[0] = i - 1;
    internal_setup(cur, ints);
-   return 0;
+   return 1;
 }
 
 int u14_34f_detect(Scsi_Host_Template *tpnt)

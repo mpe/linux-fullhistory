@@ -6,6 +6,9 @@
  * Copyright 2000, Jayson C. Vantuyl <vantuyl@csc.smsu.edu>
  *             and Bryon W. Roche    <bryon@csc.smsu.edu>
  *
+ * 64-bit addressing added by Kanoj Sarcar <kanoj@sgi.com>
+ * 			   and Leo Dagum    <dagum@sgi.com>
+ *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
  * Free Software Foundation; either version 2, or (at your option) any
@@ -160,6 +163,8 @@ struct {
 #define MBOX3		0x76	/* mailbox 3 */
 #define MBOX4		0x78	/* mailbox 4 */
 #define MBOX5		0x7a	/* mailbox 5 */
+#define MBOX6           0x7c    /* mailbox 6 */
+#define MBOX7           0x7e    /* mailbox 7 */
 
 /* mailbox command complete status codes */
 #define MBOX_COMMAND_COMPLETE		0x4000
@@ -177,6 +182,15 @@ struct {
 #define REQUEST_QUEUE_WAKEUP		0x8005
 #define EXECUTION_TIMEOUT_RESET		0x8006
 
+#ifdef CONFIG_QL_ISP_A64
+#define IOCB_SEGS                       2
+#define CONTINUATION_SEGS               5
+#define MAX_CONTINUATION_ENTRIES        254
+#else
+#define IOCB_SEGS                       4
+#define CONTINUATION_SEGS               7
+#endif /* CONFIG_QL_ISP_A64 */
+
 struct Entry_header {
 	u_char	entry_type;
 	u_char	entry_cnt;
@@ -185,8 +199,14 @@ struct Entry_header {
 };
 
 /* entry header type commands */
+#ifdef CONFIG_QL_ISP_A64
+#define ENTRY_COMMAND           9
+#define ENTRY_CONTINUATION      0xa
+#else
 #define ENTRY_COMMAND		1
 #define ENTRY_CONTINUATION	2
+#endif /* CONFIG_QL_ISP_A64 */
+
 #define ENTRY_STATUS		3
 #define ENTRY_MARKER		4
 #define ENTRY_EXTENDED_COMMAND	5
@@ -199,6 +219,9 @@ struct Entry_header {
 
 struct dataseg {
 	u_int			d_base;
+#ifdef CONFIG_QL_ISP_A64
+	u_int                   d_base_hi;
+#endif
 	u_int			d_count;
 };
 
@@ -213,7 +236,11 @@ struct Command_Entry {
 	u_short			time_out;
 	u_short			segment_cnt;
 	u_char			cdb[12];
-	struct dataseg		dataseg[4];
+#ifdef CONFIG_QL_ISP_A64
+	u_int                   rsvd1;
+	u_int                   rsvd2;
+#endif
+	struct dataseg		dataseg[IOCB_SEGS];
 };
 
 /* command entry control flag definitions */
@@ -240,8 +267,10 @@ struct Ext_Command_Entry {
 
 struct Continuation_Entry {
 	struct Entry_header	hdr;
+#ifndef CONFIG_QL_ISP_A64
 	u_int			reserved;
-	struct dataseg		dataseg[7];
+#endif
+	struct dataseg		dataseg[CONTINUATION_SEGS];
 };
 
 struct Marker_Entry {
@@ -385,6 +414,11 @@ struct Status_Entry {
 #define MBOX_WRITE_FOUR_RAM_WORDS	0x0041
 #define MBOX_EXEC_BIOS_IOCB		0x0042
 
+#ifdef CONFIG_QL_ISP_A64
+#define MBOX_CMD_INIT_REQUEST_QUEUE_64      0x0052
+#define MBOX_CMD_INIT_RESPONSE_QUEUE_64     0x0053
+#endif /* CONFIG_QL_ISP_A64 */
+
 #include "qlogicisp_asm.c"
 
 #define PACKB(a, b)			(((a)<<4)|(b))
@@ -457,6 +491,25 @@ static const u_char mbox_param[] = {
 	PACKB(1, 2),	/* MBOX_RETURN_BIOS_BLOCK_ADDR */
 	PACKB(6, 1),	/* MBOX_WRITE_FOUR_RAM_WORDS */
 	PACKB(2, 3)	/* MBOX_EXEC_BIOS_IOCB */
+#ifdef CONFIG_QL_ISP_A64
+	,PACKB(0, 0),	/* 0x0043 */
+	PACKB(0, 0),	/* 0x0044 */
+	PACKB(0, 0),	/* 0x0045 */
+	PACKB(0, 0),	/* 0x0046 */
+	PACKB(0, 0),	/* 0x0047 */
+	PACKB(0, 0),	/* 0x0048 */
+	PACKB(0, 0),	/* 0x0049 */
+	PACKB(0, 0),	/* 0x004a */
+	PACKB(0, 0),	/* 0x004b */
+	PACKB(0, 0),	/* 0x004c */
+	PACKB(0, 0),	/* 0x004d */
+	PACKB(0, 0),	/* 0x004e */
+	PACKB(0, 0),	/* 0x004f */
+	PACKB(0, 0),	/* 0x0050 */
+	PACKB(0, 0),	/* 0x0051 */
+	PACKB(8, 8),	/* MBOX_CMD_INIT_REQUEST_QUEUE_64 (0x0052) */
+	PACKB(8, 8)	/* MBOX_CMD_INIT_RESPONSE_QUEUE_64 (0x0053) */
+#endif /* CONFIG_QL_ISP_A64 */
 };
 
 #define MAX_MBOX_COMMAND	(sizeof(mbox_param)/sizeof(u_short))
@@ -742,6 +795,7 @@ int isp1020_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 	struct Continuation_Entry *cont;
 	struct Scsi_Host *host;
 	struct isp1020_hostdata *hostdata;
+	dma_addr_t	dma_addr;
 
 	ENTER("isp1020_queuecommand");
 
@@ -817,14 +871,18 @@ int isp1020_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 
 		/* fill in first four sg entries: */
 		n = sg_count;
-		if (n > 4)
-			n = 4;
+		if (n > IOCB_SEGS)
+			n = IOCB_SEGS;
 		for (i = 0; i < n; i++) {
-			ds[i].d_base  = cpu_to_le32(sg_dma_address(sg));
+			dma_addr = sg_dma_address(sg);
+			ds[i].d_base  = cpu_to_le32((u32) dma_addr);
+#ifdef CONFIG_QL_ISP_A64
+			ds[i].d_base_hi = cpu_to_le32((u32) (dma_addr>>32));
+#endif /* CONFIG_QL_ISP_A64 */
 			ds[i].d_count = cpu_to_le32(sg_dma_len(sg));
 			++sg;
 		}
-		sg_count -= 4;
+		sg_count -= IOCB_SEGS;
 
 		while (sg_count > 0) {
 			++cmd->hdr.entry_cnt;
@@ -841,32 +899,46 @@ int isp1020_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 			cont->hdr.entry_cnt  = 0;
 			cont->hdr.sys_def_1  = 0;
 			cont->hdr.flags      = 0;
+#ifndef CONFIG_QL_ISP_A64
 			cont->reserved = 0;
+#endif
 			ds = cont->dataseg;
 			n = sg_count;
-			if (n > 7)
-				n = 7;
+			if (n > CONTINUATION_SEGS)
+				n = CONTINUATION_SEGS;
 			for (i = 0; i < n; ++i) {
-				ds[i].d_base = cpu_to_le32(sg_dma_address(sg));
+				dma_addr = sg_dma_address(sg);
+				ds[i].d_base = cpu_to_le32((u32) dma_addr);
+#ifdef CONFIG_QL_ISP_A64
+				ds[i].d_base_hi = cpu_to_le32((u32)(dma_addr>>32));
+#endif /* CONFIG_QL_ISP_A64 */
 				ds[i].d_count = cpu_to_le32(sg_dma_len(sg));
 				++sg;
 			}
 			sg_count -= n;
 		}
 	} else if (Cmnd->request_bufflen) {
-		Cmnd->SCp.ptr = (char *)(unsigned long)
-			pci_map_single(hostdata->pci_dev,
+		/*Cmnd->SCp.ptr = (char *)(unsigned long)*/
+		dma_addr = pci_map_single(hostdata->pci_dev,
 				       Cmnd->request_buffer,
 				       Cmnd->request_bufflen,
 				       scsi_to_pci_dma_dir(Cmnd->sc_data_direction));
+		Cmnd->SCp.ptr = (char *)(unsigned long) dma_addr;
 
 		cmd->dataseg[0].d_base =
-			cpu_to_le32((u32)(long)Cmnd->SCp.ptr);
+			cpu_to_le32((u32) dma_addr);
+#ifdef CONFIG_QL_ISP_A64
+		cmd->dataseg[0].d_base_hi =
+			cpu_to_le32((u32) (dma_addr>>32));
+#endif /* CONFIG_QL_ISP_A64 */
 		cmd->dataseg[0].d_count =
 			cpu_to_le32((u32)Cmnd->request_bufflen);
 		cmd->segment_cnt = cpu_to_le16(1);
 	} else {
 		cmd->dataseg[0].d_base = 0;
+#ifdef CONFIG_QL_ISP_A64
+		cmd->dataseg[0].d_base_hi = 0;
+#endif /* CONFIG_QL_ISP_A64 */
 		cmd->dataseg[0].d_count = 0;
 		cmd->segment_cnt = cpu_to_le16(1); /* Shouldn't this be 0? */
 	}
@@ -983,7 +1055,11 @@ void isp1020_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 				     scsi_to_pci_dma_dir(Cmnd->sc_data_direction));
 		else if (Cmnd->request_bufflen)
 			pci_unmap_single(hostdata->pci_dev,
+#ifdef CONFIG_QL_ISP_A64
+					 (dma_addr_t)((long)Cmnd->SCp.ptr),
+#else
 					 (u32)((long)Cmnd->SCp.ptr),
+#endif
 					 Cmnd->request_bufflen,
 					 scsi_to_pci_dma_dir(Cmnd->sc_data_direction));
 
@@ -1612,8 +1688,13 @@ static int isp1020_set_defaults(struct Scsi_Host *host)
 static int isp1020_load_parameters(struct Scsi_Host *host)
 {
 	int i, k;
+#ifdef CONFIG_QL_ISP_A64
+	u_long queue_addr;
+	u_short param[8];
+#else
 	u_int queue_addr;
 	u_short param[6];
+#endif
 	u_short isp_cfg1, hwrev;
 	unsigned long flags;
 	struct isp1020_hostdata *hostdata =
@@ -1753,13 +1834,20 @@ static int isp1020_load_parameters(struct Scsi_Host *host)
 	}
 
 	queue_addr = hostdata->res_dma;
-
+#ifdef CONFIG_QL_ISP_A64
+	param[0] = MBOX_CMD_INIT_RESPONSE_QUEUE_64;
+#else
 	param[0] = MBOX_INIT_RES_QUEUE;
+#endif
 	param[1] = RES_QUEUE_LEN + 1;
 	param[2] = (u_short) (queue_addr >> 16);
 	param[3] = (u_short) (queue_addr & 0xffff);
 	param[4] = 0;
 	param[5] = 0;
+#ifdef CONFIG_QL_ISP_A64
+	param[6] = (u_short) (queue_addr >> 48);
+	param[7] = (u_short) (queue_addr >> 32);
+#endif
 
 	isp1020_mbox_command(host, param);
 
@@ -1770,12 +1858,21 @@ static int isp1020_load_parameters(struct Scsi_Host *host)
 	}
 
 	queue_addr = hostdata->req_dma;
-
+#ifdef CONFIG_QL_ISP_A64
+	param[0] = MBOX_CMD_INIT_REQUEST_QUEUE_64;
+#else
 	param[0] = MBOX_INIT_REQ_QUEUE;
+#endif
 	param[1] = QLOGICISP_REQ_QUEUE_LEN + 1;
 	param[2] = (u_short) (queue_addr >> 16);
 	param[3] = (u_short) (queue_addr & 0xffff);
 	param[4] = 0;
+
+#ifdef CONFIG_QL_ISP_A64
+	param[5] = 0;
+	param[6] = (u_short) (queue_addr >> 48);
+	param[7] = (u_short) (queue_addr >> 32);
+#endif
 
 	isp1020_mbox_command(host, param);
 
@@ -1811,6 +1908,8 @@ static int isp1020_mbox_command(struct Scsi_Host *host, u_short param[])
 		printk("qlogicisp: mbox_command loop timeout #1\n");
 
 	switch(mbox_param[param[0]] >> 4) {
+	      case 8: isp_outw(param[7], host, MBOX7);
+	      case 7: isp_outw(param[6], host, MBOX6);
 	      case 6: isp_outw(param[5], host, MBOX5);
 	      case 5: isp_outw(param[4], host, MBOX4);
 	      case 4: isp_outw(param[3], host, MBOX3);
@@ -1836,6 +1935,8 @@ static int isp1020_mbox_command(struct Scsi_Host *host, u_short param[])
 		printk("qlogicisp: mbox_command loop timeout #3\n");
 
 	switch(mbox_param[param[0]] & 0xf) {
+	      case 8: param[7] = isp_inw(host, MBOX7);
+	      case 7: param[6] = isp_inw(host, MBOX6);
 	      case 6: param[5] = isp_inw(host, MBOX5);
 	      case 5: param[4] = isp_inw(host, MBOX4);
 	      case 4: param[3] = isp_inw(host, MBOX3);

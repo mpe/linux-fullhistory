@@ -42,10 +42,19 @@ struct nfs_inode_info {
 
 	/*
 	 * This is the list of dirty unwritten pages.
-	 * NFSv3 will want to add a list for written but uncommitted
-	 * pages.
 	 */
-	struct nfs_wreq *	writeback;
+	struct list_head	dirty;
+	struct list_head	commit;
+	struct list_head	writeback;
+
+	unsigned int		ndirty,
+				ncommit,
+				npages;
+
+	/* Flush daemon info */
+	struct inode		*hash_next,
+				*hash_prev;
+	unsigned long		nextscan;
 
 	/* Readdir caching information. */
 	void *cookies;
@@ -55,8 +64,9 @@ struct nfs_inode_info {
 /*
  * Legal inode flag values
  */
-#define NFS_INO_REVALIDATING	0x0001		/* revalidating attrs */
+#define NFS_INO_REVALIDATING	0x0004		/* revalidating attrs */
 #define NFS_IS_SNAPSHOT		0x0010		/* a snapshot file */
+#define NFS_INO_FLUSH		0x0020		/* inode is due for flushing */
 
 /*
  * NFS lock info

@@ -42,8 +42,8 @@ static int	nfsctl_export(struct nfsctl_export *data);
 static int	nfsctl_unexport(struct nfsctl_export *data);
 static int	nfsctl_getfh(struct nfsctl_fhparm *, __u8 *);
 static int	nfsctl_getfd(struct nfsctl_fdparm *, __u8 *);
-#ifdef notyet
 static int	nfsctl_getfs(struct nfsctl_fsparm *, struct knfsd_fh *);
+#ifdef notyet
 static int	nfsctl_ugidupdate(struct nfsctl_ugidmap *data);
 #endif
 
@@ -112,7 +112,6 @@ nfsctl_ugidupdate(nfs_ugidmap *data)
 }
 #endif
 
-#ifdef notyet
 static inline int
 nfsctl_getfs(struct nfsctl_fsparm *data, struct knfsd_fh *res)
 {
@@ -131,10 +130,9 @@ nfsctl_getfs(struct nfsctl_fsparm *data, struct knfsd_fh *res)
 	else
 		err = exp_rootfh(clp, 0, 0, data->gd_path, res, data->gd_maxlen);
 	exp_unlock();
-
+	/*HACK*/ res->fh_size = NFS_FHSIZE; /* HACK until lockd handles var-length handles */
 	return err;
 }
-#endif
 
 static inline int
 nfsctl_getfd(struct nfsctl_fdparm *data, __u8 *res)
@@ -206,6 +204,21 @@ nfsctl_getfh(struct nfsctl_fhparm *data, __u8 *res)
 #define handle_sys_nfsservctl sys_nfsservctl
 #endif
 
+static struct {
+	int argsize, respsize;
+}  sizes[] = {
+	/* NFSCTL_SVC        */ { sizeof(struct nfsctl_svc), 0 },
+	/* NFSCTL_ADDCLIENT  */ { sizeof(struct nfsctl_client), 0},
+	/* NFSCTL_DELCLIENT  */ { sizeof(struct nfsctl_client), 0},
+	/* NFSCTL_EXPORT     */ { sizeof(struct nfsctl_export), 0},
+	/* NFSCTL_UNEXPORT   */ { sizeof(struct nfsctl_export), 0},
+	/* NFSCTL_UGIDUPDATE */ { sizeof(struct nfsctl_uidmap), 0},
+	/* NFSCTL_GETFH      */ { sizeof(struct nfsctl_fhparm), NFS_FHSIZE},
+	/* NFSCTL_GETFD      */ { sizeof(struct nfsctl_fdparm), NFS_FHSIZE},
+	/* NFSCTL_GETFS      */ { sizeof(struct nfsctl_fsparm), sizeof(struct knfsd_fh)},
+};
+#define CMD_MAX (sizeof(sizes)/sizeof(sizes[0])-1)
+
 int
 asmlinkage handle_sys_nfsservctl(int cmd, void *opaque_argp, void *opaque_resp)
 {
@@ -214,6 +227,7 @@ asmlinkage handle_sys_nfsservctl(int cmd, void *opaque_argp, void *opaque_resp)
 	struct nfsctl_arg *	arg = NULL;
 	union nfsctl_res *	res = NULL;
 	int			err;
+	int			argsize, respsize;
 
 	MOD_INC_USE_COUNT;
 	lock_kernel ();
@@ -223,12 +237,16 @@ asmlinkage handle_sys_nfsservctl(int cmd, void *opaque_argp, void *opaque_resp)
 	if (!capable(CAP_SYS_ADMIN)) {
 		goto done;
 	}
+	err = -EINVAL;
+	if (cmd<0 || cmd > CMD_MAX)
+		goto done;
 	err = -EFAULT;
-	if (!access_ok(VERIFY_READ, argp, sizeof(*argp))
-	 || (resp && !access_ok(VERIFY_WRITE, resp, sizeof(*resp)))) {
+	argsize = sizes[cmd].argsize + sizeof(int); /* int for ca_version */
+	respsize = sizes[cmd].respsize;	/* maximum */
+	if (!access_ok(VERIFY_READ, argp, argsize)
+	 || (resp && !access_ok(VERIFY_WRITE, resp, respsize))) {
 		goto done;
 	}
-
 	err = -ENOMEM;	/* ??? */
 	if (!(arg = kmalloc(sizeof(*arg), GFP_USER)) ||
 	    (resp && !(res = kmalloc(sizeof(*res), GFP_USER)))) {
@@ -236,7 +254,7 @@ asmlinkage handle_sys_nfsservctl(int cmd, void *opaque_argp, void *opaque_resp)
 	}
 
 	err = -EINVAL;
-	copy_from_user(arg, argp, sizeof(*argp));
+	copy_from_user(arg, argp, argsize);
 	if (arg->ca_version != NFSCTL_VERSION) {
 		printk(KERN_WARNING "nfsd: incompatible version in syscall.\n");
 		goto done;
@@ -269,16 +287,16 @@ asmlinkage handle_sys_nfsservctl(int cmd, void *opaque_argp, void *opaque_resp)
 	case NFSCTL_GETFD:
 		err = nfsctl_getfd(&arg->ca_getfd, res->cr_getfh);
 		break;
-#ifdef notyet
 	case NFSCTL_GETFS:
 		err = nfsctl_getfs(&arg->ca_getfs, &res->cr_getfs);
-#endif
+		respsize = res->cr_getfs.fh_size+sizeof(int);
+		break;
 	default:
 		err = -EINVAL;
 	}
 
-	if (!err && resp)
-		copy_to_user(resp, res, sizeof(*resp));
+	if (!err && resp && respsize)
+		copy_to_user(resp, res, respsize);
 
 done:
 	if (arg)

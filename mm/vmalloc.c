@@ -39,7 +39,8 @@ static inline void free_area_pte(pmd_t * pmd, unsigned long address, unsigned lo
 			continue;
 		if (pte_present(page)) {
 			unsigned long map_nr = pte_pagenr(page);
-			if (map_nr < max_mapnr)
+			if ((map_nr < max_mapnr) && 
+						(!PageReserved(mem_map + map_nr)))
 				__free_page(mem_map + map_nr);
 			continue;
 		}
@@ -206,7 +207,7 @@ void * vmalloc(unsigned long size)
 	struct vm_struct *area;
 
 	size = PAGE_ALIGN(size);
-	if (!size || (size >> PAGE_SHIFT) > max_mapnr) {
+	if (!size || (size >> PAGE_SHIFT) > num_physpages) {
 		BUG();
 		return NULL;
 	}

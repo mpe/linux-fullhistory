@@ -336,6 +336,9 @@ int pi_init(PIA *pi, int autoprobe, int port, int mode,
 
 	s = protocol; e = s+1;
 
+	if (!protocols[0])
+		request_module ("paride_protocol");
+
 	if (autoprobe) {
 		s = 0; 
 		e = MAX_PROTOS;

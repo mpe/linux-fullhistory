@@ -529,7 +529,7 @@ verify_tb_operation(void)
 	/* Fifth, verify that a previously invalid PTE entry gets
 	   filled from the page table.  */
 
-	data0 = 0xabcdef123;
+	data0 = 0xabcdef12;
 	page[0] = data0;
 	arena->ptes[5] = pte0;
 	mcheck_expected(0) = 1;
@@ -640,7 +640,6 @@ do_init_arch(int is_pyxis)
 	pci_isa_hose = hose = alloc_pci_controler();
 	hose->io_space = &ioport_resource;
 	hose->mem_space = &iomem_resource;
-	hose->config_space = CIA_CONF;
 	hose->index = 0;
 
 	if (! is_pyxis) {
@@ -654,6 +653,16 @@ do_init_arch(int is_pyxis)
 
 		if (request_resource(&iomem_resource, hae_mem) < 0)
 			printk(KERN_ERR "Failed to request HAE_MEM\n");
+
+		hose->sparse_mem_base = CIA_SPARSE_MEM - IDENT_ADDR;
+		hose->dense_mem_base = CIA_DENSE_MEM - IDENT_ADDR;
+		hose->sparse_io_base = CIA_IO - IDENT_ADDR;
+		hose->dense_io_base = 0;
+	} else {
+		hose->sparse_mem_base = 0;
+		hose->dense_mem_base = CIA_BW_MEM - IDENT_ADDR;
+		hose->sparse_io_base = 0;
+		hose->dense_io_base = CIA_BW_IO - IDENT_ADDR;
 	}
 
 	/*

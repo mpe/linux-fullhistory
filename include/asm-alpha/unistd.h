@@ -313,6 +313,7 @@
 #define __NR_dipc			373
 #define __NR_pivot_root			374
 #define __NR_mincore			375
+#define __NR_pciconfig_iobase		376
 
 #if defined(__LIBRARY__) && defined(__GNUC__)
 

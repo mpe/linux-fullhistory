@@ -114,8 +114,8 @@ static void NS8390_trigger_send(struct net_device *dev, unsigned int length,
 static void set_multicast_list(struct net_device *dev);
 static void do_set_multicast_list(struct net_device *dev);
 
-/*
- *	SMP and the 8390 setup.
+/**
+ *	DOC: SMP and the 8390 setup.
  *
  *	The 8390 isnt exactly designed to be multithreaded on RX/TX. There is
  *	a page register that controls bank and packet buffer access. We guard
@@ -142,10 +142,14 @@ static void do_set_multicast_list(struct net_device *dev);
  
 
 
-/* Open/initialize the board.  This routine goes all-out, setting everything
-   up anew at each open, even though many of these registers should only
-   need to be set once at boot.
-   */
+/**
+ * ei_open - Open/initialize the board.
+ * @dev: network device to initialize
+ *
+ * This routine goes all-out, setting everything
+ * up anew at each open, even though many of these registers should only
+ * need to be set once at boot.
+ */
 int ei_open(struct net_device *dev)
 {
 	unsigned long flags;
@@ -173,7 +177,12 @@ int ei_open(struct net_device *dev)
 	return 0;
 }
 
-/* Opposite of above. Only used when "ifconfig <devname> down" is done. */
+/**
+ * ei_close - shut down network device
+ * @dev: network device to close
+ *
+ * Opposite of ei_open. Only used when "ifconfig <devname> down" is done.
+ */
 int ei_close(struct net_device *dev)
 {
 	struct ei_device *ei_local = (struct ei_device *) dev->priv;
@@ -190,6 +199,14 @@ int ei_close(struct net_device *dev)
 	return 0;
 }
 
+/**
+ * ei_start_xmit - begin packet transmission
+ * @skb: packet to be sent
+ * @dev: network device to which packet is sent
+ *
+ * Sends a packet to an 8390 network device.
+ */
+ 
 static int ei_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	long e8390_base = dev->base_addr;
@@ -389,8 +406,15 @@ static int ei_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	return 0;
 }
 
-/* The typical workload of the driver:
-   Handle the ether interface interrupts. */
+/**
+ * ei_interrupt - 
+ * @irq:
+ * @dev_id:
+ * @regs:
+ *
+ * The typical workload of the driver:
+ * Handle the ether interface interrupts.
+ */
 
 void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
@@ -492,7 +516,10 @@ void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	return;
 }
 
-/*
+/**
+ * ei_tx_err - handle transmitter error
+ * @dev: network device which threw the exception
+ *
  * A transmitter error has happened. Most likely excess collisions (which
  * is a fairly normal condition). If the error is one where the Tx will
  * have been aborted, we try and send another one right away, instead of
@@ -538,8 +565,13 @@ static void ei_tx_err(struct net_device *dev)
 	}
 }
 
-/* We have finished a transmit: check for errors and then trigger the next
-   packet to be sent. Called with lock held */
+/**
+ * ei_tx_intr - transmit interrupt handler
+ * @dev: network device for which tx intr is handled
+ *
+ * We have finished a transmit: check for errors and then trigger the next
+ * packet to be sent. Called with lock held
+ */
 
 static void ei_tx_intr(struct net_device *dev)
 {
@@ -625,8 +657,13 @@ static void ei_tx_intr(struct net_device *dev)
 	netif_wake_queue(dev);
 }
 
-/* We have a good packet(s), get it/them out of the buffers. 
-   Called with lock held */
+/**
+ * ei_receive - receive some packets
+ * @dev: network device with which receive will be run
+ *
+ * We have a good packet(s), get it/them out of the buffers. 
+ * Called with lock held
+ */
 
 static void ei_receive(struct net_device *dev)
 {
@@ -751,7 +788,10 @@ static void ei_receive(struct net_device *dev)
 	return;
 }
 
-/* 
+/**
+ * ei_rx_overrun - handle receiver overrun
+ * @dev: network device which threw exception
+ *
  * We have a receiver overrun: we have to kick the 8390 to get it started
  * again. Problem is that you have to kick it exactly as NS prescribes in
  * the updated datasheets, or "the NIC may act in an unpredictable manner."
@@ -900,7 +940,10 @@ static inline void make_mc_bits(u8 *bits, struct net_device *dev)
 	}
 }
 
-/*
+/**
+ * do_set_multicast_list - set/clear multicast filter
+ * @dev: net device for which multicast filter is adjusted
+ *
  *	Set or clear the multicast filter for this adaptor. May be called
  *	from a BH in 2.1.x. Must be called with lock held. 
  */
@@ -970,7 +1013,10 @@ static void set_multicast_list(struct net_device *dev)
 	spin_unlock_irqrestore(&ei_local->page_lock, flags);
 }	
 
-/*
+/**
+ * ethdev_init - init rest of 8390 device struct
+ * @dev: network device structure to init
+ *
  * Initialize the rest of the 8390 device structure.  Do NOT __init
  * this, as it is used by 8390 based modular drivers too.
  */
@@ -1006,7 +1052,11 @@ int ethdev_init(struct net_device *dev)
 /* This page of functions should be 8390 generic */
 /* Follow National Semi's recommendations for initializing the "NIC". */
 
-/*
+/**
+ * NS8390_init - initialize 8390 hardware
+ * @dev: network device to initialize
+ * @startp: boolean.  non-zero value to initiate chip processing
+ *
  *	Must be called with lock held.
  */
 
@@ -1066,7 +1116,6 @@ void NS8390_init(struct net_device *dev, int startp)
 		outb_p(E8390_RXCONFIG, e8390_base + EN0_RXCR); /* rx on,  */
 		do_set_multicast_list(dev);	/* (re)load the mcast table */
 	}
-	return;
 }
 
 /* Trigger a transmit start, assuming the length is valid. 

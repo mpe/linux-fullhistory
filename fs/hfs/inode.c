@@ -225,7 +225,7 @@ static int hfs_readpage(struct dentry *dentry, struct page *page)
 {
 	return block_read_full_page(page,hfs_get_block);
 }
-static int hfs_prepare_write(struct page *page, unsigned from, unsigned to)
+static int hfs_prepare_write(struct file *file, struct page *page, unsigned from, unsigned to)
 {
 	return cont_prepare_write(page,from,to,hfs_get_block,
 		&((struct inode*)page->mapping->host)->u.hfs_i.mmu_private);

@@ -43,6 +43,8 @@ extern struct svc_program	nfsd_program;
 static void			nfsd(struct svc_rqst *rqstp);
 struct timeval			nfssvc_boot = { 0, 0 };
 static struct svc_serv 		*nfsd_serv = NULL;
+static int			nfsd_busy = 0;
+static unsigned long		nfsd_last_call;
 
 struct nfsd_list {
 	struct list_head 	list;
@@ -115,6 +117,24 @@ nfsd_svc(unsigned short port, int nrservs)
 	return error;
 }
 
+static void inline
+update_thread_usage(int busy_threads)
+{
+	unsigned long prev_call;
+	unsigned long diff;
+	int decile;
+
+	prev_call = nfsd_last_call;
+	nfsd_last_call = jiffies;
+	decile = busy_threads*10/nfsdstats.th_cnt;
+	if (decile>0 && decile <= 10) {
+		diff = nfsd_last_call - prev_call;
+		nfsdstats.th_usage[decile-1] += diff;
+		if (decile == 10)
+			nfsdstats.th_fullcnt++;
+	}
+}
+
 /*
  * This is the NFS server kernel thread
  */
@@ -134,6 +154,7 @@ nfsd(struct svc_rqst *rqstp)
 	sprintf(current->comm, "nfsd");
 	current->fs->umask = 0;
 
+	nfsdstats.th_cnt++;
 	/* Let svc_process check client's authentication. */
 	rqstp->rq_auth = 1;
 
@@ -161,6 +182,8 @@ nfsd(struct svc_rqst *rqstp)
 		    ;
 		if (err < 0)
 			break;
+		update_thread_usage(nfsd_busy);
+		nfsd_busy++;
 
 		/* Lock the export hash tables for reading. */
 		exp_readlock();
@@ -179,6 +202,8 @@ nfsd(struct svc_rqst *rqstp)
 
 		/* Unlock export hash tables */
 		exp_unlock();
+		update_thread_usage(nfsd_busy);
+		nfsd_busy--;
 	}
 
 	if (err != -EINTR) {
@@ -202,6 +227,7 @@ nfsd(struct svc_rqst *rqstp)
 	        nfsd_racache_shutdown();	/* release read-ahead cache */
 	}
 	list_del(&me.list);
+	nfsdstats.th_cnt --;
 
 	/* Release the thread */
 	svc_exit_thread(rqstp);

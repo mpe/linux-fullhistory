@@ -490,7 +490,7 @@ static int corkscrew_scan(struct net_device *dev)
 				if (inw(ioaddr + Wn0EepromData) != 0x6d50)
 					continue;
 			}
-			printk(KERN_INFO "3c515 Resource configuraiton register %#4.4x, DCR %4.4x.\n",
+			printk(KERN_INFO "3c515 Resource configuration register %#4.4x, DCR %4.4x.\n",
 		     		inl(ioaddr + 0x2002), inw(ioaddr + 0x2000));
 			/* irq = inw(ioaddr + 0x2002) & 15; */ /* Use the irq from isapnp */
 			corkscrew_isapnp_phys_addr[pnp_cards] = ioaddr;
@@ -533,7 +533,7 @@ no_pnp:
 			if (inw(ioaddr + Wn0EepromData) != 0x6d50)
 				continue;
 		}
-		printk(KERN_INFO "3c515 Resource configuraiton register %#4.4x, DCR %4.4x.\n",
+		printk(KERN_INFO "3c515 Resource configuration register %#4.4x, DCR %4.4x.\n",
 		     inl(ioaddr + 0x2002), inw(ioaddr + 0x2000));
 		irq = inw(ioaddr + 0x2002) & 15;
 		corkscrew_found_device(dev, ioaddr, irq, CORKSCREW_ID, dev

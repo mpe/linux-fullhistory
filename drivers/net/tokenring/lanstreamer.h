@@ -132,6 +132,7 @@
 #define BMCTL_TX1_DIS (1<<14)
 #define BMCTL_TX2_DIS (1<<10)
 #define BMCTL_RX_DIS (1<<6)
+#define BMCTL_RX_ENABLED  (1<<5)
 
 #define RXLBDA  0x90
 #define RXBDA   0x94
@@ -257,6 +258,9 @@ struct streamer_private {
 	__u16 asb;
 
 	__u8 *streamer_mmio;
+        char *streamer_card_name;
+ 
+        spinlock_t streamer_lock;
 
 	volatile int srb_queued;	/* True if an SRB is still posted */
 	wait_queue_head_t srb_wait;
@@ -264,10 +268,10 @@ struct streamer_private {
 	volatile int asb_queued;	/* True if an ASB is posted */
 
 	volatile int trb_queued;	/* True if a TRB is posted */
-	wait_queue_head_t  trb_wait;
+	wait_queue_head_t trb_wait;
 
-	struct streamer_rx_desc streamer_rx_ring[STREAMER_RX_RING_SIZE];
-	struct streamer_tx_desc streamer_tx_ring[STREAMER_TX_RING_SIZE];
+	struct streamer_rx_desc *streamer_rx_ring;
+	struct streamer_tx_desc *streamer_tx_ring;
 	struct sk_buff *tx_ring_skb[STREAMER_TX_RING_SIZE],
 	    *rx_ring_skb[STREAMER_RX_RING_SIZE];
 	int tx_ring_free, tx_ring_last_status, rx_ring_last_received,
@@ -279,7 +283,6 @@ struct streamer_private {
 	__u16 pkt_buf_sz;
 	__u8 streamer_receive_options, streamer_copy_all_options,
 	    streamer_message_level;
-	__u8 streamer_multicast_set;
 	__u16 streamer_addr_table_addr, streamer_parms_addr;
 	__u16 mac_rx_buffer;
 	__u8 streamer_laa[6];

@@ -58,6 +58,7 @@
  *            First release to the public
  *  03/03/00 - Merged to kernel, indented -kr -i8 -bri0, fixed some missing
  *		malloc free checks, reviewed code. <alan@redhat.com>
+ *  03/13/00 - Added spinlocks for smp
  *  
  *  To Do:
  *
@@ -105,6 +106,7 @@
 #include <linux/stddef.h>
 #include <linux/init.h>
 #include <linux/pci.h>
+#include <linux/spinlock.h>
 #include <net/checksum.h>
 
 #include <asm/io.h>
@@ -121,7 +123,7 @@
  * Official releases will only have an a.b.c version number format.
  */
 
-static char *version = "LanStreamer.c v0.1.0 12/10/99 - Mike Sullivan";
+static char *version = "LanStreamer.c v0.3.1 03/13/99 - Mike Sullivan";
 
 static char *open_maj_error[] = {
 	"No error", "Lobe Media Test", "Physical Insertion",
@@ -210,7 +212,7 @@ static int __init streamer_scan(struct net_device *dev)
 			/* Check to see if io has been allocated, if so, we've already done this card,
 			   so continue on the card discovery loop  */
 
-			if (check_region(pci_device->resource[0].start, STREAMER_IO_SPACE)) 
+			if (check_region(pci_device->resource[0].start & (~3), STREAMER_IO_SPACE)) 
 			{
 				card_no++;
 				continue;
@@ -223,6 +225,8 @@ static int __init streamer_scan(struct net_device *dev)
 				break;
 			}
 			memset(streamer_priv, 0, sizeof(struct streamer_private));
+			init_waitqueue_head(&streamer_priv->srb_wait);
+			init_waitqueue_head(&streamer_priv->trb_wait);
 #ifndef MODULE
 			dev = init_trdev(dev, 0);
 			if(dev==NULL)
@@ -238,11 +242,11 @@ static int __init streamer_scan(struct net_device *dev)
 			       pci_device, dev, dev->priv);
 #endif
 			dev->irq = pci_device->irq;
-			dev->base_addr = pci_device->resource[0].start;
+			dev->base_addr = pci_device->resource[0].start & (~3);
 			dev->init = &streamer_init;
+			streamer_priv->streamer_card_name = (char *)pci_device->resource[0].name;
 			streamer_priv->streamer_mmio = ioremap(pci_device->resource[1].start, 256);
-			init_waitqueue_head(&streamer_priv->srb_wait);
-			init_waitqueue_head(&streamer_priv->trb_wait);
+
 			if ((pkt_buf_sz[card_no] < 100) || (pkt_buf_sz[card_no] > 18000))
 				streamer_priv->pkt_buf_sz = PKT_BUF_SZ;
 			else
@@ -250,7 +254,6 @@ static int __init streamer_scan(struct net_device *dev)
 
 			streamer_priv->streamer_ring_speed = ringspeed[card_no];
 			streamer_priv->streamer_message_level = message_level[card_no];
-			streamer_priv->streamer_multicast_set = 0;
 
 			if (streamer_init(dev) == -1) {
 				unregister_netdevice(dev);
@@ -274,7 +277,7 @@ static int __init streamer_scan(struct net_device *dev)
 }
 
 
-static int __init streamer_init(struct net_device *dev)
+static int streamer_reset(struct net_device *dev)
 {
 	struct streamer_private *streamer_priv;
 	__u8 *streamer_mmio;
@@ -286,12 +289,6 @@ static int __init streamer_init(struct net_device *dev)
 	streamer_priv = (struct streamer_private *) dev->priv;
 	streamer_mmio = streamer_priv->streamer_mmio;
 
-	printk("%s \n", version);
-	printk(KERN_INFO "%s: IBM PCI tokenring card. I/O at %hx, MMIO at %p, using irq %d\n",
-			dev->name, (unsigned int) dev->base_addr,
-			streamer_priv->streamer_mmio, dev->irq);
-
-	request_region(dev->base_addr, STREAMER_IO_SPACE, "streamer");
 	writew(readw(streamer_mmio + BCTL) | BCTL_SOFTRESET, streamer_mmio + BCTL);
 	t = jiffies;
 	/* Hold soft reset bit for a while */
@@ -330,11 +327,16 @@ static int __init streamer_init(struct net_device *dev)
 		printk(KERN_INFO "%s: skb allocation for diagnostics failed...proceeding\n",
 		       dev->name);
 	} else {
-		streamer_priv->streamer_rx_ring[0].forward = 0;
-		streamer_priv->streamer_rx_ring[0].status = 0;
-		streamer_priv->streamer_rx_ring[0].buffer = virt_to_bus(skb->data);
-		streamer_priv->streamer_rx_ring[0].framelen_buflen = 512;	/* streamer_priv->pkt_buf_sz; */
-		writel(virt_to_bus(&streamer_priv->streamer_rx_ring[0]), streamer_mmio + RXBDA);
+	        struct streamer_rx_desc *rx_ring;
+                u8 *data;
+
+		rx_ring=(struct streamer_rx_desc *)skb->data;
+		data=((u8 *)skb->data)+sizeof(struct streamer_rx_desc);
+		rx_ring->forward=0;
+		rx_ring->status=0;
+		rx_ring->buffer=virt_to_bus(data);
+		rx_ring->framelen_buflen=512; 
+		writel(virt_to_bus(rx_ring),streamer_mmio+RXBDA);
 	}
 
 #if STREAMER_DEBUG
@@ -382,7 +384,7 @@ static int __init streamer_init(struct net_device *dev)
 	writew(readw(streamer_mmio + LAPWWO) + 6, streamer_mmio + LAPA);
 	if (readw(streamer_mmio + LAPD)) {
 		printk(KERN_INFO "tokenring card intialization failed. errorcode : %x\n",
-		       readw(streamer_mmio + LAPD));
+		       ntohs(readw(streamer_mmio + LAPD)));
 		release_region(dev->base_addr, STREAMER_IO_SPACE);
 		return -1;
 	}
@@ -398,17 +400,14 @@ static int __init streamer_init(struct net_device *dev)
 #endif
 
 	/* setup uaa area for access with LAPD */
-	writew(uaa_addr, streamer_mmio + LAPA);
-
-	/* setup uaa area for access with LAPD */
 	{
 		int i;
 		__u16 addr;
 		writew(uaa_addr, streamer_mmio + LAPA);
 		for (i = 0; i < 6; i += 2) {
-			addr = readw(streamer_mmio + LAPDINC);
-			dev->dev_addr[i] = addr & 0xff;
-			dev->dev_addr[i + 1] = (addr >> 8) & 0xff;
+		        addr=ntohs(readw(streamer_mmio+LAPDINC));
+			dev->dev_addr[i]= (addr >> 8) & 0xff;
+			dev->dev_addr[i+1]= addr & 0xff;
 		}
 #if STREAMER_DEBUG
 		printk("Adapter address: ");
@@ -421,6 +420,32 @@ static int __init streamer_init(struct net_device *dev)
 	return 0;
 }
 
+static int __init streamer_init(struct net_device *dev) 
+{
+        struct streamer_private *streamer_priv;
+	__u8 *streamer_mmio;
+	int rc;
+  
+	streamer_priv=(struct streamer_private *)dev->priv;
+	streamer_mmio=streamer_priv->streamer_mmio;
+
+	spin_lock_init(&streamer_priv->streamer_lock);
+  
+	printk("%s \n", version);
+	printk("%s: %s. I/O at %hx, MMIO at %p, using irq %d\n",dev->name,
+	       streamer_priv->streamer_card_name,
+	       (unsigned int) dev->base_addr,
+	       streamer_priv->streamer_mmio, 
+	       dev->irq);
+
+	request_region(dev->base_addr, STREAMER_IO_SPACE, "streamer");
+
+	rc=streamer_reset(dev);
+	return rc;
+}
+  
+
+
 static int streamer_open(struct net_device *dev)
 {
 	struct streamer_private *streamer_priv = (struct streamer_private *) dev->priv;
@@ -430,7 +455,11 @@ static int streamer_open(struct net_device *dev)
 	int i, open_finished = 1;
 	__u16 srb_word;
 	__u16 srb_open;
+	int rc;
 
+	if (readw(streamer_mmio+BMCTL_SUM) & BMCTL_RX_ENABLED) {
+	        rc=streamer_reset(dev);
+	}
 
 	if (request_irq(dev->irq, &streamer_interrupt, SA_SHIRQ, "streamer", dev)) {
 		return -EAGAIN;
@@ -461,23 +490,27 @@ static int streamer_open(struct net_device *dev)
 			writew(0, streamer_mmio + LAPDINC);
 		}
 
-		writew(readw(streamer_mmio + LAPWWO), streamer_mmio + LAPA);
-		writew(SRB_OPEN_ADAPTER, streamer_mmio + LAPDINC);	/* open */
+		writew(readw(streamer_mmio+LAPWWO),streamer_mmio+LAPA);
+		writew(htons(SRB_OPEN_ADAPTER<<8),streamer_mmio+LAPDINC) ; 	/* open */
+		writew(htons(STREAMER_CLEAR_RET_CODE<<8),streamer_mmio+LAPDINC);
 		writew(STREAMER_CLEAR_RET_CODE, streamer_mmio + LAPDINC);
 
 		writew(readw(streamer_mmio + LAPWWO) + 8, streamer_mmio + LAPA);
 #if STREAMER_NETWORK_MONITOR
 		/* If Network Monitor, instruct card to copy MAC frames through the ARB */
-		writew(ntohs(OPEN_ADAPTER_ENABLE_FDX | OPEN_ADAPTER_PASS_ADC_MAC | OPEN_ADAPTER_PASS_ATT_MAC | OPEN_ADAPTER_PASS_BEACON), streamer_mmio + LAPDINC);	/* offset 8 word contains open options */
+		writew(htons(OPEN_ADAPTER_ENABLE_FDX | OPEN_ADAPTER_PASS_ADC_MAC | OPEN_ADAPTER_PASS_ATT_MAC | OPEN_ADAPTER_PASS_BEACON), streamer_mmio + LAPDINC);	/* offset 8 word contains open options */
 #else
-		writew(ntohs(OPEN_ADAPTER_ENABLE_FDX), streamer_mmio + LAPDINC);	/* Offset 8 word contains Open.Options */
+		writew(htons(OPEN_ADAPTER_ENABLE_FDX), streamer_mmio + LAPDINC);	/* Offset 8 word contains Open.Options */
 #endif
 
 		if (streamer_priv->streamer_laa[0]) {
 			writew(readw(streamer_mmio + LAPWWO) + 12, streamer_mmio + LAPA);
-			writew(((__u16 *) (streamer_priv->streamer_laa))[0], streamer_mmio + LAPDINC);	/* offset 12 word */
-			writew(((__u16 *) (streamer_priv->streamer_laa))[2], streamer_mmio + LAPDINC);	/* offset 14 word */
-			writew(((__u16 *) (streamer_priv->streamer_laa))[4], streamer_mmio + LAPDINC);	/* offset 16 word */
+			writew(htons((streamer_priv->streamer_laa[0] << 8) | 
+				     streamer_priv->streamer_laa[1]),streamer_mmio+LAPDINC);
+			writew(htons((streamer_priv->streamer_laa[2] << 8) | 
+				     streamer_priv->streamer_laa[3]),streamer_mmio+LAPDINC);
+			writew(htons((streamer_priv->streamer_laa[4] << 8) | 
+				     streamer_priv->streamer_laa[5]),streamer_mmio+LAPDINC);
 			memcpy(dev->dev_addr, streamer_priv->streamer_laa, dev->addr_len);
 		}
 
@@ -526,7 +559,7 @@ static int streamer_open(struct net_device *dev)
 		 * timed out.
 		 */
 		writew(srb_open + 2, streamer_mmio + LAPA);
-		srb_word = readw(streamer_mmio + LAPD) & 0xFF;
+		srb_word = ntohs(readw(streamer_mmio + LAPD)) & 0xFF;
 		if (srb_word == STREAMER_CLEAR_RET_CODE) {
 			printk(KERN_WARNING "%s: Adapter Open time out or error.\n",
 			       dev->name);
@@ -574,7 +607,7 @@ static int streamer_open(struct net_device *dev)
 	} while (!(open_finished));	/* Will only loop if ring speed mismatch re-open attempted && autosense is on */
 
 	writew(srb_open + 18, streamer_mmio + LAPA);
-	srb_word = readw(streamer_mmio + LAPD) & 0xFF;
+	srb_word=ntohs(readw(streamer_mmio+LAPD)) >> 8;
 	if (srb_word & (1 << 3))
 		if (streamer_priv->streamer_message_level)
 			printk(KERN_INFO "%s: Opened in FDX Mode\n", dev->name);
@@ -604,6 +637,14 @@ static int streamer_open(struct net_device *dev)
 	writew(~BMCTL_RX_DIS, streamer_mmio + BMCTL_RUM);
 
 	/* setup rx descriptors */
+	streamer_priv->streamer_rx_ring=
+	    kmalloc( sizeof(struct streamer_rx_desc)*
+		     STREAMER_RX_RING_SIZE,GFP_KERNEL);
+	if (!streamer_priv->streamer_rx_ring) {
+	    printk(KERN_WARNING "%s ALLOC of streamer rx ring FAILED!!\n",dev->name);
+	    return -EIO;
+	}
+
 	for (i = 0; i < STREAMER_RX_RING_SIZE; i++) {
 		struct sk_buff *skb;
 
@@ -638,6 +679,13 @@ static int streamer_open(struct net_device *dev)
 
 
 	/* setup tx ring */
+	streamer_priv->streamer_tx_ring=kmalloc(sizeof(struct streamer_tx_desc)*
+						STREAMER_TX_RING_SIZE,GFP_KERNEL);
+	if (!streamer_priv->streamer_tx_ring) {
+	    printk(KERN_WARNING "%s ALLOC of streamer_tx_ring FAILED\n",dev->name);
+	    return -EIO;
+	}
+
 	writew(~BMCTL_TX2_DIS, streamer_mmio + BMCTL_RUM);	/* Enables TX channel 2 */
 	for (i = 0; i < STREAMER_TX_RING_SIZE; i++) {
 		streamer_priv->streamer_tx_ring[i].forward = virt_to_bus(&streamer_priv->streamer_tx_ring[i + 1]);
@@ -776,7 +824,7 @@ static void streamer_rx(struct net_device *dev)
 						memcpy(skb_put(skb, length),bus_to_virt(rx_desc->buffer), length);	/* copy this fragment */
 						streamer_priv->streamer_rx_ring[rx_ring_last_received].status = 0;
 						streamer_priv->streamer_rx_ring[rx_ring_last_received].framelen_buflen = streamer_priv->pkt_buf_sz;
-						streamer_priv->streamer_rx_ring[rx_ring_last_received].buffer = virt_to_bus(skb->data);
+						
 						/* give descriptor back to the adapter */
 						writel(virt_to_bus(&streamer_priv->streamer_rx_ring[rx_ring_last_received]), streamer_mmio + RXLBDA);
 
@@ -828,9 +876,13 @@ static void streamer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	misr = readw(streamer_mmio + MISR_RUM);
 	writew(~misr, streamer_mmio + MISR_RUM);
 
-	if (!sisr) {		/* Interrupt isn't for us */
+	if (!sisr) 
+	{		/* Interrupt isn't for us */
+  	        writew(~misr,streamer_mmio+MISR_RUM);
 		return;
 	}
+
+	spin_lock(&streamer_priv->streamer_lock);
 
 	if ((sisr & (SISR_SRB_REPLY | SISR_ADAPTER_CHECK | SISR_ASB_FREE | SISR_ARB_CMD | SISR_TRB_REPLY))
 	    || (misr & (MISR_TX2_EOF | MISR_RX_NOBUF | MISR_RX_EOF))) {
@@ -868,9 +920,9 @@ static void streamer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			writel(readl(streamer_mmio + LAPWWO), streamer_mmio + LAPA);
 			printk(KERN_WARNING "%s: Words %x:%x:%x:%x:\n",
 			       dev->name, readw(streamer_mmio + LAPDINC),
-			       readw(streamer_mmio + LAPDINC),
-			       readw(streamer_mmio + LAPDINC),
-			       readw(streamer_mmio + LAPDINC));
+			       ntohs(readw(streamer_mmio + LAPDINC)),
+			       ntohs(readw(streamer_mmio + LAPDINC)),
+			       ntohs(readw(streamer_mmio + LAPDINC)));
 			free_irq(dev->irq, dev);
 		}
 
@@ -907,17 +959,19 @@ static void streamer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}			/* One if the interrupts we want */
 
 	writew(SISR_MI, streamer_mmio + SISR_MASK_SUM);
+	spin_unlock(&streamer_priv->streamer_lock) ; 
 }
-
 
 static int streamer_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct streamer_private *streamer_priv =
 	    (struct streamer_private *) dev->priv;
 	__u8 *streamer_mmio = streamer_priv->streamer_mmio;
+	unsigned long flags ;
 
+	spin_lock_irqsave(&streamer_priv->streamer_lock, flags);
 	netif_stop_queue(dev);
-	
+
 	if (streamer_priv->free_tx_ring_entries) {
 		streamer_priv->streamer_tx_ring[streamer_priv->tx_ring_free].status = 0;
 		streamer_priv->streamer_tx_ring[streamer_priv->tx_ring_free].bufcnt_framelen = 0x00010000 | skb->len;
@@ -941,9 +995,11 @@ static int streamer_xmit(struct sk_buff *skb, struct net_device *dev)
 		writel(virt_to_bus (&streamer_priv->streamer_tx_ring[streamer_priv->tx_ring_free]),streamer_mmio + TX2LFDA);
 
 		streamer_priv->tx_ring_free = (streamer_priv->tx_ring_free + 1) & (STREAMER_TX_RING_SIZE - 1);
-		netif_start_queue(dev);
+		netif_wake_queue(dev);
+		spin_unlock_irqrestore(&streamer_priv->streamer_lock,flags);
 		return 0;
 	} else {
+	        spin_unlock_irqrestore(&streamer_priv->streamer_lock,flags);
 		return 1;
 	}
 }
@@ -957,9 +1013,10 @@ static int streamer_close(struct net_device *dev)
 	unsigned long flags;
 	int i;
 
+	netif_stop_queue(dev);
 	writew(streamer_priv->srb, streamer_mmio + LAPA);
-	writew(SRB_CLOSE_ADAPTER, streamer_mmio + LAPDINC);
-	writew(STREAMER_CLEAR_RET_CODE, streamer_mmio + LAPDINC);
+	writew(htons(SRB_CLOSE_ADAPTER << 8),streamer_mmio+LAPDINC);
+	writew(htons(STREAMER_CLEAR_RET_CODE << 8), streamer_mmio+LAPDINC);
 
 	save_flags(flags);
 	cli();
@@ -987,7 +1044,9 @@ static int streamer_close(struct net_device *dev)
 	streamer_priv->rx_ring_last_received = (streamer_priv->rx_ring_last_received + 1) & (STREAMER_RX_RING_SIZE - 1);
 
 	for (i = 0; i < STREAMER_RX_RING_SIZE; i++) {
-		dev_kfree_skb(streamer_priv->rx_ring_skb[streamer_priv->rx_ring_last_received]);
+	        if (streamer_priv->rx_ring_skb[streamer_priv->rx_ring_last_received]) {
+		        dev_kfree_skb(streamer_priv->rx_ring_skb[streamer_priv->rx_ring_last_received]);
+		} 
 		streamer_priv->rx_ring_last_received = (streamer_priv->rx_ring_last_received + 1) & (STREAMER_RX_RING_SIZE - 1);
 	}
 
@@ -1003,11 +1062,10 @@ static int streamer_close(struct net_device *dev)
 	writew(streamer_priv->srb, streamer_mmio + LAPA);
 	printk("srb): ");
 	for (i = 0; i < 2; i++) {
-		printk("%x ", htons(readw(streamer_mmio + LAPDINC)));
+		printk("%x ", ntohs(readw(streamer_mmio + LAPDINC)));
 	}
 	printk("\n");
 #endif
-	netif_stop_queue(dev);
 	free_irq(dev->irq, dev);
 
 	MOD_DEC_USE_COUNT;
@@ -1019,9 +1077,10 @@ static void streamer_set_rx_mode(struct net_device *dev)
 	struct streamer_private *streamer_priv =
 	    (struct streamer_private *) dev->priv;
 	__u8 *streamer_mmio = streamer_priv->streamer_mmio;
-	__u8 options = 0, set_mc_list = 0;
-	__u16 ata1, ata2;
+	__u8 options = 0;
 	struct dev_mc_list *dmi;
+	unsigned char dev_mc_address[5];
+	int i;
 
 	writel(streamer_priv->srb, streamer_mmio + LAPA);
 	options = streamer_priv->streamer_copy_all_options;
@@ -1031,23 +1090,17 @@ static void streamer_set_rx_mode(struct net_device *dev)
 	else
 		options &= ~(3 << 5);
 
-	if (dev->mc_count) {
-		set_mc_list = 1;
-	}
-
 	/* Only issue the srb if there is a change in options */
 
 	if ((options ^ streamer_priv->streamer_copy_all_options)) 
 	{
 		/* Now to issue the srb command to alter the copy.all.options */
-
-		writew(SRB_MODIFY_RECEIVE_OPTIONS,
-		       streamer_mmio + LAPDINC);
-		writew(STREAMER_CLEAR_RET_CODE, streamer_mmio + LAPDINC);
-		writew(streamer_priv->streamer_receive_options | (options << 8), streamer_mmio + LAPDINC);
-		writew(0x414a, streamer_mmio + LAPDINC);
-		writew(0x454d, streamer_mmio + LAPDINC);
-		writew(0x2053, streamer_mmio + LAPDINC);
+		writew(htons(SRB_MODIFY_RECEIVE_OPTIONS << 8), streamer_mmio+LAPDINC);
+		writew(htons(STREAMER_CLEAR_RET_CODE << 8), streamer_mmio+LAPDINC);
+		writew(htons((streamer_priv->streamer_receive_options << 8) | options),streamer_mmio+LAPDINC);
+		writew(htons(0x4a41),streamer_mmio+LAPDINC);
+		writew(htons(0x4d45),streamer_mmio+LAPDINC);
+		writew(htons(0x5320),streamer_mmio+LAPDINC);
 		writew(0x2020, streamer_mmio + LAPDINC);
 
 		streamer_priv->srb_queued = 2;	/* Can't sleep, use srb_bh */
@@ -1058,54 +1111,25 @@ static void streamer_set_rx_mode(struct net_device *dev)
 		return;
 	}
 
-	if (set_mc_list ^ streamer_priv->streamer_multicast_set)
-	{	/* Multicast options have changed */
-		dmi = dev->mc_list;
-
-		writel(streamer_priv->streamer_addr_table_addr, streamer_mmio + LAPA);
-		ata1 = readw(streamer_mmio + LAPDINC);
-		ata2 = readw(streamer_mmio + LAPD);
-
-		writel(streamer_priv->srb, streamer_mmio + LAPA);
-
-		if (set_mc_list) 
-		{
-			/* Turn multicast on */
-
-			/* RFC 1469 Says we must support using the functional address C0 00 00 04 00 00
-			 * We do this with a set functional address mask.
-			 */
-
-			if (!(ata1 & 0x0400)) {	/* need to set functional mask */
-				writew(SRB_SET_FUNC_ADDRESS, streamer_mmio + LAPDINC);
-				writew(STREAMER_CLEAR_RET_CODE, streamer_mmio + LAPDINC);
-				writew(0, streamer_mmio + LAPDINC);
-				writew(ata1 | 0x0400, streamer_mmio + LAPDINC);
-				writew(ata2, streamer_mmio + LAPD);
-
-				streamer_priv->srb_queued = 2;
-				writel(LISR_SRB_CMD, streamer_mmio + LISR_SUM);
-
-				streamer_priv->streamer_multicast_set = 1;
-			}
-
-		} else {	/* Turn multicast off */
-
-			if ((ata1 & 0x0400)) {	/* Hmmm, need to reset the functional mask */
-				writew(SRB_SET_FUNC_ADDRESS, streamer_mmio + LAPDINC);
-				writew(STREAMER_CLEAR_RET_CODE, streamer_mmio + LAPDINC);
-				writew(0, streamer_mmio + LAPDINC);
-				writew(ata1 & ~0x0400, streamer_mmio + LAPDINC);
-				writew(ata2, streamer_mmio + LAPD);
-
-				streamer_priv->srb_queued = 2;
-				writel(LISR_SRB_CMD, streamer_mmio + LISR_SUM);
-
-				streamer_priv->streamer_multicast_set = 0;
-			}
-		}
-
+	/* Set the functional addresses we need for multicast */
+	writel(streamer_priv->srb,streamer_mmio+LAPA);
+	dev_mc_address[0] = dev_mc_address[1] = dev_mc_address[2] = dev_mc_address[3] = 0 ; 
+  
+	for (i=0,dmi=dev->mc_list;i < dev->mc_count; i++,dmi = dmi->next) 
+	{ 
+   	        dev_mc_address[0] |= dmi->dmi_addr[2] ; 
+		dev_mc_address[1] |= dmi->dmi_addr[3] ; 
+		dev_mc_address[2] |= dmi->dmi_addr[4] ; 
+		dev_mc_address[3] |= dmi->dmi_addr[5] ; 
 	}
+  
+	writew(htons(SRB_SET_FUNC_ADDRESS << 8),streamer_mmio+LAPDINC);
+	writew(htons(STREAMER_CLEAR_RET_CODE << 8), streamer_mmio+LAPDINC);
+	writew(0,streamer_mmio+LAPDINC);
+	writew(htons( (dev_mc_address[0] << 8) | dev_mc_address[1]),streamer_mmio+LAPDINC);
+	writew(htons( (dev_mc_address[2] << 8) | dev_mc_address[3]),streamer_mmio+LAPDINC);
+	streamer_priv->srb_queued = 2 ; 
+	writel(LISR_SRB_CMD,streamer_mmio+LISR_SUM);
 }
 
 static void streamer_srb_bh(struct net_device *dev)
@@ -1115,7 +1139,7 @@ static void streamer_srb_bh(struct net_device *dev)
 	__u16 srb_word;
 
 	writew(streamer_priv->srb, streamer_mmio + LAPA);
-	srb_word = readw(streamer_mmio + LAPDINC) & 0xFF;
+	srb_word=ntohs(readw(streamer_mmio+LAPDINC)) >> 8;
 
 	switch (srb_word) {
 
@@ -1125,7 +1149,8 @@ static void streamer_srb_bh(struct net_device *dev)
 		 */
 
 	case SRB_MODIFY_RECEIVE_OPTIONS:
-		srb_word = readw(streamer_mmio + LAPDINC) & 0xFF;
+	        srb_word=ntohs(readw(streamer_mmio+LAPDINC)) >> 8;
+
 		switch (srb_word) {
 		case 0x01:
 			printk(KERN_WARNING "%s: Unrecognized srb command\n", dev->name);
@@ -1147,11 +1172,10 @@ static void streamer_srb_bh(struct net_device *dev)
 		/* SRB_SET_GROUP_ADDRESS - Multicast group setting 
 		 */
 	case SRB_SET_GROUP_ADDRESS:
-		srb_word = readw(streamer_mmio + LAPDINC) & 0xFF;
+	        srb_word=ntohs(readw(streamer_mmio+LAPDINC)) >> 8;
 		switch (srb_word) {
 		case 0x00:
-			streamer_priv->streamer_multicast_set = 1;
-			break;
+		        break;
 		case 0x01:
 			printk(KERN_WARNING "%s: Unrecognized srb command \n",dev->name);
 			break;
@@ -1176,11 +1200,10 @@ static void streamer_srb_bh(struct net_device *dev)
 		/* SRB_RESET_GROUP_ADDRESS - Remove a multicast address from group list
 		 */
 	case SRB_RESET_GROUP_ADDRESS:
-		srb_word = readw(streamer_mmio + LAPDINC) & 0xFF;
+	        srb_word=ntohs(readw(streamer_mmio+LAPDINC)) >> 8;
 		switch (srb_word) {
 		case 0x00:
-			streamer_priv->streamer_multicast_set = 0;
-			break;
+		        break;
 		case 0x01:
 			printk(KERN_WARNING "%s: Unrecognized srb command \n", dev->name);
 			break;
@@ -1200,7 +1223,7 @@ static void streamer_srb_bh(struct net_device *dev)
 		 */
 
 	case SRB_SET_FUNC_ADDRESS:
-		srb_word = readw(streamer_mmio + LAPDINC) & 0xFF;
+	        srb_word=ntohs(readw(streamer_mmio+LAPDINC)) >> 8;
 		switch (srb_word) {
 		case 0x00:
 			if (streamer_priv->streamer_message_level)
@@ -1221,7 +1244,7 @@ static void streamer_srb_bh(struct net_device *dev)
 		 */
 
 	case SRB_READ_LOG:
-		srb_word = readw(streamer_mmio + LAPDINC) & 0xFF;
+	        srb_word=ntohs(readw(streamer_mmio+LAPDINC)) >> 8;
 		switch (srb_word) {
 		case 0x00:
 			{
@@ -1250,7 +1273,7 @@ static void streamer_srb_bh(struct net_device *dev)
 		/* SRB_READ_SR_COUNTERS - Read and reset the source routing bridge related counters */
 
 	case SRB_READ_SR_COUNTERS:
-		srb_word = readw(streamer_mmio + LAPDINC) & 0xFF;
+	        srb_word=ntohs(readw(streamer_mmio+LAPDINC)) >> 8;
 		switch (srb_word) {
 		case 0x00:
 			if (streamer_priv->streamer_message_level)
@@ -1285,9 +1308,10 @@ static int streamer_set_mac_address(struct net_device *dev, void *addr)
 	struct sockaddr *saddr = addr;
 	struct streamer_private *streamer_priv = (struct streamer_private *) dev->priv;
 
-	if (netif_running(dev)) {
+	if (netif_running(dev)) 
+	{
 		printk(KERN_WARNING "%s: Cannot set mac/laa address while card is open\n", dev->name);
-		return -EBUSY;
+		return -EIO;
 	}
 
 	memcpy(streamer_priv->streamer_laa, saddr->sa_data, dev->addr_len);
@@ -1324,12 +1348,12 @@ static void streamer_arb_cmd(struct net_device *dev)
 #endif
 
 	writew(streamer_priv->arb, streamer_mmio + LAPA);
-	arb_word = readw(streamer_mmio + LAPD) & 0xFF;
-
+	arb_word=ntohs(readw(streamer_mmio+LAPD)) >> 8;
+	
 	if (arb_word == ARB_RECEIVE_DATA) {	/* Receive.data, MAC frames */
 		writew(streamer_priv->arb + 6, streamer_mmio + LAPA);
 		streamer_priv->mac_rx_buffer = buff_off = ntohs(readw(streamer_mmio + LAPDINC));
-		header_len = readw(streamer_mmio + LAPDINC) & 0xff;	/* 802.5 Token-Ring Header Length */
+		header_len=ntohs(readw(streamer_mmio+LAPDINC)) >> 8; /* 802.5 Token-Ring Header Length */
 		frame_len = ntohs(readw(streamer_mmio + LAPDINC));
 
 #if STREAMER_DEBUG
@@ -1340,7 +1364,7 @@ static void streamer_arb_cmd(struct net_device *dev)
 			__u16 len;
 
 			writew(ntohs(buff_off), streamer_mmio + LAPA);	/*setup window to frame data */
-			next = ntohs(readw(streamer_mmio + LAPDINC));
+			next = htons(readw(streamer_mmio + LAPDINC));
 			status =
 			    ntohs(readw(streamer_mmio + LAPDINC)) & 0xff;
 			len = ntohs(readw(streamer_mmio + LAPDINC));
@@ -1364,7 +1388,7 @@ static void streamer_arb_cmd(struct net_device *dev)
 			int i;
 			__u16 rx_word;
 
-			writew(ntohs(buff_off), streamer_mmio + LAPA);	/* setup window to frame data */
+			writew(htons(buff_off), streamer_mmio + LAPA);	/* setup window to frame data */
 			next_ptr = ntohs(readw(streamer_mmio + LAPDINC));
 			readw(streamer_mmio + LAPDINC);	/* read thru status word */
 			buffer_len = ntohs(readw(streamer_mmio + LAPDINC));
@@ -1374,9 +1398,9 @@ static void streamer_arb_cmd(struct net_device *dev)
 
 			i = 0;
 			while (i < buffer_len) {
-				rx_word = readw(streamer_mmio + LAPDINC);
-				frame_data[i] = rx_word & 0xff;
-				frame_data[i + 1] = (rx_word >> 8) & 0xff;
+				rx_word=ntohs(readw(streamer_mmio+LAPDINC));
+				frame_data[i]=rx_word >> 8;
+				frame_data[i+1]=rx_word & 0xff;
 				i += 2;
 			}
 
@@ -1420,10 +1444,10 @@ static void streamer_arb_cmd(struct net_device *dev)
 
 
 		writew(streamer_priv->asb, streamer_mmio + LAPA);
-		writew(ASB_RECEIVE_DATA, streamer_mmio + LAPDINC);	/* Receive data */
-		writew(STREAMER_CLEAR_RET_CODE, streamer_mmio + LAPDINC);	/* Necessary ?? */
+		writew(htons(ASB_RECEIVE_DATA << 8), streamer_mmio+LAPDINC);
+		writew(htons(STREAMER_CLEAR_RET_CODE << 8), streamer_mmio+LAPDINC);
 		writew(0, streamer_mmio + LAPDINC);
-		writew(ntohs(streamer_priv->mac_rx_buffer), streamer_mmio + LAPD);
+		writew(htons(streamer_priv->mac_rx_buffer), streamer_mmio + LAPD);
 
 		writel(LISR_ASB_REPLY | LISR_ASB_FREE_REQ, streamer_priv->streamer_mmio + LISR_SUM);
 
@@ -1433,12 +1457,13 @@ static void streamer_arb_cmd(struct net_device *dev)
 	} else if (arb_word == ARB_LAN_CHANGE_STATUS) {	/* Lan.change.status */
 		writew(streamer_priv->arb + 6, streamer_mmio + LAPA);
 		lan_status = ntohs(readw(streamer_mmio + LAPDINC));
-		fdx_prot_error = readw(streamer_mmio + LAPD) & 0xFF;
-
+		fdx_prot_error = ntohs(readw(streamer_mmio+LAPD)) >> 8;
+		
 		/* Issue ARB Free */
 		writew(LISR_ARB_FREE, streamer_priv->streamer_mmio + LISR_SUM);
 
-		lan_status_diff = streamer_priv->streamer_lan_status ^ lan_status;
+		lan_status_diff = (streamer_priv->streamer_lan_status ^ lan_status) & 
+		    lan_status; 
 
 		if (lan_status_diff & (LSC_LWF | LSC_ARW | LSC_FPE | LSC_RR)) 
 		{
@@ -1489,8 +1514,8 @@ static void streamer_arb_cmd(struct net_device *dev)
 			/* Issue READ.LOG command */
 
 			writew(streamer_priv->srb, streamer_mmio + LAPA);
-			writew(SRB_READ_LOG, streamer_mmio + LAPDINC);
-			writew(STREAMER_CLEAR_RET_CODE, streamer_mmio + LAPDINC);
+			writew(htons(SRB_READ_LOG << 8),streamer_mmio+LAPDINC);
+			writew(htons(STREAMER_CLEAR_RET_CODE << 8), streamer_mmio+LAPDINC);
 			writew(0, streamer_mmio + LAPDINC);
 			streamer_priv->srb_queued = 2;	/* Can't sleep, use srb_bh */
 
@@ -1503,10 +1528,10 @@ static void streamer_arb_cmd(struct net_device *dev)
 
 			/* Issue a READ.SR.COUNTERS */
 			writew(streamer_priv->srb, streamer_mmio + LAPA);
-			writew(SRB_READ_SR_COUNTERS,
-			       streamer_mmio + LAPDINC);
-			writew(STREAMER_CLEAR_RET_CODE,
-			       streamer_mmio + LAPDINC);
+			writew(htons(SRB_READ_SR_COUNTERS << 8),
+			       streamer_mmio+LAPDINC);
+			writew(htons(STREAMER_CLEAR_RET_CODE << 8),
+			       streamer_mmio+LAPDINC);
 			streamer_priv->srb_queued = 2;	/* Can't sleep, use srb_bh */
 			writew(LISR_SRB_CMD, streamer_mmio + LISR_SUM);
 
@@ -1528,10 +1553,10 @@ static void streamer_asb_bh(struct net_device *dev)
 		/* Dropped through the first time */
 
 		writew(streamer_priv->asb, streamer_mmio + LAPA);
-		writew(ASB_RECEIVE_DATA, streamer_mmio + LAPDINC);	/* Receive data */
-		writew(STREAMER_CLEAR_RET_CODE, streamer_mmio + LAPDINC);	/* Necessary ?? */
+		writew(htons(ASB_RECEIVE_DATA << 8),streamer_mmio+LAPDINC);
+		writew(htons(STREAMER_CLEAR_RET_CODE << 8), streamer_mmio+LAPDINC);
 		writew(0, streamer_mmio + LAPDINC);
-		writew(ntohs(streamer_priv->mac_rx_buffer), streamer_mmio + LAPD);
+		writew(htons(streamer_priv->mac_rx_buffer), streamer_mmio + LAPD);
 
 		writel(LISR_ASB_REPLY | LISR_ASB_FREE_REQ, streamer_priv->streamer_mmio + LISR_SUM);
 		streamer_priv->asb_queued = 2;
@@ -1542,7 +1567,7 @@ static void streamer_asb_bh(struct net_device *dev)
 	if (streamer_priv->asb_queued == 2) {
 		__u8 rc;
 		writew(streamer_priv->asb + 2, streamer_mmio + LAPA);
-		rc = readw(streamer_mmio + LAPD) & 0xff;
+		rc=ntohs(readw(streamer_mmio+LAPD)) >> 8;
 		switch (rc) {
 		case 0x01:
 			printk(KERN_WARNING "%s: Unrecognized command code \n", dev->name);
@@ -1594,7 +1619,7 @@ static int streamer_proc_info(char *buffer, char **start, off_t offset,
 	off_t pos = 0;
 	int size;
 
-	struct net_device *dev;
+	struct device *dev;
 
 
 	size = sprintf(buffer, "IBM LanStreamer/MPC Chipset Token Ring Adapters\n");
@@ -1607,8 +1632,8 @@ static int streamer_proc_info(char *buffer, char **start, off_t offset,
 
 		for (dev = dev_base; dev != NULL; dev = dev->next) 
 		{
-			if (dev->base_addr == (pci_device->base_address[0] & (~3))) 
-			{	/* Yep, a Streamer device */
+		        if (dev->base_addr == pci_device->resource[0].start) 
+			{       /* Yep, a Streamer device */
 				size = sprintf_info(buffer + len, dev);
 				len += size;
 				pos = begin + len;
@@ -1644,17 +1669,17 @@ static int sprintf_info(char *buffer, struct net_device *dev)
 	for (i = 0; i < 14; i += 2) {
 		__u16 io_word;
 		__u8 *datap = (__u8 *) & sat;
-		io_word = readw(streamer_mmio + LAPDINC);
-		datap[size] = io_word & 0xff;
-		datap[size + 1] = (io_word >> 8) & 0xff;
+		io_word=ntohs(readw(streamer_mmio+LAPDINC));
+		datap[size]=io_word >> 8;
+		datap[size+1]=io_word & 0xff;
 	}
 	writew(streamer_priv->streamer_parms_addr, streamer_mmio + LAPA);
 	for (i = 0; i < 68; i += 2) {
 		__u16 io_word;
 		__u8 *datap = (__u8 *) & spt;
-		io_word = readw(streamer_mmio + LAPDINC);
-		datap[size] = io_word & 0xff;
-		datap[size + 1] = (io_word >> 8) & 0xff;
+		io_word=ntohs(readw(streamer_mmio+LAPDINC));
+		datap[size]=io_word >> 8;
+		datap[size+1]=io_word & 0xff;
 	}
 
 
@@ -1723,10 +1748,7 @@ int init_module(void)
 
 #if STREAMER_NETWORK_MONITOR
 #ifdef CONFIG_PROC_FS
-	struct proc_dir_entry *ent;
-
-	ent = create_proc_entry("net/streamer_tr", 0, 0);
-	ent->read_proc = &streamer_proc_info;
+	create_proc_read_entry("net/streamer_tr",0,0,streamer_proc_info,NULL); 
 #endif
 #endif
 	for (i = 0; (i < STREAMER_MAX_ADAPTERS); i++) 
@@ -1758,11 +1780,17 @@ int init_module(void)
 void cleanup_module(void)
 {
 	int i;
+	struct streamer_private *streamer_priv;
 
 	for (i = 0; i < STREAMER_MAX_ADAPTERS; i++)
 		if (dev_streamer[i]) {
 			unregister_trdev(dev_streamer[i]);
 			release_region(dev_streamer[i]->base_addr, STREAMER_IO_SPACE);
+			streamer_priv=(struct streamer_private *)dev_streamer[i]->priv;
+			kfree_s(streamer_priv->streamer_rx_ring,
+				sizeof(struct streamer_rx_desc)*STREAMER_RX_RING_SIZE);
+			kfree_s(streamer_priv->streamer_tx_ring,
+				sizeof(struct streamer_tx_desc)*STREAMER_TX_RING_SIZE);
 			kfree_s(dev_streamer[i]->priv, sizeof(struct streamer_private));
 			kfree_s(dev_streamer[i], sizeof(struct net_device));
 			dev_streamer[i] = NULL;

@@ -2465,7 +2465,7 @@ generic_file_write(struct file *file,const char *buf,size_t count,loff_t *ppos)
 			PAGE_BUG(page);
 		}
 
-		status = mapping->a_ops->prepare_write(page, offset, offset+bytes);
+		status = mapping->a_ops->prepare_write(file, page, offset, offset+bytes);
 		if (status)
 			goto unlock;
 		kaddr = (char*)page_address(page);

@@ -262,7 +262,6 @@ static struct tulip_chip_table {
 	int flags;
 	void (*media_timer)(unsigned long data);
 } tulip_tbl[] = {
-#if 0 /* these entries conflict with regular tulip driver */
   { "Digital DC21040 Tulip", 128, 0x0001ebef, 0, tulip_timer },
   { "Digital DC21041 Tulip", 128, 0x0001ebef, HAS_MEDIA_TABLE, tulip_timer },
   { "Digital DS21140 Tulip", 128, 0x0001ebef,
@@ -285,20 +284,15 @@ static struct tulip_chip_table {
 	MC_HASH_ONLY, comet_timer },
   { "Compex 9881 PMAC", 128, 0x0001ebef,
 	HAS_MII | HAS_MEDIA_TABLE | CSR12_IN_SROM, mxic_timer },
-#endif
   { "Xircom Cardbus Adapter (DEC 21143 compatible mode)", 128, 0x0801fbff,
        HAS_MII | HAS_ACPI, tulip_timer }, 
   {0},
 };
 /* This matches the table above.  Note 21142 == 21143. */
 enum chips {
-#if 0 /* these entries conflict with regular tulip driver */
 	DC21040=0, DC21041=1, DC21140=2, DC21142=3, DC21143=3,
 	LC82C168, MX98713, MX98715, MX98725, AX88140, PNIC2, COMET, COMPEX9881,
 	X3201_3,
-#else
-	X3201_3 = 0,
-#endif
 };
 
 /* A full-duplex map for media types. */

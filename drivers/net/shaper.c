@@ -485,20 +485,24 @@ static void shaper_cache_update(struct hh_cache *hh, struct net_device *dev,
 
 static int shaper_neigh_setup(struct neighbour *n)
 {
+#ifdef CONFIG_INET
 	if (n->nud_state == NUD_NONE) {
 		n->ops = &arp_broken_ops;
 		n->output = n->ops->output;
 	}
+#endif	
 	return 0;
 }
 
 static int shaper_neigh_setup_dev(struct net_device *dev, struct neigh_parms *p)
 {
+#ifdef CONFIG_INET
 	if (p->tbl->family == AF_INET) {
 		p->neigh_setup = shaper_neigh_setup;
 		p->ucast_probes = 0;
 		p->mcast_probes = 0;
 	}
+#endif	
 	return 0;
 }
 

@@ -377,3 +377,39 @@ alloc_resource(void)
 
 	return res;
 }
+
+
+/* Provide information on locations of various I/O regions in physical
+   memory.  Do this on a per-card basis so that we choose the right hose.  */
+
+asmlinkage long
+sys_pciconfig_iobase(long which, unsigned long bus, unsigned long dfn)
+{
+	struct pci_controler *hose;
+	struct pci_dev *dev;
+
+	/* Special hook for ISA access.  */
+	if (bus == 0 && dfn == 0) {
+		hose = pci_isa_hose;
+	} else {
+		dev = pci_find_slot(bus, dfn);
+		if (!dev)
+			return -ENODEV;
+		hose = dev->sysdata;
+	}
+
+	switch (which) {
+	case IOBASE_HOSE:
+		return hose->index;
+	case IOBASE_SPARSE_MEM:
+		return hose->sparse_mem_base;
+	case IOBASE_DENSE_MEM:
+		return hose->dense_mem_base;
+	case IOBASE_SPARSE_IO:
+		return hose->sparse_io_base;
+	case IOBASE_DENSE_IO:
+		return hose->dense_io_base;
+	}
+
+	return -EOPNOTSUPP;
+}

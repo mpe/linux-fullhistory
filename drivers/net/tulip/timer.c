@@ -14,7 +14,6 @@
 */
 
 #include "tulip.h"
-#include <asm/io.h>
 
 
 void tulip_timer(unsigned long data)
@@ -87,7 +86,11 @@ void tulip_timer(unsigned long data)
 			break;
 		}
 		break;
-	case DC21140:  case DC21142: case MX98713: case COMPEX9881: default: {
+	case DC21140:
+	case DC21142:
+	case MX98713:
+	case COMPEX9881:
+	default: {
 		struct medialeaf *mleaf;
 		unsigned char *p;
 		if (tp->mtable == NULL) {	/* No EEPROM info, use generic code. */

@@ -2,7 +2,6 @@
 #define _PPC_TYPES_H
 
 #ifndef __ASSEMBLY__
-#ifdef __KERNEL__
 
 typedef unsigned short umode_t;
 
@@ -20,6 +19,11 @@ typedef __signed__ long long __s64;
 typedef unsigned long long __u64;
 #endif
 
+typedef struct {
+	__u32 u[4];
+} __attribute((aligned(16))) vector128;
+
+#ifdef __KERNEL__
 /*
  * These aren't exported outside the kernel to avoid name space clashes
  */
@@ -34,10 +38,6 @@ typedef unsigned int u32;
 
 typedef signed long long s64;
 typedef unsigned long long u64;
-
-typedef struct {
-	u32 u[4];
-} __attribute((aligned(16))) vector128;
 
 #define BITS_PER_LONG 32
 

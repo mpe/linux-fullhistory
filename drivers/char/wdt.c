@@ -159,10 +159,6 @@ static int wdt_status(void)
  *	Handle an interrupt from the board. These are raised when the status
  *	map changes in what the board considers an interesting way. That means
  *	a failure condition occuring.
- *
- *	FIXME:	We need to pass a dev_id as the PCI card can share irqs
- *	although its arguably a _very_ dumb idea to share watchdog
- *	irq lines
  */
  
 void wdt_interrupt(int irq, void *dev_id, struct pt_regs *regs)
@@ -494,7 +490,7 @@ void cleanup_module(void)
 int __init wdt_init(void)
 {
 	printk(KERN_INFO "WDT500/501-P driver 0.07 at %X (Interrupt %d)\n", io,irq);
-	if(request_irq(irq, wdt_interrupt, SA_INTERRUPT, "wdt501p", NULL))
+	if(request_irq(irq, wdt_interrupt, SA_INTERRUPT, "wdt501p", &wdt_miscdev))
 	{
 		printk(KERN_ERR "IRQ %d is not free.\n", irq);
 		return -EIO;

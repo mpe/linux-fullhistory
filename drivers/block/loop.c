@@ -190,7 +190,7 @@ static int lo_send(struct loop_device *lo, char *data, int len, loff_t pos,
 		page = grab_cache_page(mapping, index);
 		if (!page)
 			goto fail;
-		if (aops->prepare_write(page, offset, offset+size))
+		if (aops->prepare_write(file, page, offset, offset+size))
 			goto unlock;
 		kaddr = (char*)page_address(page);
 		if ((lo->transfer)(lo, WRITE, kaddr+offset, data, size, IV))

@@ -1,0 +1,290 @@
+***************
+*** 399,405 ****
+  	/*  @X@0001:mpu
+  	 */
+  
+- #ifdef CONFIG_MIDI
+  	if((mpu_dev = isapnp_find_dev(bus,
+  				ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001), NULL)))
+  	{
+--- 361,366 ----
+  	/*  @X@0001:mpu
+  	 */
+  
+  	if((mpu_dev = isapnp_find_dev(bus,
+  				ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001), NULL)))
+  	{
+***************
+*** 413,583 ****
+  	}
+  	else
+  		printk(KERN_ERR "sb: DT0197H panic: mpu not found\n");
+- #endif
+- 
+- 
+- 	/*  @P@:Gameport
+- 	 */
+- 
+- 	if((jp_dev = isapnp_find_dev(bus,
+- 				ISAPNP_VENDOR('@','P','@'), ISAPNP_FUNCTION(0x0001), NULL)))
+- 	{
+- 		jp_dev->prepare(jp_dev);
+- 
+- 		if((jp_dev = activate_dev("DT0197H", "gameport", jp_dev)))
+- 			show_base("DT0197H", "gameport", &jp_dev->resource[0]);
+- 	}
+- 	else
+- 		printk(KERN_ERR "sb: DT0197H panic: gameport not found\n");
+- 
+- 	/*  @H@0001:OPL3 
+- 	 */
+- 
+- #if defined(CONFIG_SOUND_YM3812) || defined(CONFIG_SOUND_YM3812_MODULE)
+- 	if((wss_dev = isapnp_find_dev(bus,
+- 				ISAPNP_VENDOR('@','H','@'), ISAPNP_FUNCTION(0x0001), NULL)))
+- 	{
+- 		wss_dev->prepare(wss_dev);
+- 
+- 		/* Let's disable IRQ and DMA for WSS device */
+- 
+- 		wss_dev->irq_resource[0].flags = 0;
+- 		wss_dev->dma_resource[0].flags = 0;
+- 
+- 		if((wss_dev = activate_dev("DT0197H", "opl3", wss_dev)))
+- 			show_base("DT0197H", "opl3", &wss_dev->resource[0]);
+- 	}
+- 	else
+- 		printk(KERN_ERR "sb: DT0197H panic: opl3 not found\n");
+- #endif
+  
+  	printk(KERN_INFO "sb: DT0197H mail reports to Torsten Werner <twerner@intercomm.de>\n");
+  
+  	return(sb_dev);
+  }
+  
+- /* Specific support for awe will be dropped when:
+-  * a) The new awe_wawe driver with PnP support will be introduced in the kernel
+-  * b) The joystick driver will support PnP - a little patch is available from me....hint, hint :-)
+-  */
+- 
+- static struct pci_dev *sb_init_awe(struct pci_bus *bus, struct pci_dev *card, struct address_info *hw_config, struct address_info *mpu_config)
+  {
+- 	/*  CTL0042:Audio SB64
+- 	 *  CTL0031:Audio SB32
+- 	 *  CTL0045:Audio SB64
+  	 */
+  
+- 	if(	(sb_dev = isapnp_find_dev(bus, ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0042), NULL)) || 
+- 		(sb_dev = isapnp_find_dev(bus, ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031), NULL)) ||
+- 		(sb_dev = isapnp_find_dev(bus, ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0045), NULL))	)
+  	{
+  		sb_dev->prepare(sb_dev);
+  		
+- 		if((sb_dev = activate_dev("AWE", "sb", sb_dev)))
+  		{
+  			hw_config->io_base 	= sb_dev->resource[0].start;
+  			hw_config->irq 		= sb_dev->irq_resource[0].start;
+- 			hw_config->dma 		= sb_dev->dma_resource[0].start;
+- 			hw_config->dma2 	= sb_dev->dma_resource[1].start;
+- 
+- 			mpu_config->io_base	= sb_dev->resource[1].start;
+  
+- 			show_base("AWE", "sb",		&sb_dev->resource[0]);
+- 			show_base("AWE", "mpu", 	&sb_dev->resource[1]);
+- 			show_base("AWE", "opl3",	&sb_dev->resource[2]);
+  		}
+- 		else
+- 			return(NULL);
+- 	}
+- 	else
+- 		printk(KERN_ERR "sb: AWE panic: sb base not found\n");
+- 
+  
+- 	/*  CTL7002:Game SB64
+- 	 *  CTL7001:Game SB32
+- 	 */
+- 
+- 	if(	(jp_dev = isapnp_find_dev(bus, ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x7002), NULL)) ||
+- 		(jp_dev = isapnp_find_dev(bus, ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x7001), NULL)) )
+- 	{
+- 		jp_dev->prepare(jp_dev);
+- 		
+- 		if((jp_dev = activate_dev("AWE", "gameport", jp_dev)))
+- 			show_base("AWE", "gameport", &jp_dev->resource[0]);
+  	}
+  	else
+- 		printk(KERN_ERR "sb: AWE panic: gameport not found\n");
+- 
+  
+- 	/*  CTL0022:WaveTable SB64
+- 	 *  CTL0021:WaveTable SB32
+- 	 *  CTL0023:WaveTable Sb64
+  	 */
+  
+- 	if( nosbwave == 0 &&
+-    	( ( wt_dev = isapnp_find_dev(bus, ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0023), NULL)) ||
+- 	  ( wt_dev = isapnp_find_dev(bus, ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0022), NULL)) ||
+- 	  ( wt_dev = isapnp_find_dev(bus, ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0021), NULL)) ))
+  	{
+- 		wt_dev->prepare(wt_dev);
+- 		
+- 		if((wt_dev = activate_dev("AWE", "wavetable", wt_dev)))
+  		{
+- 			show_base("AWE", "wavetable", &wt_dev->resource[0]);
+- 			show_base("AWE", "wavetable", &wt_dev->resource[1]);
+- 			show_base("AWE", "wavetable", &wt_dev->resource[2]);
+  		}
+  	}
+  	else
+- 		printk(KERN_ERR "sb: AWE panic: wavetable not found\n");
+  
+- 	printk(KERN_INFO "sb: AWE mail reports to Alessandro Zummo <azummo@ita.flashnet.it>\n");
+  
+  	return(sb_dev);
+  }
+  
+- #define SBF_DEV	0x01
+- 
+  
+  static struct { unsigned short vendor, function, flags; struct pci_dev * (*initfunc)(struct pci_bus *, struct pci_dev *, struct address_info *, struct address_info *); char *name; }
+- isapnp_sb_list[] __initdata = {
+  	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0001), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
+  	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
+  	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0041), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
+  	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0042), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
+  	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0043), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
+  	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0045), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
+- 	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0044), 0,	&sb_init_awe,		"Sound Blaster 32" },
+- 	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0039), 0,	&sb_init_awe,		"Sound Blaster AWE 32" },
+- 	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x009D), 0,	&sb_init_awe,		"Sound Blaster AWE 64" },
+- 	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x00C5), 0,	&sb_init_awe,		"Sound Blaster AWE 64" },
+- 	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x00E4), 0,	&sb_init_awe,		"Sound Blaster AWE 64" },
+  	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x0968), SBF_DEV,	&sb_init_ess,		"ESS 1688" },
+  	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1868), SBF_DEV,	&sb_init_ess,		"ESS 1868" },
+  	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x8611), SBF_DEV,	&sb_init_ess,		"ESS 1868" },
+  	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1869), SBF_DEV,	&sb_init_ess,		"ESS 1869" },
+  	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1878), SBF_DEV,	&sb_init_ess,		"ESS 1878" },
+  	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1879), SBF_DEV,	&sb_init_ess,		"ESS 1879" },
+- 	{ISAPNP_VENDOR('C','M','I'), ISAPNP_FUNCTION(0x0001), 0,	&sb_init_cmi,		"CMI 8330 SoundPRO" },
+- 	{ISAPNP_VENDOR('R','W','B'), ISAPNP_FUNCTION(0x1688), 0,	&sb_init_diamond,	"Diamond DT0197H" },
+  	{0}
+  };
+  
+- static int __init sb_init_isapnp(struct address_info *hw_config, struct address_info *mpu_config, struct pci_bus *bus, struct pci_dev *card, int slot)
+  {
+  	struct pci_dev *idev = NULL;
+  
+  	/* You missed the init func? That's bad. */
+- 	if(isapnp_sb_list[slot].initfunc)
+  	{
+- 		char *busname = bus->name[0] ? bus->name : isapnp_sb_list[slot].name;
+  
+  		printk(KERN_INFO "sb: %s detected\n", busname); 
+  
+  		/* Initialize this baby. */
+  
+- 		if((idev = isapnp_sb_list[slot].initfunc(bus, card, hw_config, mpu_config)))
+  		{
+  			/* We got it. */
+  
+--- 374,473 ----
+  	}
+  	else
+  		printk(KERN_ERR "sb: DT0197H panic: mpu not found\n");
+  
+  	printk(KERN_INFO "sb: DT0197H mail reports to Torsten Werner <twerner@intercomm.de>\n");
+  
+  	return(sb_dev);
+  }
+  
++ static struct pci_dev *sb_init_als(struct pci_bus *bus, struct pci_dev *card, struct address_info *hw_config, struct address_info *mpu_config)
+  {
++ 	/* 
++ 	 * ALS 100
++ 	 * very similar to both ones above
++ 	 */
++ 
++ 	/*  @@@0001:Soundblaster.
+  	 */
+  
++ 	if((sb_dev = isapnp_find_dev(bus,
++ 				ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x0001), NULL)))
+  	{
+  		sb_dev->prepare(sb_dev);
+  		
++ 		if((sb_dev = activate_dev("ALS100", "sb", sb_dev)))
+  		{
+  			hw_config->io_base 	= sb_dev->resource[0].start;
+  			hw_config->irq 		= sb_dev->irq_resource[0].start;
++ 			hw_config->dma 		= sb_dev->dma_resource[1].start;
++ 			hw_config->dma2 	= sb_dev->dma_resource[0].start;
+  
++ 			show_base("ALS100", "sb", &sb_dev->resource[0]);
+  		}
+  
++ 		if(!sb_dev) return(NULL);
+  	}
+  	else
++ 		printk(KERN_ERR "sb: ALS100 panic: sb base not found\n");
+  
++ 	/*  @X@0001:mpu
+  	 */
+  
++ 	if((mpu_dev = isapnp_find_dev(bus,
++ 				ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001), NULL)))
+  	{
++ 		mpu_dev->prepare(mpu_dev);
++ 
++ 		if((mpu_dev = activate_dev("ALS100", "mpu", mpu_dev)))
+  		{
++ 			show_base("ALS100", "mpu", &mpu_dev->resource[0]);
++ 			mpu_config->io_base = mpu_dev->resource[0].start;
+  		}
+  	}
+  	else
++ 		printk(KERN_ERR "sb: ALS100 panic: mpu not found\n");
+  
++ 	printk(KERN_INFO "sb: ALS100 mail reports to Torsten Werner <twerner@intercomm.de>\n");
+  
+  	return(sb_dev);
+  }
+  
++ #define SBF_DEV	0x01 /* Please notice that cards without this flag set are on top in the list */
+  
+  static struct { unsigned short vendor, function, flags; struct pci_dev * (*initfunc)(struct pci_bus *, struct pci_dev *, struct address_info *, struct address_info *); char *name; }
++ sb_isapnp_list[] __initdata = {
++ 	{ISAPNP_VENDOR('C','M','I'), ISAPNP_FUNCTION(0x0001), 0,	&sb_init_cmi,		"CMI 8330 SoundPRO" },
++ 	{ISAPNP_VENDOR('R','W','B'), ISAPNP_FUNCTION(0x1688), 0,	&sb_init_diamond,	"Diamond DT0197H" },
++ 	{ISAPNP_VENDOR('A','L','S'), ISAPNP_FUNCTION(0x0001), 0,	&sb_init_als,		"ALS 100" },
+  	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0001), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
+  	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
+  	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0041), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
+  	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0042), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
+  	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0043), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
+  	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0045), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
+  	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x0968), SBF_DEV,	&sb_init_ess,		"ESS 1688" },
+  	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1868), SBF_DEV,	&sb_init_ess,		"ESS 1868" },
+  	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x8611), SBF_DEV,	&sb_init_ess,		"ESS 1868" },
+  	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1869), SBF_DEV,	&sb_init_ess,		"ESS 1869" },
+  	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1878), SBF_DEV,	&sb_init_ess,		"ESS 1878" },
+  	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1879), SBF_DEV,	&sb_init_ess,		"ESS 1879" },
+  	{0}
+  };
+  
++ static int __init sb_isapnp_init(struct address_info *hw_config, struct address_info *mpu_config, struct pci_bus *bus, struct pci_dev *card, int slot)
+  {
+  	struct pci_dev *idev = NULL;
+  
+  	/* You missed the init func? That's bad. */
++ 	if(sb_isapnp_list[slot].initfunc)
+  	{
++ 		char *busname = bus->name[0] ? bus->name : sb_isapnp_list[slot].name;
+  
+  		printk(KERN_INFO "sb: %s detected\n", busname); 
+  
+  		/* Initialize this baby. */
+  
++ 		if((idev = sb_isapnp_list[slot].initfunc(bus, card, hw_config, mpu_config)))
+  		{
+  			/* We got it. */
+  

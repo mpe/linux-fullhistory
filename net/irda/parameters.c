@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Jun  7 10:25:11 1999
- * Modified at:   Tue Dec 14 16:03:57 1999
+ * Modified at:   Sun Jan 30 14:08:39 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1999-2000 Dag Brattli, All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -78,7 +78,7 @@ static PV_HANDLER pv_insert_table[] = {
 static int irda_insert_no_value(void *self, __u8 *buf, int len, __u8 pi, 
 				PV_TYPE type, PI_HANDLER func)
 {
-	param_t p;
+	irda_param_t p;
 	int ret;
 
 	p.pi = pi;
@@ -105,7 +105,7 @@ static int irda_insert_no_value(void *self, __u8 *buf, int len, __u8 pi,
 static int irda_extract_no_value(void *self, __u8 *buf, int len, __u8 pi, 
 				 PV_TYPE type, PI_HANDLER func)
 {
-	param_t p;
+	irda_param_t p;
 	int ret;
 
 	/* Extract values anyway, since handler may need them */
@@ -129,7 +129,7 @@ static int irda_extract_no_value(void *self, __u8 *buf, int len, __u8 pi,
 static int irda_insert_integer(void *self, __u8 *buf, int len, __u8 pi, 
 			       PV_TYPE type, PI_HANDLER func)
 {
-	param_t p;
+	irda_param_t p;
 	int n = 0;
 	int err;
 
@@ -202,7 +202,7 @@ static int irda_insert_integer(void *self, __u8 *buf, int len, __u8 pi,
 static int irda_extract_integer(void *self, __u8 *buf, int len, __u8 pi, 
 				PV_TYPE type, PI_HANDLER func)
 {
-	param_t p;
+	irda_param_t p;
 	int n = 0;
 	int err;
 
@@ -273,7 +273,7 @@ static int irda_extract_string(void *self, __u8 *buf, int len, __u8 pi,
 			       PV_TYPE type, PI_HANDLER func)
 {
 	char str[33];
-	param_t p;
+	irda_param_t p;
 	int err;
 
 	IRDA_DEBUG(2, __FUNCTION__ "()\n");
@@ -319,7 +319,7 @@ static int irda_extract_string(void *self, __u8 *buf, int len, __u8 pi,
 static int irda_extract_octseq(void *self, __u8 *buf, int len, __u8 pi,
 			       PV_TYPE type, PI_HANDLER func)
 {
-	param_t p;
+	irda_param_t p;
 
 	p.pi = pi;     /* In case handler needs to know */
 	p.pl = buf[1]; /* Extract lenght of value */
@@ -346,10 +346,10 @@ static int irda_extract_octseq(void *self, __u8 *buf, int len, __u8 pi,
  */
 int irda_param_pack(__u8 *buf, char *fmt, ...)
 {
+	irda_pv_t arg;
 	va_list args;
 	char *p;
 	int n = 0;
-	pv_t arg;
 	
 	va_start(args, fmt);
 
@@ -392,10 +392,10 @@ int irda_param_pack(__u8 *buf, char *fmt, ...)
  */
 int irda_param_unpack(__u8 *buf, char *fmt, ...)
 {
+	irda_pv_t arg;
 	va_list args;
 	char *p;
 	int n = 0;
-	pv_t arg;
 
 	va_start(args, fmt);
 

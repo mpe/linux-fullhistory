@@ -27,7 +27,7 @@
 #define FPCR_DYN_PLUS	 (0x3UL << FPCR_DYN_SHIFT)	/* towards +INF */
 #define FPCR_DYN_MASK	 (0x3UL << FPCR_DYN_SHIFT)
 
-#define FPCR_MASK	0xfffe000000000000
+#define FPCR_MASK	0xffff800000000000
 
 /*
  * IEEE trap enables are implemented in software.  These per-thread
@@ -67,7 +67,8 @@
 				 IEEE_STATUS_OVF | IEEE_STATUS_UNF |	\
 				 IEEE_STATUS_INE | IEEE_STATUS_DNO)
 
-#define IEEE_SW_MASK		(IEEE_TRAP_ENABLE_MASK | IEEE_STATUS_MASK | IEEE_MAP_MASK)
+#define IEEE_SW_MASK		(IEEE_TRAP_ENABLE_MASK |		\
+				 IEEE_STATUS_MASK | IEEE_MAP_MASK)
 
 #define IEEE_CURRENT_RM_SHIFT	32
 #define IEEE_CURRENT_RM_MASK	(3UL<<IEEE_CURRENT_RM_SHIFT)
@@ -78,7 +79,12 @@
 
 /*
  * Convert the software IEEE trap enable and status bits into the
- * hardware fpcr format.
+ * hardware fpcr format. 
+ *
+ * Digital Unix engineers receive my thanks for not defining the
+ * software bits identical to the hardware bits.  The chip designers
+ * receive my thanks for making all the not-implemented fpcr bits
+ * RAZ forcing us to use system calls to read/write this value.
  */
 
 static inline unsigned long
@@ -86,11 +92,13 @@ ieee_swcr_to_fpcr(unsigned long sw)
 {
 	unsigned long fp;
 	fp = (sw & IEEE_STATUS_MASK) << 35;
-	fp |= sw & IEEE_STATUS_MASK ? FPCR_SUM : 0;
+	fp |= (sw & IEEE_MAP_DMZ) << 36;
+	fp |= (sw & IEEE_STATUS_MASK ? FPCR_SUM : 0);
 	fp |= (~sw & (IEEE_TRAP_ENABLE_INV
 		      | IEEE_TRAP_ENABLE_DZE
 		      | IEEE_TRAP_ENABLE_OVF)) << 48;
 	fp |= (~sw & (IEEE_TRAP_ENABLE_UNF | IEEE_TRAP_ENABLE_INE)) << 57;
+	fp |= (sw & IEEE_MAP_UMZ ? FPCR_UNDZ | FPCR_UNFD : 0);
 	fp |= (~sw & IEEE_TRAP_ENABLE_DNO) << 41;
 	return fp;
 }
@@ -100,10 +108,12 @@ ieee_fpcr_to_swcr(unsigned long fp)
 {
 	unsigned long sw;
 	sw = (fp >> 35) & IEEE_STATUS_MASK;
+	sw |= (fp >> 36) & IEEE_MAP_DMZ;
 	sw |= (~fp >> 48) & (IEEE_TRAP_ENABLE_INV
 			     | IEEE_TRAP_ENABLE_DZE
 			     | IEEE_TRAP_ENABLE_OVF);
 	sw |= (~fp >> 57) & (IEEE_TRAP_ENABLE_UNF | IEEE_TRAP_ENABLE_INE);
+	sw |= (fp >> 47) & IEEE_MAP_UMZ;
 	sw |= (~fp >> 41) & IEEE_TRAP_ENABLE_DNO;
 	return sw;
 }
@@ -115,26 +125,59 @@ ieee_fpcr_to_swcr(unsigned long fp)
    never generates arithmetic faults and (b) call_pal instructions
    are implied trap barriers.  */
 
-static inline unsigned long rdfpcr(void)
+static inline unsigned long
+rdfpcr(void)
 {
 	unsigned long tmp, ret;
+
+#if defined(__alpha_cix__) || defined(__alpha_fix__)
+	__asm__ ("ftoit $f0,%0\n\t"
+		 "mf_fpcr $f0\n\t"
+		 "ftoit $f0,%1\n\t"
+		 "itoft %0,$f0"
+		 : "=r"(tmp), "=r"(ret));
+#else
 	__asm__ ("stt $f0,%0\n\t"
 		 "mf_fpcr $f0\n\t"
 		 "stt $f0,%1\n\t"
 		 "ldt $f0,%0"
-		: "=m"(tmp), "=m"(ret));
+		 : "=m"(tmp), "=m"(ret));
+#endif
+
 	return ret;
 }
 
-static inline void wrfpcr(unsigned long val)
+static inline void
+wrfpcr(unsigned long val)
 {
 	unsigned long tmp;
+
+#if defined(__alpha_cix__) || defined(__alpha_fix__)
+	__asm__ ("ftoit $f0,%0\n\t"
+		 "itoft %1,$f0\n\t"
+		 "mt_fpcr $f0\n\t"
+		 "itoft %0,$f0"
+		 : "=&r"(tmp) : "r"(val));
+#else
 	__asm__ __volatile__ (
 		"stt $f0,%0\n\t"
 		"ldt $f0,%1\n\t"
 		"mt_fpcr $f0\n\t"
 		"ldt $f0,%0"
 		: "=m"(tmp) : "m"(val));
+#endif
+}
+
+static inline unsigned long
+swcr_update_status(unsigned long swcr, unsigned long fpcr)
+{
+	/* EV6 implements most of the bits in hardware.  Collect
+	   the acrued exception bits from the real fpcr.  */
+	if (implver() == IMPLVER_EV6) {
+		swcr &= ~IEEE_STATUS_MASK;
+		swcr |= (fpcr >> 35) & IEEE_STATUS_MASK;
+	}
+	return swcr;
 }
 
 extern unsigned long alpha_read_fp_reg (unsigned long reg);

@@ -94,7 +94,7 @@ static int hpfs_readpage(struct dentry *dentry, struct page *page)
 {
 	return block_read_full_page(page,hpfs_get_block);
 }
-static int hpfs_prepare_write(struct page *page, unsigned from, unsigned to)
+static int hpfs_prepare_write(struct file *file, struct page *page, unsigned from, unsigned to)
 {
 	return cont_prepare_write(page,from,to,hpfs_get_block,
 		&((struct inode*)page->mapping->host)->u.hpfs_i.mmu_private);

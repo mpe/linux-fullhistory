@@ -144,10 +144,10 @@ nfs_fsync(struct file *file, struct dentry *dentry)
  * If the writer ends up delaying the write, the writer needs to
  * increment the page use counts until he is done with the page.
  */
-static int nfs_prepare_write(struct page *page, unsigned offset, unsigned to)
+static int nfs_prepare_write(struct file *file, struct page *page, unsigned offset, unsigned to)
 {
 	kmap(page);
-	return 0;
+	return nfs_flush_incompatible(file, page);
 }
 static int nfs_commit_write(struct file *file, struct page *page, unsigned offset, unsigned to)
 {

@@ -1121,11 +1121,9 @@ out:
 }
 
 #ifdef RPC_DEBUG
-#include <linux/nfs_fs.h>
 void rpc_show_tasks(void)
 {
 	struct rpc_task *t = all_tasks, *next;
-	struct nfs_wreq *wreq;
 
 	spin_lock(&rpc_sched_lock);
 	t = all_tasks;
@@ -1143,17 +1141,6 @@ void rpc_show_tasks(void)
 			t->tk_rqstp, t->tk_timeout,
 			t->tk_rpcwait ? rpc_qname(t->tk_rpcwait) : " <NULL> ",
 			t->tk_action, t->tk_exit);
-
-		if (!(t->tk_flags & RPC_TASK_NFSWRITE))
-			continue;
-		/* NFS write requests */
-		wreq = (struct nfs_wreq *) t->tk_calldata;
-		printk("     NFS: flgs=%08x, pid=%d, pg=%p, off=(%d, %d)\n",
-			wreq->wb_flags, wreq->wb_pid, wreq->wb_page,
-			wreq->wb_offset, wreq->wb_bytes);
-		printk("          name=%s/%s\n",
-			wreq->wb_file->f_dentry->d_parent->d_name.name,
-			wreq->wb_file->f_dentry->d_name.name);
 	}
 	spin_unlock(&rpc_sched_lock);
 }

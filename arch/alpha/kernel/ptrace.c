@@ -17,6 +17,7 @@
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
+#include <asm/fpu.h>
 
 #include "proto.h"
 
@@ -113,18 +114,30 @@ get_reg_addr(struct task_struct * task, unsigned long regno)
 /*
  * Get contents of register REGNO in task TASK.
  */
-static inline long
+static long
 get_reg(struct task_struct * task, unsigned long regno)
 {
+	/* Special hack for fpcr -- combine hardware and software bits.  */
+	if (regno == 63) {
+		unsigned long fpcr = *get_reg_addr(task, regno);
+		unsigned long swcr = task->thread.flags & IEEE_SW_MASK;
+		swcr = swcr_update_status(swcr, fpcr);
+		return fpcr | swcr;
+	}
 	return *get_reg_addr(task, regno);
 }
 
 /*
  * Write contents of register REGNO in task TASK.
  */
-static inline int
+static int
 put_reg(struct task_struct *task, unsigned long regno, long data)
 {
+	if (regno == 63) {
+		task->thread.flags = ((task->thread.flags & ~IEEE_SW_MASK)
+				      | (data & IEEE_SW_MASK));
+		data = (data & FPCR_DYN_MASK) | ieee_swcr_to_fpcr(data);
+	}
 	*get_reg_addr(task, regno) = data;
 	return 0;
 }

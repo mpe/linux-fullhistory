@@ -223,9 +223,10 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 		goto done;
 	fh_lock(dirfhp);
 	dchild = lookup_one(argp->name, dget(dirfhp->fh_dentry));
-	nfserr = nfserrno(PTR_ERR(dchild));
-	if (IS_ERR(dchild))
+	if (IS_ERR(dchild)) {
+		nfserr = nfserrno(PTR_ERR(dchild));
 		goto out_unlock;
+	}
 	fh_init(newfhp, NFS_FHSIZE);
 	nfserr = fh_compose(newfhp, dirfhp->fh_export, dchild);
 	if (!nfserr && !dchild->d_inode)

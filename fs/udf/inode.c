@@ -133,7 +133,7 @@ static int udf_readpage(struct dentry *dentry, struct page *page)
 	return block_read_full_page(page, udf_get_block);
 }
 
-static int udf_prepare_write(struct page *page, unsigned from, unsigned to)
+static int udf_prepare_write(struct file *file, struct page *page, unsigned from, unsigned to)
 {
 	return block_prepare_write(page, from, to, udf_get_block);
 }

@@ -16,11 +16,8 @@
 #include <linux/usb.h>
 
 
-static const char *version = __FILE__ ": v0.3.3 2000/03/13 Written by Petko Manolov (petkan@spct.net)\n";
+static const char *version = __FILE__ ": v0.3.5 2000/03/21 Written by Petko Manolov (petkan@spct.net)\n";
 
-
-#define	ADMTEK_VENDOR_ID		0x07a6
-#define	ADMTEK_DEVICE_ID_PEGASUS	0x0986
 
 #define	PEGASUS_MTU		1500
 #define PEGASUS_MAX_MTU		1536
@@ -38,12 +35,29 @@ struct pegasus {
 	unsigned char		ALIGN(intr_buff[8]);
 };
 
+struct usb_eth_dev {
+	char	*name;
+	__u16	vendor;
+	__u16	device;
+	void	*private;
+};
+
 static int loopback = 0;
 static int multicast_filter_limit = 32;
 
 MODULE_AUTHOR("Petko Manolov <petkan@spct.net>");
 MODULE_DESCRIPTION("ADMtek AN986 Pegasus USB Ethernet driver");
 MODULE_PARM(loopback, "i");
+
+
+static struct usb_eth_dev usb_dev_id[] = {
+	{ "D-Link DSB-650TX", 0x2001, 0x4001, NULL },
+	{ "Linksys USB100TX", 0x066b, 0x2203, NULL },
+	{ "SMC 202 USB Ethernet", 0x0707, 0x0200, NULL },
+	{ "ADMtek AN986 (Pegasus) USB Ethernet", 0x07a6, 0x0986, NULL },
+	{ "Accton USB 10/100 Ethernet Adapter", 0x083a, 0x1046, NULL },
+	{ NULL, 0, 0, NULL }
+};
 
 
 #define pegasus_get_registers(dev, indx, size, data)\
@@ -164,8 +178,8 @@ static int pegasus_start_net(struct net_device *dev, struct usb_device *usb)
 		return 4;
 
 	if ((partmedia & 0x1f) != 1) {
-		err("party FAIL %x", partmedia);
-		return 5;
+		warn("party FAIL %x", partmedia);
+		/* return 5;	FIXME */ 
 	}
 
 	data[0] = 0xc9;
@@ -374,13 +388,25 @@ static void pegasus_set_rx_mode(struct net_device *net)
 	netif_wake_queue(net);
 }
 
+static int check_device_ids( __u16 vendor, __u16 product )
+{
+	int i=0;
+	
+	while ( usb_dev_id[i].name ) {
+		if ( (usb_dev_id[i].vendor == vendor) && 
+			(usb_dev_id[i].device == product) )
+			return 0;
+		i++;
+	}
+	return	1;
+}
+
 static void * pegasus_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct net_device *net;
 	struct pegasus *pegasus;
 
-	if (dev->descriptor.idVendor != ADMTEK_VENDOR_ID ||
-		dev->descriptor.idProduct != ADMTEK_DEVICE_ID_PEGASUS) {
+	if ( check_device_ids(dev->descriptor.idVendor, dev->descriptor.idProduct) ) {
 		return NULL;
 	}
 

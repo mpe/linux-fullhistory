@@ -262,8 +262,14 @@ static int sohci_submit_urb (urb_t * urb)
 	urb_print (urb, "SUB", usb_pipein (pipe));
 #endif
 	
+	/* a request to the virtual root hub */
 	if (usb_pipedevice (pipe) == ohci->rh.devnum) 
-		return rh_submit_urb (urb); /* a request to the virtual root hub */
+		return rh_submit_urb (urb);
+	
+	/* when controller's hung, permit only hub cleanup attempts
+	 * such as powering down ports */
+	if (ohci->disabled)
+		return -ESHUTDOWN;
 
 	/* every endpoint has a ed, locate and fill it */
 	if (!(ed = ep_add_ed (urb->dev, pipe, urb->interval, 1))) {
@@ -1222,13 +1228,16 @@ static void rh_int_timer_do (unsigned long ptr)
 
 	urb_t * urb = (urb_t *) ptr;
 	ohci_t * ohci = urb->dev->bus->hcpriv;
+
+	if (ohci->disabled)
+	    return;
 	
 	if(ohci->rh.send) { 
 		len = rh_send_irq (ohci, urb->transfer_buffer, urb->transfer_buffer_length);
 		if (len > 0) {
 			urb->actual_length = len;
 #ifdef DEBUG
-			urb_print (urb, "RET(rh)", usb_pipeout (urb->pipe));
+			urb_print (urb, "RET-t(rh)", usb_pipeout (urb->pipe));
 #endif
 			if (urb->complete) urb->complete (urb);
 		}
@@ -1385,21 +1394,35 @@ static int rh_submit_urb (urb_t * urb)
 			break;
 		
 		case RH_GET_DESCRIPTOR | RH_CLASS:
-			*(__u8 *)  (data_buf+1) = 0x29;
-			put_unaligned(cpu_to_le32 (readl (&ohci->regs->roothub.a)),
-				      (__u32 *) (data_buf + 2));
-	 		*(__u8 *)  data_buf = (*(__u8 *) (data_buf + 2) / 8) * 2 + 9; /* length of descriptor */
-				 
-			len = min (leni, min(*(__u8 *) data_buf, wLength));
-			*(__u8 *) (data_buf+6) = 0; /* Root Hub needs no current from bus */
-			if (*(__u8 *) (data_buf+2) < 8) { /* less than 8 Ports */
-				*(__u8 *) (data_buf+7) = readl (&ohci->regs->roothub.b) & 0xff; 
-				*(__u8 *) (data_buf+8) = (readl (&ohci->regs->roothub.b) & 0xff0000) >> 16; 
-			} else {
-				put_unaligned(cpu_to_le32 (readl(&ohci->regs->roothub.b)),
-					      (__u32 *) (data_buf + 7));
+		    {
+			    __u32 temp = readl (&ohci->regs->roothub.a);
+
+			    data_buf [0] = 9;		// min length;
+			    data_buf [1] = 0x29;
+			    data_buf [2] = temp & RH_A_NDP;
+			    data_buf [3] = 0;
+			    if (temp & RH_A_PSM) 	/* per-port power switching? */
+				data_buf [3] |= 0x1;
+			    if (temp & RH_A_NOCP)	/* no overcurrent reporting? */
+				data_buf [3] |= 0x10;
+			    else if (temp & RH_A_OCPM)	/* per-port overcurrent reporting? */
+				data_buf [3] |= 0x8;
+
+			    datab [1] = 0;
+			    data_buf [5] = (temp & RH_A_POTPGT) >> 24;
+			    temp = readl (&ohci->regs->roothub.b);
+			    data_buf [7] = temp & RH_B_DR;
+			    if (data_buf [2] < 7) {
+				data_buf [8] = 0xff;
+			    } else {
+				data_buf [0] += 2;
+				data_buf [8] = (temp & RH_B_DR) >> 8;
+				data_buf [10] = data_buf [9] = 0xff;
+			    }
+				
+			    len = min (leni, min (data_buf [0], wLength));
+			    OK (len);
 			}
-			OK (len); 
  
 		case RH_GET_CONFIGURATION: 	*(__u8 *) data_buf = 0x01; OK (1);
 
@@ -1472,6 +1495,7 @@ static void hc_reset (ohci_t * ohci)
 		}	
 		udelay (1);
 	}	 
+	ohci->disabled = 0;
 }
 
 /*-------------------------------------------------------------------------*/
@@ -1502,7 +1526,7 @@ static int hc_start (ohci_t * ohci)
 	writel (0x628, &ohci->regs->lsthresh);
 
 	/* Choose the interrupts we care about now, others later on demand */
-	mask = OHCI_INTR_MIE | OHCI_INTR_WDH | OHCI_INTR_SO;
+	mask = OHCI_INTR_MIE | OHCI_INTR_UE | OHCI_INTR_WDH | OHCI_INTR_SO;
 	
 	writel (ohci->hc_control = 0xBF, &ohci->regs->control); /* USB Operational */
 	writel (mask, &ohci->regs->intrenable);
@@ -1550,6 +1574,11 @@ static void hc_interrupt (int irq, void * __ohci, struct pt_regs * r)
 
 	dbg("Interrupt: %x frame: %x", ints, le16_to_cpu (ohci->hcca.frame_no));
 	
+	if (ints & OHCI_INTR_UE) {
+		ohci->disabled++;
+		err ("OHCI Unrecoverable Error, controller disabled");
+	}
+  
 	if (ints & OHCI_INTR_WDH) {
 		writel (OHCI_INTR_WDH, &regs->intrdisable);	
 		dl_done_list (ohci, dl_reverse_done_list (ohci));

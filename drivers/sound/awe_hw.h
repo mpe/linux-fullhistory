@@ -3,9 +3,9 @@
  *
  * Access routines and definitions for the low level driver for the 
  * Creative AWE32/SB32/AWE64 wave table synth.
- *   version 0.4.3; Mar. 1, 1998
+ *   version 0.4.4; Jan. 4, 2000
  *
- * Copyright (C) 1996-1998 Takashi Iwai
+ * Copyright (C) 1996-2000 Takashi Iwai
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

@@ -3,9 +3,9 @@
  *
  * Voice information definitions for the low level driver for the 
  * AWE32/SB32/AWE64 wave table synth.
- *   version 0.4.3; Feb. 1, 1999
+ *   version 0.4.4; Jan. 4, 2000
  *
- * Copyright (C) 1996-1999 Takashi Iwai
+ * Copyright (C) 1996-2000 Takashi Iwai
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -57,6 +57,7 @@ typedef struct awe_patch_info {
 #define AWE_MAP_PRESET		6	/* awe_voice_map */
 /*#define AWE_PROBE_INFO	7*/	/* awe_voice_map (pat only) */
 #define AWE_PROBE_DATA		8	/* optarg=sample */
+#define AWE_REMOVE_INFO		9	/* optarg=(bank<<8)|instr */
 #define AWE_LOAD_CHORUS_FX	0x10	/* awe_chorus_fx_rec (optarg=mode) */
 #define AWE_LOAD_REVERB_FX	0x11	/* awe_reverb_fx_rec (optarg=mode) */
 

@@ -737,7 +737,7 @@ static int fat_readpage(struct dentry *dentry, struct page *page)
 {
 	return block_read_full_page(page,fat_get_block);
 }
-static int fat_prepare_write(struct page *page, unsigned from, unsigned to)
+static int fat_prepare_write(struct file *file, struct page *page, unsigned from, unsigned to)
 {
 	return cont_prepare_write(page,from,to,fat_get_block,
 		&MSDOS_I((struct inode*)page->mapping->host)->mmu_private);

@@ -74,6 +74,7 @@ obj-$(CONFIG_USB_AUDIO)		+= audio.o
 obj-$(CONFIG_USB_CPIA)		+= cpia.o
 obj-$(CONFIG_USB_IBMCAM)	+= ibmcam.o
 obj-$(CONFIG_USB_DC2XX)		+= dc2xx.o
+obj-$(CONFIG_USB_MDC800)   += mdc800.o
 obj-$(CONFIG_USB_STORAGE)	+= usb-storage.o
 obj-$(CONFIG_USB_USS720)	+= uss720.o
 obj-$(CONFIG_USB_DABUSB)	+= dabusb.o

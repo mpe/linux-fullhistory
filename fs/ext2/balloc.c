@@ -11,6 +11,7 @@
  *        David S. Miller (davem@caip.rutgers.edu), 1995
  */
 
+#include <linux/config.h>
 #include <linux/fs.h>
 #include <linux/locks.h>
 #include <linux/quotaops.h>

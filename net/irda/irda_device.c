@@ -254,7 +254,7 @@ int irda_device_is_receiving(struct net_device *dev)
 	return req.ifr_receiving;
 }
 
-void irda_task_next_state(struct irda_task *task, TASK_STATE state)
+void irda_task_next_state(struct irda_task *task, IRDA_TASK_STATE state)
 {
 	IRDA_DEBUG(2, __FUNCTION__ "(), state = %s\n", task_state[state]);
 
@@ -354,8 +354,9 @@ int irda_task_kick(struct irda_task *task)
  *    called from interrupt context, so it's not possible to use
  *    schedule_timeout() 
  */
-struct irda_task *irda_task_execute(void *instance, TASK_CALLBACK function, 
-				    TASK_CALLBACK finished, 
+struct irda_task *irda_task_execute(void *instance, 
+				    IRDA_TASK_CALLBACK function, 
+				    IRDA_TASK_CALLBACK finished, 
 				    struct irda_task *parent, void *param)
 {
 	struct irda_task *task;

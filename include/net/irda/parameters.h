@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Jun  7 08:47:28 1999
- * Modified at:   Mon Dec 13 11:51:59 1999
+ * Modified at:   Sun Jan 30 14:05:14 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1999-2000 Dag Brattli, All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -61,15 +61,15 @@ typedef union {
 	__u8  *bp;
 	__u16 *sp;
 	__u32 *ip;
-} pv_t;
+} irda_pv_t;
 
 typedef struct {
 	__u8 pi;
 	__u8 pl;
-	pv_t pv;
-} param_t;
+	irda_pv_t pv;
+} irda_param_t;
 
-typedef int (*PI_HANDLER)(void *self, param_t *param, int get);
+typedef int (*PI_HANDLER)(void *self, irda_param_t *param, int get);
 typedef int (*PV_HANDLER)(void *self, __u8 *buf, int len, __u8 pi,
 			  PV_TYPE type, PI_HANDLER func);
 

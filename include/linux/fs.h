@@ -339,7 +339,7 @@ struct address_space;
 struct address_space_operations {
 	int (*writepage) (struct dentry *, struct page *);
 	int (*readpage)(struct dentry *, struct page *);
-	int (*prepare_write)(struct page *, unsigned, unsigned);
+	int (*prepare_write)(struct file *, struct page *, unsigned, unsigned);
 	int (*commit_write)(struct file *, struct page *, unsigned, unsigned);
 	/* Unfortunately this kludge is needed for FIBMAP. Don't use it */
 	int (*bmap)(struct address_space *, long);

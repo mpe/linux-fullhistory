@@ -6,10 +6,10 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Sep  9 00:00:26 1997
- * Modified at:   Sun Dec 12 13:47:09 1999
+ * Modified at:   Sun Jan 30 14:29:16 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>, 
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -43,13 +43,18 @@
 #define CI_BZIP2  27 /* Random pick */
 #endif
 
-static int irlap_param_baud_rate(void *instance, param_t *param, int get);
-static int irlap_param_link_disconnect(void *instance, param_t *parm, int get);
-static int irlap_param_max_turn_time(void *instance, param_t *param, int get);
-static int irlap_param_data_size(void *instance, param_t *param, int get);
-static int irlap_param_window_size(void *instance, param_t *param, int get);
-static int irlap_param_additional_bofs(void *instance, param_t *parm, int get);
-static int irlap_param_min_turn_time(void *instance, param_t *param, int get);
+static int irlap_param_baud_rate(void *instance, irda_param_t *param, int get);
+static int irlap_param_link_disconnect(void *instance, irda_param_t *parm, 
+				       int get);
+static int irlap_param_max_turn_time(void *instance, irda_param_t *param, 
+				     int get);
+static int irlap_param_data_size(void *instance, irda_param_t *param, int get);
+static int irlap_param_window_size(void *instance, irda_param_t *param, 
+				   int get);
+static int irlap_param_additional_bofs(void *instance, irda_param_t *parm, 
+				       int get);
+static int irlap_param_min_turn_time(void *instance, irda_param_t *param, 
+				     int get);
 
 __u32 min_turn_times[]  = { 10000, 5000, 1000, 500, 100, 50, 10, 0 }; /* us */
 __u32 baud_rates[]      = { 2400, 9600, 19200, 38400, 57600, 115200, 576000, 
@@ -345,7 +350,7 @@ int irlap_insert_qos_negotiation_params(struct irlap_cb *self,
  *    Negotiate data-rate
  *
  */
-static int irlap_param_baud_rate(void *instance, param_t *param, int get)
+static int irlap_param_baud_rate(void *instance, irda_param_t *param, int get)
 {
 	__u16 final;
 
@@ -380,7 +385,8 @@ static int irlap_param_baud_rate(void *instance, param_t *param, int get)
  *    Negotiate link disconnect/threshold time. 
  *
  */
-static int irlap_param_link_disconnect(void *instance, param_t *param, int get)
+static int irlap_param_link_disconnect(void *instance, irda_param_t *param, 
+				       int get)
 {
 	__u16 final;
 	
@@ -413,7 +419,8 @@ static int irlap_param_link_disconnect(void *instance, param_t *param, int get)
  *    will be negotiated independently for each station
  *
  */
-static int irlap_param_max_turn_time(void *instance, param_t *param, int get)
+static int irlap_param_max_turn_time(void *instance, irda_param_t *param, 
+				     int get)
 {
 	struct irlap_cb *self = (struct irlap_cb *) instance;
 	
@@ -435,7 +442,7 @@ static int irlap_param_max_turn_time(void *instance, param_t *param, int get)
  *    will be negotiated independently for each station
  *
  */
-static int irlap_param_data_size(void *instance, param_t *param, int get)
+static int irlap_param_data_size(void *instance, irda_param_t *param, int get)
 {
 	struct irlap_cb *self = (struct irlap_cb *) instance;
 	
@@ -457,7 +464,8 @@ static int irlap_param_data_size(void *instance, param_t *param, int get)
  *    will be negotiated independently for each station
  *
  */
-static int irlap_param_window_size(void *instance, param_t *param, int get)
+static int irlap_param_window_size(void *instance, irda_param_t *param, 
+				   int get)
 {
 	struct irlap_cb *self = (struct irlap_cb *) instance;
 	
@@ -478,7 +486,7 @@ static int irlap_param_window_size(void *instance, param_t *param, int get)
  *    Negotiate additional BOF characters. This is a type 1 parameter and
  *    will be negotiated independently for each station.
  */
-static int irlap_param_additional_bofs(void *instance, param_t *param, int get)
+static int irlap_param_additional_bofs(void *instance, irda_param_t *param, int get)
 {
 	struct irlap_cb *self = (struct irlap_cb *) instance;
 	
@@ -499,7 +507,8 @@ static int irlap_param_additional_bofs(void *instance, param_t *param, int get)
  *    Negotiate the minimum turn around time. This is a type 1 parameter and
  *    will be negotiated independently for each station
  */
-static int irlap_param_min_turn_time(void *instance, param_t *param, int get)
+static int irlap_param_min_turn_time(void *instance, irda_param_t *param, 
+				     int get)
 {
 	struct irlap_cb *self = (struct irlap_cb *) instance;
 	

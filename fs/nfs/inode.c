@@ -27,6 +27,7 @@
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/stats.h>
 #include <linux/nfs_fs.h>
+#include <linux/nfs_flushd.h>
 #include <linux/lockd/bind.h>
 #include <linux/smp_lock.h>
 
@@ -74,6 +75,12 @@ nfs_read_inode(struct inode * inode)
 	inode->i_rdev = 0;
 	NFS_FILEID(inode) = 0;
 	NFS_FSID(inode) = 0;
+	INIT_LIST_HEAD(&inode->u.nfs_i.dirty);
+	INIT_LIST_HEAD(&inode->u.nfs_i.commit);
+	INIT_LIST_HEAD(&inode->u.nfs_i.writeback);
+	inode->u.nfs_i.ndirty = 0;
+	inode->u.nfs_i.ncommit = 0;
+	inode->u.nfs_i.npages = 0;
 	NFS_CACHEINV(inode);
 	NFS_ATTRTIMEO(inode) = NFS_MINATTRTIMEO(inode);
 }
@@ -92,8 +99,6 @@ nfs_put_inode(struct inode * inode)
 static void
 nfs_delete_inode(struct inode * inode)
 {
-	int failed;
-
 	dprintk("NFS: delete_inode(%x/%ld)\n", inode->i_dev, inode->i_ino);
 
 	lock_kernel();
@@ -101,29 +106,12 @@ nfs_delete_inode(struct inode * inode)
 		nfs_free_dircache(inode);
 	} else {
 		/*
-		 * Flush out any pending write requests ...
+		 * The following can never actually happen...
 		 */
-		if (NFS_WRITEBACK(inode) != NULL) {
-			unsigned long timeout = jiffies + 5*HZ;
-#ifdef NFS_DEBUG_VERBOSE
-printk("nfs_delete_inode: inode %ld has pending RPC requests\n", inode->i_ino);
-#endif
-			nfs_inval(inode);
-			while (NFS_WRITEBACK(inode) != NULL &&
-			       time_before(jiffies, timeout)) {
-				current->state = TASK_INTERRUPTIBLE;
-				schedule_timeout(HZ/10);
-			}
-			current->state = TASK_RUNNING;
-			if (NFS_WRITEBACK(inode) != NULL)
-				printk("NFS: Arghhh, stuck RPC requests!\n");
+		if (nfs_have_writebacks(inode)) {
+			printk(KERN_ERR "nfs_delete_inode: inode %ld has pending RPC requests\n", inode->i_ino);
 		}
 	}
-
-	failed = nfs_check_failed_request(inode);
-	if (failed)
-		printk("NFS: inode %ld had %d failed requests\n",
-			inode->i_ino, failed);
 	unlock_kernel();
 
 	clear_inode(inode);
@@ -135,8 +123,17 @@ nfs_put_super(struct super_block *sb)
 	struct nfs_server *server = &sb->u.nfs_sb.s_server;
 	struct rpc_clnt	*rpc;
 
+	/*
+	 * First get rid of the request flushing daemon.
+	 * Relies on rpc_shutdown_client() waiting on all
+	 * client tasks to finish.
+	 */
+	nfs_reqlist_exit(server);
+
 	if ((rpc = server->client) != NULL)
 		rpc_shutdown_client(rpc);
+
+	nfs_reqlist_free(server);
 
 	if (!(server->flags & NFS_MOUNT_NONLM))
 		lockd_down();	/* release rpc.lockd */
@@ -306,6 +303,12 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	sb->s_root->d_op = &nfs_dentry_operations;
 	sb->s_root->d_fsdata = root_fh;
 
+	/* Fire up the writeback cache */
+	if (nfs_reqlist_alloc(server) < 0) {
+		printk(KERN_NOTICE "NFS: cannot initialize writeback cache.\n");
+		goto failure_kill_reqlist;
+	}
+
 	/* We're airborne */
 
 	/* Check whether to start the lockd process */
@@ -314,6 +317,8 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	return sb;
 
 	/* Yargs. It didn't work out. */
+ failure_kill_reqlist:
+	nfs_reqlist_exit(server);
 out_no_root:
 	printk("nfs_read_super: get root inode failed\n");
 	iput(root_inode);
@@ -342,6 +347,7 @@ out_no_xprt:
 	printk(KERN_WARNING "NFS: cannot create RPC transport.\n");
 
 out_free_host:
+	nfs_reqlist_free(server);
 	kfree(server->hostname);
 out_unlock:
 	goto out_fail;
@@ -440,7 +446,6 @@ nfs_invalidate_inode(struct inode *inode)
 
 	make_bad_inode(inode);
 	inode->i_mode = save_mode;
-	nfs_inval(inode);
 	nfs_zap_caches(inode);
 }
 
@@ -864,7 +869,7 @@ nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 	 * to look at the size or the mtime the server sends us
 	 * too closely, as we're in the middle of modifying them.
 	 */
-	if (NFS_WRITEBACK(inode))
+	if (nfs_have_writebacks(inode))
 		goto out;
 
 	if (inode->i_size != fattr->size) {
@@ -925,7 +930,7 @@ printk("nfs_refresh_inode: invalidating %ld pages\n", inode->i_nrpages);
 static DECLARE_FSTYPE(nfs_fs_type, "nfs", nfs_read_super, 0);
 
 extern int nfs_init_fhcache(void);
-extern int nfs_init_wreqcache(void);
+extern int nfs_init_nfspagecache(void);
 
 /*
  * Initialize NFS
@@ -939,7 +944,7 @@ init_nfs_fs(void)
 	if (err)
 		return err;
 
-	err = nfs_init_wreqcache();
+	err = nfs_init_nfspagecache();
 	if (err)
 		return err;
 

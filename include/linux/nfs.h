@@ -160,11 +160,35 @@ struct nfs_fsinfo {
 	__u32			bavail;
 };
 
+/* Arguments to the write call.
+ * Note that NFS_WRITE_MAXIOV must be <= (MAX_IOVEC-2) from sunrpc/xprt.h
+ */
+#define NFS_WRITE_MAXIOV        8
+
+enum nfs3_stable_how {
+	NFS_UNSTABLE = 0,
+	NFS_DATA_SYNC = 1,
+	NFS_FILE_SYNC = 2
+};
+
 struct nfs_writeargs {
 	struct nfs_fh *		fh;
 	__u32			offset;
 	__u32			count;
-	const void *		buffer;
+	enum nfs3_stable_how	stable;
+	unsigned int		nriov;
+	struct iovec		iov[NFS_WRITE_MAXIOV];
+};
+
+struct nfs_writeverf {
+	enum nfs3_stable_how	committed;
+	__u32			verifier[2];
+};
+
+struct nfs_writeres {
+	struct nfs_fattr *	fattr;
+	struct nfs_writeverf *	verf;
+	__u32			count;
 };
 
 #ifdef NFS_NEED_XDR_TYPES

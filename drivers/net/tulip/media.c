@@ -14,7 +14,6 @@
 */
 
 #include "tulip.h"
-#include <asm/io.h>
 
 
 /* This is a mysterious value that can be written to CSR11 in the 21040 (only)

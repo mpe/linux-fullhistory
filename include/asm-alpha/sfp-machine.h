@@ -74,9 +74,7 @@
 #define FP_EX_INEXACT		IEEE_TRAP_ENABLE_INE
 #define FP_EX_DENORM		IEEE_TRAP_ENABLE_DNO
 
-#define FP_DENORM_ZERO		(fpcw & IEEE_MAP_DMZ)
-
-#define FP_HANDLE_EXCEPTIONS return _fex
+#define FP_DENORM_ZERO		(swcr & IEEE_MAP_DMZ)
 
 /* We write the results always */
 #define FP_INHIBIT_RESULTS 0

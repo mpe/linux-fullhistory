@@ -189,7 +189,7 @@ mk_conf_addr(struct pci_dev *dev, int where, struct pci_controler *hose,
 		bus = 0;
 	addr = (bus << 16) | (devfn << 8) | (where);
 	addr <<= 5; /* swizzle for SPARSE */
-	addr |= hose->config_space;
+	addr |= hose->config_space_base;
 
 	*pci_addr = addr;
 	DBG_CFG(("mk_conf_addr: returning pci_addr 0x%lx\n", addr));
@@ -337,13 +337,19 @@ mcpcia_new_hose(int h)
 	int mid = MCPCIA_HOSE2MID(h);
 
 	hose = alloc_pci_controler();
+	if (h == 0)
+		pci_isa_hose = hose;
 	io = alloc_resource();
 	mem = alloc_resource();
 	hae_mem = alloc_resource();
 			
 	hose->io_space = io;
 	hose->mem_space = hae_mem;
-	hose->config_space = MCPCIA_CONF(mid);
+	hose->sparse_mem_base = MCPCIA_SPARSE(mid) - IDENT_ADDR;
+	hose->dense_mem_base = MCPCIA_DENSE(mid) - IDENT_ADDR;
+	hose->sparse_io_base = MCPCIA_IO(mid) - IDENT_ADDR;
+	hose->dense_io_base = 0;
+	hose->config_space_base = MCPCIA_CONF(mid);
 	hose->index = h;
 
 	io->start = MCPCIA_IO(mid) - MCPCIA_IO_BIAS;

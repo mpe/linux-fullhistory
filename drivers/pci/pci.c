@@ -33,6 +33,16 @@
 LIST_HEAD(pci_root_buses);
 LIST_HEAD(pci_devices);
 
+/**
+ * pci_find_slot - locate PCI device from a given PCI slot
+ * @bus: number of PCI bus on which desired PCI device resides
+ * @devfn:  number of PCI slot in which desired PCI device resides
+ *
+ * Given a PCI bus and slot number, the desired PCI device is
+ * located in system global list of PCI devices.  If the device
+ * is found, a pointer to its data structure is returned.  If no 
+ * device is found, %NULL is returned.
+ */
 struct pci_dev *
 pci_find_slot(unsigned int bus, unsigned int devfn)
 {
@@ -66,6 +76,19 @@ pci_find_subsys(unsigned int vendor, unsigned int device,
 }
 
 
+/**
+ * pci_find_device - begin or continue searching for a PCI device by vendor/device id
+ * @vendor: PCI vendor id to match, or %PCI_ANY_ID to match all vendor ids
+ * @device: PCI device id to match, or %PCI_ANY_ID to match all vendor ids
+ * @from: Previous PCI device found in search, or %NULL for new search.
+ *
+ * Iterates through the list of known PCI devices.  If a PCI device is
+ * found with a matching @vendor and @device, a pointer to its device structure is
+ * returned.  Otherwise, %NULL is returned.
+ *
+ * A new search is initiated by passing %NULL to the @from argument.
+ * Otherwise if @from is not null, searches continue from that point.
+ */
 struct pci_dev *
 pci_find_device(unsigned int vendor, unsigned int device, const struct pci_dev *from)
 {
@@ -73,6 +96,18 @@ pci_find_device(unsigned int vendor, unsigned int device, const struct pci_dev *
 }
 
 
+/**
+ * pci_find_class - begin or continue searching for a PCI device by class
+ * @class: search for a PCI device with this class designation
+ * @from: Previous PCI device found in search, or %NULL for new search.
+ *
+ * Iterates through the list of known PCI devices.  If a PCI device is
+ * found with a matching @class, a pointer to its device structure is
+ * returned.  Otherwise, %NULL is returned.
+ *
+ * A new search is initiated by passing %NULL to the @from argument.
+ * Otherwise if @from is not null, searches continue from that point.
+ */
 struct pci_dev *
 pci_find_class(unsigned int class, const struct pci_dev *from)
 {
@@ -122,7 +157,11 @@ pci_find_capability(struct pci_dev *dev, int cap)
 }
 
 
-/*
+/**
+ * pci_find_parent_resource - return resource region of parent bus of given region
+ * @dev: PCI device structure contains resources to be searched
+ * @res: child resource record for which parent is sought
+ *
  *  For given resource region of given device, return the resource
  *  region of parent bus the given region is contained in or where
  *  it should be allocated from.
@@ -150,7 +189,11 @@ pci_find_parent_resource(const struct pci_dev *dev, struct resource *res)
 	return best;
 }
 
-/*
+/**
+ * pci_set_power_state - Set power management state of a device.
+ * @dev: PCI device for which PM is set
+ * @new_state: new power management statement (0 == D0, 3 == D3, etc.)
+ *
  *  Set power management state of a device.  For transitions from state D3
  *  it isn't as straightforward as one could assume since many devices forget
  *  their configuration space during wakeup.  Returns old power state.
@@ -192,7 +235,10 @@ pci_set_power_state(struct pci_dev *dev, int new_state)
 	return old_state;
 }
 
-/*
+/**
+ * pci_enable_device - Initialize device before it's used by a driver.
+ * @dev: PCI device to be initialized
+ *
  *  Initialize device before it's used by a driver. Ask low-level code
  *  to enable I/O and memory. Wake up the device if it was suspended.
  *  Beware, this function can fail.

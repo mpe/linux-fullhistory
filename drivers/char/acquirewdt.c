@@ -37,8 +37,10 @@
 #include <linux/notifier.h>
 #include <linux/reboot.h>
 #include <linux/init.h>
+#include <linux/spinlock.h>
 
 static int acq_is_open=0;
+static spinlock_t acq_lock;
 
 /*
  *	You must set these - there is no sane way to probe for this board.
@@ -117,8 +119,12 @@ static int acq_open(struct inode *inode, struct file *file)
 	switch(MINOR(inode->i_rdev))
 	{
 		case WATCHDOG_MINOR:
+			spin_lock(&acq_lock);
 			if(acq_is_open)
+			{
+				spin_unlock(&acq_lock);
 				return -EBUSY;
+			}
 			MOD_INC_USE_COUNT;
 			/*
 			 *	Activate 
@@ -126,6 +132,7 @@ static int acq_open(struct inode *inode, struct file *file)
 	 
 			acq_is_open=1;
 			inb_p(WDT_START);      
+			spin_unlock(&acq_lock);
 			return 0;
 		default:
 			return -ENODEV;
@@ -136,10 +143,12 @@ static int acq_close(struct inode *inode, struct file *file)
 {
 	if(MINOR(inode->i_rdev)==WATCHDOG_MINOR)
 	{
+		spin_lock(&acq_lock);
 #ifndef CONFIG_WATCHDOG_NOWAYOUT	
 		inb_p(WDT_STOP);
 #endif		
 		acq_is_open=0;
+		spin_unlock(&acq_lock);
 	}
 	MOD_DEC_USE_COUNT;
 	return 0;
@@ -211,6 +220,7 @@ int __init acq_init(void)
 {
 	printk("WDT driver for Acquire single board computer initialising.\n");
 
+	spin_lock_init(acq_lock);
 	misc_register(&acq_miscdev);
 	request_region(WDT_STOP, 1, "Acquire WDT");
 	request_region(WDT_START, 1, "Acquire WDT");

@@ -17,7 +17,7 @@
 #include <linux/spinlock.h>
 #include <linux/netdevice.h>
 #include <linux/timer.h>
-
+#include <asm/io.h>
 
 struct tulip_chip_table {
 	char *chip_name;
@@ -36,8 +36,10 @@ enum tbl_flag {
 	HAS_ACPI = 0x10,
 	MC_HASH_ONLY = 0x20,	/* Hash-only multicast filter. */
 	HAS_PNICNWAY = 0x80,
-	HAS_NWAY143 = 0x40,	/* Uses internal NWay xcvr. */
-	HAS_8023X = 0x100,
+	HAS_NWAY = 0x40,	/* Uses internal NWay xcvr. */
+	HAS_INTR_MITIGATION = 0x100,
+	IS_ASIX = 0x200,
+	HAS_8023X = 0x400,
 };
 
 
@@ -133,6 +135,17 @@ enum desc_status_bits {
 	DescOwned = 0x80000000,
 	RxDescFatalErr = 0x8000,
 	RxWholePkt = 0x0300,
+};
+
+
+enum t21041_csr13_bits {
+	csr13_eng = (0xEF0<<4), /* for eng. purposes only, hardcode at EF0h */
+	csr13_aui = (1<<3), /* clear to force 10bT, set to force AUI/BNC */
+	csr13_cac = (1<<2), /* CSR13/14/15 autoconfiguration */
+	csr13_srl = (1<<0), /* When reset, resets all SIA functions, machines */
+
+	csr13_mask_auibnc = (csr13_eng | csr13_aui | csr13_cac | csr13_srl),
+	csr13_mask_10bt = (csr13_eng | csr13_cac | csr13_srl),
 };
 
 

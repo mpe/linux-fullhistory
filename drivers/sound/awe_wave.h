@@ -2,7 +2,7 @@
  * sound/awe_config.h
  *
  * Configuration of AWE32/SB32/AWE64 wave table synth driver.
- *   version 0.4.3; Mar. 1, 1998
+ *   version 0.4.4; Jan. 4, 2000
  *
  * Copyright (C) 1996-1998 Takashi Iwai
  *
@@ -68,20 +68,10 @@
 /*#define AWE_DEFAULT_MEM_SIZE	512*/	/* kbytes */
 
 /*
- * maximum size of soundfont list table
+ * AWE driver version number
  */
-
-#define AWE_MAX_SF_LISTS 16
-
-/*
- * chunk size of sample and voice tables
- */
-
-#define AWE_MAX_SAMPLES 400
-#define AWE_MAX_INFOS 800
-
 #define AWE_MAJOR_VERSION	0
 #define AWE_MINOR_VERSION	4
-#define AWE_TINY_VERSION	3
+#define AWE_TINY_VERSION	4
 #define AWE_VERSION_NUMBER	((AWE_MAJOR_VERSION<<16)|(AWE_MINOR_VERSION<<8)|AWE_TINY_VERSION)
-#define AWEDRV_VERSION		"0.4.3"
+#define AWEDRV_VERSION		"0.4.4"

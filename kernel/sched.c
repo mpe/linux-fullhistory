@@ -618,6 +618,11 @@ handle_softirq:
 	goto handle_softirq_back;
 
 handle_tq_scheduler:
+	/*
+	 * do not run the task queue with disabled interrupts,
+	 * cli() wouldn't work on SMP
+	 */
+	sti();
 	run_task_queue(&tq_scheduler);
 	goto tq_scheduler_back;
 
@@ -630,7 +635,7 @@ move_rr_last:
 
 scheduling_in_interrupt:
 	printk("Scheduling in interrupt\n");
-	*(int *)0 = 0;
+	BUG();
 	return;
 }
 

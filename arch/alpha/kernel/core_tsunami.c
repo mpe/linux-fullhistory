@@ -104,7 +104,7 @@ mk_conf_addr(struct pci_dev *dev, int where, unsigned long *pci_addr,
 	*type1 = (bus != 0);
 
 	addr = (bus << 16) | (device_fn << 8) | where;
-	addr |= hose->config_space;
+	addr |= hose->config_space_base;
 		
 	*pci_addr = addr;
 	DBG_CFG(("mk_conf_addr: returning pci_addr 0x%lx\n", addr));
@@ -291,7 +291,18 @@ tsunami_init_one_pchip(tsunami_pchip *pchip, int index)
 	hose->io_space = alloc_resource();
 	hose->mem_space = alloc_resource();
 
-	hose->config_space = TSUNAMI_CONF(index);
+	/* This is for userland consumption.  For some reason, the 40-bit
+	   PIO bias that we use in the kernel through KSEG didn't work for
+	   the page table based user mappings.  So make sure we get the
+	   43-bit PIO bias.  */
+	hose->sparse_mem_base = 0;
+	hose->sparse_io_base = 0;
+	hose->dense_mem_base
+	  = (TSUNAMI_MEM(index) & 0xffffffffff) | 0x80000000000;
+	hose->dense_io_base
+	  = (TSUNAMI_IO(index) & 0xffffffffff) | 0x80000000000;
+
+	hose->config_space_base = TSUNAMI_CONF(index);
 	hose->index = index;
 
 	hose->io_space->start = TSUNAMI_IO(index) - TSUNAMI_IO_BIAS;

@@ -539,13 +539,16 @@ static inline struct raparms *
 nfsd_get_raparms(dev_t dev, ino_t ino)
 {
 	struct raparms	*ra, **rap, **frap = NULL;
-
+	int depth = 0;
+	
 	for (rap = &raparm_cache; (ra = *rap); rap = &ra->p_next) {
 		if (ra->p_ino == ino && ra->p_dev == dev)
 			goto found;
+		depth++;
 		if (ra->p_count == 0)
 			frap = rap;
 	}
+	depth = nfsdstats.ra_size*11/10;
 	if (!frap)
 		return NULL;
 	rap = frap;
@@ -560,6 +563,7 @@ found:
 		raparm_cache = ra;
 	}
 	ra->p_count++;
+	nfsdstats.ra_depth[depth*10/nfsdstats.ra_size]++;
 	return ra;
 }
 
@@ -598,6 +602,7 @@ nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	oldfs = get_fs(); set_fs(KERNEL_DS);
 	err = file.f_op->read(&file, buf, *count, &file.f_pos);
 	set_fs(oldfs);
+	nfsdstats.io_read += *count;
 
 	/* Write back readahead params */
 	if (ra != NULL) {
@@ -691,6 +696,7 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 #else
 	err = file.f_op->write(&file, buf, cnt, &file.f_pos);
 #endif
+	nfsdstats.io_write += cnt;
 	set_fs(oldfs);
 
 	/* clear setuid/setgid flag after write */
@@ -1559,5 +1565,6 @@ nfsd_racache_init(int cache_size)
 		       "nfsd: Could not allocate memory read-ahead cache.\n");
 		return -ENOMEM;
 	}
+	nfsdstats.ra_size = cache_size;
 	return 0;
 }

@@ -628,7 +628,7 @@ static int ext2_readpage(struct dentry *dentry, struct page *page)
 {
 	return block_read_full_page(page,ext2_get_block);
 }
-static int ext2_prepare_write(struct page *page, unsigned from, unsigned to)
+static int ext2_prepare_write(struct file *file, struct page *page, unsigned from, unsigned to)
 {
 	return block_prepare_write(page,from,to,ext2_get_block);
 }

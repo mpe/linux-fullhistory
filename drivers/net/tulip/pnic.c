@@ -15,7 +15,6 @@
 
 #include <linux/kernel.h>
 #include "tulip.h"
-#include <asm/io.h>
 
 
 void pnic_do_nway(struct net_device *dev)

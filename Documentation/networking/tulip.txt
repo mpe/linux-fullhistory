@@ -142,7 +142,16 @@ tulip_core.c	- Driver core (a.k.a. where "everything else" goes)
 
 Version history
 ===============
-0.9.4.1:
+0.9.4.2 (March 21, 2000):
+* Fix 21041 CSR7, CSR13/14/15 handling
+* Merge some PCI ids from tulip 0.91x
+* Merge some HAS_xxx flags and flag settings from tulip 0.91x
+* asm/io.h fix (submitted by many) and cleanup
+* s/HAS_NWAY143/HAS_NWAY/
+* Cleanup 21041 mode reporting
+* Small code cleanups
+
+0.9.4.1 (March 18, 2000):
 * Finish PCI DMA conversion (davem)
 * Do not netif_start_queue() at end of tulip_tx_timeout() (kuznet)
 * PCI DMA fix (kuznet)

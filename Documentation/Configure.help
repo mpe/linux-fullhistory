@@ -186,10 +186,22 @@ High Memory support
 CONFIG_NOHIGHMEM
   If you are compiling a kernel which will never run on a machine
   with more than 1 Gigabyte total physical RAM, answer "off"
-  here (default choice).
+  here (default choice).  This will result in the old "3GB/1GB"
+  virtual/physical memory split. 3BG are mapped so as each processus
+  sees a 3GB virtual memory space.
+  The remaining part of the 4G virtual memory space is used by the
+  kernel to 'permanently map' as much physical memory as possible.
+  Certain types of applications perform better if there is more
+  'permanently mapped' kernel memory.
+  Certain types of applications (eg. database servers) perform
+  better if they have as much virtual memory per process as possible.
 
   Linux can use up to 64 Gigabytes of physical memory on x86 systems.
-  High memory is all the physical RAM that could not be directly
+  However 32-bit x86 processors have only 4 Gigabytes of virtual memory
+  space. 
+
+  Any potentially remaining part of physical memory is called
+  'high memory' that is all the physical RAM that could not be directly
   mapped by the kernel - ie. 3GB if there is 4GB RAM in the system,
   7GB if there is 8GB RAM in the system.
 
@@ -201,6 +213,13 @@ CONFIG_NOHIGHMEM
   supported by Linux, PAE mode is implemented on all recent Intel
   processors (PPro and better). NOTE: The "64GB" kernel will not
   boot CPUs that not support PAE!
+
+  The actual amount of total physical memory will either be
+  autodetected or can be forced by using a kernel command line option
+  such as "mem=256M". (Try "man bootparam" or see the documentation of
+  your boot loader (lilo or loadlin) about how to pass options to the
+  kernel at boot time. The lilo procedure is also explained in the
+  SCSI-HOWTO, available from http://www.linuxdoc.org/docs.html#howto .)
 
 Normal PC floppy disk support
 CONFIG_BLK_DEV_FD
@@ -372,7 +391,7 @@ CONFIG_BLK_DEV_IDE
   Useful information about large (>540 MB) IDE disks, multiple
   interfaces, what to do if ATA/IDE devices are not automatically
   detected, sound card ATA/IDE ports, module support, and other topics, is
-  contained in Documentation/ata-ide.txt. For detailed information about
+  contained in Documentation/ide.txt. For detailed information about
   hard drives, consult the Disk-HOWTO and the Multi-Disk-HOWTO,
   available from http://www.linuxdoc.org/docs.html#howto .
 
@@ -2135,6 +2154,14 @@ CONFIG_HUB6
   Say Y here to enable support in the dumb serial driver to support
   the HUB6 card.
 
+Support for hot-pluggable devices
+CONFIG_HOTPLUG
+  Say Y here to enable support for hot plugin of certain hardware such as
+  PCMCIA cards and the like.
+
+  At this moment, few drivers support it, but as they get converted to use the
+  new ressource allocator/manager, their number will increase.
+
 PCMCIA serial device support
 CONFIG_PCMCIA_SERIAL_CS
   Say Y here to enable support for 16-bit PCMCIA serial devices,
@@ -2728,6 +2755,27 @@ S3 Trio frame buffer device support
 CONFIG_FB_S3TRIO
   If you have a S3 Trio say Y. Say N for S3 Virge. 
 
+3Dfx Banshee/Voodoo3 display support (EXPERIMENTAL)
+CONFIG_FB_3DFX
+  This driver supports graphics boards with the 3Dfx Banshee/Voodoo3 chips.
+  Say Y if you have such a graphics board.
+
+  The driver is also available as a module ( = code which can be
+  inserted and removed from the running kernel whenever you want). The
+  module will be called tdfxfb.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
+nVidia Riva support (EXPERIMENTAL)
+CONFIG_FB_RIVA
+  This driver supports graphics boards with the nVidia Riva (aka TNTx)
+  chips.
+  Say Y if you have such a graphics board.
+
+  The driver is also available as a module ( = code which can be
+  inserted and removed from the running kernel whenever you want). The
+  module will be called rivafb.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
 ATI Mach64 display support (EXPERIMENTAL)
 CONFIG_FB_ATY
   This driver supports graphics boards with the ATI Mach64 chips.
@@ -2808,19 +2856,36 @@ CONFIG_FB_VGA16
   running kernel whenever you want), say M here and read
   Documentation/modules.txt. The module will be called vga16fb.o.
 
+Select other compiled-in fonts
+CONFIG_FBCON_FONTS
+  Say Y here if you would like to use fonts other than the default your frame
+  buffer console usually use.
+
+  Note that the answer to this question won't directly affect the kernel:
+  saying N will just cause this configure script to skip all the questions
+  about foreign fonts.
+
+  If unsure, say N (the default choices are safe).
+
 VGA 8x16 font
 CONFIG_FONT_8x16
   This is the "high resolution" font for the VGA frame buffer (the one
-  provided by the text console 80x25 mode.
+  provided by the VGA text console 80x25 mode.
+
+  If unsure, say Y.
 
 Support only 8 pixels wide fonts
 CONFIG_FBCON_FONTWIDTH8_ONLY
   Answer Y here will make the kernel provide only the 8x8 fonts (these
   are the less readable).
 
+  If unsure, say N.
+
 Sparc console 8x16 font
 CONFIG_FONT_SUN8x16
-  This is the high resolution console font for Sun machines. Say Y.
+  This is the high resolution console font for Sun machines.
+
+  Say Y.
 
 Sparc console 12x22 font (not supported by all drivers)
 CONFIG_FONT_SUN12x22
@@ -2834,6 +2899,7 @@ CONFIG_FONT_8x8
   provided by the text console 80x50 (and higher) modes.
   Note this is a poor quality font. The VGA 8x16 font is quite a lot
   more readable.
+
   Given the resolution provided by the frame buffer device, answer N
   here is safe.
 
@@ -2844,13 +2910,25 @@ CONFIG_FB_COMPAT_XPMAC
   includes a server that supports the frame buffer device directly
   (XF68_FBDev).
 
+HGA monochrome support (EXPERIMENTAL)
+Hercules mono graphics console (EXPERIMENTAL)
+CONFIG_FBCON_HGA
+  Say Y here if you have a Hercules mono graphics card.
+
+  This driver is also available as a module ( = code which can be
+  inserted and removed from the running kernel whenever you want).
+  The module will be called hgafb.o. If you want to compile it as
+  a module, say M here and read Documentation/modules.txt.
+
+  As this card technology is 15 years old, most people will answer N here.
+
 Matrox unified accelerated driver (EXPERIMENTAL)
 CONFIG_FB_MATROX
   Say Y here if you have Matrox Millennium, Matrox Millennium II,
   Matrox Mystique, Matrox Mystique 220, Matrox Productiva G100, Matrox
-  Mystique G200, Matrox Millennium G200 or Matrox Marvel G200 video
-  card in your box. At this time, support for the G100, Mystique G200
-  and Marvel G200 is untested.
+  Mystique G200, Matrox Millennium G200, Matrox Marvel G200 video or
+  Matrox G400 card in your box. At this time, support for the G100,
+  Mystique G200 and Marvel G200 is untested.
 
   This driver is also available as a module ( = code which can be
   inserted and removed from the running kernel whenever you want).
@@ -3783,6 +3861,12 @@ CONFIG_DECNET_ROUTER
    be required for the forthcoming routing daemon to work.
 
    See Documentation/networking/decnet.txt for more information.
+
+Appletalk interfaces support
+CONFIG_APPLETALK
+  AppleTalk is the way Apple computers speak to each other on a
+  network. If your Linux box is connected to such a network and you
+  want to join the conversation, say Y.
 
 AppleTalk DDP
 CONFIG_ATALK
@@ -6069,7 +6153,7 @@ CONFIG_BONDING
   with a similar Bonding Linux driver, a Cisco 5500 switch or a
   SunTrunking SunSoft driver.
 
-  This is similar to the EQL driver, but it merge etherner segments instead
+  This is similar to the EQL driver, but it merge ethernet segments instead
   of serial lines.
 
   If you want to compile this as a module ( = code which can be
@@ -6718,6 +6802,17 @@ CONFIG_ECONET_NATIVE
   Say Y here if you have a native Econet network card installed in
   your computer.
 
+Wan interfaces support
+CONFIG_WAN
+  Wide Area Networks (WANs), such as X.25, frame relay and leased
+  lines, are used to interconnect Local Area Networks (LANs) over vast
+  distances with data transfer rates significantly higher than those
+  achievable with commonly used asynchronous modem connections.
+
+  Say Y here if you want to use such interconnections.
+
+  It is safe to say N. Most people won't need it.
+
 WAN Router
 CONFIG_WAN_ROUTER
   Wide Area Networks (WANs), such as X.25, frame relay and leased
@@ -6742,6 +6837,18 @@ CONFIG_WAN_ROUTER
   module, say M here and read Documentation/modules.txt.
 
   If unsure, say N.
+
+WAN router drivers
+CONFIG_WAN_ROUTER_DRIVERS
+  Wide Area Networks (WANs), such as X.25, frame relay and leased
+  lines, are used to interconnect Local Area Networks (LANs) over vast
+  distances with data transfer rates significantly higher than those
+  achievable with commonly used asynchronous modem connections.
+  Usually, a quite expensive external device called a `WAN router' is
+  needed to connect to a WAN.
+
+  Say Y here will enable the kernel to a??? as a WAN router betwenn LAN by
+  means of WAN adapters.
 
 Fast switching (read help!)
 CONFIG_NET_FASTROUTE
@@ -7037,8 +7144,14 @@ CONFIG_COSA
   The module will be called cosa.o. For general information about
   modules read Documentation/modules.txt.
 
-# Fibre Channel driver support
-# CONFIG_NET_FC
+Fibre Channel driver support
+CONFIG_NET_FC
+  Say Y here provide support for storage arrays connected to
+  the system using Fibre Optic and the "X3.269-199X Fibre Channel
+  Protocol for SCSI" specification. You'll also need the generic SCSI
+  support, as well as the drivers for the storage array itself and
+  for the interface adapter such as SOC or SOC+. This subsystem could even
+  serve for IP networking, with some code extensions. If unsure, say N.
 
 # Interphase 5526 Tachyon chipset based adaptor support
 # CONFIG_IPHASE5526
@@ -9154,6 +9267,21 @@ CONFIG_USB_DC2XX
   The module will be called dc2xx.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
+
+USB Mustek MDC800 Digital Camera Support
+CONFIG_USB_MDC800
+  Say Y here if you want to connect this type of still camera to
+  your computer's USB port. This driver can be used with gphoto 0.4.3
+  and higher (look at www.gphoto.org).
+  To use it create a devicenode with mknod /dev/mustek c 10 171 and
+  configure it in your software.
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called mdc800.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
+
 USB Mass Storage support
 CONFIG_USB_STORAGE
   Say Y here if you want to connect USB mass storage devices to your
@@ -9472,6 +9600,23 @@ CONFIG_VFAT_FS
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt. The module will be
   called vfat.o.
+
+Compressed ROM file system support
+CONFIG_CRAMFS
+  This option provides support for CramFs (Compressed ROM File System).
+  Cramfs is designed to be a simple, small, and compressed file system for ROM
+  based embedded systems.
+  CramFs is read-only, limited to 256MB file systems (with 16MB files), don't
+  support neither 16/32 bits uid/gid nor hard links. Neither are timestamps.
+  It isn't endian aware.
+  
+  See Documentation/filesystems/cramfs.txt and fs/cramfs/README
+  for further information.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called cramfs.o.
 
 UMSDOS: Unix-like file system on top of standard MSDOS fs
 CONFIG_UMSDOS_FS
@@ -9871,7 +10016,9 @@ CONFIG_PARTITION_ADVANCED
 
   Note that the answer to this question won't directly affect the
   kernel: saying N will just cause this configure script to skip all
-  the questions about foreign partitioning schemes. If unsure, say N.
+  the questions about foreign partitioning schemes.
+
+  If unsure, say N.
 
 Alpha OSF partition support
 CONFIG_OSF_PARTITION
@@ -11375,10 +11522,16 @@ CONFIG_PM
   This enable the kernel to lower the requested computer power by making some
   devices enter in lower power levels (standy, sleep, ... modes).
   Basically, this let you save power.
+
   Two majors interfaces exist between the hardware and the OS, the older
   Advanced Power Management (APM) and the newer Advanced Configuration and
   Power Interface (ACPI).
+
   Both are supported by the Linux Kernel.
+
+  Note that on some architectures (such as ia32), the idle task perform hlt
+  instructions which makes the CPU enter a low power mode. This can be seen as
+  the first kernel PM level.
 
 Enter S1 for sleep (EXPERIMENTAL)
 CONFIG_ACPI_S1_SLEEP
@@ -13193,6 +13346,14 @@ CONFIG_HP300
   If you plan to try to use the kernel on such a machine say Y here.
   Everybody else says N.
 
+Sun 3X support
+CONFIG_SUN3X
+  This option enables support for the Sun 3x series of workstations. Be
+  warned that this support is very experimental. You will also want to
+  say Y to 68020 support and N to the other processors below.
+
+  If you don't want to compile a kernel for a Sun 3x, say N.
+
 Sun 3 support
 CONFIG_SUN3
   This option enables support for the Sun 3 series of workstations. Be
@@ -13256,8 +13417,8 @@ CONFIG_M68KFPU_EMU_EXTRAPREC
   mantissa and round slightly incorrect, what is more then enough
   for normal usage.
 
-Advanced processor options
-CONFIG_ADVANCED_CPU
+Advanced configuration options
+CONFIG_ADVANCED
   This gives you access to some advanced options for the CPU. The
   defaults should be fine for most users, but these options may make
   it possible for you to improve performance somewhat if you know what
@@ -14223,45 +14384,6 @@ CONFIG_ARCH_PERSONAL_SERVER
   
   If you have any questions or comments about the  Compaq Personal
   Server, send e-mail to skiff@crl.dec.com
-
-Virtual/Physical Memory Split
-CONFIG_1GB
-  If you are compiling a kernel which will never run on a machine
-  with more than 1 Gigabyte total physical RAM, answer "3GB/1GB"
-  here (default choice).
-
-  On 32-bit x86 systems Linux can use up to 64 Gigabytes of physical
-  memory. However 32-bit x86 processors have only 4 Gigabytes of
-  virtual memory space. This option specifies the maximum amount of
-  virtual memory space one process can potentially use. Certain types
-  of applications (eg. database servers) perform better if they have
-  as much virtual memory per process as possible.
-
-  The remaining part of the 4G virtual memory space is used by the
-  kernel to 'permanently map' as much physical memory as possible.
-  Certain types of applications perform better if there is more
-  'permanently mapped' kernel memory.
-
-  [WARNING! Certain boards do not support PCI DMA to physical addresses
-  bigger than 2 Gigabytes. Non-DMA-able memory must not be permanently
-  mapped by the kernel, thus a 1G/3G split will not work on such boxes.]
-
-  As you can see there is no 'perfect split' - the fundamental
-  problem is that 4G of 32-bit virtual memory space is short. So
-  you'll have to pick your own choice - depending on the application
-  load of your box. A 2G/2G split is typically a good choice for a
-  generic Linux server with lots of RAM.
-
-  Any potentially remaining (not permanently mapped) part of physical
-  memory is called 'high memory'. How much total high memory the kernel
-  can handle is influenced by the (next) High Memory configuration option.
-
-  The actual amount of total physical memory will either be
-  autodetected or can be forced by using a kernel command line option
-  such as "mem=256M". (Try "man bootparam" or see the documentation of
-  your boot loader (lilo or loadlin) about how to pass options to the
-  kernel at boot time. The lilo procedure is also explained in the
-  SCSI-HOWTO, available from http://www.linuxdoc.org/docs.html#howto .)
 
 Math emulation
 CONFIG_NWFPE

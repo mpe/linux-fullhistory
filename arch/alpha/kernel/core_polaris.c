@@ -192,11 +192,15 @@ polaris_init_arch(void)
 	 * Create our single hose.
 	 */
 
-	hose = alloc_pci_controler();
+	pci_isa_hose = hose = alloc_pci_controler();
 	hose->io_space = &ioport_resource;
 	hose->mem_space = &iomem_resource;
-	hose->config_space = POLARIS_DENSE_CONFIG_BASE;
 	hose->index = 0;
+
+	hose->sparse_mem_base = 0;
+	hose->dense_mem_base = POLARIS_DENSE_MEM_BASE - IDENT_ADDR;
+	hose->sparse_io_base = 0;
+	hose->dense_io_base = POLARIS_DENSE_IO_BASE - IDENT_ADDR;
 
 	hose->sg_isa = hose->sg_pci = NULL;
 

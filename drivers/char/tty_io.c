@@ -2278,9 +2278,6 @@ void __init tty_init(void)
 #ifdef CONFIG_ESPSERIAL  /* init ESP before rs, so rs doesn't see the port */
 	espserial_init();
 #endif
-#ifdef CONFIG_SERIAL
-	rs_init();
-#endif
 #if defined(CONFIG_MVME162_SCC) || defined(CONFIG_BVME6000_SCC) || defined(CONFIG_MVME147_SCC)
 	vme_scc_init();
 #endif

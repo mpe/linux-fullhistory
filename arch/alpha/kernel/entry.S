@@ -8,7 +8,7 @@
 
 #define SIGCHLD 20
 
-#define NR_SYSCALLS 376
+#define NR_SYSCALLS 377
 
 /*
  * These offsets must match with alpha_mv in <asm/machvec.h>.
@@ -1156,3 +1156,4 @@ sys_call_table:
 	.quad sys_ni_syscall			/* sys_dipc */
 	.quad sys_pivot_root
 	.quad sys_mincore			/* 375 */
+	.quad sys_pciconfig_iobase

@@ -251,12 +251,9 @@ void
 flush_thread(void)
 {
 	/* Arrange for each exec'ed process to start off with a clean slate
-	   with respect to the FPU.  This is all exceptions disabled.  Note
-           that EV6 defines UNFD valid only with UNDZ, which we don't want
-	   for IEEE conformance -- so that disabled bit remains in software.  */
-
+	   with respect to the FPU.  This is all exceptions disabled.  */
 	current->thread.flags &= ~IEEE_SW_MASK;
-	wrfpcr(FPCR_DYN_NORMAL | FPCR_INVD | FPCR_DZED | FPCR_OVFD | FPCR_INED);
+	wrfpcr(FPCR_DYN_NORMAL | ieee_swcr_to_fpcr(0));
 }
 
 void

@@ -59,7 +59,7 @@ static int adfs_readpage(struct dentry *dentry, struct page *page)
 	return block_read_full_page(page, adfs_get_block);
 }
 
-static int adfs_prepare_write(struct page *page, unsigned int from, unsigned int to)
+static int adfs_prepare_write(struct file *file, struct page *page, unsigned int from, unsigned int to)
 {
 	return cont_prepare_write(page, from, to, adfs_get_block,
 		&((struct inode *)page->mapping->host)->u.adfs_i.mmu_private);

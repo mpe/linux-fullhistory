@@ -45,7 +45,7 @@ static int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pt
 	if (!pte_present(pte))
 		goto out_failed;
 	page = pte_page(pte);
-	if (page-mem_map >= max_mapnr)
+	if ((page-mem_map >= max_mapnr) || PageReserved(page))
 		goto out_failed;
 
 	/* Don't look at this pte if it's been accessed recently. */
@@ -59,7 +59,7 @@ static int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pt
 		goto out_failed;
 	}
 
-	if (PageReserved(page) || PageLocked(page))
+	if (PageLocked(page))
 		goto out_failed;
 
 	/*

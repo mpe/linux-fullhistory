@@ -14,7 +14,6 @@
 */
 
 #include "tulip.h"
-#include <asm/io.h>
 #include <linux/etherdevice.h>
 #include <linux/pci.h>
 

@@ -13,16 +13,6 @@
 #include <asm/uaccess.h>
 
 /*
- * Define this if you want SunOS compatibility wrt braindead
- * select behaviour on FIFO's.
- */
-#ifdef __sparc__
-#define FIFO_SUNOS_BRAINDAMAGE
-#else
-#undef FIFO_SUNOS_BRAINDAMAGE
-#endif
-
-/*
  * We use a start+len construction, which provides full use of the 
  * allocated memory.
  * -- Florian Coosmann (FGC)
@@ -32,7 +22,7 @@
  */
 
 /* Drop the inode semaphore and wait for a pipe event, atomically */
-static void pipe_wait(struct inode * inode)
+void pipe_wait(struct inode * inode)
 {
 	DECLARE_WAITQUEUE(wait, current);
 	current->state = TASK_INTERRUPTIBLE;
@@ -294,9 +284,9 @@ pipe_poll(struct file *filp, poll_table *wait)
 
 	/* Reading only -- no need for aquiring the semaphore.  */
 	mask = POLLIN | POLLRDNORM;
-	if (PIPE_EMPTY(*inode))
+	if (PIPE_FREE(*inode) >= PIPE_BUF)
 		mask = POLLOUT | POLLWRNORM;
-	if (!PIPE_WRITERS(*inode))
+	if (!PIPE_WRITERS(*inode) && filp->f_version != PIPE_WCOUNTER(*inode))
 		mask |= POLLHUP;
 	if (!PIPE_READERS(*inode))
 		mask |= POLLERR;
@@ -304,71 +294,8 @@ pipe_poll(struct file *filp, poll_table *wait)
 	return mask;
 }
 
-#ifdef FIFO_SUNOS_BRAINDAMAGE
-/*
- * Argh!  Why does SunOS have to have different select() behaviour
- * for pipes and FIFOs?  Hate, hate, hate!  SunOS lacks POLLHUP.
- */
-static unsigned int
-fifo_poll(struct file *filp, poll_table *wait)
-{
-	unsigned int mask;
-	struct inode *inode = filp->f_dentry->d_inode;
-
-	poll_wait(filp, PIPE_WAIT(*inode), wait);
-
-	/* Reading only -- no need for aquiring the semaphore.  */
-	mask = POLLIN | POLLRDNORM;
-	if (PIPE_EMPTY(*inode))
-		mask = POLLOUT | POLLWRNORM;
-	if (!PIPE_READERS(*inode))
-		mask |= POLLERR;
-
-	return mask;
-}
-#else
-
+/* FIXME: most Unices do not set POLLERR for fifos */
 #define fifo_poll pipe_poll
-
-#endif /* FIFO_SUNOS_BRAINDAMAGE */
-
-/*
- * The 'connect_xxx()' functions are needed for named pipes when
- * the open() code hasn't guaranteed a connection (O_NONBLOCK),
- * and we need to act differently until we do get a writer..
- */
-static ssize_t
-connect_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
-{
-	struct inode *inode = filp->f_dentry->d_inode;
-
-	/* Reading only -- no need for aquiring the semaphore.  */
-	if (PIPE_EMPTY(*inode) && !PIPE_WRITERS(*inode))
-		return 0;
-
-	filp->f_op = &read_fifo_fops;
-	return pipe_read(filp, buf, count, ppos);
-}
-
-static unsigned int
-connect_poll(struct file *filp, poll_table *wait)
-{
-	struct inode *inode = filp->f_dentry->d_inode;
-	unsigned int mask = 0;
-
-	poll_wait(filp, PIPE_WAIT(*inode), wait);
-
-	/* Reading only -- no need for aquiring the semaphore.  */
-	if (!PIPE_EMPTY(*inode)) {
-		filp->f_op = &read_fifo_fops;
-		mask = POLLIN | POLLRDNORM;
-	} else if (PIPE_WRITERS(*inode)) {
-		filp->f_op = &read_fifo_fops;
-		mask = POLLOUT | POLLWRNORM;
-	}
-
-	return mask;
-}
 
 static int
 pipe_release(struct inode *inode, int decr, int decw)
@@ -450,16 +377,6 @@ pipe_rdwr_open(struct inode *inode, struct file *filp)
  * The file_operations structs are not static because they
  * are also used in linux/fs/fifo.c to do operations on FIFOs.
  */
-struct file_operations connecting_fifo_fops = {
-	llseek:		pipe_lseek,
-	read:		connect_read,
-	write:		bad_pipe_w,
-	poll:		connect_poll,
-	ioctl:		pipe_ioctl,
-	open:		pipe_read_open,
-	release:	pipe_read_release,
-};
-
 struct file_operations read_fifo_fops = {
 	llseek:		pipe_lseek,
 	read:		pipe_read,
@@ -520,29 +437,42 @@ struct file_operations rdwr_pipe_fops = {
 	release:	pipe_rdwr_release,
 };
 
-static struct inode * get_pipe_inode(void)
+struct inode* pipe_new(struct inode* inode)
 {
-	struct inode *inode = get_empty_inode();
 	unsigned long page;
-
-	if (!inode)
-		goto fail_inode;
 
 	page = __get_free_page(GFP_USER);
 	if (!page)
-		goto fail_iput;
+		return NULL;
 
 	inode->i_pipe = kmalloc(sizeof(struct pipe_inode_info), GFP_KERNEL);
 	if (!inode->i_pipe)
 		goto fail_page;
 
-	inode->i_fop = &rdwr_pipe_fops;
-
 	init_waitqueue_head(PIPE_WAIT(*inode));
-	PIPE_BASE(*inode) = (char *) page;
+	PIPE_BASE(*inode) = (char*) page;
 	PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
-	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 1;
+	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
 	PIPE_WAITING_READERS(*inode) = PIPE_WAITING_WRITERS(*inode) = 0;
+	PIPE_RCOUNTER(*inode) = PIPE_WCOUNTER(*inode) = 1;
+
+	return inode;
+fail_page:
+	free_page(page);
+	return NULL;
+}
+
+static struct inode * get_pipe_inode(void)
+{
+	struct inode *inode = get_empty_inode();
+
+	if (!inode)
+		goto fail_inode;
+
+	if(!pipe_new(inode))
+		goto fail_iput;
+	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 1;
+	inode->i_fop = &rdwr_pipe_fops;
 
 	/*
 	 * Mark the inode dirty from the very beginning,
@@ -558,8 +488,6 @@ static struct inode * get_pipe_inode(void)
 	inode->i_blksize = PAGE_SIZE;
 	return inode;
 
-fail_page:
-	free_page(page);
 fail_iput:
 	iput(inode);
 fail_inode:
@@ -606,11 +534,13 @@ int do_pipe(int *fd)
 	f1->f_flags = O_RDONLY;
 	f1->f_op = &read_pipe_fops;
 	f1->f_mode = 1;
+	f1->f_version = 0;
 
 	/* write file */
 	f2->f_flags = O_WRONLY;
 	f2->f_op = &write_pipe_fops;
 	f2->f_mode = 2;
+	f2->f_version = 0;
 
 	fd_install(i, f1);
 	fd_install(j, f2);

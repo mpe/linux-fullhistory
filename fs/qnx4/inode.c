@@ -418,7 +418,7 @@ static int qnx4_readpage(struct dentry *dentry, struct page *page)
 {
 	return block_read_full_page(page,qnx4_get_block);
 }
-static int qnx4_prepare_write(struct page *page, unsigned from, unsigned to)
+static int qnx4_prepare_write(struct file *file, struct page *page, unsigned from, unsigned to)
 {
 	return cont_prepare_write(page,from,to,qnx4_get_block,
 		&((struct inode*)page->mapping->host)->u.qnx4_i.mmu_private);

@@ -244,7 +244,7 @@ $(TOPDIR)/include/linux/modversions.h:
 endif # CONFIG_MODVERSIONS
 
 ifneq "$(strip $(SYMTAB_OBJS))" ""
-$(SYMTAB_OBJS): $(TOPDIR)/include/linux/modversions.h $(SYMTAB_OBJS:.o=.c)
+$(SYMTAB_OBJS): $(SYMTAB_OBJS:.o=.c) $(TOPDIR)/include/linux/modversions.h
 	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@) -DEXPORT_SYMTAB -c $(@:.o=.c)
 	@ ( \
 	    echo 'ifeq ($(strip $(subst $(comma),:,$(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@) -DEXPORT_SYMTAB)),$$(strip $$(subst $$(comma),:,$$(CFLAGS) $$(EXTRA_CFLAGS) $$(CFLAGS_$@) -DEXPORT_SYMTAB)))' ; \

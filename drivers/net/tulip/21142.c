@@ -14,7 +14,6 @@
 */
 
 #include "tulip.h"
-#include <asm/io.h>
 
 
 static u16 t21142_csr13[] = { 0x0001, 0x0009, 0x0009, 0x0000, 0x0001, };

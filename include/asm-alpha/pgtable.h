@@ -159,6 +159,16 @@ extern unsigned long __zero_page(void);
  * On certain platforms whose physical address space can overlap KSEG,
  * namely EV6 and above, we must re-twiddle the physaddr to restore the
  * correct high-order bits.
+ *
+ * This is extremely confusing until you realize that this is actually
+ * just working around a userspace bug.  The X server was intending to
+ * provide the physical address but instead provided the KSEG address.
+ * Or tried to, except it's not representable.
+ * 
+ * On Tsunami there's nothing meaningful at 0x40000000000, so this is
+ * a safe thing to do.  Come the first core logic that does put something
+ * in this area -- memory or whathaveyou -- then this hack will have
+ * to go away.  So be prepared!
  */
 
 #if defined(CONFIG_ALPHA_GENERIC) && defined(USE_48_BIT_KSEG)

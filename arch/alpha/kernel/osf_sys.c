@@ -811,21 +811,8 @@ asmlinkage unsigned long osf_getsysinfo(unsigned long op, void *buffer,
 		/* Return current software fp control & status bits.  */
 		/* Note that DU doesn't verify available space here.  */
 
-		/* EV6 implements most of the bits in hardware.  If
-		   UNDZ is not set, UNFD is maintained in software.  */
-		if (implver() == IMPLVER_EV6) {
-			unsigned long fpcr = rdfpcr();
-			w = ieee_fpcr_to_swcr(fpcr);
-			if (!(fpcr & FPCR_UNDZ)) {
-				w &= ~IEEE_TRAP_ENABLE_UNF;
-				w |= (current->thread.flags
-				      & IEEE_TRAP_ENABLE_UNF);
-			}
-		} else {
-			/* Otherwise we are forced to do everything in sw.  */
-			w = current->thread.flags & IEEE_SW_MASK;
-		}
-
+ 		w = current->thread.flags & IEEE_SW_MASK;
+ 		w = swcr_update_status(w, rdfpcr());
 		if (put_user(w, (unsigned long *) buffer))
 			return -EFAULT;
 		return 0;
@@ -876,7 +863,7 @@ asmlinkage unsigned long osf_setsysinfo(unsigned long op, void *buffer,
 {
 	switch (op) {
 	case SSI_IEEE_FP_CONTROL: {
-		unsigned long swcr, fpcr, undz;
+		unsigned long swcr, fpcr;
 
 		/* 
 		 * Alpha Architecture Handbook 4.7.7.3:
@@ -891,14 +878,18 @@ asmlinkage unsigned long osf_setsysinfo(unsigned long op, void *buffer,
 		current->thread.flags &= ~IEEE_SW_MASK;
 		current->thread.flags |= swcr & IEEE_SW_MASK;
 
-		/* Update the real fpcr.  Keep UNFD off if not UNDZ.  */
+		/* Update the real fpcr.  */
 		fpcr = rdfpcr();
-		undz = (fpcr & FPCR_UNDZ);
-		fpcr &= ~(FPCR_MASK | FPCR_DYN_MASK | FPCR_UNDZ);
+		fpcr &= FPCR_DYN_MASK;
 		fpcr |= ieee_swcr_to_fpcr(swcr);
-		fpcr &= ~(undz << 1);
 		wrfpcr(fpcr);
-		   
+
+ 		/* If any exceptions are now unmasked, send a signal.  */
+ 		if (((swcr & IEEE_STATUS_MASK)
+ 		     >> IEEE_STATUS_TO_EXCSUM_SHIFT) & swcr) {
+ 			send_sig(SIGFPE, current, 1);
+ 		}
+
 		return 0;
 	}
 

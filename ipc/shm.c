@@ -1047,12 +1047,10 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		 */
 		if ((shmid % SEQ_MULTIPLIER) == zero_id)
 			return -EINVAL;
-		lock_kernel();
 		down(&shm_ids.sem);
 		shp = shm_lock(shmid);
 		if (shp == NULL) {
 			up(&shm_ids.sem);
-			unlock_kernel();
 			return -EINVAL;
 		}
 		err = -EIDRM;
@@ -1061,14 +1059,12 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 				int id=shp->id;
 				shm_unlock(shmid);
 				up(&shm_ids.sem);
-				/* The kernel lock prevents new attaches from
-				 * being happening.  We can't hold shm_lock here
-				 * else we will deadlock in shm_lookup when we
+				/*
+				 * We can't hold shm_lock here else we
+				 * will deadlock in shm_lookup when we
 				 * try to recursively grab it.
 				 */
-				err = shm_remove_name(id);
-				unlock_kernel();
-				return err;
+				return shm_remove_name(id);
 			}
 			/* Do not find me any more */
 			shp->shm_perm.mode |= SHM_DEST;
@@ -1078,7 +1074,6 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		/* Unlock */
 		shm_unlock(shmid);
 		up(&shm_ids.sem);
-		unlock_kernel();
 		return err;
 	}
 
@@ -1140,8 +1135,8 @@ static inline void shm_inc (int id) {
 
 static int shm_mmap(struct file * file, struct vm_area_struct * vma)
 {
-	if (!(vma->vm_flags & VM_SHARED))
-		return -EINVAL; /* we cannot do private mappings */
+	if ((vma->vm_flags & VM_WRITE) && !(vma->vm_flags & VM_SHARED))
+		return -EINVAL; /* we cannot do private writable mappings */
 	UPDATE_ATIME(file->f_dentry->d_inode);
 	vma->vm_ops = &shm_vm_ops;
 	shm_inc(file->f_dentry->d_inode->i_ino);
@@ -1156,15 +1151,16 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	unsigned long addr;
 	struct file * file;
 	int    err;
-	int    flags;
+	unsigned long flags;
+	unsigned long prot;
+	unsigned long o_flags;
 	char   name[SHM_FMT_LEN+1];
 
 	if (!shm_sb || (shmid % SEQ_MULTIPLIER) == zero_id)
 		return -EINVAL;
 
-	if ((addr = (ulong)shmaddr))
-	{
-		if(addr & (SHMLBA-1)) {
+	if ((addr = (ulong)shmaddr)) {
+		if (addr & (SHMLBA-1)) {
 			if (shmflg & SHM_RND)
 				addr &= ~(SHMLBA-1);	   /* round down */
 			else
@@ -1174,14 +1170,22 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	} else
 		flags = MAP_SHARED;
 
-	sprintf (name, SHM_FMT, shmid); 
+	if (shmflg & SHM_RDONLY) {
+		prot = PROT_READ;
+		o_flags = O_RDONLY;
+	} else {
+		prot = PROT_READ | PROT_WRITE;
+		o_flags = O_RDWR;
+	}
+
+	sprintf (name, SHM_FMT, shmid);
+
 	lock_kernel();
-	file = filp_open(name, O_RDWR, 0, dget(shm_sb->s_root));
+	file = filp_open(name, o_flags, 0, dget(shm_sb->s_root));
 	if (IS_ERR (file))
 		goto bad_file;
 	*raddr = do_mmap (file, addr, file->f_dentry->d_inode->i_size,
-			  (shmflg & SHM_RDONLY ? PROT_READ :
-			   PROT_READ | PROT_WRITE), flags, 0);
+			  prot, flags, 0);
 	unlock_kernel();
 	if (IS_ERR(*raddr))
 		err = PTR_ERR(*raddr);
@@ -1204,14 +1208,18 @@ static void shm_open (struct vm_area_struct *shmd)
 }
 
 /*
- *	Remove a name. Must be called with lock_kernel
+ *	Remove a name.
  */
  
 static int shm_remove_name(int id)
 {
+	int err;
 	char name[SHM_FMT_LEN+1];
 	sprintf (name, SHM_FMT, id);
-	return do_unlink (name, dget(shm_sb->s_root));
+	lock_kernel();
+	err = do_unlink (name, dget(shm_sb->s_root));
+	unlock_kernel();
+	return err;
 }
 
 /*
@@ -1224,8 +1232,6 @@ static void shm_close (struct vm_area_struct *shmd)
 {
 	int id = shmd->vm_file->f_dentry->d_inode->i_ino;
 	struct shmid_kernel *shp;
-
-	lock_kernel();
 
 	/* remove from the list of attaches of the shm segment */
 	if(!(shp = shm_lock(id)))
@@ -1244,14 +1250,12 @@ static void shm_close (struct vm_area_struct *shmd)
 		 * try to recursively grab it.
 		 */
 		err = shm_remove_name(pid);
-		if(err && err != -ENOENT)
+		if(err && err != -EINVAL && err != -ENOENT) 
 			printk(KERN_ERR "Unlink of SHM id %d failed (%d).\n", pid, err);
 
 	} else {
 		shm_unlock(id);
 	}
-
-	unlock_kernel();
 }
 
 /*

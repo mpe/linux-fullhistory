@@ -90,6 +90,9 @@ endif
 CFLAGS := $(CPPFLAGS) -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
 AFLAGS := $(CPPFLAGS)
 
+# use '-fno-strict-aliasing', but only if the compiler can take it
+CFLAGS += $(shell if $(CC) -fno-strict-aliasing -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-fno-strict-aliasing"; fi)
+
 export	CPPFLAGS CFLAGS AFLAGS
 
 #
@@ -181,11 +184,8 @@ include arch/$(ARCH)/Makefile
 
 export	NETWORKS DRIVERS LIBS HEAD LDFLAGS LINKFLAGS MAKEBOOT ASFLAGS
 
-# use '-fno-strict-aliasing', but only if the compiler can take it
-CFLAGS += $(shell if $(CC) -fno-strict-aliasing -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-fno-strict-aliasing"; fi)
-
 .S.s:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -E -o $*.s $<
+	$(CPP) -D__ASSEMBLY__ $(AFLAGS) -traditional -o $*.s $<
 .S.o:
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c -o $*.o $<
 
@@ -398,7 +398,7 @@ mrproper: clean archmrproper
 	rm -f .hdepend scripts/mkdep scripts/split-include scripts/docproc
 	rm -f $(TOPDIR)/include/linux/modversions.h
 	rm -rf $(TOPDIR)/include/linux/modules
-	rm -f Documentation/DocBook/*.sgml
+	make clean TOPDIR=$(TOPDIR) -C Documentation/DocBook
 
 distclean: mrproper
 	rm -f core `find . \( -name '*.orig' -o -name '*.rej' -o -name '*~' \

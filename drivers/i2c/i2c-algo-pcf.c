@@ -581,7 +581,7 @@ int i2c_pcf_del_bus(struct i2c_adapter *adap)
 	return 0;
 }
 
-static int __init i2c_algo_pcf_init (void)
+int __init i2c_algo_pcf_init (void)
 {
 	printk("i2c-algo-pcf.o: i2c pcf8584 algorithm module\n");
 	return 0;

@@ -903,7 +903,7 @@ static void partial_clear(struct vm_area_struct *vma, unsigned long address)
 		return;
 	flush_cache_page(vma, address);
 	page = pte_page(pte);
-	if (page-mem_map >= max_mapnr)
+	if ((page-mem_map >= max_mapnr) || PageReserved(page))
 		return;
 	offset = address & ~PAGE_MASK;
 	memclear_highpage_flush(page, offset, PAGE_SIZE - offset);

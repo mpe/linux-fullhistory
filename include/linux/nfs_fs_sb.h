@@ -18,6 +18,7 @@ struct nfs_server {
 	unsigned int		acdirmin;
 	unsigned int		acdirmax;
 	char *			hostname;	/* remote hostname */
+	struct nfs_reqlist *	rw_requests;	/* async read/write requests */
 };
 
 /*

@@ -384,11 +384,15 @@ t2_init_arch(void)
 	 * Create our single hose.
 	 */
 
-	hose = alloc_pci_controler();
+	pci_isa_hose = hose = alloc_pci_controler();
 	hose->io_space = &ioport_resource;
 	hose->mem_space = &iomem_resource;
-	hose->config_space = T2_CONF;
 	hose->index = 0;
+
+	hose->sparse_mem_base = T2_SPARSE_MEM - IDENT_ADDR;
+	hose->dense_mem_base = T2_DENSE_MEM - IDENT_ADDR;
+	hose->sparse_io_base = T2_IO - IDENT_ADDR;
+	hose->dense_io_base = 0;
 
 	hose->sg_isa = hose->sg_pci = NULL;
 	__direct_map_base = 0x40000000;
