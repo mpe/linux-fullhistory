@@ -210,6 +210,24 @@ asmlinkage int sys_chdir(const char * filename)
 	return (0);
 }
 
+asmlinkage int sys_fchdir(unsigned int fd)
+{
+	struct inode * inode;
+	struct file * file;
+
+	if (fd >= NR_OPEN || !(file = current->filp[fd]))
+		return -EBADF;
+	if (!(inode = file->f_inode))
+		return -ENOENT;
+	if (!S_ISDIR(inode->i_mode))
+		return -ENOTDIR;
+	if (!permission(inode,MAY_EXEC))
+		return -EACCES;
+	iput(current->pwd);
+	current->pwd = inode;
+	return (0);
+}
+
 asmlinkage int sys_chroot(const char * filename)
 {
 	struct inode * inode;

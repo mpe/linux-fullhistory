@@ -1430,6 +1430,15 @@ static int tty_select(struct inode * inode, struct file * filp, int sel_type, se
 		printk("tty_select: tty struct for dev %d was NULL\n", dev);
 		return 0;
 	}
+	if (ldiscs[tty->disc].select)
+		return (ldiscs[tty->disc].select)(tty, inode, filp,
+						  sel_type, wait);
+	return 0;
+}
+
+static int normal_select(struct tty_struct * tty, struct inode * inode,
+			 struct file * file, int sel_type, select_table *wait)
+{
 	switch (sel_type) {
 		case SEL_IN:
 			if (L_CANON(tty)) {
@@ -1681,6 +1690,7 @@ static struct tty_ldisc tty_ldisc_N_TTY = {
 	read_chan,		/* read */
 	write_chan,		/* write */
 	NULL,			/* ioctl */
+	normal_select,		/* select */
 	copy_to_cooked		/* handler */
 };
 

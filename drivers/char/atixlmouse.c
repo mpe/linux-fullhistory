@@ -4,6 +4,8 @@
  *
  * Uses VFS interface for linux 0.98 (01OCT92)
  *
+ * Modified by Chris Colohan (colohan@eecg.toronto.edu)
+ *
  * version 0.3
  */
 
@@ -52,8 +54,8 @@
 /* Same general mouse structure */
 
 static struct mouse_status {
-	unsigned char buttons;
-	unsigned char latch_buttons;
+	char buttons;
+	char latch_buttons;
 	int dx;
 	int dy;
 	int present;
@@ -64,16 +66,23 @@ static struct mouse_status {
 
 void mouse_interrupt(int unused)
 {
+	char dx, dy, buttons;
+
 	ATIXL_MSE_DISABLE_UPDATE(); /* Note that interrupts are still enabled */
 	outb(ATIXL_MSE_READ_X, ATIXL_MSE_CONTROL_PORT); /* Select IR1 - X movement */
-	mouse.dx += inb( ATIXL_MSE_DATA_PORT);
+	dx = inb( ATIXL_MSE_DATA_PORT);
 	outb(ATIXL_MSE_READ_Y, ATIXL_MSE_CONTROL_PORT); /* Select IR2 - Y movement */
-	mouse.dy += inb( ATIXL_MSE_DATA_PORT);
+	dy = inb( ATIXL_MSE_DATA_PORT);
 	outb(ATIXL_MSE_READ_BUTTONS, ATIXL_MSE_CONTROL_PORT); /* Select IR0 - Button Status */
-	mouse.latch_buttons |= inb(ATIXL_MSE_DATA_PORT);
+	buttons = inb( ATIXL_MSE_DATA_PORT);
+	if (dx != 0 || dy != 0 || buttons != mouse.latch_buttons) {
+		mouse.latch_buttons |= buttons;
+		mouse.dx += dx;
+		mouse.dy += dy;
+		mouse.ready = 1;
+		wake_up_interruptible(&mouse.wait);
+	}
 	ATIXL_MSE_ENABLE_UPDATE();
-	mouse.ready = 1;
-	wake_up_interruptible(&mouse.wait);
 }
 
 static void release_mouse(struct inode * inode, struct file * file)
@@ -112,21 +121,33 @@ static int write_mouse(struct inode * inode, struct file * file, char * buffer, 
 
 static int read_mouse(struct inode * inode, struct file * file, char * buffer, int count)
 {
+	int i;
+
 	if (count < 3)
 		return -EINVAL;
 	if (!mouse.ready)
 		return -EAGAIN;
 	ATIXL_MSE_DISABLE_UPDATE();
 	/* Allowed interrupts to occur during data gathering - shouldn't hurt */
-	put_fs_byte((~mouse.latch_buttons & 7) | 0x80 , buffer);
-	put_fs_byte(mouse.dx, buffer + 1);
-	put_fs_byte(-mouse.dy, buffer + 2);
+	put_fs_byte((char)(~mouse.latch_buttons&7) | 0x80 , buffer);
+	if (mouse.dx < -127)
+		mouse.dx = -127;
+	if (mouse.dx > 127)
+		mouse.dx =  127;
+	put_fs_byte((char)mouse.dx, buffer + 1);
+	if (mouse.dy < -127)
+		mouse.dy = -127;
+	if (mouse.dy > 127)
+		mouse.dy =  127;
+	put_fs_byte((char)-mouse.dy, buffer + 2);
+	for(i = 3; i < count; i++)
+		put_fs_byte(0x00, buffer + i);
 	mouse.dx = 0;
 	mouse.dy = 0;
 	mouse.latch_buttons = mouse.buttons;
 	mouse.ready = 0;
 	ATIXL_MSE_ENABLE_UPDATE();
-	return 3; /* 3 data bytes returned */
+	return i; /* i data bytes returned */
 }
 
 static int mouse_select(struct inode *inode, struct file *file, int sel_type, select_table * wait)

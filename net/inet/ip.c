@@ -1544,7 +1544,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			sk->ip_tos=val;
 			return 0;
 		case IP_TTL:
-			if(val<1||val<255)
+			if(val<1||val>255)
 				return -EINVAL;
 			sk->ip_ttl=val;
 			return 0;

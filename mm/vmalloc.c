@@ -53,19 +53,19 @@ static int free_area_pages(unsigned long dindex, unsigned long index, unsigned l
 		return 0;
 	page &= PAGE_MASK;
 	pte = index + (unsigned long *) page;
-	for ( ; nr > 0 ; nr--, pte++) {
+	do {
 		unsigned long pg = *pte;
 		*pte = 0;
-		if (!(pg & PAGE_PRESENT))
-			continue;
-		free_page(pg);
-	}
+		if (pg & PAGE_PRESENT)
+			free_page(pg);
+		pte++;
+	} while (--nr);
 	pte = (unsigned long *) page;
 	for (nr = 0 ; nr < 1024 ; nr++, pte++)
 		if (*pte)
 			return 0;
 	set_pgdir(dindex,0);
-	mem_map[MAP_NR(page)] &= ~MAP_PAGE_RESERVED;
+	mem_map[MAP_NR(page)] = 1;
 	free_page(page);
 	return 0;
 }
@@ -83,20 +83,21 @@ static int alloc_area_pages(unsigned long dindex, unsigned long index, unsigned 
 			free_page(page);
 			page = swapper_pg_dir[dindex];
 		} else {
-			mem_map[MAP_NR(page)] |= MAP_PAGE_RESERVED;
+			mem_map[MAP_NR(page)] = MAP_PAGE_RESERVED;
 			set_pgdir(dindex, page | PAGE_SHARED);
 		}
 	}
 	page &= PAGE_MASK;
 	pte = index + (unsigned long *) page;
 	*pte = PAGE_SHARED;		/* remove a race with vfree() */
-	for ( ; nr > 0 ; nr--, pte++) {
+	do {
 		unsigned long pg = get_free_page(GFP_KERNEL);
 
 		if (!pg)
 			return -ENOMEM;
 		*pte = pg | PAGE_SHARED;
-	}
+		pte++;
+	} while (--nr);
 	return 0;
 }
 
@@ -113,9 +114,9 @@ static int do_area(void * addr, unsigned long size,
 
 		if (i > nr)
 			i = nr;
+		nr -= i;
 		if (area_fn(dindex, index, i))
 			return -1;
-		nr -= i;
 		index = 0;
 		dindex++;
 	}

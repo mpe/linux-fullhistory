@@ -256,7 +256,7 @@ DEB(printk("sb16_dsp_open()\n"));
   if (!sb16_dsp_ok)
     {
       printk ("SB16 Error: SoundBlaster board not installed\n");
-      return RET_ERROR(ENODEV);
+      return RET_ERROR(ENXIO);
     }
 
   if (intr_active)
@@ -459,8 +459,16 @@ sb16_dsp_reset (int dev)
 static void
 sb16_dsp_halt (int dev)
 {
-  sb_dsp_command01(0xd9);
-  sb_dsp_command01(0xd5);
+  if (dsp_16bit)
+   {
+     sb_dsp_command01(0xd9);
+     sb_dsp_command01(0xd5);
+   }
+  else
+   {
+     sb_dsp_command01(0xda);
+     sb_dsp_command01(0xd0);
+   }
 }
 
 static void

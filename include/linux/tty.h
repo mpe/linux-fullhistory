@@ -78,8 +78,8 @@ struct serial_struct {
 	int	xmit_fifo_size;
 	int	custom_divisor;
 	int	baud_base;
-	char	close_delay;
-	char	reserved_char[3];
+	unsigned short	close_delay;
+	char	reserved_char[2];
 	int	hub6;
 	int	reserved[5];
 };
@@ -97,6 +97,8 @@ struct serial_struct {
 /*
  * Definitions for async_struct (and serial_struct) flags field
  */
+#define ASYNC_HUP_NOTIFY 0x0001 /* Notify getty on hangups and closes 
+				   on the callout port */
 #define ASYNC_FOURPORT  0x0002	/* Set OU1, OUT2 per AST Fourport settings */
 #define ASYNC_SAK	0x0004	/* Secure Attention Key (Orange book) */
 #define ASYNC_SPLIT_TERMIOS 0x0008 /* Separate termios for dialin/callout */
@@ -259,6 +261,9 @@ struct tty_ldisc {
 			 char * buf, int nr);	
 	int	(*ioctl)(struct tty_struct * tty, struct file * file,
 			 unsigned int cmd, unsigned long arg);
+	int	(*select)(struct tty_struct * tty, struct inode * inode,
+			  struct file * file, int sel_type,
+			  select_table *wait);
 	/*
 	 * The following routines are called from below.
 	 */

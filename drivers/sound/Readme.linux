@@ -1,18 +1,10 @@
-Sound Card Driver version 2.2
+Sound Driver version 2.4 for Linux
+----------------------------------
 
-This directory contains the driver for various PC soundcards. 
-The following cards are supported:
-
-AdLib
-SoundBlaster (1.0-2.0) and compatibles, including
-  ThunderBoard and Ati Stereo F/X.
-SoundBlaster Pro and SB Pro 2
-SoundBlaster 16
-ProAudioSpectrum 16
-  (The original ProAudioSpectrum and the PAS+ are not supported 
-  (and propably will remain unsupported)).
-
-If you have any problems, please contact me.
+NOTE!	The sound driver is now a part of the Linux kernel distribution.
+	Check that your kernel doesn't have more recent version than this
+	when installing a separately distributed sound driver. The
+	version number of this driver is defined in the makefile.
 
 Installation
 ------------
@@ -20,14 +12,23 @@ Installation
 - Since this driver is a part of the Linux kernel distribution, no
   special steps are required to build the driver itself.
 
-- To build the device files you need to run the enclosed shell scrip 
-  (see below).
+- In case you are installing a separately distributed sound driver,
+  you have to do some additional steps.
+  - Remove all files from the linux/drivers/sound. Old files could
+    sometimes cause trouble.
+  - cd linux/drivers.
+  - gunzip -c snd-driv-X.Y.tar.gz|tar xvf -
+  - cd ./sound
+  - cp soundcard.h ultrasound.h /usr/include/linux
 
-- Copy the sound/ultrasound.h  to /usr/include/sys
-  (Remove the old one from /usr/include/sys /usr/include/linux first).
+- To build the device files for this driver, you need to run the enclosed 
+  shell script (at the end of this file).
 
-- Ensure you have the following symlink:
-  ln -s /usr/include/linux/soundcard.h /usr/include/sys/soundcard.h
+- Create /usr/include/sys/soundcard.h whic contains just a line:
+#include <linux/soundcard.h>
+
+- Create /usr/include/sys/ultrasound.h whic contains just a line:
+#include <linux/ultrasound.h>
 
 Boot time configuration (using lilo)
 ------------------------------------
@@ -190,6 +191,11 @@ if [ -e /dev/mixer ]; then
 	rm -f /dev/mixer 
 fi
 mknod -m 666 /dev/mixer c 14 0
+
+if [ -e /dev/mixer1 ]; then 
+	rm -f /dev/mixer1 
+fi
+mknod -m 666 /dev/mixer1 c 14 16
 #
 #	Sequencer	(14, 1)
 #

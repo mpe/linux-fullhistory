@@ -1200,6 +1200,7 @@ slip_init(struct device *dev)
 	sl_ldisc.write	= NULL;
 	sl_ldisc.ioctl	= (int (*)(struct tty_struct *, struct file *,
 				   unsigned int, unsigned long)) slip_ioctl;
+	sl_ldisc.select = NULL;
 	sl_ldisc.handler = slip_recv;
 	if ((i = tty_register_ldisc(N_SLIP, &sl_ldisc)) != 0)
 		printk("ERROR: %d\n", i);

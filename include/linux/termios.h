@@ -237,5 +237,6 @@ struct termios {
 #define N_TTY		0
 #define N_SLIP		1
 #define N_MOUSE		2
+#define N_PPP		3
 
 #endif

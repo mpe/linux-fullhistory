@@ -280,7 +280,7 @@ sound_open_sw (int dev, struct fileinfo *file)
   if ((dev >= SND_NDEVS) || (dev < 0))
     {
       printk ("Invalid minor device %d\n", dev);
-      return RET_ERROR (ENODEV);
+      return RET_ERROR (ENXIO);
     }
 
   switch (dev & 0x0f)
@@ -320,7 +320,7 @@ sound_open_sw (int dev, struct fileinfo *file)
 
     default:
       printk ("Invalid minor device %d\n", dev);
-      return RET_ERROR (ENODEV);
+      return RET_ERROR (ENXIO);
     }
 
   sbc_devices[dev].usecount++;
@@ -383,12 +383,12 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
     case SND_DEV_CTL:
 
       if (!num_mixers)
-	return RET_ERROR (ENODEV);
+	return RET_ERROR (ENXIO);
 
-      if (dev >= num_mixers)
-	return RET_ERROR (ENODEV);
+      if ((dev >> 4) >= num_mixers)
+	return RET_ERROR (ENXIO);
 
-      return mixer_devs[dev]->ioctl (dev, cmd, arg);
+      return mixer_devs[dev >> 4]->ioctl (dev >> 4, cmd, arg);
       break;
 
     case SND_DEV_SEQ:

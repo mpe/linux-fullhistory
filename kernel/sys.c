@@ -495,7 +495,7 @@ asmlinkage int sys_getpgid(pid_t pid)
 	struct task_struct * p;
 
 	if (!pid)
-		pid = current->pid;
+		return current->pgrp;
 	for_each_task(p) {
 		if (p->pid == pid)
 			return p->pgrp;

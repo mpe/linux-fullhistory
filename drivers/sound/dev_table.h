@@ -167,11 +167,6 @@ struct generic_midi_operations {
 			{MPU_BASE, MPU_IRQ, 0}, SND_DEFAULT_ENABLE},
 #endif
 
-#ifndef EXCLUDE_GUS
-		{SNDCARD_GUS,	"Gravis Ultrasound",	attach_gus_card, probe_gus,
-			{GUS_BASE, GUS_IRQ, GUS_DMA}, SND_DEFAULT_ENABLE},
-#endif
-
 #ifndef EXCLUDE_PAS
 		{SNDCARD_PAS,	"ProAudioSpectrum",	attach_pas_card, probe_pas,
 			{PAS_BASE, PAS_IRQ, PAS_DMA}, SND_DEFAULT_ENABLE},
@@ -191,6 +186,11 @@ struct generic_midi_operations {
 		{SNDCARD_SB16MIDI,"SB16 MPU-401",	attach_sb16midi, probe_sb16midi,
 			{SB16MIDI_BASE, SBC_IRQ, 0}, SND_DEFAULT_ENABLE},
 #endif
+#endif
+
+#ifndef EXCLUDE_GUS
+		{SNDCARD_GUS,	"Gravis Ultrasound",	attach_gus_card, probe_gus,
+			{GUS_BASE, GUS_IRQ, GUS_DMA}, SND_DEFAULT_ENABLE},
 #endif
 
 #ifndef EXCLUDE_YM3812

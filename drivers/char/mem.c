@@ -387,6 +387,10 @@ static struct file_operations memory_fops = {
 	NULL		/* fsync */
 };
 
+#ifdef CONFIG_FTAPE
+char* ftape_big_buffer;
+#endif
+
 long chr_dev_init(long mem_start, long mem_end)
 {
 	if (register_chrdev(MEM_MAJOR,"mem",&memory_fops))
@@ -406,5 +410,15 @@ long chr_dev_init(long mem_start, long mem_end)
 #if CONFIG_TAPE_QIC02
 	mem_start = tape_qic02_init(mem_start);
 #endif
+/*
+ *      Rude way to allocate kernel memory buffer for tape device
+ */
+#ifdef CONFIG_FTAPE
+        /* allocate NR_FTAPE_BUFFERS 32Kb buffers at aligned address */
+        ftape_big_buffer= (char*) ((mem_start + 0x7fff) & ~0x7fff);
+        printk( "ftape: allocated %d buffers alligned at: %p\n",
+               NR_FTAPE_BUFFERS, ftape_big_buffer);
+        mem_start = (long) ftape_big_buffer + NR_FTAPE_BUFFERS * 0x8000;
+#endif 
 	return mem_start;
 }

@@ -115,6 +115,10 @@ bool 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE n
 bool 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE n
 bool 'Selection (cut and paste for virtual consoles)' CONFIG_SELECTION y
 bool 'QIC-02 tape support' CONFIG_TAPE_QIC02 n
+bool 'QIC-117 tape support' CONFIG_FTAPE n
+if [ "$CONFIG_FTAPE" = "y" ]
+int ' number of ftape buffers' NR_FTAPE_BUFFERS 3
+fi
 *
 * Sound
 *

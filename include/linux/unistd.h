@@ -139,6 +139,7 @@
 #define __NR_get_kernel_syms	130
 #define __NR_quotactl		131
 #define __NR_getpgid		132
+#define __NR_fchdir		133
 
 extern int errno;
 

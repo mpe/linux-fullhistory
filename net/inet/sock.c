@@ -51,6 +51,7 @@
  *		Alan Cox	:	inet sockets don't set sk->type!
  *		Alan Cox	:	Split socket option code
  *		Alan Cox	:	Callbacks
+ *		Alan Cox	:	Nagle flag for Charles & Johannes stuff
  *
  * To Fix:
  *
@@ -824,6 +825,11 @@ inet_create(struct socket *sock, int protocol)
 		return(-ESOCKTNOSUPPORT);
   }
   sk->socket = sock;
+#ifdef CONFIG_TCP_NAGLE_OFF
+  sk->nonagle = 1;
+#else    
+  sk->nonagle = 0;
+#endif  
   sk->type = sock->type;
   sk->protocol = protocol;
   sk->wmem_alloc = 0;
@@ -1790,6 +1796,8 @@ inet_fioctl(struct inode *inode, struct file *file,
 
   return(ret);
 }
+
+
 
 
 static struct file_operations inet_fops = {

@@ -252,7 +252,8 @@ static void setup_frame(struct sigaction * sa, unsigned long ** fp, unsigned lon
 	if (regs->ss != USER_DS)
 		frame = (unsigned long *) sa->sa_restorer;
 	frame -= 32;
-	verify_area(VERIFY_WRITE,frame,32*4);
+	if (verify_area(VERIFY_WRITE,frame,32*4))
+		do_exit(SIGSEGV);
 /* set up the "normal" stack seen by the signal handler (iBCS2) */
 	put_fs_long(__CODE,frame);
 	put_fs_long(signr, frame+1);

@@ -105,6 +105,10 @@ gusintr (int unit)
 {
   unsigned char   src;
 
+#ifdef linux
+  sti();
+#endif
+
   while (1)
     {
       if (!(src = INB (u_IrqStatus)))

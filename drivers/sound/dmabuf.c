@@ -323,6 +323,15 @@ DMAbuf_getrdbuffer (int dev, char **buf, int *len)
   unsigned long   flags;
   int err = EIO;
 
+  DISABLE_INTR (flags);
+  if (!dev_qlen[dev])
+    {
+      if (dev_needs_restart[dev])
+      {
+	dma_reset(dev);
+	dev_needs_restart[dev] = 0;
+      }
+
   if (dma_mode[dev] == DMODE_OUTPUT) /* Was output -> direction change */
   {
 	dma_sync(dev);
@@ -339,18 +348,12 @@ DMAbuf_getrdbuffer (int dev, char **buf, int *len)
 
       if ((err = dsp_devs[dev]->prepare_for_input (dev,
 				    dev_buffsize[dev], dev_nbufs[dev])) < 0)
-	return err;
+	{
+          RESTORE_INTR (flags);
+	  return err;
+ 	}
       dma_mode[dev] = DMODE_INPUT;
     }
-
-  DISABLE_INTR (flags);
-  if (!dev_qlen[dev])
-    {
-      if (dev_needs_restart[dev])
-      {
-	dma_reset(dev);
-	dev_needs_restart[dev] = 0;
-      }
 
       if (!dev_active[dev])
 	{
@@ -366,7 +369,7 @@ DMAbuf_getrdbuffer (int dev, char **buf, int *len)
       DO_SLEEP (dev_sleeper[dev], dev_sleep_flag[dev], 2 * HZ);
       if (TIMED_OUT (dev_sleeper[dev], dev_sleep_flag[dev]))
 	{
-	  printk ("Sound: DMA timed out\n");
+	  printk ("Sound: DMA timed out - IRQ/DRQ config error?\n");
 	  err = EIO;
 	  SET_ABORT_FLAG (dev_sleeper[dev], dev_sleep_flag[dev]);
 	}
@@ -531,7 +534,7 @@ DMAbuf_getwrbuffer (int dev, char **buf, int *size)
       DO_SLEEP (dev_sleeper[dev], dev_sleep_flag[dev], 2 * HZ);
       if (TIMED_OUT (dev_sleeper[dev], dev_sleep_flag[dev]))
 	{
-	  printk ("Sound: DMA timed out\n");
+	  printk ("Sound: DMA timed out - IRQ/DRQ config error?\n");
 	  err = EIO;
 	  SET_ABORT_FLAG (dev_sleeper[dev], dev_sleep_flag[dev]);
 	}

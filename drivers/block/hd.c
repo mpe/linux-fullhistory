@@ -227,8 +227,8 @@ static void reset_controller(void)
 {
 	int	i;
 
-	printk("HD-controller reset\n");
-	outb(4,HD_CMD);
+	printk(KERN_DEBUG "HD-controller reset\n");
+	outb_p(4,HD_CMD);
 	for(i = 0; i < 1000; i++) nop();
 	outb(hd_info[0].ctl & 0x0f ,HD_CMD);
 	if (drive_busy())
@@ -269,7 +269,7 @@ repeat:
 void unexpected_hd_interrupt(void)
 {
 	sti();
-	printk("Unexpected HD interrupt\n");
+	printk(KERN_DEBUG "Unexpected HD interrupt\n");
 	SET_TIMER;
 }
 
@@ -421,7 +421,7 @@ static void hd_times_out(void)
 	reset = 1;
 	if (!CURRENT)
 		return;
-	printk("HD timeout\n");
+	printk(KERN_DEBUG "HD timeout\n");
 	cli();
 	if (++CURRENT->errors >= MAX_ERRORS) {
 #ifdef DEBUG

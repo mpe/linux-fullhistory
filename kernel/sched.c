@@ -138,7 +138,7 @@ sys_wait4, sys_swapoff, sys_sysinfo, sys_ipc, sys_fsync, sys_sigreturn,
 sys_clone, sys_setdomainname, sys_newuname, sys_modify_ldt,
 sys_adjtimex, sys_mprotect, sys_sigprocmask, sys_create_module,
 sys_init_module, sys_delete_module, sys_get_kernel_syms, sys_quotactl,
-sys_getpgid };
+sys_getpgid, sys_fchdir };
 
 /* So we don't have to do any more manual updating.... */
 int NR_syscalls = sizeof(sys_call_table)/sizeof(fn_ptr);

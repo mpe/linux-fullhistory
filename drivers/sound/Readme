@@ -1,32 +1,30 @@
-Release notes for the Linux Sound Driver 2.3
------------------------------------------------
+Release notes for the Linux Sound Driver 2.4
+--------------------------------------------
 
-This version has finally the SB16 support. It seems to work
-well but there is some problems with recording. If the recording
-process cannot read the data from the device fast enough the
-driver will return EIO. Usually this happens when there is no more
-memory for the disk buffers.
-The SB16 DSP support is by Joerg Schubert (jsb@sth.ruhr-uni-bochum.de).
-Currently the SB16 support is an ALPHA test version since it has been
-tested just by me.
+NOTE!	The sound driver is a part of the Linux kernel distribution also.
+	Check that your kernel doesn't have more recent version than this
+	when installing a separately distributed sound driver. The
+	version number of this driver is defined in the makefile.
 
+This version contains a driver for the SB16 also.
 The SB16 driver requires separate DMA channels for the 8 and 16 bit
 modes. There should be a way to share the 8 bit DMA channels between
 these modes but this feature is not supported yet.
+The SB16 DSP support is by Joerg Schubert (jsb@sth.ruhr-uni-bochum.de).
 
 The SB16 driver has also the Midi input capability even at the same
 time with the /dev/dsp. Also the WaveBlaster daughter board is supported.
 No support for the ASP chip yet (the ASP chip can be installed but it's
 not used by the driver).
 
-You will need the snd-util-2.0.tar.gz and snd-data-0.1.tar.Z
+You will need the snd-util-2.4.tar.gz and snd-data-0.1.tar.Z
 packages to use this driver. They should be in the same
 ftp site or BBS from where you got this driver. For
 example at nic.funet.fi:pub/OS/Linux/*.
 
-There is a new version of the tracker program available (tracker-3.19) but
-I don't know how to find it. The tracker 3.10 has bugs and it don't work
-without some fixes. Look at the README of the snd-util-2.0.
+There is a new version of the tracker program available (tracker-3_19.lzh) but
+I don't know where it is available. The tracker 3.10 has bugs and it don't work
+without some fixes. Look at the README of the snd-util-2.3.
 
 If you are looking for the installation instructions, please
 look at linux/Readme.
@@ -161,7 +159,12 @@ Mixer(s) installed
 Known bugs/limitations
 ----------------------
 
-- Midi input doesn't work with SB and SB Pro (SB16 works somehow).
+- High speed recording of long audio samples (>20 second) to disk
+  is not possible. Everything works until next sync() which delays the
+  recording process too much. A delay longer than 0.1 to 0.3 seconds is
+  too much.
+- The SB16 driver sometimes swaps the left and right channels together.
+- Midi input doesn't work with SB and SB Pro (SB16 works).
 - It's not possible to open /dev/dsp (or /dev/audio) while the 
   /dev/sequencer is open for output and GUS is the only soundcard
   installed. It's possible if /dev/dsp is opened before /dev/sequencer
@@ -226,6 +229,7 @@ contributors. (I could have forgotten some names.)
 	Jim Lowe	FreeBSD port
 	Anders Baekgaard 	Bughunting and valuable suggestions.
 	Joerg Schubert	SB16 DSP support.
+	Andrew Robinson Improvements to the GUS driver
 
 Regards,
 

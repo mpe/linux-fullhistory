@@ -57,6 +57,8 @@
  *		Alan Cox	:	Added tcp_select_window() aka NET2E 
  *					window non shrink trick.
  *		Alan Cox	:	Added a couple of small NET2E timer fixes
+ *		Charles Hedrick :	TCP fixes
+ *		Toomas Tamm	:	TCP window fixes
  *
  *
  * To Fix:
@@ -98,8 +100,6 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <linux/mm.h>
-
-#define USE_NAGLE
 
 #define SEQ_TICK 3
 unsigned long seq_offset;
@@ -1018,20 +1018,17 @@ tcp_write(struct sock *sk, unsigned char *from,
   sk->err = 0;
 
 /*
- * In its original form, the following code implements
- * Nagle's rule.  Everybody recommends it, and probably
- * production code should use it.  But it slows down response enough
- * that I dont' like it.  So as long as we're not bumping into 
- * the window, I go ahead and send it.  If you want Nagle, just
- * define USE_NAGLE  --C. Hedrick
+ *	Nagles rule. Turn Nagle off with TCP_NODELAY for highly
+ *	interactive fast network servers. It's meant to be on and
+ *	it really improves the throughput though not the echo time
+ *	on my slow slip link - Alan
  */
 
   /* Avoid possible race on send_tmp - c/o Johannes Stille */
   if(sk->send_tmp && 
      ((!sk->packets_out) 
-#ifndef USE_NAGLE
-      || before(sk->send_seq , sk->window_seq)
-#endif
+     /* If not nagling we can send on the before case too.. */
+      || (sk->nonagle && before(sk->send_seq , sk->window_seq))
       ))
   	tcp_send_partial(sk);
   /* -- */
@@ -1273,7 +1270,6 @@ tcp_read_urg(struct sock * sk, int nonblock,
 			amt = min(ntohs(skb->h.th->urg_ptr),len);
 			if(amt)
 			{
-				verify_area(VERIFY_WRITE, to, amt);
 				memcpy_tofs(to,(unsigned char *)(skb->h.th) +
 							skb->h.th->doff*4, amt);
 			}
@@ -2132,7 +2128,7 @@ tcp_write_xmit(struct sock *sk)
 	return;
 
   while(sk->wfront != NULL &&
-        before(sk->wfront->h.seq, sk->window_seq) &&
+        before(sk->wfront->h.seq, sk->window_seq +1) &&
 	(sk->retransmits == 0 ||
 	 sk->timeout != TIME_WRITE ||
 	 before(sk->wfront->h.seq, sk->rcv_ack_seq +1))
@@ -2395,7 +2391,7 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
    * and put it onto the xmit queue.
    */
   if (sk->wfront != NULL) {
-	if (after (sk->window_seq, sk->wfront->h.seq) &&
+	if (after (sk->window_seq+1, sk->wfront->h.seq) &&
 	        (sk->retransmits == 0 || 
 		 sk->timeout != TIME_WRITE ||
 		 before(sk->wfront->h.seq, sk->rcv_ack_seq +1))
@@ -3534,12 +3530,12 @@ int tcp_setsockopt(struct sock *sk, int level, int optname, char *optval, int op
 	switch(optname)
 	{
 		case TCP_MSS:
-			if(val<200||val>2048)
+			if(val<200||val>2048 || val>sk->mtu)
 				return -EINVAL;
 			sk->mss=val;
 			return 0;
 		case TCP_NODELAY:
-			/* Ready for Johannes delayed ACK code */
+			sk->nonagle=(val==0)?0:1;
 			return 0;
 		default:
 			return(-ENOPROTOOPT);
@@ -3559,7 +3555,7 @@ int tcp_getsockopt(struct sock *sk, int level, int optname, char *optval, int *o
 			val=sk->mss;
 			break;
 		case TCP_NODELAY:
-			val=1;	/* Until Johannes stuff is in */
+			val=sk->nonagle;	/* Until Johannes stuff is in */
 			break;
 		default:
 			return(-ENOPROTOOPT);

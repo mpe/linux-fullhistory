@@ -114,7 +114,11 @@ static struct packet_type arp_packet_type = {
   &ax25_packet_type
 #endif
 #else
+#ifdef CONFIG_AX25
+  &ax25_packet_type
+#else
   NULL		/* next */
+#endif
 #endif
 };
 
@@ -287,22 +291,49 @@ my_addr(void)
 }
 
 
+static int dev_nit=0; /* Number of network taps running */
+
 /* Add a protocol ID to the list.  This will change soon. */
 void
 dev_add_pack(struct packet_type *pt)
 {
   struct packet_type *p1;
-
   pt->next = ptype_base;
 
-  /* See if we need to copy it. */
-  for (p1 = ptype_base; p1 != NULL; p1 = p1->next) {
-	if (p1->type == pt->type) {
-		pt->copy = 1;
-		break;
+  /* Don't use copy counts on ETH_P_ALL. Instead keep a global
+     count of number of these and use it and pt->copy to decide
+     copies */
+  pt->copy=0;
+  if(pt->type==NET16(ETH_P_ALL))
+  	dev_nit++;	/* I'd like a /dev/nit too one day 8) */
+  else
+  {
+  	/* See if we need to copy it. */
+  	for (p1 = ptype_base; p1 != NULL; p1 = p1->next) {
+		if (p1->type == pt->type) {
+			pt->copy = 1;
+			break;
+		}
+	  }
+  }
+  
+  /*
+   *	NIT taps must go at the end or inet_bh will leak!
+   */
+   
+  if(pt->type==NET16(ETH_P_ALL))
+  {
+  	pt->next=NULL;
+  	if(ptype_base==NULL)
+	  	ptype_base=pt;
+	else
+	{
+		for(p1=ptype_base;p1->next!=NULL;p1=p1->next);
+		p1->next=pt;
 	}
   }
-  ptype_base = pt;
+  else
+  	ptype_base = pt;
 }
 
 
@@ -312,6 +343,8 @@ dev_remove_pack(struct packet_type *pt)
 {
   struct packet_type *lpt, *pt1;
 
+  if (pt->type == NET16(ETH_P_ALL))
+  	dev_nit--;
   if (pt == ptype_base) {
 	ptype_base = pt->next;
 	return;
@@ -328,7 +361,7 @@ dev_remove_pack(struct packet_type *pt)
 		return;
 	}
 
-	if (pt1->next -> type == pt ->type) {
+	if (pt1->next -> type == pt ->type && pt->type != NET16(ETH_P_ALL)) {
 		lpt = pt1->next;
 	}
   }
@@ -594,7 +627,7 @@ inet_bh(void *tmp)
   struct packet_type *ptype;
   unsigned short type;
   unsigned char flag = 0;
-
+  int nitcount;
 
   /* Atomically check and mark our BUSY state. */
   if (set_bit(1, (void*)&in_bh))
@@ -606,6 +639,7 @@ inet_bh(void *tmp)
   /* Any data left to process? */
   while((skb=skb_dequeue(&backlog))!=NULL)
   {
+  	nitcount=dev_nit;
 	flag=0;
 	sti();
        /*
@@ -625,7 +659,6 @@ inet_bh(void *tmp)
 	* header (the h_proto field in struct ethhdr), but drivers like
 	* SLIP and PLIP have no alternative but to force the type to be
 	* IP or something like that.  Sigh- FvK
-	* FIXME: Ethernet drivers need potty training in 802.3 packets -AC
 	*/
        type = skb->dev->type_trans(skb, skb->dev);
 
@@ -636,10 +669,12 @@ inet_bh(void *tmp)
 	 * to anyone who wants it.
 	 */
 	for (ptype = ptype_base; ptype != NULL; ptype = ptype->next) {
-		if (ptype->type == type) {
+		if (ptype->type == type || ptype->type == NET16(ETH_P_ALL)) {
 			struct sk_buff *skb2;
 
-			if (ptype->copy) {	/* copy if we need to	*/
+			if (ptype->type==NET16(ETH_P_ALL))
+				nitcount--;
+			if (ptype->copy || nitcount) {	/* copy if we need to	*/
 				skb2 = alloc_skb(skb->mem_len, GFP_ATOMIC);
 				if (skb2 == NULL) 
 					continue;

@@ -1,5 +1,15 @@
-Changelog for version 2.3
+Changelog for version 2.4
 -------------------------
+
+Since 2.3b
+- Fixed bug which made it impossible to make long recordings to disk.
+  Recording was not restarted after a buffer overflow situation.
+- Limited mixer support for GUS.
+- Numerous improvements to the GUS driver by Andrew Robinson. Including
+  some click removal etc.
+
+Since 2.3
+- Fixed some minor bugs in the SB16 driver.
 
 Since 2.2b
 - Full SB16 DSP support. 8/16 bit, mono/stereo

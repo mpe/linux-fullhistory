@@ -143,6 +143,7 @@ extern int sys_delete_module();
 extern int sys_get_kernel_syms(); /* 130 */
 extern int sys_quotactl();
 extern int sys_getpgid();
+extern int sys_fchdir();
 
 /*
  * These are system calls that will be removed at some time

@@ -95,7 +95,7 @@ sound_open (struct inode *inode, struct file *file)
   if (!soundcard_configured && dev != SND_DEV_CTL && dev != SND_DEV_STATUS)
     {
       printk ("SoundCard Error: The soundcard system has not been configured\n");
-      return RET_ERROR (ENODEV);
+      return RET_ERROR (ENXIO);
     }
 
   files[dev].mode = 0;

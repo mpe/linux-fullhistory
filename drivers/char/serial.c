@@ -492,6 +492,7 @@ static void rs_interrupt(int irq)
 	pass_number = 0;
 	while (info) {
 		if (info->tty &&
+		    info->tty->termios &&
 		    (!pass_number ||
 		     !(serial_inp(info, UART_IIR) & UART_IIR_NO_INT))) {
 			done = 0;
@@ -1489,7 +1490,24 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 #ifdef SERIAL_DEBUG_OPEN
 	printk("rs_close ttys%d, count = %d\n", info->line, info->count);
 #endif
-	if (--info->count > 0)
+	if ((tty->count == 1) && (info->count != 1)) {
+		/*
+		 * Uh, oh.  tty->count is 1, which means that the tty
+		 * structure will be freed.  Info->count should always
+		 * be one in these conditions.  If it's greater than
+		 * one, we've got real problems, since it means the
+		 * serial port won't be shutdown.
+		 */
+		printk("rs_close: bad serial port count; tty->count is 1, "
+		       "info->count is %d\n", info->count);
+		info->count = 1;
+	}
+	if (--info->count < 0) {
+		printk("rs_close: bad serial port count for ttys%d: %d\n",
+		       info->line, info->count);
+		info->count = 0;
+	}
+	if (info->count)
 		return;
 	info->flags |= ASYNC_CLOSING;
 	/*
@@ -1502,8 +1520,16 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 		info->callout_termios = *tty->termios;
 	tty->stopped = 0;		/* Force flush to succeed */
 	tty->hw_stopped = 0;
-	rs_start(tty);
-	wait_until_sent(tty);
+	if (info->flags & ASYNC_INITIALIZED) {
+		rs_start(tty);
+		/*
+		 * XXX There should be a timeout added to
+		 * wait_until_sent, eventually.  TYT 1/19/94
+		 */
+		wait_until_sent(tty);
+	} else
+		flush_output(tty);
+	flush_input(tty);
 	cli();
 	/*
 	 * Make sure the UART transmitter has completely drained; this
@@ -1517,7 +1543,6 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	shutdown(info, 1);
 	clear_bit(line, rs_event);
 	info->event = 0;
-	info->count = 0;
 	info->tty = 0;
 	if (info->blocked_open) {
 		if (info->close_delay) {
@@ -1574,7 +1599,14 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	 */
 	if (info->flags & ASYNC_CLOSING) {
 		interruptible_sleep_on(&info->close_wait);
+#ifdef SERIAL_DO_RESTART
+		if (info->flags & ASYNC_HUP_NOTIFY)
+			return -EAGAIN;
+		else
+			return -ERESTARTSYS;
+#else
 		return -EAGAIN;
+#endif
 	}
 
 	/*
@@ -1632,7 +1664,14 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 		current->state = TASK_INTERRUPTIBLE;
 		if (tty_hung_up_p(filp) ||
 		    !(info->flags & ASYNC_INITIALIZED)) {
+#ifdef SERIAL_DO_RESTART
+			if (info->flags & ASYNC_HUP_NOTIFY)
+				retval = -EAGAIN;
+			else
+				retval = -ERESTARTSYS;
+#else
 			retval = -EAGAIN;
+#endif
 			break;
 		}
 		if (!(info->flags & ASYNC_CALLOUT_ACTIVE) &&

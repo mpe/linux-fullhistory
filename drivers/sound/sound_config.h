@@ -195,7 +195,7 @@ If your card has nonstandard I/O address or IRQ number, change defines
 #define OFF		0
 
 #define MAX_DSP_DEV	4
-#define MAX_MIXER_DEV	1
+#define MAX_MIXER_DEV	2
 #define MAX_SYNTH_DEV	3
 #define MAX_MIDI_DEV	4
 

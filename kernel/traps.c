@@ -95,7 +95,7 @@ asmlinkage void alignment_check(void);
 		regs->ds, regs->es, regs->fs, regs->gs);
 	store_TR(i);
 	printk("Pid: %d, process nr: %d\n", current->pid, 0xffff & i);
-	for(i=0;i<10;i++)
+	for(i=0;i<20;i++)
 		printk("%02x ",0xff & get_seg_byte(regs->cs,(i+(char *)regs->eip)));
 	printk("\n");
 	do_exit(SIGSEGV);

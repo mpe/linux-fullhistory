@@ -81,7 +81,8 @@ struct sock {
 				no_check,
 				exp_growth,
 				zapped,	/* In ax25 & ipx means not linked */
-				broadcast;
+				broadcast,
+				nonagle;
   unsigned long		        lingertime;
   int				proc;
   struct sock			*next;
