@@ -562,8 +562,6 @@ got:
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME_SEC;
 
 	memset(ei->i_data, 0, sizeof(ei->i_data));
-	ei->i_next_alloc_block = 0;
-	ei->i_next_alloc_goal = 0;
 	ei->i_dir_start_lookup = 0;
 	ei->i_disksize = 0;
 
@@ -581,7 +579,7 @@ got:
 	ei->i_file_acl = 0;
 	ei->i_dir_acl = 0;
 	ei->i_dtime = 0;
-	ei->i_rsv_window = NULL;
+	ei->i_block_alloc_info = NULL;
 	ei->i_block_group = group;
 
 	ext3_set_inode_flags(inode);

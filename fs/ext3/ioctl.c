@@ -155,8 +155,8 @@ flags_err:
 	case EXT3_IOC_GETRSVSZ:
 		if (test_opt(inode->i_sb, RESERVATION)
 			&& S_ISREG(inode->i_mode)
-			&& ei->i_rsv_window) {
-			rsv_window_size = ei->i_rsv_window->rsv_goal_size;
+			&& ei->i_block_alloc_info) {
+			rsv_window_size = ei->i_block_alloc_info->rsv_window_node.rsv_goal_size;
 			return put_user(rsv_window_size, (int __user *)arg);
 		}
 		return -ENOTTY;
@@ -182,11 +182,13 @@ flags_err:
 		 * before set the window size
 		 */
 		down(&ei->truncate_sem);
-		if (!ei->i_rsv_window)
-			ext3_alloc_init_reservation(inode);
+		if (!ei->i_block_alloc_info)
+			ext3_init_block_alloc_info(inode);
 
-		if (ei->i_rsv_window)
-			ei->i_rsv_window->rsv_goal_size = rsv_window_size;
+		if (ei->i_block_alloc_info){
+			struct ext3_reserve_window_node *rsv = &ei->i_block_alloc_info->rsv_window_node;
+			rsv->rsv_goal_size = rsv_window_size;
+		}
 		up(&ei->truncate_sem);
 		return 0;
 	}

@@ -259,28 +259,47 @@ static inline int rsv_is_empty(struct ext3_reserve_window *rsv)
 	/* a valid reservation end block could not be 0 */
 	return (rsv->_rsv_end == EXT3_RESERVE_WINDOW_NOT_ALLOCATED);
 }
-void ext3_alloc_init_reservation(struct inode *inode)
+void ext3_init_block_alloc_info(struct inode *inode)
 {
 	struct ext3_inode_info *ei = EXT3_I(inode);
-	struct ext3_reserve_window_node *rsv = ei->i_rsv_window;
+	struct ext3_block_alloc_info *block_i = ei->i_block_alloc_info;
+	struct super_block *sb = inode->i_sb;
 
-	rsv = kmalloc(sizeof(*rsv), GFP_NOFS);
-	if (rsv) {
+	block_i = kmalloc(sizeof(*block_i), GFP_NOFS);
+	if (block_i) {
+		struct ext3_reserve_window_node *rsv = &block_i->rsv_window_node;
+
 		rsv->rsv_start = EXT3_RESERVE_WINDOW_NOT_ALLOCATED;
 		rsv->rsv_end = EXT3_RESERVE_WINDOW_NOT_ALLOCATED;
-		rsv->rsv_goal_size = EXT3_DEFAULT_RESERVE_BLOCKS;
+
+	 	/*
+		 * if filesystem is mounted with NORESERVATION, the goal
+		 * reservation window size is set to zero to indicate
+		 * block reservation is off
+		 */
+		if (!test_opt(sb, RESERVATION))
+			rsv->rsv_goal_size = 0;
+		else
+			rsv->rsv_goal_size = EXT3_DEFAULT_RESERVE_BLOCKS;
 		rsv->rsv_alloc_hit = 0;
+		block_i->last_alloc_logical_block = 0;
+		block_i->last_alloc_physical_block = 0;
 	}
-	ei->i_rsv_window = rsv;
+	ei->i_block_alloc_info = block_i;
 }
 
 void ext3_discard_reservation(struct inode *inode)
 {
 	struct ext3_inode_info *ei = EXT3_I(inode);
-	struct ext3_reserve_window_node *rsv = ei->i_rsv_window;
+	struct ext3_block_alloc_info *block_i = ei->i_block_alloc_info;
+	struct ext3_reserve_window_node *rsv;
 	spinlock_t *rsv_lock = &EXT3_SB(inode->i_sb)->s_rsv_window_lock;
 
-	if (rsv && !rsv_is_empty(&rsv->rsv_window)) {
+	if (!block_i)
+		return;
+
+	rsv = &block_i->rsv_window_node;
+	if (!rsv_is_empty(&rsv->rsv_window)) {
 		spin_lock(rsv_lock);
 		if (!rsv_is_empty(&rsv->rsv_window))
 			rsv_window_remove(inode->i_sb, rsv);
@@ -1161,7 +1180,7 @@ int ext3_new_block(handle_t *handle, struct inode *inode,
 	struct ext3_super_block *es;
 	struct ext3_sb_info *sbi;
 	struct ext3_reserve_window_node *my_rsv = NULL;
-	struct ext3_reserve_window_node *rsv = EXT3_I(inode)->i_rsv_window;
+	struct ext3_block_alloc_info *block_i;
 	unsigned short windowsz = 0;
 #ifdef EXT3FS_DEBUG
 	static int goal_hits, goal_attempts;
@@ -1194,8 +1213,9 @@ int ext3_new_block(handle_t *handle, struct inode *inode,
 	 * command EXT3_IOC_SETRSVSZ to set the window size to 0 to turn off
 	 * reservation on that particular file)
 	 */
-	if (rsv && ((windowsz = rsv->rsv_goal_size) > 0))
-		my_rsv = rsv;
+	block_i = EXT3_I(inode)->i_block_alloc_info;
+	if (block_i && ((windowsz = block_i->rsv_window_node.rsv_goal_size) > 0))
+		my_rsv = &block_i->rsv_window_node;
 
 	if (!ext3_has_free_blocks(sbi)) {
 		*errp = -ENOSPC;
