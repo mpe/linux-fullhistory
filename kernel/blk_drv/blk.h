@@ -1,7 +1,7 @@
 #ifndef _BLK_H
 #define _BLK_H
 
-#define NR_BLK_DEV	10
+#define NR_BLK_DEV	7
 /*
  * NR_REQUEST is the number of entries in the request-queue.
  * NOTE that writes may use only the low 2/3 of these: reads
@@ -27,9 +27,8 @@ struct request {
 	unsigned long sector;
 	unsigned long nr_sectors;
 	char * buffer;
-	struct wait_queue * waiting;
+	struct task_struct * waiting;
 	struct buffer_head * bh;
-	struct buffer_head * bhtail;
 	struct request * next;
 };
 
@@ -50,18 +49,10 @@ struct blk_dev_struct {
 
 extern struct blk_dev_struct blk_dev[NR_BLK_DEV];
 extern struct request request[NR_REQUEST];
-extern struct wait_queue * wait_for_request;
+extern struct task_struct * wait_for_request;
 
 extern int * blk_size[NR_BLK_DEV];
 
-extern int is_read_only(int dev);
-extern void set_device_ro(int dev,int flag);
-
-#define RO_IOCTLS(dev,where) \
-  case BLKROSET: if (!suser()) return -EPERM; \
-		 set_device_ro((dev),get_fs_long((long *) (where))); return 0; \
-  case BLKROGET: put_fs_long(is_read_only(dev),(long *) (where)); return 0;
-		 
 #ifdef MAJOR_NR
 
 /*
@@ -94,24 +85,6 @@ extern void set_device_ro(int dev,int flag);
 #define TIMEOUT_VALUE 600
 #define DEVICE_REQUEST do_hd_request
 #define DEVICE_NR(device) (MINOR(device)>>6)
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
-
-#elif (MAJOR_NR == 8)
-/* scsi disk */
-#define DEVICE_NAME "scsidisk"
-#define DEVICE_INTR do_sd  
-#define DEVICE_REQUEST do_sd_request
-#define DEVICE_NR(device) (MINOR(device) >> 4)
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
-
-#elif (MAJOR_NR == 9)
-/* scsi tape */
-#define DEVICE_NAME "scsitape"
-#define DEVICE_INTR do_st  
-#define DEVICE_REQUEST do_st_request
-#define DEVICE_NR(device) (MINOR(device))
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 
@@ -157,40 +130,22 @@ extern inline void unlock_buffer(struct buffer_head * bh)
 	wake_up(&bh->b_wait);
 }
 
-static void end_request(int uptodate)
+extern inline void end_request(int uptodate)
 {
-	struct request * req;
-	struct buffer_head * bh;
-
-	req = CURRENT;
-	req->errors = 0;
+	DEVICE_OFF(CURRENT->dev);
+	if (CURRENT->bh) {
+		CURRENT->bh->b_uptodate = uptodate;
+		unlock_buffer(CURRENT->bh);
+	}
 	if (!uptodate) {
 		printk(DEVICE_NAME " I/O error\n\r");
-		printk("dev %04x, sector %d\n\r",req->dev,req->sector);
-		req->nr_sectors--;
-		req->nr_sectors &= ~1;
-		req->sector += 2;
-		req->sector &= ~1;		
+		printk("dev %04x, block %d\n\r",CURRENT->dev,
+			CURRENT->bh->b_blocknr);
 	}
-	if (bh = req->bh) {
-		req->bh = bh->b_reqnext;
-		bh->b_reqnext = NULL;
-		bh->b_uptodate = uptodate;
-		unlock_buffer(bh);
-		if (bh = req->bh) {
-			if (req->nr_sectors < 2) {
-				req->nr_sectors = 2;
-				printk("end_request: buffer-list destroyed\n");
-			}
-			req->buffer = bh->b_data;
-			return;
-		}
-	}
-	DEVICE_OFF(req->dev);
-	CURRENT = req->next;
-	wake_up(&req->waiting);
-	req->dev = -1;
+	wake_up(&CURRENT->waiting);
 	wake_up(&wait_for_request);
+	CURRENT->dev = -1;
+	CURRENT = CURRENT->next;
 }
 
 #ifdef DEVICE_INTR

@@ -6,9 +6,9 @@
 
 #include <errno.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/dirent.h>
 
-#include <linux/stat.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
@@ -36,7 +36,7 @@ int sys_readdir(unsigned int fd, struct dirent * dirent, unsigned int count)
 int sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 {
 	struct file * file;
-	int tmp = -1;
+	int tmp;
 
 	if (fd >= NR_OPEN || !(file=current->filp[fd]) || !(file->f_inode))
 		return -EBADF;
@@ -62,7 +62,6 @@ int sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 	if (tmp < 0)
 		return -EINVAL;
 	file->f_pos = tmp;
-	file->f_reada = 0;
 	return file->f_pos;
 }
 
@@ -80,6 +79,7 @@ int sys_read(unsigned int fd,char * buf,unsigned int count)
 	verify_area(buf,count);
 	if (file->f_op && file->f_op->read)
 		return file->f_op->read(inode,file,buf,count);
+	printk("(Read)inode->i_mode=%06o\n\r",inode->i_mode);
 	return -EINVAL;
 }
 
@@ -96,5 +96,6 @@ int sys_write(unsigned int fd,char * buf,unsigned int count)
 		return 0;
 	if (file->f_op && file->f_op->write)
 		return file->f_op->write(inode,file,buf,count);
+	printk("(Write)inode->i_mode=%06o\n\r",inode->i_mode);
 	return -EINVAL;
 }

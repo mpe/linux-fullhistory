@@ -4,13 +4,13 @@
  *  (C) 1991  Linus Torvalds
  */
 
-#include <errno.h>
-
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/tty.h>
-#include <linux/stat.h>
-#include <linux/fcntl.h>
+
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 /*
  * Truncate has the most races in the whole filesystem: coding it is
@@ -148,4 +148,51 @@ void minix_truncate(struct inode * inode)
 void minix_release(struct inode * inode, struct file * filp)
 {
 	printk("minix_release not implemented\n");
+}
+
+static int check_char_dev(struct inode * inode, struct file * filp)
+{
+	struct tty_struct *tty;
+	int min, dev;
+
+	dev = inode->i_rdev;
+	if (MAJOR(dev) == 4 || MAJOR(dev) == 5) {
+		if (MAJOR(dev) == 5)
+			min = current->tty;
+		else
+			min = MINOR(dev);
+		if (min < 0)
+			return -1;
+		if ((IS_A_PTY_MASTER(min)) && (inode->i_count>1))
+			return -1;
+		tty = TTY_TABLE(min);
+		if (!(filp->f_flags & O_NOCTTY) &&
+		    current->leader &&
+		    current->tty<0 &&
+		    tty->session==0) {
+			current->tty = min;
+			tty->session= current->session;
+			tty->pgrp = current->pgrp;
+		}
+		if (IS_A_SERIAL(min))
+			serial_open(min-64);
+	}
+	return 0;
+}
+
+/*
+ * Called every time a minix-file is opened
+ */
+int minix_open(struct inode * inode, struct file * filp)
+{
+	if (S_ISCHR(inode->i_mode)) {
+		if (check_char_dev(inode,filp))
+			return -EAGAIN;
+	} else if (S_ISBLK(inode->i_mode))
+		check_disk_change(inode->i_rdev);
+	else if (S_ISREG(inode->i_mode))
+		filp->f_op = &minix_file_operations;
+	else if (S_ISDIR(inode->i_mode))
+		filp->f_op = &minix_dir_operations;
+	return 0;
 }

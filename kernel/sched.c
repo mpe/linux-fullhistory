@@ -10,9 +10,6 @@
  * call functions (type getpid(), which just extracts a field from
  * current-task
  */
-
-#define TIMER_IRQ 0
-
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/kernel.h>
@@ -21,21 +18,18 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
-#include <sys/time.h>
 
 #include <signal.h>
 #include <errno.h>
 
-int need_resched = 0;
-
 #define _S(nr) (1<<((nr)-1))
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
-static void show_task(int nr,struct task_struct * p)
+void show_task(int nr,struct task_struct * p)
 {
 	int i,j = 4096-sizeof(struct task_struct);
 
-	printk("%d: pid=%d, state=%d, father=%d, child=%d, ",(p == current)?-nr:nr,p->pid,
+	printk("%d: pid=%d, state=%d, father=%d, child=%d, ",nr,p->pid,
 		p->state, p->p_pptr->pid, p->p_cptr ? p->p_cptr->pid : -1);
 	i=0;
 	while (i<j && !((char *)(p+1))[i])
@@ -72,7 +66,7 @@ union task_union {
 	char stack[PAGE_SIZE];
 };
 
-static union task_union init_task = {INIT_TASK, };
+static union task_union init_task = {INIT_TASK,};
 
 unsigned long volatile jiffies=0;
 unsigned long startup_time=0;
@@ -130,17 +124,20 @@ void schedule(void)
 
 /* check alarm, wake up any interruptible tasks that have got a signal */
 
-	need_resched = 0;
 	for(p = &LAST_TASK ; p > &FIRST_TASK ; --p)
 		if (*p) {
 			if ((*p)->timeout && (*p)->timeout < jiffies)
 				if ((*p)->state == TASK_INTERRUPTIBLE) {
 					(*p)->timeout = 0;
-					wake_one_task(*p);
+					(*p)->state = TASK_RUNNING;
 				}
+			if ((*p)->alarm && (*p)->alarm < jiffies) {
+				(*p)->signal |= (1<<(SIGALRM-1));
+				(*p)->alarm = 0;
+			}
 			if (((*p)->signal & ~(*p)->blocked) &&
-			    (*p)->state==TASK_INTERRUPTIBLE)
-				wake_one_task(*p);
+			(*p)->state==TASK_INTERRUPTIBLE)
+				(*p)->state=TASK_RUNNING;
 		}
 
 /* this is the scheduler proper: */
@@ -181,68 +178,54 @@ int sys_pause(void)
 	return -EINTR;
 }
 
-void wake_one_task(struct task_struct * p)
+void wake_up(struct task_struct **p)
 {
-	p->state = TASK_RUNNING;
-	if (p->counter > current->counter)
-		need_resched = 1;
-}
+	struct task_struct * wakeup_ptr, * tmp;
 
-/*
- * wake_up doesn't wake up stopped processes - they have to be awakened
- * with signals or similar.
- */
-void wake_up(struct wait_queue **q)
-{
-	struct wait_queue *tmp, *next;
-	struct task_struct * p;
-	unsigned long flags;
-
-	if (!q || !(next = *q))
-		return;
-	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
-	do {
-		tmp = next;
-		next = tmp->next;
-		if (p = tmp->task) {
-			if (p->state == TASK_ZOMBIE)
+	if (p && *p) {
+		wakeup_ptr = *p;
+		*p = NULL;
+		while (wakeup_ptr && wakeup_ptr != task[0]) {
+			if (wakeup_ptr->state == TASK_STOPPED)
+				printk("wake_up: TASK_STOPPED\n");
+			else if (wakeup_ptr->state == TASK_ZOMBIE)
 				printk("wake_up: TASK_ZOMBIE\n");
-			else if (p->state != TASK_STOPPED) {
-				p->state = TASK_RUNNING;
-				if (p->counter > current->counter)
-					need_resched = 1;
-			}
+			else
+				wakeup_ptr->state = TASK_RUNNING;
+			tmp = wakeup_ptr->next_wait;
+			wakeup_ptr->next_wait = task[0];
+			wakeup_ptr = tmp;
 		}
-		tmp->next = NULL;
-	} while (next && next != *q);
-	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+	}
 }
 
-static inline void __sleep_on(struct wait_queue **p, int state)
+static inline void __sleep_on(struct task_struct **p, int state)
 {
-	unsigned long flags;
+	unsigned int flags;
 
 	if (!p)
 		return;
 	if (current == task[0])
 		panic("task[0] trying to sleep");
-	if (current->wait.next)
-		printk("__sleep_on: wait->next exists\n");
-	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+	__asm__("pushfl ; popl %0":"=r" (flags));
+	current->next_wait = *p;
+	task[0]->next_wait = NULL;
+	*p = current;
 	current->state = state;
-	add_wait_queue(p,&current->wait);
 	sti();
 	schedule();
-	remove_wait_queue(p,&current->wait);
+	if (current->next_wait != task[0])
+		wake_up(p);
+	current->next_wait = NULL;
 	__asm__("pushl %0 ; popfl"::"r" (flags));
 }
 
-void interruptible_sleep_on(struct wait_queue **p)
+void interruptible_sleep_on(struct task_struct **p)
 {
 	__sleep_on(p,TASK_INTERRUPTIBLE);
 }
 
-void sleep_on(struct wait_queue **p)
+void sleep_on(struct task_struct **p)
 {
 	__sleep_on(p,TASK_UNINTERRUPTIBLE);
 }
@@ -252,7 +235,7 @@ void sleep_on(struct wait_queue **p)
  * proper. They are here because the floppy needs a timer, and this
  * was the easiest way of doing it.
  */
-static struct wait_queue * wait_motor[4] = {NULL,NULL,NULL,NULL};
+static struct task_struct * wait_motor[4] = {NULL,NULL,NULL,NULL};
 static int  mon_timer[4]={0,0,0,0};
 static int moff_timer[4]={0,0,0,0};
 unsigned char current_DOR = 0x0C;
@@ -350,75 +333,14 @@ void add_timer(long jiffies, void (*fn)(void))
 	sti();
 }
 
-#define	FSHIFT	11
-#define	FSCALE	(1<<FSHIFT)
-/*
- * Constants for averages over 1, 5, and 15 minutes
- * when sampling at 5 second intervals.
- */
-static unsigned long cexp[3] = {
-	1884,	/* 0.9200444146293232 * FSCALE,	 exp(-1/12) */
-	2014,	/* 0.9834714538216174 * FSCALE,	 exp(-1/60) */
-	2037,	/* 0.9944598480048967 * FSCALE,	 exp(-1/180) */
-};
-unsigned long averunnable[3] = { 0, };	/* fixed point numbers */
-
-void update_avg(void)
-{
-    	int i, n=0;
-	struct task_struct **p;
-
-	for(p = &LAST_TASK; p > &FIRST_TASK; --p)
-		if (*p && ((*p)->state == TASK_RUNNING || 
-			   (*p)->state == TASK_UNINTERRUPTIBLE))
-			++n;
-	
-	for (i = 0; i < 3; ++i)
-		averunnable[i] = (cexp[i] * averunnable[i] +
-			n * FSCALE * (FSCALE - cexp[i])) >> FSHIFT;
-}
-
 unsigned long timer_active = 0;
 struct timer_struct timer_table[32];
 
-static void do_timer(int cpl)
+void do_timer(long cpl)
 {
 	unsigned long mask;
 	struct timer_struct *tp = timer_table+0;
-	struct task_struct ** task_p;
-	static int avg_cnt = 0;
 
-	jiffies++;
-	if (!cpl)
-		current->stime++;
-	else
-		current->utime++;
-	if (--avg_cnt < 0) {
-		avg_cnt = 500;
-		update_avg();
-	}
-	if ((--current->counter)<=0) {
-		current->counter=0;
-		need_resched = 1;
-	}
-	/* Update ITIMER_REAL for every task */
-	for (task_p = &LAST_TASK; task_p >= &FIRST_TASK; task_p--)
-		if (*task_p && (*task_p)->it_real_value
-			&& !(--(*task_p)->it_real_value)) {
-			send_sig(SIGALRM,*task_p,1);
-			(*task_p)->it_real_value = (*task_p)->it_real_incr;
-			need_resched = 1;
-		}
-	/* Update ITIMER_PROF for the current task */
-	if (current->it_prof_value && !(--current->it_prof_value)) {
-		current->it_prof_value = current->it_prof_incr;
-		send_sig(SIGPROF,current,1);
-	}
-	/* Update ITIMER_VIRT for current task if not in a system call */
-	if (current->it_virt_value && !(--current->it_virt_value)) {
-		current->it_virt_value = current->it_virt_incr;
-		send_sig(SIGVTALRM,current,1);
-	}
 	for (mask = 1 ; mask ; tp++,mask += mask) {
 		if (mask > timer_active)
 			break;
@@ -428,8 +350,13 @@ static void do_timer(int cpl)
 			continue;
 		timer_active &= ~mask;
 		tp->fn();
-		sti();
 	}
+
+	if (cpl)
+		current->utime++;
+	else
+		current->stime++;
+
 	if (next_timer) {
 		next_timer->jiffies--;
 		while (next_timer && next_timer->jiffies <= 0) {
@@ -443,18 +370,20 @@ static void do_timer(int cpl)
 	}
 	if (current_DOR & 0xf0)
 		do_floppy_timer();
+	if ((--current->counter)>0) return;
+	current->counter=0;
+	if (!cpl) return;
+	schedule();
 }
 
 int sys_alarm(long seconds)
 {
-	extern int _setitimer(int, struct itimerval *, struct itimerval *);
-	struct itimerval new, old;
+	int old = current->alarm;
 
-	new.it_interval.tv_sec = new.it_interval.tv_usec = 0;
-	new.it_value.tv_sec = seconds;
-	new.it_value.tv_usec = 0;
-	_setitimer(ITIMER_REAL, &new, &old);
-	return(old.it_value.tv_sec + (old.it_value.tv_usec / 1000000));
+	if (old)
+		old = (old - jiffies) / HZ;
+	current->alarm = (seconds>0)?(jiffies+HZ*seconds):0;
+	return (old);
 }
 
 int sys_getpid(void)
@@ -491,7 +420,7 @@ int sys_nice(long increment)
 {
 	if (increment < 0 && !suser())
 		return -EPERM;
-	if (increment >= current->priority)
+	if (increment > current->priority)
 		increment = current->priority-1;
 	current->priority -= increment;
 	return 0;
@@ -506,7 +435,6 @@ void sched_init(void)
 		panic("Struct sigaction MUST be 16 bytes");
 	set_tss_desc(gdt+FIRST_TSS_ENTRY,&(init_task.task.tss));
 	set_ldt_desc(gdt+FIRST_LDT_ENTRY,&(init_task.task.ldt));
-	set_system_gate(0x80,&system_call);
 	p = gdt+2+FIRST_TSS_ENTRY;
 	for(i=1 ; i<NR_TASKS ; i++) {
 		task[i] = NULL;
@@ -522,5 +450,7 @@ void sched_init(void)
 	outb_p(0x36,0x43);		/* binary, mode 3, LSB/MSB, ch 0 */
 	outb_p(LATCH & 0xff , 0x40);	/* LSB */
 	outb(LATCH >> 8 , 0x40);	/* MSB */
-	request_irq(TIMER_IRQ,do_timer);
+	set_intr_gate(0x20,&timer_interrupt);
+	outb(inb_p(0x21)&~0x01,0x21);
+	set_system_gate(0x80,&system_call);
 }

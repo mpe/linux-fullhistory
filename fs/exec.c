@@ -19,18 +19,15 @@
 
 #include <signal.h>
 #include <errno.h>
-#include <sys/ptrace.h>
+#include <linux/string.h>
+#include <sys/stat.h>
 #include <a.out.h>
 
-#include <linux/string.h>
-#include <linux/stat.h>
-#include <linux/fcntl.h>
 #include <linux/fs.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <asm/segment.h>
-#include <sys/user.h>
 
 extern int sys_exit(int exit_code);
 extern int sys_close(int fd);
@@ -41,121 +38,6 @@ extern int sys_close(int fd);
  * a maximum env+arg of 128kB !
  */
 #define MAX_ARG_PAGES 32
-
-/*
- * These are the only things you should do on a core-file: use only these
- * macros to write out all the necessary info.
- */
-#define DUMP_WRITE(addr,nr) \
-while (file.f_op->write(inode,&file,(char *)(addr),(nr)) != (nr)) goto close_coredump
-
-#define DUMP_SEEK(offset) \
-if (file.f_op->lseek) { \
-	if (file.f_op->lseek(inode,&file,(offset),0) != (offset)) \
- 		goto close_coredump; \
-} else file.f_pos = (offset)		
-
-/*
- * Routine writes a core dump image in the current directory.
- * Currently only a stub-function.
- *
- * Note that setuid/setgid files won't make a core-dump if the uid/gid
- * changed due to the set[u|g]id. It's enforced by the "current->dumpable"
- * field, which also makes sure the core-dumps won't be recursive if the
- * dumping of the process results in another error..
- */
-int core_dump(long signr, struct pt_regs * regs)
-{
-	struct inode * inode = NULL;
-	struct file file;
-	unsigned short fs;
-	int has_dumped = 0;
-	register int dump_start, dump_size;
-	struct user dump;
-
-	if (!current->dumpable)
-		return 0;
-	current->dumpable = 0;
-/* See if we have enough room to write the upage.  */
-	if(current->rlim[RLIMIT_CORE].rlim_cur < PAGE_SIZE/1024) return 0;
-	__asm__("mov %%fs,%0":"=r" (fs));
-	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
-	if (open_namei("core",O_CREAT | O_WRONLY | O_TRUNC,0600,&inode))
-		goto end_coredump;
-	if (!S_ISREG(inode->i_mode))
-		goto end_coredump;
-	if (!inode->i_op || !inode->i_op->default_file_ops)
-		goto end_coredump;
-	file.f_mode = 3;
-	file.f_flags = 0;
-	file.f_count = 1;
-	file.f_inode = inode;
-	file.f_pos = 0;
-	file.f_reada = 0;
-	file.f_op = inode->i_op->default_file_ops;
-	if (file.f_op->open)
-		if (file.f_op->open(inode,&file))
-			goto end_coredump;
-	if (!file.f_op->write)
-		goto close_coredump;
-	has_dumped = 1;
-/* write and seek example: from kernel space */
-	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
-	dump.magic = CMAGIC;
-	dump.u_tsize = current->end_code / PAGE_SIZE;
-	dump.u_dsize = (current->brk - current->end_code) / PAGE_SIZE;
-	dump.u_ssize =((current->start_stack +(PAGE_SIZE-1)) / PAGE_SIZE) -
-	  (regs->esp/ PAGE_SIZE);
-/* If the size of the dump file exceeds the rlimit, then see what would happen
-   if we wrote the stack, but not the data area.  */
-	if ((dump.u_dsize+dump.u_ssize+1) * PAGE_SIZE/1024 >
-	    current->rlim[RLIMIT_CORE].rlim_cur)
-		dump.u_dsize = 0;
-/* Make sure we have enough room to write the stack and data areas. */
-	if ((dump.u_ssize+1) * PAGE_SIZE / 1024 >
-	    current->rlim[RLIMIT_CORE].rlim_cur)
-		dump.u_ssize = 0;
-       	dump.u_comm = 0;
-	dump.u_ar0 = (struct pt_regs *)(((int)(&dump.regs)) -((int)(&dump)));
-	dump.signal = signr;
-	dump.regs = *regs;
-	dump.start_code = 0;
-	dump.start_stack = regs->esp & ~(PAGE_SIZE - 1);
-/* Flag indicating the math stuff is valid. */
-	if (dump.u_fpvalid = current->used_math) {
-		if (last_task_used_math == current)
-			__asm__("clts ; fnsave %0"::"m" (dump.i387));
-		else
-			memcpy(&dump.i387,&current->tss.i387,sizeof(dump.i387));
-	};
-	DUMP_WRITE(&dump,sizeof(dump));
-	DUMP_SEEK(sizeof(dump));
- /* Dump the task struct.  Not be used by gdb, but could be useful */
-	DUMP_WRITE(current,sizeof(*current));
-/* Now dump all of the user data.  Include malloced stuff as well */
-	DUMP_SEEK(PAGE_SIZE);
-/* now we start writing out the user space info */
-	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x17));
-/* Dump the data area */
-	if (dump.u_dsize != 0) {
-		dump_start = current->end_code;
-		dump_size = current->brk - current->end_code;
-		DUMP_WRITE(dump_start,dump_size);
-	};
-/* Now prepare to dump the stack area */
-	if (dump.u_ssize != 0) {
-		dump_start = regs->esp & ~(PAGE_SIZE - 1);
-		dump_size = dump.u_ssize * PAGE_SIZE;
-		DUMP_WRITE(dump_start,dump_size);
-	};
-close_coredump:
-	if (file.f_op->release)
-		file.f_op->release(inode,&file);
-end_coredump:
-	__asm__("mov %0,%%fs"::"r" (fs));
-	iput(inode);
-	return has_dumped;
-}
 
 /*
  * Note that a shared library must be both readable and executable due to
@@ -169,8 +51,6 @@ int sys_uselib(const char * library)
 	struct inode * inode;
 	struct buffer_head * bh;
 	struct exec ex;
-	int i;
-	struct file * f;
 
 	if (get_limit(0x17) != TASK_SIZE)
 		return -EINVAL;
@@ -182,20 +62,11 @@ int sys_uselib(const char * library)
 		inode = NULL;
 	if (!inode)
 		return -ENOENT;
-	if (!S_ISREG(inode->i_mode) || !permission(inode,MAY_READ)) {
+	if (!S_ISREG(inode->i_mode) || !permission(inode,MAY_READ|MAY_EXEC)) {
 		iput(inode);
 		return -EACCES;
 	}
- 	if (inode->i_count > 1) {		/* check for writers */
- 		f=0+file_table;
- 		for (i=0 ; i<NR_FILE ; i++,f++ )
- 			if (f->f_count && (f->f_mode & 2))
- 				if (inode == f->f_inode) {
- 					iput(inode);
- 					return -ETXTBSY;
- 				}
- 	}
-	if (!(bh = bread(inode->i_dev,bmap(inode,0)))) {
+	if (!(bh = bread(inode->i_dev,inode->i_data[0]))) {
 		iput(inode);
 		return -EACCES;
 	}
@@ -287,7 +158,7 @@ static int count(char ** argv)
 static unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 		unsigned long p, int from_kmem)
 {
-	char *tmp, *pag = NULL;
+	char *tmp, *pag;
 	int len, offset = 0;
 	unsigned long old_fs, new_fs;
 
@@ -358,32 +229,6 @@ static unsigned long change_ldt(unsigned long text_size,unsigned long * page)
 	return data_limit;
 }
 
-static void read_omagic(struct inode *inode, int bytes)
-{
-	struct buffer_head *bh;
-	int n, blkno, blk = 0;
-	char *dest = (char *) 0;
-
-	while (bytes > 0) {
-		if (!(blkno = bmap(inode, blk)))
-			sys_exit(-1);
-		if (!(bh = bread(inode->i_dev, blkno)))
-			sys_exit(-1);
-		n = (blk ? BLOCK_SIZE : BLOCK_SIZE - sizeof(struct exec));
-		if (bytes < n)
-			n = bytes;
-
-		memcpy_tofs(dest, (blk ? bh->b_data :
-				bh->b_data + sizeof(struct exec)), n);
-		brelse(bh);
-		++blk;
-		dest += n;
-		bytes -= n;
-	}
-	iput(inode);
-	current->executable = NULL;
-}
-
 /*
  * 'do_execve()' executes a new program.
  *
@@ -403,7 +248,6 @@ int do_execve(unsigned long * eip,long tmp,char * filename,
 	int sh_bang = 0;
 	unsigned long p=PAGE_SIZE*MAX_ARG_PAGES-4;
 	int ch;
-	struct file * f;
 
 	if ((0xffff & eip[1]) != 0x000f)
 		panic("execve called from supervisor mode");
@@ -411,15 +255,6 @@ int do_execve(unsigned long * eip,long tmp,char * filename,
 		page[i]=0;
 	if (!(inode=namei(filename)))		/* get executables inode */
 		return -ENOENT;
-	if (inode->i_count > 1) {		/* check for writers */
-		f=0+file_table;
-		for (i=0 ; i<NR_FILE ; i++,f++ )
-			if (f->f_count && (f->f_mode & 2))
-				if (inode == f->f_inode) {
-					retval = -ETXTBSY;
-					goto exec_error2;
-				}
-	}
 	argc = count(argv);
 	envc = count(envp);
 	
@@ -428,17 +263,7 @@ restart_interp:
 		retval = -EACCES;
 		goto exec_error2;
 	}
-	if (IS_NOEXEC(inode)) { /* FS mustn't be mounted noexec */
-		retval = -EPERM;
-		goto exec_error2;
-	}
 	i = inode->i_mode;
-	if (IS_NOSUID(inode) && (((i & S_ISUID) && inode->i_uid != current->
-	    euid) || ((i & S_ISGID) && inode->i_gid != current->egid)) &&
-	    !suser()) {
-		retval = -EPERM;
-		goto exec_error2;
-	}
 	/* make sure we don't let suid, sgid files be ptraced. */
 	if (current->flags & PF_PTRACED) {
 		e_uid = current->euid;
@@ -456,7 +281,7 @@ restart_interp:
 		retval = -EACCES;
 		goto exec_error2;
 	}
-	if (!(bh = bread(inode->i_dev,bmap(inode,0)))) {
+	if (!(bh = bread(inode->i_dev,inode->i_data[0]))) {
 		retval = -EACCES;
 		goto exec_error2;
 	}
@@ -534,14 +359,13 @@ restart_interp:
 		goto restart_interp;
 	}
 	brelse(bh);
-	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC) ||
-		ex.a_trsize || ex.a_drsize ||
+	if (N_MAGIC(ex) != ZMAGIC || ex.a_trsize || ex.a_drsize ||
 		ex.a_text+ex.a_data+ex.a_bss>0x3000000 ||
 		inode->i_size < ex.a_text+ex.a_data+ex.a_syms+N_TXTOFF(ex)) {
 		retval = -ENOEXEC;
 		goto exec_error2;
 	}
-	if (N_TXTOFF(ex) != BLOCK_SIZE && N_MAGIC(ex) != OMAGIC) {
+	if (N_TXTOFF(ex) != BLOCK_SIZE) {
 		printk("%s: N_TXTOFF != BLOCK_SIZE. See a.out.h.", filename);
 		retval = -ENOEXEC;
 		goto exec_error2;
@@ -555,7 +379,6 @@ restart_interp:
 		}
 	}
 /* OK, This is the point of no return */
-	current->dumpable = 1;
 	for (i=0; (ch = get_fs_byte(filename++)) != '\0';)
 		if (ch == '/')
 			i = 0;
@@ -571,9 +394,6 @@ restart_interp:
 		iput(current->libraries[i].library);
 		current->libraries[i].library = NULL;
 	}
-	if (e_uid != current->euid || e_gid != current->egid ||
-	    !permission(inode,MAY_READ))
-		current->dumpable = 0;
 	current->numlibraries = 0;
 	current->executable = inode;
 	current->signal = 0;
@@ -602,12 +422,10 @@ restart_interp:
 	current->rss = (LIBRARY_OFFSET - p + PAGE_SIZE-1) / PAGE_SIZE;
 	current->suid = current->euid = e_uid;
 	current->sgid = current->egid = e_gid;
-	if (N_MAGIC(ex) == OMAGIC)
-		read_omagic(inode, ex.a_text+ex.a_data);
 	eip[0] = ex.a_entry;		/* eip, magic happens :-) */
 	eip[3] = p;			/* stack pointer */
 	if (current->flags & PF_PTRACED)
-		send_sig(SIGTRAP, current, 0);
+	  send_sig(SIGTRAP, current, 0);
 	return 0;
 exec_error2:
 	iput(inode);

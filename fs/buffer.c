@@ -30,7 +30,7 @@ extern int end;
 static struct buffer_head * start_buffer = (struct buffer_head *) &end;
 static struct buffer_head * hash_table[NR_HASH];
 static struct buffer_head * free_list;
-static struct wait_queue * buffer_wait = NULL;
+static struct task_struct * buffer_wait = NULL;
 int NR_BUFFERS = 0;
 
 static inline void wait_on_buffer(struct buffer_head * bh)
@@ -47,25 +47,23 @@ static void sync_buffers(int dev)
 	struct buffer_head * bh;
 
 	bh = free_list;
-	for (i = NR_BUFFERS*2 ; i-- > 0 ; bh = bh->b_next_free) {
-		if (bh->b_lock)
+	for (i=0 ; i<NR_BUFFERS ; i++,bh = bh->b_next_free) {
+#if 0
+		if (dev && (bh->b_dev != dev))
 			continue;
-		if (!bh->b_dirt)
+#endif
+		wait_on_buffer(bh);
+#if 0
+		if (dev && (bh->b_dev != dev))
 			continue;
-		ll_rw_block(WRITE,bh);
+#endif
+		if (bh->b_dirt)
+			ll_rw_block(WRITE,bh);
 	}
 }
 
 int sys_sync(void)
 {
-	int i;
-
-	for (i=0 ; i<NR_SUPER ; i++)
-		if (super_block[i].s_dev
-		    && super_block[i].s_op 
-		    && super_block[i].s_op->write_super 
-		    && super_block[i].s_dirt)
-			super_block[i].s_op->write_super(&super_block[i]);
 	sync_inodes();		/* write out inodes into buffers */
 	sync_buffers(0);
 	return 0;
@@ -73,11 +71,6 @@ int sys_sync(void)
 
 int sync_dev(int dev)
 {
-	struct super_block * sb;
-
-	if (sb = get_super (dev))
-		if (sb->s_op && sb->s_op->write_super && sb->s_dirt)
-			sb->s_op->write_super (sb);
 	sync_buffers(dev);
 	sync_inodes();
 	sync_buffers(dev);
@@ -265,7 +258,9 @@ repeat:
 	if (bh = get_hash_table(dev,block))
 		return bh;
 	buffers = NR_BUFFERS;
-	for (tmp = free_list ; buffers-- > 0 ; tmp = tmp->b_next_free) {
+	tmp = free_list;
+	do {
+		tmp = tmp->b_next_free;
 		if (tmp->b_count)
 			continue;
 		if (!bh || BADNESS(tmp)<BADNESS(bh)) {
@@ -273,12 +268,10 @@ repeat:
 			if (!BADNESS(tmp))
 				break;
 		}
-#if 0
 		if (tmp->b_dirt)
 			ll_rw_block(WRITEA,tmp);
-#endif
-	}
 /* and repeat until we find something good */
+	} while (buffers--);
 	if (!bh) {
 		sleep_on(&buffer_wait);
 		goto repeat;
@@ -286,9 +279,11 @@ repeat:
 	wait_on_buffer(bh);
 	if (bh->b_count)
 		goto repeat;
-	if (bh->b_dirt) {
-		sync_buffers(bh->b_dev);
-		goto repeat;
+	while (bh->b_dirt) {
+		sync_dev(bh->b_dev);
+		wait_on_buffer(bh);
+		if (bh->b_count)
+			goto repeat;
 	}
 /* NOTE!! While we slept waiting for this block, somebody else might */
 /* already have added "this" block to the cache. check it */
@@ -389,7 +384,7 @@ struct buffer_head * breada(int dev,int first, ...)
 		tmp=getblk(dev,first);
 		if (tmp) {
 			if (!tmp->b_uptodate)
-				ll_rw_block(READA,tmp);
+				ll_rw_block(READA,bh);
 			tmp->b_count--;
 		}
 	}
@@ -425,7 +420,6 @@ void buffer_init(long buffer_end)
 		h->b_next = NULL;
 		h->b_prev = NULL;
 		h->b_data = (char *) b;
-		h->b_reqnext = NULL;
 		h->b_prev_free = h-1;
 		h->b_next_free = h+1;
 		h++;

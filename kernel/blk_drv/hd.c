@@ -16,10 +16,7 @@
  *  in the early extended-partition checks and added DM partitions
  */
 
-#define HD_IRQ 14
-
 #include <errno.h>
-#include <signal.h>
 
 #include <linux/config.h>
 #include <linux/sched.h>
@@ -27,8 +24,6 @@
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/hdreg.h>
-
-#define REALLY_SLOW_IO
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -42,8 +37,6 @@ static inline unsigned char CMOS_READ(unsigned char addr)
 	return inb_p(0x71);
 }
 
-#define	HD_DELAY	0
-
 /* Max read/write errors/sector */
 #define MAX_ERRORS	7
 #define MAX_HD		2
@@ -53,10 +46,6 @@ static void bad_rw_intr(void);
 
 static int recalibrate = 0;
 static int reset = 0;
-
-#if (HD_DELAY > 0)
-unsigned long last_req, read_timer();
-#endif
 
 /*
  *  This struct defines the HD's and their types.
@@ -85,6 +74,7 @@ __asm__("cld;rep;insw"::"d" (port),"D" (buf),"c" (nr):"cx","di")
 #define port_write(port,buf,nr) \
 __asm__("cld;rep;outsw"::"d" (port),"S" (buf),"c" (nr):"cx","si")
 
+extern void hd_interrupt(void);
 extern void rd_load(void);
 
 static unsigned int current_minor;
@@ -281,28 +271,10 @@ int sys_setup(void * BIOS)
 	blk_size[MAJOR_NR] = hd_sizes;
 	if (NR_HD)
 		printk("Partition table%s ok.\n\r",(NR_HD>1)?"s":"");
-#ifdef RAMDISK
 	rd_load();
-#endif
 	mount_root();
 	return (0);
 }
-
-#if (HD_DELAY > 0)
-unsigned long read_timer(void)
-{
-	unsigned long t;
-	int i;
-
-	cli();
-    	outb_p(0xc2, 0x43);
-	t = jiffies * 11931 + (inb_p(0x40) & 0x80 ? 5966 : 11932);
-	i = inb_p(0x40);
-	i |= inb(0x40) << 8;
-	sti();
-	return(t - i / 2);
-}
-#endif
 
 static int controller_ready(void)
 {
@@ -336,10 +308,6 @@ static void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
 
 	if (drive>1 || head>15)
 		panic("Trying to write bad sector");
-#if (HD_DELAY > 0)
-	while (read_timer() - last_req < HD_DELAY)
-		/* nothing */;
-#endif
 	if (reset || !controller_ready()) {
 		reset = 1;
 		return;
@@ -353,7 +321,7 @@ static void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
 	outb_p(cyl,++port);
 	outb_p(cyl>>8,++port);
 	outb_p(0xA0|(drive<<4)|head,++port);
-	outb_p(cmd,++port);
+	outb(cmd,++port);
 }
 
 static int drive_busy(void)
@@ -375,7 +343,6 @@ static void reset_controller(void)
 {
 	int	i;
 
-	printk("HD-controller reset\r\n");
 	outb(4,HD_CMD);
 	for(i = 0; i < 1000; i++) nop();
 	outb(hd_info[0].ctl & 0x0f ,HD_CMD);
@@ -430,82 +397,48 @@ static void bad_rw_intr(void)
 		return;
 	if (++CURRENT->errors >= MAX_ERRORS)
 		end_request(0);
-	else if (CURRENT->errors > MAX_ERRORS/2)
+	if (CURRENT->errors > MAX_ERRORS/2)
 		reset = 1;
 	else
 		recalibrate = 1;
 }
 
-#define STAT_MASK (BUSY_STAT | READY_STAT | WRERR_STAT | SEEK_STAT | ERR_STAT)
-#define STAT_OK (READY_STAT | SEEK_STAT)
-
 static void read_intr(void)
 {
-	int i;
-
-	i = (unsigned) inb_p(HD_STATUS);
-	if (!(i & DRQ_STAT))
-		goto bad_read;
-	if ((i & STAT_MASK) != STAT_OK)
-		goto bad_read;
+	SET_INTR(&read_intr);
+	if (win_result()) {
+		SET_INTR(NULL);
+		bad_rw_intr();
+		do_hd_request();
+		return;
+	}
 	port_read(HD_DATA,CURRENT->buffer,256);
-	i = (unsigned) inb_p(HD_STATUS);
-	if (!(i & BUSY_STAT))
-		if ((i & STAT_MASK) != STAT_OK)
-			goto bad_read;
 	CURRENT->errors = 0;
 	CURRENT->buffer += 512;
 	CURRENT->sector++;
-	i = --CURRENT->nr_sectors;
-	if (!i || (CURRENT->bh && !(i&1)))
-		end_request(1);
-	if (i > 0) {
-		SET_INTR(&read_intr);
+	if (--CURRENT->nr_sectors)
 		return;
-	}
-#if (HD_DELAY > 0)
-	last_req = read_timer();
-#endif
+	SET_INTR(NULL);
+	end_request(1);
 	do_hd_request();
-	return;
-bad_read:
-	if (i & ERR_STAT)
-		i = (unsigned) inb(HD_ERROR);
-	bad_rw_intr();
-	do_hd_request();
-	return;
 }
 
 static void write_intr(void)
 {
-	int i;
-
-	i = (unsigned) inb_p(HD_STATUS);
-	if ((i & STAT_MASK) != STAT_OK)
-		goto bad_write;
-	if (CURRENT->nr_sectors > 1 && !(i & DRQ_STAT))
-		goto bad_write;
-	CURRENT->sector++;
-	i = --CURRENT->nr_sectors;
-	CURRENT->buffer += 512;
-	if (!i || (CURRENT->bh && !(i & 1)))
-		end_request(1);
-	if (i > 0) {
+	if (win_result()) {
+		bad_rw_intr();
+		do_hd_request();
+		return;
+	}
+	if (--CURRENT->nr_sectors) {
+		CURRENT->sector++;
+		CURRENT->buffer += 512;
 		SET_INTR(&write_intr);
 		port_write(HD_DATA,CURRENT->buffer,256);
-	} else {
-#if (HD_DELAY > 0)
-		last_req = read_timer();
-#endif
-		do_hd_request();
+		return;
 	}
-	return;
-bad_write:
-	if (i & ERR_STAT)
-		i = (unsigned) inb(HD_ERROR);
-	bad_rw_intr();
+	end_request(1);
 	do_hd_request();
-	return;
 }
 
 static void recal_intr(void)
@@ -521,7 +454,7 @@ static void recal_intr(void)
  */
 static void hd_times_out(void)
 {	
-	DEVICE_INTR = NULL;
+	do_hd = NULL;
 	reset = 1;
 	if (!CURRENT)
 		return;
@@ -543,7 +476,7 @@ static void do_hd_request(void)
 	dev = MINOR(CURRENT->dev);
 	block = CURRENT->sector;
 	nsect = CURRENT->nr_sectors;
-	if (dev >= (NR_HD<<6) || block >= hd[dev].nr_sects) {
+	if (dev >= (NR_HD<<6) || block+nsect > hd[dev].nr_sects) {
 		end_request(0);
 		goto repeat;
 	}
@@ -561,7 +494,8 @@ static void do_hd_request(void)
 	}
 	if (recalibrate) {
 		recalibrate = 0;
-		hd_out(dev,hd_info[dev].sect,0,0,0,WIN_RESTORE,&recal_intr);
+		hd_out(dev,hd_info[dev].sect,0,0,0,
+			WIN_RESTORE,&recal_intr);
 		if (reset)
 			goto repeat;
 		return;
@@ -598,29 +532,16 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 		return -EINVAL;
 	switch (cmd) {
 		case HDIO_REQ:
-			verify_area(loc, sizeof(*loc));
 			put_fs_byte(hd_info[dev].head,
 				(char *) &loc->heads);
 			put_fs_byte(hd_info[dev].sect,
 				(char *) &loc->sectors);
 			put_fs_word(hd_info[dev].cyl,
 				(short *) &loc->cylinders);
-			put_fs_long(hd[MINOR(inode->i_rdev)].start_sect,
-				(long *) &loc->start);
 			return 0;
-		RO_IOCTLS(inode->i_rdev,arg);
 		default:
 			return -EINVAL;
 	}
-}
-
-/*
- * Releasing a block device means we sync() it, so that it can safely
- * be forgotten about...
- */
-static void hd_release(struct inode * inode, struct file * file)
-{
-	sync_dev(inode->i_rdev);
 }
 
 static struct file_operations hd_fops = {
@@ -628,41 +549,17 @@ static struct file_operations hd_fops = {
 	block_read,		/* read - general block-dev read */
 	block_write,		/* write - general block-dev write */
 	NULL,			/* readdir - bad */
+	NULL,			/* close - default */
 	NULL,			/* select */
-	hd_ioctl,		/* ioctl */
-	NULL,			/* no special open code */
-	hd_release		/* release */
-};
-
-static void hd_interrupt(int cpl)
-{
-	void (*handler)(void) = DEVICE_INTR;
-
-	DEVICE_INTR = NULL;
-	timer_active &= ~(1<<HD_TIMER);
-	if (!handler)
-		handler = unexpected_hd_interrupt;
-	handler();
-}
-
-/*
- * This is the harddisk IRQ descruption. The SA_INTERRUPT in sa_flags
- * means we run the IRQ-handler with interrupts disabled: this is bad for
- * interrupt latency, but anything else has led to problems on some
- * machines...
- */
-static struct sigaction hd_sigaction = {
-	hd_interrupt,
-	0,
-	SA_INTERRUPT,
-	NULL
+	hd_ioctl		/* ioctl */
 };
 
 void hd_init(void)
 {
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	blkdev_fops[MAJOR_NR] = &hd_fops;
-	if (irqaction(HD_IRQ,&hd_sigaction))
-		printk("Unable to get IRQ%d for the harddisk driver\n",HD_IRQ);
+	set_intr_gate(0x2E,&hd_interrupt);
+	outb_p(inb_p(0x21)&0xfb,0x21);
+	outb(inb_p(0xA1)&0xbf,0xA1);
 	timer_table[HD_TIMER].fn = hd_times_out;
 }

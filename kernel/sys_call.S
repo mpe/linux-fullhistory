@@ -37,6 +37,8 @@
  *	40(%esp) - %oldss
  */
 
+SIG_CHLD	= 17
+
 EBX		= 0x00
 ECX		= 0x04
 EDX		= 0x08
@@ -79,14 +81,14 @@ ENOSYS = 38
  * Ok, I get parallel printer interrupts while using the floppy for some
  * strange reason. Urgel. Now I just ignore them.
  */
-.globl _system_call,_sys_execve
+.globl _system_call,_timer_interrupt,_sys_execve
 .globl _device_not_available, _coprocessor_error
 .globl _divide_error,_debug,_nmi,_int3,_overflow,_bounds,_invalid_op
 .globl _double_fault,_coprocessor_segment_overrun
 .globl _invalid_TSS,_segment_not_present,_stack_segment
-.globl _general_protection,_reserved
+.globl _general_protection,_irq13,_reserved
 .globl _alignment_check,_page_fault
-.globl ret_from_sys_call
+.globl _keyboard_interrupt
 
 #define SAVE_ALL \
 	cld; \
@@ -107,17 +109,59 @@ ENOSYS = 38
 	movl $0x17,%edx; \
 	mov %dx,%fs
 
+#define ACK_FIRST(mask) \
+	inb $0x21,%al; \
+	jmp 1f; \
+1:	jmp 1f; \
+1:	orb $(mask),%al; \
+	outb %al,$0x21; \
+	jmp 1f; \
+1:	jmp 1f; \
+1:	movb $0x20,%al; \
+	outb %al,$0x20
+
+#define ACK_SECOND(mask) \
+	inb $0xA1,%al; \
+	jmp 1f; \
+1:	jmp 1f; \
+1:	orb $mask,%al; \
+	outb %al,$0xA1; \
+	jmp 1f; \
+1:	jmp 1f; \
+1:	movb $0x20,%al; \
+	outb %al,$0x20
+	jmp 1f; \
+1:	jmp 1f; \
+1:	outb %al,$0xA0
+
+#define UNBLK_FIRST(mask) \
+	inb $0x21,%al; \
+	jmp 1f; \
+1:	jmp 1f; \
+1:	andb $~(mask),%al; \
+	outb %al,$0x21
+
+#define UNBLK_SECOND(mask) \
+	inb $0xA1,%al; \
+	jmp 1f; \
+1:	jmp 1f; \
+1:	andb $~(mask),%al; \
+	outb %al,$0xA1
+
+.align 2
+bad_sys_call:
+	movl $-ENOSYS,EAX(%esp)
+	jmp ret_from_sys_call
 .align 2
 reschedule:
 	pushl $ret_from_sys_call
 	jmp _schedule
 .align 2
 _system_call:
-	pushl %eax			# save orig_eax
+	pushl %eax		# save orig_eax
 	SAVE_ALL
-	movl $-ENOSYS,EAX(%esp)
 	cmpl _NR_syscalls,%eax
-	jae ret_from_sys_call
+	jae bad_sys_call
 	call _sys_call_table(,%eax,4)
 	movl %eax,EAX(%esp)		# save the return value
 ret_from_sys_call:
@@ -125,17 +169,13 @@ ret_from_sys_call:
 	jne 2f
 	cmpw $0x17,OLDSS(%esp)		# was stack segment = 0x17 ?
 	jne 2f
-1:	cmpl $0,_need_resched
-	jne reschedule
-	movl _current,%eax
+1:	movl _current,%eax
+	cmpl _task,%eax			# task[0] cannot have signals
+	je 2f
 	cmpl $0,state(%eax)		# state
 	jne reschedule
 	cmpl $0,counter(%eax)		# counter
 	je reschedule
-	movl $1,_need_resched
-	cmpl _task,%eax			# task[0] cannot have signals
-	je 2f
-	movl $0,_need_resched
 	movl signal(%eax),%ebx
 	movl blocked(%eax),%ecx
 	notl %ecx
@@ -144,13 +184,10 @@ ret_from_sys_call:
 	je 2f
 	btrl %ecx,%ebx
 	movl %ebx,signal(%eax)
-	movl %esp,%ebx
-	pushl %ebx
 	incl %ecx
 	pushl %ecx
 	call _do_signal
 	popl %ecx
-	popl %ebx
 	testl %eax, %eax
 	jne 1b			# see if we need to switch tasks, or do more signals
 2:	popl %ebx
@@ -168,6 +205,16 @@ ret_from_sys_call:
 	iret
 
 .align 2
+_irq13:
+	pushl %eax
+	xorb %al,%al
+	outb %al,$0xF0
+	movb $0x20,%al
+	outb %al,$0x20
+	jmp 1f
+1:	jmp 1f
+1:	outb %al,$0xA0
+	popl %eax
 _coprocessor_error:
 	pushl $-1		# mark this as an int. 
 	SAVE_ALL
@@ -187,6 +234,31 @@ _device_not_available:
 	call _math_emulate
 	addl $4,%esp
 	ret
+
+.align 2
+_keyboard_interrupt:
+	pushl $-1
+	SAVE_ALL
+	ACK_FIRST(2)
+	sti
+	call _do_keyboard
+	cli
+	UNBLK_FIRST(2)
+	jmp ret_from_sys_call
+
+.align 2
+_timer_interrupt:
+	pushl $-1		# mark this as an int
+	SAVE_ALL
+	incl _jiffies
+	movb $0x20,%al		# EOI to interrupt controller #1
+	outb %al,$0x20
+	movl CS(%esp),%eax
+	andl $3,%eax		# %eax is CPL (0 or 3, 0=supervisor)
+	pushl %eax
+	call _do_timer		# 'do_timer(long CPL)' does everything from
+	addl $4,%esp		# task switching to accounting ...
+	jmp ret_from_sys_call
 
 .align 2
 _sys_execve:

@@ -3,10 +3,9 @@
  *
  * Written by obz.
  */
-#include <linux/stat.h>
+#include <sys/stat.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
-#include <linux/mm.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <errno.h>
@@ -38,11 +37,16 @@
 #define CODE_SPACE(addr) ((((addr)+4095)&~4095) < \
 			  current->start_code + current->end_code)
 
+extern int remap_page_range(unsigned long from, unsigned long to,
+			    unsigned long size, int permiss);
+extern int unmap_page_range(unsigned long from, unsigned long size);
+
 static caddr_t
 mmap_chr(unsigned long addr, size_t len, int prot, int flags,
 	 struct inode *inode, unsigned long off)
 {
 	int major, minor;
+	extern unsigned long HIGH_MEMORY;
 
 	major = MAJOR(inode->i_rdev);
 	minor = MINOR(inode->i_rdev);

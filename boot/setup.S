@@ -189,10 +189,9 @@ end_move:
 	out	#0xA1,al
 	.word	0x00eb,0x00eb
 	mov	al,#0xFF		! mask off all interrupts for now
-	out	#0xA1,al
+	out	#0x21,al
 	.word	0x00eb,0x00eb
-	mov	al,#0xFB		! mask all irq's but irq2 which
-	out	#0x21,al		! is cascaded
+	out	#0xA1,al
 
 ! well, that certainly wasn't fun :-(. Hopefully it works, and we don't
 ! need no steenking BIOS anyway (except for the initial loading :-).
@@ -242,75 +241,10 @@ chsvga:	cld
 	push	ds
 	push	cs
 	pop	ds
-
-! First try and execute a VESA BIOS call
-
-	mov	ax,#0x4f00		! AX = VESA BIOS func RETURN SVGA Info
-	push	cs
-	pop	es
-	lea	di,vib			! ES:[DI] -> VESA Information Block Ptr
-	int	0x10
-
-	cmp	ax,#0x004f		! Check result status
-	jne	novesa			! VESA BIOS not supported or failed
-
-! OK!  We got a VESA BIOS, let's figure out what we can do!
-
-! Print out the VESA information from the VIB
-
-	lea	si,vib			! This should print out VESA
-	lodsb
-	call	prnt1
-	lodsb
-	call	prnt1
-	lodsb
-	call	prnt1
-	lodsb
-	call	prnt1
-	call	space
-
-	mov	al,vib+5		! This is the version of VESA supported
-	call	dprnt
-	mov	al,#0x2e
-	call	prnt1
-	mov	al,vib+4
-	call	dprnt
-	call	space
-
-	push	ds
-	lds	si,vib+6		! This prints out the OEM string
-	call	prtstr
-	call	space
-	pop	ds
-
-	mov	al,vib+10		! This prints out the Vesa Capabilities
-	call	dprnt
-	mov	al,vib+11
-	call	dprnt
-	mov	al,vib+12
-	call	dprnt
-	mov	al,vib+13
-	call	dprnt
-
-	push	ds			! Finally, go through the list of modes
-	lds	si,vib+14
-model:	lodsw				! Get mode number
-	cmp	ax,#0xFFFF
-	je	isvesa
-	call	addmod			! Check to see if this is a TEXT mode
-	jmp	model
-
-isvesa:	call	docr
-	pop	ds
-	lea	si,dscvesa
-	lea	di,movesa
-	lea	cx,selmod
-	jmp	cx
-
-novesa:	mov 	ax,#0xc000
+	mov 	ax,#0xc000
 	mov	es,ax
 	lea	si,msg1
-	call	prtstr			! Press <RETURN> to see SVGA-modes ...
+	call	prtstr
 flush:	in	al,#0x60		! Flush the keyboard buffer
 	cmp	al,#0x82
 	jb	nokey
@@ -529,38 +463,23 @@ even7:	mov	al,#0x0c
 	mov	al,#0x55
 	xor	al,#0xea
 	cmp	al,bh
-	je	isvideo7
-	lea	cx,set8x8
-	jmp	cx
-isvideo7:
+	jne	novid7
 	lea	si,dscvideo7
 	lea	di,movideo7
-
-! Upon Entry to SELMOD, SI -> list of Modes, DI -> List of Mode Numbers
-
 selmod:	push	si
-	lea	si,msg2			! Numb:   Mode:   COLSxROWS
+	lea	si,msg2
 	call	prtstr
-	mov	cx,(di)			! This gets Number of Modes in list
+	xor	cx,cx
+	mov	cl,(di)
 	pop	si
 	push	si
 	push	cx
 tbl:	pop	bx
 	push	bx
-	mov	ax,bx
-	sub	ax,cx
-	call	hprntl			! Print out selection number
-	push	ax
+	mov	al,bl
+	sub	al,cl
+	call	dprnt
 	call	spcing
-	pop	ax
-	push	di
-	add	ax,ax
-	add	ax,#2
-	add	di,ax
-	mov	ax,(di)
-	call	hprntl			! Print out MODE number
-	call	spcing
-	pop	di
 	lodsw
 	xchg	al,ah
 	call	dprnt
@@ -574,7 +493,7 @@ tbl:	pop	bx
 	loop	tbl
 	pop	cx
 	call	docr
-	lea	si,msg3			! Choose Mode Number
+	lea	si,msg3
 	call	prtstr
 	pop	si
 	add	cl,#0x80
@@ -590,38 +509,18 @@ zero:	sub	al,#0x0a
 nozero:	sub	al,#0x80
 	dec	al
 	xor	ah,ah
-	shl	ax,#1
-	push	ax
 	add	di,ax
 	inc	di
-	inc	di
-	mov	ax,(di)			! AX = Mode
-	cmp	ah,#0
-	jne	setvesa
-	int 	0x10			! Set OLD style mode
-
-retmode:
+	push	ax
+	mov	al,(di)
+	int 	0x10
 	pop	ax
+	shl	ax,#1
 	add	si,ax
-	lodsw				! Get COLSxROWS
+	lodsw
 	pop	ds
 	ret
-
-setvesa:
-	pop	bx
-	cmp	ah,#0xFF		! Special, mode FF, set 8x8 font
-	je	set8x8
-
-	push	bx
-	mov	bx,ax			! Mode to set
-	mov	ax,#0x4f02		! Set VESA mode
-	int	0x10
-
-	jmp	retmode
-		
-! If we can't find the adapter in the table, at least set 80x50
-
-set8x8:
+novid7:
 	mov	ax,#0x1112
 	mov	bl,#0
 	int	0x10		! use 8x8 font set (50 lines on VGA)
@@ -642,83 +541,17 @@ set8x8:
 	mov	ax,#0x5032	! return 80x50
 	ret
 
-! Routine to add mode in ax to VESA selection table
-
-addmod:	push	cx
-	push	ds
-	push	es
-	push	di
-	push	bx
-	push	dx
-	push	ax
-
-	mov	cx,ax			! CX = VESA mode number
-	push	cs
-	pop	es
-	lea	di,mib			! ES:[DI] -> Mode Information Block
-	mov	ax,#0x4f01		! AX = Get VESA Mode Info
-	int	0x10	
-
-	cmp	ax,#0x004f		! If fails, assume it's not a TEXT mode
-	jne	adfail
-
-	push	cs
-	pop	ds			! Make DS contain something reasonable
-
-	mov	ax,mib			! Get Mode Attributes field
-	and	al,#0x12		! Mask Text and Extended bits
-	cmp	al,#0x02		! Text and Extended info available?
-	jne	adfail
-
-	call	space
-
-	mov	ax,mib+18		! Horizontal Resolution
-	mov	bl,mib+22		! X Char Size
-	div	bl
-! HACK:  For some reason, my Diamond Stealth card returns 160 cols for its
-!	 132 coloumn modes, so don't return any sizes > 132?
-	sub	al,#132
-	jbe	orgcol
-	sub	al,al
-orgcol:	add	al,#132			! MIN(cols, 132)
-	mov	dh,al			! Put num cols in DH
-	mov	ax,mib+20		! Vertical Resolution
-	mov	bl,mib+23		! Y Char Size
-	div	bl
-	mov	dl,al			! Put num rows in DL
-
-	mov	bx,movesa		! Get current number of video modes
-	lea	di,movesa
-	inc	(di)			! This is a NEW mode
-	add	bx,bx
-	add	di,bx
-	add	di,#2
-	pop	ax			! Get Mode number back
-	push	ax
-	mov	(di),ax			! Mode number
-	lea	di,dscvesa
-	add	di,bx
-	mov	(di),dx			! Screen resolution
-
-adfail:	pop	ax
-	pop	dx
-	pop	bx
-	pop	di
-	pop	es
-	pop	ds
-	pop	cx
-
-	ret
-
 ! Routine that 'tabs' to next col.
 
 spcing:	mov	al,#0x2e
+	call	prnt1
+	mov	al,#0x20
 	call	prnt1	
-space3:	mov	al,#0x20
+	mov	al,#0x20
 	call	prnt1	
-space2:	mov	al,#0x20
+	mov	al,#0x20
 	call	prnt1	
-space:	mov	al,#0x20
+	mov	al,#0x20
 	call	prnt1
 	ret	
 
@@ -730,39 +563,6 @@ prtstr:	lodsb
 	call	prnt1
 	jmp	prtstr
 fin:	ret
-
-! Routine to print out HEX values on screen.
-! The value to be printed is in the AX register.
-
-hprntl:	xchg	ah,al
-	call	hprnt
-	xchg	ah,al
-	call	hprnt
-	ret
-
-! Routine to print out HEX values on the screen
-! The valueto be printed is in the AL register.  AH is preserved.
-
-hprnt:	push	ax
-	shr	al,4
-	and	al,#0xf
-	call	hprnt1
-	pop	ax
-	push	ax
-	and	al,#0xf
-	call	hprnt1
-	pop	ax
-	ret
-
-! Routine to print out one HEX digit on the screen.
-! The value to be printed is in al (0-F)
-
-hprnt1:	cmp	al,#10
-	jl	hdec
-	add	al,#7			! Convert 10-15 to A-F
-hdec:	add	al,#0x30		! Convert to ASCII
-	call	prnt1			! print it
-	ret
 
 ! Routine to print a decimal value on screen, the value to be
 ! printed is put in al (i.e 0-255). 
@@ -835,7 +635,7 @@ gdt_48:
 
 msg1:		.ascii	"Press <RETURN> to see SVGA-modes available or any other key to continue."
 		db	0x0d, 0x0a, 0x0a, 0x00
-msg2:		.ascii	"Numb:   Mode:  COLSxROWS:"
+msg2:		.ascii	"Mode:  COLSxROWS:"
 		db	0x0d, 0x0a, 0x0a, 0x00
 msg3:		.ascii	"Choose mode by pressing the corresponding number."
 		db	0x0d, 0x0a, 0x00
@@ -847,17 +647,16 @@ idparadise:	.ascii	"VGA="
 
 ! Manufacturer:	  Numofmodes:	Mode:
 
-moati:		.word	0x02,	0x23, 0x33 
-moahead:	.word	0x05,	0x22, 0x23, 0x24, 0x2f, 0x34
-mocandt:	.word	0x02,	0x60, 0x61
-mocirrus:	.word	0x04,	0x1f, 0x20, 0x22, 0x31
-moeverex:	.word	0x0a,	0x03, 0x04, 0x07, 0x08, 0x0a, 0x0b, 0x16, 0x18, 0x21, 0x40
-mogenoa:	.word	0x0a,	0x58, 0x5a, 0x60, 0x61, 0x62, 0x63, 0x64, 0x72, 0x74, 0x78
-moparadise:	.word	0x02,	0x55, 0x54
-motrident:	.word	0x07,	0x50, 0x51, 0x52, 0x57, 0x58, 0x59, 0x5a
-motseng:	.word	0x05,	0x26, 0x2a, 0x23, 0x24, 0x22
-movideo7:	.word	0x06,	0x40, 0x43, 0x44, 0x41, 0x42, 0x45
-movesa:		.word	0x02,	0x03, 0xFFFF, 254*0
+moati:		.byte	0x02,	0x23, 0x33 
+moahead:	.byte	0x05,	0x22, 0x23, 0x24, 0x2f, 0x34
+mocandt:	.byte	0x02,	0x60, 0x61
+mocirrus:	.byte	0x04,	0x1f, 0x20, 0x22, 0x31
+moeverex:	.byte	0x0a,	0x03, 0x04, 0x07, 0x08, 0x0a, 0x0b, 0x16, 0x18, 0x21, 0x40
+mogenoa:	.byte	0x0a,	0x58, 0x5a, 0x60, 0x61, 0x62, 0x63, 0x64, 0x72, 0x74, 0x78
+moparadise:	.byte	0x02,	0x55, 0x54
+motrident:	.byte	0x07,	0x50, 0x51, 0x52, 0x57, 0x58, 0x59, 0x5a
+motseng:	.byte	0x05,	0x26, 0x2a, 0x23, 0x24, 0x22
+movideo7:	.byte	0x06,	0x40, 0x43, 0x44, 0x41, 0x42, 0x45
 
 !			msb = Cols lsb = Rows:
 
@@ -871,11 +670,7 @@ dscparadise:	.word	0x8419, 0x842b
 dsctrident:	.word 	0x501e, 0x502b, 0x503c, 0x8419, 0x841e, 0x842b, 0x843c
 dsctseng:	.word	0x503c, 0x6428, 0x8419, 0x841c, 0x842c
 dscvideo7:	.word	0x502b, 0x503c, 0x643c, 0x8419, 0x842c, 0x841c
-dscvesa:	.word	0x5019, 0x5032, 254*0
 	
-vib:		.word	256*0
-mib:		.word	256*0
-
 .text
 endtext:
 .data

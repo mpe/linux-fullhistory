@@ -2,7 +2,6 @@
 #define _SYS_DIRENT_H
 
 #include <limits.h>
-#include <sys/types.h>
 
 struct dirent {
 	long		d_ino;

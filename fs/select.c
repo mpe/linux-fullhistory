@@ -7,13 +7,14 @@
 
 #include <linux/fs.h>
 #include <linux/kernel.h>
+#include <linux/tty.h>
 #include <linux/sched.h>
 #include <linux/string.h>
-#include <linux/stat.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
 
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/time.h>
 
@@ -28,46 +29,138 @@
  * understand what I'm doing here, then you understand how the linux sleep/wakeup
  * mechanism works.
  *
- * Two very simple procedures, select_wait() and free_wait() make all the work.
- * select_wait() is a inline-function defined in <linux/fs.h>, as all select
- * functions have to call it to add an entry to the select table.
+ * Two very simple procedures, add_wait() and free_wait() make all the work. We
+ * have to have interrupts disabled throughout the select, but that's not really
+ * such a loss: sleeping automatically frees interrupts when we aren't in this
+ * task.
  */
 
 static select_table * sel_tables = NULL;
 
+static void add_wait(struct task_struct ** wait_address, select_table * p)
+{
+	int i;
+
+	if (!wait_address)
+		return;
+	for (i = 0 ; i < p->nr ; i++)
+		if (p->entry[i].wait_address == wait_address)
+			return;
+	current->next_wait = NULL;
+	p->entry[p->nr].wait_address = wait_address;
+	p->entry[p->nr].old_task = *wait_address;
+	*wait_address = current;
+	p->nr++;
+}
+
+/*
+ * free_wait removes the current task from any wait-queues and then
+ * wakes up the queues.
+ */
+static void free_one_table(select_table * p)
+{
+	int i;
+	struct task_struct ** tpp;
+
+	for(tpp = &LAST_TASK ; tpp > &FIRST_TASK ; --tpp)
+		if (*tpp && ((*tpp)->next_wait == p->current))
+			(*tpp)->next_wait = NULL;
+	if (!p->nr)
+		return;
+	for (i = 0; i < p->nr ; i++) {
+		wake_up(p->entry[i].wait_address);
+		wake_up(&p->entry[i].old_task);
+	}
+	p->nr = 0;
+}
+
 static void free_wait(select_table * p)
 {
-	struct select_table_entry * entry = p->entry + p->nr;
+	select_table * tmp;
 
-	while (p->nr > 0) {
-		p->nr--;
-		entry--;
-		remove_wait_queue(entry->wait_address,&entry->wait);
+	if (p->woken)
+		return;
+	p = sel_tables;
+	sel_tables = NULL;
+	while (p) {
+		wake_up(&p->current);
+		p->woken = 1;
+		tmp = p->next_table;
+		p->next_table = NULL;
+		free_one_table(p);
+		p = tmp;
 	}
+}
+
+static struct tty_struct * get_tty(struct inode * inode)
+{
+	int major, minor;
+
+	if (!S_ISCHR(inode->i_mode))
+		return NULL;
+	if ((major = MAJOR(inode->i_rdev)) != 5 && major != 4)
+		return NULL;
+	if (major == 5)
+		minor = current->tty;
+	else
+		minor = MINOR(inode->i_rdev);
+	if (minor < 0)
+		return NULL;
+	return TTY_TABLE(minor);
 }
 
 /*
  * The check_XX functions check out a file. We know it's either
- * a pipe, a character device or a fifo
+ * a pipe, a character device or a fifo (fifo's not implemented)
  */
-static int check_in(select_table * wait, struct inode * inode, struct file * file)
+static int check_in(select_table * wait, struct inode * inode)
 {
-	if (file->f_op && file->f_op->select)
-		return file->f_op->select(inode,file,SEL_IN,wait);
+	struct tty_struct * tty;
+
+	if (tty = get_tty(inode))
+		if (!EMPTY(tty->secondary))
+			return 1;
+		else
+			add_wait(&tty->secondary->proc_list, wait);
+	else if (inode->i_pipe)
+		if (!PIPE_EMPTY(*inode) || inode->i_count < 2)
+			return 1;
+		else
+			add_wait(&inode->i_wait, wait);
 	return 0;
 }
 
-static int check_out(select_table * wait, struct inode * inode, struct file * file)
+static int check_out(select_table * wait, struct inode * inode)
 {
-	if (file->f_op && file->f_op->select)
-		return file->f_op->select(inode,file,SEL_OUT,wait);
+	struct tty_struct * tty;
+
+	if (tty = get_tty(inode))
+		if (!FULL(tty->write_q))
+			return 1;
+		else
+			add_wait(&tty->write_q->proc_list, wait);
+	else if (inode->i_pipe)
+		if (!PIPE_FULL(*inode))
+			return 1;
+		else
+			add_wait(&inode->i_wait, wait);
 	return 0;
 }
 
-static int check_ex(select_table * wait, struct inode * inode, struct file * file)
+static int check_ex(select_table * wait, struct inode * inode)
 {
-	if (file->f_op && file->f_op->select)
-		return file->f_op->select(inode,file,SEL_EX,wait);
+	struct tty_struct * tty;
+
+	if (tty = get_tty(inode))
+		if (!FULL(tty->write_q))
+			return 0;
+		else
+			return 0;
+	else if (inode->i_pipe)
+		if (inode->i_count < 2)
+			return 1;
+		else
+			add_wait(&inode->i_wait,wait);
 	return 0;
 }
 
@@ -76,7 +169,6 @@ int do_select(fd_set in, fd_set out, fd_set ex,
 {
 	int count;
 	select_table wait_table;
-	struct file * file;
 	int i;
 	fd_set mask;
 
@@ -94,42 +186,44 @@ int do_select(fd_set in, fd_set out, fd_set ex,
 			continue;
 		if (S_ISFIFO(current->filp[i]->f_inode->i_mode))
 			continue;
-		if (S_ISSOCK(current->filp[i]->f_inode->i_mode))
-			continue;
 		return -EBADF;
 	}
 repeat:
 	wait_table.nr = 0;
+	wait_table.woken = 0;
+	wait_table.current = current;
+	wait_table.next_table = sel_tables;
+	sel_tables = &wait_table;
 	*inp = *outp = *exp = 0;
 	count = 0;
-	current->state = TASK_INTERRUPTIBLE;
 	mask = 1;
 	for (i = 0 ; i < NR_OPEN ; i++, mask += mask) {
-		file = current->filp[i];
 		if (mask & in)
-			if (check_in(&wait_table,file->f_inode,file)) {
+			if (check_in(&wait_table,current->filp[i]->f_inode)) {
 				*inp |= mask;
 				count++;
 			}
 		if (mask & out)
-			if (check_out(&wait_table,file->f_inode,file)) {
+			if (check_out(&wait_table,current->filp[i]->f_inode)) {
 				*outp |= mask;
 				count++;
 			}
 		if (mask & ex)
-			if (check_ex(&wait_table,file->f_inode,file)) {
+			if (check_ex(&wait_table,current->filp[i]->f_inode)) {
 				*exp |= mask;
 				count++;
 			}
 	}
 	if (!(current->signal & ~current->blocked) &&
 	    current->timeout && !count) {
+		current->state = TASK_INTERRUPTIBLE;
+		sti();
 		schedule();
+		cli();
 		free_wait(&wait_table);
 		goto repeat;
 	}
 	free_wait(&wait_table);
-	current->state = TASK_RUNNING;
 	return count;
 }
 
@@ -172,11 +266,13 @@ int sys_select( unsigned long *buffer )
 		timeout += jiffies;
 	}
 	current->timeout = timeout;
+	cli();
 	i = do_select(in, out, ex, &res_in, &res_out, &res_ex);
 	if (current->timeout > jiffies)
 		timeout = current->timeout - jiffies;
 	else
 		timeout = 0;
+	sti();
 	current->timeout = 0;
 	if (i < 0)
 		return i;

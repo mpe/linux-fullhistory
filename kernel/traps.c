@@ -57,7 +57,10 @@ void general_protection(void);
 void page_fault(void);
 void coprocessor_error(void);
 void reserved(void);
+void parallel_interrupt(void);
+void irq13(void);
 void alignment_check(void);
+int send_sig(long, struct task_struct *, int);
 
 static void die(char * str,long esp_ptr,long nr)
 {
@@ -81,10 +84,7 @@ static void die(char * str,long esp_ptr,long nr)
 	for(i=0;i<10;i++)
 		printk("%02x ",0xff & get_seg_byte(esp[1],(i+(char *)esp[0])));
 	printk("\n\r");
-	if ((0xffff & esp[1]) == 0xf)
-		send_sig(SIGSEGV, current, 0);
-	else
-		do_exit(SIGSEGV);
+	do_exit(11);		/* play segment exception */
 }
 
 void do_double_fault(long esp, long error_code)
@@ -99,7 +99,7 @@ void do_general_protection(long esp, long error_code)
 
 void do_alignment_check(long esp, long error_code)
 {
-	die("alignment check",esp,error_code);
+    die("alignment check",esp,error_code);
 }
 
 void do_divide_error(long esp, long error_code)
@@ -114,12 +114,12 @@ void do_int3(long esp, long error_code)
 
 void do_nmi(long esp, long error_code)
 {
-	printk("Uhhuh. NMI received. Dazed and confused, but trying to continue\n");
+	die("nmi",esp,error_code);
 }
 
 void do_debug(long esp, long error_code)
 {
-	send_sig(SIGTRAP, current, 0);
+  send_sig(SIGTRAP, current, 0);
 }
 
 void do_overflow(long esp, long error_code)
@@ -198,4 +198,8 @@ void trap_init(void)
 	set_trap_gate(17,&alignment_check);
 	for (i=18;i<48;i++)
 		set_trap_gate(i,&reserved);
+	set_trap_gate(45,&irq13);
+	outb_p(inb_p(0x21)&0xfb,0x21);
+	outb(inb_p(0xA1)&0xdf,0xA1);
+	set_trap_gate(39,&parallel_interrupt);
 }

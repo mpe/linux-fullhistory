@@ -4,21 +4,9 @@
  *  (C) 1991  Linus Torvalds
  */
 
-#include <stddef.h>
-#include <stdarg.h>
+#define __LIBRARY__
+#include <unistd.h>
 #include <time.h>
-
-#include <sys/types.h>
-
-#include <asm/system.h>
-#include <asm/io.h>
-
-#include <linux/fcntl.h>
-#include <linux/config.h>
-#include <linux/sched.h>
-#include <linux/tty.h>
-#include <linux/head.h>
-#include <linux/unistd.h>
 
 /*
  * we need this inline - forking from kernel space will result
@@ -36,36 +24,33 @@ static inline _syscall0(int,fork)
 static inline _syscall0(int,pause)
 static inline _syscall1(int,setup,void *,BIOS)
 static inline _syscall0(int,sync)
-static inline _syscall0(pid_t,setsid)
-static inline _syscall3(int,write,int,fd,const char *,buf,off_t,count)
-static inline _syscall1(int,dup,int,fd)
-static inline _syscall3(int,execve,const char *,file,char **,argv,char **,envp)
-static inline _syscall3(int,open,const char *,file,int,flag,int,mode)
-static inline _syscall1(int,close,int,fd)
-static inline _syscall3(pid_t,waitpid,pid_t,pid,int *,wait_stat,int,options)
 
-static inline pid_t wait(int * wait_stat)
-{
-	return waitpid(-1,wait_stat,0);
-}
+#include <linux/sched.h>
+#include <linux/tty.h>
+#include <linux/head.h>
+#include <linux/string.h>
+
+#include <asm/system.h>
+#include <asm/io.h>
+
+#include <stddef.h>
+#include <stdarg.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/types.h>
 
 static char printbuf[1024];
 
+extern char *strcpy();
 extern int vsprintf();
 extern void init(void);
-extern void init_IRQ(void);
-extern long blk_dev_init(long,long);
-extern long chr_dev_init(long,long);
+extern void blk_dev_init(void);
+extern void chr_dev_init(void);
 extern void hd_init(void);
 extern void floppy_init(void);
-extern void sock_init(void);
 extern void mem_init(long start, long end);
 extern long rd_init(long mem_start, int length);
 extern long kernel_mktime(struct tm * tm);
-
-#ifdef CONFIG_SCSI
-extern void scsi_dev_init(void);
-#endif
 
 static int sprintf(char * str, const char *fmt, ...)
 {
@@ -164,37 +149,32 @@ void start_kernel(void)
 	else
 		buffer_memory_end = 1*1024*1024;
 	main_memory_start = buffer_memory_end;
-	trap_init();
-	init_IRQ();
-	sched_init();
-	main_memory_start = chr_dev_init(main_memory_start,memory_end);
-	main_memory_start = blk_dev_init(main_memory_start,memory_end);
+#ifdef RAMDISK
+	main_memory_start += rd_init(main_memory_start, RAMDISK*1024);
+#endif
 	mem_init(main_memory_start,memory_end);
+	trap_init();
+	chr_dev_init();
+	blk_dev_init();
 	time_init();
-	printk("Linux version " UTS_RELEASE " " __DATE__ " " __TIME__ "\n");
+	sched_init();
 	buffer_init(buffer_memory_end);
 	hd_init();
 	floppy_init();
-	sock_init();
 	sti();
-#ifdef CONFIG_SCSI
-	scsi_dev_init();
-#endif
 	move_to_user_mode();
 	if (!fork()) {		/* we count on this going ok */
 		init();
 	}
 /*
- * task[0] is meant to be used as an "idle" task: it may not sleep, but
- * it might do some general things like count free pages or it could be
- * used to implement a reasonable LRU algorithm for the paging routines:
- * anything that can be useful, but shouldn't take time from the real
- * processes.
- *
- * Right now task[0] just does a infinite loop in user mode.
+ *   NOTE!!   For any other task 'pause()' would mean we have to get a
+ * signal to awaken, but task0 is the sole exception (see 'schedule()')
+ * as task 0 gets activated at every idle moment (when no other tasks
+ * can run). For task0 'pause()' just means we go check if some other
+ * task can run, and if not we return here.
  */
 	for(;;)
-		/* nothing */ ;
+		__asm__("int $0x80"::"a" (__NR_pause):"ax");
 }
 
 static int printf(const char *fmt, ...)

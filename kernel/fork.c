@@ -15,9 +15,10 @@
 
 #include <linux/sched.h>
 #include <linux/kernel.h>
-#include <linux/mm.h>
 #include <asm/segment.h>
 #include <asm/system.h>
+
+extern void write_verify(unsigned long address);
 
 long last_pid=0;
 
@@ -66,25 +67,17 @@ int copy_mem(int nr,struct task_struct * p)
 
 static int find_empty_process(void)
 {
-	int i, task_nr;
+	int i;
 
 	repeat:
-		if ((++last_pid) & 0xffff0000)
-			last_pid=1;
+		if ((++last_pid)<0) last_pid=1;
 		for(i=0 ; i<NR_TASKS ; i++)
 			if (task[i] && ((task[i]->pid == last_pid) ||
 				        (task[i]->pgrp == last_pid)))
 				goto repeat;
-/* Only the super-user can fill the last available slot */
-	task_nr = 0;
 	for(i=1 ; i<NR_TASKS ; i++)
 		if (!task[i])
-			if (task_nr)
-				return task_nr;
-			else
-				task_nr = i;
-	if (task_nr && suser())
-		return task_nr;
+			return i;
 	return -EAGAIN;
 }
 
@@ -112,18 +105,17 @@ int sys_fork(long ebx,long ecx,long edx,
 	}
 	task[nr] = p;
 	*p = *current;	/* NOTE! this doesn't copy the supervisor stack */
-	p->wait.task = p;
-	p->wait.next = NULL;
 	p->state = TASK_UNINTERRUPTIBLE;
-	p->flags &= ~PF_PTRACED;
 	p->pid = last_pid;
-	p->p_pptr = p->p_opptr = current;
+	p->p_pptr = current;
 	p->p_cptr = NULL;
-	SET_LINKS(p);
+	p->p_ysptr = NULL;
+	if (p->p_osptr = current->p_cptr)
+		p->p_osptr->p_ysptr = p;
+	current->p_cptr = p;
 	p->counter = p->priority;
 	p->signal = 0;
-	p->it_real_value = p->it_virt_value = p->it_prof_value = 0;
-	p->it_real_incr = p->it_virt_incr = p->it_prof_incr = 0;
+	p->alarm = 0;
 	p->leader = 0;		/* process leadership doesn't inherit */
 	p->utime = p->stime = 0;
 	p->cutime = p->cstime = 0;
@@ -134,7 +126,7 @@ int sys_fork(long ebx,long ecx,long edx,
 	p->tss.esp0 = PAGE_SIZE + (long) p;
 	p->tss.ss0 = 0x10;
 	p->tss.eip = eip;
-	p->tss.eflags = eflags & 0xffffcfff;	/* iopl is always 0 for a new process */
+	p->tss.eflags = eflags;
 	p->tss.eax = 0;
 	p->tss.ecx = ecx;
 	p->tss.edx = edx;
@@ -157,7 +149,12 @@ int sys_fork(long ebx,long ecx,long edx,
 		__asm__("clts ; fnsave %0 ; frstor %0"::"m" (p->tss.i387));
 	if (copy_mem(nr,p)) {
 		task[nr] = NULL;
-		REMOVE_LINKS(p);
+		if (p->p_pptr->p_cptr == p)
+			p->p_pptr->p_cptr = p->p_osptr;
+		if (p->p_osptr)
+			p->p_osptr->p_ysptr = p->p_ysptr;
+		if (p->p_ysptr)
+			p->p_ysptr->p_osptr = p->p_osptr;
 		free_page((long) p);
 		return -EAGAIN;
 	}

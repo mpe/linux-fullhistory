@@ -154,17 +154,6 @@ static int write_port(struct inode * inode,struct file * file,char * buf, int co
 	return tmp-buf;
 }
 
-static int read_zero(struct inode *node,struct file *file,char *buf,int count)
-{
-	int left;
-
-	for (left = count; left > 0; left--) {
-		put_fs_byte(0,buf);
-		buf++;
-	}
-	return count;
-}
-
 /*
  * The memory devices use the full 32 bits of the offset, and so we cannot
  * check against negative addresses: they are ok. The return value is weird,
@@ -203,8 +192,6 @@ static int mem_read(struct inode * inode, struct file * file, char * buf, int co
 			return 0;	/* /dev/null */
 		case 4:
 			return read_port(inode,file,buf,count);
-		case 5:
-			return read_zero(inode,file,buf,count);
 		default:
 			return -ENODEV;
 	}
@@ -223,29 +210,29 @@ static int mem_write(struct inode * inode, struct file * file, char * buf, int c
 			return count;	/* /dev/null */
 		case 4:
 			return write_port(inode,file,buf,count);
-		case 5:
-			return count; /* /dev/zero */
 		default:
 			return -ENODEV;
 	}
+}
+
+static int mem_readdir(struct inode * inode, struct file * file, struct dirent * de, int count)
+{
+	return -ENOTDIR;
 }
 
 static struct file_operations mem_fops = {
 	mem_lseek,
 	mem_read,
 	mem_write,
-	NULL,		/* mem_readdir */
+	mem_readdir,
+	NULL,		/* mem_close */
 	NULL,		/* mem_select */
-	NULL,		/* mem_ioctl */
-	NULL,		/* no special open code */
-	NULL		/* no special release code */
+	NULL		/* mem_ioctl */
 };
 
-long chr_dev_init(long mem_start, long mem_end)
+void chr_dev_init(void)
 {
 	chrdev_fops[1] = &mem_fops;
-	mem_start = tty_init(mem_start);
-	mem_start = lp_init(mem_start);
-	mem_start = mouse_init(mem_start);
-	return mem_start;
+	tty_init();
+	lp_init();
 }

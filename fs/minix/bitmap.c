@@ -1,12 +1,12 @@
 /*
- *  linux/fs/minix/bitmap.c
+ *  linux/fs/bitmap.c
  *
  *  (C) 1991  Linus Torvalds
  */
 
 /* bitmap.c contains the code that handles the inode and block bitmaps */
-
 #include <linux/string.h>
+
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/kernel.h>
@@ -43,35 +43,6 @@ __asm__("cld\n" \
 	"2:\taddl %%edx,%%ecx" \
 	:"=c" (__res):"0" (0),"S" (addr):"ax","dx","si"); \
 __res;})
-
-static int nibblemap[] = { 0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4 };
-
-static unsigned long count_used(struct buffer_head *map[], unsigned numblocks,
-	unsigned numbits)
-{
-	unsigned i, j, end, sum = 0;
-	struct buffer_head *bh;
-  
-	for (i=0; (i<numblocks) && numbits; i++) {
-		if (!(bh=map[i])) 
-			return(0);
-		if (numbits >= (8*BLOCK_SIZE)) { 
-			end = BLOCK_SIZE;
-			numbits -= 8*BLOCK_SIZE;
-		} else {
-			int tmp;
-			end = numbits >> 3;
-			numbits &= 0x7;
-			tmp = bh->b_data[end] & ((1<<numbits)-1);
-			sum += nibblemap[tmp&0xf] + nibblemap[(tmp>>4)&0xf];
-			numbits = 0;
-		}  
-		for (j=0; j<end; j++)
-			sum += nibblemap[bh->b_data[j] & 0xf] 
-				+ nibblemap[(bh->b_data[j]>>4)&0xf];
-	}
-	return(sum);
-}
 
 int minix_free_block(int dev, int block)
 {
@@ -136,12 +107,6 @@ int minix_new_block(int dev)
 	return j;
 }
 
-unsigned long minix_count_free_blocks(struct super_block *sb)
-{
-	return (sb->s_nzones - count_used(sb->s_zmap,sb->s_zmap_blocks,sb->s_nzones))
-		 << sb->s_log_zone_size;
-}
-
 void minix_free_inode(struct inode * inode)
 {
 	struct buffer_head * bh;
@@ -191,7 +156,6 @@ struct inode * minix_new_inode(int dev)
 		iput(inode);
 		return NULL;
 	}
-	inode->i_flags = inode->i_sb->s_flags;
 	j = 8192;
 	for (i=0 ; i<8 ; i++)
 		if (bh=inode->i_sb->s_imap[i])
@@ -215,11 +179,6 @@ struct inode * minix_new_inode(int dev)
 	inode->i_dirt = 1;
 	inode->i_ino = j + i*8192;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
-	inode->i_op = NULL;
+	inode->i_op = &minix_inode_operations;
 	return inode;
-}
-
-unsigned long minix_count_free_inodes(struct super_block *sb)
-{
-	return sb->s_ninodes - count_used(sb->s_imap,sb->s_imap_blocks,sb->s_ninodes);
 }

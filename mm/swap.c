@@ -10,8 +10,8 @@
  */
 
 #include <errno.h>
+#include <sys/stat.h>
 
-#include <linux/stat.h>
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/sched.h>
@@ -245,10 +245,10 @@ repeat:
  *
  * The swapon system call
  */
+
 int sys_swapon(const char * specialfile)
 {
 	struct inode * swap_inode;
-	char * tmp;
 	int i,j;
 
 	if (!suser())
@@ -268,39 +268,38 @@ int sys_swapon(const char * specialfile)
 		iput(swap_inode);
 		return -EINVAL;
 	}
-	tmp = (char *) get_free_page();
-	if (!tmp) {
+	swap_bitmap = (char *) get_free_page();
+	if (!swap_bitmap) {
 		iput(swap_file);
 		swap_device = 0;
 		swap_file = NULL;
 		printk("Unable to start swapping: out of memory :-)\n");
 		return -ENOMEM;
 	}
-	read_swap_page(0,tmp);
-	if (strncmp("SWAP-SPACE",tmp+4086,10)) {
+	read_swap_page(0,swap_bitmap);
+	if (strncmp("SWAP-SPACE",swap_bitmap+4086,10)) {
 		printk("Unable to find swap-space signature\n\r");
-		free_page((long) tmp);
+		free_page((long) swap_bitmap);
 		iput(swap_file);
 		swap_device = 0;
 		swap_file = NULL;
 		swap_bitmap = NULL;
 		return -EINVAL;
 	}
-	memset(tmp+4086,0,10);
+	memset(swap_bitmap+4086,0,10);
 	j = 0;
 	for (i = 1 ; i < SWAP_BITS ; i++)
-		if (bit(tmp,i))
+		if (bit(swap_bitmap,i))
 			j++;
 	if (!j) {
 		printk("Empty swap-file\n");
-		free_page((long) tmp);
+		free_page((long) swap_bitmap);
 		iput(swap_file);
 		swap_device = 0;
 		swap_file = NULL;
 		swap_bitmap = NULL;
 		return -EINVAL;
 	}
-	swap_bitmap = tmp;
 	printk("Adding Swap: %d pages (%d bytes) swap-space\n\r",j,j*4096);
 	return 0;
 }

@@ -224,7 +224,8 @@ got_sectors:
 	mov	ax,#0x021c		! /dev/PS0 - 1.44Mb
 	cmp	bx,#18
 	je	root_defined
-	mov	ax,#0x0200		! /dev/fd0 - autodetect
+undef_root:
+	jmp undef_root
 root_defined:
 	seg cs
 	mov	root_dev,ax

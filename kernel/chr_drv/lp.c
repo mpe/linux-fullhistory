@@ -53,6 +53,13 @@ static int lp_write(struct inode * inode, struct file * file, char * buf, int co
 	unsigned int minor = MINOR(inode->i_rdev);
 	char c, *temp = buf;
 
+	if (minor >= LP_NO)
+		return -ENODEV;
+	if ((LP_F(minor) & LP_EXIST) == 0)
+		return -ENODEV;
+	LP_T(minor) = current->pid;
+	LP_F(minor) |= LP_BUSY;
+	LP_R(minor) = count;
 	temp = buf;
 	while (count > 0) {
 		c = get_fs_byte(temp++);
@@ -90,39 +97,22 @@ static int lp_lseek(struct inode * inode, struct file * file, off_t offset, int 
 	return -EINVAL;
 }
 
-static int lp_open(struct inode * inode, struct file * file)
+static int lp_readdir(struct inode * inode, struct file * file, struct dirent * de, int count)
 {
-	unsigned int minor = MINOR(inode->i_rdev);
-
-	if (minor >= LP_NO)
-		return -ENODEV;
-	if ((LP_F(minor) & LP_EXIST) == 0)
-		return -ENODEV;
-	if (LP_F(minor) & LP_BUSY)
-		return -EBUSY;
-	LP_F(minor) |= LP_BUSY;
-	return 0;
-}
-
-static void lp_release(struct inode * inode, struct file * file)
-{
-	unsigned int minor = MINOR(inode->i_rdev);
-
-	LP_F(minor) &= ~LP_BUSY;
+	return -ENOTDIR;
 }
 
 static struct file_operations lp_fops = {
 	lp_lseek,
 	lp_read,
 	lp_write,
-	NULL,		/* lp_readdir */
+	lp_readdir,
+	NULL,		/* lp_close */
 	NULL,		/* lp_select */
-	NULL,		/* lp_ioctl */
-	lp_open,
-	lp_release
+	NULL		/* lp_ioctl */
 };
 
-long lp_init(long kmem_start)
+void lp_init(void)
 {
 	int offset = 0;
 	unsigned int testvalue = 0;
@@ -145,5 +135,4 @@ long lp_init(long kmem_start)
 	}
 	if (count == 0)
 		printk("lp_init: no lp devices found\n");
-	return kmem_start;
 }

@@ -1,8 +1,6 @@
 #ifndef _CONFIG_H
 #define _CONFIG_H
 
-#define CONFIG_DISTRIBUTION
-
 /*
  * Defines for what uname() should return 
  */
@@ -26,7 +24,7 @@
 #define DEF_INITSEG	0x9000
 #define DEF_SYSSEG	0x1000
 #define DEF_SETUPSEG	0x9020
-#define DEF_SYSSIZE	0x5000
+#define DEF_SYSSIZE	0x4000
 
 /*
  * The root-device is no longer hard-coded. You can change the default
@@ -63,53 +61,5 @@
  If you want the BIOS to tell what kind of drive you have, just
  leave HD_TYPE undefined. This is the normal thing to do.
 */
-
-#undef HD_TYPE
-
-#undef CONFIG_BLK_DEV_SD
-#undef CONFIG_BLK_DEV_ST
-
-/*
-	Choose supported SCSI adapters here.
-*/
-
-#undef CONFIG_SCSI_AHA1542
-#undef CONFIG_SCSI_ALWAYS
-#undef CONFIG_SCSI_CSC
-#undef CONFIG_SCSI_DTC
-#undef CONFIG_SCSI_FUTURE_DOMAIN
-#undef CONFIG_SCSI_SEAGATE
-#undef CONFIG_SCSI_ULTRASTOR
-
-#if defined(CONFIG_BLK_DEV_SD) || defined(CONFIG_BLK_DEV_ST)
-	#ifndef CONFIG_SCSI
-		#define CONFIG_SCSI
-	#endif
-	
-	#if !defined(CONFIG_SCSI_AHA1542) && !defined(CONFIG_SCSI_CSC) && !defined(CONFIG_SCSI_DTC) && \
-		!defined(CONFIG_SCSI_FUTURE_DOMAIN) &&  !defined(CONFIG_SCSI_SEAGATE) && !defined(CONFIG_SCSI_ULTRASTOR) 
-
-	#error  Error : SCSI devices enabled, but no low level drivers have been enabled.
-	#endif
-#endif
-
-#ifdef CONFIG_DISTRIBUTION
-	#include <linux/config.dist.h>
-#else
-	#include <linux/config.site.h>
-#endif
-
-/*
-	File type specific stuff goes into this.
-*/
-
-#ifdef ASM_SRC
-#endif
-
-#ifdef C_SRC
-#endif
-
-#ifdef MAKE
-#endif
 
 #endif

@@ -6,11 +6,9 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
-
+#include <errno.h>
 #include <asm/segment.h>
 #include <asm/system.h>
-
-#include <errno.h>
 #include <sys/ptrace.h>
 
 /*
@@ -31,19 +29,19 @@
  */
 #define MAGICNUMBER 68
 
-void do_no_page(unsigned long, unsigned long, struct task_struct *, unsigned long);
+void do_no_page(unsigned long, unsigned long, struct task_struct *);
 void write_verify(unsigned long);
 
 /* change a pid into a task struct. */
-static inline struct task_struct * get_task(int pid)
+static inline int get_task(int pid)
 {
 	int i;
 
-	for (i = 1; i < NR_TASKS; i++) {
+	for (i = 0; i < NR_TASKS; i++) {
 		if (task[i] != NULL && (task[i]->pid == pid))
-			return task[i];
+			return i;
 	}
-	return NULL;
+	return -1;
 }
 
 /*
@@ -102,7 +100,7 @@ repeat:
 		page = *((unsigned long *) page);
 	}
 	if (!(page & PAGE_PRESENT)) {
-		do_no_page(0,addr,tsk,0);
+		do_no_page(0,addr,tsk);
 		goto repeat;
 	}
 	page &= 0xfffff000;
@@ -131,7 +129,7 @@ repeat:
 		page = *((unsigned long *) page);
 	}
 	if (!(page & PAGE_PRESENT)) {
-		do_no_page(0,addr,tsk,0);
+		do_no_page(0,addr,tsk);
 		goto repeat;
 	}
 	if (!(page & PAGE_RW)) {
@@ -224,54 +222,32 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 int sys_ptrace(long request, long pid, long addr, long data)
 {
 	struct task_struct *child;
+	int childno;
 
-	if (request == PTRACE_TRACEME) {
-		/* are we already being traced? */
-		if (current->flags & PF_PTRACED)
-			return -EPERM;
+	if (request == 0) {
 		/* set the ptrace bit in the proccess flags. */
 		current->flags |= PF_PTRACED;
 		return 0;
 	}
-	if (!(child = get_task(pid)))
-		return -ESRCH;
-	if (request == PTRACE_ATTACH) {
-		long tmp;
 
-		if (child == current)
-			return -EPERM;
-		if ((!child->dumpable || (current->uid != child->euid) ||
-	 	    (current->gid != child->egid)) && !suser())
-			return -EPERM;
-		/* the same process cannot be attached many times */
-		if (child->flags & PF_PTRACED)
-			return -EPERM;
-		child->flags |= PF_PTRACED;
-		if (child->p_pptr != current) {
-			REMOVE_LINKS(child);
-			child->p_pptr = current;
-			SET_LINKS(child);
-		}
-		tmp = get_stack_long(child, 4*EFL-MAGICNUMBER) | TRAP_FLAG;
-		put_stack_long(child, 4*EFL-MAGICNUMBER,tmp);
-		if (child->state == TASK_INTERRUPTIBLE ||
-		    child->state == TASK_STOPPED)
-			child->state = TASK_RUNNING;
-		child->signal = 0;
-		return 0;
-	}
-	if (!(child->flags & PF_PTRACED) || child->state != TASK_STOPPED)
+	childno = get_task(pid);
+
+	if (childno < 0)
 		return -ESRCH;
-	if (child->p_pptr != current)
+	else
+		child = task[childno];
+
+	if (child->p_pptr != current || !(child->flags & PF_PTRACED) ||
+	    child->state != TASK_STOPPED)
 		return -ESRCH;
 
 	switch (request) {
 	/* when I and D space are seperate, these will need to be fixed. */
-		case PTRACE_PEEKTEXT: /* read word at location addr. */ 
-		case PTRACE_PEEKDATA: {
+		case 1: /* read word at location addr. */ 
+		case 2: {
 			int tmp,res;
 
-			res = read_long(child, addr, &tmp);
+			res = read_long(task[childno], addr, &tmp);
 			if (res < 0)
 				return res;
 			verify_area((void *) data, 4);
@@ -280,7 +256,7 @@ int sys_ptrace(long request, long pid, long addr, long data)
 		}
 
 	/* read the word at location addr in the USER area. */
-		case PTRACE_PEEKUSR: {
+		case 3: {
 			int tmp;
 			addr = addr >> 2; /* temporary hack. */
 			if (addr < 0 || addr >= 17)
@@ -292,11 +268,11 @@ int sys_ptrace(long request, long pid, long addr, long data)
 		}
 
       /* when I and D space are seperate, this will have to be fixed. */
-		case PTRACE_POKETEXT: /* write the word at location addr. */
-		case PTRACE_POKEDATA:
-			return write_long(child,addr,data);
+		case 4: /* write the word at location addr. */
+		case 5:
+			return write_long(task[childno],addr,data);
 
-		case PTRACE_POKEUSR: /* write the word at location addr in the USER area */
+		case 6: /* write the word at location addr in the USER area */
 			addr = addr >> 2; /* temproary hack. */
 			if (addr < 0 || addr >= 17)
 				return -EIO;
@@ -310,13 +286,13 @@ int sys_ptrace(long request, long pid, long addr, long data)
 				return -EIO;
 			return 0;
 
-		case PTRACE_CONT: { /* restart after signal. */
+		case 7: { /* restart after signal. */
 			long tmp;
 
-			child->signal = 0;
+			child->signal=0;
 			if (data > 0 && data <= NSIG)
 				child->signal = 1<<(data-1);
-			child->state = TASK_RUNNING;
+			child->state = 0;
 	/* make sure the single step bit is not set. */
 			tmp = get_stack_long(child, 4*EFL-MAGICNUMBER) & ~TRAP_FLAG;
 			put_stack_long(child, 4*EFL-MAGICNUMBER,tmp);
@@ -328,10 +304,10 @@ int sys_ptrace(long request, long pid, long addr, long data)
  * perhaps it should be put in the status that it want's to 
  * exit.
  */
-		case PTRACE_KILL: {
+		case 8: {
 			long tmp;
 
-			child->state = TASK_RUNNING;
+			child->state = 0;
 			child->signal = 1 << (SIGKILL-1);
 	/* make sure the single step bit is not set. */
 			tmp = get_stack_long(child, 4*EFL-MAGICNUMBER) & ~TRAP_FLAG;
@@ -339,31 +315,16 @@ int sys_ptrace(long request, long pid, long addr, long data)
 			return 0;
 		}
 
-		case PTRACE_SINGLESTEP: {  /* set the trap flag. */
+		case 9: {  /* set the trap flag. */
 			long tmp;
 
 			tmp = get_stack_long(child, 4*EFL-MAGICNUMBER) | TRAP_FLAG;
 			put_stack_long(child, 4*EFL-MAGICNUMBER,tmp);
-			child->state = TASK_RUNNING;
+			child->state = 0;
 			child->signal = 0;
-			if (data > 0 && data <= NSIG)
+			if (data > 0 && data <NSIG)
 				child->signal= 1<<(data-1);
 	/* give it a chance to run. */
-			return 0;
-		}
-
-		case PTRACE_DETACH: { /* detach a process that was attached. */
-			long tmp;
-
-			child->flags &= ~PF_PTRACED;
-			child->signal=0;
-			child->state = 0;
-			REMOVE_LINKS(child);
-			child->p_pptr = child->p_opptr;
-			SET_LINKS(child);
-			/* make sure the single step bit is not set. */
-			tmp = get_stack_long(child, 4*EFL-MAGICNUMBER) & ~TRAP_FLAG;
-			put_stack_long(child, 4*EFL-MAGICNUMBER,tmp);
 			return 0;
 		}
 

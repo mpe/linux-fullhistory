@@ -5,11 +5,11 @@
  */
 
 #include <linux/string.h>
-#include <linux/stat.h>
+#include <sys/stat.h>
+
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
-
 #include <asm/system.h>
 
 struct inode inode_table[NR_INODE]={{0,},};
@@ -39,13 +39,13 @@ static inline void unlock_inode(struct inode * inode)
 
 static void write_inode(struct inode * inode)
 {
-	if (!inode->i_dirt)
-		return;
-	inode->i_dirt = 0;
 	lock_inode(inode);
-	if (inode->i_dev && inode->i_sb &&
-	    inode->i_sb->s_op && inode->i_sb->s_op->write_inode)
-		inode->i_sb->s_op->write_inode(inode);
+	if (!inode->i_dirt || !inode->i_dev) {
+		unlock_inode(inode);
+		return;
+	}
+	if (inode->i_op && inode->i_op->write_inode)
+		inode->i_op->write_inode(inode);
 	unlock_inode(inode);
 }
 
@@ -100,7 +100,7 @@ void sync_inodes(void)
 	inode = 0+inode_table;
 	for(i=0 ; i<NR_INODE ; i++,inode++) {
 		wait_on_inode(inode);
-		if (inode->i_dirt)
+		if (inode->i_dirt && !inode->i_pipe)
 			write_inode(inode);
 	}
 }
@@ -110,34 +110,36 @@ void iput(struct inode * inode)
 	if (!inode)
 		return;
 	wait_on_inode(inode);
-	if (!inode->i_count) {
-		printk("iput: trying to free free inode\n");
-		printk("device %04x, inode %d, mode=%07o\n",inode->i_rdev,
-			inode->i_ino,inode->i_mode);
-		return;
-	}
+	if (!inode->i_count)
+		panic("iput: trying to free free inode");
 	if (inode->i_pipe) {
 		wake_up(&inode->i_wait);
 		wake_up(&inode->i_wait2);
+		if (--inode->i_count)
+			return;
+		free_page(inode->i_size);
+		inode->i_count=0;
+		inode->i_dirt=0;
+		inode->i_pipe=0;
+		return;
+	}
+	if (!inode->i_dev) {
+		inode->i_count--;
+		return;
+	}
+	if (S_ISBLK(inode->i_mode)) {
+		sync_dev(inode->i_rdev);
+		wait_on_inode(inode);
 	}
 repeat:
 	if (inode->i_count>1) {
 		inode->i_count--;
 		return;
 	}
-	if (inode->i_pipe) {
-		free_page(inode->i_size);
-		inode->i_size = 0;
-	}
-	if (!inode->i_dev) {
-		inode->i_count--;
-		return;
-	}
 	if (!inode->i_nlink) {
-		if (inode->i_sb && inode->i_sb->s_op && inode->i_sb->s_op->put_inode) {
-			inode->i_sb->s_op->put_inode(inode);
-			return;
-		}
+		if (inode->i_op && inode->i_op->put_inode)
+			inode->i_op->put_inode(inode);
+		return;
 	}
 	if (inode->i_dirt) {
 		write_inode(inode);	/* we can sleep - so do again */
@@ -188,13 +190,12 @@ struct inode * get_pipe_inode(void)
 
 	if (!(inode = get_empty_inode()))
 		return NULL;
-	if (!(inode->i_size = get_free_page())) {
+	if (!(inode->i_size=get_free_page())) {
 		inode->i_count = 0;
 		return NULL;
 	}
 	inode->i_count = 2;	/* sum of readers/writers */
 	PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
-	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 1;
 	inode->i_pipe = 1;
 	return inode;
 }
@@ -252,7 +253,6 @@ struct inode * iget(int dev,int nr)
 	}
 	inode->i_dev = dev;
 	inode->i_ino = nr;
-	inode->i_flags = inode->i_sb->s_flags;
 	read_inode(inode);
 	return inode;
 }

@@ -10,15 +10,12 @@
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
-#include <linux/ext_fs.h>
-#include <linux/msdos_fs.h>
 #include <linux/kernel.h>
-#include <linux/stat.h>
 #include <asm/system.h>
 #include <asm/segment.h>
 
 #include <errno.h>
-
+#include <sys/stat.h>
 
 int sync_dev(int dev);
 void wait_for_keypress(void);
@@ -37,8 +34,6 @@ int ROOT_DEV = 0;
 
 static struct file_system_type file_systems[] = {
 	{minix_read_super,"minix"},
-	{ext_read_super,"ext"},
-	{msdos_read_super,"msdos"},
 	{NULL,NULL}
 };
 
@@ -65,8 +60,10 @@ void lock_super(struct super_block * sb)
 
 void free_super(struct super_block * sb)
 {
+	cli();
 	sb->s_lock = 0;
 	wake_up(&(sb->s_wait));
+	sti();
 }
 
 void wait_on_super(struct super_block * sb)
@@ -113,7 +110,7 @@ void put_super(int dev)
 		sb->s_op->put_super(sb);
 }
 
-static struct super_block * read_super(int dev,char *name,int flags,void *data)
+static struct super_block * read_super(int dev,char *name,void *data)
 {
 	struct super_block * s;
 	struct file_system_type *type;
@@ -134,7 +131,6 @@ static struct super_block * read_super(int dev,char *name,int flags,void *data)
 			break;
 	}
 	s->s_dev = dev;
-	s->s_flags = flags;
 	if (!type->read_super(s,data))
 		return(NULL);
 	s->s_dev = dev;
@@ -178,30 +174,32 @@ int sys_umount(char * dev_name)
 	sb->s_covered = NULL;
 	iput(sb->s_mounted);
 	sb->s_mounted = NULL;
-	if (sb->s_op && sb->s_op->write_super && sb->s_dirt)
-		sb->s_op->write_super (sb);
         put_super(dev);
         sync_dev(dev);
 	return 0;
 }
 
-/*
- * do_mount() does the actual mounting after sys_mount has done the ugly
- * parameter parsing. When enough time has gone by, and everything uses the
- * new mount() parameters, sys_mount() can then be cleaned up.
- *
- * We cannot mount a filesystem if it has active, used, or dirty inodes.
- * We also have to flush all inode-data for this device, as the new mount
- * might need new info.
- */
-static int do_mount(int dev, const char * dir, char * type, int flags, void * data)
+int sys_mount(char * dev_name, char * dir_name, char * type, int rw_flag)
 {
-	struct inode * inode, * dir_i;
+	struct inode * dev_i, * dir_i;
 	struct super_block * sb;
+	int dev;
+	char tmp[100],*t;
+	int i;
 
-	if (!(dir_i = namei(dir)))
+	if (!suser())
+		return -EPERM;
+	if (!(dev_i = namei(dev_name)))
 		return -ENOENT;
-	if (dir_i->i_count != 1 || dir_i->i_mount) {
+	dev = dev_i->i_rdev;
+	if (!S_ISBLK(dev_i->i_mode)) {
+		iput(dev_i);
+		return -EPERM;
+	}
+	iput(dev_i);
+	if (!(dir_i=namei(dir_name)))
+		return -ENOENT;
+	if (dir_i->i_count != 1 || dir_i->i_ino == MINIX_ROOT_INO) {
 		iput(dir_i);
 		return -EBUSY;
 	}
@@ -209,82 +207,29 @@ static int do_mount(int dev, const char * dir, char * type, int flags, void * da
 		iput(dir_i);
 		return -EPERM;
 	}
-	for (inode = inode_table+0 ; inode < inode_table+NR_INODE ; inode++) {
-		if (inode->i_dev != dev)
-			continue;
-		if (inode->i_count || inode->i_dirt || inode->i_lock) {
-			iput(dir_i);
-			return -EBUSY;
-		}
-		inode->i_dev = 0;
-	}
-	sb = read_super(dev,type,flags,data);
-	if (!sb || sb->s_covered) {
+	if (dir_i->i_mount) {
 		iput(dir_i);
-		return -EBUSY;
-	}
-	sb->s_flags = flags;
-	sb->s_covered = dir_i;
-	dir_i->i_mount = 1;
-	return 0;		/* we don't iput(dir_i) - see umount */
-}
-
-/*
- * Flags is a 16-bit value that allows up to 16 non-fs dependent flags to
- * be given to the mount() call (ie: read-only, no-dev, no-suid etc).
- *
- * data is a (void *) that can point to any structure up to 4095 bytes, which
- * can contain arbitrary fs-dependent information (or be NULL).
- *
- * NOTE! As old versions of mount() didn't use this setup, the flags has to have
- * a special 16-bit magic number in the hight word: 0xC0ED. If this magic word
- * isn't present, the flags and data info isn't used, as the syscall assumes we
- * are talking to an older version that didn't understand them.
- */
-int sys_mount(char * dev_name, char * dir_name, char * type,
-	unsigned long new_flags, void *data)
-{
-	struct inode * inode;
-	int dev;
-	int retval = 0;
-	char tmp[100],*t;
-	int i;
-	unsigned long flags = 0;
-	unsigned long page = 0;
-
-	if (!suser())
 		return -EPERM;
-	if (!(inode = namei(dev_name)))
-		return -ENOENT;
-	dev = inode->i_rdev;
-	if (!S_ISBLK(inode->i_mode))
-		retval = -EPERM;
-	else if (IS_NODEV(inode))
-		retval = -EACCES;
-	iput(inode);
-	if (retval)
-		return retval;
-	if ((new_flags & 0xffff0000) == 0xC0ED0000) {
-		flags = new_flags & 0xffff;
-		if (data && (unsigned long) data < TASK_SIZE)
-			page = get_free_page();
-	}
-	if (page) {
-		i = TASK_SIZE - (unsigned long) data;
-		if (i < 0 || i > 4095)
-			i = 4095;
-		memcpy_fromfs((void *) page,data,i);
 	}
 	if (type) {
-		for (i = 0 ; i < 100 ; i++)
-			if (!(tmp[i] = get_fs_byte(type++)))
-				break;
+		i = 0;
+		while (i < 100 && (tmp[i] = get_fs_byte(type++)))
+			i++;
 		t = tmp;
 	} else
 		t = "minix";
-	retval = do_mount(dev,dir_name,t,flags,(void *) page);
-	free_page(page);
-	return retval;
+	if (!(sb = read_super(dev,t,NULL))) {
+		iput(dir_i);
+		return -EBUSY;
+	}
+	if (sb->s_covered) {
+		iput(dir_i);
+		return -EBUSY;
+	}
+	sb->s_covered = dir_i;
+	dir_i->i_mount = 1;
+	dir_i->i_dirt = 1;		/* NOTE! we don't iput(dir_i) */
+	return 0;			/* we do that in umount */
 }
 
 void mount_root(void)
@@ -306,7 +251,7 @@ void mount_root(void)
 		p->s_lock = 0;
 		p->s_wait = NULL;
 	}
-	if (!(p=read_super(ROOT_DEV,"minix",0,NULL)))
+	if (!(p=read_super(ROOT_DEV,"minix",NULL)))
 		panic("Unable to mount root");
  	/*wait_for_keypress();
 	if (!(mi=iget(ROOT_DEV,MINIX_ROOT_INO)))
@@ -315,7 +260,6 @@ void mount_root(void)
 	mi=p->s_mounted;
 	mi->i_count += 3 ;	/* NOTE! it is logically used 4 times, not 1 */
 	p->s_mounted = p->s_covered = mi;
-	p->s_flags = 0;
 	current->pwd = mi;
 	current->root = mi;
 	free=0;

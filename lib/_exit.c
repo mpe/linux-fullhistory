@@ -5,12 +5,10 @@
  */
 
 #define __LIBRARY__
-#include <linux/unistd.h>
+#include <unistd.h>
 
 volatile void _exit(int exit_code)
 {
-fake_volatile:
 	__asm__("movl %1,%%ebx\n\t"
 		"int $0x80"::"a" (__NR_exit),"g" (exit_code));
-	goto fake_volatile;
 }

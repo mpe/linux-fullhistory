@@ -60,8 +60,10 @@
 
 #define MAX_SHARED_LIBS 6
 
+extern int copy_page_tables(unsigned long from, unsigned long to, long size);
+extern int free_page_tables(unsigned long from, unsigned long size);
+
 extern void sched_init(void);
-extern void show_state(void);
 extern void schedule(void);
 extern void trap_init(void);
 extern void panic(const char * str);
@@ -117,26 +119,22 @@ struct task_struct {
 	long blocked;	/* bitmap of masked signals */
 /* various fields */
 	int exit_code;
-	int dumpable;
 	unsigned long start_code,end_code,end_data,brk,start_stack;
 	long pid,pgrp,session,leader;
 	int	groups[NGROUPS];
 	/* 
-	 * pointers to (original) parent process, youngest child, younger sibling,
+	 * pointers to parent process, youngest child, younger sibling,
 	 * older sibling, respectively.  (p->father can be replaced with 
 	 * p->p_pptr->pid)
 	 */
-	struct task_struct *p_opptr,*p_pptr, *p_cptr, *p_ysptr, *p_osptr;
+	struct task_struct *p_pptr, *p_cptr, *p_ysptr, *p_osptr;
 	/*
-	 * For ease of programming... Normal sleeps don't need to
-	 * keep track of a wait-queue: every task has an entry of it's own
+	 * sleep makes a singly linked list with this.
 	 */
-	struct wait_queue wait;
+	struct task_struct *next_wait;
 	unsigned short uid,euid,suid;
 	unsigned short gid,egid,sgid;
-	unsigned long timeout;
-	unsigned long it_real_value, it_prof_value, it_virt_value;
-	unsigned long it_real_incr, it_prof_incr, it_virt_incr;
+	unsigned long timeout,alarm;
 	long utime,stime,cutime,cstime,start_time;
 	unsigned long min_flt, maj_flt;
 	unsigned long cmin_flt, cmaj_flt;
@@ -183,13 +181,12 @@ struct task_struct {
 #define INIT_TASK \
 /* state etc */	{ 0,15,15, \
 /* signals */	0,{{},},0, \
-/* ec,brk... */	0,0,0,0,0,0,0, \
+/* ec,brk... */	0,0,0,0,0,0, \
 /* pid etc.. */	0,0,0,0, \
 /* suppl grps*/ {NOGROUP,}, \
-/* proc links*/ &init_task.task,&init_task.task,NULL,NULL,NULL, \
-/* wait queue*/ {&init_task.task,NULL}, \
+/* proc links*/ &init_task.task,NULL,NULL,NULL,NULL, \
 /* uid etc */	0,0,0,0,0,0, \
-/* timeout */	0,0,0,0,0,0,0,0,0,0,0,0, \
+/* timeout */	0,0,0,0,0,0,0, \
 /* min_flt */	0,0,0,0, \
 /* rlimits */   { {0x7fffffff, 0x7fffffff}, {0x7fffffff, 0x7fffffff},  \
 		  {0x7fffffff, 0x7fffffff}, {0x7fffffff, 0x7fffffff}, \
@@ -224,18 +221,10 @@ extern int jiffies_offset;
 #define CURRENT_TIME (startup_time+(jiffies+jiffies_offset)/HZ)
 
 extern void add_timer(long jiffies, void (*fn)(void));
-
-extern void sleep_on(struct wait_queue ** p);
-extern void interruptible_sleep_on(struct wait_queue ** p);
-extern void wake_up(struct wait_queue ** p);
-extern void wake_one_task(struct task_struct * p);
-
-extern int send_sig(long sig,struct task_struct * p,int priv);
+extern void sleep_on(struct task_struct ** p);
+extern void interruptible_sleep_on(struct task_struct ** p);
+extern void wake_up(struct task_struct ** p);
 extern int in_group_p(gid_t grp);
-
-extern int request_irq(unsigned int irq,void (*handler)(int));
-extern void free_irq(unsigned int irq);
-extern int irqaction(unsigned int irq,struct sigaction * new);
 
 /*
  * Entry into gdt where to find first TSS. 0-nul, 1-cs, 2-ds, 3-syscall
@@ -264,10 +253,8 @@ struct {long a,b;} __tmp; \
 __asm__("cmpl %%ecx,_current\n\t" \
 	"je 1f\n\t" \
 	"movw %%dx,%1\n\t" \
-	"cli\n\t" \
 	"xchgl %%ecx,_current\n\t" \
 	"ljmp %0\n\t" \
-	"sti\n\t" \
 	"cmpl %%ecx,_last_task_used_math\n\t" \
 	"jne 1f\n\t" \
 	"clts\n" \
@@ -305,51 +292,6 @@ __asm__("movw %%dx,%0\n\t" \
 #define set_base(ldt,base) _set_base( ((char *)&(ldt)) , base )
 #define set_limit(ldt,limit) _set_limit( ((char *)&(ldt)) , (limit-1)>>12 )
 
-extern inline void add_wait_queue(struct wait_queue ** p, struct wait_queue * wait)
-{
-	unsigned long flags;
-	struct wait_queue * tmp;
-
-	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
-	wait->next = *p;
-	tmp = wait;
-	while (tmp->next)
-		if ((tmp = tmp->next)->next == *p)
-			break;
-	*p = tmp->next = wait;
-	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
-}
-
-extern inline void remove_wait_queue(struct wait_queue ** p, struct wait_queue * wait)
-{
-	unsigned long flags;
-	struct wait_queue * tmp;
-
-	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
-	if (*p == wait)
-		if ((*p = wait->next) == wait)
-			*p = NULL;
-	tmp = wait;
-	while (tmp && tmp->next != wait)
-		tmp = tmp->next;
-	if (tmp)
-		tmp->next = wait->next;
-	wait->next = NULL;
-	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
-}
-
-extern inline void select_wait(struct wait_queue ** wait_address, select_table * p)
-{
-	struct select_table_entry * entry = p->entry + p->nr;
-
-	if (!wait_address)
-		return;
-	entry->wait_address = wait_address;
-	entry->wait.task = current;
-	add_wait_queue(wait_address,&entry->wait);
-	p->nr++;
-}
-
 static unsigned long inline _get_base(char * addr)
 {
 	unsigned long __base;
@@ -373,19 +315,5 @@ static unsigned long inline get_limit(unsigned long segment)
 		:"=r" (__limit):"r" (segment));
 	return __limit+1;
 }
-
-#define REMOVE_LINKS(p) \
-	if ((p)->p_osptr) \
-		(p)->p_osptr->p_ysptr = (p)->p_ysptr; \
-	if ((p)->p_ysptr) \
-		(p)->p_ysptr->p_osptr = (p)->p_osptr; \
-	else \
-		(p)->p_pptr->p_cptr = (p)->p_osptr
-
-#define SET_LINKS(p) \
-	(p)->p_ysptr = NULL; \
-	if ((p)->p_osptr = (p)->p_pptr->p_cptr) \
-		(p)->p_osptr->p_ysptr = p; \
-	(p)->p_pptr->p_cptr = p
 
 #endif

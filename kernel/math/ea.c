@@ -58,7 +58,7 @@ static char * sib(struct info * info, int mod)
 char * ea(struct info * info, unsigned short code)
 {
 	unsigned char mod,rm;
-	long * tmp;
+	long * tmp = &EAX;
 	int offset = 0;
 
 	mod = (code >> 6) & 3;
@@ -84,7 +84,7 @@ char * ea(struct info * info, unsigned short code)
 			EIP += 4;
 			break;
 		case 3:
-			math_abort(info,SIGILL);
+			math_abort(info,1<<(SIGILL-1));
 	}
 	I387.foo = offset;
 	I387.fos = 0x17;

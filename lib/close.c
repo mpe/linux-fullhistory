@@ -5,7 +5,6 @@
  */
 
 #define __LIBRARY__
-#include <linux/unistd.h>
+#include <unistd.h>
 
 _syscall1(int,close,int,fd)
-

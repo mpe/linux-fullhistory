@@ -31,7 +31,9 @@ $Header: /usr/src/linux/include/linux/lp.h,v 1.2 1992/01/21 23:59:24 james_r_wie
 
 #define LP_B(minor)	lp_table[(minor)].base
 #define LP_F(minor)	lp_table[(minor)].flags
+#define LP_T(minor)	lp_table[(minor)].lp_task
 #define LP_S(minor)	inb(LP_B((minor)) + 1)
+#define LP_R(minor)	lp_table[(minor)].remainder
 
 /* 
 since we are dealing with a horribly slow device
@@ -43,6 +45,10 @@ I don't see the need for a queue
 struct lp_struct {
 	int base;
 	int flags;
+	/* number of characters yet to be printed in current block */
+	int remainder;
+	/* needed for busy determination */
+	int lp_task;
 };
 
 /* 
@@ -100,4 +106,4 @@ struct lp_struct lp_table[] = {
  * function prototypes
  */
 
-extern long lp_init(long);
+extern void lp_init(void);

@@ -72,8 +72,6 @@ enum machine_type {
 /* Code indicating demand-paged executable.  */
 #define ZMAGIC 0413
 
-/* Code indicating core file.  */
-#define CMAGIC 0421
 #if !defined (N_BADMAG)
 #define N_BADMAG(x)					\
  (N_MAGIC(x) != OMAGIC && N_MAGIC(x) != NMAGIC		\

@@ -5,22 +5,15 @@
  */
 
 #include <linux/string.h>
-#include <linux/stat.h>
+#include <sys/stat.h>
+
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <asm/system.h>
-#include <asm/segment.h>
 
 int sync_dev(int dev);
-
-void minix_put_inode(struct inode *inode)
-{
-	inode->i_size = 0;
-	minix_truncate(inode);
-	minix_free_inode(inode);
-}
 
 void minix_put_super(struct super_block *sb)
 {
@@ -38,17 +31,12 @@ void minix_put_super(struct super_block *sb)
 
 static struct super_operations minix_sops = { 
 	minix_read_inode,
-	minix_write_inode,
-	minix_put_inode,
-	minix_put_super,
-	NULL,
-	minix_statfs
+	minix_put_super
 };
 
 struct super_block *minix_read_super(struct super_block *s,void *data)
 {
 	struct buffer_head *bh;
-	struct minix_super_block *ms;
 	int i,dev=s->s_dev,block;
 
 	lock_super(s);
@@ -58,15 +46,8 @@ struct super_block *minix_read_super(struct super_block *s,void *data)
 		printk("bread failed\n");
 		return NULL;
 	}
-	ms = (struct minix_super_block *) bh->b_data;
-	s->s_ninodes = ms->s_ninodes;
-	s->s_nzones = ms->s_nzones;
-	s->s_imap_blocks = ms->s_imap_blocks;
-	s->s_zmap_blocks = ms->s_zmap_blocks;
-	s->s_firstdatazone = ms->s_firstdatazone;
-	s->s_log_zone_size = ms->s_log_zone_size;
-	s->s_max_size = ms->s_max_size;
-	s->s_magic = ms->s_magic;
+	*((struct minix_super_block *) s) =
+		*((struct minix_super_block *) bh->b_data);
 	brelse(bh);
 	if (s->s_magic != MINIX_SUPER_MAGIC) {
 		s->s_dev = 0;
@@ -111,21 +92,6 @@ struct super_block *minix_read_super(struct super_block *s,void *data)
 		return NULL;
 	}
 	return s;
-}
-
-void minix_statfs (struct super_block *sb, struct statfs *buf)
-{
-	long tmp;
-
-	put_fs_long(MINIX_SUPER_MAGIC, &buf->f_type);
-	put_fs_long(1024, &buf->f_bsize);
-	put_fs_long(sb->s_nzones << sb->s_log_zone_size, &buf->f_blocks);
-	tmp = minix_count_free_blocks(sb);
-	put_fs_long(tmp, &buf->f_bfree);
-	put_fs_long(tmp, &buf->f_bavail);
-	put_fs_long(sb->s_ninodes, &buf->f_files);
-	put_fs_long(minix_count_free_inodes(sb), &buf->f_ffree);
-	/* Don't know what value to put in buf->f_fsid */
 }
 
 static int _minix_bmap(struct inode * inode,int block,int create)
@@ -233,24 +199,7 @@ void minix_read_inode(struct inode * inode)
 	else for (block = 0; block < 9; block++)
 		inode->i_data[block] = raw_inode->i_zone[block];
 	brelse(bh);
-	inode->i_op = NULL;
-	if (S_ISREG(inode->i_mode))
-		inode->i_op = &minix_file_inode_operations;
-	else if (S_ISDIR(inode->i_mode))
-		inode->i_op = &minix_dir_inode_operations;
-	else if (S_ISLNK(inode->i_mode))
-		inode->i_op = &minix_symlink_inode_operations;
-	else if (S_ISCHR(inode->i_mode))
-		inode->i_op = &minix_chrdev_inode_operations;
-	else if (S_ISBLK(inode->i_mode))
-		inode->i_op = &minix_blkdev_inode_operations;
-	else if (S_ISFIFO(inode->i_mode)) {
-		inode->i_op = &minix_fifo_inode_operations;
-		inode->i_size = 0;
-		inode->i_pipe = 1;
-		PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
-		PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
-	}
+	inode->i_op = &minix_inode_operations;
 }
 
 void minix_write_inode(struct inode * inode)
