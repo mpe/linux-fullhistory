@@ -187,7 +187,7 @@ void __init ixp2000_init_time(unsigned long tick_rate)
 	ticks_per_jiffy = (tick_rate + HZ/2) / HZ;
 	ticks_per_usec = tick_rate / 1000000;
 
-	ixp2000_reg_write(IXP2000_T1_CLD, ticks_per_jiffy);
+	ixp2000_reg_write(IXP2000_T1_CLD, ticks_per_jiffy - 1);
 	ixp2000_reg_write(IXP2000_T1_CTL, (1 << 7));
 
 	/*
@@ -195,7 +195,7 @@ void __init ixp2000_init_time(unsigned long tick_rate)
 	 */
 	ixp2000_reg_write(IXP2000_T4_CLD, -1);
 	ixp2000_reg_write(IXP2000_T4_CTL, (1 << 7));
- 	next_jiffy_time = 0xffffffff - ticks_per_jiffy;
+ 	next_jiffy_time = 0xffffffff;
 
 	/* register for interrupt */
 	setup_irq(IRQ_IXP2000_TIMER1, &ixp2000_timer_irq);
