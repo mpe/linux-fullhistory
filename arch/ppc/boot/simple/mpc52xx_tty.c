@@ -33,18 +33,19 @@
 #error "MPC52xx_PF_CONSOLE_PORT not defined"
 #endif
 
-static struct mpc52xx_psc *psc = (struct mpc52xx_psc *)MPC52xx_CONSOLE;
+static struct mpc52xx_psc __iomem *psc =
+	(struct mpc52xx_psc __iomem *) MPC52xx_CONSOLE;
 
 /* The decrementer counts at the system bus clock frequency
  * divided by four.  The most accurate time base is connected to the
  * rtc.  We read the decrementer change during one rtc tick (one second)
  * and multiply by 4 to get the system bus clock frequency.
  */
-int
+static int
 mpc52xx_ipbfreq(void)
 {
-	struct mpc52xx_rtc *rtc = (struct mpc52xx_rtc*)MPC52xx_RTC;
-	struct mpc52xx_cdm *cdm = (struct mpc52xx_cdm*)MPC52xx_CDM;
+	struct mpc52xx_rtc __iomem *rtc = (struct mpc52xx_rtc __iomem *)MPC52xx_RTC;
+	struct mpc52xx_cdm __iomem *cdm = (struct mpc52xx_cdm __iomem *)MPC52xx_CDM;
 	int current_time, previous_time;
 	int tbl_start, tbl_end;
 	int xlbfreq, ipbfreq;
@@ -67,7 +68,7 @@ mpc52xx_ipbfreq(void)
 unsigned long
 serial_init(int ignored, void *ignored2)
 {
-	struct mpc52xx_gpio *gpio = (struct mpc52xx_gpio *)MPC52xx_GPIO;
+	struct mpc52xx_gpio __iomem *gpio = (struct mpc52xx_gpio __iomem *)MPC52xx_GPIO;
 	int divisor;
 	int mode1;
 	int mode2;
@@ -117,7 +118,7 @@ serial_init(int ignored, void *ignored2)
 void
 serial_putc(void *ignored, const char c)
 {
-	serial_init(0, 0);
+	serial_init(0, NULL);
 
 	while (!(in_be16(&psc->mpc52xx_psc_status) & MPC52xx_PSC_SR_TXEMP)) ;
 	out_8(&psc->mpc52xx_psc_buffer_8, c);

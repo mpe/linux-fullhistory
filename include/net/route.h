@@ -44,8 +44,9 @@
 /* RTO_CONN is not used (being alias for 0), but preserved not to break
  * some modules referring to it. */
 
-#define RT_CONN_FLAGS(sk)   (RT_TOS(inet_sk(sk)->tos) | sk->sk_localroute)
+#define RT_CONN_FLAGS(sk)   (RT_TOS(inet_sk(sk)->tos) | sock_flag(sk, SOCK_LOCALROUTE))
 
+struct fib_nh;
 struct inet_peer;
 struct rtable
 {
@@ -58,7 +59,8 @@ struct rtable
 	struct in_device	*idev;
 	
 	unsigned		rt_flags;
-	unsigned		rt_type;
+	__u16			rt_type;
+	__u16			rt_multipath_alg;
 
 	__u32			rt_dst;	/* Path destination	*/
 	__u32			rt_src;	/* Path source		*/
@@ -179,6 +181,9 @@ static inline int ip_route_newports(struct rtable **rp, u16 sport, u16 dport,
 		memcpy(&fl, &(*rp)->fl, sizeof(fl));
 		fl.fl_ip_sport = sport;
 		fl.fl_ip_dport = dport;
+#if defined(CONFIG_IP_ROUTE_MULTIPATH_CACHED)
+		fl.flags |= FLOWI_FLAG_MULTIPATHOLDROUTE;
+#endif
 		ip_rt_put(*rp);
 		*rp = NULL;
 		return ip_route_output_flow(rp, &fl, sk, 0);

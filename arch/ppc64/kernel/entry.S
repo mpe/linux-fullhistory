@@ -616,7 +616,7 @@ unrecov_restore:
 	bl	.unrecoverable_exception
 	b	unrecov_restore
 
-#ifdef CONFIG_PPC_PSERIES
+#ifdef CONFIG_PPC_RTAS
 /*
  * On CHRP, the Run-Time Abstraction Services (RTAS) have to be
  * called with the MMU off.
@@ -753,7 +753,7 @@ _STATIC(rtas_restore_regs)
 	mtlr    r0
         blr				/* return to caller */
 
-#endif /* CONFIG_PPC_PSERIES */
+#endif /* CONFIG_PPC_RTAS */
 
 #ifdef CONFIG_PPC_MULTIPLATFORM
 

@@ -1,7 +1,7 @@
 /*
  *  drivers/s390/cio/cio.c
  *   S/390 common I/O routines -- low level i/o calls
- *   $Revision: 1.130 $
+ *   $Revision: 1.131 $
  *
  *    Copyright (C) 1999-2002 IBM Deutschland Entwicklung GmbH,
  *			      IBM Corporation
@@ -608,6 +608,10 @@ do_IRQ (struct pt_regs *regs)
 	irq_enter ();
 	asm volatile ("mc 0,0");
 	if (S390_lowcore.int_clock >= S390_lowcore.jiffy_timer)
+		/**
+		 * Make sure that the i/o interrupt did not "overtake"
+		 * the last HZ timer interrupt.
+		 */
 		account_ticks(regs);
 	/*
 	 * Get interrupt information from lowcore

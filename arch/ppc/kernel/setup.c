@@ -338,14 +338,15 @@ int __openfirmware
 of_show_percpuinfo(struct seq_file *m, int i)
 {
 	struct device_node *cpu_node;
-	int *fp, s;
+	u32 *fp;
+	int s;
 	
 	cpu_node = find_type_devices("cpu");
 	if (!cpu_node)
 		return 0;
 	for (s = 0; s < i && cpu_node->next; s++)
 		cpu_node = cpu_node->next;
-	fp = (int *) get_property(cpu_node, "clock-frequency", NULL);
+	fp = (u32 *)get_property(cpu_node, "clock-frequency", NULL);
 	if (fp)
 		seq_printf(m, "clock\t\t: %dMHz\n", *fp / 1000000);
 	return 0;

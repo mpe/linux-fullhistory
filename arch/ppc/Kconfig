@@ -538,6 +538,17 @@ config CHESTNUT
 config SPRUCE
 	bool "IBM-Spruce"
 
+config HDPU
+	bool "Sky-HDPU"
+	help
+	  Select HDPU if configuring a Sky Computers Compute Blade.
+
+config HDPU_FEATURES
+	depends HDPU
+	tristate "HDPU-Features"
+	help
+	  Select to enable HDPU enhanced features.
+
 config EV64260
 	bool "Marvell-EV64260BP"
 	help
@@ -748,7 +759,7 @@ config GT64260
 
 config MV64360
 	bool
-	depends on KATANA || RADSTONE_PPC7D
+	depends on KATANA || RADSTONE_PPC7D || HDPU
 	default y
 
 config MV64360
@@ -1099,7 +1110,7 @@ config MCA
 	bool
 
 config PCI
-	bool "PCI support" if 40x || CPM2 || 83xx || 85xx
+	bool "PCI support" if 40x || CPM2 || 83xx || 85xx || PPC_MPC52xx
 	default y if !40x && !CPM2 && !8xx && !APUS && !83xx && !85xx
 	default PCI_PERMEDIA if !4xx && !CPM2 && !8xx && APUS
 	default PCI_QSPAN if !4xx && !CPM2 && 8xx
