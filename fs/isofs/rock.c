@@ -56,6 +56,7 @@
     int block, offset, offset1; \
     struct buffer_head * bh; \
     buffer = kmalloc(cont_size,GFP_KERNEL); \
+    if (!buffer) goto out; \
     block = cont_extent; \
     offset = cont_offset; \
     offset1 = 0; \
@@ -214,6 +215,7 @@ int get_rock_ridge_filename(struct iso_directory_record * de,
 	     deallocate the mem fairly soon
 	     after control is returned */
 
+	  if (!retname) goto out;
 	  *retname = 0; /* Zero length string */
 	  retnamlen = 0;
 	};
@@ -467,6 +469,7 @@ char * get_rock_ridge_symlink(struct inode * inode)
        while (slen > 1){
 	 if (!rpnt){
 	   rpnt = (char *) kmalloc (inode->i_size +1, GFP_KERNEL);
+	   if (!rpnt) goto out;
 	   *rpnt = 0;
 	 };
 	 rootflag = 0;

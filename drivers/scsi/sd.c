@@ -444,6 +444,24 @@ repeat:
 	printk("sd%c : real dev = /dev/sd%c, block = %d\n", 'a' + MINOR(SCpnt->request.dev), dev, block);
 #endif
 
+	/*
+	 * If we have a 1K hardware sectorsize, prevent access to single
+	 * 512 byte sectors.  In theory we could handle this - in fact
+	 * the scsi cdrom driver must be able to handle this because
+	 * we typically use 1K blocksizes, and cdroms typically have
+	 * 2K hardware sectorsizes.  Of course, things are simpler
+	 * with the cdrom, since it is read-only.  For performance
+	 * reasons, the filesystems should be able to handle this
+	 * and not force the scsi disk driver to use bounce buffers
+	 * for this.
+	 */
+	if (rscsi_disks[dev].sector_size == 1024)
+	  if((block & 1) || (SCpnt->request.nr_sectors & 1)) {
+	 	printk("sd.c:Bad block number requested");
+		SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
+		goto repeat;
+	}
+	
 	switch (SCpnt->request.cmd)
 		{
 		case WRITE :

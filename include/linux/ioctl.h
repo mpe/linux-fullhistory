@@ -23,9 +23,15 @@
 #define IOC_INOUT	(IOC_IN | IOC_OUT)	/* both */
 #define IOCSIZE_MASK	0x3fff0000	/* size (max 16k-1 bytes) */
 #define IOCSIZE_SHIFT	16		/* how to get the size */
+#define IOCSIZE_MAX	((PAGE_SIZE-1)&(IOCSIZE_MASK >> IOC_SHIFT))
 #define IOCCMD_MASK	0x0000ffff	/* command code */
 #define IOCCMD_SHIFT	0
+#define IOCPARM_MASK IOCCMD_MASK
+#define IOCPARM_SHIFT IOCCMD_SHIFT
 
+#define IOC_SIZE(cmd)	(((cmd) & IOCSIZE_MASK) >> IOCSIZE_SHIFT)
+#define IOCBASECMD(cmd)	((cmd) & ~IOOCPARM_MASK
+#define IOCGROUP(cmd)	(((cmd) >> 8) & 0xFF)
 
 /* _IO(magic, subcode); size field is zero and the 
  * subcode determines the command.

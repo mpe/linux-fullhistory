@@ -178,6 +178,8 @@ struct buffer_head {
 #define ATTR_ATIME	16
 #define ATTR_MTIME	32
 #define ATTR_CTIME	64
+#define ATTR_ATIME_SET	128
+#define ATTR_MTIME_SET	256
 
 /*
  * This is the Inode Attributes structure, used for notify_change().  It

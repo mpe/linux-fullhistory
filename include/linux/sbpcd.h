@@ -135,7 +135,6 @@
 #define upc_bit 0x40
 #define volume_bit 0x20
 #define toc_bit 0x10
-#define multisession_bit 0x08
 #define cd_size_bit 0x04
 #define subq_bit 0x02
 #define frame_size_bit 0x01
@@ -146,7 +145,6 @@
 #define upc_valid (DriveStruct[d].diskstate_flags&upc_bit)
 #define volume_valid (DriveStruct[d].diskstate_flags&volume_bit)
 #define toc_valid (DriveStruct[d].diskstate_flags&toc_bit)
-#define multisession_valid (DriveStruct[d].diskstate_flags&multisession_bit)
 #define cd_size_valid (DriveStruct[d].diskstate_flags&cd_size_bit)
 #define subq_valid (DriveStruct[d].diskstate_flags&subq_bit)
 #define frame_size_valid (DriveStruct[d].diskstate_flags&frame_size_bit)
@@ -197,21 +195,24 @@
 /*
  * drive types (firmware versions):
  */
-#define drv_199 0       /* <200 */
-#define drv_200 1       /* <201 */
-#define drv_201 2       /* <210 */
-#define drv_210 3       /* <211 */
-#define drv_211 4       /* <300 */
-#define drv_300 5       /* else */
-#define drv_099 0x10    /* new,  <100 */
-#define drv_100 0x11    /* new, >=100 */
-#define drv_new 0x10    /* all new drives have that bit set */
-#define drv_old 0x00    /*  */
+#define drv_old 0x10    /* CR-52x family */
+#define drv_199 0x11    /* <200 */
+#define drv_200 0x12    /* <201 */
+#define drv_201 0x13    /* <210 */
+#define drv_210 0x14    /* <211 */
+#define drv_211 0x15    /* <300 */
+#define drv_300 0x16    /* >=300 */
 
-/*
- * drv_099 and drv_100 are the "new" drives
- */
-#define new_drive (DriveStruct[d].drv_type&0x10)
+#define drv_lcs 0x20    /* Longshine family */
+#define drv_260 0x21    /* LCS-7260 */
+
+#define drv_new 0x40    /* CR-56x family */
+#define drv_099 0x41    /* <100 */
+#define drv_100 0x42    /* >=100 */
+
+#define old_drive (DriveStruct[d].drv_type&drv_old)
+#define lcs_drive (DriveStruct[d].drv_type&drv_lcs)
+#define new_drive (DriveStruct[d].drv_type&drv_new)
 
 /*
  * audio states:
@@ -370,8 +371,9 @@ read:    02 xx-xx-xx nn-nn fl. (??)  read nn-nn blocks of 2048 bytes,
                                      fl=0: "lba"-, =2:"msf-bcd"-coded xx-xx-xx
 
 Read XA-Data:
-read:    03 ll-bb-aa nn-nn 00. (??)  read nn-nn blocks of 2340 bytes, 
-                                     starting at block ll-bb-aa
+read:    03 xx-xx-xx nn-nn fl. (??)  read nn-nn blocks of 2340 bytes, 
+                                     starting at block xx-xx-xx
+                                     fl=0: "lba"-, =2:"msf-bcd"-coded xx-xx-xx
 
 Read SUB_Q:
          89 fl 00 00 00 00 00. (13)  r0: audio status, r4-r7: lba/msf, 

@@ -11,6 +11,16 @@ N: Werner Almesberger
 E: almesber@bernina.ethz.ch
 D: dosfs, LILO, some fd features, various other hacks here and there
 
+N: Derek Atkins
+E: warlord@MIT.EDU
+D: Linux-AFS Port, random kernel hacker,
+D: VFS fixes (new notify_change in particular)
+D: Moving all VFS access checks into the file systems
+S: MIT Room E15-341
+S: 20 Ames St.
+S: Cambridge, Massachusetts  02139
+S: USA
+
 N: John Aycock
 E: aycock@cpsc.ucalgary.ca
 D: Adaptec 274x driver
@@ -147,6 +157,12 @@ S: United Kingdom
 N: Wayne Davison
 E: davison@borland.com
 D: Second extended file system co-designer
+
+N: Terry Dawson
+E: terryd@extro.ucc.su.oz.au
+E: vk2ktj@gw.vk2ktj.ampr.org (Amateur Radio use only)
+D: NET-2-HOWTO author.
+D: RADIOLINUX Amateur Radio software for Linux list collator.
 
 N: Todd J. Derr
 E: tjd@cs.pitt.edu
@@ -296,13 +312,14 @@ S: Dulles, Virginia 20166
 S: USA
 
 N: Nick Holloway
-E: alfie@dcs.warwick.ac.uk
+E: Nick.Holloway@alfie.demon.co.uk
+E: Nick.Holloway@parallax.co.uk
 D: Small patches for kernel, libc
-D: Makedev
-S: Department of Computer Science
-S: University of Warwick
+D: MAKEDEV
+S: 15 Duke Street
+S: Chapelfields
 S: Coventry
-S: CV4 7AL
+S: CV5 8BZ
 S: United Kingdom
 
 N: Ron Holt
@@ -391,6 +408,13 @@ S: 11, rue General Mangin
 S: 38100 Grenoble
 S: France
 
+N: Harald Koenig
+E: koenig@tat.physik.uni-tuebingen.de
+D: XFree86 (S3), DCF77, some kernel hacks and fixes
+S: Koenigsberger Str. 90
+S: D-72336 Balingen
+S: Germany
+
 N: Rudolf Koenig
 E: rfkoenig@immd4.informatik.uni-erlangen.de
 D: The Linux Support Team Erlangen
@@ -408,6 +432,13 @@ D: NCR53C400/T130B SCSI extension to NCR5380 driver.
 S: 18 Board Street
 S: Doncaster VIC 3108
 S: Australia
+
+N: Hans Lermen
+E: lermen@elserv.ffm.fgan.de
+D: Author of the LOADLIN Linux loader
+S: Am Muehlenweg 38
+S: D53424 Remagen
+S: Germany
 
 N: Mark Lord
 E: mlord@bnr.ca
@@ -819,7 +850,6 @@ S: USA
 
 N: Eric Youngdale
 E: eric@aib.com
-E: ericy@cais.com
 D: General kernel hacker
 D: SCSI iso9660 and ELF
 S: 17 Canterbury Square #101

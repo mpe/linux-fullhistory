@@ -41,7 +41,7 @@ int scsicam_bios_param (Disk *disk, /* SCSI disk */
     int ret_code;
     int size = disk->capacity;
 
-    if (!(bh = bread(dev,0,1024)))
+    if (!(bh = bread(dev & ~0xf,0,1024)))
 	return -1;
 
 #ifdef DEBUG

@@ -93,6 +93,7 @@
  *					fix a race and a signal problem with
  *					accept() and async I/O.
  *		Alan Cox	:	Relaxed the rules on tcp_sendto().
+ *		Yury Shevchuk	:	Really fixed accept() blocking problem.
  *
  *
  * To Fix:
@@ -244,7 +245,7 @@ static struct sk_buff *tcp_find_established(struct sock *s)
 		return NULL;
 	do
 	{
-		if(p->sk->state>=TCP_ESTABLISHED)
+		if(p->sk->state == TCP_ESTABLISHED || p->sk->state >= TCP_FIN_WAIT1)
 			return p;
 		p=p->next;
 	}
@@ -1885,7 +1886,7 @@ static void tcp_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *t
 	t1->psh = 0;
 	t1->doff = sizeof(*t1)/4;
 	tcp_send_check(t1, saddr, daddr, sizeof(*t1), NULL);
-	prot->queue_xmit(NULL, dev, buff, 1);
+	prot->queue_xmit(NULL, ndev, buff, 1);
 	tcp_statistics.TcpOutSegs++;
 }
 
@@ -2211,7 +2212,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	ptr[3] =(newsk->mtu) & 0xff;
 
 	tcp_send_check(t1, daddr, saddr, sizeof(*t1)+4, newsk);
-	newsk->prot->queue_xmit(newsk, dev, buff, 0);
+	newsk->prot->queue_xmit(newsk, ndev, buff, 0);
 
 	reset_timer(newsk, TIME_WRITE , TCP_TIMEOUT_INIT);
 	skb->sk = newsk;

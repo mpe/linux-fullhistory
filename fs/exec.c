@@ -365,16 +365,26 @@ unsigned long * create_tables(char * p,int argc,int envc,int ibcs)
 
 /*
  * count() counts the number of arguments/envelopes
+ *
+ * We also do some limited EFAULT checking: this isn't complete, but
+ * it does cover most cases. I'll have to do this correctly some day..
  */
 static int count(char ** argv)
 {
-	int i=0;
-	char ** tmp;
+	int error, i = 0;
+	char ** tmp, *p;
 
-	if ((tmp = argv) != 0)
-		while (get_fs_long((unsigned long *) (tmp++)))
+	error = verify_area(VERIFY_READ, argv, sizeof(char *));
+	if (error)
+		return error;
+	if ((tmp = argv) != 0) {
+		while ((p = (char *) get_fs_long((unsigned long *) (tmp++))) != NULL) {
 			i++;
-
+			error = verify_area(VERIFY_READ, p, 1);
+			if (error)
+				return error;
+		}
+	}
 	return i;
 }
 
@@ -601,8 +611,10 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	if (retval)
 		return retval;
 	bprm.filename = filename;
-	bprm.argc = count(argv);
-	bprm.envc = count(envp);
+	if ((bprm.argc = count(argv)) < 0)
+		return bprm.argc;
+	if ((bprm.envc = count(envp)) < 0)
+		return bprm.envc;
 	
 restart_interp:
 	if (!S_ISREG(bprm.inode->i_mode)) {	/* must be regular file */

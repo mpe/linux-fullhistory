@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 62
+SUBLEVEL = 63
 
 ARCH = i386
 
@@ -132,7 +132,11 @@ tools/./version.h: tools/version.h
 tools/version.h: $(CONFIGURE) Makefile
 	@./makever.sh
 	@echo \#define UTS_RELEASE \"$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)\" > tools/version.h
-	@echo \#define UTS_VERSION \"\#`cat .version` `date`\" >> tools/version.h
+	@if [ -f .name ]; then \
+	   echo \#define UTS_VERSION \"\#`cat .version`-`cat .name` `date`\"; \
+	 else \
+	   echo \#define UTS_VERSION \"\#`cat .version` `date`\";  \
+	 fi >> tools/version.h 
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_HOST \"`hostname`\" >> tools/version.h

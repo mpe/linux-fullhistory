@@ -580,8 +580,8 @@ Scsi_Cmnd * request_queueable (struct request * req, Scsi_Device * device)
 
   if (!SCpnt) return NULL;
 
-  if (device->host->hostt->can_queue
-      && device->host->host_busy >= device->host->hostt->can_queue) return NULL;
+  if (device->host->can_queue
+      && device->host->host_busy >= device->host->can_queue) return NULL;
 
   if (req) {
     memcpy(&SCpnt->request, req, sizeof(struct request));
@@ -766,7 +766,7 @@ update_timeout(SCpnt, SCpnt->timeout_per_command);
 		"bufflen = %d, done = %08x)\n", SCpnt->host->host_no, SCpnt->target, SCpnt->cmnd, SCpnt->buffer, SCpnt->bufflen, SCpnt->done);
 #endif
 
-        if (host->hostt->can_queue)
+        if (host->can_queue)
 		{
 #ifdef DEBUG
 	printk("queuecommand : routine at %08x\n", 
@@ -860,7 +860,7 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 	
 	if (!host)
 		{
-		panic ("Invalid or not present host. %d\n", host->host_no);
+		panic ("Invalid or not present host.\n");
 		}
 
 	
@@ -876,12 +876,12 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 
 	while (1==1){
 	  cli();
-	  if (host->hostt->can_queue
-	      && host->host_busy >= host->hostt->can_queue)
+	  if (host->can_queue
+	      && host->host_busy >= host->can_queue)
 	    {
 	      sti();
 	      SCSI_SLEEP(&host->host_wait, 
-			 (host->host_busy >= host->hostt->can_queue));
+			 (host->host_busy >= host->can_queue));
 	    } else {
 	      host->host_busy++;
 	      sti();

@@ -160,6 +160,7 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(jiffies),
 	X(xtime),
 	X(loops_per_sec),
+	X(need_resched),
 	X(kill_proc),
 	X(kill_pg),
 	X(kill_sl),

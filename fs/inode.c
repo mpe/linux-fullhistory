@@ -258,6 +258,15 @@ int inode_change_ok(struct inode *inode, struct iattr *attr)
 			attr->ia_mode &= ~S_ISGID;
 	}
 
+	/* Check for setting the inode time */
+	if ((attr->ia_valid & ATTR_ATIME_SET) &&
+	    ((current->fsuid != inode->i_uid) && !fsuser()))
+		return -EPERM;
+	if ((attr->ia_valid & ATTR_MTIME_SET) &&
+	    ((current->fsuid != inode->i_uid) && !fsuser()))
+		return -EPERM;
+
+
 	return 0;
 }
 

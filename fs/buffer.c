@@ -56,7 +56,6 @@ int buffers_lav[NR_SIZES] = {0,};  /* Load average of buffer usage */
 int nr_free[NR_SIZES] = {0,};
 int buffermem = 0;
 int nr_buffer_heads = 0;
-static int min_free_pages = 20;	/* nr free pages needed before buffer grows */
 extern int *blksize_size[];
 
 /* Here is the parameter block for the bdflush process. */
@@ -518,7 +517,7 @@ void refill_freelist(int size)
 	/* We are going to try and locate this much memory */
 	needed =bdf_prm.b_un.nrefill * size;  
 
-	while (nr_free_pages > min_free_pages && needed > 0 &&
+	while (nr_free_pages > min_free_pages*2 && needed > 0 &&
 	       grow_buffers(GFP_BUFFER, size)) {
 		needed -= PAGE_SIZE;
 	}
@@ -1572,7 +1571,7 @@ unsigned long generate_cluster(dev_t dev, int b[], int size)
 		 if(retval) return retval;
 	 };
 	
-	if (nr_free_pages > min_free_pages) 
+	if (nr_free_pages > min_free_pages*2) 
 		 return try_to_generate_cluster(dev, b[0], size);
 	else
 		 return reassign_cluster(dev, b[0], size);
@@ -1591,13 +1590,11 @@ void buffer_init(void)
         int isize = BUFSIZE_INDEX(BLOCK_SIZE);
 
 	if (high_memory >= 4*1024*1024) {
-		min_free_pages = 200;
 		if(high_memory >= 16*1024*1024)
 			 nr_hash = 16381;
 		else
 			 nr_hash = 4093;
 	} else {
-		min_free_pages = 20;
 		nr_hash = 997;
 	};
 	

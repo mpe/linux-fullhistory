@@ -741,23 +741,29 @@ static void scrdown(int currcons, unsigned int t, unsigned int b)
 
 static void lf(int currcons)
 {
-	if (y+1<bottom) {
-		y++;
-		pos += video_size_row;
-		return;
-	} else 
+    	/* don't scroll if above bottom of scrolling region, or
+	 * if below scrolling region
+	 */
+    	if (y+1 == bottom)
 		scrup(currcons,top,bottom);
+	else if (y < video_num_lines-1) {
+	    	y++;
+		pos += video_size_row;
+	}
 	need_wrap = 0;
 }
 
 static void ri(int currcons)
 {
-	if (y>top) {
+    	/* don't scroll if below top of scrolling region, or
+	 * if above scrolling region
+	 */
+	if (y == top)
+		scrdown(currcons,top,bottom);
+	else if (y > 0) {
 		y--;
 		pos -= video_size_row;
-		return;
-	} else
-		scrdown(currcons,top,bottom);
+	}
 	need_wrap = 0;
 }
 

@@ -31,7 +31,7 @@
 #define SWP_OFFSET(entry) ((entry) >> PAGE_SHIFT)
 #define SWP_ENTRY(type,offset) (((type) << 1) | ((offset) << PAGE_SHIFT))
 
-static int min_free_pages = 20;
+int min_free_pages = 20;
 
 static int nr_swapfiles = 0;
 static struct wait_queue * lock_queue = NULL;
@@ -586,8 +586,7 @@ do { struct mem_list * queue = free_area_list+order; \
      unsigned long new_order = order; \
 	do { struct mem_list *next = queue->next; \
 		if (queue != next) { \
-			queue->next = next->next; \
-			next->next->prev = queue; \
+			(queue->next = next->next)->prev = queue; \
 			mark_used((unsigned long) next, new_order); \
 			nr_free_pages -= 1 << order; \
 			restore_flags(flags); \

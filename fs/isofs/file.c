@@ -146,7 +146,8 @@ static int isofs_file_read(struct inode * inode, struct file * filp, char * buf,
 		return 0;
 	read = 0;
 	block = filp->f_pos >> ISOFS_BUFFER_BITS(inode);
-	offset = filp->f_pos & (ISOFS_BUFFER_SIZE(inode)-1);
+	offset = (inode->u.isofs_i.i_first_extent + filp->f_pos)
+	  & (ISOFS_BUFFER_SIZE(inode)-1);
 	blocks = (left + offset + ISOFS_BUFFER_SIZE(inode) - 1) / ISOFS_BUFFER_SIZE(inode);
 	bhb = bhe = buflist;
 

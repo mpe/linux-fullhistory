@@ -196,6 +196,12 @@ void aha1740_intr_handle(int foo)
 					((ulong) inb(MBOXIN2) <<16) +
 					((ulong) inb(MBOXIN3) <<24) );
 	    outb(G2CNTRL_HRDY,G2CNTRL); /* Host Ready -> Mailbox in complete */
+	    if (!ecbptr)
+	    {
+		printk("Aha1740 null ecbptr in interrupt (%x,%x,%x,%d)\n",
+			inb(G2STAT),adapstat,inb(G2INTST),number_serviced++);
+		continue;
+	    }
 	    SCtmp = ecbptr->SCpnt;
 	    if (SCtmp->host_scribble)
 		scsi_free(SCtmp->host_scribble, 512);

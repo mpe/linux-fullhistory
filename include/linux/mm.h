@@ -116,6 +116,7 @@ struct page_info {
 
 extern int nr_swap_pages;
 extern int nr_free_pages;
+extern int min_free_pages;
 
 #define NR_MEM_LISTS 6
 

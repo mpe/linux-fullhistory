@@ -1,10 +1,13 @@
-This README belongs to release 2.7 or newer of the SoundBlaster Pro
+This README belongs to release 2.8 or newer of the SoundBlaster Pro
 (Matsushita, Kotobuki, Panasonic, CreativeLabs) CD-ROM driver for Linux.
 
 The driver is able to drive the whole family of "traditional" IDE-style (that
 has nothing to do with the new "Enhanced IDE" drive standard) Matsushita,
 Kotobuki, Panasonic drives, sometimes labelled as "CreativeLabs". The
 well-known drives are CR-521, CR-522, CR-523, CR-562, CR-563.
+
+The Longshine LCS-7260 is a double-speed drive which uses the "old"
+Matsushita command set. It should be fully supported soon, too.
 
 There exists an "IBM External ISA CD-ROM Drive" which in fact is a CR-562
 with a special controller board. This drive is supported (the interface is
@@ -20,21 +23,22 @@ interfaces does NOT make the drives compatible. :-)
 
 It will work with the soundcard interfaces (SB Pro, SB 16, Galaxy, SoundFX,
 ...) and/or with the "no-sound" cards (Panasonic CI-101P, LaserMate,
-WDH-7001C, older Aztech cards, ...).
+WDH-7001C, Longshine LCS-6853, older Aztech cards, ...).
 It should work too now with the "configurable" interface "Sequoia S-1000",
 which is found on the Spea Media FX sound card. I still need feedback about
 this.
 The interface type has to get configured in /usr/include/linux/sbpcd.h, 
-because the behavior is different.
+because the behavior of some sound card interfaces is different.
 
 The driver respects different drive firmware releases - my old drive is a 2.11,
 but it should work with "old" drives <2.01 ... >3.00 and with "new" drives
 (which count the releases around 0.75 or 1.00).
 
 Up to 4 drives per interface card, and up to 4 interface cards are supported.
-CR-52x ("old") and CR-56x ("new") drives can be mixed, but the CR-521 ones are
-hard-wired to drive ID 0. The drives have to use different drive IDs, and each
-drive has to get a unique minor number (0...3), corresponding to it's drive ID.
+CR-52x ("old"), CR-56x ("new") and LCS drives can be mixed, but the CR-521
+ones are hard-wired to drive ID 0. The drives have to use different drive IDs,
+and each drive has to get a unique minor number (0...3), corresponding to it's
+drive ID.
 The drive IDs may be selected freely from 0 to 3 - they do not have to be in
 consecutive order.
 

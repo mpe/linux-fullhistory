@@ -101,7 +101,7 @@ extern void sbpcd_setup(char *str, int *ints);
 #endif CONFIG_SBPCD
 #ifdef CONFIG_CDU31A
 extern void cdu31a_setup(char *str, int *ints);
-#endif CONFIG_SBPCD
+#endif CONFIG_CDU31A
 void ramdisk_setup(char *str, int *ints);
 
 #ifdef CONFIG_SYSVIPC
@@ -328,7 +328,7 @@ static void parse_options(char *line)
 			for (n = 0 ; devnames[n] ; n++) {
 				int len = strlen(devnames[n]);
 				if (!strncmp(line,devnames[n],len)) {
-					ROOT_DEV = devnums[n]+simple_strtoul(line+len,NULL,16);
+					ROOT_DEV = devnums[n]+simple_strtoul(line+len,NULL,0);
 					break;
 				}
 			}

@@ -120,6 +120,9 @@
 #define PCI_DEVICE_ID_NCR_53C820	0x0002
 #define PCI_DEVICE_ID_NCR_53C825	0x0003
 
+#define PCI_VENDOR_ID_ADAPTEC		0x9004
+#define PCI_DEVICE_ID_ADAPTEC_2940	0x7178
+
 /* PCI BIOS */
 
 extern int pcibios_present (void);

@@ -1010,12 +1010,12 @@ slip_init(struct device *dev)
   if (already++ == 0) {
 	printk("SLIP: version %s (%d channels)\n",
 				SLIP_VERSION, SL_NRUNIT);
-#ifdef CONFIG_INET				
+#ifdef SL_COMPRESSED
 	printk("CSLIP: code copyright 1989 Regents of the University of California\n");
-#endif	
+#endif
 #ifdef CONFIG_AX25
 	printk("AX25: KISS encapsulation enabled\n");
-#endif	
+#endif
 	/* Fill in our LDISC request block. */
 	memset(&sl_ldisc, 0, sizeof(sl_ldisc));
 	sl_ldisc.magic	= TTY_LDISC_MAGIC;

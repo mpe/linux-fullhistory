@@ -72,6 +72,7 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 	void * cpnt = NULL;
 	unsigned int old_offset;
 	int dlen, rrflag;
+	int high_sierra = 0;
 	char * dpnt, *dpnt1;
 	struct iso_directory_record * de;
 	
@@ -125,6 +126,7 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 		        unsigned int frag1;
 			frag1 = bufsize - old_offset;
 			cpnt = kmalloc(*((unsigned char *) de),GFP_KERNEL);
+			if (!cpnt) return 0;
 			memcpy(cpnt, bh->b_data + old_offset, frag1);
 			de = (struct iso_directory_record *) ((char *)cpnt);
 			brelse(bh);
@@ -156,8 +158,7 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 			put_fs_byte('.',dirent->d_name+1);
 			i = 2;
 			dpnt = "..";
-			if((inode->i_sb->u.isofs_sb.s_firstdatazone
-			    << bufbits) != inode->i_ino)
+			if((inode->i_sb->u.isofs_sb.s_firstdatazone) != inode->i_ino)
 				inode_number = inode->u.isofs_i.i_backlink;
 			else
 				inode_number = inode->i_ino;
@@ -178,6 +179,15 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 		   is no Rock Ridge NM field. */
 		
 		else {
+		  /* Do not report hidden or associated files */
+		        high_sierra = inode->i_sb->u.isofs_sb.s_high_sierra;
+		        if (de->flags[-high_sierra] & 5) {
+			  if (cpnt) {
+			    kfree(cpnt);
+			    cpnt = NULL;
+			  };
+			  continue;
+			}
 			dlen = de->name_len[0];
 			dpnt = de->name;
 			i = dlen;
@@ -196,6 +206,7 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 			  if(inode->i_sb->u.isofs_sb.s_mapping == 'n') {
 			    dpnt1 = dpnt;
 			    dpnt = kmalloc(dlen, GFP_KERNEL);
+			    if (!dpnt) goto out;
 			    for (i = 0; i < dlen && i < NAME_MAX; i++) {
 			      if (!(c = dpnt1[i])) break;
 			      if (c >= 'A' && c <= 'Z') c |= 0x20;  /* lower case */

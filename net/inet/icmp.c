@@ -24,6 +24,8 @@
  *		Alan Cox	:	Fixed the ICMP error status of net/host unreachable
  *	Gerhard Koerting	:	Fixed broadcast ping properly
  *		Ulrich Kunitz	:	Fixed ICMP timestamp reply
+ *		A.N.Kuznetsov	:	Multihoming fixes.
+ *		Laco Rusnak	:	Multihoming fixes.
  *
  * 
  *
@@ -408,7 +410,7 @@ static void icmp_echo(struct icmphdr *icmph, struct sk_buff *skb, struct device 
 	/*
 	 *	Ship it out - free it when done 
 	 */
-	ip_queue_xmit((struct sock *)NULL, dev, skb2, 1);
+	ip_queue_xmit((struct sock *)NULL, ndev, skb2, 1);
 
 	/*
 	 *	Free the received frame
@@ -498,7 +500,7 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, struct de
 	 *	Ship it out - free it when done 
 	 */
 
-	ip_queue_xmit((struct sock *) NULL, dev, skb2, 1);
+	ip_queue_xmit((struct sock *) NULL, ndev, skb2, 1);
 	icmp_statistics.IcmpOutTimestampReps++;
 	kfree_skb(skb, FREE_READ);
 }
@@ -581,7 +583,7 @@ static void icmp_address(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 	icmphr->checksum = ip_compute_csum((unsigned char *)icmphr, len);
 
 	/* Ship it out - free it when done */
-	ip_queue_xmit((struct sock *)NULL, dev, skb2, 1);
+	ip_queue_xmit((struct sock *)NULL, ndev, skb2, 1);
 
 	skb->sk = NULL;
 	kfree_skb(skb, FREE_READ);

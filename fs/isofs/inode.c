@@ -245,8 +245,22 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	
 	s->u.isofs_sb.s_ninodes = 0; /* No way to figure this out easily */
 	
-	s->u.isofs_sb.s_firstdatazone = isonum_733( rootp->extent) << 
-		(ISOFS_BLOCK_BITS - blocksize_bits);
+	/* RDE: convert log zone size to bit shift */
+
+	switch (s -> u.isofs_sb.s_log_zone_size)
+	  { case  512: s -> u.isofs_sb.s_log_zone_size =  9; break;
+	    case 1024: s -> u.isofs_sb.s_log_zone_size = 10; break;
+	    case 2048: s -> u.isofs_sb.s_log_zone_size = 11; break;
+
+	    default:
+	      printk("Bad logical zone size %d\n", s -> u.isofs_sb.s_log_zone_size = 10);
+	      goto out;
+	  }
+
+	/* RDE: data zone now byte offset! */
+
+	s->u.isofs_sb.s_firstdatazone = (isonum_733( rootp->extent) 
+					 << s -> u.isofs_sb.s_log_zone_size);
 	s->s_magic = ISOFS_SUPER_MAGIC;
 	
 	/* The CDROM is read-only, has no nodes (devices) on it, and since
@@ -256,19 +270,14 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	
 	s->s_flags |= MS_RDONLY /* | MS_NODEV | MS_NOSUID */;
 	
-	if(s->u.isofs_sb.s_log_zone_size != (1 << ISOFS_BLOCK_BITS)) {
-		printk("1 <<Block bits != Block size\n");
-		goto out;
-	};
-	
 	brelse(bh);
 	
 	printk("Max size:%ld   Log zone size:%ld\n",
 	       s->u.isofs_sb.s_max_size, 
 	       s->u.isofs_sb.s_log_zone_size);
 	printk("First datazone:%ld   Root inode number %d\n",
-	       s->u.isofs_sb.s_firstdatazone,
-	       isonum_733 (rootp->extent) << ISOFS_BLOCK_BITS);
+	       s->u.isofs_sb.s_firstdatazone >> s -> u.isofs_sb.s_log_zone_size,
+	       isonum_733 (rootp->extent) << s -> u.isofs_sb.s_log_zone_size);
 	if(high_sierra) printk("Disc in High Sierra format.\n");
 	unlock_super(s);
 	/* set up enough so that it can read an inode */
@@ -283,7 +292,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	s->u.isofs_sb.s_gid = opt.gid;
 	s->s_blocksize = opt.blocksize;
 	s->s_blocksize_bits = blocksize_bits;
-	s->s_mounted = iget(s, isonum_733 (rootp->extent) << ISOFS_BLOCK_BITS);
+	s->s_mounted = iget(s, isonum_733 (rootp->extent) << s -> u.isofs_sb.s_log_zone_size);
 	unlock_super(s);
 
 	if (!(s->s_mounted)) {
@@ -320,7 +329,7 @@ int isofs_bmap(struct inode * inode,int block)
 		printk("_isofs_bmap: block<0");
 		return 0;
 	}
-	return inode->u.isofs_i.i_first_extent + block;
+	return (inode->u.isofs_i.i_first_extent >> ISOFS_BUFFER_BITS(inode)) + block;
 }
 
 void isofs_read_inode(struct inode * inode)
@@ -425,10 +434,12 @@ void isofs_read_inode(struct inode * inode)
 
 	/* I have no idea what other flag bits are used for, so
 	   we will flag it for now */
+#ifdef DEBUG
 	if((raw_inode->flags[-high_sierra] & ~2)!= 0){
 		printk("Unusual flag settings for ISO file (%ld %x).\n",
 		       inode->i_ino, raw_inode->flags[-high_sierra]);
 	}
+#endif
 
 #ifdef DEBUG
 	printk("Get inode %d: %d %d: %d\n",inode->i_ino, block, 
@@ -438,10 +449,9 @@ void isofs_read_inode(struct inode * inode)
 	inode->i_mtime = inode->i_atime = inode->i_ctime = 
 	  iso_date(raw_inode->date, high_sierra);
 
-	inode->u.isofs_i.i_first_extent = 
-	  (isonum_733 (raw_inode->extent) + 
-	   isonum_711 (raw_inode->ext_attr_length)) << 
-		(ISOFS_BLOCK_BITS - ISOFS_BUFFER_BITS(inode));
+	inode->u.isofs_i.i_first_extent = (isonum_733 (raw_inode->extent) + 
+					   isonum_711 (raw_inode->ext_attr_length))
+	  << inode -> i_sb -> u.isofs_sb.s_log_zone_size;
 	
 	inode->u.isofs_i.i_backlink = 0xffffffff; /* Will be used for previous directory */
 	switch (inode->i_sb->u.isofs_sb.s_conversion){
@@ -625,6 +635,7 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
  		        unsigned int frag1;
  			frag1 = bufsize - old_offset;
  			cpnt = kmalloc(*((unsigned char *) de),GFP_KERNEL);
+			if (!cpnt) return -1;
  			memcpy(cpnt, bh->b_data + old_offset, frag1);
  			de = (struct iso_directory_record *) ((char *)cpnt);
 			brelse(bh);

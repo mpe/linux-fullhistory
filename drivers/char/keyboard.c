@@ -193,38 +193,100 @@ void to_utf8(ushort c) {
 }
 
 /*
- * Translation of escaped scancodes to keysyms.
- * This should be user-settable.
+ * Translation of escaped scancodes to keycodes.
+ * This is now user-settable.
+ * The keycodes 1-88,96-111,119 are fairly standard, and
+ * should probably not be changed - changing might confuse X.
+ * X also interprets scancode 0x5d (KEY_Begin).
+ *
+ * For 1-88 keycode equals scancode.
  */
-#define E0_BASE 96
 
-#define E0_KPENTER (E0_BASE+0)
-#define E0_RCTRL   (E0_BASE+1)
-#define E0_KPSLASH (E0_BASE+2)
-#define E0_PRSCR   (E0_BASE+3)
-#define E0_RALT    (E0_BASE+4)
-#define E0_BREAK   (E0_BASE+5)  /* (control-pause) */
-#define E0_HOME    (E0_BASE+6)
-#define E0_UP      (E0_BASE+7)
-#define E0_PGUP    (E0_BASE+8)
-#define E0_LEFT    (E0_BASE+9)
-#define E0_RIGHT   (E0_BASE+10)
-#define E0_END     (E0_BASE+11)
-#define E0_DOWN    (E0_BASE+12)
-#define E0_PGDN    (E0_BASE+13)
-#define E0_INS     (E0_BASE+14)
-#define E0_DEL     (E0_BASE+15)
+#define E0_KPENTER 96
+#define E0_RCTRL   97
+#define E0_KPSLASH 98
+#define E0_PRSCR   99
+#define E0_RALT    100
+#define E0_BREAK   101  /* (control-pause) */
+#define E0_HOME    102
+#define E0_UP      103
+#define E0_PGUP    104
+#define E0_LEFT    105
+#define E0_RIGHT   106
+#define E0_END     107
+#define E0_DOWN    108
+#define E0_PGDN    109
+#define E0_INS     110
+#define E0_DEL     111
+
+#define E1_PAUSE   119
+
+/*
+ * The keycodes below are randomly located in 89-95,112-118,120-127.
+ * They could be thrown away (and all occurrences below replaced by 0),
+ * but that would force many users to use the `setkeycodes' utility, where
+ * they needed not before. It does not matter that there are duplicates, as
+ * long as no duplication occurs for any single keyboard.
+ */
+#define SC_LIM 89
+
+#define FOCUS_PF1 85           /* actual code! */
+#define FOCUS_PF2 89
+#define FOCUS_PF3 90
+#define FOCUS_PF4 91
+#define FOCUS_PF5 92
+#define FOCUS_PF6 93
+#define FOCUS_PF7 94
+#define FOCUS_PF8 95
+#define FOCUS_PF9 120
+#define FOCUS_PF10 121
+#define FOCUS_PF11 122
+#define FOCUS_PF12 123
+
+#define JAP_86     124
+/* tfj@olivia.ping.dk:
+ * The four keys are located over the numeric keypad, and are
+ * labelled A1-A4. It's an rc930 keyboard, from
+ * Regnecentralen/RC International, Now ICL.
+ * Scancodes: 59, 5a, 5b, 5c.
+ */
+#define RGN1 124
+#define RGN2 125
+#define RGN3 126
+#define RGN4 127
+
+static unsigned char high_keys[128 - SC_LIM] = {
+  RGN1, RGN2, RGN3, RGN4, 0, 0, 0,                   /* 0x59-0x5f */
+  0, 0, 0, 0, 0, 0, 0, 0,                            /* 0x60-0x67 */
+  0, 0, 0, 0, 0, FOCUS_PF11, 0, FOCUS_PF12,          /* 0x68-0x6f */
+  0, 0, 0, FOCUS_PF2, FOCUS_PF9, 0, 0, FOCUS_PF3,    /* 0x70-0x77 */
+  FOCUS_PF4, FOCUS_PF5, FOCUS_PF6, FOCUS_PF7,        /* 0x78-0x7b */
+  FOCUS_PF8, JAP_86, FOCUS_PF10, 0                   /* 0x7c-0x7f */
+};
+
 /* BTC */
-#define E0_MACRO   (E0_BASE+16)
+#define E0_MACRO   112
 /* LK450 */
-#define E0_F13     (E0_BASE+17)
-#define E0_F14     (E0_BASE+18)
-#define E0_HELP    (E0_BASE+19)
-#define E0_DO      (E0_BASE+20)
-#define E0_F17     (E0_BASE+21)
-#define E0_KPMINPLUS (E0_BASE+22)
-
-#define E1_PAUSE   (E0_BASE+23)	                      /* 119 */
+#define E0_F13     113
+#define E0_F14     114
+#define E0_HELP    115
+#define E0_DO      116
+#define E0_F17     117
+#define E0_KPMINPLUS 118
+/*
+ * My OmniKey generates e0 4c for  the "OMNI" key and the
+ * right alt key does nada. [kkoller@nyx10.cs.du.edu]
+ */
+#define E0_OK	124
+/*
+ * New microsoft keyboard is rumoured to have
+ * e0 5b (left window button), e0 5c (right window button),
+ * e0 5d (menu button). [or: LBANNER, RBANNER, RMENU]
+ * [or: Windows_L, Windows_R, TaskMan]
+ */
+#define E0_MSLW	125
+#define E0_MSRW	126
+#define E0_MSTM	127
 
 static unsigned char e0_keys[128] = {
   0, 0, 0, 0, 0, 0, 0, 0,			      /* 0x00-0x07 */
@@ -236,47 +298,33 @@ static unsigned char e0_keys[128] = {
   0, 0, 0, 0, 0, E0_KPSLASH, 0, E0_PRSCR,	      /* 0x30-0x37 */
   E0_RALT, 0, 0, 0, 0, E0_F13, E0_F14, E0_HELP,	      /* 0x38-0x3f */
   E0_DO, E0_F17, 0, 0, 0, 0, E0_BREAK, E0_HOME,	      /* 0x40-0x47 */
-  E0_UP, E0_PGUP, 0, E0_LEFT, 0, E0_RIGHT, E0_KPMINPLUS, E0_END,/* 0x48-0x4f */
+  E0_UP, E0_PGUP, 0, E0_LEFT, E0_OK, E0_RIGHT, E0_KPMINPLUS, E0_END,/* 0x48-0x4f */
   E0_DOWN, E0_PGDN, E0_INS, E0_DEL, 0, 0, 0, 0,	      /* 0x50-0x57 */
-  0, 0, 0, 0, 0, 0, 0, 0,			      /* 0x58-0x5f */
+  0, 0, 0, E0_MSLW, E0_MSRW, E0_MSTM, 0, 0,	      /* 0x58-0x5f */
   0, 0, 0, 0, 0, 0, 0, 0,			      /* 0x60-0x67 */
   0, 0, 0, 0, 0, 0, 0, E0_MACRO,		      /* 0x68-0x6f */
   0, 0, 0, 0, 0, 0, 0, 0,			      /* 0x70-0x77 */
   0, 0, 0, 0, 0, 0, 0, 0			      /* 0x78-0x7f */
 };
 
-/* kludge to stay below 128 - next time someone comes with a strange
-   keyboard, key codes will have to become 2 (or 4) bytes. */
-/* Owners of a FOCUS 9000 can assign F1,F2-F8,F9-F12 to 85,89-95,120-123 */
-/* Owners of a certain Japanese keyboard can use 89 and 124 */
-/* Owners of a certain Brazilian keyboard can use 89 and 121 */
-/* Note: MEDIUMRAW mode will change, and all keycodes above 89 will change;
-   this is only a temporary solution */
+int setkeycode(unsigned int scancode, unsigned int keycode)
+{
+	if (scancode < SC_LIM || scancode > 255 || keycode > 127)
+	  return -EINVAL;
+	if (scancode < 128)
+	  high_keys[scancode - SC_LIM] = keycode;
+	else
+	  e0_keys[scancode - 128] = keycode;
+	return 0;
+}
 
-#define SC_LIM 89
-
-#define FOCUS_PF1 85           /* actual code! */
-#define FOCUS_PF2 89
-#define FOCUS_PF3 90
-#define FOCUS_PF4 91
-#define FOCUS_PF5 92
-#define FOCUS_PF6 93
-#define FOCUS_PF7 94
-#define FOCUS_PF8 95
-#define FOCUS_PF9 (E1_PAUSE + 1)
-#define FOCUS_PF10 (E1_PAUSE + 2)
-#define FOCUS_PF11 (E1_PAUSE + 3)
-#define FOCUS_PF12 (E1_PAUSE + 4)                    /* 123 */
-#define JAP_86     (E1_PAUSE + 5)                    /* 124 */
-
-static unsigned char high_keys[128 - SC_LIM] = {
-  0, 0, 0, 0, 0, 0, 0,                               /* 0x59-0x5f */
-  0, 0, 0, 0, 0, 0, 0, 0,                            /* 0x60-0x67 */
-  0, 0, 0, 0, 0, FOCUS_PF11, 0, FOCUS_PF12,          /* 0x68-0x6f */
-  0, 0, 0, FOCUS_PF2, FOCUS_PF9, 0, 0, FOCUS_PF3,    /* 0x70-0x77 */
-  FOCUS_PF4, FOCUS_PF5, FOCUS_PF6, FOCUS_PF7,        /* 0x78-0x7b */
-  FOCUS_PF8, JAP_86, FOCUS_PF10, 0                   /* 0x7c-0x7f */
-};
+int getkeycode(unsigned int scancode)
+{
+	return
+	  (scancode < SC_LIM || scancode > 255) ? -EINVAL :
+	  (scancode < 128) ? high_keys[scancode - SC_LIM] :
+	    e0_keys[scancode - 128];
+}
 
 static void keyboard_interrupt(int int_pt_regs)
 {

@@ -43,7 +43,7 @@ extern struct device *init_etherdev(struct device *dev, int sizeof_private,
 
 /* A zero-terminated list of I/O addresses to be probed. */
 static unsigned int hpplus_portlist[] =
-{0x200, 0x240, 0x280, 0x2C0, 0x300, 0x320, 0x340, 0}
+{0x200, 0x240, 0x280, 0x2C0, 0x300, 0x320, 0x340, 0};
 
 /*
    The HP EtherTwist chip implementation is a fairly routine DP8390

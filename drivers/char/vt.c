@@ -46,6 +46,8 @@ struct vt_struct *vt_cons[MAX_NR_CONSOLES];
 
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on);
 
+extern int getkeycode(unsigned int scancode);
+extern int setkeycode(unsigned int scancode, unsigned int keycode);
 extern void compute_shiftstate(void);
 extern void change_console(unsigned int new_console);
 extern void complete_change_console(unsigned int new_console);
@@ -284,6 +286,36 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			put_fs_long(ucval, (unsigned long *) arg);
 		}
 		return i;
+
+	case KDGETKEYCODE:
+	{
+		struct kbkeycode * const a = (struct kbkeycode *)arg;
+		unsigned int sc;
+		int kc;
+
+		i = verify_area(VERIFY_WRITE, (void *)a, sizeof(struct kbkeycode));
+		if (i)
+			return i;
+		sc = get_fs_long((int *) &a->scancode);
+		kc = getkeycode(sc);
+		if (kc < 0)
+			return kc;
+		put_fs_long(kc, (int *) &a->keycode);
+		return 0;
+	}
+
+	case KDSETKEYCODE:
+	{
+		struct kbkeycode * const a = (struct kbkeycode *)arg;
+		unsigned int sc, kc;
+
+		i = verify_area(VERIFY_READ, (void *)a, sizeof(struct kbkeycode));
+		if (i)
+			return i;
+		sc = get_fs_long((int *) &a->scancode);
+		kc = get_fs_long((int *) &a->keycode);
+		return setkeycode(sc, kc);
+	}
 
 	case KDGKBENT:
 	{

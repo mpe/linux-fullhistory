@@ -135,6 +135,7 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 	struct inode * inode;
 	long actime,modtime;
 	int error;
+	unsigned int flags = 0;
 	struct iattr newattrs;
 
 	error = namei(filename,&inode);
@@ -144,17 +145,14 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 		iput(inode);
 		return -EROFS;
 	}
+	/* Don't worry, the checks are done in inode_change_ok() */
 	if (times) {
-		if ((current->fsuid != inode->i_uid) && !fsuser()) {
-			iput(inode);
-			return -EPERM;
-		}
 		actime = get_fs_long((unsigned long *) &times->actime);
 		modtime = get_fs_long((unsigned long *) &times->modtime);
 		newattrs.ia_ctime = CURRENT_TIME;
+		flags = ATTR_ATIME_SET | ATTR_MTIME_SET;
 	} else {
-		if ((current->fsuid != inode->i_uid) &&
-		    !permission(inode,MAY_WRITE)) {
+		if (!permission(inode,MAY_WRITE)) {
 			iput(inode);
 			return -EACCES;
 		}
@@ -162,7 +160,7 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 	}
 	newattrs.ia_atime = actime;
 	newattrs.ia_mtime = modtime;
-	newattrs.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_ATIME;
+	newattrs.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_ATIME | flags;
 	inode->i_dirt = 1;
 	error = notify_change(inode, &newattrs);
 	iput(inode);

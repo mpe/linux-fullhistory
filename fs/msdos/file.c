@@ -56,6 +56,44 @@ struct inode_operations msdos_file_inode_operations = {
 	NULL			/* smap */
 };
 
+#define MSDOS_PREFETCH	32
+struct msdos_pre {
+	int file_sector;/* Next sector to read in the prefetch table */
+			/* This is relative to the file, not the disk */
+	struct buffer_head *bhlist[MSDOS_PREFETCH];	/* All buffers needed */
+	int nblist;	/* Number of buffers in bhlist */
+	int nolist;	/* index in bhlist */
+};
+/*
+	Order the prefetch of more sectors.
+*/
+static void msdos_prefetch (
+	struct inode *inode,
+	struct msdos_pre *pre,
+	int nb)		/* How many must be prefetch at once */
+{
+	struct buffer_head *bhreq[MSDOS_PREFETCH];	/* Buffers not */
+												/* already read */
+	int nbreq=0;			/* Number of buffers in bhreq */
+	int i;
+	for (i=0; i<nb; i++){
+		int sector = msdos_smap(inode,pre->file_sector);
+		if (sector != 0){
+			struct buffer_head *bh;
+			PRINTK (("fsector2 %d -> %d\n",pre->file_sector-1,sector));
+			pre->file_sector++;
+			bh = getblk(inode->i_dev,sector,SECTOR_SIZE);
+			if (bh == NULL)	break;
+			pre->bhlist[pre->nblist++] = bh;
+			if (!bh->b_uptodate) bhreq[nbreq++] = bh;
+		}else{
+			break;
+		}
+	}
+	if (nbreq > 0) ll_rw_block (READ,nbreq,bhreq);
+	for (i=pre->nblist; i<MSDOS_PREFETCH; i++) pre->bhlist[i] = NULL;
+}
+
 /*
 	Read a file into user space
 */
@@ -66,17 +104,9 @@ int msdos_file_read(
 	int count)
 {
 	char *start;
-	int left,offset,size,cnt;
-	#define MSDOS_PREFETCH	48
-	struct {
-		int file_sector;/* Next sector to read in the prefetch table */
-				/* This is relative to the file, not the disk */
-		struct buffer_head *bhlist[MSDOS_PREFETCH];	/* All buffers needed */
-		int nblist;	/* Number of buffers in bhlist */
-		int nolist;	/* index in bhlist */
-		int fetched_max; /* End of pre fetch area */
-	}pre;
+	int left;
 	int i;
+	struct msdos_pre pre;
 		
 
 	if (!inode) {
@@ -100,9 +130,6 @@ int msdos_file_read(
 	*/
 	PRINTK (("#### ino %ld pos %ld size %ld count %d\n",inode->i_ino,filp->f_pos,inode->i_size,count));
 	{
-		struct buffer_head *bhreq[MSDOS_PREFETCH];	/* Buffers not */
-													/* already read */
-		int nbreq;			/* Number of buffers in bhreq */
 		/*
 			We must prefetch complete block, so we must
 			take in account the offset in the first block.
@@ -112,53 +139,36 @@ int msdos_file_read(
 		pre.file_sector = filp->f_pos >> SECTOR_BITS;
 		to_reada = count_max / SECTOR_SIZE;
 		if (count_max & (SECTOR_SIZE-1)) to_reada++;
-		if (filp->f_reada){
-			int min_read = read_ahead[MAJOR(inode->i_dev)];
-			if (min_read > to_reada) to_reada = min_read;
+		if (filp->f_reada || !MSDOS_I(inode)->i_binary){
+			/* Doing a read ahead on ascii file make sure we always */
+			/* pre read enough, since we don't know how many blocks */
+			/* we really need */
+			int ahead = read_ahead[MAJOR(inode->i_dev)];
+			if (ahead == 0) ahead = 8;
+			to_reada += ahead;
 		}
 		if (to_reada > MSDOS_PREFETCH) to_reada = MSDOS_PREFETCH;
-		nbreq = pre.nblist = 0;
-		for (i=0; i<to_reada; i++){
-			int sector;
-			struct buffer_head *bh;
-			if (!(sector = msdos_smap(inode,pre.file_sector++))) break;
-			PRINTK (("fsector1 %d -> %d\n",pre.file_sector-1,sector));
-			bh = getblk(inode->i_dev,sector,SECTOR_SIZE);
-			if (bh == NULL)	break;
-			pre.bhlist[pre.nblist++] = bh;
-			if (!bh->b_uptodate){
-				bhreq[nbreq++] = bh;
-			}
-		}
-		pre.fetched_max = pre.file_sector * SECTOR_SIZE;
-		if (nbreq > 0) ll_rw_block (READ,nbreq,bhreq);
+		pre.nblist = 0;
+		msdos_prefetch (inode,&pre,to_reada);
 	}
 	start = buf;
 	pre.nolist = 0;
+	PRINTK (("count %d ahead %d nblist %d\n",count,read_ahead[MAJOR(inode->i_dev)],pre.nblist));
 	while ((left = MIN(inode->i_size-filp->f_pos,count-(buf-start))) > 0){
 		struct buffer_head *bh = pre.bhlist[pre.nolist];
 		char *data;
+		int size,offset;
 		if (bh == NULL) break;
-		PRINTK (("file_read pos %ld nblist %d %d %d\n",filp->f_pos,pre.nblist,pre.fetched,count));
 		pre.bhlist[pre.nolist] = NULL;
-		if (left + filp->f_pos > pre.fetched_max){
-			int sector;
-			if ((sector = msdos_smap(inode,pre.file_sector++))){
-				struct buffer_head *bhreq[1];
-				PRINTK (("fsector2 %d -> %d\n",pre.file_sector-1,sector));
-				bhreq[0] = getblk(inode->i_dev,sector,SECTOR_SIZE);
-				if (bhreq[0] == NULL)	break;
-				pre.bhlist[pre.nolist] = bhreq[0];
-				if (!bhreq[0]->b_uptodate)
-					ll_rw_block (READ,1,bhreq);
-				pre.fetched_max += SECTOR_SIZE;
-			}else{
-				/* Stop prefetching further, we have reached eof */
-				pre.fetched_max = 2000000000l;
-			}
-		} 
 		pre.nolist++;
-		if (pre.nolist >= pre.nblist) pre.nolist = 0;
+		if (pre.nolist == MSDOS_PREFETCH/2){
+			memcpy (pre.bhlist,pre.bhlist+MSDOS_PREFETCH/2
+				,(MSDOS_PREFETCH/2)*sizeof(pre.bhlist[0]));
+			pre.nblist -= MSDOS_PREFETCH/2;
+			msdos_prefetch (inode,&pre,MSDOS_PREFETCH/2);
+			pre.nolist = 0;
+		}
+		PRINTK (("file_read pos %ld nblist %d %d %d\n",filp->f_pos,pre.nblist,pre.fetched,count));
 		wait_on_buffer(bh);
 		if (!bh->b_uptodate){
 			/* read error  ? */
@@ -167,31 +177,28 @@ int msdos_file_read(
 		}
 		offset = filp->f_pos & (SECTOR_SIZE-1);
 		filp->f_pos += (size = MIN(SECTOR_SIZE-offset,left));
-		data = bh->b_data;
+		data = bh->b_data + offset;
 		if (MSDOS_I(inode)->i_binary) {
-			memcpy_tofs(buf,data+offset,size);
+			memcpy_tofs(buf,data,size);
 			buf += size;
-		}
-		else for (cnt = size; cnt; cnt--) {
-				char ch;
-				if ((ch = *((char *) data+offset++)) == '\r')
-					size--;
-				else {
-					if (ch != 26) put_fs_byte(ch,buf++);
-					else {
-						filp->f_pos = inode->i_size;
-						brelse(bh);
-						break;
-					}
+		}else{
+			int cnt;
+			for (cnt = size; cnt; cnt--) {
+				char ch = *data++;
+				if (ch == 26){
+					filp->f_pos = inode->i_size;
+					break;
+				}else if (ch != '\r'){
+					put_fs_byte(ch,buf++);
 				}
 			}
+		}
 		brelse(bh);
 	}
 	PRINTK (("--- %d -> %d\n",count,(int)(buf-start)));
 	for (i=0; i<pre.nblist; i++) brelse (pre.bhlist[i]);
 	if (start == buf) return -EIO;
-	if (!IS_RDONLY(inode))
-		inode->i_atime = CURRENT_TIME;
+	if (!IS_RDONLY(inode)) inode->i_atime = CURRENT_TIME;
 	PRINTK (("file_read ret %d\n",(buf-start)));
 	filp->f_reada = 1;	/* Will be reset if a lseek is done */
 	return buf-start;

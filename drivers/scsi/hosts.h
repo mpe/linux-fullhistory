@@ -243,6 +243,7 @@ struct Scsi_Host
 		  */
 		
 		int this_id;
+		int can_queue;
 		short unsigned int sg_tablesize;
 		unsigned unchecked_isa_dma:1;
 		/*

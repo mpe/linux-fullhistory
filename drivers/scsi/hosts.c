@@ -227,9 +227,10 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
 	printk("Register %x %x: %d\n", retval, retval->hostt, j);
 #endif
 
-	/* The next three are the default values which can be overridden
+	/* The next four are the default values which can be overridden
 	   if need be */
 	retval->this_id = tpnt->this_id;
+	retval->can_queue = tpnt->can_queue;
 	retval->sg_tablesize = tpnt->sg_tablesize;
 	retval->unchecked_isa_dma = tpnt->unchecked_isa_dma;
 
