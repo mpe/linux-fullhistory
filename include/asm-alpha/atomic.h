@@ -51,11 +51,30 @@ extern __inline__ void atomic_sub(atomic_t i, atomic_t * v)
 }
 
 /*
- * Same as above, but return true if we counted down to zero
+ * Same as above, but return the result value
  */
-extern __inline__ int atomic_sub_and_test(atomic_t i, atomic_t * v)
+extern __inline__ long atomic_add_return(atomic_t i, atomic_t * v)
 {
-	unsigned long temp, result;
+	long temp, result;
+	__asm__ __volatile__(
+		"\n1:\t"
+		"ldl_l %0,%1\n\t"
+		"addl %0,%3,%0\n\t"
+		"bis %0,%0,%2\n\t"
+		"stl_c %0,%1\n\t"
+		"beq %0,1b\n"
+		"2:"
+		:"=&r" (temp),
+		 "=m" (__atomic_fool_gcc(v)),
+		 "=&r" (result)
+		:"Ir" (i),
+		 "m" (__atomic_fool_gcc(v)));
+	return result;
+}
+
+extern __inline__ long atomic_sub_return(atomic_t i, atomic_t * v)
+{
+	long temp, result;
 	__asm__ __volatile__(
 		"\n1:\t"
 		"ldl_l %0,%1\n\t"
@@ -69,11 +88,16 @@ extern __inline__ int atomic_sub_and_test(atomic_t i, atomic_t * v)
 		 "=&r" (result)
 		:"Ir" (i),
 		 "m" (__atomic_fool_gcc(v)));
-	return result==0;
+	return result;
 }
+
+#define atomic_dec_return(v) atomic_sub_return(1,(v))
+#define atomic_inc_return(v) atomic_add_return(1,(v))
+
+#define atomic_sub_and_test(i,v) (atomic_sub_return((i), (v)) == 0)
+#define atomic_dec_and_test(v) (atomic_sub_return(1, (v)) == 0)
 
 #define atomic_inc(v) atomic_add(1,(v))
 #define atomic_dec(v) atomic_sub(1,(v))
-#define atomic_dec_and_test(v) atomic_sub_and_test(1,(v))
 
 #endif

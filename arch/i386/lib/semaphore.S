@@ -12,18 +12,14 @@
  * to increment the number of waiters on the semaphore,
  * call "__down()", and then eventually return to try again.
  */
-.globl down_failed
-ALIGN
-down_failed:
+ENTRY(down_failed)
 	pushl %eax
 	pushl %ecx
 	call SYMBOL_NAME(__down)
 	popl %ecx
 	ret
 
-.globl up_wakeup
-ALIGN
-up_wakeup:
+ENTRY(up_wakeup)
 	pushl %eax
 	pushl %ecx
 	call SYMBOL_NAME(__up)

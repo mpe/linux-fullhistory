@@ -106,10 +106,10 @@ W:	http://www.dgii.com/linux/
 S:	Maintained
 
 APM DRIVER
-P:      Rik Faith & Stephen Rothwell
-M:      faith@cs.unc.edu, Stephen.Rothwell@canb.auug.org.au
-L:      linux-laptop@vger.rutgers.edu
-S:      Maintained
+P:	Rik Faith & Stephen Rothwell
+M:	faith@cs.unc.edu, Stephen.Rothwell@canb.auug.org.au
+L:	linux-laptop@vger.rutgers.edu
+S:	Maintained
 
 APPLETALK NETWORK LAYER
 P:	Alan Cox & University Of Michigan
@@ -166,10 +166,10 @@ L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
 FUTURE DOMAIN TMC-16x0 SCSI DRIVER (16-bit)
-P:      Rik Faith
-M:      faith@cs.unc.edu
-L:      linux-scsi@vger.rutgers.edu
-S:      Odd fixes (e.g., new signatures)
+P:	Rik Faith
+M:	faith@cs.unc.edu
+L:	linux-scsi@vger.rutgers.edu
+S:	Odd fixes (e.g., new signatures)
 
 SCSI TAPE DRIVER
 P:	Kai Mäkisara
@@ -245,10 +245,10 @@ L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 STARMODE RADIO IP (STRIP) PROTOCOL DRIVER
-P:     Stuart Cheshire
-M:     cheshire@cs.stanford.edu
-W:     http://mosquitonet.Stanford.EDU/strip.html
-S:     Maintained
+P:	Stuart Cheshire
+M:	cheshire@cs.stanford.edu
+W:	http://mosquitonet.Stanford.EDU/strip.html
+S:	Maintained
 
 SMB FILESYSTEM:
 P:	Volker Lendecke

@@ -5,7 +5,7 @@
  *
  *		Global definitions for the Frame relay interface.
  *
- * Version:	@(#)sdla.c   0.25	14 May 1996
+ * Version:	@(#)sdla.c   0.30	12 Sep 1996
  *
  * Credits:	Sangoma Technologies, for the use of 2 cards for an extended
  *			period of time.
@@ -23,7 +23,8 @@
  *					non DLCI devices.
  *		0.25	Mike McLagan	Fixed problem with rejecting packets
  *					from non DLCI devices.
- *
+ *		0.30	Mike McLagan	Fixed kernel panic when used with modified
+ *					ifconfig
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -58,7 +59,7 @@
 
 #include <linux/sdla.h>
 
-static const char* version = "SDLA driver v0.25, 14 May 1996, mike.mclagan@linux.org";
+static const char* version = "SDLA driver v0.30, 12 Sep 1996, mike.mclagan@linux.org";
 
 static const char* devname = "sdla";
 
@@ -424,6 +425,7 @@ static int sdla_cmd(struct device *dev, int cmd, short dlci, short flags,
    window = flp->type == SDLA_S508 ? SDLA_508_CMD_BUF : SDLA_502_CMD_BUF;
    cmd_buf = (struct sdla_cmd *)(dev->mem_start + (window & SDLA_ADDR_MASK));
    ret = 0;
+   len = 0;
    jiffs = jiffies + HZ;  /* 1 second is plenty */
    save_flags(pflags);
    cli();
@@ -603,7 +605,7 @@ int sdla_deassoc(struct device *slave, struct device *master)
 int sdla_dlci_conf(struct device *slave, struct device *master, int get)
 {
    struct frad_local *flp;
-   struct frad_local *dlp;
+   struct dlci_local *dlp;
    int               i;
    short             len, ret;
 

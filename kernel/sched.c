@@ -43,7 +43,7 @@
 
 int securelevel = 0;			/* system security level */
 
-long tick = 1000000 / HZ;		/* timer interrupt period */
+long tick = (1000000 + HZ/2) / HZ;	/* timer interrupt period */
 volatile struct timeval xtime;		/* The current time */
 int tickadj = 500/HZ;			/* microsecs */
 
@@ -64,7 +64,7 @@ long time_precision = 1;	/* clock precision (us) */
 long time_maxerror = MAXPHASE;	/* maximum error (us) */
 long time_esterror = MAXPHASE;	/* estimated error (us) */
 long time_phase = 0;		/* phase offset (scaled us) */
-long time_freq = 0;		/* frequency offset (scaled ppm) */
+long time_freq = ((1000000 + HZ/2) % HZ - HZ/2) << SHIFT_USEC;	/* frequency offset (scaled ppm) */
 long time_adj = 0;		/* tick adjust (scaled 1 / HZ) */
 long time_reftime = 0;		/* time at last adjustment (s) */
 
@@ -515,7 +515,7 @@ static inline void normalize_semaphore(struct semaphore *sem)
  * critical part is the inline stuff in <asm/semaphore.h>
  * where we want to avoid any extra jumps and calls.
  */
-inline void __up(struct semaphore *sem)
+void __up(struct semaphore *sem)
 {
 	normalize_semaphore(sem);
 	wake_up(&sem->wait);

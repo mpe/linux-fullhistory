@@ -7,9 +7,11 @@
  * (C) Copyright 1996 Linus Torvalds
  */
 
+#include <asm/atomic.h>
+
 struct semaphore {
-	int count;
-	int waiting;
+	atomic_t count;
+	atomic_t waiting;
 	struct wait_queue * wait;
 };
 
@@ -17,27 +19,25 @@ struct semaphore {
 #define MUTEX_LOCKED ((struct semaphore) { 0, 0, NULL })
 
 extern void __down(struct semaphore * sem);
-extern void wake_up(struct wait_queue ** p);
+extern void __up(struct semaphore * sem);
 
 /*
- * These are not yet interrupt-safe: should use ldl_l/stl_c here..
- *
- * See include/asm-i386/semaphore.h on how to do this correctly
- * without any jumps or wakeups taken for the no-contention cases.
+ * This isn't quite as clever as the x86 side, but the gp register
+ * makes things a bit more complicated on the alpha..
  */
 extern inline void down(struct semaphore * sem)
 {
-	sem->count--;
-	/* "down_failed" */
-	if (sem->count < 0)
+	for (;;) {
+		if (atomic_dec_return(&sem->count) >= 0)
+			break;
 		__down(sem);
+	}
 }
 
 extern inline void up(struct semaphore * sem)
 {
-	sem->count++;
-	/* "up_wakeup" */
-	__up(sem);
+	if (atomic_inc_return(&sem->count) <= 0)
+		__up(sem);
 }	
 
 #endif

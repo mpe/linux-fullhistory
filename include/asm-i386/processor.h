@@ -131,7 +131,7 @@ struct thread_struct {
 	NULL, 0, 0, 0, 0 /* vm86_info */ \
 }
 
-#define alloc_kernel_stack()    get_free_page(GFP_KERNEL)
+#define alloc_kernel_stack()    __get_free_page(GFP_KERNEL)
 #define free_kernel_stack(page) free_page((page))
 
 static inline void start_thread(struct pt_regs * regs, unsigned long eip, unsigned long esp)

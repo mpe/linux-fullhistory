@@ -5,7 +5,7 @@
  *		interfaces.  Requires 'dlcicfg' program to create usable 
  *		interfaces, the initial one, 'dlci' is for IOCTL use only.
  *
- * Version:	@(#)dlci.c	0.25	13 May 1996
+ * Version:	@(#)dlci.c	0.30	12 Sep 1996
  *
  * Author:	Mike McLagan <mike.mclagan@linux.org>
  *
@@ -13,14 +13,13 @@
  *
  *		0.15	Mike Mclagan	Packet freeing, bug in kmalloc call
  *					DLCI_RET handling
- *
  *		0.20	Mike McLagan	More conservative on which packets
  *					are returned for retry and whic are
  *					are dropped.  If DLCI_RET_DROP is
  *					returned from the FRAD, the packet is
  *				 	sent back to Linux for re-transmission
- *
  *		0.25	Mike McLagan	Converted to use SIOC IOCTL calls
+ *		0.30	Jim Freeman	Fixed to allow IPX traffic
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -54,7 +53,7 @@
 #include <net/sock.h>
 
 static const char *devname = "dlci";
-static const char *version = "DLCI driver v0.25, 13 May 1996, mike.mclagan@linux.org";
+static const char *version = "DLCI driver v0.30, 12 Sep 1996, mike.mclagan@linux.org";
 
 static struct device *open_dev[CONFIG_DLCI_COUNT];
 
@@ -143,7 +142,7 @@ static int dlci_header(struct sk_buff *skb, struct device *dev,
          hdr.pad = FRAD_P_PADDING;
          hdr.NLPID = FRAD_P_SNAP;
          memset(hdr.OUI, 0, sizeof(hdr.OUI));
-         hdr.PID = type;
+         hdr.PID = htons(type);
          hlen = sizeof(hdr);
          break;
    }
@@ -194,7 +193,8 @@ static void dlci_receive(struct sk_buff *skb, struct device *dev)
 
             /* at this point, it's an EtherType frame */
             header = sizeof(struct frhdr);
-            skb->protocol = htons(hdr->PID);
+            /* Already in network order ! */
+            skb->protocol = hdr->PID;
             process = 1;
             break;
 
@@ -619,12 +619,6 @@ int dlci_init(struct device *dev)
 
    for (i = 0; i < DEV_NUMBUFFS; i++) 
       skb_queue_head_init(&dev->buffs[i]);
-
-   if (strcmp(dev->name, devname) == 0)
-   {
-      dev->type = 0xFFFF;
-      dev->family = AF_UNSPEC;
-   }
 
    return(0);
 }

@@ -3,6 +3,14 @@
 # This version of the Linux kernel configuration help texts
 # corresponds to the kernel versions 2.0.x.
 #
+# International versions available on the WWW:
+#   - http://www.eis.or.jp/muse/kikutani/Configure.help-1.2.x.euc 
+# is a Japanese translation of a previous version of this file,
+# written by kikutani@eis.or.jp.
+#   - http://nevod.perm.su/service/linux/doc/kernel/Configure.help 
+# is a Russian translation of this file, maintained by
+# kaf@linux.nevod.perm.su.
+#
 # Information about what a kernel is, what it does, how to patch and
 # compile it and much more is contained in the Kernel-HOWTO, available
 # via ftp (user: anonymous) from sunsite.unc.edu in the directory
@@ -202,22 +210,23 @@ CONFIG_BLK_DEV_CMD640
   "SiS" chipset.  Unfortunately, it has a number of rather nasty
   design flaws that can cause severe data corruption under many common
   conditions.  Say Y here to include code which tries to automatically
-  detect and correct the problems under Linux.  
-  This option also enables access to the secondary IDE ports in some
-  CMD640 based systems.  This driver will work automatically in PCI
-  based systems (most new systems have PCI slots).  But if your system
-  uses VESA local bus (VLB) instead of PCI, you must also supply a
-  kernel boot parameter to enable the CMD640 bugfix/support:
-  "ide0=cmd640_vlb" The CMD640 chip is also used on add-in cards by
-  Acculogic, and on the "CSA-6400E PCI to IDE controller" that some
-  people have. If unsure, say Y.
+  detect and correct the problems under Linux.  This option also
+  enables access to the secondary IDE ports in some CMD640 based
+  systems.  This driver will work automatically in PCI based systems
+  (most new systems have PCI slots).  But if your system uses VESA
+  local bus (VLB) instead of PCI, you must also supply a kernel boot
+  parameter to enable the CMD640 bugfix/support: "ide0=cmd640_vlb" The
+  CMD640 chip is also used on add-in cards by Acculogic, and on the
+  "CSA-6400E PCI to IDE controller" that some people have. For
+  details, read Documentation/ide.txt. If unsure, say Y.
 
 CMD640 enhanced support
 CONFIG_BLK_DEV_CMD640_ENHANCED
-  This option includes support for setting/autotuning PIO modes
-  and prefetch on CMD640 IDE interfaces.  If you have a CMD640 IDE
-  interface and your BIOS does not already do this for you, then say Y
-  here.  Otherwise say N.
+  This option includes support for setting/autotuning PIO modes and
+  prefetch on CMD640 IDE interfaces.  For details, read
+  Documentation/ide.txt. If you have a CMD640 IDE interface and your
+  BIOS does not already do this for you, then say Y here.  Otherwise
+  say N.
 
 RZ1000 chipset bugfix/support
 CONFIG_BLK_DEV_RZ1000
@@ -267,12 +276,13 @@ CONFIG_BLK_DEV_UMC8672
   of the UMC-8672, and permits faster I/O speeds to be set as well.
   See the Documentation/ide.txt and umc8672.c files for more info.
 
-ALI M1439/M1445 support
+ALI M14xx support
 CONFIG_BLK_DEV_ALI14XX
   This driver is enabled at runtime using the "ide0=ali14xx" kernel
   boot parameter.  It enables support for the secondary IDE interface
-  of the chipset, and permits faster I/O speeds to be set as well.
-  See the Documentation/ide.txt and ali14xx.c files for more info.
+  of the ALI M1439/1443/1445/1487/1489 chipsets, and permits faster
+  I/O speeds to be set as well.  See the Documentation/ide.txt and
+  ali14xx.c files for more info.
 
 PROMISE DC4030 support (EXPERIMENTAL)
 CONFIG_BLK_DEV_PROMISE
@@ -551,7 +561,7 @@ CONFIG_PCI_OPTIMIZE
   certain BIOSes if your computer uses a PCI bus system. This is
   recommended; say Y.
 
-Intel 430FX (Triton) chipset DMA support
+Intel 82371 PIIX (Triton I/II) DMA support
 CONFIG_BLK_DEV_TRITON
   If your PCI system uses an IDE harddrive (as opposed to SCSI, say)
   and includes the Intel 430FX PCI Triton chipset, you will want to
@@ -804,11 +814,11 @@ IP: multicasting
 CONFIG_IP_MULTICAST
   This is code for addressing several networked computers at once,
   enlarging your kernel by about 2 kB. If you are using gated, the
-  daemon that updates your computer's routing tables, and are using
-  RIP2 or OSPF you will need to have this option compiled in. You also
-  need multicasting if you intend to participate in the MBONE, a high
-  bandwidth network on top of the internet which carries audio and
-  video broadcasts. More information about the MBONE is on the WWW at
+  daemon that updates your computer's routing tables, you will need to
+  have this option compiled in. You also need multicasting if you
+  intend to participate in the MBONE, a high bandwidth network on top
+  of the internet which carries audio and video broadcasts. More
+  information about the MBONE is on the WWW at
   http://www.best.com/~prince/techinfo/mbone.html (to browse the WWW,
   you need to have access to a machine on the Internet that has one of
   the programs lynx, netscape or Mosaic). Information about the
@@ -1233,16 +1243,19 @@ CONFIG_BLK_DEV_SR
 SCSI generic support
 CONFIG_CHR_DEV_SG
   If you want to use SCSI scanners, synthesizers or CD-writers or just
-  about anything having "SCSI" in its name other than disks, CDROMs or
-  tapes, say Y here. Those won't be supported by the kernel directly,
-  so you need some additional software which knows how to talk to
-  these things using the SCSI protocol. Chances are that you'll have
-  to write that software yourself, so have a look at the SCSI-HOWTO
-  and at the SCSI-Programming-HOWTO, both available via ftp (user:
-  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you want to
-  compile this as a module ( = code which can be inserted in and
-  removed from the running kernel whenever you want), say M here and
-  read Documentation/modules.txt and Documentation/scsi.txt.
+  about anything having "SCSI" in its name other than harddisks,
+  CDROMs or tapes, say Y here. Those won't be supported by the kernel
+  directly, so you need some additional software which knows how to
+  talk to these devices using the SCSI protocol. For CD-writers, you
+  would need the program cdwrite, available via ftp (user: anonymous)
+  from sunsite.unc.edu:/pub/Linux/utils/disk-management; for other
+  devices, it's possible that you'll have to write the driver software
+  yourself, so have a look at the SCSI-HOWTO and at the
+  SCSI-Programming-HOWTO, both available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt and Documentation/scsi.txt.
 
 Probe all LUNs on each SCSI device
 CONFIG_SCSI_MULTI_LUN
@@ -1354,9 +1367,9 @@ EATA-PIO (old DPT PM2001, PM2012A) support
 CONFIG_SCSI_EATA_PIO
   This driver supports all EATA-PIO protocol compliant SCSI Host
   Adaptors like the DPT PM2001 and the PM2012A. EATA-DMA compliant
-  HBAs can also use this driver but are discouraged from doing so,
-  since this driver only supports harddisks and lacks numerous
-  features.  You might want to have a look at the SCSI-HOWTO,
+  host adaptors could also use this driver but are discouraged from
+  doing so, since this driver only supports harddisks and lacks
+  numerous features.  You might want to have a look at the SCSI-HOWTO,
   available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
   as a module ( = code which can be inserted in and removed from the
@@ -1482,10 +1495,10 @@ CONFIG_SCSI_NCR53C8XX_IOMAPPED
 not allow targets to disconnect
 CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
   This option is only provided for safety if you suspect some scsi
-  device of yours to not support properly this feature. In that case,
-  you would say Y here. In general however, to not allow targets to
-  disconnect is not reasonable if there is more than 1 device on a
-  scsi bus.  The normal answer therefore is N.
+  device of yours to not support properly the target-disconnect
+  feature. In that case, you would say Y here. In general however, to
+  not allow targets to disconnect is not reasonable if there is more
+  than 1 device on a scsi bus.  The normal answer therefore is N.
 
 enable tagged command queuing
 CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
@@ -1497,8 +1510,8 @@ CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
   asks the driver to use up to 4 concurrent tagged commands for target
   2 of controller 0.
   See the file drivers/scsi/README.ncr53c8xx for more information.
-  WARNING! tagged queue support requires to allow targets to
-  disconnect (see above).
+  WARNING! If you say Y here, then you have to say N to "not allow
+  targets to disconnect", above.
   The safe answer therefore is N.
   The normal answer therefore is Y.
 
@@ -1933,9 +1946,9 @@ CONFIG_DLCI
   low-cost way to connect to a remote internet access provider or to
   form a private wide area network. The one physical line from your
   box to the local "switch" (i.e. the entry point to the frame relay
-  network) can carry several logical point-to-point connections to
-  other computers connected to the frame relay network. For a general
-  explanation of the protocol, check out
+  network, usually at the phone company) can carry several logical
+  point-to-point connections to other computers connected to the frame
+  relay network. For a general explanation of the protocol, check out
   http://frame-relay.indiana.edu/4000/4000index.html on the WWW. (To
   browse the WWW, you need to have access to a machine on the Internet
   that has one of the programs lynx, netscape or Mosaic.) To use frame
@@ -2724,7 +2737,7 @@ CONFIG_OPTCD
   This is the driver for the 'DOLPHIN' drive with a 34-pin Sony
   compatible interface. It also works with the Lasermate CR328A. If
   you have one of those, say Y. This driver does not work for the
-  Optics Storage 8001 drive; use the IDE-ATAPI CDROM driver for this
+  Optics Storage 8001 drive; use the IDE-ATAPI CDROM driver for that
   one. 
 
 Sanyo CDR-H94A CDROM support
@@ -2764,19 +2777,22 @@ Quota support
 CONFIG_QUOTA
   If you say Y here, you will be able to set per user limits for disk
   usage (also called diskquotas). Currently, it works only for the
-  ext2 filesystem; you need the software available via ftp (user:
-  anonymous) in
-  ftp.funet.fi:/pub/Linux/PEOPLE/Linus/subsystems/quota/ in order to
-  use it. Probably this is only useful for multi user systems. If
-  unsure, say N.
+  ext2 filesystem. You need additional software in order to use quota
+  support; check the file Documentation/Changes for that. Probably the
+  quota support is only useful for multi user systems. If unsure, say
+  N.
 
 Mandatory lock support
 CONFIG_LOCK_MANDATORY
-  Mandatory locking is used by some System 5 style database
-  applications.  To use this option safely you must have newer NFS
-  daemons, new samba, new netatalk, new mars-nwe and other file
-  servers. At the time of writing none of these are available. Unless
-  you need this feature say N.
+  File locking is a system designed to prevent that several processes
+  write to the same file at the same time, causing data
+  corruption. Mandatory file locking is more secure than the usual
+  algorithm and is used by some Unix System 5 style database
+  applications. For details, read Documentation/mandatory.txt. To use
+  this option safely you must have newer NFS daemons, new samba, new
+  netatalk, new mars-nwe and other file servers. At the time of
+  writing none of these are available. So it's safest to say N here
+  unless you really know that you need this feature.
 
 Minix fs support
 CONFIG_MINIX_FS
@@ -2986,9 +3002,11 @@ ISO9660 cdrom filesystem support
 CONFIG_ISO9660_FS
   This is the standard filesystem used on CDROMs. It was previously
   known as "High Sierra Filesystem" and is called "hsfs" on other Unix
-  systems.  If you have a CDROM drive and want to do more with it than
-  just listen to audio CDs and watch its LEDs, say Y (and read the
-  CDROM-HOWTO, available via ftp (user: anonymous) from
+  systems. The so-called Rock-Ridge extensions which allow for long
+  Unix filenames are also supported by this driver. If you have a
+  CDROM drive and want to do more with it than just listen to audio
+  CDs and watch its LEDs, say Y (and read the CDROM-HOWTO, available
+  via ftp (user: anonymous) from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO), thereby enlarging your
   kernel by about 27 kB; otherwise say N.  If you want to compile this
   as a module ( = code which can be inserted in and removed from the
@@ -3355,18 +3373,21 @@ CONFIG_SUN_ZS
 Advanced Power Management
 CONFIG_APM
   APM is a BIOS specification for saving power using several different
-  techniques.  This is mostly useful for battery powered laptops with APM
-  compliant BIOSes.  Specifically, the time will be reset after a USER
-  RESUME operation, the /proc/apm device will provide battery status
-  information, and user-space programs will receive notification of APM
-  "events" (e.g., battery status change).  This driver does not spin down
-  disk drives (see hdparm(8) for that); and it doesn't turn off
-  VESA-compliant "green" monitors.  This driver does not support the TI
-  4000M TravelMate and the ACER 486/DX4/75 because they don't have
-  compliant BIOSes.  Many "green" desktop machines also don't have
-  compliant BIOSes, and this driver will cause those machines to panic
-  during the boot phase (typically, these machines are using a data
-  segment of 0040, which is reserved for the Linux kernel).  If you don't
+  techniques.  This is mostly useful for battery powered laptops with
+  APM compliant BIOSes.  Specifically, the time will be reset after a
+  USER RESUME operation, the /proc/apm device will provide battery
+  status information, and user-space programs will receive
+  notification of APM "events" (e.g., battery status change).  This
+  driver does not spin down disk drives (see hdparm(8) for that); and
+  it doesn't turn off VESA-compliant "green" monitors.  This driver
+  does not support the TI 4000M TravelMate and the ACER 486/DX4/75
+  because they don't have compliant BIOSes.  Many "green" desktop
+  machines also don't have compliant BIOSes, and this driver will
+  cause those machines to panic during the boot phase (typically,
+  these machines are using a data segment of 0040, which is reserved
+  for the Linux kernel). If you get random kernel OOPSes that don't
+  seem to be related to anything and you have a motherboard with APM
+  support, try disabling/enabling this option. Generally, if you don't
   have a battery in your machine, there isn't much point in using this
   driver.
 
@@ -3478,12 +3499,16 @@ CONFIG_SOFT_WATCHDOG
 
 Berkshire Products PC Watchdog card
 CONFIG_PCWATCHDOG
-  This is the driver for the Berkshire Products PC Watchdog card.  This card
-  simply watches your kernel to make sure it doesn't freeze, and if it does,
-  it resets your computer after a certain amount of time.  This driver is
-  like the WDT501 driver but for different hardware. The PC watchdog cards
-  can be ordered from http://www.berkprod.com. Some example rc.local files
-  are available from ftp.bitgate.com.
+  This is the driver for the Berkshire Products PC Watchdog card.
+  This card simply watches your kernel to make sure it doesn't freeze,
+  and if it does, it resets your computer after a certain amount of
+  time.  This driver is like the WDT501 driver but for different
+  hardware. The PC watchdog cards can be ordered from
+  http://www.berkprod.com. Some example rc.local files are available
+  from ftp.bitgate.com. This driver is also available as a module ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.  Most people will say N.
 
 Enhanced Real Time Clock Support
 CONFIG_RTC
@@ -3839,7 +3864,7 @@ CONFIG_AP1000
 # LocalWords:  Bernd informatik rwth aachen uae affs multihosting bytecode java
 # LocalWords:  applets applet JDK ncsa cabi SNI Alphatronix readme LANs scarab
 # LocalWords:  winsock RNIS caltech OSPF honour Honouring Mbit Localtalk DEFRAG
-# LocalWords:  Camtec Berkshire
+# LocalWords:  localtalk download Packetwin Baycom baycom interwork ascii JNT
 # LocalWords:  Camtec proxying indyramp defragment defragmented UDP FAS FASXX
 # LocalWords:  FastSCSI SIO FDC qlogicfas QLogic qlogicisp setbaycom ife ee LJ
 # LocalWords:  ethz ch Travelmates ProAudioSpectrum ProAudio SoundMan SB SBPro
@@ -3849,4 +3874,5 @@ CONFIG_AP1000
 # LocalWords:  Soundscape SSCAPE TRIX MediaTrix PnP Maui dsp midixx EIA getty
 # LocalWords:  mgetty sendfax gert greenie muc lowlevel Lasermate LanManager io
 # LocalWords:  OOPSes trackball binghamton mobileip ncr IOMAPPED settags ns ser
-# LocalWords:  setsync NEGO MPARITY
+# LocalWords:  setsync NEGO MPARITY autotuning prefetch PIIX cdwrite utils rc
+# LocalWords:  PCWATCHDOG berkprod bitgate
