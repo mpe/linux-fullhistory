@@ -808,6 +808,11 @@ start_up:
 		retval = -EEXIST;
 		goto end_rename;
 	}
+	retval = -EPERM;
+	if (new_inode && (new_dir->i_mode & S_ISVTX) && 
+	    current->euid != new_inode->i_uid &&
+	    current->euid != new_dir->i_uid && !suser())
+		goto end_rename;
 	if (S_ISDIR(old_inode->i_mode)) {
 		retval = -EEXIST;
 		if (new_bh)

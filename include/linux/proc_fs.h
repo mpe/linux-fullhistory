@@ -27,6 +27,7 @@ extern struct inode_operations proc_root_inode_operations;
 extern struct inode_operations proc_base_inode_operations;
 extern struct inode_operations proc_mem_inode_operations;
 extern struct inode_operations proc_array_inode_operations;
+extern struct inode_operations proc_kmsg_inode_operations;
 extern struct inode_operations proc_link_inode_operations;
 extern struct inode_operations proc_fd_inode_operations;
 

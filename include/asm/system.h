@@ -1,3 +1,6 @@
+#ifndef __ASM_SYSTEM_H
+#define __ASM_SYSTEM_H
+
 #define move_to_user_mode() \
 __asm__ __volatile__ ("movl %%esp,%%eax\n\t" \
 	"pushl $0x17\n\t" \
@@ -16,6 +19,14 @@ __asm__ __volatile__ ("movl %%esp,%%eax\n\t" \
 #define sti() __asm__ __volatile__ ("sti"::)
 #define cli() __asm__ __volatile__ ("cli"::)
 #define nop() __asm__ __volatile__ ("nop"::)
+
+extern inline int tas(char * m)
+{
+	char res;
+
+	__asm__("xchg %0,%1":"=q" (res),"=m" (*m):"0" (0x1));
+	return res;
+}
 
 #define save_flags(x) \
 __asm__ __volatile__("pushfl ; popl %0":"=r" (x))
@@ -70,3 +81,5 @@ __asm__ __volatile__ ("movw $" #limit ",%1\n\t" \
 
 #define set_tss_desc(n,addr) _set_tssldt_desc(((char *) (n)),((int)(addr)),231,"0x89")
 #define set_ldt_desc(n,addr) _set_tssldt_desc(((char *) (n)),((int)(addr)),23,"0x82")
+
+#endif

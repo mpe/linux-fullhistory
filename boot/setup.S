@@ -253,17 +253,15 @@ no_output:
 getkey:
 	in	al,#0x60		! Quick and dirty...
 	.word	0x00eb,0x00eb		! jmp $+2, jmp $+2
-	mov	bl,al
-	in	al,#0x61
+	ret
+
+!
+! Flush the keyboard buffer
+!
+flush:	in	al,#0x60
 	.word	0x00eb,0x00eb
-	mov	ah,al
-	or	al,#0x80
-	out	#0x61,al
-	.word	0x00eb,0x00eb
-	mov	al,ah
-	out	#0x61,al
-	.word	0x00eb,0x00eb
-	mov	al,bl
+	cmp	al,#0x82
+	jae	flush
 	ret
 
 ! Routine trying to recognize type of SVGA-board present (if any)
@@ -287,11 +285,8 @@ chsvga:	cld
 	jne	svga
 	lea	si,msg1
 	call	prtstr
-flush:	in	al,#0x60		! Flush the keyboard buffer
-	cmp	al,#0x82
-	jb	nokey
-	jmp	flush
-nokey:	call getkey
+	call	flush
+nokey:	call	getkey
 	cmp	al,#0x9c		! enter ?
 	je	svga			! yes - svga selection
 	cmp	al,#0xb9		! space ?
@@ -317,7 +312,18 @@ extvga:
 	mov	ax,#0x5032	! return 80x50
 	ret
 /* svga modes */
-svga:	cld
+svga:	cld	
+	lea	si,idf1280	! Check for Orchid F1280 (dingbat@diku.dk)
+	mov	di,#0x10a	! id string is at c000:010a
+	mov	cx,#0x21	! length
+	repe
+	cmpsb
+	jne	nf1280	
+	lea	si,dscf1280
+	lea	di,mof1280
+	lea	cx,selmod
+	jmp	cx
+nf1280:	cld
 	lea 	si,idati		! Check ATI 'clues'
 	mov	di,#0x31
 	mov 	cx,#0x09
@@ -701,6 +707,7 @@ idcandt:	.byte	0xa5
 idgenoa:	.byte	0x77, 0x00, 0x66, 0x99
 idparadise:	.ascii	"VGA="
 idoakvga:	.ascii  "OAK VGA "
+idf1280:	.ascii	"Orchid Technology Fahrenheit 1280"
 
 ! Manufacturer:	  Numofmodes:	Mode:
 
@@ -715,6 +722,7 @@ motrident:	.byte	0x07,	0x50, 0x51, 0x52, 0x57, 0x58, 0x59, 0x5a
 motseng:	.byte	0x05,	0x26, 0x2a, 0x23, 0x24, 0x22
 movideo7:	.byte	0x06,	0x40, 0x43, 0x44, 0x41, 0x42, 0x45
 mooakvga:	.byte	0x05,	0x00, 0x07, 0x4f, 0x50, 0x51
+mof1280:	.byte	0x02,	0x54, 0x55
 
 !			msb = Cols lsb = Rows:
 
@@ -729,6 +737,7 @@ dsctrident:	.word 	0x501e, 0x502b, 0x503c, 0x8419, 0x841e, 0x842b, 0x843c
 dsctseng:	.word	0x503c, 0x6428, 0x8419, 0x841c, 0x842c
 dscvideo7:	.word	0x502b, 0x503c, 0x643c, 0x8419, 0x842c, 0x841c
 dscoakvga:	.word	0x2819, 0x5019, 0x843c, 0x8419, 0x842C
+dscf1280:	.word	0x842b, 0x8419
 modesave:	.word	SVGA_MODE
 	
 .text

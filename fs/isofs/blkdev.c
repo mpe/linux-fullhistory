@@ -24,11 +24,11 @@ static int blkdev_open(struct inode * inode, struct file * filp)
 	int i;
 
 	i = MAJOR(inode->i_rdev);
-	if (i < MAX_BLKDEV) {
-		filp->f_op = blkdev_fops[i];
-		if (filp->f_op && filp->f_op->open)
-			return filp->f_op->open(inode,filp);
-	}
+	if (i >= MAX_BLKDEV || !blkdev_fops[i])
+		return -ENODEV;
+	filp->f_op = blkdev_fops[i];
+	if (filp->f_op->open)
+		return filp->f_op->open(inode,filp);
 	return 0;
 }	
 

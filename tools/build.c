@@ -28,11 +28,12 @@
 #include <sys/sysmacros.h>
 #include <unistd.h>	/* contains read/write */
 #include <fcntl.h>
+#include <linux/config.h>
 
 #define MINIX_HEADER 32
 #define GCC_HEADER 1024
 
-#define SYS_SIZE 0x7000
+#define SYS_SIZE DEF_SYSSIZE
 
 #define DEFAULT_MAJOR_ROOT 0
 #define DEFAULT_MINOR_ROOT 0
@@ -42,6 +43,32 @@
 #define SETUP_SECTS 4
 
 #define STRINGIFY(x) #x
+
+typedef union {
+	long l;
+	short s[2];
+	char b[4];
+} conv;
+
+long intel_long(long l)
+{
+	conv t;
+
+	t.b[0] = l & 0xff; l >>= 8;
+	t.b[1] = l & 0xff; l >>= 8;
+	t.b[2] = l & 0xff; l >>= 8;
+	t.b[3] = l & 0xff; l >>= 8;
+	return t.l;
+}
+
+short intel_short(short l)
+{
+	conv t;
+
+	t.b[0] = l & 0xff; l >>= 8;
+	t.b[1] = l & 0xff; l >>= 8;
+	return t.s[0];
+}
 
 void die(char * str)
 {
@@ -85,9 +112,9 @@ int main(int argc, char ** argv)
 		die("Unable to open 'boot'");
 	if (read(id,buf,MINIX_HEADER) != MINIX_HEADER)
 		die("Unable to read header of 'boot'");
-	if (((long *) buf)[0]!=0x04100301)
+	if (((long *) buf)[0]!=intel_long(0x04100301))
 		die("Non-Minix header of 'boot'");
-	if (((long *) buf)[1]!=MINIX_HEADER)
+	if (((long *) buf)[1]!=intel_long(MINIX_HEADER))
 		die("Non-Minix header of 'boot'");
 	if (((long *) buf)[3]!=0)
 		die("Illegal data segment in 'boot'");
@@ -101,7 +128,7 @@ int main(int argc, char ** argv)
 	fprintf(stderr,"Boot sector %d bytes.\n",i);
 	if (i != 512)
 		die("Boot block must be exactly 512 bytes");
-	if ((*(unsigned short *)(buf+510)) != 0xAA55)
+	if ((*(unsigned short *)(buf+510)) != (unsigned short)intel_short(0xAA55))
 		die("Boot block hasn't got boot flag (0xAA55)");
 	buf[508] = (char) minor_root;
 	buf[509] = (char) major_root;	
@@ -114,9 +141,9 @@ int main(int argc, char ** argv)
 		die("Unable to open 'setup'");
 	if (read(id,buf,MINIX_HEADER) != MINIX_HEADER)
 		die("Unable to read header of 'setup'");
-	if (((long *) buf)[0]!=0x04100301)
+	if (((long *) buf)[0]!=intel_long(0x04100301))
 		die("Non-Minix header of 'setup'");
-	if (((long *) buf)[1]!=MINIX_HEADER)
+	if (((long *) buf)[1]!=intel_long(MINIX_HEADER))
 		die("Non-Minix header of 'setup'");
 	if (((long *) buf)[3]!=0)
 		die("Illegal data segment in 'setup'");

@@ -61,8 +61,6 @@
   indices need not be involved.
 */
 
-static void wd7000_set_sync(int id);
-
 static struct {
        struct wd_mailbox ogmb[OGMB_CNT]; 
        struct wd_mailbox icmb[ICMB_CNT];
@@ -575,21 +573,6 @@ const char *wd7000_info(void)
 
     return info;
 }
-
-
-void wd7000_set_sync(int id)
-{
-    volatile unchar icb[ICB_LEN] = {0x8a};
-    unchar speedval = 0x2c; 	/* Sets 4MHz for SBIC Revision A */
-    any2scsi(icb+2,1);		/* Transfer 1 byte */
-    any2scsi(icb+5,&speedval);	/* The speed buffer address */
-    icb[8]=0; icb[9]=2*id;      /* The index into the table */
-
-    icb[ICB_PHASE] = 1;
-    mail_out( (struct scb *) icb );
-    while (icb[ICB_PHASE]) /* wait for completion */;
-}
-
 
 int wd7000_abort(Scsi_Cmnd * SCpnt, int i)
 {

@@ -257,7 +257,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 static int sr_open(struct inode * inode, struct file * filp)
 {
 	if(MINOR(inode->i_rdev) >= NR_SR || 
-	   !scsi_CDs[MINOR(inode->i_rdev)].device) return -EACCES;   /* No such device */
+	   !scsi_CDs[MINOR(inode->i_rdev)].device) return -ENODEV;   /* No such device */
 
         check_disk_change(inode->i_rdev);
 
@@ -601,6 +601,7 @@ unsigned long sr_init(unsigned long memory_start, unsigned long memory_end)
 {
 	int i;
 
+	blkdev_fops[MAJOR_NR] = &sr_fops; 
 	if(MAX_SR == 0) return memory_start;
 
 	sr_sizes = (int *) memory_start;
@@ -628,6 +629,5 @@ unsigned long sr_init(unsigned long memory_start, unsigned long memory_end)
 	else
 	  read_ahead[MAJOR_NR] = 4;  /* 4 sector read-ahead */
 
-	blkdev_fops[MAJOR_NR] = &sr_fops; 
 	return memory_start;
 }	

@@ -74,11 +74,11 @@ void math_state_restore()
 {
 	if (last_task_used_math == current)
 		return;
-	__asm__("fwait");
 	if (last_task_used_math) {
 		__asm__("fnsave %0"::"m" (last_task_used_math->tss.i387));
 	}
-	last_task_used_math=current;
+	__asm__("fwait");
+	last_task_used_math = current;
 	if (current->used_math) {
 		__asm__("frstor %0"::"m" (current->tss.i387));
 	} else {

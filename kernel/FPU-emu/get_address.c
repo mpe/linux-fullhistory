@@ -115,7 +115,7 @@ void get_address(unsigned char FPU_modrm)
 {
   unsigned char mod;
   long *cpu_reg_ptr;
-  int offset;
+  int offset = 0;
   
   mod = (FPU_modrm >> 6) & 3;
 

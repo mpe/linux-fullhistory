@@ -15,6 +15,7 @@
 #include <linux/mm.h>
 #include <linux/ptrace.h>
 #include <linux/keyboard.h>
+#include <linux/interrupt.h>
 
 /*
  * The default IO slowdown is doing 'inb()'s from 0x61, which should be
@@ -39,6 +40,9 @@ struct kbd_struct kbd_table[NR_CONSOLES];
 static struct kbd_struct * kbd = kbd_table;
 static struct tty_struct * tty = NULL;
 
+static volatile unsigned char acknowledge = 0;
+static volatile unsigned char resend = 0;
+
 typedef void (*fptr)(int);
 
 static int diacr = -1;
@@ -53,57 +57,87 @@ static unsigned int handle_diacr(unsigned int);
 
 static struct pt_regs * pt_regs;
 
+static inline void kb_wait(void)
+{
+	int i;
+
+	for (i=0; i<0x10000; i++)
+		if ((inb_p(0x64) & 0x02) == 0)
+			break;
+}
+
+/*
+ * send_cmd() sends a command byte to the keyboard.
+ */
+static inline void send_cmd(unsigned char c)
+{
+	kb_wait();
+	outb(c,0x64);
+}
+
+static inline unsigned char get_scancode(void)
+{
+	kb_wait();
+	if (inb_p(0x64) & 0x01)
+		return inb(0x60);
+	return 0;
+}
+
 static void keyboard_interrupt(int int_pt_regs)
 {
 	static unsigned char rep = 0xff;
 	unsigned char scancode;
 
 	pt_regs = (struct pt_regs *) int_pt_regs;
-	while (inb_p(0x64) & 1) {
-		kbd_prev_dead_keys |= kbd_dead_keys;
-		if (!kbd_dead_keys)
-			kbd_prev_dead_keys = 0;
-		kbd_dead_keys = 0;
-		scancode = inb_p(0x60);
-		tty = TTY_TABLE(0);
-		kbd = kbd_table + fg_console;
-		if (vc_kbd_flag(kbd,VC_RAW)) {
-			kbd_flags = 0;
-			put_queue(scancode);
-			continue;
-		}
-		if (scancode == 0xe0) {
-			set_kbd_dead(KGD_E0);
-			continue;
-		} else if (scancode == 0xe1) {
-			set_kbd_dead(KGD_E1);
-			continue;
-		}
-		/*
-		 *  The keyboard maintains its own internal caps lock and num lock
-		 *  statuses. In caps lock mode E0 AA precedes make code and E0 2A
-		 *  follows break code. In num lock mode, E0 2A precedes make
-		 *  code and E0 AA follows break code. We do our own book-keeping,
-		 *  so we will just ignore these.
-		 */
-		if (kbd_dead(KGD_E0) && (scancode == 0x2a || scancode == 0xaa))
-			continue;
-		/*
-		 *  Repeat a key only if the input buffers are empty or the
-		 *  characters get echoed locally. This makes key repeat usable
-		 *  with slow applications and unders heavy loads.
-		 */
-		if (scancode == rep) {
-			if (!(vc_kbd_flag(kbd,VC_REPEAT) && tty &&
-				   (L_ECHO(tty) ||
-				    (EMPTY(&tty->secondary) &&
-				     EMPTY(&tty->read_q)))))
-				continue;
-		}
-		rep = scancode;
-		key_table[scancode](scancode);
+	kbd_prev_dead_keys |= kbd_dead_keys;
+	if (!kbd_dead_keys)
+		kbd_prev_dead_keys = 0;
+	kbd_dead_keys = 0;
+	send_cmd(0xAD);
+	scancode = get_scancode();
+	if (scancode == 0xfa) {
+		acknowledge = 1;
+		goto end_kbd_intr;
+	} else if (scancode == 0xfe) {
+		resend = 1;
+		goto end_kbd_intr;
 	}
+	tty = TTY_TABLE(0);
+	kbd = kbd_table + fg_console;
+	if (vc_kbd_flag(kbd,VC_RAW)) {
+		kbd_flags = 0;
+		put_queue(scancode);
+		goto end_kbd_intr;
+	}
+	if (scancode == 0xe0) {
+		set_kbd_dead(KGD_E0);
+		goto end_kbd_intr;
+	} else if (scancode == 0xe1) {
+		set_kbd_dead(KGD_E1);
+		goto end_kbd_intr;
+	}
+	/*
+	 *  The keyboard maintains its own internal caps lock and num lock
+	 *  statuses. In caps lock mode E0 AA precedes make code and E0 2A
+	 *  follows break code. In num lock mode, E0 2A precedes make
+	 *  code and E0 AA follows break code. We do our own book-keeping,
+	 *  so we will just ignore these.
+	 */
+	if (kbd_dead(KGD_E0) && (scancode == 0x2a || scancode == 0xaa))
+		goto end_kbd_intr;
+	/*
+	 *  Repeat a key only if the input buffers are empty or the
+	 *  characters get echoed locally. This makes key repeat usable
+	 *  with slow applications and unders heavy loads.
+	 */
+	if ((scancode != rep) || 
+	    (vc_kbd_flag(kbd,VC_REPEAT) && tty &&
+	     (L_ECHO(tty) || (EMPTY(&tty->secondary) && EMPTY(&tty->read_q)))))
+		key_table[scancode](scancode);
+	rep = scancode;
+end_kbd_intr:
 	do_keyboard_interrupt();
+	send_cmd(0xAE);
 }
 
 static void put_queue(int ch)
@@ -1273,51 +1307,48 @@ static void none(int sc)
 }
 
 /*
- * kb_wait waits for the keyboard controller buffer to empty.
+ * send_data sends a character to the keyboard and waits
+ * for a acknowledge, possibly retrying if asked to. Returns
+ * the success status.
  */
-static void kb_wait(void)
+static int send_data(unsigned char data)
 {
+	int retries = 3;
 	int i;
 
-	for (i=0; i<0x10000; i++)
-		if ((inb(0x64)&0x02) == 0)
-			break;
+	do {
+		kb_wait();
+		acknowledge = 0;
+		resend = 0;
+		outb_p(data, 0x60);
+		for(i=0; i<0x20000; i++) {
+			inb_p(0x64);		/* just as a delay */
+			if (acknowledge)
+				return 1;
+			if (resend)
+				goto repeat;
+		}
+		return 0;
+repeat:
+	} while (retries-- > 0);
+	return 0;
 }
 
-/*
- * kb_ack waits for 0xfa to appear in port 0x60
- *
- * Suggested by Bruce Evans
- * Added by Niels Skou Olsen [NSO]
- * April 21, 1992
- *
- * Heavily inspired by kb_wait :-)
- * I don't know how much waiting actually is required,
- * but this seems to work
- */
-static void kb_ack(void)
-{
-	int i;
-
-	for(i=0; i<0x10000; i++)
-		if (inb(0x60) == 0xfa)
-			break;
-}
-
-void set_leds(void)
+static void kbd_bh(void * unused)
 {
 	static unsigned char old_leds = -1;
 	unsigned char leds = kbd_table[fg_console].flags & LED_MASK;
 
-	if (leds != old_leds) {
-		old_leds = leds;
-		kb_wait();
-		outb(0xed, 0x60);	/* set leds command */
-		kb_ack();
-		kb_wait();
-		outb(leds, 0x60);
-		kb_ack();
-	}
+	if (leds == old_leds)
+		return;
+	old_leds = leds;
+	if (!send_data(0xed) || !send_data(leds))
+		send_data(0xf4);	/* re-enable kbd if any errors */
+}
+
+void set_leds(void)
+{
+	mark_bh(KEYBOARD_BH);
 }
 
 long no_idt[2] = {0, 0};
@@ -1332,7 +1363,7 @@ void hard_reset_now(void)
 	int i, j;
 	extern unsigned long pg0[1024];
 
-	sti();
+	cli();
 /* rebooting needs to touch the page at absolute addr 0 */
 	pg0[0] = 7;
 	*((unsigned short *)0x472) = 0x1234;
@@ -1425,6 +1456,7 @@ unsigned long kbd_init(unsigned long kmem_start)
 		kbd->default_flags = KBD_DEFFLAGS;
 		kbd->kbd_flags = KBDFLAGS;
 	}
+	bh_base[KEYBOARD_BH].routine = kbd_bh;
 	request_irq(KEYBOARD_IRQ,keyboard_interrupt);
 	keyboard_interrupt(0);
 	return kmem_start;

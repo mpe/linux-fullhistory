@@ -26,8 +26,6 @@
 #define	SSIZE(stack)	(KSTK_ESP(stack) ? _SSIZE(stack) : 0)
 
 #define	VSIZE(task,stack) ((task)->brk + 1023 + SSIZE(stack))
-#define	SIZE(task,stack)  (((task)->brk - (task)->end_code + 1023 + \
-			  SSIZE(stack)) / 1024)
 
 
 static int get_loadavg(char * buffer)
@@ -140,19 +138,42 @@ static int get_arg(int pid, char * buffer)
 	return get_array(p, (*p)->arg_start, (*p)->arg_end, buffer);
 }
 
+static unsigned long get_wchan(struct task_struct *p)
+{
+	unsigned long ebp, eip;
+	unsigned long stack_page;
+	int count = 0;
+
+	if (!p || p == current)
+		return 0;
+	ebp = p->tss.ebp;
+	stack_page = p->kernel_stack_page;
+	do {
+		if (ebp < stack_page || ebp >= 4092+stack_page)
+			return 0;
+		eip = *(unsigned long *) (ebp+4);
+		if ((void *)eip != sleep_on &&
+		    (void *)eip != interruptible_sleep_on)
+			return eip;
+		ebp = *(unsigned long *) ebp;
+	} while (count++ < 16);
+	return 0;
+}
+
 static int get_stat(int pid, char * buffer)
 {
 	struct task_struct ** p = get_task(pid);
-	unsigned long sigignore=0, sigcatch=0, bit=1;
+	unsigned long sigignore=0, sigcatch=0, bit=1, wchan;
 	int i;
 	char state;
 
 	if (!p || !*p)
 		return 0;
-	if ((*p)->state < 0)
+	if ((*p)->state < 0 || (*p)->state > 5)
 		state = '.';
 	else
 		state = "RSDZTD"[(*p)->state];
+	wchan = get_wchan(*p);
 	for(i=0; i<32; ++i) {
 		switch((int) (*p)->sigaction[i].sa_handler) {
 		case 1: sigignore |= bit; break;
@@ -200,7 +221,7 @@ static int get_stat(int pid, char * buffer)
 		(*p)->blocked,
 		sigignore,
 		sigcatch,
-		(*p)->tss.eip);
+		wchan);
 }
 
 static int get_statm(int pid, char * buffer)

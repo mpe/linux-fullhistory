@@ -18,6 +18,8 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
+#define ROUND_UP(x,y) (((x)+(y)-1)/(y))
+
 /*
  * Ok, Peter made a complicated, but straightforward multiple_wait() function.
  * I have rewritten this, taking some shortcuts: This code may not be easy to
@@ -198,7 +200,7 @@ int sys_select( unsigned long *buffer )
 	timeout = 0xffffffff;
 	if (tvp) {
 		timeout = jiffies;
-		timeout += get_fs_long((unsigned long *)&tvp->tv_usec)/(1000000/HZ);
+		timeout += ROUND_UP(get_fs_long((unsigned long *)&tvp->tv_usec),(1000000/HZ));
 		timeout += get_fs_long((unsigned long *)&tvp->tv_sec) * HZ;
 		if (timeout <= jiffies)
 			timeout = 0;

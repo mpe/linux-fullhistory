@@ -122,7 +122,15 @@ __asm__( \
 	"addl $8,%esp\n\t" \
 	"cli\n\t" \
 	UNBLK_##chip(mask) \
-	"call _do_bottom_half\n\t"\
+	"decl _intr_count\n\t" \
+	"jne ret_from_sys_call\n\t" \
+	"cmpl $0,_bh_active\n\t" \
+	"je ret_from_sys_call\n\t" \
+	"incl _intr_count\n\t" \
+	"sti\n\t" \
+	"call _do_bottom_half\n\t" \
+	"cli\n\t" \
+	"decl _intr_count\n\t" \
 	"jmp ret_from_sys_call\n" \
 "\n.align 2\n" \
 "_fast_IRQ" #nr "_interrupt:\n\t" \

@@ -226,7 +226,7 @@ static void dump_fat(struct super_block *sb,int start)
 	printk("[");
 	while (start) {
 		printk("%d ",start);
-        	start = fat_access(sb,start,-1);
+		start = fat_access(sb,start,-1);
 		if (!start) {
 			printk("ERROR");
 			break;

@@ -118,14 +118,14 @@ static int ext_file_read(struct inode * inode, struct file * filp, char * buf, i
 	   buffers and caches. */
 
 	do {
-	        bhrequest = 0;
-	        uptodate = 1;
+		bhrequest = 0;
+		uptodate = 1;
 		while (blocks) {
 			--blocks;
 			*bhb = ext_getblk(inode, block++, 0);
 			if (*bhb && !(*bhb)->b_uptodate) {
-			        uptodate = 0;
-			        bhreq[bhrequest++] = *bhb;
+				uptodate = 0;
+				bhreq[bhrequest++] = *bhb;
 			}
 
 			if (++bhb == &buflist[NBUF])

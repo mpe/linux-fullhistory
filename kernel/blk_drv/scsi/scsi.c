@@ -104,11 +104,9 @@ extern int last_reset[];
        char * revision; /* Latest revision known to be bad.  Not used yet */
      };
 
-#if 0
 static struct blist blacklist[] = 
 {{"TANDBERG","TDC 3600","U07"},  /* Locks up if polled for lun != 0 */
    {"SEAGATE","ST296","921"},   /* Responds to all lun */
-   {"NEWBURY","NDR3380S","2.10"},   /* Responds to all lun */
    {NULL, NULL, NULL}};	
 
 static int blacklisted(char * response_data){
@@ -122,7 +120,6 @@ static int blacklisted(char * response_data){
     return 1;
   };	
 };
-#endif
 
 /*
  *	As the actual SCSI command runs in the background, we must set up a 
@@ -324,11 +321,9 @@ static void scan_scsis (void)
 			};
 
 			++NR_SCSI_DEVICES;
-#if 0
 			/* Some scsi devices cannot be polled for lun != 0
 			   due to firmware bugs */
 			if(blacklisted(scsi_result)) break;
-#endif
 			/* Some scsi-1 peripherals do not handle lun != 0.
 			   I am assuming that scsi-2 peripherals do better */
 			if((scsi_result[2] & 0x07) == 1 && 

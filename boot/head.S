@@ -35,7 +35,19 @@ startup_32:
 	movl %eax,0x000000	# loop forever if it isn't
 	cmpl %eax,0x100000
 	je 1b
+/*
+ * Initialize eflags.  Some BIOS's leave bits like NT set.  This would
+ * confuse the debugger if this code is traced.
+ * XXX - best to initialize before switching to protected mode.
+ */
+	pushl $0
+	popfl
 /* check if it is 486 or 386. */
+/*
+ * XXX - this does a lot of unnecessary setup.  Alignment checks don't
+ * apply at our cpl of 0 and the stack ought to be aligned already, and
+ * we don't need to preserve eflags.
+ */
 	movl %esp,%edi		# save stack pointer
 	andl $0xfffffffc,%esp	# align stack to avoid AC fault
 	pushfl			# push EFLAGS
@@ -46,8 +58,9 @@ startup_32:
 	popfl			# set EFLAGS
 	pushfl			# get new EFLAGS
 	popl %eax		# put it in eax
-	xorl %ecx,%eax		# check if AC bit is changed. zero is 486.
-	jz 1f			# 486
+	xorl %ecx,%eax		# change in flags
+	andl $0x40000,%eax	# check if AC bit changed
+	jnz 1f			# 486
 	pushl %ecx		# restore original EFLAGS
 	popfl
 	movl %edi,%esp		# restore esp
@@ -60,13 +73,15 @@ startup_32:
  * mode. Then it would be unnecessary with the "verify_area()"-calls.
  * 486 users probably want to set the NE (#5) bit also, so as to use
  * int 16 for math errors.
+ * XXX - the above is out of date.  We set all the bits, but don't take
+ * advantage of WP (26 Dec 92).
  */
 1:	pushl %ecx		# restore original EFLAGS
 	popfl
 	movl %edi,%esp		# restore esp
 	movl %cr0,%eax		# 486
 	andl $0x80000011,%eax	# Save PG,PE,ET
-	orl $0x10022,%eax	# set NE and MP
+	orl $0x50022,%eax	# set AM, WP, NE and MP
 2:	movl %eax,%cr0
 	call check_x87
 	call setup_paging

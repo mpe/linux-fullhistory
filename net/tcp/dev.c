@@ -286,7 +286,7 @@ dev_rint(unsigned char *buff, long len, int flags,
    sti();
    
    if (backlog != NULL)
-     bh_active |= 1 << INET_BH;
+     mark_bh(INET_BH);
 
   return (0);
 }

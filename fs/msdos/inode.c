@@ -169,7 +169,6 @@ printk("[me=0x%x,cs=%d,#f=%d,fs=%d,fl=%d,ds=%d,de=%d,data=%d,se=%d,ts=%d]\n",
 		printk("Unsupported FS parameters\n");
 		return NULL;
 	}
-	if (!MSDOS_CAN_BMAP(MSDOS_SB(s))) printk("No bmap support\n");
 	s->s_magic = MSDOS_SUPER_MAGIC;
 	MSDOS_SB(s)->name_check = check;
 	MSDOS_SB(s)->conversion = conversion;
@@ -266,7 +265,7 @@ void msdos_read_inode(struct inode *inode)
 	raw_entry = &((struct msdos_dir_entry *) (bh->b_data))
 	    [inode->i_ino & (MSDOS_DPB-1)];
 	if ((raw_entry->attr & ATTR_DIR) && *raw_entry->name && *(unsigned char *)
-            raw_entry->name != DELETED_FLAG) {
+	    raw_entry->name != DELETED_FLAG) {
 		inode->i_mode = MSDOS_MKMODE(raw_entry->attr,0777 &
 		    ~MSDOS_SB(inode->i_sb)->fs_umask) | S_IFDIR;
 		inode->i_op = &msdos_dir_inode_operations;

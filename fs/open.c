@@ -243,6 +243,8 @@ int sys_fchmod(unsigned int fd, mode_t mode)
 	if (IS_RDONLY(inode))
 		return -EROFS;
 	inode->i_mode = (mode & 07777) | (inode->i_mode & ~07777);
+	if (!suser() && !in_group_p(inode->i_gid))
+		inode->i_mode &= ~S_ISGID;
 	inode->i_dirt = 1;
 	return notify_change(inode);
 }
@@ -264,6 +266,8 @@ int sys_chmod(const char * filename, mode_t mode)
 		return -EROFS;
 	}
 	inode->i_mode = (mode & 07777) | (inode->i_mode & ~07777);
+	if (!suser() && !in_group_p(inode->i_gid))
+		inode->i_mode &= ~S_ISGID;
 	inode->i_dirt = 1;
 	error = notify_change(inode);
 	iput(inode);

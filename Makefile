@@ -66,7 +66,7 @@ SVGA_MODE=	-DSVGA_MODE=1
 # You should use one of the values 4096 (SB), 16384 (SB Pro), 32768 (PAS+) 
 # or 65536 (PAS16). The SBC_IRQ defines the IRQ line used by SoundBlaster and
 # the PAS_IRQ is the IRQ number for ProAudioSpectrum.
-# NOTE! The ProAudioSpectrum support is not available yet.
+#
 
 SOUND_SUPPORT = -DKERNEL_SOUNDCARD -DDSP_BUFFSIZE=16384 -DSBC_IRQ=7 -DPAS_IRQ=5
 
@@ -97,6 +97,7 @@ CC	=gcc -DKERNEL
 MAKE	=make
 CPP	=$(CC) -E
 AR	=ar
+STRIP	=strip
 
 ARCHIVES	=kernel/kernel.o mm/mm.o fs/fs.o net/net.o
 FILESYSTEMS	=fs/filesystems.a
@@ -141,7 +142,7 @@ linuxsubdirs: dummy
 
 Version: dummy
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.99.pl1-`cat .version`\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.99.pl2-`cat .version`\" > tools/version.h
 	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
@@ -149,7 +150,7 @@ Version: dummy
 
 Image: $(CONFIGURATION) boot/bootsect boot/setup tools/system tools/build
 	cp tools/system system.tmp
-	strip system.tmp
+	$(STRIP) system.tmp
 	tools/build boot/bootsect boot/setup system.tmp $(ROOT_DEV) > Image
 	rm system.tmp
 	sync

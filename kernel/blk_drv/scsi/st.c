@@ -292,7 +292,7 @@ static int scsi_tape_open(struct inode * inode, struct file * filp)
 
     dev = inode->i_rdev & 127;
     if (dev >= NR_ST)
-      return (-ENXIO);
+      return (-ENODEV);
     if (scsi_tapes[dev].in_use) {
       printk("st%d: Device already in use.\n", dev);
       return (-EBUSY);
@@ -1227,12 +1227,12 @@ unsigned long st_init(unsigned long mem_start, unsigned long mem_end)
 {
   int i;
 
+  chrdev_fops[MAJOR_NR] = &st_fops;
   if (NR_ST == 0) return mem_start;
 
 #ifdef DEBUG
   printk("st: Init tape.\n");
 #endif
-  chrdev_fops[MAJOR_NR] = &st_fops;
 
   for (i=0; i < NR_ST; ++i) {
     scsi_tapes[i].capacity = 0xfffff;

@@ -67,16 +67,6 @@ void proc_statfs(struct super_block *sb, struct statfs *buf)
 	/* Don't know what value to put in buf->f_fsid */
 }
 
-int proc_bmap(struct inode * inode,int block)
-{
-	return 0;
-}
-
-int proc_create_block(struct inode * inode, int block)
-{
-	return 0;
-}
-
 void proc_read_inode(struct inode * inode)
 {
 	unsigned long ino, pid;
@@ -111,6 +101,8 @@ void proc_read_inode(struct inode * inode)
 	if (!pid) {
 		inode->i_mode = S_IFREG | 0444;
 		inode->i_op = &proc_array_inode_operations;
+		if (ino == 5)
+			inode->i_op = &proc_kmsg_inode_operations;
 		return;
 	}
 	ino &= 0x0000ffff;

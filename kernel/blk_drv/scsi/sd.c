@@ -62,7 +62,7 @@ static int sd_open(struct inode * inode, struct file * filp)
 	target =  DEVICE_NR(MINOR(inode->i_rdev));
 
 	if(target >= NR_SD || !rscsi_disks[target].device)
-	  return -EACCES;   /* No such device */
+	  return -ENODEV;   /* No such device */
 	
 /* Make sure that only one process can do a check_change_disk at one time.
  This is also used to lock out further access when the partition table is being re-read. */
@@ -761,6 +761,7 @@ unsigned long sd_init(unsigned long memory_start, unsigned long memory_end)
 {
 	int i;
 
+	blkdev_fops[MAJOR_NR] = &sd_fops; /* to get sd_open in table */
 	if (MAX_SD == 0) return memory_start;
 
 	sd_sizes = (int *) memory_start;
@@ -779,7 +780,6 @@ unsigned long sd_init(unsigned long memory_start, unsigned long memory_end)
 	  i = sd_init_onedisk(i);
 
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
-	blkdev_fops[MAJOR_NR] = &sd_fops;
 
 	/* If our host adapter is capable of scatter-gather, then we increase
 	   the read-ahead to 8 blocks (16 sectors).  If not, we use

@@ -61,18 +61,24 @@ void flush_output(struct tty_struct * tty)
 
 void wait_until_sent(struct tty_struct * tty)
 {
-	while (!(current->signal & ~current->blocked) &&
-	       !EMPTY(&tty->write_q)) {
+	struct wait_queue wait = { current, NULL };
+
+	TTY_WRITE_FLUSH(tty);
+	if (EMPTY(&tty->write_q))
+		return;
+	add_wait_queue(&tty->write_q.proc_list, &wait);
+	current->counter = 0;	/* make us low-priority */
+	while (1) {
+		current->state = TASK_INTERRUPTIBLE;
+		if (current->signal & ~current->blocked)
+			break;
 		TTY_WRITE_FLUSH(tty);
-		current->counter = 0;
-		cli();
 		if (EMPTY(&tty->write_q))
 			break;
-		else
-			interruptible_sleep_on(&tty->write_q.proc_list);
-		sti();
+		schedule();
 	}
-	sti();
+	current->state = TASK_RUNNING;
+	remove_wait_queue(&tty->write_q.proc_list, &wait);
 }
 
 static int do_get_ps_info(int arg)
@@ -333,7 +339,14 @@ int tty_ioctl(struct inode * inode, struct file * file,
 		case TIOCNXCL:
 			return -EINVAL; /* not implemented */
 		case TIOCSCTTY:
-			return -EINVAL; /* set controlling term NI */
+			if (current->leader && current->tty < 0
+			    && tty->session == 0) {
+				current->tty = dev;
+				tty->session = current->session;
+				tty->pgrp = current->pgrp;
+				return 0;
+			}
+			return -EPERM;
 		case TIOCGPGRP:
 			verify_area((void *) arg,4);
 			put_fs_long(termios_tty->pgrp,(unsigned long *) arg);

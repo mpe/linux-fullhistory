@@ -61,7 +61,7 @@ static volatile int st0x_aborted=0;	/*
 						detect routine - but this 
 						overides it. 
 					*/
-
+static unsigned char controller_type;	/* set to SEAGATE for ST0x boards or FD for TMC-88x boards */
 			
 #define retcode(result) (((result) << 16) | (message << 8) | status) 			
 #define STATUS (*(unsigned char *) st0x_cr_sr)
@@ -76,11 +76,12 @@ typedef struct
 	char *signature ;
 	unsigned offset;
 	unsigned length;
+	unsigned char type;
 	} Signature;
 	
 static const Signature signatures[] = {
 #ifdef CONFIG_SCSI_SEAGATE
-{"SCSI BIOS 2.00  (C) Copyright 1987 Seagate", 15, 40},
+{"SCSI BIOS 2.00  (C) Copyright 1987 Seagate", 15, 40, SEAGATE},
 
 /*
 	The following two lines are NOT mistakes.  One detects 
@@ -90,9 +91,8 @@ static const Signature signatures[] = {
 	are probably "good enough"
 */
 
-{"SEAGATE SCSI BIOS ",16, 17},
-{"SEAGATE SCSI BIOS ",17, 17},
-#endif
+{"SEAGATE SCSI BIOS ",16, 17, SEAGATE},
+{"SEAGATE SCSI BIOS ",17, 17, SEAGATE},
 
 /*
 	This is for the Future Domain 88x series.  I've been told that
@@ -101,8 +101,9 @@ static const Signature signatures[] = {
 	I believe it.
 */
 
-#ifdef CONFIG_SCSI_FD_88x
-{"FUTURE DOMAIN CORP. (C) 1986-1989 V6.0A7/28/90", 5, 46},
+{"FUTURE DOMAIN CORP. (C) 1986-1989 V6.0A7/28/90", 5, 46, FD},
+{"FUTURE DOMAIN CORP. (C) 1986-1990 V6.0105/31/90",5, 47, FD},
+{"FUTURE DOMAIN CORP. (C) 1986-1990 V7.009/18/90", 5, 46, FD},
 #endif
 }
 ;
@@ -168,14 +169,16 @@ static struct sigaction seagate_sigaction = {
 		for (j = 0; !base_address && j < NUM_SIGNATURES; ++j)
 		if (!memcmp ((void *) (seagate_bases[i] +
 		    signatures[j].offset), (void *) signatures[j].signature,
-		    signatures[j].length))
+		    signatures[j].length)) {
 			base_address = (void *) seagate_bases[i];
+			controller_type = signatures[j].type;
+		}
  #endif
  
 	if (base_address)
 		{
-		st0x_cr_sr =(void *) (((unsigned char *) base_address) + 0x1a00); 
-		st0x_dr = (void *) (((unsigned char *) base_address )+ 0x1c00);
+		st0x_cr_sr =(void *) (((unsigned char *) base_address) + (controller_type == SEAGATE ? 0x1a00 : 0x1c00)); 
+		st0x_dr = (void *) (((unsigned char *) base_address ) + (controller_type == SEAGATE ? 0x1c00 : 0x1e00));
 #ifdef DEBUG
 		printk("ST0x detected. Base address = %x, cr = %x, dr = %x\n", base_address, st0x_cr_sr, st0x_dr);
 #endif
@@ -369,7 +372,7 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 #endif
 	
 
-	if (target > 6)
+	if (target == (controller_type == SEAGATE ? 7 : 6))
 		return DID_BAD_TARGET;
 
 /*
@@ -410,7 +413,7 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
  *	ID off of the BUS.
  */
  
-		if (!((temp = DATA) & 0x80))
+		if (!((temp = DATA) & (controller_type == SEAGATE ? 0x80 : 0x40)))
 			{
 #if (DEBUG & PHASE_RESELECT)
 			printk("scsi%d : detected reconnect request to different target.\n" 
@@ -518,7 +521,7 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 /*
  *	We must assert both our ID and our target's ID on the bus.
  */
-		DATA = (unsigned char) ((1 << target) | 0x80);
+		DATA = (unsigned char) ((1 << target) | (controller_type == SEAGATE ? 0x80 : 0x40));
 
 /*
  *	If we are allowing ourselves to reconnect, then I will keep 

@@ -184,7 +184,7 @@ struct task_struct {
 	struct rlimit rlim[RLIM_NLIMITS]; 
 	unsigned short used_math;
 	unsigned short rss;	/* number of resident pages */
-	char comm[8];
+	char comm[16];
 	struct vm86_struct * vm86_info;
 	unsigned long screen_bitmap;
 /* file system info */

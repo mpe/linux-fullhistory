@@ -184,29 +184,9 @@ unix_proto_recv(struct socket *sock, void *buff, int len, int nonblock,
 	return (unix_proto_read (sock, buff, len, nonblock));
 }
 
-/*
- * Since unix domain sockets use filenames to communicate, two sockets are
- * the same if their strings are the same, even if their lengths are different
- * (due to possible null terminations). Verified under SunOS 4.1.2
- */
-static int
-same_path(char *s1, int l1, char *s2, int l2)
-{
-	/*
-	 * Skip chars while they're equal
-	 */
-	for (; l1 && l2 && *s1 == *s2; ++s1, ++s2, --l1, --l2);
-
-	/*
-	 * Both must be exhausted, or one must be null terminated and the
-	 * other either exhausted or null terminated, for the paths to be
-	 * equivalent
-	 */
-	return ((l1 == 0 || *s1 == '\0') && (l2 == 0 || *s2 == '\0'));
-}
-
 static struct unix_proto_data *
-unix_data_lookup(struct sockaddr_un *sockun, int sockaddr_len)
+unix_data_lookup(struct sockaddr_un *sockun, int sockaddr_len,
+		 struct inode *inode)
 {
 	struct unix_proto_data *upd;
 
@@ -214,9 +194,7 @@ unix_data_lookup(struct sockaddr_un *sockun, int sockaddr_len)
 		if (upd->refcnt && upd->socket &&
 		    upd->socket->state == SS_UNCONNECTED &&
 		    upd->sockaddr_un.sun_family == sockun->sun_family &&
-		    same_path(sockun->sun_path, sockaddr_len - UN_PATH_OFFSET,
-			      upd->sockaddr_un.sun_path,
-			      upd->sockaddr_len - UN_PATH_OFFSET))
+		    upd->inode == inode)
 			return upd;
 	}
 	return NULL;
@@ -386,6 +364,7 @@ unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
 #ifdef SOCK_DEBUG
 	sockaddr_un_printk(&upd->sockaddr_un, upd->sockaddr_len);
 #endif
+	PRINTK("to inode 0x%x\n", upd->inode);
 	return 0;
 }
 
@@ -400,6 +379,9 @@ unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 	int i;
 	struct unix_proto_data *serv_upd;
 	struct sockaddr_un sockun;
+	char fname[sizeof(((struct sockaddr_un *)0)->sun_path) + 1];
+	unsigned long old_fs;
+	struct inode *inode;
 
 	PRINTK("unix_proto_connect: socket 0x%x, servlen=%d\n", sock,
 	       sockaddr_len);
@@ -423,8 +405,28 @@ unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 		       sockun.sun_family, AF_UNIX);
 		return -EINVAL;
 	}
-	if (!(serv_upd = unix_data_lookup(&sockun, sockaddr_len))) {
-		PRINTK("unix_proto_connect: can't locate peer\n");
+
+	/*
+	 * try to open the name in the filesystem - this is how we
+	 * identify ourselves and our server. Note that we don't
+	 * hold onto the inode that long, just enough to find our
+	 * server. When we're connected, we mooch off the server.
+	 */
+	memcpy(fname, sockun.sun_path, sockaddr_len-UN_PATH_OFFSET);
+	fname[sockaddr_len-UN_PATH_OFFSET] = '\0';
+	old_fs = get_fs();
+	set_fs(get_ds());
+	i = open_namei(fname, 0, S_IFSOCK, &inode, NULL);
+	set_fs(old_fs);
+	if (i < 0) {
+		PRINTK("unix_proto_connect: can't open socket %s\n", fname);
+		return i;
+	}
+	serv_upd = unix_data_lookup(&sockun, sockaddr_len, inode);
+	iput(inode);
+	if (!serv_upd) {
+		PRINTK("unix_proto_connect: can't locate peer %s at inode 0x%x\n",
+			fname, inode);
 		return -EINVAL;
 	}
 	if ((i = sock_awaitconn(sock, serv_upd->socket)) < 0) {
@@ -437,7 +439,7 @@ unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 }
 
 /*
- * to do a socketpair, we make just connect the two datas, easy! since we
+ * to do a socketpair, we just connect the two datas, easy! since we
  * always wait on the socket inode, they're no contention for a wait area,
  * and deadlock prevention in the case of a process writing to itself is,
  * ignored, in true unix fashion!

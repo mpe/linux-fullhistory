@@ -113,13 +113,13 @@ static int minix_file_read(struct inode * inode, struct file * filp, char * buf,
 
 	do {
 		bhrequest = 0;
-	        uptodate = 1;
+		uptodate = 1;
 		while (blocks) {
 			--blocks;
 			*bhb = minix_getblk(inode, block++, 0);
 			if (*bhb && !(*bhb)->b_uptodate) {
-			        uptodate = 0;
-			        bhreq[bhrequest++] = *bhb;
+				uptodate = 0;
+				bhreq[bhrequest++] = *bhb;
 			}
 
 			if (++bhb == &buflist[NBUF])

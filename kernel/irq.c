@@ -32,8 +32,7 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 
-
-void irq13(void);
+#define CR0_NE 32
 
 static unsigned long intr_count=0;
 
@@ -41,55 +40,25 @@ static unsigned long intr_count=0;
 int bh_active=0;
 struct bh_struct bh_base[32]; 
 
-/* interrupts should be on at the interrupt priority controller level. */
-/* returns with interrupts off at the processor level. */
-
+/*
+ * do_bottom_half() runs at normal kernel priority: all interrupts
+ * enabled.  do_bottom_half() is atomic with respect to itself: a
+ * bottom_half handler need not be re-entrant.  This function is
+ * called only when bh_active is non-zero and when there aren't any
+ * nested irq's active.
+ */
 void do_bottom_half(void)
 {
 	struct bh_struct *bh;
-	int mask;
-	int count;
-	static int in_bh = 0;
+	int nr;
 
-	cli();
-	if (intr_count > 1) {
-		intr_count--;
-		return;
-	}
-  /* don't just decrement it in case it is already 0 */
-
-	intr_count = 0;
-
-  /* any sort of real time test should go here. */
-	if (in_bh != 0) {
-		return;
-	}
-
-	in_bh = 1;
-	do {
-		count = 0;
-		for (mask = 1, bh = bh_base; mask ; bh++, mask = mask << 1) {
-			if (mask > bh_active)
-				break;
-			if (!(mask & bh_active))
-				continue;
-
-			count++;
-			bh_active &= ~mask;
-
-			/* turn the interrupts back on. */
-			sti();
-
-			if (bh->routine != NULL)
-				bh->routine(bh->data);
-			else
-				printk ("irq.c:bad bottom half entry.\n");
-
-		/* and back off. */
-			cli();
-		}
-	} while (count > 0);
-	in_bh = 0;
+	__asm__ __volatile__("bsfl %1,%0":"=r" (nr):"m" (bh_active));
+	__asm__ __volatile__("btcl %1,%0":"=m" (bh_active):"r" (nr));
+	bh = bh_base+nr;
+	if (bh->routine != NULL)
+		bh->routine(bh->data);
+	else
+		printk ("irq.c:bad bottom half entry.\n");
 }
 
 /*
@@ -267,10 +236,22 @@ void free_irq(unsigned int irq)
 
 extern void do_coprocessor_error(long,long);
 
+/*
+ * Note that on a 486, we don't want to do a SIGFPE on a irq13
+ * as the irq is unreliable, and exception 16 works correctly
+ * (ie as explained in the intel litterature). On a 386, you
+ * can't use exception 16 due to bad IBM design, so we have to
+ * rely on the less exact irq13.
+ */
 static void math_error_irq(int cpl)
 {
 	outb(0,0xF0);
 	do_coprocessor_error(0,0);
+}
+
+static void math_error_irq_486(int cpl)
+{
+	outb(0,0xF0);	/* even this is probably not needed.. */
 }
 
 static void no_action(int cpl) { }
@@ -285,20 +266,25 @@ static struct sigaction ignore_IRQ = {
 void init_IRQ(void)
 {
 	int i;
+	unsigned long cr0;
 
 	for (i = 0; i < 16 ; i++)
 		set_intr_gate(0x20+i,bad_interrupt[i]);
 	if (irqaction(2,&ignore_IRQ))
 		printk("Unable to get IRQ2 for cascade\n");
-	if (request_irq(13,math_error_irq))
+	__asm__("movl %%cr0,%%eax":"=a" (cr0));
+	if (cr0 & CR0_NE)
+		i = request_irq(13,math_error_irq_486);
+	else
+		i = request_irq(13,math_error_irq);
+	if (i)
 		printk("Unable to get IRQ13 for math-error handler\n");
 
 	/* intialize the bottom half routines. */
-	for (i = 0; i < 32; i++)
-	  {
-	    bh_base[i].routine = NULL;
-	    bh_base[i].data = NULL;
-	  }
+	for (i = 0; i < 32; i++) {
+		bh_base[i].routine = NULL;
+		bh_base[i].data = NULL;
+	}
 	bh_active = 0;
-
+	intr_count = 0;
 }

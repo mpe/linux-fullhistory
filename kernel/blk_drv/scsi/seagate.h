@@ -125,6 +125,9 @@ extern volatile int seagate_st0x_timeout;
 
 #define eoi() __asm__("push %%eax\nmovb $0x20, %%al\noutb %%al, $0x20\npop %%eax"::)
 	
+#define SEAGATE 1	/* these determine the type of the controller */
+#define FD	2
+
 
 #endif
 

@@ -100,7 +100,7 @@ extern unsigned long scsi_dev_init(unsigned long, unsigned long);
  */
 
 #define CMOS_READ(addr) ({ \
-outb_p(0x80|addr,0x70); \
+outb_p(addr,0x70); \
 inb_p(0x71); \
 })
 
@@ -109,7 +109,11 @@ inb_p(0x71); \
 static void time_init(void)
 {
 	struct mktime time;
+	int i;
 
+	for (i = 0 ; i < 1000000 ; i++)
+		if (!(CMOS_READ(10) & 0x80))
+			break;
 	do {
 		time.sec = CMOS_READ(0);
 		time.min = CMOS_READ(2);

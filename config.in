@@ -33,8 +33,6 @@ Adaptec AHA1542 support
 CONFIG_SCSI_AHA1542 y/n y
 Adaptec AHA1740 support
 CONFIG_SCSI_AHA1740 y/n y
-Always IN support
-CONFIG_SCSI_ALWAYS y/n y
 Future Domain SCSI support
 CONFIG_SCSI_FUTURE_DOMAIN y/n y
 Seagate ST-02 SCSI support
@@ -62,7 +60,7 @@ CONFIG_ISO9660_FS y/n n
 Various character device drivers..
 .
 Autoconfigure serial IRQ lines at bootup
-CONFIG_AUTOIRQ y/n n
+CONFIG_AUTO_IRQ y/n n
 AST Fourport serial driver support
 CONFIG_AST_FOURPORT y/n n
 Accent Async 4 serial support

@@ -1130,9 +1130,9 @@ long tty_init(long kmem_start)
 		tty_table[i] =  0;
 		tty_termios[i] = 0;
 	}
+	kmem_start = kbd_init(kmem_start);
 	kmem_start = con_init(kmem_start);
 	kmem_start = rs_init(kmem_start);
-	kmem_start = kbd_init(kmem_start);
 	printk("%d virtual consoles\n\r",NR_CONSOLES);
 	return kmem_start;
 }

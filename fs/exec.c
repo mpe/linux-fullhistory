@@ -194,6 +194,10 @@ int sys_uselib(const char * library)
 		iput(inode);
 		return -EACCES;
 	}
+	if (!inode->i_op || !inode->i_op->bmap) {
+		iput(inode);
+		return -ENOEXEC;
+	}
 	if (!(bh = bread(inode->i_dev,bmap(inode,0),inode->i_sb->s_blocksize))) {
 		iput(inode);
 		return -EACCES;
@@ -365,35 +369,42 @@ static unsigned long change_ldt(unsigned long text_size,unsigned long * page)
 	return data_limit;
 }
 
-static void read_omagic(struct inode *inode, int bytes)
+/*
+ * Read in the complete executable. This is used for "-N" files
+ * that aren't on a block boundary, and for files on filesystems
+ * without bmap support.
+ */
+static int read_exec(struct inode *inode, unsigned long offset,
+	char * addr, unsigned long count)
 {
-	struct buffer_head *bh;
-	int n, blkno, blk = 0;
-	char *dest = (char *) 0;
-	unsigned int block_size;
+	struct file file;
+	int result = -ENOEXEC;
 
-	block_size = 1024;
-	if (inode->i_sb)
-		block_size = inode->i_sb->s_blocksize;
-	while (bytes > 0) {
-		n = (blk ? block_size : block_size - sizeof(struct exec));
-		if (bytes < n)
-			n = bytes;
-		blkno = bmap(inode, blk);
-		if (blkno) {
-			bh = bread(inode->i_dev, blkno, block_size);
-			if (!bh)
-				sys_exit(-1);
-			memcpy_tofs(dest, (blk ? bh->b_data :
-				bh->b_data + sizeof(struct exec)), n);
-			brelse(bh);
-		}
-		++blk;
-		dest += n;
-		bytes -= n;
-	}
-	iput(inode);
-	current->executable = NULL;
+	if (!inode->i_op || !inode->i_op->default_file_ops)
+		goto end_readexec;
+	file.f_mode = 1;
+	file.f_flags = 0;
+	file.f_count = 1;
+	file.f_inode = inode;
+	file.f_pos = 0;
+	file.f_reada = 0;
+	file.f_op = inode->i_op->default_file_ops;
+	if (file.f_op->open)
+		if (file.f_op->open(inode,&file))
+			goto end_readexec;
+	if (!file.f_op || !file.f_op->read)
+		goto close_readexec;
+	if (file.f_op->lseek) {
+		if (file.f_op->lseek(inode,&file,offset,0) != offset)
+ 			goto close_readexec;
+	} else
+		file.f_pos = offset;
+	result = file.f_op->read(inode, &file, addr, count);
+close_readexec:
+	if (file.f_op->release)
+		file.f_op->release(inode,&file);
+end_readexec:
+	return result;
 }
 
 /*
@@ -406,7 +417,8 @@ int do_execve(unsigned long * eip,long tmp,char * filename,
 	char ** argv, char ** envp)
 {
 	struct inode * inode;
-	struct buffer_head * bh;
+	char buf[128];
+	unsigned long old_fs;
 	struct exec ex;
 	unsigned long page[MAX_ARG_PAGES];
 	int i,argc,envc;
@@ -463,32 +475,35 @@ restart_interp:
 		retval = -EACCES;
 		goto exec_error2;
 	}
-	if (!(bh = bread(inode->i_dev,bmap(inode,0),inode->i_sb->s_blocksize))) {
-		retval = -EACCES;
+	memset(buf,0,sizeof(buf));
+	old_fs = get_fs();
+	set_fs(get_ds());
+	retval = read_exec(inode,0,buf,128);
+	set_fs(old_fs);
+	if (retval < 0)
 		goto exec_error2;
-	}
-	if (!IS_RDONLY(inode)) {
-		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
-	}
-	ex = *((struct exec *) bh->b_data);	/* read exec-header */
-	if ((bh->b_data[0] == '#') && (bh->b_data[1] == '!') && (!sh_bang)) {
+	ex = *((struct exec *) buf);		/* exec-header */
+	if ((buf[0] == '#') && (buf[1] == '!') && (!sh_bang)) {
 		/*
 		 * This section does the #! interpretation.
 		 * Sorta complicated, but hopefully it will work.  -TYT
 		 */
 
-		char buf[128], *cp, *interp, *i_name, *i_arg;
-		unsigned long old_fs;
+		char *cp, *interp, *i_name, *i_arg;
 
-		strncpy(buf, bh->b_data+2, 127);
-		brelse(bh);
 		iput(inode);
 		buf[127] = '\0';
-		if ((cp = strchr(buf, '\n')) != NULL) {
-			*cp = '\0';
-			for (cp = buf; (*cp == ' ') || (*cp == '\t'); cp++);
+		if ((cp = strchr(buf, '\n')) == NULL)
+			cp = buf+127;
+		*cp = '\0';
+		while (cp > buf) {
+			cp--;
+			if ((*cp == ' ') || (*cp == '\t'))
+				*cp = '\0';
+			else
+				break;
 		}
+		for (cp = buf+2; (*cp == ' ') || (*cp == '\t'); cp++);
 		if (!cp || *cp == '\0') {
 			retval = -ENOEXEC; /* No interpreter name found */
 			goto exec_error1;
@@ -499,10 +514,10 @@ restart_interp:
  			if (*cp == '/')
 				i_name = cp+1;
 		}
-		if (*cp) {
+		while ((*cp == ' ') || (*cp == '\t'))
 			*cp++ = '\0';
+		if (*cp)
 			i_arg = cp;
-		}
 		/*
 		 * OK, we've parsed out the interpreter name and
 		 * (optional) argument.
@@ -542,7 +557,6 @@ restart_interp:
 			goto exec_error1;
 		goto restart_interp;
 	}
-	brelse(bh);
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC) ||
 		ex.a_trsize || ex.a_drsize ||
 		ex.a_text+ex.a_data+ex.a_bss>0x3000000 ||
@@ -569,12 +583,13 @@ restart_interp:
 		if (ch == '/')
 			i = 0;
 		else
-			if (i < 8)
+			if (i < 15)
 				current->comm[i++] = ch;
-	if (i < 8)
-		current->comm[i] = '\0';
-	if (current->executable)
+	current->comm[i] = '\0';
+	if (current->executable) {
 		iput(current->executable);
+		current->executable = NULL;
+	}
 	i = current->numlibraries;
 	while (i-- > 0) {
 		iput(current->libraries[i].library);
@@ -584,7 +599,6 @@ restart_interp:
 	    !permission(inode,MAY_READ))
 		current->dumpable = 0;
 	current->numlibraries = 0;
-	current->executable = inode;
 	current->signal = 0;
 	for (i=0 ; i<32 ; i++) {
 		current->sigaction[i].sa_mask = 0;
@@ -610,8 +624,14 @@ restart_interp:
 	current->rss = (TASK_SIZE - p + PAGE_SIZE-1) / PAGE_SIZE;
 	current->suid = current->euid = e_uid;
 	current->sgid = current->egid = e_gid;
-	if (N_MAGIC(ex) == OMAGIC)
-		read_omagic(inode, ex.a_text+ex.a_data);
+	if (N_MAGIC(ex) == OMAGIC) {
+		read_exec(inode, 32, (char *) 0, ex.a_text+ex.a_data);
+		iput(inode);
+	} else if (!inode->i_op || !inode->i_op->bmap) {
+		read_exec(inode, 1024, (char *) 0, ex.a_text+ex.a_data);
+		iput(inode);
+	} else
+		current->executable = inode;
 	eip[0] = ex.a_entry;		/* eip, magic happens :-) */
 	eip[3] = p;			/* stack pointer */
 	if (current->flags & PF_PTRACED)

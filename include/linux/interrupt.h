@@ -16,9 +16,15 @@ enum {
 	TIMER_BH = 0,
 	CONSOLE_BH,
 	SERIAL_BH,
-	INET_BH
+	INET_BH,
+	KEYBOARD_BH
 };
 
 void do_bottom_half();
+
+extern inline void mark_bh(int nr)
+{
+	__asm__ __volatile__("btsl %1,%0":"=m" (bh_active):"ir" (nr));
+}
 
 #endif

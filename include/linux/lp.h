@@ -30,32 +30,31 @@
  * have extremely slow printing, or if the machine seems to slow down
  * a lot when you print.  If you have slow printing, increase this
  * number and recompile, and if your system gets bogged down, decrease
- * this number.  This can be changed with the tunelp(8) command.
+ * this number.  This can be changed with the tunelp(8) command as well.
  */
 
-#define LP_INIT_CHAR 250
+#define LP_INIT_CHAR 1000
 
 /* The parallel port specs apparently say that there needs to be
  * a .5usec wait before and after the strobe.  Since there are wildly
  * different computers running linux, I can't come up with a perfect
  * value, but since it worked well on most printers before without,
- * and I have seen some improvement on my computer by making it a
- * small number, I'll initialize it to 2.
+ * I'll initialize it to 0.
  */
 
-#define LP_INIT_WAIT 2
+#define LP_INIT_WAIT 0
 
 /* This is the amount of time that the driver waits for the printer to
  * catch up when the printer's buffer appears to be filled.  If you
  * want to tune this and have a fast printer (i.e. HPIIIP), decrease
  * this number, and if you have a slow printer, increase this number.
- * This is in hundredths of a second, the default 10 being .1 second.
+ * This is in hundredths of a second, the default 2 being .05 second.
  * Or use the tunelp(8) command, which is especially nice if you want
  * change back and forth between character and graphics printing, which
  * are wildly different...
  */
 
-#define LP_INIT_TIME 10
+#define LP_INIT_TIME 2
 
 /* IOCTL numbers */
 #define LPCHAR   0x0001  /* corresponds to LP_INIT_CHAR */

@@ -82,7 +82,7 @@ typedef unsigned long tcflag_t;
 #define __FDSET_LONGS 8
 
 typedef struct fd_set {
-	unsigned long __bits [__FDSET_LONGS];
+	unsigned long fds_bits [__FDSET_LONGS];
 } fd_set;
 
 #undef __NFDBITS

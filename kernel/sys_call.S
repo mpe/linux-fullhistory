@@ -149,6 +149,9 @@ _system_call:
 	call _schedule
 	.align 4,0x90
 ret_from_sys_call:
+/*
+ * XXX - interrupts are masked here about 3 times in 1000.  Fishy.
+ */
 	movl EFLAGS(%esp),%eax		# check VM86 flag: CS/SS are
 	testl $VM_MASK,%eax		# different then
 	jne 4f
@@ -172,11 +175,11 @@ ret_from_sys_call:
 	movl blocked(%eax),%ecx
 	notl %ecx
 	andl %ebx,%ecx
+	je 2f				# XXX - branch is almost always taken
 	bsfl %ecx,%ecx
-	je 2f
-	btrl %ecx,%ebx
+	btrl %ecx,signal(%eax)		# change atomically (%ebx is stale)
+	jnc 2f				# bit became clear (can't happen?)
 	incl %ecx
-	movl %ebx,signal(%eax)
 	movl %esp,%ebx
 	testl $VM_MASK,EFLAGS(%esp)
 	je 3f
