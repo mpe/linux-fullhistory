@@ -401,6 +401,8 @@ config FIQ
 
 endmenu
 
+menu "Boot options"
+
 # Compressed boot loader in ROM.  Yes, we really want to ask about
 # TEXT and BSS so we preserve their values in the config files.
 config ZBOOT_ROM_TEXT
@@ -433,6 +435,16 @@ config ZBOOT_ROM
 	  Say Y here if you intend to execute your compressed kernel image
 	  (zImage) directly from ROM or flash.  If unsure, say N.
 
+config CMDLINE
+	string "Default kernel command string"
+	default ""
+	help
+	  On some architectures (EBSA110 and CATS), there is currently no way
+	  for the boot loader to pass arguments to the kernel. For these
+	  architectures, you should supply some command-line options at build
+	  time by entering them here. As a minimum, you should specify the
+	  memory size and the root device (e.g., mem=64M root=/dev/nfs).
+
 config XIP_KERNEL
 	bool "Kernel Execute-In-Place from ROM"
 	depends on !ZBOOT_ROM
@@ -463,6 +475,8 @@ config XIP_PHYS_ADDR
 	  be linked for and stored to.  This address is dependent on your
 	  own flash usage.
 
+endmenu
+
 if (ARCH_SA1100 || ARCH_INTEGRATOR)
 
 source "drivers/cpufreq/Kconfig"
@@ -490,7 +504,9 @@ config CPU_FREQ_INTEGRATOR
 
 endif
 
-comment "At least one math emulation must be selected"
+menu "Floating point emulation"
+
+comment "At least one emulation must be selected"
 
 config FPE_NWFPE
 	bool "NWFPE math emulation"
@@ -541,7 +557,25 @@ config VFP
 
 	  Say N if your target does not have VFP hardware.
 
+endmenu
+
+menu "Userspace binary formats"
+
 source "fs/Kconfig.binfmt"
+
+config ARTHUR
+	tristate "RISC OS personality"
+	depends on CPU_32
+	help
+	  Say Y here to include the kernel code necessary if you want to run
+	  Acorn RISC OS/Arthur binaries under Linux. This code is still very
+	  experimental; if this sounds frightening, say N and sleep in peace.
+	  You can also say M here to compile this support as a module (which
+	  will be called arthur).
+
+endmenu
+
+menu "Power management options"
 
 config PM
 	bool "Power Management support"
@@ -621,26 +655,6 @@ config APM
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called apm.
-
-config ARTHUR
-	tristate "RISC OS personality"
-	depends on CPU_32
-	help
-	  Say Y here to include the kernel code necessary if you want to run
-	  Acorn RISC OS/Arthur binaries under Linux. This code is still very
-	  experimental; if this sounds frightening, say N and sleep in peace.
-	  You can also say M here to compile this support as a module (which
-	  will be called arthur).
-
-config CMDLINE
-	string "Default kernel command string"
-	default ""
-	help
-	  On some architectures (EBSA110 and CATS), there is currently no way
-	  for the boot loader to pass arguments to the kernel. For these
-	  architectures, you should supply some command-line options at build
-	  time by entering them here. As a minimum, you should specify the
-	  memory size and the root device (e.g., mem=64M root=/dev/nfs).
 
 endmenu
 
