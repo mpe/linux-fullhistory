@@ -40,7 +40,7 @@
 #include <linux/list.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include <asm/uaccess.h>
 
 #include "usb.h"

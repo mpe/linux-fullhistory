@@ -48,7 +48,7 @@
 #include "pci2220i.h"
 
 #if LINUX_VERSION_CODE >= LINUXVERSION(2,1,95)
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #endif
 #if LINUX_VERSION_CODE < LINUXVERSION(2,1,93)
 #include <linux/bios32.h>

@@ -113,10 +113,10 @@ static const char *version = "NET3 PLIP version 2.4-parport gniibe@mri.co.jp\n";
 
 #include <linux/tqueue.h>
 #include <linux/ioport.h>
+#include <linux/spinlock.h>
 #include <asm/bitops.h>
 #include <asm/irq.h>
 #include <asm/byteorder.h>
-#include <asm/spinlock.h>
 #include <asm/semaphore.h>
 
 #include <linux/parport.h>

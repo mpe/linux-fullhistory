@@ -1,4 +1,4 @@
-/* $Id: p1275.c,v 1.16 1999/08/02 12:05:57 jj Exp $
+/* $Id: p1275.c,v 1.17 1999/08/31 19:25:43 davem Exp $
  * p1275.c: Sun IEEE 1275 PROM low level interface routines
  *
  * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -9,13 +9,13 @@
 #include <linux/sched.h>
 #include <linux/smp.h>
 #include <linux/string.h>
+#include <linux/spinlock.h>
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 #include <asm/system.h>
 #include <asm/spitfire.h>
 #include <asm/pstate.h>
-#include <asm/spinlock.h>
 
 struct {
 	long prom_callback;			/* 0x00 */
@@ -320,6 +320,10 @@ long p1275_cmd (char *service, long fmt, ...)
 		case P1275_ARG_NUMBER:
 			p1275buf.prom_args[i + 3] =
 						(unsigned)va_arg(list, long);
+			break;
+		case P1275_ARG_IN_64B:
+			p1275buf.prom_args[i + 3] =
+				va_arg(list, unsigned long);
 			break;
 		case P1275_ARG_IN_STRING:
 			strcpy (p, va_arg(list, char *));

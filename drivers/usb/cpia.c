@@ -19,8 +19,8 @@
 #include <linux/vmalloc.h>
 #include <linux/wrapper.h>
 #include <linux/module.h>
+#include <linux/spinlock.h>
 
-#include <asm/spinlock.h>
 #include <asm/io.h>
 
 #include "usb.h"

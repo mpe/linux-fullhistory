@@ -44,7 +44,7 @@
 #  include <linux/init.h>
 #  include <asm/io.h>
 #  include <asm/uaccess.h>
-#  include <asm/spinlock.h>
+#  include <linux/spinlock.h>
 #endif
 #include <asm/irq.h>
 #include "msnd.h"

@@ -7,7 +7,7 @@
  * Default SMP lock implementation
  */
 #include <linux/interrupt.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 extern spinlock_t kernel_flag;
 

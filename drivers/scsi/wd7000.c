@@ -152,8 +152,8 @@
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/malloc.h>
+#include <linux/spinlock.h>
 #include <asm/system.h>
-#include <asm/spinlock.h>
 #include <asm/dma.h>
 #include <asm/io.h>
 #include <linux/ioport.h>

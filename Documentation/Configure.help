@@ -3578,8 +3578,8 @@ CONFIG_NETLINK_DEV
 Asynchronous Transfer Mode (ATM)
 CONFIG_ATM
   Kernel support for ATM. Note that you need a set of user-space programs
-  to actually make use of ATM. See http://lrcwww.epfl.ch/linux-atm/ for
-  further details.
+  to actually make use of ATM. See Documentation/atm.txt for further
+  details.
 
 Classical IP over ATM
 CONFIG_ATM_CLIP
@@ -3608,12 +3608,6 @@ CONFIG_ATM_MPOA
   bridges and ATM attached hosts establish direct ATM VCs across
   subnetwork boundaries. These shortcut connections bypass routers
   enhancing overall network performance.
-
-
-Application REQUested IP over ATM
-CONFIG_AREQUIPA
-  Arequipa is a mechanism to create ATM connections under application
-  control for IP traffic. See RFC2170 for details.
 
 ATM over TCP
 CONFIG_ATM_TCP
@@ -11283,6 +11277,17 @@ CONFIG_VIDEO_DEV
   which can be inserted in and removed from the running kernel
   whenever you want). If you want to compile it as a module, say M
   here and read Documentation/modules.txt.
+
+Direct Rendering Manager (XFree86 DRI support)
+CONFIG_DRM
+  Kernel-level support for the Direct Rendering Infrastructure (DRI)
+  introduced in XFree86 4.x.  These modules provide support for
+  synchronization, security, and DMA transfers.  Select the module that
+  provides support for your graphics card.
+
+3dlabs GMX 2000 Direct Rendering Driver (XFree86 DRI support)
+CONFIG_DRM_GAMMA
+  Choose M here if you have a 3dlabs GMX 2000 graphics card.
 
 AIMSlab RadioTrack (aka RadioReveal) support
 CONFIG_RADIO_RTRACK

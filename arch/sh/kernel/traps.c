@@ -19,11 +19,11 @@
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/delay.h>
+#include <linux/spinlock.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
-#include <asm/spinlock.h>
 #include <asm/atomic.h>
 
 static inline void console_verbose(void)

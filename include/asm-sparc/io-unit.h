@@ -5,8 +5,8 @@
 #ifndef _SPARC_IO_UNIT_H
 #define _SPARC_IO_UNIT_H
 
+#include <linux/spinlock.h>
 #include <asm/page.h>
-#include <asm/spinlock.h>
 #include <asm/pgtable.h>
 
 /* The io-unit handles all virtual to physical address translations

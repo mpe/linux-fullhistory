@@ -123,9 +123,9 @@
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
 #include <linux/unistd.h>
+#include <linux/spinlock.h>
 #include <asm/io.h>
 #include <asm/irq.h>
-#include <asm/spinlock.h>
 #include "sd.h"
 #include "hosts.h"
 #include "qlogicfas.h"

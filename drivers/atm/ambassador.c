@@ -20,11 +20,6 @@
   system and in the file COPYING in the Linux kernel source.
 */
 
-/*
-  IMPORTANT NOTE: Madge Networks does not license the microcode for
-  this driver under the GPL. See the .data file for the licence.
-*/
-
 /* * dedicated to the memory of Graham Gordon 1971-1998 * */
 
 #include <linux/module.h>
@@ -44,7 +39,7 @@
 
 #define maintainer_string "Giuliano Procida at Madge Networks <gprocida@madge.com>"
 #define description_string "Madge ATM Ambassador driver"
-#define version_string "1.1"
+#define version_string "1.2"
 
 static inline void __init show_version (void) {
   printk ("%s version %s\n", description_string, version_string);
@@ -122,11 +117,11 @@ static inline void __init show_version (void) {
   
   The queue pairs work as follows: one queue is for supply to the
   adapter, items in it are pending and are owned by the adapter; the
-  other is the for return from the adapter, items in it have been
-  dealt with by the adapter. The host adds items to the supply (TX
-  descriptors and free RX buffer descriptors) and removes items from
-  the return (TX and RX completions). The adapter deals with out of
-  order completions.
+  other is the queue for return from the adapter, items in it have
+  been dealt with by the adapter. The host adds items to the supply
+  (TX descriptors and free RX buffer descriptors) and removes items
+  from the return (TX and RX completions). The adapter deals with out
+  of order completions.
   
   Interrupts (card to host) and the doorbell (host to card) are used
   for signalling.
@@ -170,25 +165,26 @@ static inline void __init show_version (void) {
 
     delay/spacing = latency = (20+2)/3 = 7 (buffers)  (rounding up)
     
-  The 20us delay assumes that there is no need to touch disk; if we
-  need touch disk to get buffers we are going to drop frames anyway.
-   
+  The 20us delay assumes that there is no need to sleep; if we need to
+  sleep to get buffers we are going to drop frames anyway.
+  
   In fact, each pool should have enough buffers to support the
   simultaneous reassembly of a separate frame on each VC and cope with
-  the case in which large frames arrive with round robin cell arrivals
-  on each VC.
-   
+  the case in which frames complete in round robin cell fashion on
+  each VC.
+  
   Only one frame can complete at each cell arrival, so if "n" VCs are
   open, the worst case is to have them all complete frames together
   followed by all starting new frames together.
   
-    min number of buffers = n + delay/spacing
+    desired number of buffers = n + delay/spacing
     
   These are the extreme requirements, however, they are "n+k" for some
   "k" so we have only the constant to choose. This is the argument
-  rx_lats which current defaults at 3.
+  rx_lats which current defaults to 7.
   
-  Actually, "n ? n+k : 0" is better and this is what is implemented.
+  Actually, "n ? n+k : 0" is better and this is what is implemented,
+  subject to the limit given by the pool size.
   
   4. Driver locking
   
@@ -202,7 +198,7 @@ static inline void __init show_version (void) {
   and close functions. There are three reasons for a lock: 1. we need
   to do atomic rate reservation and release (not used yet), 2. Opening
   sometimes involves two adapter commands which must not be separated
-  by another command on the same VC, 3. the changes in RX pool size
+  by another command on the same VC, 3. the changes to RX pool size
   must be atomic. The lock needs to work over context switches, so we
   use a semaphore.
   
@@ -229,12 +225,12 @@ static inline void __init show_version (void) {
   The PLX likes to prefetch; if reading up to 4 u32 past the end of
   each TX fragment is not a problem, then TX can be made to go a
   little faster by passing a flag at init that disables a prefetch
-  workaround. We do not pass this flag.
+  workaround. We do not pass this flag. (new microcode only)
   
   Now we:
-  . Note that skb_alloc rounds up size to a 16byte boundary.  
-  . Ensure all areas must not traverse 4MB boundaries.
-  . Ensure all areas must not start at a E00000xx bus address.
+  . Note that alloc_skb rounds up size to a 16byte boundary.  
+  . Ensure all areas do not traverse 4MB boundaries.
+  . Ensure all areas do not start at a E00000xx bus address.
   (I cannot be certain, but this may always hold with Linux)
   . Make all failures cause a loud message.
   . Discard non-conforming SKBs (causes TX failure or RX fill delay).
@@ -321,13 +317,15 @@ static unsigned short debug = 0;
 static unsigned int cmds = 8;
 static unsigned int txs = 32;
 static unsigned int rxs[NUM_RX_POOLS] = { 64, 64, 64, 64 };
-static unsigned int rxs_bs[NUM_RX_POOLS] = { 2500, 5000, 10000, 20000 };
+static unsigned int rxs_bs[NUM_RX_POOLS] = { 4080, 12240, 36720, 65535 };
 static unsigned int rx_lats = 7;
 static unsigned char pci_lat = 0;
 
 /********** access to adapter **********/
 
-static inline void wr_mem (const amb_dev * dev, u32 * addr, u32 data) {
+static const amb_mem * const mem = 0;
+
+static inline void wr_mem (const amb_dev * dev, const u32 * addr, u32 data) {
   u32 be = cpu_to_be32 (data);
   PRINTD (DBG_FLOW|DBG_REGS, "wr: %p <- %08x b[%08x]", addr, data, be);
 #ifdef AMB_MMIO
@@ -337,7 +335,7 @@ static inline void wr_mem (const amb_dev * dev, u32 * addr, u32 data) {
 #endif
 }
 
-static inline u32 rd_mem (const amb_dev * dev, u32 * addr) {
+static inline u32 rd_mem (const amb_dev * dev, const u32 * addr) {
 #ifdef AMB_MMIO
   u32 be = dev->membase[addr - (u32 *) 0];
 #else
@@ -499,7 +497,7 @@ static void rx_complete (amb_dev * dev, rx_out * rx) {
 	  
 	} else {
 	  // someone fix this (message), please!
-	  PRINTD (DBG_INFO|DBG_RX, "dropped thanks to atm_charge (vc %hu)", vc);
+	  PRINTD (DBG_INFO|DBG_RX, "dropped thanks to atm_charge (vc %hu, truesize %u)", vc, skb->truesize);
 	  // drop stats incremented in atm_charge
 	}
 	
@@ -755,7 +753,7 @@ static inline void drain_rx_pool (amb_dev * dev, unsigned char pool) {
   if (rxq->pending > rxq->buffers_wanted) {
     command cmd;
     cmd.request = cpu_to_be32 (SRB_FLUSH_BUFFER_Q);
-    cmd.args.flush.flags = cpu_to_be16 (pool << SRB_POOL_SHIFT);
+    cmd.args.flush.flags = cpu_to_be32 (pool << SRB_POOL_SHIFT);
     while (command_do (dev, &cmd))
       schedule();
     /* the pool may also be emptied via the interrupt handler */
@@ -792,7 +790,7 @@ static inline void fill_rx_pool (amb_dev * dev, unsigned char pool, int priority
   rxq = &dev->rxq[pool];
   while (rxq->pending < rxq->maximum && rxq->pending < rxq->buffers_wanted) {
     
-    struct sk_buff * skb = alloc_skb (rxq->buffer_size + RX_FUDGE, priority);
+    struct sk_buff * skb = alloc_skb (rxq->buffer_size, priority);
     if (!skb) {
       PRINTD (DBG_SKB|DBG_POOL, "failed to allocate skb for RX pool %hu", pool);
       return;
@@ -880,11 +878,9 @@ static void interrupt_handler (int irq, void * dev_id, struct pt_regs * pt_regs)
   
   while (irq_ok_old != irq_ok && irq_ok < 100) {
     unsigned char pool;
-#ifdef DEBUG_AMBASSADOR
-    u32 ints = rd_mem (dev, &mem->interrupt);
-#endif
+    PRINTD (DBG_IRQ, "FYI: interrupt was %08x, work %u",
+	    rd_mem (dev, &mem->interrupt), irq_ok);
     wr_mem (dev, &mem->interrupt, -1);
-    PRINTD (DBG_IRQ, "FYI: interrupt was %08x, work %u", ints, irq_ok);
     irq_ok_old = irq_ok;
     for (pool = 0; pool < NUM_RX_POOLS; ++pool)
       while (!rx_take (dev, pool))
@@ -970,9 +966,9 @@ static void dont_panic (amb_dev * dev) {
 /********** make rate (not quite as much fun as Horizon) **********/
 
 static unsigned int make_rate (unsigned int rate, rounding r,
-			u16 * bits, unsigned int * actual) {
-  unsigned char exp = 0; /* silence gcc */
-  unsigned int man = 0;
+			       u16 * bits, unsigned int * actual) {
+  unsigned char exp = -1; // hush gcc
+  unsigned int man = -1;  // hush gcc
   
   PRINTD (DBG_FLOW|DBG_QOS, "make_rate %u", rate);
   
@@ -987,12 +983,20 @@ static unsigned int make_rate (unsigned int rate, rounding r,
   // find position of top bit, this gives e
   // remove top bit and shift (rounding if feeling clever) by 9-e
   
-  // XXX fix me to work with larger ints
-  
   // ucode bug: please don't set bit 14! 0 not representable
   
-  if (rate) {
-    // non-zero rate
+  if (rate > 0xffc00000U) {
+    // larger than largest representable rate
+    
+    if (r == round_up) {
+	return -EINVAL;
+    } else {
+      exp = 31;
+      man = 511;
+    }
+    
+  } else if (rate) {
+    // representable rate
     
     exp = 31;
     man = rate;
@@ -1007,13 +1011,14 @@ static unsigned int make_rate (unsigned int rate, rounding r,
     // rate = (2^31+(man-2^31))*2^(exp-31)
     // rate = (1+(man-2^31)/2^31)*2^exp
     man = man<<1;
+    man &= 0xffffffffU; // a nop on 32-bit systems
     // rate = (1+man/2^32)*2^exp
     
     // exp is in the range 0 to 31, man is in the range 0 to 2^32-1
     // time to lose significance... we want m in the range 0 to 2^9-1
     // rounding presents a minor problem... we first decide which way
-    // we are rounding (based on given rounding direction and the bits
-    // of the mantissa that are to be discarded).
+    // we are rounding (based on given rounding direction and possibly
+    // the bits of the mantissa that are to be discarded).
     
     switch (r) {
       case round_down: {
@@ -1026,13 +1031,9 @@ static unsigned int make_rate (unsigned int rate, rounding r,
 	if (man & (-1>>9)) {
 	  man = (man>>(32-9)) + 1;
 	  if (man == (1<<9)) {
-	    // check for round up outside of range
-	    if (exp == 31) {
-	      return -EINVAL;
-	    } else {
-	      man = 0;
-	      exp += 1;
-	    }
+	    // no need to check for round up outside of range
+	    man = 0;
+	    exp += 1;
 	  }
 	} else {
 	  man = (man>>(32-9));
@@ -1043,14 +1044,10 @@ static unsigned int make_rate (unsigned int rate, rounding r,
 	// check msb that we are discarding
 	if (man & (1<<(32-9-1))) {
 	  man = (man>>(32-9)) + 1;
-	  // if rounding up would go out of range, just stay at top
 	  if (man == (1<<9)) {
-	    if (exp == 31) {
-	      man -= 1;
-	    } else {
-	      man = 0;
-	      exp += 1;
-	    }
+	    // no need to check for round up outside of range
+	    man = 0;
+	    exp += 1;
 	  }
 	} else {
 	  man = (man>>(32-9));
@@ -1060,19 +1057,13 @@ static unsigned int make_rate (unsigned int rate, rounding r,
     }
     
   } else {
-    // zero rate
+    // zero rate - not representable
     
-    switch (r) {
-      case round_up: {
-	break;
-      }
-      case round_down: {
-	return -EINVAL;
-	break;
-      }
-      case round_nearest: {
-	break;
-      }
+    if (r == round_down) {
+      return -EINVAL;
+    } else {
+      exp = 0;
+      man = 0;
     }
     
   }
@@ -1104,18 +1095,17 @@ static int amb_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
   struct atm_trafprm * txtp;
   struct atm_trafprm * rxtp;
   u16 tx_rate_bits;
-  u16 tx_vc_bits = 0; /* silence gcc */
-  u16 tx_frame_bits = 0;
-  // int pcr;
+  u16 tx_vc_bits = -1; // hush gcc
+  u16 tx_frame_bits = -1; // hush gcc
   
   amb_dev * dev = AMB_DEV(atm_vcc->dev);
   amb_vcc * vcc;
-  unsigned char pool = -1; // compiler warning
+  unsigned char pool = -1; // hush gcc
   
   PRINTD (DBG_FLOW|DBG_VCC, "amb_open %x %x", vpi, vci);
   
+#ifdef ATM_VPI_UNSPEC
   // UNSPEC is deprecated, remove this code eventually
-#if defined ATM_VPI_UNSPEC
   if (vpi == ATM_VPI_UNSPEC || vci == ATM_VCI_UNSPEC) {
     PRINTK (KERN_WARNING, "rejecting open with unspecified VPI/VCI (deprecated)");
     return -EINVAL;
@@ -1250,25 +1240,23 @@ static int amb_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
       // RXer on the channel already, just modify rate...
       cmd.request = cpu_to_be32 (SRB_MODIFY_VC_RATE);
       cmd.args.modify_rate.vc = cpu_to_be32 (vci);  // vpi 0
-      // only lower 16 bits used (BE nightmare continues)
-      cmd.args.modify_rate.rate = cpu_to_be16 (tx_rate_bits);
+      cmd.args.modify_rate.rate = cpu_to_be32 (tx_rate_bits << SRB_RATE_SHIFT);
       while (command_do (dev, &cmd))
 	schedule();
       // ... and TX flags, preserving the RX pool
       cmd.request = cpu_to_be32 (SRB_MODIFY_VC_FLAGS);
       cmd.args.modify_flags.vc = cpu_to_be32 (vci);  // vpi 0
-      // only lower 16 bits used (BE nightmare continues)
-      cmd.args.modify_flags.flags = cpu_to_be16
-	((AMB_VCC(dev->rxer[vci])->rx_info.pool << SRB_POOL_SHIFT) | tx_vc_bits);
+      cmd.args.modify_flags.flags = cpu_to_be32
+	( (AMB_VCC(dev->rxer[vci])->rx_info.pool << SRB_POOL_SHIFT)
+	  | (tx_vc_bits << SRB_FLAGS_SHIFT) );
       while (command_do (dev, &cmd))
 	schedule();
     } else {
       // no RXer on the channel, just open (with pool zero)
       cmd.request = cpu_to_be32 (SRB_OPEN_VC);
       cmd.args.open.vc = cpu_to_be32 (vci);  // vpi 0
-      // only lower 16 bits used (BE nightmare continues)
-      cmd.args.open.flags = cpu_to_be16	(tx_vc_bits);
-      cmd.args.open.rate = cpu_to_be16 (tx_rate_bits);
+      cmd.args.open.flags = cpu_to_be32 (tx_vc_bits << SRB_FLAGS_SHIFT);
+      cmd.args.open.rate = cpu_to_be32 (tx_rate_bits << SRB_RATE_SHIFT);
       while (command_do (dev, &cmd))
 	schedule();
     }
@@ -1282,7 +1270,6 @@ static int amb_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
     vcc->rx_info.pool = pool;
     
     down (&dev->vcc_sf); 
-    
     /* grow RX buffer pool */
     if (!dev->rxq[pool].buffers_wanted)
       dev->rxq[pool].buffers_wanted = rx_lats;
@@ -1294,16 +1281,15 @@ static int amb_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
       // switch (from pool zero) to this pool, preserving the TX bits
       cmd.request = cpu_to_be32 (SRB_MODIFY_VC_FLAGS);
       cmd.args.modify_flags.vc = cpu_to_be32 (vci);  // vpi 0
-      // only lower 16 bits used (BE nightmare continues)
-      cmd.args.modify_flags.flags = cpu_to_be16
-	((pool << SRB_POOL_SHIFT) | dev->txer[vci].tx_vc_bits);
+      cmd.args.modify_flags.flags = cpu_to_be32
+	( (pool << SRB_POOL_SHIFT)
+	  | (dev->txer[vci].tx_vc_bits << SRB_FLAGS_SHIFT) );
     } else {
       // no TXer on the channel, open the VC (with no rate info)
       cmd.request = cpu_to_be32 (SRB_OPEN_VC);
       cmd.args.open.vc = cpu_to_be32 (vci);  // vpi 0
-      // only lower 16 bits used in the next two (BE nightmare continues)
-      cmd.args.open.flags = cpu_to_be16 (pool << SRB_POOL_SHIFT);
-      cmd.args.open.rate = cpu_to_be16 (0);
+      cmd.args.open.flags = cpu_to_be32 (pool << SRB_POOL_SHIFT);
+      cmd.args.open.rate = cpu_to_be32 (0);
     }
     while (command_do (dev, &cmd))
       schedule();
@@ -1344,8 +1330,7 @@ static void amb_close (struct atm_vcc * atm_vcc) {
       // RXer still on the channel, just modify rate... XXX not really needed
       cmd.request = cpu_to_be32 (SRB_MODIFY_VC_RATE);
       cmd.args.modify_rate.vc = cpu_to_be32 (vci);  // vpi 0
-      // only lower 16 bits used (BE nightmare continues)
-      cmd.args.modify_rate.rate = cpu_to_be16 (0);
+      cmd.args.modify_rate.rate = cpu_to_be32 (0);
       // ... and clear TX rate flags (XXX to stop RM cell output?), preserving RX pool
     } else {
       // no RXer on the channel, close channel
@@ -1370,8 +1355,8 @@ static void amb_close (struct atm_vcc * atm_vcc) {
       // TXer still on the channel, just go to pool zero XXX not really needed
       cmd.request = cpu_to_be32 (SRB_MODIFY_VC_FLAGS);
       cmd.args.modify_flags.vc = cpu_to_be32 (vci);  // vpi 0
-      // only lower 16 bits used (BE nightmare continues)
-      cmd.args.modify_flags.flags = cpu_to_be16 (dev->txer[vci].tx_vc_bits);
+      cmd.args.modify_flags.flags = cpu_to_be32
+	(dev->txer[vci].tx_vc_bits << SRB_FLAGS_SHIFT);
     } else {
       // no TXer on the channel, close the VC
       cmd.request = cpu_to_be32 (SRB_CLOSE_VC);
@@ -1392,7 +1377,6 @@ static void amb_close (struct atm_vcc * atm_vcc) {
       dev->rxq[pool].buffers_wanted = 0;
       drain_rx_pool (dev, pool);
     }
-
     up (&dev->vcc_sf);
   }
   
@@ -1674,8 +1658,8 @@ static const struct atmdev_ops amb_ops = {
   amb_open,
   amb_close,
   NULL,          // no amb_ioctl,
-  NULL, // amb_getsockopt,
-  NULL, // amb_setsockopt,
+  NULL,          // no amb_getsockopt,
+  NULL,          // no amb_setsockopt,
   amb_send,
   amb_sg_send,
   NULL,          // no send_oam    - not in fact used yet
@@ -1718,8 +1702,9 @@ static void do_housekeeping (unsigned long arg) {
 
 /********** creation of communication queues **********/
 
-static int create_queues (amb_dev * dev, unsigned int cmds, unsigned int txs,
-			  unsigned int * rxs, unsigned int * rx_buffer_sizes) {
+static int __init create_queues (amb_dev * dev, unsigned int cmds,
+				 unsigned int txs, unsigned int * rxs,
+				 unsigned int * rx_buffer_sizes) {
   unsigned char pool;
   size_t total = 0;
   void * memory;
@@ -1848,8 +1833,8 @@ static void destroy_queues (amb_dev * dev) {
 
 /********** basic loader commands and error handling **********/
 
-static int do_loader_command (const amb_dev * dev, loader_command cmd,
-			      volatile loader_block * lb) {
+static int __init do_loader_command (const amb_dev * dev, loader_command cmd,
+				     volatile loader_block * lb) {
   
   // centisecond timeouts - guessing away here
   unsigned int command_timeouts [] = {
@@ -1865,8 +1850,7 @@ static int do_loader_command (const amb_dev * dev, loader_command cmd,
     [adap_run_in_iram]     = 1,
     [adap_end_download]    = 1
   };
-
-#if 0 /* unused */
+  
   unsigned int command_successes [] = {
     [host_memory_test]     = COMMAND_PASSED_TEST,
     [read_adapter_memory]  = COMMAND_READ_DATA_OK,
@@ -1880,11 +1864,14 @@ static int do_loader_command (const amb_dev * dev, loader_command cmd,
     [adap_run_in_iram]     = COMMAND_COMPLETE,
     [adap_end_download]    = COMMAND_COMPLETE
   };
-#endif
   
-  int decode_loader_error (u32 result) {
+  int decode_loader_result (loader_command cmd, u32 result) {
     int res;
     const char * msg;
+    
+    if (result == command_successes[cmd])
+      return 0;
+    
     switch (result) {
       case BAD_COMMAND:
 	res = -EINVAL;
@@ -1937,12 +1924,12 @@ static int do_loader_command (const amb_dev * dev, loader_command cmd,
       default:
 	res = -EINVAL;
 	msg = "unknown error";
-	PRINTD (DBG_LOAD|DBG_ERR, "decode_loader_error got %d=%x !",
+	PRINTD (DBG_LOAD|DBG_ERR, "decode_loader_result got %d=%x !",
 		result, result);
 	break;
     }
-    if (res)
-      PRINTK (KERN_ERR, "%s", msg);
+    
+    PRINTK (KERN_ERR, "%s", msg);
     return res;
   }
   
@@ -1967,7 +1954,7 @@ static int do_loader_command (const amb_dev * dev, loader_command cmd,
   
   timeout = command_timeouts[cmd] * HZ/100;
   
-  while (!lb->result || lb->result == be32_to_cpu (COMMAND_IN_PROGRESS))
+  while (!lb->result || lb->result == cpu_to_be32 (COMMAND_IN_PROGRESS))
     if (timeout) {
       timeout = schedule_timeout (timeout);
     } else {
@@ -1991,25 +1978,14 @@ static int do_loader_command (const amb_dev * dev, loader_command cmd,
       }
     return 0;
   } else {
-    return decode_loader_error (be32_to_cpu (lb->result));
+    return decode_loader_result (cmd, be32_to_cpu (lb->result));
   }
   
-#if 0
-  if ((res != COMMAND_PASSED_TEST) &&
-      (res != COMMAND_READ_DATA_OK) &&
-      (res != COMMAND_WRITE_DATA_OK) &&
-      (res != COMMAND_COMPLETE)) {
-    PRINTD (DBG_LOAD|DBG_ERR"startup cmd %d failed with error %08x",
-	    cmd, res);
-    dump_registers (dev);
-    return -EIO;
-  }
-#endif
 }
 
 /* loader: determine loader version */
 
-static int get_loader_version (const amb_dev * dev, u32 * version) {
+static int __init get_loader_version (const amb_dev * dev, u32 * version) {
   loader_block lb;
   int res;
   
@@ -2025,8 +2001,8 @@ static int get_loader_version (const amb_dev * dev, u32 * version) {
 
 /* loader: read or verify memory data blocks */
 
-static int loader_write (const amb_dev * dev, const u32 * data,
-		  u32 address, unsigned int count) {
+static int __init loader_write (const amb_dev * dev, const u32 * data,
+				u32 address, unsigned int count) {
   unsigned int i;
   loader_block lb;
   transfer_block * tb = &lb.payload.transfer;
@@ -2042,8 +2018,8 @@ static int loader_write (const amb_dev * dev, const u32 * data,
   return do_loader_command (dev, write_adapter_memory, &lb);
 }
 
-static int loader_verify (const amb_dev * dev, const u32 * data,
-		   u32 address, unsigned int count) {
+static int __init loader_verify (const amb_dev * dev, const u32 * data,
+				 u32 address, unsigned int count) {
   unsigned int i;
   loader_block lb;
   transfer_block * tb = &lb.payload.transfer;
@@ -2065,7 +2041,7 @@ static int loader_verify (const amb_dev * dev, const u32 * data,
   return res;
 }
 
-static int loader_start (const amb_dev * dev, u32 address) {
+static int __init loader_start (const amb_dev * dev, u32 address) {
   loader_block lb;
   
   PRINTD (DBG_FLOW|DBG_LOAD, "loader_start");
@@ -2139,7 +2115,7 @@ static int amb_reset (amb_dev * dev, int diags) {
 
 /********** transfer and start the microcode **********/
 
-static int ucode_init (amb_dev * dev) {
+static int __init ucode_init (amb_dev * dev) {
   unsigned int i = 0;
   unsigned int total = 0;
   const u32 * pointer = ucode_data;
@@ -2185,7 +2161,7 @@ static int ucode_init (amb_dev * dev) {
 
 /********** give adapter parameters **********/
 
-static int amb_talk (amb_dev * dev) {
+static int __init amb_talk (amb_dev * dev) {
   adap_talk_block a;
   unsigned char pool;
   unsigned long timeout;
@@ -2238,7 +2214,7 @@ static int amb_talk (amb_dev * dev) {
 }
 
 // get microcode version
-static void amb_ucode_version (amb_dev * dev) {
+static void __init amb_ucode_version (amb_dev * dev) {
   u32 major;
   u32 minor;
   command cmd;
@@ -2251,11 +2227,11 @@ static void amb_ucode_version (amb_dev * dev) {
 }
 
 // get end station address
-static void amb_esi (amb_dev * dev, u8 * esi) {
+static void __init amb_esi (amb_dev * dev, u8 * esi) {
   u32 lower4;
   u16 upper2;
   command cmd;
-
+  
   // swap bits within byte to get Ethernet ordering
   u8 bit_swap (u8 byte) {
     const u8 swap[] = {
@@ -2266,14 +2242,14 @@ static void amb_esi (amb_dev * dev, u8 * esi) {
     };
     return ((swap[byte & 0xf]<<4) | swap[byte>>4]);
   }
-
+  
   cmd.request = cpu_to_be32 (SRB_GET_BIA);
   while (command_do (dev, &cmd))
     schedule();
   lower4 = be32_to_cpu (cmd.args.bia.lower4);
   upper2 = be32_to_cpu (cmd.args.bia.upper2);
   PRINTD (DBG_LOAD, "BIA: lower4: %08x, upper2 %04x", lower4, upper2);
-
+  
   if (esi) {
     unsigned int i;
     
@@ -2292,7 +2268,7 @@ static void amb_esi (amb_dev * dev, u8 * esi) {
   return;
 }
 
-static int amb_init (amb_dev * dev) {
+static int __init amb_init (amb_dev * dev) {
   u32 version;
   
   /* enable adapter doorbell */
@@ -2381,8 +2357,8 @@ static int __init amb_probe (void) {
 #endif
     
     // semaphore for txer/rxer modifications - we cannot use a
-    // spinlock as the critical region needs to process switches
-    init_MUTEX(&dev->vcc_sf);
+    // spinlock as the critical region needs to switch processes
+    init_MUTEX (&dev->vcc_sf);
     // queue manipulation spinlocks; we want atomic reads and
     // writes to the queue descriptors (handles IRQ and SMP)
     // consider replacing "int pending" -> "atomic_t available"
@@ -2618,8 +2594,6 @@ void cleanup_module (void) {
 
 int __init amb_detect (void) {
   int devs;
-  
-  PRINTD (DBG_FLOW|DBG_INIT, "init_module");
   
   // sanity check - cast needed as printk does not support %Zu
   if (sizeof(amb_mem) != 4*16 + 4*12) {

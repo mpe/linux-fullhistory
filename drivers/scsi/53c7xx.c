@@ -253,7 +253,7 @@
 #include <linux/ioport.h>
 #include <linux/time.h>
 #include <linux/blk.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include <asm/pgtable.h>
 
 #ifdef CONFIG_AMIGA

@@ -1,4 +1,4 @@
-/* $Id: oplib.h,v 1.10 1998/12/18 10:02:03 davem Exp $
+/* $Id: oplib.h,v 1.11 1999/08/31 19:25:49 davem Exp $
  * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *
@@ -205,7 +205,8 @@ extern int prom_wakeupsystem(void);
 /* MMU and memory related OBP interfaces. */
 
 /* Get unique string identifying SIMM at given physical address. */
-extern int prom_getunumber(unsigned long phys_lo, unsigned long phys_hi,
+extern int prom_getunumber(int syndrome_code,
+			   unsigned long phys_addr,
 			   char *buf, int buflen);
 
 /* Retain physical memory to the caller across soft resets. */
@@ -336,6 +337,7 @@ extern long p1275_cmd (char *, long, ...);
 #define P1275_ARG_OUT_32B		3
 #define P1275_ARG_IN_FUNCTION		4
 #define P1275_ARG_IN_BUF		5
+#define P1275_ARG_IN_64B		6
 
 #define P1275_IN(x) ((x) & 0xf)
 #define P1275_OUT(x) (((x) << 4) & 0xf0)

@@ -117,7 +117,7 @@ static int serial_refcount;
 static void probe_sccs(void);
 static void change_speed(struct mac_serial *info, struct termios *old);
 static void rs_wait_until_sent(struct tty_struct *tty, int timeout);
-static void set_scc_power(struct mac_serial * info, int state);
+static int set_scc_power(struct mac_serial * info, int state);
 static int setup_scc(struct mac_serial * info);
 
 static struct tty_struct *serial_table[NUM_CHANNELS];
@@ -329,8 +329,8 @@ static _INLINE_ void receive_chars(struct mac_serial *info,
 			
 		if (tty->flip.count >= TTY_FLIPBUF_SIZE) {
 			static int flip_buf_ovf;
-			++flip_buf_ovf;
-			printk("FB. overflow: %d\n", flip_buf_ovf);
+			if (++flip_buf_ovf <= 1)
+				printk("FB. overflow: %d\n", flip_buf_ovf);
 			break;
 		}
 		tty->flip.count++;
@@ -586,8 +586,10 @@ static void rs_timer(void)
 {
 }
 
-static int startup(struct mac_serial * info)
+static int startup(struct mac_serial * info, int can_sleep)
 {
+	int delay;
+
 #ifdef SERIAL_DEBUG_OPEN
 	printk("startup() (ttyS%d, irq %d)\n", info->line, info->irq);
 #endif
@@ -609,7 +611,7 @@ static int startup(struct mac_serial * info)
 	printk("starting up ttyS%d (irq %d)...\n", info->line, info->irq);
 #endif
 
-	set_scc_power(info, 1);
+	delay = set_scc_power(info, 1);
 	
 	setup_scc(info);
 
@@ -619,6 +621,15 @@ static int startup(struct mac_serial * info)
 
 	info->flags |= ZILOG_INITIALIZED;
 	enable_irq(info->irq);
+
+	if (delay) {
+		if (can_sleep) {
+			/* we need to wait a bit before using the port */
+			current->state = TASK_INTERRUPTIBLE;
+			schedule_timeout(delay * HZ / 1000);
+		} else
+			mdelay(delay);
+	}
 
 	return 0;
 }
@@ -740,10 +751,18 @@ static void shutdown(struct mac_serial * info)
 	info->flags &= ~ZILOG_INITIALIZED;
 }
 
-static void set_scc_power(struct mac_serial * info, int state)
+/*
+ * Turn power on or off to the SCC and associated stuff
+ * (port drivers, modem, IR port, etc.)
+ * Returns the number of milliseconds we should wait before
+ * trying to use the port.
+ */
+static int set_scc_power(struct mac_serial * info, int state)
 {
+	int delay = 0;
+
 	if (feature_test(info->dev_node, FEATURE_Serial_enable) < 0)
-		return;		/* don't have serial power control */
+		return 0;	/* don't have serial power control */
 
 	/* The timings looks strange but that's the ones MacOS seems
 	   to use for the internal modem. I think we can use a lot faster
@@ -762,16 +781,13 @@ static void set_scc_power(struct mac_serial * info, int state)
 			feature_set(info->dev_node, FEATURE_Serial_IO_A);
 		else
 			feature_set(info->dev_node, FEATURE_Serial_IO_B);
-		mdelay(1);
+		delay = 1;
 		
 		if (info->is_cobalt_modem){
 			feature_set(info->dev_node, FEATURE_Modem_Reset);
-	   		mdelay(15);
+	   		mdelay(5);
 			feature_clear(info->dev_node, FEATURE_Modem_Reset);
-			/* XXX Note the big 250ms, we should probably replace this 
-			   by something better since we have irqs disabled here
-			 */
-			mdelay(250);
+			delay = 1000;	/* wait for 1s before using */
 		}
 #ifdef CONFIG_PMAC_PBOOK
 		if (info->is_pwbk_ir)
@@ -786,7 +802,7 @@ static void set_scc_power(struct mac_serial * info, int state)
 #ifdef SERIAL_DEBUG_POWER
 			printk(KERN_INFO "        (canceled by KGDB)\n");
 #endif
-			return;
+			return 0;
 		}
 #endif
 #ifdef CONFIG_XMON
@@ -794,7 +810,7 @@ static void set_scc_power(struct mac_serial * info, int state)
 #ifdef SERIAL_DEBUG_POWER
 			printk(KERN_INFO "        (canceled by XMON)\n");
 #endif
-			return;
+			return 0;
 		}
 #endif
 		if (info->is_cobalt_modem) {
@@ -835,6 +851,7 @@ static void set_scc_power(struct mac_serial * info, int state)
 			mdelay(5);
 		}
 	}
+	return delay;
 }
 
 
@@ -1796,7 +1813,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	 * Start up serial port
 	 */
 
-	retval = startup(info);
+	retval = startup(info, 1);
 	if (retval)
 		return retval;
 

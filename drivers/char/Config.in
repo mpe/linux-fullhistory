@@ -210,4 +210,11 @@ if [ "$CONFIG_FTAPE" != "n" ]; then
 fi
 endmenu
 
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  bool 'Direct Rendering Manager (XFree86 DRI support)' CONFIG_DRM
+  if [ "$CONFIG_DRM" = "y" ]; then
+    dep_tristate '   3dlabs GMX 2000' CONFIG_DRM_GAMMA m
+  fi
+fi
+
 endmenu

@@ -42,7 +42,7 @@
 #include <linux/poll.h>
 #include <linux/init.h>
 #include <linux/malloc.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 #include "usb.h"
 

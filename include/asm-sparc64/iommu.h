@@ -5,9 +5,9 @@
 #ifndef _SPARC64_IOMMU_H
 #define _SPARC64_IOMMU_H
 
+#include <linux/spinlock.h>
 #include <asm/page.h>
 #include <asm/sysio.h>
-#include <asm/spinlock.h>
 
 /* The iommu handles all virtual to physical address translations
  * that occur between the SYSIO and physical memory.  Access by

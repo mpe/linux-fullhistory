@@ -2238,6 +2238,8 @@ void cleanup_module(void)
 
 extern int pcmcia_ds_init(void);
 extern int pcmcia_i82365_init(void);
+extern int init_pcnet_cs(void);
+extern int init_ray_cs(void);
 
 int pcmcia_init(void)
 {
@@ -2248,7 +2250,15 @@ int pcmcia_init(void)
 	pcmcia_i82365_init();
 
 	/* Get the ball rolling.. */
-	return pcmcia_ds_init();
+	pcmcia_ds_init();
+
+#ifdef CONFIG_PCMCIA_PCNET
+	init_pcnet_cs();
+#endif
+#ifdef CONFIG_PCMCIA_RAYCS
+	init_ray_cs();
+#endif
+	return 0;
 }
 
 #endif

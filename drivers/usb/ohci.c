@@ -37,8 +37,8 @@
 #include <linux/malloc.h>
 #include <linux/smp_lock.h>
 #include <linux/errno.h>
+#include <linux/spinlock.h>
 
-#include <asm/spinlock.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/system.h>

@@ -89,9 +89,9 @@
 #include <linux/proc_fs.h>
 #include <linux/delay.h>
 #include <linux/mca.h>
+#include <linux/spinlock.h>
 #include <asm/io.h>
 #include <asm/system.h>
-#include <asm/spinlock.h>
 
 #include "scsi.h"
 #include "hosts.h"

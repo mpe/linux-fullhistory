@@ -38,11 +38,6 @@
 #include "common.h" /* atm_proc_init prototype */
 #include "signaling.h" /* to get sigd - ugly too */
 
-#ifdef CONFIG_AREQUIPA
-#include <linux/arequipa.h>
-void atm_push_arequipa(struct atm_vcc *vcc,struct sk_buff *skb);
-#endif
-
 #ifdef CONFIG_ATM_CLIP
 #include <net/atmclip.h>
 #include "ipcommon.h"
@@ -111,9 +106,6 @@ ENTRY(arp);
 #if defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE)
 ENTRY(lec);
 #endif
-#ifdef CONFIG_AREQUIPA
-ENTRY(arequipa);
-#endif
 
 
 static int atm_header(ino_t ino,char *buf)
@@ -136,10 +128,6 @@ static int atm_header(ino_t ino,char *buf)
 		return sprintf(buf,"Itf  MAC          ATM destination"
 		    "                          Status            Flags "
 		    "VPI/VCI Recv VPI/VCI\n");
-#endif
-#ifdef CONFIG_AREQUIPA
-	if (ino == INO(arequipa))
-		return sprintf(buf,"Itf VPI VCI   State    Sock# Inode\n");
 #endif
 	return -EINVAL;
 }
@@ -300,37 +288,6 @@ static void svc_info(struct atm_vcc *vcc,char *buf)
 }
 
 
-#ifdef CONFIG_AREQUIPA
-
-
-static const char *arequipa_state(const struct atm_vcc *vcc)
-{
-	if (!(vcc->flags & ATM_VF_REGIS) && vcc->family != PF_ATMPVC)
-		return "DOOMED";
-	if (vcc->upper) return "ATTACHED";
-	return "DANGLING";
-}
-
-
-static void arequipa_info(struct atm_vcc *vcc,char *buf)
-{
-	char *here;
- 
-	if (!vcc->dev) sprintf(buf,"Unassigned    ");
-	else sprintf(buf,"%3d %3d %5d ",vcc->dev->number,vcc->vpi,vcc->vci);
-        here = strchr(buf,0);
-        here += sprintf(here,"%-8s ",arequipa_state(vcc));
-	if (vcc->upper)
-		here += sprintf(here,"%5d %ld",vcc->upper->num,
-		    vcc->upper->socket && SOCK_INODE(vcc->upper->socket) ?
-		    SOCK_INODE(vcc->upper->socket)->i_ino : 0);
-	strcat(here,"\n");
-}
-
-
-#endif
-
-
 #if defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE)
 
 static char*
@@ -455,18 +412,6 @@ static int atm_info(ino_t ino,loff_t *pos,char *buf)
 				}
 			}
 		read_unlock_bh(&clip_tbl.lock);
-		return 0;
-	}
-#endif
-#ifdef CONFIG_AREQUIPA
-	if (ino == INO(arequipa)) {
-		left = *pos-1;
-		for (dev = atm_devs; dev; dev = dev->next)
-			for (vcc = dev->vccs; vcc; vcc = vcc->next)
-				if (vcc->push == atm_push_arequipa && !left--) {
-					arequipa_info(vcc,buf);
-					return strlen(buf);
-				}
 		return 0;
 	}
 #endif
@@ -609,9 +554,6 @@ int __init atm_proc_init(void)
 #endif
 #if defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE)
 	REG(lec);
-#endif
-#ifdef CONFIG_AREQUIPA
-	REG(arequipa);
 #endif
 	return error;
 }

@@ -257,6 +257,7 @@ CONFIG_EEXPRESS_PRO100=y
 # CONFIG_NE2K_PCI is not set
 # CONFIG_TLAN is not set
 # CONFIG_VIA_RHINE is not set
+# CONFIG_ADAPTEC_STARFIRE is not set
 # CONFIG_NET_POCKET is not set
 # CONFIG_FDDI is not set
 # CONFIG_PPP is not set
@@ -279,6 +280,11 @@ CONFIG_EEXPRESS_PRO100=y
 # CONFIG_WAN_DRIVERS is not set
 # CONFIG_LAPBETHER is not set
 # CONFIG_X25_ASY is not set
+
+#
+# PCMCIA network devices
+#
+CONFIG_PCMCIA_RAYCS=m
 
 #
 # Amateur Radio support

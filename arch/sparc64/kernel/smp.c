@@ -14,6 +14,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/delay.h>
 #include <linux/init.h>
+#include <linux/spinlock.h>
 
 #include <asm/head.h>
 #include <asm/ptrace.h>
@@ -23,7 +24,6 @@
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/oplib.h>
-#include <asm/spinlock.h>
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
 #include <asm/uaccess.h>

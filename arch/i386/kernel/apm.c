@@ -983,40 +983,27 @@ static void check_events(void)
 	}
 }
 
-/*
- * This is the APM thread main loop.
- */
-static void apm_mainloop(void)
+static void apm_event_handler(void)
 {
-	DECLARE_WAITQUEUE(wait, current);
-	apm_enabled = 1;
+	static int pending_count = 0;
 
-	add_wait_queue(&apm_waitqueue, &wait);
-	for (;;) {
-		static int pending_count = 0;
+	if (((standbys_pending > 0) || (suspends_pending > 0))
+	    && (apm_bios_info.version > 0x100)
+	    && (pending_count-- <= 0)) {
 		int err;
+		pending_count = 4;
 
-		current->state = TASK_INTERRUPTIBLE;
-		schedule_timeout(APM_CHECK_TIMEOUT);
-
-		if (((standbys_pending > 0) || (suspends_pending > 0))
-		    && (apm_bios_info.version > 0x100)
-		    && (pending_count-- <= 0)) {
-			pending_count = 4;
-
-			err = apm_set_power_state(APM_STATE_BUSY);
-			if (err)
-				apm_error("busy", err);
-		}
-
-		if (!(((standbys_pending > 0) || (suspends_pending > 0))
-		      && (apm_bios_info.version == 0x100)))
-			check_events();
+		err = apm_set_power_state(APM_STATE_BUSY);
+		if (err)
+			apm_error("busy", err);
 	}
+
+	if (!(((standbys_pending > 0) || (suspends_pending > 0))
+	      && (apm_bios_info.version == 0x100)))
+		check_events();
 }
 
-/* Called from cpu_idle, must make sure apm_enabled. */
-int apm_do_idle(void)
+static int apm_do_idle(void)
 {
 #ifdef CONFIG_APM_CPU_IDLE
 	u32	dummy;
@@ -1027,28 +1014,72 @@ int apm_do_idle(void)
 	if (apm_bios_call_simple(0x5305, 0, 0, &dummy))
 		return 0;
 
+#ifdef ALWAYS_CALL_BUSY
+	clock_slowed = 1;
+#else
 	clock_slowed = (apm_bios_info.flags & APM_IDLE_SLOWS_CLOCK) != 0;
+#endif
 	return 1;
 #else
 	return 0;
 #endif
 }
 
-/* Called from cpu_idle, must make sure apm_enabled. */
-void apm_do_busy(void)
+static void apm_do_busy(void)
 {
 #ifdef CONFIG_APM_CPU_IDLE
 	u32	dummy;
 
-	if (apm_enabled
-#ifndef ALWAYS_CALL_BUSY
-		&& clock_slowed
-#endif
-	) {
+	if (clock_slowed) {
 		(void) apm_bios_call_simple(0x5306, 0, 0, &dummy);
 		clock_slowed = 0;
 	}
 #endif
+}
+
+/*
+ * This is the APM thread main loop.
+ *
+ * Check whether we're the only running process to
+ * decide if we should just power down.
+ *
+ * Do this by checking the runqueue: if we're the
+ * only one, then the current process run_list will
+ * have both prev and next pointing to the same
+ * entry (the true idle process)
+ */
+#define system_idle() (current->run_list.next == current->run_list.prev)
+
+static void apm_mainloop(void)
+{
+	DECLARE_WAITQUEUE(wait, current);
+	apm_enabled = 1;
+
+	add_wait_queue(&apm_waitqueue, &wait);
+	current->state = TASK_INTERRUPTIBLE;
+	for (;;) {
+		/* Nothing to do, just sleep for the timeout */
+		schedule_timeout(APM_CHECK_TIMEOUT);
+
+		/*
+		 * Ok, check all events, check for idle (and mark us sleeping
+		 * so as not to count towards the load average)..
+		 */
+		current->state = TASK_INTERRUPTIBLE;
+		apm_event_handler();
+		if (!system_idle())
+			continue;
+		if (apm_do_idle()) {
+			unsigned long start = jiffies;
+			do {
+				apm_do_idle();
+				if (jiffies - start > APM_CHECK_TIMEOUT)
+					break;
+			} while (system_idle());
+			apm_do_busy();
+			apm_event_handler();
+		}
+	}
 }
 
 static int check_apm_bios_struct(struct apm_bios_struct *as, const char *func)

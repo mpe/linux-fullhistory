@@ -53,9 +53,9 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/unistd.h>
+#include <linux/spinlock.h>
 #include <asm/io.h>
 #include <asm/irq.h>
-#include <asm/spinlock.h>
 
 #include "sd.h"
 #include "hosts.h"
@@ -1885,9 +1885,8 @@ static int isp2x00_init(struct Scsi_Host *sh)
 		       pdev->device);
 		return 1;
 	}
-	if (command & PCI_COMMAND_IO && (io_base & 3) == 1)
-		io_base &= PCI_BASE_ADDRESS_IO_MASK;
-	else {
+	if (!(command & PCI_COMMAND_IO) ||
+	    !(pdev->resource[0].flags & IORESOURCE_IO)) {
 		printk("qlogicfc%d : i/o mapping is disabled\n", hostdata->host_id);
 		return 1;
 	}

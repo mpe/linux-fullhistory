@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.149 1999/08/30 10:17:17 davem Exp $
+ * Version:	$Id: tcp.c,v 1.151 1999/09/07 02:31:21 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1580,7 +1580,7 @@ void tcp_close(struct sock *sk, long timeout)
 	if(data_was_unread != 0) {
 		/* Unread data was tossed, zap the connection. */
 		tcp_set_state(sk, TCP_CLOSE);
-		tcp_send_active_reset(sk);
+		tcp_send_active_reset(sk, GFP_KERNEL);
 	} else if (tcp_close_state(sk,1)) {
 		/* We FIN if the application ate all the data before
 		 * zapping the connection.
@@ -1658,7 +1658,7 @@ int tcp_disconnect(struct sock *sk, int flags)
 	if (old_state == TCP_LISTEN) {
 		tcp_close_pending(sk);
 	} else if (tcp_connected(old_state)) {
-		tcp_send_active_reset(sk);
+		tcp_send_active_reset(sk, GFP_KERNEL);
 		sk->err = ECONNRESET;
 	} else if (old_state == TCP_SYN_SENT)
 		sk->err = ECONNRESET;
@@ -1870,6 +1870,40 @@ int tcp_setsockopt(struct sock *sk, int level, int optname, char *optval,
 			tcp_push_pending_frames(sk, tp);
 		}
 		break;
+		
+	case TCP_KEEPIDLE:
+		if (val < 1 || val > MAX_TCP_KEEPIDLE)
+			err = -EINVAL;
+		else {
+			tp->keepalive_time = val * HZ;
+			if (sk->keepopen) {
+				__u32 elapsed = tcp_time_stamp - tp->rcv_tstamp;
+				if (tp->keepalive_time > elapsed)
+					elapsed = tp->keepalive_time - elapsed;
+				else
+					elapsed = 0;
+				tcp_reset_keepalive_timer(sk, elapsed);
+			}
+		}
+		break;
+	case TCP_KEEPINTVL:
+		if (val < 1 || val > MAX_TCP_KEEPINTVL)
+			err = -EINVAL;
+		else
+			tp->keepalive_intvl = val * HZ;
+		break;
+	case TCP_KEEPCNT:
+		if (val < 1 || val > MAX_TCP_KEEPCNT)
+			err = -EINVAL;
+		else
+			tp->keepalive_probes = val;
+		break;
+	case TCP_SYNCNT:
+		if (val < 1 || val > MAX_TCP_SYNCNT)
+			err = -EINVAL;
+		else
+			tp->syn_retries = val;
+		break;
 
 	default:
 		err = -ENOPROTOOPT;
@@ -1903,6 +1937,30 @@ int tcp_getsockopt(struct sock *sk, int level, int optname, char *optval,
 		break;
 	case TCP_CORK:
 		val = (sk->nonagle == 2);
+		break;
+	case TCP_KEEPIDLE:
+		if (tp->keepalive_time)
+			val = tp->keepalive_time / HZ;
+		else
+			val = sysctl_tcp_keepalive_time / HZ;
+		break;
+	case TCP_KEEPINTVL:
+		if (tp->keepalive_intvl)
+			val = tp->keepalive_intvl / HZ;
+		else
+			val = sysctl_tcp_keepalive_intvl / HZ;
+		break;
+	case TCP_KEEPCNT:
+		if (tp->keepalive_probes)
+			val = tp->keepalive_probes;
+		else
+			val = sysctl_tcp_keepalive_probes;
+		break;
+	case TCP_SYNCNT:
+		if (tp->syn_retries)
+			val = tp->syn_retries;
+		else
+			val = sysctl_tcp_syn_retries;
 		break;
 	default:
 		return -ENOPROTOOPT;

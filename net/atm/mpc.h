@@ -4,7 +4,7 @@
 #include <linux/atm.h>
 #include <linux/atmmpc.h>
 #include <linux/skbuff.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include "mpoa_caches.h"
 
 /* kernel -> mpc-daemon */
@@ -16,7 +16,7 @@ int atm_mpoa_vcc_attach(struct atm_vcc *vcc, long arg);
 
 struct mpoa_client {
         struct mpoa_client *next;
-        struct net_device *dev;          /* lec in question                     */
+        struct net_device *dev;      /* lec in question                     */
         int dev_num;                 /* e.g. 2 for lec2                     */
         int (*old_hard_start_xmit)(struct sk_buff *skb, struct net_device *dev);
         struct atm_vcc *mpoad_vcc;   /* control channel to mpoad            */

@@ -1,6 +1,7 @@
 #
 # ATM device configuration
 #
+mainmenu_option next_comment
 comment 'ATM drivers'
 if [ "$CONFIG_INET" = "y" ]; then
   tristate 'ATM over TCP' CONFIG_ATM_TCP y
@@ -43,3 +44,4 @@ if [ "$CONFIG_PCI" = "y" ]; then
     bool '  Enable debugging messages' CONFIG_ATM_HORIZON_DEBUG
   fi
 fi
+endmenu

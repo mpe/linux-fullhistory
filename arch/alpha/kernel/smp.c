@@ -13,6 +13,7 @@
 #include <linux/interrupt.h>
 #include <linux/init.h>
 #include <linux/delay.h>
+#include <linux/spinlock.h>
 
 #include <asm/hwrpb.h>
 #include <asm/ptrace.h>
@@ -22,7 +23,6 @@
 #include <asm/irq.h>
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
-#include <asm/spinlock.h>
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
 

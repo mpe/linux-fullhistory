@@ -106,6 +106,10 @@ endif
 	@$(MAKECHRPBOOT) $@
 endif
 
+gemini_config:
+	rm -f .config arch/ppc/defconfig
+	ln -s gemini_defconfig arch/ppc/defconfig
+
 pmac_config:
 	rm -f .config arch/ppc/defconfig
 	ln -s pmac_defconfig arch/ppc/defconfig

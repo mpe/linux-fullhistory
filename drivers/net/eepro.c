@@ -150,7 +150,7 @@ static const char *version =
 /* For linux 2.1.xx */
 #if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE > 0x20155
 
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include <linux/init.h>
 #include <linux/delay.h>
 

@@ -104,7 +104,7 @@
 
 #include <linux/stat.h>
 #include <linux/config.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include <linux/smp.h>
 
 /*

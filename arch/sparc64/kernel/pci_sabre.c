@@ -1,4 +1,4 @@
-/* $Id: pci_sabre.c,v 1.1 1999/08/30 10:00:32 davem Exp $
+/* $Id: pci_sabre.c,v 1.2 1999/09/05 04:58:06 davem Exp $
  * pci_sabre.c: Sabre specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1121,7 +1121,8 @@ static void __init sabre_scan_bus(struct pci_controller_info *p)
 	sabre_register_error_handlers(p);
 }
 
-static void __init sabre_iommu_init(struct pci_controller_info *p, int tsbsize)
+static void __init sabre_iommu_init(struct pci_controller_info *p,
+				    int tsbsize, unsigned long dvma_offset)
 {
 	struct linux_mlist_p1275 *mlist;
 	unsigned long tsbbase, i, n, order;
@@ -1142,7 +1143,6 @@ static void __init sabre_iommu_init(struct pci_controller_info *p, int tsbsize)
 	for(order = 0;; order++)
 		if((PAGE_SIZE << order) >= ((tsbsize * 1024) * 8))
 			break;
-
 	tsbbase = __get_free_pages(GFP_DMA, order);
 	if (!tsbbase) {
 		prom_printf("SABRE_IOMMU: Error, gfp(tsb) failed.\n");
@@ -1200,8 +1200,7 @@ static void __init sabre_iommu_init(struct pci_controller_info *p, int tsbsize)
 					     (paddr & IOPTE_PAGE));
 
 			if (!(n & 0xff))
-				set_dvma_hash(paddr, (n << 16));
-
+				set_dvma_hash(dvma_offset, paddr, (n << 16));
 			if (++n > (tsbsize * 1024))
 				goto out;
 
@@ -1225,15 +1224,12 @@ out:
 	control |= (IOMMU_CTRL_TBWSZ | IOMMU_CTRL_ENAB);
 	switch(tsbsize) {
 	case 8:
-		pci_dvma_mask = 0x1fffffffUL;
 		control |= IOMMU_TSBSZ_8K;
 		break;
 	case 16:
-		pci_dvma_mask = 0x3fffffffUL;
 		control |= IOMMU_TSBSZ_16K;
 		break;
 	case 32:
-		pci_dvma_mask = 0x7fffffffUL;
 		control |= IOMMU_TSBSZ_32K;
 		break;
 	default:
@@ -1463,8 +1459,7 @@ void __init sabre_init(int pnode)
 			prom_halt();
 	}
 
-	pci_dvma_offset = vdma[0];
-	sabre_iommu_init(p, tsbsize);
+	sabre_iommu_init(p, tsbsize, vdma[0]);
 
 	printk("SABRE: DVMA at %08x [%08x]\n", vdma[0], vdma[1]);
 

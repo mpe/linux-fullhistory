@@ -46,6 +46,10 @@
 
 #endif
 
+#ifdef __KERNEL__
+#include <linux/string.h>
+#endif
+
 static inline lb_addr lelb_to_cpu(lb_addr in)
 {
 	lb_addr out;

@@ -174,16 +174,22 @@ int __init adb_mouse_init(void)
  * option, which is about using ADB keyboard buttons to emulate
  * mouse buttons. -- paulus
  */
-void __init adb_mouse_setup(char *str, int *ints)
+static int __init adb_mouse_setup(char *str)
 {
+	int ints[4];
+
+	str = get_options(str, ARRAY_SIZE(ints), ints);
 	if (ints[0] >= 1) {
-		adb_emulate_buttons = ints[1] > 0;
-		if (ints[1] > 1)
-			adb_button2_keycode = ints[1];
+		adb_emulate_buttons = ints[1];
 		if (ints[0] >= 2)
-			adb_button3_keycode = ints[2];
+			adb_button2_keycode = ints[2];
+		if (ints[0] >= 3)
+			adb_button3_keycode = ints[3];
 	}
+	return 1;
 }
+
+__setup("adb_buttons=", adb_mouse_setup);
 
 #ifdef MODULE
 int init_module(void)

@@ -191,7 +191,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #if LINUX_VERSION_CODE >= 0x02015F
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #endif
 
 #if LINUX_VERSION_CODE >= 0x010300

@@ -28,7 +28,7 @@
 
 #include <linux/types.h>
 #include <linux/skbuff.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 #include <net/irda/irda.h>
 #include <net/irda/irlmp.h>

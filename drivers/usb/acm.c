@@ -56,8 +56,8 @@
 #include <linux/tty_flip.h>
 #include <linux/tty.h>
 #include <linux/module.h>
-//#include <sys/ioctl.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
+
 #include "usb.h"
 
 #define NR_PORTS 3

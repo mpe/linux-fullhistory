@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/head.S
  *
- *  $Id: head.S,v 1.142 1999/08/23 02:53:18 paulus Exp $
+ *  $Id: head.S,v 1.143 1999/09/05 11:56:28 paulus Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -143,6 +143,7 @@ __start:
 	mr	r27,r7
 	li	r24,0			/* cpu # */
 	bl	prom_init
+
 #ifdef CONFIG_APUS
 /* On APUS the __va/__pa constants need to be set to the correct 
  * values before continuing. 
@@ -150,15 +151,14 @@ __start:
 	mr	r4,r30
 	bl	fix_mem_constants
 #endif
-	.globl	__secondary_start
-__secondary_start:
+
 /*
  * Use the first pair of BAT registers to map the 1st 16MB
  * of RAM to KERNELBASE.  From this point on we can't safely
  * call OF any more.
  */
 	lis	r11,KERNELBASE@h
-#ifndef CONFIG_PPC64
+#ifndef CONFIG_PPC64xxx
 	mfspr	r9,PVR
 	rlwinm	r9,r9,16,16,31		/* r9 = 1 for 601, 4 for 604 */
 	cmpi	0,r9,1
@@ -189,8 +189,15 @@ __secondary_start:
 	 * allow secondary cpus to get at all of ram in early bootup
 	 * since their init_task may be up there -- Cort
 	 */
+#if 0
 	oris	r18,r8,0x10000000@h
 	oris	r21,r11,(KERNELBASE+0x10000000)@h
+#else
+	lis	r18,0x9000
+	ori	r18,r18,0x12
+	lis	r21,0x9000
+	ori	r21,r21,0x7fe
+#endif
 	mtspr	DBAT1L,r18		/* N.B. 6xx (not 601) have valid */
 	mtspr	DBAT1U,r21		/* bit in upper BAT register */
 	mtspr	IBAT1L,r18
@@ -330,7 +337,7 @@ label:						\
 	STD_EXCEPTION(0x100, Reset, __secondary_start_psurge)
 #else
 	STD_EXCEPTION(0x100, Reset, UnknownException)
-#endif	
+#endif
 
 /* Machine check */
 	STD_EXCEPTION(0x200, MachineCheck, MachineCheckException)
@@ -982,11 +989,6 @@ fix_mem_constants:
 #endif
 
 #ifdef CONFIG_SMP
-	.globl	__secondary_start_psurge
-__secondary_start_psurge:
-	li	r24,1			/* cpu # */
-	b	__secondary_start
-
 	.globl	__secondary_hold
 __secondary_hold:
 	/* tell the master we're here */
@@ -1008,15 +1010,59 @@ __secondary_hold:
 	mtlr	r5
 	mr	r24,r3			/* cpu # */
 	blr
+
+	.globl	__secondary_start_psurge
+__secondary_start_psurge:
+	li	r24,1			/* cpu # */
+	/* we come in here with IR=0 and DR=1, and DBAT 0
+	   set to map the 0xf0000000 - 0xffffffff region */
+	mfmsr	r0
+	rlwinm	r0,r0,0,28,26		/* clear DR (0x10) */
+	sync
+	mtmsr	r0
+	isync
+
+	.globl	__secondary_start
+__secondary_start:
+	bl	enable_caches
+
+	/* get current */
+	lis	r2,current_set@h
+	ori	r2,r2,current_set@l
+	tophys(r2,r2)
+	slwi	r24,r24,2		/* get current_set[cpu#] */
+	lwzx	r2,r2,r24
+
+	/* stack */
+	addi	r1,r2,TASK_UNION_SIZE-STACK_FRAME_OVERHEAD
+	li	r0,0
+	tophys(r3,r1)
+	stw	r0,0(r3)
+
+	/* load up the MMU */
+	bl	load_up_mmu
+
+	/* ptr to phys current thread */
+	tophys(r4,r2)
+	addi	r4,r4,THREAD	/* phys address of our thread_struct */
+	mtspr	SPRG3,r4
+	li	r3,0
+	mtspr	SPRG2,r3	/* 0 => r1 has kernel sp */
+
+	/* enable MMU and jump to start_secondary */
+	li	r4,MSR_KERNEL
+	lis	r3,start_secondary@h
+	ori	r3,r3,start_secondary@l
+	mtspr	SRR0,r3
+	mtspr	SRR1,r4
+	rfi
+
 #endif /* CONFIG_SMP */
-	
+
 /*
- * This is where the main kernel code starts.
+ * Enable caches and 604-specific features if necessary.
  */
-start_here:
-	/*
-	 * Enable caches and 604-specific features if necessary.
-	 */
+enable_caches:
 	mfspr	r9,PVR
 	rlwinm	r9,r9,16,16,31
 	cmpi	0,r9,1
@@ -1044,25 +1090,57 @@ start_here:
 	bne	2,5f
 	ori	r11,r11,HID0_BTCD
 5:	mtspr	HID0,r11		/* superscalar exec & br history tbl */
-4:
-#ifdef __SMP__
-	/* if we're the second cpu stack and r2 are different
-	* and we want to not clear the bss -- Cort */
-	lis	r5,first_cpu_booted@h
-	ori	r5,r5,first_cpu_booted@l
-	lwz	r5,0(r5)
-	cmpi	0,r5,0
-	beq	99f
+4:	blr
 
-	/* get current */
-	lis	r2,current_set@h
-	ori	r2,r2,current_set@l
-	slwi	r24,r24,2			/* cpu # to current_set[cpu#] */
-	add	r2,r2,r24
-	lwz	r2,0(r2)
-	b	10f
-99:	
-#endif /* __SMP__ */
+/*
+ * Load stuff into the MMU.  Intended to be called with
+ * IR=0 and DR=0.
+ */
+load_up_mmu:
+	/* Load the SDR1 register (hash table base & size) */
+	lis	r6,_SDR1@ha
+	tophys(r6,r6)
+#ifdef CONFIG_PPC64	
+	ld	r6,_SDR1@l(r6)
+	mtspr	SDR1,r6
+	/* clear the v bit in the ASR so we can
+	 * behave as if we have segment registers 
+	 * -- Cort
+	 */
+	clrldi	r6,r6,63
+	mtasr	r6
+#else
+	lwz	r6,_SDR1@l(r6)
+	mtspr	SDR1,r6
+#endif /* CONFIG_PPC64 */
+	li	r0,16		/* load up segment register values */
+	mtctr	r0		/* for context 0 */
+	lis	r3,0x2000	/* Ku = 1, VSID = 0 */
+	li	r4,0
+3:	mtsrin	r3,r4
+	addi	r3,r3,1		/* increment VSID */
+	addis	r4,r4,0x1000	/* address of next segment */
+	bdnz	3b
+/* Load the BAT registers with the values set up by MMU_init.
+   MMU_init takes care of whether we're on a 601 or not. */
+	mfpvr	r3
+	srwi	r3,r3,16
+	cmpwi	r3,1
+	lis	r3,BATS@ha
+	addi	r3,r3,BATS@l
+	tophys(r3,r3)
+	LOAD_BAT(0,r3,r4,r5)
+	LOAD_BAT(1,r3,r4,r5)
+	LOAD_BAT(2,r3,r4,r5)
+	LOAD_BAT(3,r3,r4,r5)
+	blr
+
+/*
+ * This is where the main kernel code starts.
+ */
+start_here:
+	bl	enable_caches
+
 	/* ptr to current */
 	lis	r2,init_task_union@h
 	ori	r2,r2,init_task_union@l
@@ -1081,9 +1159,6 @@ start_here:
 3:	stwu	r0,4(r8)
 	bdnz	3b
 2:
-#ifdef __SMP__	
-10:
-#endif /* __SMP__ */
 	/* stack */
 	addi	r1,r2,TASK_UNION_SIZE
 	li	r0,0
@@ -1104,12 +1179,6 @@ start_here:
  * for SDR1 (hash table pointer) and the segment registers
  * and change to using our exception vectors.
  */
-	lis	r6,_SDR1@ha
-#ifdef CONFIG_PPC64	
-	ld	r6,_SDR1@l(r6)
-#else
-	lwz	r6,_SDR1@l(r6)
-#endif		
 	lis	r4,2f@h
 	ori	r4,r4,2f@l
 	tophys(r4,r4)
@@ -1126,42 +1195,7 @@ start_here:
 	tlbsync			/* ... on all CPUs */
 	sync
 #endif
-	mtspr	SDR1,r6
-#ifdef CONFIG_PPC64
-	/* clear the v bit in the ASR so we can
-	 * behave as if we have segment registers 
-	 * -- Cort
-	 */
-	clrldi	r6,r6,63
-	mtasr	r6
-#endif /* CONFIG_PPC64 */
-	li	r0,16		/* load up segment register values */
-	mtctr	r0		/* for context 0 */
-	lis	r3,0x2000	/* Ku = 1, VSID = 0 */
-	li	r4,0
-3:	mtsrin	r3,r4
-	addi	r3,r3,1		/* increment VSID */
-	addis	r4,r4,0x1000	/* address of next segment */
-	bdnz	3b
-/* Load the BAT registers with the values set up by MMU_init.
-   MMU_init takes care of whether we're on a 601 or not. */
-	mfpvr	r3
-	srwi	r3,r3,16
-	cmpwi	r3,1
-	lis	r3,BATS@ha
-	addi	r3,r3,BATS@l
-	tophys(r3,r3)
-#ifdef CONFIG_PPC64
-	LOAD_BAT(0,r3,r4,r5)
-	LOAD_BAT(1,r3,r4,r5)
-	LOAD_BAT(2,r3,r4,r5)
-	LOAD_BAT(3,r3,r4,r5)
-#else /* CONFIG_PPC64 */
-	LOAD_BAT(0,r3,r4,r5)
-	LOAD_BAT(1,r3,r4,r5)
-	LOAD_BAT(2,r3,r4,r5)
-	LOAD_BAT(3,r3,r4,r5)
-#endif /* CONFIG_PPC64 */
+	bl	load_up_mmu
 
 /* Set up for using our exception vectors */
 	/* ptr to phys current thread */
@@ -1174,20 +1208,6 @@ start_here:
 	li	r4,MSR_KERNEL
 	lis	r3,start_kernel@h
 	ori	r3,r3,start_kernel@l
-#ifdef __SMP__
-	/* the second time through here we go to
-	 * start_secondary(). -- Cort
-	 */
-	lis	r5,first_cpu_booted@h
-	ori	r5,r5,first_cpu_booted@l
-	tophys(r5,r5)
-	lwz	r5,0(r5)
-	cmpi	0,r5,0
-	beq	10f
-	lis	r3,start_secondary@h
-	ori	r3,r3,start_secondary@l
-10:	
-#endif /* __SMP__ */
 	mtspr	SRR0,r3
 	mtspr	SRR1,r4
 	rfi			/* enable MMU and jump to start_kernel */

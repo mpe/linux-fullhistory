@@ -47,7 +47,7 @@
 #include <asm/segment.h>
 #include <linux/types.h>
 #include <linux/wrapper.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 #include <linux/videodev.h>
 

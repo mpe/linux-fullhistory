@@ -1438,7 +1438,7 @@ static void NCR5380_main(void) {
 
 #ifndef DONT_USE_INTR
 #include <linux/blk.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 /*
  * Function : void NCR5380_intr (int irq)

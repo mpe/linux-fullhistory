@@ -37,7 +37,7 @@
 #include <linux/mca.h>
 #include <asm/system.h>
 #ifndef OLDKERN
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #endif
 #include <asm/io.h>
 #include "sd.h"

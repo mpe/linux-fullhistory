@@ -54,19 +54,23 @@ static inline void end_bh_atomic(void)
 /* These are for the IRQs testing the lock */
 static inline int softirq_trylock(int cpu)
 {
-	if (!test_and_set_bit(0,&global_bh_count)) {
-		if (atomic_read(&global_bh_lock) &&
-		    ppc_local_bh_count[cpu] == 0) {
-			++ppc_local_bh_count[cpu];
-			return 1;
+	if (ppc_local_bh_count[cpu] == 0) {
+		ppc_local_bh_count[cpu] = 1;
+		if (!test_and_set_bit(0,&global_bh_count)) {
+			mb();
+			if (atomic_read(&global_bh_lock) == 0)
+				return 1;
+			clear_bit(0,&global_bh_count);
 		}
-		clear_bit(0,&global_bh_count);
+		ppc_local_bh_count[cpu] = 0;
+		mb();
 	}
 	return 0;
 }
 
 static inline void softirq_endlock(int cpu)
 {
+	mb();
 	ppc_local_bh_count[cpu]--;
 	clear_bit(0,&global_bh_count);
 }

@@ -1,6 +1,6 @@
 /* drivers/atm/suni.c - PMC SUNI (PHY) driver */
  
-/* Written 1995-1998 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #include <linux/module.h>
@@ -45,7 +45,7 @@ struct suni_priv {
   PUT((GET(reg) & ~(mask)) | ((value) << (shift)),reg)
 
 
-static struct timer_list poll_timer = { NULL, NULL, 0L, 0L, NULL };
+static struct timer_list poll_timer;
 static int start_timer = 1;
 static struct suni_priv *sunis = NULL;
 
@@ -91,11 +91,7 @@ static void suni_hz(unsigned long dummy)
 		    ((GET(TACP_TCCM) & 7) << 16);
 		if (stats->tx_cells < 0) stats->tx_cells = LONG_MAX;
 	}
-	if (!start_timer) {
-		del_timer(&poll_timer);
-		poll_timer.expires = jiffies+HZ;
-		add_timer(&poll_timer);
-	}
+	if (!start_timer) mod_timer(&poll_timer,jiffies+HZ);
 }
 
 
@@ -244,7 +240,7 @@ static int suni_start(struct atm_dev *dev)
 	else {
 		start_timer = 0;
 		restore_flags(flags);
-		/*init_timer(&poll_timer);*/
+		init_timer(&poll_timer);
 		poll_timer.expires = jiffies+HZ;
 		poll_timer.function = suni_hz;
 #if 0
@@ -282,9 +278,10 @@ int __init suni_init(struct atm_dev *dev)
 }
 
 
-#ifdef MODULE
-
 EXPORT_SYMBOL(suni_init);
+
+
+#ifdef MODULE
 
 
 int init_module(void)

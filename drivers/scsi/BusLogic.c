@@ -43,9 +43,9 @@
 #include <linux/sched.h>
 #include <linux/stat.h>
 #include <linux/pci.h>
+#include <linux/spinlock.h>
 #include <asm/dma.h>
 #include <asm/io.h>
-#include <asm/spinlock.h>
 #include <asm/system.h>
 #include "scsi.h"
 #include "hosts.h"

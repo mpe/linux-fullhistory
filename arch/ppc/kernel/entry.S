@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/entry.S
  *
- *  $Id: entry.S,v 1.2 1999/08/23 02:53:16 paulus Exp $
+ *  $Id: entry.S,v 1.3 1999/09/05 11:56:26 paulus Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -291,14 +291,12 @@ ret_from_syscall:
 	.globl	ret_from_except
 ret_from_except:
 0:	mfmsr	r30		/* Disable interrupts */
-	li	r3,0
-	ori	r3,r3,MSR_EE
-	andc	r30,r30,r3
+	rlwinm	r30,r30,0,17,15	/* clear MSR_EE */
 	SYNC			/* Some chip revs need this... */
 	mtmsr	r30
 	SYNC
 	lwz	r5,_MSR(r1)
-	and.	r5,r5,r4
+	andi.	r5,r5,MSR_EE
 	beq	2f
 3:	lis	r4,ppc_n_lost_interrupts@ha
 	lwz	r4,ppc_n_lost_interrupts@l(r4)

@@ -45,11 +45,11 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/errno.h>
+#include <linux/spinlock.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/byteorder.h>
-#include <asm/spinlock.h>
 
 
 #include "i2o_proc.h"

@@ -21,6 +21,7 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/init.h>
+#include <linux/spinlock.h>
 
 #include <asm/byteorder.h>
 
@@ -31,7 +32,6 @@
 #include <asm/sbus.h>
 #include <asm/dma.h>
 #include <asm/system.h>
-#include <asm/spinlock.h>
 #include <asm/machines.h>
 #include <asm/ptrace.h>
 #include <asm/pgtable.h>

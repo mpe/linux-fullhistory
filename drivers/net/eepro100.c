@@ -94,7 +94,7 @@ static int debug = -1;			/* The debug level */
 #include <linux/bios32.h>		/* Ignore the bogus warning in 2.1.100+ */
 #endif
 #endif
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 
@@ -583,10 +583,10 @@ int eepro100_init(struct net_device *dev)
 #endif
 		/* Remove I/O space marker in bit 0. */
 		if (pciaddr & 1) {
-			ioaddr = pciaddr & ~3;
+			ioaddr = pciaddr & ~3UL;
 			if (check_region(ioaddr, 32))
 				continue;
-		} else if ((ioaddr = (long)ioremap(pciaddr & ~0xf, 0x1000)) == 0) {
+		} else if ((ioaddr = (long)ioremap(pciaddr & ~0xfUL, 0x1000)) == 0) {
 			printk(KERN_INFO "Failed to map PCI address %#x.\n",
 				   pciaddr);
 			continue;

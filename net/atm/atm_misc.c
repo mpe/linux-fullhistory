@@ -23,6 +23,26 @@ int atm_charge(struct atm_vcc *vcc,int truesize)
 }
 
 
+struct sk_buff *atm_alloc_charge(struct atm_vcc *vcc,int pdu_size,
+    int gfp_flags)
+{
+	int guess = atm_guess_pdu2truesize(pdu_size);
+
+	atm_force_charge(vcc,guess);
+	if (atomic_read(&vcc->rx_inuse) <= vcc->rx_quota) {
+		struct sk_buff *skb = alloc_skb(pdu_size,gfp_flags);
+
+		if (skb) {
+			atomic_add(skb->truesize-guess,&vcc->rx_inuse);
+			return skb;
+		}
+	}
+	atm_return(vcc,guess);
+	vcc->stats->rx_drop++;
+	return NULL;
+}
+
+
 static int check_ci(struct atm_vcc *vcc,short vpi,int vci)
 {
 	struct atm_vcc *walk;
@@ -118,6 +138,6 @@ int atm_pcr_goal(struct atm_trafprm *tp)
 
 
 EXPORT_SYMBOL(atm_charge);
-EXPORT_SYMBOL(atm_return);
+EXPORT_SYMBOL(atm_alloc_charge);
 EXPORT_SYMBOL(atm_find_ci);
 EXPORT_SYMBOL(atm_pcr_goal);

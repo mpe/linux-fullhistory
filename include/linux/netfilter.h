@@ -57,23 +57,29 @@ struct nf_hook_ops
 	int priority;
 };
 
-struct nf_setsockopt_ops
+struct nf_sockopt_ops
 {
 	struct list_head list;
 
 	int pf;
-	int optmin;
-	int optmax;
-	int (*fn)(int optval, void *user, unsigned int len);
+
+	/* Non-inclusive ranges: use 0/0/NULL to never get called. */
+	int set_optmin;
+	int set_optmax;
+	int (*set)(struct sock *sk, int optval, void *user, unsigned int len);
+
+	int get_optmin;
+	int get_optmax;
+	int (*get)(struct sock *sk, int optval, void *user, int *len);
 };
 
 /* Function to register/unregister hook points. */
 int nf_register_hook(struct nf_hook_ops *reg);
 void nf_unregister_hook(struct nf_hook_ops *reg);
 
-/* Functions to register setsockopt ranges (inclusive). */
-int nf_register_sockopt(struct nf_setsockopt_ops *reg);
-void nf_unregister_sockopt(struct nf_setsockopt_ops *reg);
+/* Functions to register get/setsockopt ranges (non-inclusive). */
+int nf_register_sockopt(struct nf_sockopt_ops *reg);
+void nf_unregister_sockopt(struct nf_sockopt_ops *reg);
 
 extern struct list_head nf_hooks[NPROTO][NF_MAX_HOOKS];
 
@@ -114,7 +120,10 @@ void nf_cacheflush(int pf, unsigned int hook, const void *packet,
 		   __u32 packetcount, __u32 bytecount);
 
 /* Call setsockopt() */
-int nf_setsockopt(int pf, int optval, char *opt, unsigned int len);
+int nf_setsockopt(struct sock *sk, int pf, int optval, char *opt, 
+		  int len);
+int nf_getsockopt(struct sock *sk, int pf, int optval, char *opt,
+		  int *len);
 
 struct nf_wakeme
 {

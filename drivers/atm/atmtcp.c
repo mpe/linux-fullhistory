@@ -1,13 +1,13 @@
 /* drivers/atm/atmtcp.c - ATM over TCP "device" driver */
 
-/* Written 1997,1998 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1997-1999 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #include <linux/module.h>
+#include <linux/wait.h>
 #include <linux/atmdev.h>
 #include <linux/atm_tcp.h>
 #include <asm/uaccess.h>
-#include "../../net/atm/tunable.h" /* @@@ fix this */
 #include "../../net/atm/protocols.h" /* @@@ fix this */
 
 
@@ -26,6 +26,75 @@ struct atmtcp_dev_data {
 #define MAX_VCI_BITS 16
 
 
+/*
+ * Hairy code ahead: the control VCC may be closed while we're still
+ * waiting for an answer, so we need to re-validate out_vcc every once
+ * in a while.
+ */
+
+
+static int atmtcp_send_control(struct atm_vcc *vcc,int type,
+    const struct atmtcp_control *msg,unsigned short flag)
+{
+	struct atm_vcc *out_vcc;
+	struct sk_buff *skb;
+	struct atmtcp_control *new_msg;
+	unsigned short old_flags;
+
+	out_vcc = PRIV(vcc->dev) ? PRIV(vcc->dev)->vcc : NULL;
+	if (!out_vcc) return -EUNATCH;
+	skb = alloc_skb(sizeof(*msg),GFP_KERNEL);
+	if (!skb) return -ENOMEM;
+	mb();
+	out_vcc = PRIV(vcc->dev) ? PRIV(vcc->dev)->vcc : NULL;
+	if (!out_vcc) {
+		dev_kfree_skb(skb);
+		return -EUNATCH;
+	}
+	atm_force_charge(out_vcc,skb->truesize);
+	new_msg = (struct atmtcp_control *) skb_put(skb,sizeof(*new_msg));
+	*new_msg = *msg;
+	new_msg->hdr.length = ATMTCP_HDR_MAGIC;
+	new_msg->type = type;
+	new_msg->vcc = (unsigned long) vcc;
+	old_flags = vcc->flags;
+	out_vcc->push(out_vcc,skb);
+	while (!((vcc->flags ^ old_flags) & flag)) {
+		mb();
+		out_vcc = PRIV(vcc->dev) ? PRIV(vcc->dev)->vcc : NULL;
+		if (!out_vcc) return -EUNATCH;
+		sleep_on(&vcc->sleep);
+		
+	}
+	return 0;
+}
+
+
+static int atmtcp_recv_control(const struct atmtcp_control *msg)
+{
+	struct atm_vcc *vcc = (struct atm_vcc *) msg->vcc;
+
+	vcc->vpi = msg->addr.sap_addr.vpi;
+	vcc->vci = msg->addr.sap_addr.vci;
+	vcc->qos = msg->qos;
+	vcc->reply = msg->result;
+	switch (msg->type) {
+	    case ATMTCP_CTRL_OPEN:
+		vcc->flags ^= ATM_VF_READY;
+		break;
+	    case ATMTCP_CTRL_CLOSE:
+		vcc->flags ^= ATM_VF_ADDR;
+		break;
+	    default:
+		printk(KERN_ERR "atmtcp_recv_control: unknown type %d\n",
+		    msg->type);
+		return -EINVAL;
+	}
+	wake_up(&vcc->sleep);
+	return 0;
+}
+
+
 static void atmtcp_v_dev_close(struct atm_dev *dev)
 {
 	MOD_DEC_USE_COUNT;
@@ -34,21 +103,38 @@ static void atmtcp_v_dev_close(struct atm_dev *dev)
 
 static int atmtcp_v_open(struct atm_vcc *vcc,short vpi,int vci)
 {
+	struct atmtcp_control msg;
 	int error;
 
-	error = atm_find_ci(vcc,&vpi,&vci);
+	memset(&msg,0,sizeof(msg));
+	msg.addr.sap_family = AF_ATMPVC;
+	msg.hdr.vpi = htons(vpi);
+	msg.addr.sap_addr.vpi = vpi;
+	msg.hdr.vci = htons(vci);
+	msg.addr.sap_addr.vci = vci;
+	error = atm_find_ci(vcc,&msg.addr.sap_addr.vpi,&msg.addr.sap_addr.vci);
 	if (error) return error;
-	vcc->vpi = vpi;
-	vcc->vci = vci;
 	if (vpi == ATM_VPI_UNSPEC || vci == ATM_VCI_UNSPEC) return 0;
-	vcc->flags |= ATM_VF_ADDR | ATM_VF_READY;
-	return 0;
+	msg.type = ATMTCP_CTRL_OPEN;
+	msg.qos = vcc->qos;
+	vcc->flags |= ATM_VF_ADDR;
+	vcc->flags &= ~ATM_VF_READY; /* just in case ... */
+	error = atmtcp_send_control(vcc,ATMTCP_CTRL_OPEN,&msg,ATM_VF_READY);
+	if (error) return error;
+	return vcc->reply;
 }
 
 
 static void atmtcp_v_close(struct atm_vcc *vcc)
 {
-	vcc->flags &= ~(ATM_VF_READY | ATM_VF_ADDR);
+	struct atmtcp_control msg;
+
+	memset(&msg,0,sizeof(msg));
+	msg.addr.sap_family = AF_ATMPVC;
+	msg.addr.sap_addr.vpi = vcc->vpi;
+	msg.addr.sap_addr.vci = vcc->vci;
+	vcc->flags &= ~ATM_VF_READY;
+	(void) atmtcp_send_control(vcc,ATMTCP_CTRL_CLOSE,&msg,ATM_VF_ADDR);
 }
 
 
@@ -89,12 +175,7 @@ static int atmtcp_v_send(struct atm_vcc *vcc,struct sk_buff *skb)
 		return -ENOLINK;
 	}
 	size = skb->len+sizeof(struct atmtcp_hdr);
-	if (!atm_charge(out_vcc,atm_pdu2truesize(size))) new_skb = NULL;
-	else {
-		new_skb = alloc_skb(size,GFP_ATOMIC);
-		if (!new_skb)
-			atm_return(out_vcc,atm_pdu2truesize(size));
-	}
+	new_skb = atm_alloc_charge(out_vcc,size,GFP_ATOMIC);
 	if (!new_skb) {
 		if (vcc->pop) vcc->pop(vcc,skb);
 		else dev_kfree_skb(skb);
@@ -128,14 +209,18 @@ static void atmtcp_c_close(struct atm_vcc *vcc)
 {
 	struct atm_dev *atmtcp_dev;
 	struct atmtcp_dev_data *dev_data;
+	struct atm_vcc *walk;
 
 	atmtcp_dev = (struct atm_dev *) vcc->dev_data;
 	dev_data = PRIV(atmtcp_dev);
 	dev_data->vcc = NULL;
 	if (dev_data->persist) return;
+	PRIV(atmtcp_dev) = NULL;
 	kfree(dev_data);
 	shutdown_atm_dev(atmtcp_dev);
 	vcc->dev_data = NULL;
+	for (walk = atmtcp_dev->vccs; walk; walk = walk->next)
+		wake_up(&walk->sleep);
 }
 
 
@@ -145,37 +230,38 @@ static int atmtcp_c_send(struct atm_vcc *vcc,struct sk_buff *skb)
 	struct atmtcp_hdr *hdr;
 	struct atm_vcc *out_vcc;
 	struct sk_buff *new_skb;
+	int result = 0;
 
 	if (!skb->len) return 0;
 	dev = vcc->dev_data;
-	hdr = (void *) skb->data;
+	hdr = (struct atmtcp_hdr *) skb->data;
+	if (hdr->length == ATMTCP_HDR_MAGIC) {
+		result = atmtcp_recv_control(
+		    (struct atmtcp_control *) skb->data);
+		goto done;
+	}
 	for (out_vcc = dev->vccs; out_vcc; out_vcc = out_vcc->next)
 		if (out_vcc->vpi == ntohs(hdr->vpi) &&
 		    out_vcc->vci == ntohs(hdr->vci) &&
 		    out_vcc->qos.rxtp.traffic_class != ATM_NONE)
 			break;
 	if (!out_vcc) {
-		if (vcc->pop) vcc->pop(vcc,skb);
-		else dev_kfree_skb(skb);
 		vcc->stats->tx_err++;
-		return 0;
+		goto done;
 	}
 	skb_pull(skb,sizeof(struct atmtcp_hdr));
-	if (!atm_charge(out_vcc,atm_pdu2truesize(skb->len))) new_skb = NULL;
-	else {
-		new_skb = alloc_skb(skb->len,GFP_KERNEL);
-		if (!new_skb) atm_return(out_vcc,atm_pdu2truesize(skb->len));
-        }
+	new_skb = atm_alloc_charge(out_vcc,skb->len,GFP_KERNEL);
 	if (!new_skb) {
-		if (vcc->pop) vcc->pop(vcc,skb);
-		else dev_kfree_skb(skb);
-	 	return -ENOBUFS;
+		result = -ENOBUFS;
+		goto done;
 	}
+	new_skb->stamp = xtime;
 	memcpy(skb_put(new_skb,skb->len),skb->data,skb->len);
+	out_vcc->push(out_vcc,new_skb);
+done:
 	if (vcc->pop) vcc->pop(vcc,skb);
 	else dev_kfree_skb(skb);
-	out_vcc->push(out_vcc,new_skb);
-	return 0;
+	return result;
 }
 
 
@@ -323,8 +409,12 @@ int init_module(void)
 	return 0;
 }
 
+
 void cleanup_module(void)
 {
+	atm_tcp_ops.attach = NULL;
+	atm_tcp_ops.create_persistent = NULL;
+	atm_tcp_ops.remove_persistent = NULL;
 }
 
 #else
@@ -336,4 +426,3 @@ struct atm_tcp_ops atm_tcp_ops = {
 };
 
 #endif
-    

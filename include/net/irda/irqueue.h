@@ -28,7 +28,7 @@
  ********************************************************************/
 
 #include <linux/types.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 #ifndef QUEUE_H
 #define QUEUE_H

@@ -33,9 +33,9 @@
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
 #include <linux/init.h>
+#include <linux/spinlock.h>
 #include <asm/dma.h>
 #include <asm/system.h>
-#include <asm/spinlock.h>
 #include <asm/io.h>
 #include <linux/blk.h>
 #include "scsi.h"

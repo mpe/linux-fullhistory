@@ -15,13 +15,13 @@
 #include <linux/sched.h>
 #include <linux/kernel_stat.h>
 #include <linux/interrupt.h>
+#include <linux/spinlock.h>
 #include <asm/machdep.h>
 #include <asm/irq.h>
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/traps.h>
 #include <asm/ptrace.h>
-#include <asm/spinlock.h>
 #include "ints.h"
 
 /* Each ipl has a linked list of interrupt service routines.

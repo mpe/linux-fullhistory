@@ -1,5 +1,5 @@
 /*
- * $Id: pci.c,v 1.56 1999/08/31 15:42:37 cort Exp $
+ * $Id: pci.c,v 1.60 1999/09/08 03:04:07 cort Exp $
  * Common pmac/prep/chrp pci routines. -- Cort
  */
 
@@ -21,6 +21,8 @@
 #include <asm/gg2.h>
 
 #include "pci.h"
+
+static void __init pcibios_claim_resources(struct pci_bus *);
 
 unsigned long isa_io_base     = 0;
 unsigned long isa_mem_base    = 0;
@@ -68,17 +70,46 @@ struct pci_ops generic_pci_ops =
 void __init pcibios_init(void)
 {
 	printk("PCI: Probing PCI hardware\n");
+	ioport_resource.end = ~0L;
 	pci_scan_bus(0, &generic_pci_ops, NULL);
-	
+	pcibios_claim_resources(pci_root);
+	if ( ppc_md.pcibios_fixup )
+		ppc_md.pcibios_fixup();
 }
 
-void __init pcibios_fixup(void)
+static void __init pcibios_claim_resources(struct pci_bus *bus)
 {
-	ppc_md.pcibios_fixup();
+	struct pci_dev *dev;
+	int idx;
+
+	while (bus)
+	{
+		for (dev=bus->devices; dev; dev=dev->sibling)
+		{
+			for (idx = 0; idx < PCI_NUM_RESOURCES; idx++)
+			{
+				struct resource *r = &dev->resource[idx];
+				struct resource *pr;
+				if (!r->start)
+					continue;
+				pr = pci_find_parent_resource(dev, r);
+				if (!pr || request_resource(pr, r) < 0)
+				{
+					printk(KERN_ERR "PCI: Address space collision on region %d of device %s\n", idx, dev->name);
+					/* We probably should disable the region, shouldn't we? */
+				}
+			}
+		}
+		if (bus->children)
+			pcibios_claim_resources(bus->children);
+		bus = bus->next;
+	}
 }
 
 void __init pcibios_fixup_bus(struct pci_bus *bus)
 {
+	if ( ppc_md.pcibios_fixup_bus )
+		ppc_md.pcibios_fixup_bus(bus);
 }
 
 char __init *pcibios_setup(char *str)
@@ -110,3 +141,8 @@ void __init fix_intr(struct device_node *node, struct pci_dev *dev)
 	}
 }
 #endif
+
+int pcibios_assign_resource(struct pci_dev *pdev, int resource)
+{
+	return 0;
+}

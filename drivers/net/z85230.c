@@ -46,7 +46,7 @@
 #include <asm/io.h>
 #define RT_LOCK
 #define RT_UNLOCK
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 #include "z85230.h"
 #include "syncppp.h"

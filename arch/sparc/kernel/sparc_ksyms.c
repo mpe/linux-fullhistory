@@ -15,6 +15,7 @@
 #include <linux/string.h>
 #include <linux/interrupt.h>
 #include <linux/in6.h>
+#include <linux/spinlock.h>
 
 #include <asm/oplib.h>
 #include <asm/delay.h>
@@ -29,7 +30,6 @@
 #include <asm/smp.h>
 #include <asm/mostek.h>
 #include <asm/ptrace.h>
-#include <asm/spinlock.h>
 #include <asm/softirq.h>
 #include <asm/hardirq.h>
 #include <asm/user.h>

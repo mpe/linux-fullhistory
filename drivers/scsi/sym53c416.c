@@ -30,10 +30,10 @@
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <linux/proc_fs.h>
+#include <linux/spinlock.h>
 #include <asm/dma.h>
 #include <asm/system.h>
 #include <asm/io.h>
-#include <asm/spinlock.h>
 #include <linux/blk.h>
 #include <linux/version.h>
 #include "scsi.h"

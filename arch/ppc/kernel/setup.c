@@ -1,5 +1,5 @@
 /*
- * $Id: setup.c,v 1.146 1999/08/31 06:54:08 davem Exp $
+ * $Id: setup.c,v 1.148 1999/09/05 11:56:34 paulus Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
@@ -279,9 +279,11 @@ int get_cpuinfo(char *buffer)
 				for ( s = 0; (s < i) && cpu_node->next ;
 				      s++, cpu_node = cpu_node->next )
 					/* nothing */ ;
+#if 0 /* SMP Pmacs don't have all cpu nodes -- Cort */
 				if ( s != i )
 					printk("get_cpuinfo(): ran out of "
 					       "cpu nodes.\n");
+#endif
 			}
 			fp = (int *) get_property(cpu_node, "clock-frequency", NULL);
 			if ( !fp ) break;
@@ -343,7 +345,6 @@ unsigned long __init
 identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		 unsigned long r6, unsigned long r7)
 {
-	
 #ifdef __SMP__
 	if ( first_cpu_booted ) return 0;
 #endif /* __SMP__ */

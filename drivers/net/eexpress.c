@@ -121,7 +121,7 @@
 #include <linux/skbuff.h>
 #include <linux/malloc.h>
 
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 #ifndef NET_DEBUG
 #define NET_DEBUG 4

@@ -56,7 +56,7 @@
 #include <linux/stat.h>
 #include <linux/config.h>	/* for CONFIG_PCI */
 #include <linux/blk.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 struct proc_dir_entry proc_scsi_eata_pio = {
     PROC_SCSI_EATA_PIO, 9, "eata_pio",

@@ -33,7 +33,7 @@ extern unsigned int local_irq_count;
 #else /* (__SMP__) */
 
 #include <asm/atomic.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include <asm/system.h>
 #include <asm/smp.h>
 

@@ -252,6 +252,10 @@ struct ucred {
 #define TCP_NODELAY	1
 #define TCP_MAXSEG	2
 #define TCP_CORK	3	/* Linux specific (for use with sendfile) */
+#define TCP_KEEPIDLE	4
+#define TCP_KEEPINTVL	5
+#define TCP_KEEPCNT	6
+#define TCP_SYNCNT	7
 
 #ifdef __KERNEL__
 extern int memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len);

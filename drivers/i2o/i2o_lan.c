@@ -38,7 +38,7 @@
 #include <linux/malloc.h>
 #include <linux/trdevice.h>
 #include <linux/init.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include <asm/io.h>
 
 #include <linux/errno.h>

@@ -11,9 +11,9 @@
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/stddef.h>
+#include <linux/spinlock.h>
 
 #include <asm/page.h>
-#include <asm/spinlock.h>
 #include <asm/processor.h>
 
 /*

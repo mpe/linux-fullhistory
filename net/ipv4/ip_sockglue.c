@@ -5,7 +5,7 @@
  *
  *		The IP to API glue.
  *		
- * Version:	$Id: ip_sockglue.c,v 1.44 1999/08/20 11:05:49 davem Exp $
+ * Version:	$Id: ip_sockglue.c,v 1.45 1999/09/06 04:58:03 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -598,13 +598,12 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
  
 		default:
 #ifdef CONFIG_NETFILTER
-			release_sock(sk);
-			return nf_setsockopt(PF_INET, optname, optval, 
-					     (unsigned int)optlen);
+			err = nf_setsockopt(sk, PF_INET, optname, optval, 
+					    optlen);
 #else
 			err = -ENOPROTOOPT;
-			break;
 #endif
+			break;
 	}
 	release_sock(sk);
 	return err;
@@ -758,8 +757,17 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 			return put_user(len, optlen);
 		}
 		default:
+#ifdef CONFIG_NETFILTER
+			val = nf_getsockopt(sk, PF_INET, optname, optval, 
+					    &len);
+			release_sock(sk);
+			if (val >= 0)
+				val = put_user(len, optlen);
+			return val;
+#else
 			release_sock(sk);
 			return -ENOPROTOOPT;
+#endif
 	}
 	release_sock(sk);
 	

@@ -18,8 +18,7 @@ static int check_addr(struct sockaddr_atmsvc *addr)
 
 	if (addr->sas_family != AF_ATMSVC) return -EAFNOSUPPORT;
 	if (!*addr->sas_addr.pub)
-		if (!*addr->sas_addr.prv) return -EINVAL;
-		else return 0;
+		return *addr->sas_addr.prv ? 0 : -EINVAL;
 	for (i = 1; i < ATM_E164_LEN+1; i++) /* make sure it's \0-terminated */
 		if (!addr->sas_addr.pub[i]) return 0;
 	return -EINVAL;

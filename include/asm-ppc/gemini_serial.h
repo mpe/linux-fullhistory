@@ -4,14 +4,20 @@
 #include <linux/config.h>
 #include <asm/gemini.h>
 
+#ifdef CONFIG_SERIAL_MANY_PORTS
+#define RS_TABLE_SIZE  64
+#else
+#define RS_TABLE_SIZE  4
+#endif
+
 /* Rate for the 24.576 Mhz clock for the onboard serial chip */
 #define BASE_BAUD  (24576000 / 16)
 
 #ifdef CONFIG_SERIAL_DETECT_IRQ
-#define STD_COM_FLAGS (ASYNC_BOOT_AUTOCONF|ASYNC_SKIP_TEST|ASYNC_AUTO_IRQ)
+#define STD_COM_FLAGS (/*ASYNC_BOOT_AUTOCONF|*/ASYNC_SKIP_TEST|ASYNC_AUTO_IRQ)
 #define STD_COM4_FLAGS (ASYNC_BOOT_AUTOCONF|ASYNC_AUTO_IRQ)
 #else
-#define STD_COM_FLAGS (ASYNC_BOOT_AUTOCONF|ASYNC_SKIP_TEST)
+#define STD_COM_FLAGS (/*ASYNC_BOOT_AUTOCONF|*/ASYNC_SKIP_TEST)
 #define STD_COM4_FLAGS (ASYNC_BOOT_AUTOCONF)
 #endif
 

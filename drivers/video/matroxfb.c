@@ -111,9 +111,9 @@
 #include <linux/init.h>
 #include <linux/timer.h>
 #include <linux/pci.h>
+#include <linux/spinlock.h>
 
 #include <asm/io.h>
-#include <asm/spinlock.h>
 #include <asm/unaligned.h>
 #ifdef CONFIG_MTRR
 #include <asm/mtrr.h>

@@ -17,7 +17,7 @@
 
 #include <linux/config.h>
 
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/tty.h>

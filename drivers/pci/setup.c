@@ -26,7 +26,6 @@
 # define DBGC(args)
 #endif
 
-
 int __init
 pci_claim_resource(struct pci_dev *dev, int resource)
 {

@@ -237,9 +237,9 @@ void usb_free_dev(struct usb_device *dev)
 {
 	if (atomic_dec_and_test(&dev->refcnt)) {
 		usb_destroy_configuration(dev);
-		kfree(dev);
 
 		dev->bus->op->deallocate(dev);
+		kfree(dev);
 	}
 }
 

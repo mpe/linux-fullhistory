@@ -5,8 +5,8 @@ typedef unsigned int dmach_t;
 
 #include <linux/config.h>
 #include <linux/kernel.h>
+#include <linux/spinlock.h>
 #include <asm/irq.h>
-#include <asm/spinlock.h>
 #include <asm/arch/dma.h>
 
 /*

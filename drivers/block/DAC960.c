@@ -41,7 +41,7 @@
 #include <linux/pci.h>
 #include <asm/io.h>
 #include <asm/segment.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include <asm/uaccess.h>
 #include "DAC960.h"
 

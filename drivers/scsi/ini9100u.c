@@ -130,7 +130,7 @@
 #endif
 #include <linux/blk.h>
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #endif
 #include <linux/stat.h>
 #include <linux/config.h>

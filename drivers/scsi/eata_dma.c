@@ -80,7 +80,7 @@
 #include <asm/pgtable.h>
 #ifdef __mips__
 #include <asm/cachectl.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #endif
 #include <linux/blk.h>
 #include "scsi.h"

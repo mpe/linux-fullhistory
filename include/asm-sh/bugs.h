@@ -14,7 +14,7 @@
 
 #include <asm/processor.h>
 
-__initfunc(static void check_bugs(void))
+static void __init check_bugs(void)
 {
 }
 #endif /* __ASM_SH_BUGS_H */

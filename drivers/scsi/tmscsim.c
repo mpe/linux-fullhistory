@@ -188,13 +188,13 @@
  * undef  : traditional save_flags; cli; restore_flags;
  */
 
-//#define DEBUG_SPINLOCKS 2	/* Set to 0, 1 or 2 in include/asm/spinlock.h */
+//#define DEBUG_SPINLOCKS 2	/* Set to 0, 1 or 2 in include/linux/spinlock.h */
 
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
 
 #if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,30)
 # include <linux/init.h>
-# include <asm/spinlock.h>
+# include <linux/spinlock.h>
 #endif
 
 

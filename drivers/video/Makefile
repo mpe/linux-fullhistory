@@ -281,6 +281,13 @@ L_OBJS += sbusfb.o
     M_OBJS += cgfourteenfb.o
     endif
   endif
+  ifeq ($(CONFIG_FB_P9100),y)
+    L_OBJS += p9100fb.o
+  else
+    ifeq ($(CONFIG_FB_P9100),m)
+    M_OBJS += p9100fb.o
+    endif
+  endif
   ifeq ($(CONFIG_FB_LEO),y)
     L_OBJS += leofb.o
   else
@@ -331,6 +338,13 @@ else
     else
       ifeq ($(CONFIG_FB_CGFOURTEEN),m)
       M_OBJS += cgfourteenfb.o
+      endif
+    endif
+    ifeq ($(CONFIG_FB_P9100),y)
+      M_OBJS += p9100fb.o
+    else
+      ifeq ($(CONFIG_FB_P9100),m)
+      M_OBJS += p9100fb.o
       endif
     endif
     ifeq ($(CONFIG_FB_LEO),y)

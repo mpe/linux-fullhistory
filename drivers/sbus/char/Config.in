@@ -12,6 +12,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Bidirectional parallel port support (obsolete)' CONFIG_SUN_BPP
   tristate 'Videopix Frame Grabber (EXPERIMENTAL)' CONFIG_SUN_VIDEOPIX
   tristate 'Aurora Multiboard 1600se (EXPERIMENTAL)' CONFIG_SUN_AURORA
+  tristate 'Tadpole TS102 Microcontroller support' CONFIG_TADPOLE_TS102_UCTRL
 
   # XXX Why don't we do "source drivers/char/Config.in" somewhere?
   if [ "$CONFIG_PCI" = "y" ]; then

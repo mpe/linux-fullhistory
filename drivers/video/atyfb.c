@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.120 1999/08/30 10:12:18 davem Exp $
+/*  $Id: atyfb.c,v 1.122 1999/09/06 20:44:08 geert Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -89,8 +89,34 @@
  */
 #undef DEBUG
 
+/* Definitions for the ICS 2595 == ATI 18818_1 Clockchip */
 
-#define GUI_RESERVE	0x00001000
+#define REF_FREQ_2595       1432  /*  14.33 MHz  (exact   14.31818) */
+#define REF_DIV_2595          46  /* really 43 on ICS 2595 !!!  */
+                                  /* ohne Prescaler */
+#define MAX_FREQ_2595      15938  /* 159.38 MHz  (really 170.486) */
+#define MIN_FREQ_2595       8000  /*  80.00 MHz  (        85.565) */
+                                  /* mit Prescaler 2, 4, 8 */
+#define ABS_MIN_FREQ_2595   1000  /*  10.00 MHz  (really  10.697) */
+#define N_ADJ_2595           257
+
+#define STOP_BITS_2595     0x1800
+
+
+#define MIN_N_408		2
+
+#define MIN_N_1703		6
+
+#define MIN_M		2
+#define MAX_M		30
+#define MIN_N		35
+#define MAX_N		255-8
+
+
+/* Make sure n * PAGE_SIZE is protected at end of Aperture for GUI-regs */
+/*  - must be large enough to catch all GUI-Regs   */
+/*  - must be aligned to a PAGE boundary           */
+#define GUI_RESERVE	(1 * PAGE_SIZE)
 
 
 #ifndef __powerpc__
@@ -126,6 +152,14 @@ struct pll_gx {
     u8 n;
 };
 
+struct pll_18818
+{
+    u32 program_bits;
+    u32 locationAddr;
+    u32 period_in_ps;
+    u32 post_divider;
+};
+
 struct pll_ct {
     u8 pll_ref_div;
     u8 pll_gen_cntl;
@@ -150,6 +184,7 @@ struct atyfb_par {
     union {
 	struct pll_gx gx;
 	struct pll_ct ct;
+	struct pll_18818 ics2595;
     } pll;
     u32 accel_flags;
 };
@@ -196,6 +231,7 @@ struct fb_info_aty {
     unsigned long ati_regbase;
     unsigned long frame_buffer_phys;
     unsigned long frame_buffer;
+    unsigned long clk_wr_offset;
     struct pci_mmap_map *mmap_map;
     struct aty_cursor *cursor;
     struct aty_cmap_regs *aty_cmap_regs;
@@ -213,6 +249,7 @@ struct fb_info_aty {
     u8 bus_type;
     u8 ram_type;
     u8 dac_type;
+    u8 dac_subtype;
     u8 clk_type;
     u8 mem_refresh_rate;
     struct display disp;
@@ -329,6 +366,7 @@ static char *strtoke(char *s, const char *ct);
 
 static void reset_engine(const struct fb_info_aty *info);
 static void init_engine(const struct atyfb_par *par, struct fb_info_aty *info);
+
 static void aty_st_514(int offset, u8 val, const struct fb_info_aty *info);
 static void aty_st_pll(int offset, u8 val, const struct fb_info_aty *info);
 static u8 aty_ld_pll(int offset, const struct fb_info_aty *info);
@@ -342,7 +380,37 @@ static int aty_crtc_to_var(const struct crtc *crtc,
 			   struct fb_var_screeninfo *var);
 static void aty_set_pll_gx(const struct fb_info_aty *info,
 			   const struct pll_gx *pll);
-static int aty_var_to_pll_18818(u32 vclk_per, struct pll_gx *pll);
+
+static int aty_set_dac_ATI68860_B(const struct fb_info_aty *info, u32 bpp,
+				  u32 AccelMode);
+static int aty_set_dac_ATT21C498(const struct fb_info_aty *info,
+				 const struct pll_18818 *pll, u32 bpp);
+void aty_dac_waste4(const struct fb_info_aty *info);
+
+static int aty_var_to_pll_18818(u32 period_in_ps, struct pll_18818 *pll);
+static u32 aty_pll_18818_to_var(const struct pll_18818 *pll);
+static void aty_set_pll18818(const struct fb_info_aty *info,
+			     const struct pll_18818 *pll);
+
+static void aty_StrobeClock(const struct fb_info_aty *info);
+
+static void aty_ICS2595_put1bit(u8 data, const struct fb_info_aty *info);
+
+static int aty_var_to_pll_408(u32 period_in_ps, struct pll_18818 *pll);
+static u32 aty_pll_408_to_var(const struct pll_18818 *pll);
+static void aty_set_pll_408(const struct fb_info_aty *info,
+			    const struct pll_18818 *pll);
+
+static int aty_var_to_pll_1703(u32 period_in_ps, struct pll_18818 *pll);
+static u32 aty_pll_1703_to_var(const struct pll_18818 *pll);
+static void aty_set_pll_1703(const struct fb_info_aty *info,
+			     const struct pll_18818 *pll);
+
+static int aty_var_to_pll_8398(u32 period_in_ps, struct pll_18818 *pll);
+static u32 aty_pll_8398_to_var(const struct pll_18818 *pll);
+static void aty_set_pll_8398(const struct fb_info_aty *info,
+			     const struct pll_18818 *pll);
+
 static int aty_var_to_pll_514(u32 vclk_per, struct pll_gx *pll);
 static u32 aty_pll_gx_to_var(const struct pll_gx *pll,
 			     const struct fb_info_aty *info);
@@ -1193,6 +1261,124 @@ static int aty_var_to_crtc(const struct fb_info_aty *info,
     return 0;
 }
 
+
+static int aty_set_dac_ATI68860_B(const struct fb_info_aty *info, u32 bpp,
+				  u32 AccelMode)
+{
+    u32 gModeReg, devSetupRegA, temp, mask;
+
+    gModeReg = 0;
+    devSetupRegA = 0;
+    
+    switch (bpp) {
+	case 8:
+	    gModeReg = 0x83;
+	    devSetupRegA = 0x60 | 0x00 /*(info->mach64DAC8Bit ? 0x00 : 0x01) */;
+	    break;
+	case 15:
+	    gModeReg = 0xA0;
+	    devSetupRegA = 0x60;
+	    break;
+	case 16:
+	    gModeReg = 0xA1;
+	    devSetupRegA = 0x60;
+	    break;
+	case 24:
+	    gModeReg = 0xC0;
+	    devSetupRegA = 0x60;
+	    break;
+	case 32:
+	    gModeReg = 0xE3;
+	    devSetupRegA = 0x60;
+	    break;
+    }
+
+    if (!AccelMode) {
+	gModeReg = 0x80;
+	devSetupRegA = 0x61;
+    }
+
+    temp = aty_ld_8(DAC_CNTL, info);
+    aty_st_8(DAC_CNTL, (temp & ~DAC_EXT_SEL_RS2) | DAC_EXT_SEL_RS3, info);
+
+    aty_st_8(DAC_REGS + 2, 0x1D, info);
+    aty_st_8(DAC_REGS + 3, gModeReg, info);
+    aty_st_8(DAC_REGS, 0x02, info);
+
+    temp = aty_ld_8(DAC_CNTL, info);
+    aty_st_8(DAC_CNTL, temp | DAC_EXT_SEL_RS2 | DAC_EXT_SEL_RS3, info);
+
+    if (info->total_vram < MEM_SIZE_1M)
+	mask = 0x04;
+    else if (info->total_vram == MEM_SIZE_1M)
+	mask = 0x08;
+    else
+	mask = 0x0C;
+
+    /* The following assumes that the BIOS has correctly set R7 of the
+     * Device Setup Register A at boot time.
+     */
+#define A860_DELAY_L	0x80
+
+    temp = aty_ld_8(DAC_REGS, info);
+    aty_st_8(DAC_REGS, (devSetupRegA | mask) | (temp & A860_DELAY_L), info);
+    temp = aty_ld_8(DAC_CNTL, info);
+    aty_st_8(DAC_CNTL, (temp & ~(DAC_EXT_SEL_RS2 | DAC_EXT_SEL_RS3)), info);
+
+    return 0;
+}
+
+static int aty_set_dac_ATT21C498(const struct fb_info_aty *info,
+				 const struct pll_18818 *pll, u32 bpp)
+{
+    u32 dotClock;
+    int muxmode = 0;
+    int DACMask = 0;
+
+    dotClock = 100000000 / pll->period_in_ps;
+
+    switch (bpp) {
+	case 8:
+	    if (dotClock > 8000) {
+		DACMask = 0x24;
+		muxmode = 1;
+	    } else
+		DACMask = 0x04;
+	    break;
+	case 15:
+	    DACMask = 0x16;
+	    break;
+	case 16:
+	    DACMask = 0x36;
+	    break;
+	case 24:
+	    DACMask = 0xE6;
+	    break;
+	case 32:
+	    DACMask = 0xE6;
+	    break;
+    }
+
+    if (1 /* info->mach64DAC8Bit */)
+	DACMask |= 0x02;
+
+    aty_dac_waste4(info);
+    aty_st_8(DAC_REGS + 2, DACMask, info);
+
+    return muxmode;
+}
+
+void aty_dac_waste4(const struct fb_info_aty *info)
+{
+  (void)aty_ld_8(DAC_REGS, info);
+
+  (void)aty_ld_8(DAC_REGS + 2, info);
+  (void)aty_ld_8(DAC_REGS + 2, info);
+  (void)aty_ld_8(DAC_REGS + 2, info);
+  (void)aty_ld_8(DAC_REGS + 2, info);
+}
+
+
 static void aty_set_dac_514(const struct fb_info_aty *info, u32 bpp)
 {
     static struct {
@@ -1390,59 +1576,476 @@ static void aty_set_pll_gx(const struct fb_info_aty *info,
     }
 }
 
-static int aty_var_to_pll_18818(u32 vclk_per, struct pll_gx *pll)
-{
-    /*
-     *  FIXME: use real calculations instead of using fixed values from the old
-     *	       driver
-     */
-    static struct {
-	u32 ps_lim;	/* pixclock period rounding limit (arbitrary) */
-	u8 mode;	/* (prescsaler << 4) | Select */
-	u8 prog;	/* ref_div_count */
-    } ATI18818_clocks[] = {
-	{  7500, 0x0B, 1 },	/*  7407.4 ps = 135.00 MHz */
-	{  9000, 0x0A, 1 },	/*  7936.5 ps = 126.00 MHz */
-	{ 11000, 0x09, 1 },	/* 10000.0 ps = 100.00 MHz */
-	{ 12800, 0x0D, 1 },	/* 12500.0 ps =  80.00 MHz */
-	{ 13500, 0x0E, 1 },	/* 13333.3 ps =  75.00 MHz */
-/*	{ 14000, 0x03, 2 },*/	/* 13888.8 ps =  72.00 MHz */
-	{ 15000, 0x1B, 1 },	/* 14814.8 ps =  67.50 MHz */
-	{ 15500, 0x0F, 1 },	/* 15384.6 ps =  65.00 MHz */
-	{ 16000, 0x1A, 1 },	/* 15873.0 ps =  63.00 MHz */
-/*	{ 16000, 0x02, 2 },*/	/* 15873.0 ps =  63.00 MHz */
-/*	{ 18000, 0x01, 2 },*/	/* 17655.4 ps =  56.64 MHz */
-/*	{ 19900, 0x00, 2 },*/	/* 19860.9 ps =  50.35 MHz */
-	{ 20000, 0x07, 1 },	/* 20000.0 ps =  50.00 MHz */
-	{ 20300, 0x06, 1 },	/* 20202.0 ps =  49.50 MHz */
-	{ 22500, 0x05, 1 },	/* 22271.2 ps =  44.90 MHz */
-	{ 25000, 0x04, 1 },	/* 25000.0 ps =  40.00 MHz */
-/*	{ 28000, 0x03, 1 },*/	/* 27777.8 ps =  36.00 MHz */
-	{ 30000, 0x2B, 1 },	/* 29629,6 ps =  33.75 MHz */
-	{ 31000, 0x1F, 1 },	/* 30769.2 ps =  32.50 MHz */
-	{ 32000, 0x2A, 1 },	/* 31746.0 ps =  31.50 MHz */
-/*	{ 32000, 0x02, 1 },*/	/* 31746.0 ps =  31.50 MHz */
-/*	{ 36000, 0x01, 1 },*/	/* 35310.7 ps =  28.32 MHz */
-/*	{ 39900, 0x00, 1 },*/	/* 39714.1 ps =  25.18 MHz */
-	{ 40000, 0x17, 1 },	/* 40000.0 ps =  25.00 MHz */
-	{ 40600, 0x16, 1 },	/* 40404.0 ps =  24.75 MHz */
-	{ 45000, 0x15, 1 },	/* 44543.4 ps =  22.45 MHz */
-	{ 50000, 0x14, 1 },	/* 50000.0 ps =  20.00 MHz */
-/*	{ 56000, 0x13, 1 },*/	/* 55555.5 ps =  18.00 MHz */
-	{ 62000, 0x2F, 1 },	/* 61538.8 ps =  16.25 MHz */
-/*	{ 64000, 0x12, 1 },*/	/* 63492.0 ps =  15.75 MHz */
-    };
-    int set;
 
-    for (set = 0; set < sizeof(ATI18818_clocks)/sizeof(*ATI18818_clocks);
-	 set++)
-	if (vclk_per <= ATI18818_clocks[set].ps_lim) {
-	    pll->m = ATI18818_clocks[set].mode;
-	    pll->n = ATI18818_clocks[set].prog;
-	    return 0;
+static int aty_var_to_pll_18818(u32 period_in_ps, struct pll_18818 *pll)
+{
+    u32 MHz100;		/* in 0.01 MHz */
+    u32 program_bits;
+    u32 post_divider;
+
+    /* Calculate the programming word */
+    MHz100 = 100000000 / period_in_ps;
+    
+    program_bits = -1;
+    post_divider = 1;
+
+    if (MHz100 > MAX_FREQ_2595) {
+	MHz100 = MAX_FREQ_2595;
+	return -EINVAL;
+    } else if (MHz100 < ABS_MIN_FREQ_2595) {
+	program_bits = 0;	/* MHz100 = 257 */
+	return -EINVAL;
+    } else {
+	while (MHz100 < MIN_FREQ_2595) {
+	    MHz100 *= 2;
+	    post_divider *= 2;
 	}
-    return -EINVAL;
+    }
+    MHz100 *= 1000;
+    MHz100 = (REF_DIV_2595 * MHz100) / REF_FREQ_2595;
+
+    MHz100 += 500;    /* + 0.5 round */
+    MHz100 /= 1000;
+
+    if (program_bits == -1) {
+	program_bits = MHz100 - N_ADJ_2595;
+	switch (post_divider) {
+	    case 1:
+		program_bits |= 0x0600;
+		break;
+	    case 2:
+		program_bits |= 0x0400;
+		break;
+	    case 4:
+		program_bits |= 0x0200;
+		break;
+	    case 8:
+	    default:
+		break;
+	}
+    }
+
+    program_bits |= STOP_BITS_2595;
+
+    pll->program_bits = program_bits;
+    pll->locationAddr = 0;
+    pll->post_divider = post_divider;
+    pll->period_in_ps = period_in_ps;
+
+    return 0;
 }
+
+static u32 aty_pll_18818_to_var(const struct pll_18818 *pll)
+{
+    return(pll->period_in_ps);  /* default for now */
+}
+
+static void aty_set_pll18818(const struct fb_info_aty *info,
+			     const struct pll_18818 *pll)
+{
+    u32 program_bits;
+    u32 locationAddr;
+
+    u32 i;
+
+    u8 old_clock_cntl;
+    u8 old_crtc_ext_disp;
+
+    old_clock_cntl = aty_ld_8(CLOCK_CNTL, info);
+    aty_st_8(CLOCK_CNTL + info->clk_wr_offset, 0, info);
+
+    old_crtc_ext_disp = aty_ld_8(CRTC_GEN_CNTL + 3, info);
+    aty_st_8(CRTC_GEN_CNTL + 3, old_crtc_ext_disp | (CRTC_EXT_DISP_EN >> 24),
+	     info);
+
+    udelay(15000); /* delay for 50 (15) ms */
+
+    program_bits = pll->program_bits;
+    locationAddr = pll->locationAddr;
+
+    /* Program the clock chip */
+    aty_st_8(CLOCK_CNTL + info->clk_wr_offset, 0, info);  /* Strobe = 0 */
+    aty_StrobeClock(info);
+    aty_st_8(CLOCK_CNTL + info->clk_wr_offset, 1, info);  /* Strobe = 0 */
+    aty_StrobeClock(info);
+
+    aty_ICS2595_put1bit(1, info);    /* Send start bits */
+    aty_ICS2595_put1bit(0, info);    /* Start bit */
+    aty_ICS2595_put1bit(0, info);    /* Read / ~Write */
+
+    for (i = 0; i < 5; i++) {	/* Location 0..4 */
+	aty_ICS2595_put1bit(locationAddr & 1, info);
+	locationAddr >>= 1;
+    }
+
+    for (i = 0; i < 8 + 1 + 2 + 2; i++) {
+	aty_ICS2595_put1bit(program_bits & 1, info);
+	program_bits >>= 1;
+    }
+
+    udelay(1000); /* delay for 1 ms */
+
+    (void)aty_ld_8(DAC_REGS, info); /* Clear DAC Counter */
+    aty_st_8(CRTC_GEN_CNTL + 3, old_crtc_ext_disp, info);
+    aty_st_8(CLOCK_CNTL + info->clk_wr_offset, old_clock_cntl | CLOCK_STROBE,
+	     info);
+
+    udelay(50000); /* delay for 50 (15) ms */
+    aty_st_8(CLOCK_CNTL + info->clk_wr_offset,
+	     ((pll->locationAddr & 0x0F) | CLOCK_STROBE), info);
+   
+    return;
+}
+
+
+static int aty_var_to_pll_408(u32 period_in_ps, struct pll_18818 *pll)
+{
+    u32 mhz100;		/* in 0.01 MHz */
+    u32 program_bits;
+    /* u32 post_divider; */
+    u32 mach64MinFreq, mach64MaxFreq, mach64RefFreq;
+    u32 temp, tempB;
+    u16 remainder, preRemainder;
+    short divider = 0, tempA;
+
+    /* Calculate the programming word */
+    mhz100 = 100000000 / period_in_ps;
+    mach64MinFreq = MIN_FREQ_2595;
+    mach64MaxFreq = MAX_FREQ_2595;
+    mach64RefFreq = REF_FREQ_2595;	/* 14.32 MHz */
+    
+    /* Calculate program word */
+    if (mhz100 == 0)
+	program_bits = 0xFF;
+    else {
+	if (mhz100 < mach64MinFreq)
+	    mhz100 = mach64MinFreq;
+	if (mhz100 > mach64MaxFreq)
+	    mhz100 = mach64MaxFreq;
+
+	while (mhz100 < (mach64MinFreq << 3)) {
+	    mhz100 <<= 1;
+	    divider += 0x40;
+	}
+
+	temp = (unsigned int)mhz100;
+	temp = (unsigned int)(temp * (MIN_N_408 + 2));
+	temp -= ((short)(mach64RefFreq << 1));
+
+	tempA = MIN_N_408;
+	preRemainder = 0xFFFF;
+
+	do {
+	    tempB = temp;
+	    remainder = tempB % mach64RefFreq;
+	    tempB = tempB / mach64RefFreq;
+	    if (((tempB & 0xFFFF) <= 255) && (remainder <= preRemainder)) {
+		preRemainder = remainder;
+		divider &= ~0x3f;
+		divider |= tempA;
+		divider = (divider & 0x00FF) + ((tempB & 0xFF) << 8);
+	    }
+	    temp += mhz100;
+	    tempA++;
+	} while(tempA <= 32);
+
+	program_bits = divider;
+    }
+
+    pll->program_bits = program_bits;
+    pll->locationAddr = 0;
+    pll->post_divider = divider;	/* fuer nix */
+    pll->period_in_ps = period_in_ps;
+
+    return 0;
+}
+
+static u32 aty_pll_408_to_var(const struct pll_18818 *pll)
+{
+    return(pll->period_in_ps);  /* default for now */
+}
+
+static void aty_set_pll_408(const struct fb_info_aty *info,
+			    const struct pll_18818 *pll)
+{
+    u32 program_bits;
+    u32 locationAddr;
+
+    u8 tmpA, tmpB, tmpC;
+    char old_crtc_ext_disp;
+
+    old_crtc_ext_disp = aty_ld_8(CRTC_GEN_CNTL + 3, info);
+    aty_st_8(CRTC_GEN_CNTL + 3, old_crtc_ext_disp | (CRTC_EXT_DISP_EN >> 24),
+	     info);
+
+    program_bits = pll->program_bits;
+    locationAddr = pll->locationAddr;
+
+    /* Program clock */
+    aty_dac_waste4(info);
+    tmpB = aty_ld_8(DAC_REGS + 2, info) | 1;
+    aty_dac_waste4(info);
+    aty_st_8(DAC_REGS + 2, tmpB, info);
+
+    tmpA = tmpB;
+    tmpC = tmpA;
+    tmpA |= 8;
+    tmpB = 1;
+
+    aty_st_8(DAC_REGS, tmpB, info);
+    aty_st_8(DAC_REGS + 2, tmpA, info);
+
+    udelay(400); /* delay for 400 us */
+
+    locationAddr = (locationAddr << 2) + 0x40;
+    tmpB = locationAddr;
+    tmpA = program_bits >> 8;
+
+    aty_st_8(DAC_REGS, tmpB, info);
+    aty_st_8(DAC_REGS + 2, tmpA, info);
+
+    tmpB = locationAddr + 1;
+    tmpA = (u8)program_bits;
+
+    aty_st_8(DAC_REGS, tmpB, info);
+    aty_st_8(DAC_REGS + 2, tmpA, info);
+
+    tmpB = locationAddr + 2;
+    tmpA = 0x77;
+
+    aty_st_8(DAC_REGS, tmpB, info);
+    aty_st_8(DAC_REGS + 2, tmpA, info);
+
+    udelay(400); /* delay for 400 us */
+    tmpA = tmpC & (~(1 | 8));
+    tmpB = 1;
+
+    aty_st_8(DAC_REGS, tmpB, info);
+    aty_st_8(DAC_REGS + 2, tmpA, info);
+
+    (void)aty_ld_8(DAC_REGS, info); /* Clear DAC Counter */
+    aty_st_8(CRTC_GEN_CNTL + 3, old_crtc_ext_disp, info);
+
+    return;
+}
+
+
+static int aty_var_to_pll_1703(u32 period_in_ps, struct pll_18818 *pll)
+{
+    u32 mhz100;			/* in 0.01 MHz */
+    u32 program_bits;
+    /* u32 post_divider; */
+    u32 mach64MinFreq, mach64MaxFreq, mach64RefFreq;
+    u32 temp, tempB;
+    u16 remainder, preRemainder;
+    short divider = 0, tempA;
+
+    /* Calculate the programming word */
+    mhz100 = 100000000 / period_in_ps;
+    mach64MinFreq = MIN_FREQ_2595;
+    mach64MaxFreq = MAX_FREQ_2595;
+    mach64RefFreq = REF_FREQ_2595;	/* 14.32 MHz */
+    
+    /* Calculate program word */
+    if (mhz100 == 0)
+	program_bits = 0xE0;
+    else {
+	if (mhz100 < mach64MinFreq)
+	    mhz100 = mach64MinFreq;
+	if (mhz100 > mach64MaxFreq)
+	    mhz100 = mach64MaxFreq;
+
+	divider = 0;
+	while (mhz100 < (mach64MinFreq << 3)) {
+	    mhz100 <<= 1;
+	    divider += 0x20;
+	}
+
+	temp = (unsigned int)(mhz100);
+	temp = (unsigned int)(temp * (MIN_N_1703 + 2));
+	temp -= (short)(mach64RefFreq << 1);
+
+	tempA = MIN_N_1703;
+	preRemainder = 0xffff;
+
+	do {
+	    tempB = temp;
+	    remainder = tempB % mach64RefFreq;
+	    tempB = tempB / mach64RefFreq;
+
+	    if ((tempB & 0xffff) <= 127 && (remainder <= preRemainder)) {
+		preRemainder = remainder;
+		divider &= ~0x1f;
+		divider |= tempA;
+		divider = (divider & 0x00ff) + ((tempB & 0xff) << 8);
+	    }
+
+	    temp += mhz100;
+	    tempA++;
+	} while (tempA <= (MIN_N_1703 << 1));
+
+	program_bits = divider;
+    }
+
+      pll->program_bits = program_bits;
+      pll->locationAddr = 0;
+      pll->post_divider = divider;  /* fuer nix */
+      pll->period_in_ps = period_in_ps;
+
+      return 0;
+}
+
+static u32 aty_pll_1703_to_var(const struct pll_18818 *pll)
+{
+    return(pll->period_in_ps);  /* default for now */
+}
+
+static void aty_set_pll_1703(const struct fb_info_aty *info,
+			     const struct pll_18818 *pll)
+{
+    u32 program_bits;
+    u32 locationAddr;
+
+    char old_crtc_ext_disp;
+
+    old_crtc_ext_disp = aty_ld_8(CRTC_GEN_CNTL + 3, info);
+    aty_st_8(CRTC_GEN_CNTL + 3, old_crtc_ext_disp | (CRTC_EXT_DISP_EN >> 24),
+	     info);
+
+    program_bits = pll->program_bits;
+    locationAddr = pll->locationAddr;
+
+    /* Program clock */
+    aty_dac_waste4(info);
+
+    (void)aty_ld_8(DAC_REGS + 2, info);
+    aty_st_8(DAC_REGS+2, (locationAddr << 1) + 0x20, info);
+    aty_st_8(DAC_REGS+2, 0, info);
+    aty_st_8(DAC_REGS+2, (program_bits & 0xFF00) >> 8, info);
+    aty_st_8(DAC_REGS+2, (program_bits & 0xFF), info);
+
+    (void)aty_ld_8(DAC_REGS, info); /* Clear DAC Counter */
+    aty_st_8(CRTC_GEN_CNTL + 3, old_crtc_ext_disp, info);
+
+    return;
+}
+
+
+static int aty_var_to_pll_8398(u32 period_in_ps, struct pll_18818 *pll)
+{
+
+    u32 tempA, tempB, fOut, longMHz100, diff, preDiff;
+
+    u32 mhz100;				/* in 0.01 MHz */
+    u32 program_bits;
+    /* u32 post_divider; */
+    u32 mach64MinFreq, mach64MaxFreq, mach64RefFreq;
+    u16 m, n, k=0, save_m, save_n, twoToKth;
+
+    /* Calculate the programming word */
+    mhz100 = 100000000 / period_in_ps;
+    mach64MinFreq = MIN_FREQ_2595;
+    mach64MaxFreq = MAX_FREQ_2595;
+    mach64RefFreq = REF_FREQ_2595;	/* 14.32 MHz */
+    
+    save_m = 0;
+    save_n = 0;
+
+    /* Calculate program word */
+    if (mhz100 == 0)
+	program_bits = 0xE0;
+    else
+    {
+	if (mhz100 < mach64MinFreq)
+	    mhz100 = mach64MinFreq;
+	if (mhz100 > mach64MaxFreq)
+	    mhz100 = mach64MaxFreq;
+
+	longMHz100 = mhz100 * 256 / 100;   /* 8 bit scale this */
+
+	while (mhz100 < (mach64MinFreq << 3))
+        {
+	    mhz100 <<= 1;
+	    k++;
+	}
+
+	twoToKth = 1 << k;
+	diff = 0;
+	preDiff = 0xFFFFFFFF;
+
+	for (m = MIN_M; m <= MAX_M; m++)
+        {
+	    for (n = MIN_N; n <= MAX_N; n++)
+            {
+		tempA = (14.31818 * 65536);
+		tempA *= (n + 8);  /* 43..256 */
+		tempB = twoToKth * 256;
+		tempB *= (m + 2);  /* 4..32 */
+		fOut = tempA / tempB;  /* 8 bit scale */
+
+		if (longMHz100 > fOut)
+		    diff = longMHz100 - fOut;
+		else
+		    diff = fOut - longMHz100;
+
+		if (diff < preDiff)
+                {
+		    save_m = m;
+		    save_n = n;
+		    preDiff = diff;
+		}
+	    }
+	}
+
+	program_bits = (k << 6) + (save_m) + (save_n << 8);
+    }
+
+    pll->program_bits = program_bits;
+    pll->locationAddr = 0;
+    pll->post_divider = 0;
+    pll->period_in_ps = period_in_ps;
+
+    return 0;
+}
+
+static u32 aty_pll_8398_to_var(const struct pll_18818 *pll)
+{
+    return(pll->period_in_ps);  /* default for now */
+}
+
+static void aty_set_pll_8398(const struct fb_info_aty *info,
+			     const struct pll_18818 *pll)
+{
+    u32 program_bits;
+    u32 locationAddr;
+
+    char old_crtc_ext_disp;
+    char tmp;
+
+    old_crtc_ext_disp = aty_ld_8(CRTC_GEN_CNTL + 3, info);
+    aty_st_8(CRTC_GEN_CNTL + 3, old_crtc_ext_disp | (CRTC_EXT_DISP_EN >> 24),
+	     info);
+
+    program_bits = pll->program_bits;
+    locationAddr = pll->locationAddr;
+
+    /* Program clock */
+    tmp = aty_ld_8(DAC_CNTL, info);
+    aty_st_8(DAC_CNTL, tmp | DAC_EXT_SEL_RS2 | DAC_EXT_SEL_RS3, info);
+
+    aty_st_8(DAC_REGS, locationAddr, info);
+    aty_st_8(DAC_REGS+1, (program_bits & 0xff00) >> 8, info);
+    aty_st_8(DAC_REGS+1, (program_bits & 0xff), info);
+
+    tmp = aty_ld_8(DAC_CNTL, info);
+    aty_st_8(DAC_CNTL, (tmp & ~DAC_EXT_SEL_RS2) | DAC_EXT_SEL_RS3, info);
+
+    (void)aty_ld_8(DAC_REGS, info); /* Clear DAC Counter */
+    aty_st_8(CRTC_GEN_CNTL + 3, old_crtc_ext_disp, info);
+
+    return;
+}
+
 
 static int aty_var_to_pll_514(u32 vclk_per, struct pll_gx *pll)
 {
@@ -1474,7 +2077,42 @@ static int aty_var_to_pll_514(u32 vclk_per, struct pll_gx *pll)
     return -EINVAL;
 }
 
-    /* FIXME: ATI18818?? */
+
+static void aty_StrobeClock(const struct fb_info_aty *info)
+{
+    u8 tmp;
+
+    udelay(26);
+
+    tmp = aty_ld_8(CLOCK_CNTL, info);
+    aty_st_8(CLOCK_CNTL + info->clk_wr_offset, tmp | CLOCK_STROBE, info);
+
+    return;
+}
+
+
+static void aty_ICS2595_put1bit(u8 data, const struct fb_info_aty *info)
+{
+    u8 tmp;
+
+    data &= 0x01;
+    tmp = aty_ld_8(CLOCK_CNTL, info);
+    aty_st_8(CLOCK_CNTL + info->clk_wr_offset, (tmp & ~0x04) | (data << 2),
+	     info);
+
+    tmp = aty_ld_8(CLOCK_CNTL, info);
+    aty_st_8(CLOCK_CNTL + info->clk_wr_offset, (tmp & ~0x08) | (0 << 3), info);
+
+    aty_StrobeClock(info);
+
+    tmp = aty_ld_8(CLOCK_CNTL, info);
+    aty_st_8(CLOCK_CNTL + info->clk_wr_offset, (tmp & ~0x08) | (1 << 3), info);
+
+    aty_StrobeClock(info);
+
+    return;
+}
+
 
 static u32 aty_pll_gx_to_var(const struct pll_gx *pll,
 			     const struct fb_info_aty *info)
@@ -1720,27 +2358,76 @@ static void atyfb_set_par(const struct atyfb_par *par,
 			  struct fb_info_aty *info)
 {
     u32 i;
+    int accelmode;
+    int muxmode;
+    u8 tmp;
+    
+    accelmode = par->accel_flags;  /* hack */
 
     info->current_par = *par;
 
     if (info->blitter_may_be_busy)
 	wait_for_idle(info);
+    tmp = aty_ld_8(CRTC_GEN_CNTL + 3, info);
     aty_set_crtc(info, &par->crtc);
-    aty_st_8(CLOCK_CNTL, 0, info);
-    aty_st_8(CLOCK_CNTL, CLOCK_STROBE, info);
+    aty_st_8(CLOCK_CNTL + info->clk_wr_offset, 0, info);
+					/* better call aty_StrobeClock ?? */
+    aty_st_8(CLOCK_CNTL + info->clk_wr_offset, CLOCK_STROBE, info);
 
     if ((Gx == GX_CHIP_ID) || (Gx == CX_CHIP_ID)) {
-	switch (info->dac_type) {
+	switch (info->dac_subtype) {
 	    case DAC_IBMRGB514:
 		aty_set_dac_514(info, par->crtc.bpp);
 		break;
 	    case DAC_ATI68860_B:
-		/* FIXME */
+	    case DAC_ATI68860_C:
+		muxmode = aty_set_dac_ATI68860_B(info, par->crtc.bpp,
+						 accelmode);
+		aty_st_le32(BUS_CNTL, 0x890e20f1, info);
+		aty_st_le32(DAC_CNTL, 0x47052100, info);
 		break;
-	}
-	aty_set_pll_gx(info, &par->pll.gx);
+	    case DAC_ATT20C408:
+		muxmode = aty_set_dac_ATT21C498(info, &par->pll.ics2595,
+						par->crtc.bpp);
+		aty_st_le32(BUS_CNTL, 0x890e20f1, info);
+		aty_st_le32(DAC_CNTL, 0x00072000, info);
+		break;
+	    case DAC_ATT21C498:
+		muxmode = aty_set_dac_ATT21C498(info, &par->pll.ics2595,
+						par->crtc.bpp);
+		aty_st_le32(BUS_CNTL, 0x890e20f1, info);
+		aty_st_le32(DAC_CNTL, 0x00072000, info);
+		break;
+	    default:
+		printk(" atyfb_set_par: DAC type not implemented yet!\n");
+		aty_st_le32(BUS_CNTL, 0x890e20f1, info);
+		aty_st_le32(DAC_CNTL, 0x47052100, info);
+	/* new in 2.2.3p1 from Geert. ???????? */
 	aty_st_le32(BUS_CNTL, 0x590e10ff, info);
 	aty_st_le32(DAC_CNTL, 0x47012100, info);
+		break;
+	}
+
+	switch (info->clk_type) {
+	    case CLK_ATI18818_1:
+		aty_set_pll18818(info, &par->pll.ics2595);
+		break;
+	    case CLK_STG1703:
+		aty_set_pll_1703(info, &par->pll.ics2595);
+		break;
+	    case CLK_CH8398:
+		aty_set_pll_8398(info, &par->pll.ics2595);
+		break;
+	    case CLK_ATT20C408:
+		aty_set_pll_408(info, &par->pll.ics2595);
+		break;
+	    case CLK_IBMRGB514:
+		aty_set_pll_gx(info, &par->pll.gx);
+		break;
+	    default:
+		printk(" atyfb_set_par: CLK type not implemented yet!");
+		break;
+	}
 
 	/* Don't forget MEM_CNTL */
 	i = aty_ld_le32(MEM_CNTL, info) & 0xf0ffffff;
@@ -1828,7 +2515,16 @@ static int atyfb_decode_var(const struct fb_var_screeninfo *var,
     if ((Gx == GX_CHIP_ID) || (Gx == CX_CHIP_ID))
 	switch (info->clk_type) {
 	    case CLK_ATI18818_1:
-		err = aty_var_to_pll_18818(var->pixclock, &par->pll.gx);
+		err = aty_var_to_pll_18818(var->pixclock, &par->pll.ics2595);
+		break;
+	    case CLK_STG1703:
+		err = aty_var_to_pll_1703(var->pixclock, &par->pll.ics2595);
+		break;
+	    case CLK_CH8398:
+		err = aty_var_to_pll_8398(var->pixclock, &par->pll.ics2595);
+		break;
+	    case CLK_ATT20C408:
+		err = aty_var_to_pll_408(var->pixclock, &par->pll.ics2595);
 		break;
 	    case CLK_IBMRGB514:
 		err = aty_var_to_pll_514(var->pixclock, &par->pll.gx);
@@ -1864,7 +2560,23 @@ static int atyfb_encode_var(struct fb_var_screeninfo *var,
     if ((err = aty_crtc_to_var(&par->crtc, var)))
 	return err;
     if ((Gx == GX_CHIP_ID) || (Gx == CX_CHIP_ID))
-	var->pixclock = aty_pll_gx_to_var(&par->pll.gx, info);
+	switch (info->clk_type) {
+	    case CLK_ATI18818_1:
+		var->pixclock = aty_pll_18818_to_var(&par->pll.ics2595);
+		break;
+	    case CLK_STG1703:
+		var->pixclock = aty_pll_1703_to_var(&par->pll.ics2595);
+		break;
+	    case CLK_CH8398:
+		var->pixclock = aty_pll_8398_to_var(&par->pll.ics2595);
+		break;
+	    case CLK_ATT20C408:
+		var->pixclock = aty_pll_408_to_var(&par->pll.ics2595);
+		break;
+	    case CLK_IBMRGB514:
+	        var->pixclock = aty_pll_gx_to_var(&par->pll.gx, info);
+		break;
+	}
     else
 	var->pixclock = aty_pll_ct_to_var(&par->pll.ct, info);
 
@@ -2234,7 +2946,9 @@ struct atyclk {
 static int atyfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		       u_long arg, int con, struct fb_info *info2)
 {
+#if defined(__sparc__) || defined(DEBUG)
     struct fb_info_aty *info = (struct fb_info_aty *)info2;
+#endif /* __sparc__ || DEBUG */
 #ifdef __sparc__
     struct fbtype fbtyp;
     struct display *disp;
@@ -2540,6 +3254,7 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
     for (j = 0; j < (sizeof(aty_features)/sizeof(*aty_features)); j++)
 	if (aty_features[j].chip_type == Gx) {
 	    chipname = aty_features[j].name;
+	    info->dac_type = (aty_ld_le32(DAC_CNTL, info) >> 16) & 0x07;
 	    break;
 	}
     if (!chipname) {
@@ -2553,10 +3268,16 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
 	ramname = aty_gx_ram[info->ram_type];
 	/* FIXME: clockchip/RAMDAC probing? */
 #ifdef CONFIG_ATARI
-	info->dac_type = DAC_ATI68860_B;
 	info->clk_type = CLK_ATI18818_1;
+	info->dac_type = (aty_ld_le32(CONFIG_STAT0, info) >> 9) & 0x07;
+	if (info->dac_type == 0x07)
+	    info->dac_subtype = DAC_ATT20C408;
+	else
+	    info->dac_subtype = (aty_ld_8(SCRATCH_REG1 + 1, info) & 0xF0) |
+				info->dac_type;
 #else
 	info->dac_type = DAC_IBMRGB514;
+	info->dac_subtype = DAC_IBMRGB514;
 	info->clk_type = CLK_IBMRGB514;
 #endif
 	/* FIXME */
@@ -2567,6 +3288,7 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
 	info->ram_type = (aty_ld_le32(CONFIG_STAT0, info) & 0x07);
 	ramname = aty_ct_ram[info->ram_type];
 	info->dac_type = DAC_INTERNAL;
+	info->dac_subtype = DAC_INTERNAL;
 	info->clk_type = CLK_INTERNAL;
 	if ((Gx == CT_CHIP_ID) || (Gx == ET_CHIP_ID)) {
 	    pll = 135;
@@ -3175,7 +3897,9 @@ int __init atyfb_init(void)
 #endif /* __sparc__ */
 	}
     }
+
 #elif defined(CONFIG_ATARI)
+  u32   clock_r;
     int m64_num;
     struct fb_info_aty *info;
 
@@ -3199,9 +3923,27 @@ int __init atyfb_init(void)
 	 *  kernel address space.
 	 */
 	info->frame_buffer = ioremap(phys_vmembase[m64_num], phys_size[m64_num]);
-	info->frame_buffer_phys = info->frame_buffer;
+	info->frame_buffer_phys = info->frame_buffer;  /* Fake! */
 	info->ati_regbase = ioremap(phys_guiregbase[m64_num], 0x10000)+0xFC00ul;
-	info->ati_regbase_phys = info->ati_regbase;
+	info->ati_regbase_phys = info->ati_regbase;  /* Fake! */
+
+	aty_st_le32(CLOCK_CNTL, 0x12345678, info);
+	clock_r = aty_ld_le32(CLOCK_CNTL, info);
+
+	switch (clock_r & 0x003F) {
+	    case 0x12:
+		info->clk_wr_offset = 3;  /*  */
+		break;
+	    case 0x34:
+		info->clk_wr_offset = 2;  /* Medusa ST-IO ISA Adapter etc. */
+		break;
+	    case 0x16:
+		info->clk_wr_offset = 1;  /*  */
+		break;
+	    case 0x38:
+		info->clk_wr_offset = 0;  /* Panther 1 ISA Adapter (Gerald) */
+		break;
+	}
 
 	if (!aty_init(info, "ISA bus")) {
 	    kfree(info);
@@ -3209,7 +3951,7 @@ int __init atyfb_init(void)
 	    return -ENXIO;
 	}
     }
-#endif
+#endif /* CONFIG_ATARI */
     return 0;
 }
 

@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.106 1999/08/02 08:39:34 davem Exp $
+/* $Id: entry.S,v 1.107 1999/08/31 19:25:29 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -477,6 +477,97 @@ __do_instruction_access_exception:
 	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
 	ba,pt		%xcc, rtrap
 	 clr		%l6
+
+	/* This is the trap handler entry point for ECC correctable
+	 * errors.  They are corrected, but we listen for the trap
+	 * so that the event can be logged.
+	 *
+	 * Disrupting errors are either:
+	 * 1) single-bit ECC errors during UDB reads to system
+	 *    memory
+	 * 2) data parity errors during write-back events
+	 *
+	 * As far as I can make out from the manual, the CEE trap
+	 * is only for correctable errors during memory read
+	 * accesses by the front-end of the processor.
+	 *
+	 * The code below is only for trap level 1 CEE events,
+	 * as it is the only situation where we can safely record
+	 * and log.  For trap level >1 we just clear the CE bit
+	 * in the AFSR and return.
+	 */
+
+	/* Our trap handling infrastructure allows us to preserve
+	 * two 64-bit values during etrap for arguments to
+	 * subsequent C code.  Therefore we encode the information
+	 * as follows:
+	 *
+	 * value 1) Full 64-bits of AFAR
+	 * value 2) Low 33-bits of AFSR, then bits 33-->42
+	 *          are UDBL error status and bits 43-->52
+	 *          are UDBH error status
+	 */
+	.align	64
+	.globl	cee_trap
+cee_trap:
+	ldxa	[%g0] ASI_AFSR, %g1		! Read AFSR
+	ldxa	[%g0] ASI_AFAR, %g2		! Read AFAR
+	sllx	%g1, 31, %g1			! Clear reserved bits
+	srlx	%g1, 31, %g1			! in AFSR
+
+	/* NOTE: UltraSparc-I/II have high and low UDB error
+	 *       registers, corresponding to the two UDB units
+	 *       present on those chips.  UltraSparc-IIi only
+	 *       has a single UDB, called "SDB" in the manual.
+	 *       For IIi the upper UDB register always reads
+	 *       as zero so for our purposes things will just
+	 *       work with the checks below.
+	 */
+	ldxa	[%g0] ASI_UDBL_ERROR_R, %g3	! Read UDB-Low error status
+	andcc	%g3, (1 << 8), %g4		! Check CE bit
+	sllx	%g3, (64 - 10), %g3		! Clear reserved bits
+	srlx	%g3, (64 - 10), %g3		! in UDB-Low error status
+
+	sllx	%g3, (33 + 0), %g3		! Shift up to encoding area
+	or	%g1, %g3, %g1			! Or it in
+	be,pn	%xcc, 1f			! Branch if CE bit was clear
+	 nop
+	stxa	%g4, [%g0] ASI_UDB_ERROR_W	! Clear CE sticky bit in UDBL
+	membar	#Sync				! Synchronize ASI stores
+1:	mov	0x18, %g5			! Addr of UDB-High error status
+	ldxa	[%g5] ASI_UDBH_ERROR_R, %g3	! Read it
+
+	andcc	%g3, (1 << 8), %g4		! Check CE bit
+	sllx	%g3, (64 - 10), %g3		! Clear reserved bits
+	srlx	%g3, (64 - 10), %g3		! in UDB-High error status
+	sllx	%g3, (33 + 10), %g3		! Shift up to encoding area
+	or	%g1, %g3, %g1			! Or it in
+	be,pn	%xcc, 1f			! Branch if CE bit was clear
+	 nop
+	nop
+
+	stxa	%g4, [%g5] ASI_UDB_ERROR_W	! Clear CE sticky bit in UDBH
+	membar	#Sync				! Synchronize ASI stores
+1:	mov	1, %g5				! AFSR CE bit is
+	sllx	%g5, 20, %g5			! bit 20
+	stxa	%g5, [%g0] ASI_AFSR		! Clear CE sticky bit in AFSR
+	membar	#Sync				! Synchronize ASI stores
+	sllx	%g2, (64 - 41), %g2		! Clear reserved bits
+	srlx	%g2, (64 - 41), %g2		! in latched AFAR
+
+	andn	%g2, 0x0f, %g2			! Finish resv bit clearing
+	mov	%g1, %g4			! Move AFSR+UDB* into save reg
+	mov	%g2, %g5			! Move AFAR into save reg
+	rdpr	%pil, %g2
+	wrpr	%g0, 15, %pil
+	ba,pt	%xcc, etrap_irq
+	 rd	%pc, %g7
+	mov	%l4, %o0
+
+	mov	%l5, %o1
+	call	cee_log
+	 add	%sp, STACK_BIAS + REGWIN_SZ, %o2
+	ba,a,pt	%xcc, rtrap_clr_l6
 
 	.globl		__do_privact
 __do_privact:

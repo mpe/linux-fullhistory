@@ -1,20 +1,18 @@
-/* $Id: sigcontext.h,v 1.11 1998/10/06 09:28:37 jj Exp $ */
+/* $Id: sigcontext.h,v 1.12 1999/09/06 08:22:09 jj Exp $ */
 #ifndef __SPARC64_SIGCONTEXT_H
 #define __SPARC64_SIGCONTEXT_H
 
+#ifdef __KERNEL__
 #include <asm/ptrace.h>
-
-#define SUNOS_MAXWIN   31
+#endif
 
 #ifndef __ASSEMBLY__
 
-/* SunOS system call sigstack() uses this arg. */
-struct sunos_sigstack {
-	unsigned int sig_sp;
-	int onstack_flag;
-};
+#ifdef __KERNEL__
 
-/* This is what SunOS does, so shall I. */
+#define __SUNOS_MAXWIN   31
+
+/* This is what SunOS does, so shall I unless we use new 32bit signals or rt signals. */
 struct sigcontext32 {
 	int sigc_onstack;      /* state to restore */
 	int sigc_mask;         /* sigmask to restore */
@@ -31,44 +29,30 @@ struct sigcontext32 {
 	int sigc_oswins;       /* outstanding windows */
 
 	/* stack ptrs for each regwin buf */
-	unsigned sigc_spbuf[SUNOS_MAXWIN];
+	unsigned sigc_spbuf[__SUNOS_MAXWIN];
 
 	/* Windows to restore after signal */
-	struct reg_window32 sigc_wbuf[SUNOS_MAXWIN];
+	struct reg_window32 sigc_wbuf[__SUNOS_MAXWIN];
 };
 
-/* This is what SunOS doesn't, so we have to write this alone. */
-struct sigcontext {
-	int sigc_onstack;      /* state to restore */
-	int sigc_mask;         /* sigmask to restore */
-	unsigned long sigc_sp;   /* stack pointer */
-	unsigned long sigc_pc;   /* program counter */
-	unsigned long sigc_npc;  /* next program counter */
-	unsigned long sigc_psr;  /* for condition codes etc */
-	unsigned long sigc_g1;   /* User uses these two registers */
-	unsigned long sigc_o0;   /* within the trampoline code. */
+#endif
 
-	/* Now comes information regarding the users window set
-	 * at the time of the signal.
-	 */
-	int sigc_oswins;       /* outstanding windows */
+#ifdef __KERNEL__
 
-	/* stack ptrs for each regwin buf */
-	char *sigc_spbuf[SUNOS_MAXWIN];
-
-	/* Windows to restore after signal */
-	struct reg_window sigc_wbuf[SUNOS_MAXWIN];
-};
+/* This is what we use for 32bit new non-rt signals. */
 
 typedef struct {
-	struct pt_regs32	si_regs;
+	struct {
+		unsigned int psr;
+		unsigned int pc;
+		unsigned int npc;
+		unsigned int y;
+		unsigned int u_regs[16]; /* globals and ins */
+	}			si_regs;
 	int			si_mask;
 } __siginfo32_t;
 
-typedef struct {
-	struct     pt_regs si_regs;
-	long	   si_mask;
-} __siginfo_t;
+#endif
 
 typedef struct {
 	unsigned   int si_float_regs [64];
@@ -77,6 +61,30 @@ typedef struct {
 	unsigned   long si_fprs;
 } __siginfo_fpu_t;
 
+/* This is what SunOS doesn't, so we have to write this alone
+   and do it properly. */
+struct sigcontext {
+	/* The size of this array has to match SI_MAX_SIZE from siginfo.h */
+	char			sigc_info[128];
+	struct {
+		unsigned long	u_regs[16]; /* globals and ins */
+		unsigned long	tstate;
+		unsigned long	tpc;
+		unsigned long	tnpc;
+		unsigned int	y;
+		unsigned int	fprs;
+	}			sigc_regs;
+	__siginfo_fpu_t *	sigc_fpu_save;
+	struct {
+		void	*	ss_sp;
+		int		ss_flags;
+		unsigned long	ss_size;
+	}			sigc_stack;
+	unsigned long		sigc_mask;
+};
+
+#ifdef __KERNEL__
+
 /* This magic should be in g_upper[0] for all upper parts
    to be valid.  */
 #define SIGINFO_EXTRA_V8PLUS_MAGIC	0x130e269
@@ -84,6 +92,8 @@ typedef struct {
 	unsigned   int g_upper[8];
 	unsigned   int o_upper[8];
 } siginfo_extra_v8plus_t;
+
+#endif
 
 #endif /* !(__ASSEMBLY__) */
 

@@ -8,6 +8,7 @@
 #include <linux/interrupt.h>
 #include <linux/vt_kern.h>
 #include <linux/nvram.h>
+#include <linux/spinlock.h>
 
 #include <asm/page.h>
 #include <asm/semaphore.h>
@@ -28,7 +29,6 @@
 #include <asm/pci-bridge.h>
 #include <asm/irq.h>
 #include <asm/feature.h>
-#include <asm/spinlock.h>
 #include <asm/dma.h>
 #include <asm/machdep.h>
 

@@ -95,10 +95,10 @@ static const char *version =
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/config.h>	/* for CONFIG_IP_MULTICAST */
+#include <linux/spinlock.h>
 
 #include <asm/bitops.h>
 #include <asm/io.h>
-#include <asm/spinlock.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>

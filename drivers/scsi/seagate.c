@@ -83,7 +83,7 @@
 
 #include <asm/io.h>
 #include <asm/system.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/string.h>

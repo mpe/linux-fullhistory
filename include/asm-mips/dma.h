@@ -14,7 +14,7 @@
 
 #include <linux/config.h>
 #include <asm/io.h>			/* need byte IO */
-#include <asm/spinlock.h>		/* And spinlocks */
+#include <linux/spinlock.h>		/* And spinlocks */
 #include <linux/delay.h>
 #include <asm/system.h>
 

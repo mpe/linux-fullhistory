@@ -325,7 +325,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
 #endif
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,0)
-#  include <asm/spinlock.h>
+#  include <linux/spinlock.h>
 #  include <linux/smp.h>
 #  define cpuid smp_processor_id()
 #  if LINUX_VERSION_CODE < KERNEL_VERSION(2,1,95)

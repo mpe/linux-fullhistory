@@ -10,11 +10,11 @@
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/ioport.h>
+#include <linux/spinlock.h>
 
 #include <asm/io.h>
 #include <asm/page.h>
 #include <asm/oplib.h>
-#include <asm/spinlock.h>
 
 /* The abstraction used here is that there are PCI controllers,
  * each with one (Sabre) or two (PSYCHO/SCHIZO) PCI bus modules

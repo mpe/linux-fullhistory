@@ -1,7 +1,7 @@
 /*
  * sysctl_net_ipv4.c: sysctl interface to net IPV4 subsystem.
  *
- * $Id: sysctl_net_ipv4.c,v 1.39 1999/08/20 11:06:00 davem Exp $
+ * $Id: sysctl_net_ipv4.c,v 1.40 1999/09/07 02:31:17 davem Exp $
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/ipv4 directory entry (empty =) ). [MS]
@@ -150,6 +150,9 @@ ctl_table ipv4_table[] = {
 	{NET_IPV4_TCP_KEEPALIVE_PROBES, "tcp_keepalive_probes",
 	 &sysctl_tcp_keepalive_probes, sizeof(int), 0644, NULL, 
 	 &proc_dointvec},
+	{NET_IPV4_TCP_KEEPALIVE_INTVL, "tcp_keepalive_intvl",
+	 &sysctl_tcp_keepalive_intvl, sizeof(int), 0644, NULL,
+	 &proc_dointvec_jiffies, &sysctl_jiffies},
 	{NET_IPV4_TCP_RETRIES1, "tcp_retries1",
 	 &sysctl_tcp_retries1, sizeof(int), 0644, NULL, &proc_dointvec_minmax, 
 	 &sysctl_intvec, NULL, NULL, &tcp_retr1_max},

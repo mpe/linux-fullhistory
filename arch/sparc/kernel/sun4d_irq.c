@@ -18,6 +18,7 @@
 #include <linux/init.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/spinlock.h>
 
 #include <asm/ptrace.h>
 #include <asm/processor.h>
@@ -32,7 +33,6 @@
 #include <asm/irq.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
-#include <asm/spinlock.h>
 #include <asm/sbus.h>
 #include <asm/sbi.h>
 

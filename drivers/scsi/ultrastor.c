@@ -134,10 +134,10 @@
 #include <linux/kernel.h>
 #include <linux/ioport.h>
 #include <linux/proc_fs.h>
+#include <linux/spinlock.h>
 #include <asm/io.h>
 #include <asm/bitops.h>
 #include <asm/system.h>
-#include <asm/spinlock.h>
 #include <asm/dma.h>
 
 #define ULTRASTOR_PRIVATE	/* Get the private stuff from ultrastor.h */

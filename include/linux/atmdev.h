@@ -138,10 +138,6 @@ struct atm_cirange {
 #include <linux/proc_fs.h>
 #endif
 
-#ifdef CONFIG_AREQUIPA
-#include <net/sock.h> /* for struct sock */
-#endif
-
 
 #define ATM_VF_ADDR	1	/* Address is in use. Set by anybody, cleared
 				   by device driver. */
@@ -220,17 +216,11 @@ struct atm_vcc {
 	struct sk_buff_head listenq;
 	int		backlog_quota;	/* number of connection requests we */
 					/* can still accept */
-	int		reply;
+	int		reply;		/* also used by ATMTCP */
 	/* Multipoint part ------------------------------------------------- */
 	struct atm_vcc	*session;	/* session VCC descriptor */
 	/* Other stuff ----------------------------------------------------- */
 	void		*user_back;	/* user backlink - not touched */
-#ifdef CONFIG_AREQUIPA
-	struct sock	*upper;		/* our "master" */
-	struct socket	*sock;		/* back pointer to our own socket */
-	struct atm_vcc	*aq_next,*aq_prev; /* for consistency checks */
-	unsigned long	generation;	/* generation number */
-#endif
 };
 
 
@@ -325,14 +315,12 @@ void shutdown_atm_dev(struct atm_dev *dev);
 void bind_vcc(struct atm_vcc *vcc,struct atm_dev *dev);
 
 
-/* This is the algorithm used by alloc_skb
-
-   SHIT! It is fully illegal. If we could derive truesize
-   from another skb parameter, we would not create this variable.
-   Do not wonder, if allocating 5K skbm truesize will be > 8K.
+/*
+ * This is approximately the algorithm used by alloc_skb.
+ *
  */
 
-static __inline__ int atm_pdu2truesize(int pdu_size)
+static __inline__ int atm_guess_pdu2truesize(int pdu_size)
 {
 	return ((pdu_size+15) & ~15) + sizeof(struct sk_buff);
 }
@@ -351,7 +339,8 @@ static __inline__ void atm_return(struct atm_vcc *vcc,int truesize)
 
 
 int atm_charge(struct atm_vcc *vcc,int truesize);
-void atm_return(struct atm_vcc *vcc,int truesize);
+struct sk_buff *atm_alloc_charge(struct atm_vcc *vcc,int pdu_size,
+    int gfp_flags);
 int atm_find_ci(struct atm_vcc *vcc,short *vpi,int *vci);
 int atm_pcr_goal(struct atm_trafprm *tp);
 

@@ -8,12 +8,12 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/malloc.h>
+#include <linux/spinlock.h>
 #include <asm/pgtable.h>
 #include <asm/sbus.h>
 #include <asm/io.h>
 #include <asm/io-unit.h>
 #include <asm/mxcc.h>
-#include <asm/spinlock.h>
 #include <asm/bitops.h>
 
 /* #define IOUNIT_DEBUG */

@@ -160,7 +160,7 @@ MODULE_DESCRIPTION ("AMI MegaRAID driver");
 #if LINUX_VERSION_CODE < 0x20100
 #include <linux/bios32.h>
 #else
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #endif
 
 #include <asm/io.h>

@@ -5,7 +5,7 @@
  *
  * The OHCI HCD layer is a simple but nearly complete implementation of what 
  * the USB people would call a HCD  for the OHCI. 
- * (ISO comming soon, Bulk disabled, INT u. CTRL transfers enabled)
+ * (ISO alpha , Bulk, INT u. CTRL transfers enabled)
  * The layer on top of it, is for interfacing to the alternate-usb 
  * device-drivers.
  * 
@@ -17,12 +17,15 @@
  * [ $Log: ohci.c,v $ ]
  * [ Revision 1.1  1999/04/05 08:32:30  greg ]
  * 
+ * v4.2 1999/09/05 ISO API alpha, new dev alloc, neg Error-codes
+ * v4.1 1999/08/27 Randy Dunlap's - ISO API first impl.
+ * v4.0 1999/08/18 
  * v3.0 1999/06/25 
  * v2.1 1999/05/09  code clean up
  * v2.0 1999/05/04 
- * virtual root hub is now an option, 
+ * virtual root hub is now enabled, 
  * memory allocation based on kmalloc and kfree now, Bus error handling, 
- * INT and CTRL transfers enabled, Bulk included but disabled, ISO needs completion
+ * INT, CTRL and BULK transfers enabled, ISO needs testing (alpha)
  * 
  * from Linus Torvalds (uhci.c) (APM not tested; hub, usb_device, bus and related stuff)
  * from Greg Smith (ohci.c) (reset controller handling, hub)
@@ -44,8 +47,8 @@
 #include <linux/smp_lock.h>
 #include <linux/errno.h>
 #include <linux/timer.h>
+#include <linux/spinlock.h>
 
-#include <asm/spinlock.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/system.h>
@@ -58,8 +61,11 @@
 static int handle_apm_event(apm_event_t event);
 static int apm_resume = 0;
 #endif
+
 static int ohci_link_ed(struct ohci * ohci, struct usb_ohci_ed *ed);
- 
+static int sohci_kill_isoc (struct usb_isoc_desc *id);
+static int sohci_get_current_frame_number (struct usb_device *usb_dev);
+static int sohci_run_isoc(struct usb_isoc_desc *id, struct usb_isoc_desc *pr_id);
 static DECLARE_WAIT_QUEUE_HEAD(op_wakeup);
  
 void usb_pipe_to_hcd_ed(struct usb_device *usb_dev, unsigned int pipe, struct usb_hcd_ed  *hcd_ed) 
@@ -70,7 +76,8 @@ void usb_pipe_to_hcd_ed(struct usb_device *usb_dev, unsigned int pipe, struct us
 	hcd_ed->type     = usb_pipetype(pipe);
 	hcd_ed->slow     = usb_pipeslow(pipe);
 	hcd_ed->maxpack  = usb_maxpacket(usb_dev, pipe, usb_pipeout(pipe));
-	OHCI_DEBUG(printk("******* hcd_ed: endpoint: %4x, function: %4x, out: %4x, type: %4x, slow: %4x, maxpack: %4x\n", hcd_ed->endpoint, hcd_ed->function, hcd_ed->out, hcd_ed->type, hcd_ed->slow, hcd_ed->maxpack); )
+	OHCI_DEBUG(printk("******* hcd_ed: pipe: %8x, endpoint: %4x, function: %4x, out: %4x, type: %4x, slow: %4x, maxpack: %4x\n", pipe, hcd_ed->endpoint, hcd_ed->function, hcd_ed->out, hcd_ed->type, hcd_ed->slow, hcd_ed->maxpack); )
+OHCI_DEBUG(printk("******* dev: devnum: %4x, slow: %4x, maxpacketsize: %4x\n",usb_dev->devnum, usb_dev->slow, usb_dev->maxpacketsize); )
 }
 
 
@@ -81,7 +88,10 @@ void usb_pipe_to_hcd_ed(struct usb_device *usb_dev, unsigned int pipe, struct us
 static int sohci_blocking_handler(void * ohci_in, struct usb_ohci_ed *ed, void * data, int data_len, int status, __OHCI_BAG lw0, __OHCI_BAG lw1)
 {  
 	if(lw0 != NULL) {
-		((struct ohci_state * )lw0)->status = status;
+		if(USB_ST_CRC < 0 && (status == USB_ST_DATAUNDERRUN || status == USB_ST_NOERROR)) 
+			((struct ohci_state * )lw0)->status = data_len;
+		else
+			((struct ohci_state * )lw0)->status = status;
 		((struct ohci_state * )lw0)->len = data_len;
 	}
 	if(lw1 != NULL) {
@@ -116,7 +126,59 @@ static int sohci_int_handler(void * ohci_in, struct usb_ohci_ed *ed, void * data
  
 	return 0;
 }
-                                                         
+
+static int sohci_iso_handler(void * ohci_in, struct usb_ohci_ed *ed, void * data, int data_len, int status, __OHCI_BAG lw0, __OHCI_BAG lw1) {
+
+	// struct ohci * ohci = ohci_in; 
+	unsigned int ix = (unsigned int) lw0;
+	struct usb_isoc_desc * id = (struct usb_isoc_desc *) lw1;
+	struct usb_ohci_td **tdp = id->td;
+	int ret = 0;
+	int fx;
+
+	OHCI_DEBUG({ int i; printk("USB HC ISO |||: %x: data(%d):", ed->hwINFO, data_len);)
+	OHCI_DEBUG( for(i=0; i < 16 ; i++ ) printk(" %02x", ((__u8 *) data)[i]);)
+	OHCI_DEBUG( printk(" ... ret_status: %x\n", status); })
+
+	tdp[ix] = NULL;
+	id->frames[ix].frame_length = data_len;
+	id->frames[ix].frame_status = status;
+	id->total_length += data_len;
+	if(status) id->error_count++;
+	
+	id->cur_completed_frame++;
+	id->total_completed_frames++;
+	
+	if(id->cur_completed_frame == id->callback_frames) {
+		id->prev_completed_frame = id->cur_completed_frame;
+		id->cur_completed_frame = 0;
+		OHCI_DEBUG(printk("USB HC ISO <<<: %x: \n", ed->hwINFO);)
+		ret = id->callback_fn(id->error_count, id->data, id->total_length, id);
+		switch (ret) {
+			case CB_CONT_RUN:
+				for (fx = 0; fx < id->frame_count; fx++)
+					id->frames[fx].frame_length = id->frame_size;
+				sohci_run_isoc(id, id->prev_isocdesc);
+				break;
+				
+			case CB_CONTINUE:
+				break;
+		
+			case CB_REUSE:
+				break;
+		
+			case CB_RESTART:
+				break;
+		
+			case CB_ABORT:
+				sohci_kill_isoc(id);
+				break;
+		}
+	}
+	
+	return 0;
+}
+                                                     
 static void * sohci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id)
 {
 	struct ohci * ohci = usb_dev->bus->hcpriv;
@@ -146,8 +208,8 @@ static int sohci_release_irq(struct usb_device *usb_dev, void * ed)
 	// struct usb_device *usb_dev = ((struct ohci_device *) ((unsigned int)ed & 0xfffff000))->usb;
 	struct ohci * ohci = usb_dev->bus->hcpriv; 
 	
-	OHCI_DEBUG( printk("USB HC RM_IRQ>>>:%4x\n", (unsigned int) ed);)
-	
+	OHCI_DEBUG( printk("USB HC ***** RM_IRQ>>>:%4x\n", (unsigned int) ed);)
+
 	if(ed == NULL) return 0;
 			 
 #ifdef  VROOTHUB
@@ -157,7 +219,7 @@ static int sohci_release_irq(struct usb_device *usb_dev, void * ed)
 	ED_setSTATE((struct usb_ohci_ed *)ed, ED_STOP);
 	 
     usb_ohci_rm_ep(usb_dev, (struct usb_ohci_ed *) ed, NULL, NULL, NULL, 0);
-     
+ 
 	return 0;
 }
 
@@ -179,7 +241,7 @@ static int sohci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devr
  	
 	ed = usb_ohci_add_ep(usb_dev, &hcd_ed, 0, 1);
 	
- 	OHCI_DEBUG( { int i; printk("USB HC CTRL>>>: %x: ctrl(%d):", ed->hwINFO, 8);)
+ 	OHCI_DEBUG( { int i; printk("USB HC CTRL>>>: ed:%x-%x: ctrl(%d):", (unsigned int) ed, ed->hwINFO, 8);)
 	OHCI_DEBUG( for(i=0; i < 8; i++ ) printk(" %02x", ((__u8 *) cmd)[i]);)
 	OHCI_DEBUG( printk(" data(%d):", len);) 
 	OHCI_DEBUG( for(i=0; i < len; i++ ) printk(" %02x", ((__u8 *) data)[i]);)
@@ -191,7 +253,7 @@ static int sohci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devr
     OHCI_DEBUG(printk("USB HC trans req ed %x: %x :", ed->hwINFO, (unsigned int ) ed); )
  	OHCI_DEBUG({ int i; for( i= 0; i<8 ;i++) printk(" %4x", ((unsigned int *) ed)[i]) ; printk("\n"); }; )
  	if (ED_STATE(ed) != ED_OPER)  ohci_link_ed(ohci, ed);
- 	schedule_timeout(HZ/10);
+ 	schedule_timeout(HZ*5);
    
     if(state.status == TD_NOTACCESSED) {	
     	current->state = TASK_UNINTERRUPTIBLE;
@@ -223,7 +285,7 @@ static int sohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *d
 	ohci_trans_req(ohci, ed, 0, NULL, data, len, (__OHCI_BAG) &state, (__OHCI_BAG) &wait,(usb_pipeout(pipe))?BULK_OUT:BULK_IN, sohci_blocking_handler);
 	if (ED_STATE(ed) != ED_OPER)  ohci_link_ed(ohci, ed);
 	
-	schedule_timeout(HZ/10);
+	schedule_timeout(HZ*5);
 
 	if(state.status == TD_NOTACCESSED) {		
     	current->state = TASK_UNINTERRUPTIBLE;
@@ -267,13 +329,36 @@ static int sohci_terminate_bulk(struct usb_device *usb_dev, void * ed)
 	return 1;
 }
 
-static int sohci_usb_deallocate(struct usb_device *usb_dev) {
+static int sohci_alloc_dev(struct usb_device *usb_dev)
+{
+	struct ohci_device *dev;
+
+	/* Allocate the OHCI_HCD device private data */
+	dev = kmalloc(sizeof(*dev), GFP_KERNEL);
+	if (!dev)
+		return -1;
+
+	/* Initialize "dev" */
+	memset(dev, 0, sizeof(*dev));
+
+	usb_dev->hcpriv = dev;
+	dev->usb = usb_dev;
+	atomic_set(&dev->refcnt, 1);
+
+	if (usb_dev->parent)
+		dev->ohci = usb_to_ohci(usb_dev->parent)->ohci;
+
+	return 0;
+}
+
+static int sohci_free_dev(struct usb_device *usb_dev)
+{
 	int cnt;
     DECLARE_WAITQUEUE(wait, current);
-    struct ohci_device *dev = usb_to_ohci(usb_dev); 
-	
-	OHCI_DEBUG(printk("USB HC dealloc %x\n", usb_dev->devnum);)
- 	 
+	struct ohci_device *dev = usb_to_ohci(usb_dev);
+
+	OHCI_DEBUG(printk("USB HC ***** free %x\n", usb_dev->devnum);)
+
 	if(usb_dev->devnum >= 0) {
 		current->state = TASK_UNINTERRUPTIBLE;
     	cnt = usb_ohci_rm_function(usb_dev, sohci_blocking_handler, NULL, &wait);
@@ -281,109 +366,161 @@ static int sohci_usb_deallocate(struct usb_device *usb_dev) {
     		schedule();
     		remove_wait_queue(&op_wakeup, &wait);
     	}
+    	current->state = TASK_INTERRUPTIBLE;
 	}
- 	 		 
-    USB_FREE(dev);
-    usb_destroy_configuration(usb_dev);
-	USB_FREE(usb_dev);
+
+if (atomic_dec_and_test(&dev->refcnt))
+		kfree(dev);
 
 	return 0;
 }
 
-static struct usb_device *sohci_usb_allocate(struct usb_device *parent) {
  
-	struct usb_device *usb_dev;
-	struct ohci_device *dev;
-	
-	USB_ALLOC(usb_dev, sizeof(*usb_dev));
-	if (!usb_dev)
-		return NULL;
-		
-	memset(usb_dev, 0, sizeof(*usb_dev));
 
-	USB_ALLOC(dev, sizeof(*dev));
-	if (!dev) {
-		usb_destroy_configuration(usb_dev);
-		USB_FREE(usb_dev);
-		return NULL;
-	}
+/*
+ * ISO Interface designed by Randy Dunlap
+ */
 
-	/* Initialize "dev" */
-	memset(dev, 0, sizeof(*dev));
-	
-	usb_dev->hcpriv = dev;
-	dev->usb = usb_dev;
+static int sohci_get_current_frame_number(struct usb_device *usb_dev) {
 
-	usb_dev->parent = parent;
-
-	if (parent) {
-		usb_dev->bus = parent->bus;
-		dev->ohci = usb_to_ohci(parent)->ohci;
-	}
-	return usb_dev;
-}
-
-static void *sohci_alloc_isochronous (struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int maxsze, usb_device_irq completed, void *dev_id)
-{
 	struct ohci * ohci = usb_dev->bus->hcpriv;
-	struct ohci_device * dev = usb_to_ohci(usb_dev);
-	struct usb_hcd_ed hcd_ed;
-	struct usb_ohci_ed * ed;
- 	struct usb_ohci_td * td;
- 	
-	usb_pipe_to_hcd_ed(usb_dev, pipe, &hcd_ed);
+	
+	return readl(&ohci->regs->fmnumber) & 0xffff;
+}
+
+
+static int sohci_init_isoc(struct usb_device *usb_dev, unsigned int pipe, int frame_count, void *context, struct usb_isoc_desc **idp) {
+
+	struct usb_isoc_desc *id;
+	
+	*idp = NULL;
+
+	id = kmalloc (sizeof (struct usb_isoc_desc) + (sizeof (struct isoc_frame_desc) * frame_count), GFP_KERNEL);
+	if(!id) return -ENOMEM;
+	memset (id, 0, sizeof (struct usb_isoc_desc) + (sizeof (struct isoc_frame_desc) * frame_count));
+OHCI_DEBUG(printk("ISO alloc id: %p, size: %d\n", id, sizeof (struct usb_isoc_desc) + (sizeof (struct isoc_frame_desc) * frame_count));)
+	id->td = kmalloc (sizeof (void *) * frame_count, GFP_KERNEL);
+	if(!id->td) {
+		kfree (id);
+		return -ENOMEM;
+	}		
+	memset (id->td, 0, sizeof (void *) * frame_count);
+OHCI_DEBUG(printk("ISO alloc id->td: %p, size: %d\n", id->td, sizeof (void *) * frame_count);)
+	
+	id->frame_count = frame_count;
+	id->frame_size  = usb_maxpacket (usb_dev, pipe, usb_pipeout(pipe));
+	id->start_frame = -1;
+	id->end_frame   = -1;
+	id->usb_dev     = usb_dev;
+	id->pipe        = pipe;
+	id->context     = context;
+
+	*idp = id;
+	return 0;
+} 
+
+void print_int_eds(struct ohci * ohci);
+
+static int sohci_run_isoc(struct usb_isoc_desc *id, struct usb_isoc_desc *pr_id) {
+
+	struct ohci * ohci = id->usb_dev->bus->hcpriv;
+	struct usb_ohci_td  ** tdp = (struct usb_ohci_td  **) id->td;
+	struct usb_hcd_ed   hcd_ed;
+	struct usb_ohci_ed  * ed;
+	int	ix, frlen;
+	unsigned char	*bufptr;
+
+	if(pr_id)
+		id->start_frame = pr_id->end_frame + 1;		
+	else {
+		switch(id->start_type) {
+			case START_ABSOLUTE:
+				break;
+				
+			case START_RELATIVE:
+				if(id->start_frame < START_FRAME_FUDGE) id->start_frame = START_FRAME_FUDGE;
+				id->start_frame += sohci_get_current_frame_number(id->usb_dev);
+				break;
+				
+			case START_ASAP:
+				id->start_frame = START_FRAME_FUDGE + sohci_get_current_frame_number(id->usb_dev);
+				break;
+		}
+	}
+
+	id->start_frame &= 0xffff;	
+	id->end_frame = (id->start_frame + id->frame_count - 1) & 0xffff;
+
+	id->prev_completed_frame = 0;
+	id->cur_completed_frame  = 0;
+	if (id->frame_spacing <= 0) id->frame_spacing = 1;
+	
+	bufptr = id->data;
+	
+	usb_pipe_to_hcd_ed(id->usb_dev, id->pipe, &hcd_ed);
 	hcd_ed.type = ISO;
-	ed = usb_ohci_add_ep(usb_dev, &hcd_ed, 1, 1);
-	
-	OHCI_DEBUG( printk("USB HC ISO>>>: %x:  \n", ed->hwINFO);) 
-	
-	td = ohci_trans_req(ohci, ed, 0, NULL, dev->data, len, (__OHCI_BAG) completed, (__OHCI_BAG) dev_id, (usb_pipeout(pipe))?ISO_OUT:ISO_IN, sohci_int_handler);
-	return td;
-}
-
-static void sohci_delete_isochronous (struct usb_device *usb_dev, void *td)
-{
-	// struct ohci * ohci = usb_dev->bus->hcpriv; 
-	DECLARE_WAITQUEUE(wait, current);
-	
-	OHCI_DEBUG( printk("USB HC RM_ISO>>>:%4x\n", (unsigned int) td);)
+	ed = usb_ohci_add_ep(id->usb_dev, &hcd_ed, 1, 1);
+	OHCI_DEBUG( printk("USB HC ISO>>>: ed: %x-%x: (%d tds)\n", (unsigned int) ed, ed->hwINFO, id->frame_count);) 
 	 
-	current->state = TASK_UNINTERRUPTIBLE;
-    usb_ohci_rm_ep(usb_dev, ((struct usb_ohci_td *) td)->ed, sohci_blocking_handler, NULL, &wait, SEND);
-    schedule();
-    remove_wait_queue(&op_wakeup, &wait); 
-	return;
+	for (ix = 0; ix < id->frame_count; ix++) {
+		frlen = (id->frames[ix].frame_length > id->frame_size)? id->frame_size : id->frames[ix].frame_length;	
+		printk("ISO run id->td: %p \n", &tdp[ix]);
+		tdp[ix] = ohci_trans_req(ohci, ed, id->start_frame + ix , NULL, bufptr, frlen, (__OHCI_BAG) ix, (__OHCI_BAG) id, 
+						(usb_pipeout(id->pipe))?ISO_OUT:ISO_IN, 
+						sohci_iso_handler);
+		bufptr += frlen;
+	}
+	
+	if (ED_STATE(ed) != ED_OPER)  ohci_link_ed(ohci, ed);
+	print_int_eds(ohci);
+	return 0;
 }
 
-static int sohci_sched_isochronous (struct usb_device *usb_dev, void *_isodesc, void *_pisodesc)
-{
-	return USB_ST_NOTSUPPORTED;
+static int sohci_kill_isoc(struct usb_isoc_desc *id) {
+
+	struct usb_ohci_ed	*ed = NULL;
+	struct usb_ohci_td	**td = id->td;
+	int i;
+printk("KILL_ISOC***:\n");	
+	for (i = 0; i < id->frame_count; i++) {
+		if(td[i]) {
+			td[i]->type |= DEL;
+			ed = td[i]->ed; printk(" %d", i);	
+		}
+	} 
+	if(ed) usb_ohci_rm_ep(id->usb_dev, ed, NULL, NULL, NULL, TD_RM);
+printk(": end KILL_ISOC***: %p\n", ed);		
+	id->start_frame = -1;
+	return 0;
 }
 
-static int sohci_unsched_isochronous (struct usb_device *usb_dev, void *_isodesc)
-{
-	return USB_ST_NOTSUPPORTED;
-}
 
-static int sohci_compress_isochronous (struct usb_device *usb_dev, void *_isodesc)
-{
-	return USB_ST_NOTSUPPORTED;
+static void sohci_free_isoc(struct usb_isoc_desc *id) {
+printk("FREE_ISOC***\n");
+wait_ms(2000);
+	if(id->start_frame >= 0) sohci_kill_isoc(id);
+printk("FREE_ISOC2***\n");
+wait_ms(2000);
+	kfree(id->td);
+	kfree(id);
+printk("FREE_ISOC3***\n");
+wait_ms(2000);
 }
 
 struct usb_operations sohci_device_operations = {
-	sohci_usb_allocate,
-	sohci_usb_deallocate,
+	sohci_alloc_dev,
+	sohci_free_dev,
 	sohci_control_msg,
 	sohci_bulk_msg,
 	sohci_request_irq,
 	sohci_release_irq,
 	sohci_request_bulk,
 	sohci_terminate_bulk,
-	sohci_alloc_isochronous,
-	sohci_delete_isochronous,
-	sohci_sched_isochronous,
-	sohci_unsched_isochronous,
-	sohci_compress_isochronous
+	sohci_get_current_frame_number,
+	sohci_init_isoc,
+	sohci_free_isoc,
+	sohci_run_isoc,
+	sohci_kill_isoc
 };
 
  
@@ -394,7 +531,7 @@ struct usb_operations sohci_device_operations = {
 /* just for debugging; prints all 32 branches of the int ed tree inclusive iso eds*/
 void print_int_eds(struct ohci * ohci) {int i; __u32 * ed_p;
 	for(i= 0; i < 32; i++) {
-			OHCI_DEBUG(printk("unlnk_branch int %2d(%2x): ", i,i); )
+			OHCI_DEBUG(printk("branch int %2d(%2x): ", i,i); )
 			ed_p = &(ohci->hc_area->hcca.int_table[i]);
 			while (*ed_p != 0) {
 				OHCI_DEBUG(printk("ed: %4x; ", (((struct usb_ohci_ed *)bus_to_virt(*ed_p))->hwINFO));)
@@ -431,7 +568,7 @@ static int usb_ohci_int_ballance(struct ohci * ohci, int * interval, int load) {
 }
 
 /* the int tree is a binary tree 
- * in order to process it sequentielly the indexes of the branches have to be mapped 
+ * in order to process it sequentially the indexes of the branches have to be mapped 
  * the mapping reverses the bits of a word of num_bits length
  * */
 static int rev(int num_bits, int word) {
@@ -445,7 +582,7 @@ static int rev(int num_bits, int word) {
 /* get the ed from the endpoint / usb_device address */
 
 struct usb_ohci_ed * ohci_find_ep(struct usb_device *usb_dev, struct usb_hcd_ed *hcd_ed) {
- 	return &(usb_to_ohci(usb_dev)->ed[hcd_ed->endpoint << 1 | ((hcd_ed->type == CTRL)? 0:hcd_ed->out)]);
+ 	return &(usb_to_ohci(usb_dev)->ed[(hcd_ed->endpoint << 1) | ((hcd_ed->type == CTRL)? 0:hcd_ed->out)]);
 }
 
 /* link an ed into one of the HC chains */
@@ -634,16 +771,19 @@ struct usb_ohci_ed *usb_ohci_add_ep(struct usb_device * usb_dev, struct usb_hcd_
 
    	// struct ohci * ohci = usb_dev->bus->hcpriv;
 	struct usb_ohci_td * td;  
-	struct usb_ohci_ed * ed; 
+	struct usb_ohci_ed * ed, *ed1; 
 	 
- 	int ed_state;
+ 	int ed_state, ed_state1;
  
 	spin_lock(&usb_ed_lock);
 
-	ed = ohci_find_ep(usb_dev, hcd_ed);
+	ed = ohci_find_ep(usb_dev, hcd_ed); 
 
+	 
+	ed1 = ((void *) ed) + 0x40; ed_state1 = ED_STATE(ed1);
+OHCI_DEBUG(printk("++++ USB HC add 60 ed1 %x: %x :state: %x\n", ed1->hwINFO, (unsigned int ) ed1, ed_state1); )
 	ed_state = ED_STATE(ed); /* store state of ed */
-	
+	OHCI_DEBUG(printk("USB HC add ed %x: %x :state: %x\n", ed->hwINFO, (unsigned int ) ed, ed_state); )
 	if (ed_state == ED_NEW) {
   		OHCI_ALLOC(td, sizeof(*td)); /* dummy td; end of td list for ed */
 		ed->hwTailP = virt_to_bus(td);
@@ -678,6 +818,8 @@ struct usb_ohci_ed *usb_ohci_add_ep(struct usb_device * usb_dev, struct usb_hcd_
  * put the ep on the rm_list and request a stop of the bulk or ctrl list 
  * real removal is done at the next start of frame (SOF) hardware interrupt 
  * the dummy td carries the essential information (handler, proc queue, ...)
+ * if(send & TD_RM) then just the TD witch have (TD->type & DEL) set will be removed
+ * otherwise all TDs including the dummy TD of the ED will be removed
  */
 int usb_ohci_rm_ep(struct usb_device * usb_dev, struct usb_ohci_ed *ed, f_handler handler, __OHCI_BAG lw0, __OHCI_BAG lw1, int send)
 {    
@@ -692,17 +834,21 @@ int usb_ohci_rm_ep(struct usb_device * usb_dev, struct usb_ohci_ed *ed, f_handle
 	ed->hwINFO  |=  OHCI_ED_SKIP;
 	writel( OHCI_INTR_SF, &ohci->regs->intrenable); /* enable sof interrupt */
 
-	if(ED_STATE(ed) == ED_OPER) ohci_unlink_ed(ohci, ed);
 
-	td = (struct usb_ohci_td *) bus_to_virt(ed->hwTailP);
-	td->lw0 = lw0;
-	td->lw1 = lw1;
-	td->ed = ed;
-	td->hwINFO = TD_CC;
-	td->handler = handler;
-	td->type = send;
-  
-	ED_setSTATE(ed, ED_DEL);
+	if(send & TD_RM) { /* delete selected TDs */
+		ED_setSTATE(ed, ED_TD_DEL);
+	}
+	else { /* delete all TDS */
+		if(ED_STATE(ed) == ED_OPER) ohci_unlink_ed(ohci, ed);
+		td = (struct usb_ohci_td *) bus_to_virt(ed->hwTailP);
+		td->lw0 = lw0;
+		td->lw1 = lw1;
+		td->ed = ed;
+		td->hwINFO = TD_CC;
+		td->handler = handler;
+		td->type = send; 
+		ED_setSTATE(ed, ED_DEL);
+	}
 	ed->ed_prev = ohci->ed_rm_list;
 	ohci->ed_rm_list = ed;
    
@@ -770,7 +916,7 @@ int usb_ohci_rm_function(struct usb_device * usb_dev, f_handler handler,__OHCI_B
 
 #define FILL_ISO_TD(INFO, DATA, LEN, LW0, LW1, TYPE, HANDLER)  \
 	OHCI_ALLOC(td_pt, sizeof(*td_pt)); \
-    td_ret = (struct usb_ohci_td *) bus_to_virt(usb_ed->hwTailP); \
+    td_ret = (struct usb_ohci_td *) bus_to_virt(usb_ed->hwTailP & 0xfffffff0); \
     td_pt1 = td_ret; \
     td_pt1->ed = ed; \
     td_pt1->buffer_start = (DATA); \
@@ -779,12 +925,13 @@ int usb_ohci_rm_function(struct usb_device * usb_dev, f_handler handler,__OHCI_B
     td_pt1->lw0 = (LW0); \
     td_pt1->lw1 = (LW1); \
     td_pt1->hwINFO = (INFO); \
-    td_pt1->hwCBP = (virt_to_bus(DATA) & 0xfffff000); \
-    td_pt1->hwBE = virt_to_bus((DATA) + (LEN) - 1); \
+    td_pt1->hwCBP = (((DATA)==NULL)||((LEN)==0))?0:(virt_to_bus(DATA) & 0xfffff000); \
+    td_pt1->hwBE = (((DATA)==NULL)||((LEN)==0))?0:virt_to_bus((DATA) + (LEN) - 1); \
     td_pt1->hwNextTD = virt_to_bus(td_pt); \
-    td_pt1->hwPSW[0] = virt_to_bus(DATA) & 0xfff; \
-    usb_ed->hwTailP = virt_to_bus(td_pt); \
-    td_pt->hwNextTD = 0
+    td_pt1->hwPSW[0] = (virt_to_bus(DATA) & 0xfff) | 0xe000; \
+    td_pt->hwNextTD = 0; \
+    usb_ed->hwTailP =  td_pt1->hwNextTD
+    
     
 spinlock_t usb_req_lock = SPIN_LOCK_UNLOCKED;
 
@@ -811,7 +958,7 @@ struct usb_ohci_td * ohci_trans_req(struct ohci * ohci, struct usb_ohci_ed * ed,
   case BULK_IN: 
   	while(data_len > 4096)
 	{	
-		FILL_TD( TD_CC | TD_R | TD_DP_IN | TD_T_TOGGLE, data, 4096, NULL, NULL, BULK_IN | ADD_LEN|(cnt++?0:ST_ADDR), NULL);
+		FILL_TD( TD_CC | TD_DP_IN | TD_T_TOGGLE, data, 4096, NULL, NULL, BULK_IN | ADD_LEN|(cnt++?0:ST_ADDR), NULL);
 		data += 4096; data_len -= 4096;
 	}
     FILL_TD( TD_CC | TD_R | TD_DP_IN | TD_T_TOGGLE, data, data_len, lw0, lw1, BULK_IN |ADD_LEN|SEND|(cnt++?0:ST_ADDR), handler);
@@ -925,7 +1072,8 @@ static struct usb_ohci_td * ohci_reverse_done_list(struct ohci * ohci) {
 }
 
 /* there are some pending requests to remove some of the eds 
- * we process every td including the dummy td of these eds 
+ * we either process every td including the dummy td of these eds 
+ * or just those marked with TD->type&DEL
  * and link them to a list
  * */
 static struct usb_ohci_td * usb_ohci_del_list(struct ohci *  ohci) {
@@ -964,11 +1112,12 @@ static struct usb_ohci_td * usb_ohci_del_list(struct ohci *  ohci) {
    	 	 	OHCI_DEBUG(printk("USB HC ed_rm_list: dummy (ED_DEL) td: %4x\n", (unsigned int) td);)
    	 	 	ED_setSTATE(td->ed, ED_DEL| ED_NEW);
    	 	 	td->next_dl_td = NULL;
-   	 	}	
+   	 	}	  	
+   	 	if(ED_TYPE(ed) == CTRL) writel(0, &ohci->regs->ed_controlcurrent); /* reset CTRL list */
+  		if(ED_TYPE(ed) == BULK) writel(0, &ohci->regs->ed_bulkcurrent);    /* reset BULK list */
+
    	}  
    	  
-  	writel(0, &ohci->regs->ed_controlcurrent); /* reset CTRL list */
-  	writel(0, &ohci->regs->ed_bulkcurrent);    /* reset BULK list */
   	writel_set((0x03<<4), &ohci->regs->control);   /* start CTRL u. BULK list */ 
 
    	ohci->ed_rm_list = NULL;
@@ -1014,11 +1163,11 @@ static int usb_ohci_done_list(struct ohci * ohci, struct usb_ohci_td * td_list) 
   			}
   		}
   		/* error code of transfer */
-  		cc = (ED_STATE(td_list->ed) == ED_DEL || (td_list->type & DEL))? USB_ST_REMOVED : TD_CC_GET(td_list->hwINFO);
+  		cc = (ED_STATE(td_list->ed) == ED_DEL || (td_list->type & DEL))? USB_ST_REMOVED : (USB_ST_CRC*TD_CC_GET(td_list->hwINFO));
 
   	 	if(td_list->type & DEL_ED) ED_setSTATE(td_list->ed, ED_NEW); /* remove ed */
  		
-  		if((td_list->type & SEND) && (ED_STATE(td_list->ed) != ED_STOP)) {  /*  send the reply  */	
+  		if((td_list->type & SEND) && (ED_STATE(td_list->ed) != ED_STOP) && (td_list->handler)) {  /*  send the reply  */	
   			td_list->handler((void *) ohci,
 						td_list->ed,				  
 						td_list->ed->buffer_start, 
@@ -1029,6 +1178,7 @@ static int usb_ohci_done_list(struct ohci * ohci, struct usb_ohci_td * td_list) 
 			OHCI_DEBUG(if(cc != TD_CC_NOERROR) printk("******* USB BUS error %x @ep %x\n", TD_CC_GET(td_list->hwINFO), td_list->ed->hwINFO);)		
 			
 		}
+		if(ED_STATE(td_list->ed) == ED_TD_DEL) td_list->ed->hwINFO &= ~OHCI_ED_SKIP;
 		
      	if(((td_list->ed->hwHeadP & 0xfffffff0) == td_list->ed->hwTailP) && (ED_STATE(td_list->ed) > ED_UNLINK)) 
      		ohci_unlink_ed(ohci, td_list->ed); 		/* unlink eds if they are not busy */
@@ -1050,12 +1200,18 @@ static int usb_ohci_done_list(struct ohci * ohci, struct usb_ohci_td * td_list) 
 void reset_hc(struct ohci *ohci) {
 
 	int timeout = 30;
+	int smm_timeout = 50; /* 0,5 sec */
 	 	
 	if(readl(&ohci->regs->control) & 0x100) { /* SMM owns the HC */
 		writel(0x08,  &ohci->regs->cmdstatus); /* request ownership */
 		printk("USB HC TakeOver from SMM\n");
-		if(readl(&ohci->regs->control) & 0x100)
-			printk("USB HC TakeOver failed!\n");
+		while(readl(&ohci->regs->control) & 0x100) {
+			wait_ms(10);
+			if (--smm_timeout == 0) {
+				printk("USB HC TakeOver failed!\n");
+				break;
+			}
+		}
 	}	
 		
 	writel((1<<31), &ohci->regs->intrdisable); /* Disable HC interrupts */
@@ -1092,7 +1248,7 @@ int start_hc(struct ohci *ohci)
 	
 	writel(virt_to_bus(&ohci->hc_area->hcca), &ohci->regs->hcca); /* a reset clears this */
    
-	writel((0xB7), &ohci->regs->control); /* USB Operational */
+	writel((0xBF), &ohci->regs->control); /* USB Operational */
  		
   	fminterval = 0x2edf;
 	writel(((fminterval)*9)/10, &ohci->regs->periodicstart);
@@ -1121,16 +1277,16 @@ int start_hc(struct ohci *ohci)
 	struct ohci_device *dev;
  
 
-	usb_dev = sohci_usb_allocate(NULL);
+	usb_dev = usb_alloc_dev(NULL, ohci->bus);
 	if (!usb_dev) return -1;
 
 	dev = usb_to_ohci(usb_dev);
-	usb_dev->bus = ohci->bus;
+	// usb_dev->bus = ohci->bus;
 	ohci->bus->root_hub = usb_dev;
 	dev->ohci = ohci;
 	usb_connect(usb_dev);
 	if(usb_new_device(usb_dev) != 0) {
-		sohci_usb_deallocate(usb_dev); 
+		usb_free_dev(usb_dev); 
 		return -1;
 	}
 

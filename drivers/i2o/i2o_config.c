@@ -25,10 +25,10 @@
 #include <linux/malloc.h>
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
+#include <linux/spinlock.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
-#include <asm/spinlock.h>
 
 #include "i2o_proc.h"
 

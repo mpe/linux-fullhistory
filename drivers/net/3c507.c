@@ -50,11 +50,11 @@ static const char *version =
 #include <linux/ioport.h>
 #include <linux/in.h>
 #include <linux/string.h>
+#include <linux/spinlock.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
-#include <asm/spinlock.h>
 #include <linux/errno.h>
 
 #include <linux/netdevice.h>

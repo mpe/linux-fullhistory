@@ -36,12 +36,12 @@
 #include <linux/tty.h>
 #include <linux/kmod.h>
 #include <linux/wireless.h>
+#include <linux/spinlock.h>
 
 #include <asm/ioctls.h>
 #include <asm/segment.h>
 #include <asm/uaccess.h>
 #include <asm/dma.h>
-#include <asm/spinlock.h>
 
 #include <net/pkt_sched.h>
 

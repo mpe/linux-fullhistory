@@ -15,6 +15,7 @@
 #include <linux/pagemap.h>
 #include <linux/init.h>
 #include <linux/blk.h>
+#include <linux/spinlock.h>
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
@@ -32,7 +33,6 @@
 #include <asm/a.out.h>
 #include <asm/mmu_context.h>
 #include <asm/io-unit.h>
-#include <asm/spinlock.h>
 
 /* Now the cpu specific definitions. */
 #include <asm/viking.h>

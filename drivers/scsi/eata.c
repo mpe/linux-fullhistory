@@ -407,7 +407,7 @@ MODULE_AUTHOR("Dario Ballabio");
 #endif
 
 #if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,101)
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #define IRQ_FLAGS
 #define IRQ_LOCK
 #define IRQ_LOCK_SAVE

@@ -20,8 +20,8 @@
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 #include <linux/timer.h>
+#include <linux/spinlock.h>
 #include <net/sock.h>
-#include <asm/spinlock.h>
 #include <asm/atomic.h>
 #include <net/dn.h>
 

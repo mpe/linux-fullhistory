@@ -33,7 +33,7 @@
 struct tcp_ehash_bucket {
 	rwlock_t	lock;
 	struct sock	*chain;
-} __attribute__((__aligned__(SMP_CACHE_BYTES)));
+} __attribute__((__aligned__(8)));
 
 extern int tcp_ehash_size;
 extern struct tcp_ehash_bucket *tcp_ehash;
@@ -286,7 +286,12 @@ static __inline__ int tcp_sk_listen_hashfn(struct sock *sk)
 				 * there is no window			*/
 #define TCP_KEEPALIVE_TIME (120*60*HZ)		/* two hours */
 #define TCP_KEEPALIVE_PROBES	9		/* Max of 9 keepalive probes	*/
-#define TCP_KEEPALIVE_PERIOD ((75*HZ)>>2)	/* period of keepalive check	*/
+#define TCP_KEEPALIVE_INTVL	(75*HZ)
+
+#define MAX_TCP_KEEPIDLE	32767
+#define MAX_TCP_KEEPINTVL	32767
+#define MAX_TCP_KEEPCNT		127
+#define MAX_TCP_SYNCNT		127
 
 #define TCP_SYNACK_PERIOD	(HZ/2) /* How often to run the synack slow timer */
 #define TCP_QUICK_TRIES		8  /* How often we try to retransmit, until
@@ -331,6 +336,12 @@ static __inline__ int tcp_sk_listen_hashfn(struct sock *sk)
 #define TIME_DACK	3	/* Delayed ack timer */
 #define TIME_PROBE0	4
 #define TIME_KEEPOPEN	5
+
+/* sysctl variables for tcp */
+extern int sysctl_tcp_keepalive_time;
+extern int sysctl_tcp_keepalive_probes;
+extern int sysctl_tcp_keepalive_intvl;
+extern int sysctl_tcp_syn_retries;
 
 struct open_request;
 
@@ -611,7 +622,7 @@ extern void tcp_send_probe0(struct sock *);
 extern void tcp_send_partial(struct sock *);
 extern void tcp_write_wakeup(struct sock *);
 extern void tcp_send_fin(struct sock *sk);
-extern void tcp_send_active_reset(struct sock *sk);
+extern void tcp_send_active_reset(struct sock *sk, int priority);
 extern int  tcp_send_synack(struct sock *);
 extern void tcp_transmit_skb(struct sock *, struct sk_buff *);
 extern void tcp_send_skb(struct sock *, struct sk_buff *, int force_queue);
@@ -1229,6 +1240,22 @@ extern __inline__ void tcp_listen_unlock(void)
 {
 	if (atomic_dec_and_test(&tcp_lhash_users))
 		wake_up(&tcp_lhash_wait);
+}
+
+static inline int keepalive_intvl_when(struct tcp_opt *tp)
+{
+	if (tp->keepalive_intvl)
+		return tp->keepalive_intvl;
+	else
+		return sysctl_tcp_keepalive_intvl;
+}
+
+static inline int keepalive_time_when(struct tcp_opt *tp)
+{
+	if (tp->keepalive_time)
+		return tp->keepalive_time;
+	else
+		return sysctl_tcp_keepalive_time;
 }
 
 #endif	/* _TCP_H */

@@ -1532,6 +1532,7 @@ struct pci_dev *pci_find_class (unsigned int class, struct pci_dev *from);
 struct pci_dev *pci_find_slot (unsigned int bus, unsigned int devfn);
 int pci_find_capability (struct pci_dev *dev, int cap);
 
+int pci_assign_resource(struct pci_dev *dev, int i);
 int pci_claim_resource(struct pci_dev *, int);
 void pci_assign_unassigned_resources(u32 min_io, u32 min_mem);
 void pci_set_bus_ranges(void);

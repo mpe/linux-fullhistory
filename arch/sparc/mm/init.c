@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.68 1999/08/31 06:54:32 davem Exp $
+/*  $Id: init.c,v 1.69 1999/09/06 22:56:17 ecd Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -379,4 +379,6 @@ void si_meminfo(struct sysinfo *val)
 	}
 	val->totalram <<= PAGE_SHIFT;
 	val->sharedram <<= PAGE_SHIFT;
+	val->totalbig = 0;
+	val->freebig = 0;
 }

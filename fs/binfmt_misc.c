@@ -27,8 +27,8 @@
 #include <linux/proc_fs.h>
 #include <linux/string.h>
 #include <linux/ctype.h>
+#include <linux/spinlock.h>
 #include <asm/uaccess.h>
-#include <asm/spinlock.h>
 
 /*
  * We should make this work with a "stub-only" /proc,

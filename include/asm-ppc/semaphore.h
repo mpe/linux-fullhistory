@@ -1,5 +1,5 @@
-#ifndef _SPARC_SEMAPHORE_H
-#define _SPARC_SEMAPHORE_H
+#ifndef _PPC_SEMAPHORE_H
+#define _PPC_SEMAPHORE_H
 
 /*
  * Swiped from asm-sparc/semaphore.h and modified
@@ -104,4 +104,4 @@ extern inline void up(struct semaphore * sem)
 
 #endif /* __KERNEL__ */
 
-#endif /* !(_SPARC_SEMAPHORE_H) */
+#endif /* !(_PPC_SEMAPHORE_H) */

@@ -59,37 +59,32 @@ pipe_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
 	if (count == 0)
 		goto out_nolock;
 
-	/* Grab, or try to grab, the pipe's semaphore with data present.  */
-	if (filp->f_flags & O_NONBLOCK) {
-		ret = -EAGAIN;
-		if (down_trylock(PIPE_SEM(*inode)))
-			goto out_nolock;
-		ret = PIPE_WRITERS(*inode) ? -EAGAIN : 0;
-		if (PIPE_EMPTY(*inode))
-			goto out;
-	} else {
-		ret = -ERESTARTSYS;
-		if (down_interruptible(PIPE_SEM(*inode)))
-			goto out_nolock;
+	/* Get the pipe semaphore */
+	ret = -ERESTARTSYS;
+	if (down_interruptible(PIPE_SEM(*inode)))
+		goto out_nolock;
 
-		if (PIPE_EMPTY(*inode)) {
+	if (PIPE_EMPTY(*inode)) {
+		ret = 0;
+		if (!PIPE_WRITERS(*inode))
+			goto out;
+
+		ret = -EAGAIN;
+		if (filp->f_flags & O_NONBLOCK)
+			goto out;
+
+		for (;;) {
+			pipe_wait(inode);
+			ret = -ERESTARTSYS;
+			if (signal_pending(current))
+				goto out_nolock;
+			if (down_interruptible(PIPE_SEM(*inode)))
+				goto out_nolock;
 			ret = 0;
+			if (!PIPE_EMPTY(*inode))
+				break;
 			if (!PIPE_WRITERS(*inode))
 				goto out;
-
-			for (;;) {
-				pipe_wait(inode);
-				ret = -ERESTARTSYS;
-				if (signal_pending(current))
-					goto out_nolock;
-				if (down_interruptible(PIPE_SEM(*inode)))
-					goto out_nolock;
-				ret = 0;
-				if (!PIPE_EMPTY(*inode))
-					break;
-				if (!PIPE_WRITERS(*inode))
-					goto out;
-			}
 		}
 	}
 

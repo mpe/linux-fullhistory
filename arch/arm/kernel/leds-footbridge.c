@@ -21,10 +21,10 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/spinlock.h>
 
 #include <asm/hardware.h>
 #include <asm/leds.h>
-#include <asm/spinlock.h>
 #include <asm/system.h>
 
 #define LED_STATE_ENABLED	1

@@ -1,5 +1,5 @@
 /*
- * $Id: idle.c,v 1.65 1999/08/03 19:16:19 cort Exp $
+ * $Id: idle.c,v 1.66 1999/09/05 11:56:30 paulus Exp $
  *
  * Idle daemon for PowerPC.  Idle daemon will handle any action
  * that needs to be taken when the system becomes idle.
@@ -45,7 +45,7 @@ unsigned long zeropage_hits;  /* # zero'd pages request that we've done */
 unsigned long zeropage_calls; /* # zero'd pages request that've been made */
 unsigned long zerototal;      /* # pages zero'd over time */
 
-int idled(void *unused)
+int idled(void)
 {
 	/* endless loop with no priority at all */
 	current->priority = 0;
@@ -73,9 +73,9 @@ int idled(void *unused)
  * SMP entry into the idle task - calls the same thing as the
  * non-smp versions. -- Cort
  */
-int cpu_idle(void *unused)
+int cpu_idle()
 {
-	idled(unused);
+	idled();
 	return 0; 
 }
 

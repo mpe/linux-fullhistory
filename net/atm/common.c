@@ -29,10 +29,6 @@
 #include <linux/uio.h>
 #endif
 
-#ifdef CONFIG_AREQUIPA
-#include <linux/arequipa.h>
-#endif
-
 #if defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE)
 #include <linux/atmlec.h>
 #include "lec.h"
@@ -107,10 +103,6 @@ int atm_create(struct socket *sock,int protocol,int family)
 	if (sock->type == SOCK_STREAM) return -EINVAL;
 	if (!(sk = alloc_atm_vcc_sk(family))) return -ENOMEM;
 	vcc = sk->protinfo.af_atm;
-#ifdef CONFIG_AREQUIPA
-	vcc->upper = NULL;
-	vcc->sock = sock;
-#endif
 	vcc->flags = ATM_VF_SCRX | ATM_VF_SCTX;
 	vcc->dev = NULL;
 	vcc->family = sock->ops->family;
@@ -620,29 +612,6 @@ int atm_ioctl(struct socket *sock,unsigned int cmd,unsigned long arg)
 			if (!capable(CAP_NET_ADMIN)) return -EPERM;
 			return clip_encap(vcc,arg);
 #endif
-#ifdef CONFIG_AREQUIPA
-		case AREQUIPA_PRESET:
-			{
-				struct socket *upper;
-
-				if (!(upper = sockfd_lookup(arg,&error)))
-					return error;
-				if (upper->ops->family != PF_INET)
-					return -EPROTOTYPE;
-				return arequipa_preset(sock,upper->sk);
-			}
-		case AREQUIPA_INCOMING:
-			return arequipa_incoming(sock);
-		case AREQUIPA_CTRL:
-			if (!capable(CAP_NET_ADMIN)) return -EPERM;
-			error = arequipad_attach(vcc);
-			if (!error) sock->state = SS_CONNECTED;
-			return error;
-		case AREQUIPA_WORK:
-			if (!capable(CAP_NET_ADMIN)) return -EPERM;
-			arequipa_work();
-			return 0;
-#endif
 #if defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE)
                 case ATMLEC_CTRL:
                         if (!capable(CAP_NET_ADMIN)) return -EPERM;
@@ -899,6 +868,8 @@ static int atm_do_getsockopt(struct socket *sock,int level,int optname,
 		case SO_BCTXOPT:
 			/* fall through */
 		case SO_BCRXOPT:
+			printk(KERN_WARNING "Warning: SO_BCTXOPT/SO_BCRXOPT "
+			   "are obsolete\n");
 			break;
 		case SO_ATMQOS:
 			if (!(vcc->flags & ATM_VF_HASQOS)) return -EINVAL;
@@ -907,6 +878,19 @@ static int atm_do_getsockopt(struct socket *sock,int level,int optname,
 		case SO_SETCLP:
 			return put_user(vcc->atm_options & ATM_ATMOPT_CLP ? 1 :
 			  0,(unsigned long *) optval) ? -EFAULT : 0;
+		case SO_ATMPVC:
+			{
+				struct sockaddr_atmpvc pvc;
+
+				if (!vcc->dev || !(vcc->flags & ATM_VF_ADDR))
+					return -ENOTCONN;
+				pvc.sap_family = AF_ATMPVC;
+				pvc.sap_addr.itf = vcc->dev->number;
+				pvc.sap_addr.vpi = vcc->vpi;
+				pvc.sap_addr.vci = vcc->vci;
+				return copy_to_user(optval,&pvc,sizeof(pvc)) ?
+				    -EFAULT : 0;
+			}
 		default:
 			if (level == SOL_SOCKET) return -EINVAL;
 			break;
@@ -919,7 +903,7 @@ static int atm_do_getsockopt(struct socket *sock,int level,int optname,
 int atm_setsockopt(struct socket *sock,int level,int optname,char *optval,
     int optlen)
 {
-	if (level == __SO_LEVEL(optname) && optlen != __SO_SIZE(optname))
+	if (__SO_LEVEL_MATCH(optname, level) && optlen != __SO_SIZE(optname))
 		return -EINVAL;
 	return atm_do_setsockopt(sock,level,optname,optval,optlen);
 }
@@ -931,7 +915,7 @@ int atm_getsockopt(struct socket *sock,int level,int optname,
 	int len;
 
 	if (get_user(len,optlen)) return -EFAULT;
-	if (level == __SO_LEVEL(optname) && len != __SO_SIZE(optname))
+	if (__SO_LEVEL_MATCH(optname, level) && len != __SO_SIZE(optname))
 		return -EINVAL;
 	return atm_do_getsockopt(sock,level,optname,optval,len);
 }

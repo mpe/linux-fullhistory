@@ -32,6 +32,9 @@
 
 #include <linux/config.h>
 
+#include <linux/version.h>
+
+
 #ifdef CONFIG_ATM_HORIZON_DEBUG
 #define DEBUG_HORIZON
 #endif
@@ -41,7 +44,7 @@
 #ifndef PCI_VENDOR_ID_MADGE
 #define PCI_VENDOR_ID_MADGE               0x10B6
 #endif
-#ifndef PCI_VENDOR_ID_MADGE_HORIZON
+#ifndef PCI_DEVICE_ID_MADGE_HORIZON
 #define PCI_DEVICE_ID_MADGE_HORIZON       0x1000
 #endif
 
@@ -375,8 +378,6 @@ typedef struct MEMMAP {
 
 #define memmap ((MEMMAP *)0)
 
-#define BUF_PTR(cbptr) ((cbptr) - (cell_buf *) 0)
-
 /* end horizon specific bits */
 
 typedef enum {
@@ -423,7 +424,11 @@ struct hrz_dev {
   unsigned int        tx_regions; // number of remaining regions
 
   spinlock_t          mem_lock;
+#if LINUX_VERSION_CODE >= 0x20303
   wait_queue_head_t   tx_queue;
+#else
+  struct wait_queue * tx_queue;
+#endif
 
   u8                  irq;
   u8                  flags;
@@ -465,6 +470,8 @@ struct hrz_dev {
 typedef struct hrz_dev hrz_dev;
 
 /* macros for use later */
+
+#define BUF_PTR(cbptr) ((cbptr) - (cell_buf *) 0)
 
 #define INTERESTING_INTERRUPTS \
   (RX_DATA_AV | RX_DISABLED | TX_BUS_MASTER_COMPLETE | RX_BUS_MASTER_COMPLETE)

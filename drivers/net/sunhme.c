@@ -2426,17 +2426,46 @@ static void quattro_sbus_interrupt(int irq, void *cookie, struct pt_regs *ptregs
 	int i;
 
 	for(i = 0; i < 4; i++) {
-		struct net_device *hdev = qp->happy_meals[i];
-		struct happy_meal *hp = (struct happy_meal *) hdev->priv;
-		volatile u32 *sreg = qp->irq_status[i];
+		struct net_device *dev = qp->happy_meals[i];
+		struct happy_meal *hp = (struct happy_meal *) dev->priv;
+		struct hmeal_gregs *gregs = hp->gregs;
+		struct hmeal_tcvregs *tregs = hp->tcvregs;
+		unsigned int happy_status = hme_read32(hp, &gregs->stat);
 
-		if(sreg &&
-		   (hme_read32(hp, sreg) & (GREG_STAT_ERRORS |
-					    GREG_STAT_MIFIRQ |
-					    GREG_STAT_TXALL  |
-					    GREG_STAT_RXTOHOST)) != 0)
-			qp->handler(irq, hdev, ptregs);
+		HMD(("quattro_interrupt: status=%08x ",happy_status));
+
+		dev->interrupt=1;
+
+		if(happy_status & GREG_STAT_ERRORS) {
+			HMD(("ERRORS "));
+			if(happy_meal_is_not_so_happy(hp, gregs, happy_status)) {
+				dev->interrupt=0;
+				break;
+			}
+		}
+
+		if(happy_status & GREG_STAT_MIFIRQ) {
+			HMD(("MIFIRQ "));
+			happy_meal_mif_interrupt(hp, gregs, tregs);
+		}
+
+		if(happy_status & GREG_STAT_TXALL) {
+			HMD(("TXALL "));
+			happy_meal_tx(hp);
+		}
+
+		if(happy_status & GREG_STAT_RXTOHOST) {
+			HMD(("RXTOHOST "));
+			happy_meal_rx(hp, dev, gregs);
+		}
+
+		if(dev->tbusy && (TX_BUFFS_AVAIL(hp) >= 0)) {
+			hp->dev->tbusy = 0;
+			mark_bh(NET_BH);
+		}
+		dev->interrupt=0;
 	}
+	HMD(("done\n"));
 }
 
 static int happy_meal_open(struct net_device *dev)
@@ -2947,8 +2976,11 @@ static struct quattro * __init quattro_sbus_find(struct linux_sbus_device *goal_
 	struct linux_sbus_device *sdev;
 	struct quattro *qp;
 
+	if(qfe_sbus_list == NULL)
+		goto found;
+
 	for(qp = qfe_sbus_list; qp != NULL; qp = qp->next) {
-		for(sdev = qp->quattro_sbus_dev->child;
+		for(sdev = qp->quattro_sbus_dev;
 		    sdev != NULL;
 		    sdev = sdev->next) {
 			if(sdev == goal_sdev)
@@ -2980,7 +3012,7 @@ found:
 			qp->happy_meals[i] = NULL;
 		}
 		qp->handler = NULL;
-		qp->quattro_sbus_dev = sdev;
+		qp->quattro_sbus_dev = goal_sdev;
 #ifdef CONFIG_PCI
 		qp->quattro_pci_dev = NULL;
 #endif
@@ -3037,7 +3069,7 @@ static void __init quattro_sbus_register_irqs(void)
 #ifndef __sparc_v9__
 		if(sparc_cpu_model == sun4c)
 			qp->handler = sun4c_happy_meal_interrupt;
-		else if(sparc_cpu_model == sun4c)
+		else if(sparc_cpu_model == sun4d)
 			qp->handler = sun4d_happy_meal_interrupt;
 		else
 #endif
@@ -3088,7 +3120,7 @@ static int __init happy_meal_ether_init(struct net_device *dev, struct linux_sbu
 		printk(version);
 
 	if(qfe_slot != -1)
-		printk("%s: Quattro HME slot %d (SBUS) 10/100baseT Ethernet",
+		printk("%s: Quattro HME slot %d (SBUS) 10/100baseT Ethernet ",
 		       dev->name, qfe_slot);
 	else
 		printk("%s: HAPPY MEAL (SBUS) 10/100baseT Ethernet ",
@@ -3097,10 +3129,14 @@ static int __init happy_meal_ether_init(struct net_device *dev, struct linux_sbu
 	dev->base_addr = (long) sdev;
 
 	/* XXX Check for local-mac-address property on Quattro... -DaveM */
+	/* Quattro local-mac-address... */
+	if(qfe_slot != -1 && prom_getproplen(sdev->prom_node,"local-mac-address")==6)
+		prom_getproperty(sdev->prom_node,"local-mac-address",dev->dev_addr,6);
+	else
+		memcpy(dev->dev_addr,idprom->id_ethaddr,6);
 	for(i = 0; i < 6; i++)
 		printk("%2.2x%c",
-		       dev->dev_addr[i] = idprom->id_ethaddr[i],
-		       i == 5 ? ' ' : ':');
+		       dev->dev_addr[i], i == 5 ? ' ' : ':');
 	printk("\n");
 
 	hp = (struct happy_meal *) dev->priv;

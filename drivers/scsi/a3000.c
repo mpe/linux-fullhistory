@@ -4,6 +4,7 @@
 #include <linux/sched.h>
 #include <linux/version.h>
 #include <linux/init.h>
+#include <linux/spinlock.h>
 
 #include <asm/setup.h>
 #include <asm/page.h>
@@ -11,7 +12,6 @@
 #include <asm/amigaints.h>
 #include <asm/amigahw.h>
 #include <asm/irq.h>
-#include <asm/spinlock.h>
 
 #include "scsi.h"
 #include "hosts.h"

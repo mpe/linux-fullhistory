@@ -1,5 +1,5 @@
 /*
- * $Id: system.h,v 1.47 1999/08/22 12:31:08 paulus Exp $
+ * $Id: system.h,v 1.48 1999/09/05 11:56:40 paulus Exp $
  *
  * Copyright (C) 1999 Cort Dougan <cort@cs.nmt.edu>
  */
@@ -31,6 +31,10 @@
 #define mb()  __asm__ __volatile__ ("sync" : : : "memory")
 #define rmb()  __asm__ __volatile__ ("sync" : : : "memory")
 #define wmb()  __asm__ __volatile__ ("eieio" : : : "memory")
+
+#define set_mb(var, value)	do { var = value; mb(); } while (0)
+#define set_rmb(var, value)	do { var = value; rmb(); } while (0)
+#define set_wmb(var, value)	do { var = value; wmb(); } while (0)
 
 extern void xmon_irq(int, void *, struct pt_regs *);
 extern void xmon(struct pt_regs *excp);

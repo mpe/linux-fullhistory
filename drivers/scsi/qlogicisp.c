@@ -24,9 +24,9 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/unistd.h>
+#include <linux/spinlock.h>
 #include <asm/io.h>
 #include <asm/irq.h>
-#include <asm/spinlock.h>
 #include <asm/byteorder.h>
 
 #include "sd.h"

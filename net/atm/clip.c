@@ -45,7 +45,7 @@
 
 struct net_device *clip_devs = NULL;
 struct atm_vcc *atmarpd = NULL;
-static struct timer_list idle_timer = { NULL, NULL, 0L, 0L, NULL };
+static struct timer_list idle_timer;
 static int start_timer = 1;
 
 
@@ -207,12 +207,14 @@ void clip_push(struct atm_vcc *vcc,struct sk_buff *skb)
 		skb_pull(skb,RFC1483LLC_LEN);
 		if (skb->protocol == htons(ETH_P_ARP)) {
 			PRIV(skb->dev)->stats.rx_packets++;
+			PRIV(skb->dev)->stats.rx_bytes += skb->len;
 			clip_arp_rcv(skb);
 			return;
 		}
 	}
 	clip_vcc->last_use = jiffies;
 	PRIV(skb->dev)->stats.rx_packets++;
+	PRIV(skb->dev)->stats.rx_bytes += skb->len;
 	netif_rx(skb);
 }
 
@@ -395,13 +397,14 @@ return 0;
 	entry->vccs->last_use = jiffies;
 	DPRINTK("atm_skb(%p)->vcc(%p)->dev(%p)\n",skb,ATM_SKB(skb)->vcc,
 	    ATM_SKB(skb)->vcc->dev);
-	(void) ATM_SKB(skb)->vcc->dev->ops->send(ATM_SKB(skb)->vcc,skb);
 	PRIV(dev)->stats.tx_packets++;
+	PRIV(dev)->stats.tx_bytes += skb->len;
+	(void) ATM_SKB(skb)->vcc->dev->ops->send(ATM_SKB(skb)->vcc,skb);
 	return 0;
 }
 
 
-static struct enet_statistics *clip_get_stats(struct net_device *dev)
+static struct net_device_stats *clip_get_stats(struct net_device *dev)
 {
 	return &PRIV(dev)->stats;
 }
@@ -437,8 +440,11 @@ int clip_mkip(struct atm_vcc *vcc,int timeout)
 			kfree_skb(skb);
 		}
 		else {
+			unsigned int len = skb->len;
+
 			clip_push(vcc,skb);
 			PRIV(skb->dev)->stats.rx_packets--;
+			PRIV(skb->dev)->stats.rx_bytes -= len;
 		}
 	return 0;
 }
@@ -672,6 +678,7 @@ int atm_init_atmarp(struct atm_vcc *vcc)
 	if (atmarpd) return -EADDRINUSE;
 	if (start_timer) {
 		start_timer = 0;
+		init_timer(&idle_timer);
 		idle_timer.expires = jiffies+CLIP_CHECK_INTERVAL*HZ;
 		idle_timer.function = idle_timer_check;
 		add_timer(&idle_timer);
@@ -691,4 +698,12 @@ int atm_init_atmarp(struct atm_vcc *vcc)
 		if (dev->flags & IFF_UP)
 			(void) to_atmarpd(act_up,PRIV(dev)->number,0);
 	return 0;
+}
+
+
+void atm_clip_init(void)
+{
+	clip_tbl.lock = RW_LOCK_UNLOCKED;
+	clip_tbl.kmem_cachep = kmem_cache_create(clip_tbl.id,
+	    clip_tbl.entry_size, 0, SLAB_HWCACHE_ALIGN, NULL, NULL);
 }

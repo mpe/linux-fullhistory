@@ -105,9 +105,9 @@
 #include <linux/poll.h>
 #include <linux/bitops.h>
 #include <linux/proc_fs.h>
+#include <linux/spinlock.h>
 #include <asm/io.h>
 #include <asm/dma.h>
-#include <asm/spinlock.h>
 #include <asm/uaccess.h>
 #include <asm/hardirq.h>
 #include "ac97.h"

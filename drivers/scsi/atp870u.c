@@ -17,9 +17,9 @@
 #include <linux/delay.h>
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
+#include <linux/spinlock.h>
 #include <asm/system.h>
 #include <asm/io.h>
-#include <asm/spinlock.h>
 #include <linux/pci.h>
 #include <linux/blk.h>
 #include "scsi.h"

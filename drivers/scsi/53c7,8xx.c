@@ -253,7 +253,7 @@ typedef unsigned int  u32;
 #include <linux/time.h>
 #include <linux/blk.h>
 #include <linux/init.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 #include "scsi.h"
 #include "hosts.h"

@@ -54,7 +54,7 @@ struct Sun_Machine_Models Sun_Machines[NUM_SUN_MACHINES] = {
 //{ "Sun4M OBP based system", (SM_SUN4M_OBP | 0x0) }
 };
 
-__initfunc(static void display_system_type(unsigned char machtype))
+static void __init display_system_type(unsigned char machtype)
 {
 	register int i;
 
@@ -92,7 +92,7 @@ void sun3_get_model(unsigned char* model)
 
 
 /* Calculate the IDPROM checksum (xor of the data bytes). */
-__initfunc(static unsigned char calc_idprom_cksum(struct idprom *idprom))
+static unsigned char __init calc_idprom_cksum(struct idprom *idprom)
 {
 	unsigned char cksum, i, *ptr = (unsigned char *)idprom;
 
@@ -103,7 +103,7 @@ __initfunc(static unsigned char calc_idprom_cksum(struct idprom *idprom))
 }
 
 /* Create a local IDPROM copy, verify integrity, and display information. */
-__initfunc(void idprom_init(void))
+void __init idprom_init(void)
 {
 	prom_get_idprom((char *) &idprom_buffer, sizeof(idprom_buffer));
 

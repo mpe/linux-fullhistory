@@ -1,4 +1,4 @@
-/* $Id: ttable.S,v 1.28 1999/03/29 12:38:10 jj Exp $
+/* $Id: ttable.S,v 1.29 1999/08/31 19:25:37 davem Exp $
  * ttable.S: Sparc V9 Trap Table(s) with SpitFire extensions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -57,7 +57,7 @@ tl0_resv05c:	BTRAP(0x5c) BTRAP(0x5d) BTRAP(0x5e) BTRAP(0x5f)
 tl0_ivec:	TRAP_IVEC
 tl0_paw:	TRAP(do_paw)
 tl0_vaw:	TRAP(do_vaw)
-tl0_cee:	TRAP(do_cee)
+tl0_cee:	TRAP_NOSAVE(cee_trap)
 tl0_iamiss:
 #include	"itlb_base.S"
 tl0_damiss:
@@ -202,7 +202,7 @@ tl1_resv05c:	BTRAPTL1(0x5c) BTRAPTL1(0x5d) BTRAPTL1(0x5e) BTRAPTL1(0x5f)
 tl1_ivec:	TRAP_IVEC
 tl1_paw:	TRAPTL1(do_paw_tl1)
 tl1_vaw:	TRAPTL1(do_vaw_tl1)
-tl1_cee:	TRAPTL1(do_cee_tl1)
+tl1_cee:	TRAPTL1_CEE
 tl1_iamiss:	BTRAPTL1(0x64) BTRAPTL1(0x65) BTRAPTL1(0x66) BTRAPTL1(0x67)
 tl1_damiss:
 #include	"dtlb_backend.S"

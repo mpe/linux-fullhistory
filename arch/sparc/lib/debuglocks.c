@@ -8,9 +8,9 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/threads.h>	/* For NR_CPUS */
+#include <linux/spinlock.h>
 #include <asm/psr.h>
 #include <asm/system.h>
-#include <asm/spinlock.h>
 
 /* To enable this code, just define SPIN_LOCK_DEBUG in asm/spinlock.h */
 #ifdef SPIN_LOCK_DEBUG

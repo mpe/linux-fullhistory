@@ -47,9 +47,9 @@ static const char *version =
 #include <linux/skbuff.h>
 #include <linux/if_arp.h>
 #include <linux/timer.h>
+#include <linux/spinlock.h>
 #include <asm/system.h>
 #include <asm/io.h>
-#include <asm/spinlock.h>
 
 #include <linux/netdevice.h>
 #include <linux/fcdevice.h> /* had the declarations for init_fcdev among others + includes if_fcdevice.h */

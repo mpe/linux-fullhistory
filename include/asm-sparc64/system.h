@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.53 1999/08/03 05:16:14 davem Exp $ */
+/* $Id: system.h,v 1.54 1999/09/01 08:06:12 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -97,6 +97,12 @@ extern void __global_restore_flags(unsigned long flags);
 #define membar(type)	__asm__ __volatile__ ("membar " type : : : "memory");
 #define rmb()		membar("#LoadLoad | #LoadStore")
 #define wmb()		membar("#StoreLoad | #StoreStore")
+#define set_mb(__var, __value) \
+	do { __var = __value; membar("#StoreLoad | #StoreStore"); } while(0)
+#define set_rmb(__var, __value) \
+	do { __var = __value; membar("#StoreLoad"); } while(0)
+#define set_wmb(__var, __value) \
+	do { __var = __value; membar("#StoreStore"); } while(0)
 
 #define flushi(addr)	__asm__ __volatile__ ("flush %0" : : "r" (addr) : "memory")
 

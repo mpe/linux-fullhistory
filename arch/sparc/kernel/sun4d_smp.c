@@ -17,6 +17,7 @@
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
 #include <linux/init.h>
+#include <linux/spinlock.h>
 
 #include <asm/ptrace.h>
 #include <asm/atomic.h>
@@ -27,7 +28,6 @@
 #include <asm/pgtable.h>
 #include <asm/oplib.h>
 #include <asm/atops.h>
-#include <asm/spinlock.h>
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
 #include <asm/sbus.h>

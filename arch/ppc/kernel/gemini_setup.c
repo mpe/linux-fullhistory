@@ -480,6 +480,8 @@ void __init gemini_init(unsigned long r3, unsigned long r4, unsigned long r5,
 			unsigned long r6, unsigned long r7)
 {
 	void chrp_do_IRQ(struct pt_regs *, int, int);
+	void layout_bus( struct pci_bus * );
+ 
 	gemini_setup_pci_ptrs();
 
 	ISA_DMA_THRESHOLD = 0;
@@ -521,4 +523,5 @@ void __init gemini_init(unsigned long r3, unsigned long r4, unsigned long r5,
 #ifdef CONFIG_MAGIC_SYSRQ
 	ppc_md.ppc_kbd_sysrq_xlate = NULL;
 #endif
+	ppc_md.pcibios_fixup_bus = layout_bus;
 }

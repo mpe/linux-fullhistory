@@ -1,4 +1,4 @@
-/* $Id: signal.h,v 1.34 1998/07/29 16:32:38 jj Exp $ */
+/* $Id: signal.h,v 1.35 1999/09/06 08:22:04 jj Exp $ */
 #ifndef _ASMSPARC_SIGNAL_H
 #define _ASMSPARC_SIGNAL_H
 
@@ -196,10 +196,12 @@ struct __new_sigaction {
 	__new_sigset_t	sa_mask;
 };
 
+#ifdef __KERNEL__
 struct k_sigaction {
 	struct __new_sigaction	sa;
 	void			*ka_restorer;
 };
+#endif
 
 struct __old_sigaction {
 	__sighandler_t	sa_handler;
@@ -211,7 +213,7 @@ struct __old_sigaction {
 typedef struct sigaltstack {
 	void		*ss_sp;
 	int		ss_flags;
-	__kernel_size_t	ss_size;
+	size_t		ss_size;
 } stack_t;
 
 #endif /* !(__ASSEMBLY__) */

@@ -161,8 +161,8 @@ static int pd_drive_count;
 #include <linux/genhd.h>
 #include <linux/hdreg.h>
 #include <linux/cdrom.h>	/* for the eject ioctl */
+#include <linux/spinlock.h>
 
-#include <asm/spinlock.h>
 #include <asm/uaccess.h>
 
 #ifndef MODULE

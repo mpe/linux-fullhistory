@@ -16,8 +16,7 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/lp.h>
-
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 #include "usb.h"
 

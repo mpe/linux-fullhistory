@@ -140,9 +140,9 @@
 
 #include <linux/module.h>
 #include <linux/stddef.h>
+#include <linux/spinlock.h>
 #include <asm/fixmap.h>
 #include <asm/sgi-cobalt.h>
-#include <asm/spinlock.h>
 
 #include "sound_config.h"
 

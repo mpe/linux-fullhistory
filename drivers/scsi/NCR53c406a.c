@@ -52,7 +52,7 @@
 #include <asm/irq.h>
 
 #include <linux/blk.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include "scsi.h"
 #include "hosts.h"
 #include "sd.h"

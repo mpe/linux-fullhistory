@@ -35,8 +35,7 @@
 
 #include <linux/tty.h>
 #include <linux/netdevice.h>
-
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 #include <net/irda/irda.h>
 #include <net/irda/qos.h>

@@ -4,9 +4,9 @@
 
 /* Derived heavily from Linus's Alpha/AXP ASN code... */
 
+#include <linux/spinlock.h>
 #include <asm/system.h>
 #include <asm/spitfire.h>
-#include <asm/spinlock.h>
 
 #ifndef __ASSEMBLY__
 

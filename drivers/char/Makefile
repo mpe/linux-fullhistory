@@ -566,6 +566,11 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_DRM),y)
+  ALL_SUB_DIRS += drm
+  MOD_SUB_DIRS += drm
+endif
+
 include $(TOPDIR)/Rules.make
 
 fastdep:

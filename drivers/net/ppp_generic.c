@@ -40,8 +40,8 @@
 #include <linux/if_arp.h>
 #include <linux/ip.h>
 #include <linux/tcp.h>
+#include <linux/spinlock.h>
 #include <net/slhc_vj.h>
-#include <asm/spinlock.h>
 
 #define PPP_VERSION	"2.4.0"
 

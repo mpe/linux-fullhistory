@@ -23,7 +23,7 @@
 
 #include <linux/config.h>
 #include <linux/wanrouter.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 #ifdef	__KERNEL__
 /* Kernel Interface */

@@ -95,6 +95,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_TADPOLE_TS102_UCTRL),y)
+O_OBJS += uctrl.o
+else
+  ifeq ($(CONFIG_TADPOLE_TS102_UCTRL),m)
+  M_OBJS += uctrl.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 
 sunkbdmap.o: sunkeymap.c

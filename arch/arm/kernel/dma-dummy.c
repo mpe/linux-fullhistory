@@ -8,8 +8,7 @@
  */
 #include <linux/errno.h>
 #include <linux/init.h>
-
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 spinlock_t dma_spin_lock = SPIN_LOCK_UNLOCKED;
 

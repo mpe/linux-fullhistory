@@ -54,11 +54,11 @@
 #define __KERNEL_SYSCALLS__
 
 #include <linux/unistd.h>
+#include <linux/spinlock.h>
 
 #include <asm/system.h>
 #include <asm/irq.h>
 #include <asm/dma.h>
-#include <asm/spinlock.h>
 
 #include "scsi.h"
 #include "hosts.h"

@@ -6,7 +6,7 @@
 	.text
 
 /*
- * $Id: head.S,v 1.32 1999/08/12 19:51:12 cort Exp $
+ * $Id: head.S,v 1.33 1999/09/08 01:06:58 cort Exp $
  *	
  * Boot loader philosophy:
  *      ROM loads us to some arbitrary location
@@ -125,10 +125,11 @@ start_ldr:
 	 * get start address of kernel code which is stored as a coff
 	 * entry.  see boot/head.S -- Cort 
 	 */
-	li	r9,0x0
+	li	r9,0x4
 	mtlr	r9
 	lis	r10,0xdeadc0de@h
 	ori	r10,r10,0xdeadc0de@l
+	li	r9,0
 	stw	r10,0(r9)
 /*
  * The Radstone firmware maps PCI memory at 0xc0000000 using BAT2

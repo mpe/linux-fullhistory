@@ -21,7 +21,7 @@
 
 #include <asm/atomic.h>
 #include <asm/types.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 #define HAVE_ALLOC_SKB		/* For the drivers to know */
 #define HAVE_ALIGNABLE_SKB	/* Ditto 8)		   */

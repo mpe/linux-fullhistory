@@ -30,8 +30,8 @@
 #include <linux/proc_fs.h>
 #include <linux/string.h>
 #include <linux/netfilter_decnet.h>
+#include <linux/spinlock.h>
 #include <asm/atomic.h>
-#include <asm/spinlock.h>
 #include <net/neighbour.h>
 #include <net/dst.h>
 #include <net/dn.h>

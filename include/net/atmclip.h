@@ -46,7 +46,7 @@ struct atmarp_entry {
 struct clip_priv {
 	char name[8];			/* interface name */
 	int number;			/* for convenience ... */
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	struct net_device *next;		/* next CLIP interface */
 };
 
@@ -58,5 +58,6 @@ int clip_create(int number);
 int clip_mkip(struct atm_vcc *vcc,int timeout);
 int clip_setentry(struct atm_vcc *vcc,u32 ip);
 int clip_encap(struct atm_vcc *vcc,int mode);
+void atm_clip_init(void);
 
 #endif

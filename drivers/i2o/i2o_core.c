@@ -31,9 +31,9 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/malloc.h>
+#include <linux/spinlock.h>
 
 #include <asm/io.h>
-#include <asm/spinlock.h>
 
 #include "i2o_lan.h"
 

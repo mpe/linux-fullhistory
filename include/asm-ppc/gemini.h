@@ -160,6 +160,7 @@ static inline int gemini_processor(void)
 
 
 extern void _gemini_reboot(void);
+extern void gemini_prom_init(void);
 extern void gemini_init_l2(void);
 #endif /* __ASSEMBLY__ */
 #endif

@@ -69,7 +69,7 @@ find_name : find_name.c
 	$(HOSTCC) $(HOSTCFLAGS) -o find_name find_name.c
 
 checks: checks.c
-	$(HOSTCC) -I$(HPATH) $(HOSTCFLAGS) -D__KERNEL__ -o checks checks.c
+	$(HOSTCC) -I$(HPATH) $(HOSTCFLAGS) -D__KERNEL__ -fno-builtin -o checks checks.c
 	./checks
 
 include $(TOPDIR)/Rules.make

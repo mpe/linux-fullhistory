@@ -24,7 +24,7 @@
 #include <linux/kernel.h>
 #include <linux/ioport.h>
 #include <linux/string.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 #ifdef CONFIG_PARPORT_MODULE
 #define CONFIG_PARPORT

@@ -118,6 +118,7 @@ extern int bagetlance_probe(struct net_device *);
 extern int dec_lance_probe(struct net_device *);
 extern int mvme147lance_probe(struct net_device *dev);
 extern int via_rhine_probe(struct net_device *dev);
+extern int starfire_probe(struct net_device *dev);
 extern int tc515_probe(struct net_device *dev);
 extern int lance_probe(struct net_device *dev);
 extern int rcpci_probe(struct net_device *);
@@ -223,6 +224,9 @@ struct devprobe pci_probes[] __initdata = {
 #endif
 #ifdef CONFIG_VIA_RHINE
 	{via_rhine_probe, 0},
+#endif
+#ifdef CONFIG_ADAPTEC_STARFIRE
+	{starfire_probe, 0},
 #endif
 	{NULL, 0},
 };

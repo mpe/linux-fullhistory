@@ -1,6 +1,6 @@
 /* net/atm/pvc.c - ATM PVC sockets */
 
-/* Written 1995-1998 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #include <linux/config.h>
@@ -14,9 +14,6 @@
 #include <linux/init.h>
 #include <linux/skbuff.h>
 #include <net/sock.h>		/* for sock_no_* */
-#ifdef CONFIG_AREQUIPA
-#include <linux/arequipa.h>
-#endif
 #ifdef CONFIG_ATM_CLIP
 #include <net/atmclip.h>
 #endif
@@ -66,14 +63,11 @@ static int pvc_getname(struct socket *sock,struct sockaddr *sockaddr,
     int *sockaddr_len,int peer)
 {
 	struct sockaddr_atmpvc *addr;
-	struct atm_vcc *vcc;
+	struct atm_vcc *vcc = ATM_SD(sock);
 
-#if 0 /* add some sanity checks later ... @@@ */
-	if (sock->state != SS_CONNECTED) return -EINVAL;
-#endif
+	if (!vcc->dev || !(vcc->flags & ATM_VF_ADDR)) return -ENOTCONN;
         *sockaddr_len = sizeof(struct sockaddr_atmpvc);
 	addr = (struct sockaddr_atmpvc *) sockaddr;
-	vcc = ATM_SD(sock);
 	addr->sap_family = AF_ATMPVC;
 	addr->sap_addr.itf = vcc->dev->number;
 	addr->sap_addr.vpi = vcc->vpi;
@@ -101,6 +95,7 @@ static struct proto_ops SOCKOPS_WRAPPED(pvc_proto_ops) = {
 	atm_recvmsg,
 	sock_no_mmap
 };
+
 
 #include <linux/smp_lock.h>
 SOCKOPS_WRAP(pvc_proto, PF_ATMPVC);
@@ -137,15 +132,7 @@ void __init atmpvc_proto_init(struct net_proto *pro)
 		return;
 	}
 #ifdef CONFIG_ATM_CLIP
-	clip_tbl.lock = RW_LOCK_UNLOCKED;
-	if (clip_tbl.kmem_cachep == NULL)
-		clip_tbl.kmem_cachep = kmem_cache_create(clip_tbl.id,
-							 clip_tbl.entry_size,
-							 0, SLAB_HWCACHE_ALIGN,
-							 NULL, NULL);
-#endif
-#ifdef CONFIG_AREQUIPA
-	(void) atm_init_arequipa();
+	atm_clip_init();
 #endif
 #ifdef CONFIG_PROC_FS
 	error = atm_proc_init();

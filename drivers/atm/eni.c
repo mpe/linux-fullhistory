@@ -522,11 +522,7 @@ static int rx_aal0(struct atm_vcc *vcc)
 	else {
 		length = ATM_CELL_SIZE-1; /* no HEC */
 	}
-	if (!length || !atm_charge(vcc,atm_pdu2truesize(length))) skb = NULL;
-	else {
-		skb = alloc_skb(length,GFP_ATOMIC);
-		if (!skb) atm_return(vcc,atm_pdu2truesize(length));
-	}
+	skb = length ? atm_alloc_charge(vcc,length,GFP_ATOMIC) : NULL;
 	if (!skb) {
 		discard(vcc,length >> 2);
 		return 0;
@@ -596,16 +592,7 @@ static int rx_aal5(struct atm_vcc *vcc)
 			vcc->stats->rx_err++;
 		}
 	}
-	if (!eff || !atm_charge(vcc,atm_pdu2truesize(eff << 2))) skb = NULL;
-	else {
-		skb = alloc_skb(eff << 2,GFP_ATOMIC);
-		if (!skb) {
-			EVENT("peek reject (eff << 2=%ld)\n",eff << 2,0);
-			DPRINTK(DEV_LABEL "(itf %d): peek reject for %ld "
-			    "bytes\n",vcc->dev->number,eff << 2);
-			atm_return(vcc,atm_pdu2truesize(eff << 2));
-		}
-	}
+	skb = eff ? atm_alloc_charge(vcc,eff << 2,GFP_ATOMIC) : NULL;
 	if (!skb) {
 		discard(vcc,size);
 		return 0;

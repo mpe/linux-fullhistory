@@ -1,4 +1,4 @@
-/* $Id: sbus.c,v 1.79 1999/08/31 06:57:40 davem Exp $
+/* $Id: sbus.c,v 1.80 1999/09/02 05:44:33 shadow Exp $
  * sbus.c:  SBus support routines.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -207,6 +207,9 @@ extern int flash_init(void);
 #endif
 #ifdef CONFIG_SUN_AURORA
 extern int aurora_init(void);
+#endif
+#ifdef CONFIG_TADPOLE_TS102_UCTRL
+extern int ts102_uctrl_init(void);
 #endif
 
 static void __init sbus_do_child_siblings(int start_node,
@@ -444,6 +447,9 @@ void __init sbus_init(void)
 #endif
 #ifdef CONFIG_SUN_AURORA
 	aurora_init();
+#endif
+#ifdef CONFIG_TADPOLE_TS102_UCTRL
+	ts102_uctrl_init();
 #endif
 #ifdef __sparc_v9__
 	if (sparc_cpu_model == sun4u) {

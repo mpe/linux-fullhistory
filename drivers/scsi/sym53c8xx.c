@@ -110,7 +110,7 @@
 #include <asm/io.h>
 #include <asm/system.h>
 #if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,93)
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #endif
 #include <linux/delay.h>
 #include <linux/signal.h>

@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.74 1999/05/08 03:03:14 davem Exp $ */
+/* $Id: system.h,v 1.75 1999/09/01 08:06:08 davem Exp $ */
 #include <linux/config.h>
 
 #ifndef __SPARC_SYSTEM_H
@@ -309,6 +309,9 @@ do {	register unsigned long bits asm("g7");				\
 #define mb()	__asm__ __volatile__ ("" : : : "memory")
 #define rmb()	mb()
 #define wmb()	mb()
+#define set_mb(__var, __value)  do { __var = __value; mb(); } while(0)
+#define set_rmb(__var, __value) set_mb(__var, __value)
+#define set_wmb(__var, __value) set_mb(__var, __value)
 
 #define nop() __asm__ __volatile__ ("nop");
 

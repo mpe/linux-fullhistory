@@ -1,4 +1,4 @@
-/* $Id: pci_common.c,v 1.2 1999/08/31 09:12:33 davem Exp $
+/* $Id: pci_common.c,v 1.3 1999/09/04 22:26:32 ecd Exp $
  * pci_common.c: PCI controller common support.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -20,6 +20,19 @@ static int __init find_device_prom_node(struct pci_pbm_info *pbm,
 					int *nregs)
 {
 	int node;
+
+	/*
+	 * Return the PBM's PROM node in case we are it's PCI device,
+	 * as the PBM's reg property is different to standard PCI reg
+	 * properties. We would delete this device entry otherwise,
+	 * which confuses XFree86's device probing...
+	 */
+	if ((pdev->bus->number == pbm->pci_bus->number) && (pdev->devfn == 0) &&
+	    (pdev->vendor == PCI_VENDOR_ID_SUN) &&
+	    (pdev->device == PCI_DEVICE_ID_SUN_PBM)) {
+		*nregs = 0;
+		return bus_prom_node;
+	}
 
 	node = prom_getchild(bus_prom_node);
 	while (node != 0) {

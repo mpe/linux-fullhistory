@@ -13,8 +13,8 @@ O_TARGET= atm.o
 
 ifeq ($(CONFIG_ATM),y)
 
-O_OBJS	= addr.o pvc.o raw.o signaling.o svc.o # party.o
-OX_OBJS = common.o atm_misc.o resources.o
+O_OBJS	= addr.o pvc.o signaling.o svc.o
+OX_OBJS = common.o atm_misc.o raw.o resources.o
 
 ifeq ($(CONFIG_MMU_HACKS),y)
 O_OBJS += mmuio.o
@@ -22,11 +22,6 @@ endif
 
 ifeq ($(CONFIG_ATM_CLIP),y)
 O_OBJS += clip.o
-NEED_IPCOM = ipcommon.o
-endif
-
-ifeq ($(CONFIG_AREQUIPA),y)
-O_OBJS += arequipa.o
 NEED_IPCOM = ipcommon.o
 endif
 

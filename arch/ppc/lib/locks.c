@@ -10,9 +10,9 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
+#include <linux/spinlock.h>
 #include <asm/processor.h>
 #include <asm/system.h>
-#include <asm/spinlock.h>
 #include <asm/io.h>
 
 #define DEBUG_LOCKS 1

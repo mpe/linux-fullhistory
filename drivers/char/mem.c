@@ -268,6 +268,7 @@ static ssize_t write_kmem(struct file * file, const char * buf,
 	return do_write_mem(file, (void*)p, p, buf, count, ppos);
 }
 
+#if !defined(CONFIG_PPC) && !defined(__mc68000__)
 static ssize_t read_port(struct file * file, char * buf,
 			 size_t count, loff_t *ppos)
 {
@@ -305,6 +306,7 @@ static ssize_t write_port(struct file * file, const char * buf,
 	*ppos = i;
 	return tmp-buf;
 }
+#endif
 
 static ssize_t read_null(struct file * file, char * buf,
 			 size_t count, loff_t *ppos)
@@ -515,6 +517,7 @@ static struct file_operations null_fops = {
 	NULL		/* fsync */
 };
 
+#if !defined(CONFIG_PPC) && !defined(__mc68000__)
 static struct file_operations port_fops = {
 	memory_lseek,
 	read_port,
@@ -528,6 +531,7 @@ static struct file_operations port_fops = {
 	NULL,		/* no special release code */
 	NULL		/* fsync */
 };
+#endif
 
 static struct file_operations zero_fops = {
 	zero_lseek,

@@ -26,7 +26,7 @@
 #include <linux/sched.h>
 #include <linux/kmod.h>
 
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include <asm/irq.h>
 
 #undef PARPORT_PARANOID

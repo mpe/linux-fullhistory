@@ -19,8 +19,8 @@
 #define _ASM_DMA_H
 
 #include <linux/config.h>
+#include <linux/spinlock.h>
 #include <asm/io.h>
-#include <asm/spinlock.h>
 
 #define dma_outb	outb
 #define dma_inb		inb

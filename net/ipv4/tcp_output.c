@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.112 1999/08/23 06:30:37 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.113 1999/09/07 02:31:39 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -825,13 +825,13 @@ void tcp_send_fin(struct sock *sk)
  * was unread data in the receive queue.  This behavior is recommended
  * by draft-ietf-tcpimpl-prob-03.txt section 3.10.  -DaveM
  */
-void tcp_send_active_reset(struct sock *sk)
+void tcp_send_active_reset(struct sock *sk, int priority)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 	struct sk_buff *skb;
 
 	/* NOTE: No TCP options attached and we never retransmit this. */
-	skb = alloc_skb(MAX_HEADER + sk->prot->max_header, GFP_KERNEL);
+	skb = alloc_skb(MAX_HEADER + sk->prot->max_header, priority);
 	if (!skb)
 		return;
 
@@ -947,7 +947,7 @@ struct sk_buff * tcp_make_synack(struct sock *sk, struct dst_entry *dst,
 
 int tcp_connect(struct sock *sk, struct sk_buff *buff)
 {
-	struct dst_entry *dst = sk->dst_cache;
+	struct dst_entry *dst = __sk_dst_get(sk);
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
 	/* Reserve space for headers. */

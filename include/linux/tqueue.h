@@ -13,9 +13,9 @@
 #ifndef _LINUX_TQUEUE_H
 #define _LINUX_TQUEUE_H
 
+#include <linux/spinlock.h>
 #include <asm/bitops.h>
 #include <asm/system.h>
-#include <asm/spinlock.h>
 
 /*
  * New proposed "bottom half" handlers:

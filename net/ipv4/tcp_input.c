@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.172 1999/08/23 06:30:35 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.173 1999/09/07 02:31:27 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -2423,7 +2423,7 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		newsk->timer.function = &tcp_keepalive_timer;
 		newsk->timer.data = (unsigned long) newsk;
 		if (newsk->keepopen)
-			tcp_reset_keepalive_timer(sk, sysctl_tcp_keepalive_time);
+			tcp_reset_keepalive_timer(newsk, keepalive_time_when(newtp));
 		newsk->socket = NULL;
 		newsk->sleep = NULL;
 

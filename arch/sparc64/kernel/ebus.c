@@ -1,4 +1,4 @@
-/* $Id: ebus.c,v 1.42 1999/08/31 09:12:31 davem Exp $
+/* $Id: ebus.c,v 1.44 1999/09/05 09:28:09 ecd Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -77,7 +77,7 @@ void __init ebus_intmap_match(struct linux_ebus *ebus,
 }
 
 void __init fill_ebus_child(int node, struct linux_prom_registers *preg,
-			    struct linux_ebus_child *dev)
+			    struct linux_ebus_child *dev, int non_standard_regs)
 {
 	int regs[PROMREG_MAX];
 	int irqs[PROMREG_MAX];
@@ -85,22 +85,34 @@ void __init fill_ebus_child(int node, struct linux_prom_registers *preg,
 
 	dev->prom_node = node;
 	prom_getstring(node, "name", dev->prom_name, sizeof(dev->prom_name));
-	printk("(%s)", dev->prom_name);
+	printk(" (%s)", dev->prom_name);
 
 	len = prom_getproperty(node, "reg", (void *)regs, sizeof(regs));
 	dev->num_addrs = len / sizeof(regs[0]);
 
-	for (i = 0; i < dev->num_addrs; i++) {
-		int rnum = regs[i];
-		if (rnum >= dev->parent->num_addrs) {
-			prom_printf("UGH: property for %s was %d, need < %d\n",
-				    dev->prom_name, len, dev->parent->num_addrs);
-			panic(__FUNCTION__);
+	if (non_standard_regs) {
+		/* This is to handle reg properties which are not
+		 * in the parent relative format.  One example are
+		 * children of the i2c device on CompactPCI systems.
+		 *
+		 * So, for such devices we just record the property
+		 * raw in the child resources.
+		 */
+		for (i = 0; i < dev->num_addrs; i++)
+			dev->resource[i].start = regs[i];
+	} else {
+		for (i = 0; i < dev->num_addrs; i++) {
+			int rnum = regs[i];
+			if (rnum >= dev->parent->num_addrs) {
+				prom_printf("UGH: property for %s was %d, need < %d\n",
+					    dev->prom_name, len, dev->parent->num_addrs);
+				panic(__FUNCTION__);
+			}
+			dev->resource[i].start = dev->parent->resource[i].start;
+			dev->resource[i].end = dev->parent->resource[i].end;
+			dev->resource[i].flags = IORESOURCE_MEM;
+			dev->resource[i].name = dev->prom_name;
 		}
-		dev->resource[i].start = dev->parent->resource[i].start;
-		dev->resource[i].end = dev->parent->resource[i].end;
-		dev->resource[i].flags = IORESOURCE_MEM;
-		dev->resource[i].name = dev->prom_name;
 	}
 
 	len = prom_getproperty(node, "interrupts", (char *)&irqs, sizeof(irqs));
@@ -131,6 +143,13 @@ void __init fill_ebus_child(int node, struct linux_prom_registers *preg,
 			dev->irqs[i] = p->irq_build(p, dev->bus->self, irqs[i]);
 		}
 	}
+}
+
+static int __init child_regs_nonstandard(struct linux_ebus_device *dev)
+{
+	if (!strcmp(dev->prom_name, "i2c"))
+		return 1;
+	return 0;
 }
 
 void __init fill_ebus_device(int node, struct linux_ebus_device *dev)
@@ -188,7 +207,8 @@ void __init fill_ebus_device(int node, struct linux_ebus_device *dev)
 		child->next = 0;
 		child->parent = dev;
 		child->bus = dev->bus;
-		fill_ebus_child(node, &regs[0], child);
+		fill_ebus_child(node, &regs[0],
+				child, child_regs_nonstandard(dev));
 
 		while ((node = prom_getsibling(node))) {
 			child->next = ebus_alloc(sizeof(struct linux_ebus_child));
@@ -197,7 +217,8 @@ void __init fill_ebus_device(int node, struct linux_ebus_device *dev)
 			child->next = 0;
 			child->parent = dev;
 			child->bus = dev->bus;
-			fill_ebus_child(node, &regs[0], child);
+			fill_ebus_child(node, &regs[0],
+					child, child_regs_nonstandard(dev));
 		}
 	}
 	printk("]");

@@ -347,7 +347,7 @@ static void zatm_feedback(struct atm_vcc *vcc,struct sk_buff *skb,
 
 #ifdef CONFIG_ATM_ZATM_EXACT_TS
 
-static struct timer_list sync_timer = { NULL, NULL, 0L, 0L, NULL };
+static struct timer_list sync_timer;
 
 
 /*
@@ -454,9 +454,7 @@ static void zatm_clock_sync(unsigned long dummy)
 		zatm_dev->last_real_time = now;
 		zatm_dev->last_clk = ticks;
 	}
-	del_timer(&sync_timer);
-	sync_timer.expires += POLL_INTERVAL*HZ;
-	add_timer(&sync_timer);
+	mod_timer(&sync_timer,sync_timer.expires+POLL_INTERVAL*HZ);
 }
 
 
@@ -475,6 +473,7 @@ static void __init zatm_clock_init(struct zatm_dev *zatm_dev)
 	zatm_dev->last_clk = zpeekl(zatm_dev,uPD98401_TSR);
 	if (start_timer) {
 		start_timer = 0;
+		init_timer(&sync_timer);
 		sync_timer.expires = jiffies+POLL_INTERVAL*HZ;
 		sync_timer.function = zatm_clock_sync;
 		add_timer(&sync_timer);

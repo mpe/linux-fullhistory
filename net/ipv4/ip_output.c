@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.70 1999/08/31 07:03:39 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.72 1999/09/07 02:31:15 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -345,7 +345,7 @@ static inline int ip_queue_xmit2(struct sk_buff *skb)
 		if (skb2 == NULL)
 			return -ENOMEM;
 		if (sk)
-			skb_set_owner_w(skb, sk);
+			skb_set_owner_w(skb2, sk);
 		skb = skb2;
 		iph = skb->nh.iph;
 	}
@@ -386,7 +386,7 @@ int ip_queue_xmit(struct sk_buff *skb)
 	struct iphdr *iph;
 
 	/* Make sure we can route this packet. */
-	rt = (struct rtable *)sk_dst_check(sk, 0);
+	rt = (struct rtable *)__sk_dst_check(sk, 0);
 	if (rt == NULL) {
 		u32 daddr;
 
@@ -403,10 +403,9 @@ int ip_queue_xmit(struct sk_buff *skb)
 				    RT_TOS(sk->protinfo.af_inet.tos) | RTO_CONN | sk->localroute,
 				    sk->bound_dev_if))
 			goto no_route;
-		dst_clone(&rt->u.dst);
-		sk_dst_set(sk, &rt->u.dst);
+		__sk_dst_set(sk, &rt->u.dst);
 	}
-	skb->dst = &rt->u.dst;
+	skb->dst = dst_clone(&rt->u.dst);
 
 	if (opt && opt->is_strictroute && rt->rt_dst != rt->rt_gateway)
 		goto no_route;

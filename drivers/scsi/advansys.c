@@ -1,5 +1,5 @@
-/* $Id: advansys.c,v 1.58 1999/09/03 23:02:16 bobf Exp bobf $ */
-#define ASC_VERSION "3.2F"    /* AdvanSys Driver Version */
+/* $Id: advansys.c,v 1.59 1999/09/08 18:50:51 bobf Exp bobf $ */
+#define ASC_VERSION "3.2G"    /* AdvanSys Driver Version */
 
 /*
  * advansys.c - Linux Host Driver for AdvanSys SCSI Adapters
@@ -634,7 +634,11 @@
      3.2F (9/3/99):
          1. Handle new initial function code added in v2.3.16 for all
             driver versions.
-            
+
+     3.2G (9/8/99):
+         1. Fix PCI board detection in v2.3.13 and greater kernels.
+         2. Fix comiple errors in v2.3.X with debugging enabled.
+
   J. Known Problems/Fix List (XXX)
 
      1. Need to add memory mapping workaround. Test the memory mapping.
@@ -737,7 +741,7 @@
 #include <linux/stat.h>
 #endif /* version >= v1.3.0 */
 #if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(2,1,95)
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #endif /* version >= 2.1.95 */
 #include "scsi.h"
 #include "hosts.h"
@@ -4711,7 +4715,7 @@ advansys_detect(Scsi_Host_Template *tpnt)
 #if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,3,13)
                     iop = pci_devp->base_address[0] & PCI_IOADDRESS_MASK;
 #else /* version >= v2.3.13 */ 
-                    iop = pci_devp->resource[1].start & PCI_IOADDRESS_MASK;
+                    iop = pci_devp->resource[0].start & PCI_IOADDRESS_MASK;
 #endif /* version >= v2.3.13 */ 
                     ASC_DBG2(1,
                         "advansys_detect: vendorID %X, deviceID %X\n",
@@ -10439,9 +10443,8 @@ asc_prt_scsi_host(struct Scsi_Host *s)
         (unsigned) s->last_reset);
 
     printk(
-" host_wait %x, host_queue %x, hostt %x, block %x,\n",
-        (unsigned) s->host_wait, (unsigned) s->host_queue,
-        (unsigned) s->hostt, (unsigned) s->block);
+" host_queue %x, hostt %x, block %x,\n",
+        (unsigned) s->host_queue, (unsigned) s->hostt, (unsigned) s->block);
 
     printk(
 " wish_block %d, base %lu, io_port %lu, n_io_port %u, irq %d,\n",

@@ -149,10 +149,10 @@ static char mcchannelid[] = {
 #include <linux/trdevice.h>
 #include <linux/stddef.h>
 #include <linux/init.h>
+#include <linux/spinlock.h>
 #include <net/checksum.h>
 
 #include <asm/io.h>
-#include <asm/spinlock.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 

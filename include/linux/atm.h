@@ -47,10 +47,17 @@
 #define ATM_AAL34	3		/* AAL3/4 (data) */
 #define ATM_AAL5	5		/* AAL5 (data) */
 
-/* socket option name coding functions */
+/*
+ * socket option name coding functions
+ *
+ * Note that __SO_ENCODE and __SO_LEVEL are somewhat a hack since the
+ * << 22 only reserves 9 bits for the level.  On some architectures
+ * SOL_SOCKET is 0xFFFF, so that's a bit of a problem
+ */
 
-#define __SO_ENCODE(l,n,t)	(((l) << 22) | ((n) << 16) | sizeof(t))
-#define __SO_LEVEL(c)		((c) >> 22)
+#define __SO_ENCODE(l,n,t)	((((l) & 0x1FF) << 22) | ((n) << 16) | \
+				sizeof(t))
+#define __SO_LEVEL_MATCH(c,m)	(((c) >> 22) == ((m) & 0x1FF))
 #define __SO_NUMBER(c)		(((c) >> 16) & 0x3f)
 #define __SO_SIZE(c)		((c) & 0x3fff)
 
@@ -67,6 +74,8 @@
 			    /* Quality of Service setting */
 #define SO_ATMSAP	__SO_ENCODE(SOL_ATM,3,struct atm_sap)
 			    /* Service Access Point */
+#define SO_ATMPVC	__SO_ENCODE(SOL_ATM,4,struct sockaddr_atmpvc)
+			    /* "PVC" address (also for SVCs); get only */
 
 /*
  * Note @@@: since the socket layers don't really distinguish the control and

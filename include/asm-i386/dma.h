@@ -9,8 +9,8 @@
 #define _ASM_DMA_H
 
 #include <linux/config.h>
+#include <linux/spinlock.h>	/* And spinlocks */
 #include <asm/io.h>		/* need byte IO */
-#include <asm/spinlock.h>	/* And spinlocks */
 #include <linux/delay.h>
 
 

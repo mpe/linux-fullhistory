@@ -30,7 +30,7 @@
 
 #include <asm/system.h>
 #include <asm/atomic.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include <linux/wait.h>
 
 struct semaphore {

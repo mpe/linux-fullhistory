@@ -5,7 +5,7 @@
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) hamradio irda fc
+ALL_SUB_DIRS := $(SUB_DIRS) hamradio irda fc pcmcia
 
 L_TARGET := net.a
 L_OBJS   := auto_irq.o
@@ -28,6 +28,11 @@ CONFIG_85230_BUILTIN :=
 CONFIG_85230_MODULE  :=
 CONFIG_SYNCPPP_BUILTIN :=
 CONFIG_SYNCPPP_MODULE  :=
+
+ifneq ($(CONFIG_PCMCIA),n)
+  SUB_DIRS += pcmcia
+  MOD_SUB_DIRS += pcmcia
+endif
 
 ifeq ($(CONFIG_ISDN),y)
   ifeq ($(CONFIG_ISDN_PPP),y)
@@ -1116,6 +1121,14 @@ L_OBJS += bmac.o
 else
   ifeq ($(CONFIG_BMAC),m)
   M_OBJS += bmac.o
+  endif
+endif
+
+ifeq ($(CONFIG_ADAPTEC_STARFIRE),y)
+L_OBJS += starfire.o
+else
+  ifeq ($(CONFIG_ADAPTEC_STARFIRE),m)
+  M_OBJS += starfire.o
   endif
 endif
 

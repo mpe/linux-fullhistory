@@ -1,5 +1,5 @@
 /*
- * $Id: smp.c,v 1.61 1999/08/24 22:06:26 cort Exp $
+ * $Id: smp.c,v 1.62 1999/09/05 11:56:34 paulus Exp $
  *
  * Smp support for ppc.
  *
@@ -21,13 +21,13 @@
 #include <linux/unistd.h>
 #include <linux/init.h>
 #include <linux/openpic.h>
+#include <linux/spinlock.h>
 
 #include <asm/ptrace.h>
 #include <asm/atomic.h>
 #include <asm/irq.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
-#include <asm/spinlock.h>
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
 #include <asm/init.h>
@@ -253,15 +253,17 @@ void __init smp_boot_cpus(void)
 	/* let other processors know to not do certain initialization */
 	first_cpu_booted = 1;
 	smp_num_cpus = 1;
-	
+        smp_store_cpu_info(0);
+
 	/*
 	 * assume for now that the first cpu booted is
 	 * cpu 0, the master -- Cort
 	 */
 	cpu_callin_map[0] = 1;
-        smp_store_cpu_info(0);
         active_kernel_processor = 0;
 	current->processor = 0;
+
+	init_idle();
 
 	for (i = 0; i < NR_CPUS; i++) {
 		prof_counter[i] = 1;
@@ -304,12 +306,21 @@ void __init smp_boot_cpus(void)
 	for ( i = 1 ; i < cpu_nr; i++ )
 	{
 		int c;
+		struct pt_regs regs;
+		struct task_struct *idle;
 		
 		/* create a process for the processor */
-		kernel_thread(start_secondary, NULL, CLONE_PID);
-		p = init_tasks[i];
-		if ( !p )
-			panic("No idle task for secondary processor\n");
+		/* we don't care about the values in regs since we'll
+		   never reschedule the forked task. */
+		if (do_fork(CLONE_VM|CLONE_PID, 0, &regs) < 0)
+			panic("failed fork for CPU %d", i);
+		p = init_task.prev_task;
+		if (!p)
+			panic("No idle task for CPU %d", i);
+		del_from_runqueue(p);
+		unhash_process(p);
+		init_tasks[i] = p;
+
 		p->processor = i;
 		p->has_cpu = 1;
 		current_set[i] = p;
@@ -329,6 +340,7 @@ void __init smp_boot_cpus(void)
 			eieio();
 			/* interrupt secondary to begin executing code */
 			out_be32(PSURGE_INTR, ~0);
+			udelay(1);
 			out_be32(PSURGE_INTR, 0);
 			break;
 		case _MACH_chrp:
@@ -385,6 +397,7 @@ void __init smp_commence(void)
 	/*
 	 *	Lets the callin's below out of their loop.
 	 */
+	wmb();
 	smp_commenced = 1;
 }
 
@@ -394,8 +407,10 @@ void __init initialize_secondary(void)
 }
 
 /* Activate a secondary processor. */
-asmlinkage int __init start_secondary(void *unused)
+int __init start_secondary(void *unused)
 {
+	atomic_inc(&init_mm.mm_count);
+	current->active_mm = &init_mm;
 	smp_callin();
 	return cpu_idle(NULL);
 }

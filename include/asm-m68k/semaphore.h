@@ -3,10 +3,10 @@
 
 #include <linux/linkage.h>
 #include <linux/wait.h>
+#include <linux/spinlock.h>
 
 #include <asm/system.h>
 #include <asm/atomic.h>
-#include <asm/spinlock.h>
 
 /*
  * SMP- and interrupt-safe semaphores..

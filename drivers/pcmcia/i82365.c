@@ -1034,34 +1034,38 @@ static u_int topic_set_opts(u_short s, char *buf)
 static void cb_get_state(u_short s)
 {
     socket_info_t *t = &socket[s];
-    
-    pci_readb(t->bus, t->devfn, PCI_CACHE_LINE_SIZE, &t->cache);
-    pci_readb(t->bus, t->devfn, PCI_LATENCY_TIMER, &t->pci_lat);
-    pci_readb(t->bus, t->devfn, CB_LATENCY_TIMER, &t->cb_lat);
-    pci_readb(t->bus, t->devfn, CB_CARDBUS_BUS, &t->cap.cardbus);
-    pci_readb(t->bus, t->devfn, CB_SUBORD_BUS, &t->sub_bus);
-    pci_readw(t->bus, t->devfn, CB_BRIDGE_CONTROL, &t->bcr);
-    {
-	struct pci_dev *pdev = pci_find_slot(t->bus, t->devfn);
-	t->cap.pci_irq = (pdev) ? pdev->irq : 0;
-    }
+    struct pci_dev *dev = pci_find_slot(t->bus, t->devfn);
+
+    if (!dev)
+	return;
+    pci_read_config_byte(dev, PCI_CACHE_LINE_SIZE, &t->cache);
+    pci_read_config_byte(dev, PCI_LATENCY_TIMER, &t->pci_lat);
+    pci_read_config_byte(dev, CB_LATENCY_TIMER, &t->cb_lat);
+    pci_read_config_byte(dev, CB_CARDBUS_BUS, &t->cap.cardbus);
+    pci_read_config_byte(dev, CB_SUBORD_BUS, &t->sub_bus);
+    pci_read_config_word(dev, CB_BRIDGE_CONTROL, &t->bcr);
+
+    t->cap.pci_irq = dev->irq;
     if (t->cap.pci_irq >= NR_IRQS) t->cap.pci_irq = 0;
 }
 
 static void cb_set_state(u_short s)
 {
     socket_info_t *t = &socket[s];
+    struct pci_dev *dev = pci_find_slot(t->bus, t->devfn);
+
     if (t->pmcs)
-	pci_writew(t->bus, t->devfn, t->pmcs, PCI_PMCS_PWR_STATE_D0);
-    pci_writel(t->bus, t->devfn, CB_LEGACY_MODE_BASE, 0);
-    pci_writel(t->bus, t->devfn, PCI_BASE_ADDRESS_0, t->cb_phys);
-    pci_writew(t->bus, t->devfn, PCI_COMMAND, CMD_DFLT);
-    pci_writeb(t->bus, t->devfn, PCI_CACHE_LINE_SIZE, t->cache);
-    pci_writeb(t->bus, t->devfn, PCI_LATENCY_TIMER, t->pci_lat);
-    pci_writeb(t->bus, t->devfn, CB_LATENCY_TIMER, t->cb_lat);
-    pci_writeb(t->bus, t->devfn, CB_CARDBUS_BUS, t->cap.cardbus);
-    pci_writeb(t->bus, t->devfn, CB_SUBORD_BUS, t->sub_bus);
-    pci_writew(t->bus, t->devfn, CB_BRIDGE_CONTROL, t->bcr);
+	pci_write_config_word(dev, t->pmcs, PCI_PMCS_PWR_STATE_D0);
+
+    pci_write_config_dword(dev, CB_LEGACY_MODE_BASE, 0);
+    pci_write_config_dword(dev, PCI_BASE_ADDRESS_0, t->cb_phys);
+    pci_write_config_word(dev, PCI_COMMAND, CMD_DFLT);
+    pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE, t->cache);
+    pci_write_config_byte(dev, PCI_LATENCY_TIMER, t->pci_lat);
+    pci_write_config_byte(dev, CB_LATENCY_TIMER, t->cb_lat);
+    pci_write_config_byte(dev, CB_CARDBUS_BUS, t->cap.cardbus);
+    pci_write_config_byte(dev, CB_SUBORD_BUS, t->sub_bus);
+    pci_write_config_word(dev, CB_BRIDGE_CONTROL, t->bcr);
 }
 
 static int cb_get_irq_mode(u_short s)

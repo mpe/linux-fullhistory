@@ -12,9 +12,10 @@
  *
  */
 
+#include <linux/spinlock.h>
+
 #include <asm/system.h>
 #include <asm/atomic.h>
-#include <asm/spinlock.h>
 
 struct semaphore {
 	atomic_t count;

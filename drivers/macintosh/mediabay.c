@@ -98,9 +98,7 @@ static int media_bay_task(void *);
  * Therefore we do it all by polling the media bay once each tick.
  */
 
-__pmac /* I don't know of any chrp with a mediabay -- Cort */
-
-void
+void __pmac
 media_bay_init(void)
 {
 	struct device_node *np;
@@ -174,7 +172,7 @@ media_bay_intr(int irq, void *devid, struct pt_regs *regs)
 }
 #endif
 
-int
+int __pmac
 check_media_bay(struct device_node *which_bay, int what)
 {
 #ifdef CONFIG_BLK_DEV_IDE
@@ -192,7 +190,7 @@ check_media_bay(struct device_node *which_bay, int what)
 	return -ENODEV;
 }
 
-int
+int __pmac
 check_media_bay_by_base(unsigned long base, int what)
 {
 #ifdef CONFIG_BLK_DEV_IDE
@@ -211,7 +209,7 @@ check_media_bay_by_base(unsigned long base, int what)
 	return -ENODEV;
 }
 
-int
+int __pmac
 media_bay_set_ide_infos(struct device_node* which_bay, unsigned long base,
 	int irq, int index)
 {
@@ -238,7 +236,7 @@ media_bay_set_ide_infos(struct device_node* which_bay, unsigned long base,
  * with the IDE driver.  It needs to be a thread because
  * ide_register can't be called from interrupt context.
  */
-int
+int __pmac
 media_bay_task(void *x)
 {
 	volatile struct media_bay_info* bay;
@@ -294,7 +292,7 @@ media_bay_task(void *x)
 	}
 }
 
-void
+void __pmac
 poll_media_bay(int which)
 {
 	int id = MB_CONTENTS(which);
@@ -309,7 +307,7 @@ poll_media_bay(int which)
 	}
 }
 
-static void
+static void __pmac
 set_media_bay(int which, int id)
 {
 	volatile struct media_bay_info* bay;

@@ -387,7 +387,7 @@ struct IN2000_hostdata {
 # define CLISPIN_UNLOCK(flags) restore_flags(flags)
 #else                               /* 2.1.xxx */
 # include <linux/init.h>
-# include <asm/spinlock.h>
+# include <linux/spinlock.h>
 # define in2000__INITFUNC(function) __initfunc(function)
 # define in2000__INIT __init
 # define in2000__INITDATA __initdata

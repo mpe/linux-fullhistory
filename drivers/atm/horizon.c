@@ -50,9 +50,9 @@
 
 #define maintainer_string "Giuliano Procida at Madge Networks <gprocida@madge.com>"
 #define description_string "Madge ATM Horizon [Ultra] driver"
-#define version_string "1.1"
+#define version_string "1.2"
 
-static void __init show_version (void) {
+static inline void __init show_version (void) {
   printk ("%s version %s\n", description_string, version_string);
 }
 
@@ -86,7 +86,7 @@ static void __init show_version (void) {
   
   The driver is only known to work with SONET and UTP Horizon Ultra
   cards at 155Mb/s. However, code is in place to deal with both the
-  original Horizon and 35Mb/s.
+  original Horizon and 25Mb/s operation.
   
   There are two revisions of the Horizon ASIC: the original and the
   Ultra. Details of hardware bugs are in section III.
@@ -127,15 +127,15 @@ static void __init show_version (void) {
   
   3. Initialisation
   
-  The card is reset and then put into a know state. The physical layer
-  is configured for normal operation at the appropriate speed; in the
-  case of the 155 cards, the framer is initialised with line-based
-  timing; the internal RAM is zeroed and the allocation of buffers for
-  RX and TX is made; the Burnt In Address is read and copied to the
-  ATM ESI; various policy settings for RX (VPI bits, unknown VCs, oam
-  cells) are made. Ideally all policy items should be configurable at
-  module load (if not actually on-demand), however, only the vpi vs
-  vci bit allocation can be specified at insmod.
+  The card is reset and then put into a known state. The physical
+  layer is configured for normal operation at the appropriate speed;
+  in the case of the 155 cards, the framer is initialised with
+  line-based timing; the internal RAM is zeroed and the allocation of
+  buffers for RX and TX is made; the Burnt In Address is read and
+  copied to the ATM ESI; various policy settings for RX (VPI bits,
+  unknown VCs, oam cells) are made. Ideally all policy items should be
+  configurable at module load (if not actually on-demand), however,
+  only the vpi vs vci bit allocation can be specified at insmod.
   
   4. Shutdown
   
@@ -152,12 +152,12 @@ static void __init show_version (void) {
   the following items they make up the traffic specification.
   
   struct atm_trafprm {
-  unsigned char  traffic_class; traffic class (ATM_UBR, ...)
-  int		   max_pcr;	  maximum PCR in cells per second
-  int		   pcr;		  desired PCR in cells per second
-  int		   min_pcr;	  minimum PCR in cells per second
-  int	           max_cdv;	  maximum CDV in microseconds
-  int              max_sdu;	  maximum SDU in bytes
+    unsigned char traffic_class; traffic class (ATM_UBR, ...)
+    int           max_pcr;       maximum PCR in cells per second
+    int           pcr;           desired PCR in cells per second
+    int           min_pcr;       minimum PCR in cells per second
+    int           max_cdv;       maximum CDV in microseconds
+    int           max_sdu;       maximum SDU in bytes
   };
   
   Note that these denote bandwidth available not bandwidth used; the
@@ -206,30 +206,31 @@ static void __init show_version (void) {
   
   AAL types are:
   
-  ATM_NO_AAL	AAL not specified
-  ATM_AAL0	"raw" ATM cells
-  ATM_AAL1	AAL1 (CBR)
-  ATM_AAL2	AAL2 (VBR)
-  ATM_AAL34	AAL3/4 (data)
-  ATM_AAL5	AAL5 (data)
-  ATM_SAAL	signaling AAL
+  ATM_NO_AAL    AAL not specified
+  ATM_AAL0      "raw" ATM cells
+  ATM_AAL1      AAL1 (CBR)
+  ATM_AAL2      AAL2 (VBR)
+  ATM_AAL34     AAL3/4 (data)
+  ATM_AAL5      AAL5 (data)
+  ATM_SAAL      signaling AAL
   
   The Horizon has support for AAL frame types: 0, 3/4 and 5. However,
   it does not implement AAL 3/4 SAR and it has a different notion of
   "raw cell" to ATM Linux's (48 bytes vs. 52 bytes) so neither are
   supported by this driver.
   
-  The Horizon has (TX) support for ABR (including UBR), VBR and CBR.
-  Each TX channel has a bucket (containing up to 31 cell units) and
-  two timers (PCR and SCR) associated with it that can be used to
-  govern cell emissions and host notification (in the case of
-  ABR). The timers may either be disabled or may be set to any of 240
-  values (determined by the clock crystal, a fixed (?) per-device
-  divider, a configurable divider and a configurable timer preload
-  value).
+  The Horizon has limited support for ABR (including UBR), VBR and
+  CBR. Each TX channel has a bucket (containing up to 31 cell units)
+  and two timers (PCR and SCR) associated with it that can be used to
+  govern cell emissions and host notification (in the case of ABR this
+  is presumably so that RM cells may be emitted at appropriate times).
+  The timers may either be disabled or may be set to any of 240 values
+  (determined by the clock crystal, a fixed (?) per-device divider, a
+  configurable divider and a configurable timer preload value).
   
-  At the moment only UBR and CBR are supported by the driver. This is
-  due to my not understanding ATM Linux VBR or Horizon's VBR support.
+  At the moment only UBR and CBR are supported by the driver. VBR will
+  be supported as soon as ATM for Linux supports it. ABR support is
+  very unlikely as RM cell handling is completely up to the driver.
   
   1. TX (TX channel setup and TX transfer)
   
@@ -305,7 +306,7 @@ static void __init show_version (void) {
   in the TX direction on the original Horizon. More complicated
   solutions are likely to hurt my brain.
   
-  3. Loss of buffer on close VC
+  2. Loss of buffer on close VC
   
   When a VC is being closed, the buffer associated with it is not
   returned to the pool. The host must store the reference to this
@@ -314,7 +315,7 @@ static void __init show_version (void) {
   The host intervention currently consists of stacking such a buffer
   pointer at VC close and checking the stack at VC open.
   
-  4. Failure to close a VC
+  3. Failure to close a VC
   
   If a VC is currently receiving a frame then closing the VC may fail
   and the frame continues to be received.
@@ -322,7 +323,7 @@ static void __init show_version (void) {
   The solution is to make sure any received frames are flushed when
   ready. This is currently done just before the solution to 3.
   
-  5. PCI bus (original Horizon only, fixed in Ultra)
+  4. PCI bus (original Horizon only, fixed in Ultra)
   
   Reading from the data port prior to initialisation will hang the PCI
   bus. Just don't do that then! We don't.
@@ -388,10 +389,9 @@ static inline void rds_regb (const hrz_dev * dev, unsigned char reg, void * addr
   insb (dev->iobase + reg, addr, len);
 }
 
-/* Read / Write to a given address in Horizon buffer memory.                */
-// Interrupts must be disabled between the address register and data port
-// accesses as these must form an atomic operation.
-
+/* Read / Write to a given address in Horizon buffer memory.
+   Interrupts must be disabled between the address register and data
+   port accesses as these must form an atomic operation. */
 static inline void wr_mem (const hrz_dev * dev, HDW * addr, u32 data) {
   // wr_regl (dev, MEM_WR_ADDR_REG_OFF, (u32) addr);
   wr_regl (dev, MEM_WR_ADDR_REG_OFF, (addr - (HDW *) 0) * sizeof(HDW));
@@ -401,7 +401,7 @@ static inline void wr_mem (const hrz_dev * dev, HDW * addr, u32 data) {
 static inline u32 rd_mem (const hrz_dev * dev, HDW * addr) {
   // wr_regl (dev, MEM_RD_ADDR_REG_OFF, (u32) addr);
   wr_regl (dev, MEM_RD_ADDR_REG_OFF, (addr - (HDW *) 0) * sizeof(HDW));
-  return rd_regl(dev, MEMORY_PORT_OFF);
+  return rd_regl (dev, MEMORY_PORT_OFF);
 }
 
 static inline void wr_framer (const hrz_dev * dev, u32 addr, u32 data) {
@@ -511,7 +511,7 @@ static inline void dump_framer (hrz_dev * dev) {
 
 /* RX channels are 10 bit integers, these fns are quite paranoid */
 
-static inline int channel_to_vpci (const u16 channel, short * vpi, int * vci) {
+static inline int channel_to_vpivci (const u16 channel, short * vpi, int * vci) {
   unsigned short vci_bits = 10 - vpi_bits;
   if ((channel & RX_CHANNEL_MASK) == channel) {
     *vci = channel & ((~0)<<vci_bits);
@@ -521,7 +521,7 @@ static inline int channel_to_vpci (const u16 channel, short * vpi, int * vci) {
   return -EINVAL;
 }
 
-static inline int vpci_to_channel (u16 * channel, const short vpi, const int vci) {
+static inline int vpivci_to_channel (u16 * channel, const short vpi, const int vci) {
   unsigned short vci_bits = 10 - vpi_bits;
   if (0 <= vpi && vpi < 1<<vpi_bits && 0 <= vci && vci < 1<<vci_bits) {
     *channel = vpi<<vci_bits | vci;
@@ -746,7 +746,7 @@ static int make_rate_with_tolerance (const hrz_dev * dev, u32 c, rounding r, uns
 static int hrz_open_rx (hrz_dev * dev, u16 channel) {
   // is there any guarantee that we don't get two simulataneous
   // identical calls of this function from different processes? yes
-  // rates_lock
+  // rate_lock
   unsigned long flags;
   u32 channel_type; // u16?
   
@@ -786,13 +786,13 @@ static int hrz_open_rx (hrz_dev * dev, u16 channel) {
   spin_lock_irqsave (&dev->mem_lock, flags);
   
   wr_mem (dev, &rx_desc->wr_buf_type,
-          buf_ptr | CHANNEL_TYPE_AAL5 | FIRST_CELL_OF_AAL5_FRAME);
+	  buf_ptr | CHANNEL_TYPE_AAL5 | FIRST_CELL_OF_AAL5_FRAME);
   if (buf_ptr != RX_CHANNEL_IDLE)
     wr_mem (dev, &rx_desc->rd_buf_type, buf_ptr);
   
   spin_unlock_irqrestore (&dev->mem_lock, flags);
   
-  //    rxer->rate = make_rate (qos->peak_cells);
+  // rxer->rate = make_rate (qos->peak_cells);
   
   PRINTD (DBG_FLOW, "hrz_open_rx ok");
   
@@ -1340,12 +1340,12 @@ static inline void rx_data_av_handler (hrz_dev * dev) {
       if (atm_vcc->qos.rxtp.traffic_class != ATM_NONE) {
 	
 	if (rx_len <= atm_vcc->qos.rxtp.max_sdu) {
-	  
+	  struct sk_buff *skb = atm_alloc_charge(atm_vcc,rx_len,GFP_ATOMIC);
+
 	  // If everyone has to call atm_pdu2... why isn't it part of
 	  // atm_charge? B'cos some people already have skb->truesize!
-	  if (atm_charge (atm_vcc, atm_pdu2truesize (rx_len))) {
-	    
-	    struct sk_buff * skb = alloc_skb (rx_len, GFP_ATOMIC);
+	  // WA: well. even if they think they do, they might not ... :-)
+
 	    if (skb) {
 	      // remember this so we can push it later
 	      dev->rx_skb = skb;
@@ -1369,15 +1369,8 @@ static inline void rx_data_av_handler (hrz_dev * dev) {
 	      return;
 	      
 	    } else {
-	      PRINTD (DBG_SKB|DBG_WARN, "failed to get skb");
-	      atm_vcc->stats->rx_drop++;
+	      PRINTD (DBG_INFO, "failed to get skb");
 	    }
-	    
-	  } else {
-	    // someone fix this (message), please!
-	    PRINTD (DBG_INFO, "dropped thanks to atm_charge");
-	    // drop stats incremented in atm_charge
-	  }
 	  
 	} else {
 	  PRINTK (KERN_INFO, "frame received on TX-only VC %x", rx_channel);
@@ -1385,7 +1378,7 @@ static inline void rx_data_av_handler (hrz_dev * dev) {
 	}
 	
       } else {
-      	PRINTK (KERN_WARNING, "dropped over-size frame");
+	PRINTK (KERN_WARNING, "dropped over-size frame");
 	// do we count this?
       }
       
@@ -1573,7 +1566,7 @@ static inline short setup_idle_tx_channel (hrz_dev * dev, hrz_vcc * vcc) {
 			      vcc->tx_pcr_bits);
 
 #if 0
-    if (a vbr channel) {
+    if (vcc->tx_xbr_bits == VBR_RATE_TYPE) {
       // SCR timer
       update_tx_channel_config (dev, tx_channel, SCR_TIMER_ACCESS,
 				vcc->tx_scr_bits);
@@ -1584,9 +1577,9 @@ static inline short setup_idle_tx_channel (hrz_dev * dev, hrz_vcc * vcc) {
       
       // ... and fullness
       update_tx_channel_config (dev, tx_channel, BUCKET_FULLNESS_ACCESS,
-			      vcc->tx_bucket_bits);
+				vcc->tx_bucket_bits);
     }
-#endif    
+#endif
 
     // Initialise the read and write buffer pointers
     rd_ptr = rd_mem (dev, &tx_desc->rd_buf_type) & BUFFER_PTR_MASK;
@@ -1723,7 +1716,7 @@ static int hrz_send (struct atm_vcc * atm_vcc, struct sk_buff * skb) {
 	    free_buffers, buffers_required);
     // what is the appropriate delay? implement a timeout? (depending on line speed?)
     // mdelay (1);
-    // what happens if  kill (current_pid, SIGKILL) ?
+    // what happens if we kill (current_pid, SIGKILL) ?
     schedule();
     if (++spin_count > 1000) {
       PRINTD (DBG_TX|DBG_ERR, "spun out waiting for tx buffers, got %d of %d",
@@ -1743,7 +1736,7 @@ static int hrz_send (struct atm_vcc * atm_vcc, struct sk_buff * skb) {
     for (tx_channel = 0; tx_channel < TX_CHANS; ++tx_channel)
       if (dev->tx_channel_record[tx_channel] == channel) {
 	PRINTD (DBG_TX, "vc already on channel: hit");
-        break;
+	break;
       }
     if (tx_channel == TX_CHANS) { 
       PRINTD (DBG_TX, "vc already on channel: miss");
@@ -1802,7 +1795,7 @@ static int hrz_send (struct atm_vcc * atm_vcc, struct sk_buff * skb) {
 
 /********** reset a card **********/
 
-static void __init hrz_reset_card (const hrz_dev * dev) {
+static void __init hrz_reset (const hrz_dev * dev) {
   u32 control_0_reg = rd_regl (dev, CONTROL_0_REG);
   
   // why not set RESET_HORIZON to one and wait for the card to
@@ -1813,25 +1806,13 @@ static void __init hrz_reset_card (const hrz_dev * dev) {
     control_0_reg = rd_regl (dev, CONTROL_0_REG);
   
   // old reset code retained:
-  wr_regl (dev,  CONTROL_0_REG, control_0_reg |
+  wr_regl (dev, CONTROL_0_REG, control_0_reg |
 	   RESET_ATM | RESET_RX | RESET_TX | RESET_HOST);
   // just guessing here
   udelay (1000);
   
   wr_regl (dev, CONTROL_0_REG, control_0_reg);
 }
-
-/********** shutdown a card **********/
-
-#ifdef MODULE
-
-static void hrz_shutdown (const hrz_dev * dev) {
-  hrz_reset_card (dev);
-  
-  GREEN_LED_OFF(dev);
-}
-
-#endif
 
 /********** read the burnt in address **********/
 
@@ -1931,7 +1912,7 @@ static int __init hrz_init (hrz_dev * dev) {
   // Reset the card to get everything in a known state
   
   printk (" reset");
-  hrz_reset_card (dev);
+  hrz_reset (dev);
   
   // Clear all the buffer memory
   
@@ -2105,9 +2086,9 @@ static int __init hrz_init (hrz_dev * dev) {
     
     for (i=0; i < ESI_LEN; ++i) {
       if (i % 2 == 0)
-        b = read_bia (dev, i/2 + 2);
+	b = read_bia (dev, i/2 + 2);
       else
-        b = b >> 8;
+	b = b >> 8;
       esi[i] = b & 0xFF;
       printk ("%02x", esi[i]);
     }
@@ -2199,8 +2180,8 @@ static int hrz_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
   hrz_vcc * vccp; // allocated late
   PRINTD (DBG_FLOW|DBG_VCC, "hrz_open %x %x", vpi, vci);
   
+#ifdef ATM_VPI_UNSPEC
   // UNSPEC is deprecated, remove this code eventually
-#if defined ATM_VPI_UNSPEC
   if (vpi == ATM_VPI_UNSPEC || vci == ATM_VCI_UNSPEC) {
     PRINTK (KERN_WARNING, "rejecting open with unspecified VPI/VCI (deprecated)");
     return -EINVAL;
@@ -2215,7 +2196,7 @@ static int hrz_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
   }
   PRINTD (DBG_VCC, "atm_find_ci gives %x %x", vpi, vci);
   
-  error = vpci_to_channel (&channel, vpi, vci);
+  error = vpivci_to_channel (&channel, vpi, vci);
   if (error) {
     PRINTD (DBG_WARN|DBG_VCC, "VPI/VCI out of range: %hd/%d", vpi, vci);
     return error;
@@ -2459,7 +2440,7 @@ static int hrz_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
 	  // slight race (no locking) here so we may get -EAGAIN
 	  // later; the greedy bastards would deserve it :)
 	  PRINTD (DBG_QOS, "snatching all remaining RX bandwidth");
-	  pcr = dev->tx_avail;
+	  pcr = dev->rx_avail;
 	} else if (pcr < 0) {
 	  pcr = -pcr;
 	}
@@ -2472,14 +2453,15 @@ static int hrz_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
 	}
 	break;
       }
+#if 0
       case ATM_VBR: {
-	// int scr = atm_scr_goal (txtp);
+	// int scr = atm_scr_goal (rxtp);
 	int scr = 1<<16; // just for fun
 	if (!scr) {
 	  // slight race (no locking) here so we may get -EAGAIN
 	  // later; the greedy bastards would deserve it :)
 	  PRINTD (DBG_QOS, "snatching all remaining RX bandwidth");
-	  scr = dev->tx_avail;
+	  scr = dev->rx_avail;
 	} else if (scr < 0) {
 	  scr = -scr;
 	}
@@ -2492,6 +2474,7 @@ static int hrz_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
 	}
 	break;
       }
+#endif
       default: {
 	PRINTD (DBG_QOS, "unsupported RX traffic class");
 	return -EINVAL;
@@ -2632,8 +2615,10 @@ static void hrz_close (struct atm_vcc * atm_vcc) {
   MOD_DEC_USE_COUNT;
 }
 
+#if 0
 static int hrz_getsockopt (struct atm_vcc * atm_vcc, int level, int optname,
 			   void *optval, int optlen) {
+  hrz_dev * dev = HRZ_DEV(atm_vcc->dev);
   PRINTD (DBG_FLOW|DBG_VCC, "hrz_getsockopt");
   switch (level) {
     case SOL_SOCKET:
@@ -2655,6 +2640,7 @@ static int hrz_getsockopt (struct atm_vcc * atm_vcc, int level, int optname,
 
 static int hrz_setsockopt (struct atm_vcc * atm_vcc, int level, int optname,
 			   void *optval, int optlen) {
+  hrz_dev * dev = HRZ_DEV(atm_vcc->dev);
   PRINTD (DBG_FLOW|DBG_VCC, "hrz_setsockopt");
   switch (level) {
     case SOL_SOCKET:
@@ -2673,6 +2659,7 @@ static int hrz_setsockopt (struct atm_vcc * atm_vcc, int level, int optname,
   }
   return -EINVAL;
 }
+#endif
 
 static int hrz_sg_send (struct atm_vcc * atm_vcc,
 			unsigned long start,
@@ -2722,15 +2709,15 @@ static int hrz_proc_read (struct atm_dev * atm_dev, loff_t * pos, char * page) {
   /* more diagnostics here? */
   
 #if 0
-  {
-    // VBR temporary diags
+  if (!left--) {
+    unsigned int count = sprintf (page, "vbr buckets:");
     unsigned int i;
-    for (i = 0; i < TX_CHANS; ++i) {
-      if (!left--)
-	return sprintf (page, "bucket %u: %u/%u\n", i, 
+    for (i = 0; i < TX_CHANS; ++i)
+      count += sprintf (page, " %u/%u",
 			query_tx_channel_config (dev, i, BUCKET_FULLNESS_ACCESS),
 			query_tx_channel_config (dev, i, BUCKET_CAPACITY_ACCESS));
-    }
+    count += sprintf (page+count, ".\n");
+    return count;
   }
 #endif
   
@@ -2760,8 +2747,8 @@ static const struct atmdev_ops hrz_ops = {
   hrz_open,
   hrz_close,
   NULL,          // no hrz_ioctl
-  hrz_getsockopt,
-  hrz_setsockopt,
+  NULL,          // hrz_getsockopt,
+  NULL,          // hrz_setsockopt,
   hrz_send,
   hrz_sg_send,
   NULL,          // no send_oam    - not in fact used yet
@@ -2811,10 +2798,10 @@ static int __init hrz_probe (void) {
     
     // grab IRQ and install handler - move this someplace more sensible
     if (request_irq (irq,
-                     interrupt_handler,
-                     SA_SHIRQ, /* irqflags guess */
-                     DEV_LABEL, /* name guess */
-                     dev)) {
+		     interrupt_handler,
+		     SA_SHIRQ, /* irqflags guess */
+		     DEV_LABEL, /* name guess */
+		     dev)) {
       PRINTD (DBG_WARN, "request IRQ failed!");
       // free_irq is at "endif"
     } else {
@@ -2824,20 +2811,20 @@ static int __init hrz_probe (void) {
       
       dev->atm_dev = atm_dev_register (DEV_LABEL, &hrz_ops, -1, 0);
       if (!(dev->atm_dev)) {
-        PRINTD (DBG_ERR, "failed to register Madge ATM adapter");
+	PRINTD (DBG_ERR, "failed to register Madge ATM adapter");
       } else {
 	unsigned char lat;
 	
-        PRINTD (DBG_INFO, "registered Madge ATM adapter (no. %d) (%p) at %p",
+	PRINTD (DBG_INFO, "registered Madge ATM adapter (no. %d) (%p) at %p",
 		dev->atm_dev->number, dev, dev->atm_dev);
-        dev->atm_dev->dev_data = (void *) dev;
-        dev->pci_dev = pci_dev; 
-        
-        /* XXX DEV_LABEL is a guess */
-        request_region (iobase, HRZ_IO_EXTENT, DEV_LABEL);
+	dev->atm_dev->dev_data = (void *) dev;
+	dev->pci_dev = pci_dev; 
 	
-        // enable bus master accesses
-        pci_set_master (pci_dev);
+	/* XXX DEV_LABEL is a guess */
+	request_region (iobase, HRZ_IO_EXTENT, DEV_LABEL);
+	
+	// enable bus master accesses
+	pci_set_master (pci_dev);
 	
 	// frobnicate latency (upwards, usually)
 	pci_read_config_byte (pci_dev, PCI_LATENCY_TIMER, &lat);
@@ -2851,9 +2838,9 @@ static int __init hrz_probe (void) {
 	  pci_write_config_byte (pci_dev, PCI_LATENCY_TIMER, MIN_PCI_LATENCY);
 	}
 	
-        dev->iobase = iobase;
-        dev->irq = irq; 
-        dev->membase = membase; 
+	dev->iobase = iobase;
+	dev->irq = irq; 
+	dev->membase = membase; 
 	
 	dev->rx_q_entry = dev->rx_q_reset = &memmap->rx_q_entries[0];
 	dev->rx_q_wrap  = &memmap->rx_q_entries[RX_CHANS-1];
@@ -2882,13 +2869,13 @@ static int __init hrz_probe (void) {
 	}
 	
 	dev->flags = 0;
-        
+	
 	// Allocate cell rates and remember ASIC version
 	// Fibre: ATM_OC3_PCR = 1555200000/8/270*260/53 - 29/53
 	// Copper: (WRONG) we want 6 into the above, close to 25Mb/s
 	// Copper: (plagarise!) 25600000/8/270*260/53 - n/53
 	
-        if (hrz_init (dev)) {
+	if (hrz_init (dev)) {
 	  // to be really pedantic, this should be ATM_OC3c_PCR
 	  dev->tx_avail = ATM_OC3_PCR;
 	  dev->rx_avail = ATM_OC3_PCR;
@@ -2906,21 +2893,25 @@ static int __init hrz_probe (void) {
 	// writes to adapter memory (handles IRQ and SMP)
 	spin_lock_init (&dev->mem_lock);
 	
-	init_waitqueue_head(&dev->tx_queue);
-        
-        // vpi in 0..4, vci in 6..10
-        dev->atm_dev->ci_range.vpi_bits = vpi_bits;
-        dev->atm_dev->ci_range.vci_bits = 10-vpi_bits;
-        
-        // update count and linked list
+#if LINUX_VERSION_CODE >= 0x20303
+	init_waitqueue_head (&dev->tx_queue);
+#else
+	dev->tx_queue = 0;
+#endif
+	
+	// vpi in 0..4, vci in 6..10
+	dev->atm_dev->ci_range.vpi_bits = vpi_bits;
+	dev->atm_dev->ci_range.vci_bits = 10-vpi_bits;
+	
+	// update count and linked list
 	++devs;
-        dev->prev = hrz_devs;
-        hrz_devs = dev;
+	dev->prev = hrz_devs;
+	hrz_devs = dev;
 	// success
-        continue;
-        
-        /* not currently reached */
-        atm_dev_deregister (dev->atm_dev);
+	continue;
+	
+	/* not currently reached */
+	atm_dev_deregister (dev->atm_dev);
       } /* atm_dev_register */
       free_irq (irq, dev);
     } /* request_irq */
@@ -2943,11 +2934,11 @@ static void __init hrz_check_args (void) {
   
   if (max_tx_size > TX_AAL5_LIMIT)
     PRINTK (KERN_NOTICE, "max_tx_size has been limited to %hu",
-            max_tx_size = TX_AAL5_LIMIT);
+	    max_tx_size = TX_AAL5_LIMIT);
   
   if (max_rx_size > RX_AAL5_LIMIT)
     PRINTK (KERN_NOTICE, "max_rx_size has been limited to %hu",
-            max_rx_size = RX_AAL5_LIMIT);
+	    max_rx_size = RX_AAL5_LIMIT);
   
   return;
 }
@@ -3016,7 +3007,7 @@ void cleanup_module (void) {
     hrz_devs = dev->prev;
     
     PRINTD (DBG_INFO, "closing %p (atm_dev = %p)", dev, dev->atm_dev);
-    hrz_shutdown (dev);
+    hrz_reset (dev);
     atm_dev_deregister (dev->atm_dev);
     free_irq (dev->irq, dev);
     release_region (dev->iobase, HRZ_IO_EXTENT);

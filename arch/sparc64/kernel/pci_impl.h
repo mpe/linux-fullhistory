@@ -1,4 +1,4 @@
-/* $Id: pci_impl.h,v 1.1 1999/08/30 10:00:44 davem Exp $
+/* $Id: pci_impl.h,v 1.2 1999/09/05 04:58:05 davem Exp $
  * pci_impl.h: Helper definitions for PCI controller support.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -8,7 +8,7 @@
 #define PCI_IMPL_H
 
 #include <linux/types.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include <asm/io.h>
 
 extern spinlock_t pci_controller_lock;
@@ -35,12 +35,12 @@ extern void pci_scan_for_master_abort(struct pci_controller_info *, struct pci_p
 extern void pci_scan_for_parity_error(struct pci_controller_info *, struct pci_pbm_info *, struct pci_bus *);
 
 /* IOMMU/DVMA initialization. */
-extern unsigned long pci_dvma_offset;
-extern unsigned long pci_dvma_mask;
 #define PCI_DVMA_HASH_NONE	~0UL
-static __inline__ void set_dvma_hash(unsigned long paddr, unsigned long daddr)
+static __inline__ void set_dvma_hash(unsigned long dvma_offset,
+				     unsigned long paddr,
+				     unsigned long daddr)
 {
-	unsigned long dvma_addr = pci_dvma_offset + daddr;
+	unsigned long dvma_addr = dvma_offset + daddr;
 	unsigned long vaddr = (unsigned long)__va(paddr);
 
 	pci_dvma_v2p_hash[pci_dvma_ahashfn(paddr)] = dvma_addr - vaddr;

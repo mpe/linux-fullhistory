@@ -1,0 +1,2327 @@
+/*=============================================================================
+ *
+ * A  PCMCIA client driver for the Raylink wireless LAN card.
+ * The starting point for this module was the skeleton.c in the
+ * PCMCIA 2.9.12 package written by David Hinds, dhinds@allegro.stanford.edu
+ *
+ *
+ * Copyright (c) 1998  Corey Thomas (corey@world.std.com)
+ *
+ * This driver is free software; you can redistribute it and/or modify
+ * it under the terms of version 2 only of the GNU General Public License as 
+ * published by the Free Software Foundation.
+ *
+ * It is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
+ * 
+=============================================================================*/
+
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
+#include <linux/proc_fs.h>
+#include <linux/ptrace.h>
+#include <linux/malloc.h>
+#include <linux/string.h>
+#include <linux/timer.h>
+#include <asm/io.h>
+#include <asm/system.h>
+#include <asm/byteorder.h>
+
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
+#include <linux/ioport.h>
+#include <linux/skbuff.h>
+
+#include <pcmcia/version.h>
+#include <pcmcia/cs_types.h>
+#include <pcmcia/cs.h>
+#include <pcmcia/cistpl.h>
+#include <pcmcia/cisreg.h>
+#include <pcmcia/ds.h>
+#include <pcmcia/mem_op.h>
+
+#include "rayctl.h"
+#include "ray_cs.h"
+
+/* All the PCMCIA modules use PCMCIA_DEBUG to control debugging.  If
+   you do not define PCMCIA_DEBUG at all, all the debug code will be
+   left out.  If you compile with PCMCIA_DEBUG=0, the debug code will
+   be present but disabled -- but it can then be enabled for specific
+   modules at load time with a 'pc_debug=#' option to insmod.
+
+   I found that  adding -DPCMCIA_DEBUG to the compile options during
+   the 'make config' resulted in cardmgr not finding any sockets.
+   Therefore, this module uses RAYLINK_DEBUG instead.
+   The module option to use is ray_debug=#
+    where # is 1 for modest output
+               2 for more output
+               ...
+*/
+
+#ifdef RAYLINK_DEBUG
+static int ray_debug = RAYLINK_DEBUG;
+MODULE_PARM(ray_debug, "i");
+/* #define DEBUG(n, args...) if (ray_debug>(n)) printk(KERN_DEBUG args); */
+#define DEBUG(n, args...) if (ray_debug>(n)) printk(args);
+#else
+#define DEBUG(n, args...)
+#endif
+/** Prototypes based on PCMCIA skeleton driver *******************************/
+void ray_config(dev_link_t *link);
+void ray_release(u_long arg);
+int ray_event(event_t event, int priority, event_callback_args_t *args);
+dev_link_t *ray_attach(void);
+void ray_detach(dev_link_t *);
+
+/***** Prototypes indicated by device structure ******************************/
+int ray_dev_close(struct net_device *dev);
+int ray_dev_config(struct net_device *dev, struct ifmap *map);
+struct enet_statistics *ray_get_stats(struct net_device *dev);
+int ray_dev_init(struct net_device *dev);
+int ray_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
+int ray_open(struct net_device *dev);
+int ray_dev_start_xmit(struct sk_buff *skb, struct net_device *dev);
+static void set_multicast_list(struct net_device *dev);
+static void ray_update_multi_list(struct net_device *dev, int all);
+int encapsulate_frame(ray_dev_t *local, struct tx_msg *ptx, UCHAR msg_type,
+                unsigned char *data, int len);
+int translate_frame(ray_dev_t *local, struct tx_msg *ptx,
+                unsigned char *data, int len);
+void ray_build_header(ray_dev_t *local, struct tx_msg *ptx, UCHAR msg_type,
+                unsigned char *data);
+void untranslate(ray_dev_t *local, struct sk_buff *skb, int len);
+
+/***** Prototypes for raylink functions **************************************/
+int asc_to_int(char a);
+void authenticate(ray_dev_t *local);
+int build_auth_frame(ray_dev_t *local, UCHAR *dest, int auth_type);
+void authenticate_timeout(u_long);
+int get_free_ccs(ray_dev_t *local);
+int get_free_tx_ccs(ray_dev_t *local);
+void init_startup_params(ray_dev_t *local);
+int parse_addr(char *in_str, UCHAR *out);
+int ray_hw_xmit(unsigned char* data, int len, struct net_device* dev, UCHAR type);
+int ray_init(struct net_device *dev);
+int interrupt_ecf(ray_dev_t *local, int ccs);
+void ray_reset(struct net_device *dev);
+void ray_update_parm(struct net_device *dev, UCHAR objid, UCHAR *value, int len);
+void verify_dl_startup(u_long);
+
+/* Prototypes for interrpt time functions **********************************/
+void ray_interrupt(int reg, void *dev_id, struct pt_regs *regs);
+void clear_interrupt(ray_dev_t *local);
+void rx_deauthenticate(ray_dev_t *local, struct rcs *prcs, 
+                       unsigned int pkt_addr, int rx_len);
+int copy_from_rx_buff(ray_dev_t *local, UCHAR *dest, int pkt_addr, int len);
+void ray_rx(struct net_device *dev, ray_dev_t *local, struct rcs *prcs);
+void release_frag_chain(ray_dev_t *local, struct rcs *prcs);
+void rx_authenticate(ray_dev_t *local, struct rcs *prcs,
+                     unsigned int pkt_addr, int rx_len);
+void rx_data(struct net_device *dev, struct rcs *prcs, unsigned int pkt_addr, 
+             int rx_len);
+void associate(ray_dev_t *local);
+
+/* Card command functions */
+int dl_startup_params(struct net_device *dev);
+void join_net(u_long local);
+void start_net(u_long local);
+/* void start_net(ray_dev_t *local); */
+
+int ray_cs_proc_read(char *buf, char **start, off_t off, int len, int spare);
+
+/* Create symbol table for registering with kernel in init_module */
+EXPORT_SYMBOL(ray_dev_ioctl);
+EXPORT_SYMBOL(ray_rx);
+
+/*===========================================================================*/
+/* Parameters that can be set with 'insmod' */
+/* Bit map of interrupts to choose from */
+/* This means pick from 15, 14, 12, 11, 10, 9, 7, 5, 4, and 3 */
+static u_long irq_mask = 0xdeb8;
+MODULE_PARM(irq_mask,"i");
+
+/* ADHOC=0, Infrastructure=1 */
+static int net_type = ADHOC;
+MODULE_PARM(net_type,"i");
+
+/* Hop dwell time in Kus (1024 us units defined by 802.11) */
+static int hop_dwell = 128;
+MODULE_PARM(hop_dwell,"i");
+
+/* Beacon period in Kus */
+static int beacon_period = 128;
+MODULE_PARM(beacon_period,"i");
+
+/* power save mode (0 = off, 1 = save power) */
+static int psm = 0;
+MODULE_PARM(psm,"i");
+
+/* String for network's Extended Service Set ID. 32 Characters max */
+static char *essid = NULL;
+MODULE_PARM(essid,"s");
+
+/* Default to encapsulation unless translation requested */
+static int translate = 0;
+MODULE_PARM(translate,"i");
+
+static int country = USA;
+MODULE_PARM(country,"i");
+
+static int sniffer = 0;
+MODULE_PARM(sniffer,"i");
+
+static int bc = 0;
+MODULE_PARM(bc,"i");
+
+/* 48 bit physical card address if overriding card's real physical
+ * address is required.  Since IEEE 802.11 addresses are 48 bits
+ * like ethernet, an int can't be used, so a string is used. To
+ * allow use of addresses starting with a decimal digit, the first
+ * character must be a letter and will be ignored. This letter is
+ * followed by up to 12 hex digits which are the address.  If less
+ * than 12 digits are used, the address will be left filled with 0's.
+ * Note that bit 0 of the first byte is the broadcast bit, and evil
+ * things will happen if it is not 0 in a card address.
+ */
+static char *phy_addr = NULL;
+MODULE_PARM(phy_addr,"s");
+
+
+/* The dev_info variable is the "key" that is used to match up this
+   device driver with appropriate cards, through the card configuration
+   database.
+*/
+static dev_info_t dev_info = "ray_cs";
+
+/* A linked list of "instances" of the ray device.  Each actual
+   PCMCIA card corresponds to one device instance, and is described
+   by one dev_link_t structure (defined in ds.h).
+*/
+static dev_link_t *dev_list = NULL;
+
+/* A dev_link_t structure has fields for most things that are needed
+   to keep track of a socket, but there will usually be some device
+   specific information that also needs to be kept track of.  The
+   'priv' pointer in a dev_link_t structure can be used to point to
+   a device-specific private data structure, like this.
+*/
+static const unsigned int ray_mem_speed = 0x2A;
+
+static UCHAR b5_default_startup_parms[] = {
+    0,   0,                         /* Adhoc station */
+   'L','I','N','U','X', 0,  0,  0,  /* 32 char ESSID */
+    0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,
+    1,  0,                          /* Active scan, CA Mode */
+    0,  0,  0,  0,  0,  0,          /* No default MAC addr  */
+    0x7f, 0xff,                     /* Frag threshold */
+    0x00, 0x80,                     /* Hop time 128 Kus*/
+    0x01, 0x00,                     /* Beacon period 256 Kus */
+    0x01, 0x07, 0xa3,               /* DTIM, retries, ack timeout*/
+    0x1d, 0x82, 0x4e,               /* SIFS, DIFS, PIFS */
+    0x7f, 0xff,                     /* RTS threshold */
+    0x04, 0xe2, 0x38, 0xA4,         /* scan_dwell, max_scan_dwell */
+    0x05,                           /* assoc resp timeout thresh */
+    0x08, 0x02, 0x08,               /* adhoc, infra, super cycle max*/
+    0,                              /* Promiscuous mode */
+    0x0c, 0x0bd,                    /* Unique word */
+    0x32,                           /* Slot time */
+    0xff, 0xff,                     /* roam-low snr, low snr count */
+    0x05, 0xff,                     /* Infra, adhoc missed bcn thresh */
+    0x01, 0x0b, 0x4f,               /* USA, hop pattern, hop pat length */
+/* b4 - b5 differences start here */
+    0x00, 0x3f,                     /* CW max */
+    0x00, 0x0f,                     /* CW min */
+    0x04, 0x08,                     /* Noise gain, limit offset */
+    0x28, 0x28,                     /* det rssi, med busy offsets */
+    7,                              /* det sync thresh */
+    0, 2, 2,                        /* test mode, min, max */
+    0,                              /* allow broadcast SSID probe resp */
+    0, 0,                           /* privacy must start, can join */
+    2, 0, 0, 0, 0, 0, 0, 0          /* basic rate set */
+};
+
+static UCHAR b4_default_startup_parms[] = {
+    0,   0,                         /* Adhoc station */
+   'L','I','N','U','X', 0,  0,  0,  /* 32 char ESSID */
+    0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,
+    1,  0,                          /* Active scan, CA Mode */
+    0,  0,  0,  0,  0,  0,          /* No default MAC addr  */
+    0x7f, 0xff,                     /* Frag threshold */
+    0x02, 0x00,                     /* Hop time */
+    0x00, 0x01,                     /* Beacon period */
+    0x01, 0x07, 0xa3,               /* DTIM, retries, ack timeout*/
+    0x1d, 0x82, 0xce,               /* SIFS, DIFS, PIFS */
+    0x7f, 0xff,                     /* RTS threshold */
+    0xfb, 0x1e, 0xc7, 0x5c,         /* scan_dwell, max_scan_dwell */
+    0x05,                           /* assoc resp timeout thresh */
+    0x04, 0x02, 0x4,                /* adhoc, infra, super cycle max*/
+    0,                              /* Promiscuous mode */
+    0x0c, 0x0bd,                    /* Unique word */
+    0x4e,                           /* Slot time (TBD seems wrong)*/
+    0xff, 0xff,                     /* roam-low snr, low snr count */
+    0x05, 0xff,                     /* Infra, adhoc missed bcn thresh */
+    0x01, 0x0b, 0x4e,               /* USA, hop pattern, hop pat length */
+/* b4 - b5 differences start here */
+    0x3f, 0x0f,                     /* CW max, min */
+    0x04, 0x08,                     /* Noise gain, limit offset */
+    0x28, 0x28,                     /* det rssi, med busy offsets */
+    7,                              /* det sync thresh */
+    0, 2, 2                         /* test mode, min, max*/
+};
+/*===========================================================================*/
+static unsigned char eth2_llc[] = {0xaa, 0xaa, 3, 0, 0, 0};
+
+static char rcsid[] = " $Id: ray_cs.c,v 1.60 1999/09/01 20:58:45 corey Exp $ - Corey Thomas corey@world.std.com";
+
+#ifdef CONFIG_PROC_FS
+struct proc_dir_entry ray_cs_proc_entry = {
+    0,                         /* Dynamic inode # */
+    6,"ray_cs",                /* name length and name */
+    S_IFREG | S_IRUGO,         /* mode */
+    1, 0, 0,                   /* nlinks, owner, group */
+    0,                         /* size (unused) */
+    NULL,                      /* operations (default) */
+    &ray_cs_proc_read,         /* function to read data */
+    /* The end ?? */
+};
+#endif
+/*===========================================================================*/
+void cs_error(client_handle_t handle, int func, int ret)
+{
+    error_info_t err = { func, ret };
+    CardServices(ReportError, handle, &err);
+}
+/*=============================================================================
+    ray_attach() creates an "instance" of the driver, allocating
+    local data structures for one device.  The device is registered
+    with Card Services.
+    The dev_link structure is initialized, but we don't actually
+    configure the card at this point -- we wait until we receive a
+    card insertion event.
+=============================================================================*/
+dev_link_t *ray_attach(void)
+{
+    client_reg_t client_reg;
+    dev_link_t *link;
+    ray_dev_t *local;
+    int ret;
+    struct net_device *dev;
+    
+    DEBUG(1, "ray_attach()\n");
+
+    /* Initialize the dev_link_t structure */
+    link = kmalloc(sizeof(struct dev_link_t), GFP_KERNEL);
+    memset(link, 0, sizeof(struct dev_link_t));
+    link->release.function = &ray_release;
+    link->release.data = (u_long)link;
+
+    /* The io structure describes IO port mapping. None used here */
+    link->io.NumPorts1 = 0;
+    link->io.Attributes1 = IO_DATA_PATH_WIDTH_8;
+    link->io.IOAddrLines = 5;
+
+    /* Interrupt setup. For PCMCIA, driver takes what's given */
+    link->irq.Attributes = IRQ_TYPE_EXCLUSIVE | IRQ_HANDLE_PRESENT;
+    link->irq.IRQInfo1 = IRQ_INFO2_VALID | IRQ_LEVEL_ID;
+    link->irq.IRQInfo2 = irq_mask;
+    link->irq.Handler = &ray_interrupt;
+
+    /* General socket configuration */
+    link->conf.Attributes = CONF_ENABLE_IRQ;
+    link->conf.Vcc = 50;
+    link->conf.IntType = INT_MEMORY_AND_IO;
+    link->conf.ConfigIndex = 1;
+    link->conf.Present = PRESENT_OPTION;
+
+    /* Allocate space for private device-specific data */
+    dev = kmalloc(sizeof(struct net_device), GFP_KERNEL);
+    memset(dev, 0, sizeof(struct net_device));
+    link->priv = dev;
+    link->irq.Instance = dev;
+    
+    local = kmalloc(sizeof(ray_dev_t), GFP_KERNEL);
+    memset(local, 0, sizeof(ray_dev_t));
+    dev->priv = local;
+    local->finder = link;
+    link->dev = &local->node;
+    local->card_status = CARD_INSERTED;
+	local->authentication_state = UNAUTHENTICATED;
+    local->num_multi = 0;
+    DEBUG(2,"ray_attach link = %p,  dev = %p,  local = %p, intr = %p\n",
+          link,dev,local,&ray_interrupt);
+
+    /* Raylink entries in the device structure */
+    dev->hard_start_xmit = &ray_dev_start_xmit;
+    dev->set_config = &ray_dev_config;
+    dev->get_stats  = &ray_get_stats;
+    dev->do_ioctl = &ray_dev_ioctl;
+
+    dev->set_multicast_list = &set_multicast_list;
+
+    DEBUG(2,"ray_cs ray_attach calling ether_setup.)\n");
+    ether_setup(dev);
+    dev->name = local->node.dev_name;
+    dev->init = &ray_dev_init;
+    dev->open = &ray_open;
+    dev->stop = &ray_dev_close;
+    dev->tbusy = 1;
+
+    /* Register with Card Services */
+    link->next = dev_list;
+    dev_list = link;
+    client_reg.dev_info = &dev_info;
+    client_reg.Attributes = INFO_IO_CLIENT | INFO_CARD_SHARE;
+    client_reg.EventMask =
+        CS_EVENT_CARD_INSERTION | CS_EVENT_CARD_REMOVAL |
+        CS_EVENT_RESET_PHYSICAL | CS_EVENT_CARD_RESET |
+        CS_EVENT_PM_SUSPEND | CS_EVENT_PM_RESUME;
+    client_reg.event_handler = &ray_event;
+    client_reg.Version = 0x0210;
+    client_reg.event_callback_args.client_data = link;
+
+    DEBUG(2,"ray_cs ray_attach calling CardServices(RegisterClient...)\n");
+
+    init_timer(&local->timer);
+
+    ret = CardServices(RegisterClient, &link->handle, &client_reg);
+    if (ret != 0) {
+        printk("ray_cs ray_attach RegisterClient unhappy - detaching\n");
+        cs_error(link->handle, RegisterClient, ret);
+        ray_detach(link);
+        return NULL;
+    }
+    DEBUG(2,"ray_cs ray_attach ending\n");
+    return link;
+} /* ray_attach */
+/*=============================================================================
+    This deletes a driver "instance".  The device is de-registered
+    with Card Services.  If it has been released, all local data
+    structures are freed.  Otherwise, the structures will be freed
+    when the device is released.
+=============================================================================*/
+void ray_detach(dev_link_t *link)
+{
+    dev_link_t **linkp;
+    struct net_device *dev;
+    long flags;
+
+    DEBUG(1, "ray_detach(0x%p)\n", link);
+    
+    /* Locate device structure */
+    for (linkp = &dev_list; *linkp; linkp = &(*linkp)->next)
+        if (*linkp == link) break;
+    if (*linkp == NULL)
+        return;
+
+    save_flags(flags);
+    cli();
+    if (link->state & DEV_RELEASE_PENDING) {
+        del_timer(&link->release);
+        link->state &= ~DEV_RELEASE_PENDING;
+    }
+    restore_flags(flags);
+
+    /* If the device is currently configured and active, we won't
+      actually delete it yet.  Instead, it is marked so that when
+      the release() function is called, that will trigger a proper
+      detach().
+    */
+    if (link->state & DEV_CONFIG) {
+        ray_release((u_long)link);
+        if(link->state & DEV_STALE_CONFIG) {
+            DEBUG(0,"ray_cs: detach postponed, '%s' "
+              "still locked\n", link->dev->dev_name);
+            link->state |= DEV_STALE_LINK;
+            return;
+        }
+    }
+
+    /* Break the link with Card Services */
+    if (link->handle)
+        CardServices(DeregisterClient, link->handle);
+    
+    /* Unlink device structure, free pieces */
+    *linkp = link->next;
+    if (link->priv) {
+        dev = link->priv;
+        if (dev->priv)
+            kfree_s(dev->priv, sizeof(ray_dev_t));
+
+        kfree_s(link->priv, sizeof(struct net_device));
+    }
+    kfree_s(link, sizeof(struct dev_link_t));
+    DEBUG(2,"ray_cs ray_detach ending\n");
+} /* ray_detach */
+/*=============================================================================
+    ray_config() is run after a CARD_INSERTION event
+    is received, to configure the PCMCIA socket, and to make the
+    ethernet device available to the system.
+=============================================================================*/
+#define CS_CHECK(fn, args...) \
+while ((last_ret=CardServices(last_fn=(fn),args))!=0) goto cs_failed
+#define MAX_TUPLE_SIZE 80
+void ray_config(dev_link_t *link)
+{
+    client_handle_t handle = link->handle;
+    tuple_t tuple;
+    cisparse_t parse;
+    int last_fn, last_ret;
+    int i;
+    u_char buf[80];
+    win_req_t req;
+    memreq_t mem;
+    struct net_device *dev = (struct net_device *)link->priv;
+    ray_dev_t *local = (ray_dev_t *)dev->priv;
+
+    DEBUG(1, "ray_config(0x%p)\n", link);
+
+    /* This reads the card's CONFIG tuple to find its configuration regs */
+    tuple.DesiredTuple = CISTPL_CONFIG;
+    CS_CHECK(GetFirstTuple, handle, &tuple);
+    tuple.TupleData = buf;
+    tuple.TupleDataMax = MAX_TUPLE_SIZE;
+    tuple.TupleOffset = 0;
+    CS_CHECK(GetTupleData, handle, &tuple);
+    CS_CHECK(ParseTuple, handle, &tuple, &parse);
+    link->conf.ConfigBase = parse.config.base;
+    link->conf.Present = parse.config.rmask[0];
+
+    /* Configure card */
+    link->state |= DEV_CONFIG;
+
+    /* Now allocate an interrupt line.  Note that this does not
+       actually assign a handler to the interrupt.
+    */
+    CS_CHECK(RequestIRQ, link->handle, &link->irq);
+    dev->irq = link->irq.AssignedIRQ;
+    
+    /* This actually configures the PCMCIA socket -- setting up
+       the I/O windows and the interrupt mapping.
+    */
+    CS_CHECK(RequestConfiguration, link->handle, &link->conf);
+
+/*** Set up 32k window for shared memory (transmit and control) ************/
+    req.Attributes = WIN_DATA_WIDTH_8 | WIN_MEMORY_TYPE_CM | WIN_ENABLE | WIN_USE_WAIT;
+    req.Base = 0;
+    req.Size = 0x8000;
+    req.AccessSpeed = ray_mem_speed;
+    link->win = (window_handle_t)link->handle;
+    CS_CHECK(RequestWindow, &link->win, &req);
+    mem.CardOffset = 0x0000; mem.Page = 0;
+    CS_CHECK(MapMemPage, link->win, &mem);
+    local->sram = (UCHAR *)(ioremap(req.Base,req.Size));
+
+/*** Set up 16k window for shared memory (receive buffer) ***************/
+    req.Attributes = WIN_DATA_WIDTH_8 | WIN_MEMORY_TYPE_CM | WIN_ENABLE | WIN_USE_WAIT;
+    req.Base = 0;
+    req.Size = 0x4000;
+    req.AccessSpeed = ray_mem_speed;
+    local->rmem_handle = (window_handle_t)link->handle;
+    CS_CHECK(RequestWindow, &local->rmem_handle, &req);
+    mem.CardOffset = 0x8000; mem.Page = 0;
+    CS_CHECK(MapMemPage, local->rmem_handle, &mem);
+    local->rmem = (UCHAR *)(ioremap(req.Base,req.Size));
+
+/*** Set up window for attribute memory ***********************************/
+    req.Attributes = WIN_DATA_WIDTH_8 | WIN_MEMORY_TYPE_AM | WIN_ENABLE | WIN_USE_WAIT;
+    req.Base = 0;
+    req.Size = 0x1000;
+    req.AccessSpeed = ray_mem_speed;
+    local->amem_handle = (window_handle_t)link->handle;
+    CS_CHECK(RequestWindow, &local->amem_handle, &req);
+    mem.CardOffset = 0x0000; mem.Page = 0;
+    CS_CHECK(MapMemPage, local->amem_handle, &mem);
+    local->amem = (UCHAR *)(ioremap(req.Base,req.Size));
+
+    DEBUG(3,"ray_config sram=%p\n",local->sram);
+    DEBUG(3,"ray_config rmem=%p\n",local->rmem);
+    DEBUG(3,"ray_config amem=%p\n",local->amem);
+    if (ray_init(dev) < 0) {
+        ray_release((u_long)link);
+        return;
+    }
+
+    i = register_netdev(dev);
+    if (i != 0) {
+        printk("ray_config register_netdev() failed\n");
+        ray_release((u_long)link);
+        return;
+    }
+
+    link->state &= ~DEV_CONFIG_PENDING;
+    DEBUG(0, "ray_cs device loaded\n");
+
+    return;
+
+cs_failed:
+    cs_error(link->handle, last_fn, last_ret);
+
+    ray_release((u_long)link);
+} /* ray_config */
+/*===========================================================================*/
+int ray_init(struct net_device *dev)
+{
+    int i;
+    UCHAR *p;
+    struct ccs *pccs;
+    ray_dev_t *local = (ray_dev_t *)dev->priv;
+    dev_link_t *link = local->finder;
+    DEBUG(1, "ray_init(0x%p)\n", dev);
+    if (!(link->state & DEV_PRESENT)) {
+        DEBUG(0,"ray_init - device not present\n");
+        return -1;
+    }
+
+    local->net_type = net_type;
+    local->sta_type = TYPE_STA;
+
+    /* Copy the startup results to local memory */
+    memcpy_fromio(&local->startup_res, local->sram + ECF_TO_HOST_BASE,\
+           sizeof(struct startup_res_6));
+
+    /* Check Power up test status and get mac address from card */
+    if (local->startup_res.startup_word != 0x80) {
+DEBUG(0,"ray_init ERROR card status = %2x\n", local->startup_res.startup_word);
+        local->card_status = CARD_INIT_ERROR;
+        return -1;
+    }
+
+    local->fw_ver = local->startup_res.firmware_version[0];
+    local->fw_bld = local->startup_res.firmware_version[1];
+    local->fw_var = local->startup_res.firmware_version[2];
+    DEBUG(1,"ray_init firmware version %d.%d \n",local->fw_ver, local->fw_bld);
+
+    local->tib_length = 0x20;
+    if ((local->fw_ver == 5) && (local->fw_bld >= 30))
+        local->tib_length = local->startup_res.tib_length;
+    DEBUG(2,"ray_init tib_length = 0x%02x\n", local->tib_length);
+    /* Initialize CCS's to buffer free state */
+    pccs = (struct ccs *)(local->sram + CCS_BASE);
+    for (i=0;  i<NUMBER_OF_CCS;  i++) {
+        writeb(CCS_BUFFER_FREE, &(pccs++)->buffer_status);
+    }
+    init_startup_params(local);
+
+    /* copy mac address to startup parameters */
+    if (parse_addr(phy_addr, local->sparm.b4.a_mac_addr))
+    {
+        p = local->sparm.b4.a_mac_addr;
+        DEBUG(1,"ray_cs phy address overridden = %2x %2x %2x %2x %2x %2x\n",\
+              p[0],p[1],p[2],p[3],p[4],p[5]);
+    }
+    else
+    {
+        memcpy(&local->sparm.b4.a_mac_addr,
+               &local->startup_res.station_addr, ADDRLEN);
+        p = local->sparm.b4.a_mac_addr;
+        DEBUG(1,"ray_cs phy addr= %2x %2x %2x %2x %2x %2x\n",\
+              p[0],p[1],p[2],p[3],p[4],p[5]);
+    }
+
+    clear_interrupt(local); /* Clear any interrupt from the card */
+    local->card_status = CARD_AWAITING_PARAM;
+    DEBUG(2,"ray_init ending\n");
+    return 0;
+} /* ray_init */
+/*===========================================================================*/
+/* Download startup parameters to the card and command it to read them       */
+int dl_startup_params(struct net_device *dev)
+{
+    int ccsindex;
+    ray_dev_t *local = (ray_dev_t *)dev->priv;
+    struct ccs *pccs;
+    dev_link_t *link = local->finder;
+
+    DEBUG(1,"dl_startup_params entered\n");
+    if (!(link->state & DEV_PRESENT)) {
+        DEBUG(0,"ray_cs dl_startup_params - device not present\n");
+        return -1;
+    }
+    
+    /* Copy parameters to host to ECF area */
+    if (local->fw_ver == 0x55) 
+        memcpy_toio(local->sram + HOST_TO_ECF_BASE, &local->sparm.b4,
+               sizeof(struct b4_startup_params));
+    else
+        memcpy_toio(local->sram + HOST_TO_ECF_BASE, &local->sparm.b5,
+               sizeof(struct b5_startup_params));
+
+    
+    /* Fill in the CCS fields for the ECF */
+    if ((ccsindex = get_free_ccs(local)) == -1) return -1;
+    local->dl_param_ccs = ccsindex;
+    pccs = ((struct ccs *)(local->sram + CCS_BASE)) + ccsindex;
+    writeb(CCS_DOWNLOAD_STARTUP_PARAMS, &pccs->cmd);
+    DEBUG(2,"dl_startup_params start ccsindex = %d\n", local->dl_param_ccs);
+    /* Interrupt the firmware to process the command */
+    if (interrupt_ecf(local, ccsindex)) {
+        DEBUG(0,"ray dl_startup_params failed - ECF not ready for intr\n");
+        local->card_status = CARD_DL_PARAM_ERROR;
+        writeb(CCS_BUFFER_FREE, &(pccs++)->buffer_status);
+        return -2;
+    }
+    local->card_status = CARD_DL_PARAM;
+    /* Start kernel timer to wait for dl startup to complete. */
+    local->timer.expires = jiffies + HZ/2;
+    local->timer.data = (long)local;
+    local->timer.function = &verify_dl_startup;
+    add_timer(&local->timer);
+    DEBUG(2,"ray_cs dl_startup_params started timer for verify_dl_startup\n");
+    return 0;
+} /* dl_startup_params */
+/*===========================================================================*/
+void init_startup_params(ray_dev_t *local)
+{
+    int i; 
+    static char hop_pattern_length[] = { 1,
+                     USA_HOP_MOD,             EUROPE_HOP_MOD,
+                     JAPAN_HOP_MOD,           KOREA_HOP_MOD,
+                     SPAIN_HOP_MOD,           FRANCE_HOP_MOD,
+                     ISRAEL_HOP_MOD,          AUSTRALIA_HOP_MOD,
+                     JAPAN_TEST_HOP_MOD
+    };
+
+    if (country > JAPAN_TEST) country = USA;
+    else
+        if (country < USA) country = USA;
+    /* structure for hop time and beacon period is defined here using 
+     * New 802.11D6.1 format.  Card firmware is still using old format
+     * until version 6.
+     *    Before                    After
+     *    a_hop_time ms byte        a_hop_time ms byte
+     *    a_hop_time 2s byte        a_hop_time ls byte
+     *    a_hop_time ls byte        a_beacon_period ms byte
+     *    a_beacon_period           a_beacon_period ls byte
+     *
+     *    a_hop_time = uS           a_hop_time = KuS
+     *    a_beacon_period = hops    a_beacon_period = KuS
+     */                             /* 64ms = 010000 */
+    if (local->fw_ver == 0x55)  {
+        memcpy((UCHAR *)&local->sparm.b4, b4_default_startup_parms, 
+               sizeof(struct b4_startup_params));
+        /* Translate sane kus input values to old build 4/5 format */
+        /* i = hop time in uS truncated to 3 bytes */
+        i = (hop_dwell * 1024) & 0xffffff;
+        local->sparm.b4.a_hop_time[0] = (i >> 16) & 0xff;
+        local->sparm.b4.a_hop_time[1] = (i >> 8) & 0xff;
+        local->sparm.b4.a_beacon_period[0] = 0;
+        local->sparm.b4.a_beacon_period[1] =
+            ((beacon_period/hop_dwell) - 1) & 0xff;
+        local->sparm.b4.a_curr_country_code = country;
+        local->sparm.b4.a_hop_pattern_length = 
+            hop_pattern_length[(int)country] - 1;
+		if (bc)
+		{
+			local->sparm.b4.a_ack_timeout = 0x50;
+			local->sparm.b4.a_sifs = 0x3f;
+		}
+    }
+    else {    /* Version 5 uses real kus values */
+        memcpy((UCHAR *)&local->sparm.b5, b5_default_startup_parms, 
+               sizeof(struct b5_startup_params));
+
+        local->sparm.b5.a_hop_time[0] = (hop_dwell >> 8) & 0xff;
+        local->sparm.b5.a_hop_time[1] = hop_dwell & 0xff;
+        local->sparm.b5.a_beacon_period[0] = (beacon_period >> 8) & 0xff;
+        local->sparm.b5.a_beacon_period[1] = beacon_period & 0xff;
+        if (psm)
+            local->sparm.b5.a_power_mgt_state = 1;
+        local->sparm.b5.a_curr_country_code = country;
+        local->sparm.b5.a_hop_pattern_length = 
+            hop_pattern_length[(int)country];
+    }
+    
+    local->sparm.b4.a_network_type = net_type & 0x01;
+    local->sparm.b4.a_acting_as_ap_status = TYPE_STA;
+
+    if (essid != NULL)
+        strncpy(local->sparm.b4.a_current_ess_id, essid, ESSID_SIZE);
+} /* init_startup_params */ 
+/*===========================================================================*/
+void verify_dl_startup(u_long data)
+{
+    ray_dev_t *local = (ray_dev_t *)data;
+    struct ccs *pccs = ((struct ccs *)(local->sram + CCS_BASE)) + local->dl_param_ccs;
+    UCHAR status;
+/*    UCHAR *p = local->sram + HOST_TO_ECF_BASE; */
+    dev_link_t *link = local->finder;
+
+    if (!(link->state & DEV_PRESENT)) {
+        DEBUG(0,"ray_cs verify_dl_startup - device not present\n");
+        return;
+    }
+#ifdef RAYLINK_DEBUG
+    {
+	int i;
+        DEBUG(2,"verify_dl_startup parameters sent via ccs %d:\n",\
+              local->dl_param_ccs);
+        for (i=0; i<sizeof(struct b5_startup_params); i++)
+        {
+            DEBUG(1," %2x ", readb(local->sram + HOST_TO_ECF_BASE + i));
+        }
+        DEBUG(1,"\n");
+    }
+#endif
+
+    status = readb(&pccs->buffer_status);
+    if (status!= CCS_BUFFER_FREE)
+    {
+        DEBUG(0,"Download startup params failed.  Status = %d\n",status);
+        local->card_status = CARD_DL_PARAM_ERROR;
+        return;
+    }
+    if (local->sparm.b4.a_network_type == ADHOC)
+        start_net((u_long)local);
+    else
+        join_net((u_long)local);
+
+    return;
+} /* end verify_dl_startup */
+/*===========================================================================*/
+/* Command card to start a network */
+void start_net(u_long data)
+{
+    ray_dev_t *local = (ray_dev_t *)data;
+    struct ccs *pccs;
+    int ccsindex;
+    dev_link_t *link = local->finder;
+    if (!(link->state & DEV_PRESENT)) {
+        DEBUG(0,"ray_cs start_net - device not present\n");
+        return;
+    }
+    /* Fill in the CCS fields for the ECF */
+    if ((ccsindex = get_free_ccs(local)) == -1) return;
+    pccs = ((struct ccs *)(local->sram + CCS_BASE)) + ccsindex;
+    writeb(CCS_START_NETWORK, &pccs->cmd);
+    writeb(0, &pccs->var.start_network.update_param);
+    /* Interrupt the firmware to process the command */
+    if (interrupt_ecf(local, ccsindex)) {
+        DEBUG(1,"ray start net failed - card not ready for intr\n");
+        writeb(CCS_BUFFER_FREE, &(pccs++)->buffer_status);
+        return;
+    }
+    local->card_status = CARD_DOING_ACQ;
+    return;
+} /* end start_net */
+/*===========================================================================*/
+/* Command card to join a network */
+void join_net(u_long data)
+{
+    ray_dev_t *local = (ray_dev_t *)data;
+
+    struct ccs *pccs;
+    int ccsindex;
+    dev_link_t *link = local->finder;
+    
+    if (!(link->state & DEV_PRESENT)) {
+        DEBUG(0,"ray_cs join_net - device not present\n");
+        return;
+    }
+    /* Fill in the CCS fields for the ECF */
+    if ((ccsindex = get_free_ccs(local)) == -1) return;
+    pccs = ((struct ccs *)(local->sram + CCS_BASE)) + ccsindex;
+    writeb(CCS_JOIN_NETWORK, &pccs->cmd);
+    writeb(0, &pccs->var.join_network.update_param);
+    writeb(0, &pccs->var.join_network.net_initiated);
+    /* Interrupt the firmware to process the command */
+    if (interrupt_ecf(local, ccsindex)) {
+        DEBUG(1,"ray join net failed - card not ready for intr\n");
+        writeb(CCS_BUFFER_FREE, &(pccs++)->buffer_status);
+        return;
+    }
+    local->card_status = CARD_DOING_ACQ;
+    return;
+}
+/*============================================================================
+    After a card is removed, ray_release() will unregister the net
+    device, and release the PCMCIA configuration.  If the device is
+    still open, this will be postponed until it is closed.
+=============================================================================*/
+void ray_release(u_long arg)
+{
+    dev_link_t *link = (dev_link_t *)arg;
+    struct net_device *dev = link->priv; 
+    ray_dev_t *local = dev->priv;
+    int i;
+    
+    DEBUG(1, "ray_release(0x%p)\n", link);
+    /* If the device is currently in use, we won't release until it
+      is actually closed.
+    */
+    if (link->open) {
+        DEBUG(1, "ray_cs: release postponed, '%s' still open\n",
+              link->dev->dev_name);
+        link->state |= DEV_STALE_CONFIG;
+        return;
+    }
+	del_timer(&local->timer);
+    if (link->dev != '\0') unregister_netdev(dev);
+    /* Unlink the device chain */
+    link->dev = NULL;
+
+    iounmap(local->sram);
+    iounmap(local->rmem);
+    iounmap(local->amem);
+    /* Do bother checking to see if these succeed or not */
+    i = CardServices(ReleaseWindow, link->win);
+    if ( i != CS_SUCCESS ) DEBUG(0,"ReleaseWindow(link->win) ret = %x\n",i);
+    i = CardServices(ReleaseWindow, local->amem_handle);
+    if ( i != CS_SUCCESS ) DEBUG(0,"ReleaseWindow(local->amem) ret = %x\n",i);
+    i = CardServices(ReleaseWindow, local->rmem_handle);
+    if ( i != CS_SUCCESS ) DEBUG(0,"ReleaseWindow(local->rmem) ret = %x\n",i);
+    i = CardServices(ReleaseConfiguration, link->handle);
+    if ( i != CS_SUCCESS ) DEBUG(0,"ReleaseConfiguration ret = %x\n",i);
+    i = CardServices(ReleaseIRQ, link->handle, &link->irq);
+    if ( i != CS_SUCCESS ) DEBUG(0,"ReleaseIRQ ret = %x\n",i);
+
+    link->state &= ~DEV_CONFIG;
+    if (link->state & DEV_STALE_LINK) ray_detach(link);
+    DEBUG(2,"ray_release ending\n");
+} /* ray_release */
+/*=============================================================================
+    The card status event handler.  Mostly, this schedules other
+    stuff to run after an event is received.  A CARD_REMOVAL event
+    also sets some flags to discourage the net drivers from trying
+    to talk to the card any more.
+
+    When a CARD_REMOVAL event is received, we immediately set a flag
+    to block future accesses to this device.  All the functions that
+    actually access the device should check this flag to make sure
+    the card is still present.
+=============================================================================*/
+int ray_event(event_t event, int priority,
+                     event_callback_args_t *args)
+{
+    dev_link_t *link = args->client_data;
+    struct net_device *dev = link->priv;
+    ray_dev_t *local = (ray_dev_t *)dev->priv;
+    DEBUG(1, "ray_event(0x%06x)\n", event);
+    
+    switch (event) {
+    case CS_EVENT_CARD_REMOVAL:
+        link->state &= ~DEV_PRESENT;
+        dev->tbusy = 1; dev->start = 0;
+        if (link->state & DEV_CONFIG) {
+            link->release.expires = jiffies + HZ/20;
+            add_timer(&link->release);
+            del_timer(&local->timer);
+        }
+        break;
+    case CS_EVENT_CARD_INSERTION:
+        link->state |= DEV_PRESENT | DEV_CONFIG_PENDING;
+        ray_config(link);
+        break;
+    case CS_EVENT_PM_SUSPEND:
+        link->state |= DEV_SUSPEND;
+        /* Fall through... */
+    case CS_EVENT_RESET_PHYSICAL:
+        if (link->state & DEV_CONFIG) {
+            if (link->open) {
+                dev->tbusy = 1;
+                dev->start = 0;
+            }
+            CardServices(ReleaseConfiguration, link->handle);
+        }
+        break;
+    case CS_EVENT_PM_RESUME:
+        link->state &= ~DEV_SUSPEND;
+        /* Fall through... */
+    case CS_EVENT_CARD_RESET:
+        if (link->state & DEV_CONFIG) {
+            CardServices(RequestConfiguration, link->handle, &link->conf);
+            if (link->open) {
+                ray_reset(dev);
+                dev->tbusy = 0;
+                dev->start = 1;
+            }
+        }
+        break;
+    }
+    return 0;
+    DEBUG(2,"ray_event ending\n");
+} /* ray_event */
+/*===========================================================================*/
+int init_module(void)
+{
+    int rc;
+    servinfo_t serv;
+    
+    DEBUG(1, "%s\n", rcsid);
+    CardServices(GetCardServicesInfo, &serv);
+    if (serv.Revision != CS_RELEASE_CODE) {
+        printk(KERN_NOTICE "ray: Card Services release does not match!\n");
+        return -1;
+    }
+    rc = register_pcmcia_driver(&dev_info, &ray_attach, &ray_detach);
+    DEBUG(1, "raylink init_module register_pcmcia_driver returns 0x%x\n",rc);
+    proc_register(&proc_root, &ray_cs_proc_entry);
+    if (translate != 0) translate = 1;
+    return 0;
+} /* init_module */
+/*===========================================================================*/
+void cleanup_module(void)
+{
+    DEBUG(0, "ray_cs: cleanup_module\n");
+
+    unregister_pcmcia_driver(&dev_info);
+    while (dev_list != NULL) {
+        if (dev_list->state & DEV_CONFIG) ray_release((u_long)dev_list);
+        ray_detach(dev_list);
+    }
+    proc_unregister(&proc_root, ray_cs_proc_entry.low_ino);
+} /* cleanup_module */
+/*===========================================================================*/
+int ray_dev_init(struct net_device *dev)
+{
+    int i;
+    ray_dev_t *local = dev->priv;
+    dev_link_t *link = local->finder;
+
+    DEBUG(1,"ray_dev_init(dev=%p)\n",dev);
+    if (!(link->state & DEV_PRESENT)) {
+        DEBUG(0,"ray_dev_init - device not present\n");
+        return -1;
+    }
+    /* Download startup parameters */
+    if ( (i = dl_startup_params(dev)) < 0)
+    {
+        DEBUG(0,"ray_dev_init dl_startup_params failed - returns 0x%x/n",i);
+        return -1;
+    }
+    
+    /* copy mac and broadcast addresses to linux device */
+    memcpy(&dev->dev_addr, &local->sparm.b4.a_mac_addr, ADDRLEN);
+    memset(dev->broadcast, 0xff, ETH_ALEN);
+
+#ifdef RAYLINK_DEBUG
+    {
+    UCHAR *p;
+    p = (UCHAR *)(local->startup_res.station_addr);
+    DEBUG(1,"ray_dev_init card hardware mac addr = %2x %2x %2x %2x %2x %2x\n",\
+          p[0],p[1],p[2],p[3],p[4],p[5]);
+    }
+#endif
+
+    DEBUG(2,"ray_dev_init ending\n");
+    return 0;
+}
+/*===========================================================================*/
+int ray_dev_config(struct net_device *dev, struct ifmap *map)
+{
+    ray_dev_t *local = dev->priv;
+    dev_link_t *link = local->finder;
+    /* Dummy routine to satisfy device structure */
+    DEBUG(1,"ray_dev_config(dev=%p,ifmap=%p)\n",dev,map);
+    if (!(link->state & DEV_PRESENT)) {
+        DEBUG(0,"ray_dev_config - device not present\n");
+        return -1;
+    }
+
+    return 0;
+}
+/*===========================================================================*/
+int ray_dev_start_xmit(struct sk_buff *skb, struct net_device *dev)
+{
+    ray_dev_t *local = dev->priv;
+    dev_link_t *link = local->finder;
+    short length;
+
+    if (!(link->state & DEV_PRESENT)) {
+        DEBUG(0,"ray_dev_start_xmit - device not present\n");
+        return -1;
+    }
+    DEBUG(3,"ray_dev_start_xmit(skb=%p, dev=%p)\n",skb,dev);
+    if (dev->tbusy)
+    {
+        DEBUG(2,"ray_dev_start_xmit busy\n");
+        return 1;
+    }
+    if (local->authentication_state == NEED_TO_AUTH) {
+        DEBUG(0,"ray_cs Sending authentication request.\n");
+        if (!build_auth_frame (local, local->auth_id, OPEN_AUTH_REQUEST)) {
+            local->authentication_state = AUTHENTICATED;
+            dev->tbusy = 1;
+            return 1;
+        }
+    }
+
+    length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
+    switch (ray_hw_xmit( skb->data, length, dev, DATA_TYPE)) {
+        case XMIT_NO_CCS:
+	    case XMIT_NEED_AUTH:
+            dev->tbusy = 1;
+            return 1;
+        case XMIT_NO_INTR:
+        case XMIT_MSG_BAD:
+        case XMIT_OK:
+        default:
+            dev->trans_start = jiffies;
+            dev_kfree_skb(skb);
+            return 0;
+    }
+    return 0;
+} /* ray_dev_start_xmit */
+/*===========================================================================*/
+int ray_hw_xmit(unsigned char* data, int len, struct net_device* dev, 
+                UCHAR msg_type)
+{
+    ray_dev_t *local = (ray_dev_t *)dev->priv;
+    struct ccs *pccs;
+    int ccsindex;
+    int offset;
+    struct tx_msg *ptx; /* Address of xmit buffer in PC space */
+    short int addr;     /* Address of xmit buffer in card space */
+    
+    DEBUG(3,"ray_hw_xmit(data=%p, len=%d, dev=%p)\n",data,len,dev);
+    if (len + TX_HEADER_LENGTH > TX_BUF_SIZE)
+    {
+        DEBUG(0,"ray_hw_xmit packet to large %d bytes\n",len);
+        return XMIT_MSG_BAD;
+    }
+    if ((ccsindex = get_free_tx_ccs(local)) == -1)
+    {
+        DEBUG(2,"ray_hw_xmit - No free tx ccs\n");
+        dev->tbusy = 1;
+        return XMIT_NO_CCS;
+    }
+    addr = TX_BUF_BASE + (ccsindex << 11);
+
+    if (msg_type == DATA_TYPE) {
+        local->stats.tx_bytes += len;
+        local->stats.tx_packets++;
+    }
+
+    ptx = (struct tx_msg *)(local->sram + addr);
+
+    ray_build_header(local, ptx, msg_type, data);
+    if (translate) {
+        offset = translate_frame(local, ptx, data, len);
+    }
+    else { /* Encapsulate frame */
+        /* TBD TIB length will move address of ptx->var */
+        memcpy( (UCHAR *)&ptx->var, data, len);
+        offset = 0;
+    }
+
+    /* fill in the CCS */
+    pccs = ((struct ccs *)(local->sram + CCS_BASE)) + ccsindex;
+    len += TX_HEADER_LENGTH + offset;
+    writeb(CCS_TX_REQUEST, &pccs->cmd);
+    writeb(addr >> 8, &pccs->var.tx_request.tx_data_ptr[0]);
+    writeb(local->tib_length, &pccs->var.tx_request.tx_data_ptr[1]);
+    writeb(len >> 8, &pccs->var.tx_request.tx_data_length[0]);
+    writeb(len & 0xff, &pccs->var.tx_request.tx_data_length[1]);
+/* TBD still need psm_cam? */
+    writeb(PSM_CAM, &pccs->var.tx_request.pow_sav_mode);
+    writeb(local->net_default_tx_rate, &pccs->var.tx_request.tx_rate);
+    writeb(0, &pccs->var.tx_request.antenna);
+    DEBUG(3,"ray_hw_xmit default_tx_rate = 0x%x\n",\
+          local->net_default_tx_rate);
+
+    /* Interrupt the firmware to process the command */
+    if (interrupt_ecf(local, ccsindex)) {
+        DEBUG(2,"ray_hw_xmit failed - ECF not ready for intr\n");
+/* TBD very inefficient to copy packet to buffer, and then not
+   send it, but the alternative is to queue the messages and that
+   won't be done for a while.  Maybe set tbusy until a CCS is free?
+*/
+        writeb(CCS_BUFFER_FREE, &pccs->buffer_status);
+        return XMIT_NO_INTR;
+    }
+    return XMIT_OK;
+} /* end ray_hw_xmit */
+/*===========================================================================*/
+int translate_frame(ray_dev_t *local, struct tx_msg *ptx, unsigned char *data,
+                    int len)
+{
+    unsigned short int proto = ((struct ethhdr *)data)->h_proto;
+    if (ntohs(proto) >= 1536) { /* DIX II ethernet frame */
+        DEBUG(3,"ray_cs translate_frame DIX II\n");
+        /* Copy LLC header to card buffer */
+        memcpy_toio((UCHAR *)&ptx->var, eth2_llc, sizeof(eth2_llc));
+        memcpy_toio( ((UCHAR *)&ptx->var) + sizeof(eth2_llc), (UCHAR *)&proto, 2);
+        if ((proto == 0xf380) || (proto == 0x3781)) {
+            /* This is the selective translation table, only 2 entries */
+            writeb(0xf8, (UCHAR *) &((struct snaphdr_t *)ptx->var)->org[3]);
+        }
+        /* Copy body of ethernet packet without ethernet header */
+        memcpy_toio((UCHAR *)&ptx->var + sizeof(struct snaphdr_t), \
+                    data + ETH_HLEN,  len - ETH_HLEN);
+        return sizeof(struct snaphdr_t) - ETH_HLEN;
+    }
+    else { /* already  802 type, and proto is length */
+        DEBUG(3,"ray_cs translate_frame 802\n");
+        if (proto == 0xffff) { /* evil netware IPX 802.3 without LLC */
+        DEBUG(3,"ray_cs translate_frame evil IPX\n");
+            memcpy_toio((UCHAR *)&ptx->var, data + ETH_HLEN,  len - ETH_HLEN);
+            return 0 - ETH_HLEN;
+        }
+        memcpy_toio((UCHAR *)&ptx->var, data + ETH_HLEN,  len - ETH_HLEN);
+        return 0 - ETH_HLEN;
+    }
+    /* TBD do other frame types */
+} /* end translate_frame */
+/*===========================================================================*/
+void ray_build_header(ray_dev_t *local, struct tx_msg *ptx, UCHAR msg_type,
+                unsigned char *data)
+{
+    writeb(PROTOCOL_VER | msg_type, &ptx->mac.frame_ctl_1);
+/*** IEEE 802.11 Address field assignments *************
+                     addr_1       addr_2     addr_3
+     AP              destination  AP(BSSID)  source
+     Infra Terminal  AP           terminal   destination
+     Adhoc           destination  terminal   BSSID
+*******************************************************/
+    if (local->net_type == ADHOC) {   
+        writeb(0, &ptx->mac.frame_ctl_2);
+        memcpy_toio(ptx->mac.addr_1, ((struct ethhdr *)data)->h_dest, 2 * ADDRLEN);
+        memcpy_toio(ptx->mac.addr_3, local->bss_id, ADDRLEN);
+    }
+    else /* infrastructure */
+    {
+        if (local->sparm.b4.a_acting_as_ap_status)
+        {
+            writeb(FC2_FROM_DS, &ptx->mac.frame_ctl_2);;
+            memcpy_toio(ptx->mac.addr_1, ((struct ethhdr *)data)->h_dest, ADDRLEN);
+            memcpy_toio(ptx->mac.addr_2, local->bss_id, 6);
+            memcpy_toio(ptx->mac.addr_3, ((struct ethhdr *)data)->h_source, ADDRLEN);
+        }
+        else /* Terminal */
+        {
+            writeb(FC2_TO_DS, &ptx->mac.frame_ctl_2);
+            memcpy_toio(ptx->mac.addr_1, local->bss_id, ADDRLEN);
+            memcpy_toio(ptx->mac.addr_2, ((struct ethhdr *)data)->h_source, ADDRLEN);
+            memcpy_toio(ptx->mac.addr_3, ((struct ethhdr *)data)->h_dest, ADDRLEN);
+        }
+    }
+} /* end encapsulate_frame */
+/*===========================================================================*/
+int ray_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
+{
+    ray_dev_t *local = (ray_dev_t *)dev->priv;
+    dev_link_t *link = local->finder;
+    int err = 0;
+
+    if (!(link->state & DEV_PRESENT)) {
+        DEBUG(0,"ray_dev_ioctl - device not present\n");
+        return -1;
+    }
+    DEBUG(2,"ray_cs IOCTL dev=%p, ifr=%p, cmd = 0x%x\n",dev,ifr,cmd);
+    /* Validate the command */
+    switch (cmd)
+    {
+        default:
+            DEBUG(0,"ray_dev_ioctl cmd = 0x%x\n", cmd);
+            err = -EOPNOTSUPP;
+    }
+    return err;
+} /* end ray_dev_ioctl */
+/*===========================================================================*/
+int ray_open(struct net_device *dev)
+{
+    dev_link_t *link;
+    ray_dev_t *local = (ray_dev_t *)dev->priv;
+    
+    DEBUG(1, "ray_open('%s')\n", dev->name);
+
+    for (link = dev_list; link; link = link->next)
+        if (link->priv == dev) break;
+    if (!DEV_OK(link))
+        return -ENODEV;
+
+    if (link->open == 0) local->num_multi = 0;
+    link->open++;
+    MOD_INC_USE_COUNT;
+
+    dev->interrupt = 0;
+    if (sniffer) dev->tbusy = 1;
+    else         dev->tbusy = 0;
+    dev->start = 1;
+
+    DEBUG(2,"ray_open ending\n");
+    return 0;
+} /* end ray_open */
+/*===========================================================================*/
+int ray_dev_close(struct net_device *dev)
+{
+    dev_link_t *link;
+
+    DEBUG(1, "ray_dev_close('%s')\n", dev->name);
+
+    for (link = dev_list; link; link = link->next)
+        if (link->priv == dev) break;
+    if (link == NULL)
+        return -ENODEV;
+
+    link->open--; dev->start = 0;
+    if (link->state & DEV_STALE_CONFIG) {
+        link->release.expires = jiffies + HZ/20;
+        link->state |= DEV_RELEASE_PENDING;
+        add_timer(&link->release);
+    }
+
+    MOD_DEC_USE_COUNT;
+
+    return 0;
+} /* end ray_dev_close */
+/*===========================================================================*/
+void ray_reset(struct net_device *dev) {
+    DEBUG(1,"ray_reset entered\n");
+    return;
+}
+/*===========================================================================*/
+/* Cause a firmware interrupt if it is ready for one                         */
+/* Return nonzero if not ready                                               */
+int interrupt_ecf(ray_dev_t *local, int ccs)
+{
+    int i = 50;
+/*    UCHAR *p = (local->amem + CIS_OFFSET + ECF_INTR_OFFSET); */
+    dev_link_t *link = local->finder;
+
+    if (!(link->state & DEV_PRESENT)) {
+        DEBUG(0,"ray_cs interrupt_ecf - device not present\n");
+        return -1;
+    }
+    DEBUG(2,"interrupt_ecf(local=%p, ccs = 0x%x\n",local,ccs);
+
+/*    while ( i && (*p & ECF_INTR_SET))  i--; */
+    while ( i && 
+            (readb(local->amem + CIS_OFFSET + ECF_INTR_OFFSET) & ECF_INTR_SET))
+        i--;
+    if (i == 0) {
+        DEBUG(2,"ray_cs interrupt_ecf card not ready for interrupt\n");
+        return -1;
+    }
+
+    *(local->sram + SCB_BASE) = ccs;
+    writeb(ECF_INTR_SET, local->amem + CIS_OFFSET + ECF_INTR_OFFSET);
+    return 0;
+} /* interrupt_ecf */
+/*===========================================================================*/
+/* Get next free transmit CCS                                                */
+/* Return - index of current tx ccs                                          */
+int get_free_tx_ccs(ray_dev_t *local)
+{
+    int i;
+    struct ccs *pccs = (struct ccs *)(local->sram + CCS_BASE);
+    dev_link_t *link = local->finder;
+
+    if (!(link->state & DEV_PRESENT)) {
+        DEBUG(0,"ray_cs get_free_tx_ccs - device not present\n");
+        return -1;
+    }
+
+    for (i=0; i < NUMBER_OF_TX_CCS; i++) {
+        if (readb(&(pccs+i)->buffer_status) == CCS_BUFFER_FREE) {
+            writeb(CCS_BUFFER_BUSY, &(pccs+i)->buffer_status);
+            writeb(CCS_END_LIST, &(pccs+i)->link);
+            return i;
+        }
+    }
+    DEBUG(1,"ray_cs ERROR no free tx CCS for raylink card\n");
+    return -1;
+} /* get_free_tx_ccs */
+/*===========================================================================*/
+/* Get next free CCS                                                         */
+/* Return - index of current ccs                                             */
+int get_free_ccs(ray_dev_t *local)
+{
+    int i;
+    struct ccs *pccs = (struct ccs *)(local->sram + CCS_BASE);
+    dev_link_t *link = local->finder;
+
+    if (!(link->state & DEV_PRESENT)) {
+        DEBUG(0,"ray_cs get_free_ccs - device not present\n");
+        return -1;
+    }
+    for (i = NUMBER_OF_TX_CCS; i < NUMBER_OF_CCS; i++) {
+        if (readb(&(pccs+i)->buffer_status) == CCS_BUFFER_FREE) {
+            writeb(CCS_BUFFER_BUSY, &(pccs+i)->buffer_status);
+            writeb(CCS_END_LIST, &(pccs+i)->link);
+            return i;
+        }
+    }
+    DEBUG(1,"ray_cs ERROR no free CCS for raylink card\n");
+    return -1;
+} /* get_free_ccs */
+/*===========================================================================*/
+void authenticate_timeout(u_long data)
+{
+    ray_dev_t *local = (ray_dev_t *)data;
+    del_timer(&local->timer);
+    DEBUG(0,"ray_cs Authentication with access point failed - timeout\n");
+    join_net((u_long)local);
+}
+/*===========================================================================*/
+int asc_to_int(char a)
+{
+    if (a < '0') return -1;
+    if (a <= '9') return (a - '0');
+    if (a < 'A') return -1;
+    if (a <= 'F') return (10 + a - 'A');
+    if (a < 'a') return -1;
+    if (a <= 'f') return (10 + a - 'a');
+    return -1;
+}
+/*===========================================================================*/
+int parse_addr(char *in_str, UCHAR *out)
+{
+    int len;
+    int i,j,k;
+    int status;
+    
+    if (in_str == NULL) return 0;
+    if ((len = strlen(in_str)) < 2) return 0;
+    memset(out, 0, ADDRLEN);
+
+    status = 1;
+    j = len - 1;
+    if (j > 12) j = 12;
+    i = 5;
+    
+    while (j > 0)
+    {
+        if ((k = asc_to_int(in_str[j--])) != -1) out[i] = k;
+        else return 0;
+
+        if (j == 0) break;
+        if ((k = asc_to_int(in_str[j--])) != -1) out[i] += k << 4;
+        else return 0;
+        if (!i--) break;
+    }
+    return status;
+}
+/*===========================================================================*/
+struct enet_statistics *ray_get_stats(struct net_device *dev)
+{
+    ray_dev_t *local = (ray_dev_t *)dev->priv;
+    dev_link_t *link = local->finder;
+    struct status *p = (struct status *)(local->sram + STATUS_BASE);
+    if (!(link->state & DEV_PRESENT)) {
+        DEBUG(0,"ray_cs enet_statistics - device not present\n");
+        return &local->stats;
+    }
+    if (p->mrx_overflow_for_host)
+    {
+        local->stats.rx_over_errors += ntohs(p->mrx_overflow);
+        p->mrx_overflow = 0;
+        p->mrx_overflow_for_host = 0;
+    }
+    if (p->mrx_checksum_error_for_host)
+    {
+        local->stats.rx_crc_errors += ntohs(p->mrx_checksum_error);
+        p->mrx_checksum_error = 0;
+        p->mrx_checksum_error_for_host = 0;
+    }
+    if (p->rx_hec_error_for_host)
+    {
+        local->stats.rx_frame_errors += ntohs(p->rx_hec_error);
+        p->rx_hec_error = 0;
+        p->rx_hec_error_for_host = 0;
+    }
+    return &local->stats;
+}
+/*===========================================================================*/
+void ray_update_parm(struct net_device *dev, UCHAR objid, UCHAR *value, int len)
+{
+    ray_dev_t *local = (ray_dev_t *)dev->priv;
+    dev_link_t *link = local->finder;
+    int ccsindex;
+    int i;
+    struct ccs *pccs;
+
+    if (!(link->state & DEV_PRESENT)) {
+        DEBUG(0,"ray_update_parm - device not present\n");
+        return;
+    }
+
+    if ((ccsindex = get_free_ccs(local)) == -1)
+    {
+        DEBUG(0,"ray_update_parm - No free ccs\n");
+        return;
+    }
+    pccs = ((struct ccs *)(local->sram + CCS_BASE)) + ccsindex;
+    writeb(CCS_UPDATE_PARAMS, &pccs->cmd);
+    writeb(objid, &pccs->var.update_param.object_id);
+    writeb(1, &pccs->var.update_param.number_objects);
+    writeb(0, &pccs->var.update_param.failure_cause);
+    for (i=0; i<len; i++) {
+        writeb(value[i], local->sram + HOST_TO_ECF_BASE);
+    }
+    /* Interrupt the firmware to process the command */
+    if (interrupt_ecf(local, ccsindex)) {
+        DEBUG(0,"ray_cs associate failed - ECF not ready for intr\n");
+        writeb(CCS_BUFFER_FREE, &(pccs++)->buffer_status);
+    }
+}
+/*===========================================================================*/
+static void ray_update_multi_list(struct net_device *dev, int all)
+{
+    struct dev_mc_list *dmi, **dmip;
+    int ccsindex;
+    struct ccs *pccs;
+    int i = 0;
+    ray_dev_t *local = (ray_dev_t *)dev->priv;
+    dev_link_t *link = local->finder;
+    UCHAR *p = local->sram + HOST_TO_ECF_BASE;
+
+    if (!(link->state & DEV_PRESENT)) {
+        DEBUG(1,"ray_update_multi_list - device not present\n");
+        return;
+    }
+    else 
+        DEBUG(1,"ray_update_multi_list(%p)\n",dev);
+    if ((ccsindex = get_free_ccs(local)) == -1)
+    {
+        DEBUG(1,"ray_update_multi - No free ccs\n");
+        return;
+    }
+    pccs = ((struct ccs *)(local->sram + CCS_BASE)) + ccsindex;
+    writeb(CCS_UPDATE_MULTICAST_LIST, &pccs->cmd);
+
+    if (all) {
+        writeb(0xff, &pccs->var);
+        local->num_multi = 0xff;
+    }
+    else {
+        /* Copy the kernel's list of MC addresses to card */
+        for (dmip=&dev->mc_list; (dmi=*dmip)!=NULL; dmip=&dmi->next) {
+            memcpy_toio(p, dmi->dmi_addr, ETH_ALEN);
+            DEBUG(1,"ray_update_multi add addr %02x%02x%02x%02x%02x%02x\n",dmi->dmi_addr[0],dmi->dmi_addr[1],dmi->dmi_addr[2],dmi->dmi_addr[3],dmi->dmi_addr[4],dmi->dmi_addr[5]);
+            p += ETH_ALEN;
+            i++;
+        }
+        if (i > 256/ADDRLEN) i = 256/ADDRLEN;
+        writeb((UCHAR)i, &pccs->var);
+        DEBUG(1,"ray_cs update_multi %d addresses in list\n", i);
+        /* Interrupt the firmware to process the command */
+        local->num_multi = i;
+    }
+    if (interrupt_ecf(local, ccsindex)) {
+        DEBUG(1,"ray_cs update_multi failed - ECF not ready for intr\n");
+        writeb(CCS_BUFFER_FREE, &(pccs++)->buffer_status);
+    }
+} /* end ray_update_multi_list */
+/*===========================================================================*/
+static void set_multicast_list(struct net_device *dev)
+{
+    ray_dev_t *local = (ray_dev_t *)dev->priv;
+    UCHAR promisc;
+
+    DEBUG(1,"ray_cs set_multicast_list(%p)\n",dev);
+
+    if (dev->flags & IFF_PROMISC)
+    {
+        if (local->sparm.b5.a_promiscuous_mode == 0) {
+            DEBUG(1,"ray_cs set_multicast_list promisc on\n");
+            local->sparm.b5.a_promiscuous_mode = 1;
+            promisc = 1;
+            ray_update_parm(dev,  OBJID_promiscuous_mode, \
+                            &promisc, sizeof(promisc));
+        }
+    }
+    else {
+        if (local->sparm.b5.a_promiscuous_mode == 1) {
+            DEBUG(1,"ray_cs set_multicast_list promisc off\n");
+            local->sparm.b5.a_promiscuous_mode = 0;
+            promisc = 0;
+            ray_update_parm(dev,  OBJID_promiscuous_mode, \
+                            &promisc, sizeof(promisc));
+        }
+    }
+
+    if (dev->flags & IFF_ALLMULTI) ray_update_multi_list(dev, 1);
+    else
+    {
+        if (local->num_multi != dev->mc_count) ray_update_multi_list(dev, 0);
+    }
+} /* end set_multicast_list */
+/*=============================================================================
+ * All routines below here are run at interrupt time.
+=============================================================================*/
+void ray_interrupt(int irq, void *dev_id, struct pt_regs * regs)
+{
+    struct net_device *dev = (struct net_device *)dev_id;
+    dev_link_t *link;
+    ray_dev_t *local;
+    struct ccs *pccs;
+    struct rcs *prcs;
+    UCHAR rcsindex;
+    UCHAR tmp;
+    UCHAR cmd;
+    UCHAR status;
+
+    if (dev == NULL) {
+        link = dev_list;
+        dev = (struct net_device *)link->priv;
+        DEBUG(4,"ray_cs interrupt dev  = %p, link = %p\n",dev,link);
+        if (dev->irq != irq)
+        {
+            DEBUG(0,"ray_cs interrupt irq %d for unknown device.\n", irq);
+            return;
+        }
+    }
+    DEBUG(4,"ray_cs: interrupt for *dev=%p\n",dev);
+
+    if (dev->interrupt) {
+        printk("ray_cs Reentering interrupt handler not allowed\n");
+        return;
+    }
+    dev->interrupt = 1;
+    local = (ray_dev_t *)dev->priv;
+    link = (dev_link_t *)local->finder;
+    if ( ! (link->state & DEV_PRESENT) || link->state & DEV_SUSPEND ) {
+        DEBUG(1,"ray_cs interrupt from device not present or suspended.\n");
+        return;
+    }
+    rcsindex = ((struct scb *)(local->sram))->rcs_index;
+
+    if (rcsindex >= (NUMBER_OF_CCS + NUMBER_OF_RCS))
+    {
+        DEBUG(1,"ray_cs interrupt bad rcsindex = 0x%x\n",rcsindex);
+        clear_interrupt(local);
+        dev->interrupt = 0;
+        return;
+    }
+    if (rcsindex < NUMBER_OF_CCS) /* If it's a returned CCS */
+    {
+        pccs = ((struct ccs *) (local->sram + CCS_BASE)) + rcsindex;
+        cmd = readb(&pccs->cmd);
+        status = readb(&pccs->buffer_status);
+        switch (cmd)
+        {
+        case CCS_DOWNLOAD_STARTUP_PARAMS: /* Happens in firmware someday */
+            del_timer(&local->timer);
+            if (status == CCS_COMMAND_COMPLETE) {
+                DEBUG(1,"ray_cs interrupt download_startup_parameters OK\n");
+            }
+            else {
+                DEBUG(1,"ray_cs interrupt download_startup_parameters fail\n");
+            }
+            break;
+        case CCS_UPDATE_PARAMS:
+            DEBUG(1,"ray_cs interrupt update params done\n");
+            if (status != CCS_COMMAND_COMPLETE) {
+                tmp = readb(&pccs->var.update_param.failure_cause);
+            DEBUG(0,"ray_cs interrupt update params failed - reason %d\n",tmp);
+            }
+            break;
+        case CCS_REPORT_PARAMS:
+            DEBUG(1,"ray_cs interrupt report params done\n");
+            break;
+        case CCS_UPDATE_MULTICAST_LIST: /* Note that this CCS isn't returned */
+            DEBUG(1,"ray_cs interrupt CCS Update Multicast List done\n");
+            break;
+        case CCS_UPDATE_POWER_SAVINGS_MODE:
+            DEBUG(1,"ray_cs interrupt update power save mode done\n");
+            break;
+        case CCS_START_NETWORK:
+        case CCS_JOIN_NETWORK:
+            if (status == CCS_COMMAND_COMPLETE) {
+                if (readb(&pccs->var.start_network.net_initiated) == 1) {
+                    DEBUG(0,"ray_cs interrupt network \"%s\"started\n",\
+                          local->sparm.b4.a_current_ess_id);
+                }
+                else {
+                    DEBUG(0,"ray_cs interrupt network \"%s\" joined\n",\
+                          local->sparm.b4.a_current_ess_id);
+                }
+                memcpy_fromio(&local->bss_id,pccs->var.start_network.bssid,ADDRLEN);
+
+                if (local->fw_ver == 0x55) local->net_default_tx_rate = 3;
+                else local->net_default_tx_rate = 
+                         readb(&pccs->var.start_network.net_default_tx_rate);
+                local->encryption = readb(&pccs->var.start_network.encryption);
+                if (!sniffer && (local->net_type == INFRA)
+                    && !(local->sparm.b4.a_acting_as_ap_status)) {
+                    authenticate(local);
+                }
+                local->card_status = CARD_ACQ_COMPLETE;
+            }
+            else {
+                local->card_status = CARD_ACQ_FAILED;
+
+                del_timer(&local->timer);
+                local->timer.expires = jiffies + HZ*5;
+                local->timer.data = (long)local;
+                if (status == CCS_START_NETWORK) {
+                    DEBUG(0,"ray_cs interrupt network \"%s\" start failed\n",\
+                          local->sparm.b4.a_current_ess_id);
+                    local->timer.function = &start_net;
+                }
+                else {
+                    DEBUG(0,"ray_cs interrupt network \"%s\" join failed\n",\
+                          local->sparm.b4.a_current_ess_id);
+                    local->timer.function = &join_net;
+                }
+                add_timer(&local->timer);
+            }
+            break;
+        case CCS_START_ASSOCIATION:
+            if (status == CCS_COMMAND_COMPLETE) {
+                local->card_status = CARD_ASSOC_COMPLETE;
+                DEBUG(0,"ray_cs association successful\n");
+            }
+            else
+            {
+                DEBUG(0,"ray_cs association failed,\n");
+                local->card_status = CARD_ASSOC_FAILED;
+                join_net((u_long)local);
+            }
+            break;
+        case CCS_TX_REQUEST:
+            if (status == CCS_COMMAND_COMPLETE) {
+                DEBUG(3,"ray_cs interrupt tx request complete\n");
+            }
+            else {
+                DEBUG(1,"ray_cs interrupt tx request failed\n");
+            }
+            if (!sniffer) dev->tbusy = 0;
+            mark_bh(NET_BH);
+            break;
+        case CCS_TEST_MEMORY:
+            DEBUG(1,"ray_cs interrupt mem test done\n");
+            break;
+        case CCS_SHUTDOWN:
+            DEBUG(1,"ray_cs interrupt Unexpected CCS returned - Shutdown\n");
+            break;
+        case CCS_DUMP_MEMORY:
+            DEBUG(1,"ray_cs interrupt dump memory done\n");
+            break;
+        case CCS_START_TIMER:
+            DEBUG(2,"ray_cs interrupt DING - raylink timer expired\n");
+            break;
+        default:
+            DEBUG(1,"ray_cs interrupt Unexpected CCS 0x%x returned 0x%x\n",\
+                  rcsindex, cmd);
+        }
+        writeb(CCS_BUFFER_FREE, &pccs->buffer_status);
+    }
+    else /* It's an RCS */
+    {
+        prcs = ((struct rcs *)(local->sram + CCS_BASE)) + rcsindex;
+    
+        switch (readb(&prcs->interrupt_id))
+        {
+        case PROCESS_RX_PACKET:
+            ray_rx(dev, local, prcs);
+            break;
+        case REJOIN_NET_COMPLETE:
+            DEBUG(1,"ray_cs interrupt rejoin net complete\n");
+            local->card_status = CARD_ACQ_COMPLETE;
+            /* do we need to clear tx buffers CCS's? */
+            if (local->sparm.b4.a_network_type == ADHOC) {
+                if (!sniffer) dev->tbusy = 0;
+            }
+            else {
+                memcpy_fromio(&local->bss_id, prcs->var.rejoin_net_complete.bssid, ADDRLEN);
+                DEBUG(1,"ray_cs new BSSID = %02x%02x%02x%02x%02x%02x\n",\
+                      local->bss_id[0], local->bss_id[1], local->bss_id[2],\
+                      local->bss_id[3], local->bss_id[4], local->bss_id[5]);
+                if (!sniffer) authenticate(local);
+            }
+            break;
+        case ROAMING_INITIATED:
+            DEBUG(1,"ray_cs interrupt roaming initiated\n"); 
+            dev->tbusy = 1;
+            local->card_status = CARD_DOING_ACQ;
+            break;
+        case JAPAN_CALL_SIGN_RXD:
+            DEBUG(1,"ray_cs interrupt japan call sign rx\n");
+            break;
+        default:
+            DEBUG(1,"ray_cs Unexpected interrupt for RCS 0x%x cmd = 0x%x\n",\
+                  rcsindex, readb(&prcs->interrupt_id));
+            break;
+        }
+        writeb(CCS_BUFFER_FREE, &prcs->buffer_status);
+    }
+    clear_interrupt(local);
+    dev->interrupt = 0;
+} /* ray_interrupt */
+/*===========================================================================*/
+void ray_rx(struct net_device *dev, ray_dev_t *local, struct rcs *prcs)
+{
+    int rx_len;
+    unsigned int pkt_addr;
+    UCHAR *pmsg;
+    DEBUG(4,"ray_rx process rx packet\n");
+
+    /* Calculate address of packet within Rx buffer */
+    pkt_addr = ((readb(&prcs->var.rx_packet.rx_data_ptr[0]) << 8)
+                + readb(&prcs->var.rx_packet.rx_data_ptr[1])) & RX_BUFF_END;
+    /* Length of first packet fragment */
+    rx_len = (readb(&prcs->var.rx_packet.rx_data_length[0]) << 8)
+        + readb(&prcs->var.rx_packet.rx_data_length[1]);
+
+    pmsg = local->rmem + pkt_addr;
+    switch(readb(pmsg))
+    {
+    case DATA_TYPE:
+	    DEBUG(4,"ray_rx data type\n");
+        rx_data(dev, prcs, pkt_addr, rx_len);
+        break;
+    case AUTHENTIC_TYPE:
+	    DEBUG(4,"ray_rx authentic type\n");
+        if (sniffer) rx_data(dev, prcs, pkt_addr, rx_len);
+        else rx_authenticate(local, prcs, pkt_addr, rx_len);
+        break;
+    case DEAUTHENTIC_TYPE:
+	    DEBUG(4,"ray_rx deauth type\n");
+        if (sniffer) rx_data(dev, prcs, pkt_addr, rx_len);
+        else rx_deauthenticate(local, prcs, pkt_addr, rx_len);
+        break;
+    case NULL_MSG_TYPE:
+        DEBUG(3,"ray_cs rx NULL msg\n");
+        break;
+    case BEACON_TYPE:
+	    DEBUG(4,"ray_rx beacon type\n");
+        if (sniffer) rx_data(dev, prcs, pkt_addr, rx_len);
+
+        copy_from_rx_buff(local, (UCHAR *)&local->last_bcn, pkt_addr, 
+                          rx_len < sizeof(struct beacon_rx) ? 
+                          rx_len : sizeof(struct beacon_rx));
+
+        /* Get the statistics so the card counters never overflow */
+        ray_get_stats(dev);
+            break;
+    default:
+        DEBUG(0,"ray_cs unknown pkt type %2x\n", readb(pmsg));
+        break;
+    }
+
+} /* end ray_rx */
+/*===========================================================================*/
+void rx_data(struct net_device *dev, struct rcs *prcs, unsigned int pkt_addr, 
+             int rx_len)
+{
+    struct sk_buff *skb = NULL;
+    struct rcs *prcslink = prcs;
+    ray_dev_t *local = dev->priv;
+    UCHAR *rx_ptr;
+    int total_len;
+    int tmp;
+
+    if (!sniffer) {
+        if (translate) {
+/* TBD length needs fixing for translated header */
+            if (rx_len < (ETH_HLEN + RX_MAC_HEADER_LENGTH) ||
+                rx_len > (dev->mtu + RX_MAC_HEADER_LENGTH + ETH_HLEN + FCS_LEN)) 
+            {
+                DEBUG(0,"ray_cs invalid packet length %d received \n",rx_len);
+                return;
+            }
+        }
+        else /* encapsulated ethernet */ {
+            if (rx_len < (ETH_HLEN + RX_MAC_HEADER_LENGTH) ||
+                rx_len > (dev->mtu + RX_MAC_HEADER_LENGTH + ETH_HLEN + FCS_LEN))
+            {
+                DEBUG(0,"ray_cs invalid packet length %d received \n",rx_len);
+                return;
+            }
+        }
+    }
+    DEBUG(4,"ray_cs rx_data packet\n");
+    /* If fragmented packet, verify sizes of fragments add up */
+    if (prcs->var.rx_packet.next_frag_rcs_index != 0xFF) {
+        DEBUG(1,"ray_cs rx'ed fragment\n");
+        tmp = (readb(&prcs->var.rx_packet.totalpacketlength[0]) << 8)
+            +  readb(&prcs->var.rx_packet.totalpacketlength[1]);
+        total_len = tmp;
+        prcslink = prcs;
+        do {
+            tmp -= (readb(&prcslink->var.rx_packet.rx_data_length[0]) << 8)
+                +   readb(&prcslink->var.rx_packet.rx_data_length[1]);
+            if (readb(&prcslink->var.rx_packet.next_frag_rcs_index) == 0xFF
+                || tmp < 0) break;
+            prcslink = ((struct rcs *)(local->sram + CCS_BASE))
+                + readb(&prcslink->link_field);
+        } while (1);
+
+        if (tmp < 0)
+        {
+            DEBUG(0,"ray_cs rx_data fragment lengths don't add up\n");
+            local->stats.rx_dropped++; 
+            release_frag_chain(local, prcs);
+            return;
+        }
+    }
+    else { /* Single unfragmented packet */
+        total_len = rx_len;
+    }
+
+    skb = dev_alloc_skb( total_len+5 );
+    if (skb == NULL)
+    {
+        DEBUG(0,"ray_cs rx_data could not allocate skb\n");
+        local->stats.rx_dropped++; 
+        if (readb(&prcs->var.rx_packet.next_frag_rcs_index) != 0xFF)
+            release_frag_chain(local, prcs);
+        return;
+    }
+    skb_reserve( skb, 2);   /* Align IP on 16 byte (TBD check this)*/
+    skb->dev = dev;
+
+    DEBUG(4,"ray_cs rx_data total_len = %x, rx_len = %x\n",total_len,rx_len);
+
+/************************/
+    /* Reserve enough room for the whole damn packet. */
+    rx_ptr = skb_put( skb, total_len);
+    /* Copy the whole packet to sk_buff */
+    rx_ptr += copy_from_rx_buff(local, rx_ptr, pkt_addr & RX_BUFF_END, rx_len);
+
+    /* Now, deal with encapsulation/translation/sniffer */
+    if (!sniffer) {
+        if (!translate) { 
+            /* Encapsulated ethernet, so just lop off 802.11 MAC header */
+/* TBD reserve            skb_reserve( skb, RX_MAC_HEADER_LENGTH); */
+            skb_pull( skb, RX_MAC_HEADER_LENGTH);
+        }
+        else {
+            /* Do translation */
+            untranslate(local, skb, total_len);
+        }
+    }
+    else 
+    {  /* sniffer mode, so just pass whole packet */  };
+
+/************************/
+    /* Now pick up the rest of the fragments if any */
+    tmp = 17; 
+    if (readb(&prcs->var.rx_packet.next_frag_rcs_index) != 0xFF) {
+        prcslink = prcs;
+        DEBUG(1,"ray_cs rx_data in fragment loop\n");
+        do {
+            prcslink = ((struct rcs *)(local->sram + CCS_BASE))
+                + readb(&prcslink->var.rx_packet.next_frag_rcs_index);
+            rx_len = (( readb(&prcslink->var.rx_packet.rx_data_length[0]) << 8)
+                      + readb(&prcslink->var.rx_packet.rx_data_length[1]))
+                & RX_BUFF_END;
+            pkt_addr = (( readb(&prcslink->var.rx_packet.rx_data_ptr[0]) << 8)
+                        + readb(&prcslink->var.rx_packet.rx_data_ptr[1]))
+                & RX_BUFF_END;
+
+            rx_ptr += copy_from_rx_buff(local, rx_ptr, pkt_addr, rx_len);
+
+        } while (tmp-- && 
+                 readb(&prcslink->var.rx_packet.next_frag_rcs_index) != 0xFF);
+        release_frag_chain(local, prcs);
+    }
+
+    skb->protocol = eth_type_trans(skb,dev);
+    netif_rx(skb);
+
+    local->stats.rx_packets++;
+    local->stats.rx_bytes += skb->len;
+} /* end rx_data */
+/*===========================================================================*/
+void untranslate(ray_dev_t *local, struct sk_buff *skb, int len)
+{
+    snaphdr_t *psnap = (snaphdr_t *)(skb->data + RX_MAC_HEADER_LENGTH);
+    struct mac_header *pmac = (struct mac_header *)skb->data;
+    unsigned short type = *(unsigned short *)psnap->ethertype;
+    unsigned int xsap = *(unsigned int *)psnap & 0x00ffffff;
+    unsigned int org = (*(unsigned int *)psnap->org) & 0x00ffffff;
+    int delta;
+    struct ethhdr *peth;
+    UCHAR srcaddr[ADDRLEN];
+    UCHAR destaddr[ADDRLEN];
+    int i;
+
+    if (local->sparm.b5.a_acting_as_ap_status != TYPE_STA)  
+        memcpy(destaddr, pmac->addr_3, ADDRLEN);
+    else
+        memcpy(destaddr, pmac->addr_1, ADDRLEN);
+    memcpy(srcaddr, pmac->addr_2, ADDRLEN);
+
+    DEBUG(3,"skb->data before untranslate");
+    for (i=0;i<64;i++) 
+        DEBUG(3,"%02x ",skb->data[i]);
+    DEBUG(3,"\ntype = %08x, xsap = %08x, org = %08x\n",type,xsap,org);
+    DEBUG(3,"untranslate skb->data = %p\n",skb->data);
+
+    if ( xsap != SNAP_ID) {
+        /* not a snap type so leave it alone */
+        DEBUG(3,"ray_cs untranslate NOT SNAP %x\n", *(unsigned int *)psnap & 0x00ffffff);
+
+        delta = RX_MAC_HEADER_LENGTH - ETH_HLEN;
+        peth = (struct ethhdr *)(skb->data + delta);
+        peth->h_proto = htons(len - RX_MAC_HEADER_LENGTH);
+    }
+    else { /* Its a SNAP */
+        if (org == BRIDGE_ENCAP) { /* EtherII and nuke the LLC  */
+        DEBUG(3,"ray_cs untranslate Bridge encap\n");
+            delta = RX_MAC_HEADER_LENGTH 
+                + sizeof(struct snaphdr_t) - ETH_HLEN;
+            peth = (struct ethhdr *)(skb->data + delta);
+            peth->h_proto = type;
+        }
+        else {
+            if (org == RFC1042_ENCAP) {
+                switch (type) {
+                case RAY_IPX_TYPE:
+                case APPLEARP_TYPE:
+                    DEBUG(3,"ray_cs untranslate RFC IPX/AARP\n");
+                    delta = RX_MAC_HEADER_LENGTH - ETH_HLEN;
+                    peth = (struct ethhdr *)(skb->data + delta);
+                    peth->h_proto = htons(len - RX_MAC_HEADER_LENGTH);
+                    break;
+                default:
+                    DEBUG(3,"ray_cs untranslate RFC default\n");
+                    delta = RX_MAC_HEADER_LENGTH + 
+                        sizeof(struct snaphdr_t) - ETH_HLEN;
+                    peth = (struct ethhdr *)(skb->data + delta);
+                    peth->h_proto = type;
+                    break;
+                }
+            }
+            else {
+                printk("ray_cs untranslate very confused by packet\n");
+                delta = RX_MAC_HEADER_LENGTH - ETH_HLEN;
+                peth = (struct ethhdr *)(skb->data + delta);
+                peth->h_proto = type;
+            }
+        }
+    }
+/* TBD reserve  skb_reserve(skb, delta); */
+    skb_pull(skb, delta);
+    DEBUG(3,"untranslate after skb_pull(%d), skb->data = %p\n",delta,skb->data);
+    memcpy(peth->h_dest, destaddr, ADDRLEN);
+    memcpy(peth->h_source, srcaddr, ADDRLEN);
+    DEBUG(3,"skb->data after untranslate:");
+    for (i=0;i<64;i++) 
+        DEBUG(3,"%02x ",skb->data[i]);
+    DEBUG(3,"\n");
+} /* end untranslate */
+/*===========================================================================*/
+/* Copy data from circular receive buffer to PC memory.
+ * dest     = destination address in PC memory
+ * pkt_addr = source address in receive buffer
+ * len      = length of packet to copy
+ */
+int copy_from_rx_buff(ray_dev_t *local, UCHAR *dest, int pkt_addr, int length)
+{
+    int wrap_bytes = (pkt_addr + length) - (RX_BUFF_END + 1);
+    if (wrap_bytes <= 0)
+    {
+        memcpy_fromio(dest,local->rmem + pkt_addr,length);
+    }
+    else /* Packet wrapped in circular buffer */
+    {
+        memcpy_fromio(dest,local->rmem+pkt_addr,length - wrap_bytes);
+        memcpy_fromio(dest + length - wrap_bytes, local->rmem, wrap_bytes);
+    }
+    return length;
+}
+/*===========================================================================*/
+void release_frag_chain(ray_dev_t *local, struct rcs* prcs)
+{
+    struct rcs *prcslink = prcs;
+    int tmp = 17;
+    unsigned rcsindex = readb(&prcs->var.rx_packet.next_frag_rcs_index);
+
+    while (tmp--) {
+        writeb(CCS_BUFFER_FREE, &prcslink->buffer_status);
+        if (rcsindex >= (NUMBER_OF_CCS + NUMBER_OF_RCS)) {
+            DEBUG(1,"ray_cs interrupt bad rcsindex = 0x%x\n",rcsindex);
+            break;      
+        }   
+        prcslink = ((struct rcs *)(local->sram + CCS_BASE)) + rcsindex;
+        rcsindex = readb(&prcslink->var.rx_packet.next_frag_rcs_index);
+    }
+    writeb(CCS_BUFFER_FREE, &prcslink->buffer_status);
+}
+/*===========================================================================*/
+void authenticate(ray_dev_t *local)
+{
+    dev_link_t *link = local->finder;
+    DEBUG(0,"ray_cs Starting authentication.\n");
+    if (!(link->state & DEV_PRESENT)) {
+        DEBUG(1,"ray_cs authenticate - device not present\n");
+        return;
+    }
+
+    del_timer(&local->timer);
+    if (build_auth_frame(local, local->bss_id, OPEN_AUTH_REQUEST)) {
+        local->timer.function = &join_net;
+    }
+    else {
+        local->timer.function = &authenticate_timeout;
+    }
+    local->timer.expires = jiffies + HZ*2;
+    local->timer.data = (long)local;
+    add_timer(&local->timer);
+    local->authentication_state = AWAITING_RESPONSE;
+} /* end authenticate */
+/*===========================================================================*/
+void rx_authenticate(ray_dev_t *local, struct rcs *prcs,
+                     unsigned int pkt_addr, int rx_len)
+{
+    UCHAR buff[256];
+    struct rx_msg *msg = (struct rx_msg *)buff;
+    
+    del_timer(&local->timer);
+
+    copy_from_rx_buff(local, buff, pkt_addr, rx_len & 0xff);
+	/* if we are trying to get authenticated */
+    if (local->sparm.b4.a_network_type == ADHOC) {
+		DEBUG(1,"ray_cs rx_auth var= %02x %02x %02x %02x %02x %02x\n", msg->var[0],msg->var[1],msg->var[2],msg->var[3],msg->var[4],msg->var[5]);
+		if (msg->var[2] == 1) {
+                    DEBUG(0,"ray_cs Sending authentication response.\n");
+                    if (!build_auth_frame (local, msg->mac.addr_2, OPEN_AUTH_RESPONSE)) {
+                        local->authentication_state = NEED_TO_AUTH;
+                        memcpy(local->auth_id, msg->mac.addr_2, ADDRLEN);
+                    }
+		}
+	}
+	else /* Infrastructure network */
+	{
+		if (local->authentication_state == AWAITING_RESPONSE) {
+			/* Verify authentication sequence #2 and success */
+			if (msg->var[2] == 2) {
+				if ((msg->var[3] | msg->var[4]) == 0) {
+					DEBUG(1,"Authentication successful\n");
+					local->card_status = CARD_AUTH_COMPLETE;
+					associate(local);
+					local->authentication_state = AUTHENTICATED;
+				}
+				else {
+					DEBUG(0,"Authentication refused\n");
+					local->card_status = CARD_AUTH_REFUSED;
+					join_net((u_long)local);
+					local->authentication_state = UNAUTHENTICATED;
+				}
+			}
+		}
+	}
+
+} /* end rx_authenticate */
+/*===========================================================================*/
+void associate(ray_dev_t *local)
+{
+    struct ccs *pccs;
+    dev_link_t *link = local->finder;
+    struct net_device *dev = link->priv;
+    int ccsindex;
+    if (!(link->state & DEV_PRESENT)) {
+        DEBUG(1,"ray_cs associate - device not present\n");
+        return;
+    }
+    /* If no tx buffers available, return*/
+    if ((ccsindex = get_free_ccs(local)) == -1)
+    {
+/* TBD should never be here but... what if we are? */
+        DEBUG(1,"ray_cs associate - No free ccs\n");
+        return;
+    }
+    DEBUG(1,"ray_cs Starting association with access point\n");
+    pccs = ((struct ccs *)(local->sram + CCS_BASE)) + ccsindex;
+    /* fill in the CCS */
+    writeb(CCS_START_ASSOCIATION, &pccs->cmd);
+    /* Interrupt the firmware to process the command */
+    if (interrupt_ecf(local, ccsindex)) {
+        DEBUG(1,"ray_cs associate failed - ECF not ready for intr\n");
+        writeb(CCS_BUFFER_FREE, &(pccs++)->buffer_status);
+
+        del_timer(&local->timer);
+        local->timer.expires = jiffies + HZ*2;
+        local->timer.data = (long)local;
+        local->timer.function = &join_net;
+        add_timer(&local->timer);
+        local->card_status = CARD_ASSOC_FAILED;
+        return;
+    }
+    if (!sniffer) dev->tbusy = 0;
+
+} /* end associate */
+/*===========================================================================*/
+void rx_deauthenticate(ray_dev_t *local, struct rcs *prcs, 
+                       unsigned int pkt_addr, int rx_len)
+{
+/*  UCHAR buff[256];
+    struct rx_msg *msg = (struct rx_msg *)buff;
+*/
+    DEBUG(0,"Deauthentication frame received\n");
+	local->authentication_state = UNAUTHENTICATED;
+    /* Need to reauthenticate or rejoin depending on reason code */
+/*  copy_from_rx_buff(local, buff, pkt_addr, rx_len & 0xff);
+ */
+}
+/*===========================================================================*/
+void clear_interrupt(ray_dev_t *local)
+{
+    writeb(0, local->amem + CIS_OFFSET + HCS_INTR_OFFSET);
+}
+/*===========================================================================*/
+#ifdef CONFIG_PROC_FS
+#define MAXDATA (PAGE_SIZE - 80)
+
+static char *card_status[] = {
+    "Card inserted - uninitialized",     /* 0 */
+    "Card not downloaded",               /* 1 */
+    "Waiting for download parameters",   /* 2 */
+    "Card doing acquisition",            /* 3 */
+    "Acquisition complete",              /* 4 */
+    "Authentication complete",           /* 5 */
+    "Association complete",              /* 6 */
+    "???", "???", "???", "???",          /* 7 8 9 10 undefined */
+    "Card init error",                   /* 11 */
+    "Download parameters error",         /* 12 */
+    "???",                               /* 13 */
+    "Acquisition failed",                /* 14 */
+    "Authentication refused",            /* 15 */
+    "Association failed"                 /* 16 */
+};
+
+static char *nettype[] = {"Adhoc", "Infra "};
+static char *framing[] = {"Encapsulation", "Translation"}
+;
+/*===========================================================================*/
+int ray_cs_proc_read(char *buf, char **start, off_t offset, 
+                     int len, int unused)
+{
+/* Print current values which are not available via other means
+ * eg ifconfig 
+ */
+    int i;
+    dev_link_t *link = dev_list;
+    struct net_device *dev = (struct net_device *)link->priv;
+    ray_dev_t *local = (ray_dev_t *)dev->priv;
+    UCHAR *p;
+    struct freq_hop_element *pfh;
+    UCHAR c[33];
+
+    len = 0;
+
+    len += sprintf(buf + len, "Raylink Wireless LAN driver status\n");
+    len += sprintf(buf + len, "%s\n", rcsid);
+    /* build 4 does not report version, and field is 0x55 after memtest */
+    len += sprintf(buf + len, "Firmware version     = ");
+    if (local->fw_ver == 0x55)
+        len += sprintf(buf + len, "4 - Use dump_cis for more details\n");
+    else
+        len += sprintf(buf + len, "%2d.%02d.%02d\n",
+                   local->fw_ver, local->fw_bld, local->fw_var);
+
+    for (i=0; i<32; i++) c[i] = local->sparm.b5.a_current_ess_id[i];
+    c[32] = 0;
+    len += sprintf(buf + len, "%s network ESSID = \"%s\"\n", 
+                   nettype[local->sparm.b5.a_network_type], c);
+
+    p = local->bss_id;
+    len += sprintf(buf + len, 
+                   "BSSID                = %02x:%02x:%02x:%02x:%02x:%02x\n",
+                   p[0],p[1],p[2],p[3],p[4],p[5]);
+
+    len += sprintf(buf + len, "Country code         = %d\n", 
+                   local->sparm.b5.a_curr_country_code);
+
+    i = local->card_status;
+    if (i < 0) i = 10;
+    if (i > 16) i = 10;
+    len += sprintf(buf + len, "Card status          = %s\n", card_status[i]);
+
+    len += sprintf(buf + len, "Framing mode         = %s\n",framing[translate]);
+
+    /* Pull some fields out of last beacon received */
+    len += sprintf(buf + len, "Beacon Interval      = %d Kus\n", 
+                   local->last_bcn.beacon_intvl[0]
+                   + 256 * local->last_bcn.beacon_intvl[1]);
+    
+    p = local->last_bcn.elements;
+    if (p[0] == C_ESSID_ELEMENT_ID) p += p[1] + 2;
+    else {
+        len += sprintf(buf + len, "Parse beacon failed at essid element id = %d\n",p[0]);
+        return len;
+    }
+
+    if (p[0] == C_SUPPORTED_RATES_ELEMENT_ID) {
+        len += sprintf(buf + len, "Supported rate codes = ");
+        for (i=2; i<p[1] + 2; i++) 
+            len += sprintf(buf + len, "0x%02x ", p[i]);
+        len += sprintf(buf + len, "\n");
+        p += p[1] + 2;
+    }
+    else {
+        len += sprintf(buf + len, "Parse beacon failed at rates element\n");
+        return len;
+    }
+
+    if (p[0] == C_FH_PARAM_SET_ELEMENT_ID) {
+        pfh = (struct freq_hop_element *)p;
+        len += sprintf(buf + len, "Hop dwell            = %d Kus\n",
+                       pfh->dwell_time[0] + 256 * pfh->dwell_time[1]);
+        len += sprintf(buf + len, "Hop set              = %d \n", pfh->hop_set);
+        len += sprintf(buf + len, "Hop pattern          = %d \n", pfh->hop_pattern);
+        len += sprintf(buf + len, "Hop index            = %d \n", pfh->hop_index);
+        p += p[1] + 2;
+    }
+    else {
+        len += sprintf(buf + len, "Parse beacon failed at FH param element\n");
+        return len;
+    }
+    return len;
+}
+
+#endif
+/*===========================================================================*/
+int  build_auth_frame(ray_dev_t *local, UCHAR *dest, int auth_type)
+{
+    int addr;
+    struct ccs *pccs;
+    struct tx_msg *ptx;
+    int ccsindex;
+
+    /* If no tx buffers available, return */
+    if ((ccsindex = get_free_tx_ccs(local)) == -1)
+    {
+/* TBD should never be here but... what if we are? */
+        DEBUG(1,"ray_cs send authenticate - No free tx ccs\n");
+        return -1;
+    }
+
+    pccs = ((struct ccs *)(local->sram + CCS_BASE)) + ccsindex;
+
+    /* Address in card space */
+    addr = TX_BUF_BASE + (ccsindex << 11);
+    /* fill in the CCS */
+    writeb(CCS_TX_REQUEST, &pccs->cmd);
+    writeb(addr >> 8, pccs->var.tx_request.tx_data_ptr);
+    writeb(0x20, pccs->var.tx_request.tx_data_ptr + 1);
+    writeb(TX_AUTHENTICATE_LENGTH_MSB, pccs->var.tx_request.tx_data_length);
+    writeb(TX_AUTHENTICATE_LENGTH_LSB,pccs->var.tx_request.tx_data_length + 1);
+    writeb(0, &pccs->var.tx_request.pow_sav_mode);
+
+    ptx = (struct tx_msg *)(local->sram + addr);
+    /* fill in the mac header */
+    writeb(PROTOCOL_VER | AUTHENTIC_TYPE, &ptx->mac.frame_ctl_1);
+    writeb(0, &ptx->mac.frame_ctl_2);
+
+    memcpy_toio(ptx->mac.addr_1, dest, ADDRLEN);
+    memcpy_toio(ptx->mac.addr_2, local->sparm.b4.a_mac_addr, ADDRLEN);
+    memcpy_toio(ptx->mac.addr_3, local->bss_id, ADDRLEN);
+
+    /* Fill in msg body with protocol 00 00, sequence 01 00 ,status 00 00 */
+    memset_io(ptx->var, 0, 6);
+    writeb(auth_type & 0xff, ptx->var + 2);
+
+    /* Interrupt the firmware to process the command */
+    if (interrupt_ecf(local, ccsindex)) {
+        DEBUG(1,"ray_cs send authentication request failed - ECF not ready for intr\n");
+        writeb(CCS_BUFFER_FREE, &(pccs++)->buffer_status);
+        return -1;
+    }
+    return 0;
+} /* End build_auth_frame */
+/*===========================================================================*/

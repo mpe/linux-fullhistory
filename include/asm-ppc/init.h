@@ -3,7 +3,8 @@
 
 #include <linux/init.h>
 
-#if 0/*__GNUC__ > 2 || __GNUC_MINOR__ >= 90*/ /* egcs */
+#if __GNUC__ > 2 || __GNUC_MINOR__ >= 90 /* egcs */
+#define __pmac __attribute__ ((__section__ (".text.pmac")))
 #define __pmacdata __attribute__ ((__section__ (".data.pmac")))
 #define __pmacfunc(__argpmac) \
 	__argpmac __pmac; \

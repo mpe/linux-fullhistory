@@ -1,5 +1,5 @@
 /*
- * $Id: prom.c,v 1.70 1999/08/25 21:26:08 cort Exp $
+ * $Id: prom.c,v 1.73 1999/09/05 11:56:32 paulus Exp $
  *
  * Procedures for interfacing to the Open Firmware PROM on
  * Power Macintosh computers.
@@ -16,9 +16,10 @@
 #include <linux/string.h>
 #include <linux/init.h>
 #include <linux/version.h>
+#include <linux/threads.h>
+#include <linux/spinlock.h>
 
 #include <asm/init.h>
-#include <asm/spinlock.h>
 #include <asm/prom.h>
 #include <asm/page.h>
 #include <asm/processor.h>
@@ -27,6 +28,7 @@
 #include <asm/smp.h>
 #include <asm/bootx.h>
 #include <asm/system.h>
+#include <asm/gemini.h>
 
 /*
  * Properties whose value is longer than this get excluded from our
@@ -281,6 +283,11 @@ prom_init(int r3, int r4, prom_entry pp)
 	int l;
 	char *p, *d;
 
+#ifdef CONFIG_GEMINI
+	gemini_prom_init();
+	return;
+#endif /* CONFIG_GEMINI */
+	
 	/* check if we're apus, return if we are */
 	if ( r3 == 0x61707573 )
 		return;

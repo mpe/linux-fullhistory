@@ -41,7 +41,6 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       if [ "$CONFIG_ATM_CLIP" = "y" ]; then
 	bool '    Do NOT send ICMP if no neighbour' CONFIG_ATM_CLIP_NO_ICMP n
       fi
-#      bool '  Application REQUested IP over ATM' CONFIG_AREQUIPA y
     fi
     tristate '  LAN Emulation (LANE) support' CONFIG_ATM_LANE y
     if [ "$CONFIG_INET" = "y" -a "$CONFIG_ATM_LANE" != "n" ]; then

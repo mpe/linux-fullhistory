@@ -45,13 +45,7 @@ _GLOBAL(reloc_offset)
 	mtlr	r0
 	blr
 
-/*
- * Disable interrupts
- *	rc = _disable_interrupts()
- */
-_GLOBAL(_disable_interrupts)
 _GLOBAL(__cli)
-_GLOBAL(_hard_cli)
 	mfmsr	r0		/* Get current interrupt state */
 	rlwinm	r3,r0,16+1,32-1,31	/* Extract old value of 'EE' */
 	li	r4,0		/* Need [unsigned] value of MSR_EE */
@@ -61,16 +55,7 @@ _GLOBAL(_hard_cli)
 	mtmsr	r0		/* Update machine state */
 	blr			/* Done */
 
-/*
- * Enable interrupts
- *	_enable_interrupts(int state)
- * turns on interrupts if state = 1.
- */
-_GLOBAL(_enable_interrupts)
-	cmpi	0,r3,0		/* turning them on? */
-	beqlr			/* nothing to do if state == 0 */
 _GLOBAL(__sti)
-_GLOBAL(_hard_sti)
 	lis	r4,ppc_n_lost_interrupts@ha
 	lwz	r4,ppc_n_lost_interrupts@l(r4)
 	mfmsr	r3		/* Get current state */

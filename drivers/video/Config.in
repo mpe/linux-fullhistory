@@ -105,6 +105,7 @@ if [ "$CONFIG_FB" = "y" ]; then
       if [ "$ARCH" = "sparc" ]; then
         bool '  TCX (SS4/SS5 only) support' CONFIG_FB_TCX
 	bool '  CGfourteen (SX) support' CONFIG_FB_CGFOURTEEN
+        bool '  P9100 (Sparcbook 3 only) support' CONFIG_FB_P9100
       fi
       bool '  Leo (ZX) support' CONFIG_FB_LEO
     fi
@@ -184,6 +185,7 @@ if [ "$CONFIG_FB" = "y" ]; then
 	 "$CONFIG_FB_VALKYRIE" = "y" -o "$CONFIG_FB_PLATINUM" = "y" -o \
          "$CONFIG_FB_IGA" = "y" -o "$CONFIG_FB_MATROX" = "y" -o \
 	 "$CONFIG_FB_CT65550" = "y" -o "$CONFIG_FB_PM2" = "y" -o \
+	 "$CONFIG_FB_P9100" = "y" -o \
 	 "$CONFIG_FB_SGIVW" = "y" -o "$CONFIG_FB_CYBER2000" = "y" ]; then
       define_bool CONFIG_FBCON_CFB8 y
     else
@@ -198,6 +200,7 @@ if [ "$CONFIG_FB" = "y" ]; then
 	   "$CONFIG_FB_VALKYRIE" = "m" -o "$CONFIG_FB_PLATINUM" = "m" -o \
            "$CONFIG_FB_IGA" = "m" -o "$CONFIG_FB_MATROX" = "m" -o \
 	   "$CONFIG_FB_CT65550" = "m" -o "$CONFIG_FB_PM2" = "m" -o \
+	   "$CONFIG_FB_P9100" = "m" -o \
 	   "$CONFIG_FB_SGIVW" = "m" -o "$CONFIG_FB_CYBER2000" = "m" ]; then
 	define_bool CONFIG_FBCON_CFB8 m
       fi

@@ -619,14 +619,13 @@ static char rcsid[] =
 #include <linux/mm.h>
 #include <linux/init.h>
 #include <linux/delay.h>
+#include <linux/spinlock.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/uaccess.h>
 #include <asm/bitops.h>
-
-#include <asm/spinlock.h>
 
 #define	CY_LOCK(info,flags)					\
 		do {						\

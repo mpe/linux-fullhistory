@@ -12,8 +12,8 @@
 #include <linux/malloc.h>
 #include <linux/smp_lock.h>
 #include <linux/module.h>
+#include <linux/spinlock.h>
 
-#include <asm/spinlock.h>
 #include <asm/uaccess.h>
 
 #include "usb.h"

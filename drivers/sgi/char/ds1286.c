@@ -37,11 +37,11 @@
 #include <linux/init.h>
 #include <linux/poll.h>
 #include <linux/rtc.h>
+#include <linux/spinlock.h>
 
 #include <asm/ds1286.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
-#include <asm/spinlock.h>
 #include <asm/system.h>
 
 #define DS1286_VERSION		"1.0"

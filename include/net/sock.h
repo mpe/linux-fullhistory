@@ -317,6 +317,11 @@ struct tcp_opt {
 
 	int syn_backlog;	/* Backlog of received SYNs */
 	int write_pending;
+	
+	unsigned int		keepalive_time;	  /* time before keep alive takes place */
+	unsigned int		keepalive_intvl;  /* time interval between keep alive probes */
+	unsigned char  		keepalive_probes; /* num of allowed keep alive probes */
+	unsigned char		syn_retries;	  /* num of allowed syn retries */
 };
 
  	

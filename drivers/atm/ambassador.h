@@ -20,11 +20,6 @@
   system and in the file COPYING in the Linux kernel source.
 */
 
-/*
-  IMPORTANT NOTE: Madge Networks does not license the microcode for
-  this driver under the GPL. See the .data file for the licence.
-*/
-
 #ifndef AMBASSADOR_H
 #define AMBASSADOR_H
 
@@ -116,9 +111,6 @@
 
 // minimum RX buffers required to cope with replenishing delay
 #define MIN_RX_BUFFERS	   1
-
-// RX buffer tailroom to cope with writing too much
-#define RX_FUDGE           3
 
 // minimum PCI latency we will tolerate (32 IS TOO SMALL)
 #define MIN_PCI_LATENCY   64 // 255
@@ -217,7 +209,9 @@
 /* RxPool2:	0x0040		*/
 /* RxPool3:	0x0060		*/
 
-#define SRB_POOL_SHIFT           5
+#define SRB_RATE_SHIFT          16
+#define SRB_POOL_SHIFT          (SRB_FLAGS_SHIFT+5)
+#define SRB_FLAGS_SHIFT         16
 
 #define	SRB_STOP_TASKING	19
 #define	SRB_START_TASKING	20
@@ -339,8 +333,6 @@ typedef struct {
   u32 reset_control;
 } amb_mem;
 
-#define mem ((amb_mem *)0)
-
 /* IRQ (card to host) and doorbell (host to card) enable bits */
 #define AMB_INTERRUPT_BITS 0x00030000
 #define AMB_DOORBELL_BITS  0x00000300
@@ -435,12 +427,10 @@ typedef struct {
 
 typedef struct {
   u32	handle;
-  // really? what about a BE host?
   u16	vc;
   u16	next_descriptor_length;
   u32	next_descriptor;
 #ifdef AMB_NEW_MICROCODE
-  // BE host?
   u8    cpcs_uu;
   u8    cpi;
   u16   pad;
@@ -463,7 +453,6 @@ typedef union {
 /* this "points" to the sequence of fragments and trailer */
 
 typedef	struct {
-  // what about a BE host?
   u16	vc;
   u16	tx_descr_length;
   u32	tx_descr_addr;
@@ -483,7 +472,6 @@ typedef	struct {
 
 typedef struct {
   u32  handle;
-  // what about a BE host?
   u16  vc;
   u16  lec_id; // unused
   u16  status;
@@ -526,7 +514,6 @@ typedef struct {
     u32 buffer_size;		/* size of host buffer */
   } rec_struct[NUM_RX_POOLS];
 #ifdef AMB_NEW_MICROCODE
-  // BE?
   u16 init_flags;
   u16 talk_block_spare;
 #endif
@@ -538,7 +525,6 @@ typedef struct {
    GET_SUNI_STATS */
 
 typedef struct {
-  // what about a BE host?
   u8	racp_chcs;
   u8	racp_uhcs;
   u16	spare;

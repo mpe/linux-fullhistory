@@ -252,8 +252,7 @@ int init_module(void)
 #endif /* PHY_LOOPBACK */
    XPRINTK("nicstar: init_module() returned.\n");
 
-   ns_timer.next = NULL;
-   ns_timer.prev = NULL;
+   init_timer(&ns_timer);
    ns_timer.expires = jiffies + NS_POLL_PERIOD;
    ns_timer.data = 0UL;
    ns_timer.function = ns_poll;
@@ -383,6 +382,11 @@ int __init nicstar_detect(void)
 #endif /* PHY_LOOPBACK */
    XPRINTK("nicstar: init_module() returned.\n");
 
+   init_timer(&ns_timer);
+   ns_timer.expires = jiffies + NS_POLL_PERIOD;
+   ns_timer.data = 0UL;
+   ns_timer.function = ns_poll;
+   add_timer(&ns_timer);
    return i;
 }
 
@@ -845,21 +849,6 @@ static int ns_init_card(int i, struct pci_dev *pcidev)
       ns_cfg_rctsize = NS_CFG_RCTSIZE_16384_ENTRIES;
 
    card->efbie = 1;
-   writel(NS_CFG_RXPATH |
-          NS_CFG_SMBUFSIZE |
-          NS_CFG_LGBUFSIZE |
-          NS_CFG_EFBIE |
-          NS_CFG_RSQSIZE |
-          NS_CFG_VPIBITS |
-          ns_cfg_rctsize |
-          NS_CFG_RXINT_NODELAY |
-          NS_CFG_RAWIE |		/* Only enabled if RCQ_SUPPORT */
-          NS_CFG_RSQAFIE |
-          NS_CFG_TXEN |
-          NS_CFG_TXIE |
-          NS_CFG_TSQFIE_OPT |		/* Only enabled if ENABLE_TSQFIE */ 
-          NS_CFG_PHYIE,
-          card->membase + CFG);
 
    /* Register device */
    card->atmdev = atm_dev_register("nicstar", &atm_ops, -1, 0UL);
@@ -884,6 +873,7 @@ static int ns_init_card(int i, struct pci_dev *pcidev)
    card->atmdev->ci_range.vci_bits = card->vcibits;
    card->atmdev->link_rate = card->max_pcr;
 
+   card->atmdev->phy = NULL;
 #ifdef CONFIG_ATM_NICSTAR_USE_SUNI
    if (card->max_pcr == ATM_OC3_PCR) {
       suni_init(card->atmdev);
@@ -895,6 +885,22 @@ static int ns_init_card(int i, struct pci_dev *pcidev)
 #endif /* CONFIG_ATM_NICSTAR_USE_SUNI */
    if (card->atmdev->phy && card->atmdev->phy->start)
       card->atmdev->phy->start(card->atmdev);
+
+   writel(NS_CFG_RXPATH |
+          NS_CFG_SMBUFSIZE |
+          NS_CFG_LGBUFSIZE |
+          NS_CFG_EFBIE |
+          NS_CFG_RSQSIZE |
+          NS_CFG_VPIBITS |
+          ns_cfg_rctsize |
+          NS_CFG_RXINT_NODELAY |
+          NS_CFG_RAWIE |		/* Only enabled if RCQ_SUPPORT */
+          NS_CFG_RSQAFIE |
+          NS_CFG_TXEN |
+          NS_CFG_TXIE |
+          NS_CFG_TSQFIE_OPT |		/* Only enabled if ENABLE_TSQFIE */ 
+          NS_CFG_PHYIE,
+          card->membase + CFG);
 
    num_cards++;
 
@@ -1132,10 +1138,10 @@ static void push_rxbufs(ns_dev *card, u32 type, u32 handle1, u32 addr1,
       save_flags(flags); cli();
 
       while (CMD_BUSY(card));
-      writel(handle1, card->membase + DR0);
-      writel(addr1, card->membase + DR1);
-      writel(handle2, card->membase + DR2);
       writel(addr2, card->membase + DR3);
+      writel(handle2, card->membase + DR2);
+      writel(addr1, card->membase + DR1);
+      writel(handle1, card->membase + DR0);
       writel(NS_CMD_WRITE_FREEBUFQ | (u32) type, card->membase + CMD);
  
       restore_flags(flags);
@@ -3010,7 +3016,7 @@ static short ns_h2i(char c)
 {
    if (c >= '0' && c <= '9')
       return (short) (c - '0');
-   if (c >= 'A' && c <= 'A')
+   if (c >= 'A' && c <= 'F')
       return (short) (c - 'A' + 10);
    if (c >= 'a' && c <= 'f')
       return (short) (c - 'a' + 10);

@@ -27,10 +27,10 @@
 #include <linux/mtio.h>
 #include <linux/ioctl.h>
 #include <linux/fcntl.h>
+#include <linux/spinlock.h>
 #include <asm/uaccess.h>
 #include <asm/dma.h>
 #include <asm/system.h>
-#include <asm/spinlock.h>
 
 /* The driver prints some debugging information on the console if DEBUG
    is defined and non-zero. */

@@ -424,13 +424,15 @@ static struct net_device *rtl8129_probe1(int pci_bus, int pci_devfn,
 	/* Bring the chip out of low-power mode. */
 	outb(0x00, ioaddr + Config1);
 
-	if (read_eeprom(ioaddr, 0) != 0xffff)
-		for (i = 0; i < 3; i++)
-			((u16 *)(dev->dev_addr))[i] = read_eeprom(ioaddr, i + 7);
-	else
+	if (read_eeprom(ioaddr, 0) != 0xffff) {
+		for (i = 0; i < 3; i++) {
+			((u16 *)(dev->dev_addr))[i] =
+				le16_to_cpu(read_eeprom(ioaddr, i + 7));
+		}
+	} else {
 		for (i = 0; i < 6; i++)
 			dev->dev_addr[i] = inb(ioaddr + MAC0 + i);
-
+	}
 	for (i = 0; i < 5; i++)
 		printk("%2.2x:", dev->dev_addr[i]);
 	printk("%2.2x.\n", dev->dev_addr[i]);
@@ -1188,7 +1190,7 @@ static int rtl8129_rx(struct net_device *dev)
 
 	while ((inb(ioaddr + ChipCmd) & 1) == 0) {
 		int ring_offset = cur_rx % RX_BUF_LEN;
-		u32 rx_status = *(u32*)(rx_ring + ring_offset);
+		u32 rx_status = le32_to_cpu(*(u32*)(rx_ring + ring_offset));
 		int rx_size = rx_status >> 16;
 
 		if (rtl8129_debug > 4) {
@@ -1197,7 +1199,7 @@ static int rtl8129_rx(struct net_device *dev)
 				   dev->name, rx_status, rx_size, cur_rx);
 			printk(KERN_DEBUG"%s: Frame contents ", dev->name);
 			for (i = 0; i < 70; i++)
-				printk(" %2.2x", rx_ring[ring_offset + i]);
+				printk(" %2.2x", le32_to_cpu(rx_ring[ring_offset + i]));
 			printk(".\n");
 		}
 		if (rx_status & RxTooLong) {
@@ -1248,7 +1250,7 @@ static int rtl8129_rx(struct net_device *dev)
 					printk(KERN_DEBUG"%s:  Frame wrap @%d",
 						   dev->name, semi_count);
 					for (i = 0; i < 16; i++)
-						printk(" %2.2x", rx_ring[i]);
+						printk(" %2.2x", le32_to_cpu(rx_ring[i]));
 					printk(".\n");
 					memset(rx_ring, 0xcc, 16);
 				}

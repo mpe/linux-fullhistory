@@ -106,7 +106,7 @@ struct hdlcdrv_ioctl {
 
 #include <linux/netdevice.h>
 #include <linux/if.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 #define HDLCDRV_MAGIC      0x5ac6e778
 #define HDLCDRV_IFNAMELEN    6

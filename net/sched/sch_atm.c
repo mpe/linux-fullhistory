@@ -375,7 +375,7 @@ static int atm_tc_enqueue(struct sk_buff *skb,struct Qdisc *sch)
 	result = TC_POLICE_OK; /* be nice to gcc */
 	if (TC_H_MAJ(skb->priority) != sch->handle ||
 	    !(flow = (struct atm_flow_data *) atm_tc_get(sch,skb->priority)))
-		for (flow = p->link.next; flow; flow = flow->next)
+		for (flow = p->flows; flow; flow = flow->next)
 			if (flow->filter_list) {
 				result = tc_classify(skb,flow->filter_list,
 				    &res);

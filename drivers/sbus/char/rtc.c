@@ -1,4 +1,4 @@
-/* $Id: rtc.c,v 1.17 1999/08/31 13:32:01 anton Exp $
+/* $Id: rtc.c,v 1.18 1999/08/31 18:51:36 davem Exp $
  *
  * Linux/SPARC Real Time Clock Driver
  * Copyright (C) 1996 Thomas K. Dyas (tdyas@eden.rutgers.edu)
@@ -29,7 +29,7 @@ static int rtc_busy = 0;
 /* Retrieve the current date and time from the real time clock. */
 void get_rtc_time(struct rtc_time *t)
 {
-	struct mostek48t02 *regs = (struct mostek48t02 *)mstk48t02_regs;
+	unsigned long regs = mstk48t02_regs;
 	unsigned long flags;
 	u8 tmp;
 
@@ -57,7 +57,7 @@ void get_rtc_time(struct rtc_time *t)
 /* Set the current date and time inthe real time clock. */
 void set_rtc_time(struct rtc_time *t)
 {
-	struct mostek48t02 *regs = (struct mostek48t02 *)mstk48t02_regs;
+	unsigned long regs = mstk48t02_regs;
 	unsigned long flags;
 	u8 tmp;
 

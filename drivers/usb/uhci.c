@@ -41,9 +41,9 @@
 #include <linux/smp_lock.h>
 #include <linux/errno.h>
 #include <linux/unistd.h>
+#include <linux/spinlock.h>
 
 #include <asm/uaccess.h>
-#include <asm/spinlock.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/system.h>
@@ -860,21 +860,10 @@ static int uhci_run_isoc (struct usb_isoc_desc *isocdesc,
 			if (ix < START_FRAME_FUDGE || /* too small */
 			    ix > CAN_SCHEDULE_FRAMES) { /* too large */
 #ifdef CONFIG_USB_DEBUG_ISOC
-					printk (KERN_DEBUG "uhci_init_isoc: bad start_frame value (%d)\n",
-						isocdesc->start_frame);
+					printk (KERN_DEBUG "uhci_init_isoc: bad start_frame value (%d,%d)\n",
+						isocdesc->start_frame, cur_frame);
 #endif
 					return -EINVAL;
-				}
-			}
-			else /* start_frame <= cur_frame */ {
-				if ((isocdesc->start_frame + UHCI_MAX_SOF_NUMBER + 1
-				    - cur_frame) > CAN_SCHEDULE_FRAMES) {
-#ifdef CONFIG_USB_DEBUG_ISOC
-					printk (KERN_DEBUG "uhci_init_isoc: bad start_frame value (%d)\n",
-						isocdesc->start_frame);
-#endif
-					return -EINVAL;
-				}
 			}
 		} /* end START_ABSOLUTE */
 	}

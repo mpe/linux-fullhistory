@@ -1,4 +1,4 @@
-/* $Id: pci.c,v 1.1 1999/08/30 10:00:42 davem Exp $
+/* $Id: pci.c,v 1.6 1999/09/08 03:40:41 davem Exp $
  * pci.c: UltraSparc PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@redhat.com)
@@ -20,45 +20,9 @@
 #include <asm/irq.h>
 #include <asm/ebus.h>
 
-/* This is the base address of IOMMU translated space
- * on PCI bus segments.  This means that any PCI address
- * greater than or equal this value will be translated
- * into a physical address and transferred on the system
- * bus.  Any address less than it will be considered a
- * PCI peer-to-peer transaction.  For example, given a
- * value of 0x80000000:
- *
- *	If a PCI device bus masters the address 0x80001000
- *	then then PCI controller's IOMMU will take the offset
- *	portion (0x1000) and translate that into a physical
- *	address.  The data transfer will be performed to/from
- *	that physical address on the system bus.
- *
- *	If the PCI device bus masters the address 0x00002000
- *	then the PCI controller will not do anything, it will
- *	proceed as a PCI peer-to-peer transfer.
- *
- * This all stems from the fact that PCI drivers in Linux are
- * not conscious of DMA mappings to the extent they need to
- * be for systems like Sparc64 and Alpha which have IOMMU's.
- * Plans are already in the works to fix this.  So what we do
- * at the moment is linearly map all of physical ram with the
- * IOMMU in consistant mode, thus providing the illusion of
- * a simplistic linear DMA mapping scheme to the drivers.
- * This, while it works, is bad for performance (streaming
- * DMA is not used) and limits the amount of total memory we
- * can support (2GB on Psycho, 512MB on Sabre/APB).
- */
-unsigned long pci_dvma_offset = 0x00000000UL;
-
-/* Given a valid PCI dma address (ie. >= pci_dvma_addset) this
- * mask will give you the offset into the DMA space of a
- * PCI bus.
- */
-unsigned long pci_dvma_mask   = 0xffffffffUL;
-
 unsigned long pci_dvma_v2p_hash[PCI_DVMA_HASHSZ];
 unsigned long pci_dvma_p2v_hash[PCI_DVMA_HASHSZ];
+unsigned long pci_memspace_mask = 0xffffffffUL;
 
 #ifndef CONFIG_PCI
 /* A "nop" PCI implementation. */
@@ -123,7 +87,9 @@ static struct {
 	void (*init)(int);
 } pci_controller_table[] = {
 	{ "SUNW,sabre", sabre_init },
-	{ "SUNW,psycho", psycho_init }
+	{ "pci108e,a000", sabre_init },
+	{ "SUNW,psycho", psycho_init },
+	{ "pci108e,8000", psycho_init }
 };
 #define PCI_NUM_CONTROLLER_TYPES (sizeof(pci_controller_table) / \
 				  sizeof(pci_controller_table[0]))
@@ -164,6 +130,12 @@ static void pci_controller_probe(void)
 				       namebuf, sizeof(namebuf));
 		if (len > 0)
 			pci_controller_init(namebuf, len, node);
+		else {
+			len = prom_getproperty(node, "compatible",
+					       namebuf, sizeof(namebuf));
+			if (len > 0)
+				pci_controller_init(namebuf, len, node);
+		}
 		node = prom_getsibling(node);
 		if (!node)
 			break;
@@ -228,6 +200,11 @@ struct pci_fixup pcibios_fixups[] = {
 
 void pcibios_fixup_bus(struct pci_bus *pbus)
 {
+}
+
+int pcibios_assign_resource(struct pci_dev *pdev, int resource)
+{
+	return 0;
 }
 
 char * __init pcibios_setup(char *str)

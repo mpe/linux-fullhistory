@@ -168,15 +168,12 @@ static long long udf_file_llseek(struct file * file, long long offset, int origi
 			break;
 		}
 	}
+#if BITS_PER_LONG < 64
 	if (((unsigned long long) offset >> 32) != 0)
 	{
-#if BITS_PER_LONG < 64
 		return -EINVAL;
-#else
-		if (offset > ???)
-			return -EINVAL;
-#endif
 	}
+#endif
 	if (offset != file->f_pos)
 	{
 		file->f_pos = offset;

@@ -1,4 +1,4 @@
-/* $Id: pci_psycho.c,v 1.2 1999/08/31 09:12:34 davem Exp $
+/* $Id: pci_psycho.c,v 1.4 1999/09/05 09:33:36 ecd Exp $
  * pci_psycho.c: PSYCHO/U2P specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1312,7 +1312,7 @@ static void __init psycho_iommu_init(struct pci_controller_info *p, int tsbsize)
 					     (paddr & IOPTE_PAGE));
 
 			if (!(n & 0xff))
-				set_dvma_hash(paddr, (n << 16));
+				set_dvma_hash(0x80000000, paddr, (n << 16));
 
 			if (++n > (tsbsize * 1024))
 				goto out;
@@ -1338,17 +1338,14 @@ out:
 	switch(tsbsize) {
 	case 8:
 		p->iommu.page_table_map_base = 0xe0000000;
-		pci_dvma_mask = 0x1fffffffUL;
 		control |= PSYCHO_IOMMU_TSBSZ_8K;
 		break;
 	case 16:
 		p->iommu.page_table_map_base = 0xc0000000;
-		pci_dvma_mask = 0x3fffffffUL;
 		control |= PSYCHO_IOMMU_TSBSZ_16K;
 		break;
 	case 32:
 		p->iommu.page_table_map_base = 0x80000000;
-		pci_dvma_mask = 0x7fffffffUL;
 		control |= PSYCHO_IOMMU_TSBSZ_32K;
 		break;
 	default:
@@ -1594,9 +1591,14 @@ void __init psycho_init(int node)
 	p->config_space = pr_regs[2].phys_addr + PSYCHO_CONFIGSPACE;
 	printk("PSYCHO: PCI config space at %016lx\n", p->config_space);
 
+	/*
+	 * Psycho's PCI MEM space is mapped to a 2GB aligned area, so
+	 * we need to adjust our MEM space mask.
+	 */
+	pci_memspace_mask = 0x7fffffffUL;
+
 	psycho_controller_hwinit(p);
 
-	pci_dvma_offset = 0x80000000UL;
 	psycho_iommu_init(p, 32);
 
 	is_pbm_a = ((pr_regs[0].phys_addr & 0x6000) == 0x2000);

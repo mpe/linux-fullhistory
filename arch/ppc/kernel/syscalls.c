@@ -37,6 +37,7 @@
 
 #include <asm/uaccess.h>
 #include <asm/ipc.h>
+#include <asm/semaphore.h>
 
 void
 check_bugs(void)

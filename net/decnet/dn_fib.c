@@ -24,7 +24,7 @@
 #include <linux/proc_fs.h>
 #include <linux/netdevice.h>
 #include <linux/timer.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include <asm/atomic.h>
 #include <asm/uaccess.h>
 #include <net/neighbour.h>

@@ -311,7 +311,7 @@ static int svc_setsockopt(struct socket *sock,int level,int optname,
 {
 	struct atm_vcc *vcc;
 
-	if (level != __SO_LEVEL(optname) || optname != SO_ATMSAP ||
+	if (!__SO_LEVEL_MATCH(optname, level) || optname != SO_ATMSAP ||
 	    optlen != sizeof(struct atm_sap))
 		return atm_setsockopt(sock,level,optname,optval,optlen);
 	vcc = ATM_SD(sock);
@@ -326,7 +326,7 @@ static int svc_getsockopt(struct socket *sock,int level,int optname,
 {
 	int len;
 
-	if (level != __SO_LEVEL(optname) || optname != SO_ATMSAP)
+	if (!__SO_LEVEL_MATCH(optname, level) || optname != SO_ATMSAP)
 		return atm_getsockopt(sock,level,optname,optval,optlen);
 	if (get_user(len,optlen)) return -EFAULT;
 	if (len != sizeof(struct atm_sap)) return -EINVAL;

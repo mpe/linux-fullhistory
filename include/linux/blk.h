@@ -4,8 +4,7 @@
 #include <linux/blkdev.h>
 #include <linux/locks.h>
 #include <linux/config.h>
-
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 /*
  * Spinlock for protecting the request queue which

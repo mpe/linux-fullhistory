@@ -9,12 +9,12 @@
  * in <asm/page.h> (currently 8192).
  */
 #include <linux/config.h>
+#include <linux/spinlock.h>	/* For the task lock */
 
 #include <asm/system.h>
 #include <asm/processor.h>	/* For TASK_SIZE */
 #include <asm/mmu_context.h>
 #include <asm/machvec.h>
-#include <asm/spinlock.h>	/* For the task lock */
 
 
 /* Caches aren't brain-dead on the Alpha. */

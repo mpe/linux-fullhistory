@@ -16,7 +16,7 @@
 #include <linux/interrupt.h>
 #include <linux/if.h>
 #include <linux/netdevice.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 #define __KERNEL_SYSCALLS__
 #include <linux/unistd.h>
@@ -47,6 +47,7 @@ struct nf_info
 };
 
 static rwlock_t nf_lock = RW_LOCK_UNLOCKED;
+static DECLARE_MUTEX(nf_sockopt_mutex);
 
 struct list_head nf_hooks[NPROTO][NF_MAX_HOOKS];
 static LIST_HEAD(nf_sockopts);
@@ -91,15 +92,15 @@ void nf_unregister_hook(struct nf_hook_ops *reg)
 	write_unlock_bh(&nf_lock);
 }
 
-/* Do inclusive ranges overlap? */
+/* Do exclusive ranges overlap? */
 static inline int overlap(int min1, int max1, int min2, int max2)
 {
-	return (min1 >= min2 && min1 <= max2)
-		|| (max1 >= min2 && max1 <= max2);
+	return (min1 >= min2 && min1 < max2)
+		|| (max1 > min2 && max1 <= max2);
 }
 
-/* Functions to register setsockopt ranges (inclusive). */
-int nf_register_sockopt(struct nf_setsockopt_ops *reg)
+/* Functions to register sockopt ranges (exclusive). */
+int nf_register_sockopt(struct nf_sockopt_ops *reg)
 {
 	struct list_head *i;
 	int ret = 0;
@@ -109,33 +110,44 @@ int nf_register_sockopt(struct nf_setsockopt_ops *reg)
 		NFDEBUG("nf_register_sockopt: bad val: pf=%i.\n", reg->pf);
 		return -EINVAL;
 	}
-	if (reg->optmin > reg->optmax) {
-		NFDEBUG("nf_register_sockopt: bad val: min=%i max=%i.\n", 
-			reg->optmin, reg->optmax);
+	if (reg->set_optmin > reg->set_optmax) {
+		NFDEBUG("nf_register_sockopt: bad set val: min=%i max=%i.\n", 
+			reg->set_optmin, reg->set_optmax);
+		return -EINVAL;
+	}
+	if (reg->get_optmin > reg->get_optmax) {
+		NFDEBUG("nf_register_sockopt: bad get val: min=%i max=%i.\n", 
+			reg->get_optmin, reg->get_optmax);
 		return -EINVAL;
 	}
 #endif
-	write_lock_bh(&nf_lock);
+	if (down_interruptible(&nf_sockopt_mutex) != 0)
+		return -EINTR;
+
 	for (i = nf_sockopts.next; i != &nf_sockopts; i = i->next) {
-		struct nf_setsockopt_ops *ops = (struct nf_setsockopt_ops *)i;
+		struct nf_sockopt_ops *ops = (struct nf_sockopt_ops *)i;
 		if (ops->pf == reg->pf
-		    && overlap(ops->optmin, ops->optmax, 
-			       reg->optmin, reg->optmax)) {
-			NFDEBUG("nf_register_sockopt overlap: %u-%u v %u-%u\n",
-				ops->optmin, ops->optmax, 
-				reg->optmin, reg->optmax);
+		    && (overlap(ops->set_optmin, ops->set_optmax, 
+				reg->set_optmin, reg->set_optmax)
+			|| overlap(ops->get_optmin, ops->get_optmax, 
+				   reg->get_optmin, reg->get_optmax))) {
+			NFDEBUG("nf_sock overlap: %u-%u/%u-%u v %u-%u/%u-%u\n",
+				ops->set_optmin, ops->set_optmax, 
+				ops->get_optmin, ops->get_optmax, 
+				reg->set_optmin, reg->set_optmax,
+				reg->get_optmin, reg->get_optmax);
 			ret = -EBUSY;
 			goto out;
 		}
 	}
-	
+
 	list_add(&reg->list, &nf_sockopts);
 out:
-	write_unlock_bh(&nf_lock);
+	up(&nf_sockopt_mutex);
 	return ret;
 }
 
-void nf_unregister_sockopt(struct nf_setsockopt_ops *reg)
+void nf_unregister_sockopt(struct nf_sockopt_ops *reg)
 {
 #ifdef CONFIG_NETFILTER_DEBUG
 	if (reg->pf<0 || reg->pf>=NPROTO) {
@@ -143,9 +155,10 @@ void nf_unregister_sockopt(struct nf_setsockopt_ops *reg)
 		return;
 	}
 #endif
-	write_lock_bh(&nf_lock);
+	/* No point being interruptible: we're probably in cleanup_module() */
+	down(&nf_sockopt_mutex);
 	list_del(&reg->list);
-	write_unlock_bh(&nf_lock);
+	up(&nf_sockopt_mutex);
 }
 
 #ifdef CONFIG_NETFILTER_DEBUG
@@ -290,8 +303,9 @@ void nf_cacheflush(int pf, unsigned int hook, const void *packet,
 	read_unlock_bh(&nf_lock);
 }
 
-/* Call setsockopt() */
-int nf_setsockopt(int pf, int val, char *opt, unsigned int len)
+/* Call get/setsockopt() */
+static int nf_sockopt(struct sock *sk, int pf, int val, 
+		      char *opt, int *len, int get)
 {
 	struct list_head *i;
 	int ret;
@@ -299,19 +313,42 @@ int nf_setsockopt(int pf, int val, char *opt, unsigned int len)
 	if (!capable(CAP_NET_ADMIN))
 		return -EPERM;
 
-	read_lock_bh(&nf_lock);
+	if (down_interruptible(&nf_sockopt_mutex) != 0)
+		return -EINTR;
+
 	for (i = nf_sockopts.next; i != &nf_sockopts; i = i->next) {
-		struct nf_setsockopt_ops *ops = (struct nf_setsockopt_ops *)i;
-		if (ops->pf == pf 
-		    && val >= ops->optmin && val <= ops->optmax) {
-			ret = ops->fn(val, opt, len);
-			goto out;
+		struct nf_sockopt_ops *ops = (struct nf_sockopt_ops *)i;
+		if (ops->pf == pf) {
+			if (get) {
+				if (val >= ops->get_optmin
+				    && val < ops->get_optmax) {
+					ret = ops->get(sk, val, opt, len);
+					goto out;
+				}
+			} else {
+				if (val >= ops->set_optmin
+				    && val < ops->set_optmax) {
+					ret = ops->set(sk, val, opt, *len);
+					goto out;
+				}
+			}
 		}
 	}
 	ret = -ENOPROTOOPT;
  out:
-	read_unlock_bh(&nf_lock);
+	up(&nf_sockopt_mutex);
 	return ret;
+}
+
+int nf_setsockopt(struct sock *sk, int pf, int val, char *opt,
+		  int len)
+{
+	return nf_sockopt(sk, pf, val, opt, &len, 0);
+}
+
+int nf_getsockopt(struct sock *sk, int pf, int val, char *opt, int *len)
+{
+	return nf_sockopt(sk, pf, val, opt, len, 1);
 }
 
 static unsigned int nf_iterate(struct list_head *head,

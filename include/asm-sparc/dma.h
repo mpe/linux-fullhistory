@@ -16,7 +16,7 @@
 #include <asm/delay.h>
 #include <asm/oplib.h>
 #include <asm/system.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 extern spinlock_t  dma_spin_lock;
 

@@ -59,7 +59,7 @@
 static int lec_open(struct net_device *dev);
 static int lec_send_packet(struct sk_buff *skb, struct net_device *dev);
 static int lec_close(struct net_device *dev);
-static struct enet_statistics *lec_get_stats(struct net_device *dev);
+static struct net_device_stats *lec_get_stats(struct net_device *dev);
 static int lec_init(struct net_device *dev);
 static __inline__ struct lec_arp_table* lec_arp_find(struct lec_priv *priv,
                                                      unsigned char *mac_addr);
@@ -165,8 +165,10 @@ unsigned char *get_tr_dst(unsigned char *packet, unsigned char *rdesc)
         /* offset 4 comes from LAN destination field in LE control frames */
         if (trh->rcf & htons((uint16_t)TR_RCF_DIR_BIT))
                 memcpy(&rdesc[4], &trh->rseg[num_rdsc-2], sizeof(uint16_t));
-        else
+        else {
                 memcpy(&rdesc[4], &trh->rseg[1], sizeof(uint16_t));
+                rdesc[5] = ((ntohs(trh->rseg[0]) & 0x000f) | (rdesc[5] & 0xf0));
+        }
 
         return NULL;
 }
@@ -189,7 +191,7 @@ lec_open(struct net_device *dev)
         dev->tbusy = 0;
         dev->start = 1;
         dev->interrupt = 1;
-        memset(&priv->stats,0,sizeof(struct enet_statistics));
+        memset(&priv->stats,0,sizeof(struct net_device_stats));
         
         return 0;
 }
@@ -348,16 +350,18 @@ lec_send_packet(struct sk_buff *skb, struct net_device *dev)
                         ATM_SKB(skb2)->atm_options = send_vcc->atm_options;
                         DPRINTK("%s:sending to vpi:%d vci:%d\n", dev->name,
                                send_vcc->vpi, send_vcc->vci);       
-                        send_vcc->dev->ops->send(send_vcc, skb2);
                         priv->stats.tx_packets++;
+                        priv->stats.tx_bytes += skb2->len;
+                        send_vcc->dev->ops->send(send_vcc, skb2);
                 }
 
                 ATM_SKB(skb)->vcc = send_vcc;
                 atomic_add(skb->truesize, &send_vcc->tx_inuse);
                 ATM_SKB(skb)->iovcnt = 0;
                 ATM_SKB(skb)->atm_options = send_vcc->atm_options;
-                send_vcc->dev->ops->send(send_vcc, skb);
                 priv->stats.tx_packets++;
+                priv->stats.tx_bytes += skb->len;
+                send_vcc->dev->ops->send(send_vcc, skb);
         }
         /* Should we wait for card's device driver to notify us? */
         dev->tbusy=0;
@@ -378,12 +382,10 @@ lec_close(struct net_device *dev)
  * Get the current statistics.
  * This may be called with the card open or closed.
  */
-static struct enet_statistics *
+static struct net_device_stats *
 lec_get_stats(struct net_device *dev)
 {
-        struct lec_priv *priv = (struct lec_priv *)dev->priv;
-        
-        return (struct enet_statistics *)&priv->stats;
+        return &((struct lec_priv *)dev->priv)->stats;
 }
 
 static int 
@@ -714,8 +716,9 @@ lec_push(struct atm_vcc *vcc, struct sk_buff *skb)
                 else
 #endif
                 skb->protocol = eth_type_trans(skb, dev);
-                netif_rx(skb);
                 priv->stats.rx_packets++;
+                priv->stats.rx_bytes += skb->len;
+                netif_rx(skb);
         }
 }
 
@@ -769,12 +772,12 @@ lecd_attach(struct atm_vcc *vcc, int arg)
                 return -EINVAL;
 #endif
         if (!dev_lec[i]) {
-                dev_lec[i] = (struct net_device*)kmalloc(sizeof(struct net_device)+
-                                                     sizeof(myname)+1, 
-                                                     GFP_KERNEL);
+                dev_lec[i] = (struct net_device*)
+		    kmalloc(sizeof(struct net_device)+sizeof(myname)+1, 
+		    GFP_KERNEL);
                 if (!dev_lec[i])
                         return -ENOMEM;
-                memset(dev_lec[i],0, sizeof(struct net_device)+sizeof(myname)+1);
+                memset(dev_lec[i],0,sizeof(struct net_device)+sizeof(myname)+1);
 
                 dev_lec[i]->priv = kmalloc(sizeof(struct lec_priv), GFP_KERNEL);
                 if (!dev_lec[i]->priv)
@@ -888,7 +891,8 @@ void cleanup_module(void)
  * lec will be used.
  * If dst_mac == NULL, targetless LE_ARP will be sent
  */
-static int lane2_resolve(struct net_device *dev, u8 *dst_mac, int force, u8 **tlvs, u32 *sizeoftlvs)
+static int lane2_resolve(struct net_device *dev, u8 *dst_mac, int force,
+    u8 **tlvs, u32 *sizeoftlvs)
 {
         struct lec_priv *priv = (struct lec_priv *)dev->priv;
         struct lec_arp_table *table;
@@ -968,7 +972,8 @@ static int lane2_associate_req (struct net_device *dev, u8 *lan_dst,
  * LANE2: 3.1.5, LE_ASSOCIATE.indication
  *
  */
-static void lane2_associate_ind (struct net_device *dev, u8 *mac_addr, u8 *tlvs, u32 sizeoftlvs)
+static void lane2_associate_ind (struct net_device *dev, u8 *mac_addr,
+    u8 *tlvs, u32 sizeoftlvs)
 {
 #if 0
         int i = 0;
@@ -1004,8 +1009,6 @@ static void lane2_associate_ind (struct net_device *dev, u8 *mac_addr, u8 *tlvs,
                 priv->lane2_ops->associate_indicator(dev, mac_addr,
                                                      tlvs, sizeoftlvs);
         }
-        else
-                printk("lane:(%s) lane2_associate_ind: could not notify MPOA\n", dev->name);
         return;
 }
 

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.67 1999/08/30 12:14:43 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.68 1999/09/07 02:31:43 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -25,6 +25,7 @@
 int sysctl_tcp_syn_retries = TCP_SYN_RETRIES; 
 int sysctl_tcp_keepalive_time = TCP_KEEPALIVE_TIME;
 int sysctl_tcp_keepalive_probes = TCP_KEEPALIVE_PROBES;
+int sysctl_tcp_keepalive_intvl = TCP_KEEPALIVE_INTVL;
 int sysctl_tcp_retries1 = TCP_RETR1;
 int sysctl_tcp_retries2 = TCP_RETR2;
 
@@ -183,7 +184,9 @@ static void tcp_write_timeout(struct sock *sk)
 	}
 	
 	/* Have we tried to SYN too many times (repent repent 8)) */
-	if(tp->retransmits > sysctl_tcp_syn_retries && sk->state==TCP_SYN_SENT) {
+	if (sk->state == TCP_SYN_SENT && 
+	    ((!tp->syn_retries && tp->retransmits > sysctl_tcp_syn_retries) ||
+	      (tp->syn_retries && tp->retransmits > tp->syn_retries))) {
 		tcp_write_err(sk, 1);
 		/* Don't FIN, we got nothing back */
 	} else if (tp->retransmits > sysctl_tcp_retries2) {
@@ -593,7 +596,7 @@ void tcp_reset_keepalive_timer (struct sock *sk, unsigned long len)
 void tcp_set_keepalive(struct sock *sk, int val)
 {
 	if (val && !sk->keepopen)
-		tcp_reset_keepalive_timer(sk, sysctl_tcp_keepalive_time);
+		tcp_reset_keepalive_timer(sk, keepalive_time_when(&sk->tp_pinfo.af_tcp));
 	else if (!val)
 		tcp_delete_keepalive_timer(sk);
 }
@@ -619,25 +622,29 @@ void tcp_keepalive_timer (unsigned long data)
 	if (!sk->keepopen)
 		goto out;
 
-	elapsed = sysctl_tcp_keepalive_time;
+	elapsed = keepalive_time_when(tp);
 	if (!((1<<sk->state) & (TCPF_ESTABLISHED|TCPF_CLOSE_WAIT|TCPF_FIN_WAIT2)))
 		goto resched;
 
 	elapsed = tcp_time_stamp - tp->rcv_tstamp;
 
-	if (elapsed >= sysctl_tcp_keepalive_time) {
-		if (tp->probes_out > sysctl_tcp_keepalive_probes) {
+	if (elapsed >= keepalive_time_when(tp)) {
+		if ((!tp->keepalive_probes && tp->probes_out >= sysctl_tcp_keepalive_probes) ||
+		     (tp->keepalive_probes && tp->probes_out >= tp->keepalive_probes)) {
+			tcp_send_active_reset(sk, GFP_ATOMIC);
 			tcp_write_err(sk, 1);
 			goto out;
 		}
 		tp->probes_out++;
 		tp->pending = TIME_KEEPOPEN;
 		tcp_write_wakeup(sk);
-		/* Randomize to avoid synchronization */
-		elapsed = (TCP_KEEPALIVE_PERIOD>>1) + (net_random()%TCP_KEEPALIVE_PERIOD);
+		elapsed = keepalive_intvl_when(tp);
 	} else {
-		/* It is tp->rcv_tstamp + sysctl_tcp_keepalive_time */
-		elapsed = sysctl_tcp_keepalive_time - elapsed;
+		/* It is tp->rcv_tstamp + keepalive_time_when(tp) */
+		if (keepalive_time_when(tp) > elapsed)
+			elapsed = keepalive_time_when(tp) - elapsed;
+		else
+			elapsed = 0;
 	}
 
 resched:

@@ -1,9 +1,10 @@
 /* net/atm/raw.c - Raw AAL0 and AAL5 transports */
 
-/* Written 1995-1998 by Werner Almesberger, EPFL LRC */
+/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #include <linux/config.h>
+#include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/atmdev.h>
 #include <linux/kernel.h>
@@ -78,3 +79,6 @@ int atm_init_aal5(struct atm_vcc *vcc)
 	vcc->push_oam = NULL;
 	return 0;
 }
+
+
+EXPORT_SYMBOL(atm_init_aal5);

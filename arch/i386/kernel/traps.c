@@ -20,6 +20,7 @@
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/delay.h>
+#include <linux/spinlock.h>
 
 #ifdef CONFIG_MCA
 #include <linux/mca.h>
@@ -29,7 +30,6 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
-#include <asm/spinlock.h>
 #include <asm/atomic.h>
 #include <asm/debugreg.h>
 #include <asm/desc.h>
@@ -357,10 +357,16 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 	unsigned int condition;
 	struct task_struct *tsk = current;
 
+	__asm__ __volatile__("movl %%db6,%0" : "=r" (condition));
+
+	/* Mask out spurious debug traps due to lazy DR7 setting */
+	if (condition & (DR_TRAP0|DR_TRAP1|DR_TRAP2|DR_TRAP3)) {
+		if (!tsk->thread.debugreg[7])
+			goto clear_dr7;
+	}
+
 	if (regs->eflags & VM_MASK)
 		goto debug_vm86;
-
-	__asm__ __volatile__("movl %%db6,%0" : "=r" (condition));
 
 	/* Mask out spurious TF errors due to lazy TF clearing */
 	if (condition & DR_STEP) {
@@ -375,12 +381,6 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 		 */
 		if ((tsk->flags & (PF_DTRACE|PF_PTRACED)) == PF_DTRACE)
 			goto clear_TF;
-	}
-
-	/* Mask out spurious debug traps due to lazy DR7 setting */
-	if (condition & (DR_TRAP0|DR_TRAP1|DR_TRAP2|DR_TRAP3)) {
-		if (!tsk->thread.debugreg[7])
-			goto clear_dr7;
 	}
 
 	/* If this is a kernel mode trap, we need to reset db7 to allow us to continue sanely */

@@ -205,6 +205,35 @@ pci_set_master(struct pci_dev *dev)
 }
 
 /*
+ * Assign new address to PCI resource.  We hope our resource information
+ * is complete.  On the PC, we don't re-assign resources unless we are
+ * forced to do so or the driver asks us to.
+ *
+ * Expects start=0, end=size-1, flags=resource type.
+ */
+int __init pci_assign_resource(struct pci_dev *dev, int i)
+{
+	struct resource *r = &dev->resource[i];
+	struct resource *pr = pci_find_parent_resource(dev, r);
+	unsigned long size = r->end + 1;
+
+	if (!pr)
+		return -EINVAL;
+	if (r->flags & IORESOURCE_IO) {
+		if (size > 0x100)
+			return -EFBIG;
+		if (allocate_resource(pr, r, size, 0x1000, ~0, 1024))
+			return -EBUSY;
+	} else {
+		if (allocate_resource(pr, r, size, 0x10000000, ~0, size))
+			return -EBUSY;
+	}
+	if (i < 6)
+		pci_write_config_dword(dev, PCI_BASE_ADDRESS_0 + 4*i, r->start);
+	return 0;
+}
+
+/*
  * Translate the low bits of the PCI base
  * to the resource type
  */

@@ -8,7 +8,7 @@
 
 #include <linux/config.h>
 #include <asm/io.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include <asm/system.h>
 
 /*

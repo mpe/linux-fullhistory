@@ -1,5 +1,5 @@
 /*
- *  $Id: init.c,v 1.180 1999/08/31 06:54:13 davem Exp $
+ *  $Id: init.c,v 1.183 1999/09/05 19:29:44 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -90,8 +90,7 @@ extern unsigned long *find_end_of_memory(void);
 unsigned long *mbx_find_end_of_memory(void);
 #endif /* CONFIG_MBX */
 static void mapin_ram(void);
-void map_page(struct task_struct *, unsigned long va,
-		     unsigned long pa, int flags);
+void map_page(unsigned long va, unsigned long pa, int flags);
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
 
@@ -436,7 +435,7 @@ __ioremap(unsigned long addr, unsigned long size, unsigned long flags)
 	 */
 	
 	for (i = 0; i < size; i += PAGE_SIZE)
-		map_page(&init_task, v+i, p+i, flags);
+		map_page(v+i, p+i, flags);
 out:	
 	return (void *) (v + (addr & ~PAGE_MASK));
 }
@@ -472,13 +471,19 @@ unsigned long iopa(unsigned long addr)
 }
 
 void
-map_page(struct task_struct *tsk, unsigned long va,
-	 unsigned long pa, int flags)
+map_page(unsigned long va, unsigned long pa, int flags)
 {
-	pte_t * pte;
-
-	pte = pte_alloc(pmd_offset(pgd_offset_k(va), va), va);
-	set_pte(pte, mk_pte_phys(pa, __pgprot(flags)));
+	pmd_t *pd, oldpd;
+	pte_t *pg;
+	
+	/* Use upper 10 bits of VA to index the first level map */
+	pd = pmd_offset(pgd_offset_k(va), va);
+	oldpd = *pd;
+	/* Use middle 10 bits of VA to index the second-level map */
+	pg = pte_alloc(pd, va);
+	if (pmd_none(oldpd) && mem_init_done)
+		set_pgdir(va, *(pgd_t *)pd);
+	set_pte(pg, mk_pte_phys(pa & PAGE_MASK, __pgprot(flags)));
 	flush_hash_page(0, va);
 }
 
@@ -856,7 +861,6 @@ static void __init mapin_ram(void)
 			       RAM_PAGE);
 		}
 	}
-
 	v = KERNELBASE;
 	for (i = 0; i < phys_mem.n_regions; ++i) {
 		p = phys_mem.regions[i].address;
@@ -868,11 +872,11 @@ static void __init mapin_ram(void)
 				/* On the powerpc, no user access
 				   forces R/W kernel access */
 				f |= _PAGE_USER;
-			map_page(&init_task, v, p, f);
+			map_page(v, p, f);
 			v += PAGE_SIZE;
 			p += PAGE_SIZE;
 		}
-	}	    
+	}
 
 #else	/* CONFIG_8xx */
 
@@ -895,7 +899,7 @@ static void __init mapin_ram(void)
                          */
 			if ((char *) v < _stext || (char *) v >= etext)
 				f |= _PAGE_RW | _PAGE_DIRTY | _PAGE_HWWRITE;
-			map_page(&init_task, v, p, f);
+			map_page(v, p, f);
 			v += PAGE_SIZE;
 			p += PAGE_SIZE;
 		}
@@ -957,6 +961,11 @@ void __init free_initmem(void)
 		FREESEC(__prep_begin,__prep_end,num_prep_pages);
 		break;
 	case _MACH_apus:
+		FREESEC(__pmac_begin,__pmac_end,num_pmac_pages);
+		FREESEC(__prep_begin,__prep_end,num_prep_pages);
+		break;
+	case _MACH_gemini:
+		FREESEC(__apus_begin,__apus_end,num_apus_pages);
 		FREESEC(__pmac_begin,__pmac_end,num_pmac_pages);
 		FREESEC(__prep_begin,__prep_end,num_prep_pages);
 		break;

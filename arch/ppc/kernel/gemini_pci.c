@@ -152,7 +152,7 @@ static unsigned int mem_base = FIRST_MEM_ADDR;
 
 
 
-static __init void layout_dev( struct pci_dev *dev )
+__init void layout_dev( struct pci_dev *dev )
 {
 	int i;
 	struct pci_bus *bus;
@@ -225,7 +225,7 @@ static __init void layout_dev( struct pci_dev *dev )
 					  (cmd|PCI_COMMAND_MASTER));
 }
 
-static __init void layout_bus( struct pci_bus *bus )
+__init void layout_bus( struct pci_bus *bus )
 {
 	struct pci_dev *dev;
 
@@ -246,12 +246,9 @@ void __init gemini_pcibios_fixup(void)
 {
 	struct pci_bus *bus;
 	unsigned long orig_mem_base, orig_io_base;
-
+	
 	orig_mem_base = pci_mem_base;
 	orig_io_base = pci_io_base;
-
-	for( bus = &pci_root; bus; bus = bus->children )
-		layout_bus( bus );
 
 	pci_mem_base = orig_mem_base;
 	pci_io_base = orig_io_base;

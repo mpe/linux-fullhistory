@@ -142,9 +142,9 @@ static int pcd_drive_count;
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/cdrom.h>
+#include <linux/spinlock.h>
 
 #include <asm/uaccess.h>
-#include <asm/spinlock.h>
 
 #ifndef MODULE
 

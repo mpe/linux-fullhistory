@@ -26,6 +26,7 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/console.h>
+#include <linux/spinlock.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -40,7 +41,6 @@
 #include <asm/kdebug.h>
 #include <asm/mbus.h>
 #include <asm/idprom.h>
-#include <asm/spinlock.h>
 #include <asm/softirq.h>
 #include <asm/hardirq.h>
 #include <asm/machines.h>

@@ -289,7 +289,7 @@
 #include "hosts.h"
 #include "fdomain.h"
 #include <asm/system.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/ioport.h>

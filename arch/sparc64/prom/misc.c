@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.14 1998/12/18 10:01:59 davem Exp $
+/* $Id: misc.c,v 1.15 1999/08/31 19:25:41 davem Exp $
  * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
@@ -125,15 +125,37 @@ void prom_set_trap_table(unsigned long tba)
 /* This is only used internally below. */
 static int prom_get_mmu_ihandle(void)
 {
-	int node;
-	int ret;
+	static int mmu_ihandle_cache = 0;
+	int node, ret;
+
+	if (mmu_ihandle_cache != 0)
+		return mmu_ihandle_cache;
 
 	node = prom_finddevice("/chosen");
 	ret = prom_getint(node, "mmu");
-	if(ret == -1 || ret == 0) {
-		prom_printf("PROMLIB: Fatal error, cannot get mmu ihandle.\n");
-		prom_halt();
-	}
+	if(ret == -1 || ret == 0)
+		mmu_ihandle_cache = -1;
+	else
+		mmu_ihandle_cache = ret;
+
+	return ret;
+}
+
+static int prom_get_memory_ihandle(void)
+{
+	static int memory_ihandle_cache = 0;
+	int node, ret;
+
+	if (memory_ihandle_cache != 0)
+		return memory_ihandle_cache;
+
+	node = prom_finddevice("/chosen");
+	ret = prom_getint(node, "memory");
+	if (ret == -1 || ret == 0)
+		memory_ihandle_cache = -1;
+	else
+		memory_ihandle_cache = ret;
+
 	return ret;
 }
 
@@ -197,12 +219,18 @@ unsigned long prom_retain(char *name,
  * etched into the motherboard next to the SIMM slot
  * in question.
  */
-int prom_getunumber(unsigned long phys_lo, unsigned long phys_hi,
+int prom_getunumber(int syndrome_code,
+		    unsigned long phys_addr,
 		    char *buf, int buflen)
 {
-	return p1275_cmd("SUNW,get-unumber",
-			 (P1275_ARG(2, P1275_ARG_OUT_BUF) | P1275_INOUT(4, 1)),
-			 phys_lo, phys_hi, buf, buflen);
+	return p1275_cmd("call-method",
+			 (P1275_ARG(0, P1275_ARG_IN_STRING)	|
+			  P1275_ARG(3, P1275_ARG_OUT_BUF)	|
+			  P1275_ARG(5, P1275_ARG_IN_64B)	|
+			  P1275_INOUT(8, 2)),
+			 "SUNW,get-unumber", prom_get_memory_ihandle(),
+			 buflen, buf, P1275_SIZE(buflen),
+			 0, phys_addr, syndrome_code);
 }
 
 /* Power management extensions. */

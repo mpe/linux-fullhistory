@@ -31,8 +31,9 @@ static struct sbus_mmap_map p9100_mmap_map[] = {
   { P9100_CTL_OFF, 0x38000000, 0x2000 },
   { P9100_CMD_OFF, 0x38002000, 0x2000 },
   { P9100_FB_OFF, 0x38800000, 0x200000 },
-#else
   { CG3_MMAP_OFFSET, 0x38800000, SBUS_MMAP_FBSIZE(1) },
+#else
+  { CG3_MMAP_OFFSET, 0x0, SBUS_MMAP_FBSIZE(1) },
 #endif
   { 0, 0, 0 }
 };
@@ -79,22 +80,6 @@ static void p9100_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int in
 		_READCTL(pwrup_cfg, tmp);
 		WRITECTL(ramdac_palette_data, (fb->color_map CM(i,2) << 16));
 	}
-#if 0
-	printk("updating %d colors starting at %d\n", count, index);
-
-	WRITECTL(ramdac_palette_rdaddr, index);
-	for (i = index; count--; i++){
-		_READCTL(pwrup_cfg, tmp);
-		READCTL(ramdac_palette_data, tmp);
-		printk("%d: red %x ", i, tmp);
-		_READCTL(pwrup_cfg, tmp);
-		READCTL(ramdac_palette_data, tmp);
-		printk("green %x ", tmp);
-		_READCTL(pwrup_cfg, tmp);
-		READCTL(ramdac_palette_data, tmp);
-		printk("blue %x\n", tmp);
-	}
-#endif
 }
 
 static void p9100_blank (struct fb_info_sbusfb *fb)
@@ -121,7 +106,7 @@ static void p9100_margins (struct fb_info_sbusfb *fb, struct display *p, int x_m
 
 static char idstring[60] __initdata = { 0 };
 
-char * __init p9100fb_init(struct fb_info_sbusfb *fb)
+__initfunc(char *p9100fb_init(struct fb_info_sbusfb *fb))
 {
 	struct fb_fix_screeninfo *fix = &fb->fix;
 	struct display *disp = &fb->disp;
@@ -140,7 +125,8 @@ char * __init p9100fb_init(struct fb_info_sbusfb *fb)
 
 	if (!fb->s.p9100.ctrl) {
 	  fb->s.p9100.ctrl = (struct p9100_ctrl *)
-	    sparc_alloc_io(fb->sbdp->reg_addrs[0].phys_addr, 0, fb->sbdp->reg_addrs[1].reg_size, "p9100_ctrl", fb->iospace, 0);
+	    sparc_alloc_io(fb->sbdp->reg_addrs[0].phys_addr, 0, 
+			   fb->sbdp->reg_addrs[1].reg_size, "p9100_ctrl", fb->iospace, 0);
 	}
 
 	strcpy(fb->info.modename, "p9100");

@@ -1,4 +1,4 @@
-/* $Id: signal.h,v 1.8 1998/07/29 16:32:39 jj Exp $ */
+/* $Id: signal.h,v 1.9 1999/09/06 08:22:11 jj Exp $ */
 #ifndef _ASMSPARC64_SIGNAL_H
 #define _ASMSPARC64_SIGNAL_H
 
@@ -196,7 +196,7 @@ struct sigstack {
 
 /* Type of a signal handler.  */
 #ifdef __KERNEL__
-typedef void (*__sighandler_t)(int, int, struct sigcontext *, char *);
+typedef void (*__sighandler_t)(int, struct sigcontext *);
 #else
 typedef void (*__sighandler_t)(int);
 #endif
@@ -219,10 +219,12 @@ struct __new_sigaction32 {
 	__new_sigset_t32 	sa_mask;
 };
 
+#ifdef __KERNEL__
 struct k_sigaction {
 	struct __new_sigaction 	sa;
 	void			*ka_restorer;
 };
+#endif
 
 struct __old_sigaction {
 	__sighandler_t  	sa_handler;
@@ -239,16 +241,18 @@ struct __old_sigaction32 {
 };
 
 typedef struct sigaltstack {
-       void 			*ss_sp;
-       int 			ss_flags;
-       __kernel_size_t 		ss_size;
+	void			*ss_sp;
+	int			ss_flags;
+	size_t			ss_size;
 } stack_t;
 
+#ifdef __KERNEL__
 typedef struct sigaltstack32 {
-       u32			ss_sp;
-       int 			ss_flags;
-       __kernel_size_t32 	ss_size;
+	u32			ss_sp;
+	int			ss_flags;
+	__kernel_size_t32	ss_size;
 } stack_t32;
+#endif
 
 #endif /* !(__ASSEMBLY__) */
 

@@ -160,7 +160,7 @@ static int pf_drive_count;
 #include <linux/genhd.h>
 #include <linux/hdreg.h>
 #include <linux/cdrom.h>
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 #include <asm/uaccess.h>
 

@@ -88,13 +88,13 @@
 #include <linux/malloc.h>
 #include <linux/smp_lock.h>
 #include <linux/irq.h>
+#include <linux/spinlock.h>
 
 #include <asm/page.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/smp.h>
-#include <asm/spinlock.h>
 
 #undef DEBUG
 
@@ -760,36 +760,6 @@ static void __init pcibios_sort(void)
 #endif
 
 /*
- * Assign new address to PCI resource.  We hope our resource information
- * is complete.  On the PC, we don't re-assign resources unless we are
- * forced to do so.
- *
- * Expects start=0, end=size-1, flags=resource type.
- */
-
-int __init pcibios_assign_resource(struct pci_dev *dev, int i)
-{
-	struct resource *r = &dev->resource[i];
-	struct resource *pr = pci_find_parent_resource(dev, r);
-	unsigned long size = r->end + 1;
-
-	if (!pr)
-		return -EINVAL;
-	if (r->flags & IORESOURCE_IO) {
-		if (size > 0x100)
-			return -EFBIG;
-		if (allocate_resource(pr, r, size, 0x1000, ~0, 1024))
-			return -EBUSY;
-	} else {
-		if (allocate_resource(pr, r, size, 0x10000000, ~0, size))
-			return -EBUSY;
-	}
-	if (i < 6)
-		pci_write_config_dword(dev, PCI_BASE_ADDRESS_0 + 4*i, r->start);
-	return 0;
-}
-
-/*
  * Several BIOS'es forget to assign addresses to I/O ranges. Try to fix it.
  */
 
@@ -824,7 +794,7 @@ static void __init pcibios_fixup_io_addr(struct pci_dev *dev, int idx)
 
 		r->start = 0;
 		r->end = size - 1;
-		if (pcibios_assign_resource(dev, idx)) {
+		if (pci_assign_resource(dev, idx)) {
 			printk(KERN_ERR "PCI: Unable to find free %d bytes of I/O space for device %s.\n", size, dev->name);
 			return;
 		}
@@ -852,7 +822,7 @@ static void __init pcibios_fixup_rom_addr(struct pci_dev *dev)
 
 	r->start = 0;
 	r->end = rom_size - 1;
-	if (pcibios_assign_resource(dev, PCI_ROM_RESOURCE))
+	if (pci_assign_resource(dev, PCI_ROM_RESOURCE))
 		printk(KERN_ERR "PCI: Unable to find free space for expansion ROM of device %s (0x%lx bytes)\n",
 		       dev->name, rom_size);
 	else {

@@ -19,13 +19,13 @@
 #include <linux/malloc.h>
 #include <linux/mman.h>
 #include <linux/init.h>
+#include <linux/spinlock.h>
 
 #include <asm/page.h>
 #include <asm/irq.h>
 #include <asm/hardware.h>
 #include <asm/io.h>
 #include <asm/dma.h>
-#include <asm/spinlock.h>
 
 
 /* A note on resource allocation:

@@ -150,6 +150,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       tristate 'SMC EtherPower II (EXPERIMENTAL)' CONFIG_EPIC100
       bool 'Zenith Z-Note support (EXPERIMENTAL)' CONFIG_ZNET
     fi
+    tristate 'Adaptec Starfire support' CONFIG_ADAPTEC_STARFIRE
   fi
   bool 'Pocket and portable adaptors' CONFIG_NET_POCKET
   if [ "$CONFIG_NET_POCKET" = "y" ]; then
@@ -307,4 +308,8 @@ if [ "$CONFIG_LAPB" != "n" ]; then
     dep_tristate 'LAPB over Ethernet driver' CONFIG_LAPBETHER $CONFIG_LAPB
     dep_tristate 'X.25 async driver' CONFIG_X25_ASY $CONFIG_LAPB
 fi
+fi
+
+if [ "$CONFIG_PCMCIA" != "n" ]; then
+   source drivers/net/pcmcia/Config.in
 fi

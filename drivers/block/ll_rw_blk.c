@@ -830,7 +830,7 @@ int __init blk_dev_init(void)
 #ifdef CONFIG_BLK_DEV_FD
 	floppy_init();
 #else
-#if !defined (__mc68000__) && !defined(CONFIG_PMAC) && !defined(__sparc__)\
+#if !defined (__mc68000__) && !defined(CONFIG_PPC) && !defined(__sparc__)\
     && !defined(CONFIG_APUS) && !defined(__sh__)
 	outb_p(0xc, 0x3f2);
 #endif

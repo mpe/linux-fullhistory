@@ -47,11 +47,11 @@
 #include <linux/serial_reg.h>
 #include <linux/errno.h>
 #include <linux/init.h>
+#include <linux/spinlock.h>
 
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
-#include <asm/spinlock.h>
 
 #include <net/irda/irda.h>
 #include <net/irda/irmod.h>

@@ -15,12 +15,12 @@
 #include <linux/blk.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/spinlock.h>
 #include <asm/dbdma.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/prom.h>
 #include <asm/system.h>
-#include <asm/spinlock.h>
 
 #include "scsi.h"
 #include "hosts.h"

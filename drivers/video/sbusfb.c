@@ -1088,7 +1088,8 @@ sizechange:
 #endif
 #ifdef CONFIG_FB_P9100
 	case FBTYPE_P9100COLOR:
-		p = p9100fb_init(fb); break;
+		/* Temporary crock. For now we are a cg3 */
+		p = p9100fb_init(fb); type->fb_type = FBTYPE_SUN3COLOR; break;
 #endif
 	}
 	

@@ -25,6 +25,7 @@ static int irq[PARPORT_MAX] __initdata = { [0 ... PARPORT_MAX-1] = PARPORT_IRQ_P
 static int dma[PARPORT_MAX] __initdata = { [0 ... PARPORT_MAX-1] = PARPORT_DMA_NONE };
 
 extern int parport_pc_init(int *io, int *io_hi, int *irq, int *dma);
+extern int parport_sunbpp_init(void);
 
 static int parport_setup_ptr __initdata = 0;
 
@@ -152,10 +153,11 @@ int __init parport_init (void)
 #ifdef CONFIG_PARPORT_ARC
 	parport_arc_init();
 #endif
+#ifdef CONFIG_PARPORT_SUNBPP
+	parport_sunbpp_init();
+#endif
 	return 0;
 }
-
-__initcall (parport_init);
 
 #endif
 

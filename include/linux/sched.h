@@ -126,7 +126,7 @@ struct sched_param {
 
 #ifdef __KERNEL__
 
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 /*
  * This serializes "schedule()" and also protects

@@ -240,7 +240,7 @@ static void set_multicast_list( struct net_device *dev );
 
 /************************* End of Prototypes **************************/
 
-__initfunc(int sun3lance_probe( struct net_device *dev ))
+int __init sun3lance_probe( struct net_device *dev )
 {	
 	static int found = 0;
 
@@ -255,7 +255,7 @@ __initfunc(int sun3lance_probe( struct net_device *dev ))
 	return( ENODEV );
 }
 
-__initfunc(static int lance_probe( struct net_device *dev))
+static int __init lance_probe( struct net_device *dev)
 {	
 	unsigned long ioaddr, iopte;
 	

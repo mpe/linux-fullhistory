@@ -64,8 +64,8 @@ static int max_interrupt_work = 10;
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/delay.h>	/* for udelay() */
+#include <linux/spinlock.h>
 
-#include <asm/spinlock.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/irq.h>

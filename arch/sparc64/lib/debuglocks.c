@@ -6,8 +6,8 @@
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/spinlock.h>
 #include <asm/system.h>
-#include <asm/spinlock.h>
 
 #ifdef __SMP__
 

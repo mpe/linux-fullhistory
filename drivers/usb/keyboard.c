@@ -1,3 +1,11 @@
+/*
+	Fixes:
+	1999/09/04 - Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+		Handle states in usb_kbd_irq
+	1999/09/06 - Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+		rmmod usb-keyboard doesn't crash the system anymore: the irq
+		handlers are correctly released with usb_release_irq
+*/
 #include <linux/kernel.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
@@ -31,6 +39,7 @@ struct usb_keyboard
     unsigned char repeat_key;
     struct timer_list repeat_timer;
     struct list_head list;
+    void *irq_handler; /* host controller's IRQ transfer handle */
 };
 
 extern unsigned char usb_kbd_map[];
@@ -97,8 +106,22 @@ usb_kbd_irq(int state, void *buffer, int len, void *dev_id)
     struct usb_keyboard *kbd = (struct usb_keyboard*) dev_id;
     unsigned long *down = (unsigned long*) buffer;
 
-    if(kbd->down[0] != down[0] || kbd->down[1] != down[1])
-    {
+    /*
+     * USB_ST_NOERROR is the normal case.
+     * USB_ST_REMOVED occurs if keyboard disconnected
+     * On other states, ignore
+     */
+
+    switch (state) {
+	case USB_ST_REMOVED:
+	case USB_ST_INTERNALERROR:
+        	printk(KERN_DEBUG "%s(%d): Suspending\n", __FILE__, __LINE__);
+		return 0; /* disable */
+	case USB_ST_NOERROR: break;
+		default: return 1; /* ignore */
+    }
+
+    if(kbd->down[0] != down[0] || kbd->down[1] != down[1]) {
         unsigned char *olddown, *newdown;
         unsigned char modsdelta, key;
         int i;
@@ -202,11 +225,9 @@ usb_kbd_probe(struct usb_device *dev)
         usb_set_protocol(dev, 0);
         usb_set_idle(dev, 0, 0);
         
-        usb_request_irq(dev,
-                        usb_rcvctrlpipe(dev, endpoint->bEndpointAddress),
-                        usb_kbd_irq,
-                        endpoint->bInterval,
-                        kbd);
+        kbd->irq_handler = usb_request_irq(dev,
+                        		usb_rcvctrlpipe(dev, endpoint->bEndpointAddress),
+					usb_kbd_irq, endpoint->bInterval, kbd);
 
         list_add(&kbd->list, &usb_kbd_list);
 	
@@ -240,6 +261,30 @@ int usb_kbd_init(void)
     return 0;
 }
 
+void usb_kbd_cleanup(void)
+{
+	struct list_head *cur, *head = &usb_kbd_list;
+
+	cur = head->next;
+
+	while (cur != head) {
+		struct usb_keyboard *kbd = list_entry(cur, struct usb_keyboard, list);
+
+		cur = cur->next;
+
+                list_del(&kbd->list);
+                INIT_LIST_HEAD(&kbd->list);
+
+		if (kbd->irq_handler) {
+			usb_release_irq(kbd->dev, kbd->irq_handler);
+			/* never keep a reference to a released IRQ! */
+			kbd->irq_handler = NULL;
+		}
+	}
+
+	usb_deregister(&usb_kbd_driver);
+}
+
 #ifdef MODULE
 int init_module(void)
 {
@@ -248,7 +293,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	usb_deregister(&usb_kbd_driver);
+	usb_kbd_cleanup();
 }
 #endif
 

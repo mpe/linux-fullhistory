@@ -19,6 +19,7 @@
 #include <linux/tqueue.h>
 #include <linux/interrupt.h>
 #include <linux/reboot.h>
+#include <linux/spinlock.h>
 #include <asm/dbdma.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
@@ -27,7 +28,6 @@
 #include <asm/irq.h>
 #include <asm/hydra.h>
 #include <asm/processor.h>
-#include <asm/spinlock.h>
 #include <asm/feature.h>
 
 #include "scsi.h"

@@ -446,6 +446,7 @@ static const char *version = "de4x5.c:V0.544 1999/5/8 davies@maniac.ultranet.com
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/version.h>
+#include <linux/spinlock.h>
 
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -453,7 +454,6 @@ static const char *version = "de4x5.c:V0.544 1999/5/8 davies@maniac.ultranet.com
 #include <asm/byteorder.h>
 #include <asm/unaligned.h>
 #include <asm/uaccess.h>
-#include <asm/spinlock.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>

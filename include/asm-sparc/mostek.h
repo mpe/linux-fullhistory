@@ -1,4 +1,4 @@
-/* $Id: mostek.h,v 1.11 1999/08/30 10:14:32 davem Exp $
+/* $Id: mostek.h,v 1.12 1999/08/31 18:51:41 davem Exp $
  * mostek.h:  Describes the various Mostek time of day clock registers.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -93,14 +93,14 @@ extern unsigned long mstk48t02_regs;
 #define MSTK_DECIMAL_TO_REGVAL(x)  ((((x) / 0x0A) << 0x04) + ((x) % 0x0A))
 
 /* Generic register set and get macros for internal use. */
-#define MSTK_GET(regs,var,mask) (MSTK_REGVAL_TO_DECIMAL(regs->var & MSTK_ ## mask ## _MASK))
-#define MSTK_SET(regs,var,value,mask) do { regs->var &= ~(MSTK_ ## mask ## _MASK); regs->var |= MSTK_DECIMAL_TO_REGVAL(value) & (MSTK_ ## mask ## _MASK); } while (0)
+#define MSTK_GET(regs,var,mask) (MSTK_REGVAL_TO_DECIMAL(((struct mostek48t02 *)regs)->var & MSTK_ ## mask ## _MASK))
+#define MSTK_SET(regs,var,value,mask) do { ((struct mostek48t02 *)regs)->var &= ~(MSTK_ ## mask ## _MASK); ((struct mostek48t02 *)regs)->var |= MSTK_DECIMAL_TO_REGVAL(value) & (MSTK_ ## mask ## _MASK); } while (0)
 
 /* Macros to make register access easier on our fingers. These give you
  * the decimal value of the register requested if applicable. You pass
  * the a pointer to a 'struct mostek48t02'.
  */
-#define	MSTK_REG_CREG(regs)	(regs->creg)
+#define	MSTK_REG_CREG(regs)	(((struct mostek48t02 *)regs)->creg)
 #define	MSTK_REG_SEC(regs)	MSTK_GET(regs,sec,SEC)
 #define	MSTK_REG_MIN(regs)	MSTK_GET(regs,min,MIN)
 #define	MSTK_REG_HOUR(regs)	MSTK_GET(regs,hour,HOUR)

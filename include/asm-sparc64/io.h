@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.21 1999/08/30 10:14:44 davem Exp $ */
+/* $Id: io.h,v 1.24 1999/09/06 01:17:54 davem Exp $ */
 #ifndef __SPARC64_IO_H
 #define __SPARC64_IO_H
 
@@ -15,9 +15,6 @@
 
 
 #define PCI_DVMA_HASHSZ	256
-
-extern unsigned long pci_dvma_offset;
-extern unsigned long pci_dvma_mask;
 
 extern unsigned long pci_dvma_v2p_hash[PCI_DVMA_HASHSZ];
 extern unsigned long pci_dvma_p2v_hash[PCI_DVMA_HASHSZ];
@@ -49,11 +46,13 @@ extern __inline__ void *phys_to_virt(unsigned long addr)
 #define virt_to_bus virt_to_phys
 #define bus_to_virt phys_to_virt
 
-extern __inline__ unsigned long bus_dvma_to_mem(unsigned long vaddr)
-{
-	return vaddr & pci_dvma_mask;
-}
+/* Different PCI controllers we support have their PCI MEM space
+ * mapped to an either 2GB (Psycho) or 4GB (Sabre) aligned area,
+ * so need to chop off the top 33 or 32 bits.
+ */
+extern unsigned long pci_memspace_mask;
 
+#define bus_dvma_to_mem(__vaddr) ((__vaddr) & pci_memspace_mask)
 
 extern __inline__ unsigned int inb(unsigned long addr)
 {
@@ -120,12 +119,66 @@ extern void insw(unsigned long addr, void *dst, unsigned long count);
 extern void insl(unsigned long addr, void *dst, unsigned long count);
 
 /* Memory functions, same as I/O accesses on Ultra. */
-#define readb(addr)		inb((unsigned long)(addr))
-#define readw(addr)		inw((unsigned long)(addr))
-#define readl(addr)		inl((unsigned long)(addr))
-#define writeb(b, addr)		outb((b), (unsigned long)(addr))
-#define writew(w, addr)		outw((w), (unsigned long)(addr))
-#define writel(l, addr)		outl((l), (unsigned long)(addr))
+extern __inline__ unsigned int _readb(unsigned long addr)
+{
+	unsigned int ret;
+
+	__asm__ __volatile__("lduba [%1] %2, %0"
+			     : "=r" (ret)
+			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
+
+	return ret;
+}
+
+extern __inline__ unsigned int _readw(unsigned long addr)
+{
+	unsigned int ret;
+
+	__asm__ __volatile__("lduha [%1] %2, %0"
+			     : "=r" (ret)
+			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
+
+	return ret;
+}
+
+extern __inline__ unsigned int _readl(unsigned long addr)
+{
+	unsigned int ret;
+
+	__asm__ __volatile__("lduwa [%1] %2, %0"
+			     : "=r" (ret)
+			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
+
+	return ret;
+}
+
+extern __inline__ void _writeb(unsigned char b, unsigned long addr)
+{
+	__asm__ __volatile__("stba %0, [%1] %2"
+			     : /* no outputs */
+			     : "r" (b), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
+}
+
+extern __inline__ void _writew(unsigned short w, unsigned long addr)
+{
+	__asm__ __volatile__("stha %0, [%1] %2"
+			     : /* no outputs */
+			     : "r" (w), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
+}
+
+extern __inline__ void _writel(unsigned int l, unsigned long addr)
+{
+	__asm__ __volatile__("stwa %0, [%1] %2"
+			     : /* no outputs */
+			     : "r" (l), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
+}
+
+#define readb(__addr)		(_readb((unsigned long)(__addr)))
+#define readw(__addr)		(_readw((unsigned long)(__addr)))
+#define readl(__addr)		(_readl((unsigned long)(__addr)))
+#define writeb(__b, __addr)	(_writeb((__b), (unsigned long)(__addr)))
+#define writew(__w, __addr)	(_writew((__w), (unsigned long)(__addr)))
+#define writel(__l, __addr)	(_writel((__l), (unsigned long)(__addr)))
 
 /*
  * Memcpy to/from I/O space is just a regular memory operation on

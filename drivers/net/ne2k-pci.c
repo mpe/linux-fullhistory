@@ -105,7 +105,7 @@ pci_clone_list[] __initdata = {
 #define NESM_STOP_PG	0x80	/* Last page +1 of RX ring */
 
 int ne2k_pci_probe(struct net_device *dev);
-static struct net_device *ne2k_pci_probe1(struct net_device *dev, int ioaddr, int irq,
+static struct net_device *ne2k_pci_probe1(struct net_device *dev, long ioaddr, int irq,
 									  int chip_idx);
 
 static int ne2k_pci_open(struct net_device *dev);
@@ -196,9 +196,9 @@ int __init ne2k_pci_probe(struct net_device *dev)
 		return -ENODEV;
 
 	while ((pdev = pci_find_class(PCI_CLASS_NETWORK_ETHERNET << 8, pdev)) != NULL) {
-		u8 pci_irq_line;
+		int pci_irq_line;
 		u16 pci_command, new_command;
-		u32 pci_ioaddr;
+		unsigned long pci_ioaddr;
 
 		/* Note: some vendor IDs (RealTek) have non-NE2k cards as well. */
 		for (i = 0; pci_clone_list[i].vendor != 0; i++)
@@ -232,19 +232,19 @@ int __init ne2k_pci_probe(struct net_device *dev)
 				   pci_command, new_command);
 			pci_write_config_word(pdev, PCI_COMMAND, new_command);
 		}
-
+#ifndef __sparc__
 		if (pci_irq_line <= 0 || pci_irq_line >= NR_IRQS)
 			printk(KERN_WARNING "  WARNING: The PCI BIOS assigned this PCI NE2k"
 				   " card to IRQ %d, which is unlikely to work!.\n"
 				   KERN_WARNING " You should use the PCI BIOS setup to assign"
 				   " a valid IRQ line.\n", pci_irq_line);
-
-		printk("ne2k-pci.c: PCI NE2000 clone '%s' at I/O %#x, IRQ %d.\n",
+#endif
+		printk("ne2k-pci.c: PCI NE2000 clone '%s' at I/O %#lx, IRQ %d.\n",
 			   pci_clone_list[i].name, pci_ioaddr, pci_irq_line);
 		dev = ne2k_pci_probe1(dev, pci_ioaddr, pci_irq_line, i);
 		if (dev == 0) {
 			/* Should not happen. */
-			printk(KERN_ERR "ne2k-pci: Probe of PCI card at %#x failed.\n",
+			printk(KERN_ERR "ne2k-pci: Probe of PCI card at %#lx failed.\n",
 				   pci_ioaddr);
 			continue;
 		} else {
@@ -263,7 +263,7 @@ int __init ne2k_pci_probe(struct net_device *dev)
 	return cards_found ? 0 : -ENODEV;
 }
 
-static struct net_device __init *ne2k_pci_probe1(struct net_device *dev, int ioaddr, int irq, int chip_idx)
+static struct net_device __init *ne2k_pci_probe1(struct net_device *dev, long ioaddr, int irq, int chip_idx)
 {
 	int i;
 	unsigned char SA_prom[32];
@@ -340,7 +340,6 @@ static struct net_device __init *ne2k_pci_probe1(struct net_device *dev, int ioa
 
 	/* Note: all PCI cards have at least 16 bit access, so we don't have
 	   to check for 8 bit cards.  Most cards permit 32 bit access. */
-
 	if (pci_clone_list[chip_idx].flags & ONLY_32BIT_IO) {
 		for (i = 0; i < 4 ; i++)
 			((u32 *)SA_prom)[i] = le32_to_cpu(inl(ioaddr + NE_DATAPORT));
@@ -367,7 +366,7 @@ static struct net_device __init *ne2k_pci_probe1(struct net_device *dev, int ioa
 
 	request_region(ioaddr, NE_IO_EXTENT, dev->name);
 
-	printk("%s: %s found at %#x, IRQ %d, ",
+	printk("%s: %s found at %#lx, IRQ %d, ",
 		   dev->name, pci_clone_list[chip_idx].name, ioaddr, dev->irq);
 	for(i = 0; i < 6; i++) {
 		printk("%2.2X%s", SA_prom[i], i == 5 ? ".\n": ":");
@@ -447,7 +446,7 @@ static void
 ne2k_pci_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 
-	int nic_base = dev->base_addr;
+	long nic_base = dev->base_addr;
 
 	/* This *shouldn't* happen. If it does, it's the last thing you'll see */
 	if (ei_status.dmaing) {
@@ -485,7 +484,7 @@ ne2k_pci_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int rin
 static void
 ne2k_pci_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
-	int nic_base = dev->base_addr;
+	long nic_base = dev->base_addr;
 	char *buf = skb->data;
 
 	/* This *shouldn't* happen. If it does, it's the last thing you'll see */
@@ -530,7 +529,7 @@ static void
 ne2k_pci_block_output(struct net_device *dev, int count,
 		const unsigned char *buf, const int start_page)
 {
-	int nic_base = NE_BASE;
+	long nic_base = NE_BASE;
 	unsigned long dma_start;
 
 	/* On little-endian it's always safe to round the count up for

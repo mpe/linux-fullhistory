@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/hashtable.S
  *
- *  $Id: hashtable.S,v 1.2 1999/08/23 02:53:17 paulus Exp $
+ *  $Id: hashtable.S,v 1.3 1999/09/05 11:56:27 paulus Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -318,11 +318,14 @@ hash_page_out:
 	eieio
 	blr
 
+	.data
 	.globl	hash_table_lock
 hash_table_lock:
 	.long	0
-#endif
+	.text
+#endif /* __SMP__ */
 
+/* next_slot is assumed to be within the first 32kB of physical RAM */
 next_slot:
 	.long	0
 
@@ -467,9 +470,8 @@ _GLOBAL(flush_hash_page)
 #ifdef __SMP__
 	tlbsync
 	sync
-	lis	r3,hash_table_lock@h
 	li	r0,0
-	stw	r0,hash_table_lock@l(r3)
+	stw	r0,0(r9)		/* clear hash_table_lock */
 	mtmsr	r10
 	SYNC
 #endif

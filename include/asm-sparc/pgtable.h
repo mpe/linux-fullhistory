@@ -11,6 +11,7 @@
 
 #include <linux/mm.h>
 #include <linux/config.h>
+#include <linux/spinlock.h>
 #include <asm/asi.h>
 #ifdef CONFIG_SUN4
 #include <asm/pgtsun4.h>
@@ -22,7 +23,6 @@
 #include <asm/oplib.h>
 #include <asm/sbus.h>
 #include <asm/btfixup.h>
-#include <asm/spinlock.h>
 
 extern void load_mmu(void);
 extern int io_remap_page_range(unsigned long from, unsigned long to,

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.187 1999/08/31 07:03:48 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.189 1999/09/07 02:31:33 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -1822,7 +1822,7 @@ static void __tcp_v4_rehash(struct sock *sk)
 
 int tcp_v4_rebuild_header(struct sock *sk)
 {
-	struct rtable *rt = (struct rtable *)sk->dst_cache;
+	struct rtable *rt = (struct rtable *)__sk_dst_get(sk);
 	__u32 new_saddr;
         int want_rewrite = sysctl_ip_dynaddr && sk->state == TCP_SYN_SENT;
 

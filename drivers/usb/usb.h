@@ -372,7 +372,8 @@ enum {
 				   current callback function ret. values */
 	CB_REUSE,               /* leave descriptors as NULL, not active */
 	CB_RESTART,             /* leave descriptors as they are, alive */
-	CB_ABORT                /* kill this USB transfer request */
+	CB_ABORT,                /* kill this USB transfer request */
+	CB_CONT_RUN    		/* append the isoc_desc at the end of all active isoc_desc */
 };
 
 struct isoc_frame_desc {
@@ -406,6 +407,7 @@ struct usb_isoc_desc {
 	usb_device_irq  callback_fn;
 	void            *data;
 	int             buf_size;
+	struct usb_isoc_desc *prev_isocdesc; /* previous isoc_desc, for CB_CONT_RUN */
 	/*
 	 * The following fields are set by the usb_run_isoc() call.
 	 */

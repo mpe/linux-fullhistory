@@ -12,19 +12,21 @@ include ../../.config
 
 ifeq ($(CONFIG_ATM_ENI),y)
 L_OBJS += eni.o
-LX_OBJS += suni.o
+NEED_SUNI_LX = suni.o
 else
   ifeq ($(CONFIG_ATM_ENI),m)
   M_OBJS += eni.o
-  MX_OBJS += suni.o
+  NEED_SUNI_MX = suni.o
   endif
 endif
 
 ifeq ($(CONFIG_ATM_ZATM),y)
-LX_OBJS += zatm.o uPD98402.o
+L_OBJS += zatm.o
+LX_OBJS += uPD98402.o
 else
   ifeq ($(CONFIG_ATM_ZATM),m)
-  MX_OBJS += zatm.o uPD98402.o
+  M_OBJS += zatm.o
+  MX_OBJS += uPD98402.o
   endif
 endif
 
@@ -39,13 +41,13 @@ endif
 ifeq ($(CONFIG_ATM_NICSTAR),y)
 L_OBJS += nicstar.o
   ifeq ($(CONFIG_ATM_NICSTAR_USE_SUNI),y)
-  LX_OBJS += suni.o
+  NEED_SUNI_LX = suni.o
   endif
 else
   ifeq ($(CONFIG_ATM_NICSTAR),m)
   M_OBJS += nicstar.o
     ifeq ($(CONFIG_ATM_NICSTAR_USE_SUNI),y)
-    MX_OBJS += suni.o
+    NEED_SUNI_MX = suni.o
     endif
   endif
 endif
@@ -64,6 +66,12 @@ else
   ifeq ($(CONFIG_ATM_AMBASSADOR),m)
   M_OBJS += ambassador.o
   endif
+endif
+
+ifeq ($(NEED_SUNI_LX),)
+  MX_OBJS += $(NEED_SUNI_MX)
+else
+  LX_OBJS += $(NEED_SUNI_LX)
 endif
 
 ifeq ($(CONFIG_ATM_TCP),y)

@@ -12,8 +12,7 @@
 #include <linux/ioport.h>
 #include <linux/init.h>
 #include <linux/malloc.h>
-
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 
 struct resource ioport_resource = { "PCI IO", 0x0000, 0xFFFF, IORESOURCE_IO };
 struct resource iomem_resource = { "PCI mem", 0x00000000, 0xFFFFFFFF, IORESOURCE_MEM };

@@ -22,6 +22,7 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/init.h>
+#include <linux/spinlock.h>
 
 #include "scsi.h"
 #include "hosts.h"
@@ -37,7 +38,6 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/idprom.h>
-#include <asm/spinlock.h>
 
 #define DEBUG_ESP
 /* #define DEBUG_ESP_HME */

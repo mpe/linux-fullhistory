@@ -43,7 +43,7 @@
 #include <linux/mm.h>
 #include <linux/module.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
-#include <asm/spinlock.h>
+#include <linux/spinlock.h>
 #include <linux/poll.h>
 #endif
 

@@ -57,7 +57,7 @@ extern unsigned long sun_serial_setup(unsigned long memory_start);
 volatile char* clock_va; 
 extern unsigned char* sun3_intreg;
 
-__initfunc(void sun3_init(void))
+void __init sun3_init(void)
 {
 	unsigned char enable_register;
 	int i;
@@ -106,7 +106,7 @@ static void sun3_reboot (void)
 	prom_reboot ("vmlinux");
 }
 
-__initfunc(void config_sun3(unsigned long *start_mem_p, unsigned long *end_mem_p))
+void __init config_sun3(unsigned long *start_mem_p, unsigned long *end_mem_p)
 {
 	printk("ARCH: SUN3\n");
 	idprom_init();
@@ -141,7 +141,7 @@ __initfunc(void config_sun3(unsigned long *start_mem_p, unsigned long *end_mem_p
         *start_mem_p = sun_serial_setup(*start_mem_p);
 }
 
-__initfunc(void sun3_sched_init(void (*timer_routine)(int, void *, struct pt_regs *)))
+void __init sun3_sched_init(void (*timer_routine)(int, void *, struct pt_regs *))
 {
 	sun3_disable_interrupts();
         intersil_clock->cmd_reg=(INTERSIL_RUN|INTERSIL_INT_DISABLE|INTERSIL_24H_MODE);
