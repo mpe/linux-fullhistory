@@ -693,12 +693,9 @@ static void ntfs_put_super(struct super_block *sb)
 	ntfs_volume *vol;
 
 	ntfs_debug(DEBUG_OTHER, "ntfs_put_super\n");
-	/* Ensure that nobody uses the super block anymore */
-	lock_super(sb);
+
 	vol=NTFS_SB2VOL(sb);
-	/* Tell the kernel that the super block is no more used */
-	sb->s_dev = 0;
-	unlock_super(sb);
+
 	ntfs_release_volume(vol);
 	if(vol->nls_map)
 		unload_nls(vol->nls_map);

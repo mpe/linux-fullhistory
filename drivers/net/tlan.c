@@ -29,7 +29,6 @@
 
 #include "tlan.h"
 
-#include <linux/bios32.h>
 #include <linux/ioport.h>
 #include <linux/pci.h>
 #include <linux/etherdevice.h>
@@ -96,7 +95,7 @@ static	TLanPciId TLanDeviceList[] = {
 };
 
 
-static int	TLan_PciProbe( u8 *, u8 *, u8 *, u8 *, u32 *, u32 * );
+static int	TLan_PciProbe( u8 *, u8 *, int *, u8 *, u32 *, u32 * );
 static int	TLan_Init( struct device * );
 static int	TLan_Open(struct device *dev);
 static int	TLan_StartTx(struct sk_buff *, struct device *);
@@ -193,7 +192,7 @@ extern int init_module(void)
 	int		failed;
 	int		found;
 	u32		io_base;
-	u8		irq;
+	int		irq;
 	u8		rev;
 
 	printk( "TLAN driver, v%d.%d, (C) 1997 Caldera, Inc.\n",
@@ -319,7 +318,8 @@ extern int tlan_probe( struct device *dev )
 	static int	pad_allocated = 0;
 	int		found;
 	TLanPrivateInfo	*priv;
-	u8		bus, dfn, irq, rev;
+	u8		bus, dfn, rev;
+	int		irq;
 	u32		io_base, dl_ix;
 
 	found = TLan_PciProbe( &bus, &dfn, &irq, &rev, &io_base, &dl_ix );
@@ -398,7 +398,7 @@ extern int tlan_probe( struct device *dev )
 	 *
 	 **************************************************************/
 
-int TLan_PciProbe( u8 *pci_bus, u8 *pci_dfn, u8 *pci_irq, u8 *pci_rev, u32 *pci_io_base, u32 *dl_ix )
+int TLan_PciProbe( u8 *pci_bus, u8 *pci_dfn, int *pci_irq, u8 *pci_rev, u32 *pci_io_base, u32 *dl_ix )
 {
 	static int dl_index = 0;
 	static int pci_index = 0;
@@ -409,7 +409,7 @@ int TLan_PciProbe( u8 *pci_bus, u8 *pci_dfn, u8 *pci_irq, u8 *pci_rev, u32 *pci_
 	int	reg;
 
 
-	if ( ! pcibios_present() ) {
+	if ( ! pci_present() ) {
 		printk( "TLAN:   PCI Bios not present.\n" );
 		return 0;
 	}
@@ -425,6 +425,7 @@ int TLan_PciProbe( u8 *pci_bus, u8 *pci_dfn, u8 *pci_irq, u8 *pci_rev, u32 *pci_
 		);
 
 		if ( ! not_found ) {
+			struct pci_dev *pdev = pci_find_slot(*pci_bus, *pci_dfn);
 
 			TLAN_DBG(
 				TLAN_DEBUG_GNRL,
@@ -433,19 +434,18 @@ int TLan_PciProbe( u8 *pci_bus, u8 *pci_dfn, u8 *pci_irq, u8 *pci_rev, u32 *pci_
 				TLanDeviceList[dl_index].deviceId
 			);
 
-			pcibios_read_config_byte ( *pci_bus,  *pci_dfn, PCI_REVISION_ID, pci_rev);
-			pcibios_read_config_byte ( *pci_bus,  *pci_dfn, PCI_INTERRUPT_LINE, pci_irq);
-			pcibios_read_config_word ( *pci_bus,  *pci_dfn, PCI_COMMAND, &pci_command);
-			pcibios_read_config_dword( *pci_bus,  *pci_dfn, PCI_BASE_ADDRESS_0, pci_io_base);
-			pcibios_read_config_byte ( *pci_bus,  *pci_dfn, PCI_LATENCY_TIMER, &pci_latency);
+			pci_read_config_byte ( pdev, PCI_REVISION_ID, pci_rev);
+			*pci_irq = pdev->irq;
+			pci_read_config_word ( pdev, PCI_COMMAND, &pci_command);
+			pci_read_config_byte ( pdev, PCI_LATENCY_TIMER, &pci_latency);
 
 			if (pci_latency < 0x10) {
-				pcibios_write_config_byte( *pci_bus, *pci_dfn, PCI_LATENCY_TIMER, 0xff);
+				pci_write_config_byte( pdev, PCI_LATENCY_TIMER, 0xff);
 				TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:    Setting latency timer to max.\n");
 			}
 
-			for ( reg = PCI_BASE_ADDRESS_0; reg <= PCI_BASE_ADDRESS_5; reg +=4 ) {
-				pcibios_read_config_dword( *pci_bus, *pci_dfn, reg, pci_io_base);
+			for ( reg = 0; reg <= 5; reg ++ ) {
+				*pci_io_base = pdev->base_address[reg];
 				if ((pci_command & PCI_COMMAND_IO) && (*pci_io_base & 0x3)) {
 					*pci_io_base &= PCI_BASE_ADDRESS_IO_MASK;
 					TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:    IO mapping is available at %x.\n", *pci_io_base);

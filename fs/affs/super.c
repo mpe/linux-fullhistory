@@ -46,7 +46,6 @@ affs_put_super(struct super_block *sb)
 
 	pr_debug("affs_put_super()\n");
 
-	lock_super(sb);
 	for (i = 0; i < sb->u.affs_sb.s_bm_count; i++)
 		affs_brelse(sb->u.affs_sb.s_bitmap[i].bm_bh);
 	if (!(sb->s_flags & MS_RDONLY)) {
@@ -67,8 +66,6 @@ affs_put_super(struct super_block *sb)
 	 */
 	set_blocksize(sb->s_dev, sb->u.affs_sb.s_blksize);
 
-	sb->s_dev = 0;
-	unlock_super(sb);
 	MOD_DEC_USE_COUNT;
 	return;
 }

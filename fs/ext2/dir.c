@@ -75,7 +75,8 @@ struct inode_operations ext2_dir_inode_operations = {
 };
 
 int ext2_check_dir_entry (const char * function, struct inode * dir,
-			  struct ext2_dir_entry * de, struct buffer_head * bh,
+			  struct ext2_dir_entry_2 * de,
+			  struct buffer_head * bh,
 			  unsigned long offset)
 {
 	const char * error_msg = NULL;
@@ -84,7 +85,7 @@ int ext2_check_dir_entry (const char * function, struct inode * dir,
 		error_msg = "rec_len is smaller than minimal";
 	else if (le16_to_cpu(de->rec_len) % 4 != 0)
 		error_msg = "rec_len % 4 != 0";
-	else if (le16_to_cpu(de->rec_len) < EXT2_DIR_REC_LEN(le16_to_cpu(de->name_len)))
+	else if (le16_to_cpu(de->rec_len) < EXT2_DIR_REC_LEN(de->name_len))
 		error_msg = "rec_len is too small for name_len";
 	else if (dir && ((char *) de - bh->b_data) + le16_to_cpu(de->rec_len) >
 		 dir->i_sb->s_blocksize)
@@ -97,7 +98,7 @@ int ext2_check_dir_entry (const char * function, struct inode * dir,
 			    "offset=%lu, inode=%lu, rec_len=%d, name_len=%d",
 			    dir->i_ino, error_msg, offset,
 			    (unsigned long) le32_to_cpu(de->inode),
-			    le16_to_cpu(de->rec_len), le16_to_cpu(de->name_len));
+			    le16_to_cpu(de->rec_len), de->name_len);
 	return error_msg == NULL ? 1 : 0;
 }
 
@@ -108,7 +109,7 @@ static int ext2_readdir(struct file * filp,
 	unsigned long offset, blk;
 	int i, num, stored;
 	struct buffer_head * bh, * tmp, * bha[16];
-	struct ext2_dir_entry * de;
+	struct ext2_dir_entry_2 * de;
 	struct super_block * sb;
 	int err;
 	struct inode *inode = filp->f_dentry->d_inode;
@@ -158,7 +159,7 @@ revalidate:
 		 * to make sure. */
 		if (filp->f_version != inode->i_version) {
 			for (i = 0; i < sb->s_blocksize && i < offset; ) {
-				de = (struct ext2_dir_entry *) 
+				de = (struct ext2_dir_entry_2 *) 
 					(bh->b_data + i);
 				/* It's too expensive to do a full
 				 * dirent test each time round this
@@ -178,7 +179,7 @@ revalidate:
 		
 		while (!error && filp->f_pos < inode->i_size 
 		       && offset < sb->s_blocksize) {
-			de = (struct ext2_dir_entry *) (bh->b_data + offset);
+			de = (struct ext2_dir_entry_2 *) (bh->b_data + offset);
 			if (!ext2_check_dir_entry ("ext2_readdir", inode, de,
 						   bh, offset)) {
 				/* On error, skip the f_pos to the
@@ -200,7 +201,7 @@ revalidate:
 				unsigned long version = inode->i_version;
 
 				error = filldir(dirent, de->name,
-						le16_to_cpu(de->name_len),
+						de->name_len,
 						filp->f_pos, le32_to_cpu(de->inode));
 				if (error)
 					break;

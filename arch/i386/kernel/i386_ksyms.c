@@ -8,7 +8,6 @@
 #include <linux/in6.h>
 #include <linux/interrupt.h>
 #include <linux/smp_lock.h>
-#include <linux/pci.h>
 
 #include <asm/semaphore.h>
 #include <asm/processor.h>
@@ -64,13 +63,14 @@ EXPORT_SYMBOL(__generic_copy_to_user);
 EXPORT_SYMBOL(strlen_user);
 
 #ifdef __SMP__
-EXPORT_SYMBOL(apic_reg);	/* Needed internally for the I386 inlines */
 EXPORT_SYMBOL(cpu_data);
 EXPORT_SYMBOL_NOVERS(kernel_flag);
 EXPORT_SYMBOL_NOVERS(active_kernel_processor);
 EXPORT_SYMBOL(smp_invalidate_needed);
 EXPORT_SYMBOL_NOVERS(__lock_kernel);
 EXPORT_SYMBOL(lk_lockmsg);
+EXPORT_SYMBOL(__cpu_logical_map);
+EXPORT_SYMBOL(smp_num_cpus);
 
 /* Global SMP irq stuff */
 EXPORT_SYMBOL(synchronize_irq);
@@ -96,8 +96,4 @@ EXPORT_SYMBOL(mca_get_adapter_name);
 EXPORT_SYMBOL(mca_set_adapter_procfn);
 EXPORT_SYMBOL(mca_isenabled);
 EXPORT_SYMBOL(mca_isadapter);
-#endif
-
-#if CONFIG_PCI
-EXPORT_SYMBOL(pci_devices);
 #endif

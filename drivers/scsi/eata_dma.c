@@ -1406,7 +1406,7 @@ void find_PCI(struct get_conf *buf, Scsi_Host_Template * tpnt)
     u32 error, i, x;
     u8 pal1, pal2, pal3;
 
-    if (pcibios_present()) {
+    if (pci_present()) {
 	for (i = 0; i <= MAXPCI; ++i, ++pci_index) {
 	    if (pcibios_find_device(PCI_VENDOR_ID_DPT, PCI_DEVICE_ID_DPT, 
 				    pci_index, &pci_bus, &pci_device_fn))

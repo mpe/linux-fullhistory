@@ -133,7 +133,6 @@
 #include <linux/init.h>
 #include <linux/hdreg.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/delay.h>
 
 #include <asm/io.h>
@@ -213,13 +212,14 @@ __initfunc(void ide_init_trm290 (ide_hwif_t *hwif))
 {
 	unsigned int cfgbase = 0;
 	unsigned long flags;
-	byte reg, progif;
+	byte reg;
+	struct pci_dev *dev = hwif->pci_dev;
 
 	hwif->chipset = ide_trm290;
-	if (!pcibios_read_config_byte(hwif->pci_bus, hwif->pci_fn, 0x09, &progif) && (progif & 5)
-	 && !pcibios_read_config_dword(hwif->pci_bus, hwif->pci_fn, 0x20, &cfgbase) && cfgbase)
+	cfgbase = dev->base_address[4];
+	if ((dev->class & 5) && cfgbase)
 	{
-		hwif->config_data = cfgbase & ~1;
+		hwif->config_data = cfgbase & PCI_BASE_ADDRESS_IO_MASK;
 		printk("TRM290: chip config base at 0x%04lx\n", hwif->config_data);
 	} else {
 		hwif->config_data = 0x3df0;

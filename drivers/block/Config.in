@@ -34,6 +34,9 @@ else
           fi
         fi
       fi
+      if [ "$CONFIG_CHRP" = "y" ]; then
+          bool '   WInbond SL82c105 support' CONFIG_BLK_DEV_SL82C105
+      fi
     fi
     bool '   Other IDE chipset support' CONFIG_IDE_CHIPSETS
     if [ "$CONFIG_IDE_CHIPSETS" = "y" ]; then

@@ -243,7 +243,6 @@ typedef unsigned int  u32;
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/proc_fs.h>
 #include <linux/string.h>
@@ -1413,53 +1412,47 @@ normal_init (Scsi_Host_Template *tpnt, int board, int chip,
 __initfunc(static int 
 ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip, 
     unsigned char bus, unsigned char device_fn, long long options)) {
-    unsigned short vendor_id, device_id, command;
+    unsigned short command;
 #ifdef LINUX_1_2
     unsigned long
 #else
     unsigned int 
 #endif
 	base, io_port; 
-    unsigned char irq, revision;
+    unsigned char revision;
     int error, expected_chip;
     int expected_id = -1, max_revision = -1, min_revision = -1;
-    int i;
+    int i, irq;
+    struct pci_dev *pdev = pci_find_slot(bus, device_fn);
 
     printk("scsi-ncr53c7,8xx : at PCI bus %d, device %d,  function %d\n",
 	bus, (int) (device_fn & 0xf8) >> 3, 
     	(int) device_fn & 7);
 
-    if (!pcibios_present()) {
-	printk("scsi-ncr53c7,8xx : not initializing due to lack of PCI BIOS,\n"
+    if (!pdev) {
+	printk("scsi-ncr53c7,8xx : not initializing -- PCI device not found,\n"
 	       "        try using memory, port, irq override instead.\n");
 	return -1;
     }
 
-    if ((error = pcibios_read_config_word (bus, device_fn, PCI_VENDOR_ID, 
-	&vendor_id)) ||
-	(error = pcibios_read_config_word (bus, device_fn, PCI_DEVICE_ID, 
-	    &device_id)) ||
-	(error = pcibios_read_config_word (bus, device_fn, PCI_COMMAND, 
+    if ((error = pcibios_read_config_word (bus, device_fn, PCI_COMMAND, 
 	    &command)) ||
-	(error = pcibios_read_config_dword (bus, device_fn, 
-	    PCI_BASE_ADDRESS_0, &io_port)) || 
-	(error = pcibios_read_config_dword (bus, device_fn, 
-	    PCI_BASE_ADDRESS_1, &base)) ||
 	(error = pcibios_read_config_byte (bus, device_fn, PCI_CLASS_REVISION,
-	    &revision)) ||
-	(error = pcibios_read_config_byte (bus, device_fn, PCI_INTERRUPT_LINE,
-	    &irq))) {
+	    &revision))) {
 	printk ("scsi-ncr53c7,8xx : error %s not initializing due to error reading configuration space\n"
 		"	 perhaps you specified an incorrect PCI bus, device, or function.\n"
 		, pcibios_strerror(error));
 	return -1;
     }
+    io_port = pdev->base_address[0];
+    base = pdev->base_address[1];
+    irq = pdev->irq;
 
     /* If any one ever clones the NCR chips, this will have to change */
 
-    if (vendor_id != PCI_VENDOR_ID_NCR) {
+    if (pdev->vendor != PCI_VENDOR_ID_NCR) {
 	printk ("scsi-ncr53c7,8xx : not initializing, 0x%04x is not NCR vendor ID\n",
-	    (int) vendor_id);
+	    (int) pdev->vendor);
 	return -1;
     }
 
@@ -1467,14 +1460,16 @@ ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip,
     if ( ! (command & PCI_COMMAND_MASTER)) {
       printk("SCSI: PCI Master Bit has not been set. Setting...\n");
       command |= PCI_COMMAND_MASTER|PCI_COMMAND_IO;
-      pcibios_write_config_word(bus, device_fn, PCI_COMMAND, command);
-      if (io_port >= 0x10000000) {
+      pci_write_config_word(pdev, PCI_COMMAND, command);
+
+      if (io_port >= 0x10000000 && is_prep ) {
 	      /* Mapping on PowerPC can't handle this! */
 	      unsigned long new_io_port;
 	      new_io_port = (io_port & 0x00FFFFFF) | 0x01000000;
 	      printk("SCSI: I/O moved from %08X to %08x\n", io_port, new_io_port);
 	      io_port = new_io_port;
-	      pcibios_write_config_dword(bus, device_fn, PCI_BASE_ADDRESS_0, io_port);
+	      pci_write_config_dword(pdev, PCI_BASE_ADDRESS_0, io_port);
+	      pdev->base_address[0] = io_port;
       }
     }
 #endif
@@ -1519,7 +1514,7 @@ ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip,
     }
 
     for (i = 0; i < NPCI_CHIP_IDS; ++i) {
-	if (device_id == pci_chip_ids[i].pci_device_id) {
+	if (pdev->device == pci_chip_ids[i].pci_device_id) {
 	    max_revision = pci_chip_ids[i].max_revision;
 	    min_revision = pci_chip_ids[i].min_revision;
 	    expected_chip = pci_chip_ids[i].chip;
@@ -1528,10 +1523,10 @@ ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip,
 	    expected_id = pci_chip_ids[i].pci_device_id;
     }
 
-    if (chip && device_id != expected_id) 
+    if (chip && pdev->device != expected_id) 
 	printk ("scsi-ncr53c7,8xx : warning : device id of 0x%04x doesn't\n"
                 "                   match expected 0x%04x\n",
-	    (unsigned int) device_id, (unsigned int) expected_id );
+	    (unsigned int) pdev->device, (unsigned int) expected_id );
     
     if (max_revision != -1 && revision > max_revision) 
 	printk ("scsi-ncr53c7,8xx : warning : revision of %d is greater than %d.\n",
@@ -1598,7 +1593,7 @@ NCR53c7xx_detect(Scsi_Host_Template *tpnt)) {
 	} 
     }
 
-    if (pcibios_present()) {
+    if (pci_present()) {
 	for (i = 0; i < NPCI_CHIP_IDS; ++i) 
 	    for (pci_index = 0;
 		!pcibios_find_device (PCI_VENDOR_ID_NCR, 

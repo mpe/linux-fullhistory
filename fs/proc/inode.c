@@ -80,20 +80,13 @@ static void proc_delete_inode(struct inode *inode)
 	}
 }
 
-static void proc_put_super(struct super_block *sb)
-{
-	lock_super(sb);
-	sb->s_dev = 0;
-	unlock_super(sb);
-}
-
 static struct super_operations proc_sops = { 
 	proc_read_inode,
 	proc_write_inode,
 	proc_put_inode,
 	proc_delete_inode,	/* delete_inode(struct inode *) */
 	NULL,
-	proc_put_super,
+	NULL,
 	NULL,
 	proc_statfs,
 	NULL
@@ -198,9 +191,9 @@ int proc_permission(struct inode *inode, int mask)
 	read_lock(&tasklist_lock);
 	p = find_task_by_pid(pid);
 
-	if (p != NULL)
+	if (p && p->fs)
 		de = p->fs->root;
-	read_unlock(&tasklist_lock);
+	read_unlock(&tasklist_lock);	/* FIXME! */
 
 	if (p == NULL)
 		return -EACCES;		/* ENOENT? */

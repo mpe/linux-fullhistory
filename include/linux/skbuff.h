@@ -75,13 +75,7 @@ struct sk_buff {
 
 	struct  dst_entry *dst;
 
-#if (defined(__alpha__) || defined(__sparc_v9__)) && (defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE))
-	char		cb[48];	   /* sorry. 64bit pointers have a price */
-#elif (defined(__alpha__) || defined(__sparc_v9__))
-	char		cb[40];
-#else
-	char    	cb[36];
-#endif
+	char		cb[48];	 
 
 	unsigned int 	len;			/* Length of actual data			*/
 	unsigned int	csum;			/* Checksum 					*/

@@ -684,15 +684,8 @@ void compute_creds(struct linux_binprm *bprm)
 	current->cap_permitted.cap = new_permitted;
 	current->cap_effective.cap = new_permitted & bprm->cap_effective.cap;
 	
-        /* XXX - Audit candidate */
-        if (!cap_isclear(current->cap_effective)) {
-                printk(KERN_NOTICE
-		       "raising capabilities on `%s'(pid=%d) [%04x]:%lu\n",
-		       current->comm, current->pid,
-		       kdev_t_to_nr(bprm->dentry->d_inode->i_dev), 
-		       bprm->dentry->d_inode->i_ino);
-        }
-	
+        /* AUD: Audit candidate if current->cap_effective is set */
+
         current->suid = current->euid = current->fsuid = bprm->e_uid;
         current->sgid = current->egid = current->fsgid = bprm->e_gid;
         if (current->euid != current->uid || current->egid != current->gid ||

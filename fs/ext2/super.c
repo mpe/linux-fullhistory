@@ -107,12 +107,10 @@ void ext2_put_super (struct super_block * sb)
 	int db_count;
 	int i;
 
-	lock_super (sb);
 	if (!(sb->s_flags & MS_RDONLY)) {
 		sb->u.ext2_sb.s_es->s_state = le16_to_cpu(sb->u.ext2_sb.s_mount_state);
 		mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
 	}
-	sb->s_dev = 0;
 	db_count = sb->u.ext2_sb.s_db_per_group;
 	for (i = 0; i < db_count; i++)
 		if (sb->u.ext2_sb.s_group_desc[i])
@@ -126,7 +124,7 @@ void ext2_put_super (struct super_block * sb)
 		if (sb->u.ext2_sb.s_block_bitmap[i])
 			brelse (sb->u.ext2_sb.s_block_bitmap[i]);
 	brelse (sb->u.ext2_sb.s_sbh);
-	unlock_super (sb);
+
 	MOD_DEC_USE_COUNT;
 	return;
 }
@@ -516,11 +514,11 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 			goto failed_mount;
 		}
 	}
-	sb->u.ext2_sb.s_feature_compat = es->s_feature_compat;
-	sb->u.ext2_sb.s_feature_incompat = es->s_feature_incompat;
-	sb->u.ext2_sb.s_feature_ro_compat = es->s_feature_ro_compat;
+	sb->u.ext2_sb.s_feature_compat = le32_to_cpu(es->s_feature_compat);
+	sb->u.ext2_sb.s_feature_incompat = le32_to_cpu(es->s_feature_incompat);
+	sb->u.ext2_sb.s_feature_ro_compat = le32_to_cpu(es->s_feature_ro_compat);
 	sb->u.ext2_sb.s_frag_size = EXT2_MIN_FRAG_SIZE <<
-				   (__s32) le32_to_cpu(es->s_log_frag_size);
+				   le32_to_cpu(es->s_log_frag_size);
 	if (sb->u.ext2_sb.s_frag_size)
 		sb->u.ext2_sb.s_frags_per_block = sb->s_blocksize /
 						  sb->u.ext2_sb.s_frag_size;

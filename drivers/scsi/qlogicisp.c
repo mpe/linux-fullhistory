@@ -21,7 +21,6 @@
 #include <linux/ioport.h>
 #include <linux/sched.h>
 #include <linux/types.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/unistd.h>
@@ -54,8 +53,6 @@
 #define TRACE_ISP		0
 
 #define DEFAULT_LOOP_COUNT	1000000
-
-#define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
 
 /* End Configuration section *************************************************/
 
@@ -488,11 +485,10 @@ struct dev_param {
 #define QUEUE_ENTRY_LEN		64
 
 struct isp1020_hostdata {
-	u_char	bus;
 	u_char	revision;
-	u_char	device_fn;
 	struct	host_param host_param;
 	struct	dev_param dev_param[MAX_TARGETS];
+	struct	pci_dev *pci_dev;
 	
 	/* result and request queues (shared with isp1020): */
 	u_int	req_in_ptr;		/* index of next request slot */
@@ -510,8 +506,6 @@ struct isp1020_hostdata {
 #define REQ_QUEUE_DEPTH(in, out)	QUEUE_DEPTH(in, out, 		     \
 						    QLOGICISP_REQ_QUEUE_LEN)
 #define RES_QUEUE_DEPTH(in, out)	QUEUE_DEPTH(in, out, RES_QUEUE_LEN)
-
-static struct Scsi_Host *irq2host[NR_IRQS];
 
 static void	isp1020_enable_irqs(struct Scsi_Host *);
 static void	isp1020_disable_irqs(struct Scsi_Host *);
@@ -557,33 +551,26 @@ static inline void isp1020_disable_irqs(struct Scsi_Host *host)
 int isp1020_detect(Scsi_Host_Template *tmpt)
 {
 	int hosts = 0;
-	u_short index;
-	u_char bus, device_fn;
 	struct Scsi_Host *host;
 	struct isp1020_hostdata *hostdata;
+	struct pci_dev *pdev = NULL;
 
 	ENTER("isp1020_detect");
 
 	tmpt->proc_dir = &proc_scsi_isp1020;
 
-	if (pcibios_present() == 0) {
-		printk("qlogicisp : PCI bios not present\n");
+	if (pci_present() == 0) {
+		printk("qlogicisp : PCI not present\n");
 		return 0;
 	}
 
-	memset(irq2host, 0, sizeof(irq2host));
-
-	for (index = 0; pcibios_find_device(PCI_VENDOR_ID_QLOGIC,
-					    PCI_DEVICE_ID_QLOGIC_ISP1020,
-					    index, &bus, &device_fn) == 0;
-	     index++)
+	while ((pdev = pci_find_device(PCI_VENDOR_ID_QLOGIC, PCI_DEVICE_ID_QLOGIC_ISP1020, pdev)))
 	{
 		host = scsi_register(tmpt, sizeof(struct isp1020_hostdata));
 		hostdata = (struct isp1020_hostdata *) host->hostdata;
 
 		memset(hostdata, 0, sizeof(struct isp1020_hostdata));
-		hostdata->bus = bus;
-		hostdata->device_fn = device_fn;
+		hostdata->pci_dev = pdev;
 
 		if (isp1020_init(host) || isp1020_reset_hardware(host)
 #if USE_NVRAM_DEFAULTS
@@ -598,8 +585,8 @@ int isp1020_detect(Scsi_Host_Template *tmpt)
 
 		host->this_id = hostdata->host_param.initiator_scsi_id;
 
-		if (request_irq(host->irq, isp1020_intr_handler, SA_INTERRUPT,
-				"qlogicisp", NULL))
+		if (request_irq(host->irq, isp1020_intr_handler, SA_INTERRUPT | SA_SHIRQ,
+				"qlogicisp", host))
 		{
 			printk("qlogicisp : interrupt %d already in use\n",
 			       host->irq);
@@ -611,13 +598,12 @@ int isp1020_detect(Scsi_Host_Template *tmpt)
 			printk("qlogicisp : i/o region 0x%lx-0x%lx already "
 			       "in use\n",
 			       host->io_port, host->io_port + 0xff);
-			free_irq(host->irq, NULL);
+			free_irq(host->irq, host);
 			scsi_unregister(host);
 			continue;
 		}
 
 		request_region(host->io_port, 0xff, "qlogicisp");
-		irq2host[host->irq] = host;
 
 		outw(0x0, host->io_port + PCI_SEMAPHORE);
 		outw(HCCR_CLEAR_RISC_INTR, host->io_port + HOST_HCCR);
@@ -641,7 +627,7 @@ int isp1020_release(struct Scsi_Host *host)
 	hostdata = (struct isp1020_hostdata *) host->hostdata;
 
 	outw(0x0, host->io_port + PCI_INTF_CTL);
-	free_irq(host->irq, NULL);
+	free_irq(host->irq, host);
 
 	release_region(host->io_port, 0xff);
 
@@ -660,8 +646,8 @@ const char *isp1020_info(struct Scsi_Host *host)
 
 	hostdata = (struct isp1020_hostdata *) host->hostdata;
 	sprintf(buf,
-		"QLogic ISP1020 SCSI on PCI bus %d device %d irq %d base 0x%lx",
-		hostdata->bus, (hostdata->device_fn & 0xf8) >> 3, host->irq,
+		"QLogic ISP1020 SCSI on PCI bus %02x device %02x irq %d base 0x%lx",
+		hostdata->pci_dev->bus->number, hostdata->pci_dev->devfn, host->irq,
 		host->io_port);
 
 	LEAVE("isp1020_info");
@@ -819,18 +805,13 @@ void isp1020_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 {
 	Scsi_Cmnd *Cmnd;
 	struct Status_Entry *sts;
-	struct Scsi_Host *host;
+	struct Scsi_Host *host = dev_id;
 	struct isp1020_hostdata *hostdata;
 	u_int in_ptr, out_ptr;
 	u_short status;
 
 	ENTER_INTR("isp1020_intr_handler");
 
-	host = irq2host[irq];
-	if (!host) {
-		printk("qlogicisp : unexpected interrupt on line %d\n", irq);
-		return;
-	}
 	hostdata = (struct isp1020_hostdata *) host->hostdata;
 
 	DEBUG_INTR(printk("qlogicisp : interrupt on line %d\n", irq));
@@ -1168,53 +1149,36 @@ static int isp1020_reset_hardware(struct Scsi_Host *host)
 
 static int isp1020_init(struct Scsi_Host *sh)
 {
-	u_long io_base = 0;
+	u_int io_base;
 	struct isp1020_hostdata *hostdata;
-	u_char bus, device_fn, revision, irq;
-	u_short vendor_id, device_id, command;
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,90)
+	u_char revision;
+	u_int irq;
+	u_short command;
 	struct pci_dev *pdev;
-#endif
 
 	ENTER("isp1020_init");
 
 	hostdata = (struct isp1020_hostdata *) sh->hostdata;
-	bus = hostdata->bus;
-	device_fn = hostdata->device_fn;
+	pdev = hostdata->pci_dev;
 
-	if (pcibios_read_config_word(bus, device_fn, PCI_VENDOR_ID, &vendor_id)
-            || pcibios_read_config_word(bus, device_fn,
-					PCI_DEVICE_ID, &device_id)
-            || pcibios_read_config_word(bus, device_fn,
-					PCI_COMMAND, &command)
-#if LINUX_VERSION_CODE < LinuxVersionCode(2,1,90)
-            || pcibios_read_config_dword(bus, device_fn,
-					 PCI_BASE_ADDRESS_0, &io_base)
-	    || pcibios_read_config_byte(bus, device_fn,
-					PCI_INTERRUPT_LINE, &irq)
-#endif
-            || pcibios_read_config_byte(bus, device_fn,
-					PCI_CLASS_REVISION, &revision))
+	if (pci_read_config_word(pdev, PCI_COMMAND, &command)
+	    || pci_read_config_byte(pdev, PCI_CLASS_REVISION, &revision))
 	{
 		printk("qlogicisp : error reading PCI configuration\n");
 		return 1;
 	}
-
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,90)
-	pdev = pci_find_dev(bus, device_fn);
 	io_base = pdev->base_address[0];
-	irq     = pdev->irq;
-#endif
+	irq = pdev->irq;
 
-	if (vendor_id != PCI_VENDOR_ID_QLOGIC) {
+	if (pdev->vendor != PCI_VENDOR_ID_QLOGIC) {
 		printk("qlogicisp : 0x%04x is not QLogic vendor ID\n",
-		       vendor_id);
+		       pdev->vendor);
 		return 1;
 	}
 
-	if (device_id != PCI_DEVICE_ID_QLOGIC_ISP1020) {
+	if (pdev->device != PCI_DEVICE_ID_QLOGIC_ISP1020) {
 		printk("qlogicisp : 0x%04x does not match ISP1020 device id\n",
-		       device_id);
+		       pdev->device);
 		return 1;
 	}
 

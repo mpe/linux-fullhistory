@@ -26,7 +26,7 @@
  *				pending interrupt in DC390_detect()	*
  * 	1.11  02/05/97	KG/CLH	Fixeds problem with partitions greater	*
  * 				than 1GB				*
- * 	1.12  25/02/98	KG	Cleaned up ifdefs for 2.1 kernel	*
+ *      1.12  15/02/98  MJ      Rewritten PCI probing			*
  ***********************************************************************/
 
 
@@ -47,7 +47,6 @@
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/ioport.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/proc_fs.h>
 #include <linux/string.h>
@@ -118,8 +117,6 @@ static PDCB	pPrevDCB = NULL;
 static USHORT	adapterCnt = 0;
 static USHORT	InitialTime = 0;
 static USHORT	CurrSyncOffset = 0;
-static ULONG	mech1addr;
-static UCHAR	mech2bus, mech2Agent, mech2CfgSPenR;
 
 static PVOID DC390_phase0[]={
        DC390_DataOut_0,
@@ -1200,147 +1197,7 @@ __initfunc(int DC390_initAdapter( PSH psh, ULONG io_port, UCHAR Irq, USHORT inde
 
 
 void
-DC390_EnableCfg( USHORT mechnum, UCHAR regval )
-{
-    ULONG wlval;
-
-    if(mechnum == 2)
-    {
-	outb(mech2bus, PCI_CFG2_FORWARD_REG);
-	outb(mech2CfgSPenR, PCI_CFG2_ENABLE_REG);
-    }
-    else
-    {
-	regval &= 0xFC;
-	wlval = mech1addr;
-	wlval |= (((ULONG)regval) & 0xff);
-	outl(wlval, PCI_CFG1_ADDRESS_REG);
-    }
-}
-
-
-void
-DC390_DisableCfg( USHORT mechnum )
-{
-
-    if(mechnum == 2)
-	outb(0, PCI_CFG2_ENABLE_REG);
-    else
-	outl(0, PCI_CFG1_ADDRESS_REG);
-}
-
-
-UCHAR
-DC390_inByte( USHORT mechnum, UCHAR regval )
-{
-    UCHAR bval;
-    ULONG wval;
-    ULONG flags;
-
-    save_flags(flags);
-    cli();
-    DC390_EnableCfg( mechnum, regval );
-    if(mechnum == 2)
-    {
-	wval = mech2Agent;
-	wval <<= 8;
-	wval |= ((USHORT) regval) & 0xff;
-	bval = inb(wval);
-    }
-    else
-    {
-	regval &= 3;
-	bval = inb(PCI_CFG1_DATA_REG | regval);
-    }
-    DC390_DisableCfg(mechnum);
-    restore_flags(flags);
-    return(bval);
-}
-
-
-USHORT
-DC390_inWord( USHORT mechnum, UCHAR regval )
-{
-    USHORT wval;
-    ULONG flags;
-
-    save_flags(flags);
-    cli();
-    DC390_EnableCfg(mechnum,regval);
-    if(mechnum == 2)
-    {
-	wval = mech2Agent;
-	wval <<= 8;
-	wval |= regval;
-	wval = inw(wval);
-    }
-    else
-    {
-	regval &= 3;
-	wval = inw(PCI_CFG1_DATA_REG | regval);
-    }
-    DC390_DisableCfg(mechnum);
-    restore_flags(flags);
-    return(wval);
-}
-
-
-ULONG
-DC390_inDword(USHORT mechnum, UCHAR regval )
-{
-    ULONG wlval;
-    ULONG flags;
-    USHORT wval;
-
-    save_flags(flags);
-    cli();
-    DC390_EnableCfg(mechnum,regval);
-    if(mechnum == 2)
-    {
-	wval = mech2Agent;
-	wval <<= 8;
-	wval |= regval;
-	wlval = inl(wval);
-    }
-    else
-    {
-	wlval = inl(PCI_CFG1_DATA_REG);
-    }
-    DC390_DisableCfg(mechnum);
-    restore_flags(flags);
-    return(wlval);
-}
-
-
-void
-DC390_OutB(USHORT mechnum, UCHAR regval, UCHAR bval )
-{
-
-    USHORT wval;
-    ULONG  flags;
-
-    save_flags(flags);
-    cli();
-    DC390_EnableCfg(mechnum,regval);
-    if(mechnum == 2)
-    {
-	wval = mech2Agent;
-	wval <<= 8;
-	wval |= regval;
-	outb(bval, wval);
-    }
-    else
-    {
-	regval &= 3;
-	outb(bval, PCI_CFG1_DATA_REG | regval);
-    }
-    DC390_DisableCfg(mechnum);
-    restore_flags(flags);
-}
-
-
-void
-DC390_EnDisableCE( UCHAR mode, USHORT mechnum, PUCHAR regval )
+DC390_EnDisableCE( UCHAR mode, struct pci_dev *pdev, PUCHAR regval )
 {
 
     UCHAR bval;
@@ -1350,15 +1207,15 @@ DC390_EnDisableCE( UCHAR mode, USHORT mechnum, PUCHAR regval )
 	*regval = 0xc0;
     else
 	*regval = 0x80;
-    DC390_OutB(mechnum,*regval,bval);
+    pci_write_config_byte(pdev, *regval, bval);
     if(mode == DISABLE_CE)
-	DC390_OutB(mechnum,*regval,bval);
+	pci_write_config_byte(pdev, *regval, bval);
     udelay(160);
 }
 
 
 void
-DC390_EEpromOutDI( USHORT mechnum, PUCHAR regval, USHORT Carry )
+DC390_EEpromOutDI( struct pci_dev *pdev, PUCHAR regval, USHORT Carry )
 {
     UCHAR bval;
 
@@ -1367,32 +1224,28 @@ DC390_EEpromOutDI( USHORT mechnum, PUCHAR regval, USHORT Carry )
     {
 	bval = 0x40;
 	*regval = 0x80;
-	DC390_OutB(mechnum,*regval,bval);
+	pci_write_config_byte(pdev, *regval, bval);
     }
     udelay(160);
     bval |= 0x80;
-    DC390_OutB(mechnum,*regval,bval);
+    pci_write_config_byte(pdev, *regval, bval);
     udelay(160);
     bval = 0;
-    DC390_OutB(mechnum,*regval,bval);
+    pci_write_config_byte(pdev, *regval, bval);
     udelay(160);
 }
 
 
 UCHAR
-DC390_EEpromInDO( USHORT mechnum )
+DC390_EEpromInDO( struct pci_dev *pdev )
 {
-    UCHAR bval,regval;
+    UCHAR bval;
 
-    regval = 0x80;
-    bval = 0x80;
-    DC390_OutB(mechnum,regval,bval);
+    pci_write_config_byte(pdev, 0x80, 0x80);
     udelay(160);
-    bval = 0x40;
-    DC390_OutB(mechnum,regval,bval);
+    pci_write_config_byte(pdev, 0x80, 0x40);
     udelay(160);
-    regval = 0x0;
-    bval = DC390_inByte(mechnum,regval);
+    pci_read_config_byte(pdev, 0x00, &bval);
     if(bval == 0x22)
 	return(1);
     else
@@ -1401,7 +1254,7 @@ DC390_EEpromInDO( USHORT mechnum )
 
 
 USHORT
-EEpromGetData1( USHORT mechnum )
+EEpromGetData1( struct pci_dev *pdev )
 {
     UCHAR i;
     UCHAR carryFlag;
@@ -1411,7 +1264,7 @@ EEpromGetData1( USHORT mechnum )
     for(i=0; i<16; i++)
     {
 	wval <<= 1;
-	carryFlag = DC390_EEpromInDO(mechnum);
+	carryFlag = DC390_EEpromInDO(pdev);
 	wval |= carryFlag;
     }
     return(wval);
@@ -1419,7 +1272,7 @@ EEpromGetData1( USHORT mechnum )
 
 
 void
-DC390_Prepare( USHORT mechnum, PUCHAR regval, UCHAR EEpromCmd )
+DC390_Prepare( struct pci_dev *pdev, PUCHAR regval, UCHAR EEpromCmd )
 {
     UCHAR i,j;
     USHORT carryFlag;
@@ -1428,7 +1281,7 @@ DC390_Prepare( USHORT mechnum, PUCHAR regval, UCHAR EEpromCmd )
     j = 0x80;
     for(i=0; i<9; i++)
     {
-	DC390_EEpromOutDI(mechnum,regval,carryFlag);
+	DC390_EEpromOutDI(pdev,regval,carryFlag);
 	carryFlag = (EEpromCmd & j) ? 1 : 0;
 	j >>= 1;
     }
@@ -1436,7 +1289,7 @@ DC390_Prepare( USHORT mechnum, PUCHAR regval, UCHAR EEpromCmd )
 
 
 void
-DC390_ReadEEprom( USHORT mechnum, USHORT index )
+DC390_ReadEEprom( struct pci_dev *pdev, int index )
 {
     UCHAR   regval,cmd;
     PUSHORT ptr;
@@ -1446,23 +1299,23 @@ DC390_ReadEEprom( USHORT mechnum, USHORT index )
     cmd = EEPROM_READ;
     for(i=0; i<0x40; i++)
     {
-	DC390_EnDisableCE(ENABLE_CE, mechnum, &regval);
-	DC390_Prepare(mechnum, &regval, cmd);
-	*ptr = EEpromGetData1(mechnum);
+	DC390_EnDisableCE(ENABLE_CE, pdev, &regval);
+	DC390_Prepare(pdev, &regval, cmd);
+	*ptr = EEpromGetData1(pdev);
 	ptr++;
 	cmd++;
-	DC390_EnDisableCE(DISABLE_CE,mechnum,&regval);
+	DC390_EnDisableCE(DISABLE_CE, pdev, &regval);
     }
 }
 
 
 USHORT
-DC390_CheckEEpromCheckSum( USHORT MechNum, USHORT index )
+DC390_CheckEEpromCheckSum( struct pci_dev *pdev, int index )
 {
     USHORT wval, rc, *ptr;
     UCHAR  i;
 
-    DC390_ReadEEprom( MechNum, index );
+    DC390_ReadEEprom( pdev, index );
     wval = 0;
     ptr = (PUSHORT) &eepromBuf[index][0];
     for(i=0; i<128 ;i+=2, ptr++)
@@ -1474,30 +1327,6 @@ DC390_CheckEEpromCheckSum( USHORT MechNum, USHORT index )
     return( rc );
 }
 
-
-USHORT
-DC390_ToMech( USHORT Mechnum, USHORT BusDevFunNum )
-{
-    USHORT devnum;
-
-    devnum = BusDevFunNum;
-
-    if(Mechnum == 2)
-    {
-	if(devnum & 0x80)
-	     return(-1);
-	mech2bus = (UCHAR)((devnum & 0xff00) >> 8);	  /* Bus num */
-	mech2Agent = ((UCHAR)(devnum & 0xff)) >> 3;	  /* Dev num */
-	mech2Agent |= 0xc0;
-	mech2CfgSPenR = ((UCHAR)(devnum & 0xff)) & 0x07;  /* Fun num */
-	mech2CfgSPenR = (mech2CfgSPenR << 1) | 0x20;
-    }
-    else	/* use mech #1 method */
-    {
-	mech1addr = 0x80000000 | ((ULONG)devnum << 8);
-    }
-    return(0);
-}
 
 /***********************************************************************
  * Function : static int DC390_init (struct Scsi_Host *host)
@@ -1511,12 +1340,12 @@ DC390_ToMech( USHORT Mechnum, USHORT BusDevFunNum )
  ***********************************************************************/
 
 __initfunc(static int
-DC390_init (PSHT psht, ULONG io_port, UCHAR Irq, USHORT index, USHORT MechNum))
+DC390_init (PSHT psht, ULONG io_port, UCHAR Irq, struct pci_dev *pdev, int index))
 {
     PSH   psh;
     PACB  pACB;
 
-    if( !DC390_CheckEEpromCheckSum( MechNum, index) )
+    if( !DC390_CheckEEpromCheckSum( pdev, index ) )
     {
 	psh = scsi_register( psht, sizeof(DC390_ACB) );
 	if( !psh )
@@ -1594,20 +1423,10 @@ DC390_init (PSHT psht, ULONG io_port, UCHAR Irq, USHORT index, USHORT MechNum))
 __initfunc(int
 DC390_detect(Scsi_Host_Template *psht))
 {
-#ifdef FOR_PCI_OK
-    UCHAR   pci_bus, pci_device_fn;
-    int     error = 0;
-    USHORT  chipType = 0;
-    USHORT  i;
-#endif
-
-    UCHAR   irq;
-    UCHAR   istatus;
+    struct pci_dev *pdev = NULL;
+    UINT    irq;
     UINT    io_port;
     USHORT  adaptCnt = 0;	/* Number of boards detected */
-    USHORT  pci_index = 0;	/* Device index to PCI BIOS calls */
-    USHORT  MechNum, BusDevFunNum;
-    ULONG   wlval;
 
     psht->proc_dir = &proc_scsi_tmscsim;
 
@@ -1615,81 +1434,17 @@ DC390_detect(Scsi_Host_Template *psht))
     pSHT_start = psht;
     pACB_start = NULL;
 
-    MechNum = 1;
-    for( ; (MechNum < 3) && (!adaptCnt); MechNum++)
-    {
-	BusDevFunNum = 0;
-	for (; adaptCnt < MAX_ADAPTER_NUM ;)
+    if ( pci_present() )
+	while ((pdev = pci_find_device(PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD53C974, pdev)))
 	{
-	    if( !DC390_ToMech( MechNum, BusDevFunNum) )
-	    {
-		 wlval = DC390_inDword( MechNum, PCI_VENDOR_ID);
-		 if(wlval == ( (PCI_DEVICE_ID_AMD53C974 << 16)+
-				PCI_VENDOR_ID_AMD) )
-		 {
-		    io_port =DC390_inDword(MechNum,PCI_BASE_ADDRESS_0) & 0xFFFE;
-		    irq = DC390_inByte( MechNum, PCI_INTERRUPT_LINE);
+	    io_port = pdev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
+	    irq = pdev->irq;
 #ifdef DC390_DEBUG0
-		printk("DC390: IO_PORT=%4x,IRQ=%x,\n",(UINT) io_port, irq);
+	    printk("DC390: IO_PORT=%4x,IRQ=%x,\n",(UINT) io_port, irq);
 #endif
-		    if( !DC390_init(psht, io_port, irq, pci_index, MechNum) )
-		    {
-			adaptCnt++;
-			pci_index++;
-			istatus = inb( (USHORT)io_port+INT_Status );	/* Reset Pending INT */
-#ifdef DC390_DEBUG0
-		printk("DC390: Mech=%2x,\n",(UCHAR) MechNum);
-#endif
-		    }
-		 }
-	    }
-	    if( BusDevFunNum != 0xfff8 )
-		BusDevFunNum += 8;	    /* next device # */
-	    else
-		break;
+	    if( !DC390_init(psht, io_port, irq, pdev, adaptCnt))
+		adaptCnt++;
 	}
-    }
-
-#ifdef FOR_PCI_OK
-    if ( pcibios_present() )
-    {
-	for (i = 0; i < MAX_ADAPTER_NUM; ++i)
-	{
-	    if( !pcibios_find_device( PCI_VENDOR_ID_AMD,
-				PCI_DEVICE_ID_AMD53C974,
-				pci_index, &pci_bus, &pci_device_fn) )
-	    {
-		chipType = PCI_DEVICE_ID_AMD53C974;
-		pci_index++;
-	    }
-
-	    if( chipType )
-	    {
-
-		error = pcibios_read_config_dword(pci_bus, pci_device_fn,
-						  PCI_BASE_ADDRESS_0, &io_port);
-		error |= pcibios_read_config_byte(pci_bus, pci_device_fn,
-						  PCI_INTERRUPT_LINE, &irq);
-		if( error )
-		{
-		    printk("DC390_detect: reading configuration registers error!\n");
-		    InitialTime = 0;
-		    return( 0 );
-		}
-
-		(USHORT) io_port = (USHORT) io_port & 0xFFFE;
-#ifdef DC390_DEBUG0
-		printk("DC390: IO_PORT=%4x,IRQ=%x,\n",(UINT) io_port, irq);
-#endif
-		if( !DC390_init(psht, io_port, irq, i) )
-		    adaptCnt++;
-		chipType = 0;
-	    }
-	    else
-		break;
-	}
-    }
-#endif
 
     InitialTime = 0;
     adapterCnt = adaptCnt;

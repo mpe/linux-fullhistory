@@ -28,7 +28,6 @@
 #include <linux/head.h>
 #include <linux/types.h>
 #include <linux/string.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
@@ -519,21 +518,15 @@ int Pci2000_Detect (Scsi_Host_Template *tpnt)
 	PADAPTER2000	    padapter;
 	int					z;
 	int					setirq;
+	struct pci_dev	   *pdev = NULL;
 
-	if ( pcibios_present () )
-		{
-		for ( pci_index = 0;  pci_index <= MAXADAPTER;  ++pci_index )
+	if ( pci_present () )
+		while ((pdev = pci_find_device(VENDOR_PSI, DEVICE_ROY_1, pdev)))
 			{
-			UCHAR	pci_bus, pci_device_fn;
-
-			if ( pcibios_find_device (VENDOR_PSI, DEVICE_ROY_1, pci_index, &pci_bus, &pci_device_fn) != 0 )
-				break;
-
 			pshost = scsi_register (tpnt, sizeof(ADAPTER2000));
 			padapter = HOSTDATA(pshost);
 
-			pcibios_read_config_word (pci_bus, pci_device_fn, PCI_BASE_ADDRESS_1, &padapter->basePort);
-			padapter->basePort &= 0xFFFE;
+			padapter->basePort = pdev->base_address[1] & PCI_BASE_ADDRESS_IO_MASK;
 			DEB (printk ("\nBase Regs = %#04X", padapter->basePort));			// get the base I/O port address
 			padapter->mb0	= padapter->basePort + RTR_MAILBOX;		   			// get the 32 bit mail boxes
 			padapter->mb1	= padapter->basePort + RTR_MAILBOX + 4;
@@ -550,7 +543,7 @@ int Pci2000_Detect (Scsi_Host_Template *tpnt)
 			if ( WaitReady (padapter) )
 				goto unregister;
 
-			pcibios_read_config_byte (pci_bus, pci_device_fn, PCI_INTERRUPT_LINE, &pshost->irq);
+			pshost->irq = pdev->irq;
 			setirq = 1;
 			for ( z = 0;  z < pci_index;  z++ )											// scan for shared interrupts
 				{
@@ -573,13 +566,12 @@ int Pci2000_Detect (Scsi_Host_Template *tpnt)
 
 			printk("\nPSI-2000 EIDE CONTROLLER: at I/O = %X  IRQ = %d\n", padapter->basePort, pshost->irq);
 			printk("(C) 1997 Perceptive Solutions, Inc. All rights reserved\n\n");
+			NumAdapters++;
 			continue;
 unregister:;
 			scsi_unregister (pshost);
 			}
-		}
-	NumAdapters = pci_index;
-	return pci_index;
+	return NumAdapters;
 	}
 /****************************************************************
  *	Name:	Pci2220i_Abort

@@ -80,7 +80,6 @@
 #include <linux/major.h>
 #include <linux/ioport.h>
 #ifdef ENABLE_PCI
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #endif
 #if (LINUX_VERSION_CODE >= 131343) /* 2.1.15 -- XX get correct version */
@@ -1875,31 +1874,10 @@ __initfunc(int register_PCI(int i, char bus, char device_fn))
 	unsigned int	aiopio[MAX_AIOPS_PER_BOARD];
 	char *str;
 	CONTROLLER_t	*ctlp;
-	unsigned short	vendor_id, device_id;
-	int	ret, error;
-	unsigned int port;
+	struct pci_dev *dev = pci_find_slot(bus, device_fn);
 
-	error = pcibios_read_config_word(bus, device_fn, PCI_VENDOR_ID,
-		&vendor_id);
-	ret = pcibios_read_config_word(bus, device_fn, PCI_DEVICE_ID,
-		&device_id);
-	if (error == 0)
-		error = ret;
-	ret = pcibios_read_config_dword(bus, device_fn, PCI_BASE_ADDRESS_0,
-		&port);
-	rcktpt_io_addr[i] = (unsigned long) port;
-	if (error == 0)
-		error = ret;
-
-	if (error) {
-		printk("PCI RocketPort error: %s not initializing due to error"
-		       "reading configuration space\n",
-		       pcibios_strerror(error));
-		return(0);
-	}
-
-	--rcktpt_io_addr[i];
-	switch(device_id) {
+	rcktpt_io_addr[i] = dev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
+	switch(dev->device) {
 	case PCI_DEVICE_ID_RP4QUAD:
 		str = "Quadcable";
 		max_num_aiops = 1;
@@ -1935,7 +1913,7 @@ __initfunc(int register_PCI(int i, char bus, char device_fn))
 	num_aiops = sPCIInitController(ctlp, i,
 					aiopio, max_num_aiops, 0,
 					FREQ_DIS, 0);
-	printk("Rocketport controller #%d found at %d:%d, "
+	printk("Rocketport controller #%d found at %02x:%02x, "
 	       "%d AIOP(s) (PCI Rocketport %s)\n", i, bus, device_fn,
 	       num_aiops, str);
 	if(num_aiops <= 0) {
@@ -2095,7 +2073,7 @@ __initfunc(int rp_init(void))
 			isa_boards_found++;
 	}
 #ifdef ENABLE_PCI
-	if (pcibios_present()) {
+	if (pci_present()) {
 		if(isa_boards_found < NUM_BOARDS)
 			pci_boards_found = init_PCI(isa_boards_found);
 	} else {

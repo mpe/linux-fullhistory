@@ -45,7 +45,6 @@ static const char *version = "lance.c:v1.09 Aug 20 1996 dplatt@3do.com, becker@c
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/init.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -285,7 +284,7 @@ static struct lance_chip_type {
 enum {OLD_LANCE = 0, PCNET_ISA=1, PCNET_ISAP=2, PCNET_PCI=3, PCNET_VLB=4, PCNET_PCI_II=5, LANCE_UNKNOWN=6};
 
 /* Non-zero only if the current card is a PCI with BIOS-set IRQ. */
-static unsigned char pci_irq_line = 0;
+static unsigned int pci_irq_line = 0;
 
 /* Non-zero if lance_probe1() needs to allocate low-memory bounce buffers.
    Assume yes until we know the memory size. */
@@ -317,36 +316,26 @@ __initfunc(int lance_init(void))
 		lance_need_isa_bounce_buffers = 0;
 
 #if defined(CONFIG_PCI) && !defined(CONFIG_PCNET32)
-    if (pcibios_present()) {
-	    int pci_index;
+    if (pci_present()) {
+	    struct pci_dev *pdev = NULL;
 		if (lance_debug > 1)
-			printk("lance.c: PCI bios is present, checking for devices...\n");
-		for (pci_index = 0; pci_index < 8; pci_index++) {
+			printk("lance.c: PCI is present, checking for devices...\n");
+		while (pdev = pci_find_device(PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_LANCE, pdev)) {
 			unsigned char pci_bus, pci_device_fn;
 			unsigned int pci_ioaddr;
 			unsigned short pci_command;
 
-			if (pcibios_find_device (PCI_VENDOR_ID_AMD,
-									 PCI_DEVICE_ID_AMD_LANCE, pci_index,
-									 &pci_bus, &pci_device_fn) != 0)
-				break;
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-									 PCI_INTERRUPT_LINE, &pci_irq_line);
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-									  PCI_BASE_ADDRESS_0, &pci_ioaddr);
-			/* Remove I/O space marker in bit 0. */
-			pci_ioaddr &= ~3;
+			pci_irq_line = pdev->irq;
+			pci_ioaddr = pdev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
 			/* PCI Spec 2.1 states that it is either the driver or PCI card's
 	 		 * responsibility to set the PCI Master Enable Bit if needed.
 			 *	(From Mark Stockton <marks@schooner.sys.hou.compaq.com>)
 			 */
-			pcibios_read_config_word(pci_bus, pci_device_fn,
-									 PCI_COMMAND, &pci_command);
+			pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
 			if ( ! (pci_command & PCI_COMMAND_MASTER)) {
 				printk("PCI Master Bit has not been set. Setting...\n");
 				pci_command |= PCI_COMMAND_MASTER;
-				pcibios_write_config_word(pci_bus, pci_device_fn,
-										  PCI_COMMAND, pci_command);
+				pci_write_config_word(pdev, PCI_COMMAND, pci_command);
 			}
 			printk("Found PCnet/PCI at %#x, irq %d.\n",
 				   pci_ioaddr, pci_irq_line);

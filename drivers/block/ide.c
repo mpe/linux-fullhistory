@@ -107,7 +107,6 @@
 #include <linux/errno.h>
 #include <linux/genhd.h>
 #include <linux/malloc.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
 
@@ -263,7 +262,7 @@ int ide_system_bus_speed (void)
 		if (idebus_parameter)
 			system_bus_speed = idebus_parameter;	/* user supplied value */
 #ifdef CONFIG_PCI
-		else if (pcibios_present())
+		else if (pci_present())
 			system_bus_speed = 40;	/* safe default value for PCI */
 #endif /* CONFIG_PCI */
 		else
@@ -1260,6 +1259,12 @@ static void unexpected_intr (int irq, ide_hwgroup_t *hwgroup)
 	} while ((hwif = hwif->next) != hwgroup->hwif);
 }
 
+#ifdef __sparc_v9__
+#define IDE_IRQ_EQUAL(irq1, irq2)	(1)
+#else
+#define IDE_IRQ_EQUAL(irq1, irq2)	((irq1) == (irq2))
+#endif
+
 /*
  * entry point for all interrupts, caller does __cli() for us
  */
@@ -1270,25 +1275,28 @@ void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 	ide_hwif_t *hwif = hwgroup->hwif;
 	ide_handler_t *handler;
 
-	if (!ide_ack_intr(hwif->io_ports[IDE_STATUS_OFFSET], hwif->io_ports[IDE_IRQ_OFFSET]))
+	if (!ide_ack_intr (hwif->io_ports[IDE_STATUS_OFFSET], hwif->io_ports[IDE_IRQ_OFFSET]))
 		return;
+
 	do {
-		if (hwif->irq != irq) disable_irq(hwif->irq);
+		if (!IDE_IRQ_EQUAL(irq, hwgroup->hwif->irq))
+			disable_irq(hwif->irq);
 	} while ((hwif = hwif->next) != hwgroup->hwif);
-	if (irq == hwif->irq && (handler = hwgroup->handler) != NULL) {
+	if (IDE_IRQ_EQUAL(irq, hwif->irq)
+	    && (handler = hwgroup->handler) != NULL) {
 		ide_drive_t *drive = hwgroup->drive;
-#if 1	/* temporary, remove later -- FIXME */
+#if 1  /* temporary, remove later -- FIXME */
 		{
 			struct request *rq = hwgroup->rq;
 			if (rq != NULL
-			 &&( MAJOR(rq->rq_dev) != HWIF(drive)->major
-			 || (MINOR(rq->rq_dev) >> PARTN_BITS) != drive->select.b.unit))
+			    &&( MAJOR(rq->rq_dev) != HWIF(drive)->major
+			    || (MINOR(rq->rq_dev) >> PARTN_BITS) != drive->select.b.unit))
 			{
 				printk("ide_intr: got IRQ from wrong device: email mlord@pobox.com!!\n");
 				return;
 			}
 		}
-#endif	/* temporary */
+#endif /* temporary */
 		hwgroup->handler = NULL;
 		del_timer(&(hwgroup->timer));
 		/* if (drive->unmask)
@@ -1308,7 +1316,8 @@ void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 	__cli();
 	hwif = hwgroup->hwif;
 	do {
-		if (hwif->irq != irq) enable_irq(hwif->irq);
+		if (!IDE_IRQ_EQUAL(hwif->irq, irq))
+			enable_irq(hwif->irq);
 	} while ((hwif = hwif->next) != hwgroup->hwif);
 }
 
@@ -2520,7 +2529,7 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 __initfunc(static void probe_for_hwifs (void))
 {
 #ifdef CONFIG_PCI
-	if (pcibios_present())
+	if (pci_present())
 	{
 #ifdef CONFIG_BLK_DEV_IDEPCI
 		ide_scan_pcibus();
@@ -2530,23 +2539,29 @@ __initfunc(static void probe_for_hwifs (void))
 			extern void ide_probe_for_rz100x(void);
 			ide_probe_for_rz100x();
 		}
-#endif	/* CONFIG_BLK_DEV_RZ1000 */
-#endif	/* CONFIG_BLK_DEV_IDEPCI */
+#endif /* CONFIG_BLK_DEV_RZ1000 */
+#ifdef CONFIG_BLK_DEV_SL82C105
+		{
+			extern void ide_probe_for_sl82c105(void);
+			ide_probe_for_sl82c105();
+		}
+#endif /* CONFIG_BLK_DEV_SL82C105 */
+#endif /* CONFIG_BLK_DEV_IDEPCI */
 	}
-#endif	/* CONFIG_PCI */
+#endif /* CONFIG_PCI */
 
 #ifdef CONFIG_BLK_DEV_CMD640
 	{
 		extern void ide_probe_for_cmd640x(void);
 		ide_probe_for_cmd640x();
 	}
-#endif	/* CONFIG_BLK_DEV_CMD640 */
+#endif /* CONFIG_BLK_DEV_CMD640 */
 #ifdef CONFIG_BLK_DEV_PDC4030
 	{
 		extern int init_pdc4030(void);
 		(void) init_pdc4030();
 	}
-#endif	/* CONFIG_BLK_DEV_PDC4030 */
+#endif /* CONFIG_BLK_DEV_PDC4030 */
 }
 
 __initfunc(void ide_init_builtin_drivers (void))

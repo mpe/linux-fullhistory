@@ -49,14 +49,12 @@ void isofs_put_super(struct super_block *sb)
 		sb->u.isofs_sb.s_nls_iocharset = NULL;
 	}
 #endif
-	lock_super(sb);
 
 #ifdef LEAK_CHECK
 	printk("Outstanding mallocs:%d, outstanding buffers: %d\n",
 	       check_malloc, check_bread);
 #endif
-	sb->s_dev = 0;
-	unlock_super(sb);
+
 	MOD_DEC_USE_COUNT;
 	return;
 }

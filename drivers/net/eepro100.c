@@ -59,7 +59,6 @@ static int max_interrupt_work = 200;
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/delay.h>
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/bitops.h>
@@ -120,6 +119,7 @@ struct device *init_etherdev(struct device *dev, int sizeof_priv,
 
 #if (LINUX_VERSION_CODE < 0x20123)
 #define test_and_set_bit(val, addr) set_bit(val, addr)
+#include <linux/bios32.h>
 #endif
 
 /* The total I/O port extent of the board.  Nominally 0x18, but rounded up
@@ -473,10 +473,16 @@ int eepro100_init(struct device *dev)
 {
 	int cards_found = 0;
 
-	if (pcibios_present()) {
+	if (pci_present()) {
 		static int pci_index = 0;
 		for (; pci_index < 8; pci_index++) {
-			unsigned char pci_bus, pci_device_fn, pci_irq_line, pci_latency;
+			unsigned char pci_bus, pci_device_fn, pci_latency;
+#if (LINUX_VERSION_CODE >= VERSION(2,1,85))
+			unsigned int pci_irq_line;
+			struct pci_dev *pdev;
+#else
+			unsigned char pci_irq_line;
+#endif
 #if (LINUX_VERSION_CODE >= VERSION(1,3,44))
 			int pci_ioaddr;
 #else
@@ -489,11 +495,17 @@ int eepro100_init(struct device *dev)
 									pci_index, &pci_bus,
 									&pci_device_fn))
 			  break;
+#if (LINUX_VERSION_CODE >= VERSION(2,1,85))
+			pdev = pci_find_slot(pci_bus, pci_device_fn);
+			pci_irq_line = pdev->irq;
+			pci_ioaddr = pdev->base_address[1];
+#else
 			pcibios_read_config_byte(pci_bus, pci_device_fn,
 									 PCI_INTERRUPT_LINE, &pci_irq_line);
 			/* Note: BASE_ADDRESS_0 is for memory-mapping the registers. */
 			pcibios_read_config_dword(pci_bus, pci_device_fn,
 									  PCI_BASE_ADDRESS_1, &pci_ioaddr);
+#endif
 			/* Remove I/O space marker in bit 0. */
 			pci_ioaddr &= ~3;
 			if (speedo_debug > 2)

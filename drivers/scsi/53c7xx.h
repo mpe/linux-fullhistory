@@ -1247,14 +1247,6 @@ struct NCR53c7x0_hostdata {
 					   digits of part number */
 
     char valid_ids[8];			/* Valid SCSI ID's for adapter */
-    /*
-     * PCI bus, device, function, only for NCR53c8x0 chips.
-     * pci_valid indicates that the PCI configuration information
-     * is valid, and we can twiddle MAX_LAT, etc. as recommended
-     * for maximum performance in the NCR documentation.
-     */
-    unsigned char pci_bus, pci_device_fn;
-    unsigned pci_valid:1;
 
     u32 *dsp;				/* dsp to restart with after
 					   all stacked interrupts are

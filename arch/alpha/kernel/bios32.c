@@ -56,7 +56,6 @@ asmlinkage int sys_pciconfig_write()
 
 #else /* CONFIG_PCI */
 
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/malloc.h>
 #include <linux/mm.h>
@@ -553,55 +552,6 @@ static int layout_bus(struct pci_bus *bus)
 }
 
 #endif /* !PCI_MODIFY */
-
-
-/*
- * Given the vendor and device ids, find the n'th instance of that device
- * in the system.  
- */
-int pcibios_find_device (unsigned short vendor, unsigned short device_id,
-			 unsigned short index, unsigned char *bus,
-			 unsigned char *devfn)
-{
-	unsigned int curr = 0;
-	struct pci_dev *dev;
-
-	for (dev = pci_devices; dev; dev = dev->next) {
-		if (dev->vendor == vendor && dev->device == device_id) {
-			if (curr == index) {
-				*devfn = dev->devfn;
-				*bus = dev->bus->number;
-				return PCIBIOS_SUCCESSFUL;
-			}
-			++curr;
-		}
-	}
-	return PCIBIOS_DEVICE_NOT_FOUND;
-}
-
-
-/*
- * Given the class, find the n'th instance of that device
- * in the system.
- */
-int pcibios_find_class (unsigned int class_code, unsigned short index,
-			unsigned char *bus, unsigned char *devfn)
-{
-	unsigned int curr = 0;
-	struct pci_dev *dev;
-
-	for (dev = pci_devices; dev; dev = dev->next) {
-		if (dev->class == class_code) {
-			if (curr == index) {
-				*devfn = dev->devfn;
-				*bus = dev->bus->number;
-				return PCIBIOS_SUCCESSFUL;
-			}
-			++curr;
-		}
-	}
-	return PCIBIOS_DEVICE_NOT_FOUND;
-}
 
 
 int pcibios_present(void)
@@ -2247,6 +2197,11 @@ es1888_init(void)
 	return 0;
 }
 #endif /* CONFIG_ALPHA_MIATA */
+
+__initfunc(char *pcibios_setup(char *str))
+{
+	return str;
+}
 
 #ifdef CONFIG_ALPHA_SRM_SETUP
 void reset_for_srm(void)

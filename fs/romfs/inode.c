@@ -157,9 +157,6 @@ outnobh:
 static void
 romfs_put_super(struct super_block *sb)
 {
-	lock_super(sb);
-	sb->s_dev = 0;
-	unlock_super(sb);
 	MOD_DEC_USE_COUNT;
 	return;
 }

@@ -1342,10 +1342,7 @@ int dev_change_flags(struct device *dev, unsigned flags)
 	ret = 0;
 	if ((old_flags^flags)&IFF_UP)	/* Bit is different  ? */
 	{
-		if(old_flags&IFF_UP)		/* Gone down */
-			ret=dev_close(dev); 		
-		else				/* Come up */
-			ret=dev_open(dev);
+		ret = ((old_flags & IFF_UP) ? dev_close : dev_open)(dev);
 
 		if (ret == 0) 
 			dev_mc_upload(dev);

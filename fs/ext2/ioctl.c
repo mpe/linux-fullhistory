@@ -19,16 +19,18 @@
 int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 		unsigned long arg)
 {
-	unsigned long flags;
+	unsigned int flags;
 
 	ext2_debug ("cmd = %u, arg = %lu\n", cmd, arg);
 
 	switch (cmd) {
 	case EXT2_IOC_GETFLAGS:
+		flags = inode->u.ext2_i.i_flags & EXT2_FL_USER_VISIBLE;
 		return put_user(inode->u.ext2_i.i_flags, (int *) arg);
 	case EXT2_IOC_SETFLAGS:
 		if (get_user(flags, (int *) arg))
-			return -EFAULT;	
+			return -EFAULT;
+		flags = flags & EXT2_FL_USER_MODIFIABLE;
 		/*
 		 * The IMMUTABLE and APPEND_ONLY flags can only be changed by
 		 * the super user when the security level is zero.
@@ -44,7 +46,8 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 				return -EPERM;
 		if (IS_RDONLY(inode))
 			return -EROFS;
-		inode->u.ext2_i.i_flags = flags;
+		inode->u.ext2_i.i_flags = (inode->u.ext2_i.i_flags &
+					   ~EXT2_FL_USER_MODIFIABLE) | flags;
 		if (flags & EXT2_SYNC_FL)
 			inode->i_flags |= MS_SYNCHRONOUS;
 		else

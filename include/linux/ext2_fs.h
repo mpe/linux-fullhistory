@@ -31,6 +31,7 @@
  * Define EXT2_PREALLOCATE to preallocate data blocks for expanding files
  */
 #define EXT2_PREALLOCATE
+#define EXT2_DEFAULT_PREALLOC_BLOCKS	8
 
 /*
  * The second extended file system version
@@ -190,8 +191,18 @@ struct ext2_group_desc
 #define EXT2_APPEND_FL			0x00000020 /* writes to file may only append */
 #define EXT2_NODUMP_FL			0x00000040 /* do not dump file */
 #define EXT2_NOATIME_FL			0x00000080 /* do not update atime */
+/* Reserved for compression usage... */
+#define EXT2_DIRTY_FL			0x00000100
+#define EXT2_COMPRBLK_FL		0x00000200 /* One or more compressed clusters */
+#define EXT2_NOCOMP_FL			0x00000400 /* Don't compress */
+#define EXT2_ECOMPR_FL			0x00000800 /* Compression error */
+/* End compression flags --- maybe not all used */	
+#define EXT2_BTREE_FL			0x00001000 /* btree format dir */
 #define EXT2_RESERVED_FL		0x80000000 /* reserved for ext2 lib */
-	
+
+#define EXT2_FL_USER_VISIBLE		0x00001FFF /* User visible flags */
+#define EXT2_FL_USER_MODIFIABLE		0x000000FF /* User modifiable flags */
+
 /*
  * ioctl commands
  */
@@ -254,6 +265,8 @@ struct ext2_inode {
 		} masix2;
 	} osd2;				/* OS dependent 2 */
 };
+
+#define i_size_high	i_dir_acl
 
 #if defined(__KERNEL__) || defined(__linux__)
 #define i_reserved1	osd1.linux1.l_i_reserved1
@@ -367,8 +380,25 @@ struct ext2_super_block {
 	__u8	s_uuid[16];		/* 128-bit uuid for volume */
 	char	s_volume_name[16]; 	/* volume name */
 	char	s_last_mounted[64]; 	/* directory where last mounted */
-	__u32	s_reserved[206];	/* Padding to the end of the block */
+	__u32	s_algorithm_usage_bitmap; /* For compression */
+	/*
+	 * Performance hints.  Directory preallocation should only
+	 * happen if the EXT2_COMPAT_PREALLOC flag is on.
+	 */
+	__u8	s_prealloc_blocks;	/* Nr of blocks to try to preallocate*/
+	__u8	s_prealloc_dir_blocks;	/* Nr to preallocate for dirs */
+	__u16	s_padding1;
+	__u32	s_reserved[204];	/* Padding to the end of the block */
 };
+
+#ifdef __KERNEL__
+#define EXT2_SB(sb)	(&((sb)->u.ext2_sb))
+#else
+/* Assume that user mode programs are passing in an ext2fs superblock, not
+ * a kernel struct super_block.  This will allow us to call the feature-test
+ * macros from user land. */
+#define EXT2_SB(sb)	(sb)
+#endif
 
 /*
  * Codes for operating systems
@@ -394,11 +424,27 @@ struct ext2_super_block {
  * Feature set definitions
  */
 
+#define EXT2_HAS_COMPAT_FEATURE(sb,mask)			\
+	( EXT2_SB(sb)->s_feature_compat & (mask) )
+#define EXT2_HAS_RO_COMPAT_FEATURE(sb,mask)			\
+	( EXT2_SB(sb)->s_feature_ro_compat & (mask) )
+#define EXT2_HAS_INCOMPAT_FEATURE(sb,mask)			\
+	( EXT2_SB(sb)->s_feature_incompat & (mask) )
+
+#define EXT2_FEATURE_COMPAT_DIR_PREALLOC	0x0001
+
 #define EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER	0x0001
+#define EXT2_FEATURE_RO_COMPAT_LARGE_FILE	0x0002
+#define EXT2_FEATURE_RO_COMPAT_BTREE_DIR	0x0004
+
+#define EXT2_FEATURE_INCOMPAT_COMPRESSION	0x0001
+#define EXT2_FEATURE_INCOMPAT_FILETYPE		0x0002
 
 #define EXT2_FEATURE_COMPAT_SUPP	0
-#define EXT2_FEATURE_INCOMPAT_SUPP	0
-#define EXT2_FEATURE_RO_COMPAT_SUPP	EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER
+#define EXT2_FEATURE_INCOMPAT_SUPP	EXT2_FEATURE_INCOMPAT_FILETYPE
+#define EXT2_FEATURE_RO_COMPAT_SUPP	(EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER| \
+					 EXT2_FEATURE_RO_COMPAT_LARGE_FILE| \
+					 EXT2_FEATURE_RO_COMPAT_BTREE_DIR)
 
 /*
  * Default values for user and/or group using reserved blocks
@@ -417,6 +463,35 @@ struct ext2_dir_entry {
 	__u16	name_len;		/* Name length */
 	char	name[EXT2_NAME_LEN];	/* File name */
 };
+
+/*
+ * The new version of the directory entry.  Since EXT2 structures are
+ * stored in intel byte order, and the name_len field could never be
+ * bigger than 255 chars, it's safe to reclaim the extra byte for the
+ * file_type field.
+ */
+struct ext2_dir_entry_2 {
+	__u32	inode;			/* Inode number */
+	__u16	rec_len;		/* Directory entry length */
+	__u8	name_len;		/* Name length */
+	__u8	file_type;
+	char	name[EXT2_NAME_LEN];	/* File name */
+};
+
+/*
+ * Ext2 directory file types.  Only the low 3 bits are used.  The
+ * other bits are reserved for now.
+ */
+#define EXT2_FT_UNKNOWN		0
+#define EXT2_FT_REG_FILE	1
+#define EXT2_FT_DIR		2
+#define EXT2_FT_CHRDEV		3
+#define EXT2_FT_BLKDEV 		4
+#define EXT2_FT_FIFO		5
+#define EXT2_FT_SOCK		6
+#define EXT2_FT_SYMLINK		7
+
+#define EXT2_FT_MAX		8
 
 /*
  * EXT2_DIR_PAD defines the directory entries boundaries
@@ -451,13 +526,16 @@ extern void ext2_free_blocks (const struct inode *, unsigned long,
 			      unsigned long);
 extern unsigned long ext2_count_free_blocks (struct super_block *);
 extern void ext2_check_blocks_bitmap (struct super_block *);
+extern struct ext2_group_desc * ext2_get_group_desc(struct super_block * sb,
+						    unsigned int block_group,
+						    struct buffer_head ** bh);
 
 /* bitmap.c */
 extern unsigned long ext2_count_free (struct buffer_head *, unsigned);
 
 /* dir.c */
 extern int ext2_check_dir_entry (const char *, struct inode *,
-				 struct ext2_dir_entry *, struct buffer_head *,
+				 struct ext2_dir_entry_2 *, struct buffer_head *,
 				 unsigned long);
 
 /* file.c */

@@ -407,8 +407,6 @@ static void ncp_put_super(struct super_block *sb)
 {
 	struct ncp_server *server = NCP_SBP(sb);
 
-	lock_super(sb);
-
 	ncp_lock_server(server);
 	ncp_disconnect(server);
 	ncp_unlock_server(server);
@@ -423,9 +421,6 @@ static void ncp_put_super(struct super_block *sb)
 	ncp_kfree_s(server->packet, server->packet_size);
 
 	ncp_kfree_s(NCP_SBP(sb), sizeof(struct ncp_server));
-
-	sb->s_dev = 0;
-	unlock_super(sb);
 
 	MOD_DEC_USE_COUNT;
 }

@@ -123,8 +123,8 @@
 #include "hosts.h"
 
 
-#define IN2000_VERSION    "1.31"
-#define IN2000_DATE       "06/July/1997"
+#define IN2000_VERSION    "1.32"
+#define IN2000_DATE       "28/March/1998"
 
 /*
  * Note - the following defines have been moved to 'in2000.h':
@@ -2031,18 +2031,12 @@ char buf[32];
          continue;
          }
 
-/* Let's expect only known legal hardware version here. There
- * can't be THAT many of them, and it's easy to add new ones
- * as we hear about them.
+/* Let's assume any hardware version will work, although the driver
+ * has only been tested on 0x21, 0x22, 0x25, 0x26, and 0x27. We'll
+ * print out the rev number for reference later, but accept them all.
  */
 
       hrev = inb(base + IO_HARDWARE);
-      if ((hrev != 0x27) && (hrev != 0x26) && (hrev != 0x25)) {
-         printk("The IN-2000 SCSI card at IOport 0x%03x ",base);
-         printk("has unknown version %02x hardware - ",hrev);
-         printk("Sorry, cancelling detection.\n");
-         continue;
-         }
 
   /* Bit 2 tells us if interrupts are disabled */
       if (switches & SW_DISINT) {

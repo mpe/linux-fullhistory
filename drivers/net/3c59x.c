@@ -65,7 +65,6 @@ static int max_interrupt_work = 20;
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/timer.h>
 #include <asm/irq.h>			/* For NR_IRQS only. */
 #include <asm/bitops.h>
@@ -113,6 +112,7 @@ static int max_interrupt_work = 20;
 
 #if LINUX_VERSION_CODE < 0x20115
 #define test_and_set_bit(val, addr) set_bit(val, addr)
+#include <linux/bios32.h>
 #elif defined(MODULE)
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
 MODULE_DESCRIPTION("3Com 3c590/3c900 series Vortex/Boomerang driver");
@@ -532,12 +532,18 @@ static int vortex_scan(struct device *dev)
 	   be best done a central PCI probe dispatch, which wouldn't work
 	   well with the current structure.  So instead we detect 3Com cards
 	   in slot order. */
-	if (pcibios_present()) {
+	if (pci_present()) {
 		static int pci_index = 0;
 		unsigned char pci_bus, pci_device_fn;
 
 		for (;pci_index < 0xff; pci_index++) {
-			unsigned char pci_irq_line, pci_latency;
+#if LINUX_VERSION_CODE >= 0x20155
+			unsigned int pci_irq_line;
+			struct pci_dev *pdev;
+#else
+			unsigned char pci_irq_line;
+#endif
+			unsigned char pci_latency;
 			unsigned short pci_command, new_command, vendor, device;
 			unsigned int pci_ioaddr;
 			int board_index = 0;
@@ -550,10 +556,16 @@ static int vortex_scan(struct device *dev)
 									 PCI_VENDOR_ID, &vendor);
 			pcibios_read_config_word(pci_bus, pci_device_fn,
 									 PCI_DEVICE_ID, &device);
+#if LINUX_VERSION_CODE >= 0x20155
+			pdev = pci_find_slot(pci_bus, pci_device_fn);
+			pci_irq_line = pdev->irq;
+			pci_ioaddr = pdev->base_address[0];
+#else
 			pcibios_read_config_byte(pci_bus, pci_device_fn,
 									 PCI_INTERRUPT_LINE, &pci_irq_line);
 			pcibios_read_config_dword(pci_bus, pci_device_fn,
 									  PCI_BASE_ADDRESS_0, &pci_ioaddr);
+#endif
 			pcibios_read_config_word(pci_bus, pci_device_fn,
 									 PCI_COMMAND, &pci_command);
 			/* Remove I/O space marker in bit 0. */

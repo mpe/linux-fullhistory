@@ -442,7 +442,7 @@ __asm__("cld\n\t" \
 		case 0: COMMON(""); return to;
 		case 1: COMMON("\n\tmovsb"); return to;
 		case 2: COMMON("\n\tmovsw"); return to;
-		case 3: COMMON("\n\tmovsw\n\tmovsb"); return to;
+		default: COMMON("\n\tmovsw\n\tmovsb"); return to;
 	}
 #undef COMMON
 }
@@ -593,7 +593,7 @@ __asm__("cld\n\t" \
 		case 0: COMMON(""); return s;
 		case 1: COMMON("\n\tstosb"); return s;
 		case 2: COMMON("\n\tstosw"); return s;
-		case 3: COMMON("\n\tstosw\n\tstosb"); return s;
+		default: COMMON("\n\tstosw\n\tstosb"); return s;
 	}
 #undef COMMON
 }

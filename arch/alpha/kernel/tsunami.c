@@ -7,7 +7,6 @@
 #include <linux/kernel.h>
 #include <linux/config.h>
 #include <linux/types.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/sched.h>
 

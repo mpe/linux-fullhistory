@@ -30,7 +30,6 @@
 #include <linux/head.h>
 #include <linux/types.h>
 #include <linux/string.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
@@ -632,7 +631,7 @@ VOID ReadFlash (PADAPTER2220I hostdata, VOID *pdata, ULONG base, ULONG length)
  ****************************************************************/
 int Pci2220i_Detect (Scsi_Host_Template *tpnt)
 	{
-	int					pci_index = 0;
+	struct pci_dev	   *pdev = NULL;
 	struct Scsi_Host   *pshost;
 	PADAPTER2220I	    hostdata;
 	ULONG				modearray[] = {DALE_DATA_MODE2, DALE_DATA_MODE3, DALE_DATA_MODE4, DALE_DATA_MODE4P};
@@ -640,20 +639,13 @@ int Pci2220i_Detect (Scsi_Host_Template *tpnt)
 	int					z;
 	int					setirq;
 
-	if ( pcibios_present () )
-		{
-		for ( pci_index = 0;  pci_index <= MAXADAPTER;  ++pci_index )
+	if ( pci_present () )
+		while ((pdev = pci_find_device(VENDOR_PSI, DEVICE_DALE_1, pdev)))
 			{
-			UCHAR	pci_bus, pci_device_fn;
-
-			if ( pcibios_find_device (VENDOR_PSI, DEVICE_DALE_1, pci_index, &pci_bus, &pci_device_fn) != 0 )
-				break;
-
 			pshost = scsi_register (tpnt, sizeof(ADAPTER2220I));
 			hostdata = HOSTDATA(pshost);
 
-			pcibios_read_config_word (pci_bus, pci_device_fn, PCI_BASE_ADDRESS_1, &hostdata->basePort);
-			hostdata->basePort &= 0xFFFE;
+			hostdata->basePort = pdev->base_address[1] & PCI_BASE_ADDRESS_IO_MASK;
 			DEB (printk ("\nBase Regs = %#04X", hostdata->basePort));
 			hostdata->regRemap		= hostdata->basePort + RTR_LOCAL_REMAP;				// 32 bit local space remap
 			DEB (printk (" %#04X", hostdata->regRemap));
@@ -666,8 +658,7 @@ int Pci2220i_Detect (Scsi_Host_Template *tpnt)
 			hostdata->regScratchPad	= hostdata->basePort + RTR_MAILBOX;	  				// 16 byte scratchpad I/O base address
 			DEB (printk (" %#04X", hostdata->regScratchPad));
 
-			pcibios_read_config_word (pci_bus, pci_device_fn, PCI_BASE_ADDRESS_2, &hostdata->regBase);
-			hostdata->regBase &= 0xFFFE;
+			hostdata->regBase = pdev->base_address[2] & PCI_BASE_ADDRESS_IO_MASK;
 			for ( z = 0;  z < 9;  z++ )													// build regester address array
 				hostdata->ports[z] = hostdata->regBase + 0x80 + (z * 4);
 			hostdata->ports[PORT_FAIL] = hostdata->regBase + REG_FAIL;
@@ -691,11 +682,11 @@ int Pci2220i_Detect (Scsi_Host_Template *tpnt)
 			if ( !inb_p (hostdata->regScratchPad + DALE_NUM_DRIVES) )					// if no devices on this board
 				goto unregister;
 
-			pcibios_read_config_byte (pci_bus, pci_device_fn, PCI_INTERRUPT_LINE, &pshost->irq);
+			pshost->irq = pdev->irq;
 			setirq = 1;
-			for ( z = 0;  z < pci_index;  z++ )											// scan for shared interrupts
+			for ( z = 0;  z < NumAdapters;  z++ )										// scan for shared interrupts
 				{
-				if ( PsiHost[z]->irq == pshost->irq )						// if shared then, don't posses
+				if ( PsiHost[z]->irq == pshost->irq )									// if shared then, don't posses
 					setirq = 0;
 				}
 			if ( setirq )																// if not shared, posses
@@ -706,7 +697,7 @@ int Pci2220i_Detect (Scsi_Host_Template *tpnt)
 					goto unregister;
 					}
 				}
-			PsiHost[pci_index]	= pshost;												// save SCSI_HOST pointer
+			PsiHost[NumAdapters]	= pshost;											// save SCSI_HOST pointer
 
 			pshost->unique_id	= hostdata->regBase;
 			pshost->max_id		= 4;
@@ -743,7 +734,6 @@ unregister:
 			scsi_unregister (pshost);
 			NumAdapters++;
 			}
-		}
 	return NumAdapters;
 	}
 /****************************************************************

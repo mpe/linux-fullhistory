@@ -780,16 +780,26 @@ char * d_path(struct dentry *dentry, char *buffer, int buflen)
 asmlinkage int sys_getcwd(char *buf, unsigned long size)
 {
 	int error;
-	unsigned long len;
-	char * page = (char *) __get_free_page(GFP_USER);
-	char * cwd = d_path(current->fs->pwd, page, PAGE_SIZE);
+	struct dentry *pwd = current->fs->pwd; 
 
-	error = -ERANGE;
-	len = PAGE_SIZE + page - cwd;
-	if (len <= size) {
-		error = len;
-		if (copy_to_user(buf, cwd, len))
-			error = -EFAULT;
+	error = -ENOENT;
+	/* Has the current directory has been unlinked? */
+	if (pwd->d_parent != pwd && list_empty(&pwd->d_hash)) {
+		char *page = (char *) __get_free_page(GFP_USER);
+		error = -ENOMEM;
+		if (page) {
+			unsigned long len;
+			char * cwd = d_path(pwd, page, PAGE_SIZE);
+
+			error = -ERANGE;
+			len = PAGE_SIZE + page - cwd;
+			if (len <= size) {
+				error = len;
+				if (copy_to_user(buf, cwd, len))
+					error = -EFAULT;
+			}
+			free_page((unsigned long) page);
+		}
 	}
 	return error;
 }

@@ -82,7 +82,6 @@ static const rx_copybreak = 100;
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -125,7 +124,9 @@ char kernel_version[] = UTS_RELEASE;
 #include <linux/delay.h>
 #endif
 #if (LINUX_VERSION_CODE >= 0x20100)
+#ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
+#endif
 #endif
 #ifdef SA_SHIRQ
 #define IRQ(irq, dev_id, pt_regs) (irq, dev_id, pt_regs)
@@ -135,6 +136,7 @@ char kernel_version[] = UTS_RELEASE;
 
 #if (LINUX_VERSION_CODE < 0x20123)
 #define test_and_set_bit(val, addr) set_bit(val, addr)
+#include <linux/bios32.h>
 #endif
 
 /* This my implementation of shared IRQs, now only used for 1.2.13. */
@@ -453,11 +455,17 @@ int tulip_probe(struct device *dev)
 	   well with the current structure.  So instead we detect just the
 	   Tulip cards in slot order. */
 
-	if (pcibios_present()) {
+	if (pci_present()) {
 		unsigned char pci_bus, pci_device_fn;
 
 		for (;pci_index < 0xff; pci_index++) {
-			unsigned char pci_irq_line, pci_latency;
+			unsigned char pci_latency;
+#if LINUX_VERSION_CODE >= 0x20155
+			unsigned int pci_irq_line;
+			struct pci_dev *pdev;
+#else
+			unsigned char pci_irq_line;
+#endif
 			unsigned short pci_command, vendor, device;
 			unsigned int pci_ioaddr, chip_idx = 0;
 
@@ -473,10 +481,16 @@ int tulip_probe(struct device *dev)
 									 PCI_VENDOR_ID, &vendor);
 			pcibios_read_config_word(pci_bus, pci_device_fn,
 									 PCI_DEVICE_ID, &device);
+#if LINUX_VERSION_CODE >= 0x20155
+			pdev = pci_find_slot(pci_bus, pci_device_fn);
+			pci_irq_line = pdev->irq;
+			pci_ioaddr = pdev->base_address[0];
+#else
 			pcibios_read_config_byte(pci_bus, pci_device_fn,
 									 PCI_INTERRUPT_LINE, &pci_irq_line);
 			pcibios_read_config_dword(pci_bus, pci_device_fn,
 									  PCI_BASE_ADDRESS_0, &pci_ioaddr);
+#endif
 			/* Remove I/O space marker in bit 0. */
 			pci_ioaddr &= ~3;
 

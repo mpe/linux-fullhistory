@@ -974,8 +974,7 @@ CONFIG_TGA_CONSOLE
   that implements the TGA interface (much like the VGA standard, but
   older TGA adapters are *not* VGA compatible).  On such systems, you
   should say Y here so that the TGA driver rather than the standard
-  VGA driver is used.  Note that, at this time, there is no X server
-  for these systems. If unsure, try N.
+  VGA driver is used.
 
 PCI support
 CONFIG_PCI
@@ -1019,9 +1018,13 @@ CONFIG_PCI_OPTIMIZE
 
 Backward-compatible /proc/pci
 CONFIG_PCI_OLD_PROC
-  If you say Y here and to the "/proc filesystem support" below, you
-  will get a directory /proc/pci with information about your PCI
-  hardware. If unsure, say Y.
+  Older kernels supported a /proc/pci file containing brief textual
+  description of all PCI devices in the system. Several programs tried
+  to parse this file, so it became almost impossible to add new
+  fields without breaking compatibility. So a new /proc interface to
+  PCI (/proc/bus/pci) has been implemented and the old one is supported
+  for compatibility reasons only (you can disable it here, gaining
+  some memory).  If unsure, say Y.
 
 MCA support
 CONFIG_MCA
@@ -5343,7 +5346,7 @@ CONFIG_ROMFS_FS
   M here and read Documentation/modules.txt. If you don't know whether
   you need it, then you don't need it: say N.
 
-Kernel automounter support (experimental)
+Kernel automounter support
 CONFIG_AUTOFS_FS
   The automounter is a tool to automatically mount remote filesystems
   on demand.  This implementation is partially kernel-based to reduce
@@ -5421,6 +5424,13 @@ CONFIG_ADFS_FS
   inserted in and removed from the running kernel whenever you want).
   If you want to compile it as a module, say M here and read
   Documentation/modules.txt.
+
+/dev/pts filesystem
+CONFIG_DEVPTS_FS
+  A filesystem which when mounted on /dev/pts and used in conjunction
+  with the /dev/ptmx multiplexing pty device, should allow full
+  support for Unix98 pty's without requiring setuid or daemons.  glibc
+  2.1 contains the requisite support for this mode of operation.
 
 Macintosh partition map support
 CONFIG_MAC_PARTITION

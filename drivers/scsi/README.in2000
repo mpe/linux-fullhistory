@@ -1,4 +1,11 @@
 
+UPDATE NEWS: version 1.32 - 28 Mar 98
+
+   Removed the check for legal IN2000 hardware versions:
+   It appears that the driver works fine with serial
+   EPROMs (the 8-pin chip that defines hardware rev) as
+   old as 2.1, so we'll assume that all cards are OK.
+
 UPDATE NEWS: version 1.31 - 6 Jul 97
 
    Fixed a bug that caused incorrect SCSI status bytes to be

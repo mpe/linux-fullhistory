@@ -17,7 +17,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -67,6 +67,13 @@ extern void ide_init_ns87415(ide_hwif_t *);
 #define INIT_NS87415	IDE_IGNORE
 #endif
 
+#ifdef CONFIG_BLK_DEV_CMD646
+extern void ide_init_cmd646(ide_hwif_t *);
+#define INIT_CMD646	&ide_init_cmd646
+#else
+#define INIT_CMD646	IDE_IGNORE
+#endif
+
 #ifdef CONFIG_BLK_DEV_RZ1000
 extern void ide_init_rz1000(ide_hwif_t *);
 #define INIT_RZ1000	&ide_init_rz1000
@@ -99,7 +106,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_CMD640,	"CMD640",	IDE_IGNORE,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
 	{DEVID_NS87410,	"NS87410",	NULL,		{{0x43,0x08,0x08}, {0x47,0x08,0x08}} },
 	{DEVID_SIS5513,	"SIS5513",	NULL,		{{0x4a,0x02,0x02}, {0x4a,0x04,0x04}} },
-	{DEVID_CMD646,	"CMD646",	NULL,		{{0x00,0x00,0x00}, {0x51,0x80,0x80}} },
+	{DEVID_CMD646,	"CMD646",	INIT_CMD646,	{{0x00,0x00,0x00}, {0x51,0x80,0x80}} },
 	{DEVID_HT6565,	"HT6565",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
 	{DEVID_OPTI621,	"OPTI621",	INIT_OPTI621,	{{0x45,0x80,0x00}, {0x40,0x08,0x00}} },
 	{DEVID_OPTI621X,"OPTI621X",	INIT_OPTI621,	{{0x45,0x80,0x00}, {0x40,0x08,0x00}} },
@@ -137,7 +144,7 @@ unsigned long ide_find_free_region (unsigned short size) /* __init */
  * Match a PCI IDE port against an entry in ide_hwifs[],
  * based on io_base port if possible.
  */
-__initfunc(static ide_hwif_t *ide_match_hwif (unsigned int io_base, const char *name))
+__initfunc(static ide_hwif_t *ide_match_hwif (unsigned long io_base, const char *name))
 {
 	int h;
 	ide_hwif_t *hwif;
@@ -163,7 +170,7 @@ __initfunc(static ide_hwif_t *ide_match_hwif (unsigned int io_base, const char *
 		if (hwif->io_ports[IDE_DATA_OFFSET] == io_base) {
 			if (hwif->chipset == ide_unknown)
 				return hwif; /* match */
-			printk("%s: port 0x%04x already claimed by %s\n", name, io_base, hwif->name);
+			printk("%s: port 0x%04lx already claimed by %s\n", name, io_base, hwif->name);
 			return NULL;	/* already claimed */
 		}
 	}
@@ -188,7 +195,7 @@ __initfunc(static ide_hwif_t *ide_match_hwif (unsigned int io_base, const char *
 	return NULL;
 }
 
-__initfunc(static int ide_setup_pci_baseregs (byte bus, byte fn, const char *name))
+__initfunc(static int ide_setup_pci_baseregs (struct pci_dev *dev, const char *name))
 {
 	unsigned int base, readback;
 	byte reg, progif = 0;
@@ -196,14 +203,14 @@ __initfunc(static int ide_setup_pci_baseregs (byte bus, byte fn, const char *nam
 	/*
 	 * Place both IDE interfaces into PCI "native" mode:
 	 */
-	if (pcibios_read_config_byte(bus, fn, 0x09, &progif) || (progif & 5) != 5) {
+	if (pci_read_config_byte(dev, PCI_CLASS_PROG, &progif) || (progif & 5) != 5) {
 		if ((progif & 0xa) != 0xa) {
 			printk("%s: device not capable of full native PCI mode\n", name);
 			return 1;
 		}
 		printk("%s: placing both ports into native PCI mode\n", name);
-		(void) pcibios_write_config_byte(bus, fn, 0x09, progif|5);
-		if (pcibios_read_config_byte(bus, fn, 0x09, &progif) || (progif & 5) != 5) {
+		(void) pci_write_config_byte(dev, PCI_CLASS_PROG, progif|5);
+		if (pci_read_config_byte(dev, PCI_CLASS_PROG, &progif) || (progif & 5) != 5) {
 			printk("%s: rewrite of PROGIF failed, wanted 0x%04x, got 0x%04x\n", name, progif|5, progif);
 			return 1;
 		}
@@ -213,9 +220,10 @@ __initfunc(static int ide_setup_pci_baseregs (byte bus, byte fn, const char *nam
 	 */
 	if (!(base = ide_find_free_region(32)))
 		return 1;
-	for (reg = 0x10; reg <= 0x1c; reg += 4, base += 8) {
-		(void) pcibios_write_config_dword(bus, fn, reg, base|1);
-		if (pcibios_read_config_dword(bus, fn, reg, &readback) || (readback &= ~1) != base) {
+	for (reg = 0; reg < 4; reg++, base += 8) {
+		(void) pci_write_config_dword(dev, PCI_BASE_ADDRESS_0 + reg, base | PCI_BASE_ADDRESS_SPACE_IO);
+		if (pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + reg, &readback) ||
+		    readback != (base | PCI_BASE_ADDRESS_SPACE_IO)) {
 			printk("%s: readback failed for basereg 0x%02x: wrote 0x%04x, read 0x%x04\n", name, reg, base, readback);
 			return 1;
 		}
@@ -233,22 +241,19 @@ __initfunc(static int ide_setup_pci_baseregs (byte bus, byte fn, const char *nam
  * we "know" about, this information is in the ide_pci_device_t struct;
  * for all other chipsets, we just assume both interfaces are enabled.
  */
-__initfunc(static void ide_setup_pci_device (byte bus, byte fn, unsigned int ccode, ide_pci_device_t *d))
+__initfunc(static void ide_setup_pci_device (struct pci_dev *dev, ide_pci_device_t *d))
 {
-	unsigned int port, at_least_one_hwif_enabled = 0, no_autodma = 0;
+	unsigned int port, at_least_one_hwif_enabled = 0, no_autodma = 0, pciirq = 0;
 	unsigned short pcicmd = 0, tried_config = 0;
-	byte tmp = 0, progif = 0, pciirq = 0;
+	byte tmp = 0;
 	ide_hwif_t *hwif, *mate = NULL;
 
 check_if_enabled:
-	if (pcibios_read_config_word(bus, fn, 0x04, &pcicmd)
-	 || pcibios_read_config_byte(bus, fn, 0x09, &progif)
-	 || pcibios_read_config_byte(bus, fn, 0x3c, &pciirq))
-	{
+	if (pci_read_config_word(dev, PCI_COMMAND, &pcicmd)) {
 		printk("%s: error accessing PCI regs\n", d->name);
 		return;
 	}
-	if (!(pcicmd & 1)) {	/* is device disabled? */
+	if (!(pcicmd & PCI_COMMAND_IO)) {	/* is device disabled? */
 		/*
 		 * PnP BIOS was *supposed* to have set this device up for us,
 		 * but we can do it ourselves, so long as the BIOS has assigned an IRQ
@@ -257,9 +262,8 @@ check_if_enabled:
 		 * but we'll eventually ignore it again if no drives respond.
 		 */
 		if (tried_config++
-		 || ide_setup_pci_baseregs(bus, fn, d->name)
-		 || pcibios_write_config_word(bus, fn, 0x04, pcicmd|1))
-		{
+		 || ide_setup_pci_baseregs(dev, d->name)
+		 || pci_write_config_word(dev, PCI_COMMAND, pcicmd | PCI_COMMAND_IO)) {
 			printk("%s: device disabled (BIOS)\n", d->name);
 			return;
 		}
@@ -271,39 +275,47 @@ check_if_enabled:
 	/*
 	 * Can we trust the reported IRQ?
 	 */
-	if ((ccode >> 16) != PCI_CLASS_STORAGE_IDE || (progif & 5) != 5) {
+	pciirq = dev->irq;
+	if ((dev->class & ~(0xfa)) != ((PCI_CLASS_STORAGE_IDE << 8) | 5)) {
 		printk("%s: not 100%% native mode: will probe irqs later\n", d->name);
 		pciirq = 0;
 	} else if (tried_config) {
 		printk("%s: will probe irqs later\n", d->name);
 		pciirq = 0;
-	} else if (!pciirq || pciirq >= NR_IRQS) {
-		printk("%s: bad irq from BIOS (%d): will probe later\n", d->name, pciirq);
+	} else if (!pciirq) {
+		printk("%s: bad irq (%d): will probe later\n", d->name, pciirq);
 		pciirq = 0;
 	} else {
+#ifdef __sparc_v9__
+		printk("%s: 100%% native mode on irq %08x\n", d->name, pciirq);
+#else
 		printk("%s: 100%% native mode on irq %d\n", d->name, pciirq);
+#endif
 	}
 	/*
 	 * Set up the IDE ports
 	 */
 	for (port = 0; port <= 1; ++port) {
-		unsigned int base = 0, ctl = 0;
+		unsigned long base = 0, ctl = 0;
 		ide_pci_enablebit_t *e = &(d->enablebits[port]);
-		if (e->reg && (pcibios_read_config_byte(bus, fn, e->reg, &tmp) || (tmp & e->mask) != e->val))
+		if (e->reg && (pci_read_config_byte(dev, e->reg, &tmp) || (tmp & e->mask) != e->val))
 			continue;	/* port not enabled */
-		if (pcibios_read_config_dword(bus, fn, 0x14+(port*8), &ctl) || (ctl &= ~3) == 0)
+		ctl = dev->base_address[1+2*port] & PCI_BASE_ADDRESS_IO_MASK;
+		if (!ctl)
 			ctl = port ? 0x374 : 0x3f4;	/* use default value */
-		if (pcibios_read_config_dword(bus, fn, 0x10+(port*8), &base) || (base &= ~7) == 0)
+		base = dev->base_address[2*port] & ~7;
+
+		if (!base)
 			base = port ? 0x170 : 0x1f0;	/* use default value */
 		if ((hwif = ide_match_hwif(base, d->name)) == NULL)
 			continue;	/* no room in ide_hwifs[] */
 		if (hwif->io_ports[IDE_DATA_OFFSET] != base) {
 			ide_init_hwif_ports(hwif->io_ports, base, NULL);
 			hwif->io_ports[IDE_CONTROL_OFFSET] = ctl + 2;
+			hwif->noprobe = !hwif->io_ports[IDE_DATA_OFFSET];
 		}
 		hwif->chipset = ide_pci;
-		hwif->pci_bus = bus;
-		hwif->pci_fn = fn;
+		hwif->pci_dev = dev;
 		hwif->pci_devid = d->devid;
 		hwif->channel = port;
 		if (!hwif->irq)
@@ -315,16 +327,18 @@ check_if_enabled:
 		if (no_autodma)
 			hwif->no_autodma = 1;
 #ifdef CONFIG_BLK_DEV_IDEDMA
-		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246) || ((ccode >> 16) == PCI_CLASS_STORAGE_IDE && (ccode & 0x8000))) {
+		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246) ||
+		    ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && (dev->class & 0x80))) {
 			unsigned int extra = (!mate && IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246)) ? 16 : 0;
-			unsigned long dma_base = ide_get_or_set_dma_base(hwif, extra, d->name);
-			if (dma_base && !(pcicmd & 4)) {
+			unsigned long dma_base = ide_get_or_set_dma_base(dev, hwif, extra, d->name);
+			if (dma_base && !(pcicmd & PCI_COMMAND_MASTER)) {
 				/*
  	 			 * Set up BM-DMA capability (PnP BIOS should have done this)
  	 			 */
+printk("%s: %s enabling Bus-Master DMA\n", hwif->name, d->name);
 				hwif->no_autodma = 1;	/* default DMA off if we had to configure it here */
-				(void) pcibios_write_config_word(bus, fn, 0x04, (pcicmd|4));
-				if (pcibios_read_config_word(bus, fn, 0x04, &pcicmd) || !(pcicmd & 4)) {
+				(void) pci_write_config_word(dev, PCI_COMMAND, pcicmd | PCI_COMMAND_MASTER);
+				if (pci_read_config_word(dev, PCI_COMMAND, &pcicmd) || !(pcicmd & PCI_COMMAND_MASTER)) {
 					printk("%s: %s error updating PCICMD\n", hwif->name, d->name);
 					dma_base = 0;
 				}
@@ -332,8 +346,7 @@ check_if_enabled:
 			if (dma_base)
 				ide_setup_dma(hwif, dma_base, 8);
 			else
-				printk("%s: %s Bus-Master DMA disabled (BIOS), pcicmd=0x%04x, ccode=0x%04x, dma_base=0x%04lx\n",
-				 hwif->name, d->name, pcicmd, ccode, dma_base);
+				printk("%s: %s Bus-Master DMA disabled (BIOS)\n", hwif->name, d->name);
 		}
 #endif	/* CONFIG_BLK_DEV_IDEDMA */
 		if (d->init_hwif)  /* Call chipset-specific routine for each enabled hwif */
@@ -346,66 +359,32 @@ check_if_enabled:
 }
 
 /*
- * ide_scan_pci_device() examines all functions of a PCI device,
- * looking for IDE interfaces and/or devices in ide_pci_chipsets[].
- * We cannot use pcibios_find_class() cuz it doesn't work in all systems.
+ * ide_scan_pcibus() gets invoked at boot time from ide.c.
+ * It finds all PCI IDE controllers and calls ide_setup_pci_device for them.
  */
-static inline void ide_scan_pci_device (unsigned int bus, unsigned int fn)
+__initfunc(void ide_scan_pcibus (void))
 {
-	unsigned int		ccode;
+	struct pci_dev		*dev;
 	ide_pci_devid_t		devid;
 	ide_pci_device_t	*d;
-	byte			hedt;
 
-	if (pcibios_read_config_byte(bus, fn, 0x0e, &hedt))
-		hedt = 0;
-	do {
-		if (pcibios_read_config_word(bus, fn, 0x00, &devid.vid)
-		 || devid.vid == 0xffff
-		 || pcibios_read_config_word(bus, fn, 0x02, &devid.did)
-		 || IDE_PCI_DEVID_EQ(devid, IDE_PCI_DEVID_NULL)
-		 || pcibios_read_config_dword(bus, fn, 0x08, &ccode))
-			return;
-		/* 
-		 * workaround Intel Advanced/ZP with bios <= 1.04;
-		 * these appear in some Dell Dimension XPS's 
-		 */
-		if (!hedt && IDE_PCI_DEVID_EQ(devid, DEVID_PIIXa)) {
-			printk("ide: implementing workaround for PIIX detection\n");
-		        hedt = 0x80;
-		}
-
+	if (!pci_present())
+		return;
+	for(dev = pci_devices; dev; dev=dev->next) {
+		devid.vid = dev->vendor;
+		devid.did = dev->device;
 		for (d = ide_pci_chipsets; d->devid.vid && !IDE_PCI_DEVID_EQ(d->devid, devid); ++d);
 		if (d->init_hwif == IDE_IGNORE)
 			printk("%s: ignored by ide_scan_pci_device() (uses own driver)\n", d->name);
-		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_OPTI621V) && !(fn & 1))
+		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_OPTI621V) && !(PCI_FUNC(dev->devfn) & 1))
 			continue;	/* OPTI Viper-M uses same devid for functions 0 and 1 */
-		else if (!IDE_PCI_DEVID_EQ(d->devid, IDE_PCI_DEVID_NULL) || (ccode >> 16) == PCI_CLASS_STORAGE_IDE) {
+		else if (!IDE_PCI_DEVID_EQ(d->devid, IDE_PCI_DEVID_NULL) || (dev->class >> 8) == PCI_CLASS_STORAGE_IDE) {
 			if (IDE_PCI_DEVID_EQ(d->devid, IDE_PCI_DEVID_NULL))
-				printk("%s: unknown IDE controller on PCI bus %d function %d, VID=%04x, DID=%04x\n",
-					d->name, bus, fn, devid.vid, devid.did);
+				printk("%s: unknown IDE controller on PCI bus %02x device %02x, VID=%04x, DID=%04x\n",
+					d->name, dev->bus->number, dev->devfn, devid.vid, devid.did);
 			else
-				printk("%s: IDE controller on PCI bus %d function %d\n", d->name, bus, fn);
-			ide_setup_pci_device(bus, fn, ccode, d);
-		}
-	} while ((hedt & 0x80) && (++fn & 7));
-}
-
-/*
- * ide_scan_pcibus() gets invoked at boot time from ide.c
- *
- * Loops over all PCI devices on all PCI buses, invoking ide_scan_pci_device().
- * We cannot use pcibios_find_class() cuz it doesn't work in all systems.
- */
-void ide_scan_pcibus (void) /* __init */
-{
-	unsigned int bus, dev;
-
-	if (!pcibios_present())
-		return;
-	for (bus = 0; bus <= 255; ++bus) {
-		for (dev = 0; dev < 256; dev += 8) {
-			ide_scan_pci_device(bus, dev);
+				printk("%s: IDE controller on PCI bus %02x dev %02x\n", d->name, dev->bus->number, dev->devfn);
+			ide_setup_pci_device(dev, d);
 		}
 	}
 }

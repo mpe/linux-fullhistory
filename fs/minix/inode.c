@@ -59,7 +59,6 @@ void minix_put_super(struct super_block *sb)
 {
 	int i;
 
-	lock_super(sb);
 	if (!(sb->s_flags & MS_RDONLY)) {
 		sb->u.minix_sb.s_ms->s_state = sb->u.minix_sb.s_mount_state;
 		mark_buffer_dirty(sb->u.minix_sb.s_sbh, 1);
@@ -70,8 +69,7 @@ void minix_put_super(struct super_block *sb)
 		brelse(sb->u.minix_sb.s_zmap[i]);
 	brelse (sb->u.minix_sb.s_sbh);
 	kfree(sb->u.minix_sb.s_imap);
-	sb->s_dev = 0;
-	unlock_super(sb);
+
 	MOD_DEC_USE_COUNT;
 	return;
 }

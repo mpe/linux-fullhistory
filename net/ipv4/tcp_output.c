@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.81 1998/03/30 08:41:36 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.83 1998/04/03 08:10:45 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -109,6 +109,9 @@ void tcp_transmit_skb(struct sock *sk, struct sk_buff *skb)
 		th->check		= 0;
 		th->urg_ptr		= ntohs(tcb->urg_ptr);
 		if(tcb->flags & TCPCB_FLAG_SYN) {
+			/* RFC1323: The window in SYN & SYN/ACK segments
+			 * is never scaled.
+			 */
 			th->window	= htons(tp->rcv_wnd);
 			tcp_syn_build_options((__u32 *)(th + 1), sk->mss,
 					      sysctl_tcp_timestamps,
@@ -610,6 +613,24 @@ void tcp_send_fin(struct sock *sk)
 		TCP_SKB_CB(skb)->flags |= TCPCB_FLAG_FIN;
 		TCP_SKB_CB(skb)->end_seq++;
 		tp->write_seq++;
+
+		/* Special case to avoid Nagle bogosity.  If this
+		 * segment is the last segment, and it was queued
+		 * due to Nagle/SWS-avoidance, send it out now.
+		 */
+		if(tp->send_head == skb &&
+		   !sk->nonagle &&
+		   skb->len < (sk->mss >> 1) &&
+		   tp->packets_out &&
+		   !(TCP_SKB_CB(skb)->flags & TCPCB_FLAG_URG)) {
+			update_send_head(sk);
+			TCP_SKB_CB(skb)->when = jiffies;
+			tp->snd_nxt = TCP_SKB_CB(skb)->end_seq;
+			tp->packets_out++;
+			tcp_transmit_skb(sk, skb_clone(skb, GFP_ATOMIC));
+			if(!tcp_timer_is_set(sk, TIME_RETRANS))
+				tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
+		}
 	} else {
 		/* Socket is locked, keep trying until memory is available. */
 		do {
@@ -755,6 +776,8 @@ struct sk_buff * tcp_make_synack(struct sock *sk, struct dst_entry *dst,
 			&rcv_wscale);
 		req->rcv_wscale = rcv_wscale; 
 	}
+
+	/* RFC1323: The window in SYN & SYN/ACK segments is never scaled. */
 	th->window = htons(req->rcv_wnd);
 
 	TCP_SKB_CB(skb)->when = jiffies;

@@ -244,8 +244,6 @@
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
-#include <linux/bios32.h>
-#include <linux/pci.h>
 #include <linux/proc_fs.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
@@ -670,6 +668,7 @@ find_host (int host) {
     return h;
 }
 
+#if 0
 /*
  * Function : request_synchronous (int host, int target)
  * 
@@ -717,6 +716,7 @@ request_synchronous (int host, int target) {
     restore_flags(flags);
     return 0;
 }
+#endif
 
 /*
  * Function : request_disconnect (int host, int on_or_off)
@@ -1121,16 +1121,12 @@ NCR53c7x0_init (struct Scsi_Host *host) {
 
 /* 
  * Function : static int ncr53c7xx_init(Scsi_Host_Template *tpnt, int board, 
- *	int chip, u32 base, int io_port, int irq, int dma,
- *	long long options, int clock);
+ *	int chip, u32 base, int io_port, int irq, int dma, long long options,
+ *	int clock);
  *
  * Purpose : initializes a NCR53c7,8x0 based on base addresses,
  *	IRQ, and DMA channel.	
  *	
- *	Useful where a new NCR chip is backwards compatible with
- *	a supported chip, but the DEVICE ID has changed so it 
- *	doesn't show up when the autoprobe does a pcibios_find_device.
- *
  * Inputs : tpnt - Template for this SCSI adapter, board - board level
  *	product, chip - 710
  * 

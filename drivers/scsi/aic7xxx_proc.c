@@ -86,45 +86,18 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
 {
   struct Scsi_Host *HBAptr;
   struct aic7xxx_host *p;
-  int    found = FALSE;
   int    size = 0;
-  unsigned char i;
 #ifdef AIC7XXX_PROC_STATS
   struct aic7xxx_xferstats *sp;
   unsigned char target, lun;
+  int i;
 #endif
 
   HBAptr = NULL;
-  for (i=0; i < NUMBER(aic7xxx_boards); i++)
-  {
-    if ((HBAptr = aic7xxx_boards[i]) != NULL)
-    {
-      if (HBAptr->host_no == hostno)
-      {
-        break;
-      }
+  for(p=first_aic7xxx; p->host->host_no != hostno; p=p->next)
+    ;
 
-      while ((HBAptr->hostdata != NULL) && !found &&
-          ((HBAptr = ((struct aic7xxx_host *) HBAptr->hostdata)->next) != NULL))
-      {
-        if (HBAptr->host_no == hostno)
-        {
-          found = TRUE;
-        }
-      }
-
-      if (!found)
-      {
-        HBAptr = NULL;
-      }
-      else
-      {
-        break;
-      }
-    }
-  }
-
-  if (HBAptr == NULL)
+  if (!p)
   {
     size += sprintf(buffer, "Can't find adapter for host number %d\n", hostno);
     if (size > length)
@@ -136,6 +109,7 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
       return (length);
     }
   }
+  HBAptr = p->host;
 
   if (inout == TRUE) /* Has data been written to the file? */ 
   {
@@ -217,8 +191,8 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
   size += sprintf(BLS, "                         (%s chipset)\n",
       chip_names[p->chip_class]);
   size += sprintf(BLS, "               Host Bus: %s\n", bus_names[p->bus_type]);
-  size += sprintf(BLS, "                Base IO: %#.4x\n", p->base);
-  size += sprintf(BLS, "         Base IO Memory: 0x%x\n", p->mbase);
+  size += sprintf(BLS, "                Base IO: 0x%lx\n", p->base);
+  size += sprintf(BLS, "         Base IO Memory: 0x%lx\n", p->mbase);
   size += sprintf(BLS, "                    IRQ: %d\n", HBAptr->irq);
   size += sprintf(BLS, "                   SCBs: Used %d, HW %d, Page %d\n",
       p->scb_data->numscbs, p->scb_data->maxhscbs, p->scb_data->maxscbs);

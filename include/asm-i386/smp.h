@@ -155,7 +155,6 @@ struct mpc_config_intlocal
 extern int smp_found_config;
 extern int smp_scan_config(unsigned long, unsigned long);
 extern unsigned long smp_alloc_memory(unsigned long mem_base);
-extern unsigned char *apic_reg;
 extern unsigned char boot_cpu_id;
 extern unsigned long cpu_present_map;
 extern volatile int cpu_number_map[NR_CPUS];
@@ -192,24 +191,25 @@ extern volatile int smp_process_available;
  *	APIC handlers: Note according to the Intel specification update
  *	you should put reads between APIC writes.
  *	Intel Pentium processor specification update [11AP, pg 64]
- *		"Back to Back Assertions of HOLD May Cause Lost APIC Write Cycle"
+ *	"Back to Back Assertions of HOLD May Cause Lost APIC Write Cycle"
  */
+
+#define APIC_BASE ((char *)0xFEE00000)
 
 extern __inline void apic_write(unsigned long reg, unsigned long v)
 {
-	*((volatile unsigned long *)(apic_reg+reg))=v;
+	*((volatile unsigned long *)(APIC_BASE+reg))=v;
 }
 
 extern __inline unsigned long apic_read(unsigned long reg)
 {
-	return *((volatile unsigned long *)(apic_reg+reg));
+	return *((volatile unsigned long *)(APIC_BASE+reg));
 }
 
 /*
- *	This function is needed by all SMP systems. It must _always_ be valid from the initial
- *	startup. This may require magic on some systems (in the i86 case we dig out the boot 
- *	cpu id from the config and set up a fake apic_reg pointer so that before we activate
- *	the apic we get the right answer). Hopefully other processors are more sensible 8)
+ * This function is needed by all SMP systems. It must _always_ be valid
+ * from the initial startup. We map APIC_BASE very early in page_setup(),
+ * so this is correct in the x86 case.
  */
 
 #define smp_processor_id() (current->processor)
@@ -217,7 +217,7 @@ extern __inline unsigned long apic_read(unsigned long reg)
 extern __inline int hard_smp_processor_id(void)
 {
 	/* we don't want to mark this access volatile - bad code generation */
-	return GET_APIC_ID(*(unsigned long *)(apic_reg+APIC_ID));
+	return GET_APIC_ID(*(unsigned long *)(APIC_BASE+APIC_ID));
 }
 
 #endif /* !ASSEMBLY */

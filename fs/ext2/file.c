@@ -13,6 +13,9 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *
  *  ext2 fs regular file handling primitives
+ *
+ *  64-bit file support on 64-bit platforms by Jakub Jelinek
+ * 	(jj@sunsite.ms.mff.cuni.cz)
  */
 
 #include <asm/uaccess.h>
@@ -36,6 +39,23 @@
 static long long ext2_file_lseek(struct file *, long long, int);
 static ssize_t ext2_file_write (struct file *, const char *, size_t, loff_t *);
 static int ext2_release_file (struct inode *, struct file *);
+#if BITS_PER_LONG < 64
+static int ext2_open_file (struct inode *, struct file *);
+
+#else
+
+#define EXT2_MAX_SIZE(bits)							\
+	(((EXT2_NDIR_BLOCKS + (1LL << (bits - 2)) + 				\
+	   (1LL << (bits - 2)) * (1LL << (bits - 2)) + 				\
+	   (1LL << (bits - 2)) * (1LL << (bits - 2)) * (1LL << (bits - 2))) * 	\
+	  (1LL << bits)) - 1)
+
+static long long ext2_max_sizes[] = {
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+EXT2_MAX_SIZE(10), EXT2_MAX_SIZE(11), EXT2_MAX_SIZE(12), EXT2_MAX_SIZE(13)
+};
+
+#endif
 
 /*
  * We have mostly NULL's here: the current defaults are ok for
@@ -49,7 +69,11 @@ static struct file_operations ext2_file_operations = {
 	NULL,			/* poll - default */
 	ext2_ioctl,		/* ioctl */
 	generic_file_mmap,	/* mmap */
+#if BITS_PER_LONG == 64	
 	NULL,			/* no special open is needed */
+#else
+	ext2_open_file,
+#endif
 	ext2_release_file,	/* release */
 	ext2_sync_file,		/* fsync */
 	NULL,			/* fasync */
@@ -86,7 +110,6 @@ static long long ext2_file_lseek(
 	long long offset,
 	int origin)
 {
-	long long retval;
 	struct inode *inode = file->f_dentry->d_inode;
 
 	switch (origin) {
@@ -96,17 +119,20 @@ static long long ext2_file_lseek(
 		case 1:
 			offset += file->f_pos;
 	}
-	retval = -EINVAL;
-	/* make sure the offset fits in 32 bits */
-	if (((unsigned long long) offset >> 32) == 0) {
-		if (offset != file->f_pos) {
-			file->f_pos = offset;
-			file->f_reada = 0;
-			file->f_version = ++event;
-		}
-		retval = offset;
+	if (((unsigned long long) offset >> 32) != 0) {
+#if BITS_PER_LONG < 64
+		return -EINVAL;
+#else
+		if (offset > ext2_max_sizes[EXT2_BLOCK_SIZE_BITS(inode->i_sb)])
+			return -EINVAL;
+#endif
+	} 
+	if (offset != file->f_pos) {
+		file->f_pos = offset;
+		file->f_reada = 0;
+		file->f_version = ++event;
 	}
-	return retval;
+	return offset;
 }
 
 static inline void remove_suid(struct inode *inode)
@@ -128,7 +154,7 @@ static ssize_t ext2_file_write (struct file * filp, const char * buf,
 				size_t count, loff_t *ppos)
 {
 	struct inode * inode = filp->f_dentry->d_inode;
-	__u32 pos;
+	off_t pos;
 	long block;
 	int offset;
 	int written, c;
@@ -165,14 +191,37 @@ static ssize_t ext2_file_write (struct file * filp, const char * buf,
 		pos = *ppos;
 		if (pos != *ppos)
 			return -EINVAL;
+#if BITS_PER_LONG >= 64
+		if (pos > ext2_max_sizes[EXT2_BLOCK_SIZE_BITS(sb)])
+			return -EINVAL;
+#endif
 	}
 
 	/* Check for overflow.. */
+#if BITS_PER_LONG < 64
 	if (pos > (__u32) (pos + count)) {
 		count = ~pos; /* == 0xFFFFFFFF - pos */
 		if (!count)
 			return -EFBIG;
 	}
+#else
+	off_t max = ext2_max_sizes[EXT2_BLOCK_SIZE_BITS(sb)];
+
+	if (pos + count > max) {
+		count = max - pos;
+		if (!count)
+			return -EFBIG;
+	}
+	if (((pos + count) >> 32) && 
+	    !(sb->u.ext2_sb.s_es->s_feature_ro_compat &
+	      cpu_to_le32(EXT2_FEATURE_RO_COMPAT_LARGE_FILE))) {
+		/* If this is the first large file created, add a flag
+		   to the superblock */
+		sb->u.ext2_sb.s_es->s_feature_ro_compat |=
+			cpu_to_le32(EXT2_FEATURE_RO_COMPAT_LARGE_FILE);
+		mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
+	}
+#endif
 
 	/*
 	 * If a file has been opened in synchronous mode, we have to ensure
@@ -265,12 +314,25 @@ static ssize_t ext2_file_write (struct file * filp, const char * buf,
 
 /*
  * Called when an inode is released. Note that this is different
- * from ext2_open: open gets called at every open, but release
+ * from ext2_file_open: open gets called at every open, but release
  * gets called only when /all/ the files are closed.
  */
 static int ext2_release_file (struct inode * inode, struct file * filp)
 {
-	if (filp->f_mode & 2)
+	if (filp->f_mode & FMODE_WRITE)
 		ext2_discard_prealloc (inode);
 	return 0;
 }
+
+#if BITS_PER_LONG < 64
+/*
+ * Called when an inode is about to be open.
+ * We use this to disallow opening RW large files on 32bit systems.
+ */
+static int ext2_open_file (struct inode * inode, struct file * filp)
+{
+	if (inode->u.ext2_i.i_high_size && (filp->f_mode & FMODE_WRITE))
+		return -EFBIG;
+	return 0;
+}
+#endif

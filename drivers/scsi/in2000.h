@@ -2,7 +2,7 @@
  *    in2000.h -  Linux device driver definitions for the
  *                Always IN2000 ISA SCSI card.
  *
- *    IMPORTANT: This file is for version 1.31 - 06/Jul/1997
+ *    IMPORTANT: This file is for version 1.32 - 28/Mar/1998
  *
  * Copyright (c) 1996 John Shifflett, GeoLog Consulting
  *    john@geolog.com
@@ -404,8 +404,8 @@ int in2000_reset(Scsi_Cmnd *, unsigned int);
                   this_id:         IN2000_HOST_ID,      /* host-adapter scsi id */ \
                   sg_tablesize:    IN2000_SG,           /* scatter-gather table size */ \
                   cmd_per_lun:     IN2000_CPL,          /* commands per lun */ \
-                  use_clustering:  DISABLE_CLUSTERING, \
-		  use_new_eh_code: 0			/* Enable new error code */ \
+                  use_clustering:  DISABLE_CLUSTERING,  /* ENABLE_CLUSTERING may speed things up */ \
+                  use_new_eh_code: 0                    /* new error code - not using it yet */ \
                 }
 
 

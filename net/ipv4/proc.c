@@ -7,7 +7,7 @@
  *		PROC file system.  It is mainly used for debugging and
  *		statistics.
  *
- * Version:	$Id: proc.c,v 1.27 1998/03/18 07:51:59 davem Exp $
+ * Version:	$Id: proc.c,v 1.28 1998/04/03 09:49:45 freitag Exp $
  *
  * Authors:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
@@ -25,6 +25,7 @@
  *		Alan Cox	:	Allow inode to be NULL (kernel socket)
  *	Andi Kleen		:	Add support for open_requests and 
  *					split functions for more readibility.
+ *	Andi Kleen		:	Add support for /proc/net/netstat
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -326,6 +327,34 @@ int snmp_get_info(char *buffer, char **start, off_t offset, int length, int dumm
 	  		tcp_rx_hit2,tcp_rx_hit1,tcp_rx_miss);
 */
 	
+	if (offset >= len)
+	{
+		*start = buffer;
+		return 0;
+	}
+	*start = buffer + offset;
+	len -= offset;
+	if (len > length)
+		len = length;
+	return len;
+}
+
+/* 
+ *	Output /proc/net/netstat
+ */
+ 
+int netstat_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+{
+	extern struct linux_mib net_statistics;
+	int len;
+
+	len = sprintf(buffer,
+		      "TcpExt: SyncookiesSent SyncookiesRecv SyncookiesFailed\n"
+		      "TcpExt: %lu %lu %lu\n",
+		      net_statistics.SyncookiesSent,
+		      net_statistics.SyncookiesRecv,
+		      net_statistics.SyncookiesFailed);
+
 	if (offset >= len)
 	{
 		*start = buffer;

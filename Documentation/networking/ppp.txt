@@ -1,11 +1,7 @@
 *NEWSFLASH*
 This kernel release needs a minor bug fix for pppd to run properly with
 the new routing code.  When your pppd doesn't work apply the following 
-patch to pppd-2.2.0f or install updated RPMs.
-
-Updated RPMs for libc5 machines (build on RedHat 4.0):
-ftp://ftp.firstfloor.org/pub/ak/ppp-2.2.0f-4.src.rpm
-ftp://ftp.firstfloor.org/pub/ak/ppp-2.2.0f-4.i386.rpm
+patch to pppd-2.2.0f or update to the newest pppd version.
 
 Patch:
 

@@ -24,6 +24,7 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/system.h>
+#include <asm/irq.h>
 
 /* Some configuration switches are present in the include file... */
 
@@ -48,11 +49,16 @@ unsigned char pckbd_sysrq_xlate[128] =
  * them.
  */
 
-#ifndef __i386__
-#define INIT_KBD
+/*
+ * Some x86 BIOSes do not correctly initializes the keyboard, so the
+ * "kbd-reset" command line options can be given to force a reset.
+ * [Ranger]
+ */
+#ifdef __i386__
+ int kbd_startup_reset __initdata = 0;
+#else
+ int kbd_startup_reset __initdata = 1;
 #endif
-
-#ifdef INIT_KBD
 
 __initfunc(static int kbd_wait_for_input(void))
 {
@@ -202,7 +208,7 @@ __initfunc(static void initialize_kbd(void))
 		printk(KERN_WARNING "initialize_kbd: %s\n", msg);
 }
 
-#endif /* INIT_KBD */
+
 
 unsigned char kbd_read_mask = KBD_STAT_OBF; /* Modified by psaux.c */
 
@@ -602,7 +608,11 @@ __initfunc(void pckbd_init_hw(void))
 {
 	request_irq(KEYBOARD_IRQ, keyboard_interrupt, 0, "keyboard", NULL);
 	request_region(0x60, 16, "keyboard");
-#ifdef INIT_KBD
-	initialize_kbd();
-#endif
+	if (kbd_startup_reset) initialize_kbd();
+}
+
+/* for "kbd-reset" cmdline param */
+__initfunc(void kbd_reset_setup(char *str, int *ints))
+{
+	kbd_startup_reset = 1;
 }

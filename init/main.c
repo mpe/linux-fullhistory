@@ -40,6 +40,9 @@
 
 #include <stdarg.h>
 
+#ifdef CONFIG_PCI
+#include <linux/pci.h>
+#endif
 
 /*
  * Versions of gcc older than that listed below may actually compile
@@ -61,23 +64,25 @@ extern int bdflush(void *);
 extern int kswapd(void *);
 extern void kswapd_setup(void);
 
+extern void dquot_init(void);
 extern void init_IRQ(void);
 extern void init_modules(void);
 extern long console_init(long, long);
 extern void sock_init(void);
 extern void uidcache_init(void);
-extern unsigned long pci_init(unsigned long, unsigned long);
 extern long mca_init(long, long);
 extern long sbus_init(long, long);
 extern long powermac_init(unsigned long, unsigned long);
 extern void sysctl_init(void);
 extern void filescache_init(void);
 extern void signals_init(void);
-extern void dquot_init(void);
 
 extern void smp_setup(char *str, int *ints);
+#ifdef __i386__
 extern void ioapic_pirq_setup(char *str, int *ints);
+#endif
 extern void no_scroll(char *str, int *ints);
+extern void kbd_reset_setup(char *str, int *ints);
 extern void panic_setup(char *str, int *ints);
 extern void bmouse_setup(char *str, int *ints);
 extern void msmouse_setup(char *str, int *ints);
@@ -473,7 +478,9 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef __SMP__
 	{ "nosmp", smp_setup },
 	{ "maxcpus=", smp_setup },
+#ifdef __i386__
 	{ "pirq=", ioapic_pirq_setup },
+#endif
 #endif
 #ifdef CONFIG_BLK_DEV_RAM
 	{ "ramdisk_start=", ramdisk_start_setup },
@@ -492,6 +499,7 @@ static struct kernel_param cooked_params[] __initdata = {
 	{ "console=", console_setup },
 #ifdef CONFIG_VT
 	{ "no-scroll", no_scroll },
+	{ "kbd-reset", kbd_reset_setup },
 #endif
 #ifdef CONFIG_BUGi386
 	{ "no-hlt", no_halt },
@@ -736,6 +744,9 @@ static struct kernel_param raw_params[] __initdata = {
 #endif
 #ifdef CONFIG_IP_PNP
 	{ "ip=", ip_auto_config_setup },
+#endif
+#ifdef CONFIG_PCI
+	{ "pci=", pci_setup },
 #endif
 #ifdef CONFIG_PARIDE_PD
 	{ "pd.", pd_setup },
@@ -1015,23 +1026,14 @@ __initfunc(asmlinkage void start_kernel(void))
 		memset(prof_buffer, 0, prof_len * sizeof(unsigned int));
 	}
 #endif
-#ifdef CONFIG_SBUS
-	memory_start = sbus_init(memory_start,memory_end);
-#endif
-#if defined(CONFIG_PMAC) || defined(CONFIG_CHRP)
-	memory_start = powermac_init(memory_start, memory_end);
-#endif
-#if defined(CONFIG_PCI) && defined(CONFIG_PCI_CONSOLE)
-	memory_start = pci_init(memory_start,memory_end);
-#endif
+
+/*
+ * HACK ALERT! This is early. We're enabling the console before
+ * we've done PCI setups etc, and console_init() must be aware of
+ * this. But we do want output early, in case something goes wrong.
+ */
 #if HACK
 	memory_start = console_init(memory_start,memory_end);
-#endif
-#if defined(CONFIG_PCI) && !defined(CONFIG_PCI_CONSOLE)
-	memory_start = pci_init(memory_start,memory_end);
-#endif
-#ifdef CONFIG_MCA
-	memory_start = mca_init(memory_start,memory_end);
 #endif
 	memory_start = kmem_cache_init(memory_start, memory_end);
 	sti();
@@ -1070,6 +1072,24 @@ __initfunc(asmlinkage void start_kernel(void))
 #ifdef CONFIG_SYSCTL
 	sysctl_init();
 #endif
+
+	/*
+	 * Ok, at this point all CPU's should be initialized, so
+	 * we can start looking into devices..
+	 */
+#ifdef CONFIG_PCI
+	pci_init();
+#endif
+#ifdef CONFIG_SBUS
+	sbus_init();
+#endif
+#if defined(CONFIG_PMAC) || defined(CONFIG_CHRP)
+	powermac_init();
+#endif
+#ifdef CONFIG_MCA
+	mca_init();
+#endif
+
 	/* 
 	 *	We count on the initial thread going ok 
 	 *	Like idlers init is an unlocked kernel thread, which will

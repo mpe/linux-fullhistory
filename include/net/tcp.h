@@ -941,6 +941,9 @@ extern __inline__ void tcp_select_initial_window(__u32 space, __u16 mss,
 	(*window_clamp) = min(65535<<(*rcv_wscale),*window_clamp);
 }
 
+/* Do new listen semantics */
+#define TCP_NEW_LISTEN
+
 extern __inline__ void tcp_synq_unlink(struct tcp_opt *tp, struct open_request *req, struct open_request *prev)
 {
 	if(!req->dl_next)
@@ -959,20 +962,6 @@ extern __inline__ void tcp_synq_init(struct tcp_opt *tp)
 {
 	tp->syn_wait_queue = NULL;
 	tp->syn_wait_last = &tp->syn_wait_queue;
-}
-
-extern __inline__ struct open_request *tcp_synq_unlink_tail(struct tcp_opt *tp)
-{
-	struct open_request *head = tp->syn_wait_queue;
-#if 0
-	/* Should be a net-ratelimit'd thing, not all the time. */
-	printk(KERN_DEBUG "synq tail drop with expire=%ld\n", 
-	       head->expires-jiffies);
-#endif
-	if (head->dl_next == NULL)
-		tp->syn_wait_last = &tp->syn_wait_queue;
-	tp->syn_wait_queue = head->dl_next;
-	return head;
 }
 
 extern void __tcp_inc_slow_timer(struct tcp_sl_timer *slt);

@@ -72,7 +72,6 @@ void fat_delete_inode(struct inode *inode)
 
 void fat_put_super(struct super_block *sb)
 {
-	lock_super(sb);
 	if (MSDOS_SB(sb)->cvf_format) {
 		dec_cvf_format_use_count_by_version(MSDOS_SB(sb)->cvf_format->cvf_version);
 		MSDOS_SB(sb)->cvf_format->unmount_cvf(sb);
@@ -99,8 +98,7 @@ void fat_put_super(struct super_block *sb)
 		kfree(MSDOS_SB(sb)->options.iocharset);
 		MSDOS_SB(sb)->options.iocharset = NULL;
 	}
-	sb->s_dev = 0;
-	unlock_super(sb);
+
 	MOD_DEC_USE_COUNT;
 	return;
 }

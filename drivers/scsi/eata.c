@@ -1,6 +1,14 @@
 /*
  *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
  *   
+ *       4 Apr 1998 rev. 4.02 for linux 2.0.33 and 2.1.92
+ *          io_port is now unsigned long.
+ *
+ *      17 Mar 1998 rev. 4.01 for linux 2.0.33 and 2.1.88
+ *          Use new scsi error handling code (if linux version >= 2.1.88).
+ *          Use new interrupt code.
+ *
+ *
  *      12 Sep 1997 rev. 3.11 for linux 2.0.30 and 2.1.55
  *          Use of udelay inside the wait loops to avoid timeout
  *          problems with fast cpus.
@@ -127,7 +135,7 @@
  *          This driver is based on the CAM (Common Access Method Committee)
  *          EATA (Enhanced AT Bus Attachment) rev. 2.0A, using DMA protocol.
  *
- *  Copyright (C) 1994-1997 Dario Ballabio (dario@milano.europe.dg.com)
+ *  Copyright (C) 1994-1998 Dario Ballabio (dario@milano.europe.dg.com)
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that redistributions of source
@@ -331,9 +339,7 @@ struct proc_dir_entry proc_scsi_eata2x = {
 #undef  DEBUG_LINKED_COMMANDS
 #undef  DEBUG_DETECT
 #undef  DEBUG_INTERRUPT
-#undef  DEBUG_STATISTICS
 #undef  DEBUG_RESET
-#undef  DEBUG_SMP
 
 #define MAX_ISA 4
 #define MAX_VESA 0 
@@ -343,15 +349,14 @@ struct proc_dir_entry proc_scsi_eata2x = {
 #define MAX_CHANNEL 4
 #define MAX_LUN 32
 #define MAX_TARGET 32
-#define MAX_IRQ 16
 #define MAX_MAILBOXES 64
 #define MAX_SGLIST 64
-#define MAX_LARGE_SGLIST 252
+#define MAX_LARGE_SGLIST 122
 #define MAX_INTERNAL_RETRIES 64
 #define MAX_CMD_PER_LUN 2
 #define MAX_TAGGED_CMD_PER_LUN (MAX_MAILBOXES - MAX_CMD_PER_LUN)
 
-#define SKIP UINT_MAX
+#define SKIP ULONG_MAX
 #define FALSE 0
 #define TRUE 1
 #define FREE 0
@@ -415,15 +420,15 @@ struct eata_info {
    ulong  data_len;     /* Number of valid bytes after this field */
    ulong  sign;         /* ASCII "EATA" signature */
    unchar        :4,    /* unused low nibble */
-	  version:4;    /* EATA version, should be 0x1 */
+          version:4;    /* EATA version, should be 0x1 */
    unchar  ocsena:1,    /* Overlap Command Support Enabled */
-	   tarsup:1,    /* Target Mode Supported */
+           tarsup:1,    /* Target Mode Supported */
            trnxfr:1,    /* Truncate Transfer Cmd NOT Necessary */
            morsup:1,    /* More Supported */
-	   dmasup:1,    /* DMA Supported */
-	   drqvld:1,    /* DRQ Index (DRQX) is valid */
-	      ata:1,    /* This is an ATA device */
-	   haaval:1;    /* Host Adapter Address Valid */
+           dmasup:1,    /* DMA Supported */
+           drqvld:1,    /* DRQ Index (DRQX) is valid */
+              ata:1,    /* This is an ATA device */
+           haaval:1;    /* Host Adapter Address Valid */
    ushort cp_pad_len;   /* Number of pad bytes after cp_len */
    unchar host_addr[4]; /* Host Adapter SCSI ID for channels 3, 2, 1, 0 */
    ulong  cp_len;       /* Number of valid bytes in cp */
@@ -432,19 +437,19 @@ struct eata_info {
    ushort unused;
    ushort scatt_size;   /* Max number of entries in scatter/gather table */
    unchar     irq:4,    /* Interrupt Request assigned to this controller */
-	   irq_tr:1,    /* 0 for edge triggered, 1 for level triggered */
-	   second:1,    /* 1 if this is a secondary (not primary) controller */
-	     drqx:2;    /* DRQ Index (0=DMA0, 1=DMA7, 2=DMA6, 3=DMA5) */
+           irq_tr:1,    /* 0 for edge triggered, 1 for level triggered */
+           second:1,    /* 1 if this is a secondary (not primary) controller */
+             drqx:2;    /* DRQ Index (0=DMA0, 1=DMA7, 2=DMA6, 3=DMA5) */
    unchar  sync;        /* 1 if scsi target id 7...0 is running sync scsi */
 
    /* Structure extension defined in EATA 2.0B */
    unchar  isaena:1,    /* ISA i/o addressing is disabled/enabled */
-	 forcaddr:1,    /* Port address has been forced */
+         forcaddr:1,    /* Port address has been forced */
          large_sg:1,    /* 1 if large SG lists are supported */
              res1:1,
-		 :4;
+                 :4;
    unchar  max_id:5,    /* Max SCSI target ID number */
-	 max_chan:3;    /* Max SCSI channel number on this board */
+         max_chan:3;    /* Max SCSI channel number on this board */
 
    /* Structure extension defined in EATA 2.0C */
    unchar   max_lun;    /* Max SCSI LUN number */
@@ -463,17 +468,17 @@ struct eata_info {
 struct eata_config {
    ushort len;          /* Number of bytes following this field */
    unchar edis:1,       /* Disable EATA interface after config command */
-	 ocena:1,       /* Overlapped Commands Enabled */
-	mdpena:1,       /* Transfer all Modified Data Pointer Messages */
-	tarena:1,       /* Target Mode Enabled for this controller */
-	      :4;
+         ocena:1,       /* Overlapped Commands Enabled */
+        mdpena:1,       /* Transfer all Modified Data Pointer Messages */
+        tarena:1,       /* Target Mode Enabled for this controller */
+              :4;
    unchar cpad[511];
    };
 
 /* Returned status packet structure */
 struct mssp {
    unchar adapter_status:7,    /* State related to current command */
-		     eoc:1;    /* End Of Command (1 = command completed) */
+                     eoc:1;    /* End Of Command (1 = command completed) */
    unchar target_status;       /* SCSI status received after data transfer */
    unchar unused[2];
    ulong inv_res_len;          /* Number of bytes not transferred */
@@ -489,13 +494,13 @@ struct sg_list {
 /* MailBox SCSI Command Packet */
 struct mscp {
    unchar  sreset:1,     /* SCSI Bus Reset Signal should be asserted */
-	     init:1,     /* Re-initialize controller and self test */
-	   reqsen:1,     /* Transfer Request Sense Data to addr using DMA */
-	       sg:1,     /* Use Scatter/Gather */
-		 :1,
-	   interp:1,     /* The controller interprets cp, not the target */ 
-	     dout:1,     /* Direction of Transfer is Out (Host to Target) */
-	      din:1;     /* Direction of Transfer is In (Target to Host) */
+             init:1,     /* Re-initialize controller and self test */
+           reqsen:1,     /* Transfer Request Sense Data to addr using DMA */
+               sg:1,     /* Use Scatter/Gather */
+                 :1,
+           interp:1,     /* The controller interprets cp, not the target */ 
+             dout:1,     /* Direction of Transfer is Out (Host to Target) */
+              din:1;     /* Direction of Transfer is In (Target to Host) */
    unchar sense_len;     /* Request Sense Length */
    unchar unused[3];
    unchar  fwnest:1,     /* Send command to a component of an Array Group */
@@ -507,9 +512,9 @@ struct mscp {
    unchar  target:5,     /* SCSI target ID */
           channel:3;     /* SCSI channel number */
    unchar     lun:5,     /* SCSI logical unit number */
-	   luntar:1,     /* This cp is for Target (not LUN) */
-	   dispri:1,     /* Disconnect Privilege granted */
-	      one:1;     /* 1 */
+           luntar:1,     /* This cp is for Target (not LUN) */
+           dispri:1,     /* Disconnect Privilege granted */
+              one:1;     /* 1 */
    unchar mess[3];       /* Massage to/from Target */
    unchar cdb[12];       /* Command Descriptor Block */
    ulong  data_len;      /* If sg=0 Data Length, if sg=1 sglist length */
@@ -526,7 +531,6 @@ struct hostdata {
    unsigned int cp_stat[MAX_MAILBOXES]; /* FREE, IN_USE, LOCKED, IN_RESET */
    unsigned int last_cp_used;           /* Index of last mailbox used */
    unsigned int iocount;                /* Total i/o done for this board */
-   unsigned int multicount;             /* Total ... in second ihdlr loop */
    int board_number;                    /* Number of this board */
    char board_name[16];                 /* Name of this board */
    char board_id[256];                  /* data from INQUIRY on this board */
@@ -542,9 +546,12 @@ struct hostdata {
 
 static struct Scsi_Host *sh[MAX_BOARDS + 1];
 static const char *driver_name = "EATA";
-static unsigned int irqlist[MAX_IRQ], calls[MAX_IRQ];
+static char sha[MAX_BOARDS];
 
-static unsigned int io_port[] __initdata = { 
+/* Initialize num_boards so that ihdlr can work while detect is in progress */
+static unsigned int num_boards = MAX_BOARDS;
+
+static unsigned long io_port[] __initdata = { 
 
    /* Space for MAX_INT_PARAM ports usable while loading as a module */
    SKIP,    SKIP,   SKIP,   SKIP,   SKIP,   SKIP,   SKIP,   SKIP,
@@ -665,7 +672,7 @@ static void select_queue_depths(struct Scsi_Host *host, Scsi_Device *devlist) {
    return;
 }
 
-static inline int wait_on_busy(unsigned int iobase, unsigned int loop) {
+static inline int wait_on_busy(unsigned long iobase, unsigned int loop) {
 
    while (inb(iobase + REG_AUX_STATUS) & ABSY_ASSERTED) {
       udelay(1L);
@@ -675,7 +682,7 @@ static inline int wait_on_busy(unsigned int iobase, unsigned int loop) {
    return FALSE;
 }
 
-static inline int do_dma(unsigned int iobase, unsigned int addr, unchar cmd) {
+static inline int do_dma(unsigned long iobase, unsigned int addr, unchar cmd) {
 
    if (wait_on_busy(iobase, (addr ? MAXLOOP * 100 : MAXLOOP))) return TRUE;
 
@@ -690,7 +697,7 @@ static inline int do_dma(unsigned int iobase, unsigned int addr, unchar cmd) {
    return FALSE;
 }
 
-static inline int read_pio(unsigned int iobase, ushort *start, ushort *end) {
+static inline int read_pio(unsigned long iobase, ushort *start, ushort *end) {
    unsigned int loop = MAXLOOP;
    ushort *p;
 
@@ -698,7 +705,7 @@ static inline int read_pio(unsigned int iobase, ushort *start, ushort *end) {
 
       while (!(inb(iobase + REG_STATUS) & DRQ_ASSERTED)) {
          udelay(1L);
-	 if (--loop == 0) return TRUE;
+         if (--loop == 0) return TRUE;
          }
 
       loop = MAXLOOP;
@@ -709,7 +716,7 @@ static inline int read_pio(unsigned int iobase, ushort *start, ushort *end) {
 }
 
 __initfunc (static inline int port_detect \
-      (unsigned int port_base, unsigned int j, Scsi_Host_Template *tpnt)) {
+      (unsigned long port_base, unsigned int j, Scsi_Host_Template *tpnt)) {
    unsigned char irq, dma_channel, subversion, i;
    unsigned char protocol_rev;
    struct eata_info info;
@@ -723,7 +730,7 @@ __initfunc (static inline int port_detect \
    sprintf(name, "%s%d", driver_name, j);
 
    if(check_region(port_base, REGION_SIZE)) {
-      printk("%s: address 0x%03x in use, skipping probe.\n", name, port_base);
+      printk("%s: address 0x%03lx in use, skipping probe.\n", name, port_base);
       return FALSE;
       }
 
@@ -738,7 +745,7 @@ __initfunc (static inline int port_detect \
 
    if (DEV2H(info.data_len) < EATA_2_0A_SIZE) {
       printk("%s: config structure size (%ld bytes) too short, detaching.\n", 
-	     name, DEV2H(info.data_len));
+             name, DEV2H(info.data_len));
       return FALSE;
       }
    else if (DEV2H(info.data_len) == EATA_2_0A_SIZE)
@@ -774,7 +781,7 @@ __initfunc (static inline int port_detect \
       }
 
    if (!info.haaval || info.ata) {
-      printk("%s: address 0x%03x, unusable %s board (%d%d), detaching.\n",
+      printk("%s: address 0x%03lx, unusable %s board (%d%d), detaching.\n",
              name, port_base, bus_type, info.haaval, info.ata);
       return FALSE;
       }
@@ -782,7 +789,7 @@ __initfunc (static inline int port_detect \
    if (info.drqvld) {
 
       if (subversion ==  ESA)
-	 printk("%s: warning, weird %s board using DMA.\n", name, bus_type);
+         printk("%s: warning, weird %s board using DMA.\n", name, bus_type);
 
       subversion = ISA;
       dma_channel = dma_channel_table[3 - info.drqx];
@@ -790,7 +797,7 @@ __initfunc (static inline int port_detect \
    else {
 
       if (subversion ==  ISA)
-	 printk("%s: warning, weird %s board not using DMA.\n", name, bus_type);
+         printk("%s: warning, weird %s board not using DMA.\n", name, bus_type);
 
       subversion = ESA;
       dma_channel = NO_DMA;
@@ -803,19 +810,20 @@ __initfunc (static inline int port_detect \
 
    if (subversion == ESA && !info.irq_tr)
       printk("%s: warning, LEVEL triggering is suggested for IRQ %u.\n",
-	     name, irq);
+             name, irq);
 
-   /* Board detected, allocate its IRQ if not already done */
-   if ((irq >= MAX_IRQ) || (!irqlist[irq] && request_irq(irq,
-              eata2x_interrupt_handler, SA_INTERRUPT, driver_name, NULL))) {
+   /* Board detected, allocate its IRQ */
+   if (request_irq(irq, eata2x_interrupt_handler,
+             SA_INTERRUPT | ((subversion == ESA) ? SA_SHIRQ : 0),
+             driver_name, (void *) &sha[j])) {
       printk("%s: unable to allocate IRQ %u, detaching.\n", name, irq);
       return FALSE;
       }
 
    if (subversion == ISA && request_dma(dma_channel, driver_name)) {
       printk("%s: unable to allocate DMA channel %u, detaching.\n",
-	     name, dma_channel);
-      free_irq(irq, NULL);
+             name, dma_channel);
+      free_irq(irq, &sha[j]);
       return FALSE;
       }
 
@@ -840,7 +848,7 @@ __initfunc (static inline int port_detect \
    if (sh[j] == NULL) {
       printk("%s: unable to register host, detaching.\n", name);
 
-      if (!irqlist[irq]) free_irq(irq, NULL);
+      free_irq(irq, &sha[j]);
 
       if (subversion == ISA) free_dma(dma_channel);
 
@@ -865,7 +873,6 @@ __initfunc (static inline int port_detect \
    HD(j)->subversion = subversion;
    HD(j)->protocol_rev = protocol_rev;
    HD(j)->board_number = j;
-   irqlist[irq]++;
 
    if (HD(j)->subversion == ESA)
       sh[j]->unchecked_isa_dma = FALSE;
@@ -937,10 +944,11 @@ __initfunc (static inline int port_detect \
       }
    else                                 tag_type = 'n';
 
-   printk("%s: 2.0%c, %s 0x%03x, IRQ %u, %s, SG %d, MB %d, tc:%c, lc:%c, "\
-          "mq:%d.\n", BN(j), HD(j)->protocol_rev, bus_type, sh[j]->io_port,
-          sh[j]->irq, dma_name, sh[j]->sg_tablesize, sh[j]->can_queue,
-          tag_type, YESNO(linked_comm), max_queue_depth);
+   printk("%s: 2.0%c, %s 0x%03lx, IRQ %u, %s, SG %d, MB %d, tc:%c, lc:%c, "\
+          "mq:%d.\n", BN(j), HD(j)->protocol_rev, bus_type,
+          (unsigned long)sh[j]->io_port, sh[j]->irq, dma_name,
+          sh[j]->sg_tablesize, sh[j]->can_queue, tag_type, YESNO(linked_comm),
+          max_queue_depth);
 
    if (sh[j]->max_id > 8 || sh[j]->max_lun > 8)
       printk("%s: wide SCSI support enabled, max_id %u, max_lun %u.\n",
@@ -1012,7 +1020,7 @@ __initfunc (static void add_pci_ports(void)) {
    unsigned char bus, devfn;
    unsigned int addr, k;
 
-   if (!pcibios_present()) return;
+   if (!pci_present()) return;
 
    for (k = 0; k < MAX_PCI; k++) {
 
@@ -1056,11 +1064,6 @@ __initfunc (int eata2x_detect(Scsi_Host_Template *tpnt)) {
       }
 #endif
 
-   for (k = 0; k < MAX_IRQ; k++) {
-      irqlist[k] = 0;
-      calls[k] = 0;
-      }
-
    for (k = 0; k < MAX_BOARDS + 1; k++) sh[k] = NULL;
 
    if (!setup_done) add_pci_ports();
@@ -1073,8 +1076,9 @@ __initfunc (int eata2x_detect(Scsi_Host_Template *tpnt)) {
       }
 
    if (j > 0) 
-      printk("EATA/DMA 2.0x: Copyright (C) 1994-1997 Dario Ballabio.\n");
+      printk("EATA/DMA 2.0x: Copyright (C) 1994-1998 Dario Ballabio.\n");
 
+   num_boards = j;
    restore_flags(flags);
    return j;
 }
@@ -1138,26 +1142,26 @@ int eata2x_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
       if (i >= sh[j]->can_queue) i = 0;
 
       if (HD(j)->cp_stat[i] == FREE) {
-	 HD(j)->last_cp_used = i;
-	 break;
-	 }
+         HD(j)->last_cp_used = i;
+         break;
+         }
       }
 
    if (k == sh[j]->can_queue) {
       printk("%s: qcomm, no free mailbox, resetting.\n", BN(j));
 
       if (HD(j)->in_reset) 
-	 printk("%s: qcomm, already in reset.\n", BN(j));
+         printk("%s: qcomm, already in reset.\n", BN(j));
       else if (eata2x_reset(SCpnt, SCSI_RESET_SUGGEST_BUS_RESET)
                == SCSI_RESET_SUCCESS) 
-	 panic("%s: qcomm, SCSI_RESET_SUCCESS.\n", BN(j));
+         panic("%s: qcomm, SCSI_RESET_SUCCESS.\n", BN(j));
 
       SCpnt->result = DID_BUS_BUSY << 16; 
       SCpnt->host_scribble = NULL;
       printk("%s: qcomm, pid %ld, DID_BUS_BUSY, done.\n", BN(j), SCpnt->pid);
       restore_flags(flags);
       done(SCpnt);    
-      return 0;
+      return 1;
       }
 
    /* Set pointer to control packet structure */
@@ -1178,21 +1182,21 @@ int eata2x_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    SCpnt->host_scribble = (unsigned char *) &cpp->index;
 
    if (do_trace) printk("%s: qcomm, mbox %d, target %d.%d:%d, pid %ld.\n",
-			BN(j), i, SCpnt->channel, SCpnt->target,
+                        BN(j), i, SCpnt->channel, SCpnt->target,
                         SCpnt->lun, SCpnt->pid);
 
    for (k = 0; k < ARRAY_SIZE(data_out_cmds); k++)
      if (SCpnt->cmnd[0] == data_out_cmds[k]) {
-	cpp->dout = TRUE;
-	break;
-	}
+        cpp->dout = TRUE;
+        break;
+        }
 
    if ((cpp->din = !cpp->dout))
       for (k = 0; k < ARRAY_SIZE(data_none_cmds); k++)
         if (SCpnt->cmnd[0] == data_none_cmds[k]) {
-	   cpp->din = FALSE;
-	   break;
-	   }
+           cpp->din = FALSE;
+           break;
+           }
 
    cpp->reqsen = TRUE;
    cpp->dispri = TRUE;
@@ -1253,7 +1257,7 @@ int eata2x_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
              SCpnt->pid);
       restore_flags(flags);
       done(SCpnt);    
-      return 0;
+      return 1;
       }
 
    HD(j)->cp_stat[i] = IN_USE;
@@ -1272,14 +1276,14 @@ int eata2x_abort(Scsi_Cmnd *SCarg) {
    if (SCarg->host_scribble == NULL
        || SCarg->serial_number != SCarg->serial_number_at_timeout) {
       printk("%s: abort, target %d.%d:%d, pid %ld inactive.\n",
-	     BN(j), SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid);
+             BN(j), SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid);
       restore_flags(flags);
       return SCSI_ABORT_NOT_RUNNING;
       }
 
    i = *(unsigned int *)SCarg->host_scribble;
    printk("%s: abort, mbox %d, target %d.%d:%d, pid %ld.\n", 
-	  BN(j), i, SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid);
+          BN(j), i, SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid);
 
    if (i >= sh[j]->can_queue)
       panic("%s: abort, invalid SCarg->host_scribble.\n", BN(j));
@@ -1300,8 +1304,8 @@ int eata2x_abort(Scsi_Cmnd *SCarg) {
       printk("%s: abort, mbox %d is in use.\n", BN(j), i);
 
       if (SCarg != HD(j)->cp[i].SCpnt)
-	 panic("%s: abort, mbox %d, SCarg %p, cp SCpnt %p.\n",
-	       BN(j), i, SCarg, HD(j)->cp[i].SCpnt);
+         panic("%s: abort, mbox %d, SCarg %p, cp SCpnt %p.\n",
+               BN(j), i, SCarg, HD(j)->cp[i].SCpnt);
 
       if (inb(sh[j]->io_port + REG_AUX_STATUS) & IRQ_ASSERTED)
          printk("%s: abort, mbox %d, interrupt pending.\n", BN(j), i);
@@ -1327,7 +1331,7 @@ int eata2x_abort(Scsi_Cmnd *SCarg) {
       SCarg->host_scribble = NULL;
       HD(j)->cp_stat[i] = FREE;
       printk("%s, abort, mbox %d ready, DID_ABORT, pid %ld done.\n",
-	     BN(j), i, SCarg->pid);
+             BN(j), i, SCarg->pid);
       SCarg->scsi_done(SCarg);
       restore_flags(flags);
       return SCSI_ABORT_SUCCESS;
@@ -1347,7 +1351,7 @@ int eata2x_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
    cli();
    j = ((struct hostdata *) SCarg->host->hostdata)->board_number;
    printk("%s: reset, enter, target %d.%d:%d, pid %ld, reset_flags %u.\n", 
-	  BN(j), SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid,
+          BN(j), SCarg->channel, SCarg->target, SCarg->lun, SCarg->pid,
           reset_flags);
 
    if (SCarg->host_scribble == NULL)
@@ -1384,13 +1388,13 @@ int eata2x_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
       if (HD(j)->cp_stat[i] == FREE) continue;
 
       if (HD(j)->cp_stat[i] == LOCKED) {
-	 HD(j)->cp_stat[i] = FREE;
-	 printk("%s: reset, locked mbox %d forced free.\n", BN(j), i);
-	 continue;
-	 }
+         HD(j)->cp_stat[i] = FREE;
+         printk("%s: reset, locked mbox %d forced free.\n", BN(j), i);
+         continue;
+         }
 
       if (!(SCpnt = HD(j)->cp[i].SCpnt))
-	 panic("%s: reset, mbox %d, SCpnt == NULL.\n", BN(j), i);
+         panic("%s: reset, mbox %d, SCpnt == NULL.\n", BN(j), i);
 
       if (HD(j)->cp_stat[i] == READY || HD(j)->cp_stat[i] == ABORTING) {
          HD(j)->cp_stat[i] = ABORTING;
@@ -1405,13 +1409,13 @@ int eata2x_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
          }
 
       if (SCpnt->host_scribble == NULL)
-	 panic("%s: reset, mbox %d, garbled SCpnt.\n", BN(j), i);
+         panic("%s: reset, mbox %d, garbled SCpnt.\n", BN(j), i);
 
       if (*(unsigned int *)SCpnt->host_scribble != i) 
-	 panic("%s: reset, mbox %d, index mismatch.\n", BN(j), i);
+         panic("%s: reset, mbox %d, index mismatch.\n", BN(j), i);
 
       if (SCpnt->scsi_done == NULL) 
-	 panic("%s: reset, mbox %d, SCpnt->scsi_done == NULL.\n", BN(j), i);
+         panic("%s: reset, mbox %d, SCpnt->scsi_done == NULL.\n", BN(j), i);
 
       if (SCpnt == SCarg) arg_done = TRUE;
       }
@@ -1446,7 +1450,7 @@ int eata2x_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
          HD(j)->cp_stat[i] = LOCKED;
 
          printk("%s, reset, mbox %d locked, DID_RESET, pid %ld done.\n",
-	        BN(j), i, SCpnt->pid);
+                BN(j), i, SCpnt->pid);
          }
 
       else if (HD(j)->cp_stat[i] == ABORTING) {
@@ -1458,7 +1462,7 @@ int eata2x_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
          HD(j)->cp_stat[i] = FREE;
 
          printk("%s, reset, mbox %d aborting, DID_RESET, pid %ld done.\n",
-	        BN(j), i, SCpnt->pid);
+                BN(j), i, SCpnt->pid);
          }
 
       else
@@ -1640,229 +1644,200 @@ static void flush_dev(Scsi_Device *dev, unsigned long cursec, unsigned int j,
 
 }
 
-static void eata2x_interrupt_handler(int irq, void *dev_id,
+static void eata2x_interrupt_handler(int irq, void *shap,
                                      struct pt_regs *regs) {
    Scsi_Cmnd *SCpnt;
-   unsigned long flags;
-   unsigned int i, j, k, c, status, tstatus, loops, total_loops = 0, reg;
+   unsigned int i, j, k, c, status, tstatus, reg;
+   unsigned int n, n_ready, il[MAX_MAILBOXES];
    struct mssp *spp;
    struct mscp *cpp;
 
-   save_flags(flags);
-   cli();
+   /* Check if the interrupt must be processed by this handler */
+   if ((j = (unsigned int)((char *)shap - sha)) >= num_boards) return;
+ 
+   if (sh[j]->irq != irq)
+       panic("%s: ihdlr, irq %d, sh[j]->irq %d.\n", BN(j), irq, sh[j]->irq);
+ 
+   if (do_trace) printk("%s: ihdlr, enter, irq %d, count %d.\n", BN(j), irq,
+                        HD(j)->iocount);
+ 
+   /* Check if this board need to be serviced */
+   if (!(inb(sh[j]->io_port + REG_AUX_STATUS) & IRQ_ASSERTED)) return;
 
-   if (!irqlist[irq]) {
-      printk("%s, ihdlr, irq %d, unexpected interrupt.\n", driver_name, irq);
-      restore_flags(flags);
-      return;
+   n_ready = 0;
+
+   /* Find the mailboxes to be serviced on this board */
+   for (i = 0; i < sh[j]->can_queue; i++) {
+      spp = &HD(j)->sp[i];
+
+      /* Check if this mailbox has completed the operation */
+      if (spp->eoc == FALSE) continue;
+
+      spp->eoc = FALSE;
+      il[n_ready++] = i;
       }
 
-   if (do_trace) printk("%s: ihdlr, enter, irq %d, calls %d.\n", 
-			driver_name, irq, calls[irq]);
+   /* Read the status register to clear the interrupt indication */
+   reg = inb(sh[j]->io_port + REG_STATUS);
 
-   /* Service all the boards configured on this irq */
-   for (j = 0; sh[j] != NULL; j++) {
+   /* Mailbox service loop */
+   for (n = 0; n < n_ready; n++) {
+      i = il[n];
+      spp = &HD(j)->sp[i];
 
-      if (sh[j]->irq != irq) continue;
+      if (HD(j)->cp_stat[i] == IGNORE) {
+         HD(j)->cp_stat[i] = FREE;
+         return;
+         }
+      else if (HD(j)->cp_stat[i] == LOCKED) {
+         HD(j)->cp_stat[i] = FREE;
+         printk("%s: ihdlr, mbox %d unlocked, count %d.\n", BN(j), i,
+                HD(j)->iocount);
+         return;
+         }
+      else if (HD(j)->cp_stat[i] == FREE) {
+         printk("%s: ihdlr, mbox %d is free, count %d.\n", BN(j), i,
+                HD(j)->iocount);
+         return;
+         }
+      else if (HD(j)->cp_stat[i] == IN_RESET)
+         printk("%s: ihdlr, mbox %d is in reset.\n", BN(j), i);
+      else if (HD(j)->cp_stat[i] != IN_USE) 
+         panic("%s: ihdlr, mbox %d, invalid cp_stat.\n", BN(j), i);
 
-      loops = 0;
+      HD(j)->cp_stat[i] = FREE;
+      cpp = &HD(j)->cp[i];
+      SCpnt = spp->SCpnt;
 
-      /* Loop until all interrupts for a board are serviced */
-      while (inb(sh[j]->io_port + REG_AUX_STATUS) & IRQ_ASSERTED) {
-	 total_loops++;
-	 loops++;
+      if(SCpnt == NULL) panic("%s: ihdlr, mbox %d, SCpnt == NULL.\n", BN(j), i);
 
-	 if (do_trace) printk("%s: ihdlr, start service, count %d.\n",
-			      BN(j), HD(j)->iocount);
-   
-	 /* Read the status register to clear the interrupt indication */
-	 reg = inb(sh[j]->io_port + REG_STATUS);
-   
-	 /* Service all mailboxes of this board */
-	 for (i = 0; i < sh[j]->can_queue; i++) {
-	    spp = &HD(j)->sp[i];
-   
-	    /* Check if this mailbox has completed the operation */
-	    if (spp->eoc == FALSE) continue;
-   
-	    spp->eoc = FALSE;
-   
-	    if (HD(j)->cp_stat[i] == IGNORE) {
-	       HD(j)->cp_stat[i] = FREE;
-	       continue;
-	       }
-	    else if (HD(j)->cp_stat[i] == LOCKED) {
-	       HD(j)->cp_stat[i] = FREE;
-	       printk("%s: ihdlr, mbox %d unlocked, count %d.\n",
-		      BN(j), i, HD(j)->iocount);
-	       continue;
-	       }
-	    else if (HD(j)->cp_stat[i] == FREE) {
-	       printk("%s: ihdlr, mbox %d is free, count %d.\n", 
-		      BN(j), i, HD(j)->iocount);
-	       continue;
-	       }
-	    else if (HD(j)->cp_stat[i] == IN_RESET)
-	       printk("%s: ihdlr, mbox %d is in reset.\n", BN(j), i);
-	    else if (HD(j)->cp_stat[i] != IN_USE) 
-	       panic("%s: ihdlr, mbox %d, invalid cp_stat.\n", BN(j), i);
-   
-	    HD(j)->cp_stat[i] = FREE;
-	    cpp = &HD(j)->cp[i];
-	    SCpnt = spp->SCpnt;
-   
-	    if (SCpnt == NULL)
-	       panic("%s: ihdlr, mbox %d, SCpnt == NULL.\n", BN(j), i);
-   
-	    if (SCpnt != cpp->SCpnt)
-	       panic("%s: ihdlr, mbox %d, sp SCpnt %p, cp SCpnt %p.\n",
-		     BN(j), i, SCpnt, cpp->SCpnt);
-   
-	    if (SCpnt->host_scribble == NULL)
-	       panic("%s: ihdlr, mbox %d, pid %ld, SCpnt %p garbled.\n",
-		     BN(j), i, SCpnt->pid, SCpnt);
-   
-	    if (*(unsigned int *)SCpnt->host_scribble != i) 
-	       panic("%s: ihdlr, mbox %d, pid %ld, index mismatch %d,"\
-		     " irq %d.\n", BN(j), i, SCpnt->pid, 
-		     *(unsigned int *)SCpnt->host_scribble, irq);
-   
-         if (linked_comm && SCpnt->device->queue_depth > 2
-                                           && TLDEV(SCpnt->device->type))
-            flush_dev(SCpnt->device, SCpnt->request.sector, j, TRUE);
+      if (SCpnt != cpp->SCpnt)
+         panic("%s: ihdlr, mbox %d, sp SCpnt %p, cp SCpnt %p.\n", BN(j), i,
+               SCpnt, cpp->SCpnt);
 
-	    tstatus = status_byte(spp->target_status);
-   
-	    switch (spp->adapter_status) {
-	       case ASOK:     /* status OK */
-   
-		  /* Forces a reset if a disk drive keeps returning BUSY */
-		  if (tstatus == BUSY && SCpnt->device->type != TYPE_TAPE) 
-		     status = DID_ERROR << 16;
-   
-		  /* If there was a bus reset, redo operation on each target */
-		  else if (tstatus != GOOD && SCpnt->device->type == TYPE_DISK
-     		           && HD(j)->target_redo[SCpnt->target][SCpnt->channel])
-		     status = DID_BUS_BUSY << 16;
-   
-		  /* Works around a flaw in scsi.c */
-		  else if (tstatus == CHECK_CONDITION
-			   && SCpnt->device->type == TYPE_DISK
-			   && (SCpnt->sense_buffer[2] & 0xf) == RECOVERED_ERROR)
-		     status = DID_BUS_BUSY << 16;
+      if (SCpnt->host_scribble == NULL)
+         panic("%s: ihdlr, mbox %d, pid %ld, SCpnt %p garbled.\n", BN(j), i,
+               SCpnt->pid, SCpnt);
 
-		  else
-		     status = DID_OK << 16;
-   
-		  if (tstatus == GOOD)
-		     HD(j)->target_redo[SCpnt->target][SCpnt->channel] = FALSE;
-   
-		  if (spp->target_status && SCpnt->device->type == TYPE_DISK)
-		     printk("%s: ihdlr, target %d.%d:%d, pid %ld, "\
-                            "target_status 0x%x, sense key 0x%x.\n", BN(j), 
-			    SCpnt->channel, SCpnt->target, SCpnt->lun, 
-                            SCpnt->pid, spp->target_status, 
-                            SCpnt->sense_buffer[2]);
-   
-		  HD(j)->target_to[SCpnt->target][SCpnt->channel] = 0;
-   
-                  if (HD(j)->last_retried_pid == SCpnt->pid) HD(j)->retries = 0;
+      if (*(unsigned int *)SCpnt->host_scribble != i) 
+         panic("%s: ihdlr, mbox %d, pid %ld, index mismatch %d, irq %d.\n",
+              BN(j), i, SCpnt->pid, *(unsigned int *)SCpnt->host_scribble, irq);
 
-		  break;
-	       case ASST:     /* Selection Time Out */
-	       case 0x02:     /* Command Time Out   */
-   
-		  if (HD(j)->target_to[SCpnt->target][SCpnt->channel] > 1)
-		     status = DID_ERROR << 16;
-		  else {
-		     status = DID_TIME_OUT << 16;
-		     HD(j)->target_to[SCpnt->target][SCpnt->channel]++;
-		     }
-   
-		  break;
+      if (linked_comm && SCpnt->device->queue_depth > 2
+                                        && TLDEV(SCpnt->device->type))
+      flush_dev(SCpnt->device, SCpnt->request.sector, j, TRUE);
 
-               /* Perform a limited number of internal retries */
-	       case 0x03:     /* SCSI Bus Reset Received */
-	       case 0x04:     /* Initial Controller Power-up */
-   
-		  for (c = 0; c <= sh[j]->max_channel; c++) 
-		     for (k = 0; k < sh[j]->max_id; k++) 
-		        HD(j)->target_redo[k][c] = TRUE;
-   
-	          if (SCpnt->device->type != TYPE_TAPE
-                      && HD(j)->retries < MAX_INTERNAL_RETRIES) {
-		     status = DID_BUS_BUSY << 16;
-		     HD(j)->retries++;
-                     HD(j)->last_retried_pid = SCpnt->pid;
-                     }
-	          else 
-		     status = DID_ERROR << 16;
+      tstatus = status_byte(spp->target_status);
 
-		  break;
-	       case 0x05:     /* Unexpected Bus Phase */
-	       case 0x06:     /* Unexpected Bus Free */
-	       case 0x07:     /* Bus Parity Error */
-	       case 0x08:     /* SCSI Hung */
-	       case 0x09:     /* Unexpected Message Reject */
-	       case 0x0a:     /* SCSI Bus Reset Stuck */
-	       case 0x0b:     /* Auto Request-Sense Failed */
-	       case 0x0c:     /* Controller Ram Parity Error */
-	       default:
-		  status = DID_ERROR << 16;
-		  break;
-	       }
-   
-	    SCpnt->result = status | spp->target_status;
-	    HD(j)->iocount++;
+      switch (spp->adapter_status) {
+         case ASOK:     /* status OK */
 
-	    if (loops > 1) HD(j)->multicount++;
+            /* Forces a reset if a disk drive keeps returning BUSY */
+            if (tstatus == BUSY && SCpnt->device->type != TYPE_TAPE) 
+               status = DID_ERROR << 16;
+
+            /* If there was a bus reset, redo operation on each target */
+            else if (tstatus != GOOD && SCpnt->device->type == TYPE_DISK
+                     && HD(j)->target_redo[SCpnt->target][SCpnt->channel])
+               status = DID_BUS_BUSY << 16;
+
+            /* Works around a flaw in scsi.c */
+            else if (tstatus == CHECK_CONDITION
+                     && SCpnt->device->type == TYPE_DISK
+                     && (SCpnt->sense_buffer[2] & 0xf) == RECOVERED_ERROR)
+               status = DID_BUS_BUSY << 16;
+
+            else
+               status = DID_OK << 16;
+
+            if (tstatus == GOOD)
+               HD(j)->target_redo[SCpnt->target][SCpnt->channel] = FALSE;
+
+            if (spp->target_status && SCpnt->device->type == TYPE_DISK)
+               printk("%s: ihdlr, target %d.%d:%d, pid %ld, "\
+                      "target_status 0x%x, sense key 0x%x.\n", BN(j), 
+                      SCpnt->channel, SCpnt->target, SCpnt->lun, 
+                      SCpnt->pid, spp->target_status, 
+                      SCpnt->sense_buffer[2]);
+
+            HD(j)->target_to[SCpnt->target][SCpnt->channel] = 0;
+
+            if (HD(j)->last_retried_pid == SCpnt->pid) HD(j)->retries = 0;
+
+            break;
+         case ASST:     /* Selection Time Out */
+         case 0x02:     /* Command Time Out   */
+
+            if (HD(j)->target_to[SCpnt->target][SCpnt->channel] > 1)
+               status = DID_ERROR << 16;
+            else {
+               status = DID_TIME_OUT << 16;
+               HD(j)->target_to[SCpnt->target][SCpnt->channel]++;
+               }
+
+            break;
+
+         /* Perform a limited number of internal retries */
+         case 0x03:     /* SCSI Bus Reset Received */
+         case 0x04:     /* Initial Controller Power-up */
+
+            for (c = 0; c <= sh[j]->max_channel; c++) 
+               for (k = 0; k < sh[j]->max_id; k++) 
+                  HD(j)->target_redo[k][c] = TRUE;
+
+            if (SCpnt->device->type != TYPE_TAPE
+                && HD(j)->retries < MAX_INTERNAL_RETRIES) {
+               status = DID_BUS_BUSY << 16;
+               HD(j)->retries++;
+               HD(j)->last_retried_pid = SCpnt->pid;
+               }
+            else 
+               status = DID_ERROR << 16;
+
+            break;
+         case 0x05:     /* Unexpected Bus Phase */
+         case 0x06:     /* Unexpected Bus Free */
+         case 0x07:     /* Bus Parity Error */
+         case 0x08:     /* SCSI Hung */
+         case 0x09:     /* Unexpected Message Reject */
+         case 0x0a:     /* SCSI Bus Reset Stuck */
+         case 0x0b:     /* Auto Request-Sense Failed */
+         case 0x0c:     /* Controller Ram Parity Error */
+         default:
+            status = DID_ERROR << 16;
+            break;
+         }
+
+      SCpnt->result = status | spp->target_status;
+      HD(j)->iocount++;
 
 #if defined (DEBUG_INTERRUPT)
-	    if (SCpnt->result || do_trace)
+      if (SCpnt->result || do_trace)
 #else
-	    if ((spp->adapter_status != ASOK && HD(j)->iocount >  1000) ||
-		(spp->adapter_status != ASOK && 
-		spp->adapter_status != ASST && HD(j)->iocount <= 1000) ||
-		do_trace || msg_byte(spp->target_status))
+      if ((spp->adapter_status != ASOK && HD(j)->iocount >  1000) ||
+          (spp->adapter_status != ASOK && 
+          spp->adapter_status != ASST && HD(j)->iocount <= 1000) ||
+          do_trace || msg_byte(spp->target_status))
 #endif
-	       printk("%s: ihdlr, mbox %2d, err 0x%x:%x,"\
-		      " target %d.%d:%d, pid %ld, reg 0x%x, count %d.\n",
-		      BN(j), i, spp->adapter_status, spp->target_status,
-		      SCpnt->channel, SCpnt->target, SCpnt->lun, SCpnt->pid,
-                      reg, HD(j)->iocount);
-   
-	    /* Set the command state to inactive */
-	    SCpnt->host_scribble = NULL;
-   
-	    restore_flags(flags);
-	    SCpnt->scsi_done(SCpnt);
-	    cli();
+         printk("%s: ihdlr, mbox %2d, err 0x%x:%x,"\
+                " target %d.%d:%d, pid %ld, reg 0x%x, count %d.\n",
+                BN(j), i, spp->adapter_status, spp->target_status,
+                SCpnt->channel, SCpnt->target, SCpnt->lun, SCpnt->pid,
+                reg, HD(j)->iocount);
 
-	    }   /* Mailbox loop */
+      /* Set the command state to inactive */
+      SCpnt->host_scribble = NULL;
 
-	 }   /* Multiple command loop */
+      SCpnt->scsi_done(SCpnt);
 
-      }   /* Boards loop */
+      }   /* Mailbox loop */
 
-   calls[irq]++;
+   if (n_ready > 1)
+      printk("%s: ihdlr, multiple commands (%d) completed.\n", BN(j), n_ready);
 
-#if defined (DEBUG_SMP)
-   if (total_loops == 0) 
-     printk("%s: ihdlr, irq %d, no command completed, calls %d.\n",
-	    driver_name, irq, calls[irq]);
-#endif
+   if (do_trace) printk("%s: ihdlr, exit, irq %d, count %d.\n", BN(j), irq,
+                        HD(j)->iocount);
 
-   if (do_trace) printk("%s: ihdlr, exit, irq %d, calls %d.\n", 
-			driver_name, irq, calls[irq]);
-
-#if defined (DEBUG_STATISTICS)
-   if ((calls[irq] % 100000) == 10000)
-      for (j = 0; sh[j] != NULL; j++)
-	 printk("%s: ihdlr, calls %d, count %d, multi %d.\n", BN(j),
-		calls[(sh[j]->irq)], HD(j)->iocount, HD(j)->multicount);
-#endif
-
-   restore_flags(flags);
    return;
 }
 
@@ -1881,7 +1856,7 @@ int eata2x_release(struct Scsi_Host *shpnt) {
    for (i = 0; i < sh[j]->can_queue; i++) 
       if ((&HD(j)->cp[i])->sglist) kfree((&HD(j)->cp[i])->sglist);
 
-   if (! --irqlist[sh[j]->irq]) free_irq(sh[j]->irq, NULL);
+   free_irq(sh[j]->irq, &sha[j]);
 
    if (sh[j]->dma_channel != NO_DMA) free_dma(sh[j]->dma_channel);
 

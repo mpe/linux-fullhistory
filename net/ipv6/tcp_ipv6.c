@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.72 1998/03/30 08:41:52 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.74 1998/04/03 09:50:01 freitag Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -41,9 +41,6 @@
 #include <net/ip6_route.h>
 
 #include <asm/uaccess.h>
-
-extern int sysctl_tcp_timestamps;
-extern int sysctl_tcp_window_scaling;
 
 static void	tcp_v6_send_reset(struct sk_buff *skb);
 static void	tcp_v6_send_check(struct sock *sk, struct tcphdr *th, int len, 
@@ -748,12 +745,12 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 	if (sk->ack_backlog >= sk->max_ack_backlog) {
 		printk(KERN_DEBUG "droping syn ack:%d max:%d\n",
 		       sk->ack_backlog, sk->max_ack_backlog);
-		tcp_statistics.TcpAttemptFails++;
-		goto exit;
+		goto drop;		
 	}
 
 	req = tcp_openreq_alloc();
 	if (req == NULL) {
+		goto drop;
 	}
 
 	sk->ack_backlog++;
@@ -796,8 +793,11 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 
 	sk->data_ready(sk, 0);
 
-exit:
 	return 0;
+
+drop:
+	tcp_statistics.TcpAttemptFails++;
+	return 0; /* don't send reset */
 }
 
 static void tcp_v6_send_check(struct sock *sk, struct tcphdr *th, int len, 

@@ -70,7 +70,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -84,6 +84,7 @@
  */
 const char *good_dma_drives[] = {"Micropolis 2112A",
 				 "CONNER CTMA 4000",
+				 "ST34342A",
 				 NULL};
 
 /*
@@ -140,7 +141,7 @@ int ide_build_dmatable (ide_drive_t *drive)
 {
 	struct request *rq = HWGROUP(drive)->rq;
 	struct buffer_head *bh = rq->bh;
-	unsigned long size, addr, *table = HWIF(drive)->dmatable;
+	unsigned int size, addr, *table = (unsigned int *)HWIF(drive)->dmatable;
 #ifdef CONFIG_BLK_DEV_TRM290
 	unsigned int is_trm290_chipset = (HWIF(drive)->chipset == ide_trm290);
 #else
@@ -183,7 +184,7 @@ int ide_build_dmatable (ide_drive_t *drive)
 				printk("%s: DMA table too small\n", drive->name);
 				return 0; /* revert to PIO for this request */
 			} else {
-				unsigned long xcount, bcount = 0x10000 - (addr & 0xffff);
+				unsigned int xcount, bcount = 0x10000 - (addr & 0xffff);
 				if (bcount > size)
 					bcount = size;
 				*table++ = cpu_to_le32(addr);
@@ -288,7 +289,7 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	}
 }
 
-void ide_setup_dma (ide_hwif_t *hwif, unsigned long dma_base, unsigned int num_ports) /* __init */
+__initfunc(void ide_setup_dma (ide_hwif_t *hwif, unsigned long dma_base, unsigned int num_ports))
 {
 	static unsigned long dmatable = 0;
 	static unsigned leftover = 0;
@@ -320,74 +321,39 @@ void ide_setup_dma (ide_hwif_t *hwif, unsigned long dma_base, unsigned int num_p
 		if (hwif->chipset != ide_trm290) {
 			byte dma_stat = inb(dma_base+2);
 			printk(", BIOS settings: %s:%s, %s:%s",
-		 	 hwif->drives[0].name, (dma_stat & 0x20) ? "DMA" : "pio",
-		 	 hwif->drives[1].name, (dma_stat & 0x40) ? "DMA" : "pio");
+			       hwif->drives[0].name, (dma_stat & 0x20) ? "DMA" : "pio",
+			       hwif->drives[1].name, (dma_stat & 0x40) ? "DMA" : "pio");
 		}
 		printk("\n");
 	}
 }
 
-/* The next two functions were stolen from cmd640.c, with a few modifications  */
-
-__initfunc(static void write_pcicfg_dword (byte fn, unsigned short reg, long val))
-{
-  unsigned long flags;
-
-  save_flags(flags);
-  cli();
-  outl_p((reg & 0xfc) | ((fn * 0x100) + 0x80000000), 0xcf8);
-  outl_p(val, (reg & 3) | 0xcfc);
-  restore_flags(flags);
-}
-
-__initfunc(static long read_pcicfg_dword (byte fn, unsigned short reg))
-{
-  long b;
-  unsigned long flags;
-
-  save_flags(flags);
-  cli();
-  outl_p((reg & 0xfc) | ((fn * 0x100) + 0x80000000), 0xcf8);
-  b = inl_p((reg & 3) | 0xcfc);
-  restore_flags(flags);
-  return b;
-}
-
 /*
  * Fetch the DMA Bus-Master-I/O-Base-Address (BMIBA) from PCI space:
  */
-unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const char *name) /* __init */
+__initfunc(unsigned long ide_get_or_set_dma_base (struct pci_dev *dev, ide_hwif_t *hwif, int extra, const char *name))
 {
 	unsigned long new, dma_base = 0;
-	byte bus = hwif->pci_bus, fn = hwif->pci_fn;
 
 	if (hwif->mate && hwif->mate->dma_base) {
 		dma_base = hwif->mate->dma_base - (hwif->channel ? 0 : 8);
-	} else if (pcibios_read_config_dword(bus, fn, 0x20, (unsigned int *)&dma_base)) {
-		printk("%s: failed to read dma_base\n", name);
-		dma_base = 0;
-	} else if ((dma_base &= ~0xf) == 0 || dma_base == ~0xf) {
-		printk("%s: dma_base is invalid (0x%04lx, BIOS problem)\n", name, dma_base);
-		new = ide_find_free_region(16 + extra);
-		hwif->no_autodma = 1;	/* default DMA off if we had to configure it here */
-		if (new) {
-			printk("%s: setting dma_base to 0x%04lx\n", name, new);
-			new |= 1;
-			(void) pcibios_write_config_dword(bus, fn, 0x20, new);
-			dma_base = 0;
-			(void) pcibios_read_config_dword(bus, fn, 0x20, (unsigned int *)&dma_base);
-			if (dma_base != new) {
-				if (bus == 0) {
-					printk("%s: operation failed, bypassing BIOS to try again\n", name);
-					write_pcicfg_dword(fn, 0x20, new);
-					dma_base = read_pcicfg_dword(fn, 0x20);
-				}
+	} else {
+		dma_base = dev->base_address[4] & PCI_BASE_ADDRESS_IO_MASK;
+		if (!dma_base || dma_base == PCI_BASE_ADDRESS_IO_MASK) {
+			printk("%s: dma_base is invalid (0x%04lx, BIOS problem), please report to <mj@ucw.cz>\n", name, dma_base);
+			new = ide_find_free_region(16 + extra);
+			hwif->no_autodma = 1;	/* default DMA off if we had to configure it here */
+			if (new) {
+				printk("%s: setting dma_base to 0x%04lx\n", name, new);
+				new |= PCI_BASE_ADDRESS_SPACE_IO;
+				(void) pci_write_config_dword(dev, PCI_BASE_ADDRESS_4, new);
+				dma_base = 0;
+				(void) pci_read_config_dword(dev, PCI_BASE_ADDRESS_4, (unsigned int *) &dma_base);
 				if (dma_base != new) {
-					printk("%s: operation failed, DMA disabled\n", name);
+					printk("%s: Operation failed, DMA disabled\n", name);
 					dma_base = 0;
 				}
 			}
-			dma_base &= ~0xf;
 		}
 	}
 	if (dma_base) {
@@ -401,4 +367,3 @@ unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const char *
 	}
 	return dma_base;
 }
-

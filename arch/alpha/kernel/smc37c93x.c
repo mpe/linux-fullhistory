@@ -5,8 +5,6 @@
 #include <linux/config.h>
 #include <linux/kernel.h>
 
-#include <linux/bios32.h>
-#include <linux/pci.h>
 #include <linux/malloc.h>
 #include <linux/mm.h>
 #include <linux/init.h>

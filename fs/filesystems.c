@@ -26,6 +26,7 @@
 #include <linux/auto_fs.h>
 #include <linux/ntfs_fs.h>
 #include <linux/hfs_fs.h>
+#include <linux/devpts_fs.h>
 #include <linux/major.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
@@ -137,6 +138,10 @@ __initfunc(static void do_sys_setup(void))
 
 #ifdef CONFIG_ADFS_FS
 	init_adfs_fs();
+#endif
+
+#ifdef CONFIG_DEVPTS_FS
+	init_devpts_fs();
 #endif
 
 #ifdef CONFIG_NLS

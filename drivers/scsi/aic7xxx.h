@@ -25,6 +25,12 @@
 
 #define AIC7XXX_H_VERSION  "$Revision: 3.2 $"
 
+#ifdef __i386__
+#define AIC7XXX_BIOSPARAM	aic7xxx_biosparam
+#else
+#define AIC7XXX_BIOSPARAM	NULL
+#endif
+
 /*
  * Scsi_Host_Template (see hosts.h) for AIC-7xxx - some fields
  * to do with card config are filled in after the card is detected.
@@ -36,7 +42,7 @@
 	queuecommand:    aic7xxx_queue,						\
 	abort:           aic7xxx_abort,						\
 	reset:           aic7xxx_reset,						\
-	bios_param:      aic7xxx_biosparam,					\
+	bios_param:      AIC7XXX_BIOSPARAM,					\
 	can_queue:       -1,			/* max simultaneous cmds      */\
 	this_id:         -1,			/* scsi id of host adapter    */\
 	sg_tablesize:    SG_ALL,		/* max scatter-gather cmds    */\

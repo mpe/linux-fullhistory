@@ -3,7 +3,6 @@
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/string.h>
 #include <linux/blk.h>
@@ -34,6 +33,8 @@
  *  The AM53C974_nobios_detect code was originally developed by
  *   Robin Cutshaw (robin@xfree86.org) and is used here in a 
  *   slightly modified form.
+ *
+ *  PCI detection rewritten by Martin Mares <mj@atrey.karlin.mff.cuni.cz>
  *
  *  For the remaining code:
  *    Copyright 1994, D. Frieauff
@@ -188,23 +189,6 @@
 #define DEF_PWD                 0    /* CNTLREG4, reduced power feature */
 #define DEF_RAE                 0    /* CNTLREG4, RAE active negation on REQ, ACK only */
 #define DEF_RADE                1    /* 1CNTLREG4, active negation on REQ, ACK and data */
-
-/*** PCI block ***/
-/* standard registers are defined in <linux/pci.h> */
-#ifndef PCI_VENDOR_ID_AMD
-#define PCI_VENDOR_ID_AMD	0x1022
-#define PCI_DEVICE_ID_AMD_SCSI  0x2020
-#endif
-#define PCI_BASE_MASK           0xFFFFFFE0
-#define PCI_COMMAND_PERREN      0x40
-#define PCI_SCRATCH_REG_0	0x40	/* 16 bits */
-#define PCI_SCRATCH_REG_1	0x42	/* 16 bits */
-#define PCI_SCRATCH_REG_2	0x44	/* 16 bits */
-#define PCI_SCRATCH_REG_3	0x46	/* 16 bits */
-#define PCI_SCRATCH_REG_4	0x48	/* 16 bits */
-#define PCI_SCRATCH_REG_5	0x4A	/* 16 bits */
-#define PCI_SCRATCH_REG_6	0x4C	/* 16 bits */
-#define PCI_SCRATCH_REG_7	0x4E	/* 16 bits */
 
 /*** SCSI block ***/
 #define CTCLREG		    	0x00	/* r	current transf. count, low byte    */
@@ -363,108 +347,15 @@ typedef struct _override_t {
     int max_offset;	                /* max. sync. offset, 0 = asynchronous */
     } override_t;
 
-/************ PCI stuff *************/
-#define AM53C974_PCIREG_OPEN()                    outb(0xF1, 0xCF8); outb(0, 0xCFA)
-#define AM53C974_PCIREG_CLOSE()                   outb(0, 0xCF8)
-#define AM53C974_PCIREG_READ_BYTE(instance,a)     ( inb((a) + (instance)->io_port) )
-#define AM53C974_PCIREG_READ_WORD(instance,a)     ( inw((a) + (instance)->io_port) )
-#define AM53C974_PCIREG_READ_DWORD(instance,a)    ( inl((a) + (instance)->io_port) )
-#define AM53C974_PCIREG_WRITE_BYTE(instance,x,a)  ( outb((x), (a) + (instance)->io_port) )
-#define AM53C974_PCIREG_WRITE_WORD(instance,x,a)  ( outw((x), (a) + (instance)->io_port) )
-#define AM53C974_PCIREG_WRITE_DWORD(instance,x,a) ( outl((x), (a) + (instance)->io_port) )
-
-typedef struct _pci_config_t {
-    /* start of official PCI config space header */
-    union {
-        unsigned int device_vendor;
-	struct {
-	  unsigned short vendor;
-	  unsigned short device;
- 	  } dv;
-        } dv_id;
-#define _device_vendor dv_id.device_vendor
-#define _vendor dv_id.dv.vendor
-#define _device dv_id.dv.device
-    union {
-        unsigned int status_command;
-	struct {
-	  unsigned short command;
-	  unsigned short status;
-	  } sc;
-        } stat_cmd;
-#define _status_command stat_cmd.status_command
-#define _command stat_cmd.sc.command
-#define _status  stat_cmd.sc.status
-    union {
-        unsigned int class_revision;
-	struct {
-	    unsigned char rev_id;
-	    unsigned char prog_if;
-	    unsigned char sub_class;
-	    unsigned char base_class;
-	} cr;
-    } class_rev;
-#define _class_revision class_rev.class_revision
-#define _rev_id     class_rev.cr.rev_id
-#define _prog_if    class_rev.cr.prog_if
-#define _sub_class  class_rev.cr.sub_class
-#define _base_class class_rev.cr.base_class
-    union {
-        unsigned int bist_header_latency_cache;
-	struct {
-	    unsigned char cache_line_size;
-	    unsigned char latency_timer;
-	    unsigned char header_type;
-	    unsigned char bist;
-	} bhlc;
-    } bhlc;
-#define _bist_header_latency_cache bhlc.bist_header_latency_cache
-#define _cache_line_size bhlc.bhlc.cache_line_size
-#define _latency_timer   bhlc.bhlc.latency_timer
-#define _header_type     bhlc.bhlc.header_type
-#define _bist            bhlc.bhlc.bist
-    unsigned int _base0;
-    unsigned int _base1;
-    unsigned int _base2;
-    unsigned int _base3;
-    unsigned int _base4;
-    unsigned int _base5;
-    unsigned int rsvd1;
-    unsigned int rsvd2;
-    unsigned int _baserom;
-    unsigned int rsvd3;
-    unsigned int rsvd4;
-    union {
-        unsigned int max_min_ipin_iline;
-	struct {
-	    unsigned char int_line;
-	    unsigned char int_pin;
-	    unsigned char min_gnt;
-	    unsigned char max_lat;
-	} mmii;
-    } mmii;
-#define _max_min_ipin_iline mmii.max_min_ipin_iline
-#define _int_line mmii.mmii.int_line
-#define _int_pin  mmii.mmii.int_pin
-#define _min_gnt  mmii.mmii.min_gnt
-#define _max_lat  mmii.mmii.max_lat
-    /* end of official PCI config space header */
-    unsigned short _ioaddr; /* config type 1 - private I/O addr    */
-    unsigned int _pcibus;  /* config type 2 - private bus id      */
-    unsigned int _cardnum; /* config type 2 - private card number */
-} pci_config_t;
-
 
 #ifdef AM53C974_DEBUG
-static void AM53C974_print_pci(struct Scsi_Host *instance);
 static void AM53C974_print_phase(struct Scsi_Host *instance);
 static void AM53C974_print_queues(struct Scsi_Host *instance);
 #endif /* AM53C974_DEBUG */
 static void AM53C974_print(struct Scsi_Host *instance);
 static void AM53C974_keywait(void);
-static __inline__ int AM53C974_bios_detect(Scsi_Host_Template *tpnt);
-static __inline__ int AM53C974_nobios_detect(Scsi_Host_Template *tpnt);
-static int AM53C974_init(Scsi_Host_Template *tpnt, pci_config_t pci_config);
+static __inline__ int AM53C974_pci_detect(Scsi_Host_Template *tpnt);
+static int AM53C974_init(Scsi_Host_Template *tpnt, struct pci_dev *pdev);
 static void AM53C974_config_after_reset(struct Scsi_Host *instance);
 static __inline__ void initialize_SCp(Scsi_Cmnd *cmd);
 static __inline__ void run_main(void);
@@ -501,52 +392,6 @@ struct proc_dir_entry proc_scsi_am53c974 = {
 
 #ifdef AM53C974_DEBUG
 static int deb_stop = 1;
-
-/**************************************************************************
- * Function : void AM53C974_print_pci(struct Scsi_Host *instance)
- *
- * Purpose : dump the PCI registers for debugging purposes
- *
- * Input : instance - which AM53C974
- **************************************************************************/
-static void AM53C974_print_pci(struct Scsi_Host *instance)
-{
-int            i;
-unsigned short vendor_id, device_id, command, status, scratch[8];
-unsigned long  class_revision, base; 
-unsigned char  irq, cache_line_size, latency_timer, header_type;
-
-AM53C974_PCIREG_OPEN();
-
-for (i = 0; i < 8; i++) *(scratch + i) = AM53C974_PCIREG_READ_WORD(instance, PCI_SCRATCH_REG_0 + 2*i);
-vendor_id = AM53C974_PCIREG_READ_WORD(instance, PCI_VENDOR_ID);
-device_id = AM53C974_PCIREG_READ_WORD(instance, PCI_DEVICE_ID);
-command   = AM53C974_PCIREG_READ_WORD(instance, PCI_COMMAND);
-status    = AM53C974_PCIREG_READ_WORD(instance, PCI_STATUS);
-class_revision = AM53C974_PCIREG_READ_DWORD(instance, PCI_CLASS_REVISION);
-cache_line_size = AM53C974_PCIREG_READ_BYTE(instance, PCI_CACHE_LINE_SIZE);
-latency_timer = AM53C974_PCIREG_READ_BYTE(instance, PCI_LATENCY_TIMER);
-header_type = AM53C974_PCIREG_READ_BYTE(instance, PCI_HEADER_TYPE);
-base = AM53C974_PCIREG_READ_DWORD(instance, PCI_BASE_ADDRESS_0);
-irq = AM53C974_PCIREG_READ_BYTE(instance, PCI_INTERRUPT_LINE);
-
-AM53C974_PCIREG_CLOSE();
-
-
-printk("------------- start of PCI register dump -------------\n");
-printk("PCI_VENDOR_ID:       0x%x\n", vendor_id);
-printk("PCI_DEVICE_ID:       0x%x\n", device_id);
-printk("PCI_COMMAND:         0x%x\n", command);
-printk("PCI_STATUS:          0x%x\n", status);
-printk("PCI_CLASS_REVISION:  0x%lx\n", class_revision);
-printk("PCI_CACHE_LINE_SIZE: 0x%x\n", cache_line_size);
-printk("PCI_LATENCY_TIMER:   0x%x\n", latency_timer);
-printk("PCI_HEADER_TYPE:     0x%x\n", header_type);
-printk("PCI_BASE_ADDRESS_0:  0x%lx\n", base);
-printk("PCI_INTERRUPT_LINE:  %d\n", irq);
-for (i = 0; i < 8; i++) printk("PCI_SCRATCH_%d:       0x%x\n", i, scratch[i]);
-printk("------------- end of PCI register dump -------------\n\n");
-}
 
 static struct {
     unsigned char value;
@@ -732,7 +577,7 @@ if (ints[0] < 4)
 
 #if defined (CONFIG_PCI)
 /**************************************************************************
-* Function : int AM53C974_bios_detect(Scsi_Host_Template *tpnt)
+* Function : int AM53C974_pci_detect(Scsi_Host_Template *tpnt)
 *
 * Purpose : detects and initializes AM53C974 SCSI chips with PCI Bios
 *
@@ -740,159 +585,32 @@ if (ints[0] < 4)
 * 
 * Returns : number of host adapters detected
 **************************************************************************/
-static __inline__ int AM53C974_bios_detect(Scsi_Host_Template *tpnt)
+static __inline__ int AM53C974_pci_detect(Scsi_Host_Template *tpnt)
 {
 int count = 0;        /* number of boards detected */
-int pci_index;
-pci_config_t pci_config;
+struct pci_dev *pdev = NULL;
+unsigned short command;
 
-for (pci_index = 0; pci_index <= 16; ++pci_index) {
-    unsigned char pci_bus, pci_device_fn;
-    if (pcibios_find_device(PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_SCSI, pci_index, &pci_bus, &pci_device_fn) != 0)
-       break;
+while ((pdev = pci_find_device(PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_SCSI, pdev))) {
+    pci_read_config_word(pdev, PCI_COMMAND, &command);
 
-    pcibios_read_config_word(pci_bus, pci_device_fn, PCI_VENDOR_ID, &pci_config._vendor);
-    pcibios_read_config_word(pci_bus, pci_device_fn, PCI_DEVICE_ID, &pci_config._device);
-    pcibios_read_config_word(pci_bus, pci_device_fn, PCI_COMMAND, &pci_config._command);
-    pcibios_read_config_word(pci_bus, pci_device_fn, PCI_STATUS, &pci_config._status);
-    pcibios_read_config_dword(pci_bus, pci_device_fn, PCI_CLASS_REVISION, &pci_config._class_revision);
-    pcibios_read_config_byte(pci_bus, pci_device_fn, PCI_CACHE_LINE_SIZE, &pci_config._cache_line_size);
-    pcibios_read_config_byte(pci_bus, pci_device_fn, PCI_LATENCY_TIMER, &pci_config._latency_timer);
-    pcibios_read_config_byte(pci_bus, pci_device_fn, PCI_HEADER_TYPE, &pci_config._header_type);
-    pcibios_read_config_byte(pci_bus, pci_device_fn, PCI_BIST, &pci_config._bist);
-    pcibios_read_config_dword(pci_bus, pci_device_fn, PCI_BASE_ADDRESS_0, &pci_config._base0);
-    pcibios_read_config_dword(pci_bus, pci_device_fn, PCI_BASE_ADDRESS_1, &pci_config._base1);
-    pcibios_read_config_dword(pci_bus, pci_device_fn, PCI_BASE_ADDRESS_2, &pci_config._base2);
-    pcibios_read_config_dword(pci_bus, pci_device_fn, PCI_BASE_ADDRESS_3, &pci_config._base3);
-    pcibios_read_config_dword(pci_bus, pci_device_fn, PCI_BASE_ADDRESS_4, &pci_config._base4);
-    pcibios_read_config_dword(pci_bus, pci_device_fn, PCI_BASE_ADDRESS_5, &pci_config._base5);
-    pcibios_read_config_dword(pci_bus, pci_device_fn, PCI_ROM_ADDRESS, &pci_config._baserom);
-    pcibios_read_config_byte(pci_bus, pci_device_fn, PCI_INTERRUPT_LINE, &pci_config._int_line);
-    pcibios_read_config_byte(pci_bus, pci_device_fn, PCI_INTERRUPT_PIN, &pci_config._int_pin);
-    pcibios_read_config_byte(pci_bus, pci_device_fn, PCI_MIN_GNT, &pci_config._min_gnt);
-    pcibios_read_config_byte(pci_bus, pci_device_fn, PCI_MAX_LAT, &pci_config._max_lat);
-    pci_config._pcibus = 0xFFFFFFFF;
-    pci_config._cardnum = 0xFFFFFFFF;
- 
     /* check whether device is I/O mapped -- should be */
-    if (!(pci_config._command & PCI_COMMAND_IO)) continue;
+    if (!(command & PCI_COMMAND_IO)) continue;
 
     /* PCI Spec 2.1 states that it is either the driver's or the PCI card's responsibility
        to set the PCI Master Enable Bit if needed. 
        (from Mark Stockton <marks@schooner.sys.hou.compaq.com>) */
-    if (!(pci_config._command & PCI_COMMAND_MASTER)) {
-       pci_config._command |= PCI_COMMAND_MASTER;
+    if (!(command & PCI_COMMAND_MASTER)) {
+       command |= PCI_COMMAND_MASTER;
        printk("PCI Master Bit has not been set. Setting...\n");
-       pcibios_write_config_word(pci_bus, pci_device_fn, PCI_COMMAND, pci_config._command); }
+       pci_write_config_word(pdev, PCI_COMMAND, command); }
 
     /* everything seems OK now, so initialize */
-    if (AM53C974_init(tpnt, pci_config)) count++ ;
+    if (AM53C974_init(tpnt, pdev)) count++ ;
     }
 return (count);
 }
 #endif
-
-/**************************************************************************
-* Function : int AM53C974_nobios_detect(Scsi_Host_Template *tpnt)
-*
-* Purpose : detects and initializes AM53C974 SCSI chips using PCI config 2 
-*
-* Inputs : tpnt - host template
-* 
-* Returns : number of host adapters detected
-*
-* NOTE : This code assumes the controller on PCI bus 0.
-*
-* Origin: Robin Cutshaw (robin@xfree86.org)
-**************************************************************************/
-static __inline__ int AM53C974_nobios_detect(Scsi_Host_Template *tpnt)
-{
-int          count = 0;		/* number of boards detected */
-pci_config_t pci_config;
-
-/* first try PCI config method 1 */
-for (pci_config._pcibus = 0; pci_config._pcibus < 0x10; pci_config._pcibus++) {
-    for (pci_config._cardnum = 0; pci_config._cardnum < 0x20; pci_config._cardnum++) {
-        unsigned long config_cmd;
-	config_cmd = 0x80000000 | (pci_config._pcibus<<16) | (pci_config._cardnum<<11);
-
-        outl(config_cmd, 0xCF8);         /* ioreg 0 */
-        pci_config._device_vendor = inl(0xCFC);
-
-        if ((pci_config._vendor == PCI_VENDOR_ID_AMD) && (pci_config._device == PCI_DEVICE_ID_AMD_SCSI)) {
-           outl(config_cmd | PCI_COMMAND, 0xCF8); pci_config._status_command  = inl(0xCFC);
-           outl(config_cmd | PCI_CLASS_REVISION, 0xCF8); pci_config._class_revision = inl(0xCFC);
-           outl(config_cmd | PCI_CACHE_LINE_SIZE, 0xCF8); pci_config._bist_header_latency_cache = inl(0xCFC);
-           outl(config_cmd | PCI_BASE_ADDRESS_0, 0xCF8); pci_config._base0 = inl(0xCFC);
-           outl(config_cmd | PCI_BASE_ADDRESS_1, 0xCF8); pci_config._base1 = inl(0xCFC);
-           outl(config_cmd | PCI_BASE_ADDRESS_2, 0xCF8); pci_config._base2 = inl(0xCFC);
-           outl(config_cmd | PCI_BASE_ADDRESS_3, 0xCF8); pci_config._base3 = inl(0xCFC);
-           outl(config_cmd | PCI_BASE_ADDRESS_4, 0xCF8); pci_config._base4 = inl(0xCFC);
-           outl(config_cmd | PCI_BASE_ADDRESS_5, 0xCF8); pci_config._base5 = inl(0xCFC);
-           outl(config_cmd | PCI_ROM_ADDRESS, 0xCF8); pci_config._baserom = inl(0xCFC);
-           outl(config_cmd | PCI_INTERRUPT_LINE, 0xCF8); pci_config._max_min_ipin_iline = inl(0xCFC);
-
-           /* check whether device is I/O mapped -- should be */
-           if (!(pci_config._command & PCI_COMMAND_IO)) continue;
-
-           /* PCI Spec 2.1 states that it is either the driver's or the PCI card's responsibility
-              to set the PCI Master Enable Bit if needed. 
-              From Mark Stockton <marks@schooner.sys.hou.compaq.com> */
-           if (!(pci_config._command & PCI_COMMAND_MASTER)) {
-              pci_config._command |= PCI_COMMAND_MASTER;
-              printk("Config 1; PCI Master Bit has not been set. Setting...\n");
-              outl(config_cmd | PCI_COMMAND, 0xCF8); outw(pci_config._command, 0xCFC); }
-
-           /* everything seems OK now, so initialize */
-           if (AM53C974_init(tpnt, pci_config)) count++ ;
-           }
-        }
-    }
-outb(0, 0xCF8); /* is this really necessary? */
-
-/* try PCI config method 2, if no device was detected by method 1 */
-if (!count) {
-   AM53C974_PCIREG_OPEN();
-
-   pci_config._pcibus = 0xFFFFFFFF;
-   pci_config._cardnum = 0xFFFFFFFF;
-
-   for (pci_config._ioaddr = 0xC000; pci_config._ioaddr < 0xD000; pci_config._ioaddr += 0x0100) {
-       pci_config._device_vendor = inl(pci_config._ioaddr);
-
-       if ((pci_config._vendor == PCI_VENDOR_ID_AMD) && (pci_config._device == PCI_DEVICE_ID_AMD_SCSI)) {
-          pci_config._status_command = inl(pci_config._ioaddr + PCI_COMMAND);
-          pci_config._class_revision = inl(pci_config._ioaddr + PCI_CLASS_REVISION);
-          pci_config._bist_header_latency_cache = inl(pci_config._ioaddr + PCI_CACHE_LINE_SIZE);
-          pci_config._base0 = inl(pci_config._ioaddr + PCI_BASE_ADDRESS_0);
-          pci_config._base1 = inl(pci_config._ioaddr + PCI_BASE_ADDRESS_1);
-          pci_config._base2 = inl(pci_config._ioaddr + PCI_BASE_ADDRESS_2);
-          pci_config._base3 = inl(pci_config._ioaddr + PCI_BASE_ADDRESS_3);
-          pci_config._base4 = inl(pci_config._ioaddr + PCI_BASE_ADDRESS_4);
-          pci_config._base5 = inl(pci_config._ioaddr + PCI_BASE_ADDRESS_5);
-          pci_config._baserom = inl(pci_config._ioaddr + PCI_ROM_ADDRESS);
-          pci_config._max_min_ipin_iline = inl(pci_config._ioaddr + PCI_INTERRUPT_LINE);
-
-          /* check whether device is I/O mapped -- should be */
-          if (!(pci_config._command & PCI_COMMAND_IO)) continue;
-
-          /* PCI Spec 2.1 states that it is either the driver's or the PCI card's responsibility
-             to set the PCI Master Enable Bit if needed.
-             From Mark Stockton <marks@schooner.sys.hou.compaq.com> */
-          if (!(pci_config._command & PCI_COMMAND_MASTER)) {
-              pci_config._command |= PCI_COMMAND_MASTER;
-              printk("Config 2; PCI Master Bit has not been set. Setting...\n");
-              outw(pci_config._command, pci_config._ioaddr + PCI_COMMAND); }
-
-          /* everything seems OK now, so initialize */
-          if (AM53C974_init(tpnt, pci_config)) count++ ;
-          }
-       }
-   AM53C974_PCIREG_CLOSE();
-   }
-
-return(count);
-}
 
 /**************************************************************************
 * Function : int AM53C974_detect(Scsi_Host_Template *tpnt)
@@ -905,21 +623,19 @@ return(count);
 **************************************************************************/
 __initfunc(int AM53C974_detect(Scsi_Host_Template *tpnt))
 {
-int count;        /* number of boards detected */
+int count = 0;        /* number of boards detected */
 
 tpnt->proc_dir = &proc_scsi_am53c974;
 
 #if defined (CONFIG_PCI)
-if (pcibios_present())
-   count = AM53C974_bios_detect(tpnt);
-  else
+if (pci_present())
+   count = AM53C974_pci_detect(tpnt);
 #endif
-count = AM53C974_nobios_detect(tpnt);
 return (count);
 }
 
 /**************************************************************************
-* Function : int AM53C974_init(Scsi_Host_Template *tpnt, pci_config_t pci_config)
+* Function : int AM53C974_init(Scsi_Host_Template *tpnt, struct pci_dev *pdev)
 *
 * Purpose : initializes instance and corresponding AM53/79C974 chip,
 *
@@ -932,7 +648,7 @@ return (count);
 *       set up by the BIOS (as reflected by contents of register CNTLREG1).
 *       This is the only BIOS assistance we need.
 **************************************************************************/
-__initfunc(static int AM53C974_init(Scsi_Host_Template *tpnt, pci_config_t pci_config))
+__initfunc(static int AM53C974_init(Scsi_Host_Template *tpnt, struct pci_dev *pdev))
 {
 AM53C974_local_declare();
 int                      i, j;
@@ -947,9 +663,8 @@ struct AM53C974_hostdata *hostdata;
 instance = scsi_register(tpnt, sizeof(struct AM53C974_hostdata));
 hostdata = (struct AM53C974_hostdata *)instance->hostdata;
 instance->base = NULL;
-instance->io_port = pci_config._base0 & (pci_config._base0 & 0x1 ? 
-                                         0xFFFFFFFC : 0xFFFFFFF0);
-instance->irq = pci_config._int_line;
+instance->io_port = pdev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
+instance->irq = pdev->irq;
 instance->dma_channel = -1;
 AM53C974_setio(instance);
 

@@ -126,10 +126,6 @@ nfs_put_super(struct super_block *sb)
 	struct nfs_server *server = &sb->u.nfs_sb.s_server;
 	struct rpc_clnt	*rpc;
 
-	/*
-	 * Lock the super block while we bring down the daemons.
-	 */
-	lock_super(sb);
 	if ((rpc = server->client) != NULL)
 		rpc_shutdown_client(rpc);
 
@@ -142,8 +138,7 @@ nfs_put_super(struct super_block *sb)
 	nfs_invalidate_dircache_sb(sb);
 
 	kfree(server->hostname);
-	sb->s_dev = 0;
-	unlock_super(sb);
+
 	MOD_DEC_USE_COUNT;
 }
 

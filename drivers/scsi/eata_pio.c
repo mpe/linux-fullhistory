@@ -880,7 +880,7 @@ void find_pio_PCI(struct get_conf *buf, Scsi_Host_Template * tpnt)
     u16 rev_device;
     u32 error, i, x;
 
-    if (pcibios_present()) {
+    if (pci_present()) {
 	for (i = 0; i <= MAXPCI; ++i, ++pci_index) {
 	    if (pcibios_find_device(PCI_VENDOR_ID_DPT, PCI_DEVICE_ID_DPT, 
 				    pci_index, &pci_bus, &pci_device_fn))

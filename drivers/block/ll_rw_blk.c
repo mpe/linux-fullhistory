@@ -38,6 +38,15 @@ DECLARE_TASK_QUEUE(tq_disk);
 
 /*
  * Protect the request list against multiple users..
+ *
+ * With this spinlock the Linux block IO subsystem is 100% SMP threaded
+ * from the IRQ event side, and almost 100% SMP threaded from the syscall
+ * side (we still have protect against block device array operations, and
+ * the do_request() side is casually still unsafe. The kernel lock protects
+ * this part currently.).
+ *
+ * there is a fair chance that things will work just OK if these functions
+ * are called with no global kernel lock held ...
  */
 spinlock_t io_request_lock = SPIN_LOCK_UNLOCKED;
 
@@ -106,6 +115,11 @@ static inline int get_max_sectors(kdev_t dev)
 	return max_sectors[MAJOR(dev)][MINOR(dev)];
 }
 
+/*
+ * Is called with the request spinlock aquired.
+ * NOTE: the device-specific queue() functions
+ * have to be atomic!
+ */
 static inline struct request **get_queue(kdev_t dev)
 {
 	int major = MAJOR(dev);
@@ -122,19 +136,27 @@ static inline struct request **get_queue(kdev_t dev)
 void unplug_device(void * data)
 {
 	struct blk_dev_struct * dev = (struct blk_dev_struct *) data;
+	int queue_new_request=0;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&io_request_lock,flags);
 	if (dev->current_request == &dev->plug) {
 		struct request * next = dev->plug.next;
 		dev->current_request = next;
 		if (next || dev->queue) {
 			dev->plug.next = NULL;
-			(dev->request_fn)();
+			queue_new_request = 1;
 		}
 	}
-	restore_flags(flags);
+	spin_unlock_irqrestore(&io_request_lock,flags);
+
+	if (queue_new_request)
+		/*
+		 * request functions are smart enough to notice a change
+		 * in the request queue, calling them without the spinlock
+		 * is OK, i think. <-- FIXME: [is this true? --mingo]
+		 */
+		(dev->request_fn)();
 }
 
 /*
@@ -143,6 +165,7 @@ void unplug_device(void * data)
  * on the list.
  *
  * This is called with interrupts off and no requests on the queue.
+ * (and with the request spinlock aquired)
  */
 static inline void plug_device(struct blk_dev_struct * dev)
 {
@@ -154,8 +177,8 @@ static inline void plug_device(struct blk_dev_struct * dev)
 
 /*
  * look for a free request in the first N entries.
- * NOTE: interrupts must be disabled on the way in, and will still
- *       be disabled on the way out.
+ * NOTE: interrupts must be disabled on the way in (on SMP the request queue
+ * spinlock has to be aquired), and will still be disabled on the way out.
  */
 static inline struct request * get_request(int n, kdev_t dev)
 {
@@ -191,13 +214,14 @@ static struct request * __get_request_wait(int n, kdev_t dev)
 {
 	register struct request *req;
 	struct wait_queue wait = { current, NULL };
+	unsigned long flags;
 
 	add_wait_queue(&wait_for_request, &wait);
 	for (;;) {
 		current->state = TASK_UNINTERRUPTIBLE;
-		cli();
+		spin_lock_irqsave(&io_request_lock,flags);
 		req = get_request(n, dev);
-		sti();
+		spin_unlock_irqrestore(&io_request_lock,flags);
 		if (req)
 			break;
 		run_task_queue(&tq_disk);
@@ -211,10 +235,11 @@ static struct request * __get_request_wait(int n, kdev_t dev)
 static inline struct request * get_request_wait(int n, kdev_t dev)
 {
 	register struct request *req;
+	unsigned long flags;
 
-	cli();
+	spin_lock_irqsave(&io_request_lock,flags);
 	req = get_request(n, dev);
-	sti();
+	spin_unlock_irqrestore(&io_request_lock,flags);
 	if (req)
 		return req;
 	return __get_request_wait(n, dev);
@@ -261,8 +286,9 @@ static inline void drive_stat_acct(int cmd, unsigned long nr_sectors,
 
 /*
  * add-request adds a request to the linked list.
- * It disables interrupts so that it can muck with the
- * request-lists in peace.
+ * It disables interrupts (aquires the request spinlock) so that it can muck
+ * with the request-lists in peace. Thus it should be called with no spinlocks
+ * held.
  *
  * By this point, req->cmd is always either READ/WRITE, never READA/WRITEA,
  * which is important for drive_stat_acct() above.
@@ -272,6 +298,8 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 {
 	struct request * tmp, **current_request;
 	short		 disk_index;
+	unsigned long flags;
+	int queue_new_request = 0;
 
 	switch (MAJOR(req->rq_dev)) {
 		case SCSI_DISK_MAJOR:
@@ -292,16 +320,20 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	}
 
 	req->next = NULL;
+
+	/*
+	 * We use the goto to reduce locking complexity
+	 */
+	spin_lock_irqsave(&io_request_lock,flags);
 	current_request = get_queue(req->rq_dev);
-	cli();
+
 	if (req->bh)
 		mark_buffer_clean(req->bh);
 	if (!(tmp = *current_request)) {
 		*current_request = req;
 		if (dev->current_request != &dev->plug)
-			(dev->request_fn)();
-		sti();
-		return;
+			queue_new_request = 1;
+		goto out;
 	}
 	for ( ; tmp->next ; tmp = tmp->next) {
 		if ((IN_ORDER(tmp,req) ||
@@ -314,11 +346,21 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 
 /* for SCSI devices, call request_fn unconditionally */
 	if (scsi_blk_major(MAJOR(req->rq_dev)))
-		(dev->request_fn)();
+		queue_new_request = 1;
+out:
+	spin_unlock_irqrestore(&io_request_lock,flags);
 
-	sti();
+	/*
+	 * request_fn() is usually a quite complex and slow function,
+	 * we want to call it with no spinlocks held
+	 */
+	if (queue_new_request)
+		(dev->request_fn)();
 }
 
+/*
+ * Has to be called with the request spinlock aquired
+ */
 static inline void attempt_merge (struct request *req, int max_sectors)
 {
 	struct request *next = req->next;

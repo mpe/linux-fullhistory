@@ -7,6 +7,9 @@
  *    -- C. Scott Ananian <cananian@alumni.princeton.edu>, 14-Jan-1998
  */
 
+#include <linux/config.h>
+#include <linux/module.h>	/* For EXPORT_SYMBOL */
+
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
@@ -21,6 +24,9 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
+
+#define BUILDING_PTY_C 1
+#include <linux/devpts_fs.h>
 
 struct pty_struct {
 	int	magic;
@@ -66,6 +72,7 @@ static void pty_close(struct tty_struct * tty, struct file * filp)
 	if (tty->driver.subtype == PTY_TYPE_MASTER) {
 		tty_hangup(tty->link);
 		set_bit(TTY_OTHER_CLOSED, &tty->flags);
+		devpts_pty_kill(MINOR(tty->device) - tty->driver.minor_start);
 	}
 }
 
@@ -363,6 +370,5 @@ __initfunc(int pty_init(void))
 		panic("Couldn't register compat pty driver");
 	if (tty_register_driver(&old_pty_slave_driver))
 		panic("Couldn't register compat pty slave driver");
-	
 	return 0;
 }

@@ -87,7 +87,6 @@ static char *version = "$Id: dgrs.c,v 1.12 1996/12/21 13:43:58 rick Exp $";
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/init.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -109,6 +108,7 @@ static char *version = "$Id: dgrs.c,v 1.12 1996/12/21 13:43:58 rick Exp $";
 	#define COPY_FROM_USER(DST,SRC,LEN)	copy_from_user(DST,SRC,LEN)
 	#define COPY_TO_USER(DST,SRC,LEN)	copy_to_user(DST,SRC,LEN)
 #else
+	#include <linux/bios32.h>
 	#define IOREMAP(ADDR, LEN)		vremap(ADDR, LEN)
 	#define IOUNMAP(ADDR)			vfree(ADDR)
 	#define COPY_FROM_USER(DST,SRC,LEN)	memcpy_fromfs(DST,SRC,LEN)
@@ -1373,14 +1373,19 @@ dgrs_scan(struct device *dev))
 	/*
 	 *	First, check for PCI boards
 	 */
-	if (pcibios_present())
+	if (pci_present())
 	{
 		int pci_index = 0;
 
 		for (; pci_index < 8; pci_index++)
 		{
 			uchar	pci_bus, pci_device_fn;
+#if LINUX_VERSION_CODE < 0x20100
 			uchar	pci_irq;
+#else
+			uint	pci_irq;
+			struct pci_dev *pdev;
+#endif
 			uchar	pci_latency;
 			ushort	pci_command;
 
@@ -1390,6 +1395,7 @@ dgrs_scan(struct device *dev))
 							&pci_device_fn))
 					break;
 
+#if LINUX_VERSION_CODE < 0x20100
 			pcibios_read_config_byte(pci_bus, pci_device_fn,
 					PCI_INTERRUPT_LINE, &pci_irq);
 			pcibios_read_config_dword(pci_bus, pci_device_fn,
@@ -1398,6 +1404,13 @@ dgrs_scan(struct device *dev))
 					PCI_BASE_ADDRESS_1, &io);
 			pcibios_read_config_dword(pci_bus, pci_device_fn,
 					PCI_BASE_ADDRESS_2, &mem);
+#else
+			pdev = pci_find_slot(pci_bus, pci_device_fn);
+			pci_irq = pdev->irq;
+			plxreg = pdev->base_address[0];
+			io = pdev->base_address[1];
+			mem = pdev->base_address[2];
+#endif
 			pcibios_read_config_dword(pci_bus, pci_device_fn,
 					0x30, &plxdma);
 			irq = pci_irq;

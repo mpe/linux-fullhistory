@@ -458,6 +458,7 @@ static int epp_clear_timeout(struct parport *pb)
 static int parport_SPP_supported(struct parport *pb)
 {
 	/* Do a simple read-write test to make sure the port exists. */
+	parport_pc_write_econtrol(pb, 0xc);
 	parport_pc_write_control(pb, 0xc);
 	parport_pc_write_data(pb, 0xaa);
 	if (parport_pc_read_data(pb) != 0xaa) return 0;
@@ -894,6 +895,7 @@ static int probe_one_port(unsigned long int base, int irq, int dma)
 	p->flags |= PARPORT_FLAG_COMA;
 
 	/* Done probing.  Now put the port into a sensible start-up state. */
+	parport_pc_write_econtrol(p, 0xc);
 	parport_pc_write_control(p, 0xc);
 	parport_pc_write_data(p, 0);
 

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.127 1998/03/30 08:41:25 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.131 1998/04/03 10:52:04 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -39,11 +39,12 @@
  *					most of it into the af independent code.
  *					Added tail drop and some other bugfixes.
  *					Added new listen sematics (ifdefed by
- *					NEW_LISTEN for now)
+ *					TCP_NEW_LISTEN for now)
  *		Mike McLagan	:	Routing by source
  *	Juan Jose Ciarlante:		ip_dynaddr bits
  *		Andi Kleen:		various fixes.
  *	Vitaly E. Lavrov	:	Transparent proxy revived after year coma.
+ *	Andi Kleen		:	Fix TCP_NEW_LISTEN and make it the default.
  */
 
 #include <linux/config.h>
@@ -812,6 +813,11 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 		if (req->sk) {	/* not yet accept()ed */
 			sk = req->sk; /* report error in accept */
 		} else {
+#ifdef TCP_NEW_LISTEN
+			tp->syn_backlog--;
+#else
+			sk->ack_backlog--;
+#endif
 			tcp_synq_unlink(tp, req, prev);
 			req->class->destructor(req);
 			tcp_openreq_free(req);
@@ -1017,7 +1023,6 @@ tcp_v4_save_options(struct sock *sk, struct sk_buff *skb,
 }
 
 int sysctl_max_syn_backlog = 1024; 
-int sysctl_tcp_syn_taildrop = 1;
 
 struct or_calltable or_ipv4 = {
 	tcp_v4_send_synack,
@@ -1025,7 +1030,7 @@ struct or_calltable or_ipv4 = {
 	tcp_v4_send_reset
 };
 
-#ifdef NEW_LISTEN
+#ifdef TCP_NEW_LISTEN
 #define BACKLOG(sk) ((sk)->tp_pinfo.af_tcp.syn_backlog) /* lvalue! */
 #define BACKLOGMAX(sk) sysctl_max_syn_backlog
 #else
@@ -1057,27 +1062,19 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 		if (sysctl_tcp_syncookies) {
 			syn_flood_warning(skb);
 			want_cookie = 1; 
-		} else 
+		} else
 #endif
-		if (sysctl_tcp_syn_taildrop) {
-			struct open_request *req;
-
-			req = tcp_synq_unlink_tail(&sk->tp_pinfo.af_tcp);
-			tcp_openreq_free(req);
-			tcp_statistics.TcpAttemptFails++;
-		} else {
-			goto error;
-		}
+		goto drop;
 	} else { 
 		if (isn == 0)
 			isn = tcp_v4_init_sequence(sk, skb);
-		BACKLOG(sk)++;
 	}
+
+	BACKLOG(sk)++;
 
 	req = tcp_openreq_alloc();
 	if (req == NULL) {
-		if (!want_cookie) BACKLOG(sk)--;
-		goto error;
+		goto dropbacklog;
 	}
 
 	req->rcv_wnd = 0;		/* So that tcp_send_synack() knows! */
@@ -1137,7 +1134,10 @@ dead:
 	tcp_statistics.TcpAttemptFails++;
 	return -ENOTCONN; /* send reset */
 
-error:
+dropbacklog:
+	if (!want_cookie) 
+		BACKLOG(sk)--;
+drop:
 	tcp_statistics.TcpAttemptFails++;
 	return 0;
 }
@@ -1184,7 +1184,12 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		newtp->ato = 0;
 		newtp->snd_wl1 = req->rcv_isn;
 		newtp->snd_wl2 = req->snt_isn;
+
+		/* RFC1323: The window in SYN & SYN/ACK segments
+		 * is never scaled.
+		 */
 		newtp->snd_wnd = ntohs(skb->h.th->window);
+
 		newtp->max_window = newtp->snd_wnd;
 		newtp->pending = 0;
 		newtp->retransmits = 0;
@@ -1270,6 +1275,10 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 	return newsk;
 }
 
+/* 
+ * The three way handshake has completed - we got a valid synack - 
+ * now create the new socket. 
+ */
 struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 				   struct open_request *req,
 				   struct dst_entry *dst)
@@ -1280,7 +1289,7 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	int snd_mss;
 	int mtu;
 
-#ifdef NEW_LISTEN
+#ifdef TCP_NEW_LISTEN
 	if (sk->ack_backlog > sk->max_ack_backlog)
 		goto exit; /* head drop */
 #endif
@@ -1288,13 +1297,14 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 		struct rtable *rt;
 		
 		if (ip_route_output(&rt,
-				    opt && opt->srr ? opt->faddr : req->af.v4_req.rmt_addr,
-				    req->af.v4_req.loc_addr, sk->ip_tos|RTO_CONN, 0))
+			opt && opt->srr ? opt->faddr : req->af.v4_req.rmt_addr,
+			req->af.v4_req.loc_addr, sk->ip_tos|RTO_CONN, 0))
 			return NULL;
 	        dst = &rt->u.dst;
 	}
 
-#ifdef NEW_LISTEN
+#ifdef TCP_NEW_LISTEN
+	sk->tp_pinfo.af_tcp.syn_backlog--;
 	sk->ack_backlog++;
 #endif
 
@@ -1343,6 +1353,11 @@ static void tcp_v4_rst_req(struct sock *sk, struct sk_buff *skb)
 	    after(TCP_SKB_CB(skb)->seq, req->snt_isn+1))
 		return;
 	tcp_synq_unlink(tp, req, prev);
+#ifdef TCP_NEW_LISTEN
+	(req->sk ? sk->ack_backlog : tp->syn_backlog)--;
+#else
+	sk->ack_backlog--;
+#endif
 	req->class->destructor(req);
 	tcp_openreq_free(req); 
 }
@@ -1468,9 +1483,14 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 		skb->csum = csum_partial((char *)th, len, 0);
 	case CHECKSUM_HW:
 		if (tcp_v4_check(th,len,skb->nh.iph->saddr,skb->nh.iph->daddr,skb->csum)) {
-			printk(KERN_DEBUG "TCPv4 bad checksum from %d.%d.%d.%d:%04x to %d.%d.%d.%d:%04x, len=%d/%d/%d\n",
- 			       NIPQUAD(skb->nh.iph->saddr), ntohs(th->source), NIPQUAD(skb->nh.iph->daddr),
-			       ntohs(th->dest), len, skb->len, ntohs(skb->nh.iph->tot_len));
+			printk(KERN_DEBUG "TCPv4 bad checksum from %d.%d.%d.%d:%04x to %d.%d.%d.%d:%04x, "
+			       "len=%d/%d/%d\n",
+ 			       NIPQUAD(ntohl(skb->nh.iph->saddr)),
+			       ntohs(th->source), 
+			       NIPQUAD(ntohl(skb->nh.iph->daddr)),
+			       ntohs(th->dest),
+			       len, skb->len,
+			       ntohs(skb->nh.iph->tot_len));
 			tcp_statistics.TcpInErrs++;
 			goto discard_it;
 		}
@@ -1642,7 +1662,7 @@ static int tcp_v4_init_sock(struct sock *sk)
 	tp->rto  = TCP_TIMEOUT_INIT;		/*TCP_WRITE_TIME*/
 	tp->mdev = TCP_TIMEOUT_INIT;
 	tp->in_mss = 536;
-
+      
 	/* See draft-stevens-tcpca-spec-01 for discussion of the
 	 * initialization of these values.
 	 */

@@ -35,10 +35,10 @@ NEWS for user.
 
 NEWS for hacker.
 
-- New destination cache. Flexible, robust and just beatiful.
+- New destination cache. Flexible, robust and just beautiful.
 - Network stack is reordered, simplified, optimized, a lot of bugs fixed.
-  (well, and new bugs are intoduced, but I've yet not seen them 8))
-  It is difficult to descibe all the changes, look into source.
+  (well, and new bugs are introduced, but I haven't seen them yet 8))
+  It is difficult to describe all the changes, look into source.
 
 If you see this file, then this patch works 8)
 

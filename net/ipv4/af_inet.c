@@ -5,7 +5,7 @@
  *
  *		AF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.68 1998/03/27 07:02:42 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.69 1998/04/03 09:49:42 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -117,10 +117,13 @@
 
 #define min(a,b)	((a)<(b)?(a):(b))
 
+struct linux_mib net_statistics;
+
 extern int sysctl_core_destroy_delay;
 
 extern int raw_get_info(char *, char **, off_t, int, int);
 extern int snmp_get_info(char *, char **, off_t, int, int);
+extern int netstat_get_info(char *, char **, off_t, int, int);
 extern int afinet_get_info(char *, char **, off_t, int, int);
 extern int tcp_get_info(char *, char **, off_t, int, int);
 extern int udp_get_info(char *, char **, off_t, int, int);
@@ -1016,6 +1019,12 @@ static struct proc_dir_entry proc_net_raw = {
 	0, &proc_net_inode_operations,
 	raw_get_info
 };
+static struct proc_dir_entry proc_net_netstat = {
+	PROC_NET_NETSTAT, 7, "netstat",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	netstat_get_info
+};
 static struct proc_dir_entry proc_net_snmp = {
 	PROC_NET_SNMP, 4, "snmp",
 	S_IFREG | S_IRUGO, 1, 0, 0,
@@ -1141,6 +1150,7 @@ __initfunc(void inet_proto_init(struct net_proto *pro))
 #endif		/* RARP */
 	proc_net_register(&proc_net_raw);
 	proc_net_register(&proc_net_snmp);
+	proc_net_register(&proc_net_netstat);
 	proc_net_register(&proc_net_sockstat);
 	proc_net_register(&proc_net_tcp);
 	proc_net_register(&proc_net_udp);

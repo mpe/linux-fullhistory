@@ -20,7 +20,8 @@ FONTMAPFILE = cp437.uni
 
 L_TARGET := char.a
 M_OBJS   :=
-L_OBJS   := tty_io.o n_tty.o tty_ioctl.o pty.o mem.o random.o
+L_OBJS   := tty_io.o n_tty.o tty_ioctl.o mem.o random.o
+LX_OBJS  := pty.o
 
 ifdef CONFIG_VT
 L_OBJS += console.o vt.o vc_screen.o consolemap.o consolemap_deftbl.o

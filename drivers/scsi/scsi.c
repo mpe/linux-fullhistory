@@ -141,7 +141,7 @@ static unsigned char   ** dma_malloc_pages = NULL;
  */
 unsigned int              scsi_logging_level = 0;
 
-static volatile struct Scsi_Host * host_active = NULL;
+volatile struct Scsi_Host * host_active = NULL;
 
 #if CONFIG_PROC_FS
 /* 

@@ -64,7 +64,6 @@
 #include <linux/stat.h>
 #include <linux/mm.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/ctype.h>
 #include <asm/io.h>
 #include "ide.h"
@@ -211,21 +210,22 @@ static int proc_ide_write_config
 				if (is_pci) {
 #ifdef CONFIG_BLK_DEV_IDEPCI
 					int rc = 0;
+					struct pci_dev *dev = hwif->pci_dev;
 					switch (digits) {
 						case 2:	msg = "byte";
-							rc = pcibios_write_config_byte(hwif->pci_bus, hwif->pci_fn, reg, val);
+							rc = pci_write_config_byte(dev, reg, val);
 							break;
 						case 4:	msg = "word";
-							rc = pcibios_write_config_word(hwif->pci_bus, hwif->pci_fn, reg, val);
+							rc = pci_write_config_word(dev, reg, val);
 							break;
 						case 8:	msg = "dword";
-							rc = pcibios_write_config_dword(hwif->pci_bus, hwif->pci_fn, reg, val);
+							rc = pci_write_config_dword(dev, reg, val);
 							break;
 					}
 					if (rc) {
 						restore_flags(flags);
-						printk("proc_ide_write_config: error writing %s at bus %d fn %d reg 0x%x value 0x%x\n",
-							msg, hwif->pci_bus, hwif->pci_fn, reg, val);
+						printk("proc_ide_write_config: error writing %s at bus %02x dev %02x reg 0x%x value 0x%x\n",
+							msg, dev->bus->number, dev->devfn, reg, val);
 						printk("proc_ide_write_config: %s\n", pcibios_strerror(rc));
 						return -EIO;
 					}
@@ -259,14 +259,16 @@ static int proc_ide_read_config
 	int		len, reg = 0;
 
 #ifdef CONFIG_BLK_DEV_IDEPCI
-	out += sprintf(out, "pci bus %d device %d vid %04x did %04x channel %d\n",
-		hwif->pci_bus, hwif->pci_fn, hwif->pci_devid.vid, hwif->pci_devid.did, hwif->channel);
+	struct pci_dev *dev = hwif->pci_dev;
+
+	out += sprintf(out, "pci bus %02x device %02x vid %04x did %04x channel %d\n",
+		dev->bus->number, dev->devfn, hwif->pci_devid.vid, hwif->pci_devid.did, hwif->channel);
 	do {
 		byte val;
-		int rc = pcibios_read_config_byte(hwif->pci_bus, hwif->pci_fn, reg, &val);
+		int rc = pci_read_config_byte(dev, reg, &val);
 		if (rc) {
-			printk("proc_ide_read_config: error reading bus %d fn %d reg 0x%02x\n",
-				hwif->pci_bus, hwif->pci_fn, reg);
+			printk("proc_ide_read_config: error reading bus %02x dev %02x reg 0x%02x\n",
+				dev->bus->number, dev->devfn, reg);
 			printk("proc_ide_read_config: %s\n", pcibios_strerror(rc));
 			return -EIO;
 			out += sprintf(out, "??%c", (++reg & 0xf) ? ' ' : '\n');

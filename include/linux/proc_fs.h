@@ -134,6 +134,7 @@ enum net_directory_inos {
 	PROC_NET_DN_L1,
 	PROC_NET_DN_L2,
 	PROC_NET_DN_SKT,
+	PROC_NET_NETSTAT,
 	PROC_NET_LAST
 };
 

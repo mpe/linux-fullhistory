@@ -25,7 +25,6 @@ static const char *version = "pcnet32.c:v0.23 8.2.97 tsbogend@alpha.franken.de\n
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/init.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -78,7 +77,7 @@ static int pcnet32_debug = 1;
  *	   in arch/i386/bios32.c
  * v0.21:  added endian conversion for ppc, from work by cort@cs.nmt.edu
  * v0.22:  added printing of status to ring dump
- * v0.23:  changed enet_statistics to net_devive_stats
+ * v0.23:  changed enet_statistics to net_device_stats
  */
 
 
@@ -172,7 +171,7 @@ static void pcnet32_set_multicast_list(struct device *dev);
 __initfunc(int pcnet32_probe (struct device *dev))
 {
     unsigned int  ioaddr = dev ? dev->base_addr: 0;
-    unsigned char irq_line = dev ? dev->irq : 0;
+    unsigned int  irq_line = dev ? dev->irq : 0;
     int *port;
     
     if (ioaddr > 0x1ff)
@@ -181,30 +180,20 @@ __initfunc(int pcnet32_probe (struct device *dev))
       return ENXIO;
     
 #if defined(CONFIG_PCI)
-    if (pcibios_present()) {
-	int pci_index;
+    if (pci_present()) {
+	struct pci_dev *pdev = NULL;
 	
 	printk("pcnet32.c: PCI bios is present, checking for devices...\n");
-	for (pci_index = 0; pci_index < 8; pci_index++) {
-	    unsigned char pci_bus, pci_device_fn;
+	while ((pdev = pci_find_device(PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_LANCE, pdev))) {
 	    unsigned short pci_command;
 
-	    if (pcibios_find_device (PCI_VENDOR_ID_AMD,
-				     PCI_DEVICE_ID_AMD_LANCE, pci_index,
-				     &pci_bus, &pci_device_fn) != 0)
-	      break;
-	    pcibios_read_config_byte(pci_bus, pci_device_fn,
-				     PCI_INTERRUPT_LINE, &irq_line);
-	    pcibios_read_config_dword(pci_bus, pci_device_fn,
-				      PCI_BASE_ADDRESS_0, &ioaddr);
-	    /* Remove I/O space marker in bit 0. */
-	    ioaddr &= ~3;
+	    irq_line = pdev->irq;
+	    ioaddr = pdev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
 	    /* PCI Spec 2.1 states that it is either the driver or PCI card's
 	     * responsibility to set the PCI Master Enable Bit if needed.
 	     *	(From Mark Stockton <marks@schooner.sys.hou.compaq.com>)
 	     */
-	    pcibios_read_config_word(pci_bus, pci_device_fn,
-				     PCI_COMMAND, &pci_command);
+	    pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
 	    
 	    /* Avoid already found cards from previous pcnet32_probe() calls */
 	    if (check_region(ioaddr, PCNET32_TOTAL_SIZE))
@@ -213,8 +202,7 @@ __initfunc(int pcnet32_probe (struct device *dev))
 	    if ( ! (pci_command & PCI_COMMAND_MASTER)) {
 		printk("PCI Master Bit has not been set. Setting...\n");
 		pci_command |= PCI_COMMAND_MASTER|PCI_COMMAND_IO;
-		pcibios_write_config_word(pci_bus, pci_device_fn,
-					  PCI_COMMAND, pci_command);
+		pci_write_config_word(pdev, PCI_COMMAND, pci_command);
 	    }
 #ifdef __powerpc__
 	    irq_line = 15;

@@ -62,7 +62,7 @@ tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
 tristate 'Amiga FFS filesystem support' CONFIG_AFFS_FS
 tristate 'Apple Macintosh filesystem support (experimental)' CONFIG_HFS_FS
 tristate 'ROM filesystem support' CONFIG_ROMFS_FS
-tristate 'Kernel automounter support (experimental)' CONFIG_AUTOFS_FS
+tristate 'Kernel automounter support' CONFIG_AUTOFS_FS
 if [ "$CONFIG_AFFS_FS" != "n" ]; then
   define_bool CONFIG_AMIGA_PARTITION y
 fi
@@ -74,6 +74,7 @@ if [ "$CONFIG_UFS_FS" != "n" ]; then
 fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'ADFS filesystem support (read only) (EXPERIMENTAL)' CONFIG_ADFS_FS
+  tristate '/dev/pts filesystem support (EXPERIMENTAL)' CONFIG_DEVPTS_FS
 fi
 bool 'Macintosh partition map support' CONFIG_MAC_PARTITION
 endmenu

@@ -73,8 +73,6 @@
 #include <asm/io.h>
 #include "ide.h"
 #include "ide_modes.h"
-#include <linux/pci.h>
-#include <linux/bios32.h>
 
 #define OPTI621_MAX_PIO 3
 /* In fact, I do not have any PIO 4 drive

@@ -122,8 +122,6 @@ static void hfs_put_super(struct super_block *sb)
 {
 	struct hfs_mdb *mdb = HFS_SB(sb)->s_mdb;
  
-	lock_super(sb);
-
 	if (!(sb->s_flags & MS_RDONLY)) {
 		hfs_mdb_commit(mdb, 0);
 		sb->s_dirt = 0;
@@ -135,12 +133,8 @@ static void hfs_put_super(struct super_block *sb)
 	/* restore default blocksize for the device */
 	set_blocksize(sb->s_dev, BLOCK_SIZE);
 
-	/* invalidate the superblock */
-	sb->s_dev = 0;
-
 	MOD_DEC_USE_COUNT;
 
-	unlock_super(sb);
 	return;
 }
 

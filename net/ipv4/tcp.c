@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.108 1998/03/29 08:43:51 davem Exp $
+ * Version:	$Id: tcp.c,v 1.110 1998/04/03 09:49:51 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1160,17 +1160,17 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 			break;
 		}
 
+		if (sk->shutdown & RCV_SHUTDOWN) {
+			sk->done = 1;
+			break;
+		}
+
 		if (sk->state == TCP_CLOSE) {
 			if (!sk->done) {
 				sk->done = 1;
 				break;
 			}
 			copied = -ENOTCONN;
-			break;
-		}
-
-		if (sk->shutdown & RCV_SHUTDOWN) {
-			sk->done = 1;
 			break;
 		}
 
@@ -1529,7 +1529,7 @@ struct sock *tcp_accept(struct sock *sk, int flags)
 	tcp_synq_unlink(tp, req, prev);
 	newsk = req->sk;
 	tcp_openreq_free(req);
-	sk->ack_backlog--;  /* XXX */
+	sk->ack_backlog--; 
 
 	/* FIXME: need to check here if newsk has already
 	 * an soft_err or err set.

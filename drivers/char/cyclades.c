@@ -525,7 +525,6 @@ static char rcsid[] =
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 
 #include <linux/version.h>
@@ -4391,7 +4390,7 @@ __initfunc(static int
 cy_detect_pci(void))
 {
 #ifdef CONFIG_PCI
-  unsigned char         cyy_bus, cyy_dev_fn, cyy_rev_id;
+  unsigned char         cyy_rev_id;
   unsigned long         pci_intr_ctrl;
   unsigned char         cy_pci_irq;
   uclong                cy_pci_addr0, cy_pci_addr1, cy_pci_addr2;
@@ -4399,20 +4398,17 @@ cy_detect_pci(void))
   unsigned short        device_id,dev_index = 0,board_index = 0;
   uclong		mailbox;
   uclong		Ze_addr0[NR_CARDS], Ze_addr2[NR_CARDS], ZeIndex = 0;
+  struct pci_dev	*pdev = NULL;
 
-        if(pcibios_present() == 0) {    /* PCI bus not present */
+        if(pci_present() == 0) {    /* PCI bus not present */
                 return(0);
         }
         for (i = 0; i < NR_CARDS; i++) {
                 /* look for a Cyclades card by vendor and device id */
                 while((device_id = cy_pci_dev_id[dev_index]) != 0) {
-                        if(pcibios_find_device(PCI_VENDOR_ID_CYCLADES,
-                                        device_id,board_index,
-                                        &cyy_bus, &cyy_dev_fn) != 0)
-                        {
+			if ((pdev = pci_find_device(PCI_VENDOR_ID_CYCLADES, device_id, pdev)) == NULL)
                                 dev_index++;    /* try next device id */
-                                board_index = 0;
-                        } else {
+                        else {
                                 board_index++;
                                 break;          /* found a board */
                         }
@@ -4422,37 +4418,29 @@ cy_detect_pci(void))
 		    break;
 
                 /* read PCI configuration area */
-                pcibios_read_config_byte(cyy_bus, cyy_dev_fn,
-                                 PCI_INTERRUPT_LINE, &cy_pci_irq);
-                pcibios_read_config_dword(cyy_bus, cyy_dev_fn,
-                                  PCI_BASE_ADDRESS_0, 
-				  (unsigned int *) &cy_pci_addr0);
-                pcibios_read_config_dword(cyy_bus, cyy_dev_fn,
-                                  PCI_BASE_ADDRESS_1, 
-				  (unsigned int *) &cy_pci_addr1);
-                pcibios_read_config_dword(cyy_bus, cyy_dev_fn,
-                                  PCI_BASE_ADDRESS_2, 
-				  (unsigned int *) &cy_pci_addr2);
-                pcibios_read_config_byte(cyy_bus, cyy_dev_fn,
-                                  PCI_REVISION_ID, &cyy_rev_id);
+		cy_pci_irq = pdev->irq;
+		cy_pci_addr0 = pdev->base_address[0];
+		cy_pci_addr1 = pdev->base_address[1];
+		cy_pci_addr2 = pdev->base_address[2];
+		pci_read_config_byte(pdev, PCI_REVISION_ID, &cyy_rev_id);
 
     if ((device_id == PCI_DEVICE_ID_CYCLOM_Y_Lo)
 	   || (device_id == PCI_DEVICE_ID_CYCLOM_Y_Hi)){
 #ifdef CY_PCI_DEBUG
             printk("Cyclom-Y/PCI (bus=0x0%x, pci_id=0x%x, ",
-		cyy_bus, cyy_dev_fn);
+		pdev->bus->number, pdev->devfn);
             printk("rev_id=%d) IRQ%d\n",
 		cyy_rev_id, (int)cy_pci_irq);
             printk("Cyclom-Y/PCI:found  winaddr=0x%lx ioaddr=0x%lx\n",
 		(ulong)cy_pci_addr2, (ulong)cy_pci_addr1);
 #endif
-                cy_pci_addr1  &= 0xfffffffc;
-                cy_pci_addr2  &= 0xfffffff0;
+                cy_pci_addr1  &= PCI_BASE_ADDRESS_IO_MASK;
+                cy_pci_addr2  &= PCI_BASE_ADDRESS_MEM_MASK;
 
 #if defined(__alpha__)
                 if (device_id  == PCI_DEVICE_ID_CYCLOM_Y_Lo) { /* below 1M? */
 		    printk("Cyclom-Y/PCI (bus=0x0%x, pci_id=0x%x, ",
-		        cyy_bus, cyy_dev_fn);
+		        pdev->bus->number, pdev->devfn);
 		    printk("rev_id=%d) IRQ%d\n",
 		        cyy_rev_id, (int)cy_pci_irq);
                     printk("Cyclom-Y/PCI:found  winaddr=0x%lx ioaddr=0x%lx\n",
@@ -4537,7 +4525,7 @@ cy_detect_pci(void))
     }else if (device_id == PCI_DEVICE_ID_CYCLOM_Z_Lo){
 	    /* print message */
 		printk("Cyclades-Z/PCI (bus=0x0%x, pci_id=0x%x, ",
-		    cyy_bus, cyy_dev_fn);
+		    pdev->bus->number, pdev->devfn);
 		printk("rev_id=%d) IRQ%d\n",
 		    cyy_rev_id, (int)cy_pci_irq);
 		printk("Cyclades-Z/PCI: found winaddr=0x%lx ctladdr=0x%lx\n",
@@ -4547,13 +4535,13 @@ cy_detect_pci(void))
     }else if (device_id == PCI_DEVICE_ID_CYCLOM_Z_Hi){
 #ifdef CY_PCI_DEBUG
             printk("Cyclades-Z/PCI (bus=0x0%x, pci_id=0x%x, ",
-		cyy_bus, cyy_dev_fn);
+		pdev->bus->number, pdev->devfn);
             printk("rev_id=%d) IRQ%d\n",
 		cyy_rev_id, (int)cy_pci_irq);
             printk("Cyclades-Z/PCI: found winaddr=0x%lx ctladdr=0x%lx\n",
                 (ulong)cy_pci_addr2, (ulong)cy_pci_addr0);
 #endif
-                cy_pci_addr0 &= 0xfffffff0;
+                cy_pci_addr0 &= PCI_BASE_ADDRESS_MEM_MASK;
 #if !defined(__alpha__)
                 cy_pci_addr0 = (unsigned int) ioremap(
                                cy_pci_addr0 & PAGE_MASK,
@@ -4562,7 +4550,7 @@ cy_detect_pci(void))
 #endif
 		mailbox = (uclong)cy_readl(&((struct RUNTIME_9060 *) 
 			   cy_pci_addr0)->mail_box_0);
-                cy_pci_addr2 &= 0xfffffff0;
+                cy_pci_addr2 &= PCI_BASE_ADDRESS_MEM_MASK;
 		if (mailbox == ZE_V1) {
 #if !defined(__alpha__)
                	    cy_pci_addr2 = (unsigned int) ioremap(

@@ -23,6 +23,19 @@
  * Tested with Linux 1.2.13, ..., 2.1.61                                *
  *                                                                      *
  * $Log: gdth.c,v $
+ * Revision 1.3  1998/02/25 23:52:32  ecd
+ * Final round of PCI device driver patches by Martin Mares.
+ *
+ * I could not verify each and every change to the drivers locally,
+ * please consult linux/Documentation/pci.txt to understand changes
+ * made in case patching should be necessary.
+ *
+ * Revision 1.2  1997/11/12 23:58:51  davem
+ * Merge to 2.1.63 to get the Ingo P5 bugfix.
+ * I did not touch the sound changes at all, Alan
+ * please look into that stuff as it is your
+ * territory.
+ *
  * Revision 1.10  1997/10/31 12:29:57  achim
  * Read heads/sectors from host drive
  *
@@ -60,7 +73,7 @@
  * Initial revision
  *
  *
- * $Id: gdth.c,v 1.10 1997/10/31 12:29:57 achim Exp $ 
+ * $Id: gdth.c,v 1.3 1998/02/25 23:52:32 ecd Exp $ 
  ************************************************************************/
 
 #ifdef MODULE
@@ -71,7 +84,6 @@
 #include <linux/kernel.h>
 #include <linux/head.h>
 #include <linux/types.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
@@ -83,6 +95,8 @@
 #include <linux/timer.h>
 #if LINUX_VERSION_CODE >= 0x020100
 #include <linux/reboot.h>
+#else
+#include <linux/bios32.h>
 #endif
 
 #include <asm/dma.h>
@@ -440,7 +454,7 @@ static int gdth_search_pci(ushort device_id,ushort index,gdth_pci_str *pcistr)
     TRACE(("gdth_search_pci() device_id %d, index %d\n",
                  device_id,index));
 
-    if (!pcibios_present())
+    if (!pci_present())
         return 0;
 
     if (pcibios_find_device(PCI_VENDOR_ID_VORTEX,device_id,index,
@@ -448,6 +462,22 @@ static int gdth_search_pci(ushort device_id,ushort index,gdth_pci_str *pcistr)
         return 0;
 
     /* GDT PCI controller found, now read resources from config space */
+#if LINUX_VERSION_CODE >= 0x20155
+    {
+	struct pci_dev *pdev = pci_find_slot(pcistr->bus, pcistr->device_fn);
+	base0 = pdev->base_address[0];
+	base1 = pdev->base_address[1];
+	base2 = pdev->base_address[2];
+	if ((error = pcibios_read_config_dword(pcistr->bus,pcistr->device_fn,
+                                           PCI_ROM_ADDRESS,
+                                           (int *) &pcistr->bios))) {
+		printk("GDT-PCI: error %s reading configuration space",
+		       pcibios_strerror(error));
+		return -1;
+		}
+	pcistr->irq = pdev->irq;
+    }
+#else
 #if LINUX_VERSION_CODE >= 0x010300
 #define GDTH_BASEP      (int *)
 #else
@@ -471,6 +501,7 @@ static int gdth_search_pci(ushort device_id,ushort index,gdth_pci_str *pcistr)
                pcibios_strerror(error));
         return -1;
     }
+#endif
 
     pcistr->device_id = device_id;
     if (device_id <= PCI_DEVICE_ID_VORTEX_GDT6000B ||   /* GDT6000 or GDT6000B */

@@ -668,18 +668,26 @@ static int do_umount(kdev_t dev, int unmount_root)
 	if (retval)
 		goto out;
 
-	/* Forget any inodes */
-	if (invalidate_inodes(sb)) {
-		printk("VFS: Busy inodes after unmount. "
-			"Self-destruct in 5 seconds. Bye-bye..\n");
-	}
-
 	if (sb->s_op) {
 		if (sb->s_op->write_super && sb->s_dirt)
 			sb->s_op->write_super(sb);
+	}
+
+	lock_super(sb);
+	if (sb->s_op) {
 		if (sb->s_op->put_super)
 			sb->s_op->put_super(sb);
 	}
+
+	/* Forget any remaining inodes */
+	if (invalidate_inodes(sb)) {
+		printk("VFS: Busy inodes after unmount. "
+			"Self-destruct in 5 seconds.  Have a nice day...\n");
+	}
+
+	sb->s_dev = 0;		/* Free the superblock */
+	unlock_super(sb);
+
 	remove_vfsmnt(dev);
 out:
 	return retval;

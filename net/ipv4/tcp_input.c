@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.103 1998/03/30 08:41:12 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.104 1998/04/01 07:41:24 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1906,7 +1906,10 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			tp->rcv_nxt = TCP_SKB_CB(skb)->seq+1;
 			tp->rcv_wup = TCP_SKB_CB(skb)->seq+1;
 
-			tp->snd_wnd = htons(th->window) << tp->snd_wscale;
+			/* RFC1323: The window in SYN & SYN/ACK segments is
+			 * never scaled.
+			 */
+			tp->snd_wnd = htons(th->window);
 			tp->snd_wl1 = TCP_SKB_CB(skb)->seq;
 			tp->snd_wl2 = TCP_SKB_CB(skb)->ack_seq;
 			tp->fin_seq = TCP_SKB_CB(skb)->seq;
@@ -1918,6 +1921,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
                 		tp->snd_wscale = tp->rcv_wscale = 0;
                 		tp->window_clamp = min(tp->window_clamp,65535);
         		}
+
 			if (tp->tstamp_ok) {
 				tp->tcp_header_len =
 					sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED;
@@ -1980,6 +1984,9 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 				tp->rcv_nxt = TCP_SKB_CB(skb)->seq + 1;
 				tp->rcv_wup = TCP_SKB_CB(skb)->seq + 1;
 
+				/* RFC1323: The window in SYN & SYN/ACK segments is
+				 * never scaled.
+				 */
 				tp->snd_wnd = htons(th->window);
 				tp->snd_wl1 = TCP_SKB_CB(skb)->seq;
 				

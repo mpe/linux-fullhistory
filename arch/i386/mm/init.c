@@ -174,29 +174,29 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
  * It may also hold the MP configuration table when we are booting SMP.
  */
 #ifdef __SMP__
-	if (!smp_scan_config(0x0,0x400))	/* Scan the bottom 1K for a signature */
-	{
+	/*
+	 * FIXME: Linux assumes you have 640K of base ram..
+	 * this continues the error...
+	 *
+	 * 1) Scan the bottom 1K for a signature
+	 * 2) Scan the top 1K of base RAM
+	 * 3) Scan the 64K of bios
+	 */
+	if (!smp_scan_config(0x0,0x400) &&
+	    !smp_scan_config(639*0x400,0x400) &&
+	    !smp_scan_config(0xF0000,0x10000)) {
 		/*
-		 *	FIXME: Linux assumes you have 640K of base ram.. this continues
-		 *	the error...
+		 * If it is an SMP machine we should know now, unless the
+		 * configuration is in an EISA/MCA bus machine with an
+		 * extended bios data area. 
+		 *
+		 * there is a real-mode segmented pointer pointing to the
+		 * 4K EBDA area at 0x40E, calculate and scan it here:
 		 */
-		if (!smp_scan_config(639*0x400,0x400))	/* Scan the top 1K of base RAM */
-		{
-			if(!smp_scan_config(0xF0000,0x10000))	/* Scan the 64K of bios */
-			{
-				/*
-				 *	If it is an SMP machine we should know now, unless the configuration
-				 *	is in an EISA/MCA bus machine with an extended bios data area. 
-				 */
-		 
-				address = *(unsigned short *)phys_to_virt(0x40E); /* EBDA */
-				address<<=4;	/* Real mode segments to physical */
-				smp_scan_config(address, 0x1000);	/* Scan the EBDA */
-			}
-		}
+		address = *(unsigned short *)phys_to_virt(0x40E);
+		address<<=4;
+		smp_scan_config(address, 0x1000);
 	}
-			
-/*	smp_alloc_memory(8192); */
 #endif
 	start_mem = PAGE_ALIGN(start_mem);
 	address = PAGE_OFFSET;
@@ -255,7 +255,50 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 			address += PAGE_SIZE;
 		}
 	}
+#ifdef __SMP__
+{
+	pte_t pte;
+	unsigned long apic_area = (unsigned long)APIC_BASE;
+
+	pg_dir = swapper_pg_dir + ((apic_area) >> PGDIR_SHIFT);
+	memset((void *)start_mem, 0, PAGE_SIZE);
+	pgd_val(*pg_dir) = _PAGE_TABLE | __pa(start_mem);
+	start_mem += PAGE_SIZE;
+
+	if (smp_found_config) {
+		/*
+		 * Map the local APIC to FEE00000.
+		 */
+		pg_table = pte_offset((pmd_t *)pg_dir, apic_area);
+		pte = mk_pte(__va(apic_area), PAGE_KERNEL);
+		set_pte(pg_table, pte);
+
+		/*
+		 * Map the IO-APIC to FEC00000.
+		 */
+		apic_area = 0xFEC00000; /*(unsigned long)IO_APIC_BASE;*/
+		pg_table = pte_offset((pmd_t *)pg_dir, apic_area);
+		pte = mk_pte(__va(apic_area), PAGE_KERNEL);
+		set_pte(pg_table, pte);
+	} else {
+		/*
+		 * No local APIC but we are compiled SMP ... set up a
+		 * fake all zeroes page to simulate the local APIC.
+		 */
+		pg_table = pte_offset((pmd_t *)pg_dir, apic_area);
+		pte = mk_pte(start_mem, PAGE_KERNEL);
+		memset((void *)start_mem, 0, PAGE_SIZE);
+		start_mem += PAGE_SIZE;
+		set_pte(pg_table, pte);
+	}
+
 	local_flush_tlb();
+	printk("IO APIC ID: %d\n", *(int *)0xFEC00000);
+	printk("APIC ID: %d\n", *(int *)0xFEE00000);
+}
+#endif
+	local_flush_tlb();
+
 	return free_area_init(start_mem, end_mem);
 }
 

@@ -1,5 +1,5 @@
 /*
- *	$Id: pci.h,v 1.51 1997/12/27 13:55:23 mj Exp $
+ *	$Id: pci.h,v 1.62 1998/03/15 13:50:05 ecd Exp $
  *
  *	PCI defines and function prototypes
  *	Copyright 1994, Drew Eckhardt
@@ -68,6 +68,10 @@
 #define PCI_CACHE_LINE_SIZE	0x0c	/* 8 bits */
 #define PCI_LATENCY_TIMER	0x0d	/* 8 bits */
 #define PCI_HEADER_TYPE		0x0e	/* 8 bits */
+#define  PCI_HEADER_TYPE_NORMAL	0
+#define  PCI_HEADER_TYPE_BRIDGE 1
+#define  PCI_HEADER_TYPE_CARDBUS 2
+
 #define PCI_BIST		0x0f	/* 8 bits */
 #define PCI_BIST_CODE_MASK	0x0f	/* Return result */
 #define PCI_BIST_START		0x40	/* 1 to start BIST, 2 secs or less */
@@ -99,8 +103,8 @@
 
 /* Header type 0 (normal devices) */
 #define PCI_CARDBUS_CIS		0x28
-#define PCI_SUBSYSTEM_ID	0x2c
-#define PCI_SUBSYSTEM_VENDOR_ID	0x2e  
+#define PCI_SUBSYSTEM_VENDOR_ID	0x2c
+#define PCI_SUBSYSTEM_ID	0x2e  
 #define PCI_ROM_ADDRESS		0x30	/* 32 bits */
 #define  PCI_ROM_ADDRESS_ENABLE	0x01	/* Write 1 to enable ROM,
 					   bits 31..11 are address,
@@ -148,6 +152,36 @@
 #define  PCI_BRIDGE_CTL_MASTER_ABORT 0x20  /* Report master aborts */
 #define  PCI_BRIDGE_CTL_BUS_RESET 0x40	/* Secondary bus reset */
 #define  PCI_BRIDGE_CTL_FAST_BACK 0x80	/* Fast Back2Back enabled on secondary interface */
+
+/* Header type 2 (CardBus bridges) -- detailed info welcome */
+#define PCI_CB_CARDBUS_BASE	0x10	/* CardBus Socket/ExCa base address */
+#define  PCI_CB_CARDBUS_BASE_TYPE_MASK 0xfff
+#define  PCI_CB_CARDBUS_BASE_MASK ~0xfff
+#define PCI_CB_CAPABILITIES	0x14	/* Offset of list of capabilities in cfg space */
+/* 0x15 reserved */
+#define PCI_CB_SEC_STATUS	0x16	/* Secondary status */
+#define PCI_CB_BUS_NUMBER	0x18	/* PCI bus number */
+#define PCI_CB_CARDBUS_NUMBER	0x19	/* CardBus bus number */
+#define PCI_CB_SUBORDINATE_BUS	0x1a	/* Subordinate bus number */
+#define PCI_CB_CARDBUS_LATENCY	0x1b	/* CardBus latency timer */
+#define PCI_CB_MEMORY_BASE_0	0x1c
+#define PCI_CB_MEMORY_LIMIT_0	0x20
+#define PCI_CB_MEMORY_BASE_1	0x24
+#define PCI_CB_MEMORY_LIMIT_1	0x28
+#define PCI_CB_IO_BASE_0	0x2c
+#define PCI_CB_IO_BASE_0_HI	0x2e
+#define PCI_CB_IO_LIMIT_0	0x30
+#define PCI_CB_IO_LIMIT_0_HI	0x32
+#define PCI_CB_IO_BASE_1	0x34
+#define PCI_CB_IO_BASE_1_HI	0x36
+#define PCI_CB_IO_LIMIT_1	0x38
+#define PCI_CB_IO_LIMIT_1_HI	0x3a
+/* 0x3c-0x3d are same as for htype 0 */
+/* 0x3e-0x3f are same as for htype 1 */
+#define PCI_CB_SUBSYSTEM_ID	0x40
+#define PCI_CB_SUBSYSTEM_VENDOR_ID 0x42
+#define PCI_CB_LEGACY_MODE_BASE	0x44	/* 16-bit PC Card legacy mode base address (ExCa) */
+/* 0x48-0x7f reserved */
 
 /* Device classes and subclasses */
 
@@ -236,7 +270,8 @@
 
 /*
  * Vendor and card ID's: sort these numerically according to vendor
- * (and according to card ID within vendor)
+ * (and according to card ID within vendor). Send all updates to
+ * <linux-pcisupport@cck.uni-kl.de>.
  */
 #define PCI_VENDOR_ID_COMPAQ		0x0e11
 #define PCI_DEVICE_ID_COMPAQ_1280	0x3033
@@ -518,7 +553,9 @@
 #define PCI_VENDOR_ID_SUN		0x108e
 #define PCI_DEVICE_ID_SUN_EBUS		0x1000
 #define PCI_DEVICE_ID_SUN_HAPPYMEAL	0x1001
+#define PCI_DEVICE_ID_SUN_SIMBA		0x5000
 #define PCI_DEVICE_ID_SUN_PBM		0x8000
+#define PCI_DEVICE_ID_SUN_SABRE		0xa000
 
 #define PCI_VENDOR_ID_CMD		0x1095
 #define PCI_DEVICE_ID_CMD_640		0x0640
@@ -601,6 +638,8 @@
 #define PCI_VENDOR_ID_CERN		0x10dc
 #define PCI_DEVICE_ID_CERN_SPSB_PMC	0x0001
 #define PCI_DEVICE_ID_CERN_SPSB_PCI	0x0002
+#define PCI_DEVICE_ID_CERN_HIPPI_DST	0x0021
+#define PCI_DEVICE_ID_CERN_HIPPI_SRC	0x0022
 
 #define PCI_VENDOR_ID_NVIDIA		0x10de
 
@@ -783,6 +822,9 @@
 #define PCI_DEVICE_ID_CYCLOM_Z_Lo	0x0200
 #define PCI_DEVICE_ID_CYCLOM_Z_Hi	0x0201
 
+#define PCI_VENDOR_ID_ESSENTIAL		0x120f
+#define PCI_DEVICE_ID_ROADRUNNER	0x0001
+
 #define PCI_VENDOR_ID_O2		0x1217
 #define PCI_DEVICE_ID_O2_6832		0x6832
 
@@ -933,10 +975,47 @@
 #define PCI_SLOT(devfn)		(((devfn) >> 3) & 0x1f)
 #define PCI_FUNC(devfn)		((devfn) & 0x07)
 
-/* create an index into the pci_dev base_address[] array from an offset */
-#define PCI_BASE_INDEX(o) (((o)-PCI_BASE_ADDRESS_0)>>2)
-
 #ifdef __KERNEL__
+
+/*
+ * Error values that may be returned by the PCI bios.  Use
+ * pcibios_strerror() to convert to a printable string.
+ */
+#define PCIBIOS_SUCCESSFUL		0x00
+#define PCIBIOS_FUNC_NOT_SUPPORTED	0x81
+#define PCIBIOS_BAD_VENDOR_ID		0x83
+#define PCIBIOS_DEVICE_NOT_FOUND	0x86
+#define PCIBIOS_BAD_REGISTER_NUMBER	0x87
+#define PCIBIOS_SET_FAILED		0x88
+#define PCIBIOS_BUFFER_TOO_SMALL	0x89
+
+/* Direct configuration space access */
+
+int pcibios_present (void);
+void pcibios_init(void);
+void pcibios_fixup(void);
+char *pcibios_setup (char *str);
+int pcibios_read_config_byte (unsigned char bus, unsigned char dev_fn,
+			      unsigned char where, unsigned char *val);
+int pcibios_read_config_word (unsigned char bus, unsigned char dev_fn,
+			      unsigned char where, unsigned short *val);
+int pcibios_read_config_dword (unsigned char bus, unsigned char dev_fn,
+			       unsigned char where, unsigned int *val);
+int pcibios_write_config_byte (unsigned char bus, unsigned char dev_fn,
+			       unsigned char where, unsigned char val);
+int pcibios_write_config_word (unsigned char bus, unsigned char dev_fn,
+			       unsigned char where, unsigned short val);
+int pcibios_write_config_dword (unsigned char bus, unsigned char dev_fn,
+				unsigned char where, unsigned int val);
+const char *pcibios_strerror (int error);
+
+/* Don't use these in new code, use pci_find_... instead */
+
+int pcibios_find_class (unsigned int class_code, unsigned short index, unsigned char *bus, unsigned char *dev_fn);
+int pcibios_find_device (unsigned short vendor, unsigned short dev_id,
+			 unsigned short index, unsigned char *bus,
+			 unsigned char *dev_fn);
+
 /*
  * There is one pci_dev structure for each slot-number/function-number
  * combination:
@@ -952,6 +1031,7 @@ struct pci_dev {
 	unsigned short	vendor;
 	unsigned short	device;
 	unsigned int	class;		/* 3 bytes: (base,sub,prog-if) */
+	unsigned int	hdr_type;	/* PCI header type */
 	unsigned int	master : 1;	/* set if device is master capable */
 	/*
 	 * In theory, the irq level can be read from configuration
@@ -990,15 +1070,25 @@ struct pci_bus {
 
 extern struct pci_bus	pci_root;	/* root bus */
 extern struct pci_dev	*pci_devices;	/* list of all devices */
-extern struct pci_dev   *pci_find_dev (unsigned char bus, unsigned char devfn);
 
-extern unsigned long pci_init (unsigned long mem_start, unsigned long mem_end);
+void pci_init(void);
+void pci_setup(char *str, int *ints);
+void pci_quirks_init(void);
+unsigned int pci_scan_bus(struct pci_bus *bus);
 
-extern unsigned int pci_scan_bus (struct pci_bus *bus, unsigned long *mem_startp);
+struct pci_dev *pci_find_device (unsigned int vendor, unsigned int device, struct pci_dev *from);
+struct pci_dev *pci_find_class (unsigned int class, struct pci_dev *from);
+struct pci_dev *pci_find_slot (unsigned int bus, unsigned int devfn);
 
-extern int get_pci_list (char *buf);
+#define pci_present pcibios_present
+#define pci_read_config_byte(dev, where, val) pcibios_read_config_byte(dev->bus->number, dev->devfn, where, val)
+#define pci_read_config_word(dev, where, val) pcibios_read_config_word(dev->bus->number, dev->devfn, where, val)
+#define pci_read_config_dword(dev, where, val) pcibios_read_config_dword(dev->bus->number, dev->devfn, where, val)
+#define pci_write_config_byte(dev, where, val) pcibios_write_config_byte(dev->bus->number, dev->devfn, where, val)
+#define pci_write_config_word(dev, where, val) pcibios_write_config_word(dev->bus->number, dev->devfn, where, val)
+#define pci_write_config_dword(dev, where, val) pcibios_write_config_dword(dev->bus->number, dev->devfn, where, val)
 
-extern void pci_quirks_init (void);
+int get_pci_list (char *buf);
 
 #endif /* __KERNEL__ */
 #endif /* LINUX_PCI_H */

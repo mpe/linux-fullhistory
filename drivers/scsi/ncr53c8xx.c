@@ -116,7 +116,6 @@
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
@@ -136,6 +135,7 @@
 #if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,35)
 #include <linux/init.h>
 #else
+#include <linux/bios32.h>
 #ifndef	__initdata
 #define	__initdata
 #endif
@@ -275,8 +275,12 @@ typedef u32 u_int32;
 typedef	u_long		vm_offset_t;
 typedef	int		vm_size_t;
 
+#ifndef bcopy
 #define bcopy(s, d, n)	memcpy((d), (s), (n))
+#endif
+#ifndef bzero
 #define bzero(d, n)	memset((d), 0, (n))
+#endif
 
 #ifndef offsetof
 #define offsetof(t, m)	((size_t) (&((t *)0)->m))
@@ -309,6 +313,12 @@ typedef	int		vm_size_t;
 **	architecture.
 */
 
+#ifdef __sparc__
+#define remap_pci_mem(base, size)	((vm_offset_t) __va(base))
+#define unmap_pci_mem(vaddr, size)
+#define pcivtophys(p)			((p) & pci_dvma_mask)
+#else	/* __sparc__ */
+#define pcivtophys(p)			(p)
 #ifndef NCR_IOMAPPED
 __initfunc(
 static vm_offset_t remap_pci_mem(u_long base, u_long size)
@@ -337,6 +347,7 @@ static void unmap_pci_mem(vm_offset_t vaddr, u_long size)
 #endif
 }
 #endif	/* !NCR_IOMAPPED */
+#endif	/* __sparc__ */
 
 #else /* linux-1.2.13 */
 
@@ -1795,8 +1806,8 @@ struct ncb {
 	**	Profiling data
 	*/
 	struct profile	profile;
-	u_long		disc_phys;
-	u_long		disc_ref;
+	u_int		disc_phys;
+	u_int		disc_ref;
 
 	/*
 	**	The global control block.
@@ -1839,7 +1850,7 @@ struct ncb {
 	/*
 	**	irq level
 	*/
-	u_short		irq;
+	u_int		irq;
 };
 
 #define NCB_SCRIPT_PHYS(np,lbl)	 (np->p_script  + offsetof (struct script, lbl))
@@ -3795,7 +3806,8 @@ static void ncr_script_copy_and_bind (ncb_p np, ncrcmd *src, ncrcmd *dst, int le
 
 				switch (old & RELOC_MASK) {
 				case RELOC_REGISTER:
-					new = (old & ~RELOC_MASK) + np->paddr;
+					new = (old & ~RELOC_MASK)
+							+ pcivtophys(np->paddr);
 					break;
 				case RELOC_LABEL:
 					new = (old & ~RELOC_MASK) + np->p_script;
@@ -4388,9 +4400,15 @@ static int ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 	u_long flags = 0;
 	ncr_nvram *nvram = device->nvram;
 
+#ifdef __sparc__
+printf(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=0x%x\n",
+	device->chip.name, unit, device->chip.revision_id, device->slot.base,
+	device->slot.io_port, device->slot.irq);
+#else
 printf(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n",
 	device->chip.name, unit, device->chip.revision_id, device->slot.base,
 	device->slot.io_port, device->slot.irq);
+#endif
 
 	/*
 	**	Allocate host_data structure
@@ -4543,7 +4561,7 @@ printf(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n",
 	np->p_scripth	= vtophys(np->scripth);
 
 	np->script	= (np->vaddr2) ? (struct script *) np->vaddr2 : np->script0;
-	np->p_script	= (np->vaddr2) ? np->paddr2 : vtophys(np->script0);
+	np->p_script	= (np->vaddr2) ? pcivtophys(np->paddr2) : vtophys(np->script0);
 
 	ncr_script_copy_and_bind (np, (ncrcmd *) &script0, (ncrcmd *) np->script0, sizeof(struct script));
 	ncr_script_copy_and_bind (np, (ncrcmd *) &scripth0, (ncrcmd *) np->scripth0, sizeof(struct scripth));
@@ -4618,7 +4636,7 @@ printf(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n",
 	**	Then enable disconnects.
 	*/
 	save_flags(flags); cli();
-	if (ncr_reset_scsi_bus(np, 0, driver_setup.settle_delay) != 0) {
+	if (ncr_reset_scsi_bus(np, 1, driver_setup.settle_delay) != 0) {
 		printf("%s: FATAL ERROR: CHECK SCSI BUS - CABLES, TERMINATION, DEVICE POWER etc.!\n", ncr_name(np));
 		restore_flags(flags);
 		goto attach_error;
@@ -5504,7 +5522,11 @@ static int ncr_detach(ncb_p np)
 */
 
 #ifdef DEBUG_NCR53C8XX
+#ifdef __sparc__
+	printf("%s: freeing irq 0x%x\n", ncr_name(np), np->irq);
+#else
 	printf("%s: freeing irq %d\n", ncr_name(np), np->irq);
+#endif
 #endif
 #if LINUX_VERSION_CODE >= LinuxVersionCode(1,3,70)
 	free_irq(np->irq, np);
@@ -5812,8 +5834,14 @@ void ncr_complete (ncb_p np, ccb_p cp)
 		**  Announce changes to the generic driver.
 		*/
 		if (tp->numtags) {
+			/*
+			 * Decrease tp->maxtags (ecd, 980110)
+			 */
+			tp->maxtags = tp->numtags - 1;
+
 			PRINT_ADDR(cmd);
-			printf("QUEUE FULL! suspending tagged command queueing\n");
+			printf("QUEUE FULL! suspending tagged command queueing (setting maxtags to %d)\n", tp->maxtags);
+
 			tp->numtags	= 0;
 			tp->num_good	= 0;
 			if (lp) {
@@ -7317,10 +7345,10 @@ static void ncr_int_ma (ncb_p np)
 
 	if (dsp == vtophys (&cp->patch[2])) {
 		vdsp = &cp->patch[0];
-		nxtdsp = vdsp[3];
+		nxtdsp = scr_to_cpu(vdsp[3]);
 	} else if (dsp == vtophys (&cp->patch[6])) {
 		vdsp = &cp->patch[4];
-		nxtdsp = vdsp[3];
+		nxtdsp = scr_to_cpu(vdsp[3]);
 	} else if (dsp > np->p_script && dsp <= np->p_script + sizeof(struct script)) {
 		vdsp = (u_int32 *) ((char*)np->script - np->p_script + dsp -8);
 		nxtdsp = dsp;
@@ -8233,13 +8261,13 @@ static	void ncr_alloc_ccb (ncb_p np, u_long target, u_long lun)
 			cpu_to_scr(SCR_COPY(1)):cpu_to_scr(SCR_COPY_F(1));
 		tp->getscr[1] = cpu_to_scr(vtophys (&tp->sval));
 		tp->getscr[2] =
-		cpu_to_scr(np->paddr + offsetof (struct ncr_reg, nc_sxfer));
+		cpu_to_scr(pcivtophys(np->paddr) + offsetof (struct ncr_reg, nc_sxfer));
 
 		tp->getscr[3] =	(np->features & FE_PFEN) ?
 			cpu_to_scr(SCR_COPY(1)):cpu_to_scr(SCR_COPY_F(1));
 		tp->getscr[4] = cpu_to_scr(vtophys (&tp->wval));
 		tp->getscr[5] =
-		cpu_to_scr(np->paddr + offsetof (struct ncr_reg, nc_scntl3));
+		cpu_to_scr(pcivtophys(np->paddr) + offsetof (struct ncr_reg, nc_scntl3));
 
 		assert (( (offsetof(struct ncr_reg, nc_sxfer) ^
 			offsetof(struct tcb    , sval    )) &3) == 0);
@@ -8635,8 +8663,8 @@ static int ncr_snooptest (struct ncb* np)
 #define PROFILE  cp->phys.header.stamp
 static	void ncb_profile (ncb_p np, ccb_p cp)
 {
-	int co, st, en, di, se, post,work,disc;
-	u_long diff;
+	long co, st, en, di, se, post, work, disc;
+	u_int diff;
 
 	PROFILE.end = jiffies;
 
@@ -8659,7 +8687,7 @@ static	void ncb_profile (ncb_p np, ccb_p cp)
 
 	work = (st - co) - disc;
 
-	diff = (np->disc_phys - np->disc_ref) & 0xff;
+	diff = (scr_to_cpu(np->disc_phys) - np->disc_ref) & 0xff;
 	np->disc_ref += diff;
 
 	np->profile.num_trans	+= 1;
@@ -9085,7 +9113,7 @@ ncr_attach_using_nvram(Scsi_Host_Template *tpnt, int nvram_index, int count, ncr
 	int i, j;
 	int attach_count = 0;
 	ncr_nvram  *nvram;
-	ncr_device *devp;
+	ncr_device *devp = 0;	/* to shut up gcc */
 
 	if (!nvram_index)
 		return 0;
@@ -9211,7 +9239,7 @@ if (ncr53c8xx)
 	** the order they are detected.
 	*/
 
-	if (!pcibios_present())
+	if (!pci_present())
 		return 0;
 
 	chips	= sizeof(ncr_chip_ids)	/ sizeof(ncr_chip_ids[0]);
@@ -9295,14 +9323,17 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 {
 	ushort vendor_id, device_id, command;
 	uchar cache_line_size, latency_timer;
-	uchar irq, revision;
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,90)
-	ulong base, base_2, io_port;
+	uchar revision;
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,85)
 	struct pci_dev *pdev;
-#elif LINUX_VERSION_CODE >= LinuxVersionCode(1,3,0)
+	ulong base, base_2, io_port; 
+	uint irq;
+#elif LINUX_VERSION_CODE >= LinuxVersionCode(1,3,0) 
+	uchar irq;
 	uint base, base_2, io_port; 
 #else
-	ulong base, base_2; 
+	uchar irq;
+	ulong base, base_2, io_port; 
 #endif
 	int i;
 
@@ -9312,7 +9343,7 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	ncr_chip *chip;
 
 	printk(KERN_INFO "ncr53c8xx: at PCI bus %d, device %d, function %d\n",
-		bus, PCI_SLOT(device_fn), PCI_FUNC(device_fn));
+		bus, (int) (device_fn & 0xf8) >> 3, (int) device_fn & 7);
 	/*
 	 * Read info from the PCI config space.
 	 * pcibios_read_config_xxx() functions are assumed to be used for 
@@ -9326,12 +9357,12 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 					PCI_DEVICE_ID, &device_id);
 	(void) pcibios_read_config_word(bus, device_fn,
 					PCI_COMMAND, &command);
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,90)
-	pdev = pci_find_dev(bus, device_fn);
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,85)
+	pdev = pci_find_slot(bus, device_fn);
 	io_port = pdev->base_address[0];
-	base    = pdev->base_address[1];
-	base_2  = pdev->base_address[2];
-	irq     = pdev->irq;
+	base = pdev->base_address[1];
+	base_2 = pdev->base_address[2];
+	irq = pdev->irq;
 #else
 	(void) pcibios_read_config_dword(bus, device_fn,
 					PCI_BASE_ADDRESS_0, &io_port);	
@@ -9343,7 +9374,7 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 					PCI_INTERRUPT_LINE, &irq);
 #endif
 	(void) pcibios_read_config_byte(bus, device_fn,
-					PCI_CLASS_REVISION, &revision);	
+					PCI_CLASS_REVISION,&revision);	
 	(void) pcibios_read_config_byte(bus, device_fn,
 					PCI_CACHE_LINE_SIZE, &cache_line_size);
 	(void) pcibios_read_config_byte(bus, device_fn,
@@ -9369,24 +9400,105 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	}
 
 #ifdef __powerpc__
-	/*
-	 *	Severall fix-up for power/pc.
-	 *	Should not be performed by the driver.
-	 */
-	if ((command &
-		(PCI_COMMAND_MASTER|PCI_COMMAND_IO|PCI_COMMAND_MEMORY)) !=
-		(PCI_COMMAND_MASTER|PCI_COMMAND_IO|PCI_COMMAND_MEMORY)) {
-		printk("ncr53c8xx : setting PCI master/io/command bit\n");
-		command |= PCI_COMMAND_MASTER|PCI_COMMAND_IO|PCI_COMMAND_MEMORY;
+	if (!(command & PCI_COMMAND_MASTER)) {
+		printk("ncr53c8xx: attempting to force PCI_COMMAND_MASTER...");
+		command |= PCI_COMMAND_MASTER;
 		pcibios_write_config_word(bus, device_fn, PCI_COMMAND, command);
+		pcibios_read_config_word(bus, device_fn, PCI_COMMAND, &command);
+		if (!(command & PCI_COMMAND_MASTER)) {
+			printk("failed!\n");
+		} else {
+			printk("succeeded.\n");
+		}
 	}
-	if (io_port >= 0x10000000) {
-		io_port = (io_port & 0x00FFFFFF) | 0x01000000;
-		pcibios_write_config_dword(bus, device_fn, PCI_BASE_ADDRESS_0, io_port);
+
+	if (!(command & PCI_COMMAND_IO)) {
+		printk("ncr53c8xx: attempting to force PCI_COMMAND_IO...");
+		command |= PCI_COMMAND_IO;
+		pcibios_write_config_word(bus, device_fn, PCI_COMMAND, command);
+		pcibios_read_config_word(bus, device_fn, PCI_COMMAND, &command);
+		if (!(command & PCI_COMMAND_IO)) {
+			printk("failed!\n");
+		} else {
+			printk("succeeded.\n");
+		}
 	}
-	if (base >= 0x10000000) {
-		base = (base & 0x00FFFFFF) | 0x01000000;
-		pcibios_write_config_dword(bus, device_fn, PCI_BASE_ADDRESS_1, base);
+
+	if (!(command & PCI_COMMAND_MEMORY)) {
+		printk("ncr53c8xx: attempting to force PCI_COMMAND_MEMORY...");
+		command |= PCI_COMMAND_MEMORY;
+		pcibios_write_config_word(bus, device_fn, PCI_COMMAND, command);
+		pcibios_read_config_word(bus, device_fn, PCI_COMMAND, &command);
+		if (!(command & PCI_COMMAND_MEMORY)) {
+			printk("failed!\n");
+		} else {
+			printk("succeeded.\n");
+		}
+	}
+	
+	if ( is_prep ) {
+		if (io_port >= 0x10000000) {
+			printk("ncr53c8xx: reallocating io_port (Wacky IBM)");
+			io_port = (io_port & 0x00FFFFFF) | 0x01000000;
+			pcibios_write_config_dword(bus, device_fn, PCI_BASE_ADDRESS_0, io_port);
+		}
+		if (base >= 0x10000000) {
+			printk("ncr53c8xx: reallocating base (Wacky IBM)");
+			base = (base & 0x00FFFFFF) | 0x01000000;
+			pcibios_write_config_dword(bus, device_fn, PCI_BASE_ADDRESS_1, base);
+		}
+		if (base_2 >= 0x10000000) {
+			printk("ncr53c8xx: reallocating base2 (Wacky IBM)");
+			base_2 = (base_2 & 0x00FFFFFF) | 0x01000000;
+			pcibios_write_config_dword(bus, device_fn, PCI_BASE_ADDRESS_2, base_2);
+		}
+	}
+#endif
+#ifdef __sparc__
+	/*
+	 *	Severall fix-ups for sparc.
+	 *
+	 *	Should not be performed by the driver, but how can OBP know
+	 *	each and every PCI card, if they don't use Fcode?
+	 */
+
+	base = __pa(base);
+	base_2 = __pa(base_2);
+
+	if (!(command & PCI_COMMAND_MASTER)) {
+		if (initverbose >= 2)
+			printk("ncr53c8xx: setting PCI_COMMAND_MASTER bit (fixup)\n");
+		command |= PCI_COMMAND_MASTER;
+		pcibios_write_config_word(bus, device_fn, PCI_COMMAND, command);
+		pcibios_read_config_word(bus, device_fn, PCI_COMMAND, &command);
+	}
+
+	if ((chip->features & FE_WRIE) && !(command & PCI_COMMAND_INVALIDATE)) {
+		if (initverbose >= 2)
+			printk("ncr53c8xx: setting PCI_COMMAND_INVALIDATE bit (fixup)\n");
+		command |= PCI_COMMAND_INVALIDATE;
+		pcibios_write_config_word(bus, device_fn, PCI_COMMAND, command);
+		pcibios_read_config_word(bus, device_fn, PCI_COMMAND, &command);
+	}
+
+	if ((chip->features & FE_CLSE) && !cache_line_size) {
+		cache_line_size = 16;
+		if (initverbose >= 2)
+			printk("ncr53c8xx: setting PCI_CACHE_LINE_SIZE to %d (fixup)\n", cache_line_size);
+		pcibios_write_config_byte(bus, device_fn,
+					  PCI_CACHE_LINE_SIZE, cache_line_size);
+		pcibios_read_config_byte(bus, device_fn,
+					 PCI_CACHE_LINE_SIZE, &cache_line_size);
+	}
+
+	if (!latency_timer) {
+		latency_timer = 248;
+		if (initverbose >= 2)
+			printk("ncr53c8xx: setting PCI_LATENCY_TIMER to %d bus clocks (fixup)\n", latency_timer);
+		pcibios_write_config_byte(bus, device_fn,
+					  PCI_LATENCY_TIMER, latency_timer);
+		pcibios_read_config_byte(bus, device_fn,
+					 PCI_LATENCY_TIMER, &latency_timer);
 	}
 #endif
 
@@ -9425,8 +9537,13 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	base_2 &= PCI_BASE_ADDRESS_MEM_MASK;
 
 	if (io_port && check_region (io_port, 128)) {
+#ifdef __sparc__
+		printk("ncr53c8xx: IO region 0x%lx to 0x%lx is in use\n",
+			io_port, (io_port + 127));
+#else
 		printk("ncr53c8xx: IO region 0x%x to 0x%x is in use\n",
 			(int) io_port, (int) (io_port + 127));
+#endif
 		return -1;
 	}
 	
@@ -9459,7 +9576,7 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	/*
 	 * Try to fix up PCI config according to wished features.
 	 */
-#if defined(__i386) && !defined(MODULE)
+#if defined(__i386__) && !defined(MODULE)
 	if ((driver_setup.pci_fix_up & 1) &&
 	    (chip->features & FE_CLSE) && cache_line_size == 0) {
 #if LINUX_VERSION_CODE < LinuxVersionCode(2,1,75)

@@ -1,0 +1,60 @@
+		       Few Notes About The PCI Subsystem
+
+				       or
+
+		"What should you avoid when writing PCI drivers"
+
+	  by Martin Mares <mj@atrey.karlin.mff.cuni.cz> on 13-Feb-1998
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+1. How to find PCI devices
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+   In case your driver wants to search for all devices with given vendor/device
+ID, it should use:
+
+		struct pci_dev *dev = NULL;
+		while (dev = pci_find_device(VENDOR_ID, DEVICE_ID, dev))
+			configure_device(dev);
+
+   For class-based search, use pci_find_class(CLASS_ID, dev).
+
+   In case you want to do some complex matching, look at pci_devices -- it's
+a linked list of pci_dev structures for all PCI devices in the system.
+
+   All these methods return pointer to a pci_dev structure which is used as a
+parameter for many other PCI functions. The rest of them accept bus and
+device/function numbers which can be found in pci_dev->bus->number and
+pci_dev->devfn. Feel free to use all other fields of the pci_dev structure, but
+don't modify them.
+
+   The pci_present() function can be used to test presence of PCI in the
+machine.
+
+2. How to access PCI config space
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   You can use pci_(read|write)_config_(byte|word|dword) to access the config
+space of device represented by pci_dev. All these functions return 0 when
+successfull or an error code (PCIBIOS_...) which can be translated to text
+string by pcibios_strerror. Most drivers expect that accesses to valid PCI
+devices don't fail.
+
+   In case you want to address the devices by bus/device/function numbers,
+use pcibios_(read_write)_config_(byte|word|dword).
+
+   If you access fields in the standard portion of the config header, please
+use symbolic names of locations and bits declared in <linux/pci.h>.
+
+3. Addresses and interrupts
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   Memory and port addresses and interrupt numbers should NOT be read from the
+config space. You should use the values in the pci_dev structure as they might
+have been remapped by the kernel.
+
+4. Obsolete functions
+~~~~~~~~~~~~~~~~~~~~~
+
+<linux/bios32.h> is obsolete and should not be included in new code.
+
+pcibios_find_(device|class) are also obsolete and should be replaced by
+pci_find_(device|class).

@@ -28,13 +28,11 @@
 
 #include "irq.h"
 
-#define IO_APIC_BASE 0xfec00000
-
 /*
  * volatile is justified in this case, it might change
  * spontaneously, GCC should not cache it
  */
-volatile unsigned int * io_apic_reg = NULL;
+#define IO_APIC_BASE ((volatile int *)0xfec00000)
 
 /*
  * The structure of the IO-APIC:
@@ -96,17 +94,19 @@ int nr_ioapic_registers = 0;			/* # of IRQ routing registers */
 int mp_irq_entries = 0;				/* # of MP IRQ source entries */
 struct mpc_config_intsrc mp_irqs[MAX_IRQ_SOURCES];
 						/* MP IRQ source entries */
+int mpc_default_type = 0;			/* non-0 if default (table-less)
+						   MP configuration */
 
 unsigned int io_apic_read (unsigned int reg)
 {
-	*io_apic_reg = reg;
-	return *(io_apic_reg+4);
+	*IO_APIC_BASE = reg;
+	return *(IO_APIC_BASE+4);
 }
 
 void io_apic_write (unsigned int reg, unsigned int value)
 {
-	*io_apic_reg = reg;
-	*(io_apic_reg+4) = value;
+	*IO_APIC_BASE = reg;
+	*(IO_APIC_BASE+4) = value;
 }
 
 void enable_IO_APIC_irq (unsigned int irq)
@@ -256,7 +256,7 @@ void setup_IO_APIC_irqs (void)
 		/*
 		 * PCI IRQ redirection. Yes, limits are hardcoded.
 		 */
-		if ((i>=16) && (i<=19)) {
+		if ((i>=16) && (i<=23)) {
 			if (pirq_entries[i-16] != -1) {
 				if (!pirq_entries[i-16]) {
 					printk("disabling PIRQ%d\n", i-16);
@@ -516,16 +516,16 @@ void print_IO_APIC (void)
 static void init_sym_mode (void)
 {
 	printk("enabling Symmetric IO mode ... ");
-		outb (0x70, 0x22);
-		outb (0x01, 0x23);
+		outb_p (0x70, 0x22);
+		outb_p (0x01, 0x23);
 	printk("...done.\n");
 }
 
 void init_pic_mode (void)
 {
 	printk("disabling Symmetric IO mode ... ");
-		outb (0x70, 0x22);
-		outb (0x00, 0x23);
+		outb_p (0x70, 0x22);
+		outb_p (0x00, 0x23);
 	printk("...done.\n");
 }
 
@@ -579,17 +579,85 @@ static int ioapic_blacklisted (void)
 	return in_ioapic_list(ioapic_blacklist);
 }
 
+static void setup_ioapic_id (void)
+{
+	struct IO_APIC_reg_00 reg_00;
 
+	/*
+	 * 'default' mptable configurations mean a hardwired setup,
+	 * 2 CPUs, 16 APIC registers. IO-APIC ID is usually set to 0,
+	 * setting it to ID 2 should be fine.
+	 */
+
+	/*
+	 * Sanity check, is ID 2 really free? Every APIC in the
+	 * system must have a unique ID or we get lots of nice
+	 * 'stuck on smp_invalidate_needed IPI wait' messages.
+	 */
+	if (cpu_present_map & (1<<0x2))
+		panic("APIC ID 2 already used");
+
+	/*
+	 * set the ID
+	 */
+	*(int *)&reg_00 = io_apic_read(0);
+	printk("... changing IO-APIC physical APIC ID to 2 ...\n");
+	reg_00.ID = 0x2;
+	io_apic_write(0, *(int *)&reg_00);
+
+	/*
+	 * Sanity check
+	 */
+	*(int *)&reg_00 = io_apic_read(0);
+	if (reg_00.ID != 0x2)
+		panic("could not set ID");
+}
+
+static void construct_default_ISA_mptable (void)
+{
+	int i, pos=0;
+
+	for (i=0; i<16; i++) {
+		if (!IO_APIC_IRQ(i))
+			continue;
+
+		mp_irqs[pos].mpc_irqtype = 0;
+		mp_irqs[pos].mpc_irqflag = 0;
+		mp_irqs[pos].mpc_srcbus = 0;
+		mp_irqs[pos].mpc_srcbusirq = i;
+		mp_irqs[pos].mpc_dstapic = 0;
+		mp_irqs[pos].mpc_dstirq = i;
+		pos++;
+	}
+	mp_irq_entries = pos;
+	mp_bus_id_to_type[0] = MP_BUS_ISA;
+
+	/*
+	 * MP specification 1.4 defines some extra rules for default
+	 * configurations, fix them up here:
+	 */
+	
+	switch (mpc_default_type)
+	{
+		case 2:
+			break;
+		default:
+		/*
+		 * pin 2 is IRQ0:
+		 */
+			mp_irqs[0].mpc_dstirq = 2;
+	}
+
+	setup_ioapic_id();
+}
+			
 void setup_IO_APIC (void)
 {
 	int i;
-	/*
-	 *      Map the IO APIC into kernel space
-	 */
 
-	printk("mapping IO APIC from standard address.\n");
-	io_apic_reg = ioremap_nocache(IO_APIC_BASE,4096);
-	printk("new virtual address: %p.\n",io_apic_reg);
+	if (!pirqs_enabled)
+		for (i=0; i<MAX_PIRQS; i++)
+			pirq_entries[i]=-1;
 
 	init_sym_mode();
 	{
@@ -604,12 +672,6 @@ void setup_IO_APIC (void)
 	 */
 	for (i=0; i<nr_ioapic_registers; i++)
 		clear_IO_APIC_irq (i);
-
-#if DEBUG_1
-	for (i=0; i<16; i++)
-		if (IO_APIC_IRQ(i))
-			setup_IO_APIC_irq_ISA_default (i);
-#endif
 
 	/*
 	 * the following IO-APIC's can be enabled:
@@ -634,7 +696,18 @@ void setup_IO_APIC (void)
 		io_apic_irqs = 0;
 	}
 
+	/*
+	 * If there are no explicit mp irq entries: it's either one of the
+	 * default configuration types or we are broken. In both cases it's
+	 * fine to set up most of the low 16 IOAPIC pins to ISA defaults.
+	 */
+	if (!mp_irq_entries) {
+		printk("no explicit IRQ entries, using default mptable\n");
+		construct_default_ISA_mptable();
+	}
+
 	init_IO_APIC_traps();
+
 	setup_IO_APIC_irqs ();
 
 	if (!timer_irq_works ()) {
@@ -644,9 +717,9 @@ void setup_IO_APIC (void)
 		printk("..MP-BIOS bug: i8254 timer not connected to IO-APIC\n");
 		printk("..falling back to 8259A-based timer interrupt\n");
 	}
-
-	printk("nr of MP irq sources: %d.\n", mp_irq_entries);
-	printk("nr of IOAPIC registers: %d.\n", nr_ioapic_registers);
+ 
+ 	printk("nr of MP irq sources: %d.\n", mp_irq_entries);
+ 	printk("nr of IOAPIC registers: %d.\n", nr_ioapic_registers);
 	print_IO_APIC();
 }
 

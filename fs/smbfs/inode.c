@@ -322,8 +322,6 @@ smb_put_super(struct super_block *sb)
 {
 	struct smb_sb_info *server = &(sb->u.smbfs_sb);
 
-	lock_super(sb);
-
 	if (server->sock_file) {
 		smb_proc_disconnect(server);
 		smb_dont_catch_keepalive(server);
@@ -337,9 +335,6 @@ smb_put_super(struct super_block *sb)
 	kfree(sb->u.smbfs_sb.temp_buf);
 	if (server->packet)
 		smb_vfree(server->packet);
-	sb->s_dev = 0;
-
-	unlock_super(sb);
 
 	MOD_DEC_USE_COUNT;
 }

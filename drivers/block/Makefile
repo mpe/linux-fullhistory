@@ -155,6 +155,14 @@ ifeq ($(CONFIG_BLK_DEV_NS87415),y)
 L_OBJS += ns87415.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_CMD646),y)
+L_OBJS += cmd646.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_SL82C105),y)
+L_OBJS += sl82c105.o
+endif
+
 ifeq ($(CONFIG_BLK_DEV_IDEDISK),y)
 L_OBJS += ide-disk.o
 else

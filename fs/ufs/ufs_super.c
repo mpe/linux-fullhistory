@@ -335,15 +335,13 @@ void ufs_put_super (struct super_block * sb)
 		printk("ufs_put_super\n"); /* XXX */
         }
 
-	lock_super (sb);
+
 	/* XXX - sync fs data, set state to ok, and flush buffers */
 	set_blocksize (sb->s_dev, BLOCK_SIZE);
-	sb->s_dev = 0;
 
 	/* XXX - free allocated kernel memory */
 	/* includes freeing usb page */
 
-	unlock_super (sb);
 	MOD_DEC_USE_COUNT;
 
 	return;

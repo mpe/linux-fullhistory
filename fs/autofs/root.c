@@ -109,8 +109,7 @@ static int try_to_fill_dentry(struct dentry *dentry, struct super_block *sb, str
 	if ( !(ent = autofs_hash_lookup(&sbi->dirhash, &dentry->d_name)) ) {
 		do {
 			if ( status && dentry->d_inode ) {
-				printk("autofs: lookup failure on existing dentry, status = %d, name = %s\n", status, dentry->d_name.name);
-				printk("autofs: trying to recover, but prepare for Armageddon\n");
+				printk("autofs warning: lookup failure on existing dentry, status = %d, name = %s\n", status, dentry->d_name.name);
 				break;
 			}
 
@@ -146,7 +145,10 @@ static int try_to_fill_dentry(struct dentry *dentry, struct super_block *sb, str
 		return !autofs_wait(sbi, &dentry->d_name);
 	}
 
-	autofs_update_usage(&sbi->dirhash,ent);
+	/* We don't update the usages for the autofs daemon itself, this
+	   is necessary for recursive autofs mounts */
+	if ( !autofs_oz_mode(sbi) )
+		autofs_update_usage(&sbi->dirhash,ent);
 
 	dentry->d_flags &= ~DCACHE_AUTOFS_PENDING;
 	return 1;
@@ -188,8 +190,10 @@ static int autofs_revalidate(struct dentry * dentry)
 	}
 
 	/* Update the usage list */
-	ent = (struct autofs_dir_ent *) dentry->d_time;
-	autofs_update_usage(&sbi->dirhash,ent);
+	if ( !autofs_oz_mode(sbi) ) {
+		ent = (struct autofs_dir_ent *) dentry->d_time;
+		autofs_update_usage(&sbi->dirhash,ent);
+	}
 	return 1;
 }
 

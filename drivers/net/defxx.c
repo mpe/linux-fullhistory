@@ -213,7 +213,6 @@ static const char *version = "defxx.c:v1.04 09/16/96  Lawrence V. Stefani (stefa
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <asm/byteorder.h>
@@ -455,9 +454,8 @@ __initfunc(int dfx_probe(
 	int				i;				/* used in for loops */
 	int				version_disp;	/* was version info string already displayed? */
 	int				port_len;		/* length of port address range (in bytes) */
-	u8				pci_bus;		/* PCI bus number (0-255) */
-	u8				pci_dev_fun;	/* PCI device and function numbers (0-255) */
 	u16				port;			/* temporary I/O (port) address */
+	struct pci_dev *		pdev = NULL;		/* PCI device record */
 	u16				command;		/* PCI Configuration space Command register val */
 	u32				slot_id;		/* EISA hardware (slot) ID read from adapter */
 	DFX_board_t		*bp;			/* board pointer */
@@ -530,61 +528,58 @@ __initfunc(int dfx_probe(
 
 	/* Scan for FDDI PCI controllers */
 
-	if (pcibios_present())						/* is PCI BIOS even present? */
-		for (i=0; i < DFX_MAX_NUM_BOARDS; i++)	/* scan for up to 8 PCI cards */
-			if (pcibios_find_device(PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_FDDI, i, &pci_bus, &pci_dev_fun) == 0)
+	if (pci_present())						/* is PCI even present? */
+		while ((pdev = pci_find_device(PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_FDDI, pdev)))
+			{
+			if (!version_disp)					/* display version info if adapter is found */
 				{
-				if (!version_disp)					/* display version info if adapter is found */
-					{
-					version_disp = 1;				/* set display flag to TRUE so that */
-					printk(version);				/* we only display this string ONCE */
-					}
-
-				/* Verify that I/O enable bit is set (PCI slot is enabled) */
-
-				pcibios_read_config_word(pci_bus, pci_dev_fun, PCI_COMMAND, &command);
-				if ((command & PCI_COMMAND_IO) == 0)
-					printk("I/O enable bit not set!  Verify that slot is enabled\n");
-				else
-					{
-					/* Turn off memory mapped space and enable mastering */
-
-					command |= PCI_COMMAND_MASTER;
-					command &= ~PCI_COMMAND_MEMORY;
-					pcibios_write_config_word(pci_bus, pci_dev_fun, PCI_COMMAND, command);
-
-					/* Read I/O base address from PCI Configuration Space */
-				
-					pcibios_read_config_word(pci_bus, pci_dev_fun, PCI_BASE_ADDRESS_1, &port);
-					port &= PCI_BASE_ADDRESS_IO_MASK;		/* clear I/O bit (bit 0) */
-
-					/* Verify port address range is not already being used */
-
-					port_len = PFI_K_CSR_IO_LEN;
-					if (check_region(port, port_len) == 0)
-						{
-						/* Allocate a new device structure for this adapter */
-
-						dev = dfx_alloc_device(dev, port);
-						if (dev != NULL)
-							{
-							/* Initialize board structure with bus-specific info */
-
-							bp = (DFX_board_t *) dev->priv;
-							bp->dev = dev;
-							bp->bus_type = DFX_BUS_TYPE_PCI;
-							bp->pci_bus = pci_bus;
-							bp->pci_dev_fun = pci_dev_fun;
-							if (dfx_driver_init(dev) == DFX_K_SUCCESS)
-								num_boards++;		/* only increment global board count on success */
-							else
-								dev->base_addr = 0;	/* clear port address field in device structure on failure */
-							}
-						}
-					else
-						printk("I/O range allocated to adapter (0x%X-0x%X) is already being used!\n", port, (port + port_len-1));
-					}
+				version_disp = 1;				/* set display flag to TRUE so that */
+				printk(version);				/* we only display this string ONCE */
 				}
+
+			/* Verify that I/O enable bit is set (PCI slot is enabled) */
+
+			pci_read_config_word(pdev, PCI_COMMAND, &command);
+			if ((command & PCI_COMMAND_IO) == 0)
+				printk("I/O enable bit not set!  Verify that slot is enabled\n");
+			else
+				{
+				/* Turn off memory mapped space and enable mastering */
+
+				command |= PCI_COMMAND_MASTER;
+				command &= ~PCI_COMMAND_MEMORY;
+				pci_write_config_word(pdev, PCI_COMMAND, command);
+
+				/* Get I/O base address from PCI Configuration Space */
+
+				port = pdev->base_address[1] & PCI_BASE_ADDRESS_IO_MASK;
+
+				/* Verify port address range is not already being used */
+
+				port_len = PFI_K_CSR_IO_LEN;
+				if (check_region(port, port_len) == 0)
+					{
+					/* Allocate a new device structure for this adapter */
+
+					dev = dfx_alloc_device(dev, port);
+					if (dev != NULL)
+						{
+						/* Initialize board structure with bus-specific info */
+
+						bp = (DFX_board_t *) dev->priv;
+						bp->dev = dev;
+						bp->bus_type = DFX_BUS_TYPE_PCI;
+						bp->pci_dev = pdev;
+						if (dfx_driver_init(dev) == DFX_K_SUCCESS)
+							num_boards++;		/* only increment global board count on success */
+						else
+							dev->base_addr = 0;	/* clear port address field in device structure on failure */
+						}
+					}
+				else
+					printk("I/O range allocated to adapter (0x%X-0x%X) is already being used!\n", port, (port + port_len-1));
+				}
+			}
 
 	/*
 	 * If we're at this point we're going through dfx_probe() for the first
@@ -823,18 +818,19 @@ __initfunc(void dfx_bus_init(
 		}
 	else
 		{
+		struct pci_dev *pdev = bp->pci_dev;
+
 		/* Get the interrupt level from the PCI Configuration Table */
 
-		pcibios_read_config_byte(bp->pci_bus, bp->pci_dev_fun, PCI_INTERRUPT_LINE, &val);
-		dev->irq = val;					/* save IRQ value in device table */
+		dev->irq = pdev->irq;
 
 		/* Check Latency Timer and set if less than minimal */
 
-		pcibios_read_config_byte(bp->pci_bus, bp->pci_dev_fun, PCI_LATENCY_TIMER, &val);
+		pci_read_config_byte(pdev, PCI_LATENCY_TIMER, &val);
 		if (val < PFI_K_LAT_TIMER_MIN)	/* if less than min, override with default */
 			{
 			val = PFI_K_LAT_TIMER_DEF;
-			pcibios_write_config_byte(bp->pci_bus, bp->pci_dev_fun, PCI_LATENCY_TIMER, val);
+			pci_write_config_byte(pdev, PCI_LATENCY_TIMER, val);
 			}
 
 		/* Enable interrupts at PCI bus interface chip (PFI) */

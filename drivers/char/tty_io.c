@@ -66,6 +66,7 @@
 #include <linux/interrupt.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
+#include <linux/devpts_fs.h>
 #include <linux/file.h>
 #include <linux/console.h>
 #include <linux/timer.h>
@@ -1209,7 +1210,7 @@ retry_open:
 	if (device == PTMX_DEV) {
 		/* find a free pty. */
 		struct tty_driver *driver = tty_drivers;
-		int minor;
+		int minor, line;
 
 		/* find the pty driver */
 		for (driver=tty_drivers; driver; driver=driver->next)
@@ -1229,6 +1230,8 @@ retry_open:
 			return -EIO; /* no free ptys */
 		
 		set_bit(TTY_PTY_LOCK, &tty->flags); /* LOCK THE SLAVE */
+		line = minor - driver->minor_start;
+		devpts_pty_new(line, MKDEV(driver->other->major, line+driver->other->minor_start));
 		noctty = 1;
 		goto init_dev_done;
 	}

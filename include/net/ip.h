@@ -128,6 +128,7 @@ struct ipv4_config
 
 extern struct ipv4_config ipv4_config;
 extern struct ip_mib	ip_statistics;
+extern struct linux_mib	net_statistics;
 
 extern int sysctl_local_port_range[2];
 

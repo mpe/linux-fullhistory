@@ -6,7 +6,6 @@
  * SNI specific PCI support for RM200/RM300.
  */
 #include <linux/config.h>
-#include <linux/bios32.h>
 #include <linux/init.h>
 #include <linux/pci.h>
 #include <linux/types.h>

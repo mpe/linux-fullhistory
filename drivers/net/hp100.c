@@ -83,7 +83,6 @@
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 
@@ -331,6 +330,9 @@ __initfunc(int hp100_probe( struct device *dev ))
   int ioaddr = 0;
 #ifdef CONFIG_PCI
   int pci_start_index = 0;
+#ifdef LINUX_2_1
+  struct pci_dev *pdev;
+#endif
 #endif
 
 #ifdef HP100_DEBUG_B
@@ -363,7 +365,7 @@ __initfunc(int hp100_probe( struct device *dev ))
   /* at first - scan PCI bus(es) */
 
 #ifdef CONFIG_PCI
-  if ( pcibios_present() )
+  if ( pci_present() )
     {
       int pci_index;
 
@@ -384,8 +386,14 @@ __initfunc(int hp100_probe( struct device *dev ))
           break;
 
 	  __pci_found:
+
+#ifdef LINUX_2_1
+	  pdev = pci_find_slot(pci_bus, pci_device_fn);
+	  ioaddr = pdev->base_address[0];
+#else
           pcibios_read_config_dword( pci_bus, pci_device_fn,
                                      PCI_BASE_ADDRESS_0, &ioaddr );
+#endif
 
           ioaddr &= ~3;    /* remove I/O space marker in bit 0. */
 

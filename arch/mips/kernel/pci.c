@@ -5,7 +5,6 @@
  *
  * MIPS implementation of PCI BIOS services for PCI support.
  */
-#include <linux/bios32.h>
 #include <linux/config.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -33,53 +32,6 @@ __initfunc(unsigned long pcibios_init(unsigned long memory_start,
 int pcibios_present (void)
 {
 	return pci_ops != NULL;
-}
-
-/*
- * Given the vendor and device ids, find the n'th instance of that device
- * in the system.  
- */
-int pcibios_find_device (unsigned short vendor, unsigned short device_id,
-			 unsigned short index, unsigned char *bus,
-			 unsigned char *devfn)
-{
-	unsigned int curr = 0;
-	struct pci_dev *dev;
-
-	for (dev = pci_devices; dev; dev = dev->next) {
-		if (dev->vendor == vendor && dev->device == device_id) {
-			if (curr == index) {
-				*devfn = dev->devfn;
-				*bus = dev->bus->number;
-				return PCIBIOS_SUCCESSFUL;
-			}
-			++curr;
-		}
-	}
-	return PCIBIOS_DEVICE_NOT_FOUND;
-}
-
-/*
- * Given the class, find the n'th instance of that device
- * in the system.
- */
-int pcibios_find_class (unsigned int class_code, unsigned short index,
-			unsigned char *bus, unsigned char *devfn)
-{
-	unsigned int curr = 0;
-	struct pci_dev *dev;
-
-	for (dev = pci_devices; dev; dev = dev->next) {
-		if (dev->class == class_code) {
-			if (curr == index) {
-				*devfn = dev->devfn;
-				*bus = dev->bus->number;
-				return PCIBIOS_SUCCESSFUL;
-			}
-			++curr;
-		}
-	}
-	return PCIBIOS_DEVICE_NOT_FOUND;
 }
 
 /*
@@ -127,6 +79,11 @@ int pcibios_write_config_dword (unsigned char bus, unsigned char dev_fn,
                                 unsigned char where, unsigned int val)
 {
 	return pci_ops->pcibios_write_config_dword(bus, dev_fn, where, val);
+}
+
+__initfunc(char *pcibios_setup(char *str))
+{
+	return str;
 }
 
 #endif /* defined(CONFIG_PCI) */

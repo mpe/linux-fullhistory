@@ -20,12 +20,6 @@ static int proc_readlink(struct dentry *, char *, int);
 static struct dentry * proc_follow_link(struct dentry *, struct dentry *);
 
 /*
- * PLAN9_SEMANTICS won't work any more: it used an ugly hack that broke 
- * when the files[] array was updated only after the open code
- */
-#undef PLAN9_SEMANTICS
-
-/*
  * links can't do much...
  */
 static struct file_operations proc_fd_link_operations = {

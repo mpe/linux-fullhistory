@@ -660,21 +660,4 @@ UCHAR	xx2;
 	outl((value), DC390_ioport + (address)))
 
 
-/* Configuration method #1 */
-#define PCI_CFG1_ADDRESS_REG		0xcf8
-#define PCI_CFG1_DATA_REG		0xcfc
-#define PCI_CFG1_ENABLE 		0x80000000
-#define PCI_CFG1_TUPPLE(bus, device, function, register)		\
-	(PCI_CFG1_ENABLE | (((bus) << 16) & 0xff0000) | 		\
-	(((device) << 11) & 0xf800) | (((function) << 8) & 0x700)|	\
-	(((register) << 2) & 0xfc))
-
-/* Configuration method #2 */
-#define PCI_CFG2_ENABLE_REG		0xcf8
-#define PCI_CFG2_FORWARD_REG		0xcfa
-#define PCI_CFG2_ENABLE 		0x0f0
-#define PCI_CFG2_TUPPLE(function)					\
-	(PCI_CFG2_ENABLE | (((function) << 1) & 0xe))
-
-
 #endif /* _TMSCSIM_H */

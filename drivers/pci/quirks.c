@@ -1,5 +1,5 @@
 /*
- * $Id: quirks.c,v 1.2 1997/09/20 21:43:34 davem Exp $
+ * $Id: quirks.c,v 1.3 1998/02/06 19:51:42 mj Exp $
  *
  * PCI Chipset-Specific Quirks
  *
@@ -13,7 +13,6 @@
 
 #include <linux/types.h>
 #include <linux/kernel.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/string.h>
 #include <linux/init.h>

@@ -9,11 +9,9 @@
  *      as published by the Free Software Foundation; either version
  *      2 of the License, or (at your option) any later version.
  * 
- *  $Id: syncookies.c,v 1.4 1998/03/08 05:56:34 davem Exp $
+ *  $Id: syncookies.c,v 1.5 1998/04/03 09:49:46 freitag Exp $
  *
  *  Missing: IPv6 support. 
- *           Some counter so that the Administrator can see when the machine
- *           is under a syn flood attack.
  */
 
 #include <linux/config.h>
@@ -88,6 +86,8 @@ __u32 cookie_v4_init_sequence(struct sock *sk, struct sk_buff *skb,
 found:
 	*mssp = w[-1]; 
 
+	net_statistics.SyncookiesSent++;
+
 	isn |= i; 
 	return isn; 
 }
@@ -110,8 +110,9 @@ static inline int cookie_check(struct sk_buff *skb, __u32 cookie)
 	__u32 seq; 
 
   	if ((jiffies - tcp_lastsynq_overflow) > TCP_TIMEOUT_INIT
-	    && tcp_lastsynq_overflow) 
+	    && tcp_lastsynq_overflow) {
 		return 0; 
+	}
 
 	mssind = cookie & 7;
 	cookie &= ~7;
@@ -157,8 +158,12 @@ cookie_v4_check(struct sock *sk, struct sk_buff *skb, struct ip_options *opt)
 		return sk; 
 
 	mss = cookie_check(skb, cookie);
-	if (mss == 0) 
+	if (mss == 0) {
+	 	net_statistics.SyncookiesFailed++;
 		return sk;
+	}
+
+	net_statistics.SyncookiesRecv++;
 
 	req = tcp_openreq_alloc();
 	if (req == NULL)

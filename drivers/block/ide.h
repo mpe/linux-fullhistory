@@ -340,8 +340,7 @@ typedef struct hwif_s {
 	unsigned	reset      : 1;	/* reset after probe */
 	unsigned	no_autodma : 1;	/* don't automatically enable DMA at boot */
 	byte		channel;	/* for dual-port chips: 0=primary, 1=secondary */
-	byte		pci_bus;	/* for pci chipsets */
-	byte		pci_fn;		/* for pci chipsets */
+	struct		pci_dev *pci_dev; /* for pci chipsets */
 	ide_pci_devid_t	pci_devid;	/* for pci chipsets: {VID,DID} */
 #if (DISK_RECOVERY_TIME > 0)
 	unsigned long	last_time;	/* time when previous rq was done */
@@ -723,7 +722,7 @@ int ide_build_dmatable (ide_drive_t *drive);
 void ide_dma_intr  (ide_drive_t *drive);
 int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive);
 void ide_setup_dma (ide_hwif_t *hwif, unsigned long dmabase, unsigned int num_ports) __init;
-unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const char *name) __init;
+unsigned long ide_get_or_set_dma_base (struct pci_dev *dev, ide_hwif_t *hwif, int extra, const char *name) __init;
 #endif
 
 #ifdef CONFIG_BLK_DEV_IDE

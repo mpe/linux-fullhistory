@@ -41,16 +41,13 @@ static void autofs_put_super(struct super_block *sb)
 	if ( !sbi->catatonic )
 		autofs_catatonic_mode(sbi); /* Free wait queues, close pipe */
 
-	lock_super(sb);
 	autofs_hash_nuke(&sbi->dirhash);
 	for ( n = 0 ; n < AUTOFS_MAX_SYMLINKS ; n++ ) {
 		if ( test_bit(n, sbi->symlink_bitmap) )
 			kfree(sbi->symlink[n].data);
 	}
 
-	sb->s_dev = 0;
 	kfree(sb->u.generic_sbp);
-	unlock_super(sb);
 
 	DPRINTK(("autofs: shutting down\n"));
 	

@@ -1,61 +1,34 @@
 /*
- * BIOS32, PCI BIOS functions and defines
- * Copyright 1994, Drew Eckhardt
- * 
- * For more information, please consult 
- * 
- * PCI BIOS Specification Revision
- * PCI Local Bus Specification
- * PCI System Design Guide
- *
- * PCI Special Interest Group
- * P.O. Box 14070
- * Portland, OR 97214
- * U. S. A.
- * Phone: 800-433-5177 / +1-503-797-4207
- * Fax: +1-503-234-6762 
- * 
- * Manuals are $25 each or $50 for all three, plus $7 shipping 
- * within the United States, $35 abroad.
+ *	This is only a stub file to make drivers not yet converted to the new
+ *	PCI probing mechanism work. [mj]
  */
 
 #ifndef BIOS32_H
 #define BIOS32_H
 
-/*
- * Error values that may be returned by the PCI bios.  Use
- * pcibios_strerror() to convert to a printable string.
- */
-#define PCIBIOS_SUCCESSFUL		0x00
-#define PCIBIOS_FUNC_NOT_SUPPORTED	0x81
-#define PCIBIOS_BAD_VENDOR_ID		0x83
-#define PCIBIOS_DEVICE_NOT_FOUND	0x86
-#define PCIBIOS_BAD_REGISTER_NUMBER	0x87
-#define PCIBIOS_SET_FAILED		0x88
-#define PCIBIOS_BUFFER_TOO_SMALL	0x89
+#include <linux/pci.h>
 
-extern int pcibios_present (void);
-extern unsigned long pcibios_init (unsigned long memory_start,
-				   unsigned long memory_end);
-extern unsigned long pcibios_fixup (unsigned long memory_start,
-				    unsigned long memory_end);
-extern int pcibios_find_class (unsigned int class_code, unsigned short index, 
-			       unsigned char *bus, unsigned char *dev_fn);
-extern int pcibios_find_device (unsigned short vendor, unsigned short dev_id,
-				unsigned short index, unsigned char *bus,
-				unsigned char *dev_fn);
-extern int pcibios_read_config_byte (unsigned char bus, unsigned char dev_fn,
-				     unsigned char where, unsigned char *val);
-extern int pcibios_read_config_word (unsigned char bus, unsigned char dev_fn,
-				     unsigned char where, unsigned short *val);
-extern int pcibios_read_config_dword (unsigned char bus, unsigned char dev_fn,
-				      unsigned char where, unsigned int *val);
-extern int pcibios_write_config_byte (unsigned char bus, unsigned char dev_fn,
-				      unsigned char where, unsigned char val);
-extern int pcibios_write_config_word (unsigned char bus, unsigned char dev_fn,
-				      unsigned char where, unsigned short val);
-extern int pcibios_write_config_dword (unsigned char bus, unsigned char dev_fn,
-				       unsigned char where, unsigned int val);
-extern const char *pcibios_strerror (int error);
+#warning This driver uses the old PCI interface, please fix it (see Documentation/pci.txt)
 
-#endif /* BIOS32_H */
+extern inline int __pcibios_read_irq(unsigned char bus, unsigned char dev_fn, unsigned char *to)
+{
+	struct pci_dev *pdev = pci_find_slot(bus, dev_fn);
+	if (!pdev) {
+		*to = 0;
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	} else {
+		*to = pdev->irq;
+		return PCIBIOS_SUCCESSFUL;
+	}
+}
+
+extern inline int __pcibios_read_config_byte(unsigned char bus,
+	unsigned char dev_fn, unsigned char where, unsigned char *to)
+{
+	return pcibios_read_config_byte(bus, dev_fn, where, to);
+}
+
+#define pcibios_read_config_byte(b,d,w,p) \
+	(((w) == PCI_INTERRUPT_LINE) ? __pcibios_read_irq(b,d,p) : __pcibios_read_config_byte(b,d,w,p))
+
+#endif

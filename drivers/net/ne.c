@@ -40,7 +40,6 @@ static const char *version =
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <asm/system.h>
@@ -117,7 +116,7 @@ bad_clone_list[] __initdata = {
 #define NESM_STOP_PG	0x80	/* Last page +1 of RX ring */
 
 /* Non-zero only if the current card is a PCI with BIOS-set IRQ. */
-static unsigned char pci_irq_line = 0;
+static unsigned int pci_irq_line = 0;
 
 int ne_probe(struct device *dev);
 static int ne_probe1(struct device *dev, int ioaddr);
@@ -182,7 +181,7 @@ __initfunc(int ne_probe(struct device *dev))
 
 #ifdef CONFIG_PCI
     /* Then look for any installed PCI clones */
-    if (pcibios_present() && (ne_probe_pci(dev) == 0))
+    if (pci_present() && (ne_probe_pci(dev) == 0))
 	return 0;
 #endif
 
@@ -207,27 +206,19 @@ __initfunc(static int ne_probe_pci(struct device *dev))
 	int i;
 
 	for (i = 0; pci_clone_list[i].vendor != 0; i++) {
-		unsigned char pci_bus, pci_device_fn;
+		struct pci_dev *pdev = NULL;
 		unsigned int pci_ioaddr;
-		int pci_index;
 
-		for (pci_index = 0; pci_index < 8; pci_index++) {
-			if (pcibios_find_device (pci_clone_list[i].vendor,
-					pci_clone_list[i].dev_id, pci_index,
-					&pci_bus, &pci_device_fn) != 0)
-				break;	/* No more of these type of cards */
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-					PCI_BASE_ADDRESS_0, &pci_ioaddr);
-			/* Strip the I/O address out of the returned value */
-			pci_ioaddr &= PCI_BASE_ADDRESS_IO_MASK;
+		while ((pdev = pci_find_device(pci_clone_list[i].vendor, pci_clone_list[i].dev_id, pdev))) {
+			pci_ioaddr = pdev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
 			/* Avoid already found cards from previous calls */
 			if (check_region(pci_ioaddr, NE_IO_EXTENT))
 				continue;
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-					PCI_INTERRUPT_LINE, &pci_irq_line);
-			break;	/* Beauty -- got a valid card. */
+			pci_irq_line = pdev->irq;
+			if (pci_irq_line == 0) continue;	/* Try next PCI ID */
 		}
-		if (pci_irq_line == 0) continue;	/* Try next PCI ID */
+		if (!pdev)
+			continue;
 		printk("ne.c: PCI BIOS reports %s at i/o %#x, irq %d.\n",
 				pci_clone_list[i].name,
 				pci_ioaddr, pci_irq_line);

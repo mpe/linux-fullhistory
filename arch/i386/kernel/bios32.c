@@ -1,7 +1,7 @@
 /*
- * bios32.c - BIOS32, PCI BIOS functions.
+ * bios32.c - Low-Level PCI Access
  *
- * $Id: bios32.c,v 1.17 1997/11/16 11:03:41 mj Exp $
+ * $Id: bios32.c,v 1.26 1998/02/18 15:21:09 mj Exp $
  *
  * Sponsored by
  *	iX Multiuser Multitasking Magazine
@@ -64,12 +64,13 @@
  *
  * Aug 2,  1997 : Split to PCI BIOS handling and direct PCI access parts
  *	and cleaned it up...     Martin Mares <mj@atrey.karlin.mff.cuni.cz>
+ *
+ * Feb 6,  1998 : No longer using BIOS to find devices and device classes. [mj]
  */
 
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/init.h>
 
@@ -91,8 +92,6 @@
 
 struct pci_access {
     int pci_present;
-    int (*find_device)(unsigned short, unsigned short, unsigned short, unsigned char *, unsigned char *);
-    int (*find_class)(unsigned int, unsigned short, unsigned char *, unsigned char *);
     int (*read_config_byte)(unsigned char, unsigned char, unsigned char, unsigned char *);
     int (*read_config_word)(unsigned char, unsigned char, unsigned char, unsigned short *);
     int (*read_config_dword)(unsigned char, unsigned char, unsigned char, unsigned int *);
@@ -108,8 +107,6 @@ static int pci_stub(void)
 
 static struct pci_access pci_access_none = {
 	0,		   		/* No PCI present */
-	(void *) pci_stub,	        /* No functions implemented */
-	(void *) pci_stub,
 	(void *) pci_stub,
 	(void *) pci_stub,
 	(void *) pci_stub,
@@ -125,18 +122,6 @@ int pcibios_present(void)
 	return access_pci->pci_present;
 }
 
-int pcibios_find_class (unsigned int class_code, unsigned short index,
-	unsigned char *bus, unsigned char *device_fn)
-{
-	return access_pci->find_class(class_code, index, bus, device_fn);
-}
-
-int pcibios_find_device (unsigned short vendor, unsigned short device_id,
-	unsigned short index, unsigned char *bus, unsigned char *device_fn)
-{
-	return access_pci->find_device(vendor, device_id, index, bus, device_fn);
-}
-
 int pcibios_read_config_byte (unsigned char bus,
 	unsigned char device_fn, unsigned char where, unsigned char *value)
 {
@@ -147,6 +132,9 @@ int pcibios_read_config_byte (unsigned char bus,
 #ifdef __SMP__
 /*
  * IOAPICs can take PCI IRQs directly, lets first check the mptable:
+ *
+ * This can go away once nobody probes the irq this way,
+ * but uses the PCI tables instead.
  */
 	if (where == PCI_INTERRUPT_LINE) {
 		int irq;
@@ -205,60 +193,17 @@ int pcibios_write_config_dword (unsigned char bus,
 	return access_pci->write_config_dword(bus, device_fn, where, value);
 }
 
+static unsigned int pci_probe = ~0;
+
+#define PCI_PROBE_BIOS 1
+#define PCI_PROBE_CONF1 2
+#define PCI_PROBE_CONF2 4
+
 /*
  * Direct access to PCI hardware...
  */
 
-/*
- * Given the vendor and device ids, find the n'th instance of that device
- * in the system.  
- */
-
 #ifdef CONFIG_PCI_DIRECT
-
-static int pci_direct_find_device (unsigned short vendor, unsigned short device_id,
-			   unsigned short index, unsigned char *bus,
-			   unsigned char *devfn)
-{
-    unsigned int curr = 0;
-    struct pci_dev *dev;
-
-    for (dev = pci_devices; dev; dev = dev->next) {
-	if (dev->vendor == vendor && dev->device == device_id) {
-	    if (curr == index) {
-		*devfn = dev->devfn;
-		*bus = dev->bus->number;
-		return PCIBIOS_SUCCESSFUL;
-	    }
-	    ++curr;
-	}
-    }
-    return PCIBIOS_DEVICE_NOT_FOUND;
-}
-
-/*
- * Given the class, find the n'th instance of that device
- * in the system.
- */
-
-static int pci_direct_find_class (unsigned int class_code, unsigned short index,
-			  unsigned char *bus, unsigned char *devfn)
-{
-    unsigned int curr = 0;
-    struct pci_dev *dev;
-
-    for (dev = pci_devices; dev; dev = dev->next) {
-	if (dev->class == class_code) {
-	    if (curr == index) {
-		*devfn = dev->devfn;
-		*bus = dev->bus->number;
-		return PCIBIOS_SUCCESSFUL;
-	    }
-	    ++curr;
-	}
-    }
-    return PCIBIOS_DEVICE_NOT_FOUND;
-}
 
 /*
  * Functions for accessing PCI configuration space with type 1 accesses
@@ -346,8 +291,6 @@ static int pci_conf1_write_config_dword (unsigned char bus, unsigned char device
 
 static struct pci_access pci_direct_conf1 = {
       1,
-      pci_direct_find_device,
-      pci_direct_find_class,
       pci_conf1_read_config_byte,
       pci_conf1_read_config_word,
       pci_conf1_read_config_dword,
@@ -458,8 +401,6 @@ static int pci_conf2_write_config_dword (unsigned char bus, unsigned char device
 
 static struct pci_access pci_direct_conf2 = {
       1,
-      pci_direct_find_device,
-      pci_direct_find_class,
       pci_conf2_read_config_byte,
       pci_conf2_read_config_word,
       pci_conf2_read_config_dword,
@@ -470,39 +411,43 @@ static struct pci_access pci_direct_conf2 = {
 
 __initfunc(static struct pci_access *pci_check_direct(void))
 {
-    unsigned int tmp;
-    unsigned long flags;
+	unsigned int tmp;
+	unsigned long flags;
 
-    save_flags(flags); cli();
+	save_flags(flags); cli();
 
-    /*
-     * Check if configuration type 1 works.
-     */
-    outb (0x01, 0xCFB);
-    tmp = inl (0xCF8);
-    outl (0x80000000, 0xCF8);
-    if (inl (0xCF8) == 0x80000000) {
-	outl (tmp, 0xCF8);
+	/*
+	 * Check if configuration type 1 works.
+	 */
+	if (pci_probe & PCI_PROBE_CONF1) {
+		outb (0x01, 0xCFB);
+		tmp = inl (0xCF8);
+		outl (0x80000000, 0xCF8);
+		if (inl (0xCF8) == 0x80000000) {
+			outl (tmp, 0xCF8);
+			restore_flags(flags);
+			printk("PCI: Using configuration type 1\n");
+			return &pci_direct_conf1;
+		}
+		outl (tmp, 0xCF8);
+	}
+
+	/*
+	 * Check if configuration type 2 works.
+	 */
+	if (pci_probe & PCI_PROBE_CONF2) {
+		outb (0x00, 0xCFB);
+		outb (0x00, 0xCF8);
+		outb (0x00, 0xCFA);
+		if (inb (0xCF8) == 0x00 && inb (0xCFA) == 0x00) {
+			restore_flags(flags);
+			printk("PCI: Using configuration type 2\n");
+			return &pci_direct_conf2;
+		}
+	}
+
 	restore_flags(flags);
-	printk("PCI: Using configuration type 1\n");
-	return &pci_direct_conf1;
-    }
-    outl (tmp, 0xCF8);
-
-    /*
-     * Check if configuration type 2 works.
-     */
-    outb (0x00, 0xCFB);
-    outb (0x00, 0xCF8);
-    outb (0x00, 0xCFA);
-    if (inb (0xCF8) == 0x00 && inb (0xCFA) == 0x00) {
-	restore_flags(flags);
-	printk("PCI: Using configuration type 2\n");
-	return &pci_direct_conf2;
-    }
-    restore_flags(flags);
-    printk("PCI: PCI hardware not found (i.e., not present or not supported).\n");
-    return NULL;
+	return NULL;
 }
 
 #endif
@@ -599,7 +544,7 @@ static unsigned long bios32_service(unsigned long service)
 			printk("bios32_service(0x%lx): not present\n", service);
 			return 0;
 		default: /* Shouldn't happen */
-			printk("bios32_service(0x%lx): returned 0x%x, mail drew@colorado.edu\n",
+			printk("bios32_service(0x%lx): returned 0x%x, report to <mj@ucw.cz>.\n",
 				service, return_code);
 			return 0;
 	}
@@ -642,7 +587,7 @@ __initfunc(static int check_pcibios(void))
 		if (present_status || (signature != PCI_SIGNATURE)) {
 			printk ("PCI: %s: BIOS32 Service Directory says PCI BIOS is present,\n"
 				"	but PCI_BIOS_PRESENT subfunction fails with present status of 0x%x\n"
-				"	and signature of 0x%08lx (%c%c%c%c).  Mail drew@Colorado.EDU\n",
+				"	and signature of 0x%08lx (%c%c%c%c).  Report to <mj@ucw.cz>.\n",
 				(signature == PCI_SIGNATURE) ?  "WARNING" : "ERROR",
 				present_status, signature,
 				(char) (signature >>  0), (char) (signature >>  8),
@@ -659,6 +604,8 @@ __initfunc(static int check_pcibios(void))
 	}
 	return 0;
 }
+
+#if 0	/* Not used */
 
 static int pci_bios_find_class (unsigned int class_code, unsigned short index,
 	unsigned char *bus, unsigned char *device_fn)
@@ -708,6 +655,8 @@ static int pci_bios_find_device (unsigned short vendor, unsigned short device_id
 	*device_fn = bx & 0xff;
 	return (int) (ret & 0xff00) >> 8;
 }
+
+#endif
 
 static int pci_bios_read_config_byte(unsigned char bus,
 	unsigned char device_fn, unsigned char where, unsigned char *value)
@@ -847,8 +796,6 @@ static int pci_bios_write_config_dword (unsigned char bus,
 
 static struct pci_access pci_bios_access = {
       1,
-      pci_bios_find_device,
-      pci_bios_find_class,
       pci_bios_read_config_byte,
       pci_bios_read_config_word,
       pci_bios_read_config_dword,
@@ -887,18 +834,14 @@ __initfunc(static struct pci_access *pci_find_bios(void))
 		if (sum != 0)
 			continue;
 		if (check->fields.revision != 0) {
-			printk("PCI: unsupported BIOS32 revision %d at 0x%p, mail drew@colorado.edu\n",
+			printk("PCI: unsupported BIOS32 revision %d at 0x%p, report to <mj@ucw.cz>\n",
 				check->fields.revision, check);
 			continue;
 		}
 		printk ("PCI: BIOS32 Service Directory structure at 0x%p\n", check);
 		if (check->fields.entry >= 0x100000) {
-#ifdef CONFIG_PCI_DIRECT
-			printk("PCI: BIOS32 entry in high memory, trying direct PCI access.\n");
-			return pci_check_direct();
-#else
 			printk("PCI: BIOS32 entry in high memory, cannot use.\n");
-#endif
+			return NULL;
 		} else {
 			bios32_entry = check->fields.entry;
 			printk ("PCI: BIOS32 Service Directory entry at 0x%lx\n", bios32_entry);
@@ -909,39 +852,128 @@ __initfunc(static struct pci_access *pci_find_bios(void))
 		break;	/* Hopefully more than one BIOS32 cannot happen... */
 	}
 
+	/*
+	 * If we were told to use the PCI BIOS and it's not present, avoid
+	 * touching the hardware.
+	 */
+	pci_probe = 0;
 	return NULL;
 }
 
 #endif
 
 /*
- * No fixup function used.
+ * Arch-dependent fixups.
  */
 
-__initfunc(unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end))
+__initfunc(void pcibios_fixup(void))
 {
-    return mem_start;
+	struct pci_dev *dev;
+	int i, has_io;
+
+	for(dev = pci_devices; dev; dev=dev->next) {
+		/*
+		 * There are probably some buggy BIOSes that forget to assign I/O port
+		 * addresses to several devices. We probably should assign new addresses
+		 * to such devices, but we need to gather some information first. [mj]
+		 */
+		has_io = 0;
+		for(i=0; i<6; i++) {
+			unsigned long a = dev->base_address[i];
+			if (a & PCI_BASE_ADDRESS_SPACE_IO) {
+				has_io = 1;
+				a &= PCI_BASE_ADDRESS_IO_MASK;
+				if (!a || a == PCI_BASE_ADDRESS_IO_MASK)
+					printk(KERN_WARNING "PCI: BIOS forgot to assign address #%d to device %02x:%02x,"
+						" please report to <mj@ucw.cz>\n", i, dev->bus->number, dev->devfn);
+			}
+		}
+		/*
+		 * Check if the I/O space access is allowed. If not, moan loudly. [mj]
+		 */
+		if (has_io) {
+			unsigned short cmd;
+			pci_read_config_word(dev, PCI_COMMAND, &cmd);
+			if (!(cmd & PCI_COMMAND_IO))
+				printk(KERN_WARNING "PCI: BIOS forgot to enable I/O for device %02x:%02x,"
+					" please report to <mj@ucw.cz>\n", dev->bus->number, dev->devfn);
+		}
+#ifdef __SMP__
+		/*
+		 * Recalculate IRQ numbers if we use the I/O APIC
+		 */
+		{
+		unsigned char pin;
+		int irq;
+
+		pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
+		if (pin) {
+			pin--;		/* interrupt pins are numbered starting from 1 */
+			irq = IO_APIC_get_PCI_irq_vector (dev->bus->number, PCI_SLOT(dev->devfn), pin);
+			if (irq >= 0) {
+				printk("PCI->APIC IRQ transform: (B%d,I%d,P%d) -> %d\n",
+					dev->bus->number, PCI_SLOT(dev->devfn), pin, irq);
+				dev->irq = irq;
+				}
+		}
+		}
+#endif
+		/*
+		 * Fix out-of-range IRQ numbers.
+		 */
+		if (dev->irq >= NR_IRQS)
+			dev->irq = 0;
+	}
 }
 
 /*
  * Initialization. Try all known PCI access methods.
  */
 
-__initfunc(unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end))
+__initfunc(void pcibios_init(void))
 {
 	struct pci_access *a = NULL;
 
 #ifdef CONFIG_PCI_BIOS
-	a = pci_find_bios();
-#else
-#ifdef CONFIG_PCI_DIRECT
-	a = pci_check_direct();
-#else
-#error "You need to set CONFIG_PCI_BIOS or CONFIG_PCI_DIRECT if you want PCI support."
+	if (pci_probe & PCI_PROBE_BIOS)
+		a = pci_find_bios();
 #endif
+#ifdef CONFIG_PCI_DIRECT
+	if (!a && (pci_probe & (PCI_PROBE_CONF1 | PCI_PROBE_CONF2)))
+		a = pci_check_direct();
 #endif
 	if (a)
 		access_pci = a;
+}
 
-	return memory_start;
+#if !defined(CONFIG_PCI_BIOS) && !defined(CONFIG_PCI_DIRECT)
+#error PCI configured with neither PCI BIOS or PCI direct access support.
+#endif
+
+__initfunc(char *pcibios_setup(char *str))
+{
+	if (!strncmp(str, "off", 3)) {
+		pci_probe = 0;
+		return str+3;
+	}
+#ifdef CONFIG_PCI_BIOS
+	else if (!strncmp(str, "bios", 4)) {
+		pci_probe = PCI_PROBE_BIOS;
+		return str+4;
+	} else if (!strncmp(str, "nobios", 6)) {
+		pci_probe &= ~PCI_PROBE_BIOS;
+		return str+6;
+	}
+#endif
+#ifdef CONFIG_PCI_DIRECT
+	else if (!strncmp(str, "conf1", 5)) {
+		pci_probe = PCI_PROBE_CONF1;
+		return str+5;
+	}
+	else if (!strncmp(str, "conf2", 5)) {
+		pci_probe = PCI_PROBE_CONF2;
+		return str+5;
+	}
+#endif
+	return str;
 }

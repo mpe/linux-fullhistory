@@ -106,7 +106,6 @@ char kernel_version[]=UTS_RELEASE;
 
 
 #ifdef ENABLE_PCI
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/digiPCI.h>
 #endif /* ENABLE_PCI */
@@ -1747,7 +1746,7 @@ int pc_init(void)
 	--------------------------------------------------------------------- */
   
 	pci_boards_found = 0;
-	if (pcibios_present())
+	if (pci_present())
 	{
 		if(num_cards < MAXBOARDS)
 			pci_boards_found += init_PCI(num_cards);
@@ -4039,31 +4038,23 @@ void epca_setup(char *str, int *ints)
 #ifdef ENABLE_PCI
 /* --------------------- Begin get_PCI_configuration  ---------------------- */
 
-int get_PCI_configuration(char bus, char device_fn, 
+int get_PCI_configuration(char bus, char device_fn,
                           unsigned int *base_addr0, unsigned int *base_addr1,
                           unsigned int *base_addr2, unsigned int *base_addr3,
                           unsigned int *base_addr4, unsigned int *base_addr5)
 { /* Begin get_PCI_configuration */
 
-	int	error;
+	struct	pci_dev *dev = pci_find_slot(bus, device_fn);
 
-	error = pcibios_read_config_dword(bus, device_fn, PCI_BASE_ADDRESS_0,
-	                                  base_addr0);
+	if (!dev)
+		return(0);
 
-	error |= pcibios_read_config_dword(bus, device_fn, PCI_BASE_ADDRESS_1,
-                                      base_addr1);
-
-	error |= pcibios_read_config_dword(bus, device_fn, PCI_BASE_ADDRESS_2,
-                                      base_addr2);
-
-	error |= pcibios_read_config_dword(bus, device_fn, PCI_BASE_ADDRESS_3,
-                                      base_addr3);
-
-	error |= pcibios_read_config_dword(bus, device_fn, PCI_BASE_ADDRESS_4,
-                                      base_addr4);
-
-	error |= pcibios_read_config_dword(bus, device_fn, PCI_BASE_ADDRESS_5,
-                                      base_addr5);
+	*base_addr0 = dev->base_address[0];
+	*base_addr1 = dev->base_address[1];
+	*base_addr2 = dev->base_address[2];
+	*base_addr3 = dev->base_address[3];
+	*base_addr4 = dev->base_address[4];
+	*base_addr5 = dev->base_address[5];
 
 	/* ------------------------------------------------------------------------
 			 NOTE - The code below mask out either the 2 or 4 bits dependent on the
@@ -4103,11 +4094,6 @@ int get_PCI_configuration(char bus, char device_fn,
 	else
 		(*base_addr5) &= PCI_BASE_ADDRESS_MEM_MASK;
 
-	if (error) 
-	{
-		printk(KERN_ERR "<Error> - DIGI PCI error: board not initializing due to error\n");
-		return(0);
-	}
 	return(1);
 } /* End get_PCI_configuration */
 
@@ -4311,5 +4297,3 @@ int init_PCI(int boards_found)
 } /* End init_PCI */
 
 #endif /* ENABLE_PCI */
-
-

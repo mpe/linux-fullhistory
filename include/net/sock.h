@@ -274,7 +274,8 @@ struct tcp_opt {
 
 	struct open_request	*syn_wait_queue;
 	struct open_request	**syn_wait_last;
-	int syn_backlog;
+
+	int syn_backlog;	/* Backlog of received SYNs */
 };
 
  	

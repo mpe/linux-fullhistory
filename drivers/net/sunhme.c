@@ -45,7 +45,6 @@ static char *version =
 
 #ifdef CONFIG_PCI
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <asm/pbm.h>
 #endif
 
@@ -55,7 +54,10 @@ static char *version =
 static struct happy_meal *root_happy_dev = NULL;
 #endif
 
-/* #define HMEDEBUG */
+#undef HMEDEBUG
+#undef SXDEBUG
+#undef RXDEBUG
+#undef TXDEBUG
 
 #ifdef HMEDEBUG
 #define HMD(x)  printk x
@@ -1584,8 +1586,11 @@ static inline void happy_meal_mif_interrupt(struct happy_meal *hp,
 	happy_meal_poll_stop(hp, tregs);
 }
 
-/* #define TXD(x) printk x */
+#ifdef TXDEBUG
+#define TXD(x) printk x
+#else
 #define TXD(x)
+#endif
 
 static inline void happy_meal_tx(struct happy_meal *hp)
 {
@@ -1676,8 +1681,11 @@ static inline void sun4c_happy_meal_tx(struct happy_meal *hp)
 	TXD((">"));
 }
 
-/* #define RXD(x) printk x */
+#ifdef RXDEBUG
+#define RXD(x) printk x
+#else
 #define RXD(x)
+#endif
 
 /* Originally I use to handle the allocation failure by just giving back just
  * that one ring buffer to the happy meal.  Problem is that usually when that
@@ -1705,7 +1713,7 @@ static inline void happy_meal_rx(struct happy_meal *hp, struct device *dev,
 
 		/* Check for errors. */
 		if((len < ETH_ZLEN) || (flags & RXFLAG_OVERFLOW)) {
-			RXD(("ERR(%08lx)]", flags));
+			RXD(("ERR(%08x)]", flags));
 			hp->net_stats.rx_errors++;
 			if(len < ETH_ZLEN)
 				hp->net_stats.rx_length_errors++;
@@ -1724,11 +1732,8 @@ static inline void happy_meal_rx(struct happy_meal *hp, struct device *dev,
 		}
 		skb = hp->rx_skbs[elem];
 #ifdef NEED_DMA_SYNCHRONIZATION
-#ifdef CONFIG_PCI
-		if(!(hp->happy_flags & HFLAG_PCI))
-#endif
-			mmu_sync_dma(kva_to_hva(hp, skb->data),
-				     skb->len, hp->happy_sbus_dev->my_bus);
+		mmu_sync_dma(kva_to_hva(hp, skb->data),
+			     skb->len, hp->happy_sbus_dev->my_bus);
 #endif
 		if(len > RX_COPY_THRESHOLD) {
 			struct sk_buff *new_skb;
@@ -1819,7 +1824,7 @@ static inline void pci_happy_meal_rx(struct happy_meal *hp, struct device *dev,
 
 		/* Check for errors. */
 		if((len < ETH_ZLEN) || (flags & RXFLAG_OVERFLOW)) {
-			RXD(("ERR(%08lx)]", flags));
+			RXD(("ERR(%08x)]", flags));
 			hp->net_stats.rx_errors++;
 			if(len < ETH_ZLEN)
 				hp->net_stats.rx_length_errors++;
@@ -1926,7 +1931,7 @@ static inline void sun4c_happy_meal_rx(struct happy_meal *hp, struct device *dev
 
 		/* Check for errors. */
 		if((len < ETH_ZLEN) || (flags & RXFLAG_OVERFLOW)) {
-			RXD(("ERR(%08lx)]", flags));
+			RXD(("ERR(%08x)]", flags));
 			hp->net_stats.rx_errors++;
 			if(len < ETH_ZLEN)
 				hp->net_stats.rx_length_errors++;
@@ -1975,7 +1980,7 @@ static void happy_meal_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	struct hmeal_tcvregs *tregs   = hp->tcvregs;
 	unsigned int happy_status    = hme_read32(hp, &gregs->stat);
 
-	HMD(("happy_meal_interrupt: status=%08lx ", happy_status));
+	HMD(("happy_meal_interrupt: status=%08x ", happy_status));
 
 	dev->interrupt = 1;
 
@@ -2020,7 +2025,7 @@ static void pci_happy_meal_interrupt(int irq, void *dev_id, struct pt_regs *regs
 	struct hmeal_tcvregs *tregs   = hp->tcvregs;
 	unsigned int happy_status     = readl((unsigned long)&gregs->stat);
 
-	HMD(("happy_meal_interrupt: status=%08lx ", happy_status));
+	HMD(("happy_meal_interrupt: status=%08x ", happy_status));
 
 	dev->interrupt = 1;
 
@@ -2065,7 +2070,7 @@ static void sun4c_happy_meal_interrupt(int irq, void *dev_id, struct pt_regs *re
 	struct hmeal_tcvregs *tregs   = hp->tcvregs;
 	unsigned int happy_status    = hme_read32(hp, &gregs->stat);
 
-	HMD(("happy_meal_interrupt: status=%08lx ", happy_status));
+	HMD(("happy_meal_interrupt: status=%08x ", happy_status));
 
 	dev->interrupt = 1;
 
@@ -2181,8 +2186,11 @@ static int happy_meal_close(struct device *dev)
 	return 0;
 }
 
-/* #define SXD(x) printk x */
+#ifdef SXDEBUG
+#define SXD(x) printk x
+#else
 #define SXD(x)
+#endif
 
 static int happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
 {
@@ -2700,19 +2708,20 @@ __initfunc(int happy_meal_probe(struct device *dev))
 		}
 	}
 #ifdef CONFIG_PCI
-	if(pcibios_present()) {
+	if(pci_present()) {
 		struct pci_dev *pdev;
 
-		for(pdev = pci_devices; pdev; pdev = pdev->next) {
+		pdev = pci_find_device(PCI_VENDOR_ID_SUN,
+				       PCI_DEVICE_ID_SUN_HAPPYMEAL, 0);
+		while (pdev) {
 			if(cards)
 				dev = NULL;
-			if((pdev->vendor == PCI_VENDOR_ID_SUN) &&
-			   (pdev->device == PCI_DEVICE_ID_SUN_HAPPYMEAL)) {
-				cards++;
-				if((v = happy_meal_pci_init(dev, pdev)))
-					return v;
-			}
-
+			cards++;
+			if((v = happy_meal_pci_init(dev, pdev)))
+				return v;
+			pdev = pci_find_device(PCI_VENDOR_ID_SUN,
+					       PCI_DEVICE_ID_SUN_HAPPYMEAL,
+					       pdev);
 		}
 	}
 #endif

@@ -98,13 +98,11 @@ static struct super_operations adfs_sops = {
 static void adfs_put_super (struct super_block *sb)
 {
 	int i;
-	lock_super (sb);
-	sb->s_dev = 0;
+
 	for (i = 0; i < sb->u.adfs_sb.s_map_size; i++)
 		brelse (sb->u.adfs_sb.s_map[i]);
 	kfree (sb->u.adfs_sb.s_map);
 	brelse (sb->u.adfs_sb.s_sbh);
-	unlock_super (sb);
 	MOD_DEC_USE_COUNT;
 }
 

@@ -492,12 +492,14 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 	sb->s_op = &sysv_sops;
 	root_inode = iget(sb,SYSV_ROOT_INO);
 	sb->s_root = d_alloc_root(root_inode, NULL);
-	unlock_super(sb);
 	if (!sb->s_root) {
 		printk("SysV FS: get root inode failed\n");
 		sysv_put_super(sb);
+		sb->sb_dev = 0;
+		unlock_super(sb);
 		return NULL;
 	}
+	unlock_super(sb);
 	sb->s_dirt = 1;
 	/* brelse(bh);  resp.  brelse(bh1); brelse(bh2);
 	   occurs when the disk is unmounted. */
@@ -530,15 +532,14 @@ void sysv_write_super (struct super_block *sb)
 
 void sysv_put_super(struct super_block *sb)
 {
-	/* we can assume sysv_write_super() has already been called */
-	lock_super(sb);
+	/* we can assume sysv_write_super() has already been called, and
+	   and that the superblock is locked */
 	brelse(sb->sv_bh1);
 	if (sb->sv_bh1 != sb->sv_bh2) brelse(sb->sv_bh2);
 	/* switch back to default block size */
 	if (sb->s_blocksize != BLOCK_SIZE)
 		set_blocksize(sb->s_dev,BLOCK_SIZE);
-	sb->s_dev = 0;
-	unlock_super(sb);
+
 	MOD_DEC_USE_COUNT;
 }
 

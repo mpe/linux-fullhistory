@@ -83,7 +83,7 @@ static int update_timeout (Scsi_Cmnd *, int);
 extern void scsi_old_times_out (Scsi_Cmnd * SCpnt);
 extern void internal_cmnd (Scsi_Cmnd * SCpnt);
 
-static volatile struct Scsi_Host * host_active = NULL;
+extern volatile struct Scsi_Host * host_active;
 #define SCSI_BLOCK(HOST) ((HOST->block && host_active && HOST != host_active) \
 			  || (HOST->can_queue && HOST->host_busy >= HOST->can_queue))
 

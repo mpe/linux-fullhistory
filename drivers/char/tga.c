@@ -24,7 +24,6 @@
 #include <linux/major.h>
 #include <linux/mm.h>
 #include <linux/ioport.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/init.h>
 #include <linux/console.h>
@@ -137,7 +136,7 @@ extern struct console vt_console_driver;
 #define TGA_F_HEIGHT_PADDED 18
 
 int tga_type;
-unsigned int tga_mem_base;
+unsigned long tga_mem_base;
 unsigned long tga_fb_base;
 unsigned long tga_regs_base;
 unsigned int tga_bpp, tga_fb_width, tga_fb_height, tga_fb_stride;
@@ -472,15 +471,13 @@ __initfunc(int con_is_present(void))
 __initfunc(void
 tga_console_init(void))
 {
-	unsigned char pci_bus, pci_devfn;
+	struct pci_dev *dev;
 	int status;
 	
 	/*
 	 * first, find the TGA among the PCI devices...
 	 */
-	status = pcibios_find_device (PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TGA,
-				      0, &pci_bus, &pci_devfn);
-	if (status == PCIBIOS_DEVICE_NOT_FOUND) {
+	if (! (dev = pci_find_device(PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TGA, NULL)))
 		/* PANIC!!! */
 		printk("tga_console_init: TGA not found!!! :-(\n");
 		return;
@@ -489,14 +486,12 @@ tga_console_init(void))
 	/*
 	 * read BASE_REG_0 for memory address
 	 */
-	pcibios_read_config_dword(pci_bus, pci_devfn,
-				  PCI_BASE_ADDRESS_0, &tga_mem_base);
-	tga_mem_base &= ~15;
+	tga_mem_base = dev->base_address[0] & PCI_BASE_ADDRESS_MEM_MASK;
 #ifdef DEBUG
-	printk("tga_console_init: mem_base 0x%x\n", tga_mem_base);
+	printk("tga_console_init: mem_base 0x%lx\n", tga_mem_base);
 #endif /* DEBUG */
 
-	tga_type = (readl((unsigned long)tga_mem_base) >> 12) & 0x0f;
+	tga_type = (readl(tga_mem_base) >> 12) & 0x0f;
 	if (tga_type != 0 && tga_type != 1 && tga_type != 3) {
 	  printk("TGA type (0x%x) unrecognized!\n", tga_type);
 	  return;
@@ -561,9 +556,8 @@ tga_init_video(void))
 	int i, j, temp;
 	unsigned char *cbp;
 
-	tga_regs_base = ((unsigned long)tga_mem_base + TGA_REGS_OFFSET);
-	tga_fb_base =
-	  ((unsigned long)tga_mem_base + fb_offset_presets[tga_type]);
+	tga_regs_base = (tga_mem_base + TGA_REGS_OFFSET);
+	tga_fb_base = (tga_mem_base + fb_offset_presets[tga_type]);
 
 	/* first, disable video timing */
 	TGA_WRITE_REG(0x03, TGA_VALID_REG); /* SCANNING and BLANK */

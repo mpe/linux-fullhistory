@@ -52,7 +52,6 @@
 
 #ifdef CONFIG_PCI
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #endif
 
 /*****************************************************************************/
@@ -466,7 +465,7 @@ static inline int	stl_initech(stlbrd_t *brdp);
 
 #ifdef	CONFIG_PCI
 static inline int	stl_findpcibrds(void);
-static inline int	stl_initpcibrd(int brdtype, unsigned char busnr, unsigned char devnr);
+static inline int	stl_initpcibrd(int brdtype, struct pci_dev *dev);
 #endif
 
 /*
@@ -2530,16 +2529,16 @@ __initfunc(static int stl_brdinit(stlbrd_t *brdp))
  *	configuration space.
  */
 
-static inline int stl_initpcibrd(int brdtype, unsigned char busnr, unsigned char devnr)
+static inline int stl_initpcibrd(int brdtype, struct pci_dev *dev)
 {
 	unsigned int	bar[4];
 	stlbrd_t	*brdp;
-	int		i, rc;
+	int		i;
 	unsigned char	irq;
 
 #if DEBUG
 	printk("stl_initpcibrd(brdtype=%d,busnr=%x,devnr=%x)\n",
-		brdtype, busnr, devnr);
+		brdtype, dev->bus->number, dev->devfn);
 #endif
 
 	brdp = (stlbrd_t *) stl_memalloc(sizeof(stlbrd_t));
@@ -2559,22 +2558,9 @@ static inline int stl_initpcibrd(int brdtype, unsigned char busnr, unsigned char
  *	boards use these in different ways, so we just read in the whole
  *	lot and then figure out what is what later.
  */
-	for (i = 0; (i < 4); i++) {
-		rc = pcibios_read_config_dword(busnr, devnr,
-			(PCI_BASE_ADDRESS_0 + (i * 0x4)), &bar[i]);
-		if (rc) {
-			printk("STALLION: failed to read BAR register %d "
-				"from PCI board, errno=%x\n", i, rc);
-			return(0);
-		}
-	}
-
-	rc = pcibios_read_config_byte(busnr, devnr, PCI_INTERRUPT_LINE, &irq);
-	if (rc) {
-		printk("STALLION: failed to read INTERRUPT register "
-			"from PCI board, errno=%x\n", rc);
-		return(0);
-	}
+	for (i = 0; (i < 4); i++)
+		bar[i] = dev->base_address[i];
+	irq = dev->irq;
 
 #if DEBUG
 	printk("%s(%d): BAR[]=%x,%x,%x,%x IRQ=%x\n", __FILE__, __LINE__,
@@ -2620,24 +2606,18 @@ static inline int stl_initpcibrd(int brdtype, unsigned char busnr, unsigned char
 
 static inline int stl_findpcibrds()
 {
-	unsigned char	busnr, devnr;
-	unsigned short	class;
-	int		i, rc, brdtypnr;
+	struct pci_dev	*dev = NULL;
+	int		i, rc;
 
 #if DEBUG
 	printk("stl_findpcibrds()\n");
 #endif
 
-	if (! pcibios_present())
+	if (! pci_present())
 		return(0);
 
-	for (i = 0; (i < stl_nrpcibrds); i++) {
-		for (brdtypnr = 0; ; brdtypnr++) {
-
-			rc = pcibios_find_device(stl_pcibrds[i].vendid,
-				stl_pcibrds[i].devid, brdtypnr, &busnr, &devnr);
-			if (rc)
-				break;
+	for (i = 0; (i < stl_nrpcibrds); i++)
+		while ((dev = pci_find_device(stl_pcibrds[i].vendid, stl_pcibrds[i].devid, dev))) {
 
 /*
  *			Check that we can handle more boards...
@@ -2653,22 +2633,13 @@ static inline int stl_findpcibrds()
  *			Found a device on the PCI bus that has our vendor and
  *			device ID. Need to check now that it is really us.
  */
-			rc = pcibios_read_config_word(busnr, devnr,
-				PCI_CLASS_DEVICE, &class);
-			if (rc) {
-				printk("STALLION: failed to read class type "
-					"from PCI board, errno=%x\n", rc);
-				continue;
-			}
-			if (class == PCI_CLASS_STORAGE_IDE)
+			if ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE)
 				continue;
 
-			rc = stl_initpcibrd(stl_pcibrds[i].brdtype, busnr,
-				devnr);
+			rc = stl_initpcibrd(stl_pcibrds[i].brdtype, dev);
 			if (rc)
 				return(rc);
 		}
-	}
 
 	return(0);
 }

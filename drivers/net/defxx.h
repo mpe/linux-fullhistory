@@ -1754,8 +1754,7 @@ typedef struct DFX_board_tag
 	struct device			*dev;							/* pointer to device structure */
 	u32						bus_type;						/* bus type (0 == PCI, 1 == EISA) */
 	u16						base_addr;						/* base I/O address (same as dev->base_addr) */
-	u8						pci_bus;						/* PCI bus number */
-	u8						pci_dev_fun;					/* PCI device and function numbers */
+	struct pci_dev *				pci_dev;
 	u32						full_duplex_enb;				/* FDDI Full Duplex enable (1 == on, 2 == off) */
 	u32						req_ttrt;						/* requested TTRT value (in 80ns units) */
 	u32						burst_size;						/* adapter burst size (enumerated) */

@@ -161,6 +161,8 @@
 #define	SCSI_NCR_IOMAPPED
 #elif defined(__alpha__) || defined(__powerpc__)
 #define	SCSI_NCR_IOMAPPED
+#elif defined(__sparc__)
+#undef SCSI_NCR_IOMAPPED
 #endif
 
 /*
@@ -347,13 +349,18 @@ int ncr53c8xx_release(struct Scsi_Host *);
 #error	"BIG ENDIAN byte ordering needs kernel version >= 2.1.0"
 #endif
 
-#ifdef	__powerpc__
+#if defined(__powerpc__)
 #define	inw_l2b		inw
 #define	inl_l2b		inl
 #define	outw_b2l	outw
 #define	outl_b2l	outl
+#elif defined(__sparc__)
+#define	readw_l2b	readw
+#define	readl_l2b	readl
+#define	writew_b2l	writew
+#define	writel_b2l	writel
 #else
-#error	"Support for BIG ENDIAN is only available for the PowerPC"
+#error	"Support for BIG ENDIAN is only available for PowerPC and SPARC"
 #endif
 
 #else	/* Assumed x86 or alpha */

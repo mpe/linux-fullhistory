@@ -731,9 +731,6 @@ static void hpfs_read_inode(struct inode *inode)
 
 static void hpfs_put_super(struct super_block *s)
 {
-	lock_super(s);
-	s->s_dev = 0;
-	unlock_super(s);
 	MOD_DEC_USE_COUNT;
 }
 
