@@ -490,6 +490,9 @@ static void do_sd_request (void)
 	    if( SDev->removable && !intr_count )
 	    {
                 scsi_ioctl(SDev, SCSI_IOCTL_DOORLOCK, 0);
+		/* scsi_ioctl may allow CURRENT to change, so start over. */
+		SDev->was_reset = 0;
+		continue;
 	    }
 	    SDev->was_reset = 0;
         }

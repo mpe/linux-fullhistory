@@ -279,7 +279,7 @@ void tcp_enqueue_partial(struct sk_buff * skb, struct sock * sk)
 	/*
 	 *	Wait up to 1 second for the buffer to fill.
 	 */
-	sk->partial_timer.expires = jiffies+HZ;
+	sk->partial_timer.expires = jiffies+HZ/10;
 	sk->partial_timer.function = (void (*)(unsigned long)) tcp_send_partial;
 	sk->partial_timer.data = (unsigned long) sk;
 	add_timer(&sk->partial_timer);
@@ -966,6 +966,10 @@ void tcp_send_ack(struct sock *sk)
 		sock_wfree(sk, buff);
 		return;
 	}
+#ifndef CONFIG_NO_PATH_MTU_DISCOVERY
+	buff->ip_hdr->frag_off |= htons(IP_DF);
+#endif
+
 	t1 =(struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
 
   	/*

@@ -64,10 +64,21 @@ typedef struct {
 	struct sock		*sk;		/* Backlink to socket */
 } nr_cb;
 
+struct nr_neigh {
+	struct nr_neigh *next;
+	ax25_address    callsign;
+	ax25_digi       *digipeat;
+	struct device   *dev;
+	unsigned char   quality;
+	unsigned char   locked;
+	unsigned short  count;
+	unsigned int    number;
+};
+
 struct nr_route {
-	unsigned char  quality;
-	unsigned char  obs_count;
-	unsigned short neighbour;
+	unsigned char   quality;
+	unsigned char   obs_count;
+	struct nr_neigh *neighbour;
 };
 
 struct nr_node {
@@ -77,17 +88,6 @@ struct nr_node {
 	unsigned char   which;
 	unsigned char   count;
 	struct nr_route routes[3];
-};
-
-struct nr_neigh {
-	struct nr_neigh *next;
-	ax25_address    callsign;
-	ax25_digi       *digipeat;
-	struct device   *dev;
-	unsigned char   quality;
-	unsigned char   locked;
-	unsigned short  count;
-	unsigned short  number;
 };
 
 /* af_netrom.c */

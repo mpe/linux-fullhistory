@@ -934,7 +934,7 @@ static int nr_getname(struct socket *sock, struct sockaddr *uaddr,
 		sax->fsa_ax25.sax25_ndigis = 1;
 		sax->fsa_ax25.sax25_call = sk->nr->user_addr;
 		sax->fsa_digipeater[0]   = sk->nr->dest_addr;
-		*uaddr_len = sizeof(struct sockaddr_ax25) + AX25_ADDR_LEN;
+		*uaddr_len = sizeof(struct full_sockaddr_ax25);
 	} else {
 		sax->fsa_ax25.sax25_family = AF_NETROM;
 		sax->fsa_ax25.sax25_ndigis = 0;
@@ -952,14 +952,13 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	ax25_address *src, *dest, *user;
 	unsigned short circuit_index, circuit_id;
 	unsigned short frametype, window, timeout;
-	
 
 	skb->sk = NULL;		/* Initially we don't know who it's for */
 
 	/*
 	 *	skb->data points to the netrom frame start
 	 */
-	
+
 	src  = (ax25_address *)(skb->data + 0);
 	dest = (ax25_address *)(skb->data + 7);
 
@@ -1327,7 +1326,7 @@ static int nr_get_info(char *buffer, char **start, off_t offset, int length, int
   
 	cli();
 
-	len += sprintf(buffer, "user_addr dest_node src_node  dev    my  your  st vs vr va    t1     t2    n2  rtt wnd paclen Snd-Q Rcv-Q\n");
+	len += sprintf(buffer, "user_addr dest_node src_node  dev    my  your  st  vs  vr  va    t1     t2    n2  rtt wnd paclen Snd-Q Rcv-Q\n");
 
 	for (s = nr_list; s != NULL; s = s->next) {
 		if ((dev = s->nr->device) == NULL)
@@ -1339,7 +1338,7 @@ static int nr_get_info(char *buffer, char **start, off_t offset, int length, int
 			ax2asc(&s->nr->user_addr));
 		len += sprintf(buffer + len, "%-9s ",
 			ax2asc(&s->nr->dest_addr));
-		len += sprintf(buffer + len, "%-9s %-3s  %02X/%02X %02X/%02X %2d %2d %2d %2d %3d/%03d %2d/%02d %2d/%02d %3d %3d %6d %5d %5d\n",
+		len += sprintf(buffer + len, "%-9s %-3s  %02X/%02X %02X/%02X %2d %3d %3d %3d %3d/%03d %2d/%02d %2d/%02d %3d %3d %6d %5d %5d\n",
 			ax2asc(&s->nr->source_addr),
 			devname, s->nr->my_index, s->nr->my_id,
 			s->nr->your_index, s->nr->your_id,

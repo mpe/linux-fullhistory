@@ -645,7 +645,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 	 *	Check for any "DF" flag. [DF means do not fragment]
 	 */
 
-	if (ntohs(iph->frag_off) & IP_DF)
+	if (iph->frag_off & htons(IP_DF))
 	{
 		ip_statistics.IpFragFails++;
 		NETDEBUG(printk("ip_queue_xmit: frag needed\n"));

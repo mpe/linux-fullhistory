@@ -1,5 +1,5 @@
 Ioctl Numbers
-12 Jun 1996
+6 Aug 1996
 Michael Chastain
 <mec@duracef.shout.net>
 
@@ -50,7 +50,8 @@ Following the convention is good because:
 (5) When following the convention, the driver code can use generic
     code to call verify_area to validate parameters.
 
-This table is current to Linux pre2.0.9.
+This table lists ioctls visible from user land for Linux/i386.  It is
+current to Linux 2.0.11.
 
 Code	Seq#	Include File		Comments
 ========================================================
@@ -83,6 +84,7 @@ Code	Seq#	Include File		Comments
 'T'	all	linux/soundcard.h	conflict!
 'T'	all	asm-i386/ioctls.h	conflict!
 'V'	all	linux/vt.h
+'W'	00-1F	linux/pcwd.h
 'Y'	all	linux/cyclades.h
 'Z'	all	linux/scc.h		version 2.2 of z8530drv
 'a'	all	various, see http://lrcwww.epfl.ch/linux-atm/magic.html

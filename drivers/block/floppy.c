@@ -1685,15 +1685,9 @@ void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		} while ((ST0 & 0x83) != UNIT(current_drive) && inr == 2);
 	}
 	if (handler) {
-		if(intr_count >= 2)
-			{
-				/* expected interrupt */
-				floppy_tq.routine = (void *)(void *) handler;
-				queue_task_irq(&floppy_tq, &tq_immediate);
-				mark_bh(IMMEDIATE_BH);
-			}
-		else
-			handler();
+		/* expected interrupt */
+		floppy_tq.routine = (void *)(void *) handler;
+		queue_task_irq(&floppy_tq, &tq_timer);
 	} else
 		FDCS->reset = 1;
 	is_alive("normal interrupt end");
@@ -1931,8 +1925,7 @@ static int wait_til_done(void (*handler)(void), int interruptible)
 	unsigned long flags;
 
 	floppy_tq.routine = (void *)(void *) handler;
-	queue_task(&floppy_tq, &tq_immediate);
-	mark_bh(IMMEDIATE_BH);
+	queue_task(&floppy_tq, &tq_timer);
 	INT_OFF;
 	while(command_status < 2 && NO_SIGNAL){
 		is_alive("wait_til_done");
@@ -2740,8 +2733,7 @@ static void redo_fd_request(void)
 		if (TESTF(FD_NEED_TWADDLE))
 			twaddle();
 		floppy_tq.routine = (void *)(void *) floppy_start;
-		queue_task(&floppy_tq, &tq_immediate);
-		mark_bh(IMMEDIATE_BH);
+		queue_task(&floppy_tq, &tq_timer);
 #ifdef DEBUGT
 		debugt("queue fd request");
 #endif
@@ -2762,8 +2754,7 @@ static struct tq_struct request_tq =
 static void process_fd_request(void)
 {
 	cont = &rw_cont;
-	queue_task(&request_tq, &tq_immediate);
-	mark_bh(IMMEDIATE_BH);
+	queue_task(&request_tq, &tq_timer);
 }
 
 static void do_fd_request(void)

@@ -25,6 +25,9 @@
  *
  * Bruno Haible      :  remove 4K limit for the maps file
  * <haible@ma2s2.mathematik.uni-karlsruhe.de>
+ *
+ * Yves Arrouye      :  remove removal of trailing spaces in get_array.
+ *			<Yves.Arrouye@marin.fdn.fr>
  */
 
 #include <linux/types.h>
@@ -370,7 +373,7 @@ static int get_array(struct task_struct ** p, unsigned long start, unsigned long
 	for (;;) {
 		addr = get_phys_addr(*p, start);
 		if (!addr)
-			goto ready;
+			return result;
 		do {
 			c = *(char *) addr;
 			if (!c)
@@ -378,17 +381,13 @@ static int get_array(struct task_struct ** p, unsigned long start, unsigned long
 			if (size < PAGE_SIZE)
 				buffer[size++] = c;
 			else
-				goto ready;
+				return result;
 			addr++;
 			start++;
 			if (!c && start >= end)
-				goto ready;
+				return result;
 		} while (addr & ~PAGE_MASK);
 	}
-ready:
-	/* remove the trailing blanks, used to fill out argv,envp space */
-	while (result>0 && buffer[result-1]==' ')
-		result--;
 	return result;
 }
 

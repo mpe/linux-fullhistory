@@ -17,6 +17,11 @@
          
 	**********************
 	
+	v2.55 (96/08/05)
+	  - A couple more messages moved to D_EXTRA.
+	  - SLOW_XMIT_COPY off by default.
+	  - Some tiny changes.
+	
 	v2.54 (96/07/05)
 	  - Under some situations, Stage 5 autoprobe was a little bit too
 	    picky about the TXACK flag.
@@ -154,14 +159,19 @@
          
 	TO DO: (semi-prioritized)
 	
-         - Smarter recovery from RECON-during-transmit conditions.
+         - Support "arpless" mode like NetBSD does, and as recommended
+           by the (obsoleted) RFC1051.
+         - Smarter recovery from RECON-during-transmit conditions. (ie.
+           retransmit immediately)
          - Make arcnetE_send_packet use arcnet_prepare_tx for loading the
            packet into ARCnet memory.
-	 - Probe for multiple devices in one shot (trying to decide whether
-	   to do it the "ugly" way or not).
-         - Add support for the new 1.3.x IP header cache features.
-	 - Debug level should be changed with a system call, not a hack to
-	   the "metric" flag.
+         - Some cards have shared memory with 4k mirrors instead of just 2k,
+           so we (uneventfully) find the "wrong" shmem when probing.
+         - Probe for multiple devices in one shot (trying to decide whether
+           to do it the "ugly" way or not).
+         - Add support for the new 1.3.x IP header cache, and other features.
+         - Debug level should be changed with a system call, not a hack to
+           the "metric" flag.
          - What about cards with shared memory that can be "turned off?"
            (or that have none at all, like the SMC PC500longboard)
          - Autoconfigure PDI5xxPlus cards. (I now have a PDI508Plus to play
@@ -192,7 +202,7 @@
 */
 
 static const char *version =
- "arcnet.c: v2.54 96/07/05 Avery Pennarun <apenwarr@foxnet.net>\n";
+ "arcnet.c: v2.55 96/08/05 Avery Pennarun <apenwarr@foxnet.net>\n";
 
  
 
@@ -244,11 +254,11 @@ static const char *version =
  * defines; ARCnet probably is not the only driver that can screw up an
  * ftape DMA transfer.
  *
- * Turn this off if you don't have timing-sensitive DMA (ie. a tape drive)
- * and would like the little bit of speed back.  It's on by default because
- * - trust me - it's very difficult to figure out that you need it!
+ * Turn this on if you have timing-sensitive DMA (ie. a tape drive) and
+ * would like to sacrifice a little bit of network speed to reduce tape
+ * write retries or some related problem.
  */
-#define SLOW_XMIT_COPY
+#undef SLOW_XMIT_COPY
 
 /* The card sends the reconfiguration signal when it loses the connection to
  * the rest of its network. It is a 'Hello, is anybody there?' cry.  This
@@ -2310,7 +2320,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 			
 		if (in->skb)	/* already assembling one! */
         	{
-        		BUGMSG(D_NORMAL,"aborting assembly (seq=%d) for unsplit packet (splitflag=%d, seq=%d)\n",
+        		BUGMSG(D_EXTRA,"aborting assembly (seq=%d) for unsplit packet (splitflag=%d, seq=%d)\n",
         			in->sequence,arcsoft->split_flag,
         			arcsoft->sequence);
         		kfree_skb(in->skb,FREE_WRITE);
@@ -2407,7 +2417,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 
 		if (in->skb && in->sequence!=arcsoft->sequence)
 		{
-			BUGMSG(D_NORMAL,"wrong seq number (saddr=%d, expected=%d, seq=%d, splitflag=%d)\n",
+			BUGMSG(D_EXTRA,"wrong seq number (saddr=%d, expected=%d, seq=%d, splitflag=%d)\n",
 				saddr,in->sequence,arcsoft->sequence,
 				arcsoft->split_flag);
 	        	kfree_skb(in->skb,FREE_WRITE);
@@ -2423,7 +2433,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 	        		arcsoft->split_flag);
 	        	if (in->skb)	/* already assembling one! */
 	        	{
-	        		BUGMSG(D_NORMAL,"aborting previous (seq=%d) assembly (splitflag=%d, seq=%d)\n",
+	        		BUGMSG(D_EXTRA,"aborting previous (seq=%d) assembly (splitflag=%d, seq=%d)\n",
 	        			in->sequence,arcsoft->split_flag,
 	        			arcsoft->sequence);
 				lp->stats.rx_errors++;
@@ -2437,7 +2447,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 	        	
 	        	if (in->numpackets>16)
 	        	{
-	        		BUGMSG(D_NORMAL,"incoming packet more than 16 segments; dropping. (splitflag=%d)\n",
+	        		BUGMSG(D_EXTRA,"incoming packet more than 16 segments; dropping. (splitflag=%d)\n",
 	        			arcsoft->split_flag);
 	        		lp->stats.rx_errors++;
 	        		lp->stats.rx_length_errors++;
@@ -2477,7 +2487,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 			 */			
 			if (!in->skb)
 			{
-				BUGMSG(D_NORMAL,"can't continue split without starting first! (splitflag=%d, seq=%d)\n",
+				BUGMSG(D_EXTRA,"can't continue split without starting first! (splitflag=%d, seq=%d)\n",
 					arcsoft->split_flag,arcsoft->sequence);
 				lp->stats.rx_errors++;
 				lp->stats.rx_missed_errors++;
@@ -2490,7 +2500,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 				/* harmless duplicate? ignore. */
 				if (packetnum<=in->lastpacket-1)
 				{
-					BUGMSG(D_NORMAL,"duplicate splitpacket ignored! (splitflag=%d)\n",
+					BUGMSG(D_EXTRA,"duplicate splitpacket ignored! (splitflag=%d)\n",
 						arcsoft->split_flag);
 					lp->stats.rx_errors++;
 					lp->stats.rx_frame_errors++;
@@ -2498,7 +2508,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 				}
 				
 				/* "bad" duplicate, kill reassembly */
-				BUGMSG(D_NORMAL,"out-of-order splitpacket, reassembly (seq=%d) aborted (splitflag=%d, seq=%d)\n",	
+				BUGMSG(D_EXTRA,"out-of-order splitpacket, reassembly (seq=%d) aborted (splitflag=%d, seq=%d)\n",
 					in->sequence,arcsoft->split_flag,
 					arcsoft->sequence);
 	        		kfree_skb(in->skb,FREE_WRITE);

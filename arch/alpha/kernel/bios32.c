@@ -993,6 +993,7 @@ static inline void sio_fixup(void)
 		{ 0,  0,  2,  1,  0}, /* idsel 11 KN25_PCI_SLOT0 */
 		{ 1,  1,  0,  2,  1}, /* idsel 12 KN25_PCI_SLOT1 */
 		{ 2,  2,  1,  0,  2}, /* idsel 13 KN25_PCI_SLOT2 */
+		{ 0,  0,  0,  0,  0}, /* idsel 14 AS255 TULIP */
 #endif
 	};
 	/*
@@ -1005,7 +1006,21 @@ static inline void sio_fixup(void)
 	 * This probably ought to be configurable via MILO.  For
 	 * example, sound boards seem to like using IRQ 9.
 	 */
+#ifdef CONFIG_ALPHA_NONAME
+	/*
+	 * For UDB, the only available PCI slot must not map to IRQ 9,
+	 *  since that's the builtin MSS sound chip. That PCI slot
+	 *  will map to PIRQ1 (for INTA at least), so we give it IRQ 15
+	 *  instead.
+	 *
+	 * Unfortunately we have to do this for NONAME as well, since
+	 *  they are co-indicated when the platform type "Noname" is
+	 *  selected... :-(
+	 */
+	const unsigned int route_tab = 0x0b0a0f09;
+#else /* CONFIG_ALPHA_NONAME */
 	const unsigned int route_tab = 0x0b0a090f;
+#endif /* CONFIG_ALPHA_NONAME */
 	unsigned int level_bits;
 	unsigned char pin, slot;
 	int pirq;
@@ -1093,8 +1108,13 @@ static inline void sio_fixup(void)
 	 * Now, make all PCI interrupts level sensitive.  Notice:
 	 * these registers must be accessed byte-wise.  inw()/outw()
 	 * don't work.
+	 *
+	 * Make sure to turn off any level bits set for IRQs 9,10,11,15,
+	 *  so that the only bits getting set are for devices actually found.
+	 * Note that we do preserve the remainder of the bits, which we hope
+	 *  will be set correctly by ARC/SRM.
 	 */
-	level_bits |= (inb(0x4d0) | (inb(0x4d1) << 8));
+	level_bits |= ((inb(0x4d0) | (inb(0x4d1) << 8)) & 0x71ff);
 	outb((level_bits >> 0) & 0xff, 0x4d0);
 	outb((level_bits >> 8) & 0xff, 0x4d1);
 	enable_ide(0x26e);

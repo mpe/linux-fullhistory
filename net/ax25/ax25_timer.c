@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 031
+ *	AX.25 release 032
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -113,7 +113,7 @@ static void ax25_timer(unsigned long param)
 			if (ax25->sk != NULL) {
 				if (ax25->sk->rmem_alloc < (ax25->sk->rcvbuf / 2) && (ax25->condition & OWN_RX_BUSY_CONDITION)) {
 					ax25->condition &= ~OWN_RX_BUSY_CONDITION;
-					if (!ax25->dama_slave) /* dl1bke */
+					if (!ax25->dama_slave)
 						ax25_send_control(ax25, RR, POLLOFF, C_RESPONSE);
 					ax25->condition &= ~ACK_PENDING_CONDITION;
 					break;
@@ -123,7 +123,7 @@ static void ax25_timer(unsigned long param)
 			 * Check for frames to transmit.
 			 */
 			if (!ax25->dama_slave)
-				ax25_kick(ax25);	/* dl1bke 960114 */
+				ax25_kick(ax25);
 			break;
 
 		default:
@@ -134,7 +134,7 @@ static void ax25_timer(unsigned long param)
 		if (ax25->state == AX25_STATE_3 || ax25->state == AX25_STATE_4) {
 			if (ax25->condition & ACK_PENDING_CONDITION) {
 				ax25->condition &= ~ACK_PENDING_CONDITION;
-				if (!ax25->dama_slave)			/* dl1bke 960114 */
+				if (!ax25->dama_slave)
 					ax25_timeout_response(ax25);
 			}
 		}
@@ -272,7 +272,7 @@ void ax25_t1_timeout(ax25_cb * ax25)
 #endif
 				ax25_clear_queues(ax25);
 				ax25->state = AX25_STATE_0;
-				ax25_send_control(ax25, DISC, POLLON, C_COMMAND); /* dl1bke */
+				ax25_send_control(ax25, DISC, POLLON, C_COMMAND);
 				
 				if (ax25->sk != NULL) {
 					ax25->sk->state = TCP_CLOSE;
@@ -283,14 +283,14 @@ void ax25_t1_timeout(ax25_cb * ax25)
 				}
 			} else {
 				ax25->n2count++;
-				if (!ax25_dev_is_dama_slave(ax25->device))	/* dl1bke */
+				if (!ax25_dev_is_dama_slave(ax25->device))
 					ax25_send_control(ax25, DISC, POLLON, C_COMMAND);
 			}
 			break;
 
 		case AX25_STATE_3: 
 			ax25->n2count = 1;
-			if (!ax25->dama_slave)			/* dl1bke 960114 */
+			if (!ax25->dama_slave)
 				ax25_transmit_enquiry(ax25);
 			ax25->state   = AX25_STATE_4;
 			break;
@@ -314,7 +314,7 @@ void ax25_t1_timeout(ax25_cb * ax25)
 				}
 			} else {
 				ax25->n2count++;
-				if (!ax25->dama_slave)		/* dl1bke 960114 */
+				if (!ax25->dama_slave)
 					ax25_transmit_enquiry(ax25);
 			}
 			break;

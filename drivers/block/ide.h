@@ -42,7 +42,7 @@
 #endif
 
 #ifdef CONFIG_BLK_DEV_CMD640
-#if 1
+#if 0	/* change to 1 when debugging cmd640 problems */
 void cmd640_dump_regs (void);
 #define CMD640_DUMP_REGS cmd640_dump_regs() /* for debugging cmd640 chipset */
 #endif

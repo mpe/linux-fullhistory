@@ -765,7 +765,7 @@ do_load_elf_library(int fd){
 
 	/* First of all, some simple consistency checks */
 	if (elf_ex.e_type != ET_EXEC || elf_ex.e_phnum > 2 ||
-	   (elf_ex.e_machine != EM_386 && elf_ex.e_machine != EM_486) ||
+	   !elf_check_arch(elf_ex.e_machine) ||
 	   (!inode->i_op || !inode->i_op->default_file_ops->mmap))
 		return -ENOEXEC;
 	

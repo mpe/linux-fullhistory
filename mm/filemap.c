@@ -78,7 +78,7 @@ void invalidate_inode_pages(struct inode * inode)
 		page->prev = NULL;
 		remove_page_from_hash_queue(page);
 		page->inode = NULL;
-		free_page(page_address(page));
+		__free_page(page);
 		continue;
 	}
 }
@@ -111,15 +111,16 @@ repeat:
 			page->prev = NULL;
 			remove_page_from_hash_queue(page);
 			page->inode = NULL;
-			free_page(page_address(page));
+			__free_page(page);
 			continue;
 		}
 		p = &page->next;
 		offset = start - offset;
 		/* partial truncate, clear end of page */
 		if (offset < PAGE_SIZE) {
-			memset((void *) (offset + page_address(page)), 0, PAGE_SIZE - offset);
-			flush_page_to_ram(page_address(page));
+			unsigned long address = page_address(page);
+			memset((void *) (offset + address), 0, PAGE_SIZE - offset);
+			flush_page_to_ram(address);
 		}
 	}
 }
@@ -175,7 +176,7 @@ int shrink_mmap(int priority, int dma)
 				if (page->inode) {
 					remove_page_from_hash_queue(page);
 					remove_page_from_inode_queue(page);
-					free_page(page_address(page));
+					__free_page(page);
 					return 1;
 				}
 

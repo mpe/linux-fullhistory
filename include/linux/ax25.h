@@ -1,59 +1,14 @@
+/*
+ * These are the public elements of the Linux kernel AX.25 code. A similar
+ * file netrom.h exists for the NET/ROM protocol.
+ */
+ 
+#ifndef	AX25_KERNEL_H
+#define	AX25_KERNEL_H
+ 
 #define PF_AX25		AF_AX25
 #define AX25_MTU	256
-#define AX25_MAX_DIGIS	6
-
-typedef struct
-{
-	char ax25_call[7];	/* 6 call + SSID (shifted ascii!) */
-}
-ax25_address;
-
-struct sockaddr_ax25
-{
-	short sax25_family;
-	ax25_address sax25_call;
-	int sax25_ndigis;
-	/* Digipeater ax25_address sets follow */
-};
-
-#define sax25_uid	sax25_ndigis
-
-struct full_sockaddr_ax25
-{
-	struct sockaddr_ax25 fsa_ax25;
-	ax25_address fsa_digipeater[AX25_MAX_DIGIS];
-};
-
-struct ax25_routes_struct
-{
-	ax25_address port_addr;
-	ax25_address dest_addr;
-	unsigned char digi_count;
-	ax25_address digi_addr[AX25_MAX_DIGIS];
-};
-
-struct ax25_route_opt_struct
-{
-	ax25_address port_addr;
-	ax25_address dest_addr;
-	int cmd;
-	int arg;
-};
-
-struct ax25_ctl_struct
-{
-	ax25_address port_addr;
-	ax25_address source_addr;
-	ax25_address dest_addr;
-	unsigned int cmd;
-	unsigned long arg;
-};
-
-struct ax25_bpqaddr_struct
-{
-	char dev[16];
-	ax25_address addr;
-};
+#define AX25_MAX_DIGIS	6	/* This is wrong, should be 8 */
 
 #define AX25_WINDOW	1
 #define AX25_T1		2
@@ -79,15 +34,7 @@ struct ax25_bpqaddr_struct
 #define SIOCAX25OPTRT		(SIOCPROTOPRIVATE+7)
 #define SIOCAX25CTLCON		(SIOCPROTOPRIVATE+8)
 
-#define AX25_SET_RT_PERMANENT	1
 #define AX25_SET_RT_IPMODE	2
-
-#define AX25_RT_DYNAMIC		0
-#define AX25_RT_PERMANENT	1
-
-#define AX25_RT_IPMODE_DEFAULT	' '
-#define AX25_RT_IPMODE_DATAGRAM	'D'
-#define AX25_RT_IPMODE_VC	'V'
 
 #define AX25_NOUID_DEFAULT	0
 #define AX25_NOUID_BLOCK	1
@@ -113,8 +60,54 @@ struct ax25_bpqaddr_struct
 #define AX25_VALUES_IPMAXQUEUE  15	/* Maximum number of buffers enqueued */
 #define	AX25_MAX_VALUES		20
 
-struct ax25_parms_struct
-{
+typedef struct {
+	char ax25_call[7];	/* 6 call + SSID (shifted ascii!) */
+} ax25_address;
+
+struct sockaddr_ax25 {
+	short sax25_family;
+	ax25_address sax25_call;
+	int sax25_ndigis;
+	/* Digipeater ax25_address sets follow */
+};
+
+#define sax25_uid	sax25_ndigis
+
+struct full_sockaddr_ax25 {
+	struct sockaddr_ax25 fsa_ax25;
+	ax25_address fsa_digipeater[AX25_MAX_DIGIS];
+};
+
+struct ax25_routes_struct {
+	ax25_address port_addr;
+	ax25_address dest_addr;
+	unsigned char digi_count;
+	ax25_address digi_addr[AX25_MAX_DIGIS];
+};
+
+struct ax25_route_opt_struct {
+	ax25_address port_addr;
+	ax25_address dest_addr;
+	int cmd;
+	int arg;
+};
+
+struct ax25_ctl_struct {
+	ax25_address port_addr;
+	ax25_address source_addr;
+	ax25_address dest_addr;
+	unsigned int cmd;
+	unsigned long arg;
+};
+
+struct ax25_bpqaddr_struct {
+	char dev[16];
+	ax25_address addr;
+};
+
+struct ax25_parms_struct {
 	ax25_address port_addr;
 	unsigned short values[AX25_MAX_VALUES];
 };
+
+#endif

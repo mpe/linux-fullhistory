@@ -129,6 +129,15 @@ N: Ross Biro
 E: bir7@leland.Stanford.Edu
 D: Original author of the Linux networking code
 
+N: Philip Blundell
+E: pjb27@cam.ac.uk 
+E: pb@nexus.co.uk
+E: phil@tazenda.demon.co.uk
+D: Device driver hacking (especially EtherExpress16/3C505 net cards)
+D: Some Linux/ARM stuff
+S: Trinity College
+S: Cambridge, UK. CB2 1TQ
+
 N: Thomas Bogendoerfer
 E: tsbogend@bigbug.franken.de
 D: Lance32 driver
@@ -545,6 +554,13 @@ S: Muehlenweg 19
 S: 34266 Niestetal
 S: Germany
 
+N: Richard Henderson
+E: rth@tamu.edu
+D: Alpha/ELF, gcc, binutils, and glibc
+S: 304 E. North Ave.
+S: Bryan, TX  77801-3431
+S: USA
+
 N: Sebastian Hetze
 E: she@lunetix.de
 D: German Linux Documentation,
@@ -566,6 +582,14 @@ D: The XFree86[tm] Project
 S: AIB Software Corporation
 S: 46030 Manekin Plaza, Suite 160
 S: Dulles, Virginia 20166
+S: USA
+
+N: Kenji Tsutomu Hollis
+E: khollis@bitgate.com
+W: http://www.nurk.org/
+D: Berkshire PC Watchdog Driver
+S: PO Box 15
+S: Grants Pass, OR 97526
 S: USA
 
 N: Nick Holloway

@@ -289,7 +289,7 @@ sound_mmap (inode_handle * inode, file_handle * file, vm_area_handle * vma)
 	      size, dmap->bytes_in_use);
     }
 
-  if (remap_page_range (vma_get_start (vma), virt_to_phys(dmap->raw_buf),
+  if (remap_page_range (vma_get_start (vma), (unsigned long)dmap->raw_buf,
 			vma_get_end (vma) - vma_get_start (vma),
 			vma_get_page_prot (vma)))
     return -EAGAIN;

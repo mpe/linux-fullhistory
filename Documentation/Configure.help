@@ -3483,7 +3483,7 @@ CONFIG_PCWATCHDOG
   it resets your computer after a certain amount of time.  This driver is
   like the WDT501 driver but for different hardware. The PC watchdog cards
   can be ordered from http://www.berkprod.com. Some example rc.local files
-  are available from ftp.bitgame.com.
+  are available from ftp.bitgate.com.
 
 Enhanced Real Time Clock Support
 CONFIG_RTC

@@ -168,7 +168,7 @@ void nr_kick(struct sock *sk)
 		do {
 			if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
 				skb_queue_head(&sk->write_queue, skb);
-				return;
+				break;
 			}
 
 			next = (sk->nr->vs + 1) % NR_MODULUS;

@@ -126,7 +126,7 @@
 #define	AX25_DEF_N2		10
 #define AX25_DEF_IDLE		20
 #define AX25_DEF_PACLEN		256
-#define AX25_DEF_IPMAXQUEUE	1		/* 1 * ax25->window */
+#define AX25_DEF_IPMAXQUEUE	2		/* 1 * ax25->window */
 #define	AX25_DEF_DIGI		(AX25_DIGI_INBAND|AX25_DIGI_XBAND)
 
 typedef struct ax25_uid_assoc {
@@ -203,15 +203,13 @@ extern void dama_check_need_response(ax25_cb *, int, int);	/* dl1bke 960114 */
 extern void dama_establish_data_link(ax25_cb *);
 
 /* ax25_route.c */
-extern void ax25_rt_rx_frame(ax25_address *, struct device *, ax25_digi *);
 extern int  ax25_rt_get_info(char *, char **, off_t, int, int);
 extern int  ax25_cs_get_info(char *, char **, off_t, int, int);
 extern int  ax25_rt_autobind(ax25_cb *, ax25_address *);
-extern void ax25_rt_build_path(ax25_cb *, ax25_address *);
+extern void ax25_rt_build_path(ax25_cb *, ax25_address *, struct device *);
 extern void ax25_dg_build_path(struct sk_buff *, ax25_address *, struct device *);
 extern void ax25_rt_device_down(struct device *);
 extern int  ax25_rt_ioctl(unsigned int, void *);
-extern void ax25_ip_mode_set(ax25_address *, struct device *, char);
 extern char ax25_ip_mode_get(ax25_address *, struct device *);
 extern unsigned short ax25_dev_get_value(struct device *, int);
 extern void ax25_dev_device_up(struct device *);

@@ -485,11 +485,11 @@ void sr_photocd(struct inode *inode)
 		printk(KERN_WARNING"sr_photocd: ioctl error (TOSHIBA #1): 0x%x\n",rc);
 	    break; /* if the first ioctl fails, we don't call the second one */
 	}
+	is_xa  = (rec[0] == 0x20);
 	min    = (unsigned long) rec[1]/16*10 + (unsigned long) rec[1]%16;
 	sec    = (unsigned long) rec[2]/16*10 + (unsigned long) rec[2]%16;
 	frame  = (unsigned long) rec[3]/16*10 + (unsigned long) rec[3]%16;
 	sector = min*CD_SECS*CD_FRAMES + sec*CD_FRAMES + frame;
-	is_xa  = (rec[0] == 0x20) || sector;
 	if (sector) {
 	    sector -= CD_BLOCK_OFFSET;
 #ifdef DEBUG
@@ -566,9 +566,6 @@ void sr_photocd(struct inode *inode)
 	    break;
 	}
 	sector = rec[11] + (rec[10] << 8) + (rec[9] << 16) + (rec[8] << 24);
-	if (rec[6] <= 1) {
-	    sector = 0; /* ignore sector offsets from first track */
-	}
 	is_xa = !!sector;
 #ifdef DEBUG
 	if (sector)

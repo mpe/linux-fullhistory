@@ -32,6 +32,10 @@ extern void timer_interrupt(struct pt_regs * regs);
 #  error Unable to handle more than 64 irq levels.
 #endif
 
+/* Reserved interrupts.  These must NEVER be requested by any driver!
+ */
+#define	IS_RESERVED_IRQ(irq)	((irq)==2)	/* IRQ 2 used by hw cascade */
+
 /*
  * Shadow-copy of masked interrupts.
  *  The bits are used as follows:
@@ -185,6 +189,8 @@ int request_irq(unsigned int irq,
 
 	if (irq >= NR_IRQS)
 		return -EINVAL;
+	if (IS_RESERVED_IRQ(irq))
+		return -EINVAL;
 	if (!handler)
 		return -EINVAL;
 	p = irq_action + irq;
@@ -239,6 +245,10 @@ void free_irq(unsigned int irq, void *dev_id)
 
 	if (irq >= NR_IRQS) {
 		printk("Trying to free IRQ%d\n",irq);
+		return;
+	}
+	if (IS_RESERVED_IRQ(irq)) {
+		printk("Trying to free reserved IRQ %d\n", irq);
 		return;
 	}
 	for (p = irq + irq_action; (action = *p) != NULL; p = &action->next) {

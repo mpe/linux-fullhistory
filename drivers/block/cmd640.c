@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/cmd640.c	Version 0.97  Aug  4, 1996
+ *  linux/drivers/block/cmd640.c	Version 0.99  Aug  6, 1996
  *
  *  Copyright (C) 1995-1996  Linus Torvalds & authors (see below)
  */
@@ -90,6 +90,8 @@
  *  Version 0.96	prevent use of io_32bit when prefetch is off
  *  Version 0.97	fix VLB secondary interface for sjd@slip.net
  *			other minor tune-ups:  0.96 was very good.
+ *  Version 0.98	ignore PCI version when disabled by BIOS
+ *  Version 0.99	display setup/active/recovery clocks with PIO mode
  */
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
@@ -119,6 +121,7 @@ int cmd640_vlb = 0;
 #define VID		0x00
 #define DID		0x02
 #define PCMD		0x04
+#define   PCMD_ENA	0x01
 #define PSTTS		0x06
 #define REVID		0x08
 #define PROGIF		0x09
@@ -287,6 +290,10 @@ static int match_pci_cmd640_device (void)
 	for (i = 0; i < 4; i++) {
 		if (get_cmd640_reg(i) != ven_dev[i])
 			return 0;
+	}
+	if ((get_cmd640_reg(PCMD) & PCMD_ENA) == 0) {
+		printk("ide: cmd640 on PCI disabled by BIOS\n");
+		return 0;
 	}
 	return 1; /* success */
 }
@@ -458,6 +465,24 @@ static void set_prefetch_mode (unsigned int index, int mode)
 }
 
 /*
+ * Dump out current drive clocks settings
+ */
+static void display_clocks (unsigned int index)
+{
+	byte active_count, recovery_count;
+
+	active_count = active_counts[index];
+	if (active_count == 1)
+		++active_count;
+	recovery_count = recovery_counts[index];
+	if (active_count > 3 && recovery_count == 1)
+		++recovery_count;
+	if (cmd640_chip_version > 1)
+		recovery_count += 1;  /* cmd640b uses (count + 1)*/
+	printk(", clocks=%d/%d/%d\n", setup_counts[index], active_count, recovery_count);
+}
+
+/*
  * Pack active and recovery counts into single byte representation
  * used by controller
  */
@@ -564,7 +589,7 @@ static void cmd640_set_mode (unsigned int index, byte pio_mode, unsigned int cyc
 	active_time = ide_pio_timings[pio_mode].active_time;
 	recovery_time = cycle_time - (setup_time + active_time);
 	clock_time = 1000 / bus_speed;
-	cycle_count = (cycle_time + clock_time - 1) / clock_time; 
+	cycle_count = (cycle_time + clock_time - 1) / clock_time;
 
 	setup_count = (setup_time + clock_time - 1) / clock_time;
 
@@ -635,12 +660,13 @@ static void cmd640_tune_drive (ide_drive_t *drive, byte mode_wanted)
 	(void) ide_get_best_pio_mode (drive, mode_wanted, 5, &d);
 	cmd640_set_mode (index, d.pio_mode, d.cycle_time);
 
-	printk ("%s: selected cmd640 PIO mode%d (%dns) %s/IORDY%s\n",
+	printk ("%s: selected cmd640 PIO mode%d (%dns) %s/IORDY%s",
 		drive->name,
 		d.pio_mode,
 		d.cycle_time,
 		d.use_iordy ? "w" : "wo",
 		d.overridden ? " (overriding vendor mode)" : "");
+	display_clocks(index);
 }
 
 #endif /* CONFIG_BLK_DEV_CMD640_ENHANCED */
@@ -784,8 +810,9 @@ int ide_probe_for_cmd640x (void)
 			 */
 			retrieve_drive_counts (index);
 			check_prefetch (index);
-			printk("cmd640: drive%d timings/prefetch(%s) preserved\n",
+			printk("cmd640: drive%d timings/prefetch(%s) preserved",
 				index, drive->no_io_32bit ? "off" : "on");
+			display_clocks(index);
 		}
 #else
 		/*

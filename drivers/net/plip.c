@@ -873,9 +873,9 @@ plip_rebuild_header(void *buff, struct device *dev, unsigned long dst,
 		return 0;
 	}
 
-	for (i=0; i < ETH_ALEN - sizeof(unsigned long); i++)
+	for (i=0; i < ETH_ALEN - sizeof(u32); i++)
 		eth->h_dest[i] = 0xfc;
-	memcpy(&(eth->h_dest[i]), &dst, sizeof(unsigned long));
+	*(u32 *)(eth->h_dest+i) = dst;
 	return 0;
 }
 
@@ -964,9 +964,9 @@ plip_open(struct device *dev)
 	nl->is_deferred = 0;
 
 	/* Fill in the MAC-level header. */
-	for (i=0; i < ETH_ALEN - sizeof(unsigned long); i++)
+	for (i=0; i < ETH_ALEN - sizeof(u32); i++)
 		dev->dev_addr[i] = 0xfc;
-	memcpy(&(dev->dev_addr[i]), &dev->pa_addr, sizeof(unsigned long));
+	*(u32 *)(dev->dev_addr+i) = dev->pa_addr;
 
 	dev->interrupt = 0;
 	dev->start = 1;

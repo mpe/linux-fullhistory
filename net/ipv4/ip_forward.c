@@ -315,7 +315,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 #endif
 		IS_SKB(skb);
 
-		if (skb->len+encap > dev2->mtu && (ntohs(iph->frag_off) & IP_DF)) 
+		if (skb->len+encap > dev2->mtu && (iph->frag_off & htons(IP_DF))) 
 		{
 			ip_statistics.IpFragFails++;
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, htonl(dev2->mtu), dev);

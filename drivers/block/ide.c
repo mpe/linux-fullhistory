@@ -256,6 +256,7 @@
  *			fix missing restore_flags() in ide_ioctl
  *			prevent use of io_32bit on cmd640 with no prefetch
  * Version 5.49		fix minor quirks in probing routines
+ * Version 5.50		allow values as small as 20 for idebus=
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -2807,7 +2808,7 @@ static int match_parm (char *s, const char *keywords[], int vals[], int max_vals
  *				older/odd IDE drives.
  *
  * "idebus=xx"		: inform IDE driver of VESA/PCI bus speed in Mhz,
- *				where "xx" is between 25 and 66 inclusive,
+ *				where "xx" is between 20 and 66 inclusive,
  *				used when tuning chipset PIO modes.
  *				For PCI bus, 25 is correct for a P75 system,
  *				30 is correct for P90,P120,P180 systems,
@@ -2912,10 +2913,10 @@ void ide_setup (char *s)
 	if (s[3] == 'b' && s[4] == 'u' && s[5] == 's') {
 		if (match_parm(&s[6], NULL, vals, 1) != 1)
 			goto bad_option;
-		if (vals[0] >= 25 && vals[0] <= 66)
+		if (vals[0] >= 20 && vals[0] <= 66)
 			idebus_parameter = vals[0];
 		else
-			printk(" -- BAD BUS SPEED! Expected value from 25 to 66");
+			printk(" -- BAD BUS SPEED! Expected value from 20 to 66");
 		goto done;
 	}
 	/*

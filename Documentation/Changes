@@ -26,11 +26,11 @@ http://slug.ctv.es/~alfredo/Cambios.html.
 valtozasokrol, az alabbi cimen megtalaljak Nyitrai Tamas forditasat:
 http://www.datanet.hu/generations/linux/newkernel.html.
 
-   For people who prefer Japanse (thanks to Mitsuhiro Kojima): Kono
-bunshou no nihongo ban ha
+   For people who prefer Japanese (thanks to Mitsuhiro Kojima): Kono
+bunshou no nihongo ban wa
 http://jf.gee.kyoto-u.ac.jp/JF/v2.0/Changes-2.0.html ni arimasu.
 
-Last updated: July 29, 1996.
+Last updated: August 6, 1996.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Releases
@@ -134,6 +134,18 @@ the old libc).  If you're feeling lazy, just comment out
 there's an unofficial libc-4.7.6 release out to which you can upgrade
 to fix this problem.  Libc is available from
 ftp://sunsite.unc.edu/pub/Linux/GCC/.
+
+GCC Signal 11 error
+===================
+
+   Many people have been reporting messages like the following,
+especially when compiling a new kernel:
+
+   `gcc:  Internal compiler error:  program cc1 got fatal signal 11'.
+
+   This is NOT a kernel bug.  Rather, these messages are generally
+caused by hardware problems.  See http://www.bitwizard.nl/sig11/ for
+the sig11 FAQ.
 
 Procps utilities
 ================
@@ -259,7 +271,11 @@ the following as root:
 ftp://sunsite.unc.edu/pub/Linux/GCC/termcap-2.0.8.tar.gz.  If you
 upgrade to this release read the `README' file contained into the
 package to get some important information about the `tgetent' function
-changes!
+changes!  Note that there is now a fixed version at
+ftp://sunsite.unc.edu/pub/Linux/GCC/termcap-2.0.8.fix.  If some of your
+apps complain that termcap entries are too long and you don't need some
+of the more esoteric terms in the standard 2.0.8 termcap, just download
+termcap-2.0.8.fix and move it to /etc/termcap.
 
    Also, the console driver is now responsible for keeping track of
 correspondence between character codes and glyph bitmaps.  If you
@@ -271,7 +287,7 @@ Hdparm
 
    Hdparm has been upgraded to take advantage of the latest features of
 the kernel drivers.  The latest non-beta version can be found at
-ftp://sunsite.unc.edu/pub/Linux/kernel/patches/diskdrives/hdparm-3.0.tar.gz.
+ftp://sunsite.unc.edu/pub/Linux/kernel/patches/diskdrives/hdparm-3.1.tar.gz.
 
 IP Accounting
 =============
@@ -285,7 +301,7 @@ direction (either incoming or outgoing).
    There also exists a possibility to match on device names and/or
 device addresses, so that only packets coming in/going out via that
 device (network interface) match with a rule.  You'll need to get
-ipfwadm from ftp://ftp.xos.nl/pub/linux/ipfwadm/ipfwadm-2.2.tar.gz to
+ipfwadm from ftp://ftp.xos.nl/pub/linux/ipfwadm/ipfwadm-2.3.0.tar.gz to
 use this.
 
 IP Firewalls
@@ -298,7 +314,7 @@ exists a possibility to match on device names and/or device addresses,
 so that only packets coming in/going out via that device (network
 interface) match with a rule.  This is especially useful to prevent
 spoofing.  You'll need to get
-ftp://ftp.xos.nl/pub/linux/ipfwadm/ipfwadm-2.2.tar.gz to use this.
+ftp://ftp.xos.nl/pub/linux/ipfwadm/ipfwadm-2.3.0.tar.gz to use this.
 
 IP Masquerading
 ===============
@@ -307,7 +323,7 @@ IP Masquerading
 always need to load separate modules (ip_masq_ftp.o and/or
 ip_masq_irc.o) if you are going to use FTP or IRC in combination with
 masquerading.  You'll need to get
-ftp://ftp.xos.nl/pub/linux/ipfwadm/ipfwadm-2.2.tar.gz to use this.
+ftp://ftp.xos.nl/pub/linux/ipfwadm/ipfwadm-2.3.0.tar.gz to use this.
 
 ISDN support
 ============
@@ -473,9 +489,9 @@ Cyclades Serial Driver
 ======================
 
    The Cyclades driver has been changed so that the minor numbers start
-at 0 instead of 32 (ie: ttyC0 should be major 19, minor 0 in the 2.0.x
-kernels while it used to be major 19, minor 32 in the older kernels).
-You can use mknod to manually fix this or use a newer version of MAKEDEV.
+at 0 instead of 32 (for example, ttyC0 should be major 19, minor 0 for
+2.0.x kernels; in older kernels, it would have been major 19, minor
+32).  Use mknod or a sufficiently new version of MAKEDEV to fix this.
 
 NCR 53c810 SCSI Driver
 ======================
@@ -492,8 +508,9 @@ Perl
 
    While we're on the subject, changes made for the 2.0.x series cause
 the connect() Perl (both 4 and 5) call to time out while connecting to
-remote systems.  If you need the connect call for your program, use C
-instead of Perl.
+remote systems.  The problem is not actually in the connect() call;
+rather, the optional bind() call usually used with connect() causes the
+problem.  Remove the bind() call and your Perl scripts should connect.
 
    Also, Perl scripts using the readdir call now misbehave if you're
 using an old version of Perl, due to changes in libc.  Upgrade to a
@@ -508,7 +525,10 @@ when present at the end of a line, try setting an appropriate value
 (many have reported success with "latin1", for example) for the
 environmental variable LESSCHARSET.  Another, and probably better,
 solution is to edit the file /usr/lib/man.config and change all
-`-Tlatin1' options to `-Tascii'.
+`-Tlatin1' options to `-Tascii'.  An alternate solution, for those of
+you who can't reformat your man files in .../cat* directories is to
+edit /usr/lib/man.config, setting the PAGER to `PAGER
+(LESSCHARSET=latin1;export LESSCHARSET;/usr/bin/less -is'.
 
 E2fsprogs
 =========

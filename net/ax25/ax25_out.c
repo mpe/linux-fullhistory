@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 031
+ *	AX.25 release 032
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -25,7 +25,6 @@
  *	AX.25 030	Jonathan(G4KLX)	Added fragmentation to ax25_output.
  *					Added support for extended AX.25.
  *	AX.25 031	Joerg(DL1BKE)	Added DAMA support
- *
  *			Joerg(DL1BKE)	Modified fragmenter to fragment vanilla 
  *					AX.25 I-Frames. Added PACLEN parameter.
  *			Joerg(DL1BKE)	Fixed a problem with buffer allocation
@@ -214,7 +213,7 @@ void ax25_kick(ax25_cb *ax25)
 		do {
 			if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
 				skb_queue_head(&ax25->write_queue, skb);
-				return;
+				break;
 			}
 
 			next = (ax25->vs + 1) % ax25->modulus;

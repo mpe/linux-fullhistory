@@ -629,7 +629,7 @@ ess_audio_prepare_for_input (int dev, int bsize, int bcount)
 
   if (devc->channels == 1)
     {
-      if (devc->bits == AFMT_U8 == 0)
+      if (devc->bits == AFMT_U8)
 	{			/* 8 bit mono */
 	  ess_write (devc, 0xb7, 0x51);
 	  ess_write (devc, 0xb7, 0xd0);

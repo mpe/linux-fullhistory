@@ -38,7 +38,6 @@ typedef unsigned long	Elf32_Word;
 #define EM_88K   5
 #define EM_486   6   /* Perhaps disused */
 #define EM_860   7
-#define EM_PPC   20
 
 #define EM_MIPS		8	/* MIPS R3000 (officially, big-endian only) */
 

@@ -967,7 +967,7 @@ static void do_mount_root(void)
 #ifdef CONFIG_BLK_DEV_FD
 	if (MAJOR(ROOT_DEV) == FLOPPY_MAJOR) {
 		floppy_eject();
-#ifdef CONFIG_BLK_DEV_RAM
+#ifndef CONFIG_BLK_DEV_RAM
 		printk(KERN_NOTICE "(Warning, this kernel has no ramdisk support)\n");
 #endif
 		printk(KERN_NOTICE "VFS: Insert root floppy and press ENTER\n");

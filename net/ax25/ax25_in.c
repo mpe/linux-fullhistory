@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 031
+ *	AX.25 release 032
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -32,6 +32,8 @@
  *			Joerg(DL1BKE)   Renamed it to "IDLE" with a slightly
  *					different behaviour. Fixed defrag
  *					routine (I hope)
+ *	AX.25 032	Jonathan(G4KLX)	Remove auto-router.
+ *			Darryl(G7LED)	AX.25 segmentation fixed.
  */
 
 #include <linux/config.h>
@@ -70,66 +72,57 @@ static int ax25_rx_iframe(ax25_cb *, struct sk_buff *);
 static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
 {
 	struct sk_buff *skbn, *skbo;
-	int hdrlen;
+	int hdrlen, nhdrlen;
 	
 	if (ax25->fragno != 0) {
 		if (!(*skb->data & SEG_FIRST)) {
 			if ((ax25->fragno - 1) == (*skb->data & SEG_REM)) {
-			
-				/* enqueue fragment */
-				
+				/* Enqueue fragment */
 				ax25->fragno = *skb->data & SEG_REM;
 				skb_pull(skb, 1);	/* skip fragno */
 				ax25->fraglen += skb->len;
 				skb_queue_tail(&ax25->frag_queue, skb);
-				
-				/* last fragment received? */
 
+				/* Last fragment received ? */
 				if (ax25->fragno == 0) {
-					if ((skbn = alloc_skb(AX25_MAX_HEADER_LEN + ax25->fraglen, GFP_ATOMIC)) == NULL)
-						return 0;
+					if ((skbn = alloc_skb(AX25_MAX_HEADER_LEN + ax25->fraglen, GFP_ATOMIC)) == NULL) {
+						while ((skbo = skb_dequeue(&ax25->frag_queue)) != NULL)
+							kfree_skb(skbo, FREE_READ);
+						return 1;
+					}
 
 					skbn->free = 1;
 					skbn->arp  = 1;
-					skbn->dev  = skb->dev;
+					skbn->dev  = ax25->device;
 
 					if (ax25->sk != NULL) {
 						skbn->sk = ax25->sk;
 						atomic_add(skbn->truesize, &ax25->sk->rmem_alloc);
 					}
 
-					/* get first fragment from queue */
-					
+					skb_reserve(skbn, AX25_MAX_HEADER_LEN);
+
+					/* Get first fragment from queue */
 					skbo = skb_dequeue(&ax25->frag_queue);
-					hdrlen = skbo->data - skbo->h.raw - 2;	/* skip PID & fragno */
-					
-					skb_push(skbo, hdrlen + 2);		/* start of address field */
-					skbn->data = skb_put(skbn, hdrlen);	/* get space for info */
-					memcpy(skbn->data, skbo->data, hdrlen);	/* copy address field */
-					skb_pull(skbo, hdrlen + 2);		/* start of data */
-					skb_pull(skbn, hdrlen + 1);		/* ditto */
+					hdrlen  = skbo->data - skbo->h.raw;
+					nhdrlen = hdrlen - 2;
 
-					/* copy data from first fragment */
+					skb_push(skbo, hdrlen);
+					skb_push(skbn, nhdrlen);
+					skbn->h.raw = skbn->data;
 
-					memcpy(skb_put(skbn, skbo->len), skbo->data, skbo->len);
-					kfree_skb(skbo, FREE_READ);
-					
-					/* add other fragment's data */
+					/* Copy AX.25 headers */
+					memcpy(skbn->data, skbo->data, nhdrlen);
+					skb_pull(skbn, nhdrlen);
+					skb_pull(skbo, hdrlen);
 
-					while ((skbo = skb_dequeue(&ax25->frag_queue)) != NULL) {
+					/* Copy data from the fragments */
+					do {
 						memcpy(skb_put(skbn, skbo->len), skbo->data, skbo->len);
 						kfree_skb(skbo, FREE_READ);
-					}
+					} while ((skbo = skb_dequeue(&ax25->frag_queue)) != NULL);
 
-					ax25->fraglen = 0;		/* reset counter */
-					
-					/* 
-					 * mysteriously we need to re-adjust skb->data.
-					 * Anyway, it seems to work. Do we have the address fields
-					 * encoded TWICE in one sk_buff?
-					 */
-					
-					skb_pull(skbn, hdrlen);
+					ax25->fraglen = 0;
 
 					if (ax25_rx_iframe(ax25, skbn) == 0)
 						kfree_skb(skbn, FREE_READ);
@@ -139,9 +132,10 @@ static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
 			}
 		}
 	} else {
-		/* first fragment received? */
-
+		/* First fragment received */
 		if (*skb->data & SEG_FIRST) {
+			while ((skbo = skb_dequeue(&ax25->frag_queue)) != NULL)
+				kfree_skb(skbo, FREE_READ);
 			ax25->fragno = *skb->data & SEG_REM;
 			skb_pull(skb, 1);		/* skip fragno */
 			ax25->fraglen = skb->len;
@@ -181,7 +175,6 @@ static int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 		case AX25_P_IP:
 			skb_pull(skb, 1);	/* Remove PID */
 			skb->h.raw = skb->data;
-			ax25_ip_mode_set(&ax25->dest_addr, ax25->device, 'V');
 			ip_rcv(skb, ax25->device, NULL);	/* Wrong ptype */
 			queued = 1;
 			break;
@@ -273,7 +266,7 @@ static int ax25_state1_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			break;
 
 		default:
-			if (dama && pf)	/* dl1bke 960116 */
+			if (dama && pf)
 				ax25_send_control(ax25, SABM, POLLON, C_COMMAND);
 			break;
 	}
@@ -490,7 +483,7 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			}
 			if (ax25->condition & OWN_RX_BUSY_CONDITION) {
 				if (pf)	{
-					if (ax25->dama_slave)	/* dl1bke 960114 */
+					if (ax25->dama_slave)
 						dama_enquiry_response(ax25);
 					else
 						ax25_enquiry_response(ax25);
@@ -498,20 +491,21 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 				break;
 			}
 			if (ns == ax25->vr) {
+				ax25->vr = (ax25->vr + 1) % ax25->modulus;
 				queued = ax25_rx_iframe(ax25, skb);
 				if (ax25->condition & OWN_RX_BUSY_CONDITION) {
+					ax25->vr = ns;	/* ax25->vr - 1 */
 					if (pf) {
-						if (ax25->dama_slave)	/* dl1bke 960114 */
+						if (ax25->dama_slave)
 							dama_enquiry_response(ax25);
 						else
 							ax25_enquiry_response(ax25);
 					}
 					break;
 				}
-				ax25->vr = (ax25->vr + 1) % ax25->modulus;
 				ax25->condition &= ~REJECT_CONDITION;
 				if (pf) {
-					if (ax25->dama_slave)	/* dl1bke 960114 */
+					if (ax25->dama_slave)
 						dama_enquiry_response(ax25);
 					else
 						ax25_enquiry_response(ax25);
@@ -524,14 +518,14 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			} else {
 				if (ax25->condition & REJECT_CONDITION) {
 					if (pf) {
-						if (ax25->dama_slave)	/* dl1bke 960114 */
+						if (ax25->dama_slave)
 							dama_enquiry_response(ax25);
 						else
 							ax25_enquiry_response(ax25);
 					}
 				} else {
 					ax25->condition |= REJECT_CONDITION;
-					if (ax25->dama_slave)		/* dl1bke 960114 */
+					if (ax25->dama_slave)
 						dama_enquiry_response(ax25);
 					else
 						ax25_send_control(ax25, REJ, pf, C_RESPONSE);
@@ -660,7 +654,7 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			
 		case RR:
 			ax25->condition &= ~PEER_RX_BUSY_CONDITION;
-			if ( pf && (type == C_RESPONSE || (ax25->dama_slave && type == C_COMMAND)) ) {
+			if (pf && (type == C_RESPONSE || (ax25->dama_slave && type == C_COMMAND))) {
 				ax25->t1timer = 0;
 				if (ax25_validate_nr(ax25, nr)) {
 					ax25_frames_acked(ax25, nr);
@@ -691,7 +685,7 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 
 		case REJ:
 			ax25->condition &= ~PEER_RX_BUSY_CONDITION;
-			if ( pf && (type == C_RESPONSE || (ax25->dama_slave && type == C_COMMAND)) ) {
+			if (pf && (type == C_RESPONSE || (ax25->dama_slave && type == C_COMMAND))) {
 				ax25->t1timer = 0;
 				if (ax25_validate_nr(ax25, nr)) {
 					ax25_frames_acked(ax25, nr);
@@ -735,7 +729,7 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			}
 			ax25_frames_acked(ax25, nr);
 			if (ax25->condition & OWN_RX_BUSY_CONDITION) {
-				if (pf) {	/* dl1bke 960114 */
+				if (pf) {
 					if (ax25->dama_slave)
 						ax25_enquiry_response(ax25);
 					else
@@ -744,9 +738,11 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 				break;
 			}
 			if (ns == ax25->vr) {
+				ax25->vr = (ax25->vr + 1) % ax25->modulus;
 				queued = ax25_rx_iframe(ax25, skb);
 				if (ax25->condition & OWN_RX_BUSY_CONDITION) {
-					if (pf) {	/* dl1bke 960114 */
+					ax25->vr = ns;	/* ax25->vr - 1 */
+					if (pf) {
 						if (ax25->dama_slave)
 							dama_enquiry_response(ax25);
 						else
@@ -754,10 +750,9 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 					}
 					break;
 				}
-				ax25->vr = (ax25->vr + 1) % ax25->modulus;
 				ax25->condition &= ~REJECT_CONDITION;
 				if (pf) {
-					if (ax25->dama_slave) 	/* dl1bke 960114 */
+					if (ax25->dama_slave)
 						dama_enquiry_response(ax25);
 					else
 						ax25_enquiry_response(ax25);
@@ -769,7 +764,7 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 				}
 			} else {
 				if (ax25->condition & REJECT_CONDITION) {
-					if (pf) { 	/* dl1bke 960114 */
+					if (pf) {
 						if (ax25->dama_slave)
 							dama_enquiry_response(ax25);
 						else
@@ -777,7 +772,7 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 					}
 				} else {
 					ax25->condition |= REJECT_CONDITION;
-					if (ax25->dama_slave)		/* dl1bke 960114 */
+					if (ax25->dama_slave)
 						dama_enquiry_response(ax25);
 					else
 						ax25_send_control(ax25, REJ, pf, C_RESPONSE);

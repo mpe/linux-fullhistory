@@ -1101,7 +1101,7 @@ static inline void after_unlock_page (struct page * page)
 	if (clear_bit(PG_decr_after, &page->flags))
 		atomic_dec(&nr_async_pages);
 	if (clear_bit(PG_free_after, &page->flags))
-		free_page(page_address(page));
+		__free_page(page);
 	if (clear_bit(PG_swap_unlock_after, &page->flags))
 		swap_after_unlock_page(page->swap_unlock_entry);
 }
@@ -1322,11 +1322,10 @@ bad_count:
  */
 int generic_readpage(struct inode * inode, struct page * page)
 {
-	unsigned long block, address;
+	unsigned long block;
 	int *p, nr[PAGE_SIZE/512];
 	int i;
 
-	address = page_address(page);
 	page->count++;
 	set_bit(PG_locked, &page->flags);
 	set_bit(PG_free_after, &page->flags);
@@ -1342,7 +1341,7 @@ int generic_readpage(struct inode * inode, struct page * page)
 	} while (i > 0);
 
 	/* IO start */
-	brw_page(READ, address, inode->i_dev, nr, inode->i_sb->s_blocksize, 1);
+	brw_page(READ, page_address(page), inode->i_dev, nr, inode->i_sb->s_blocksize, 1);
 	return 0;
 }
 

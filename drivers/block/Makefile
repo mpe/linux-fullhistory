@@ -10,13 +10,13 @@
 #
 
 #
-# Note : at this point, these files are compiled on all systems. 
+# Note : at this point, these files are compiled on all systems.
 # In the future, some of these should be built conditionally.
 #
 
 
 L_TARGET := block.a
-L_OBJS   := ll_rw_blk.o genhd.o 
+L_OBJS   := ll_rw_blk.o genhd.o
 M_OBJS   :=
 MOD_LIST_NAME := BLOCK_MODULES
 LX_OBJS :=

@@ -87,6 +87,7 @@ sb_midi_close (int dev)
   sb_dsp_reset (devc);
   devc->intr_active = 0;
   devc->input_opened = 0;
+  devc->opened = 0;
   restore_flags (flags);
 }
 

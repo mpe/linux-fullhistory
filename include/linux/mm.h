@@ -116,6 +116,9 @@ struct vm_operations_struct {
  * is used for linear searches (eg. clock algorithm scans). 
  */
 typedef struct page {
+	/* these must be first (free area handling) */
+	struct page *next;
+	struct page *prev;
 	struct inode *inode;
 	unsigned long offset;
 	struct page *next_hash;
@@ -124,8 +127,6 @@ typedef struct page {
 	unsigned dirty:16,
 		 age:8;
 	struct wait_queue *wait;
-	struct page *next;
-	struct page *prev;
 	struct page *prev_hash;
 	struct buffer_head * buffers;
 	unsigned long swap_unlock_entry;
@@ -247,6 +248,7 @@ extern inline unsigned long get_free_page(int priority)
 
 #define free_page(addr) free_pages((addr),0)
 extern void free_pages(unsigned long addr, unsigned long order);
+extern void __free_page(struct page *);
 
 extern void show_free_areas(void);
 extern unsigned long put_dirty_page(struct task_struct * tsk,unsigned long page,

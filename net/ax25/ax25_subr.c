@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 031
+ *	AX.25 release 032
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -101,7 +101,7 @@ void ax25_frames_acked(ax25_cb *ax25, unsigned short nr)
 			skb->free = 1;
 			kfree_skb(skb, FREE_WRITE);
 			ax25->va = (ax25->va + 1) % ax25->modulus;
-			if (ax25->dama_slave)		/* dl1bke 960120 */
+			if (ax25->dama_slave)
 				ax25->n2count = 0;
 		}
 	}

@@ -38,4 +38,15 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 	memcpy((char *) &_dest, (char *) &_dump.regs,	\
 	       sizeof(elf_gregset_t)); }
 
+/* $0 is set by ld.so to a pointer to a function which might be 
+   registered using atexit.  This provides a mean for the dynamic
+   linker to call DT_FINI functions for shared libraries that have
+   been loaded before the code runs.
+
+   So that we can use the same startup file with static executables,
+   we start programs with a value of 0 to indicate that there is no
+   such function.  */
+
+#define ELF_PLAT_INIT(_r)       _r->r0 = 0
+
 #endif

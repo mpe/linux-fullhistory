@@ -16,13 +16,10 @@
  *	NET/ROM 001	Jonathan(G4KLX)	First attempt.
  *	NET/ROM	003	Jonathan(G4KLX)	Use SIOCADDRT/SIOCDELRT ioctl values
  *					for NET/ROM routes.
+ *					Use '*' for a blank mnemonic in /proc/net/nr_nodes.
+ *					Change default quality for new neighbour when same
+ *					as node callsign.
  *			Alan Cox(GW4PTS) Added the firewall hooks.
- *
- *	TO DO
- *	Sort out the which pointer when shuffling entries in the routes
- *	section. Also reset the which pointer when a route becomes "good"
- *	again, ie when a NODES broadcast is processed via calls to
- *	nr_add_node().
  */
  
 #include <linux/config.h>
@@ -54,11 +51,13 @@
 #include <linux/firewall.h>
 #include <net/netrom.h>
 
-static int nr_neigh_no = 1;
+static unsigned int nr_neigh_no = 1;
 static int nr_route_on = 1;
 
 static struct nr_node  *nr_node_list  = NULL;
 static struct nr_neigh *nr_neigh_list = NULL;
+
+static void nr_remove_neigh(struct nr_neigh *);
 
 /*
  *	Add a new route to a node, and in the process add the node and the
@@ -72,7 +71,10 @@ static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax2
 	struct nr_route nr_route;
 	unsigned long flags;
 	int i, found;
-	
+
+	if (nr_dev_get(nr) != NULL)	/* Can't add routes to ourself */
+		return -EINVAL;
+
 	for (nr_node = nr_node_list; nr_node != NULL; nr_node = nr_node->next)
 		if (ax25cmp(nr, &nr_node->callsign) == 0)
 			break;
@@ -91,7 +93,10 @@ static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax2
 		nr_neigh->callsign = *ax25;
 		nr_neigh->digipeat = NULL;
 		nr_neigh->dev      = dev;
-		nr_neigh->quality  = nr_default.quality;
+		if (ax25cmp(nr, ax25) == 0)
+			nr_neigh->quality = quality;
+		else
+			nr_neigh->quality = nr_default.quality;
 		nr_neigh->locked   = 0;
 		nr_neigh->count    = 0;
 		nr_neigh->number   = nr_neigh_no++;
@@ -118,14 +123,14 @@ static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax2
 			return -ENOMEM;
 
 		nr_node->callsign = *nr;
-		memcpy(&nr_node->mnemonic, mnemonic, sizeof(nr_node->mnemonic));
+		strcpy(nr_node->mnemonic, mnemonic);
 
 		nr_node->which = 0;
 		nr_node->count = 1;
 
 		nr_node->routes[0].quality   = quality;
 		nr_node->routes[0].obs_count = obs_count;
-		nr_node->routes[0].neighbour = nr_neigh->number;
+		nr_node->routes[0].neighbour = nr_neigh;
 			
 		save_flags(flags);
 		cli();
@@ -138,10 +143,13 @@ static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax2
 		nr_neigh->count++;
 
 		return 0;
+	} else {
+		if (nr_node->mnemonic[0] == '\0')
+			strcpy(nr_node->mnemonic, mnemonic);
 	}
 
 	for (found = 0, i = 0; i < nr_node->count; i++) {
-		if (nr_node->routes[i].neighbour == nr_neigh->number) {
+		if (nr_node->routes[i].neighbour == nr_neigh) {
 			nr_node->routes[i].quality   = quality;
 			nr_node->routes[i].obs_count = obs_count;
 			found = 1;
@@ -157,16 +165,22 @@ static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax2
 
 			nr_node->routes[0].quality   = quality;
 			nr_node->routes[0].obs_count = obs_count;
-			nr_node->routes[0].neighbour = nr_neigh->number;
+			nr_node->routes[0].neighbour = nr_neigh;
 				
+			nr_node->which++;
 			nr_node->count++;
 			nr_neigh->count++;
 		} else {
 			/* It must be better than the worst */
 			if (quality > nr_node->routes[2].quality) {
+				nr_node->routes[2].neighbour->count--;
+				
+				if (nr_node->routes[2].neighbour->count == 0 && !nr_node->routes[2].neighbour->locked)
+					nr_remove_neigh(nr_node->routes[2].neighbour);
+			
 				nr_node->routes[2].quality   = quality;
 				nr_node->routes[2].obs_count = obs_count;
-				nr_node->routes[2].neighbour = nr_neigh->number;
+				nr_node->routes[2].neighbour = nr_neigh;
 
 				nr_neigh->count++;
 			}
@@ -212,7 +226,7 @@ static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax2
 	}
 
 	for (i = 0; i < nr_node->count; i++) {
-		if (nr_node->routes[i].neighbour == nr_neigh->number) {
+		if (nr_node->routes[i].neighbour == nr_neigh) {
 			if (i < nr_node->which)
 				nr_node->which = i;
 			break;
@@ -307,7 +321,7 @@ static int nr_del_node(ax25_address *callsign, ax25_address *neighbour, struct d
 	if (nr_neigh == NULL) return -EINVAL;
 	
 	for (i = 0; i < nr_node->count; i++) {
-		if (nr_node->routes[i].neighbour == nr_neigh->number) {
+		if (nr_node->routes[i].neighbour == nr_neigh) {
 			nr_neigh->count--;
 
 			if (nr_neigh->count == 0 && !nr_neigh->locked)
@@ -403,7 +417,7 @@ static int nr_del_neigh(ax25_address *callsign, struct device *dev, unsigned int
  */
 static int nr_dec_obs(void)
 {
-	struct nr_neigh *t, *nr_neigh;
+	struct nr_neigh *nr_neigh;
 	struct nr_node  *s, *nr_node;
 	int i;
 
@@ -420,21 +434,12 @@ static int nr_dec_obs(void)
 				break;
 
 			case 1:		/* From 1 -> 0 */
-				nr_neigh = nr_neigh_list;
-
-				while (nr_neigh != NULL) {
-					t        = nr_neigh;
-					nr_neigh = nr_neigh->next;
-
-					if (t->number == s->routes[i].neighbour) {
-						t->count--;
+				nr_neigh = s->routes[i].neighbour;
+				
+				nr_neigh->count--;
 						
-						if (t->count == 0 && !t->locked)
-							nr_remove_neigh(t);
-
-						break;
-					}
-				}
+				if (nr_neigh->count == 0 && !nr_neigh->locked)
+					nr_remove_neigh(nr_neigh);
 
 				s->count--;
 
@@ -483,7 +488,7 @@ void nr_rt_device_down(struct device *dev)
 				nr_node = nr_node->next;
 				
 				for (i = 0; i < t->count; i++) {
-					if (t->routes[i].neighbour == s->number) {
+					if (t->routes[i].neighbour == s) {
 						t->count--;
 
 						switch (i) {
@@ -609,13 +614,16 @@ int nr_rt_ioctl(unsigned int cmd, void *arg)
 
 		case SIOCNRDECOBS:
 			return nr_dec_obs();
-			
+
 		case SIOCNRRTCTL:
 			if ((err = verify_area(VERIFY_READ, arg, sizeof(int))) != 0)
 				return err;
 			opt = get_fs_long((void *)arg);
 			nr_route_on = opt ? 1 : 0;
 			return 0;
+
+		default:
+			return -EINVAL;
 	}
 
 	return 0;
@@ -637,7 +645,7 @@ void nr_link_failed(ax25_address *callsign, struct device *dev)
 	if (nr_neigh == NULL) return;
 	
 	for (nr_node = nr_node_list; nr_node != NULL; nr_node = nr_node->next)
-		if (nr_node->which >= nr_node->count && nr_node->routes[nr_node->which].neighbour == nr_neigh->number)
+		if (nr_node->which < nr_node->count && nr_node->routes[nr_node->which].neighbour == nr_neigh)
 			nr_node->which++;
 }
 
@@ -645,7 +653,6 @@ void nr_link_failed(ax25_address *callsign, struct device *dev)
  *	Route a frame to an appropriate AX.25 connection. A NULL ax25_cb
  *	indicates an internally generated frame.
  */
-
 int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 {
 	ax25_address *nr_src, *nr_dest;
@@ -655,12 +662,12 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	unsigned char *dptr;
 	
 #ifdef CONFIG_FIREWALL
-
-	if(ax25 && call_in_firewall(PF_NETROM, skb->dev, skb->data, NULL)!=FW_ACCEPT)
+	if (ax25 != NULL && call_in_firewall(PF_NETROM, skb->dev, skb->data, NULL) != FW_ACCEPT)
 		return 0;
-	if(!ax25 && call_out_firewall(PF_NETROM, skb->dev, skb->data, NULL)!=FW_ACCEPT)
+	if (ax25 == NULL && call_out_firewall(PF_NETROM, skb->dev, skb->data, NULL) != FW_ACCEPT)
 		return 0;
 #endif
+
 	nr_src  = (ax25_address *)(skb->data + 0);
 	nr_dest = (ax25_address *)(skb->data + 7);
 
@@ -684,27 +691,20 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	if (nr_node == NULL || nr_node->which >= nr_node->count)
 		return 0;
 
-	for (nr_neigh = nr_neigh_list; nr_neigh != NULL; nr_neigh = nr_neigh->next)
-		if (nr_neigh->number == nr_node->routes[nr_node->which].neighbour)
-			break;
-			
-	if (nr_neigh == NULL)
-		return 0;
+	nr_neigh = nr_node->routes[nr_node->which].neighbour;
 
 	if ((dev = nr_dev_first()) == NULL)
 		return 0;
 
 #ifdef CONFIG_FIREWALL
-	if(ax25 && call_fw_firewall(PF_NETROM, skb->dev, skb->data, NULL)!=FW_ACCEPT)
+	if (ax25 != NULL && call_fw_firewall(PF_NETROM, skb->dev, skb->data, NULL) != FW_ACCEPT)
 		return 0;
 #endif
 
 	dptr  = skb_push(skb, 1);
 	*dptr = AX25_P_NETROM;
 
-	ax25_send_frame(skb, (ax25_address *)dev->dev_addr, &nr_neigh->callsign, nr_neigh->digipeat, nr_neigh->dev);
-
-	return 1;
+	return ax25_send_frame(skb, (ax25_address *)dev->dev_addr, &nr_neigh->callsign, nr_neigh->digipeat, nr_neigh->dev);
 }
 
 int nr_nodes_get_info(char *buffer, char **start, off_t offset,
@@ -715,7 +715,7 @@ int nr_nodes_get_info(char *buffer, char **start, off_t offset,
 	off_t pos   = 0;
 	off_t begin = 0;
 	int i;
-  
+
 	cli();
 
 	len += sprintf(buffer, "callsign  mnemonic w n qual obs neigh qual obs neigh qual obs neigh\n");
@@ -723,7 +723,7 @@ int nr_nodes_get_info(char *buffer, char **start, off_t offset,
 	for (nr_node = nr_node_list; nr_node != NULL; nr_node = nr_node->next) {
 		len += sprintf(buffer + len, "%-9s %-7s  %d %d",
 			ax2asc(&nr_node->callsign),
-			nr_node->mnemonic,
+			(nr_node->mnemonic[0] == '\0') ? "*" : nr_node->mnemonic,
 			nr_node->which + 1,
 			nr_node->count);			
 
@@ -731,7 +731,7 @@ int nr_nodes_get_info(char *buffer, char **start, off_t offset,
 			len += sprintf(buffer + len, "  %3d   %d %05d",
 				nr_node->routes[i].quality,
 				nr_node->routes[i].obs_count,
-				nr_node->routes[i].neighbour);
+				nr_node->routes[i].neighbour->number);
 		}
 
 		len += sprintf(buffer + len, "\n");
@@ -742,7 +742,7 @@ int nr_nodes_get_info(char *buffer, char **start, off_t offset,
 			len   = 0;
 			begin = pos;
 		}
-		
+
 		if (pos > offset + length)
 			break;
 	}
@@ -754,7 +754,7 @@ int nr_nodes_get_info(char *buffer, char **start, off_t offset,
 
 	if (len > length) len = length;
 
-	return(len);
+	return len;
 } 
 
 int nr_neigh_get_info(char *buffer, char **start, off_t offset,
@@ -764,7 +764,7 @@ int nr_neigh_get_info(char *buffer, char **start, off_t offset,
 	int len     = 0;
 	off_t pos   = 0;
 	off_t begin = 0;
-  
+
 	cli();
 
 	len += sprintf(buffer, "addr  callsign  dev  qual lock count\n");
@@ -796,7 +796,7 @@ int nr_neigh_get_info(char *buffer, char **start, off_t offset,
 
 	if (len > length) len = length;
 
-	return(len);
+	return len;
 } 
 
 #endif

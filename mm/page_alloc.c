@@ -36,30 +36,34 @@ int nr_free_pages = 0;
 
 #define NR_MEM_LISTS 6
 
+/* The start of this MUST match the start of "struct page" */
 struct free_area_struct {
-	struct page list;
+	struct page *next;
+	struct page *prev;
 	unsigned int * map;
 };
 
+#define memory_head(x) ((struct page *)x)
+
 static struct free_area_struct free_area[NR_MEM_LISTS];
 
-static inline void init_mem_queue(struct page * head)
+static inline void init_mem_queue(struct free_area_struct * head)
 {
-	head->next = head;
-	head->prev = head;
+	head->next = memory_head(head);
+	head->prev = memory_head(head);
 }
 
-static inline void add_mem_queue(struct page * head, struct page * entry)
+static inline void add_mem_queue(struct free_area_struct * head, struct page * entry)
 {
 	struct page * next = head->next;
 
-	entry->prev = head;
+	entry->prev = memory_head(head);
 	entry->next = next;
 	next->prev = entry;
 	head->next = entry;
 }
 
-static inline void remove_mem_queue(struct page * head, struct page * entry)
+static inline void remove_mem_queue(struct page * entry)
 {
 	struct page * next = entry->next;
 	struct page * prev = entry->prev;
@@ -85,9 +89,12 @@ static inline void remove_mem_queue(struct page * head, struct page * entry)
 
 /*
  * Buddy system. Hairy. You really aren't expected to understand this
+ *
+ * Hint: -mask = 1+~mask
  */
 static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
 {
+	struct free_area_struct *area = free_area + order;
 	unsigned long index = map_nr >> (1 + order);
 	unsigned long mask = (~0UL) << order;
 	unsigned long flags;
@@ -98,21 +105,30 @@ static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
 #define list(x) (mem_map+(x))
 
 	map_nr &= mask;
-	nr_free_pages += 1 << order;
-	while (order < NR_MEM_LISTS-1) {
-		if (!change_bit(index, free_area[order].map))
+	nr_free_pages -= mask;
+	while (mask + (1 << (NR_MEM_LISTS-1))) {
+		if (!change_bit(index, area->map))
 			break;
-		remove_mem_queue(&free_area[order].list, list(map_nr ^ (1+~mask)));
+		remove_mem_queue(list(map_nr ^ -mask));
 		mask <<= 1;
-		order++;
+		area++;
 		index >>= 1;
 		map_nr &= mask;
 	}
-	add_mem_queue(&free_area[order].list, list(map_nr));
+	add_mem_queue(area, list(map_nr));
 
 #undef list
 
 	restore_flags(flags);
+}
+
+void __free_page(struct page *page)
+{
+	if (!PageReserved(page) && atomic_dec_and_test(&page->count)) {
+		unsigned long map_nr = page->map_nr;
+		delete_from_swap_cache(map_nr);
+		free_pages_ok(map_nr, 0);
+	}
 }
 
 void free_pages(unsigned long addr, unsigned long order)
@@ -141,8 +157,8 @@ void free_pages(unsigned long addr, unsigned long order)
 #define RMQUEUE(order, dma) \
 do { struct free_area_struct * area = free_area+order; \
      unsigned long new_order = order; \
-	do { struct page *prev = &area->list, *ret; \
-		while (&area->list != (ret = prev->next)) { \
+	do { struct page *prev = memory_head(area), *ret; \
+		while (memory_head(area) != (ret = prev->next)) { \
 			if (!dma || CAN_DMA(ret)) { \
 				unsigned long map_nr = ret->map_nr; \
 				(prev->next = ret->next)->prev = prev; \
@@ -162,7 +178,7 @@ do { struct free_area_struct * area = free_area+order; \
 do { unsigned long size = 1 << high; \
 	while (high > low) { \
 		area--; high--; size >>= 1; \
-		add_mem_queue(&area->list, map); \
+		add_mem_queue(area, map); \
 		MARK_USED(index, high, area); \
 		index += size; \
 		map += size; \
@@ -219,7 +235,7 @@ void show_free_areas(void)
  	for (order=0 ; order < NR_MEM_LISTS; order++) {
 		struct page * tmp;
 		unsigned long nr = 0;
-		for (tmp = free_area[order].list.next ; tmp != &free_area[order].list ; tmp = tmp->next) {
+		for (tmp = free_area[order].next ; tmp != memory_head(free_area+order) ; tmp = tmp->next) {
 			nr ++;
 		}
 		total += nr * ((PAGE_SIZE>>10) << order);
@@ -269,7 +285,7 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 
 	for (i = 0 ; i < NR_MEM_LISTS ; i++) {
 		unsigned long bitmap_size;
-		init_mem_queue(&free_area[i].list);
+		init_mem_queue(free_area+i);
 		mask += mask;
 		end_mem = (end_mem + ~mask) & mask;
 		bitmap_size = (end_mem - PAGE_OFFSET) >> (PAGE_SHIFT + i);

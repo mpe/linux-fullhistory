@@ -8,16 +8,13 @@
 	according to the terms of the GNU Public License,
 	incorporated herein by reference.
 
-	The author may be reached at bao@saigon.async.com 
+	The author may be reached at bao.ha@srs.gov 
 	or 418 Hastings Place, Martinez, GA 30907.
 
 	Things remaining to do:
 	Better record keeping of errors.
 	Eliminate transmit interrupt to reduce overhead.
 	Implement "concurrent processing". I won't be doing it!
-	Allow changes to the partition of the transmit and receive
-	buffers, currently the ratio is 3:1 of receive to transmit
-	buffer ratio.  
 
 	Bugs:
 
@@ -26,6 +23,13 @@
 	This is a compatibility hardware problem.
 
 	Versions:
+
+	0.09	Fixed a race condition in the transmit algorithm,
+		which causes crashes under heavy load with fast
+		pentium computers.  The performance should also
+		improve a bit.  The size of RX buffer, and hence
+		TX buffer, can also be changed via lilo or insmod.
+		(BCH, 7/31/96)
 
 	0.08	Implement 32-bit I/O for the 82595TX and 82595FX
 		based lan cards.  Disable full-duplex mode if TPE
@@ -56,7 +60,7 @@
 */
 
 static const char *version =
-	"eepro.c: v0.08 4/8/96 Bao C. Ha (bao.ha@srs.gov)\n";
+	"eepro.c: v0.09 7/31/96 Bao C. Ha (bao.ha@srs.gov)\n";
 
 #include <linux/module.h>
 
@@ -110,7 +114,7 @@ static unsigned int eepro_portlist[] =
 
 /* use 0 for production, 1 for verification, >2 for debug */
 #ifndef NET_DEBUG
-#define NET_DEBUG 2
+#define NET_DEBUG 3
 #endif
 static unsigned int net_debug = NET_DEBUG;
 
@@ -180,15 +184,26 @@ single packet.  In other systems with faster computers and more congested
 network traffics, the ring linked list should improve performance by
 allowing up to 8K worth of packets to be queued.
 
+The sizes of the receive and transmit buffers can now be changed via lilo 
+or insmod.  Lilo uses the appended line "ether=io,irq,debug,rx-buffer,eth0"
+where rx-buffer is in KB unit.  Modules uses the parameter mem which is
+also in KB unit, for example "insmod io=io-address irq=0 mem=rx-buffer."  
+The receive buffer has to be more than 3K or less than 29K.  Otherwise,
+it is reset to the default of 24K, and, hence, 8K for the trasnmit
+buffer (transmit-buffer = 32K - receive-buffer).
+
 */
 #define	RAM_SIZE	0x8000
 #define	RCV_HEADER	8
-#define	RCV_RAM		0x6000	/* 24KB for RCV buffer */
-#define	RCV_LOWER_LIMIT	0x00	/* 0x0000 */
-#define	RCV_UPPER_LIMIT	((RCV_RAM - 2) >> 8)	/* 0x5ffe */
-#define	XMT_RAM		(RAM_SIZE - RCV_RAM)	/* 8KB for XMT buffer */
-#define	XMT_LOWER_LIMIT	(RCV_RAM >> 8)	/* 0x6000 */
-#define	XMT_UPPER_LIMIT	((RAM_SIZE - 2) >> 8)	/* 0x7ffe */
+#define RCV_RAM         0x6000  /* 24KB default for RCV buffer */
+#define RCV_LOWER_LIMIT 0x00    /* 0x0000 */
+/* #define RCV_UPPER_LIMIT ((RCV_RAM - 2) >> 8) */    /* 0x5ffe */
+#define RCV_UPPER_LIMIT (((rcv_ram) - 2) >> 8)   
+/* #define XMT_RAM         (RAM_SIZE - RCV_RAM) */    /* 8KB for XMT buffer */
+#define XMT_RAM         (RAM_SIZE - (rcv_ram))    /* 8KB for XMT buffer */
+/* #define XMT_LOWER_LIMIT (RCV_RAM >> 8) */  /* 0x6000 */
+#define XMT_LOWER_LIMIT ((rcv_ram) >> 8) 
+#define XMT_UPPER_LIMIT ((RAM_SIZE - 2) >> 8)   /* 0x7ffe */
 #define	XMT_HEADER	8
 
 #define	RCV_DONE	0x0008
@@ -368,6 +383,16 @@ int eepro_probe1(struct device *dev, short ioaddr)
 				dev->dev_addr[i] = ((unsigned char *) station_addr)[5-i];
 				printk("%c%02x", i ? ':' : ' ', dev->dev_addr[i]);
 			}
+			
+			if ((dev->mem_end & 0x3f) < 3 ||	/* RX buffer must be more than 3K */
+				(dev->mem_end & 0x3f) > 29)	/* and less than 29K */
+				dev->mem_end = RCV_RAM;		/* or it will be set to 24K */
+			else dev->mem_end = 1024*dev->mem_end;  /* Maybe I should shift << 10 */
+
+			/* From now on, dev->mem_end contains the actual size of rx buffer */
+			
+			if (net_debug > 3)
+				printk(", %dK RCV buffer", (int)(dev->mem_end)/1024);
 				
 			outb(BANK2_SELECT, ioaddr); /* be CAREFUL, BANK 2 now */
 			id = inb(ioaddr + REG3);
@@ -401,8 +426,8 @@ int eepro_probe1(struct device *dev, short ioaddr)
 			}
 			else printk(", %s.\n", ifmap[dev->if_port]);
 			
-			if ((dev->mem_start & 0xf) > 0)
-				net_debug = dev->mem_start & 7;
+			if ((dev->mem_start & 0xf) > 0)	/* I don't know if this is */
+				net_debug = dev->mem_start & 7; /* still useful or not */
 
 			if (net_debug > 3) {
 				i = read_eeprom(ioaddr, 5);
@@ -516,7 +541,7 @@ static int
 eepro_open(struct device *dev)
 {
 	unsigned short temp_reg, old8, old9;
-	int i, ioaddr = dev->base_addr;
+	int i, ioaddr = dev->base_addr, rcv_ram = dev->mem_end;
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
 
 	if (net_debug > 3)
@@ -654,6 +679,7 @@ eepro_send_packet(struct sk_buff *skb, struct device *dev)
 {
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
 	int ioaddr = dev->base_addr;
+	int rcv_ram = dev->mem_end;
 
 	if (net_debug > 5)
 		printk("eepro: entering eepro_send_packet routine.\n");
@@ -662,12 +688,13 @@ eepro_send_packet(struct sk_buff *skb, struct device *dev)
 		/* If we get here, some higher level has decided we are broken.
 		   There should really be a "kick me" function call instead. */
 		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 5)
+		if (tickssofar < 40)
 			return 1;
 		if (net_debug > 1)
 			printk("%s: transmit timed out, %s?\n", dev->name,
 				   "network cable problem");
 		lp->stats.tx_errors++;
+
 		/* Try to restart the adaptor. */
 		outb(SEL_RESET_CMD, ioaddr); 
 		/* We are supposed to wait for 2 us after a SEL_RESET */
@@ -675,7 +702,7 @@ eepro_send_packet(struct sk_buff *skb, struct device *dev)
 		SLOW_DOWN_IO;
 
 		/* Do I also need to flush the transmit buffers here? YES? */
-		lp->tx_start = lp->tx_end = RCV_RAM; 
+		lp->tx_start = lp->tx_end = rcv_ram; 
 		lp->tx_last = 0;
 	
 		dev->tbusy=0;
@@ -722,7 +749,7 @@ static void
 eepro_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
-	int ioaddr, status, boguscount = 0;
+	int ioaddr, status, boguscount = 20;
 
 	if (net_debug > 5)
 		printk("eepro: entering eepro_interrupt routine.\n");
@@ -737,7 +764,7 @@ eepro_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 	do { 
 		status = inb(ioaddr + STATUS_REG);
-
+		
 		if (status & RX_INT) {
 			if (net_debug > 4)
 				printk("eepro: packet received interrupt.\n");
@@ -748,6 +775,7 @@ eepro_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 			/* Get the received packets */
 			eepro_rx(dev);
 		}
+
 		else if (status & TX_INT) {
 			if (net_debug > 4)
 				printk("eepro: packet transmit interrupt.\n");
@@ -757,10 +785,9 @@ eepro_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 			/* Process the status of transmitted packets */
 			eepro_transmit_interrupt(dev);
-			dev->tbusy = 0;
-			mark_bh(NET_BH);
-		}		
-	} while ((++boguscount < 10) && (status & 0x06));
+		}
+	
+	} while ((boguscount-- > 0) && (status & 0x06));
 
 	dev->interrupt = 0;
 	if (net_debug > 5)
@@ -774,6 +801,7 @@ eepro_close(struct device *dev)
 {
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
 	int ioaddr = dev->base_addr;
+	int rcv_ram = dev->mem_end;
 	short temp_reg;
 
 	dev->tbusy = 1;
@@ -789,7 +817,7 @@ eepro_close(struct device *dev)
 
 	/* Flush the Tx and disable Rx. */
 	outb(STOP_RCV_CMD, ioaddr); 
-	lp->tx_start = lp->tx_end = RCV_RAM ;
+	lp->tx_start = lp->tx_end = rcv_ram ;
 	lp->tx_last = 0;  
 
 	/* Mask all the interrupts. */
@@ -912,7 +940,9 @@ set_multicast_list(struct device *dev)
 			outw(status | CHAIN_BIT, ioaddr + IO_PORT);
 			lp->tx_end = i ;
 		}
-		else lp->tx_start = lp->tx_end = i ;
+		else {
+			lp->tx_start = lp->tx_end = i ;
+		}
 
 		/* Acknowledge that the MC setup is done */
 		do { /* We should be doing this in the eepro_interrupt()! */
@@ -993,12 +1023,24 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 {
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
 	short ioaddr = dev->base_addr;
-	unsigned status, tx_available, last, end, boguscount = 10;
+	int rcv_ram = dev->mem_end;
+	unsigned status, tx_available, last, end, boguscount = 100;
 
 	if (net_debug > 5)
 		printk("eepro: entering hardware_send_packet routine.\n");
 
 	while (boguscount-- > 0) {
+
+		/* Disable RX and TX interrupts.  Necessary to avoid
+	   	corruption of the HOST_ADDRESS_REG by interrupt
+	   	service routines. */
+		outb(ALL_MASK, ioaddr + INT_MASK_REG);
+
+		if (dev->interrupt == 1) {  
+			/* Enable RX and TX interrupts */
+			outb(ALL_MASK & ~(RX_MASK | TX_MASK), ioaddr + INT_MASK_REG); 
+			continue;
+		}
 
 		/* determine how much of the transmit buffer space is available */
 		if (lp->tx_end > lp->tx_start)
@@ -1007,14 +1049,15 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 			tx_available = lp->tx_start - lp->tx_end;
 		else tx_available = XMT_RAM;
 
-		/* Disable RX and TX interrupts.  Necessary to avoid
-		   corruption of the HOST_ADDRESS_REG by interrupt
-		   service routines. */
-		outb(ALL_MASK, ioaddr + INT_MASK_REG);
-
 		if (((((length + 3) >> 1) << 1) + 2*XMT_HEADER) 
 			>= tx_available)   /* No space available ??? */
+			{
+			eepro_transmit_interrupt(dev); /* Clean up the transmiting queue */
+
+			/* Enable RX and TX interrupts */
+			outb(ALL_MASK & ~(RX_MASK | TX_MASK), ioaddr + INT_MASK_REG); 
 			continue;
+		}
 
 		last = lp->tx_end;
 		end = last + (((length + 3) >> 1) << 1) + XMT_HEADER;
@@ -1023,10 +1066,10 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 			if ((RAM_SIZE - last) <= XMT_HEADER) {	
 			/* Arrrr!!!, must keep the xmt header together,
 			  several days were lost to chase this one down. */
-				last = RCV_RAM;
+				last = rcv_ram;
 				end = last + (((length + 3) >> 1) << 1) + XMT_HEADER;
 			}	
-			else end = RCV_RAM + (end - RAM_SIZE);
+			else end = rcv_ram + (end - RAM_SIZE);
 		}
 
 		outw(last, ioaddr + HOST_ADDRESS_REG);
@@ -1044,9 +1087,17 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 			outb(temp & ~(IO_32_BIT), ioaddr + INT_MASK_REG);
 		}
 
-		if (lp->tx_start != lp->tx_end) { 
+		/* A dummy read to flush the DRAM write pipeline */
+		status = inw(ioaddr + IO_PORT); 
+
+		if (lp->tx_start == lp->tx_end) {	
+			outw(last, ioaddr + XMT_BAR);
+			outb(XMT_CMD, ioaddr);
+			lp->tx_start = last;   /* I don't like to change tx_start here */
+		}
+		else {
 			/* update the next address and the chain bit in the 
-			   last packet */
+		   	last packet */
 			if (lp->tx_end != last) {
 				outw(lp->tx_last + XMT_CHAIN, ioaddr + HOST_ADDRESS_REG);
 				outw(last, ioaddr + IO_PORT);
@@ -1054,33 +1105,26 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 			outw(lp->tx_last + XMT_COUNT, ioaddr + HOST_ADDRESS_REG);
 			status = inw(ioaddr + IO_PORT);
 			outw(status | CHAIN_BIT, ioaddr + IO_PORT);
-		}
 
-		/* A dummy read to flush the DRAM write pipeline */
-		status = inw(ioaddr + IO_PORT); 
-
-		/* Enable RX and TX interrupts */
-		outb(ALL_MASK & ~(RX_MASK | TX_MASK), ioaddr + INT_MASK_REG); 
-	
-		if (lp->tx_start == lp->tx_end) {
-			outw(last, ioaddr + XMT_BAR);
-			outb(XMT_CMD, ioaddr);
-			lp->tx_start = last;   /* I don't like to change tx_start here */
+			/* Continue the transmit command */
+			outb(RESUME_XMT_CMD, ioaddr);
 		}
-		else	outb(RESUME_XMT_CMD, ioaddr);
 
 		lp->tx_last = last;
 		lp->tx_end = end;
 
+		/* Enable RX and TX interrupts */
+		outb(ALL_MASK & ~(RX_MASK | TX_MASK), ioaddr + INT_MASK_REG); 
+	
 		if (dev->tbusy) {
 			dev->tbusy = 0;
-			mark_bh(NET_BH);
 		}
 
 		if (net_debug > 5)
 			printk("eepro: exiting hardware_send_packet routine.\n");
 		return;
 	}
+
 	dev->tbusy = 1;
 	if (net_debug > 5)
 		printk("eepro: exiting hardware_send_packet routine.\n");
@@ -1090,7 +1134,7 @@ static void
 eepro_rx(struct device *dev)
 {
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
-	short ioaddr = dev->base_addr;
+	short ioaddr = dev->base_addr, rcv_ram = dev->mem_end;
 	short boguscount = 20;
 	short rcv_car = lp->rx_start;
 	unsigned rcv_event, rcv_status, rcv_next_frame, rcv_size;
@@ -1171,7 +1215,7 @@ eepro_transmit_interrupt(struct device *dev)
 {
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
 	short ioaddr = dev->base_addr;
-	short boguscount = 10; 
+	short boguscount = 20; 
 	short xmt_status;
 
 	while (lp->tx_start != lp->tx_end) { 
@@ -1179,16 +1223,15 @@ eepro_transmit_interrupt(struct device *dev)
 		outw(lp->tx_start, ioaddr + HOST_ADDRESS_REG);
 		xmt_status = inw(ioaddr+IO_PORT);
 		if ((xmt_status & TX_DONE_BIT) == 0) break;
+
 		xmt_status = inw(ioaddr+IO_PORT);
 		lp->tx_start = inw(ioaddr+IO_PORT);
-	
-		if (dev->tbusy) {
-			dev->tbusy = 0;
-			mark_bh(NET_BH);
-		}
+
+		dev->tbusy = 0;
+		mark_bh(NET_BH);
 
 		if (xmt_status & 0x2000)
-			lp->stats.tx_packets++;
+			lp->stats.tx_packets++; 
 		else {
 			lp->stats.tx_errors++;
 			if (xmt_status & 0x0400)
@@ -1196,10 +1239,12 @@ eepro_transmit_interrupt(struct device *dev)
 			printk("%s: XMT status = %#x\n",
 				dev->name, xmt_status);
 		}
-		if (xmt_status & 0x000f)
+		if (xmt_status & 0x000f) {
 			lp->stats.collisions += (xmt_status & 0x000f);
-		if ((xmt_status & 0x0040) == 0x0)
+		}
+		if ((xmt_status & 0x0040) == 0x0) {
 			lp->stats.tx_heartbeat_errors++;
+		}
 
 		if (--boguscount == 0)
 			break;  
@@ -1216,6 +1261,7 @@ static struct device dev_eepro = {
 
 static int io = 0x200;
 static int irq = 0;
+static int mem = (RCV_RAM/1024);	/* Size of the rx buffer in KB */
 
 int
 init_module(void)
@@ -1224,6 +1270,7 @@ init_module(void)
 		printk("eepro: You should not use auto-probing with insmod!\n");
 	dev_eepro.base_addr = io;
 	dev_eepro.irq       = irq;
+	dev_eepro.mem_end   = mem;
 
 	if (register_netdev(&dev_eepro) != 0)
 		return -EIO;
