@@ -11,6 +11,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  *
+ * (07/23/2000) gkh
+ *	Added bulk_out_endpointAddress to port structure.
+ *
  * (07/19/2000) gkh, pberger, and borchers
  *	Modifications to allow usb-serial drivers to be modules.
  *
@@ -51,6 +54,7 @@ struct usb_serial_port {
 	unsigned char *		bulk_out_buffer;
 	int			bulk_out_size;
 	struct urb *		write_urb;
+	__u8			bulk_out_endpointAddress;
 
 	wait_queue_head_t	write_wait;
 

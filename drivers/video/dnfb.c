@@ -533,6 +533,11 @@ static void rev_char_apollofb(struct display *p, int xx, int yy)
 }
 
 static struct display_switch dispsw_apollofb = {
-    fbcon_mfb_setup, bmove_apollofb, clear_apollofb,
-    putc_apollofb, putcs_apollofb, rev_char_apollofb
+    setup:		fbcon_mfb_setup,
+    bmove:		bmove_apollofb,
+    clear:		clear_apollofb,
+    putc:		putc_apollofb,
+    putcs:		putcs_apollofb,
+    revc:		rev_char_apollofb,
+    fontwidthmask:	FONTWIDTH(8)
 };

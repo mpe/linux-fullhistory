@@ -708,11 +708,11 @@ static void refill_freelist(int size)
 	}
 }
 
-void init_buffer(struct buffer_head *bh, bh_end_io_t *handler, void *dev_id)
+void init_buffer(struct buffer_head *bh, bh_end_io_t *handler, void *private)
 {
 	bh->b_list = BUF_CLEAN;
 	bh->b_end_io = handler;
-	bh->b_dev_id = dev_id;
+	bh->b_private = private;
 }
 
 static void end_buffer_io_sync(struct buffer_head *bh, int uptodate)
@@ -1742,7 +1742,7 @@ static void end_buffer_io_kiobuf(struct buffer_head *bh, int uptodate)
 	
 	mark_buffer_uptodate(bh, uptodate);
 
-	kiobuf = bh->b_kiobuf;
+	kiobuf = bh->b_private;
 	unlock_buffer(bh);
 	end_kio_request(kiobuf, uptodate);
 }
@@ -1862,11 +1862,10 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 				set_bh_page(tmp, map, offset);
 				tmp->b_this_page = tmp;
 
-				init_buffer(tmp, end_buffer_io_kiobuf, NULL);
+				init_buffer(tmp, end_buffer_io_kiobuf, iobuf);
 				tmp->b_dev = dev;
 				tmp->b_blocknr = blocknr;
 				tmp->b_state = 1 << BH_Mapped;
-				tmp->b_kiobuf = iobuf;
 
 				if (rw == WRITE) {
 					set_bit(BH_Uptodate, &tmp->b_state);

@@ -1348,9 +1348,14 @@ static void fbcon_virge8_clear_margins(struct vc_data *conp, struct display *p,
 }
 
 static struct display_switch fbcon_virge8 = {
-   fbcon_cfb8_setup, fbcon_virge8_bmove, fbcon_virge8_clear, fbcon_virge8_putc,
-   fbcon_virge8_putcs, fbcon_virge8_revc, NULL, NULL, fbcon_virge8_clear_margins,
-   FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+   setup:		fbcon_cfb8_setup,
+   bmove:		fbcon_virge8_bmove,
+   clear:		fbcon_virge8_clear,
+   putc:		fbcon_virge8_putc,
+   putcs:		fbcon_virge8_putcs,
+   revc:		fbcon_virge8_revc,
+   clear_margins:	fbcon_virge8_clear_margins,
+   fontwidthmask:	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
 
@@ -1408,9 +1413,14 @@ static void fbcon_virge16_clear_margins(struct vc_data *conp, struct display *p,
 }
 
 static struct display_switch fbcon_virge16 = {
-   fbcon_cfb16_setup, fbcon_virge16_bmove, fbcon_virge16_clear, fbcon_virge16_putc,
-   fbcon_virge16_putcs, fbcon_virge16_revc, NULL, NULL, fbcon_virge16_clear_margins,
-   FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+   setup:		fbcon_cfb16_setup,
+   bmove:		fbcon_virge16_bmove,
+   clear:		fbcon_virge16_clear,
+   putc:		fbcon_virge16_putc,
+   putcs:		fbcon_virge16_putcs,
+   revc:		fbcon_virge16_revc,
+   clear_margins:	fbcon_virge16_clear_margins,
+   fontwidthmask:	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
 

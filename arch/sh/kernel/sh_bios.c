@@ -7,7 +7,7 @@
  *
  */
 
-#include <config/sh/standard/bios.h>
+#include <linux/config.h>
 #include <asm/sh_bios.h>
 
 #ifdef CONFIG_SH_STANDARD_BIOS

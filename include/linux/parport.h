@@ -1,10 +1,9 @@
 /* $Id: parport.h,v 1.1 1998/05/17 10:57:52 andrea Exp andrea $ */
 
 /*
- * The block comments above the functions in this file are
- * licensed as part of the generated file
- * Documentation/DocBook/parportbook.sgml under the GNU Free
- * Documentation License.
+ * Any part of this program may be used in documents licensed under
+ * the GNU Free Documentation License, Version 1.1 or any later version
+ * published by the Free Software Foundation.
  */
 
 #ifndef _PARPORT_H_

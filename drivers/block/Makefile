@@ -42,13 +42,7 @@ obj-$(CONFIG_BLK_DEV_MD)	+= md.o
 obj-$(CONFIG_MD_LINEAR)		+= linear.o
 obj-$(CONFIG_MD_RAID0)		+= raid0.o
 obj-$(CONFIG_MD_RAID1)		+= raid1.o
-
-ifeq ($(CONFIG_MD_RAID5),m)
-	obj-y += xor.o
-else
-	obj-$(CONFIG_MD_RAID5)	+= xor.o
-endif
-obj-$(CONFIG_MD_RAID5)		+= raid5.o
+obj-$(CONFIG_MD_RAID5)		+= raid5.o xor.o
 
 obj-$(CONFIG_BLK_DEV_NBD)	+= nbd.o
 

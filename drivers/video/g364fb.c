@@ -155,9 +155,15 @@ void fbcon_g364fb_cursor(struct display *p, int mode, int x, int y)
 
 
 static struct display_switch fbcon_g364cfb8 = {
-    fbcon_cfb8_setup, fbcon_cfb8_bmove, fbcon_cfb8_clear, fbcon_cfb8_putc,
-    fbcon_cfb8_putcs, fbcon_cfb8_revc, fbcon_g364fb_cursor, NULL,
-    fbcon_cfb8_clear_margins, FONTWIDTH(8)
+    setup:		fbcon_cfb8_setup,
+    bmove:		fbcon_cfb8_bmove,
+    clear:		fbcon_cfb8_clear,
+    putc:		fbcon_cfb8_putc,
+    putcs:		fbcon_cfb8_putcs,
+    revc:		fbcon_cfb8_revc,
+    cursor:		fbcon_g364fb_cursor,
+    clear_margins:	fbcon_cfb8_clear_margins,
+    fontwidthmask:	FONTWIDTH(8)
 };
 
 /*

@@ -11,7 +11,7 @@ JPG-parportbook := $(patsubst %.fig, %.jpeg, $(IMG-parportbook))
 
 $(BOOKS): $(TOPDIR)/scripts/docproc
 
-.PHONY:	books ps pdf html clean mrproper db2ps db2pdf db2html
+.PHONY:	books ps pdf html clean mrproper
 
 books:	$(BOOKS)
 
@@ -20,11 +20,6 @@ ps:	$(PS)
 pdf:	$(PDF)
 
 html:	$(HTML)
-
-db2ps db2pdf db2html:
-	@(which $@ > /dev/null 2>&1) || \
-	 (echo "*** You need to install DocBook stylesheets ***"; \
-	  exit 1)
 
 %.eps: %.fig
 	-fig2dev -Leps $< $@
@@ -88,8 +83,7 @@ kernel-api.sgml: kernel-api.tmpl $(APISOURCES)
 parportbook: $(JPG-parportbook)
 parportbook.ps: $(EPS-parportbook)
 parportbook.sgml: parportbook.tmpl $(TOPDIR)/drivers/parport/init.c
-	$(TOPDIR)/scripts/docgen $(TOPDIR)/drivers/parport/init.c \
-		<parportbook.tmpl >parportbook.sgml
+	$(TOPDIR)/scripts/docgen $(TOPDIR)/drivers/parport/init.c <$< >$@
 
 DVI	:=	$(patsubst %.sgml, %.dvi, $(BOOKS))
 AUX	:=	$(patsubst %.sgml, %.aux, $(BOOKS))
@@ -106,17 +100,35 @@ clean:
 mrproper: clean
 	-$(RM) $(PS) $(PDF)
 	-$(RM) -r $(HTML)
+	-$(RM) .depend
+	-$(RM) $(TOPDIR)/scripts/mkdep-docbook
 
-%.ps : %.sgml db2ps
+%.ps : %.sgml
+	@(which db2ps > /dev/null 2>&1) || \
+	 (echo "*** You need to install DocBook stylesheets ***"; \
+	  exit 1)
 	db2ps $<
 
-%.pdf : %.sgml db2pdf
+%.pdf : %.sgml
+	@(which db2pdf > /dev/null 2>&1) || \
+	 (echo "*** You need to install DocBook stylesheets ***"; \
+	  exit 1)
 	db2pdf $<
 
-%:	%.sgml db2html
+%:	%.sgml
+	@(which db2html > /dev/null 2>&1) || \
+	 (echo "*** You need to install DocBook stylesheets ***"; \
+	  exit 1)
 	-$(RM) -r $@
 	db2html $<
 	if [ ! -z "$(JPG-$@)" ]; then cp $(JPG-$@) $@; fi
+
+#
+# we could have our own dependency generator
+#
+#
+# .depend: $(TOPDIR)/scripts/mkdep-docbook
+#	$(TOPDIR)/scripts/mkdep-docbook $(wildcard *.tmpl) > .depend
 
 include $(TOPDIR)/Rules.make
 

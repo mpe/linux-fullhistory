@@ -1,11 +1,15 @@
 /*
- * $Id: t1pci.c,v 1.9 2000/05/19 15:43:22 calle Exp $
+ * $Id: t1pci.c,v 1.10 2000/07/20 10:21:21 calle Exp $
  * 
  * Module for AVM T1 PCI-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: t1pci.c,v $
+ * Revision 1.10  2000/07/20 10:21:21  calle
+ * Bugfix: driver will not be unregistered, if not cards were detected.
+ *         this result in an oops in kcapi.c
+ *
  * Revision 1.9  2000/05/19 15:43:22  calle
  * added calls to pci_device_start().
  *
@@ -62,7 +66,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.9 $";
+static char *revision = "$Revision: 1.10 $";
 
 #undef CONFIG_T1PCI_DEBUG
 #undef CONFIG_T1PCI_POLLDEBUG
@@ -322,9 +326,7 @@ int t1pci_init(void)
 		        printk(KERN_ERR
 			"%s: failed to enable AVM-T1-PCI at i/o %#x, irq %d, mem %#x err=%d\n",
 			driver->name, param.port, param.irq, param.membase, retval);
-#ifdef MODULE
-			cleanup_module();
-#endif
+    			detach_capi_driver(&t1pci_driver);
 			MOD_DEC_USE_COUNT;
 			return -EIO;
 		}
@@ -337,9 +339,7 @@ int t1pci_init(void)
 		        printk(KERN_ERR
 			"%s: no AVM-T1-PCI at i/o %#x, irq %d detected, mem %#x\n",
 			driver->name, param.port, param.irq, param.membase);
-#ifdef MODULE
-			cleanup_module();
-#endif
+    			detach_capi_driver(&t1pci_driver);
 			MOD_DEC_USE_COUNT;
 			return retval;
 		}
@@ -352,6 +352,7 @@ int t1pci_init(void)
 		return 0;
 	}
 	printk(KERN_ERR "%s: NO T1-PCI card detected\n", driver->name);
+	detach_capi_driver(&t1pci_driver);
 	MOD_DEC_USE_COUNT;
 	return -ESRCH;
 #else

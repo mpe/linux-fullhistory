@@ -21,7 +21,7 @@
  *
  *
  *
- *  $Id: dabusb.c,v 1.45 2000/01/31 10:23:44 fliegl Exp $
+ *  $Id: dabusb.c,v 1.54 2000/07/24 21:39:39 deti Exp $
  *
  */
 
@@ -272,16 +272,22 @@ static int dabusb_bulk (pdabusb_t s, pbulk_transfer_t pb)
 	else
 		pipe = usb_sndbulkpipe (s->usbdev, 2);
 
-	ret=usb_bulk_msg(s->usbdev, pipe, pb->data, pb->size, &actual_length, 1000);
+	ret=usb_bulk_msg(s->usbdev, pipe, pb->data, pb->size, &actual_length, 100);
 	if(ret<0) {
 		err("dabusb: usb_bulk_msg failed(%d)",ret);
+
+		if (usb_set_interface (s->usbdev, _DABUSB_IF, 1) < 0) {
+			err("set_interface failed");
+			return -EINVAL;
+		}
+
 	}
 	
 	if( ret == -EPIPE ) {
 		warn("CLEAR_FEATURE request to remove STALL condition.");
 		if(usb_clear_halt(s->usbdev, usb_pipeendpoint(pipe)))
 			err("request failed");
-		}
+	}
 
 	pb->size = actual_length;
 	return ret;
@@ -667,8 +673,9 @@ static int dabusb_ioctl (struct inode *inode, struct file *file, unsigned int cm
 			break;
 		}
 
-		dabusb_bulk (s, pbulk);
-		ret = copy_to_user ((void *) arg, pbulk, sizeof (bulk_transfer_t));
+		ret=dabusb_bulk (s, pbulk);
+		if(ret==0)
+			ret = copy_to_user ((void *) arg, pbulk, sizeof (bulk_transfer_t));
 		kfree (pbulk);
 		break;
 
@@ -799,10 +806,6 @@ int __init dabusb_init (void)
 {
 	unsigned u;
 
-	/* register misc device */
-	if (usb_register(&dabusb_driver))
-		return -1;
-
 	/* initialize struct */
 	for (u = 0; u < NRDABUSB; u++) {
 		pdabusb_t s = &dabusb[u];
@@ -816,6 +819,10 @@ int __init dabusb_init (void)
 		INIT_LIST_HEAD (&s->free_buff_list);
 		INIT_LIST_HEAD (&s->rec_buff_list);
 	}
+
+	/* register misc device */
+	if (usb_register(&dabusb_driver))
+		return -1;
 
 	dbg("dabusb_init: driver registered");
 	return 0;

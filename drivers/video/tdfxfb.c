@@ -1183,58 +1183,54 @@ static void tdfx_cfbX_cursor(struct display *p, int mode, int x, int y)
 }
 #ifdef FBCON_HAS_CFB8
 static struct display_switch fbcon_banshee8 = {
-   fbcon_cfb8_setup, 
-   tdfx_cfbX_bmove, 
-   tdfx_cfb8_clear, 
-   tdfx_cfb8_putc,
-   tdfx_cfb8_putcs, 
-   tdfx_cfbX_revc,   
-   tdfx_cfbX_cursor, 
-   NULL, 
-   tdfx_cfbX_clear_margins,
-   FONTWIDTH(8)
+   setup:		fbcon_cfb8_setup, 
+   bmove:		tdfx_cfbX_bmove, 
+   clear:		tdfx_cfb8_clear, 
+   putc:		tdfx_cfb8_putc,
+   putcs:		tdfx_cfb8_putcs, 
+   revc:		tdfx_cfbX_revc,   
+   cursor:		tdfx_cfbX_cursor, 
+   clear_margins:	tdfx_cfbX_clear_margins,
+   fontwidthmask:	FONTWIDTH(8)
 };
 #endif
 #ifdef FBCON_HAS_CFB16
 static struct display_switch fbcon_banshee16 = {
-   fbcon_cfb16_setup, 
-   tdfx_cfbX_bmove, 
-   tdfx_cfb16_clear, 
-   tdfx_cfb16_putc,
-   tdfx_cfb16_putcs, 
-   tdfx_cfbX_revc, 
-   tdfx_cfbX_cursor, 
-   NULL, 
-   tdfx_cfbX_clear_margins,
-   FONTWIDTH(8)
+   setup:		fbcon_cfb16_setup, 
+   bmove:		tdfx_cfbX_bmove, 
+   clear:		tdfx_cfb16_clear, 
+   putc:		tdfx_cfb16_putc,
+   putcs:		tdfx_cfb16_putcs, 
+   revc:		tdfx_cfbX_revc, 
+   cursor:		tdfx_cfbX_cursor, 
+   clear_margins:	tdfx_cfbX_clear_margins,
+   fontwidthmask:	FONTWIDTH(8)
 };
 #endif
 #ifdef FBCON_HAS_CFB24
 static struct display_switch fbcon_banshee24 = {
-   fbcon_cfb24_setup, 
-   tdfx_cfbX_bmove, 
-   tdfx_cfb24_clear, 
-   tdfx_cfb24_putc,
-   tdfx_cfb24_putcs, 
-   tdfx_cfbX_revc, 
-   tdfx_cfbX_cursor, 
-   NULL, 
-   tdfx_cfbX_clear_margins,
-   FONTWIDTH(8)
+   setup:		fbcon_cfb24_setup, 
+   bmove:		tdfx_cfbX_bmove, 
+   clear:		tdfx_cfb24_clear, 
+   putc:		tdfx_cfb24_putc,
+   putcs:		tdfx_cfb24_putcs, 
+   revc:		tdfx_cfbX_revc, 
+   cursor:		tdfx_cfbX_cursor, 
+   clear_margins:	tdfx_cfbX_clear_margins,
+   fontwidthmask:	FONTWIDTH(8)
 };
 #endif
 #ifdef FBCON_HAS_CFB32
 static struct display_switch fbcon_banshee32 = {
-   fbcon_cfb32_setup, 
-   tdfx_cfbX_bmove, 
-   tdfx_cfb32_clear, 
-   tdfx_cfb32_putc,
-   tdfx_cfb32_putcs, 
-   tdfx_cfbX_revc, 
-   tdfx_cfbX_cursor, 
-   NULL, 
-   tdfx_cfbX_clear_margins,
-   FONTWIDTH(8)
+   setup:		fbcon_cfb32_setup, 
+   bmove:		tdfx_cfbX_bmove, 
+   clear:		tdfx_cfb32_clear, 
+   putc:		tdfx_cfb32_putc,
+   putcs:		tdfx_cfb32_putcs, 
+   revc:		tdfx_cfbX_revc, 
+   cursor:		tdfx_cfbX_cursor, 
+   clear_margins:	tdfx_cfbX_clear_margins,
+   fontwidthmask:	FONTWIDTH(8)
 };
 #endif
 

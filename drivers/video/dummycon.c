@@ -45,6 +45,8 @@ static int dummycon_dummy(void)
     return 0;
 }
 
+#define DUMMY	(void *)dummycon_dummy
+
 /*
  *  The console `switch' structure for the dummy console
  *
@@ -52,19 +54,18 @@ static int dummycon_dummy(void)
  */
 
 struct consw dummy_con = {
-    dummycon_startup, dummycon_init,
-    (void *)dummycon_dummy,	/* con_deinit */
-    (void *)dummycon_dummy,	/* con_clear */
-    (void *)dummycon_dummy,	/* con_putc */
-    (void *)dummycon_dummy,	/* con_putcs */
-    (void *)dummycon_dummy,	/* con_cursor */
-    (void *)dummycon_dummy,	/* con_scroll */
-    (void *)dummycon_dummy,	/* con_bmove */
-    (void *)dummycon_dummy,	/* con_switch */
-    (void *)dummycon_dummy,	/* con_blank */
-    (void *)dummycon_dummy,	/* con_font_op */
-    (void *)dummycon_dummy,	/* con_set_palette */
-    (void *)dummycon_dummy,	/* con_scrolldelta */
-    NULL,			/* con_set_origin */
-    NULL,			/* con_save_screen */
+    con_startup:	dummycon_startup,
+    con_init:		dummycon_init,
+    con_deinit:		DUMMY,
+    con_clear:		DUMMY,
+    con_putc:		DUMMY,
+    con_putcs:		DUMMY,
+    con_cursor:		DUMMY,
+    con_scroll:		DUMMY,
+    con_bmove:		DUMMY,
+    con_switch:		DUMMY,
+    con_blank:		DUMMY,
+    con_font_op:	DUMMY,
+    con_set_palette:	DUMMY,
+    con_scrolldelta:	DUMMY,
 };

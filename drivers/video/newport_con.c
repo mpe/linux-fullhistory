@@ -575,24 +575,22 @@ static int newport_dummy(struct vc_data *c)
 #define DUMMY (void *) newport_dummy
 
 struct consw newport_con = {
-    newport_startup,
-    newport_init,
-    DUMMY,                          /* con_deinit */
-    newport_clear,
-    newport_putc,
-    newport_putcs,
-    newport_cursor,
-    newport_scroll,
-    newport_bmove,
-    newport_switch,
-    newport_blank,
-    newport_font_op,
-    newport_set_palette,
-    newport_scrolldelta,
-    DUMMY, /* newport_set_origin, */
-    DUMMY, /* newport_save_screen */
-    NULL, /* newport_build_attr */
-    NULL  /* newport_invert_region */
+    con_startup:	newport_startup,
+    con_init:		newport_init,
+    con_deinit:		DUMMY,
+    con_clear:		newport_clear,
+    con_putc:		newport_putc,
+    con_putcs:		newport_putcs,
+    con_cursor:		newport_cursor,
+    con_scroll:		newport_scroll,
+    con_bmove:		newport_bmove,
+    con_switch:		newport_switch,
+    con_blank:		newport_blank,
+    con_font_op:	newport_font_op,
+    con_set_palette:	newport_set_palette,
+    con_scrolldelta:	newport_scrolldelta,
+    con_set_origin:	DUMMY,
+    con_save_screen:	DUMMY,
 };
 
 #ifdef MODULE

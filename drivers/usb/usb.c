@@ -607,6 +607,10 @@ static void call_policy (char *verb, struct usb_device *dev)
 		dbg ("In_interrupt");
 		return;
 	}
+	if (dev->devnum < 0) {
+		dbg ("device already deleted ??");
+		return;
+	}
 	if (!(envp = (char **) kmalloc (20 * sizeof (char *), GFP_KERNEL))) {
 		dbg ("enomem");
 		return;
@@ -1948,12 +1952,17 @@ static int usb_open(struct inode * inode, struct file * file)
 	int minor = MINOR(inode->i_rdev);
 	struct usb_driver *c = usb_minors[minor/16];
 	int err = -ENODEV;
-	struct file_operations *old_fops;
+	struct file_operations *old_fops, *new_fops = NULL;
 
-	if (!c || !c->fops)
+	/*
+	 * No load-on-demand? Randy, could you ACK that it's really not
+	 * supposed to be done?					-- AV
+	 */
+	if (!c || !(new_fops = fops_get(c->fops)))
 		return err;
 	old_fops = file->f_op;
-	file->f_op = fops_get(c->fops);
+	file->f_op = new_fops;
+	/* Curiouser and curiouser... NULL ->open() as "no device" ? */
 	if (file->f_op->open)
 		err = file->f_op->open(inode,file);
 	if (err) {

@@ -6302,6 +6302,66 @@ CONFIG_SCSI_IZIP_SLOW_CTR
 
   Generally, saying N is fine.
 
+Parallel port SCSI device support
+CONFIG_PPSCSI
+  There are many external CD-ROM and disk devices that connect through
+  your computer's parallel port. Lots of them are actually SCSI
+  devices using a parallel port SCSI adapter. This option enables the
+  ppSCSI subsystem which contains drivers for many of these external
+  drives. You may also want to look at CONFIG_PARIDE (Parallel port
+  IDE device support).
+
+  If you built ppSCSI support into your kernel, you may still build
+  the individual protocol modules and high-level drivers as loadable
+  modules. If you build this support as a module, it will be called
+  ppscsi.o.
+
+  To use the ppSCSI support, you must say Y or M here and also to at
+  least one protocol driver (e.g. "Shuttle EPST adapter", "Iomega VPI0
+  adapter", "Shining ScarSCI adapter" etc.).
+
+Adaptec APA-348 adapter
+CONFIG_PPSCSI_T348
+  This option enables support for the APA-348 adapter from Adaptec
+  (also known as Trantor T348).  If you build this as a module it will
+  be called t348.o.
+
+Adaptec APA-358 adapter
+CONFIG_PPSCSI_T358
+  This option enables support for the APA-358 adapter from Adaptec
+  (also known as Trantor T358).  If you build this as a module it will
+  be called t358.o.
+
+Iomega VPI0 adapter
+CONFIG_PPSCSI_VPI0
+  This option enables support for the Iomega VPI0 adapter found in the
+  original ZIP-100 drives and the Jaz Traveller.  If you build this as
+  a module it will be called vpi0.o.
+
+OnSpec 90c26 adapter
+CONFIG_PPSCSI_ONSCSI
+  This option enables support for the OnSpec 90c26 in its SCSI adapter
+  mode.  If you build this as a module it will be called onscsi.o.
+
+Shining SparSCI adapter
+CONFIG_PPSCSI_SPARCSI
+  This option enables support for the WBS-11A parallel port SCSI
+  adapter.  This adapter has been marketed by LinkSys as the
+  "ParaSCSI+" and by Shining Technologies as the "SparCSI".  If you
+  build this as a module it will be called sparcsi.o.
+
+Shuttle EPSA-2 adapter
+CONFIG_PPSCSI_EPSA2
+  This option enables support for the Shuttle Technologies EPSA2
+  parallel port SCSI adapter.  EPAS2 is a predecessor to the EPST.  If
+  you build this as a module it will be called epsa2.o.
+
+Shuttle EPST adapter
+CONFIG_PPSCSI_EPST
+  This option enables support for the Shuttle Technologies EPST
+  parallel port SCSI adapter.  If you build this as a module is will
+  be called epst.o.
+
 SCSI Debug host simulator. (EXPERIMENTAL)
 CONFIG_SCSI_DEBUG
   This is a host adapter simulator that can be programmed to simulate
@@ -9999,7 +10059,7 @@ CONFIG_USB_SERIAL
   
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
-  The module will be called usb-serial.o. If you want to compile it 
+  The module will be called usbserial.o. If you want to compile it 
   as a module, say M here and read Documentation/modules.txt.
 
 USB Generic Serial Driver
@@ -10015,11 +10075,21 @@ CONFIG_USB_SERIAL_WHITEHEAT
   Say Y here if you want to use a ConnectTech WhiteHEAT 4 port
   USB to serial converter device.
 
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called whiteheat.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
 USB Handspring Visor Driver
 CONFIG_USB_SERIAL_VISOR
   Say Y here if you want to connect to your HandSpring Visor through
   its USB docking station. See http://usbvisor.sourceforge.net for
   more information on using this driver.
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called visor.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
 
 USB FTDI Single Port Serial Driver
 CONFIG_USB_SERIAL_FTDI_SIO
@@ -10029,11 +10099,21 @@ CONFIG_USB_SERIAL_FTDI_SIO
   See http://reality.sgi.com/bryder_wellington/ftdi_sio for more
   information on this driver and the device.
 
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called ftdi_sio.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
 USB Keyspan PDA Single Port Serial Driver
 CONFIG_USB_SERIAL_KEYSPAN_PDA
   Say Y here if you want to use a Keyspan PDA single port USB to
   serial converter device.  This driver makes use of firmware
   developed from scratch by Brian Warner.
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called keyspan_pda.o. If you want to compile it 
+  as a module, say M here and read Documentation/modules.txt.
 
 USB Keyspan USA-xxx Serial Driver
 CONFIG_USB_SERIAL_KEYSPAN
@@ -10045,6 +10125,11 @@ CONFIG_USB_SERIAL_KEYSPAN
   See http://www.linuxcare.com.au/hugh/keyspan.html for 
   more information.
  
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called keyspan.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
 USB Keyspan USA-28 Firmware
 CONFIG_USB_SERIAL_KEYSPAN_USA28
   Say Y here to include firmware for the USA-28 converter.
@@ -10069,11 +10154,26 @@ USB ZyXEL omni.net LCD Plus Driver
 CONFIG_USB_SERIAL_OMNINET
   Say Y here if you want to use a ZyXEL omni.net LCD ISDN TA.
 
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called omninet.o. If you want to compile it as a 
+  module, say M here and read Documentation/modules.txt.
+
 USB Digi International AccelePort USB Serial Driver
 CONFIG_USB_SERIAL_DIGI_ACCELEPORT
   Say Y here if you want to use a Digi AccelePort USB 4 device,
   a 4 port USB serial converter.  The Digi Acceleport USB 2 and
   8 are not yet supported by this driver.
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called digi_acceleport.o. If you want to compile 
+  it as a module, say M here and read Documentation/modules.txt.
+
+USB Serial Converter verbose debug
+CONFIG_USB_SERIAL_DEBUG
+  Say Y here if you want verbose debug messages from the USB Serial
+  Converter. 
 
 USB Printer support
 CONFIG_USB_PRINTER
@@ -10084,11 +10184,6 @@ CONFIG_USB_PRINTER
   inserted in and removed from the running kernel whenever you want).
   The module will be called printer.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
-
-USB Serial Converter verbose debug
-CONFIG_USB_SERIAL_DEBUG
-  Say Y here if you want verbose debug messages from the USB Serial
-  Converter. 
 
 USB IBM (Xirlink) C-It Camera support
 CONFIG_USB_IBMCAM
@@ -10309,6 +10404,18 @@ CONFIG_USB_MICROTEK
   http://fachschaft.cup.uni-muenchen.de/~neukum/scanner.html
   This driver can be compiled as a module.
 
+USB Bluetooth support
+CONFIG_USB_BLUETOOTH
+  Say Y here if you want to connect a USB Bluetooth device to your
+  computer's USB port. You will need the Bluetooth stack (available
+  at http://developer.axis.com/software/index.shtml) to fully use
+  the device.
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called bluetooth.o. If you want to compile it as 
+  a module, say M here and read Documentation/modules.txt.
+  
 Minix fs support
 CONFIG_MINIX_FS
   Minix is a simple operating system used in many classes about OS's.
@@ -12119,6 +12226,9 @@ CONFIG_I2C_PHILIPSPAR
   This driver is also available as a module. If you want to compile
   it as a module, say M here and read Documentation/modules.txt. The
   module will be called i2c-philips-par.o.
+
+  Note that if you want support for different parallel port devices,
+  life will be much easier if you compile them all as modules.
 
 ELV adapter
 CONFIG_I2C_ELV

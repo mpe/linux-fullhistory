@@ -106,7 +106,7 @@ static union {
 #define cpu_curr(cpu) aligned_data[(cpu)].schedule_data.curr
 #define last_schedule(cpu) aligned_data[(cpu)].schedule_data.last_schedule
 
-struct kernel_stat kstat = { 0 };
+struct kernel_stat kstat;
 
 #ifdef CONFIG_SMP
 

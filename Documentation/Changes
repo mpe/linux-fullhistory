@@ -231,25 +231,25 @@ o  ftp://metalab.unc.edu/pub/gnu/gcc-2.7.2.3.tar.gz
 
 egcs 1.12
 ---------
-o  ftp://ftp.varesearch.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-glibc.x86.tar.bz2
-     <ftp://ftp.varesearch.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-glibc.x86.tar.bz2>
-o  ftp://ftp.varesearch.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-libc5.x86.tar.bz2
-     <ftp://ftp.varesearch.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-libc5.x86.tar.bz2>
-o  ftp://ftp.varesearch.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-alpha.tar.bz2
-     <ftp://ftp.varesearch.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-alpha.tar.bz2>
+o  ftp://ftp.valinux.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-glibc.x86.tar.bz2
+     <ftp://ftp.valinux.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-glibc.x86.tar.bz2>
+o  ftp://ftp.valinux.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-libc5.x86.tar.bz2
+     <ftp://ftp.valinux.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-libc5.x86.tar.bz2>
+o  ftp://ftp.valinux.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-alpha.tar.bz2
+     <ftp://ftp.valinux.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-alpha.tar.bz2>
 
 Binutils
 ********
 
 2.9.1 series
 ------------
-o  ftp://ftp.varesearch.com/pub/support/hjl/binutils/2.9.1/binutils-2.9.1.0.25.tar.gz
-     <ftp://ftp.varesearch.com/pub/support/hjl/binutils/2.9.1/binutils-2.9.1.0.25.tar.gz>
+o  ftp://ftp.valinux.com/pub/support/hjl/binutils/2.9.1/binutils-2.9.1.0.25.tar.gz
+     <ftp://ftp.valinux.com/pub/support/hjl/binutils/2.9.1/binutils-2.9.1.0.25.tar.gz>
 
 2.9.5 series
 ------------
-o  ftp://ftp.varesearch.com/pub/support/hjl/binutils/binutils-2.9.5.0.46.tar.gz
-     <ftp://ftp.varesearch.com/pub/support/hjl/binutils/binutils-2.9.5.0.46.tar.bz2>
+o  ftp://ftp.valinux.com/pub/support/hjl/binutils/binutils-2.9.5.0.46.tar.gz
+     <ftp://ftp.valinux.com/pub/support/hjl/binutils/binutils-2.9.5.0.46.tar.bz2>
 
 System utilities
 ****************

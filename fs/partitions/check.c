@@ -34,7 +34,6 @@
 #include "ultrix.h"
 
 extern void device_init(void);
-extern void md_run_setup(void);
 extern int *blk_size[];
 extern void rd_load(void);
 extern void initrd_load(void);

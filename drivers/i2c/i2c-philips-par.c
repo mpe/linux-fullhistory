@@ -21,30 +21,34 @@
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi> and even
    Frodo Looijaard <frodol@dds.nl> */
 
-/* $Id: i2c-philips-par.c,v 1.16 2000/01/18 23:54:07 frodo Exp $ */
+/* $Id: i2c-philips-par.c,v 1.18 2000/07/06 19:21:49 frodo Exp $ */
 
 #include <linux/kernel.h>
 #include <linux/ioport.h>
 #include <linux/module.h>
 #include <linux/init.h>
-#include <asm/io.h>
 #include <linux/stddef.h>
+#include <linux/parport.h>
 
 #include <linux/i2c.h>
 #include <linux/i2c-algo-bit.h>
 
-#define DEFAULT_BASE 0x378
-static int base=0;
+#ifndef __exit
+#define __exit __init
+#endif
 
-/* Note: all we need to know is the base address of the parallel port, so
- * instead of having a dedicated struct to store this value, we store this
- * int in the pointer field (=bit_lp_ops.data) itself.
- */
+static int type;
 
-/* Note2: as the hw that implements the i2c bus on the parallel port is 
- * incompatible with other epp stuff etc., we access the port exclusively
- * and don't cooperate with parport functions.
- */
+struct i2c_par
+{
+	struct pardevice *pdev;
+	struct i2c_adapter adapter;
+	struct i2c_algo_bit_data bit_lp_data;
+	struct i2c_par *next;
+};
+
+static struct i2c_par *adapter_list;
+
 
 /* ----- global defines -----------------------------------------------	*/
 #define DEB(x)		/* should be reasonable open, close &c. 	*/
@@ -64,12 +68,6 @@ static int base=0;
 #define I2C_DMASK	0x7f
 #define I2C_CMASK	0xf7
 
-/* --- Convenience defines for the parallel port:			*/
-#define BASE	(unsigned int)(data)
-#define DATA	BASE			/* Centronics data port		*/
-#define STAT	(BASE+1)		/* Centronics status port	*/
-#define CTRL	(BASE+2)		/* Centronics control port	*/
-
 /* ----- local functions ----------------------------------------------	*/
 
 static void bit_lp_setscl(void *data, int state)
@@ -77,48 +75,59 @@ static void bit_lp_setscl(void *data, int state)
 	/*be cautious about state of the control register - 
 		touch only the one bit needed*/
 	if (state) {
-		outb(inb(CTRL)|I2C_SCL,   CTRL);
+		parport_write_control((struct parport *) data,
+		      parport_read_control((struct parport *) data)|I2C_SCL);
 	} else {
-		outb(inb(CTRL)&I2C_CMASK, CTRL);
+		parport_write_control((struct parport *) data,
+		      parport_read_control((struct parport *) data)&I2C_CMASK);
 	}
 }
 
 static void bit_lp_setsda(void *data, int state)
 {
 	if (state) {
-		outb(I2C_DMASK , DATA);
+		parport_write_data((struct parport *) data, I2C_DMASK);
 	} else {
-		outb(I2C_SDA , DATA);
+		parport_write_data((struct parport *) data, I2C_SDA);
 	}
 }
 
 static int bit_lp_getscl(void *data)
 {
-	return ( 0 != ( (inb(STAT)) & I2C_SCLIN ) );
+	return parport_read_status((struct parport *) data) & I2C_SCLIN;
 }
 
 static int bit_lp_getsda(void *data)
 {
-	return ( 0 != ( (inb(STAT)) & I2C_SDAIN ) );
+	return parport_read_status((struct parport *) data) & I2C_SDAIN;
 }
 
-static int bit_lp_init(void)
+static void bit_lp_setscl2(void *data, int state)
 {
-	if (check_region(base,(base == 0x3bc)? 3 : 8) < 0 ) {
-		return -ENODEV;
+	if (state) {
+		parport_write_data((struct parport *) data,
+		      parport_read_data((struct parport *) data)|0x1);
 	} else {
-		request_region(base,(base == 0x3bc)? 3 : 8,
-			"i2c (parallel port adapter)");
-		/* reset hardware to sane state */
-		bit_lp_setsda((void*)base,1);
-		bit_lp_setscl((void*)base,1);
+		parport_write_data((struct parport *) data,
+		      parport_read_data((struct parport *) data)&0xfe);
 	}
-	return 0;
 }
 
-static void bit_lp_exit(void)
+static void bit_lp_setsda2(void *data, int state)
 {
-	release_region( base , (base == 0x3bc)? 3 : 8 );
+	if (state) {
+		parport_write_data((struct parport *) data,
+		      parport_read_data((struct parport *) data)|0x2);
+	} else {
+		parport_write_data((struct parport *) data,
+		      parport_read_data((struct parport *) data)&0xfd);
+	}
+}
+
+static int bit_lp_getsda2(void *data)
+{
+	return (parport_read_status((struct parport *) data) & 
+			             PARPORT_STATUS_BUSY) ? 0 : 1;
 }
 
 static int bit_lp_reg(struct i2c_client *client)
@@ -155,64 +164,144 @@ static struct i2c_algo_bit_data bit_lp_data = {
 	80, 80, 100,		/*	waits, timeout */
 }; 
 
+static struct i2c_algo_bit_data bit_lp_data2 = {
+	NULL,
+	bit_lp_setsda2,
+	bit_lp_setscl2,
+	bit_lp_getsda2,
+	NULL,
+	80, 80, 100,		/*	waits, timeout */
+}; 
+
 static struct i2c_adapter bit_lp_ops = {
 	"Philips Parallel port adapter",
 	I2C_HW_B_LP,
 	NULL,
-	&bit_lp_data,
+	NULL,
 	bit_lp_inc_use,
 	bit_lp_dec_use,
 	bit_lp_reg,
+
 	bit_lp_unreg,
 };
 
+static void i2c_parport_attach (struct parport *port)
+{
+	struct i2c_par *adapter = kmalloc(sizeof(struct i2c_par),
+					  GFP_KERNEL);
+	if (!adapter) {
+		printk("i2c-philips-par: Unable to malloc.\n");
+		return;
+	}
+
+	printk("i2c-philips-par.o: attaching to %s\n", port->name);
+
+	adapter->pdev = parport_register_device(port, "i2c-philips-par",
+						NULL, NULL, NULL, 
+						PARPORT_FLAG_EXCL,
+						NULL);
+	if (!adapter->pdev) {
+		printk("i2c-philips-par: Unable to register with parport.\n");
+		return;
+	}
+
+	adapter->adapter = bit_lp_ops;
+	adapter->adapter.algo_data = &adapter->bit_lp_data;
+	adapter->bit_lp_data = type ? bit_lp_data2 : bit_lp_data;
+	adapter->bit_lp_data.data = port;
+
+	/* reset hardware to sane state */
+	parport_claim_or_block(adapter->pdev);
+	bit_lp_setsda(port, 1);
+	bit_lp_setscl(port, 1);
+	parport_release(adapter->pdev);
+
+	if (i2c_bit_add_bus(&adapter->adapter) < 0)
+	{
+		printk("i2c-philips-par: Unable to register with I2C.\n");
+		parport_unregister_device(adapter->pdev);
+		kfree(adapter);
+		return;		/* No good */
+	}
+
+	adapter->next = adapter_list;
+	adapter_list = adapter;
+}
+
+static void i2c_parport_detach (struct parport *port)
+{
+	struct i2c_par *adapter, *prev = NULL;
+
+	for (adapter = adapter_list; adapter; adapter = adapter->next)
+	{
+		if (adapter->pdev->port == port)
+		{
+			parport_unregister_device(adapter->pdev);
+			i2c_bit_del_bus(&adapter->adapter);
+			if (prev)
+				prev->next = adapter->next;
+			else
+				adapter_list = adapter->next;
+			kfree(adapter);
+			return;
+		}
+		prev = adapter;
+	}
+}
+
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,4)
+static struct parport_driver i2c_driver = {
+	"i2c-philips-par",
+	i2c_parport_attach,
+	i2c_parport_detach,
+	NULL
+};
+#endif
 
 int __init i2c_bitlp_init(void)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,4)
+	struct parport *port;
+#endif
 	printk("i2c-philips-par.o: i2c Philips parallel port adapter module\n");
-	if (base==0) {
-		/* probe some values */
-		base=DEFAULT_BASE;
-		bit_lp_data.data=(void*)DEFAULT_BASE;
-		if (bit_lp_init()==0) {
-			if (i2c_bit_add_bus(&bit_lp_ops) < 0)
-				return -ENODEV;
-		} else {
-			return -ENODEV;
-		}
-	} else {
-		bit_lp_data.data=(void*)base;
-		if (bit_lp_init()==0) {
-			if (i2c_bit_add_bus(&bit_lp_ops) < 0)
-				return -ENODEV;
-		} else {
-			return -ENODEV;
-		}
-	}
-	printk("i2c-philips-par.o: found device at %#x.\n",base);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,4)
+	parport_register_driver(&i2c_driver);
+#else
+	for (port = parport_enumerate(); port; port=port->next)
+		i2c_parport_attach(port);
+#endif
+	
 	return 0;
+}
+
+void __exit i2c_bitlp_exit(void)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,4)
+	parport_unregister_driver(&i2c_driver);
+#else
+	struct parport *port;
+	for (port = parport_enumerate(); port; port=port->next)
+		i2c_parport_detach(port);
+#endif
 }
 
 EXPORT_NO_SYMBOLS;
 
-#ifdef MODULE
 MODULE_AUTHOR("Simon G. Vogl <simon@tk.uni-linz.ac.at>");
 MODULE_DESCRIPTION("I2C-Bus adapter routines for Philips parallel port adapter");
 
-MODULE_PARM(base, "i");
+MODULE_PARM(type, "i");
 
-int init_module(void) 
+#ifdef MODULE
+int init_module(void)
 {
 	return i2c_bitlp_init();
 }
 
-void cleanup_module(void) 
+void cleanup_module(void)
 {
-	i2c_bit_del_bus(&bit_lp_ops);
-	bit_lp_exit();
+	i2c_bitlp_exit();
 }
-
 #endif
-
-
-

@@ -453,10 +453,11 @@ static int vfat_valid_shortname(struct nls_table *nls, wchar_t *name, int len)
 			if (charbuf[chi] != vfat_tolower(nls, c)) return -EINVAL;
 			if (strchr(replace_chars,c)) return -EINVAL;
 			if (c < ' '|| c==':') return -EINVAL;
-			if (c == '.') break;
+			if (c == '.') goto dot;
 			space = c == ' ';
 		}
 	}
+dot:;
 	if (space) return -EINVAL;
 	if (len && c != '.') {
 		len--;
@@ -464,6 +465,7 @@ static int vfat_valid_shortname(struct nls_table *nls, wchar_t *name, int len)
 			if (charbuf[0] != '.') return -EINVAL;
 		} else
 			return -EINVAL;
+		c = '.';
 	}
 	if (c == '.') {
 		if (len >= 4) return -EINVAL;
@@ -522,7 +524,7 @@ static int vfat_format_name(struct nls_table *nls, wchar_t *name,
 		if (chl == 0)
 			return -EINVAL;
 		for (chi = 0; chi < chl; chi++){
-			if (charbuf[chi] == '.') break;
+			if (charbuf[chi] == '.') goto dot;
 			if (!charbuf[chi]) return -EINVAL;
 			if (walk-res == 8) return -EINVAL;
 			if (strchr(replace_chars,charbuf[chi])) return -EINVAL;
@@ -532,6 +534,7 @@ static int vfat_format_name(struct nls_table *nls, wchar_t *name,
 			walk++;
 		}
 	}
+dot:;
 	if (space) return -EINVAL;
 	if (len >= 0) {
 		while (walk-res < 8) *walk++ = ' ';

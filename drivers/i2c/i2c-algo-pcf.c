@@ -24,7 +24,7 @@
    Frodo Looijaard <frodol@dds.nl> ,and also from Martin Bailey
    <mbailey@littlefeet-inc.com> */
 
-/* $Id: i2c-algo-pcf.c,v 1.21 2000/03/16 13:07:34 frodo Exp $ */
+/* $Id: i2c-algo-pcf.c,v 1.24 2000/07/09 15:16:16 frodo Exp $ */
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -572,7 +572,9 @@ int i2c_pcf_add_bus(struct i2c_adapter *adap)
 
 int i2c_pcf_del_bus(struct i2c_adapter *adap)
 {
-	i2c_del_adapter(adap);
+	int res;
+	if ((res = i2c_del_adapter(adap)) < 0)
+		return res;
 	DEB2(printk("i2c-algo-pcf.o: adapter unregistered: %s\n",adap->name));
 
 #ifdef MODULE

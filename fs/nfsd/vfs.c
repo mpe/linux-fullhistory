@@ -196,7 +196,6 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 	int		ftype = 0;
 	int		imode;
 	int		err;
-	kernel_cap_t	saved_cap = 0;
 	int		size_change = 0;
 
 	if (iap->ia_valid & (ATTR_ATIME | ATTR_MTIME | ATTR_SIZE))
@@ -283,10 +282,6 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 
 
 	iap->ia_valid |= ATTR_CTIME;
-	if (current->fsuid != 0) {
-		saved_cap = current->cap_effective;
-		cap_clear(current->cap_effective);
-	}
 #ifdef CONFIG_QUOTA
 	/* DQUOT_TRANSFER needs both ia_uid and ia_gid defined */
 	if (iap->ia_valid & (ATTR_UID|ATTR_GID)) {
@@ -312,8 +307,6 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 		fh_unlock(fhp);
 		put_write_access(inode);
 	}
-	if (current->fsuid != 0)
-		current->cap_effective = saved_cap;
 	if (err)
 		goto out_nfserr;
 	if (EX_ISSYNC(fhp->fh_export))
@@ -640,9 +633,6 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	mm_segment_t		oldfs;
 	int			err = 0;
 	int			stable = *stablep;
-#ifdef CONFIG_QUOTA
-	uid_t			saved_euid;
-#endif
 
 	err = nfsd_open(rqstp, fhp, S_IFREG, MAY_WRITE, &file);
 	if (err)
@@ -680,15 +670,7 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 
 	/* Write the data. */
 	oldfs = get_fs(); set_fs(KERNEL_DS);
-#ifdef CONFIG_QUOTA
-	/* This is for disk quota. */
-	saved_euid = current->euid;
-	current->euid = current->fsuid;
 	err = file.f_op->write(&file, buf, cnt, &file.f_pos);
-	current->euid = saved_euid;
-#else
-	err = file.f_op->write(&file, buf, cnt, &file.f_pos);
-#endif
 	if (err >= 0)
 		nfsdstats.io_write += cnt;
 	set_fs(oldfs);
@@ -696,17 +678,10 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	/* clear setuid/setgid flag after write */
 	if (err >= 0 && (inode->i_mode & (S_ISUID | S_ISGID))) {
 		struct iattr	ia;
-		kernel_cap_t	saved_cap = 0;
 
 		ia.ia_valid = ATTR_MODE;
 		ia.ia_mode  = inode->i_mode & ~(S_ISUID | S_ISGID);
-		if (current->fsuid != 0) {
-			saved_cap = current->cap_effective;
-			cap_clear(current->cap_effective);
-		}
 		notify_change(dentry, &ia);
-		if (current->fsuid != 0)
-			current->cap_effective = saved_cap;
 	}
 
 	if (err >= 0 && stable) {
@@ -1463,7 +1438,6 @@ nfsd_permission(struct svc_export *exp, struct dentry *dentry, int acc)
 {
 	struct inode	*inode = dentry->d_inode;
 	int		err;
-	kernel_cap_t	saved_cap = 0;
 
 	if (acc == MAY_NOP)
 		return 0;
@@ -1522,19 +1496,12 @@ nfsd_permission(struct svc_export *exp, struct dentry *dentry, int acc)
 	    inode->i_uid == current->fsuid)
 		return 0;
 
-	if (current->fsuid != 0) {
-		saved_cap = current->cap_effective;
-		cap_clear(current->cap_effective);
-	}
 
 	err = permission(inode, acc & (MAY_READ|MAY_WRITE|MAY_EXEC));
 
 	/* Allow read access to binaries even when mode 111 */
 	if (err == -EACCES && S_ISREG(inode->i_mode) && acc == MAY_READ)
 		err = permission(inode, MAY_EXEC);
-
-	if (current->fsuid != 0)
-		current->cap_effective = saved_cap;
 
 	return err? nfserrno(err) : 0;
 }

@@ -246,16 +246,14 @@ cyber2000_accel_clear_margins(struct vc_data *conp, struct display *p,
 }
 
 static struct display_switch fbcon_cyber_accel = {
-	cyber2000_accel_setup,
-	cyber2000_accel_bmove,
-	cyber2000_accel_clear,
-	cyber2000_accel_putc,
-	cyber2000_accel_putcs,
-	cyber2000_accel_revc,
-	NULL,
-	NULL,
-	cyber2000_accel_clear_margins,
-	FONTWIDTH(8)|FONTWIDTH(16)
+	setup:		cyber2000_accel_setup,
+	bmove:		cyber2000_accel_bmove,
+	clear:		cyber2000_accel_clear,
+	putc:		cyber2000_accel_putc,
+	putcs:		cyber2000_accel_putcs,
+	revc:		cyber2000_accel_revc,
+	clear_margins:	cyber2000_accel_clear_margins,
+	fontwidthmask:	FONTWIDTH(8)|FONTWIDTH(16)
 };
 
 /*

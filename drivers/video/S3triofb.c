@@ -861,8 +861,13 @@ static void fbcon_trio8_revc(struct display *p, int xx, int yy)
 }
 
 static struct display_switch fbcon_trio8 = {
-   fbcon_cfb8_setup, fbcon_trio8_bmove, fbcon_trio8_clear, fbcon_trio8_putc,
-   fbcon_trio8_putcs, fbcon_trio8_revc, NULL, NULL, fbcon_cfb8_clear_margins,
-   FONTWIDTH(8)
+   setup:		fbcon_cfb8_setup,
+   bmove:		fbcon_trio8_bmove,
+   clear:		fbcon_trio8_clear,
+   putc:		fbcon_trio8_putc,
+   putcs:		fbcon_trio8_putcs,
+   revc:		fbcon_trio8_revc,
+   clear_margins:	fbcon_cfb8_clear_margins,
+   fontwidthmask:	FONTWIDTH(8)
 };
 #endif

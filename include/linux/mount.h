@@ -12,6 +12,8 @@
 #define _LINUX_MOUNT_H
 #ifdef __KERNEL__
 
+#define MNT_VISIBLE	1
+
 struct vfsmount
 {
 	struct dentry *mnt_mountpoint;	/* dentry of mountpoint */
@@ -24,6 +26,7 @@ struct vfsmount
 	struct list_head mnt_mounts;	/* list of children, anchored here */
 	struct list_head mnt_child;	/* and going through their mnt_child */
 	atomic_t mnt_count;
+	int mnt_flags;
 
   char *mnt_devname;			/* Name of device e.g. /dev/dsk/hda1 */
 	struct list_head mnt_list;

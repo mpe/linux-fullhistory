@@ -44,7 +44,7 @@ if [ "$CONFIG_BLK_DEV_LVM" != "n" ]; then
    bool '   LVM information in proc filesystem' CONFIG_LVM_PROC_FS Y
 fi
 
-bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD
+tristate 'Multiple devices driver support' CONFIG_BLK_DEV_MD
 dep_tristate '  Linear (append) mode' CONFIG_MD_LINEAR $CONFIG_BLK_DEV_MD
 dep_tristate '  RAID-0 (striping) mode' CONFIG_MD_RAID0 $CONFIG_BLK_DEV_MD
 dep_tristate '  RAID-1 (mirroring) mode' CONFIG_MD_RAID1 $CONFIG_BLK_DEV_MD

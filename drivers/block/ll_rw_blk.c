@@ -1052,4 +1052,5 @@ EXPORT_SYMBOL(blk_queue_headactive);
 EXPORT_SYMBOL(blk_queue_pluggable);
 EXPORT_SYMBOL(blk_queue_make_request);
 EXPORT_SYMBOL(generic_make_request);
+EXPORT_SYMBOL(generic_unplug_device);
 EXPORT_SYMBOL(blkdev_release_request);

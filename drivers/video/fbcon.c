@@ -2400,8 +2400,6 @@ struct consw fb_con = {
     con_set_palette: 	fbcon_set_palette,
     con_scrolldelta: 	fbcon_scrolldelta,
     con_set_origin: 	fbcon_set_origin,
-    con_save_screen: 	NULL,
-    con_build_attr:	NULL,
     con_invert_region:	fbcon_invert_region,
     con_screen_pos:	fbcon_screen_pos,
     con_getxy:		fbcon_getxy,
@@ -2414,14 +2412,15 @@ struct consw fb_con = {
 
 static void fbcon_dummy_op(void) {}
 
+#define DUMMY	(void *)fbcon_dummy_op
+
 struct display_switch fbcon_dummy = {
-    (void *)fbcon_dummy_op,	/* fbcon_dummy_setup */
-    (void *)fbcon_dummy_op,	/* fbcon_dummy_bmove */
-    (void *)fbcon_dummy_op,	/* fbcon_dummy_clear */
-    (void *)fbcon_dummy_op,	/* fbcon_dummy_putc */
-    (void *)fbcon_dummy_op,	/* fbcon_dummy_putcs */
-    (void *)fbcon_dummy_op,	/* fbcon_dummy_revc */
-    NULL,			/* fbcon_dummy_cursor */
+    setup:	DUMMY,
+    bmove:	DUMMY,
+    clear:	DUMMY,
+    putc:	DUMMY,
+    putcs:	DUMMY,
+    revc:	DUMMY,
 };
 
 

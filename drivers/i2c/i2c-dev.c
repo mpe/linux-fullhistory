@@ -25,7 +25,7 @@
 
 /* The I2C_RDWR ioctl code is written by Kolja Waschk <waschk@telos.de> */
 
-/* $Id: i2c-dev.c,v 1.30 2000/02/28 21:35:05 frodo Exp $ */
+/* $Id: i2c-dev.c,v 1.32 2000/07/25 23:52:17 frodo Exp $ */
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -415,6 +415,7 @@ int i2cdev_attach_adapter(struct i2c_adapter *adap)
 		i2cdev_adaps[i] = adap;
 		printk("i2c-dev.o: Registered '%s' as minor %d\n",adap->name,i);
 	} else {
+		/* This is actually a detach_adapter call! */
 		i2cdev_adaps[i] = NULL;
 #ifdef DEBUG
 		printk("i2c-dev.o: Adapter unregistered: %s\n",adap->name);

@@ -138,16 +138,8 @@ pcibios_update_resource(struct pci_dev *dev, struct resource *root,
 void
 pcibios_align_resource(void *data, struct resource *res, unsigned long size)
 {
-	struct pci_dev *dev = data;
-
 	if (res->flags & IORESOURCE_IO) {
 		unsigned long start = res->start;
-
-		if (size > 0x100) {
-			printk(KERN_ERR "PCI: I/O Region %s/%d too large"
-			       " (%ld bytes)\n", dev->slot_name,
-			       dev->resource - res, size);
-		}
 
 		if (start & 0x300) {
 			start = (start + 0x3ff) & ~0x3ff;

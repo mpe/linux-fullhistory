@@ -178,9 +178,14 @@ void fbcon_mfb_clear_margins(struct vc_data *conp, struct display *p,
      */
 
 struct display_switch fbcon_mfb = {
-    fbcon_mfb_setup, fbcon_mfb_bmove, fbcon_mfb_clear, fbcon_mfb_putc,
-    fbcon_mfb_putcs, fbcon_mfb_revc, NULL, NULL, fbcon_mfb_clear_margins,
-    FONTWIDTH(8)
+    setup:		fbcon_mfb_setup,
+    bmove:		fbcon_mfb_bmove,
+    clear:		fbcon_mfb_clear,
+    putc:		fbcon_mfb_putc,
+    putcs:		fbcon_mfb_putcs,
+    revc:		fbcon_mfb_revc,
+    clear_margins:	fbcon_mfb_clear_margins,
+    fontwidthmask:	FONTWIDTH(8)
 };
 
 

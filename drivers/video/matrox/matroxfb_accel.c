@@ -1042,56 +1042,79 @@ static int matrox_text_setfont(struct display* p, int width, int height) {
 
 #ifdef FBCON_HAS_VGATEXT
 static struct display_switch matroxfb_text = {
-	matrox_text_setup,    matrox_text_bmove,  matrox_text_clear,
-	matrox_text_putc,     matrox_text_putcs,  matrox_text_revc,
-	matrox_text_cursor,   matrox_text_setfont, NULL,
-	FONTWIDTH(8)|FONTWIDTH(9)
+	setup:		matrox_text_setup,
+	bmove:		matrox_text_bmove,
+	clear:		matrox_text_clear,
+	putc:		matrox_text_putc,
+	putcs:		matrox_text_putcs,
+	revc:		matrox_text_revc,
+	cursor:		matrox_text_cursor,
+	set_font:	matrox_text_setfont,
+	fontwidthmask:	FONTWIDTH(8)|FONTWIDTH(9)
 };
 #endif
 
 #ifdef FBCON_HAS_CFB4
 static struct display_switch matroxfb_cfb4 = {
-	fbcon_cfb4_setup,     matrox_cfb4_bmove,  matrox_cfb4_clear,
-	fbcon_cfb4_putc,      fbcon_cfb4_putcs,	  matrox_cfb4_revc,
-	NULL,		      NULL,		  NULL,
-	/* cursor... */       /* set_font... */
-	FONTWIDTH(8) /* fix, fix, fix it */
+	setup:		fbcon_cfb4_setup,
+	bmove:		matrox_cfb4_bmove,
+	clear:		matrox_cfb4_clear,
+	putc:		fbcon_cfb4_putc,
+	putcs:		fbcon_cfb4_putcs,
+	revc:		matrox_cfb4_revc,
+	fontwidthmask:	FONTWIDTH(8) /* fix, fix, fix it */
 };
 #endif
 
 #ifdef FBCON_HAS_CFB8
 static struct display_switch matroxfb_cfb8 = {
-	fbcon_cfb8_setup,     matrox_cfbX_bmove,  matrox_cfb8_clear,
-	matrox_cfb8_putc,     matrox_cfb8_putcs,  matrox_cfb8_revc,
-	NULL,		      NULL,		  matrox_cfbX_clear_margins,
-	~1 /* FONTWIDTHS */
+	setup:		fbcon_cfb8_setup,
+	bmove:		matrox_cfbX_bmove,
+	clear:		matrox_cfb8_clear,
+	putc:		matrox_cfb8_putc,
+	putcs:		matrox_cfb8_putcs,
+	revc:		matrox_cfb8_revc,
+	clear_margins:	matrox_cfbX_clear_margins,
+	fontwidthmask:	~1 /* FONTWIDTHS */
 };
 #endif
 
 #ifdef FBCON_HAS_CFB16
 static struct display_switch matroxfb_cfb16 = {
-	fbcon_cfb16_setup,    matrox_cfbX_bmove,  matrox_cfb16_clear,
-	matrox_cfb16_putc,    matrox_cfb16_putcs, matrox_cfb16_revc,
-	NULL,		      NULL,		  matrox_cfbX_clear_margins,
-	~1 /* FONTWIDTHS */
+	setup:		fbcon_cfb16_setup,
+	bmove:		matrox_cfbX_bmove,
+	clear:		matrox_cfb16_clear,
+	putc:		matrox_cfb16_putc,
+	putcs:		matrox_cfb16_putcs,
+	revc:		matrox_cfb16_revc,
+	clear_margins:	matrox_cfbX_clear_margins,
+	fontwidthmask:	~1 /* FONTWIDTHS */
 };
 #endif
 
 #ifdef FBCON_HAS_CFB24
 static struct display_switch matroxfb_cfb24 = {
-	fbcon_cfb24_setup,    matrox_cfbX_bmove,  matrox_cfb24_clear,
-	matrox_cfb24_putc,    matrox_cfb24_putcs, matrox_cfb24_revc,
-	NULL,		      NULL,		  matrox_cfbX_clear_margins,
-	~1 /* FONTWIDTHS */ /* TODO: and what about non-aligned access on BE? I think that there are no in my code */
+	setup:		fbcon_cfb24_setup,
+	bmove:		matrox_cfbX_bmove,
+	clear:		matrox_cfb24_clear,
+	putc:		matrox_cfb24_putc,
+	putcs:		matrox_cfb24_putcs,
+	revc:		matrox_cfb24_revc,
+	clear_margins:	matrox_cfbX_clear_margins,
+	fontwidthmask:	~1 /* FONTWIDTHS */ /* TODO: and what about non-aligned access on BE? I think that there are no in my code */
 };
 #endif
 
 #ifdef FBCON_HAS_CFB32
 static struct display_switch matroxfb_cfb32 = {
-	fbcon_cfb32_setup,    matrox_cfbX_bmove,  matrox_cfb32_clear,
-	matrox_cfb32_putc,    matrox_cfb32_putcs, matrox_cfb32_revc,
-	NULL,		      NULL,		  matrox_cfbX_clear_margins,
-	~1 /* FONTWIDTHS */
+	setup:		fbcon_cfb32_setup,
+	bmove:		matrox_cfbX_bmove,
+	clear:		matrox_cfb32_clear,
+	putc:		matrox_cfb32_putc,
+	putcs:		matrox_cfb32_putcs,
+	revc:		matrox_cfb32_revc,
+	clear_margins:	matrox_cfbX_clear_margins,
+	fontwidthmask:	~1 /* FONTWIDTHS */
 };
 #endif
 

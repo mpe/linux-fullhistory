@@ -8,7 +8,7 @@ mainmenu_option next_comment
 comment 'PCMCIA/CardBus support'
 
 dep_tristate 'CardBus support' CONFIG_PCMCIA $CONFIG_PCI
-if [ "$CONFIG_CARDBUS" != "n" ]; then
+if [ "$CONFIG_PCMCIA" != "n" ]; then
   define_bool CONFIG_CARDBUS y
 fi
 

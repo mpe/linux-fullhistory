@@ -545,64 +545,60 @@ static inline void do_it_virt(struct task_struct * p, unsigned long ticks)
 	unsigned long it_virt = p->it_virt_value;
 
 	if (it_virt) {
-		if (it_virt <= ticks) {
-			it_virt = ticks + p->it_virt_incr;
+		it_virt -= ticks;
+		if (!it_virt) {
+			it_virt = p->it_virt_incr;
 			send_sig(SIGVTALRM, p, 1);
 		}
-		p->it_virt_value = it_virt - ticks;
+		p->it_virt_value = it_virt;
 	}
 }
 
-static inline void do_it_prof(struct task_struct * p, unsigned long ticks)
+static inline void do_it_prof(struct task_struct *p)
 {
 	unsigned long it_prof = p->it_prof_value;
 
 	if (it_prof) {
-		if (it_prof <= ticks) {
-			it_prof = ticks + p->it_prof_incr;
+		if (--it_prof == 0) {
+			it_prof = p->it_prof_incr;
 			send_sig(SIGPROF, p, 1);
 		}
-		p->it_prof_value = it_prof - ticks;
+		p->it_prof_value = it_prof;
 	}
 }
 
-void update_one_process(struct task_struct *p,
-	unsigned long ticks, unsigned long user, unsigned long system, int cpu)
+void update_one_process(struct task_struct *p, unsigned long user,
+			unsigned long system, int cpu)
 {
 	p->per_cpu_utime[cpu] += user;
 	p->per_cpu_stime[cpu] += system;
 	do_process_times(p, user, system);
 	do_it_virt(p, user);
-	do_it_prof(p, ticks);
+	do_it_prof(p);
 }	
 
 /*
  * Called from the timer interrupt handler to charge one tick to the current 
  * process.  user_tick is 1 if the tick is user time, 0 for system.
  */
-static void update_process_times(int user_tick)
+void update_process_times(int user_tick)
 {
-/*
- * SMP does this on a per-CPU basis elsewhere
- */
-#ifndef  CONFIG_SMP
 	struct task_struct *p = current;
-	int system = !user_tick;
+	int cpu = smp_processor_id(), system = user_tick ^ 1;
 
+	update_one_process(p, user_tick, system, cpu);
 	if (p->pid) {
 		if (--p->counter <= 0) {
 			p->counter = 0;
 			p->need_resched = 1;
 		}
 		if (p->nice > 0)
-			kstat.cpu_nice += user_tick;
+			kstat.per_cpu_nice[cpu] += user_tick;
 		else
-			kstat.cpu_user += user_tick;
-		kstat.cpu_system += system;
-	} else if (local_bh_count(0) || local_irq_count(0) > 1)
-		kstat.cpu_system += system;
-	update_one_process(p, 1, user_tick, system, 0);
-#endif
+			kstat.per_cpu_user[cpu] += user_tick;
+		kstat.per_cpu_system[cpu] += system;
+	} else if (local_bh_count(cpu) || local_irq_count(cpu) > 1)
+		kstat.per_cpu_system[cpu] += system;
 }
 
 /*
@@ -683,7 +679,11 @@ void timer_bh(void)
 void do_timer(struct pt_regs *regs)
 {
 	(*(unsigned long *)&jiffies)++;
+#ifndef CONFIG_SMP
+	/* SMP process accounting uses the local APIC timer */
+
 	update_process_times(user_mode(regs));
+#endif
 	mark_bh(TIMER_BH);
 	if (tq_timer)
 		mark_bh(TQUEUE_BH);

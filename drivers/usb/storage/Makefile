@@ -4,7 +4,7 @@
 
 O_TARGET	:= usb-storage.o
 M_OBJS		:= usb-storage.o
-O_OBJS		:= scsiglue.o protocol.o transport.o debug.o usb.o 
+O_OBJS		:= scsiglue.o protocol.o transport.o usb.o 
 MOD_LIST_NAME	:= USB_STORAGE_MODULES
 
 CFLAGS_scsiglue.o:= -I../../scsi/
@@ -19,6 +19,10 @@ ifeq ($(CONFIG_USB_STORAGE_DEBUG),y)
 endif
 
 ifeq ($(CONFIG_USB_STORAGE_HP8200e),y)
+	O_OBJS += scm.o
+endif
+
+ifeq ($(CONFIG_USB_STORAGE_SDDR09),y)
 	O_OBJS += scm.o
 endif
 

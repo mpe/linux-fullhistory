@@ -1,11 +1,15 @@
 /*
- * $Id: c4.c,v 1.12 2000/06/19 16:51:53 keil Exp $
+ * $Id: c4.c,v 1.13 2000/07/20 10:21:21 calle Exp $
  * 
  * Module for AVM C4 card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: c4.c,v $
+ * Revision 1.13  2000/07/20 10:21:21  calle
+ * Bugfix: driver will not be unregistered, if not cards were detected.
+ *         this result in an oops in kcapi.c
+ *
  * Revision 1.12  2000/06/19 16:51:53  keil
  * don't free skb in irq context
  *
@@ -67,7 +71,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.12 $";
+static char *revision = "$Revision: 1.13 $";
 
 #undef CONFIG_C4_DEBUG
 #undef CONFIG_C4_POLLDEBUG
@@ -1357,9 +1361,7 @@ int c4_init(void)
 		        printk(KERN_ERR
 			"%s: failed to enable AVM-C4 at i/o %#x, irq %d, mem %#x err=%d\n",
 			driver->name, param.port, param.irq, param.membase, retval);
-#ifdef MODULE
-			cleanup_module();
-#endif
+    			detach_capi_driver(driver);
 			MOD_DEC_USE_COUNT;
 			return -EIO;
 		}
@@ -1372,9 +1374,7 @@ int c4_init(void)
 		        printk(KERN_ERR
 			"%s: no AVM-C4 at i/o %#x, irq %d detected, mem %#x\n",
 			driver->name, param.port, param.irq, param.membase);
-#ifdef MODULE
-			cleanup_module();
-#endif
+    			detach_capi_driver(driver);
 			MOD_DEC_USE_COUNT;
 			return retval;
 		}
@@ -1387,6 +1387,7 @@ int c4_init(void)
 		return 0;
 	}
 	printk(KERN_ERR "%s: NO C4 card detected\n", driver->name);
+	detach_capi_driver(driver);
 	MOD_DEC_USE_COUNT;
 	return -ESRCH;
 #else

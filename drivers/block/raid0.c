@@ -258,7 +258,7 @@ static int raid0_make_request (request_queue_t *q, mddev_t *mddev,
 	sect_in_chunk = bh->b_rsector & ((chunk_size<<1) -1);
 	chunk = (block - zone->zone_offset) / (zone->nb_dev << chunksize_bits);
 	tmp_dev = zone->dev[(block >> chunksize_bits) % zone->nb_dev];
-	rsect = ((chunk << chunksize_bits) + zone->dev_offset)<<1
+	rsect = (((chunk << chunksize_bits) + zone->dev_offset)<<1)
 		+ sect_in_chunk;
  
 	/*

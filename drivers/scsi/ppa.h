@@ -123,14 +123,15 @@ int ppa_sg = SG_ALL;		/* enable/disable scatter-gather. */
 #define r_str(x)        (unsigned char)inb((x)+1)
 #define r_ctr(x)        (unsigned char)inb((x)+2)
 #define r_epp(x)        (unsigned char)inb((x)+4)
-#define r_fifo(x)       (unsigned char)inb((x)+0x400)
-#define r_ecr(x)        (unsigned char)inb((x)+0x402)
+#define r_fifo(x)       (unsigned char)inb((x)) /* x must be base_hi */
+					/* On PCI is base+0x400 != base_hi */
+#define r_ecr(x)        (unsigned char)inb((x)+0x2) /* x must be base_hi */
 
 #define w_dtr(x,y)      outb(y, (x))
 #define w_str(x,y)      outb(y, (x)+1)
 #define w_epp(x,y)      outb(y, (x)+4)
-#define w_fifo(x,y)     outb(y, (x)+0x400)
-#define w_ecr(x,y)      outb(y, (x)+0x402)
+#define w_fifo(x,y)     outb(y, (x))	/* x must be base_hi */
+#define w_ecr(x,y)      outb(y, (x)+0x2)/* x must be base_hi */
 
 #ifdef CONFIG_SCSI_IZIP_SLOW_CTR
 #define w_ctr(x,y)      outb_p(y, (x)+2)

@@ -395,7 +395,7 @@ For now, you can ignore the `flags' parameter. It is there for future use.
     /* Let's see whether this adapter can support what we need.
        Please substitute the things you need here! 
        For `sensors' drivers, add `! is_isa &&' to the if statement */
-    if (i2c_check_functionality(adapter,I2C_FUNC_SMBUS_WORD_DATA |
+    if (!i2c_check_functionality(adapter,I2C_FUNC_SMBUS_WORD_DATA |
                                         I2C_FUNC_SMBUS_WRITE_BYTE))
        goto ERROR0;
 

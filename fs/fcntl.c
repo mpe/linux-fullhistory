@@ -15,45 +15,80 @@
 
 extern int sock_fcntl (struct file *, unsigned int cmd, unsigned long arg);
 
+/* Expand files.  Return <0 on error; 0 nothing done; 1 files expanded,
+ * we may have blocked. 
+ *
+ * Should be called with the files->file_lock spinlock held for write.
+ */
+static int expand_files(struct files_struct *files, int nr)
+{
+	int err, expand = 0;
+#ifdef FDSET_DEBUG	
+	printk (KERN_ERR __FUNCTION__ " %d: nr = %d\n", current->pid, nr);
+#endif
+	
+	if (nr >= files->max_fdset) {
+		expand = 1;
+		if ((err = expand_fdset(files, nr)))
+			goto out;
+	}
+	if (nr >= files->max_fds) {
+		expand = 1;
+		if ((err = expand_fd_array(files, nr)))
+			goto out;
+	}
+	err = expand;
+ out:
+#ifdef FDSET_DEBUG	
+	if (err)
+		printk (KERN_ERR __FUNCTION__ " %d: return %d\n", current->pid, err);
+#endif
+	return err;
+}
+
 /*
  * locate_fd finds a free file descriptor in the open_fds fdset,
  * expanding the fd arrays if necessary.  The files write lock will be
  * held on exit to ensure that the fd can be entered atomically.
  */
 
-static inline int locate_fd(struct files_struct *files, 
-			    struct file *file, int start)
+static int locate_fd(struct files_struct *files, 
+			    struct file *file, int orig_start)
 {
 	unsigned int newfd;
 	int error;
+	int start;
 
 	write_lock(&files->file_lock);
 	
 repeat:
-	error = -EMFILE;
+	/*
+	 * Someone might have closed fd's in the range
+	 * orig_start..files->next_fd
+	 */
+	start = orig_start;
 	if (start < files->next_fd)
 		start = files->next_fd;
-	if (start >= files->max_fdset) {
-	expand:
-		error = expand_files(files, start);
-		if (error < 0)
-			goto out;
-		goto repeat;
+
+	newfd = start;
+	if (start < files->max_fdset) {
+		newfd = find_next_zero_bit(files->open_fds->fds_bits,
+			files->max_fdset, start);
 	}
 	
-	newfd = find_next_zero_bit(files->open_fds->fds_bits, 
-				   files->max_fdset, start);
-
 	error = -EMFILE;
 	if (newfd >= current->rlim[RLIMIT_NOFILE].rlim_cur)
 		goto out;
-	if (newfd >= files->max_fdset) 
-		goto expand;
 
 	error = expand_files(files, newfd);
 	if (error < 0)
 		goto out;
-	if (error) /* If we might have blocked, try again. */
+
+	/*
+	 * If we needed to expand the fs array we
+	 * might have blocked - try again.
+	 */
+	if (error)
 		goto repeat;
 
 	if (start <= files->next_fd)
@@ -104,8 +139,8 @@ asmlinkage long sys_dup2(unsigned int oldfd, unsigned int newfd)
 	if (newfd == oldfd)
 		goto out_unlock;
 	err = -EBADF;
-	if (newfd >= NR_OPEN)
-		goto out_unlock;	/* following POSIX.1 6.2.1 */
+	if (newfd >= current->rlim[RLIMIT_NOFILE].rlim_cur)
+		goto out_unlock;
 	get_file(file);			/* We are now finished with oldfd */
 
 	err = expand_files(files, newfd);

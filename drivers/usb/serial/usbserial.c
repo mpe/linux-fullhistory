@@ -1,8 +1,9 @@
 /*
  * USB Serial Converter driver
  *
- *	Copyright (C) 1999, 2000
- *	    Greg Kroah-Hartman (greg@kroah.com)
+ * Copyright (C) 1999, 2000 Greg Kroah-Hartman (greg@kroah.com)
+ * Copyright (c) 2000 Peter Berger (pberger@brimson.com)
+ * Copyright (c) 2000 Al Borchers (borchers@steinerpoint.com)
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -14,6 +15,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (07/23/2000) gkh
+ *	Added bulk_out_endpointAddress to port structure.
+ *
  * (07/19/2000) gkh, pberger, and borchers
  *	Modifications to allow usb-serial drivers to be modules.
  *
@@ -1075,6 +1079,7 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 		}
 		buffer_size = endpoint->wMaxPacketSize;
 		port->bulk_out_size = buffer_size;
+		port->bulk_out_endpointAddress = endpoint->bEndpointAddress;
 		port->bulk_out_buffer = kmalloc (buffer_size, GFP_KERNEL);
 		if (!port->bulk_out_buffer) {
 			err("Couldn't allocate bulk_out_buffer");

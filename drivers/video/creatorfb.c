@@ -626,8 +626,13 @@ out:
 }
 
 static struct display_switch ffb_dispsw __initdata = {
-	ffb_setup, fbcon_redraw_bmove, ffb_clear, ffb_putc, ffb_putcs, ffb_revc, 
-	NULL, NULL, NULL, FONTWIDTHRANGE(1,16) /* Allow fontwidths up to 16 */
+	setup:		ffb_setup,
+	bmove:		fbcon_redraw_bmove,
+	clear:		ffb_clear,
+	putc:		ffb_putc,
+	putcs:		ffb_putcs,
+	revc:		ffb_revc, 
+	fontwidthmask:	FONTWIDTHRANGE(1,16) /* Allow fontwidths up to 16 */
 };
 
 static void ffb_margins (struct fb_info_sbusfb *fb, struct display *p, int x_margin, int y_margin)

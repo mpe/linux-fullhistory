@@ -38,7 +38,6 @@
 #include <asm/io.h>
 #include <asm/smp.h>
 #ifdef CONFIG_SH_EARLY_PRINTK
-#include <linux/console.h>
 #include <asm/sh_bios.h>
 #endif
 

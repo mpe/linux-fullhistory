@@ -15,6 +15,7 @@
 
 #define __KERNEL_SYSCALLS__
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/unistd.h>
 #include <linux/smp_lock.h>

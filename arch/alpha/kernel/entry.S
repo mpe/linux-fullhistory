@@ -33,8 +33,8 @@
 #define TASK_ADDR_LIMIT		24	
 #define TASK_EXEC_DOMAIN	32
 #define TASK_NEED_RESCHED	40
+#define TASK_PTRACE		48
 #define TASK_PROCESSOR		100
-#define TASK_PTRACE		104
 
 /*
  * task flags (must match include/linux/sched.h):

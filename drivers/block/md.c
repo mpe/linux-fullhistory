@@ -28,6 +28,7 @@
    Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
+#include <linux/module.h>
 #include <linux/config.h>
 #include <linux/raid/md.h>
 #include <linux/raid/xor.h>
@@ -264,6 +265,8 @@ static mddev_t * alloc_mddev (kdev_t dev)
 	 */
 	add_mddev_mapping(mddev, dev, 0);
 	md_list_add(&mddev->all_mddevs, &all_mddevs);
+
+	MOD_INC_USE_COUNT;
 
 	return mddev;
 }
@@ -807,6 +810,7 @@ static void free_mddev (mddev_t *mddev)
 	MD_INIT_LIST_HEAD(&mddev->all_mddevs);
 	blk_cleanup_queue(&mddev->queue);
 	kfree(mddev);
+	MOD_DEC_USE_COUNT;
 }
 
 #undef BAD_CSUM
@@ -2895,7 +2899,7 @@ int md_thread(void * arg)
 	/*
 	 * Detach thread
 	 */
-	sys_setsid();
+	daemonize();
 	sprintf(current->comm, thread->name);
 	md_init_signals();
 	md_flush_signals();
@@ -3582,7 +3586,7 @@ struct notifier_block md_notifier = {
 	NULL,
 	0
 };
-
+#ifndef MODULE
 static int md__init raid_setup(char *str)
 {
 	int len, pos;
@@ -3605,7 +3609,7 @@ static int md__init raid_setup(char *str)
 	return 1;
 }
 __setup("raid=", raid_setup);
-
+#endif
 static void md_geninit (void)
 {
 	int i;
@@ -3678,12 +3682,6 @@ int md__init md_init (void)
 #endif
 #ifdef CONFIG_MD_RAID5
 	raid5_init ();
-#endif
-#if defined(CONFIG_MD_RAID5) || defined(CONFIG_MD_RAID5_MODULE)
-	/*
-	 * pick a XOR routine, runtime.
-	 */
-	calibrate_xor_block();
 #endif
 	md_geninit();
 	return (0);
@@ -3855,6 +3853,54 @@ void md__init md_setup_drive(void)
 __setup("md=", md_setup);
 #endif
 
+#ifdef MODULE
+int init_module (void)
+{
+	return md_init();
+}
+
+static void free_device_names(void)
+{
+	while (device_names.next != &device_names) {
+		struct list_head *tmp = device_names.next;
+		list_del(tmp);
+		kfree(tmp);
+	}
+}
+
+
+void cleanup_module (void)
+{
+	struct gendisk **gendisk_ptr;
+
+	md_unregister_thread(md_recovery_thread);
+	devfs_unregister(devfs_handle);
+
+	devfs_unregister_blkdev(MAJOR_NR,"md");
+	unregister_reboot_notifier(&md_notifier);
+	unregister_sysctl_table(raid_table_header);
+#ifdef CONFIG_PROC_FS
+	remove_proc_entry("mdstat", NULL);
+#endif
+	
+	gendisk_ptr = &gendisk_head;
+	while (*gendisk_ptr) {
+		if (*gendisk_ptr == &md_gendisk) {
+			*gendisk_ptr = md_gendisk.next;
+			break;
+		}
+		gendisk_ptr = & (*gendisk_ptr)->next;
+	}
+	blk_dev[MAJOR_NR].queue = NULL;
+	blksize_size[MAJOR_NR] = NULL;
+	blk_size[MAJOR_NR] = NULL;
+	max_readahead[MAJOR_NR] = NULL;
+	hardsect_size[MAJOR_NR] = NULL;
+	
+	free_device_names();
+
+}
+#endif
 
 MD_EXPORT_SYMBOL(md_size);
 MD_EXPORT_SYMBOL(register_md_personality);

@@ -31,6 +31,8 @@
 
 #define __NO_VERSION__
 #include "drmP.h"
+#include <linux/sched.h>
+#include <linux/smp_lock.h>
 
 struct vm_operations_struct   drm_vm_ops = {
 	nopage:	 drm_vm_nopage,
@@ -193,15 +195,22 @@ void drm_vm_close(struct vm_area_struct *vma)
 int drm_mmap_dma(struct file *filp, struct vm_area_struct *vma)
 {
 	drm_file_t	 *priv	 = filp->private_data;
-	drm_device_t	 *dev	 = priv->dev;
-	drm_device_dma_t *dma	 = dev->dma;
+	drm_device_t	 *dev;
+	drm_device_dma_t *dma;
 	unsigned long	 length	 = vma->vm_end - vma->vm_start;
 	
+	lock_kernel();
+	dev	 = priv->dev;
+	dma	 = dev->dma;
 	DRM_DEBUG("start = 0x%lx, end = 0x%lx, offset = 0x%lx\n",
 		  vma->vm_start, vma->vm_end, VM_OFFSET(vma));
 
 				/* Length must match exact page count */
-	if ((length >> PAGE_SHIFT) != dma->page_count) return -EINVAL;
+	if ((length >> PAGE_SHIFT) != dma->page_count) {
+		unlock_kernel();
+		return -EINVAL;
+	}
+	unlock_kernel();
 
 	vma->vm_ops   = &drm_vm_dma_ops;
 	vma->vm_flags |= VM_LOCKED | VM_SHM; /* Don't swap */

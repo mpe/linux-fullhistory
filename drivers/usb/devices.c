@@ -136,7 +136,7 @@ static const struct class_info clas_info[] =
 	{USB_CLASS_COMM,		"comm."},
 	{USB_CLASS_HID,			"HID"},
 	{USB_CLASS_HUB,			"hub"},
-	{USB_CLASS_PHYSICAL,		"phys."},
+	{USB_CLASS_PHYSICAL,		"PID"},
 	{USB_CLASS_PRINTER,		"print"},
 	{USB_CLASS_MASS_STORAGE,	"stor."},
 	{USB_CLASS_DATA,		"data"},

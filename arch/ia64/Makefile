@@ -18,7 +18,8 @@ AFLAGS += -Wa,-x
 EXTRA	=
 
 CFLAGS := $(CFLAGS) -pipe $(EXTRA) -Wa,-x -ffixed-r13 -mfixed-range=f10-f15,f32-f127 \
-	  -mconstant-gp -funwind-tables
+	  -funwind-tables
+CFLAGS_KERNEL := -mconstant-gp
 
 ifdef CONFIG_IA64_GENERIC
 	CORE_FILES      :=      arch/$(ARCH)/hp/hp.a	\

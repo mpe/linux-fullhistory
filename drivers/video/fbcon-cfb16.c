@@ -280,9 +280,14 @@ void fbcon_cfb16_clear_margins(struct vc_data *conp, struct display *p,
      */
 
 struct display_switch fbcon_cfb16 = {
-    fbcon_cfb16_setup, fbcon_cfb16_bmove, fbcon_cfb16_clear, fbcon_cfb16_putc,
-    fbcon_cfb16_putcs, fbcon_cfb16_revc, NULL, NULL, fbcon_cfb16_clear_margins,
-    FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+    setup:		fbcon_cfb16_setup,
+    bmove:		fbcon_cfb16_bmove,
+    clear:		fbcon_cfb16_clear,
+    putc:		fbcon_cfb16_putc,
+    putcs:		fbcon_cfb16_putcs,
+    revc:		fbcon_cfb16_revc,
+    clear_margins:	fbcon_cfb16_clear_margins,
+    fontwidthmask:	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 
 

@@ -259,10 +259,9 @@ repeat:
 	ext2_debug ("goal = %d.\n", goal);
 
 	tmp = ext2_alloc_block (inode, goal, err);
-	if (!tmp) {
-		*err = -ENOSPC;
+	if (!tmp)
 		return NULL;
-	}
+
 	if (metadata) {
 		result = getblk (inode->i_dev, tmp, blocksize);
 		if (!buffer_uptodate(result))

@@ -379,7 +379,7 @@ static void raid1_end_bh_io (struct raid1_bh *r1_bh, int uptodate)
 }
 void raid1_end_request (struct buffer_head *bh, int uptodate)
 {
-	struct raid1_bh * r1_bh = (struct raid1_bh *)(bh->b_dev_id);
+	struct raid1_bh * r1_bh = (struct raid1_bh *)(bh->b_private);
 
 	/*
 	 * this branch is our 'one mirror IO has finished' event handler:
@@ -626,7 +626,7 @@ static int raid1_make_request (request_queue_t *q, mddev_t *mddev, int rw,
 		bh_req->b_rdev = mirror->dev;
 	/*	bh_req->b_rsector = bh->n_rsector; */
 		bh_req->b_end_io = raid1_end_request;
-		bh_req->b_dev_id = r1_bh;
+		bh_req->b_private = r1_bh;
 		q = blk_get_queue(bh_req->b_rdev);
 		generic_make_request (q, rw, bh_req);
 		return 0;
@@ -679,7 +679,7 @@ static int raid1_make_request (request_queue_t *q, mddev_t *mddev, int rw,
  		mbh->b_data	  = bh->b_data;
  		mbh->b_list       = BUF_LOCKED;
  		mbh->b_end_io     = raid1_end_request;
- 		mbh->b_dev_id     = r1_bh;
+ 		mbh->b_private    = r1_bh;
 
 		mbh->b_next = r1_bh->mirror_bh_list;
 		r1_bh->mirror_bh_list = mbh;
@@ -1192,7 +1192,7 @@ static void raid1d (void *data)
 					mbh->b_data	  = bh->b_data;
 					mbh->b_list       = BUF_LOCKED;
 					mbh->b_end_io     = end_sync_write;
-					mbh->b_dev_id     = r1_bh;
+					mbh->b_private    = r1_bh;
 
 					mbh->b_next = r1_bh->mirror_bh_list;
 					r1_bh->mirror_bh_list = mbh;
@@ -1430,7 +1430,7 @@ static int raid1_sync_request (mddev_t *mddev, unsigned long block_nr)
 	if (bh->b_data != (char *) page_address(bh->b_page))
 		BUG();
 	bh->b_end_io = end_sync_read;
-	bh->b_dev_id = (void *) r1_bh;
+	bh->b_private = r1_bh;
 	bh->b_rsector = block_nr<<1;
 	init_waitqueue_head(&bh->b_wait);
 
@@ -1448,7 +1448,7 @@ nomem:
 
 static void end_sync_read(struct buffer_head *bh, int uptodate)
 {
-	struct raid1_bh * r1_bh = (struct raid1_bh *)(bh->b_dev_id);
+	struct raid1_bh * r1_bh = (struct raid1_bh *)(bh->b_private);
 
 	/* we have read a block, now it needs to be re-written,
 	 * or re-read if the read failed.
@@ -1463,7 +1463,7 @@ static void end_sync_read(struct buffer_head *bh, int uptodate)
 
 static void end_sync_write(struct buffer_head *bh, int uptodate)
 {
-	struct raid1_bh * r1_bh = (struct raid1_bh *)(bh->b_dev_id);
+ 	struct raid1_bh * r1_bh = (struct raid1_bh *)(bh->b_private);
 	
 	if (!uptodate)
  		md_error (mddev_to_kdev(r1_bh->mddev), bh->b_dev);

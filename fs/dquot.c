@@ -732,7 +732,7 @@ put_it:
 /* Free list of dquots - called from inode.c */
 void put_dquot_list(struct list_head *tofree_head)
 {
-	struct list_head *act_head = tofree_head;
+	struct list_head *act_head = tofree_head.next;
 	struct dquot *dquot;
 
 	/* So now we have dquots on the list... Just free them */

@@ -281,7 +281,7 @@ static inline void copy_to_high_bh_irq (struct buffer_head *to,
 
 static inline void bounce_end_io (struct buffer_head *bh, int uptodate)
 {
-	struct buffer_head *bh_orig = (struct buffer_head *)(bh->b_dev_id);
+	struct buffer_head *bh_orig = (struct buffer_head *)(bh->b_private);
 
 	bh_orig->b_end_io(bh_orig, uptodate);
 	__free_page(bh->b_page);
@@ -295,7 +295,7 @@ static void bounce_end_io_write (struct buffer_head *bh, int uptodate)
 
 static void bounce_end_io_read (struct buffer_head *bh, int uptodate)
 {
-	struct buffer_head *bh_orig = (struct buffer_head *)(bh->b_dev_id);
+	struct buffer_head *bh_orig = (struct buffer_head *)(bh->b_private);
 
 	if (uptodate)
 		copy_to_high_bh_irq(bh_orig, bh);
@@ -354,10 +354,9 @@ repeat_page:
 		copy_from_high_bh(bh, bh_orig);
 	} else
 		bh->b_end_io = bounce_end_io_read;
-	bh->b_dev_id = (void *)bh_orig;
+	bh->b_private = (void *)bh_orig;
 	bh->b_rsector = bh_orig->b_rsector;
 	memset(&bh->b_wait, -1, sizeof(bh->b_wait));
-	bh->b_kiobuf = NULL;
 
 	return bh;
 }

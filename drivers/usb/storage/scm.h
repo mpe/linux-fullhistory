@@ -1,6 +1,8 @@
 /* Driver for SCM Microsystems USB-ATAPI cable
  * Header File
  *
+ * $Id: scm.h,v 1.3 2000/07/24 19:19:52 mdharm Exp $
+ *
  * Current development and maintainance by:
  *   (c) 2000 Robert Baruch (autophile@dol.net)
  *
@@ -73,5 +75,8 @@ extern int scm_write_user_io(struct us_data *us,
 
 extern int hp8200e_transport(Scsi_Cmnd *srb, struct us_data *us);
 
+/* Sandisk SDDR-09 stuff */
+
+extern int sddr09_transport(Scsi_Cmnd *srb, struct us_data *us);
 
 #endif

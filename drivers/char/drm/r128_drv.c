@@ -35,6 +35,8 @@
 #endif
 #include "drmP.h"
 #include "r128_drv.h"
+#include <linux/sched.h>
+#include <linux/smp_lock.h>
 EXPORT_SYMBOL(r128_init);
 EXPORT_SYMBOL(r128_cleanup);
 
@@ -474,9 +476,11 @@ int r128_open(struct inode *inode, struct file *filp)
 int r128_release(struct inode *inode, struct file *filp)
 {
 	drm_file_t    *priv   = filp->private_data;
-	drm_device_t  *dev    = priv->dev;
+	drm_device_t  *dev;
 	int	      retcode = 0;
 
+	lock_kernel();
+	dev    = priv->dev;
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_release(inode, filp))) {
 		MOD_DEC_USE_COUNT;
@@ -488,13 +492,15 @@ int r128_release(struct inode *inode, struct file *filp)
 					  atomic_read(&dev->ioctl_count),
 					  dev->blocked);
 				spin_unlock(&dev->count_lock);
+				unlock_kernel();
 				return -EBUSY;
 			}
 			spin_unlock(&dev->count_lock);
-			return r128_takedown(dev);
-		}
-		spin_unlock(&dev->count_lock);
+			retcode = r128_takedown(dev);
+		} else
+			spin_unlock(&dev->count_lock);
 	}
+	unlock_kernel();
 	return retcode;
 }
 

@@ -597,7 +597,7 @@ static inline void raid5_mark_buffer_uptodate (struct buffer_head *bh, int uptod
 
 static void raid5_end_request (struct buffer_head * bh, int uptodate)
 {
-	struct stripe_head *sh = bh->b_dev_id;
+ 	struct stripe_head *sh = bh->b_private;
 	raid5_conf_t *conf = sh->raid_conf;
 	int disks = conf->raid_disks, i;
 	unsigned long flags;
@@ -2391,6 +2391,12 @@ int raid5_init (void)
 	err = register_md_personality (RAID5, &raid5_personality);
 	if (err)
 		return err;
+
+	/*
+	 * pick a XOR routine, runtime.
+	 */
+	calibrate_xor_block();
+
 	return 0;
 }
 

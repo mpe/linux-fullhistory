@@ -9,6 +9,8 @@
  * Copyright (C) 1999 by Kaz Kojima & Niibe Yutaka
  */
 
+#include <linux/config.h>
+
 /*
  * computes the checksum of a memory block at buff, length len,
  * and adds in "sum" (32-bit)

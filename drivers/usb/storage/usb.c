@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: usb.c,v 1.6 2000/07/20 23:36:22 mdharm Exp $
+ * $Id: usb.c,v 1.11 2000/07/24 20:37:24 mdharm Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -43,12 +43,14 @@
  * 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include <linux/config.h>
+
 #include "usb.h"
 #include "scsiglue.h"
 #include "transport.h"
 #include "protocol.h"
 #include "debug.h"
-#ifdef CONFIG_USB_STORAGE_HP8200e
+#if defined(CONFIG_USB_STORAGE_HP8200e) || defined(CONFIG_USB_STORAGE_SDDR09)
 #include "scm.h"
 #endif
 
@@ -98,6 +100,9 @@ static int usb_stor_control_thread(void * __us)
 	 * This thread doesn't need any user-level access,
 	 * so get rid of all our resources..
 	 */
+	exit_files(current);
+	current->files = init_task.files;
+	atomic_inc(&current->files->count);
 	daemonize();
 
 	/* set our name for identification purposes */
@@ -250,6 +255,11 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 		US_SC_SCSI, US_PR_BULK, US_FL_ALT_LENGTH},
 	{ 0x0781, 0x0001, 0x0200, 0x0200, "Sandisk ImageMate (SDDR-01)",
 		US_SC_SCSI, US_PR_CB, US_FL_SINGLE_LUN | US_FL_START_STOP},
+#ifdef CONFIG_USB_STORAGE_SDDR09
+	{ 0x0781, 0x0200, 0x0100, 0x0100, "Sandisk ImageMate (SDDR-09)",
+		US_SC_SCSI, US_PR_SCM_SCSI,
+		US_FL_SINGLE_LUN | US_FL_START_STOP | US_FL_NEED_INIT},
+#endif
 	{ 0x0781, 0x0002, 0x0009, 0x0009, "Sandisk Imagemate (SDDR-31)",
 		US_SC_SCSI, US_PR_BULK, US_FL_IGNORE_SER},
 	{ 0x07af, 0x0004, 0x0100, 0x0100, "Microtech USB-SCSI-DB25",
@@ -436,7 +446,15 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		  ep_in, ep_out, ep_int, ep_int ? ep_int->bInterval : 0);
 
 	/* set the interface -- STALL is an acceptable response here */
+#ifdef CONFIG_USB_STORAGE_SDDR09
+	if (protocol != US_PR_SCM_SCSI)
+		result = usb_set_interface(dev, 
+			altsetting->bInterfaceNumber, 0);
+	else
+		result = usb_set_configuration(dev, 1);
+#else
 	result = usb_set_interface(dev, altsetting->bInterfaceNumber, 0);
+#endif
 	US_DEBUGP("Result from usb_set_interface is %d\n", result);
 	if (result == -EPIPE) {
 		US_DEBUGP("-- clearing stall on control interface\n");
@@ -508,6 +526,12 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			ss->ep_out = ep_out->bEndpointAddress & 
 				USB_ENDPOINT_NUMBER_MASK;
 		ss->ep_int = ep_int;
+
+                /* Reset the device's NEED_INIT flag if it needs to be
+                   initialized with a magic sequence */
+
+                if (flags & US_FL_NEED_INIT)
+                        ss->flags |= US_FL_NEED_INIT;
 
 		/* allocate an IRQ callback if one is needed */
 		if ((ss->protocol == US_PR_CBI) && usb_stor_allocate_irq(ss))
@@ -603,8 +627,17 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			ss->transport = hp8200e_transport;
 			ss->transport_reset = usb_stor_CB_reset;
 			ss->max_lun = 1;
-#endif
 			break;
+#endif
+
+#ifdef CONFIG_USB_STORAGE_SDDR09
+		case US_PR_SCM_SCSI:
+			ss->transport_name = "SCM/SCSI";
+			ss->transport = sddr09_transport;
+			ss->transport_reset = usb_stor_CB_reset;
+			ss->max_lun = 1;
+			break;
+#endif
 			
 		default:
 			ss->transport_name = "Unknown";
@@ -691,8 +724,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		
 		/* start up our control thread */
 		ss->pid = kernel_thread(usb_stor_control_thread, ss,
-					CLONE_FS | CLONE_FILES |
-					CLONE_SIGHAND);
+					CLONE_VM);
 		if (ss->pid < 0) {
 			printk(KERN_WARNING USB_STORAGE 
 			       "Unable to start control thread\n");

@@ -285,7 +285,7 @@ static LIST_HEAD(vfsmntlist);
  *	add_vfsmnt - add a new mount node
  *	@nd: location of mountpoint or %NULL if we want a root node
  *	@root: root of (sub)tree to be mounted
- *	@dev_name: device name to show in /proc/mounts
+ *	@dev_name: device name to show in /proc/mounts or %NULL (for "none").
  *
  *	This is VFS idea of mount. New node is allocated, bound to a tree
  *	we are mounting and optionally (OK, usually) registered as mounted
@@ -295,6 +295,13 @@ static LIST_HEAD(vfsmntlist);
  *	Potential reason for failure (aside of trivial lack of memory) is a
  *	deleted mountpoint. Caller must hold ->i_zombie on mountpoint
  *	dentry (if any).
+ *
+ *	Node is marked as MNT_VISIBLE (visible in /proc/mounts) unless both
+ *	@nd and @devname are %NULL. It works since we pass non-%NULL @devname
+ *	when we are mounting root and kern_mount() filesystems are deviceless.
+ *	If we will get a kern_mount() filesystem with nontrivial @devname we
+ *	will have to pass the visibility flag explicitly, so if we will add
+ *	support for such beasts we'll have to change prototype.
  */
 
 static struct vfsmount *add_vfsmnt(struct nameidata *nd,
@@ -309,6 +316,9 @@ static struct vfsmount *add_vfsmnt(struct nameidata *nd,
 	if (!mnt)
 		goto out;
 	memset(mnt, 0, sizeof(struct vfsmount));
+
+	if (nd || dev_name)
+		mnt->mnt_flags = MNT_VISIBLE;
 
 	/* It may be NULL, but who cares? */
 	if (dev_name) {
@@ -344,7 +354,8 @@ out:
 	return mnt;
 fail:
 	spin_unlock(&dcache_lock);
-	kfree(mnt->mnt_devname);
+	if (mnt->mnt_devname)
+		kfree(mnt->mnt_devname);
 	kfree(mnt);
 	return NULL;
 }
@@ -370,7 +381,8 @@ static void move_vfsmnt(struct vfsmount *mnt,
 
 	/* flip names */
 	if (new_devname) {
-		kfree(mnt->mnt_devname);
+		if (mnt->mnt_devname)
+			kfree(mnt->mnt_devname);
 		mnt->mnt_devname = new_devname;
 	}
 
@@ -411,7 +423,8 @@ static void remove_vfsmnt(struct vfsmount *mnt)
 
 	dput(mnt->mnt_mountpoint);
 	dput(mnt->mnt_root);
-	kfree(mnt->mnt_devname);
+	if (mnt->mnt_devname)
+		kfree(mnt->mnt_devname);
 	kfree(mnt);
 }
 
@@ -460,11 +473,13 @@ int get_filesystem_info( char *buf )
 	for (p = vfsmntlist.next; p!=&vfsmntlist && len < PAGE_SIZE - 160;
 	    p = p->next) {
 		struct vfsmount *tmp = list_entry(p, struct vfsmount, mnt_list);
+		if (!(tmp->mnt_flags & MNT_VISIBLE))
+			continue;
 		path = d_path(tmp->mnt_root, tmp, buffer, PAGE_SIZE);
 		if (!path)
 			continue;
 		len += sprintf( buf + len, "%s %s %s %s",
-			tmp->mnt_devname, path,
+			tmp->mnt_devname ? tmp->mnt_devname : "none", path,
 			tmp->mnt_sb->s_type->name,
 			tmp->mnt_sb->s_flags & MS_RDONLY ? "ro" : "rw" );
 		for (fs_infop = fs_info; fs_infop->flag; fs_infop++) {
@@ -922,7 +937,7 @@ struct vfsmount *kern_mount(struct file_system_type *type)
 		put_unnamed_dev(dev);
 		return ERR_PTR(-EINVAL);
 	}
-	mnt = add_vfsmnt(NULL, sb->s_root, "none");
+	mnt = add_vfsmnt(NULL, sb->s_root, NULL);
 	if (!mnt) {
 		kill_super(sb, 0);
 		return ERR_PTR(-ENOMEM);

@@ -190,8 +190,13 @@ void fbcon_cfb2_revc(struct display *p, int xx, int yy)
      */
 
 struct display_switch fbcon_cfb2 = {
-    fbcon_cfb2_setup, fbcon_cfb2_bmove, fbcon_cfb2_clear, fbcon_cfb2_putc,
-    fbcon_cfb2_putcs, fbcon_cfb2_revc, NULL, NULL, NULL, FONTWIDTH(8)
+    setup:		fbcon_cfb2_setup,
+    bmove:		fbcon_cfb2_bmove,
+    clear:		fbcon_cfb2_clear,
+    putc:		fbcon_cfb2_putc,
+    putcs:		fbcon_cfb2_putcs,
+    revc:		fbcon_cfb2_revc,
+    fontwidthmask:	FONTWIDTH(8)
 };
 
 

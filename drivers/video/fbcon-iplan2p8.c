@@ -495,9 +495,14 @@ void fbcon_iplan2p8_clear_margins(struct vc_data *conp, struct display *p,
      */
 
 struct display_switch fbcon_iplan2p8 = {
-    fbcon_iplan2p8_setup, fbcon_iplan2p8_bmove, fbcon_iplan2p8_clear,
-    fbcon_iplan2p8_putc, fbcon_iplan2p8_putcs, fbcon_iplan2p8_revc, NULL,
-    NULL, fbcon_iplan2p8_clear_margins, FONTWIDTH(8)
+    setup:		fbcon_iplan2p8_setup,
+    bmove:		fbcon_iplan2p8_bmove,
+    clear:		fbcon_iplan2p8_clear,
+    putc:		fbcon_iplan2p8_putc,
+    putcs:		fbcon_iplan2p8_putcs,
+    revc:		fbcon_iplan2p8_revc,
+    clear_margins:	fbcon_iplan2p8_clear_margins,
+    fontwidthmask:	FONTWIDTH(8)
 };
 
 

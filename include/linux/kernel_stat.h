@@ -16,7 +16,6 @@
 #define DK_MAX_DISK 16
 
 struct kernel_stat {
-	unsigned int cpu_user, cpu_nice, cpu_system;	
 	unsigned int per_cpu_user[NR_CPUS],
 	             per_cpu_nice[NR_CPUS],
 	             per_cpu_system[NR_CPUS];

@@ -2400,10 +2400,14 @@ static void fbcon_aty8_clear_margins(struct vc_data *conp,
 }
 
 static struct display_switch fbcon_aty128_8 = {
-    fbcon_cfb8_setup, fbcon_aty128_bmove, fbcon_cfb8_clear,
-    fbcon_aty8_putc, fbcon_aty8_putcs, fbcon_cfb8_revc, NULL, NULL,
-    fbcon_aty8_clear_margins,
-    FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+    setup:		fbcon_cfb8_setup,
+    bmove:		fbcon_aty128_bmove,
+    clear:		fbcon_cfb8_clear,
+    putc:		fbcon_aty8_putc,
+    putcs:		fbcon_aty8_putcs,
+    revc:		fbcon_cfb8_revc,
+    clear_margins:	fbcon_aty8_clear_margins,
+    fontwidthmask:	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
 #ifdef FBCON_HAS_CFB16
@@ -2444,10 +2448,14 @@ static void fbcon_aty16_clear_margins(struct vc_data *conp,
 }
 
 static struct display_switch fbcon_aty128_16 = {
-    fbcon_cfb16_setup, fbcon_aty128_bmove, fbcon_cfb16_clear,
-    fbcon_aty16_putc, fbcon_aty16_putcs, fbcon_cfb16_revc, NULL, NULL,
-    fbcon_aty16_clear_margins,
-    FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+    setup:		fbcon_cfb16_setup,
+    bmove:		fbcon_aty128_bmove,
+    clear:		fbcon_cfb16_clear,
+    putc:		fbcon_aty16_putc,
+    putcs:		fbcon_aty16_putcs,
+    revc:		fbcon_cfb16_revc,
+    clear_margins:	fbcon_aty16_clear_margins,
+    fontwidthmask:	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
 #ifdef FBCON_HAS_CFB24
@@ -2488,10 +2496,14 @@ static void fbcon_aty24_clear_margins(struct vc_data *conp,
 }
 
 static struct display_switch fbcon_aty128_24 = {
-    fbcon_cfb24_setup, fbcon_aty128_bmove, fbcon_cfb24_clear,
-    fbcon_aty24_putc, fbcon_aty24_putcs, fbcon_cfb24_revc, NULL, NULL,
-    fbcon_aty24_clear_margins,
-    FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+    setup:		fbcon_cfb24_setup,
+    bmove:		fbcon_aty128_bmove,
+    clear:		fbcon_cfb24_clear,
+    putc:		fbcon_aty24_putc,
+    putcs:		fbcon_aty24_putcs,
+    revc:		fbcon_cfb24_revc,
+    clear_margins:	fbcon_aty24_clear_margins,
+    fontwidthmask:	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
 #ifdef FBCON_HAS_CFB32
@@ -2532,10 +2544,14 @@ static void fbcon_aty32_clear_margins(struct vc_data *conp,
 }
 
 static struct display_switch fbcon_aty128_32 = {
-    fbcon_cfb32_setup, fbcon_aty128_bmove, fbcon_cfb32_clear,
-    fbcon_aty32_putc, fbcon_aty32_putcs, fbcon_cfb32_revc, NULL, NULL,
-    fbcon_aty32_clear_margins,
-    FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+    setup:		fbcon_cfb32_setup,
+    bmove:		fbcon_aty128_bmove,
+    clear:		fbcon_cfb32_clear,
+    putc:		fbcon_aty32_putc,
+    putcs:		fbcon_aty32_putcs,
+    revc:		fbcon_cfb32_revc,
+    clear_margins:	fbcon_aty32_clear_margins,
+    fontwidthmask:	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
 

@@ -287,18 +287,21 @@ static int kstat_read_proc(char *page, char **start, off_t off,
 	int i, len;
 	extern unsigned long total_forks;
 	unsigned long jif = jiffies;
-	unsigned sum = 0;
+	unsigned int sum = 0, user = 0, nice = 0, system = 0;
 	int major, disk;
 
-	for (i = 0 ; i < NR_IRQS ; i++)
-		sum += kstat_irqs(i);
+	for (i = 0 ; i < smp_num_cpus; i++) {
+		int cpu = cpu_logical_map(i), j;
 
-	len = sprintf(page,
-		"cpu  %u %u %u %lu\n",
-		kstat.cpu_user,
-		kstat.cpu_nice,
-		kstat.cpu_system,
-		jif*smp_num_cpus - (kstat.cpu_user + kstat.cpu_nice + kstat.cpu_system));
+		user += kstat.per_cpu_user[cpu];
+		nice += kstat.per_cpu_nice[cpu];
+		system += kstat.per_cpu_system[cpu];
+		for (j = 0 ; j < NR_IRQS ; j++)
+			sum += kstat.irqs[cpu][j];
+	}
+
+	len = sprintf(page, "cpu  %u %u %u %lu\n", user, nice, system,
+		      jif * smp_num_cpus - (user + nice + system));
 	for (i = 0 ; i < smp_num_cpus; i++)
 		len += sprintf(page + len, "cpu%d %u %u %u %lu\n",
 			i,

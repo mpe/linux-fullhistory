@@ -112,7 +112,7 @@ static int misc_open(struct inode * inode, struct file * file)
 	int minor = MINOR(inode->i_rdev);
 	struct miscdevice *c;
 	int err = -ENODEV;
-	struct file_operations *old_fops;
+	struct file_operations *old_fops, *new_fops = NULL;
 	
 	down(&misc_sem);
 	
@@ -120,7 +120,9 @@ static int misc_open(struct inode * inode, struct file * file)
 
 	while ((c != &misc_list) && (c->minor != minor))
 		c = c->next;
-	if (c == &misc_list) {
+	if (c != &misc_list)
+		new_fops = fops_get(c->fops);
+	if (!new_fops) {
 		char modname[20];
 		up(&misc_sem);
 		sprintf(modname, "char-major-%d-%d", MISC_MAJOR, minor);
@@ -129,20 +131,19 @@ static int misc_open(struct inode * inode, struct file * file)
 		c = misc_list.next;
 		while ((c != &misc_list) && (c->minor != minor))
 			c = c->next;
-		if (c == &misc_list)
+		if (c == &misc_list || (new_fops = fops_get(c->fops)) == NULL)
 			goto fail;
 	}
 
+	err = 0;
 	old_fops = file->f_op;
-	file->f_op = fops_get(c->fops);
-	if (file->f_op) {
-		err = 0;
-		if (file->f_op->open)
-			err=file->f_op->open(inode,file);
-	}
-	if (err) {
-		fops_put(file->f_op);
-		file->f_op = fops_get(old_fops);
+	file->f_op = new_fops;
+	if (file->f_op->open) {
+		err=file->f_op->open(inode,file);
+		if (err) {
+			fops_put(file->f_op);
+			file->f_op = fops_get(old_fops);
+		}
 	}
 	fops_put(old_fops);
 fail:

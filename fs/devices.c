@@ -35,6 +35,7 @@ struct device_struct {
 	struct file_operations * fops;
 };
 
+static rwlock_t chrdevs_lock = RW_LOCK_UNLOCKED;
 static struct device_struct chrdevs[MAX_CHRDEV] = {
 	{ NULL, NULL },
 };
@@ -47,11 +48,13 @@ int get_device_list(char * page)
 	int len;
 
 	len = sprintf(page, "Character devices:\n");
+	read_lock(&chrdevs_lock);
 	for (i = 0; i < MAX_CHRDEV ; i++) {
 		if (chrdevs[i].fops) {
 			len += sprintf(page+len, "%3d %s\n", i, chrdevs[i].name);
 		}
 	}
+	read_unlock(&chrdevs_lock);
 	len += get_blkdev_list(page+len);
 	return len;
 }
@@ -59,68 +62,66 @@ int get_device_list(char * page)
 /*
 	Return the function table of a device.
 	Load the driver if needed.
+	Increment the reference count of module in question.
 */
-static struct file_operations * get_fops(
-	unsigned int major,
-	unsigned int minor,
-	unsigned int maxdev,
-	const char *mangle,		/* String to use to build the module name */
-	struct device_struct tb[])
+static struct file_operations * get_chrfops(unsigned int major, unsigned int minor)
 {
 	struct file_operations *ret = NULL;
 
-	if (major < maxdev){
-#ifdef CONFIG_KMOD
-		/*
-		 * I do get request for device 0. I have no idea why. It happen
-		 * at shutdown time for one. Without the following test, the
-		 * kernel will happily trigger a request_module() which will
-		 * trigger kmod and modprobe for nothing (since there
-		 * is no device with major number == 0. And furthermore
-		 * it locks the reboot process :-(
-		 *
-		 * Jacques Gelinas (jacques@solucorp.qc.ca)
-		 *
-		 * A. Haritsis <ah@doc.ic.ac.uk>: fix for serial module
-		 *  though we need the minor here to check if serial dev,
-		 *  we pass only the normal major char dev to kmod 
-		 *  as there is no other loadable dev on these majors
-		 */
-		if ((isa_tty_dev(major) && need_serial(major,minor)) ||
-		    (major != 0 && !tb[major].fops)) {
-			char name[20];
-			sprintf(name, mangle, major);
-			request_module(name);
-		}
-#endif
-		ret = tb[major].fops;
-	}
-	return ret;
-}
+	if (!major || major >= MAX_CHRDEV)
+		return NULL;
 
-struct file_operations * get_chrfops(unsigned int major, unsigned int minor)
-{
-	return get_fops (major,minor,MAX_CHRDEV,"char-major-%d",chrdevs);
+	read_lock(&chrdevs_lock);
+	ret = fops_get(chrdevs[major].fops);
+	read_unlock(&chrdevs_lock);
+#ifdef CONFIG_KMOD
+	if (ret && isa_tty_dev(major)) {
+		lock_kernel();
+		if (need_serial(major,minor)) {
+			/* Force request_module anyway, but what for? */
+			fops_put(ret);
+			ret = NULL;
+		}
+		unlock_kernel();
+	}
+	if (!ret) {
+		char name[20];
+		sprintf(name, "char-major-%d", major);
+		request_module(name);
+	}
+	read_lock(&chrdevs_lock);
+	ret = fops_get(chrdevs[major].fops);
+	read_unlock(&chrdevs_lock);
+
+#endif
+	return ret;
 }
 
 int register_chrdev(unsigned int major, const char * name, struct file_operations *fops)
 {
 	if (major == 0) {
+		write_lock(&chrdevs_lock);
 		for (major = MAX_CHRDEV-1; major > 0; major--) {
 			if (chrdevs[major].fops == NULL) {
 				chrdevs[major].name = name;
 				chrdevs[major].fops = fops;
+				write_unlock(&chrdevs_lock);
 				return major;
 			}
 		}
+		write_unlock(&chrdevs_lock);
 		return -EBUSY;
 	}
 	if (major >= MAX_CHRDEV)
 		return -EINVAL;
-	if (chrdevs[major].fops && chrdevs[major].fops != fops)
+	write_lock(&chrdevs_lock);
+	if (chrdevs[major].fops && chrdevs[major].fops != fops) {
+		write_unlock(&chrdevs_lock);
 		return -EBUSY;
+	}
 	chrdevs[major].name = name;
 	chrdevs[major].fops = fops;
+	write_unlock(&chrdevs_lock);
 	return 0;
 }
 
@@ -128,12 +129,14 @@ int unregister_chrdev(unsigned int major, const char * name)
 {
 	if (major >= MAX_CHRDEV)
 		return -EINVAL;
-	if (!chrdevs[major].fops)
+	write_lock(&chrdevs_lock);
+	if (!chrdevs[major].fops || strcmp(chrdevs[major].name, name)) {
+		write_unlock(&chrdevs_lock);
 		return -EINVAL;
-	if (strcmp(chrdevs[major].name, name))
-		return -EINVAL;
+	}
 	chrdevs[major].name = NULL;
 	chrdevs[major].fops = NULL;
+	write_unlock(&chrdevs_lock);
 	return 0;
 }
 
@@ -144,15 +147,15 @@ int chrdev_open(struct inode * inode, struct file * filp)
 {
 	int ret = -ENODEV;
 
-	lock_kernel();
-	filp->f_op = fops_get(get_chrfops(MAJOR(inode->i_rdev),
-				MINOR(inode->i_rdev)));
+	filp->f_op = get_chrfops(MAJOR(inode->i_rdev), MINOR(inode->i_rdev));
 	if (filp->f_op) {
 		ret = 0;
-		if (filp->f_op->open != NULL)
+		if (filp->f_op->open != NULL) {
+			lock_kernel();
 			ret = filp->f_op->open(inode,filp);
+			unlock_kernel();
+		}
 	}
-	unlock_kernel();
 	return ret;
 }
 

@@ -32,6 +32,7 @@ static int device_check(int host_no);
 typedef struct {
     struct pardevice *dev;	/* Parport device entry         */
     int base;			/* Actual port address          */
+    int base_hi;		/* Hi Base address for ECP-ISA chipset */
     int mode;			/* Transfer mode                */
     int host;			/* Host number (for proc)       */
     Scsi_Cmnd *cur_cmd;		/* Current queued command       */
@@ -46,6 +47,7 @@ typedef struct {
 #define IMM_EMPTY \
 {	dev:		NULL,		\
 	base:		-1,		\
+	base_hi:	0,		\
 	mode:		IMM_AUTODETECT,	\
 	host:		-1,		\
 	cur_cmd:	NULL,		\
@@ -63,6 +65,7 @@ static imm_struct imm_hosts[NO_HOSTS] =
 {IMM_EMPTY, IMM_EMPTY, IMM_EMPTY, IMM_EMPTY};
 
 #define IMM_BASE(x)	imm_hosts[(x)].base
+#define IMM_BASE_HI(x)     imm_hosts[(x)].base_hi
 
 int parbus_base[NO_HOSTS] =
 {0x03bc, 0x0378, 0x0278, 0x0000};
@@ -158,6 +161,7 @@ int imm_detect(Scsi_Host_Template * host)
 	    }
 	}
 	ppb = IMM_BASE(i) = imm_hosts[i].dev->port->base;
+	IMM_BASE_HI(i) = imm_hosts[i].dev->port->base_hi;
 	w_ctr(ppb, 0x0c);
 	modes = imm_hosts[i].dev->port->modes;
 
@@ -374,6 +378,9 @@ static int imm_negotiate(imm_struct * tmp)
     return a;
 }
 
+/* 
+ * Clear EPP timeout bit. 
+ */
 static inline void epp_reset(unsigned short ppb)
 {
     int i;
@@ -383,19 +390,23 @@ static inline void epp_reset(unsigned short ppb)
     w_str(ppb, i & 0xfe);
 }
 
-static inline void ecp_sync(unsigned short ppb)
+/* 
+ * Wait for empty ECP fifo (if we are in ECP fifo mode only)
+ */
+static inline void ecp_sync(unsigned short hostno)
 {
-    int i;
+    int i, ppb_hi=IMM_BASE_HI(hostno);
 
-    if ((r_ecr(ppb) & 0xe0) != 0x80)
-	return;
+    if (ppb_hi == 0) return;
 
-    for (i = 0; i < 100; i++) {
-	if (r_ecr(ppb) & 0x01)
-	    return;
-	udelay(5);
+    if ((r_ecr(ppb_hi) & 0xe0) == 0x60) { /* mode 011 == ECP fifo mode */
+        for (i = 0; i < 100; i++) {
+	    if (r_ecr(ppb_hi) & 0x01)
+	        return;
+	    udelay(5);
+	}
+        printk("imm: ECP sync failed as data still present in FIFO.\n");
     }
-    printk("imm: ECP sync failed as data still present in FIFO.\n");
 }
 
 static int imm_byte_out(unsigned short base, const char *buffer, int len)
@@ -483,7 +494,7 @@ static int imm_out(int host_no, char *buffer, int len)
 	w_ctr(ppb, 0xc);
 	r = !(r_str(ppb) & 0x01);
 	w_ctr(ppb, 0xc);
-	ecp_sync(ppb);
+	ecp_sync(host_no);
 	break;
 
     case IMM_NIBBLE:
@@ -545,7 +556,7 @@ static int imm_in(int host_no, char *buffer, int len)
 	w_ctr(ppb, 0x2c);
 	r = !(r_str(ppb) & 0x01);
 	w_ctr(ppb, 0x2c);
-	ecp_sync(ppb);
+	ecp_sync(host_no);
 	break;
 
     default:
@@ -1235,7 +1246,7 @@ static int device_check(int host_no)
 	    return 1;
 	}
 	imm_disconnect(host_no);
-	printk("imm: Communication established with ID %i using %s\n", loop,
+	printk("imm: Communication established at 0x%x with ID %i using %s\n", ppb, loop,
 	       IMM_MODE_STRING[imm_hosts[host_no].mode]);
 	imm_connect(host_no, CONNECT_EPP_MAYBE);
 	imm_reset_pulse(IMM_BASE(host_no));

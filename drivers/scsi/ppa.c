@@ -125,7 +125,7 @@ int ppa_detect(Scsi_Host_Template * host)
     }
   retry_entry:
     for (i = 0; pb; i++, pb = pb->next) {
-	int modes, ppb;
+	int modes, ppb, ppb_hi;
 
 	ppa_hosts[i].dev =
 	    parport_register_device(pb, "ppa", NULL, ppa_wakeup,
@@ -150,6 +150,7 @@ int ppa_detect(Scsi_Host_Template * host)
 	    }
 	}
 	ppb = PPA_BASE(i) = ppa_hosts[i].dev->port->base;
+	ppb_hi =  ppa_hosts[i].dev->port->base_hi;
 	w_ctr(ppb, 0x0c);
 	modes = ppa_hosts[i].dev->port->modes;
 
@@ -162,11 +163,11 @@ int ppa_detect(Scsi_Host_Template * host)
 	    ppa_hosts[i].mode = PPA_PS2;
 
 	if (modes & PARPORT_MODE_ECP) {
-	    w_ecr(ppb, 0x20);
+	    w_ecr(ppb_hi, 0x20);
 	    ppa_hosts[i].mode = PPA_PS2;
 	}
 	if ((modes & PARPORT_MODE_EPP) && (modes & PARPORT_MODE_ECP))
-	    w_ecr(ppb, 0x80);
+	    w_ecr(ppb_hi, 0x80);
 
 	/* Done configuration */
 	ppa_pb_release(i);
@@ -321,8 +322,7 @@ static unsigned char ppa_wait(int host_no)
 }
 
 /*
- * output a string, in whatever mode is available, according to the
- * PPA protocol. 
+ * Clear EPP Timeout Bit 
  */
 static inline void epp_reset(unsigned short ppb)
 {
@@ -333,19 +333,23 @@ static inline void epp_reset(unsigned short ppb)
     w_str(ppb, i & 0xfe);
 }
 
-static inline void ecp_sync(unsigned short ppb)
+/* 
+ * Wait for empty ECP fifo (if we are in ECP fifo mode only)
+ */
+static inline void ecp_sync(unsigned short hostno)
 {
-    int i;
+    int i, ppb_hi=ppa_hosts[hostno].dev->port->base_hi;
 
-    if ((r_ecr(ppb) & 0xe0) != 0x80)
-	return;
+    if (ppb_hi == 0) return;
 
-    for (i = 0; i < 100; i++) {
-	if (r_ecr(ppb) & 0x01)
-	    return;
-	udelay(5);
+    if ((r_ecr(ppb_hi) & 0xe0) == 0x60) { /* mode 011 == ECP fifo mode */
+        for (i = 0; i < 100; i++) {
+            if (r_ecr(ppb_hi) & 0x01)
+                return;
+            udelay(5);
+        }
+        printk("ppa: ECP sync failed as data still present in FIFO.\n");
     }
-    printk("ppa: ECP sync failed as data still present in FIFO.\n");
 }
 
 static int ppa_byte_out(unsigned short base, const char *buffer, int len)
@@ -420,7 +424,7 @@ static int ppa_out(int host_no, char *buffer, int len)
 	w_ctr(ppb, 0xc);
 	r = !(r_str(ppb) & 0x01);
 	w_ctr(ppb, 0xc);
-	ecp_sync(ppb);
+	ecp_sync(host_no);
 	break;
 
     default:
@@ -473,7 +477,7 @@ static int ppa_in(int host_no, char *buffer, int len)
 	w_ctr(ppb, 0x2c);
 	r = !(r_str(ppb) & 0x01);
 	w_ctr(ppb, 0x2c);
-	ecp_sync(ppb);
+	ecp_sync(host_no);
 	break;
 
     default:

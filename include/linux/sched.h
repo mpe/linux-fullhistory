@@ -139,8 +139,9 @@ extern void init_idle(void);
 extern void show_state(void);
 extern void cpu_init (void);
 extern void trap_init(void);
-extern void update_one_process( struct task_struct *p,
-	unsigned long ticks, unsigned long user, unsigned long system, int cpu);
+extern void update_process_times(int user);
+extern void update_one_process(struct task_struct *p, unsigned long user,
+			       unsigned long system, int cpu);
 
 #define	MAX_SCHEDULE_TIMEOUT	LONG_MAX
 extern signed long FASTCALL(schedule_timeout(signed long timeout));
@@ -680,37 +681,6 @@ extern void free_fd_array(struct file **, int);
 extern fd_set *alloc_fdset(int);
 extern int expand_fdset(struct files_struct *, int nr);
 extern void free_fdset(fd_set *, int);
-
-/* Expand files.  Return <0 on error; 0 nothing done; 1 files expanded,
- * we may have blocked. 
- *
- * Should be called with the files->file_lock spinlock held for write.
- */
-static inline int expand_files(struct files_struct *files, int nr)
-{
-	int err, expand = 0;
-#ifdef FDSET_DEBUG	
-	printk (KERN_ERR __FUNCTION__ " %d: nr = %d\n", current->pid, nr);
-#endif
-	
-	if (nr >= files->max_fdset) {
-		expand = 1;
-		if ((err = expand_fdset(files, nr)))
-			goto out;
-	}
-	if (nr >= files->max_fds) {
-		expand = 1;
-		if ((err = expand_fd_array(files, nr)))
-			goto out;
-	}
-	err = expand;
- out:
-#ifdef FDSET_DEBUG	
-	if (err)
-		printk (KERN_ERR __FUNCTION__ " %d: return %d\n", current->pid, err);
-#endif
-	return err;
-}
 
 extern int  copy_thread(int, unsigned long, unsigned long, struct task_struct *, struct pt_regs *);
 extern void flush_thread(void);

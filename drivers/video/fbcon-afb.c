@@ -411,8 +411,13 @@ void fbcon_afb_revc(struct display *p, int xx, int yy)
      */
 
 struct display_switch fbcon_afb = {
-    fbcon_afb_setup, fbcon_afb_bmove, fbcon_afb_clear, fbcon_afb_putc,
-    fbcon_afb_putcs, fbcon_afb_revc, NULL, NULL, NULL, FONTWIDTH(8)
+    setup:		fbcon_afb_setup,
+    bmove:		fbcon_afb_bmove,
+    clear:		fbcon_afb_clear,
+    putc:		fbcon_afb_putc,
+    putcs:		fbcon_afb_putcs,
+    revc:		fbcon_afb_revc,
+    fontwidthmask:	FONTWIDTH(8)
 };
 
 

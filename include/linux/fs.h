@@ -238,11 +238,10 @@ struct buffer_head {
 	char * b_data;			/* pointer to data block (512 byte) */
 	struct page *b_page;		/* the page this bh is mapped to */
 	void (*b_end_io)(struct buffer_head *bh, int uptodate); /* I/O completion */
-	void *b_dev_id;
+ 	void *b_private;		/* reserved for b_end_io */
 
 	unsigned long b_rsector;	/* Real buffer location on disk */
 	wait_queue_head_t b_wait;
-	struct kiobuf * b_kiobuf;	/* kiobuf which owns this IO */
 };
 
 typedef void (bh_end_io_t)(struct buffer_head *bh, int uptodate);
@@ -803,7 +802,7 @@ struct file_system_type var = { \
 /* Alas, no aliases. Too much hassle with bringing module.h everywhere */
 #define fops_get(fops) \
 	(((fops) && (fops)->owner)	\
-		? __MOD_INC_USE_COUNT((fops)->owner), (fops) \
+		? ( try_inc_mod_count((fops)->owner) ? (fops) : NULL ) \
 		: (fops))
 
 #define fops_put(fops) \
@@ -900,7 +899,6 @@ extern int blkdev_put(struct block_device *, int);
 
 /* fs/devices.c */
 extern const struct block_device_operations *get_blkfops(unsigned int);
-extern struct file_operations *get_chrfops(unsigned int, unsigned int);
 extern int register_chrdev(unsigned int, const char *, struct file_operations *);
 extern int unregister_chrdev(unsigned int, const char *);
 extern int chrdev_open(struct inode *, struct file *);

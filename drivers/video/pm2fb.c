@@ -1281,20 +1281,24 @@ static void pm2fb_clear_margins8(struct vc_data* conp, struct display* p,
 }
 
 static struct display_switch pm2_cfb8 = {
-	fbcon_cfb8_setup, pm2fb_pp_bmove,
+	setup:		fbcon_cfb8_setup,
+	bmove:		pm2fb_pp_bmove,
 #ifdef __alpha__
 	/* Not sure why, but this works and the other does not. */
 	/* Also, perhaps we need a separate routine to wait for the
 	   blitter to stop before doing this? */
 	/* In addition, maybe we need to do this for 16 and 32 bit depths? */
-	fbcon_cfb8_clear,
+	clear:		fbcon_cfb8_clear,
 #else
-	pm2fb_clear8,
+	clear:		pm2fb_clear8,
 #endif
-	fbcon_cfb8_putc, fbcon_cfb8_putcs, fbcon_cfb8_revc,
-	pm2fb_cursor, pm2fb_set_font,
-	pm2fb_clear_margins8,
-	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16) };
+	putc:		fbcon_cfb8_putc,
+	putcs:		fbcon_cfb8_putcs,
+	revc:		fbcon_cfb8_revc,
+	cursor:		pm2fb_cursor,
+	set_font:	pm2fb_set_font,
+	clear_margins:	pm2fb_clear_margins8,
+	fontwidthmask:	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16) };
 #endif /* FBCON_HAS_CFB8 */
 
 #ifdef FBCON_HAS_CFB16
@@ -1330,11 +1334,17 @@ static void pm2fb_clear_margins16(struct vc_data* conp, struct display* p,
 }
 
 static struct display_switch pm2_cfb16 = {
-	fbcon_cfb16_setup, pm2fb_pp_bmove, pm2fb_clear16,
-	fbcon_cfb16_putc, fbcon_cfb16_putcs, fbcon_cfb16_revc,
-	pm2fb_cursor, pm2fb_set_font,
-	pm2fb_clear_margins16,
-	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16) };
+	setup:		fbcon_cfb16_setup,
+	bmove:		pm2fb_pp_bmove,
+	clear:		pm2fb_clear16,
+	putc:		fbcon_cfb16_putc,
+	putcs:		fbcon_cfb16_putcs,
+	revc:		fbcon_cfb16_revc,
+	cursor:		pm2fb_cursor,
+	set_font:	pm2fb_set_font,
+	clear_margins:	pm2fb_clear_margins16,
+	fontwidthmask:	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+};
 #endif /* FBCON_HAS_CFB16 */
 
 #ifdef FBCON_HAS_CFB24
@@ -1388,11 +1398,17 @@ static void pm2fb_clear_margins24(struct vc_data* conp, struct display* p,
 }
 
 static struct display_switch pm2_cfb24 = {
-	fbcon_cfb24_setup, pm2fb_bmove, pm2fb_clear24,
-	fbcon_cfb24_putc, fbcon_cfb24_putcs, fbcon_cfb24_revc,
-	pm2fb_cursor, pm2fb_set_font,
-	pm2fb_clear_margins24,
-	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16) };
+	setup:		fbcon_cfb24_setup,
+	bmove:		pm2fb_bmove,
+	clear:		pm2fb_clear24,
+	putc:		fbcon_cfb24_putc,
+	putcs:		fbcon_cfb24_putcs,
+	revc:		fbcon_cfb24_revc,
+	cursor:		pm2fb_cursor,
+	set_font:	pm2fb_set_font,
+	clear_margins:	pm2fb_clear_margins24,
+	fontwidthmask:	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+};
 #endif /* FBCON_HAS_CFB24 */
 
 #ifdef FBCON_HAS_CFB32
@@ -1426,11 +1442,17 @@ static void pm2fb_clear_margins32(struct vc_data* conp, struct display* p,
 }
 
 static struct display_switch pm2_cfb32 = {
-	fbcon_cfb32_setup, pm2fb_bmove, pm2fb_clear32,
-	fbcon_cfb32_putc, fbcon_cfb32_putcs, fbcon_cfb32_revc,
-	pm2fb_cursor, pm2fb_set_font,
-	pm2fb_clear_margins32,
-	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16) };
+	setup:		fbcon_cfb32_setup,
+	bmove:		pm2fb_bmove,
+	clear:		pm2fb_clear32,
+	putc:		fbcon_cfb32_putc,
+	putcs:		fbcon_cfb32_putcs,
+	revc:		fbcon_cfb32_revc,
+	cursor:		pm2fb_cursor,
+	set_font:	pm2fb_set_font,
+	clear_margins:	pm2fb_clear_margins32,
+	fontwidthmask:	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+};
 #endif /* FBCON_HAS_CFB32 */
 
 /***************************************************************************

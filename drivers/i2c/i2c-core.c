@@ -20,7 +20,7 @@
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi>.
    All SMBus-related things are written by Frodo Looijaard <frodol@dds.nl> */
 
-/* $Id: i2c-core.c,v 1.52 2000/02/27 10:43:29 frodo Exp $ */
+/* $Id: i2c-core.c,v 1.56 2000/07/09 15:13:05 frodo Exp $ */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -73,8 +73,6 @@ static int driver_count;
 
 /**** debug level */
 static int i2c_debug=1;
-static void i2c_dummy_adapter(struct i2c_adapter *adapter);
-static void i2c_dummy_client(struct i2c_client *client);
 
 /* ---------------------------------------------------
  * /proc entry declarations
@@ -111,8 +109,8 @@ static int i2cproc_initialized = 0;
 
 #else /* undef CONFIG_PROC_FS */
 
-#define i2cproc_init()
-#define i2cproc_cleanup()
+#define i2cproc_init() 0
+#define i2cproc_cleanup() 0
 
 #endif /* CONFIG_PROC_FS */
 
@@ -129,7 +127,7 @@ static int i2cproc_initialized = 0;
  */
 int i2c_add_adapter(struct i2c_adapter *adap)
 {
-	int i,j;
+	int i,j,res;
 
 	ADAP_LOCK();
 	for (i = 0; i < I2C_ADAP_MAX; i++)
@@ -139,8 +137,8 @@ int i2c_add_adapter(struct i2c_adapter *adap)
 		printk(KERN_WARNING 
 		       " i2c-core.o: register_adapter(%s) - enlarge I2C_ADAP_MAX.\n",
 			adap->name);
-		ADAP_UNLOCK();
-		return -ENOMEM;
+		res = -ENOMEM;
+		goto ERROR0;
 	}
 
 	adapters[i] = adap;
@@ -150,7 +148,6 @@ int i2c_add_adapter(struct i2c_adapter *adap)
 	/* init data types */
 	init_MUTEX(&adap->lock);
 
-	i2c_dummy_adapter(adap);  /* actually i2c_dummy->add_adapter */
 #ifdef CONFIG_PROC_FS
 
 	if (i2cproc_initialized) {
@@ -163,12 +160,12 @@ int i2c_add_adapter(struct i2c_adapter *adap)
 		if (! proc_entry) {
 			printk("i2c-core.o: Could not create /proc/bus/%s\n",
 			       name);
-			return -ENOENT;
+			res = -ENOENT;
+			goto ERROR1;
 		}
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,48))
 		proc_entry->proc_fops = &i2cproc_operations;
-		proc_entry->owner = THIS_MODULE;
 #else
 		proc_entry->ops = &i2cproc_inode_operations;
 #endif
@@ -185,7 +182,9 @@ int i2c_add_adapter(struct i2c_adapter *adap)
 	/* inform drivers of new adapters */
 	DRV_LOCK();	
 	for (j=0;j<I2C_DRIVER_MAX;j++)
-		if (drivers[j]!=NULL && drivers[j]->flags&I2C_DF_NOTIFY)
+		if (drivers[j]!=NULL && 
+		    (drivers[j]->flags&(I2C_DF_NOTIFY|I2C_DF_DUMMY)))
+			/* We ignore the return code; if it fails, too bad */
 			drivers[j]->attach_adapter(adap);
 	DRV_UNLOCK();
 	
@@ -193,24 +192,68 @@ int i2c_add_adapter(struct i2c_adapter *adap)
 	           adap->name,i));
 
 	return 0;	
+
+
+ERROR1:
+	ADAP_LOCK();
+	adapters[i] = NULL;
+	adap_count--;
+ERROR0:
+	ADAP_UNLOCK();
+	return res;
 }
 
 
 int i2c_del_adapter(struct i2c_adapter *adap)
 {
-	int i,j;
+	int i,j,res;
+
 	ADAP_LOCK();
+
 	for (i = 0; i < I2C_ADAP_MAX; i++)
 		if (adap == adapters[i])
 			break;
 	if (I2C_ADAP_MAX == i) {
-		printk( " i2c-core.o: unregister_adapter adap [%s] not found.\n",
+		printk( "i2c-core.o: unregister_adapter adap [%s] not found.\n",
 			adap->name);
-		ADAP_UNLOCK();
-		return -ENODEV;
+		res = -ENODEV;
+		goto ERROR0;
 	}
-	
-	i2c_dummy_adapter(adap);  /* actually i2c_dummy->del_adapter */
+
+	/* DUMMY drivers do not register their clients, so we have to
+	 * use a trick here: we call driver->attach_adapter to
+	 * *detach* it! Of course, each dummy driver should know about
+	 * this or hell will break loose...
+	 */
+	DRV_LOCK();
+	for (j = 0; j < I2C_DRIVER_MAX; j++) 
+		if (drivers[j] && (drivers[j]->flags & I2C_DF_DUMMY))
+			if ((res = drivers[j]->attach_adapter(adap))) {
+				printk("i2c-core.o: can't detach adapter %s "
+				       "while detaching driver %s: driver not "
+				       "detached!",adap->name,drivers[j]->name);
+				goto ERROR1;	
+			}
+	DRV_UNLOCK();
+
+
+	/* detach any active clients. This must be done first, because
+	 * it can fail; in which case we give upp. */
+	for (j=0;j<I2C_CLIENT_MAX;j++) {
+		struct i2c_client *client = adap->clients[j];
+		if (client!=NULL)
+		    /* detaching devices is unconditional of the set notify
+		     * flag, as _all_ clients that reside on the adapter
+		     * must be deleted, as this would cause invalid states.
+		     */
+			if ((res=client->driver->detach_client(client))) {
+				printk("i2c-core.o: adapter %s not "
+					"unregisted, because client at "
+					"address %02x can't be detached. ",
+					adap->name, client->addr);
+				goto ERROR0;
+			}
+	}
 #ifdef CONFIG_PROC_FS
 	if (i2cproc_initialized) {
 		char name[8];
@@ -219,25 +262,19 @@ int i2c_del_adapter(struct i2c_adapter *adap)
 	}
 #endif /* def CONFIG_PROC_FS */
 
-	/* detach any active clients */
-	for (j=0;j<I2C_CLIENT_MAX;j++) {
-		struct i2c_client *client = adap->clients[j];
-		if ( (client!=NULL) 
-		     /* && (client->driver->flags & I2C_DF_NOTIFY) */ )
-			/* detaching devices is unconditional of the set notify
-			 * flag, as _all_ clients that reside on the adapter
-			 * must be deleted, as this would cause invalid states.
-			 */
-			client->driver->detach_client(client);
-			/* i2c_detach_client(client); --- frodo */
-	}
-	/* all done, now unregister */
 	adapters[i] = NULL;
 	adap_count--;
 	
 	ADAP_UNLOCK();	
 	DEB(printk("i2c-core.o: adapter unregistered: %s\n",adap->name));
 	return 0;
+
+ERROR0:
+	ADAP_UNLOCK();
+	return res;
+ERROR1:
+	DRV_UNLOCK();
+	return res;
 }
 
 
@@ -249,14 +286,15 @@ int i2c_del_adapter(struct i2c_adapter *adap)
 
 int i2c_add_driver(struct i2c_driver *driver)
 {
-	int i,j;
+	int i;
 	DRV_LOCK();
 	for (i = 0; i < I2C_DRIVER_MAX; i++)
 		if (NULL == drivers[i])
 			break;
 	if (I2C_DRIVER_MAX == i) {
 		printk(KERN_WARNING 
-		       " i2c-core.o: register_driver(%s) - enlarge I2C_DRIVER_MAX.\n",
+		       " i2c-core.o: register_driver(%s) "
+		       "- enlarge I2C_DRIVER_MAX.\n",
 			driver->name);
 		DRV_UNLOCK();
 		return -ENOMEM;
@@ -269,27 +307,14 @@ int i2c_add_driver(struct i2c_driver *driver)
 	
 	DEB(printk("i2c-core.o: driver %s registered.\n",driver->name));
 	
-	/* Notify all existing adapters and clients to dummy driver */
 	ADAP_LOCK();
-	if (driver->flags&I2C_DF_DUMMY) { 
-		for (i=0; i<I2C_ADAP_MAX; i++) {
-			if (adapters[i]) {
-				driver->attach_adapter(adapters[i]);
-		 		for (j=0; j<I2C_CLIENT_MAX; j++)
-		 			if (adapters[i]->clients[j])
-	 				driver->detach_client(
-					             adapters[i]->clients[j]);
-			}
-		}
-		ADAP_UNLOCK();
-		return 0;
-	}
 
 	/* now look for instances of driver on our adapters
 	 */
-	if ( driver->flags&I2C_DF_NOTIFY ) {
+	if (driver->flags& (I2C_DF_NOTIFY|I2C_DF_DUMMY)) {
 		for (i=0;i<I2C_ADAP_MAX;i++)
 			if (adapters[i]!=NULL)
+				/* Ignore errors */
 				driver->attach_adapter(adapters[i]);
 	}
 	ADAP_UNLOCK();
@@ -298,14 +323,15 @@ int i2c_add_driver(struct i2c_driver *driver)
 
 int i2c_del_driver(struct i2c_driver *driver)
 {
-	int i,j,k;
+	int i,j,k,res;
 
 	DRV_LOCK();
 	for (i = 0; i < I2C_DRIVER_MAX; i++)
 		if (driver == drivers[i])
 			break;
 	if (I2C_DRIVER_MAX == i) {
-		printk(KERN_WARNING " i2c-core.o: unregister_driver: [%s] not found\n",
+		printk(KERN_WARNING " i2c-core.o: unregister_driver: "
+				    "[%s] not found\n",
 			driver->name);
 		DRV_UNLOCK();
 		return -ENODEV;
@@ -320,19 +346,52 @@ int i2c_del_driver(struct i2c_driver *driver)
 	 * pointers.
 	 */
 	ADAP_LOCK(); /* should be moved inside the if statement... */
-	if ((driver->flags&I2C_DF_DUMMY)==0) 
 	for (k=0;k<I2C_ADAP_MAX;k++) {
 		struct i2c_adapter *adap = adapters[k];
 		if (adap == NULL) /* skip empty entries. */
 			continue;
-		DEB2(printk("i2c-core.o: examining adapter %s:\n",adap->name));
-		for (j=0;j<I2C_CLIENT_MAX;j++) { 
-			struct i2c_client *client = adap->clients[j];
-			if (client != NULL && client->driver == driver) {
-				DEB2(printk("i2c-core.o:   detaching client %s:\n",
-					client->name));
-				/*i2c_detach_client(client);*/
-				driver->detach_client(client);
+		DEB2(printk("i2c-core.o: examining adapter %s:\n",
+			    adap->name));
+		if (driver->flags & I2C_DF_DUMMY) {
+		/* DUMMY drivers do not register their clients, so we have to
+		 * use a trick here: we call driver->attach_adapter to
+		 * *detach* it! Of course, each dummy driver should know about
+		 * this or hell will break loose...  
+		 */
+			if ((res = driver->attach_adapter(adap))) {
+				printk("i2c-core.o: while unregistering "
+				       "dummy driver %s, adapter %s could "
+				       "not be detached properly; driver "
+				       "not unloaded!",driver->name,
+				       adap->name);
+				ADAP_UNLOCK();
+				return res;
+			}
+		} else {
+			for (j=0;j<I2C_CLIENT_MAX;j++) { 
+				struct i2c_client *client = adap->clients[j];
+				if (client != NULL && 
+				    client->driver == driver) {
+					DEB2(printk("i2c-core.o: "
+						    "detaching client %s:\n",
+					            client->name));
+					if ((res = driver->
+							detach_client(client)))
+					{
+						printk("i2c-core.o: while "
+						       "unregistering driver "
+						       "`%s', the client at "
+						       "address %02x of
+						       adapter `%s' could not
+						       be detached; driver
+						       not unloaded!",
+						       driver->name,
+						       client->addr,
+						       adap->name);
+						ADAP_UNLOCK();
+						return res;
+					}
+				}
 			}
 		}
 	}
@@ -374,12 +433,18 @@ int i2c_attach_client(struct i2c_client *client)
 
 	adapter->clients[i] = client;
 	adapter->client_count++;
-	i2c_dummy_client(client);
 	
-	if (adapter->client_register != NULL) 
-		adapter->client_register(client);
+	if (adapter->client_register) 
+		if (adapter->client_register(client)) 
+			printk("i2c-core.o: warning: client_register seems "
+			       "to have failed for client %02x at adapter %s\n",
+			       client->addr,adapter->name);
 	DEB(printk("i2c-core.o: client [%s] registered to adapter [%s](pos. %d).\n",
 		client->name, adapter->name,i));
+
+	if(client->flags & I2C_CLIENT_ALLOW_USE)
+		client->usage_count = 0;
+	
 	return 0;
 }
 
@@ -387,24 +452,31 @@ int i2c_attach_client(struct i2c_client *client)
 int i2c_detach_client(struct i2c_client *client)
 {
 	struct i2c_adapter *adapter = client->adapter;
-	int i;
+	int i,res;
 
 	for (i = 0; i < I2C_CLIENT_MAX; i++)
 		if (client == adapter->clients[i])
 			break;
 	if (I2C_CLIENT_MAX == i) {
-		printk(KERN_WARNING " i2c-core.o: unregister_client [%s] not found\n",
+		printk(KERN_WARNING " i2c-core.o: unregister_client "
+				    "[%s] not found\n",
 			client->name);
 		return -ENODEV;
 	}
-
+	
+	if( (client->flags & I2C_CLIENT_ALLOW_USE) && 
+	    (client->usage_count>0))
+		return -EBUSY;
+	
 	if (adapter->client_unregister != NULL) 
-		adapter->client_unregister(client);
-	/*	client->driver->detach_client(client);*/
+		if ((res = adapter->client_unregister(client))) {
+			printk("i2c-core.o: client_unregister [%s] failed, "
+			       "client not detached",client->name);
+			return res;
+		}
 
 	adapter->clients[i] = NULL;
 	adapter->client_count--;
-	i2c_dummy_client(client);
 
 	DEB(printk("i2c-core.o: client [%s] unregistered.\n",client->name));
 	return 0;
@@ -422,12 +494,113 @@ void i2c_inc_use_client(struct i2c_client *client)
 
 void i2c_dec_use_client(struct i2c_client *client)
 {
-
+	
 	if (client->driver->dec_use != NULL)
 		client->driver->dec_use(client);
 
 	if (client->adapter->dec_use != NULL)
 		client->adapter->dec_use(client->adapter);
+}
+
+struct i2c_client *i2c_get_client(int driver_id, int adapter_id, 
+					struct i2c_client *prev)
+{
+	int i,j;
+	
+	/* Will iterate through the list of clients in each adapter of adapters-list
+	   in search for a client that matches the search criteria. driver_id or 
+	   adapter_id are ignored if set to 0. If both are ignored this returns 
+	   first client found. */
+	
+	i = j = 0;  
+	
+	/* set starting point */ 
+	if(prev)
+	{
+		if(!(prev->adapter))
+			return (struct i2c_client *) -EINVAL;
+		
+		for(j=0; j < I2C_ADAP_MAX; j++)
+			if(prev->adapter == adapters[j])
+				break;
+		
+		/* invalid starting point? */
+		if (I2C_ADAP_MAX == j) {
+			printk(KERN_WARNING " i2c-core.o: get_client adapter for client:[%s] not found\n",
+				prev->name);
+			return (struct i2c_client *) -ENODEV;
+		}	
+		
+		for(i=0; i < I2C_CLIENT_MAX; i++)
+			if(prev == adapters[j]->clients[i])
+				break;
+		
+		/* invalid starting point? */
+		if (I2C_CLIENT_MAX == i) {
+			printk(KERN_WARNING " i2c-core.o: get_client client:[%s] not found\n",
+				prev->name);
+			return (struct i2c_client *) -ENODEV;
+		}	
+		
+		i++; /* start from one after prev */
+	}
+	
+	for(; j < I2C_ADAP_MAX; j++)
+	{
+		if(!adapters[j])
+			continue;
+			
+		if(adapter_id && (adapters[j]->id != adapter_id))
+			continue;
+		
+		for(; i < I2C_CLIENT_MAX; i++)
+		{
+			if(!adapters[j]->clients[i])
+				continue;
+				
+			if(driver_id && (adapters[j]->clients[i]->driver->id != driver_id))
+				continue;
+			if(adapters[j]->clients[i]->flags & I2C_CLIENT_ALLOW_USE)	
+				return adapters[j]->clients[i];
+		}
+	}
+
+	return 0;
+}
+
+int i2c_use_client(struct i2c_client *client)
+{
+	if(client->flags & I2C_CLIENT_ALLOW_USE) {
+		if (client->flags & I2C_CLIENT_ALLOW_MULTIPLE_USE) 
+			client->usage_count++;
+		else {
+			if(client->usage_count > 0) 
+				return -EBUSY;
+			 else 
+				client->usage_count++;
+		}
+	}
+
+	i2c_inc_use_client(client);
+
+	return 0;
+}
+
+int i2c_release_client(struct i2c_client *client)
+{
+	if(client->flags & I2C_CLIENT_ALLOW_USE) {
+		if(client->usage_count>0)
+			client->usage_count--;
+		else
+		{
+			printk(KERN_WARNING " i2c-core.o: dec_use_client used one too many times\n");
+			return -EPERM;
+		}
+	}
+	
+	i2c_dec_use_client(client);
+	
+	return 0;
 }
 
 /* ----------------------------------------------------
@@ -578,28 +751,6 @@ int i2cproc_cleanup(void)
 
 
 #endif /* def CONFIG_PROC_FS */
-
-/* ---------------------------------------------------
- * dummy driver notification
- * --------------------------------------------------- 
- */
-
-static void i2c_dummy_adapter(struct i2c_adapter *adap)
-{
-	int i;	
-	for (i=0; i<I2C_DRIVER_MAX; i++)
-		if (drivers[i] && (drivers[i]->flags & I2C_DF_DUMMY))
-		    drivers[i]->attach_adapter(adap);
-}
-
-static void i2c_dummy_client(struct i2c_client *client)
-{
-	int i;
-	for (i=0; i<I2C_DRIVER_MAX; i++)
-		if (drivers[i] && (drivers[i]->flags & I2C_DF_DUMMY))
-		    drivers[i]->detach_client(client);
-}
-
 
 /* ----------------------------------------------------
  * the functional interface to the i2c busses.
@@ -1187,6 +1338,9 @@ EXPORT_SYMBOL(i2c_attach_client);
 EXPORT_SYMBOL(i2c_detach_client);
 EXPORT_SYMBOL(i2c_inc_use_client);
 EXPORT_SYMBOL(i2c_dec_use_client);
+EXPORT_SYMBOL(i2c_get_client);
+EXPORT_SYMBOL(i2c_use_client);
+EXPORT_SYMBOL(i2c_release_client);
 EXPORT_SYMBOL(i2c_check_addr);
 
 

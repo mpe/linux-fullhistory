@@ -27,8 +27,9 @@ static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk,
 
 static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next, struct task_struct *tsk, unsigned cpu)
 {
-	set_bit(cpu, &next->cpu_vm_mask);
 	if (prev != next) {
+		/* stop flush ipis for the previous mm */
+		clear_bit(cpu, &prev->cpu_vm_mask);
 		/*
 		 * Re-load LDT if necessary
 		 */
@@ -38,20 +39,22 @@ static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next, str
 		cpu_tlbstate[cpu].state = TLBSTATE_OK;
 		cpu_tlbstate[cpu].active_mm = next;
 #endif
+		set_bit(cpu, &next->cpu_vm_mask);
 		/* Re-load page tables */
 		asm volatile("movl %0,%%cr3": :"r" (__pa(next->pgd)));
-		clear_bit(cpu, &prev->cpu_vm_mask);
 	}
 #ifdef CONFIG_SMP
 	else {
-		int old_state = cpu_tlbstate[cpu].state;
 		cpu_tlbstate[cpu].state = TLBSTATE_OK;
 		if(cpu_tlbstate[cpu].active_mm != next)
 			BUG();
-		if(old_state == TLBSTATE_OLD)
+		if(!test_and_set_bit(cpu, &next->cpu_vm_mask)) {
+			/* We were in lazy tlb mode and leave_mm disabled 
+			 * tlb flush IPI delivery. We must flush our tlb.
+			 */
 			local_flush_tlb();
+		}
 	}
-
 #endif
 }
 

@@ -49,14 +49,16 @@ static int phone_open(struct inode *inode, struct file *file)
 	unsigned int minor = MINOR(inode->i_rdev);
 	int err = 0;
 	struct phone_device *p;
-	struct file_operations *old_fops;
+	struct file_operations *old_fops, *new_fops = NULL;
 
 	if (minor >= PHONE_NUM_DEVICES)
 		return -ENODEV;
 
 	down(&phone_lock);
 	p = phone_device[minor];
-	if (p == NULL) {
+	if (p)
+		new_fops = fops_get(p->f_op);
+	if (!new_fops) {
 		char modname[32];
 
 		up(&phone_lock);
@@ -64,14 +66,14 @@ static int phone_open(struct inode *inode, struct file *file)
 		request_module(modname);
 		down(&phone_lock);
 		p = phone_device[minor];
-		if (p == NULL)
+		if (p == NULL || (new_fops = fops_get(p->f_op)) == NULL)
 		{
 			err=-ENODEV;
 			goto end;
 		}
 	}
 	old_fops = file->f_op;
-	file->f_op = fops_get(p->f_op);
+	file->f_op = new_fops;
 	if (p->open)
 		err = p->open(p, file);	/* Tell the device it is open */
 	if (err) {

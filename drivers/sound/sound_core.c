@@ -479,6 +479,7 @@ int soundcore_open(struct inode *inode, struct file *file)
 	int chain;
 	int unit=MINOR(inode->i_rdev);
 	struct sound_unit *s;
+	struct file_operations *new_fops = NULL;
 
 	chain=unit&0x0F;
 	if(chain==4 || chain==5)	/* dsp/audio/dsp16 */
@@ -490,7 +491,9 @@ int soundcore_open(struct inode *inode, struct file *file)
 	
 	spin_lock(&sound_loader_lock);
 	s = __look_for_unit(chain, unit);
-	if (s == NULL) {
+	if (s)
+		new_fops = fops_get(s->unit_fops);
+	if (!new_fops) {
 		char mod[32];
 	
 		spin_unlock(&sound_loader_lock);
@@ -507,8 +510,10 @@ int soundcore_open(struct inode *inode, struct file *file)
 		request_module(mod);
 		spin_lock(&sound_loader_lock);
 		s = __look_for_unit(chain, unit);
+		if (s)
+			new_fops = fops_get(s->unit_fops);
 	}
-	if (s) {
+	if (new_fops) {
 		/*
 		 * We rely upon the fact that we can't be unloaded while the
 		 * subdriver is there, so if ->open() is successful we can
@@ -518,7 +523,7 @@ int soundcore_open(struct inode *inode, struct file *file)
 		 */
 		int err = 0;
 		struct file_operations *old_fops = file->f_op;
-		file->f_op = fops_get(s->unit_fops);
+		file->f_op = new_fops;
 		spin_unlock(&sound_loader_lock);
 		if(file->f_op->open)
 			err = file->f_op->open(inode,file);

@@ -864,6 +864,7 @@ void exit_mmap(struct mm_struct * mm)
 		}
 		mm->map_count--;
 		remove_shared_vm_struct(mpnt);
+		flush_cache_range(mm, start, end);
 		zap_page_range(mm, start, size);
 		if (mpnt->vm_file)
 			fput(mpnt->vm_file);

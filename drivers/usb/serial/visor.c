@@ -11,6 +11,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (07/23/2000) gkh
+ *	Added pool of write urbs to speed up transfers to the visor.
+ * 
  * (07/19/2000) gkh
  *	Added module_init and module_exit functions to handle the fact that this
  *	driver is a loadable module now.
@@ -64,11 +67,13 @@
 /* function prototypes for a handspring visor */
 static int  visor_open		(struct usb_serial_port *port, struct file *filp);
 static void visor_close		(struct usb_serial_port *port, struct file *filp);
+static int  visor_write		(struct usb_serial_port *port, int from_user, const unsigned char *buf, int count);
 static void visor_throttle	(struct usb_serial_port *port);
 static void visor_unthrottle	(struct usb_serial_port *port);
 static int  visor_startup	(struct usb_serial *serial);
 static int  visor_ioctl		(struct usb_serial_port *port, struct file * file, unsigned int cmd, unsigned long arg);
 static void visor_set_termios	(struct usb_serial_port *port, struct termios *old_termios);
+static void visor_write_bulk_callback (struct urb *urb);
 
 /* All of the device info needed for the Handspring Visor */
 static __u16	handspring_vendor_id	= HANDSPRING_VENDOR_ID;
@@ -91,7 +96,13 @@ struct usb_serial_device_type handspring_device = {
 	startup:		visor_startup,
 	ioctl:			visor_ioctl,
 	set_termios:		visor_set_termios,
+	write:			visor_write,
+	write_bulk_callback:	visor_write_bulk_callback,
 };
+
+
+#define NUM_URBS	24
+static struct urb *write_urb_pool[NUM_URBS];
 
 
 /******************************************************************************
@@ -136,6 +147,93 @@ static void visor_close (struct usb_serial_port *port, struct file * filp)
 	usb_unlink_urb (port->write_urb);
 	usb_unlink_urb (port->read_urb);
 	port->active = 0;
+}
+
+
+static int visor_write (struct usb_serial_port *port, int from_user, const unsigned char *buf, int count)
+{
+	struct usb_serial *serial = port->serial;
+	struct urb *urb = NULL;
+	unsigned char *buffer = NULL;
+	int status;
+	int i;
+
+	dbg(__FUNCTION__ " - port %d", port->number);
+
+	if (count == 0) {
+		dbg(__FUNCTION__ " - write request of 0 bytes");
+		return 0;
+	}
+
+	/* try to find a free urb in our list of them */
+	for (i = 0; i < NUM_URBS; ++i) {
+		if (write_urb_pool[i]->status != -EINPROGRESS) {
+			urb = write_urb_pool[i];
+			break;
+		}
+	}
+	if (urb == NULL) {
+		dbg (__FUNCTION__ " - no free urbs");
+		return 0;
+	}
+
+	count = (count > port->bulk_out_size) ? port->bulk_out_size : count;
+
+#ifdef DEBUG
+	printk (KERN_DEBUG __FILE__ ": " __FUNCTION__ " - length = %d, data = ", count);
+	for (i = 0; i < count; ++i) {
+		printk ("%.2x ", buf[i]);
+	}
+	printk ("\n");
+#endif
+
+	if (urb->transfer_buffer != NULL)
+		kfree(urb->transfer_buffer);
+	buffer = kmalloc (count, GFP_KERNEL);
+	if (buffer == NULL) {
+		err(__FUNCTION__" no more kernel memory...");
+		return 0;
+	}
+	
+	if (from_user) {
+		copy_from_user(buffer, buf, count);
+	}
+	else {
+		memcpy (buffer, buf, count);
+	}  
+
+	/* build up our urb */
+	FILL_BULK_URB (urb, serial->dev, usb_sndbulkpipe(serial->dev, port->bulk_out_endpointAddress),
+			buffer, count, visor_write_bulk_callback, port);
+	urb->transfer_flags |= USB_QUEUE_BULK;
+
+	/* send it down the pipe */
+	status = usb_submit_urb(urb);
+	if (status)
+		dbg(__FUNCTION__ " - usb_submit_urb(write bulk) failed with status = %d", status);
+
+	return (count);
+} 
+
+
+static void visor_write_bulk_callback (struct urb *urb)
+{
+	struct usb_serial_port *port = (struct usb_serial_port *)urb->context;
+
+	if (port_paranoia_check (port, __FUNCTION__))
+		return;
+	
+	dbg(__FUNCTION__ " - port %d", port->number);
+	
+	if (urb->status) {
+		dbg(__FUNCTION__ " - nonzero write bulk status received: %d", urb->status);
+		return;
+	}
+
+	queue_task(&port->tqueue, &tq_immediate);
+	mark_bh(IMMEDIATE_BH);
+	
+	return;
 }
 
 
@@ -299,14 +397,37 @@ static void visor_set_termios (struct usb_serial_port *port, struct termios *old
 
 int visor_init (void)
 {
+	int i;
+
 	usb_serial_register (&handspring_device);
+	
+	/* create our write urb pool */ 
+	for (i = 0; i < NUM_URBS; ++i) {
+		struct urb  *urb = usb_alloc_urb(0);
+		if (urb == NULL) {
+			err("No more urbs???");
+			continue;
+		}
+		urb->transfer_buffer = NULL;
+		write_urb_pool[i] = urb;
+	}
+	
 	return 0;
 }
 
 
 void visor_exit (void)
 {
+	int i;
+
 	usb_serial_deregister (&handspring_device);
+	
+	for (i = 0; i < NUM_URBS; ++i) {
+		usb_unlink_urb(write_urb_pool[i]);
+		if (write_urb_pool[i]->transfer_buffer)
+			kfree(write_urb_pool[i]->transfer_buffer);
+		usb_free_urb (write_urb_pool[i]);
+	}
 }
 
 

@@ -23,12 +23,16 @@
 /* With some changes from Kyösti Mälkki <kmalkki@cc.hut.fi> and
    Frodo Looijaard <frodol@dds.nl> */
 
-/* $Id: i2c.h,v 1.37 2000/02/15 17:57:27 frodo Exp $ */
+/* $Id: i2c.h,v 1.40 2000/07/19 19:55:45 frodo Exp $ */
 
 #ifndef I2C_H
 #define I2C_H
 
 #include <linux/i2c-id.h>	/* id values of adapters et. al. 	*/
+
+
+struct i2c_msg;
+
 
 #ifdef __KERNEL__
 
@@ -56,7 +60,6 @@
 #define I2C_CLIENT_MAX	32
 #define I2C_DUMMY_MAX 4
 
-struct i2c_msg;
 struct i2c_algorithm;
 struct i2c_adapter;
 struct i2c_client;
@@ -85,23 +88,6 @@ extern int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg msg[],int num);
 extern int i2c_slave_send(struct i2c_client *,char*,int);
 extern int i2c_slave_recv(struct i2c_client *,char*,int);
 
-
-/*
- * I2C Message - could be used in the current interface to 
- */
-struct i2c_msg {
-	u16 addr;	/* slave address			*/
-	unsigned short flags;		
-#define I2C_M_TEN	0x10	/* we have a ten bit chip address	*/
-#define I2C_M_RD	0x01
-#define I2C_M_NOSTART	0x4000
-#define I2C_M_REV_DIR_ADDR	0x2000
-#if 0
-#define I2C_M_PROBE	0x20
-#endif
-	short len;		/* msg length				*/
-	char *buf;		/* pointer to msg data			*/
-};
 
 
 /* This is the very generalized SMBus access routine. You probably do not
@@ -198,6 +184,8 @@ struct i2c_client {
 	struct i2c_adapter *adapter;	/* the adapter we sit on	*/
 	struct i2c_driver *driver;	/* and our access routines	*/
 	void *data;			/* for the clients		*/
+	int usage_count;		/* How many accesses currently  */
+					/* to the client		*/
 };
 
 
@@ -283,6 +271,11 @@ struct i2c_adapter {
 #define I2C_DF_NOTIFY	0x01		/* notify on bus (de/a)ttaches 	*/
 #define I2C_DF_DUMMY	0x02		/* do not connect any clients */
 
+/*flags for the client struct: */
+#define I2C_CLIENT_ALLOW_USE		0x01	/* Client allows access */
+#define I2C_CLIENT_ALLOW_MULTIPLE_USE 	0x02  	/* Allow multiple access-locks */
+						/* on an i2c_client */
+
 /* i2c_client_address_data is the struct for holding default client
  * addresses for a driver and for the parameters supplied on the
  * command line
@@ -326,6 +319,23 @@ extern int i2c_detach_client(struct i2c_client *);
 extern void i2c_inc_use_client(struct i2c_client *);
 extern void i2c_dec_use_client(struct i2c_client *);
 
+/* New function: This is to get an i2c_client-struct for controlling the 
+   client either by using i2c_control-function or having the 
+   client-module export functions that can be used with the i2c_client
+   -struct. */
+extern struct i2c_client *i2c_get_client(int driver_id, int adapter_id, 
+					struct i2c_client *prev);
+
+/* Should be used with new function
+   extern struct i2c_client *i2c_get_client(int,int,struct i2c_client *);
+   to make sure that client-struct is valid and that it is okay to access
+   the i2c-client. 
+   returns -EACCES if client doesn't allow use (default)
+   returns -EBUSY if client doesn't allow multiple use (default) and 
+   usage_count >0 */
+extern int i2c_use_client(struct i2c_client *);
+extern int i2c_release_client(struct i2c_client *);
+
 /* returns -EBUSY if address has been taken, 0 if not. Note that the only
    other place at which this is called is within i2c_attach_client; so
    you can cheat by simply not registering. Not recommended, of course! */
@@ -361,6 +371,21 @@ extern int i2c_check_functionality (struct i2c_adapter *adap, u32 func);
 
 #endif /* __KERNEL__ */
 
+#include <linux/types.h>
+/*
+ * I2C Message - used for pure i2c transaction, also from /dev interface
+ */
+struct i2c_msg {
+	__u16 addr;	/* slave address			*/
+	unsigned short flags;		
+#define I2C_M_TEN	0x10	/* we have a ten bit chip address	*/
+#define I2C_M_RD	0x01
+#define I2C_M_NOSTART	0x4000
+#define I2C_M_REV_DIR_ADDR	0x2000
+	short len;		/* msg length				*/
+	char *buf;		/* pointer to msg data			*/
+};
+
 /* To determine what functionality is present */
 
 #define I2C_FUNC_I2C			0x00000001
@@ -395,7 +420,7 @@ extern int i2c_check_functionality (struct i2c_adapter *adap, u32 func);
                             I2C_FUNC_SMBUS_BYTE_DATA | \
                             I2C_FUNC_SMBUS_WORD_DATA | \
                             I2C_FUNC_SMBUS_PROC_CALL | \
-                            I2C_FUNC_SMBUS_READ_BLOCK_DATA
+                            I2C_FUNC_SMBUS_WRITE_BLOCK_DATA
 
 /* 
  * Data for SMBus Messages 

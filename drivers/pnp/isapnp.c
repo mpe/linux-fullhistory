@@ -2067,10 +2067,12 @@ static void isapnp_free_card(struct pci_bus *card)
 static void isapnp_free_all_resources(void)
 {
 #ifdef ISAPNP_REGION_OK
-	release_resource(pidxr_res);
+	if (pidxr_res)
+		release_resource(pidxr_res);
 #endif
-	release_resource(pnpwrp_res);
-	if (isapnp_rdp >= 0x203 && isapnp_rdp <= 0x3ff)
+	if (pnpwrp_res)
+		release_resource(pnpwrp_res);
+	if (isapnp_rdp >= 0x203 && isapnp_rdp <= 0x3ff && isapnp_rdp_res)
 		release_resource(isapnp_rdp_res);
 #ifdef MODULE
 #ifdef CONFIG_PROC_FS

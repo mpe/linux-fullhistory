@@ -1,11 +1,14 @@
 /*
- * $Id: b1dma.c,v 1.5 2000/06/19 16:51:53 keil Exp $
+ * $Id: b1dma.c,v 1.6 2000/06/29 13:59:06 calle Exp $
  * 
  * Common module for AVM B1 cards that support dma with AMCC
  * 
  * (c) Copyright 2000 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1dma.c,v $
+ * Revision 1.6  2000/06/29 13:59:06  calle
+ * Bugfix: reinit txdma without interrupt will confuse some AMCC chips.
+ *
  * Revision 1.5  2000/06/19 16:51:53  keil
  * don't free skb in irq context
  *
@@ -41,7 +44,7 @@
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.5 $";
+static char *revision = "$Revision: 1.6 $";
 
 /* ------------------------------------------------------------- */
 

@@ -1106,15 +1106,25 @@ static void control_cfb32_revc(struct display *p, int xx, int yy)
 }
 
 static struct display_switch control_cfb16 = {
-    fbcon_cfb16_setup, fbcon_cfb16_bmove, fbcon_cfb16_clear, fbcon_cfb16_putc,
-    fbcon_cfb16_putcs, control_cfb16_revc, NULL, NULL, fbcon_cfb16_clear_margins,
-    FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+    setup:		fbcon_cfb16_setup,
+    bmove:		fbcon_cfb16_bmove,
+    clear:		fbcon_cfb16_clear,
+    putc:		fbcon_cfb16_putc,
+    putcs:		fbcon_cfb16_putcs,
+    revc:		control_cfb16_revc,
+    clear_margins:	fbcon_cfb16_clear_margins,
+    fontwidthmask:	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 
 static struct display_switch control_cfb32 = {
-    fbcon_cfb32_setup, fbcon_cfb32_bmove, fbcon_cfb32_clear, fbcon_cfb32_putc,
-    fbcon_cfb32_putcs, control_cfb32_revc, NULL, NULL, fbcon_cfb32_clear_margins,
-    FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+    setup:		fbcon_cfb32_setup,
+    bmove:		fbcon_cfb32_bmove,
+    clear:		fbcon_cfb32_clear,
+    putc:		fbcon_cfb32_putc,
+    putcs:		fbcon_cfb32_putcs,
+    revc:		control_cfb32_revc,
+    clear_margins:	fbcon_cfb32_clear_margins,
+    fontwidthmask:	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 
 

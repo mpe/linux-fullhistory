@@ -1246,8 +1246,7 @@ devfs_handle_t devfs_register (devfs_handle_t dir, const char *name,
     }
     if (ops == NULL)
     {
-	if ( S_ISCHR (mode) ) ops = get_chrfops (major, 0);
-	else if ( S_ISBLK (mode) ) ops = (void *) get_blkfops (major);
+	if ( S_ISBLK (mode) ) ops = (void *) get_blkfops (major);
 	if (ops == NULL)
 	{
 	    printk ("%s: devfs_register(%s): NULL ops pointer\n",
@@ -2506,6 +2505,19 @@ static int devfs_open (struct inode *inode, struct file *file)
     else
     {
 	/*  Fallback to legacy scheme  */
+	/*
+	 * Do we need it? Richard, could you verify it?
+	 * It can legitimately happen if
+	 *	it is a character device and 
+	 *	df->ops == NULL and
+	 *	de->registered is true,
+	 * but AFAICS it can't happen - in devfs_register() we never set
+	 * ->ops to NULL, in unregister() we set ->registered to false,
+	 * in devfs_mknod() we set it to NULL only if ->register is false.
+	 *
+	 * Looks like this fallback is not needed at all.
+	 *							AV
+	 */
 	if ( S_ISCHR (inode->i_mode) ) err = chrdev_open (inode, file);
 	else err = -ENODEV;
     }

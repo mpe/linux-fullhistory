@@ -586,24 +586,22 @@ static int mdacon_scroll(struct vc_data *c, int t, int b, int dir, int lines)
  */
 
 struct consw mda_con = {
-	mdacon_startup,		/* con_startup */
-	mdacon_init,		/* con_init */
-	mdacon_deinit,		/* con_deinit */
-	mdacon_clear,		/* con_clear */
-	mdacon_putc,		/* con_putc */
-	mdacon_putcs,		/* con_putcs */
-	mdacon_cursor,		/* con_cursor */
-	mdacon_scroll,		/* con_scroll */
-	mdacon_bmove,		/* con_bmove */
-	mdacon_switch,		/* con_switch */
-	mdacon_blank,		/* con_blank */
-	mdacon_font_op,		/* con_font_op */
-	mdacon_set_palette,	/* con_set_palette */
-	mdacon_scrolldelta,	/* con_scrolldelta */
-	NULL,			/* con_set_origin */
-	NULL,			/* con_save_screen */
-	mdacon_build_attr,	/* con_build_attr */
-	mdacon_invert_region,	/* con_invert_region */
+	con_startup:		mdacon_startup,
+	con_init:		mdacon_init,
+	con_deinit:		mdacon_deinit,
+	con_clear:		mdacon_clear,
+	con_putc:		mdacon_putc,
+	con_putcs:		mdacon_putcs,
+	con_cursor:		mdacon_cursor,
+	con_scroll:		mdacon_scroll,
+	con_bmove:		mdacon_bmove,
+	con_switch:		mdacon_switch,
+	con_blank:		mdacon_blank,
+	con_font_op:		mdacon_font_op,
+	con_set_palette:	mdacon_set_palette,
+	con_scrolldelta:	mdacon_scrolldelta,
+	con_build_attr:		mdacon_build_attr,
+	con_invert_region:	mdacon_invert_region,
 };
 
 #ifdef MODULE

@@ -207,7 +207,7 @@ static inline void send_IPI_mask(int mask, int vector)
  *	These mean you can really definitely utterly forget about
  *	writing to user space from interrupts. (Its not allowed anyway).
  *
- *	Optimizations Manfred Spraul <manfreds@colorfullife.com>
+ *	Optimizations Manfred Spraul <manfred@colorfullife.com>
  */
 
 static volatile unsigned long flush_cpumask;
@@ -216,23 +216,45 @@ static unsigned long flush_va;
 static spinlock_t tlbstate_lock = SPIN_LOCK_UNLOCKED;
 #define FLUSH_ALL	0xffffffff
 
+/*
+ * We cannot call mmdrop() because we are in interrupt context, 
+ * instead update mm->cpu_vm_mask.
+ */
 static void inline leave_mm (unsigned long cpu)
 {
 	if (cpu_tlbstate[cpu].state == TLBSTATE_OK)
 		BUG();
 	clear_bit(cpu, &cpu_tlbstate[cpu].active_mm->cpu_vm_mask);
-	cpu_tlbstate[cpu].state = TLBSTATE_OLD;
 }
 
 /*
  *
  * The flush IPI assumes that a thread switch happens in this order:
- * 1) set_bit(cpu, &new_mm->cpu_vm_mask);
- * 2) update cpu_tlbstate
- * [now the cpu can accept tlb flush request for the new mm]
- * 3) change cr3 (if required, or flush local tlb,...)
- * 4) clear_bit(cpu, &old_mm->cpu_vm_mask);
- * 5) switch %%esp, ie current
+ * [cpu0: the cpu that switches]
+ * 1) switch_mm() either 1a) or 1b)
+ * 1a) thread switch to a different mm
+ * 1a1) clear_bit(cpu, &old_mm->cpu_vm_mask);
+ * 	Stop ipi delivery for the old mm. This is not synchronized with
+ * 	the other cpus, but smp_invalidate_interrupt ignore flush ipis
+ * 	for the wrong mm, and in the worst case we perform a superflous
+ * 	tlb flush.
+ * 1a2) set cpu_tlbstate to TLBSTATE_OK
+ * 	Now the smp_invalidate_interrupt won't call leave_mm if cpu0
+ *	was in lazy tlb mode.
+ * 1a3) update cpu_tlbstate[].active_mm
+ * 	Now cpu0 accepts tlb flushes for the new mm.
+ * 1a4) set_bit(cpu, &new_mm->cpu_vm_mask);
+ * 	Now the other cpus will send tlb flush ipis.
+ * 1a4) change cr3.
+ * 1b) thread switch without mm change
+ *	cpu_tlbstate[].active_mm is correct, cpu0 already handles
+ *	flush ipis.
+ * 1b1) set cpu_tlbstate to TLBSTATE_OK
+ * 1b2) test_and_set the cpu bit in cpu_vm_mask.
+ * 	Atomically set the bit [other cpus will start sending flush ipis],
+ * 	and test the bit.
+ * 1b3) if the bit was 0: leave_mm was called, flush the tlb.
+ * 2) switch %%esp, ie current
  *
  * The interrupt must handle 2 special cases:
  * - cr3 is changed before %%esp, ie. it cannot use current->{active_,}mm.
@@ -249,8 +271,6 @@ static void inline leave_mm (unsigned long cpu)
  *
  * 1) Flush the tlb entries if the cpu uses the mm that's being flushed.
  * 2) Leave the mm if we are in the lazy tlb mode.
- * We cannot call mmdrop() because we are in interrupt context, 
- * instead update cpu_tlbstate.
  */
 
 asmlinkage void smp_invalidate_interrupt (void)

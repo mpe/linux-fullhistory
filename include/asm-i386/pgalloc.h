@@ -240,7 +240,6 @@ static inline void flush_tlb_range(struct mm_struct * mm, unsigned long start, u
 
 #define TLBSTATE_OK	1
 #define TLBSTATE_LAZY	2
-#define TLBSTATE_OLD	3
 
 struct tlb_state
 {

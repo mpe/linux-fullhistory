@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * SCSI layer glue code
  *
- * $Id: scsiglue.c,v 1.4 2000/07/20 01:14:56 mdharm Exp $
+ * $Id: scsiglue.c,v 1.5 2000/07/24 18:55:39 mdharm Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -192,7 +192,7 @@ static int queuecommand( Scsi_Cmnd *srb , void (*done)(Scsi_Cmnd *))
 static int command_abort( Scsi_Cmnd *srb )
 {
 	struct us_data *us = (struct us_data *)srb->host->hostdata[0];
-	api_wrapper_data *awd = (api_wrapper_data *)us->current_urb->context;
+	wait_queue_head_t *wqh = (wait_queue_head_t *)us->current_urb->context;
 
 	US_DEBUGP("command_abort() called\n");
 
@@ -209,8 +209,8 @@ static int command_abort( Scsi_Cmnd *srb )
 		usb_unlink_urb(us->current_urb);
 
 		/* wake the control thread up */
-		if (waitqueue_active(awd->wakeup))
-			wake_up(awd->wakeup);
+		if (waitqueue_active(wqh))
+			wake_up(wqh);
 
 		/* wait for us to be done */
 		down(&(us->notify));

@@ -35,6 +35,8 @@
 #endif
 #include "drmP.h"
 #include "i810_drv.h"
+#include <linux/sched.h>
+#include <linux/smp_lock.h>
 
 
 EXPORT_SYMBOL(i810_init);
@@ -484,9 +486,11 @@ int i810_open(struct inode *inode, struct file *filp)
 int i810_release(struct inode *inode, struct file *filp)
 {
 	drm_file_t    *priv   = filp->private_data;
-	drm_device_t  *dev    = priv->dev;
+	drm_device_t  *dev;
 	int	      retcode = 0;
 
+	lock_kernel();
+	dev    = priv->dev;
 	DRM_DEBUG("pid = %d, device = 0x%x, open_count = %d\n",
 		  current->pid, dev->device, dev->open_count);
 
@@ -557,12 +561,14 @@ int i810_release(struct inode *inode, struct file *filp)
 				  atomic_read(&dev->ioctl_count),
 				  dev->blocked);
 		   	spin_unlock(&dev->count_lock);
+			unlock_kernel();
 		   	return -EBUSY;
 		}
 	   	spin_unlock(&dev->count_lock);
-	   	return i810_takedown(dev);
-	}
-   	spin_unlock(&dev->count_lock);
+	   	retcode = i810_takedown(dev);
+	} else
+		spin_unlock(&dev->count_lock);
+	unlock_kernel();
 	return retcode;
 }
 

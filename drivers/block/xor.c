@@ -1827,6 +1827,8 @@ static struct buffer_head b1, b2;
 
 void calibrate_xor_block(void)
 {
+	if (xor_block)
+		return;
 	memset(&b1,0,sizeof(b1));
 	b2 = b1;
 
@@ -1885,6 +1887,8 @@ void calibrate_xor_block(void)
 
 void calibrate_xor_block(void)
 {
+	if (xor_block)
+		return;
 	printk(KERN_INFO "raid5: using high-speed VIS checksum routine\n");
 	xor_block = xor_block_VIS;
 }
@@ -1892,3 +1896,12 @@ void calibrate_xor_block(void)
 #endif /* __sparc_v9__ */
 
 MD_EXPORT_SYMBOL(xor_block);
+MD_EXPORT_SYMBOL(calibrate_xor_block);
+
+#ifdef MODULE
+int init_module(void)
+{
+	calibrate_xor_block();
+	return 0;
+}
+#endif

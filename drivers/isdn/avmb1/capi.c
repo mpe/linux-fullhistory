@@ -1,11 +1,20 @@
 /*
- * $Id: capi.c,v 1.35 2000/06/19 15:11:24 keil Exp $
+ * $Id: capi.c,v 1.38 2000/07/24 08:49:09 calle Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capi.c,v $
+ * Revision 1.38  2000/07/24 08:49:09  calle
+ * - Bugfix: capiminor_del_all_ack completely wrong :-(
+ *
+ * Revision 1.37  2000/07/20 10:22:27  calle
+ * - Made procfs function cleaner and removed variable "begin".
+ *
+ * Revision 1.36  2000/06/29 13:59:35  calle
+ * - call to devfs_register was wrong
+ *
  * Revision 1.35  2000/06/19 15:11:24  keil
  * avoid use of freed structs
  * changes from 2.4.0-ac21
@@ -207,7 +216,7 @@
 #endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
 #include <linux/slab.h>
 
-static char *revision = "$Revision: 1.35 $";
+static char *revision = "$Revision: 1.38 $";
 
 MODULE_AUTHOR("Carsten Paeth (calle@calle.in-berlin.de)");
 
@@ -364,7 +373,8 @@ void capiminor_del_all_ack(struct capiminor *mp)
 {
 	struct datahandle_queue **pp, *p;
 
-	for (pp = &mp->ackqueue; *pp; pp = &(*pp)->next) {
+	pp = &mp->ackqueue;
+	while (*pp) {
 		p = *pp;
 		*pp = (*pp)->next;
 		kmem_cache_free(capidh_cachep, p);
@@ -380,8 +390,10 @@ struct capiminor *capiminor_alloc(__u16 applid, __u32 ncci)
 	struct capiminor *mp, **pp;
         unsigned int minor = 0;
 
+	MOD_INC_USE_COUNT;
 	mp = (struct capiminor *)kmem_cache_alloc(capiminor_cachep, GFP_ATOMIC);
 	if (!mp) {
+		MOD_DEC_USE_COUNT;
 		printk(KERN_ERR "capi: can't alloc capiminor\n");
 		return 0;
 	}
@@ -433,6 +445,7 @@ void capiminor_free(struct capiminor *mp)
 				kfree_skb(skb);
 			capiminor_del_all_ack(mp);
 			kmem_cache_free(capiminor_cachep, mp);
+			MOD_DEC_USE_COUNT;
 #ifdef _DEBUG_REFCOUNT
 			printk(KERN_DEBUG "capiminor_free %d\n", GET_USE_COUNT(THIS_MODULE));
 #endif
@@ -1210,6 +1223,7 @@ capi_open(struct inode *inode, struct file *file)
 	if ((file->private_data = capidev_alloc(file)) == 0)
 		return -ENOMEM;
 
+	MOD_INC_USE_COUNT;
 #ifdef _DEBUG_REFCOUNT
 	printk(KERN_DEBUG "capi_open %d\n", GET_USE_COUNT(THIS_MODULE));
 #endif
@@ -1226,6 +1240,7 @@ capi_release(struct inode *inode, struct file *file)
 	capidev_free(cdev);
 	file->private_data = NULL;
 
+	MOD_DEC_USE_COUNT;
 #ifdef _DEBUG_REFCOUNT
 	printk(KERN_DEBUG "capi_release %d\n", GET_USE_COUNT(THIS_MODULE));
 #endif
@@ -1836,7 +1851,6 @@ static int proc_capidev_read_proc(char *page, char **start, off_t off,
 {
         struct capidev *cdev;
 	int len = 0;
-	off_t begin = 0;
 
 	for (cdev=capidev_openlist; cdev; cdev = cdev->next) {
 		len += sprintf(page+len, "%d %d %lu %lu %lu %lu\n",
@@ -1846,20 +1860,20 @@ static int proc_capidev_read_proc(char *page, char **start, off_t off,
 			cdev->nrecvdatapkt,
 			cdev->nsentctlpkt,
 			cdev->nsentdatapkt);
-		if (len+begin > off+count)
-			goto endloop;
-		if (len+begin < off) {
-			begin += len;
+		if (len <= off) {
+			off -= len;
 			len = 0;
+		} else {
+			if (len-off > count)
+				goto endloop;
 		}
 	}
 endloop:
-	if (cdev == 0)
+	if (len < count)
 		*eof = 1;
-	if (off >= len+begin)
-		return 0;
-	*start = page + (off-begin);
-	return ((count < begin+len-off) ? count : begin+len-off);
+	if (len>count) len = count;
+	if (len<0) len = 0;
+	return len;
 }
 
 /*
@@ -1872,7 +1886,6 @@ static int proc_capincci_read_proc(char *page, char **start, off_t off,
         struct capidev *cdev;
         struct capincci *np;
 	int len = 0;
-	off_t begin = 0;
 
 	for (cdev=capidev_openlist; cdev; cdev = cdev->next) {
 		for (np=cdev->nccis; np; np = np->next) {
@@ -1884,21 +1897,22 @@ static int proc_capincci_read_proc(char *page, char **start, off_t off,
 #else /* CONFIG_ISDN_CAPI_MIDDLEWARE */
 				np->minorp && np->minorp->file ? " open" : "");
 #endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
-			if (len+begin > off+count)
-				goto endloop;
-			if (len+begin < off) {
-				begin += len;
+			if (len <= off) {
+				off -= len;
 				len = 0;
+			} else {
+				if (len-off > count)
+					goto endloop;
 			}
 		}
 	}
 endloop:
-	if (cdev == 0)
+	*start = page+off;
+	if (len < count)
 		*eof = 1;
-	if (off >= len+begin)
-		return 0;
-	*start = page + (begin-off);
-	return ((count < begin+len-off) ? count : begin+len-off);
+	if (len>count) len = count;
+	if (len<0) len = 0;
+	return len;
 }
 
 static struct procfsentries {
@@ -2050,6 +2064,8 @@ int capi_init(void)
 {
 	char *p;
 
+	MOD_INC_USE_COUNT;
+
 	if ((p = strchr(revision, ':'))) {
 		strcpy(rev, p + 2);
 		p = strchr(rev, '$');
@@ -2059,6 +2075,7 @@ int capi_init(void)
 
 	if (devfs_register_chrdev(capi_major, "capi20", &capi_fops)) {
 		printk(KERN_ERR "capi20: unable to get major %d\n", capi_major);
+		MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 
@@ -2066,6 +2083,7 @@ int capi_init(void)
 	if (devfs_register_chrdev(capi_rawmajor, "capi/r%d", &capinc_raw_fops)) {
 		devfs_unregister_chrdev(capi_major, "capi20");
 		printk(KERN_ERR "capi20: unable to get major %d\n", capi_rawmajor);
+		MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
         devfs_register_series (NULL, "capi/r%u", CAPINC_NR_PORTS,
@@ -2081,6 +2099,7 @@ int capi_init(void)
 
 	if ((capifuncs = attach_capi_interface(&cuser)) == 0) {
 
+		MOD_DEC_USE_COUNT;
 		devfs_unregister_chrdev(capi_major, "capi20");
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
 		devfs_unregister_chrdev(capi_rawmajor, "capi/r%d");
@@ -2096,6 +2115,7 @@ int capi_init(void)
 		(void) detach_capi_interface(&cuser);
 		devfs_unregister_chrdev(capi_major, "capi20");
 		devfs_unregister_chrdev(capi_rawmajor, "capi/r%d");
+		MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 #endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
@@ -2116,6 +2136,7 @@ int capi_init(void)
 		devfs_unregister(devfs_find_handle(NULL, "capi20",
 						   capi_major, 0,
 						   DEVFS_SPECIAL_CHR, 0));
+		MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 
@@ -2124,6 +2145,7 @@ int capi_init(void)
 	printk(KERN_NOTICE "capi20: Rev%s: started up with major %d\n",
 				rev, capi_major);
 
+	MOD_DEC_USE_COUNT;
 	return 0;
 }
 

@@ -141,6 +141,7 @@ EXPORT_SYMBOL(get_empty_super);
 EXPORT_SYMBOL(getname);
 EXPORT_SYMBOL(names_cachep);
 EXPORT_SYMBOL(fput);
+EXPORT_SYMBOL(fget);
 EXPORT_SYMBOL(igrab);
 EXPORT_SYMBOL(iunique);
 EXPORT_SYMBOL(iget4);
@@ -353,6 +354,11 @@ EXPORT_SYMBOL(del_timer);
 EXPORT_SYMBOL(request_irq);
 EXPORT_SYMBOL(free_irq);
 
+/* waitqueue handling */
+EXPORT_SYMBOL(add_wait_queue);
+EXPORT_SYMBOL(add_wait_queue_exclusive);
+EXPORT_SYMBOL(remove_wait_queue);
+
 /* The notion of irq probe/assignment is foreign to S/390 */
 
 #if !defined(CONFIG_ARCH_S390)
@@ -503,9 +509,7 @@ EXPORT_SYMBOL(fs_overflowgid);
 EXPORT_SYMBOL(fasync_helper);
 EXPORT_SYMBOL(kill_fasync);
 
-#ifdef CONFIG_BLK_DEV_MD
 EXPORT_SYMBOL(disk_name);	/* for md.c */
-#endif
 
 /* binfmt_aout */
 EXPORT_SYMBOL(get_write_access);

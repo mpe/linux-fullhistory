@@ -1038,22 +1038,22 @@ static int vgacon_dummy(struct vc_data *c)
 #define DUMMY (void *) vgacon_dummy
 
 struct consw vga_con = {
-	vgacon_startup,
-	vgacon_init,
-	vgacon_deinit,
-	DUMMY,				/* con_clear */
-	DUMMY,				/* con_putc */
-	DUMMY,				/* con_putcs */
-	vgacon_cursor,
-	vgacon_scroll,			/* con_scroll */
-	DUMMY,				/* con_bmove */
-	vgacon_switch,
-	vgacon_blank,
-	vgacon_font_op,
-	vgacon_set_palette,
-	vgacon_scrolldelta,
-	vgacon_set_origin,
-	vgacon_save_screen,
-	vgacon_build_attr,
-	vgacon_invert_region
+	con_startup:		vgacon_startup,
+	con_init:		vgacon_init,
+	con_deinit:		vgacon_deinit,
+	con_clear:		DUMMY,
+	con_putc:		DUMMY,
+	con_putcs:		DUMMY,
+	con_cursor:		vgacon_cursor,
+	con_scroll:		vgacon_scroll,
+	con_bmove:		DUMMY,
+	con_switch:		vgacon_switch,
+	con_blank:		vgacon_blank,
+	con_font_op:		vgacon_font_op,
+	con_set_palette:	vgacon_set_palette,
+	con_scrolldelta:	vgacon_scrolldelta,
+	con_set_origin:		vgacon_set_origin,
+	con_save_screen:	vgacon_save_screen,
+	con_build_attr:		vgacon_build_attr,
+	con_invert_region:	vgacon_invert_region,
 };

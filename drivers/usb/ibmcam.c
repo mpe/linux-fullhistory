@@ -3055,6 +3055,7 @@ static void usb_ibmcam_release(struct usb_ibmcam *ibmcam)
 	if (debug > 0)
 		printk(KERN_DEBUG "usb_ibmcam_release: Video unregistered.\n");
 	ibmcam->ibmcam_used = 0;
+	ibmcam->initialized = 0;
 }
 
 /*

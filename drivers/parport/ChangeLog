@@ -1,3 +1,12 @@
+2000-07-20  Eddie C. Dost  <ecd@skynet.be>
+
+	* share.c (attach_driver_chain): attach[i](port) needs to be
+	replaced by attach[count](port).
+
+2000-07-20  Eddie C. Dost  <ecd@skynet.be>
+
+	* daisy.c (add_dev): kmalloc args are in wrong order.
+
 2000-07-12  Tim Waugh  <twaugh@redhat.com>
 
 	* share.c: Documentation for parport_{get,port}_port,

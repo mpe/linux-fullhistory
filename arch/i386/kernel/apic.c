@@ -569,43 +569,6 @@ int setup_profiling_timer(unsigned int multiplier)
 
 #undef APIC_DIVISOR
 
-#ifdef CONFIG_SMP
-static inline void handle_smp_time (int user, int cpu)
-{
-	int system = !user;
-	struct task_struct * p = current;
-	/*
-	 * After doing the above, we need to make like
-	 * a normal interrupt - otherwise timer interrupts
-	 * ignore the global interrupt lock, which is the
-	 * WrongThing (tm) to do.
-	 */
-
-	irq_enter(cpu, 0);
-	update_one_process(p, 1, user, system, cpu);
-	if (p->pid) {
-		p->counter -= 1;
-		if (p->counter <= 0) {
-			p->counter = 0;
-			p->need_resched = 1;
-		}
-		if (p->nice > 0) {
-			kstat.cpu_nice += user;
-			kstat.per_cpu_nice[cpu] += user;
-		} else {
-			kstat.cpu_user += user;
-			kstat.per_cpu_user[cpu] += user;
-		}
-		kstat.cpu_system += system;
-		kstat.per_cpu_system[cpu] += system;
-	} else if (local_bh_count(cpu) || local_irq_count(cpu) > 1) {
-		kstat.cpu_system += system;
-		kstat.per_cpu_system[cpu] += system;
-	}
-	irq_exit(cpu, 0);
-}
-#endif
-
 /*
  * Local timer interrupt handler. It does both profiling and
  * process statistics/rescheduling.
@@ -646,7 +609,14 @@ inline void smp_local_timer_interrupt(struct pt_regs * regs)
 		}
 
 #ifdef CONFIG_SMP
-		handle_smp_time(user, cpu);
+		/*
+		 * update_process_times() expects us to have done irq_enter().
+		 * Besides, if we don't timer interrupts ignore the global
+		 * interrupt lock, which is the WrongThing (tm) to do.
+		 */
+		irq_enter(cpu, 0);
+		update_process_times(user);
+		irq_exit(cpu, 0);
 #endif
 	}
 

@@ -187,6 +187,8 @@ running once the system is up.
 
 	ftape=		[HW] Floppy Tape subsystem debugging options.
 
+	gamma=		[HW,DRM]
+
 	gc=		[HW,JOY]
 
 	gc_2=		[HW,JOY]
@@ -207,6 +209,8 @@ running once the system is up.
 	hfmodem=	[HW,AX25]
 
 	hisax=		[HW,ISDN]
+
+	i810=		[HW,DRM]
 
 	ibmmcascsi=	[HW,MCA,SCSI] IBM MicroChannel SCSI adapter.
 
@@ -233,6 +237,8 @@ running once the system is up.
 	js=		[HW,JOY] Analog joystick
  
 	kbd-reset	[VT]
+
+	keep_initrd	[HW, ARM]
 
 	load_ramdisk=	[RAM] List of ramdisks to load from floppy.
 
@@ -291,6 +297,8 @@ running once the system is up.
 
 	memfrac=	[KNL]
  
+	mga=		[HW,DRM]
+
 	mpu401=		[HW,SOUND]
  
 	msmouse=	[HW,MOUSE] Microsoft Mouse.
@@ -405,6 +413,10 @@ running once the system is up.
 
 	quiet=		[KNL] Disable log messages.
  
+	r128=		[HW,DRM]
+
+	raid=		[HW,RAID]
+
 	ramdisk=	[RAM] Sizes of RAM disks in kilobytes [deprecated].
 
 	ramdisk_blocksize=

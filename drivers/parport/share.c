@@ -125,7 +125,7 @@ static void attach_driver_chain(struct parport *port)
 	spin_unlock (&driverlist_lock);
 
 	for (count = 0; count < i; count++)
-		(*attach[i]) (port);
+		(*attach[count]) (port);
 
 	kfree (attach);
 }

@@ -20,7 +20,7 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.		     */
 /* ------------------------------------------------------------------------- */
 
-/* $Id: i2c-id.h,v 1.15 2000/03/16 14:01:57 frodo Exp $ */
+/* $Id: i2c-id.h,v 1.16 2000/04/03 18:57:42 frodo Exp $ */
 
 #ifndef I2C_ID_H
 #define I2C_ID_H
@@ -70,6 +70,7 @@
 #define I2C_DRIVERID_SAA5249	24	/* SAA5249 and compatibles	*/
 #define I2C_DRIVERID_PCF8583	25	/* real time clock		*/
 #define I2C_DRIVERID_SAB3036	26	/* SAB3036 tuner		*/
+#define I2C_DRIVERID_TDA7432	27	/* Stereo sound processor	*/
 
 #define I2C_DRIVERID_EXP0	0xF0	/* experimental use id's	*/
 #define I2C_DRIVERID_EXP1	0xF1

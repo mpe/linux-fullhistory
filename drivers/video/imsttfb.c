@@ -1115,30 +1115,58 @@ imsttfbcon_revc (struct display *disp, int sx, int sy)
 
 #ifdef FBCON_HAS_CFB8
 static struct display_switch fbcon_imstt8 = {
-	fbcon_cfb8_setup, imsttfbcon_bmove, imsttfbcon_clear, fbcon_cfb8_putc,
-	fbcon_cfb8_putcs, imsttfbcon_revc, imsttfbcon_cursor, imsttfbcon_set_font, fbcon_cfb8_clear_margins,
-	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+	setup:		fbcon_cfb8_setup,
+	bmove:		imsttfbcon_bmove,
+	clear:		imsttfbcon_clear,
+	putc:		fbcon_cfb8_putc,
+	putcs:		fbcon_cfb8_putcs,
+	revc:		imsttfbcon_revc,
+	cursor:		imsttfbcon_cursor,
+	set_font:	imsttfbcon_set_font,
+	clear_margins:	fbcon_cfb8_clear_margins,
+	fontwidthmask:	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
 #ifdef FBCON_HAS_CFB16
 static struct display_switch fbcon_imstt16 = {
-	fbcon_cfb16_setup, imsttfbcon_bmove, imsttfbcon_clear, fbcon_cfb16_putc,
-	fbcon_cfb16_putcs, imsttfbcon_revc, imsttfbcon_cursor, imsttfbcon_set_font, fbcon_cfb16_clear_margins,
-	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+	setup:		fbcon_cfb16_setup,
+	bmove:		imsttfbcon_bmove,
+	clear:		imsttfbcon_clear,
+	putc:		fbcon_cfb16_putc,
+	putcs:		fbcon_cfb16_putcs,
+	revc:		imsttfbcon_revc,
+	cursor:		imsttfbcon_cursor,
+	set_font:	imsttfbcon_set_font,
+	clear_margins:	fbcon_cfb16_clear_margins,
+	fontwidthmask:	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
 #ifdef FBCON_HAS_CFB24
 static struct display_switch fbcon_imstt24 = {
-	fbcon_cfb24_setup, imsttfbcon_bmove, imsttfbcon_clear, fbcon_cfb24_putc,
-	fbcon_cfb24_putcs, imsttfbcon_revc, imsttfbcon_cursor, imsttfbcon_set_font, fbcon_cfb24_clear_margins,
-	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+	setup:		fbcon_cfb24_setup,
+	bmove:		imsttfbcon_bmove,
+	clear:		imsttfbcon_clear,
+	putc:		fbcon_cfb24_putc,
+	putcs:		fbcon_cfb24_putcs,
+	revc:		imsttfbcon_revc,
+	cursor:		imsttfbcon_cursor,
+	set_font:	imsttfbcon_set_font,
+	clear_margins:	fbcon_cfb24_clear_margins,
+	fontwidthmask:	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
 #ifdef FBCON_HAS_CFB32
 static struct display_switch fbcon_imstt32 = {
-	fbcon_cfb32_setup, imsttfbcon_bmove, imsttfbcon_clear, fbcon_cfb32_putc,
-	fbcon_cfb32_putcs, imsttfbcon_revc, imsttfbcon_cursor, imsttfbcon_set_font, fbcon_cfb32_clear_margins,
-	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+	setup:		fbcon_cfb32_setup,
+	bmove:		imsttfbcon_bmove,
+	clear:		imsttfbcon_clear,
+	putc:		fbcon_cfb32_putc,
+	putcs:		fbcon_cfb32_putcs,
+	revc:		imsttfbcon_revc,
+	cursor:		imsttfbcon_cursor,
+	set_font:	imsttfbcon_set_font,
+	clear_margins:	fbcon_cfb32_clear_margins,
+	fontwidthmask:	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
 

@@ -331,10 +331,6 @@ init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE) {
-		printk("nfsd: nfsd busy, remove delayed\n");
-		return;
-	}
 	do_nfsservctl = NULL;
 	nfsd_export_shutdown();
 	nfsd_cache_shutdown();
