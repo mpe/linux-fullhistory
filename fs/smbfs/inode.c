@@ -20,6 +20,7 @@
 #include <linux/file.h>
 #include <linux/dcache.h>
 #include <linux/smp_lock.h>
+#include <linux/nls.h>
 
 #include <linux/smb_fs.h>
 #include <linux/smbno.h>
@@ -29,6 +30,7 @@
 #include <asm/uaccess.h>
 
 #include "smb_debug.h"
+#include "getopt.h"
 
 static void smb_delete_inode(struct inode *);
 static void smb_put_super(struct super_block *);
@@ -282,6 +284,82 @@ smb_delete_inode(struct inode *ino)
 	clear_inode(ino);
 }
 
+/* FIXME: flags and has_arg could probably be merged. */
+struct option opts[] = {
+	{ "version",	1, 0, 'v' },
+	{ "win95",	0, SMB_MOUNT_WIN95, 1 },
+	{ "oldattr",	0, SMB_MOUNT_OLDATTR, 1 },
+	{ "dirattr",	0, SMB_MOUNT_DIRATTR, 1 },
+	{ "case",	0, SMB_MOUNT_CASE, 1 },
+	{ "uid",	1, 0, 'u' },
+	{ "gid",	1, 0, 'g' },
+	{ "file_mode",	1, 0, 'f' },
+	{ "dir_mode",	1, 0, 'd' },
+	{ "iocharset",	1, 0, 'i' },
+	{ "codepage",	1, 0, 'c' },
+	{ NULL,		0, 0, 0}
+};
+
+static int
+parse_options(struct smb_mount_data_kernel *mnt, char *options)
+{
+	int c;
+	unsigned long flags;
+	unsigned long value;
+	char *optarg;
+	char *optopt;
+
+	flags = 0;
+	while ( (c = smb_getopt("smbfs", &options, opts,
+				&optopt, &optarg, &flags, &value)) > 0) {
+
+		VERBOSE("'%s' -> '%s'\n", optopt, optarg ? optarg : "<none>");
+
+		switch (c) {
+		case 1:
+			/* got a "flag" option */
+			break;
+		case 'v':
+			if (value != SMB_MOUNT_VERSION) {
+			printk ("smbfs: Bad mount version %ld, expected %d\n",
+				value, SMB_MOUNT_VERSION);
+				return 0;
+			}
+			mnt->version = value;
+			break;
+		case 'u':
+			mnt->uid = value;
+			break;
+		case 'g':
+			mnt->gid = value;
+			break;
+		case 'f':
+			mnt->file_mode = value & (S_IRWXU | S_IRWXG | S_IRWXO);
+			mnt->file_mode |= S_IFREG;
+			break;
+		case 'd':
+			mnt->dir_mode = value & (S_IRWXU | S_IRWXG | S_IRWXO);
+			mnt->dir_mode |= S_IFDIR;
+			break;
+		case 'i':
+			strncpy(mnt->codepage.local_name, optarg, 
+				SMB_NLS_MAXNAMELEN);
+			break;
+		case 'c':
+			strncpy(mnt->codepage.remote_name, optarg,
+				SMB_NLS_MAXNAMELEN);
+			break;
+		default:
+			printk ("smbfs: Unrecognized mount option %s\n",
+				optopt);
+			return -1;
+		}
+	}
+	mnt->flags = flags;
+	return c;
+}
+
+
 static void
 smb_put_super(struct super_block *sb)
 {
@@ -300,18 +378,32 @@ smb_put_super(struct super_block *sb)
 	kfree(sb->u.smbfs_sb.temp_buf);
 	if (server->packet)
 		smb_vfree(server->packet);
+
+	if(sb->u.smbfs_sb.remote_nls) {
+		unload_nls(sb->u.smbfs_sb.remote_nls);
+		sb->u.smbfs_sb.remote_nls = NULL;
+	}
+	if(sb->u.smbfs_sb.local_nls) {
+		unload_nls(sb->u.smbfs_sb.local_nls);
+		sb->u.smbfs_sb.local_nls = NULL;
+	}
 }
 
 struct super_block *
 smb_read_super(struct super_block *sb, void *raw_data, int silent)
 {
-	struct smb_mount_data *mnt;
+	struct smb_mount_data_kernel *mnt;
+	struct smb_mount_data *oldmnt;
 	struct inode *root_inode;
 	struct smb_fattr root;
+	int ver;
 
 	if (!raw_data)
 		goto out_no_data;
-	if (((struct smb_mount_data *) raw_data)->version != SMB_MOUNT_VERSION)
+
+	oldmnt = (struct smb_mount_data *) raw_data;
+	ver = oldmnt->version;
+	if (ver != SMB_MOUNT_OLDVERSION && cpu_to_be32(ver) != SMB_MOUNT_ASCII)
 		goto out_wrong_data;
 
 	sb->s_blocksize = 1024;	/* Eh...  Is this correct? */
@@ -320,6 +412,7 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	sb->s_flags = 0;
 	sb->s_op = &smb_sops;
 
+	sb->u.smbfs_sb.mnt = NULL;
 	sb->u.smbfs_sb.sock_file = NULL;
 	init_MUTEX(&sb->u.smbfs_sb.sem);
 	init_waitqueue_head(&sb->u.smbfs_sb.wait);
@@ -332,30 +425,61 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 		goto out_no_mem;
 
 	/* Allocate the global temp buffer */
-	sb->u.smbfs_sb.temp_buf = kmalloc(SMB_MAXPATHLEN + 20, GFP_KERNEL);
+	sb->u.smbfs_sb.temp_buf = kmalloc(2*SMB_MAXPATHLEN + 20, GFP_KERNEL);
 	if (!sb->u.smbfs_sb.temp_buf)
 		goto out_no_temp;
 
+	/* Setup NLS stuff */
+	sb->u.smbfs_sb.remote_nls = NULL;
+	sb->u.smbfs_sb.local_nls = NULL;
+	sb->u.smbfs_sb.name_buf = sb->u.smbfs_sb.temp_buf + SMB_MAXPATHLEN + 20;
+
 	/* Allocate the mount data structure */
-	mnt = kmalloc(sizeof(struct smb_mount_data), GFP_KERNEL);
+	/* FIXME: merge this with the other malloc and get a whole page? */
+	mnt = kmalloc(sizeof(struct smb_mount_data_kernel), GFP_KERNEL);
 	if (!mnt)
 		goto out_no_mount;
-	*mnt = *((struct smb_mount_data *) raw_data);
-	/* FIXME: passes config flags in high bits of file mode. Should be a
-	   separate flags field. (but smbmount includes kernel headers ...) */
-	mnt->version = (mnt->file_mode >> 9);
-	mnt->file_mode &= (S_IRWXU | S_IRWXG | S_IRWXO);
-	mnt->file_mode |= S_IFREG;
-	mnt->dir_mode  &= (S_IRWXU | S_IRWXG | S_IRWXO);
-	mnt->dir_mode  |= S_IFDIR;
 	sb->u.smbfs_sb.mnt = mnt;
+
+	memset(mnt, 0, sizeof(struct smb_mount_data_kernel));
+	strncpy(mnt->codepage.local_name, CONFIG_NLS_DEFAULT,
+		SMB_NLS_MAXNAMELEN);
+	strncpy(mnt->codepage.local_name, CONFIG_SMB_NLS_REMOTE,
+		SMB_NLS_MAXNAMELEN);
+
+	if (ver == SMB_MOUNT_OLDVERSION) {
+		mnt->version = oldmnt->version;
+
+		/* FIXME: is this enough to convert uid/gid's ? */
+		mnt->mounted_uid = oldmnt->mounted_uid;
+		mnt->uid = oldmnt->uid;
+		mnt->gid = oldmnt->gid;
+
+		mnt->file_mode =
+			oldmnt->file_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
+		mnt->dir_mode =
+			oldmnt->dir_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
+		mnt->file_mode |= S_IFREG;
+		mnt->dir_mode  |= S_IFDIR;
+
+		mnt->flags = (oldmnt->file_mode >> 9);
+	} else {
+		if (parse_options(mnt, raw_data))
+			goto out_bad_option;
+
+		mnt->mounted_uid = current->uid;
+	}
+	smb_setcodepage(&sb->u.smbfs_sb, &mnt->codepage);
+	if (!sb->u.smbfs_sb.convert)
+		PARANOIA("convert funcptr was NULL!\n");
+
 	/*
 	 * Display the enabled options
 	 * Note: smb_proc_getattr uses these in 2.4 (but was changed in 2.2)
 	 */
-	if (mnt->version & SMB_FIX_OLDATTR)
+	if (mnt->flags & SMB_MOUNT_OLDATTR)
 		printk("SMBFS: Using core getattr (Win 95 speedup)\n");
-	else if (mnt->version & SMB_FIX_DIRATTR)
+	else if (mnt->flags & SMB_MOUNT_DIRATTR)
 		printk("SMBFS: Using dir ff getattr\n");
 
 	/*
@@ -374,16 +498,18 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 
 out_no_root:
 	iput(root_inode);
+out_bad_option:
 	kfree(sb->u.smbfs_sb.mnt);
 out_no_mount:
 	kfree(sb->u.smbfs_sb.temp_buf);
 out_no_temp:
 	smb_vfree(sb->u.smbfs_sb.packet);
 out_no_mem:
-	printk(KERN_ERR "smb_read_super: allocation failure\n");
+	if (!sb->u.smbfs_sb.mnt)
+		printk(KERN_ERR "smb_read_super: allocation failure\n");
 	goto out_fail;
 out_wrong_data:
-	printk(KERN_ERR "SMBFS: need mount version %d\n", SMB_MOUNT_VERSION);
+	printk(KERN_ERR "smbfs: mount_data version %d is not supported\n", ver);
 	goto out_fail;
 out_no_data:
 	printk(KERN_ERR "smb_read_super: missing data argument\n");

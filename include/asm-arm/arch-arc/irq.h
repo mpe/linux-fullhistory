@@ -10,6 +10,7 @@
  *   11-01-1998	RMK	Added mask_and_ack_irq
  *   22-08-1998	RMK	Restructured IRQ routines
  */
+#include <linux/config.h>
 #include <asm/ioc.h>
 
 #ifdef CONFIG_ARCH_ARC

@@ -1,5 +1,5 @@
 /*
- * $Id: gamecon.c,v 1.4 2000/05/29 21:08:45 vojtech Exp $
+ * $Id: gamecon.c,v 1.5 2000/06/25 09:56:58 vojtech Exp $
  *
  *  Copyright (c) 1999-2000 Vojtech Pavlik
  *
@@ -157,7 +157,7 @@ static void gc_n64_read_packet(struct gc *gc, unsigned char *data)
 
 static unsigned char gc_nes_bytes[] = { 0, 1, 2, 3 };
 static unsigned char gc_snes_bytes[] = { 8, 0, 2, 3, 9, 1, 10, 11 };
-static short gc_snes_btn[] = { BTN_A, BTN_B, BTN_START, BTN_SELECT, BTN_X, BTN_Y, BTN_TL, BTN_TR };
+static short gc_snes_btn[] = { BTN_A, BTN_B, BTN_SELECT, BTN_START, BTN_X, BTN_Y, BTN_TL, BTN_TR };
 
 /*
  * gc_nes_read_packet() reads a NES/SNES packet.
@@ -515,7 +515,7 @@ static struct gc __init *gc_probe(int *config)
 
 			case GC_N64:
 				for (j = 0; j < 10; j++)
-					set_bit(gc_n64_btn[j], gc->dev[j].keybit);
+					set_bit(gc_n64_btn[j], gc->dev[i].keybit);
 
 				for (j = 0; j < 2; j++) {
 					set_bit(ABS_X + j, gc->dev[i].absbit);
@@ -530,18 +530,15 @@ static struct gc __init *gc_probe(int *config)
 				break;
 
 			case GC_SNES:
-				for (j = 0; j < 8; j++)
-					set_bit(gc_snes_btn[j], gc->dev[j].keybit);
-				break;
-
+				for (j = 4; j < 8; j++)
+					set_bit(gc_snes_btn[j], gc->dev[i].keybit);
 			case GC_NES:
 				for (j = 0; j < 4; j++)
-					set_bit(gc_snes_btn[j], gc->dev[j].keybit);
+					set_bit(gc_snes_btn[j], gc->dev[i].keybit);
 				break;
 
 			case GC_MULTI2:
 				set_bit(BTN_THUMB, gc->dev[i].keybit);
-
 			case GC_MULTI:
 				set_bit(BTN_TRIGGER, gc->dev[i].keybit);
 				break;
@@ -656,12 +653,13 @@ void __exit gc_exit(void)
 {
 	int i, j;
 
-	for (i = 0; i < 3; i++)  {
-		for (j = 0; j < 5; j++) 
-			if (gc_base[i]->pads[0] & gc_status_bit[j])
-				input_unregister_device(gc_base[i]->dev + j);
-		parport_unregister_device(gc_base[i]->pd);
-	}
+	for (i = 0; i < 3; i++)
+		if (gc_base[i]) {
+			for (j = 0; j < 5; j++)
+				if (gc_base[i]->pads[0] & gc_status_bit[j])
+					input_unregister_device(gc_base[i]->dev + j); 
+			parport_unregister_device(gc_base[i]->pd);
+		}
 }
 
 module_init(gc_init);

@@ -62,6 +62,13 @@ struct smb_conn_opt {
 
 #ifdef __KERNEL__
 
+#define SMB_NLS_MAXNAMELEN 20
+struct smb_nls_codepage {
+	char local_name[SMB_NLS_MAXNAMELEN];
+	char remote_name[SMB_NLS_MAXNAMELEN];
+};
+
+
 #define SMB_MAXNAMELEN 255
 #define SMB_MAXPATHLEN 1024
 

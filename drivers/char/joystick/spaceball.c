@@ -1,5 +1,5 @@
 /*
- * $Id: spaceball.c,v 1.6 2000/05/29 11:19:51 vojtech Exp $
+ * $Id: spaceball.c,v 1.7 2000/06/24 11:55:40 vojtech Exp $
  *
  *  Copyright (c) 1999-2000 Vojtech Pavlik
  *
@@ -46,7 +46,7 @@
  */
 
 #define JS_SBALL_MAX_LENGTH	128
-static int spaceball_axes[] = { ABS_X, ABS_Y, ABS_Z, ABS_RX, ABS_RY, ABS_RZ };
+static int spaceball_axes[] = { ABS_X, ABS_Z, ABS_Y, ABS_RX, ABS_RZ, ABS_RY };
 static char *spaceball_name = "SpaceTec SpaceBall 4000 FLX"; 
 
 /*
@@ -70,9 +70,11 @@ static void spaceball_process_packet(struct spaceball* spaceball)
 {
 	struct input_dev *dev = &spaceball->dev;
 	unsigned char *data = spaceball->data;
-	int i, d;
+	int i;
 
 	if (spaceball->idx < 2) return;
+
+	printk("%c %d\n", spaceball->data[0], spaceball->idx);
 
 	switch (spaceball->data[0]) {
 
@@ -84,17 +86,17 @@ static void spaceball_process_packet(struct spaceball* spaceball)
 			break;
 
 		case 'D':					/* Ball data */
-			if (spaceball->idx != 16) return;
+			if (spaceball->idx != 15) return;
 			for (i = 0; i < 6; i++) {
-				d = ((data[2 * i + 3] << 8) | data[2 * i + 2]);
-				input_report_abs(dev, spaceball_axes[i], d - ((d & 0x8000) ? 0x10000 : 0));
+				input_report_abs(dev, spaceball_axes[i], 
+					(__s16)((data[2 * i + 3] << 8) | data[2 * i + 2]));
 			}
 			break;
 
 		case '.':				/* Button data, part2 */
-			if (spaceball->idx != 4) return;
-			input_report_key(dev, BTN_LEFT,  data[2] & 1);
-			input_report_key(dev, BTN_RIGHT, data[2] & 2);
+			if (spaceball->idx != 3) return;
+			input_report_key(dev, BTN_0,  data[2] & 1);
+			input_report_key(dev, BTN_1, data[2] & 2);
 			break;
 
 		case '?':				/* Error packet */
@@ -118,22 +120,27 @@ static void spaceball_interrupt(struct serio *serio, unsigned char data, unsigne
 
 	switch (data) {
 		case 0xd:
-			if (spaceball->idx)
-				spaceball_process_packet(spaceball);
+			spaceball_process_packet(spaceball);
 			spaceball->idx = 0;
 			spaceball->escape = 0;
 			return;
+		case '^':
+			if (!spaceball->escape) {
+				spaceball->escape ^= 1;
+				return;
+			}
+			spaceball->escape = 0;
 		case 'M':
 		case 'Q':
 		case 'S':
-			if (spaceball->escape)
+			if (spaceball->escape) {
+				spaceball->escape = 0;
 				data = 0xd;
-		case '^':
-			spaceball->escape ^= 1;
+			}
 		default:
 			if (spaceball->escape) {
-				printk(KERN_WARNING "spaceball.c: Unknown escaped character: %#x\n", data);
 				spaceball->escape = 0;
+				printk(KERN_WARNING "spaceball.c: Unknown escaped character: %#x (%c)\n", data, data);
 			}
 			if (spaceball->idx < JS_SBALL_MAX_LENGTH)
 				spaceball->data[spaceball->idx++] = data;
@@ -172,15 +179,15 @@ static void spaceball_connect(struct serio *serio, struct serio_dev *dev)
 	memset(spaceball, 0, sizeof(struct spaceball));
 
 	spaceball->dev.evbit[0] = BIT(EV_KEY) | BIT(EV_ABS);	
-	spaceball->dev.keybit[LONG(BTN_LEFT)] = BIT(BTN_LEFT) | BIT(BTN_RIGHT);
+	spaceball->dev.keybit[LONG(BTN_0)] = BIT(BTN_0) | BIT(BTN_1);
 
 	for (i = 0; i < 6; i++) {
 		t = spaceball_axes[i];
 		set_bit(t, spaceball->dev.absbit);
-		spaceball->dev.absmin[t] = i < 3 ? -10000 : -2000;
-		spaceball->dev.absmax[t] = i < 3 ?  10000 :  2000;
-		spaceball->dev.absflat[t] = i < 3 ? 50 : 10;
-		spaceball->dev.absfuzz[t] = i < 3 ? 12 : 2;
+		spaceball->dev.absmin[t] = i < 3 ? -8000 : -1600;
+		spaceball->dev.absmax[t] = i < 3 ?  8000 :  1600;
+		spaceball->dev.absflat[t] = i < 3 ? 40 : 8;
+		spaceball->dev.absfuzz[t] = i < 3 ? 8 : 2;
 	}
 
 	spaceball->serio = serio;

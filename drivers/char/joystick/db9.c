@@ -1,5 +1,5 @@
 /*
- * $Id: db9.c,v 1.5 2000/05/29 20:39:38 vojtech Exp $
+ * $Id: db9.c,v 1.6 2000/06/25 10:57:50 vojtech Exp $
  *
  *  Copyright (c) 1999 Vojtech Pavlik
  *
@@ -95,7 +95,7 @@ static short db9_genesis_btn[] = { BTN_START, BTN_A, BTN_B, BTN_C, BTN_X, BTN_Y,
 static short db9_cd32_btn[] = { BTN_A, BTN_B, BTN_C, BTN_X, BTN_Y, BTN_Z, BTN_TL, BTN_TR, BTN_START };
 
 static char db9_buttons[DB9_MAX_PAD] = { 0, 1, 2, 4, 0, 6, 8, 8, 1, 1, 7 };
-static short *db9_btn[DB9_MAX_PAD] = { db9_multi_btn, db9_multi_btn, db9_genesis_btn, NULL, db9_genesis_btn,
+static short *db9_btn[DB9_MAX_PAD] = { NULL, db9_multi_btn, db9_multi_btn, db9_genesis_btn, NULL, db9_genesis_btn,
 					db9_genesis_btn, db9_cd32_btn, db9_multi_btn, db9_multi_btn, db9_cd32_btn };
 static char *db9_name[DB9_MAX_PAD] = { NULL, "Multisystem joystick", "Multisystem joystick (2 fire)", "Genesis pad",
 				      NULL, "Genesis 5 pad", "Genesis 6 pad", "Saturn pad", "Multisystem (0.8.0.2) joystick",
@@ -113,36 +113,36 @@ static void db9_timer(unsigned long private)
 
 			data = parport_read_data(port) >> 3;
 
-			input_report_abs(dev + 1, ABS_X, (data&DB9_DOWN ?0:1) - (data&DB9_UP  ?0:1));
-			input_report_abs(dev + 1, ABS_Y, (data&DB9_RIGHT?0:1) - (data&DB9_LEFT?0:1));
-			input_report_key(dev + 1, BTN_TRIGGER, ~data&DB9_FIRE1);
+			input_report_abs(dev + 1, ABS_X, (data & DB9_RIGHT ? 0 : 1) - (data & DB9_LEFT ? 0 : 1));
+			input_report_abs(dev + 1, ABS_Y, (data & DB9_DOWN  ? 0 : 1) - (data & DB9_UP   ? 0 : 1));
+			input_report_key(dev + 1, BTN_TRIGGER, ~data & DB9_FIRE1);
 
 		case DB9_MULTI_0802:
 
 			data = parport_read_status(port) >> 3;
 
-			input_report_abs(dev, ABS_X, (data&DB9_DOWN ?0:1) - (data&DB9_UP  ?0:1));
-			input_report_abs(dev, ABS_Y, (data&DB9_RIGHT?0:1) - (data&DB9_LEFT?0:1));
-			input_report_key(dev, BTN_TRIGGER, data&DB9_FIRE1);
+			input_report_abs(dev, ABS_X, (data & DB9_RIGHT ? 0 : 1) - (data & DB9_LEFT ? 0 : 1));
+			input_report_abs(dev, ABS_Y, (data & DB9_DOWN  ? 0 : 1) - (data & DB9_UP   ? 0 : 1));
+			input_report_key(dev, BTN_TRIGGER, data & DB9_FIRE1);
 			break;
 
 		case DB9_MULTI_STICK:
 
 			data = parport_read_data(port);
 
-			input_report_abs(dev, ABS_X, (data&DB9_DOWN ?0:1) - (data&DB9_UP  ?0:1));
-			input_report_abs(dev, ABS_Y, (data&DB9_RIGHT?0:1) - (data&DB9_LEFT?0:1));
-			input_report_key(dev, BTN_TRIGGER, ~data&DB9_FIRE1);
+			input_report_abs(dev, ABS_X, (data & DB9_RIGHT ? 0 : 1) - (data & DB9_LEFT ? 0 : 1));
+			input_report_abs(dev, ABS_Y, (data & DB9_DOWN  ? 0 : 1) - (data & DB9_UP   ? 0 : 1));
+			input_report_key(dev, BTN_TRIGGER, ~data & DB9_FIRE1);
 			break;
 
 		case DB9_MULTI2_STICK:
 
 			data = parport_read_data(port);
 
-			input_report_abs(dev, ABS_X, (data&DB9_DOWN ?0:1) - (data&DB9_UP  ?0:1));
-			input_report_abs(dev, ABS_Y, (data&DB9_RIGHT?0:1) - (data&DB9_LEFT?0:1));
-			input_report_key(dev, BTN_TRIGGER, ~data&DB9_FIRE1);
-			input_report_key(dev, BTN_THUMB,   ~data&DB9_FIRE2);
+			input_report_abs(dev, ABS_X, (data & DB9_RIGHT ? 0 : 1) - (data & DB9_LEFT ? 0 : 1));
+			input_report_abs(dev, ABS_Y, (data & DB9_DOWN  ? 0 : 1) - (data & DB9_UP   ? 0 : 1));
+			input_report_key(dev, BTN_TRIGGER, ~data & DB9_FIRE1);
+			input_report_key(dev, BTN_THUMB,   ~data & DB9_FIRE2);
 			break;
 
 		case DB9_GENESIS_PAD:
@@ -150,16 +150,16 @@ static void db9_timer(unsigned long private)
 			parport_write_control(port, DB9_NOSELECT);
 			data = parport_read_data(port);
 
-			input_report_abs(dev, ABS_X, (data&DB9_DOWN ?0:1) - (data&DB9_UP  ?0:1));
-			input_report_abs(dev, ABS_Y, (data&DB9_RIGHT?0:1) - (data&DB9_LEFT?0:1));
-			input_report_key(dev, BTN_B, ~data&DB9_FIRE1);
-			input_report_key(dev, BTN_C, ~data&DB9_FIRE2);
+			input_report_abs(dev, ABS_X, (data & DB9_RIGHT ? 0 : 1) - (data & DB9_LEFT ? 0 : 1));
+			input_report_abs(dev, ABS_Y, (data & DB9_DOWN  ? 0 : 1) - (data & DB9_UP   ? 0 : 1));
+			input_report_key(dev, BTN_B, ~data & DB9_FIRE1);
+			input_report_key(dev, BTN_C, ~data & DB9_FIRE2);
 
 			parport_write_control(port, DB9_NORMAL);
 			data=parport_read_data(port);
 
-			input_report_key(dev, BTN_A,     ~data&DB9_FIRE1);
-			input_report_key(dev, BTN_START, ~data&DB9_FIRE2);
+			input_report_key(dev, BTN_A,     ~data & DB9_FIRE1);
+			input_report_key(dev, BTN_START, ~data & DB9_FIRE2);
 			break;
 
 		case DB9_GENESIS5_PAD:
@@ -167,18 +167,18 @@ static void db9_timer(unsigned long private)
 			parport_write_control(port, DB9_NOSELECT);
 			data=parport_read_data(port);
 
-			input_report_abs(dev, ABS_X, (data&DB9_DOWN ?0:1) - (data&DB9_UP  ?0:1));
-			input_report_abs(dev, ABS_Y, (data&DB9_RIGHT?0:1) - (data&DB9_LEFT?0:1));
-			input_report_key(dev, BTN_B, ~data&DB9_FIRE1);
-			input_report_key(dev, BTN_C, ~data&DB9_FIRE2);
+			input_report_abs(dev, ABS_X, (data & DB9_RIGHT ? 0 : 1) - (data & DB9_LEFT ? 0 : 1));
+			input_report_abs(dev, ABS_Y, (data & DB9_DOWN  ? 0 : 1) - (data & DB9_UP   ? 0 : 1));
+			input_report_key(dev, BTN_B, ~data & DB9_FIRE1);
+			input_report_key(dev, BTN_C, ~data & DB9_FIRE2);
 
 			parport_write_control(port, DB9_NORMAL);
 			data=parport_read_data(port);
 
-			input_report_key(dev, BTN_A,     ~data&DB9_FIRE1);
-			input_report_key(dev, BTN_X,     ~data&DB9_FIRE2);
-			input_report_key(dev, BTN_Y,     ~data&DB9_LEFT);
-			input_report_key(dev, BTN_START, ~data&DB9_RIGHT);
+			input_report_key(dev, BTN_A,     ~data & DB9_FIRE1);
+			input_report_key(dev, BTN_X,     ~data & DB9_FIRE2);
+			input_report_key(dev, BTN_Y,     ~data & DB9_LEFT);
+			input_report_key(dev, BTN_START, ~data & DB9_RIGHT);
 			break;
 
 		case DB9_GENESIS6_PAD:
@@ -187,17 +187,17 @@ static void db9_timer(unsigned long private)
 			udelay(DB9_GENESIS6_DELAY);
 			data=parport_read_data(port);
 
-			input_report_abs(dev, ABS_X, (data&DB9_DOWN ?0:1) - (data&DB9_UP  ?0:1));
-			input_report_abs(dev, ABS_Y, (data&DB9_RIGHT?0:1) - (data&DB9_LEFT?0:1));
-			input_report_key(dev, BTN_B, ~data&DB9_FIRE1);
-			input_report_key(dev, BTN_C, ~data&DB9_FIRE2);
+			input_report_abs(dev, ABS_X, (data & DB9_RIGHT ? 0 : 1) - (data & DB9_LEFT ? 0 : 1));
+			input_report_abs(dev, ABS_Y, (data & DB9_DOWN  ? 0 : 1) - (data & DB9_UP   ? 0 : 1));
+			input_report_key(dev, BTN_B, ~data & DB9_FIRE1);
+			input_report_key(dev, BTN_C, ~data & DB9_FIRE2);
 
 			parport_write_control(port, DB9_NORMAL);
 			udelay(DB9_GENESIS6_DELAY);
 			data=parport_read_data(port);
 
-			input_report_key(dev, BTN_A, ~data&DB9_FIRE1);
-			input_report_key(dev, BTN_X, ~data&DB9_FIRE2);
+			input_report_key(dev, BTN_A, ~data & DB9_FIRE1);
+			input_report_key(dev, BTN_X, ~data & DB9_FIRE2);
 
 			parport_write_control(port, DB9_NOSELECT); /* 2 */
 			udelay(DB9_GENESIS6_DELAY);
@@ -207,10 +207,10 @@ static void db9_timer(unsigned long private)
 			udelay(DB9_GENESIS6_DELAY);
 			data=parport_read_data(port);
 
-			input_report_key(dev, BTN_Y,     ~data&DB9_LEFT);
-			input_report_key(dev, BTN_Z,     ~data&DB9_DOWN);
-			input_report_key(dev, BTN_MODE,  ~data&DB9_UP);
-			input_report_key(dev, BTN_START, ~data&DB9_RIGHT);
+			input_report_key(dev, BTN_Y,     ~data & DB9_LEFT);
+			input_report_key(dev, BTN_Z,     ~data & DB9_DOWN);
+			input_report_key(dev, BTN_MODE,  ~data & DB9_UP);
+			input_report_key(dev, BTN_START, ~data & DB9_RIGHT);
 
 			parport_write_control(port, DB9_NORMAL);
 			udelay(DB9_GENESIS6_DELAY);
@@ -224,32 +224,32 @@ static void db9_timer(unsigned long private)
 			parport_write_control(port, DB9_SATURN0);
 			data = parport_read_data(port);
 
-			input_report_key(dev, BTN_Y, ~data&DB9_LEFT);
-			input_report_key(dev, BTN_Z, ~data&DB9_DOWN);
-			input_report_key(dev, BTN_TL,~data&DB9_UP);
-			input_report_key(dev, BTN_TR,~data&DB9_RIGHT);
+			input_report_key(dev, BTN_Y,  ~data & DB9_LEFT);
+			input_report_key(dev, BTN_Z,  ~data & DB9_DOWN);
+			input_report_key(dev, BTN_TL, ~data & DB9_UP);
+			input_report_key(dev, BTN_TR, ~data & DB9_RIGHT);
 
 			parport_write_control(port, DB9_SATURN2);
 			data = parport_read_data(port);
 
-			input_report_abs(dev, ABS_X, (data&DB9_DOWN ?0:1) - (data&DB9_UP  ?0:1));
-			input_report_abs(dev, ABS_Y, (data&DB9_RIGHT?0:1) - (data&DB9_LEFT?0:1));
+			input_report_abs(dev, ABS_X, (data & DB9_RIGHT ? 0 : 1) - (data & DB9_LEFT ? 0 : 1));
+			input_report_abs(dev, ABS_Y, (data & DB9_DOWN  ? 0 : 1) - (data & DB9_UP   ? 0 : 1));
 			
 			parport_write_control(port, DB9_NORMAL);
 			data = parport_read_data(port);
 
-			input_report_key(dev, BTN_A, ~data&DB9_LEFT);
-			input_report_key(dev, BTN_B, ~data&DB9_UP);
-			input_report_key(dev, BTN_C, ~data&DB9_DOWN);
-			input_report_key(dev, BTN_X, ~data&DB9_RIGHT);
+			input_report_key(dev, BTN_A, ~data & DB9_LEFT);
+			input_report_key(dev, BTN_B, ~data & DB9_UP);
+			input_report_key(dev, BTN_C, ~data & DB9_DOWN);
+			input_report_key(dev, BTN_X, ~data & DB9_RIGHT);
 			break;
 
 		case DB9_CD32_PAD:
 
 			data=parport_read_data(port);
 
-			input_report_abs(dev, ABS_X, (data&DB9_DOWN ?0:1) - (data&DB9_UP  ?0:1));
-			input_report_abs(dev, ABS_Y, (data&DB9_RIGHT?0:1) - (data&DB9_LEFT?0:1));
+			input_report_abs(dev, ABS_X, (data & DB9_RIGHT ? 0 : 1) - (data & DB9_LEFT ? 0 : 1));
+			input_report_abs(dev, ABS_Y, (data & DB9_DOWN  ? 0 : 1) - (data & DB9_UP   ? 0 : 1));
 
 			parport_write_control(port, 0x0a); 
 
@@ -257,7 +257,7 @@ static void db9_timer(unsigned long private)
 				data = parport_read_data(port);
 				parport_write_control(port, 0x02); 
 				parport_write_control(port, 0x0a); 
-				input_report_key(dev, db9_cd32_btn[i], ~data&DB9_FIRE2);
+				input_report_key(dev, db9_cd32_btn[i], ~data & DB9_FIRE2);
 				}
 
 			parport_write_control(port, 0x00); 

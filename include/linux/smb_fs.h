@@ -73,13 +73,6 @@ smb_vfree(void *obj)
 #define SMB_F_CACHEVALID	0x01	/* directory cache valid */
 #define SMB_F_LOCALWRITE	0x02	/* file modified locally */
 
-/*
- * Bug fix flags
- */
-#define SMB_FIX_WIN95	0x0001	/* Win 95 server */
-#define SMB_FIX_OLDATTR	0x0002	/* Use core getattr (Win 95 speedup) */
-#define SMB_FIX_DIRATTR	0x0004	/* Use find_first for getattr */
-
 
 /* NT1 protocol capability bits */
 #define SMB_CAP_RAW_MODE         0x0001
@@ -122,6 +115,7 @@ unsigned long smb_invent_inos(unsigned long);
 struct inode *smb_iget(struct super_block *, struct smb_fattr *);
 
 /* linux/fs/smbfs/proc.c */
+int smb_setcodepage(struct smb_sb_info *server, struct smb_nls_codepage *cp);
 __u32 smb_len(unsigned char *);
 __u8 *smb_encode_smb_length(__u8 *, __u32);
 __u8 *smb_setup_header(struct smb_sb_info *, __u8, __u16, __u16);

@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.197 2000/08/09 00:00:15 davem Exp $
+/* $Id: sun4c.c,v 1.198 2000/08/14 00:46:13 anton Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -2156,9 +2156,9 @@ static pte_t sun4c_mk_pte_io(unsigned long page, pgprot_t pgprot, int space)
 	return __pte(((page - PAGE_OFFSET) >> PAGE_SHIFT) | pgprot_val(pgprot));
 }
 
-static unsigned long sun4c_pte_pagenr(pte_t pte)
+static struct page *sun4c_pte_page(pte_t pte)
 {
-	return (pte_val(pte) & SUN4C_PFN_MASK);
+	return (mem_map + (unsigned long)(pte_val(pte) & SUN4C_PFN_MASK));
 }
 
 static inline unsigned long sun4c_pmd_page(pmd_t pmd)
@@ -2650,7 +2650,7 @@ void __init ld_mmu_sun4c(void)
 
 	BTFIXUPSET_CALL(set_pte, sun4c_set_pte, BTFIXUPCALL_STO1O0);
 
-	BTFIXUPSET_CALL(sparc_pte_pagenr, sun4c_pte_pagenr, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_page, sun4c_pte_page, BTFIXUPCALL_NORM);
 #if PAGE_SHIFT <= 12	
 	BTFIXUPSET_CALL(pmd_page, sun4c_pmd_page, BTFIXUPCALL_ANDNINT(PAGE_SIZE - 1));
 #else

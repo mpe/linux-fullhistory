@@ -527,6 +527,7 @@ EXPORT_SYMBOL(get_fast_time);
 /* library functions */
 EXPORT_SYMBOL(strnicmp);
 EXPORT_SYMBOL(strspn);
+EXPORT_SYMBOL(strsep);
 
 /* software interrupts */
 EXPORT_SYMBOL(tasklet_hi_vec);

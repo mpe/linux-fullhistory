@@ -339,7 +339,7 @@ repeat_page:
 	bh->b_count = bh_orig->b_count;
 	bh->b_rdev = bh_orig->b_rdev;
 	bh->b_state = bh_orig->b_state;
-	bh->b_flushtime = 0;
+	bh->b_flushtime = jiffies;
 	bh->b_next_free = NULL;
 	bh->b_prev_free = NULL;
 	/* bh->b_this_page */

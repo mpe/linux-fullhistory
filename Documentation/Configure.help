@@ -11305,6 +11305,21 @@ CONFIG_SMB_FS
   want), say M here and read Documentation/modules.txt. The module
   will be called smbfs.o. Most people say N, however.
 
+nls support setting
+CONFIG_SMB_NLS_REMOTE
+  This setting allows you to specify a default value for which
+  codepage the server uses. If this field is left blank no
+  translations will be done by default. The local codepage/charset
+  default to CONFIG_NLS_DEFAULT.
+
+  The nls settings can be changed at mount time, if your smbmount
+  supports that, using the codepage and iocharset parameters.
+
+  Currently no smbmount distributed with samba supports this, it is
+  assumed future versions will. In the meantime you can get an
+  unofficial patch for samba 2.0.7 from:
+  http://www.hojdpunkten.ac.se/054/samba/index.html
+
 Coda file system support (advanced network fs)
 CONFIG_CODA_FS
   Coda is an advanced network file system, similar to NFS in that it

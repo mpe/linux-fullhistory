@@ -1,5 +1,5 @@
 /*
- * $Id: amijoy.c,v 1.4 2000/05/29 10:39:54 vojtech Exp $
+ * $Id: amijoy.c,v 1.5 2000/07/21 22:52:24 vojtech Exp $
  *
  *  Copyright (c) 1998-2000 Vojtech Pavlik
  *
@@ -77,7 +77,7 @@ static int amijoy_open(struct input_dev *dev)
 		return 0;
 	
 	if (request_irq(IRQ_AMIGA_VERTB, amijoy_interrupt, 0, "amijoy", NULL)) {
-		amijoy_used--;
+		(*used)--;
 		printk(KERN_ERR "amijoy.c: Can't allocate irq %d\n", amijoy_irq);
 		return -EBUSY;
 	}
@@ -89,7 +89,7 @@ static void amijoy_close(struct input_dev *dev)
 {
 	int *used = dev->private;
 
-	if (!--(*port->used))
+	if (!--(*used))
 		free_irq(IRQ_AMIGA_VERTB, amijoy_interrupt);
 }
 
@@ -112,13 +112,21 @@ static int __init amijoy_init(void)
 
 	for (i = 0; i < 2; i++)
 		if (amijoy[i]) {
+			if (!request_mem_region(CUSTOM_PHYSADDR+10+i*2, 2,
+						amijoy [Denise]")) {
+				if (i == 1 && amijoy[0]) {
+					input_unregister_device(amijoy_dev);
+					release_mem_region(CUSTOM_PHYSADDR+10, 2);
+				}
+				return -EBUSY;
+			}
 
 			amijoy_dev[i].open = amijoy_open;
 			amijoy_dev[i].close = amijoy_close;
 			amijoy_dev[i].evbit[0] = BIT(EV_KEY) | BIT(EV_ABS);
 			amijoy_dev[i].absbit[0] = BIT(ABS_X) | BIT(ABS_Y);
 			amijoy_dev[i].keybit[LONG(BTN_LEFT)] = BIT(BTN_LEFT) | BIT(BTN_MIDDLE) | BIT(BTN_RIGHT);
-			for (j = 0; j < 2; j++)
+			for (j = 0; j < 2; j++) {
 				amijoy_dev[i].absmin[ABS_X + j] = -1;
 				amijoy_dev[i].absmax[ABS_X + j] = 1;
 			}
@@ -134,6 +142,7 @@ static int __init amijoy_init(void)
 			input_register_device(amijoy_dev + i);
 			printk(KERN_INFO "input%d: %s at joy%ddat\n", amijoy_dev[i].number, amijoy_name, i);
 		}
+	return 0;
 }
 
 static void _exit amijoy_exit(void)
@@ -141,8 +150,10 @@ static void _exit amijoy_exit(void)
 	int i;
 
 	for (i = 0; i < 2; i++)
-		if (amijoy[i])
+		if (amijoy[i]) {
 			input_unregister_device(amijoy_dev + i);
+			release_mem_region(CUSTOM_PHYSADDR+10+i*2, 2);
+		}
 }
 
 module_init(amijoy_init);

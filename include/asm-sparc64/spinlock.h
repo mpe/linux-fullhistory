@@ -109,6 +109,7 @@ extern int _spin_trylock (spinlock_t *lock);
 
 typedef unsigned int rwlock_t;
 #define RW_LOCK_UNLOCKED	0
+#define rwlock_init(lp) do { *(lp) = RW_LOCK_UNLOCKED; } while(0)
 
 extern void __read_lock(rwlock_t *);
 extern void __read_unlock(rwlock_t *);
@@ -128,6 +129,7 @@ typedef struct {
 	unsigned int reader_pc[4];
 } rwlock_t;
 #define RW_LOCK_UNLOCKED	(rwlock_t) { 0, 0, 0xff, { 0, 0, 0, 0 } }
+#define rwlock_init(lp) do { *(lp) = RW_LOCK_UNLOCKED; } while(0)
 
 extern void _do_read_lock(rwlock_t *rw, char *str);
 extern void _do_read_unlock(rwlock_t *rw, char *str);

@@ -25,6 +25,7 @@
  */
 
 
+#include <linux/config.h>
 #include <linux/fs.h>
 #undef N_DATA
 

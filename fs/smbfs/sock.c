@@ -111,12 +111,16 @@ smb_data_callback(void* ptr)
 	unsigned char peek_buf[4];
 	int result;
 	mm_segment_t fs;
+	int count = 100;   /* this is a lot, we should have some data waiting */
+	int found = 0;
 
 	fs = get_fs();
 	set_fs(get_ds());
 
 	lock_kernel();
-	while (1) {
+	while (count-- > 0) {
+		peek_buf[0] = 0;
+
 		result = -EIO;
 		if (job->sk->dead) {
 			PARANOIA("sock dead!\n");
@@ -125,7 +129,7 @@ smb_data_callback(void* ptr)
 
 		result = _recvfrom(socket, (void *) peek_buf, 1,
 				   MSG_PEEK | MSG_DONTWAIT);
-		if (result == -EAGAIN)
+		if (result < 0)
 			break;
 		if (peek_buf[0] != 0x85)
 			break;
@@ -136,13 +140,15 @@ smb_data_callback(void* ptr)
 
 		DEBUG1("got SESSION KEEPALIVE\n");
 
-		if (result == -EAGAIN)
+		if (result < 0)
 			break;
+		found = 1;
 	}
 	unlock_kernel();
 	set_fs(fs);
 
-	if (result != -EAGAIN)
+	DEBUG1("found=%d, count=%d, result=%d\n", found, count, result);
+	if (found)
 		found_data(job->sk);
 	kfree(ptr);
 }

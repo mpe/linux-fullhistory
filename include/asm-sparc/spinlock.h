@@ -16,7 +16,7 @@
  * Define this to use the verbose/debugging versions in
  * arch/sparc/lib/debuglocks.c
  *
- * Be sure to make check_asm whenever changing this option.
+ * Be sure to make dep whenever changing this option.
  */
 #define SPIN_LOCK_DEBUG
 
@@ -28,7 +28,7 @@ struct _spinlock_debug {
 typedef struct _spinlock_debug spinlock_t;
 
 #define SPIN_LOCK_UNLOCKED	(spinlock_t) { 0, 0 }
-#define spin_lock_init(lp)	do { (lp)->owner_pc = 0; (lp)->lock = 0; } while(0)
+#define spin_lock_init(lp)	do { *(lp)= SPIN_LOCK_UNLOCKED; } while(0)
 #define spin_is_locked(lp)  (*((volatile unsigned char *)(&((lp)->lock))) != 0)
 #define spin_unlock_wait(lp)	do { barrier(); } while(*(volatile unsigned char *)(&(lp)->lock))
 
@@ -48,6 +48,8 @@ struct _rwlock_debug {
 typedef struct _rwlock_debug rwlock_t;
 
 #define RW_LOCK_UNLOCKED (rwlock_t) { 0, 0, {0} }
+
+#define rwlock_init(lp)	do { *(lp)= RW_LOCK_UNLOCKED; } while(0)
 
 extern void _do_read_lock(rwlock_t *rw, char *str);
 extern void _do_read_unlock(rwlock_t *rw, char *str);
@@ -143,6 +145,9 @@ extern __inline__ void spin_unlock(spinlock_t *lock)
 typedef struct { volatile unsigned int lock; } rwlock_t;
 
 #define RW_LOCK_UNLOCKED (rwlock_t) { 0 }
+
+#define rwlock_init(lp)	do { *(lp)= RW_LOCK_UNLOCKED; } while(0)
+
 
 /* Sort of like atomic_t's on Sparc, but even more clever.
  *

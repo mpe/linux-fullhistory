@@ -23,7 +23,7 @@ struct smb_sb_info {
         enum smb_conn_state state;
 	struct file * sock_file;
 
-        struct smb_mount_data *mnt;
+        struct smb_mount_data_kernel *mnt;
         unsigned char *temp_buf;
 
 	/* Connections are counted. Each time a new socket arrives,
@@ -41,8 +41,20 @@ struct smb_sb_info {
         unsigned short     rcls; /* The error codes we received */
         unsigned short     err;
 
-        /* We use our on data_ready callback, but need the original one */
+        /* We use our own data_ready callback, but need the original one */
         void *data_ready;
+
+	/* nls pointers for codepage conversions */
+	struct nls_table *remote_nls;
+	struct nls_table *local_nls;
+
+	/* utf8 can make strings longer so we can't do in-place conversion.
+	   This is a buffer for temporary stuff. We only need one so no need
+	   to put it on the stack. This points to temp_buf space. */
+	char *name_buf;
+
+	int (*convert)(char *, int, const char *, int,
+		       struct nls_table *, struct nls_table *);
 };
 
 #endif /* __KERNEL__ */

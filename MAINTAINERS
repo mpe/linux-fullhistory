@@ -450,6 +450,13 @@ M:      asun@cobaltnet.com
 L:      linux-kernel@vger.rutgers.edu
 S:      Maintained
 
+HGA FRAMEBUFFER DRIVER
+P:	Ferenc Bakonyi
+M:	fero@drama.obuda.kando.hu
+L:	linux-nvidia@lists.surfsouth.com
+W:	http://drama.obuda.kando.hu/~fero/cgi-bin/hgafb.shtml
+S:	Maintained
+
 HIGH-SPEED SCC DRIVER FOR AX.25
 P:	Klaus Kudielka
 M:	klaus.kudielka@ieee.org

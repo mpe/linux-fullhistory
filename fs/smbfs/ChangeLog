@@ -1,5 +1,16 @@
 ChangeLog for smbfs.
 
+2000-08-14 Urban Widmark <urban@svenskatest.se>
+
+	* dir.c: support case sensitive shares
+	* inode.c: ascii mount options
+	* proc.c: check length of paths to avoid buffer overflow
+	* proc.c: don't do interruptable_sleep in smb_retry to avoid signal
+	  problem/race.
+	* proc.c: O_RDONLY & smb_revalidate_inode fix (tail -f)
+	* proc.c: add nls support
+	* sock.c: attempt to fix smb_data_callback (avoid infinite loop)
+
 2000-07-25 Urban Widmark <urban@svenskatest.se>
 
 	* proc.c: fix 3 places where bad server responses could cause an Oops.

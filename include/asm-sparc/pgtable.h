@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.101 2000/08/09 00:00:17 davem Exp $ */
+/* $Id: pgtable.h,v 1.102 2000/08/14 00:46:13 anton Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -201,11 +201,9 @@ extern unsigned long empty_zero_page;
 
 #define SIZEOF_PTR_LOG2   2
 
-BTFIXUPDEF_CALL_CONST(unsigned long, sparc_pte_pagenr, pte_t)
 BTFIXUPDEF_CALL_CONST(unsigned long, pmd_page, pmd_t)
 BTFIXUPDEF_CALL_CONST(unsigned long, pgd_page, pgd_t)
 
-#define sparc_pte_pagenr(pte) BTFIXUP_CALL(sparc_pte_pagenr)(pte)
 #define pmd_page(pmd) BTFIXUP_CALL(pmd_page)(pmd)
 #define pgd_page(pgd) BTFIXUP_CALL(pgd_page)(pgd)
 
@@ -305,7 +303,9 @@ BTFIXUPDEF_CALL_CONST(pte_t, pte_mkyoung, pte_t)
 
 /* Permanent address of a page. */
 #define page_address(page)  ((page)->virtual)
-#define pte_page(x) (mem_map+sparc_pte_pagenr(x))
+
+BTFIXUPDEF_CALL(struct page *, pte_page, pte_t)
+#define pte_page(pte) BTFIXUP_CALL(pte_page)(pte)
 
 /*
  * Conversion functions: convert a page and protection to a page entry,

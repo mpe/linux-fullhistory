@@ -3,7 +3,6 @@
  *
  * Copyright (c) 1996-1999 Russell King and Dave Gilbert
  */
-#include <linux/config.h>
 
 static void arch_idle(void)
 {

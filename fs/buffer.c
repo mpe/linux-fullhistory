@@ -119,7 +119,7 @@ union bdflush_param {
 				  when trying to refill buffers. */
 		int interval; /* jiffies delay between kupdate flushes */
 		int age_buffer;  /* Time for normal buffer to age before we flush it */
-		int age_super;  /* Time for superblock to age before we flush it */
+		int dummy1;    /* unused, was age_super */
 		int dummy2;    /* unused */
 		int dummy3;    /* unused */
 	} b_un;
@@ -894,7 +894,7 @@ void balance_dirty(kdev_t dev)
 
 static __inline__ void __mark_dirty(struct buffer_head *bh, int flag)
 {
-	bh->b_flushtime = jiffies + (flag ? bdf_prm.b_un.age_super : bdf_prm.b_un.age_buffer);
+	bh->b_flushtime = jiffies + bdf_prm.b_un.age_buffer;
 	refile_buffer(bh);
 }
 
@@ -1714,8 +1714,10 @@ int generic_commit_write(struct file *file, struct page *page,
 	loff_t pos = ((loff_t)page->index << PAGE_CACHE_SHIFT) + to;
 	__block_commit_write(inode,page,from,to);
 	kunmap(page);
-	if (pos > inode->i_size)
+	if (pos > inode->i_size) {
 		inode->i_size = pos;
+		mark_inode_dirty(inode);
+	}
 	return 0;
 }
 
@@ -1837,6 +1839,7 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 	int		pageind;
 	int		bhind;
 	int		offset;
+	int		sectors = size>>9;
 	unsigned long	blocknr;
 	struct kiobuf *	iobuf = NULL;
 	struct page *	map;
@@ -1888,9 +1891,10 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 				tmp->b_this_page = tmp;
 
 				init_buffer(tmp, end_buffer_io_kiobuf, iobuf);
-				tmp->b_dev = dev;
+				tmp->b_rdev = tmp->b_dev = dev;
 				tmp->b_blocknr = blocknr;
-				tmp->b_state = 1 << BH_Mapped;
+				tmp->b_rsector = blocknr*sectors;
+				tmp->b_state = (1 << BH_Mapped) | (1 << BH_Lock) | (1 << BH_Req);
 
 				if (rw == WRITE) {
 					set_bit(BH_Uptodate, &tmp->b_state);

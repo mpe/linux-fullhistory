@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.220 2000/08/09 00:00:15 davem Exp $
+/* $Id: srmmu.c,v 1.221 2000/08/14 00:46:13 anton Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -137,8 +137,8 @@ static inline unsigned long srmmu_pgd_page(pgd_t pgd)
 static inline unsigned long srmmu_pmd_page(pmd_t pmd)
 { return srmmu_device_memory(pmd_val(pmd))?~0:(unsigned long)__nocache_va((pmd_val(pmd) & SRMMU_PTD_PMASK) << 4); }
 
-static inline unsigned long srmmu_pte_pagenr(pte_t pte)
-{ return srmmu_device_memory(pte_val(pte))?~0:(((pte_val(pte) & SRMMU_PTE_PMASK) << 4) >> PAGE_SHIFT); }
+static inline struct page *srmmu_pte_page(pte_t pte)
+{ return (mem_map + (unsigned long)(srmmu_device_memory(pte_val(pte))?~0:(((pte_val(pte) & SRMMU_PTE_PMASK) << 4) >> PAGE_SHIFT))); }
 
 static inline int srmmu_pte_none(pte_t pte)
 { return !(pte_val(pte) & 0xFFFFFFF); }
@@ -2153,7 +2153,7 @@ void __init ld_mmu_srmmu(void)
 	BTFIXUPSET_CALL(set_pte, srmmu_set_pte, BTFIXUPCALL_SWAPO0O1);
 	BTFIXUPSET_CALL(switch_mm, srmmu_switch_mm, BTFIXUPCALL_NORM);
 
-	BTFIXUPSET_CALL(sparc_pte_pagenr, srmmu_pte_pagenr, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_page, srmmu_pte_page, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(pmd_page, srmmu_pmd_page, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(pgd_page, srmmu_pgd_page, BTFIXUPCALL_NORM);
 

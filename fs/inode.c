@@ -771,6 +771,7 @@ void iput(struct inode *inode)
 			list_del(&inode->i_list);
 			INIT_LIST_HEAD(&inode->i_list);
 			inode->i_state|=I_FREEING;
+			inodes_stat.nr_inodes--;
 			spin_unlock(&inode_lock);
 
 			if (inode->i_data.nrpages)
@@ -799,11 +800,11 @@ void iput(struct inode *inode)
 				list_del(&inode->i_list);
 				INIT_LIST_HEAD(&inode->i_list);
 				inode->i_state|=I_FREEING;
+				inodes_stat.nr_inodes--;
 				spin_unlock(&inode_lock);
 				clear_inode(inode);
 			}
 		}
-		inodes_stat.nr_inodes--;
 		destroy_inode(inode);
 	}
 }

@@ -14,6 +14,7 @@
 #include <linux/ctype.h>
 
 #include <linux/smb_fs.h>
+#include <linux/smb_mount.h>
 #include <linux/smbno.h>
 
 #include "smb_debug.h"
@@ -142,7 +143,7 @@ out:
 }
 
 /*
- * Note: in order to allow the smbclient process to open the
+ * Note: in order to allow the smbmount process to open the
  * mount point, we don't revalidate if conn_pid is NULL.
  */
 static int
@@ -189,6 +190,13 @@ static struct dentry_operations smbfs_dentry_operations =
 	d_compare:	smb_compare_dentry,
 	d_delete:	smb_delete_dentry,
 };
+
+static struct dentry_operations smbfs_dentry_operations_case =
+{
+	d_revalidate:	smb_lookup_validate,
+	d_delete:	smb_delete_dentry,
+};
+
 
 /*
  * This is the callback when the dcache has a lookup hit.
@@ -249,8 +257,7 @@ smb_compare_dentry(struct dentry *dir, struct qstr *a, struct qstr *b)
 
 	if (a->len != b->len)
 		goto out;
-	for (i=0; i < a->len; i++)
-	{
+	for (i=0; i < a->len; i++) {
 		if (tolower(a->name[i]) != tolower(b->name[i]))
 			goto out;
 	}
@@ -300,6 +307,7 @@ smb_lookup(struct inode *dir, struct dentry *dentry)
 	struct smb_fattr finfo;
 	struct inode *inode;
 	int error;
+	struct smb_sb_info *server;
 
 	error = -ENAMETOOLONG;
 	if (dentry->d_name.len > SMB_MAXNAMELEN)
@@ -315,15 +323,18 @@ smb_lookup(struct inode *dir, struct dentry *dentry)
 	inode = NULL;
 	if (error == -ENOENT)
 		goto add_entry;
-	if (!error)
-	{
+	if (!error) {
 		error = -EACCES;
 		finfo.f_ino = smb_invent_inos(1);
 		inode = smb_iget(dir->i_sb, &finfo);
-		if (inode)
-		{
+		if (inode) {
 	add_entry:
-			dentry->d_op = &smbfs_dentry_operations;
+			server = server_from_dentry(dentry);
+			if (server->mnt->flags & SMB_MOUNT_CASE)
+				dentry->d_op = &smbfs_dentry_operations_case;
+			else
+				dentry->d_op = &smbfs_dentry_operations;
+
 			d_add(dentry, inode);
 			smb_renew_times(dentry);
 			error = 0;

@@ -414,7 +414,7 @@ static int writeout_one_page(struct page *page)
 		if (buffer_locked(bh) || !buffer_dirty(bh) || !buffer_uptodate(bh))
 			continue;
 
-		bh->b_flushtime = 0;
+		bh->b_flushtime = jiffies;
 		ll_rw_block(WRITE, 1, &bh);	
 	} while ((bh = bh->b_this_page) != head);
 	return 0;

@@ -359,6 +359,7 @@ EXPORT_SYMBOL(tcp_sockets_allocated);
 EXPORT_SYMBOL(sysctl_tcp_reordering);
 EXPORT_SYMBOL(sysctl_tcp_rmem);
 EXPORT_SYMBOL(sysctl_tcp_wmem);
+EXPORT_SYMBOL(sysctl_tcp_ecn);
 EXPORT_SYMBOL(tcp_cwnd_application_limited);
 
 EXPORT_SYMBOL(xrlim_allow);

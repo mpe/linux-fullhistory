@@ -7,6 +7,7 @@
  *
  * Modified for ARM by Russell King
  */
+#include <linux/config.h>
 #include <linux/sched.h>
 
 #include <asm/semaphore.h>
