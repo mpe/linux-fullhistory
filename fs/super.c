@@ -310,6 +310,32 @@ static int do_mount(dev_t dev, const char * dir, char * type, int flags, void * 
 	return 0;		/* we don't iput(dir_i) - see umount */
 }
 
+
+/*
+ * Alters the mount flags of a mounted file system. Only the mount point
+ * is used as a reference - file system type and the device are ignored.
+ * FS-specific mount options can't be altered by remounting.
+ */
+
+static int do_remount(const char *dir,int flags)
+{
+	struct inode *dir_i;
+	int retval;
+
+	retval = namei(dir,&dir_i);
+	if (retval)
+		return retval;
+	if (dir_i != dir_i->i_sb->s_mounted) {
+		iput(dir_i);
+		return -EINVAL;
+	}
+	dir_i->i_sb->s_flags = (dir_i->i_sb->s_flags & ~MS_RMT_MASK) |
+		(flags & MS_RMT_MASK);
+	iput(dir_i);
+	return 0;
+}
+
+
 /*
  * Flags is a 16-bit value that allows up to 16 non-fs dependent flags to
  * be given to the mount() call (ie: read-only, no-dev, no-suid etc).
@@ -337,6 +363,10 @@ int sys_mount(char * dev_name, char * dir_name, char * type,
 
 	if (!suser())
 		return -EPERM;
+	if ((new_flags & (MS_MGC_MSK | MS_REMOUNT)) == (MS_MGC_VAL |
+	    MS_REMOUNT))
+		return do_remount(dir_name,new_flags & ~MS_MGC_MSK &
+		    ~MS_REMOUNT);
 	if (type) {
 		for (i = 0 ; i < 100 ; i++)
 			if (!(tmp[i] = get_fs_byte(type++)))
@@ -378,8 +408,8 @@ int sys_mount(char * dev_name, char * dir_name, char * type,
 			return retval;
 		}
 	}
-	if ((new_flags & 0xffff0000) == 0xC0ED0000) {
-		flags = new_flags & 0xffff;
+	if ((new_flags & MS_MGC_MSK) == MS_MGC_VAL) {
+		flags = new_flags & ~MS_MGC_MSK;
 		if (data) {
 			if ((unsigned long) data >= TASK_SIZE) {
 				iput(inode);

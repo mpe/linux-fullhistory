@@ -110,6 +110,16 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 		if (!(filp->f_mode & 2))
 			return -EBADF;
 		break;
+	case F_SHLCK :
+		if (!(filp->f_mode & 3))
+			return -EBADF;
+		file_lock.fl_type = F_RDLCK;
+		break;
+	case F_EXLCK :
+		if (!(filp->f_mode & 3))
+			return -EBADF;
+		file_lock.fl_type = F_WRLCK;
+		break;
 	case F_UNLCK :
 		break;
 	}

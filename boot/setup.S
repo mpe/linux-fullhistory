@@ -227,9 +227,14 @@ end_move:
 ! things as simple as possible, we do no register set-up or anything,
 ! we let the gnu-compiled 32-bit programs do that. We just jump to
 ! absolute address 0x00000, in 32-bit protected mode.
-
+!
+! Note that the short jump isn't strictly needed, althought there are
+! reasons why it might be a good idea. It won't hurt in any case.
+!
 	mov	ax,#0x0001	! protected mode (PE) bit
 	lmsw	ax		! This is it!
+	jmp	flush_instr
+flush_instr:
 	jmpi	0,8		! jmp offset 0 of segment 8 (cs)
 
 ! This routine checks that the keyboard command queue is empty
@@ -258,8 +263,7 @@ getkey:
 !
 ! Flush the keyboard buffer
 !
-flush:	in	al,#0x60
-	.word	0x00eb,0x00eb
+flush:	call getkey
 	cmp	al,#0x82
 	jae	flush
 	ret
@@ -321,8 +325,7 @@ svga:	cld
 	jne	nf1280	
 	lea	si,dscf1280
 	lea	di,mof1280
-	lea	cx,selmod
-	jmp	cx
+	br	selmod
 nf1280:	cld
 	lea 	si,idati		! Check ATI 'clues'
 	mov	di,#0x31
@@ -332,8 +335,7 @@ nf1280:	cld
 	jne	noati
 	lea	si,dscati
 	lea	di,moati
-	lea	cx,selmod
-	jmp	cx
+	br	selmod
 noati:	mov	ax,#0x200f		! Check Ahead 'clues'
 	mov	dx,#0x3ce
 	out	dx,ax
@@ -345,8 +347,7 @@ noati:	mov	ax,#0x200f		! Check Ahead 'clues'
 	jne	noahed
 isahed:	lea	si,dscahead
 	lea	di,moahead
-	lea	cx,selmod
-	jmp	cx
+	br	selmod
 noahed:	mov	dx,#0x3c3		! Check Chips & Tech. 'clues'
 	in	al,dx
 	or	al,#0x10
@@ -362,8 +363,7 @@ noahed:	mov	dx,#0x3c3		! Check Chips & Tech. 'clues'
 	jne	nocant
 	lea	si,dsccandt
 	lea	di,mocandt
-	lea	cx,selmod
-	jmp	cx
+	br	selmod
 nocant:	mov	dx,#0x3d4		! Check Cirrus 'clues'
 	mov	al,#0x0c
 	out	dx,al
@@ -401,8 +401,7 @@ nocant:	mov	dx,#0x3d4		! Check Cirrus 'clues'
 	call	rst3d4	
 	lea	si,dsccirrus
 	lea	di,mocirrus
-	lea	cx,selmod
-	jmp	cx
+	br	selmod
 rst3d4:	mov	dx,#0x3d4
 	mov	al,bl
 	xor	ah,ah
@@ -423,8 +422,7 @@ nocirr:	call	rst3d4			! Check Everex 'clues'
 	je	istrid
 	lea	si,dsceverex
 	lea	di,moeverex
-	lea	cx,selmod
-	jmp	cx
+	br	selmod
 istrid:	lea	cx,ev2tri
 	jmp	cx
 noevrx:	lea	si,idgenoa		! Check Genoa 'clues'
@@ -446,8 +444,7 @@ l1:	inc	si
 	jne	nogen
 	lea	si,dscgenoa
 	lea	di,mogenoa
-	lea	cx,selmod
-	jmp	cx
+	br	selmod
 nogen:	cld
 	lea	si,idoakvga
 	mov	di,#0x08
@@ -457,8 +454,7 @@ nogen:	cld
 	jne	nooak
 	lea	si,dscoakvga
 	lea	di,mooakvga
-	lea	cx,selmod
-	jmp	cx
+	br	selmod
 nooak:	cld
 	lea	si,idparadise		! Check Paradise 'clues'
 	mov	di,#0x7d
@@ -468,8 +464,7 @@ nooak:	cld
 	jne	nopara
 	lea	si,dscparadise
 	lea	di,moparadise
-	lea	cx,selmod
-	jmp	cx
+	br	selmod
 nopara:	mov	dx,#0x3c4		! Check Trident 'clues'
 	mov	al,#0x0e
 	out	dx,al
@@ -492,8 +487,7 @@ clrb2:	out	dx,al
 	jne	notrid
 ev2tri:	lea	si,dsctrident
 	lea	di,motrident
-	lea	cx,selmod
-	jmp	cx
+	jmp	selmod
 notrid:	mov	dx,#0x3cd		! Check Tseng 'clues'
 	in	al,dx			! Could things be this simple ! :-)
 	mov	bl,al
@@ -507,8 +501,7 @@ notrid:	mov	dx,#0x3cd		! Check Tseng 'clues'
  	jne	notsen
 	lea	si,dsctseng
 	lea	di,motseng
-	lea	cx,selmod
-	jmp	cx
+	jmp	selmod
 notsen:	mov	dx,#0x3cc		! Check Video7 'clues'
 	in	al,dx
 	mov	dx,#0x3b4

@@ -11,21 +11,30 @@
  *
  * bit 0 is the LSB of addr; bit 32 is the LSB of (addr+1).
  */
-extern inline int set_bit(int nr,int * addr)
+
+/*
+ * Some hacks to defeat gcc over-optimizations..
+ */
+struct __dummy { unsigned long a[100]; };
+#define ADDR (*(struct __dummy *) addr)
+
+extern inline int set_bit(int nr, void * addr)
 {
 	char ok;
 
-	__asm__ __volatile__("btsl %1,%2\n\tsetb %0":
-		"=q" (ok):"r" (nr),"m" (*(addr)));
+	__asm__ __volatile__("btsl %2,%1\n\tsetb %0"
+		:"=q" (ok),"=m" (ADDR)
+		:"r" (nr));
 	return ok;
 }
 
-extern inline int clear_bit(int nr, int * addr)
+extern inline int clear_bit(int nr, void * addr)
 {
 	char ok;
 
-	__asm__ __volatile__("btrl %1,%2\n\tsetnb %0":
-		"=q" (ok):"r" (nr),"m" (*(addr)));
+	__asm__ __volatile__("btrl %2,%1\n\tsetnb %0"
+		:"=q" (ok),"=m" (ADDR)
+		:"r" (nr));
 	return ok;
 }
 
@@ -33,12 +42,13 @@ extern inline int clear_bit(int nr, int * addr)
  * This routine doesn't need to be atomic, but it's faster to code it
  * this way.
  */
-extern inline int test_bit(int nr, int * addr)
+extern inline int test_bit(int nr, void * addr)
 {
 	char ok;
 
-	__asm__ __volatile__("btl %1,%2\n\tsetb %0":
-		"=q" (ok):"r" (nr),"m" (*(addr)));
+	__asm__ __volatile__("btl %2,%1\n\tsetb %0"
+		:"=q" (ok)
+		:"m" (ADDR),"r" (nr));
 	return ok;
 }
 

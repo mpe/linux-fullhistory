@@ -88,14 +88,28 @@ extern unsigned long inode_init(unsigned long start, unsigned long end);
 #define MS_NODEV     4 /* disallow access to device special files */
 #define MS_NOEXEC    8 /* disallow program execution */
 #define MS_SYNC     16 /* writes are synced at once */
+#define	MS_REMOUNT  32 /* alter flags of a mounted FS */
+
+/*
+ * Flags that can be altered by MS_REMOUNT
+ */
+#define MS_RMT_MASK (MS_RDONLY)
+
+/*
+ * Magic mount flag number. Has to be or-ed to the flag values.
+ */
+#define MS_MGC_VAL 0xC0ED0000 /* magic flag number to indicate "new" flags */
+#define MS_MGC_MSK 0xffff0000 /* magic flag number mask */
 
 /*
  * Note that read-only etc flags are inode-specific: setting some file-system
  * flags just means all the inodes inherit those flags by default. It might be
  * possible to overrride it sevelctively if you really wanted to with some
  * ioctl() that is not currently implemented.
+ *
+ * Exception: MS_RDONLY is always applied to the entire file system.
  */
-#define IS_RDONLY(inode) ((inode)->i_flags & MS_RDONLY)
+#define IS_RDONLY(inode) ((inode)->i_sb->s_flags & MS_RDONLY)
 #define IS_NOSUID(inode) ((inode)->i_flags & MS_NOSUID)
 #define IS_NODEV(inode) ((inode)->i_flags & MS_NODEV)
 #define IS_NOEXEC(inode) ((inode)->i_flags & MS_NOEXEC)

@@ -34,6 +34,10 @@
 #define F_WRLCK		1
 #define F_UNLCK		2
 
+/* For bsd flock () */
+#define F_EXLCK		4	/* or 3 */
+#define F_SHLCK		8	/* or 4 */
+
 /* Once again - not implemented, but ... */
 struct flock {
 	short l_type;

@@ -1,3 +1,6 @@
+
+all:	Version Image
+
 #
 # Make "config" the default target if there is no configuration file or
 # "depend" the target if there is no top-level dependency information.
@@ -123,10 +126,8 @@ KERNELHDRS	=/usr/src/linux/include
 .c.o:
 	$(CC) $(CFLAGS) -c -o $*.o $<
 
-all:	Version Image
-
 Version: dummy
-	rm tools/version.h
+	rm -f tools/version.h
 
 lilo: $(CONFIGURE) Image
 	if [ -f /vmlinux ]; then mv /vmlinux /vmlinux.old; fi
@@ -140,9 +141,11 @@ config:
 linuxsubdirs: dummy
 	@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE)) || exit; done
 
+tools/./version.h: tools/version.h
+
 tools/version.h: $(CONFIGURE) Makefile
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.99.pl3-`cat .version`\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.99.pl4-`cat .version`\" > tools/version.h
 	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
@@ -164,7 +167,7 @@ tools/build: $(CONFIGURE) tools/build.c
 
 boot/head.o: $(CONFIGURE) boot/head.s
 
-boot/head.s: $(CONFIGURE) boot/head.S
+boot/head.s: $(CONFIGURE) boot/head.S include/linux/tasks.h
 	$(CPP) -traditional boot/head.S -o boot/head.s
 
 tools/version.o: tools/version.c tools/version.h

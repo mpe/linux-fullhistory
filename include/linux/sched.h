@@ -12,10 +12,7 @@
 
 #define HZ 100
 
-/*
- * This is the maximum nr of tasks - change it if you need to
- */
-#define NR_TASKS	64
+#include <linux/tasks.h>
 
 /*
  * User space process size: 3GB. This is hardcoded into a few places,

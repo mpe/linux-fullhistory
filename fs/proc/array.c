@@ -59,6 +59,14 @@ static int get_meminfo(char * buffer)
 		i.totalswap, i.totalswap-i.freeswap, i.freeswap);
 }
 
+static int get_version(char * buffer)
+{
+	extern char *linux_banner;
+
+	strcpy(buffer, linux_banner);
+	return strlen(buffer);
+}
+
 static struct task_struct ** get_task(pid_t pid)
 {
 	struct task_struct ** p;
@@ -295,6 +303,9 @@ static int array_read(struct inode * inode, struct file * file,char * buf, int c
 			break;
 		case 4:
 			length = get_meminfo(page);
+			break;
+		case 6:
+			length = get_version(page);
 			break;
 		case 9:
 			length = get_env(pid, page);

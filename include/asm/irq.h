@@ -59,8 +59,16 @@
 	"pop %es\n\t" \
 	"iret"
 
+/*
+ * The "inb" instructions are not needed, but seem to change the timings
+ * a bit - without them it seems that the harddisk driver won't work on
+ * all hardware. Arghh.
+ */
 #define ACK_FIRST(mask) \
-	"orb $" #mask ",_cache_21\n\t" \
+	"inb $0x21,%al\n\t" \
+	"jmp 1f\n" \
+	"1:\tjmp 1f\n" \
+	"1:\torb $" #mask ",_cache_21\n\t" \
 	"movb _cache_21,%al\n\t" \
 	"outb %al,$0x21\n\t" \
 	"jmp 1f\n" \
@@ -69,7 +77,10 @@
 	"outb %al,$0x20\n\t"
 
 #define ACK_SECOND(mask) \
-	"orb $" #mask ",_cache_A1\n\t" \
+	"inb $0xA1,%al\n\t" \
+	"jmp 1f\n" \
+	"1:\tjmp 1f\n" \
+	"1:\torb $" #mask ",_cache_A1\n\t" \
 	"movb _cache_A1,%al\n\t" \
 	"outb %al,$0xA1\n\t" \
 	"jmp 1f\n" \
@@ -81,12 +92,18 @@
 	"1:\toutb %al,$0x20\n\t"
 
 #define UNBLK_FIRST(mask) \
-	"andb $~(" #mask "),_cache_21\n\t" \
+	"inb $0x21,%al\n\t" \
+	"jmp 1f\n" \
+	"1:\tjmp 1f\n" \
+	"1:\tandb $~(" #mask "),_cache_21\n\t" \
 	"movb _cache_21,%al\n\t" \
 	"outb %al,$0x21\n\t"
 
 #define UNBLK_SECOND(mask) \
-	"andb $~(" #mask "),_cache_A1\n\t" \
+	"inb $0xA1,%al\n\t" \
+	"jmp 1f\n" \
+	"1:\tjmp 1f\n" \
+	"1:\tandb $~(" #mask "),_cache_A1\n\t" \
 	"movb _cache_A1,%al\n\t" \
 	"outb %al,$0xA1\n\t"
 
@@ -159,9 +176,8 @@ __asm__( \
 	RESTORE_MOST \
 "\n\n.align 4\n" \
 "_bad_IRQ" #nr "_interrupt:\n\t" \
-	"pushl %eax\n\t" \
+	SAVE_MOST \
 	ACK_##chip(mask) \
-	"popl %eax\n\t" \
-	"iret");
+	RESTORE_MOST);
 
 #endif

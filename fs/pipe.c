@@ -40,7 +40,11 @@ static int pipe_read(struct inode * inode, struct file * filp, char * buf, int c
 		buf += chars;
 	}
 	wake_up(& PIPE_WRITE_WAIT(*inode));
-	return read?read:-EAGAIN;
+	if (read)
+		return read;
+	if (PIPE_WRITERS(*inode))
+		return -EAGAIN;
+	return 0;
 }
 	
 static int pipe_write(struct inode * inode, struct file * filp, char * buf, int count)

@@ -18,6 +18,8 @@
 .globl _empty_bad_page_table
 .globl _tmp_floppy_area,_floppy_track_buffer
 
+#include <linux/tasks.h>
+
 /*
  * swapper_pg_dir is the main page directory, address 0x00001000
  */
@@ -266,7 +268,7 @@ _idt:
 .align 4
 .word 0
 gdt_descr:
-	.word 256*8-1
+	.word (4+2*NR_TASKS)*8-1
 	.long 0xc0000000+_gdt
 
 /*
@@ -279,4 +281,4 @@ _gdt:
 	.quad 0xc0c39a000000ffff	/* 1GB at 0xC0000000 */
 	.quad 0xc0c392000000ffff	/* 1GB */
 	.quad 0x0000000000000000	/* TEMPORARY - don't use */
-	.fill 252,8,0			/* space for LDT's and TSS's etc */
+	.fill 2*NR_TASKS,8,0		/* space for LDT's and TSS's etc */

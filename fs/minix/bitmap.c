@@ -12,23 +12,13 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 
+#include <asm/bitops.h>
+
 #define clear_block(addr) \
 __asm__("cld\n\t" \
 	"rep\n\t" \
 	"stosl" \
 	::"a" (0),"c" (BLOCK_SIZE/4),"D" ((long) (addr)):"cx","di")
-
-#define set_bit(nr,addr) ({\
-char res; \
-__asm__ __volatile__("btsl %1,%2\n\tsetb %0": \
-"=q" (res):"r" (nr),"m" (*(addr))); \
-res;})
-
-#define clear_bit(nr,addr) ({\
-char res; \
-__asm__ __volatile__("btrl %1,%2\n\tsetnb %0": \
-"=q" (res):"r" (nr),"m" (*(addr))); \
-res;})
 
 #define find_first_zero(addr) ({ \
 int __res; \

@@ -113,11 +113,16 @@ static struct blist blacklist[] =
 
 static int blacklisted(char * response_data){
   int i = 0;
+  char * pnt;
   for(i=0; 1; i++){
     if(blacklist[i].vendor == NULL) return 0;
-    if(strncmp(blacklist[i].vendor, &response_data[8],
+    pnt = &response_data[8];
+    while(*pnt && *pnt == ' ') pnt++;
+    if(strncmp(blacklist[i].vendor, pnt,
 	       strlen(blacklist[i].vendor))) continue;
-    if(strncmp(blacklist[i].model, &response_data[16],
+    pnt = &response_data[16];
+    while(*pnt && *pnt == ' ') pnt++;
+    if(strncmp(blacklist[i].model, pnt,
 	       strlen(blacklist[i].model))) continue;
     return 1;
   };	

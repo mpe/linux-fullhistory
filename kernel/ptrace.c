@@ -258,7 +258,9 @@ int sys_ptrace(long request, long pid, long addr, long data)
 		child->signal = 0;
 		return 0;
 	}
-	if (!(child->flags & PF_PTRACED) || child->state != TASK_STOPPED)
+	if (!(child->flags & PF_PTRACED))
+		return -ESRCH;
+	if (child->state != TASK_STOPPED && request != PTRACE_DETACH)
 		return -ESRCH;
 	if (child->p_pptr != current)
 		return -ESRCH;

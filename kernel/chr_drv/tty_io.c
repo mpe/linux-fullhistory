@@ -965,6 +965,8 @@ static void release_dev(int dev, struct file * filp)
 		tty_termios[dev] = NULL;
 		kfree_s(tp, sizeof(struct termios));
 	}
+	if (tty == redirect || o_tty == redirect)
+		redirect = NULL;
 	free_page((unsigned long) tty);
 	if (o_tty)
 		free_page((unsigned long) o_tty);

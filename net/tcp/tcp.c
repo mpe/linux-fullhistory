@@ -2951,7 +2951,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	{
 	   sk->err = ECONNRESET;
 	   sk->state = TCP_CLOSE;
-	   sk->state = SHUTDOWN_MASK;
+	   sk->shutdown = SHUTDOWN_MASK;
 	   tcp_reset (daddr, saddr,  th, sk->prot, opt,dev);
 	   if (!sk->dead)
 	     {
@@ -3070,7 +3070,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	{
 	  sk->err = ECONNREFUSED ;
 	  sk->state = TCP_CLOSE;
-	  sk->state = SHUTDOWN_MASK;
+	  sk->shutdown = SHUTDOWN_MASK;
 	  if (!sk->dead)
 	    {
 	      wake_up (sk->sleep);

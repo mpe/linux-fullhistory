@@ -14,6 +14,10 @@ long soundcard_init(long mem_start)
 	return mem_start;
 }
 
+void sound_mem_init(void)
+{
+}
+
 #ifdef CONFIG_SOUND
 #error The Sound Driver not installed.
 #endif

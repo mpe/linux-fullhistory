@@ -40,6 +40,8 @@
 
 unsigned long high_memory = 0;
 
+extern void sound_mem_init(void);
+
 int nr_free_pages = 0;
 unsigned long free_page_list = 0;
 /*
@@ -931,6 +933,7 @@ void mem_init(unsigned long start_low_mem,
 		mem_map[MAP_NR(start_mem)] = 0;
 		start_mem += 4096;
 	}
+	sound_mem_init();
 	free_page_list = 0;
 	nr_free_pages = 0;
 	for (tmp = 0 ; tmp < end_mem ; tmp += 4096) {

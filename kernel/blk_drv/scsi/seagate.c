@@ -101,9 +101,11 @@ static const Signature signatures[] = {
 	I believe it.
 */
 
-{"FUTURE DOMAIN CORP. (C) 1986-1989 V6.0A7/28/90", 5, 46, FD},
+{"FUTURE DOMAIN CORP. (C) 1986-1988 V4.0I 03/16/88",5,48, FD},
+{"FUTURE DOMAIN CORP. (C) 1986-1989 V6.0A7/28/89", 5, 46, FD},
 {"FUTURE DOMAIN CORP. (C) 1986-1990 V6.0105/31/90",5, 47, FD},
 {"FUTURE DOMAIN CORP. (C) 1986-1990 V7.009/18/90", 5, 46, FD},
+{"FUTURE DOMAIN CORP. (C) 1992 V8.00.004/02/92",   5, 44, FD},
 #endif
 }
 ;
@@ -251,6 +253,7 @@ static int should_reconnect = 0;
 static void seagate_reconnect_intr (int unused)
 	{
 	int temp;
+	Scsi_Cmnd * SCtmp;
 
 /* enable all other interrupts. */	
 	sti();
@@ -283,9 +286,10 @@ static void seagate_reconnect_intr (int unused)
 				hostno, temp);
 #endif
 				if(!SCint) panic("SCint == NULL in seagate");
-				SCint->result = temp;
-				done_fn (SCint);
+				SCtmp = SCint;
 				SCint = NULL;
+				SCtmp->result = temp;
+				done_fn (SCtmp);
 				}
 			else
 				printk("done_fn() not defined.\n");
@@ -297,12 +301,19 @@ static void seagate_reconnect_intr (int unused)
  * The seagate_st0x_queue_command() function provides a queued interface
  * to the seagate SCSI driver.  Basically, it just passes control onto the
  * seagate_command() function, after fixing it so that the done_fn()
- * is set to the one passed to the function.
+ * is set to the one passed to the function.  We have to be very careful,
+ * because there are some commands on some devices that do not disconnect,
+ * and if we simply call the done_fn when the command is done then another
+ * command is started and queue_command is called again...  We end up
+ * overflowing the kernel stack, and this tends not to be such a good idea.
  */
+
+static int recursion_depth = 0;
 
 int seagate_st0x_queue_command (Scsi_Cmnd * SCpnt,  void (*done)(Scsi_Cmnd *))
 	{
 	int result;
+	Scsi_Cmnd * SCtmp;
 
 	done_fn = done;
 	current_target = SCpnt->target;
@@ -311,20 +322,24 @@ int seagate_st0x_queue_command (Scsi_Cmnd * SCpnt,  void (*done)(Scsi_Cmnd *))
 	current_data = SCpnt->request_buffer;
 	current_bufflen = SCpnt->request_bufflen;
 	SCint = SCpnt;
-
-	result = internal_command (SCpnt->target, SCpnt->lun, SCpnt->cmnd, SCpnt->request_buffer,
-				   SCpnt->request_bufflen, 
-				   CAN_RECONNECT);
-	if (msg_byte(result) == DISCONNECT)
-		return 0;
-	else 
-		{
-		  SCpnt->result = result;
-		done_fn (SCpnt); 
-		SCint = NULL;
-		return 1; 
-		}
-	}
+	if(recursion_depth) {
+	  return 0;
+	};
+	recursion_depth++;
+	do{
+	  
+	  result = internal_command (SCint->target, SCint->lun, SCint->cmnd, SCint->request_buffer,
+				     SCint->request_bufflen, 
+				     CAN_RECONNECT);
+	  if (msg_byte(result) == DISCONNECT)  break;
+	  SCtmp = SCint;
+	  SCint = NULL;
+	  SCtmp->result = result;
+	  done_fn (SCtmp);
+	} while(SCint);
+	recursion_depth--;
+	return 0;
+      }
 
 int seagate_st0x_command (Scsi_Cmnd * SCpnt)
 	{

@@ -221,13 +221,13 @@ dev_queue_xmit (struct sk_buff *skb, struct device *dev, int pri)
 
   */
 
-static struct sk_buff *backlog = NULL;
+static volatile struct sk_buff * volatile backlog = NULL;
 
 int
 dev_rint(unsigned char *buff, long len, int flags,
 	 struct device * dev)
 {
-   struct sk_buff *skb=NULL;
+   volatile struct sk_buff *skb=NULL;
    unsigned char *to;
    int amount;
 
@@ -247,7 +247,7 @@ dev_rint(unsigned char *buff, long len, int flags,
 	 }
        skb->lock = 0;
        skb->mem_len = sizeof (*skb) + len;
-       skb->mem_addr = skb;
+       skb->mem_addr = (struct sk_buff *)skb;
        /* first we copy the packet into a buffer, and save it for later. */
 
        to = (unsigned char *)(skb+1);
@@ -272,16 +272,16 @@ dev_rint(unsigned char *buff, long len, int flags,
    cli();
    if (backlog == NULL)
      {
-       skb->prev = skb;
-       skb->next = skb;
+       skb->prev = (struct sk_buff *)skb;
+       skb->next = (struct sk_buff *)skb;
        backlog = skb;
      }
    else
      {
-       skb ->prev = backlog->prev;
-       skb->next = backlog;
-       skb->next->prev = skb;
-       skb->prev->next = skb;
+       skb->prev = backlog->prev;
+       skb->next = (struct sk_buff *)backlog;
+       skb->next->prev = (struct sk_buff *)skb;
+       skb->prev->next = (struct sk_buff *)skb;
      }
    sti();
    
@@ -294,11 +294,11 @@ dev_rint(unsigned char *buff, long len, int flags,
 void
 inet_bh(void *tmp)
 {
-  struct sk_buff *skb;
+  volatile struct sk_buff *skb;
   struct packet_type *ptype;
   unsigned short type;
   unsigned char flag =0;
-  static int in_bh=0;
+  static volatile int in_bh=0;
 
   cli();
   if (in_bh != 0)
@@ -331,7 +331,7 @@ inet_bh(void *tmp)
        skb->len -= skb->dev->hard_header_len;
 
        /* convert the type to an ethernet type. */
-       type = skb->dev->type_trans (skb, skb->dev);
+       type = skb->dev->type_trans ((struct sk_buff *)skb, skb->dev);
 
        /* if there get to be a lot of types we should changes this to
 	  a bunch of linked lists like we do for ip protocols. */
@@ -355,7 +355,7 @@ inet_bh(void *tmp)
 		 }
 	       else
 		 {
-		   skb2 = skb;
+		   skb2 = (struct sk_buff *)skb;
 		   flag = 1;
 		 }
 	       
@@ -366,7 +366,7 @@ inet_bh(void *tmp)
        if (!flag)
 	 {
 	   PRINTK (("discarding packet type = %X\n", type));
-	   kfree_skb (skb, FREE_READ);
+	   kfree_skb ((struct sk_buff *)skb, FREE_READ);
 	 }
      }
   in_bh = 0;
