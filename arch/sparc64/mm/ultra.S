@@ -49,9 +49,9 @@ __flush_tlb_mm: /* %o0=(ctx & TAG_CONTEXT_BITS), %o1=SECONDARY_CONTEXT */
 	.globl		__flush_tlb_pending
 __flush_tlb_pending:
 	/* %o0 = context, %o1 = nr, %o2 = vaddrs[] */
-	rdpr		%pstate, %g5
+	rdpr		%pstate, %g7
 	sllx		%o1, 3, %o1
-	andn		%g5, PSTATE_IE, %g2
+	andn		%g7, PSTATE_IE, %g2
 	wrpr		%g2, %pstate
 	mov		SECONDARY_CONTEXT, %o4
 	ldxa		[%o4] ASI_DMMU, %g2
@@ -70,7 +70,7 @@ __flush_tlb_pending:
 	stxa		%g2, [%o4] ASI_DMMU
 	flush		%g6
 	retl
-	 wrpr		%g5, 0x0, %pstate
+	 wrpr		%g7, 0x0, %pstate
 
 	.align		32
 	.globl		__flush_tlb_kernel_range
@@ -114,53 +114,18 @@ __spitfire_flush_tlb_mm_slow:
 	.align		32
 	.globl		__flush_icache_page
 __flush_icache_page:	/* %o0 = phys_page */
-	sethi		%hi(1 << 13), %o2	! IC_set bit
-	mov		1, %g1
-	srlx		%o0, 5, %o0
-	clr		%o1			! IC_addr
-	sllx		%g1, 36, %g1
-	ldda		[%o1] ASI_IC_TAG, %o4
-	sub		%g1, 1, %g2
-	or		%o0, %g1, %o0		! VALID+phys-addr comparitor
-
-	sllx		%g2, 1, %g2
-	andn		%g2, ITAG_MASK, %g2	! IC_tag mask
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-
-1:	addx		%g0, %g0, %g0
-	ldda		[%o1 + %o2] ASI_IC_TAG, %g4
-	addx		%g0, %g0, %g0
-	and		%o5, %g2, %g3
-	cmp		%g3, %o0
-	add		%o1, 0x20, %o1
-	ldda		[%o1] ASI_IC_TAG, %o4
-	be,pn		%xcc, iflush1
-
-2:	 nop
-	and		%g5, %g2, %g5
-	cmp		%g5, %o0
-	be,pn		%xcc, iflush2
-3:	 cmp		%o1, %o2
-	bne,pt		%xcc, 1b
-	 addx		%g0, %g0, %g0
-	nop
-
+	membar		#StoreStore
+	srlx		%o0, PAGE_SHIFT, %o0
+	sethi		%uhi(PAGE_OFFSET), %g1
+	sllx		%o0, PAGE_SHIFT, %o0
+	sethi		%hi(PAGE_SIZE), %g2
+	sllx		%g1, 32, %g1
+	add		%o0, %g1, %o0
+1:	subcc		%g2, 32, %g2
+	bne,pt		%icc, 1b
+	 flush		%o0 + %g2
 	retl
-	 ldx		[%g6 + TI_TASK], %g4
-
-iflush1:sub		%o1, 0x20, %g3
-	stxa		%g0, [%g3] ASI_IC_TAG
-	flush		%g6
-	ba,a,pt		%xcc, 2b
-iflush2:sub		%o1, 0x20, %g3
-	stxa		%g0, [%o1 + %o2] ASI_IC_TAG
-	flush		%g6
-	ba,a,pt		%xcc, 3b
+	 nop
 
 #if (PAGE_SHIFT == 13)
 #define DTAG_MASK 0x3
@@ -260,8 +225,8 @@ __update_mmu_cache:	/* %o0=hw_context, %o1=address, %o2=pte, %o3=fault_code */
 
 	/* Cheetah specific versions, patched at boot time.  */
 __cheetah_flush_tlb_mm: /* 15 insns */
-	rdpr		%pstate, %g5
-	andn		%g5, PSTATE_IE, %g2
+	rdpr		%pstate, %g7
+	andn		%g7, PSTATE_IE, %g2
 	wrpr		%g2, 0x0, %pstate
 	wrpr		%g0, 1, %tl
 	mov		PRIMARY_CONTEXT, %o2
@@ -274,13 +239,13 @@ __cheetah_flush_tlb_mm: /* 15 insns */
 	flush		%g6
 	wrpr		%g0, 0, %tl
 	retl
-	 wrpr		%g5, 0x0, %pstate
+	 wrpr		%g7, 0x0, %pstate
 
 __cheetah_flush_tlb_pending:	/* 22 insns */
 	/* %o0 = context, %o1 = nr, %o2 = vaddrs[] */
-	rdpr		%pstate, %g5
+	rdpr		%pstate, %g7
 	sllx		%o1, 3, %o1
-	andn		%g5, PSTATE_IE, %g2
+	andn		%g7, PSTATE_IE, %g2
 	wrpr		%g2, 0x0, %pstate
 	wrpr		%g0, 1, %tl
 	mov		PRIMARY_CONTEXT, %o4
@@ -299,7 +264,7 @@ __cheetah_flush_tlb_pending:	/* 22 insns */
 	flush		%g6
 	wrpr		%g0, 0, %tl
 	retl
-	 wrpr		%g5, 0x0, %pstate
+	 wrpr		%g7, 0x0, %pstate
 
 flush_dcpage_cheetah: /* 11 insns */
 	sethi		%uhi(PAGE_OFFSET), %g1
