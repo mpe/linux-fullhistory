@@ -159,6 +159,8 @@ EXPORT_SYMBOL(__mark_inode_dirty);
 EXPORT_SYMBOL(free_kiovec);
 EXPORT_SYMBOL(brw_kiovec);
 EXPORT_SYMBOL(alloc_kiovec);
+EXPORT_SYMBOL(expand_kiobuf);
+EXPORT_SYMBOL(unmap_kiobuf);
 EXPORT_SYMBOL(get_empty_filp);
 EXPORT_SYMBOL(init_private_file);
 EXPORT_SYMBOL(filp_open);

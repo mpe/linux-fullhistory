@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.74 2000/02/09 11:15:07 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.75 2000/02/21 15:50:08 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -261,7 +261,6 @@ EXPORT_SYMBOL(strrchr);
 EXPORT_SYMBOL(strpbrk);
 EXPORT_SYMBOL(strtok);
 EXPORT_SYMBOL(strstr);
-EXPORT_SYMBOL(strspn);
 
 #ifdef CONFIG_SOLARIS_EMUL_MODULE
 EXPORT_SYMBOL(getname32);

@@ -117,7 +117,7 @@ iobase=0x%x irq=%d lo_dma=%d hi_dma=%d\n",
 	
 	if (check_region(hw_config->io_base, 16))
 	{
-		printk(KERN_ERR "sb_card: I/O port %x is already in use\n\n", hw_config->io_base);
+		printk(KERN_ERR "sb_card: I/O port 0x%x is already in use\n\n", hw_config->io_base);
 		return 0;
 	}
 	return sb_dsp_detect(hw_config, 0, 0);
@@ -162,7 +162,7 @@ int support 	= 0;		/* Set support to load this as a support module */
 int sm_games	= 0;		/* Mixer - see sb_mixer.c */
 int acer 	= 0;		/* Do acer notebook init */
 
-#if defined CONFIGISAPNP || defined CONFIG_ISAPNP_MODULE
+#if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE
 int isapnp 		= 1;
 int isapnpjump 		= 0;
 int nosbwave	= 0;		/* This option will be removed when the new awe_wave driver will be in the kernel tree */
@@ -211,7 +211,7 @@ MODULE_PARM_DESC(acer,		"Set this to detect cards in some ACER notebooks");
 
 void *smw_free = NULL;
 
-#if defined CONFIGISAPNP || defined CONFIG_ISAPNP_MODULE
+#if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE
 
 /* That's useful. */
 
@@ -632,7 +632,7 @@ int init_module(void)
 			able to disable PNP support for this single driver!
 		*/
 
-#if defined CONFIGISAPNP || defined CONFIG_ISAPNP_MODULE			
+#if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE			
 		if(isapnp && (sb_probe_isapnp(&config, &config_mpu) < 0) )
 		{
 			printk(KERN_NOTICE "sb_card: No ISAPnP cards found, trying standard ones...\n");

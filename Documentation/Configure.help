@@ -1539,7 +1539,7 @@ CONFIG_NETFILTER
   Chances are that you should say Y here if you compile a kernel which
   will run as a router and N for regular hosts. If unsure, say N.
  
-SIN flood protection
+SYN flood protection
 CONFIG_SYN_COOKIES
   Normal TCP/IP networking is open to an attack known as "SYN
   flooding". This denial-of-service attack prevents legitimate remote
@@ -1899,7 +1899,7 @@ CONFIG_PNP
   Say Y here if you would like Linux to configure your Plug and Play
   devices. You should then also say Y to "ISA Plug and Play support",
   below. Alternatively, you can configure your PnP devices using the
-  user space utilities contained in the ISAPNP tools package.
+  user space utilities contained in the isapnptools package.
   
   This support is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -2457,6 +2457,52 @@ CONFIG_FB_MATROX_G100
   you select "Advanced lowlevel driver options", you should check 8
   bpp packed pixel, 16 bpp packed pixel, 24 bpp packed pixel and 32
   bpp packed pixel. You can also use font widths different from 8.
+  
+  If you need support for G400 secondary head, you must first enable
+  I2C support and I2C bit-banging support in character devices section,
+  and then Matrox I2C support and G400 secondary head support here
+  in framebuffer section.
+
+Matrox I2C support
+CONFIG_FB_MATROX_I2C
+  This drivers creates I2C buses which are needed for accessing
+  DDC (I2C) bus present on all Matroxes, I2C bus which interconnects
+  Matrox optional devices, like MGA-TVO on G200 and G400, and
+  secondary head DDC bus, present on G400 only.
+  
+  You can say Y or M here if you want to experiment with monitor 
+  detection code. You must say Y or M here if you want to use either
+  second head of G400 or MGA-TVO on G200 or G400.
+  
+  If you compile it as module, it will create module named i2c-matroxfb.o.
+  
+Matrox G400 second head support
+CONFIG_FB_MATROX_MAVEN
+  Say Y or M here if you want to use secondary head on G400 or MGA-TVO
+  add-on on G200. Secondary head is not compatible with accelerated
+  XFree 3.3.x SVGA servers - secondary head output is blanked while you
+  are in X. With XFree 3.9.17 preview you can use both heads if you use
+  SVGA over fbdev or fbdev driver on first head and fbdev driver on
+  second head.
+  
+  If you compile it as module, two modules are created, matroxfb_crtc2.o
+  and matroxfb_maven.o. Matroxfb_maven is needed for both G200 and G400,
+  matroxfb_crtc2 is needed only by G400. You must also load i2c-matroxfb
+  to get it to run.
+  
+  Driver starts in monitor mode and you must use matroxset tool (available
+  at ftp://platan.vc.cvut.cz/pub/linux/matrox-latest) to switch it to PAL
+  or NTSC or to swap primary and secondary head outputs. Secondary head
+  driver also always start in 640x480 resolution, you must use fbset to
+  change it.
+  
+  Also do not forget that second head supports only 16 and 32 bpp packed
+  pixels, so it is good idea to compile them into kernel too. You can
+  use only some font widths, as driver uses generic painting procedures
+  (secondary head does not use acceleration engine).
+  
+  There is no need for enabling 'Matrox multihead support' if you have
+  only one Matrox card in the box.
 
 Matrox unified driver multihead support
 CONFIG_FB_MATROX_MULTIHEAD
@@ -4142,6 +4188,82 @@ CONFIG_ATM_IA_DEBUG
   When active, these messages can have a significant impact on the
   speed of the driver, and the size of your syslog files! When
   inactive, they will have only a modest impact on performance.
+
+FORE Systems 200E-series
+CONFIG_ATM_FORE200E
+  This is a driver for the FORE Systems 200E-series ATM adapter
+  cards. It simultaneously supports PCA-200E and SBA-200E models
+  on PCI and SBUS hosts. Say Y (or M to compile as a module
+  named fore_200e.o) here if you have one of these ATM adapters.
+ 
+  See the file Documentation/networking/fore200e.txt for further
+  details.
+ 
+Enable PCA-200E card support on PCI-based hosts
+CONFIG_ATM_FORE200E_PCA
+  Enable this if you want your PCA-200E cards to be probed.
+ 
+Use default PCA-200E firmware
+CONFIG_ATM_FORE200E_PCA_DEFAULT_FW
+  Use the default PCA-200E firmware data shipped with the driver.
+ 
+  Normal users do not have to deal with the firmware stuff, so
+  this feature is normally enabled.
+ 
+Pathname of user-supplied binary firmware
+CONFIG_ATM_FORE200E_PCA_FW
+  This defines the pathname of an alternative PCA-200E binary
+  firmware image supplied by the user. This pathname may be
+  absolute or relative to the drivers/atm directory.
+ 
+  The driver comes with an adequate firmware image, so normal users
+  do not have to supply an alternative one. They just enable the use
+  of the default firmware instead.
+ 
+Enable SBA-200E card support on SBUS-based hosts
+CONFIG_ATM_FORE200E_SBA
+  Enable this if you want your SBA-200E cards to be probed.
+ 
+Use default SBA-200E firmware
+CONFIG_ATM_FORE200E_SBA_DEFAULT_FW
+  Use the default SBA-200E firmware data shipped with the driver.
+ 
+  Normal users do not have to deal with the firmware stuff, so
+  this feature is normally enabled.
+ 
+Pathname of user-supplied binary firmware
+CONFIG_ATM_FORE200E_SBA_FW
+  This defines the pathname of an alternative SBA-200E binary
+  firmware image supplied by the user. This pathname may be
+  absolute or relative to the drivers/atm directory.
+ 
+  The driver comes with an adequate firmware image, so normal users
+  do not have to supply an alternative one. They just enable the use
+  of the default firmware instead.
+ 
+Maximum number of tx retries
+CONFIG_ATM_FORE200E_TX_RETRY
+  Specifies the number of times the driver attempts to transmit
+  a message before giving up, if the transmit queue of the ATM card
+  is transiently saturated.
+ 
+  Saturation of the transmit queue may occur only under extreme
+  conditions, e.g. when a fast host continuously submits very small
+  frames (<64 bytes) or raw AAL0 cells (48 bytes) to the ATM adapter.
+ 
+  Note that under common conditions, it is unlikely that you encounter
+  a saturation of the transmit queue, so the retry mechanism never
+  comes into play.
+
+Debugging level (0-3)
+CONFIG_ATM_FORE200E_DEBUG
+  Specifies the level of debugging messages issued by the driver.
+  The verbosity of the driver increases with the value of this
+  parameter.
+ 
+  When active, these messages can have a significant impact on
+  the performances of the driver, and the size of your syslog files!
+  Keep the debugging level to 0 during normal operations.
 
 SCSI support?
 CONFIG_SCSI
@@ -7474,6 +7596,11 @@ CONFIG_EEPRO100
   The module will be called eepro100.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
+
+EtherExpress PRO/100 support
+CONFIG_EEPRO100_PM (EXPERIMENTAL)
+  If you want to play around with power management code
+  that has reported to lock up some machines, say Y here.
 
 ICL EtherTeam 16i/32 support (EXPERIMENTAL)
 CONFIG_ETH16I

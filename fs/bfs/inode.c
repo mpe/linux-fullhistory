@@ -209,15 +209,10 @@ static void bfs_write_super(struct super_block *s)
 static struct super_operations bfs_sops = {
 	read_inode:	bfs_read_inode,
 	write_inode:	bfs_write_inode,
-	put_inode:	NULL,
 	delete_inode:	bfs_delete_inode,
-	notify_change:	NULL,
 	put_super:	bfs_put_super,
 	write_super:	bfs_write_super,
 	statfs:		bfs_statfs,
-	remount_fs:	NULL,
-	clear_inode:	NULL,
-	umount_begin:	NULL
 };
 
 void dump_imap(const char *prefix, struct super_block * s)
@@ -337,7 +332,6 @@ static struct file_system_type bfs_fs_type = {
 	name:		"bfs",
 	fs_flags:	FS_REQUIRES_DEV,
 	read_super:	bfs_read_super,
-	next:		NULL
 };
 
 #ifdef MODULE

@@ -432,18 +432,17 @@ static struct usb_driver usblp_driver = {
 	minor:		USBLP_MINOR_BASE
 };
 
-static void __exit usb_printer_cleanup(void)
+static int __init usblp_init(void)
+{
+	if (usb_register(&usblp_driver))
+		return -1;
+	return 0;
+}
+
+static void __exit usblp_exit(void)
 {
 	usb_deregister(&usblp_driver);
 }
 
-static int __init usb_printer_init(void)
-{
-	if (usb_register(&usblp_driver))
-		return -1;
-
-	return 0;
-}
-
-module_init(usb_printer_init);
-module_exit(usb_printer_cleanup);
+module_init(usblp_init);
+module_exit(usblp_exit);

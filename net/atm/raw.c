@@ -1,6 +1,6 @@
 /* net/atm/raw.c - Raw AAL0 and AAL5 transports */
 
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #include <linux/module.h>
@@ -38,7 +38,7 @@ static void atm_pop_raw(struct atm_vcc *vcc,struct sk_buff *skb)
 {
 	DPRINTK("APopR (%d) %d -= %d\n",vcc->vci,vcc->tx_inuse,skb->truesize);
 	atomic_sub(skb->truesize+ATM_PDU_OVHD,&vcc->tx_inuse);
-	dev_kfree_skb(skb);
+	dev_kfree_skb_irq(skb);
 	wake_up(&vcc->wsleep);
 }
 

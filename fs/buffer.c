@@ -1532,10 +1532,10 @@ static int __block_commit_write(struct inode *inode, struct page *page,
  * mark_buffer_uptodate() functions propagate buffer state into the
  * page struct once IO has completed.
  */
-static inline int __block_read_full_page(struct inode *inode, struct page *page,
-		get_block_t *get_block)
+int block_read_full_page(struct page *page, get_block_t *get_block)
 {
-	unsigned long iblock;
+	struct inode *inode = (struct inode*)page->mapping->host;
+	unsigned long iblock, lblock;
 	struct buffer_head *bh, *head, *arr[MAX_BUF_PER_PAGE];
 	unsigned int blocksize, blocks;
 	unsigned long kaddr = 0;
@@ -1550,6 +1550,7 @@ static inline int __block_read_full_page(struct inode *inode, struct page *page,
 
 	blocks = PAGE_CACHE_SIZE >> inode->i_sb->s_blocksize_bits;
 	iblock = page->index << (PAGE_CACHE_SHIFT - inode->i_sb->s_blocksize_bits);
+	lblock = (inode->i_size+blocksize-1) >> inode->i_sb->s_blocksize_bits;
 	bh = head;
 	nr = 0;
 	i = 0;
@@ -1559,7 +1560,8 @@ static inline int __block_read_full_page(struct inode *inode, struct page *page,
 			continue;
 
 		if (!buffer_mapped(bh)) {
-			get_block(inode, iblock, bh, 0);
+			if (iblock < lblock)
+				get_block(inode, iblock, bh, 0);
 			if (!buffer_mapped(bh)) {
 				if (!kaddr)
 					kaddr = kmap(page);
@@ -1704,13 +1706,30 @@ int generic_commit_write(struct file *file, struct page *page,
 int block_write_full_page(struct page *page, get_block_t *get_block)
 {
 	struct inode *inode = (struct inode*)page->mapping->host;
-	return __block_write_full_page(inode, page, get_block);
-}
+	unsigned long end_index = inode->i_size >> PAGE_CACHE_SHIFT;
+	unsigned offset;
+	int err;
 
-int block_read_full_page(struct page *page, get_block_t *get_block)
-{
-	struct inode *inode = (struct inode*)page->mapping->host;
-	return __block_read_full_page(inode, page, get_block);
+	/* easy case */
+	if (page->index < end_index)
+		return __block_write_full_page(inode, page, get_block);
+
+	/* things got complicated... */
+	offset = inode->i_size & (PAGE_CACHE_SIZE-1);
+	/* OK, are we completely out? */
+	if (page->index >= end_index+1 || !offset)
+		return -EIO;
+	/* Sigh... will have to work, then... */
+	err = __block_prepare_write(inode, page, 0, offset, get_block);
+	if (!err) {
+		memset((char *)page_address(page)+offset, 0, PAGE_CACHE_SIZE-offset);
+		__block_commit_write(inode,page,0,offset);
+done:
+		kunmap(page);
+		return err;
+	}
+	ClearPageUptodate(page);
+	goto done;
 }
 
 int generic_block_bmap(struct address_space *mapping, long block, get_block_t *get_block)
@@ -1735,10 +1754,10 @@ static void end_buffer_io_kiobuf(struct buffer_head *bh, int uptodate)
 	mark_buffer_uptodate(bh, uptodate);
 
 	kiobuf = bh->b_kiobuf;
-	if (atomic_dec_and_test(&kiobuf->io_count))
-		kiobuf->end_io(kiobuf);
 	if (!uptodate)
 		kiobuf->errno = -EIO;
+	if (atomic_dec_and_test(&kiobuf->io_count))
+		kiobuf->end_io(kiobuf);
 }
 
 

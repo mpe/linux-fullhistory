@@ -127,7 +127,7 @@ mem_pieces_print(struct mem_pieces *mp)
 	printk("\n");
 }
 
-#if defined(CONFIG_PREP) || defined(CONFIG_APUS) || defined(CONFIG_ALL_PPC)
+#if defined(CONFIG_APUS) || defined(CONFIG_ALL_PPC)
 /*
  * Add some memory to an array of pieces
  */

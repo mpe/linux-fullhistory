@@ -1,110 +1,143 @@
                 Tulip Ethernet Card Driver
 
 The Tulip driver is developed by Donald Becker and changed by
-Takashi Manabe. This driver is designed to work with PCI Ethernet
-cards which use the DECchip DC21x4x family. This driver hopefully
-works with all of 1.2.x and 1.3.x kernels, but I tested only
-with 1.2.13, 1.3.39, 1.3.49, 1.3.52, 1.3.57 and later.
+Takashi Manabe and a cast of thousands.
 
-Hopefully, the de4x5.c driver will support all cards supported
-by the tulip.c driver. However, the SMC's 9332dst card and some
-cards do not work with the de4x5.c driver. So, if your card is
-not a 9332dst, please try the de4x5.c driver first.
+	This driver is for the Digital "Tulip" Ethernet adapter interface.
+	It should work with most DEC 21*4*-based chips/ethercards, as well as
+	with work-alike chips from Lite-On (PNIC) and Macronix (MXIC) and ASIX.
 
-Success List
-============
+	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
+	Center of Excellence in Space Data and Information Sciences
+	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 
-+-------------------------------------+-----------+-------------+
-|vendor/card                          |chip       |system       |
-+-------------------------------------+-----------+-------------+
-|SMC                                  |           |             |
-|     EtherPower 10 PCI(8432T/8432BT) |21040/21041|Pentium      |
-+-------------------------------------+-----------+-------------+
-|SMC                                  |           |             |
-|     EtherPower 10/100 PCI(9332DST)  |21140      |Pentium/UDB  |
-+-------------------------------------+-----------+-------------+
-|DEC                                  |           |             |
-|     EtherWorks 100/10 PCI(DE500-XA) |21140      |Pentium      |
-+-------------------------------------+-----------+-------------+
-|DEC                                  |           |             |
-|     EtherWorks 10 PCI(DE450)        |21041      |Pentium      |
-+-------------------------------------+-----------+-------------+
-|DEC                                  |           |             |
-|     QSILVER's                       |21040      |UDB          |
-+-------------------------------------+-----------+-------------+
-|ZNYX                                 |           |             |
-|     312 etherarray                  |21040      |Pentium      |
-+-------------------------------------+-----------+-------------+
-|Allied Telesis                       |           |             |
-|     LA100PCI-T                      |21140      |Pentium/UDB  |
-+-------------------------------------+-----------+-------------+
-|Danpex ('Planet Japan' in Japan?)    |           |             |
-|     EN-9400                         |21040      |Pentium      |
-+-------------------------------------+-----------+-------------+
-|Cogent                               |           |             |
-|     EM110                           |21140      |Pentium      |
-+-------------------------------------+-----------+-------------+
+	Additional information available at
+	http://cesdis.gsfc.nasa.gov/linux/drivers/tulip.html
+	
+				Theory of Operation
 
-Pentium: PCI machine with Pentium CPU
-UDB:     Universal Desktop Box(aka Multia) with Alpha 21066 CPU
+Board Compatibility
+===================
 
-Known bug(s)
-============
-This driver's media detection is very simple and sometimes
-it causes serious problem. The driver automatically switches
-media when it causes timeout. If you want to specify or to fix
-a media;
+This device driver is designed for the DECchip "Tulip", Digital's
+single-chip ethernet controllers for PCI.  Supported members of the family
+are the 21040, 21041, 21140, 21140A, 21142, and 21143.  Similar work-alike
+chips from Lite-On, Macronics, ASIX, Compex and other listed below are also
+supported. 
 
-- Modify TULIP_PORT in tulip.c, line 33.
-- Uncomment the definition of TULIP_FIX_PORT in tulip.c, line 40.
+These chips are used on at least 140 unique PCI board designs.  The great
+number of chips and board designs supported is the reason for the
+driver size and complexity.  Almost of the increasing complexity is in the
+board configuration and media selection code.  There is very little
+increasing in the operational critical path length.
 
-or
+Board-specific settings
+=======================
 
-- Use patched ifconfig command and specify 'link='. The patch
-  against ifconfig.c in net-tools-1.3.50-BETA6e is included in
-  this file.
+PCI bus devices are configured by the system at boot time, so no jumpers
+need to be set on the board.  The system BIOS preferably should assign the
+PCI INTA signal to an otherwise unused system IRQ line.
 
-Thanks
+Some boards have EEPROMs tables with default media entry.  The factory default
+is usually "autoselect".  This should only be overridden when using
+transceiver connections without link beat e.g. 10base2 or AUI, or (rarely!)
+for forcing full-duplex when used with old link partners that do not do
+autonegotiation. 
+
+Driver operation
+================
+
+Ring buffers
+------------
+
+The Tulip can use either ring buffers or lists of Tx and Rx descriptors.
+This driver uses statically allocated rings of Rx and Tx descriptors, set at
+compile time by RX/TX_RING_SIZE.  This version of the driver allocates skbuffs
+for the Rx ring buffers at open() time and passes the skb->data field to the
+Tulip as receive data buffers.  When an incoming frame is less than
+RX_COPYBREAK bytes long, a fresh skbuff is allocated and the frame is
+copied to the new skbuff.  When the incoming frame is larger, the skbuff is
+passed directly up the protocol stack and replaced by a newly allocated
+skbuff.
+
+The RX_COPYBREAK value is chosen to trade-off the memory wasted by
+using a full-sized skbuff for small frames vs. the copying costs of larger
+frames.  For small frames the copying cost is negligible (esp. considering
+that we are pre-loading the cache with immediately useful header
+information).  For large frames the copying cost is non-trivial, and the
+larger copy might flush the cache of useful data.  A subtle aspect of this
+choice is that the Tulip only receives into longword aligned buffers, thus
+the IP header at offset 14 isn't longword aligned for further processing.
+Copied frames are put into the new skbuff at an offset of "+2", thus copying
+has the beneficial effect of aligning the IP header and preloading the
+cache.
+
+Synchronization
+---------------
+The driver runs as two independent, single-threaded flows of control.  One
+is the send-packet routine, which enforces single-threaded use by the
+dev->tbusy flag.  The other thread is the interrupt handler, which is single
+threaded by the hardware and other software.
+
+The send packet thread has partial control over the Tx ring and 'dev->tbusy'
+flag.  It sets the tbusy flag whenever it's queuing a Tx packet. If the next
+queue slot is empty, it clears the tbusy flag when finished otherwise it sets
+the 'tp->tx_full' flag.
+
+The interrupt handler has exclusive control over the Rx ring and records stats
+from the Tx ring.  (The Tx-done interrupt can't be selectively turned off, so
+we can't avoid the interrupt overhead by having the Tx routine reap the Tx
+stats.)	 After reaping the stats, it marks the queue entry as empty by setting
+the 'base' to zero.	 Iff the 'tp->tx_full' flag is set, it clears both the
+tx_full and tbusy flags.
+
+Notes
+=====
+
+Thanks to Duke Kamstra of SMC for long ago providing an EtherPower board.
+Greg LaPolla at Linksys provided PNIC and other Linksys boards.
+Znyx provided a four-port card for testing.
+
+References
+==========
+
+http://cesdis.gsfc.nasa.gov/linux/misc/NWay.html
+http://www.digital.com  (search for current 21*4* datasheets and "21X4 SROM")
+http://www.national.com/pf/DP/DP83840A.html
+http://www.asix.com.tw/pmac.htm
+http://www.admtek.com.tw/
+
+Errata
 ======
 
-o becker@CESDIS.gsfc.nasa.gov (author of the tulip.c driver)
-o davies@wanton.lkg.dec.com (author of the de4x5.c driver)
+The old DEC databooks were light on details.
+The 21040 databook claims that CSR13, CSR14, and CSR15 should each be the last
+register of the set CSR12-15 written.  Hmmm, now how is that possible?
 
-o siekas@mailhost.tcs.tulane.edu
+The DEC SROM format is very badly designed not precisely defined, leading to
+part of the media selection junkheap below.  Some boards do not have EEPROM
+media tables and need to be patched up.  Worse, other boards use the DEC
+design kit media table when it isn't correct for their board.
 
-o jheiss@calvin.caltech.edu (providing information about smc8432 card)
-o goto@plathome.co.jp (lending me a DE450 card)
-o ted@physics.ucsb.edu
-o pmheuvel@xs4all.nl
-o hjl@lucon.org (EN-9400)
-o niles@axp745.gsfc.nasa.gov (ZNYX312)
-o pkc@scs.carleton.ca (EM110)
-o and testers...
+We cannot use MII interrupts because there is no defined GPIO pin to attach
+them.  The MII transceiver status is polled using an kernel timer.
 
------------------------------------------------------------------------
-*** ifconfig.c-dist	Wed Jan 17 07:25:36 1996
---- ifconfig.c	Tue Apr  9 15:24:25 1996
-***************
-*** 765,770 ****
---- 766,786 ----
-  			continue;
-  		}
-  		ifr.ifr_map.irq = atoi(*spp);
-+ 		if (ioctl(skfd, SIOCSIFMAP, &ifr) < 0) {
-+ 			fprintf(stderr, "SIOCSIFMAP: %s\n", strerror(errno));
-+ 			goterr = 1;
-+ 		}
-+ 		spp++;
-+ 		continue;
-+ 	}
-+ 
-+ 	if (!strcmp(*spp, "link")) {
-+ 		if (*++spp == NULL) usage();
-+ 		if (ioctl(skfd, SIOCGIFMAP, &ifr) < 0) {
-+ 			goterr = 1;
-+ 			continue;
-+ 		}
-+ 		ifr.ifr_map.port = atoi(*spp);
-  		if (ioctl(skfd, SIOCSIFMAP, &ifr) < 0) {
-  			fprintf(stderr, "SIOCSIFMAP: %s\n", strerror(errno));
-  			goterr = 1;
+
+Source tree tour
+----------------
+The following is a list of files comprising the Tulip ethernet driver in
+drivers/net/tulip subdirectory.
+
+21142.c		- 21142-specific h/w interaction
+eeprom.c	- EEPROM reading and parsing
+interrupt.c	- Interrupt handler
+media.c		- Media selection and MII support
+pnic.c		- PNIC-specific h/w interaction
+timer.c		- Main driver timer, and misc h/w timers
+tulip.h		- Private driver header
+tulip_core.c	- Driver core (a.k.a. where "everything else" goes)
+
+
+
+[EOF]
+

@@ -48,6 +48,12 @@ unsigned long __irq_attempt[NR_IRQS];
 #define ACTUAL_NR_IRQS	NR_IRQS
 #endif
 
+/* Hack minimum IPL during interupt processing for broken hardware.  */
+
+#ifdef CONFIG_ALPHA_BROKEN_IRQ_MASK
+int __min_ipl;
+#endif
+
 /*
  * Performance counter hook.  A module can override this to
  * do something useful.
@@ -283,30 +289,32 @@ handle_IRQ_event(unsigned int irq, struct pt_regs *regs,
 		 struct irqaction *action)
 {
 	int status, cpu = smp_processor_id();
-	unsigned long ipl;
+	int old_ipl, ipl;
 
 	kstat.irqs[cpu][irq]++;
 	irq_enter(cpu, irq);
 
 	status = 1;	/* Force the "do bottom halves" bit */
-	ipl = rdps() & 7;
 
+	old_ipl = ipl = getipl();
 	do {
-		unsigned long newipl = (action->flags & SA_INTERRUPT ? 7 : 0);
-		if (newipl != ipl) {
-			swpipl(newipl);
-			ipl = newipl;
+		int new_ipl = IPL_MIN;
+		if (action->flags & SA_INTERRUPT)
+			new_ipl = IPL_MAX;
+		if (new_ipl != ipl) {
+			setipl(new_ipl);
+			ipl = new_ipl;
 		}
 
 		status |= action->flags;
 		action->handler(irq, action->dev_id, regs);
 		action = action->next;
 	} while (action);
+	if (ipl != old_ipl)
+		setipl(old_ipl);
+
 	if (status & SA_SAMPLE_RANDOM)
 		add_interrupt_randomness(irq);
-	if (ipl == 0)
-		__cli();
-
 	irq_exit(cpu, irq);
 
 	return status;
@@ -325,7 +333,7 @@ disable_irq_nosync(unsigned int irq)
 
 	spin_lock_irqsave(&irq_controller_lock, flags);
 	if (!irq_desc[irq].depth++) {
-		irq_desc[irq].status |= IRQ_DISABLED;
+		irq_desc[irq].status |= IRQ_DISABLED | IRQ_MASKED;
 		irq_desc[irq].handler->disable(irq);
 	}
 	spin_unlock_irqrestore(&irq_controller_lock, flags);
@@ -356,14 +364,15 @@ enable_irq(unsigned int irq)
 	switch (irq_desc[irq].depth) {
 	case 1:
 	  {
-		unsigned int status = irq_desc[irq].status & ~IRQ_DISABLED;
-		irq_desc[irq].status = status;
-		if ((status & (IRQ_PENDING | IRQ_REPLAY)) == IRQ_PENDING) {
-			irq_desc[irq].status = status | IRQ_REPLAY;
+		unsigned int status = irq_desc[irq].status;
 
+		status &= ~(IRQ_DISABLED | IRQ_MASKED);
+		if ((status & (IRQ_PENDING | IRQ_REPLAY)) == IRQ_PENDING) {
+			status |= IRQ_REPLAY;
 			/* ??? We can't re-send on (most?) alpha hw.
 			   hw_resend_irq(irq_desc[irq].handler,irq); */
 		}
+		irq_desc[irq].status = status;
 		irq_desc[irq].handler->enable(irq);
 		/* fall-through */
 	  }
@@ -425,7 +434,7 @@ setup_irq(unsigned int irq, struct irqaction * new)
 
 	if (!shared) {
 		irq_desc[irq].depth = 0;
-		irq_desc[irq].status &= ~IRQ_DISABLED;
+		irq_desc[irq].status &= ~(IRQ_DISABLED | IRQ_MASKED);
 		irq_desc[irq].handler->startup(irq);
 	}
 	spin_unlock_irqrestore(&irq_controller_lock,flags);
@@ -500,7 +509,7 @@ free_irq(unsigned int irq, void *dev_id)
 			/* Found - now remove it from the list of entries.  */
 			*pp = action->next;
 			if (!irq_desc[irq].action) {
-				irq_desc[irq].status |= IRQ_DISABLED;
+				irq_desc[irq].status |= IRQ_DISABLED|IRQ_MASKED;
 				irq_desc[irq].handler->shutdown(irq);
 			}
 			spin_unlock_irqrestore(&irq_controller_lock,flags);
@@ -669,7 +678,7 @@ __global_cli(void)
 	 * Maximize ipl.  If ipl was previously 0 and if this thread
 	 * is not in an irq, then take global_irq_lock.
 	 */
-	if (swpipl(7) == 0 && !local_irq_count(cpu))
+	if (swpipl(IPL_MAX) == IPL_MIN && !local_irq_count(cpu))
 		get_irqlock(cpu, where);
 }
 
@@ -841,13 +850,23 @@ handle_irq(int irq, struct pt_regs * regs)
 	desc = irq_desc + irq;
 	spin_lock_irq(&irq_controller_lock); /* mask also the RTC */
 	desc->handler->ack(irq);
+	status = desc->status;
+
+	/* Look for broken irq masking.  */
+	if (status & IRQ_MASKED) {
+		static unsigned long last_printed;
+		if (time_after(jiffies, last_printed+HZ)) {
+			printk(KERN_CRIT "Mask didn't work for irq %d!\n", irq);
+			last_printed = jiffies;
+		}
+	}
 
 	/*
 	 * REPLAY is when Linux resends an IRQ that was dropped earlier.
 	 * WAITING is used by probe to mark irqs that are being tested.
 	 */
-	status = desc->status & ~(IRQ_REPLAY | IRQ_WAITING);
-	status |= IRQ_PENDING; /* we _want_ to handle it */
+	status &= ~(IRQ_REPLAY | IRQ_WAITING);
+	status |= IRQ_PENDING | IRQ_MASKED; /* we _want_ to handle it */
 
 	/*
 	 * If the IRQ is disabled for whatever reason, we cannot
@@ -890,9 +909,12 @@ handle_irq(int irq, struct pt_regs * regs)
 		desc->status &= ~IRQ_PENDING;
 		spin_unlock(&irq_controller_lock);
 	}
-	desc->status &= ~IRQ_INPROGRESS;
-	if (!(desc->status & IRQ_DISABLED))
+	status = desc->status & ~IRQ_INPROGRESS;
+	if (!(status & IRQ_DISABLED)) {
+		status &= ~IRQ_MASKED;
 		desc->handler->end(irq);
+	}
+	desc->status = status;
 	spin_unlock(&irq_controller_lock);
 }
 

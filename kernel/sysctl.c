@@ -86,8 +86,11 @@ static int proc_doutsstring(ctl_table *table, int write, struct file *filp,
 
 
 static ctl_table root_table[];
+/*
 static struct ctl_table_header root_table_header = 
-	{root_table, DNODE_SINGLE(&root_table_header)};
+	{ root_table, LIST_HEAD_INIT(root_table_header) };
+*/
+static LIST_HEAD(root_table_header);
 
 static ctl_table kern_table[];
 static ctl_table vm_table[];
@@ -313,13 +316,13 @@ void __init sysctl_init(void)
 #endif
 }
 
-
 int do_sysctl (int *name, int nlen,
 	       void *oldval, size_t *oldlenp,
 	       void *newval, size_t newlen)
 {
 	int error;
-	struct ctl_table_header *tmp;
+	/* struct ctl_table_header *tmp; */
+	struct list_head *tmp;
 	void *context;
 	
 	if (nlen == 0 || nlen >= CTL_MAXNAME)
@@ -333,6 +336,7 @@ int do_sysctl (int *name, int nlen,
 		if(get_user(old_len, oldlenp))
 			return -EFAULT;
 	}
+	/*
 	tmp = &root_table_header;
 	do {
 		context = NULL;
@@ -344,6 +348,18 @@ int do_sysctl (int *name, int nlen,
 			return error;
 		tmp = tmp->DLIST_NEXT(ctl_entry);
 	} while (tmp != &root_table_header);
+	*/
+	list_for_each(tmp, root_table_header) {
+		struct ctl_table_header *head =
+			list_entry(tmp, struct ctl_table_header, ctl_entry);
+		context = NULL;
+		error = parse_table(name, nlen, oldval, oldlenp, 
+				    newval, newlen, head->ctl_table, &context);
+		if (context)
+			kfree(context);
+		if (error != -ENOTDIR)
+			return error;
+	}
 	return -ENOTDIR;
 }
 
@@ -438,7 +454,7 @@ repeat:
 						   newval, newlen, context);
 			return error;
 		}
-	};
+	}
 	return -ENOTDIR;
 }
 
@@ -495,14 +511,21 @@ struct ctl_table_header *register_sysctl_table(ctl_table * table,
 					       int insert_at_head)
 {
 	struct ctl_table_header *tmp;
-	tmp = kmalloc(sizeof(*tmp), GFP_KERNEL);
+	tmp = kmalloc(sizeof(struct ctl_table_header), GFP_KERNEL);
 	if (!tmp)
 		return 0;
-	*tmp = ((struct ctl_table_header) {table, DNODE_NULL});
+	tmp->ctl_table = table;
+	INIT_LIST_HEAD(&tmp->ctl_entry);
+	/*
 	if (insert_at_head)
 		DLIST_INSERT_AFTER(&root_table_header, tmp, ctl_entry);
 	else
 		DLIST_INSERT_BEFORE(&root_table_header, tmp, ctl_entry);
+	*/
+	if (insert_at_head)
+		list_add(&tmp->ctl_entry, &root_table_header);
+	else
+		list_add_tail(&tmp->ctl_entry, &root_table_header);
 #ifdef CONFIG_PROC_FS
 	register_proc_table(table, proc_sys_root);
 #endif
@@ -514,7 +537,8 @@ struct ctl_table_header *register_sysctl_table(ctl_table * table,
  */
 void unregister_sysctl_table(struct ctl_table_header * header)
 {
-	DLIST_DELETE(header, ctl_entry);
+	/* DLIST_DELETE(header, ctl_entry); */
+	list_del(&header->ctl_entry);
 #ifdef CONFIG_PROC_FS
 	unregister_proc_table(header->ctl_table, proc_sys_root);
 #endif

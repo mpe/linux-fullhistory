@@ -39,6 +39,17 @@ extern int pmac_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn
 extern int pmac_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
                                       unsigned char offset, unsigned short val);
 
+/*
+ * Mark an irq as "lost".  This is only used on the pmac
+ * since it can lose interrupts (see pmac_set_irq_mask).
+ * -- Cort
+ */
+void __pmac __no_use_set_lost(unsigned long irq_nr)
+{
+	if (!test_and_set_bit(irq_nr, ppc_lost_interrupts))
+		atomic_inc(&ppc_n_lost_interrupts);
+}
+
 static void pmac_openpic_mask_irq(unsigned int irq_nr)
 {
 	openpic_disable_irq(irq_nr);
@@ -105,10 +116,8 @@ static void __pmac pmac_set_irq_mask(unsigned int irq_nr)
          */
         if ((bit & ppc_cached_irq_mask[i])
             && (ld_le32(&pmac_irq_hw[i]->level) & bit)
-            && !(ld_le32(&pmac_irq_hw[i]->flag) & bit)) {
-                if (!test_and_set_bit(irq_nr, ppc_lost_interrupts))
-                        atomic_inc(&ppc_n_lost_interrupts);
-        }
+            && !(ld_le32(&pmac_irq_hw[i]->flag) & bit))
+		__set_lost((ulong)irq_nr);
 }
 
 static void __pmac pmac_mask_irq(unsigned int irq_nr)
@@ -174,6 +183,8 @@ pmac_get_irq(struct pt_regs *regs)
 	unsigned long bits = 0;
 
 #ifdef __SMP__
+	void pmac_smp_message_recv(void);
+	
         /* IPI's are a hack on the powersurge -- Cort */
         if ( smp_processor_id() != 0 )
         {
@@ -182,12 +193,12 @@ pmac_get_irq(struct pt_regs *regs)
 		if (xmon_2nd)
 			xmon(regs);
 #endif
-		smp_message_recv();
+		pmac_smp_message_recv();
 		return -2;	/* ignore, already handled */
         }
 #endif /* __SMP__ */
 
-	/* Yeah, I know, this could be a separate do_IRQ function */
+	/* Yeah, I know, this could be a separate get_irq function */
 	if (has_openpic)
 	{
 		irq = openpic_irq(smp_processor_id());
@@ -376,6 +387,7 @@ pmac_pic_init(void)
 		irqctrler = NULL;
 	}
 
+	int_control.int_set_lost = __no_use_set_lost;
 	/*
 	 * G3 powermacs and 1999 G3 PowerBooks have 64 interrupts,
 	 * 1998 G3 Series PowerBooks have 128, 

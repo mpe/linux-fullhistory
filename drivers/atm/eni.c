@@ -156,7 +156,8 @@ static int tx_complete = 0,dma_complete = 0,queued = 0,requeued = 0,
 
 static struct atm_dev *eni_boards = NULL;
 
-static u32 *zeroes = NULL; /* aligned "magic" zeroes */
+static u32 *cpu_zeroes = NULL; /* aligned "magic" zeroes */
+static dma_addr_t zeroes;
 
 /* Read/write registers on card */
 #define eni_in(r)	readl(eni_dev->reg+(r)*4)
@@ -349,18 +350,21 @@ static int do_rx_dma(struct atm_vcc *vcc,struct sk_buff *skb,
 	struct eni_vcc *eni_vcc;
 	u32 dma_rd,dma_wr;
 	u32 dma[RX_DMA_BUF*2];
-	unsigned long paddr,here;
+	dma_addr_t paddr;
+	unsigned long here;
 	int i,j;
 
 	eni_dev = ENI_DEV(vcc->dev);
 	eni_vcc = ENI_VCC(vcc);
 	paddr = 0; /* GCC, shut up */
 	if (skb) {
-		paddr = (unsigned long) skb->data;
+		paddr = pci_map_single(eni_dev->pci_dev,skb->data,skb->len,
+		    PCI_DMA_FROMDEVICE);
+		ENI_PRV_PADDR(skb) = paddr;
 		if (paddr & 3)
 			printk(KERN_CRIT DEV_LABEL "(itf %d): VCI %d has "
 			    "mis-aligned RX data (0x%lx)\n",vcc->dev->number,
-			    vcc->vci,paddr);
+			    vcc->vci,(unsigned long) paddr);
 		ENI_PRV_SIZE(skb) = size+skip;
 		    /* PDU plus descriptor */
 		ATM_SKB(skb)->vcc = vcc;
@@ -390,7 +394,7 @@ static int do_rx_dma(struct atm_vcc *vcc,struct sk_buff *skb,
 			if (init > words) init = words;
 			dma[j++] = MID_DT_WORD | (init << MID_DMA_COUNT_SHIFT) |
 			    (vcc->vci << MID_DMA_VCI_SHIFT);
-			dma[j++] = virt_to_bus((void *) paddr);
+			dma[j++] = paddr;
 			paddr += init << 2;
 			words -= init;
 		}
@@ -399,7 +403,7 @@ static int do_rx_dma(struct atm_vcc *vcc,struct sk_buff *skb,
 			dma[j++] = MID_DT_16W | ((words >> 4) <<
 			    MID_DMA_COUNT_SHIFT) | (vcc->vci <<
 			    MID_DMA_VCI_SHIFT);
-			dma[j++] = virt_to_bus((void *) paddr);
+			dma[j++] = paddr;
 			paddr += (words & ~15) << 2;
 			words &= 15;
 		}
@@ -409,7 +413,7 @@ static int do_rx_dma(struct atm_vcc *vcc,struct sk_buff *skb,
 			dma[j++] = MID_DT_8W | ((words >> 3) <<
 			    MID_DMA_COUNT_SHIFT) | (vcc->vci <<
 			    MID_DMA_VCI_SHIFT);
-			dma[j++] = virt_to_bus((void *) paddr);
+			dma[j++] = paddr;
 			paddr += (words & ~7) << 2;
 			words &= 7;
 		}
@@ -419,7 +423,7 @@ static int do_rx_dma(struct atm_vcc *vcc,struct sk_buff *skb,
 			dma[j++] = MID_DT_4W | ((words >> 2) <<
 			    MID_DMA_COUNT_SHIFT) | (vcc->vci <<
 			    MID_DMA_VCI_SHIFT);
-			dma[j++] = virt_to_bus((void *) paddr);
+			dma[j++] = paddr;
 			paddr += (words & ~3) << 2;
 			words &= 3;
 		}
@@ -429,7 +433,7 @@ static int do_rx_dma(struct atm_vcc *vcc,struct sk_buff *skb,
 			dma[j++] = MID_DT_2W | ((words >> 1) <<
 			    MID_DMA_COUNT_SHIFT) | (vcc->vci <<
 			    MID_DMA_VCI_SHIFT);
-			dma[j++] = virt_to_bus((void *) paddr);
+			dma[j++] = paddr;
 			paddr += (words & ~1) << 2;
 			words &= 1;
 		}
@@ -437,7 +441,7 @@ static int do_rx_dma(struct atm_vcc *vcc,struct sk_buff *skb,
 		if (words) {
 			dma[j++] = MID_DT_WORD | (words << MID_DMA_COUNT_SHIFT)
 			    | (vcc->vci << MID_DMA_VCI_SHIFT);
-			dma[j++] = virt_to_bus((void *) paddr);
+			dma[j++] = paddr;
 		}
 	}
 	if (size != eff) {
@@ -447,8 +451,7 @@ static int do_rx_dma(struct atm_vcc *vcc,struct sk_buff *skb,
 	}
 	if (!j || j > 2*RX_DMA_BUF) {
 		printk(KERN_CRIT DEV_LABEL "!j or j too big!!!\n");
-		if (skb) kfree_skb(skb);
-		return -1;
+		goto trouble;
 	}
 	dma[j-2] |= MID_DMA_END;
 	j = j >> 1;
@@ -461,8 +464,7 @@ static int do_rx_dma(struct atm_vcc *vcc,struct sk_buff *skb,
 	if (!NEPMOK(dma_wr,j+j+1,dma_rd,NR_DMA_RX)) { /* @@@ +1 is ugly */
 		printk(KERN_WARNING DEV_LABEL "(itf %d): RX DMA full\n",
 		    vcc->dev->number);
-		if (skb) kfree_skb(skb);
-		return -1;
+		goto trouble;
 	}
         for (i = 0; i < j; i++) {
 		writel(dma[i*2],eni_dev->rx_dma+dma_wr*8);
@@ -472,12 +474,19 @@ static int do_rx_dma(struct atm_vcc *vcc,struct sk_buff *skb,
 	if (skb) {
 		ENI_PRV_POS(skb) = eni_vcc->descr+size+1;
 		skb_queue_tail(&eni_dev->rx_queue,skb);
-eni_vcc->last = skb;
+		eni_vcc->last = skb;
 rx_enqueued++;
 	}
 	eni_vcc->descr = here;
 	eni_out(dma_wr,MID_DMA_WR_RX);
 	return 0;
+
+trouble:
+	if (paddr)
+		pci_unmap_single(eni_dev->pci_dev,paddr,skb->len,
+		    PCI_DMA_FROMDEVICE);
+	if (skb) dev_kfree_skb_irq(skb);
+	return -1;
 }
 
 
@@ -747,7 +756,9 @@ rx_dequeued++;
 		}
 		eni_vcc->rxing--;
 		eni_vcc->rx_pos = ENI_PRV_POS(skb) & (eni_vcc->words-1);
-		if (!skb->len) kfree_skb(skb);
+		pci_unmap_single(eni_dev->pci_dev,ENI_PRV_PADDR(skb),skb->len,
+		    PCI_DMA_TODEVICE);
+		if (!skb->len) dev_kfree_skb_irq(skb);
 		else {
 			EVENT("pushing (len=%ld)\n",skb->len,0);
 			if (vcc->qos.aal == ATM_AAL0)
@@ -902,13 +913,13 @@ static int start_rx(struct atm_dev *dev)
 enum enq_res { enq_ok,enq_next,enq_jam };
 
 
-static inline void put_dma(int chan,u32 *dma,int *j,unsigned long paddr,
+static inline void put_dma(int chan,u32 *dma,int *j,dma_addr_t paddr,
     u32 size)
 {
 	u32 init,words;
 
-	DPRINTK("put_dma: 0x%lx+0x%x\n",paddr,size);
-	EVENT("put_dma: 0x%lx+0x%lx\n",paddr,size);
+	DPRINTK("put_dma: 0x%lx+0x%x\n",(unsigned long) paddr,size);
+	EVENT("put_dma: 0x%lx+0x%lx\n",(unsigned long) paddr,size);
 #if 0 /* don't complain anymore */
 	if (paddr & 3)
 		printk(KERN_ERR "put_dma: unaligned addr (0x%lx)\n",paddr);
@@ -918,10 +929,11 @@ static inline void put_dma(int chan,u32 *dma,int *j,unsigned long paddr,
 	if (paddr & 3) {
 		init = 4-(paddr & 3);
 		if (init > size || size < 7) init = size;
-		DPRINTK("put_dma: %lx DMA: %d/%d bytes\n",paddr,init,size);
+		DPRINTK("put_dma: %lx DMA: %d/%d bytes\n",
+		    (unsigned long) paddr,init,size);
 		dma[(*j)++] = MID_DT_BYTE | (init << MID_DMA_COUNT_SHIFT) |
 		    (chan << MID_DMA_CHAN_SHIFT);
-		dma[(*j)++] = virt_to_bus((void *) paddr);
+		dma[(*j)++] = paddr;
 		paddr += init;
 		size -= init;
 	}
@@ -930,10 +942,11 @@ static inline void put_dma(int chan,u32 *dma,int *j,unsigned long paddr,
 	if (words && (paddr & 31)) {
 		init = 8-((paddr & 31) >> 2);
 		if (init > words) init = words;
-		DPRINTK("put_dma: %lx DMA: %d/%d words\n",paddr,init,words);
+		DPRINTK("put_dma: %lx DMA: %d/%d words\n",
+		    (unsigned long) paddr,init,words);
 		dma[(*j)++] = MID_DT_WORD | (init << MID_DMA_COUNT_SHIFT) |
 		    (chan << MID_DMA_CHAN_SHIFT);
-		dma[(*j)++] = virt_to_bus((void *) paddr);
+		dma[(*j)++] = paddr;
 		paddr += init << 2;
 		words -= init;
 	}
@@ -943,18 +956,18 @@ static inline void put_dma(int chan,u32 *dma,int *j,unsigned long paddr,
 		    words);
 		dma[(*j)++] = MID_DT_16W | ((words >> 4) << MID_DMA_COUNT_SHIFT)
 		    | (chan << MID_DMA_CHAN_SHIFT);
-		dma[(*j)++] = virt_to_bus((void *) paddr);
+		dma[(*j)++] = paddr;
 		paddr += (words & ~15) << 2;
 		words &= 15;
 	}
 #endif
 #ifdef CONFIG_ATM_ENI_BURST_TX_8W /* recommended */
 	if (words & ~7) {
-		DPRINTK("put_dma: %lx DMA: %d*8/%d words\n",paddr,words >> 3,
-		    words);
+		DPRINTK("put_dma: %lx DMA: %d*8/%d words\n",
+		    (unsigned long) paddr,words >> 3,words);
 		dma[(*j)++] = MID_DT_8W | ((words >> 3) << MID_DMA_COUNT_SHIFT)
 		    | (chan << MID_DMA_CHAN_SHIFT);
-		dma[(*j)++] = virt_to_bus((void *) paddr);
+		dma[(*j)++] = paddr;
 		paddr += (words & ~7) << 2;
 		words &= 7;
 	}
@@ -965,7 +978,7 @@ static inline void put_dma(int chan,u32 *dma,int *j,unsigned long paddr,
 		    words);
 		dma[(*j)++] = MID_DT_4W | ((words >> 2) << MID_DMA_COUNT_SHIFT)
 		    | (chan << MID_DMA_CHAN_SHIFT);
-		dma[(*j)++] = virt_to_bus((void *) paddr);
+		dma[(*j)++] = paddr;
 		paddr += (words & ~3) << 2;
 		words &= 3;
 	}
@@ -976,23 +989,25 @@ static inline void put_dma(int chan,u32 *dma,int *j,unsigned long paddr,
 		    words);
 		dma[(*j)++] = MID_DT_2W | ((words >> 1) << MID_DMA_COUNT_SHIFT)
 		    | (chan << MID_DMA_CHAN_SHIFT);
-		dma[(*j)++] = virt_to_bus((void *) paddr);
+		dma[(*j)++] = paddr;
 		paddr += (words & ~1) << 2;
 		words &= 1;
 	}
 #endif
 	if (words) {
-		DPRINTK("put_dma: %lx DMA: %d words\n",paddr,words);
+		DPRINTK("put_dma: %lx DMA: %d words\n",(unsigned long) paddr,
+		    words);
 		dma[(*j)++] = MID_DT_WORD | (words << MID_DMA_COUNT_SHIFT) |
 		    (chan << MID_DMA_CHAN_SHIFT);
-		dma[(*j)++] = virt_to_bus((void *) paddr);
+		dma[(*j)++] = paddr;
 		paddr += words << 2;
 	}
 	if (size) {
-		DPRINTK("put_dma: %lx DMA: %d bytes\n",paddr,size);
+		DPRINTK("put_dma: %lx DMA: %d bytes\n",(unsigned long) paddr,
+		    size);
 		dma[(*j)++] = MID_DT_BYTE | (size << MID_DMA_COUNT_SHIFT) |
 		    (chan << MID_DMA_CHAN_SHIFT);
-		dma[(*j)++] = virt_to_bus((void *) paddr);
+		dma[(*j)++] = paddr;
 	}
 }
 
@@ -1003,6 +1018,7 @@ static enum enq_res do_tx(struct sk_buff *skb)
 	struct eni_dev *eni_dev;
 	struct eni_vcc *eni_vcc;
 	struct eni_tx *tx;
+	dma_addr_t paddr;
 	u32 dma_rd,dma_wr;
 	u32 size; /* in words */
 	int aal5,dma_size,i,j;
@@ -1079,6 +1095,9 @@ DPRINTK("iovcnt = %d\n",ATM_SKB(skb)->iovcnt);
 		    vcc->dev->number);
 		return enq_jam;
 	}
+	paddr = pci_map_single(eni_dev->pci_dev,skb->data,skb->len,
+	    PCI_DMA_TODEVICE);
+	ENI_PRV_PADDR(skb) = paddr;
 	/* prepare DMA queue entries */
 	j = 0;
 	eni_dev->dma[j++] = (((tx->tx_pos+TX_DESCR_SIZE) & (tx->words-1)) <<
@@ -1086,21 +1105,17 @@ DPRINTK("iovcnt = %d\n",ATM_SKB(skb)->iovcnt);
 	     MID_DT_JK;
 	j++;
 	if (!ATM_SKB(skb)->iovcnt)
-		if (aal5)
-			put_dma(tx->index,eni_dev->dma,&j,
-			    (unsigned long) skb->data,skb->len);
-		else put_dma(tx->index,eni_dev->dma,&j,
-			    (unsigned long) skb->data+4,skb->len-4);
+		if (aal5) put_dma(tx->index,eni_dev->dma,&j,paddr,skb->len);
+		else put_dma(tx->index,eni_dev->dma,&j,paddr+4,skb->len-4);
 	else {
-DPRINTK("doing direct send\n");
+DPRINTK("doing direct send\n"); /* @@@ well, this doesn't work anyway */
 		for (i = 0; i < ATM_SKB(skb)->iovcnt; i++)
 			put_dma(tx->index,eni_dev->dma,&j,(unsigned long)
 			    ((struct iovec *) skb->data)[i].iov_base,
 			    ((struct iovec *) skb->data)[i].iov_len);
 	}
 	if (skb->len & 3)
-		put_dma(tx->index,eni_dev->dma,&j,
-		    (unsigned long) zeroes,4-(skb->len & 3));
+		put_dma(tx->index,eni_dev->dma,&j,zeroes,4-(skb->len & 3));
 	/* JK for AAL5 trailer - AAL0 doesn't need it, but who cares ... */
 	eni_dev->dma[j++] = (((tx->tx_pos+size) & (tx->words-1)) <<
 	     MID_DMA_COUNT_SHIFT) | (tx->index << MID_DMA_CHAN_SHIFT) |
@@ -1188,8 +1203,10 @@ static void dequeue_tx(struct atm_dev *dev)
 			break;
 		}
 		ENI_VCC(vcc)->txing -= ENI_PRV_SIZE(skb);
+		pci_unmap_single(eni_dev->pci_dev,ENI_PRV_PADDR(skb),skb->len,
+		    PCI_DMA_TODEVICE);
 		if (vcc->pop) vcc->pop(vcc,skb);
-		else dev_kfree_skb(skb);
+		else dev_kfree_skb_irq(skb);
 		vcc->stats->tx++;
 		wake_up(&eni_dev->tx_wait);
 dma_complete++;
@@ -1670,7 +1687,7 @@ static int __init eni_init(struct atm_dev *dev)
 	    (eni_dev->asic ? PCI_COMMAND_PARITY | PCI_COMMAND_SERR : 0)))) {
 		printk(KERN_ERR DEV_LABEL "(itf %d): can't enable memory "
 		    "(0x%02x)\n",dev->number,error);
-		return error;
+		return -EIO;
 	}
 	printk(KERN_NOTICE DEV_LABEL "(itf %d): rev.%d,base=0x%lx,irq=%d,",
 	    dev->number,revision,real_base,eni_dev->irq);
@@ -2020,7 +2037,6 @@ static int eni_send(struct atm_vcc *vcc,struct sk_buff *skb)
 	if (!skb) {
 		printk(KERN_CRIT "!skb in eni_send ?\n");
 		if (vcc->pop) vcc->pop(vcc,skb);
-		else dev_kfree_skb(skb);
 		return -EINVAL;
 	}
 	if (vcc->qos.aal == ATM_AAL0) {
@@ -2195,7 +2211,14 @@ int __init eni_detect(void)
 	struct atm_dev *dev;
 	struct eni_dev *eni_dev;
 	int devs,type;
+	struct sk_buff *skb;
 
+	DPRINTK("eni_detect\n");
+	if (sizeof(skb->cb) < sizeof(struct eni_skb_prv)) {
+		printk(KERN_ERR "eni_detect: skb->cb is too small (%d < %d)\n",
+		    sizeof(skb->cb),sizeof(struct eni_skb_prv));
+		return 0;
+	}
 	eni_dev = (struct eni_dev *) kmalloc(sizeof(struct eni_dev),
 	    GFP_KERNEL);
 	if (!eni_dev) return -ENOMEM;
@@ -2208,8 +2231,9 @@ int __init eni_detect(void)
 		    PCI_DEVICE_ID_EF_ATM_ASIC : PCI_DEVICE_ID_EF_ATM_FPGA,
 		    pci_dev))) {
 			if (!devs) {
-				zeroes = kmalloc(4,GFP_KERNEL);
-				if (!zeroes) {
+				cpu_zeroes = pci_alloc_consistent(pci_dev,
+				    ENI_ZEROES_SIZE,&zeroes);
+				if (!cpu_zeroes) {
 					kfree(eni_dev);
 					return -ENOMEM;
 				}
@@ -2231,11 +2255,12 @@ int __init eni_detect(void)
 			if (!eni_dev) break;
 		}
 	}
-	kfree(eni_dev);
-	if (!devs && zeroes) {
-		kfree(zeroes);
-		zeroes = NULL;
+	if (!devs && cpu_zeroes) {
+		pci_free_consistent(eni_dev->pci_dev,ENI_ZEROES_SIZE,
+		    cpu_zeroes,zeroes);
+		cpu_zeroes = NULL;
 	}
+	kfree(eni_dev);
 	return devs;
 }
 

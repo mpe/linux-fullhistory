@@ -1204,7 +1204,7 @@ int init_module (void)
 
 void cleanup_module(void)
 {
-	if (devc)
+	if (devc && io != -1)
 	{
 		if(devc->base)
 			release_region(devc->base,4);

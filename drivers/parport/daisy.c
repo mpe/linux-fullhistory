@@ -1,7 +1,7 @@
 /*
  * IEEE 1284.3 Parallel port daisy chain and multiplexor code
  * 
- * Copyright (C) 1999  Tim Waugh <tim@cyberelk.demon.co.uk>
+ * Copyright (C) 1999, 2000  Tim Waugh <tim@cyberelk.demon.co.uk>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -12,6 +12,7 @@
  * 31-01-1999: Make port-cloning transparent.
  * 13-02-1999: Move DeviceID technique from parport_probe.
  * 13-03-1999: Get DeviceID from non-IEEE 1284.3 devices too.
+ * 22-02-2000: Count devices that are actually detected.
  *
  */
 
@@ -80,9 +81,11 @@ static struct parport *clone_parport (struct parport *real, int muxport)
 	return extra;
 }
 
-/* Discover the IEEE1284.3 topology on a port -- muxes and daisy chains. */
+/* Discover the IEEE1284.3 topology on a port -- muxes and daisy chains.
+ * Return value is number of devices actually detected. */
 int parport_daisy_init (struct parport *port)
 {
+	int detected = 0;
 	char *deviceid;
 	static const char *th[] = { /*0*/"th", "st", "nd", "rd", "th" };
 	int num_ports;
@@ -128,7 +131,7 @@ int parport_daisy_init (struct parport *port)
 		select_port (port);
 
 	parport_daisy_deselect_all (port);
-	assign_addrs (port);
+	detected += assign_addrs (port);
 
 	/* Count the potential legacy device at the end. */
 	add_dev (numdevs++, port, -1);
@@ -136,25 +139,31 @@ int parport_daisy_init (struct parport *port)
 	/* Find out the legacy device's IEEE 1284 device ID. */
 	deviceid = kmalloc (1000, GFP_KERNEL);
 	if (deviceid) {
-		parport_device_id (numdevs - 1, deviceid, 1000);
+		if (parport_device_id (numdevs - 1, deviceid, 1000) > 2)
+			detected++;
+
 		kfree (deviceid);
 	}
 
-	return 0;
+	return detected;
 }
 
 /* Forget about devices on a physical port. */
 void parport_daisy_fini (struct parport *port)
 {
 	struct daisydev *dev, *prev = topology;
-	while (prev && prev->port == port)
-		prev = topology = topology->next;
+	while (prev && prev->port == port) {
+		topology = topology->next;
+		kfree (prev);
+		prev = topology;
+	}
 
 	while (prev) {
 		dev = prev->next;
 		if (dev && dev->port == port)
 			prev->next = dev->next;
 
+		kfree (dev);
 		prev = prev->next;
 	}
 
@@ -162,7 +171,8 @@ void parport_daisy_fini (struct parport *port)
            someone enumerate through all IEEE1284.3 devices in the
            topology?. */
 	if (!topology) numdevs = 0;
-	return; }
+	return;
+}
 
 /* Find a device by canonical device number. */
 struct pardevice *parport_open (int devnum, const char *name,
@@ -371,7 +381,7 @@ static int assign_addrs (struct parport *port)
 		  | PARPORT_STATUS_ERROR)) {
 		DPRINTK (KERN_DEBUG "%s: assign_addrs: aa5500ff(%02x)\n",
 			 port->name, s);
-		return -ENXIO;
+		return 0;
 	}
 
 	parport_write_data (port, 0x87); udelay (2);
@@ -382,7 +392,7 @@ static int assign_addrs (struct parport *port)
 	if (s != (PARPORT_STATUS_SELECT | PARPORT_STATUS_ERROR)) {
 		DPRINTK (KERN_DEBUG "%s: assign_addrs: aa5500ff87(%02x)\n",
 			 port->name, s);
-		return -ENXIO;
+		return 0;
 	}
 
 	parport_write_data (port, 0x78); udelay (2);
@@ -421,7 +431,7 @@ static int assign_addrs (struct parport *port)
 		parport_device_id (thisdev, deviceid, 1000);
 
 	kfree (deviceid);
-	return 0;
+	return numdevs - thisdev;
 }
 
 /* Find a device with a particular manufacturer and model string,

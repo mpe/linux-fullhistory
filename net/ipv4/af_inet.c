@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.107 2000/02/18 16:47:20 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.108 2000/02/21 16:25:59 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -135,7 +135,9 @@ extern int dlci_ioctl(unsigned int, void*);
 int (*dlci_ioctl_hook)(unsigned int, void *) = NULL;
 #endif
 
+#if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
 int (*br_ioctl_hook)(unsigned long) = NULL;
+#endif
 
 /* New destruction routine */
 
@@ -837,13 +839,14 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			return(devinet_ioctl(cmd,(void *) arg));
 		case SIOCGIFBR:
 		case SIOCSIFBR:
+#if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
 #ifdef CONFIG_KMOD
 			if (br_ioctl_hook == NULL)
 				request_module("bridge");
 #endif
 			if (br_ioctl_hook != NULL)
 				return br_ioctl_hook(arg);
-
+#endif
 			return -ENOPKG;
 			
 		case SIOCADDDLCI:

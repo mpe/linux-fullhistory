@@ -32,6 +32,7 @@
 #include <linux/malloc.h>
 #include <linux/input.h>
 #include <linux/module.h>
+#include <linux/init.h>
 #include "usb.h"
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
@@ -132,18 +133,16 @@ static struct usb_driver usb_mouse_driver = {
 	disconnect:	usb_mouse_disconnect,
 };
 
-#ifdef MODULE
-void cleanup_module(void)
-{
-	usb_deregister(&usb_mouse_driver);
-}
-
-int init_module(void)
-#else
-int usb_mouse_init(void)
-#endif
+static int __init usb_mouse_init(void)
 {
 	usb_register(&usb_mouse_driver);
 	return 0;
 }
 
+static void __exit usb_mouse_exit(void)
+{
+	usb_deregister(&usb_mouse_driver);
+}
+
+module_init(usb_mouse_init);
+module_exit(usb_mouse_exit);

@@ -303,35 +303,3 @@ void input_close_device(struct input_handle *handle)
 		handleptr = &((*handleptr)->hnext);
 	*handleptr = (*handleptr)->hnext;
 }
-
-
-#ifdef MODULE
-int init_module(void)
-#else
-int __init input_init(void)
-#endif
-{
-#ifndef MODULE
-#ifdef CONFIG_INPUT_KEYBDEV
-	keybdev_init();
-#endif
-#ifdef CONFIG_INPUT_MOUSEDEV
-	mousedev_init();
-#endif
-#ifdef CONFIG_INPUT_JOYDEV
-	joydev_init();
-#endif
-#ifdef CONFIG_INPUT_EVDEV
-	evdev_init();
-#endif
-#endif
-	return 0;
-}
-
-#ifdef MODULE
-void cleanup_module(void)
-{
-}
-#endif
-
-__initcall(input_init);

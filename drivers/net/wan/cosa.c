@@ -1,4 +1,4 @@
-/* $Id: cosa.c,v 1.28 1999/10/11 21:06:58 kas Exp $ */
+/* $Id: cosa.c,v 1.30 2000/02/21 15:19:49 kas Exp $ */
 
 /*
  *  Copyright (C) 1995-1997  Jan "Yenya" Kasprzak <kas@fi.muni.cz>
@@ -222,6 +222,8 @@ static int cosa_major = 117;
 #undef DEBUG_IRQS 1	/* Print the message when the IRQ is received */
 #undef DEBUG_IO 1	/* Dump the I/O traffic */
 
+#define TX_TIMEOUT	(5*HZ)
+
 /* Maybe the following should be allocated dynamically */
 static struct cosa_data cosa_cards[MAX_CARDS];
 static int nr_cards = 0;
@@ -286,6 +288,7 @@ static void sppp_channel_init(struct channel_data *chan);
 static void sppp_channel_delete(struct channel_data *chan);
 static int cosa_sppp_open(struct net_device *d);
 static int cosa_sppp_close(struct net_device *d);
+static void cosa_sppp_timeout(struct net_device *d);
 static int cosa_sppp_tx(struct sk_buff *skb, struct net_device *d);
 static char *sppp_setup_rx(struct channel_data *channel, int size);
 static int sppp_rx_done(struct channel_data *channel);
@@ -370,7 +373,7 @@ static int __init cosa_init(void)
 {
 	int i;
 
-	printk(KERN_INFO "cosa v1.06 (c) 1997-8 Jan Kasprzak <kas@fi.muni.cz>\n");
+	printk(KERN_INFO "cosa v1.07 (c) 1997-2000 Jan Kasprzak <kas@fi.muni.cz>\n");
 #ifdef __SMP__
 	printk(KERN_INFO "cosa: SMP found. Please mail any success/failure reports to the author.\n");
 #endif
@@ -406,7 +409,6 @@ static int __init cosa_init(void)
 #ifdef MODULE
 void cleanup_module (void)
 {
-	int i;
 	struct cosa_data *cosa;
 	printk(KERN_INFO "Unloading the cosa module\n");
 
@@ -595,6 +597,8 @@ static void sppp_channel_init(struct channel_data *chan)
 	d->hard_start_xmit = cosa_sppp_tx;
 	d->do_ioctl = cosa_sppp_ioctl;
 	d->get_stats = cosa_net_stats;
+	d->tx_timeout = cosa_sppp_timeout;
+	d->watchdog_timeo = TX_TIMEOUT;
 	dev_init_buffers(d);
 	if (register_netdev(d) == -1) {
 		printk(KERN_WARNING "%s: register_netdev failed.\n", d->name);
@@ -608,7 +612,6 @@ static void sppp_channel_delete(struct channel_data *chan)
 	sppp_detach(chan->pppdev.dev);
 	unregister_netdev(chan->pppdev.dev);
 }
-
 
 static int cosa_sppp_open(struct net_device *d)
 {
@@ -646,7 +649,7 @@ static int cosa_sppp_open(struct net_device *d)
 		return err;
 	}
 
-	d->tbusy = 0;
+	netif_start_queue(d);
 	cosa_enable_rx(chan);
 	return 0;
 }
@@ -655,32 +658,30 @@ static int cosa_sppp_tx(struct sk_buff *skb, struct net_device *dev)
 {
 	struct channel_data *chan = dev->priv;
 
-	if (dev->tbusy) { 
-		if (time_before(jiffies, dev->trans_start+2*HZ))
-			return 1;	/* Two seconds timeout */
-		if (test_bit(RXBIT, &chan->cosa->rxtx)) {
-			chan->stats.rx_errors++;
-			chan->stats.rx_missed_errors++;
-		} else {
-			chan->stats.tx_errors++;
-			chan->stats.tx_aborted_errors++;
-		}
-		cosa_kick(chan->cosa);
-		if (chan->tx_skb) {
-			dev_kfree_skb(chan->tx_skb);
-			chan->tx_skb = 0;
-		}
-		dev->tbusy = 0;
-	}
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-		printk(KERN_WARNING "%s: Transmitter access conflict.\n", dev->name);
-		return 1;
-	}
-	
+	netif_stop_queue(dev);
+
 	chan->tx_skb = skb;
-	dev->trans_start = jiffies;
 	cosa_start_tx(chan, skb->data, skb->len);
 	return 0;
+}
+
+static void cosa_sppp_timeout(struct net_device *dev)
+{
+	struct channel_data *chan = dev->priv;
+
+	if (test_bit(RXBIT, &chan->cosa->rxtx)) {
+		chan->stats.rx_errors++;
+		chan->stats.rx_missed_errors++;
+	} else {
+		chan->stats.tx_errors++;
+		chan->stats.tx_aborted_errors++;
+	}
+	cosa_kick(chan->cosa);
+	if (chan->tx_skb) {
+		dev_kfree_skb(chan->tx_skb);
+		chan->tx_skb = 0;
+	}
+	netif_wake_queue(dev);
 }
 
 static int cosa_sppp_close(struct net_device *d)
@@ -688,8 +689,8 @@ static int cosa_sppp_close(struct net_device *d)
 	struct channel_data *chan = d->priv;
 	int flags;
 
+	netif_stop_queue(d);
 	sppp_close(d);
-	d->tbusy = 1;
 	cosa_disable_rx(chan);
 	spin_lock_irqsave(&chan->cosa->lock, flags);
 	if (chan->rx_skb) {
@@ -760,8 +761,7 @@ static int sppp_tx_done(struct channel_data *chan, int size)
 	chan->tx_skb = 0;
 	chan->stats.tx_packets++;
 	chan->stats.tx_bytes += size;
-	chan->pppdev.dev->tbusy = 0;
-	mark_bh(NET_BH);
+	netif_wake_queue(chan->pppdev.dev);
 	return 1;
 }
 
@@ -1350,14 +1350,14 @@ static void put_driver_status_nolock(struct cosa_data *cosa)
 static void cosa_kick(struct cosa_data *cosa)
 {
 	unsigned flags, flags1;
-	char *s = "Unknown";
+	char *s = "(probably) IRQ";
 
 	if (test_bit(RXBIT, &cosa->rxtx))
-		s = "RX";
+		s = "RX DMA";
 	if (test_bit(TXBIT, &cosa->rxtx))
-		s = "TX";
+		s = "TX DMA";
 
-	printk(KERN_INFO "%s: %s DMA timeout - restarting.\n", cosa->name, s); 
+	printk(KERN_INFO "%s: %s timeout - restarting.\n", cosa->name, s); 
 	spin_lock_irqsave(&cosa->lock, flags);
 	cosa->rxtx = 0;
 

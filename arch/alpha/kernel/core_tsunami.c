@@ -229,7 +229,7 @@ tsunami_probe_read(volatile unsigned long *vaddr)
 {
 	long dont_care, probe_result;
 	int cpu = smp_processor_id();
-	int s = swpipl(6);	/* Block everything but machine checks. */
+	int s = swpipl(IPL_MCHECK - 1);
 
 	mcheck_taken(cpu) = 0;
 	mcheck_expected(cpu) = 1;

@@ -149,7 +149,7 @@ static int test_unit_ready(int minor)
 	sr_cmd[0] = GPCMD_TEST_UNIT_READY;
 	sr_cmd[1] = ((scsi_CDs[minor].device->lun) << 5);
 	sr_cmd[2] = sr_cmd[3] = sr_cmd[4] = sr_cmd[5] = 0;
-	return sr_do_ioctl(minor, sr_cmd, NULL, 255, 1, SCSI_DATA_NONE);
+	return sr_do_ioctl(minor, sr_cmd, NULL, 0, 1, SCSI_DATA_NONE);
 }
 
 int sr_tray_move(struct cdrom_device_info *cdi, int pos)
@@ -161,7 +161,7 @@ int sr_tray_move(struct cdrom_device_info *cdi, int pos)
 	sr_cmd[2] = sr_cmd[3] = sr_cmd[5] = 0;
 	sr_cmd[4] = (pos == 0) ? 0x03 /* close */ : 0x02 /* eject */ ;
 
-	return sr_do_ioctl(MINOR(cdi->dev), sr_cmd, NULL, 255, 0, SCSI_DATA_NONE);
+	return sr_do_ioctl(MINOR(cdi->dev), sr_cmd, NULL, 0, 0, SCSI_DATA_NONE);
 }
 
 int sr_lock_door(struct cdrom_device_info *cdi, int lock)

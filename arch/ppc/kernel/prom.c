@@ -604,7 +604,6 @@ prom_init(int r3, int r4, prom_entry pp)
 		/* XXX: hack - don't start cpu 0, this cpu -- Cort */
 		if ( smp_chrp_cpu_nr++ == 0 )
 			continue;
-		RELOC(smp_ibm_chrp_hack) = 1;
 		prom_print(RELOC("starting cpu "));
 		prom_print(path);
 		*(unsigned long *)(0x4) = 0;

@@ -1841,8 +1841,6 @@ static struct pci_driver eepro100_driver = {
 
 static int __init eepro100_init_module(void)
 {
-	int cards_found;
-
 	if (debug >= 0)
 		speedo_debug = debug;
 
@@ -1850,14 +1848,7 @@ static int __init eepro100_init_module(void)
 	if (speedo_debug)
 		printk(KERN_INFO "%s", version);
 
-	cards_found = pci_register_driver (&eepro100_driver);
-	if (cards_found <= 0) {
-		printk(KERN_INFO PFX "No cards found, driver not installed.\n");
-		pci_unregister_driver (&eepro100_driver);
-		return -ENODEV;
-	}
-
-	return 0;
+	return pci_module_init (&eepro100_driver);
 }
 
 

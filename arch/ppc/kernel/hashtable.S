@@ -115,11 +115,6 @@ hash_page:
 	stw	r6,0(r2)		/* update PTE (accessed/dirty bits) */
 
 	/* Convert linux-style PTE to low word of PPC-style PTE */
-#ifdef CONFIG_PPC64
-	/* clear the high 32 bits just in case */
-	clrldi	r6,r6,32
-	clrldi	r4,r4,32
-#endif /* CONFIG_PPC64 */
 	rlwinm	r4,r6,32-9,31,31	/* _PAGE_HWWRITE -> PP lsb */
 	rlwimi	r6,r6,32-1,31,31	/* _PAGE_USER -> PP (both bits now) */
 	ori	r4,r4,0xe04		/* clear out reserved bits */
@@ -151,10 +146,6 @@ hash_page:
 	.globl	hash_page_patch_A
 hash_page_patch_A:
 	lis	r4,Hash_base@h		/* base address of hash table */
-#ifdef CONFIG_PPC64
-	/* just in case */
-	clrldi	r4,r4,32
-#endif	
 	rlwimi	r4,r5,32-1,26-Hash_bits,25	/* (VSID & hash_mask) << 6 */
 	rlwinm	r0,r3,32-6,26-Hash_bits,25	/* (PI & hash_mask) << 6 */
 	xor	r4,r4,r0		/* make primary hash */
@@ -169,43 +160,89 @@ hash_page_patch_A:
 	/* Search the primary PTEG for a PTE whose 1st word matches r5 */
 	mtctr	r2
 	addi	r3,r4,-8
-1:	lwzu	r0,8(r3)		/* get next PTE */
+1:		
+#ifdef CONFIG_PPC64	
+	lwzu	r0,16(r3)		/* get next PTE */
+#else	
+	lwzu	r0,8(r3)		/* get next PTE */
+#endif	
 	cmp	0,r0,r5
 	bdnzf	2,1b			/* loop while ctr != 0 && !cr0.eq */
 	beq+	found_slot
 
 	/* Search the secondary PTEG for a matching PTE */
+#ifdef CONFIG_PPC64
+	ori	r5,r5,0x2		/* set H (secondary hash) bit */
+#else	
 	ori	r5,r5,0x40		/* set H (secondary hash) bit */
+#endif	
 	.globl	hash_page_patch_B
 hash_page_patch_B:
 	xoris	r3,r4,Hash_msk>>16	/* compute secondary hash */
 	xori	r3,r3,0xffc0
+#ifdef CONFIG_PPC64
+	addi	r3,r3,-16
+#else	
 	addi	r3,r3,-8
+#endif	
 	mtctr	r2
-2:	lwzu	r0,8(r3)
+2:
+#ifdef CONFIG_PPC64
+	lwzu	r0,16(r3)
+#else	
+	lwzu	r0,8(r3)
+#endif	
 	cmp	0,r0,r5
 	bdnzf	2,2b
 	beq+	found_slot
+#ifdef CONFIG_PPC64
+	xori	r5,r5,0x2		/* clear H bit again */
+#else	
 	xori	r5,r5,0x40		/* clear H bit again */
+#endif	
 
 	/* Search the primary PTEG for an empty slot */
 10:	mtctr	r2
+#ifdef CONFIG_PPC64
+	addi	r3,r4,-16		/* search primary PTEG */
+#else	
 	addi	r3,r4,-8		/* search primary PTEG */
-1:	lwzu	r0,8(r3)		/* get next PTE */
+#endif	
+1:
+#ifdef CONFIG_PPC64
+	lwzu	r0,16(r3)		/* get next PTE */
+	andi.	r0,r0,1
+#else	
+	lwzu	r0,8(r3)		/* get next PTE */
 	rlwinm.	r0,r0,0,0,0		/* only want to check valid bit */
+#endif	
 	bdnzf	2,1b			/* loop while ctr != 0 && !cr0.eq */
 	beq+	found_empty
 
 	/* Search the secondary PTEG for an empty slot */
+#ifdef CONFIG_PPC64
+	ori	r5,r5,0x2		/* set H (secondary hash) bit */
+#else	
 	ori	r5,r5,0x40		/* set H (secondary hash) bit */
+#endif	
 	.globl	hash_page_patch_C
 hash_page_patch_C:
 	xoris	r3,r4,Hash_msk>>16	/* compute secondary hash */
 	xori	r3,r3,0xffc0
+#ifdef CONFIG_PPC64
+	addi	r3,r3,-16
+#else	
 	addi	r3,r3,-8
+#endif	
 	mtctr	r2
-2:	lwzu	r0,8(r3)
+2:
+#ifdef CONFIG_PPC64
+	lwzu	r0,16(r3)
+	andi.	r0,r0,1
+#else	
+	lwzu	r0,8(r3)
 	rlwinm.	r0,r0,0,0,0		/* only want to check valid bit */
+#endif	
 	bdnzf	2,2b
 	beq+	found_empty
 
@@ -218,12 +255,21 @@ hash_page_patch_C:
 	 * advantage to putting the PTE in the primary PTEG, we always
 	 * put the PTE in the primary PTEG.
 	 */
+#ifdef CONFIG_PPC64
+	xori	r5,r5,0x2		/* clear H bit again */
+#else
 	xori	r5,r5,0x40		/* clear H bit again */
+#endif		
 	lis	r3,next_slot@ha
 	tophys(r3,r3)
 	lwz	r2,next_slot@l(r3)
+#ifdef CONFIG_PPC64	
+	addi	r2,r2,16
+	andi.	r2,r2,0x78
+#else
 	addi	r2,r2,8
 	andi.	r2,r2,0x38
+#endif	
 	stw	r2,next_slot@l(r3)
 	add	r3,r4,r2
 11:		
@@ -237,9 +283,17 @@ hash_page_patch_C:
 #ifndef __SMP__
 	/* Store PTE in PTEG */
 found_empty:
+#ifdef CONFIG_PPC64
+	std	r5,0(r3)
+#else		
 	stw	r5,0(r3)
+#endif	
 found_slot:
+#ifdef CONFIG_PPC64
+	std	r6,8(r3)
+#else
 	stw	r6,4(r3)
+#endif	
 	sync
 
 #else /* __SMP__ */

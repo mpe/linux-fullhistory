@@ -55,7 +55,7 @@
 */
 
 /*
-**	January 9 2000, sym53c8xx 1.5h
+**	February 20 2000, sym53c8xx 1.5j
 **
 **	Supported SCSI features:
 **	    Synchronous data transfers
@@ -84,7 +84,7 @@
 /*
 **	Name and version of the driver
 */
-#define SCSI_NCR_DRIVER_NAME	"sym53c8xx - version 1.5h"
+#define SCSI_NCR_DRIVER_NAME	"sym53c8xx - version 1.5j"
 
 /* #define DEBUG_896R1 */
 #define SCSI_NCR_OPTIMIZE_896
@@ -173,6 +173,15 @@ typedef u32 u_int32;
 typedef u64 u_int64;
 
 #include "sym53c8xx.h"
+
+/*
+**	Hmmm... What complex some PCI-HOST bridges actually are, 
+**	despite the fact that the PCI specifications are looking 
+**	so smart and simple! ;-)
+*/
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,3,47)
+#define SCSI_NCR_DYNAMIC_DMA_MAPPING
+#endif
 
 /*==========================================================
 **
@@ -501,7 +510,7 @@ pci_get_base_address(struct pci_dev *pdev, int index, u_long *base)
 typedef unsigned int pcidev_t;
 #define PCIDEV_NULL		(~0u)
 #define PciBusNumber(d)		((d)>>8)
-#define PciDeviceFn(n)		((d)&0xff)
+#define PciDeviceFn(d)		((d)&0xff)
 #define __PciDev(busn, devfn)	(((busn)<<8)+(devfn))
 
 #define pci_present pcibios_present
@@ -539,7 +548,7 @@ pci_find_device(unsigned int vendor, unsigned int device, pcidev_t prev)
 static u_short __init PciVendorId(pcidev_t dev)
 {
 	u_short vendor_id;
-	pcibios_read_config_word(dev, PCI_VENDOR_ID, &vendor_id);
+	pci_read_config_word(dev, PCI_VENDOR_ID, &vendor_id);
 	return vendor_id;
 }
 
@@ -552,7 +561,7 @@ static u_short __init PciDeviceId(pcidev_t dev)
 
 static u_int __init PciIrqLine(pcidev_t dev)
 {
-	u_short irq;
+	u_char irq;
 	pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &irq);
 	return irq;
 }
@@ -652,17 +661,6 @@ spinlock_t sym53c8xx_lock = SPIN_LOCK_UNLOCKED;
 #endif
 
 /*
-**	Address translation
-**
-**	The driver has to provide bus memory addresses to 
-**	the script processor. Because some architectures use 
-**	different physical addressing scheme from the PCI BUS, 
-**	we use virt_to_bus() instead of virt_to_phys().
-*/
-
-#define vtobus(p)	virt_to_bus(p)
-
-/*
 **	Memory mapped IO
 **
 **	Since linux-2.1, we must use ioremap() to map the io memory space.
@@ -736,44 +734,76 @@ static void MDELAY(long ms) { while (ms--) UDELAY(1000); }
 **	this allocator allows simple and fast address calculations  
 **	from the SCRIPTS code. In addition, cache line alignment 
 **	is guaranteed for power of 2 cache line size.
+**	Enhanced in linux-2.3.44 to provide a memory pool per pcidev 
+**	to support dynamic dma mapping. (I would have preferred a 
+**	real bus astraction, btw).
 */
-
-#define MEMO_SHIFT	4	/* 16 bytes minimum memory chunk */
-#define MEMO_PAGE_ORDER	0	/* 1 PAGE maximum (for now (ever?) */
-typedef unsigned long addr;	/* Enough bits to bit-hack addresses */
-
-#define MEMO_FREE_UNUSED	/* Free unused pages immediately */
-
-struct m_link {
-	struct m_link *next;	/* Simple links are enough */
-};
-
-#ifndef GFP_DMA_32BIT
-#define GFP_DMA_32BIT	0	/* Will this flag ever exist */
-#endif
 
 #if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,0)
-#define GetPages(order) __get_free_pages(GFP_ATOMIC | GFP_DMA_32BIT, order)
+#define __GetFreePages(flags, order) __get_free_pages(flags, order)
 #else
-#define GetPages(order) __get_free_pages(GFP_ATOMIC | GFP_DMA_32BIT, order, 0)
+#define __GetFreePages(flags, order) __get_free_pages(flags, order, 0)
 #endif
 
-/*
-**	Lists of available memory chunks.
-**	Starts with 16 bytes chunks until 1 PAGE chunks.
-*/
-static struct m_link h[PAGE_SHIFT-MEMO_SHIFT+MEMO_PAGE_ORDER+1];
+#define MEMO_SHIFT	4	/* 16 bytes minimum memory chunk */
+#if PAGE_SIZE >= 8192
+#define MEMO_PAGE_ORDER	0	/* 1 PAGE  maximum */
+#else
+#define MEMO_PAGE_ORDER	1	/* 2 PAGES maximum */
+#endif
+#define MEMO_FREE_UNUSED	/* Free unused pages immediately */
+#define MEMO_WARN	1
+#define MEMO_GFP_FLAGS	GFP_ATOMIC
+#define MEMO_CLUSTER_SHIFT	(PAGE_SHIFT+MEMO_PAGE_ORDER)
+#define MEMO_CLUSTER_SIZE	(1UL << MEMO_CLUSTER_SHIFT)
+#define MEMO_CLUSTER_MASK	(MEMO_CLUSTER_SIZE-1)
 
-/*
-**	Allocate a memory area aligned on the lowest power of 2 
-**	greater than the requested size.
-*/
-static void *__m_alloc(int size)
+typedef u_long m_addr_t;	/* Enough bits to bit-hack addresses */
+typedef pcidev_t m_bush_t;	/* Something that addresses DMAable */
+
+typedef struct m_link {		/* Link between free memory chunks */
+	struct m_link *next;
+} m_link_s;
+
+#ifdef	SCSI_NCR_DYNAMIC_DMA_MAPPING
+typedef struct m_vtob {		/* Virtual to Bus address translation */
+	struct m_vtob *next;
+	m_addr_t vaddr;
+	m_addr_t baddr;
+} m_vtob_s;
+#define VTOB_HASH_SHIFT		5
+#define VTOB_HASH_SIZE		(1UL << VTOB_HASH_SHIFT)
+#define VTOB_HASH_MASK		(VTOB_HASH_SIZE-1)
+#define VTOB_HASH_CODE(m)	\
+	((((m_addr_t) (m)) >> MEMO_CLUSTER_SHIFT) & VTOB_HASH_MASK)
+#endif
+
+typedef struct m_pool {		/* Memory pool of a given kind */
+#ifdef	SCSI_NCR_DYNAMIC_DMA_MAPPING
+	m_bush_t bush;
+	m_addr_t (*getp)(struct m_pool *);
+	void (*freep)(struct m_pool *, m_addr_t);
+#define M_GETP()		mp->getp(mp)
+#define M_FREEP(p)		mp->freep(mp, p)
+#define GetPages()		__GetFreePages(MEMO_GFP_FLAGS, MEMO_PAGE_ORDER)
+#define FreePages(p)		free_pages(p, MEMO_PAGE_ORDER)
+	int nump;
+	m_vtob_s *(vtob[VTOB_HASH_SIZE]);
+	struct m_pool *next;
+#else
+#define M_GETP()		__GetFreePages(MEMO_GFP_FLAGS, MEMO_PAGE_ORDER)
+#define M_FREEP(p)		free_pages(p, MEMO_PAGE_ORDER)
+#endif	/* SCSI_NCR_DYNAMIC_DMA_MAPPING */
+	struct m_link h[PAGE_SHIFT-MEMO_SHIFT+MEMO_PAGE_ORDER+1];
+} m_pool_s;
+
+static void *___m_alloc(m_pool_s *mp, int size)
 {
 	int i = 0;
 	int s = (1 << MEMO_SHIFT);
 	int j;
-	addr a ;
+	m_addr_t a;
+	m_link_s *h = mp->h;
 
 	if (size > (PAGE_SIZE << MEMO_PAGE_ORDER))
 		return 0;
@@ -786,7 +816,7 @@ static void *__m_alloc(int size)
 	j = i;
 	while (!h[j].next) {
 		if (s == (PAGE_SIZE << MEMO_PAGE_ORDER)) {
-			h[j].next = (struct m_link *) GetPages(MEMO_PAGE_ORDER);
+			h[j].next = (m_link_s *) M_GETP();
 			if (h[j].next)
 				h[j].next->next = 0;
 			break;
@@ -794,36 +824,32 @@ static void *__m_alloc(int size)
 		++j;
 		s <<= 1;
 	}
-	a = (addr) h[j].next;
+	a = (m_addr_t) h[j].next;
 	if (a) {
 		h[j].next = h[j].next->next;
 		while (j > i) {
 			j -= 1;
 			s >>= 1;
-			h[j].next = (struct m_link *) (a+s);
+			h[j].next = (m_link_s *) (a+s);
 			h[j].next->next = 0;
 		}
 	}
 #ifdef DEBUG
-	printk("m_alloc(%d) = %p\n", size, (void *) a);
+	printk("___m_alloc(%d) = %p\n", size, (void *) a);
 #endif
 	return (void *) a;
 }
 
-/*
-**	Free a memory area allocated using m_alloc().
-**	Coalesce buddies.
-**	Free pages that become unused if MEMO_FREE_UNUSED is defined.
-*/
-static void __m_free(void *ptr, int size)
+static void ___m_free(m_pool_s *mp, void *ptr, int size)
 {
 	int i = 0;
 	int s = (1 << MEMO_SHIFT);
-	struct m_link *q;
-	addr a, b;
+	m_link_s *q;
+	m_addr_t a, b;
+	m_link_s *h = mp->h;
 
 #ifdef DEBUG
-	printk("m_free(%p, %d)\n", ptr, size);
+	printk("___m_free(%p, %d)\n", ptr, size);
 #endif
 
 	if (size > (PAGE_SIZE << MEMO_PAGE_ORDER))
@@ -834,23 +860,23 @@ static void __m_free(void *ptr, int size)
 		++i;
 	}
 
-	a = (addr) ptr;
+	a = (m_addr_t) ptr;
 
 	while (1) {
 #ifdef MEMO_FREE_UNUSED
 		if (s == (PAGE_SIZE << MEMO_PAGE_ORDER)) {
-			free_pages(a, MEMO_PAGE_ORDER);
+			M_FREEP(a);
 			break;
 		}
 #endif
 		b = a ^ s;
 		q = &h[i];
-		while (q->next && q->next != (struct m_link *) b) {
+		while (q->next && q->next != (m_link_s *) b) {
 			q = q->next;
 		}
 		if (!q->next) {
-			((struct m_link *) a)->next = h[i].next;
-			h[i].next = (struct m_link *) a;
+			((m_link_s *) a)->next = h[i].next;
+			h[i].next = (m_link_s *) a;
 			break;
 		}
 		q->next = q->next->next;
@@ -860,45 +886,338 @@ static void __m_free(void *ptr, int size)
 	}
 }
 
-#define MEMO_WARN	1
-
-/*
-**	The memory pool is shared by all instances.
-**	We use a global SMP LOCK to be SMP safe.
-*/
-
-static void *m_calloc(int size, char *name, int uflags)
+static void *__m_calloc2(m_pool_s *mp, int size, char *name, int uflags)
 {
-	u_long flags;
 	void *p;
 
-	NCR_LOCK_DRIVER(flags);
-	p = __m_alloc(size);
-	NCR_UNLOCK_DRIVER(flags);
+	p = ___m_alloc(mp, size);
 
 	if (DEBUG_FLAGS & DEBUG_ALLOC)
 		printk ("new %-10s[%4d] @%p.\n", name, size, p);
 
 	if (p)
-		memset(p, 0, size);
+		bzero(p, size);
 	else if (uflags & MEMO_WARN)
 		printk (NAME53C8XX ": failed to allocate %s[%d]\n", name, size);
 
 	return p;
 }
 
-static void m_free(void *ptr, int size, char *name)
-{
-	u_long flags;
+#define __m_calloc(mp, s, n)	__m_calloc2(mp, s, n, MEMO_WARN)
 
+static void __m_free(m_pool_s *mp, void *ptr, int size, char *name)
+{
 	if (DEBUG_FLAGS & DEBUG_ALLOC)
 		printk ("freeing %-10s[%4d] @%p.\n", name, size, ptr);
 
+	___m_free(mp, ptr, size);
+
+}
+
+/*
+ * With pci bus iommu support, we use a default pool of unmapped memory 
+ * for memory we donnot need to DMA from/to and one pool per pcidev for 
+ * memory accessed by the PCI chip. `mp0' is the default not DMAable pool.
+ */
+
+#ifndef	SCSI_NCR_DYNAMIC_DMA_MAPPING
+
+static m_pool_s mp0;
+
+#else
+
+static m_addr_t ___mp0_getp(m_pool_s *mp)
+{
+	m_addr_t m = GetPages();
+	if (m)
+		++mp->nump;
+	return m;
+}
+
+static void ___mp0_freep(m_pool_s *mp, m_addr_t m)
+{
+	FreePages(m);
+	--mp->nump;
+}
+
+static m_pool_s mp0 = {0, ___mp0_getp, ___mp0_freep};
+
+#endif	/* SCSI_NCR_DYNAMIC_DMA_MAPPING */
+
+static void *m_calloc(int size, char *name)
+{
+	u_long flags;
+	void *m;
 	NCR_LOCK_DRIVER(flags);
-	__m_free(ptr, size);
+	m = __m_calloc(&mp0, size, name);
+	NCR_UNLOCK_DRIVER(flags);
+	return m;
+}
+
+static void m_free(void *ptr, int size, char *name)
+{
+	u_long flags;
+	NCR_LOCK_DRIVER(flags);
+	__m_free(&mp0, ptr, size, name);
 	NCR_UNLOCK_DRIVER(flags);
 }
 
+/*
+ * DMAable pools.
+ */
+
+#ifndef	SCSI_NCR_DYNAMIC_DMA_MAPPING
+
+/* Without pci bus iommu support, all the memory is assumed DMAable */
+
+#define __m_calloc_dma(b, s, n)		m_calloc(s, n)
+#define __m_free_dma(b, p, s, n)	m_free(p, s, n)
+#define __vtobus(b, p)			virt_to_bus(p)
+
+#else
+
+/*
+ * With pci bus iommu support, we maintain one pool per pcidev and a 
+ * hashed reverse table for virtual to bus physical address translations.
+ */
+static m_addr_t ___dma_getp(m_pool_s *mp)
+{
+	m_addr_t vp;
+	m_vtob_s *vbp;
+
+	vbp = __m_calloc(&mp0, sizeof(*vbp), "VTOB");
+	if (vbp) {
+		dma_addr_t daddr;
+		vp = (m_addr_t) pci_alloc_consistent(mp->bush,
+						PAGE_SIZE<<MEMO_PAGE_ORDER,
+						&daddr);
+		if (vp) {
+			int hc = VTOB_HASH_CODE(vp);
+			vbp->vaddr = vp;
+			vbp->baddr = daddr;
+			vbp->next = mp->vtob[hc];
+			mp->vtob[hc] = vbp;
+			++mp->nump;
+			return vp;
+		}
+	}
+	__m_free(&mp0, vbp, sizeof(*vbp), "VTOB");
+	return 0;
+}
+
+static void ___dma_freep(m_pool_s *mp, m_addr_t m)
+{
+	m_vtob_s **vbpp, *vbp;
+	int hc = VTOB_HASH_CODE(m);
+
+	vbpp = &mp->vtob[hc];
+	while (*vbpp && (*vbpp)->vaddr != m)
+		vbpp = &(*vbpp)->next;
+	if (*vbpp) {
+		vbp = *vbpp;
+		*vbpp = (*vbpp)->next;
+		pci_free_consistent(mp->bush, PAGE_SIZE<<MEMO_PAGE_ORDER,
+				    (void *)vbp->vaddr, (dma_addr_t)vbp->baddr);
+		__m_free(&mp0, vbp, sizeof(*vbp), "VTOB");
+		--mp->nump;
+	}
+}
+
+static inline m_pool_s *___get_dma_pool(m_bush_t bush)
+{
+	m_pool_s *mp;
+	for (mp = mp0.next; mp && mp->bush != bush; mp = mp->next);
+	return mp;
+}
+
+static m_pool_s *___cre_dma_pool(m_bush_t bush)
+{
+	m_pool_s *mp;
+	mp = __m_calloc(&mp0, sizeof(*mp), "MPOOL");
+	if (mp) {
+		bzero(mp, sizeof(*mp));
+		mp->bush = bush;
+		mp->getp = ___dma_getp;
+		mp->freep = ___dma_freep;
+		mp->next = mp0.next;
+		mp0.next = mp;
+	}
+	return mp;
+}
+
+static void ___del_dma_pool(m_pool_s *p)
+{
+	struct m_pool **pp = &mp0.next;
+
+	while (*pp && *pp != p)
+		pp = &(*pp)->next;
+	if (*pp) {
+		*pp = (*pp)->next;
+		__m_free(&mp0, p, sizeof(*p), "MPOOL");
+	}
+}
+
+static void *__m_calloc_dma(m_bush_t bush, int size, char *name)
+{
+	u_long flags;
+	struct m_pool *mp;
+	void *m = 0;
+
+	NCR_LOCK_DRIVER(flags);
+	mp = ___get_dma_pool(bush);
+	if (!mp)
+		mp = ___cre_dma_pool(bush);
+	if (mp)
+		m = __m_calloc(mp, size, name);
+	if (mp && !mp->nump)
+		___del_dma_pool(mp);
+	NCR_UNLOCK_DRIVER(flags);
+
+	return m;
+}
+
+static void __m_free_dma(m_bush_t bush, void *m, int size, char *name)
+{
+	u_long flags;
+	struct m_pool *mp;
+
+	NCR_LOCK_DRIVER(flags);
+	mp = ___get_dma_pool(bush);
+	if (mp)
+		__m_free(mp, m, size, name);
+	if (mp && !mp->nump)
+		___del_dma_pool(mp);
+	NCR_UNLOCK_DRIVER(flags);
+}
+
+static m_addr_t __vtobus(m_bush_t bush, void *m)
+{
+	u_long flags;
+	m_pool_s *mp;
+	int hc = VTOB_HASH_CODE(m);
+	m_vtob_s *vp = 0;
+	m_addr_t a = ((m_addr_t) m) & ~MEMO_CLUSTER_MASK;
+
+	NCR_LOCK_DRIVER(flags);
+	mp = ___get_dma_pool(bush);
+	if (mp) {
+		vp = mp->vtob[hc];
+		while (vp && (m_addr_t) vp->vaddr != a)
+			vp = vp->next;
+	}
+	NCR_UNLOCK_DRIVER(flags);
+	return vp ? vp->baddr + (((m_addr_t) m) - a) : 0;
+}
+
+#endif	/* SCSI_NCR_DYNAMIC_DMA_MAPPING */
+
+#define _m_calloc_dma(np, s, n)		__m_calloc_dma(np->pdev, s, n)
+#define _m_free_dma(np, p, s, n)	__m_free_dma(np->pdev, p, s, n)
+#define m_calloc_dma(s, n)		_m_calloc_dma(np, s, n)
+#define m_free_dma(p, s, n)		_m_free_dma(np, p, s, n)
+#define _vtobus(np, p)			__vtobus(np->pdev, p)
+#define vtobus(p)			_vtobus(np, p)
+
+/*
+ *  Deal with DMA mapping/unmapping.
+ */
+
+#ifndef SCSI_NCR_DYNAMIC_DMA_MAPPING
+
+/* Linux versions prior to pci bus iommu kernel interface */
+
+#define __unmap_scsi_data(pdev, cmd)	do {; } while (0)
+#define __map_scsi_single_data(pdev, cmd) (__vtobus(pdev,(cmd)->request_buffer))
+#define __map_scsi_sg_data(pdev, cmd)	((cmd)->use_sg)
+#define __sync_scsi_data(pdev, cmd)	do {; } while (0)
+
+#define scsi_sg_dma_address(sc)		vtobus((sc)->address)
+#define scsi_sg_dma_len(sc)		((sc)->length)
+
+#else
+
+/* Linux version with pci bus iommu kernel interface */
+
+/* To keep track of the dma mapping (sg/single) that has been set */
+#define __data_mapped	SCp.phase
+#define __data_mapping	SCp.have_data_in
+
+static void __unmap_scsi_data(pcidev_t pdev, Scsi_Cmnd *cmd)
+{
+	int dma_dir = scsi_to_pci_dma_dir(cmd->sc_data_direction);
+
+	switch(cmd->__data_mapped) {
+	case 2:
+		pci_unmap_sg(pdev, cmd->buffer, cmd->use_sg, dma_dir);
+		break;
+	case 1:
+		pci_unmap_single(pdev, cmd->__data_mapping,
+				 cmd->request_bufflen, dma_dir);
+		break;
+	}
+	cmd->__data_mapped = 0;
+}
+
+static u_long __map_scsi_single_data(pcidev_t pdev, Scsi_Cmnd *cmd)
+{
+	dma_addr_t mapping;
+	int dma_dir = scsi_to_pci_dma_dir(cmd->sc_data_direction);
+
+	if (cmd->request_bufflen == 0)
+		return 0;
+
+	mapping = pci_map_single(pdev, cmd->request_buffer,
+				 cmd->request_bufflen, dma_dir);
+	cmd->__data_mapped = 1;
+	cmd->__data_mapping = mapping;
+
+	return mapping;
+}
+
+static int __map_scsi_sg_data(pcidev_t pdev, Scsi_Cmnd *cmd)
+{
+	int use_sg;
+	int dma_dir = scsi_to_pci_dma_dir(cmd->sc_data_direction);
+
+	if (cmd->use_sg == 0)
+		return 0;
+
+	use_sg = pci_map_sg(pdev, cmd->buffer, cmd->use_sg, dma_dir);
+	cmd->__data_mapped = 2;
+	cmd->__data_mapping = use_sg;
+
+	return use_sg;
+}
+
+static void __sync_scsi_data(pcidev_t pdev, Scsi_Cmnd *cmd)
+{
+	int dma_dir = scsi_to_pci_dma_dir(cmd->sc_data_direction);
+
+	switch(cmd->__data_mapped) {
+	case 2:
+		pci_dma_sync_sg(pdev, cmd->buffer, cmd->use_sg, dma_dir);
+		break;
+	case 1:
+		pci_dma_sync_single(pdev, cmd->__data_mapping,
+				    cmd->request_bufflen, dma_dir);
+		break;
+	}
+}
+
+#define scsi_sg_dma_address(sc)		sg_dma_address(sc)
+#define scsi_sg_dma_len(sc)		sg_dma_len(sc)
+
+#endif	/* SCSI_NCR_DYNAMIC_DMA_MAPPING */
+
+#define unmap_scsi_data(np, cmd)	__unmap_scsi_data(np->pdev, cmd)
+#define map_scsi_single_data(np, cmd)	__map_scsi_single_data(np->pdev, cmd)
+#define map_scsi_sg_data(np, cmd)	__map_scsi_sg_data(np->pdev, cmd)
+#define sync_scsi_data(np, cmd)		__sync_scsi_data(np->pdev, cmd)
+
+
+/*
+ * Print out some buffer.
+ */
 static void ncr_print_hex(u_char *p, int n)
 {
 	while (n-- > 0)
@@ -915,21 +1234,49 @@ static void ncr_printl_hex(char *label, u_char *p, int n)
 /*
 **	Transfer direction
 **
-**	Low-level scsi drivers under Linux do not receive the expected 
-**	data transfer direction from upper scsi drivers.
-**	The driver will only check actual data direction for common 
-**	scsi opcodes. Other ones may cause problem, since they may 
-**	depend on device type or be vendor specific.
-**	I would prefer to never trust the device for data direction, 
-**	but that is not possible.
-**
-**	The original driver requires the expected direction to be known.
-**	The Linux version of the driver has been enhanced in order to 
-**	be able to transfer data in the direction choosen by the target. 
+**	Until some linux kernel version near 2.3.40, low-level scsi 
+**	drivers were not told about data transfer direction.
+**	We check the existence of this feature that has been expected 
+**	for a _long_ time by all SCSI driver developers by just 
+**	testing against the definition of SCSI_DATA_UNKNOWN. Indeed 
+**	this is a hack, but testing against a kernel version would 
+**	have been a shame. ;-)
 */
+#ifdef	SCSI_DATA_UNKNOWN
 
-#define XFER_IN		(1)
-#define XFER_OUT	(2)
+#define scsi_data_direction(cmd)	(cmd->sc_data_direction)
+
+#else
+
+#define	SCSI_DATA_UNKNOWN	0
+#define	SCSI_DATA_WRITE		1
+#define	SCSI_DATA_READ		2
+#define	SCSI_DATA_NONE		3
+
+static __inline__ scsi_data_direction(Scsi_Cmnd *cmd)
+{
+	int direction;
+
+	switch((int) cmd->cmnd[0]) {
+	case 0x08:  /*	READ(6)				08 */
+	case 0x28:  /*	READ(10)			28 */
+	case 0xA8:  /*	READ(12)			A8 */
+		direction = SCSI_DATA_READ;
+		break;
+	case 0x0A:  /*	WRITE(6)			0A */
+	case 0x2A:  /*	WRITE(10)			2A */
+	case 0xAA:  /*	WRITE(12)			AA */
+		direction = SCSI_DATA_WRITE;
+		break;
+	default:
+		direction = SCSI_DATA_UNKNOWN;
+		break;
+	}
+
+	return direction;
+}
+
+#endif	/* SCSI_DATA_UNKNOWN */
 
 /*
 **	Head of list of NCR boards
@@ -1039,6 +1386,7 @@ typedef struct {
 **	to save data on each detected board for ncr_attach().
 */
 typedef struct {
+	pcidev_t  pdev;
 	ncr_slot  slot;
 	ncr_chip  chip;
 	ncr_nvram *nvram;
@@ -1796,6 +2144,8 @@ struct ccb {
 	**----------------------------------------------------------------
 	*/
 	Scsi_Cmnd	*cmd;		/* SCSI command 		*/
+	u_char		cdb_buf[16];	/* Copy of CDB			*/
+	u_char		sense_buf[64];
 	int		data_len;	/* Total data length		*/
 	int		segments;	/* Number of SG segments	*/
 
@@ -1964,6 +2314,7 @@ struct ncb {
 	**	General controller parameters and configuration.
 	**----------------------------------------------------------------
 	*/
+	pcidev_t	pdev;
 	u_short		device_id;	/* PCI device id		*/
 	u_char		revision_id;	/* PCI device revision id	*/
 	u_char		bus;		/* PCI BUS number		*/
@@ -1995,7 +2346,8 @@ struct ncb {
 	**	SCRIPTS processor in order to start SCSI commands.
 	**----------------------------------------------------------------
 	*/
-	u_int32		*squeue;	/* Start queue			*/
+	u_long		p_squeue;	/* Start queue BUS address	*/
+	u_int32		*squeue;	/* Start queue virtual address	*/
 	u_short		squeueput;	/* Next free slot of the queue	*/
 	u_short		actccbs;	/* Number of allocated CCBs	*/
 	u_short		queuedepth;	/* Start queue depth		*/
@@ -2045,6 +2397,7 @@ struct ncb {
 	u_char		order;		/* Tag order to use		*/
 	u_char		verbose;	/* Verbosity for this controller*/
 	u_int32		ncr_cache;	/* Used for cache test at init.	*/
+	u_long		p_ncb;		/* BUS address of this NCB	*/
 
 	/*----------------------------------------------------------------
 	**	CCB lists and queue.
@@ -2085,7 +2438,7 @@ struct ncb {
 	**	We use a different scatter function for 896 rev 1.
 	**----------------------------------------------------------------
 	*/
-	int (*scatter) (ccb_p, Scsi_Cmnd *);
+	int (*scatter) (ncb_p, ccb_p, Scsi_Cmnd *);
 
 	/*----------------------------------------------------------------
 	**	Command abort handling.
@@ -2106,6 +2459,7 @@ struct ncb {
 	u_char		release_stage;	/* Synchronisation stage on release  */
 };
 
+#define NCB_PHYS(np, lbl)	 (np->p_ncb + offsetof(struct ncb, lbl))
 #define NCB_SCRIPT_PHYS(np,lbl)	 (np->p_script  + offsetof (struct script, lbl))
 #define NCB_SCRIPTH_PHYS(np,lbl) (np->p_scripth + offsetof (struct scripth,lbl))
 #define NCB_SCRIPTH0_PHYS(np,lbl) (np->p_scripth0+offsetof (struct scripth,lbl))
@@ -2336,8 +2690,8 @@ static	void	ncb_profile	(ncb_p np, ccb_p cp);
 static	void	ncr_script_copy_and_bind
 				(ncb_p np, ncrcmd *src, ncrcmd *dst, int len);
 static  void    ncr_script_fill (struct script * scr, struct scripth * scripth);
-static	int	ncr_scatter_896R1 (ccb_p cp, Scsi_Cmnd *cmd);
-static	int	ncr_scatter	(ccb_p cp, Scsi_Cmnd *cmd);
+static	int	ncr_scatter_896R1 (ncb_p np, ccb_p cp, Scsi_Cmnd *cmd);
+static	int	ncr_scatter	(ncb_p np, ccb_p cp, Scsi_Cmnd *cmd);
 static	void	ncr_getsync	(ncb_p np, u_char sfac, u_char *fakp, u_char *scntl3p);
 static	void	ncr_setsync	(ncb_p np, ccb_p cp, u_char scntl3, u_char sxfer);
 static	void	ncr_setup_tags	(ncb_p np, u_char tn, u_char ln);
@@ -4529,7 +4883,7 @@ ncr_script_copy_and_bind (ncb_p np,ncrcmd *src,ncrcmd *dst,int len)
 				new = (old & ~RELOC_MASK) + np->p_scripth;
 				break;
 			case RELOC_SOFTC:
-				new = (old & ~RELOC_MASK) + vtobus(np);
+				new = (old & ~RELOC_MASK) + np->p_ncb;
 				break;
 #ifdef	RELOC_KVAR
 			case RELOC_KVAR:
@@ -5191,10 +5545,12 @@ ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 	/*
 	**	Allocate the host control block.
 	*/
-	np = m_calloc(sizeof(struct ncb), "NCB", MEMO_WARN);
+	np = __m_calloc_dma(device->pdev, sizeof(struct ncb), "NCB");
 	if (!np)
 		goto attach_error;
 	NCR_INIT_LOCK_NCB(np);
+	np->pdev  = device->pdev;
+	np->p_ncb = __vtobus(device->pdev, np);
 	host_data->ncb = np;
 
 	/*
@@ -5218,22 +5574,23 @@ ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 	**	Allocate the start queue.
 	*/
 	np->squeue = (ncrcmd *)
-		m_calloc(sizeof(ncrcmd)*(MAX_START*2), "SQUEUE", MEMO_WARN);
+		m_calloc_dma(sizeof(ncrcmd)*(MAX_START*2), "SQUEUE");
 	if (!np->squeue)
 		goto attach_error;
+	np->p_squeue = vtobus(np->squeue);
 
 	/*
 	**	Allocate the done queue.
 	*/
 	np->dqueue = (ncrcmd *)
-		m_calloc(sizeof(ncrcmd)*(MAX_START*2), "DQUEUE", MEMO_WARN);
+		m_calloc_dma(sizeof(ncrcmd)*(MAX_START*2), "DQUEUE");
 	if (!np->dqueue)
 		goto attach_error;
 
 	/*
 	**	Allocate the target bus address array.
 	*/
-	np->targtbl = (u_int32 *) m_calloc(256, "TARGTBL", MEMO_WARN);
+	np->targtbl = (u_int32 *) m_calloc_dma(256, "TARGTBL");
 	if (!np->targtbl)
 		goto attach_error;
 
@@ -5241,11 +5598,11 @@ ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 	**	Allocate SCRIPTS areas
 	*/
 	np->script0	= (struct script *) 
-		m_calloc(sizeof(struct script),  "SCRIPT",  MEMO_WARN);
+		m_calloc_dma(sizeof(struct script),  "SCRIPT");
 	if (!np->script0)
 		goto attach_error;
 	np->scripth0	= (struct scripth *)
-		m_calloc(sizeof(struct scripth), "SCRIPTH", MEMO_WARN);
+		m_calloc_dma(sizeof(struct scripth), "SCRIPTH");
 	if (!np->scripth0)
 		goto attach_error;
 
@@ -5457,24 +5814,24 @@ ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 	*/
 	np->idletask.start	= cpu_to_scr(NCB_SCRIPT_PHYS (np, idle));
 	np->idletask.restart	= cpu_to_scr(NCB_SCRIPTH_PHYS (np, bad_i_t_l));
-	np->p_idletask		= vtobus(&np->idletask);
+	np->p_idletask		= NCB_PHYS(np, idletask);
 
 	np->notask.start	= cpu_to_scr(NCB_SCRIPT_PHYS (np, idle));
 	np->notask.restart	= cpu_to_scr(NCB_SCRIPTH_PHYS (np, bad_i_t_l));
-	np->p_notask		= vtobus(&np->notask);
+	np->p_notask		= NCB_PHYS(np, notask);
 
 	np->bad_i_t_l.start	= cpu_to_scr(NCB_SCRIPT_PHYS (np, idle));
 	np->bad_i_t_l.restart	= cpu_to_scr(NCB_SCRIPTH_PHYS (np, bad_i_t_l));
-	np->p_bad_i_t_l		= vtobus(&np->bad_i_t_l);
+	np->p_bad_i_t_l		= NCB_PHYS(np, bad_i_t_l);
 
 	np->bad_i_t_l_q.start	= cpu_to_scr(NCB_SCRIPT_PHYS (np, idle));
 	np->bad_i_t_l_q.restart	= cpu_to_scr(NCB_SCRIPTH_PHYS (np,bad_i_t_l_q));
-	np->p_bad_i_t_l_q	= vtobus(&np->bad_i_t_l_q);
+	np->p_bad_i_t_l_q	= NCB_PHYS(np, bad_i_t_l_q);
 
 	/*
 	**	Allocate and prepare the bad lun table.
 	*/
-	np->badluntbl = m_calloc(256, "BADLUNTBL", MEMO_WARN);
+	np->badluntbl = m_calloc_dma(256, "BADLUNTBL");
 	if (!np->badluntbl)
 		goto attach_error;
 
@@ -5482,16 +5839,16 @@ ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 	np->resel_badlun = cpu_to_scr(NCB_SCRIPTH_PHYS(np, bad_identify));
 
 	for (i = 0 ; i < 64 ; i++)
-		np->badluntbl[i] = cpu_to_scr(vtobus(&np->resel_badlun));
+		np->badluntbl[i] = cpu_to_scr(NCB_PHYS(np, resel_badlun));
 
 	/*
 	**	Prepare the target bus address array.
 	*/
 	np->scripth0->targtbl[0] = cpu_to_scr(vtobus(np->targtbl));
 	for (i = 0 ; i < MAX_TARGET ; i++) {
-		np->targtbl[i] = cpu_to_scr(vtobus(&np->target[i]));
+		np->targtbl[i] = cpu_to_scr(NCB_PHYS(np, target[i]));
 		np->target[i].b_luntbl = cpu_to_scr(vtobus(np->badluntbl));
-		np->target[i].b_lun0   = cpu_to_scr(vtobus(&np->resel_badlun));
+		np->target[i].b_lun0   = cpu_to_scr(NCB_PHYS(np, resel_badlun));
 	}
 
 	/*
@@ -5533,7 +5890,7 @@ ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 #ifndef SCSI_NCR_PROFILE_SUPPORT
 #define XXX	0
 #else
-#define XXX	3
+#define XXX	2
 #endif
 		np->script0->dataphase[XXX] = cpu_to_scr(SCR_JUMP);
 		np->script0->dataphase[XXX+1] = 
@@ -5699,21 +6056,21 @@ static void ncr_free_resources(ncb_p np)
 		unmap_pci_mem(np->base2_va, np->base2_ws);
 #endif
 	if (np->scripth0)
-		m_free(np->scripth0, sizeof(struct scripth), "SCRIPTH");
+		m_free_dma(np->scripth0, sizeof(struct scripth), "SCRIPTH");
 	if (np->script0)
-		m_free(np->script0, sizeof(struct script), "SCRIPT");
+		m_free_dma(np->script0, sizeof(struct script), "SCRIPT");
 	if (np->squeue)
-		m_free(np->squeue, sizeof(ncrcmd)*(MAX_START*2), "SQUEUE");
+		m_free_dma(np->squeue, sizeof(ncrcmd)*(MAX_START*2), "SQUEUE");
 	if (np->dqueue)
-		m_free(np->dqueue, sizeof(ncrcmd)*(MAX_START*2),"DQUEUE");
+		m_free_dma(np->dqueue, sizeof(ncrcmd)*(MAX_START*2),"DQUEUE");
 
 	while ((cp = np->ccbc) != NULL) {
 		np->ccbc = cp->link_ccb;
-		m_free(cp, sizeof(*cp), "CCB");
+		m_free_dma(cp, sizeof(*cp), "CCB");
 	}
 
 	if (np->badluntbl)
-		m_free(np->badluntbl, 256,"BADLUNTBL");
+		m_free_dma(np->badluntbl, 256,"BADLUNTBL");
 
 	for (target = 0; target < MAX_TARGET ; target++) {
 		tp = &np->target[target];
@@ -5722,18 +6079,23 @@ static void ncr_free_resources(ncb_p np)
 			if (!lp)
 				continue;
 			if (lp->tasktbl != &lp->tasktbl_0)
-				m_free(lp->tasktbl, MAX_TASKS*4, "TASKTBL");
+				m_free_dma(lp->tasktbl, MAX_TASKS*4, "TASKTBL");
 			if (lp->cb_tags)
 				m_free(lp->cb_tags, MAX_TAGS, "CB_TAGS");
-			m_free(lp, sizeof(*lp), "LCB");
+			m_free_dma(lp, sizeof(*lp), "LCB");
 		}
 #if MAX_LUN > 1
 		if (tp->lmp)
 			m_free(tp->lmp, MAX_LUN * sizeof(lcb_p), "LMP");
+		if (tp->luntbl)
+			m_free_dma(tp->luntbl, 256, "LUNTBL");
 #endif 
 	}
 
-	m_free(np, sizeof(*np), "NCB");
+	if (np->targtbl)
+		m_free_dma(np->targtbl, 256, "TARGTBL");
+
+	m_free_dma(np, sizeof(*np), "NCB");
 }
 
 
@@ -5761,13 +6123,14 @@ static inline void ncr_queue_done_cmd(ncb_p np, Scsi_Cmnd *cmd)
 	np->done_list = cmd;
 }
 
-static inline void ncr_flush_done_cmds(Scsi_Cmnd *lcmd)
+static inline void ncr_flush_done_cmds(pcidev_t pdev, Scsi_Cmnd *lcmd)
 {
 	Scsi_Cmnd *cmd;
 
 	while (lcmd) {
 		cmd = lcmd;
 		lcmd = (Scsi_Cmnd *) cmd->host_scribble;
+		__unmap_scsi_data(pdev, cmd);
 		cmd->scsi_done(cmd);
 	}
 }
@@ -6013,7 +6376,7 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 	**----------------------------------------------------
 	*/
 
-	cp->segments = segments = np->scatter (cp, cp->cmd);
+	cp->segments = segments = np->scatter (np, cp, cp->cmd);
 
 	if (segments < 0) {
 		ncr_free_ccb(np, cp);
@@ -6027,61 +6390,34 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 	**----------------------------------------------------
 	*/
 	if (!cp->data_len)
-		direction = 0;
-	else {
-		switch((int) cmd->cmnd[0]) {
-		case 0x08:  /*	READ(6)				08 */
-		case 0x28:  /*	READ(10)			28 */
-		case 0xA8:  /*	READ(12)			A8 */
-			direction = XFER_IN;
-			break;
-		case 0x0A:  /*	WRITE(6)			0A */
-		case 0x2A:  /*	WRITE(10)			2A */
-		case 0xAA:  /*	WRITE(12)			AA */
-			direction = XFER_OUT;
-			break;
-		default:
-			direction = (XFER_IN|XFER_OUT);
-			break;
-		}
-	}
-
-	/*----------------------------------------------------
-	**
-	**	Set the DATA POINTER.
-	**
-	**----------------------------------------------------
-	*/
+		direction = SCSI_DATA_NONE;
+	else
+		direction = scsi_data_direction(cmd);
 
 	/*
-	**	Default to no data transfer.
+	**	If data direction is UNKNOWN, speculate DATA_READ 
+	**	but prepare alternate pointers for WRITE in case 
+	**	of our speculation will be just wrong.
+	**	SCRIPTS will swap values if needed.
 	*/
-	lastp = goalp = NCB_SCRIPTH_PHYS (np, no_data);
-
-	/*
-	**	Compute data out pointers, if needed.
-	*/
-	if (direction & XFER_OUT) {
+	switch(direction) {
+	case SCSI_DATA_UNKNOWN:
+	case SCSI_DATA_WRITE:
 		goalp = NCB_SCRIPT_PHYS (np, data_out2) + 8;
 		lastp = goalp - 8 - (segments * (SCR_SG_SIZE*4));
-
-		/*
-		**	If actual data direction is unknown, save pointers 
-		**	in header. The SCRIPTS will swap them to current 
-		**	if target decision will be data out.
-		*/
-		if (direction & XFER_IN) {
-			cp->phys.header.wgoalp	= cpu_to_scr(goalp);
-			cp->phys.header.wlastp	= cpu_to_scr(lastp);
-		}
-	}
-
-	/*
-	**	Compute data in pointers, if needed.
-	*/
-	if (direction & XFER_IN) {
+		if (direction != SCSI_DATA_UNKNOWN)
+			break;
+		cp->phys.header.wgoalp	= cpu_to_scr(goalp);
+		cp->phys.header.wlastp	= cpu_to_scr(lastp);
+		/* fall through */
+	case SCSI_DATA_READ:
 		goalp = NCB_SCRIPT_PHYS (np, data_in2) + 8;
 		lastp = goalp - 8 - (segments * (SCR_SG_SIZE*4));
+		break;
+	default:
+	case SCSI_DATA_NONE:
+		lastp = goalp = NCB_SCRIPTH_PHYS (np, no_data);
+		break;
 	}
 
 	/*
@@ -6091,7 +6427,7 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 	cp->phys.header.lastp = cpu_to_scr(lastp);
 	cp->phys.header.goalp = cpu_to_scr(goalp);
 
-	if ((direction & (XFER_IN|XFER_OUT)) == (XFER_IN|XFER_OUT))
+	if (direction == SCSI_DATA_UNKNOWN)
 		cp->phys.header.savep = 
 			cpu_to_scr(NCB_SCRIPTH_PHYS (np, data_io));
 	else
@@ -6152,7 +6488,8 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 	/*
 	**	command
 	*/
-	cp->phys.cmd.addr	= cpu_to_scr(vtobus (&cmd->cmnd[0]));
+	memcpy(cp->cdb_buf, cmd->cmnd, cmd->cmd_len);
+	cp->phys.cmd.addr	= cpu_to_scr(CCB_PHYS (cp, cdb_buf[0]));
 	cp->phys.cmd.size	= cpu_to_scr(cmd->cmd_len);
 
 	/*
@@ -6719,6 +7056,7 @@ void ncr_complete (ncb_p np, ccb_p cp)
 		*/
 		if (cmd->cmnd[0] == 0x12 && !(cmd->cmnd[1] & 0x3) &&
 		    cmd->cmnd[4] >= 7 && !cmd->use_sg) {
+			sync_scsi_data(np, cmd);	/* SYNC the data */
 			ncr_setup_lcb (np, cp->target, cp->lun,
 				       (char *) cmd->request_buffer);
 		}
@@ -6941,7 +7279,7 @@ void ncr_init (ncb_p np, int reset, char * msg, u_long code)
 	/*
 	**	Clear Start Queue
 	*/
-	phys = vtobus(np->squeue);
+	phys = np->p_squeue;
 	np->queuedepth = MAX_START - 1;	/* 1 entry needed as end marker */
 	for (i = 0; i < MAX_START*2; i += 2) {
 		np->squeue[i]   = cpu_to_scr(np->p_idletask);
@@ -7131,7 +7469,7 @@ void ncr_init (ncb_p np, int reset, char * msg, u_long code)
 
 	np->istat_sem = 0;
 
-	OUTL (nc_dsa, vtobus(np));
+	OUTL (nc_dsa, np->p_ncb);
 	OUTL (nc_dsp, phys);
 }
 
@@ -8733,7 +9071,7 @@ static void ncr_sir_to_redo(ncb_p np, int num, ccb_p cp)
 	**	them back in the LUN CCB wait queue.
 	*/
 	busyccbs = lp->queuedccbs;
-	i = (INL (nc_scratcha) - vtobus(np->squeue)) / 4;
+	i = (INL (nc_scratcha) - np->p_squeue) / 4;
 	j = i;
 	while (i != np->squeueput) {
 		cp2 = ncr_ccb_from_dsa(np, scr_to_cpu(np->squeue[i]));
@@ -8888,11 +9226,9 @@ next:
 		/*
 		**	sense data
 		*/
-		bzero(cmd->sense_buffer, sizeof(cmd->sense_buffer));
-		cp->phys.sense.addr	=
-				cpu_to_scr(vtobus (&cmd->sense_buffer[0]));
-		cp->phys.sense.size	=
-				cpu_to_scr(sizeof(cmd->sense_buffer));
+		bzero(cp->sense_buf, sizeof(cp->sense_buf));
+		cp->phys.sense.addr	= cpu_to_scr(CCB_PHYS(cp,sense_buf[0]));
+		cp->phys.sense.size	= cpu_to_scr(sizeof(cp->sense_buf));
 
 		/*
 		**	requeue the command.
@@ -9073,7 +9409,7 @@ static void ncr_sir_task_recovery(ncb_p np, int num)
 			np->abrt_sel.sel_id	= target;
 			np->abrt_sel.sel_scntl3 = tp->wval;
 			np->abrt_sel.sel_sxfer  = tp->sval;
-			OUTL(nc_dsa, vtobus(np));
+			OUTL(nc_dsa, np->p_ncb);
 			OUTL (nc_dsp, NCB_SCRIPTH_PHYS (np, sel_for_abort));
 			return;
 		}
@@ -9114,7 +9450,7 @@ static void ncr_sir_task_recovery(ncb_p np, int num)
 			**	Compute index of next position in the start 
 			**	queue the SCRIPTS will schedule.
 			*/
-			i = (INL (nc_scratcha) - vtobus(np->squeue)) / 4;
+			i = (INL (nc_scratcha) - np->p_squeue) / 4;
 
 			/*
 			**	Remove the job from the start queue.
@@ -9315,11 +9651,17 @@ static void ncr_sir_task_recovery(ncb_p np, int num)
 	*/
 	case SIR_AUTO_SENSE_DONE:
 		cp = ncr_ccb_from_dsa(np, INL (nc_dsa));
+		if (!cp)
+			break;
+		memcpy(cp->cmd->sense_buffer, cp->sense_buf,
+		       sizeof(cp->cmd->sense_buffer));
 		p  = &cp->cmd->sense_buffer[0];
 
 		if (p[0] != 0x70 || p[2] != 0x6 || p[12] != 0x29)
 			break;
+#if 0
 		(void) ncr_clear_tasks(np, HS_RESET, cp->target, cp->lun, -1);
+#endif
 		break;
 	}
 
@@ -10036,6 +10378,7 @@ void ncr_int_sir (ncb_p np)
 	case SIR_SCRIPT_STOPPED:
 	case SIR_TARGET_SELECTED:
 	case SIR_ABORT_SENT:
+	case SIR_AUTO_SENSE_DONE:
 		ncr_sir_task_recovery(np, num);
 		return;
 	/*
@@ -10397,7 +10740,7 @@ static ccb_p ncr_alloc_ccb(ncb_p np)
 	/*
 	**	Allocate memory for this CCB.
 	*/
-	cp = m_calloc(sizeof(struct ccb), "CCB", MEMO_WARN);
+	cp = m_calloc_dma(sizeof(struct ccb), "CCB");
 	if (!cp)
 		return 0;
 
@@ -10427,7 +10770,7 @@ static ccb_p ncr_alloc_ccb(ncb_p np)
 	/*
 	**	Initilialyze some other fields.
 	*/
-	cp->phys.smsg_ext.addr = cpu_to_scr(vtobus(&np->msgin[2]));
+	cp->phys.smsg_ext.addr = cpu_to_scr(NCB_PHYS(np, msgin[2]));
 
 	/*
 	**	Chain into wakeup list and free ccb queue.
@@ -10519,11 +10862,11 @@ static lcb_p ncr_alloc_lcb (ncb_p np, u_char tn, u_char ln)
 	if (ln && !tp->luntbl) {
 		int i;
 
-		tp->luntbl = m_calloc(256, "LUNTBL", MEMO_WARN);
+		tp->luntbl = m_calloc_dma(256, "LUNTBL");
 		if (!tp->luntbl)
 			goto fail;
 		for (i = 0 ; i < 64 ; i++)
-			tp->luntbl[i] = cpu_to_scr(vtobus(&np->resel_badlun));
+			tp->luntbl[i] = cpu_to_scr(NCB_PHYS(np, resel_badlun));
 		tp->b_luntbl = cpu_to_scr(vtobus(tp->luntbl));
 	}
 
@@ -10531,7 +10874,7 @@ static lcb_p ncr_alloc_lcb (ncb_p np, u_char tn, u_char ln)
 	**	Allocate the table of pointers for LUN(s) > 0, if needed.
 	*/
 	if (ln && !tp->lmp) {
-		tp->lmp = m_calloc(MAX_LUN * sizeof(lcb_p), "LMP", MEMO_WARN);
+		tp->lmp = m_calloc(MAX_LUN * sizeof(lcb_p), "LMP");
 		if (!tp->lmp)
 			goto fail;
 	}
@@ -10540,7 +10883,7 @@ static lcb_p ncr_alloc_lcb (ncb_p np, u_char tn, u_char ln)
 	**	Allocate the lcb.
 	**	Make it available to the chip.
 	*/
-	lp = m_calloc(sizeof(struct lcb), "LCB", MEMO_WARN);
+	lp = m_calloc_dma(sizeof(struct lcb), "LCB");
 	if (!lp)
 		goto fail;
 	if (ln) {
@@ -10652,7 +10995,7 @@ static lcb_p ncr_setup_lcb (ncb_p np, u_char tn, u_char ln, u_char *inq_data)
 	**	initialyze the task table if not yet.
 	*/
 	if ((inq_byte7 & INQ7_QUEUE) && lp->tasktbl == &lp->tasktbl_0) {
-		lp->tasktbl = m_calloc(MAX_TASKS*4, "TASKTBL", MEMO_WARN);
+		lp->tasktbl = m_calloc_dma(MAX_TASKS*4, "TASKTBL");
 		if (!lp->tasktbl) {
 			lp->tasktbl = &lp->tasktbl_0;
 			goto fail;
@@ -10661,7 +11004,7 @@ static lcb_p ncr_setup_lcb (ncb_p np, u_char tn, u_char ln, u_char *inq_data)
 		for (i = 0 ; i < MAX_TASKS ; i++)
 			lp->tasktbl[i] = cpu_to_scr(np->p_notask);
 
-		lp->cb_tags = m_calloc(MAX_TAGS, "CB_TAGS", MEMO_WARN);
+		lp->cb_tags = m_calloc(MAX_TAGS, "CB_TAGS");
 		if (!lp->cb_tags)
 			goto fail;
 		for (i = 0 ; i < MAX_TAGS ; i++)
@@ -10741,7 +11084,7 @@ fail:
 
 #define CROSS_16MB(p, n) (((((u_long) p) + n - 1) ^ ((u_long) p)) & ~0xffffff)
 
-static	int ncr_scatter_no_sglist(ccb_p cp, Scsi_Cmnd *cmd)
+static	int ncr_scatter_no_sglist(ncb_p np, ccb_p cp, Scsi_Cmnd *cmd)
 {
 	struct scr_tblmove *data = &cp->phys.data[MAX_SCATTER-1];
 	int segment;
@@ -10749,7 +11092,8 @@ static	int ncr_scatter_no_sglist(ccb_p cp, Scsi_Cmnd *cmd)
 	cp->data_len = cmd->request_bufflen;
 
 	if (cmd->request_bufflen) {
-		u_long baddr = vtobus(cmd->request_buffer);
+		u_long baddr = map_scsi_single_data(np, cmd);
+
 		SCATTER_ONE(data, baddr, cmd->request_bufflen);
 		if (CROSS_16MB(baddr, cmd->request_bufflen)) {
 			cp->host_flags |= HF_PM_TO_C;
@@ -10780,7 +11124,7 @@ printk("He! we are crossing a 16 MB boundary (0x%lx, 0x%x)\n",
 **	nicely power-of-two sized and aligned. But, since this may change 
 **	at any time, a work-around was required.
 */
-static int ncr_scatter_896R1(ccb_p cp, Scsi_Cmnd *cmd)
+static int ncr_scatter_896R1(ncb_p np, ccb_p cp, Scsi_Cmnd *cmd)
 {
 	int segn;
 	int use_sg = (int) cmd->use_sg;
@@ -10788,18 +11132,23 @@ static int ncr_scatter_896R1(ccb_p cp, Scsi_Cmnd *cmd)
 	cp->data_len = 0;
 
 	if (!use_sg)
-		segn = ncr_scatter_no_sglist(cp, cmd);
+		segn = ncr_scatter_no_sglist(np, cp, cmd);
 	else if (use_sg > MAX_SCATTER)
 		segn = -1;
 	else {
 		struct scatterlist *scatter = (struct scatterlist *)cmd->buffer;
-		struct scr_tblmove *data = &cp->phys.data[MAX_SCATTER - use_sg];
+		struct scr_tblmove *data;
+
+		use_sg = map_scsi_sg_data(np, cmd);
+		data = &cp->phys.data[MAX_SCATTER - use_sg];
 
 		for (segn = 0; segn < use_sg; segn++) {
-			u_long baddr = vtobus(scatter[segn].address);
+			u_long baddr = scsi_sg_dma_address(&scatter[segn]);
+			unsigned int len = scsi_sg_dma_len(&scatter[segn]);
+
 			SCATTER_ONE(&data[segn],
 				    baddr,
-				    scatter[segn].length);
+				    len);
 			if (CROSS_16MB(baddr, scatter[segn].length)) {
 				cp->host_flags |= HF_PM_TO_C;
 #ifdef DEBUG_896R1
@@ -10807,14 +11156,14 @@ printk("He! we are crossing a 16 MB boundary (0x%lx, 0x%x)\n",
 	baddr, scatter[segn].length);
 #endif
 			}
-			cp->data_len += scatter[segn].length;
+			cp->data_len += len;
 		}
 	}
 
 	return segn;
 }
 
-static int ncr_scatter(ccb_p cp, Scsi_Cmnd *cmd)
+static int ncr_scatter(ncb_p np, ccb_p cp, Scsi_Cmnd *cmd)
 {
 	int segment;
 	int use_sg = (int) cmd->use_sg;
@@ -10822,19 +11171,24 @@ static int ncr_scatter(ccb_p cp, Scsi_Cmnd *cmd)
 	cp->data_len = 0;
 
 	if (!use_sg)
-		segment = ncr_scatter_no_sglist(cp, cmd);
+		segment = ncr_scatter_no_sglist(np, cp, cmd);
 	else if (use_sg > MAX_SCATTER)
 		segment = -1;
 	else {
 		struct scatterlist *scatter = (struct scatterlist *)cmd->buffer;
-		struct scr_tblmove *data = &cp->phys.data[MAX_SCATTER - use_sg];
+		struct scr_tblmove *data;
+
+		use_sg = map_scsi_sg_data(np, cmd);
+		data = &cp->phys.data[MAX_SCATTER - use_sg];
 
 		for (segment = 0; segment < use_sg; segment++) {
-			u_long baddr = vtobus(scatter[segment].address);
+			u_long baddr = scsi_sg_dma_address(&scatter[segment]);
+			unsigned int len = scsi_sg_dma_len(&scatter[segment]);
+
 			SCATTER_ONE(&data[segment],
 				    baddr,
-				    scatter[segment].length);
-			cp->data_len += scatter[segment].length;
+				    len);
+			cp->data_len += len;
 		}
 	}
 
@@ -10901,7 +11255,7 @@ static int __init ncr_snooptest (struct ncb* np)
 	/*
 	**	Start script (exchange values)
 	*/
-	OUTL (nc_dsa, vtobus(np));
+	OUTL (nc_dsa, np->p_ncb);
 	OUTL (nc_dsp, pc);
 	/*
 	**	Wait 'til done (with timeout)
@@ -11580,7 +11934,7 @@ if (sym53c8xx)
 	**	overflow the kernel stack.
 	**	1 x 4K PAGE is enough for more than 40 devices for i386.
 	*/
-	devtbl = m_calloc(PAGE_SIZE, "devtbl", MEMO_WARN);
+	devtbl = m_calloc(PAGE_SIZE, "devtbl");
 	if (!devtbl)
 		return 0;
 
@@ -11745,6 +12099,15 @@ sym53c8xx_pci_init(Scsi_Host_Template *tpnt, pcidev_t pdev, ncr_device *device)
 		PciBusNumber(pdev),
 		(int) (PciDeviceFn(pdev) & 0xf8) >> 3,
 		(int) (PciDeviceFn(pdev) & 7));
+
+#ifdef SCSI_NCR_DYNAMIC_DMA_MAPPING
+	if (!pci_dma_supported(pdev, (dma_addr_t) (0xffffffffUL))) {
+		printk(KERN_WARNING NAME53C8XX
+		       "32 BIT PCI BUS DMA ADDRESSING NOT SUPPORTED\n");
+		return -1;
+	}
+#endif
+
 	/*
 	**    Read info from the PCI config space.
 	**    pci_read_config_xxx() functions are assumed to be used for 
@@ -12032,6 +12395,7 @@ sym53c8xx_pci_init(Scsi_Host_Template *tpnt, pcidev_t pdev, ncr_device *device)
  	/*
 	**    Initialise ncr_device structure with items required by ncr_attach.
 	*/
+	device->pdev		= pdev;
 	device->slot.bus	= PciBusNumber(pdev);
 	device->slot.device_fn	= PciDeviceFn(pdev);
 	device->slot.base	= base;
@@ -12232,6 +12596,10 @@ printk("sym53c8xx_queue_command\n");
      cmd->host_scribble = NULL;
      cmd->SCp.ptr       = NULL;
      cmd->SCp.buffer    = NULL;
+#ifdef SCSI_NCR_DYNAMIC_DMA_MAPPING
+     cmd->__data_mapped = 0;
+     cmd->__data_mapping = 0;
+#endif
 
      NCR_LOCK_NCB(np, flags);
 
@@ -12267,6 +12635,7 @@ static void sym53c8xx_intr(int irq, void *dev_id, struct pt_regs * regs)
      unsigned long flags;
      ncb_p np = (ncb_p) dev_id;
      Scsi_Cmnd *done_list;
+     pcidev_t pdev;
 
 #ifdef DEBUG_SYM53C8XX
      printk("sym53c8xx : interrupt received\n");
@@ -12276,6 +12645,7 @@ static void sym53c8xx_intr(int irq, void *dev_id, struct pt_regs * regs)
 
      NCR_LOCK_NCB(np, flags);
      ncr_exception(np);
+     pdev = np->pdev;
      done_list     = np->done_list;
      np->done_list = 0;
      NCR_UNLOCK_NCB(np, flags);
@@ -12284,7 +12654,7 @@ static void sym53c8xx_intr(int irq, void *dev_id, struct pt_regs * regs)
 
      if (done_list) {
           NCR_LOCK_SCSI_DONE(np, flags);
-          ncr_flush_done_cmds(done_list);
+          ncr_flush_done_cmds(pdev, done_list);
           NCR_UNLOCK_SCSI_DONE(np, flags);
      }
 }
@@ -12297,17 +12667,19 @@ static void sym53c8xx_timeout(unsigned long npref)
 {
      ncb_p np = (ncb_p) npref;
      unsigned long flags;
+     pcidev_t pdev;
      Scsi_Cmnd *done_list;
 
      NCR_LOCK_NCB(np, flags);
      ncr_timeout((ncb_p) np);
+     pdev = np->pdev;
      done_list     = np->done_list;
      np->done_list = 0;
      NCR_UNLOCK_NCB(np, flags);
 
      if (done_list) {
           NCR_LOCK_SCSI_DONE(np, flags);
-          ncr_flush_done_cmds(done_list);
+          ncr_flush_done_cmds(pdev, done_list);
           NCR_UNLOCK_SCSI_DONE(np, flags);
      }
 }
@@ -12325,6 +12697,7 @@ int sym53c8xx_reset(Scsi_Cmnd *cmd)
 	ncb_p np = ((struct host_data *) cmd->host->hostdata)->ncb;
 	int sts;
 	unsigned long flags;
+	pcidev_t pdev;
 	Scsi_Cmnd *done_list;
 
 #if defined SCSI_RESET_SYNCHRONOUS && defined SCSI_RESET_ASYNCHRONOUS
@@ -12369,11 +12742,12 @@ int sym53c8xx_reset(Scsi_Cmnd *cmd)
 #endif
 
 out:
+	pdev = np->pdev;
 	done_list     = np->done_list;
 	np->done_list = 0;
 	NCR_UNLOCK_NCB(np, flags);
 
-	ncr_flush_done_cmds(done_list);
+	ncr_flush_done_cmds(pdev, done_list);
 
 	return sts;
 }
@@ -12387,6 +12761,7 @@ int sym53c8xx_abort(Scsi_Cmnd *cmd)
 	ncb_p np = ((struct host_data *) cmd->host->hostdata)->ncb;
 	int sts;
 	unsigned long flags;
+	pcidev_t pdev;
 	Scsi_Cmnd *done_list;
 
 #if defined SCSI_RESET_SYNCHRONOUS && defined SCSI_RESET_ASYNCHRONOUS
@@ -12410,11 +12785,12 @@ int sym53c8xx_abort(Scsi_Cmnd *cmd)
 
 	sts = ncr_abort_command(np, cmd);
 out:
+	pdev = np->pdev;
 	done_list     = np->done_list;
 	np->done_list = 0;
 	NCR_UNLOCK_NCB(np, flags);
 
-	ncr_flush_done_cmds(done_list);
+	ncr_flush_done_cmds(pdev, done_list);
 
 	return sts;
 }

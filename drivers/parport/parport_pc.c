@@ -681,6 +681,7 @@ size_t parport_pc_compat_write_block_pio (struct parport *port,
 
 	/* Set up parallel port FIFO mode.*/
 	parport_pc_data_forward (port); /* Must be in PS2 mode */
+	parport_pc_frob_control (port, PARPORT_CONTROL_STROBE, 0);
 	change_mode (port, ECR_PPF); /* Parallel port FIFO */
 	port->physport->ieee1284.phase = IEEE1284_PH_FWD_DATA;
 
@@ -747,6 +748,10 @@ size_t parport_pc_ecp_write_block_pio (struct parport *port,
 
 	/* Set up ECP parallel port mode.*/
 	parport_pc_data_forward (port); /* Must be in PS2 mode */
+	parport_pc_frob_control (port,
+				 PARPORT_CONTROL_STROBE |
+				 PARPORT_CONTROL_AUTOFD,
+				 0);
 	change_mode (port, ECR_ECP); /* ECP FIFO */
 	port->physport->ieee1284.phase = IEEE1284_PH_FWD_DATA;
 
@@ -850,6 +855,10 @@ size_t parport_pc_ecp_read_block_pio (struct parport *port,
 
 	/* Set up ECP parallel port mode.*/
 	parport_pc_data_reverse (port); /* Must be in PS2 mode */
+	parport_pc_frob_control (port,
+				 PARPORT_CONTROL_STROBE |
+				 PARPORT_CONTROL_AUTOFD,
+				 0);
 	change_mode (port, ECR_ECP); /* ECP FIFO */
 	port->ieee1284.phase = IEEE1284_PH_REV_DATA;
 
@@ -1693,9 +1702,7 @@ struct parport *__maybe_init parport_pc_probe_port (unsigned long int base,
 #endif /* CONFIG_PARPORT_PC_FIFO */
 	}
 
-	/* Done probing.  Now put the port into a sensible start-up state.
-	 * SELECT | INIT also puts IEEE1284-compliant devices into
-	 * compatibility mode. */
+	/* Done probing.  Now put the port into a sensible start-up state. */
 	if (priv->ecr)
 		/*
 		 * Put the ECP detected port in PS2 mode.

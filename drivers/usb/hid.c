@@ -1408,19 +1408,16 @@ static struct usb_driver hid_driver = {
 	disconnect:	hid_disconnect
 };
 
-#ifdef MODULE
-void cleanup_module(void)
-{
-	usb_deregister(&hid_driver);
-}
-
-int init_module(void)
-#else
-int hid_init(void)
-#endif
+static int __init hid_init(void)
 {
 	usb_register(&hid_driver);
 	return 0;
 }
 
-__initcall(hid_init);
+static void __exit hid_exit(void)
+{
+	usb_deregister(&hid_driver);
+}
+
+module_init(hid_init);
+module_exit(hid_exit);

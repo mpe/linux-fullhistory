@@ -192,7 +192,7 @@ extern int lvm_init(void);
 static void lvm_dummy_device_request(request_queue_t *);
 #define	DEVICE_REQUEST	lvm_dummy_device_request
 
-static void lvm_make_request_fn(int, struct buffer_head*);
+static int lvm_make_request_fn(request_queue_t *, int, struct buffer_head*);
 
 static int lvm_blk_ioctl(struct inode *, struct file *, uint, ulong);
 static int lvm_blk_open(struct inode *, struct file *);
@@ -1292,14 +1292,14 @@ static int lvm_proc_get_info(char *page, char **start, off_t pos, int count)
  */
 static int lvm_map(struct buffer_head *bh, int rw)
 {
-	int minor = MINOR(bh->b_dev);
+	int minor = MINOR(bh->b_rdev);
 	int ret = 0;
 	ulong index;
 	ulong pe_start;
 	ulong size = bh->b_size >> 9;
-	ulong rsector_tmp = bh->b_blocknr * size;
+	ulong rsector_tmp = bh->b_rsector;
 	ulong rsector_sav;
-	kdev_t rdev_tmp = bh->b_dev;
+	kdev_t rdev_tmp = bh->b_rdev;
 	kdev_t rdev_sav;
 	lv_t *lv = vg[VG_BLK(minor)]->lv[LV_BLK(minor)];
 
@@ -1513,11 +1513,10 @@ static void lvm_dummy_device_request(request_queue_t * t)
 /*
  * make request function
  */
-static void lvm_make_request_fn(int rw, struct buffer_head *bh)
+static int lvm_make_request_fn(request_queue_t *q, int rw, struct buffer_head *bh)
 {
 	lvm_map(bh, rw);
-	if (bh->b_rdev != MD_MAJOR) generic_make_request(rw, bh); 
-	return;
+	return 1;
 }
 
 

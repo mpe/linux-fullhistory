@@ -226,8 +226,7 @@ asmlinkage long sys_reboot(int magic1, int magic2, int cmd, void * arg)
 	default:
 		unlock_kernel();
 		return -EINVAL;
-		break;
-	};
+	}
 	unlock_kernel();
 	return 0;
 }

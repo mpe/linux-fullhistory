@@ -752,8 +752,8 @@ static void __exit sixpack_cleanup_driver(void)
 				 * VSV = if dev->start==0, then device
 				 * unregistered while close proc.
 				 */ 
-				if (netif_running(sixpack_ctrls[i]->dev))
-					unregister_netdev(&(sixpack_ctrls[i]->dev));
+				if (netif_running(&sixpack_ctrls[i]->dev))
+					unregister_netdev(&sixpack_ctrls[i]->dev);
 
 				kfree(sixpack_ctrls[i]);
 				sixpack_ctrls[i] = NULL;

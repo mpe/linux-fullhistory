@@ -66,6 +66,7 @@ extern void load_up_altivec(struct task_struct *);
 extern void cvt_fd(float *from, double *to, unsigned long *fpscr);
 extern void cvt_df(double *from, float *to, unsigned long *fpscr);
 extern int call_rtas(const char *, int, int, unsigned long *, ...);
+extern int abs(int);
 
 struct device_node;
 extern void note_scsi_host(struct device_node *, void *);

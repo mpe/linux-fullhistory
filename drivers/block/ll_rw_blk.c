@@ -952,96 +952,122 @@ end_io:
 	bh->b_end_io(bh, test_bit(BH_Uptodate, &bh->b_state));
 }
 
-void generic_make_request(int rw, struct buffer_head * bh)
+static inline void buffer_IO_error(struct buffer_head * bh)
 {
-	request_queue_t * q;
+	mark_buffer_clean(bh);
+	/*
+	 * b_end_io has to clear the BH_Uptodate bitflag in the error case!
+	 */
+	bh->b_end_io(bh, 0);
+}
+
+int generic_make_request (request_queue_t *q, int rw, struct buffer_head * bh)
+{
 	unsigned long flags;
+	int ret;
 
-	q = blk_get_queue(bh->b_rdev);
+	/*
+	 * Resolve the mapping until finished. (drivers are
+	 * still free to implement/resolve their own stacking
+	 * by explicitly returning 0)
+	 */
 
+	while (q->make_request_fn) {
+		ret = q->make_request_fn(q, rw, bh);
+		if (ret > 0) {
+			q = blk_get_queue(bh->b_rdev);
+			continue;
+		}
+		return ret;
+	}
+	/*
+	 * Does the block device want us to queue
+	 * the IO request? (normal case)
+	 */
 	__make_request(q, rw, bh);
-
 	spin_lock_irqsave(&io_request_lock,flags);
 	if (q && !q->plugged)
 		(q->request_fn)(q);
 	spin_unlock_irqrestore(&io_request_lock,flags);
-}
 
+	return 0;
+}
 
 /* This function can be used to request a number of buffers from a block
    device. Currently the only restriction is that all buffers must belong to
    the same device */
 
-static void __ll_rw_block(int rw, int nr, struct buffer_head * bh[],int haslock)
+static void __ll_rw_block(int rw, int nr, struct buffer_head * bhs[],
+								int haslock)
 {
+	struct buffer_head *bh;
+	request_queue_t *q;
 	unsigned int major;
 	int correct_size;
-	request_queue_t *q;
 	int i;
 
-	major = MAJOR(bh[0]->b_dev);
-	q = blk_get_queue(bh[0]->b_dev);
+	major = MAJOR(bhs[0]->b_dev);
+	q = blk_get_queue(bhs[0]->b_dev);
 	if (!q) {
 		printk(KERN_ERR
 	"ll_rw_block: Trying to read nonexistent block-device %s (%ld)\n",
-		kdevname(bh[0]->b_dev), bh[0]->b_blocknr);
+		kdevname(bhs[0]->b_dev), bhs[0]->b_blocknr);
 		goto sorry;
 	}
 
 	/* Determine correct block size for this device. */
 	correct_size = BLOCK_SIZE;
 	if (blksize_size[major]) {
-		i = blksize_size[major][MINOR(bh[0]->b_dev)];
+		i = blksize_size[major][MINOR(bhs[0]->b_dev)];
 		if (i)
 			correct_size = i;
 	}
 
 	/* Verify requested block sizes. */
 	for (i = 0; i < nr; i++) {
-		if (bh[i]->b_size != correct_size) {
+		bh = bhs[i];
+		if (bh->b_size != correct_size) {
 			printk(KERN_NOTICE "ll_rw_block: device %s: "
 			       "only %d-char blocks implemented (%u)\n",
-			       kdevname(bh[0]->b_dev),
-			       correct_size, bh[i]->b_size);
+			       kdevname(bhs[0]->b_dev),
+			       correct_size, bh->b_size);
 			goto sorry;
 		}
 	}
 
-	if ((rw & WRITE) && is_read_only(bh[0]->b_dev)) {
+	if ((rw & WRITE) && is_read_only(bhs[0]->b_dev)) {
 		printk(KERN_NOTICE "Can't write to read-only device %s\n",
-		       kdevname(bh[0]->b_dev));
+		       kdevname(bhs[0]->b_dev));
 		goto sorry;
 	}
 
 	for (i = 0; i < nr; i++) {
+		bh = bhs[i];
+
 		/* Only one thread can actually submit the I/O. */
 		if (haslock) {
-			if (!buffer_locked(bh[i]))
+			if (!buffer_locked(bh))
 				BUG();
 		} else {
-			if (test_and_set_bit(BH_Lock, &bh[i]->b_state))
+			if (test_and_set_bit(BH_Lock, &bh->b_state))
 				continue;
 		}
-		set_bit(BH_Req, &bh[i]->b_state);
+		set_bit(BH_Req, &bh->b_state);
 
-		if (q->make_request_fn)
-			q->make_request_fn(rw, bh[i]);
-		else {
-			bh[i]->b_rdev = bh[i]->b_dev;
-			bh[i]->b_rsector = bh[i]->b_blocknr*(bh[i]->b_size>>9);
+		/*
+		 * First step, 'identity mapping' - RAID or LVM might
+		 * further remap this.
+		 */
+		bh->b_rdev = bh->b_dev;
+		bh->b_rsector = bh->b_blocknr * (bh->b_size>>9);
 
-			generic_make_request(rw, bh[i]);
-		}
+		generic_make_request(q, rw, bh);
 	}
-
 	return;
 
 sorry:
-	for (i = 0; i < nr; i++) {
-		mark_buffer_clean(bh[i]); /* remeber to refile it */
-		clear_bit(BH_Uptodate, &bh[i]->b_state);
-		bh[i]->b_end_io(bh[i], 0);
-	}
+	for (i = 0; i < nr; i++)
+		buffer_IO_error(bhs[i]);
 	return;
 }
 

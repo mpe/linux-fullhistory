@@ -1,41 +1,73 @@
-Sun Jul  2 01:38:33 EST 1995
+	The Wavelan drivers saga
+	------------------------
 
-	As the date above certify, this ``readme'' is mostly
-obsolete. Please read release notes and change list in
-driver/net/wavelan.p.h, and consult my web page at :
-	http://www.hpl.hp.com/personal/Jean_Tourrilhes/Linux/Wavelan.html
+	By Jean Tourrilhes <jt@hpl.hp.com>
 
-	Jean <jt@hpl.hp.com>
+	The Wavelan is a Radio network adapter designed by
+Lucent. Under this generic name is hidden quite a variety of hardware,
+and many Linux driver to support it.
+	The get the full story on Wireless LANs, please consult :
+		http://www.hpl.hp.com/personal/Jean_Tourrilhes/Linux/
 
-1. At present the driver autoprobes for a WaveLAN card only at I/O address 
-   0x390. The version of the card that I use (NCR) supports four I/O addresses
-   (selectable via a pair of DIP switches).  If you want the driver to
-   autoprobe a different subset of the four valid addresses then you will need
-   to edit .../drivers/net/wavelan.c (near line 714) and change the 
-   initialisation of the `iobase[]' array.  Normally, I use a LILO 
-   configuration file directive to obviate the need for autoprobing entirely, 
-   a course of action I heartily recommend.
+"wavelan" driver (old ISA Wavelan)
+----------------
+	o Config :	Network device -> Wireless LAN -> AT&T WaveLAN
+	o Location :	.../drivers/net/wavelan*
+	o in-line doc :	.../drivers/net/wavelan.p.h
+	o on-line doc :
+	    http://www.hpl.hp.com/personal/Jean_Tourrilhes/Linux/Wavelan.html
 
-2. By default, the driver uses the Network ID (NWID) stored in the card's 
-   Parameter Storage Area (PSA).  However, the PSA NWID can be overridden by a
-   value passed explicitly as the third numeric argument to LILO's "ether="
-   directive, either  at the LILO prompt at boot time or within LILO's 
-   configuration file.
-   For example, the following line from such a LILO configuration file would
-   auto-configure the IRQ value, set the I/O base to 0x390 and set the NWID to
-   0x4321, all on a WaveLAN card labelled "eth0":
+	This is the driver for the ISA version of the first generation
+of the Wavelan, now discontinued. The device is 2 Mb/s, composed of a
+Intel 82586 controler and a Lucent Modem, and is NOT 802.11 compliant.
+	The driver has been tested with the following hardware :
+	o Wavelan ISA 915 MHz (full length ISA card) 
+	o Wavelan ISA 915 MHz 2.0 (half length ISA card) 
+	o Wavelan ISA 2.4 GHz (full length ISA card, fixed frequency) 
+	o Wavelan ISA 2.4 GHz 2.0 (half length ISA card, frequency selectable) 
+	o Above cards with the optional DES encryption feature 
 
-	..
-	append	="ether=0,0x390,0x4321,eth0"
-	..
+"wavelan_cs" driver (old Pcmcia Wavelan)
+-------------------
+	o Config :	Network device -> PCMCIA network ->
+				Pcmcia Wireless LAN -> AT&T/Lucent WaveLAN
+	o Location :	.../drivers/net/pcmcia/wavelan*
+	o in-line doc :	.../drivers/net/pcmcia/wavelan_cs.h
+	o on-line doc :
+	    http://www.hpl.hp.com/personal/Jean_Tourrilhes/Linux/Wavelan.html
 
-3. The driver uses the IRQ stored in the card's PSA.
-   To change this you will need to use the configuration/setup software that
-   accompanies each WaveLAN device.  Yes, the driver should use the value passed
-   in via LILO and it will, just as soon as I can work out why that part of the
-   code doesn't work :-(.
+	This is the driver for the PCMCIA version of the first
+generation of the Wavelan, now discontinued. The device is 2 Mb/s,
+composed of a Intel 82593 controler (totally different from the 82586)
+and a Lucent Modem, and NOT 802.11 compatible.
+	The driver has been tested with the following hardware :
+	o Wavelan Pcmcia 915 MHz 2.0 (Pcmcia card + separate
+					modem/antenna block) 
+	o Wavelan Pcmcia 2.4 GHz 2.0 (Pcmcia card + separate
+					modem/antenna block) 
 
-4. If you encounter any problems send me some email.
+"wvlan_cs" driver (Wavelan IEEE, GPL)
+-----------------
+	o Config :	Not yet in kernel
+	o Location :	Pcmcia package 3.1.10+
+	o on-line doc :	http://www.fasta.fh-dortmund.de/users/andy/wvlan/
 
-Good luck,
-Bruce Janson (bruce@cs.usyd.edu.au)
+	This is the driver for the current generation of Wavelan IEEE,
+which is 802.11 compatible. Depending on version, it is 2 Mb/s or 11
+Mb/s, with or without encryption, all implemented in Lucent specific
+DSP (the Hermes).
+	This is a GPL full source PCMCIA driver (ISA is just a Pcmcia
+card with ISA-Pcmcia bridge).
+
+"wavelan2_cs" driver (Wavelan IEEE, binary)
+--------------------
+	o Config :	Not yet in kernel
+	o Location :	ftp://sourceforge.org/pcmcia/contrib/
+
+	This driver support exactly the same hardware as the previous
+driver, the main difference is that it is based on a binary library
+and supported by Lucent.
+
+	I hope it clears the confusion ;-)
+
+	Jean

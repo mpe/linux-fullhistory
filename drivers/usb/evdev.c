@@ -256,20 +256,16 @@ static struct input_handler evdev_handler = {
 	disconnect:	evdev_disconnect,
 };
 
-#ifdef MODULE
-int init_module(void)
-#else
-int __init evdev_init(void)
-#endif
+static int __init evdev_init(void)
 {
 	input_register_handler(&evdev_handler);
-
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit evdev_exit(void)
 {
 	input_unregister_handler(&evdev_handler);
 }
-#endif
+
+module_init(evdev_init);
+module_exit(evdev_exit);

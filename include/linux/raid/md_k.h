@@ -75,6 +75,8 @@ extern dev_mapping_t mddev_map [MAX_MD_DEVS];
 
 extern inline mddev_t * kdev_to_mddev (kdev_t dev)
 {
+	if (MAJOR(dev) != MD_MAJOR)
+		BUG();
         return mddev_map[MINOR(dev)].mddev;
 }
 
@@ -213,7 +215,7 @@ struct mdk_personality_s
 	char *name;
 	int (*map)(mddev_t *mddev, kdev_t dev, kdev_t *rdev,
 		unsigned long *rsector, unsigned long size);
-	int (*make_request)(mddev_t *mddev, int rw, struct buffer_head * bh);
+	int (*make_request)(request_queue_t *q, mddev_t *mddev, int rw, struct buffer_head * bh);
 	void (*end_request)(struct buffer_head * bh, int uptodate);
 	int (*run)(mddev_t *mddev);
 	int (*stop)(mddev_t *mddev);

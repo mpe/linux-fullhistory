@@ -692,16 +692,7 @@ void _nmask_and_or_msr(unsigned long nmask, unsigned long or_val);
 #endif /* ndef ASSEMBLY*/
 
 #ifdef CONFIG_MACH_SPECIFIC
-#if defined(CONFIG_PREP)
-#define _machine _MACH_prep
-#define have_of 0
-#elif defined(CONFIG_CHRP)
-#define _machine _MACH_chrp
-#define have_of 1
-#elif defined(CONFIG_PMAC)
-#define _machine _MACH_Pmac
-#define have_of 1
-#elif defined(CONFIG_8xx)
+#if defined(CONFIG_8xx)
 #define _machine _MACH_8xx
 #define have_of 0
 #elif defined(CONFIG_OAK)

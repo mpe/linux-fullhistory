@@ -37,6 +37,7 @@
 #include <linux/malloc.h>
 #include <linux/input.h>
 #include <linux/module.h>
+#include <linux/init.h>
 #include "usb.h"
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
@@ -179,17 +180,16 @@ static struct usb_driver graphire_driver = {
 	disconnect:	graphire_disconnect,
 };
 
-#ifdef MODULE
-void cleanup_module(void)
-{
-	usb_deregister(&graphire_driver);
-}
-
-int init_module(void)
-#else
-int graphire_init(void)
-#endif
+static int __init graphire_init(void)
 {
 	usb_register(&graphire_driver);
 	return 0;
 }
+
+static void __exit graphire_exit(void)
+{
+	usb_deregister(&graphire_driver);
+}
+
+module_init(graphire_init);
+module_exit(graphire_exit);

@@ -4,6 +4,7 @@
 #define WNOHANG		0x00000001
 #define WUNTRACED	0x00000002
 
+#define __WALL		0x40000000
 #define __WCLONE	0x80000000
 
 #ifdef __KERNEL__

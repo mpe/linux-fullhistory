@@ -36,9 +36,11 @@
  *	1.09b	Jeff Garzik: Modularize, init cleanup
  *	1.09c	Jeff Garzik: SMP cleanup
  *	1.10    Paul Barton-Davis: add support for async I/O
+ *	1.10a	Andrea Arcangeli: Alpha updates
+ *	1.10b	Andrew Morton: SMP lock fix
  */
 
-#define RTC_VERSION		"1.10"
+#define RTC_VERSION		"1.10b"
 
 #define RTC_IRQ 	8	/* Can't see this changing soon.	*/
 #define RTC_IO_EXTENT	0x10	/* Only really two ports, but...	*/
@@ -378,7 +380,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		if (!(CMOS_READ(RTC_CONTROL) & RTC_DM_BINARY)
 		    || RTC_ALWAYS_BCD) {
 			if (yrs > 169) {
-				restore_flags(flags);
+				spin_unlock_irqrestore(&rtc_lock, flags);
 				return -EINVAL;
 			}
 			if (yrs >= 100)
@@ -704,7 +706,9 @@ static void __exit rtc_exit (void)
 	free_irq (rtc_irq, &rtc_port);
 #else
 	release_region (RTC_PORT (0), RTC_IO_EXTENT);
+#ifndef __alpha__
 	free_irq (RTC_IRQ, NULL);
+#endif
 #endif /* __sparc__ */
 }
 

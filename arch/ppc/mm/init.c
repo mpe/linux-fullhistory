@@ -115,11 +115,7 @@ extern struct task_struct *current_set[NR_CPUS];
 PTE *Hash, *Hash_end;
 unsigned long Hash_size, Hash_mask;
 #if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
-#ifdef CONFIG_PPC64
-unsigned long long _SDR1;
-#else
 unsigned long _SDR1;
-#endif
 static void hash_init(void);
 
 union ubat {			/* BAT register values to be loaded */
@@ -423,10 +419,9 @@ __ioremap(unsigned long addr, unsigned long size, unsigned long flags)
 	/*
 	 * Is it a candidate for a BAT mapping?
 	 */
-	
 	for (i = 0; i < size; i += PAGE_SIZE)
 		map_page(v+i, p+i, flags);
-out:	
+out:
 	return (void *) (v + (addr & ~PAGE_MASK));
 }
 
@@ -593,7 +588,7 @@ mmu_context_overflow(void)
 #if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
 static void get_mem_prop(char *, struct mem_pieces *);
 
-#if defined(CONFIG_PMAC) || defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC)
+#if defined(CONFIG_ALL_PPC)
 /*
  * Read in a property describing some pieces of memory.
  */
@@ -616,7 +611,7 @@ static void __init get_mem_prop(char *name, struct mem_pieces *mp)
 	mem_pieces_sort(mp);
 	mem_pieces_coalesce(mp);
 }
-#endif /* CONFIG_PMAC || CONFIG_CHRP || CONFIG_ALL_PPC */
+#endif /* CONFIG_ALL_PPC */
 
 /*
  * Set up one of the I/D BAT (block address translation) register pairs.
@@ -921,10 +916,11 @@ void __init MMU_init(void)
 	if ( ppc_md.progress ) ppc_md.progress("MMU:hash init", 0x300);
         hash_init();
 #ifdef CONFIG_PPC64
-	_SDR1 = 0;	/* temporary hack to just use bats -- Cort */
-#else	
+	_SDR1 = __pa(Hash) | (ffz(~Hash_size) - 7)-11;
+#else
         _SDR1 = __pa(Hash) | (Hash_mask >> 10);
-#endif	
+#endif
+	
 	ioremap_base = 0xf8000000;
 
 	if ( ppc_md.progress ) ppc_md.progress("MMU:mapin", 0x301);
@@ -947,7 +943,7 @@ void __init MMU_init(void)
 		setbat(0, 0xf8000000, 0xf8000000, 0x08000000, IO_PAGE);
 #ifdef CONFIG_PPC64
 		/* temporary hack to get working until page tables are stable -- Cort*/
-		setbat(1, 0x80000000, 0xc0000000, 0x10000000, IO_PAGE);
+/*		setbat(1, 0x80000000, 0xc0000000, 0x10000000, IO_PAGE);*/
 		setbat(3, 0xd0000000, 0xd0000000, 0x10000000, IO_PAGE);
 #else
 		setbat(1, 0x80000000, 0x80000000, 0x10000000, IO_PAGE);
@@ -1118,7 +1114,7 @@ void __init paging_init(void)
 	/*
 	 * All pages are DMA-able so we put them all in the DMA zone.
 	 */
-	zones_size[0] = virt_to_phys(end_of_DRAM) >> PAGE_SHIFT;
+	zones_size[0] = ((unsigned long)end_of_DRAM - KERNELBASE) >> PAGE_SHIFT;
 	for (i = 1; i < MAX_NR_ZONES; i++)
 		zones_size[i] = 0;
 	free_area_init(zones_size);
@@ -1132,9 +1128,9 @@ void __init mem_init(void)
 	int codepages = 0;
 	int datapages = 0;
 	int initpages = 0;
-#if defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC)	
+#if defined(CONFIG_ALL_PPC)	
 	extern unsigned int rtas_data, rtas_size;
-#endif /* defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC) */
+#endif /* defined(CONFIG_ALL_PPC) */
 	max_mapnr = max_low_pfn;
 	high_memory = (void *) __va(max_low_pfn * PAGE_SIZE);
 	num_physpages = max_mapnr;	/* RAM is assumed contiguous */
@@ -1150,13 +1146,13 @@ void __init mem_init(void)
 	}
 #endif /* CONFIG_BLK_DEV_INITRD */
 
-#if defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC)	
+#if defined(CONFIG_ALL_PPC)	
 	/* mark the RTAS pages as reserved */
 	if ( rtas_data )
 		for (addr = rtas_data; addr < PAGE_ALIGN(rtas_data+rtas_size) ;
 		     addr += PAGE_SIZE)
 			SetPageReserved(mem_map + MAP_NR(addr));
-#endif /* defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC) */
+#endif /* defined(CONFIG_ALL_PPC) */
 	if ( sysmap_size )
 		for (addr = (unsigned long)sysmap;
 		     addr < PAGE_ALIGN((unsigned long)sysmap+sysmap_size) ;
@@ -1184,7 +1180,7 @@ void __init mem_init(void)
 }
 
 #if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
-#if defined(CONFIG_PMAC) || defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC)
+#if defined(CONFIG_ALL_PPC)
 /*
  * On systems with Open Firmware, collect information about
  * physical RAM and which pieces are already in use.
@@ -1195,9 +1191,13 @@ void __init mem_init(void)
 unsigned long __init *pmac_find_end_of_memory(void)
 {
 	unsigned long a, total;
-	
-	/* max amount of RAM we allow -- Cort */
-#define RAM_LIMIT (768<<20)
+	unsigned long ram_limit = 0xf0000000 - KERNELBASE;
+	/* allow 0x08000000 for IO space */
+	if ( _machine & (_MACH_prep|_MACH_Pmac) )
+		ram_limit = 0xd8000000 - KERNELBASE;
+#ifdef CONFIG_PPC64
+	ram_limit = 64<<20;
+#endif
 
 	memory_node = find_devices("memory");
 	if (memory_node == NULL) {
@@ -1222,16 +1222,8 @@ unsigned long __init *pmac_find_end_of_memory(void)
 	a = phys_mem.regions[0].address;
 	if (a != 0)
 		panic("RAM doesn't start at physical address 0");
-	/*
-	 * XXX:
-	 * Make sure ram mappings don't stomp on IO space
-	 * This is a temporary hack to keep this from happening
-	 * until we move the KERNELBASE and can allocate RAM up
-	 * to our nearest IO area.
-	 * -- Cort
-	 */
-	if (__max_memory == 0 || __max_memory > RAM_LIMIT)
-		__max_memory = RAM_LIMIT;
+	if (__max_memory == 0 || __max_memory > ram_limit)
+		__max_memory = ram_limit;
 	if (phys_mem.regions[0].size >= __max_memory) {
 		phys_mem.regions[0].size = __max_memory;
 		phys_mem.n_regions = 1;
@@ -1247,12 +1239,11 @@ unsigned long __init *pmac_find_end_of_memory(void)
 
 	set_phys_avail(&phys_mem);
 
-#undef RAM_LIMIT
 	return __va(total);
 }
-#endif /* CONFIG_PMAC || CONFIG_CHRP || CONFIG_ALL_PPC */
+#endif /* CONFIG_ALL_PPC */
 
-#if defined(CONFIG_PREP) || defined(CONFIG_ALL_PPC)
+#if defined(CONFIG_ALL_PPC)
 /*
  * This finds the amount of physical ram and does necessary
  * setup for prep.  This is pretty architecture specific so
@@ -1279,7 +1270,7 @@ unsigned long __init *prep_find_end_of_memory(void)
 
 	return (__va(total));
 }
-#endif /* defined(CONFIG_PREP) || defined(CONFIG_ALL_PPC) */
+#endif /* defined(CONFIG_ALL_PPC) */
 
 
 #if defined(CONFIG_GEMINI)
@@ -1389,16 +1380,12 @@ static void __init hash_init(void)
 	 * up to a maximum of 2MB.
 	 */
 	ramsize = (ulong)end_of_DRAM - KERNELBASE;
-#ifdef CONFIG_PPC64	
-	Hash_mask = 0;
-	for (h = 256<<10; h < ramsize / 256 && h < 4<<20; h *= 2, Hash_mask++)
-		;
-	Hash_size = h;
-	Hash_mask <<= 10;  /* so setting _SDR1 works the same -- Cort */
-#else
 	for (h = 64<<10; h < ramsize / 256 && h < 2<<20; h *= 2)
 		;
 	Hash_size = h;
+#ifdef CONFIG_PPC64
+	Hash_mask = (h >> 7) - 1;
+#else	
 	Hash_mask = (h >> 6) - 1;
 #endif	
 	
@@ -1433,7 +1420,11 @@ static void __init hash_init(void)
 		/*
 		 * Patch up the instructions in head.S:hash_page
 		 */
+#ifdef CONFIG_PPC64		
+		Hash_bits = ffz(~Hash_size) - 7;
+#else
 		Hash_bits = ffz(~Hash_size) - 6;
+#endif		
 		hash_page_patch_A[0] = (hash_page_patch_A[0] & ~0xffff)
 			| (__pa(Hash) >> 16);
 		hash_page_patch_A[1] = (hash_page_patch_A[1] & ~0x7c0)
@@ -1443,9 +1434,17 @@ static void __init hash_init(void)
 		hash_page_patch_A[2] = (hash_page_patch_A[2] & ~0x7c0)
 			| ((26 - Hash_bits) << 6);
 		hash_page_patch_B[0] = (hash_page_patch_B[0] & ~0xffff)
+#ifdef CONFIG_PPC64			
+			| (Hash_mask >> 11);
+#else
 			| (Hash_mask >> 10);
+#endif		
 		hash_page_patch_C[0] = (hash_page_patch_C[0] & ~0xffff)
+#ifdef CONFIG_PPC64			
+			| (Hash_mask >> 11);
+#else
 			| (Hash_mask >> 10);
+#endif		
 #if 0	/* see hash_page in head.S, note also patch_C ref below */
 		hash_page_patch_D[0] = (hash_page_patch_D[0] & ~0xffff)
 			| (Hash_mask >> 10);

@@ -933,20 +933,19 @@ void net_call_rx_atomic(void (*fn)(void))
 void (*br_handle_frame_hook)(struct sk_buff *skb) = NULL;
 #endif
 
-#define HANDLE_BRIDGE(SKB, PT_PREV)					\
-do {									\
-	if ((SKB)->dev->br_port != NULL &&				\
-	    br_handle_frame_hook != NULL) {				\
-		if (PT_PREV)						\
-			if (!(PT_PREV->data))				\
-				deliver_to_old_ones(PT_PREV, SKB, 1);	\
-			else						\
-				pt_prev->func(SKB, SKB->dev, PT_PREV);	\
-									\
-		br_handle_frame_hook(SKB);				\
-		continue;						\
-	}								\
-} while(0)
+static void __inline__ handle_bridge(struct sk_buff *skb,
+				     struct packet_type *pt_prev)
+{
+	if (pt_prev)
+		deliver_to_old_ones(pt_prev, skb, 0);
+	else {
+		atomic_inc(&skb->users);
+		pt_prev->func(skb, skb->dev, pt_prev);
+	}
+
+	br_handle_frame_hook(skb);
+}
+
 
 static void net_rx_action(struct softirq_action *h)
 {
@@ -999,7 +998,11 @@ static void net_rx_action(struct softirq_action *h)
 			}
 
 #if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
-			HANDLE_BRIDGE(skb, pt_prev);
+			if (skb->dev->br_port != NULL &&
+			    br_handle_frame_hook != NULL) {
+				handle_bridge(skb, pt_prev);
+				continue;
+			}
 #endif
 
 			for (ptype=ptype_base[ntohs(type)&15];ptype;ptype=ptype->next) {
@@ -1856,6 +1859,14 @@ int register_netdevice(struct net_device *dev)
 		*dp = dev;
 		dev_hold(dev);
 		write_unlock_bh(&dev_base_lock);
+
+		/*
+		 *	Default initial state at registry is that the
+		 *	device is present.
+		 */
+
+		set_bit(__LINK_STATE_PRESENT, &dev->state);
+
 		return 0;
 	}
 

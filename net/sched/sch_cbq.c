@@ -878,7 +878,7 @@ cbq_dequeue_prio(struct Qdisc *sch, int prio)
 
 		/* Start round */
 		do {
-			struct cbq_class *borrow = NULL;
+			struct cbq_class *borrow = cl;
 
 			if (cl->q->q.qlen &&
 			    (borrow = cbq_under_limit(cl)) == NULL)

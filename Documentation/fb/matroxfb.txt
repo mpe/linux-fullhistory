@@ -105,7 +105,7 @@ problem and not mine, but I'm not sure.
 Configuration
 =============
 
-You can pass kernel command line options to vesafb with
+You can pass kernel command line options to matroxfb with
 `video=matrox:option1,option2:value2,option3' (multiple options should be 
 separated by comma, values are separated from options by `:'). 
 Accepted options:
@@ -276,16 +276,16 @@ And following misfeatures:
  + color keying is not supported
  + feature connector of Mystique and Gx00 is set to VGA mode (it is disabled
    by BIOS)
- + DCC (monitor detection) protocol is not implemented
+ + DDC (monitor detection) is supported through dualhead driver
  + some check for input values are not so strict how it should be (you can
    specify vslen=4000 and so on).
  + maybe more...
 And following features:
  + 4bpp is available only on Millennium I and Millennium II. It is hardware
    limitation.
- + current fbset is not able to set 15bpp videomode: you must specify
-   depth==16 and green.length==5. fbset does not allow you to set 
-   green.length.
+ + selection between 1:5:5:5 and 5:6:5 16bpp videomode is done by -rgba 
+   option of fbset: "fbset -depth 16 -rgba 5,5,5" selects 1:5:5:5, anything
+   else selects 5:6:5 mode.
  + text mode uses 6 bit VGA palette instead of 8 bit (one of 262144 colors
    instead of one of 16M colors). It is due to hardware limitation of 
    Millennium I/II and SVGALib compatibility.
@@ -329,6 +329,27 @@ TEXT
         8x16
 	Millennium I  G200
 TEXT     3.29         1.50
+
+
+Dualhead G400
+=============
+Driver supports dualhead G400 with some limitations:
+ + secondary head shares videomemory with primary head. It is not problem
+   if you have 32MB of videoram, but if you have only 16MB, you may have
+   to think twice before choosing videomode (for example twice 1880x1440x32bpp
+   is not possible).
+ + due to hardware limitation, secondary head can use only 16 and 32bpp
+   videomodes.
+ + secondary head is not accelerated. There were bad problems with accelerated
+   XFree when secondary head used to use acceleration.
+ + secondary head always powerups in 640x480@60-32 videomode. You have to use
+   fbset to change this mode.
+ + secondary head always powerups in monitor mode. You have to use matroxset
+   to change it to TV mode. Also, you must select at least 525 lines for
+   NTSC output and 625 lines for PAL output.
+ + kernel is not fully multihead ready. So some things are impossible to do.
+ + if you compiled it as module, you must insert i2c-matroxfb, matroxfb_maven
+   and matroxfb_crtc2 into kernel.
 
 	
 * Yes, it is slower than Millennium I.

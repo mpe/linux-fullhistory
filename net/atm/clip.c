@@ -73,6 +73,7 @@ static void link_vcc(struct clip_vcc *clip_vcc,struct atmarp_entry *entry)
 	DPRINTK("link_vcc %p to entry %p (neigh %p)\n",clip_vcc,entry,
 	    entry->neigh);
 	clip_vcc->entry = entry;
+	clip_vcc->xoff = 0; /* @@@ may overrun buffer by one packet */
 	clip_vcc->next = entry->vccs;
 	entry->vccs = clip_vcc;
 	entry->neigh->used = jiffies;
@@ -95,6 +96,8 @@ static void unlink_clip_vcc(struct clip_vcc *clip_vcc)
 
 			*walk = clip_vcc->next; /* atomic */
 			clip_vcc->entry = NULL;
+			if (clip_vcc->xoff)
+				netif_wake_queue(entry->neigh->dev);
 			if (entry->vccs) return;
 			entry->expires = jiffies-1;
 				/* force resolution or expiration */
@@ -218,13 +221,27 @@ void clip_push(struct atm_vcc *vcc,struct sk_buff *skb)
 }
 
 
+/*
+ * Note: these spinlocks _must_not_ block on non-SMP. The only goal is that
+ * clip_pop is atomic with respect to the critical section in clip_start_xmit.
+ */
+
+
 static void clip_pop(struct atm_vcc *vcc,struct sk_buff *skb)
 {
+	struct clip_vcc *clip_vcc = CLIP_VCC(vcc);
+	int old;
+
 	DPRINTK("clip_pop(vcc %p)\n",vcc);
-	CLIP_VCC(vcc)->old_pop(vcc,skb);
+	clip_vcc->old_pop(vcc,skb);
 	/* skb->dev == NULL in outbound ARP packets */
-	if (atm_may_send(vcc,0) && skb->dev)
-		netif_wake_queue(skb->dev);
+	if (!skb->dev) return;
+	spin_lock(&PRIV(skb->dev)->xoff_lock);
+	if (atm_may_send(vcc,0)) {
+		old = xchg(&clip_vcc->xoff,0);
+		if (old) netif_wake_queue(skb->dev);
+	}
+	spin_unlock(&PRIV(skb->dev)->xoff_lock);
 }
 
 
@@ -354,8 +371,10 @@ int clip_encap(struct atm_vcc *vcc,int mode)
 
 static int clip_start_xmit(struct sk_buff *skb,struct net_device *dev)
 {
+	struct clip_priv *clip_priv = PRIV(dev);
 	struct atmarp_entry *entry;
 	struct atm_vcc *vcc;
+	int old;
 
 	DPRINTK("clip_start_xmit (skb %p)\n",skb);
 	if (!skb->dst) {
@@ -368,7 +387,7 @@ static int clip_start_xmit(struct sk_buff *skb,struct net_device *dev)
 		skb->dst->neighbour = clip_find_neighbour(skb->dst,1);
 		if (!skb->dst->neighbour) {
 			dev_kfree_skb(skb); /* lost that one */
-			PRIV(dev)->stats.tx_dropped++;
+			clip_priv->stats.tx_dropped++;
 			return 0;
 		}
 #endif
@@ -386,7 +405,7 @@ return 0;
 			skb_queue_tail(&entry->neigh->arp_queue,skb);
 		else {
 			dev_kfree_skb(skb);
-			PRIV(dev)->stats.tx_dropped++;
+			clip_priv->stats.tx_dropped++;
 		}
 		return 0;
 	}
@@ -401,15 +420,33 @@ return 0;
 		((u16 *) here)[3] = skb->protocol;
 	}
 	atomic_add(skb->truesize,&vcc->tx_inuse);
-	if (!atm_may_send(vcc,0))
-		netif_stop_queue(dev);
 	ATM_SKB(skb)->iovcnt = 0;
 	ATM_SKB(skb)->atm_options = vcc->atm_options;
 	entry->vccs->last_use = jiffies;
 	DPRINTK("atm_skb(%p)->vcc(%p)->dev(%p)\n",skb,vcc,vcc->dev);
-	PRIV(dev)->stats.tx_packets++;
-	PRIV(dev)->stats.tx_bytes += skb->len;
+	old = xchg(&entry->vccs->xoff,1); /* assume XOFF ... */
+	if (old) {
+		printk(KERN_WARNING "clip_start_xmit: XOFF->XOFF transition\n");
+		return 0;
+	}
+	clip_priv->stats.tx_packets++;
+	clip_priv->stats.tx_bytes += skb->len;
 	(void) vcc->dev->ops->send(vcc,skb);
+	if (atm_may_send(vcc,0)) {
+		entry->vccs->xoff = 0;
+		return 0;
+	}
+	if (old) return 0;
+	spin_lock(&clip_priv->xoff_lock);
+	netif_stop_queue(dev); /* XOFF -> throttle immediately */
+	barrier();
+	if (!entry->vccs->xoff)
+		netif_start_queue(dev);
+		/* Oh, we just raced with clip_pop. netif_start_queue should be
+		   good enough, because nothing should really be asleep because
+		   of the brief netif_stop_queue. If this isn't true or if it
+		   changes, use netif_wake_queue instead. */
+	spin_unlock(&clip_priv->xoff_lock);
 	return 0;
 }
 
@@ -434,6 +471,7 @@ int clip_mkip(struct atm_vcc *vcc,int timeout)
 	clip_vcc->vcc = vcc;
 	vcc->user_back = clip_vcc;
 	clip_vcc->entry = NULL;
+	clip_vcc->xoff = 0;
 	clip_vcc->encap = 1;
 	clip_vcc->last_use = jiffies;
 	clip_vcc->idle_timeout = timeout*HZ;
@@ -523,7 +561,7 @@ static int clip_init(struct net_device *dev)
 	dev->hard_header_len = RFC1483LLC_LEN;
 	dev->mtu = RFC1626_MTU;
 	dev->addr_len = 0;
-	dev->tx_queue_len = 100; /* "normal" queue */
+	dev->tx_queue_len = 100; /* "normal" queue (packets) */
 	    /* When using a "real" qdisc, the qdisc determines the queue */
 	    /* length. tx_queue_len is only used for the default case, */
 	    /* without any more elaborate queuing. 100 is a reasonable */
@@ -538,6 +576,7 @@ static int clip_init(struct net_device *dev)
 int clip_create(int number)
 {
 	struct net_device *dev;
+	struct clip_priv *clip_priv;
 	int error;
 
 	if (number != -1) {
@@ -554,16 +593,18 @@ int clip_create(int number)
 	    GFP_KERNEL); 
 	if (!dev) return -ENOMEM;
 	memset(dev,0,sizeof(struct net_device)+sizeof(struct clip_priv));
-	dev->name = PRIV(dev)->name;
+	clip_priv = PRIV(dev);
+	dev->name = clip_priv->name;
 	sprintf(dev->name,"atm%d",number);
 	dev->init = clip_init;
-	PRIV(dev)->number = number;
+	spin_lock_init(&clip_priv->xoff_lock);
+	clip_priv->number = number;
 	error = register_netdev(dev);
 	if (error) {
 		kfree(dev);
 		return error;
 	}
-	PRIV(dev)->next = clip_devs;
+	clip_priv->next = clip_devs;
 	clip_devs = dev;
 	DPRINTK("registered (net:%s)\n",dev->name);
 	return number;

@@ -333,7 +333,7 @@ static DECLARE_WAIT_QUEUE_HEAD(apm_waitqueue);
 static DECLARE_WAIT_QUEUE_HEAD(apm_suspend_waitqueue);
 static struct apm_user *	user_list = NULL;
 
-static char			driver_version[] = "1.12";	/* no spaces */
+static char			driver_version[] = "1.13";	/* no spaces */
 
 static char *	apm_event_name[] = {
 	"system standby",
@@ -635,7 +635,7 @@ static void apm_power_off(void)
 	 */
 #ifdef CONFIG_SMP
 	/* Some bioses don't like being called from CPU != 0 */
-	while (cpu_number_map[smp_processor_id()] != 0) {
+	while (cpu_number_map(smp_processor_id()) != 0) {
 		kernel_thread(apm_magic, NULL,
 			CLONE_FS | CLONE_FILES | CLONE_SIGHAND | SIGCHLD);
 		schedule();

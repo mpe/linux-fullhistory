@@ -47,12 +47,9 @@ if [ "$CONFIG_8xx" = "y" ]; then
 fi
 if [ "$CONFIG_6xx" = "y" ]; then
   choice 'Machine Type'		\
-	"PowerMac	CONFIG_PMAC		\
-	 PReP/MTX	CONFIG_PREP		\
-	 CHRP		CONFIG_CHRP		\
-	 PowerMac/PReP/CHRP	CONFIG_ALL_PPC	\
+	"PowerMac/PReP/MTX/CHRP	CONFIG_ALL_PPC	\
 	 Gemini		CONFIG_GEMINI		\
-	 APUS		CONFIG_APUS"		PowerMac
+	 APUS		CONFIG_APUS"		PowerMac/PReP/MTX/CHRP
 fi
 
 if [ "$CONFIG_PPC64" = "y" ]; then

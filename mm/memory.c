@@ -418,7 +418,7 @@ static struct page * follow_page(unsigned long address)
 
 struct page * get_page_map(struct page *page, unsigned long vaddr)
 {
-	if (MAP_NR(page) >= max_mapnr)
+	if (MAP_NR(vaddr) >= max_mapnr)
 		return 0;
 	if (page == ZERO_PAGE(vaddr))
 		return 0;
@@ -862,6 +862,8 @@ void vmtruncate(struct inode * inode, loff_t offset)
 	struct vm_area_struct * mpnt;
 	struct address_space *mapping = inode->i_mapping;
 
+	if (inode->i_size < offset)
+		goto out;
 	inode->i_size = offset;
 	truncate_inode_pages(mapping, offset);
 	spin_lock(&mapping->i_shared_lock);
@@ -906,6 +908,9 @@ void vmtruncate(struct inode * inode, loff_t offset)
 	} while ((mpnt = mpnt->vm_next_share) != NULL);
 out_unlock:
 	spin_unlock(&mapping->i_shared_lock);
+out:
+	/* this should go into ->truncate */
+	inode->i_size = offset;
 	if (inode->i_op && inode->i_op->truncate)
 		inode->i_op->truncate(inode);
 }

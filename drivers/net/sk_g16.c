@@ -1172,7 +1172,7 @@ static int SK_lance_init(struct net_device *dev, unsigned short mode)
  *     YY/MM/DD  uid  Description
 -*/
 
-static int SK_timeout(struct net_device *dev)
+static void SK_timeout(struct net_device *dev)
 {
 	printk(KERN_WARNING "%s: xmitter timed out, try to restart!\n", dev->name);
 	SK_lance_init(dev, MODE_NORMAL); /* Reinit LANCE */

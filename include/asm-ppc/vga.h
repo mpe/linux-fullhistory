@@ -23,12 +23,12 @@
 
 extern inline void scr_writew(u16 val, u16 *addr)
 {
-    writew(val, (unsigned long)addr);
+    st_le16(addr, val);
 }
 
 extern inline u16 scr_readw(const u16 *addr)
 {
-    return readw((unsigned long)addr);
+    return ld_le16(addr);
 }
 
 #define VT_BUF_HAVE_MEMCPYW

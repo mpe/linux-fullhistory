@@ -32,6 +32,7 @@
 #include <linux/malloc.h>
 #include <linux/module.h>
 #include <linux/input.h>
+#include <linux/init.h>
 #include "usb.h"
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
@@ -202,17 +203,16 @@ static struct usb_driver usb_kbd_driver = {
 	disconnect:	usb_kbd_disconnect
 };
 
-#ifdef MODULE
-void cleanup_module(void)
-{
-	usb_deregister(&usb_kbd_driver);
-}
-
-int init_module(void)
-#else
-int usb_kbd_init(void)
-#endif
+static int __init usb_kbd_init(void)
 {
 	usb_register(&usb_kbd_driver);
 	return 0;
 }
+
+static void __exit usb_kbd_exit(void)
+{
+	usb_deregister(&usb_kbd_driver);
+}
+
+module_init(usb_kbd_init);
+module_exit(usb_kbd_exit);

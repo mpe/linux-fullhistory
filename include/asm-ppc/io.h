@@ -38,73 +38,73 @@ extern unsigned long pci_dram_offset;
 #endif /* CONFIG_APUS */
 #endif
 
-#define readb(addr) in_8((volatile unsigned char *)(addr))
-#define writeb(b,addr) out_8((volatile unsigned char *)(addr), (b))
+#define readb(addr) in_8((volatile u8 *)(addr))
+#define writeb(b,addr) out_8((volatile u8 *)(addr), (b))
 #if defined(CONFIG_APUS)
-#define readw(addr) (*(volatile unsigned short *) (addr))
-#define readl(addr) (*(volatile unsigned int *) (addr))
-#define writew(b,addr) ((*(volatile unsigned short *) (addr)) = (b))
-#define writel(b,addr) ((*(volatile unsigned int *) (addr)) = (b))
+#define readw(addr) (*(volatile u16 *) (addr))
+#define readl(addr) (*(volatile u32 *) (addr))
+#define writew(b,addr) ((*(volatile u16 *) (addr)) = (b))
+#define writel(b,addr) ((*(volatile u32 *) (addr)) = (b))
 #else
-#define readw(addr) in_le16((volatile unsigned short *)(addr))
-#define readl(addr) in_le32((volatile unsigned *)(addr))
-#define writew(b,addr) out_le16((volatile unsigned short *)(addr),(b))
-#define writel(b,addr) out_le32((volatile unsigned *)(addr),(b))
+#define readw(addr) in_le16((volatile u16 *)(addr))
+#define readl(addr) in_le32((volatile u32 *)(addr))
+#define writew(b,addr) out_le16((volatile u16 *)(addr),(b))
+#define writel(b,addr) out_le32((volatile u32 *)(addr),(b))
 #endif
 
-#define insb(port, buf, ns)	_insb((unsigned char *)((port)+_IO_BASE), (buf), (ns))
-#define outsb(port, buf, ns)	_outsb((unsigned char *)((port)+_IO_BASE), (buf), (ns))
-#define insw(port, buf, ns)	_insw((unsigned short *)((port)+_IO_BASE), (buf), (ns))
-#define outsw(port, buf, ns)	_outsw((unsigned short *)((port)+_IO_BASE), (buf), (ns))
-#define insl(port, buf, nl)	_insl((unsigned long *)((port)+_IO_BASE), (buf), (nl))
-#define outsl(port, buf, nl)	_outsl((unsigned long *)((port)+_IO_BASE), (buf), (nl))
+#define insb(port, buf, ns)	_insb((u8 *)((port)+_IO_BASE), (buf), (ns))
+#define outsb(port, buf, ns)	_outsb((u8 *)((port)+_IO_BASE), (buf), (ns))
+#define insw(port, buf, ns)	_insw((u16 *)((port)+_IO_BASE), (buf), (ns))
+#define outsw(port, buf, ns)	_outsw((u16 *)((port)+_IO_BASE), (buf), (ns))
+#define insl(port, buf, nl)	_insl((u32 *)((port)+_IO_BASE), (buf), (nl))
+#define outsl(port, buf, nl)	_outsl((u32 *)((port)+_IO_BASE), (buf), (nl))
 
-#define inb(port)		in_8((unsigned char *)((port)+_IO_BASE))
-#define outb(val, port)		out_8((unsigned char *)((port)+_IO_BASE), (val))
+#define inb(port)		in_8((u8 *)((port)+_IO_BASE))
+#define outb(val, port)		out_8((u8 *)((port)+_IO_BASE), (val))
 #if defined(CONFIG_APUS)
-#define inw(port)		in_be16((unsigned short *)((port)+_IO_BASE))
-#define outw(val, port)		out_be16((unsigned short *)((port)+_IO_BASE), (val))
-#define inl(port)		in_be32((unsigned *)((port)+_IO_BASE))
-#define outl(val, port)		out_be32((unsigned *)((port)+_IO_BASE), (val))
+#define inw(port)		in_be16((u16 *)((port)+_IO_BASE))
+#define outw(val, port)		out_be16((u16 *)((port)+_IO_BASE), (val))
+#define inl(port)		in_be32((u32 *)((port)+_IO_BASE))
+#define outl(val, port)		out_be32((u32 *)((port)+_IO_BASE), (val))
 #else
-#define inw(port)		in_le16((unsigned short *)((port)+_IO_BASE))
-#define outw(val, port)		out_le16((unsigned short *)((port)+_IO_BASE), (val))
-#define inl(port)		in_le32((unsigned *)((port)+_IO_BASE))
-#define outl(val, port)		out_le32((unsigned *)((port)+_IO_BASE), (val))
+#define inw(port)		in_le16((u16 *)((port)+_IO_BASE))
+#define outw(val, port)		out_le16((u16 *)((port)+_IO_BASE), (val))
+#define inl(port)		in_le32((u32 *)((port)+_IO_BASE))
+#define outl(val, port)		out_le32((u32 *)((port)+_IO_BASE), (val))
 #endif
 
-#define inb_p(port)		in_8((unsigned char *)((port)+_IO_BASE))
-#define outb_p(val, port)	out_8((unsigned char *)((port)+_IO_BASE), (val))
-#define inw_p(port)		in_le16((unsigned short *)((port)+_IO_BASE))
-#define outw_p(val, port)	out_le16((unsigned short *)((port)+_IO_BASE), (val))
-#define inl_p(port)		in_le32((unsigned *)((port)+_IO_BASE))
-#define outl_p(val, port)	out_le32((unsigned *)((port)+_IO_BASE), (val))
+#define inb_p(port)		in_8((u8 *)((port)+_IO_BASE))
+#define outb_p(val, port)	out_8((u8 *)((port)+_IO_BASE), (val))
+#define inw_p(port)		in_le16((u16 *)((port)+_IO_BASE))
+#define outw_p(val, port)	out_le16((u16 *)((port)+_IO_BASE), (val))
+#define inl_p(port)		in_le32((u32 *)((port)+_IO_BASE))
+#define outl_p(val, port)	out_le32((u32 *)((port)+_IO_BASE), (val))
 
-extern void _insb(volatile unsigned char *port, void *buf, int ns);
-extern void _outsb(volatile unsigned char *port, const void *buf, int ns);
-extern void _insw(volatile unsigned short *port, void *buf, int ns);
-extern void _outsw(volatile unsigned short *port, const void *buf, int ns);
-extern void _insl(volatile unsigned long *port, void *buf, int nl);
-extern void _outsl(volatile unsigned long *port, const void *buf, int nl);
+extern void _insb(volatile u8 *port, void *buf, int ns);
+extern void _outsb(volatile u8 *port, const void *buf, int ns);
+extern void _insw(volatile u16 *port, void *buf, int ns);
+extern void _outsw(volatile u16 *port, const void *buf, int ns);
+extern void _insl(volatile u32 *port, void *buf, int nl);
+extern void _outsl(volatile u32 *port, const void *buf, int nl);
 
 /*
  * The *_ns versions below don't do byte-swapping.
  */
-#define insw_ns(port, buf, ns)	_insw_ns((unsigned short *)((port)+_IO_BASE), (buf), (ns))
-#define outsw_ns(port, buf, ns)	_outsw_ns((unsigned short *)((port)+_IO_BASE), (buf), (ns))
-#define insl_ns(port, buf, nl)	_insl_ns((unsigned long *)((port)+_IO_BASE), (buf), (nl))
-#define outsl_ns(port, buf, nl)	_outsl_ns((unsigned long *)((port)+_IO_BASE), (buf), (nl))
+#define insw_ns(port, buf, ns)	_insw_ns((u16 *)((port)+_IO_BASE), (buf), (ns))
+#define outsw_ns(port, buf, ns)	_outsw_ns((u16 *)((port)+_IO_BASE), (buf), (ns))
+#define insl_ns(port, buf, nl)	_insl_ns((u32 *)((port)+_IO_BASE), (buf), (nl))
+#define outsl_ns(port, buf, nl)	_outsl_ns((u32 *)((port)+_IO_BASE), (buf), (nl))
 
-extern void _insw_ns(volatile unsigned short *port, void *buf, int ns);
-extern void _outsw_ns(volatile unsigned short *port, const void *buf, int ns);
-extern void _insl_ns(volatile unsigned long *port, void *buf, int nl);
-extern void _outsl_ns(volatile unsigned long *port, const void *buf, int nl);
+extern void _insw_ns(volatile u16 *port, void *buf, int ns);
+extern void _outsw_ns(volatile u16 *port, const void *buf, int ns);
+extern void _insl_ns(volatile u32 *port, void *buf, int nl);
+extern void _outsl_ns(volatile u32 *port, const void *buf, int nl);
 
 #define IO_SPACE_LIMIT ~0
 
-#define memset_io(a,b,c)	memset((a),(b),(c))
-#define memcpy_fromio(a,b,c)	memcpy((a),(b),(c))
-#define memcpy_toio(a,b,c)	memcpy((a),(b),(c))
+#define memset_io(a,b,c)       memset((void *)(a),(b),(c))
+#define memcpy_fromio(a,b,c)   memcpy((a),(void *)(b),(c))
+#define memcpy_toio(a,b,c)	memcpy((void *)(a),(b),(c))
 
 #ifdef __KERNEL__
 /*

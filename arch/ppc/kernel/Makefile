@@ -88,24 +88,13 @@ endif
 ifeq ($(CONFIG_NVRAM),y)
   O_OBJS += pmac_nvram.o
 endif
-ifeq ($(CONFIG_6xx),y)
-  O_OBJS += open_pic.o indirect_pci.o
-endif
-ifeq ($(CONFIG_PPC64),y)
-  O_OBJS += open_pic.o indirect_pci.o
-endif
 ifeq ($(CONFIG_APUS),y)
   O_OBJS += apus_setup.o
 endif
-ifeq ($(CONFIG_PMAC),y)
-  O_OBJS += pmac_pic.o pmac_setup.o pmac_time.o feature.o pmac_pci.o prom.o
-endif
-ifeq ($(CONFIG_CHRP),y)
-  O_OBJS += chrp_pci.o pmac_pci.o chrp_setup.o i8259.o \
-	chrp_time.o pmac_time.o prom.o
-endif
-ifeq ($(CONFIG_PREP),y)
-  O_OBJS += prep_pci.o i8259.o prep_setup.o prep_nvram.o prep_time.o residual.o
+ifeq ($(CONFIG_ALL_PPC),y)
+  O_OBJS += pmac_pic.o pmac_setup.o pmac_time.o feature.o pmac_pci.o prom.o \
+	chrp_setup.o chrp_time.o chrp_pci.o open_pic.o indirect_pci.o \
+	prep_pci.o i8259.o prep_setup.o prep_nvram.o prep_time.o residual.o
 endif
 ifeq ($(CONFIG_GEMINI),y)
   O_OBJS += gemini_prom.o gemini_pci.o gemini_setup.o

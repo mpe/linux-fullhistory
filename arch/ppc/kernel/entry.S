@@ -435,7 +435,7 @@ _GLOBAL(fake_interrupt)
  * here so it's easy to add arch-specific sections later.
  * -- Cort
  */
-#if defined(CONFIG_CHRP) || defined(CONFIG_PMAC) || defined(CONFIG_ALL_PPC)
+#if defined(CONFIG_ALL_PPC)
 /*
  * On CHRP, the Run-Time Abstraction Services (RTAS) have to be
  * called with the MMU off.
@@ -475,4 +475,4 @@ enter_rtas:
 	mtspr	SRR0,r8
 	mtspr	SRR1,r9
 	rfi			/* return to caller */
-#endif /* CONFIG_CHRP || CONFIG_PMAC || CONFIG_ALL_PPC */
+#endif /* CONFIG_ALL_PPC */

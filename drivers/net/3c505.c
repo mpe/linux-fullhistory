@@ -361,8 +361,7 @@ static inline unsigned int send_pcb_fast(unsigned int base_addr, unsigned char b
 static inline void prime_rx(struct net_device *dev)
 {
 	elp_device *adapter = dev->priv;
-	while (adapter->rx_active < ELP_RX_PCBS &&
-	       netif_running(dev->state)) {
+	while (adapter->rx_active < ELP_RX_PCBS && netif_running(dev)) {
 		if (!start_receive(dev, &adapter->itx_pcb))
 			break;
 	}

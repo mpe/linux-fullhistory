@@ -1321,8 +1321,7 @@ struct page * filemap_nopage(struct vm_area_struct * area,
 	 * of the file is an error and results in a SIGBUS, while a
 	 * private mapping just maps in a zero page.
 	 */
-	if ((pgoff >= size) &&
-		(area->vm_flags & VM_SHARED) && (area->vm_mm == current->mm))
+	if ((pgoff >= size) && (area->vm_mm == current->mm))
 		return NULL;
 
 	/*
@@ -1431,33 +1430,6 @@ page_not_uptodate:
 	return NULL;
 }
 
-/*
- * Tries to write a shared mapped page to its backing store. May return -EIO
- * if the disk is full.
- */
-static inline int do_write_page(struct inode * inode, struct file * file,
-	struct page * page, unsigned long index)
-{
-	int retval;
-	int (*writepage) (struct dentry *, struct page *);
-
-	/* refuse to extend file size.. */
-	if (S_ISREG(inode->i_mode)) {
-		unsigned long size_idx = (inode->i_size + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
-
-		/* Ho humm.. We should have tested for this earlier */
-		if (size_idx <= index)
-			return -EIO;
-	}
-	writepage = inode->i_mapping->a_ops->writepage;
-	lock_page(page);
-
-	retval = writepage(file->f_dentry, page);
-
-	UnlockPage(page);
-	return retval;
-}
-
 static int filemap_write_page(struct file *file,
 			      unsigned long index,
 			      struct page * page,
@@ -1476,7 +1448,9 @@ static int filemap_write_page(struct file *file,
 	 * vma/file is guaranteed to exist in the unmap/sync cases because
 	 * mmap_sem is held.
 	 */
-	result = do_write_page(inode, file, page, index);
+	lock_page(page);
+	result = inode->i_mapping->a_ops->writepage(dentry, page);
+	UnlockPage(page);
 	return result;
 }
 

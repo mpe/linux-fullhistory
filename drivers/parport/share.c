@@ -247,7 +247,19 @@ void parport_announce_port (struct parport *port)
 {
 #ifdef CONFIG_PARPORT_1284
 	/* Analyse the IEEE1284.3 topology of the port. */
-	parport_daisy_init (port);
+	if (parport_daisy_init (port) == 0) {
+		/* No devices were detected.  Perhaps they are in some
+                   funny state; let's try to reset them and see if
+                   they wake up. */
+		parport_daisy_fini (port);
+		parport_write_control (port, PARPORT_CONTROL_SELECT);
+		udelay (50);
+		parport_write_control (port,
+				       PARPORT_CONTROL_SELECT |
+				       PARPORT_CONTROL_INIT);
+		udelay (50);
+		parport_daisy_init (port);
+	}
 #endif
 
 	/* Let drivers know that a new port has arrived. */

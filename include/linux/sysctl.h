@@ -664,7 +664,7 @@ struct ctl_table
 struct ctl_table_header
 {
 	ctl_table *ctl_table;
-	DLNODE(struct ctl_table_header) ctl_entry;	
+	struct list_head ctl_entry;
 };
 
 struct ctl_table_header * register_sysctl_table(ctl_table * table, 

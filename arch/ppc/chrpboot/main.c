@@ -10,7 +10,6 @@
 #include "../coffboot/zlib.h"
 #include <asm/bootinfo.h>
 #include <asm/processor.h>
-#define __KERNEL__
 #include <asm/page.h>
 
 extern void *finddevice(const char *);
@@ -49,17 +48,8 @@ chrpboot(int a1, int a2, void *prom)
     
     printf("chrpboot starting: loaded at 0x%x\n\r", &_start);
 
-    if (initrd_len) {
-	initrd_size = initrd_len;
-	initrd_start = (RAM_END - initrd_size) & ~0xFFF;
-	a1 = initrd_start;
-	a2 = initrd_size;
-	printf("initial ramdisk moving 0x%x <- 0x%x (%x bytes)\n\r", initrd_start,
-	       initrd_data,initrd_size);
-	memcpy((char *)initrd_start, initrd_data, initrd_size);
-	end_avail = (char *)initrd_start;
-    } else
-	end_avail = (char *) RAM_END;
+    end_avail = (char *) RAM_END;
+
     im = image_data;
     len = image_len;
     dst = (void *) PROG_START;
@@ -98,7 +88,7 @@ chrpboot(int a1, int a2, void *prom)
 	    rec = (struct bi_record *)((unsigned long)rec + rec->size);
 	    
 	    rec->tag = BI_SYSMAP;
-	    rec->data[0] = sysmap_data;
+	    rec->data[0] = (unsigned long)sysmap_data;
 	    rec->data[1] = sysmap_len;
 	    rec->size = sizeof(struct bi_record) + sizeof(unsigned long);
 	    rec = (struct bi_record *)((unsigned long)rec + rec->size);
@@ -129,6 +119,10 @@ void *zalloc(void *x, unsigned items, unsigned size)
 
 void zfree(void *x, void *addr, unsigned nb)
 {
+    nb = (nb + 7) & -8;
+    if (addr == (avail_ram - nb)) {
+	avail_ram -= nb;
+    }
 }
 
 #define HEAD_CRC	2

@@ -1838,7 +1838,7 @@ int __init mtrr_init(void)
     proc_root_mtrr = create_proc_entry ("mtrr", S_IWUSR | S_IRUGO, &proc_root);
     proc_root_mtrr->ops = &proc_mtrr_inode_operations;
 #endif
-#ifdev CONFIG_DEVFS_FS
+#ifdef CONFIG_DEVFS_FS
     devfs_handle = devfs_register (NULL, "cpu/mtrr", 0, DEVFS_FL_DEFAULT, 0, 0,
 				   S_IFREG | S_IRUGO | S_IWUSR, 0, 0,
 				   &mtrr_fops, NULL);

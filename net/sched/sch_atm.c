@@ -6,6 +6,7 @@
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/skbuff.h>
+#include <linux/interrupt.h>
 #include <linux/atmdev.h>
 #include <linux/atmclip.h>
 #include <linux/netdevice.h>
@@ -20,7 +21,7 @@ extern struct socket *sockfd_lookup(int fd, int *err); /* @@@ fix this */
 						   __inline__ in socket.c */
 
 
-#if 1 /* control */
+#if 0 /* control */
 #define DPRINTK(format,args...) printk(KERN_DEBUG format,##args)
 #else
 #define DPRINTK(format,args...)
@@ -64,6 +65,7 @@ struct atm_flow_data {
 	struct tcf_proto	*filter_list;
 	struct atm_vcc		*vcc;		/* VCC; NULL if VCC is closed */
 	void (*old_pop)(struct atm_vcc *vcc,struct sk_buff *skb); /* chaining */
+	struct atm_qdisc_data	*parent;	/* parent qdisc */
 	struct socket		*sock;		/* for closing */
 	u32			classid;	/* x:y type ID */
 	int			ref;		/* reference count */
@@ -79,6 +81,7 @@ struct atm_qdisc_data {
 	struct atm_flow_data	link;		/* unclassified skbs go here */
 	struct atm_flow_data	*flows;		/* NB: "link" is also on this
 						   list */
+	struct tasklet_struct	task;		/* requeue tasklet */
 };
 
 
@@ -153,6 +156,18 @@ static unsigned long atm_tc_bind_filter(struct Qdisc *sch,
 }
 
 
+static void destroy_filters(struct atm_flow_data *flow)
+{
+	struct tcf_proto *filter;
+
+	while ((filter = flow->filter_list)) {
+		DPRINTK("destroy_filters: destroying filter %p\n",filter);
+		flow->filter_list = filter->next;
+		filter->ops->destroy(filter);
+	}
+}
+
+
 /*
  * atm_tc_put handles all destructions, including the ones that are explicitly
  * requested (atm_tc_destroy, etc.). The assumption here is that we never drop
@@ -164,7 +179,6 @@ static void atm_tc_put(struct Qdisc *sch, unsigned long cl)
 	struct atm_qdisc_data *p = PRIV(sch);
 	struct atm_flow_data *flow = (struct atm_flow_data *) cl;
 	struct atm_flow_data **prev;
-	struct tcf_proto *filter;
 
 	DPRINTK("atm_tc_put(sch %p,[qdisc %p],flow %p)\n",sch,p,flow);
 	if (--flow->ref) return;
@@ -178,14 +192,10 @@ static void atm_tc_put(struct Qdisc *sch, unsigned long cl)
 	*prev = flow->next;
 	DPRINTK("atm_tc_put: qdisc %p\n",flow->q);
 	qdisc_destroy(flow->q);
-	while ((filter = flow->filter_list)) {
-		DPRINTK("atm_tc_put: destroying filter %p\n",filter);
-		flow->filter_list = filter->next;
-		DPRINTK("atm_tc_put: filter %p\n",filter);
-		filter->ops->destroy(filter);
-	}
+	destroy_filters(flow);
 	if (flow->sock) {
-		DPRINTK("atm_tc_put: f_count %d\n",file_count(flow->sock->file));
+		DPRINTK("atm_tc_put: f_count %d\n",
+		    file_count(flow->sock->file));
 		flow->vcc->pop = flow->old_pop;
 		sockfd_put(flow->sock);
 	}
@@ -200,8 +210,11 @@ static void atm_tc_put(struct Qdisc *sch, unsigned long cl)
 
 static void sch_atm_pop(struct atm_vcc *vcc,struct sk_buff *skb)
 {
+	struct atm_qdisc_data *p = VCC2FLOW(vcc)->parent;
+
+	D2PRINTK("sch_atm_pop(vcc %p,skb %p,[qdisc %p])\n",vcc,skb,p);
 	VCC2FLOW(vcc)->old_pop(vcc,skb);
-	mark_bh(NET_BH); /* may allow to send more */
+	tasklet_schedule(&p->task);
 }
 
 
@@ -302,6 +315,7 @@ static int atm_tc_change(struct Qdisc *sch, u32 classid, u32 parent,
 	flow->vcc->user_back = flow;
         DPRINTK("atm_tc_change: vcc %p\n",flow->vcc);
 	flow->old_pop = flow->vcc->pop;
+	flow->parent = p;
 	flow->vcc->pop = sch_atm_pop;
 	flow->classid = classid;
 	flow->ref = 1;
@@ -440,21 +454,31 @@ static int atm_tc_enqueue(struct sk_buff *skb,struct Qdisc *sch)
 }
 
 
-static struct sk_buff *atm_tc_dequeue(struct Qdisc *sch)
+/*
+ * Dequeue packets and send them over ATM. Note that we quite deliberately
+ * avoid checking net_device's flow control here, simply because sch_atm
+ * uses its own channels, which have nothing to do with any CLIP/LANE/or
+ * non-ATM interfaces.
+ */
+
+
+static void sch_atm_dequeue(unsigned long data)
 {
+	struct Qdisc *sch = (struct Qdisc *) data;
 	struct atm_qdisc_data *p = PRIV(sch);
 	struct atm_flow_data *flow;
 	struct sk_buff *skb;
 
-	D2PRINTK("atm_tc_dequeue(sch %p,[qdisc %p])\n",sch,p);
+	D2PRINTK("sch_atm_dequeue(sch %p,[qdisc %p])\n",sch,p);
 	for (flow = p->link.next; flow; flow = flow->next)
 		/*
 		 * If traffic is properly shaped, this won't generate nasty
-		 * little bursts. Otherwise, it may ... @@@
+		 * little bursts. Otherwise, it may ... (but that's okay)
 		 */
 		while ((skb = flow->q->dequeue(flow->q))) {
 			if (!atm_may_send(flow->vcc,skb->truesize)) {
-				flow->q->ops->requeue(skb,flow->q);
+				if (flow->q->ops->requeue(skb,flow->q))
+					sch->q.qlen--;
 				break;
 			}
 			sch->q.qlen--;
@@ -469,7 +493,7 @@ static struct sk_buff *atm_tc_dequeue(struct Qdisc *sch)
 				if (!new) continue;
 				skb = new;
 			}
-			D2PRINTK("atm_tc_dequeue: ip %p, data %p\n",
+			D2PRINTK("sch_atm_dequeue: ip %p, data %p\n",
 			    skb->nh.iph,skb->data);
 			ATM_SKB(skb)->vcc = flow->vcc;
 			memcpy(skb_push(skb,flow->hdr_len),flow->hdr,
@@ -479,6 +503,16 @@ static struct sk_buff *atm_tc_dequeue(struct Qdisc *sch)
 			/* atm.atm_options are already set by atm_tc_enqueue */
 			(void) flow->vcc->dev->ops->send(flow->vcc,skb);
 		}
+}
+
+
+static struct sk_buff *atm_tc_dequeue(struct Qdisc *sch)
+{
+	struct atm_qdisc_data *p = PRIV(sch);
+	struct sk_buff *skb;
+
+	D2PRINTK("atm_tc_dequeue(sch %p,[qdisc %p])\n",sch,p);
+	tasklet_schedule(&p->task);
 	skb = p->link.q->dequeue(p->link.q);
 	if (skb) sch->q.qlen--;
 	return skb;
@@ -530,6 +564,7 @@ static int atm_tc_init(struct Qdisc *sch,struct rtattr *opt)
 	p->link.classid = sch->handle;
 	p->link.ref = 1;
 	p->link.next = NULL;
+	tasklet_init(&p->task,sch_atm_dequeue,(unsigned long) sch);
 	MOD_INC_USE_COUNT;
 	return 0;
 }
@@ -554,6 +589,7 @@ static void atm_tc_destroy(struct Qdisc *sch)
 	DPRINTK("atm_tc_destroy(sch %p,[qdisc %p])\n",sch,p);
 	/* races ? */
 	while ((flow = p->flows)) {
+		destroy_filters(flow);
 		if (flow->ref > 1)
 			printk(KERN_ERR "atm_destroy: %p->ref = %d\n",flow,
 			    flow->ref);
@@ -565,6 +601,7 @@ static void atm_tc_destroy(struct Qdisc *sch)
 			break;
 		}
 	}
+	tasklet_kill(&p->task);
 	MOD_DEC_USE_COUNT;
 }
 

@@ -169,17 +169,25 @@ printk("smb_writepage_sync: short write, wsize=%d, result=%d\n", wsize, result);
 static int
 smb_writepage(struct dentry *dentry, struct page *page)
 {
-	int 	result;
+	struct inode *inode = dentry->d_inode;
+	unsigned long end_index = inode->i_size >> PAGE_CACHE_SHIFT;
+	unsigned offset = PAGE_CACHE_SIZE;
+	int err;
 
-#ifdef SMBFS_PARANOIA
-	if (!PageLocked(page))
-		printk("smb_writepage: page not already locked!\n");
-#endif
+	/* easy case */
+	if (page->index < end_index)
+		goto do_it;
+	/* things got complicated... */
+	offset = inode->i_size & (PAGE_CACHE_SIZE-1);
+	/* OK, are we completely out? */
+	if (page->index >= end_index+1 || !offset)
+		return -EIO;
+do_it:
 	get_page(page);
-	result = smb_writepage_sync(dentry, page, 0, PAGE_SIZE);
+	err = smb_writepage_sync(dentry, page, 0, offset);
 	SetPageUptodate(page);
 	put_page(page);
-	return result;
+	return err;
 }
 
 static int

@@ -53,7 +53,7 @@ typedef int (merge_requests_fn) (request_queue_t *q,
 				 int);
 typedef void (request_fn_proc) (request_queue_t *q);
 typedef request_queue_t * (queue_proc) (kdev_t dev);
-typedef void (make_request_fn) (int rw, struct buffer_head *bh);
+typedef int (make_request_fn) (request_queue_t *q, int rw, struct buffer_head *bh);
 typedef void (plug_device_fn) (request_queue_t *q, kdev_t device);
 typedef void (unplug_device_fn) (void *q);
 
@@ -129,7 +129,8 @@ extern wait_queue_head_t wait_for_request;
 extern void grok_partitions(struct gendisk *dev, int drive, unsigned minors, long size);
 extern void register_disk(struct gendisk *dev, kdev_t first, unsigned minors, struct block_device_operations *ops, long size);
 extern void generic_unplug_device(void * data);
-extern void generic_make_request(int rw, struct buffer_head * bh);
+extern int generic_make_request(request_queue_t *q, int rw,
+						struct buffer_head * bh);
 extern request_queue_t * blk_get_queue(kdev_t dev);
 
 /*

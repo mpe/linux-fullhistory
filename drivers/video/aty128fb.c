@@ -118,20 +118,19 @@ static struct fb_videomode defaultmode __initdata = {
 /* chip description information */
 struct aty128_chip_info {
     const char *name;
-    unsigned short vendor;
     unsigned short device;
 };
 
 /* supported Rage128 chipsets */
-static const struct aty128_chip_info aty128_pci_probe_list[] =
+static const struct aty128_chip_info aty128_pci_probe_list[] __initdata =
 {
-    {"PCI_DEVICE_ID_ATI_RAGE128_RE", PCI_VENDOR_ID_ATI, 0x5245},
-    {"PCI_DEVICE_ID_ATI_RAGE128_RF", PCI_VENDOR_ID_ATI, 0x5246},
-    {"PCI_DEVICE_ID_ATI_RAGE128_RK", PCI_VENDOR_ID_ATI, 0x524b},
-    {"PCI_DEVICE_ID_ATI_RAGE128_RL", PCI_VENDOR_ID_ATI, 0x524c},
-    {"PCI_DEVICE_ID_ATI_RAGE128_PF", PCI_VENDOR_ID_ATI, 0x5046},
-    {"PCI_DEVICE_ID_ATI_RAGE128_PR", PCI_VENDOR_ID_ATI, 0x5052},
-    {NULL, 0, 0}
+    {"Rage128 RE (PCI)", PCI_DEVICE_ID_ATI_RAGE128_RE},
+    {"Rage128 RF (AGP)", PCI_DEVICE_ID_ATI_RAGE128_RF},
+    {"Rage128 RK (PCI)", PCI_DEVICE_ID_ATI_RAGE128_RK},
+    {"Rage128 RL (AGP)", PCI_DEVICE_ID_ATI_RAGE128_RL},
+    {"Rage128 Pro PF (AGP)", PCI_DEVICE_ID_ATI_RAGE128_PF},
+    {"Rage128 Pro PR (PCI)", PCI_DEVICE_ID_ATI_RAGE128_PR},
+    {NULL, 0}
 };
 
 /* packed BIOS settings */
@@ -186,7 +185,8 @@ static int currcon = 0;
 
 static char *aty128fb_name = "ATY Rage128";
 static char fontname[40] __initdata = { 0 };
-static char noaccel __initdata = 0;
+static char noaccel __initdata = 1;
+static unsigned int initdepth __initdata = 8;
 
 #ifndef MODULE
 static const char *mode_option __initdata = NULL;
@@ -253,7 +253,9 @@ struct fb_info_aty128 {
     void *regbase;
     const struct aty128_meminfo *mem;   /* onboard mem info    */
     u32 vram_size;                      /* onboard video ram   */
-    void *BIOS_SEG;                     /* BIOS segment        */
+#ifndef CONFIG_PPC
+    void *bios_seg;                     /* video BIOS segment  */
+#endif
     unsigned short card_revision;	/* video card revision */
     struct aty128fb_par default_par, current_par;
     struct display disp;
@@ -362,12 +364,27 @@ static void fbcon_aty8_putcs(struct vc_data *conp, struct display *p,
 #endif
 #ifdef FBCON_HAS_CFB16
 static struct display_switch fbcon_aty128_16;
+static void fbcon_aty16_putc(struct vc_data *conp, struct display *p,
+                            int c, int yy, int xx);
+static void fbcon_aty16_putcs(struct vc_data *conp, struct display *p,
+                             const unsigned short *s, int count,
+                             int yy, int xx);
 #endif
 #ifdef FBCON_HAS_CFB24
 static struct display_switch fbcon_aty128_24;
+static void fbcon_aty24_putc(struct vc_data *conp, struct display *p,
+                            int c, int yy, int xx);
+static void fbcon_aty24_putcs(struct vc_data *conp, struct display *p,
+                             const unsigned short *s, int count,
+                             int yy, int xx);
 #endif
 #ifdef FBCON_HAS_CFB32
 static struct display_switch fbcon_aty128_32;
+static void fbcon_aty32_putc(struct vc_data *conp, struct display *p,
+                            int c, int yy, int xx);
+static void fbcon_aty32_putcs(struct vc_data *conp, struct display *p,
+                             const unsigned short *s, int count,
+                             int yy, int xx);
 #endif
 
 static struct fb_ops aty128fb_ops = {
@@ -651,7 +668,7 @@ aty128_init_engine(const struct aty128fb_par *par,
 		GMC_SRC_CLIP_DEFAULT			|
 		GMC_DST_CLIP_DEFAULT			|
 		GMC_BRUSH_SOLIDCOLOR			|
-		(bpp_to_depth(par->crtc.bpp) << 8)	|
+		(bpp_to_depth(par->crtc.bpp << 8))	|
 		GMC_SRC_DSTCOLOR			|
 		GMC_BYTE_ORDER_MSB_TO_LSB		|
 		GMC_DP_CONVERSION_TEMP_6500		|
@@ -911,6 +928,7 @@ aty128_crtc_to_var(const struct aty128_crtc *crtc,
     u32 v_total, v_disp, v_sync_strt, v_sync_wid, v_sync_pol, c_sync;
     u32 pix_width;
 
+    /* fun with masking */
     h_total = crtc->h_total & 0x1ff;
     h_disp = (crtc->h_total>>16) & 0xff;
     h_sync_strt = (crtc->h_sync_strt_wid>>3) & 0x1ff;
@@ -1094,7 +1112,7 @@ aty128_ddafifo(struct aty128_ddafifo *dsp,
 	x;
 
 #ifdef DEBUG
-    printk(KERN_DEBUG "x %x\n", x);
+    printk(KERN_DEBUG "aty128fb: x %x\n", x);
 #endif
     b = 0;
     while (x) {
@@ -1109,13 +1127,13 @@ aty128_ddafifo(struct aty128_ddafifo *dsp,
     x = round_div(n, d);
     roff = x * (fifo_depth - 4);
     if ((ron + m->Rloop) >= roff) {
-	printk(KERN_ERR "Mode out of range\n");
+	printk(KERN_ERR "aty128fb: Mode out of range!\n");
 	return -EINVAL;
     }
 
 #ifdef DEBUG
-    printk(KERN_DEBUG "p: %x rloop: %x x: %x ron: %x roff: %x\n", p,
-                       m->Rloop, x, ron, roff);
+    printk(KERN_DEBUG "aty128fb: p: %x rloop: %x x: %x ron: %x roff: %x\n",
+                       p, m->Rloop, x, ron, roff);
 #endif
     dsp->dda_config = p << 16 | m->Rloop << 20 | x;
     dsp->dda_on_off = ron << 16 | roff;
@@ -1203,10 +1221,10 @@ aty128_decode_var(struct fb_var_screeninfo *var, struct aty128fb_par *par,
 {
     int err;
 
-    if ((err = aty128_var_to_crtc(var, &(par->crtc), info)))
+    if ((err = aty128_var_to_crtc(var, &par->crtc, info)))
 	return err;
 
-    if ((err = aty128_var_to_pll(var->pixclock, &(par->pll), info)))
+    if ((err = aty128_var_to_pll(var->pixclock, &par->pll, info)))
 	return err;
 
     if ((err = aty128_ddafifo(&par->fifo_reg, &par->pll, par->crtc.bpp, info)))
@@ -1587,7 +1605,25 @@ aty128fb_setup(char *options)
 	    fontname[i] = 0;
 	} else if (!strncmp(this_opt, "noaccel", 7)) {
 	    noaccel = 1;
-	}
+	} else if (!strncmp(this_opt, "depth:", 6)) {
+            unsigned int depth = simple_strtoul(this_opt+6, NULL, 0);
+            switch (depth) {
+            case 0 ... 8:
+                initdepth = 8;
+                break;
+            case 9 ... 16:
+                initdepth = 16;
+                break;
+            case 17 ... 24:
+                initdepth = 24;
+                break;
+            case 25 ... 32:
+                initdepth = 32;
+                break;
+            default:
+                initdepth = 8;
+            }
+        }
 #ifdef CONFIG_MTRR
         else if(!strncmp(this_opt, "nomtrr", 6)) {
             mtrr = 0;
@@ -1636,9 +1672,11 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
     u32 dac;
     int j, k;
     u8 chip_rev;
+    const struct aty128_chip_info *aci = &aty128_pci_probe_list[0];
+    char *video_card = NULL;
 
     if (!register_test(info)) {
-	printk(KERN_ERR "Can't write to video registers\n");
+	printk(KERN_ERR "aty128fb: Can't write to video registers\n");
 	return 0;
     }
 
@@ -1647,14 +1685,17 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
 
     chip_rev = (aty_ld_le32(CONFIG_CNTL) >> 16) & 0x1F;
 
-    /* TODO: be more verbose */
-    printk(KERN_INFO "aty128fb: Rage128 [chip rev 0x%x] [card rev %x] ",
-                      chip_rev, info->card_revision);
+    /* put a name with the face */
+    while (info->pdev->device != aci->device) { aci++; }
+    video_card = (char *)aci->name;
+
+    printk(KERN_INFO "aty128fb: %s [chip rev 0x%x] [card rev %x] ",
+                      video_card, chip_rev, info->card_revision);
 
     if (info->vram_size % (1024 * 1024) == 0)
-	printk("%dM \n", info->vram_size / (1024*1024));
+	printk("%dM\n", info->vram_size / (1024*1024));
     else
-	printk("%dk \n", info->vram_size / 1024);
+	printk("%dk\n", info->vram_size / 1024);
 
     /* fill in info */
     strcpy(info->fb_info.modename, aty128fb_name);
@@ -1678,7 +1719,7 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,1)
 	if (!fb_find_mode(&var, &info->fb_info, mode_option, NULL, 0,
-			  &defaultmode, 8))
+			  &defaultmode, initdepth))
 	    var = default_var;
 #endif
 
@@ -1767,13 +1808,13 @@ aty128pci_probe(void)
     struct pci_dev *pdev = NULL;
     const struct aty128_chip_info *aci = &aty128_pci_probe_list[0];
 
-    while(aci->name != NULL) {
-	pdev = pci_find_device(aci->vendor, aci->device, NULL);
-	while(pdev != NULL) {
-            if(aty128_pci_register(pdev, aci) > 0)
+    while (aci->name != NULL) {
+        pdev = pci_find_device(PCI_VENDOR_ID_ATI, aci->device, pdev);
+        while (pdev != NULL) {
+            if (aty128_pci_register(pdev, aci) == 0)
                 return;
-            pdev = pci_find_device(aci->vendor, aci->device, pdev);
-	}
+            pdev = pci_find_device(PCI_VENDOR_ID_ATI, aci->device, pdev);
+        }
 	aci++;
     }
 
@@ -1797,16 +1838,16 @@ aty128_pci_register(struct pci_dev *pdev,
     fb_addr = rp->start;
     fb_addr &= PCI_BASE_ADDRESS_MEM_MASK;
 
-    request_mem_region (rp->start, rp->end - rp->start + 1, "aty128fb");
+    request_mem_region(rp->start, rp->end - rp->start + 1, "aty128fb");
 
     rp = &pdev->resource[2];
     reg_addr = rp->start;
     reg_addr &= PCI_BASE_ADDRESS_MEM_MASK;
 
     if (!reg_addr) {
-        release_mem_region (pdev->resource[0].start,
-                            pdev->resource[0].end -
-                            pdev->resource[0].start + 1);
+        release_mem_region(pdev->resource[0].start,
+                           pdev->resource[0].end -
+                           pdev->resource[0].start + 1);
         return -1;
     }
 #else
@@ -1874,13 +1915,13 @@ aty128_pci_register(struct pci_dev *pdev,
     return 0;
 
 err_out:
-    kfree (info);
+    kfree(info);
 unmap_out:
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,1)
-    release_mem_region (pdev->resource[0].start,
+    release_mem_region(pdev->resource[0].start,
 			pdev->resource[0].end -
 			pdev->resource[0].start + 1);
-    release_mem_region (pdev->resource[2].start,
+    release_mem_region(pdev->resource[2].start,
 			pdev->resource[2].end -
 			pdev->resource[2].start + 1);
 #endif
@@ -1949,7 +1990,7 @@ aty128find_ROM(struct fb_info_aty128 *info)
 
         printk(KERN_INFO "aty128fb: Rage128 BIOS located at segment %4.4X\n",
                          (u32)rom_base);
-        info->BIOS_SEG = rom_base;
+        info->bios_seg = rom_base;
         flag = 1;
         break;
     }
@@ -1965,16 +2006,16 @@ aty128_get_pllinfo(struct fb_info_aty128 *info)
     u16 bios_header_offset, pll_info_offset;
     PLL_BLOCK pll;
 
-    bios_header = info->BIOS_SEG + 0x48L;
+    bios_header = info->bios_seg + 0x48L;
     header_ptr = bios_header;
 
     bios_header_offset = readw(header_ptr);
-    bios_header = info->BIOS_SEG + bios_header_offset;
+    bios_header = info->bios_seg + bios_header_offset;
     bios_header += 0x30;
 
     header_ptr = bios_header;
     pll_info_offset = readw(header_ptr);
-    header_ptr = info->BIOS_SEG + pll_info_offset;
+    header_ptr = info->bios_seg + pll_info_offset;
 
     memcpy_fromio(&pll, header_ptr, 50);
 
@@ -2013,8 +2054,8 @@ aty128_get_pllinfo(struct fb_info_aty128 *info)
     }       
 
     /* free up to-be unused resources */
-    if (info->BIOS_SEG)
-        iounmap(info->BIOS_SEG);
+    if (info->bios_seg)
+        iounmap(info->bios_seg);
 
     return;
 }           
@@ -2346,7 +2387,6 @@ fbcon_aty128_bmove(struct display *p, int sy, int sx, int dy, int dx,
 }
 
 
-/* TODO: Fix accel and add to these structs */
 #ifdef FBCON_HAS_CFB8
 static void fbcon_aty8_putc(struct vc_data *conp, struct display *p,
                             int c, int yy, int xx)

@@ -507,9 +507,6 @@ EXPORT_SYMBOL(dev_load);
 #endif
 EXPORT_SYMBOL(dev_ioctl);
 EXPORT_SYMBOL(dev_queue_xmit);
-#ifdef CONFIG_NET_FASTROUTE
-EXPORT_SYMBOL(dev_fastroute_stat);
-#endif
 #ifdef CONFIG_NET_HW_FLOWCONTROL
 EXPORT_SYMBOL(netdev_register_fc);
 EXPORT_SYMBOL(netdev_unregister_fc);

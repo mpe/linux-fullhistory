@@ -729,7 +729,6 @@ static struct devfs_entry *search_for_entry_in_dir (struct devfs_entry *parent,
     return search_for_entry (parent,
 			     curr->u.symlink.linkname, curr->u.symlink.length,
 			     FALSE, FALSE, NULL, TRUE);
-    return curr;
 }   /*  End Function search_for_entry_in_dir  */
 
 static struct devfs_entry *create_entry (struct devfs_entry *parent,

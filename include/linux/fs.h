@@ -1023,7 +1023,7 @@ extern int vfs_readlink(struct dentry *, char *, int, const char *);
 extern struct dentry *vfs_follow_link(struct dentry *, struct dentry *, unsigned, const char *);
 extern int page_readlink(struct dentry *, char *, int);
 extern struct dentry *page_follow_link(struct dentry *, struct dentry *, unsigned);
-struct inode_operations page_symlink_inode_operations;
+extern struct inode_operations page_symlink_inode_operations;
 
 extern struct super_block *get_super(kdev_t);
 struct super_block *get_empty_super(void);

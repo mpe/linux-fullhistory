@@ -24,6 +24,7 @@
 #define FBIOGET_CON2FBMAP	0x460F
 #define FBIOPUT_CON2FBMAP	0x4610
 #define FBIOBLANK		0x4611		/* arg: 0 or vesa level + 1 */
+#define FBIOGET_VBLANK		_IOR('F', 0x12, struct fb_vblank)
 
 #define FB_TYPE_PACKED_PIXELS		0	/* Packed Pixels	*/
 #define FB_TYPE_PLANES			1	/* Non interleaved planes */
@@ -209,6 +210,24 @@ struct fb_monspecs {
 	__u16 vfmin;			/* vfreq lower limit (Hz) */
 	__u16 vfmax;			/* vfreq upper limit (Hz) */
 	unsigned dpms : 1;		/* supports DPMS */
+};
+
+#define FB_VBLANK_VBLANKING	0x001	/* currently in a vertical blank */
+#define FB_VBLANK_HBLANKING	0x002	/* currently in a horizontal blank */
+#define FB_VBLANK_HAVE_VBLANK	0x004	/* vertical blanks can be detected */
+#define FB_VBLANK_HAVE_HBLANK	0x008	/* horizontal blanks can be detected */
+#define FB_VBLANK_HAVE_COUNT	0x010	/* global retrace counter is available */
+#define FB_VBLANK_HAVE_VCOUNT	0x020	/* the vcount field is valid */
+#define FB_VBLANK_HAVE_HCOUNT	0x040	/* the hcount field is valid */
+#define FB_VBLANK_VSYNCING	0x080	/* currently in a vsync */
+#define FB_VBLANK_HAVE_VSYNC	0x100	/* verical syncs can be detected */
+
+struct fb_vblank {
+	__u32 flags;			/* FB_VBLANK flags */
+	__u32 count;			/* counter of retraces since boot */
+	__u32 vcount;			/* current scanline position */
+	__u32 hcount;			/* current scandot position */
+	__u32 reserved[4];		/* reserved for future compatibility */
 };
 
 #ifdef __KERNEL__

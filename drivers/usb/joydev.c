@@ -82,7 +82,7 @@ static struct joydev *joydev_base[BITS_PER_LONG];
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
 MODULE_SUPPORTED_DEVICE("js");
 
-static int js_correct(int value, struct js_corr *corr)
+static int joydev_correct(int value, struct js_corr *corr)
 {
 	switch (corr->type) {
 		case JS_CORR_NONE:
@@ -102,7 +102,7 @@ static int js_correct(int value, struct js_corr *corr)
 	return value;
 }
 
-static void js_event(struct input_handle *handle, unsigned int type, unsigned int code, int value)
+static void joydev_event(struct input_handle *handle, unsigned int type, unsigned int code, int value)
 {
 	struct joydev *joydev = handle->private;
 	struct joydev_list *list = joydev->list;
@@ -120,7 +120,7 @@ static void js_event(struct input_handle *handle, unsigned int type, unsigned in
 		case EV_ABS:
 			event.type = JS_EVENT_AXIS;
 			event.number = joydev->absmap[code];
-			event.value = js_correct(value, &joydev->corr[event.number]);
+			event.value = joydev_correct(value, &joydev->corr[event.number]);
 			break;
 
 		default:
@@ -226,8 +226,8 @@ static ssize_t joydev_read(struct file *file, char *buf, size_t count, loff_t *p
 
 		data.buttons =  (joydev->nkey > 0 && test_bit(joydev->keypam[0], input->key)) ? 1 : 0 |
 				(joydev->nkey > 1 && test_bit(joydev->keypam[1], input->key)) ? 2 : 0;
-		data.x = ((js_correct(input->abs[ABS_X], &joydev->corr[0]) / 256) + 128) >> joydev->glue.JS_CORR.x;
-		data.y = ((js_correct(input->abs[ABS_Y], &joydev->corr[1]) / 256) + 128) >> joydev->glue.JS_CORR.y;
+		data.x = ((joydev_correct(input->abs[ABS_X], &joydev->corr[0]) / 256) + 128) >> joydev->glue.JS_CORR.x;
+		data.y = ((joydev_correct(input->abs[ABS_Y], &joydev->corr[1]) / 256) + 128) >> joydev->glue.JS_CORR.y;
 
 		if (copy_to_user(buf, &data, sizeof(struct JS_DATA_TYPE)))
 			return -EFAULT;
@@ -276,7 +276,7 @@ static ssize_t joydev_read(struct file *file, char *buf, size_t count, loff_t *p
 			event.number = list->startup;
 		} else {
 			event.type = JS_EVENT_AXIS | JS_EVENT_INIT;
-			event.value = js_correct(input->abs[joydev->abspam[list->startup - joydev->nkey]],
+			event.value = joydev_correct(input->abs[joydev->abspam[list->startup - joydev->nkey]],
 							&joydev->corr[list->startup - joydev->nkey]);
 			event.number = list->startup - joydev->nkey;
 		}
@@ -459,29 +459,27 @@ static void joydev_disconnect(struct input_handle *handle)
 }
 
 static struct input_handler joydev_handler = {
-	event:		js_event,
+	event:		joydev_event,
 	connect:	joydev_connect,
 	disconnect:	joydev_disconnect,
 };
 
-#ifdef MODULE
-void cleanup_module(void)
-{
-	input_unregister_handler(&joydev_handler);
-	if (unregister_chrdev(JOYSTICK_MAJOR, "js"))
-		printk(KERN_ERR "js: can't unregister device\n");
-}
-
-int init_module(void)
-#else
-int __init joydev_init(void)
-#endif
+static int joydev_init(void)
 {
 	if (register_chrdev(JOYDEV_MAJOR, "js", &joydev_fops)) {
 		printk(KERN_ERR "joydev: unable to get major %d for joystick\n", JOYDEV_MAJOR);
 		return -EBUSY;
 	}
 	input_register_handler(&joydev_handler);
-
 	return 0;
 }
+
+static void joydev_exit(void)
+{
+	input_unregister_handler(&joydev_handler);
+	if (unregister_chrdev(JOYSTICK_MAJOR, "js"))
+		printk(KERN_ERR "js: can't unregister device\n");
+}
+
+module_init(joydev_init);
+module_exit(joydev_exit);

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Thomas Davis (tadavis@jps.net)
  * Created at:    
- * Modified at:   Fri Jan 21 09:41:08 2000
+ * Modified at:   Tue Feb 22 10:05:06 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999-2000 Dag Brattli
@@ -567,7 +567,6 @@ static void ircc_change_speed(void *priv, __u32 speed)
 			   "(), using irport to change speed to %d\n", speed);
 		irport_change_speed(self->irport, speed);
 	}	
-	dev->tbusy = 0;
 
 	register_bank(iobase, 1);
 	outb(((inb(iobase+IRCC_SCE_CFGA) & 0x87) | ir_mode), 
@@ -617,9 +616,7 @@ static int ircc_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 	if ((speed = irda_get_speed(skb)) != self->io.speed)
 		self->new_speed = speed;
 	
-	/* Lock transmit buffer */
-	if (irda_lock((void *) &dev->tbusy) == FALSE)
-		return -EBUSY;
+	netif_stop_queue(dev);
 
 	memcpy(self->tx_buff.head, skb->data, skb->len);
 
@@ -741,11 +738,7 @@ static void ircc_dma_xmit_complete(struct ircc_cb *self, int iobase)
 		self->new_speed = 0;
 	}
 
-	/* Unlock tx_buff and request another frame */
-	self->netdev->tbusy = 0; /* Unlock */
-	
-	/* Tell the network layer, that we can accept more frames */
-	mark_bh(NET_BH);
+	netif_wake_queue(self->netdev);
 }
 
 /*
@@ -875,7 +868,6 @@ static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	iobase = self->io.fir_base;
 
 	spin_lock(&self->lock);	
-	dev->interrupt = 1;
 
 	register_bank(iobase, 0);
 	iir = inb(iobase+IRCC_IIR);
@@ -898,7 +890,6 @@ static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	register_bank(iobase, 0);
 	outb(IRCC_IER_ACTIVE_FRAME|IRCC_IER_EOM, iobase+IRCC_IER);
 
-	dev->interrupt = 0;
 	spin_unlock(&self->lock);
 }
 

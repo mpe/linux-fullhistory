@@ -788,8 +788,7 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     
     while ((status = inw(ioaddr + EL3_STATUS)) &
 	(IntLatch | RxComplete | StatsFull)) {
-	if (!netif_device_present(dev)) ||
-	    ((status & 0xe000) != 0x2000)) {
+	if (!netif_device_present(dev) || ((status & 0xe000) != 0x2000)) {
 	    DEBUG(1, "%s: interrupt from dead card\n", dev->name);
 	    break;
 	}

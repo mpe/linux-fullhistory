@@ -181,6 +181,8 @@ ret_from_fork:
 	call SYMBOL_NAME(schedule_tail)
 	addl $4, %esp
 	GET_CURRENT(%ebx)
+	testb $0x20,flags(%ebx)		# PF_TRACESYS
+	jne tracesys_exit
 	jmp	ret_from_sys_call
 
 /*

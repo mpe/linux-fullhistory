@@ -2359,7 +2359,7 @@ __initfunc(static int ia_init(struct atm_dev *dev))
 	{  
 		printk(DEV_LABEL "(itf %d): can't enable memory (0x%x)\n",  
 		    dev->number,error);  
-		return error;  
+		return -EIO;  
 	}  
 	/*  
 	 * Delay at least 1us before doing any mem accesses (how 'bout 10?)  
@@ -2499,7 +2499,7 @@ __initfunc(static int ia_start(struct atm_dev *dev))
                 printk(KERN_ERR DEV_LABEL "(itf %d): can't enable memory+"  
                     "master (0x%x)\n",dev->number, error);  
                 free_irq(iadev->irq, dev); 
-                return error;  
+                return -EIO;  
         }  
 	udelay(10);  
   
@@ -3074,7 +3074,7 @@ static int ia_send(struct atm_vcc *vcc, struct sk_buff *skb)
         {
             if (!skb)
                 printk(KERN_CRIT "null skb in ia_send\n");
-            dev_kfree_skb(skb);
+            else dev_kfree_skb(skb);
             return -EINVAL;
         }                         
         spin_lock_irqsave(&iadev->tx_lock, flags); 

@@ -1,3 +1,17 @@
+Sun Feb 20 11:00 2000 Gerard Roudier (groudier@club-internet.fr)
+	* version sym53c8xx-1.5j
+	- Add support for the new dynamic dma mapping kernel interface.
+	  Requires Linux-2.3.47 (tested with pre-2.3.47-6).
+	  Many thanks to David S. Miller for his preliminary changes 
+	  that have been useful guidelines, for having reviewed the 
+	  code and having tested this driver version on Ultra-Sparc.
+	- 2 tiny bugs fixed in the PCI wrapper that provides support 
+	  for early kernels without pci device structure.
+	- Get data transfer direction from the scsi command structure 
+	  (Scsi_Cmnd) with kernels that provide this information.
+	- Fix an old bug that only affected 896 rev. 1 when driver 
+	  profile support option was set in kernel configuration.
+
 Sat Jan 8  22:00 2000 Gerard Roudier (groudier@club-internet.fr)
 	* version sym53c8xx-1.5h
 	- Add year 2000 copyright.

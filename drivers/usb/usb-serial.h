@@ -87,15 +87,6 @@ struct usb_serial {
 
 #define NUM_DONT_CARE	(-1)
 
-/* local function prototypes */
-static int serial_open (struct tty_struct *tty, struct file * filp);
-static void serial_close (struct tty_struct *tty, struct file * filp);
-static int serial_write (struct tty_struct * tty, int from_user, const unsigned char *buf, int count);
-static int serial_write_room (struct tty_struct *tty);
-static int serial_chars_in_buffer (struct tty_struct *tty);
-static void serial_throttle (struct tty_struct * tty);
-static void serial_unthrottle (struct tty_struct * tty);
-
 
 /* This structure defines the individual serial converter. */
 struct usb_serial_device_type {
@@ -110,6 +101,8 @@ struct usb_serial_device_type {
 	char	num_bulk_out;
 	char	num_ports;		/* number of serial ports this device has */
 
+	void	*private;		/* data private to the specific driver */
+	
 	/* function call to make before accepting driver */
 	int (*startup) (struct usb_serial *serial);	/* return 0 to continue initialization, anything else to abort */
 	
@@ -118,21 +111,30 @@ struct usb_serial_device_type {
 	void (*close)(struct tty_struct * tty, struct file * filp);
 	int  (*write)(struct tty_struct * tty, int from_user,const unsigned char *buf, int count);
 	int  (*write_room)(struct tty_struct *tty);
+	int  (*ioctl)(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned long arg);
+	void (*set_termios)(struct tty_struct *tty, struct termios * old);
 	int  (*chars_in_buffer)(struct tty_struct *tty);
 	void (*throttle)(struct tty_struct * tty);
 	void (*unthrottle)(struct tty_struct * tty);
+	
 	void (*read_bulk_callback)(struct urb *urb);
 	void (*write_bulk_callback)(struct urb *urb);
+
 };
 
 
 /* function prototypes for a "generic" type serial converter (no flow control, not all endpoints needed) */
 /* need to always compile these in, as some of the other devices use these functions as their own. */
+/* if a driver does not provide a function pointer, the generic function will be called. */
 static int  generic_serial_open		(struct tty_struct *tty, struct file *filp);
 static void generic_serial_close	(struct tty_struct *tty, struct file *filp);
 static int  generic_serial_write	(struct tty_struct *tty, int from_user, const unsigned char *buf, int count);
 static int  generic_write_room		(struct tty_struct *tty);
+static int  generic_ioctl		(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned long arg);
+static void generic_set_termios		(struct tty_struct *tty, struct termios * old);
 static int  generic_chars_in_buffer	(struct tty_struct *tty);
+static void generic_throttle		(struct tty_struct *tty);
+static void generic_unthrottle		(struct tty_struct *tty);
 static void generic_read_bulk_callback	(struct urb *urb);
 static void generic_write_bulk_callback	(struct urb *urb);
 
@@ -150,13 +152,6 @@ static struct usb_serial_device_type generic_device = {
 	num_bulk_in:		NUM_DONT_CARE,
 	num_bulk_out:		NUM_DONT_CARE,
 	num_ports:		1,
-	open:			generic_serial_open,
-	close:			generic_serial_close,
-	write:			generic_serial_write,
-	write_room:		generic_write_room,
-	chars_in_buffer:	generic_chars_in_buffer,
-	read_bulk_callback:	generic_read_bulk_callback,
-	write_bulk_callback:	generic_write_bulk_callback
 };
 #endif
 
@@ -165,6 +160,7 @@ static struct usb_serial_device_type generic_device = {
 /* function prototypes for the Connect Tech WhiteHEAT serial converter */
 static int  whiteheat_serial_open	(struct tty_struct *tty, struct file *filp);
 static void whiteheat_serial_close	(struct tty_struct *tty, struct file *filp);
+static void whiteheat_set_termios	(struct tty_struct *tty, struct termios * old);
 static void whiteheat_throttle		(struct tty_struct *tty);
 static void whiteheat_unthrottle	(struct tty_struct *tty);
 static int  whiteheat_startup		(struct usb_serial *serial);
@@ -198,11 +194,9 @@ static struct usb_serial_device_type whiteheat_device = {
 	num_ports:		4,
 	open:			whiteheat_serial_open,
 	close:			whiteheat_serial_close,
-	write:			generic_serial_write,
-	write_room:		generic_write_room,
-	chars_in_buffer:	generic_chars_in_buffer,
 	throttle:		whiteheat_throttle,
-	unthrottle:		whiteheat_unthrottle
+	unthrottle:		whiteheat_unthrottle,
+	set_termios:		whiteheat_set_termios,
 };
 #endif
 
@@ -283,14 +277,9 @@ static struct usb_serial_device_type handspring_device = {
 	num_ports:		2,
 	open:			visor_serial_open,
 	close:			visor_serial_close,
-	write:			generic_serial_write,
-	write_room:		generic_write_room,
-	chars_in_buffer:	generic_chars_in_buffer,
 	throttle:		visor_throttle,
 	unthrottle:		visor_unthrottle,
 	startup:		visor_startup,
-	read_bulk_callback:	generic_read_bulk_callback,
-	write_bulk_callback:	generic_write_bulk_callback
 };
 #endif
 
@@ -300,7 +289,7 @@ static struct usb_serial_device_type handspring_device = {
 static int  ftdi_sio_serial_open	(struct tty_struct *tty, struct file *filp);
 static void ftdi_sio_serial_close	(struct tty_struct *tty, struct file *filp);
 
-/* All of the device info needed for the Handspring Visor */
+/* All of the device info needed for the FTDI SIO serial converter */
 static __u16	ftdi_vendor_id		= FTDI_VENDOR_ID;
 static __u16	ftdi_sio_product_id	= FTDI_SIO_SERIAL_CONVERTER_ID;
 static struct usb_serial_device_type ftdi_sio_device = {
@@ -316,11 +305,6 @@ static struct usb_serial_device_type ftdi_sio_device = {
 	num_ports:		1,
 	open:			ftdi_sio_serial_open,
 	close:			ftdi_sio_serial_close,
-	write:			generic_serial_write,
-	write_room:		generic_write_room,
-	chars_in_buffer:	generic_chars_in_buffer,
-	read_bulk_callback:	generic_read_bulk_callback,
-	write_bulk_callback:	generic_write_bulk_callback
 };
 #endif
 
@@ -331,7 +315,7 @@ static int  keyspan_pda_serial_open	(struct tty_struct *tty, struct file *filp);
 static void keyspan_pda_serial_close	(struct tty_struct *tty, struct file *filp);
 static int  keyspan_pda_startup		(struct usb_serial *serial);
 
-/* All of the device info needed for the Handspring Visor */
+/* All of the device info needed for the Keyspan PDA serial converter */
 static __u16	keyspan_vendor_id		= KEYSPAN_VENDOR_ID;
 static __u16	keyspan_pda_fake_product_id	= KEYSPAN_PDA_FAKE_ID;
 static __u16	keyspan_pda_product_id		= KEYSPAN_PDA_ID;
@@ -360,11 +344,6 @@ static struct usb_serial_device_type keyspan_pda_device = {
 	num_ports:		1,
 	open:			keyspan_pda_serial_open,
 	close:			keyspan_pda_serial_close,
-	write:			generic_serial_write,
-	write_room:		generic_write_room,
-	chars_in_buffer:	generic_chars_in_buffer,
-	read_bulk_callback:	generic_read_bulk_callback,
-	write_bulk_callback:	generic_write_bulk_callback
 };
 #endif
 

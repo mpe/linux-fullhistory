@@ -679,8 +679,24 @@ unsigned long probe_irq_on(void)
 	unsigned long delay;
 	unsigned long val;
 
+	/* 
+	 * something may have generated an irq long ago and we want to
+	 * flush such a longstanding irq before considering it as spurious. 
+	 */
+	spin_lock_irq(&irq_controller_lock);
+	for (i = NR_IRQS-1; i > 0; i--) 
+		if (!irq_desc[i].action) 
+			irq_desc[i].handler->startup(i);
+	spin_unlock_irq(&irq_controller_lock);
+
+	/* Wait for longstanding interrupts to trigger. */
+	for (delay = jiffies + HZ/50; time_after(delay, jiffies); )
+		/* about 20ms delay */ synchronize_irq();
+
 	/*
-	 * first, enable any unassigned irqs
+	 * enable any unassigned irqs
+	 * (we must startup again here because if a longstanding irq
+	 * happened in the previous stage, it may have masked itself)
 	 */
 	spin_lock_irq(&irq_controller_lock);
 	for (i = NR_IRQS-1; i > 0; i--) {

@@ -50,6 +50,7 @@
 #include <linux/random.h>
 #include <linux/pkt_sched.h>
 #include <asm/byteorder.h>
+#include <linux/spinlock.h>
 #include "syncppp.h"
 
 #define MAXALIVECNT     6               /* max. alive packets */
@@ -126,6 +127,7 @@ struct cisco_packet {
 
 static struct sppp *spppq;
 static struct timer_list sppp_keepalive_timer;
+static spinlock_t spppq_lock;
 
 static void sppp_keepalive (unsigned long dummy);
 static void sppp_cp_send (struct sppp *sp, u16 proto, u8 type,
@@ -359,8 +361,8 @@ static void sppp_keepalive (unsigned long dummy)
 {
 	struct sppp *sp;
 	unsigned long flags;
-	save_flags(flags);
-	cli();
+
+	spin_lock_irqsave(&spppq_lock, flags);
 
 	for (sp=spppq; sp; sp=sp->pp_next) 
 	{
@@ -402,7 +404,7 @@ static void sppp_keepalive (unsigned long dummy)
 				sp->lcp.echoid, 4, &nmagic);
 		}
 	}
-	restore_flags(flags);
+	spin_unlock_irqrestore(&spppq_lock, flags);
 	sppp_keepalive_timer.expires=jiffies+10*HZ;
 	add_timer(&sppp_keepalive_timer);
 }
@@ -915,7 +917,9 @@ void sppp_attach(struct ppp_device *pd)
 {
 	struct net_device *dev = pd->dev;
 	struct sppp *sp = &pd->sppp;
-	
+	unsigned long flags;
+
+	spin_lock_irqsave(&spppq_lock, flags);
 	/* Initialize keepalive handler. */
 	if (! spppq)
 	{
@@ -927,6 +931,7 @@ void sppp_attach(struct ppp_device *pd)
 	/* Insert new entry into the keepalive list. */
 	sp->pp_next = spppq;
 	spppq = sp;
+	spin_unlock_irqrestore(&spppq_lock, flags);
 
 	sp->pp_loopcnt = 0;
 	sp->pp_alivecnt = 0;
@@ -971,7 +976,9 @@ EXPORT_SYMBOL(sppp_attach);
 void sppp_detach (struct net_device *dev)
 {
 	struct sppp **q, *p, *sp = (struct sppp *)sppp_of(dev);
+	unsigned long flags;
 
+	spin_lock_irqsave(&spppq_lock, flags);
 	/* Remove the entry from the keepalive list. */
 	for (q = &spppq; (p = *q); q = &p->pp_next)
 		if (p == sp) {
@@ -983,6 +990,7 @@ void sppp_detach (struct net_device *dev)
 	if (! spppq)
 		del_timer(&sppp_keepalive_timer);
 	sppp_clear_timeout (sp);
+	spin_unlock_irqrestore(&spppq_lock, flags);
 }
 
 EXPORT_SYMBOL(sppp_detach);
@@ -1292,6 +1300,7 @@ void sync_ppp_init(void)
 {
 	printk(KERN_INFO "Cronyx Ltd, Synchronous PPP and CISCO HDLC (c) 1994\n");
 	printk(KERN_INFO "Linux port (c) 1998 Building Number Three Ltd & Jan \"Yenya\" Kasprzak.\n");
+	spin_lock_init(&spppq_lock);
 	sppp_packet_type.type=htons(ETH_P_WAN_PPP);	
 	dev_add_pack(&sppp_packet_type);
 }

@@ -100,6 +100,58 @@ else
   LX_OBJS += $(NEED_IDT77105_LX)
 endif
 
+ifeq ($(CONFIG_ATM_FORE200E_PCA),y)
+FORE200E_FW_OBJS += fore200e_pca_fw.o
+  ifeq ($(CONFIG_ATM_FORE200E_PCA_DEFAULT_FW),y)
+#   guess the target endianess to choose the right PCA-200E firmware image
+    CONFIG_ATM_FORE200E_PCA_FW := $(shell if test -n "`$(CC) -E -dM ../../include/asm/byteorder.h | grep ' __LITTLE_ENDIAN '`"; then echo pca200e.bin; else echo pca200e_ecd.bin2; fi)
+  endif
+endif
+ifeq ($(CONFIG_ATM_FORE200E_SBA),y)
+FORE200E_FW_OBJS += fore200e_sba_fw.o
+  ifeq ($(CONFIG_ATM_FORE200E_SBA_DEFAULT_FW),y)
+    CONFIG_ATM_FORE200E_SBA_FW := sba200e_ecd.bin2
+  endif
+endif
+ifeq ($(CONFIG_ATM_FORE200E),y)
+L_OBJS += fore200e.o $(FORE200E_FW_OBJS)
+else
+  ifeq ($(CONFIG_ATM_FORE200E),m)
+  M_OBJS += fore_200e.o
+  endif
+endif
+
 EXTRA_CFLAGS=-g
 
 include $(TOPDIR)/Rules.make
+
+# FORE Systems 200E-series firmware magic
+fore200e_pca_fw.c: $(patsubst "%", %, $(CONFIG_ATM_FORE200E_PCA_FW)) \
+	  fore200e_mkfirm
+	./fore200e_mkfirm -k -b _fore200e_pca_fw \
+	  -i $(CONFIG_ATM_FORE200E_PCA_FW) -o $@
+
+fore200e_sba_fw.c: $(patsubst "%", %, $(CONFIG_ATM_FORE200E_SBA_FW)) \
+	  fore200e_mkfirm
+	./fore200e_mkfirm -k -b _fore200e_sba_fw \
+	  -i $(CONFIG_ATM_FORE200E_SBA_FW) -o $@
+
+fore200e_mkfirm: fore200e_mkfirm.c
+	$(HOSTCC) $(HOSTCFLAGS) $< -o $@
+
+# deal with the various suffixes of the firmware images
+%.bin:  %.data
+	objcopy -Iihex $< -Obinary $@.gz
+	gzip -df $@.gz
+
+%.bin1: %.data
+	objcopy -Iihex $< -Obinary $@.gz
+	gzip -df $@.gz
+
+%.bin2: %.data
+	objcopy -Iihex $< -Obinary $@.gz
+	gzip -df $@.gz
+
+# module build
+fore_200e.o: fore200e.o $(FORE200E_FW_OBJS)
+	$(LD) -r -o $@ $< $(FORE200E_FW_OBJS)

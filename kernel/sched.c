@@ -497,17 +497,15 @@ repeat_schedule:
 	c = -1000;
 	if (prev->state == TASK_RUNNING)
 		goto still_running;
-still_running_back:
 
-	tmp = runqueue_head.next;
-	while (tmp != &runqueue_head) {
+still_running_back:
+	list_for_each(tmp, runqueue_head) {
 		p = list_entry(tmp, struct task_struct, run_list);
 		if (can_schedule(p)) {
 			int weight = goodness(p, this_cpu, prev->active_mm);
 			if (weight > c)
 				c = weight, next = p;
 		}
-		tmp = tmp->next;
 	}
 
 	/* Do we need to re-calculate counters? */
@@ -658,12 +656,9 @@ static inline void __wake_up_common(wait_queue_head_t *q, unsigned int mode, con
         if (!head->next || !head->prev)
                 WQ_BUG();
 #endif
-	tmp = head->next;
-	while (tmp != head) {
+	list_for_each(tmp, *head) {
 		unsigned int state;
                 wait_queue_t *curr = list_entry(tmp, wait_queue_t, task_list);
-
-		tmp = tmp->next;
 
 #if WAITQUEUE_DEBUG
 		CHECK_MAGIC(curr->__magic);

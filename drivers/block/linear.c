@@ -121,14 +121,15 @@ static int linear_stop (mddev_t *mddev)
 	return 0;
 }
 
-static int linear_make_request (mddev_t *mddev, int rw, struct buffer_head * bh)
+static int linear_make_request (request_queue_t *q, mddev_t *mddev,
+			int rw, struct buffer_head * bh)
 {
         linear_conf_t *conf = mddev_to_conf(mddev);
         struct linear_hash *hash;
         dev_info_t *tmp_dev;
         long block;
 
-	block = bh->b_blocknr * (bh->b_size >> 10);
+	block = bh->b_rsector >> 1;
 	hash = conf->hash_table + (block / conf->smallest->size);
   
 	if (block >= (hash->dev0->size + hash->dev0->offset)) {
@@ -149,8 +150,7 @@ static int linear_make_request (mddev_t *mddev, int rw, struct buffer_head * bh)
 	bh->b_rdev = tmp_dev->dev;
 	bh->b_rsector = (block - tmp_dev->offset) << 1;
 
-	generic_make_request(rw, bh);
-	return 0;
+	return 1;
 }
 
 static int linear_status (char *page, mddev_t *mddev)

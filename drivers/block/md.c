@@ -75,16 +75,16 @@ static devfs_handle_t devfs_handle = NULL;
 
 static struct gendisk md_gendisk=
 {
-	MD_MAJOR,
-	"md",
-	0,
-	1,
-	md_hd_struct,
-	md_size,
-	MAX_MD_DEVS,
-	NULL,
-	NULL,
-	&md_fops,
+	major: MD_MAJOR,
+	major_name: "md",
+	minor_shift: 0,
+	max_p: 1,
+	part: md_hd_struct,
+	sizes: md_size,
+	nr_real: MAX_MD_DEVS,
+	real_devices: NULL,
+	next: NULL,
+	fops: &md_fops,
 };
 
 void md_plug_device (request_queue_t *mdqueue, kdev_t dev)
@@ -178,17 +178,16 @@ static void do_md_request (request_queue_t * q)
 	return;
 }
 
-void md_make_request (int rw, struct buffer_head * bh)
+static int md_make_request (request_queue_t *q, int rw, struct buffer_head * bh)
 {
-	mddev_t *mddev = kdev_to_mddev(bh->b_dev);
+	mddev_t *mddev = kdev_to_mddev(bh->b_rdev);
 
-	if (!mddev || !mddev->pers)
-		bh->b_end_io(bh, 0);
+	if (mddev && mddev->pers)
+		return mddev->pers->make_request(q, mddev, rw, bh);
 	else {
-		if ((rw == READ || rw == READA) && buffer_uptodate(bh))
-			bh->b_end_io(bh, 1);
-		else
-			mddev->pers->make_request(mddev, rw, bh);
+		mark_buffer_clean(bh);
+		bh->b_end_io(bh, 0);
+		return -1;
 	}
 }
 
@@ -232,28 +231,6 @@ static mddev_t * alloc_mddev (kdev_t dev)
 	md_list_add(&mddev->all_mddevs, &all_mddevs);
 
 	return mddev;
-}
-
-static void free_mddev (mddev_t *mddev)
-{
-	if (!mddev) {
-		MD_BUG();
-		return;
-	}
-
-	/*
-	 * Make sure nobody else is using this mddev
-	 * (careful, we rely on the global kernel lock here)
-	 */
-	while (md_atomic_read(&mddev->resync_sem.count) != 1)
-		schedule();
-	while (md_atomic_read(&mddev->recovery_sem.count) != 1)
-		schedule();
-
-	del_mddev_mapping(mddev, MKDEV(MD_MAJOR, mdidx(mddev)));
-	md_list_del(&mddev->all_mddevs);
-	MD_INIT_LIST_HEAD(&mddev->all_mddevs);
-	kfree(mddev);
 }
 
 struct gendisk * find_gendisk (kdev_t dev)
@@ -755,6 +732,32 @@ static void export_array (mddev_t *mddev)
 	}
 	if (mddev->nb_dev)
 		MD_BUG();
+}
+
+static void free_mddev (mddev_t *mddev)
+{
+	if (!mddev) {
+		MD_BUG();
+		return;
+	}
+
+	export_array(mddev);
+	md_size[mdidx(mddev)] = 0;
+	md_hd_struct[mdidx(mddev)].nr_sects = 0;
+
+	/*
+	 * Make sure nobody else is using this mddev
+	 * (careful, we rely on the global kernel lock here)
+	 */
+	while (md_atomic_read(&mddev->resync_sem.count) != 1)
+		schedule();
+	while (md_atomic_read(&mddev->recovery_sem.count) != 1)
+		schedule();
+
+	del_mddev_mapping(mddev, MKDEV(MD_MAJOR, mdidx(mddev)));
+	md_list_del(&mddev->all_mddevs);
+	MD_INIT_LIST_HEAD(&mddev->all_mddevs);
+	kfree(mddev);
 }
 
 #undef BAD_CSUM
@@ -1723,13 +1726,7 @@ static int do_md_stop (mddev_t * mddev, int ro)
 		printk (STILL_MOUNTED, mdidx(mddev));
 		OUT(-EBUSY);
 	}
-  
-	/*
-	 * complain if it's already stopped
-	 */
-	if (!mddev->nb_dev)
-		OUT(-ENXIO);
-
+ 
 	if (mddev->pers) {
 		/*
 		 * It is safe to call stop here, it only frees private
@@ -1796,9 +1793,6 @@ static int do_md_stop (mddev_t * mddev, int ro)
 	 * Free resources if final stop
 	 */
 	if (!ro) {
-		export_array(mddev);
-		md_size[mdidx(mddev)] = 0;
-		md_hd_struct[mdidx(mddev)].nr_sects = 0;
 		free_mddev(mddev);
 
 		printk (KERN_INFO "md%d stopped.\n", mdidx(mddev));
@@ -3279,15 +3273,15 @@ static void md_geninit (void)
 {
 	int i;
 
-	blksize_size[MD_MAJOR] = md_blocksizes;
-	max_readahead[MD_MAJOR] = md_maxreadahead;
-
 	for(i = 0; i < MAX_MD_DEVS; i++) {
 		md_blocksizes[i] = 1024;
+		md_size[i] = 0;
 		md_maxreadahead[i] = MD_READAHEAD;
 		register_disk(&md_gendisk, MKDEV(MAJOR_NR,i), 1, &md_fops, 0);
-
 	}
+	blksize_size[MD_MAJOR] = md_blocksizes;
+	blk_size[MAJOR_NR] = md_size;
+	max_readahead[MD_MAJOR] = md_maxreadahead;
 
 	printk("md.c: sizeof(mdp_super_t) = %d\n", (int)sizeof(mdp_super_t));
 

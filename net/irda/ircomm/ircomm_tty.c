@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Jun  6 21:00:56 1999
- * Modified at:   Tue Jan  4 14:12:06 2000
+ * Modified at:   Wed Feb 23 00:09:02 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       serial.c and previous IrCOMM work by Takahide Higuchi
  * 
@@ -1079,6 +1079,9 @@ void ircomm_tty_check_modem_status(struct ircomm_tty_cb *self)
 					   "(), CTS tx start...\n");
 				tty->hw_stopped = 0;
 				
+				/* Wake up processes blocked on open */
+				wake_up_interruptible(&self->open_wait);
+
 				queue_task(&self->tqueue, &tq_immediate);
 				mark_bh(IMMEDIATE_BH);
 				return;

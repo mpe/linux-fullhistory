@@ -285,6 +285,7 @@
 #include <linux/config.h>
 #include <linux/ioport.h>
 #include <linux/list.h>
+#include <linux/errno.h>
 
 /* This defines the direction arg to the DMA mapping routines. */
 #define PCI_DMA_BIDIRECTIONAL	0

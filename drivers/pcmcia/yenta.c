@@ -17,6 +17,12 @@
 #include "yenta.h"
 #include "i82365.h"
 
+#if 0
+#define DEBUG(x,args...)	printk(__FUNCTION__ ": " x,##args)
+#else
+#define DEBUG(x,args...)
+#endif
+
 /* Don't ask.. */
 #define to_cycles(ns)	((ns)/120)
 #define to_ns(cycles)	((cycles)*120)
@@ -26,13 +32,24 @@
  * regular memory space ("cb_xxx"), configuration space
  * ("config_xxx") and compatibility space ("exca_xxxx")
  */
-#define cb_readl(sock,reg)	readl((sock)->base + (reg))
-#define cb_writel(sock,reg,val) writel(val,(sock)->base + (reg))
+static inline u32 cb_readl(pci_socket_t *socket, unsigned reg)
+{
+	u32 val = readl(socket->base + reg);
+	DEBUG("%p %04x %08x\n", socket, reg, val);
+	return val;
+}
+
+static inline void cb_writel(pci_socket_t *socket, unsigned reg, u32 val)
+{
+	DEBUG("%p %04x %08x\n", socket, reg, val);
+	writel(val, socket->base + reg);
+}
 
 static inline u8 config_readb(pci_socket_t *socket, unsigned offset)
 {
 	u8 val;
 	pci_read_config_byte(socket->dev, offset, &val);
+	DEBUG("%p %04x %02x\n", socket, offset, val);
 	return val;
 }
 
@@ -40,6 +57,7 @@ static inline u16 config_readw(pci_socket_t *socket, unsigned offset)
 {
 	u16 val;
 	pci_read_config_word(socket->dev, offset, &val);
+	DEBUG("%p %04x %04x\n", socket, offset, val);
 	return val;
 }
 
@@ -47,25 +65,55 @@ static inline u32 config_readl(pci_socket_t *socket, unsigned offset)
 {
 	u32 val;
 	pci_read_config_dword(socket->dev, offset, &val);
+	DEBUG("%p %04x %08x\n", socket, offset, val);
 	return val;
 }
 
-#define config_writeb(s,off,val) pci_write_config_byte((s)->dev, (off), (val))
-#define config_writew(s,off,val) pci_write_config_word((s)->dev, (off), (val))
-#define config_writel(s,off,val) pci_write_config_dword((s)->dev, (off), (val))
-
-#define exca_readb(sock,reg)	readb((sock)->base + 0x800 + (reg))
-#define exca_writeb(sock,reg,v)	writeb((v), (sock)->base + 0x800 + (reg))
-
-static u16 exca_readw(pci_socket_t *socket, unsigned reg)
+static inline void config_writeb(pci_socket_t *socket, unsigned offset, u8 val)
 {
-	return exca_readb(socket, reg) | (exca_readb(socket, reg+1) << 8);
+	DEBUG("%p %04x %02x\n", socket, offset, val);
+	pci_write_config_byte(socket->dev, offset, val);
+}
+
+static inline void config_writew(pci_socket_t *socket, unsigned offset, u16 val)
+{
+	DEBUG("%p %04x %04x\n", socket, offset, val);
+	pci_write_config_word(socket->dev, offset, val);
+}
+
+static inline void config_writel(pci_socket_t *socket, unsigned offset, u32 val)
+{
+	DEBUG("%p %04x %08x\n", socket, offset, val);
+	pci_write_config_dword(socket->dev, offset, val);
+}
+
+static inline u8 exca_readb(pci_socket_t *socket, unsigned reg)
+{
+	u8 val = readb(socket->base + 0x800 + reg);
+	DEBUG("%p %04x %02x\n", socket, reg, val);
+	return val;
+}
+
+static inline u8 exca_readw(pci_socket_t *socket, unsigned reg)
+{
+	u16 val;
+	val = readb(socket->base + 0x800 + reg);
+	val |= readb(socket->base + 0x800 + reg + 1) << 8;
+	DEBUG("%p %04x %04x\n", socket, reg, val);
+	return val;
+}
+
+static inline void exca_writeb(pci_socket_t *socket, unsigned reg, u8 val)
+{
+	DEBUG("%p %04x %02x\n", socket, reg, val);
+	writeb(val, socket->base + 0x800 + reg);
 }
 
 static void exca_writew(pci_socket_t *socket, unsigned reg, u16 val)
 {
-	exca_writeb(socket, reg, val);
-	exca_writeb(socket, reg+1, val >> 8);
+	DEBUG("%p %04x %04x\n", socket, reg, val);
+	writeb(val, socket->base + 0x800 + reg);
+	writeb(val >> 8, socket->base + 0x800 + reg + 1);
 }
 
 /*

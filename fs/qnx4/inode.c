@@ -231,7 +231,7 @@ unsigned long qnx4_block_map( struct inode *inode, long iblock )
 		block = le32_to_cpu(qnx4_inode->i_first_xtnt.xtnt_blk) + iblock - 1;
 	} else {
 		// iblock is beyond first extent. We have to follow the extent chain.
-		i_xblk = qnx4_inode->i_xblk;
+		i_xblk = le32_to_cpu(qnx4_inode->i_xblk);
 		offset = iblock - le32_to_cpu(qnx4_inode->i_first_xtnt.xtnt_size);
 		ix = 0;
 		while ( --nxtnt > 0 ) {

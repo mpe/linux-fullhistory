@@ -447,12 +447,7 @@ static struct input_handler mousedev_handler = {
 	disconnect:	mousedev_disconnect,
 };
 
-
-#ifdef MODULE
-int init_module(void)
-#else
-int __init mousedev_init(void)
-#endif
+static int __init mousedev_init(void)
 {
 	input_register_handler(&mousedev_handler);
 
@@ -472,13 +467,13 @@ int __init mousedev_init(void)
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit mousedev_exit(void)
 {
 #ifdef CONFIG_INPUT_MOUSEDEV_MIX
 	misc_deregister(&mousedev_single.misc);
 #endif
-
 	input_unregister_handler(&mousedev_handler);
 }
-#endif
+
+module_init(mousedev_init);
+module_exit(mousedev_exit);

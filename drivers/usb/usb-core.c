@@ -33,12 +33,8 @@ int usb_audio_init(void);
 int usb_cpia_init(void);
 int usb_ibmcam_init(void);
 int usb_ov511_init(void);
-int usb_stor_init(void);
 int dabusb_init(void);
 int plusb_init(void);
-int usb_mouse_init(void);
-int usb_kbd_init(void);
-int graphire_init(void);
 
 /*
  * HCI drivers
@@ -86,23 +82,11 @@ int usb_init(void)
 #ifdef CONFIG_USB_OV511
 	usb_ov511_init();
 #endif
-#ifdef CONFIG_USB_STORAGE
-	usb_stor_init();
-#endif
 #ifdef CONFIG_USB_DABUSB
 	dabusb_init();
 #endif
 #ifdef CONFIG_USB_PLUSB
 	plusb_init();
-#endif
-#ifdef CONFIG_USB_MOUSE
-	usb_mouse_init();
-#endif
-#ifdef CONFIG_USB_KBD
-	usb_kbd_init();
-#endif
-#ifdef CONFIG_USB_GRAPHIRE
-	graphire_init();
 #endif
 #ifdef CONFIG_USB_UHCI
 	uhci_init();

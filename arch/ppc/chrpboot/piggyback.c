@@ -1,8 +1,9 @@
 #include <stdio.h>
+#include <unistd.h>
 
 extern long ce_exec_config[];
 
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	int i, cnt, pos, len;
 	unsigned int cksum, val;

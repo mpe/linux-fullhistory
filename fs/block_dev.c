@@ -193,7 +193,7 @@ ssize_t block_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
 	if (blk_size[MAJOR(dev)])
 		size = (loff_t) blk_size[MAJOR(dev)][MINOR(dev)] << BLOCK_SIZE_BITS;
 	else
-		size = INT_MAX;
+		size = (loff_t) INT_MAX << BLOCK_SIZE_BITS;
 
 	if (offset > size)
 		left = 0;

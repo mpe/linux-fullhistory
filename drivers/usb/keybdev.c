@@ -158,18 +158,18 @@ struct input_handler keybdev_handler = {
 	disconnect:	keybdev_disconnect,
 };
 
-#ifdef MODULE
-void cleanup_module(void)
-{
-	kbd_ledfunc = NULL;
-	input_unregister_handler(&keybdev_handler);
-}
-int init_module(void)
-#else
-int __init keybdev_init(void)
-#endif
+static int __init keybdev_init(void)
 {
 	input_register_handler(&keybdev_handler);
 	kbd_ledfunc = keybdev_ledfunc;
 	return 0;
 }
+
+static void __exit keybdev_exit(void)
+{
+	kbd_ledfunc = NULL;
+	input_unregister_handler(&keybdev_handler);
+}
+
+module_init(keybdev_init);
+module_exit(keybdev_exit);

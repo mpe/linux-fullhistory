@@ -10,7 +10,7 @@
  * TODO:
  *  This file needs a *really* good cleanup. Restructure and optimize.
  *  Make sure it can be compiled for non-APUS configs. Begin to move
- *  Amiga specific stuff into linux/machine/amiga.
+ *  Amiga specific stuff into mach/amiga.
  */
 
 #include <linux/config.h>
@@ -26,6 +26,10 @@
 #ifdef CONFIG_APUS
 #include <asm/logging.h>
 #endif
+
+/* Needs INITSERIAL call in head.S! */
+#undef APUS_DEBUG
+
 
 #include <linux/ide.h>
 #define T_CHAR          (0x0000)        /* char:  don't touch  */
@@ -59,37 +63,6 @@ static u_short driveid_types[] = {
 };
 
 #define num_driveid_types       (sizeof(driveid_types)/sizeof(*driveid_types))
-
-#if 0 /* Get rid of this crud */
-/* Get the IDE stuff from the 68k file */
-#define ide_init_hwif_ports m68k_ide_init_hwif_ports
-#define ide_default_irq m68k_ide_default_irq
-#undef ide_request_irq
-#define ide_request_irq m68k_ide_request_irq
-#undef ide_free_irq
-#define ide_free_irq m68k_ide_free_irq
-#define ide_default_io_base m68k_ide_default_io_base
-#define ide_check_region m68k_ide_check_region
-#define ide_request_region m68k_ide_request_region
-#define ide_release_region m68k_ide_release_region
-#define ide_fix_driveid m68k_ide_fix_driveid
-#define ide_init_default_hwifs m68k_ide_init_default_hwifs
-#define select_t m68k_select_t
-//#include <asm/hdreg.h>
-#include <asm-m68k/ide.h>
-#undef ide_free_irq
-#undef select_t
-#undef ide_request_irq
-#undef ide_init_default_hwifs
-#undef ide_init_hwif_ports
-#undef ide_default_irq
-#undef ide_default_io_base
-#undef ide_check_region
-#undef ide_request_region
-#undef ide_release_region
-#undef ide_fix_driveid
-/*-------------------------------------------*/
-#endif
 
 #include <asm/bootinfo.h>
 #include <asm/setup.h>
@@ -764,6 +737,12 @@ void apus_ide_init_hwif_ports (hw_regs_t *hw, ide_ioreg_t data_port,
 /****************************************************** IRQ stuff */
 
 __apus
+static unsigned int apus_irq_cannonicalize(unsigned int irq)
+{
+	return irq;
+}
+
+__apus
 int apus_get_irq_list(char *buf)
 {
 #ifdef CONFIG_APUS
@@ -922,6 +901,114 @@ static void apus_kbd_init_hw(void)
 }
 
 
+/****************************************************** debugging */
+
+/* some serial hardware definitions */
+#define SDR_OVRUN   (1<<15)
+#define SDR_RBF     (1<<14)
+#define SDR_TBE     (1<<13)
+#define SDR_TSRE    (1<<12)
+
+#define AC_SETCLR   (1<<15)
+#define AC_UARTBRK  (1<<11)
+
+#define SER_DTR     (1<<7)
+#define SER_RTS     (1<<6)
+#define SER_DCD     (1<<5)
+#define SER_CTS     (1<<4)
+#define SER_DSR     (1<<3)
+
+static __inline__ void ser_RTSon(void)
+{
+    ciab.pra &= ~SER_RTS; /* active low */
+}
+
+__apus
+int __debug_ser_out( unsigned char c )
+{
+	custom.serdat = c | 0x100;
+	mb();
+	while (!(custom.serdatr & 0x2000))
+		barrier();
+	return 1;
+}
+
+__apus
+unsigned char __debug_ser_in( void )
+{
+	unsigned char c;
+
+	/* XXX: is that ok?? derived from amiga_ser.c... */
+	while( !(custom.intreqr & IF_RBF) )
+		barrier();
+	c = custom.serdatr;
+	/* clear the interrupt, so that another character can be read */
+	custom.intreq = IF_RBF;
+	return c;
+}
+
+__apus
+int __debug_serinit( void )
+{	
+	unsigned long flags;
+	
+	save_flags (flags);
+	cli();
+
+	/* turn off Rx and Tx interrupts */
+	custom.intena = IF_RBF | IF_TBE;
+
+	/* clear any pending interrupt */
+	custom.intreq = IF_RBF | IF_TBE;
+
+	restore_flags (flags);
+
+	/*
+	 * set the appropriate directions for the modem control flags,
+	 * and clear RTS and DTR
+	 */
+	ciab.ddra |= (SER_DTR | SER_RTS);   /* outputs */
+	ciab.ddra &= ~(SER_DCD | SER_CTS | SER_DSR);  /* inputs */
+	
+#ifdef CONFIG_KGDB
+	/* turn Rx interrupts on for GDB */
+	custom.intena = IF_SETCLR | IF_RBF;
+	ser_RTSon();
+#endif
+
+	return 0;
+}
+
+__apus
+void __debug_print_hex(unsigned long x)
+{
+	int i;
+	char hexchars[] = "0123456789ABCDEF";
+
+	for (i = 0; i < 8; i++) {
+		__debug_ser_out(hexchars[(x >> 28) & 15]);
+		x <<= 4;
+	}
+	__debug_ser_out('\n');
+	__debug_ser_out('\r');
+}
+
+__apus
+void __debug_print_string(char* s)
+{
+	unsigned char c;
+	while((c = *s++))
+		__debug_ser_out(c);
+	__debug_ser_out('\n');
+	__debug_ser_out('\r');
+}
+
+__apus
+static void apus_progress(char *s, unsigned short value)
+{
+	__debug_print_string(s);
+}
+
 /****************************************************** init */
 
 /* The number of spurious interrupts */
@@ -970,7 +1057,7 @@ void apus_init_IRQ(void)
 	int i;
 
 	for ( i = 0 ; i < NR_IRQS ; i++ )
-		irq_desc[i].ctl = &amiga_irqctrl;
+		irq_desc[i].handler = &amiga_irqctrl;
 
 	for (i = 0; i < NUM_IRQ_NODES; i++)
 		nodes[i].handler = NULL;
@@ -1015,13 +1102,17 @@ void apus_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.setup_arch     = apus_setup_arch;
 	ppc_md.setup_residual = NULL;
 	ppc_md.get_cpuinfo    = apus_get_cpuinfo;
-	ppc_md.irq_cannonicalize = NULL;
+	ppc_md.irq_cannonicalize = apus_irq_cannonicalize;
 	ppc_md.init_IRQ       = apus_init_IRQ;
 	ppc_md.get_irq        = apus_get_irq;
 	ppc_md.post_irq       = apus_post_irq;
 #ifdef CONFIG_HEARTBEAT
 	ppc_md.heartbeat      = apus_heartbeat;
 	ppc_md.heartbeat_count = 1;
+#endif
+#ifdef APUS_DEBUG
+	__debug_serinit();
+	ppc_md.progress       = apus_progress;
 #endif
 	ppc_md.init           = NULL;
 

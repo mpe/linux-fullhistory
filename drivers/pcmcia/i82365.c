@@ -165,25 +165,6 @@ typedef struct vg46x_state_t {
     u_char		ctl, ema;
 } vg46x_state_t;
 
-typedef struct ti113x_state_t {
-    u_int		sysctl;
-    u_char		cardctl, devctl, diag;
-} ti113x_state_t;
-
-typedef struct rl5c4xx_state_t {
-    u_short		misc, ctl, io, mem;
-} rl5c4xx_state_t;
-
-typedef struct o2micro_state_t {
-    u_char		mode_a, mode_b, mode_c, mode_d;
-    u_char		mhpg, fifo, mode_e;
-} o2micro_state_t;
-
-typedef struct topic_state_t {
-    u_char		slot, ccr, cdr;
-    u_int		rcr;
-} topic_state_t;
-
 typedef struct socket_info_t {
     u_short		type, flags;
     socket_cap_t	cap;
@@ -273,22 +254,6 @@ static pcic_t pcic[] = {
 };
 
 #define PCIC_COUNT	(sizeof(pcic)/sizeof(pcic_t))
-
-/*====================================================================*/
-
-/* Some PCI shortcuts */
-
-#define config_readb(sock, r, v)	pci_read_config_byte((sock)->pdev, r, v)
-#define config_readw(sock, r, v)	pci_read_config_word((sock)->pdev, r, v)
-#define config_readl(sock, r, v)	pci_read_config_dword((sock)->pdev, r, v)
-#define config_writeb(sock, r, v)	pci_write_config_byte((sock)->pdev, r, v)
-#define config_writew(sock, r, v)	pci_write_config_word((sock)->pdev, r, v)
-#define config_writel(sock, r, v)	pci_write_config_dword((sock)->pdev, r, v)
-
-#define cb_readb(s, r)		readb(socket[s].cb_virt + (r))
-#define cb_readl(s, r)		readl(socket[s].cb_virt + (r))
-#define cb_writeb(s, r, v)	writeb(v, socket[s].cb_virt + (r))
-#define cb_writel(s, r, v)	writel(v, socket[s].cb_virt + (r))
 
 /*====================================================================*/
 

@@ -14,6 +14,17 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (02/21/2000) gkh
+ *	Made it so that any serial devices only have to specify which functions
+ *	they want to overload from the generic function calls (great, 
+ *	inheritance in C, in a driver, just what I wanted...)
+ *	Added support for set_termios and ioctl function calls. No drivers take
+ *	advantage of this yet.
+ *	Removed the #ifdef MODULE, now there is no module specific code.
+ *	Cleaned up a few comments in usb-serial.h that were wrong (thanks again
+ *	to Miles Lott).
+ *	Small fix to get_free_serial.
+ *
  * (02/14/2000) gkh
  *	Removed the Belkin and Peracom functionality from the driver due to
  *	the lack of support from the vendor, and me not wanting people to 
@@ -169,6 +180,19 @@
 
 #include "usb-serial.h"
 
+/* parity check flag */
+#define RELEVANT_IFLAG(iflag)	(iflag & (IGNBRK|BRKINT|IGNPAR|PARMRK|INPCK))
+
+/* local function prototypes */
+static int  serial_open (struct tty_struct *tty, struct file * filp);
+static void serial_close (struct tty_struct *tty, struct file * filp);
+static int  serial_write (struct tty_struct * tty, int from_user, const unsigned char *buf, int count);
+static int  serial_write_room (struct tty_struct *tty);
+static int  serial_chars_in_buffer (struct tty_struct *tty);
+static void serial_throttle (struct tty_struct * tty);
+static void serial_unthrottle (struct tty_struct * tty);
+static int  serial_ioctl (struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned long arg);
+static void serial_set_termios (struct tty_struct *tty, struct termios * old);
 
 static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum);
 static void usb_serial_disconnect(struct usb_device *dev, void *ptr);
@@ -224,7 +248,7 @@ static struct usb_serial *get_free_serial (int num_ports, int *minor)
 			continue;
 
 		good_spot = 1;
-		for (j = 0; j < num_ports-1; ++j)
+		for (j = 1; j <= num_ports-1; ++j)
 			if (serial_table[i+j])
 				good_spot = 0;
 		if (good_spot == 0)
@@ -328,12 +352,12 @@ static int serial_open (struct tty_struct *tty, struct file * filp)
 	tty->driver_data = serial;
 	serial->tty = tty;
 	 
-	/* pass on to the driver specific version of this function */
+	/* pass on to the driver specific version of this function if it is available */
 	if (serial->type->open) {
 		return (serial->type->open(tty, filp));
+	} else {
+		return (generic_serial_open(tty, filp));
 	}
-		
-	return (0);
 }
 
 
@@ -363,9 +387,11 @@ static void serial_close(struct tty_struct *tty, struct file * filp)
 		return;
 	}
 
-	/* pass on to the driver specific version of this function */
+	/* pass on to the driver specific version of this function if it is available */
 	if (serial->type->close) {
 		serial->type->close(tty, filp);
+	} else {
+		generic_serial_close(tty, filp);
 	}
 }	
 
@@ -391,13 +417,12 @@ static int serial_write (struct tty_struct * tty, int from_user, const unsigned 
 		return (-EINVAL);
 	}
 	
-	/* pass on to the driver specific version of this function */
+	/* pass on to the driver specific version of this function if it is available */
 	if (serial->type->write) {
 		return (serial->type->write(tty, from_user, buf, count));
+	} else {
+		return (generic_serial_write(tty, from_user, buf, count));
 	}
-
-	/* no specific driver, so return that we didn't write anything */
-	return (0);
 }
 
 
@@ -422,12 +447,12 @@ static int serial_write_room (struct tty_struct *tty)
 		return (-EINVAL);
 	}
 	
-	/* pass on to the driver specific version of this function */
+	/* pass on to the driver specific version of this function if it is available */
 	if (serial->type->write_room) {
 		return (serial->type->write_room(tty));
+	} else {
+		return (generic_write_room(tty));
 	}
-
-	return (0);
 }
 
 
@@ -452,12 +477,12 @@ static int serial_chars_in_buffer (struct tty_struct *tty)
 		return (-EINVAL);
 	}
 	
-	/* pass on to the driver specific version of this function */
+	/* pass on to the driver specific version of this function if it is available */
 	if (serial->type->chars_in_buffer) {
 		return (serial->type->chars_in_buffer(tty));
+	} else {
+		return (generic_chars_in_buffer(tty));
 	}
-
-	return (0);
 }
 
 
@@ -485,6 +510,8 @@ static void serial_throttle (struct tty_struct * tty)
 	/* pass on to the driver specific version of this function */
 	if (serial->type->throttle) {
 		serial->type->throttle(tty);
+	} else {
+		generic_throttle(tty);
 	}
 
 	return;
@@ -515,8 +542,82 @@ static void serial_unthrottle (struct tty_struct * tty)
 	/* pass on to the driver specific version of this function */
 	if (serial->type->unthrottle) {
 		serial->type->unthrottle(tty);
+	} else {
+		generic_unthrottle(tty);
 	}
 
+	return;
+}
+
+
+static int serial_ioctl (struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned long arg)
+{
+	struct usb_serial *serial = (struct usb_serial *) tty->driver_data; 
+	int port;	
+
+	dbg("serial_ioctl");
+
+	if (!serial) {
+		dbg("serial == NULL!");
+		return -ENODEV;
+	}
+
+	port = MINOR(tty->device) - serial->minor;
+
+	dbg("serial_ioctl port %d", port);
+	
+	/* do some sanity checking that we really have a device present */
+	if (!serial->type) {
+		dbg("serial->type == NULL!");
+		return -ENODEV;
+	}
+	if (!serial->active[port]) {
+		dbg ("device not open");
+		return -ENODEV;
+	}
+
+	/* pass on to the driver specific version of this function if it is available */
+	if (serial->type->ioctl) {
+		return (serial->type->ioctl(tty, file, cmd, arg));
+	} else {
+		return (generic_ioctl (tty, file, cmd, arg));
+	}
+}
+
+
+static void serial_set_termios (struct tty_struct *tty, struct termios * old)
+{
+	struct usb_serial *serial = (struct usb_serial *) tty->driver_data; 
+	int port;	
+
+	dbg("serial_set_termios");
+
+	if (!serial) {
+		dbg("serial == NULL!");
+		return;
+	}
+
+	port = MINOR(tty->device) - serial->minor;
+
+	dbg("serial_set_termios port %d", port);
+	
+	/* do some sanity checking that we really have a device present */
+	if (!serial->type) {
+		dbg("serial->type == NULL!");
+		return;
+	}
+	if (!serial->active[port]) {
+		dbg ("device not open");
+		return;
+	}
+
+	/* pass on to the driver specific version of this function if it is available */
+	if (serial->type->set_termios) {
+		serial->type->set_termios(tty, old);
+	} else {
+		generic_set_termios (tty, old);
+	}
+	
 	return;
 }
 
@@ -565,6 +666,29 @@ static void whiteheat_serial_close(struct tty_struct *tty, struct file * filp)
 	serial->active[port] = 0;
 }
 
+
+static void whiteheat_set_termios (struct tty_struct *tty, struct termios *old_termios)
+{
+	struct usb_serial *serial = (struct usb_serial *) tty->driver_data; 
+	int port = MINOR(tty->device) - serial->minor;
+	unsigned int cflag = tty->termios->c_cflag;
+
+	dbg("whiteheat_set_termios port %d", port);
+
+	/* check that they really want us to change something */
+	if (old_termios) {
+		if ((cflag == old_termios->c_cflag) &&
+		    (RELEVANT_IFLAG(tty->termios->c_iflag) == RELEVANT_IFLAG(old_termios->c_iflag))) {
+			dbg("nothing to change...");
+			return;
+		}
+	}
+
+	/* do the parsing of the cflag to see what to set the line to */
+	/* FIXME!! */
+
+	return;
+}
 
 static void whiteheat_throttle (struct tty_struct * tty)
 {
@@ -1041,6 +1165,34 @@ static int generic_chars_in_buffer (struct tty_struct *tty)
 }
 
 
+static void generic_throttle (struct tty_struct *tty) 
+{
+	/* do nothing for the generic device */
+	return;
+}
+
+
+static void generic_unthrottle (struct tty_struct *tty) 
+{
+	/* do nothing for the generic device */
+	return;
+}
+
+
+static int generic_ioctl (struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned long arg)
+{
+	/* generic driver doesn't support any ioctls yet */
+	return -ENOIOCTLCMD;
+}
+
+
+static void generic_set_termios (struct tty_struct *tty, struct termios * old)
+{
+	/* generic driver doesn't really care about setting any line settings */
+	return;
+}
+
+
 static void generic_read_bulk_callback (struct urb *urb)
 {
 	struct usb_serial *serial = (struct usb_serial *)urb->context;
@@ -1059,7 +1211,7 @@ static void generic_read_bulk_callback (struct urb *urb)
 	if (urb->actual_length) {
 		printk (KERN_DEBUG __FILE__ ": data read - length = %d, data = ", urb->actual_length);
 		for (i = 0; i < urb->actual_length; ++i) {
-			printk ("0x%.2x ", data[i]);
+			printk ("%.2x ", data[i]);
 		}
 		printk ("\n");
 	}
@@ -1352,8 +1504,8 @@ static struct tty_driver serial_tty_driver = {
 	put_char:		NULL,
 	flush_chars:		NULL,
 	write_room:		serial_write_room,
-	ioctl:			NULL,
-	set_termios:		NULL,
+	ioctl:			serial_ioctl,
+	set_termios:		serial_set_termios,
 	set_ldisc:		NULL, 
 	throttle:		serial_throttle,
 	unthrottle:		serial_unthrottle,
@@ -1397,19 +1549,14 @@ int usb_serial_init(void)
 }
 
 
-#ifdef MODULE
-int init_module(void)
-{
-	return usb_serial_init();
-}
-
-void cleanup_module(void)
+void usb_serial_exit(void)
 {
 	tty_unregister_driver(&serial_tty_driver);
 	usb_deregister(&usb_serial_driver);
 }
 
-#else
-__initcall(usb_serial_init);
-#endif
+
+module_init(usb_serial_init);
+module_exit(usb_serial_exit);
+
 

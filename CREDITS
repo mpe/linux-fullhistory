@@ -1505,15 +1505,17 @@ S: Santa Clara, CA 95052
 S: USA
 
 N: Martin Mares
-E: mj@atrey.karlin.mff.cuni.cz
+E: mj@suse.cz
+E: mj@ucw.cz
 W: http://atrey.karlin.mff.cuni.cz/~mj/
 D: BIOS video mode handling code
 D: MOXA C-218 serial board driver
 D: Network autoconfiguration
+D: PCI subsystem
 D: Random kernel hacking
 S: Kankovskeho 1241
 S: 182 00 Praha 8
-S: Czech Republic 
+S: Czech Republic
 
 N: John A. Martin
 E: jam@acm.org
@@ -2017,6 +2019,14 @@ S: 301/222 City Walk
 S: Canberra ACT 2601
 S: Australia
 
+N: Sampo Saaristo
+E: sambo@cs.tut.fi
+D: Co-author of Multi-Protocol Over ATM (MPOA)
+S: Tampere University of Technology / Telecom lab
+S: Hermiankatu 12C
+S: FIN-33720 Tampere
+S: Finland
+
 N: Thomas Sailer
 E: sailer@ife.ee.ethz.ch
 E: HB9JNX@HB9W.CHE.EU (packet radio)
@@ -2399,6 +2409,14 @@ S: 27 Spencer Drive
 S: Nashua, New Hampshire 03062
 S: USA
 
+N: Heikki Vatiainen
+E: hessu@cs.tut.fi
+D: Co-author of Multi-Protocol Over ATM (MPOA), some LANE hacks
+S: Tampere University of Technology / Telecom lab
+S: Hermiankatu 12C
+S: FIN-33720 Tampere
+S: Finland
+
 N: Andrew Veliath
 E: andrewtv@usa.net
 D: Turtle Beach MultiSound sound driver
@@ -2424,6 +2442,14 @@ S: X/OS Experts in Open Systems BV
 S: Kruislaan 419
 S: 1098 VA Amsterdam 
 S: The Netherlands
+
+N: Peter Shaobo Wang
+E: pwang@mmdcorp.com
+W: http://www.mmdcorp.com/pw/linux
+D: Driver for Interphase ATM (i)Chip SAR adapter card family (x575, x525, x531).
+S: 1513 Brewster Dr.
+S: Carrollton, TX 75010
+S: USA
 
 N: Tim Waugh
 E: tim@cyberelk.demon.co.uk
@@ -2463,6 +2489,14 @@ D: Original moderator of c.o.l.announce and c.o.l.answers
 S: Computer Science Division
 S: UC Berkeley
 S: Berkeley, CA 94720-1776
+S: USA
+
+N: Bill Wendling
+E: wendling@ganymede.isdn.uiuc.edu
+W: http://www.ncsa.uiuc.edu/~wendling/
+D: Various random hacks. Mostly on poll/select logic.
+S: 605 E. Springfield Ave.
+S: Champaign, IL 61820
 S: USA
 
 N: Mike Westall

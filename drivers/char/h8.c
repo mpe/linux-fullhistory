@@ -23,7 +23,6 @@
 #include <linux/stat.h>
 #include <linux/proc_fs.h>
 #include <linux/miscdevice.h>
-#include <linux/lists.h>
 #include <linux/ioport.h>
 #include <linux/poll.h>
 #include <linux/init.h>
@@ -31,6 +30,13 @@
 
 #define __KERNEL_SYSCALLS__
 #include <asm/unistd.h>
+
+/*
+ * This is the only driver still using the broken
+ * lists.h stuff, let's not do that.. 
+ */
+#error must be converted to new <linux/list.h>
+#include <linux/lists.h>
 
 #include "h8.h"
 

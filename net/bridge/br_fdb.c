@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br_fdb.c,v 1.1 2000/02/18 16:47:12 davem Exp $
+ *	$Id: br_fdb.c,v 1.3 2000/02/21 16:14:17 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -216,6 +216,7 @@ int br_fdb_get_entries(struct net_bridge *br,
 			struct __fdb_entry ent;
 			int err;
 			struct net_bridge_fdb_entry *g;
+			struct net_bridge_fdb_entry **pp; 
 
 			if (has_expired(br, f)) {
 				f = f->next_hash;
@@ -236,13 +237,13 @@ int br_fdb_get_entries(struct net_bridge *br,
 			read_lock_bh(&br->hash_lock);
 
 			g = f->next_hash;
+			pp = f->pprev_hash;
 			br_fdb_put(f);
 
 			if (err)
 				goto out_fault;
 
-			if (f->next_hash == NULL &&
-			    f->pprev_hash == NULL)
+			if (g == NULL && pp == NULL)
 				goto out_disappeared;
 
 			num++;

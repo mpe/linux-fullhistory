@@ -817,15 +817,12 @@ usb_driver scanner_driver = {
        SCN_BASE_MNR
 };
 
-#ifdef MODULE
-void cleanup_module(void)
+void __exit usb_scanner_exit(void)
 {
 	usb_deregister(&scanner_driver);
 }
-int init_module(void)
-#else
-int usb_scanner_init(void)
-#endif
+
+int __init usb_scanner_init(void)
 {
         if (usb_register(&scanner_driver) < 0)
                 return -1;
@@ -834,4 +831,5 @@ int usb_scanner_init(void)
 	return 0;
 }
 
-__initcall(usb_scanner_init);
+module_init(usb_scanner_init);
+module_exit(usb_scanner_exit);

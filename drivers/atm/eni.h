@@ -27,6 +27,8 @@
 #define DEFAULT_RX_MULT	300		/* max_sdu*3 */
 #define DEFAULT_TX_MULT	300		/* max_sdu*3 */
 
+#define ENI_ZEROES_SIZE	  4		/* need that many DMA-able zero bytes */
+
 
 struct eni_free {
 	unsigned long start;		/* counting in bytes */
@@ -113,9 +115,11 @@ struct eni_skb_prv {
 	struct atm_skb_data _;		/* reserved */
 	unsigned long pos;		/* position of next descriptor */
 	int size;			/* PDU size in reassembly buffer */
+	dma_addr_t paddr;		/* DMA handle */
 };
 
 #define ENI_PRV_SIZE(skb) (((struct eni_skb_prv *) (skb)->cb)->size)
 #define ENI_PRV_POS(skb) (((struct eni_skb_prv *) (skb)->cb)->pos)
+#define ENI_PRV_PADDR(skb) (((struct eni_skb_prv *) (skb)->cb)->paddr)
 
 #endif

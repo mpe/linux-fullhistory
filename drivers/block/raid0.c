@@ -223,23 +223,23 @@ static int raid0_stop (mddev_t *mddev)
  * Of course, those facts may not be valid anymore (and surely won't...)
  * Hey guys, there's some work out there ;-)
  */
-static int raid0_make_request (mddev_t *mddev, int rw, struct buffer_head * bh)
+static int raid0_make_request (request_queue_t *q, mddev_t *mddev,
+					int rw, struct buffer_head * bh)
 {
-	unsigned long size = bh->b_size >> 10;
+	int blk_in_chunk, chunksize_bits, chunk, chunk_size;
 	raid0_conf_t *conf = mddev_to_conf(mddev);
 	struct raid0_hash *hash;
 	struct strip_zone *zone;
 	mdk_rdev_t *tmp_dev;
-	int blk_in_chunk, chunksize_bits, chunk, chunk_size;
 	long block, rblock;
 
 	chunk_size = mddev->param.chunk_size >> 10;
 	chunksize_bits = ffz(~chunk_size);
-	block = bh->b_blocknr * size;
+	block = bh->b_rsector >> 1;
 	hash = conf->hash_table + block / conf->smallest->size;
 
 	/* Sanity check */
-	if (chunk_size < (block % chunk_size) + size)
+	if (chunk_size < (block % chunk_size) + (bh->b_size >> 10))
 		goto bad_map;
  
 	if (!hash)
@@ -261,20 +261,19 @@ static int raid0_make_request (mddev_t *mddev, int rw, struct buffer_head * bh)
 	rblock = (chunk << chunksize_bits) + blk_in_chunk + zone->dev_offset;
  
 	/*
-	 * Important, at this point we are not guaranteed to be the only
-	 * CPU modifying b_rdev and b_rsector! Only __make_request() later
-	 * on serializes the IO. So in 2.4 we must never write temporary
-	 * values to bh->b_rdev, like 2.2 and 2.0 did.
+	 * The new BH_Lock semantics in ll_rw_blk.c guarantee that this
+	 * is the only IO operation happening on this bh.
 	 */
 	bh->b_rdev = tmp_dev->dev;
 	bh->b_rsector = rblock << 1;
 
-	generic_make_request(rw, bh);
-
-	return 0;
+	/*
+	 * Let the main block layer submit the IO and resolve recursion:
+	 */
+	return 1;
 
 bad_map:
-	printk ("raid0_make_request bug: can't convert block across chunks or bigger than %dk %ld %ld\n", chunk_size, bh->b_rsector, size);
+	printk ("raid0_make_request bug: can't convert block across chunks or bigger than %dk %ld %d\n", chunk_size, bh->b_rsector, bh->b_size >> 10);
 	return -1;
 bad_hash:
 	printk("raid0_make_request bug: hash==NULL for block %ld\n", block);

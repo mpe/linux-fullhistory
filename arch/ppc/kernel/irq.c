@@ -70,8 +70,6 @@ volatile unsigned char *chrp_int_ack_special;
 
 #define MAXCOUNT 10000000
 
-#define NR_MASK_WORDS	((NR_IRQS + 31) / 32)
-
 irq_desc_t irq_desc[NR_IRQS];
 int ppc_spurious_interrupts = 0;
 unsigned int local_bh_count[NR_CPUS];
@@ -80,7 +78,6 @@ struct irqaction *ppc_irq_action[NR_IRQS];
 unsigned int ppc_cached_irq_mask[NR_MASK_WORDS];
 unsigned int ppc_lost_interrupts[NR_MASK_WORDS];
 atomic_t ppc_n_lost_interrupts;
-
 
 /* nasty hack for shared irq's since we need to do kmalloc calls but
  * can't very early in the boot when we need to do a request irq.

@@ -445,7 +445,7 @@ asmlinkage long sys_wait4(pid_t pid,unsigned int * stat_addr, int options, struc
 	DECLARE_WAITQUEUE(wait, current);
 	struct task_struct *p;
 
-	if (options & ~(WNOHANG|WUNTRACED|__WCLONE))
+	if (options & ~(WNOHANG|WUNTRACED|__WCLONE|__WALL))
 		return -EINVAL;
 
 	add_wait_queue(&current->wait_chldexit,&wait);
@@ -464,8 +464,13 @@ repeat:
 			if (p->pgrp != -pid)
 				continue;
 		}
-		/* wait for cloned processes iff the __WCLONE flag is set */
-		if ((p->exit_signal != SIGCHLD) ^ ((options & __WCLONE) != 0))
+		/* Wait for all children (clone and not) if __WALL is set;
+		 * otherwise, wait for clone children *only* if __WCLONE is
+		 * set; otherwise, wait for non-clone children *only*.  (Note:
+		 * A "clone" child here is one that reports to its parent
+		 * using a signal other than SIGCHLD.) */
+		if (((p->exit_signal != SIGCHLD) ^ ((options & __WCLONE) != 0))
+		    && !(options & __WALL))
 			continue;
 		flag = 1;
 		switch (p->state) {

@@ -20,6 +20,9 @@
  *		Initial release.
  *	1.01	18 February 2000, Tigran Aivazian <tigran@sco.com>
  *		Added read() support + cleanups.
+ *	1.02	21 February 2000, Tigran Aivazian <tigran@sco.com>
+ *		Added 'device trimming' support. open(O_WRONLY) zeroes
+ *		and frees the saved copy of applied microcode.
  */
 
 #include <linux/init.h>
@@ -33,7 +36,7 @@
 #include <asm/uaccess.h>
 #include <asm/processor.h>
 
-#define MICROCODE_VERSION 	"1.01"
+#define MICROCODE_VERSION 	"1.02"
 
 MODULE_DESCRIPTION("CPU (P6) microcode update driver");
 MODULE_AUTHOR("Tigran Aivazian <tigran@ocston.org>");
@@ -53,7 +56,7 @@ static void do_update_one(void *);
 /*
  *  Bits in microcode_status. (31 bits of room for future expansion)
  */
-#define MICROCODE_IS_OPEN	0	/* set if /dev/microcode is in use */
+#define MICROCODE_IS_OPEN	0	/* set if device is in use */
 static unsigned long microcode_status = 0;
 
 /* the actual array of microcode blocks, each 2048 bytes */
@@ -76,23 +79,12 @@ static struct proc_dir_entry *proc_microcode;
 
 static int __init microcode_init(void)
 {
-	int size;
-
 	proc_microcode = create_proc_entry("microcode", S_IWUSR|S_IRUSR, proc_root_driver);
 	if (!proc_microcode) {
 		printk(KERN_ERR "microcode: can't create /proc/driver/microcode\n");
 		return -ENOMEM;
 	}
 	proc_microcode->ops = &microcode_inops;
-	size = smp_num_cpus * sizeof(struct microcode);
-	mc_applied = kmalloc(size, GFP_KERNEL);
-	if (!mc_applied) {
-		remove_proc_entry("microcode", proc_root_driver);
-		printk(KERN_ERR "microcode: can't allocate memory for saved microcode\n");
-		return -ENOMEM;
-	}
-	memset(mc_applied, 0, size); /* so that reading from offsets corresponding to failed
-	                                update makes this obvious */
 	printk(KERN_INFO "P6 Microcode Update Driver v%s registered\n", MICROCODE_VERSION);
 	return 0;
 }
@@ -100,7 +92,8 @@ static int __init microcode_init(void)
 static void __exit microcode_exit(void)
 {
 	remove_proc_entry("microcode", proc_root_driver);
-	kfree(mc_applied);
+	if (mc_applied)
+		kfree(mc_applied);
 	printk(KERN_INFO "P6 Microcode Update Driver v%s unregistered\n", MICROCODE_VERSION);
 }
 
@@ -118,6 +111,15 @@ static int microcode_open(struct inode *inode, struct file *file)
 	/* one at a time, please */
 	if (test_and_set_bit(MICROCODE_IS_OPEN, &microcode_status))
 		return -EBUSY;
+
+	if ((file->f_flags & O_ACCMODE) == O_WRONLY) {
+		proc_microcode->size = 0;
+		if (mc_applied) {
+			memset(mc_applied, 0, smp_num_cpus * sizeof(struct microcode));
+			kfree(mc_applied);
+			mc_applied = NULL;
+		}
+	}
 
 	MOD_INC_USE_COUNT;
 
@@ -243,6 +245,16 @@ static ssize_t microcode_write(struct file *file, const char *buf, size_t len, l
 			sizeof(struct microcode));
 		return -EINVAL;
 	}
+	if (!mc_applied) {
+		int size = smp_num_cpus * sizeof(struct microcode);
+		mc_applied = kmalloc(size, GFP_KERNEL);
+		if (!mc_applied) {
+			printk(KERN_ERR "microcode: can't allocate memory for saved microcode\n");
+			return -ENOMEM;
+		}
+		memset(mc_applied, 0, size);
+	}
+	
 	lock_kernel();
 	microcode_num = len/sizeof(struct microcode);
 	microcode = vmalloc(len);

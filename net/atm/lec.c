@@ -184,9 +184,7 @@ lec_open(struct net_device *dev)
 {
         struct lec_priv *priv = (struct lec_priv *)dev->priv;
         
-        dev->tbusy = 0;
-        dev->start = 1;
-        dev->interrupt = 1;
+	netif_start_queue(dev);
         memset(&priv->stats,0,sizeof(struct net_device_stats));
         
         return 0;
@@ -214,165 +212,148 @@ lec_send_packet(struct sk_buff *skb, struct net_device *dev)
         if (!priv->lecd) {
                 printk("%s:No lecd attached\n",dev->name);
                 priv->stats.tx_errors++;
-                dev->tbusy = 1;
+                netif_stop_queue(dev);
                 return -EUNATCH;
         } 
-        if (dev->tbusy) {
-                /*
-                 * If we get here, some higher level has decided we are broken.
-                 * There should really be a "kick me" function call instead.
-                 */
-                printk("%s: transmit timed out\n", dev->name);
-                dev->tbusy = 0;
-        }
 
-        /*
-         * Block a timer-based transmit from overlapping. This could better be
-         * done with atomic_swap(1, dev->tbusy), but set_bit() works as well.
-         */
-
-        if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-                printk(KERN_WARNING "%s: Transmitter access conflict.\n", 
-                       dev->name);
-        } else {
-                DPRINTK("skbuff head:%lx data:%lx tail:%lx end:%lx\n",
-                        (long)skb->head, (long)skb->data, (long)skb->tail,
-                        (long)skb->end);
+        DPRINTK("skbuff head:%lx data:%lx tail:%lx end:%lx\n",
+                (long)skb->head, (long)skb->data, (long)skb->tail,
+                (long)skb->end);
 #ifdef CONFIG_BRIDGE
-                if (skb->pkt_bridged == IS_BRIDGED)
-                        handle_bridge(skb, dev);
+        if (skb->pkt_bridged == IS_BRIDGED)
+                handle_bridge(skb, dev);
 #endif /* CONFIG_BRIDGE */
 
-                /* Make sure we have room for lec_id */
-                if (skb_headroom(skb) < 2) {
+        /* Make sure we have room for lec_id */
+        if (skb_headroom(skb) < 2) {
 
-                        DPRINTK("lec_send_packet: reallocating skb\n");
-                        skb2 = skb_realloc_headroom(skb, LEC_HEADER_LEN);
-                        kfree_skb(skb);
-                        if (skb2 == NULL) return 0;
-                        skb = skb2;
-                }
-                skb_push(skb, 2);
+                DPRINTK("lec_send_packet: reallocating skb\n");
+                skb2 = skb_realloc_headroom(skb, LEC_HEADER_LEN);
+                kfree_skb(skb);
+                if (skb2 == NULL) return 0;
+                skb = skb2;
+        }
+        skb_push(skb, 2);
 
-                /* Put le header to place, works for TokenRing too */
-                lec_h = (struct lecdatahdr_8023*)skb->data;
-                lec_h->le_header = htons(priv->lecid); 
+        /* Put le header to place, works for TokenRing too */
+        lec_h = (struct lecdatahdr_8023*)skb->data;
+        lec_h->le_header = htons(priv->lecid); 
 
 #ifdef CONFIG_TR
-                /* Ugly. Use this to realign Token Ring packets for
-                 * e.g. PCA-200E driver. */
-                if (priv->is_trdev) {
-                        skb2 = skb_realloc_headroom(skb, LEC_HEADER_LEN);
-                        kfree_skb(skb);
-                        if (skb2 == NULL) return 0;
-                        skb = skb2;
-                }
+        /* Ugly. Use this to realign Token Ring packets for
+         * e.g. PCA-200E driver. */
+        if (priv->is_trdev) {
+                skb2 = skb_realloc_headroom(skb, LEC_HEADER_LEN);
+                kfree_skb(skb);
+                if (skb2 == NULL) return 0;
+                skb = skb2;
+        }
 #endif
 
 #if DUMP_PACKETS > 0
-                printk("%s: send datalen:%ld lecid:%4.4x\n", dev->name,
-                        skb->len, priv->lecid);
+        printk("%s: send datalen:%ld lecid:%4.4x\n", dev->name,
+               skb->len, priv->lecid);
 #if DUMP_PACKETS >= 2
-                for(i=0;i<skb->len && i <99;i++) {
-                        sprintf(buf+i*3,"%2.2x ",0xff&skb->data[i]);
-                }
+        for(i=0;i<skb->len && i <99;i++) {
+                sprintf(buf+i*3,"%2.2x ",0xff&skb->data[i]);
+        }
 #elif DUMP_PACKETS >= 1
-                for(i=0;i<skb->len && i < 30;i++) {
-                        sprintf(buf+i*3,"%2.2x ", 0xff&skb->data[i]);
-                }
+        for(i=0;i<skb->len && i < 30;i++) {
+                sprintf(buf+i*3,"%2.2x ", 0xff&skb->data[i]);
+        }
 #endif /* DUMP_PACKETS >= 1 */
-                if (i==skb->len)
-                        printk("%s\n",buf);
-                else
-                        printk("%s...\n",buf);
+        if (i==skb->len)
+                printk("%s\n",buf);
+        else
+                printk("%s...\n",buf);
 #endif /* DUMP_PACKETS > 0 */
 
-                /* Minimum ethernet-frame size */
-                if (skb->len <62) {
-                        if (skb->truesize < 62) {
-                                printk("%s:data packet %d / %d\n",
-                                       dev->name,
-                                       skb->len,skb->truesize);
-                                nb=(unsigned char*)kmalloc(64, GFP_ATOMIC);
-                                memcpy(nb,skb->data,skb->len);
-                                kfree(skb->head);
-                                skb->head = skb->data = nb;
-                                skb->tail = nb+62;
-                                skb->end = nb+64;
-                                skb->len=62;
-                                skb->truesize = 64;
-                        } else {
-                                skb->len = 62;
-                        }
+        /* Minimum ethernet-frame size */
+        if (skb->len <62) {
+                if (skb->truesize < 62) {
+                        printk("%s:data packet %d / %d\n",
+                               dev->name,
+                               skb->len,skb->truesize);
+                        nb=(unsigned char*)kmalloc(64, GFP_ATOMIC);
+                        memcpy(nb,skb->data,skb->len);
+                        kfree(skb->head);
+                        skb->head = skb->data = nb;
+                        skb->tail = nb+62;
+                        skb->end = nb+64;
+                        skb->len=62;
+                        skb->truesize = 64;
+                } else {
+                        skb->len = 62;
                 }
-
-                /* Send to right vcc */
-                is_rdesc = 0;
-                dst = lec_h->h_dest;
+        }
+        
+        /* Send to right vcc */
+        is_rdesc = 0;
+        dst = lec_h->h_dest;
 #ifdef CONFIG_TR
-                if (priv->is_trdev) {
-                        dst = get_tr_dst(skb->data+2, rdesc);
-                        if (dst == NULL) {
-                                dst = rdesc;
-                                is_rdesc = 1;
-                        }
+        if (priv->is_trdev) {
+                dst = get_tr_dst(skb->data+2, rdesc);
+                if (dst == NULL) {
+                        dst = rdesc;
+                        is_rdesc = 1;
                 }
+        }
 #endif
-                entry = NULL;
-                send_vcc = lec_arp_resolve(priv, dst, is_rdesc, &entry);
-                DPRINTK("%s:send_vcc:%p vcc_flags:%x, entry:%p\n", dev->name,
-                        send_vcc, send_vcc?send_vcc->flags:0, entry);
-                if (!send_vcc || !(send_vcc->flags & ATM_VF_READY)) {    
-                        if (entry && (entry->tx_wait.qlen < LEC_UNRES_QUE_LEN)) {
-                                DPRINTK("%s:lec_send_packet: queuing packet, ", dev->name);
-                                DPRINTK("MAC address 0x%02x:%02x:%02x:%02x:%02x:%02x\n",
-                                       lec_h->h_dest[0], lec_h->h_dest[1], lec_h->h_dest[2],
-                                       lec_h->h_dest[3], lec_h->h_dest[4], lec_h->h_dest[5]);
-                                skb_queue_tail(&entry->tx_wait, skb);
-                        } else {
-                                DPRINTK("%s:lec_send_packet: tx queue full or no arp entry, dropping, ", dev->name);
-                                DPRINTK("MAC address 0x%02x:%02x:%02x:%02x:%02x:%02x\n",
-                                       lec_h->h_dest[0], lec_h->h_dest[1], lec_h->h_dest[2],
-                                       lec_h->h_dest[3], lec_h->h_dest[4], lec_h->h_dest[5]);
-                                priv->stats.tx_dropped++;
-                                dev_kfree_skb(skb);
-                        }
-                        dev->tbusy=0;
-                        return 0;
+        entry = NULL;
+        send_vcc = lec_arp_resolve(priv, dst, is_rdesc, &entry);
+        DPRINTK("%s:send_vcc:%p vcc_flags:%x, entry:%p\n", dev->name,
+                send_vcc, send_vcc?send_vcc->flags:0, entry);
+        if (!send_vcc || !(send_vcc->flags & ATM_VF_READY)) {    
+                if (entry && (entry->tx_wait.qlen < LEC_UNRES_QUE_LEN)) {
+                        DPRINTK("%s:lec_send_packet: queuing packet, ", dev->name);
+                        DPRINTK("MAC address 0x%02x:%02x:%02x:%02x:%02x:%02x\n",
+                                lec_h->h_dest[0], lec_h->h_dest[1], lec_h->h_dest[2],
+                                lec_h->h_dest[3], lec_h->h_dest[4], lec_h->h_dest[5]);
+                        skb_queue_tail(&entry->tx_wait, skb);
+                } else {
+                        DPRINTK("%s:lec_send_packet: tx queue full or no arp entry, dropping, ", dev->name);
+                        DPRINTK("MAC address 0x%02x:%02x:%02x:%02x:%02x:%02x\n",
+                                lec_h->h_dest[0], lec_h->h_dest[1], lec_h->h_dest[2],
+                                lec_h->h_dest[3], lec_h->h_dest[4], lec_h->h_dest[5]);
+                        priv->stats.tx_dropped++;
+                        dev_kfree_skb(skb);
                 }
+                return 0;
+        }
                 
 #if DUMP_PACKETS > 0                    
-                printk("%s:sending to vpi:%d vci:%d\n", dev->name,
-                       send_vcc->vpi, send_vcc->vci);       
+        printk("%s:sending to vpi:%d vci:%d\n", dev->name,
+               send_vcc->vpi, send_vcc->vci);       
 #endif /* DUMP_PACKETS > 0 */
                 
-                while (entry && (skb2 = skb_dequeue(&entry->tx_wait))) {
-                        DPRINTK("lec.c: emptying tx queue, ");
-                        DPRINTK("MAC address 0x%02x:%02x:%02x:%02x:%02x:%02x\n",
-                               lec_h->h_dest[0], lec_h->h_dest[1], lec_h->h_dest[2],
-                               lec_h->h_dest[3], lec_h->h_dest[4], lec_h->h_dest[5]);
-                        ATM_SKB(skb2)->vcc = send_vcc;
-                        atomic_add(skb2->truesize, &send_vcc->tx_inuse);
-                        ATM_SKB(skb2)->iovcnt = 0;
-                        ATM_SKB(skb2)->atm_options = send_vcc->atm_options;
-                        DPRINTK("%s:sending to vpi:%d vci:%d\n", dev->name,
-                               send_vcc->vpi, send_vcc->vci);       
-                        priv->stats.tx_packets++;
-                        priv->stats.tx_bytes += skb2->len;
-                        send_vcc->dev->ops->send(send_vcc, skb2);
-                }
-
-                ATM_SKB(skb)->vcc = send_vcc;
-                atomic_add(skb->truesize, &send_vcc->tx_inuse);
-                ATM_SKB(skb)->iovcnt = 0;
-                ATM_SKB(skb)->atm_options = send_vcc->atm_options;
+        while (entry && (skb2 = skb_dequeue(&entry->tx_wait))) {
+                DPRINTK("lec.c: emptying tx queue, ");
+                DPRINTK("MAC address 0x%02x:%02x:%02x:%02x:%02x:%02x\n",
+                        lec_h->h_dest[0], lec_h->h_dest[1], lec_h->h_dest[2],
+                        lec_h->h_dest[3], lec_h->h_dest[4], lec_h->h_dest[5]);
+                ATM_SKB(skb2)->vcc = send_vcc;
+                atomic_add(skb2->truesize, &send_vcc->tx_inuse);
+                ATM_SKB(skb2)->iovcnt = 0;
+                ATM_SKB(skb2)->atm_options = send_vcc->atm_options;
+                DPRINTK("%s:sending to vpi:%d vci:%d\n", dev->name,
+                        send_vcc->vpi, send_vcc->vci);       
                 priv->stats.tx_packets++;
-                priv->stats.tx_bytes += skb->len;
-                send_vcc->dev->ops->send(send_vcc, skb);
+                priv->stats.tx_bytes += skb2->len;
+                send_vcc->dev->ops->send(send_vcc, skb2);
         }
+
+        ATM_SKB(skb)->vcc = send_vcc;
+        atomic_add(skb->truesize, &send_vcc->tx_inuse);
+        ATM_SKB(skb)->iovcnt = 0;
+        ATM_SKB(skb)->atm_options = send_vcc->atm_options;
+        priv->stats.tx_packets++;
+        priv->stats.tx_bytes += skb->len;
+        send_vcc->dev->ops->send(send_vcc, skb);
+
+#if 0
         /* Should we wait for card's device driver to notify us? */
         dev->tbusy=0;
-        
+#endif        
         return 0;
 }
 
@@ -380,8 +361,7 @@ lec_send_packet(struct sk_buff *skb, struct net_device *dev)
 static int 
 lec_close(struct net_device *dev) 
 {
-        dev->tbusy = 1;
-        dev->start = 0;
+        netif_stop_queue(dev);
         return 0;
 }
 
@@ -530,9 +510,7 @@ lec_atm_close(struct atm_vcc *vcc)
         priv->lecd = NULL;
         /* Do something needful? */
 
-        dev->tbusy = 1;
-        dev->start = 0;
-
+        netif_stop_queue(dev);
         lec_arp_destroy(priv);
 
         if (skb_peek(&vcc->recvq))
@@ -698,7 +676,7 @@ lec_push(struct atm_vcc *vcc, struct sk_buff *skb)
 
                 if (!(dst[0]&0x01) &&   /* Never filter Multi/Broadcast */
                     !priv->is_proxy &&  /* Proxy wants all the packets */
-                    memcmp(dst, dev->dev_addr, sizeof(dev->dev_addr))) {
+		    memcmp(dst, dev->dev_addr, dev->addr_len)) {
                         dev_kfree_skb(skb);
                         return;
                 }
@@ -814,8 +792,7 @@ lecd_attach(struct atm_vcc *vcc, int arg)
         priv->path_switching_delay = (6*HZ);
 
         if (dev_lec[i]->flags & IFF_UP) {
-                dev_lec[i]->tbusy = 0;
-                dev_lec[i]->start = 1;
+                netif_start_queue(dev_lec[i]);
         }
         MOD_INC_USE_COUNT;
         return i;

@@ -416,9 +416,23 @@ wait_on_write_request(struct nfs_wreq *req)
 int
 nfs_writepage(struct dentry * dentry, struct page *page)
 {
-	int result = nfs_writepage_sync(dentry, dentry->d_inode, page, 0, PAGE_SIZE); 
-	if ( result == PAGE_SIZE) return 0; 
-	return result; 
+	struct inode *inode = dentry->d_inode;
+	unsigned long end_index = inode->i_size >> PAGE_CACHE_SHIFT;
+	unsigned offset = PAGE_CACHE_SIZE;
+	int err;
+
+	/* easy case */
+	if (page->index < end_index)
+		goto do_it;
+	/* things got complicated... */
+	offset = inode->i_size & (PAGE_CACHE_SIZE-1);
+	/* OK, are we completely out? */
+	if (page->index >= end_index+1 || !offset)
+		return -EIO;
+do_it:
+	err = nfs_writepage_sync(dentry, inode, page, 0, offset); 
+	if ( err == offset) return 0; 
+	return err; 
 }
 
 /*

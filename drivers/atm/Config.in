@@ -51,4 +51,29 @@ if [ "$CONFIG_PCI" = "y" ]; then
       bool '  Enable debugging messages' CONFIG_ATM_IA_DEBUG
     fi
 fi
+if [ "$CONFIG_PCI" = "y" -o "$CONFIG_SBUS" = "y" ]; then
+  tristate 'FORE Systems 200E-series' CONFIG_ATM_FORE200E
+  if [ "$CONFIG_ATM_FORE200E" != "n" ]; then
+    if [ "$CONFIG_PCI" = "y" ]; then
+      bool '  PCA-200E support' CONFIG_ATM_FORE200E_PCA y
+      if [ "$CONFIG_ATM_FORE200E_PCA" = "y" ]; then
+	bool '   Use default PCA-200E firmware (normally enabled)' CONFIG_ATM_FORE200E_PCA_DEFAULT_FW
+        if [ "$CONFIG_ATM_FORE200E_PCA_DEFAULT_FW" = "n" ]; then
+          string '   Pathname of user-supplied binary firmware' CONFIG_ATM_FORE200E_PCA_FW
+        fi
+      fi
+    fi
+    if [ "$CONFIG_SBUS" = "y" ]; then
+      bool '  SBA-200E support' CONFIG_ATM_FORE200E_SBA y
+      if [ "$CONFIG_ATM_FORE200E_SBA" = "y" ]; then
+        bool '   Use default SBA-200E firmware (normally enabled)' CONFIG_ATM_FORE200E_SBA_DEFAULT_FW
+        if [ "$CONFIG_ATM_FORE200E_SBA_DEFAULT_FW" = "n" ]; then
+          string '   Pathname of user-supplied binary firmware' CONFIG_ATM_FORE200E_SBA_FW ""
+        fi
+      fi
+    fi
+    int  '  Maximum number of tx retries' CONFIG_ATM_FORE200E_TX_RETRY 16
+    int  '  Debugging level (0-3)' CONFIG_ATM_FORE200E_DEBUG 0
+  fi
+fi
 endmenu

@@ -636,12 +636,12 @@ printk("dummy: 0x%08lx, 0x%08lx\n",dummy[0],dummy[1]);
 			event_dump();
 		}
 		if (!size) {
-			kfree_skb(skb);
+			dev_kfree_skb_irq(skb);
 			if (vcc) vcc->stats->rx_err++;
 			continue;
 		}
 		if (!atm_charge(vcc,skb->truesize)) {
-			kfree_skb(skb);
+			dev_kfree_skb_irq(skb);
 			continue;
 		}
 		skb->len = size;
@@ -854,7 +854,7 @@ printk("NONONONOO!!!!\n");
 		    uPD98401_TXBD_SIZE*ATM_SKB(skb)->iovcnt,GFP_ATOMIC);
 		if (!dsc) {
 			if (vcc->pop) vcc->pop(vcc,skb);
-			else dev_kfree_skb(skb);
+			else dev_kfree_skb_irq(skb);
 			return -EAGAIN;
 		}
 		/* @@@ should check alignment */
@@ -908,7 +908,7 @@ if (*ZATM_PRV_DSC(skb) != (uPD98401_TXPD_V | uPD98401_TXPD_DP |
 	*ZATM_PRV_DSC(skb) = 0; /* mark as invalid */
 	zatm_vcc->txing--;
 	if (vcc->pop) vcc->pop(vcc,skb);
-	else dev_kfree_skb(skb);
+	else dev_kfree_skb_irq(skb);
 	while ((skb = skb_dequeue(&zatm_vcc->backlog)))
 		if (do_tx(skb) == RING_BUSY) {
 			skb_queue_head(&zatm_vcc->backlog,skb);
@@ -1395,7 +1395,7 @@ static int __init zatm_init(struct atm_dev *dev)
 	    command | PCI_COMMAND_IO | PCI_COMMAND_MASTER))) {
 		printk(KERN_ERR DEV_LABEL "(itf %d): can't enable IO (0x%02x)"
 		    "\n",dev->number,error);
-		return error;
+		return -EIO;
 	}
 	eprom_get_esi(dev);
 	printk(KERN_NOTICE DEV_LABEL "(itf %d): rev.%d,base=0x%x,irq=%d,",
@@ -1741,7 +1741,6 @@ static int zatm_send(struct atm_vcc *vcc,struct sk_buff *skb)
 	if (!skb) {
 		printk(KERN_CRIT "!skb in zatm_send ?\n");
 		if (vcc->pop) vcc->pop(vcc,skb);
-		else dev_kfree_skb(skb);
 		return -EINVAL;
 	}
 	ATM_SKB(skb)->vcc = vcc;

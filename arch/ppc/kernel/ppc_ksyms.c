@@ -34,6 +34,7 @@
 #include <asm/feature.h>
 #include <asm/dma.h>
 #include <asm/machdep.h>
+#include <asm/hw_irq.h>
 #ifdef __SMP__
 #include <asm/smplock.h>
 #endif /* __SMP__ */
@@ -50,7 +51,6 @@ extern void AlignmentException(struct pt_regs *regs);
 extern void ProgramCheckException(struct pt_regs *regs);
 extern void SingleStepException(struct pt_regs *regs);
 extern int sys_sigreturn(struct pt_regs *regs);
-extern atomic_t ppc_n_lost_interrupts;
 extern void do_lost_interrupts(unsigned long);
 extern int do_signal(sigset_t *, struct pt_regs *);
 
@@ -69,6 +69,7 @@ EXPORT_SYMBOL(ProgramCheckException);
 EXPORT_SYMBOL(SingleStepException);
 EXPORT_SYMBOL(sys_sigreturn);
 EXPORT_SYMBOL(ppc_n_lost_interrupts);
+EXPORT_SYMBOL(ppc_lost_interrupts);
 EXPORT_SYMBOL(do_lost_interrupts);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
@@ -88,7 +89,7 @@ EXPORT_SYMBOL(ISA_DMA_THRESHOLD);
 EXPORT_SYMBOL(DMA_MODE_READ);
 EXPORT_SYMBOL(DMA_MODE_WRITE);
 #ifndef CONFIG_8xx
-#if defined(CONFIG_PREP) || defined(CONFIG_ALL_PPC)
+#if defined(CONFIG_ALL_PPC)
 EXPORT_SYMBOL(_prep_type);
 EXPORT_SYMBOL(ucSystemType);
 #endif
@@ -125,7 +126,6 @@ EXPORT_SYMBOL(strtok);
 EXPORT_SYMBOL(strstr);
 EXPORT_SYMBOL(strlen);
 EXPORT_SYMBOL(strnlen);
-EXPORT_SYMBOL(strspn);
 EXPORT_SYMBOL(strcmp);
 EXPORT_SYMBOL(strncmp);
 
@@ -227,7 +227,7 @@ EXPORT_SYMBOL(pmu_register_sleep_notifier);
 EXPORT_SYMBOL(pmu_unregister_sleep_notifier);
 EXPORT_SYMBOL(pmu_enable_irled);
 #endif CONFIG_PMAC_PBOOK
-#if defined(CONFIG_PMAC) || defined(CONFIG_ALL_PPC)
+#if defined(CONFIG_ALL_PPC)
 EXPORT_SYMBOL(find_devices);
 EXPORT_SYMBOL(find_type_devices);
 EXPORT_SYMBOL(find_compatible_devices);
@@ -243,8 +243,8 @@ EXPORT_SYMBOL(pci_device_loc);
 EXPORT_SYMBOL(feature_set);
 EXPORT_SYMBOL(feature_clear);
 EXPORT_SYMBOL(feature_test);
-#endif /* defined(CONFIG_PMAC) || defined(CONFIG_ALL_PPC) */
-#if defined(CONFIG_SCSI) && (defined(CONFIG_PMAC) || defined(CONFIG_ALL_PPC))
+#endif /* defined(CONFIG_ALL_PPC) */
+#if defined(CONFIG_SCSI) && defined(CONFIG_ALL_PPC)
 EXPORT_SYMBOL(note_scsi_host);
 #endif
 EXPORT_SYMBOL(kd_mksound);
@@ -270,7 +270,6 @@ EXPORT_SYMBOL(screen_info);
 EXPORT_SYMBOL(int_control);
 EXPORT_SYMBOL(timer_interrupt_intercept);
 EXPORT_SYMBOL(timer_interrupt);
-extern unsigned long do_IRQ_intercept;
 EXPORT_SYMBOL(do_IRQ_intercept);
 EXPORT_SYMBOL(irq_desc);
 void ppc_irq_dispatch_handler(struct pt_regs *, int);
@@ -278,3 +277,7 @@ EXPORT_SYMBOL(ppc_irq_dispatch_handler);
 EXPORT_SYMBOL(decrementer_count);
 EXPORT_SYMBOL(get_wchan);
 EXPORT_SYMBOL(console_drivers);
+#ifdef CONFIG_XMON
+EXPORT_SYMBOL(xmon);
+#endif
+EXPORT_SYMBOL(down_read_failed);

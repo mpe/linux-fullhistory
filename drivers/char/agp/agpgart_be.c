@@ -1397,8 +1397,6 @@ static int __init sis_generic_setup (struct pci_dev *pdev)
 	agp_bridge.free_by_type = agp_generic_free_by_type;
 
 	return 0;
-	
-	(void) pdev; /* unused */
 }
 
 #endif /* CONFIG_AGP_SIS */

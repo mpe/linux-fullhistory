@@ -478,26 +478,6 @@ extern __inline__ int netif_running(struct net_device *dev)
 	return test_bit(__LINK_STATE_START, &dev->state);
 }
 
-/* Hot-plugging. */
-extern __inline__ int netif_device_present(struct net_device *dev)
-{
-	return test_bit(__LINK_STATE_PRESENT, &dev->state);
-}
-
-extern __inline__ void netif_device_detach(struct net_device *dev)
-{
-	if (test_and_clear_bit(__LINK_STATE_PRESENT, &dev->state) &&
-	    netif_running(dev))
-		netif_stop_queue(dev);
-}
-
-extern __inline__ void netif_device_attach(struct net_device *dev)
-{
-	if (test_and_set_bit(__LINK_STATE_PRESENT, &dev->state) &&
-	    netif_running(dev))
-		netif_wake_queue(dev);
-}
-
 /* Use this variant when it is known for sure that it
  * is executing from interrupt context.
  */
@@ -553,6 +533,35 @@ extern __inline__ void dev_put(struct net_device *dev)
 #define __dev_put(dev) atomic_dec(&(dev)->refcnt)
 #define dev_hold(dev) atomic_inc(&(dev)->refcnt)
 
+/* Hot-plugging. */
+extern __inline__ int netif_device_present(struct net_device *dev)
+{
+	return test_bit(__LINK_STATE_PRESENT, &dev->state);
+}
+
+extern __inline__ void netif_device_detach(struct net_device *dev)
+{
+	if (test_and_clear_bit(__LINK_STATE_PRESENT, &dev->state) &&
+	    netif_running(dev)) {
+		netif_stop_queue(dev);
+		if (dev->tx_timeout &&
+		    del_timer(&dev->watchdog_timer))
+			__dev_put(dev);
+	}
+}
+
+extern __inline__ void netif_device_attach(struct net_device *dev)
+{
+	if (test_and_set_bit(__LINK_STATE_PRESENT, &dev->state) &&
+	    netif_running(dev)) {
+		netif_wake_queue(dev);
+		if (dev->tx_timeout) {
+			dev->watchdog_timer.expires = jiffies + dev->watchdog_timeo;
+			add_timer(&dev->watchdog_timer);
+			dev_hold(dev);
+		}
+	}
+}
 
 /* These functions live elsewhere (drivers/net/net_init.c, but related) */
 

@@ -126,6 +126,30 @@ cabriolet_init_irq(void)
 	setup_irq(16+4, &isa_cascade_irqaction);
 }
 
+#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_PC164)
+static void
+pc164_device_interrupt(unsigned long v, struct pt_regs *r)
+{
+	/* In theory, the PC164 has the same interrupt hardware as
+	   the other Cabriolet based systems.  However, something 
+	   got screwed up late in the development cycle which broke
+	   the interrupt masking hardware.  Repeat, it is not 
+	   possible to mask and ack interrupts.  At all.
+
+	   In an attempt to work around this, while processing 
+	   interrupts, we do not allow the IPL to drop below what
+	   it is currently.  This prevents the possibility of
+	   recursion.  
+
+	   ??? Another option might be to force all PCI devices
+	   to use edge triggered rather than level triggered
+	   interrupts.  That might be too invasive though.  */
+
+	__min_ipl = getipl();
+	cabriolet_device_interrupt(v, r);
+	__min_ipl = 0;
+}
+#endif
 
 /*
  * The EB66+ is very similar to the EB66 except that it does not have
@@ -379,7 +403,7 @@ struct alpha_machine_vector pc164_mv __initmv = {
 	min_mem_address:	CIA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		35,
-	device_interrupt:	cabriolet_device_interrupt,
+	device_interrupt:	pc164_device_interrupt,
 
 	init_arch:		cia_init_arch,
 	init_irq:		cabriolet_init_irq,

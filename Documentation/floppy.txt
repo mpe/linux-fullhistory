@@ -1,4 +1,4 @@
-This Readme file describes the floppy driver.
+This file describes the floppy driver.
 
 FAQ list:
 =========

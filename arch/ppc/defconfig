@@ -17,9 +17,6 @@ CONFIG_6xx=y
 # CONFIG_PPC64 is not set
 # CONFIG_82xx is not set
 # CONFIG_8xx is not set
-# CONFIG_PMAC is not set
-# CONFIG_PREP is not set
-# CONFIG_CHRP is not set
 CONFIG_ALL_PPC=y
 # CONFIG_GEMINI is not set
 # CONFIG_APUS is not set
@@ -286,30 +283,29 @@ CONFIG_GMAC=y
 # CONFIG_LANCE is not set
 # CONFIG_NET_VENDOR_SMC is not set
 # CONFIG_NET_VENDOR_RACAL is not set
-# CONFIG_RTL8139 is not set
-# CONFIG_DM9102 is not set
 # CONFIG_AT1700 is not set
 # CONFIG_DEPCA is not set
 # CONFIG_NET_ISA is not set
-CONFIG_NET_EISA=y
+CONFIG_NET_PCI=y
 CONFIG_PCNET32=y
 # CONFIG_ADAPTEC_STARFIRE is not set
 # CONFIG_AC3200 is not set
 # CONFIG_APRICOT is not set
-# CONFIG_CS89x0 is not set
 CONFIG_DE4X5=y
-# CONFIG_DEC_ELCP is not set
+# CONFIG_TULIP is not set
 # CONFIG_DGRS is not set
-# CONFIG_EEXPRESS_PRO100 is not set
+# CONFIG_DM9102 is not set
+# CONFIG_EEPRO100 is not set
 # CONFIG_LNE390 is not set
 # CONFIG_NE3210 is not set
 # CONFIG_NE2K_PCI is not set
+# CONFIG_RTL8129 is not set
+# CONFIG_8139TOO is not set
 # CONFIG_SIS900 is not set
 # CONFIG_TLAN is not set
 # CONFIG_VIA_RHINE is not set
 # CONFIG_ES3210 is not set
 # CONFIG_EPIC100 is not set
-# CONFIG_ZNET is not set
 # CONFIG_NET_POCKET is not set
 
 #
@@ -499,6 +495,7 @@ CONFIG_USB_OHCI=y
 # CONFIG_USB_DC2XX is not set
 # CONFIG_USB_STORAGE is not set
 # CONFIG_USB_DABUSB is not set
+# CONFIG_USB_PLUSB is not set
 
 #
 # USB HID
@@ -508,13 +505,15 @@ CONFIG_USB_KBD=y
 CONFIG_USB_MOUSE=y
 # CONFIG_USB_GRAPHIRE is not set
 # CONFIG_USB_WMFORCE is not set
-# CONFIG_INPUT_KEYBDEV is not set
-# CONFIG_INPUT_MOUSEDEV is not set
+CONFIG_INPUT_KEYBDEV=y
+CONFIG_INPUT_MOUSEDEV=y
+# CONFIG_INPUT_MOUSEDEV_MIX is not set
+# CONFIG_INPUT_MOUSEDEV_DIGITIZER is not set
 # CONFIG_INPUT_JOYDEV is not set
 # CONFIG_INPUT_EVDEV is not set
 
 #
-# Filesystems
+# File systems
 #
 # CONFIG_QUOTA is not set
 CONFIG_AUTOFS_FS=y
@@ -535,6 +534,7 @@ CONFIG_ISO9660_FS=y
 # CONFIG_NTFS_FS is not set
 # CONFIG_HPFS_FS is not set
 CONFIG_PROC_FS=y
+# CONFIG_DEVFS_FS is not set
 CONFIG_DEVPTS_FS=y
 # CONFIG_QNX4FS_FS is not set
 # CONFIG_ROMFS_FS is not set

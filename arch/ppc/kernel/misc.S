@@ -241,12 +241,21 @@ _GLOBAL(__flush_page_to_ram)
 	rlwinm	r5,r5,16,16,31
 	cmpi	0,r5,1
 	beqlr				/* for 601, do nothing */
+	li	r4,0x0FFF
+	andc	r3,r3,r4		/* Get page base address */
 	li	r4,4096/CACHE_LINE_SIZE	/* Number of lines in a page */
 	mtctr	r4
+	mr	r6,r3
 0:	dcbst	0,r3			/* Write line to ram */
 	addi	r3,r3,CACHE_LINE_SIZE
 	bdnz	0b
 	sync
+	mtctr	r4
+1:	icbi	0,r6
+	addi	r6,r6,CACHE_LINE_SIZE
+	bdnz	1b
+	sync
+	isync
 	blr
 
 /*
@@ -270,7 +279,7 @@ _GLOBAL(__flush_icache_page)
 	sync
 	isync
 	blr
-
+	
 /*
  * Clear a page using the dcbz instruction, which doesn't cause any
  * memory traffic (except to write out any cache lines which get

@@ -1328,18 +1328,15 @@ load_up_mmu:
 	/* Load the SDR1 register (hash table base & size) */
 	lis	r6,_SDR1@ha
 	tophys(r6,r6)
-#ifdef CONFIG_PPC64	
-	ld	r6,_SDR1@l(r6)
+	lwz	r6,_SDR1@l(r6)
 	mtspr	SDR1,r6
+#ifdef CONFIG_PPC64	
 	/* clear the v bit in the ASR so we can
 	 * behave as if we have segment registers 
 	 * -- Cort
 	 */
 	clrldi	r6,r6,63
 	mtasr	r6
-#else
-	lwz	r6,_SDR1@l(r6)
-	mtspr	SDR1,r6
 #endif /* CONFIG_PPC64 */
 	li	r0,16		/* load up segment register values */
 	mtctr	r0		/* for context 0 */

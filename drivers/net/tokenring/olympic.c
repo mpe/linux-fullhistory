@@ -26,10 +26,9 @@
  *	      resource. Driver also reports the card name returned by
  *            the pci resource.
  *  1/11/00 - Added spinlocks for smp
- *  
- *  To Do:
+ *  2/23/00 - Updated to dev_kfree_irq 
  *
- *  IPv6 Multicast
+ *  To Do:
  *
  *  If Problems do Occur
  *  Most problems can be rectified by either closing and opening the interface
@@ -88,7 +87,7 @@
  */
 
 static char *version = 
-"Olympic.c v0.3.1 1/11/00 - Peter De Schrijver & Mike Phillips" ; 
+"Olympic.c v0.3.2 2/23/00 - Peter De Schrijver & Mike Phillips" ; 
 
 static char *open_maj_error[]  = {"No error", "Lobe Media Test", "Physical Insertion",
 				   "Address Verification", "Neighbor Notification (Ring Poll)",
@@ -777,7 +776,7 @@ static void olympic_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			olympic_priv->free_tx_ring_entries++;
 			olympic_priv->olympic_stats.tx_bytes += olympic_priv->tx_ring_skb[olympic_priv->tx_ring_last_status]->len;
 			olympic_priv->olympic_stats.tx_packets++ ; 
-			dev_kfree_skb(olympic_priv->tx_ring_skb[olympic_priv->tx_ring_last_status]);
+			dev_kfree_skb_irq(olympic_priv->tx_ring_skb[olympic_priv->tx_ring_last_status]);
 			olympic_priv->olympic_tx_ring[olympic_priv->tx_ring_last_status].buffer=0xdeadbeef;
 			olympic_priv->olympic_tx_status_ring[olympic_priv->tx_ring_last_status].status=0;
 			netif_wake_queue(dev);

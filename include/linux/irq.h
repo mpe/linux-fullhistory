@@ -12,6 +12,7 @@
 #define IRQ_AUTODETECT	16	/* IRQ is being autodetected */
 #define IRQ_WAITING	32	/* IRQ not yet seen - for autodetection */
 #define IRQ_LEVEL	64	/* IRQ level triggered */
+#define IRQ_MASKED	128	/* IRQ masked - shouldn't be seen again */
 
 /*
  * Interrupt controller descriptor. This is all we need

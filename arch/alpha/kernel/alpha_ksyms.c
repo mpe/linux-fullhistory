@@ -98,6 +98,8 @@ EXPORT_SYMBOL(__memset);
 EXPORT_SYMBOL(__memsetw);
 EXPORT_SYMBOL(__constant_c_memset);
 
+EXPORT_SYMBOL(__direct_map_base);
+EXPORT_SYMBOL(__direct_map_size);
 EXPORT_SYMBOL(pci_alloc_consistent);
 EXPORT_SYMBOL(pci_free_consistent);
 EXPORT_SYMBOL(pci_map_single);
@@ -142,6 +144,10 @@ extern long (*alpha_fp_emul_imprecise)(struct pt_regs *, unsigned long);
 extern long (*alpha_fp_emul) (unsigned long pc);
 EXPORT_SYMBOL(alpha_fp_emul_imprecise);
 EXPORT_SYMBOL(alpha_fp_emul);
+#endif
+
+#ifdef CONFIG_ALPHA_BROKEN_IRQ_MASK
+EXPORT_SYMBOL(__min_ipl);
 #endif
 
 /*

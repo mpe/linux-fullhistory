@@ -32,6 +32,7 @@
 #include <linux/malloc.h>
 #include <linux/input.h>
 #include <linux/module.h>
+#include <linux/init.h>
 #include "usb.h"
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
@@ -149,17 +150,16 @@ static struct usb_driver wmforce_driver = {
 	disconnect:	wmforce_disconnect,
 };
 
-#ifdef MODULE
-void cleanup_module(void)
-{
-	usb_deregister(&wmforce_driver);
-}
-
-int init_module(void)
-#else
-int wmforce_init(void)
-#endif
+static int __init wmforce_init(void)
 {
 	usb_register(&wmforce_driver);
 	return 0;
 }
+
+static void __exit wmforce_exit(void)
+{
+	usb_deregister(&wmforce_driver);
+}
+
+module_init(wmforce_init);
+module_exit(wmforce_exit);

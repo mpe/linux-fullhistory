@@ -117,15 +117,48 @@ static __inline__ int irq_cannonicalize(int irq)
 	return irq;
 }
 
-#else
+#else /* CONFIG_4xx + CONFIG_8xx */
 
-#ifdef CONFIG_APUS
-#define enable_irq m68k_enable_irq
-#define disable_irq m68k_disable_irq
-#include <asm-m68k/irq.h>
-#undef enable_irq
-#undef disable_irq
-#else /* CONFIG_APUS */
+#if defined(CONFIG_APUS)
+/*
+ * This structure is used to chain together the ISRs for a particular
+ * interrupt source (if it supports chaining).
+ */
+typedef struct irq_node {
+	void		(*handler)(int, void *, struct pt_regs *);
+	unsigned long	flags;
+	void		*dev_id;
+	const char	*devname;
+	struct irq_node *next;
+} irq_node_t;
+
+/*
+ * This structure has only 4 elements for speed reasons
+ */
+typedef struct irq_handler {
+	void		(*handler)(int, void *, struct pt_regs *);
+	unsigned long	flags;
+	void		*dev_id;
+	const char	*devname;
+} irq_handler_t;
+
+/* count of spurious interrupts */
+extern volatile unsigned int num_spurious;
+
+extern int sys_request_irq(unsigned int, 
+	void (*)(int, void *, struct pt_regs *), 
+	unsigned long, const char *, void *);
+extern void sys_free_irq(unsigned int, void *);
+
+/*
+ * This function returns a new irq_node_t
+ */
+extern irq_node_t *new_irq_node(void);
+
+/* Number of m68k interrupts */
+#define SYS_IRQS 8
+
+#endif /* CONFIG_APUS */
 
 /*
  * this is the # irq's for all ppc arch's (pmac/chrp/prep)
@@ -133,14 +166,11 @@ static __inline__ int irq_cannonicalize(int irq)
  */
 #define NR_IRQS			256
 
-#endif /* CONFIG_APUS */
-
 #define NUM_8259_INTERRUPTS	16
 #define IRQ_8259_CASCADE	16
 #define openpic_to_irq(n)	((n)+NUM_8259_INTERRUPTS)
 #define irq_to_openpic(n)	((n)-NUM_8259_INTERRUPTS)
 
-#ifndef CONFIG_APUS
 /*
  * This gets called from serial.c, which is now used on
  * powermacs as well as prep/chrp boxes.
@@ -157,8 +187,10 @@ static __inline__ int irq_cannonicalize(int irq)
 		return irq;
 	}
 }
-#endif /* !CONFIG_APUS */
 
 #endif
+
+#define NR_MASK_WORDS	((NR_IRQS + 31) / 32)
+extern unsigned int ppc_lost_interrupts[NR_MASK_WORDS];
 
 #endif /* _ASM_IRQ_H */

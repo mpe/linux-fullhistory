@@ -1,3 +1,4 @@
+#include <linux/config.h>
 #ifdef CONFIG_USB_STORAGE_DEBUG
 
 /* Debug output for Driver for USB mass storage (scsi-like) devices

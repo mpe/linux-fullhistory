@@ -33,7 +33,7 @@ pour la traduction français.
    Also, don't forget http://www.linuxhq.com/ for all your Linux kernel
 needs.
 
-Last updated: March 16, 1999
+Last updated: Feb 21, 2000
 Current Author: Chris Ricker (kaboom@gatech.edu or chris.ricker@m.cc.utah.edu).
 
 Current Minimal Requirements
@@ -512,6 +512,12 @@ recomented.
 Older isdn4k-utils versions don't support EXTRAVERSION into kernel version
 string.
 
+Logical Volume Manager
+======================
+Since 2.3.47 the kernel contains the Logical Volume Manager aka LVM. To use it,
+you need to install the LVM tools. More information can be found at the home page
+of the LVM project at http://linux.msede.com/lvm/.
+
 
 Where to get the files
 **********************
@@ -751,9 +757,9 @@ http://www.cs.kuleuven.ac.be/~geert/bin/fbset-2.0-pre-19981104.tar.gz
 PCI utils
 =========
 
-The 2.0 release:
-ftp://atrey.karlin.mff.cuni.cz/pub/linux/pci/pciutils-2.0.tar.gz
-ftp://metalab.unc.edu/pub/Linux/hardware/pciutils-2.0.tar.gz
+The 2.1.5 release:
+ftp://atrey.karlin.mff.cuni.cz/pub/linux/pci/pciutils-2.1.5.tar.gz
+ftp://metalab.unc.edu/pub/Linux/hardware/pciutils-2.1.5.tar.gz
 
 Powertweak
 ==========
@@ -795,8 +801,16 @@ ftp://ftp.gnu.org/gnu/patch/patch-2.5.tar.gz
 
 ISDN4Linux
 ==========
+
 The v3.1beta7 release:
 ftp://ftp.isdn4linux.de/pub/isdn4linux/utils/testing/isdn4k-utils.v3.1beta7.tar.gz
+
+Logical Volume Manager
+======================
+
+The 0.7 release:
+ftp://linux.msede.com/lvm/v0.7/lvm_0.7.tar.gz
+
 
 Other Info
 ==========
