@@ -538,6 +538,11 @@ static void ohci_initialize(struct ti_ohci *ohci)
 	/* Initialize AT dma */
 	initialize_dma_trm_ctx(&ohci->at_req_context);
 	initialize_dma_trm_ctx(&ohci->at_resp_context);
+	
+	/* Initialize IR Legacy DMA */
+	ohci->ir_legacy_channels = 0;
+	initialize_dma_rcv_ctx(&ohci->ir_legacy_context, 1);
+	DBGMSG("ISO receive legacy context activated");
 
 	/*
 	 * Accept AT requests from all nodes. This probably
@@ -1035,22 +1040,6 @@ static int ohci_devctl(struct hpsb_host *host, enum devctl_cmd cmd, int arg)
 			return -EFAULT;
 		}
 
-		/* activate the legacy IR context */
-		if (ohci->ir_legacy_context.ohci == NULL) {
-			if (alloc_dma_rcv_ctx(ohci, &ohci->ir_legacy_context,
-					      DMA_CTX_ISO, 0, IR_NUM_DESC,
-					      IR_BUF_SIZE, IR_SPLIT_BUF_SIZE,
-					      OHCI1394_IsoRcvContextBase) < 0) {
-				PRINT(KERN_ERR, "%s: failed to allocate an IR context",
-				      __FUNCTION__);
-				return -ENOMEM;
-			}
-			ohci->ir_legacy_channels = 0;
-			initialize_dma_rcv_ctx(&ohci->ir_legacy_context, 1);
-
-			DBGMSG("ISO receive legacy context activated");
-		}
-
 		mask = (u64)0x1<<arg;
 
                 spin_lock_irqsave(&ohci->IR_channel_lock, flags);
@@ -1112,12 +1101,6 @@ static int ohci_devctl(struct hpsb_host *host, enum devctl_cmd cmd, int arg)
 
                 spin_unlock_irqrestore(&ohci->IR_channel_lock, flags);
                 DBGMSG("Listening disabled on channel %d", arg);
-
-		if (ohci->ir_legacy_channels == 0) {
-			stop_dma_rcv_ctx(&ohci->ir_legacy_context);
-			free_dma_rcv_ctx(&ohci->ir_legacy_context);
-			DBGMSG("ISO receive legacy context deactivated");
-		}
                 break;
         }
 	default:
@@ -2921,7 +2904,9 @@ alloc_dma_rcv_ctx(struct ti_ohci *ohci, struct dma_rcv_ctx *d,
 		  enum context_type type, int ctx, int num_desc,
 		  int buf_size, int split_buf_size, int context_base)
 {
-	int i;
+	int i, len;
+	static int num_allocs;
+	static char pool_name[20];
 
 	d->ohci = ohci;
 	d->type = type;
@@ -2965,9 +2950,19 @@ alloc_dma_rcv_ctx(struct ti_ohci *ohci, struct dma_rcv_ctx *d,
 		free_dma_rcv_ctx(d);
 		return -ENOMEM;
 	}
-
-	d->prg_pool = pci_pool_create("ohci1394 rcv prg", ohci->dev,
+	
+	len = sprintf(pool_name, "ohci1394_rcv_prg");
+	sprintf(pool_name+len, "%d", num_allocs);
+	d->prg_pool = pci_pool_create(pool_name, ohci->dev,
 				sizeof(struct dma_cmd), 4, 0);
+	if(d->prg_pool == NULL)
+	{
+		PRINT(KERN_ERR, "pci_pool_create failed for %s", pool_name);
+		free_dma_rcv_ctx(d);
+		return -ENOMEM;
+	}
+	num_allocs++;
+
 	OHCI_DMA_ALLOC("dma_rcv prg pool");
 
 	for (i=0; i<d->num_desc; i++) {
@@ -3060,7 +3055,9 @@ alloc_dma_trm_ctx(struct ti_ohci *ohci, struct dma_trm_ctx *d,
 		  enum context_type type, int ctx, int num_desc,
 		  int context_base)
 {
-	int i;
+	int i, len;
+	static char pool_name[20];
+	static int num_allocs=0;
 
 	d->ohci = ohci;
 	d->type = type;
@@ -3082,8 +3079,17 @@ alloc_dma_trm_ctx(struct ti_ohci *ohci, struct dma_trm_ctx *d,
 	memset(d->prg_cpu, 0, d->num_desc * sizeof(struct at_dma_prg*));
 	memset(d->prg_bus, 0, d->num_desc * sizeof(dma_addr_t));
 
-	d->prg_pool = pci_pool_create("ohci1394 trm prg", ohci->dev,
+	len = sprintf(pool_name, "ohci1394_trm_prg");
+	sprintf(pool_name+len, "%d", num_allocs);
+	d->prg_pool = pci_pool_create(pool_name, ohci->dev,
 				sizeof(struct at_dma_prg), 4, 0);
+	if (d->prg_pool == NULL) {
+		PRINT(KERN_ERR, "pci_pool_create failed for %s", pool_name);
+		free_dma_trm_ctx(d);
+		return -ENOMEM;
+	}
+	num_allocs++;
+
 	OHCI_DMA_ALLOC("dma_rcv prg pool");
 
 	for (i = 0; i < d->num_desc; i++) {
@@ -3355,10 +3361,19 @@ static int __devinit ohci1394_pci_probe(struct pci_dev *dev,
 	ohci->ISO_channel_usage = 0;
         spin_lock_init(&ohci->IR_channel_lock);
 
-	/* the IR DMA context is allocated on-demand; mark it inactive */
-	ohci->ir_legacy_context.ohci = NULL;
+	/* Allocate the IR DMA context right here so we don't have
+	 * to do it in interrupt path - note that this doesn't
+	 * waste much memory and avoids the jugglery required to
+	 * allocate it in IRQ path. */
+	if (alloc_dma_rcv_ctx(ohci, &ohci->ir_legacy_context,
+			      DMA_CTX_ISO, 0, IR_NUM_DESC,
+			      IR_BUF_SIZE, IR_SPLIT_BUF_SIZE,
+			      OHCI1394_IsoRcvContextBase) < 0) {
+		FAIL(-ENOMEM, "Cannot allocate IR Legacy DMA context");
+	}
 
-	/* same for the IT DMA context */
+	/* We hopefully don't have to pre-allocate IT DMA like we did
+	 * for IR DMA above. Allocate it on-demand and mark inactive. */
 	ohci->it_legacy_context.ohci = NULL;
 
 	if (request_irq(dev->irq, ohci_irq_handler, SA_SHIRQ,
@@ -3398,6 +3413,7 @@ static void ohci1394_pci_remove(struct pci_dev *pdev)
 
 	switch (ohci->init_state) {
 	case OHCI_INIT_DONE:
+		stop_dma_rcv_ctx(&ohci->ir_legacy_context);
 		hpsb_remove_host(ohci->host);
 
 		/* Clear out BUS Options */
@@ -3446,6 +3462,10 @@ static void ohci1394_pci_remove(struct pci_dev *pdev)
 
 		/* Free IT dma */
 		free_dma_trm_ctx(&ohci->it_legacy_context);
+
+		/* Free IR legacy dma */
+		free_dma_rcv_ctx(&ohci->ir_legacy_context);
+
 
 	case OHCI_INIT_HAVE_SELFID_BUFFER:
 		pci_free_consistent(ohci->dev, OHCI1394_SI_DMA_BUF_SIZE,
