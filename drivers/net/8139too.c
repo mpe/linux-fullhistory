@@ -749,7 +749,6 @@ static void __rtl8139_cleanup_dev (struct net_device *dev)
 	pci_release_regions (pdev);
 
 	free_netdev(dev);
-	pci_disable_device(pdev);
 	pci_set_drvdata (pdev, NULL);
 }
 
@@ -778,7 +777,7 @@ static int __devinit rtl8139_init_board (struct pci_dev *pdev,
 	struct net_device *dev;
 	struct rtl8139_private *tp;
 	u8 tmp8;
-	int rc;
+	int rc, disable_dev_on_err = 0;
 	unsigned int i;
 	unsigned long pio_start, pio_end, pio_flags, pio_len;
 	unsigned long mmio_start, mmio_end, mmio_flags, mmio_len;
@@ -850,6 +849,7 @@ static int __devinit rtl8139_init_board (struct pci_dev *pdev,
 	rc = pci_request_regions (pdev, "8139too");
 	if (rc)
 		goto err_out;
+	disable_dev_on_err = 1;
 
 	/* enable PCI bus-mastering */
 	pci_set_master (pdev);
@@ -935,6 +935,8 @@ match:
 
 err_out:
 	__rtl8139_cleanup_dev (dev);
+	if (disable_dev_on_err)
+		pci_disable_device (pdev);
 	return rc;
 }
 
@@ -1112,6 +1114,7 @@ static int __devinit rtl8139_init_one (struct pci_dev *pdev,
 
 err_out:
 	__rtl8139_cleanup_dev (dev);
+	pci_disable_device (pdev);
 	return i;
 }
 
@@ -1125,6 +1128,7 @@ static void __devexit rtl8139_remove_one (struct pci_dev *pdev)
 	unregister_netdev (dev);
 
 	__rtl8139_cleanup_dev (dev);
+	pci_disable_device (pdev);
 }
 
 

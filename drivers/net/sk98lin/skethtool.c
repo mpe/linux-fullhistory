@@ -437,9 +437,6 @@ static int locateDevice(struct net_device *dev, u32 data)
 	pAC->LedsOn = 0;
 	mod_timer(&pAC->BlinkTimer, jiffies);
 	msleep_interruptible(data * 1000);
-
-	set_current_state(TASK_INTERRUPTIBLE);
-	schedule_timeout(data * HZ);
 	del_timer_sync(&pAC->BlinkTimer);
 	toggleLeds(pNet, 0);
 
