@@ -101,6 +101,9 @@ static struct usb_busmap busmap;
 DECLARE_MUTEX (usb_bus_list_lock);	/* exported only for usbfs */
 EXPORT_SYMBOL_GPL (usb_bus_list_lock);
 
+/* used for controlling access to virtual root hubs */
+static DEFINE_SPINLOCK(hcd_root_hub_lock);
+
 /* used when updating hcd data */
 static DEFINE_SPINLOCK(hcd_data_lock);
 
@@ -874,6 +877,17 @@ int usb_hcd_register_root_hub (struct usb_device *usb_dev, struct usb_hcd *hcd)
 				usb_dev->dev.bus_id, retval);
 	}
 	up (&usb_bus_list_lock);
+
+	if (retval == 0) {
+		spin_lock_irq (&hcd_root_hub_lock);
+		hcd->rh_registered = 1;
+		spin_unlock_irq (&hcd_root_hub_lock);
+
+		/* Did the HC die before the root hub was registered? */
+		if (hcd->state == HC_STATE_HALT)
+			usb_hc_died (hcd);	/* This time clean up */
+	}
+
 	return retval;
 }
 EXPORT_SYMBOL_GPL(usb_hcd_register_root_hub);
@@ -1575,12 +1589,21 @@ irqreturn_t usb_hcd_irq (int irq, void *__hcd, struct pt_regs * r)
  */
 void usb_hc_died (struct usb_hcd *hcd)
 {
+	unsigned long flags;
+
 	dev_err (hcd->self.controller, "HC died; cleaning up\n");
 
-	/* make khubd clean up old urbs and devices */
-	usb_set_device_state(hcd->self.root_hub, USB_STATE_NOTATTACHED);
-	mod_timer(&hcd->rh_timer, jiffies);
+	spin_lock_irqsave (&hcd_root_hub_lock, flags);
+	if (hcd->rh_registered) {
+
+		/* make khubd clean up old urbs and devices */
+		usb_set_device_state (hcd->self.root_hub,
+				USB_STATE_NOTATTACHED);
+		usb_kick_khubd (hcd->self.root_hub);
+	}
+	spin_unlock_irqrestore (&hcd_root_hub_lock, flags);
 }
+EXPORT_SYMBOL_GPL (usb_hc_died);
 
 /*-------------------------------------------------------------------------*/
 
@@ -1737,6 +1760,9 @@ void usb_remove_hcd(struct usb_hcd *hcd)
 		hcd->state = HC_STATE_QUIESCING;
 
 	dev_dbg(hcd->self.controller, "roothub graceful disconnect\n");
+	spin_lock_irq (&hcd_root_hub_lock);
+	hcd->rh_registered = 0;
+	spin_unlock_irq (&hcd_root_hub_lock);
 	usb_disconnect(&hcd->self.root_hub);
 
 	hcd->driver->stop(hcd);

@@ -289,6 +289,11 @@ static void kick_khubd(struct usb_hub *hub)
 	spin_unlock_irqrestore(&hub_event_lock, flags);
 }
 
+void usb_kick_khubd(struct usb_device *hdev)
+{
+	kick_khubd(hdev_to_hub(hdev));
+}
+
 
 /* completion function, fires on port status changes and various faults */
 static void hub_irq(struct urb *urb, struct pt_regs *regs)
@@ -2624,7 +2629,17 @@ static void hub_events(void)
 			usb_put_intf(intf);
 			continue;
 		}
-		if (hub != usb_get_intfdata(intf) || hub->quiescing)
+		if (hub != usb_get_intfdata(intf))
+			goto loop;
+
+		/* If the hub has died, clean up after it */
+		if (hdev->state == USB_STATE_NOTATTACHED) {
+			hub_pre_reset(hub);
+			goto loop;
+		}
+
+		/* If this is an inactive or suspended hub, do nothing */
+		if (hub->quiescing)
 			goto loop;
 
 		if (hub->error) {

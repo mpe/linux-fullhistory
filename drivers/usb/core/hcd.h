@@ -74,6 +74,8 @@ struct usb_hcd {	/* usb_bus.hcpriv points to this */
 	unsigned		saw_irq : 1;
 	unsigned		can_wakeup:1;	/* hw supports wakeup? */
 	unsigned		remote_wakeup:1;/* sw should use wakeup? */
+	unsigned		rh_registered:1;/* is root hub registered? */
+
 	int			irq;		/* irq allocated */
 	void __iomem		*regs;		/* device memory/io */
 	u64			rsrc_start;	/* memory/io resource start */
