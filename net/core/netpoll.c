@@ -593,7 +593,7 @@ int netpoll_setup(struct netpoll *np)
 		rtnl_shunlock();
 
 		atleast = jiffies + HZ/10;
- 		atmost = jiffies + 10*HZ;
+ 		atmost = jiffies + 4*HZ;
 		while (!netif_carrier_ok(ndev)) {
 			if (time_after(jiffies, atmost)) {
 				printk(KERN_NOTICE
@@ -606,7 +606,7 @@ int netpoll_setup(struct netpoll *np)
 
 		if (time_before(jiffies, atleast)) {
 			printk(KERN_NOTICE "%s: carrier detect appears flaky,"
-			       " waiting 10 seconds\n",
+			       " waiting 4 seconds\n",
 			       np->name);
 			while (time_before(jiffies, atmost))
 				cond_resched();
