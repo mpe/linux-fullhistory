@@ -160,6 +160,7 @@ function int () {
 
 CONFIG=.config~
 CONFIG_H=include/linux/autoconf.h
+trap "rm -f $CONFIG $CONFIG_H config.new ; exit 1" 1 2
 
 #
 # Make sure we start out with a clean slate.

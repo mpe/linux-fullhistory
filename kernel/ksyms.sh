@@ -10,7 +10,7 @@
 #
 #
 
-trap "rm -f ksyms.tmp ksyms.lst" 1 2 
+trap "rm -f ksyms.tmp ksyms.lst ; exit 1" 1 2 
 
 sed -e '/^#/d' -e '/^[	 ]*$/d' ksyms.lst | sort > ksyms.tmp
 

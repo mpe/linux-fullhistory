@@ -45,7 +45,7 @@ static int read_core(struct inode * inode, struct file * file,char * buf, int co
 	if (p >= high_memory + PAGE_SIZE)
 		return 0;
 	if (count > high_memory + PAGE_SIZE - p)
-		count = high_memory - p;
+		count = high_memory + PAGE_SIZE - p;
 	read = 0;
 
 	if (p < sizeof(struct user) && count > 0) {

@@ -399,7 +399,7 @@ extern long tty_init(long);
 
 extern void flush_input(struct tty_struct * tty);
 extern void flush_output(struct tty_struct * tty);
-extern void wait_until_sent(struct tty_struct * tty);
+extern void wait_until_sent(struct tty_struct * tty, int timeout);
 extern int check_change(struct tty_struct * tty, int channel);
 extern void stop_tty(struct tty_struct * tty);
 extern void start_tty(struct tty_struct * tty);

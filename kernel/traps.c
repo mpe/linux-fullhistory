@@ -89,8 +89,8 @@ asmlinkage void alignment_check(void);
 	printk("EIP:    %04x:%08lx\nEFLAGS: %08lx\n", 0xffff & regs->cs,regs->eip,regs->eflags);
 	printk("eax: %08lx   ebx: %08lx   ecx: %08lx   edx: %08lx\n",
 		regs->eax, regs->ebx, regs->ecx, regs->edx);
-	printk("esi: %08lx   edi: %08lx   ebp: %08lx   esp: %08lx\n",
-		regs->esi, regs->edi, regs->ebp, regs->esp);
+	printk("esi: %08lx   edi: %08lx   ebp: %08lx\n",
+		regs->esi, regs->edi, regs->ebp);
 	printk("ds: %04x   es: %04x   fs: %04x   gs: %04x\n",
 		regs->ds, regs->es, regs->fs, regs->gs);
 	store_TR(i);
@@ -98,11 +98,6 @@ asmlinkage void alignment_check(void);
 	for(i=0;i<20;i++)
 		printk("%02x ",0xff & get_seg_byte(regs->cs,(i+(char *)regs->eip)));
 	printk("\n");
-#if 0
-	for(i=0;i<5;i++)
-		printk("%08lx ", get_seg_long(regs->ss,(i+(unsigned long *)regs->esp)));
-	printk("\n");
-#endif
 	do_exit(SIGSEGV);
 }
 

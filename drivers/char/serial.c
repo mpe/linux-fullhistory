@@ -1528,11 +1528,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	tty->hw_stopped = 0;
 	if (info->flags & ASYNC_INITIALIZED) {
 		rs_start(tty);
-		/*
-		 * XXX There should be a timeout added to
-		 * wait_until_sent, eventually.  TYT 1/19/94
-		 */
-		wait_until_sent(tty);
+		wait_until_sent(tty, 6000); /* 60 seconds timeout */
 	} else
 		flush_output(tty);
 	flush_input(tty);

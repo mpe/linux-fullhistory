@@ -954,7 +954,9 @@ int shrink_buffers(unsigned int priority)
 	bh = free_list;
 	i = nr_buffers >> priority;
 	for ( ; i-- > 0 ; bh = bh->b_next_free) {
-		if (bh->b_count) {
+		if (bh->b_count ||
+		    (priority >= 5 &&
+		     mem_map[MAP_NR((unsigned long) bh->b_data)] > 1)) {
 			put_last_free(bh);
 			continue;
 		}

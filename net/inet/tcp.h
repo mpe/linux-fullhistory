@@ -30,6 +30,9 @@
 #define MIN_WRITE_SPACE	2048
 #define TCP_WINDOW_DIFF	2048
 
+/* marks the urg_data as read */
+#define URG_READ	0xdeadbeef
+
 #define TCP_RETR1	7	/*
 				 * This is howmany retries it does before it
 				 * tries to figure out if the gateway is

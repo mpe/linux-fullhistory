@@ -72,8 +72,7 @@ struct sk_buff {
   volatile char 		acked,
 				used,
 				free,
-				arp,
-				urg_used;
+				arp;
   unsigned char			tries,lock;	/* Lock is now unused */
   unsigned short		users;		/* User count - see datagram.c (and soon seqpacket.c/stream.c) */
   unsigned long			padding[0];

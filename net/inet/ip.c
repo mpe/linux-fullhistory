@@ -34,6 +34,12 @@
  *		Alan Cox	:	Save IP header pointer for later
  *		Alan Cox	:	ip option setting
  *		Alan Cox	:	Use ip_tos/ip_ttl settings
+ *		Alan Cox	:	Fragmentation bogosity removed
+ *					(Thanks to Mark.Bush@prg.ox.ac.uk)
+ *		Dmitry Gordchanin :	Send of a raw packet crash fix.
+ *		Alan Cox	:	Silly ip bug when an overlength
+ *					fragment turns up. Now frees the
+ *					queue.
  *
  * To Fix:
  *		IP option processing is mostly not needed. ip_forward needs to know about routing rules
@@ -785,6 +791,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
    		if(count+fp->len>skb->len)
    		{
    			printk("Invalid fragment list: Fragment over size.\n");
+   			ip_free(qp);
    			kfree_skb(skb,FREE_WRITE);
    			return NULL;
    		}
@@ -970,7 +977,9 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
    	/* Point into the IP datagram header. */
    	raw = skb->data;
    	iph = (struct iphdr *) (raw + dev->hard_header_len);
- 	
+
+	skb->ip_hdr = iph;
+	 	
    	/* Setup starting values. */
    	hlen = (iph->ihl * sizeof(unsigned long));
    	left = ntohs(iph->tot_len) - hlen;
@@ -1008,6 +1017,7 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
    	while(left > 0) 
    	{
  		len = left;
+#ifdef OLD 		
  		if (len+8 > mtu) 
  			len = (dev->mtu - hlen - 8);
  		if ((left - len) >= 8) 
@@ -1015,6 +1025,18 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
  			len /= 8;
  			len *= 8;
  		}
+#else
+		/* IF: it doesn't fit, use 'mtu' - the data space left */
+		if (len > mtu)
+			len = mtu;
+		/* IF: we are not sending upto and including the packet end
+		   then align the next start on an eight byte boundary */
+		if (len < left)
+		{
+			len/=8;
+			len*=8;
+		}
+#endif		 		
  		DPRINTF((DBG_IP,"IP: frag: creating fragment of %d bytes (%d total)\n",
  							len, len + hlen));
  
@@ -1368,6 +1390,7 @@ ip_queue_xmit(struct sock *sk, struct device *dev,
   ptr = skb->data;
   ptr += dev->hard_header_len;
   iph = (struct iphdr *)ptr;
+  skb->ip_hdr = iph;
   iph->tot_len = ntohs(skb->len-dev->hard_header_len);
 
   if(skb->len > dev->mtu)

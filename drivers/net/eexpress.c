@@ -19,7 +19,7 @@
 */
 
 static char *version =
-	"eexpress.c:v0.06 10/27/93 Donald Becker (becker@super.org)\n";
+	"eexpress.c:v0.07 1/19/94 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 
@@ -154,7 +154,7 @@ struct net_local {
 #define ASIC_RESET		0x40
 #define _586_RESET		0x80
 
-/* Offsets into the System Control Block structure. */
+/* Offsets to elements of the System Control Block structure. */
 #define SCB_STATUS	0xc008
 #define SCB_CMD		0xc00A
 #define	 CUC_START	 0x0100
@@ -175,8 +175,8 @@ struct net_local {
   program space than initializing the individual tables, and I feel it's much
   cleaner.
 
-  The databook is particularly useless for the first two structures, I had
-  to use the Crynwr driver as an example.
+  The databook is particularly useless for the first two structures; they are
+  completely undocumented.  I had to use the Crynwr driver as an example.
 
    The memory setup is as follows:
    */
@@ -194,17 +194,18 @@ struct net_local {
 
 #define TX_BUF_START	0x0100
 #define NUM_TX_BUFS 	4
-#define TX_BUF_SIZE 	(1518+14+20+16) /* packet+header+TBD */
+#define TX_BUF_SIZE		0x0680	/* packet+header+TBD+extra (1518+14+20+16) */
+#define TX_BUF_END		0x2000
 
 #define RX_BUF_START	0x2000
 #define RX_BUF_SIZE 	(0x640)	/* packet+header+RBD+extra */
-#define RX_BUF_END		0x8000
+#define RX_BUF_END		0x4000
 
 /*
   That's it: only 86 bytes to set up the beast, including every extra
   command available.  The 170 byte buffer at DUMP_DATA is shared between the
   Dump command (called only by the diagnostic program) and the SetMulticastList
-  command. 
+  command.
 
   To complete the memory setup you only have to write the station address at
   SA_OFFSET and create the Tx & Rx buffer lists.
@@ -326,6 +327,7 @@ express_probe(struct device *dev)
 #ifdef notdef
 		for (i = 16; i > 0; i--)
 			sum += inb(id_addr);
+		printk("EtherExpress ID checksum is %04x.\n", sum);
 #else
 		for (i = 4; i > 0; i--) {
 			short id_val = inb(id_addr);
@@ -353,7 +355,7 @@ int eexp_probe1(struct device *dev, short ioaddr)
 	station_addr[1] = read_eeprom(ioaddr, 3);
 	station_addr[2] = read_eeprom(ioaddr, 4);
 
-	/* Check the first three octets of the S.A. for the manufactor's code. */ 
+	/* Check the first three octets of the S.A. for the manufactor's code. */
 	if (station_addr[2] != 0x00aa || (station_addr[1] & 0xff00) != 0x0000) {
 		printk(" rejected (invalid address %04x%04x%04x).\n",
 			   station_addr[2], station_addr[1], station_addr[0]);
@@ -511,7 +513,7 @@ eexp_send_packet(struct sk_buff *skb, struct device *dev)
 
 	/* For ethernet, fill in the header.  This should really be done by a
 	   higher level, rather than duplicated for each ethernet adaptor. */
-	if (!skb->arp  &&  dev->rebuild_header(skb->data, dev)) {
+	if (!skb->arp  &&  dev->rebuild_header(skb+1, dev)) {
 		skb->dev = dev;
 		arp_queue (skb);
 		return 0;
@@ -523,7 +525,7 @@ eexp_send_packet(struct sk_buff *skb, struct device *dev)
 		printk("%s: Transmitter access conflict.\n", dev->name);
 	else {
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
-		unsigned char *buf = skb->data;
+		unsigned char *buf = (void *)(skb+1);
 
 		/* Disable the 82586's input to the interrupt line. */
 		outb(irqrmap[dev->irq], ioaddr + SET_IRQ);
@@ -551,8 +553,8 @@ eexp_interrupt(int reg_ptr)
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 	struct net_local *lp;
 	int ioaddr, status, boguscount = 0;
-	short ack_cmd = 0;
-	
+	short ack_cmd;
+
 	if (dev == NULL) {
 		printk ("net_interrupt(): irq %d for unknown device.\n", irq);
 		return;
@@ -595,7 +597,7 @@ eexp_interrupt(int reg_ptr)
 		if (net_debug > 5)
 			printk("Reaped %x, Tx status %04x.\n" , lp->tx_reap, tx_status);
 		lp->tx_reap += TX_BUF_SIZE;
-		if (lp->tx_reap > RX_BUF_START - TX_BUF_SIZE)
+		if (lp->tx_reap > TX_BUF_END - TX_BUF_SIZE)
 			lp->tx_reap = TX_BUF_START;
 		if (++boguscount > 4)
 			break;
@@ -611,22 +613,43 @@ eexp_interrupt(int reg_ptr)
 	ack_cmd = status & 0xf000;
 
 	if ((status & 0x0700) != 0x0200  &&  dev->start) {
-		if (net_debug)
+		short saved_write_ptr = inw(ioaddr + WRITE_PTR);
+		if (net_debug > 1)
 			printk("%s: Command unit stopped, status %04x, restarting.\n",
 				   dev->name, status);
-		/* If this ever occurs we should really re-write the idle loop, reset
-		   the Tx list, and do a complete restart of the command unit.
-		   For now we rely on the Tx timeout if the resume doesn't work. */
-		ack_cmd |= CUC_RESUME;
+		/* If this ever occurs we must re-write the idle loop, reset
+		   the Tx list, and do a complete restart of the command unit. */
+		outw(IDLELOOP, ioaddr + WRITE_PTR);
+		outw(0, ioaddr);
+		outw(CmdNOp, ioaddr);
+		outw(IDLELOOP, ioaddr);
+		outw(IDLELOOP, SCB_CBL);
+		lp->tx_cmd_link = IDLELOOP + 4;
+		lp->tx_head = lp->tx_reap = TX_BUF_START;
+		/* Restore the saved write pointer. */
+		outw(saved_write_ptr, ioaddr + WRITE_PTR);
+		ack_cmd |= CUC_START;
 	}
 
 	if ((status & 0x0070) != 0x0040  &&  dev->start) {
 		short saved_write_ptr = inw(ioaddr + WRITE_PTR);
 		/* The Rx unit is not ready, it must be hung.  Restart the receiver by
 		   initializing the rx buffers, and issuing an Rx start command. */
-		if (net_debug)
-			printk("%s: Rx unit stopped, status %04x, restarting.\n",
-				   dev->name, status);
+		lp->stats.rx_errors++;
+		if (net_debug > 1) {
+			int cur_rxbuf = RX_BUF_START;
+			printk("%s: Rx unit stopped status %04x rx head %04x tail %04x.\n",
+				   dev->name, status, lp->rx_head, lp->rx_tail);
+			while (cur_rxbuf <= RX_BUF_END - RX_BUF_SIZE) {
+				int i;
+				printk("  Rx buf at %04x:", cur_rxbuf);
+				outw(cur_rxbuf, ioaddr + READ_PTR);
+				for (i = 0; i < 0x20; i += 2)
+					printk(" %04x", inw(ioaddr));
+				printk(".\n");
+				cur_rxbuf += RX_BUF_SIZE;
+			}
+		}
 		init_rx_bufs(dev);
 		outw(RX_BUF_START, SCB_RFA);
 		outw(saved_write_ptr, ioaddr + WRITE_PTR);
@@ -813,8 +836,7 @@ init_82586_mem(struct device *dev)
 }
 
 /* Initialize the Rx-block list. */
-static void
-init_rx_bufs(struct device *dev)
+static void init_rx_bufs(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	short ioaddr = dev->base_addr;
@@ -828,14 +850,14 @@ init_rx_bufs(struct device *dev)
 		outw(0x0000, ioaddr);				/* Command */
 		outw(cur_rxbuf + RX_BUF_SIZE, ioaddr); /* Link */
 		outw(cur_rxbuf + 22, ioaddr);		/* Buffer offset */
-		outw(0x0000, ioaddr); 				/* Pad for dest addr. */
-		outw(0x0000, ioaddr);
-		outw(0x0000, ioaddr);
-		outw(0x0000, ioaddr); 				/* Pad for source addr. */
-		outw(0x0000, ioaddr);
-		outw(0x0000, ioaddr);
-		outw(0x0000, ioaddr);				/* Pad for protocol. */
-		
+		outw(0xFeed, ioaddr); 				/* Pad for dest addr. */
+		outw(0xF00d, ioaddr);
+		outw(0xF001, ioaddr);
+		outw(0x0505, ioaddr); 				/* Pad for source addr. */
+		outw(0x2424, ioaddr);
+		outw(0x6565, ioaddr);
+		outw(0xdeaf, ioaddr);				/* Pad for protocol. */
+
 		outw(0x0000, ioaddr);				/* Buffer: Actual count */
 		outw(-1, ioaddr);					/* Buffer: Next (none). */
 		outw(cur_rxbuf + 0x20, ioaddr);		/* Buffer: Address low */
@@ -890,7 +912,7 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 
 	/* Set the next free tx region. */
 	lp->tx_head = tx_block + TX_BUF_SIZE;
-	if (lp->tx_head > RX_BUF_START - TX_BUF_SIZE)
+	if (lp->tx_head > TX_BUF_END - TX_BUF_SIZE)
 		lp->tx_head = TX_BUF_START;
 
     if (net_debug > 4) {
@@ -960,7 +982,7 @@ eexp_rx(struct device *dev)
 
 			outw(data_buffer_addr + 10, ioaddr + READ_PTR);
 
-			insw(ioaddr, skb->data, (pkt_len + 1) >> 1);
+			insw(ioaddr, (void *)(skb+1), (pkt_len + 1) >> 1);
 		
 #ifdef HAVE_NETIF_RX
 			netif_rx(skb);
@@ -985,7 +1007,7 @@ eexp_rx(struct device *dev)
 			printk("%s: Rx next frame at %#x is %#x instead of %#x.\n", dev->name,
 				   rx_head, next_rx_frame, rx_head + RX_BUF_SIZE);
 			next_rx_frame = rx_head + RX_BUF_SIZE;
-			if (next_rx_frame >= RX_BUF_END - RX_BUF_SIZE) 
+			if (next_rx_frame >= RX_BUF_END - RX_BUF_SIZE)
 				next_rx_frame = RX_BUF_START;
 		}
 #endif

@@ -442,7 +442,6 @@ unsigned long psaux_init(unsigned long kmem_start)
         int qp_found = 0;
 
 #ifdef CONFIG_82C710_MOUSE
-	printk("Probing 82C710 mouse port device.\n");
         if ((qp_found = probe_qp())) {
 	        printk("82C710 type pointing device detected -- driver installed.\n");
 /*		printk("82C710 address = %x (should be 0x310)\n", qp_data); */

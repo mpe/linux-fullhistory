@@ -205,7 +205,7 @@ struct lance_private {
     int pad0, pad1;		/* Used for alignment */
 };
 
-static unsigned long lance_probe1(short ioaddr, unsigned long mem_start);
+unsigned long lance_probe1(short ioaddr, unsigned long mem_start);
 static int lance_open(struct device *dev);
 static void lance_init_ring(struct device *dev);
 static int lance_start_xmit(struct sk_buff *skb, struct device *dev);
@@ -236,7 +236,7 @@ unsigned long lance_init(unsigned long mem_start, unsigned long mem_end)
     return mem_start;
 }
 
-static unsigned long lance_probe1(short ioaddr, unsigned long mem_start)
+unsigned long lance_probe1(short ioaddr, unsigned long mem_start)
 {
     struct device *dev;
     struct lance_private *lp;
@@ -512,7 +512,7 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
     }
 
     /* Fill in the ethernet header. */
-    if (!skb->arp  &&  dev->rebuild_header(skb->data, dev)) {
+    if (!skb->arp  &&  dev->rebuild_header(skb+1, dev)) {
 	skb->dev = dev;
 	arp_queue (skb);
 	return 0;
@@ -553,11 +553,11 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
 
     /* If any part of this buffer is >16M we must copy it to a low-memory
        buffer. */
-    if ((int)(skb->data) + skb->len > 0x01000000) {
+    if ((int)(skb+1) + skb->len > 0x01000000) {
 	if (lance_debug > 5)
 	    printk("%s: bouncing a high-memory packet (%#x).\n",
-		   dev->name, (int)skb->data);
-	memcpy(&lp->tx_bounce_buffs[entry], skb->data, skb->len);
+		   dev->name, (int)(skb+1));
+	memcpy(&lp->tx_bounce_buffs[entry], skb+1, skb->len);
 	lp->tx_ring[entry].base =
 	    (int)(lp->tx_bounce_buffs + entry) | 0x83000000;
 	if (skb->free)
@@ -567,7 +567,7 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
     	/* Gimme!!! */
     	if(skb->free==0)
     		skb_kept_by_device(skb);
-	lp->tx_ring[entry].base = (int)skb->data | 0x83000000;
+	lp->tx_ring[entry].base = (int)(skb+1) | 0x83000000;
     }
     lp->cur_tx++;
 
@@ -638,11 +638,12 @@ lance_interrupt(int reg_ptr)
 		if (err_status & 0x0800) lp->stats.tx_carrier_errors++;
 		if (err_status & 0x1000) lp->stats.tx_window_errors++;
 		if (err_status & 0x4000) lp->stats.tx_fifo_errors++;
-		/* We should re-init() after the FIFO error. */
-	    } else if (status & 0x18000000)
-		lp->stats.collisions++;
-	    else
+		/* Perhaps we should re-init() after the FIFO error. */
+	    } else {
+		if (status & 0x18000000)
+		    lp->stats.collisions++;
 		lp->stats.tx_packets++;
+	    }
 
 	    /* We don't free the skb if it's a data-only copy in the bounce
 	       buffer.  The address checks here are sorted -- the first test
@@ -726,7 +727,7 @@ lance_rx(struct device *dev)
 	    skb->mem_addr = skb;
 	    skb->len = pkt_len;
 	    skb->dev = dev;
-	    memcpy(skb->data,
+	    memcpy((unsigned char *) (skb + 1),
 		   (unsigned char *)(lp->rx_ring[entry].base & 0x00ffffff),
 		   pkt_len);
 #ifdef HAVE_NETIF_RX
@@ -835,6 +836,12 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
     outw(0, ioaddr+LANCE_ADDR);
     outw(0x0142, ioaddr+LANCE_DATA); /* Resume normal operation. */
 }
+#endif
+
+#ifdef HAVE_DEVLIST
+static unsigned int lance_portlist[] = {0x300, 0x320, 0x340, 0x360, 0};
+struct netdev_entry lance_drv =
+{"lance", lance_probe1, LANCE_TOTAL_SIZE, lance_portlist};
 #endif
 
 /*

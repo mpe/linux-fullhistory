@@ -130,7 +130,7 @@ print_sk(struct sock *sk)
   printk("  retransmits = %ld, timeout = %d\n", sk->retransmits, sk->timeout);
   printk("  cong_window = %d, packets_out = %d\n", sk->cong_window,
 	  sk->packets_out);
-  printk("  urg = %d shutdown=%d\n", sk->urg, sk->shutdown);
+  printk("  shutdown=%d\n", sk->shutdown);
 }
 
 
@@ -842,6 +842,8 @@ inet_create(struct socket *sock, int protocol)
   sk->acked_seq = 0;
   sk->copied_seq = 0;
   sk->fin_seq = 0;
+  sk->urg_seq = 0;
+  sk->urg_data = 0;
   sk->proc = 0;
   sk->rtt = TCP_WRITE_TIME << 3;
   sk->rto = TCP_WRITE_TIME;
@@ -859,7 +861,6 @@ inet_create(struct socket *sock, int protocol)
 
   sk->priority = 1;
   sk->shutdown = 0;
-  sk->urg = 0;
   sk->keepopen = 0;
   sk->zapped = 0;
   sk->done = 0;

@@ -61,6 +61,8 @@ struct sock {
   unsigned long			rcv_ack_seq;
   unsigned long			window_seq;
   unsigned long			fin_seq;
+  unsigned long			urg_seq;
+  unsigned long			urg_data;
 
   /*
    * Not all are volatile, but some are, so we
@@ -112,7 +114,6 @@ struct sock {
   volatile unsigned short	cong_count;
   volatile unsigned short	ssthresh;
   volatile unsigned short	packets_out;
-  volatile unsigned short	urg;
   volatile unsigned short	shutdown;
   volatile unsigned long	rtt;
   volatile unsigned long	mdev;

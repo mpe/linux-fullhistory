@@ -11,6 +11,8 @@
 
 	Thanks go to jennings@Montrouge.SMR.slb.com ( Patrick Jennings)
 	and jrs@world.std.com (Rick Sladkey) for testing and bugfixes.
+	Mark Salazar <leslie@access.digex.net> made the changes for cards with
+	only 16K packet buffers.
 
 	Things remaining to do:
 	Verify that the tx and rx buffers don't have fencepost errors.
@@ -19,7 +21,7 @@
 */
 
 static char *version =
-	"3c507.c:v0.03 10/27/93 Donald Becker (becker@super.org)\n";
+	"3c507.c:v0.99-15f 2/17/94 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 
@@ -145,6 +147,17 @@ struct net_local {
 #define iSCB_CBL		0xC	/* Command BLock offset. */
 #define iSCB_RFA		0xE	/* Rx Frame Area offset. */
 
+/*  Since the 3c507 maps the shared memory window so that the last byte is
+	at 82586 address FFFF, the first byte is at 82586 address 0, 16K, 32K, or
+	48K cooresponding to window sizes of 64K, 48K, 32K and 16K respectively. 
+	We can account for this be setting the 'SBC Base' entry in the ISCP table
+	below for all the 16 bit offset addresses, and also adding the 'SCB Base'
+	value to all 24 bit physical addresses (in the SCP table and the TX and RX
+	Buffer Descriptors).
+					-Mark	
+	*/
+#define SCB_BASE		((unsigned)64*1024 - (dev->mem_end - dev->mem_start))
+ 
 /*
   What follows in 'init_words[]' is the "program" that is downloaded to the
   82586 memory.	 It's mostly tables and command blocks, and starts at the
@@ -192,7 +205,7 @@ struct net_local {
   The Tx command chain and buffer list is setup as follows:
   A Tx command table, with the data buffer pointing to...
   A Tx data buffer descriptor.  The packet is in a single buffer, rather than
-     chaining together several smaller buffers.
+	chaining together several smaller buffers.
   A NoOp command, which initially points to itself,
   And the packet data.
 
@@ -213,13 +226,17 @@ struct net_local {
 
   */
 
-short init_words[] = {
+unsigned short init_words[] = {
+	/*	System Configuration Pointer (SCP). */
 	0x0000,					/* Set bus size to 16 bits. */
-	0x0000,0x0000,			/* Set control mailbox (SCB) addr. */
-	0,0,					/* pad to 0x000000. */
+	0,0,					/* pad words. */
+	0x0000,0x0000,			/* ISCP phys addr, set in init_82586_mem(). */
+
+	/*	Intermediate System Configuration Pointer (ISCP). */
 	0x0001,					/* Status word that's cleared when init is done. */
 	0x0008,0,0,				/* SCB offset, (skip, skip) */
 
+	/* System Control Block (SCB). */
 	0,0xf000|RX_START|CUC_START,	/* SCB status and cmd. */
 	CONFIG_CMD,				/* Command list pointer, points to Configure. */
 	RX_BUF_START,				/* Rx block list. */
@@ -270,11 +287,11 @@ void init_82586_mem(struct device *dev);
 
 
 /* Check for a network adaptor of this type, and return '0' iff one exists.
-   If dev->base_addr == 0, probe all likely locations.
-   If dev->base_addr == 1, always return failure.
-   If dev->base_addr == 2, (detachable devices only) alloate space for the
-   device and return success.
-   */
+	If dev->base_addr == 0, probe all likely locations.
+	If dev->base_addr == 1, always return failure.
+	If dev->base_addr == 2, (detachable devices only) alloate space for the
+	device and return success.
+	*/
 int
 el16_probe(struct device *dev)
 {
@@ -369,9 +386,6 @@ int el16_probe1(struct device *dev, short ioaddr)
 			size = ((mem_config & 3) + 1) << 14;
 			base = 0x0c0000 + ( (mem_config & 0x18) << 12);
 		}
-		if (size != 0x10000)
-			printk("%s: Warning, this version probably only works with 64K of"
-				   "shared memory.\n", dev->name);
 		dev->mem_start = base;
 		dev->mem_end = base + size;
 	}
@@ -538,9 +552,9 @@ el16_interrupt(int reg_ptr)
 	
 	status = shmem[iSCB_STATUS>>1];
 	
-    if (net_debug > 4) {
+	if (net_debug > 4) {
 		printk("%s: 3c507 interrupt, status %4.4x.\n", dev->name, status);
-    }
+	}
 
 	/* Disable the 82586's input to the interrupt line. */
 	outb(0x80, ioaddr + MISC_CTRL);
@@ -661,6 +675,7 @@ init_rx_bufs(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned short *write_ptr;
+	unsigned short SCB_base = SCB_BASE;
 
 	int cur_rxbuf = lp->rx_head = RX_BUF_START;
 	
@@ -683,7 +698,7 @@ init_rx_bufs(struct device *dev)
 		
 		*write_ptr++ = 0x0000;				/* Buffer: Actual count */
 		*write_ptr++ = -1;					/* Buffer: Next (none). */
-		*write_ptr++ = cur_rxbuf + 0x20;		/* Buffer: Address low */
+		*write_ptr++ = cur_rxbuf + 0x20 + SCB_base;	/* Buffer: Address low */
 		*write_ptr++ = 0x0000;
 		/* Finally, the number of bytes in the buffer. */
 		*write_ptr++ = 0x8000 + RX_BUF_SIZE-0x20;
@@ -712,12 +727,13 @@ init_82586_mem(struct device *dev)
 	   and hold the 586 in reset during the memory initialization. */
 	outb(0x20, ioaddr + MISC_CTRL);
 
+	/* Fix the ISCP address and base. */
+	init_words[3] = SCB_BASE;
+	init_words[7] = SCB_BASE;
+
 	/* Write the words at 0xfff6 (address-aliased to 0xfffff6). */
-#ifdef old
-	memcpy((void*)dev->mem_start+0xfff6, init_words, 10);
-#else
 	memcpy((void*)dev->mem_end-10, init_words, 10);
-#endif
+
 	/* Write the words at 0x0000. */
 	memcpy((char*)dev->mem_start, init_words + 5, sizeof(init_words) - 10);
 
@@ -776,7 +792,7 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 	/* Output the data buffer descriptor. */
 	*write_ptr++ = length | 0x8000;		/* Byte count parameter. */
 	*write_ptr++ = -1;					/* No next data buffer. */
-	*write_ptr++ = tx_block+22;			/* Buffer follows the NoOp command. */
+	*write_ptr++ = tx_block+22+SCB_BASE;/* Buffer follows the NoOp command. */
 	*write_ptr++ = 0x0000;				/* Buffer address high bits (always zero). */
 
 	/* Output the Loop-back NoOp command. */
@@ -796,10 +812,10 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 	if (lp->tx_head > RX_BUF_START - TX_BUF_SIZE)
 		lp->tx_head = TX_BUF_START;
 
-    if (net_debug > 4) {
+	if (net_debug > 4) {
 		printk("%s: 3c507 @%x send length = %d, tx_block %3x, next %3x.\n",
 			   dev->name, ioaddr, length, tx_block, lp->tx_head);
-    }
+	}
 
 	if (lp->tx_head != lp->tx_reap)
 		dev->tbusy = 0;
@@ -893,6 +909,7 @@ el16_rx(struct device *dev)
  *  version-control: t
  *  kept-new-versions: 5
  *  tab-width: 4
+ *  c-indent-level: 4
  * End:
  */
 

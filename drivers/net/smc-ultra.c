@@ -14,7 +14,7 @@
 */
 
 static char *version =
-    "smc-ultra.c:v0.05 12/21/93 Donald Becker (becker@super.org)\n";
+    "smc-ultra.c:v0.06 2/9/94 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -139,7 +139,7 @@ int ultraprobe1(int ioaddr, struct device *dev)
   dev->base_addr = ioaddr+ULTRA_NIC_OFFSET;
 
   { 
-      int addr_tbl[4] = {0x0C0000, 0x0D0000, 0xFC0000, 0xFD0000};
+      int addr_tbl[4] = {0x0C0000, 0x0E0000, 0xFC0000, 0xFE0000};
       short num_pages_tbl[4] = {0x20, 0x40, 0x80, 0xff};
 
       dev->mem_start = ((addr & 0x0f) << 13) + addr_tbl[(addr >> 6) & 3] ;

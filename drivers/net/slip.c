@@ -523,7 +523,6 @@ sl_xmit(struct sk_buff *skb, struct device *dev)
 {
   struct tty_struct *tty;
   struct slip *sl;
-  
   int size;
 
   /* Find the correct SLIP channel to use. */

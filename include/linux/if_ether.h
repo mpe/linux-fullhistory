@@ -5,9 +5,10 @@
  *
  *		Global definitions for the Ethernet IEE 802.3 interface.
  *
- * Version:	@(#)if_ether.h	1.0.1	03/15/93
+ * Version:	@(#)if_ether.h	1.0.1a	02/08/94
  *
  * Author:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
+ *		Donald Becker, <becker@super.org>
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -18,12 +19,14 @@
 #define _LINUX_IF_ETHER_H
 
 
-/* IEEE 802.3 Ethernet magic constants. */
-#define ETH_ALEN	6		/* #bytes in eth addr		*/
-#define ETH_HLEN	14		/* #bytes in eth header		*/
-#define ETH_ZLEN	60		/* min #bytes in frame		*/
-#define ETH_FLEN	1536		/* max #bytes in frame		*/
-#define ETH_DLEN	(ETH_FLEN - ETH_HLEN)	/* max #bytes of data	*/
+/* IEEE 802.3 Ethernet magic constants.  The frame sizes omit the preamble
+   and FCS/CRC (frame check sequence). */
+#define ETH_ALEN	6		/* Octets in one ethernet addr	 */
+#define ETH_HLEN	14		/* Total octets in header.	 */
+#define ETH_ZLEN	60		/* Min. octets in frame sans FCS */
+#define ETH_DATA_LEN	1500		/* Max. octets in payload	 */
+#define ETH_FRAME_LEN	1514		/* Max. octets in frame sans FCS */
+
 
 /* These are the defined Ethernet Protocol ID's. */
 #define ETH_P_LOOP	0x0060		/* Ethernet Loopback packet	*/
@@ -38,30 +41,12 @@
 #define ETH_P_AX25	0x0002		/* Dummy protocol id for AX.25  */
 #define ETH_P_ALL	0x0003		/* Every packet (be careful!!!) */
 
-/* Define the Ethernet Broadcast Address (48 bits set to "1"). */
-#define ETH_A_BCAST     "\377\377\377\377\377\377"
-
 /* This is an Ethernet frame header. */
 struct ethhdr {
   unsigned char		h_dest[ETH_ALEN];	/* destination eth addr	*/
   unsigned char		h_source[ETH_ALEN];	/* source ether addr	*/
   unsigned short	h_proto;		/* packet type ID field	*/
 };
-
-/* This is the complete Ethernet frame. */
-struct ethframe {
-  struct ethhdr		f_hdr;			/* frame header		*/
-  char			f_data[ETH_DLEN];	/* frame data (variable)*/
-};
-
-
-/* Receiver modes */
-#define ETH_MODE_MONITOR	1	/* Monitor mode - no receive	*/
-#define ETH_MODE_PHYS		2	/* Physical address receive only */
-#define ETH_MODE_BCAST		3	/* Broadcast receive + mode 2	*/
-#define ETH_MODE_MCAST		4	/* Multicast receive + mode 3	*/
-#define ETH_MODE_PROMISC	5	/* Promiscuous mode - receive all */
-
 
 /* Ethernet statistics collection data. */
 struct enet_statistics{

@@ -477,7 +477,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 
 	/* For ethernet, fill in the header.  This should really be done by a
 	   higher level, rather than duplicated for each ethernet adaptor. */
-	if (!skb->arp  &&  dev->rebuild_header(skb->data, dev)) {
+	if (!skb->arp  &&  dev->rebuild_header(skb+1, dev)) {
 		skb->dev = dev;
 		arp_queue (skb);
 		return 0;
@@ -490,7 +490,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		printk("%s: Transmitter access conflict.\n", dev->name);
 	else {
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
-		unsigned char *buf = skb->data;
+		unsigned char *buf = (void *)(skb+1);
 		int flags;
 
 		/* Disable interrupts by writing 0x00 to the Interrupt Mask Register.
@@ -686,11 +686,11 @@ static void net_rx(struct device *dev)
 		skb->len = pkt_len;
 		skb->dev = dev;
 		
-		/* 'skb->data' points to the start of sk_buff data area. */
-		read_block(ioaddr, pkt_len, skb->data, dev->if_port);
+		/* 'skb+1' points to the start of sk_buff data area. */
+		read_block(ioaddr, pkt_len, (unsigned char *)(skb + 1), dev->if_port);
 
 		if (net_debug > 6) {
-			unsigned char *data = skb->data;
+			unsigned char *data = (unsigned char *)(skb + 1);
 			printk(" data %02x%02x%02x %02x%02x%02x %02x%02x%02x %02x%02x%02x %02x%02x..",
 				   data[0], data[1], data[2], data[3], data[4], data[5],
 				   data[6], data[7], data[8], data[9], data[10], data[11],

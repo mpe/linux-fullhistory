@@ -45,24 +45,19 @@ void ipc_init (void)
  * to ipc resources. return 0 if allowed
  */
 int ipcperms (struct ipc_perm *ipcp, short flag)
-{
-	int i; mode_t perm; uid_t euid; int egid;
-	
+{	/* flag will most probably be 0 or S_...UGO from <linux/stat.h> */
+	int requested_mode, granted_mode;
+
 	if (suser())
 		return 0;
-
-	perm = S_IRWXO; euid = current->euid;
-
-	if (euid == ipcp->cuid || euid == ipcp->uid) 
-		perm = S_IRWXU;
-	else {
-		for (i = 0; (egid = current->groups[i]) != NOGROUP; i++)
-			if ((egid == ipcp->cgid) || (egid == ipcp->gid)) { 
-				perm = S_IRWXG; 
-				break;
-			}
-	}
-	if (!(flag & perm) || flag & perm & ~ipcp->mode)
+	requested_mode = (flag >> 6) | (flag >> 3) | flag;
+	granted_mode = ipcp->mode;
+	if (current->euid == ipcp->cuid || current->euid == ipcp->uid)
+		granted_mode >>= 6;
+	else if (in_group_p(ipcp->cgid) || in_group_p(ipcp->gid))
+		granted_mode >>= 3;
+	/* is there some bit set in requested_mode but not in granted_mode? */
+	if (requested_mode & ~granted_mode & 0007)
 		return -1;
 	return 0;
 }
