@@ -54,6 +54,50 @@ static __inline__ void __init_pmd(pmd_t *pmdp)
 	__bfill64((void *)pmdp, &two_null_pte_table);
 }
 
+int do_check_pgt_cache(int low, int high)
+{
+        struct page *page, *page2;
+        int freed = 0;
+
+	if(pgtable_cache_size > high) {
+		do {
+#ifdef __SMP__
+			if(pgd_quicklist)
+				free_pgd_slow(get_pgd_fast()), freed++;
+#endif
+			if(pte_quicklist)
+				free_pte_slow(get_pte_fast()), freed++;
+		} while(pgtable_cache_size > low);
+	}
+#ifndef __SMP__ 
+        if (pgd_cache_size > high / 4) {
+                for (page2 = NULL, page = (struct page *)pgd_quicklist; page;) {
+                        if ((unsigned long)page->pprev_hash == 3) {
+                                if (page2)
+                                        page2->next_hash = page->next_hash;
+                                else
+                                        (struct page *)pgd_quicklist = page->next_hash;
+                                page->next_hash = NULL;
+                                page->pprev_hash = NULL;
+                                pgd_cache_size -= 2;
+                                free_page(PAGE_OFFSET + (page->map_nr << PAGE_SHIFT));
+                                freed++;
+                                if (page2)
+                                        page = page2->next_hash;
+                                else
+                                        page = (struct page *)pgd_quicklist;
+                                if (pgd_cache_size <= low / 4)
+                                        break;
+                                continue;
+                        }
+                        page2 = page;
+                        page = page->next_hash;
+                }
+        }
+#endif
+        return freed;
+}
+
 /*
  * BAD_PAGE is the page that is used for page faults when linux
  * is out-of-memory. Older versions of linux just did a

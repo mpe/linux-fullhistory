@@ -161,7 +161,7 @@ pmd_t *get_pointer_table (void)
 	return pmdp;
 }
 
-void free_pointer_table (pmd_t *ptable)
+int free_pointer_table (pmd_t *ptable)
 {
 	struct ptable_desc *dp;
 	unsigned long page = (unsigned long)ptable & PAGE_MASK;
@@ -189,7 +189,7 @@ void free_pointer_table (pmd_t *ptable)
 		cache_page (dp->page);
 		free_page (dp->page);
 		kfree (dp);
-		return;
+		return 1;
 	} else {
 		/*
 		 * move this descriptor to the front of the list, since
@@ -205,6 +205,7 @@ void free_pointer_table (pmd_t *ptable)
 		ptable_list.next->prev = dp;
 		ptable_list.next = dp;
 		restore_flags(flags);
+		return 0;
 	}
 }
 

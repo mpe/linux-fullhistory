@@ -9,9 +9,16 @@
 
 /*
  * Your basic spinlocks, allowing only a single CPU anywhere
+ *
+ * Gcc-2.7.x has a nasty bug with empty initializers.
  */
-typedef struct { int gcc_is_buggy; } spinlock_t;
-#define SPIN_LOCK_UNLOCKED { 0 }
+#if (__GNUC__ > 2) || (__GNUC_MINOR__ >= 8)
+  typedef struct { } spinlock_t;
+  #define SPIN_LOCK_UNLOCKED { 0 }
+#else
+  typedef struct { int gcc_is_buggy; } spinlock_t;
+  #define SPIN_LOCK_UNLOCKED { 0 }
+#endif
 
 #define spin_lock_init(lock)	do { } while(0)
 #define spin_lock(lock)		do { } while(0)

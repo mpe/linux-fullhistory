@@ -40,7 +40,6 @@
 #include <asm/elf.h>
 
 extern void fpsave(unsigned long *, unsigned long *, void *, unsigned long *);
-extern void srmmu_check_pgt_cache(void);
 
 struct task_struct *current_set[NR_CPUS] = {&init_task, };
 
@@ -92,9 +91,8 @@ asmlinkage int sys_idle(void)
 				}
 			}
 			restore_flags(flags);
-			check_pgt_cache();
-		} else
-			srmmu_check_pgt_cache();
+		}
+		check_pgt_cache();
 		schedule();
 	}
 	ret = 0;

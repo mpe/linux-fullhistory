@@ -541,6 +541,8 @@ extern inline pmd_t * pmd_alloc(pgd_t *pgd, unsigned long address)
 #define pte_alloc_kernel(pmd, addr)	pte_alloc(pmd, addr)
 #define pmd_alloc_kernel(pgd, addr)	pmd_alloc(pgd, addr)
 
+extern int do_check_pgt_cache(int, int);
+
 extern inline void set_pgdir(unsigned long address, pgd_t entry)
 {
 	/* Nothing to do on sparc64 :) */

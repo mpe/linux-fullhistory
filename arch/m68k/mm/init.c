@@ -31,6 +31,20 @@ extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void init_kpointer_table(void);
 extern void show_net_buffers(void);
 
+int do_check_pgt_cache(int low, int high)
+{
+	int freed = 0;
+	if(pgtable_cache_size > high) {
+		do {
+			if(pmd_quicklist)
+				freed += free_pmd_slow(get_pmd_fast());
+			if(pte_quicklist)
+				free_pte_slow(get_pte_fast()), freed++;
+		} while(pgtable_cache_size > low);
+	}
+	return freed;
+}
+
 /*
  * BAD_PAGE is the page that is used for page faults when linux
  * is out-of-memory. Older versions of linux just did a

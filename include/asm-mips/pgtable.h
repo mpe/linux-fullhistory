@@ -489,6 +489,8 @@ extern inline pgd_t *pgd_alloc(void)
 	return (pgd_t *) page;
 }
 
+extern int do_check_pgt_cache(int, int);
+
 extern pgd_t swapper_pg_dir[1024];
 
 extern void (*update_mmu_cache)(struct vm_area_struct *vma,

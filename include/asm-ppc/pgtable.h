@@ -513,6 +513,8 @@ extern inline pmd_t * pmd_alloc(pgd_t * pgd, unsigned long address)
 #define pmd_alloc_kernel	pmd_alloc
 #define pte_alloc_kernel	pte_alloc
 
+extern int do_check_pgt_cache(int, int);
+
 extern inline void set_pgdir(unsigned long address, pgd_t entry)
 {
 	struct task_struct * p;

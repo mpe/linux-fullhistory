@@ -2722,16 +2722,12 @@ __initfunc(static void get_srmmu_type(void))
 	srmmu_is_bad();
 }
 
-/* Low and high watermarks for page table cache.
-   The system should try to have pgt_water[0] <= cache elements <= pgt_water[1]
- */
-extern int pgt_cache_water[2];
-
-void srmmu_check_pgt_cache(void)
+static int srmmu_check_pgt_cache(int low, int high)
 {
 	struct page *page, *page2;
+	int freed = 0;
 
-	if (pgtable_cache_size > pgt_cache_water[0]) {
+	if (pgtable_cache_size > high) {
 		spin_lock(&pte_spinlock);
 		for (page2 = NULL, page = (struct page *)pte_quicklist; page;) {
 			if ((unsigned int)page->pprev_hash == 0xffff) {
@@ -2743,11 +2739,12 @@ void srmmu_check_pgt_cache(void)
 				page->pprev_hash = NULL;
 				pgtable_cache_size -= 16;
 				free_page(PAGE_OFFSET + (page->map_nr << PAGE_SHIFT));
+				freed++;
 				if (page2)
 					page = page2->next_hash;
 				else
 					page = (struct page *)pte_quicklist;
-				if (pgtable_cache_size <= pgt_cache_water[1])
+				if (pgtable_cache_size <= low)
 					break;
 				continue;
 			}
@@ -2756,7 +2753,7 @@ void srmmu_check_pgt_cache(void)
 		}
 		spin_unlock(&pte_spinlock);
 	}
-	if (pgd_cache_size > pgt_cache_water[0] / 4) {
+	if (pgd_cache_size > high / 4) {
 		spin_lock(&pgd_spinlock);
 		for (page2 = NULL, page = (struct page *)pgd_quicklist; page;) {
 			if ((unsigned int)page->pprev_hash == 0xf) {
@@ -2768,11 +2765,12 @@ void srmmu_check_pgt_cache(void)
 				page->pprev_hash = NULL;
 				pgd_cache_size -= 4;
 				free_page(PAGE_OFFSET + (page->map_nr << PAGE_SHIFT));
+				freed++;
 				if (page2)
 					page = page2->next_hash;
 				else
 					page = (struct page *)pgd_quicklist;
-				if (pgd_cache_size <= pgt_cache_water[1] / 4)
+				if (pgd_cache_size <= low / 4)
 					break;
 				continue;
 			}
@@ -2781,6 +2779,7 @@ void srmmu_check_pgt_cache(void)
 		}
 		spin_unlock(&pgd_spinlock);
 	}
+	return freed;
 }
 
 extern unsigned long spwin_mmu_patchme, fwin_mmu_patchme,
@@ -2853,6 +2852,7 @@ __initfunc(void ld_mmu_srmmu(void))
 	BTFIXUPSET_CALL(get_pgd_fast, srmmu_get_pgd_fast, BTFIXUPCALL_RETINT(0));
 	BTFIXUPSET_CALL(free_pte_slow, srmmu_free_pte_slow, BTFIXUPCALL_NOP);
 	BTFIXUPSET_CALL(free_pgd_slow, srmmu_free_pgd_slow, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(do_check_pgt_cache, srmmu_check_pgt_cache, BTFIXUPCALL_NORM);
 	
 	BTFIXUPSET_CALL(set_pgdir, srmmu_set_pgdir, BTFIXUPCALL_NORM);
 	    

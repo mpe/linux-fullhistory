@@ -621,7 +621,7 @@ extern pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset);
 extern pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long offset);
 
 extern pmd_t *get_pointer_table(void);
-extern void free_pointer_table(pmd_t *);
+extern int free_pointer_table(pmd_t *);
 extern pmd_t *get_kpointer_table(void);
 extern void free_kpointer_table(pmd_t *);
 
@@ -671,9 +671,9 @@ extern __inline__ void free_pmd_fast(pmd_t *pmd)
 	quicklists.pgtable_cache_sz++;
 }
 
-extern __inline__ void free_pmd_slow(pmd_t *pmd)
+extern __inline__ int free_pmd_slow(pmd_t *pmd)
 {
-	free_pointer_table(pmd);
+	return free_pointer_table(pmd);
 }
 
 /* The pgd cache is folded into the pmd cache, so these are dummy routines. */
@@ -788,6 +788,8 @@ extern inline pgd_t * pgd_alloc(void)
 		pgd = (pgd_t *)get_pointer_table();
 	return pgd;
 }
+
+extern int do_check_pgt_cache(int, int);
 
 extern inline void set_pgdir(unsigned long address, pgd_t entry)
 {

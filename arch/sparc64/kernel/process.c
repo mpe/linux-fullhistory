@@ -43,45 +43,6 @@
 
 #ifndef __SMP__
 
-extern int pgt_cache_water[2];
-
-static inline void ultra_check_pgt_cache(void)
-{
-        struct page *page, *page2;
-
-        if(pgtable_cache_size > pgt_cache_water[0]) {
-                do {
-                        if(pmd_quicklist)
-                                free_pmd_slow(get_pmd_fast());
-                        if(pte_quicklist)
-                                free_pte_slow(get_pte_fast());
-                } while(pgtable_cache_size > pgt_cache_water[1]);
-        }
-        if (pgd_cache_size > pgt_cache_water[0] / 4) {
-                for (page2 = NULL, page = (struct page *)pgd_quicklist; page;) {
-                        if ((unsigned long)page->pprev_hash == 3) {
-                                if (page2)
-                                        page2->next_hash = page->next_hash;
-                                else
-                                        (struct page *)pgd_quicklist = page->next_hash;
-                                page->next_hash = NULL;
-                                page->pprev_hash = NULL;
-                                pgd_cache_size -= 2;
-                                free_page(PAGE_OFFSET + (page->map_nr << PAGE_SHIFT));
-                                if (page2)
-                                        page = page2->next_hash;
-                                else
-                                        page = (struct page *)pgd_quicklist;
-                                if (pgd_cache_size <= pgt_cache_water[1] / 4)
-                                        break;
-                                continue;
-                        }
-                        page2 = page;
-                        page = page->next_hash;
-                }
-        }
-}
-
 /*
  * the idle loop on a Sparc... ;)
  */
@@ -94,7 +55,7 @@ asmlinkage int sys_idle(void)
 	current->priority = -100;
 	current->counter = -100;
 	for (;;) {
-		ultra_check_pgt_cache();
+		check_pgt_cache();
 		run_task_queue(&tq_scheduler);
 		schedule();
 	}

@@ -2536,6 +2536,22 @@ extern __inline__ pgd_t *sun4c_get_pgd_fast(void)
 	return (pgd_t *)ret;
 }
 
+static int sun4c_check_pgt_cache(int low, int high)
+{
+	int freed = 0;
+	if(pgtable_cache_size > high) {
+		do {
+			if(pgd_quicklist)
+				free_pgd_slow(get_pgd_fast()), freed++;
+			if(pmd_quicklist)
+				free_pmd_slow(get_pmd_fast()), freed++;
+			if(pte_quicklist)
+				free_pte_slow(get_pte_fast()), freed++;
+		} while(pgtable_cache_size > low);
+	}
+	return freed;
+}
+
 static void sun4c_set_pgdir(unsigned long address, pgd_t entry)
 {
 	/* Nothing to do */
@@ -2803,6 +2819,7 @@ __initfunc(void ld_mmu_sun4c(void))
 	BTFIXUPSET_CALL(get_pgd_fast, sun4c_pgd_alloc, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(free_pte_slow, sun4c_free_pte_slow, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(free_pgd_slow, sun4c_free_pgd_slow, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(do_check_pgt_cache, sun4c_check_pgt_cache, BTFIXUPCALL_NORM);
 	
 	BTFIXUPSET_CALL(set_pgdir, sun4c_set_pgdir, BTFIXUPCALL_NOP);
 

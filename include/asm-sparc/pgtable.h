@@ -354,6 +354,7 @@ BTFIXUPDEF_CALL(pte_t *, get_pte_fast, void)
 BTFIXUPDEF_CALL(pgd_t *, get_pgd_fast, void)
 BTFIXUPDEF_CALL(void,    free_pte_slow, pte_t *)
 BTFIXUPDEF_CALL(void,    free_pgd_slow, pgd_t *)
+BTFIXUPDEF_CALL(int,	 do_check_pgt_cache, int, int)
 
 #define get_pte_fast() BTFIXUP_CALL(get_pte_fast)()
 extern __inline__ pmd_t *get_pmd_fast(void)
@@ -366,6 +367,7 @@ extern __inline__ void free_pmd_slow(pmd_t *pmd)
 {
 }
 #define free_pgd_slow(pgd) BTFIXUP_CALL(free_pgd_slow)(pgd)
+#define do_check_pgt_cache(low,high) BTFIXUP_CALL(do_check_pgt_cache)(low,high)
 
 /*
  * Allocate and free page tables. The xxx_kernel() versions are

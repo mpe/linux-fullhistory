@@ -56,6 +56,11 @@ unsigned long max_mapnr = 0;
 unsigned long num_physpages = 0;
 void * high_memory = NULL;
 
+/* Low and high watermarks for page table cache.
+   The system should try to have pgt_water[0] <= cache elements <= pgt_water[1]
+ */
+int pgt_cache_water[2] = { 25, 50 };
+
 /*
  * We special-case the C-O-W ZERO_PAGE, because it's such
  * a common occurrence (no need to read the page to know
@@ -136,7 +141,8 @@ void clear_page_tables(struct task_struct * tsk)
 		free_one_pgd(page_dir + i);
 
 	/* keep the page table cache within bounds */
-	check_pgt_cache();
+	do_check_pgt_cache(pgtable_cache_water[0],
+			   pgtable_cache_water[1]);
 	return;
 
 out_bad:
@@ -165,7 +171,8 @@ void free_page_tables(struct mm_struct * mm)
 	pgd_free(page_dir);
 
 	/* keep the page table cache within bounds */
-	check_pgt_cache();
+	do_check_pgt_cache(pgtable_cache_water[0],
+			   pgtable_cache_water[1]);
 out:
 	return;
 
@@ -948,21 +955,9 @@ void make_pages_present(unsigned long addr, unsigned long end)
 	}
 }
 
-/* Low and high watermarks for page table cache.
-   The system should try to have pgt_water[0] <= cache elements <= pgt_water[1]
- */
-int pgt_cache_water[2] = { 25, 50 };
-
-void check_pgt_cache(void)
+/* Returns the number of pages freed */
+int check_pgt_cache(void)
 {
-	if (pgtable_cache_size > pgt_cache_water[1]) {
-		do {
-			if (pgd_quicklist)
-				free_pgd_slow(get_pgd_fast());
-			if (pmd_quicklist)
-				free_pmd_slow(get_pmd_fast());
-			if (pte_quicklist)
-				free_pte_slow(get_pte_fast());
-		} while (pgtable_cache_size > pgt_cache_water[0]);
-	}
+	return do_check_pgt_cache(pgtable_cache_water[0],
+				  pgtable_cache_water[1]);
 }
