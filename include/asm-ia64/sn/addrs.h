@@ -11,6 +11,7 @@
 
 #include <asm/percpu.h>
 #include <asm/sn/types.h>
+#include <asm/sn/arch.h>
 #include <asm/sn/pda.h>
 
 /*
@@ -57,9 +58,9 @@
 /*
  * Define basic shift & mask constants for manipulating NASIDs and AS values.
  */
-#define NASID_BITMASK		(pda->nasid_bitmask)
-#define NASID_SHIFT		(pda->nasid_shift)
-#define AS_SHIFT		(pda->as_shift)
+#define NASID_BITMASK		(sn_hub_info->nasid_bitmask)
+#define NASID_SHIFT		(sn_hub_info->nasid_shift)
+#define AS_SHIFT		(sn_hub_info->as_shift)
 #define AS_BITMASK		0x3UL
 
 #define NASID_MASK              ((u64)NASID_BITMASK << NASID_SHIFT)

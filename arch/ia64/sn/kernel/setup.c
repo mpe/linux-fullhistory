@@ -67,8 +67,10 @@ extern void snidle(int);
 extern unsigned char acpi_kbd_controller_present;
 
 unsigned long sn_rtc_cycles_per_second;
-
 EXPORT_SYMBOL(sn_rtc_cycles_per_second);
+
+DEFINE_PER_CPU(struct sn_hub_info_s, __sn_hub_info);
+EXPORT_PER_CPU_SYMBOL(__sn_hub_info);
 
 partid_t sn_partid = -1;
 EXPORT_SYMBOL(sn_partid);
@@ -76,6 +78,16 @@ char sn_system_serial_number_string[128];
 EXPORT_SYMBOL(sn_system_serial_number_string);
 u64 sn_partition_serial_number;
 EXPORT_SYMBOL(sn_partition_serial_number);
+u8 sn_partition_id;
+EXPORT_SYMBOL(sn_partition_id);
+u8 sn_system_size;
+EXPORT_SYMBOL(sn_system_size);
+u8 sn_sharing_domain_size;
+EXPORT_SYMBOL(sn_sharing_domain_size);
+u8 sn_coherency_id;
+EXPORT_SYMBOL(sn_coherency_id);
+u8 sn_region_size;
+EXPORT_SYMBOL(sn_region_size);
 
 short physical_node_map[MAX_PHYSNODE_ID];
 
@@ -232,7 +244,7 @@ static void __init sn_check_for_wars(void)
 	} else {
 		for_each_online_node(cnode) {
 			if (is_shub_1_1(cnodeid_to_nasid(cnode)))
-				shub_1_1_found = 1;
+				sn_hub_info->shub_1_1_found = 1;
 		}
 	}
 }
@@ -424,16 +436,14 @@ void __init sn_cpu_init(void)
 	int slice;
 	int cnode;
 	int i;
-	u64 shubtype, nasid_bitmask, nasid_shift;
 	static int wars_have_been_checked;
 
 	memset(pda, 0, sizeof(pda));
-	if (ia64_sn_get_hub_info(0, &shubtype, &nasid_bitmask, &nasid_shift))
+	if (ia64_sn_get_sn_info(0, &sn_hub_info->shub2, &sn_hub_info->nasid_bitmask, &sn_hub_info->nasid_shift,
+				&sn_system_size, &sn_sharing_domain_size, &sn_partition_id,
+				&sn_coherency_id, &sn_region_size))
 		BUG();
-	pda->shub2 = (u8)shubtype;
-	pda->nasid_bitmask = (u16)nasid_bitmask;
-	pda->nasid_shift = (u8)nasid_shift;
-	pda->as_shift = pda->nasid_shift - 2;
+	sn_hub_info->as_shift = sn_hub_info->nasid_shift - 2;
 
 	/*
 	 * The boot cpu makes this call again after platform initialization is
@@ -482,7 +492,7 @@ void __init sn_cpu_init(void)
 		sn_check_for_wars();
 		wars_have_been_checked = 1;
 	}
-	pda->shub_1_1_found = shub_1_1_found;
+	sn_hub_info->shub_1_1_found = shub_1_1_found;
 
 	/*
 	 * Set up addresses of PIO/MEM write status registers.

@@ -135,9 +135,10 @@ extern int nasid_slice_to_cpuid(int, int);
 #define nasid_to_cnodeid(nasid)		(physical_node_map[nasid])
 
 /*
- * partition_coherence_id - cget the coherence ID of the current partition
+ * partition_coherence_id - get the coherence ID of the current partition
  */
-#define partition_coherence_id()	(get_nasid() >> 9)
+extern u8 sn_coherency_id;
+#define partition_coherence_id()	(sn_coherency_id)
 
 #endif /* _ASM_IA64_SN_SN_CPUID_H */
 
