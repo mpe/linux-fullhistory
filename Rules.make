@@ -146,9 +146,10 @@ ifneq "$(strip $(SYMTAB_OBJS))" ""
 
 MODINCL = $(TOPDIR)/include/linux/modules
 
+# The -w option (enable warnings) for /bin/genksyms will return here in 2.1
 $(MODINCL)/%.ver: %.c
-	@if [ ! -x /sbin/genksyms ]; then echo "Please read: README.modules"; fi
-	$(CC) $(CFLAGS) -E -D__GENKSYMS__ $< | /sbin/genksyms -w $(MODINCL)
+	@if [ ! -x /sbin/genksyms ]; then echo "Please read: Documentation/modules.txt"; fi
+	$(CC) $(CFLAGS) -E -D__GENKSYMS__ $< | /sbin/genksyms $(MODINCL)
 
 $(addprefix $(MODINCL)/,$(SYMTAB_OBJS:.o=.ver)): $(TOPDIR)/include/linux/autoconf.h
 

@@ -138,6 +138,7 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 		DBG(("conf_read: TYPE1 access\n"));
 	}
 
+	mb();
 	draina();
 	CIA_mcheck_expected = 1;
 	CIA_mcheck_taken = 0;
@@ -159,7 +160,7 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 	 * know).  When we build kernels for one particular platform
 	 * then we can make this conditional on the type.
 	 */
-#if 1
+#if 0
 	draina();
 
 	/* now look for any errors */
@@ -229,7 +230,7 @@ static void conf_write(unsigned long addr, unsigned int value, unsigned char typ
 	 * know).  When we build kernels for one particular platform
 	 * then we can make this conditional on the type.
 	 */
-#if 1
+#if 0
 	draina();
 
 	/* now look for any errors */
@@ -439,8 +440,8 @@ int cia_pci_clr_err(void)
 void cia_machine_check(unsigned long vector, unsigned long la_ptr,
 			 struct pt_regs * regs)
 {
-#if 1
-        printk("CIA machine check\n") ;
+#if 0
+        printk("CIA machine check ignored\n") ;
 #else
 	struct el_common *mchk_header;
 	struct el_CIA_sysdata_mcheck *mchk_sysdata;
@@ -470,16 +471,23 @@ void cia_machine_check(unsigned long vector, unsigned long la_ptr,
 	 * Check if machine check is due to a badaddr() and if so,
 	 * ignore the machine check.
 	 */
-	if (CIA_mcheck_expected && (mchk_sysdata->epic_dcsr && 0x0c00UL)) {
+	mb();
+	mb();
+	if (CIA_mcheck_expected/* && (mchk_sysdata->epic_dcsr && 0x0c00UL)*/) {
+		DBG(("CIA machine check expected\n"));
 		CIA_mcheck_expected = 0;
 		CIA_mcheck_taken = 1;
 		mb();
 		mb();
+		draina();
 		cia_pci_clr_err();
 		wrmces(0x7);
 		mb();
-		draina();
 	}
+#if 1
+	else
+	  printk("CIA machine check NOT expected\n") ;
+#endif
 #endif
 }
 

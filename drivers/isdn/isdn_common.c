@@ -1,4 +1,4 @@
-/* $Id: isdn_common.c,v 1.15 1996/05/31 01:10:54 fritz Exp $
+/* $Id: isdn_common.c,v 1.18 1996/06/06 14:51:51 fritz Exp $
  *
  * Linux ISDN subsystem, common used functions (linklevel).
  *
@@ -21,6 +21,16 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_common.c,v $
+ * Revision 1.18  1996/06/06 14:51:51  fritz
+ * Changed to support DTMF decoding on audio playback also.
+ *
+ * Revision 1.17  1996/06/05 02:24:10  fritz
+ * Added DTMF decoder for audio mode.
+ *
+ * Revision 1.16  1996/06/03 20:09:05  fritz
+ * Bugfix: called wrong function pointer for locking in
+ *         isdn_get_free_channel().
+ *
  * Revision 1.15  1996/05/31 01:10:54  fritz
  * Bugfixes:
  *   Lowlevel modules did not get locked correctly.
@@ -109,7 +119,7 @@
 isdn_dev *dev = (isdn_dev *) 0;
 
 static int  has_exported = 0;
-static char *isdn_revision      = "$Revision: 1.15 $";
+static char *isdn_revision      = "$Revision: 1.18 $";
 
 extern char *isdn_net_revision;
 extern char *isdn_tty_revision;
@@ -252,6 +262,9 @@ static void isdn_receive_skb_callback(int di, int channel, struct sk_buff *skb)
 	ulong flags;
 	int i;
         int midx;
+#ifdef CONFIG_ISDN_AUDIO
+        int ifmt;
+#endif
 	modem_info *info;
         
         if ((i = isdn_dc2minor(di,channel))==-1) {
@@ -271,6 +284,12 @@ static void isdn_receive_skb_callback(int di, int channel, struct sk_buff *skb)
                         return;
                 }
                 info  = &dev->mdm.info[midx];
+#ifdef CONFIG_ISDN_AUDIO
+                ifmt = 1;
+
+                if (info->vonline)
+                        isdn_audio_calc_dtmf(info, skb->data, skb->len, ifmt);
+#endif
                 if ((info->online < 2) &&
                     (!(info->vonline & 1))) {
                         /* If Modem not listening, drop data */
@@ -288,7 +307,6 @@ static void isdn_receive_skb_callback(int di, int channel, struct sk_buff *skb)
                 skb->users = 0;
 #ifdef CONFIG_ISDN_AUDIO
                 if (info->vonline & 1) {
-                        int ifmt = 1;
                         /* voice conversion/compression */
                         switch (info->emu.vpar[3]) {
                                 case 2:
@@ -1713,7 +1731,7 @@ int isdn_get_free_channel(int usage, int l2_proto, int l3_proto, int pre_dev
                                                 cmd.driver = i;
                                                 cmd.arg = 0;
                                                 cmd.command = ISDN_CMD_LOCK;
-                                                (void) dev->drv[i]->interface->command(&cmd);
+                                                (void) dev->drv[d]->interface->command(&cmd);
 						restore_flags(flags);
 						return i;
 					} else {
@@ -1724,7 +1742,7 @@ int isdn_get_free_channel(int usage, int l2_proto, int l3_proto, int pre_dev
                                                         cmd.driver = i;
                                                         cmd.arg = 0;
                                                         cmd.command = ISDN_CMD_LOCK;
-                                                        (void) dev->drv[i]->interface->command(&cmd);
+                                                        (void) dev->drv[d]->interface->command(&cmd);
 							restore_flags(flags);
 							return i;
 						}

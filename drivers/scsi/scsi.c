@@ -151,6 +151,7 @@ Scsi_Cmnd * last_cmnd = NULL;
 /* This is the pointer to the /proc/scsi code. 
  * It is only initialized to !=0 if the scsi code is present 
  */ 
+#if CONFIG_PROC_FS 
 extern int (* dispatch_scsi_info_ptr)(int ino, char *buffer, char **start, 
 				      off_t offset, int length, int inout); 
 extern int dispatch_scsi_info(int ino, char *buffer, char **start, 
@@ -163,6 +164,7 @@ struct proc_dir_entry proc_scsi_scsi = {
     NULL, NULL,
     NULL, NULL, NULL
 };
+#endif
 
 /*
  *  As the scsi do command functions are intelligent, and may need to
@@ -2503,7 +2505,9 @@ int scsi_dev_init(void)
 #endif
 
     /* Yes we're here... */
+#if CONFIG_PROC_FS 
     dispatch_scsi_info_ptr = dispatch_scsi_info;
+#endif
 
     /* Init a few things so we can "malloc" memory. */
     scsi_loadable_module_flag = 0;
@@ -3391,7 +3395,9 @@ int init_module(void) {
     /*
      * This makes /proc/scsi visible.
      */
+#if CONFIG_PROC_FS
     dispatch_scsi_info_ptr = dispatch_scsi_info;
+#endif
 
     timer_table[SCSI_TIMER].fn = scsi_main_timeout;
     timer_table[SCSI_TIMER].expires = 0;
@@ -3428,10 +3434,10 @@ void cleanup_module( void)
 {
 #if CONFIG_PROC_FS
     proc_scsi_unregister(0, PROC_SCSI_SCSI);
-#endif
 
     /* No, we're not here anymore. Don't show the /proc/scsi files. */
     dispatch_scsi_info_ptr = 0L;
+#endif
 
     /*
      * Free up the DMA pool.

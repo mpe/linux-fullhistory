@@ -318,6 +318,12 @@ M:	Bob Frey <bobf@advansys.com>
 W:	http://www.advansys.com/linux
 S:	Maintained
 
+AHA152X SCSI DRIVER
+P:	Juergen E. Fischer
+M:	Juergen Fischer <fischer@et-inf.fho-emden.de>
+L:	linux-scsi@vger.rutgers.edu
+S:	Maintained
+
 CREDITS FILE
 P:	John A. Martin
 M:	jam@acm.org

@@ -106,6 +106,7 @@ README for the ISDN-subsystem
                         driver may not be selected (see "Automatic
                         Assignment") however the size of outgoing packets
                         will be limited correctly.
+	       AT&D0    Ignore DTR
 	       AT&D2    DTR-low-edge: Hang up and return to 
                         command mode (default).
                AT&D3    Same as AT&D2 but also resets all registers.
@@ -157,10 +158,10 @@ README for the ISDN-subsystem
                                       1 = DCD follows carrier.
                             Bit 4     0 = CTS follows RTS
                                       1 = Ignore RTS, CTS always on.
-                            Bit 5     0 = Low-edge on DTR: Hang up and
-                                          return to command mode.
+                            Bit 5     0 = return to command mode on DTR low.
                                       1 = Same as 0 but also resets all
                                           registers.
+                                      See also register 13, bit 2
                             Bit 6     0 = DSR always on.
                                       1 = DSR only on if channel is available.
                             Bit 7     0 = Cisco-PPP-flag-hack off (default).
@@ -170,6 +171,8 @@ README for the ISDN-subsystem
                                       1 = Direct tty-send.
                             Bit 1:    0 = T.70 protocol (Only for BTX!) off
                                       1 = T.70 protocol (Only for BTX!) on
+                            Bit 2:    0 = Don't hangup on DTR low.
+                                      1 = Hangup on DTR low.
 	     14   0         Layer-2 protocol:
 				      0 = X75/LAPB with I-frames
 				      1 = X75/LAPB with UI-frames

@@ -108,7 +108,7 @@ nfs_read_cb(int result, struct nfsiod_req *req)
 		set_bit(PG_uptodate, &page->flags);
 	} else {
 		fail++;
-		printk("BIO: %d successful reads, %d failures\n", succ, fail);
+		dprintk("BIO: %d successful reads, %d failures\n", succ, fail);
 		set_bit(PG_error, &page->flags);
 	}
 	clear_bit(PG_locked, &page->flags);

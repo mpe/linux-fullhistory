@@ -33,7 +33,7 @@ extern void console_print(const char *);
 #define DEFAULT_MESSAGE_LOGLEVEL 4 /* KERN_WARNING */
 
 /* We show everything that is MORE important than this.. */
-#define MINIMUM_CONSOLE_LOGLEVEL 5 /* Minimum loglevel we let people use */
+#define MINIMUM_CONSOLE_LOGLEVEL 1 /* Minimum loglevel we let people use */
 #define DEFAULT_CONSOLE_LOGLEVEL 7 /* anything MORE serious than KERN_DEBUG */
 
 unsigned long log_size = 0;

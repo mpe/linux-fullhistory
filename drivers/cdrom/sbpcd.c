@@ -4457,8 +4457,10 @@ static void DO_SBPCD_REQUEST(void)
 	INIT_REQUEST;
 	sti();
 	
-	if ((CURRENT == NULL) || CURRENT->rq_status == RQ_INACTIVE)
-		goto err_done;
+	if ((CURRENT == NULL) || CURRENT->rq_status == RQ_INACTIVE) {
+		CLEAR_INTR;
+		return;
+	}
 	if (CURRENT -> sector == -1)
 		goto err_done;
 	if (CURRENT->cmd != READ)

@@ -375,69 +375,78 @@ not_free_on_freelist:
 	return NULL;
 }
 
-void kfree(void *ptr)
+void kfree(void *__ptr)
 {
-	int size, dma;
+	int dma;
 	unsigned long flags;
-	int order;
-	register struct block_header *p;
+	unsigned int order;
 	struct page_descriptor *page, **pg;
+	struct size_descriptor *bucket;
 
-	if (!ptr)
-		return;
-	p = ((struct block_header *) ptr) - 1;
-	dma = 0;
-	page = PAGE_DESC(p);
+	if (!__ptr)
+		goto null_kfree;
+#define ptr ((struct block_header *) __ptr)
+	page = PAGE_DESC(ptr);
+	__ptr = ptr - 1;
+	if (~PAGE_MASK & (unsigned long)page->next)
+		goto bad_order;
 	order = page->order;
-	pg = &sizes[order].firstfree;
-	if (p->bh_flags == MF_DMA) {
+	if (order >= sizeof(sizes) / sizeof(sizes[0]))
+		goto bad_order;
+	bucket = sizes + order;
+	dma = 0;
+	pg = &bucket->firstfree;
+	if (ptr->bh_flags == MF_DMA) {
 		dma = 1;
-		p->bh_flags = MF_USED;
-		pg = &sizes[order].dmafree;
+		ptr->bh_flags = MF_USED;
+		pg = &bucket->dmafree;
 	}
-
-	if ((order < 0) ||
-	    (order >= sizeof(sizes) / sizeof(sizes[0])) ||
-	    (((long) (page->next)) & ~PAGE_MASK) ||
-	    (p->bh_flags != MF_USED)) {
-		printk("kfree of non-kmalloced memory: %p, next= %p, order=%d\n",
-		       p, page->next, page->order);
-		return;
-	}
-	size = p->bh_length;
-	p->bh_flags = MF_FREE;	/* As of now this block is officially free */
+	if (ptr->bh_flags != MF_USED)
+		goto bad_order;
+	ptr->bh_flags = MF_FREE;	/* As of now this block is officially free */
 #ifdef SADISTIC_KMALLOC
-	memset(p+1, 0xe0, size);
+	memset(ptr+1, 0xe0, ptr->bh_length);
 #endif
 	save_flags(flags);
 	cli();
-	p->bh_next = page->firstfree;
-	page->firstfree = p;
-	page->nfree++;
 
-	if (page->nfree == 1) {
+	bucket->nfrees++;
+	bucket->nbytesmalloced -= ptr->bh_length;
+
+	ptr->bh_next = page->firstfree;
+	page->firstfree = ptr;
+	if (!page->nfree++) {
 /* Page went from full to one free block: put it on the freelist. */
+		if (bucket->nblocks == 1)
+			goto free_page;
 		page->next = *pg;
 		*pg = page;
 	}
 /* If page is completely free, free it */
-	if (page->nfree == NBLOCKS(order)) {
+	if (page->nfree == bucket->nblocks) {
 		for (;;) {
 			struct page_descriptor *tmp = *pg;
-			if (!tmp) {
-				printk("Ooops. page %p doesn't show on freelist.\n", page);
+			if (!tmp)
+				goto not_on_freelist;
+			if (tmp == page)
 				break;
-			}
-			if (tmp == page) {
-				*pg = page->next;
-				break;
-			}
 			pg = &tmp->next;
 		}
-		sizes[order].npages--;
-		free_kmalloc_pages(page, sizes[order].gfporder, dma);
+		*pg = page->next;
+free_page:
+		bucket->npages--;
+		free_kmalloc_pages(page, bucket->gfporder, dma);
 	}
-	sizes[order].nfrees++;
-	sizes[order].nbytesmalloced -= size;
+	restore_flags(flags);
+null_kfree:
+	return;
+
+bad_order:
+	printk("kfree of non-kmalloced memory: %p, next= %p, order=%d\n",
+	       ptr+1, page->next, page->order);
+	return;
+
+not_on_freelist:
+	printk("Ooops. page %p doesn't show on freelist.\n", page);
 	restore_flags(flags);
 }

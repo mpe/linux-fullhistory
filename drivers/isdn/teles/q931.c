@@ -1,4 +1,4 @@
-/* $Id: q931.c,v 1.4 1996/05/17 03:46:17 fritz Exp $
+/* $Id: q931.c,v 1.5 1996/06/03 20:03:40 fritz Exp $
  *
  * q931.c               code to decode ITU Q.931 call control messages
  * 
@@ -14,6 +14,9 @@
  *
  * 
  * $Log: q931.c,v $
+ * Revision 1.5  1996/06/03 20:03:40  fritz
+ * Fixed typos.
+ *
  * Revision 1.4  1996/05/17 03:46:17  fritz
  * General cleanup.
  *

@@ -1,4 +1,4 @@
-/* $Id: isdn_tty.c,v 1.13 1996/05/31 01:33:29 fritz Exp $
+/* $Id: isdn_tty.c,v 1.18 1996/06/07 11:17:33 tsbogend Exp $
  *
  * Linux ISDN subsystem, tty functions and AT-command emulator (linklevel).
  *
@@ -20,6 +20,27 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_tty.c,v $
+ * Revision 1.18  1996/06/07 11:17:33  tsbogend
+ * added missing #ifdef CONFIG_ISDN_AUDIO to make compiling without
+ * audio support possible
+ *
+ * Revision 1.17  1996/06/06 14:55:47  fritz
+ * Changed to support DTMF decoding on audio playback also.
+ * Bugfix: Added check for invalid info->isdn_driver in
+ *         isdn_tty_senddown().
+ * Clear ncarrier flag on last close() of a tty.
+ *
+ * Revision 1.16  1996/06/05 02:24:12  fritz
+ * Added DTMF decoder for audio mode.
+ *
+ * Revision 1.15  1996/06/03 20:35:01  fritz
+ * Fixed typos.
+ *
+ * Revision 1.14  1996/06/03 20:12:19  fritz
+ * Fixed typos.
+ * Added call to write_wakeup via isdn_tty_flush_buffer()
+ * in isdn_tty_modem_hup().
+ *
  * Revision 1.13  1996/05/31 01:33:29  fritz
  * Changed buffering due to bad performance with mgetty.
  * Now sk_buff is delayed allocated in isdn_tty_senddown
@@ -95,6 +116,7 @@ static void isdn_tty_check_esc(const u_char *, u_char, int, int *, int *, int);
 static void isdn_tty_modem_reset_regs(atemu *, int);
 static void isdn_tty_cmd_ATA(modem_info *);
 static void isdn_tty_at_cout(char *, modem_info *);
+static void isdn_tty_flush_buffer(struct tty_struct *);
 
 /* Leave this unchanged unless you know what you do! */
 #define MODEM_PARANOIA_CHECK
@@ -105,7 +127,7 @@ static char *isdn_ttyname_cui  = "cui";
 static int bit2si[8] = {1,5,7,7,7,7,7,7};
 static int si2bit[8] = {4,1,4,4,4,4,4,4};
                                 
-char *isdn_tty_revision        = "$Revision: 1.13 $";
+char *isdn_tty_revision        = "$Revision: 1.18 $";
 
 #define DLE 0x10
 #define ETX 0x03
@@ -179,6 +201,9 @@ void isdn_tty_readmodem(void)
                         info = &dev->mdm.info[midx];
 			if (info->online) {
 				r = 0;
+#ifdef CONFIG_ISDN_AUDIO
+				isdn_audio_eval_dtmf(info);
+#endif
 				if ((tty = info->tty)) {
 					if (info->mcr & UART_MCR_RTS) {
 						c = TTY_FLIPBUF_SIZE - tty->flip.count;
@@ -223,6 +248,11 @@ void isdn_tty_cleanup_xmit(modem_info *info)
         cli();
         if (skb_queue_len(&info->xmit_queue))
                 while ((skb = skb_dequeue(&info->xmit_queue))) {
+                        skb->free = 1;
+                        kfree_skb(skb, FREE_WRITE);
+                }
+        if (skb_queue_len(&info->dtmf_queue))
+                while ((skb = skb_dequeue(&info->dtmf_queue))) {
                         skb->free = 1;
                         kfree_skb(skb, FREE_WRITE);
                 }
@@ -359,6 +389,11 @@ static void isdn_tty_senddown(modem_info * info)
         save_flags(flags);
         cli();
         if (!(buflen = info->xmit_count)) {
+                restore_flags(flags);
+                return;
+        }
+        if (info->isdn_driver < 0) {
+                info->xmit_count = 0;
                 restore_flags(flags);
                 return;
         }
@@ -558,7 +593,7 @@ void isdn_tty_modem_hup(modem_info * info)
                 return;
         info->rcvsched = 0;
         info->online = 0;
-        isdn_tty_cleanup_xmit(info);
+        isdn_tty_flush_buffer(info->tty);
         if (info->vonline & 1) {
                 /* voice-recording, add DLE-ETX */
                 isdn_tty_at_cout("\020\003", info);
@@ -568,6 +603,11 @@ void isdn_tty_modem_hup(modem_info * info)
                 isdn_tty_at_cout("\020\024", info);
         }
         info->vonline = 0;
+#ifdef CONFIG_ISDN_AUDIO
+        if (info->dtmf_state) {
+                kfree(info->dtmf_state);
+                info->dtmf_state = NULL;
+        }
         if (info->adpcms) {
                 kfree(info->adpcms);
                 info->adpcms = NULL;
@@ -576,6 +616,7 @@ void isdn_tty_modem_hup(modem_info * info)
                 kfree(info->adpcmr);
                 info->adpcmr = NULL;
         }
+#endif
         info->msr &= ~(UART_MSR_DCD | UART_MSR_RI);
         info->lsr |= UART_LSR_TEMT;
 	if (info->isdn_driver >= 0) {
@@ -1406,6 +1447,7 @@ static void isdn_tty_close(struct tty_struct *tty, struct file *filp)
 	if (tty->ldisc.flush_buffer)
 		tty->ldisc.flush_buffer(tty);
 	info->tty = 0;
+        info->ncarrier = 0;
 	tty->closing = 0;
 	if (info->blocked_open) {
                 current->state = TASK_INTERRUPTIBLE;
@@ -1566,6 +1608,7 @@ int isdn_tty_modem_init(void)
 		info->drv_index = -1;
 		info->xmit_size = ISDN_SERIAL_XMIT_SIZE;
                 skb_queue_head_init(&info->xmit_queue);
+                skb_queue_head_init(&info->dtmf_queue);
                 if (!(info->xmit_buf = kmalloc(ISDN_SERIAL_XMIT_SIZE + 5, GFP_KERNEL))) {
                         printk(KERN_ERR "Could not allocate modem xmit-buffer\n");
                         return -3;
@@ -1598,7 +1641,7 @@ int isdn_tty_find_icall(int di, int ch, char *num)
 	if (num[0] == ',') {
 		nr[0] = '0';
 		strncpy(&nr[1], num, 29);
-		printk(KERN_WARNING "isdn_tty: Incoming call without OAD, assuming '0'\n");
+		printk(KERN_INFO "isdn_tty: Incoming call without OAD, assuming '0'\n");
 	} else
 		strncpy(nr, num, 30);
 	s = strtok(nr, ",");
@@ -1829,6 +1872,14 @@ void isdn_tty_modem_result(int code, modem_info * info)
                                 return;
                         }
                         restore_flags(flags);
+                        if (info->vonline & 1) {
+                                /* voice-recording, add DLE-ETX */
+                                isdn_tty_at_cout("\020\003", info);
+                        }
+                        if (info->vonline & 2) {
+                                /* voice-playing, add DLE-DC4 */
+                                isdn_tty_at_cout("\020\024", info);
+                        }
                         break;
                 case 1:
                 case 5:
@@ -1870,6 +1921,8 @@ void isdn_tty_modem_result(int code, modem_info * info)
 			restore_flags(flags);
 			return;
 		}
+                if (info->tty->ldisc.flush_buffer)
+                        info->tty->ldisc.flush_buffer(info->tty);
 		if ((info->flags & ISDN_ASYNC_CHECK_CD) &&
 		    (!((info->flags & ISDN_ASYNC_CALLOUT_ACTIVE) &&
 		       (info->flags & ISDN_ASYNC_CALLOUT_NOHUP)))) {
@@ -2271,8 +2324,13 @@ static int isdn_tty_cmd_PLUSV(char **p, modem_info * info)
                         /* AT+VRX - Start recording */
                         if (!m->vpar[0])
                                 PARSE_ERROR1;
+                        info->dtmf_state = isdn_audio_dtmf_init(info->dtmf_state);
+                        if (!info->dtmf_state) {
+                                printk(KERN_WARNING "isdn_tty: Couldn't malloc dtmf state\n");
+                                PARSE_ERROR1;
+                        }
                         if (m->vpar[3] < 5) {
-                                info->adpcmr = isdn_audio_adpcm_init(m->vpar[3]);
+                                info->adpcmr = isdn_audio_adpcm_init(info->adpcmr, m->vpar[3]);
                                 if (!info->adpcmr) {
                                         printk(KERN_WARNING "isdn_tty: Couldn't malloc adpcm state\n");
                                         PARSE_ERROR1;
@@ -2372,8 +2430,13 @@ static int isdn_tty_cmd_PLUSV(char **p, modem_info * info)
                         /* AT+VTX - Start sending */
                         if (!m->vpar[0])
                                 PARSE_ERROR1;
+                        info->dtmf_state = isdn_audio_dtmf_init(info->dtmf_state);
+                        if (!info->dtmf_state) {
+                                printk(KERN_WARNING "isdn_tty: Couldn't malloc dtmf state\n");
+                                PARSE_ERROR1;
+                        }
                         if (m->vpar[3] < 5) {
-                                info->adpcms = isdn_audio_adpcm_init(m->vpar[3]);
+                                info->adpcms = isdn_audio_adpcm_init(info->adpcms, m->vpar[3]);
                                 if (!info->adpcms) {
                                         printk(KERN_WARNING "isdn_tty: Couldn't malloc adpcm state\n");
                                         PARSE_ERROR1;

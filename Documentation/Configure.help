@@ -697,17 +697,17 @@ CONFIG_MODULES
 Set version information on all symbols for modules
 CONFIG_MODVERSIONS
   Usually, modules have to be recompiled whenever you switch to a new
-  kernel. Enabling this option allows you to keep using the same
-  modules even after compiling a new kernel; this requires the program
-  modprobe. All the software needed for module support is in the
-  modules package in sunsite.unc.edu:/pub/Linux/kernel, available via
-  ftp (user: anonymous) and to be extracted with "tar xzvf
-  filename". NOTE1: if you say Y here but don't have the program
-  genksyms (which is also contained in the above mentioned modules
-  package), then the building of your kernel will fail. NOTE2: if you
-  say Y here, then you cannot say Y to the PPP driver, below; the only
-  option is to compile it as a module (PPP is a protocol for sending
-  internet traffic over telephone lines). Therefore, N is a safe bet.
+  kernel. Enabling this option makes it possible, and safe, to use the
+  same modules even after compiling a new kernel; this requires the
+  program modprobe. All the software needed for module support is in
+  the modules package in sunsite.unc.edu:/pub/Linux/kernel, available
+  via ftp (user: anonymous) to be extracted with "tar xzvf filename".
+  NOTE: if you say Y here but don't have the program genksyms (which
+  is also contained in the above mentioned modules package), then the
+  building of your kernel will fail.
+  If you are going to use modules that are generated from non-kernel
+  sources, you would benefit from this option. Otherwise it's not that
+  important. So, N ought to be a safe bet.
 
 Kernel daemon support
 CONFIG_KERNELD

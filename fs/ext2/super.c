@@ -411,11 +411,20 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
-	if ((es->s_rev_level > EXT2_GOOD_OLD_REV) &&
-	    (es->s_feature_incompat & !EXT2_FEATURE_INCOMPAT_SUPP)) {
-		printk("EXT2-fs: %s: couldn't mount because of "
-		       "unsupported optional features.\n", kdevname(dev));
-		goto failed_mount;
+	if (es->s_rev_level > EXT2_GOOD_OLD_REV) {
+		if (es->s_feature_incompat & ~EXT2_FEATURE_INCOMPAT_SUPP) {
+			printk("EXT2-fs: %s: couldn't mount because of "
+			       "unsupported optional features.\n", 
+			       kdevname(dev));
+			goto failed_mount;
+		}
+		if (!(sb->s_flags & MS_RDONLY) &&
+		    (es->s_feature_ro_compat & ~EXT2_FEATURE_RO_COMPAT_SUPP)) {
+			printk("EXT2-fs: %s: couldn't mount RDWR because of "
+			       "unsupported optional features.\n", 
+			       kdevname(dev));
+			goto failed_mount;
+		}
 	}
 	sb->s_blocksize_bits = sb->u.ext2_sb.s_es->s_log_block_size + 10;
 	sb->s_blocksize = 1 << sb->s_blocksize_bits;

@@ -1175,6 +1175,14 @@ S: 14355 SW Allen Blvd., Suite #140
 S: Beaverton, OR 97008
 S: USA
 
+N: John Shifflett
+E: john@geolog.com
+E: jshiffle@netcom.com
+D: Always IN2000 SCSI driver
+D: wd33c93 SCSI driver (linux-m68k)
+S: San Jose, CA
+S: USA
+
 N: Rick Sladkey
 E: jrs@world.std.com
 D: utility hacker: Emacs, NFS server, mount, kmem-ps, UPS debugger, strace, GDB
@@ -1262,6 +1270,8 @@ S: Spain
 
 N: Linus Torvalds
 E: Linus.Torvalds@Helsinki.FI
+W: http://www.cs.helsinki.fi/~torvalds/
+P: 1024/A86B35C5 96 54 50 29 EC 11 44 7A  BE 67 3C 24 03 13 62 C8
 D: General kernel hacker
 S: Kalevankatu 55 B 37
 S: 00180 Helsinki

@@ -17,6 +17,10 @@
          
 	**********************
 	
+	v2.53 (96/06/06)
+	  - arc0e and arc0s wouldn't initialize in newer kernels, which
+	    don't like dev->open==NULL or dev->stop==NULL.
+	
 	v2.52 (96/04/20)
 	  - Replaced more decimal node ID's with hex, for consistency.
 	  - Changed a couple of printk debug levels.
@@ -180,7 +184,7 @@
 */
 
 static const char *version =
- "arcnet.c: v2.52 96/04/20 Avery Pennarun <apenwarr@foxnet.net>\n";
+ "arcnet.c: v2.53 96/06/06 Avery Pennarun <apenwarr@foxnet.net>\n";
 
  
 
@@ -635,6 +639,7 @@ unsigned short arcnetA_type_trans(struct sk_buff *skb,struct device *dev);
 #ifdef CONFIG_ARCNET_ETH
 	/* functions specific to Ethernet-Encap */
 static int arcnetE_init(struct device *dev);
+static int arcnetE_open_close(struct device *dev);
 static int arcnetE_send_packet(struct sk_buff *skb, struct device *dev);
 static void arcnetE_rx(struct device *dev,u_char *arcsoft,
 	int length,u_char saddr, u_char daddr);
@@ -643,6 +648,7 @@ static void arcnetE_rx(struct device *dev,u_char *arcsoft,
 #ifdef CONFIG_ARCNET_1051
 	/* functions specific to RFC1051 */
 static int arcnetS_init(struct device *dev);
+static int arcnetS_open_close(struct device *dev);
 static int arcnetS_send_packet(struct sk_buff *skb, struct device *dev);
 static void arcnetS_rx(struct device *dev,u_char *buf,
 	int length,u_char saddr, u_char daddr);
@@ -2755,12 +2761,21 @@ static int arcnetE_init(struct device *dev)
 	dev->dev_addr[0]=0;
 	dev->dev_addr[5]=lp->stationid;
 	dev->mtu=512-sizeof(struct HardHeader)-dev->hard_header_len-1;
-	dev->open=NULL;
-	dev->stop=NULL;
+	dev->open=arcnetE_open_close;
+	dev->stop=arcnetE_open_close;
 	dev->hard_start_xmit=arcnetE_send_packet;
 
 	BUGMSG(D_EXTRA,"ARCnet Ethernet-Encap protocol initialized.\n");
 			
+	return 0;
+}
+
+
+/* Bring up/down the arc0e device - we don't actually have to do anything,
+ * since our parent arc0 handles the card I/O itself.
+ */
+static int arcnetE_open_close(struct device *dev)
+{
 	return 0;
 }
 
@@ -2925,13 +2940,22 @@ static int arcnetS_init(struct device *dev)
 	dev->hard_header_len=sizeof(struct S_ClientData);
 	dev->mtu=512-sizeof(struct HardHeader)-dev->hard_header_len
 		+ S_EXTRA_CLIENTDATA;
-	dev->open=NULL;
-	dev->stop=NULL;
+	dev->open=arcnetS_open_close;
+	dev->stop=arcnetS_open_close;
 	dev->hard_start_xmit=arcnetS_send_packet;
 	dev->hard_header=arcnetS_header;
 	dev->rebuild_header=arcnetS_rebuild_header;
 	BUGMSG(D_EXTRA,"ARCnet RFC1051 (NetBSD, AmiTCP) protocol initialized.\n");
 
+	return 0;
+}
+
+
+/* Bring up/down the arc0s device - we don't actually have to do anything,
+ * since our parent arc0 handles the card I/O itself.
+ */
+static int arcnetS_open_close(struct device *dev)
+{
 	return 0;
 }
 

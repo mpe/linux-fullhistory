@@ -64,9 +64,15 @@ extern __inline__ void tcp_delack_estimator(struct sock *sk)
 		if (m <= 0)
 			m = 1;
 
-		if (m > (sk->rtt >> 3))
+		/* This used to test against sk->rtt.
+		 * On a purely receiving link, there is no rtt measure.
+		 * The result is that we loose delayed ACKs on one way links.
+		 * Therefore we test against sk->rto, which will always
+		 * at least have a default value.
+		 */
+		if (m > sk->rto)
 		{
-			sk->ato = sk->rtt >> 3;
+			sk->ato = sk->rto;
 			/*
 			 * printk(KERN_DEBUG "ato: rtt %lu\n", sk->ato);
 			 */
@@ -124,7 +130,12 @@ extern __inline__ void tcp_rtt_estimator(struct sock *sk, struct sk_buff *oskb)
 	 *	Now update timeout.  Note that this removes any backoff.
 	 */
 			 
+	/* Jacobson's algorithm calls for rto = R + 4V.
+	 * We diverge from Jacobson's algorithm here. See the commentary
+	 * in tcp_ack to understand why.
+	 */
 	sk->rto = (sk->rtt >> 3) + sk->mdev;
+	sk->rto += (sk->rto>>2) + (sk->rto >> (sk->cong_window-1));
 	if (sk->rto > 120*HZ)
 		sk->rto = 120*HZ;
 	if (sk->rto < HZ/5)	/* Was 1*HZ - keep .2 as minimum cos of the BSD delayed acks */
@@ -195,7 +206,7 @@ static void bad_tcp_sequence(struct sock *sk, struct tcphdr *th, u32 end_seq,
 	/*
 	 * 	This packet is old news. Usually this is just a resend
 	 * 	from the far end, but sometimes it means the far end lost
-	 *	an ACK we send, so we better send an ACK.
+	 *	an ACK we sent, so we better send an ACK.
 	 */
 	tcp_send_ack(sk);
 }
@@ -842,8 +853,22 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 			 *  RTO = R*4V
 			 * In particular this gives better performance over
 			 * slow links, and should not effect fast links.
-			 */
+			 *
+			 * Note: Jacobson's algorithm is fine on BSD which
+			 * has a 1/2 second granularity clock, but with our
+			 * 1/100 second granularity clock we become too
+	 		 * sensitive to minor changes in the round trip time.
+			 * We add in two compensating factors.
+			 * First we multiply by 5/4. For large congestion
+			 * windows this allows us to tollerate burst traffic
+			 * delaying up to 1/4 of our packets.
+			 * We also add in a rtt / cong_window term.
+			 * For small congestion windows this allows
+			 * a single packet delay, but has neglibible effect
+			 * on the compensation for large windows.
+	 		 */
 			sk->rto = (sk->rtt >> 3) + sk->mdev;
+			sk->rto += (sk->rto>>2) + (sk->rto >> (sk->cong_window-1));
 			if (sk->rto > 120*HZ)
 				sk->rto = 120*HZ;
 			if (sk->rto < HZ/5)	/* Was 1*HZ, then 1 - turns out we must allow about
@@ -1247,8 +1272,18 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 			if (sk->ip_xmit_timeout != TIME_WRITE) {
 				if (sk->send_head)
 					tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);
-				else
-					printk(KERN_ERR "send_head NULL in FIN_WAIT1\n");
+				else if (sk->ip_xmit_timeout != TIME_PROBE0
+				|| skb_queue_empty(&sk->write_queue)) {
+					/* BUG check case.
+					 * We have a problem here if there
+					 * is no timer running [leads to
+					 * frozen socket] or no data in the
+					 * write queue [means we sent a fin
+					 * and lost it from the queue before
+					 * changing the ack properly].
+					 */
+					printk(KERN_ERR "Lost timer or fin packet in tcp_fin.");
+				}
 			}
 			tcp_set_state(sk,TCP_CLOSING);
 			break;
@@ -1358,7 +1393,7 @@ static void tcp_queue(struct sk_buff * skb, struct sock * sk, struct tcphdr *th)
 		} else {
 			if (sk->debug)
 				printk("Ack duplicate packet.\n");
-	    		tcp_send_ack(sk);
+			tcp_send_ack(sk);
 			return;
 		}
 
@@ -1865,8 +1900,14 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			/* Crossed SYN or previous junk segment */
 			if(th->ack)
 			{
-				/* We got an ack, but it's not a good ack */
-				if(!tcp_ack(sk,th,skb->ack_seq,len))
+				/* We got an ack, but it's not a good ack.
+				 * We used to test this with a call to tcp_ack,
+				 * but this looses, because it takes the SYN
+				 * packet out of the send queue, even if
+				 * the ACK doesn't have the SYN bit sent, and
+				 * therefore isn't the one we are waiting for.
+				 */
+				if (after(skb->ack_seq, sk->sent_seq) || before(skb->ack_seq, sk->rcv_ack_seq))
 				{
 					/* Reset the ack - it's an ack from a 
 					   different connection  [ th->rst is checked in tcp_send_reset()] */
@@ -1888,6 +1929,15 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 					kfree_skb(skb, FREE_READ);
 					return 0;
 				}
+
+				/* process the ACK, get the SYN packet out
+				 * of the send queue, do other initial
+				 * processing stuff. [We know its good, and
+				 * we know it's the SYN,ACK we want.]
+				 */
+				tcp_ack(sk,th,skb->ack_seq,len);
+
+
 				/*
 				 *	Ok.. it's good. Set up sequence numbers and
 				 *	move to established.

@@ -526,15 +526,13 @@ int proc_dostring(ctl_table *table, int write, struct file *filp,
 		((char *) table->data)[len] = 0;
 		filp->f_pos += *lenp;
 	} else {
-		len = strlen(table->data) + 1;
+		len = strlen(table->data);
 		if (len > table->maxlen)
 			len = table->maxlen;
 		if (len > *lenp)
 			len = *lenp;
-		if (len) {			
-			memcpy_tofs(buffer, table->data, len-1);
-			put_user(0, ((char *) buffer) + len - 1);
-		}
+		if (len)
+			memcpy_tofs(buffer, table->data, len);
 		if (len < *lenp) {
 			put_user('\n', ((char *) buffer) + len);
 			len++;

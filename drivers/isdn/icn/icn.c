@@ -1,4 +1,4 @@
-/* $Id: icn.c,v 1.22 1996/05/17 15:46:41 fritz Exp $
+/* $Id: icn.c,v 1.24 1996/06/06 13:58:33 fritz Exp $
  *
  * ISDN low-level module for the ICN active ISDN-Card.
  *
@@ -19,6 +19,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: icn.c,v $
+ * Revision 1.24  1996/06/06 13:58:33  fritz
+ * Changed code to be architecture independent
+ *
+ * Revision 1.23  1996/06/03 19:59:00  fritz
+ * Fixed typos.
+ *
  * Revision 1.22  1996/05/17 15:46:41  fritz
  * Removed own queue management.
  * Changed queue management to use sk_buffs.
@@ -113,7 +119,7 @@
 #undef MAP_DEBUG
 
 static char
-*revision = "$Revision: 1.22 $";
+*revision = "$Revision: 1.24 $";
 
 static int icn_addcard(int, char *, char *);
 
@@ -315,7 +321,8 @@ static void icn_pollbchan_receive(int channel, icn_card *card)
                                 card->rcvidx[channel] = 0;
                                 eflag = 0;
                         } else {
-                                memcpy(&card->rcvbuf[channel][card->rcvidx[channel]], rbuf_d, cnt);
+                                memcpy_fromio(&card->rcvbuf[channel][card->rcvidx[channel]],
+                                              rbuf_d, cnt);
                                 card->rcvidx[channel] += cnt;
                                 eflag = rbuf_f;
                         }
@@ -554,8 +561,8 @@ static void icn_polldchan(unsigned long data)
 
         if (icn_trymaplock_channel(card,mch)) {
                 avail = msg_avail;
-                for (left = avail, i = msg_o; left > 0; i++, left--) {
-                        c = dev.shmem->comm_buffers.iopc_buf[i & 0xff];
+                for (left = avail, i = readb(&msg_o); left > 0; i++, left--) {
+                        c = readb(&dev.shmem->comm_buffers.iopc_buf[i & 0xff]);
                         save_flags(flags);
                         cli();
                         *card->msg_buf_write++ = (c == 0xff) ? '\n' : c;
@@ -613,7 +620,7 @@ static void icn_polldchan(unsigned long data)
                                         card->iptr++;
                         }
                 }
-                msg_o = (msg_o + avail) & 0xff;
+                writeb((readb(&msg_o) + avail) & 0xff, &msg_o);
                 icn_release_channel();
         }
         if (avail) {
@@ -691,8 +698,8 @@ static int icn_check_loader(int cardnumber)
 #ifdef BOOT_DEBUG
                 printk(KERN_DEBUG "Loader %d ?\n", cardnumber);
 #endif
-                if (dev.shmem->data_control.scns ||
-                    dev.shmem->data_control.scnr) {
+                if (readb(&dev.shmem->data_control.scns) ||
+                    readb(&dev.shmem->data_control.scnr)) {
                         if (timer++ > 5) {
                                 printk(KERN_WARNING
                                        "icn: Boot-Loader %d timed out.\n",
@@ -744,6 +751,7 @@ static int icn_loadboot(u_char * buffer, icn_card * card)
 {
         int ret;
         ulong flags;
+        unsigned char codebuf[ICN_CODE_STAGE1];
 
 #ifdef BOOT_DEBUG
         printk(KERN_DEBUG "icn_loadboot called, buffaddr=%08lx\n", (ulong) buffer);
@@ -789,8 +797,6 @@ static int icn_loadboot(u_char * buffer, icn_card * card)
         SLEEP(1);
         save_flags(flags);
         cli();
-        dev.channel = 1;                                           /* Force Mapping    */
-        dev.mcard   = NULL;
 #ifdef BOOT_DEBUG
         printk(KERN_DEBUG "Map Bank 0\n");
 #endif
@@ -798,7 +804,8 @@ static int icn_loadboot(u_char * buffer, icn_card * card)
         icn_lock_channel(card,0);                                  /* Lock Bank 0      */
         restore_flags(flags);
         SLEEP(1);
-        memcpy_fromfs(dev.shmem, buffer, ICN_CODE_STAGE1);         /* Copy code        */
+        memcpy_fromfs(codebuf, buffer, ICN_CODE_STAGE1);           /* Copy code        */
+        memcpy_toio(dev.shmem, codebuf, ICN_CODE_STAGE1);
 #ifdef BOOT_DEBUG
         printk(KERN_DEBUG "Bootloader transfered\n");
 #endif
@@ -814,7 +821,8 @@ static int icn_loadboot(u_char * buffer, icn_card * card)
                 icn_lock_channel(card,2);                          /* Lock Bank 8     */
                 restore_flags(flags);
                 SLEEP(1);
-                memcpy_fromfs(dev.shmem, buffer, ICN_CODE_STAGE1); /* Copy code       */
+                memcpy_fromfs(codebuf, buffer, ICN_CODE_STAGE1);   /* Copy code        */
+                memcpy_toio(dev.shmem, codebuf, ICN_CODE_STAGE1);
 #ifdef BOOT_DEBUG
                 printk(KERN_DEBUG "Bootloader transfered\n");
 #endif
@@ -887,7 +895,7 @@ static int icn_loadproto(u_char * buffer, icn_card * card)
         sbuf_n = 0x20;
         timer = 0;
         while (1) {
-                if (cmd_o || cmd_i) {
+                if (readb(&cmd_o) || readb(&cmd_i)) {
 #ifdef BOOT_DEBUG
                         printk(KERN_DEBUG "Proto?\n");
 #endif
@@ -984,8 +992,9 @@ static int icn_writecmd(const u_char * buf, int len, int user, icn_card * card, 
                         *card->msg_buf_write++ = '>';
                         if (card->msg_buf_write > card->msg_buf_end)
                                 card->msg_buf_write = card->msg_buf;
-                        for (p = msg, pp = cmd_i, i = count; i > 0; i--, p++, pp++) {
-                                dev.shmem->comm_buffers.pcio_buf[pp & 0xff] = (*p == '\n') ? 0xff : *p;
+                        for (p = msg, pp = readb(&cmd_i), i = count; i > 0; i--, p++, pp++) {
+                                writeb((*p == '\n') ? 0xff : *p,
+                                       &dev.shmem->comm_buffers.pcio_buf[pp & 0xff]);
                                 *card->msg_buf_write++ = *p;
                                 if ((*p == '\n') && (i > 1)) {
                                         *card->msg_buf_write++ = '>';
@@ -1003,7 +1012,7 @@ static int icn_writecmd(const u_char * buf, int len, int user, icn_card * card, 
                         cmd.driver = card->myid;
                         cmd.arg = ocount;
                         card->interface.statcallb(&cmd);
-                        cmd_i = (cmd_i + count) & 0xff;
+                        writeb((readb(&cmd_i) + count) & 0xff, &cmd_i);
                         icn_release_channel();
                         waitflg = 0;
                 } else
@@ -1550,6 +1559,8 @@ int icn_init(void)
 
         memset(&dev, 0, sizeof(icn_dev));
         dev.shmem = (icn_shmem *) (membase & 0x0ffc000);
+        dev.channel = -1;
+        dev.mcard   = NULL;
 
         /* No symbols to export, hide all symbols */
         register_symtab(NULL);

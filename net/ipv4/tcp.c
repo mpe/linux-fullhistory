@@ -1187,8 +1187,6 @@ out:
 
 /*
  *	Send an ack if one is backlogged at this point.
- *
- *	This is called for delayed acks also.
  */
 
 void tcp_read_wakeup(struct sock *sk)

@@ -1,4 +1,4 @@
-/* $Id: card.c,v 1.7 1996/05/31 01:02:21 fritz Exp $
+/* $Id: card.c,v 1.9 1996/06/06 14:42:09 fritz Exp $
  *
  * card.c     low level stuff for the Teles S0 isdn card
  * 
@@ -7,6 +7,9 @@
  * Beat Doebeli         log all D channel traffic
  * 
  * $Log: card.c,v $
+ * Revision 1.9  1996/06/06 14:42:09  fritz
+ * Bugfix: forgot hsp-> in last change.
+ *
  * Revision 1.7  1996/05/31 01:02:21  fritz
  * Cosmetic changes.
  *
@@ -438,7 +441,7 @@ hscx_interrupt(struct IsdnCardState *sp, byte val, byte hscx)
 			if (!r & 0x80)
 				printk(KERN_WARNING
                                        "Teles: HSCX invalid frame\n");
-			if (r & 0x40)
+			if ((r & 0x40) && hsp->mode)
 				printk(KERN_WARNING "Teles: HSCX RDO mode=%d\n",hsp->mode);
 			if (!r & 0x20)
 				printk(KERN_WARNING "Teles: HSCX CRC error\n");

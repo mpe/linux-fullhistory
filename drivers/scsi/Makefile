@@ -35,7 +35,10 @@ TOPDIR = ../..
 endif
 
 ifeq ($(CONFIG_SCSI),y)
-L_OBJS += hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o scsi_proc.o
+L_OBJS += hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o
+  ifeq ($(CONFIG_PROC_FS),y)
+    L_OBJS += scsi_proc.o
+  endif
 LX_OBJS += scsi_syms.o
 else
   ifeq ($(CONFIG_SCSI),m)

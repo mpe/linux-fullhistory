@@ -175,6 +175,8 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 				val = SK_WMEM_MAX*2;
 			if(val < 256)
 				val = 256;
+			if(val > 65535)
+				val = 65535;
 			sk->sndbuf = val;
 			return 0;
 

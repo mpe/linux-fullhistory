@@ -882,11 +882,12 @@ void tcp_send_delayed_ack(struct sock * sk, int max_timeout, unsigned long timeo
 
 	/* Calculate new timeout */
 	now = jiffies;
-	if (timeout > max_timeout || sk->bytes_rcv >= sk->max_unacked) {
+	if (timeout > max_timeout)
+		timeout = max_timeout;
+	timeout += now;
+	if (sk->bytes_rcv >= sk->max_unacked) {
 		timeout = now;
 		mark_bh(TIMER_BH);
-	} else {
-		timeout += now;
 	}
 
 	/* Use new timeout only if there wasn't a older one earlier  */

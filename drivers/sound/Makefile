@@ -108,9 +108,7 @@ oldconfig: setup-$(TARGET_OS) configure
 #	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
 	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
 
-kernelconfig: setup-$(TARGET_OS)
-	rm -f configure
-	$(HOSTCC) -o configure configure.c
+kernelconfig: setup-$(TARGET_OS) configure
 	./configure fixedlocal > local.h
 	./configure fixeddefines > .defines
 	@echo \#define SOUND_CONFIG_DATE \"`date`\" >> local.h
@@ -119,9 +117,7 @@ kernelconfig: setup-$(TARGET_OS)
 #	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
 	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
 
-mkscript: setup-$(TARGET_OS)
-	rm -f configure
-	$(HOSTCC) -o configure configure.c
+mkscript: setup-$(TARGET_OS) configure
 	./configure script > Config.in
 	./configure fixedlocal > local.h
 	./configure fixeddefines > .defines

@@ -545,6 +545,6 @@ extern void net_timer (unsigned long);
  *	Enable debug/info messages 
  */
 
-#define NETDEBUG(x)		x
+#define NETDEBUG(x)	do { } while (0)
 
 #endif	/* _SOCK_H */

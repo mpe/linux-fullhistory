@@ -1,6 +1,15 @@
-/* $Id: callc.c,v 1.8 1996/05/31 01:00:38 fritz Exp $
+/* $Id: callc.c,v 1.11 1996/06/07 12:32:20 fritz Exp $
  *
  * $Log: callc.c,v $
+ * Revision 1.11  1996/06/07 12:32:20  fritz
+ * More changes to support suspend/resume.
+ *
+ * Revision 1.10  1996/06/06 21:24:21  fritz
+ * Started adding support for suspend/resume.
+ *
+ * Revision 1.9  1996/05/31 12:23:57  jdenoud
+ * Jan: added channel open check to teles_writebuf
+ *
  * Revision 1.8  1996/05/31 01:00:38  fritz
  * Changed return code of teles_writebuf, when out of memory.
  *
@@ -126,6 +135,8 @@ enum {
         EV_HANGUP,         /* 17 */
         EV_BC_REL,         /* 18 */
         EV_CINF,           /* 19 */
+        EV_SUSPEND,        /* 20 */
+        EV_RESUME,         /* 21 */
 };
 
 #define EVENT_COUNT (EV_CINF+1)
@@ -150,6 +161,8 @@ static char    *strEvent[] =
         "EV_HANGUP",
         "EV_BC_REL",
         "EV_CINF",
+        "EV_SUSPEND",
+        "EV_RESUME",
 };
 
 enum {
@@ -1328,6 +1341,22 @@ teles_command(isdn_ctrl * ic)
                           command_debug(chanp, "HANGUP");
                   FsmEvent(&chanp->fi, EV_HANGUP, NULL);
                   break;
+          case (ISDN_CMD_SUSPEND):
+                  chanp = chanlist + ic->arg;
+                  if (chanp->debug & 1) {
+                          sprintf(tmp, "SUSPEND %s", ic->num);
+                          command_debug(chanp, tmp);
+                  }
+                 FsmEvent(&chanp->fi, EV_SUSPEND, ic);
+                  break;
+          case (ISDN_CMD_RESUME):
+                  chanp = chanlist + ic->arg;
+                  if (chanp->debug & 1) {
+                          sprintf(tmp, "RESUME %s", ic->num);
+                          command_debug(chanp, tmp);
+                  }
+                  FsmEvent(&chanp->fi, EV_RESUME, ic);
+                  break;
           case (ISDN_CMD_LOCK):
                   teles_mod_inc_use_count();
                   break;
@@ -1388,6 +1417,11 @@ teles_writebuf(int id, int chan, const u_char * buf, int count, int user)
         int             err, i;
         byte           *ptr;
 
+	if (!chanp->data_open) {
+		printk(KERN_DEBUG "teles_writebuf: channel not open\n");
+		return -ENOMEM;
+	}
+	
         err = BufPoolGet(&ibh, st->l1.sbufpool, GFP_ATOMIC, st, 21);
         if (err)
                 return -ENOMEM;

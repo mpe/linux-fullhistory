@@ -87,7 +87,10 @@ extern struct hwrpb_struct *hwrpb;
 
 #if PCI_MODIFY
 
-#if defined(CONFIG_ALPHA_MIKASA) || defined(CONFIG_ALPHA_ALCOR)
+/* NOTE: we can't just blindly use 64K for machines with EISA busses; they
+   may also have PCI-PCI bridges present, and then we'd configure the bridge
+   incorrectly */
+#if 0
 static unsigned int	io_base	 = 64*KB;	/* <64KB are (E)ISA ports */
 #else
 static unsigned int	io_base	 = 0xb000;
@@ -122,7 +125,7 @@ static void disable_dev(struct pci_dev *dev)
 	 *       itself as a bridge... :-(
 	 */
         if (dev->vendor == 0x8086 && dev->device == 0x0482) {
-          DBG_DEVS(("disable_dev: ignoring...\n"));
+          DBG_DEVS(("disable_dev: ignoring PCEB...\n"));
           return;
         }
 #endif
@@ -147,6 +150,17 @@ static void layout_dev(struct pci_dev *dev)
 	unsigned short cmd;
 	unsigned int base, mask, size, reg;
 	unsigned int alignto;
+
+#if defined(CONFIG_ALPHA_MIKASA) || defined(CONFIG_ALPHA_ALCOR)
+	/*
+	 * HACK: the PCI-to-EISA bridge does not seem to identify
+	 *       itself as a bridge... :-(
+	 */
+        if (dev->vendor == 0x8086 && dev->device == 0x0482) {
+          DBG_DEVS(("layout_dev: ignoring PCEB...\n"));
+          return;
+        }
+#endif
 
 	bus = dev->bus;
 	pcibios_read_config_word(bus->number, dev->devfn, PCI_COMMAND, &cmd);
@@ -352,7 +366,7 @@ static void layout_bus(struct pci_bus *bus)
 		 */
 		pcibios_read_config_dword(bridge->bus->number, bridge->devfn,
 					  0x1c, &l);
-		l = (l & 0xffff0000) | (bio >> 8) | ((tio - 1) & 0xf000);
+		l = (l & 0xffff0000) | ((bio >> 8) & 0x00f0) | ((tio - 1) & 0xf000);
 		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
 					   0x1c, l);
 		/*

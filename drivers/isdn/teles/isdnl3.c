@@ -1,6 +1,16 @@
-/* $Id: isdnl3.c,v 1.6 1996/05/21 11:33:50 keil Exp $
+/* $Id: isdnl3.c,v 1.9 1996/06/06 14:22:27 fritz Exp $
  *
  * $Log: isdnl3.c,v $
+ * Revision 1.9  1996/06/06 14:22:27  fritz
+ * Changed level of "non-digital call..." message, since
+ * with audio support, this is quite normal.
+ *
+ * Revision 1.8  1996/06/03 20:35:04  fritz
+ * Fixed typos.
+ *
+ * Revision 1.7  1996/06/03 20:03:39  fritz
+ * Fixed typos.
+ *
  * Revision 1.6  1996/05/21 11:33:50  keil
  * Adding SETUP_ACKNOWLEDGE as answer of a SETUP message.
  *
@@ -298,7 +308,7 @@ l3s12(struct PStack *st, byte pr, void *arg)
 
         if (bcfound) {
                 if (st->pa->info != 7) {
-                        printk(KERN_WARNING "non-digital call: %s -> %s\n",
+                        printk(KERN_DEBUG "non-digital call: %s -> %s\n",
                                st->pa->calling,
                                st->pa->called);
                 }

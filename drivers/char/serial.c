@@ -17,7 +17,7 @@
  *
  *  rs_set_termios fixed to look also for changes of the input
  *      flags INPCK, BRKINT, PARMRK, IGNPAR and IGNBRK.
- *                                            Bernd Anhdupl 05/17/96.
+ *                                            Bernd Anhäupl 05/17/96.
  * 
  * This module exports the following rs232 io functions:
  *

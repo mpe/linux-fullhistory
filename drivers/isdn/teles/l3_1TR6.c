@@ -1,6 +1,10 @@
-/* $Id: l3_1TR6.c,v 1.3 1996/04/30 21:54:42 isdn4dev Exp $
+/* $Id: l3_1TR6.c,v 1.4 1996/06/06 14:22:28 fritz Exp $
  *
  * $Log: l3_1TR6.c,v $
+ * Revision 1.4  1996/06/06 14:22:28  fritz
+ * Changed level of "non-digital call..." message, since
+ * with audio support, this is quite normal.
+ *
  * Revision 1.3  1996/04/30 21:54:42  isdn4dev
  * SPV, callback , remove some debugging code  Karsten Keil
  *
@@ -156,7 +160,7 @@ l3_1tr6_tu_setup(struct PStack *st, byte pr, void *arg)
 
         /* Signal all services, linklevel takes care of Service-Indicator */
 	if (st->pa->info != 7) {
-                printk(KERN_INFO "non-digital call: %s -> %s\n",
+                printk(KERN_DEBUG "non-digital call: %s -> %s\n",
                        st->pa->calling,
                        st->pa->called);
 	}

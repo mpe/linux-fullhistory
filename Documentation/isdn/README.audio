@@ -1,4 +1,4 @@
-$Id: README.audio,v 1.1 1996/05/19 00:07:35 fritz Exp $
+$Id: README.audio,v 1.3 1996/06/05 02:19:36 fritz Exp $
 
 ISDN subsystem for Linux.
   Description of audio mode.
@@ -89,14 +89,18 @@ General behavior and description of data formats/protocol.
     <DLE><ETX>              End of audio data. Emulator stops
                             recording, responding with VCON.
     <DLE><DLE>              Escape sequence for DLE in data stream.
-
-    Currently unsupported DLE sequences:
-
     <DLE>0                  Touchtone "0" received.
          ...
     <DLE>9                  Touchtone "9" received.
     <DLE>#                  Touchtone "#" received.
     <DLE>*                  Touchtone "*" received.
+    <DLE>A                  Touchtone "A" received.
+    <DLE>B                  Touchtone "B" received.
+    <DLE>C                  Touchtone "C" received.
+    <DLE>D                  Touchtone "D" received.
+
+    Currently unsupported DLE sequences:
+
     <DLE>c                  FAX calling tone received.
     <DLE>b                  busy tone received.
     <DLE>q                  quiet. Silence detected after non-silence.

@@ -1068,8 +1068,9 @@ static void eexp_hw_init586(struct device *dev)
 	outb_p(i586_RST,ioaddr+EEPROM_Ctrl);
 	udelay(2000);  /* delay 20ms */
         {
-		unsigned short ofs, i;
+		unsigned long ofs;
 		for (ofs = 0; ofs < lp->rx_buf_end; ofs += 32) {
+			unsigned long i;
 			outw_p(ofs, ioaddr+SM_PTR);
 			for (i = 0; i < 16; i++) {
 				outw_p(0, ioaddr+SM_ADDR(i<<1));

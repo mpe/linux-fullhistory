@@ -546,7 +546,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, __u16 *redirport, struct ip_
 						 * Note that redirport will become
 						 * 0xFFFF for non-TCP/UDP packets.
 						 */
-						*redirport = dst_port;
+						*redirport = htons(dst_port);
 					}
 				answer = FW_REDIRECT;
 			} else

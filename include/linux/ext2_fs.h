@@ -362,7 +362,8 @@ struct ext2_super_block {
 	__u16	s_block_group_nr; 	/* block group # of this superblock */
 	__u32	s_feature_compat; 	/* compatible feature set */
 	__u32	s_feature_incompat; 	/* incompatible feature set */
-	__u32	s_reserved[231];	/* Padding to the end of the block */
+	__u32	s_feature_ro_compat; 	/* readonly-compatible feature set */
+	__u32	s_reserved[230];	/* Padding to the end of the block */
 };
 
 /*
@@ -418,6 +419,7 @@ struct ext2_dir_entry {
  */
 #define EXT2_FEATURE_COMPAT_SUPP	0
 #define EXT2_FEATURE_INCOMPAT_SUPP	0
+#define EXT2_FEATURE_RO_COMPAT_SUPP	0
 
 #ifdef __KERNEL__
 /*

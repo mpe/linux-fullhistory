@@ -20,9 +20,12 @@
  * General Public License for more details.
  *
  *
- * $Id: aha152x.c,v 1.15 1996/04/30 14:52:06 fischer Exp fischer $
+ * $Id: aha152x.c,v 1.16 1996/06/09 00:04:56 root Exp $
  *
  * $Log: aha152x.c,v $
+ * Revision 1.16  1996/06/09 00:04:56  root
+ * - added configuration symbols for insmod (aha152x/aha152x1)
+ *
  * Revision 1.15  1996/04/30 14:52:06  fischer
  * - proc info fixed
  * - support for extended translation for >1GB disks
@@ -332,6 +335,16 @@ enum {
   in_sync      = 0x0040,
   sync_ok      = 0x0080,
 };
+
+#if defined(MODULE)
+#if defined(DEBUG_AHA152X)
+int aha152x[]  = { 0, 11, 7, 1, 1, 0, DELAY_DEFAULT, DEBUG_DEFAULT };
+int aha152x1[] = { 0, 11, 7, 1, 1, 0, DELAY_DEFAULT, DEBUG_DEFAULT };
+#else
+int aha152x[]  = { 0, 11, 7, 1, 1, 0, DELAY_DEFAULT };
+int aha152x1[] = { 0, 11, 7, 1, 1, 0, DELAY_DEFAULT };
+#endif
+#endif
 
 /* set by aha152x_setup according to the command line */
 static int  setup_count=0;
@@ -680,14 +693,12 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 	}
 
 #ifdef SETUP0
-  if(setup_count<2)
-	{
+  if(setup_count<2) {
       struct aha152x_setup override = SETUP0;
 
       if(setup_count==0 || (override.io_port != setup[0].io_port))
-        if(!aha152x_checksetup(&override))
-	{
-                printk("\naha152x: SETUP0 (0x%x, %d, %d, %d, %d, %d, %d) invalid\n",
+      if(!aha152x_checksetup(&override)) {
+        printk("\naha152x: invalid override SETUP0={0x%x,%d,%d,%d,%d,%d,%d}\n",
         	      override.io_port,
         	      override.irq,
         	      override.scsiid,
@@ -695,21 +706,18 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
         	      override.parity,
         	      override.synchronous,
         	      override.delay);
-	}
-        else
+      } else
           setup[setup_count++] = override;
 	}
 #endif
 
 #ifdef SETUP1
-  if(setup_count<2)
-	{
+  if(setup_count<2) {
       struct aha152x_setup override = SETUP1;
 
       if(setup_count==0 || (override.io_port != setup[0].io_port))
-        if(!aha152x_checksetup(&override))
-	{
-                printk("\naha152x: SETUP1 (0x%x, %d, %d, %d, %d, %d, %d) invalid\n",
+      if(!aha152x_checksetup(&override)) {
+        printk("\naha152x: invalid override SETUP1={0x%x,%d,%d,%d,%d,%d,%d}\n",
         	       override.io_port,
         	       override.irq,
         	       override.scsiid,
@@ -717,15 +725,65 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
         	       override.parity,
         	       override.synchronous,
         	       override.delay);
+      } else
+        setup[setup_count++] = override;
     }
+#endif
+
+#if defined(MODULE)
+  if(setup_count<2 && aha152x[0]!=0) {
+    setup[setup_count].conf        = "";
+    setup[setup_count].io_port     = aha152x[0];
+    setup[setup_count].irq         = aha152x[1];
+    setup[setup_count].scsiid      = aha152x[2];
+    setup[setup_count].reconnect   = aha152x[3];
+    setup[setup_count].parity      = aha152x[4];
+    setup[setup_count].synchronous = aha152x[5];
+    setup[setup_count].delay       = aha152x[6];
+#ifdef DEBUG_AHA152X
+    setup[setup_count].debug       = aha152x[7];
+#endif
+    if(aha152x_checksetup(&setup[setup_count]))
+      setup_count++;
   else
-          setup[setup_count++] = override;
+      printk("\naha152x: invalid module argument aha152x=0x%x,%d,%d,%d,%d,%d,%d\n",
+             setup[setup_count].io_port,
+             setup[setup_count].irq,
+             setup[setup_count].scsiid,
+             setup[setup_count].reconnect,
+             setup[setup_count].parity,
+             setup[setup_count].synchronous,
+             setup[setup_count].delay);
+  }
+
+  if(setup_count<2 && aha152x1[0]!=0) {
+    setup[setup_count].conf        = "";
+    setup[setup_count].io_port     = aha152x1[0];
+    setup[setup_count].irq         = aha152x1[1];
+    setup[setup_count].scsiid      = aha152x1[2];
+    setup[setup_count].reconnect   = aha152x1[3];
+    setup[setup_count].parity      = aha152x1[4];
+    setup[setup_count].synchronous = aha152x1[5];
+    setup[setup_count].delay       = aha152x1[6];
+#ifdef DEBUG_AHA152X
+    setup[setup_count].debug       = aha152x1[7];
+#endif
+    if(aha152x_checksetup(&setup[setup_count]))
+      setup_count++;
+    else
+      printk("\naha152x: invalid module argument aha152x1=0x%x,%d,%d,%d,%d,%d,%d\n",
+             setup[setup_count].io_port,
+             setup[setup_count].irq,
+             setup[setup_count].scsiid,
+             setup[setup_count].reconnect,
+             setup[setup_count].parity,
+             setup[setup_count].synchronous,
+             setup[setup_count].delay);
     }
 #endif
   
 #if defined(AUTOCONF)
-  if(setup_count<2)
-    {
+  if(setup_count<2) {
 #if !defined(SKIP_BIOSTEST)
       ok=0;
       for(i=0; i < ADDRESS_COUNT && !ok; i++)
@@ -742,13 +800,13 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
       printk("aha152x: ");
 #endif /* !SKIP_BIOSTEST */
  
-      for(i=0; i<PORT_COUNT && setup_count<2; i++)
-            {
+    ok=0;
+    for(i=0; i<PORT_COUNT && setup_count<2; i++) {
               if((setup_count==1) && (setup[0].io_port == ports[i]))
                 continue;
 
-              if(aha152x_porttest(ports[i]))
-	{
+      if(aha152x_porttest(ports[i])) {
+        ok++;
                   setup[setup_count].io_port = ports[i];
               
                   conf.cf_port =
@@ -767,11 +825,12 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
                 }
 	}
 
+    if(ok)
       printk("auto configuration: ok, ");
     }
 #endif
 
-  printk("detection complete\n");
+  printk("detected %d controllers\n", setup_count);
 
   for(i=0; i<setup_count; i++)
     {
@@ -2772,11 +2831,11 @@ static int get_command(char *pos, Scsi_Cmnd *ptr)
   char *start = pos;
   int i;
   
-  SPRINTF("0x%08x: target=%d; lun=%d; cmnd=(",
+  SPRINTF("0x%08x: target=%d; lun=%d; cmnd=( ",
           (unsigned int) ptr, ptr->target, ptr->lun);
   
   for(i=0; i<COMMAND_SIZE(ptr->cmnd[0]); i++)
-    SPRINTF("0x%02x", ptr->cmnd[i]);
+    SPRINTF("0x%02x ", ptr->cmnd[i]);
   
   SPRINTF("); residual=%d; buffers=%d; phase |",
           ptr->SCp.this_residual, ptr->SCp.buffers_residual);

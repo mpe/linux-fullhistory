@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.11 1996/05/18 01:36:59 fritz Exp $
+/* $Id: isdn_net.c,v 1.13 1996/06/06 14:25:44 fritz Exp $
  *
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -21,6 +21,13 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_net.c,v $
+ * Revision 1.13  1996/06/06 14:25:44  fritz
+ * Changed loglevel of "incoming ... without OAD" message, since
+ * with audio support this is quite normal.
+ *
+ * Revision 1.12  1996/06/05 02:36:45  fritz
+ * Minor bugfixes by M. Hipp.
+ *
  * Revision 1.11  1996/05/18 01:36:59  fritz
  * Added spelling corrections and some minor changes
  * to stay in sync with kernel.
@@ -98,7 +105,7 @@ static int isdn_net_xmit(struct device *, isdn_net_local *, struct sk_buff *);
  
 extern void dev_purge_queues(struct device *dev);	/* move this to net/core/dev.c */
 
-char *isdn_net_revision = "$Revision: 1.11 $";
+char *isdn_net_revision = "$Revision: 1.13 $";
 
  /*
   * Code for raw-networking over ISDN
@@ -256,6 +263,15 @@ isdn_net_stat_callback(int idx, int cmd)
 				if ((lp->flags & ISDN_NET_CONNECTED) &&
 				    (!lp->dialstate)) {
 					lp->stats.tx_packets++;
+					if(lp->p_encap == ISDN_NET_ENCAP_SYNCPPP && lp->first_skb) {
+						if(!isdn_net_send_skb(&lp->netdev->dev,lp,lp->first_skb)) {
+							dev_kfree_skb(lp->first_skb,FREE_WRITE);
+							lp->first_skb = NULL;
+							mark_bh(NET_BH);
+						}
+						else
+							return 1;
+					}
                                         if (clear_bit(0,(void*)&(p->dev.tbusy)))
                                                 mark_bh(NET_BH);
 				}
@@ -719,9 +735,11 @@ isdn_net_send_skb(struct device *ndev, isdn_net_local *lp,
 	
 	lp->transcount += skb->len;
         ret = isdn_writebuf_skb_stub(lp->isdn_device, lp->isdn_channel, skb);
-	if (ret == skb->len)
+	if (ret == skb->len) {
 		clear_bit(0, (void *)&(ndev->tbusy));
-	return (!ret);
+		return 0;
+	}
+	return 1;
 }                                      
 	
 
@@ -1476,7 +1494,7 @@ isdn_net_find_icall(int di, int ch, int idx, char *num)
 	if (num[0] == ',') {
 		nr[0] = '0';
 		strncpy(&nr[1], num, 30);
-		printk(KERN_WARNING "isdn_net: Incoming call without OAD, assuming '0'\n");
+		printk(KERN_INFO "isdn_net: Incoming call without OAD, assuming '0'\n");
 	} else
 		strncpy(nr, num, 30);
 	s = strtok(nr, ",");

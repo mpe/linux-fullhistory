@@ -19,6 +19,7 @@ CONFIG_MODULES=y
 #
 CONFIG_NATIVE=y
 # CONFIG_ALPHA_AVANTI is not set
+# CONFIG_ALPHA_XL is not set
 # CONFIG_ALPHA_CABRIOLET is not set
 # CONFIG_ALPHA_EB66 is not set
 # CONFIG_ALPHA_EB66P is not set
@@ -27,10 +28,12 @@ CONFIG_ALPHA_EB164=y
 # CONFIG_ALPHA_PC164 is not set
 # CONFIG_ALPHA_JENSEN is not set
 # CONFIG_ALPHA_NONAME is not set
+# CONFIG_ALPHA_MIKASA is not set
+# CONFIG_ALPHA_ALCOR is not set
 # CONFIG_ALPHA_P2K is not set
 CONFIG_PCI=y
 CONFIG_ALPHA_EV5=y
-CONFIG_ALPHA_ALCOR=y
+CONFIG_ALPHA_CIA=y
 # CONFIG_SERIAL_ECHO is not set
 # CONFIG_TGA_CONSOLE is not set
 CONFIG_NET=y
@@ -45,7 +48,7 @@ CONFIG_BLK_DEV_FD=y
 # CONFIG_BLK_DEV_IDE is not set
 
 #
-# Please see drivers/block/README.ide for help/info on IDE drives
+# Please see Documentation/ide.txt for help/info on IDE drives
 #
 # CONFIG_BLK_DEV_HD_ONLY is not set
 
@@ -91,7 +94,7 @@ CONFIG_SKB_LARGE=y
 CONFIG_SCSI=y
 
 #
-# SCSI support type (disk, tape, CDrom)
+# SCSI support type (disk, tape, CD-ROM)
 #
 CONFIG_BLK_DEV_SD=y
 # CONFIG_CHR_DEV_ST is not set
@@ -107,33 +110,33 @@ CONFIG_SCSI_CONSTANTS=y
 #
 # SCSI low-level drivers
 #
-# CONFIG_SCSI_ADVANSYS is not set
+# CONFIG_SCSI_7000FASST is not set
 # CONFIG_SCSI_AHA152X is not set
 # CONFIG_SCSI_AHA1542 is not set
 # CONFIG_SCSI_AHA1740 is not set
 # CONFIG_SCSI_AIC7XXX is not set
+# CONFIG_SCSI_ADVANSYS is not set
+# CONFIG_SCSI_IN2000 is not set
+# CONFIG_SCSI_AM53C974 is not set
 # CONFIG_SCSI_BUSLOGIC is not set
 # CONFIG_SCSI_DTC3280 is not set
+# CONFIG_SCSI_EATA is not set
 # CONFIG_SCSI_EATA_DMA is not set
 # CONFIG_SCSI_EATA_PIO is not set
-# CONFIG_SCSI_U14_34F is not set
 # CONFIG_SCSI_FUTURE_DOMAIN is not set
 # CONFIG_SCSI_GENERIC_NCR5380 is not set
+# CONFIG_SCSI_NCR53C406A is not set
 CONFIG_SCSI_NCR53C7xx=y
 CONFIG_SCSI_NCR53C7xx_sync=y
 CONFIG_SCSI_NCR53C7xx_FAST=y
 # CONFIG_SCSI_NCR53C7xx_DISCONNECT is not set
-# CONFIG_SCSI_IN2000 is not set
+# CONFIG_SCSI_PPA is not set
 # CONFIG_SCSI_PAS16 is not set
 # CONFIG_SCSI_QLOGIC_FAS is not set
 # CONFIG_SCSI_SEAGATE is not set
 # CONFIG_SCSI_T128 is not set
+# CONFIG_SCSI_U14_34F is not set
 # CONFIG_SCSI_ULTRASTOR is not set
-# CONFIG_SCSI_7000FASST is not set
-# CONFIG_SCSI_EATA is not set
-# CONFIG_SCSI_NCR53C406A is not set
-# CONFIG_SCSI_PPA is not set
-# CONFIG_SCSI_AM53C974 is not set
 
 #
 # Network device support
@@ -184,7 +187,6 @@ CONFIG_NFS_FS=y
 CONFIG_ISO9660_FS=y
 # CONFIG_HPFS_FS is not set
 # CONFIG_SYSV_FS is not set
-# CONFIG_AFFS_FS is not set
 # CONFIG_UFS_FS is not set
 
 #
@@ -196,11 +198,12 @@ CONFIG_SERIAL=y
 # CONFIG_STALDRV is not set
 # CONFIG_RISCOM8 is not set
 # CONFIG_PRINTER is not set
+CONFIG_MOUSE=y
+# CONFIG_ATIXL_BUSMOUSE is not set
 # CONFIG_BUSMOUSE is not set
+# CONFIG_MS_BUSMOUSE is not set
 CONFIG_PSMOUSE=y
 # CONFIG_82C710_MOUSE is not set
-# CONFIG_MS_BUSMOUSE is not set
-# CONFIG_ATIXL_BUSMOUSE is not set
 # CONFIG_UMISC is not set
 # CONFIG_QIC02_TAPE is not set
 # CONFIG_FTAPE is not set

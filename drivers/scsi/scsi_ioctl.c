@@ -342,13 +342,13 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 	if(!dev->tagged_supported) return -EINVAL;
 	dev->tagged_queue = 1;
 	dev->current_tag = 1;
-	break;
+	return 0;
     case SCSI_IOCTL_TAGGED_DISABLE:
 	if(!suser())  return -EACCES;
 	if(!dev->tagged_supported) return -EINVAL;
 	dev->tagged_queue = 0;
 	dev->current_tag = 0;
-	break;
+	return 0;
     case SCSI_IOCTL_PROBE_HOST:
 	return ioctl_probe(dev->host, arg);
     case SCSI_IOCTL_SEND_COMMAND:

@@ -193,6 +193,13 @@ static inline void ack_irq(int irq)
 		/* .. then the master */
 		outb(0xE0 | irq, 0x20);
 	}
+#if defined(CONFIG_ALPHA_ALCOR)
+	/* on ALCOR, need to dismiss interrupt via GRU */
+	*(int *)GRU_INT_CLEAR = 0x80000000; 
+	mb();
+	*(int *)GRU_INT_CLEAR = 0x00000000;
+	mb();
+#endif /* CONFIG_ALPHA_ALCOR */
 }
 
 int request_irq(unsigned int irq, 

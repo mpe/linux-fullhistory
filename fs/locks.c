@@ -304,8 +304,8 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 /* warn a bit for now, but don't overdo it */
 {
 	static int count = 0;
-	if (count < 5) {
-		count++;
+	if (!count) {
+		count=1;
 		printk(KERN_WARNING
 		       "fcntl_setlk() called by process %d (%s) with broken flock() emulation\n",
 		       current->pid, current->comm);

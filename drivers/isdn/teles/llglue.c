@@ -1,6 +1,9 @@
-/* $Id: llglue.c,v 1.5 1996/05/31 00:58:47 fritz Exp $
+/* $Id: llglue.c,v 1.6 1996/06/03 20:03:39 fritz Exp $
  *
  * $Log: llglue.c,v $
+ * Revision 1.6  1996/06/03 20:03:39  fritz
+ * Fixed typos.
+ *
  * Revision 1.5  1996/05/31 00:58:47  fritz
  * Errata: Reverted change from rev 1.4.
  *

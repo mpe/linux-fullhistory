@@ -1,8 +1,9 @@
-/* $Id: isdn_audio.c,v 1.4 1996/05/17 03:48:01 fritz Exp $
+/* $Id: isdn_audio.c,v 1.6 1996/06/06 14:43:31 fritz Exp $
  *
  * Linux ISDN subsystem, audio conversion and compression (linklevel).
  *
  * Copyright 1994,95,96 by Fritz Elfert (fritz@wuemaus.franken.de)
+ * DTMF code (c) 1996 by Christian Mock (cm@kukuruz.ping.at)
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +20,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_audio.c,v $
+ * Revision 1.6  1996/06/06 14:43:31  fritz
+ * Changed to support DTMF decoding on audio playback also.
+ *
+ * Revision 1.5  1996/06/05 02:24:08  fritz
+ * Added DTMF decoder for audio mode.
+ *
  * Revision 1.4  1996/05/17 03:48:01  fritz
  * Removed some test statements.
  * Added revision string.
@@ -38,8 +45,9 @@
 #include <linux/module.h>
 #include <linux/isdn.h>
 #include "isdn_audio.h"
+#include "isdn_common.h"
 
-char *isdn_audio_revision        = "$Revision: 1.4 $";
+char *isdn_audio_revision        = "$Revision: 1.6 $";
 
 /*
  * Misc. lookup-tables.
@@ -189,6 +197,46 @@ static char isdn_audio_ulaw_to_alaw[] = {
         0x8a, 0x8a, 0x6a, 0x6a, 0xea, 0xea, 0x2a, 0x2a
 };
 
+#define NCOEFF           16     /* number of frequencies to be analyzed       */
+#define DTMF_TRESH    50000     /* above this is dtmf                         */
+#define SILENCE_TRESH   100     /* below this is silence                      */
+#define H2_TRESH      10000     /* 2nd harmonic                               */
+#define AMP_BITS          9     /* bits per sample, reduced to avoid overflow */
+#define LOGRP             0
+#define HIGRP             1
+
+typedef struct {
+        int grp;        /* low/high group     */
+        int k;          /* k                  */
+        int k2;         /* k fuer 2. harmonic */
+} dtmf_t;
+
+/* For DTMF recognition:
+ * 2 * cos(2 * PI * k / N) precalculated for all k
+ */
+static int cos2pik[NCOEFF] = {
+        55812,  29528, 53603,  24032, 51193,  14443, 48590,   6517,
+        38113, -21204, 33057, -32186, 25889, -45081, 18332, -55279
+};
+
+static dtmf_t dtmf_tones[8] = {
+        { LOGRP,  0,  1 }, /*  697 Hz */
+        { LOGRP,  2,  3 }, /*  770 Hz */
+        { LOGRP,  4,  5 }, /*  852 Hz */
+        { LOGRP,  6,  7 }, /*  941 Hz */
+        { HIGRP,  8,  9 }, /* 1209 Hz */
+        { HIGRP, 10, 11 }, /* 1336 Hz */
+        { HIGRP, 12, 13 }, /* 1477 Hz */
+        { HIGRP, 14, 15 }  /* 1633 Hz */
+};
+
+static char dtmf_matrix[4][4] = {
+        {'1', '2', '3', 'A'},
+        {'4', '5', '6', 'B'},
+        {'7', '8', '9', 'C'},
+        {'*', '0', '#', 'D'}
+};
+
 #if ((CPU == 386) || (CPU == 486) || (CPU == 586))
 static inline void
 isdn_audio_tlookup(const void *table, void *buff, unsigned long n)
@@ -314,21 +362,28 @@ isdn_audio_put_bits (int data, int nbits, adpcm_state *s,
 }
 
 adpcm_state *
-isdn_audio_adpcm_init(int nbits)
+isdn_audio_adpcm_init(adpcm_state *s, int nbits)
 {
-static adpcm_state *s;
-
-#ifdef ATEST
-        s = (adpcm_state *) malloc(sizeof(adpcm_state));
-#else
-        s = (adpcm_state *) kmalloc(sizeof(adpcm_state), GFP_ATOMIC);
-#endif
+        if (!s)
+                s = (adpcm_state *) kmalloc(sizeof(adpcm_state), GFP_ATOMIC);
         if (s) {
                 s->a     = 0;
                 s->d     = 5;
                 s->word  = 0;
                 s->nleft = 0;
                 s->nbits = nbits;
+        }
+        return s;
+}
+
+dtmf_state *
+isdn_audio_dtmf_init(dtmf_state *s)
+{
+        if (!s)
+                s = (dtmf_state *) kmalloc(sizeof(dtmf_state), GFP_ATOMIC);
+        if (s) {
+                s->idx   = 0;
+                s->last  = ' ';
         }
         return s;
 }
@@ -425,4 +480,143 @@ isdn_audio_xlaw2adpcm (adpcm_state *s, int fmt, unsigned char *in,
 	s->d = d;
         return olen;
 }
+
+/*
+ * Goertzel algorithm.
+ * See http://ptolemy.eecs.berkeley.edu/~pino/Ptolemy/papers/96/dtmf_ict/
+ * for more info.
+ * Result is stored into an sk_buff and queued up for later
+ * evaluation.
+ */
+void
+isdn_audio_goertzel(int *sample, modem_info *info) {
+        int sk, sk1, sk2;
+        int k, n;
+        struct sk_buff *skb;
+        int *result;
+
+        skb = dev_alloc_skb(sizeof(int) * NCOEFF);
+        if (!skb) {
+                printk(KERN_WARNING
+                       "isdn_audio: Could not alloc DTMF result for ttyI%d\n",
+                       info->line);
+                return;
+        }
+        result = (int *)skb_put(skb, sizeof(int) * NCOEFF);
+        skb->free = 1;
+        skb->users = 0;
+        for (k = 0; k < NCOEFF; k++) {
+                sk = sk1 = sk2 = 0;
+                for (n = 0; n < DTMF_NPOINTS; n++) {
+                        sk = sample[n] + ((cos2pik[k] * sk1) >> 15) - sk2;
+                        sk2 = sk1;
+                        sk1 = sk;
+                }
+                result[k] =
+                        ((sk * sk) >> AMP_BITS) - 
+                        ((((cos2pik[k] * sk) >> 15) * sk2) >> AMP_BITS) +
+                        ((sk2 * sk2) >> AMP_BITS);
+        }
+        skb_queue_tail(&info->dtmf_queue, skb);
+        isdn_timer_ctrl(ISDN_TIMER_MODEMREAD, 1);
+}
+
+void
+isdn_audio_eval_dtmf(modem_info *info)
+{
+        struct sk_buff *skb;
+        int *result;
+        dtmf_state *s;
+        int silence;
+        int i;
+        int di;
+        int ch;
+        unsigned long flags;
+        int grp[2];
+        char what;
+        char *p;
+
+        while ((skb = skb_dequeue(&info->dtmf_queue))) {
+                result = (int *)skb->data;
+                s = info->dtmf_state;
+                grp[LOGRP] = grp[HIGRP] = -2;
+                silence = 0;
+                for(i = 0; i < 8; i++) {
+                        if ((result[dtmf_tones[i].k] > DTMF_TRESH) &&
+                            (result[dtmf_tones[i].k2] < H2_TRESH)    )
+                                grp[dtmf_tones[i].grp] = (grp[dtmf_tones[i].grp] == -2)?i:-1;
+                        else
+                                if ((result[dtmf_tones[i].k] < SILENCE_TRESH) &&
+                                    (result[dtmf_tones[i].k2] < SILENCE_TRESH)  )
+                                        silence++;
+                }
+                if(silence == 8)
+                        what = ' ';
+                else {
+                        if((grp[LOGRP] >= 0) && (grp[HIGRP] >= 0)) {
+                                what = dtmf_matrix[grp[LOGRP]][grp[HIGRP] - 4];
+                                if(s->last != ' ' && s->last != '.')
+                                        s->last = what;  /* min. 1 non-DTMF between DTMF */
+                        } else
+                                what = '.';
+                }
+                if ((what != s->last) && (what != ' ') && (what != '.')) {
+                        printk(KERN_DEBUG "dtmf: tt='%c'\n", what);
+                        p = skb->data;
+                        *p++ = 0x10;
+                        *p = what;
+                        skb_trim(skb, 2);
+                        save_flags(flags);
+                        cli();
+                        di = info->isdn_driver;
+                        ch = info->isdn_channel;
+                        __skb_queue_tail(&dev->drv[di]->rpqueue[ch], skb);
+                        dev->drv[di]->rcvcount[ch] += 2;
+                        restore_flags(flags);
+                        /* Schedule dequeuing */
+                        if ((dev->modempoll) && (info->rcvsched))
+                                isdn_timer_ctrl(ISDN_TIMER_MODEMREAD, 1);
+                        wake_up_interruptible(&dev->drv[di]->rcv_waitq[ch]);
+                } else
+                        kfree_skb(skb, FREE_READ);
+                s->last = what;
+        }
+}
+
+/*
+ * Decode DTMF tones, queue result in separate sk_buf for
+ * later examination.
+ * Parameters:
+ *   s    = pointer to state-struct.
+ *   buf  = input audio data
+ *   len  = size of audio data.
+ *   fmt  = audio data format (0 = ulaw, 1 = alaw)
+ */
+void
+isdn_audio_calc_dtmf(modem_info *info, unsigned char *buf, int len, int fmt)
+{
+        dtmf_state *s = info->dtmf_state;
+        int i;
+        int c;
+
+        while (len) {
+                c = MIN(len, (DTMF_NPOINTS - s->idx));
+                if (c <= 0)
+                        break;
+                for (i = 0; i < c; i++) {
+                        if (fmt)
+                                s->buf[s->idx++] =
+                                        isdn_audio_alaw_to_s16[*buf++] >> (15 - AMP_BITS);
+                        else
+                                s->buf[s->idx++] =
+                                        isdn_audio_ulaw_to_s16[*buf++] >> (15 - AMP_BITS);
+                }
+                if (s->idx == DTMF_NPOINTS) {
+                        isdn_audio_goertzel(s->buf, info);
+                        s->idx = 0;
+                }
+                len -= c;
+        }
+}
+
 

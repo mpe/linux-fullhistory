@@ -1040,6 +1040,10 @@ int change_root(kdev_t new_root_dev,const char *put_old)
 	old_root = current->fs->root;
 	old_pwd = current->fs->pwd;
 	old_root_dev = ROOT_DEV;
+	if (!fs_may_mount(new_root_dev)) {
+		printk(KERN_CRIT "New root is busy. Staying in initrd.\n");
+		return -EBUSY;
+	}
 	ROOT_DEV = new_root_dev;
 	do_mount_root();
 	old_fs = get_fs();

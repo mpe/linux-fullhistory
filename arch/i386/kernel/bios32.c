@@ -441,14 +441,6 @@ unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end)
 				bios32_indirect.address = bios32_entry = check->fields.entry;
 				printk ("pcibios_init : BIOS32 Service Directory entry at 0x%lx\n", bios32_entry);
 			}
-		} else {
-			printk ("pcibios_init : multiple entries, mail drew@colorado.edu\n");
-			/*
-			 * Jeremy Fitzhardinge reports at least one PCI BIOS
-			 * with two different service directories, and as both
-			 * worked for him, we'll just mention the fact, and
-			 * not actually disallow it..
-			 */
 		}
 	}
 #ifdef CONFIG_PCI

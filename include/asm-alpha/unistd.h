@@ -164,6 +164,7 @@
 #define __NR_afs_syscall		338
 #define __NR_uname			339
 #define __NR_nanosleep			340
+#define __NR_mremap			341
 
 #ifdef __LIBRARY__
 

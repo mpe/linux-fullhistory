@@ -2,12 +2,19 @@ HOSTCFLAGS:=$(HOSTCFLAGS) -g -Wall
 HEADER=header.tk
 TAIL=tail.tk
 
-SOUNDSCRIPT=${TOPDIR}/drivers/sound/Config.in
-
-${SOUNDSCRIPT}: ${TOPDIR}/drivers/sound/configure.c
+# We allow the Makefile in drivers/sound to decide when to rebuild its
+# files, rather than trying to second-guess it like we did before.
+#
+soundscript:
 	make -C ${TOPDIR}/drivers/sound mkscript
+	@echo
 
-kconfig.tk: ${SOUNDSCRIPT} ${TOPDIR}/Makefile ../arch/${ARCH}/config.in \
+# There is probably a better way to decide when to rebuild kconfig.tk; this
+# one won't catch every last change to the various Config.in files.  However,
+# the reliance on ${TOPDIR}/Makefile makes sure we at least rebuild when the
+# kernel version number changes.
+#
+kconfig.tk: soundscript ${TOPDIR}/Makefile ${TOPDIR}/arch/${ARCH}/config.in \
 		tkparse ${HEADER} ${TAIL}
 	./tkparse < ../arch/${ARCH}/config.in  > kconfig.tmp
 	@if [ -f /usr/local/bin/wish ];	then \

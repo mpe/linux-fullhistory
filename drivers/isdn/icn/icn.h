@@ -1,4 +1,4 @@
-/* $Id: icn.h,v 1.17 1996/05/18 00:47:04 fritz Exp $
+/* $Id: icn.h,v 1.19 1996/06/06 13:58:35 fritz Exp $
  *
  * ISDN lowlevel-module for the ICN active ISDN-Card.
  *
@@ -19,6 +19,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: icn.h,v $
+ * Revision 1.19  1996/06/06 13:58:35  fritz
+ * Changed code to be architecture independent
+ *
+ * Revision 1.18  1996/06/03 19:59:30  fritz
+ * Removed include of config.h
+ *
  * Revision 1.17  1996/05/18 00:47:04  fritz
  * Removed callback debug code.
  *
@@ -276,46 +282,50 @@ char *icn_id2 = "\0";
 #define ICN_BANK   (card->port+3)
 
 /* Return true, if there is a free transmit-buffer */
-#define sbfree (((dev.shmem->data_control.scns+1) & 0xf) != \
-                dev.shmem->data_control.scnr)
+#define sbfree (((readb(&dev.shmem->data_control.scns)+1) & 0xf) != \
+                readb(&dev.shmem->data_control.scnr))
 
 /* Switch to next transmit-buffer */
-#define sbnext (dev.shmem->data_control.scns = \
-               ((dev.shmem->data_control.scns+1) & 0xf))
+#define sbnext (writeb((readb(&dev.shmem->data_control.scns)+1) & 0xf, \
+                       &dev.shmem->data_control.scns))
 
 /* Shortcuts for transmit-buffer-access */
 #define sbuf_n dev.shmem->data_control.scns
-#define sbuf_d dev.shmem->data_buffers.send_buf[sbuf_n].data
-#define sbuf_l dev.shmem->data_buffers.send_buf[sbuf_n].length
-#define sbuf_f dev.shmem->data_buffers.send_buf[sbuf_n].endflag
+#define sbuf_d dev.shmem->data_buffers.send_buf[readb(&sbuf_n)].data
+#define sbuf_l dev.shmem->data_buffers.send_buf[readb(&sbuf_n)].length
+#define sbuf_f dev.shmem->data_buffers.send_buf[readb(&sbuf_n)].endflag
 
 /* Return true, if there is receive-data is available */
-#define rbavl  (dev.shmem->data_control.ecnr != \
-                dev.shmem->data_control.ecns)
+#define rbavl  (readb(&dev.shmem->data_control.ecnr) != \
+                readb(&dev.shmem->data_control.ecns))
 
 /* Switch to next receive-buffer */
-#define rbnext (dev.shmem->data_control.ecnr = \
-               ((dev.shmem->data_control.ecnr+1) & 0xf))
+#define rbnext (writeb((readb(&dev.shmem->data_control.ecnr)+1) & 0xf, \
+                       &dev.shmem->data_control.ecnr))
 
 /* Shortcuts for receive-buffer-access */
 #define rbuf_n dev.shmem->data_control.ecnr
-#define rbuf_d dev.shmem->data_buffers.receive_buf[rbuf_n].data
-#define rbuf_l dev.shmem->data_buffers.receive_buf[rbuf_n].length
-#define rbuf_f dev.shmem->data_buffers.receive_buf[rbuf_n].endflag
+#define rbuf_d dev.shmem->data_buffers.receive_buf[readb(&rbuf_n)].data
+#define rbuf_l dev.shmem->data_buffers.receive_buf[readb(&rbuf_n)].length
+#define rbuf_f dev.shmem->data_buffers.receive_buf[readb(&rbuf_n)].endflag
 
 /* Shortcuts for command-buffer-access */
 #define cmd_o (dev.shmem->comm_control.pcio_o)
 #define cmd_i (dev.shmem->comm_control.pcio_i)
 
 /* Return free space in command-buffer */
-#define cmd_free ((cmd_i>=cmd_o)?0x100-cmd_i+cmd_o:cmd_o-cmd_i)
+#define cmd_free ((readb(&cmd_i)>=readb(&cmd_o))? \
+                  0x100-readb(&cmd_i)+readb(&cmd_o): \
+                  readb(&cmd_o)-readb(&cmd_i))
 
 /* Shortcuts for message-buffer-access */
 #define msg_o (dev.shmem->comm_control.iopc_o)
 #define msg_i (dev.shmem->comm_control.iopc_i)
 
 /* Return length of Message, if avail. */
-#define msg_avail ((msg_o>msg_i)?0x100-msg_o+msg_i:msg_i-msg_o)
+#define msg_avail ((readb(&msg_o)>readb(&msg_i))? \
+                   0x100-readb(&msg_o)+readb(&msg_i): \
+                   readb(&msg_i)-readb(&msg_o))
 
 #define CID (card->interface.id)
 
