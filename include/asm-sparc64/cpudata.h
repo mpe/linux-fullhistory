@@ -19,7 +19,7 @@ typedef struct {
 
 	/* Dcache line 2 */
 	unsigned int	pgcache_size;
-	unsigned int	pgdcache_size;
+	unsigned int	__pad1;
 	unsigned long	*pte_cache[2];
 	unsigned long	*pgd_cache;
 } cpuinfo_sparc;

@@ -806,48 +806,6 @@ static void cheetah_flush_ecache_line(unsigned long physaddr)
 			       "i" (ASI_PHYS_USE_EC));
 }
 
-#ifdef CONFIG_SMP
-unsigned long __init cheetah_tune_scheduling(void)
-{
-	unsigned long tick1, tick2, raw;
-	unsigned long flush_base = ecache_flush_physbase;
-	unsigned long flush_linesize = ecache_flush_linesize;
-	unsigned long flush_size = ecache_flush_size;
-
-	/* Run through the whole cache to guarantee the timed loop
-	 * is really displacing cache lines.
-	 */
-	__asm__ __volatile__("1: subcc	%0, %4, %0\n\t"
-			     "   bne,pt	%%xcc, 1b\n\t"
-			     "    ldxa	[%2 + %0] %3, %%g0\n\t"
-			     : "=&r" (flush_size)
-			     : "0" (flush_size), "r" (flush_base),
-			       "i" (ASI_PHYS_USE_EC), "r" (flush_linesize));
-
-	/* The flush area is 2 X Ecache-size, so cut this in half for
-	 * the timed loop.
-	 */
-	flush_base = ecache_flush_physbase;
-	flush_linesize = ecache_flush_linesize;
-	flush_size = ecache_flush_size >> 1;
-
-	tick1 = tick_ops->get_tick();
-
-	__asm__ __volatile__("1: subcc	%0, %4, %0\n\t"
-			     "   bne,pt	%%xcc, 1b\n\t"
-			     "    ldxa	[%2 + %0] %3, %%g0\n\t"
-			     : "=&r" (flush_size)
-			     : "0" (flush_size), "r" (flush_base),
-			       "i" (ASI_PHYS_USE_EC), "r" (flush_linesize));
-
-	tick2 = tick_ops->get_tick();
-
-	raw = (tick2 - tick1);
-
-	return (raw - (raw >> 2));
-}
-#endif
-
 /* Unfortunately, the diagnostic access to the I-cache tags we need to
  * use to clear the thing interferes with I-cache coherency transactions.
  *
