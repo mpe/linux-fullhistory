@@ -21,9 +21,9 @@ ENTRY(empty_zero_page)
 	.long	0x00360000	/* INITRD_START */
 	.long	0x000a0000	/* INITRD_SIZE */
 	.long	0
+	.balign 4096,0,4096
 
 	.text	
-	.balign 4096,0,4096
 /*
  * Condition at the entry of _stext:
  *

@@ -18,7 +18,8 @@
 #include <asm/machvec.h>
 
 #ifndef MAX_HWIFS
-#define MAX_HWIFS	1
+/* Should never have less than 2, ide-pci.c(ide_match_hwif) requires it */
+#define MAX_HWIFS	2
 #endif
 
 #define ide__sti()	__sti()

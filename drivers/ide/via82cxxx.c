@@ -1,5 +1,5 @@
 /*
- * $Id: via82cxxx.c,v 2.1b 2000/09/20 23:19:60 vojtech Exp $
+ * $Id: via82cxxx.c,v 2.1d 2000/10/01 10:01:00 vojtech Exp $
  *
  *  Copyright (c) 2000 Vojtech Pavlik
  *
@@ -192,7 +192,7 @@ static int via_get_info(char *buffer, char **addr, off_t offset, int count)
 
 	via_print("----------VIA BusMastering IDE Configuration----------------");
 
-	via_print("Driver Version:                     2.1b");
+	via_print("Driver Version:                     2.1d");
 
 	pci_read_config_byte(isa_dev, PCI_REVISION_ID, &t);
 	via_print("South Bridge:                       VIA %s rev %#x", via_isa_bridges[via_config].name, t);
@@ -334,7 +334,7 @@ static int via_set_speed(ide_drive_t *drive, byte speed)
  */
 
 	switch(via_isa_bridges[via_config].speed) {
-		case XFER_UDMA_2: t = via_timing[i].udma ? (0x60 | (FIT(via_timing[i].udma, 2, 5) - 2)) : 0x03; break;
+		case XFER_UDMA_2: t = via_timing[i].udma ? (0xe0 | (FIT(via_timing[i].udma, 2, 5) - 2)) : 0x03; break;
 		case XFER_UDMA_4: t = via_timing[i].udma ? (0xe8 | (FIT(via_timing[i].udma, 2, 9) - 2)) : 0x0f; break;
         }
 
@@ -588,7 +588,7 @@ unsigned int __init pci_init_via82cxxx(struct pci_dev *dev, const char *name)
 
 unsigned int __init ata66_via82cxxx(ide_hwif_t *hwif)
 {
-	return ((via_enabled && via_ata66) >> hwif->channel) & 1;
+	return ((via_enabled & via_ata66) >> hwif->channel) & 1;
 }
 
 void __init ide_init_via82cxxx(ide_hwif_t *hwif)

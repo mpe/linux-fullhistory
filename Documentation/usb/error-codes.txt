@@ -46,6 +46,9 @@ USB_ST_BANDWIDTH_ERROR
 -ENOSPC		The host controller's bandwidth is already consumed and
 		this request would push it past its allowed limit.
 
+-ESHUTDOWN	The host controller has been disabled due to some
+		problem that could not be worked around.
+
 
 **************************************************************************
 *                   Error codes returned by in urb->status               *
@@ -92,6 +95,8 @@ USB_ST_PARTIAL_ERROR
 
 USB_ST_URB_INVALID_ERROR
 -EINVAL			ISO madness, if this happens: Log off and go home
+
+-ECONNRESET		the URB is being unlinked asynchronously
 
 **************************************************************************
 *              Error codes returned by usbcore-functions                 *

@@ -131,4 +131,5 @@ pci_class_name(u32 class)
 	return NULL;
 }
 
-#endif
+#endif /* CONFIG_PCI_NAMES */
+

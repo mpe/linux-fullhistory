@@ -91,6 +91,7 @@ extern void age_page_up(struct page *);
 extern void age_page_up_nolock(struct page *);
 extern void age_page_down(struct page *);
 extern void age_page_down_nolock(struct page *);
+extern void age_page_down_ageonly(struct page *);
 extern void deactivate_page(struct page *);
 extern void deactivate_page_nolock(struct page *);
 extern void activate_page(struct page *);

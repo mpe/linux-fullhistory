@@ -221,7 +221,6 @@ static int device_reset( Scsi_Cmnd *srb )
 static int bus_reset( Scsi_Cmnd *srb )
 {
 	struct us_data *us = (struct us_data *)srb->host->hostdata[0];
-	int result;
 	int i;
 
 	/* we use the usb_reset_device() function to handle this for us */

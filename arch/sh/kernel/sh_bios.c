@@ -1,4 +1,4 @@
-/* $Id: sh_bios.c,v 1.2 2000/07/26 04:37:32 gniibe Exp $
+/* $Id: sh_bios.c,v 1.3 2000/09/30 03:43:30 gniibe Exp $
  *
  *  linux/arch/sh/kernel/sh_bios.c
  *  C interface for trapping into the standard LinuxSH BIOS.
@@ -20,11 +20,11 @@
 
 static __inline__ long sh_bios_call(long func, long arg0, long arg1, long arg2, long arg3)
 {
-    register long r0 __asm__("$r0") = func;
-    register long r4 __asm__("$r4") = arg0;
-    register long r5 __asm__("$r5") = arg1;
-    register long r6 __asm__("$r6") = arg2;
-    register long r7 __asm__("$r7") = arg3;
+    register long r0 __asm__("r0") = func;
+    register long r4 __asm__("r4") = arg0;
+    register long r5 __asm__("r5") = arg1;
+    register long r6 __asm__("r6") = arg2;
+    register long r7 __asm__("r7") = arg3;
     __asm__ __volatile__("trapa	#0x3f"
 	 : "=z" (r0)
 	 : "0" (r0), "r" (r4), "r" (r5), "r" (r6), "r" (r7)

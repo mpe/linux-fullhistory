@@ -705,7 +705,7 @@ static void usb_find_drivers(struct usb_device *dev)
 		dbg("unhandled interfaces on device");
 
 	if (!claimed) {
-		warn("USB device %d (prod/vend 0x%x/0x%x) is not claimed by any active driver.",
+		warn("USB device %d (vend/prod 0x%x/0x%x) is not claimed by any active driver.",
 			dev->devnum,
 			dev->descriptor.idVendor,
 			dev->descriptor.idProduct);
@@ -1205,7 +1205,7 @@ int usb_parse_configuration(struct usb_device *dev, struct usb_config_descriptor
 	config->interface = (struct usb_interface *)
 		kmalloc(config->bNumInterfaces *
 		sizeof(struct usb_interface), GFP_KERNEL);
-	dbg("kmalloc IF %p, numif %i",config->interface,config->bNumInterfaces);
+	dbg("kmalloc IF %p, numif %i", config->interface, config->bNumInterfaces);
 	if (!config->interface) {
 		err("out of memory");
 		return -1;	
@@ -1467,7 +1467,7 @@ void usb_connect(struct usb_device *dev)
 	int devnum;
 	// FIXME needs locking for SMP!!
 	/* why? this is called only from the hub thread, 
-	 * which hopefully doesn't run on multiple CPU's simulatenously 8-)
+	 * which hopefully doesn't run on multiple CPU's simultaneously 8-)
 	 */
 	dev->descriptor.bMaxPacketSize0 = 8;  /* Start off at 8 bytes  */
 	devnum = find_next_zero_bit(dev->bus->devmap.devicemap, 128, 1);
@@ -1876,7 +1876,8 @@ int usb_new_device(struct usb_device *dev)
 
 	err = usb_set_address(dev);
 	if (err < 0) {
-		err("USB device not accepting new address (error=%d)", err);
+		err("USB device not accepting new address=%d (error=%d)",
+			dev->devnum, err);
 		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
 		dev->devnum = -1;
 		return 1;
@@ -1889,7 +1890,7 @@ int usb_new_device(struct usb_device *dev)
 		if (err < 0)
 			err("USB device not responding, giving up (error=%d)", err);
 		else
-			err("USB device descriptor short read (expected %i, got %i)",8,err);
+			err("USB device descriptor short read (expected %i, got %i)", 8, err);
 		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
 		dev->devnum = -1;
 		return 1;
@@ -1902,7 +1903,8 @@ int usb_new_device(struct usb_device *dev)
 		if (err < 0)
 			err("unable to get device descriptor (error=%d)", err);
 		else
-			err("USB device descriptor short read (expected %i, got %i)", sizeof(dev->descriptor), err);
+			err("USB device descriptor short read (expected %i, got %i)",
+				sizeof(dev->descriptor), err);
 	
 		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
 		dev->devnum = -1;
@@ -1911,7 +1913,8 @@ int usb_new_device(struct usb_device *dev)
 
 	err = usb_get_configuration(dev);
 	if (err < 0) {
-		err("unable to get configuration (error=%d)", err);
+		err("unable to get device %d configuration (error=%d)",
+			dev->devnum, err);
 		usb_destroy_configuration(dev);
 		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
 		dev->devnum = -1;
@@ -1921,7 +1924,8 @@ int usb_new_device(struct usb_device *dev)
 	/* we set the default configuration here */
 	err = usb_set_configuration(dev, dev->config[0].bConfigurationValue);
 	if (err) {
-		err("failed to set default configuration (error=%d)", err);
+		err("failed to set device %d default configuration (error=%d)",
+			dev->devnum, err);
 		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
 		dev->devnum = -1;
 		return 1;

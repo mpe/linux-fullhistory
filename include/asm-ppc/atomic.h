@@ -5,8 +5,6 @@
 #ifndef _ASM_PPC_ATOMIC_H_ 
 #define _ASM_PPC_ATOMIC_H_
 
-#include <linux/config.h>
-
 typedef struct { volatile int counter; } atomic_t;
 
 #define ATOMIC_INIT(i)	{ (i) }

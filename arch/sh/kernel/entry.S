@@ -14,7 +14,12 @@
 #include <linux/linkage.h>
 #include <linux/config.h>
 
-#define COMPAT_OLD_SYSCALL_ABI 1
+
+/*
+ * Define this to turn on compatibility with the previous
+ * system call ABI.  This feature is not properly maintained.
+ */
+#undef COMPAT_OLD_SYSCALL_ABI
 
 ! NOTE:
 ! GNU as (as of 2.9.1) changes bf/s into bt/s and bra, when the address
@@ -27,6 +32,12 @@
  *
  * NOTE: This code handles signal-recognition, which happens every time
  * after a timer-interrupt and after each system call.
+ *
+ * NOTE: This code uses a convention that instructions in the delay slot
+ * of a transfer-control instruction are indented by an extra space, thus:
+ *
+ *    jmp	@$k0	    ! control-transfer instruction
+ *     ldc	$k1, $ssr   ! delay slot
  *
  * Stack layout in 'ret_from_syscall':
  * 	ptrace needs to have all regs on the stack.
@@ -58,6 +69,7 @@ PT_TRACESYS  = 0x00000002
 PF_USEDFPU   = 0x00100000
 
 ENOSYS = 38
+EINVAL = 22
 
 #if defined(__sh3__)
 TRA     = 0xffffffd0
@@ -76,7 +88,14 @@ MMU_TEA = 0xff00000c		! TLB Exception Address Register
 #endif
 
 /* Offsets to the stack */
-R0         =  0		/* Return value */
+R0         =  0		/* Return value. New ABI also arg4 */
+R1         =  4     	/* New ABI: arg5 */
+R2         =  8     	/* New ABI: arg6 */
+R3         =  12     	/* New ABI: syscall_nr */
+R4         =  16     	/* New ABI: arg0 */
+R5         =  20     	/* New ABI: arg1 */
+R6         =  24     	/* New ABI: arg2 */
+R7         =  28     	/* New ABI: arg3 */
 SP	   =  (15*4)
 SR	   =  (16*4+8)
 SYSCALL_NR =  (16*4+6*4)
@@ -132,7 +151,6 @@ SYSCALL_NR =  (16*4+6*4)
 tlb_miss_load:
 	mov.l	2f, $r0
 	mov.l	@$r0, $r6
-	STI()
 	mov	$r15, $r4
 	mov.l	1f, $r0
 	jmp	@$r0
@@ -142,7 +160,6 @@ tlb_miss_load:
 tlb_miss_store:
 	mov.l	2f, $r0
 	mov.l	@$r0, $r6
-	STI()
 	mov	$r15, $r4
 	mov.l	1f, $r0
 	jmp	@$r0
@@ -152,7 +169,6 @@ tlb_miss_store:
 initial_page_write:
 	mov.l	2f, $r0
 	mov.l	@$r0, $r6
-	STI()
 	mov	$r15, $r4
 	mov.l	1f, $r0
 	jmp	@$r0
@@ -162,7 +178,6 @@ initial_page_write:
 tlb_protection_violation_load:
 	mov.l	2f, $r0
 	mov.l	@$r0, $r6
-	STI()
 	mov	$r15, $r4
 	mov.l	1f, $r0
 	jmp	@$r0
@@ -172,14 +187,13 @@ tlb_protection_violation_load:
 tlb_protection_violation_store:
 	mov.l	2f, $r0
 	mov.l	@$r0, $r6
-	STI()
 	mov	$r15, $r4
 	mov.l	1f, $r0
 	jmp	@$r0
 	 mov	#1, $r5
 
 	.align 2
-1:	.long	SYMBOL_NAME(do_page_fault)
+1:	.long	SYMBOL_NAME(__do_page_fault)
 2:	.long	MMU_TEA
 
 #if defined(CONFIG_DEBUG_KERNEL_WITH_GDB_STUB) || defined(CONFIG_SH_STANDARD_BIOS)
@@ -249,9 +263,6 @@ error:
 	.align	2
 1:	.long	SYMBOL_NAME(do_exception_error)
 
-badsys:	mov	#-ENOSYS, $r0
-	rts			! go to ret_from_syscall..
-	 mov.l	$r0, @(R0,$r15)
 
 !
 !
@@ -291,7 +302,7 @@ ENTRY(ret_from_fork)
  */
 
 system_call:
-	mov.l	1f, $r9
+	mov.l	__TRA, $r9
 	mov.l	@$r9, $r8
 	!
 	! Is the trap argument >= 0x20? (TRA will be >= 0x80)
@@ -304,120 +315,158 @@ system_call:
 	mov	#SYSCALL_NR, $r14
 	add	$r15, $r14
 	!
-	mov	#0x40, $r9
 #ifdef COMPAT_OLD_SYSCALL_ABI
+	mov	#0x40, $r9
 	cmp/hs	$r9, $r8
-	mov	$r0, $r10
-	bf/s	0f
-	 mov	$r0, $r9
+	bf/s	old_abi_system_call
+	 nop
 #endif
 	! New Syscall ABI
 	add	#-0x40, $r8
 	shlr2	$r8
 	shll8	$r8
-	shll8	$r8
+	shll8	$r8 	    	! $r8 = num_args<<16
 	mov	$r3, $r10
 	or	$r8, $r10	! Encode syscall # and # of arguments
-	!
-	mov	$r3, $r9
-	mov	#0, $r8
-0:
 	mov.l	$r10, @$r14	! set syscall_nr
 	STI()
+	!
+	stc	$k_current, $r11
+	mov.l	@(tsk_ptrace,$r11), $r10	! Is current PTRACE_SYSCALL'd?
+	mov	#PT_TRACESYS, $r11
+	tst	$r11, $r10
+	bt	5f
+	!                     	Yes it is traced.
+	mov.l	__syscall_trace, $r11	! Call syscall_trace() which notifies
+	jsr	@$r11	    	    	! superior (will chomp $R[0-7])
+	 nop
+	!			Reload $R0-$R4 from kernel stack, where the
+	!   	    	    	parent may have modified them using
+	!   	    	    	ptrace(POKEUSR).  (Note that $R0-$R2 are
+	!   	    	    	used by the system call handler directly
+	!   	    	    	from the kernel stack anyway, so don't need
+	!   	    	    	to be reloaded here.)  This allows the parent
+	!   	    	    	to rewrite system calls and args on the fly.
+	mov.l	@(R4,$r15), $r4   ! arg0
+	mov.l	@(R5,$r15), $r5
+	mov.l	@(R6,$r15), $r6
+	mov.l	@(R7,$r15), $r7   ! arg3
+	mov.l	@(R3,$r15), $r3   ! syscall_nr
+	!   	    	    Arrange for syscall_trace() to be called
+	!   	    	    again as the system call returns.
+	mov.l	__syscall_ret_trace, $r10
+	bra	6f
+	 lds	$r10, $pr
+	!   	    	    No it isn't traced.
+	!   	    	    Arrange for normal system call return.
+5:	mov.l	__syscall_ret, $r10
+	lds	$r10, $pr
+	!   	    	    Call the system call handler through the table.
+	!   	    	    (both normal and ptrace'd)
+	!   	    	    First check for bad syscall number
+6:	mov	$r3, $r9
 	mov.l	__n_sys, $r10
 	cmp/hs	$r10, $r9
-	bt	badsys
-	!
+	bf	2f
+	!   	    	    Bad syscall number
+	rts			! go to syscall_ret or syscall_ret_trace
+    	 mov	#-ENOSYS, $r0
+	!   	    	    Good syscall number
+2:	shll2	$r9		! x4
+	mov.l	__sct, $r11
+	add	$r11, $r9
+	mov.l	@$r9, $r11
+	jmp	@$r11	    	! jump to specific syscall handler
+	 nop
+
+	! In case of trace
+syscall_ret_trace:
+	mov.l	$r0, @(R0,$r15)		! save the return value
+	mov.l	__syscall_trace, $r1
+	mova	SYMBOL_NAME(ret_from_syscall), $r0
+	jmp	@$r1    	! Call syscall_trace() which notifies superior
+	 lds	$r0, $pr    	! Then return to ret_from_syscall()
+
+
+
 #ifdef COMPAT_OLD_SYSCALL_ABI
+! Handle old ABI system call.
+! Note that ptrace(SYSCALL) is not supported for the old ABI.
+! At this point:
+!   $r0, $r4-7 as per ABI
+!   $r8  = value of TRA register (= num_args<<2)
+!   $r14 = points to SYSCALL_NR in stack frame
+old_abi_system_call:
+	mov 	$r0, $r9    	    	! Save system call number in $r9
+	!   	    	    	    	! arrange for return which pops stack
+	mov.l	__old_abi_syscall_ret, $r10
+	lds	$r10, $pr
 	!				  Build the stack frame if TRA > 0
 	mov	$r8, $r10
 	cmp/pl	$r10
 	bf	0f
-	mov.l	@(SP,$r15), $r0		! get original stack
+	mov.l	@(SP,$r15), $r0		! get original user stack
 7:	add	#-4, $r10
 4:	mov.l	@($r0,$r10), $r1	! May cause address error exception..
 	mov.l	$r1, @-$r15
 	cmp/pl	$r10
 	bt	7b
-#endif
-0:	stc	$k_current, $r11
-	mov.l	@(tsk_ptrace,$r11), $r10	! Is it trace?
-	mov	#PT_TRACESYS, $r11
-	tst	$r11, $r10
-	bt	5f
-	!                     Trace system call
-	mov	#-ENOSYS, $r11
-	mov.l	$r11, @(R0,$r15)
-	!			Push up $R0--$R2, and $R4--$R7
-	mov.l	$r0, @-$r15
-	mov.l	$r1, @-$r15
-	mov.l	$r2, @-$r15
-	mov.l	$r4, @-$r15
-	mov.l	$r5, @-$r15
-	mov.l	$r6, @-$r15
-	mov.l	$r7, @-$r15
-	!
-	mov.l	2f, $r11
-	jsr	@$r11
-	 nop
-	!			Pop down $R0--$R2, and $R4--$R7
-	mov.l	@$r15+, $r7
-	mov.l	@$r15+, $r6
-	mov.l	@$r15+, $r5
-	mov.l	@$r15+, $r4
-	mov.l	@$r15+, $r2
-	mov.l	@$r15+, $r1
-	mov.l	@$r15+, $r0
-	!
-	mov.l	__syscall_ret_trace, $r10
-	bra	6f
-	 lds	$r10, $pr
-	!
-5:	mov.l	__syscall_ret, $r10
-	lds	$r10, $pr
-	!
-6:	mov	$r9, $r10
-	shll2	$r10		! x4
+0:
+	mov.l	$r9, @$r14	    	! set syscall_nr
+	STI()
+	!   	    	    Call the system call handler through the table.
+	!   	    	    First check for bad syscall number
+	mov.l	__n_sys, $r10
+	cmp/hs	$r10, $r9
+	bf	2f
+	!   	    	    Bad syscall number
+	rts			! return to old_abi_syscall_ret
+    	 mov	#-ENOSYS, $r0
+	!   	    	    Good syscall number
+2:	shll2	$r9		! x4
 	mov.l	__sct, $r11
-	add	$r11, $r10
-	mov.l	@$r10, $r11
-	jmp	@$r11
+	add	$r11, $r9
+	mov.l	@$r9, $r11
+	jmp	@$r11	    	! call specific syscall handler,
 	 nop
 
-	! In case of trace
-	.align	2
-3:
-#ifdef COMPAT_OLD_SYSCALL_ABI
-	add	$r8, $r15		! pop off the arguments
-#endif
-	mov.l	$r0, @(R0,$r15)		! save the return value
-	mov.l	2f, $r1
-	mova	SYMBOL_NAME(ret_from_syscall), $r0
-	jmp	@$r1
-	 lds	$r0, $pr
-	.align	2
-1:	.long	TRA
-2:	.long	SYMBOL_NAME(syscall_trace)
-__n_sys:	.long	NR_syscalls
-__sct:		.long	SYMBOL_NAME(sys_call_table)
-__syscall_ret_trace:
-		.long	3b
-__syscall_ret:
-		.long	SYMBOL_NAME(syscall_ret)
+    	.align 2
+__old_abi_syscall_ret:
+	.long	old_abi_syscall_ret
 
-#ifdef COMPAT_OLD_SYSCALL_ABI
+    	! This code gets called on address error exception when copying
+	! syscall arguments from user stack to kernel stack.  It is
+	! supposed to return -EINVAL through old_abi_syscall_ret, but it
+	! appears to have been broken for a long time in that the $r0
+	! return value will be saved into the kernel stack relative to $r15
+	! but the value of $r15 is not correct partway through the loop.
+	! So the user prog is returned its old $r0 value, not -EINVAL.
+	! Greg Banks 28 Aug 2000.
 	.section	.fixup,"ax"
 fixup_syscall_argerr:
+    	! First get $r15 back to 
 	rts
-	 mov.l	1f, $r0
-1:	.long	-22	! -EINVAL
-.previous
+    	 mov	#-EINVAL, $r0
+    	.previous
 
 	.section	__ex_table, "a"
 	.align	2
 	.long	4b,fixup_syscall_argerr
-.previous
+    	.previous
 #endif
+
+	.align	2
+__TRA:	.long	TRA
+__syscall_trace:
+    	.long	SYMBOL_NAME(syscall_trace)
+__n_sys:.long	NR_syscalls
+__sct:	.long	SYMBOL_NAME(sys_call_table)
+__syscall_ret_trace:
+	.long	syscall_ret_trace
+__syscall_ret:
+	.long	SYMBOL_NAME(syscall_ret)
+
+
 
 	.align	2
 reschedule:
@@ -454,10 +503,12 @@ __INV_IMASK:
 	.long	0xffffff0f	! ~(IMASK)
 
 	.align 2
-syscall_ret:
 #ifdef COMPAT_OLD_SYSCALL_ABI
+old_abi_syscall_ret:
 	add	$r8, $r15	! pop off the arguments
+	/* fall through */
 #endif
+syscall_ret:
 	mov.l	$r0, @(R0,$r15)	! save the return value
 	/* fall through */
 
@@ -707,7 +758,7 @@ handle_exception:
 #endif
 8:	/* User space to kernel */
 	mov	#0x20, $k1
-	shll8	$k1			! $k1 <= 8192
+	shll8	$k1			! $k1 <= 8192 == THREAD_SIZE
 	add	$current, $k1
 	mov	$k1, $r15		! change to kernel stack
 	!
@@ -1107,6 +1158,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_mincore)
 	.long SYMBOL_NAME(sys_madvise)
 	.long SYMBOL_NAME(sys_getdents64)	/* 220 */
+	.long SYMBOL_NAME(sys_fcntl64)
 
 	/*
 	 * NOTE!! This doesn't have to be exact - we just have
@@ -1114,7 +1166,7 @@ ENTRY(sys_call_table)
 	 * entries. Don't panic if you notice that this hasn't
 	 * been shrunk every time we add a new system call.
 	 */
-	.rept NR_syscalls-220
+	.rept NR_syscalls-221
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr
 

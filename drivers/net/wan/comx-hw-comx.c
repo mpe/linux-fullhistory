@@ -46,9 +46,6 @@
 
 #define VERSION "0.86"
 
-#include <asm/uaccess.h>
-#include <asm/io.h>
-#include <asm/delay.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/types.h>
@@ -57,6 +54,9 @@
 #include <linux/proc_fs.h>
 #include <linux/ioport.h>
 #include <linux/init.h>
+#include <linux/delay.h>
+#include <asm/uaccess.h>
+#include <asm/io.h>
 
 #include "comx.h"
 #include "comxhw.h"

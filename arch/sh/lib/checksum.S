@@ -159,14 +159,14 @@ unsigned int csum_partial_copy_generic (const char *src, char *dst, int len,
  *	  them all but there's no guarantee.
  */
 
-#define SRC(y...)			\
-	9999: y;			\
+#define SRC(x,y)			\
+	9999: x,y;			\
 	.section __ex_table, "a";	\
 	.long 9999b, 6001f	;	\
 	.previous
 
-#define DST(y...)			\
-	9999: y;			\
+#define DST(x,y)			\
+	9999: x,y;			\
 	.section __ex_table, "a";	\
 	.long 9999b, 6002f	;	\
 	.previous
@@ -276,7 +276,7 @@ DST(	mov.l	r0,@r5	)
 DST(	mov.l	r1,@r5	)
 	add	#4,r5
 
-SRC(	mov.l	@r4+,r0 	)
+SRC(	mov.l	@r4+,r0 )
 SRC(	mov.l	@r4+,r1	)
 	addc	r0,r7
 DST(	mov.l	r0,@r5	)

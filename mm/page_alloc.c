@@ -258,13 +258,13 @@ static struct page * __alloc_pages_limit(zonelist_t *zonelist,
 		 */
 		switch (limit) {
 			default:
-			case 0:
+			case PAGES_MIN:
 				water_mark = z->pages_min;
 				break;
-			case 1:
+			case PAGES_LOW:
 				water_mark = z->pages_low;
 				break;
-			case 2:
+			case PAGES_HIGH:
 				water_mark = z->pages_high;
 		}
 
@@ -318,10 +318,19 @@ struct page * __alloc_pages(zonelist_t *zonelist, unsigned long order)
 		direct_reclaim = 1;
 
 	/*
-	 * Are we low on inactive pages?
+	 * If we are about to get low on free pages and we also have
+	 * an inactive page shortage, wake up kswapd.
 	 */
 	if (inactive_shortage() > inactive_target / 2 && free_shortage())
 		wakeup_kswapd(0);
+	/*
+	 * If we are about to get low on free pages and cleaning
+	 * the inactive_dirty pages would fix the situation,
+	 * wake up bdflush.
+	 */
+	else if (free_shortage() && nr_inactive_dirty_pages > free_shortage()
+			&& nr_inactive_dirty_pages > freepages.high)
+		wakeup_bdflush(0);
 
 try_again:
 	/*
@@ -378,8 +387,23 @@ try_again:
 	 *
 	 * We wake up kswapd, in the hope that kswapd will
 	 * resolve this situation before memory gets tight.
+	 *
+	 * We also yield the CPU, because that:
+	 * - gives kswapd a chance to do something
+	 * - slows down allocations, in particular the
+	 *   allocations from the fast allocator that's
+	 *   causing the problems ...
+	 * - ... which minimises the impact the "bad guys"
+	 *   have on the rest of the system
+	 * - if we don't have __GFP_IO set, kswapd may be
+	 *   able to free some memory we can't free ourselves
 	 */
 	wakeup_kswapd(0);
+	if (gfp_mask & __GFP_WAIT) {
+		__set_current_state(TASK_RUNNING);
+		current->policy |= SCHED_YIELD;
+		schedule();
+	}
 
 	/*
 	 * After waking up kswapd, we try to allocate a page
@@ -440,28 +464,43 @@ try_again:
 		 * up again. After that we loop back to the start.
 		 *
 		 * We have to do this because something else might eat
-		 * the memory kswapd frees for us (interrupts, other
-		 * processes, etc).
+		 * the memory kswapd frees for us and we need to be
+		 * reliable. Note that we don't loop back for higher
+		 * order allocations since it is possible that kswapd
+		 * simply cannot free a large enough contiguous area
+		 * of memory *ever*.
 		 */
-		if (gfp_mask & __GFP_WAIT) {
-			/*
-			 * Give other processes a chance to run:
-			 */
-			if (current->need_resched) {
-				__set_current_state(TASK_RUNNING);
-				schedule();
-			}
+		if ((gfp_mask & (__GFP_WAIT|__GFP_IO)) == (__GFP_WAIT|__GFP_IO)) {
+			wakeup_kswapd(1);
+			memory_pressure++;
+			if (!order)
+				goto try_again;
+		/*
+		 * If __GFP_IO isn't set, we can't wait on kswapd because
+		 * kswapd just might need some IO locks /we/ are holding ...
+		 *
+		 * SUBTLE: The scheduling point above makes sure that
+		 * kswapd does get the chance to free memory we can't
+		 * free ourselves...
+		 */
+		} else if (gfp_mask & __GFP_WAIT) {
 			try_to_free_pages(gfp_mask);
 			memory_pressure++;
-			goto try_again;
+			if (!order)
+				goto try_again;
 		}
+
 	}
 
 	/*
 	 * Final phase: allocate anything we can!
 	 *
-	 * This is basically reserved for PF_MEMALLOC and
-	 * GFP_ATOMIC allocations...
+	 * Higher order allocations, GFP_ATOMIC allocations and
+	 * recursive allocations (PF_MEMALLOC) end up here.
+	 *
+	 * Only recursive allocations can use the very last pages
+	 * in the system, otherwise it would be just too easy to
+	 * deadlock the system...
 	 */
 	zone = zonelist->zones;
 	for (;;) {
@@ -472,8 +511,21 @@ try_again:
 		if (!z->size)
 			BUG();
 
+		/*
+		 * SUBTLE: direct_reclaim is only possible if the task
+		 * becomes PF_MEMALLOC while looping above. This will
+		 * happen when the OOM killer selects this task for
+		 * instant execution...
+		 */
 		if (direct_reclaim)
 			page = reclaim_page(z);
+		if (page)
+			return page;
+
+		/* XXX: is pages_min/4 a good amount to reserve for this? */
+		if (z->free_pages < z->pages_min / 4 &&
+				!(current->flags & PF_MEMALLOC))
+			continue;
 		if (!page)
 			page = rmqueue(z, order);
 		if (page)
@@ -481,8 +533,7 @@ try_again:
 	}
 
 	/* No luck.. */
-	if (!order)
-		show_free_areas();
+	printk(KERN_ERR "__alloc_pages: %lu-order allocation failed.\n", order);
 	return NULL;
 }
 
@@ -572,6 +623,13 @@ unsigned int nr_free_buffer_pages (void)
 	sum = nr_free_pages();
 	sum += nr_inactive_clean_pages();
 	sum += nr_inactive_dirty_pages;
+
+	/*
+	 * Keep our write behind queue filled, even if
+	 * kswapd lags a bit right now.
+	 */
+	if (sum < freepages.high + inactive_target)
+		sum = freepages.high + inactive_target;
 	/*
 	 * We don't want dirty page writebehind to put too
 	 * much pressure on the working set, but we want it

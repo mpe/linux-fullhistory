@@ -21,12 +21,12 @@ typedef struct {
 #define prepare_to_switch()	do { } while(0)
 #define switch_to(prev,next,last) do { \
  register struct task_struct *__last; \
- register unsigned long *__ts1 __asm__ ("$r1") = &prev->thread.sp; \
- register unsigned long *__ts2 __asm__ ("$r2") = &prev->thread.pc; \
- register unsigned long *__ts4 __asm__ ("$r4") = (unsigned long *)prev; \
- register unsigned long *__ts5 __asm__ ("$r5") = (unsigned long *)next; \
- register unsigned long *__ts6 __asm__ ("$r6") = &next->thread.sp; \
- register unsigned long __ts7 __asm__ ("$r7") = next->thread.pc; \
+ register unsigned long *__ts1 __asm__ ("r1") = &prev->thread.sp; \
+ register unsigned long *__ts2 __asm__ ("r2") = &prev->thread.pc; \
+ register unsigned long *__ts4 __asm__ ("r4") = (unsigned long *)prev; \
+ register unsigned long *__ts5 __asm__ ("r5") = (unsigned long *)next; \
+ register unsigned long *__ts6 __asm__ ("r6") = &next->thread.sp; \
+ register unsigned long __ts7 __asm__ ("r7") = next->thread.pc; \
  __asm__ __volatile__ (".balign 4\n\t" \
 		       "stc.l	$gbr, @-$r15\n\t" \
 		       "sts.l	$pr, @-$r15\n\t" \
@@ -63,7 +63,7 @@ typedef struct {
 		       :"0" (prev), \
 			"r" (__ts1), "r" (__ts2), \
 			"r" (__ts4), "r" (__ts5), "r" (__ts6), "r" (__ts7) \
-		       :"r3"); \
+		       :"r3", "t"); \
   last = __last; \
 } while (0)
 #endif
@@ -88,11 +88,22 @@ extern void __xchg_called_with_bad_pointer(void);
 #define mb()	__asm__ __volatile__ ("": : :"memory")
 #define rmb()	mb()
 #define wmb()	__asm__ __volatile__ ("": : :"memory")
+
+#ifdef CONFIG_SMP
+#define smp_mb()	mb()
+#define smp_rmb()	rmb()
+#define smp_wmb()	wmb()
+#else
+#define smp_mb()	barrier()
+#define smp_rmb()	barrier()
+#define smp_wmb()	barrier()
+#endif
+
 #define set_mb(var, value) do { xchg(&var, value); } while (0)
 #define set_wmb(var, value) do { var = value; wmb(); } while (0)
 
 /* Interrupt Control */
-extern __inline__ void __sti(void)
+static __inline__ void __sti(void)
 {
 	unsigned long __dummy0, __dummy1;
 
@@ -106,7 +117,7 @@ extern __inline__ void __sti(void)
 			     : "memory");
 }
 
-extern __inline__ void __cli(void)
+static __inline__ void __cli(void)
 {
 	unsigned long __dummy;
 	__asm__ __volatile__("stc	$sr, %0\n\t"
@@ -205,7 +216,7 @@ extern void __global_restore_flags(unsigned long);
 
 #endif
 
-extern __inline__ unsigned long xchg_u32(volatile int * m, unsigned long val)
+static __inline__ unsigned long xchg_u32(volatile int * m, unsigned long val)
 {
 	unsigned long flags, retval;
 
@@ -216,7 +227,7 @@ extern __inline__ unsigned long xchg_u32(volatile int * m, unsigned long val)
 	return retval;
 }
 
-extern __inline__ unsigned long xchg_u8(volatile unsigned char * m, unsigned long val)
+static __inline__ unsigned long xchg_u8(volatile unsigned char * m, unsigned long val)
 {
 	unsigned long flags, retval;
 

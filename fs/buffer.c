@@ -706,7 +706,9 @@ void set_blocksize(kdev_t dev, int size)
 static void refill_freelist(int size)
 {
 	if (!grow_buffers(size)) {
-		try_to_free_pages(GFP_BUFFER);
+		wakeup_bdflush(1);
+		current->policy |= SCHED_YIELD;
+		schedule();
 	}
 }
 
@@ -859,6 +861,7 @@ repeat:
 int balance_dirty_state(kdev_t dev)
 {
 	unsigned long dirty, tot, hard_dirty_limit, soft_dirty_limit;
+	int shortage;
 
 	dirty = size_buffers_type[BUF_DIRTY] >> PAGE_SHIFT;
 	tot = nr_free_buffer_pages();
@@ -869,21 +872,21 @@ int balance_dirty_state(kdev_t dev)
 
 	/* First, check for the "real" dirty limit. */
 	if (dirty > soft_dirty_limit) {
-		if (dirty > hard_dirty_limit || inactive_shortage())
+		if (dirty > hard_dirty_limit)
 			return 1;
 		return 0;
 	}
 
 	/*
-	 * Then, make sure the number of inactive pages won't overwhelm
-	 * page replacement ... this should avoid stalls.
+	 * If we are about to get low on free pages and
+	 * cleaning the inactive_dirty pages would help
+	 * fix this, wake up bdflush.
 	 */
-	if (nr_inactive_dirty_pages >
-				nr_free_pages() + nr_inactive_clean_pages()) {
-		if (free_shortage() > freepages.min)
-			return 1;
+	shortage = free_shortage();
+	if (shortage && nr_inactive_dirty_pages > shortage &&
+			nr_inactive_dirty_pages > freepages.high)
 		return 0;
-	}
+
 	return -1;
 }
 
@@ -1807,9 +1810,9 @@ int block_truncate_page(struct address_space *mapping, loff_t from, get_block_t 
 	if (Page_Uptodate(page))
 		set_bit(BH_Uptodate, &bh->b_state);
 
+	bh->b_end_io = end_buffer_io_sync;
 	if (!buffer_uptodate(bh)) {
 		err = -EIO;
-		bh->b_end_io = end_buffer_io_sync;
 		ll_rw_block(READ, 1, &bh);
 		wait_on_buffer(bh);
 		/* Uhhuh. Read error. Complain and punt. */
@@ -2234,6 +2237,7 @@ static int grow_buffers(int size)
 	return 1;
 
 no_buffer_head:
+	UnlockPage(page);
 	page_cache_release(page);
 out:
 	return 0;
@@ -2663,9 +2667,8 @@ int bdflush(void *sem)
 		CHECK_EMERGENCY_SYNC
 
 		flushed = flush_dirty_buffers(0);
-		if (nr_inactive_dirty_pages > nr_free_pages() +
-						nr_inactive_clean_pages())
-			flushed += page_launder(GFP_KSWAPD, 0);
+		if (free_shortage())
+			flushed += page_launder(GFP_BUFFER, 0);
 
 		/* If wakeup_bdflush will wakeup us
 		   after our bdflush_done wakeup, then

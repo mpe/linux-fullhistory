@@ -416,8 +416,8 @@ inline void nmi_watchdog_tick(struct pt_regs * regs)
 	 *  here too!]
 	 */
 
-	static unsigned int last_irq_sums [NR_CPUS] = { 0, },
-				alert_counter [NR_CPUS] = { 0, };
+	static unsigned int last_irq_sums [NR_CPUS],
+				alert_counter [NR_CPUS];
 
 	/*
 	 * Since current-> is always on the stack, and we always switch

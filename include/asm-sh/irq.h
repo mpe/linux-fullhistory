@@ -42,6 +42,7 @@
 #if defined(CONFIG_CPU_SUBTYPE_SH7707) || defined(CONFIG_CPU_SUBTYPE_SH7709)
 #define SCIF_ERI_IRQ	56
 #define SCIF_RXI_IRQ	57
+#define SCIF_BRI_IRQ	58
 #define SCIF_TXI_IRQ	59
 #define SCIF_IPR_ADDR	INTC_IPRE
 #define SCIF_IPR_POS	1
@@ -49,6 +50,7 @@
 
 #define IRDA_ERI_IRQ	52
 #define IRDA_RXI_IRQ	53
+#define IRDA_BRI_IRQ	54
 #define IRDA_TXI_IRQ	55
 #define IRDA_IPR_ADDR	INTC_IPRE
 #define IRDA_IPR_POS	2
@@ -56,6 +58,7 @@
 #elif defined(CONFIG_CPU_SUBTYPE_SH7750)
 #define SCIF_ERI_IRQ	40
 #define SCIF_RXI_IRQ	41
+#define SCIF_BRI_IRQ	42
 #define SCIF_TXI_IRQ	43
 #define SCIF_IPR_ADDR	INTC_IPRC
 #define SCIF_IPR_POS	1

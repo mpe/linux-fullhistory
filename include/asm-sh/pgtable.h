@@ -92,45 +92,44 @@ extern unsigned long empty_zero_page[1024];
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
 #define VMALLOC_END	P4SEG
 
-#define _PAGE_PRESENT	0x001  /* software: page is present */
-#define _PAGE_ACCESSED	0x002  /* software: page referenced */
+/*			0x001     WT-bit on SH-4, 0 on SH-3 */
+#define _PAGE_HW_SHARED	0x002  /* SH-bit  : page is shared among processes */
 #define _PAGE_DIRTY	0x004  /* D-bit   : page changed */
 #define _PAGE_CACHABLE	0x008  /* C-bit   : cachable */
-/*		 	0x010     SZ-bit  : size of page */
+/*			0x010     SZ0-bit : Size of page */
 #define _PAGE_RW	0x020  /* PR0-bit : write access allowed */
 #define _PAGE_USER	0x040  /* PR1-bit : user space access allowed */
-#define _PAGE_PROTNONE	0x080  /* software: if not present */
-/*			0x100     V-bit   : page is valid */
-/*			0x200     can be used as software flag */
-/*			0x400     can be used as software flag */
-/*			0x800     can be used as software flag */
+/*			0x080     SZ1-bit : Size of page (on SH-4) */
+#define _PAGE_PRESENT	0x100  /* V-bit   : page is valid */
+#define _PAGE_PROTNONE	0x200  /* software: if not present  */
+#define _PAGE_ACCESSED 	0x400  /* software: page referenced */
+#define _PAGE_U0_SHARED 0x800  /* software: page is shared in user space */
+
+/* Mask which drop software flags */
+#define _PAGE_FLAGS_HARDWARE_MASK	0x1ffff1ff
+/* Hardware flags: SZ=1 (4k-byte) */
+#define _PAGE_FLAGS_HARD		0x00000010
 
 #if defined(__sh3__)
-/* Mask which drop software flags */
-#define _PAGE_FLAGS_HARDWARE_MASK	0x1ffff06c
-/* Flags defalult: SZ=1 (4k-byte), C=0 (non-cachable), SH=0 (not shared) */
-#define _PAGE_FLAGS_HARDWARE_DEFAULT	0x00000110
+#define _PAGE_SHARED	_PAGE_HW_SHARED
 #elif defined(__SH4__)
-/* Mask which drops software flags */
-#define _PAGE_FLAGS_HARDWARE_MASK	0x1ffff06c
-/* Flags defalult: SZ=01 (4k-byte), C=0 (non-cachable), SH=0 (not shared), WT=0 */
-#define _PAGE_FLAGS_HARDWARE_DEFAULT	0x00000110
+#define _PAGE_SHARED	_PAGE_U0_SHARED
 #endif
 
 #define _PAGE_TABLE	(_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | _PAGE_ACCESSED | _PAGE_DIRTY)
 #define _KERNPG_TABLE	(_PAGE_PRESENT | _PAGE_RW | _PAGE_ACCESSED | _PAGE_DIRTY)
-#define _PAGE_CHG_MASK	(PTE_MASK | _PAGE_ACCESSED | _PAGE_CACHABLE | _PAGE_DIRTY)
+#define _PAGE_CHG_MASK	(PTE_MASK | _PAGE_ACCESSED | _PAGE_CACHABLE | _PAGE_DIRTY | _PAGE_SHARED)
 
-#define PAGE_NONE	__pgprot(_PAGE_PROTNONE | _PAGE_CACHABLE |_PAGE_ACCESSED)
-#define PAGE_SHARED	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | _PAGE_CACHABLE |_PAGE_ACCESSED)
-#define PAGE_COPY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_CACHABLE | _PAGE_ACCESSED)
-#define PAGE_READONLY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_CACHABLE | _PAGE_ACCESSED)
-#define PAGE_KERNEL	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_CACHABLE | _PAGE_DIRTY | _PAGE_ACCESSED)
-#define PAGE_KERNEL_RO	__pgprot(_PAGE_PRESENT | _PAGE_CACHABLE | _PAGE_DIRTY | _PAGE_ACCESSED)
+#define PAGE_NONE	__pgprot(_PAGE_PROTNONE | _PAGE_CACHABLE |_PAGE_ACCESSED | _PAGE_FLAGS_HARD)
+#define PAGE_SHARED	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | _PAGE_CACHABLE |_PAGE_ACCESSED | _PAGE_SHARED | _PAGE_FLAGS_HARD)
+#define PAGE_COPY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_CACHABLE | _PAGE_ACCESSED | _PAGE_FLAGS_HARD)
+#define PAGE_READONLY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_CACHABLE | _PAGE_ACCESSED | _PAGE_FLAGS_HARD)
+#define PAGE_KERNEL	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_CACHABLE | _PAGE_DIRTY | _PAGE_ACCESSED | _PAGE_HW_SHARED | _PAGE_FLAGS_HARD)
+#define PAGE_KERNEL_RO	__pgprot(_PAGE_PRESENT | _PAGE_CACHABLE | _PAGE_DIRTY | _PAGE_ACCESSED | _PAGE_HW_SHARED | _PAGE_FLAGS_HARD)
 
 /*
  * As i386 and MIPS, SuperH can't do page protection for execute, and
- * considers that the same are read.  Also, write permissions imply
+ * considers that the same as a read.  Also, write permissions imply
  * read permissions. This is the closest we can get..  
  */
 
@@ -184,6 +183,7 @@ extern inline int pte_exec(pte_t pte) { return pte_val(pte) & _PAGE_USER; }
 extern inline int pte_dirty(pte_t pte){ return pte_val(pte) & _PAGE_DIRTY; }
 extern inline int pte_young(pte_t pte){ return pte_val(pte) & _PAGE_ACCESSED; }
 extern inline int pte_write(pte_t pte){ return pte_val(pte) & _PAGE_RW; }
+extern inline int pte_shared(pte_t pte){ return pte_val(pte) & _PAGE_SHARED; }
 
 extern inline pte_t pte_rdprotect(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) & ~_PAGE_USER)); return pte; }
 extern inline pte_t pte_exprotect(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) & ~_PAGE_USER)); return pte; }
@@ -244,11 +244,15 @@ extern void update_mmu_cache(struct vm_area_struct * vma,
 			     unsigned long address, pte_t pte);
 
 /* Encode and de-code a swap entry */
-#define SWP_TYPE(x)			(((x).val >> 1) & 0x3f)
-#define SWP_OFFSET(x)			((x).val >> 8)
-#define SWP_ENTRY(type, offset)		((swp_entry_t) { ((type) << 1) | ((offset) << 8) })
-#define pte_to_swp_entry(pte)		((swp_entry_t) { pte_val(pte) })
-#define swp_entry_to_pte(x)		((pte_t) { (x).val })
+/*
+ * NOTE: We should set ZEROs at the position of _PAGE_PRESENT
+ *       and _PAGE_PROTONOE bits
+ */
+#define SWP_TYPE(x)		((x).val & 0xff)
+#define SWP_OFFSET(x)		((x).val >> 10)
+#define SWP_ENTRY(type, offset)	((swp_entry_t) { (type) | ((offset) << 10) })
+#define pte_to_swp_entry(pte)	((swp_entry_t) { pte_val(pte) })
+#define swp_entry_to_pte(x)	((pte_t) { (x).val })
 
 #define module_map      vmalloc
 #define module_unmap    vfree

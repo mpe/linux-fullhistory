@@ -1,4 +1,4 @@
-/* $Id: setup_cqreek.c,v 1.1 2000/08/05 06:25:23 gniibe Exp $
+/* $Id: setup_cqreek.c,v 1.5 2000/09/18 05:51:24 gniibe Exp $
  *
  * arch/sh/kernel/setup_cqreek.c
  *
@@ -44,15 +44,24 @@ static unsigned long cqreek_port2addr(unsigned long port)
 	return ISA_OFFSET + port;
 }
 
+struct cqreek_irq_data {
+	unsigned short mask_port;	/* Port of Interrupt Mask Register */
+	unsigned short stat_port;	/* Port of Interrupt Status Register */
+	unsigned short bit;		/* Value of the bit */
+};
+static struct cqreek_irq_data cqreek_irq_data[NR_IRQS];
+
 static void disable_cqreek_irq(unsigned int irq)
 {
 	unsigned long flags;
 	unsigned short mask;
+	unsigned short mask_port = cqreek_irq_data[irq].mask_port;
+	unsigned short bit = cqreek_irq_data[irq].bit;
 
 	save_and_cli(flags);
 	/* Disable IRQ */
-	mask = inw(BRIDGE_ISA_INTR_MASK) & ~(1 << irq);
-	outw_p(mask, BRIDGE_ISA_INTR_MASK);
+	mask = inw(mask_port) & ~bit;
+	outw_p(mask, mask_port);
 	restore_flags(flags);
 }
 
@@ -60,32 +69,29 @@ static void enable_cqreek_irq(unsigned int irq)
 {
 	unsigned long flags;
 	unsigned short mask;
+	unsigned short mask_port = cqreek_irq_data[irq].mask_port;
+	unsigned short bit = cqreek_irq_data[irq].bit;
 
 	save_and_cli(flags);
 	/* Enable IRQ */
-	mask = inw(BRIDGE_ISA_INTR_MASK) | (1 << irq);
-	outw_p(mask, BRIDGE_ISA_INTR_MASK);
+	mask = inw(mask_port) | bit;
+	outw_p(mask, mask_port);
 	restore_flags(flags);
 }
 
-#define CLEAR_AT_ACCEPT
-
 static void mask_and_ack_cqreek(unsigned int irq)
 {
-	inw(BRIDGE_ISA_INTR_STAT);
+	unsigned short stat_port = cqreek_irq_data[irq].stat_port;
+	unsigned short bit = cqreek_irq_data[irq].bit;
+
+	inw(stat_port);
 	disable_cqreek_irq(irq);
-#ifdef CLEAR_AT_ACCEPT
 	/* Clear IRQ (it might be edge IRQ) */
-	outw_p((1<<irq), BRIDGE_ISA_INTR_STAT);
-#endif
+	outw_p(bit, stat_port);
 }
 
 static void end_cqreek_irq(unsigned int irq)
 {
-#ifndef CLEAR_AT_ACCEPT
-	/* Clear IRQ (it might be edge IRQ) */
-	outw_p((1<<irq), BRIDGE_ISA_INTR_STAT);
-#endif
 	enable_cqreek_irq(irq);
 }
 
@@ -101,7 +107,7 @@ static void shutdown_cqreek_irq(unsigned int irq)
 }
 
 static struct hw_interrupt_type cqreek_irq_type = {
-	"CQREEK-IRQ",
+	"CqREEK-IRQ",
 	startup_cqreek_irq,
 	shutdown_cqreek_irq,
 	enable_cqreek_irq,
@@ -116,10 +122,24 @@ static int has_ide, has_isa;
    What we really need is virtualized IRQ and demultiplexer like HP600 port */
 void __init init_cqreek_IRQ(void)
 {
-	if (has_ide)
-		make_ipr_irq(14, IDE_OFFSET+BRIDGE_IDE_INTR_LVL, 0, 0x0f-14);
+	if (has_ide) {
+		cqreek_irq_data[14].mask_port = BRIDGE_IDE_INTR_MASK;
+		cqreek_irq_data[14].stat_port = BRIDGE_IDE_INTR_STAT;
+		cqreek_irq_data[14].bit = 1;
+
+		irq_desc[14].handler = &cqreek_irq_type;
+		irq_desc[14].status = IRQ_DISABLED;
+		irq_desc[14].action = 0;
+		irq_desc[14].depth = 1;
+
+		disable_cqreek_irq(14);
+	}
 
 	if (has_isa) {
+		cqreek_irq_data[10].mask_port = BRIDGE_ISA_INTR_MASK;
+		cqreek_irq_data[10].stat_port = BRIDGE_ISA_INTR_STAT;
+		cqreek_irq_data[10].bit = (1 << 10);
+
 		/* XXX: Err... we may need demultiplexer for ISA irq... */
 		irq_desc[10].handler = &cqreek_irq_type;
 		irq_desc[10].status = IRQ_DISABLED;
@@ -135,9 +155,16 @@ void __init init_cqreek_IRQ(void)
  */
 void __init setup_cqreek(void)
 {
+	extern void disable_hlt(void);
 	int i;
 /* udelay is not available at setup time yet... */
 #define DELAY() do {for (i=0; i<10000; i++) ctrl_inw(0xa0000000);} while(0)
+
+	/*
+	 * XXX: I don't know the reason, but it becomes so fragile with
+	 * "sleep", so we need to stop sleeping.
+	 */
+	disable_hlt();
 
 	if ((inw (BRIDGE_FEATURE) & 1)) { /* We have IDE interface */
 		outw_p(0, BRIDGE_IDE_INTR_LVL);
@@ -219,7 +246,6 @@ struct sh_machine_vector mv_cqreek __initmv = {
 	mv_init_arch:		setup_cqreek,
 	mv_init_irq:		init_cqreek_IRQ,
 
-	mv_port2addr:		cqreek_port2addr,
 	mv_isa_port2addr:	cqreek_port2addr,
 };
 ALIAS_MV(cqreek)

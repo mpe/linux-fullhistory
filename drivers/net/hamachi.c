@@ -1742,9 +1742,6 @@ static int hamachi_close(struct net_device *dev)
 		hmp->rx_ring[i].status_n_length = 0;
 		hmp->rx_ring[i].addr = 0xBADF00D0; /* An invalid address. */
 		if (hmp->rx_skbuff[i]) {
-#if LINUX_VERSION_CODE < 0x20100
-			hmp->rx_skbuff[i]->free = 1;
-#endif
 			dev_kfree_skb(hmp->rx_skbuff[i]);
 		}
 		hmp->rx_skbuff[i] = 0;
@@ -1777,10 +1774,8 @@ static struct net_device_stats *hamachi_get_stats(struct net_device *dev)
         */ 
 	/* hmp->stats.tx_packets	= readl(ioaddr + 0x000); */
 
-#if LINUX_VERSION_CODE >= 0x20119
 	hmp->stats.rx_bytes = readl(ioaddr + 0x330); /* Total Uni+Brd+Multi */
 	hmp->stats.tx_bytes = readl(ioaddr + 0x3B0); /* Total Uni+Brd+Multi */
-#endif
 	hmp->stats.multicast		= readl(ioaddr + 0x320); /* Multicast Rx */
 
 	hmp->stats.rx_length_errors	= readl(ioaddr + 0x368); /* Over+Undersized */

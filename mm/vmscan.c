@@ -74,7 +74,8 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 		goto out_failed;
 	}
 	if (!onlist)
-		age_page_down(page);
+		/* The page is still mapped, so it can't be freeable... */
+		age_page_down_ageonly(page);
 
 	/*
 	 * If the page is in active use by us, or if the page
@@ -419,7 +420,7 @@ static int swap_out(unsigned int priority, int gfp_mask, unsigned long idle_time
 				continue;
 			/* Skip tasks which haven't slept long enough yet when idle-swapping. */
 			if (idle_time && !assign && (!(p->state & TASK_INTERRUPTIBLE) ||
-					time_before(p->sleep_time + idle_time * HZ, jiffies)))
+					time_after(p->sleep_time + idle_time * HZ, jiffies)))
 				continue;
 			found_task++;
 			/* Refresh swap_cnt? */
@@ -536,6 +537,7 @@ struct page * reclaim_page(zone_t * zone)
 found_page:
 	del_page_from_inactive_clean_list(page);
 	UnlockPage(page);
+	page->age = PAGE_AGE_START;
 	if (page_count(page) != 1)
 		printk("VM: reclaim_page, found page with count %d!\n",
 				page_count(page));
@@ -565,21 +567,23 @@ out:
  * This code is heavily inspired by the FreeBSD source code. Thanks
  * go out to Matthew Dillon.
  */
-#define MAX_SYNC_LAUNDER	(1 << page_cluster)
-#define MAX_LAUNDER 		(MAX_SYNC_LAUNDER * 4)
+#define MAX_LAUNDER 		(4 * (1 << page_cluster))
 int page_launder(int gfp_mask, int sync)
 {
-	int synclaunder, launder_loop, maxscan, cleaned_pages, maxlaunder;
+	int launder_loop, maxscan, cleaned_pages, maxlaunder;
+	int can_get_io_locks;
 	struct list_head * page_lru;
 	struct page * page;
 
+	/*
+	 * We can only grab the IO locks (eg. for flushing dirty
+	 * buffers to disk) if __GFP_IO is set.
+	 */
+	can_get_io_locks = gfp_mask & __GFP_IO;
+
 	launder_loop = 0;
-	synclaunder = 0;
 	maxlaunder = 0;
 	cleaned_pages = 0;
-
-	if (!(gfp_mask & __GFP_IO))
-		return 0;
 
 dirty_page_rescan:
 	spin_lock(&pagemap_lru_lock);
@@ -638,7 +642,7 @@ dirty_page_rescan:
 			spin_unlock(&pagemap_lru_lock);
 
 			/* Will we do (asynchronous) IO? */
-			if (launder_loop && synclaunder-- > 0)
+			if (launder_loop && maxlaunder == 0 && sync)
 				wait = 2;	/* Synchrounous IO */
 			else if (launder_loop && maxlaunder-- > 0)
 				wait = 1;	/* Async IO */
@@ -725,10 +729,11 @@ dirty_page_rescan:
 	 * loads, flush out the dirty pages before we have to wait on
 	 * IO.
 	 */
-	if (!launder_loop && free_shortage()) {
+	if (can_get_io_locks && !launder_loop && free_shortage()) {
 		launder_loop = 1;
-		if (sync && !cleaned_pages)
-			synclaunder = MAX_SYNC_LAUNDER;
+		/* If we cleaned pages, never do synchronous IO. */
+		if (cleaned_pages)
+			sync = 0;
 		/* We only do a few "out of order" flushes. */
 		maxlaunder = MAX_LAUNDER;
 		/* Kflushd takes care of the rest. */
@@ -774,8 +779,23 @@ int refill_inactive_scan(unsigned int priority, int oneshot)
 			age_page_up_nolock(page);
 			page_active = 1;
 		} else {
-			age_page_down_nolock(page);
-			page_active = 0;
+			age_page_down_ageonly(page);
+			/*
+			 * Since we don't hold a reference on the page
+			 * ourselves, we have to do our test a bit more
+			 * strict then deactivate_page(). This is needed
+			 * since otherwise the system could hang shuffling
+			 * unfreeable pages from the active list to the
+			 * inactive_dirty list and back again...
+			 *
+			 * SUBTLE: we can have buffer pages with count 1.
+			 */
+			if (page_count(page) <= (page->buffers ? 2 : 1)) {
+				deactivate_page_nolock(page);
+				page_active = 0;
+			} else {
+				page_active = 1;
+			}
 		}
 		/*
 		 * If the page is still on the active list, move it
@@ -805,14 +825,11 @@ int free_shortage(void)
 	pg_data_t *pgdat = pgdat_list;
 	int sum = 0;
 	int freeable = nr_free_pages() + nr_inactive_clean_pages();
+	int freetarget = freepages.high + inactive_target / 3;
 
-	/* Are we low on truly free pages? */
-	if (nr_free_pages() < freepages.min)
-		return freepages.high - nr_free_pages();
-
-	/* Are we low on free pages over-all? */
-	if (freeable < freepages.high)
-		return freepages.high - freeable;
+	/* Are we low on free pages globally? */
+	if (freeable < freetarget)
+		return freetarget - freeable;
 
 	/* If not, are we very low on any particular zone? */
 	do {
@@ -1043,14 +1060,7 @@ int kswapd(void *unused)
 			/* Do we need to do some synchronous flushing? */
 			if (waitqueue_active(&kswapd_done))
 				wait = 1;
-			if (!do_try_to_free_pages(GFP_KSWAPD, wait)) {
-				/*
-				 * if (out_of_memory()) {
-				 * 	try again a few times;
-				 * 	oom_kill();
-				 * }
-				 */
-			}
+			do_try_to_free_pages(GFP_KSWAPD, wait);
 		}
 
 		/*
@@ -1087,6 +1097,10 @@ int kswapd(void *unused)
 		 */
 		if (!free_shortage() || !inactive_shortage())
 			interruptible_sleep_on_timeout(&kswapd_wait, HZ);
+		/*
+		 * TODO: insert out of memory check & oom killer
+		 * invocation in an else branch here.
+		 */
 	}
 }
 
@@ -1121,25 +1135,18 @@ void wakeup_kswapd(int block)
 
 /*
  * Called by non-kswapd processes when they want more
- * memory.
- *
- * In a perfect world, this should just wake up kswapd
- * and return. We don't actually want to swap stuff out
- * from user processes, because the locking issues are
- * nasty to the extreme (file write locks, and MM locking)
- *
- * One option might be to let kswapd do all the page-out
- * and VM page table scanning that needs locking, and this
- * process thread could do just the mmap shrink stage that
- * can be done by just dropping cached pages without having
- * any deadlock issues.
+ * memory but are unable to sleep on kswapd because
+ * they might be holding some IO locks ...
  */
 int try_to_free_pages(unsigned int gfp_mask)
 {
 	int ret = 1;
 
-	if (gfp_mask & __GFP_WAIT)
+	if (gfp_mask & __GFP_WAIT) {
+		current->flags |= PF_MEMALLOC;
 		ret = do_try_to_free_pages(gfp_mask, 1);
+		current->flags &= ~PF_MEMALLOC;
+	}
 
 	return ret;
 }

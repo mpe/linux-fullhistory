@@ -41,7 +41,7 @@ static void end_imask_irq(unsigned int irq);
 
 static unsigned int startup_imask_irq(unsigned int irq)
 { 
-	enable_imask_irq(irq);
+	/* Nothing to do */
 	return 0; /* never anything pending */
 }
 
@@ -71,7 +71,8 @@ void static inline set_interrupt_registers(int ip)
 		     "ldc	%0, $sr\n"
 		     "1:"
 		     : "=&z" (__dummy)
-		     : "r" (~0xf0), "r" (ip << 4));
+		     : "r" (~0xf0), "r" (ip << 4)
+		     : "t");
 }
 
 static void disable_imask_irq(unsigned int irq)
@@ -103,7 +104,7 @@ static void end_imask_irq(unsigned int irq)
 
 static void shutdown_imask_irq(unsigned int irq)
 {
-	disable_imask_irq(irq);
+	/* Nothing to do */
 }
 
 void make_imask_irq(unsigned int irq)

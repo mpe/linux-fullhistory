@@ -303,8 +303,7 @@ static void chardev_channel_init(struct channel_data *chan);
 static char *chrdev_setup_rx(struct channel_data *channel, int size);
 static int chrdev_rx_done(struct channel_data *channel);
 static int chrdev_tx_done(struct channel_data *channel, int size);
-static long long cosa_lseek(struct file *file,
-	long long offset, int origin);
+static loff_t cosa_lseek(struct file *file, loff_t offset, int origin);
 static ssize_t cosa_read(struct file *file,
 	char *buf, size_t count, loff_t *ppos);
 static ssize_t cosa_write(struct file *file,
@@ -783,8 +782,7 @@ static void chardev_channel_init(struct channel_data *chan)
 	init_MUTEX(&chan->wsem);
 }
 
-static long long cosa_lseek(struct file * file,
-	long long offset, int origin)
+static loff_t cosa_lseek(struct file * file, loff_t offset, int origin)
 {
 	return -ESPIPE;
 }
@@ -1212,7 +1210,7 @@ static int cosa_sppp_ioctl(struct net_device *dev, struct ifreq *ifr,
 {
 	int rv;
 	struct channel_data *chan = (struct channel_data *)dev->priv;
-	rv = cosa_ioctl_common(chan->cosa, chan, cmd, (int)ifr->ifr_data);
+	rv = cosa_ioctl_common(chan->cosa, chan, cmd, (unsigned long)ifr->ifr_data);
 	if (rv == -ENOIOCTLCMD) {
 		return sppp_do_ioctl(dev, ifr, cmd);
 	}

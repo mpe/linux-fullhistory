@@ -62,6 +62,10 @@ extern void hd64461_outsl(unsigned int port, const void *addr, unsigned long cou
 # define __writew		generic_writew
 # define __writel		generic_writel
 
+# define __isa_port2addr	generic_isa_port2addr
+# define __ioremap		generic_ioremap
+# define __iounmap		generic_iounmap
+
 #endif
 
 #endif /* _ASM_SH_IO_HD64461_H */

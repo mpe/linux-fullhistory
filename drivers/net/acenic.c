@@ -393,22 +393,22 @@ static inline void netif_start_queue(struct net_device *dev)
 #define DEF_TRACE		0
 #define DEF_STAT		(2 * TICKS_PER_SEC)
 
-static int link[ACE_MAX_MOD_PARMS] = {0, };
-static int trace[ACE_MAX_MOD_PARMS] = {0, };
-static int tx_coal_tick[ACE_MAX_MOD_PARMS] = {0, };
-static int rx_coal_tick[ACE_MAX_MOD_PARMS] = {0, };
-static int max_tx_desc[ACE_MAX_MOD_PARMS] = {0, };
-static int max_rx_desc[ACE_MAX_MOD_PARMS] = {0, };
-static int tx_ratio[ACE_MAX_MOD_PARMS] = {0, };
+static int link[ACE_MAX_MOD_PARMS];
+static int trace[ACE_MAX_MOD_PARMS];
+static int tx_coal_tick[ACE_MAX_MOD_PARMS];
+static int rx_coal_tick[ACE_MAX_MOD_PARMS];
+static int max_tx_desc[ACE_MAX_MOD_PARMS];
+static int max_rx_desc[ACE_MAX_MOD_PARMS];
+static int tx_ratio[ACE_MAX_MOD_PARMS];
 static int dis_pci_mem_inval[ACE_MAX_MOD_PARMS] = {1, 1, 1, 1, 1, 1, 1, 1};
 
-static const char __initdata *version = 
+static char version[] __initdata = 
   "acenic.c: v0.47 09/18/2000  Jes Sorensen, linux-acenic@SunSITE.auc.dk\n"
   "                            http://home.cern.ch/~jes/gige/acenic.html\n";
 
-static struct net_device *root_dev = NULL;
+static struct net_device *root_dev;
 
-static int probed __initdata = 0;
+static int probed __initdata;
 
 
 #ifdef NEW_NETINIT

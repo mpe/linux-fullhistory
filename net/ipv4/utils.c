@@ -57,12 +57,6 @@ char *in_ntoa(__u32 in)
 	return(buff);
 }
 
-char *in_ntoa2(__u32 in, char *buff)
-{
-	sprintf(buff, "%d.%d.%d.%d", NIPQUAD(in));
-	return buff;
-}
-
 /*
  *	Convert an ASCII string to binary IP. 
  */

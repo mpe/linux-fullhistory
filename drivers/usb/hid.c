@@ -1231,6 +1231,7 @@ static int hid_submit_out(struct hid_device *hid)
 	hid->urbout.transfer_buffer_length = hid->out[hid->outtail].dr.length;
 	hid->urbout.transfer_buffer = hid->out[hid->outtail].buffer;
 	hid->urbout.setup_packet = (void *) &(hid->out[hid->outtail].dr);
+	hid->urbout.dev = hid->dev;
 
 	if (usb_submit_urb(&hid->urbout)) {
 		err("usb_submit_urb(out) failed");
@@ -1288,7 +1289,9 @@ static int hid_open(struct input_dev *dev)
 	if (hid->open++)
 		return 0;
 
-	 if (usb_submit_urb(&hid->urb))
+	hid->urb.dev = hid->dev;
+
+	if (usb_submit_urb(&hid->urb))
 		return -EIO;
 
 	return 0;

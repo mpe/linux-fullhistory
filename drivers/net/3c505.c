@@ -130,15 +130,15 @@ static const char *invalid_pcb_msg =
 #define INVALID_PCB_MSG(len) \
 	printk(invalid_pcb_msg, (len),filename,__FUNCTION__,__LINE__)
 
-static char *search_msg __initdata = "%s: Looking for 3c505 adapter at address %#x...";
+static char search_msg[] __initdata = "%s: Looking for 3c505 adapter at address %#x...";
 
-static char *stilllooking_msg __initdata = "still looking...";
+static char stilllooking_msg[] __initdata = "still looking...";
 
-static char *found_msg __initdata = "found.\n";
+static char found_msg[] __initdata = "found.\n";
 
-static char *notfound_msg __initdata = "not found (reason = %d)\n";
+static char notfound_msg[] __initdata = "not found (reason = %d)\n";
 
-static char *couldnot_msg __initdata = "%s: 3c505 not found\n";
+static char couldnot_msg[] __initdata = "%s: 3c505 not found\n";
 
 /*********************************************************
  *

@@ -11,7 +11,6 @@
 
 typedef struct kmem_cache_s kmem_cache_t;
 
-#include	<linux/config.h>
 #include	<linux/mm.h>
 #include	<linux/cache.h>
 

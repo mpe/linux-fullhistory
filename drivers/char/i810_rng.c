@@ -119,13 +119,6 @@
 	* The timer and the character device may be used simultaneously,
 	if desired.
 
-	* FIXME:  Currently only one open() of the character device is allowed.
-	If another user tries to open() the device, they will get an
-	-EBUSY error.  Instead, this really should either support
-	multiple simultaneous users of the character device (not hard),
-	or simply block open() until the current user of the chrdev
-	calls close().
-
 	* FIXME: support poll()
 
 	* FIXME: should we be crazy and support mmap()?
@@ -138,11 +131,16 @@
 	This will slow things down but guarantee that bad data is
 	never passed upstream.
 
+	* Since the RNG is accessed from a timer as well as normal
+	kernel code, but not from interrupts, we use spin_lock_bh
+	in regular code, and spin_lock in the timer function, to
+	serialize access to the RNG hardware area.
+
 	----------------------------------------------------------
 
 	Change history:
 
-	0.6.2:
+	Version 0.6.2:
 	* Clean up spinlocks.  Since we don't have any interrupts
 	  to worry about, but we do have a timer to worry about,
 	  we use spin_lock_bh everywhere except the timer function
@@ -151,6 +149,20 @@
 	* Fix timer function and h/w enable/disable logic
 	* New timer interval sysctl
 	* Clean up sysctl names
+
+	Version 0.9.0:
+	* Don't register a pci_driver, because we are really
+	  using PCI bridge vendor/device ids, and someone
+	  may want to register a driver for the bridge. (bug fix)
+	* Don't let the usage count go negative (bug fix)
+	* Clean up spinlocks (bug fix)
+	* Enable PCI device, if necessary (bug fix)
+	* iounmap on module unload (bug fix)
+	* If RNG chrdev is already in use when open(2) is called,
+	  sleep until it is available.
+	* Remove redundant globals rng_allocated, rng_use_count
+	* Convert numeric globals to unsigned
+	* Module unload cleanup
 
  */
 
@@ -166,6 +178,7 @@
 #include <linux/sysctl.h>
 #include <linux/miscdevice.h>
 #include <linux/smp_lock.h>
+#include <linux/mm.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -174,7 +187,7 @@
 /*
  * core module and version information
  */
-#define RNG_VERSION "0.6.2"
+#define RNG_VERSION "0.9.0"
 #define RNG_MODULE_NAME "i810_rng"
 #define RNG_DRIVER_NAME   RNG_MODULE_NAME " hardware driver " RNG_VERSION
 #define PFX RNG_MODULE_NAME ": "
@@ -253,22 +266,24 @@ static void rng_run_fips_test (void);
  * various RNG status variables.  they are globals
  * as we only support a single RNG device
  */
-static int rng_allocated;		/* is someone using the RNG region? */
 static int rng_hw_enabled;		/* is the RNG h/w enabled? */
 static int rng_timer_enabled;		/* is the RNG timer enabled? */
-static int rng_use_count;		/* number of times RNG has been enabled */
 static int rng_trusted;			/* does FIPS trust out data? */
 static int rng_enabled_sysctl;		/* sysctl for enabling/disabling RNG */
-static int rng_entropy = 8;		/* number of entropy bits we submit to /dev/random */
-static int rng_entropy_sysctl;		/* sysctl for changing entropy bits */
-static int rng_interval_sysctl;		/* sysctl for changing timer interval */
+static unsigned int rng_entropy = 8;	/* number of entropy bits we submit to /dev/random */
+static unsigned int rng_entropy_sysctl;	/* sysctl for changing entropy bits */
+static unsigned int rng_interval_sysctl; /* sysctl for changing timer interval */
 static int rng_have_mem_region;		/* did we grab RNG region via request_mem_region? */
-static int rng_fips_counter;		/* size of internal FIPS test data pool */
-static int rng_timer_len = RNG_DEF_TIMER_LEN; /* timer interval, in jiffies */
+static unsigned int rng_fips_counter;	/* size of internal FIPS test data pool */
+static unsigned int rng_timer_len = RNG_DEF_TIMER_LEN; /* timer interval, in jiffies */
 static void *rng_mem;			/* token to our ioremap'd RNG register area */
 static spinlock_t rng_lock = SPIN_LOCK_UNLOCKED; /* hardware lock */
 static struct timer_list rng_timer;	/* kernel timer for RNG hardware reads and tests */
-static int rng_open;			/* boolean, 0 (false) if chrdev is closed, 1 (true) if open */
+static struct pci_dev *rng_pdev;	/* Firmware Hub PCI device found during PCI probe */
+static struct semaphore rng_open_sem;	/* Semaphore for serializing rng_open/release */
+static wait_queue_head_t rng_open_wait;	/* Wait queue for serializing open/release */
+static int rng_open_mode;		/* Open mode (we only allow reads) */
+
 
 /*
  * inlined helper functions for accessing RNG registers
@@ -320,6 +335,8 @@ static void rng_timer_tick (unsigned long data)
 		/* gimme some thermal noise, baby */
 		rng_data = rng_data_read ();
 
+		spin_unlock (&rng_lock);
+
 		/*
 		 * if RNG has been verified in the past, add
 		 * data just read to the /dev/random pool,
@@ -333,6 +350,8 @@ static void rng_timer_tick (unsigned long data)
 		rng_fips_test_store (rng_data);
 		if (rng_fips_counter > RNG_FIPS_TEST_THRESHOLD)
 			rng_run_fips_test ();
+	} else {
+		spin_unlock (&rng_lock);
 	}
 
 	/* run the timer again, if enabled */
@@ -340,9 +359,6 @@ static void rng_timer_tick (unsigned long data)
 		rng_timer.expires = jiffies + rng_timer_len;
 		add_timer (&rng_timer);
 	}
-
-	spin_unlock (&rng_lock);
-
 }
 
 
@@ -351,8 +367,8 @@ static void rng_timer_tick (unsigned long data)
  */
 static int rng_enable (int enable)
 {
-	int rc = 0;
-	u8 hw_status;
+	int rc = 0, action = 0;
+	u8 hw_status, new_status;
 
 	DPRINTK ("ENTER\n");
 
@@ -362,28 +378,36 @@ static int rng_enable (int enable)
 
 	if (enable) {
 		rng_hw_enabled = 1;
-		rng_use_count++;
 		MOD_INC_USE_COUNT;
 	} else {
-		rng_use_count--;
-		if (rng_use_count == 0)
+#ifndef __alpha__
+		if (GET_USE_COUNT (THIS_MODULE) > 0)
+			MOD_DEC_USE_COUNT;
+		if (GET_USE_COUNT (THIS_MODULE) == 0)
 			rng_hw_enabled = 0;
-		MOD_DEC_USE_COUNT;
+#endif
 	}
 
 	if (rng_hw_enabled && ((hw_status & RNG_ENABLED) == 0)) {
 		rng_hwstatus_set (hw_status | RNG_ENABLED);
-		printk (KERN_INFO PFX "RNG h/w enabled\n");
+		action = 1;
 	}
 
 	else if (!rng_hw_enabled && (hw_status & RNG_ENABLED)) {
 		rng_hwstatus_set (hw_status & ~RNG_ENABLED);
-		printk (KERN_INFO PFX "RNG h/w disabled\n");
+		action = 2;
 	}
+
+	new_status = rng_hwstatus ();
 
 	spin_unlock_bh (&rng_lock);
 
-	if ((!!enable) != (!!(rng_hwstatus () & RNG_ENABLED))) {
+	if (action == 1)
+		printk (KERN_INFO PFX "RNG h/w enabled\n");
+	else if (action == 2)
+		printk (KERN_INFO PFX "RNG h/w disabled\n");
+
+	if ((!!enable) != (!!(new_status & RNG_ENABLED))) {
 		printk (KERN_ERR PFX "Unable to %sable the RNG\n",
 			enable ? "en" : "dis");
 		rc = -EIO;
@@ -406,15 +430,14 @@ static int rng_handle_sysctl_enable (ctl_table * table, int write, struct file *
 	DPRINTK ("ENTER\n");
 
 	spin_lock_bh (&rng_lock);
-
 	rng_enabled_sysctl = enabled_save = rng_timer_enabled;
+	spin_unlock_bh (&rng_lock);
 
 	rc = proc_dointvec (table, write, filp, buffer, lenp);
-	if (rc) {
-		spin_unlock_bh (&rng_lock);
+	if (rc)
 		return rc;
-	}
 
+	spin_lock_bh (&rng_lock);
 	if (enabled_save != rng_enabled_sysctl) {
 		rng_timer_enabled = rng_enabled_sysctl;
 		spin_unlock_bh (&rng_lock);
@@ -591,53 +614,49 @@ static int rng_dev_open (struct inode *inode, struct file *filp)
 	int rc = -EINVAL;
 
 	if ((filp->f_mode & FMODE_READ) == 0)
-		goto err_out;
+		goto err_out_ret;
 	if (filp->f_mode & FMODE_WRITE)
-		goto err_out;
+		goto err_out_ret;
 
-	spin_lock_bh (&rng_lock);
-
-	/* only allow one open of this device, exit with -EBUSY if already open */
-	/* FIXME: we should sleep on a semaphore here, unless O_NONBLOCK */
-	if (rng_open) {
-		spin_unlock_bh (&rng_lock);
-		rc = -EBUSY;
-		goto err_out;
+	/* wait for device to become free */
+	down (&rng_open_sem);
+	while (rng_open_mode & filp->f_mode) {
+		if (filp->f_flags & O_NONBLOCK) {
+			up (&rng_open_sem);
+			return -EWOULDBLOCK;
+		}
+		up (&rng_open_sem);
+		interruptible_sleep_on (&rng_open_wait);
+		if (signal_pending (current))
+			return -ERESTARTSYS;
+		down (&rng_open_sem);
 	}
 
-	rng_open = 1;
-
-	spin_unlock_bh (&rng_lock);
-
-	if (rng_enable(1) != 0) {
-		spin_lock_bh (&rng_lock);
-		rng_open = 0;
-		spin_unlock_bh (&rng_lock);
+	if (rng_enable (1)) {
 		rc = -EIO;
 		goto err_out;
 	}
 
+	rng_open_mode |= filp->f_mode & (FMODE_READ | FMODE_WRITE);
+	up (&rng_open_sem);
 	return 0;
 
 err_out:
+	up (&rng_open_sem);
+err_out_ret:
 	return rc;
 }
 
 
 static int rng_dev_release (struct inode *inode, struct file *filp)
 {
+	down(&rng_open_sem);
 
-	lock_kernel();
-	if (rng_enable(0) != 0) {
-		unlock_kernel();
-		return -EIO;
-	}
+	rng_enable(0);
+	rng_open_mode &= (~filp->f_mode) & (FMODE_READ|FMODE_WRITE);
 
-	spin_lock_bh (&rng_lock);
-	rng_open = 0;
-	spin_unlock_bh (&rng_lock);
-	unlock_kernel();
-
+	up (&rng_open_sem);
+	wake_up (&rng_open_wait);
 	return 0;
 }
 
@@ -705,19 +724,15 @@ read_loop:
 /*
  * rng_init_one - look for and attempt to init a single RNG
  */
-static int __init rng_init_one (struct pci_dev *dev,
-				const struct pci_device_id *id)
+static int __init rng_init_one (struct pci_dev *dev)
 {
 	int rc;
 	u8 hw_status;
 
 	DPRINTK ("ENTER\n");
 
-	if (rng_allocated) {
-		printk (KERN_ERR PFX "this driver only supports one RNG\n");
-		DPRINTK ("EXIT, returning -EBUSY\n");
-		return -EBUSY;
-	}
+	if (pci_enable_device (dev))
+		return -EIO;
 
 	/* XXX currently fails, investigate who has our mem region */
 	if (request_mem_region (RNG_ADDR, RNG_ADDR_LEN, RNG_MODULE_NAME))
@@ -728,7 +743,7 @@ static int __init rng_init_one (struct pci_dev *dev,
 		printk (KERN_ERR PFX "cannot ioremap RNG Memory\n");
 		DPRINTK ("EXIT, returning -EBUSY\n");
 		rc = -EBUSY;
-		goto err_out;
+		goto err_out_free_res;
 	}
 
 	/* Check for Intel 82802 */
@@ -737,10 +752,8 @@ static int __init rng_init_one (struct pci_dev *dev,
 		printk (KERN_ERR PFX "RNG not detected\n");
 		DPRINTK ("EXIT, returning -ENODEV\n");
 		rc = -ENODEV;
-		goto err_out;
+		goto err_out_free_map;
 	}
-
-	rng_allocated = 1;
 
 	if (rng_entropy < 0 || rng_entropy > RNG_MAX_ENTROPY)
 		rng_entropy = RNG_MAX_ENTROPY;
@@ -749,10 +762,11 @@ static int __init rng_init_one (struct pci_dev *dev,
 	init_timer (&rng_timer);
 	rng_timer.function = rng_timer_tick;
 
+	/* turn RNG h/w off, if it's on */
 	rc = rng_enable (0);
 	if (rc) {
 		printk (KERN_ERR PFX "cannot disable RNG, aborting\n");
-		goto err_out;
+		goto err_out_free_map;
 	}
 
 	/* add sysctls */
@@ -761,9 +775,9 @@ static int __init rng_init_one (struct pci_dev *dev,
 	DPRINTK ("EXIT, returning 0\n");
 	return 0;
 
-err_out:
-	if (rng_mem)
-		iounmap (rng_mem);
+err_out_free_map:
+	iounmap (rng_mem);
+err_out_free_res:
 	if (rng_have_mem_region)
 		release_mem_region (RNG_ADDR, RNG_ADDR_LEN);
 	return rc;
@@ -772,6 +786,11 @@ err_out:
 
 /*
  * Data for PCI driver interface
+ *
+ * This data only exists for exporting the supported
+ * PCI ids via MODULE_DEVICE_TABLE.  We do not actually
+ * register a pci_driver, because someone else might one day
+ * want to register another driver on the same PCI id.
  */
 const static struct pci_device_id rng_pci_tbl[] __initdata = {
         { 0x8086, 0x2418, PCI_ANY_ID, PCI_ANY_ID, },
@@ -780,11 +799,6 @@ const static struct pci_device_id rng_pci_tbl[] __initdata = {
 };
 MODULE_DEVICE_TABLE (pci, rng_pci_tbl);
 
-static struct pci_driver rng_driver = {
-       name:		RNG_MODULE_NAME,
-       id_table:	rng_pci_tbl,
-       probe:		rng_init_one,
-};
 
 MODULE_AUTHOR("Jeff Garzik, Matt Sottek");
 MODULE_DESCRIPTION("Intel i8xx chipset Random Number Generator (RNG) driver");
@@ -813,22 +827,35 @@ static struct miscdevice rng_miscdev = {
 static int __init rng_init (void)
 {
 	int rc;
+	struct pci_dev *pdev;
 
 	DPRINTK ("ENTER\n");
 
-	if (pci_register_driver (&rng_driver) < 1) {
-		DPRINTK ("EXIT, returning -ENODEV\n");
+	init_MUTEX (&rng_open_sem);
+	init_waitqueue_head (&rng_open_wait);
+
+	pdev = pci_find_device (0x8086, 0x2418, NULL);
+	if (!pdev)
+		pdev = pci_find_device (0x8086, 0x2428, NULL);
+	if (!pdev)
 		return -ENODEV;
-	}
+
+	rc = rng_init_one (pdev);
+	if (rc)
+		return rc;
 
 	rc = misc_register (&rng_miscdev);
 	if (rc) {
-		pci_unregister_driver (&rng_driver);
+		iounmap (rng_mem);
+		if (rng_have_mem_region)
+			release_mem_region (RNG_ADDR, RNG_ADDR_LEN);
 		DPRINTK ("EXIT, returning %d\n", rc);
 		return rc;
 	}
 
 	printk (KERN_INFO RNG_DRIVER_NAME " loaded\n");
+
+	rng_pdev = pdev;
 
 	DPRINTK ("EXIT, returning 0\n");
 	return 0;
@@ -842,17 +869,16 @@ static void __exit rng_cleanup (void)
 {
 	DPRINTK ("ENTER\n");
 
-	del_timer_sync (&rng_timer);
-
-	rng_sysctl (0);
-	pci_unregister_driver (&rng_driver);
-
-	if (rng_have_mem_region)
-		release_mem_region (RNG_ADDR, RNG_ADDR_LEN);
-
-	rng_hwstatus_set (rng_hwstatus() & ~RNG_ENABLED);
+	assert (rng_timer_enabled == 0);
+	assert (rng_hw_enabled == 0);
 
 	misc_deregister (&rng_miscdev);
+
+	rng_sysctl (0);
+
+	iounmap (rng_mem);
+	if (rng_have_mem_region)
+		release_mem_region (RNG_ADDR, RNG_ADDR_LEN);
 
 	DPRINTK ("EXIT\n");
 }

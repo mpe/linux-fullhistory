@@ -17,7 +17,7 @@ obj-y :=	open.o read_write.o devices.o file_table.o buffer.o \
 		filesystems.o
 
 ifeq ($(CONFIG_QUOTA),y)
-obj=ADy += dquot.o
+obj-y += dquot.o
 else
 obj-y += noquot.o
 endif

@@ -5,6 +5,7 @@ order by last name).  I'm sure this list should be longer, its
 difficult to maintain, add yourself with a patch if desired.
 
   Georg Acher <acher@informatik.tu-muenchen.de>
+  David Brownell <dbrownell@users.sourceforge.net>
   Alan Cox <alan@lxorguk.ukuu.org.uk>
   Randy Dunlap <randy.dunlap@intel.com>
   Johannes Erdfelt <jerdfelt@sventech.com>

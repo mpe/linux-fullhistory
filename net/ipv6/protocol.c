@@ -32,11 +32,8 @@
 #include <net/ipv6.h>
 #include <net/protocol.h>
 
-struct inet6_protocol *inet6_protocol_base = NULL;
-struct inet6_protocol *inet6_protos[MAX_INET_PROTOS] = 
-{
-	NULL
-};
+struct inet6_protocol *inet6_protocol_base;
+struct inet6_protocol *inet6_protos[MAX_INET_PROTOS];
 
 void inet6_add_protocol(struct inet6_protocol *prot)
 {

@@ -20,7 +20,7 @@ extern __inline__ char *strcpy(char *__dest, const char *__src)
 			     " add	#1, %0\n\t"
 			     : "=r" (__dest), "=r" (__src), "=&z" (__dummy)
 			     : "0" (__dest), "1" (__src)
-			     : "memory");
+			     : "memory", "t");
 
 	return __xdest;
 }
@@ -46,7 +46,7 @@ extern __inline__ char *strncpy(char *__dest, const char *__src, size_t __n)
 		"2:"
 		: "=r" (__dest), "=r" (__src), "=&z" (__dummy)
 		: "0" (__dest), "1" (__src), "r" (__src+__n)
-		: "memory");
+		: "memory", "t");
 
 	return __xdest;
 }
@@ -71,7 +71,8 @@ extern __inline__ int strcmp(const char *__cs, const char *__ct)
 		"sub	%3, %2\n"
 		"2:"
 		: "=r" (__cs), "=r" (__ct), "=&r" (__res), "=&z" (__dummy)
-		: "0" (__cs), "1" (__ct));
+		: "0" (__cs), "1" (__ct)
+		: "t");
 
 	return __res;
 }
@@ -81,6 +82,9 @@ extern __inline__ int strncmp(const char *__cs, const char *__ct, size_t __n)
 {
 	register int __res;
 	unsigned long __dummy;
+
+	if (__n == 0)
+		return 0;
 
 	__asm__ __volatile__(
 		"mov.b	@%1+, %3\n"
@@ -99,7 +103,8 @@ extern __inline__ int strncmp(const char *__cs, const char *__ct, size_t __n)
 		"sub	%3, %2\n"
 		"3:"
 		:"=r" (__cs), "=r" (__ct), "=&r" (__res), "=&z" (__dummy)
-		: "0" (__cs), "1" (__ct), "r" (__cs+__n));
+		: "0" (__cs), "1" (__ct), "r" (__cs+__n)
+		: "t");
 
 	return __res;
 }

@@ -15,7 +15,8 @@ extern __inline__ void __delay(unsigned long loops)
 		"bf/s	1b\n\t"
 		" dt	%0"
 		: "=r" (loops)
-		: "0" (loops));
+		: "0" (loops)
+		: "t");
 }
 
 extern __inline__ void __udelay(unsigned long usecs, unsigned long lps)

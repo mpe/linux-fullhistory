@@ -67,7 +67,7 @@ static const card_ids __init etherh_cids[] = {
 MODULE_AUTHOR("Russell King");
 MODULE_DESCRIPTION("i3 EtherH driver");
 
-static char *version __initdata =
+static char version[] __initdata =
 	"etherh [500/600/600A] ethernet driver (c) 2000 R.M.King v1.07\n";
 
 #define ETHERH500_DATAPORT	0x200	/* MEMC */

@@ -90,6 +90,8 @@ int sci_debug = 0;
 MODULE_PARM(sci_debug, "i");
 #endif
 
+#define dprintk(x...) do { if (sci_debug) printk(x); } while(0)
+
 static void put_char(struct sci_port *port, char c)
 {
 	unsigned long flags;
@@ -329,6 +331,9 @@ static void sci_set_baud(struct sci_port *port, int baud)
 	case 38400:
 		t = BPS_38400;
 		break;
+	case 57600:
+		t = BPS_57600;
+		break;
 	default:
 		printk(KERN_INFO "sci: unsupported baud rate: %d, using 115200 instead.\n", baud);
 	case 115200:
@@ -341,6 +346,8 @@ static void sci_set_baud(struct sci_port *port, int baud)
 		if(t >= 256) {
 			sci_out(port, SCSMR, (sci_in(port, SCSMR) & ~3) | 1);
 			t >>= 2;
+		} else {
+			sci_out(port, SCSMR, sci_in(port, SCSMR) & ~3);
 		}
 		sci_out(port, SCBRR, t);
 		udelay((1000000+(baud-1)) / baud); /* Wait one bit interval */
@@ -374,10 +381,9 @@ static void sci_set_termios_cflag(struct sci_port *port, int cflag, int baud)
 	if (cflag & CSTOPB)
 		smr_val |= 0x08;
 	sci_out(port, SCSMR, smr_val);
+	sci_set_baud(port, baud);
 
 	port->init_pins(port, cflag);
-
-	sci_set_baud(port, baud);
 	sci_out(port, SCSCR, SCSCR_INIT(port));
 }
 
@@ -528,12 +534,27 @@ static inline void sci_receive_chars(struct sci_port *port)
 		if (count == 0)
 			break;
 
-		for (i=0; i<count; i++)
-			tty->flip.char_buf_ptr[i] = sci_in(port, SCxRDR);
+		if (port->type == PORT_SCI) {
+			tty->flip.char_buf_ptr[0] = sci_in(port, SCxRDR);
+			tty->flip.flag_buf_ptr[0] = TTY_NORMAL;
+		} else {
+			for (i=0; i<count; i++) {
+				tty->flip.char_buf_ptr[i] = sci_in(port, SCxRDR);
+				status = sci_in(port, SCxSR);
+				if (status&SCxSR_FER(port)) {
+					tty->flip.flag_buf_ptr[i] = TTY_FRAME;
+					dprintk("sci: frame error\n");
+				} else if (status&SCxSR_PER(port)) {
+					tty->flip.flag_buf_ptr[i] = TTY_PARITY;
+					dprintk("sci: parity error\n");
+				} else {
+					tty->flip.flag_buf_ptr[i] = TTY_NORMAL;
+				}
+			}
+		}
+
 		sci_in(port, SCxSR); /* dummy read */
 		sci_out(port, SCxSR, SCxSR_RDxF_CLEAR(port));
-
-		memset(tty->flip.flag_buf_ptr, TTY_NORMAL, count);
 
 		/* Update the kernel buffer end */
 		tty->flip.count += count;
@@ -547,6 +568,82 @@ static inline void sci_receive_chars(struct sci_port *port)
 	if (copied)
 		/* Tell the rest of the system the news. New characters! */
 		tty_flip_buffer_push(tty);
+}
+
+static inline int sci_handle_errors(struct sci_port *port)
+{
+	int copied = 0;
+	unsigned short status = sci_in(port, SCxSR);
+	struct tty_struct *tty = port->gs.tty;
+
+	if (status&SCxSR_ORER(port) && tty->flip.count<TTY_FLIPBUF_SIZE) {
+		/* overrun error */
+		copied++;
+		*tty->flip.flag_buf_ptr++ = TTY_OVERRUN;
+		dprintk("sci: overrun error\n");
+	}
+
+	if (status&SCxSR_FER(port) && tty->flip.count<TTY_FLIPBUF_SIZE) {
+		if (sci_rxd_in(port) == 0) {
+			/* Notify of BREAK */
+			copied++;
+			*tty->flip.flag_buf_ptr++ = TTY_BREAK;
+			dprintk("sci: BREAK detected\n");
+		}
+		else {
+			/* frame error */
+			copied++;
+			*tty->flip.flag_buf_ptr++ = TTY_FRAME;
+			dprintk("sci: frame error\n");
+		}
+	}
+
+	if (status&SCxSR_PER(port) && tty->flip.count<TTY_FLIPBUF_SIZE) {
+		/* parity error */
+		copied++;
+		*tty->flip.flag_buf_ptr++ = TTY_PARITY;
+		dprintk("sci: parity error\n");
+	}
+
+	if (copied) {
+		tty->flip.count += copied;
+		tty_flip_buffer_push(tty);
+	}
+
+	return copied;
+}
+
+static inline int sci_handle_breaks(struct sci_port *port)
+{
+	int copied = 0;
+	unsigned short status = sci_in(port, SCxSR);
+	struct tty_struct *tty = port->gs.tty;
+
+	if (status&SCxSR_BRK(port) && tty->flip.count<TTY_FLIPBUF_SIZE) {
+		/* Notify of BREAK */
+		copied++;
+		*tty->flip.flag_buf_ptr++ = TTY_BREAK;
+		dprintk("sci: BREAK detected\n");
+	}
+
+#if defined(CONFIG_CPU_SUBTYPE_SH7750)
+	/* XXX: Handle SCIF overrun error */
+	if (port->type == PORT_SCIF && (ctrl_inw(SCLSR2) & SCIF_ORER) != 0) {
+		ctrl_outw(0, SCLSR2);
+		if(tty->flip.count<TTY_FLIPBUF_SIZE) {
+			copied++;
+			*tty->flip.flag_buf_ptr++ = TTY_OVERRUN;
+			dprintk("sci: overrun error\n");
+		}
+	}
+#endif
+
+	if (copied) {
+		tty->flip.count += copied;
+		tty_flip_buffer_push(tty);
+	}
+
+	return copied;
 }
 
 static void sci_rx_interrupt(int irq, void *ptr, struct pt_regs *regs)
@@ -577,11 +674,29 @@ static void sci_er_interrupt(int irq, void *ptr, struct pt_regs *regs)
 	struct sci_port *port = ptr;
 
 	/* Handle errors */
-	if (sci_in(port, SCxSR) & SCxSR_ERRORS(port))
-		sci_out(port, SCxSR, SCxSR_ERROR_CLEAR(port));
+	if (port->type == PORT_SCI) {
+		if(sci_handle_errors(port)) {
+			/* discard character in rx buffer */
+			sci_in(port, SCxSR);
+			sci_out(port, SCxSR, SCxSR_RDxF_CLEAR(port));
+		}
+	}
+	else
+		sci_rx_interrupt(irq, ptr, regs);
+		
+	sci_out(port, SCxSR, SCxSR_ERROR_CLEAR(port));
 
 	/* Kick the transmission */
 	sci_tx_interrupt(irq, ptr, regs);
+}
+
+static void sci_br_interrupt(int irq, void *ptr, struct pt_regs *regs)
+{
+	struct sci_port *port = ptr;
+
+	/* Handle BREAKs */
+	sci_handle_breaks(port);
+	sci_out(port, SCxSR, SCxSR_BREAK_CLEAR(port));
 }
 
 static void do_softint(void *private_)
@@ -983,8 +1098,9 @@ int __init sci_init(void)
 {
 	struct sci_port *port;
 	int i, j;
-	void (*handlers[3])(int irq, void *ptr, struct pt_regs *regs) = {
-		sci_er_interrupt, sci_rx_interrupt, sci_tx_interrupt
+	void (*handlers[4])(int irq, void *ptr, struct pt_regs *regs) = {
+		sci_er_interrupt, sci_rx_interrupt, sci_tx_interrupt,
+		sci_br_interrupt,
 	};
 
 	printk("SuperH SCI(F) driver initialized\n");
@@ -993,7 +1109,8 @@ int __init sci_init(void)
 		port = &sci_ports[j];
 		printk("ttySC%d at 0x%08x is a %s\n", j, port->base,
 		       (port->type == PORT_SCI) ? "SCI" : "SCIF");
-		for (i=0; i<3; i++) {
+		for (i=0; i<4; i++) {
+			if (!port->irqs[i]) continue;
 			if (request_irq(port->irqs[i], handlers[i], SA_INTERRUPT,
 					"sci", port)) {
 				printk(KERN_ERR "sci: Cannot allocate irq.\n");
@@ -1001,7 +1118,6 @@ int __init sci_init(void)
 			}
 		}
 	}
-	/* XXX: How about BRI interrupt?? */
 
 	sci_init_drivers();
 

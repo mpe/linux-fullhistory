@@ -136,11 +136,12 @@ void free_task_struct(struct task_struct *p)
  */
 int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 {	/* Don't use this in BL=1(cli).  Or else, CPU resets! */
-	register unsigned long __sc0 __asm__ ("$r3") = __NR_clone;
-	register unsigned long __sc4 __asm__ ("$r4") = (long) flags | CLONE_VM;
-	register unsigned long __sc5 __asm__ ("$r5") = 0;
-	register unsigned long __sc8 __asm__ ("$r8") = (long) arg;
-	register unsigned long __sc9 __asm__ ("$r9") = (long) fn;
+	register unsigned long __sc0 __asm__ ("r0");
+	register unsigned long __sc3 __asm__ ("r3") = __NR_clone;
+	register unsigned long __sc4 __asm__ ("r4") = (long) flags | CLONE_VM;
+	register unsigned long __sc5 __asm__ ("r5") = 0;
+	register unsigned long __sc8 __asm__ ("r8") = (long) arg;
+	register unsigned long __sc9 __asm__ ("r9") = (long) fn;
 
 	__asm__("trapa	#0x12\n\t" 	/* Linux/SH system call */
 		"tst	#0xff, $r0\n\t"	/* child or parent? */
@@ -148,13 +149,13 @@ int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 		"jsr	@$r9\n\t"	/* call fn */
 		" mov	$r8, $r4\n\t"	/* push argument */
 		"mov	$r0, $r4\n\t"	/* return value to arg of exit */
-		"mov	%2, $r3\n\t"	/* exit */
+		"mov	%1, $r3\n\t"	/* exit */
 		"trapa	#0x11\n"
 		"1:"
 		: "=z" (__sc0)
-		: "0" (__sc0), "i" (__NR_exit),
-		  "r" (__sc4), "r" (__sc5), "r" (__sc8), "r" (__sc9)
-		: "memory");
+		: "i" (__NR_exit), "r" (__sc3), "r" (__sc4), "r" (__sc5), 
+		  "r" (__sc8), "r" (__sc9)
+		: "memory", "t");
 	return __sc0;
 }
 

@@ -493,6 +493,7 @@ static void __init ide_setup_pci_device (struct pci_dev *dev, ide_pci_device_t *
 	byte tmp = 0;
 	ide_hwif_t *hwif, *mate = NULL;
 	unsigned int class_rev;
+	int pci_class_ide;
 
 #ifdef CONFIG_IDEDMA_AUTO
 	autodma = 1;
@@ -538,7 +539,8 @@ check_if_enabled:
 	 * Can we trust the reported IRQ?
 	 */
 	pciirq = dev->irq;
-	if ((dev->class & ~(0xff)) != (PCI_CLASS_STORAGE_IDE << 8)) {
+	pci_class_ide = ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE);
+	if (!pci_class_ide) {
 		printk("%s: not 100%% native mode: will probe irqs later\n", d->name);
 		/*
 		 * This allows offboard ide-pci cards the enable a BIOS,
@@ -548,11 +550,17 @@ check_if_enabled:
 		 */
 		pciirq = (d->init_chipset) ? d->init_chipset(dev, d->name) : ide_special_settings(dev, d->name);
 	} else if (tried_config) {
-		printk("%s: will probe irqs later\n", d->name);
+		printk(KERN_INFO "%s: will probe irqs later\n", d->name);
 		pciirq = 0;
 	} else if (!pciirq) {
-		printk("%s: bad irq (%d): will probe later\n", d->name, pciirq);
-		pciirq = 0;
+		if (pci_class_ide) {
+			/* this is the normal path for most IDE devices */
+			if (d->init_chipset)
+				pciirq = d->init_chipset(dev, d->name);
+			else
+				printk(KERN_INFO "%s standard IDE storage device detected\n", d->name);
+		} else
+			printk(KERN_WARNING "%s: bad irq (0): will probe later\n", d->name);
 	} else {
 		if (d->init_chipset)
 			(void) d->init_chipset(dev, d->name);

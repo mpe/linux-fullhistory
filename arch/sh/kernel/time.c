@@ -342,7 +342,8 @@ static __init unsigned int get_cpu_mhz(void)
 		"bt/s	1b\n\t"
 		" add	#1,%0"
 		: "=r"(count), "=z" (__dummy)
-		: "0" (0), "1" (0));
+		: "0" (0), "1" (0)
+		: "t");
 	cli();
 	/*
 	 * SH-3:

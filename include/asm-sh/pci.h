@@ -18,12 +18,12 @@
 #define PCIBIOS_MIN_MEM		0x10000000
 #endif
 
-extern inline void pcibios_set_master(struct pci_dev *dev)
+static inline void pcibios_set_master(struct pci_dev *dev)
 {
 	/* No special bus mastering setup handling */
 }
 
-extern inline void pcibios_penalize_isa_irq(int irq)
+static inline void pcibios_penalize_isa_irq(int irq)
 {
 	/* We don't do dynamic PCI IRQ allocation */
 }
@@ -67,7 +67,7 @@ extern void pci_free_consistent(struct pci_dev *hwdev, size_t size,
  * Once the device is given the dma address, the device owns this memory
  * until either pci_unmap_single or pci_dma_sync_single is performed.
  */
-extern inline dma_addr_t pci_map_single(struct pci_dev *hwdev, void *ptr,
+static inline dma_addr_t pci_map_single(struct pci_dev *hwdev, void *ptr,
 					size_t size,int directoin)
 {
 	return virt_to_bus(ptr);
@@ -80,7 +80,7 @@ extern inline dma_addr_t pci_map_single(struct pci_dev *hwdev, void *ptr,
  * After this call, reads by the cpu to the buffer are guarenteed to see
  * whatever the device wrote there.
  */
-extern inline void pci_unmap_single(struct pci_dev *hwdev, dma_addr_t dma_addr,
+static inline void pci_unmap_single(struct pci_dev *hwdev, dma_addr_t dma_addr,
 				    size_t size,int direction)
 {
 	/* Nothing to do */
@@ -101,7 +101,7 @@ extern inline void pci_unmap_single(struct pci_dev *hwdev, dma_addr_t dma_addr,
  * Device ownership issues as mentioned above for pci_map_single are
  * the same here.
  */
-extern inline int pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg,
+static inline int pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg,
 			     int nents,int direction)
 {
 	return nents;
@@ -111,7 +111,7 @@ extern inline int pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg,
  * Again, cpu read rules concerning calls here are the same as for
  * pci_unmap_single() above.
  */
-extern inline void pci_unmap_sg(struct pci_dev *hwdev, struct scatterlist *sg,
+static inline void pci_unmap_sg(struct pci_dev *hwdev, struct scatterlist *sg,
 				int nents,int direction)
 {
 	/* Nothing to do */
@@ -126,7 +126,7 @@ extern inline void pci_unmap_sg(struct pci_dev *hwdev, struct scatterlist *sg,
  * next point you give the PCI dma address back to the card, the
  * device again owns the buffer.
  */
-extern inline void pci_dma_sync_single(struct pci_dev *hwdev,
+static inline void pci_dma_sync_single(struct pci_dev *hwdev,
 				       dma_addr_t dma_handle,
 				       size_t size,int direction)
 {
@@ -139,7 +139,7 @@ extern inline void pci_dma_sync_single(struct pci_dev *hwdev,
  * The same as pci_dma_sync_single but for a scatter-gather list,
  * same rules and usage.
  */
-extern inline void pci_dma_sync_sg(struct pci_dev *hwdev,
+static inline void pci_dma_sync_sg(struct pci_dev *hwdev,
 				   struct scatterlist *sg,
 				   int nelems,int direction)
 {

@@ -26,6 +26,7 @@ You only have read/write the data from/to the buffers in the completion
 handler, the continuous streaming itself is transparently done by the 
 URB-machinery.
 
+
 1.2. The URB structure
 
 typedef struct urb
@@ -68,6 +69,7 @@ typedef struct urb
 	iso_packet_descriptor_t  iso_frame_desc[0];
 } urb_t, *purb_t;
 
+
 1.3. How to get an URB?
 
 URBs are allocated with the following call
@@ -84,6 +86,7 @@ To free an URB, use
 
 This call also may free internal (host controller specific) memory in the
 future.
+
 
 1.4. What has to be filled in?
 
@@ -106,6 +109,7 @@ Usually, (to reduce restart time) the completion handler is called
 AFTER the URB re-submission. You can get the other way by setting
 USB_URB_EARLY_COMPLETE in transfer_flags. This is implicit for
 INT transfers.
+
 
 1.5. How to submit an URB?
 
@@ -133,15 +137,25 @@ execution cannot be scheduled later than 900 frames from the 'now'-time.
 The same applies to INT transfers, but here the seamless continuation is 
 independent of the transfer flags (implicitly ASAP).
 
+
 1.6. How to cancel an already running URB?
 
-Call
+For an URB which you've submitted, but which hasn't been returned to
+your driver by the host controller, call
+
 	int unlink_urb(purb_t purb)
 
 It removes the urb from the internal list and frees all allocated
 HW descriptors. The status is changed to USB_ST_URB_KILLED. After 
 unlink_urb() returns, you can safely free the URB with free_urb(urb)
 and all other possibly associated data (urb->context etc.)
+
+There is also an asynchronous unlink mode.  To use this, set the
+the USB_ASYNC_UNLINK flag in urb->transfer flags before calling
+usb_unlink_urb().  When using async unlinking, the URB will not
+normally be unlinked when unlink_urb() returns.  Instead, wait for
+the completion handler to be called.
+
 
 1.7. What about the completion handler?
 
@@ -157,6 +171,16 @@ i.e. it gets just the URB that caused the completion call.
 In the completion handler, you should have a look at urb->status to
 detect any USB errors. Since the context parameter is included in the URB,
 you can pass information to the completion handler. 
+
+Avoid using the urb->dev field in your completion handler; it's cleared
+as part of URB unlinking.  Instead, use urb->context to hold all the
+data your driver needs.
+
+Also, NEVER SLEEP IN A COMPLETION HANDLER.  These are normally called
+during hardware interrupt processing.  If you can, defer substantial
+work to a tasklet (bottom half) to keep system latencies low.  You'll
+probably need to use spinlocks to protect data structures you manipulate
+in completion handlers.
 
 
 1.8. How to do isochronous (ISO) transfers?
@@ -184,11 +208,13 @@ queuing more than one ISO frame with ASAP to the same device&endpoint result
 in seamless ISO streaming. For continuous streaming you have to use URB
 linking. 
 
+
 1.9. How to start interrupt (INT) transfers?
 
-INT transfers are currently implemented with 8 different queues for intervals 
-for 1, 2, 4,... 128ms. Only one TD is allocated for each interrupt. After
-calling the completion handler, the TD is recycled.
+INT transfers are currently implemented with different queues for intervals 
+for 1, 2, 4,... 128ms. Only one URB is allocated for each interrupt. After
+calling the completion handler, that URB is recycled by the host controller
+driver (HCD).
 With the submission of one URB, the interrupt is scheduled until it is
 canceled by unlink_urb.
 

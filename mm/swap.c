@@ -100,6 +100,15 @@ void age_page_up_nolock(struct page * page)
 		page->age = PAGE_AGE_MAX;
 }
 
+/*
+ * We use this (minimal) function in the case where we
+ * know we can't deactivate the page (yet).
+ */
+void age_page_down_ageonly(struct page * page)
+{
+	page->age /= 2;
+}
+
 void age_page_down_nolock(struct page * page)
 {
 	/* The actual page aging bit */
@@ -155,30 +164,39 @@ void age_page_down(struct page * page)
  */
 void deactivate_page_nolock(struct page * page)
 {
+	/*
+	 * One for the cache, one for the extra reference the
+	 * caller has and (maybe) one for the buffers.
+	 *
+	 * This isn't perfect, but works for just about everything.
+	 * Besides, as long as we don't move unfreeable pages to the
+	 * inactive_clean list it doesn't need to be perfect...
+	 */
+	int maxcount = (page->buffers ? 3 : 2);
 	page->age = 0;
 
 	/*
 	 * Don't touch it if it's not on the active list.
 	 * (some pages aren't on any list at all)
 	 */
-	if (PageActive(page) && (page_count(page) <= 2 || page->buffers) &&
+	if (PageActive(page) && page_count(page) <= maxcount &&
 			!page_ramdisk(page)) {
 
 		/*
 		 * We can move the page to the inactive_dirty list
-		 * if we know there is backing store available.
+		 * if we have the strong suspicion that they might
+		 * become freeable in the near future.
 		 *
-		 * We also move pages here that we cannot free yet,
-		 * but may be able to free later - because most likely
-		 * we're holding an extra reference on the page which
-		 * will be dropped right after deactivate_page().
+		 * That is, the page has buffer heads attached (that
+		 * need to be cleared away) and/or the function calling
+		 * us has an extra reference count on the page.
 		 */
 		if (page->buffers || page_count(page) == 2) {
 			del_page_from_active_list(page);
 			add_page_to_inactive_dirty_list(page);
 		/*
-		 * If the page is clean and immediately reusable,
-		 * we can move it to the inactive_clean list.
+		 * Only if we are SURE the page is clean and immediately
+		 * reusable, we move it to the inactive_clean list.
 		 */
 		} else if (page->mapping && !PageDirty(page) &&
 							!PageLocked(page)) {
@@ -215,6 +233,10 @@ void activate_page_nolock(struct page * page)
 		 * not to do anything.
 		 */
 	}
+
+	/* Make sure the page gets a fair chance at staying active. */
+	if (page->age < PAGE_AGE_START)
+		page->age = PAGE_AGE_START;
 }
 
 void activate_page(struct page * page)

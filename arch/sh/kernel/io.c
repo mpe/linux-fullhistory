@@ -1,5 +1,5 @@
 /*
- * linux/arch/sh/kernel/io_generic.c
+ * linux/arch/sh/kernel/io.c
  *
  * Copyright (C) 2000  Stuart Menefy
  *

@@ -617,6 +617,7 @@ static void read_bulk_callback( struct urb *urb )
 	pegasus->stats.rx_bytes += pkt_len;
 
 goon:
+	pegasus->rx_urb.dev = pegasus->usb;
 	if ( (res = usb_submit_urb(&pegasus->rx_urb)) )
 		warn( __FUNCTION__ " failed submint rx_urb %d", res);
 }
@@ -698,6 +699,7 @@ static int pegasus_start_xmit( struct sk_buff *skb, struct net_device *net )
 	pegasus->tx_urb.transfer_buffer_length = count;
 	pegasus->tx_urb.transfer_flags |= USB_ASYNC_UNLINK;
 
+	pegasus->tx_urb.dev = pegasus->usb;
 	if ((res = usb_submit_urb(&pegasus->tx_urb))) {
 		warn("failed tx_urb %d", res);
 		pegasus->stats.tx_errors++;
@@ -737,9 +739,11 @@ static int pegasus_open(struct net_device *net)
 		err("can't start_net() - %d", res);
 		return -EIO;
 	}
+	pegasus->rx_urb.dev = pegasus->usb;
 	if ( (res = usb_submit_urb(&pegasus->rx_urb)) )
 		warn( __FUNCTION__ " failed rx_urb %d", res );
 #ifdef	PEGASUS_USE_INTR
+	pegasus->intr_urb.dev = pegasus->usb;
 	if ( (res = usb_submit_urb(&pegasus->intr_urb)) )
 		warn( __FUNCTION__ " failed intr_urb %d", res);
 #endif		
@@ -894,6 +898,7 @@ static void * pegasus_probe( struct usb_device *dev, unsigned int ifnum )
 	init_MUTEX( &pegasus-> ctrl_sem );
 	init_waitqueue_head( &pegasus->ctrl_wait );
 
+	usb_inc_dev_use (dev);
 	pegasus->usb = dev;
 	pegasus->net = net;
 
@@ -951,11 +956,7 @@ static void pegasus_disconnect( struct usb_device *dev, void *ptr )
 	netif_stop_queue( pegasus->net );
 	unregister_netdev( pegasus->net );
 
-	usb_unlink_urb( &pegasus->rx_urb );
-	usb_unlink_urb( &pegasus->tx_urb );
-	usb_unlink_urb( &pegasus->ctrl_urb );
-	usb_unlink_urb( &pegasus->intr_urb );
-	
+	usb_dec_dev_use (pegasus->usb);
 	kfree( pegasus );
 	pegasus = NULL;
 

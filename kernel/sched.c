@@ -141,62 +141,51 @@ static inline int goodness(struct task_struct * p, int this_cpu, struct mm_struc
 	int weight;
 
 	/*
-	 * Realtime process, select the first one on the
-	 * runqueue (taking priorities within processes
-	 * into account).
+	 * select the current process after every other
+	 * runnable process, but before the idle thread.
+	 * Also, dont trigger a counter recalculation.
 	 */
-	if (p->policy != SCHED_OTHER) {
-		weight = 1000 + p->rt_priority;
+	weight = -1;
+	if (p->policy & SCHED_YIELD)
+		goto out;
+
+	/*
+	 * Non-RT process - normal case first.
+	 */
+	if (p->policy == SCHED_OTHER) {
+		/*
+		 * Give the process a first-approximation goodness value
+		 * according to the number of clock-ticks it has left.
+		 *
+		 * Don't do any other calculations if the time slice is
+		 * over..
+		 */
+		weight = p->counter;
+		if (!weight)
+			goto out;
+			
+#ifdef CONFIG_SMP
+		/* Give a largish advantage to the same processor...   */
+		/* (this is equivalent to penalizing other processors) */
+		if (p->processor == this_cpu)
+			weight += PROC_CHANGE_PENALTY;
+#endif
+
+		/* .. and a slight advantage to the current MM */
+		if (p->mm == this_mm || !p->mm)
+			weight += 1;
+		weight += 20 - p->nice;
 		goto out;
 	}
 
 	/*
-	 * Give the process a first-approximation goodness value
-	 * according to the number of clock-ticks it has left.
-	 *
-	 * Don't do any other calculations if the time slice is
-	 * over..
+	 * Realtime process, select the first one on the
+	 * runqueue (taking priorities within processes
+	 * into account).
 	 */
-	weight = p->counter;
-	if (!weight)
-		goto out;
-			
-#ifdef CONFIG_SMP
-	/* Give a largish advantage to the same processor...   */
-	/* (this is equivalent to penalizing other processors) */
-	if (p->processor == this_cpu)
-		weight += PROC_CHANGE_PENALTY;
-#endif
-
-	/* .. and a slight advantage to the current MM */
-	if (p->mm == this_mm || !p->mm)
-		weight += 1;
-	weight += 20 - p->nice;
-
+	weight = 1000 + p->rt_priority;
 out:
 	return weight;
-}
-
-/*
- * subtle. We want to discard a yielded process only if it's being
- * considered for a reschedule. Wakeup-time 'queries' of the scheduling
- * state do not count. Another optimization we do: sched_yield()-ed
- * processes are runnable (and thus will be considered for scheduling)
- * right when they are calling schedule(). So the only place we need
- * to care about SCHED_YIELD is when we calculate the previous process'
- * goodness ...
- */
-static inline int prev_goodness(struct task_struct * p, int this_cpu, struct mm_struct *this_mm)
-{
-	if (p->policy & SCHED_YIELD) {
-		/*
-		 * select the current process after every other
-		 * runnable process, but before the idle thread.
-		 * Also, dont trigger a counter recalculation.
-		 */
-		return -1;
-	}
-	return goodness(p, this_cpu, this_mm);
 }
 
 /*
@@ -678,7 +667,7 @@ recalculate:
 	goto repeat_schedule;
 
 still_running:
-	c = prev_goodness(prev, this_cpu, prev->active_mm);
+	c = goodness(prev, this_cpu, prev->active_mm);
 	next = prev;
 	goto still_running_back;
 
