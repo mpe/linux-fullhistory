@@ -1486,7 +1486,7 @@ static int snd_ac97_mixer_build(ac97_t * ac97)
 	}
 
 	/* build S/PDIF controls */
-	if (ac97->ext_id & AC97_EI_SPDIF) {
+	if ((ac97->ext_id & AC97_EI_SPDIF) && !(ac97->scaps & AC97_SCAP_NO_SPDIF)) {
 		if (ac97->build_ops->build_spdif) {
 			if ((err = ac97->build_ops->build_spdif(ac97)) < 0)
 				return err;
