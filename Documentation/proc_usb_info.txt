@@ -1,0 +1,221 @@
+/proc/bus/usb filesystem output
+===============================
+(version 19990722)
+
+
+The /proc filesystem for USB devices generates
+/proc/bus/usb/drivers and /proc/bus/usb/devices.
+
+/proc/bus/usb/drivers just lists the registered drivers,
+one per line.  Not very interesting or pretty.
+
+In /proc/bus/usb/devices, each device's output has multiple
+lines (except for a root hub) of ASCII output.
+I made it ASCII instead of binary on purpose, so that someone
+can obtain some useful data from it without the use of an
+auxiliary program.  However, with an auxiliary program, the numbers
+in the first 4 columns of each "T:" line (topology info:
+Lev, Prnt, Port, Cnt) can be used to build a USB topology diagram.
+(I think.  I haven't proved this, but I have tested it with 3
+different topo/connections and it looked possible.)
+
+Each line is tagged with a one-character ID for that line:
+
+T = Topology (etc.)
+D = Device descriptor info.
+P = Product ID info. (from Device descriptor, but they won't fit
+    together on one line)
+C = Configuration descriptor info. (* = active configuration)
+I = Interface descriptor info.
+E = Endpoint descriptor info.
+
+=======================================================================
+
+/proc/bus/usb/devices output format:
+
+Legend:
+  d = decimal number (may have leading spaces or 0's)
+  x = hexadecimal number (may have leading spaces or 0's)
+  s = string
+
+
+Topology info:
+
+T:  Lev=dd Prnt=dd Port=dd Cnt=dd Dev#=ddd Spd=ddd If#=ddd MxCh=dd Driver=%s
+|   |      |       |       |      |        |       |       |       |__DriverName
+|   |      |       |       |      |        |       |       |__MaxChildren
+|   |      |       |       |      |        |       |__Configured InterfaceNumber
+|   |      |       |       |      |        |__Device Speed in Mbps
+|   |      |       |       |      |__DeviceNumber
+|   |      |       |       |__Count of devices at this level
+|   |      |       |__Connector/Port on Parent for this device
+|   |      |__Parent DeviceNumber
+|   |__Level in topology
+|__Topology info tag
+
+
+Device descriptor info & Product ID info:
+
+D:  Ver=x.xx Cls=xx(s) Sub=xx Prot=xx MxPS=dd #Cfgs=dd
+P:  Vendor=xxxx ProdID=xxxx Rev=xx.xx
+
+where
+D:  Ver=x.xx Cls=xx(sssss) Sub=xx Prot=xx MxPS=dd #Cfgs=dd
+|   |        |             |      |       |       |__NumberConfigurations
+|   |        |             |      |       |__MaxPacketSize of Default Endpoint
+|   |        |             |      |__DeviceProtocol
+|   |        |             |__DeviceSubClass
+|   |        |__DeviceClass
+|   |__Device USB version
+|__Device info tag #1
+
+where
+P:  Vendor=xxxx ProdID=xxxx Rev=xx.xx
+|   |           |           |__Product revision number
+|   |           |__Product ID code
+|   |__Vendor ID code
+|__Device info tag #2
+
+
+Configuration descriptor info:
+
+C:  #Ifs=dd Cfg#=dd Atr=xx MPwr=dddmA
+|   |       |       |      |__MaxPower in mA
+|   |       |       |__Attributes
+|   |       |__ConfiguratioNumber
+|   |__NumberOfInterfaces
+|__Config info tag
+
+
+Interface descriptor info (can be multiple per Config):
+
+I:  If#=dd Alt=dd #EPs=dd Cls=xx(sssss) Sub=xx Prot=xx
+|   |      |      |       |             |      |__InterfaceProtocol
+|   |      |      |       |             |__InterfaceSubClass
+|   |      |      |       |__InterfaceClass
+|   |      |      |__NumberOfEndpoints
+|   |      |__AlternateSettingNumber
+|   |__InterfaceNumber
+|__Interface info tag
+
+
+Endpoint descriptor info (can be multiple per Interface):
+
+E:  Ad=xx(s) Atr=xx(ssss) MxPS=dddd Ivl=dddms
+E:  Ad=xx(s) Atr=xx(ssss) MxPS=dddd Ivl=dddms
+|   |        |         |         |__Interval
+|   |        |         |__EndpointMaxPacketSize
+|   |        |__Attributes(EndpointType)
+|   |__EndpointAddress(I=In,O=Out)
+|__Endpoint info tag
+
+=======================================================================
+
+
+If a user or script is interested only in Topology info, for
+example, use something like "grep ^T: /proc/bus/usb/devices"
+for only the Topology lines.  A command like
+"grep -i ^[tdp]: /proc/bus/usb/devices" can be used to list
+only the lines that begin with the characters in square brackets,
+where the valid characters are TDPCIE.  With a slightly more able
+script, it can display any selected lines (for example, only T, D,
+and P lines) and change their output format.  (The "procusb"
+Perl script is the beginning of this idea.  It will list only
+selected lines [selected from TDPCIE] or "All" lines from
+/proc/bus/usb/devices.)
+
+The Topology lines can be used to generate a graphic/pictorial
+of the USB devices on a system's root hub.  (See more below
+on how to do this.)
+
+The Configuration lines could be used to list maximum power
+(in milliamps) that a system's USB devices are using.
+For example, "grep ^C: /proc/bus/usb/devices".
+
+
+Here's an example, from a system which has a UHCI root hub,
+an external hub connected to the root hub, and a mouse and
+a video camera connected to the external hub.  [The video
+camera is listed as (none) since it is not recognized by
+any driver.]
+
+
+T:  Lev=00 Prnt=00 Port=00 Cnt=00 Dev#= -1 Spd=12  If#=  0 MxCh= 2 Driver=(root hub)
+T:  Lev=01 Prnt=00 Port=00 Cnt=01 Dev#=  1 Spd=12  If#=  0 MxCh= 4 Driver=hub
+D:  Ver= 1.00 Cls=09(hub  ) Sub=00 Prot=00 MxPS= 8 #Cfgs=  1
+P:  Vendor=0451 ProdID=1446 Rev= 1.00
+C:* #If= 1 Cfg#= 1 Atr=e0 MxPwr=100mA
+I:  If#= 0 Alt= 0 #EP= 1 Cls=09(hub  ) Sub=00 Prot=00
+E:  Ad=81(I) Atr=03(Int.) MxPS=   1 Ivl=255ms
+T:  Lev=02 Prnt=01 Port=00 Cnt=01 Dev#=  3 Spd=1.5 If#=  0 MxCh= 0 Driver=mouse
+D:  Ver= 1.00 Cls=00(>ifc ) Sub=00 Prot=00 MxPS= 8 #Cfgs=  1
+P:  Vendor=0458 ProdID=0001 Rev= 0.00
+C:* #If= 1 Cfg#= 1 Atr=a0 MxPwr=100mA
+I:  If#= 0 Alt= 0 #EP= 1 Cls=03(HID  ) Sub=01 Prot=02
+E:  Ad=81(I) Atr=03(Int.) MxPS=   3 Ivl= 10ms
+T:  Lev=02 Prnt=01 Port=02 Cnt=02 Dev#=  4 Spd=12  If#=  0 MxCh= 0 Driver=(none)
+D:  Ver= 1.00 Cls=00(>ifc ) Sub=00 Prot=00 MxPS= 8 #Cfgs=  1
+P:  Vendor=04c8 ProdID=0720 Rev= 1.01
+C:* #If= 1 Cfg#= 1 Atr=80 MxPwr=500mA
+I:  If#= 0 Alt= 0 #EP= 2 Cls=0a(unk. ) Sub=ff Prot=00
+E:  Ad=81(I) Atr=01(Isoc) MxPS=   1 Ivl=  1ms
+E:  Ad=82(I) Atr=01(Isoc) MxPS= 384 Ivl=  1ms
+I:  If#= 0 Alt= 1 #EP= 2 Cls=0a(unk. ) Sub=ff Prot=00
+E:  Ad=81(I) Atr=01(Isoc) MxPS=   1 Ivl=  1ms
+E:  Ad=82(I) Atr=01(Isoc) MxPS= 240 Ivl=  1ms
+I:  If#= 0 Alt= 2 #EP= 2 Cls=0a(unk. ) Sub=ff Prot=00
+E:  Ad=81(I) Atr=01(Isoc) MxPS=   1 Ivl=  1ms
+E:  Ad=82(I) Atr=01(Isoc) MxPS= 576 Ivl=  1ms
+I:  If#= 0 Alt= 3 #EP= 2 Cls=0a(unk. ) Sub=ff Prot=00
+E:  Ad=81(I) Atr=01(Isoc) MxPS=   1 Ivl=  1ms
+E:  Ad=82(I) Atr=01(Isoc) MxPS= 464 Ivl=  1ms
+I:  If#= 0 Alt= 4 #EP= 2 Cls=0a(unk. ) Sub=ff Prot=00
+E:  Ad=81(I) Atr=01(Isoc) MxPS=   1 Ivl=  1ms
+E:  Ad=82(I) Atr=01(Isoc) MxPS= 688 Ivl=  1ms
+
+
+Selecting only the "T:" lines from this (for example, by using
+"procusb t"), we have:
+
+T:  Lev=00 Prnt=00 Port=00 Cnt=00 Dev#= -1 Spd=12  If#=  0 MxCh= 2 Driver=(root hub)
+T:  Lev=01 Prnt=00 Port=00 Cnt=01 Dev#=  1 Spd=12  If#=  0 MxCh= 4 Driver=hub
+T:  Lev=02 Prnt=01 Port=00 Cnt=01 Dev#=  3 Spd=1.5 If#=  0 MxCh= 0 Driver=mouse
+T:  Lev=02 Prnt=01 Port=02 Cnt=02 Dev#=  4 Spd=12  If#=  0 MxCh= 0 Driver=(none)
+
+
+Physically this looks like (or could be converted to):
+
+                      +------------------+
+                      |  PC/root_hub (12)|   Dev# = -1
+                      +------------------+   (nn) is Mbps.
+    Level 0           |  CN.0   |  CN.1  |   [CN = connector/port #]
+                      +------------------+
+                          /
+                         /
+            +-----------------------+
+  Level 1   | Dev#1: 4-port hub (12)|
+            +-----------------------+
+            |CN.0 |CN.1 |CN.2 |CN.3 |
+            +-----------------------+
+                \           \____________________
+                 \_____                          \
+                       \                          \
+               +--------------------+      +--------------------+
+  Level 2      | Dev# 3: mouse (1.5)|      | Dev# 4: (none) (12)|
+               +--------------------+      +--------------------+
+
+
+
+Or, in a more tree-like structure (ports [Connectors] without
+connections could be omitted):
+
+PC:  Dev# -1, root hub, 2 ports, 12 Mbps
+|_ CN.0:  Dev# 1, hub, 4 ports, 12 Mbps
+     |_ CN.0:  Dev #3, mouse, 1.5 Mbps
+     |_ CN.1:
+     |_ CN.2:  Dev #4, (none), 12 Mbps  [or use "unknown" for (none)]
+     |_ CN.3:
+|_ CN.1:
+
+
+                         ### END ###

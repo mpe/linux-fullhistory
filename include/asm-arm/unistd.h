@@ -198,14 +198,6 @@
 					/* 188 reserved */
 					/* 189 reserved */
 #define __NR_vfork			(__NR_SYSCALL_BASE+190)
-#define __NR_timer_create		(__NR_SYSCALL_BASE+191)
-#define __NR_timer_settime		(__NR_SYSCALL_BASE+192)
-#define __NR_timer_gettime		(__NR_SYSCALL_BASE+193)
-#define __NR_timer_getoverrun		(__NR_SYSCALL_BASE+194)
-#define __NR_timer_delete		(__NR_SYSCALL_BASE+195)
-#define __NR_clock_gettime		(__NR_SYSCALL_BASE+196)
-#define __NR_clock_settime		(__NR_SYSCALL_BASE+197)
-#define __NR_clock_getres		(__NR_SYSCALL_BASE+198)
 
 #define __sys2(x) #x
 #define __sys1(x) __sys2(x)

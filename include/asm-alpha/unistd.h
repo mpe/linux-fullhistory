@@ -308,14 +308,6 @@
 #define __NR_capget			368
 #define __NR_capset			369
 #define __NR_sendfile			370
-#define __NR_timer_create		371
-#define __NR_timer_settime		372
-#define __NR_timer_gettime		373
-#define __NR_timer_getoverrun		374
-#define __NR_timer_delete		375
-#define __NR_clock_gettime		376
-#define __NR_clock_settime		377
-#define __NR_clock_getres		378
 
 #if defined(__LIBRARY__) && defined(__GNUC__)
 

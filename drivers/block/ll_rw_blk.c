@@ -403,7 +403,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 		unsigned long maxsector = (blk_size[major][MINOR(bh->b_rdev)] << 1) + 1;
 
 		if (maxsector < count || maxsector - count < sector) {
-			bh->b_state &= (1 << BH_Lock);
+			bh->b_state &= (1 << BH_Lock) | (1 << BH_Mapped);
                         /* This may well happen - the kernel calls bread()
                            without checking the size of the device, e.g.,
                            when mounting a device. */

@@ -824,6 +824,7 @@ static int do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	return 1;
 
 bad_wp_page:
+	spin_unlock(&tsk->mm->page_table_lock);
 	printk("do_wp_page: bogus page at address %08lx (%08lx)\n",address,old_page);
 	return -1;
 }

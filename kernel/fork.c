@@ -580,24 +580,6 @@ static inline void copy_flags(unsigned long clone_flags, struct task_struct *p)
 	p->flags = new_flags;
 }
 
-
-static inline int copy_itimers(unsigned long clone_flags, struct task_struct * tsk)
-{
-	if (clone_flags & CLONE_ITIMERS) {
-		atomic_inc(&tsk->posix_timers->count);
-		return 0;
-	}
-
-	tsk->posix_timers = kmalloc(sizeof(*tsk->posix_timers), GFP_KERNEL);
-	if (tsk->posix_timers == NULL) return -1;
-	spin_lock_init(&tsk->posix_timers->its_lock);
-	atomic_set(&tsk->posix_timers->count, 1);
-	memset(tsk->posix_timers->itimer, 0, sizeof(tsk->posix_timers->itimer));
-
-	return 0;
-}
-
-
 /*
  *  Ok, this is the main fork-routine. It copies the system process
  * information (task[nr]) and sets up the necessary registers. It
@@ -696,8 +678,6 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 		goto bad_fork_cleanup_files;
 	if (copy_sighand(clone_flags, p))
 		goto bad_fork_cleanup_fs;
-	if (copy_itimers(clone_flags, p))
-		goto bad_fork_cleanup_itimers;
 	if (copy_mm(clone_flags, p))
 		goto bad_fork_cleanup_sighand;
 	retval = copy_thread(0, clone_flags, usp, p, regs);
@@ -742,8 +722,6 @@ fork_out:
 		down(&sem);
 	return retval;
 
-bad_fork_cleanup_itimers:
-	exit_itimers(p);
 bad_fork_cleanup_sighand:
 	exit_sighand(p);
 bad_fork_cleanup_fs:

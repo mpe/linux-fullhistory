@@ -60,6 +60,8 @@ struct pp_struct {
 	unsigned int flags;
 	int irqresponse;
 	unsigned char irqctl;
+	struct ieee1284_info state;
+	struct ieee1284_info saved_state;
 };
 
 /* pp_struct.flags bitfields */
@@ -348,6 +350,9 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 
 	/* First handle the cases that don't take arguments. */
 	if (cmd == PPCLAIM) {
+		struct ieee1284_info *info;
+		int first_claim = 0;
+
 		if (pp->flags & PP_CLAIMED) {
 			printk (KERN_DEBUG CHRDEV
 				"%x: you've already got it!\n", minor);
@@ -359,6 +364,8 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 			int err = register_device (minor, pp);
 			if (err)
 				return err;
+
+			first_claim = 1;
 		}
 
 		parport_claim_or_block (pp->pdev);
@@ -367,6 +374,30 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 		/* For interrupt-reporting to work, we need to be
 		 * informed of each interrupt. */
 		enable_irq (pp);
+
+		/* We may need to fix up the state machine. */
+		info = &pp->pdev->port->ieee1284;
+		pp->saved_state.mode = info->mode;
+		pp->saved_state.phase = info->phase;
+		if (pp->mode != info->mode) {
+			int phase = IEEE1284_PH_FWD_IDLE;
+
+			if (first_claim) {
+				info->mode = pp->mode;
+				switch (pp->mode & ~(IEEE1284_DEVICEID
+						     | IEEE1284_ADDR)) {
+				case IEEE1284_MODE_NIBBLE:
+				case IEEE1284_MODE_BYTE:
+					phase = IEEE1284_PH_REV_IDLE;
+				}
+				info->phase = phase;
+			} else {
+				/* Just restore the state. */
+				info->mode = pp->state.mode;
+				info->phase = pp->state.phase;
+			}
+		}
+
 		return 0;
 	}
 
@@ -406,6 +437,7 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 
 	port = pp->pdev->port;
 	switch (cmd) {
+		struct ieee1284_info *info;
 		unsigned char reg;
 		unsigned char mask;
 		int mode;
@@ -431,6 +463,12 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 		return 0;
 
 	case PPRELEASE:
+		/* Save the state machine's state. */
+		info = &pp->pdev->port->ieee1284;
+		pp->state.mode = info->mode;
+		pp->state.phase = info->phase;
+		info->mode = pp->saved_state.mode;
+		info->phase = pp->saved_state.phase;
 		parport_release (pp->pdev);
 		pp->flags &= ~PP_CLAIMED;
 		return 0;

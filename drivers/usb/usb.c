@@ -36,6 +36,7 @@
  * 6		wLength		2	Count		Bytes for data
  */
 
+#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/bitops.h>
 #include <linux/malloc.h>
@@ -1140,3 +1141,15 @@ int usb_release_irq(struct usb_device *dev, void* handle)
 {
 	return dev->bus->op->release_irq(handle);
 }
+
+#ifdef CONFIG_PROC_FS
+struct list_head * usb_driver_get_list (void)
+{
+	return &usb_driver_list;
+}
+
+struct list_head * usb_bus_get_list (void)
+{
+	return &usb_bus_list;
+}
+#endif

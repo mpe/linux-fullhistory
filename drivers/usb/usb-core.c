@@ -28,6 +28,7 @@
 #	endif
 #endif
 
+
 int usb_init(void)
 {
 #ifndef CONFIG_USB_MODULE
@@ -65,6 +66,9 @@ int usb_init(void)
 		usb_scsi_init();
 #	endif
 #endif
+#ifdef CONFIG_USB_PROC
+	proc_usb_init ();
+#endif
 	return 0;
 }
 /*
@@ -72,6 +76,9 @@ int usb_init(void)
  */
 void cleanup_drivers(void)
 {
+#ifdef CONFIG_USB_PROC
+	proc_usb_cleanup ();
+#endif
 #ifndef MODULE
 #	ifdef CONFIG_USB_HUB
 		usb_hub_cleanup();

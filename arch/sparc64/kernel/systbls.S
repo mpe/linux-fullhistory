@@ -68,8 +68,7 @@ sys_call_table32:
 /*240*/	.word sys_munlockall, sys_sched_setparam, sys_sched_getparam, sys_sched_setscheduler, sys_sched_getscheduler
 	.word sys_sched_yield, sys_sched_get_priority_max, sys_sched_get_priority_min, sys32_sched_rr_get_interval, sys32_nanosleep
 /*250*/	.word sys_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys32_nfsservctl
-/*255*/	.word sys_aplib, sys_timer_create, sys_timer_settime, sys_timer_gettime, sys_timer_getoverrun
-/*260*/ .word sys_timer_delete, sys_clock_gettime, sys_clock_settime, sys_clock_getres
+	.word sys_aplib
 
 	/* Now the 64-bit native Linux syscall table. */
 
@@ -128,8 +127,7 @@ sys_call_table:
 /*240*/	.word sys_munlockall, sys_sched_setparam, sys_sched_getparam, sys_sched_setscheduler, sys_sched_getscheduler
 	.word sys_sched_yield, sys_sched_get_priority_max, sys_sched_get_priority_min, sys_sched_rr_get_interval, sys_nanosleep
 /*250*/	.word sys_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys_nfsservctl
-/*255*/	.word sys_aplib, sys_timer_create, sys_timer_settime, sys_timer_gettime, sys_timer_getoverrun
-/*260*/ .word sys_timer_delete, sys_clock_gettime, sys_clock_settime, sys_clock_getres
+	.word sys_aplib
 
 	/* Now the 32-bit SunOS syscall table. */
 

@@ -1196,14 +1196,6 @@
 #define __NR_sendfile			(__NR_Linux + 207)
 #define __NR_getpmsg			(__NR_Linux + 208)
 #define __NR_putpmsg			(__NR_Linux + 209)
-#define __NR_timer_create		(__NR_Linux + 210)
-#define __NR_timer_settime		(__NR_Linux + 211)
-#define __NR_timer_gettime		(__NR_Linux + 212)
-#define __NR_timer_getoverrun		(__NR_Linux + 213)
-#define __NR_timer_delete		(__NR_Linux + 214)
-#define __NR_clock_gettime		(__NR_Linux + 215)
-#define __NR_clock_settime		(__NR_Linux + 216)
-#define __NR_clock_getres		(__NR_Linux + 217)
 
 /*
  * Offset of the last Linux flavoured syscall

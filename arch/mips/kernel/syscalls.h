@@ -225,11 +225,3 @@ SYS(sys_sigaltstack, 2)
 SYS(sys_sendfile, 3)
 SYS(sys_ni_syscall, 0)
 SYS(sys_ni_syscall, 0)
-SYS(sys_timer_create, 3)			/* 4210 */
-SYS(sys_timer_settime, 4)
-SYS(sys_timer_gettime, 2)
-SYS(sys_timer_getoverrun, 1)
-SYS(sys_timer_delete, 1)
-SYS(sys_clock_gettime, 2)			/* 4215 */
-SYS(sys_clock_settime, 2)
-SYS(sys_clock_getres, 2)

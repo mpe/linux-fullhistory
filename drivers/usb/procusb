@@ -1,0 +1,41 @@
+#!/usr/bin/perl
+
+# Reads /proc/bus/usb/devices and selectively lists and/or
+# interprets it.
+
+$DEVFILENAME = "/proc/bus/usb/devices";
+$PROGNAME = $0;
+
+$TAGS = $ARGV[0];		# save user TAGS
+if (length ($TAGS) == 0)
+{
+	print "usage: $PROGNAME tags\n";
+	print "  where 'tags' can be any number of 'TDPCIE' or 'A(LL)'\n";
+	exit 1;
+}
+
+$ALL = ($TAGS =~ /all/i) || ($TAGS =~ /a/i);
+
+# TBD: Check that $TAGS is valid.
+if (! $ALL)
+{
+}
+
+if (! open (DEVNUM, "<$DEVFILENAME"))
+{
+	print "$PROGNAME: cannot open '$DEVFILENAME'\n";
+	exit 1;
+}
+
+while ($line = <DEVNUM>)	# read a text line from DEVNUM
+{
+	if (($ALL) || ($line =~ /^[$TAGS]:/i))	# any of TAGS at beg. of line?
+	{
+		print "$line";	# still has newline char on it
+				# TBD: add more/paging functionality.
+	}
+} # end while DEVNUM
+
+close (DEVNUM);
+
+# END.

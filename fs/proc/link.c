@@ -82,63 +82,70 @@ static struct dentry * proc_follow_link(struct dentry *dentry,
 	ino &= 0x0000ffff;
 
 	result = ERR_PTR(-ENOENT);
-	read_lock(&tasklist_lock);
-	p = find_task_by_pid(pid);
-	if (!p)
-		goto out_unlock;
 
 	switch (ino) {
 		case PROC_PID_CWD:
-			if (!p->fs || !p->fs->pwd)
-				goto out_unlock;
-			result = p->fs->pwd;
-			goto out_dget;
+			read_lock(&tasklist_lock);
+			p = find_task_by_pid(pid);
+			if (p && p->fs && p->fs->pwd)
+				result = dget(p->fs->pwd);
+			read_unlock(&tasklist_lock);
+			break;
 
 		case PROC_PID_ROOT:
-			if (!p->fs || !p->fs->root)
-				goto out_unlock;
-			result = p->fs->root;
-			goto out_dget;
+			read_lock(&tasklist_lock);
+			p = find_task_by_pid(pid);
+			if (p && p->fs && p->fs->root)
+				result = dget(p->fs->root);
+			read_unlock(&tasklist_lock);
+			break;
 
 		case PROC_PID_EXE: {
+			struct mm_struct *mm = NULL;
 			struct vm_area_struct * vma;
-			if (!p->mm)
-				goto out_unlock;
-			down(&p->mm->mmap_sem);
-			vma = p->mm->mmap;
+			read_lock(&tasklist_lock);
+			p = find_task_by_pid(pid);
+			if (p)
+				mm = p->mm;
+			if (mm)
+				atomic_inc(&mm->mm_users);
+			read_unlock(&tasklist_lock);
+			if (!mm)
+				break;
+			down(&mm->mmap_sem);
+			vma = mm->mmap;
 			while (vma) {
 				if ((vma->vm_flags & VM_EXECUTABLE) && 
 				    vma->vm_file) {
-					result = vma->vm_file->f_dentry;
-					up(&p->mm->mmap_sem);
-					goto out_dget;
+					result = dget(vma->vm_file->f_dentry);
+					break;
 				}
 				vma = vma->vm_next;
 			}
-			up(&p->mm->mmap_sem);
-			goto out_unlock;
+			up(&mm->mmap_sem);
+			mmput(mm);
+			break;
 		}
 		default:
 			if (ino & PROC_PID_FD_DIR) {
 				struct file * file;
+				struct files_struct *files = NULL;
+				read_lock(&tasklist_lock);
+				p = find_task_by_pid(pid);
+				if (p)
+					files = p->files;
+				read_unlock(&tasklist_lock);
+				if (!files)
+					break;
 				ino &= 0x7fff;
-				if (!p->files) /* shouldn't happen here */
-					goto out_unlock;
-				read_lock(&p->files->file_lock);
-				file = fcheck_task(p, ino);
-				if (!file || !file->f_dentry)
-					goto out_unlock;
-				result = file->f_dentry;
+				read_lock(&files->file_lock);
+				/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+				if (ino < files->max_fds &&
+				    (file = files->fd[ino]) && file->f_dentry)
+					result = dget(file->f_dentry);
 				read_unlock(&p->files->file_lock);
-				goto out_dget;
 			}
 	}
-out_dget:
-	result = dget(result);
-
-out_unlock:
-	read_unlock(&tasklist_lock);
-
 out:
 	return result;
 }

@@ -271,14 +271,6 @@
 #define __NR_fdatasync          253
 #define __NR_nfsservctl         254
 #define __NR_aplib              255
-#define __NR_timer_create	256
-#define __NR_timer_settime	257
-#define __NR_timer_gettime	258
-#define __NR_timer_getoverrun	259
-#define __NR_timer_delete	260
-#define __NR_clock_gettime	261
-#define __NR_clock_settime	262
-#define __NR_clock_getres	263
 
 #define _syscall0(type,name) \
 type name(void) \

@@ -894,12 +894,4 @@ sys_call_table:
 	.long sys_ni_syscall		/* streams1 */
 	.long sys_ni_syscall		/* streams2 */
 	.long sys_vfork
-	.long sys_timer_create	/* 190 */
-	.long sys_timer_settime
-	.long sys_timer_gettime
-	.long sys_timer_getoverrun
-	.long sys_timer_delete
-	.long sys_clock_gettime	/* 195 */
-	.long sys_clock_settime
-	.long sys_clock_getres	/* 197 */
-	.space (NR_syscalls-197)*4
+	.space (NR_syscalls-183)*4

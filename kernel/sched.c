@@ -788,8 +788,7 @@ still_running_back:
 			atomic_inc(&oldmm->mm_count);
 		} else {
 			if (next->active_mm != mm) BUG();
-			if (mm != oldmm)
-				switch_mm(oldmm, mm, this_cpu);
+			switch_mm(oldmm, mm, this_cpu);
 		}
 
 		if (!prev->mm) {

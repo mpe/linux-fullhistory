@@ -194,14 +194,6 @@
 #define __NR_getpmsg		188	/* some people actually want streams */
 #define __NR_putpmsg		189	/* some people actually want streams */
 #define __NR_vfork		190
-#define __NR_timer_create	191
-#define __NR_timer_settime	192
-#define __NR_timer_gettime	193
-#define __NR_timer_getoverrun	194
-#define __NR_timer_delete	195
-#define __NR_clock_gettime	196
-#define __NR_clock_settime	197
-#define __NR_clock_getres	198
 
 /* user-visible error numbers are in the range -1 - -122: see
    <asm-m68k/errno.h> */

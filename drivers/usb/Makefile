@@ -22,6 +22,9 @@ endif
 ifeq ($(CONFIG_USB),m)
   M_OBJS +=usbcore.o
   MIX_OBJS +=usb.o usb-debug.o usb-core.o
+  ifeq ($(CONFIG_USB_PROC),y)
+    MIX_OBJS += proc_usb.o
+  endif
 endif
 
 ifeq ($(CONFIG_USB_UHCI),y)
@@ -153,7 +156,10 @@ usb-ohci.o: ohci.o ohci-debug.o
 usb-ohci-hcd.o: ohci-hcd.o ohci-root-hub.o 
 	$(LD) $(LD_RFLAG) -r -o $@ ohci-hcd.o ohci-root-hub.o 
        
+ifeq ($(CONFIG_USB_PROC),y)
+usbcore.o: usb.o usb-debug.o usb-core.o proc_usb.o
+	$(LD) $(LD_RFLAG) -r -o $@ usb.o usb-debug.o usb-core.o proc_usb.o
+else
 usbcore.o: usb.o usb-debug.o usb-core.o
 	$(LD) $(LD_RFLAG) -r -o $@ usb.o usb-debug.o usb-core.o
-
-       
+endif

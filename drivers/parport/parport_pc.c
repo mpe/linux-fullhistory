@@ -1831,6 +1831,7 @@ void cleanup_module(void)
 		tmp = p->next;
 		if (p->modes & PARPORT_MODE_PCSPP) { 
 			struct parport_pc_private *priv = p->private_data;
+			struct parport_operations *ops = p->ops;
 			if (p->dma != PARPORT_DMA_NONE)
 				free_dma(p->dma);
 			if (p->irq != PARPORT_IRQ_NONE)
@@ -1844,8 +1845,8 @@ void cleanup_module(void)
 			if (priv->dma_buf)
 				free_page((unsigned long) priv->dma_buf);
 			kfree (p->private_data);
-			kfree (p->ops); /* hope no-one cached it */
 			parport_unregister_port(p);
+			kfree (ops); /* hope no-one cached it */
 		}
 		p = tmp;
 	}

@@ -194,14 +194,6 @@
 #define __NR_getpmsg		187	/* some people actually want streams */
 #define __NR_putpmsg		188	/* some people actually want streams */
 #define __NR_vfork		189
-#define __NR_timer_create	190
-#define __NR_timer_settime	191
-#define __NR_timer_gettime	192
-#define __NR_timer_getoverrun	193
-#define __NR_timer_delete	194
-#define __NR_clock_gettime	195
-#define __NR_clock_settime	196
-#define __NR_clock_getres	197
 
 #define __NR(n)	#n
 

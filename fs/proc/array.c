@@ -42,6 +42,8 @@
  * Alan Cox	     :  security fixes.
  *			<Alan.Cox@linux.org>
  *
+ * Al Viro           :  safe handling of mm_struct
+ *
  */
 
 #include <linux/types.h>
@@ -386,21 +388,15 @@ static int get_cmdline(char * buffer)
 	return sprintf(buffer, "%s\n", saved_command_line);
 }
 
-static unsigned long get_phys_addr(struct task_struct * p, unsigned long ptr)
+static unsigned long get_phys_addr(struct mm_struct * mm, unsigned long ptr)
 {
 	pgd_t *page_dir;
 	pmd_t *page_middle;
 	pte_t pte;
 
-	if (!p || !p->mm || ptr >= TASK_SIZE)
+	if (ptr >= TASK_SIZE)
 		return 0;
-	/* Check for NULL pgd .. shouldn't happen! */
-	if (!p->mm->pgd) {
-		printk("get_phys_addr: pid %d has NULL pgd!\n", p->pid);
-		return 0;
-	}
-
-	page_dir = pgd_offset(p->mm,ptr);
+	page_dir = pgd_offset(mm,ptr);
 	if (pgd_none(*page_dir))
 		return 0;
 	if (pgd_bad(*page_dir)) {
@@ -422,7 +418,7 @@ static unsigned long get_phys_addr(struct task_struct * p, unsigned long ptr)
 	return pte_page(pte) + (ptr & ~PAGE_MASK);
 }
 
-static int get_array(struct task_struct *p, unsigned long start, unsigned long end, char * buffer)
+static int get_array(struct mm_struct *mm, unsigned long start, unsigned long end, char * buffer)
 {
 	unsigned long addr;
 	int size = 0, result = 0;
@@ -431,7 +427,7 @@ static int get_array(struct task_struct *p, unsigned long start, unsigned long e
 	if (start >= end)
 		return result;
 	for (;;) {
-		addr = get_phys_addr(p, start);
+		addr = get_phys_addr(mm, start);
 		if (!addr)
 			return result;
 		do {
@@ -451,29 +447,42 @@ static int get_array(struct task_struct *p, unsigned long start, unsigned long e
 	return result;
 }
 
-static int get_env(int pid, char * buffer)
+static struct mm_struct *get_mm(int pid)
 {
 	struct task_struct *p;
+	struct mm_struct *mm = NULL;
 	
 	read_lock(&tasklist_lock);
 	p = find_task_by_pid(pid);
-	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
+	if (p)
+		mm = p->mm;
+	if (mm)
+		atomic_inc(&mm->mm_users);
+	read_unlock(&tasklist_lock);
+	return mm;
+}
 
-	if (!p || !p->mm)
-		return 0;
-	return get_array(p, p->mm->env_start, p->mm->env_end, buffer);
+
+static int get_env(int pid, char * buffer)
+{
+	struct mm_struct *mm = get_mm(pid);
+	int res = 0;
+	if (mm) {
+		res = get_array(mm, mm->env_start, mm->env_end, buffer);
+		mmput(mm);
+	}
+	return res;
 }
 
 static int get_arg(int pid, char * buffer)
 {
-	struct task_struct *p;
-
-	read_lock(&tasklist_lock);
-	p = find_task_by_pid(pid);
-	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
-	if (!p || !p->mm)
-		return 0;
-	return get_array(p, p->mm->arg_start, p->mm->arg_end, buffer);
+	struct mm_struct *mm = get_mm(pid);
+	int res = 0;
+	if (mm) {
+		res = get_array(mm, mm->arg_start, mm->arg_end, buffer);
+		mmput(mm);
+	}
+	return res;
 }
 
 /*
@@ -740,48 +749,44 @@ static inline char * task_state(struct task_struct *p, char *buffer)
 	return buffer;
 }
 
-static inline char * task_mem(struct task_struct *p, char *buffer)
+static inline char * task_mem(struct mm_struct *mm, char *buffer)
 {
-	struct mm_struct * mm = p->mm;
+	struct vm_area_struct * vma;
+	unsigned long data = 0, stack = 0;
+	unsigned long exec = 0, lib = 0;
 
-	if (mm) {
-		struct vm_area_struct * vma;
-		unsigned long data = 0, stack = 0;
-		unsigned long exec = 0, lib = 0;
-
-		down(&mm->mmap_sem);
-		for (vma = mm->mmap; vma; vma = vma->vm_next) {
-			unsigned long len = (vma->vm_end - vma->vm_start) >> 10;
-			if (!vma->vm_file) {
-				data += len;
-				if (vma->vm_flags & VM_GROWSDOWN)
-					stack += len;
-				continue;
-			}
-			if (vma->vm_flags & VM_WRITE)
-				continue;
-			if (vma->vm_flags & VM_EXEC) {
-				exec += len;
-				if (vma->vm_flags & VM_EXECUTABLE)
-					continue;
-				lib += len;
-			}
+	down(&mm->mmap_sem);
+	for (vma = mm->mmap; vma; vma = vma->vm_next) {
+		unsigned long len = (vma->vm_end - vma->vm_start) >> 10;
+		if (!vma->vm_file) {
+			data += len;
+			if (vma->vm_flags & VM_GROWSDOWN)
+				stack += len;
+			continue;
 		}
-		buffer += sprintf(buffer,
-			"VmSize:\t%8lu kB\n"
-			"VmLck:\t%8lu kB\n"
-			"VmRSS:\t%8lu kB\n"
-			"VmData:\t%8lu kB\n"
-			"VmStk:\t%8lu kB\n"
-			"VmExe:\t%8lu kB\n"
-			"VmLib:\t%8lu kB\n",
-			mm->total_vm << (PAGE_SHIFT-10),
-			mm->locked_vm << (PAGE_SHIFT-10),
-			mm->rss << (PAGE_SHIFT-10),
-			data - stack, stack,
-			exec - lib, lib);
-		up(&mm->mmap_sem);
+		if (vma->vm_flags & VM_WRITE)
+			continue;
+		if (vma->vm_flags & VM_EXEC) {
+			exec += len;
+			if (vma->vm_flags & VM_EXECUTABLE)
+				continue;
+			lib += len;
+		}
 	}
+	buffer += sprintf(buffer,
+		"VmSize:\t%8lu kB\n"
+		"VmLck:\t%8lu kB\n"
+		"VmRSS:\t%8lu kB\n"
+		"VmData:\t%8lu kB\n"
+		"VmStk:\t%8lu kB\n"
+		"VmExe:\t%8lu kB\n"
+		"VmLib:\t%8lu kB\n",
+		mm->total_vm << (PAGE_SHIFT-10),
+		mm->locked_vm << (PAGE_SHIFT-10),
+		mm->rss << (PAGE_SHIFT-10),
+		data - stack, stack,
+		exec - lib, lib);
+	up(&mm->mmap_sem);
 	return buffer;
 }
 
@@ -842,44 +847,61 @@ static int get_status(int pid, char * buffer)
 {
 	char * orig = buffer;
 	struct task_struct *tsk;
+	struct mm_struct *mm = NULL;
 
 	read_lock(&tasklist_lock);
 	tsk = find_task_by_pid(pid);
+	if (tsk)
+		mm = tsk->mm;
+	if (mm)
+		atomic_inc(&mm->mm_users);
 	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
 	if (!tsk)
 		return 0;
 	buffer = task_name(tsk, buffer);
 	buffer = task_state(tsk, buffer);
-	buffer = task_mem(tsk, buffer);
+	if (mm)
+		buffer = task_mem(mm, buffer);
 	buffer = task_sig(tsk, buffer);
 	buffer = task_cap(tsk, buffer);
+	if (mm)
+		mmput(mm);
 	return buffer - orig;
 }
 
 static int get_stat(int pid, char * buffer)
 {
 	struct task_struct *tsk;
+	struct mm_struct *mm = NULL;
 	unsigned long vsize, eip, esp, wchan;
 	long priority, nice;
 	int tty_pgrp;
 	sigset_t sigign, sigcatch;
 	char state;
+	int res;
 
 	read_lock(&tasklist_lock);
 	tsk = find_task_by_pid(pid);
+	if (tsk)
+		mm = tsk->mm;
+	if (mm)
+		atomic_inc(&mm->mm_users);
 	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
 	if (!tsk)
 		return 0;
 	state = *get_task_state(tsk);
 	vsize = eip = esp = 0;
-	if (tsk->mm) {
-		struct vm_area_struct *vma = tsk->mm->mmap;
+	if (mm) {
+		struct vm_area_struct *vma;
+		down(&mm->mmap_sem);
+		vma = mm->mmap;
 		while (vma) {
 			vsize += vma->vm_end - vma->vm_start;
 			vma = vma->vm_next;
 		}
 		eip = KSTK_EIP(tsk);
 		esp = KSTK_ESP(tsk);
+		up(&mm->mmap_sem);
 	}
 
 	wchan = get_wchan(tsk);
@@ -898,7 +920,7 @@ static int get_stat(int pid, char * buffer)
 	nice = tsk->priority;
 	nice = 20 - (nice * 20 + DEF_PRIORITY / 2) / DEF_PRIORITY;
 
-	return sprintf(buffer,"%d (%s) %c %d %d %d %d %d %lu %lu \
+	res = sprintf(buffer,"%d (%s) %c %d %d %d %d %d %lu %lu \
 %lu %lu %lu %lu %lu %ld %ld %ld %ld %ld %ld %lu %lu %ld %lu %lu %lu %lu %lu \
 %lu %lu %lu %lu %lu %lu %lu %lu %d %d\n",
 		pid,
@@ -924,11 +946,11 @@ static int get_stat(int pid, char * buffer)
 		tsk->it_real_value,
 		tsk->start_time,
 		vsize,
-		tsk->mm ? tsk->mm->rss : 0, /* you might want to shift this left 3 */
+		mm ? mm->rss : 0, /* you might want to shift this left 3 */
 		tsk->rlim ? tsk->rlim[RLIMIT_RSS].rlim_cur : 0,
-		tsk->mm ? tsk->mm->start_code : 0,
-		tsk->mm ? tsk->mm->end_code : 0,
-		tsk->mm ? tsk->mm->start_stack : 0,
+		mm ? mm->start_code : 0,
+		mm ? mm->end_code : 0,
+		mm ? mm->start_stack : 0,
 		esp,
 		eip,
 		/* The signal information here is obsolete.
@@ -944,6 +966,9 @@ static int get_stat(int pid, char * buffer)
 		tsk->cnswap,
 		tsk->exit_signal,
 		tsk->processor);
+	if (mm)
+		mmput(mm);
+	return res;
 }
 		
 static inline void statm_pte_range(pmd_t * pmd, unsigned long address, unsigned long size,
@@ -1021,19 +1046,15 @@ static void statm_pgd_range(pgd_t * pgd, unsigned long address, unsigned long en
 
 static int get_statm(int pid, char * buffer)
 {
-	struct task_struct *tsk;
+	struct mm_struct *mm = get_mm(pid);
 	int size=0, resident=0, share=0, trs=0, lrs=0, drs=0, dt=0;
 
-	read_lock(&tasklist_lock);
-	tsk = find_task_by_pid(pid);
-	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
-	if (!tsk)
-		return 0;
-	if (tsk->mm) {
-		struct vm_area_struct * vma = tsk->mm->mmap;
-
+	if (mm) {
+		struct vm_area_struct * vma;
+		down(&mm->mmap_sem);
+		vma = mm->mmap;
 		while (vma) {
-			pgd_t *pgd = pgd_offset(tsk->mm, vma->vm_start);
+			pgd_t *pgd = pgd_offset(mm, vma->vm_start);
 			int pages = 0, shared = 0, dirty = 0, total = 0;
 
 			statm_pgd_range(pgd, vma->vm_start, vma->vm_end, &pages, &shared, &dirty, &total);
@@ -1051,6 +1072,8 @@ static int get_statm(int pid, char * buffer)
 				drs += pages;
 			vma = vma->vm_next;
 		}
+		up(&mm->mmap_sem);
+		mmput(mm);
 	}
 	return sprintf(buffer,"%d %d %d %d %d %d %d\n",
 		       size, resident, share, trs, lrs, drs, dt);

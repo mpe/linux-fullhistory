@@ -1384,12 +1384,6 @@ void __init smp_boot_cpus(void)
 		printk(KERN_WARNING "WARNING: SMP operation may be unreliable with B stepping processors.\n");
 	SMP_PRINTK(("Boot done.\n"));
 
-	/*
-	 * now we know the other CPUs have fired off and we know our
-	 * APIC ID, so we can go init the TSS and stuff:
-	 */
-	cpu_init();
-
 	cache_APIC_registers();
 #ifndef CONFIG_VISWS
 	/*
@@ -1401,6 +1395,11 @@ void __init smp_boot_cpus(void)
 #endif
 
 smp_done:
+	/*
+	 * now we know the other CPUs have fired off and we know our
+	 * APIC ID, so we can go init the TSS and stuff:
+	 */
+	cpu_init();
 }
 
 
@@ -1580,7 +1579,7 @@ static inline void send_IPI_single(int dest, int vector)
  * bad as in the early days of SMP, so we might ease some of the
  * paranoia here.
  */
-static void flush_tlb_others(void)
+static void flush_tlb_others(unsigned int cpumask)
 {
 	int cpu = smp_processor_id();
 	int stuck;
@@ -1590,17 +1589,9 @@ static void flush_tlb_others(void)
 	 * it's important that we do not generate any APIC traffic
 	 * until the AP CPUs have booted up!
 	 */
-	if (cpu_online_map) {
-		/*
-		 * The assignment is safe because it's volatile so the
-		 * compiler cannot reorder it, because the i586 has
-		 * strict memory ordering and because only the kernel
-		 * lock holder may issue a tlb flush. If you break any
-		 * one of those three change this to an atomic bus
-		 * locked or.
-		 */
-
-		smp_invalidate_needed = cpu_online_map;
+	cpumask &= cpu_online_map;
+	if (cpumask) {
+		atomic_set_mask(cpumask, &smp_invalidate_needed);
 
 		/*
 		 * Processors spinning on some lock with IRQs disabled
@@ -1623,8 +1614,10 @@ static void flush_tlb_others(void)
 			/*
 			 * Take care of "crossing" invalidates
 			 */
-			if (test_bit(cpu, &smp_invalidate_needed))
-			clear_bit(cpu, &smp_invalidate_needed);
+			if (test_bit(cpu, &smp_invalidate_needed)) {
+				clear_bit(cpu, &smp_invalidate_needed);
+				local_flush_tlb();
+			}
 			--stuck;
 			if (!stuck) {
 				printk("stuck on TLB IPI wait (CPU#%d)\n",cpu);
@@ -1647,44 +1640,43 @@ void flush_tlb_current_task(void)
 	unsigned long vm_mask = 1 << current->processor;
 	struct mm_struct *mm = current->mm;
 
-	if (mm->cpu_vm_mask != vm_mask)
-		flush_tlb_others();
-	mm->cpu_vm_mask = vm_mask;
+	if (mm->cpu_vm_mask != vm_mask) {
+		flush_tlb_others(mm->cpu_vm_mask & ~vm_mask);
+		mm->cpu_vm_mask = vm_mask;
+	}
 	local_flush_tlb();
 }
 
 void flush_tlb_mm(struct mm_struct * mm)
 {
 	unsigned long vm_mask = 1 << current->processor;
+	unsigned long cpu_mask = mm->cpu_vm_mask & ~vm_mask;
 
-	if (mm->cpu_vm_mask & ~vm_mask)
-		flush_tlb_others();
-	if (current->active_mm == mm) {
-		local_flush_tlb();
-		mm->cpu_vm_mask = vm_mask;
-		return;
-	}
 	mm->cpu_vm_mask = 0;
+	if (current->active_mm == mm) {
+		mm->cpu_vm_mask = vm_mask;
+		local_flush_tlb();
+	}
+	flush_tlb_others(cpu_mask);
 }
 
 void flush_tlb_page(struct vm_area_struct * vma, unsigned long va)
 {
 	unsigned long vm_mask = 1 << current->processor;
 	struct mm_struct *mm = vma->vm_mm;
+	unsigned long cpu_mask = mm->cpu_vm_mask & ~vm_mask;
 
-	if (mm->cpu_vm_mask & ~vm_mask)
-		flush_tlb_others();
+	mm->cpu_vm_mask = 0;
 	if (current->active_mm == mm) {
 		__flush_tlb_one(va);
 		mm->cpu_vm_mask = vm_mask;
-		return;
 	}
-	mm->cpu_vm_mask = 0;
+	flush_tlb_others(cpu_mask);
 }
 
 void flush_tlb_all(void)
 {
-	flush_tlb_others();
+	flush_tlb_others(~(1 << current->processor));
 	local_flush_tlb();
 }
 
@@ -1908,13 +1900,24 @@ asmlinkage void smp_reschedule_interrupt(void)
 }
 
 /*
- * Invalidate call-back
+ * Invalidate call-back.
+ *
+ * Mark the CPU as a VM user if there is a active
+ * thread holding on to an mm at this time. This
+ * allows us to optimize CPU cross-calls even in the
+ * presense of lazy TLB handling.
  */
 asmlinkage void smp_invalidate_interrupt(void)
 {
-	if (test_and_clear_bit(smp_processor_id(), &smp_invalidate_needed))
-		local_flush_tlb();
+	struct task_struct *tsk = current;
+	unsigned int cpu = tsk->processor;
 
+	if (test_and_clear_bit(cpu, &smp_invalidate_needed)) {
+		struct mm_struct *mm = tsk->mm;
+		if (mm)
+			atomic_set_mask(1 << cpu, &mm->cpu_vm_mask);
+		local_flush_tlb();
+	}
 	ack_APIC_irq();
 
 }

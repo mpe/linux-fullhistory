@@ -26,19 +26,6 @@ struct timespec {
  */
 #define MAX_JIFFY_OFFSET ((~0UL >> 1)-1)
 
-/* Parameters used to convert the timespec values */
-#ifndef USEC_PER_SEC
-#define USEC_PER_SEC (1000000L)
-#endif
-
-#ifndef NSEC_PER_SEC
-#define NSEC_PER_SEC (1000000000L)
-#endif
-
-#ifndef NSEC_PER_USEC
-#define NSEC_PER_USEC (1000L)
-#endif
-
 static __inline__ unsigned long
 timespec_to_jiffies(struct timespec *value)
 {
@@ -47,15 +34,15 @@ timespec_to_jiffies(struct timespec *value)
 
 	if (sec >= (MAX_JIFFY_OFFSET / HZ))
 		return MAX_JIFFY_OFFSET;
-	nsec += NSEC_PER_SEC / HZ - 1;
-	nsec /= NSEC_PER_SEC / HZ;
+	nsec += 1000000000L / HZ - 1;
+	nsec /= 1000000000L / HZ;
 	return HZ * sec + nsec;
 }
 
 static __inline__ void
 jiffies_to_timespec(unsigned long jiffies, struct timespec *value)
 {
-	value->tv_nsec = (jiffies % HZ) * (NSEC_PER_SEC / HZ);
+	value->tv_nsec = (jiffies % HZ) * (1000000000L / HZ);
 	value->tv_sec = jiffies / HZ;
 }
  
@@ -101,24 +88,5 @@ struct	itimerval {
 	struct	timeval it_interval;	/* timer interval */
 	struct	timeval it_value;	/* current value */
 };
-
-
-/* 
- * Data types for POSIX.1b interval timers.
- */
-typedef int clockid_t;
-typedef int timer_t;
-
-/*
- * The IDs of the various system clocks (for POSIX.1b interval timers).
- */
-#define CLOCK_REALTIME 0
-
-/*
- * The various flags for setting POSIX.1b interval timers.
- */
-
-#define TIMER_ABSTIME 0x01
-
 
 #endif

@@ -245,9 +245,6 @@ no_context:
 	printk(" at virtual address %08lx\n",address);
 	printk(" printing eip:\n");
 	printk("%08lx\n", regs->eip);
-	__asm__("movl %%cr3,%0" : "=r" (page));
-	printk(KERN_ALERT "current->active_mm.pgd = %p, %%cr3 = %08lx\n",
-		tsk->active_mm->pgd, page);
 	page = ((unsigned long *) __va(page))[address >> 22];
 	printk(KERN_ALERT "*pde = %08lx\n", page);
 	if (page & 1) {
