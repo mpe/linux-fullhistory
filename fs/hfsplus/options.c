@@ -19,6 +19,7 @@ enum {
 	opt_creator, opt_type,
 	opt_umask, opt_uid, opt_gid,
 	opt_part, opt_session, opt_nls,
+	opt_nodecompose, opt_decompose,
 	opt_err
 };
 
@@ -31,6 +32,8 @@ static match_table_t tokens = {
 	{ opt_part, "part=%u" },
 	{ opt_session, "session=%u" },
 	{ opt_nls, "nls=%s" },
+	{ opt_decompose, "decompose" },
+	{ opt_nodecompose, "nodecompose" },
 	{ opt_err, NULL }
 };
 
@@ -133,6 +136,12 @@ int parse_options(char *input, struct hfsplus_sb_info *sbi)
 				return 0;
 			}
 			kfree(p);
+			break;
+		case opt_decompose:
+			sbi->flags &= ~HFSPLUS_SB_NODECOMPOSE;
+			break;
+		case opt_nodecompose:
+			sbi->flags |= HFSPLUS_SB_NODECOMPOSE;
 			break;
 		default:
 			return 0;

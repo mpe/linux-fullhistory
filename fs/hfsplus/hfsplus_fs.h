@@ -151,6 +151,7 @@ struct hfsplus_sb_info {
 };
 
 #define HFSPLUS_SB_WRITEBACKUP	0x0001
+#define HFSPLUS_SB_NODECOMPOSE	0x0002
 
 
 struct hfsplus_inode_info {
@@ -346,7 +347,9 @@ int parse_options(char *, struct hfsplus_sb_info *);
 void fill_defaults(struct hfsplus_sb_info *);
 
 /* tables.c */
-extern u16 case_fold_table[];
+extern u16 hfsplus_case_fold_table[];
+extern u16 hfsplus_decompose_table[];
+extern u16 hfsplus_compose_table[];
 
 /* unicode.c */
 int hfsplus_unistrcmp(const struct hfsplus_unistr *, const struct hfsplus_unistr *);
