@@ -17,7 +17,7 @@ config DEBUG_KERNEL
 
 config MAGIC_SYSRQ
 	bool "Magic SysRq key"
-	depends on DEBUG_KERNEL
+	depends on DEBUG_KERNEL && !UML
 	help
 	  If you say Y here, you will have some control over the system even
 	  if the system crashes for example during kernel debugging (e.g., you
