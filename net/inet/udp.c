@@ -35,6 +35,7 @@
  *		Alan Cox	:	No wakeup calls. Instead we now use the callbacks.
  *		Alan Cox	:	Use ip_tos and ip_ttl
  *		Alan Cox	:	SNMP Mibs
+ *		Alan Cox	:	MSG_DONTROUTE, and 0.0.0.0 support.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -395,6 +396,10 @@ static int udp_sendto(struct sock *sk, unsigned char *from, int len, int noblock
   	 *	BSD socket semantics. You must set SO_BROADCAST to permit
   	 *	broadcasting of data.
   	 */
+  	 
+  	if(sin.sin_addr.s_addr==INADDR_ANY)
+  		sin.sin_addr.s_addr=ip_my_addr();
+  		
   	if(!sk->broadcast && ip_chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
 	    	return -EACCES;			/* Must turn broadcast on first */
 

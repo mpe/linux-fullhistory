@@ -197,6 +197,9 @@ static int raw_sendto(struct sock *sk, unsigned char *from,
 	if (sin.sin_port == 0) 
 		sin.sin_port = sk->protocol;
   
+	if (sin.sin_addr.s_addr == INADDR_ANY)
+		sin.sin_addr.s_addr = ip_my_addr();
+
 	if (sk->broadcast == 0 && ip_chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
 		return -EACCES;
 

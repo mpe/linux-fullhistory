@@ -916,11 +916,23 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 		return;
 	}
 	if (address < PAGE_SIZE) {
-		printk("Unable to handle kernel NULL pointer dereference");
+		printk(KERN_ALERT "Unable to handle kernel NULL pointer dereference");
 		pg0[0] = PAGE_SHARED;
 	} else
-		printk("Unable to handle kernel paging request");
-	printk(" at address %08lx\n",address);
+		printk(KERN_ALERT "Unable to handle kernel paging request");
+	printk(" at kernel address %08lx\n",address);
+	address += TASK_SIZE;
+	__asm__("movl %%cr3,%0" : "=r" (user_esp));
+	printk(KERN_ALERT "current->tss.cr3 = %08lx, %%cr3 = %08lx\n",
+		current->tss.cr3, user_esp);
+	user_esp = ((unsigned long *) user_esp)[address >> 22];
+	printk(KERN_ALERT "*pde = %08lx\n", user_esp);
+	if (user_esp & PAGE_PRESENT) {
+		user_esp &= PAGE_MASK;
+		address &= 0x003ff000;
+		user_esp = ((unsigned long *) user_esp)[address >> PAGE_SHIFT];
+		printk(KERN_ALERT "*pte = %08lx\n", user_esp);
+	}
 	die_if_kernel("Oops", regs, error_code);
 	do_exit(SIGKILL);
 }
