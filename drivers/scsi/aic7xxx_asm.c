@@ -27,18 +27,36 @@
  * A <label> is an <undef-sym> ending in a colon.  Spaces, tabs, and commas
  * are token separators.
  *-M*************************************************************************/
-static char id[] = "$Id: aic7xxx_asm.c,v 2.1 1995/08/23 04:31:40 deang Exp $";
+static const char id[] = "$Id: aic7xxx_asm.c,v 2.4 1996/01/30 07:17:29 deang Exp $";
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #define MEMORY		448
 #define MAXLINE		1024
 #define MAXTOKEN	32
 #define ADOTOUT		"a.out"
 #define NOVALUE		-1
+
+#ifndef TRUE
+#  define TRUE 1
+#endif
+#ifndef FALSE
+#  define FALSE 0
+#endif
+#define MAX_ARGS	16
+static const char *cpp[] = {
+  "/lib/cpp -P - -",
+  "/usr/lib/cpp -P - -",
+  "/usr/bin/cpp -P - -",
+  "/usr/bin/gcc -E -P -",
+  "/usr/bin/cc -E -P -"
+};
+
+#define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 
 /*
  * AIC-7770/AIC-7870 register definitions
@@ -51,7 +69,6 @@ static char id[] = "$Id: aic7xxx_asm.c,v 2.1 1995/08/23 04:31:40 deang Exp $";
 int debug;
 int lineno, LC;
 char *filename;
-FILE *ifp, *ofp;
 unsigned char M[MEMORY][4];
 
 void 
@@ -207,7 +224,7 @@ getl(int *n)
 
 	i = 0;
 
-	while (fgets(buf, sizeof(buf), ifp)) {
+	while (fgets(buf, sizeof(buf), stdin)) {
 
 		lineno += 1;
 
@@ -520,7 +537,7 @@ crack(char **a, int n)
 #undef A
 
 void
-assemble(void)
+assemble(FILE *ofile)
 {
 	int n;
 	char **a;
@@ -543,7 +560,7 @@ assemble(void)
 			continue;
 
 		if (n == 3 && !strcmp("VERSION", *a))
-			fprintf(ofp, "#define %s \"%s\"\n", a[1], a[2]);
+			fprintf(ofile, "#define %s \"%s\"\n", a[1], a[2]);
 		else {
 			if (n == 3 && !strcmp("=", a[1]))
 				define(*a, strtol(a[2], NULL, 0));
@@ -553,7 +570,7 @@ assemble(void)
 	}
 
 	backpatch();
-	output(ofp);
+	output(ofile);
 
 	if (debug)
 		output(stderr);
@@ -563,7 +580,15 @@ int
 main(int argc, char **argv)
 {
 	int c;
+	int pid;
+	int ifile;
+	int status;
+	FILE *ofile;
+	char *ofilename;
+	int fd[2];
 
+	ofile = NULL;
+	ofilename = NULL;
 	while ((c = getopt(argc, argv, "dho:vD")) != EOF) {
 		switch (c) {
 		    case 'd':
@@ -581,8 +606,8 @@ main(int argc, char **argv)
 			break;
 		    }
 		    case 'o':
-			ofp = fopen(optarg, "w");
-			if (!ofp) {
+		        ofilename = optarg;
+			if ((ofile = fopen(ofilename, "w")) < 0) {
 				perror(optarg);
 				exit(EXIT_FAILURE);
 			}
@@ -608,20 +633,102 @@ main(int argc, char **argv)
 	}
 	filename = argv[optind];
 
-	ifp = fopen(filename, "r");
-	if (!ifp) {
+	
+	if ((ifile = open(filename, O_RDONLY)) < 0) {
 		perror(filename);
 		exit(EXIT_FAILURE);
 	}
 
-	if (!ofp) {
-		ofp = fopen(ADOTOUT, "w");
-		if (!ofp) {
-			perror(ADOTOUT);
+	if (!ofilename) {
+		ofilename = ADOTOUT;
+		if ((ofile = fopen(ofilename, "w")) < 0) {
+			perror(ofilename);
 			exit(EXIT_FAILURE);
 		}
 	}
 
-	assemble();
-	exit(EXIT_SUCCESS);
+	if (pipe(fd) < 0) {
+		perror("pipe failed");
+		exit(1);
+	}
+
+	if ((pid = fork()) < 0 ) {
+		perror("fork failed");
+		exit(1);
+	}
+	else if (pid > 0) {		/* Parent */
+		close(fd[1]);		/* Close write end */
+		if (fd[0] != STDIN_FILENO) {
+			if (dup2(fd[0], STDIN_FILENO) != STDIN_FILENO) {
+				perror("dup2 error on stdin");
+				exit(EXIT_FAILURE);
+			}
+			close(fd[0]);
+		}
+		assemble(ofile);
+		if (wait(&status) < 0) {
+			perror("wait error");
+		}
+
+		if (status != 0) {
+			unlink(ofilename);
+		}
+		exit(status);
+	} else {				/* Child */
+                int i, arg_cnt, found;
+		char *args[MAX_ARGS];
+		char *buf;
+
+                arg_cnt = 0;
+                found = FALSE;
+                for (i = 0; (!found && (i < NUMBER(cpp))); i++) {
+			char *bp;
+
+			buf = strdup(cpp[i]);
+
+			for (bp = strtok(buf, " \t\n"), arg_cnt = 0;
+                             bp != NULL;
+                             bp = strtok(NULL, " \t\n"), arg_cnt++) {
+				if (arg_cnt == 0) {
+					if (access(bp, X_OK) == 0) {
+						found = TRUE;
+					}
+				}
+
+				args[arg_cnt] = bp;
+			}
+
+                        if (!found) {
+				free(buf);
+                        }
+                }
+		args[arg_cnt] = NULL;
+
+                if (found) {
+			close(fd[0]);		/* Close Read end */
+			if (fd[1] != STDOUT_FILENO) {
+				if (dup2(fd[1], STDOUT_FILENO) != STDOUT_FILENO) {
+					perror("dup2 error on stdout");
+					exit(EXIT_FAILURE);
+				}
+				close(fd[1]);
+			}
+			if (ifile != STDIN_FILENO) {
+				if (dup2(ifile, STDIN_FILENO) != STDIN_FILENO) {
+					perror("dup2 error on stdin");
+					exit(EXIT_FAILURE);
+				}
+				close(ifile);
+			}
+
+			if (execvp(args[0], args) < 0) {
+				perror("execvp() error");
+				exit(EXIT_FAILURE);
+			}
+        	} else {
+			fprintf(stderr, "%s: Cannot find CPP command.\n", argv[0]);
+			exit(EXIT_FAILURE);
+		}
+	}
+	return(EXIT_SUCCESS);
 }

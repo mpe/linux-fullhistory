@@ -40,7 +40,8 @@ enum root_directory_inos {
 #endif
 	PROC_PROFILE, /* whether enabled or not */
 	PROC_CMDLINE,
-	PROC_SYS
+	PROC_SYS,
+	PROC_MTAB
 };
 
 enum pid_directory_inos {

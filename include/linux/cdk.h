@@ -3,7 +3,7 @@
 /*
  *	cdk.h  -- CDK interface definitions.
  *
- *	Copyright (C) 1994,1995  Greg Ungerer (gerg@stallion.oz.au).
+ *	Copyright (C) 1994-1996  Greg Ungerer (gerg@stallion.oz.au).
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -467,6 +467,12 @@ typedef struct cdkasy {
 #define	STL_BSTART	_IO('s',21)
 #define	STL_BSTOP	_IO('s',22)
 #define	STL_BRESET	_IO('s',23)
+
+/*
+ *	Define a set of ioctl extensions, used to get at special stuff.
+ */
+#define	STL_GETPFLAG	_IO('s',80)
+#define	STL_SETPFLAG	_IO('s',81)
 
 /*****************************************************************************/
 #endif

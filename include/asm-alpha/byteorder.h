@@ -37,17 +37,17 @@ __ntohl(unsigned long int x)
 	unsigned long int res, t1, t2;
 
 	__asm__(
-	"# bswap input: %0 (aabbccdd)
-	# output: %0, used %1 %2
-	extlh	%0,5,%1		# %1 = dd000000
-	zap	%0,0xfd,%2	# %2 = 0000cc00
-	sll	%2,5,%2		# %2 = 00198000
-	s8addq	%2,%1,%1	# %1 = ddcc0000
-	zap	%0,0xfb,%2	# %2 = 00bb0000
-	srl	%2,8,%2		# %2 = 0000bb00
-	extbl	%0,3,%0		# %0 = 000000aa
-	or	%1,%0,%0	# %0 = ddcc00aa
-	or	%2,%0,%0	# %0 = ddccbbaa"
+	"# bswap input: %0 (aabbccdd)\n\t"
+	"# output: %0, used %1 %2\n\t"
+	"extlh	%0,5,%1		# %1 = dd000000\n\t"
+	"zap	%0,0xfd,%2	# %2 = 0000cc00\n\t"
+	"sll	%2,5,%2		# %2 = 00198000\n\t"
+	"s8addq	%2,%1,%1	# %1 = ddcc0000\n\t"
+	"zap	%0,0xfb,%2	# %2 = 00bb0000\n\t"
+	"srl	%2,8,%2		# %2 = 0000bb00\n\t"
+	"extbl	%0,3,%0		# %0 = 000000aa\n\t"
+	"or	%1,%0,%0	# %0 = ddcc00aa\n\t"
+	"or	%2,%0,%0	# %0 = ddccbbaa\n"
 	: "r="(res), "r="(t1), "r="(t2)
 	: "0" (x & 0xffffffffUL));
 	return res;
@@ -64,12 +64,13 @@ __ntohs(unsigned short int x)
 {
 	unsigned long int res, t1;
 	
-	__asm__
-	    ("bis	%2,%2,%0	# v0 is result; swap in-place.  v0=aabb
-	      extwh	%0,7,%1		# t1 = bb00
-	      extbl	%0,1,%0		# v0 = 00aa
-	      bis	%0,%1,%0	# v0 = bbaa"
-	     : "r="(res), "r="(t1) : "r"(x));
+	__asm__(
+	"# v0 is result; swap in-place.\n\t"
+	"bis	%2,%2,%0	# v0 = aabb\n\t"
+	"extwh	%0,7,%1		# t1 = bb00\n\t"
+	"extbl	%0,1,%0		# v0 = 00aa\n\t"
+	"bis	%0,%1,%0	# v0 = bbaa\n"
+	: "r="(res), "r="(t1) : "r"(x));
 	return res;
 }
 

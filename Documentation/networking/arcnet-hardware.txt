@@ -1,4 +1,4 @@
-
+ 
 -----------------------------------------------------------------------------
 1) This file is a supplement to arcnet.txt.  Please read that for general
    driver configuration help.
@@ -26,7 +26,8 @@ there are others as well, but these are less common.  The different hardware
 types, as far as I'm aware, are not compatible and so you cannot wire a
 100Mbps card to a 2.5Mbps card, and so on.  From what I hear, my driver does
 work with 100Mbps cards, but I haven't been able to verify this myself,
-since I only have the 2.5Mbps variety.
+since I only have the 2.5Mbps variety.  It is probably not going to saturate
+your 100Mbps card.  Stop complaining :)
 
 You also cannot connect an ARCnet card to any kind of ethernet card and
 expect it to work.  
@@ -46,6 +47,10 @@ even if it can't possibly be delivered properly (ie. because of a cable
 break, or because the destination computer does not exist) it will at least
 tell the sender about it.
 
+Because of the carefully defined action of the "token", it will always make
+a pass around the "ring" within a maximum length of time.  This makes it
+useful for realtime networks.
+
 In addition, all known ARCnet cards have an (almost) identical programming
 interface.  This means that with one "arcnet" driver you can support any
 card; whereas, with ethernet, each manufacturer uses what is sometimes a
@@ -60,8 +65,13 @@ limit on their packet sizes; standard ARCnet can only send packets that are
 up to 508 bytes in length.  This is smaller than the internet "bare minimum"
 of 576 bytes, let alone the ethernet MTU of 1500.  To compensate, an extra
 level of encapsulation is defined by RFC1201, which I call "packet
-splitting," which allows "virtual packets" to grow as large as 64K each,
+splitting," that allows "virtual packets" to grow as large as 64K each,
 although they are generally kept down to the ethernet-style 1500 bytes.
+
+For more information on the advantages and disadvantages (mostly the
+advantages) of ARCnet networks, you might try the "ARCnet Trade Association"
+WWW page:
+	http://www.arcnet.com
 
 
 CABLING ARCNET NETWORKS
@@ -260,7 +270,7 @@ All ARCnet cards should have a total of four or five different settings:
     that IRQ2 is the same as IRQ9, as far as Linux is concerned.  You can
     "cat /proc/interrupts" for a somewhat complete list of which ones are in
     use at any given time.  Here is a list of common usages from Vojtech
-    Pavlik <vpav4328@diana.troja.mff.cuni.cz>:
+    Pavlik <Vojtech.Pavlik@st.mff.cuni.cz>:
     	("Not on bus" means there is no way for a card to generate this
 	interrupt)
 	IRQ  0 - Timer 0 (Not on bus)
@@ -268,9 +278,9 @@ All ARCnet cards should have a total of four or five different settings:
 	IRQ  2 - IRQ Controller 2 (Not on bus, nor does interrupt the CPU)
 	IRQ  3 - COM2
 	IRQ  4 - COM1
-	IRQ  5 - FREE (LPT2 if you have it; sometimes COM3)
+	IRQ  5 - FREE (LPT2 if you have it; sometimes COM3; maybe PLIP)
 	IRQ  6 - Floppy disk controller
-	IRQ  7 - FREE (LPT1 if you don't use the polling driver or PLIP) 
+	IRQ  7 - FREE (LPT1 if you don't use the polling driver; PLIP) 
 	IRQ  8 - Realtime Clock Interrupt (Not on bus)
 	IRQ  9 - FREE (VGA vertical sync interrupt if enabled)
 	IRQ 10 - FREE
@@ -279,6 +289,19 @@ All ARCnet cards should have a total of four or five different settings:
 	IRQ 13 - Numeric Coprocessor (Not on bus)
 	IRQ 14 - Fixed Disk Controller
 	IRQ 15 - FREE (Fixed Disk Controller 2 if you have it) 
+	
+	Note: IRQ 9 is used on some video cards for the "vertical retrace"
+	interrupt.  This interrupt would have been handy for things like
+	video games, as it occurs exactly once per screen refresh, but
+	unfortunately IBM cancelled this feature starting with the original
+	VGA and thus many VGA/SVGA cards do not support it.  For this
+	reason, no modern software uses this interrupt and it can almost
+	always be safely disabled, if your video card supports it at all.
+	
+	If your card for some reason CANNOT disable this IRQ (usually there
+	is a jumper), one solution would be to clip the printed circuit
+	contact on the board: it's the fourth contact from the left on the
+	back side.  I take no responsibility if you try this.
 
 	- Avery's favourite: IRQ2 (actually IRQ9).  Watch that VGA, though.
 
@@ -324,7 +347,7 @@ All ARCnet cards should have a total of four or five different settings:
     network.
     
 Also, on many cards (not mine, though) there are red and green LED's. 
-Vojtech Pavlik <vpav4328@diana.troja.mff.cuni.cz> tells me this is what they
+Vojtech Pavlik <Vojtech.Pavlik@st.mff.cuni.cz> tells me this is what they
 mean:
 	GREEN           RED             Status
 	-----		---		------
@@ -368,7 +391,7 @@ Cards Listed in this file (in this order, mostly):
 	SMC		PC550Longboard		16
 	SMC		PC600			16
 	SMC		PC710			8
-	SMC?		LCS-8830-T		16?
+	SMC?		LCS-8830(-T)		8/16
 	Puredata	PDI507			8
 	CNet Tech	CN120-Series		8
 	CNet Tech	CN160-Series		16
@@ -974,9 +997,12 @@ I know it works when connected to a PC110 type ARCnet board.
 *****************************************************************************
 
 ** Possibly SMC **
-LCS-8830-T (16-bit card)
-------------------------
+LCS-8830(-T) (8 and 16-bit cards)
+---------------------------------
   - from Mathias Katzer <mkatzer@HRZ.Uni-Bielefeld.DE>
+  - Marek Michalkiewicz <marekm@i17linuxb.ists.pwr.wroc.pl> says the
+    LCS-8830 is slightly different from LCS-8830-T.  These are 8 bit, BUS
+    only (the JP0 jumper is hardwired), and BNC only.
 	
 This is a LCS-8830-T made by SMC, I think ('SMC' only appears on one PLCC,
 nowhere else, not even on the few xeroxed sheets from the manual).
@@ -1709,7 +1735,7 @@ JP 6  : IRQ set (ONLY ONE jumper on 1-5 for IRQ 2-6)
 ** Acer **
 8-bit card, Model 5210-003
 --------------------------
-  - from Vojtech Pavlik <vpav4328@diana.troja.mff.cuni.cz> using portions of
+  - from Vojtech Pavlik <Vojtech.Pavlik@st.mff.cuni.cz> using portions of
     the existing arcnet-hardware file.
 
 This is a 90C26 based card.  Its configuration seems similar to 
@@ -1877,7 +1903,7 @@ guess the purpose.
 ** Datapoint? **
 LAN-ARC-8, an 8-bit card
 ------------------------
-  - from Vojtech Pavlik <vpav4328@diana.troja.mff.cuni.cz>
+  - from Vojtech Pavlik <Vojtech.Pavlik@st.mff.cuni.cz>
 
 This is another SMC 90C65 based arcnet card. I couldn't identify the
 manufacturer, but it might be DataPoint, becsuse the card has the
@@ -2017,7 +2043,7 @@ parameters.  These two switches are normally left in the OFF position.
 ** Topware **
 8-bit card, TA-ARC/10
 -------------------------
-  - from Vojtech Pavlik <vpav4328@diana.troja.mff.cuni.cz>
+  - from Vojtech Pavlik <Vojtech.Pavlik@st.mff.cuni.cz>
 
 This is another very similar 90C65 card. Most of the switches and jumpers
 are the same as on other clones.
@@ -2726,7 +2752,7 @@ Setting the Timeouts
 ** No Name **
 8-bit cards ("Made in Taiwan R.O.C.")
 -----------
-  - from Vojtech Pavlik <vpav4328@diana.troja.mff.cuni.cz>
+  - from Vojtech Pavlik <Vojtech.Pavlik@st.mff.cuni.cz>
 
 I have named this ARCnet card "NONAME", since I got only the card with
 no manual at all and the only text identifying the manufacturer is 

@@ -100,7 +100,7 @@ static union bdflush_param{
 				   trim back the buffers */
 	} b_un;
 	unsigned int data[N_PARAM];
-} bdf_prm = {{60, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
+} bdf_prm = {{25, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
 
 /* The lav constant is set for 1 minute, as long as the update process runs
    every 5 seconds.  If you change the frequency of update, the time
@@ -1111,7 +1111,7 @@ int brw_page(int rw, unsigned long address, kdev_t dev, int b[], int size, int b
 				memcpy(next->b_data, tmp->b_data, size);
 			else {
 				memcpy(tmp->b_data, next->b_data, size);
-				set_bit(BH_Dirty, &tmp->b_state);
+				mark_buffer_dirty(tmp, 0);
 			}
 			brelse(tmp);
 			next->b_count--;

@@ -3,7 +3,7 @@
 /*
  *	stallion.c  -- stallion multiport serial driver.
  *
- *	Copyright (C) 1994,1995  Greg Ungerer (gerg@stallion.oz.au).
+ *	Copyright (C) 1994-1996  Greg Ungerer (gerg@stallion.oz.au).
  *
  *	This code is loosely based on the Linux serial driver, written by
  *	Linus Torvalds, Theodore T'so and others.
@@ -26,7 +26,6 @@
 /*****************************************************************************/
 
 #include <linux/module.h>
-
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/wait.h>
@@ -42,7 +41,6 @@
 #include <linux/malloc.h>
 #include <linux/ioport.h>
 #include <linux/config.h>	/* for CONFIG_PCI */
-
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -143,7 +141,7 @@ static int	stl_nrbrds = sizeof(stl_brdconf) / sizeof(stlconf_t);
  *	all the local structures required by a serial tty driver.
  */
 static char	*stl_drvname = "Stallion Multiport Serial Driver";
-static char	*stl_drvversion = "1.0.0";
+static char	*stl_drvversion = "1.0.2";
 static char	*stl_serialname = "ttyE";
 static char	*stl_calloutname = "cue";
 
@@ -452,7 +450,6 @@ static unsigned int	stl_baudrates[] = {
 int		init_module(void);
 void		cleanup_module(void);
 #endif
-static void	*stl_memalloc(int len);
 
 int		stl_init(void);
 static int	stl_open(struct tty_struct *tty, struct file *filp);
@@ -494,6 +491,7 @@ static int	stl_waitcarrier(stlport_t *portp, struct file *filp);
 static void	stl_delay(int len);
 static void	stl_intr(int irq, struct pt_regs *regs);
 static void	stl_offintr(void *private);
+static void	*stl_memalloc(int len);
 
 #ifdef	CONFIG_PCI
 static int	stl_findpcibrds(void);
@@ -504,8 +502,9 @@ static int	stl_findpcibrds(void);
 #ifdef MODULE
 
 /*
- *	Use the kernel version number for modules.
+ *	Loadable module initialization stuff.
  */
+
 int init_module()
 {
 	unsigned long	flags;
@@ -605,15 +604,12 @@ void cleanup_module()
 /*****************************************************************************/
 
 /*
- *	Local memory allocation routines. These are used so we can deal with
- *	memory allocation at init time and during run-time in a consistent
- *	way. Everbody just calls the stl_memalloc routine to allocate
- *	memory and it will do the right thing.
+ *	Local driver kernel memory allocation routine.
  */
 
 static void *stl_memalloc(int len)
 {
-	return (void *) kmalloc(len, GFP_KERNEL);
+	return((void *) kmalloc(len, GFP_KERNEL));
 }
 
 /*****************************************************************************/
@@ -2782,18 +2778,6 @@ static int stl_findpcibrds()
 			}
 			brdp->irq = irq;
 
-#if 0
-			ioaddr = 0x0c000001;
-			if ((rc = pcibios_write_config_dword(busnr, devnr, 0x40, ioaddr))) {
-				printk("STALLION: failed to write register on PCI board, errno=%x\n", rc);
-				continue;
-			}
-			if ((rc = pcibios_write_config_dword(busnr, devnr, 0x48, ioaddr))) {
-				printk("STALLION: failed to write register on PCI board, errno=%x\n", rc);
-				continue;
-			}
-#endif
-
 			stl_brdinit(brdp);
 		}
 	}
@@ -2919,7 +2903,7 @@ int stl_init(void)
 	if (tty_register_driver(&stl_callout))
 		printk("STALLION: failed to register callout driver\n");
 
-	return 0;
+	return(0);
 }
 
 /*****************************************************************************/

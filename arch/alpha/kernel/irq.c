@@ -622,6 +622,8 @@ asmlinkage void do_entInt(unsigned long type, unsigned long vector, unsigned lon
 			cabriolet_and_eb66p_device_interrupt(vector, &regs);
 #elif NR_IRQS == 32
 			eb66_and_eb64p_device_interrupt(vector, &regs);
+#elif NR_IRQS == 16
+			isa_device_interrupt(vector, &regs);
 #endif
 			return;
 		case 4:

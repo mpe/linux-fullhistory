@@ -581,7 +581,7 @@ static inline void avanti_and_noname_fixup(void)
 		{ 0,  0,  2,  1,  0}, /* idsel 11 (slot furthest from ISA) KN25_PCI_SLOT0 */
 		{ 1,  1,  0,  2,  1}, /* idsel 12 (middle slot) KN25_PCI_SLOT1 */
 #ifdef CONFIG_ALPHA_AVANTI
-		{ 1,  1, -1, -1, -1}, /* idsel 13 KN25_PCI_SLOT2 */
+		{ 1,  2,  1,  0,  2}, /* idsel 13 KN25_PCI_SLOT2 */
 #endif /* CONFIG_ALPHA_AVANTI */
 	};
 	/*

@@ -6,6 +6,7 @@
  */
 #include <linux/module.h>
 
+#include <linux/mm.h>
 #include <linux/msdos_fs.h>
 
 #include "msbuffer.h"

@@ -115,7 +115,9 @@ int ipip_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
 static struct inet_protocol ipip_protocol = {
   ipip_rcv,             /* IPIP handler          */
+#if 0
   NULL,                 /* Will be UDP fraglist handler */
+#endif
   NULL,                 /* TUNNEL error control    */
   0,                    /* next                 */
   IPPROTO_IPIP,         /* protocol ID          */

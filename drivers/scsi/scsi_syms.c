@@ -61,6 +61,7 @@ struct symbol_table scsi_symbol_table = {
     X(need_isa_buffer),
     X(request_queueable),
     X(print_Scsi_Cmnd),
+    X(scsi_mark_host_bus_reset),
 #if defined(CONFIG_PROC_FS)
     X(proc_print_scsidevice),
 #endif

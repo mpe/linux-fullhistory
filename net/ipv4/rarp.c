@@ -105,6 +105,7 @@ static initflag = 1;
 static inline void rarp_release_entry(struct rarp_table *entry)
 {
 	kfree_s(entry, sizeof(struct rarp_table));
+	MOD_DEC_USE_COUNT;
 	return;
 }
 
@@ -370,6 +371,9 @@ static int rarp_req_set(struct arpreq *req)
 	entry->htype = htype;
 	memcpy(&entry->ha, &r.arp_ha.sa_data, hlen);
 	entry->dev = dev;
+
+	/* Don't unlink if we have entries to serve. */
+	MOD_INC_USE_COUNT;
 
 	sti();  
 

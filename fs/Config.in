@@ -12,8 +12,8 @@ tristate 'xiafs filesystem support' CONFIG_XIA_FS
 
 # msdos filesystems
 tristate 'DOS FAT fs support' CONFIG_FAT_FS
-dep_tristate 'Old MSDOS fs support' CONFIG_MSDOS_FS $CONFIG_FAT_FS
-dep_tristate 'vfat (Windows-95) fs support' CONFIG_VFAT_FS $CONFIG_FAT_FS
+dep_tristate 'MSDOS fs support' CONFIG_MSDOS_FS $CONFIG_FAT_FS
+dep_tristate 'VFAT (Windows-95) fs support' CONFIG_VFAT_FS $CONFIG_FAT_FS
 dep_tristate 'umsdos: Unix like fs on top of std MSDOS FAT fs' CONFIG_UMSDOS_FS $CONFIG_MSDOS_FS
 
 bool '/proc filesystem support' CONFIG_PROC_FS

@@ -29,7 +29,7 @@
  * NOTE that writes may use only the low 2/3 of these: reads
  * take precedence.
  */
-#define NR_REQUEST	16
+#define NR_REQUEST	64
 static struct request all_requests[NR_REQUEST];
 
 /*

@@ -401,6 +401,7 @@ static int vfat_create_shortname(struct inode *dir, const char *name,
 		extlen = 0;
 	}
 	ext[extlen] = '\0';
+	base[baselen] = '\0';
 
 	count = 0;
 	strcpy(msdos_name, base);

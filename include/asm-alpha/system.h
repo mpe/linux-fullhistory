@@ -113,10 +113,10 @@ extern void tbi(long type, ...);
 /*
  * Give prototypes to shut up gcc.
  */
-extern inline unsigned long xchg_u32 (volatile int * m, unsigned long val);
-extern inline unsigned long xchg_u64 (volatile long * m, unsigned long val);
+extern __inline__ unsigned long xchg_u32 (volatile int * m, unsigned long val);
+extern __inline__ unsigned long xchg_u64 (volatile long * m, unsigned long val);
 
-extern inline unsigned long xchg_u32(volatile int * m, unsigned long val)
+extern __inline__ unsigned long xchg_u32(volatile int * m, unsigned long val)
 {
 	unsigned long dummy, dummy2;
 
@@ -132,7 +132,7 @@ extern inline unsigned long xchg_u32(volatile int * m, unsigned long val)
 	return val;
 }
 
-extern inline unsigned long xchg_u64(volatile long * m, unsigned long val)
+extern __inline__ unsigned long xchg_u64(volatile long * m, unsigned long val)
 {
 	unsigned long dummy, dummy2;
 
@@ -161,7 +161,7 @@ extern inline unsigned long xchg_u64(volatile long * m, unsigned long val)
  */
 extern void __xchg_called_with_bad_pointer(void);
 
-static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int size)
+static __inline__ unsigned long __xchg(unsigned long x, volatile void * ptr, int size)
 {
 	switch (size) {
 		case 4:

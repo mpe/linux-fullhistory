@@ -262,6 +262,23 @@ asmlinkage int sys_sysfs(int option, ...)
 	return retval;
 }
 
+int get_filesystem_info( char *buf )
+{
+	struct vfsmount *tmp = vfsmntlist;
+	int len = 0;
+
+	while ( tmp && len < PAGE_SIZE - 80 )
+	{
+		len += sprintf( buf + len, "%s %s %s %s",
+			tmp->mnt_devname, tmp->mnt_dirname, tmp->mnt_sb->s_type->name,
+			tmp->mnt_flags & MS_RDONLY ? "ro" : "rw" );
+		len += sprintf( buf + len, " 0 0\n" );
+		tmp = tmp->mnt_next;
+	}
+
+	return len;
+}
+
 int get_filesystem_list(char * buf)
 {
 	int len = 0;

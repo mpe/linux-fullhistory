@@ -106,15 +106,6 @@ extern int request_dma(unsigned int dmanr, char * deviceID);
 extern void free_dma(unsigned int dmanr);
 extern int (*rarp_ioctl_hook)(int,void*);
 
-extern void (* iABI_hook)(struct pt_regs * regs);
-
-#ifdef CONFIG_BINFMT_ELF
-#include <linux/elfcore.h>
-extern int dump_fpu(elf_fpregset_t *);
-#endif
-
-extern void dump_thread(struct pt_regs *, struct user *);
-
 struct symbol_table symbol_table = {
 #include <linux/symtab_begin.h>
 #ifdef MODVERSIONS
@@ -472,11 +463,7 @@ struct symbol_table symbol_table = {
 	X(tr_type_trans),
 #endif
 
-#ifdef CONFIG_BINFMT_ELF
-	X(dump_fpu),
-#endif
 	/* bimfm_aout */
-	X(dump_thread),
 	X(get_write_access),
 	X(put_write_access),
 

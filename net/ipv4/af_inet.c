@@ -93,6 +93,9 @@
 #ifdef CONFIG_IP_ALIAS
 #include <net/ip_alias.h>
 #endif
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
 
 #define min(a,b)	((a)<(b)?(a):(b))
 
@@ -1292,6 +1295,10 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCDRARP:
 		case SIOCGRARP:
 		case SIOCSRARP:
+#ifdef CONFIG_KERNELD
+			if (rarp_ioctl_hook == NULL)
+				request_module("rarp");
+#endif
 			if (rarp_ioctl_hook != NULL)
 				return(rarp_ioctl_hook(cmd,(void *) arg));
 		case SIOCGIFCONF:

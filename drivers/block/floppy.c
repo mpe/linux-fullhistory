@@ -107,7 +107,7 @@
 
 /* do print messages for unexpected interrupts */
 static int print_unex=1;
-
+#include <linux/utsname.h>
 #include <linux/module.h>
 
 /* the following is the mask of allowed drives. By default units 2 and
@@ -3118,30 +3118,15 @@ static struct translation_entry {
 
 static inline int normalize_0x02xx_ioctl(int *cmd, int *size)
 {
-	int i, orig_size, ocmd;
+	int i;
 
-	orig_size = _IOC_SIZE(*cmd);
-	ocmd = *cmd;
 	for (i=0; i < ARRAY_SIZE(translation_table); i++) {
-		if ((*cmd & 0xff3f) == (translation_table[i].newcmd & 0xff3f)){
+		if ((*cmd & 0xffff) == (translation_table[i].newcmd & 0xffff)){
+			*size = _IOC_SIZE(*cmd);
 			*cmd = translation_table[i].newcmd;
-			if (!orig_size && _IOC_SIZE(*cmd)) {
-				/* kernels 1.3.34 to 1.3.39 : */
-				*size = _IOC_SIZE(*cmd); 
-				DPRINT1("warning: obsolete ioctl 0x%x\n",ocmd);
-				DPRINT("please recompile your program\n");
-				/* these ioctls only existed
-				 * in six (development)
-				 * kernels anyways. That's why we
-				 * complain about these, and not about
-				 * the much older 0x00xx ioctl's
-				 */
-			} else {
-				*size = orig_size;
-				if (*size > _IOC_SIZE(*cmd)) {
-					printk("ioctl not yet supported\n");
-					return -EFAULT;
-				}
+			if (*size > _IOC_SIZE(*cmd)) {
+				printk("ioctl not yet supported\n");
+				return -EFAULT;
 			}
 			return 0;
 		}
@@ -3152,14 +3137,18 @@ static inline int normalize_0x02xx_ioctl(int *cmd, int *size)
 static inline int xlate_0x00xx_ioctl(int *cmd, int *size)
 {
 	int i;
-	/* kernels <= 1.3.33 */
-	/* we might want to start warning in 1.4.x (by then, no user
-	 * programs will have an excuse to use the old ioctls: there
-	 * will be a stable kernel supporting them :)
-	 *
-	 * when the first 1.5.x kernel will come out, this loop will
-	 * be removed as well.
-	 */
+	/* old ioctls' for kernels <= 1.3.33 */
+	/* When the next even release will come around, we'll start
+	 * warning against these.
+	 * When the next odd release will come around, we'll fail with
+	 * -EINVAL */
+	if(strcmp(system_utsname.version, "1.4.0") >= 0)
+		printk("obsolete floppy ioctl %x\n", *cmd);
+	if((system_utsname.version[0] == '1' &&
+	    strcmp(system_utsname.version, "1.5.0") >= 0) ||
+	   (system_utsname.version[0] >= '2' &&
+	    strcmp(system_utsname.version, "2.1.0") >= 0))
+		return -EINVAL;
 	for (i=0; i < ARRAY_SIZE(translation_table); i++) {
 		if (*cmd == translation_table[i].oldcmd) {
 			*size = translation_table[i].oldsize;

@@ -532,7 +532,7 @@ void tcp_send_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
 	}
 
 	t1 =(struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
-	memcpy(t1, th, sizeof(*t1));
+	memset(t1, 0, sizeof(*t1));
 
 	/*
 	 *	Swap the send and the receive. 
@@ -540,19 +540,16 @@ void tcp_send_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
 
 	t1->dest = th->source;
 	t1->source = th->dest;
-	t1->syn = 0;
-	t1->fin = 0;
-	t1->urg = 0;
+	t1->doff = sizeof(*t1)/4;
 	t1->rst = 1;
-	t1->psh = 0;  
   
 	if(th->ack)
 	{
-		t1->ack = 0;
 	  	t1->seq = th->ack_seq;
 	}
 	else
 	{
+		t1->ack = 1;
 	  	if(!th->syn)
 			t1->ack_seq = th->seq;
 		else

@@ -7,8 +7,8 @@ manual with your ARCnet card.
 
 Since no one seems to listen to me otherwise, perhaps a poem will get your
 attention:
-			This is scary software
-			If it works I DO CARE.
+		This driver's getting fat and beefy,
+		But my cat is still named Fifi.
 
 Hmm, I think I'm allowed to call that a poem, even though it's only two
 lines.  Hey, I'm in Computer Science, not English.  Give me a break.
@@ -46,16 +46,16 @@ My e-mail address is: apenwarr@foxnet.net
 These are the ARCnet drivers for Linux.
 
 This new release has resulted from many months of on-and-off effort from me
-(Avery Pennarun), many bug reports from users, and in particular a lot of
-input and coding from Tomasz Motylewski.  Starting with ARCnet 2.10 ALPHA,
-Tomasz's all-new-and-improved RFC1051 support has been included and seems to
-be working fine!
+(Avery Pennarun), many bug reports/fixes and suggestions from others, and in
+particular a lot of input and coding from Tomasz Motylewski.  Starting with
+ARCnet 2.10 ALPHA, Tomasz's all-new-and-improved RFC1051 support has been
+included and seems to be working fine!
 
 
 Where do I discuss these drivers?
 ---------------------------------
 
-BOINGY - the linux-arcnet@807-city.on.ca mailing list is now so unstable
+HEY!! - the linux-arcnet@807-city.on.ca mailing list is now so unstable
 that I can't recommend people even bother with it.  I no longer have an
 account on 807-CITY (though they still graciously forward my mail to me) so
 there's not much I can do.
@@ -65,11 +65,8 @@ mailing list; subscribe by sending a message with the BODY "subscribe
 linux-arcnet YOUR REAL NAME" to listserv@tichy.ch.uj.edu.pl.  Then, to
 submit messages to the list, mail to linux-arcnet@tichy.ch.uj.edu.pl.
 
-There are mailing list archives at:
+There are archives of the mailing list at:
 	http://tichy.ch.uj.edu.pl/lists/linux-arcnet
-
-Send all bug (or success) reports to me, then, not the list, since (as I
-mentioned) the list doesn't work.
 
 The people on linux-net@vger.rutgers.edu have also been known to be very
 helpful, especially when we're talking about ALPHA Linux kernels that may or
@@ -264,10 +261,14 @@ The ARCnet driver v2.10 ALPHA supports three protocols, each on its own
 		The arc0s support was contributed by Tomasz Motylewski
 		and modified somewhat by me.  Bugs are probably my fault.
 
+You can choose not to compile arc0e and arc0s into the driver if you want -
+this will save you a bit of memory and avoid confusion when eg. trying to
+use the "NFS-root" stuff in recent Linux kernels.
+
 The arc0e and arc0s devices are created automatically when you first
-'ifconfig' the arc0 device.  To actually use them, though, you need to also
-'ifconfig' the other virtual devices you need.  There are a number of ways
-you can set up your network then:
+ifconfig the arc0 device.  To actually use them, though, you need to also
+ifconfig the other virtual devices you need.  There are a number of ways you
+can set up your network then:
 
 
 1. Single Protocol.
@@ -308,7 +309,7 @@ you can set up your network then:
    its own IP address and needs to use freedom as its default gateway.  The
    XT (patience), however, does not have its own internet IP address and so
    I assigned it one on a "private subnet" (as defined by RFC1597).
-   
+
    To start with, take a simple network with just insight and freedom. 
    Insight needs to:
    	- talk to freedom via RFC1201 (arc0) protocol, because I like it
@@ -330,7 +331,7 @@ you can set up your network then:
    	ifconfig arc0 freedom
    	route add freedom arc0
    	route add insight arc0
-   	/* and default gateway is configured by PPP */
+   	/* and default gateway is configured by pppd */
    	
    Great, now insight talks to freedom directly on arc0, and sends packets
    to the internet through freedom.  If you didn't know how to do the above,
@@ -374,16 +375,15 @@ you can set up your network then:
    both insight and patience are using freedom as their default gateway, the
    two can already talk to each other.
    
-   It's quite fortunate that I set things up like this the first time
-   through (cough cough) because it's really handy when I boot insight into
-   DOS.  There, it runs the Novell ODI protocol stack, which only works with
-   RFC1201 ARCnet.  In this mode it would be impossible for insight to
-   communicate directly with patience, since the Novell stack is
-   incompatible with Microsoft's Ethernet-Encap.  Without changing any
-   settings on freedom or patience, I simply set freedom as the default
-   gateway for insight (now in DOS, remember) and all the forwarding happens
-   "automagically" between the two hosts that would normally not be able to
-   communicate at all.
+   It's quite fortunate that I set things up like this the first time (cough
+   cough) because it's really handy when I boot insight into DOS.  There, it
+   runs the Novell ODI protocol stack, which only works with RFC1201 ARCnet. 
+   In this mode it would be impossible for insight to communicate directly
+   with patience, since the Novell stack is incompatible with Microsoft's
+   Ethernet-Encap.  Without changing any settings on freedom or patience, I
+   simply set freedom as the default gateway for insight (now in DOS,
+   remember) and all the forwarding happens "automagically" between the two
+   hosts that would normally not be able to communicate at all.
    
    For those who like diagrams, I have created two "virtual subnets" on the
    same physical ARCnet wire.  You can picture it like this:
@@ -397,15 +397,13 @@ you can set up your network then:
           |               |         *            |               |
           |               +-Freedom-*-Gatekeeper-+               |
           |               |    |    *            |               |
-          \-------+-------/    |                 \-------+-------/
+          \-------+-------/    |    *            \-------+-------/
                   |            |                         |
                Insight         |                      Patience
                            (Internet)
-                        
 
 
 
-                                                    
 It works: what now?
 -------------------
 
@@ -424,31 +422,37 @@ It doesn't work: what now?
 --------------------------
 
 Do the same as above, but also include the output of the ifconfig and route
-commands, as well as any pertinent log entries (ie: anything that starts
+commands, as well as any pertinent log entries (ie. anything that starts
 with "arcnet:" and has shown up since the last reboot) in your mail.
 
 If you want to try fixing it yourself (I strongly recommend that you mail me
 about the problem first, since it might already have been solved) you may
 want to try some of the debug levels available.  For heavy testing on
 D_DURING or more, it would be a REALLY good idea to kill your klogd daemon
-first!  D_DURING displays 4-5 lines for each packet sent or received.  D_TX
-and RX actually DISPLAY each packet as it is sent or received, which is
-obviously quite big.
+first!  D_DURING displays 4-5 lines for each packet sent or received.  D_TX,
+D_RX, and D_SKB actually DISPLAY each packet as it is sent or received,
+which is obviously quite big.
 
-You can run the arcdump shell script (available from me or in the full
-ARCnet package if you got it) as root to list the contents of the arcnet
-buffers at any time.  To make any sense at all out of this, you should grab
-the pertinent RFC's. (some are listed near the top of arcnet.c).  arcdump
-assumes your card is at 0xD0000.  If it isn't, edit the script.
+Starting with v2.40 ALPHA, the autoprobe routines have changed
+significantly.  In particular, they won't tell you why the card was not
+found unless you turn on the D_INIT_REASONS debugging flag.
 
-Buffers #0 and 1 are used for receiving, and Buffers #2 and 3 are for
-sending.  Ping-pong buffers are implemented both ways.
+Once the driver is running, you can run the arcdump shell script (available
+from me or in the full ARCnet package, if you have it) as root to list the
+contents of the arcnet buffers at any time.  To make any sense at all out of
+this, you should grab the pertinent RFC's. (some are listed near the top of
+arcnet.c).  arcdump assumes your card is at 0xD0000.  If it isn't, edit the
+script.
 
-If your debug level includes D_DURING, the buffers are cleared to a constant
-value of 0x42 every time the card is reset (which should only happen when
-you do an ifconfig up, or when Linux decides that the driver is broken). 
-This is to make it easier to figure out which bytes are being used by a
-packet.
+Buffers 0 and 1 are used for receiving, and Buffers 2 and 3 are for sending. 
+Ping-pong buffers are implemented both ways.
+
+If your debug level includes D_DURING and you did NOT define SLOW_XMIT_COPY,
+the buffers are cleared to a constant value of 0x42 every time the card is
+reset (which should only happen when you do an ifconfig up, or when Linux
+decides that the driver is broken).  During a transmit, unused parts of the
+buffer will be cleared to 0x42 as well.  This is to make it easier to figure
+out which bytes are being used by a packet.
 
 You can change the debug level without recompiling the kernel by typing:
 	ifconfig arc0 down metric 1xxx
@@ -456,10 +460,10 @@ You can change the debug level without recompiling the kernel by typing:
 where "xxx" is the debug level you want.  For example, "metric 1015" would put
 you at debug level 15.  Debug level 7 is currently the default.
 
-Note that the debug level is (as of v1.90 ALPHA) a binary combination of
-different debug flags; so debug level 7 is really 1+2+4 or
-D_NORMAL+D_INIT+D_EXTRA.  To reach D_DURING, you would add 8 to this,
-resulting in debug level 15.
+Note that the debug level is (starting with v1.90 ALPHA) a binary
+combination of different debug flags; so debug level 7 is really 1+2+4 or
+D_NORMAL+D_EXTRA+D_INIT.  To include D_DURING, you would add 16 to this,
+resulting in debug level 23.
 
 If you don't understand that, you probably don't want to know anyway. 
 E-mail me about your problem.

@@ -775,6 +775,7 @@ extern int get_ksyms_list(char *, char **, off_t, int);
 #endif
 extern int get_device_list(char *);
 extern int get_filesystem_list(char *);
+extern int get_filesystem_info( char * );
 extern int get_irq_list(char *);
 extern int get_dma_list(char *);
 extern int get_cpuinfo(char *);
@@ -846,6 +847,9 @@ static int get_root_array(char * page, int type, char **start, off_t offset, int
 #endif
 		case PROC_CMDLINE:
 			return get_cmdline(page);
+
+                case PROC_MTAB:
+                       return get_filesystem_info( page );
 	}
 	return -EBADF;
 }

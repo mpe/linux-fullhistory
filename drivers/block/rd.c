@@ -431,7 +431,7 @@ void rd_load()
 		outfile.f_op->write(outfile.f_inode, &outfile, buf,
 				    BLOCK_SIZE);
 		if (!(i % 16)) {
-			printk("%c\b", rotator[rotate & 0x3]);
+			printk(KERN_NOTICE "%c\b", rotator[rotate & 0x3]);
 			rotate++;
 		}
 	}
