@@ -161,7 +161,7 @@ extern void aarp_proto_init(void);
  *	Give a device find its atif control structure
  */
 
-extern __inline__ struct atalk_iface *atalk_find_dev(struct net_device *dev)
+static inline struct atalk_iface *atalk_find_dev(struct net_device *dev)
 {
 	return dev->atalk_ptr;
 }

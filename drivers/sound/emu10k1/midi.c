@@ -43,7 +43,7 @@
 #include "cardmi.h"
 #include "midi.h"
 
-static spinlock_t midi_spinlock = SPIN_LOCK_UNLOCKED;
+static spinlock_t midi_spinlock __attribute((unused)) = SPIN_LOCK_UNLOCKED;
 
 static void init_midi_hdr(struct midi_hdr *midihdr)
 {

@@ -273,6 +273,10 @@ typedef __u32 kernel_cap_t;
 
 #define CAP_MKNOD            27
 
+/* Allow taking of leases on files */
+
+#define CAP_LEASE            28
+
 #ifdef __KERNEL__
 /* 
  * Bounding set

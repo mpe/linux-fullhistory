@@ -19,7 +19,7 @@ extern struct buffer_head * create_bounce(int rw, struct buffer_head * bh_orig);
 
 #else /* CONFIG_HIGHMEM */
 
-extern inline unsigned int nr_free_highpages(void) { return 0; }
+static inline unsigned int nr_free_highpages(void) { return 0; }
 #define prepare_highmem_swapout(page) page
 #define replace_with_highmem(page) page
 

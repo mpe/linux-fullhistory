@@ -250,6 +250,7 @@ CONFIGURE, MENUCONFIG, XCONFIG
 P:	Michael Elizabeth Chastain
 M:	mec@shout.net
 L:	linux-kbuild@torque.net
+W:	http://www.kernel.org/pub/linux/kernel/projects/kbuild/
 S:	Maintained
 
 CONFIGURE.HELP
@@ -484,6 +485,15 @@ M:	klaus.kudielka@ieee.org
 L:	linux-hams@vger.kernel.org
 W:	http://www.nt.tuwien.ac.at/~kkudielk/Linux/
 S:	Maintained
+
+KERNEL BUILD (Makefile, Rules.make, scripts/*)
+P:	Keith Owens
+M:	kaos@ocs.com.au
+P:	Michael Elizabeth Chastain
+M:	mec@shout.net
+L:	linux-kbuild@torque.net
+W:	http://www.kernel.org/pub/linux/kernel/projects/kbuild/
+S:	Maintained 
 
 LOGICAL VOLUME MANAGER
 P:     Heinz Mauelshagen

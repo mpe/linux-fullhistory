@@ -130,7 +130,7 @@ enum {
 
 extern struct ppp_channel_ops pppoe_chan_ops;
 
-extern void  pppox_proto_init(struct net_proto *np);
+extern int pppox_proto_init(struct net_proto *np);
 
 #endif /* __KERNEL__ */
 

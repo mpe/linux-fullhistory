@@ -47,7 +47,6 @@ nlmclnt_setlockargs(struct nlm_rqst *req, struct file_lock *fl)
 	struct nlm_args	*argp = &req->a_args;
 	struct nlm_lock	*lock = &argp->lock;
 
-	memset(argp, 0, sizeof(*argp));
 	nlmclnt_next_cookie(&argp->cookie);
 	argp->state   = nsm_local_state;
 	memcpy(&lock->fh, NFS_FH(fl->fl_file->f_dentry), sizeof(struct nfs_fh));
@@ -55,7 +54,7 @@ nlmclnt_setlockargs(struct nlm_rqst *req, struct file_lock *fl)
 	lock->oh.data = req->a_owner;
 	lock->oh.len  = sprintf(req->a_owner, "%d@%s",
 				current->pid, system_utsname.nodename);
-	lock->fl      = *fl;
+	locks_copy_lock(&lock->fl, fl);
 }
 
 /*
@@ -157,7 +156,9 @@ nlmclnt_proc(struct inode *inode, int cmd, struct file_lock *fl)
 		call->a_flags = RPC_TASK_ASYNC;
 	} else {
 		spin_unlock_irqrestore(&current->sigmask_lock, flags);
-		call->a_flags = 0;
+		memset(call, 0, sizeof(*call));
+		locks_init_lock(&call->a_args.lock.fl);
+		locks_init_lock(&call->a_res.lock.fl);
 	}
 	call->a_host = host;
 
@@ -214,8 +215,12 @@ nlmclnt_alloc_call(void)
 
 	while (!signalled()) {
 		call = (struct nlm_rqst *) kmalloc(sizeof(struct nlm_rqst), GFP_KERNEL);
-		if (call)
+		if (call) {
+			memset(call, 0, sizeof(*call));
+			locks_init_lock(&call->a_args.lock.fl);
+			locks_init_lock(&call->a_res.lock.fl);
 			return call;
+		}
 		printk("nlmclnt_alloc_call: failed, waiting for memory\n");
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(5*HZ);
@@ -389,7 +394,7 @@ nlmclnt_test(struct nlm_rqst *req, struct file_lock *fl)
 		 * Report the conflicting lock back to the application.
 		 * FIXME: Is it OK to report the pid back as well?
 		 */
-		memcpy(fl, &req->a_res.lock.fl, sizeof(*fl));
+		locks_copy_lock(fl, &req->a_res.lock.fl);
 		/* fl->fl_pid = 0; */
 	} else {
 		return nlm_stat_to_errno(req->a_res.status);
@@ -476,6 +481,9 @@ nlmclnt_reclaim(struct nlm_host *host, struct file_lock *fl)
 	int		status;
 
 	req = &reqst;
+	memset(req, 0, sizeof(*req));
+	locks_init_lock(&req->a_args.lock.fl);
+	locks_init_lock(&req->a_res.lock.fl);
 	req->a_host  = host;
 	req->a_flags = 0;
 

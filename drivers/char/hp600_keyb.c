@@ -7,7 +7,7 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/init.h>
-#include <asm/delay.h>
+#include <linux/delay.h>
 #include <asm/io.h>
 #include "scan_keyb.h"
 

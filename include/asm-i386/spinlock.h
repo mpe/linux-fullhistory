@@ -70,13 +70,12 @@ static inline int spin_trylock(spinlock_t *lock)
 	char oldval;
 	__asm__ __volatile__(
 		"xchgb %b0,%1"
-		:"=q" (oldval), "=m" (__dummy_lock(lock))
-		:"0" (0)
-		:"memory");
+		:"=q" (oldval), "=m" (lock->lock)
+		:"0" (0) : "memory");
 	return oldval > 0;
 }
 
-extern inline void spin_lock(spinlock_t *lock)
+static inline void spin_lock(spinlock_t *lock)
 {
 #if SPINLOCK_DEBUG
 	__label__ here;
@@ -88,11 +87,10 @@ printk("eip: %p\n", &&here);
 #endif
 	__asm__ __volatile__(
 		spin_lock_string
-		:"=m" (__dummy_lock(lock))
-		: :"memory");
+		:"=m" (lock->lock) : : "memory");
 }
 
-extern inline void spin_unlock(spinlock_t *lock)
+static inline void spin_unlock(spinlock_t *lock)
 {
 #if SPINLOCK_DEBUG
 	if (lock->magic != SPINLOCK_MAGIC)
@@ -102,8 +100,7 @@ extern inline void spin_unlock(spinlock_t *lock)
 #endif
 	__asm__ __volatile__(
 		spin_unlock_string
-		:"=m" (__dummy_lock(lock))
-		: :"memory");
+		:"=m" (lock->lock) : : "memory");
 }
 
 /*
@@ -146,7 +143,7 @@ typedef struct {
  */
 /* the spinlock helpers are in arch/i386/kernel/semaphore.S */
 
-extern inline void read_lock(rwlock_t *rw)
+static inline void read_lock(rwlock_t *rw)
 {
 #if SPINLOCK_DEBUG
 	if (rw->magic != RWLOCK_MAGIC)
@@ -155,7 +152,7 @@ extern inline void read_lock(rwlock_t *rw)
 	__build_read_lock(rw, "__read_lock_failed");
 }
 
-extern inline void write_lock(rwlock_t *rw)
+static inline void write_lock(rwlock_t *rw)
 {
 #if SPINLOCK_DEBUG
 	if (rw->magic != RWLOCK_MAGIC)
@@ -164,10 +161,10 @@ extern inline void write_lock(rwlock_t *rw)
 	__build_write_lock(rw, "__write_lock_failed");
 }
 
-#define read_unlock(rw)		asm volatile("lock ; incl %0" :"=m" (__dummy_lock(&(rw)->lock)))
-#define write_unlock(rw)	asm volatile("lock ; addl $" RW_LOCK_BIAS_STR ",%0":"=m" (__dummy_lock(&(rw)->lock)))
+#define read_unlock(rw)		asm volatile("lock ; incl %0" :"=m" ((rw)->lock) : : "memory")
+#define write_unlock(rw)	asm volatile("lock ; addl $" RW_LOCK_BIAS_STR ",%0":"=m" ((rw)->lock) : : "memory")
 
-extern inline int write_trylock(rwlock_t *lock)
+static inline int write_trylock(rwlock_t *lock)
 {
 	atomic_t *count = (atomic_t *)lock;
 	if (atomic_sub_and_test(RW_LOCK_BIAS, count))

@@ -1,6 +1,8 @@
 #ifndef _ALPHA_BITOPS_H
 #define _ALPHA_BITOPS_H
 
+#include <linux/config.h>
+
 /*
  * Copyright 1994, Linus Torvalds.
  */
@@ -17,14 +19,19 @@
  * bit 0 is the LSB of addr; bit 64 is the LSB of (addr+1).
  */
 
+#define BITOPS_NO_BRANCH
+
 extern __inline__ void set_bit(unsigned long nr, volatile void * addr)
 {
+#ifndef BITOPS_NO_BRANCH
 	unsigned long oldbit;
+#endif
 	unsigned long temp;
 	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
 
+#ifndef BITOPS_NO_BRANCH
 	__asm__ __volatile__(
-	"1:	ldl_l %0,%1\n"
+	"1:	ldl_l %0,%4\n"
 	"	and %0,%3,%2\n"
 	"	bne %2,2f\n"
 	"	xor %0,%3,%0\n"
@@ -36,16 +43,57 @@ extern __inline__ void set_bit(unsigned long nr, volatile void * addr)
 	".previous"
 	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
 	:"Ir" (1UL << (nr & 31)), "m" (*m));
+#else
+	__asm__ __volatile__(
+	"1:	ldl_l %0,%3\n"
+	"	bis %0,%2,%0\n"
+	"	stl_c %0,%1\n"
+	"	beq %0,2f\n"
+	".subsection 2\n"
+	"2:	br 1b\n"
+	".previous"
+	:"=&r" (temp), "=m" (*m)
+	:"Ir" (1UL << (nr & 31)), "m" (*m));
+#endif
 }
 
+/*
+ * WARNING: non atomic version.
+ */
+extern __inline__ void __set_bit(unsigned long nr, volatile void * addr)
+{
+	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+	/*
+	 * Asm and C produces the same thing so let
+	 * the compiler to do its good work.
+	 */
+#if 0
+	int tmp;
+
+	__asm__ __volatile__(
+	"ldl %0,%3\n\t"
+	"bis %0,%2,%0\n\t"
+	"stl %0,%1"
+	: "=&r" (tmp), "=m" (*m)
+	: "Ir" (1UL << (nr & 31)), "m" (*m));
+#else
+	*m |= 1UL << (nr & 31);
+#endif
+}
+
+#define smp_mb__before_clear_bit()	smp_mb()
+#define smp_mb__after_clear_bit()	smp_mb()
 extern __inline__ void clear_bit(unsigned long nr, volatile void * addr)
 {
+#ifndef BITOPS_NO_BRANCH
 	unsigned long oldbit;
+#endif
 	unsigned long temp;
 	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
 
+#ifndef BITOPS_NO_BRANCH
 	__asm__ __volatile__(
-	"1:	ldl_l %0,%1\n"
+	"1:	ldl_l %0,%4\n"
 	"	and %0,%3,%2\n"
 	"	beq %2,2f\n"
 	"	xor %0,%3,%0\n"
@@ -57,6 +105,18 @@ extern __inline__ void clear_bit(unsigned long nr, volatile void * addr)
 	".previous"
 	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
 	:"Ir" (1UL << (nr & 31)), "m" (*m));
+#else
+	__asm__ __volatile__(
+	"1:	ldl_l %0,%3\n"
+	"	and %0,%2,%0\n"
+	"	stl_c %0,%1\n"
+	"	beq %0,2f\n"
+	".subsection 2\n"
+	"2:	br 1b\n"
+	".previous"
+	:"=&r" (temp), "=m" (*m)
+	:"Ir" (~(1UL << (nr & 31))), "m" (*m));
+#endif
 }
 
 extern __inline__ void change_bit(unsigned long nr, volatile void * addr)
@@ -65,12 +125,12 @@ extern __inline__ void change_bit(unsigned long nr, volatile void * addr)
 	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
 
 	__asm__ __volatile__(
-	"1:	ldl_l %0,%1\n"
+	"1:	ldl_l %0,%3\n"
 	"	xor %0,%2,%0\n"
 	"	stl_c %0,%1\n"
-	"	beq %0,3f\n"
+	"	beq %0,2f\n"
 	".subsection 2\n"
-	"3:	br 1b\n"
+	"2:	br 1b\n"
 	".previous"
 	:"=&r" (temp), "=m" (*m)
 	:"Ir" (1UL << (nr & 31)), "m" (*m));
@@ -84,17 +144,42 @@ extern __inline__ int test_and_set_bit(unsigned long nr,
 	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
 
 	__asm__ __volatile__(
-	"1:	ldl_l %0,%1\n"
+	"1:	ldl_l %0,%4\n"
 	"	and %0,%3,%2\n"
 	"	bne %2,2f\n"
 	"	xor %0,%3,%0\n"
 	"	stl_c %0,%1\n"
 	"	beq %0,3f\n"
+#ifdef CONFIG_SMP
 	"	mb\n"
+#endif
 	"2:\n"
 	".subsection 2\n"
 	"3:	br 1b\n"
 	".previous"
+	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
+	:"Ir" (1UL << (nr & 31)), "m" (*m) : "memory");
+
+	return oldbit != 0;
+}
+
+/*
+ * WARNING: non atomic version.
+ */
+extern __inline__ int __test_and_set_bit(unsigned long nr,
+					 volatile void * addr)
+{
+	unsigned long oldbit;
+	unsigned long temp;
+	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+
+	__asm__ __volatile__(
+	"	ldl %0,%4\n"
+	"	and %0,%3,%2\n"
+	"	bne %2,1f\n"
+	"	xor %0,%3,%0\n"
+	"	stl %0,%1\n"
+	"1:\n"
 	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
 	:"Ir" (1UL << (nr & 31)), "m" (*m));
 
@@ -109,17 +194,42 @@ extern __inline__ int test_and_clear_bit(unsigned long nr,
 	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
 
 	__asm__ __volatile__(
-	"1:	ldl_l %0,%1\n"
+	"1:	ldl_l %0,%4\n"
 	"	and %0,%3,%2\n"
 	"	beq %2,2f\n"
 	"	xor %0,%3,%0\n"
 	"	stl_c %0,%1\n"
 	"	beq %0,3f\n"
+#ifdef CONFIG_SMP
 	"	mb\n"
+#endif
 	"2:\n"
 	".subsection 2\n"
 	"3:	br 1b\n"
 	".previous"
+	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
+	:"Ir" (1UL << (nr & 31)), "m" (*m) : "memory");
+
+	return oldbit != 0;
+}
+
+/*
+ * WARNING: non atomic version.
+ */
+extern __inline__ int __test_and_clear_bit(unsigned long nr,
+					   volatile void * addr)
+{
+	unsigned long oldbit;
+	unsigned long temp;
+	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+
+	__asm__ __volatile__(
+	"	ldl %0,%4\n"
+	"	and %0,%3,%2\n"
+	"	beq %2,1f\n"
+	"	xor %0,%3,%0\n"
+	"	stl %0,%1\n"
+	"1:\n"
 	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
 	:"Ir" (1UL << (nr & 31)), "m" (*m));
 
@@ -134,17 +244,19 @@ extern __inline__ int test_and_change_bit(unsigned long nr,
 	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
 
 	__asm__ __volatile__(
-	"1:	ldl_l %0,%1\n"
+	"1:	ldl_l %0,%4\n"
 	"	and %0,%3,%2\n"
 	"	xor %0,%3,%0\n"
 	"	stl_c %0,%1\n"
 	"	beq %0,3f\n"
+#ifdef CONFIG_SMP
 	"	mb\n"
+#endif
 	".subsection 2\n"
 	"3:	br 1b\n"
 	".previous"
 	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
-	:"Ir" (1UL << (nr & 31)), "m" (*m));
+	:"Ir" (1UL << (nr & 31)), "m" (*m) : "memory");
 
 	return oldbit != 0;
 }
@@ -279,16 +391,16 @@ found_middle:
 
 #ifdef __KERNEL__
 
-#define ext2_set_bit                 test_and_set_bit
-#define ext2_clear_bit               test_and_clear_bit
+#define ext2_set_bit                 __test_and_set_bit
+#define ext2_clear_bit               __test_and_clear_bit
 #define ext2_test_bit                test_bit
 #define ext2_find_first_zero_bit     find_first_zero_bit
 #define ext2_find_next_zero_bit      find_next_zero_bit
 
 /* Bitmap functions for the minix filesystem.  */
-#define minix_test_and_set_bit(nr,addr) test_and_set_bit(nr,addr)
-#define minix_set_bit(nr,addr) set_bit(nr,addr)
-#define minix_test_and_clear_bit(nr,addr) test_and_clear_bit(nr,addr)
+#define minix_test_and_set_bit(nr,addr) __test_and_set_bit(nr,addr)
+#define minix_set_bit(nr,addr) __set_bit(nr,addr)
+#define minix_test_and_clear_bit(nr,addr) __test_and_clear_bit(nr,addr)
 #define minix_test_bit(nr,addr) test_bit(nr,addr)
 #define minix_find_first_zero_bit(addr,size) find_first_zero_bit(addr,size)
 

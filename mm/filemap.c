@@ -255,7 +255,7 @@ inside:
 	 * up kswapd.
 	 */
 	age_page_up(page);
-	if (inactive_shortage() > (inactive_target * 3) / 4)
+	if (inactive_shortage() > inactive_target / 2 && free_shortage())
 			wakeup_kswapd(0);
 not_found:
 	return page;

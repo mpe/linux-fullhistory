@@ -10,6 +10,7 @@
 #include <linux/file.h>
 #include <linux/smp_lock.h>
 #include <linux/quotaops.h>
+#include <linux/dnotify.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 
@@ -113,6 +114,13 @@ static inline long do_sys_truncate(const char * path, loff_t length)
 
 	error = -EPERM;
 	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
+		goto dput_and_out;
+
+	/*
+	 * Make sure that there are no leases.
+	 */
+	error = get_lease(inode, FMODE_WRITE);
+	if (error)
 		goto dput_and_out;
 
 	error = get_write_access(inode);
@@ -790,6 +798,7 @@ int filp_close(struct file *filp, fl_owner_t id)
 		retval = filp->f_op->flush(filp);
 		unlock_kernel();
 	}
+	fcntl_dirnotify(0, filp, 0);
 	locks_remove_posix(filp, id);
 	fput(filp);
 	return retval;

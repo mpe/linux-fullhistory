@@ -67,7 +67,6 @@ extern int nr_swap_pages;
 FASTCALL(unsigned int nr_free_pages(void));
 FASTCALL(unsigned int nr_inactive_clean_pages(void));
 FASTCALL(unsigned int nr_free_buffer_pages(void));
-FASTCALL(unsigned int nr_free_highpages(void));
 extern int nr_active_pages;
 extern int nr_inactive_dirty_pages;
 extern atomic_t nr_async_pages;

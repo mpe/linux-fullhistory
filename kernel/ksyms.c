@@ -214,6 +214,7 @@ EXPORT_SYMBOL(generic_buffer_fdatasync);
 EXPORT_SYMBOL(page_hash_bits);
 EXPORT_SYMBOL(page_hash_table);
 EXPORT_SYMBOL(file_lock_list);
+EXPORT_SYMBOL(file_lock_sem);
 EXPORT_SYMBOL(posix_lock_file);
 EXPORT_SYMBOL(posix_test_lock);
 EXPORT_SYMBOL(posix_block_lock);
@@ -253,6 +254,10 @@ EXPORT_SYMBOL(page_follow_link);
 EXPORT_SYMBOL(page_symlink_inode_operations);
 EXPORT_SYMBOL(block_symlink);
 EXPORT_SYMBOL(vfs_readdir);
+EXPORT_SYMBOL(__get_lease);
+EXPORT_SYMBOL(lease_get_mtime);
+EXPORT_SYMBOL(lock_may_read);
+EXPORT_SYMBOL(lock_may_write);
 EXPORT_SYMBOL(dcache_readdir);
 
 /* for stackable file systems (lofs, wrapfs, cryptfs, etc.) */

@@ -48,6 +48,7 @@
 #include "usb.h"
 #include "debug.h"
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/malloc.h>

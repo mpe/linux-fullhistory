@@ -939,25 +939,28 @@ sys_rt_sigtimedwait(const sigset_t *uthese, siginfo_t *uinfo,
 	spin_lock_irq(&current->sigmask_lock);
 	sig = dequeue_signal(&these, &info);
 	if (!sig) {
-		/* None ready -- temporarily unblock those we're interested
-		   in so that we'll be awakened when they arrive.  */
-		sigset_t oldblocked = current->blocked;
-		sigandsets(&current->blocked, &current->blocked, &these);
-		recalc_sigpending(current);
-		spin_unlock_irq(&current->sigmask_lock);
-
 		timeout = MAX_SCHEDULE_TIMEOUT;
 		if (uts)
 			timeout = (timespec_to_jiffies(&ts)
 				   + (ts.tv_sec || ts.tv_nsec));
 
-		current->state = TASK_INTERRUPTIBLE;
-		timeout = schedule_timeout(timeout);
+		if (timeout) {
+			/* None ready -- temporarily unblock those we're
+			 * interested while we are sleeping in so that we'll
+			 * be awakened when they arrive.  */
+			sigset_t oldblocked = current->blocked;
+			sigandsets(&current->blocked, &current->blocked, &these);
+			recalc_sigpending(current);
+			spin_unlock_irq(&current->sigmask_lock);
 
-		spin_lock_irq(&current->sigmask_lock);
-		sig = dequeue_signal(&these, &info);
-		current->blocked = oldblocked;
-		recalc_sigpending(current);
+			current->state = TASK_INTERRUPTIBLE;
+			timeout = schedule_timeout(timeout);
+
+			spin_lock_irq(&current->sigmask_lock);
+			sig = dequeue_signal(&these, &info);
+			current->blocked = oldblocked;
+			recalc_sigpending(current);
+		}
 	}
 	spin_unlock_irq(&current->sigmask_lock);
 

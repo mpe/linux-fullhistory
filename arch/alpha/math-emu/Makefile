@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := math-emu.o
-O_OBJS   := math.o
+O_OBJS   := math.o qrnnd.o
 CFLAGS += -I. -I$(TOPDIR)/include/math-emu -w
 
 ifeq ($(CONFIG_MATHEMU),m)

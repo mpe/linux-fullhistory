@@ -155,7 +155,7 @@ encode_fattr(struct svc_rqst *rqstp, u32 *p, struct inode *inode)
 	*p++ = htonl((u32) inode->i_ino);
 	*p++ = htonl((u32) inode->i_atime);
 	*p++ = 0;
-	*p++ = htonl((u32) inode->i_mtime);
+	*p++ = htonl((u32) lease_get_mtime(inode));
 	*p++ = 0;
 	*p++ = htonl((u32) inode->i_ctime);
 	*p++ = 0;

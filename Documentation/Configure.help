@@ -8159,8 +8159,10 @@ CONFIG_NI65
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
-RealTek 8129 (not 8019/8029!) support (EXPERIMENTAL)
+RealTek 8129 (not 8019/8029/8139!) support (EXPERIMENTAL)
 CONFIG_RTL8129
+  This is NOT for RTL-8139 cards.  Instead, select the 8139too driver
+  (CONFIG_8139TOO).
   This is a driver for the Fast Ethernet PCI network cards based on
   the RTL8129 chip. If you have one of those, say Y and
   read the Ethernet-HOWTO, available from
@@ -8694,6 +8696,18 @@ CONFIG_EEXPRESS
   Documentation/networking/net-modules.txt. The module will be called
   eexpress.o.
 
+Packet Engines Hamachi GNIC-II support
+CONFIG_HAMACHI
+  If you have a Gigabit Ethernet card of this type, say Y and read
+  the Ethernet-HOWTO, available from
+  http://www.linuxdoc.org/docs.html#howto .
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. The module will be called
+  hamachi.o.
+
 HP PCLAN+ (27247B and 27252A) support
 CONFIG_HPLAN_PLUS
   If you have a network (Ethernet) card of this type, say Y and read
@@ -9017,22 +9031,30 @@ CONFIG_ES3210
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
-SMC EtherPower II (EXPERIMENTAL)
+SMC EtherPower II
 CONFIG_EPIC100
-  If you have an SMC EtherPower II 9432 PCI Ethernet network card
-  which is based on the SMC83c170, say Y and read the Ethernet-HOWTO,
-  available from http://www.linuxdoc.org/docs.html#howto .
-
-  This driver is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called epic100.o. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt.
+  This driver is for the SMC EtherPower II 9432 PCI Ethernet NIC,
+  which is based on the SMC83c17x (EPIC/100).
+  More specific information and updates are available from
+  http://www.scyld.com/network/epic100.html
 
 SGI Seeq ethernet controller support
 CONFIG_SGISEEQ
   Say Y here if you have an Seeq based Ethernet network card. This is
   used in many Silicon Graphics machines.
+
+Sundance "Alta" PCI Ethernet support
+CONFIG_SUNDANCE
+  This driver is for the Sundance "Alta" chip.
+  More specific information and updates are available from
+  http://www.scyld.com/network/sundance.html
+
+Winbond W89c840 PCI Ethernet support
+CONFIG_WINBOND_840
+  This driver is for the Winbond W89c840 chip.  It also works with
+  the TX9882 chip on the Compex RL100-ATX board.
+  More specific information and updates are available from
+  http://www.scyld.com/network/drivers.html
 
 Zenith Z-Note support (EXPERIMENTAL)
 CONFIG_ZNET

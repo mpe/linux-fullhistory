@@ -27,36 +27,15 @@ static const char *version =
 	"ipddp.c:v0.01 8/28/97 Bradford W. Johnson <johns393@maroon.tc.umn.edu>\n";
 
 #include <linux/config.h>
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
-
 #include <linux/kernel.h>
-#include <linux/sched.h>
-#include <linux/types.h>
-#include <linux/fcntl.h>
-#include <linux/interrupt.h>
-#include <linux/ptrace.h>
-#include <linux/ioport.h>
-#include <linux/in.h>
-#include <linux/malloc.h>
-#include <linux/string.h>
-#include <asm/uaccess.h>
-#include <asm/system.h>
-#include <asm/bitops.h>
-#include <asm/io.h>
-#include <asm/dma.h>
-#include <linux/errno.h>
+#include <linux/init.h>
 #include <linux/netdevice.h>
-#include <linux/inetdevice.h>
-#include <linux/etherdevice.h>
-#include <linux/skbuff.h>
-#include <linux/if_arp.h>
-#include <linux/atalk.h>
 #include <linux/ip.h>
+#include <linux/atalk.h>
+#include <linux/if_arp.h>
 #include <net/route.h>
-#include <linux/inet.h>
+#include <asm/uaccess.h>
 
 #include "ipddp.h"		/* Our stuff */
 
@@ -85,23 +64,17 @@ static int ipddp_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
 
 static int ipddp_open(struct net_device *dev)
 {
-#ifdef MODULE
         MOD_INC_USE_COUNT;
-#endif
-
         return 0;
 }
 
 static int ipddp_close(struct net_device *dev)
 {
-#ifdef MODULE
         MOD_DEC_USE_COUNT;
-#endif
-
         return 0;
 }
 
-int ipddp_init(struct net_device *dev)
+static int __init ipddp_init(struct net_device *dev)
 {
 	static unsigned version_printed = 0;
 
@@ -151,7 +124,7 @@ int ipddp_init(struct net_device *dev)
  */
 static struct net_device_stats *ipddp_get_stats(struct net_device *dev)
 {
-        return (struct net_device_stats *)dev->priv;
+        return dev->priv;
 }
 
 /*
@@ -325,19 +298,11 @@ static int ipddp_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
         }
 }
 
-#ifdef MODULE	/* Module specific functions for ipddp.c */
-
-static struct net_device dev_ipddp=
-{
-        "ipddp0\0   ",
-                0, 0, 0, 0,
-                0x0, 0,
-                0, 0, 0, NULL, ipddp_init
-};
+static struct net_device dev_ipddp = { init: ipddp_init };
 
 MODULE_PARM(ipddp_mode, "i");
 
-int init_module(void)
+static int __init ipddp_init_module(void)
 {
 	int err;
 
@@ -351,11 +316,14 @@ int init_module(void)
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit ipddp_cleanup_module(void)
 {
 	unregister_netdev(&dev_ipddp);
         kfree(dev_ipddp.priv);
-	dev_ipddp.priv = NULL;
+
+	memset(&dev_ipddp, 0, sizeof(dev_ipddp));
+	dev_ipddp.init = ipddp_init;
 }
 
-#endif /* MODULE */
+module_init(ipddp_init_module);
+module_exit(ipddp_cleanup_module);

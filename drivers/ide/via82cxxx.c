@@ -1,5 +1,5 @@
 /*
- * $Id: via82cxxx.c,v 2.1 2000/08/29 01:34:60 vojtech Exp $
+ * $Id: via82cxxx.c,v 2.1b 2000/09/20 23:19:60 vojtech Exp $
  *
  *  Copyright (c) 2000 Vojtech Pavlik
  *
@@ -97,7 +97,6 @@ static const struct {
 	{ "vt82c586b",	PCI_DEVICE_ID_VIA_82C586_0, XFER_UDMA_2 },
 	{ "vt82c586a",	PCI_DEVICE_ID_VIA_82C586_0, XFER_UDMA_2 },
 	{ "vt82c586",	PCI_DEVICE_ID_VIA_82C586_0, XFER_MW_DMA_2 },
-	{ "Unknown SouthBridge",	0,	    XFER_UDMA_4 },
 	{ "Unknown SouthBridge",	0,	    XFER_UDMA_2 },
 };
 
@@ -140,8 +139,8 @@ static const struct {
 	{ XFER_MW_DMA_1,  "MDMA1", 45,  80,  50, 150,   0 },
 	{ XFER_MW_DMA_0,  "MDMA0", 60, 215, 215, 480,   0 },
 
-	{ XFER_SW_DMA_0,  "SDMA0", 60, 120, 120, 240,   0 },
-	{ XFER_SW_DMA_0,  "SDMA0", 90, 240, 240, 480,   0 },
+	{ XFER_SW_DMA_2,  "SDMA2", 60, 120, 120, 240,   0 },
+	{ XFER_SW_DMA_1,  "SDMA1", 90, 240, 240, 480,   0 },
 	{ XFER_SW_DMA_0,  "SDMA0",120, 480, 480, 960,   0 },
 
 	{ XFER_PIO_5,     "PIO5",  20,  50,  30, 100,   0 },
@@ -193,7 +192,7 @@ static int via_get_info(char *buffer, char **addr, off_t offset, int count)
 
 	via_print("----------VIA BusMastering IDE Configuration----------------");
 
-	via_print("Driver Version:                     2.1");
+	via_print("Driver Version:                     2.1b");
 
 	pci_read_config_byte(isa_dev, PCI_REVISION_ID, &t);
 	via_print("South Bridge:                       VIA %s rev %#x", via_isa_bridges[via_config].name, t);
@@ -212,9 +211,6 @@ static int via_get_info(char *buffer, char **addr, off_t offset, int count)
 	via_print("Master Write Cycle IRDY:            %dws", (t & 32) >> 5 );
 	via_print("FIFO Output Data 1/2 Clock Advance: %s", (t & 16) ? "on" : "off" );
 	via_print("BM IDE Status Register Read Retry:  %s", (t & 8) ? "on" : "off" );
-
-	pci_read_config_byte(dev, VIA_MISC_2, &t);
-	sprintf(p, "Interrupt Steering Swap:           %s", (t & 64) ? "on" : "off");
 
 	pci_read_config_byte(dev, VIA_MISC_3, &t);
 	via_print("Max DRDY Pulse Width:               %s%s", via_control3[(t & 0x03)], (t & 0x03) ? "PCI clocks" : "");
@@ -337,15 +333,13 @@ static int via_set_speed(ide_drive_t *drive, byte speed)
  * UDMA cycle
  */
 
-	if (via_timing[i].udma) {
-		t = 0xe8;
-		if (via_isa_bridges[via_config].speed >= XFER_UDMA_4)
-			t |= FIT(ENOUGH(via_timing[i].udma, T >> 1) - 2, 0, 7);
-		else
-			t |= FIT(ENOUGH(via_timing[i].udma, T     ) - 2, 0, 3);
-	} else t = 0x0b;
+	switch(via_isa_bridges[via_config].speed) {
+		case XFER_UDMA_2: t = via_timing[i].udma ? (0x60 | (FIT(via_timing[i].udma, 2, 5) - 2)) : 0x03; break;
+		case XFER_UDMA_4: t = via_timing[i].udma ? (0xe8 | (FIT(via_timing[i].udma, 2, 9) - 2)) : 0x0f; break;
+        }
 
-	via_write_config_byte(dev, VIA_UDMA_TIMING + (3 - drive->dn), t);
+	if (via_isa_bridges[via_config].speed != XFER_MW_DMA_2)
+		via_write_config_byte(dev, VIA_UDMA_TIMING + (3 - drive->dn), t);
 
 /*
  * Drive init
@@ -511,6 +505,11 @@ unsigned int __init pci_init_via82cxxx(struct pci_dev *dev, const char *name)
 		if (t < 0x20) via_config++;			/* vt82c586 */
 	}
 
+	if (via_isa_bridges[via_config].id == PCI_DEVICE_ID_VIA_82C596) {
+		pci_read_config_byte(isa, PCI_REVISION_ID, &t);
+		if (t < 0x10) via_config++;			/* vt82c596a */
+	}
+
 /*
  * Check UDMA66 mode set by BIOS.
  */
@@ -530,13 +529,8 @@ unsigned int __init pci_init_via82cxxx(struct pci_dev *dev, const char *name)
 /*
  * Set UDMA66 double clock bits.
  */
-
-	pci_write_config_dword(dev, VIA_UDMA_TIMING, u | 0x80008);
-	pci_read_config_dword(dev, VIA_UDMA_TIMING, &u);
-
-	if ((via_isa_bridges[via_config].id == PCI_DEVICE_ID_VIA_82C596 || !isa)
-		&& (u & 0x80008) != 0x80008)
-			via_config++;				/* vt82c596a / Unknown UDMA33 */
+	if (via_isa_bridges[via_config].speed == XFER_UDMA_4)
+		pci_write_config_dword(dev, VIA_UDMA_TIMING, u | 0x80008);
 
 /*
  * Set up FIFO, flush, prefetch and post-writes.

@@ -1118,6 +1118,7 @@ static int dvd_do_auth(struct cdrom_device_info *cdi, dvd_authinfo *ai)
 		cdinfo(CD_DVD, "entering DVD_LU_SEND_RPC_STATE\n");
 		setup_report_key(&cgc, 0, 8);
 		memset(&rpc_state, 0, sizeof(rpc_state_t));
+		cgc.buffer = (char *) &rpc_state;
 
 		if ((ret = cdo->generic_packet(cdi, &cgc)))
 			return ret;

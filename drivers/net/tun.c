@@ -12,7 +12,7 @@
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  *
- *  $Id: tun.c,v 1.1 2000/08/23 05:59:28 davem Exp $
+ *  $Id: tun.c,v 1.2 2000/09/22 12:40:31 maxk Exp $
  */
 
 /*
@@ -20,7 +20,7 @@
  *    Modifications for 2.3.99-pre5 kernel.
  */
 
-#define TUN_VER "1.1"
+#define TUN_VER "1.2"
 
 #include <linux/module.h>
 
@@ -32,12 +32,12 @@
 #include <linux/poll.h>
 #include <linux/fcntl.h>
 #include <linux/init.h>
-#include <linux/devfs_fs_kernel.h>
 #include <linux/random.h>
 
+#include <linux/skbuff.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
-#include <linux/skbuff.h>
+#include <linux/miscdevice.h>
 #include <linux/rtnetlink.h>
 #include <linux/if.h>
 #include <linux/if_arp.h>
@@ -497,38 +497,29 @@ static struct file_operations tun_fops = {
 	fasync:	tun_chr_fasync		
 };
 
-static devfs_handle_t devfs_handle = NULL; 
+static struct miscdevice tun_miscdev=
+{
+        TUN_MINOR,
+        "net/tun",
+        &tun_fops
+};
 
 int __init tun_init(void)
 {
 	printk(KERN_INFO "Universal TUN/TAP device driver %s " 
 	       "(C)1999-2000 Maxim Krasnyansky\n", TUN_VER);
 
-	if (devfs_register_chrdev(TUN_MAJOR, "tun", &tun_fops)) {
-		printk(KERN_ERR "tun: Can't register char device %d\n",
-		       TUN_MAJOR);
+	if (misc_register(&tun_miscdev)) {
+		printk(KERN_ERR "tun: Can't register misc device %d\n", TUN_MINOR);
 		return -EIO;
 	}
 
-	devfs_handle = devfs_register(NULL, "net/tun", DEVFS_FL_DEFAULT, 
-				      TUN_MAJOR, 0,
-				      S_IFCHR | S_IRUSR | S_IWUSR, 
-				      &tun_fops, NULL);
-
-#ifdef MODULE
 	return 0;
-#else
-	/* If driver is not module, tun_init will be called from Space.c.
-	 * Return non-zero not to register fake device.
-	 */
-	return 1;
-#endif
 }
 
 void tun_cleanup(void)
 {
-	devfs_unregister_chrdev(TUN_MAJOR,"tun");
-	devfs_unregister(devfs_handle);  
+	misc_deregister(&tun_miscdev);  
 }
 
 module_init(tun_init);

@@ -22,8 +22,9 @@
 #define RLIMIT_RSS 7			/* max resident set size */
 #define RLIMIT_NPROC 8			/* max number of processes */
 #define RLIMIT_MEMLOCK 9		/* max locked-in-memory address space */
+#define RLIMIT_LOCKS	10		/* maximum file locks held */
 
-#define RLIM_NLIMITS 10			/* Number of limit flavors.  */
+#define RLIM_NLIMITS 11			/* Number of limit flavors.  */
 
 /*
  * SuS says limits have to be unsigned.
@@ -44,6 +45,7 @@
 	{ RLIM_INFINITY, RLIM_INFINITY },		\
 	{ RLIM_INFINITY, RLIM_INFINITY },		\
 	{ 0,             0             },		\
+	{ RLIM_INFINITY, RLIM_INFINITY },		\
 	{ RLIM_INFINITY, RLIM_INFINITY },		\
 }
 

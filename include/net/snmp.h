@@ -14,17 +14,34 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
+ *		$Id: snmp.h,v 1.17 2000/09/21 01:31:50 davem Exp $
+ *
  */
  
 #ifndef _SNMP_H
 #define _SNMP_H
+
+#include <linux/cache.h>
  
 /*
  *	We use all unsigned longs. Linux will soon be so reliable that even these
  *	will rapidly get too small 8-). Seriously consider the IpInReceives count
  *	on the 20Gb/s + networks people expect in a few years time!
  */
-  
+
+/* 
+ * The rule for padding: 
+ * Best is power of two because then the right structure can be found by a simple
+ * shift. The structure should be always cache line aligned.
+ * gcc needs n=alignto(cachelinesize, popcnt(sizeof(bla_mib))) shift/add instructions
+ * to emulate multiply in case it is not power-of-two. Currently n is always <=3 for
+ * all sizes so simple cache line alignment is enough. 
+ * 
+ * The best solution would be a global CPU local area , especially on 64 and 128byte 
+ * cacheline machine it makes a *lot* of sense -AK
+ */ 
+
+ 
 struct ip_mib
 {
  	unsigned long	IpInReceives;
@@ -44,8 +61,8 @@ struct ip_mib
  	unsigned long	IpFragOKs;
  	unsigned long	IpFragFails;
  	unsigned long	IpFragCreates;
-	unsigned long	__pad[32-19];
-};
+	unsigned long   __pad[0]; 
+} ____cacheline_aligned;
  
 struct ipv6_mib
 {
@@ -71,8 +88,8 @@ struct ipv6_mib
  	unsigned long	Ip6FragCreates;
  	unsigned long	Ip6InMcastPkts;
  	unsigned long	Ip6OutMcastPkts;
-	unsigned long	__pad[32-22];
-};
+	unsigned long   __pad[0]; 
+} ____cacheline_aligned;
  
 struct icmp_mib
 {
@@ -102,8 +119,8 @@ struct icmp_mib
  	unsigned long	IcmpOutTimestampReps;
  	unsigned long	IcmpOutAddrMasks;
  	unsigned long	IcmpOutAddrMaskReps;
-	unsigned long	__pad[32-26];
-};
+	unsigned long   __pad[0]; 
+} ____cacheline_aligned;
 
 struct icmpv6_mib
 {
@@ -140,8 +157,8 @@ struct icmpv6_mib
 	unsigned long	Icmp6OutRedirects;
 	unsigned long	Icmp6OutGroupMembResponses;
 	unsigned long	Icmp6OutGroupMembReductions;
-	unsigned long	__pad[32-28];
-};
+	unsigned long   __pad[0]; 
+} ____cacheline_aligned;
  
 struct tcp_mib
 {
@@ -159,8 +176,8 @@ struct tcp_mib
  	unsigned long	TcpRetransSegs;
  	unsigned long	TcpInErrs;
  	unsigned long	TcpOutRsts;
-	unsigned long	__pad[16-14];
-};
+	unsigned long   __pad[0]; 
+} ____cacheline_aligned;
  
 struct udp_mib
 {
@@ -168,8 +185,8 @@ struct udp_mib
  	unsigned long	UdpNoPorts;
  	unsigned long	UdpInErrors;
  	unsigned long	UdpOutDatagrams;
-	unsigned long	__pad[0];
-};
+	unsigned long   __pad[0];
+} ____cacheline_aligned; 
 
 struct linux_mib 
 {
@@ -237,9 +254,15 @@ struct linux_mib
 	unsigned long	TCPAbortOnLinger;
 	unsigned long	TCPAbortFailed;
 	unsigned long	TCPMemoryPressures;
-	unsigned long	__pad[64-64];
-};
+	unsigned long   __pad[0];
+} ____cacheline_aligned;
 
+
+/* 
+ * FIXME: On x86 and some other CPUs the split into user and softirq parts is not needed because 
+ * addl $1,memory is atomic against interrupts (but atomic_inc would be overkill because of the lock 
+ * cycles). Wants new nonlocked_atomic_inc() primitives -AK
+ */ 
 #define SNMP_INC_STATS(mib, field) ((mib)[2*smp_processor_id()+!in_softirq()].field++)
 #define SNMP_INC_STATS_BH(mib, field) ((mib)[2*smp_processor_id()].field++)
 #define SNMP_INC_STATS_USER(mib, field) ((mib)[2*smp_processor_id()+1].field++)

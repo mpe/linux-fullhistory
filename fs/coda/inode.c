@@ -210,6 +210,7 @@ static void coda_read_inode(struct inode *inode)
 
 	memset(cii, 0, sizeof(struct coda_inode_info));
 	list_add(&cii->c_cilist, &sbi->sbi_cihead);
+        cii->c_magic = CODA_CNODE_MAGIC;
 }
 
 static void coda_clear_inode(struct inode *inode)
@@ -241,6 +242,7 @@ static void coda_clear_inode(struct inode *inode)
 	coda_cache_clear_inode(inode);
 out:
 	inode->u.coda_i.c_magic = 0;
+	memset(&inode->u.coda_i.c_fid, 0, sizeof(struct ViceFid));
 	EXIT;
 }
 

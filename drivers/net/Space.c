@@ -678,14 +678,6 @@ static struct net_device tr0_dev = {
 #define NEXT_DEV        (&escon0_dev)                                  
 #endif  
 
-#ifdef CONFIG_TUN
-    extern int tun_init(struct net_device *dev);
-    static struct net_device tun_dev = {
-        "tun", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, tun_init };
-#   undef       NEXT_DEV
-#   define      NEXT_DEV        (&tun_dev)
-#endif    
-
 /*
  *	The loopback device is global so it can be directly referenced
  *	by the network code. Also, it must be first on device list.

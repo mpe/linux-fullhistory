@@ -34,6 +34,8 @@
 #include <linux/raid/xor.h>
 #include <linux/devfs_fs_kernel.h>
 
+#include <linux/init.h>
+
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 #endif
@@ -3844,6 +3846,11 @@ void cleanup_module (void)
 	free_device_names();
 
 }
+#endif
+
+__initcall(md_init);
+#ifdef CONFIG_AUTODETECT_RAID
+__initcall(md_run_setup);
 #endif
 
 MD_EXPORT_SYMBOL(md_size);

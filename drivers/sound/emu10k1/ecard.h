@@ -29,6 +29,7 @@
 #include "8010.h"
 #include "hwaccess.h"
 #include <linux/init.h>
+#include <linux/sched.h>
 
 /* In A1 Silicon, these bits are in the HC register */
 #define HOOKN_BIT   (1L << 12)

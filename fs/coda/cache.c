@@ -59,7 +59,7 @@ void coda_cache_clear_all(struct super_block *sb, struct coda_cred *cred)
         list_for_each(tmp, &sbi->sbi_cihead)
         {
 		cii = list_entry(tmp, struct coda_inode_info, c_cilist);
-                if ( cii->c_magic != CODA_CNODE_MAGIC ) continue;
+                if ( cii->c_magic != CODA_CNODE_MAGIC ) BUG();
 
                 if (!cred || coda_cred_eq(cred, &cii->c_cached_cred))
                         cii->c_cached_perm = 0;

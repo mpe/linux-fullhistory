@@ -121,14 +121,14 @@ static void __devinit audio_init(struct emu10k1_card *card)
 
 	/* stereo voice */
 	card->waveout.send_a[1] = 0x00;
-        card->waveout.send_b[1] = 0xff;
-        card->waveout.send_c[1] = 0x00;
+        card->waveout.send_b[1] = 0x00;
+        card->waveout.send_c[1] = 0xff;
         card->waveout.send_d[1] = 0x00;
         card->waveout.send_routing[1] = 0xd01c;
 
 	card->waveout.send_a[2] = 0x00;
-        card->waveout.send_b[2] = 0x00;
-        card->waveout.send_c[2] = 0xff;
+        card->waveout.send_b[2] = 0xff;
+        card->waveout.send_c[2] = 0x00;
         card->waveout.send_d[2] = 0x00;
         card->waveout.send_routing[2] = 0xd01c;
 

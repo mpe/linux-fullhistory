@@ -18,8 +18,9 @@
 #define RLIMIT_NOFILE	7		/* max number of open files */
 #define RLIMIT_MEMLOCK	8		/* max locked-in-memory address space */
 #define RLIMIT_AS	9		/* address space limit */
+#define RLIMIT_LOCKS	10		/* maximum file locks held */
 
-#define RLIM_NLIMITS	10
+#define RLIM_NLIMITS	11
 
 /*
  * SuS says limits have to be unsigned.
@@ -39,6 +40,7 @@
 	{ RLIM_INFINITY, RLIM_INFINITY },		\
 	{             0,             0 },		\
 	{      INR_OPEN,     INR_OPEN  },		\
+	{ RLIM_INFINITY, RLIM_INFINITY },		\
 	{ RLIM_INFINITY, RLIM_INFINITY },		\
 	{ RLIM_INFINITY, RLIM_INFINITY },		\
 }

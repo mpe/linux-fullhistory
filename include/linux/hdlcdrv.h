@@ -132,7 +132,7 @@ struct hdlcdrv_bitbuffer {
 	unsigned char buffer[HDLCDRV_BITBUFFER];
 };
 
-extern inline void hdlcdrv_add_bitbuffer(struct hdlcdrv_bitbuffer *buf, 
+static inline void hdlcdrv_add_bitbuffer(struct hdlcdrv_bitbuffer *buf, 
 					 unsigned int bit)
 {
 	unsigned char new;
@@ -147,7 +147,7 @@ extern inline void hdlcdrv_add_bitbuffer(struct hdlcdrv_bitbuffer *buf,
 	}
 }
 
-extern inline void hdlcdrv_add_bitbuffer_word(struct hdlcdrv_bitbuffer *buf, 
+static inline void hdlcdrv_add_bitbuffer_word(struct hdlcdrv_bitbuffer *buf, 
 					      unsigned int bits)
 {
 	buf->buffer[buf->wr] = bits & 0xff;
@@ -250,7 +250,7 @@ struct hdlcdrv_state {
 
 /* -------------------------------------------------------------------- */
 
-extern inline int hdlcdrv_hbuf_full(struct hdlcdrv_hdlcbuffer *hb) 
+static inline int hdlcdrv_hbuf_full(struct hdlcdrv_hdlcbuffer *hb) 
 {
 	unsigned long flags;
 	int ret;
@@ -263,7 +263,7 @@ extern inline int hdlcdrv_hbuf_full(struct hdlcdrv_hdlcbuffer *hb)
 
 /* -------------------------------------------------------------------- */
 
-extern inline int hdlcdrv_hbuf_empty(struct hdlcdrv_hdlcbuffer *hb)
+static inline int hdlcdrv_hbuf_empty(struct hdlcdrv_hdlcbuffer *hb)
 {
 	unsigned long flags;
 	int ret;
@@ -276,7 +276,7 @@ extern inline int hdlcdrv_hbuf_empty(struct hdlcdrv_hdlcbuffer *hb)
 
 /* -------------------------------------------------------------------- */
 
-extern inline unsigned short hdlcdrv_hbuf_get(struct hdlcdrv_hdlcbuffer *hb)
+static inline unsigned short hdlcdrv_hbuf_get(struct hdlcdrv_hdlcbuffer *hb)
 {
 	unsigned long flags;
 	unsigned short val;
@@ -296,7 +296,7 @@ extern inline unsigned short hdlcdrv_hbuf_get(struct hdlcdrv_hdlcbuffer *hb)
 
 /* -------------------------------------------------------------------- */
 
-extern inline void hdlcdrv_hbuf_put(struct hdlcdrv_hdlcbuffer *hb, 
+static inline void hdlcdrv_hbuf_put(struct hdlcdrv_hdlcbuffer *hb, 
 				    unsigned short val)
 {
 	unsigned newp;
@@ -313,12 +313,12 @@ extern inline void hdlcdrv_hbuf_put(struct hdlcdrv_hdlcbuffer *hb,
 
 /* -------------------------------------------------------------------- */
 
-extern inline void hdlcdrv_putbits(struct hdlcdrv_state *s, unsigned int bits)
+static inline void hdlcdrv_putbits(struct hdlcdrv_state *s, unsigned int bits)
 {
 	hdlcdrv_hbuf_put(&s->hdlcrx.hbuf, bits);
 }
 
-extern inline unsigned int hdlcdrv_getbits(struct hdlcdrv_state *s)
+static inline unsigned int hdlcdrv_getbits(struct hdlcdrv_state *s)
 {
 	unsigned int ret;
 
@@ -336,19 +336,19 @@ extern inline unsigned int hdlcdrv_getbits(struct hdlcdrv_state *s)
 	return ret;
 }
 
-extern inline void hdlcdrv_channelbit(struct hdlcdrv_state *s, unsigned int bit)
+static inline void hdlcdrv_channelbit(struct hdlcdrv_state *s, unsigned int bit)
 {
 #ifdef HDLCDRV_DEBUG
 	hdlcdrv_add_bitbuffer(&s->bitbuf_channel, bit);
 #endif /* HDLCDRV_DEBUG */
 }
 
-extern inline void hdlcdrv_setdcd(struct hdlcdrv_state *s, int dcd)
+static inline void hdlcdrv_setdcd(struct hdlcdrv_state *s, int dcd)
 {
 	s->hdlcrx.dcd = !!dcd;
 }
 
-extern inline int hdlcdrv_ptt(struct hdlcdrv_state *s)
+static inline int hdlcdrv_ptt(struct hdlcdrv_state *s)
 {
 	return s->hdlctx.ptt || (s->hdlctx.calibrate > 0);
 }

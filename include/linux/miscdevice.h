@@ -31,6 +31,8 @@
 /* drivers/sgi/char/usema.c */
 #define SGI_USEMACLONE	     151
 
+#define TUN_MINOR	     200
+
 extern int misc_init(void);
 
 struct miscdevice 

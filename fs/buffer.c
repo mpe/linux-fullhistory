@@ -706,9 +706,7 @@ void set_blocksize(kdev_t dev, int size)
 static void refill_freelist(int size)
 {
 	if (!grow_buffers(size)) {
-		balance_dirty(NODEV);
-		wakeup_kswapd(0); /* We can't wait because of __GFP_IO */
-		schedule();
+		try_to_free_pages(GFP_BUFFER);
 	}
 }
 

@@ -17,9 +17,6 @@
 #ifndef _ASM_I386_RWLOCK_H
 #define _ASM_I386_RWLOCK_H
 
-typedef struct { unsigned long a[100]; } __dummy_lock_t;
-#define __dummy_lock(lock) (*(__dummy_lock_t *)(lock))
-
 #define RW_LOCK_BIAS		 0x01000000
 #define RW_LOCK_BIAS_STR	"0x01000000"
 
@@ -44,7 +41,7 @@ typedef struct { unsigned long a[100]; } __dummy_lock_t;
 		     "popl %%eax\n\t" \
 		     "jmp 1b\n" \
 		     ".previous" \
-		     :"=m" (__dummy_lock(rw)))
+		     :"=m" (*(volatile int *)rw) : : "memory")
 
 #define __build_read_lock(rw, helper)	do { \
 						if (__builtin_constant_p(rw)) \
@@ -74,7 +71,7 @@ typedef struct { unsigned long a[100]; } __dummy_lock_t;
 		     "popl %%eax\n\t" \
 		     "jmp 1b\n" \
 		     ".previous" \
-		     :"=m" (__dummy_lock(rw)))
+		     :"=m" (*(volatile int *)rw) : : "memory")
 
 #define __build_write_lock(rw, helper)	do { \
 						if (__builtin_constant_p(rw)) \

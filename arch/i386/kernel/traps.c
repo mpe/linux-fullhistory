@@ -521,6 +521,9 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 	if (regs->eflags & VM_MASK)
 		goto debug_vm86;
 
+	/* Save debug status register where ptrace can see it */
+	tsk->thread.debugreg[6] = condition;
+
 	/* Mask out spurious TF errors due to lazy TF clearing */
 	if (condition & DR_STEP) {
 		/*

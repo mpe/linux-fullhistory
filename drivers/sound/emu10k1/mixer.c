@@ -1040,6 +1040,7 @@ static int emu10k1_mixer_ioctl(struct inode *inode, struct file *file, unsigned 
 
 		if (get_user(val, (int *) arg))
 			return -EFAULT;
+
 		i = hweight32(val);
 		if (i == 0)
 			return 0;	/* val = mixer_recmask(s); */
@@ -1065,6 +1066,7 @@ static int emu10k1_mixer_ioctl(struct inode *inode, struct file *file, unsigned 
 			return -EINVAL;
 		if (get_user(val, (int *) arg))
 			return -EFAULT;
+
 		if (emu10k1_mixer_wrch(card, i, val))
 			return -EINVAL;
 

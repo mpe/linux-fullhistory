@@ -183,7 +183,7 @@ static void init_clock(void)
 	}
 #elif defined(__alpha__)
 #if CONFIG_FT_ALPHA_CLOCK == 0
-#error You must define and set CONFIG_FT_ALPHA_CLOCK in the Makefile !
+#error You must define and set CONFIG_FT_ALPHA_CLOCK in 'make config' !
 #endif
 	extern struct hwrpb_struct *hwrpb;
 	TRACE_FUN(ft_t_any);

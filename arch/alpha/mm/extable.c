@@ -88,7 +88,7 @@ search_exception_table(unsigned long addr, unsigned long exc_gp)
 	 */
 	ret = search_exception_table_without_gp(addr);
 	if (ret) {
-		printk(KERN_ALERT, "%s: [%lx] EX_TABLE search fail with"
+		printk(KERN_ALERT "%s: [%lx] EX_TABLE search fail with"
 		       "exc frame GP, success with raw GP\n",
 		       current->comm, addr);
 		return ret;

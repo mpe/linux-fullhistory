@@ -298,6 +298,16 @@
 #define DEVICE_COUNT_DMA	2
 #define DEVICE_COUNT_RESOURCE	12
 
+#define PCI_ANY_ID (~0)
+
+#define pci_present pcibios_present
+
+#define pci_for_each_dev(dev) \
+	for(dev = pci_dev_g(pci_devices.next); dev != pci_dev_g(&pci_devices); dev = pci_dev_g(dev->global_list.next))
+
+#define pci_for_each_dev_reverse(dev) \
+	for(dev = pci_dev_g(pci_devices.prev); dev != pci_dev_g(&pci_devices); dev = pci_dev_g(dev->global_list.prev))
+
 /*
  * The pci_dev structure is used to describe both PCI and ISAPnP devices.
  */
@@ -429,6 +439,27 @@ struct pbus_set_ranges_data
 	unsigned long mem_start, mem_end;
 };
 
+struct pci_device_id {
+	unsigned int vendor, device;		/* Vendor and device ID or PCI_ANY_ID */
+	unsigned int subvendor, subdevice;	/* Subsystem ID's or PCI_ANY_ID */
+	unsigned int class, class_mask;		/* (class,subclass,prog-if) triplet */
+	unsigned long driver_data;		/* Data private to the driver */
+};
+
+struct pci_driver {
+	struct list_head node;
+	char *name;
+	const struct pci_device_id *id_table;	/* NULL if wants all devices */
+	int (*probe)(struct pci_dev *dev, const struct pci_device_id *id);	/* New device inserted */
+	void (*remove)(struct pci_dev *dev);	/* Device removed (NULL if not a hot-plug capable driver) */
+	void (*suspend)(struct pci_dev *dev);	/* Device suspended */
+	void (*resume)(struct pci_dev *dev);	/* Device woken up */
+};
+
+
+/* these external functions are only available when PCI support is enabled */
+#ifdef CONFIG_PCI
+
 void pcibios_init(void);
 void pcibios_fixup_bus(struct pci_bus *);
 int pcibios_enable_device(struct pci_dev *);
@@ -444,7 +475,6 @@ void pcibios_fixup_pbus_ranges(struct pci_bus *, struct pbus_set_ranges_data *);
 /* Backward compatibility, don't use in new code! */
 
 int pcibios_present(void);
-#define pci_present pcibios_present
 int pcibios_read_config_byte (unsigned char bus, unsigned char dev_fn,
 			      unsigned char where, unsigned char *val);
 int pcibios_read_config_word (unsigned char bus, unsigned char dev_fn,
@@ -488,8 +518,6 @@ struct pci_dev *pci_find_class (unsigned int class, const struct pci_dev *from);
 struct pci_dev *pci_find_slot (unsigned int bus, unsigned int devfn);
 int pci_find_capability (struct pci_dev *dev, int cap);
 
-#define PCI_ANY_ID (~0)
-
 int pci_read_config_byte(struct pci_dev *dev, int where, u8 *val);
 int pci_read_config_word(struct pci_dev *dev, int where, u16 *val);
 int pci_read_config_dword(struct pci_dev *dev, int where, u32 *val);
@@ -502,12 +530,6 @@ void pci_set_master(struct pci_dev *dev);
 int pci_set_power_state(struct pci_dev *dev, int state);
 int pci_assign_resource(struct pci_dev *dev, int i);
 
-#define pci_for_each_dev(dev) \
-	for(dev = pci_dev_g(pci_devices.next); dev != pci_dev_g(&pci_devices); dev = pci_dev_g(dev->global_list.next))
-
-#define pci_for_each_dev_reverse(dev) \
-	for(dev = pci_dev_g(pci_devices.prev); dev != pci_dev_g(&pci_devices); dev = pci_dev_g(dev->global_list.prev))
-
 /* Helper functions for low-level code (drivers/pci/setup.c) */
 
 int pci_claim_resource(struct pci_dev *, int);
@@ -518,30 +540,14 @@ void pci_fixup_irqs(u8 (*)(struct pci_dev *, u8 *),
 		    int (*)(struct pci_dev *, u8, u8));
 
 /* New-style probing supporting hot-pluggable devices */
-
-struct pci_device_id {
-	unsigned int vendor, device;		/* Vendor and device ID or PCI_ANY_ID */
-	unsigned int subvendor, subdevice;	/* Subsystem ID's or PCI_ANY_ID */
-	unsigned int class, class_mask;		/* (class,subclass,prog-if) triplet */
-	unsigned long driver_data;		/* Data private to the driver */
-};
-
-struct pci_driver {
-	struct list_head node;
-	char *name;
-	const struct pci_device_id *id_table;	/* NULL if wants all devices */
-	int (*probe)(struct pci_dev *dev, const struct pci_device_id *id);	/* New device inserted */
-	void (*remove)(struct pci_dev *dev);	/* Device removed (NULL if not a hot-plug capable driver) */
-	void (*suspend)(struct pci_dev *dev);	/* Device suspended */
-	void (*resume)(struct pci_dev *dev);	/* Device woken up */
-};
-
 int pci_register_driver(struct pci_driver *);
 void pci_unregister_driver(struct pci_driver *);
 void pci_insert_device(struct pci_dev *, struct pci_bus *);
 void pci_remove_device(struct pci_dev *);
 struct pci_driver *pci_dev_driver(const struct pci_dev *);
 const struct pci_device_id *pci_match_device(const struct pci_device_id *ids, const struct pci_dev *dev);
+
+#endif /* CONFIG_PCI */
 
 /* Include architecture-dependent settings and functions */
 

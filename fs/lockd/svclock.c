@@ -170,6 +170,8 @@ nlmsvc_create_block(struct svc_rqst *rqstp, struct nlm_file *file,
 	if (!(block = (struct nlm_block *) kmalloc(sizeof(*block), GFP_KERNEL)))
 		goto failed;
 	memset(block, 0, sizeof(*block));
+	locks_init_lock(&block->b_call.a_args.lock.fl);
+	locks_init_lock(&block->b_call.a_res.lock.fl);
 
 	/* Set notifier function for VFS, and init args */
 	lock->fl.fl_notify = nlmsvc_notify_blocked;
@@ -347,7 +349,7 @@ again:
 	/* Append to list of blocked */
 	nlmsvc_insert_block(block, NLM_NEVER);
 
-	if (!list_empty(&block->b_call.a_args.lock.fl.fl_block)) {
+	if (list_empty(&block->b_call.a_args.lock.fl.fl_list)) {
 		/* Now add block to block list of the conflicting lock
 		   if we haven't done so. */
 		dprintk("lockd: blocking on this lock.\n");

@@ -17,18 +17,13 @@
 	   : "r" ((UDItype)(u)),		\
 	     "r" ((UDItype)(v)))
 
-extern void udiv128(unsigned long, unsigned long,
-		    unsigned long, unsigned long,
-		    unsigned long *,
-		    unsigned long *);
-
-#define udiv_qrnnd(q, r, n1, n0, d)		\
-  do {						\
-    unsigned long xr, xi;			\
-    udiv128((n0), (n1), 0, (d), &xr, &xi);	\
-    (q) = xr; 					\
-    (r) = xi;					\
+#define udiv_qrnnd(q, r, n1, n0, d)				\
+  do { unsigned long __r;					\
+    (q) = __udiv_qrnnd (&__r, (n1), (n0), (d));			\
+    (r) = __r;							\
   } while (0)
+extern unsigned long __udiv_qrnnd (unsigned long *, unsigned long,
+				   unsigned long , unsigned long);
 
 #define UDIV_NEEDS_NORMALIZATION 1  
 

@@ -1,12 +1,42 @@
 Linux Kernel Makefiles
-16 August 2000
-Michael Elizabeth Chastain, <chastain@redhat.com>
+2000-September-14
+Michael Elizabeth Chastain, <mec@shout.net>
 
 
 
-=== Introduction
+=== Table of Contents
 
 This document describes the Linux kernel Makefiles.
+
+  1  Overview
+  2  Who does what
+  3  Makefile language
+  4  Variables passed down from the top
+  5  The structure of an arch Makefile
+     5.1  Architecture-specific variables
+     5.2  Vmlinux build variables
+     5.3  Post-vmlinux goals
+     5.4  Mandatory arch-specific goals
+  6  The structure of a subdirectory Makefile
+     6.1  Comments
+     6.2  Goal definitions
+     6.3  Adapter section
+     6.4  Rules.make section
+     6.5  Special rules
+  7  Rules.make variables
+     7.1  Subdirectories
+     7.2  Object file goals
+     7.3  Library file goals
+     7.4  Loadable module goals
+     7.5  Multi-part modules
+     7.6  Compilation flags
+     7.7  Miscellaneous variables
+  8  New-style variables
+  9  Compatibility with Linux Kernel 2.2
+ 10  Credits
+
+
+=== 1 Overview
 
 The Makefiles have five parts:
 
@@ -21,7 +51,7 @@ kernel configuration process.
 
 The top Makefile is responsible for building two major products: vmlinux
 (the resident kernel image) and modules (any module files).  It builds
-these targets by recursively descending into the subdirectories of the
+these goals by recursively descending into the subdirectories of the
 kernel source tree.  The list of subdirectories which are visited depends
 upon the kernel configuration.
 
@@ -40,7 +70,7 @@ lists.  It then declares rules based on those lists.
 
 
 
-=== Who does what
+=== 2 Who does what
 
 People have four different relationships with the kernel Makefiles.
 
@@ -66,7 +96,7 @@ This document is aimed towards normal developers and arch developers.
 
 
 
-=== Makefile language
+=== 3 Makefile language
 
 The kernel Makefiles are designed to run with Gnu Make.  The Makefiles
 use only the documented features of Gnu Make, but they do use many
@@ -91,7 +121,7 @@ split), but are otherwise exactly the same.
 
 
 
-=== Variables passed down from the top
+=== 4 Variables passed down from the top
 
 The top Makefile exports the following variables:
 
@@ -169,7 +199,7 @@ The top Makefile exports the following variables:
     GENKSYMS
 
 	These variables specify the commands and flags that Rules.make
-	uses to build target files from source files.
+	uses to build goal files from source files.
 
 	$(CFLAGS_KERNEL) contains extra C compiler flags used to compile
 	resident kernel code.
@@ -267,7 +297,11 @@ The top Makefile exports the following variables:
 
 
 
-=== The structure of an arch Makefile
+=== 5 The structure of an arch Makefile
+
+
+
+--- 5.1 Architecture-specific variables
 
 The top Makefile includes one arch Makefile file, arch/$(ARCH)/Makefile.
 This section describes the functions of the arch Makefile.
@@ -347,6 +381,10 @@ architecture-specific values.
 		LD=$(CROSS_COMPILE)ld -m elf_s390
 		OBJCOPY=$(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -S
 
+
+
+--- 5.2 Vmlinux build variables
+
 An arch Makefile co-operates with the top Makefile to define variables
 which specify how to build the vmlinux file.  Note that there is no
 corresponding arch-specific section for modules; the module-building
@@ -381,12 +419,16 @@ machinery is all architecture-independent.
 		CORE_FILES := arch/m68k/kernel/kernel.o arch/m68k/mm/mm.o $(CORE_FILES)
 		LIBS += arch/m68k/lib/lib.a
 
-An arch Makefile specifies targets that take the vmlinux file, compress
+
+
+--- 5.3 Post-vmlinux goals
+
+An arch Makefile specifies goals that take the vmlinux file, compress
 it, wrap it in bootstrapping code, and copy the resulting files somewhere.
 This includes various kinds of installation commands.
 
-These post-vmlinux targets are not standardized across different
-architectures.  Here is a list of these targets and the architectures
+These post-vmlinux goals are not standardized across different
+architectures.  Here is a list of these goals and the architectures
 that support each of them (as of kernel version 2.4.0-test6-pre5):
 
     balo		mips
@@ -417,8 +459,12 @@ that support each of them (as of kernel version 2.4.0-test6-pre5):
     zlilo		i386
     znetboot.initrd	ppc
 
-An arch Makefile must define the following auxiliary targets.  These
-targets provide arch-specific actions for the corresponding targets
+
+
+--- 5.4 Mandatory arch-specific goals
+
+An arch Makefile must define the following arch-specific goals.
+These goals provide arch-specific actions for the corresponding goals
 in the top Makefile:
 
     archclean		clean
@@ -427,15 +473,23 @@ in the top Makefile:
 
 
 
-=== The structure of a subdirectory Makefile
+=== 6 The structure of a subdirectory Makefile
 
 A subdirectory Makefile has five sections.
+
+
+
+--- 6.1 Comments
 
 The first section is a comment header.  Just write what you would
 write if you were editing a C source file, but use "# ..." instead of
 "/* ... */".  Historically, many anonymous people have edited kernel
 Makefiles without leaving any change histories in the header; comments
 from them would have been valuable.
+
+
+
+--- 6.2 Goal definitions
 
 The second section is a bunch of definitions that are the heart of the
 subdirectory Makefile.  These lines define the files to be built, any
@@ -468,24 +522,40 @@ The new-style Makefiles are more compact and easier to get correct
 for certain features (such as CONFIG_* options that enable more than
 one file).  If you have a choice, please write a new-style Makefile.
 
+
+
+--- 6.3 Adapter section
+
 The third section is an adapter section.  In old-style Makefiles, this
 third section is not present.  In new-style Makefiles, the third section
 contains boilerplate code which converts from new-style variables to
 old-style variables.  This is because Rules.make processes only the
 old-style variables.
 
+
+
+--- 6.4 Rules.make section
+
 The fourth section is the single line:
 
 	include $(TOPDIR)/Rules.make
+
+
+
+--- 6.5 Special rules
 
 The fifth section contains any special Makefile rules needed that are
 not available through the common rules in Rules.make.
 
 
 
-=== Rules.make variables
+=== 7 Rules.make variables
 
 The public interface of Rules.make consists of the following variables:
+
+
+
+--- 7.1 Subdirectories
 
     ALL_SUB_DIRS, SUB_DIRS, MOD_IN_SUB_DIRS, MOD_SUB_DIRS
 
@@ -561,6 +631,10 @@ The public interface of Rules.make consists of the following variables:
 		  endif
 		endif
 
+
+
+--- 7.2 Object file goals
+
     O_TARGET, O_OBJS, OX_OBJS
 
 	The subdirectory Makefile specifies object files for vmlinux in
@@ -611,6 +685,8 @@ The public interface of Rules.make consists of the following variables:
 	vmlinux.  See the $(M_OBJS) example below.
 
 
+
+--- 7.3 Library file goals
 
     L_TARGET, L_OBJS, LX_OBJS
 
@@ -674,6 +750,10 @@ The public interface of Rules.make consists of the following variables:
 	during development activity, but $(L_TARGET) gives better error
 	messages for unresolved symbols.
 
+
+
+--- 7.4 Loadable module goals
+
     M_OBJS, MX_OBJS
 
 	$(M_OBJS) and $(MX_OBJS) specify object files which are built
@@ -731,6 +811,10 @@ The public interface of Rules.make consists of the following variables:
 	will build $(M_OBJS) instead.  (Yes, this is a little delicate
 	and a little confusing).
 
+
+
+--- 7.5 Multi-part modules
+
     MI_OBJS, MIX_OBJS
 
 	Some kernel modules are composed of several object files
@@ -785,14 +869,9 @@ The public interface of Rules.make consists of the following variables:
 		sb.o: $(sb-objs)
 			$(LD) -r -o $@ $(sb-objs)
 
-    IGNORE_FLAGS_OBJS
 
-	$(IGNORE_FLAGS_OBJS) is a list of object files which will not have
-	their flag dependencies automatically tracked.	This is a hackish
-	feature, used to kludge around a problem in the implementation
-	of flag dependencies.  (The problem is that flag dependencies
-	assume that a %.o file is built from a matching %.S or %.c file.
-	This is sometimes not true).
+
+--- 7.6 Compilation flags
 
     EXTRA_CFLAGS, EXTRA_AFLAGS, EXTRA_LDFLAGS, EXTRA_ARFLAGS
 
@@ -866,6 +945,24 @@ The public interface of Rules.make consists of the following variables:
 	for such a file, you will have to remove the object file in order
 	to re-build from source.
 
+    LD_RFLAG
+
+	This variable is used, but never defined.  It appears to be a
+	vestige of some abandoned experiment.
+
+
+
+--- 7.7 Miscellaneous variables
+
+    IGNORE_FLAGS_OBJS
+
+	$(IGNORE_FLAGS_OBJS) is a list of object files which will not have
+	their flag dependencies automatically tracked.	This is a hackish
+	feature, used to kludge around a problem in the implementation
+	of flag dependencies.  (The problem is that flag dependencies
+	assume that a %.o file is built from a matching %.S or %.c file.
+	This is sometimes not true).
+
     USE_STANDARD_AS_RULE
 
 	This is a transition variable.	If $(USE_STANDARD_AS_RULE)
@@ -888,7 +985,7 @@ The public interface of Rules.make consists of the following variables:
 
 
 
-=== New-style variables
+=== 8 New-style variables
 
 The "new-style variables" are simpler and more powerful than the
 "old-style variables".  As a result, many subdirectory Makefiles shrank
@@ -1051,7 +1148,7 @@ people define most variables using "new style" but then fall back to
 
 
 
-=== Compatibility with Linux Kernel 2.2
+=== 9 Compatibility with Linux Kernel 2.2
 
 Most of the information in this document also applies to 2.2, although
 there is no indication of which things have changed when.  Here are some
@@ -1080,7 +1177,8 @@ for each file by name.
 
 
 
-=== Credits
+=== 10 Credits
 
 Thanks to the members of the linux-kbuild mailing list for reviewing
-drafts of this document, with particular thanks to Peter Samuelson.
+drafts of this document, with particular thanks to Peter Samuelson
+and Thomas Molina.

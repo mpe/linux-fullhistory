@@ -298,6 +298,7 @@ struct task_struct {
 	 * that's just fine.)
 	 */
 	struct list_head run_list;
+	unsigned long sleep_time;
 
 	struct task_struct *next_task, *prev_task;
 	struct mm_struct *active_mm;
@@ -356,6 +357,7 @@ struct task_struct {
 /* file system info */
 	int link_count;
 	struct tty_struct *tty; /* NULL if no tty */
+	unsigned int locks; /* How many file locks are being held */
 /* ipc stuff */
 	struct sem_undo *semundo;
 	struct sem_queue *semsleeping;
@@ -818,6 +820,7 @@ do {									\
 static inline void del_from_runqueue(struct task_struct * p)
 {
 	nr_running--;
+	p->sleep_time = jiffies;
 	list_del(&p->run_list);
 	p->run_list.next = NULL;
 }

@@ -100,8 +100,8 @@ extern void __global_restore_flags(unsigned long flags);
 #define nop() 		__asm__ __volatile__ ("nop")
 
 #define membar(type)	__asm__ __volatile__ ("membar " type : : : "memory");
-#define rmb()		membar("#LoadLoad | #LoadStore")
-#define wmb()		membar("#StoreLoad | #StoreStore")
+#define rmb()		membar("#LoadLoad")
+#define wmb()		membar("#StoreStore")
 #define set_mb(__var, __value) \
 	do { __var = __value; membar("#StoreLoad | #StoreStore"); } while(0)
 #define set_wmb(__var, __value) \

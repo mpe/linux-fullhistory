@@ -1,3 +1,4 @@
+
 /*
  *	New style setup code for the network devices
  */
@@ -166,58 +167,8 @@ static void __init network_ldisc_init(void)
 }
 
 
-static void __init appletalk_device_init(void)
+static void __init special_device_init(void)
 {
-#if defined(CONFIG_IPDDP)
-	extern int ipddp_init(struct net_device *dev);
-	static struct net_device dev_ipddp = {
-				"ipddp0"  __PAD6,
-				0, 0, 0, 0,
-				0x0, 0,
-				0, 0, 0, NULL, ipddp_init 
-	};
-	
-	dev_ipddp.init(&dev_ipddp);
-#endif /* CONFIG_IPDDP */
-}
-
-static void special_device_init(void)
-{
-#ifdef CONFIG_DUMMY
-	{
-		extern int dummy_init(struct net_device *dev);
-		static struct net_device dummy_dev = {
-			"dummy" __PAD5, 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, dummy_init, 
-		};
-		register_netdev(&dummy_dev);
-	}
-#endif	
-#ifdef CONFIG_EQUALIZER
-	{
-		extern int eql_init(struct net_device *dev);
-		static struct net_device eql_dev = 
-		{
-			"eql" __PAD3,			/* Master device for IP traffic load balancing */
-			0x0, 0x0, 0x0, 0x0,		/* recv end/start; mem end/start */
-			0,				/* base I/O address */
-			0,				/* IRQ */
-			0, 0, 0,			/* flags */
-			NULL,				/* next device */
-			eql_init			/* set up the rest */
-		};
-		register_netdev(&eql_dev);
-	}
-#endif	
-#ifdef CONFIG_APBIF
-	{
-		extern int bif_init(struct net_device *dev);
-		static struct net_device bif_dev = 
-		{
-        		"bif" __PAD3, 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, bif_init 
-        	};
-		register_netdev(&bif_dev);
-        }
-#endif
 #ifdef CONFIG_NET_SB1000
 	{
 		extern int sb1000_probe(struct net_device *dev);
@@ -228,15 +179,6 @@ static void special_device_init(void)
 		register_netdev(&sb1000_dev);
 	}
 #endif
-#ifdef CONFIG_BONDING
-	{
-		extern int bond_init(struct net_device *dev);
-		static struct net_device bond_dev = {
-			"bond" __PAD4, 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, bond_init,
-		};
-		register_netdev(&bond_dev);
-	}
-#endif	
 }
 
 /*
@@ -249,8 +191,6 @@ void __init net_device_init(void)
 	network_probe();
 	/* Line disciplines */
 	network_ldisc_init();
-	/* Appletalk */
-	appletalk_device_init();
 	/* Special devices */
 	special_device_init();
 	/* That kicks off the legacy init functions */

@@ -96,6 +96,7 @@ static const char *version = "tms380tr.c: v1.07 21/01/2000 by Christoph Goos, Ad
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/pci.h>
+#include <linux/delay.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>

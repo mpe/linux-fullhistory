@@ -37,7 +37,7 @@ waking_non_zero(struct semaphore *sem)
 		".subsection 2\n"
 		"3:	br	1b\n"
 		".previous"
-		: "=r"(ret), "=r"(tmp), "=m"(__atomic_fool_gcc(&sem->waking))
+		: "=r"(ret), "=r"(tmp), "=m"(sem->waking.counter)
 		: "0"(0));
 
 	return ret > 0;

@@ -1,3 +1,4 @@
+#define MSNFS	/* HACK HACK */
 /*
  * linux/fs/nfsd/export.c
  *
@@ -556,6 +557,9 @@ struct flags {
 	{ NFSEXP_CROSSMNT, {"nohide", ""}},
 	{ NFSEXP_NOSUBTREECHECK, {"no_subtree_check", ""}},
 	{ NFSEXP_NOAUTHNLM, {"insecure_locks", ""}},
+#ifdef NSMFS
+	{ NFSEXP_MSNFS, {"msnfs", ""}},
+#endif
 	{ 0, {"", ""}}
 };
 

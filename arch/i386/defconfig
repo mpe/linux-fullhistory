@@ -129,6 +129,7 @@ CONFIG_BLK_DEV_FD=y
 # CONFIG_MD_RAID1 is not set
 # CONFIG_MD_RAID5 is not set
 # CONFIG_BLK_DEV_LVM is not set
+# CONFIG_LVM_PROC_FS is not set
 
 #
 # Networking options
@@ -363,14 +364,18 @@ CONFIG_EEPRO100=y
 # CONFIG_NE2K_PCI is not set
 # CONFIG_8139TOO is not set
 # CONFIG_SIS900 is not set
+# CONFIG_EPIC100 is not set
+# CONFIG_SUNDANCE is not set
 # CONFIG_TLAN is not set
 # CONFIG_VIA_RHINE is not set
+# CONFIG_WINBOND_840 is not set
 # CONFIG_NET_POCKET is not set
 
 #
 # Ethernet (1000 Mbit)
 #
 # CONFIG_ACENIC is not set
+# CONFIG_HAMACHI is not set
 # CONFIG_SK98LIN is not set
 # CONFIG_FDDI is not set
 # CONFIG_PPP is not set
@@ -590,7 +595,21 @@ CONFIG_VGA_CONSOLE=y
 #
 # Sound
 #
-# CONFIG_SOUND is not set
+CONFIG_SOUND=y
+# CONFIG_SOUND_CMPCI is not set
+# CONFIG_SOUND_EMU10K1 is not set
+# CONFIG_SOUND_FUSION is not set
+# CONFIG_SOUND_ES1370 is not set
+CONFIG_SOUND_ES1371=y
+# CONFIG_SOUND_ESSSOLO1 is not set
+# CONFIG_SOUND_MAESTRO is not set
+# CONFIG_SOUND_SONICVIBES is not set
+# CONFIG_SOUND_TRIDENT is not set
+# CONFIG_SOUND_MSNDCLAS is not set
+# CONFIG_SOUND_MSNDPIN is not set
+# CONFIG_SOUND_VIA82CXXX is not set
+# CONFIG_SOUND_OSS is not set
+# CONFIG_SOUND_TVMIXER is not set
 
 #
 # USB support
@@ -607,7 +626,6 @@ CONFIG_USB=y
 #
 # USB Controllers
 #
-# CONFIG_USB_UHCI is not set
 CONFIG_USB_UHCI_ALT=y
 # CONFIG_USB_OHCI is not set
 

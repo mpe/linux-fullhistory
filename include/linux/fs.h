@@ -54,6 +54,7 @@ struct files_stat_struct {
 };
 extern struct files_stat_struct files_stat;
 extern int max_super_blocks, nr_super_blocks;
+extern int leases_enable, dir_notify_enable, lease_break_time;
 
 #define NR_FILE  8192	/* this can well be larger on a larger system */
 #define NR_RESERVED_FILES 10 /* reserved for root */
@@ -410,6 +411,9 @@ struct inode {
 	struct pipe_inode_info	*i_pipe;
 	struct block_device	*i_bdev;
 
+	unsigned long		i_dnotify_mask; /* Directory notify events */
+	struct dnotify_struct	*i_dnotify; /* for directory notifications */
+
 	unsigned long		i_state;
 
 	unsigned int		i_flags;
@@ -499,6 +503,7 @@ extern int init_private_file(struct file *, struct dentry *, int);
 #define FL_BROKEN	4	/* broken flock() emulation */
 #define FL_ACCESS	8	/* for processes suspended by mandatory locking */
 #define FL_LOCKD	16	/* lock held by rpc.lockd */
+#define FL_LEASE	32	/* lease held on this file */
 
 /*
  * The POSIX file lock owner is determined by
@@ -513,6 +518,7 @@ struct file_lock {
 	struct file_lock *fl_next;	/* singly linked list for this inode  */
 	struct list_head fl_link;	/* doubly linked list of all locks */
 	struct list_head fl_block; /* circular list of blocked processes */
+	struct list_head fl_list;	/* block list member */
 	fl_owner_t fl_owner;
 	unsigned int fl_pid;
 	wait_queue_head_t fl_wait;
@@ -525,6 +531,8 @@ struct file_lock {
 	void (*fl_notify)(struct file_lock *);	/* unblock callback */
 	void (*fl_insert)(struct file_lock *);	/* lock insertion callback */
 	void (*fl_remove)(struct file_lock *);	/* lock removal callback */
+
+	struct fasync_struct *	fl_fasync; /* for lease break notifications */
 
 	union {
 		struct nfs_lock_info	nfs_fl;
@@ -539,6 +547,7 @@ struct file_lock {
 #endif
 
 extern struct list_head file_lock_list;
+extern struct semaphore file_lock_sem;
 
 #include <linux/fcntl.h>
 
@@ -549,12 +558,18 @@ extern int fcntl_getlk64(unsigned int, struct flock64 *);
 extern int fcntl_setlk64(unsigned int, unsigned int, struct flock64 *);
 
 /* fs/locks.c */
+extern void locks_init_lock(struct file_lock *);
+extern void locks_copy_lock(struct file_lock *, struct file_lock *);
 extern void locks_remove_posix(struct file *, fl_owner_t);
 extern void locks_remove_flock(struct file *);
 extern struct file_lock *posix_test_lock(struct file *, struct file_lock *);
 extern int posix_lock_file(struct file *, struct file_lock *, unsigned int);
 extern void posix_block_lock(struct file_lock *, struct file_lock *);
 extern void posix_unblock_lock(struct file_lock *);
+extern int __get_lease(struct inode *inode, unsigned int flags);
+extern time_t lease_get_mtime(struct inode *);
+extern int lock_may_read(struct inode *, loff_t start, unsigned long count);
+extern int lock_may_write(struct inode *, loff_t start, unsigned long count);
 
 struct fasync_struct {
 	int	magic;
@@ -887,6 +902,12 @@ static inline int locks_verify_truncate(struct inode *inode,
 	return 0;
 }
 
+extern inline int get_lease(struct inode *inode, unsigned int mode)
+{
+	if (inode->i_flock && (inode->i_flock->fl_flags & FL_LEASE))
+		return __get_lease(inode, mode);
+	return 0;
+}
 
 /* fs/open.c */
 

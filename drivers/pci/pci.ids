@@ -2694,6 +2694,10 @@
 	0105  Cyclom_8Y above first megabyte
 	0200  Cyclom_Z below first megabyte
 	0201  Cyclom_Z above first megabyte
+	0300  PC300 RX 2
+	0301  PC300 RX 1
+	0310  PC300 TE 2
+	0311  PC300 TE 1
 120f  Essential Communications
 	0001  Roadrunner serial HIPPI
 1210  Hyperparallel Technologies
@@ -2752,6 +2756,7 @@
 		121a 0060  Voodoo3 3500 TV (NTSC)
 		121a 0061  Voodoo3 3500 TV (PAL)
 		121a 0062  Voodoo3 3500 TV (SECAM)
+	0009  Voodoo 4
 121b  Advanced Telecommunications Modules
 121c  Nippon Texaco., Ltd
 121d  Lippert Automationstechnik GmbH

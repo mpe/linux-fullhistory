@@ -173,6 +173,47 @@ static int find_partition(Scsi_Tape *);
 static int update_partition(Scsi_Tape *);
 
 static int st_int_ioctl(Scsi_Tape *, unsigned int, unsigned long);
+
+
+/* #include "osst_detect.h" */
+#ifndef SIGS_FROM_OSST
+#define SIGS_FROM_OSST \
+	{"OnStream", "SC-", "", "osst"}, \
+	{"OnStream", "DI-", "", "osst"}, \
+	{"OnStream", "DP-", "", "osst"}, \
+	{"OnStream", "USB", "", "osst"}, \
+	{"OnStream", "FW-", "", "osst"}
+#endif
+
+struct st_reject_data {
+	char *vendor;
+	char *model;
+	char *rev;
+	char *driver_hint; /* Name of the correct driver, NULL if unknown */
+};
+
+static struct st_reject_data reject_list[] = {
+	/* {"XXX", "Yy-", "", NULL},  example */
+	SIGS_FROM_OSST,
+	{NULL, }};
+
+/* If the device signature is on the list of incompatible drives, the
+   function returns a pointer to the name of the correct driver (if known) */
+static char * st_incompatible(Scsi_Device* SDp)
+{
+	struct st_reject_data *rp;
+
+	for (rp=&(reject_list[0]); rp->vendor != NULL; rp++)
+		if (!strncmp(rp->vendor, SDp->vendor, strlen(rp->vendor)) &&
+		    !strncmp(rp->model, SDp->model, strlen(rp->model)) &&
+		    !strncmp(rp->rev, SDp->rev, strlen(rp->rev))) {
+			if (rp->driver_hint)
+				return rp->driver_hint;
+			else
+				return "unknown";
+		}
+	return NULL;
+}
 
 
 /* Convert the result to success code */
@@ -3460,9 +3501,17 @@ static int st_attach(Scsi_Device * SDp)
 	ST_partstat *STps;
 	int i, mode, target_nbr;
 	unsigned long flags = 0;
+	char *stp;
 
 	if (SDp->type != TYPE_TAPE)
 		return 1;
+	if ((stp = st_incompatible(SDp))) {
+		printk(KERN_INFO
+		       "st: Found incompatible tape at scsi%d, channel %d, id %d, lun %d\n",
+		       SDp->host->host_no, SDp->channel, SDp->id, SDp->lun);
+		printk(KERN_INFO "st: The suggested driver is %s.\n", stp);
+		return 1;
+	}
 
 	write_lock_irqsave(&st_dev_arr_lock, flags);
 	if (st_template.nr_dev >= st_template.dev_max) {
@@ -3626,7 +3675,7 @@ static int st_attach(Scsi_Device * SDp)
 
 static int st_detect(Scsi_Device * SDp)
 {
-	if (SDp->type != TYPE_TAPE)
+	if (SDp->type != TYPE_TAPE || st_incompatible(SDp))
 		return 0;
 
 	printk(KERN_WARNING

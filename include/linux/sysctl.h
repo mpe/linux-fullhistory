@@ -186,7 +186,8 @@ enum
 	NET_CORE_MSG_COST=8,
 	NET_CORE_MSG_BURST=9,
 	NET_CORE_OPTMEM_MAX=10,
-	NET_CORE_HOT_LIST_LENGTH=11
+	NET_CORE_HOT_LIST_LENGTH=11,
+	NET_CORE_DIVERT_VERSION=12
 };
 
 /* /proc/sys/net/ethernet */
@@ -512,7 +513,10 @@ enum
 	FS_NRSUPER=9,	/* int:current number of allocated super_blocks */
 	FS_MAXSUPER=10,	/* int:maximum number of super_blocks that can be allocated */
 	FS_OVERFLOWUID=11,	/* int: overflow UID */
-	FS_OVERFLOWGID=12	/* int: overflow GID */
+	FS_OVERFLOWGID=12,	/* int: overflow GID */
+	FS_LEASES=13,	/* int: leases enabled */
+	FS_DIR_NOTIFY=14,	/* int: directory notification enabled */
+	FS_LEASE_TIME=15,	/* int: maximum time to wait for a lease break */
 };
 
 /* CTL_DEBUG names: */

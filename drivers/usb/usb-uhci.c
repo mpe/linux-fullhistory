@@ -12,7 +12,7 @@
  * (C) Copyright 1999 Johannes Erdfelt
  * (C) Copyright 1999 Randy Dunlap
  *
- * $Id: usb-uhci.c,v 1.237 2000/08/08 14:58:17 acher Exp $
+ * $Id: usb-uhci.c,v 1.239 2000/09/19 20:15:12 acher Exp $
  */
 
 #include <linux/config.h>
@@ -48,7 +48,7 @@
 /* This enables an extra UHCI slab for memory debugging */
 #define DEBUG_SLAB
 
-#define VERSTR "$Revision: 1.237 $ time " __TIME__ " " __DATE__
+#define VERSTR "$Revision: 1.239 $ time " __TIME__ " " __DATE__
 
 #include <linux/usb.h>
 #include "usb-uhci.h"
@@ -1034,6 +1034,23 @@ _static void uhci_clean_transfer (uhci_t *s, urb_t *urb, uhci_desc_t *qh, int mo
 	}
 }
 /*-------------------------------------------------------------------*/
+// Release bandwidth for Interrupt or Isoc. transfers 
+_static void uhci_release_bandwidth(urb_t *urb)
+{       
+	if (urb->bandwidth) {
+		switch (usb_pipetype(urb->pipe)) {
+		case PIPE_INTERRUPT:
+			usb_release_bandwidth (urb->dev, urb, 0);
+			break;
+		case PIPE_ISOCHRONOUS:
+			usb_release_bandwidth (urb->dev, urb, 1);
+			break;
+		default:
+			break;
+		}
+	}	
+}
+/*-------------------------------------------------------------------*/
 // unlinks an urb by dequeuing its qh, waits some frames and forgets it
 _static int uhci_unlink_urb_sync (uhci_t *s, urb_t *urb)
 {
@@ -1055,6 +1072,7 @@ _static int uhci_unlink_urb_sync (uhci_t *s, urb_t *urb)
 		if (!in_interrupt())	
 			spin_unlock(&urb->lock); 
 
+		uhci_release_bandwidth(urb);
 		spin_unlock_irqrestore (&s->urb_list_lock, flags);		
 		
 		urb->status = -ENOENT;	// mark urb as killed		
@@ -1247,6 +1265,7 @@ _static int uhci_unlink_urb (urb_t *urb)
 		if (!in_interrupt())
 			spin_lock(&urb->lock);
 
+		uhci_release_bandwidth(urb);
 		ret = uhci_unlink_urb_async(s, urb);
 
 		if (!in_interrupt())
@@ -1548,6 +1567,7 @@ _static int uhci_submit_urb (urb_t *urb)
 	int ret = 0;
 	unsigned long flags;
 	urb_t *bulk_urb=NULL;
+	int bustime;
 		
 	if (!urb->dev || !urb->dev->bus)
 		return -ENODEV;
@@ -1617,11 +1637,39 @@ _static int uhci_submit_urb (urb_t *urb)
 	else {
 		spin_unlock_irqrestore (&s->urb_list_lock, flags);
 		switch (usb_pipetype (urb->pipe)) {
-		case PIPE_ISOCHRONOUS:
-			ret = uhci_submit_iso_urb (urb);
+		case PIPE_ISOCHRONOUS:			
+			if (urb->bandwidth == 0) {      /* not yet checked/allocated */
+				if (urb->number_of_packets <= 0) {
+					ret = -EINVAL;
+					break;
+				}
+
+				bustime = usb_check_bandwidth (urb->dev, urb);
+				if (bustime < 0) {
+					ret = bustime;
+					break;
+				}
+
+				ret = uhci_submit_iso_urb(urb);
+				if (ret == 0)
+					usb_claim_bandwidth (urb->dev, urb, bustime, 1);
+			} else {        /* bandwidth is already set */
+				ret = uhci_submit_iso_urb(urb);
+			}
 			break;
 		case PIPE_INTERRUPT:
-			ret = uhci_submit_int_urb (urb);
+			if (urb->bandwidth == 0) {      /* not yet checked/allocated */
+				bustime = usb_check_bandwidth (urb->dev, urb);
+				if (bustime < 0)
+					ret = bustime;
+				else {
+					ret = uhci_submit_int_urb(urb);
+					if (ret == 0)
+						usb_claim_bandwidth (urb->dev, urb, bustime, 0);
+				}
+			} else {        /* bandwidth is already set */
+				ret = uhci_submit_int_urb(urb);
+			}
 			break;
 		case PIPE_CONTROL:
 			ret = uhci_submit_control_urb (urb);
@@ -2460,6 +2508,14 @@ _static int process_urb (uhci_t *s, struct list_head *p)
 
 	if (urb->status != -EINPROGRESS) {
 		int proceed = 0;
+
+		/* Release bandwidth for Interrupt or Iso transfers */
+		if (urb->bandwidth) {
+			if (usb_pipetype(urb->pipe)==PIPE_ISOCHRONOUS)
+				usb_release_bandwidth (urb->dev, urb, 1);
+			else if (usb_pipetype(urb->pipe)==PIPE_INTERRUPT && urb->interval)
+				usb_release_bandwidth (urb->dev, urb, 0);
+		}
 
 		dbg("dequeued urb: %p", urb);
 		dequeue_urb (s, urb);

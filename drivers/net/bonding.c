@@ -31,29 +31,10 @@
  * 
  */
 
-#include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/sched.h>
-#include <linux/types.h>
-#include <linux/fcntl.h>
-#include <linux/interrupt.h>
-#include <linux/ptrace.h>
-#include <linux/ioport.h>
-#include <linux/in.h>
-#include <linux/malloc.h>
-#include <linux/string.h>
-#include <linux/init.h>
-#include <asm/system.h>
-#include <asm/bitops.h>
-#include <asm/io.h>
-#include <asm/dma.h>
-#include <asm/uaccess.h>
-#include <linux/errno.h>
-
+#include <linux/kernel.h>
 #include <linux/netdevice.h>
-#include <linux/etherdevice.h>
-#include <linux/skbuff.h>
-
+#include <linux/init.h>
 #include <linux/if_bonding.h>
 
 typedef struct slave
@@ -228,13 +209,13 @@ static int bond_event(struct notifier_block *this, unsigned long event, void *pt
 	return NOTIFY_DONE;
 }
 
-struct notifier_block bond_netdev_notifier={
+static struct notifier_block bond_netdev_notifier={
 	bond_event,
 	NULL,
 	0
 };
 
-int __init bond_init(struct net_device *dev)
+static int __init bond_init(struct net_device *dev)
 {
 	bonding_t *bond;
 
@@ -308,15 +289,13 @@ static struct net_device_stats *bond_get_stats(struct net_device *dev)
 	return &bond->stats;
 }
 
-#ifdef MODULE
-
 static struct net_device dev_bond = {
 		"",
 		0, 0, 0, 0,
 	 	0x0, 0,
 	 	0, 0, 0, NULL, bond_init };
 
-int init_module(void)
+static int __init bonding_init(void)
 {
 	/* Find a name for this unit */
 	int err=dev_alloc_name(&dev_bond,"bond%d");
@@ -330,7 +309,7 @@ int init_module(void)
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit bonding_exit(void)
 {
 	unregister_netdevice_notifier(&bond_netdev_notifier);
 
@@ -338,7 +317,9 @@ void cleanup_module(void)
 
 	kfree(dev_bond.priv);
 }
-#endif /* MODULE */
+
+module_init(bonding_init);
+module_exit(bonding_exit);
 
 /*
  * Local variables:

@@ -71,6 +71,7 @@ struct termio {
 #define N_SLIP		1
 #define N_MOUSE		2
 #define N_PPP		3
+#define N_STRIP		4
 #define N_AX25		5
 #define N_X25		6	/* X.25 async */
 #define N_6PACK		7

@@ -233,27 +233,11 @@ void lru_cache_add(struct page * page)
 	spin_lock(&pagemap_lru_lock);
 	if (!PageLocked(page))
 		BUG();
-	/*
-	 * Heisenbug Compensator(tm)
-	 * This bug shouldn't trigger, but for unknown reasons it
-	 * sometimes does. If there are no signs of list corruption,
-	 * we ignore the problem. Else we BUG()...
-	 */
-	if (PageActive(page) || PageInactiveDirty(page) ||
-					PageInactiveClean(page)) {
-		struct list_head * page_lru = &page->lru;
-		if (page_lru->next->prev != page_lru) {
-			printk("VM: lru_cache_add, bit or list corruption..\n");
-			BUG();
-		}
-		printk("VM: lru_cache_add, page already in list!\n");
-		goto page_already_on_list;
-	}
+	DEBUG_ADD_PAGE
 	add_page_to_active_list(page);
 	/* This should be relatively rare */
 	if (!page->age)
 		deactivate_page_nolock(page);
-page_already_on_list:
 	spin_unlock(&pagemap_lru_lock);
 }
 

@@ -9,6 +9,7 @@
 
 #include <stdarg.h>
 #include <linux/linkage.h>
+#include <linux/stddef.h>
 
 /* Optimization barrier */
 /* The "volatile" is due to gcc bugs */

@@ -16,13 +16,13 @@ obj-m   :=
 obj-    :=
 export-objs :=
 
-obj-$(CONFIG_LTPC) += ltpc.o
-obj-$(CONFIG_COPS) += cops.o
 obj-$(CONFIG_IPDDP) += ipddp.o
+obj-$(CONFIG_COPS) += cops.o
+obj-$(CONFIG_LTPC) += ltpc.o
 
-L_TARGET := appletalk.a
-L_OBJS   := $(filter-out $(export-objs), $(obj-y))
-LX_OBJS  := $(filter     $(export-objs), $(obj-y))
+O_TARGET := appletalk.o
+O_OBJS   := $(filter-out $(export-objs), $(obj-y))
+OX_OBJS  := $(filter     $(export-objs), $(obj-y))
 M_OBJS   := $(sort $(filter-out $(export-objs), $(obj-m)))
 MX_OBJS  := $(sort $(filter     $(export-objs), $(obj-m)))
 

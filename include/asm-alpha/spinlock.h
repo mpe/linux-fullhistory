@@ -5,8 +5,8 @@
 #include <linux/kernel.h>
 #include <asm/current.h>
 
-#define DEBUG_SPINLOCK 1
-#define DEBUG_RWLOCK 1
+#define DEBUG_SPINLOCK 0
+#define DEBUG_RWLOCK 0
 
 /*
  * Simple spin lock operations.  There are two variants, one clears IRQ's
@@ -37,9 +37,6 @@ typedef struct {
 
 #define spin_is_locked(x)	((x)->lock != 0)
 #define spin_unlock_wait(x)	({ do { barrier(); } while ((x)->lock); })
-
-typedef struct { unsigned long a[100]; } __dummy_lock_t;
-#define __dummy_lock(lock) (*(__dummy_lock_t *)(lock))
 
 #if DEBUG_SPINLOCK
 extern void spin_unlock(spinlock_t * lock);
@@ -83,8 +80,8 @@ static inline void spin_lock(spinlock_t * lock)
 	"	blbs	%0,2b\n"
 	"	br	1b\n"
 	".previous"
-	: "=r" (tmp), "=m" (__dummy_lock(lock))
-	: "m"(__dummy_lock(lock)));
+	: "=r" (tmp), "=m" (lock->lock)
+	: "m"(lock->lock) : "memory");
 }
 
 #define spin_trylock(lock) (!test_and_set_bit(0,(lock)))
@@ -119,9 +116,8 @@ static inline void write_lock(rwlock_t * lock)
 	"	bne	%1,6b\n"
 	"	br	1b\n"
 	".previous"
-	: "=m" (__dummy_lock(lock)), "=&r" (regx)
-	: "0" (__dummy_lock(lock))
-	);
+	: "=m" (*(volatile int *)lock), "=&r" (regx)
+	: "0" (*(volatile int *)lock) : "memory");
 }
 
 static inline void read_lock(rwlock_t * lock)
@@ -140,9 +136,8 @@ static inline void read_lock(rwlock_t * lock)
 	"	blbs	%1,6b\n"
 	"	br	1b\n"
 	".previous"
-	: "=m" (__dummy_lock(lock)), "=&r" (regx)
-	: "m" (__dummy_lock(lock))
-	);
+	: "=m" (*(volatile int *)lock), "=&r" (regx)
+	: "m" (*(volatile int *)lock) : "memory");
 }
 #endif /* DEBUG_RWLOCK */
 
@@ -156,6 +151,7 @@ static inline void read_unlock(rwlock_t * lock)
 {
 	long regx;
 	__asm__ __volatile__(
+	"	mb\n"
 	"1:	ldl_l	%1,%0\n"
 	"	addl	%1,2,%1\n"
 	"	stl_c	%1,%0\n"
@@ -163,8 +159,8 @@ static inline void read_unlock(rwlock_t * lock)
 	".subsection 2\n"
 	"6:	br	1b\n"
 	".previous"
-	: "=m" (__dummy_lock(lock)), "=&r" (regx)
-	: "m" (__dummy_lock(lock)));
+	: "=m" (*(volatile int *)lock), "=&r" (regx)
+	: "m" (*(volatile int *)lock) : "memory");
 }
 
 #endif /* _ALPHA_SPINLOCK_H */

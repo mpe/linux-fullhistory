@@ -822,7 +822,7 @@ int sock_create(int family, int type, int protocol, struct socket **res)
 	 *	Check protocol is in range
 	 */
 	if(family<0 || family>=NPROTO)
-		return -EINVAL;
+		return -EAFNOSUPPORT;
 
 	/* Compatibility.
 

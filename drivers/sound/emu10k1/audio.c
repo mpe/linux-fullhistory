@@ -363,6 +363,7 @@ static int emu10k1_audio_ioctl(struct inode *inode, struct file *file, unsigned 
 
 		if (get_user(val, (int *) arg))
 			return -EFAULT;
+
 		DPD(2, "val is %d\n", val);
 
 		if (val > 0) {
@@ -418,6 +419,7 @@ static int emu10k1_audio_ioctl(struct inode *inode, struct file *file, unsigned 
 
 		if (get_user(val, (int *) arg))
 			return -EFAULT;
+
 		DPD(2, " val is %d\n", val);
 
 		if (file->f_mode & FMODE_READ) {
@@ -464,6 +466,7 @@ static int emu10k1_audio_ioctl(struct inode *inode, struct file *file, unsigned 
 
 		if (get_user(val, (int *) arg))
 			return -EFAULT;
+
 		DPD(2, " val is %d\n", val);
 
 		if (val > 0) {
@@ -527,6 +530,7 @@ static int emu10k1_audio_ioctl(struct inode *inode, struct file *file, unsigned 
 
 		if (get_user(val, (int *) arg))
 			return -EFAULT;
+
 		DPD(2, " val is %d\n", val);
 
 		if (val != AFMT_QUERY) {

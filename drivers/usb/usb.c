@@ -284,7 +284,7 @@ void usb_claim_bandwidth (struct usb_device *dev, struct urb *urb, int bustime, 
 		dev->bus->bandwidth_int_reqs++;
 	urb->bandwidth = bustime;
 	
-	dbg("bw_alloc increased by %d to %d for %d requesters",
+	dbg("bandwidth alloc increased by %d to %d for %d requesters",
 		bustime,
 		dev->bus->bandwidth_allocated,
 		dev->bus->bandwidth_int_reqs + dev->bus->bandwidth_isoc_reqs);
@@ -303,7 +303,7 @@ void usb_release_bandwidth(struct usb_device *dev, struct urb *urb, int isoc)
 	else
 		dev->bus->bandwidth_int_reqs--;
 
-	dbg("bw_alloc reduced by %d to %d for %d requesters",
+	dbg("bandwidth alloc reduced by %d to %d for %d requesters",
 		urb->bandwidth,
 		dev->bus->bandwidth_allocated,
 		dev->bus->bandwidth_int_reqs + dev->bus->bandwidth_isoc_reqs);

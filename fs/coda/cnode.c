@@ -70,7 +70,7 @@ struct inode * coda_iget(struct super_block * sb, ViceFid * fid,
 
 	/* check if the inode is already initialized */
 	cii = ITOC(inode);
-	if (cii->c_magic == CODA_CNODE_MAGIC) {
+	if (cii->c_fid.Volume != 0 || cii->c_fid.Vnode != 0 || cii->c_fid.Unique != 0) {
 		/* see if it is the right one (might have an inode collision) */
 		if ( !coda_fideq(fid, &cii->c_fid) ) {
 			printk("coda_iget: initialized inode old %s new %s!\n",
@@ -85,7 +85,6 @@ struct inode * coda_iget(struct super_block * sb, ViceFid * fid,
 	/* new, empty inode found... initializing */
 
 	/* Initialize the Coda inode info structure */
-	cii->c_magic = CODA_CNODE_MAGIC;
 	cii->c_fid   = *fid;
 	cii->c_vnode = inode;
 
@@ -165,10 +164,6 @@ struct inode *coda_fid_to_inode(ViceFid *fid, struct super_block *sb)
 		return NULL;
 	}
 
-	if ( !fid ) {
-		printk("coda_fid_to_inode: no fid!\n");
-		return NULL;
-	}
 	CDEBUG(D_INODE, "%s\n", coda_f2s(fid));
 
 
@@ -180,7 +175,7 @@ struct inode *coda_fid_to_inode(ViceFid *fid, struct super_block *sb)
                 list_for_each(le, &sbi->sbi_cihead)
                 {
 			cii = list_entry(le, struct coda_inode_info, c_cilist);
-			if ( cii->c_magic != CODA_CNODE_MAGIC ) continue;
+			if ( cii->c_magic != CODA_CNODE_MAGIC ) BUG();
 
 			CDEBUG(D_DOWNCALL, "iterating, now doing %s, ino %ld\n",
 			       coda_f2s(&cii->c_fid), cii->c_vnode->i_ino);
@@ -208,7 +203,7 @@ struct inode *coda_fid_to_inode(ViceFid *fid, struct super_block *sb)
 	cii = ITOC(inode);
 
 	/* make sure this is the one we want */
-	if ( cii->c_magic == CODA_CNODE_MAGIC && coda_fideq(fid, &cii->c_fid) ) {
+	if ( coda_fideq(fid, &cii->c_fid) ) {
                 CDEBUG(D_INODE, "found %ld\n", inode->i_ino);
                 return inode;
         }

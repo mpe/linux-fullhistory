@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.86 2000/09/18 05:59:48 davem Exp $
+ * Version:	$Id: udp.c,v 1.87 2000/09/20 02:11:34 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -494,8 +494,6 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		if (usin->sin_family != AF_INET) {
 			if (usin->sin_family != AF_UNSPEC)
 				return -EINVAL;
-			if (net_ratelimit())
-				printk("Remind Kuznetsov, he has to repair %s eventually\n", current->comm);
 		}
 
 		ufh.daddr = usin->sin_addr.s_addr;
@@ -679,6 +677,8 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	if (flags & MSG_ERRQUEUE)
 		return ip_recv_error(sk, msg, len);
 
+
+ retry:
 	/*
 	 *	From here the generic datagram does a lot of the work. Come
 	 *	the finished NET3, it will do _ALL_ the work!
@@ -734,26 +734,21 @@ out:
 csum_copy_err:
 	UDP_INC_STATS_BH(UdpInErrors);
 
-	/* Clear queue. */
-	if (flags&MSG_PEEK) {
-		int clear = 0;
+	if (flags&(MSG_PEEK|MSG_DONTWAIT)) {
+		struct sk_buff *skb2; 
+
 		spin_lock_irq(&sk->receive_queue.lock);
-		if (skb == skb_peek(&sk->receive_queue)) {
+		skb2 = skb_peek(&sk->receive_queue); 
+		if ((flags & MSG_PEEK) && skb == skb2) { 
 			__skb_unlink(skb, &sk->receive_queue);
-			clear = 1;
 		}
 		spin_unlock_irq(&sk->receive_queue.lock);
-		if (clear)
-			kfree_skb(skb);
-	}
-
-	skb_free_datagram(sk, skb);
-
-	/* 
-	 * Error for blocking case is chosen to masquerade
-   	 * as some normal condition.
-	 */
-	return (flags&MSG_DONTWAIT) ? -EAGAIN : -EHOSTUNREACH;	
+		skb_free_datagram(sk, skb); 
+		if ((flags & MSG_DONTWAIT) && !skb2) 
+			return -EAGAIN; 
+	} else 
+		skb_free_datagram(sk, skb);
+	goto retry; 		
 }
 
 int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)

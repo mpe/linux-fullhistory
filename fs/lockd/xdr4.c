@@ -131,7 +131,7 @@ nlm4_decode_lock(u32 *p, struct nlm_lock *lock)
 	 || !(p = nlm4_decode_oh(p, &lock->oh)))
 		return NULL;
 
-	memset(fl, 0, sizeof(*fl));
+	locks_init_lock(fl);
 	fl->fl_owner = current->files;
 	fl->fl_pid   = ntohl(*p++);
 	fl->fl_flags = FL_POSIX;
@@ -322,6 +322,7 @@ nlm4svc_decode_shareargs(struct svc_rqst *rqstp, u32 *p, nlm_args *argp)
 	int		len;
 
 	memset(lock, 0, sizeof(*lock));
+	locks_init_lock(&lock->fl);
 	lock->fl.fl_pid = ~(u32) 0;
 
 	if (!(p = nlm4_decode_cookie(p, &argp->cookie))
@@ -438,6 +439,7 @@ nlm4clt_decode_testres(struct rpc_rqst *req, u32 *p, struct nlm_res *resp)
 		s64			start, end, len;
 
 		memset(&resp->lock, 0, sizeof(resp->lock));
+		locks_init_lock(fl);
 		excl = ntohl(*p++);
 		fl->fl_pid = ntohl(*p++);
 		if (!(p = nlm4_decode_oh(p, &resp->lock.oh)))

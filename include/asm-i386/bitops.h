@@ -21,29 +21,9 @@
 #define LOCK_PREFIX ""
 #endif
 
-/*
- * Function prototypes to keep gcc -Wall happy
- */
-extern void set_bit(int nr, volatile void * addr);
-extern void clear_bit(int nr, volatile void * addr);
-extern void change_bit(int nr, volatile void * addr);
-extern int test_and_set_bit(int nr, volatile void * addr);
-extern int test_and_clear_bit(int nr, volatile void * addr);
-extern int test_and_change_bit(int nr, volatile void * addr);
-extern int __constant_test_bit(int nr, const volatile void * addr);
-extern int __test_bit(int nr, volatile void * addr);
-extern int find_first_zero_bit(void * addr, unsigned size);
-extern int find_next_zero_bit (void * addr, int size, int offset);
-extern unsigned long ffz(unsigned long word);
+#define ADDR (*(volatile long *) addr)
 
-/*
- * Some hacks to defeat gcc over-optimizations..
- */
-struct __dummy { unsigned long a[100]; };
-#define ADDR (*(volatile struct __dummy *) addr)
-#define CONST_ADDR (*(volatile const struct __dummy *) addr)
-
-extern __inline__ void set_bit(int nr, volatile void * addr)
+static __inline__ void set_bit(int nr, volatile void * addr)
 {
 	__asm__ __volatile__( LOCK_PREFIX
 		"btsl %1,%0"
@@ -51,7 +31,21 @@ extern __inline__ void set_bit(int nr, volatile void * addr)
 		:"Ir" (nr));
 }
 
-extern __inline__ void clear_bit(int nr, volatile void * addr)
+/* WARNING: non atomic and it can be reordered! */
+static __inline__ void __set_bit(int nr, volatile void * addr)
+{
+	__asm__(
+		"btsl %1,%0"
+		:"=m" (ADDR)
+		:"Ir" (nr));
+}
+
+/*
+ * clear_bit() doesn't provide any barrier for the compiler.
+ */
+#define smp_mb__before_clear_bit()	barrier()
+#define smp_mb__after_clear_bit()	barrier()
+static __inline__ void clear_bit(int nr, volatile void * addr)
 {
 	__asm__ __volatile__( LOCK_PREFIX
 		"btrl %1,%0"
@@ -59,7 +53,7 @@ extern __inline__ void clear_bit(int nr, volatile void * addr)
 		:"Ir" (nr));
 }
 
-extern __inline__ void change_bit(int nr, volatile void * addr)
+static __inline__ void change_bit(int nr, volatile void * addr)
 {
 	__asm__ __volatile__( LOCK_PREFIX
 		"btcl %1,%0"
@@ -67,48 +61,77 @@ extern __inline__ void change_bit(int nr, volatile void * addr)
 		:"Ir" (nr));
 }
 
-extern __inline__ int test_and_set_bit(int nr, volatile void * addr)
+/*
+ * It will also imply a memory barrier, thus it must clobber memory
+ * to make sure to reload anything that was cached into registers
+ * outside _this_ critical section.
+ */
+static __inline__ int test_and_set_bit(int nr, volatile void * addr)
 {
 	int oldbit;
 
 	__asm__ __volatile__( LOCK_PREFIX
 		"btsl %2,%1\n\tsbbl %0,%0"
 		:"=r" (oldbit),"=m" (ADDR)
+		:"Ir" (nr) : "memory");
+	return oldbit;
+}
+
+/* WARNING: non atomic and it can be reordered! */
+static __inline__ int __test_and_set_bit(int nr, volatile void * addr)
+{
+	int oldbit;
+
+	__asm__(
+		"btsl %2,%1\n\tsbbl %0,%0"
+		:"=r" (oldbit),"=m" (ADDR)
 		:"Ir" (nr));
 	return oldbit;
 }
 
-extern __inline__ int test_and_clear_bit(int nr, volatile void * addr)
+static __inline__ int test_and_clear_bit(int nr, volatile void * addr)
 {
 	int oldbit;
 
 	__asm__ __volatile__( LOCK_PREFIX
 		"btrl %2,%1\n\tsbbl %0,%0"
 		:"=r" (oldbit),"=m" (ADDR)
+		:"Ir" (nr) : "memory");
+	return oldbit;
+}
+
+/* WARNING: non atomic and it can be reordered! */
+static __inline__ int __test_and_clear_bit(int nr, volatile void * addr)
+{
+	int oldbit;
+
+	__asm__(
+		"btrl %2,%1\n\tsbbl %0,%0"
+		:"=r" (oldbit),"=m" (ADDR)
 		:"Ir" (nr));
 	return oldbit;
 }
 
-extern __inline__ int test_and_change_bit(int nr, volatile void * addr)
+static __inline__ int test_and_change_bit(int nr, volatile void * addr)
 {
 	int oldbit;
 
 	__asm__ __volatile__( LOCK_PREFIX
 		"btcl %2,%1\n\tsbbl %0,%0"
 		:"=r" (oldbit),"=m" (ADDR)
-		:"Ir" (nr));
+		:"Ir" (nr) : "memory");
 	return oldbit;
 }
 
 /*
  * This routine doesn't need to be atomic.
  */
-extern __inline__ int __constant_test_bit(int nr, const volatile void * addr)
+static __inline__ int constant_test_bit(int nr, const volatile void * addr)
 {
 	return ((1UL << (nr & 31)) & (((const volatile unsigned int *) addr)[nr >> 5])) != 0;
 }
 
-extern __inline__ int __test_bit(int nr, volatile void * addr)
+static __inline__ int variable_test_bit(int nr, volatile void * addr)
 {
 	int oldbit;
 
@@ -121,13 +144,13 @@ extern __inline__ int __test_bit(int nr, volatile void * addr)
 
 #define test_bit(nr,addr) \
 (__builtin_constant_p(nr) ? \
- __constant_test_bit((nr),(addr)) : \
- __test_bit((nr),(addr)))
+ constant_test_bit((nr),(addr)) : \
+ variable_test_bit((nr),(addr)))
 
 /*
  * Find-bit routines..
  */
-extern __inline__ int find_first_zero_bit(void * addr, unsigned size)
+static __inline__ int find_first_zero_bit(void * addr, unsigned size)
 {
 	int d0, d1, d2;
 	int res;
@@ -151,7 +174,7 @@ extern __inline__ int find_first_zero_bit(void * addr, unsigned size)
 	return res;
 }
 
-extern __inline__ int find_next_zero_bit (void * addr, int size, int offset)
+static __inline__ int find_next_zero_bit (void * addr, int size, int offset)
 {
 	unsigned long * p = ((unsigned long *) addr) + (offset >> 5);
 	int set = 0, bit = offset & 31, res;
@@ -182,7 +205,7 @@ extern __inline__ int find_next_zero_bit (void * addr, int size, int offset)
  * ffz = Find First Zero in word. Undefined if no zero exists,
  * so code should check against ~0UL first..
  */
-extern __inline__ unsigned long ffz(unsigned long word)
+static __inline__ unsigned long ffz(unsigned long word)
 {
 	__asm__("bsfl %1,%0"
 		:"=r" (word)
@@ -198,7 +221,7 @@ extern __inline__ unsigned long ffz(unsigned long word)
  * differs in spirit from the above ffz (man ffs).
  */
 
-extern __inline__ int ffs(int x)
+static __inline__ int ffs(int x)
 {
 	int r;
 
@@ -222,16 +245,16 @@ extern __inline__ int ffs(int x)
 
 #ifdef __KERNEL__
 
-#define ext2_set_bit                 test_and_set_bit
-#define ext2_clear_bit               test_and_clear_bit
+#define ext2_set_bit                 __test_and_set_bit
+#define ext2_clear_bit               __test_and_clear_bit
 #define ext2_test_bit                test_bit
 #define ext2_find_first_zero_bit     find_first_zero_bit
 #define ext2_find_next_zero_bit      find_next_zero_bit
 
 /* Bitmap functions for the minix filesystem.  */
-#define minix_test_and_set_bit(nr,addr) test_and_set_bit(nr,addr)
-#define minix_set_bit(nr,addr) set_bit(nr,addr)
-#define minix_test_and_clear_bit(nr,addr) test_and_clear_bit(nr,addr)
+#define minix_test_and_set_bit(nr,addr) __test_and_set_bit(nr,addr)
+#define minix_set_bit(nr,addr) __set_bit(nr,addr)
+#define minix_test_and_clear_bit(nr,addr) __test_and_clear_bit(nr,addr)
 #define minix_test_bit(nr,addr) test_bit(nr,addr)
 #define minix_find_first_zero_bit(addr,size) find_first_zero_bit(addr,size)
 

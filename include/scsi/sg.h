@@ -11,9 +11,13 @@ Original driver (sg.h):
 Version 2 and 3 extensions to driver:
 *       Copyright (C) 1998 - 2000 Douglas Gilbert
 
-    Version: 3.1.16 (20000716)
-    This version is for 2.3/2.4 series kernels.
+    Version: 3.1.17 (20000921)
+    This version is for 2.4 series kernels.
 
+    Changes since 3.1.16 (20000716)
+    	- changes for new scsi subsystem initialization
+    	- change Scsi_Cmnd usage to Scsi_Request
+    	- cleanup for no procfs
     Changes since 3.1.15 (20000528)
     	- further (scatter gather) buffer length changes
     Changes since 3.1.14 (20000503)

@@ -1,3 +1,4 @@
+#define MSNFS	/* HACK HACK */
 /*
  *  linux/fs/locks.c
  *
@@ -108,14 +109,29 @@
  *  Use generic list implementation from <linux/list.h>.
  *  Sped up posix_locks_deadlock by only considering blocked locks.
  *  Matthew Wilcox <willy@thepuffingroup.com>, March, 2000.
+ *
+ *  Leases and LOCK_MAND
+ *  Matthew Wilcox <willy@linuxcare.com>, June, 2000.
+ *  Stephen Rothwell <sfr@linuxcare.com>, June, 2000.
  */
 
 #include <linux/malloc.h>
 #include <linux/file.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
+#include <linux/capability.h>
+#include <linux/sched.h>
 
+#include <asm/semaphore.h>
 #include <asm/uaccess.h>
+
+DECLARE_MUTEX(file_lock_sem);
+
+#define acquire_fl_sem()	down(&file_lock_sem)
+#define release_fl_sem()	up(&file_lock_sem)
+
+int leases_enable = 1;
+int lease_break_time = 45;
 
 LIST_HEAD(file_lock_list);
 static LIST_HEAD(blocked_list);
@@ -123,10 +139,14 @@ static LIST_HEAD(blocked_list);
 static kmem_cache_t *filelock_cache;
 
 /* Allocate an empty lock structure. */
-static struct file_lock *locks_alloc_lock(void)
+static struct file_lock *locks_alloc_lock(int account)
 {
 	struct file_lock *fl;
+	if (account && current->locks >= current->rlim[RLIMIT_LOCKS].rlim_cur)
+		return NULL;
 	fl = kmem_cache_alloc(filelock_cache, SLAB_KERNEL);
+	if (fl)
+		current->locks++;
 	return fl;
 }
 
@@ -137,17 +157,36 @@ static inline void locks_free_lock(struct file_lock *fl)
 		BUG();
 		return;
 	}
-
+	current->locks--;
 	if (waitqueue_active(&fl->fl_wait))
 		panic("Attempting to free lock with active wait queue");
 
 	if (!list_empty(&fl->fl_block))
 		panic("Attempting to free lock with active block list");
 
-	if (!list_empty(&fl->fl_link))
+	if (!list_empty(&fl->fl_link) || !list_empty(&fl->fl_list))
 		panic("Attempting to free lock on active lock list");
 
 	kmem_cache_free(filelock_cache, fl);
+}
+
+void locks_init_lock(struct file_lock *fl)
+{
+	INIT_LIST_HEAD(&fl->fl_link);
+	INIT_LIST_HEAD(&fl->fl_block);
+	INIT_LIST_HEAD(&fl->fl_list);
+	init_waitqueue_head(&fl->fl_wait);
+	fl->fl_next = NULL;
+	fl->fl_fasync = NULL;
+	fl->fl_owner = 0;
+	fl->fl_pid = 0;
+	fl->fl_file = NULL;
+	fl->fl_flags = 0;
+	fl->fl_type = 0;
+	fl->fl_start = fl->fl_end = 0;
+	fl->fl_notify = NULL;
+	fl->fl_insert = NULL;
+	fl->fl_remove = NULL;
 }
 
 /*
@@ -162,16 +201,13 @@ static void init_once(void *foo, kmem_cache_t *cache, unsigned long flags)
 					SLAB_CTOR_CONSTRUCTOR)
 		return;
 
-	lock->fl_next = NULL;
-	INIT_LIST_HEAD(&lock->fl_link);
-	INIT_LIST_HEAD(&lock->fl_block);
-	init_waitqueue_head(&lock->fl_wait);
+	locks_init_lock(lock);
 }
 
 /*
  * Initialize a new lock from an existing file_lock structure.
  */
-static void locks_copy_lock(struct file_lock *new, struct file_lock *fl)
+void locks_copy_lock(struct file_lock *new, struct file_lock *fl)
 {
 	new->fl_owner = fl->fl_owner;
 	new->fl_pid = fl->fl_pid;
@@ -189,7 +225,7 @@ static void locks_copy_lock(struct file_lock *new, struct file_lock *fl)
 /* Fill in a file_lock structure with an appropriate FLOCK lock. */
 static struct file_lock *flock_make_lock(struct file *filp, unsigned int type)
 {
-	struct file_lock *fl = locks_alloc_lock();
+	struct file_lock *fl = locks_alloc_lock(1);
 	if (fl == NULL)
 		return NULL;
 
@@ -205,6 +241,20 @@ static struct file_lock *flock_make_lock(struct file *filp, unsigned int type)
 	fl->fl_remove = NULL;
 	
 	return fl;
+}
+
+static int assign_type(struct file_lock *fl, int type)
+{
+	switch (type) {
+	case F_RDLCK:
+	case F_WRLCK:
+	case F_UNLCK:
+		fl->fl_type = type;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
 }
 
 /* Verify a "struct flock" and copy it to a "struct file_lock" as a POSIX
@@ -234,6 +284,8 @@ static int flock_to_posix_lock(struct file *filp, struct file_lock *fl,
 	fl->fl_end = start + l->l_len - 1;
 	if (l->l_len > 0 && fl->fl_end < 0)
 		return (0);
+	if (fl->fl_end > OFFT_OFFSET_MAX)
+		return 0;
 	fl->fl_start = start;	/* we record the absolute position */
 	if (l->l_len == 0)
 		fl->fl_end = OFFSET_MAX;
@@ -246,17 +298,7 @@ static int flock_to_posix_lock(struct file *filp, struct file_lock *fl,
 	fl->fl_insert = NULL;
 	fl->fl_remove = NULL;
 
-	switch (l->l_type) {
-	case F_RDLCK:
-	case F_WRLCK:
-	case F_UNLCK:
-		fl->fl_type = l->l_type;
-		break;
-	default:
-		return (0);
-	}
-
-	return (1);
+	return (assign_type(fl, l->l_type) == 0);
 }
 
 #if BITS_PER_LONG == 32
@@ -310,6 +352,32 @@ static int flock64_to_posix_lock(struct file *filp, struct file_lock *fl,
 }
 #endif
 
+/* Allocate a file_lock initialised to this type of lease */
+static int lease_alloc(struct file *filp, int type, struct file_lock **flp)
+{
+	struct file_lock *fl = locks_alloc_lock(1);
+	if (fl == NULL)
+		return -ENOMEM;
+
+	fl->fl_owner = current->files;
+	fl->fl_pid = current->pid;
+
+	fl->fl_file = filp;
+	fl->fl_flags = FL_LEASE;
+	if (assign_type(fl, type) != 0) {
+		locks_free_lock(fl);
+		return -EINVAL;
+	}
+	fl->fl_start = 0;
+	fl->fl_end = OFFSET_MAX;
+	fl->fl_notify = NULL;
+	fl->fl_insert = NULL;
+	fl->fl_remove = NULL;
+
+	*flp = fl;
+	return 0;
+}
+
 /* Check if two locks overlap each other.
  */
 static inline int locks_overlap(struct file_lock *fl1, struct file_lock *fl2)
@@ -335,8 +403,8 @@ locks_same_owner(struct file_lock *fl1, struct file_lock *fl2)
  */
 static void locks_delete_block(struct file_lock *waiter)
 {
-	list_del(&waiter->fl_block);
-	INIT_LIST_HEAD(&waiter->fl_block);
+	list_del(&waiter->fl_list);
+	INIT_LIST_HEAD(&waiter->fl_list);
 	list_del(&waiter->fl_link);
 	INIT_LIST_HEAD(&waiter->fl_link);
 }
@@ -349,15 +417,14 @@ static void locks_delete_block(struct file_lock *waiter)
 static void locks_insert_block(struct file_lock *blocker, 
 			       struct file_lock *waiter)
 {
-	if (!list_empty(&waiter->fl_block)) {
+	if (!list_empty(&waiter->fl_list)) {
 		printk(KERN_ERR "locks_insert_block: removing duplicated lock "
 			"(pid=%d %Ld-%Ld type=%d)\n", waiter->fl_pid,
 			waiter->fl_start, waiter->fl_end, waiter->fl_type);
 		locks_delete_block(waiter);
 	}
-	list_add_tail(&waiter->fl_block, &blocker->fl_block);
+	list_add_tail(&waiter->fl_list, &blocker->fl_block);
 	list_add(&waiter->fl_link, &blocked_list);
-	waiter->fl_next = blocker;
 }
 
 /* Wake up processes blocked waiting for blocker.
@@ -367,7 +434,7 @@ static void locks_insert_block(struct file_lock *blocker,
 static void locks_wake_up_blocks(struct file_lock *blocker, unsigned int wait)
 {
 	while (!list_empty(&blocker->fl_block)) {
-		struct file_lock *waiter = list_entry(blocker->fl_block.next, struct file_lock, fl_block);
+		struct file_lock *waiter = list_entry(blocker->fl_block.next, struct file_lock, fl_list);
 		/* N.B. Is it possible for the notify function to block?? */
 		if (waiter->fl_notify)
 			waiter->fl_notify(waiter);
@@ -402,10 +469,10 @@ static void locks_insert_lock(struct file_lock **pos, struct file_lock *fl)
 		fl->fl_insert(fl);
 }
 
-/* Delete a lock and free it.
- * First remove our lock from the active lock lists. Then call
- * locks_wake_up_blocks() to wake up processes that are blocked
- * waiting for this lock. Finally free the lock structure.
+/* Delete a lock and then free it.
+ * Remove our lock from the lock lists, wake up processes that are blocked
+ * waiting for this lock, notify the FS that the lock has been cleared and
+ * finally free the lock.
  */
 static void locks_delete_lock(struct file_lock **thisfl_p, unsigned int wait)
 {
@@ -417,6 +484,12 @@ static void locks_delete_lock(struct file_lock **thisfl_p, unsigned int wait)
 
 	list_del(&fl->fl_link);
 	INIT_LIST_HEAD(&fl->fl_link);
+
+	fasync_helper(0, fl->fl_file, 0, &fl->fl_fasync);
+	if (fl->fl_fasync != NULL){
+		printk("locks_delete_lock: fasync == %p\n", fl->fl_fasync);
+		fl->fl_fasync = NULL;
+	}
 
 	if (fl->fl_remove)
 		fl->fl_remove(fl);
@@ -431,17 +504,14 @@ static void locks_delete_lock(struct file_lock **thisfl_p, unsigned int wait)
 }
 
 /* Determine if lock sys_fl blocks lock caller_fl. Common functionality
- * checks for overlapping locks and shared/exclusive status.
+ * checks for shared/exclusive status of overlapping locks.
  */
 static int locks_conflict(struct file_lock *caller_fl, struct file_lock *sys_fl)
 {
-	if (!locks_overlap(caller_fl, sys_fl))
-		return (0);
-
 	switch (caller_fl->fl_type) {
 	case F_RDLCK:
 		return (sys_fl->fl_type == F_WRLCK);
-		
+
 	case F_WRLCK:
 		return (1);
 
@@ -465,6 +535,10 @@ static int posix_locks_conflict(struct file_lock *caller_fl, struct file_lock *s
 	    locks_same_owner(caller_fl, sys_fl))
 		return (0);
 
+	/* Check whether they overlap */
+	if (!locks_overlap(caller_fl, sys_fl))
+		return 0;
+
 	return (locks_conflict(caller_fl, sys_fl));
 }
 
@@ -479,8 +553,51 @@ static int flock_locks_conflict(struct file_lock *caller_fl, struct file_lock *s
 	if (!(sys_fl->fl_flags & FL_FLOCK) ||
 	    (caller_fl->fl_file == sys_fl->fl_file))
 		return (0);
+#ifdef MSNFS
+	if ((caller_fl->fl_type & LOCK_MAND) || (sys_fl->fl_type & LOCK_MAND))
+		return 0;
+#endif
 
 	return (locks_conflict(caller_fl, sys_fl));
+}
+
+int interruptible_sleep_on_locked(wait_queue_head_t *fl_wait, struct semaphore *sem, int timeout)
+{
+	int result = 0;
+	wait_queue_t wait;
+	init_waitqueue_entry(&wait, current);
+
+	__add_wait_queue(fl_wait, &wait);
+	current->state = TASK_INTERRUPTIBLE;
+	up(sem);
+	if (timeout == 0)
+		schedule();
+	else
+		result = schedule_timeout(timeout);
+	if (signal_pending(current))
+		result = -ERESTARTSYS;
+	down(sem);
+	remove_wait_queue(fl_wait, &wait);
+	current->state = TASK_RUNNING;
+	return result;
+}
+
+static int locks_block_on(struct file_lock *blocker, struct file_lock *waiter)
+{
+	int result;
+	locks_insert_block(blocker, waiter);
+	result = interruptible_sleep_on_locked(&waiter->fl_wait, &file_lock_sem, 0);
+	locks_delete_block(waiter);
+	return result;
+}
+
+static int locks_block_on_timeout(struct file_lock *blocker, struct file_lock *waiter, int time)
+{
+	int result;
+	locks_insert_block(blocker, waiter);
+	result = interruptible_sleep_on_locked(&waiter->fl_wait, &file_lock_sem, time);
+	locks_delete_block(waiter);
+	return result;
 }
 
 struct file_lock *
@@ -488,12 +605,14 @@ posix_test_lock(struct file *filp, struct file_lock *fl)
 {
 	struct file_lock *cfl;
 
+	acquire_fl_sem();
 	for (cfl = filp->f_dentry->d_inode->i_flock; cfl; cfl = cfl->fl_next) {
 		if (!(cfl->fl_flags & FL_POSIX))
 			continue;
 		if (posix_locks_conflict(cfl, fl))
 			break;
 	}
+	release_fl_sem();
 
 	return (cfl);
 }
@@ -550,14 +669,14 @@ int locks_mandatory_locked(struct inode *inode)
 	/*
 	 * Search the lock list for this inode for any POSIX locks.
 	 */
-	lock_kernel();
+	acquire_fl_sem();
 	for (fl = inode->i_flock; fl != NULL; fl = fl->fl_next) {
 		if (!(fl->fl_flags & FL_POSIX))
 			continue;
 		if (fl->fl_owner != owner)
 			break;
 	}
-	unlock_kernel();
+	release_fl_sem();
 	return fl ? -EAGAIN : 0;
 }
 
@@ -566,7 +685,7 @@ int locks_mandatory_area(int read_write, struct inode *inode,
 			 size_t count)
 {
 	struct file_lock *fl;
-	struct file_lock *new_fl = locks_alloc_lock();
+	struct file_lock *new_fl = locks_alloc_lock(0);
 	int error;
 
 	new_fl->fl_owner = current->files;
@@ -578,36 +697,29 @@ int locks_mandatory_area(int read_write, struct inode *inode,
 	new_fl->fl_end = offset + count - 1;
 
 	error = 0;
-	lock_kernel();
+	acquire_fl_sem();
 
 repeat:
 	/* Search the lock list for this inode for locks that conflict with
 	 * the proposed read/write.
 	 */
-	for (fl = inode->i_flock; ; fl = fl->fl_next) {
-		error = 0;
-		if (!fl)
-			break;
+	for (fl = inode->i_flock; fl != NULL; fl = fl->fl_next) {
 		if (!(fl->fl_flags & FL_POSIX))
 			continue;
-		/* Block for writes against a "read" lock,
-		 * and both reads and writes against a "write" lock.
-		 */
+		if (fl->fl_start > new_fl->fl_end)
+			break;
 		if (posix_locks_conflict(new_fl, fl)) {
 			error = -EAGAIN;
 			if (filp && (filp->f_flags & O_NONBLOCK))
 				break;
-			error = -ERESTARTSYS;
-			if (signal_pending(current))
-				break;
 			error = -EDEADLK;
 			if (posix_locks_deadlock(new_fl, fl))
 				break;
-
-			locks_insert_block(fl, new_fl);
-			interruptible_sleep_on(&new_fl->fl_wait);
-			locks_delete_block(new_fl);
-
+	
+			error = locks_block_on(fl, new_fl);
+			if (error != 0)
+				break;
+	
 			/*
 			 * If we've been sleeping someone might have
 			 * changed the permissions behind our back.
@@ -617,14 +729,14 @@ repeat:
 			goto repeat;
 		}
 	}
-	unlock_kernel();
 	locks_free_lock(new_fl);
+	release_fl_sem();
 	return error;
 }
 
-/* Try to create a FLOCK lock on filp. We always insert new FLOCK locks at
- * the head of the list, but that's secret knowledge known only to the next
- * two functions.
+/* Try to create a FLOCK lock on filp. We always insert new FLOCK locks
+ * at the head of the list, but that's secret knowledge known only to
+ * flock_lock_file and posix_lock_file.
  */
 static int flock_lock_file(struct file *filp, unsigned int lock_type,
 			   unsigned int wait)
@@ -643,7 +755,7 @@ static int flock_lock_file(struct file *filp, unsigned int lock_type,
 		error = -ENOLCK;
 		new_fl = flock_make_lock(filp, lock_type);
 		if (!new_fl)
-			goto out;
+			return error;
 	}
 
 	error = 0;
@@ -659,7 +771,7 @@ search:
 		}
 		before = &fl->fl_next;
 	}
-	/* change means that we are changing the type of an existing lock, or
+	/* change means that we are changing the type of an existing lock,
 	 * or else unlocking it.
 	 */
 	if (change) {
@@ -675,10 +787,6 @@ search:
 		goto out;
 
 repeat:
-	/* Check signals each time we start */
-	error = -ERESTARTSYS;
-	if (signal_pending(current))
-		goto out;
 	for (fl = inode->i_flock; (fl != NULL) && (fl->fl_flags & FL_FLOCK);
 	     fl = fl->fl_next) {
 		if (!flock_locks_conflict(new_fl, fl))
@@ -686,9 +794,9 @@ repeat:
 		error = -EAGAIN;
 		if (!wait)
 			goto out;
-		locks_insert_block(fl, new_fl);
-		interruptible_sleep_on(&new_fl->fl_wait);
-		locks_delete_block(new_fl);
+		error = locks_block_on(fl, new_fl);
+		if (error != 0)
+			goto out;
 		goto repeat;
 	}
 	locks_insert_lock(&inode->i_flock, new_fl);
@@ -701,7 +809,13 @@ out:
 	return error;
 }
 
-/* Add a POSIX style lock to a file.
+/**
+ *	posix_lock_file:
+ *	@filp: The file to apply the lock to
+ *	@caller: The lock to be applied
+ *	@wait: 1 to retry automatically, 0 to return -EAGAIN
+ *
+ * Add a POSIX style lock to a file.
  * We merge adjacent locks whenever possible. POSIX locks are sorted by owner
  * task, then by starting address
  *
@@ -728,12 +842,13 @@ int posix_lock_file(struct file *filp, struct file_lock *caller,
 	 * We may need two file_lock structures for this operation,
 	 * so we get them in advance to avoid races.
 	 */
-	new_fl  = locks_alloc_lock();
-	new_fl2 = locks_alloc_lock();
+	new_fl = locks_alloc_lock(0);
+	new_fl2 = locks_alloc_lock(0);
 	error = -ENOLCK; /* "no luck" */
 	if (!(new_fl && new_fl2))
 		goto out;
 
+	acquire_fl_sem();
 	if (caller->fl_type != F_UNLCK) {
   repeat:
 		for (fl = inode->i_flock; fl != NULL; fl = fl->fl_next) {
@@ -747,12 +862,10 @@ int posix_lock_file(struct file *filp, struct file_lock *caller,
 			error = -EDEADLK;
 			if (posix_locks_deadlock(caller, fl))
 				goto out;
-			error = -ERESTARTSYS;
-			if (signal_pending(current))
+
+			error = locks_block_on(fl, caller);
+			if (error != 0)
 				goto out;
-			locks_insert_block(fl, caller);
-			interruptible_sleep_on(&caller->fl_wait);
-			locks_delete_block(caller);
 			goto repeat;
   		}
   	}
@@ -880,6 +993,7 @@ int posix_lock_file(struct file *filp, struct file_lock *caller,
 		locks_wake_up_blocks(left, 0);
 	}
 out:
+	release_fl_sem();
 	/*
 	 * Free any unused locks.
 	 */
@@ -891,6 +1005,10 @@ out:
 }
 
 static inline int flock_translate_cmd(int cmd) {
+#ifdef MSNFS
+	if (cmd & LOCK_MAND)
+		return cmd & (LOCK_MAND | LOCK_RW);
+#endif
 	switch (cmd &~ LOCK_NB) {
 	case LOCK_SH:
 		return F_RDLCK;
@@ -902,8 +1020,270 @@ static inline int flock_translate_cmd(int cmd) {
 	return -EINVAL;
 }
 
-/* flock() system call entry point. Apply a FL_FLOCK style lock to
- * an open file descriptor.
+/**
+ *	__get_lease	-	revoke all outstanding leases on file
+ *	@inode: the inode of the file to return
+ *	@mode: the open mode (read or write)
+ *
+ *	get_lease (inlined for speed) has checked there already
+ *	is a lease on this file.  Leases are broken on a call to open()
+ *	or truncate().  This function can sleep unless you
+ *	specified %O_NONBLOCK to your open().
+ */
+int __get_lease(struct inode *inode, unsigned int mode)
+{
+	int error = 0, future;
+	struct file_lock *new_fl, *flock;
+	struct file_lock *fl;
+	int alloc_err;
+
+	alloc_err = lease_alloc(NULL, 0, &new_fl);
+
+	acquire_fl_sem();
+	flock = inode->i_flock;
+	if (flock->fl_type & F_INPROGRESS) {
+		if ((mode & O_NONBLOCK)
+		    || (flock->fl_owner == current->files)) {
+			error = -EWOULDBLOCK;
+			goto out;
+		}
+		if (alloc_err != 0) {
+			error = alloc_err;
+			goto out;
+		}
+		do {
+			error = locks_block_on(flock, new_fl);
+			if (error != 0)
+				goto out;
+			flock = inode->i_flock;
+			if (!(flock && (flock->fl_flags & FL_LEASE)))
+				goto out;
+		} while (flock->fl_type & F_INPROGRESS);
+	}
+
+	if (mode & FMODE_WRITE) {
+		/* If we want write access, we have to revoke any lease. */
+		future = F_UNLCK | F_INPROGRESS;
+	} else if (flock->fl_type & F_WRLCK) {
+		/* Downgrade the exclusive lease to a read-only lease. */
+		future = F_RDLCK | F_INPROGRESS;
+	} else {
+		/* the existing lease was read-only, so we can read too. */
+		goto out;
+	}
+
+	if (alloc_err && (flock->fl_owner != current->files)) {
+		error = alloc_err;
+		goto out;
+	}
+
+	fl = flock;
+	do {
+		fl->fl_type = future;
+		fl = fl->fl_next;
+	} while (fl != NULL && (fl->fl_flags & FL_LEASE));
+
+	kill_fasync(&flock->fl_fasync, SIGIO, POLL_MSG);
+
+	if ((mode & O_NONBLOCK) || (flock->fl_owner == current->files)) {
+		error = -EWOULDBLOCK;
+		goto out;
+	}
+
+	if (lease_break_time > 0)
+		error = lease_break_time * HZ;
+	else
+		error = 0;
+restart:
+	error = locks_block_on_timeout(flock, new_fl, error);
+	if (error == 0) {
+		/* We timed out.  Unilaterally break the lease. */
+		locks_delete_lock(&inode->i_flock, 0);
+		printk(KERN_WARNING "lease timed out\n");
+	} else if (error > 0) {
+		flock = inode->i_flock;
+		if (flock && (flock->fl_flags & FL_LEASE))
+			goto restart;
+		error = 0;
+	}
+
+out:
+	release_fl_sem();
+	if (!alloc_err)
+		locks_free_lock(new_fl);
+	return error;
+}
+
+/**
+ *	lease_get_mtime
+ *	@inode: the inode
+ *
+ * This is to force NFS clients to flush their caches for files with
+ * exclusive leases.  The justification is that if someone has an
+ * exclusive lease, then they could be modifiying it.
+ */
+time_t lease_get_mtime(struct inode *inode)
+{
+	struct file_lock *flock = inode->i_flock;
+	if (flock && (flock->fl_flags & FL_LEASE) && (flock->fl_type & F_WRLCK))
+		return CURRENT_TIME;
+	return inode->i_mtime;
+}
+
+/**
+ *	fcntl_getlease - Enquire what lease is currently active
+ *	@filp: the file
+ *
+ *	The value returned by this function will be one of
+ *
+ *	%F_RDLCK to indicate a read-only (type II) lease is held.
+ *
+ *	%F_WRLCK to indicate an exclusive lease is held.
+ *
+ *	XXX: sfr & i disagree over whether F_INPROGRESS
+ *	should be returned to userspace.
+ */
+int fcntl_getlease(struct file *filp)
+{
+	struct file_lock *fl;
+	
+	fl = filp->f_dentry->d_inode->i_flock;
+	if ((fl == NULL) || ((fl->fl_flags & FL_LEASE) == 0))
+		return F_UNLCK;
+	return fl->fl_type & ~F_INPROGRESS;
+}
+
+/* We already had a lease on this file; just change its type */
+static int lease_modify(struct file_lock **before, int arg, int fd, struct file *filp)
+{
+	struct file_lock *fl = *before;
+	int error = assign_type(fl, arg);
+	if (error < 0)
+		goto out;
+
+	locks_wake_up_blocks(fl, 0);
+
+	if (arg == F_UNLCK) {
+		filp->f_owner.pid = 0;
+		filp->f_owner.uid = 0;
+		filp->f_owner.euid = 0;
+		filp->f_owner.signum = 0;
+		locks_delete_lock(before, 0);
+		fasync_helper(fd, filp, 0, &fl->fl_fasync);
+	}
+
+out:
+	return error;
+}
+
+/**
+ *	fcntl_setlease	-	sets a lease on an open file
+ *	@fd: open file descriptor
+ *	@filp: file pointer
+ *	@arg: type of lease to obtain
+ *
+ *	Call this fcntl to establish a lease on the file.
+ *	Note that you also need to call %F_SETSIG to
+ *	receive a signal when the lease is broken.
+ */
+int fcntl_setlease(unsigned int fd, struct file *filp, long arg)
+{
+	struct file_lock *fl, **before, **my_before = NULL;
+	struct dentry *dentry;
+	struct inode *inode;
+	int error, rdlease_count = 0, wrlease_count = 0;
+
+	dentry = filp->f_dentry;
+	inode = dentry->d_inode;
+
+	if ((current->fsuid != inode->i_uid) && !capable(CAP_LEASE))
+		return -EACCES;
+	if (!S_ISREG(inode->i_mode))
+		return -EINVAL;
+
+	/*
+	 * FIXME: What about F_RDLCK and files open for writing?
+	 */
+	if ((arg == F_WRLCK)
+	    && ((atomic_read(&dentry->d_count) > 1)
+		|| (atomic_read(&inode->i_count) > 1)))
+		return -EAGAIN;
+
+	before = &inode->i_flock;
+
+	acquire_fl_sem();
+
+	while ((fl = *before) != NULL) {
+		if (fl->fl_flags != FL_LEASE)
+			break;
+		if (fl->fl_file == filp)
+			my_before = before;
+		else if (fl->fl_type & F_WRLCK)
+			wrlease_count++;
+		else
+			rdlease_count++;
+		before = &fl->fl_next;
+	}
+
+	if ((arg == F_RDLCK && (wrlease_count > 0)) ||
+	    (arg == F_WRLCK && ((rdlease_count + wrlease_count) > 0))) {
+		error = -EAGAIN;
+		goto out_unlock;
+	}
+
+	if (my_before != NULL) {
+		error = lease_modify(my_before, arg, fd, filp);
+		goto out_unlock;
+	}
+
+	if (arg == F_UNLCK) {
+		error = 0;
+		goto out_unlock;
+	}
+
+	if (!leases_enable) {
+		error = -EINVAL;
+		goto out_unlock;
+	}
+
+	error = lease_alloc(filp, arg, &fl);
+	if (error)
+		goto out_unlock;
+
+	error = fasync_helper(fd, filp, 1, &fl->fl_fasync);
+	if (error < 0) {
+		locks_free_lock(fl);
+		goto out_unlock;
+	}
+	fl->fl_next = *before;
+	*before = fl;
+	list_add(&fl->fl_link, &file_lock_list);
+	filp->f_owner.pid = current->pid;
+	filp->f_owner.uid = current->uid;
+	filp->f_owner.euid = current->euid;
+out_unlock:
+	release_fl_sem();
+	return error;
+}
+
+/**
+ *	sys_flock: - flock() system call.
+ *	@fd: the file descriptor to lock.
+ *	@cmd: the type of lock to apply.
+ *
+ *	Apply a %FL_FLOCK style lock to an open file descriptor.
+ *	The @cmd can be one of
+ *
+ *	%LOCK_SH -- a shared lock.
+ *
+ *	%LOCK_EX -- an exclusive lock.
+ *
+ *	%LOCK_UN -- remove an existing lock.
+ *
+ *	%LOCK_MAND -- a `mandatory' flock.  This exists to emulate Windows Share Modes.
+ *
+ *	%LOCK_MAND can be combined with %LOCK_READ or %LOCK_WRITE to allow other
+ *	processes read and write access respectively.
  */
 asmlinkage long sys_flock(unsigned int fd, unsigned int cmd)
 {
@@ -921,13 +1301,17 @@ asmlinkage long sys_flock(unsigned int fd, unsigned int cmd)
 	type = error;
 
 	error = -EBADF;
-	if ((type != F_UNLCK) && !(filp->f_mode & 3))
+	if ((type != F_UNLCK)
+#ifdef MSNFS
+		&& !(type & LOCK_MAND)
+#endif
+		&& !(filp->f_mode & 3))
 		goto out_putf;
 
-	lock_kernel();
+	acquire_fl_sem();
 	error = flock_lock_file(filp, type,
 				(cmd & (LOCK_UN | LOCK_NB)) ? 0 : 1);
-	unlock_kernel();
+	release_fl_sem();
 
 out_putf:
 	fput(filp);
@@ -941,7 +1325,7 @@ out:
 int fcntl_getlk(unsigned int fd, struct flock *l)
 {
 	struct file *filp;
-	struct file_lock *fl, *file_lock = locks_alloc_lock();
+	struct file_lock *fl, file_lock;
 	struct flock flock;
 	int error;
 
@@ -958,20 +1342,20 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 		goto out;
 
 	error = -EINVAL;
-	if (!flock_to_posix_lock(filp, file_lock, &flock))
+	if (!flock_to_posix_lock(filp, &file_lock, &flock))
 		goto out_putf;
 
 	if (filp->f_op->lock) {
-		error = filp->f_op->lock(filp, F_GETLK, file_lock);
+		error = filp->f_op->lock(filp, F_GETLK, &file_lock);
 		if (error < 0)
 			goto out_putf;
 		else if (error == LOCK_USE_CLNT)
 		  /* Bypass for NFS with no locking - 2.0.36 compat */
-		  fl = posix_test_lock(filp, file_lock);
+		  fl = posix_test_lock(filp, &file_lock);
 		else
-		  fl = (file_lock->fl_type == F_UNLCK ? NULL : file_lock);
+		  fl = (file_lock.fl_type == F_UNLCK ? NULL : &file_lock);
 	} else {
-		fl = posix_test_lock(filp, file_lock);
+		fl = posix_test_lock(filp, &file_lock);
 	}
  
 	flock.l_type = F_UNLCK;
@@ -1002,7 +1386,6 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 out_putf:
 	fput(filp);
 out:
-	locks_free_lock(file_lock);
 	return error;
 }
 
@@ -1012,7 +1395,7 @@ out:
 int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 {
 	struct file *filp;
-	struct file_lock *file_lock = locks_alloc_lock();
+	struct file_lock *file_lock = locks_alloc_lock(0);
 	struct flock flock;
 	struct inode *inode;
 	int error;
@@ -1107,7 +1490,7 @@ out:
 int fcntl_getlk64(unsigned int fd, struct flock64 *l)
 {
 	struct file *filp;
-	struct file_lock *fl, *file_lock = locks_alloc_lock();
+	struct file_lock *fl, file_lock;
 	struct flock64 flock;
 	int error;
 
@@ -1124,20 +1507,20 @@ int fcntl_getlk64(unsigned int fd, struct flock64 *l)
 		goto out;
 
 	error = -EINVAL;
-	if (!flock64_to_posix_lock(filp, file_lock, &flock))
+	if (!flock64_to_posix_lock(filp, &file_lock, &flock))
 		goto out_putf;
 
 	if (filp->f_op->lock) {
-		error = filp->f_op->lock(filp, F_GETLK, file_lock);
+		error = filp->f_op->lock(filp, F_GETLK, &file_lock);
 		if (error < 0)
 			goto out_putf;
 		else if (error == LOCK_USE_CLNT)
 		  /* Bypass for NFS with no locking - 2.0.36 compat */
-		  fl = posix_test_lock(filp, file_lock);
+		  fl = posix_test_lock(filp, &file_lock);
 		else
-		  fl = (file_lock->fl_type == F_UNLCK ? NULL : file_lock);
+		  fl = (file_lock.fl_type == F_UNLCK ? NULL : &file_lock);
 	} else {
-		fl = posix_test_lock(filp, file_lock);
+		fl = posix_test_lock(filp, &file_lock);
 	}
  
 	flock.l_type = F_UNLCK;
@@ -1156,7 +1539,6 @@ int fcntl_getlk64(unsigned int fd, struct flock64 *l)
 out_putf:
 	fput(filp);
 out:
-	locks_free_lock(file_lock);
 	return error;
 }
 
@@ -1166,7 +1548,7 @@ out:
 int fcntl_setlk64(unsigned int fd, unsigned int cmd, struct flock64 *l)
 {
 	struct file *filp;
-	struct file_lock *file_lock = locks_alloc_lock();
+	struct file_lock *file_lock = locks_alloc_lock(0);
 	struct flock64 flock;
 	struct inode *inode;
 	int error;
@@ -1262,17 +1644,16 @@ void locks_remove_posix(struct file *filp, fl_owner_t owner)
 		 */
 		return;
 	}
-	lock_kernel();
-repeat:
+	acquire_fl_sem();
 	before = &inode->i_flock;
 	while ((fl = *before) != NULL) {
 		if ((fl->fl_flags & FL_POSIX) && fl->fl_owner == owner) {
 			locks_delete_lock(before, 0);
-			goto repeat;
+			continue;
 		}
 		before = &fl->fl_next;
 	}
-	unlock_kernel();
+	release_fl_sem();
 }
 
 /*
@@ -1281,76 +1662,104 @@ repeat:
 void locks_remove_flock(struct file *filp)
 {
 	struct inode * inode = filp->f_dentry->d_inode; 
-	struct file_lock file_lock, *fl;
+	struct file_lock *fl;
 	struct file_lock **before;
+
 	if (!inode->i_flock)
 		return;
 
-	lock_kernel();
-repeat:
+	acquire_fl_sem();
 	before = &inode->i_flock;
+
 	while ((fl = *before) != NULL) {
-		if ((fl->fl_flags & FL_FLOCK) && fl->fl_file == filp) {
-			int (*lock)(struct file *, int, struct file_lock *);
-			lock = NULL;
-			if (filp->f_op)
-				lock = filp->f_op->lock;
-			if (lock) {
-				file_lock = *fl;
-				file_lock.fl_type = F_UNLCK;
-			}
+		if ((fl->fl_flags & (FL_FLOCK|FL_LEASE))
+		    && (fl->fl_file == filp)) {
 			locks_delete_lock(before, 0);
-			if (lock) {
-				lock(filp, F_SETLK, &file_lock);
-				/* List may have changed: */
-				goto repeat;
-			}
 			continue;
-		}
+ 		}
 		before = &fl->fl_next;
 	}
-	unlock_kernel();
+	release_fl_sem();
 }
 
-/* The following two are for the benefit of lockd.
+/**
+ *	posix_block_lock - blocks waiting for a file lock
+ *	@blocker: the lock which is blocking
+ *	@waiter: the lock which conflicts and has to wait
+ *
+ * lockd needs to block waiting for locks.
  */
 void
 posix_block_lock(struct file_lock *blocker, struct file_lock *waiter)
 {
-	lock_kernel();
+	acquire_fl_sem();
 	locks_insert_block(blocker, waiter);
-	unlock_kernel();
+	release_fl_sem();
 }
 
+/**
+ *	posix_unblock_lock - stop waiting for a file lock
+ *	@waiter: the lock which was waiting
+ *
+ *	lockd needs to block waiting for locks.
+ */
 void
 posix_unblock_lock(struct file_lock *waiter)
 {
-	locks_delete_block(waiter);
-	return;
+	acquire_fl_sem();
+	if (!list_empty(&waiter->fl_list)) {
+		locks_delete_block(waiter);
+		wake_up(&waiter->fl_wait);
+	}
+	release_fl_sem();
 }
 
 static void lock_get_status(char* out, struct file_lock *fl, int id, char *pfx)
 {
-	struct inode *inode;
+	struct inode *inode = NULL;
 
-	inode = fl->fl_file->f_dentry->d_inode;
+	if (fl->fl_file != NULL)
+		inode = fl->fl_file->f_dentry->d_inode;
 
 	out += sprintf(out, "%d:%s ", id, pfx);
 	if (fl->fl_flags & FL_POSIX) {
 		out += sprintf(out, "%6s %s ",
 			     (fl->fl_flags & FL_ACCESS) ? "ACCESS" : "POSIX ",
+			     (inode == NULL) ? "*NOINODE*" :
 			     (IS_MANDLOCK(inode) &&
 			      (inode->i_mode & (S_IXGRP | S_ISGID)) == S_ISGID) ?
 			     "MANDATORY" : "ADVISORY ");
+	} else if (fl->fl_flags & FL_FLOCK) {
+#ifdef MSNFS
+		if (fl->fl_type & LOCK_MAND) {
+			out += sprintf(out, "FLOCK  MSNFS     ");
+		} else
+#endif
+			out += sprintf(out, "FLOCK  ADVISORY  ");
+	} else if (fl->fl_flags & FL_LEASE) {
+		out += sprintf(out, "LEASE  MANDATORY ");
+	} else {
+		out += sprintf(out, "UNKNOWN UNKNOWN  ");
 	}
-	else {
-		out += sprintf(out, "FLOCK  ADVISORY  ");
-	}
-	out += sprintf(out, "%s ", (fl->fl_type == F_RDLCK) ? "READ " : "WRITE");
-	out += sprintf(out, "%d %s:%ld %Ld %Ld ",
+#ifdef MSNFS
+	if (fl->fl_type & LOCK_MAND) {
+		out += sprintf(out, "%s ",
+			       (fl->fl_type & LOCK_READ)
+			       ? (fl->fl_type & LOCK_WRITE) ? "RW   " : "READ "
+			       : (fl->fl_type & LOCK_WRITE) ? "WRITE" : "NONE ");
+	} else
+#endif
+		out += sprintf(out, "%s ",
+			       (fl->fl_type & F_WRLCK) ? "WRITE" : "READ ");
+	out += sprintf(out, "%d %s:%ld ",
 		     fl->fl_pid,
-		     kdevname(inode->i_dev), inode->i_ino,
-		     (long long)fl->fl_start, (long long)fl->fl_end);
+		     inode ? kdevname(inode->i_dev) : "<none>",
+		     inode ? inode->i_ino : 0);
+	out += sprintf(out, "%Ld ", fl->fl_start);
+	if (fl->fl_end == OFFSET_MAX)
+		out += sprintf(out, "EOF ");
+	else
+		out += sprintf(out, "%Ld ", fl->fl_end);
 	sprintf(out, "%08lx %08lx %08lx %08lx %08lx\n",
 		(long)fl, (long)fl->fl_link.prev, (long)fl->fl_link.next,
 		(long)fl->fl_next, (long)fl->fl_block.next);
@@ -1378,6 +1787,14 @@ static void move_lock_status(char **p, off_t* pos, off_t offset)
 	*pos += len;
 }
 
+/**
+ *	get_locks_status	-	reports lock usage in /proc/locks
+ *	@buffer: address in userspace to write into
+ *	@start: ?
+ *	@offset: how far we are through the buffer
+ *	@length: how much to read
+ */
+
 int get_locks_status(char *buffer, char **start, off_t offset, int length)
 {
 	struct list_head *tmp;
@@ -1385,7 +1802,7 @@ int get_locks_status(char *buffer, char **start, off_t offset, int length)
 	off_t pos = 0;
 	int i = 0;
 
-	lock_kernel();
+	acquire_fl_sem();
 	list_for_each(tmp, &file_lock_list) {
 		struct list_head *btmp;
 		struct file_lock *fl = list_entry(tmp, struct file_lock, fl_link);
@@ -1397,7 +1814,7 @@ int get_locks_status(char *buffer, char **start, off_t offset, int length)
 
 		list_for_each(btmp, &fl->fl_block) {
 			struct file_lock *bfl = list_entry(btmp,
-					struct file_lock, fl_block);
+					struct file_lock, fl_list);
 			lock_get_status(q, bfl, i, " ->");
 			move_lock_status(&q, &pos, offset);
 
@@ -1406,12 +1823,88 @@ int get_locks_status(char *buffer, char **start, off_t offset, int length)
 		}
 	}
 done:
-	unlock_kernel();
+	release_fl_sem();
 	*start = buffer;
 	if(q-buffer < length)
 		return (q-buffer);
 	return length;
 }
+
+#ifdef MSNFS
+/**
+ *	lock_may_read - checks that the region is free of locks
+ *	@inode: the inode that is being read
+ *	@start: the first byte to read
+ *	@len: the number of bytes to read
+ *
+ *	Emulates Windows locking requirements.  Whole-file
+ *	mandatory locks (share modes) can prohibit a read and
+ *	byte-range POSIX locks can prohibit a read if they overlap.
+ *
+ *	N.B. this function is only ever called
+ *	from knfsd and ownership of locks is never checked.
+ */
+int lock_may_read(struct inode *inode, loff_t start, unsigned long len)
+{
+	struct file_lock *fl;
+	int result = 1;
+	acquire_fl_sem();
+	for (fl = inode->i_flock; fl != NULL; fl = fl->fl_next) {
+		if (fl->fl_flags == FL_POSIX) {
+			if (fl->fl_type == F_RDLCK)
+				continue;
+			if ((fl->fl_end < start) || (fl->fl_start > (start + len)))
+				continue;
+		} else if (fl->fl_flags == FL_FLOCK) {
+			if (!(fl->fl_type & LOCK_MAND))
+				continue;
+			if (fl->fl_type & LOCK_READ)
+				continue;
+		} else
+			continue;
+		result = 0;
+		break;
+	}
+	release_fl_sem();
+	return result;
+}
+
+/**
+ *	lock_may_write - checks that the region is free of locks
+ *	@inode: the inode that is being written
+ *	@start: the first byte to write
+ *	@len: the number of bytes to write
+ *
+ *	Emulates Windows locking requirements.  Whole-file
+ *	mandatory locks (share modes) can prohibit a write and
+ *	byte-range POSIX locks can prohibit a write if they overlap.
+ *
+ *	N.B. this function is only ever called
+ *	from knfsd and ownership of locks is never checked.
+ */
+int lock_may_write(struct inode *inode, loff_t start, unsigned long len)
+{
+	struct file_lock *fl;
+	int result = 1;
+	acquire_fl_sem();
+	for (fl = inode->i_flock; fl != NULL; fl = fl->fl_next) {
+		if (fl->fl_flags == FL_POSIX) {
+			if ((fl->fl_end < start) || (fl->fl_start > (start + len)))
+				continue;
+		} else if (fl->fl_flags == FL_FLOCK) {
+			if (!(fl->fl_type & LOCK_MAND))
+				continue;
+			if (fl->fl_type & LOCK_WRITE)
+				continue;
+		} else
+			continue;
+		result = 0;
+		break;
+	}
+	release_fl_sem();
+	return result;
+}
+#endif
 
 static int __init filelock_init(void)
 {

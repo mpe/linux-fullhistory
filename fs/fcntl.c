@@ -4,8 +4,10 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#include <linux/init.h>
 #include <linux/mm.h>
 #include <linux/file.h>
+#include <linux/dnotify.h>
 #include <linux/smp_lock.h>
 #include <linux/slab.h>
 
@@ -14,6 +16,8 @@
 #include <asm/uaccess.h>
 
 extern int sock_fcntl (struct file *, unsigned int cmd, unsigned long arg);
+extern int fcntl_setlease(unsigned int fd, struct file *filp, long arg);
+extern int fcntl_getlease(struct file *filp);
 
 /* Expand files.  Return <0 on error; 0 nothing done; 1 files expanded,
  * we may have blocked. 
@@ -195,6 +199,7 @@ asmlinkage long sys_dup(unsigned int fildes)
 static int setfl(int fd, struct file * filp, unsigned long arg)
 {
 	struct inode * inode = filp->f_dentry->d_inode;
+	int error;
 
 	/*
 	 * In the case of an append-only file, O_APPEND
@@ -205,8 +210,11 @@ static int setfl(int fd, struct file * filp, unsigned long arg)
 
 	/* Did FASYNC state change? */
 	if ((arg ^ filp->f_flags) & FASYNC) {
-		if (filp->f_op && filp->f_op->fasync)
-			filp->f_op->fasync(fd, filp, (arg & FASYNC) != 0);
+		if (filp->f_op && filp->f_op->fasync) {
+			error = filp->f_op->fasync(fd, filp, (arg & FASYNC) != 0);
+			if (error < 0)
+				return error;
+		}
 	}
 
 	/* required for strict SunOS emulation */
@@ -221,11 +229,10 @@ static int setfl(int fd, struct file * filp, unsigned long arg)
 static long do_fcntl(unsigned int fd, unsigned int cmd,
 		     unsigned long arg, struct file * filp)
 {
-	long err = 0;
+	long err = -EINVAL;
 
 	switch (cmd) {
 		case F_DUPFD:
-			err = -EINVAL;
 			if (arg < NR_OPEN) {
 				get_file(filp);
 				err = dupfd(filp, arg);
@@ -235,20 +242,21 @@ static long do_fcntl(unsigned int fd, unsigned int cmd,
 			err = get_close_on_exec(fd);
 			break;
 		case F_SETFD:
+			err = 0;
 			set_close_on_exec(fd, arg&1);
 			break;
 		case F_GETFL:
 			err = filp->f_flags;
 			break;
 		case F_SETFL:
+			lock_kernel();
 			err = setfl(fd, filp, arg);
+			unlock_kernel();
 			break;
 		case F_GETLK:
 			err = fcntl_getlk(fd, (struct flock *) arg);
 			break;
 		case F_SETLK:
-			err = fcntl_setlk(fd, cmd, (struct flock *) arg);
-			break;
 		case F_SETLKW:
 			err = fcntl_setlk(fd, cmd, (struct flock *) arg);
 			break;
@@ -263,11 +271,14 @@ static long do_fcntl(unsigned int fd, unsigned int cmd,
 			err = filp->f_owner.pid;
 			break;
 		case F_SETOWN:
+			lock_kernel();
 			filp->f_owner.pid = arg;
 			filp->f_owner.uid = current->uid;
 			filp->f_owner.euid = current->euid;
+			err = 0;
 			if (S_ISSOCK (filp->f_dentry->d_inode->i_mode))
 				err = sock_fcntl (filp, F_SETOWN, arg);
+			unlock_kernel();
 			break;
 		case F_GETSIG:
 			err = filp->f_owner.signum;
@@ -275,11 +286,19 @@ static long do_fcntl(unsigned int fd, unsigned int cmd,
 		case F_SETSIG:
 			/* arg == 0 restores default behaviour. */
 			if (arg < 0 || arg > _NSIG) {
-				err = -EINVAL;
 				break;
 			}
 			err = 0;
 			filp->f_owner.signum = arg;
+			break;
+		case F_GETLEASE:
+			err = fcntl_getlease(filp);
+			break;
+		case F_SETLEASE:
+			err = fcntl_setlease(fd, filp, arg);
+			break;
+		case F_NOTIFY:
+			err = fcntl_dirnotify(fd, filp, arg);
 			break;
 		default:
 			/* sockets need a few special fcntls. */
@@ -301,9 +320,7 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	if (!filp)
 		goto out;
 
-	lock_kernel();
 	err = do_fcntl(fd, cmd, arg, filp);
-	unlock_kernel();
 
  	fput(filp);
 out:
@@ -356,7 +373,7 @@ static long band_table[NSIGPOLL] = {
 
 static void send_sigio_to_task(struct task_struct *p,
 			       struct fown_struct *fown, 
-			       struct fasync_struct *fa,
+			       int fd,
 			       int reason)
 {
 	if ((fown->euid != 0) &&
@@ -384,7 +401,7 @@ static void send_sigio_to_task(struct task_struct *p,
 				si.si_band  = ~0L;
 			else
 				si.si_band = band_table[reason - POLL_IN];
-			si.si_fd    = fa->fa_fd;
+			si.si_fd    = fd;
 			if (!send_sig_info(fown->signum, &si, p))
 				break;
 		/* fall-through: fall back on the old plain SIGIO signal */
@@ -393,15 +410,14 @@ static void send_sigio_to_task(struct task_struct *p,
 	}
 }
 
-static void send_sigio(struct fown_struct *fown, struct fasync_struct *fa, 
-		       int band)
+void send_sigio(struct fown_struct *fown, int fd, int band)
 {
 	struct task_struct * p;
 	int   pid	= fown->pid;
 	
 	read_lock(&tasklist_lock);
 	if ( (pid > 0) && (p = find_task_by_pid(pid)) ) {
-		send_sigio_to_task(p, fown, fa, band);
+		send_sigio_to_task(p, fown, fd, band);
 		goto out;
 	}
 	for_each_task(p) {
@@ -410,18 +426,20 @@ static void send_sigio(struct fown_struct *fown, struct fasync_struct *fa,
 			match = -p->pgrp;
 		if (pid != match)
 			continue;
-		send_sigio_to_task(p, fown, fa, band);
+		send_sigio_to_task(p, fown, fd, band);
 	}
 out:
 	read_unlock(&tasklist_lock);
 }
+
+static rwlock_t fasync_lock = RW_LOCK_UNLOCKED;
+static kmem_cache_t *fasync_cache;
 
 /*
  * fasync_helper() is used by some character device drivers (mainly mice)
  * to set up the fasync queue. It returns negative on error, 0 if it did
  * no changes and positive if it added/deleted the entry.
  */
-static rwlock_t fasync_lock = RW_LOCK_UNLOCKED;
 int fasync_helper(int fd, struct file * filp, int on, struct fasync_struct **fapp)
 {
 	struct fasync_struct *fa, **fp;
@@ -429,7 +447,7 @@ int fasync_helper(int fd, struct file * filp, int on, struct fasync_struct **fap
 	int result = 0;
 
 	if (on) {
-		new = kmalloc(sizeof(struct fasync_struct), GFP_KERNEL);
+		new = kmem_cache_alloc(fasync_cache, SLAB_KERNEL);
 		if (!new)
 			return -ENOMEM;
 	}
@@ -438,10 +456,10 @@ int fasync_helper(int fd, struct file * filp, int on, struct fasync_struct **fap
 		if (fa->fa_file == filp) {
 			if(on) {
 				fa->fa_fd = fd;
-				kfree(new);
+				kmem_cache_free(fasync_cache, new);
 			} else {
 				*fp = fa->fa_next;
-				kfree(fa);
+				kmem_cache_free(fasync_cache, fa);
 				result = 1;
 			}
 			goto out;
@@ -466,7 +484,7 @@ void __kill_fasync(struct fasync_struct *fa, int sig, int band)
 	while (fa) {
 		struct fown_struct * fown;
 		if (fa->magic != FASYNC_MAGIC) {
-			printk("kill_fasync: bad magic number in "
+			printk(KERN_ERR "kill_fasync: bad magic number in "
 			       "fasync_struct!\n");
 			return;
 		}
@@ -475,7 +493,7 @@ void __kill_fasync(struct fasync_struct *fa, int sig, int band)
 		   queued signum: SIGURG has its own default signalling
 		   mechanism. */
 		if (fown->pid && !(sig == SIGURG && fown->signum == 0))
-			send_sigio(fown, fa, band);
+			send_sigio(fown, fa->fa_fd, band);
 		fa = fa->fa_next;
 	}
 }
@@ -486,3 +504,14 @@ void kill_fasync(struct fasync_struct **fp, int sig, int band)
 	__kill_fasync(*fp, sig, band);
 	read_unlock(&fasync_lock);
 }
+
+static int __init fasync_init(void)
+{
+	fasync_cache = kmem_cache_create("fasync cache",
+		sizeof(struct fasync_struct), 0, 0, NULL, NULL);
+	if (!fasync_cache)
+		panic("cannot create fasync slab cache");
+	return 0;
+}
+
+module_init(fasync_init)

@@ -9,6 +9,8 @@
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/smp_lock.h>
+#include <linux/dnotify.h>
+#include <linux/fcntl.h>
 
 /* Taken over from the old code... */
 
@@ -79,6 +81,28 @@ void inode_setattr(struct inode * inode, struct iattr * attr)
 	mark_inode_dirty(inode);
 }
 
+static int setattr_mask(unsigned int ia_valid)
+{
+	unsigned long dn_mask = 0;
+
+	if (ia_valid & ATTR_UID)
+		dn_mask |= DN_ATTRIB;
+	if (ia_valid & ATTR_GID)
+		dn_mask |= DN_ATTRIB;
+	if (ia_valid & ATTR_SIZE)
+		dn_mask |= DN_MODIFY;
+	/* both times implies a utime(s) call */
+	if ((ia_valid & (ATTR_ATIME|ATTR_MTIME)) == (ATTR_ATIME|ATTR_MTIME))
+		dn_mask |= DN_ATTRIB;
+	else if (ia_valid & ATTR_ATIME)
+		dn_mask |= DN_ACCESS;
+	else if (ia_valid & ATTR_MTIME)
+		dn_mask |= DN_MODIFY;
+	if (ia_valid & ATTR_MODE)
+		dn_mask |= DN_ATTRIB;
+	return dn_mask;
+}
+
 int notify_change(struct dentry * dentry, struct iattr * attr)
 {
 	struct inode *inode = dentry->d_inode;
@@ -101,5 +125,10 @@ int notify_change(struct dentry * dentry, struct iattr * attr)
 			inode_setattr(inode, attr);
 	}
 	unlock_kernel();
+	if (!error) {
+		unsigned long dn_mask = setattr_mask(ia_valid);
+		if (dn_mask)
+			inode_dir_notify(dentry->d_parent->d_inode, dn_mask);
+	}
 	return error;
 }

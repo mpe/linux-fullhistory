@@ -1591,7 +1591,7 @@ static void rh_int_timer_do (unsigned long ptr)
 
 	/* ignore timers firing during PM suspend, etc */
 	if ((ohci->hc_control & OHCI_CTRL_HCFS) != OHCI_USB_OPER)
-		return;
+		goto out;
 
 	if(ohci->rh.send) { 
 		len = rh_send_irq (ohci, urb->transfer_buffer, urb->transfer_buffer_length);
@@ -1602,7 +1602,8 @@ static void rh_int_timer_do (unsigned long ptr)
 #endif
 			if (urb->complete) urb->complete (urb);
 		}
-	}	
+	}
+ out:
 	rh_init_int_timer (urb);
 }
 

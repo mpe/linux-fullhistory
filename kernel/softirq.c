@@ -44,7 +44,7 @@
 irq_cpustat_t irq_stat[NR_CPUS];
 #endif	/* CONFIG_ARCH_S390 */
 
-static struct softirq_action softirq_vec[32];
+static struct softirq_action softirq_vec[32] __cacheline_aligned;
 
 asmlinkage void do_softirq()
 {
@@ -140,6 +140,14 @@ static void tasklet_action(struct softirq_action *a)
 				clear_bit(TASKLET_STATE_SCHED, &t->state);
 
 				t->func(t->data);
+				/*
+				 * talklet_trylock() uses test_and_set_bit that imply
+				 * an mb when it returns zero, thus we need the explicit
+				 * mb only here: while closing the critical section.
+				 */
+#ifdef CONFIG_SMP
+				smp_mb__before_clear_bit();
+#endif
 				tasklet_unlock(t);
 				continue;
 			}

@@ -193,7 +193,7 @@ encode_fattr3(struct svc_rqst *rqstp, u32 *p, struct dentry *dentry)
 	p = xdr_encode_hyper(p, (u64) inode->i_dev);
 	p = xdr_encode_hyper(p, (u64) inode->i_ino);
 	p = encode_time3(p, inode->i_atime);
-	p = encode_time3(p, inode->i_mtime);
+	p = encode_time3(p, lease_get_mtime(inode));
 	p = encode_time3(p, inode->i_ctime);
 
 	return p;

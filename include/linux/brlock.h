@@ -114,10 +114,23 @@ static inline void br_read_lock (enum brlock_indices idx)
 	lock = &__br_write_locks[idx].lock;
 again:
 	(*ctr)++;
-	rmb();
+	mb();
 	if (spin_is_locked(lock)) {
 		(*ctr)--;
-		rmb();
+		wmb(); /*
+			* The release of the ctr must become visible
+			* to the other cpus eventually thus wmb(),
+			* we don't care if spin_is_locked is reordered
+			* before the releasing of the ctr.
+			* However IMHO this wmb() is superflous even in theory.
+			* It would not be superflous only if on the
+			* other CPUs doing a ldl_l instead of an ldl
+			* would make a difference and I don't think this is
+			* the case.
+			* I'd like to clarify this issue further
+			* but for now this is a slow path so adding the
+			* wmb() will keep us on the safe side.
+			*/
 		while (spin_is_locked(lock))
 			barrier();
 		goto again;

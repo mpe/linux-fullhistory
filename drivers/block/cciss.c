@@ -396,8 +396,8 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 		cciss_pci_info_struct pciinfo;
 
 		if (!arg) return -EINVAL;
-		pciinfo.bus = hba[ctlr]->pci_bus;
-		pciinfo.dev_fn = hba[ctlr]->pci_dev_fn;
+		pciinfo.bus = hba[ctlr]->pci_dev->bus->number;
+		pciinfo.dev_fn = hba[ctlr]->pci_dev->devfn;
 		pciinfo.board_id = hba[ctlr]->board_id;
 		if(copy_to_user((void *) arg, &pciinfo, sizeof( cciss_pci_info_struct)))
 			return -EFAULT;
@@ -1016,13 +1016,13 @@ static int sendcmd(
 /*
  * Map (physical) PCI mem into (virtual) kernel space
  */
-static ulong remap_pci_mem(ulong base, ulong size)
+static void *remap_pci_mem(ulong base, ulong size)
 {
         ulong page_base        = ((ulong) base) & PAGE_MASK;
         ulong page_offs        = ((ulong) base) - page_base;
-        ulong page_remapped    = (ulong) ioremap(page_base, page_offs+size);
+        void *page_remapped    = ioremap(page_base, page_offs+size);
 
-        return (ulong) (page_remapped ? (page_remapped + page_offs) : 0UL);
+        return (page_remapped ? (page_remapped + page_offs) : NULL);
 }
 
 /*
@@ -1424,24 +1424,22 @@ static void print_cfg_table( CfgTable_struct *tb)
 }
 #endif /* CCISS_DEBUG */
 
-static int cciss_pci_init(ctlr_info_t *c, unchar bus, unchar device_fn)
+static int cciss_pci_init(ctlr_info_t *c, struct pci_dev *pdev)
 {
 	ushort vendor_id, device_id, command;
 	unchar cache_line_size, latency_timer;
 	unchar irq, revision;
-	uint addr[6];
+	unsigned long addr[6];
 	__u32 board_id;
-	struct pci_dev *pdev;
 
 	int i;
 
-	pdev = pci_find_slot(bus, device_fn);
 	vendor_id = pdev->vendor;
 	device_id = pdev->device;
 	irq = pdev->irq;
 
 	for(i=0; i<6; i++)
-		addr[i] = pdev->resource[i].start;
+		addr[i] = pci_resource_start(pdev, i);
 	(void) pci_read_config_word(pdev, PCI_COMMAND,&command);
 	(void) pci_read_config_byte(pdev, PCI_CLASS_REVISION,&revision);
 	(void) pci_read_config_byte(pdev, PCI_CACHE_LINE_SIZE, &cache_line_size);
@@ -1528,23 +1526,21 @@ static int cciss_pci_init(ctlr_info_t *c, unchar bus, unchar device_fn)
  */
 static int cciss_pci_detect(void)
 {
+	struct pci_dev *pdev;
 
-	int index;
-	unchar bus=0, dev_fn=0;
-	
-		for(index=0; ; index++) {
-			if (pcibios_find_device(PCI_VENDOR_ID_COMPAQ,
-			 	PCI_DEVICE_ID_COMPAQ_CISS, 
-					index, &bus, &dev_fn))
-				break;
+	pdev = pci_find_device(PCI_VENDOR_ID_COMPAQ,
+			       PCI_DEVICE_ID_COMPAQ_CISS, NULL);
+	while (pdev) {
 			printk(KERN_DEBUG "cciss: Device %x has been found at %x %x\n",
-				PCI_DEVICE_ID_COMPAQ_CISS, bus, dev_fn);
-			if (index == 1000000) break;
+				PCI_DEVICE_ID_COMPAQ_CISS,
+				pdev->bus->number, pdev->devfn);
 			if (nr_ctlr == 8) {
 				printk(KERN_WARNING "cciss: This driver"
 				" supports a maximum of 8 controllers.\n");
 				break;
 			}
+			if (pci_enable_device(pdev))
+				continue;
 			hba[nr_ctlr] = kmalloc(sizeof(ctlr_info_t), GFP_KERNEL);
 			if(hba[nr_ctlr]==NULL)
 			{
@@ -1552,18 +1548,19 @@ static int cciss_pci_detect(void)
 				continue;
 			}
 			memset(hba[nr_ctlr], 0, sizeof(ctlr_info_t));
-			if (cciss_pci_init(hba[nr_ctlr], bus, dev_fn) != 0)
+			if (cciss_pci_init(hba[nr_ctlr], pdev) != 0)
 			{
 				kfree(hba[nr_ctlr]);
 				continue;
 			}
 			sprintf(hba[nr_ctlr]->devname, "cciss%d", nr_ctlr);
 			hba[nr_ctlr]->ctlr = nr_ctlr;
-			hba[nr_ctlr]->pci_bus = bus;
-			hba[nr_ctlr]->pci_dev_fn = dev_fn;
+			hba[nr_ctlr]->pci_dev = pdev;
 			nr_ctlr++;
 
-		}
+		pdev = pci_find_device(PCI_VENDOR_ID_COMPAQ,
+				       PCI_DEVICE_ID_COMPAQ_CISS, pdev);
+	}
 	return nr_ctlr;
 
 }
@@ -1882,7 +1879,7 @@ void cleanup_module(void)
 		/* Turn board interrupts off */ 
 		hba[i]->access.set_intr_mask(hba[i], CCISS_INTR_OFF);
 		free_irq(hba[i]->intr, hba[i]);
-		iounmap((void*)hba[i]->vaddr);
+		iounmap(hba[i]->vaddr);
 		unregister_blkdev(MAJOR_NR+i, hba[i]->devname);
 		blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR + i));
 		remove_proc_entry(hba[i]->devname, proc_cciss);	

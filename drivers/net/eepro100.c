@@ -2273,6 +2273,8 @@ static struct pci_device_id eepro100_pci_tbl[] __devinitdata = {
 		PCI_ANY_ID, PCI_ANY_ID, },
 	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ID1030,
 		PCI_ANY_ID, PCI_ANY_ID, },
+	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82820FW_4,
+		PCI_ANY_ID, PCI_ANY_ID, },
 	{ 0,}
 };
 MODULE_DEVICE_TABLE(pci, eepro100_pci_tbl);

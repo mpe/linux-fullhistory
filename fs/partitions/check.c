@@ -439,9 +439,6 @@ int __init partition_setup(void)
 #endif
 	rd_load();
 #endif
-#ifdef CONFIG_BLK_DEV_MD
-	md_run_setup();
-#endif
 	return 0;
 }
 

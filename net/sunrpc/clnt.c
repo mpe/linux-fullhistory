@@ -824,6 +824,7 @@ call_verify(struct rpc_task *task)
 		case RPC_AUTH_TOOWEAK:
 			printk(KERN_NOTICE "call_verify: server requires stronger "
 			       "authentication.\n");
+			break;
 		default:
 			printk(KERN_WARNING "call_verify: unknown auth error: %x\n", n);
 			error = -EIO;

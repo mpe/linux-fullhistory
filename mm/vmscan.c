@@ -377,7 +377,7 @@ out_unlock:
 #define SWAP_SHIFT 5
 #define SWAP_MIN 8
 
-static int swap_out(unsigned int priority, int gfp_mask)
+static int swap_out(unsigned int priority, int gfp_mask, unsigned long idle_time)
 {
 	struct task_struct * p;
 	int counter;
@@ -407,6 +407,7 @@ static int swap_out(unsigned int priority, int gfp_mask)
 		struct mm_struct *best = NULL;
 		int pid = 0;
 		int assign = 0;
+		int found_task = 0;
 	select:
 		read_lock(&tasklist_lock);
 		p = init_task.next_task;
@@ -416,6 +417,11 @@ static int swap_out(unsigned int priority, int gfp_mask)
 				continue;
 	 		if (mm->rss <= 0)
 				continue;
+			/* Skip tasks which haven't slept long enough yet when idle-swapping. */
+			if (idle_time && !assign && (!(p->state & TASK_INTERRUPTIBLE) ||
+					time_before(p->sleep_time + idle_time * HZ, jiffies)))
+				continue;
+			found_task++;
 			/* Refresh swap_cnt? */
 			if (assign == 1) {
 				mm->swap_cnt = (mm->rss >> SWAP_SHIFT);
@@ -430,7 +436,7 @@ static int swap_out(unsigned int priority, int gfp_mask)
 		}
 		read_unlock(&tasklist_lock);
 		if (!best) {
-			if (!assign) {
+			if (!assign && found_task > 0) {
 				assign = 1;
 				goto select;
 			}
@@ -691,9 +697,9 @@ dirty_page_rescan:
 			 * Now the page is really freeable, so we
 			 * move it to the inactive_clean list.
 			 */
-			UnlockPage(page);
 			del_page_from_inactive_dirty_list(page);
 			add_page_to_inactive_clean_list(page);
+			UnlockPage(page);
 			cleaned_pages++;
 		} else {
 			/*
@@ -701,9 +707,9 @@ dirty_page_rescan:
 			 * It's no use keeping it here, so we move it to
 			 * the active list.
 			 */
-			UnlockPage(page);
 			del_page_from_inactive_dirty_list(page);
 			add_page_to_active_list(page);
+			UnlockPage(page);
 		}
 	}
 	spin_unlock(&pagemap_lru_lock);
@@ -860,6 +866,7 @@ int inactive_shortage(void)
 static int refill_inactive(unsigned int gfp_mask, int user)
 {
 	int priority, count, start_count, made_progress;
+	unsigned long idle_time;
 
 	count = inactive_shortage() + free_shortage();
 	if (user)
@@ -869,16 +876,28 @@ static int refill_inactive(unsigned int gfp_mask, int user)
 	/* Always trim SLAB caches when memory gets low. */
 	kmem_cache_reap(gfp_mask);
 
+	/*
+	 * Calculate the minimum time (in seconds) a process must
+	 * have slept before we consider it for idle swapping.
+	 * This must be the number of seconds it takes to go through
+	 * all of the cache. Doing this idle swapping makes the VM
+	 * smoother once we start hitting swap.
+	 */
+	idle_time = atomic_read(&page_cache_size);
+	idle_time += atomic_read(&buffermem_pages);
+	idle_time /= (inactive_target + 1);
+
 	priority = 6;
 	do {
 		made_progress = 0;
 
-		if (current->need_resched) {
+		if (current->need_resched && (gfp_mask & __GFP_IO)) {
 			__set_current_state(TASK_RUNNING);
 			schedule();
 		}
 
-		while (refill_inactive_scan(priority, 1)) {
+		while (refill_inactive_scan(priority, 1) ||
+				swap_out(priority, gfp_mask, idle_time)) {
 			made_progress = 1;
 			if (!--count)
 				goto done;
@@ -913,7 +932,7 @@ static int refill_inactive(unsigned int gfp_mask, int user)
 		/*
 		 * Then, try to page stuff out..
 		 */
-		while (swap_out(priority, gfp_mask)) {
+		while (swap_out(priority, gfp_mask, 0)) {
 			made_progress = 1;
 			if (!--count)
 				goto done;
@@ -963,7 +982,8 @@ static int do_try_to_free_pages(unsigned int gfp_mask, int user)
 	 * before we get around to moving them to the other
 	 * list, so this is a relatively cheap operation.
 	 */
-	if (free_shortage())
+	if (free_shortage() || nr_inactive_dirty_pages > nr_free_pages() +
+			nr_inactive_clean_pages())
 		ret += page_launder(gfp_mask, user);
 
 	/*
@@ -1070,9 +1090,12 @@ int kswapd(void *unused)
 		run_task_queue(&tq_disk);
 
 		/* 
-		 * If we've either completely gotten rid of the
-		 * free page shortage or the inactive page shortage
-		 * is getting low, then stop eating CPU time.
+		 * We go to sleep if either the free page shortage
+		 * or the inactive page shortage is gone. We do this
+		 * because:
+		 * 1) we need no more free pages   or
+		 * 2) the inactive pages need to be flushed to disk,
+		 *    it wouldn't help to eat CPU time now ...
 		 *
 		 * We go to sleep for one second, but if it's needed
 		 * we'll be woken up earlier...

@@ -36,6 +36,7 @@
 #include <linux/ioport.h>
 #include <linux/irq.h>
 #include <linux/interrupt.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -168,7 +169,7 @@ common_init_rtc(void)
 	init_rtc_irq();
 }
 
-void
+void __init
 time_init(void)
 {
 	unsigned int year, mon, day, hour, min, sec, cc1, cc2, epoch;
@@ -235,17 +236,14 @@ time_init(void)
 		BCD_TO_BIN(year);
 	}
 
-	/* PC-like is standard; used for year <= 20 || year >= 100 */
+	/* PC-like is standard; used for year < 20 || year >= 70 */
 	epoch = 1900;
-	if (year > 20 && year < 48)
-		/* ARC console, used on some not so old boards */
+	if (year >= 20 && year < 48)
+		/* NT epoch */
 		epoch = 1980;
 	else if (year >= 48 && year < 70)
-		/* Digital UNIX, used on older boards (eg. AXPpxi33) */
+		/* Digital UNIX epoch */
 		epoch = 1952;
-	else if (year >= 70 && year < 100)
-		/* Digital DECstations, very old... */
-		epoch = 1928;
 
 	printk(KERN_INFO "Using epoch = %d\n", epoch);
 

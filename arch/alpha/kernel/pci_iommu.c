@@ -416,7 +416,9 @@ sg_fill(struct scatterlist *leader, struct scatterlist *end,
 	ptes = &arena->ptes[dma_ofs];
 	sg = leader;
 	do {
+#if DEBUG_ALLOC > 0
 		struct scatterlist *last_sg = sg;
+#endif
 
 		size = sg->length;
 		paddr = virt_to_phys(sg->address);

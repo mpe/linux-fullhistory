@@ -21,8 +21,9 @@
 #define RLIMIT_NPROC	7		/* max number of processes */
 #define RLIMIT_MEMLOCK  8               /* max locked-in-memory address space */
 #define RLIMIT_AS       9               /* address space limit */
+#define RLIMIT_LOCKS	10		/* maximum file locks held */
 
-#define RLIM_NLIMITS	10
+#define RLIM_NLIMITS	11
 
 /*
  * SuS says limits have to be unsigned.
@@ -41,6 +42,7 @@
     {       0, RLIM_INFINITY},		\
     {RLIM_INFINITY, RLIM_INFINITY},	\
     {INR_OPEN, INR_OPEN}, {0, 0},	\
+    {RLIM_INFINITY, RLIM_INFINITY},	\
     {RLIM_INFINITY, RLIM_INFINITY},	\
     {RLIM_INFINITY, RLIM_INFINITY}	\
 }

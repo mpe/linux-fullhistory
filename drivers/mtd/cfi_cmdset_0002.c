@@ -437,7 +437,7 @@ static int cfi_amdext_erase_2_by_16 (struct mtd_info *mtd, struct erase_info *in
 	adr = instr->addr - (chipnum << cfi->chipshift) * (cfi->interleave);
 	len = instr->len;
 
-printk("erase : 0x%x 0x%x 0x%x\n", adr, len, chipnum, mtd->size);
+printk("erase : 0x%lx 0x%lx 0x%x 0x%x\n", adr, len, chipnum, mtd->size);
 
 	while(len) {
 //printk("erase : 0x%x 0x%x 0x%x 0x%x\n", chipnum, adr, len, cfi->chipshift);

@@ -219,10 +219,10 @@ static int __init find_irq_entry(int apic, int pin, int type)
 	int i;
 
 	for (i = 0; i < mp_irq_entries; i++)
-		if ( (mp_irqs[i].mpc_irqtype == type) &&
-			(mp_irqs[i].mpc_dstapic == mp_ioapics[apic].mpc_apicid) &&
-			(mp_irqs[i].mpc_dstirq == pin))
-
+		if (mp_irqs[i].mpc_irqtype == type &&
+		    (mp_irqs[i].mpc_dstapic == mp_ioapics[apic].mpc_apicid ||
+		     mp_irqs[i].mpc_dstapic == MP_APIC_ALL) &&
+		    mp_irqs[i].mpc_dstirq == pin)
 			return i;
 
 	return -1;
@@ -262,7 +262,8 @@ int IO_APIC_get_PCI_irq_vector(int bus, int slot, int pci_pin)
 		int lbus = mp_irqs[i].mpc_srcbus;
 
 		for (apic = 0; apic < nr_ioapics; apic++)
-			if (mp_ioapics[apic].mpc_apicid == mp_irqs[i].mpc_dstapic)
+			if (mp_ioapics[apic].mpc_apicid == mp_irqs[i].mpc_dstapic ||
+			    mp_irqs[i].mpc_dstapic == MP_APIC_ALL)
 				break;
 
 		if ((mp_bus_id_to_type[lbus] == MP_BUS_PCI) &&

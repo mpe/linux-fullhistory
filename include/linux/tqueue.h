@@ -114,7 +114,7 @@ static inline void run_task_queue(task_queue *list)
 			f      = p -> routine;
 			save_p = p;
 			p      = p -> next;
-			mb();
+			smp_mb();
 			save_p -> sync = 0;
 			if (f)
 				(*f)(arg);

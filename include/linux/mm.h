@@ -193,9 +193,18 @@ typedef struct page {
 #define PageLocked(page)	test_bit(PG_locked, &(page)->flags)
 #define LockPage(page)		set_bit(PG_locked, &(page)->flags)
 #define TryLockPage(page)	test_and_set_bit(PG_locked, &(page)->flags)
+/*
+ * The first mb is necessary to safely close the critical section opened by the
+ * TryLockPage(), the second mb is necessary to enforce ordering between
+ * the clear_bit and the read of the waitqueue (to avoid SMP races with a
+ * parallel wait_on_page).
+ */
 #define UnlockPage(page)	do { \
+					smp_mb__before_clear_bit(); \
 					clear_bit(PG_locked, &(page)->flags); \
-					wake_up(&page->wait); \
+					smp_mb__after_clear_bit(); \
+					if (waitqueue_active(&page->wait)) \
+						wake_up(&page->wait); \
 				} while (0)
 #define PageError(page)		test_bit(PG_error, &(page)->flags)
 #define SetPageError(page)	set_bit(PG_error, &(page)->flags)

@@ -46,7 +46,7 @@ struct adfs_discrecord {
  * appear to be correct if the sector contains all zeros, so also check that
  * the disk size is non-zero!!!
  */
-extern inline int adfs_checkbblk(unsigned char *ptr)
+static inline int adfs_checkbblk(unsigned char *ptr)
 {
 	unsigned int result = 0;
 	unsigned char *p = ptr + 511;

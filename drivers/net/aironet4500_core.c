@@ -2613,7 +2613,7 @@ EXPORT_SYMBOL(awc_unregister_proc);
 
 	long long jiff;
 
-	DEBUG(2, " awc_reset dev %x \n", (int)dev);
+	DEBUG(2, " awc_reset dev %p \n", dev);
 	DEBUG(2, "%s: awc_reset \n",  dev->name);
 	
 	awc_issue_soft_reset(dev);

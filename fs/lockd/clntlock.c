@@ -168,6 +168,7 @@ reclaimer(void *ptr)
 	 * reclaim is in progress */
 	lock_kernel();
 	lockd_up();
+	down(&file_lock_sem);
 
 	/* First, reclaim all locks that have been granted previously. */
 restart:
@@ -185,6 +186,7 @@ restart:
 		}
 		tmp = tmp->next;
 	}
+	up(&file_lock_sem);
 
 	host->h_reclaiming = 0;
 	wake_up(&host->h_gracewait);

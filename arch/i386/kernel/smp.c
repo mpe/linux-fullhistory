@@ -414,13 +414,15 @@ void smp_send_reschedule(int cpu)
  */
 static spinlock_t call_lock = SPIN_LOCK_UNLOCKED;
 
-static volatile struct call_data_struct {
+struct call_data_struct {
 	void (*func) (void *info);
 	void *info;
 	atomic_t started;
 	atomic_t finished;
 	int wait;
-} *call_data = NULL;
+};
+
+static struct call_data_struct * call_data = NULL;
 
 /*
  * this function sends a 'generic call function' IPI to all other CPUs

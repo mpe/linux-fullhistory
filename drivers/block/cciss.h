@@ -42,11 +42,10 @@ struct ctlr_info
 	char	devname[8];
 	char    *product_name;
 	char	firm_ver[4]; // Firmware version 
-	unchar  pci_bus;
-        unchar  pci_dev_fn;
+        struct pci_dev *pci_dev;
 	__u32	board_id;
-	__u32	vaddr;
-	__u32	paddr;	
+	void   *vaddr;
+	unsigned long paddr;	
 	CfgTable_struct *cfgtable;
 	int	intr;
 

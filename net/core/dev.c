@@ -1141,6 +1141,7 @@ static void net_tx_action(struct softirq_action *h)
 			struct net_device *dev = head;
 			head = head->next_sched;
 
+			smp_mb__before_clear_bit();
 			clear_bit(__LINK_STATE_SCHED, &dev->state);
 
 			if (spin_trylock(&dev->queue_lock)) {

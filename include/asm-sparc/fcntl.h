@@ -50,12 +50,20 @@
 #define F_EXLCK		4	/* or 3 */
 #define F_SHLCK		8	/* or 4 */
 
+/* for leases */
+#define F_INPROGRESS	16
+
 /* operations for bsd flock(), also used by the kernel implementation */
 #define LOCK_SH		1	/* shared lock */
 #define LOCK_EX		2	/* exclusive lock */
 #define LOCK_NB		4	/* or'd with one of the above to prevent
 				   blocking */
 #define LOCK_UN		8	/* remove lock */
+
+#define LOCK_MAND	32	/* This is a mandatory flock */
+#define LOCK_READ	64	/* ... Which allows concurrent read operations */
+#define LOCK_WRITE	128	/* ... Which allows concurrent write operations */
+#define LOCK_RW		192	/* ... Which allows concurrent read & write ops */
 
 struct flock {
 	short l_type;
@@ -75,4 +83,5 @@ struct flock64 {
 	short __unused;
 };
 
+#define F_LINUX_SPECIFIC_BASE	1024
 #endif

@@ -38,7 +38,8 @@
 #define NFSEXP_CROSSMNT		0x0200
 #define NFSEXP_NOSUBTREECHECK	0x0400
 #define	NFSEXP_NOAUTHNLM	0x0800		/* Don't authenticate NLM requests - just trust */
-#define NFSEXP_ALLFLAGS		0x0FFF
+#define NFSEXP_MSNFS		0x1000	/* do silly things that MS clients expect */
+#define NFSEXP_ALLFLAGS		0x1FFF
 
 
 #ifdef __KERNEL__

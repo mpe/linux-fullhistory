@@ -331,6 +331,10 @@ static int serial_pci_board_idx = 0;
 #define IS_PCI_REGION_IOPORT(dev, r) (pci_resource_flags((dev), (r)) & \
 				      IORESOURCE_IO)
 #endif
+#ifndef IS_PCI_REGION_IOMEM
+#define IS_PCI_REGION_IOMEM(dev, r) (pci_resource_flags((dev), (r)) & \
+				      IORESOURCE_MEM)
+#endif
 #ifndef PCI_IRQ_RESOURCE
 #define PCI_IRQ_RESOURCE(dev, r) ((dev)->irq_resource[r].start)
 #endif
@@ -4185,7 +4189,7 @@ pci_timedia_fn(struct pci_dev *dev, struct pci_board *board, int enable)
  * This is the configuration table for all of the PCI serial boards
  * which we support.
  */
-static struct pci_board pci_boards[] __initdata = {
+static struct pci_board pci_boards[] __devinitdata = {
 	/*
 	 * Vendor ID, 	Device ID,
 	 * Subvendor ID,	Subdevice ID,
@@ -4606,9 +4610,9 @@ static int _INLINE_ serial_pci_guess_board(struct pci_dev *dev,
 			num_port++;
 			if (first_port == -1)
 				first_port = i;
-		} else {
-			num_iomem++;
 		}
+		if (IS_PCI_REGION_IOMEM(dev, i))
+			num_iomem++;
 	}
 
 	/*

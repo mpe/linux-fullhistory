@@ -17,8 +17,11 @@
  * any later version.
  *
  */
- static char * sg_version_str = "Version: 3.1.16 (20000716)";
- static int sg_version_num = 30116; /* 2 digits for each component */
+#include <linux/config.h>
+#ifdef CONFIG_PROC_FS
+ static char * sg_version_str = "Version: 3.1.17 (20000921)";
+#endif
+ static int sg_version_num = 30117; /* 2 digits for each component */
 /*
  *  D. P. Gilbert (dgilbert@interlog.com, dougg@triode.net.au), notes:
  *      - scsi logging is available via SCSI_LOG_TIMEOUT macros. First
@@ -38,7 +41,6 @@
  *          # cat /proc/scsi/sg/debug
  *
  */
-#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/fs.h>
@@ -235,10 +237,12 @@ static void sg_shorten_timeout(Scsi_Request * srpnt);
 static int sg_ms_to_jif(unsigned int msecs);
 static unsigned sg_jif_to_ms(int jifs);
 static int sg_allow_access(unsigned char opcode, char dev_type);
-static int sg_last_dev(void);
 static int sg_build_dir(Sg_request * srp, Sg_fd * sfp, int dxfer_len);
 static void sg_unmap_and(Sg_scatter_hold * schp, int free_also);
 static Sg_device * sg_get_dev(int dev);
+#ifdef CONFIG_PROC_FS
+static int sg_last_dev(void);
+#endif
 
 static Sg_device ** sg_dev_arr = NULL;
 
@@ -1298,18 +1302,20 @@ static void sg_detach(Scsi_Device * scsidp)
 }
 
 #ifdef MODULE
-
 MODULE_PARM(def_reserved_size, "i");
 MODULE_PARM_DESC(def_reserved_size, "size of buffer reserved for each fd");
+#endif /* MODULE */
 
-int init_module(void) {
+static int __init init_sg(void) {
+#ifdef MODULE
     if (def_reserved_size >= 0)
 	sg_big_buff = def_reserved_size;
+#endif /* MODULE */
     sg_template.module = THIS_MODULE;
     return scsi_register_module(MODULE_SCSI_DEV, &sg_template);
 }
 
-void cleanup_module( void)
+static void __exit exit_sg( void)
 {
 #ifdef CONFIG_PROC_FS
     sg_proc_cleanup();
@@ -1324,7 +1330,6 @@ void cleanup_module( void)
     }
     sg_template.dev_max = 0;
 }
-#endif /* MODULE */
 
 
 #if 0
@@ -1972,6 +1977,7 @@ static Sg_request * sg_get_rq_mark(Sg_fd * sfp, int pack_id)
     return resp;
 }
 
+#ifdef CONFIG_PROC_FS
 static Sg_request * sg_get_nth_request(Sg_fd * sfp, int nth)
 {
     Sg_request * resp;
@@ -1985,6 +1991,7 @@ static Sg_request * sg_get_nth_request(Sg_fd * sfp, int nth)
     read_unlock_irqrestore(&sfp->rq_list_lock, iflags);
     return resp;
 }
+#endif
 
 /* always adds to end of list */
 static Sg_request * sg_add_request(Sg_fd * sfp)
@@ -2064,6 +2071,7 @@ static int sg_remove_request(Sg_fd * sfp, Sg_request * srp)
     return res;
 }
 
+#ifdef CONFIG_PROC_FS
 static Sg_fd * sg_get_nth_sfp(Sg_device * sdp, int nth)
 {
     Sg_fd * resp;
@@ -2077,6 +2085,7 @@ static Sg_fd * sg_get_nth_sfp(Sg_device * sdp, int nth)
     read_unlock_irqrestore(&sg_dev_arr_lock, iflags);
     return resp;
 }
+#endif
 
 static Sg_fd * sg_add_sfp(Sg_device * sdp, int dev)
 {
@@ -2410,6 +2419,7 @@ static int sg_allow_access(unsigned char opcode, char dev_type)
 }
 
 
+#ifdef CONFIG_PROC_FS
 static int sg_last_dev()
 {
     int k;
@@ -2421,6 +2431,7 @@ static int sg_last_dev()
     read_unlock_irqrestore(&sg_dev_arr_lock, iflags);
     return k + 1;   /* origin 1 */
 }
+#endif
 
 static Sg_device * sg_get_dev(int dev)
 {
@@ -2782,3 +2793,7 @@ static int sg_proc_version_info(char * buffer, int * len, off_t * begin,
     return 1;
 }
 #endif  /* CONFIG_PROC_FS */
+
+
+module_init(init_sg);
+module_exit(exit_sg);

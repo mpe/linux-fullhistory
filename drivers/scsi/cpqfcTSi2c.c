@@ -43,7 +43,6 @@ typedef __u32 ULONG;
 
 
 #include <linux/string.h>
-#include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/sched.h>

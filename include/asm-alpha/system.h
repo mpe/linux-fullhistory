@@ -137,11 +137,18 @@ __asm__ __volatile__("mb": : :"memory")
 #define wmb() \
 __asm__ __volatile__("wmb": : :"memory")
 
+#ifdef __SMP__
+#define smp_mb()	mb()
+#define smp_rmb()	rmb()
+#define smp_wmb()	wmb()
+#else
+#define smp_mb()	barrier()
+#define smp_rmb()	barrier()
+#define smp_wmb()	barrier()
+#endif
+
 #define set_mb(var, value) \
 do { var = value; mb(); } while (0)
-
-#define set_rmb(var, value) \
-do { var = value; rmb(); } while (0)
 
 #define set_wmb(var, value) \
 do { var = value; wmb(); } while (0)
@@ -284,11 +291,11 @@ extern int __min_ipl;
 #define getipl()		(rdps() & 7)
 #define setipl(ipl)		((void) swpipl(ipl))
 
-#define __cli()			setipl(IPL_MAX)
-#define __sti()			setipl(IPL_MIN)
+#define __cli()			do { setipl(IPL_MAX); barrier(); } while(0)
+#define __sti()			do { barrier(); setipl(IPL_MIN); } while(0)
 #define __save_flags(flags)	((flags) = rdps())
-#define __save_and_cli(flags)	((flags) = swpipl(IPL_MAX))
-#define __restore_flags(flags)	setipl(flags)
+#define __save_and_cli(flags)	do { (flags) = swpipl(IPL_MAX); barrier(); } while(0)
+#define __restore_flags(flags)	do { barrier(); setipl(flags); barrier(); } while(0)
 
 #define local_irq_save(flags)		__save_and_cli(flags)
 #define local_irq_restore(flags)	__restore_flags(flags)
@@ -344,6 +351,8 @@ extern void __global_restore_flags(unsigned long flags);
 
 /*
  * Atomic exchange.
+ * Since it can be used to implement critical sections
+ * it must clobber "memory" (also for interrupts in UP).
  */
 
 extern __inline__ unsigned long
@@ -352,16 +361,18 @@ __xchg_u32(volatile int *m, unsigned long val)
 	unsigned long dummy;
 
 	__asm__ __volatile__(
-	"1:	ldl_l %0,%2\n"
+	"1:	ldl_l %0,%4\n"
 	"	bis $31,%3,%1\n"
 	"	stl_c %1,%2\n"
 	"	beq %1,2f\n"
+#ifdef CONFIG_SMP
 	"	mb\n"
+#endif
 	".subsection 2\n"
 	"2:	br 1b\n"
 	".previous"
 	: "=&r" (val), "=&r" (dummy), "=m" (*m)
-	: "rI" (val), "m" (*m));
+	: "rI" (val), "m" (*m) : "memory");
 
 	return val;
 }
@@ -372,16 +383,18 @@ __xchg_u64(volatile long *m, unsigned long val)
 	unsigned long dummy;
 
 	__asm__ __volatile__(
-	"1:	ldq_l %0,%2\n"
+	"1:	ldq_l %0,%4\n"
 	"	bis $31,%3,%1\n"
 	"	stq_c %1,%2\n"
 	"	beq %1,2f\n"
+#ifdef CONFIG_SMP
 	"	mb\n"
+#endif
 	".subsection 2\n"
 	"2:	br 1b\n"
 	".previous"
 	: "=&r" (val), "=&r" (dummy), "=m" (*m)
-	: "rI" (val), "m" (*m));
+	: "rI" (val), "m" (*m) : "memory");
 
 	return val;
 }
@@ -416,6 +429,11 @@ __xchg(volatile void *ptr, unsigned long x, int size)
  * Atomic compare and exchange.  Compare OLD with MEM, if identical,
  * store NEW in MEM.  Return the initial value in MEM.  Success is
  * indicated by comparing RETURN with OLD.
+ *
+ * The memory barrier should be placed in SMP only when we actually
+ * make the change. If we don't change anything (so if the returned
+ * prev is equal to old) then we aren't acquiring anything new and
+ * we don't need any memory barrier as far I can tell.
  */
 
 #define __HAVE_ARCH_CMPXCHG 1
@@ -426,18 +444,21 @@ __cmpxchg_u32(volatile int *m, int old, int new)
 	unsigned long prev, cmp;
 
 	__asm__ __volatile__(
-	"1:	ldl_l %0,%2\n"
+	"1:	ldl_l %0,%5\n"
 	"	cmpeq %0,%3,%1\n"
 	"	beq %1,2f\n"
 	"	mov %4,%1\n"
 	"	stl_c %1,%2\n"
 	"	beq %1,3f\n"
-	"2:	mb\n"
+#ifdef CONFIG_SMP
+	"	mb\n"
+#endif
+	"2:\n"
 	".subsection 2\n"
 	"3:	br 1b\n"
 	".previous"
 	: "=&r"(prev), "=&r"(cmp), "=m"(*m)
-	: "r"((long) old), "r"(new), "m"(*m));
+	: "r"((long) old), "r"(new), "m"(*m) : "memory");
 
 	return prev;
 }
@@ -448,18 +469,21 @@ __cmpxchg_u64(volatile long *m, unsigned long old, unsigned long new)
 	unsigned long prev, cmp;
 
 	__asm__ __volatile__(
-	"1:	ldq_l %0,%2\n"
+	"1:	ldq_l %0,%5\n"
 	"	cmpeq %0,%3,%1\n"
 	"	beq %1,2f\n"
 	"	mov %4,%1\n"
 	"	stq_c %1,%2\n"
 	"	beq %1,3f\n"
-	"2:	mb\n"
+#ifdef CONFIG_SMP
+	"	mb\n"
+#endif
+	"2:\n"
 	".subsection 2\n"
 	"3:	br 1b\n"
 	".previous"
 	: "=&r"(prev), "=&r"(cmp), "=m"(*m)
-	: "r"((long) old), "r"(new), "m"(*m));
+	: "r"((long) old), "r"(new), "m"(*m) : "memory");
 
 	return prev;
 }

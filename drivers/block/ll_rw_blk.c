@@ -1130,9 +1130,6 @@ int __init blk_dev_init(void)
 #ifdef CONFIG_SJCD
 	sjcd_init();
 #endif CONFIG_SJCD
-#ifdef CONFIG_BLK_DEV_MD
-	md_init();
-#endif CONFIG_BLK_DEV_MD
 #ifdef CONFIG_APBLOCK
 	ap_init();
 #endif

@@ -84,66 +84,6 @@ void cleanup_module(void)
 
 #endif /* MODULE */
 
-/* For 128-bit division.  */
-
-void
-udiv128(unsigned long divisor_f0, unsigned long divisor_f1,
-	unsigned long dividend_f0, unsigned long dividend_f1,
-	unsigned long *quot, unsigned long *remd)
-{
-	_FP_FRAC_DECL_2(quo);
-	_FP_FRAC_DECL_2(rem);
-	_FP_FRAC_DECL_2(tmp);
-	unsigned long i, num_bits, bit;
-
-	_FP_FRAC_SET_2(rem, _FP_ZEROFRAC_2);
-	_FP_FRAC_SET_2(quo, _FP_ZEROFRAC_2);
-
-	if (_FP_FRAC_ZEROP_2(divisor))
-		goto out;
-
-	if (_FP_FRAC_GT_2(divisor, dividend)) {
-		_FP_FRAC_COPY_2(rem, dividend);
-		goto out;
-	}
-
-	if (_FP_FRAC_EQ_2(divisor, dividend)) {
-		__FP_FRAC_SET_2(quo, 0, 1);
-		goto out;
-	}
-
-	num_bits = 128;
-	while (1) {
-		bit = _FP_FRAC_NEGP_2(dividend);
-		_FP_FRAC_COPY_2(tmp, rem);
-		_FP_FRAC_SLL_2(tmp, 1);
-		_FP_FRAC_LOW_2(tmp) |= bit;
-		if (! _FP_FRAC_GE_2(tmp, divisor))
-			break;
-		_FP_FRAC_COPY_2(rem, tmp);
-		_FP_FRAC_SLL_2(dividend, 1);
-		num_bits--;
-	}
-
-	for (i = 0; i < num_bits; i++) {
-		bit = _FP_FRAC_NEGP_2(dividend);
-		_FP_FRAC_SLL_2(rem, 1);
-		_FP_FRAC_LOW_2(rem) |= bit;
-		_FP_FRAC_SUB_2(tmp, rem, divisor);
-		bit = _FP_FRAC_NEGP_2(tmp);
-		_FP_FRAC_SLL_2(dividend, 1);
-		_FP_FRAC_SLL_2(quo, 1);
-		if (!bit) {
-			_FP_FRAC_LOW_2(quo) |= 1;
-			_FP_FRAC_COPY_2(rem, tmp);
-		}
-	}
-
-out:
-	*quot = quo_f1;
-	*remd = rem_f1;
-	return;
-}
 
 /*
  * Emulate the floating point instruction at address PC.  Returns 0 if

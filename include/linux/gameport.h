@@ -29,6 +29,7 @@
  * Vojtech Pavlik, Ucitelska 1576, Prague 8, 182 00 Czech Republic
  */
 
+#include <linux/sched.h>
 #include <asm/io.h>
 
 struct gameport;

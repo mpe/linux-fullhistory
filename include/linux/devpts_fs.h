@@ -46,14 +46,14 @@ extern unsigned int unix98_max_ptys;
 #endif
 
 #ifndef BUILDING_DEVPTS
-extern inline void
+static inline void
 devpts_pty_new(int line, kdev_t device)
 {
 	if ( devpts_upcall_new )
 		return devpts_upcall_new(line,device);
 }
 
-extern inline void
+static inline void
 devpts_pty_kill(int line)
 {
 	if ( devpts_upcall_kill )
@@ -63,10 +63,10 @@ devpts_pty_kill(int line)
 
 #else  /* No /dev/pts filesystem at all */
 
-extern inline void
+static inline void
 devpts_pty_new(int line, kdev_t device) { }
 
-extern inline void
+static inline void
 devpts_pty_kill(int line) { }
 
 #endif

@@ -444,7 +444,8 @@ try_again:
 		 * processes, etc).
 		 */
 		if (gfp_mask & __GFP_WAIT) {
-			wakeup_kswapd(1);
+			try_to_free_pages(gfp_mask);
+			memory_pressure++;
 			goto try_again;
 		}
 	}

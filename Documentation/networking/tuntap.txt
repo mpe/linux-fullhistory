@@ -25,29 +25,24 @@ Copyright (C) 1999-2000 Maxim Krasnyansky <max_mk@yahoo.com>
   br_sigio.c  - bridge based on async io and SIGIO signal.
   However the best example is VTun http://vtun.sourceforge.net :))  
 
-2. Installation
-  Run './configure' to configure the driver.
+2. Configuration 
+  Create device node:
+     mknod /dev/net/tun c 10 200
 
-  Run 'make install' to compile and install driver module and to create 
-  /dev/net/tun device node.
+  Driver module autoloading
+     Make sure that "Kernel module loader" - module auto-loading support is enabled 
+     in your kernel. 
 
-3. Loading driver module
-  Linux
-     To load TUN/TAP driver module run:
-	modprobe tun 
-     To configure automatic loading of the 'tun' module you have to add: 
-	alias char-major-195 tun
-     to the /etc/conf.modules, and run: 
+     Add following line to the /etc/modules.conf:
+	alias char-major-10-200 tun
+     
+     Run:
         modprobe -a 
-     TUN/TAP driver will be automatically loaded when application access
-     /dev/net/tun.
-     If "Kernel module loader" - module auto-loading support is not enabled 
-     in your kernel then you can add 
-        modprobe tun 
-     to one of the startup rc files.
 
-4. Program interface 
-  4.1 Network device allocation:
+     Driver will be automatically loaded when application access /dev/net/tun.
+
+3. Program interface 
+  3.1 Network device allocation:
 
   int tun_alloc(char *dev)
   {
@@ -76,7 +71,7 @@ Copyright (C) 1999-2000 Maxim Krasnyansky <max_mk@yahoo.com>
       return fd;
   }              
  
-  4.2 Frame format:
+  3.2 Frame format:
   If flag IFF_NO_PI is not set each frame format is: 
      Flags [2 bytes]
      Proto [2 bytes]
@@ -120,7 +115,7 @@ Currently driver has been written for 3 Unices:
 
 4. What is TUN/TAP driver used for?
 As mentioned above, main purpose of TUN/TAP driver is tunneling. 
-It used by VTun (http://vtun.netpedia.net).
+It is used by VTun (http://vtun.sourceforge.net).
 
 5. How does Virtual network device actually work ? 
 Virtual network device can be viewed as a simple Point-to-Point or
@@ -146,5 +141,3 @@ to attach BPF to this interface.
 
 8. Does TAP driver support kernel Ethernet bridging?
 Yes. Linux and FreeBSD drivers support Ethernet bridging. 
-
-

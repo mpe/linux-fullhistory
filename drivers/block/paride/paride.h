@@ -1,3 +1,6 @@
+#ifndef __DRIVERS_PARIDE_H__
+#define __DRIVERS_PARIDE_H__
+
 /* 
 	paride.h	(c) 1997-8  Grant R. Guenther <grant@torque.net>
    		                    Under the terms of the GPL.
@@ -161,4 +164,5 @@ typedef struct pi_protocol PIP;
 extern int pi_register( PIP * );
 extern void pi_unregister ( PIP * );
 
+#endif /* __DRIVERS_PARIDE_H__ */
 /* end of paride.h */

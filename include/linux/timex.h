@@ -51,6 +51,8 @@
 #ifndef _LINUX_TIMEX_H
 #define _LINUX_TIMEX_H
 
+#include <asm/param.h>
+
 /*
  * The following defines establish the engineering parameters of the PLL
  * model. The HZ variable establishes the timer interrupt frequency, 100 Hz
@@ -58,10 +60,20 @@
  * OSF/1 kernel. The SHIFT_HZ define expresses the same value as the
  * nearest power of two in order to avoid hardware multiply operations.
  */
-#ifdef __alpha__
-# define SHIFT_HZ 10		/* log2(HZ) */
+#if HZ >= 24 && HZ < 48
+# define SHIFT_HZ	5
+#elif HZ >= 48 && HZ < 96
+# define SHIFT_HZ	6
+#elif HZ >= 96 && HZ < 192
+# define SHIFT_HZ	7
+#elif HZ >= 192 && HZ < 384
+# define SHIFT_HZ	8
+#elif HZ >= 384 && HZ < 768
+# define SHIFT_HZ	9
+#elif HZ >= 768 && HZ < 1536
+# define SHIFT_HZ	10
 #else
-# define SHIFT_HZ 7		/* log2(HZ) */
+# error You lose.
 #endif
 
 /*

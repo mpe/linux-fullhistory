@@ -29,7 +29,9 @@ extern inline void lock_buffer(struct buffer_head * bh)
 extern inline void unlock_buffer(struct buffer_head *bh)
 {
 	clear_bit(BH_Lock, &bh->b_state);
-	wake_up(&bh->b_wait);
+	smp_mb__after_clear_bit();
+	if (waitqueue_active(&bh->b_wait))
+		wake_up(&bh->b_wait);
 }
 
 /*
@@ -55,7 +57,12 @@ extern inline void lock_super(struct super_block * sb)
 extern inline void unlock_super(struct super_block * sb)
 {
 	sb->s_lock = 0;
-	wake_up(&sb->s_wait);
+	/*
+	 * No need of any barrier, we're protected by
+	 * the big kernel lock here... unfortunately :)
+	 */
+	if (waitqueue_active(&sb->s_wait))
+		wake_up(&sb->s_wait);
 }
 
 #endif /* _LINUX_LOCKS_H */

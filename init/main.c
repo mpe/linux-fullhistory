@@ -727,9 +727,6 @@ static void __init do_basic_setup(void)
 			while (pid != wait(&i));
 		if (MAJOR(real_root_dev) != RAMDISK_MAJOR
 		     || MINOR(real_root_dev) != 0) {
-#ifdef CONFIG_BLK_DEV_MD
-			md_run_setup();
-#endif
 			error = change_root(real_root_dev,"/initrd");
 			if (error)
 				printk(KERN_ERR "Change root to /initrd: "

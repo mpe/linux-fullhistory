@@ -119,6 +119,10 @@ archmrproper:
 
 archdep:
 	@$(MAKEBOOT) dep
+
+vmlinux: arch/alpha/vmlinux.lds
+
+arch/alpha/vmlinux.lds: arch/alpha/vmlinux.lds.in
 	$(CPP) $(CPPFLAGS) -xc -P arch/alpha/vmlinux.lds.in -o arch/alpha/vmlinux.lds
 
 bootpfile:

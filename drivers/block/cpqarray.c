@@ -116,8 +116,8 @@ static struct proc_dir_entry *proc_array = NULL;
 
 int cpqarray_init(void);
 static int cpqarray_pci_detect(void);
-static int cpqarray_pci_init(ctlr_info_t *c, unchar bus, unchar device_fn);
-static ulong remap_pci_mem(ulong base, ulong size);
+static int cpqarray_pci_init(ctlr_info_t *c, struct pci_dev *pdev);
+static void *remap_pci_mem(ulong base, ulong size);
 static int cpqarray_eisa_detect(void);
 static int pollcomplete(int ctlr);
 static void getgeometry(int ctlr);
@@ -335,7 +335,7 @@ void cleanup_module(void)
 	for(i=0; i<nr_ctlr; i++) {
 		hba[i]->access.set_intr_mask(hba[i], 0);
 		free_irq(hba[i]->intr, hba[i]);
-		iounmap((void*)hba[i]->vaddr);
+		iounmap(hba[i]->vaddr);
 		unregister_blkdev(MAJOR_NR+i, hba[i]->devname);
 		del_timer(&hba[i]->timer);
 		blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR + i));
@@ -542,8 +542,7 @@ int __init cpqarray_init(void)
  */
 static int cpqarray_pci_detect(void)
 {
-	int index;
-	unchar bus=0, dev_fn=0;
+	struct pci_dev *pdev;
 
 #define IDA_BOARD_TYPES 3
 	static int ida_vendor_id[IDA_BOARD_TYPES] = { PCI_VENDOR_ID_DEC, 
@@ -554,29 +553,22 @@ static int cpqarray_pci_detect(void)
 	/* search for all PCI board types that could be for this driver */
 	for(brdtype=0; brdtype<IDA_BOARD_TYPES; brdtype++)
 	{
-		for(index=0; ; index++) {
-			if (pcibios_find_device(ida_vendor_id[brdtype],
-			 	ida_device_id[brdtype], index, &bus, &dev_fn))
-				break;
+		pdev = pci_find_device(ida_vendor_id[brdtype],
+				       ida_device_id[brdtype], NULL);
+		while (pdev) {
 			printk(KERN_DEBUG "cpqarray: Device %x has been found at %x %x\n",
-				ida_vendor_id[brdtype], bus, dev_fn);
-			if (index == 1000000) break;
+				ida_vendor_id[brdtype],
+				pdev->bus->number, pdev->devfn);
 			if (nr_ctlr == 8) {
 				printk(KERN_WARNING "cpqarray: This driver"
 				" supports a maximum of 8 controllers.\n");
 				break;
 			}
-
+			
 /* if it is a PCI_DEVICE_ID_NCR_53C1510, make sure it's 				the Compaq version of the chip */ 
 
 			if (ida_device_id[brdtype] == PCI_DEVICE_ID_NCR_53C1510)			{	
-				unsigned short subvendor=0;
-				if(pcibios_read_config_word(bus, dev_fn, 
-                        		PCI_SUBSYSTEM_VENDOR_ID, &subvendor))
-                		{
-                        		printk(KERN_DEBUG "cpqarray: failed to read subvendor\n");
-                        		continue;
-                		}
+				unsigned short subvendor=pdev->subsystem_vendor;
 				if(subvendor !=  PCI_VENDOR_ID_COMPAQ)
 				{
 					printk(KERN_DEBUG 
@@ -591,7 +583,7 @@ static int cpqarray_pci_detect(void)
 				continue;
 			}
 			memset(hba[nr_ctlr], 0, sizeof(ctlr_info_t));
-			if (cpqarray_pci_init(hba[nr_ctlr], bus, dev_fn) != 0)
+			if (cpqarray_pci_init(hba[nr_ctlr], pdev) != 0)
 			{
 				kfree(hba[nr_ctlr]);
 				continue;
@@ -600,6 +592,8 @@ static int cpqarray_pci_detect(void)
 			hba[nr_ctlr]->ctlr = nr_ctlr;
 			nr_ctlr++;
 
+			pdev = pci_find_device(ida_vendor_id[brdtype],
+					       ida_device_id[brdtype], pdev);
 		}
 	}
 
@@ -610,26 +604,23 @@ static int cpqarray_pci_detect(void)
  * Find the IO address of the controller, its IRQ and so forth.  Fill
  * in some basic stuff into the ctlr_info_t structure.
  */
-static int cpqarray_pci_init(ctlr_info_t *c, unchar bus, unchar device_fn)
+static int cpqarray_pci_init(ctlr_info_t *c, struct pci_dev *pdev)
 {
 	ushort vendor_id, device_id, command;
 	unchar cache_line_size, latency_timer;
 	unchar irq, revision;
-	uint addr[6];
+	unsigned long addr[6];
 	__u32 board_id;
-	struct pci_dev *pdev;
 
 	int i;
 
-	c->pci_bus = bus;
-	c->pci_dev_fn = device_fn;
-	pdev = pci_find_slot(bus, device_fn);
+	c->pci_dev = pdev;
 	vendor_id = pdev->vendor;
 	device_id = pdev->device;
 	irq = pdev->irq;
 
 	for(i=0; i<6; i++)
-		addr[i] = pdev->resource[i].flags;
+		addr[i] = pci_resource_start(pdev, i);
 
 	if (pci_enable_device(pdev))
 		return -1;
@@ -646,7 +637,7 @@ DBGINFO(
 	printk("device_id = %x\n", device_id);
 	printk("command = %x\n", command);
 	for(i=0; i<6; i++)
-		printk("addr[%d] = %x\n", i, addr[i]);
+		printk("addr[%d] = %lx\n", i, addr[i]);
 	printk("revision = %x\n", revision);
 	printk("irq = %x\n", irq);
 	printk("cache_line_size = %x\n", cache_line_size);
@@ -655,17 +646,19 @@ DBGINFO(
 );
 
 	c->intr = irq;
-	c->ioaddr = addr[0] & ~0x1;
+	c->ioaddr = addr[0];
 
-	/*
-	 * Memory base addr is first addr with the first bit _not_ set
-	 */
+	c->paddr = 0;
 	for(i=0; i<6; i++)
-		if (!(addr[i] & 0x1)) {
+		if (pci_resource_flags(pdev, i) & IORESOURCE_MEM) {
 			c->paddr = pci_resource_start (pdev, i);
 			break;
 		}
+	if (!c->paddr)
+		return -1;
 	c->vaddr = remap_pci_mem(c->paddr, 128);
+	if (!c->vaddr)
+		return -1;
 	c->board_id = board_id;
 
 	for(i=0; i<NR_PRODUCTS; i++) {
@@ -688,13 +681,13 @@ DBGINFO(
 /*
  * Map (physical) PCI mem into (virtual) kernel space
  */
-static ulong remap_pci_mem(ulong base, ulong size)
+static void *remap_pci_mem(ulong base, ulong size)
 {
         ulong page_base        = ((ulong) base) & PAGE_MASK;
         ulong page_offs        = ((ulong) base) - page_base;
-        ulong page_remapped    = (ulong) ioremap(page_base, page_offs+size);
+        void *page_remapped    = ioremap(page_base, page_offs+size);
 
-        return (ulong) (page_remapped ? (page_remapped + page_offs) : 0UL);
+        return (page_remapped ? (page_remapped + page_offs) : NULL);
 }
 
 #ifndef MODULE
@@ -778,8 +771,7 @@ static int cpqarray_eisa_detect(void)
 		hba[nr_ctlr]->access = *(products[j].access);
 		hba[nr_ctlr]->ctlr = nr_ctlr;
 		hba[nr_ctlr]->board_id = board_id;
-		hba[nr_ctlr]->pci_bus = 0;  /* not PCI */
-		hba[nr_ctlr]->pci_dev_fn = 0; /* not PCI */
+		hba[nr_ctlr]->pci_dev = NULL; /* not PCI */
 
 DBGINFO(
 	printk("i = %d, j = %d\n", i, j);
@@ -1205,8 +1197,8 @@ static int ida_ioctl(struct inode *inode, struct file *filep, unsigned int cmd, 
 		ida_pci_info_struct pciinfo;
 
 		if (!arg) return -EINVAL;
-		pciinfo.bus = hba[ctlr]->pci_bus;
-		pciinfo.dev_fn = hba[ctlr]->pci_dev_fn;
+		pciinfo.bus = hba[ctlr]->pci_dev->bus->number;
+		pciinfo.dev_fn = hba[ctlr]->pci_dev->devfn;
 		pciinfo.board_id = hba[ctlr]->board_id;
 		if(copy_to_user((void *) arg, &pciinfo,  
 			sizeof( ida_pci_info_struct)))

@@ -1046,8 +1046,8 @@ debug_spin_lock(spinlock_t * lock, const char *base_file, int line_no)
 	"	blbs	%0,2b\n"
 	"	br	1b\n"
 	".previous"
-	: "=r" (tmp), "=m" (__dummy_lock(lock)), "=r" (stuck)
-	: "1" (__dummy_lock(lock)), "2" (stuck));
+	: "=r" (tmp), "=m" (lock->lock), "=r" (stuck)
+	: "1" (lock->lock), "2" (stuck) : "memory");
 
 	if (stuck < 0) {
 		printk(KERN_WARNING
@@ -1124,9 +1124,9 @@ void write_lock(rwlock_t * lock)
 	"	blt	%1,8b\n"
 	"	br	1b\n"
 	".previous"
-	: "=m" (__dummy_lock(lock)), "=&r" (regx), "=&r" (regy),
+	: "=m" (*(volatile int *)lock), "=&r" (regx), "=&r" (regy),
 	  "=&r" (stuck_lock), "=&r" (stuck_reader)
-	: "0" (__dummy_lock(lock)), "3" (stuck_lock), "4" (stuck_reader));
+	: "0" (*(volatile int *)lock), "3" (stuck_lock), "4" (stuck_reader) : "memory");
 
 	if (stuck_lock < 0) {
 		printk(KERN_WARNING "write_lock stuck at %p\n", inline_pc);
@@ -1163,8 +1163,8 @@ void read_lock(rwlock_t * lock)
 	"	blbs	%1,6b;"
 	"	br	1b\n"
 	".previous"
-	: "=m" (__dummy_lock(lock)), "=&r" (regx), "=&r" (stuck_lock)
-	: "0" (__dummy_lock(lock)), "2" (stuck_lock));
+	: "=m" (*(volatile int *)lock), "=&r" (regx), "=&r" (stuck_lock)
+	: "0" (*(volatile int *)lock), "2" (stuck_lock) : "memory");
 
 	if (stuck_lock < 0) {
 		printk(KERN_WARNING "read_lock stuck at %p\n", inline_pc);
