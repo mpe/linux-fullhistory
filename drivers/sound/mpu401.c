@@ -2,8 +2,9 @@
  * sound/mpu401.c
  *
  * The low level driver for Roland MPU-401 compatible Midi cards.
- *
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,11 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * Modified:
- *  Riccardo Facchetti  24 Mar 1995
- *  - Added the Audio Excel DSP 16 initialization routine.
  */
+#include <linux/config.h>
+
 
 #define USE_SEQ_MACROS
 #define USE_SIMPLE_MACROS
@@ -82,20 +81,36 @@ struct mpu_config
     unsigned char   last_status;
     void            (*inputintr) (int dev, unsigned char data);
     int             shared_irq;
-    sound_os_info  *osp;
+    int            *osp;
   };
 
 #define	DATAPORT(base)   (base)
 #define	COMDPORT(base)   (base+1)
 #define	STATPORT(base)   (base+1)
 
-#define mpu401_status(devc)		inb( STATPORT(devc->base))
+static int 
+mpu401_status (struct mpu_config *devc)
+{
+  return inb (STATPORT (devc->base));
+}
 #define input_avail(devc)		(!(mpu401_status(devc)&INPUT_AVAIL))
 #define output_ready(devc)		(!(mpu401_status(devc)&OUTPUT_READY))
-#define write_command(devc, cmd)	outb( cmd,  COMDPORT(devc->base))
-#define read_data(devc)		inb( DATAPORT(devc->base))
+static void 
+write_command (struct mpu_config *devc, unsigned char cmd)
+{
+  outb (cmd, COMDPORT (devc->base));
+}
+static int 
+read_data (struct mpu_config *devc)
+{
+  return inb (DATAPORT (devc->base));
+}
 
-#define write_data(devc, byte)	outb( byte,  DATAPORT(devc->base))
+static void 
+write_data (struct mpu_config *devc, unsigned char byte)
+{
+  outb (byte, DATAPORT (devc->base));
+}
 
 #define	OUTPUT_READY	0x40
 #define	INPUT_AVAIL	0x80
@@ -619,11 +634,11 @@ mpu401_command (int dev, mpu_command_rec * cmd)
     mpu401_input_loop (devc);
 
   /*
-   * Sometimes it takes about 30000 loops before the output becomes ready
+   * Sometimes it takes about 50000 loops before the output becomes ready
    * (After reset). Normally it takes just about 10 loops.
    */
 
-  timeout = 30000;
+  timeout = 50000;
 retry:
   if (timeout-- <= 0)
     {
@@ -641,19 +656,22 @@ retry:
     }
 
   write_command (devc, cmd->cmd);
+
   ok = 0;
   for (timeout = 50000; timeout > 0 && !ok; timeout--)
     if (input_avail (devc))
-      if (devc->opened && devc->mode == MODE_SYNTH)
-	{
-	  if (mpu_input_scanner (devc, read_data (devc)) == MPU_ACK)
-	    ok = 1;
-	}
-      else
-	{			/* Device is not currently open. Use simplier method */
-	  if (read_data (devc) == MPU_ACK)
-	    ok = 1;
-	}
+      {
+	if (devc->opened && devc->mode == MODE_SYNTH)
+	  {
+	    if (mpu_input_scanner (devc, read_data (devc)) == MPU_ACK)
+	      ok = 1;
+	  }
+	else
+	  {			/* Device is not currently open. Use simplier method */
+	    if (read_data (devc) == MPU_ACK)
+	      ok = 1;
+	  }
+      }
 
   if (!ok)
     {
@@ -769,7 +787,7 @@ mpu401_end_read (int dev)
 }
 
 static int
-mpu401_ioctl (int dev, unsigned cmd, ioctl_arg arg)
+mpu401_ioctl (int dev, unsigned cmd, caddr_t arg)
 {
   struct mpu_config *devc;
 
@@ -827,7 +845,7 @@ mpu401_buffer_status (int dev)
 
 static int
 mpu_synth_ioctl (int dev,
-		 unsigned int cmd, ioctl_arg arg)
+		 unsigned int cmd, caddr_t arg)
 {
   int             midi_dev;
   struct mpu_config *devc;
@@ -998,23 +1016,35 @@ static void
 mpu401_chk_version (struct mpu_config *devc)
 {
   int             tmp;
+  unsigned long   flags;
 
   devc->version = devc->revision = 0;
 
+  save_flags (flags);
+  cli ();
   if ((tmp = mpu_cmd (num_midis, 0xAC, 0)) < 0)
-    return;
+    {
+      restore_flags (flags);
+      return;
+    }
 
   if ((tmp & 0xf0) > 0x20)	/* Why it's larger than 2.x ??? */
-    return;
+    {
+      restore_flags (flags);
+      return;
+    }
 
   devc->version = tmp;
 
   if ((tmp = mpu_cmd (num_midis, 0xAD, 0)) < 0)
     {
       devc->version = 0;
+      restore_flags (flags);
       return;
     }
   devc->revision = tmp;
+
+  restore_flags (flags);
 }
 
 long
@@ -1064,6 +1094,7 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
       if (!devc->shared_irq)
 	if (snd_set_irq_handler (devc->irq, mpuintr, "mpu401", devc->osp) < 0)
 	  {
+	    printk ("MPU401: Failed to allocate IRQ%d\n", devc->irq);
 	    return mem_start;
 	  }
 
@@ -1267,13 +1298,6 @@ probe_mpu401 (struct address_info *hw_config)
   tmp_devc.opened = 0;
   tmp_devc.osp = hw_config->osp;
 
-#if defined(CONFIG_AEDSP16) && defined(AEDSP16_MPU401)
-  /*
-     * Initialize Audio Excel DSP 16 to MPU-401, before any operation.
-   */
-  InitAEDSP16_MPU401 (hw_config);
-#endif
-
   if (hw_config->always_detect)
     return 1;
 
@@ -1360,7 +1384,7 @@ tmr_reset (void)
 
   save_flags (flags);
   cli ();
-  next_event_time = 0xffffffff;
+  next_event_time = (unsigned long) -1;
   prev_event_time = 0;
   curr_ticks = curr_clocks = 0;
   restore_flags (flags);
@@ -1569,7 +1593,7 @@ mpu_timer_get_time (int dev)
 
 static int
 mpu_timer_ioctl (int dev,
-		 unsigned int command, ioctl_arg arg)
+		 unsigned int command, caddr_t arg)
 {
   int             midi_dev = sound_timer_devs[dev]->devlink;
 
@@ -1708,7 +1732,7 @@ mpu_timer_interrupt (void)
 
   if (curr_ticks >= next_event_time)
     {
-      next_event_time = 0xffffffff;
+      next_event_time = (unsigned long) -1;
       sequencer_timer (0);
     }
 }

@@ -19,4 +19,8 @@ tristate 'Sony CDU535 CDROM support' CONFIG_CDU535
 tristate 'Goldstar R420 CDROM support' CONFIG_GSCD
 tristate 'Philips/LMS CM206 CDROM support' CONFIG_CM206
 tristate 'Optics Storage DOLPHIN 8000AT CDROM support' CONFIG_OPTCD
-tristate 'Sanyo H94A CDROM support' CONFIG_SJCD
+tristate 'Sanyo CDR-H94A CDROM support' CONFIG_SJCD
+bool 'Soft configurable cdrom interface card support' CONFIG_CDI_INIT
+if [ "$CONFIG_CDI_INIT" = "y" ]; then
+  tristate 'ISP16/MAD16/Mozart soft configurable cdrom interface support' CONFIG_ISP16_CDI
+fi

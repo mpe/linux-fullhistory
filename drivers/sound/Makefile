@@ -22,14 +22,12 @@ OBJS   = audio.o dmabuf.o sb_dsp.o \
 	 gus_midi.o gus_vol.o patmgr.o sb_mixer.o sb16_dsp.o sb_midi.o \
 	 sb16_midi.o midi_synth.o uart6850.o sound_timer.o \
 	 sys_timer.o ics2101.o ad1848.o pss.o sscape.o trix.o aedsp16.o \
-	 mad16.o mad16_sb_midi.o cs4232.o maui.o sound_pnp.o
+	 mad16.o mad16_sb_midi.o cs4232.o maui.o
 endif
 
 
 build:
-	@echo Compiling modularized sound driver
 	@make sound.o
-	@echo Sound module compiled.
 
 install:	sound.o
 	cp sound.o $(MODULEDIR)
@@ -53,7 +51,7 @@ ifndef HOSTCC
 #
 CC	= gcc
 HOSTCC	= gcc
-CFLAGS	= -D__KERNEL__ -DMODULE -DMODVERSIONS -I/usr/src/linux/include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe -m486
+CFLAGS	= -D__KERNEL__ -DMODULE -I/usr/src/linux/include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe -m486
 else
 include $(TOPDIR)/Rules.make
 endif
@@ -112,7 +110,7 @@ kernelconfig: setup-$(TARGET_OS)
 #	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
 	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
 
-script: setup-$(TARGET_OS)
+mkscript: setup-$(TARGET_OS)
 	rm -f configure
 	$(HOSTCC) -o configure configure.c
 	./configure script > Config.in

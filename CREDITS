@@ -366,6 +366,13 @@ N: Philip Gladstone
 E: philipg@onsett.com
 D: Kernel / timekeeping stuff
 
+N: Danny ter Haar
+E: dth@cistron.nl
+D: /proc/procinfo, reboot on panic , kernel pre-patch tester ;)
+S: PObox 297
+S: 2400 AG, Alphen aan den Rijn
+S: The Netherlands
+
 N: Bruno Haible
 E: haible@ma2s2.mathematik.uni-karlsruhe.de
 D: Unified SysV FS based on Xenix FS (part of standard kernel since 0.99.15)

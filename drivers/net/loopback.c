@@ -49,26 +49,18 @@
 
 #define LOOPBACK_MTU (PAGE_SIZE*7/8)
 
+/*
+ * The higher levels take care of making this non-reentrant (it's
+ * called with bh's disabled).
+ */
 static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct enet_statistics *stats = (struct enet_statistics *)dev->priv;
-	unsigned long flags;
 	int unlock=1;
   
 	if (skb == NULL || dev == NULL) 
 		return(0);
 
-	save_flags(flags);
-	cli();
-	if (dev->tbusy != 0) 
-	{
-		restore_flags(flags);
-		stats->tx_errors++;
-		return(1);
-	}
-	dev->tbusy = 1;
-	restore_flags(flags);
-  
 	/*
 	 *	Optimise so buffers with skb->free=1 are not copied but
 	 *	instead are lobbed from tx queue to rx queue 
@@ -89,29 +81,21 @@ static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 	  	 *	Packet sent but looped back around. Cease to charge
 	  	 *	the socket for the frame.
 	  	 */
-		save_flags(flags);
-	  	cli();
 	  	skb->sk->wmem_alloc-=skb->truesize;
 	  	skb->sk->write_space(skb->sk);
-	  	restore_flags(flags);
 	}
 
 	skb->protocol=eth_type_trans(skb,dev);
 	skb->dev=dev;
-	save_flags(flags);
-	cli();
 #ifndef LOOPBACK_MUST_CHECKSUM
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 #endif
 	netif_rx(skb);
 	if(unlock)
 	  	skb_device_unlock(skb);
-	restore_flags(flags);
   
-	stats->tx_packets++;
 	stats->rx_packets++;
-
-	dev->tbusy = 0;
+	stats->tx_packets++;
 
 	return(0);
 }

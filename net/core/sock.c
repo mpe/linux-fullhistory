@@ -544,45 +544,37 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 
 void release_sock(struct sock *sk)
 {
-	unsigned long flags;
 #ifdef CONFIG_INET
 	struct sk_buff *skb;
 #endif
 
+	/*
+	 * First, mark it not in use: this ensures that we will not
+	 * get any new backlog packets..
+	 */
+	sk->inuse = 0;
+
+#ifdef CONFIG_INET
 	if (!sk->prot)
 		return;
+		
 	/*
-	 *	Make the backlog atomic. If we don't do this there is a tiny
-	 *	window where a packet may arrive between the sk->blog being 
-	 *	tested and then set with sk->inuse still 0 causing an extra 
-	 *	unwanted re-entry into release_sock().
+	 *	This is only ever called from a user process context, hence
+	 *	(until fine grained SMP) its safe. sk->inuse must be volatile
+	 *	so the compiler doesn't do anything unfortunate with it.
 	 */
 
-	save_flags(flags);
-	cli();
-	if (sk->blog) 
-	{
-		restore_flags(flags);
-		return;
-	}
-	sk->blog=1;
-	sk->inuse = 1;
-	restore_flags(flags);
-#ifdef CONFIG_INET
 	/* See if we have any packets built up. */
-	while((skb = skb_dequeue(&sk->back_log)) != NULL) 
+	while ((skb = __skb_dequeue(&sk->back_log)) != NULL) 
 	{
-		sk->blog = 1;
+		sk->inuse = 1;		/* Very important.. */
 		if (sk->prot->rcv) 
 			sk->prot->rcv(skb, skb->dev, (struct options*)skb->proto_priv,
 				 skb->saddr, skb->len, skb->daddr, 1,
 				/* Only used for/by raw sockets. */
 				(struct inet_protocol *)sk->pair); 
+		sk->inuse = 0;
 	}
-#endif  
-	sk->blog = 0;
-	sk->inuse = 0;
-#ifdef CONFIG_INET  
 	if (sk->dead && sk->state == TCP_CLOSE) 
 	{
 		/* Should be about 2 rtt's */

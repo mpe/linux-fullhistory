@@ -12,13 +12,24 @@
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/delay.h>
 
 asmlinkage void sys_sync(void);	/* it's really int */
+extern void hard_reset_now(void);
+
+static int timeout = -1;
+
+void panic_setup(char *str, int *ints)
+{
+	if (ints[0] == 1)
+		timeout = ints[1];
+}
 
 NORET_TYPE void panic(const char * fmt, ...)
 {
 	static char buf[1024];
 	va_list args;
+	int i;
 
 	va_start(args, fmt);
 	vsprintf(buf, fmt, args);
@@ -28,6 +39,17 @@ NORET_TYPE void panic(const char * fmt, ...)
 		printk(KERN_EMERG "In swapper task - not syncing\n");
 	else
 		sys_sync();
+	if (timeout >= 0)
+	{
+		/*
+	 	 * Delay timeout seconds before rebooting the machine. 
+		 * We can't use the "normal" timers since we just paniced..
+	 	 */
+		printk(KERN_EMERG "Rebooting in %d seconds..",timeout);
+		for(i = 0; i < (timeout*1000); i++)
+			udelay(1000);
+		hard_reset_now();
+	}
 	for(;;);
 }
 

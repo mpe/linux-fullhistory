@@ -112,9 +112,14 @@ extern void trap_init(void);
 
 asmlinkage void schedule(void);
 
+/* ??? */
 struct files_struct {
+	/* ??? */
 	int count;
+	/* bit mask to close fds on exec */
 	fd_set close_on_exec;
+	/* do we have at most NR_OPEN available fds? I assume fd i maps into
+ 	 * each open file */	
 	struct file * fd[NR_OPEN];
 };
 
@@ -187,10 +192,17 @@ struct task_struct {
 	unsigned long saved_kernel_stack;
 	unsigned long kernel_stack_page;
 	int exit_code, exit_signal;
+	/* ??? */
 	unsigned long personality;
 	int dumpable:1;
 	int did_exec:1;
-	int pid,pgrp,tty_old_pgrp,session,leader;
+	/* shouldn't this be pid_t? */
+	int pid;
+	int pgrp;
+	int tty_old_pgrp;
+	int session;
+	/* boolean value for session group leader */
+	int leader;
 	int	groups[NGROUPS];
 	/* 
 	 * pointers to (original) parent process, youngest child, younger sibling,
@@ -348,6 +360,20 @@ extern void release_thread(struct task_struct *);
 extern int do_execve(char *, char **, char **, struct pt_regs *);
 extern int do_fork(unsigned long, unsigned long, struct pt_regs *);
 
+
+/* See if we have a valid user level fd.
+ * If it makes sense, return the file structure it references.
+ * Otherwise return NULL.
+ */
+extern inline struct file *file_from_fd(const unsigned int fd)
+{
+
+	if (fd >= NR_OPEN)
+		return NULL;
+	/* either valid or null */
+	return current->files->fd[fd];
+}
+	
 /*
  * The wait-queues are circular lists, and you have to be *very* sure
  * to keep them correct. Use only these two functions to add/remove

@@ -2,8 +2,9 @@
  * sound/midibuf.c
  *
  * Device file manager for /dev/midi#
- *
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,8 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 
@@ -115,7 +117,7 @@ drain_midi_queue (int dev)
 	if (HZ / 10)
 	  current_set_timeout (tl = jiffies + (HZ / 10));
 	else
-	  tl = 0xffffffff;
+	  tl = (unsigned long) -1;
 	midi_sleep_flag[dev].mode = WK_SLEEP;
 	module_interruptible_sleep_on (&midi_sleeper[dev]);
 	if (!(midi_sleep_flag[dev].mode & WK_WAKEUP))
@@ -305,7 +307,7 @@ MIDIbuf_release (int dev, struct fileinfo *file)
 	  if (0)
 	    current_set_timeout (tl = jiffies + (0));
 	  else
-	    tl = 0xffffffff;
+	    tl = (unsigned long) -1;
 	  midi_sleep_flag[dev].mode = WK_SLEEP;
 	  module_interruptible_sleep_on (&midi_sleeper[dev]);
 	  if (!(midi_sleep_flag[dev].mode & WK_WAKEUP))
@@ -337,7 +339,7 @@ MIDIbuf_release (int dev, struct fileinfo *file)
 }
 
 int
-MIDIbuf_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
+MIDIbuf_write (int dev, struct fileinfo *file, const char *buf, int count)
 {
   unsigned long   flags;
   int             c, n, i;
@@ -368,7 +370,7 @@ MIDIbuf_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count
 	    if (0)
 	      current_set_timeout (tl = jiffies + (0));
 	    else
-	      tl = 0xffffffff;
+	      tl = (unsigned long) -1;
 	    midi_sleep_flag[dev].mode = WK_SLEEP;
 	    module_interruptible_sleep_on (&midi_sleeper[dev]);
 	    if (!(midi_sleep_flag[dev].mode & WK_WAKEUP))
@@ -405,7 +407,7 @@ MIDIbuf_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count
 
 
 int
-MIDIbuf_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
+MIDIbuf_read (int dev, struct fileinfo *file, char *buf, int count)
 {
   int             n, c = 0;
   unsigned long   flags;
@@ -427,7 +429,7 @@ MIDIbuf_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 	if (parms[dev].prech_timeout)
 	  current_set_timeout (tl = jiffies + (parms[dev].prech_timeout));
 	else
-	  tl = 0xffffffff;
+	  tl = (unsigned long) -1;
 	input_sleep_flag[dev].mode = WK_SLEEP;
 	module_interruptible_sleep_on (&input_sleeper[dev]);
 	if (!(input_sleep_flag[dev].mode & WK_WAKEUP))
@@ -467,7 +469,7 @@ MIDIbuf_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 
 int
 MIDIbuf_ioctl (int dev, struct fileinfo *file,
-	       unsigned int cmd, ioctl_arg arg)
+	       unsigned int cmd, caddr_t arg)
 {
   int             val;
 

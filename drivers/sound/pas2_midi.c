@@ -2,8 +2,9 @@
  * sound/pas2_midi.c
  *
  * The low level driver for the PAS Midi Interface.
- *
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,8 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 
@@ -215,7 +217,7 @@ pas_midi_end_read (int dev)
 }
 
 static int
-pas_midi_ioctl (int dev, unsigned cmd, ioctl_arg arg)
+pas_midi_ioctl (int dev, unsigned cmd, caddr_t arg)
 {
   return -EINVAL;
 }

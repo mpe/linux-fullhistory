@@ -76,10 +76,6 @@ ifdef CONFIG_SEQUENCER
 	OBJS := $(OBJS)  sequencer.o
 endif
 
-ifdef CONFIG_PNP
-	OBJS := $(OBJS)  sound_pnp.o
-endif
-
 ifdef CONFIG_SEQUENCER
 	OBJS := $(OBJS)  sound_timer.o
 endif

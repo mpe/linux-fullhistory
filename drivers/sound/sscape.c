@@ -2,8 +2,9 @@
  * sound/sscape.c
  *
  * Low level driver for Ensoniq Soundscape
- *
- * Copyright by Hannu Savolainen 1994
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,8 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 
@@ -94,7 +96,7 @@ typedef struct sscape_info
     int             dma_allocated;
     int             my_audiodev;
     int             opened;
-    sound_os_info  *osp;
+    int            *osp;
   }
 
 sscape_info;
@@ -438,6 +440,7 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
   unsigned long   flags;
   unsigned char   temp;
   int             done, timeout_val;
+  static int      already_done = 0;
 
   if (flag & CPF_FIRST)
     {
@@ -445,6 +448,13 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
          * First block. Have to allocate DMA and to reset the board
          * before continuing.
        */
+
+      if (already_done)
+	{
+	  printk ("Can't run 'ssinit' twice\n");
+	  return 0;
+	}
+      already_done = 1;
 
       save_flags (flags);
       cli ();
@@ -497,7 +507,7 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
 	if (1)
 	  current_set_timeout (tl = jiffies + (1));
 	else
-	  tl = 0xffffffff;
+	  tl = (unsigned long) -1;
 	sscape_sleep_flag.mode = WK_SLEEP;
 	module_interruptible_sleep_on (&sscape_sleeper);
 	if (!(sscape_sleep_flag.mode & WK_WAKEUP))
@@ -545,7 +555,7 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
 	    if (1)
 	      current_set_timeout (tl = jiffies + (1));
 	    else
-	      tl = 0xffffffff;
+	      tl = (unsigned long) -1;
 	    sscape_sleep_flag.mode = WK_SLEEP;
 	    module_interruptible_sleep_on (&sscape_sleeper);
 	    if (!(sscape_sleep_flag.mode & WK_WAKEUP))
@@ -578,7 +588,7 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
 	    if (1)
 	      current_set_timeout (tl = jiffies + (1));
 	    else
-	      tl = 0xffffffff;
+	      tl = (unsigned long) -1;
 	    sscape_sleep_flag.mode = WK_SLEEP;
 	    module_interruptible_sleep_on (&sscape_sleeper);
 	    if (!(sscape_sleep_flag.mode & WK_WAKEUP))
@@ -638,7 +648,7 @@ download_boot_block (void *dev_info, copr_buffer * buf)
 }
 
 static int
-sscape_coproc_ioctl (void *dev_info, unsigned int cmd, ioctl_arg arg, int local)
+sscape_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 {
 
   switch (cmd)
@@ -745,7 +755,7 @@ set_format (sscape_info * devc, int arg)
 }
 
 static int
-sscape_audio_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
+sscape_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 {
   sscape_info    *devc = (sscape_info *) audio_devs[dev]->devc;
 

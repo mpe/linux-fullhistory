@@ -97,13 +97,6 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		}
 		skb_queue_tail(&sk->write_queue, skb);
 		
-		/*
-		 *	If we don't fit we have to start the zero window
-		 *	probes. This is broken - we really need to do a partial
-		 *	send _first_ (This is what causes the Cisco and PC/TCP
-		 *	grief).
-		 */
-		 
 		if (before(sk->window_seq, sk->write_queue.next->end_seq) &&
 		    sk->send_head == NULL && sk->ack_backlog == 0)
 			tcp_reset_xmit_timer(sk, TIME_PROBE0, sk->rto);
@@ -117,7 +110,7 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		th->ack_seq = htonl(sk->acked_seq);
 		th->window = htons(tcp_select_window(sk));
 
-		tcp_send_check(th, sk->saddr, sk->daddr, size, sk);
+		tcp_send_check(th, sk->saddr, sk->daddr, size, skb);
 
 		sk->sent_seq = sk->write_seq;
 		
@@ -288,7 +281,7 @@ void tcp_write_xmit(struct sock *sk)
 			th->ack_seq = htonl(sk->acked_seq);
 			th->window = htons(tcp_select_window(sk));
 
-			tcp_send_check(th, sk->saddr, sk->daddr, size, sk);
+			tcp_send_check(th, sk->saddr, sk->daddr, size, skb);
 
 			sk->sent_seq = skb->end_seq;
 			
@@ -344,9 +337,9 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		/*		   anyway, so we don't need all the fuss to prepare */
 		/*		   the buffer in this case. 			    */
 		/*		   (the skb_pull() changes skb->data while we may   */
-		/*		   actually try to send the data. Ough. A side	    */
+		/*		   actually try to send the data. Ouch. A side	    */
 		/*		   effect is that we'll send some unnecessary data, */
-		/*		   but the alternative is desastrous...		    */
+		/*		   but the alternative is disasterous...	    */
 		
 		if (skb_device_locked(skb))
 			break;
@@ -439,7 +432,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 			sk->ack_backlog = 0;
 			sk->bytes_rcv = 0;
 			th->window = ntohs(tcp_select_window(sk));
-			tcp_send_check(th, sk->saddr, sk->daddr, size, sk);
+			tcp_send_check(th, sk->saddr, sk->daddr, size, skb);
 		
 			/*
 			 *	If the interface is (still) up and running, kick it.
@@ -523,6 +516,7 @@ void tcp_send_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
 	buff->sk = NULL;
 	buff->dev = dev;
 	buff->localroute = 0;
+	buff->csum = 0;
 
 	/*
 	 *	Put in the IP header and routing stuff. 
@@ -546,31 +540,26 @@ void tcp_send_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
 
 	t1->dest = th->source;
 	t1->source = th->dest;
-	t1->rst = 1;  
-	t1->window = 0;
+	t1->syn = 0;
+	t1->fin = 0;
+	t1->urg = 0;
+	t1->rst = 1;
+	t1->psh = 0;  
   
 	if(th->ack)
 	{
 		t1->ack = 0;
 	  	t1->seq = th->ack_seq;
-	  	t1->ack_seq = 0;
 	}
 	else
 	{
-	  	t1->ack = 1;
 	  	if(!th->syn)
 			t1->ack_seq = th->seq;
 		else
 			t1->ack_seq = htonl(ntohl(th->seq)+1);
-		t1->seq = 0;
 	}
 
-	t1->syn = 0;
-	t1->urg = 0;
-	t1->fin = 0;
-	t1->psh = 0;
-	t1->doff = sizeof(*t1)/4;
-	tcp_send_check(t1, saddr, daddr, sizeof(*t1), NULL);
+	tcp_send_check(t1, saddr, daddr, sizeof(*t1), buff);
 	prot->queue_xmit(NULL, ndev, buff, 1);
 	tcp_statistics.TcpOutSegs++;
 }
@@ -606,6 +595,7 @@ void tcp_send_fin(struct sock *sk)
 	 
 	buff->sk = sk;
 	buff->localroute = sk->localroute;
+	buff->csum = 0;
 
 	/*
 	 *	Put in the IP header and routing stuff. 
@@ -645,13 +635,10 @@ void tcp_send_fin(struct sock *sk)
 	sk->write_seq++;
 	buff->end_seq = sk->write_seq;
 	t1->seq = htonl(buff->seq);
-	t1->ack = 1;
 	t1->ack_seq = htonl(sk->acked_seq);
 	t1->window = htons(sk->window=tcp_select_window(sk));
 	t1->fin = 1;
-	t1->rst = 0;
-	t1->doff = sizeof(*t1)/4;
-	tcp_send_check(t1, sk->saddr, sk->daddr, sizeof(*t1), sk);
+	tcp_send_check(t1, sk->saddr, sk->daddr, sizeof(*t1), buff);
 
 	/*
 	 * If there is data in the write queue, the fin must be appended to
@@ -737,15 +724,13 @@ void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb
 	t1->dest = skb->h.th->source;
 	t1->source = newsk->dummy_th.source;
 	t1->seq = ntohl(buff->seq);
-	t1->ack = 1;
 	newsk->sent_seq = newsk->write_seq;
 	t1->window = ntohs(tcp_select_window(newsk));
-	t1->res1 = 0;
-	t1->res2 = 0;
-	t1->rst = 0;
-	t1->urg = 0;
-	t1->psh = 0;
 	t1->syn = 1;
+	t1->ack = 1;
+	t1->urg = 0;
+	t1->rst = 0;
+	t1->psh = 0;
 	t1->ack_seq = htonl(newsk->acked_seq);
 	t1->doff = sizeof(*t1)/4+1;
 	ptr = skb_put(buff,4);
@@ -753,8 +738,8 @@ void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb
 	ptr[1] = 4;
 	ptr[2] = ((newsk->mtu) >> 8) & 0xff;
 	ptr[3] =(newsk->mtu) & 0xff;
-
-	tcp_send_check(t1, newsk->saddr, newsk->daddr, sizeof(*t1)+4, newsk);
+	buff->csum = csum_partial(ptr, 4, 0);
+	tcp_send_check(t1, newsk->saddr, newsk->daddr, sizeof(*t1)+4, buff);
 	newsk->prot->queue_xmit(newsk, ndev, buff, 0);
 	tcp_reset_xmit_timer(newsk, TIME_WRITE , TCP_TIMEOUT_INIT);
 	skb->sk = newsk;
@@ -817,6 +802,7 @@ void tcp_send_ack(u32 sequence, u32 ack,
 	 
 	buff->sk = sk;
 	buff->localroute = sk->localroute;
+	buff->csum = 0;
 
 	/* 
 	 *	Put in the IP header and routing stuff. 
@@ -832,7 +818,7 @@ void tcp_send_ack(u32 sequence, u32 ack,
 	}
 	t1 =(struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
 
-	memcpy(t1, th, sizeof(*t1));
+	memcpy(t1, &sk->dummy_th, sizeof(*t1));
 
 	/*
 	 *	Swap the send and the receive. 
@@ -841,16 +827,8 @@ void tcp_send_ack(u32 sequence, u32 ack,
 	t1->dest = th->source;
 	t1->source = th->dest;
 	t1->seq = ntohl(sequence);
-	t1->ack = 1;
 	sk->window = tcp_select_window(sk);
 	t1->window = ntohs(sk->window);
-	t1->res1 = 0;
-	t1->res2 = 0;
-	t1->rst = 0;
-	t1->urg = 0;
-	t1->syn = 0;
-	t1->psh = 0;
-	t1->fin = 0;
 	
 	/*
 	 *	If we have nothing queued for transmit and the transmit timer
@@ -876,8 +854,7 @@ void tcp_send_ack(u32 sequence, u32 ack,
   	 */
   	 
   	t1->ack_seq = htonl(ack);
-  	t1->doff = sizeof(*t1)/4;
-  	tcp_send_check(t1, sk->saddr, daddr, sizeof(*t1), sk);
+  	tcp_send_check(t1, sk->saddr, daddr, sizeof(*t1), buff);
   	if (sk->debug)
   		 printk("\rtcp_ack: seq %x ack %x\n", sequence, ack);
   	sk->prot->queue_xmit(sk, dev, buff, 1);
@@ -930,7 +907,6 @@ void tcp_write_wakeup(struct sock *sk)
 #if 0
 		unsigned long ow_size;
 #endif
-	    	void * tcp_data_start;
 	
 		/*
 		 *	How many bytes can we send ?
@@ -985,9 +961,9 @@ void tcp_write_wakeup(struct sock *sk)
 
 		buff->dev = dev;
 
-		nth = (struct tcphdr *) skb_put(buff,th->doff*4);
+		nth = (struct tcphdr *) skb_put(buff,sizeof(*th));
 
-		memcpy(nth, th, th->doff * 4);
+		memcpy(nth, th, sizeof(*th));
 		
 		/*
 		 *	Correct the new header
@@ -999,16 +975,11 @@ void tcp_write_wakeup(struct sock *sk)
 		nth->check = 0;
 
 		/*
-		 *	Find the first data byte.
+		 *	Copy TCP options and data start to our new buffer
 		 */
 		 
-		tcp_data_start = (char *) th + (th->doff << 2);
-
-		/*
-		 *	Add it to our new buffer
-		 */
-		 
-		memcpy(skb_put(buff,win_size), tcp_data_start, win_size);
+		buff->csum = csum_partial_copy((void *)(th + 1), skb_put(buff,win_size),
+				win_size + th->doff*4 - sizeof(*th), 0);
 		
 		/*
 		 *	Remember our right edge sequence number.
@@ -1024,7 +995,7 @@ void tcp_write_wakeup(struct sock *sk)
 		 */
 		 
 	    	tcp_send_check(nth, sk->saddr, sk->daddr, 
-			   nth->doff * 4 + win_size , sk);
+			   nth->doff * 4 + win_size , buff);
 	}
 	else
 	{	
@@ -1035,6 +1006,7 @@ void tcp_write_wakeup(struct sock *sk)
 		buff->free = 1;
 		buff->sk = sk;
 		buff->localroute = sk->localroute;
+		buff->csum = 0;
 
 		/*
 		 *	Put in the IP header and routing stuff. 
@@ -1057,18 +1029,10 @@ void tcp_write_wakeup(struct sock *sk)
 		 */
 	 
 		t1->seq = htonl(sk->sent_seq-1);
-		t1->ack = 1; 
-		t1->res1= 0;
-		t1->res2= 0;
-		t1->rst = 0;
-		t1->urg = 0;
-		t1->psh = 0;
-		t1->fin = 0;	/* We are sending a 'previous' sequence, and 0 bytes of data - thus no FIN bit */
-		t1->syn = 0;
+/*		t1->fin = 0;	-- We are sending a 'previous' sequence, and 0 bytes of data - thus no FIN bit */
 		t1->ack_seq = htonl(sk->acked_seq);
 		t1->window = htons(tcp_select_window(sk));
-		t1->doff = sizeof(*t1)/4;
-		tcp_send_check(t1, sk->saddr, sk->daddr, sizeof(*t1), sk);
+		tcp_send_check(t1, sk->saddr, sk->daddr, sizeof(*t1), buff);
 
 	}		
 

@@ -1089,19 +1089,25 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned int flags)
 	if (!(sock = sockfd_lookup(fd, NULL)))
 		return(-ENOTSOCK);
 	
+	if(sock->ops->sendmsg==NULL)
+		return -EOPNOTSUPP;
+
+
 	err=verify_area(VERIFY_READ, msg,sizeof(struct msghdr));
 	if(err)
 		return err;
+
 	memcpy_fromfs(&msg_sys,msg,sizeof(struct msghdr));
+
+	/* do not move before msg_sys is valid */
 	if(msg_sys.msg_iovlen>MAX_IOVEC)
 		return -EINVAL;
+
 	err=verify_iovec(&msg_sys,iov,address, VERIFY_READ);
 	if(err<0)
 		return err;
 	total_len=err;
-	
-	if(sock->ops->sendmsg==NULL)
-		return -EOPNOTSUPP;
+
 	return sock->ops->sendmsg(sock, &msg_sys, total_len, (file->f_flags&O_NONBLOCK), flags);
 }
 

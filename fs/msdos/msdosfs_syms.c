@@ -25,6 +25,8 @@ static struct symbol_table msdos_syms = {
   	X(msdos_rmdir),
   	X(msdos_unlink),
   	X(msdos_unlink_umsdos),
+  	X(msdos_read_super),
+  	X(msdos_put_super), 
 #include <linux/symtab_end.h>
 };                                           
 

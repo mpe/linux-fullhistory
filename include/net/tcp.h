@@ -95,7 +95,7 @@ extern __inline int before(__u32 seq1, __u32 seq2)
 
 extern __inline int after(__u32 seq1, __u32 seq2)
 {
-	return (__s32)(seq1-seq2) > 0;
+	return (__s32)(seq2-seq1) < 0;
 }
 
 
@@ -132,7 +132,7 @@ extern void tcp_time_wait(struct sock *);
 extern void tcp_retransmit(struct sock *, int);
 extern void tcp_do_retransmit(struct sock *, int);
 extern void tcp_send_check(struct tcphdr *th, unsigned long saddr, 
-		unsigned long daddr, int len, struct sock *sk);
+		unsigned long daddr, int len, struct sk_buff *skb);
 
 /* tcp_output.c */
 

@@ -209,7 +209,6 @@ struct symbol_table symbol_table = {
 	X(add_blkdev_randomness),
 	X(generic_file_read),
 	X(generic_readpage),
-	X(mark_buffer_uptodate),
 
 	/* device registration */
 	X(register_chrdev),

@@ -2,8 +2,9 @@
  * sound/gus2_midi.c
  *
  * The low level driver for the GUS Midi Interface.
- *
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,8 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 
@@ -44,9 +46,13 @@ static unsigned char tmp_queue[256];
 static volatile int qlen;
 static volatile unsigned char qhead, qtail;
 extern int      gus_base, gus_irq, gus_dma;
-extern sound_os_info *gus_osp;
+extern int     *gus_osp;
 
-#define GUS_MIDI_STATUS()	inb( u_MidiStatus)
+static int 
+GUS_MIDI_STATUS (void)
+{
+  return inb (u_MidiStatus);
+}
 
 static int
 gus_midi_open (int dev, int mode,
@@ -188,7 +194,7 @@ gus_midi_end_read (int dev)
 }
 
 static int
-gus_midi_ioctl (int dev, unsigned cmd, ioctl_arg arg)
+gus_midi_ioctl (int dev, unsigned cmd, caddr_t arg)
 {
   return -EINVAL;
 }
@@ -262,13 +268,14 @@ gus_midi_init (long mem_start)
 void
 gus_midi_interrupt (int dummy)
 {
-  unsigned char   stat, data;
+  volatile unsigned char stat, data;
   unsigned long   flags;
+  int             timeout = 10;
 
   save_flags (flags);
   cli ();
 
-  while ((stat = GUS_MIDI_STATUS ()) & (MIDI_RCV_FULL | MIDI_XMIT_EMPTY))
+  while (timeout-- > 0 && (stat = GUS_MIDI_STATUS ()) & (MIDI_RCV_FULL | MIDI_XMIT_EMPTY))
     {
       if (stat & MIDI_RCV_FULL)
 	{

@@ -1,50 +1,28 @@
 #ifndef SOUNDCARD_H
 #define SOUNDCARD_H
 /*
- * Copyright by Hannu Savolainen 1993
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
+ * modification, are permitted provided that the following conditions are
+ * met: 1. Redistributions of source code must retain the above copyright
+ * notice, this list of conditions and the following disclaimer. 2.
+ * Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * 
  */
-
- /* 
-  * If you make modifications to this file, please contact me before
-  * distributing the modified version. There is already enough 
-  * diversity in the world.
-  *
-  * Regards,
-  * Hannu Savolainen
-  * hannu@voxware.pp.fi
-  *
-  **********************************************************************
-  * PS.	The Hacker's Guide to VoxWare available from 
-  *     nic.funet.fi:pub/OS/Linux/ALPHA/sound. The file is
-  *	snd-sdk-doc-0.1.ps.gz (gzipped postscript). It contains
-  *	some useful information about programming with VoxWare.
-  *	(NOTE! The pub/OS/Linux/ALPHA/ directories are hidden. You have
-  *	to cd inside them before the files are accessible.)
-  **********************************************************************
-  */
 
 #define SOUND_VERSION	301
 #define VOXWARE
@@ -172,7 +150,7 @@ struct patch_info {
 		short device_no;	/* Synthesizer number */
 		short instr_no;		/* Midi pgm# */
 
-		unsigned long mode;
+		unsigned int mode;
 /*
  * The least significant byte has the same format than the GUS .PAT
  * files
@@ -191,8 +169,8 @@ struct patch_info {
 #define WAVE_SCALE	0x00040000	/* The scaling info is valid */
 /* Other bits must be zeroed */
 
-		long len;	/* Size of the wave data in bytes */
-		long loop_start, loop_end; /* Byte offsets from the beginning */
+		int len;	/* Size of the wave data in bytes */
+		int loop_start, loop_end; /* Byte offsets from the beginning */
 
 /* 
  * The base_freq and base_note fields are used when computing the
@@ -211,9 +189,9 @@ struct patch_info {
  */
 
 		unsigned int base_freq;
-		unsigned long base_note;
-		unsigned long high_note;
-		unsigned long low_note;
+		unsigned int base_note;
+		unsigned int high_note;
+		unsigned int low_note;
 		int panning;	/* -128=left, 127=right */
 		int detuning;
 
@@ -250,7 +228,7 @@ struct sysex_info {
 #define SYSEX_PATCH	_PATCHKEY(0x05)
 #define MAUI_PATCH	_PATCHKEY(0x06)
 		short device_no;	/* Synthesizer number */
-		long len;	/* Size of the sysex data in bytes */
+		int len;	/* Size of the sysex data in bytes */
 		unsigned char data[1];	/* Sysex data starts here */
 	};
 
@@ -281,7 +259,7 @@ struct sysex_info {
  */
 
 struct patmgr_info {	/* Note! size must be < 4k since kmalloc() is used */
-	  unsigned long key;	/* Don't worry. Reserved for communication
+	  unsigned int key;	/* Don't worry. Reserved for communication
 	  			   between the patch manager and the driver. */
 #define PM_K_EVENT		1 /* Event from the /dev/sequencer driver */
 #define PM_K_COMMAND		2 /* Request from a application */
@@ -315,14 +293,14 @@ struct patmgr_info {	/* Note! size must be < 4k since kmalloc() is used */
  * Commands above 0xffff reserved for device specific use
  */
 
-	  long parm1;
-	  long parm2;
-	  long parm3;
+	  int parm1;
+	  int parm2;
+	  int parm3;
 
 	  union {
 		unsigned char data8[4000];
 		unsigned short data16[2000];
-		unsigned long data32[1000];
+		unsigned int data32[1000];
 		struct patch_info patch;
 	  } data;
 	};
@@ -526,7 +504,7 @@ struct synth_info {	/* Read only */
 		int	nr_voices;
 		int	nr_drums;	/* Obsolete field */
 		int	instr_bank_size;
-		unsigned long	capabilities;	
+		unsigned int	capabilities;	
 #define SYNTH_CAP_PERCMODE		0x00000001 /* No longer used */
 #define SYNTH_CAP_OPL3			0x00000002 /* Set if OPL3 supported */
 #define SYNTH_CAP_INPUT			0x00000004 /* Input (MIDI) device */
@@ -543,7 +521,7 @@ struct sound_timer_info {
 struct midi_info {
 		char		name[30];
 		int		device;		/* 0-N. INITIALIZE BEFORE CALLING */
-		unsigned long	capabilities;	/* To be defined later */
+		unsigned int	capabilities;	/* To be defined later */
 		int		dev_type;
 		int		dummies[18];	/* Reserve space */
 	};
@@ -1081,7 +1059,8 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
 					_seqbuf[_seqbufptr+2] = (dev);\
 					_seqbuf[_seqbufptr+3] = (voice);\
 					_seqbuf[_seqbufptr+4] = (controller);\
-					*(short *)&_seqbuf[_seqbufptr+5] = (value);\
+					_seqbuf[_seqbufptr+5] = ((value)&0xff);\
+					_seqbuf[_seqbufptr+6] = ((value>>8)&0xff);\
 					_seqbuf[_seqbufptr+7] = 0;\
 					_SEQ_ADVBUF(8);}
 /*

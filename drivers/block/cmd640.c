@@ -56,6 +56,7 @@
 #include <linux/hdreg.h>
 #include <asm/io.h>
 #include "ide.h"
+#include "ide_modes.h"
 
 int cmd640_vlb = 0;
 
@@ -594,87 +595,9 @@ static struct pio_timing {
 	{ 50,	125,	383 },	/* PIO Mode 1 */
 	{ 30,	100,	240 },	/* PIO Mode 2 */
 	{ 30,	80,	180 },	/* PIO Mode 3 */
-	{ 25,	70,	125 },	/* PIO Mode 4 */
+	{ 25,	70,	125 },	/* PIO Mode 4  -- should be 120, not 125 */
 	{ 20,	50,	100 }	/* PIO Mode ? (nonstandard) */
 };
-
-/*
- * Black list. Some drives incorrectly report their maximal PIO modes, at least
- * in respect to CMD640. Here we keep info on some known drives.
- */
-
-static struct drive_pio_info {
-	const char	*name;
-	int		pio;
-} drive_pios[] = {
-/*	{ "Conner Peripherals 1275MB - CFS1275A", 4 }, */
-
-	{ "WDC AC2700",  3 },
-	{ "WDC AC2540",  3 },
-	{ "WDC AC2420",  3 },
-	{ "WDC AC2340",  3 },
-	{ "WDC AC2250",  0 },
-	{ "WDC AC2200",  0 },
-	{ "WDC AC2120",  0 },
-	{ "WDC AC2850",  3 },
-	{ "WDC AC1270",  3 },
-	{ "WDC AC1170",  3 },
-	{ "WDC AC1210",  1 },
-	{ "WDC AC280",   0 },
-/*	{ "WDC AC21000", 4 }, */
-	{ "WDC AC31000", 3 },
-/*	{ "WDC AC21200", 4 }, */
-	{ "WDC AC31200", 3 },
-/*	{ "WDC AC31600", 4 }, */
-
-	{ "Maxtor 7131 AT", 1 },
-	{ "Maxtor 7171 AT", 1 },
-	{ "Maxtor 7213 AT", 1 },
-	{ "Maxtor 7245 AT", 1 },
-	{ "Maxtor 7345 AT", 1 },
-	{ "Maxtor 7546 AT", 3 },
-	{ "Maxtor 7540 AV", 3 },
-
-	{ "SAMSUNG SHD-3121A", 1 },
-	{ "SAMSUNG SHD-3122A", 1 },
-	{ "SAMSUNG SHD-3172A", 1 },
-
-/*	{ "ST51080A", 4 },
- *	{ "ST51270A", 4 },
- *	{ "ST31220A", 4 },
- *	{ "ST31640A", 4 },
- *	{ "ST32140A", 4 },
- *	{ "ST3780A",  4 },
- */	{ "ST5660A",  3 },
-	{ "ST3660A",  3 },
-	{ "ST3630A",  3 },
-	{ "ST3655A",  3 },
-	{ "ST3391A",  3 },
-	{ "ST3390A",  1 },
-	{ "ST3600A",  1 },
-	{ "ST3290A",  0 },
-	{ "ST3144A",  0 },
-
-	{ "QUANTUM ELS127A", 0 },
-	{ "QUANTUM ELS170A", 0 },
-	{ "QUANTUM LPS240A", 0 },
-	{ "QUANTUM LPS210A", 3 },
-	{ "QUANTUM LPS270A", 3 },
-	{ "QUANTUM LPS365A", 3 },
-	{ "QUANTUM LPS540A", 3 },
-	{ "QUANTUM FIREBALL", 3 }, /* For models 540/640/1080/1280 */
-	{ NULL,	0 }
-};
-
-static int known_drive_pio(char* name) {
-	struct drive_pio_info* pi;
-
-	for (pi = drive_pios; pi->name != NULL; pi++) {
-		if (strmatch(pi->name, name) == 0)
-			return pi->pio;
-	}
-	return -1;
-}
 
 static void cmd640_timings_to_clocks(int mc_time, int av_time, int ds_time,
 				int clock_time, int drv_idx)
@@ -764,7 +687,7 @@ static void cmd640_tune_drive(ide_drive_t *drive, byte pio_mode) {
 	drive_number = drive->select.b.unit;
 	clock_time = 1000/bus_speed;
 	id = drive->id;
-	if ((max_pio = known_drive_pio(id->model)) != -1) {
+	if ((max_pio = ide_scan_pio_blacklist(id->model)) != -1) {
 		ds_time = pio_timings[max_pio].ds_time;
 	} else {
 		max_pio = id->tPIO;

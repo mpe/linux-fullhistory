@@ -3,8 +3,9 @@
  * sound/pas2_pcm.c
  *
  * The low level driver for the Pro Audio Spectrum ADC/DAC.
- *
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -25,8 +26,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 
@@ -53,6 +55,7 @@ static unsigned char pcm_filter = 0;	/* filter FLAG */
 static unsigned char pcm_mode = PCM_NON;
 static unsigned long pcm_count = 0;
 static unsigned short pcm_bitsok = 8;	/* mask of OK bits */
+static int      pcm_busy = 0;
 static int      my_devnum = 0;
 
 int
@@ -66,11 +69,16 @@ pcm_set_speed (int arg)
   if (arg < 5000)
     arg = 5000;
 
-  foo = (1193180 + (arg / 2)) / arg;
-  arg = 1193180 / foo;
-
   if (pcm_channels & 2)
-    foo = foo >> 1;
+    {
+      foo = (596590 + (arg / 2)) / arg;
+      arg = 596590 / foo;
+    }
+  else
+    {
+      foo = (1193180 + (arg / 2)) / arg;
+      arg = 1193180 / foo;
+    }
 
   pcm_speed = arg;
 
@@ -152,7 +160,7 @@ pcm_set_bits (int arg)
 }
 
 static int
-pas_pcm_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
+pas_pcm_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 {
   TRACE (printk ("pas2_pcm.c: static int pas_pcm_ioctl(unsigned int cmd = %X, unsigned int arg = %X)\n", cmd, arg));
 
@@ -230,8 +238,20 @@ static int
 pas_pcm_open (int dev, int mode)
 {
   int             err;
+  unsigned long   flags;
 
   TRACE (printk ("pas2_pcm.c: static int pas_pcm_open(int mode = %X)\n", mode));
+
+  save_flags (flags);
+  cli ();
+  if (pcm_busy)
+    {
+      restore_flags (flags);
+      return -EBUSY;
+    }
+
+  pcm_busy = 1;
+  restore_flags (flags);
 
   if ((err = pas_set_intr (PAS_PCM_INTRBITS)) < 0)
     return err;
@@ -256,6 +276,7 @@ pas_pcm_close (int dev)
   pas_remove_intr (PAS_PCM_INTRBITS);
   pcm_mode = PCM_NON;
 
+  pcm_busy = 0;
   restore_flags (flags);
 }
 

@@ -20,7 +20,7 @@
  */
  
 #define SIOCSKEEPALIVE	(SIOCDEVPRIVATE)		/* Set keepalive timeout in sec */
-#define SIOCGKEEPALIVE	(SICODEVPRIVATE+1)		/* Get keepalive timeout */
+#define SIOCGKEEPALIVE	(SIOCDEVPRIVATE+1)		/* Get keepalive timeout */
 #define SIOCSOUTFILL	(SIOCDEVPRIVATE+2)		/* Set outfill timeout */
 #define	SIOCGOUTFILL	(SIOCDEVPRIVATE+3)		/* Get outfill timeout */
 

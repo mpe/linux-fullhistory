@@ -3,8 +3,9 @@
  *
  * Low level driver for the MediaTriX AudioTriX Pro
  * (MT-0002-PC Control Chip)
- *
- * Copyright by Hannu Savolainen 1995
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -25,8 +26,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 
@@ -34,6 +36,10 @@
 
 #ifdef INCLUDE_TRIX_BOOT
 #include "trix_boot.h"
+#else
+static unsigned char *trix_boot = NULL;
+static int      trix_boot_len = 0;
+
 #endif
 
 
@@ -41,7 +47,7 @@ static int      kilroy_was_here = 0;	/* Don't detect twice */
 static int      sb_initialized = 0;
 static int      mpu_initialized = 0;
 
-static sound_os_info *trix_osp = NULL;
+static int     *trix_osp = NULL;
 
 static unsigned char
 trix_read (int addr)
@@ -60,8 +66,10 @@ trix_write (int addr, int data)
 static void
 download_boot (int base)
 {
-#ifdef INCLUDE_TRIX_BOOT
-  int             i = 0, n = sizeof (trix_boot);
+  int             i = 0, n = trix_boot_len;
+
+  if (trix_boot_len == 0)
+    return;
 
   trix_write (0xf8, 0x00);	/* ??????? */
   outb (0x01, base + 6);	/* Clear the internal data pointer */
@@ -80,7 +88,6 @@ download_boot (int base)
     outb (0x00, 0x391);
   outb (0x00, base + 6);	/* Reset */
   outb (0x50, 0x390);		/* ?????? */
-#endif
 
 }
 
@@ -103,8 +110,6 @@ trix_set_wss_port (struct address_info *hw_config)
       DDB (printk ("No AudioTriX ASIC signature found\n"));
       return 0;
     }
-
-  request_region (0x390, 2, "AudioTriX");
 
   kilroy_was_here = 1;
 
@@ -149,6 +154,8 @@ trix_set_wss_port (struct address_info *hw_config)
 int
 probe_trix_wss (struct address_info *hw_config)
 {
+  int             ret;
+
   /*
      * Check if the IO port returns valid signature. The original MS Sound
      * system returns 0x04 while some cards (AudioTriX Pro for example)
@@ -156,7 +163,7 @@ probe_trix_wss (struct address_info *hw_config)
    */
   if (check_region (hw_config->io_base, 8))
     {
-      printk ("AudioTriX: MSS I/O port conflict\n");
+      printk ("AudioTriX: MSS I/O port conflict (%x)\n", hw_config->io_base);
       return 0;
     }
 
@@ -206,7 +213,12 @@ probe_trix_wss (struct address_info *hw_config)
       return 0;
     }
 
-  return ad1848_detect (hw_config->io_base + 4, NULL, hw_config->osp);
+  ret = ad1848_detect (hw_config->io_base + 4, NULL, hw_config->osp);
+
+  if (ret)
+    request_region (0x390, 2, "AudioTriX");
+
+  return ret;
 }
 
 long
@@ -282,9 +294,9 @@ probe_trix_sb (struct address_info *hw_config)
   static char     irq_translate[] =
   {-1, -1, -1, 0, 1, 2, -1, 3};
 
-#ifndef INCLUDE_TRIX_BOOT
-  return 0;			/* No boot code -> no fun */
-#endif
+  if (trix_boot_len == 0)
+    return 0;			/* No boot code -> no fun */
+
   if (!kilroy_was_here)
     return 0;			/* AudioTriX Pro has not been detected earlier */
 
@@ -293,7 +305,7 @@ probe_trix_sb (struct address_info *hw_config)
 
   if (check_region (hw_config->io_base, 16))
     {
-      printk ("AudioTriX: SB I/O port conflict\n");
+      printk ("AudioTriX: SB I/O port conflict (%x)\n", hw_config->io_base);
       return 0;
     }
 
@@ -374,7 +386,7 @@ probe_trix_mpu (struct address_info *hw_config)
 
   if (check_region (hw_config->io_base, 4))
     {
-      printk ("AudioTriX: MPU I/O port conflict\n");
+      printk ("AudioTriX: MPU I/O port conflict (%x)\n", hw_config->io_base);
       return 0;
     }
 

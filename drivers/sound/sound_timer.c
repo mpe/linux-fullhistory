@@ -1,7 +1,8 @@
 /*
  * sound/sound_timer.c
- *
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -22,8 +23,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #define SEQUENCER_C
 #include "sound_config.h"
@@ -98,7 +100,7 @@ tmr_reset (void)
   tmr_offs = 0;
   ticks_offs = 0;
   tmr_ctr = 0;
-  next_event_time = 0xffffffff;
+  next_event_time = (unsigned long) -1;
   prev_event_time = 0;
   curr_ticks = 0;
   restore_flags (flags);
@@ -112,7 +114,7 @@ timer_open (int dev, int mode)
 
   tmr_reset ();
   curr_tempo = 60;
-  curr_timebase = HZ;
+  curr_timebase = 100;
   opened = 1;
   reprogram_timer ();
 
@@ -202,7 +204,7 @@ timer_get_time (int dev)
 
 static int
 timer_ioctl (int dev,
-	     unsigned int cmd, ioctl_arg arg)
+	     unsigned int cmd, caddr_t arg)
 {
   switch (cmd)
     {
@@ -323,7 +325,7 @@ sound_timer_interrupt (void)
 
   if (curr_ticks >= next_event_time)
     {
-      next_event_time = 0xffffffff;
+      next_event_time = (unsigned long) -1;
       sequencer_timer (0);
     }
 }

@@ -219,7 +219,9 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	case KIOCSOUND:
 		if (!perm)
 			return -EPERM;
-		kd_mksound(1193180 / (unsigned int) arg, 0);
+		if (arg)
+			arg = 1193180 / arg;
+		kd_mksound(arg, 0);
 		return 0;
 
 	case KDMKTONE:

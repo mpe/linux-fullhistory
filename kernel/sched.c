@@ -1115,8 +1115,8 @@ asmlinkage int sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
 	if (error)
 		return error;
 	
-	t.ts_sec = 0;
-	t.ts_nsec = 0;   /* <-- Linus, please fill correct value in here */
+	t.tv_sec = 0;
+	t.tv_nsec = 0;   /* <-- Linus, please fill correct value in here */
 	return -ENOSYS;  /* and then delete this line. Thanks!           */
 	memcpy_tofs(interval, &t, sizeof(struct timespec));
 

@@ -76,6 +76,7 @@
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/if_arp.h>
+#include <linux/if_slip.h>
 #include "slip.h"
 #ifdef CONFIG_INET
 #include <linux/ip.h>

@@ -6,7 +6,7 @@
  *                                       vadim@rbrf.msk.su
  *                                       vadim@ipsun.ras.ru
  *                       Eric van der Maarel
- *                                       maarel@marin.nl
+ *                                       H.T.M.v.d.Maarel@marin.nl
  *
  *  This information is based on mcd.c from M. Harriss and sjcd102.lst from
  *  E. Moenkeberg.
@@ -57,7 +57,7 @@
  * Port access macro. Three ports are available: S-data port (command port),
  * status port (read only) and D-data port (read only).
  */
-#define SJCDPORT( x )       ( sjcd_port + ( x ) )
+#define SJCDPORT( x )       ( sjcd_base + ( x ) )
 #define SJCD_STATUS_PORT    SJCDPORT( 1 )
 #define SJCD_S_DATA_PORT    SJCDPORT( 0 )
 #define SJCD_COMMAND_PORT   SJCDPORT( 0 )

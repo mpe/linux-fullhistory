@@ -2,8 +2,9 @@
  * sound/midi_synth.c
  *
  * High level midi sequencer manager for dumb MIDI interfaces.
- *
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,8 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #define USE_SEQ_MACROS
 #define USE_SIMPLE_MACROS
@@ -279,7 +281,7 @@ midi_synth_output (int dev)
 
 int
 midi_synth_ioctl (int dev,
-		  unsigned int cmd, ioctl_arg arg)
+		  unsigned int cmd, caddr_t arg)
 {
   /*
    * int orig_dev = synth_devs[dev]->midi_dev;
@@ -498,7 +500,7 @@ midi_synth_hw_control (int dev, unsigned char *event)
 }
 
 int
-midi_synth_load_patch (int dev, int format, const snd_rw_buf * addr,
+midi_synth_load_patch (int dev, int format, const char *addr,
 		       int offs, int count, int pmgr_flag)
 {
   int             orig_dev = synth_devs[dev]->midi_dev;
@@ -576,7 +578,7 @@ midi_synth_load_patch (int dev, int format, const snd_rw_buf * addr,
 	  if (1)
 	    current_set_timeout (tl = jiffies + (1));
 	  else
-	    tl = 0xffffffff;
+	    tl = (unsigned long) -1;
 	  sysex_sleep_flag.mode = WK_SLEEP;
 	  module_interruptible_sleep_on (&sysex_sleeper);
 	  if (!(sysex_sleep_flag.mode & WK_WAKEUP))

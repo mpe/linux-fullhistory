@@ -95,6 +95,7 @@
  *
  * And, yes, Intel Zappa boards really *do* use the Triton IDE ports.
  */
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/timer.h>
@@ -116,7 +117,8 @@
  * of drives which do not support mword2 DMA but which are
  * known to work fine with this interface under Linux.
  */
-const char *good_dma_drives[] = {"Micropolis 2112A"};
+const char *good_dma_drives[] = {"Micropolis 2112A",
+				 "CONNER CTMA 4000"};
 
 /*
  * Our Physical Region Descriptor (PRD) table should be large enough
@@ -184,8 +186,13 @@ static int build_dmatable (ide_drive_t *drive)
 		 * is always composed of two adjacent physical 4kB pages rather
 		 * than two possibly non-adjacent physical 4kB pages.
 		 */
-		if (bh == NULL) {  /* paging requests have (rq->bh == NULL) */
+		if (bh == NULL) {  /* paging and tape requests have (rq->bh == NULL) */
 			addr = virt_to_bus (rq->buffer);
+#ifdef CONFIG_BLK_DEV_IDETAPE
+			if (drive->media == ide_tape)
+				size = drive->tape.pc->request_transfer;
+			else
+#endif /* CONFIG_BLK_DEV_IDETAPE */	
 			size = rq->nr_sectors << 9;
 		} else {
 			/* group sequential buffers into one large buffer */
@@ -255,6 +262,10 @@ static int config_drive_for_dma (ide_drive_t *drive)
  * sector address using CHS or LBA.  All that remains is to prepare for DMA
  * and then issue the actual read/write DMA/PIO command to the drive.
  *
+ * For ATAPI devices, we just prepare for DMA and return. The caller should
+ * then issue the packet command to the drive and call us again with
+ * ide_dma_begin afterwards.
+ *
  * Returns 0 if all went well.
  * Returns 1 if DMA read/write could not be started, in which case
  * the caller should revert to PIO for the current request.
@@ -274,6 +285,17 @@ static int triton_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 			reading = 0;
 		case ide_dma_read:
 			break;
+		case ide_dma_status_bad:
+			return ((inb(dma_base+2) & 7) != 4);	/* verify good DMA status */
+		case ide_dma_transferred:
+#if 0
+			return (number of bytes actually transferred);
+#else
+			return (0);
+#endif
+		case ide_dma_begin:
+			outb(inb(dma_base)|1, dma_base);	/* begin DMA */
+			return 0;
 		default:
 			printk("triton_dmaproc: unsupported func: %d\n", func);
 			return 1;
@@ -283,6 +305,10 @@ static int triton_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	outl(virt_to_bus (HWIF(drive)->dmatable), dma_base + 4); /* PRD table */
 	outb(reading, dma_base);			/* specify r/w */
 	outb(0x26, dma_base+2);				/* clear status bits */
+#ifdef CONFIG_BLK_DEV_IDEATAPI
+	if (drive->media != ide_disk)
+		return 0;
+#endif /* CONFIG_BLK_DEV_IDEATAPI */	
 	ide_set_handler(drive, &dma_intr, WAIT_CMD);	/* issue cmd to drive */
 	OUT_BYTE(reading ? WIN_READDMA : WIN_WRITEDMA, IDE_COMMAND_REG);
 	outb(inb(dma_base)|1, dma_base);		/* begin DMA */

@@ -25,6 +25,8 @@
 # 281295 Paul Gortmaker - make tri_state functions collapse to boolean
 # if module support is not enabled.
 #
+# 010296 Aaron Ucko (ucko@vax1.rockhurst.edu) - fix int and hex to accept
+# arbitrary ranges
 
 #
 # Make sure we're really running bash.
@@ -64,15 +66,15 @@ function help () {
      var=$(echo "$1"|sed 's/[][\/.^$*]/\\&/g')
      #now pick out the right help text:
      text=$(sed -n "/^$var[ 	]*\$/,\${
-                        /^$var[ 	]*\$/b
-                        /^#.*/b;/^[ 	]*\$/q
-                        p
-                    }" Documentation/Configure.help)
+			/^$var[ 	]*\$/b
+			/^#.*/b;/^[ 	]*\$/q
+			p
+		    }" Documentation/Configure.help)
      if [ -z "$text" ]
      then
-          echo; echo "  Sorry, no help available for this option yet.";echo
+	  echo; echo "  Sorry, no help available for this option yet.";echo
      else
-          (echo; echo "$text"; echo) | more
+	  (echo; echo "$text"; echo) | more
      fi
   else
      echo;
@@ -116,21 +118,21 @@ function comment () {
 #	define_bool define value
 #
 function define_bool () {
-        case "$2" in
-         "y")
+	case "$2" in
+	 "y")
 		echo "$1=y" >>$CONFIG
 		echo "#define $1 1" >>$CONFIG_H
 		;;
 
-         "m")
+	 "m")
 		echo "$1=m" >>$CONFIG
 		echo "#undef  $1" >>$CONFIG_H
 		;;
 
-         "n")
+	 "n")
 		echo "# $1 is not set" >>$CONFIG
 		echo "#undef  $1" >>$CONFIG_H
-                ;;
+		;;
 	esac
 	eval "$1=$2"
 }
@@ -142,24 +144,24 @@ function define_bool () {
 #
 function bool () {
 	def=$(eval echo "\${$2:-'n'}")
-        case "$def" in
-         "y" | "m") defprompt="Y/n/?"
-              def="y"
-              ;;
-         "n") defprompt="N/y/?"
-              ;;
-        esac
-        while :; do
-          readln "$1 ($2) [$defprompt] " "$def"
-          case "$ans" in
-            [yY] | [yY]es ) define_bool "$2" "y"
-                            break;;
-            [nN] | [nN]o )  define_bool "$2" "n"
-                            break;;
-            * )             help "$2"
-                            ;;
-          esac
-        done
+	case "$def" in
+	 "y" | "m") defprompt="Y/n/?"
+	      def="y"
+	      ;;
+	 "n") defprompt="N/y/?"
+	      ;;
+	esac
+	while :; do
+	  readln "$1 ($2) [$defprompt] " "$def"
+	  case "$ans" in
+	    [yY] | [yY]es ) define_bool "$2" "y"
+			    break;;
+	    [nN] | [nN]o )  define_bool "$2" "n"
+			    break;;
+	    * )             help "$2"
+			    ;;
+	  esac
+	done
 }
 
 #
@@ -168,32 +170,32 @@ function bool () {
 #	tristate question define
 #
 function tristate () {
-        if [ "$CONFIG_MODULES" != "y" ]; then
-          bool "$1" "$2"
-        else 
+	if [ "$CONFIG_MODULES" != "y" ]; then
+	  bool "$1" "$2"
+	else 
 	  def=$(eval echo "\${$2:-'n'}")
-          case "$def" in
-           "y") defprompt="Y/m/n/?"
-                ;;
-           "m") defprompt="M/n/y/?"
-                ;;
-           "n") defprompt="N/y/m/?"
-                ;;
-          esac
-          while :; do
-            readln "$1 ($2) [$defprompt] " "$def"
-            case "$ans" in
-              [yY] | [yY]es ) define_bool "$2" "y"
-                              break ;;
-              [nN] | [nN]o )  define_bool "$2" "n"
-                              break ;;
-              [mM] )          define_bool "$2" "m"
-                              break ;;
+	  case "$def" in
+	   "y") defprompt="Y/m/n/?"
+		;;
+	   "m") defprompt="M/n/y/?"
+		;;
+	   "n") defprompt="N/y/m/?"
+		;;
+	  esac
+	  while :; do
+	    readln "$1 ($2) [$defprompt] " "$def"
+	    case "$ans" in
+	      [yY] | [yY]es ) define_bool "$2" "y"
+			      break ;;
+	      [nN] | [nN]o )  define_bool "$2" "n"
+			      break ;;
+	      [mM] )          define_bool "$2" "m"
+			      break ;;
 	      * )             help "$2"
-                              ;;
-            esac
-          done
-        fi
+			      ;;
+	    esac
+	  done
+	fi
 }
 
 #
@@ -208,37 +210,39 @@ function tristate () {
 #
 function dep_tristate () {
 	def=$(eval echo "\${$2:-'n'}")
-	if [ "$3" != "m" ]; then
+	if [ "$3" = "n" ]; then
+		define_bool "$2" "n"
+	elif [ "$3" = "y" ]; then
 		tristate "$1" "$2"
 	else
-           if [ "$CONFIG_MODULES" = "y" ]; then
-	        case "$def" in
-        	 "y" | "m") defprompt="M/n/?"
+	   if [ "$CONFIG_MODULES" = "y" ]; then
+		case "$def" in
+		 "y" | "m") defprompt="M/n/?"
 		      def="m"
-        	      ;;
-        	 "n") defprompt="N/m/?"
-        	      ;;
-	        esac
-                while :; do
-                  readln "$1 ($2) [$defprompt] " "$def"
-                  case "$ans" in
-                      [nN] | [nN]o )  define_bool "$2" "n"
-                                      break ;;
-                      [mM] )          define_bool "$2" "m"
-                                      break ;;
-                      [yY] | [yY]es ) echo 
+		      ;;
+		 "n") defprompt="N/m/?"
+		      ;;
+		esac
+		while :; do
+		  readln "$1 ($2) [$defprompt] " "$def"
+		  case "$ans" in
+		      [nN] | [nN]o )  define_bool "$2" "n"
+				      break ;;
+		      [mM] )          define_bool "$2" "m"
+				      break ;;
+		      [yY] | [yY]es ) echo 
    echo "  This answer is not allowed, because it is not consistent with"
    echo "  your other choices."
    echo "  This driver depends on another one which you chose to compile"
    echo "  as a module. This means that you can either compile this one"
    echo "  as a module as well (with M) or leave it out altogether (N)."
-                                      echo
-                                      ;;
-                      * )             help "$2"
-                                      ;;
-                  esac
-                done
-           fi
+				      echo
+				      ;;
+		      * )             help "$2"
+				      ;;
+		  esac
+		done
+	   fi
 	fi
 }
 
@@ -260,17 +264,15 @@ function define_int () {
 #
 function int () {
 	def=$(eval echo "\${$2:-$3}")
-        while :; do
-          readln "$1 ($2) [$def] " "$def"
-          case "$ans" in
-             -1 | [1-9] | [1-9][0-9] |\
-             [1-9][0-9][0-9] | [1-9][0-9][0-9][0-9] | [1-9][0-9][0-9][0-9][0-9]) 
-                 define_int "$2" "$ans"
-                 break;;
-             * ) help "$2"
-                 ;;
-          esac
-        done
+	while :; do
+	  readln "$1 ($2) [$def] " "$def"
+	  if expr "$ans" : '0$\|-?[1-9][0-9]*$' > /dev/null; then
+	    define_int "$2" "$ans"
+	    break
+	  else
+	    help "$2"
+	  fi
+	done
 }
 #
 # define_hex sets the value of a hexadecimal argument
@@ -291,20 +293,16 @@ function define_hex () {
 function hex () {
 	def=$(eval echo "\${$2:-$3}")
 	def=${def#*[x,X]}
-        while :; do
-          readln "$1 ($2) [$def] " "$def"
-          ans=${ans#*[x,X]}
-          case "$ans" in
-             [0-9,a-f,A-F] |\
-             [0-9,a-f,A-F][0-9,a-f,A-F] |\
-             [0-9,a-f,A-F][0-9,a-f,A-F][0-9,a-f,A-F] |\
-             [0-9,a-f,A-F][0-9,a-f,A-F][0-9,a-f,A-F][0-9,a-f,A-F])\
-                 define_hex "$2" "$ans"
-                 break;;
-             * ) help "$2"
-                 ;;
-          esac
-        done
+	while :; do
+	  readln "$1 ($2) [$def] " "$def"
+	  ans=${ans#*[x,X]}
+	 if expr "$ans" : '[0-9a-fA-F]+$' > /dev/null; then
+	   define_hex "$2" "$ans"
+	   break
+	 else
+	    help "$2"
+	 fi
+	done
 }
 
 #
@@ -329,7 +327,7 @@ function choice () {
 	# determine default answer:
 	names=""
 	set -- $choices
-        firstvar=$2
+	firstvar=$2
 	while [ -n "$2" ]; do
 		if [ -n "$names" ]; then
 			names="$names, $1"
@@ -344,7 +342,7 @@ function choice () {
 
 	val=""
 	while [ -z "$val" ]; do
-                ambg=n
+		ambg=n
 		readln "$question ($names) [$def] " "$def"
 		ans=$(echo $ans | tr a-z A-Z)
 		set -- $choices
@@ -359,19 +357,19 @@ function choice () {
 					if [ -n "$val" ]; then
 						echo;echo \
 		"  Sorry, \"$ans\" is ambiguous; please enter a longer string."
-                                                echo
+						echo
 						val=""
-                                                ambg=y
+						ambg=y
 						break
 					else
 						val="$2"
 					fi;;
 			esac
 			shift; shift
-                done
-	        if [ "$val" = "" -a "$ambg" = "n" ]; then
-                        help "$firstvar"
-                fi
+		done
+		if [ "$val" = "" -a "$ambg" = "n" ]; then
+			help "$firstvar"
+		fi
 	done
 	set -- $choices
 	while [ -n "$2" ]; do

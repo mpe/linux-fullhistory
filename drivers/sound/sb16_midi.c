@@ -2,8 +2,9 @@
  * sound/sb16_midi.c
  *
  * The low level driver for the MPU-401 UART emulation of the SB16.
- *
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,8 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 
@@ -37,14 +39,31 @@
 #define	COMDPORT   (sb16midi_base+1)
 #define	STATPORT   (sb16midi_base+1)
 
-extern sound_os_info *sb_osp;
+extern int     *sb_osp;
+static int      sb16midi_base = 0x330;
 
-#define sb16midi_status()		inb( STATPORT)
+static int 
+sb16midi_status (void)
+{
+  return inb (STATPORT);
+}
 #define input_avail()		(!(sb16midi_status()&INPUT_AVAIL))
 #define output_ready()		(!(sb16midi_status()&OUTPUT_READY))
-#define sb16midi_cmd(cmd)		outb( cmd,  COMDPORT)
-#define sb16midi_read()		inb( DATAPORT)
-#define sb16midi_write(byte)	outb( byte,  DATAPORT)
+static void 
+sb16midi_cmd (unsigned char cmd)
+{
+  outb (cmd, COMDPORT);
+}
+static int 
+sb16midi_read (void)
+{
+  return inb (DATAPORT);
+}
+static void 
+sb16midi_write (unsigned char byte)
+{
+  outb (byte, DATAPORT);
+}
 
 #define	OUTPUT_READY	0x40
 #define	INPUT_AVAIL	0x80
@@ -53,7 +72,6 @@ extern sound_os_info *sb_osp;
 #define	UART_MODE_ON	0x3F
 
 static int      sb16midi_opened = 0;
-static int      sb16midi_base = 0x330;
 static int      sb16midi_detected = 0;
 static int      my_dev;
 extern int      sbc_base;
@@ -168,7 +186,7 @@ sb16midi_end_read (int dev)
 }
 
 static int
-sb16midi_ioctl (int dev, unsigned cmd, ioctl_arg arg)
+sb16midi_ioctl (int dev, unsigned cmd, caddr_t arg)
 {
   return -EINVAL;
 }

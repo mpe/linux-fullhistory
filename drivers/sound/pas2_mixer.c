@@ -4,8 +4,9 @@
  * sound/pas2_mixer.c
  *
  * Mixer routines for the Pro Audio Spectrum cards.
- *
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -26,8 +27,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 
@@ -39,7 +41,7 @@
 
 extern int      translat_code;
 extern char     pas_model;
-extern sound_os_info *pas_osp;
+extern int     *pas_osp;
 
 static int      rec_devices = (SOUND_MASK_MIC);		/* Default recording source */
 static int      mode_control = 0;
@@ -258,7 +260,7 @@ pas_mixer_reset (void)
 }
 
 int
-pas_mixer_ioctl (int dev, unsigned int cmd, ioctl_arg arg)
+pas_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 {
   TRACE (printk ("pas2_mixer.c: int pas_mixer_ioctl(unsigned int cmd = %X, unsigned int arg = %X)\n", cmd, arg));
 

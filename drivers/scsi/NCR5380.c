@@ -68,8 +68,6 @@
  *      the high level code.
  */
 
-#include "g_NCR5380.h"
-
 #if (NDEBUG & NDEBUG_LISTS)
 #define LIST(x,y) {printk("LINE:%d   Adding %p to %p\n", __LINE__, (void*)(x), (void*)(y)); if ((x)==(y)) udelay(5); }
 #define REMOVE(w,x,y,z) {printk("LINE:%d   Removing: %p->%p  %p->%p \n", __LINE__, (void*)(w), (void*)(x), (void*)(y), (void*)(z)); if ((x)==(y)) udelay(5); }
@@ -788,8 +786,10 @@ static void NCR5380_init (struct Scsi_Host *instance, int flags) {
      * the base address.
      */
 
+#ifdef NCR53C400
     if (flags & FLAG_NCR53C400)
 	instance->NCR5380_instance_name += NCR53C400_address_adjust;
+#endif
 
     NCR5380_setup(instance);
 
@@ -839,9 +839,11 @@ static void NCR5380_init (struct Scsi_Host *instance, int flags) {
     NCR5380_write(TARGET_COMMAND_REG, 0);
     NCR5380_write(SELECT_ENABLE_REG, 0);
 
+#ifdef NCR53C400
     if (hostdata->flags & FLAG_NCR53C400) {
 	NCR5380_write(C400_CONTROL_STATUS_REG, CSR_BASE);
     }
+#endif
 
     /* 
      * Detect and correct bus wedge problems.

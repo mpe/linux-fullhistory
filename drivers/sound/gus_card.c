@@ -2,8 +2,9 @@
  * sound/gus_card.c
  *
  * Detection routine for the Gravis Ultrasound.
- *
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,8 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 
@@ -40,7 +42,7 @@ extern int      gus_wave_volume;
 extern int      gus_pcm_volume;
 extern int      have_gus_max;
 
-sound_os_info  *gus_osp;
+int            *gus_osp;
 
 long
 attach_gus_card (long mem_start, struct address_info *hw_config)

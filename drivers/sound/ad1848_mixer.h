@@ -2,9 +2,11 @@
  * sound/ad1848_mixer.h
  * 
  * Definitions for the mixer of AD1848 and compatible codecs.
- * 
- * Copyright by Hannu Savolainen 1994
- * 
+ */
+
+/*
+ * Copyright by Hannu Savolainen 1993-1996
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met: 1. Redistributions of source code must retain the above copyright
@@ -12,7 +14,7 @@
  * Redistributions in binary form must reproduce the above copyright notice,
  * this list of conditions and the following disclaimer in the documentation
  * and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -25,6 +27,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+
+
 /*
  * The AD1848 codec has generic input lines called Line, Aux1 and Aux2.
  * Soundcard manufacturers have connected actual inputs (CD, synth, line,

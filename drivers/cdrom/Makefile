@@ -106,10 +106,24 @@ endif #CONFIG_OPTCD
 
 ifeq ($(CONFIG_SJCD),y)
 L_OBJS += sjcd.o
-#else
-#  ifeq ($(CONFIG_SJCD),m)
-#  M_OBJS += sjcd.o
-#  endif
+else
+  ifeq ($(CONFIG_SJCD),m)
+  M_OBJS += sjcd.o
+  endif
 endif #CONFIG_SJCD
+
+ifeq ($(CONFIG_CDI_INIT),y)
+L_OBJS += cdi.o
+endif #CONFIG_CDI_INIT
+ifeq ($(CONFIG_ISP16_CDI),y)
+L_OBJS += isp16.o
+else
+#  ifeq ($(CONFIG_CDI_INIT),m)
+#  M_OBJS += cdi.o
+#  endif
+  ifeq ($(CONFIG_ISP16_CDI),m)
+  M_OBJS += isp16.o
+  endif
+endif #CONFIG_ISP16_CDI
 
 include $(TOPDIR)/Rules.make

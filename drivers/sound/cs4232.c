@@ -7,8 +7,9 @@
  * interfaces. This is just a temporary driver until full PnP support
  * gets inplemented. Just the WSS codec, FM synth and the MIDI ports are
  * supported. Other interfaces are left uninitialized.
- *
- * Copyright by Hannu Savolainen 1995
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -29,8 +30,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 
@@ -39,7 +41,13 @@
 #define KEY_PORT	0x279	/* Same as LPT1 status port */
 #define CSN_NUM		0x99	/* Just a random number */
 
-#define CS_OUT(a) 		outb( a,  KEY_PORT)
+static int     *osp;
+
+static void 
+CS_OUT (unsigned char a)
+{
+  outb (a, KEY_PORT);
+}
 #define CS_OUT2(a, b)		{CS_OUT(a);CS_OUT(b);}
 #define CS_OUT3(a, b, c)	{CS_OUT(a);CS_OUT(b);CS_OUT(c);}
 
@@ -55,6 +63,7 @@ probe_cs4232_mpu (struct address_info *hw_config)
 
   mpu_base = hw_config->io_base;
   mpu_irq = hw_config->irq;
+
   return 0;
 }
 
@@ -78,6 +87,8 @@ probe_cs4232 (struct address_info *hw_config)
   int             i;
   int             base = hw_config->io_base, irq = hw_config->irq;
   int             dma1 = hw_config->dma, dma2 = hw_config->dma2;
+
+  osp = hw_config->osp;
 
 /*
  * Verify that the I/O port range is free.

@@ -64,6 +64,11 @@
 #define FEATUREMAP2		(WDC_SR_PSUOVER|WDC_SR_PSUUNDR)
 #endif
 
+#ifdef CONFIG_SOFT_WATCHDOG
+#define FEATUREMAP1            0
+#define FEATUREMAP2            0
+#endif
+
 #ifndef FEATUREMAP1
 #error "Config option not set"
 #endif

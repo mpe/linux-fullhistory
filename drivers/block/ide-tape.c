@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-tape.c	Version 1.2 - ALPHA	Jan   1, 1996
+ * linux/drivers/block/ide-tape.c	Version 1.3 - ALPHA	Feb   9, 1996
  *
  * Copyright (C) 1995, 1996 Gadi Oxman <tgud@tochnapc2.technion.ac.il>
  *
@@ -53,6 +53,8 @@
  *		integral number of the tape's recommended data transfer unit
  *		(which is shown on initialization and can be received with
  *		 an ioctl).
+ *		As of version 1.3 of the driver, this is no longer as critical
+ *		as it used to be.
  *	3.	No buffering is performed by the user backup program.
  *
  * Testing was done with a 2 GB CONNER CTMA 4000 IDE ATAPI Streaming Tape Drive.
@@ -161,6 +163,23 @@
  *                       The recommended user block size is returned by
  *                        the MTIOCGET ioctl.
  *                       Additional minor changes.
+ * Ver 1.3   Feb  9  96  Fixed pipelined read mode bug which prevented the
+ *                        use of some block sizes during a restore procedure.
+ *                       The character device interface will now present a
+ *                        continuous view of the media - any mix of block sizes
+ *                        during a backup/restore procedure is supported. The
+ *                        driver will buffer the requests internally and
+ *                        convert them to the tape's recommended transfer
+ *                        unit, making performance almost independent of the
+ *                        chosen user block size.
+ *                       Some improvements in error recovery.
+ *                       By cooperating with triton.c, bus mastering DMA can
+ *                        now sometimes be used with IDE tape drives as well.
+ *                        Bus mastering DMA has the potential to dramatically
+ *                        reduce the CPU's overhead when accessing the device,
+ *                        and can be enabled by using hdparm -d1 on the tape's
+ *                        block device interface. For more info, read the
+ *                        comments in triton.c.
  *
  * We are currently in an *alpha* stage. The driver is not complete and not
  * much tested. I would strongly suggest to:
@@ -279,6 +298,7 @@
  *		sharing a (fast) ATA-2 disk with any (slow) new ATAPI device.
  */
 
+#include <linux/config.h>
 #include <linux/hdreg.h>
 #include <linux/types.h>
 #include <linux/string.h>
@@ -350,11 +370,6 @@
  *	mtio.h MTIOCTOP compatible commands are supported on the character
  *	device interface.
  */
-
-#define IDETAPE_INQUIRY_IOCTL		0x0341
-#define	IDETAPE_LOCATE_IOCTL		0x0342
-
-#define IDETAPE_RESET_IOCTL		0x0350
 
 /*
  *	Special requests for our block device strategy routine.
@@ -663,13 +678,22 @@ typedef struct {
 typedef struct {
 	unsigned error_code	:7;	/* Current of deferred errors */
 	unsigned valid		:1;	/* The information field conforms to QIC-157C */
-	byte reserved_1;		/* Segment Number - Reserved */
+	unsigned reserved_1	:8;	/* Segment Number - Reserved */
 	unsigned sense_key	:4;	/* Sense Key */
 	unsigned reserved2_4	:1;	/* Reserved */
 	unsigned ili		:1;	/* Incorrect Length Indicator */
 	unsigned eom		:1;	/* End Of Medium */
-	unsigned filemark	:1;	/* Filemark */
-	unsigned long information;	/* Information - Command specific */
+	unsigned filemark 	:1;	/* Filemark */
+
+	/*
+	 *	We can't use a 32 bit variable, since it will be re-aligned
+	 *	by GCC, as we are not on a 32 bit boundary.
+	 */
+
+	byte information1;		/* MSB - Information - Command specific */
+	byte information2;
+	byte information3;
+	byte information4;		/* LSB */
 	byte asl;			/* Additional sense length (n-7) */
 	unsigned long command_specific; /* Additional command specific information */
 	byte asc;			/* Additional Sense Code */
@@ -679,6 +703,7 @@ typedef struct {
 	unsigned sksv		:1;	/* Sense Key Specific informatio is valid */
 	byte sk_specific2;		/* Sense Key Specific */
 	byte sk_specific3;		/* Sense Key Specific */
+	byte pad [2];			/* Padding to 20 bytes */
 } idetape_request_sense_result_t;
 
 /*
@@ -817,13 +842,6 @@ idetape_packet_command_t *idetape_next_pc_storage (ide_drive_t *drive);
 struct request *idetape_next_rq_storage (ide_drive_t *drive);
 
 /*
- *	idetape_end_request is used to finish servicing a request, and to
- *	insert a pending pipeline request into the main device queue.
- */
- 
-void idetape_end_request (byte uptodate, ide_hwgroup_t *hwgroup);
-
-/*
  *	Various packet commands
  */
  
@@ -857,9 +875,7 @@ void idetape_display_inquiry_result (byte *buffer);
  */
 
 int idetape_chrdev_read (struct inode *inode, struct file *file, char *buf, int count);
-int idetape_chrdev_read_remainder (struct inode *inode, struct file *file, char *buf, int count);
 int idetape_chrdev_write (struct inode *inode, struct file *file, const char *buf, int count);
-int idetape_chrdev_write_remainder (struct inode *inode, struct file *file, const char *buf, int count);
 int idetape_chrdev_ioctl (struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg);
 int idetape_chrdev_open (struct inode *inode, struct file *file);
 void idetape_chrdev_release (struct inode *inode,struct file *file);
@@ -927,6 +943,8 @@ void idetape_get_mode_sense_results (ide_drive_t *drive);
 unsigned long idetape_swap_long (unsigned long temp);
 unsigned short idetape_swap_short (unsigned short temp);
 
+#define IDETAPE_MIN(a,b)	((a)<(b) ? (a):(b))
+
 /*
  *	Pipeline related functions
  */
@@ -939,7 +957,8 @@ void idetape_increase_max_pipeline_stages (ide_drive_t *drive);
 void idetape_add_stage_tail (ide_drive_t *drive,idetape_pipeline_stage_t *stage);
 void idetape_remove_stage_head (ide_drive_t *drive);
 void idetape_active_next_stage (ide_drive_t *drive);
-void idetape_empty_read_pipeline (ide_drive_t *drive);
+void idetape_wait_for_pipeline (ide_drive_t *drive);
+void idetape_discard_read_pipeline (ide_drive_t *drive);
 void idetape_empty_write_pipeline (ide_drive_t *drive);
 void idetape_insert_pipeline_into_queue (ide_drive_t *drive);
 
@@ -1223,6 +1242,7 @@ void idetape_setup (ide_drive_t *drive)
 	tape->error_in_pipeline_stage=0;
 	tape->request_status=0;
 	tape->chrdev_direction=idetape_direction_none;
+	tape->reset_issued=0;
 
 #if IDETAPE_PIPELINE
 	tape->max_number_of_stages=IDETAPE_MIN_PIPELINE_STAGES;
@@ -1240,16 +1260,22 @@ void idetape_setup (ide_drive_t *drive)
 	if (tape->data_buffer_size % IDETAPE_ALLOCATION_BLOCK)
 		allocation_length+=IDETAPE_ALLOCATION_BLOCK;
 	
+#if IDETAPE_MINIMIZE_IDLE_MEMORY_USAGE
+	tape->data_buffer=tape->merge_buffer=NULL;
+#else
 	tape->data_buffer=kmalloc (allocation_length,GFP_KERNEL);
-	tape->temp_data_buffer=kmalloc (allocation_length,GFP_KERNEL);
-	if (tape->data_buffer == NULL || tape->temp_data_buffer == NULL) {
+	tape->merge_buffer=kmalloc (allocation_length,GFP_KERNEL);
+	if (tape->data_buffer == NULL || tape->merge_buffer == NULL) {
 		printk ("ide-tape: FATAL - Can not allocate 2 buffers of %d bytes each\n",allocation_length);
 		printk ("ide-tape: Aborting character device installation\n");
 		idetape_drive_already_found=0;
 		unregister_chrdev (idetape_chrdev.major,idetape_chrdev.name);
 		return;
 	}
+#endif /* IDETAPE_MINIMIZE_IDLE_MEMORY_USAGE */
 
+	tape->merge_buffer_size=tape->merge_buffer_offset=0;
+	
 #if IDETAPE_ANTICIPATE_READ_WRITE_DSC
 
 	/*
@@ -1428,13 +1454,14 @@ void idetape_issue_packet_command  (ide_drive_t *drive,idetape_packet_command_t 
 {
 	idetape_tape_t *tape;
 	idetape_bcount_reg_t bcount;
-        idetape_ireason_reg_t ireason;
+	idetape_ireason_reg_t ireason;
+	int dma_ok=0;
 
 	tape=&(drive->tape);
 	        
 #if IDETAPE_DEBUG_BUGS
 	if (tape->pc->c[0] == IDETAPE_REQUEST_SENSE_CMD && pc->c[0] == IDETAPE_REQUEST_SENSE_CMD) {
-		printk ("ide-tape: ide-tape.c bug - Two request sense in serial were issued\n");
+		printk ("ide-tape: possible ide-tape.c bug - Two request sense in serial were issued\n");
 	}
 #endif /* IDETAPE_DEBUG_BUGS */
 
@@ -1447,7 +1474,8 @@ void idetape_issue_packet_command  (ide_drive_t *drive,idetape_packet_command_t 
 		/*
 		 *	We will "abort" retrying a packet command in case
 		 *	a legitimate error code was received (crossing a
-		 *	filemark, for example). We will not log those errors.
+		 *	filemark, or DMA error in the end of media, for
+		 *	example).
 		 */
 
 		if (!pc->abort) {
@@ -1478,10 +1506,21 @@ void idetape_issue_packet_command  (ide_drive_t *drive,idetape_packet_command_t 
  */
  
 	pc->actually_transferred=0;					/* We haven't transferred any data yet */
+	pc->current_position=pc->buffer;	
 	bcount.all=pc->request_transfer;				/* Request to transfer the entire buffer at once */
 
-									/* Initialize the task file registers */
-	OUT_BYTE (0,IDETAPE_FEATURES_REG);				/* Use PIO data transger, No DMA */
+#ifdef CONFIG_BLK_DEV_TRITON
+	if (pc->dma_error) {
+		printk ("ide-tape: DMA disabled, reverting to PIO\n");
+		drive->using_dma=0;
+		pc->dma_error=0;
+	}
+	if (pc->request_transfer && pc->dma_recommended && drive->using_dma) {
+		dma_ok=!(HWIF(drive)->dmaproc(pc->writing ? ide_dma_write : ide_dma_read, drive));
+	}		
+#endif /* CONFIG_BLK_DEV_TRITON */
+
+	OUT_BYTE (dma_ok ? 1:0,IDETAPE_FEATURES_REG);			/* Use PIO/DMA */
 	OUT_BYTE (bcount.b.high,IDETAPE_BCOUNTH_REG);
 	OUT_BYTE (bcount.b.low,IDETAPE_BCOUNTL_REG);
 	OUT_BYTE (drive->select.all,IDETAPE_DRIVESEL_REG);
@@ -1498,17 +1537,24 @@ void idetape_issue_packet_command  (ide_drive_t *drive,idetape_packet_command_t 
 		 *	here anyway.
 		 */
 		 
-		 printk ("ide-tape: Strange, packet command initiated yet DRQ isn't asserted\n");
-		 return;
+		printk ("ide-tape: Strange, packet command initiated yet DRQ isn't asserted\n");
+		return;
 	}
 	
 	ireason.all=IN_BYTE (IDETAPE_IREASON_REG);
 	if (!ireason.b.cod || ireason.b.io) {
 		printk ("ide-tape: (IO,CoD) != (0,1) while issuing a packet command\n");
-		/* ??? */
+		ide_do_reset (drive);
+		return;		
 	}
 		
 	ide_output_data (drive,pc->c,12/4);			/* Send the actual packet */
+#ifdef CONFIG_BLK_DEV_TRITON
+	if ((pc->dma_in_progress=dma_ok)) {			/* Begin DMA, if necessary */
+		pc->dma_error=0;
+		(void) (HWIF(drive)->dmaproc(ide_dma_begin, drive));
+	}
+#endif /* CONFIG_BLK_DEV_TRITON */
 }
 
 /*
@@ -1527,9 +1573,26 @@ void idetape_pc_intr (ide_drive_t *drive)
 	idetape_tape_t *tape=&(drive->tape);
 	idetape_status_reg_t status;
 	idetape_bcount_reg_t bcount;
-        idetape_ireason_reg_t ireason;
+	idetape_ireason_reg_t ireason;
 	idetape_packet_command_t *pc=tape->pc;
 	unsigned long temp;
+
+#ifdef CONFIG_BLK_DEV_TRITON
+	if (pc->dma_in_progress) {
+		if ((pc->dma_error=HWIF(drive)->dmaproc(ide_dma_status_bad, drive)))
+			/*
+			 *	We will currently correct the following in
+			 *	idetape_analyze_error.
+			 */
+			pc->actually_transferred=HWIF(drive)->dmaproc(ide_dma_transferred, drive);
+		else
+			pc->actually_transferred=pc->request_transfer;
+		(void) (HWIF(drive)->dmaproc(ide_dma_abort, drive));	/* End DMA */
+#if IDETAPE_DEBUG_LOG
+		printk ("ide-tape: DMA finished\n");
+#endif /* IDETAPE_DEBUG_LOG */
+	}
+#endif /* CONFIG_BLK_DEV_TRITON */
 
 	status.all=IN_BYTE (IDETAPE_STATUS_REG);		/* Clear the interrupt */
 
@@ -1542,10 +1605,11 @@ void idetape_pc_intr (ide_drive_t *drive)
 		printk ("Packet command completed\n");
 		printk ("Total bytes transferred: %lu\n",pc->actually_transferred);
 #endif /* IDETAPE_DEBUG_LOG */
-		
+		pc->dma_in_progress=0;
+						
 		sti ();
 
-		if (status.b.check) {					/* Error detected */
+		if (status.b.check || pc->dma_error) {			/* Error detected */
 #if IDETAPE_DEBUG_LOG
 	/*
 	 *	Without debugging, we only log an error if we decided to
@@ -1553,6 +1617,12 @@ void idetape_pc_intr (ide_drive_t *drive)
 	 */
 			printk ("ide-tape: %s: I/O error, ",drive->name);
 #endif /* IDETAPE_DEBUG_LOG */
+			if (pc->c[0] == IDETAPE_REQUEST_SENSE_CMD) {
+				printk ("ide-tape: I/O error in request sense command\n");
+				ide_do_reset (drive);
+				return;
+			}			
+						
 			idetape_retry_pc (drive);			/* Retry operation */
 			return;
 		}
@@ -1572,19 +1642,30 @@ void idetape_pc_intr (ide_drive_t *drive)
 			(*pc->callback)(drive);			/* Command finished - Call the callback function */
 		return;
 	}
-
+#ifdef CONFIG_BLK_DEV_TRITON
+	if (pc->dma_in_progress) {
+		pc->dma_in_progress=0;
+		printk ("ide-tape: The tape wants to issue more interrupts in DMA mode\n");
+		printk ("ide-tape: DMA disabled, reverting to PIO\n");
+		drive->using_dma=0;
+		ide_do_reset (drive);
+		return;
+	}
+#endif /* CONFIG_BLK_DEV_TRITON */
 	bcount.b.high=IN_BYTE (IDETAPE_BCOUNTH_REG);			/* Get the number of bytes to transfer */
 	bcount.b.low=IN_BYTE (IDETAPE_BCOUNTL_REG);			/* on this interrupt */
 	ireason.all=IN_BYTE (IDETAPE_IREASON_REG);			/* Read the interrupt reason register */
 
 	if (ireason.b.cod) {
 		printk ("ide-tape: CoD != 0 in idetape_pc_intr\n");
-		/* ??? */
+		ide_do_reset (drive);
+		return;
 	}
 	if (ireason.b.io != !(pc->writing)) {			/* Hopefully, we will never get here */
 		printk ("ide-tape: We wanted to %s, ",pc->writing ? "Write":"Read");
 		printk ("but the tape wants us to %s !\n",ireason.b.io ? "Read":"Write");
-		/* ??? */		
+		ide_do_reset (drive);
+		return;
 	}
 	
 	if (!pc->writing) {					/* Reading - Check that we have enough space */
@@ -2058,24 +2139,19 @@ void idetape_pc_callback (ide_drive_t *drive)
 void idetape_read_callback (ide_drive_t *drive)
 
 {
-	idetape_tape_t *tape;
-	struct request *rq;
+	idetape_tape_t *tape=&(drive->tape);
+	struct request *rq=HWGROUP(drive)->rq;
+	int blocks_read=tape->pc->actually_transferred/tape->tape_block_size;
 
-	tape=&(drive->tape);	
-	rq=HWGROUP(drive)->rq;
 #if IDETAPE_DEBUG_LOG	
 	printk ("ide-tape: Reached idetape_read_callback\n");
 #endif /* IDETAPE_DEBUG_LOG */
-	tape->block_address+=tape->pc->actually_transferred/tape->tape_block_size;
-	if (!tape->pc->error) {
-#if IDETAPE_DEBUG_LOG
-		printk ("Request completed\n");
-#endif /* IDETAPE_DEBUG_LOG */
-		rq->sector+=rq->current_nr_sectors;
-		rq->nr_sectors-=rq->current_nr_sectors;
-		rq->current_nr_sectors=0;
+
+	tape->block_address+=blocks_read;
+	rq->current_nr_sectors-=blocks_read;	
+
+	if (!tape->pc->error)
 		idetape_end_request (1,HWGROUP (drive));
-	}
 	else {
 		rq->errors=tape->pc->error;
 		switch (rq->errors) {
@@ -2091,25 +2167,21 @@ void idetape_read_callback (ide_drive_t *drive)
 void idetape_write_callback (ide_drive_t *drive)
 
 {
-	idetape_tape_t *tape;
-	struct request *rq;
-	
-	tape=&(drive->tape);
-	rq=HWGROUP(drive)->rq;
+	idetape_tape_t *tape=&(drive->tape);
+	struct request *rq=HWGROUP(drive)->rq;
+	int blocks_written=tape->pc->actually_transferred/tape->tape_block_size;
+		
 #if IDETAPE_DEBUG_LOG	
 	printk ("ide-tape: Reached idetape_write_callback\n");
 #endif /* IDETAPE_DEBUG_LOG */
-	tape->block_address+=tape->pc->actually_transferred/tape->tape_block_size;
-	if (!tape->pc->error) {
-#if IDETAPE_DEBUG_LOG
-		printk ("Request completed\n");
-#endif /* IDETAPE_DEBUG_LOG */
-		rq->sector+=rq->current_nr_sectors;
-		rq->nr_sectors-=rq->current_nr_sectors;
-		rq->current_nr_sectors=0;
+
+	tape->block_address+=blocks_written;
+	rq->current_nr_sectors-=blocks_written;
+
+	if (!tape->pc->error)
 		idetape_end_request (1,HWGROUP (drive));
-	}
 	else {
+		rq->errors=tape->pc->error;
 		idetape_end_request (0,HWGROUP (drive));
 	}
 	return;
@@ -2200,7 +2272,7 @@ void idetape_create_inquiry_cmd (idetape_packet_command_t *pc)
 	pc->callback=&idetape_inquiry_callback;
 	pc->writing=0;
 	
-	idetape_zero_packet_command (pc);		
+	idetape_zero_packet_command (pc);
 	pc->c[0]=IDETAPE_INQUIRY_CMD;
 	pc->c[4]=255;
 }
@@ -2355,14 +2427,29 @@ void idetape_analyze_error (ide_drive_t *drive,idetape_request_sense_result_t *r
 		if (result->filemark) {
 			pc->error=IDETAPE_RQ_ERROR_FILEMARK;
 			pc->abort=1;
-			return;
 		}
+	}
+
+	if (pc->c[0] == IDETAPE_READ_CMD || pc->c[0] == IDETAPE_WRITE_CMD) {
 		if (result->sense_key == 8) {
 			pc->error=IDETAPE_RQ_ERROR_EOD;
 			pc->abort=1;
-			return;
 		}
 	}
+
+#if 1
+#ifdef CONFIG_BLK_DEV_TRITON
+
+	/*
+	 *	Correct pc->actually_transferred by asking the tape.
+	 */
+
+	if (pc->dma_error && pc->abort) {
+		unsigned long *long_ptr=(unsigned long *) &(result->information1);
+		pc->actually_transferred=pc->request_transfer-tape->tape_block_size*idetape_swap_long (*long_ptr);
+	}		
+#endif /* CONFIG_BLK_DEV_TRITON */
+#endif
 }
 
 void idetape_create_test_unit_ready_cmd (idetape_packet_command_t *pc)
@@ -2546,11 +2633,15 @@ void idetape_create_read_cmd (idetape_packet_command_t *pc,unsigned long length)
 	pc->writing=0;
 
 	idetape_zero_packet_command (pc);
+
 	pc->c [0]=IDETAPE_READ_CMD;
 	pc->c [1]=1;
 	pc->c [4]=original.b.b1;
 	pc->c [3]=original.b.b2;
 	pc->c [2]=original.b.b3;
+
+	if (length)
+		pc->dma_recommended=1;
 
 	return;
 }
@@ -2616,11 +2707,15 @@ void idetape_create_write_cmd (idetape_packet_command_t *pc,unsigned long length
 	pc->writing=1;
 
 	idetape_zero_packet_command (pc);
+
 	pc->c [0]=IDETAPE_WRITE_CMD;
 	pc->c [1]=1;
 	pc->c [4]=original.b.b1;
 	pc->c [3]=original.b.b2;
 	pc->c [2]=original.b.b3;
+
+	if (length)
+		pc->dma_recommended=1;
 
 	return;
 }
@@ -2699,7 +2794,6 @@ int idetape_blkdev_ioctl (ide_drive_t *drive, struct inode *inode, struct file *
 			unsigned int cmd, unsigned long arg)
 {
 	idetape_packet_command_t pc;
-	int retval;
 	
 	pc.buffer=pc.temp_buffer;
 	pc.buffer_size=IDETAPE_TEMP_BUFFER_SIZE;
@@ -2709,33 +2803,6 @@ int idetape_blkdev_ioctl (ide_drive_t *drive, struct inode *inode, struct file *
 	printk ("ide-tape: Reached idetape_blkdev_ioctl\n");
 #endif /* IDETAPE_DEBUG_LOG */
 	switch (cmd) {
-		case IDETAPE_INQUIRY_IOCTL:
-#if IDETAPE_DEBUG_LOG
-			printk ("Adding INQUIRY packet command to the tail of the request queue\n");
-#endif /* IDETAPE_DEBUG_LOG */
-			idetape_create_inquiry_cmd (&pc);
-			pc.buffer=pc.temp_buffer;
-			pc.buffer_size=IDETAPE_TEMP_BUFFER_SIZE;
-			pc.current_position=pc.temp_buffer;
-			return (idetape_queue_pc_tail (drive,&pc));
-		case IDETAPE_LOCATE_IOCTL:
-#if IDETAPE_DEBUG_LOG
-			printk ("Adding LOCATE packet command to the tail of the request queue\n");
-#endif /* IDETAPE_DEBUG_LOG */
-			idetape_create_locate_cmd (&pc,arg,0);
-			retval=idetape_queue_pc_tail (drive,&pc);
-			if (retval!=0) return (retval);
-			
-			idetape_create_read_position_cmd (&pc);
-			pc.buffer=pc.temp_buffer;
-			pc.buffer_size=IDETAPE_TEMP_BUFFER_SIZE;
-			pc.current_position=pc.temp_buffer;
-			return (idetape_queue_pc_tail (drive,&pc));
-/*
-		case IDETAPE_RESET_IOCTL:
-			printk ("Resetting drive\n");
-			return (!ide_do_reset (drive));
-*/
 		default:
 			return -EIO;
 	}
@@ -2757,6 +2824,7 @@ void idetape_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 	idetape_tape_t *tape = &(drive->tape);
 	unsigned int major = HWIF(drive)->major;
 	struct blk_dev_struct *bdev = &blk_dev[major];
+	int error;
 
 #if IDETAPE_DEBUG_LOG
 	printk ("Reached idetape_end_request\n");
@@ -2766,7 +2834,8 @@ void idetape_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 
 	if (!rq->errors)				/* In case rq->errors is already set, */
 		rq->errors=!uptodate;			/* we won't change it. */
-	
+	error=rq->errors;
+		
 	if (tape->active_data_request == rq) {		/* The request was a pipelined data transfer request */
 
 		if (rq->cmd == IDETAPE_READ_REQUEST) {
@@ -2783,12 +2852,13 @@ void idetape_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 
 		if (rq->cmd == IDETAPE_WRITE_REQUEST) {
 			if (rq->errors)
-				tape->error_in_pipeline_stage=1;
+				tape->error_in_pipeline_stage=rq->errors;
 			idetape_remove_stage_head (drive);
 		}
 		
 		if (tape->next_stage == NULL) {
-			idetape_increase_max_pipeline_stages (drive);
+			if (!error)
+				idetape_increase_max_pipeline_stages (drive);
 			ide_end_drive_cmd (drive, 0, 0);
 			return;
 		}
@@ -2904,10 +2974,22 @@ void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned long b
 		 
 		 tape->postponed_rq = NULL;
 	}	
+
+	status.all=IN_BYTE (IDETAPE_STATUS_REG);
+
+	/*
+	 *	After a software reset, the status register is locked. We
+	 *	will ignore the DSC value for our very first packet command,
+	 *	which will restore DSC operation.
+	 */
+
+	if (tape->reset_issued) {
+		status.b.dsc=1;
+		tape->reset_issued=0;
+	}
 	
 	switch (rq->cmd) {
 		case IDETAPE_READ_REQUEST:
-			status.all=IN_BYTE (IDETAPE_STATUS_REG);
 			if (!status.b.dsc) {				/* Tape buffer not ready to accept r/w command */
 #if IDETAPE_DEBUG_LOG
 				printk ("ide-tape: DSC != 1 - Postponing read request\n");
@@ -2930,7 +3012,6 @@ void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned long b
 			return;
 		
 		case IDETAPE_WRITE_REQUEST:
-			status.all=IN_BYTE (IDETAPE_STATUS_REG);
 			if (!status.b.dsc) {				/* Tape buffer not ready to accept r/w command */
 #if IDETAPE_DEBUG_LOG
 				printk ("ide-tape: DSC != 1 - Postponing write request\n");
@@ -2959,7 +3040,6 @@ void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned long b
  *	but I have occasionally missed DSC on a media access command otherwise.
  *	??? Still have to figure it out ...
  */
-			status.all=IN_BYTE (IDETAPE_STATUS_REG);
 			if (!status.b.dsc) {				/* Tape buffers are still not ready */
 #if IDETAPE_DEBUG_LOG
 				printk ("ide-tape: DSC != 1 - Postponing packet command request\n");
@@ -3072,13 +3152,8 @@ void idetape_wait_for_request (struct request *rq)
 }
 
 /*
- *	idetape_queue_rw_tail is typically called from the character device
- *	interface to generate a read/write request for the block device interface
- *	and wait for it to be serviced. Note that cmd will be different than
- *	a buffer cache originated read/write request. This will be used
- *	in idetape_end_request.
- *
- *	Returns 0 on success or -EIO if an error occured.
+ *	idetape_queue_rw_tail generates a read/write request for the block
+ *	device interface and wait for it to be serviced.
  */
 
 int idetape_queue_rw_tail (ide_drive_t *drive,int cmd,int blocks,char *buffer)
@@ -3090,16 +3165,21 @@ int idetape_queue_rw_tail (ide_drive_t *drive,int cmd,int blocks,char *buffer)
 #if IDETAPE_DEBUG_LOG
 	printk ("idetape_queue_rw_tail: cmd=%d\n",cmd);
 #endif /* IDETAPE_DEBUG_LOG */
-	/* build up a special read request, and add it to the queue */
-	
+#if IDETAPE_DEBUG_BUGS
+	if (tape->active_data_request != NULL) {
+		printk ("ide-tape: bug: the pipeline is active in idetape_queue_rw_tail\n");
+		return (0);
+	}
+#endif /* IDETAPE_DEBUG_BUGS */	
+
 	ide_init_drive_cmd (&rq);
 	rq.buffer = buffer;
 	rq.cmd = cmd;
 	rq.sector = tape->block_address;
-	rq.nr_sectors = blocks;
-	rq.current_nr_sectors = blocks;
-	tape->active_data_request=NULL;	/* Non-pipelined mode */
-	return ide_do_drive_cmd (drive, &rq, ide_wait);
+	rq.nr_sectors = rq.current_nr_sectors = blocks;
+	(void) ide_do_drive_cmd (drive, &rq, ide_wait);
+
+	return (tape->tape_block_size*(blocks-rq.current_nr_sectors));
 }
 
 /*
@@ -3113,8 +3193,8 @@ int idetape_add_chrdev_read_request (ide_drive_t *drive,int blocks,char *buffer)
 	idetape_tape_t *tape = &(drive->tape);
 	idetape_pipeline_stage_t *new_stage;
 	unsigned long flags;
-	struct request rq;
-	int errors;
+	struct request rq,*rq_ptr;
+	int bytes_read;
 	
 #if IDETAPE_DEBUG_LOG
 	printk ("Reached idetape_add_chrdev_read_request\n");
@@ -3123,8 +3203,7 @@ int idetape_add_chrdev_read_request (ide_drive_t *drive,int blocks,char *buffer)
 	ide_init_drive_cmd (&rq);
 	rq.cmd = IDETAPE_READ_REQUEST;
 	rq.sector = tape->block_address;
-	rq.nr_sectors = blocks;
-	rq.current_nr_sectors = blocks;
+	rq.nr_sectors = rq.current_nr_sectors = blocks;
 
 	if (tape->current_number_of_stages < 0.5*tape->max_number_of_stages) {
 		new_stage=idetape_kmalloc_stage (drive);
@@ -3154,12 +3233,19 @@ int idetape_add_chrdev_read_request (ide_drive_t *drive,int blocks,char *buffer)
 		idetape_wait_for_request (tape->active_data_request);
 	restore_flags (flags);
 
-	errors=tape->first_stage->rq.errors;
-	if (!errors)		
-		idetape_copy_buffer_from_stage (tape->first_stage,buffer);
-
-	idetape_remove_stage_head (drive);
-	return (errors ? -EIO:0);
+	rq_ptr=&(tape->first_stage->rq);
+	bytes_read=tape->tape_block_size*(rq_ptr->nr_sectors-rq_ptr->current_nr_sectors);
+	rq_ptr->nr_sectors=rq_ptr->current_nr_sectors=0;
+	idetape_copy_buffer_from_stage (tape->first_stage,buffer);
+	if (rq_ptr->errors != IDETAPE_RQ_ERROR_FILEMARK)
+		idetape_remove_stage_head (drive);
+#if IDETAPE_DEBUG_BUGS
+	if (bytes_read > blocks*tape->tape_block_size) {
+		printk ("ide-tape: bug: trying to return more bytes than requested\n");
+		bytes_read=blocks*tape->tape_block_size;
+	}
+#endif /* IDETAPE_DEBUG_BUGS */
+	return (bytes_read);
 }
 
 /*
@@ -3186,8 +3272,6 @@ int idetape_add_chrdev_write_request (ide_drive_t *drive,int blocks,char *buffer
 	printk ("Reached idetape_add_chrdev_write_request\n");
 #endif /* IDETAPE_DEBUG_LOG */
 	
-	if (tape->error_in_pipeline_stage)		/* Return a deferred error */
-		return (-EIO);
 	
 	new_stage=idetape_kmalloc_stage (drive);
 
@@ -3242,10 +3326,15 @@ int idetape_add_chrdev_write_request (ide_drive_t *drive,int blocks,char *buffer
 	if (tape->active_data_request == NULL && tape->current_number_of_stages >= 0.75*tape->max_number_of_stages)
 		idetape_insert_pipeline_into_queue (drive);		
 
-	return (0);		
+	if (tape->error_in_pipeline_stage) {		/* Return a deferred error */
+		tape->error_in_pipeline_stage=0;
+		return (-EIO);
+	}
+	
+	return (blocks);
 }
 
-void idetape_empty_read_pipeline (ide_drive_t *drive)
+void idetape_discard_read_pipeline (ide_drive_t *drive)
 
 {
 	idetape_tape_t *tape = &(drive->tape);
@@ -3253,11 +3342,14 @@ void idetape_empty_read_pipeline (ide_drive_t *drive)
 
 #if IDETAPE_DEBUG_BUGS
 	if (tape->chrdev_direction != idetape_direction_read) {
-		printk ("ide-tape: bug: Trying to empty read pipeline, but we are not reading.\n");
+		printk ("ide-tape: bug: Trying to discard read pipeline, but we are not reading.\n");
 		return;
 	}
 #endif /* IDETAPE_DEBUG_BUGS */
 
+	tape->merge_buffer_size=tape->merge_buffer_offset=0;
+	tape->chrdev_direction=idetape_direction_none;
+	
 	if (tape->first_stage == NULL)
 		return;
 		
@@ -3277,22 +3369,22 @@ void idetape_empty_read_pipeline (ide_drive_t *drive)
 #endif /* IDETAPE_PIPELINE */
 }
 
-
-void idetape_empty_write_pipeline (ide_drive_t *drive)
+/*
+ *	idetape_wait_for_pipeline will wait until all pending pipeline
+ *	requests are serviced. Typically called on device close.
+ */
+ 
+void idetape_wait_for_pipeline (ide_drive_t *drive)
 
 {
 	idetape_tape_t *tape = &(drive->tape);
 	unsigned long flags;
 
-#if IDETAPE_DEBUG_BUGS
-	if (tape->chrdev_direction != idetape_direction_write) {
-		printk ("ide-tape: bug: Trying to empty write pipeline, but we are not writing.\n");
-		return;
-	}
-#endif /* IDETAPE_DEBUG_BUGS */
-
 	if (tape->active_data_request == NULL)
 		idetape_insert_pipeline_into_queue (drive);		
+
+	if (tape->active_data_request == NULL)
+		return;
 
 	save_flags (flags);cli ();
 	if (tape->last_stage != NULL)
@@ -3301,8 +3393,39 @@ void idetape_empty_write_pipeline (ide_drive_t *drive)
 	else if (tape->active_data_request != NULL)
 		idetape_wait_for_request (tape->active_data_request);
 	restore_flags (flags);
+}
+
+void idetape_empty_write_pipeline (ide_drive_t *drive)
+
+{
+	idetape_tape_t *tape = &(drive->tape);
+	int blocks;
 	
+#if IDETAPE_DEBUG_BUGS
+	if (tape->chrdev_direction != idetape_direction_write) {
+		printk ("ide-tape: bug: Trying to empty write pipeline, but we are not writing.\n");
+		return;
+	}
+	if (tape->merge_buffer_size > tape->data_buffer_size) {
+		printk ("ide-tape: bug: merge_buffer too big\n");
+		tape->merge_buffer_size = tape->data_buffer_size;
+	}
+#endif /* IDETAPE_DEBUG_BUGS */
+
+	if (tape->merge_buffer_size) {
+		blocks=tape->merge_buffer_size/tape->tape_block_size;
+		if (tape->merge_buffer_size % tape->tape_block_size) {
+			blocks++;
+			memset (tape->merge_buffer+tape->merge_buffer_size,0,tape->data_buffer_size-tape->merge_buffer_size);
+		}
+		(void) idetape_add_chrdev_write_request (drive,blocks,tape->merge_buffer);
+		tape->merge_buffer_size=0;
+	}
+	
+	idetape_wait_for_pipeline (drive);
+
 	tape->error_in_pipeline_stage=0;
+	tape->chrdev_direction=idetape_direction_none;
 
 	/*
 	 *	On the next backup, perform the feedback loop again.
@@ -3316,14 +3439,12 @@ void idetape_empty_write_pipeline (ide_drive_t *drive)
 #else
 	tape->max_number_of_stages=0;
 #endif /* IDETAPE_PIPELINE */
-
 #if IDETAPE_DEBUG_BUGS
 	if (tape->first_stage != NULL || tape->next_stage != NULL || tape->last_stage != NULL || tape->current_number_of_stages != 0) {
 		printk ("ide-tape: ide-tape pipeline bug\n");		
 	}
 #endif /* IDETAPE_DEBUG_BUGS */
 }
-
 
 /*
  *	idetape_zero_packet_command just zeros a packet command and
@@ -3339,6 +3460,8 @@ void idetape_zero_packet_command (idetape_packet_command_t *pc)
 		pc->c[i]=0;
 	pc->retries=0;
 	pc->abort=0;
+	pc->dma_recommended=0;
+	pc->dma_error=0;
 }
 
 /*
@@ -3494,27 +3617,20 @@ void idetape_blkdev_release (struct inode *inode, struct file *filp, ide_drive_t
  *	Our character device read / write functions.
  *
  *	The tape is optimized to maximize throughput when it is transfering
- *	an integral number of the "continous transfer limit", which is
- *	a parameter of the specific tape (26 KB on my particular tape). The
- *	resulting increase in performance should be dramatical. In the
- *	character device read/write functions, we split the current
- *	request to units of the above size, and handle the remaining bytes
- *	in some other sub-functions.
+ *	an integral number of the "continuous transfer limit", which is
+ *	a parameter of the specific tape (26 KB on my particular tape).
  *
- *	In case the count number is not even an integral number of the tape
- *	block size (usually 512 or 1024 bytes), we will pad the transfer with
- *	zeroes (write) or read the entire block and return only the requested
- *	bytes (but the tape will be in the "wrong" position). Do not supply
- *	such a count value unless you are going to close the device right
- *	after this request.
- *
- *	Again, for best results use an integral number of the tape's parameter
+ *	For best results use an integral number of the tape's parameter
  *	(which is displayed in the driver installation stage and is returned
  *	 by the MTIOCGET ioctl).
- */
-
-/*
- *	Our character device read function.
+ *
+ *	As of version 1.3 of the driver, the character device provides an
+ *	abstract continuous view of the media - any mix of block sizes (even 1
+ *	byte) on the same backup/restore procedure is supported. The driver
+ *	will internally convert the requests to the recommended transfer unit,
+ *	so that an unmatch between the user's block size to the recommended
+ *	size will only result in a (slightly) increased driver overhead, but
+ *	will no longer hit performance.
  */
 
 int idetape_chrdev_read (struct inode *inode, struct file *file, char *buf, int count)
@@ -3522,9 +3638,8 @@ int idetape_chrdev_read (struct inode *inode, struct file *file, char *buf, int 
 {
 	ide_drive_t *drive=idetape_chrdev.drive;
 	idetape_tape_t *tape=&(drive->tape);
-	int blocks,remainder,retval;
-	char *buf_ptr;
-	unsigned long previous_block_address,actually_read;
+	char *buf_ptr=buf;
+	int bytes_read,temp,actually_read=0;
 
 #if IDETAPE_DEBUG_LOG
 	printk ("Reached idetape_chrdev_read\n");
@@ -3542,9 +3657,9 @@ int idetape_chrdev_read (struct inode *inode, struct file *file, char *buf, int 
 		 *	mode.
 		 */
 		 
-		retval=idetape_queue_rw_tail (drive,IDETAPE_READ_REQUEST,0,tape->temp_data_buffer);
-		if (retval)
-			return (retval);
+		bytes_read=idetape_queue_rw_tail (drive,IDETAPE_READ_REQUEST,0,tape->merge_buffer);
+		if (bytes_read < 0)
+			return (bytes_read);
 
 		tape->chrdev_direction=idetape_direction_read;
 	}
@@ -3552,97 +3667,55 @@ int idetape_chrdev_read (struct inode *inode, struct file *file, char *buf, int 
 	if (count==0)
 		return (0);
 
-	actually_read=0;
-	buf_ptr=buf;
-	blocks=count/tape->data_buffer_size;
-	remainder=count%tape->data_buffer_size;
-	
-	while (blocks) {
-		previous_block_address=tape->block_address;
-		retval=idetape_add_chrdev_read_request (drive,tape->capabilities.ctl,tape->temp_data_buffer);
-		if (tape->max_number_of_stages)
-			actually_read+=tape->data_buffer_size;
-		else
-			actually_read+=tape->tape_block_size*(tape->block_address-previous_block_address);
-
-		if (retval) {
-			if (tape->max_number_of_stages)
-				return (0);
-			else
-				return (actually_read);
+	if (tape->merge_buffer_size) {
+#if IDETAPE_DEBUG_BUGS
+		if (tape->merge_buffer_offset+tape->merge_buffer_size > tape->data_buffer_size) {
+			printk ("ide-tape: bug: merge buffer too big\n");
+			tape->merge_buffer_offset=0;tape->merge_buffer_size=tape->data_buffer_size-1;
 		}
-		memcpy_tofs (buf_ptr,tape->temp_data_buffer,tape->data_buffer_size);
-		buf_ptr+=tape->data_buffer_size;
-		blocks--;
+#endif /* IDETAPE_DEBUG_BUGS */
+		actually_read=IDETAPE_MIN (tape->merge_buffer_size,count);
+		memcpy_tofs (buf_ptr,tape->merge_buffer+tape->merge_buffer_offset,actually_read);
+		buf_ptr+=actually_read;tape->merge_buffer_size-=actually_read;
+		count-=actually_read;tape->merge_buffer_offset+=actually_read;
 	}
-	if (remainder)
-		return (actually_read+idetape_chrdev_read_remainder (inode,file,buf_ptr,remainder));
-	else
-		return (actually_read);		
+
+	while (count >= tape->data_buffer_size) {
+		bytes_read=idetape_add_chrdev_read_request (drive,tape->capabilities.ctl,tape->merge_buffer);
+		if (bytes_read <= 0)
+			return (actually_read);
+		memcpy_tofs (buf_ptr,tape->merge_buffer,bytes_read);
+		buf_ptr+=bytes_read;count-=bytes_read;actually_read+=bytes_read;
+	}
+
+	if (count) {
+		bytes_read=idetape_add_chrdev_read_request (drive,tape->capabilities.ctl,tape->merge_buffer);
+		if (bytes_read <= 0)
+			return (actually_read);
+		temp=IDETAPE_MIN (count,bytes_read);
+		memcpy_tofs (buf_ptr,tape->merge_buffer,temp);
+		actually_read+=temp;
+		tape->merge_buffer_offset=temp;
+		tape->merge_buffer_size=bytes_read-temp;
+	}
+	return (actually_read);
 }
  
-int idetape_chrdev_read_remainder (struct inode *inode, struct file *file, char *buf, int count)
+int idetape_chrdev_write (struct inode *inode, struct file *file, const char *buf, int count)
 
 {
 	ide_drive_t *drive=idetape_chrdev.drive;
 	idetape_tape_t *tape=&(drive->tape);
-	int blocks,remainder,retval;
-	unsigned long previous_block_address,actually_read;
-
-#if IDETAPE_DEBUG_LOG
-	printk ("Reached idetape_chrdev_read_remainder\n");
-#endif /* IDETAPE_DEBUG_LOG */
-
-	blocks=count/tape->tape_block_size;
-	remainder=count%tape->tape_block_size;
-	if (remainder) {
-#if IDETAPE_DEBUG_LOG
-	printk ("ide-tape: Padding read to block boundary\n");
-#endif /* IDETAPE_DEBUG_LOG */
-		blocks++;
-	}
-#if IDETAPE_DEBUG_LOG
-	printk ("Adding a READ request to the block device request queue\n");
-#endif /* IDETAPE_DEBUG_LOG */
-	previous_block_address=tape->block_address;
-	retval=idetape_add_chrdev_read_request (drive,blocks,tape->temp_data_buffer);
-	if (retval) {
-		if (tape->max_number_of_stages)
-			actually_read=0;
-		else
-			actually_read=tape->tape_block_size*(tape->block_address-previous_block_address);
-		if (actually_read > count)
-			actually_read=count;
-		if (actually_read != 0)
-			memcpy_tofs (buf,tape->temp_data_buffer,actually_read);
-		return (actually_read);
-	}
-#if IDETAPE_DEBUG_LOG
-	printk ("Copying %d bytes to the user space memory\n",count);
-#endif /* IDETAPE_DEBUG_LOG */
-	memcpy_tofs (buf,tape->temp_data_buffer,count);
-	return (count);
-}
-
-int idetape_chrdev_write (struct inode *inode, struct file *file, const char *buf, int count)
-
-{
-	ide_drive_t *drive;
-	idetape_tape_t *tape;
-	int blocks,remainder,retval;
-	const char *buf_ptr;
-	unsigned long previous_block_address,actually_written;
+	const char *buf_ptr=buf;
+	int retval,actually_written=0;
 
 #if IDETAPE_DEBUG_LOG
 	printk ("Reached idetape_chrdev_write\n");
 #endif /* IDETAPE_DEBUG_LOG */
 
-	drive=idetape_chrdev.drive;
-	tape=&(drive->tape);
-
 	if (tape->chrdev_direction != idetape_direction_write) {	/* Initialize write operation */
 		if (tape->chrdev_direction == idetape_direction_read)
-			idetape_empty_read_pipeline (drive);
+			idetape_discard_read_pipeline (drive);
 
 		/*
 		 *	Issue a write 0 command to ensure that DSC handshake
@@ -3650,93 +3723,51 @@ int idetape_chrdev_write (struct inode *inode, struct file *file, const char *bu
 		 *	mode.
 		 */
 
-		retval=idetape_queue_rw_tail (drive,IDETAPE_WRITE_REQUEST,0,tape->temp_data_buffer);
-		if (retval)
+		retval=idetape_queue_rw_tail (drive,IDETAPE_WRITE_REQUEST,0,tape->merge_buffer);
+		if (retval < 0)
 			return (retval);		
-	
+
 		tape->chrdev_direction=idetape_direction_write;
 	}
 
 	if (count==0)
 		return (0);
 
-	actually_written=0;
-	buf_ptr=buf;
-	blocks=count/tape->data_buffer_size;
-	remainder=count%tape->data_buffer_size;
-
-	while (blocks) {
-		memcpy_fromfs (tape->temp_data_buffer,buf_ptr,tape->data_buffer_size);
-		buf_ptr+=tape->data_buffer_size;
-		previous_block_address=tape->block_address;
-		retval=idetape_add_chrdev_write_request (drive,tape->capabilities.ctl,tape->temp_data_buffer);
-		if (tape->max_number_of_stages)
-			actually_written+=tape->data_buffer_size;	/* Pipelined mode - Cheat :-) */
-		else
-			actually_written+=tape->tape_block_size*(tape->block_address-previous_block_address);
-
-		if (retval) {
-			if (tape->max_number_of_stages)
-				return (0);
-			else
-				return (actually_written);
+	if (tape->merge_buffer_size) {
+#if IDETAPE_DEBUG_BUGS
+		if (tape->merge_buffer_size >= tape->data_buffer_size) {
+			printk ("ide-tape: bug: merge buffer too big\n");
+			tape->merge_buffer_size=0;
 		}
-		blocks--;
+#endif /* IDETAPE_DEBUG_BUGS */
+
+		actually_written=IDETAPE_MIN (tape->data_buffer_size-tape->merge_buffer_size,count);
+		memcpy_fromfs (tape->merge_buffer+tape->merge_buffer_size,buf_ptr,actually_written);
+		buf_ptr+=actually_written;tape->merge_buffer_size+=actually_written;count-=actually_written;
+
+		if (tape->merge_buffer_size == tape->data_buffer_size) {
+			tape->merge_buffer_size=0;
+			retval=idetape_add_chrdev_write_request (drive,tape->capabilities.ctl,tape->merge_buffer);
+			if (retval <= 0)
+				return (retval);
+		}
 	}
-	if (remainder)
-		return (actually_written+idetape_chrdev_write_remainder (inode,file,buf_ptr,remainder));
-	else
-		return (actually_written);		
-}
 
-int idetape_chrdev_write_remainder (struct inode *inode, struct file *file, const char *buf, int count)
-
-{
-	ide_drive_t *drive;
-	idetape_tape_t *tape;
-	int blocks,remainder,retval;
-	char *ptr;
-	unsigned long previous_block_address,actually_written;
-
-#if IDETAPE_DEBUG_LOG
-	printk ("Reached idetape_chrdev_write_remainder\n");
-#endif /* IDETAPE_DEBUG_LOG */
-		
-	drive=idetape_chrdev.drive;
-	tape=&(drive->tape);
-
-	blocks=count/tape->tape_block_size;
-	remainder=count%tape->tape_block_size;
-	if (remainder)
-		blocks++;
-#if IDETAPE_DEBUG_LOG
-	printk ("Copying %d bytes from the user space memory\n",count);
-#endif /* IDETAPE_DEBUG_LOG */
-
-	memcpy_fromfs (tape->temp_data_buffer,buf,count);
-	if (remainder) {
-#if IDETAPE_DEBUG_LOG
-	printk ("ide-tape: Padding written data to block boundary\n");
-#endif /* IDETAPE_DEBUG_LOG */
-		ptr=tape->temp_data_buffer+(blocks-1)*tape->tape_block_size;
-		memset (ptr,0,remainder);
+	while (count >= tape->data_buffer_size) {
+		memcpy_fromfs (tape->merge_buffer,buf_ptr,tape->data_buffer_size);
+		buf_ptr+=tape->data_buffer_size;count-=tape->data_buffer_size;
+		retval=idetape_add_chrdev_write_request (drive,tape->capabilities.ctl,tape->merge_buffer);
+		actually_written+=tape->data_buffer_size;
+		if (retval <= 0)
+			return (retval);
 	}
-#if IDETAPE_DEBUG_LOG
-	printk ("Adding a WRITE request to the block device request queue\n");
-#endif /* IDETAPE_DEBUG_LOG */
 
-	previous_block_address=tape->block_address;
-	retval=idetape_add_chrdev_write_request (drive,blocks,tape->temp_data_buffer);
-	if (retval) {
-		if (tape->max_number_of_stages)
-			actually_written=0;
-		else
-			actually_written=tape->tape_block_size*(tape->block_address-previous_block_address);
-		if (actually_written > count)
-			actually_written=count;
-		return (actually_written);
+	if (count) {
+		actually_written+=count;
+		memcpy_fromfs (tape->merge_buffer,buf_ptr,count);
+		tape->merge_buffer_size+=count;
 	}
-	return (count);
+	return (actually_written);
 }
 
 /*
@@ -3788,14 +3819,10 @@ int idetape_chrdev_ioctl (struct inode *inode, struct file *file, unsigned int c
 	if (tape->chrdev_direction == idetape_direction_write) {
 		idetape_empty_write_pipeline (drive);
 		idetape_flush_tape_buffers (drive);
-		tape->chrdev_direction=idetape_direction_none;
 	}
 
-	if (tape->chrdev_direction == idetape_direction_read)
-		if (cmd != MTIOCTOP) {
-			idetape_empty_read_pipeline (drive);
-			tape->chrdev_direction=idetape_direction_none;
-		}
+	if (tape->chrdev_direction == idetape_direction_read && cmd != MTIOCTOP)
+		idetape_discard_read_pipeline (drive);
 	
 	pc.buffer=pc.temp_buffer;
 	pc.buffer_size=IDETAPE_TEMP_BUFFER_SIZE;
@@ -3904,6 +3931,8 @@ int idetape_mtioctop (ide_drive_t *drive,short mt_op,int mt_count)
 		case MTFSFM:
 		case MTBSF:
 		case MTBSFM:
+			if (!mt_count)
+				return (0);
 			return (idetape_space_over_filemarks (drive,mt_op,mt_count));
 		default:
 			break;
@@ -3913,10 +3942,8 @@ int idetape_mtioctop (ide_drive_t *drive,short mt_op,int mt_count)
 	 *	Empty the pipeline.
 	 */
 
-	if (tape->chrdev_direction == idetape_direction_read) {
-		idetape_empty_read_pipeline (drive);
-		tape->chrdev_direction=idetape_direction_none;
-	}
+	if (tape->chrdev_direction == idetape_direction_read)
+		idetape_discard_read_pipeline (drive);
 
 	switch (mt_op) {
 		case MTWEOF:
@@ -3976,7 +4003,8 @@ int idetape_space_over_filemarks (ide_drive_t *drive,short mt_op,int mt_count)
 		 *	We have a read-ahead buffer. Scan it for crossed
 		 *	filemarks.
 		 */
-		 
+
+		tape->merge_buffer_size=tape->merge_buffer_offset=0;
 		while (tape->first_stage != NULL) {
 			
 			/*
@@ -4003,7 +4031,7 @@ int idetape_space_over_filemarks (ide_drive_t *drive,short mt_op,int mt_count)
 			}
 			idetape_remove_stage_head (drive);
 		}
-		tape->chrdev_direction = idetape_direction_none;
+		idetape_discard_read_pipeline (drive);
 	}
 
 	/*
@@ -4049,21 +4077,16 @@ int idetape_space_over_filemarks (ide_drive_t *drive,short mt_op,int mt_count)
 int idetape_chrdev_open (struct inode *inode, struct file *filp)
 
 {
-	ide_drive_t *drive;
-	idetape_tape_t *tape;
+	ide_drive_t *drive=idetape_chrdev.drive;
+	idetape_tape_t *tape=&(drive->tape);
 	unsigned long flags;
-	unsigned int minor;
+	unsigned int minor=MINOR (inode->i_rdev),allocation_length;
 			
 	save_flags (flags);cli ();
 
 #if IDETAPE_DEBUG_LOG
 	printk ("Reached idetape_chrdev_open\n");
 #endif /* IDETAPE_DEBUG_LOG */
-
-
-	drive=idetape_chrdev.drive;
-	tape=&(drive->tape);
-	minor=MINOR (inode->i_rdev);
 
 	if (minor!=0 && minor!=128) {		/* Currently supporting only one */
 		restore_flags (flags);		/* tape drive */
@@ -4077,6 +4100,26 @@ int idetape_chrdev_open (struct inode *inode, struct file *filp)
 
 	tape->busy=1;
 	restore_flags (flags);
+
+	allocation_length=tape->data_buffer_size;
+	if (tape->data_buffer_size % IDETAPE_ALLOCATION_BLOCK)
+		allocation_length+=IDETAPE_ALLOCATION_BLOCK;
+
+#if IDETAPE_MINIMIZE_IDLE_MEMORY_USAGE
+	if (tape->data_buffer == NULL)
+		tape->data_buffer=kmalloc (allocation_length,GFP_KERNEL);
+	if (tape->data_buffer == NULL)
+		goto sorry;
+	if (tape->merge_buffer == NULL)
+		tape->merge_buffer=kmalloc (allocation_length,GFP_KERNEL);
+	if (tape->merge_buffer == NULL) {
+		kfree (tape->data_buffer);
+	sorry:
+		printk ("ide-tape: FATAL - Can not allocate continuous buffer of %d bytes\n",allocation_length);
+		tape->busy=0;
+		return (-EIO);
+	}
+#endif /* IDETAPE_MINIMIZE_IDLE_MEMORY_USAGE */
 
 	if (!tape->block_address_valid) {
 		if (idetape_rewind_tape (drive)) {
@@ -4096,10 +4139,9 @@ int idetape_chrdev_open (struct inode *inode, struct file *filp)
 void idetape_chrdev_release (struct inode *inode, struct file *filp)
 
 {
-	ide_drive_t *drive;
-	idetape_tape_t *tape;
-	
-	unsigned int minor;
+	ide_drive_t *drive=idetape_chrdev.drive;
+	idetape_tape_t *tape=&(drive->tape);
+	unsigned int minor=MINOR (inode->i_rdev);
 	idetape_packet_command_t pc;
 	unsigned long flags;
 			
@@ -4107,28 +4149,32 @@ void idetape_chrdev_release (struct inode *inode, struct file *filp)
 	printk ("Reached idetape_chrdev_release\n");
 #endif /* IDETAPE_DEBUG_LOG */
 
-	drive=idetape_chrdev.drive;
-	tape=&(drive->tape);
-	minor=MINOR (inode->i_rdev);
-
 	if (tape->chrdev_direction == idetape_direction_write) {
 		idetape_empty_write_pipeline (drive);
-		tape->chrdev_direction = idetape_direction_none;
 		idetape_create_write_filemark_cmd (&pc,1);	/* Write a filemark */
-		if (idetape_queue_pc_tail (drive,&pc)) {
+		if (idetape_queue_pc_tail (drive,&pc))
 			printk ("ide-tape: Couldn't write a filemark\n");
-			/* ??? */
-		}
 	}
-
-	if (minor < 128) {
-		if (tape->chrdev_direction == idetape_direction_read)
-			idetape_empty_read_pipeline (drive);
-		if (idetape_rewind_tape (drive)) {
+	
+	if (tape->chrdev_direction == idetape_direction_read) {
+		if (minor < 128)
+			idetape_discard_read_pipeline (drive);
+		else
+			idetape_wait_for_pipeline (drive);
+	}
+	
+	if (minor < 128)
+		if (idetape_rewind_tape (drive))
 			printk ("ide-tape: Rewinding tape failed\n");
-			/* ??? */
-		}
+
+#if IDETAPE_MINIMIZE_IDLE_MEMORY_USAGE
+	kfree (tape->data_buffer);
+	tape->data_buffer=NULL;
+	if (!tape->merge_buffer_size) {
+		kfree (tape->merge_buffer);
+		tape->merge_buffer=NULL;
 	}
+#endif /* IDETAPE_MINIMIZE_IDLE_MEMORY_USAGE */
 
 	save_flags (flags);cli ();
 	tape->busy=0;
@@ -4307,7 +4353,7 @@ void idetape_kfree_stage (idetape_pipeline_stage_t *stage)
 
 /*
  *	idetape_copy_buffer_from_stage and idetape_copy_buffer_to_stage
- *	copy data from/to the small buffers into/from a continous buffer.
+ *	copy data from/to the small buffers into/from a continuous buffer.
  */
   
 void idetape_copy_buffer_from_stage (idetape_pipeline_stage_t *stage,char *buffer)

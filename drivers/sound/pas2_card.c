@@ -3,8 +3,9 @@
  * sound/pas2_card.c
  *
  * Detection routine for the Pro Audio Spectrum cards.
- *
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -25,8 +26,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 
@@ -44,7 +46,7 @@ int             translat_code;
 static int      pas_intr_mask = 0;
 static int      pas_irq = 0;
 
-sound_os_info  *pas_osp;
+int            *pas_osp;
 
 char            pas_model;
 static char    *pas_model_names[] =

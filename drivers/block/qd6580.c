@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/qd6580.c       Version 0.01  Feb 06, 1996
+ *  linux/drivers/block/qd6580.c       Version 0.02  Feb 09, 1996
  *
  *  Copyright (C) 1996  Linus Torvalds & author (see below)
  */
@@ -21,6 +21,7 @@
 #include <linux/hdreg.h>
 #include <asm/io.h>
 #include "ide.h"
+#include "ide_modes.h"
 
 /*
  * Register 0xb3 looks like:
@@ -43,19 +44,16 @@ static void tune_qd6580 (ide_drive_t *drive, byte pio)
 {
 	unsigned long flags;
 
-	if (pio == 255)  {	/* auto-tune */
-		struct hd_driveid *id = drive->id;
-		pio = id->tPIO;
-		if ((id->field_valid & 0x02) && (id->eide_pio_modes & 0x03))
-			pio = 3;
-	}
-	pio++;	/* is this correct? */
+	if (pio == 255)
+		pio = ide_get_best_pio_mode (drive);
+	if (pio > 3)
+		pio = 3;
 
 	save_flags(flags);
 	cli();
 	outb_p(0x8d,0xb0);
 	outb_p(0x0 ,0xb2);
-	outb_p((pio<<4)|0x0f,0xb3);
+	outb_p(((pio+1)<<4)|0x0f,0xb3);
 	inb(0x3f6);
 	restore_flags(flags);
 }

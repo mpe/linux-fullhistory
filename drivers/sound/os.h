@@ -3,8 +3,6 @@
 #undef NO_INLINE_ASM
 #define SHORT_BANNERS
 
-#include <linux/config.h>
-
 #ifdef MODULE
 #define __NO_VERSION__
 #include <linux/module.h>
@@ -37,9 +35,6 @@
 
 #include <linux/soundcard.h>
 
-typedef char snd_rw_buf;
-typedef caddr_t ioctl_arg;
-
 #define FALSE	0
 #define TRUE	1
 
@@ -57,6 +52,5 @@ extern void sound_close_dma(int chn);
 extern caddr_t sound_mem_blocks[1024];
 extern int sound_num_blocks;
 
-typedef int sound_os_info;
-
 #undef PSEUDO_DMA_AUTOINIT
+#define ALLOW_BUFFER_MAPPING

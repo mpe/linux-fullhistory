@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-tape.h	Version 1.2 - ALPHA	Jan   1, 1996
+ * linux/drivers/block/ide-tape.h	Version 1.3 - ALPHA	Feb   9, 1996
  *
  * Copyright (C) 1995, 1996 Gadi Oxman <tgud@tochnapc2.technion.ac.il>
  */
@@ -97,6 +97,20 @@
 #endif
 
 /*
+ *	ide-tape currently uses two continous buffers, each of the size of
+ *	one stage. By default, those buffers are allocated at initialization
+ *	time and never released, since dynamic allocation of pages bigger
+ *	than PAGE_SIZE may fail as memory becomes fragmented.
+ *
+ *	This results in about 100 KB memory usage when the tape is idle.
+ *	Setting IDETAPE_MINIMIZE_IDLE_MEMORY_USAGE to 1 will let ide-tape
+ *	to dynamically allocate those buffers, resulting in about 20 KB idle
+ *	memory usage.
+ */
+ 
+#define	IDETAPE_MINIMIZE_IDLE_MEMORY_USAGE	0
+
+/*
  *	The following are used to debug the driver:
  *
  *	Setting IDETAPE_DEBUG_LOG to 1 will log driver flow control.
@@ -124,7 +138,7 @@
  *	Setting IDETAPE_MAX_PC_RETRIES to 0 will disable retries.
  */
 
-#define	IDETAPE_MAX_PC_RETRIES	2
+#define	IDETAPE_MAX_PC_RETRIES	3
 
 /*
  *	With each packet command, we allocate a buffer of
@@ -256,6 +270,9 @@ typedef struct idetape_packet_command_s {
 	byte error;				/* Error code */
 	byte abort;				/* Set when an error is considered normal - We won't retry */
 	byte wait_for_dsc;			/* 1 When polling for DSC on a media access command */
+	byte dma_recommended;			/* 1 when we prefer to use DMA if possible */
+	byte dma_in_progress;			/* 1 while DMA in progress */
+	byte dma_error;				/* 1 when encountered problem during DMA */
 	unsigned long request_transfer;		/* Bytes to transfer */
 	unsigned long actually_transferred; 	/* Bytes actually transferred */
 	unsigned long buffer_size;		/* Size of our data buffer */
@@ -419,6 +436,14 @@ typedef struct {
 	byte last_status;			/* Contents of the tape status register */
 						/* before the current request (saved for us */
 						/* by ide.c) */
+	/*
+	 *	After an ATAPI software reset, the status register will be
+	 *	locked, and thus we need to ignore it when checking DSC for
+	 *	the first time.
+	 */
+	 
+	byte reset_issued;
+
 	/* Position information */
 	
 	byte partition_num;			/* Currently not used */
@@ -456,8 +481,11 @@ typedef struct {
 	struct request *active_data_request;	/* Pointer to the request which is waiting in the device request queue */
 	char *data_buffer;			/* The correspoding data buffer (for read/write requests) */
 	int data_buffer_size;			/* Data buffer size (chosen based on the tape's recommendation */
-	char *temp_data_buffer;			/* Temporary buffer for user <-> kernel space data transfer */
 
+	char *merge_buffer;			/* Temporary buffer for user <-> kernel space data transfer */
+	int merge_buffer_offset;
+	int merge_buffer_size;
+	
 	/*
 	 *	Pipeline parameters.
 	 *

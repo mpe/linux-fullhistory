@@ -215,8 +215,14 @@ hannu@voxware.pp.fi
 if [ -e /dev/mixer ]; then 
 	rm -f /dev/mixer 
 fi
+
+if [ -e /dev/mixer0 ]; then 
+	rm -f /dev/mixer0 
+fi
  
-mknod -m 666 /dev/mixer c 14 0
+mknod -m 666 /dev/mixer0 c 14 0
+ln -sf /dev/mixer0 /dev/mixer
+
 if [ -e /dev/mixer1 ]; then 
 	rm -f /dev/mixer1 
 fi
@@ -260,6 +266,7 @@ fi
 		rm -f /dev/midi00
 	fi
 	mknod -m 666 /dev/midi00 c 14 2
+	ln -sf /dev/midi00 /dev/midi
 	
 	if [ -e /dev/midi01 ]; then
 		rm -f /dev/midi01

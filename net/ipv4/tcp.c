@@ -802,14 +802,31 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
  *	Modified January 1995 from a go-faster DOS routine by
  *	Jorge Cwik <jorge@laser.satlink.net>
  */
- 
+#undef DEBUG_TCP_CHECK
 void tcp_send_check(struct tcphdr *th, unsigned long saddr, 
-		unsigned long daddr, int len, struct sock *sk)
+		unsigned long daddr, int len, struct sk_buff *skb)
 {
+#ifdef DEBUG_TCP_CHECK
+	u16 check;
+#endif
+	th->check = 0;
+	th->check = tcp_check(th, len, saddr, daddr,
+		csum_partial((char *)th,sizeof(*th),skb->csum));
+
+#ifdef DEBUG_TCP_CHECK
+	check = th->check;
 	th->check = 0;
 	th->check = tcp_check(th, len, saddr, daddr,
 		csum_partial((char *)th,len,0));
-	return;
+	if (check != th->check) {
+		static int count = 0;
+		if (++count < 10) {
+			printk("Checksum %x (%x) from %p\n", th->check, check,
+				(&th)[-1]);
+			printk("TCP=<off:%d a:%d s:%d f:%d>\n", th->doff*4, th->ack, th->syn, th->fin);
+		}
+	}
+#endif
 }
 
 
@@ -823,9 +840,6 @@ extern __inline int tcp_build_header(struct tcphdr *th, struct sock *sk, int pus
 	memcpy(th,(void *) &(sk->dummy_th), sizeof(*th));
 	th->seq = htonl(sk->write_seq);
 	th->psh =(push == 0) ? 1 : 0;
-	th->doff = sizeof(*th)/4;
-	th->ack = 1;
-	th->fin = 0;
 	sk->ack_backlog = 0;
 	sk->bytes_rcv = 0;
 	sk->ack_timed = 0;
@@ -1003,30 +1017,29 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 	
 			if ((skb = tcp_dequeue_partial(sk)) != NULL) 
 			{
-				int hdrlen;
+				int tcp_size;
 
-				 /* IP header + TCP header */
-				hdrlen = ((unsigned long)skb->h.th - (unsigned long)skb->data)
-					 + sizeof(struct tcphdr);
+				tcp_size = skb->tail - (unsigned char *)(skb->h.th + 1);
 	
 				/* Add more stuff to the end of skb->len */
 				if (!(flags & MSG_OOB)) 
 				{
-					copy = min(sk->mss - (skb->len - hdrlen), seglen);
+					copy = min(sk->mss - tcp_size, seglen);
 					if (copy <= 0) 
 					{
 						printk("TCP: **bug**: \"copy\" <= 0\n");
 				  		return -EFAULT;
-					}		  
+					}
+					tcp_size += copy;
 					memcpy_fromfs(skb_put(skb,copy), from, copy);
+					skb->csum = csum_partial(skb->tail - tcp_size, tcp_size, 0);
 					from += copy;
 					copied += copy;
 					len -= copy;
 					sk->write_seq += copy;
 					seglen -= copy;
 				}
-				if ((skb->len - hdrlen) >= sk->mss ||
-					(flags & MSG_OOB) || !sk->packets_out)
+				if (tcp_size >= sk->mss || (flags & MSG_OOB) || !sk->packets_out)
 					tcp_send_skb(sk, skb);
 				else
 					tcp_enqueue_partial(skb, sk);
@@ -1058,6 +1071,11 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 			send_tmp = NULL;
 			if (copy < sk->mss && !(flags & MSG_OOB) && sk->packets_out) 
 			{
+#if EXTRA_RELEASE
+/*
+ * we don't really need to release even if we sleep: our packets
+ * will be backlogged for us, and that's just fine.
+ */
 				/*
 				 *	We will release the socket in case we sleep here. 
 				 */
@@ -1066,16 +1084,19 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 				 *	NB: following must be mtu, because mss can be increased.
 				 *	mss is always <= mtu 
 				 */
+#endif
 				skb = sock_wmalloc(sk, sk->mtu + 128 + prot->max_header + 15, 0, GFP_KERNEL);
 				sk->inuse = 1;
 				send_tmp = skb;
 			} 
 			else 
 			{
+#if EXTRA_RELEASE
 				/*
 				 *	We will release the socket in case we sleep here. 
 				 */
 				release_sock(sk);
+#endif
 				skb = sock_wmalloc(sk, copy + prot->max_header + 15 , 0, GFP_KERNEL);
   				sk->inuse = 1;
 			}
@@ -1156,7 +1177,8 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 				skb->h.th->urg_ptr = ntohs(copy);
 			}
 
-			memcpy_fromfs(skb_put(skb,copy), from, copy);
+			skb->csum = csum_partial_copy_fromuser(from,
+				skb_put(skb,copy), copy, 0);
 		
 			from += copy;
 			copied += copy;
@@ -1240,6 +1262,7 @@ void tcp_read_wakeup(struct sock *sk)
 
 	buff->sk = sk;
 	buff->localroute = sk->localroute;
+	buff->csum = 0;
 	
 	/*
 	 *	Put in the IP header and routing stuff. 
@@ -1258,14 +1281,6 @@ void tcp_read_wakeup(struct sock *sk)
 
 	memcpy(t1,(void *) &sk->dummy_th, sizeof(*t1));
 	t1->seq = htonl(sk->sent_seq);
-	t1->ack = 1;
-	t1->res1 = 0;
-	t1->res2 = 0;
-	t1->rst = 0;
-	t1->urg = 0;
-	t1->syn = 0;
-	t1->psh = 0;
-
 
 	sk->ack_backlog = 0;
 	sk->bytes_rcv = 0;
@@ -1274,99 +1289,10 @@ void tcp_read_wakeup(struct sock *sk)
 	t1->window = htons(sk->window);
 	t1->ack_seq = htonl(sk->acked_seq);
 	t1->doff = sizeof(*t1)/4;
-	tcp_send_check(t1, sk->saddr, sk->daddr, sizeof(*t1), sk);
+	tcp_send_check(t1, sk->saddr, sk->daddr, sizeof(*t1), buff);
 	sk->prot->queue_xmit(sk, dev, buff, 1);
 	tcp_statistics.TcpOutSegs++;
 }
-
-
-/*
- * 	FIXME:
- * 	This routine frees used buffers.
- * 	It should consider sending an ACK to let the
- * 	other end know we now have a bigger window.
- */
-
-static void cleanup_rbuf(struct sock *sk)
-{
-	unsigned long flags;
-	struct sk_buff *skb;
-	unsigned long rspace;
-
-	save_flags(flags);
-	cli();
-
-	/*
-	 * See if we have anything to free up?
-	 */
-
-	skb = skb_peek(&sk->receive_queue);
-	if (!skb || !skb->used || skb->users) {
-		restore_flags(flags);
-		return;
-	}
-
-	/*
-	 *	We have to loop through all the buffer headers,
-	 *	and try to free up all the space we can.
-	 */
-
-	do {
-		skb_unlink(skb);
-		skb->sk = sk;
-		kfree_skb(skb, FREE_READ);
-		skb = skb_peek(&sk->receive_queue);
-	} while (skb && skb->used && !skb->users);
-	restore_flags(flags);
-
-	/*
-	 *	FIXME:
-	 *	At this point we should send an ack if the difference
-	 *	in the window, and the amount of space is bigger than
-	 *	TCP_WINDOW_DIFF.
-	 */
-
-	rspace=sock_rspace(sk);
-	if(sk->debug)
-		printk("sk->rspace = %lu\n", rspace);
-	/*
-	 * This area has caused the most trouble.  The current strategy
-	 * is to simply do nothing if the other end has room to send at
-	 * least 3 full packets, because the ack from those will auto-
-	 * matically update the window.  If the other end doesn't think
-	 * we have much space left, but we have room for at least 1 more
-	 * complete packet than it thinks we do, we will send an ack
-	 * immediately.  Otherwise we will wait up to .5 seconds in case
-	 * the user reads some more.
-	 */
-	sk->ack_backlog++;
-
-	/*
-	 * It's unclear whether to use sk->mtu or sk->mss here.  They differ only
-	 * if the other end is offering a window smaller than the agreed on MSS
-	 * (called sk->mtu here).  In theory there's no connection between send
-	 * and receive, and so no reason to think that they're going to send
-	 * small packets.  For the moment I'm using the hack of reducing the mss
-	 * only on the send side, so I'm putting mtu here.
-	 */
-
-	if (rspace > (sk->window - sk->bytes_rcv + sk->mtu)) 
-	{
-		/* Send an ack right now. */
-		tcp_read_wakeup(sk);
-	} 
-	else 
-	{
-		/* Force it to send an ack soon. */
-		int was_active = del_timer(&sk->retransmit_timer);
-		if (!was_active || jiffies+TCP_ACK_TIME < sk->timer.expires) 
-		{
-			tcp_reset_xmit_timer(sk, TIME_WRITE, TCP_ACK_TIME);
-		} 
-		else
-			add_timer(&sk->retransmit_timer);
-	}
-} 
 
 
 /*
@@ -1431,6 +1357,90 @@ static int tcp_recv_urg(struct sock * sk, int nonblock,
 	 */
 	return -EAGAIN;
 }
+
+/*
+ *	Release a skb if it is no longer needed. This routine
+ *	must be called with interrupts disabled or "sk->inuse = 1"
+ *	so that the sk_buff queue operation is ok.
+ */
+ 
+static inline void tcp_eat_skb(struct sock *sk, struct sk_buff * skb)
+{
+	sk->ack_backlog++;
+	skb->sk = sk;
+	__skb_unlink(skb, &sk->receive_queue);
+	kfree_skb(skb, FREE_READ);
+}
+
+/*
+ * 	FIXME:
+ * 	This routine frees used buffers.
+ * 	It should consider sending an ACK to let the
+ * 	other end know we now have a bigger window.
+ */
+
+static void cleanup_rbuf(struct sock *sk)
+{
+	struct sk_buff *skb;
+	unsigned long rspace;
+
+	/*
+	 * NOTE! 'sk->inuse' must be set, so that we don't get
+	 * a messed-up receive queue.
+	 */
+	while ((skb=skb_peek(&sk->receive_queue)) != NULL) {
+		if (!skb->used || skb->users)
+			break;
+		tcp_eat_skb(sk, skb);
+	}
+
+	/*
+	 *	FIXME:
+	 *	At this point we should send an ack if the difference
+	 *	in the window, and the amount of space is bigger than
+	 *	TCP_WINDOW_DIFF.
+	 */
+
+	rspace=sock_rspace(sk);
+	if(sk->debug)
+		printk("sk->rspace = %lu\n", rspace);
+	/*
+	 * This area has caused the most trouble.  The current strategy
+	 * is to simply do nothing if the other end has room to send at
+	 * least 3 full packets, because the ack from those will auto-
+	 * matically update the window.  If the other end doesn't think
+	 * we have much space left, but we have room for at least 1 more
+	 * complete packet than it thinks we do, we will send an ack
+	 * immediately.  Otherwise we will wait up to .5 seconds in case
+	 * the user reads some more.
+	 */
+
+	/*
+	 * It's unclear whether to use sk->mtu or sk->mss here.  They differ only
+	 * if the other end is offering a window smaller than the agreed on MSS
+	 * (called sk->mtu here).  In theory there's no connection between send
+	 * and receive, and so no reason to think that they're going to send
+	 * small packets.  For the moment I'm using the hack of reducing the mss
+	 * only on the send side, so I'm putting mtu here.
+	 */
+
+	if (rspace > (sk->window - sk->bytes_rcv + sk->mtu)) 
+	{
+		/* Send an ack right now. */
+		tcp_read_wakeup(sk);
+	} 
+	else 
+	{
+		/* Force it to send an ack soon. */
+		int was_active = del_timer(&sk->retransmit_timer);
+		if (!was_active || jiffies+TCP_ACK_TIME < sk->timer.expires) 
+		{
+			tcp_reset_xmit_timer(sk, TIME_WRITE, TCP_ACK_TIME);
+		} 
+		else
+			add_timer(&sk->retransmit_timer);
+	}
+} 
 
 
 /*
@@ -1637,6 +1647,8 @@ static int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		if (flags & MSG_PEEK)
 			continue;
 		skb->used = 1;
+		if (!skb->users)
+			tcp_eat_skb(sk, skb);		
 		continue;
 
 	found_fin_ok:
@@ -2001,13 +2013,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	buff->end_seq = sk->write_seq;
 	t1->ack = 0;
 	t1->window = 2;
-	t1->res1=0;
-	t1->res2=0;
-	t1->rst = 0;
-	t1->urg = 0;
-	t1->psh = 0;
 	t1->syn = 1;
-	t1->urg_ptr = 0;
 	t1->doff = 6;
 	/* use 512 or whatever user asked for */
 	
@@ -2056,8 +2062,9 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	ptr[1] = 4;
 	ptr[2] = (sk->mtu) >> 8;
 	ptr[3] = (sk->mtu) & 0xff;
+	buff->csum = csum_partial(ptr, 4, 0);
 	tcp_send_check(t1, sk->saddr, sk->daddr,
-		  sizeof(struct tcphdr) + 4, sk);
+		  sizeof(struct tcphdr) + 4, buff);
 
 	/*
 	 *	This must go first otherwise a really quick response will get reset. 

@@ -2,8 +2,9 @@
  * sound/maui.c
  *
  * The low level driver for Turtle Beach Maui and Tropez.
- *
- * Copyright by Hannu Savolainen 1995
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,8 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #define USE_SEQ_MACROS
 #define USE_SIMPLE_MACROS
@@ -37,7 +39,7 @@
 static int      maui_base = 0x330;
 
 static volatile int irq_ok = 0;
-static sound_os_info *maui_osp;
+static int     *maui_osp;
 
 #define HOST_DATA_PORT	(maui_base + 2)
 #define HOST_STAT_PORT	(maui_base + 3)
@@ -50,7 +52,7 @@ static sound_os_info *maui_osp;
 #define STAT_RX_AVAIL	0x02
 #define STAT_RX_IENA	0x01
 
-static int      (*orig_load_patch) (int dev, int format, const snd_rw_buf * addr,
+static int      (*orig_load_patch) (int dev, int format, const char *addr,
 				 int offs, int count, int pmgr_flag) = NULL;
 
 static int
@@ -98,7 +100,7 @@ mauiintr (int irq, struct pt_regs *dummy)
 
 
 int
-maui_load_patch (int dev, int format, const snd_rw_buf * addr,
+maui_load_patch (int dev, int format, const char *addr,
 		 int offs, int count, int pmgr_flag)
 {
 

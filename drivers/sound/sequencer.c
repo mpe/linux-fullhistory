@@ -2,8 +2,9 @@
  * sound/sequencer.c
  *
  * The sequencer personality manager.
- *
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,8 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #define SEQUENCER_C
 #include "sound_config.h"
@@ -99,7 +101,7 @@ static int      pmgr_present[MAX_SYNTH_DEV] =
 #endif
 
 int
-sequencer_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
+sequencer_read (int dev, struct fileinfo *file, char *buf, int count)
 {
   int             c = count, p = 0;
   int             ev_len;
@@ -132,7 +134,7 @@ sequencer_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 	if (pre_event_timeout)
 	  current_set_timeout (tl = jiffies + (pre_event_timeout));
 	else
-	  tl = 0xffffffff;
+	  tl = (unsigned long) -1;
 	midi_sleep_flag.mode = WK_SLEEP;
 	module_interruptible_sleep_on (&midi_sleeper);
 	if (!(midi_sleep_flag.mode & WK_WAKEUP))
@@ -174,7 +176,7 @@ sequencer_midi_output (int dev)
 }
 
 void
-seq_copy_to_input (unsigned char *event, int len)
+seq_copy_to_input (unsigned char *event_rec, int len)
 {
   unsigned long   flags;
 
@@ -192,7 +194,7 @@ seq_copy_to_input (unsigned char *event, int len)
 
   save_flags (flags);
   cli ();
-  memcpy (&iqueue[iqtail * IEV_SZ], event, len);
+  memcpy (&iqueue[iqtail * IEV_SZ], event_rec, len);
   iqlen++;
   iqtail = (iqtail + 1) % SEQ_MAX_QUEUE;
 
@@ -210,7 +212,7 @@ static void
 sequencer_midi_input (int dev, unsigned char data)
 {
   unsigned int    tstamp;
-  unsigned char   event[4];
+  unsigned char   event_rec[4];
 
   if (data == 0xfe)		/* Ignore active sensing */
     return;
@@ -224,16 +226,16 @@ sequencer_midi_input (int dev, unsigned char data)
       prev_input_time = tstamp;
     }
 
-  event[0] = SEQ_MIDIPUTC;
-  event[1] = data;
-  event[2] = dev;
-  event[3] = 0;
+  event_rec[0] = SEQ_MIDIPUTC;
+  event_rec[1] = data;
+  event_rec[2] = dev;
+  event_rec[3] = 0;
 
-  seq_copy_to_input (event, 4);
+  seq_copy_to_input (event_rec, 4);
 }
 
 void
-seq_input_event (unsigned char *event, int len)
+seq_input_event (unsigned char *event_rec, int len)
 {
   unsigned long   this_time;
 
@@ -250,19 +252,19 @@ seq_input_event (unsigned char *event, int len)
       tmp_event[1] = TMR_WAIT_ABS;
       tmp_event[2] = 0;
       tmp_event[3] = 0;
-      *(unsigned long *) &tmp_event[4] = this_time;
+      *(unsigned int *) &tmp_event[4] = this_time;
 
       seq_copy_to_input (tmp_event, 8);
       prev_input_time = this_time;
     }
 
-  seq_copy_to_input (event, len);
+  seq_copy_to_input (event_rec, len);
 }
 
 int
-sequencer_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
+sequencer_write (int dev, struct fileinfo *file, const char *buf, int count)
 {
-  unsigned char   event[EV_SZ], ev_code;
+  unsigned char   event_rec[EV_SZ], ev_code;
   int             p = 0, c, ev_size;
   int             err;
   int             mode = file->mode & O_ACCMODE;
@@ -281,21 +283,21 @@ sequencer_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int cou
 
   while (c >= 4)
     {
-      memcpy_fromfs ((char *) event, &((buf)[p]), 4);
-      ev_code = event[0];
+      memcpy_fromfs ((char *) event_rec, &((buf)[p]), 4);
+      ev_code = event_rec[0];
 
       if (ev_code == SEQ_FULLSIZE)
 	{
 	  int             err;
 
-	  dev = *(unsigned short *) &event[2];
+	  dev = *(unsigned short *) &event_rec[2];
 	  if (dev < 0 || dev >= max_synthdev)
 	    return -ENXIO;
 
 	  if (!(synth_open_mask & (1 << dev)))
 	    return -ENXIO;
 
-	  err = synth_devs[dev]->load_patch (dev, *(short *) &event[0], buf, p + 4, c, 0);
+	  err = synth_devs[dev]->load_patch (dev, *(short *) &event_rec[0], buf, p + 4, c, 0);
 	  if (err < 0)
 	    return err;
 
@@ -319,7 +321,7 @@ sequencer_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int cou
 	      return count - c;
 	    }
 
-	  memcpy_fromfs ((char *) &event[4], &((buf)[p + 4]), 4);
+	  memcpy_fromfs ((char *) &event_rec[4], &((buf)[p + 4]), 4);
 
 	}
       else
@@ -332,13 +334,13 @@ sequencer_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int cou
 	  ev_size = 4;
 	}
 
-      if (event[0] == SEQ_MIDIPUTC)
+      if (event_rec[0] == SEQ_MIDIPUTC)
 	{
 
-	  if (!midi_opened[event[2]])
+	  if (!midi_opened[event_rec[2]])
 	    {
 	      int             mode;
-	      int             dev = event[2];
+	      int             dev = event_rec[2];
 
 	      if (dev >= max_mididev)
 		{
@@ -361,8 +363,8 @@ sequencer_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int cou
 
 	}
 
-      if (!seq_queue (event, (file->flags & (O_NONBLOCK) ?
-			      1 : 0)))
+      if (!seq_queue (event_rec, (file->flags & (O_NONBLOCK) ?
+				  1 : 0)))
 	{
 	  int             processed = count - c;
 
@@ -464,7 +466,7 @@ extended_event (unsigned char *q)
       break;
 
     case SEQ_CONTROLLER:
-      synth_devs[dev]->controller (dev, q[3], q[4], *(short *) &q[5]);
+      synth_devs[dev]->controller (dev, q[3], q[4], (short) (q[5] | (q[6] << 8)));
       break;
 
     case SEQ_VOLMODE:
@@ -511,13 +513,13 @@ alloc_voice (int dev, int chn, int note)
 }
 
 static void
-seq_chn_voice_event (unsigned char *event)
+seq_chn_voice_event (unsigned char *event_rec)
 {
-  unsigned char   dev = event[1];
-  unsigned char   cmd = event[2];
-  unsigned char   chn = event[3];
-  unsigned char   note = event[4];
-  unsigned char   parm = event[5];
+  unsigned char   dev = event_rec[1];
+  unsigned char   cmd = event_rec[2];
+  unsigned char   chn = event_rec[3];
+  unsigned char   note = event_rec[4];
+  unsigned char   parm = event_rec[5];
   int             voice = -1;
 
   if ((int) dev > max_synthdev)
@@ -593,15 +595,15 @@ seq_chn_voice_event (unsigned char *event)
 }
 
 static void
-seq_chn_common_event (unsigned char *event)
+seq_chn_common_event (unsigned char *event_rec)
 {
-  unsigned char   dev = event[1];
-  unsigned char   cmd = event[2];
-  unsigned char   chn = event[3];
-  unsigned char   p1 = event[4];
+  unsigned char   dev = event_rec[1];
+  unsigned char   cmd = event_rec[2];
+  unsigned char   chn = event_rec[3];
+  unsigned char   p1 = event_rec[4];
 
-  /* unsigned char   p2 = event[5]; */
-  unsigned short  w14 = *(short *) &event[6];
+  /* unsigned char   p2 = event_rec[5]; */
+  unsigned short  w14 = *(short *) &event_rec[6];
 
   if ((int) dev > max_synthdev)
     return;
@@ -691,16 +693,16 @@ seq_chn_common_event (unsigned char *event)
 }
 
 static int
-seq_timing_event (unsigned char *event)
+seq_timing_event (unsigned char *event_rec)
 {
-  unsigned char   cmd = event[1];
-  unsigned int    parm = *(int *) &event[4];
+  unsigned char   cmd = event_rec[1];
+  unsigned int    parm = *(int *) &event_rec[4];
 
   if (seq_mode == SEQ_2)
     {
       int             ret;
 
-      if ((ret = tmr->event (tmr_no, event)) == TIMER_ARMED)
+      if ((ret = tmr->event (tmr_no, event_rec)) == TIMER_ARMED)
 	{
 	  if ((SEQ_MAX_QUEUE - qlen) >= output_treshold)
 	    {
@@ -779,7 +781,7 @@ seq_timing_event (unsigned char *event)
 
     case TMR_ECHO:
       if (seq_mode == SEQ_2)
-	seq_copy_to_input (event, 8);
+	seq_copy_to_input (event_rec, 8);
       else
 	{
 	  parm = (parm << 8 | SEQ_ECHO);
@@ -794,10 +796,10 @@ seq_timing_event (unsigned char *event)
 }
 
 static void
-seq_local_event (unsigned char *event)
+seq_local_event (unsigned char *event_rec)
 {
-  unsigned char   cmd = event[1];
-  unsigned int    parm = *((unsigned int *) &event[4]);
+  unsigned char   cmd = event_rec[1];
+  unsigned int    parm = *((unsigned int *) &event_rec[4]);
 
   switch (cmd)
     {
@@ -812,11 +814,11 @@ seq_local_event (unsigned char *event)
 }
 
 static void
-seq_sysex_message (unsigned char *event)
+seq_sysex_message (unsigned char *event_rec)
 {
-  int             dev = event[1];
+  int             dev = event_rec[1];
   int             i, l = 0;
-  unsigned char  *buf = &event[2];
+  unsigned char  *buf = &event_rec[2];
 
   if ((int) dev > max_synthdev)
     return;
@@ -844,7 +846,7 @@ play_event (unsigned char *q)
      *   1 = Timer armed. Suspend playback until timer callback.
      *   2 = MIDI output buffer full. Restore queue and suspend until timer
    */
-  unsigned long  *delay;
+  unsigned int   *delay;
 
   switch (q[0])
     {
@@ -862,7 +864,7 @@ play_event (unsigned char *q)
       break;
 
     case SEQ_WAIT:
-      delay = (unsigned long *) q;	/*
+      delay = (unsigned int *) q;	/*
 					 * Bytes 1 to 3 are containing the *
 					 * delay in jiffies
 					 */
@@ -1270,7 +1272,7 @@ seq_drain_midi_queues (void)
 	    if (HZ / 10)
 	      current_set_timeout (tl = jiffies + (HZ / 10));
 	    else
-	      tl = 0xffffffff;
+	      tl = (unsigned long) -1;
 	    seq_sleep_flag.mode = WK_SLEEP;
 	    module_interruptible_sleep_on (&seq_sleeper);
 	    if (!(seq_sleep_flag.mode & WK_WAKEUP))
@@ -1370,7 +1372,7 @@ seq_sync (void)
 	if (HZ)
 	  current_set_timeout (tl = jiffies + (HZ));
 	else
-	  tl = 0xffffffff;
+	  tl = (unsigned long) -1;
 	seq_sleep_flag.mode = WK_SLEEP;
 	module_interruptible_sleep_on (&seq_sleeper);
 	if (!(seq_sleep_flag.mode & WK_WAKEUP))
@@ -1415,7 +1417,7 @@ midi_outc (int dev, unsigned char data)
 	if (4)
 	  current_set_timeout (tl = jiffies + (4));
 	else
-	  tl = 0xffffffff;
+	  tl = (unsigned long) -1;
 	seq_sleep_flag.mode = WK_SLEEP;
 	module_interruptible_sleep_on (&seq_sleeper);
 	if (!(seq_sleep_flag.mode & WK_WAKEUP))
@@ -1538,7 +1540,7 @@ seq_panic (void)
 
 int
 sequencer_ioctl (int dev, struct fileinfo *file,
-		 unsigned int cmd, ioctl_arg arg)
+		 unsigned int cmd, caddr_t arg)
 {
   int             midi_dev, orig_dev;
   int             mode = file->mode & O_ACCMODE;
@@ -1749,14 +1751,14 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 
     case SNDCTL_SEQ_OUTOFBAND:
       {
-	struct seq_event_rec event;
+	struct seq_event_rec event_rec;
 	unsigned long   flags;
 
-	memcpy_fromfs ((char *) &event, &(((char *) arg)[0]), sizeof (event));
+	memcpy_fromfs ((char *) &event_rec, &(((char *) arg)[0]), sizeof (event_rec));
 
 	save_flags (flags);
 	cli ();
-	play_event (event.arr);
+	play_event (event_rec.arr);
 	restore_flags (flags);
 
 	return 0;
@@ -2048,15 +2050,27 @@ long
 sequencer_init (long mem_start)
 {
 
-  sequencer_ok = 1;
 
   queue = (unsigned char *) (sound_mem_blocks[sound_num_blocks] = kmalloc (SEQ_MAX_QUEUE * EV_SZ, GFP_KERNEL));
   if (sound_num_blocks < 1024)
     sound_num_blocks++;;
+  if (queue == NULL)
+    {
+      printk ("Sound: Can't allocate memory for sequencer output queue\n");
+      return mem_start;
+    }
+
 
   iqueue = (unsigned char *) (sound_mem_blocks[sound_num_blocks] = kmalloc (SEQ_MAX_QUEUE * IEV_SZ, GFP_KERNEL));
   if (sound_num_blocks < 1024)
     sound_num_blocks++;;
+  if (queue == NULL)
+    {
+      printk ("Sound: Can't allocate memory for sequencer input queue\n");
+      return mem_start;
+    }
+
+  sequencer_ok = 1;
 
   return mem_start;
 }

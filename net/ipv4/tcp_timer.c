@@ -40,6 +40,8 @@ void tcp_reset_xmit_timer(struct sock *sk, int why, unsigned long when)
 }
 
 /*
+ *	POLICY:
+ *
  * 	This is the normal code called for timeouts.  It does the retransmission
  * 	and then does backoff.  tcp_do_retransmit is separated out because
  * 	tcp_ack needs to send stuff from the retransmit queue without
@@ -76,6 +78,9 @@ static void tcp_retransmit_time(struct sock *sk, int all)
 }
 
 /*
+ *	POLICY:
+ *		Congestion control.
+ *
  *	A timer event has trigger a tcp retransmit timeout. The
  *	socket xmit queue is ready and set up to send. Because
  *	the ack receive code keeps the queue straight we do
@@ -101,7 +106,7 @@ void tcp_retransmit(struct sock *sk, int all)
 }
 
 /*
- *	A write timeout has occurred. Process the after effects.
+ *	A write timeout has occurred. Process the after effects. BROKEN (badly)
  */
 
 static int tcp_write_timeout(struct sock *sk)

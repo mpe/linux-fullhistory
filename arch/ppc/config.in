@@ -245,7 +245,8 @@ if [ "$CONFIG_CD_NO_IDESCSI" = "y" ]; then
   tristate 'Goldstar R420 CDROM support' CONFIG_GSCD n
   tristate 'Philips/LMS CM206 CDROM support' CONFIG_CM206 n
   tristate 'Experimental Optics Storage DOLPHIN 8000AT CDROM support' CONFIG_OPTCD n
-  bool 'Experimental Sanyo H94A CDROM support' CONFIG_SJCD n
+  tristate 'Sanyo CDR-H94A CDROM support' CONFIG_SJCD n
+  bool 'ISP16/MAD16/Mozart soft configurable cdrom interface support' CONFIG_ISP16_CDI n
 fi
 
 comment 'Filesystems'

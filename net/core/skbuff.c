@@ -50,11 +50,11 @@
  *	Resource tracking variables
  */
 
-volatile unsigned long net_skbcount = 0;
-volatile unsigned long net_locked = 0;
-volatile unsigned long net_allocs = 0;
-volatile unsigned long net_fails  = 0;
-volatile unsigned long net_free_locked = 0;
+unsigned long net_skbcount = 0;
+unsigned long net_locked = 0;
+unsigned long net_allocs = 0;
+unsigned long net_fails  = 0;
+unsigned long net_free_locked = 0;
 
 extern unsigned long ip_frag_mem;
 
@@ -517,7 +517,6 @@ void kfree_skb(struct sk_buff *skb, int rw)
 struct sk_buff *alloc_skb(unsigned int size,int priority)
 {
 	struct sk_buff *skb;
-	unsigned long flags;
 	int len=size;
 	unsigned char *bptr;
 
@@ -574,10 +573,7 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 	skb->localroute = 0;
 	skb->ip_summed = 0;
 	memset(skb->proto_priv, 0, sizeof(skb->proto_priv));
-	save_flags(flags);
-	cli();
 	net_skbcount++;
-	restore_flags(flags);
 #if CONFIG_SKB_CHECK
 	skb->magic_debug_cookie = SK_GOOD_SKB;
 #endif
@@ -596,6 +592,15 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
  *	Free an skbuff by memory
  */
 
+static inline void __kfree_skbmem(struct sk_buff *skb)
+{
+	/* don't do anything if somebody still uses us */
+	if (--skb->count <= 0) {
+		kfree(skb->head);
+		net_skbcount--;
+	}
+}
+
 void kfree_skbmem(struct sk_buff *skb)
 {
 	unsigned long flags;
@@ -608,7 +613,7 @@ void kfree_skbmem(struct sk_buff *skb)
 		/* free the skb that contains the actual data if we've clone()'d */
 		if (skb->data_skb) {
 			addr = skb;
-			kfree_skbmem(skb->data_skb);
+			__kfree_skbmem(skb->data_skb);
 		}
 		kfree(addr);
 		net_skbcount--;
@@ -623,8 +628,8 @@ void kfree_skbmem(struct sk_buff *skb)
 
 struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 {
-	struct sk_buff *n;
 	unsigned long flags;
+	struct sk_buff *n;
 
 	IS_SKB(skb);
 	n = kmalloc(sizeof(*n), priority);
@@ -649,22 +654,6 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	n->tries = 0;
 	n->lock = 0;
 	n->users = 0;
-	n->h.raw=skb->h.raw;
-	n->mac.raw=skb->mac.raw;
-	n->dev=skb->dev;
-	n->ip_hdr=skb->ip_hdr;
-	n->saddr=skb->saddr;
-	n->daddr=skb->daddr;
-	n->raddr=skb->raddr;
-	n->seq=skb->seq;
-	n->end_seq=skb->end_seq;
-	n->ack_seq=skb->ack_seq;
-	n->acked=skb->acked;
-	memcpy(n->proto_priv, skb->proto_priv, sizeof(skb->proto_priv));
-	n->used=skb->used;
-	n->arp=skb->arp;
-	n->pkt_type=skb->pkt_type;
-	n->stamp=skb->stamp;
 	return n;
 }
 

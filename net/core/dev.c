@@ -329,8 +329,8 @@ int unregister_netdevice_notifier(struct notifier_block *nb)
 void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 {
 	unsigned long flags;
-	struct packet_type *ptype;
-	int where = 0;		/* used to say if the packet should go	*/
+	struct sk_buff_head *list;
+	int retransmission = 0;	/* used to say if the packet should go	*/
 				/* at the front or the back of the	*/
 				/* queue - front is a retransmit try	*/
 
@@ -350,7 +350,7 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
   	if (pri < 0) 
   	{
 		pri = -pri-1;
-		where = 1;
+		retransmission = 1;
   	}
 
 #ifdef CONFIG_NET_DEBUG
@@ -382,46 +382,44 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	if (net_alias_is(dev))
 	  	skb->dev = dev = net_alias_main_dev(dev);
 #endif
+	list = dev->buffs + pri;
 
 	save_flags(flags);
-	cli();	
-	if (!where)	 	/* Always keep order. It helps other hosts
-					   far more than it costs us */
-	{
-		/*
-		 *	Check we are not overruning the device queue length.
-		 */
-		 
-		if(skb_queue_len(dev->buffs + pri) > dev->tx_queue_len)
-		{
-			dev_kfree_skb(skb, FREE_WRITE);
-			return;
+	/* if this isn't a retransmission, use the first packet instead... */
+	if (!retransmission) {
+		if (skb_queue_len(list)) {
+			/* avoid overrunning the device queue.. */
+			if (skb_queue_len(list) > dev->tx_queue_len) {
+				dev_kfree_skb(skb, FREE_WRITE);
+				return;
+			}
+			cli();
+			skb_device_unlock(skb);		/* Buffer is on the device queue and can be freed safely */
+			__skb_queue_tail(list, skb);
+			skb = __skb_dequeue(list);
+			skb_device_lock(skb);		/* New buffer needs locking down */
+			restore_flags(flags);
 		}
-		skb_queue_tail(dev->buffs + pri,skb);
-		skb_device_unlock(skb);		/* Buffer is on the device queue and can be freed safely */
-		skb = skb_dequeue(dev->buffs + pri);
-		skb_device_lock(skb);		/* New buffer needs locking down */
-	}
-	restore_flags(flags);
-
-	/* copy outgoing packets to any sniffer packet handlers */
-	if(!where && dev_nit)
-	{
-		skb->stamp=xtime;
-		for (ptype = ptype_all; ptype!=NULL; ptype = ptype->next) 
-		{
-			/* Never send packets back to the socket
-			 * they originated from - MvS (miquels@drinkel.ow.org)
-			 */
-			if ((ptype->dev == dev || !ptype->dev) &&
-			   ((struct sock *)ptype->data != skb->sk))
+		
+		/* copy outgoing packets to any sniffer packet handlers */
+		if (dev_nit) {
+			struct packet_type *ptype;
+			skb->stamp=xtime;
+			for (ptype = ptype_all; ptype!=NULL; ptype = ptype->next) 
 			{
-				struct sk_buff *skb2;
-				if ((skb2 = skb_clone(skb, GFP_ATOMIC)) == NULL)
-					break;
-				skb2->h.raw = skb2->data + dev->hard_header_len;
-				skb2->mac.raw = skb2->data;
-				ptype->func(skb2, skb->dev, ptype);
+				/* Never send packets back to the socket
+				 * they originated from - MvS (miquels@drinkel.ow.org)
+				 */
+				if ((ptype->dev == dev || !ptype->dev) &&
+				   ((struct sock *)ptype->data != skb->sk))
+				{
+					struct sk_buff *skb2;
+					if ((skb2 = skb_clone(skb, GFP_ATOMIC)) == NULL)
+						break;
+					skb2->h.raw = skb2->data + dev->hard_header_len;
+					skb2->mac.raw = skb2->data;
+					ptype->func(skb2, skb->dev, ptype);
+				}
 			}
 		}
 	}
@@ -441,7 +439,7 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	 */
 	cli();
 	skb_device_unlock(skb);
-	skb_queue_head(dev->buffs + pri,skb);
+	__skb_queue_head(list,skb);
 	restore_flags(flags);
 }
 
@@ -585,7 +583,7 @@ void net_bh(void *tmp)
 	 *	While the queue is not empty
 	 */
 	 
-	while((skb=skb_dequeue(&backlog))!=NULL)
+	while((skb=__skb_dequeue(&backlog))!=NULL)
 	{
 		/*
 		 *	We have a packet. Therefore the queue has shrunk
@@ -671,7 +669,7 @@ void net_bh(void *tmp)
 		 *	[Ought to take this out judging by tests it slows
 		 *	 us down not speeds us up]
 		 */
-#ifdef CONFIG_XMIT_EVERY
+#ifdef XMIT_EVERY
 		dev_transmit();
 #endif		
 		cli();
@@ -687,8 +685,10 @@ void net_bh(void *tmp)
 	/*
 	 *	One last output flush.
 	 */
-	 
+
+#ifdef XMIT_AFTER	 
 	dev_transmit();
+#endif
 }
 
 
@@ -700,8 +700,8 @@ void net_bh(void *tmp)
 void dev_tint(struct device *dev)
 {
 	int i;
-	struct sk_buff *skb;
 	unsigned long flags;
+	struct sk_buff_head * head;
 	
 	/*
 	 * aliases do not transmit (for now :) )
@@ -710,21 +710,19 @@ void dev_tint(struct device *dev)
 #ifdef CONFIG_NET_ALIAS
 	if (net_alias_is(dev)) return;
 #endif
-	save_flags(flags);	
+	head = dev->buffs;
+	save_flags(flags);
+	cli();
+
 	/*
 	 *	Work the queues in priority order
-	 */
-	 
-	for(i = 0;i < DEV_NUMBUFFS; i++) 
+	 */	 
+	for(i = 0;i < DEV_NUMBUFFS; i++,head++)
 	{
-		/*
-		 *	Pull packets from the queue
-		 */
-		 
+		struct sk_buff *skb = skb_peek(head);
 
-		cli();
-		while((skb=skb_dequeue(&dev->buffs[i]))!=NULL)
-		{
+		if (skb) {
+			__skb_unlink(skb, head);
 			/*
 			 *	Stop anyone freeing the buffer while we retransmit it
 			 */

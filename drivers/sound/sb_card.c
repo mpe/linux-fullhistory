@@ -2,8 +2,9 @@
  * sound/sb_card.c
  *
  * Detection routine for the SoundBlaster cards.
- *
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,11 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * Modified:
- *  Riccardo Facchetti  24 Mar 1995
- *  - Added the Audio Excel DSP 16 initialization routine.
  */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 
@@ -59,12 +58,6 @@ probe_sb (struct address_info *hw_config)
       return 0;
     }
 
-#if defined(CONFIG_AEDSP16) && defined(AEDSP16_SBPRO)
-  /*
-     * Initialize Audio Excel DSP 16 to SBPRO.
-   */
-  InitAEDSP16_SBPRO (hw_config);
-#endif
   return sb_dsp_detect (hw_config);
 }
 

@@ -25,6 +25,9 @@
 #undef REALLY_FAST_IO			/* define if ide ports are perfect */
 #define INITIAL_MULT_COUNT	0	/* off=0; on=2,4,8,16,32, etc.. */
 
+#ifndef SUPPORT_VLB_SYNC		/* 1 to support weird 32-bit chips */
+#define SUPPORT_VLB_SYNC	1	/* 0 to reduce kernel size */
+#endif
 #ifndef DISK_RECOVERY_TIME		/* off=0; on=access_delay_time */
 #define DISK_RECOVERY_TIME	0	/*  for hardware that needs it */
 #endif
@@ -347,7 +350,12 @@ typedef struct ide_drive_s {
  * Returns 1 if DMA read/write could not be started, in which case the caller
  * should either try again later, or revert to PIO for the current request.
  */
-typedef enum {ide_dma_read = 0, ide_dma_write = 1, ide_dma_abort = 2, ide_dma_check = 3} ide_dma_action_t;
+typedef enum {	ide_dma_read = 0,	ide_dma_write = 1,
+		ide_dma_abort = 2,	ide_dma_check = 3,
+		ide_dma_status_bad = 4,	ide_dma_transferred = 5,
+		ide_dma_begin = 6 }
+	ide_dma_action_t;
+
 typedef int (ide_dmaproc_t)(ide_dma_action_t, ide_drive_t *);
 
 
@@ -401,6 +409,7 @@ typedef struct hwif_s {
 	unsigned	noprobe : 1;	/* don't probe for this interface */
 	unsigned	present : 1;	/* this interface exists */
 	unsigned	serialized : 1;	/* valid only for ide_hwifs[0] */
+	unsigned	no_unmask : 1;	/* disallow setting unmask bits */
 #if (DISK_RECOVERY_TIME > 0)
 	unsigned long	last_time;	/* time when previous rq was done */
 #endif
@@ -615,6 +624,13 @@ void idetape_setup (ide_drive_t *drive);
  */
 
 void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned long block);
+
+/*
+ *	idetape_end_request is used to finish servicing a request, and to
+ *	insert a pending pipeline request into the main device queue.
+ */
+ 
+void idetape_end_request (byte uptodate, ide_hwgroup_t *hwgroup);
 
 /*
  *	Block device interface functions.

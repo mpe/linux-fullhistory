@@ -29,6 +29,7 @@
  * Include the main voxware header file. It include all the os/voxware/etc
  * headers needed by this source.
  */
+#include <linux/config.h>
 #include "sound_config.h"
 
 #ifndef AEDSP16_BASE

@@ -63,6 +63,8 @@ struct sk_buff
 		struct iphdr	*iph;
 		struct udphdr	*uh;
 		unsigned char	*raw;
+		/* for passing an fd in a unix domain socket */
+		struct file *filp;
 	} h;
   
 	union 
@@ -167,8 +169,10 @@ extern void 			skb_trim(struct sk_buff *skb, int len);
  */
 extern __inline__ struct sk_buff *skb_peek(struct sk_buff_head *list_)
 {
-	struct sk_buff *list = (struct sk_buff *)list_;
-	return (list->next != list)? list->next : NULL;
+	struct sk_buff *list = ((struct sk_buff *)list_)->next;
+	if (list == (struct sk_buff *)list_)
+		list = NULL;
+	return list;
 }
 
 /*
@@ -197,21 +201,32 @@ extern __inline__ void skb_queue_head_init(struct sk_buff_head *list)
 
 /*
  *	Insert an sk_buff at the start of a list.
+ *
+ *	The "__skb_xxxx()" functions are the non-atomic ones that
+ *	can only be called with interrupts disabled.
  */
 
-extern __inline__ void skb_queue_head(struct sk_buff_head *list_,struct sk_buff *newsk)
+extern __inline__ void __skb_queue_head(struct sk_buff_head *list, struct sk_buff *newsk)
+{
+	struct sk_buff *prev, *next;
+
+	newsk->list = list;
+	list->qlen++;
+	prev = (struct sk_buff *)list;
+	next = prev->next;
+	newsk->next = next;
+	newsk->prev = prev;
+	next->prev = newsk;
+	prev->next = newsk;
+}
+
+extern __inline__ void skb_queue_head(struct sk_buff_head *list, struct sk_buff *newsk)
 {
 	unsigned long flags;
-	struct sk_buff *list = (struct sk_buff *)list_;
 
 	save_flags(flags);
 	cli();
-	newsk->next = list->next;
-	newsk->prev = list;
-	newsk->next->prev = newsk;
-	newsk->prev->next = newsk;
-	newsk->list = list_;
-	list_->qlen++;
+	__skb_queue_head(list, newsk);
 	restore_flags(flags);
 }
 
@@ -219,65 +234,81 @@ extern __inline__ void skb_queue_head(struct sk_buff_head *list_,struct sk_buff 
  *	Insert an sk_buff at the end of a list.
  */
 
-extern __inline__ void skb_queue_tail(struct sk_buff_head *list_, struct sk_buff *newsk)
+extern __inline__ void __skb_queue_tail(struct sk_buff_head *list, struct sk_buff *newsk)
+{
+	struct sk_buff *prev, *next;
+
+	newsk->list = list;
+	list->qlen++;
+	next = (struct sk_buff *)list;
+	prev = next->prev;
+	newsk->next = next;
+	newsk->prev = prev;
+	next->prev = newsk;
+	prev->next = newsk;
+}
+
+extern __inline__ void skb_queue_tail(struct sk_buff_head *list, struct sk_buff *newsk)
 {
 	unsigned long flags;
-	struct sk_buff *list = (struct sk_buff *)list_;
 
 	save_flags(flags);
 	cli();
-
-	newsk->next = list;
-	newsk->prev = list->prev;
-
-	newsk->next->prev = newsk;
-	newsk->prev->next = newsk;
-	newsk->list=list_;
-	list_->qlen++;
+	__skb_queue_tail(list, newsk);
 	restore_flags(flags);
 }
 
 /*
- *	Remove an sk_buff from a list. This routine is also interrupt safe
- *	so you can grab read and free buffers as another process adds them.
- *
- * 	Note we now do the ful list 
+ *	Remove an sk_buff from a list.
  */
 
-extern __inline__ struct sk_buff *skb_dequeue(struct sk_buff_head *list_)
+extern __inline__ struct sk_buff *__skb_dequeue(struct sk_buff_head *list)
+{
+	struct sk_buff *next, *prev, *result;
+
+	prev = (struct sk_buff *) list;
+	next = prev->next;
+	result = NULL;
+	if (next != prev) {
+		result = next;
+		next = next->next;
+		list->qlen--;
+		next->prev = prev;
+		prev->next = next;
+		result->next = NULL;
+		result->prev = NULL;
+		result->list = NULL;
+	}
+	return result;
+}
+
+extern __inline__ struct sk_buff *skb_dequeue(struct sk_buff_head *list)
 {
 	long flags;
 	struct sk_buff *result;
-	struct sk_buff *list = (struct sk_buff *)list_;
 
 	save_flags(flags);
 	cli();
-
-	result = list->next;
-	if (result == list) 
-	{
-		restore_flags(flags);
-		return NULL;
-	}
-	else
-	{
-		result->next->prev = list;
-		list->next = result->next;
-
-		result->next = NULL;
-		result->prev = NULL;
-
-		list_->qlen--;
-		result->list=NULL;
-		restore_flags(flags);
-
-		return result;
-	}
+	result = __skb_dequeue(list);
+	restore_flags(flags);
+	return result;
 }
 
 /*
  *	Insert a packet before another one in a list.
  */
+
+extern __inline__ void __skb_insert(struct sk_buff *next, struct sk_buff *newsk)
+{
+	struct sk_buff * prev = next->prev;
+
+	newsk->next = next;
+	newsk->prev = prev;
+	next->prev = newsk;
+	prev->next = newsk;
+	newsk->list = next->list;
+	newsk->list->qlen++;
+}
 
 extern __inline__ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 {
@@ -285,12 +316,7 @@ extern __inline__ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 
 	save_flags(flags);
 	cli();
-	newsk->next = old;
-	newsk->prev = old->prev;
-	old->prev = newsk;
-	newsk->prev->next = newsk;
-	newsk->list = old->list;
-	newsk->list->qlen++;
+	__skb_insert(old, newsk);
 	restore_flags(flags);
 }
 
@@ -298,21 +324,43 @@ extern __inline__ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
  *	Place a packet after a given packet in a list.
  */
 
+extern __inline__ void __skb_append(struct sk_buff *prev, struct sk_buff *newsk)
+{
+	struct sk_buff * next = prev->next;
+
+	newsk->next = next;
+	newsk->prev = prev;
+	next->prev = newsk;
+	prev->next = newsk;
+	newsk->list = prev->list;
+	newsk->list->qlen++;
+}
+
 extern __inline__ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
 
 	save_flags(flags);
 	cli();
-
-	newsk->prev = old;
-	newsk->next = old->next;
-	newsk->next->prev = newsk;
-	old->next = newsk;
-	newsk->list = old->list;
-	newsk->list->qlen++;
-
+	__skb_append(old, newsk);
 	restore_flags(flags);
+}
+
+/*
+ * remove sk_buff from list. _Must_ be called atomically, and with
+ * the list known..
+ */
+extern __inline__ void __skb_unlink(struct sk_buff *skb, struct sk_buff_head *list)
+{
+	struct sk_buff * next, * prev;
+
+	list->qlen--;
+	next = skb->next;
+	prev = skb->prev;
+	skb->next = NULL;
+	skb->prev = NULL;
+	skb->list = NULL;
+	(next->prev = prev)->next = next;
 }
 
 /*
@@ -328,16 +376,8 @@ extern __inline__ void skb_unlink(struct sk_buff *skb)
 
 	save_flags(flags);
 	cli();
-
 	if(skb->list)
-	{
-		skb->list->qlen--;
-		skb->next->prev = skb->prev;
-		skb->prev->next = skb->next;
-		skb->next = NULL;
-		skb->prev = NULL;
-		skb->list = NULL;
-	}
+		__skb_unlink(skb, skb->list);
 	restore_flags(flags);
 }
 

@@ -2,8 +2,8 @@
 #define _LINUX_TIME_H
 
 struct timespec {
-	long	ts_sec;		/* seconds */
-	long	ts_nsec;	/* nanoseconds */
+	long	tv_sec;		/* seconds */
+	long	tv_nsec;	/* nanoseconds */
 };
 
 struct timeval {

@@ -6,13 +6,6 @@
 #include <linux/config.h>
 
 /*
- * NR_REQUEST is the number of entries in the request-queue.
- * NOTE that writes may use only the low 2/3 of these: reads
- * take precedence.
- */
-#define NR_REQUEST	64
-
-/*
  * This is used in the elevator algorithm.  We don't prioritise reads
  * over writes any more --- although reads are more time-critical than
  * writes, by treating them equally we increase filesystem throughput.
@@ -67,6 +60,9 @@ extern int optcd_init(void);
 #ifdef CONFIG_SJCD
 extern int sjcd_init(void);
 #endif CONFIG_SJCD
+#ifdef CONFIG_CDI_INIT
+extern int cdi_init(void);
+#endif CONFIG_CDI_INIT
 #ifdef CONFIG_BLK_DEV_HD
 extern int hd_init(void);
 #endif

@@ -2,8 +2,9 @@
  * sound/pss.c
  *
  * The low level driver for the Personal Sound System (ECHO ESC614).
- *
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,8 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 
@@ -77,7 +79,7 @@ typedef struct pss_config
     int             base;
     int             irq;
     int             dma;
-    sound_os_info  *osp;
+    int            *osp;
   }
 
 pss_config;
@@ -489,7 +491,7 @@ download_boot_block (void *dev_info, copr_buffer * buf)
 }
 
 static int
-pss_coproc_ioctl (void *dev_info, unsigned int cmd, ioctl_arg arg, int local)
+pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 {
   /* printk("PSS coproc ioctl %x %x %d\n", cmd, arg, local); */
 

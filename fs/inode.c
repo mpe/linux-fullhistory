@@ -429,11 +429,19 @@ repeat:
 		goto repeat;
 	}
 
-	inode->i_count--;
 	if (IS_WRITABLE(inode)) {
-		if (inode->i_sb && inode->i_sb->dq_op)
+		if (inode->i_sb && inode->i_sb->dq_op) {
+			/* Here we can sleep also. Let's do it again
+			 * Dmitry Gorodchanin 02/11/96 
+			 */
+			inode->i_lock = 1;
 			inode->i_sb->dq_op->drop(inode);
+			unlock_inode(inode);
+			goto repeat;
+		}
 	}
+	
+	inode->i_count--;
 
 	if (inode->i_mmap) {
 		printk("iput: inode %lu on device %s still has mappings.\n",

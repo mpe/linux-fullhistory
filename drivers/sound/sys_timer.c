@@ -2,9 +2,10 @@
  * sound/sys_timer.c
  *
  * The default timer for the Level 2 sequencer interface
- * Uses the (100HZ) timer of kernel.
- *
- * Copyright by Hannu Savolainen 1993
+ * Uses the (1/HZ sec) timer of kernel.
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -25,8 +26,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #define SEQUENCER_C
 #include "sound_config.h"
@@ -55,7 +57,7 @@ tmr2ticks (int tmr_value)
    *    (divide # of MIDI ticks/minute by # of system ticks/minute).
    */
 
-  return ((tmr_value * curr_tempo * curr_timebase) + (30 * HZ)) / (60 * HZ);
+  return ((tmr_value * curr_tempo * curr_timebase) + (30 * 100)) / (60 * HZ);
 }
 
 static void
@@ -77,7 +79,7 @@ poll_def_tmr (unsigned long dummy)
 
 	  if (curr_ticks >= next_event_time)
 	    {
-	      next_event_time = 0xffffffff;
+	      next_event_time = (unsigned long) -1;
 	      sequencer_timer (0);
 	    }
 	}
@@ -94,7 +96,7 @@ tmr_reset (void)
   tmr_offs = 0;
   ticks_offs = 0;
   tmr_ctr = 0;
-  next_event_time = 0xffffffff;
+  next_event_time = (unsigned long) -1;
   prev_event_time = 0;
   curr_ticks = 0;
   restore_flags (flags);
@@ -108,7 +110,7 @@ def_tmr_open (int dev, int mode)
 
   tmr_reset ();
   curr_tempo = 60;
-  curr_timebase = HZ;
+  curr_timebase = 100;
   opened = 1;
 
   ;
@@ -201,7 +203,7 @@ def_tmr_get_time (int dev)
 
 static int
 def_tmr_ioctl (int dev,
-	       unsigned int cmd, ioctl_arg arg)
+	       unsigned int cmd, caddr_t arg)
 {
   switch (cmd)
     {

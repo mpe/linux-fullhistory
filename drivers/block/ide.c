@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.27  Feb  8, 1996
+ *  linux/drivers/block/ide.c	Version 5.28  Feb 11, 1996
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
@@ -200,6 +200,11 @@
  *			add  ali14xx support in ali14xx.c
  * Version 5.27		add [no]autotune parameters to help cmd640
  *			move rz1000  support to rz1000.c
+ * Version 5.28		#include "ide_modes.h"
+ *			fix disallow_unmask: now per-interface "no_unmask" bit
+ *			force io_32bit to be the same on drive pairs of dtc2278
+ *			improved IDE tape error handling, and tape DMA support
+ *			bugfix in ide_do_drive_cmd() for cdroms + serialize
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -237,13 +242,13 @@
 #endif /* CONFIG_PCI */
 
 #include "ide.h"
+#include "ide_modes.h"
 
-static ide_hwgroup_t	*irq_to_hwgroup [16];
+static ide_hwgroup_t	*irq_to_hwgroup [NR_IRQS];
 static const byte	ide_hwif_to_major[MAX_HWIFS] = {IDE0_MAJOR, IDE1_MAJOR, IDE2_MAJOR, IDE3_MAJOR};
 
 static const unsigned short default_io_base[MAX_HWIFS] = {0x1f0, 0x170, 0x1e8, 0x168};
 static const byte	default_irqs[MAX_HWIFS]     = {14, 15, 11, 10};
-       int		ide_disallow_unmask = 0;	/* for buggy hardware */
 
 #if (DISK_RECOVERY_TIME > 0)
 /*
@@ -302,7 +307,7 @@ static void init_ide_data (void)
 		return;		/* already initialized */
 	magic_cookie = 0;
 
-	for (h = 0; h < 16; ++h)
+	for (h = 0; h < NR_IRQS; ++h)
 		 irq_to_hwgroup[h] = NULL;
 
 	/* bulk initialize hwif & drive info with zeros */
@@ -311,10 +316,10 @@ static void init_ide_data (void)
 		*--p = 0;
 	} while (p > (byte *) ide_hwifs);
 
+	/* fill in any non-zero initial values */
 	for (h = 0; h < MAX_HWIFS; ++h) {
 		ide_hwif_t *hwif = &ide_hwifs[h];
 
-		/* fill in any non-zero initial values */
 		hwif->index     = h;
 		hwif->noprobe	= (h > 1);
 		hwif->io_base	= default_io_base[h];
@@ -334,7 +339,6 @@ static void init_ide_data (void)
 		for (unit = 0; unit < MAX_DRIVES; ++unit) {
 			ide_drive_t *drive = &hwif->drives[unit];
 
-			/* fill in any non-zero initial values */
 			drive->select.all		= (unit<<4)|0xa0;
 			drive->hwif			= hwif;
 			drive->ctl			= 0x08;
@@ -349,7 +353,7 @@ static void init_ide_data (void)
 	}
 }
 
-#define VLB_SYNC 1
+#if SUPPORT_VLB_SYNC
 /*
  * Some localbus EIDE interfaces require a special access sequence
  * when using 32-bit I/O instructions to transfer data.  We call this
@@ -362,6 +366,7 @@ static inline void do_vlb_sync (unsigned short port) {
 	(void) inb (port);
 	(void) inb (port);
 }
+#endif /* SUPPORT_VLB_SYNC */
 
 /*
  * This is used for most PIO data transfers *from* the IDE interface
@@ -373,7 +378,7 @@ void ide_input_data (ide_drive_t *drive, void *buffer, unsigned int wcount)
 	byte io_32bit = drive->io_32bit;
 
 	if (io_32bit) {
-#ifdef VLB_SYNC
+#if SUPPORT_VLB_SYNC
 		if (io_32bit & 2) {
 			cli();
 			do_vlb_sync(io_base+IDE_NSECTOR_OFFSET);
@@ -381,7 +386,7 @@ void ide_input_data (ide_drive_t *drive, void *buffer, unsigned int wcount)
 			if (drive->unmask)
 				sti();
 		} else
-#endif /* VLB_SYNC */
+#endif /* SUPPORT_VLB_SYNC */
 			insl(data_reg, buffer, wcount);
 	} else
 		insw(data_reg, buffer, wcount<<1);
@@ -397,7 +402,7 @@ void ide_output_data (ide_drive_t *drive, void *buffer, unsigned int wcount)
 	byte io_32bit = drive->io_32bit;
 
 	if (io_32bit) {
-#ifdef VLB_SYNC
+#if SUPPORT_VLB_SYNC
 		if (io_32bit & 2) {
 			cli();
 			do_vlb_sync(io_base+IDE_NSECTOR_OFFSET);
@@ -405,7 +410,7 @@ void ide_output_data (ide_drive_t *drive, void *buffer, unsigned int wcount)
 			if (drive->unmask)
 				sti();
 		} else
-#endif /* VLB_SYNC */
+#endif /* SUPPORT_VLB_SYNC */
 			outsl(data_reg, buffer, wcount);
 	} else
 		outsw(data_reg, buffer, wcount<<1);
@@ -723,6 +728,10 @@ static void do_reset1 (ide_drive_t *drive, int  do_not_try_atapi)
 void ide_do_reset (ide_drive_t *drive)
 {
 	do_reset1 (drive, 0);
+#ifdef CONFIG_BLK_DEV_IDETAPE
+	if (drive->media == ide_tape)
+		drive->tape.reset_issued=1;
+#endif /* CONFIG_BLK_DEV_IDETAPE */
 }
 
 /*
@@ -851,7 +860,8 @@ void ide_error (ide_drive_t *drive, const char *msg, byte stat)
 	if ((rq = HWGROUP(drive)->rq) == NULL || drive == NULL)
 		return;
 	/* retry only "normal" I/O: */
-	if (rq->cmd != READ && rq->cmd != WRITE && drive->media != ide_cdrom) {
+	if (rq->cmd == IDE_DRIVE_CMD || (rq->cmd != READ && rq->cmd != WRITE && drive->media == ide_disk))
+	{
 		rq->errors = 1;
 		ide_end_drive_cmd(drive, stat, err);
 		return;
@@ -872,8 +882,16 @@ void ide_error (ide_drive_t *drive, const char *msg, byte stat)
 	if (GET_STAT() & (BUSY_STAT|DRQ_STAT))
 		rq->errors |= ERROR_RESET;	/* Mmmm.. timing problem */
 
-	if (rq->errors >= ERROR_MAX)
-		ide_end_request(0, HWGROUP(drive));
+	if (rq->errors >= ERROR_MAX) {
+#ifdef CONFIG_BLK_DEV_IDETAPE
+		if (drive->media == ide_tape) {
+			rq->errors = 0;
+			idetape_end_request(0, HWGROUP(drive));
+		}
+		else
+#endif /* CONFIG_BLK_DEV_IDETAPE */
+ 		ide_end_request(0, HWGROUP(drive));
+	}
 	else {
 		if ((rq->errors & ERROR_RESET) == ERROR_RESET) {
 			++rq->errors;
@@ -1347,6 +1365,12 @@ static inline void do_request (ide_hwif_t *hwif, struct request *rq)
 #endif /* CONFIG_BLK_DEV_IDECD */
 #ifdef CONFIG_BLK_DEV_IDETAPE
 			case ide_tape:
+				if (rq->cmd == IDE_DRIVE_CMD) {
+					byte *args = (byte *) rq->buffer;
+					OUT_BYTE(args[2],IDE_FEATURE_REG);
+					ide_cmd(drive, args[0], args[1], &drive_cmd_intr);
+					return;
+				}
 				idetape_do_request (drive, rq, block);
 				return;
 #endif /* CONFIG_BLK_DEV_IDETAPE */
@@ -1656,9 +1680,13 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 	if (cur_rq == NULL || action == ide_preempt) {
 		rq->next = cur_rq;
 		bdev->current_request = rq;
-		HWGROUP(drive)->rq = NULL;
-		if (action != ide_preempt)
+		if (action == ide_preempt) {
+			HWGROUP(drive)->rq = NULL;
+		} else
+		if (HWGROUP(drive)->rq == NULL) {  /* is this necessary (?) */
 			bdev->request_fn();
+			cli();
+		}
 	} else {
 		if (action == ide_wait || action == ide_end) {
 			while (cur_rq->next != NULL)	/* find end of list */
@@ -1667,7 +1695,7 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 		rq->next = cur_rq->next;
 		cur_rq->next = rq;
 	}
-	if (action == ide_wait)
+	if (action == ide_wait  && rq->rq_status != RQ_INACTIVE)
 		down(&sem);	/* wait for it to be serviced */
 	restore_flags(flags);
 	return rq->errors ? -EIO : 0;	/* return -EIO if errors */
@@ -1879,8 +1907,10 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			return write_fs_long(arg, drive->bad_wstat == BAD_R_STAT);
 
 		case HDIO_SET_DMA:
-			if (drive->media != ide_disk)
+#ifdef CONFIG_BLK_DEV_IDECD
+			if (drive->media == ide_cdrom)
 				return -EPERM;
+#endif /* CONFIG_BLK_DEV_IDECD */
 			if (!drive->id || !(drive->id->capability & 1) || !HWIF(drive)->dmaproc)
 				return -EPERM;
 		case HDIO_SET_KEEPSETTINGS:
@@ -1907,7 +1937,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 					drive->keep_settings = arg;
 					break;
 				case HDIO_SET_UNMASKINTR:
-					if (arg && ide_disallow_unmask) {
+					if (arg && HWIF(drive)->no_unmask) {
 						restore_flags(flags);
 						return -EPERM;
 					}
@@ -1917,11 +1947,13 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 					drive->bad_wstat = arg ? BAD_R_STAT : BAD_W_STAT;
 					break;
 				case HDIO_SET_32BIT:
+					if (arg > (1 + (SUPPORT_VLB_SYNC<<1)))
+						return -EINVAL;
 					drive->io_32bit = arg;
-#ifndef VLB_SYNC
-					if (arg & 2)
-						printk("%s: VLB_SYNC not supported by this kernel\n", drive->name);
-#endif
+#ifdef CONFIG_BLK_DEV_DTC2278
+					if (HWIF(drive)->chipset == ide_dtc2278)
+						HWIF(drive)->drives[!drive->select.b.unit].io_32bit = arg;
+#endif /* CONFIG_BLK_DEV_DTC2278 */
 					break;
 			}
 			restore_flags(flags);
@@ -1932,7 +1964,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 				return -EACCES;
 			if (MINOR(inode->i_rdev) & PARTN_MASK)
 				return -EINVAL;
-			if ((drive->id != NULL) && (arg > drive->id->max_multsect))
+			if (drive->id && arg > drive->id->max_multsect)
 				return -EINVAL;
 			save_flags(flags);
 			cli();
@@ -2093,15 +2125,19 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 #endif /* CONFIG_BLK_DEV_IDECD */
 			case 1:
 #ifdef CONFIG_BLK_DEV_IDETAPE
-				printk ("TAPE drive\n");
+				printk ("TAPE drive");
 				if (idetape_identify_device (drive,id)) {
 					drive->media = ide_tape;
 					drive->present = 1;
 					drive->removeable = 1;
+					if (HWIF(drive)->dmaproc != NULL &&
+					    !HWIF(drive)->dmaproc(ide_dma_check, drive))
+						printk(", DMA");
+					printk("\n");
 				}
 				else {
 					drive->present = 0;
-					printk ("ide-tape: The tape is not supported by this version of the driver\n");
+					printk ("\nide-tape: the tape is not supported by this version of the driver\n");
 				}
 				return;
 #else
@@ -2249,7 +2285,7 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 	if (OK_STAT(GET_STAT(),DRQ_STAT,BAD_R_STAT)) {
 		cli();			/* some systems need this */
 		do_identify(drive, cmd); /* drive returned ID */
-		if (drive->present && (drive->media == ide_disk || drive->media == ide_cdrom)) {
+		if (drive->present && drive->media != ide_tape) {
 			ide_tuneproc_t *tuneproc = HWIF(drive)->tuneproc;
 			if (tuneproc != NULL && drive->autotune == 1)
 				tuneproc(drive, 255);	/* auto-tune PIO mode */

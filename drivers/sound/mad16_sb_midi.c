@@ -2,8 +2,9 @@
  * sound/mad16_sb_midi.c
  *
  * The low level driver for MAD16 SoundBlaster-DS-chip-based MIDI.
- *
- * Copyright by Hannu Savolainen 1993, Aaron Ucko 1995
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,7 +25,11 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
+ */
+#include <linux/config.h>
+
+/*
+ * Modifications by Aaron Ucko 1995
  */
 
 #include "sound_config.h"
@@ -40,7 +45,7 @@ static int      mad16_sb_base = 0x220;
 static int      mad16_sb_irq = 0;
 static int      mad16_sb_dsp_ok = 0;
 static int      mad16_sb_dsp_attached = 0;
-static sound_os_info *midi_osp;
+static int     *midi_osp;
 
 int             mad16_sb_midi_mode = NORMAL_MIDI;
 int             mad16_sb_midi_busy = 0;
@@ -303,7 +308,7 @@ mad16_sb_midi_end_read (int dev)
 }
 
 static int
-mad16_sb_midi_ioctl (int dev, unsigned cmd, ioctl_arg arg)
+mad16_sb_midi_ioctl (int dev, unsigned cmd, caddr_t arg)
 {
   return -EPERM;
 }

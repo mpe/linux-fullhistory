@@ -677,6 +677,9 @@ static int unix_getname(struct socket *sock, struct sockaddr *uaddr, int *uaddr_
 	return 0;
 }
 
+/* if msg->accrights != NULL, we have fds to pass.
+ * Current implementation passes at most one fd.
+ */
 static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nonblock, int flags)
 {
 	unix_socket *sk=sock->data;
@@ -686,6 +689,8 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	struct sk_buff *skb;
 	int limit=0;
 	int sent=0;
+	/* for passing  fd, NULL indicates no fd */
+	struct file *filp;
 
 	if(sk->err)
 		return sock_error(sk);
@@ -693,7 +698,7 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	if(flags&MSG_OOB)
 		return -EOPNOTSUPP;
 			
-	if(flags || msg->msg_accrights)	/* For now */
+	if(flags)	/* For now */
 		return -EINVAL;
 		
 	if(sunaddr!=NULL)
@@ -706,6 +711,7 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 				return -EOPNOTSUPP;
 		}
 	}
+
 	if(sunaddr==NULL)
 	{
 		if(sk->protinfo.af_unix.other==NULL)
@@ -713,6 +719,26 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	}
 
 
+	/* see if we want to access rights (fd) -- at the moment, 
+	 * we can pass none or 1 fd
+         */
+	filp = NULL;
+	if(msg->msg_accrights) {
+		/* then accrightslen is meaningful */
+		if(msg->msg_accrightslen == sizeof(int)) {
+			int fd;
+
+			fd = get_user_long(msg->msg_accrights);
+			filp = file_from_fd(fd);
+			if(!filp)
+				return -EBADF;
+		} else if(msg->msg_accrightslen != 0) {
+			/* if we have accrights, we fail here */
+			return -EINVAL;
+		}
+	}
+
+	/* invariant -- flip points to a file to pass or NULL */
 	while(sent < len)
 	{
 		/*
@@ -792,8 +818,16 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 					return err;
 			}
 		}
+		/* at this point, we want to add an fd if we have one  */
+		skb->h.filp = filp;
+		if (filp) {
+			filp->f_count++;
+		}
+		
 		skb_queue_tail(&other->receive_queue, skb);
 		sti();
+		/* if we sent an fd, only do it once */
+		filp = NULL;	
 		other->data_ready(other,size);
 		sent+=size;
 	}
@@ -815,6 +849,36 @@ static void unix_data_wait(unix_socket * sk)
 	sti();
 }
 		
+
+/*
+ * return 0 if we can stick the fd, negative errno if we can't
+ */
+static int stick_fd(struct file *filp, int *uaddr, int size)
+{
+	int slot;
+	int upper_bound;
+
+	if (!uaddr || size < sizeof(int))
+		return -EINVAL;
+
+	upper_bound = current->rlim[RLIMIT_NOFILE].rlim_cur;
+
+	if (upper_bound > NR_OPEN)
+		upper_bound = NR_OPEN;
+
+	for (slot = 0; slot < upper_bound;  slot++) {
+		if (current->files->fd[slot])
+			continue;
+		/* have an fd */
+		current->files->fd[slot] = filp;
+		FD_CLR(slot, &current->files->close_on_exec);
+		/* need verify area here? */
+		put_user_long(slot, uaddr);
+		return 0;
+	} 
+	return -EMFILE;
+}
+
 static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock, int flags, int *addr_len)
 {
 	unix_socket *sk=sock->data;
@@ -826,7 +890,8 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 	int num;
 	struct iovec *iov=msg->msg_iov;
 	int ct=msg->msg_iovlen;
-	
+	struct file *filp;
+
 	if(flags&MSG_OOB)
 		return -EOPNOTSUPP;
 		
@@ -879,8 +944,16 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 					if(addr_len)
 						*addr_len=sizeof(short);
 			}
+
 			num=min(skb->len,size-copied);
 			memcpy_tofs(sp, skb->data, num);
+
+			if ((filp = skb->h.filp) != NULL) {
+				skb->h.filp = NULL;
+				if (stick_fd(filp, msg->msg_accrights, msg->msg_accrightslen) < 0)
+					close_fp(filp);
+			}
+
 			copied+=num;
 			done+=num;
 			sp+=num;

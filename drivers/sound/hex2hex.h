@@ -9,30 +9,12 @@
 #define MAX_SIZE (256*1024)
 #define ABANDON(why) { \
 		fprintf(stderr, "%s: " why "\n", source); \
-		fclose(inf);fclose(outf);return 0; \
+		return 0; \
 		}
 
-int hex2hex(char *source, char *target, char *varline)
+int loadhex(FILE *inf, unsigned char *buf, char *source)
 {
-	FILE *inf, *outf;
-
-	int i,l, c;
-	unsigned char buf[MAX_SIZE];
-
-	if ((inf=fopen(source, "r"))==NULL)
-	{
-		perror(source);
-		return 0;
-	}
-
-	if ((outf=fopen(target, "w"))==NULL)
-	{
-		perror(target);
-		fclose(inf);
-		return 0;
-	}
-
-	l=0;
+	int l=0, c, i;
 
 	while ((c=getc(inf))!=EOF)
 	{
@@ -80,7 +62,40 @@ int hex2hex(char *source, char *target, char *varline)
 		}
 	}
 
+	return l;
+}
+
+int hex2hex(char *source, char *target, char *varline)
+{
+	FILE *inf, *outf;
+
+	int i,l;
+	unsigned char buf[MAX_SIZE];
+
+	if ((inf=fopen(source, "r"))==NULL)
+	{
+		perror(source);
+		return 0;
+	}
+
+	if ((outf=fopen(target, "w"))==NULL)
+	{
+		perror(target);
+		fclose(inf);
+		return 0;
+	}
+
+	l=loadhex(inf, buf, source);
+	if (l<=0)
+        {
+           fclose(inf);
+	   fclose(outf);
+	   return l;
+	}
+
+
 	fprintf(outf, "/*\n *\t Computer generated file. Do not edit.\n */\n");
+        fprintf(outf, "static int %s_len = %d\n", l);
 	fprintf(outf, "static unsigned char %s[] = {\n", varline);
 
 	for (i=0;i<l;i++)

@@ -28,7 +28,7 @@
 #define NCR53c406a { \
      NULL			/* next */, \
      NULL			/* usage count */, \
-     NULL			/* proc_dir */, \
+     &proc_scsi_NCR53c406a      /* proc_dir */, \
      NULL			/* proc_info */, \
      "NCR53c406a"		/* name */, \
      NCR53c406a_detect		/* detect */, \
@@ -49,6 +49,8 @@
      ENABLE_CLUSTERING \
 }
 
+extern struct proc_dir_entry proc_scsi_NCR53c406a;
+
 int NCR53c406a_detect(Scsi_Host_Template *);
 const char* NCR53c406a_info(struct Scsi_Host *);
 
@@ -59,4 +61,23 @@ int NCR53c406a_reset(Scsi_Cmnd *);
 int NCR53c406a_biosparm(Disk *, kdev_t, int []);
 
 #endif /* _NCR53C406A_H */
+
+/*
+ * Overrides for Emacs so that we get a uniform tabbing style.
+ * Emacs will notice this stuff at the end of the file and automatically
+ * adjust the settings for this buffer only.  This must remain at the end
+ * of the file.
+ * ---------------------------------------------------------------------------
+ * Local variables:
+ * c-indent-level: 4
+ * c-brace-imaginary-offset: 0
+ * c-brace-offset: -4
+ * c-argdecl-indent: 4
+ * c-label-offset: -4
+ * c-continued-statement-offset: 4
+ * c-continued-brace-offset: 0
+ * indent-tabs-mode: nil
+ * tab-width: 8
+ * End:
+ */
 

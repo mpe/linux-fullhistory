@@ -56,6 +56,7 @@ extern void sysctl_init(void);
 
 extern void swap_setup(char *str, int *ints);
 extern void buff_setup(char *str, int *ints);
+extern void panic_setup(char *str, int *ints);
 extern void bmouse_setup(char *str, int *ints);
 extern void eth_setup(char *str, int *ints);
 extern void xd_setup(char *str, int *ints);
@@ -107,6 +108,9 @@ extern void optcd_setup(char *str, int *ints);
 #ifdef CONFIG_SJCD
 extern void sjcd_setup(char *str, int *ints);
 #endif CONFIG_SJCD
+#ifdef CONFIG_ISP16_CDI
+extern void isp16_setup(char *str, int *ints);
+#endif CONFIG_ISP16_CDI
 #ifdef CONFIG_BLK_DEV_RAM
 static void ramdisk_start_setup(char *str, int *ints);
 static void load_ramdisk(char *str, int *ints);
@@ -194,6 +198,7 @@ struct {
 #endif
 	{ "swap=", swap_setup },
 	{ "buff=", buff_setup },
+	{ "panic=", panic_setup },
 #ifdef CONFIG_BUGi386
 	{ "no-hlt", no_halt },
 	{ "no387", no_387 },
@@ -287,6 +292,9 @@ struct {
 #ifdef CONFIG_SJCD
 	{ "sjcd=", sjcd_setup },
 #endif CONFIG_SJCD
+#ifdef CONFIG_ISP16_CDI
+	{ "isp16=", isp16_setup },
+#endif CONFIG_ISP16_CDI
 #ifdef CONFIG_SOUND
 	{ "sound=", sound_setup },
 #endif

@@ -1,9 +1,10 @@
 /*
  * sound/sound_switch.c
  *
- * The system call switch
- *
- * Copyright by Hannu Savolainen 1993
+ * The system call switch handler
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,8 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 
@@ -34,11 +36,7 @@ struct sbc_device
     int             usecount;
   };
 
-static int      in_use = 0;	/*
-
-
-				 * *  * * Total # of open device files
-				 * (excluding * * * minor 0)   */
+static int      in_use = 0;	/* Total # of open devices */
 
 /*
  * /dev/sndstatus -device
@@ -106,12 +104,12 @@ init_status (void)
   status_ptr = 0;
 
 #ifdef SOUND_UNAME_A
-  put_status ("VoxWare Sound Driver:" SOUND_VERSION_STRING
+  put_status ("Sound Driver:" SOUND_VERSION_STRING
 	      " (" SOUND_CONFIG_DATE " " SOUND_CONFIG_BY ",\n"
 	      SOUND_UNAME_A ")"
 	      "\n");
 #else
-  put_status ("VoxWare Sound Driver:" SOUND_VERSION_STRING
+  put_status ("Sound Driver:" SOUND_VERSION_STRING
 	      " (" SOUND_CONFIG_DATE " " SOUND_CONFIG_BY "@"
 	      SOUND_CONFIG_HOST "." SOUND_CONFIG_DOMAIN ")"
 	      "\n");
@@ -301,7 +299,7 @@ init_status (void)
 }
 
 static int
-read_status (snd_rw_buf * buf, int count)
+read_status (char *buf, int count)
 {
   /*
    * Return at most 'count' bytes from the status_buf.
@@ -323,7 +321,7 @@ read_status (snd_rw_buf * buf, int count)
 }
 
 int
-sound_read_sw (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
+sound_read_sw (int dev, struct fileinfo *file, char *buf, int count)
 {
   DEB (printk ("sound_read_sw(dev=%d, count=%d)\n", dev, count));
 
@@ -361,7 +359,7 @@ sound_read_sw (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 }
 
 int
-sound_write_sw (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
+sound_write_sw (int dev, struct fileinfo *file, const char *buf, int count)
 {
 
   DEB (printk ("sound_write_sw(dev=%d, count=%d)\n", dev, count));
@@ -506,7 +504,7 @@ sound_release_sw (int dev, struct fileinfo *file)
 
 int
 sound_ioctl_sw (int dev, struct fileinfo *file,
-		unsigned int cmd, ioctl_arg arg)
+		unsigned int cmd, caddr_t arg)
 {
   DEB (printk ("sound_ioctl_sw(dev=%d, cmd=0x%x, arg=0x%x)\n", dev, cmd, arg));
 

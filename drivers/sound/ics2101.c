@@ -2,8 +2,9 @@
  * sound/ics2101.c
  *
  * Driver for the ICS2101 mixer of GUS v3.7.
- *
- * Copyright by Hannu Savolainen 1994
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,8 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 #if defined(CONFIG_GUS)
@@ -37,7 +39,7 @@
 			 SOUND_MASK_SYNTH| \
   			 SOUND_MASK_CD | SOUND_MASK_VOLUME)
 
-extern sound_os_info *gus_osp;
+extern int     *gus_osp;
 extern int      gus_base;
 static int      volumes[ICS_MIXDEVS];
 static int      left_fix[ICS_MIXDEVS] =
@@ -130,7 +132,7 @@ set_volumes (int dev, int vol)
 }
 
 static int
-ics2101_mixer_ioctl (int dev, unsigned int cmd, ioctl_arg arg)
+ics2101_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 {
   if (((cmd >> 8) & 0xff) == 'M')
     {

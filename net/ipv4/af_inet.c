@@ -587,8 +587,9 @@ static int inet_create(struct socket *sock, int protocol)
 	if (sk == NULL) 
 		return(-ENOBUFS);
 	memset(sk,0,sizeof(*sk));	/* Efficient way to set most fields to zero */
-/*	sk->num = 0;
- *	sk->reuse = 0;*/
+	/*
+	 *	Note for tcp that also wiped the dummy_th block for us.
+	 */
 	switch(sock->type) 
 	{
 		case SOCK_STREAM:
@@ -653,8 +654,6 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->socket = sock;
 #ifdef CONFIG_TCP_NAGLE_OFF
 	sk->nonagle = 1;
-#else    
-/*	sk->nonagle = 0;*/
 #endif  
 	sk->type = sock->type;
 	sk->protocol = protocol;
@@ -693,6 +692,13 @@ static int inet_create(struct socket *sock, int protocol)
 	*sk->ip_mc_name=0;
 	sk->ip_mc_list=NULL;
 #endif
+	/*
+	 *	Speed up by setting some standard state for the dummy_th
+	 *	if TCP uses it (maybe move to tcp_init later)
+	 */
+  	
+  	sk->dummy_th.ack=1;	
+  	sk->dummy_th.doff=sizeof(struct tcphdr)>>2;
   	
 	sk->state_change = def_callback1;
 	sk->data_ready = def_callback2;

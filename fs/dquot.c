@@ -16,6 +16,9 @@
  * Version: $Id: dquot.c,v 5.6 1995/11/15 20:30:27 mvw Exp mvw $
  * 
  * Author:  Marco van Wieringen <mvw@mcs.ow.nl> <mvw@tnix.net>
+ * 
+ * Fixes:   Dmitry Gorodchanin <begemot@bgm.rosprint.net>, 11 Feb 96
+ *	    removed race conditions in dqput(), dqget() and iput(). 
  *
  * (C) Copyright 1994, 1995 Marco van Wieringen 
  *
@@ -678,6 +681,7 @@ void dquot_initialize(struct inode *inode, short type)
 {
 	unsigned int id = 0;
 	short cnt;
+	struct dquot *tmp;
 
 	if (S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) || S_ISLNK(inode->i_mode)) {
 		for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
@@ -694,7 +698,16 @@ void dquot_initialize(struct inode *inode, short type)
 						id = inode->i_gid;
 						break;
 				}
-				inode->i_dquot[cnt] = dqget(inode->i_dev, id, cnt);
+
+				tmp = dqget(inode->i_dev, id, cnt);
+				/* We may sleep in dqget(), so check it again.
+				 * 	Dmitry Gorodchanin 02/11/96
+				 */
+				if (inode->i_dquot[cnt] != NODQUOT) {
+					dqput(tmp);
+					continue;
+				} 
+				inode->i_dquot[cnt] = tmp;
 				inode->i_flags |= S_WRITE;
 			}
 		}
@@ -704,12 +717,17 @@ void dquot_initialize(struct inode *inode, short type)
 void dquot_drop(struct inode *inode)
 {
 	short cnt;
+	struct dquot * tmp;
 
 	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
 		if (inode->i_dquot[cnt] == NODQUOT)
 			continue;
-		dqput(inode->i_dquot[cnt]);
+		/* We can sleep at dqput(). So we must do it this way.
+		 * 	Dmitry Gorodchanin 02/11/96
+		 */
+		tmp = inode->i_dquot[cnt];
 		inode->i_dquot[cnt] = NODQUOT;
+		dqput(tmp);
 	}
 	inode->i_flags &= ~S_WRITE;
 }

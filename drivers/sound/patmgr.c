@@ -2,8 +2,9 @@
  * sound/patmgr.c
  *
  * The patch maneger interface for the /dev/sequencer
- *
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,8 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #define PATMGR_C
 #include "sound_config.h"
@@ -91,7 +93,7 @@ pmgr_release (int dev)
 }
 
 int
-pmgr_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
+pmgr_read (int dev, struct fileinfo *file, char *buf, int count)
 {
   unsigned long   flags;
   int             ok = 0;
@@ -133,7 +135,7 @@ pmgr_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 }
 
 int
-pmgr_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
+pmgr_write (int dev, struct fileinfo *file, const char *buf, int count)
 {
   unsigned long   flags;
 

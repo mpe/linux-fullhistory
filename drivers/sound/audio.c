@@ -2,8 +2,10 @@
  * sound/audio.c
  *
  * Device file manager for /dev/audio
- *
- * Copyright by Hannu Savolainen 1993
+ */
+
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,8 +26,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 
@@ -64,7 +67,7 @@ set_format (int dev, int fmt)
 	else
 	  fmt = AFMT_U8;	/* This is always supported */
 
-      audio_format[dev] = DMAbuf_ioctl (dev, SNDCTL_DSP_SETFMT, (ioctl_arg) fmt, 1);
+      audio_format[dev] = DMAbuf_ioctl (dev, SNDCTL_DSP_SETFMT, (caddr_t) fmt, 1);
     }
 
   if (local_conversion[dev])	/* This shadows the HW format */
@@ -103,7 +106,7 @@ audio_open (int dev, struct fileinfo *file)
 
   local_conversion[dev] = 0;
 
-  if (DMAbuf_ioctl (dev, SNDCTL_DSP_SETFMT, (ioctl_arg) bits, 1) != bits)
+  if (DMAbuf_ioctl (dev, SNDCTL_DSP_SETFMT, (caddr_t) bits, 1) != bits)
     {
       audio_release (dev, file);
       return -ENXIO;
@@ -181,7 +184,7 @@ translate_bytes (const void *table, void *buff, int n)
 #endif
 
 int
-audio_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
+audio_write (int dev, struct fileinfo *file, const char *buf, int count)
 {
   int             c, p, l, buf_no, buf_ptr, buf_size;
   int             err;
@@ -267,7 +270,7 @@ audio_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
 }
 
 int
-audio_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
+audio_read (int dev, struct fileinfo *file, char *buf, int count)
 {
   int             c, p, l;
   char           *dmabuf;
@@ -330,7 +333,7 @@ audio_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 
 int
 audio_ioctl (int dev, struct fileinfo *file,
-	     unsigned int cmd, ioctl_arg arg)
+	     unsigned int cmd, caddr_t arg)
 {
 
   dev = dev >> 4;
@@ -376,7 +379,7 @@ audio_ioctl (int dev, struct fileinfo *file,
 	{
 	  audio_buf_info  info;
 
-	  int             err = DMAbuf_ioctl (dev, cmd, (ioctl_arg) & info, 1);
+	  int             err = DMAbuf_ioctl (dev, cmd, (caddr_t) & info, 1);
 
 	  if (err < 0)
 	    return err;
@@ -394,7 +397,7 @@ audio_ioctl (int dev, struct fileinfo *file,
 	  char           *dma_buf;
 	  int             buf_no, buf_ptr, buf_size;
 
-	  int             err = DMAbuf_ioctl (dev, cmd, (ioctl_arg) & info, 1);
+	  int             err = DMAbuf_ioctl (dev, cmd, (caddr_t) & info, 1);
 
 	  if (err < 0)
 	    return err;
@@ -457,15 +460,19 @@ audio_select (int dev, struct fileinfo *file, int sel_type, select_table_handle 
   switch (sel_type)
     {
     case SEL_IN:
-      if (!(audio_mode[dev] & AM_READ) && !(audio_devs[dev]->flags & DMA_DUPLEX))
-	return 0;		/* Not recording */
+      if (audio_mode[dev] & AM_WRITE && !(audio_devs[dev]->flags & DMA_DUPLEX))
+	{
+	  return 0;		/* Not recording */
+	}
 
       return DMAbuf_select (dev, file, sel_type, wait);
       break;
 
     case SEL_OUT:
-      if (!(audio_mode[dev] & AM_WRITE) && !(audio_devs[dev]->flags & DMA_DUPLEX))
-	return 0;		/* Wrong direction */
+      if (audio_mode[dev] & AM_READ && !(audio_devs[dev]->flags & DMA_DUPLEX))
+	{
+	  return 0;		/* Wrong direction */
+	}
 
       if (DMAbuf_get_curr_buffer (dev, &buf_no, &dma_buf, &buf_ptr, &buf_size) >= 0)
 	{

@@ -5,9 +5,7 @@
 
 
 	Based on Aztech CD268 CDROM driver by Werner Zimmermann and preworks
-	by Eberhard Moenkeberg (emoenke@gwdg.de). ISP16 detection and
-	configuration by Eric van der Maarel (maarel@marin.nl) and
-	Vadim Model (vadim@cecmow.enet.dec.com).
+	by Eberhard Moenkeberg (emoenke@gwdg.de). 
 
 	This program is free software; you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -71,9 +69,6 @@
 #include <linux/cdrom.h>
 #include <linux/optcd.h>
 
-#ifdef PROBE_ISP16
-#include "optcd_isp16.h"	/* optional ISP16 detection/configuration */
-#endif
 
 /* Debug support */
 
@@ -1960,50 +1955,12 @@ static struct file_operations opt_fops = {
 };
 
 
-/* Flag indicates if ISP16 detection and initialisation should be skipped */
-#define skip_isp16_init	noisp16		/* Needed for the modutils. */
-static int skip_isp16_init = 0;
-
 /* Get kernel parameter when used as a kernel driver */
 void optcd_setup(char *str, int *ints)
 {
 	if (ints[0] > 0)
 		optcd_port = ints[1];
-	if (!strcmp(str ,"noisp16"))
-		skip_isp16_init = 1;
 }
-
-
-#ifdef PROBE_ISP16
-/* If ISP16 I/O ports not already reserved, probe for an ISP16 interface card,
-   and enable SONY mode with no interrupts and no DMA.
-   (As far as I know, all Optics 8000 AT drives come with a SONY interface.
-   Interrupts and DMA are not supported).
-   Returns false only if ISP16 detected but couldn't be initialised. */
-static int probe_isp16(void)
-{
-	if (skip_isp16_init)
-		return 1;
-
-	if (check_region(ISP16_DRIVE_SET_PORT, 5))
-		return 1;
-
-	if (isp16_detect() < 0 ) {
-		printk( "No ISP16 cdrom interface found.\n" );
-		return 1;
-	}
-
-	isp16_sound_config();	/* Enable playing through speakers */
-
-	printk( "ISP16 cdrom interface detected.\n");
-	if (isp16_cdi_config(optcd_port, ISP16_SONY, 0, 0) < 0) {
-		printk( "ISP16 configure error.\n" );
-		return 0;
-	}
-	return 1;
-}
-#endif PROBE_ISP16
-
 
 /* Test for presence of drive and initialize it. Called at boot time
    or during module initialisation. */
@@ -2020,11 +1977,6 @@ int optcd_init(void)
 			optcd_port);
 		return -EIO;
 	}
-
-#ifdef PROBE_ISP16
-	if (!probe_isp16())
-		return -EIO;
-#endif
 
 	if (!reset_drive()) {
 		printk("optcd: drive at 0x%x not ready\n", optcd_port);

@@ -51,6 +51,7 @@ The set of modules is rapidly increasing, but so far these are known:
 		gscd:      Goldstar GCDR-420
 		mcd, mcdx: Mitsumi LU005, FX001
 		optcd:     Optics Storage Dolphin 8000AT
+		sjcd:      Sanyo CDR-H94A
 		sbpcd:     Matsushita/Panasonic CR52x, CR56x, CD200,
 		           Longshine LCS-7260, TEAC CD-55A
 		sonycd535: Sony CDU-531/535, CDU-510/515
@@ -58,6 +59,7 @@ The set of modules is rapidly increasing, but so far these are known:
 	Some misc modules:
 		lp: line printer
 		binfmt_elf: elf loader
+		isp16: cdrom interface
 
 When you have made the kernel, you create the modules by doing:
 

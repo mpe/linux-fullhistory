@@ -27,21 +27,20 @@ CONFIG_M586=y
 # CONFIG_M686 is not set
 
 #
-# Block devices
+# Floppy, IDE, and other block devices
 #
 CONFIG_BLK_DEV_FD=y
 # CONFIG_BLK_DEV_RAM is not set
-CONFIG_ST506=y
+CONFIG_BLK_DEV_IDE=y
 
 #
 # Please see drivers/block/README.ide for help/info on IDE drives
 #
-# CONFIG_BLK_DEV_HD is not set
-CONFIG_BLK_DEV_IDE=y
+# CONFIG_BLK_DEV_HD_IDE is not set
 CONFIG_BLK_DEV_IDECD=y
 # CONFIG_BLK_DEV_IDETAPE is not set
-CONFIG_BLK_DEV_RZ1000=y
 CONFIG_BLK_DEV_CMD640=y
+CONFIG_BLK_DEV_RZ1000=y
 # CONFIG_BLK_DEV_TRITON is not set
 # CONFIG_IDE_CHIPSETS is not set
 # CONFIG_BLK_DEV_XD is not set

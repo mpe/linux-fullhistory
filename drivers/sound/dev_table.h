@@ -2,31 +2,32 @@
  *	dev_table.h
  *
  *	Global definitions for device call tables
- * 
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
+ * modification, are permitted provided that the following conditions are
+ * met: 1. Redistributions of source code must retain the above copyright
+ * notice, this list of conditions and the following disclaimer. 2.
+ * Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
-*/
+ */
+#include <linux/config.h>
+
 
 #ifndef _DEV_TABLE_H_
 #define _DEV_TABLE_H_
@@ -134,7 +135,7 @@ typedef struct coproc_operations {
 		char name[32];
 		int (*open) (void *devc, int sub_device);
 		void (*close) (void *devc, int sub_device);
-		int (*ioctl) (void *devc, unsigned int cmd, ioctl_arg arg, int local);
+		int (*ioctl) (void *devc, unsigned int cmd, caddr_t arg, int local);
 		void (*reset) (void *devc);
 
 		void *devc;		/* Driver specific info */
@@ -155,14 +156,14 @@ struct audio_operations {
 			      int count, int intrflag, int dma_restart);
 	void (*start_input) (int dev, unsigned long buf, 
 			     int count, int intrflag, int dma_restart);
-	int (*ioctl) (int dev, unsigned int cmd, ioctl_arg arg, int local);
+	int (*ioctl) (int dev, unsigned int cmd, caddr_t arg, int local);
 	int (*prepare_for_input) (int dev, int bufsize, int nbufs);
 	int (*prepare_for_output) (int dev, int bufsize, int nbufs);
 	void (*reset) (int dev);
 	void (*halt_xfer) (int dev);
 	int (*local_qlen)(int dev);
         void (*copy_from_user)(int dev, char *localbuf, int localoffs,
-                               const snd_rw_buf *userbuf, int useroffs, int len);
+                               const char *userbuf, int useroffs, int len);
 	void (*halt_input) (int dev);
 	void (*halt_output) (int dev);
 	void (*trigger) (int dev, int bits);
@@ -178,7 +179,7 @@ struct audio_operations {
 
 struct mixer_operations {
 	char name[32];
-	int (*ioctl) (int dev, unsigned int cmd, ioctl_arg arg);
+	int (*ioctl) (int dev, unsigned int cmd, caddr_t arg);
 };
 
 struct synth_operations {
@@ -189,13 +190,13 @@ struct synth_operations {
 
 	int (*open) (int dev, int mode);
 	void (*close) (int dev);
-	int (*ioctl) (int dev, unsigned int cmd, ioctl_arg arg);
+	int (*ioctl) (int dev, unsigned int cmd, caddr_t arg);
 	int (*kill_note) (int dev, int voice, int note, int velocity);
 	int (*start_note) (int dev, int voice, int note, int velocity);
 	int (*set_instr) (int dev, int voice, int instr);
 	void (*reset) (int dev);
 	void (*hw_control) (int dev, unsigned char *event);
-	int (*load_patch) (int dev, int format, const snd_rw_buf *addr,
+	int (*load_patch) (int dev, int format, const char *addr,
 	     int offs, int count, int pmgr_flag);
 	void (*aftertouch) (int dev, int voice, int pressure);
 	void (*controller) (int dev, int voice, int ctrl_num, int value);
@@ -233,7 +234,7 @@ struct midi_operations {
 		void (*outputintr)(int dev)
 		);
 	void (*close) (int dev);
-	int (*ioctl) (int dev, unsigned int cmd, ioctl_arg arg);
+	int (*ioctl) (int dev, unsigned int cmd, caddr_t arg);
 	int (*putc) (int dev, unsigned char data);
 	int (*start_read) (int dev);
 	int (*end_read) (int dev);
@@ -259,7 +260,7 @@ struct sound_timer_operations {
 	void (*close)(int dev);
 	int (*event)(int dev, unsigned char *ev);
 	unsigned long (*get_time)(int dev);
-	int (*ioctl) (int dev, unsigned int cmd, ioctl_arg arg);
+	int (*ioctl) (int dev, unsigned int cmd, caddr_t arg);
 	void (*arm_timer)(int dev, long time);
 };
 
@@ -341,9 +342,6 @@ struct sound_timer_operations {
 		{"TRXPRO", 0, SNDCARD_TRXPRO, "MediaTriX AudioTriX Pro",	attach_trix_wss, probe_trix_wss, unload_trix_wss},
 		{"TRXPROSB", 0, SNDCARD_TRXPRO_SB, "AudioTriX (SB mode)",	attach_trix_sb, probe_trix_sb, unload_trix_sb},
 		{"TRXPROMPU", 0, SNDCARD_TRXPRO_MPU, "AudioTriX MIDI",	attach_trix_mpu, probe_trix_mpu, unload_trix_mpu},
-#endif
-#ifdef CONFIG_PNP
-		{"AD1848", 0, 500, "PnP MSS",	attach_pnp_ad1848, probe_pnp_ad1848, unload_pnp_ad1848},
 #endif
 		{NULL, 0, 0,		"*?*",			NULL, NULL, NULL}
 	};

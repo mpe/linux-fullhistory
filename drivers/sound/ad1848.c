@@ -12,8 +12,10 @@
  *
  * CS4232 is a PnP audio chip which contains a CS4231A (and SB, MPU).
  * CS4232A is an improved version of CS4232.
- *
- * Copyright by Hannu Savolainen 1994, 1995
+ */
+
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -34,11 +36,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * Modified:
- *  Riccardo Facchetti  24 Mar 1995
- *  - Added the Audio Excel DSP 16 initialization routine.
  */
+#include <linux/config.h>
+
 
 #define DEB(x)
 #define DEB1(x)
@@ -83,7 +83,7 @@ typedef struct
     volatile unsigned long timer_ticks;
     int             timer_running;
     int             irq_ok;
-    sound_os_info  *osp;
+    int            *osp;
   }
 
 ad1848_info;
@@ -98,13 +98,14 @@ static int      timer_installed = -1;
 static char     mixer2codec[MAX_MIXER_DEV] =
 {0};
 
-static int      ad_format_mask[5 /*devc->mode */ ] =
+static int      ad_format_mask[6 /*devc->mode */ ] =
 {
   0,
   AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW,
   AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_U16_LE | AFMT_IMA_ADPCM,
   AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_U16_LE | AFMT_IMA_ADPCM,
-  AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW	/* AD1845 */
+  AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW,	/* AD1845 */
+  AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_U16_LE | AFMT_IMA_ADPCM
 };
 
 static ad1848_info dev_info[MAX_AUDIO_DEV];
@@ -116,7 +117,7 @@ static ad1848_info dev_info[MAX_AUDIO_DEV];
 
 static int      ad1848_open (int dev, int mode);
 static void     ad1848_close (int dev);
-static int      ad1848_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local);
+static int      ad1848_ioctl (int dev, unsigned int cmd, caddr_t arg, int local);
 static void     ad1848_output_block (int dev, unsigned long buf, int count, int intrflag, int dma_restart);
 static void     ad1848_start_input (int dev, unsigned long buf, int count, int intrflag, int dma_restart);
 static int      ad1848_prepare_for_IO (int dev, int bsize, int bcount);
@@ -461,7 +462,7 @@ ad1848_mixer_reset (ad1848_info * devc)
 }
 
 static int
-ad1848_mixer_ioctl (int dev, unsigned int cmd, ioctl_arg arg)
+ad1848_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 {
   ad1848_info    *devc;
 
@@ -781,7 +782,7 @@ set_format (ad1848_info * devc, int arg)
 }
 
 static int
-ad1848_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
+ad1848_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 {
   ad1848_info    *devc = (ad1848_info *) audio_devs[dev]->devc;
 
@@ -1126,7 +1127,7 @@ ad1848_trigger (int dev, int state)
 }
 
 int
-ad1848_detect (int io_base, int *ad_flags, sound_os_info * osp)
+ad1848_detect (int io_base, int *ad_flags, int *osp)
 {
 
   unsigned char   tmp;
@@ -1369,7 +1370,7 @@ ad1848_detect (int io_base, int *ad_flags, sound_os_info * osp)
 }
 
 void
-ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture, int share_dma, sound_os_info * osp)
+ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture, int share_dma, int *osp)
 {
   /*
      * NOTE! If irq < 0, there is another driver which has allocated the IRQ
@@ -1654,6 +1655,7 @@ void
 check_opl3 (int base, struct address_info *hw_config)
 {
 
+#ifdef CONFIG_YM3812
   if (check_region (base, 4))
     {
       printk ("\n\nopl3.c: I/O port %x already in use\n\n", base);
@@ -1665,6 +1667,7 @@ check_opl3 (int base, struct address_info *hw_config)
 
   opl3_init (0, base, hw_config->osp);
   request_region (base, 4, "OPL3/OPL2");
+#endif
 }
 
 int
@@ -1685,15 +1688,6 @@ probe_ms_sound (struct address_info *hw_config)
       /* check_opl3(0x388, hw_config); */
       return ad1848_detect (hw_config->io_base + 4, NULL, hw_config->osp);
     }
-
-#if defined(CONFIG_AEDSP16) && defined(AEDSP16_MSS)
-  /*
-     * Initialize Audio Excel DSP 16 to MSS: before any operation
-     * we must enable MSS I/O ports.
-   */
-
-  InitAEDSP16_MSS (hw_config);
-#endif
 
   /*
      * Check if the IO port returns valid signature. The original MS Sound

@@ -45,8 +45,8 @@ void init_rz1000 (byte bus, byte fn)
 		if ((rc = pcibios_read_config_word(bus, fn, 0x40, &reg))
 		 || (rc =  pcibios_write_config_word(bus, fn, 0x40, reg & 0xdfff)))
 		{
-			extern int ide_disallow_unmask;
-			ide_disallow_unmask = 1;
+			ide_hwifs[0].no_unmask = 1;
+			ide_hwifs[1].no_unmask = 1;
 			ide_hwifs[0].serialized = 1;
 			ide_pci_access_error (rc);
 			printk("serialized, disabled unmasking\n");

@@ -1,8 +1,13 @@
+/*
+ *	 PnP support is not included in this driver version.
+ *       AEDSP16 will not work without significant changes.
+ */
 #define DISABLED_OPTIONS 	(B(OPT_PNP)|B(OPT_AEDSP16))
 /*
  * sound/configure.c  - Configuration program for the Linux Sound Driver
- *
- * Copyright by Hannu Savolainen 1993-1995
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -23,8 +28,8 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+
 
 #include <stdio.h>
 #include <unistd.h>
@@ -662,7 +667,7 @@ ask_parameters (void)
 
   if (selected_options & B (OPT_PAS))
     {
-      fprintf (stderr, "\nEnable Joystick port on ProAudioSpectrum (n/y) ? ");
+      fprintf (stderr, "\nEnable Joystick port on ProAudioSpectrum (y/N) ? ");
       if (think_positively (0))
 	printf ("#define PAS_JOYSTICK_ENABLE\n");
 
@@ -671,7 +676,7 @@ ask_parameters (void)
 	       "There is a command line switch (was it :T?)\n"
 	       "in the DOS driver for PAS16 which solves this.\n"
 	       "Don't enable this feature unless you have problems!\n"
-	       "Do you have to use this switch with DOS (y/n) ?");
+	       "Do you have to use this switch with DOS (Y/n) ?");
       if (think_positively (0))
 	printf ("#define BROKEN_BUS_CLOCK\n");
     }
@@ -1111,7 +1116,7 @@ main (int argc, char *argv[])
 
   if (access (oldconf, R_OK) == 0)
     {
-      fprintf (stderr, "Old configuration exists in %s. Use it (y/n) ? ",
+      fprintf (stderr, "Old configuration exists in %s. Use it (Y/n) ? ",
 	       oldconf);
       if (think_positively (1))
 	if (use_old_config (oldconf))
@@ -1149,7 +1154,7 @@ main (int argc, char *argv[])
 		int             def_answ = hw_table[i].default_answ;
 
 		fprintf (stderr,
-			 def_answ ? "  %s (y/n) ? " : "  %s (n/y) ? ",
+			 def_answ ? "  %s (Y/n) ? " : "  %s (y/N) ? ",
 			 questions[i]);
 		if (think_positively (def_answ))
 		  if (hw_table[i].alias)
@@ -1172,7 +1177,7 @@ main (int argc, char *argv[])
       fprintf (stderr, "Do you want support for the MV Jazz16 (ProSonic etc.) ? ");
       if (think_positively (0))
 	{
-	  fprintf (stderr, "Do you have SoundMan Wave (n/y) ? ");
+	  fprintf (stderr, "Do you have SoundMan Wave (y/N) ? ");
 
 	  if (think_positively (0))
 	    {
@@ -1184,7 +1189,7 @@ main (int argc, char *argv[])
 		 "Logitech SoundMan Wave has a microcontroller which must be initialized\n"
 		 "before MIDI emulation works. This is possible only if the microcode\n"
 		 "file is compiled into the driver.\n"
-		 "Do you have access to the MIDI0001.BIN file (y/n) ? ");
+		 "Do you have access to the MIDI0001.BIN file (Y/n) ? ");
 	      if (think_positively (1))
 		{
 		  char            path[512];
@@ -1223,7 +1228,7 @@ main (int argc, char *argv[])
 	       "\n"
 	       "DANGER! Read the above once again before answering 'y'\n"
 	       "Answer 'n' in case you are unsure what to do!\n");
-      fprintf (stderr, "Do you have a Logitech SoundMan Games (n/y) ? ");
+      fprintf (stderr, "Do you have a Logitech SoundMan Games (y/N) ? ");
       if (think_positively (0))
 	printf ("#define SM_GAMES\n");
     }
@@ -1272,7 +1277,7 @@ main (int argc, char *argv[])
 	(stderr,
        "if you wish to emulate the soundblaster and you have a DSPxxx.LD.\n"
 	 "then you must include the LD in the kernel.\n"
-	 "Do you wish to include a LD (y/n) ? ");
+	 "Do you wish to include a LD (Y/n) ? ");
       if (think_positively (1))
 	{
 	  char            path[512];
@@ -1318,7 +1323,7 @@ main (int argc, char *argv[])
 	       "modes of AudioTriX Pro will not work without\n"
 	       "this file!\n"
 	       "\n"
-	       "Do you want to include TRXPRO.HEX in your kernel (y/n) ? ");
+	       "Do you want to include TRXPRO.HEX in your kernel (Y/n) ? ");
 
       if (think_positively (1))
 	{
@@ -1377,7 +1382,7 @@ main (int argc, char *argv[])
 
   if (!old_config_used)
     {
-      fprintf (stderr, "Save copy of this configuration to %s (y/n)", oldconf);
+      fprintf (stderr, "Save copy of this configuration to %s (Y/n)", oldconf);
       if (think_positively (1))
 	{
 	  char            cmd[200];

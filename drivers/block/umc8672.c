@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/umc8672.c	Version 0.02  Feb 06, 1996
+ *  linux/drivers/block/umc8672.c	Version 0.03  Feb 09, 1996
  *
  *  Copyright (C) 1995-1996  Linus Torvalds & author (see below)
  */
@@ -15,6 +15,7 @@
  *			This will get cleaned up in a subsequent release.
  *
  *  Version 0.02	now configs/compiles separate from ide.c  -ml
+ *  Version 0.03	enhanced auto-tune, fix display bug
  */
 
 /*
@@ -46,10 +47,10 @@
 #include <linux/hdreg.h>
 #include <asm/io.h>
 #include "ide.h"
+#include "ide_modes.h"
 
 /*
- * The speeds will eventually become selectable using hdparm via ioctl's,
- * but for now they are coded here:
+ * Default speeds.  These can be changed with "auto-tune" and/or hdparm.
  */
 #define UMC_DRIVE0      1              /* DOS measured drive speeds */
 #define UMC_DRIVE1      1              /* 0 to 11 allowed */
@@ -57,7 +58,7 @@
 #define UMC_DRIVE3      1              /* In case of crash reduce speed */
 
 static byte current_speeds[4] = {UMC_DRIVE0, UMC_DRIVE1, UMC_DRIVE2, UMC_DRIVE3};
-static const byte pio_to_umc [5] = {0,3,6,10,11};	/* rough guesses */
+static const byte pio_to_umc [5] = {0,3,7,10,11};	/* rough guesses */
 
 /*       0    1    2    3    4    5    6    7    8    9    10   11      */
 static const byte speedtab [3][12] = {
@@ -103,23 +104,16 @@ static void umc_set_speeds (byte speeds[])
 	restore_flags(flags);
 
 	printk ("umc8672: drive speeds [0 to 11]: %d %d %d %d\n",
-		speeds[0], speeds[1], speeds[2], speeds[4]);
+		speeds[0], speeds[1], speeds[2], speeds[3]);
 }
 
 static void tune_umc (ide_drive_t *drive, byte pio)
 {
-	if (pio == 255)  {	/* auto-tune */
-		struct hd_driveid *id = drive->id;
-		pio = id->tPIO;
-		if (id->field_valid & 0x02) {
-			if (id->eide_pio_modes & 0x01)
-				pio = 3;
-			if (id->eide_pio_modes & 0x02)
-				pio = 4;
-		}
-	}
+	if (pio == 255)
+		pio = ide_get_best_pio_mode(drive);
 	if (pio > 4)
 		pio = 4;
+
 	current_speeds[drive->name[2] - 'a'] = pio_to_umc[pio];
 	umc_set_speeds (current_speeds);
 }

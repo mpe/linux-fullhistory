@@ -24,7 +24,12 @@
 /*
  * The request-struct contains all necessary data
  * to load a nr of sectors into memory
+ *
+ * NR_REQUEST is the number of entries in the request-queue.
+ * NOTE that writes may use only the low 2/3 of these: reads
+ * take precedence.
  */
+#define NR_REQUEST	16
 static struct request all_requests[NR_REQUEST];
 
 /*
@@ -37,34 +42,10 @@ struct wait_queue * wait_for_request = NULL;
 int read_ahead[MAX_BLKDEV] = {0, };
 
 /* blk_dev_struct is:
- *	do_request-address
- *	next-request
+ *	*request_fn
+ *	*current_request
  */
-struct blk_dev_struct blk_dev[MAX_BLKDEV] = {
-	{ NULL, NULL },		/* 0 no_dev */
-	{ NULL, NULL },		/* 1 dev mem */
-	{ NULL, NULL },		/* 2 dev fd */
-	{ NULL, NULL },		/* 3 dev ide0 or hd */
-	{ NULL, NULL },		/* 4 dev ttyx */
-	{ NULL, NULL },		/* 5 dev tty */
-	{ NULL, NULL },		/* 6 dev lp */
-	{ NULL, NULL },		/* 7 dev pipes */
-	{ NULL, NULL },		/* 8 dev sd */
-	{ NULL, NULL },		/* 9 dev st */
-	{ NULL, NULL },		/* 10 */
-	{ NULL, NULL },		/* 11 */
-	{ NULL, NULL },		/* 12 */
-	{ NULL, NULL },		/* 13 */
-	{ NULL, NULL },		/* 14 */
-	{ NULL, NULL },		/* 15 */
-	{ NULL, NULL },		/* 16 */
-	{ NULL, NULL },		/* 17 */
-	{ NULL, NULL },		/* 18 */
-	{ NULL, NULL },		/* 19 */
-	{ NULL, NULL },		/* 20 */
-	{ NULL, NULL },		/* 21 */
-	{ NULL, NULL }		/* 22 dev ide1 */
-};
+struct blk_dev_struct blk_dev[MAX_BLKDEV]; /* initialized by blk_dev_init() */
 
 /*
  * blk_size contains the size of all block-devices in units of 1024 byte
@@ -610,6 +591,12 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 int blk_dev_init(void)
 {
 	struct request * req;
+	struct blk_dev_struct *dev;
+
+	for (dev = blk_dev + MAX_BLKDEV; dev-- != blk_dev;) {
+		dev->request_fn      = NULL;
+		dev->current_request = NULL;
+	}
 
 	req = all_requests + NR_REQUEST;
 	while (--req >= all_requests) {
@@ -634,6 +621,9 @@ int blk_dev_init(void)
 #else
 	outb_p(0xc, 0x3f2);
 #endif
+#ifdef CONFIG_CDI_INIT
+	cdi_init();
+#endif CONFIG_CDI_INIT
 #ifdef CONFIG_CDU31A
 	cdu31a_init();
 #endif CONFIG_CDU31A

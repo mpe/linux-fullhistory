@@ -84,6 +84,8 @@
  *                       Add NO_DOOR_LOCKING configuration option.
  *                       Handle drive_cmd requests w/NULL args (for hdparm -t).
  *                       Work around sporadic Sony55e audio play problem.
+ * 3.07a Feb 11, 1996 -- check drive->id for NULL before dereferencing, to fix
+ *                        problem with "hde=cdrom" with no drive present.  -ml
  *
  * NOTE: Direct audio reads will only work on some types of drive.
  * So far, i've received reports of success for Sony and Toshiba drives.
@@ -2664,8 +2666,12 @@ void ide_cdrom_setup (ide_drive_t *drive)
   CDROM_CONFIG_FLAGS (drive)->no_doorlock = 0;
 #endif
 
-  CDROM_CONFIG_FLAGS (drive)->drq_interrupt =
-    ((drive->id->config & 0x0060) == 0x20);
+  if (drive->id != NULL) {
+    CDROM_CONFIG_FLAGS (drive)->drq_interrupt =
+      ((drive->id->config & 0x0060) == 0x20);
+  } else {
+    CDROM_CONFIG_FLAGS (drive)->drq_interrupt = 0;
+  }
 
 #if ! STANDARD_ATAPI
   CDROM_CONFIG_FLAGS (drive)->no_playaudio12 = 0;
@@ -2674,52 +2680,54 @@ void ide_cdrom_setup (ide_drive_t *drive)
   CDROM_CONFIG_FLAGS (drive)->playmsf_uses_bcd = 0;
   CDROM_CONFIG_FLAGS (drive)->vertos_lossage = 0;
 
-  /* Accommodate some broken drives... */
-  if (strcmp (drive->id->model, "CD220E") == 0 ||
-      strcmp (drive->id->model, "CD")     == 0)        /* Creative Labs */
-    CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
-
-  else if (strcmp (drive->id->model, "TO-ICSLYAL") == 0 ||  /* Acer CD525E */
-           strcmp (drive->id->model, "OTI-SCYLLA") == 0)
-    CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
-
-  /* I don't know who makes this.
-     Francesco Messineo <sidera@ccii.unipi.it> says this one's broken too. */
-  else if (strcmp (drive->id->model, "DCI-2S10") == 0)
-    CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
-
-  else if (strcmp (drive->id->model, "CDA26803I SE") == 0) /* Aztech */
-    {
+  if (drive->id != NULL) {
+    /* Accommodate some broken drives... */
+    if (strcmp (drive->id->model, "CD220E") == 0 ||
+        strcmp (drive->id->model, "CD")     == 0)        /* Creative Labs */
       CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
 
-      /* This drive _also_ does not implement PLAYAUDIO12 correctly. */
+    else if (strcmp (drive->id->model, "TO-ICSLYAL") == 0 ||  /* Acer CD525E */
+             strcmp (drive->id->model, "OTI-SCYLLA") == 0)
+      CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
+
+    /* I don't know who makes this.
+       Francesco Messineo <sidera@ccii.unipi.it> says this one's broken too. */
+    else if (strcmp (drive->id->model, "DCI-2S10") == 0)
+      CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
+
+    else if (strcmp (drive->id->model, "CDA26803I SE") == 0) /* Aztech */
+      {
+        CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
+
+        /* This drive _also_ does not implement PLAYAUDIO12 correctly. */
+        CDROM_CONFIG_FLAGS (drive)->no_playaudio12 = 1;
+      }
+
+    /* Vertos 300.
+       There seem to be at least two different, incompatible versions
+       of this drive floating around.  Luckily, they appear to return their
+       id strings with different byte orderings. */
+    else if (strcmp (drive->id->model, "V003S0DS") == 0)
+      {
+        CDROM_CONFIG_FLAGS (drive)->vertos_lossage = 1;
+        CDROM_CONFIG_FLAGS (drive)->playmsf_uses_bcd = 1;
+        CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
+      }
+    else if (strcmp (drive->id->model, "0V300SSD") == 0 ||
+  	   strcmp (drive->id->model, "V003M0DP") == 0)
+      CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
+
+    /* Vertos 400. */
+    else if (strcmp (drive->id->model, "V004E0DT") == 0 ||
+  	   strcmp (drive->id->model, "0V400ETD") == 0)
+      CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
+
+    else if ( strcmp (drive->id->model, "CD-ROM CDU55D") == 0) /*sony cdu55d */
       CDROM_CONFIG_FLAGS (drive)->no_playaudio12 = 1;
-    }
 
-  /* Vertos 300.
-     There seem to be at least two different, incompatible versions
-     of this drive floating around.  Luckily, they appear to return their
-     id strings with different byte orderings. */
-  else if (strcmp (drive->id->model, "V003S0DS") == 0)
-    {
-      CDROM_CONFIG_FLAGS (drive)->vertos_lossage = 1;
-      CDROM_CONFIG_FLAGS (drive)->playmsf_uses_bcd = 1;
-      CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
-    }
-  else if (strcmp (drive->id->model, "0V300SSD") == 0 ||
-	   strcmp (drive->id->model, "V003M0DP") == 0)
-    CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
-
-  /* Vertos 400. */
-  else if (strcmp (drive->id->model, "V004E0DT") == 0 ||
-	   strcmp (drive->id->model, "0V400ETD") == 0)
-    CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
-
-  else if ( strcmp (drive->id->model, "CD-ROM CDU55D") == 0) /*sony cdu55d */
-    CDROM_CONFIG_FLAGS (drive)->no_playaudio12 = 1;
-
- else if (strcmp (drive->id->model, "CD-ROM CDU55E") == 0)
-	CDROM_CONFIG_FLAGS (drive)->no_playaudio12 = 1;
+   else if (strcmp (drive->id->model, "CD-ROM CDU55E") == 0)
+  	CDROM_CONFIG_FLAGS (drive)->no_playaudio12 = 1;
+  } /* drive-id != NULL */
 #endif  /* not STANDARD_ATAPI */
 
   drive->cdrom_info.toc               = NULL;

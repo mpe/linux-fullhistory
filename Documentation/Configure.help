@@ -70,79 +70,137 @@ CONFIG_BLK_DEV_RAM
   Most normal users won't need the RAM disk functionality, and can thus say 
   N here.
 
-Normal (MFM/RLL) disk and IDE disk/cdrom support
-CONFIG_ST506   		           
-  This is the regular, non-SCSI harddisk support. Pretty much everyone
-  will want to say Y here, except if they configure a diskless machine
-  which mounts all files over the network using NFS (rare; if you are
-  planning to do this, have a look at the package
-  /pub/Linux/system/Linux-boot/netboot-nfs.tar.gz, available via ftp
-  (user: anonymous) from sunsite.unc.edu, extract with "tar xzvf
-  filename") or if they exclusively use SCSI drives and no IDE/ATAPI
-  CDROMs (ATAPI = AT Attachment Packet Interface is a new protocol
-  currently used for controlling CDROM and tape drives, similar to the
-  SCSI protocol. Some newer CDROM drives such as NEC 260 and MITSUMI
-  triple/quad speed drives use it, but most MITSUMI CDROM drives
-  don't).  Useful information about how to use large (>504MB) IDE
-  harddrives and how to work around a hardware bug in the CMD640 IDE
-  interface is contained in drivers/block/README.ide. To fine-tune
-  the parameters of your IDE drive for improved performance, you might
-  want to have a look at the hdparm package in
-  sunsite.unc.edu:/pub/Linux/kernel/patches/diskdrives/
-	
-Use old (reliable) disk-only driver for primary i/f
-CONFIG_BLK_DEV_HD
-  As you might have guessed, there are now two drivers for IDE
-  harddrives around: the old one and the new improved one. The old one
-  is not any longer more reliable than the new one. The new driver can
-  also handle IDE/ATAPI CDROM and tape drives (ATAPI = AT Attachment Packet
-  Interface is a new protocol currently used for controlling CDROM and
-  tape drives, similar to the SCSI protocol. Some newer CDROM drives
-  such as NEC 260 and MITSUMI triple/quad speed drives use it, but
-  most MITSUMI CDROM drives don't). The old driver supports up to two
-  hard drives, while the new one can deal with any mix of up to eight
-  hard drives and IDE/ATAPI CDROMs, two per IDE interface. Using the
-  old driver makes sense if you have older MFM/RLL/ESDI drives, since
-  it is smaller and these drives don't benefit from the additional
-  features of the new driver. If you have more than one IDE interface
-  (=controller), you can use the old driver on the first and the new
-  one on the others, if you like.  In that case (or if you have just
-  one interface and don't want to use the new driver at all) you would
-  say Y here, thereby enlarging your kernel by about 4 kB. If you want
-  to use the new driver exclusively, say N and answer Y to the
-  following question(s). Useful information about how to use large
-  (>504MB) IDE harddrives is contained in drivers/block/README.ide. If
-  unsure, say N.
-
-Use new IDE driver for primary/secondary i/f 
+Enhanced IDE/MFM/RLL disk/cdrom/tape support
 CONFIG_BLK_DEV_IDE 
-  This will use the new and improved IDE driver for the specified IDE
-  interface (=controller).  You can use up to 8 IDE harddisks and
-  IDE/ATAPI CDROMs, 2 per interface. (ATAPI = AT Attachment Packet
-  Interface is a new protocol currently used for controlling CDROM and
-  tape drives, similar to the SCSI protocol. Some newer CDROM drives
-  such as NEC 260 and MITSUMI triple/quad speed drives use it, but
-  most MITSUMI CDROM drives don't.) If you have just one IDE harddisk
-  and no IDE/ATAPI CDROM drive and you intend to use the old IDE
-  driver on the primary interface, say N here. Everybody else says
-  Y. This driver enlarges your kernel by about 8kB. Useful information
-  about how to use large (>504MB) IDE harddrives and how to use more
-  than 2 IDE interfaces is contained in drivers/block/README.ide.
+  This will use the full-featured IDE driver to control up to four IDE
+  interfaces, for a combination of up to eight IDE disk/cdrom/tape drives.
+  Useful information about large (>540MB) IDE disks, soundcard IDE ports,
+  and other topics, is all contained in drivers/block/README.ide.
+  If you have one or more IDE drives, say Y here.
+  If your system has no IDE drives, or if memory requirements are really tight,
+  you could say N here, and select the Old harddisk driver instead to save
+  about 13kB of memory in the kernel.  
+  To fine-tune IDE drive/interface parameters for improved performance,
+  look for the hdparm package at
+  sunsite.unc.edu:/pub/Linux/kernel/patches/diskdrives/
 
-Include support for IDE/ATAPI CDROMs
+Old harddisk (MFM/RLL/IDE) driver
+CONFIG_BLK_DEV_HD_ONLY
+  There are two drivers for MFM/RLL/IDE disks.  Most people use the
+  newer enhanced driver, but the old one is still around for two reasons.
+  Some older systems have strange timing problems and seem to work only
+  with the old driver (which itself does not work with some newer systems).
+  The other reason is that the old driver is smaller, since it lacks the
+  enhanced functionality of the new one.  This makes it a good choice
+  for systems with very tight memory restrictions, or for systems with
+  only older MFM/RLL/ESDI drives.  Choosing the old driver can save 13kB
+  or so of kernel memory.  If you are unsure, then just choose the
+  Enhanced IDE/MFM/RLL driver instead of this one.
+
+Use old disk-only driver on primary interface
+CONFIG_BLK_DEV_HD_IDE
+  There are two drivers for MFM/RLL/IDE disks.  Most people use just the
+  new enhanced driver by itself.  This option installs the old harddisk
+  driver to control the primary IDE/disk interface in the system,
+  leaving the new enhanced IDE driver take care of only the 2nd/3rd/4th
+  IDE interfaces.  Choosing this option may be useful for older systems
+  which have MFM/RLL/ESDI controller+drives at the primary port address
+  (0x1f0), along with IDE drives at the secondary/3rd/4th port addresses.
+  Normally, just say N here.
+  
+Include IDE/ATAPI CDROM support
 CONFIG_BLK_DEV_IDECD
-  If you have a CDROM drive using the ATAPI protocol, say Y. (ATAPI =
-  AT Attachment Packet Interface is a new protocol currently used for
-  controlling CDROM and tape drives, similar to the SCSI protocol and
-  derived from IDE=ATA. Some newer CDROM drives such as NEC 260 and
-  MITSUMI triple/quad speed drives use it, but most MITSUMI CDROM
-  drives don't.) If this is your only CDROM drive, you can say N to
-  all other CDROM options appearing later, but make sure to say Y to
-  the ISO9660 filesystem and read the CDROM-HOWTO, available via ftp
-  (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note
-  that older version of the linux boot loader lilo cannot properly
-  deal with IDE/ATAPI CDROMs; install lilo 16 or higher, available
+  If you have a CDROM drive using the ATAPI protocol, say Y.
+  ATAPI is a new protocol used by IDE CDROM and TAPE drives,
+  similar to the SCSI protocol.  Most new CDROM drives use ATAPI,
+  including the NEC-260, Mitsumi FX400, Sony 55E, and just about 
+  all non-SCSI double(2X), quad(4X), and six(6X) speed drives.
+  At boot time, the TAPE drive will be identified along with other IDE devices,
+  as "hdb" or "hdc", or something similar.
+  If this is your only CDROM drive, you can say N to all other CDROM options,
+  but be sure to say Y to the ISO9660 filesystem.  Read the CDROM-HOWTO,
+  available via ftp (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.
+  Note that older versions of lilo (the linux boot loader) cannot properly
+  deal with IDE/ATAPI CDROMs, so install lilo-16 or higher, available
   from sunsite.unc.edu:/pub/Linux/system/Linux-boot/lilo.
+
+Include IDE/ATAPI TAPE support
+CONFIG_BLK_DEV_IDETAPE
+  If you have an IDE tape drive using the ATAPI protocol, say Y.
+  ATAPI is a new protocol used by IDE TAPE and ATAPI drives,
+  similar to the SCSI protocol.  At boot time, the TAPE drive will
+  be identified along with other IDE devices, as "hdb" or "hdc",
+  or something similar.  Be sure to consult the drivers/block/ide-tape.c
+  and README.ide files for usage information.
+
+CMD640 chipset bugfix/support
+CONFIG_BLK_DEV_CMD640
+  The CMD-Technologies CMD640 chip is used on many common 486 and Pentium
+  motherboards, usually in combination with a "Neptune" or "SiS" chipset.
+  Unfortunately, it has a number of rather nasty design flaws that can cause
+  severe data corruption under many common conditions.  Say Y here to include
+  code which tries to automatically detect and correct the problems under Linux.
+  This also provides support for the enhanced features of the CMD640,
+  for improved support/operation under linux, including access to the secondary
+  IDE ports in some systems.  This driver will work automatically in PCI
+  based systems (most new systems have PCI slots).  But if your system uses
+  VESA local bus (VLB) instead of PCI, you must also supply a kernel boot
+  parameter to enable the CMD640 bugfix/support:  "ide0=cmd640_vlb"
+  The CMD640 chip is also used on add-in cards by Acculogic,
+  and on the "CSA-6400E PCI to IDE controller" that some people have.
+
+RZ1000 chipset bugfix/support
+CONFIG_BLK_DEV_RZ1000
+  The PC-Technologies RZ1000 chip is used on many common 486 and Pentium
+  motherboards, usually along with the "Neptune" chipset.  Unfortunately,
+  it has a rather nasty design flaw that can cause severe data corruption
+  under many conditions.  Say Y here to include code which automatically
+  detects and corrects the problem under Linux.  This may slow disk throughput
+  by a few percent, but at least things will operate 100% reliably.
+
+Other IDE chipset support
+CONFIG_IDE_CHIPSETS
+  Say Y here if you want to include enhanced support for various
+  IDE interface chipsets used on motherboards and add-on cards.
+  This enhanced support may be necessary for linux to be able to access
+  the 3rd/4th drives in some systems.  It may also enable setting of
+  higher speed I/O rates to improve system performance with these chipsets.
+  Most of these also require special kernel boot parameters to actually
+  turn on the support at runtime.
+
+DTC-2278 chipset support
+CONFIG_BLK_DEV_DTC2278
+  This driver is enabled at runtime using the "ide0=dtc2278" kernel
+  boot parameter.  It enables support for the secondary IDE interface
+  of the DTC-2278 card, and permits faster I/O speeds to be set as well.
+  See the README.ide and dtc2278.c files for more info.
+
+Holtek HT6560B chipset support
+CONFIG_BLK_DEV_HT6560B
+  This driver is enabled at runtime using the "ide0=ht6560b" kernel
+  boot parameter.  It enables support for the secondary IDE interface
+  of the Holtek card, and permits faster I/O speeds to be set as well.
+  See the README.ide and ht6560b.c files for more info.
+
+QDI QD6580 chipset support
+CONFIG_BLK_DEV_QD6580
+  This driver is enabled at runtime using the "ide0=qd6580" kernel
+  boot parameter.  It permits faster I/O speeds to be set.
+  See the README.ide and qd6580.c files for more info.
+
+UMC 8672 chipset support
+CONFIG_BLK_DEV_UMC8672
+  This driver is enabled at runtime using the "ide0=umc8672" kernel
+  boot parameter.  It enables support for the secondary IDE interface
+  of the UMC-8672, and permits faster I/O speeds to be set as well.
+  See the README.ide and umc8672.c files for more info.
+
+ALI M1439/M1445 chipset support
+CONFIG_BLK_DEV_ALI14XX
+  This driver is enabled at runtime using the "ide0=ali14xx" kernel
+  boot parameter.  It enables support for the secondary IDE interface
+  of the chipset, and permits faster I/O speeds to be set as well.
+  See the README.ide and ali14xx.c files for more info.
 
 XT harddisk support
 CONFIG_BLK_DEV_XD
@@ -278,15 +336,16 @@ CONFIG_PCI_OPTIMIZE
   certain BIOSes if your computer uses a PCI bussystem. This is
   recommended; say Y.
 
-PCI Triton IDE Bus Master DMA support
+Intel 430FX (Triton) chipset DMA support
 CONFIG_BLK_DEV_TRITON
+  This option is valid only if PCI BIOS support was also selected earlier.
   If your PCI system uses an IDE harddrive (as opposed to SCSI, say)
-  and includes the Intel PCI Triton chipset (82371FB), you will want
-  to enable this option to improve performance. Read the comments at
-  the beginning of drivers/block/triton.c. The hdparm utility can be
-  gotten via ftp (user: anonymous) from
-  sunsite.unc.edu:/pub/Linux/kernel/patches/diskdrives/. It's safe to
-  say Y.
+  and includes the Intel 430FX PCI Triton chipset, you will want
+  to enable this option to allow use of bus-mastering DMA data transfers.
+  Read the comments at the beginning of drivers/block/triton.c.
+  The hdparm utility can be obtained via ftp (user: anonymous)
+  from sunsite.unc.edu:/pub/Linux/kernel/patches/diskdrives/.
+  It is safe to say Y.
 
 System V IPC
 CONFIG_SYSVIPC
@@ -1885,9 +1944,36 @@ Optics Storage DOLPHIN 8000AT CDROM support
 CONFIG_OPTCD
   If this is your CDROM drive, say Y here.
 
-Sanyo H94A CDROM support
+Sanyo CDR-H94A CDROM support
 CONFIG_SJCD
-  If this is your CDROM drive, say Y here.
+  If this is your CDROM drive, say Y here. Command line option
+  (or 'append=' option in /etc/lilo.conf) is:
+                sjcd=<port>
+  Here 'port' is the base i/o address used by the drive. It defaults
+  to port=0x340.
+
+Soft configurable cdrom interface card support
+CONFIG_CDI_INIT
+  If you want to include boot-time intialisation of any cdrom
+  interface card that is software configurable, say Y here.
+  Currently only the ISP16/MAD16/Mozart cards are supported.
+
+ISP16/MAD16/Mozart soft configurable cdrom interface support
+CONFIG_ISP16_CDI
+  If you want any of these cdrom interface cards based on the
+  OPTi 82C928 or 82C929 chips get detected and possibly configured
+  at boot time, please say Y. Boot time command line options (or
+  'append=' options in /etc/lilo.conf) are:
+                isp16=<port>,<irq>,<dma>,<drive_type>
+  Here 'port','irq' and 'dma' are the base i/o address, irq number
+  and dma line assumed to be used by the attached cdrom drive. 'drive_type'
+  is the type of cdrom drive or its emulation mode. Valid values for
+  drive_type include: Sanyo, Panasonic (same as Sanyo), Sony and Mitsumi.
+  Default values are: port=0x340, irq=0, dma=0, drive_type=Sanyo.
+  The command line
+                isp16=noisp16
+  will skip detection and configuration after all.
+  N.B. options are case sensitive.
 
 Quota support
 CONFIG_QUOTA

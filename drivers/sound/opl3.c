@@ -2,8 +2,9 @@
  * sound/opl3.c
  *
  * A low level driver for Yamaha YM3812 and OPL-3 -chips
- *
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,8 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 /*
  * Major improvements to the FM handling 30AUG92 by Rob Hooft,
@@ -74,7 +76,7 @@ typedef struct opl_devinfo
     unsigned char   cmask;
 
     int             is_opl4;
-    sound_os_info  *osp;
+    int            *osp;
   }
 opl_devinfo;
 
@@ -121,7 +123,7 @@ enter_4op_mode (void)
 
 static int
 opl3_ioctl (int dev,
-	    unsigned int cmd, ioctl_arg arg)
+	    unsigned int cmd, caddr_t arg)
 {
   switch (cmd)
     {
@@ -167,7 +169,7 @@ opl3_ioctl (int dev,
 }
 
 int
-opl3_detect (int ioaddr, sound_os_info * osp)
+opl3_detect (int ioaddr, int *osp)
 {
   /*
    * This function returns 1 if the FM chicp is present at the given I/O port
@@ -876,7 +878,7 @@ opl3_hw_control (int dev, unsigned char *event)
 }
 
 static int
-opl3_load_patch (int dev, int format, const snd_rw_buf * addr,
+opl3_load_patch (int dev, int format, const char *addr,
 		 int offs, int count, int pmgr_flag)
 {
   struct sbi_instrument ins;
@@ -1171,7 +1173,7 @@ static struct synth_operations opl3_operations =
 };
 
 long
-opl3_init (long mem_start, int ioaddr, sound_os_info * osp)
+opl3_init (long mem_start, int ioaddr, int *osp)
 {
   int             i;
 
@@ -1191,7 +1193,7 @@ opl3_init (long mem_start, int ioaddr, sound_os_info * osp)
   devc->osp = osp;
 
   devc->nr_voice = 9;
-  strcpy (devc->fm_info.name, "OPL2-");
+  strcpy (devc->fm_info.name, "OPL2");
 
   devc->fm_info.device = 0;
   devc->fm_info.synth_type = SYNTH_TYPE_FM;

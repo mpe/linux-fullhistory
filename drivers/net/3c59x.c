@@ -14,11 +14,12 @@
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 */
 
-static char *version = "3c59x.c:v0.11 1/21/96 becker@cesdis.gsfc.nasa.gov\n";
+static char *version = "3c59x.c:v0.13 2/13/96 becker@cesdis.gsfc.nasa.gov\n";
 
 /* "Knobs" that turn on special features. */
-/* Use bus master transfers instead of programmed-I/O for the Tx process.
-   This is disabled by default! */
+/* Allow the use of bus master transfers instead of programmed-I/O for the
+   Tx process.  Bus master transfers are always disabled by default, but
+   iff this is set they may be turned on using 'options'. */
 #define VORTEX_BUS_MASTER
 
 /* Put out somewhat more debugging messages. (0 - no msg, 1 minimal msgs). */
@@ -44,6 +45,11 @@ static char *version = "3c59x.c:v0.11 1/21/96 becker@cesdis.gsfc.nasa.gov\n";
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+
+#ifdef HAVE_SHARED_IRQ
+#define USE_SHARED_IRQ
+#include <linux/shared_irq.h>
+#endif
 
 /* The total size is twice that of the original EtherLinkIII series: the
    runtime register window, window 1, is now always mapped in. */
@@ -295,8 +301,8 @@ static int vortex_scan(struct device *dev)
 	int cards_found = 0;
 
 	if (pcibios_present()) {
-		int pci_index;
-		for (pci_index = 0; pci_index < 8; pci_index++) {
+		static int pci_index = 0;
+		for (; pci_index < 8; pci_index++) {
 			unsigned char pci_bus, pci_device_fn, pci_irq_line, pci_latency;
 			unsigned int pci_ioaddr;
 			unsigned short pci_command;
@@ -340,8 +346,9 @@ static int vortex_scan(struct device *dev)
 										  PCI_LATENCY_TIMER, 255);
 			}
 #endif  /* VORTEX_BUS_MASTER */
-			vortex_found_device(dev, pci_ioaddr, pci_irq_line,
-							   index, options[cards_found]);
+			vortex_found_device(dev, pci_ioaddr, pci_irq_line, index,
+								dev && dev->mem_start ? dev->mem_start
+								: options[cards_found]);
 			dev = 0;
 			cards_found++;
 		}
@@ -359,7 +366,8 @@ static int vortex_scan(struct device *dev)
 				&& (inw(ioaddr + 0xC82) & 0xFFF0) != 0x5920)
 				continue;
 			vortex_found_device(dev, ioaddr, inw(ioaddr + 0xC88) >> 12,
-							   DEMON_INDEX, options[cards_found]);
+								DEMON_INDEX,  dev && dev->mem_start
+								? dev->mem_start : options[cards_found]);
 			dev = 0;
 			cards_found++;
 		}
@@ -389,7 +397,7 @@ static int vortex_found_device(struct device *dev, int ioaddr, int irq,
 	vp->product_name = product_names[product_index];
 	vp->options = options;
 	if (options >= 0) {
-		vp->media_override = options & 7;
+		vp->media_override = ((options & 7) == 2)  ?  0  :  options & 7;
 		vp->full_duplex = (options & 8) ? 1 : 0;
 		vp->bus_master = (options & 16) ? 1 : 0;
 	} else {
@@ -414,7 +422,7 @@ static int vortex_found_device(struct device *dev, int ioaddr, int irq,
 	vp->product_name = product_names[product_index];
 	vp->options = options;
 	if (options >= 0) {
-		vp->media_override = options & 7;
+		vp->media_override = ((options & 7) == 2)  ?  0  :  options & 7;
 		vp->full_duplex = (options & 8) ? 1 : 0;
 		vp->bus_master = (options & 16) ? 1 : 0;
 	} else {
@@ -534,12 +542,19 @@ vortex_open(struct device *dev)
 
 	outw(SetStatusEnb | 0x00, ioaddr + EL3_CMD);
 
-	if (irq2dev_map[dev->irq] != NULL
-		|| (irq2dev_map[dev->irq] = dev) == NULL
-		|| dev->irq == 0
-		|| request_irq(dev->irq, &vortex_interrupt, 0, vp->product_name)) {
+#ifdef USE_SHARED_IRQ
+	i = request_shared_irq(dev->irq, &vortex_interrupt, dev, vp->product_name);
+	if (i)						/* Error */
+		return i;
+#else
+	if (dev->irq == 0  ||  irq2dev_map[dev->irq] != NULL)
+		return -EAGAIN;
+	irq2dev_map[dev->irq] = dev;
+	if (request_irq(dev->irq, &vortex_interrupt, 0, vp->product_name)) {
+		irq2dev_map[dev->irq] = NULL;
 		return -EAGAIN;
 	}
+#endif
 
 	if (vortex_debug > 1) {
 		EL3WINDOW(4);
@@ -571,7 +586,7 @@ vortex_open(struct device *dev)
 	inw(ioaddr + 10);
 	inw(ioaddr + 12);
 	/* New: On the Vortex we must also clear the BadSSD counter. */
-	EL3WINDOW(3);
+	EL3WINDOW(4);
 	inb(ioaddr + 12);
 
 	/* Switch to register set 7 for normal use. */
@@ -723,7 +738,11 @@ vortex_start_xmit(struct sk_buff *skb, struct device *dev)
    after the Tx thread. */
 static void vortex_interrupt(int irq, struct pt_regs *regs)
 {
+#ifdef USE_SHARED_IRQ
+	struct device *dev = (struct device *)(irq == 0 ? regs : irq2dev_map[irq]);
+#else
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
+#endif
 	struct vortex_private *lp;
 	int ioaddr, status;
 	int latency;
@@ -933,9 +952,13 @@ vortex_close(struct device *dev)
 		outw(inw(ioaddr + Wn4_Media) & ~Media_TP, ioaddr + Wn4_Media);
 	}
 
+#ifdef USE_SHARED_IRQ
+	free_shared_irq(dev->irq, dev);
+#else
 	free_irq(dev->irq);
 	/* Mmmm, we should diable all interrupt sources here. */
 	irq2dev_map[dev->irq] = 0;
+#endif
 
 	update_stats(ioaddr, dev);
 #ifdef MODULE
@@ -979,7 +1002,7 @@ static void update_stats(int ioaddr, struct device *dev)
 	vp->stats.tx_window_errors		+= inb(ioaddr + 4);
 	vp->stats.rx_fifo_errors		+= inb(ioaddr + 5);
 	vp->stats.tx_packets			+= inb(ioaddr + 6);
-	vp->stats.tx_packets			+= (inb(ioaddr + 9)&15) << 8;
+	vp->stats.tx_packets			+= (inb(ioaddr + 9)&0x30) << 4;
 	/* Rx packets	*/				inb(ioaddr + 7);   /* Must read to clear */
 	/* Tx deferrals */				inb(ioaddr + 8);
 	/* Don't bother with register 9, an extention of registers 6&7.
@@ -988,7 +1011,7 @@ static void update_stats(int ioaddr, struct device *dev)
 	inw(ioaddr + 10);	/* Total Rx and Tx octets. */
 	inw(ioaddr + 12);
 	/* New: On the Vortex we must also clear the BadSSD counter. */
-	EL3WINDOW(3);
+	EL3WINDOW(4);
 	inb(ioaddr + 12);
 
 	/* We change back to window 7 (not 1) with the Vortex. */

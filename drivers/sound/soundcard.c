@@ -2,8 +2,9 @@
  * linux/kernel/chr_drv/sound/soundcard.c
  *
  * Soundcard driver for Linux
- *
- * Copyright by Hannu Savolainen 1993
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,19 +25,13 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
-/*
- * Created modular version by Peter Trattler (peter@sbox.tu-graz.ac.at)
- */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 
 #include <linux/major.h>
-
-#ifdef CONFIG_PNP
-#include <linux/pnp.h>
-#endif
 
 static int      chrdev_registered = 0;
 
@@ -235,12 +230,11 @@ sound_select (inode_handle * inode, file_handle * file, int sel_type, select_tab
   return 0;
 }
 
-#ifdef ALLOW_BUFFER_MAPPING
 static int
 sound_mmap (inode_handle * inode, file_handle * file, vm_area_handle * vma)
 {
   int             dev, dev_class;
-  unsigned long   size, i;
+  unsigned long   size;
   struct dma_buffparms *dmap = NULL;
 
   dev = inode_get_rdev (inode);
@@ -324,7 +318,6 @@ sound_mmap (inode_handle * inode, file_handle * file, vm_area_handle * vma)
 	  dmap->bytes_in_use);
   return 0;
 }
-#endif
 
 static struct file_operation_handle sound_fops =
 {
@@ -334,11 +327,7 @@ static struct file_operation_handle sound_fops =
   NULL,				/* sound_readdir */
   sound_select,
   sound_ioctl,
-#ifdef ALLOW_BUFFER_MAPPING
   sound_mmap,
-#else
-  NULL,
-#endif
   sound_open,
   sound_release
 };
@@ -356,9 +345,6 @@ soundcard_init (void)
   sndtable_init (0);		/* Initialize call tables and
 				   * detect cards */
 
-#ifdef CONFIG_PNP
-  sound_pnp_init ();
-#endif
 
   if (sndtable_get_cardcount () == 0)
     return;			/* No cards detected */
@@ -383,7 +369,7 @@ soundcard_init (void)
 
 }
 
-static unsigned long irqs = 0;
+static unsigned int irqs = 0;
 
 #ifdef MODULE
 static void
@@ -481,16 +467,12 @@ cleanup_module (void)
 	    sound_free_dma (i);
 	  }
 
-#ifdef CONFIG_PNP
-      sound_pnp_disconnect ();
-#endif
-
     }
 }
 #endif
 
 void
-tenmicrosec (sound_os_info * osp)
+tenmicrosec (int *osp)
 {
   int             i;
 
@@ -499,7 +481,7 @@ tenmicrosec (sound_os_info * osp)
 }
 
 int
-snd_set_irq_handler (int interrupt_level, void (*hndlr) (int, struct pt_regs *), char *name, sound_os_info * osp)
+snd_set_irq_handler (int interrupt_level, void (*hndlr) (int, struct pt_regs *), char *name, int *osp)
 {
   int             retcode;
 
@@ -629,9 +611,7 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
   char           *start_addr, *end_addr;
   int             i, dma_pagesize;
 
-#ifdef ALLOW_BUFFER_MAPPING
   dmap->mapping_flags &= ~DMA_MAP_MAPPED;
-#endif
 
   if (dmap->raw_buf != NULL)
     return 0;			/* Already done */
@@ -721,10 +701,8 @@ sound_free_dmap (int dev, struct dma_buffparms *dmap)
   if (dmap->raw_buf == NULL)
     return;
 
-#ifdef ALLOW_BUFFER_MAPPING
   if (dmap->mapping_flags & DMA_MAP_MAPPED)
     return;			/* Don't free mmapped buffer. Will use it next time */
-#endif
 
   {
     int             sz, size, i;

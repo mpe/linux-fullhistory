@@ -33,9 +33,10 @@ int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
 	
 	if(m->msg_name!=NULL)
 	{
-		if(mode==VERIFY_READ)
+		if(mode==VERIFY_READ) {
 			err=move_addr_to_kernel(m->msg_name, m->msg_namelen, address);
-		else
+			m->msg_name = address;
+		} else
 			err=verify_area(mode, m->msg_name, m->msg_namelen);
 		if(err<0)
 			return err;

@@ -3,8 +3,9 @@
  * sound/sb_mixer.c
  *
  * The low level mixer driver for the SoundBlaster Pro and SB16 cards.
- *
- * Copyright by Hannu Savolainen 1994
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -25,7 +26,10 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
+ */
+#include <linux/config.h>
+
+/*
  * Modified:
  *      Hunyue Yau      Jan 6 1994
  *      Added code to support the Sound Galaxy NX Pro mixer.
@@ -43,7 +47,7 @@
 
 extern int      sbc_base;
 extern int      Jazz16_detected;
-extern sound_os_info *sb_osp;
+extern int     *sb_osp;
 extern int      AudioDrive;
 
 static int      mixer_initialized = 0;
@@ -223,7 +227,7 @@ static char     smw_mix_regs[] =	/* Left mixer registers */
   0x00				/* SOUND_MIXER_LINE3 */
 };
 
-static void
+void
 smw_mixer_init (void)
 {
   int             i;
@@ -441,7 +445,7 @@ set_recmask (int mask)
 }
 
 static int
-sb_mixer_ioctl (int dev, unsigned int cmd, ioctl_arg arg)
+sb_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 {
   if (((cmd >> 8) & 0xff) == 'M')
     {
@@ -499,7 +503,7 @@ static struct mixer_operations sb_mixer_operations =
   sb_mixer_ioctl
 };
 
-static void
+void
 sb_mixer_reset (void)
 {
   int             i;

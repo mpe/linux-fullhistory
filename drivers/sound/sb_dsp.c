@@ -2,8 +2,9 @@
  * sound/sb_dsp.c
  *
  * The low level driver for the SoundBlaster DSP chip (SB1.0 to 2.1, SB Pro).
- *
- * Copyright by Hannu Savolainen 1994
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,7 +25,10 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
+ */
+#include <linux/config.h>
+
+/*
  * Modified:
  *      Hunyue Yau      Jan 6 1994
  *      Added code to support Sound Galaxy NX Pro
@@ -102,9 +106,8 @@ volatile int    sb_intr_active = 0;
 static int      dsp_speed (int);
 static int      dsp_set_stereo (int mode);
 static void     sb_dsp_reset (int dev);
-sound_os_info  *sb_osp = NULL;
-
-static void     ess_init (void);
+static void     dsp_get_vers (struct address_info *hw_config);
+int            *sb_osp = NULL;
 
 #if defined(CONFIG_MIDI) || defined(CONFIG_AUDIO)
 
@@ -478,7 +481,7 @@ actually_output_block (int dev, unsigned long buf, int nr_bytes,
 
   if (AudioDrive)
     {
-      int             c = 0x10000 - count;	/* ES1688 increments the count */
+      int             c = 0xffff - nr_bytes;	/* ES1688 increments the count */
 
       ess_write (0xa4, (unsigned char) (c & 0xff));
       ess_write (0xa5, (unsigned char) ((c >> 8) & 0xff));
@@ -525,6 +528,11 @@ static void
 sb_dsp_start_input (int dev, unsigned long buf, int count, int intrflag,
 		    int restart_dma)
 {
+  if (sb_no_recording)
+    {
+      return;
+    }
+
   trg_buf = buf;
   trg_bytes = count;
   trg_intrflag = intrflag;
@@ -533,14 +541,14 @@ sb_dsp_start_input (int dev, unsigned long buf, int count, int intrflag,
 }
 
 static void
-actually_start_input (int dev, unsigned long buf, int count, int intrflag,
+actually_start_input (int dev, unsigned long buf, int nr_bytes, int intrflag,
 		      int restart_dma)
 {
   unsigned long   flags;
+  int             count = nr_bytes;
 
   if (sb_no_recording)
     {
-      printk ("SB Error: This device doesn't support recording\n");
       return;
     }
 
@@ -563,7 +571,7 @@ actually_start_input (int dev, unsigned long buf, int count, int intrflag,
 
   if (AudioDrive)
     {
-      int             c = 0x10000 - count;	/* ES1688 increments the count */
+      int             c = 0xffff - nr_bytes;	/* ES1688 increments the count */
 
       ess_write (0xa4, (unsigned char) (c & 0xff));
       ess_write (0xa5, (unsigned char) ((c >> 8) & 0xff));
@@ -641,6 +649,12 @@ dsp_cleanup (void)
 static int
 sb_dsp_prepare_for_input (int dev, int bsize, int bcount)
 {
+  if (sb_no_recording)
+    {
+      printk ("SB Error: This device doesn't support recording\n");
+      return 0;
+    }
+
   dsp_cleanup ();
   dsp_speaker (OFF);
 
@@ -651,7 +665,6 @@ sb_dsp_prepare_for_input (int dev, int bsize, int bcount)
       if (AudioDrive)
 	{
 
-	  /* ess_init(); */
 	  ess_write (0xb8, 0x0e);	/* Auto init DMA mode */
 	  ess_write (0xa8, (ess_read (0xa8) & ~0x04) |
 		     (2 - dsp_stereo));		/* Mono/stereo */
@@ -693,7 +706,9 @@ sb_dsp_prepare_for_input (int dev, int bsize, int bcount)
 	  /* Select correct dma channel
 	     * for 16/8 bit acccess
 	   */
-	  audio_devs[my_dev]->dmachan1 = dsp_16bit ? dma16 : dma8;
+	  audio_devs[my_dev]->dmachan1 =
+	    audio_devs[my_dev]->dmachan2 =
+	    dsp_16bit ? dma16 : dma8;
 	  if (dsp_stereo)
 	    sb_dsp_command (dsp_16bit ? 0xac : 0xa8);
 	  else
@@ -718,7 +733,6 @@ sb_dsp_prepare_for_output (int dev, int bsize, int bcount)
       if (AudioDrive)
 	{
 
-	  /* ess_init(); */
 	  ess_write (0xb8, 4);	/* Auto init DMA mode */
 	  ess_write (0xa8, ess_read (0xa8) |
 		     (2 - dsp_stereo));		/* Mono/stereo */
@@ -763,7 +777,9 @@ sb_dsp_prepare_for_output (int dev, int bsize, int bcount)
 
 	  /* 16 bit specific instructions (Jazz16)
 	   */
-	  audio_devs[my_dev]->dmachan1 = dsp_16bit ? dma16 : dma8;
+	  audio_devs[my_dev]->dmachan1 =
+	    audio_devs[my_dev]->dmachan2 =
+	    dsp_16bit ? dma16 : dma8;
 	  if (Jazz16_detected != 2)	/* SM Wave */
 	    sb_mixer_set_stereo (dsp_stereo);
 	  if (dsp_stereo)
@@ -828,7 +844,9 @@ sb_dsp_open (int dev, int mode)
 
   /* Allocate 8 bit dma
    */
-  audio_devs[my_dev]->dmachan1 = dma8;
+  audio_devs[my_dev]->dmachan1 =
+    audio_devs[my_dev]->dmachan2 =
+    dma8;
 
   /* Allocate 16 bit dma (jazz16)
    */
@@ -858,7 +876,9 @@ sb_dsp_close (int dev)
    */
   if (Jazz16_detected)
     {
-      audio_devs[my_dev]->dmachan1 = dma8;
+      audio_devs[my_dev]->dmachan1 =
+	audio_devs[my_dev]->dmachan2 =
+	dma8;
 
       if (dma16 != dma8)
 	sound_close_dma (dma16);
@@ -897,7 +917,7 @@ dsp_set_bits (int arg)
 }
 
 static int
-sb_dsp_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
+sb_dsp_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 {
   switch (cmd)
     {
@@ -1137,7 +1157,7 @@ initialize_smw (int mpu_base)
   /*
      *  Make the OPL4 chip visible on the PC bus at 0x380.
      *
-     *  There is no need to enable this feature since VoxWare
+     *  There is no need to enable this feature since this driver
      *  doesn't support OPL4 yet. Also there is no RAM in SM Wave so
      *  enabling OPL4 is pretty useless.
    */
@@ -1205,7 +1225,16 @@ sb_dsp_detect (struct address_info *hw_config)
 				 */
   dma8 = dma16 = hw_config->dma;
 
-  if (!initialize_ProSonic16 ())
+  if (sb_reset_dsp ())
+    dsp_get_vers (hw_config);
+  else
+    sbc_major = 0;
+
+  if (sbc_major == 3 || sbc_major == 0)
+    if (initialize_ProSonic16 ())
+      return 1;
+
+  if (!sb_reset_dsp ())
     return 0;
 
   return 1;			/*
@@ -1239,12 +1268,15 @@ static struct audio_operations sb_dsp_operations =
 #endif
 
 static void
-ess_init (void)			/* ESS1688 Initialization */
+ess_init (int ess_minor)	/* ESS1688 Initialization */
 {
   unsigned char   cfg, irq_bits = 0, dma_bits = 0;
 
   AudioDrive = 1;
-  midi_disabled = 1;
+  sb_no_recording = 1;		/* Temporary kludge */
+
+  if (ess_minor >= 8)		/* ESS1688 doesn't support SB MIDI */
+    midi_disabled = 1;
 
   sb_reset_dsp ();		/* Turn on extended mode */
 
@@ -1366,10 +1398,16 @@ ess_midi_init (struct address_info *hw_config)	/* called from sb16_midi.c */
 void
 Jazz16_midi_init (struct address_info *hw_config)
 {
+  extern void     smw_mixer_init (void);
+  extern void     sb_mixer_reset (void);
+
   mpu_base = hw_config->io_base;
   mpu_irq = hw_config->irq;
 
   initialize_ProSonic16 ();
+
+  smw_mixer_init ();
+  sb_mixer_reset ();
 }
 
 void
@@ -1377,6 +1415,17 @@ Jazz16_set_dma16 (int dma)
 {
   dma16 = dma;
 
+/* Allocate 16 bit dma (Jazz16)
+ */
+  if (dma16 != dma8)
+    {
+      if (sound_alloc_dma (dma16, "Jazz16 16 bit"))
+	{
+	  printk ("Jazz16: Can't allocate 16 bit DMA channel\n");
+	  Jazz16_detected = 0;
+	  return;
+	}
+    }
   initialize_ProSonic16 ();
 }
 
@@ -1504,7 +1553,7 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 		       "ESS ES1688 AudioDrive (rev %d)",
 		       ess_minor & 0x0f);
 	      sb_dsp_operations.format_mask |= AFMT_S16_LE;
-	      ess_init ();
+	      ess_init (ess_minor);
 	    }
 	}
       else
@@ -1532,20 +1581,9 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 
 	audio_devs[my_dev]->buffsize = DSP_BUFFSIZE;
 	dma8 = audio_devs[my_dev]->dmachan1 = hw_config->dma;
-	audio_devs[my_dev]->dmachan2 = -1;
+	dma16 = audio_devs[my_dev]->dmachan2 = hw_config->dma;
 	if (sound_alloc_dma (hw_config->dma, "SoundBlaster"))
 	  printk ("sb_dsp.c: Can't allocate DMA channel\n");
-
-	/* Allocate 16 bit dma (Jazz16)
-	 */
-	if (Jazz16_detected != 0)
-	  if (dma16 != dma8)
-	    {
-	      if (sound_alloc_dma (dma16, "Jazz16 16 bit"))
-		{
-		  printk ("Jazz16: Can't allocate 16 bit DMA channel\n");
-		}
-	    }
       }
     else
       printk ("SB: Too many DSP devices available\n");
@@ -1562,6 +1600,7 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 #endif
 
   sb_dsp_ok = 1;
+  sb_reset_dsp ();
   return mem_start;
 }
 

@@ -1,10 +1,8 @@
 /*
  * sound/uart6850.c
- *
- * Copyright by Hannu Savolainen 1993
- *
- * Mon Nov 22 22:38:35 MET 1993 marco@driq.home.usn.nl:
- *      added 6850 support, used with COVOX SoundMaster II and custom cards.
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -25,40 +23,53 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
+ */
+#include <linux/config.h>
+
+/* Mon Nov 22 22:38:35 MET 1993 marco@driq.home.usn.nl:
+ *      added 6850 support, used with COVOX SoundMaster II and custom cards.
  */
 
 #include "sound_config.h"
 
 #if defined(CONFIG_UART6850) && defined(CONFIG_MIDI)
 
-#define	DATAPORT   (uart6850_base)	/*
-					   * * * Midi6850 Data I/O Port on IBM
-					   *  */
-#define	COMDPORT   (uart6850_base+1)	/*
-					   * * * Midi6850 Command Port on IBM   */
-#define	STATPORT   (uart6850_base+1)	/*
-					   * * * Midi6850 Status Port on IBM   */
+static int      uart6850_base = 0x330;
 
-#define uart6850_status()		inb( STATPORT)
+#define	DATAPORT   (uart6850_base)
+#define	COMDPORT   (uart6850_base+1)
+#define	STATPORT   (uart6850_base+1)
+
+static int 
+uart6850_status (void)
+{
+  return inb (STATPORT);
+}
 #define input_avail()		(uart6850_status()&INPUT_AVAIL)
 #define output_ready()		(uart6850_status()&OUTPUT_READY)
-#define uart6850_cmd(cmd)	outb( cmd,  COMDPORT)
-#define uart6850_read()		inb( DATAPORT)
-#define uart6850_write(byte)	outb( byte,  DATAPORT)
+static void 
+uart6850_cmd (unsigned char cmd)
+{
+  outb (cmd, COMDPORT);
+}
+static int 
+uart6850_read (void)
+{
+  return inb (DATAPORT);
+}
+static void 
+uart6850_write (unsigned char byte)
+{
+  outb (byte, DATAPORT);
+}
 
-#define	OUTPUT_READY	0x02	/*
-				   * * * Mask for Data Read Ready Bit   */
-#define	INPUT_AVAIL	0x01	/*
-				   * * * Mask for Data Send Ready Bit   */
+#define	OUTPUT_READY	0x02	/* Mask for data ready Bit */
+#define	INPUT_AVAIL	0x01	/* Mask for Data Send Ready Bit */
 
-#define	UART_RESET	0x95	/*
-				   * * * 6850 Total Reset Command   */
-#define	UART_MODE_ON	0x03	/*
-				   * * * 6850 Send/Receive UART Mode   */
+#define	UART_RESET	0x95
+#define	UART_MODE_ON	0x03
 
 static int      uart6850_opened = 0;
-static int      uart6850_base = 0x330;
 static int      uart6850_irq;
 static int      uart6850_detected = 0;
 static int      my_dev;
@@ -67,7 +78,7 @@ static int      reset_uart6850 (void);
 static void     (*midi_input_intr) (int dev, unsigned char data);
 static void     poll_uart6850 (unsigned long dummy);
 
-static sound_os_info *uart6850_osp;
+static int     *uart6850_osp;
 
 
 static struct timer_list uart6850_timer =
@@ -225,7 +236,7 @@ uart6850_end_read (int dev)
 }
 
 static int
-uart6850_ioctl (int dev, unsigned cmd, ioctl_arg arg)
+uart6850_ioctl (int dev, unsigned cmd, caddr_t arg)
 {
   return -EINVAL;
 }

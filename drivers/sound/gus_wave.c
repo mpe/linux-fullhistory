@@ -2,8 +2,9 @@
  * sound/gus_wave.c
  *
  * Driver for the Gravis UltraSound wave table synth.
- *
- * Copyright by Hannu Savolainen 1993, 1994
+ */
+/*
+ * Copyright by Hannu Savolainen 1993-1996
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,8 +25,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
  */
+#include <linux/config.h>
+
 
 #include "sound_config.h"
 #include <linux/ultrasound.h>
@@ -35,6 +37,8 @@
 
 #define MAX_SAMPLE	150
 #define MAX_PATCH	256
+
+#define NOT_SAMPLE	0xffff
 
 struct voice_info
   {
@@ -133,7 +137,7 @@ static unsigned long pcm_current_buf;
 static int      pcm_current_count;
 static int      pcm_current_intrflag;
 
-extern sound_os_info *gus_osp;
+extern int     *gus_osp;
 
 struct voice_info voices[32];
 
@@ -204,7 +208,7 @@ reset_sample_memory (void)
   free_sample = 0;
 
   for (i = 0; i < MAX_PATCH; i++)
-    patch_table[i] = -1;
+    patch_table[i] = NOT_SAMPLE;
 }
 
 void
@@ -889,7 +893,7 @@ gus_wave_detect (int baseaddr)
 
 static int
 guswave_ioctl (int dev,
-	       unsigned int cmd, ioctl_arg arg)
+	       unsigned int cmd, caddr_t arg)
 {
 
   switch (cmd)
@@ -1222,7 +1226,7 @@ guswave_start_note2 (int dev, int voice, int note_num, int volume)
       return -EINVAL;
     }
 
-  if ((samplep = patch_table[patch]) == -1)
+  if ((samplep = patch_table[patch]) == NOT_SAMPLE)
     {
       return -EINVAL;
     }
@@ -1237,7 +1241,7 @@ guswave_start_note2 (int dev, int voice, int note_num, int volume)
 
   best_sample = samplep;
   best_delta = 1000000;
-  while (samplep >= 0 && sample == -1)
+  while (samplep != 0 && samplep != NOT_SAMPLE && sample == -1)
     {
       delta_freq = note_freq - samples[samplep].base_note;
       if (delta_freq < 0)
@@ -1251,9 +1255,7 @@ guswave_start_note2 (int dev, int voice, int note_num, int volume)
 	  note_freq <= samples[samplep].high_note)
 	sample = samplep;
       else
-	samplep = samples[samplep].key;		/*
-						   * Follow link
-						 */
+	samplep = samples[samplep].key;		/* Link to next sample */
     }
   if (sample == -1)
     sample = best_sample;
@@ -1505,14 +1507,14 @@ guswave_close (int dev)
 }
 
 static int
-guswave_load_patch (int dev, int format, const snd_rw_buf * addr,
+guswave_load_patch (int dev, int format, const char *addr,
 		    int offs, int count, int pmgr_flag)
 {
   struct patch_info patch;
   int             instr;
   long            sizeof_patch;
 
-  unsigned long   blk_size, blk_end, left, src_offs, target;
+  unsigned long   blk_sz, blk_end, left, src_offs, target;
 
   sizeof_patch = (long) &patch.data[0] - (long) &patch;		/* Header size */
 
@@ -1638,21 +1640,21 @@ guswave_load_patch (int dev, int format, const snd_rw_buf * addr,
 
   while (left)			/* Not completely transferred yet */
     {
-      /* blk_size = audio_devs[gus_devnum]->buffsize; */
-      blk_size = audio_devs[gus_devnum]->dmap_out->bytes_in_use;
-      if (blk_size > left)
-	blk_size = left;
+      /* blk_sz = audio_devs[gus_devnum]->buffsize; */
+      blk_sz = audio_devs[gus_devnum]->dmap_out->bytes_in_use;
+      if (blk_sz > left)
+	blk_sz = left;
 
       /*
        * DMA cannot cross 256k bank boundaries. Check for that.
        */
-      blk_end = target + blk_size;
+      blk_end = target + blk_sz;
 
       if ((target >> 18) != (blk_end >> 18))
 	{			/* Split the block */
 
 	  blk_end &= ~(256 * 1024 - 1);
-	  blk_size = blk_end - target;
+	  blk_sz = blk_end - target;
 	}
 
       if (gus_no_dma)
@@ -1664,7 +1666,7 @@ guswave_load_patch (int dev, int format, const snd_rw_buf * addr,
 	  unsigned char   data;
 
 
-	  for (i = 0; i < blk_size; i++)
+	  for (i = 0; i < blk_sz; i++)
 	    {
 	      data = get_fs_byte (&((addr)[sizeof_patch + i]));
 	      if (patch.mode & WAVE_UNSIGNED)
@@ -1684,7 +1686,7 @@ guswave_load_patch (int dev, int format, const snd_rw_buf * addr,
 	   * OK, move now. First in and then out.
 	   */
 
-	  memcpy_fromfs (audio_devs[gus_devnum]->dmap_out->raw_buf, &((addr)[sizeof_patch + src_offs]), blk_size);
+	  memcpy_fromfs (audio_devs[gus_devnum]->dmap_out->raw_buf, &((addr)[sizeof_patch + src_offs]), blk_sz);
 
 	  save_flags (flags);
 	  cli ();
@@ -1692,7 +1694,7 @@ guswave_load_patch (int dev, int format, const snd_rw_buf * addr,
 	  gus_write8 (0x41, 0);	/* Disable GF1 DMA */
 	  DMAbuf_start_dma (gus_devnum,
 			    audio_devs[gus_devnum]->dmap_out->raw_buf_phys,
-			    blk_size, DMA_MODE_WRITE);
+			    blk_sz, DMA_MODE_WRITE);
 
 	  /*
 	   * Set the DRAM address for the wave data
@@ -1736,7 +1738,7 @@ guswave_load_patch (int dev, int format, const snd_rw_buf * addr,
 	    if (HZ)
 	      current_set_timeout (tl = jiffies + (HZ));
 	    else
-	      tl = 0xffffffff;
+	      tl = (unsigned long) -1;
 	    dram_sleep_flag.mode = WK_SLEEP;
 	    module_interruptible_sleep_on (&dram_sleeper);
 	    if (!(dram_sleep_flag.mode & WK_WAKEUP))
@@ -1755,9 +1757,9 @@ guswave_load_patch (int dev, int format, const snd_rw_buf * addr,
        * Now the next part
        */
 
-      left -= blk_size;
-      src_offs += blk_size;
-      target += blk_size;
+      left -= blk_sz;
+      src_offs += blk_sz;
+      target += blk_sz;
 
       gus_write8 (0x41, 0);	/* Stop DMA */
     }
@@ -1771,17 +1773,18 @@ guswave_load_patch (int dev, int format, const snd_rw_buf * addr,
 }
 
 static void
-guswave_hw_control (int dev, unsigned char *event)
+guswave_hw_control (int dev, unsigned char *event_rec)
 {
   int             voice, cmd;
   unsigned short  p1, p2;
-  unsigned long   plong, flags;
+  unsigned int    plong;
+  unsigned        flags;
 
-  cmd = event[2];
-  voice = event[3];
-  p1 = *(unsigned short *) &event[4];
-  p2 = *(unsigned short *) &event[6];
-  plong = *(unsigned long *) &event[4];
+  cmd = event_rec[2];
+  voice = event_rec[3];
+  p1 = *(unsigned short *) &event_rec[4];
+  p2 = *(unsigned short *) &event_rec[6];
+  plong = *(unsigned int *) &event_rec[4];
 
   if ((voices[voice].volume_irq_mode == VMODE_START_NOTE) &&
       (cmd != _GUS_VOICESAMPLE) && (cmd != _GUS_VOICE_POS))
@@ -1985,7 +1988,7 @@ gus_sampling_set_bits (int bits)
 }
 
 static int
-gus_sampling_ioctl (int dev, unsigned int cmd, ioctl_arg arg, int local)
+gus_sampling_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 {
   switch (cmd)
     {
@@ -2425,7 +2428,7 @@ gus_local_qlen (int dev)
 
 static void
 gus_copy_from_user (int dev, char *localbuf, int localoffs,
-		    const snd_rw_buf * userbuf, int useroffs, int len)
+		    const char *userbuf, int useroffs, int len)
 {
   if (gus_sampling_channels == 1)
     {
@@ -2823,7 +2826,7 @@ set_input_volumes (void)
 }
 
 int
-gus_default_mixer_ioctl (int dev, unsigned int cmd, ioctl_arg arg)
+gus_default_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 {
 #define MIX_DEVS	(SOUND_MASK_MIC|SOUND_MASK_LINE| \
 			 SOUND_MASK_SYNTH|SOUND_MASK_PCM)
@@ -3098,7 +3101,24 @@ gus_wave_init (long mem_start, struct address_info *hw_config)
        */
     }
 
-  sprintf (gus_info.name, "Gravis UltraSound %s (%dk)", model_num, (int) gus_mem_size / 1024);
+  if (hw_config->name)
+    {
+      strncpy (gus_info.name, hw_config->name, sizeof (gus_info.name));
+      gus_info.name[sizeof (gus_info.name) - 1] = 0;
+    }
+  else
+    sprintf (gus_info.name, "Gravis UltraSound %s (%dk)", model_num, (int) gus_mem_size / 1024);
+
+
+  samples = (struct patch_info *) (sound_mem_blocks[sound_num_blocks] = kmalloc ((MAX_SAMPLE + 1) * sizeof (*samples), GFP_KERNEL));
+  if (sound_num_blocks < 1024)
+    sound_num_blocks++;;
+  if (samples == NULL)
+    {
+      printk ("GUS Error: Cant allocate memory for instrument tables\n");
+      return mem_start;
+    }
+
   conf_printf (gus_info.name, hw_config);
 
   if (num_synths >= MAX_SYNTH_DEV)
@@ -3111,11 +3131,6 @@ gus_wave_init (long mem_start, struct address_info *hw_config)
       gus_tmr_install (gus_base + 8);
 #endif
     }
-
-
-  samples = (struct patch_info *) (sound_mem_blocks[sound_num_blocks] = kmalloc ((MAX_SAMPLE + 1) * sizeof (*samples), GFP_KERNEL));
-  if (sound_num_blocks < 1024)
-    sound_num_blocks++;;
 
   reset_sample_memory ();
 
