@@ -91,16 +91,11 @@ struct exception_table_entry
  * accesses to the same area of user memory).
  */
 
-extern void __get_user_1(void);
-extern void __get_user_2(void);
-extern void __get_user_4(void);
-extern void __get_user_8(void);
-
 #define __get_user_x(size,ret,x,ptr) \
 	__asm__ __volatile__("call __get_user_" #size \
 		:"=a" (ret),"=d" (x) \
-		:"0" (ptr) \
-		:"rbx")
+		:"c" (ptr) \
+		:"r8")
 
 /* Careful: we have to cast the result to the type of the pointer for sign reasons */
 #define get_user(x,ptr)							\
@@ -210,6 +205,10 @@ struct __large_struct { unsigned long buf[100]; };
 	__gu_err;						\
 })
 
+extern int __get_user_1(void);
+extern int __get_user_2(void);
+extern int __get_user_4(void);
+extern int __get_user_8(void);
 extern int __get_user_bad(void);
 
 #define __get_user_size(x,ptr,size,retval)				\
