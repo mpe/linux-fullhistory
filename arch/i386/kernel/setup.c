@@ -477,7 +477,7 @@ static int __init copy_e820_map(struct e820entry * biosmap, int nr_map)
 			if (start < 0x100000ULL && end > 0xA0000ULL) {
 				if (start < 0xA0000ULL)
 					add_memory_region(start, 0xA0000ULL-start, type);
-				if (end < 0x100000ULL)
+				if (end <= 0x100000ULL)
 					continue;
 				start = 0x100000ULL;
 				size = end - start;
@@ -518,7 +518,7 @@ void __init setup_memory_region(void)
 
 		e820.nr_map = 0;
 		add_memory_region(0, LOWMEMSIZE(), E820_RAM);
-		add_memory_region(HIGH_MEMORY, mem_size << 10, E820_RAM);
+		add_memory_region(HIGH_MEMORY, (mem_size << 10) - HIGH_MEMORY, E820_RAM);
   	}
 	printk("BIOS-provided physical RAM map:\n");
 	print_memory_map(who);

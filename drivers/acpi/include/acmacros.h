@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Name: acmacros.h - C macros for the entire subsystem.
- *       $Revision: 56 $
+ *       $Revision: 59 $
  *
  *****************************************************************************/
 
@@ -63,6 +63,15 @@
 #define HI_LIMIT(b)                     ((u8) (((b) & 0x00FF0000) >> 16))
 
 
+#ifdef _IA16
+#define ACPI_GET_ADDRESS(a)             ((a).lo)
+#define ACPI_STORE_ADDRESS(a,b)         {(a).hi=0;(a).lo=(b);}
+#define ACPI_VALID_ADDRESS(a)           ((a).hi && (a).lo)
+#else
+#define ACPI_GET_ADDRESS(a)             (a)
+#define ACPI_STORE_ADDRESS(a,b)         ((a)=(b))
+#define ACPI_VALID_ADDRESS(a)           (a)
+#endif
  /*
   * Extract a byte of data using a pointer.  Any more than a byte and we
   * get into potential aligment issues -- see the STORE macros below
@@ -167,9 +176,16 @@
 
 #define ACPI_PCI_FUNCTION(a)            (u32) ((((a) & ACPI_PCI_FUNCTION_MASK) >> 16))
 #define ACPI_PCI_DEVICE(a)              (u32) ((((a) & ACPI_PCI_DEVICE_MASK) >> 32))
+
+#ifndef _IA16
 #define ACPI_PCI_REGISTER(a)            (u32) (((a) & ACPI_PCI_REGISTER_MASK))
 #define ACPI_PCI_DEVFUN(a)              (u32) ((ACPI_PCI_DEVICE(a) << 16) | ACPI_PCI_FUNCTION(a))
 
+#else
+#define ACPI_PCI_REGISTER(a)            (u32) (((a) & 0x0000FFFF))
+#define ACPI_PCI_DEVFUN(a)              (u32) ((((a) & 0xFFFF0000) >> 16))
+
+#endif
 
 /*
  * An ACPI_HANDLE (which is actually an ACPI_NAMESPACE_NODE *) can appear in some contexts,

@@ -37,9 +37,9 @@ obj-$(CONFIG_PCMCIA_IBMTR)	+= ibmtr_cs.o
 
 include $(TOPDIR)/Rules.make
 
-.ibmtr.o: ../tokenring/ibmtr.c
+tmp-ibmtr.o: ../tokenring/ibmtr.c
 	$(CC) $(CFLAGS) -D__NO_VERSION__ -DPCMCIA -c -o $@ ../tokenring/ibmtr.c
 
-ibmtr_cs.o: .ibmtr.o ibmtr_cs.c
-	$(CC) $(CFLAGS) -DPCMCIA -c -o .$@ ibmtr_cs.c
-	$(LD) -r -o $@ .$@ .ibmtr.o
+ibmtr_cs.o: tmp-ibmtr.o ibmtr_cs.c
+	$(CC) $(CFLAGS) -DPCMCIA -c -o tmp-$@ ibmtr_cs.c
+	$(LD) -r -o $@ tmp-$@ tmp-ibmtr.o

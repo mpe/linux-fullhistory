@@ -7,8 +7,8 @@
 #
 
 O_TARGET := mvme147.o
-O_OBJS   := config.o 147ints.o
 
+obj-y		:= config.o 147ints.o
 
 include $(TOPDIR)/Rules.make
 

@@ -210,37 +210,33 @@ static int shmem_writepage(struct page * page)
 {
 	int error;
 	struct shmem_inode_info *info;
-	swp_entry_t *entry;
+	swp_entry_t *entry, swap;
 
 	info = &((struct inode *)page->mapping->host)->u.shmem_i;
 	if (info->locked)
 		return 1;
+	swap = __get_swap_page(2);
+	if (!swap.val)
+		return 1;
+
 	spin_lock(&info->lock);
 	entry = shmem_swp_entry (info, page->index);
 	if (!entry)	/* this had been allocted on page allocation */
 		BUG();
 	error = -EAGAIN;
-	if (entry->val)
+	if (entry->val) {
+                __swap_free(swap, 2);
 		goto out;
+        }
 
-	/*
-	 * 1 means "cannot write out".
-	 * We can't drop dirty pages
-	 * just because we ran out of
-	 * swap.
-	 */
-	error = 1;
-	*entry = __get_swap_page(2);
-	if (!entry->val)
-		goto out;
-
+        *entry = swap;
 	error = 0;
 	/* Remove the from the page cache */
 	lru_cache_del(page);
 	remove_inode_page(page);
 
 	/* Add it to the swap cache */
-	add_to_swap_cache(page,*entry);
+	add_to_swap_cache(page, swap);
 	page_cache_release(page);
 	SetPageDirty(page);
 	info->swapped++;

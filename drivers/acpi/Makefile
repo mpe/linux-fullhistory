@@ -31,7 +31,7 @@ obj-$(CONFIG_ACPI) += os.o ksyms.o
 ifdef CONFIG_ACPI_KERNEL_CONFIG
   obj-$(CONFIG_ACPI) += acpiconf.o osconf.o
 else
-  obj-$(CONFIG_ACPI) += driver.o cmbatt.o cpu.o ec.o ksyms.o sys.o table.o
+  obj-$(CONFIG_ACPI) += driver.o cmbatt.o cpu.o ec.o ksyms.o sys.o table.o power.o
 endif
 
 include $(TOPDIR)/Rules.make

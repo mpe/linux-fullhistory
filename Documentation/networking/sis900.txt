@@ -5,14 +5,43 @@ Ollie Lho
 
 Lei Chun Chang
 
-   November 16, 2000. Document Revision: 0.3
+   Copyright © 1999 by Silicon Integrated System Corp.
    
    This document gives some information on installation and usage of SiS
    900/7016 device driver under Linux.
-     _________________________________________________________________
+   
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or (at
+   your option) any later version.
+   
+   This program is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+   General Public License for more details.
+   
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+   USA
      _________________________________________________________________
    
-Introduction
+   Table of Contents
+   1. Introduction
+   2. Changes
+   3. Tested Environment
+   4. Files in This Package
+   5. Installation
+          
+        Building the driver as loadable module
+        Building the driver into kernel
+                
+   6. Known Problems and Bugs
+   7. Revision History
+   8. Acknowledgements
+     _________________________________________________________________
+   
+Chapter 1. Introduction
 
    This document describes the revision 1.06 and 1.07 of SiS 900/7016
    Fast Ethernet device driver under Linux. The driver is developed by
@@ -20,9 +49,8 @@ Introduction
    General Public License (GPL). The driver can be compiled as a loadable
    module and used under Linux kernel version 2.2.x. (rev. 1.06) With
    minimal changes, the driver can also be used under 2.3.x and 2.4.x
-   kernel (rev. 1.07), please see the section called Installation. If you
-   are intended to use the driver for earlier kernels, you are on your
-   own.
+   kernel (rev. 1.07), please see Chapter 5. If you are intended to use
+   the driver for earlier kernels, you are on your own.
    
    The driver is tested with usual TCP/IP applications including FTP,
    Telnet, Netscape etc. and is used constantly by the developers.
@@ -30,27 +58,7 @@ Introduction
    Please send all comments/fixes/questions to Lei-Chun Chang.
      _________________________________________________________________
    
-License
-
-        Copyright (C) 1999 Silicon Integrated System Corp.
-
-        This program is free software; you can redistribute it and/or modify
-        it under the terms of the GNU General Public License as published by
-        the Free Software Foundation; either version 2 of the License, or
-        (at your option) any later version.
-
-        This program is distributed in the hope that it will be useful,
-        but WITHOUT ANY WARRANTY; without even the implied warranty of
-        MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-        GNU General Public License for more details.
-
-        You should have received a copy of the GNU General Public License
-        along with this program; if not, write to the Free Software
-        Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  U
-SA
-     _________________________________________________________________
-   
-Changes
+Chapter 2. Changes
 
    Changes made in Revision 1.07
    
@@ -75,9 +83,10 @@ Changes
        rule.
    14. Support for ICS1893 10/100 Interated PHYceiver.
    15. Support for media select by ifconfig.
+   16. Added kernel-doc extratable documentation.
      _________________________________________________________________
    
-Tested Environment
+Chapter 3. Tested Environment
 
    This driver is developed on the following hardware
    
@@ -93,7 +102,7 @@ Tested Environment
      * Samba version 2.0.3
      _________________________________________________________________
    
-Files in This Package
+Chapter 4. Files in This Package
 
    In the package you can find these files:
    
@@ -110,7 +119,7 @@ Files in This Package
           Driver document in plain text
      _________________________________________________________________
    
-Installation
+Chapter 5. Installation
 
    Silicon Integrated System Corp. is cooperating closely with core Linux
    Kernel developers. The revisions of SiS 900 driver are distributed by
@@ -179,11 +188,14 @@ eth0: Using SiS 900 Internal MII PHY as default
    
    Once the driver is loaded, network can be brought up by
    
-/sbin/ifconfig eth0 IPADDR broadcast BROADCAST netmask NETMASK
+/sbin/ifconfig eth0 IPADDR broadcast BROADCAST netmask NETMASK media TYPE
 
    where IPADDR, BROADCAST, NETMASK are your IP address, broadcast
-   address and netmask respectively. For more information on how to
-   configure network interface, please refer to Networking HOWTO.
+   address and netmask respectively. TYPE is used to set medium type used
+   by the device. Typical values are "10baseT"(twisted-pair 10Mbps
+   Ethernet) or "100baseT" (twisted-pair 100Mbps Ethernet). For more
+   information on how to configure network interface, please refer to
+   Networking HOWTO.
    
    The link status is also shown by kernel messages. For example, after
    the network interface is activated, you may have the message:
@@ -212,7 +224,7 @@ make bzlilo
    Next time the system reboot, you have the driver in memory.
      _________________________________________________________________
    
-Known Problems and Bugs
+Chapter 6. Known Problems and Bugs
 
    There are some known problems and bugs. If you find any other bugs
    please mail to lcchang@sis.com.tw
@@ -224,9 +236,11 @@ Known Problems and Bugs
        caught before bad things happen and reported with the message:
        eth0: NULL pointer encountered in Rx ring, skipping which can be
        viewed with dmesg or cat /var/log/message.
+    3. The media type change from 10Mbps to 100Mbps twisted-pair ethernet
+       by ifconfig causes the media link down.
      _________________________________________________________________
    
-Revision History
+Chapter 7. Revision History
 
      * November 13, 2000, Revision 1.07, seventh release, 630E problem
        fixed and furthur clean up.
@@ -235,7 +249,7 @@ Revision History
      * August 8, 1999, Revision 1.05, Initial Public Release
      _________________________________________________________________
    
-Acknowledgements
+Chapter 8. Acknowledgements
 
    This driver was originally derived form Donald Becker's pci-skeleton
    and rtl8139 drivers. Donald also provided various suggestion regarded

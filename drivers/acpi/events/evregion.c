@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: evregion - ACPI Address_space (Op_region) handler dispatch
- *              $Revision: 90 $
+ *              $Revision: 93 $
  *
  *****************************************************************************/
 
@@ -292,8 +292,8 @@ acpi_ev_address_space_dispatch (
  *
  * FUNCTION:    Acpi_ev_disassociate_region_from_handler
  *
- * PARAMETERS:  Handler_obj     - Handler Object
- *              Region_obj      - Region Object
+ * PARAMETERS:  Region_obj      - Region Object
+ *              Acpi_ns_is_locked - Namespace Region Already Locked?
  *
  * RETURN:      None
  *
@@ -304,7 +304,8 @@ acpi_ev_address_space_dispatch (
 
 void
 acpi_ev_disassociate_region_from_handler(
-	ACPI_OPERAND_OBJECT     *region_obj)
+	ACPI_OPERAND_OBJECT     *region_obj,
+	u8                      acpi_ns_is_locked)
 {
 	ACPI_OPERAND_OBJECT     *handler_obj;
 	ACPI_OPERAND_OBJECT     *obj_desc;
@@ -347,10 +348,18 @@ acpi_ev_disassociate_region_from_handler(
 			*last_obj_ptr = obj_desc->region.next;
 			obj_desc->region.next = NULL;           /* Must clear field */
 
+			if (acpi_ns_is_locked) {
+				acpi_cm_release_mutex (ACPI_MTX_NAMESPACE);
+			}
+
 			/*
 			 *  Now stop region accesses by executing the _REG method
 			 */
 			acpi_ev_execute_reg_method (region_obj, 0);
+
+			if (acpi_ns_is_locked) {
+				acpi_cm_acquire_mutex (ACPI_MTX_NAMESPACE);
+			}
 
 			/*
 			 *  Call the setup handler with the deactivate notification
@@ -404,6 +413,7 @@ acpi_ev_disassociate_region_from_handler(
  *
  * PARAMETERS:  Handler_obj     - Handler Object
  *              Region_obj      - Region Object
+ *              Acpi_ns_is_locked - Namespace Region Already Locked?
  *
  * RETURN:      None
  *
@@ -589,7 +599,7 @@ acpi_ev_addr_handler_helper (
 	 *
 	 *  First disconnect region for any previous handler (if any)
 	 */
-	acpi_ev_disassociate_region_from_handler (obj_desc);
+	acpi_ev_disassociate_region_from_handler (obj_desc, FALSE);
 
 	/*
 	 *  Then connect the region to the new handler

@@ -17,6 +17,11 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+/*
+ * Changes
+ * David Woodhouse <dwmw2@redhat.com> 2000-12-6
+ * - Fix interruptible_sleep_on() races
+ */
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -31,6 +36,12 @@
 #include <asm/uaccess.h>
 #include "acpi.h"
 #include "driver.h"
+
+#ifdef CONFIG_ACPI_KERNEL_CONFIG
+#include <asm/efi.h>
+#define ACPI_CAN_USE_EFI_STRUCT
+#endif
+
 
 #define _COMPONENT	OS_DEPENDENT
 	MODULE_NAME	("driver")
@@ -193,8 +204,12 @@ acpi_do_event(ctl_table * ctl,
 		return 0;
 	}
 
-	for (;;) {
+	while (!event_status) {
 		unsigned long flags;
+		DECLARE_WAITQUEUE(wait, current);
+
+		set_current_state(TASK_INTERRUPTIBLE);
+		add_wait_queue(&acpi_event_wait, &wait);
 
 		// we need an atomic exchange here
 		spin_lock_irqsave(&acpi_event_lock, flags);
@@ -203,11 +218,12 @@ acpi_do_event(ctl_table * ctl,
 		spin_unlock_irqrestore(&acpi_event_lock, flags);
 		event_state = acpi_event_state;
 
-		if (event_status)
-			break;
+		if (!event_status)
+			schedule();
 
-		// wait for an event to arrive
-		interruptible_sleep_on(&acpi_event_wait);
+		remove_wait_queue(&acpi_event_wait, &wait);
+		set_current_state(TASK_RUNNING);
+
 		if (signal_pending(current))
 			return -ERESTARTSYS;
 	}
@@ -412,12 +428,14 @@ acpi_thread(void *context)
 		return -ENODEV;
 	}
 
-	/* arch-specific call to get rsdp ptr */
-	rsdp_phys = acpi_get_rsdp_ptr();
-	if (!rsdp_phys) {
+#ifndef ACPI_CAN_USE_EFI_STRUCT
+	if (!ACPI_SUCCESS(acpi_find_root_pointer(&rsdp_phys))) {
 		printk(KERN_ERR "ACPI: System description tables not found\n");
 		return -ENODEV;
 	}
+#else
+	rsdp_phys = efi.acpi;
+#endif
 		
 	printk(KERN_ERR "ACPI: System description tables found\n");
 	
@@ -443,7 +461,7 @@ acpi_thread(void *context)
 	acpi_cpu_init();
 	acpi_sys_init();
 	acpi_ec_init();
-	acpi_cmbatt_init();
+	acpi_power_init();
 
 	/* 
 	 * Non-intuitive: 0 means pwr and sleep are implemented using the fixed
@@ -474,9 +492,20 @@ acpi_thread(void *context)
 	 * run
 	 */
 	for (;;) {
-		interruptible_sleep_on(&acpi_thread_wait);
+		DECLARE_WAITQUEUE(wait, current);
+
+		set_current_state(TASK_INTERRUPTIBLE);
+		add_wait_queue(&acpi_thread_wait, &wait);
+
+		if (list_empty(&acpi_thread_run))
+			schedule();
+
+		remove_wait_queue(&acpi_thread_wait, &wait);
+		set_current_state(TASK_RUNNING);
+
 		if (signal_pending(current))
 			break;
+
 		run_task_queue(&acpi_thread_run);
 	}
 

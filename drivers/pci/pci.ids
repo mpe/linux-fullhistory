@@ -4598,6 +4598,8 @@
 	250f  82820 820 (Camino) Chipset PCI to AGP Bridge
 	2520  82805AA MTH Memory Translator Hub
 	2521  82804AA MRH-S Memory Repeater Hub for SDRAM
+	2530  82850 850 (Tehama) Chipset Host Bridge (MCH)
+	2532  82850 850 (Tehama) Chipset AGP Bridge
 	5200  EtherExpress PRO/100
 	5201  EtherExpress PRO/100
 		8086 0001  EtherExpress PRO/100 Server Ethernet Adapter

@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: cminit - Common ACPI subsystem initialization
- *              $Revision: 89 $
+ *              $Revision: 91 $
  *
  *****************************************************************************/
 
@@ -53,7 +53,7 @@
 static ACPI_STATUS
 acpi_cm_fadt_register_error (
 	NATIVE_CHAR             *register_name,
-	UINT64                  value)
+	u32                     value)
 {
 
 	REPORT_ERROR (
@@ -96,25 +96,25 @@ acpi_cm_validate_fadt (
 
 	if (!acpi_gbl_FADT->pm1_cnt_len) {
 		status = acpi_cm_fadt_register_error ("PM1_CNT_LEN",
-				  (u32) acpi_gbl_FADT->pm1_cnt_len);
+				  0);
 	}
 
-	if (!acpi_gbl_FADT->Xpm1a_evt_blk.address) {
+	if (!ACPI_VALID_ADDRESS (acpi_gbl_FADT->Xpm1a_evt_blk.address)) {
 		status = acpi_cm_fadt_register_error ("PM1a_EVT_BLK",
-				  acpi_gbl_FADT->Xpm1a_evt_blk.address);
+				  0);
 	}
 
-	if (!acpi_gbl_FADT->Xpm1a_cnt_blk.address) {
+	if (!ACPI_VALID_ADDRESS (acpi_gbl_FADT->Xpm1a_cnt_blk.address)) {
 		status = acpi_cm_fadt_register_error ("PM1a_CNT_BLK",
-				  acpi_gbl_FADT->Xpm1a_cnt_blk.address);
+				  0);
 	}
 
-	if (!acpi_gbl_FADT->Xpm_tmr_blk.address) {
+	if (!ACPI_VALID_ADDRESS (acpi_gbl_FADT->Xpm_tmr_blk.address)) {
 		status = acpi_cm_fadt_register_error ("PM_TMR_BLK",
-				  acpi_gbl_FADT->Xpm_tmr_blk.address);
+				  0);
 	}
 
-	if ((acpi_gbl_FADT->Xpm2_cnt_blk.address &&
+	if ((ACPI_VALID_ADDRESS (acpi_gbl_FADT->Xpm2_cnt_blk.address) &&
 		!acpi_gbl_FADT->pm2_cnt_len))
 	{
 		status = acpi_cm_fadt_register_error ("PM2_CNT_LEN",
@@ -129,14 +129,14 @@ acpi_cm_validate_fadt (
 	/* length of GPE blocks must be a multiple of 2 */
 
 
-	if (acpi_gbl_FADT->Xgpe0blk.address &&
+	if (ACPI_VALID_ADDRESS (acpi_gbl_FADT->Xgpe0blk.address) &&
 		(acpi_gbl_FADT->gpe0blk_len & 1))
 	{
 		status = acpi_cm_fadt_register_error ("GPE0_BLK_LEN",
 				  (u32) acpi_gbl_FADT->gpe0blk_len);
 	}
 
-	if (acpi_gbl_FADT->Xgpe1_blk.address &&
+	if (ACPI_VALID_ADDRESS (acpi_gbl_FADT->Xgpe1_blk.address) &&
 		(acpi_gbl_FADT->gpe1_blk_len & 1))
 	{
 		status = acpi_cm_fadt_register_error ("GPE1_BLK_LEN",

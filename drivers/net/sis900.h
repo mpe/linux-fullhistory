@@ -231,9 +231,14 @@ enum mii_stssum_register_bits {
 	MII_STSSUM_AUTO = 0x0002, MII_STSSUM_SPD  = 0x0001
 };
 
+enum sis900_revision_id {
+	SIS630A_900_REV = 0x80,		SIS630E_900_REV = 0x81,
+	SIS630S_900_REV = 0x82,		SIS630EA1_900_REV = 0x83
+};
+
 enum sis630_revision_id {
-	SIS630E_REV = 0x81, SIS630EA1_REV = 0x83,
-	SIS630S_REV = 0x82
+	SIS630A0    = 0x00, SIS630A1      = 0x01,
+	SIS630B0    = 0x10, SIS630B1      = 0x11
 };
 
 #define FDX_CAPABLE_DUPLEX_UNKNOWN      0
@@ -257,7 +262,9 @@ enum sis630_revision_id {
 
 /* PCI stuff, should be move to pic.h */
 #define PCI_DEVICE_ID_SI_900	0x900   
-#define PCI_DEVICE_ID_SI_7016	0x7016  
+#define PCI_DEVICE_ID_SI_7016	0x7016
+#define SIS630_VENDOR_ID        0x0630
+#define SIS630_DEVICE_ID        0x1039
 
 /* ioctl for accessing MII transceiver */
 #define SIOCGMIIPHY (SIOCDEVPRIVATE)		/* Get the PHY in use. */

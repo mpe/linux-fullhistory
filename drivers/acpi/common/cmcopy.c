@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: cmcopy - Internal to external object translation utilities
- *              $Revision: 59 $
+ *              $Revision: 61 $
  *
  *****************************************************************************/
 
@@ -102,7 +102,7 @@ acpi_cm_build_external_simple_object (
 
 	case ACPI_TYPE_STRING:
 
-		length = internal_obj->string.length;
+		length = internal_obj->string.length + 1;
 		external_obj->string.length = internal_obj->string.length;
 		external_obj->string.pointer = (NATIVE_CHAR *) data_space;
 		source_ptr = (u8 *) internal_obj->string.pointer;

@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Name: acevents.h - Event subcomponent prototypes and defines
- *       $Revision: 60 $
+ *       $Revision: 62 $
  *
  *****************************************************************************/
 
@@ -123,7 +123,8 @@ acpi_ev_addr_handler_helper (
 
 void
 acpi_ev_disassociate_region_from_handler(
-	ACPI_OPERAND_OBJECT    *region_obj);
+	ACPI_OPERAND_OBJECT    *region_obj,
+	u8                      acpi_ns_is_locked);
 
 
 ACPI_STATUS

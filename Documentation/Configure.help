@@ -2352,10 +2352,10 @@ CONFIG_AGP
   module, say M here and read Documentation/modules.txt. The module
   will be called agpgart.o.
 
-Intel 440LX/BX/GX support
+Intel 440LX/BX/GX/815/840/850 support
 CONFIG_AGP_INTEL
   This option gives you AGP support for the GLX component of the
-  XFree86 4.x on Intel 440LX/BX/GX, 815, and 840 chipsets.
+  XFree86 4.x on Intel 440LX/BX/GX, 815, 840 and 850 chipsets.
 
   For the moment, you should probably say N, unless you want to test
   the GLX component for XFree86 3.3.6, which can be downloaded from

@@ -25,6 +25,8 @@ export-objs     :=	busmouse.o console.o keyboard.o sysrq.o \
 			misc.o pty.o random.o selection.o serial.o \
 			tty_io.o
 
+mod-subdirs	:=	joystick ftape drm pcmcia
+
 list-multi	:=	
 
 KEYMAP   =defkeymap.o

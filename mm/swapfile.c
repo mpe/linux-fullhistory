@@ -370,7 +370,8 @@ static int try_to_unuse(unsigned int type)
 			swap_free(entry);
   			return -ENOMEM;
 		}
-		delete_from_swap_cache(page);
+		if (PageSwapCache(page))
+			delete_from_swap_cache(page);
 		read_lock(&tasklist_lock);
 		for_each_task(p)
 			unuse_process(p->mm, entry, page);

@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: psargs - Parse AML opcode arguments
- *              $Revision: 40 $
+ *              $Revision: 42 $
  *
  *****************************************************************************/
 
@@ -401,7 +401,7 @@ acpi_ps_get_next_namepath (
 	/*
 	 * Either we didn't find the object in the namespace, or the object is
 	 * something other than a control method.  Just initialize the Op with the
-	 * pathname
+	 * pathname.
 	 */
 
 	acpi_ps_init_op (arg, AML_NAMEPATH_OP);

@@ -303,14 +303,15 @@ void __run_task_queue(task_queue *list)
 	while (next != &head) {
 		void (*f) (void *);
 		struct tq_struct *p;
+		void *data;
 
 		p = list_entry(next, struct tq_struct, list);
 		next = next->next;
-		/* Debug: force an oops from people who delete entries */
-		next->prev->next = next->prev->prev = 0;
 		f = p->routine;
+		data = p->data;
+		wmb();
 		p->sync = 0;
 		if (f)
-			f(p->data);
+			f(data);
 	}
 }

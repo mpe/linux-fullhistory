@@ -53,9 +53,9 @@ int acpi_run(void (*callback)(void*), void *context);
 int acpi_ec_init(void);
 
 /*
- * cmbatt.c
+ * power.c
  */
-int acpi_cmbatt_init(void);
+int acpi_power_init(void);
 
 /*
  * sys.c

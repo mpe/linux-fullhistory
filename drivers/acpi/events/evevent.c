@@ -2,7 +2,7 @@
  *
  * Module Name: evevent - Fixed and General Purpose Acpi_event
  *                          handling and dispatch
- *              $Revision: 30 $
+ *              $Revision: 32 $
  *
  *****************************************************************************/
 
@@ -375,10 +375,10 @@ acpi_ev_gpe_initialize (void)
 
 	for (i = 0; i < gpe0register_count; i++) {
 		acpi_gbl_gpe_registers[register_index].status_addr =
-				 (u16) (acpi_gbl_FADT->Xgpe0blk.address + i);
+				 (u16) (ACPI_GET_ADDRESS (acpi_gbl_FADT->Xgpe0blk.address) + i);
 
 		acpi_gbl_gpe_registers[register_index].enable_addr =
-				 (u16) (acpi_gbl_FADT->Xgpe0blk.address + i + gpe0register_count);
+				 (u16) (ACPI_GET_ADDRESS (acpi_gbl_FADT->Xgpe0blk.address) + i + gpe0register_count);
 
 		acpi_gbl_gpe_registers[register_index].gpe_base = (u8) MUL_8 (i);
 
@@ -402,10 +402,10 @@ acpi_ev_gpe_initialize (void)
 
 	for (i = 0; i < gpe1_register_count; i++) {
 		acpi_gbl_gpe_registers[register_index].status_addr =
-				 (u16) (acpi_gbl_FADT->Xgpe1_blk.address + i);
+				 (u16) (ACPI_GET_ADDRESS (acpi_gbl_FADT->Xgpe1_blk.address) + i);
 
 		acpi_gbl_gpe_registers[register_index].enable_addr =
-				 (u16) (acpi_gbl_FADT->Xgpe1_blk.address + i + gpe1_register_count);
+				 (u16) (ACPI_GET_ADDRESS (acpi_gbl_FADT->Xgpe1_blk.address) + i + gpe1_register_count);
 
 		acpi_gbl_gpe_registers[register_index].gpe_base =
 				 (u8) (acpi_gbl_FADT->gpe1_base + MUL_8 (i));

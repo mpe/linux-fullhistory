@@ -350,6 +350,7 @@ do {									\
 		if (condition)						\
 			break;						\
 		spin_unlock_irq(&lock);					\
+		run_task_queue(&tq_disk);				\
 		schedule();						\
 		spin_lock_irq(&lock);					\
 	}								\

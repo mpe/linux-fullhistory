@@ -1,9 +1,9 @@
 
 /******************************************************************************
  *
- * Name: acpiosd.h - All interfaces to the OS-dependent layer.  These
- *                   interfaces must be implemented by the OS-dependent
- *                   front-end to the ACPI subsystem.
+ * Name: acpiosxf.h - All interfaces to the OS-dependent layer.  These
+ *                    interfaces must be implemented by the OS-dependent
+ *                    front-end to the ACPI subsystem.
  *
  *****************************************************************************/
 
@@ -35,10 +35,10 @@
 
 /* Priorities for Acpi_os_queue_for_execution */
 
-#define OSD_PRIORITY_HIGH   1
-#define OSD_PRIORITY_MED    2
-#define OSD_PRIORITY_LO     3
-#define OSD_PRIORITY_GPE    OSD_PRIORITY_HIGH
+#define OSD_PRIORITY_GPE    1
+#define OSD_PRIORITY_HIGH   2
+#define OSD_PRIORITY_MED    3
+#define OSD_PRIORITY_LO     4
 
 #define ACPI_NO_UNIT_LIMIT  ((u32) -1)
 #define ACPI_MUTEX_SEM      1

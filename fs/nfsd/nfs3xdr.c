@@ -36,14 +36,6 @@ static u32	nfs3_ftypes[] = {
  * XDR functions for basic NFS types
  */
 static inline u32 *
-dec64(u32 *p, u64 *valp)
-{
-	*valp  = ((u64) ntohl(*p++)) << 32;
-	*valp |= ntohl(*p++);
-	return p;
-}
-
-static inline u32 *
 encode_time3(u32 *p, time_t secs)
 {
 	*p++ = htonl((u32) secs); *p++ = 0;
@@ -142,7 +134,7 @@ decode_sattr3(u32 *p, struct iattr *iap)
 		u64	newsize;
 
 		iap->ia_valid |= ATTR_SIZE;
-		p = dec64(p, &newsize);
+		p = xdr_decode_hyper(p, &newsize);
 		if (newsize <= NFS_OFFSET_MAX)
 			iap->ia_size = newsize;
 		else
@@ -343,7 +335,7 @@ nfs3svc_decode_readargs(struct svc_rqst *rqstp, u32 *p,
 					struct nfsd3_readargs *args)
 {
 	if (!(p = decode_fh(p, &args->fh))
-	 || !(p = dec64(p, &args->offset)))
+	 || !(p = xdr_decode_hyper(p, &args->offset)))
 		return 0;
 
 	args->count = ntohl(*p++);
@@ -355,7 +347,7 @@ nfs3svc_decode_writeargs(struct svc_rqst *rqstp, u32 *p,
 					struct nfsd3_writeargs *args)
 {
 	if (!(p = decode_fh(p, &args->fh))
-	 || !(p = dec64(p, &args->offset)))
+	 || !(p = xdr_decode_hyper(p, &args->offset)))
 		return 0;
 
 	args->count = ntohl(*p++);
@@ -471,7 +463,7 @@ nfs3svc_decode_readdirargs(struct svc_rqst *rqstp, u32 *p,
 {
 	if (!(p = decode_fh(p, &args->fh)))
 		return 0;
-	p = dec64(p, &args->cookie);
+	p = xdr_decode_hyper(p, &args->cookie);
 	args->verf   = p; p += 2;
 	args->dircount = ~0;
 	args->count  = ntohl(*p++);
@@ -485,7 +477,7 @@ nfs3svc_decode_readdirplusargs(struct svc_rqst *rqstp, u32 *p,
 {
 	if (!(p = decode_fh(p, &args->fh)))
 		return 0;
-	p = dec64(p, &args->cookie);
+	p = xdr_decode_hyper(p, &args->cookie);
 	args->verf     = p; p += 2;
 	args->dircount = ntohl(*p++);
 	args->count    = ntohl(*p++);
@@ -499,7 +491,7 @@ nfs3svc_decode_commitargs(struct svc_rqst *rqstp, u32 *p,
 {
 	if (!(p = decode_fh(p, &args->fh)))
 		return 0;
-	p = dec64(p, &args->offset);
+	p = xdr_decode_hyper(p, &args->offset);
 	args->count = ntohl(*p++);
 
 	return xdr_argsize_check(rqstp, p);

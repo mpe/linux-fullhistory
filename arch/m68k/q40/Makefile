@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := q40.o
-O_OBJS   := config.o q40ints.o 
 
+obj-y		:= config.o q40ints.o 
 
 include $(TOPDIR)/Rules.make

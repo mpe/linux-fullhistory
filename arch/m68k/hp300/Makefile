@@ -8,10 +8,11 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := hp300.o
-O_OBJS	 := ksyms.o config.o ints.o time.o reboot.o
 
-ifdef CONFIG_VT
-O_OBJS += hil.o
-endif
+export-objs	:= ksyms.o
+
+obj-y		:= ksyms.o config.o ints.o time.o reboot.o
+
+obj-$(CONFIG_VT)	+= hil.o
 
 include $(TOPDIR)/Rules.make

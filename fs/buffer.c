@@ -639,7 +639,12 @@ void __invalidate_buffers(kdev_t dev, int destroy_dirty_buffers)
 			continue;
 		for (i = nr_buffers_type[nlist]; i > 0 ; bh = bh_next, i--) {
 			bh_next = bh->b_next_free;
+
+			/* Another device? */
 			if (bh->b_dev != dev)
+				continue;
+			/* Part of a mapping? */
+			if (bh->b_page->mapping)
 				continue;
 			if (buffer_locked(bh)) {
 				atomic_inc(&bh->b_count);
@@ -1512,13 +1517,13 @@ static int __block_write_full_page(struct inode *inode, struct page *page, get_b
 		block++;
 	} while (bh != head);
 
-	/* Stage 2: lock the buffers, mark them dirty */
+	/* Stage 2: lock the buffers, mark them clean */
 	do {
 		lock_buffer(bh);
 		bh->b_end_io = end_buffer_io_async;
 		atomic_inc(&bh->b_count);
 		set_bit(BH_Uptodate, &bh->b_state);
-		set_bit(BH_Dirty, &bh->b_state);
+		clear_bit(BH_Dirty, &bh->b_state);
 		bh = bh->b_this_page;
 	} while (bh != head);
 
@@ -2093,7 +2098,7 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 
 				if (rw == WRITE) {
 					set_bit(BH_Uptodate, &tmp->b_state);
-					set_bit(BH_Dirty, &tmp->b_state);
+					clear_bit(BH_Dirty, &tmp->b_state);
 				}
 
 				bh[bhind++] = tmp;

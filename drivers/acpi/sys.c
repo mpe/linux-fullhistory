@@ -129,6 +129,8 @@ int
 acpi_enter_sx(acpi_sstate_t state)
 {
 	struct acpi_enter_sx_ctx ctx;
+	DECLARE_WAITQUEUE(wait, current);
+	int ret = 0;
 
 	if ((STRNCMP(acpi_fadt.header.signature, ACPI_FADT_SIGNATURE, ACPI_SIG_LEN) != 0)
 	    || acpi_slptyp[state] == ACPI_INVALID)
@@ -137,14 +139,22 @@ acpi_enter_sx(acpi_sstate_t state)
 	init_waitqueue_head(&ctx.wait);
 	ctx.state = state;
 
+	set_current_state(TASK_INTERRUPTIBLE);
+	add_wait_queue(&ctx.wait, &wait);
+
 	if (acpi_os_queue_for_execution(0, acpi_enter_sx_async, &ctx))
-		return -1;
+		ret = -1;
 
-	interruptible_sleep_on(&ctx.wait);
-	if (signal_pending(current))
-		return -ERESTARTSYS;
+	if (!ret)
+		schedule();
 
-	return 0;
+	set_current_state(TASK_RUNNING);
+	remove_wait_queue(&ctx.wait, &wait);
+
+	if (!ret && signal_pending(current))
+		ret = -ERESTARTSYS;
+
+	return ret;
 }
 
 int

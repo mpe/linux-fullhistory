@@ -9,18 +9,12 @@
 # parent makefile.
 #
 
-L_TARGET := zorro.a
+O_TARGET := driver.o
 
-# Nasty trick as we need to link files with no references from the outside.
-O_TARGET := zorro_core.o
-L_OBJS   := zorro_core.o
-OX_OBJS   := zorro.o
+export-objs		:= zorro.o
 
-ifdef CONFIG_PROC_FS
-O_OBJS   += proc.o
-endif
-
-L_OBJS   += names.o
+obj-$(CONFIG_ZORRO)	+= zorro.o names.o
+obj-$(CONFIG_PROC_FS)	+= proc.o
 
 include $(TOPDIR)/Rules.make
 

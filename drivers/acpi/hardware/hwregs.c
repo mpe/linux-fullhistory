@@ -3,7 +3,7 @@
  *
  * Module Name: hwregs - Read/write access functions for the various ACPI
  *                       control and status registers.
- *              $Revision: 84 $
+ *              $Revision: 86 $
  *
  ******************************************************************************/
 
@@ -90,8 +90,8 @@ acpi_hw_clear_acpi_status (void)
 	acpi_hw_register_write (ACPI_MTX_DO_NOT_LOCK, PM1_STS, ALL_FIXED_STS_BITS);
 
 
-	if (acpi_gbl_FADT->Xpm1b_evt_blk.address) {
-		acpi_os_out16 ((ACPI_IO_ADDRESS) acpi_gbl_FADT->Xpm1b_evt_blk.address,
+	if (ACPI_VALID_ADDRESS (acpi_gbl_FADT->Xpm1b_evt_blk.address)) {
+		acpi_os_out16 ((ACPI_IO_ADDRESS) ACPI_GET_ADDRESS (acpi_gbl_FADT->Xpm1b_evt_blk.address),
 				  (u16) ALL_FIXED_STS_BITS);
 	}
 
@@ -101,7 +101,7 @@ acpi_hw_clear_acpi_status (void)
 		gpe_length = (u16) DIV_2 (acpi_gbl_FADT->gpe0blk_len);
 
 		for (index = 0; index < gpe_length; index++) {
-			acpi_os_out8 ((ACPI_IO_ADDRESS) (acpi_gbl_FADT->Xgpe0blk.address + index),
+			acpi_os_out8 ((ACPI_IO_ADDRESS) (ACPI_GET_ADDRESS (acpi_gbl_FADT->Xgpe0blk.address) + index),
 					  (u8) 0xff);
 		}
 	}
@@ -110,7 +110,7 @@ acpi_hw_clear_acpi_status (void)
 		gpe_length = (u16) DIV_2 (acpi_gbl_FADT->gpe1_blk_len);
 
 		for (index = 0; index < gpe_length; index++) {
-			acpi_os_out8 ((ACPI_IO_ADDRESS) (acpi_gbl_FADT->Xgpe1_blk.address + index),
+			acpi_os_out8 ((ACPI_IO_ADDRESS) (ACPI_GET_ADDRESS (acpi_gbl_FADT->Xgpe1_blk.address) + index),
 					  (u8) 0xff);
 		}
 	}
@@ -816,7 +816,7 @@ acpi_hw_low_level_read (
 	 * a non-zero address within
 	 */
 	if ((!reg) ||
-		(!reg->address))
+		(!ACPI_VALID_ADDRESS (reg->address)))
 	{
 		return 0;
 	}
@@ -831,7 +831,7 @@ acpi_hw_low_level_read (
 	{
 	case ADDRESS_SPACE_SYSTEM_MEMORY:
 
-		mem_address = (ACPI_PHYSICAL_ADDRESS) reg->address + offset;
+		mem_address = (ACPI_PHYSICAL_ADDRESS) (ACPI_GET_ADDRESS (reg->address) + offset);
 
 		switch (width)
 		{
@@ -850,7 +850,7 @@ acpi_hw_low_level_read (
 
 	case ADDRESS_SPACE_SYSTEM_IO:
 
-		io_address = (ACPI_IO_ADDRESS) reg->address + offset;
+		io_address = (ACPI_IO_ADDRESS) (ACPI_GET_ADDRESS (reg->address) + offset);
 
 		switch (width)
 		{
@@ -869,8 +869,8 @@ acpi_hw_low_level_read (
 
 	case ADDRESS_SPACE_PCI_CONFIG:
 
-		pci_dev_func = ACPI_PCI_DEVFUN  (reg->address);
-		pci_register = ACPI_PCI_REGISTER (reg->address) + offset;
+		pci_dev_func = ACPI_PCI_DEVFUN  (ACPI_GET_ADDRESS (reg->address));
+		pci_register = ACPI_PCI_REGISTER (ACPI_GET_ADDRESS (reg->address)) + offset;
 
 		switch (width)
 		{
@@ -925,7 +925,7 @@ acpi_hw_low_level_write (
 	 * a non-zero address within
 	 */
 	if ((!reg) ||
-		(!reg->address))
+		(!ACPI_VALID_ADDRESS (reg->address)))
 	{
 		return;
 	}
@@ -940,7 +940,7 @@ acpi_hw_low_level_write (
 	{
 	case ADDRESS_SPACE_SYSTEM_MEMORY:
 
-		mem_address = (ACPI_PHYSICAL_ADDRESS) reg->address + offset;
+		mem_address = (ACPI_PHYSICAL_ADDRESS) (ACPI_GET_ADDRESS (reg->address) + offset);
 
 		switch (width)
 		{
@@ -959,7 +959,7 @@ acpi_hw_low_level_write (
 
 	case ADDRESS_SPACE_SYSTEM_IO:
 
-		io_address = (ACPI_IO_ADDRESS) reg->address + offset;
+		io_address = (ACPI_IO_ADDRESS) (ACPI_GET_ADDRESS (reg->address) + offset);
 
 		switch (width)
 		{
@@ -978,8 +978,8 @@ acpi_hw_low_level_write (
 
 	case ADDRESS_SPACE_PCI_CONFIG:
 
-		pci_dev_func = ACPI_PCI_DEVFUN  (reg->address);
-		pci_register = ACPI_PCI_REGISTER (reg->address) + offset;
+		pci_dev_func = ACPI_PCI_DEVFUN  (ACPI_GET_ADDRESS (reg->address));
+		pci_register = ACPI_PCI_REGISTER (ACPI_GET_ADDRESS (reg->address)) + offset;
 
 		switch (width)
 		{

@@ -10,6 +10,7 @@
 #
 
 subdir-y     := video radio
+mod-subdirs  := video radio
 
 O_TARGET     := media.o
 obj-y        := $(join $(subdir-y),$(subdir-y:%=/%.o))

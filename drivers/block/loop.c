@@ -453,7 +453,7 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 		   structure that the caller is using */
 
 		lo->lo_device = inode->i_dev;
-		lo->lo_flags = LO_FLAGS_DO_BMAP;
+		lo->lo_flags |= LO_FLAGS_DO_BMAP;
 
 		error = -ENFILE;
 		lo->lo_backing_file = get_empty_filp();

@@ -1,7 +1,7 @@
 
 /******************************************************************************
  *
- * Name: acxface.h - External interfaces to the ACPI subsystem
+ * Name: acpixf.h - External interfaces to the ACPI subsystem
  *
  *****************************************************************************/
 

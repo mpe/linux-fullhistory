@@ -8,7 +8,9 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := sbus_all.o
+ifneq ($(ARCH),m68k)
 obj-y    := sbus.o dvma.o
+endif
 
 subdir-y += char
 subdir-m += char

@@ -1611,7 +1611,7 @@ asmlinkage long sys_link(const char * oldname, const char * newname)
 			goto out;
 		error = -EXDEV;
 		if (old_nd.mnt != nd.mnt)
-			goto out;
+			goto out_release;
 		new_dentry = lookup_create(&nd, 0);
 		error = PTR_ERR(new_dentry);
 		if (!IS_ERR(new_dentry)) {
@@ -1619,6 +1619,7 @@ asmlinkage long sys_link(const char * oldname, const char * newname)
 			dput(new_dentry);
 		}
 		up(&nd.dentry->d_inode->i_sem);
+out_release:
 		path_release(&nd);
 out:
 		path_release(&old_nd);

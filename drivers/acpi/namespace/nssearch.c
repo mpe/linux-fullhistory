@@ -1,7 +1,7 @@
 /*******************************************************************************
  *
  * Module Name: nssearch - Namespace search
- *              $Revision: 60 $
+ *              $Revision: 62 $
  *
  ******************************************************************************/
 
@@ -289,6 +289,16 @@ acpi_ns_search_and_enter (
 	status = acpi_ns_search_node (target_name, node,
 			   type, return_node);
 	if (status != AE_NOT_FOUND) {
+		/*
+		 * If we found it AND the request specifies that a
+		 * find is an error, return the error
+		 */
+		if ((status == AE_OK) &&
+			(flags & NS_ERROR_IF_FOUND))
+		{
+			status = AE_EXIST;
+		}
+
 		/*
 		 * Either found it or there was an error
 		 * -- finished either way

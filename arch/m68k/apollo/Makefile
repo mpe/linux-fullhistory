@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := apollo.o
-O_OBJS   := config.o dn_ints.o dma.o \
 
+obj-y		:= config.o dn_ints.o dma.o
 
 include $(TOPDIR)/Rules.make

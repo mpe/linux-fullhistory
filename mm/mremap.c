@@ -141,12 +141,7 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
 				get_file(new_vma->vm_file);
 			if (new_vma->vm_ops && new_vma->vm_ops->open)
 				new_vma->vm_ops->open(new_vma);
-			lock_vma_mappings(vma);
-			spin_lock(&current->mm->page_table_lock);
-			__insert_vm_struct(current->mm, new_vma);
-			unlock_vma_mappings(vma);
-			merge_segments(current->mm, new_vma->vm_start, new_vma->vm_end);
-			spin_unlock(&current->mm->page_table_lock);
+			insert_vm_struct(current->mm, new_vma);
 			do_munmap(current->mm, addr, old_len);
 			current->mm->total_vm += new_len >> PAGE_SHIFT;
 			if (new_vma->vm_flags & VM_LOCKED) {

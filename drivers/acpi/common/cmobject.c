@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: cmobject - ACPI object create/delete/size/cache routines
- *              $Revision: 32 $
+ *              $Revision: 34 $
  *
  *****************************************************************************/
 
@@ -424,7 +424,7 @@ acpi_cm_get_simple_object_size (
 
 	case ACPI_TYPE_STRING:
 
-		length += internal_obj->string.length;
+		length += internal_obj->string.length + 1;
 		break;
 
 

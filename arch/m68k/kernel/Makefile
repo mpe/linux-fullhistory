@@ -17,13 +17,13 @@ all: sun3-head.o kernel.o
 endif 
 
 O_TARGET := kernel.o
-O_OBJS := entry.o process.o traps.o ints.o signal.o ptrace.o \
-	  sys_m68k.o time.o semaphore.o
-OX_OBJS := setup.o m68k_ksyms.o
 
-ifdef CONFIG_PCI
-O_OBJS += bios32.o
-endif
+export-objs	:= setup.o m68k_ksyms.o
+
+obj-y		:= entry.o process.o traps.o ints.o signal.o ptrace.o \
+			sys_m68k.o time.o semaphore.o setup.o m68k_ksyms.o
+
+obj-$(CONFIG_PCI)	+= bios32.o
 
 head.o: head.S m68k_defs.h
 

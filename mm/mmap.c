@@ -338,27 +338,17 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 			goto free_vma;
 	}
 
-	/*
-	 * merge_segments may merge our vma, so we can't refer to it
-	 * after the call.  Save the values we need now ...
-	 */
-	flags = vma->vm_flags;
-
 	/* Can addr have changed??
 	 *
 	 * Answer: Yes, several device drivers can do it in their
 	 *         f_op->mmap method. -DaveM
 	 */
+	flags = vma->vm_flags;
 	addr = vma->vm_start;
 
-	lock_vma_mappings(vma);
-	spin_lock(&mm->page_table_lock);
-	__insert_vm_struct(mm, vma);
-	unlock_vma_mappings(vma);
+	insert_vm_struct(mm, vma);
 	if (correct_wcount)
 		atomic_inc(&file->f_dentry->d_inode->i_writecount);
-	merge_segments(mm, vma->vm_start, vma->vm_end);
-	spin_unlock(&mm->page_table_lock);
 	
 	mm->total_vm += len >> PAGE_SHIFT;
 	if (flags & VM_LOCKED) {
@@ -828,6 +818,23 @@ unsigned long do_brk(unsigned long addr, unsigned long len)
 	if (!vm_enough_memory(len >> PAGE_SHIFT))
 		return -ENOMEM;
 
+	flags = vm_flags(PROT_READ|PROT_WRITE|PROT_EXEC,
+				MAP_FIXED|MAP_PRIVATE) | mm->def_flags;
+
+	flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
+	
+
+	/* Can we just expand an old anonymous mapping? */
+	if (addr) {
+		struct vm_area_struct * vma = find_vma(mm, addr-1);
+		if (vma && vma->vm_end == addr && !vma->vm_file && 
+		    vma->vm_flags == flags) {
+			vma->vm_end = addr + len;
+			goto out;
+		}
+	}	
+
+
 	/*
 	 * create a vma struct for an anonymous mapping
 	 */
@@ -838,30 +845,16 @@ unsigned long do_brk(unsigned long addr, unsigned long len)
 	vma->vm_mm = mm;
 	vma->vm_start = addr;
 	vma->vm_end = addr + len;
-	vma->vm_flags = vm_flags(PROT_READ|PROT_WRITE|PROT_EXEC,
-				MAP_FIXED|MAP_PRIVATE) | mm->def_flags;
-
-	vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
-	vma->vm_page_prot = protection_map[vma->vm_flags & 0x0f];
+	vma->vm_flags = flags;
+	vma->vm_page_prot = protection_map[flags & 0x0f];
 	vma->vm_ops = NULL;
 	vma->vm_pgoff = 0;
 	vma->vm_file = NULL;
 	vma->vm_private_data = NULL;
 
-	/*
-	 * merge_segments may merge our vma, so we can't refer to it
-	 * after the call.  Save the values we need now ...
-	 */
-	flags = vma->vm_flags;
-	addr = vma->vm_start;
+	insert_vm_struct(mm, vma);
 
-	lock_vma_mappings(vma);
-	spin_lock(&mm->page_table_lock);
-	__insert_vm_struct(mm, vma);
-	unlock_vma_mappings(vma);
-	merge_segments(mm, vma->vm_start, vma->vm_end);
-	spin_unlock(&mm->page_table_lock);
-	
+out:
 	mm->total_vm += len >> PAGE_SHIFT;
 	if (flags & VM_LOCKED) {
 		mm->locked_vm += len >> PAGE_SHIFT;
@@ -972,84 +965,8 @@ void __insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vmp)
 void insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vmp)
 {
 	lock_vma_mappings(vmp);
+	spin_lock(&current->mm->page_table_lock);
 	__insert_vm_struct(mm, vmp);
+	spin_unlock(&current->mm->page_table_lock);
 	unlock_vma_mappings(vmp);
-}
-
-/* Merge the list of memory segments if possible.
- * Redundant vm_area_structs are freed.
- * This assumes that the list is ordered by address.
- * We don't need to traverse the entire list, only those segments
- * which intersect or are adjacent to a given interval.
- *
- * We must already hold the mm semaphore when we get here..
- */
-void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned long end_addr)
-{
-	struct vm_area_struct *prev, *mpnt, *next, *prev1;
-
-	mpnt = find_vma_prev(mm, start_addr, &prev1);
-	if (!mpnt)
-		return;
-
-	if (prev1) {
-		prev = prev1;
-	} else {
-		prev = mpnt;
-		mpnt = mpnt->vm_next;
-	}
-	mm->mmap_cache = NULL;		/* Kill the cache. */
-
-	/* prev and mpnt cycle through the list, as long as
-	 * start_addr < mpnt->vm_end && prev->vm_start < end_addr
-	 */
-	for ( ; mpnt && prev->vm_start < end_addr ; prev = mpnt, mpnt = next) {
-		next = mpnt->vm_next;
-
-		/* To share, we must have the same file, operations.. */
-		if ((mpnt->vm_file != prev->vm_file)||
-		    (mpnt->vm_private_data != prev->vm_private_data)	||
-		    (mpnt->vm_ops != prev->vm_ops)	||
-		    (mpnt->vm_flags != prev->vm_flags)	||
-		    (prev->vm_end != mpnt->vm_start))
-			continue;
-
-		/*
-		 * If we have a file or it's a shared memory area
-		 * the offsets must be contiguous..
-		 */
-		if ((mpnt->vm_file != NULL) || (mpnt->vm_flags & VM_SHM)) {
-			unsigned long off = prev->vm_pgoff;
-			off += (prev->vm_end - prev->vm_start) >> PAGE_SHIFT;
-			if (off != mpnt->vm_pgoff)
-				continue;
-		}
-
-		/* merge prev with mpnt and set up pointers so the new
-		 * big segment can possibly merge with the next one.
-		 * The old unused mpnt is freed.
-		 */
-		if (mm->mmap_avl)
-			avl_remove(mpnt, &mm->mmap_avl);
-		prev->vm_end = mpnt->vm_end;
-		prev->vm_next = mpnt->vm_next;
-		mm->map_count--;
-		if (mpnt->vm_ops && mpnt->vm_ops->close) {
-			mpnt->vm_pgoff += (mpnt->vm_end - mpnt->vm_start) >> PAGE_SHIFT;
-			mpnt->vm_start = mpnt->vm_end;
-			spin_unlock(&mm->page_table_lock);
-			mpnt->vm_ops->close(mpnt);
-		} else
-			spin_unlock(&mm->page_table_lock);
-
-		lock_vma_mappings(mpnt);
-		__remove_shared_vm_struct(mpnt);
-		unlock_vma_mappings(mpnt);
-		if (mpnt->vm_file)
-			fput(mpnt->vm_file);
-		kmem_cache_free(vm_area_cachep, mpnt);
-		mpnt = prev;
-
-		spin_lock(&mm->page_table_lock);
-	}
 }

@@ -277,9 +277,6 @@ asmlinkage long sys_mprotect(unsigned long start, size_t len, unsigned long prot
 			break;
 		}
 	}
-	spin_lock(&current->mm->page_table_lock);
-	merge_segments(current->mm, start, end);
-	spin_unlock(&current->mm->page_table_lock);
 out:
 	up(&current->mm->mmap_sem);
 	return error;

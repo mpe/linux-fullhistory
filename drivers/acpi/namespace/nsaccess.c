@@ -1,7 +1,7 @@
 /*******************************************************************************
  *
  * Module Name: nsaccess - Top-level functions for accessing ACPI namespace
- *              $Revision: 115 $
+ *              $Revision: 117 $
  *
  ******************************************************************************/
 
@@ -209,14 +209,14 @@ unlock_and_exit:
  *
  * FUNCTION:    Acpi_ns_lookup
  *
- * PARAMETERS:  Prefix_node - Search scope if name is not fully qualified
+ * PARAMETERS:  Prefix_node     - Search scope if name is not fully qualified
  *              Pathname        - Search pathname, in internal format
  *                                (as represented in the AML stream)
  *              Type            - Type associated with name
  *              Interpreter_mode - IMODE_LOAD_PASS2 => add name if not found
  *              Flags           - Flags describing the search restrictions
  *              Walk_state      - Current state of the walk
- *              Return_node - Where the Node is placed (if found
+ *              Return_node     - Where the Node is placed (if found
  *                                or created successfully)
  *
  * RETURN:      Status

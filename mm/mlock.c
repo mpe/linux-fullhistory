@@ -189,9 +189,6 @@ static int do_mlock(unsigned long start, size_t len, int on)
 			break;
 		}
 	}
-	spin_lock(&current->mm->page_table_lock);
-	merge_segments(current->mm, start, end);
-	spin_unlock(&current->mm->page_table_lock);
 	return error;
 }
 
@@ -263,9 +260,6 @@ static int do_mlockall(int flags)
 		if (error)
 			break;
 	}
-	spin_lock(&current->mm->page_table_lock);
-	merge_segments(current->mm, 0, TASK_SIZE);
-	spin_unlock(&current->mm->page_table_lock);
 	return error;
 }
 

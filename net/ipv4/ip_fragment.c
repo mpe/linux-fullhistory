@@ -324,6 +324,7 @@ static struct ipq *ip_frag_create(unsigned hash, struct iphdr *iph)
 	qp->len = 0;
 	qp->meat = 0;
 	qp->fragments = NULL;
+	qp->iif = 0;
 
 	/* Initialize a timer for this entry. */
 	init_timer(&qp->timer);
@@ -485,7 +486,8 @@ static void ip_frag_queue(struct ipq *qp, struct sk_buff *skb)
 	else
 		qp->fragments = skb;
 
-	qp->iif = skb->dev->ifindex;
+	if (skb->dev)
+		qp->iif = skb->dev->ifindex;
 	skb->dev = NULL;
 	qp->meat += skb->len;
 	atomic_add(skb->truesize, &ip_frag_mem);

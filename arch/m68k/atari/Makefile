@@ -8,14 +8,14 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := atari.o
-O_OBJS	 := config.o time.o debug.o atakeyb.o ataints.o stdma.o atasound.o \
-            joystick.o stram.o
-OX_OBJS  := atari_ksyms.o
+
+export-objs	:= atari_ksyms.o
+
+obj-y		:= config.o time.o debug.o atakeyb.o ataints.o stdma.o \
+			atasound.o joystick.o stram.o atari_ksyms.o
 
 ifdef CONFIG_PCI
-ifdef CONFIG_HADES
-O_OBJS += hades-pci.o
-endif
+obj-$(CONFIG_HADES)	+= hades-pci.o
 endif
 
 include $(TOPDIR)/Rules.make

@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: dswstate - Dispatcher parse tree walk management routines
- *              $Revision: 35 $
+ *              $Revision: 36 $
  *
  *****************************************************************************/
 
@@ -253,7 +253,7 @@ acpi_ds_result_pop_from_bottom (
 		return (AE_AML_NO_OPERAND);
 	}
 
-	
+
 	return (AE_OK);
 }
 

@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amprep - ACPI AML (p-code) execution - field prep utilities
- *              $Revision: 69 $
+ *              $Revision: 72 $
  *
  *****************************************************************************/
 
@@ -50,13 +50,25 @@
 
 static u32
 acpi_aml_decode_field_access_type (
-	u32                     access)
+	u32                     access,
+	u16                     length)
 {
 
 	switch (access)
 	{
 	case ACCESS_ANY_ACC:
-		return (8);
+		if (length <= 8) {
+			return (8);
+		}
+		else if (length <= 16) {
+			return (16);
+		}
+		else if (length <= 32) {
+			return (32);
+		}
+		else {
+			return (8);
+		}
 		break;
 
 	case ACCESS_BYTE_ACC:
@@ -131,7 +143,7 @@ acpi_aml_prep_common_field_object (
 
 	/* Decode the access type so we can compute offsets */
 
-	granularity = acpi_aml_decode_field_access_type (obj_desc->field.access);
+	granularity = acpi_aml_decode_field_access_type (obj_desc->field.access, obj_desc->field.length);
 	if (!granularity) {
 		return (AE_AML_OPERAND_VALUE);
 	}

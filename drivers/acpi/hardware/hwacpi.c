@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: hwacpi - ACPI hardware functions - mode and timer
- *              $Revision: 32 $
+ *              $Revision: 34 $
  *
  *****************************************************************************/
 
@@ -126,7 +126,9 @@ acpi_hw_initialize (
 		 * block is not fixed, so the buffer must be allocated with malloc
 		 */
 
-		if (acpi_gbl_FADT->Xgpe0blk.address && acpi_gbl_FADT->gpe0blk_len) {
+		if (ACPI_VALID_ADDRESS (acpi_gbl_FADT->Xgpe0blk.address) &&
+			acpi_gbl_FADT->gpe0blk_len)
+		{
 			/* GPE0 specified in FADT  */
 
 			acpi_gbl_gpe0enable_register_save =
@@ -147,7 +149,9 @@ acpi_hw_initialize (
 			acpi_gbl_gpe0enable_register_save = NULL;
 		}
 
-		if (acpi_gbl_FADT->Xgpe1_blk.address && acpi_gbl_FADT->gpe1_blk_len) {
+		if (ACPI_VALID_ADDRESS (acpi_gbl_FADT->Xgpe1_blk.address) &&
+			acpi_gbl_FADT->gpe1_blk_len)
+		{
 			/* GPE1 defined */
 
 			acpi_gbl_gpe1_enable_register_save =
@@ -317,7 +321,7 @@ acpi_hw_pmt_ticks (void)
 {
 	u32                      ticks;
 
-	ticks = acpi_os_in32 ((ACPI_IO_ADDRESS) acpi_gbl_FADT->Xpm_tmr_blk.address);
+	ticks = acpi_os_in32 ((ACPI_IO_ADDRESS) ACPI_GET_ADDRESS (acpi_gbl_FADT->Xpm_tmr_blk.address));
 
 	return (ticks);
 }

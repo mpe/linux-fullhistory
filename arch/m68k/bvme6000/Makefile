@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := bvme6000.o
-O_OBJS   := config.o bvmeints.o rtc.o
-#OX_OBJS = ksyms.o
+
+obj-y		:= config.o bvmeints.o rtc.o
 
 include $(TOPDIR)/Rules.make

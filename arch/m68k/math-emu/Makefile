@@ -13,7 +13,8 @@
 #EXTRA_CFLAGS=-DFPU_EMU_DEBUG
 
 O_TARGET := mathemu.o
-O_OBJS := fp_entry.o fp_scan.o fp_util.o fp_move.o fp_movem.o \
-	  fp_cond.o fp_arith.o fp_log.o fp_trig.o
+
+obj-y		:= fp_entry.o fp_scan.o fp_util.o fp_move.o fp_movem.o \
+			fp_cond.o fp_arith.o fp_log.o fp_trig.o
 
 include $(TOPDIR)/Rules.make

@@ -2439,6 +2439,17 @@ generic_file_write(struct file *file,const char *buf,size_t count,loff_t *ppos)
 		if (bytes > count)
 			bytes = count;
 
+		/*
+		 * Bring in the user page that we will copy from _first_.
+		 * Otherwise there's a nasty deadlock on copying from the
+		 * same page as we're writing to, without it being marked
+		 * up-to-date.
+		 */
+		{ volatile unsigned char dummy;
+			__get_user(dummy, buf);
+			__get_user(dummy, buf+bytes-1);
+		}
+
 		status = -ENOMEM;	/* we'll assign it later anyway */
 		page = __grab_cache_page(mapping, index, &cached_page);
 		if (!page)

@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Module Name: amutils - interpreter/scanner utilities
- *              $Revision: 64 $
+ *              $Revision: 66 $
  *
  *****************************************************************************/
 
@@ -167,7 +167,7 @@ acpi_aml_truncate_for32bit_table (
 		 * We are running a method that exists in a 32-bit ACPI table.
 		 * Truncate the value to 32 bits by zeroing out the upper 32-bit field
 		 */
-		obj_desc->number.value &= (UINT64) ACPI_UINT32_MAX;
+		obj_desc->number.value &= (ACPI_INTEGER) ACPI_UINT32_MAX;
 	}
 }
 

@@ -2,7 +2,7 @@
  *
  * Module Name: evxfregn - External Interfaces, ACPI Operation Regions and
  *                         Address Spaces.
- *              $Revision: 24 $
+ *              $Revision: 26 $
  *
  *****************************************************************************/
 
@@ -337,7 +337,7 @@ acpi_remove_address_space_handler (
 				 *  The region is just inaccessible as indicated to
 				 *  the _REG method
 				 */
-				acpi_ev_disassociate_region_from_handler(region_obj);
+				acpi_ev_disassociate_region_from_handler(region_obj, FALSE);
 
 				/*
 				 *  Walk the list, since we took the first region and it

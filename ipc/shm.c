@@ -15,23 +15,13 @@
  *
  */
 
-#include <linux/config.h>
-#include <linux/module.h>
 #include <linux/malloc.h>
 #include <linux/shm.h>
-#include <linux/swap.h>
-#include <linux/smp_lock.h>
 #include <linux/init.h>
-#include <linux/locks.h>
 #include <linux/file.h>
 #include <linux/mman.h>
-#include <linux/vmalloc.h>
-#include <linux/pagemap.h>
 #include <linux/proc_fs.h>
-#include <linux/highmem.h>
-
 #include <asm/uaccess.h>
-#include <asm/pgtable.h>
 
 #include "util.h"
 
@@ -109,6 +99,7 @@ static inline void shm_inc (int id) {
 		BUG();
 	shp->shm_atim = CURRENT_TIME;
 	shp->shm_lprid = current->pid;
+	shp->shm_nattch++;
 	shm_unlock(id);
 }
 
@@ -123,21 +114,14 @@ static void shm_open (struct vm_area_struct *shmd)
  *
  * @shp: struct to free
  *
- * It has to be called with shp and shm_ids.sem locked and will
- * release them
+ * It has to be called with shp and shm_ids.sem locked
  */
 static void shm_destroy (struct shmid_kernel *shp)
 {
-	struct file * file = shp->shm_file;
-
-	shp->shm_file = NULL;
 	shm_tot -= (shp->shm_segsz + PAGE_SIZE - 1) >> PAGE_SHIFT;
-	shm_unlock (shp->id);
 	shm_rmid (shp->id);
+	fput (shp->shm_file);
 	kfree (shp);
-	up (&shm_ids.sem);
-	/* put the file outside the critical path to prevent recursion */
-	fput (file);
 }
 
 /*
@@ -158,10 +142,10 @@ static void shm_close (struct vm_area_struct *shmd)
 		BUG();
 	shp->shm_lprid = current->pid;
 	shp->shm_dtim = CURRENT_TIME;
-	if(shp->shm_flags & SHM_DEST &&
-	   file_count (file) == 2) /* shp and the vma have the last
-                                      references*/
-		return shm_destroy (shp);
+	shp->shm_nattch--;
+	if(shp->shm_nattch == 0 &&
+	   shp->shm_flags & SHM_DEST)
+		shm_destroy (shp);
 
 	shm_unlock(id);
 	up (&shm_ids.sem);
@@ -176,7 +160,7 @@ static int shm_mmap(struct file * file, struct vm_area_struct * vma)
 }
 
 static struct file_operations shm_file_operations = {
-	mmap:		shm_mmap
+	mmap:	shm_mmap
 };
 
 static struct vm_operations_struct shm_vm_ops = {
@@ -218,9 +202,10 @@ static int newseg (key_t key, int shmflg, size_t size)
 	shp->shm_atim = shp->shm_dtim = 0;
 	shp->shm_ctim = CURRENT_TIME;
 	shp->shm_segsz = size;
+	shp->shm_nattch = 0;
 	shp->id = shm_buildid(id,shp->shm_perm.seq);
 	shp->shm_file = file;
-	file->f_dentry->d_inode->i_ino = id;
+	file->f_dentry->d_inode->i_ino = shp->id;
 	file->f_op = &shm_file_operations;
 	shm_tot += numpages;
 	shm_unlock (id);
@@ -370,15 +355,13 @@ static void shm_get_stat (unsigned long *rss, unsigned long *swp)
 		struct inode * inode;
 
 		shp = shm_get(i);
-		if(shp == NULL || shp->shm_file == NULL)
+		if(shp == NULL)
 			continue;
 		inode = shp->shm_file->f_dentry->d_inode;
-		down (&inode->i_sem);
-		*rss += inode->i_mapping->nrpages;
 		spin_lock (&inode->u.shmem_i.lock);
+		*rss += inode->i_mapping->nrpages;
 		*swp += inode->u.shmem_i.swapped;
 		spin_unlock (&inode->u.shmem_i.lock);
-		up (&inode->i_sem);
 	}
 }
 
@@ -462,7 +445,7 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		tbuf.shm_ctime	= shp->shm_ctim;
 		tbuf.shm_cpid	= shp->shm_cprid;
 		tbuf.shm_lpid	= shp->shm_lprid;
-		tbuf.shm_nattch	= file_count (shp->shm_file) - 1;
+		tbuf.shm_nattch	= shp->shm_nattch;
 		shm_unlock(shmid);
 		if(copy_shmid_to_user (buf, &tbuf, version))
 			return -EFAULT;
@@ -512,13 +495,12 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 			goto out_up;
 		err = shm_checkid(shp, shmid);
 		if (err == 0) {
-			if (file_count (shp->shm_file) == 1) {
+			if (shp->shm_nattch){
+				shp->shm_flags |= SHM_DEST;
+				/* Do not find it any more */
+				shp->shm_perm.key = IPC_PRIVATE;
+			} else
 				shm_destroy (shp);
-				return 0;
-			}
-			shp->shm_flags |= SHM_DEST;
-			/* Do not find it any more */
-			shp->shm_perm.key = IPC_PRIVATE;
 		}
 		/* Unlock */
 		shm_unlock(shmid);
@@ -619,13 +601,23 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		return -EACCES;
 	}
 	file = shp->shm_file;
-	get_file (file);
+	shp->shm_nattch++;
 	shm_unlock(shmid);
 
 	down(&current->mm->mmap_sem);
 	user_addr = (void *) do_mmap (file, addr, file->f_dentry->d_inode->i_size, prot, flags, 0);
 	up(&current->mm->mmap_sem);
-	fput (file);
+
+	down (&shm_ids.sem);
+	if(!(shp = shm_lock(shmid)))
+		BUG();
+	shp->shm_nattch--;
+	if(shp->shm_nattch == 0 &&
+	   shp->shm_flags & SHM_DEST)
+		shm_destroy (shp);
+	shm_unlock(shmid);
+	up (&shm_ids.sem);
+
 	*raddr = (unsigned long) user_addr;
 	err = 0;
 	if (IS_ERR(user_addr))
@@ -684,7 +676,7 @@ static int sysvipc_shm_read_proc(char *buffer, char **start, off_t offset, int l
 				shp->shm_segsz,
 				shp->shm_cprid,
 				shp->shm_lprid,
-				file_count (shp->shm_file) - 1,
+				shp->shm_nattch,
 				shp->shm_perm.uid,
 				shp->shm_perm.gid,
 				shp->shm_perm.cuid,

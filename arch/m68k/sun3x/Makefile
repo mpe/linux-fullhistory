@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := sun3x.o
-O_OBJS   := config.o time.o dvma.o sbus.o
-OX_OBJS  := 
+
+obj-y		:= config.o time.o dvma.o sbus.o
 
 include $(TOPDIR)/Rules.make

@@ -359,8 +359,16 @@ static struct accessmap	nfs3_diraccess[] = {
 };
 
 static struct accessmap	nfs3_anyaccess[] = {
-    /* XXX: should we try to cover read/write here for clients that
-     * rely on us to do their access checking for special files? */
+	/* Some clients - Solaris 2.6 at least, make an access call
+	 * to the server to check for access for things like /dev/null
+	 * (which really, the server doesn't care about).  So
+	 * We provide simple access checking for them, looking
+	 * mainly at mode bits
+	 */
+    {	NFS3_ACCESS_READ,	MAY_READ			},
+    {	NFS3_ACCESS_EXECUTE,	MAY_EXEC			},
+    {	NFS3_ACCESS_MODIFY,	MAY_WRITE			},
+    {	NFS3_ACCESS_EXTEND,	MAY_WRITE			},
 
     {	0,			0				}
 };
@@ -1501,12 +1509,17 @@ nfsd_permission(struct svc_export *exp, struct dentry *dentry, int acc)
 		inode->i_uid, inode->i_gid, current->fsuid, current->fsgid);
 #endif
 
-	if (acc & (MAY_WRITE | MAY_SATTR | MAY_TRUNC)) {
-		if (EX_RDONLY(exp) || IS_RDONLY(inode))
-			return nfserr_rofs;
-		if (/* (acc & MAY_WRITE) && */ IS_IMMUTABLE(inode))
-			return nfserr_perm;
-	}
+	/* only care about readonly exports for files and
+	 * directories. links don't have meaningful write access,
+	 * and all else is local to the client
+	 */
+	if (S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode)) 
+		if (acc & (MAY_WRITE | MAY_SATTR | MAY_TRUNC)) {
+			if (EX_RDONLY(exp) || IS_RDONLY(inode))
+				return nfserr_rofs;
+			if (/* (acc & MAY_WRITE) && */ IS_IMMUTABLE(inode))
+				return nfserr_perm;
+		}
 	if ((acc & MAY_TRUNC) && IS_APPEND(inode))
 		return nfserr_perm;
 

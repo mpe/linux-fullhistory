@@ -164,6 +164,9 @@ struct agp_bridge_data {
 #ifndef PCI_DEVICE_ID_INTEL_840_0
 #define PCI_DEVICE_ID_INTEL_840_0		0x1a21
 #endif
+#ifndef PCI_DEVICE_ID_INTEL_850_0
+#define PCI_DEVICE_ID_INTEL_850_0     0x2530
+#endif
 #ifndef PCI_DEVICE_ID_INTEL_810_DC100_0
 #define PCI_DEVICE_ID_INTEL_810_DC100_0 0x7122
 #endif
@@ -212,6 +215,10 @@ struct agp_bridge_data {
 /* intel i840 registers */
 #define INTEL_I840_MCHCFG   0x50
 #define INTEL_I840_ERRSTS	0xc8
+
+/* intel i850 registers */
+#define INTEL_I850_MCHCFG   0x50
+#define INTEL_I850_ERRSTS   0xc8
 
 /* intel i810 registers */
 #define I810_GMADDR 0x10

@@ -313,9 +313,7 @@ int setup_arg_pages(struct linux_binprm *bprm)
 		mpnt->vm_pgoff = 0;
 		mpnt->vm_file = NULL;
 		mpnt->vm_private_data = (void *) 0;
-		spin_lock(&current->mm->page_table_lock);
 		insert_vm_struct(current->mm, mpnt);
-		spin_unlock(&current->mm->page_table_lock);
 		current->mm->total_vm = (mpnt->vm_end - mpnt->vm_start) >> PAGE_SHIFT;
 	} 
 
