@@ -636,12 +636,11 @@ void __init setup_system(void)
 	early_console_initialized = 1;
 	register_console(&udbg_console);
 
-#endif /* !CONFIG_PPC_ISERIES */
-
 	/* Save unparsed command line copy for /proc/cmdline */
 	strlcpy(saved_command_line, cmd_line, COMMAND_LINE_SIZE);
 
 	parse_early_param();
+#endif /* !CONFIG_PPC_ISERIES */
 
 #if defined(CONFIG_SMP) && !defined(CONFIG_PPC_ISERIES)
 	/*
@@ -800,20 +799,31 @@ struct seq_operations cpuinfo_op = {
 	.show =	show_cpuinfo,
 };
 
-#if 0 /* XXX not currently used */
+/*
+ * These three variables are used to save values passed to us by prom_init()
+ * via the device tree. The TCE variables are needed because with a memory_limit
+ * in force we may need to explicitly map the TCE are at the top of RAM.
+ */
 unsigned long memory_limit;
+unsigned long tce_alloc_start;
+unsigned long tce_alloc_end;
 
+#ifdef CONFIG_PPC_ISERIES
+/*
+ * On iSeries we just parse the mem=X option from the command line.
+ * On pSeries it's a bit more complicated, see prom_init_mem()
+ */
 static int __init early_parsemem(char *p)
 {
 	if (!p)
 		return 0;
 
-	memory_limit = memparse(p, &p);
+	memory_limit = ALIGN(memparse(p, &p), PAGE_SIZE);
 
 	return 0;
 }
 early_param("mem", early_parsemem);
-#endif
+#endif /* CONFIG_PPC_ISERIES */
 
 #ifdef CONFIG_PPC_MULTIPLATFORM
 static int __init set_preferred_console(void)

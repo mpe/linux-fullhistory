@@ -912,6 +912,8 @@ static int __init early_init_dt_scan_chosen(unsigned long node,
 					    const char *full_path, void *data)
 {
 	u32 *prop;
+	u64 *prop64;
+	extern unsigned long memory_limit, tce_alloc_start, tce_alloc_end;
 
 	if (strcmp(full_path, "/chosen") != 0)
 		return 0;
@@ -927,6 +929,18 @@ static int __init early_init_dt_scan_chosen(unsigned long node,
 		iommu_is_off = 1;
 	if (get_flat_dt_prop(node, "linux,iommu-force-on", NULL) != NULL)
 		iommu_force_on = 1;
+
+ 	prop64 = (u64*)get_flat_dt_prop(node, "linux,memory-limit", NULL);
+ 	if (prop64)
+ 		memory_limit = *prop64;
+
+ 	prop64 = (u64*)get_flat_dt_prop(node, "linux,tce-alloc-start", NULL);
+ 	if (prop64)
+ 		tce_alloc_start = *prop64;
+
+ 	prop64 = (u64*)get_flat_dt_prop(node, "linux,tce-alloc-end", NULL);
+ 	if (prop64)
+ 		tce_alloc_end = *prop64;
 
 #ifdef CONFIG_PPC_RTAS
 	/* To help early debugging via the front panel, we retreive a minimal
@@ -1067,6 +1081,7 @@ void __init early_init_devtree(void *params)
 	lmb_init();
 	scan_flat_dt(early_init_dt_scan_root, NULL);
 	scan_flat_dt(early_init_dt_scan_memory, NULL);
+	lmb_enforce_memory_limit();
 	lmb_analyze();
 	systemcfg->physicalMemorySize = lmb_phys_mem_size();
 	lmb_reserve(0, __pa(klimit));
