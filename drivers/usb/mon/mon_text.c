@@ -261,6 +261,7 @@ static ssize_t mon_text_read(struct file *file, char __user *buf,
 	struct mon_event_text *ep;
 	int cnt, limit;
 	char *pbuf;
+	char udir, utype;
 	int data_len, i;
 
 	add_wait_queue(&rp->wait, &waita);
@@ -290,9 +291,18 @@ static ssize_t mon_text_read(struct file *file, char __user *buf,
 	pbuf = rp->printf_buf;
 	limit = rp->printf_size;
 
+	udir = usb_pipein(ep->pipe) ? 'i' : 'o';
+	switch (usb_pipetype(ep->pipe)) {
+	case PIPE_ISOCHRONOUS:	utype = 'Z'; break;
+	case PIPE_INTERRUPT:	utype = 'I'; break;
+	case PIPE_CONTROL:	utype = 'C'; break;
+	default: /* PIPE_BULK */  utype = 'B';
+	}
 	cnt += snprintf(pbuf + cnt, limit - cnt,
-	    "%lx %u %c %08x %d %d",
-	    ep->id, ep->tstamp, ep->type, ep->pipe, ep->status, ep->length);
+	    "%lx %u %c %c%c:%03u:%02u %d %d",
+	    ep->id, ep->tstamp, ep->type,
+	    utype, udir, usb_pipedevice(ep->pipe), usb_pipeendpoint(ep->pipe),
+	    ep->status, ep->length);
 
 	if ((data_len = ep->length) > 0) {
 		if (ep->data_flag == 0) {
