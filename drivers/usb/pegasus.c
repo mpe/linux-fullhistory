@@ -24,7 +24,7 @@ static const char *version = __FILE__ ": v0.3.9 2000/04/11 Written by Petko Mano
 #define	SROM_WRITE		0x01
 #define	SROM_READ		0x02
 #define	PEGASUS_TX_TIMEOUT	(HZ*5)
-#define	ALIGN(x)		x __attribute__((aligned(16)))
+#define	ALIGN(x)		x __attribute__((aligned(L1_CACHE_BYTES)))
 
 struct pegasus {
 	struct usb_device	*usb;
@@ -64,6 +64,8 @@ static struct usb_eth_dev usb_dev_id[] = {
 	{"SMC 202 USB Ethernet", 0x0707, 0x0200, NULL},
 	{"ADMtek AN986 \"Pegasus\" USB Ethernet (eval board)", 0x07a6, 0x0986, NULL},
 	{"Accton USB 10/100 Ethernet Adapter", 0x083a, 0x1046, NULL},
+	{"IO DATA USB ET/TX", 0x04bb, 0x0904, NULL},
+	{"LANEED USB Ethernet LD-USB/TX", 0x056e, 0x4002, NULL},
 	{NULL, 0, 0, NULL}
 };
 

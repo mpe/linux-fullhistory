@@ -322,8 +322,9 @@ struct file *open_exec(const char *name)
 	int err = 0;
 
 	lock_kernel();
-	if (walk_init(name, LOOKUP_FOLLOW|LOOKUP_POSITIVE, &nd))
-		err = walk_name(name, &nd);
+	if (path_init(name, LOOKUP_FOLLOW|LOOKUP_POSITIVE, &nd))
+		err = path_walk(name, &nd);
+	unlock_kernel();
 	file = ERR_PTR(err);
 	if (!err) {
 		file = ERR_PTR(-EACCES);
@@ -331,14 +332,14 @@ struct file *open_exec(const char *name)
 			int err = permission(nd.dentry->d_inode, MAY_EXEC);
 			file = ERR_PTR(err);
 			if (!err) {
+				lock_kernel();
 				file = dentry_open(nd.dentry, nd.mnt, O_RDONLY);
-out:
 				unlock_kernel();
+out:
 				return file;
 			}
 		}
-		dput(nd.dentry);
-		mntput(nd.mnt);
+		path_release(&nd);
 	}
 	goto out;
 }

@@ -127,12 +127,12 @@ out:
 	return err;
 }
 
-static int bfs_writepage(struct file *file, struct dentry *dentry, struct page *page)
+static int bfs_writepage(struct file *file, struct page *page)
 {
 	return block_write_full_page(page, bfs_get_block);
 }
 
-static int bfs_readpage(struct dentry *dentry, struct page *page)
+static int bfs_readpage(struct file *file, struct page *page)
 {
 	return block_read_full_page(page, bfs_get_block);
 }

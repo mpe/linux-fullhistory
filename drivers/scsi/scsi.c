@@ -447,8 +447,10 @@ Scsi_Cmnd *scsi_allocate_device(Scsi_Device * device, int wait,
                          * to the user.
                          */
                         if( interruptable ) {
-                                if (signal_pending(current))
+                                if (signal_pending(current)) {
+                                        spin_unlock_irqrestore(&device_request_lock, flags);
                                         return NULL;
+                                }
                         }
 		} else {
                         spin_unlock_irqrestore(&device_request_lock, flags);
@@ -1417,7 +1419,11 @@ void scsi_build_commandblocks(Scsi_Device * SDpnt)
 	spin_lock_irqsave(&device_request_lock, flags);
 
 	if (SDpnt->queue_depth == 0)
+	{
 		SDpnt->queue_depth = host->cmd_per_lun;
+		if (SDpnt->queue_depth == 0)
+			SDpnt->queue_depth = 1; /* live to fight another day */
+	}
 	SDpnt->device_queue = NULL;
 
 	for (j = 0; j < SDpnt->queue_depth; j++) {
@@ -1809,8 +1815,8 @@ static int proc_scsi_gen_write(struct file * file, const char * buf,
 		/* FIXME (DB) This assumes that the queue_depth routines can be used
 		   in this context as well, while they were all designed to be
 		   called only once after the detect routine. (DB) */
-		if (HBA_ptr->select_queue_depths != NULL)
-			(HBA_ptr->select_queue_depths) (HBA_ptr, HBA_ptr->host_queue);
+		/* queue_depth routine moved to inside scan_scsis(,1,,,) so
+		   it is called before build_commandblocks() */
 
 		err = length;
 		goto out;

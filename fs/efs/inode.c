@@ -11,7 +11,7 @@
 #include <linux/efs_fs_sb.h>
 
 extern int efs_get_block(struct inode *, long, struct buffer_head *, int);
-static int efs_readpage(struct dentry *dentry, struct page *page)
+static int efs_readpage(struct file *file, struct page *page)
 {
 	return block_read_full_page(page,efs_get_block);
 }

@@ -347,6 +347,12 @@ void scan_scsis(struct Scsi_Host *shpnt,
 		if (SDpnt != oldSDpnt) {
 
 			/* it could happen the blockdevice hasn't yet been inited */
+			/* queue_depth() moved from scsi_proc_info() so that
+			   it is called before scsi_build_commandblocks() */
+			if (shpnt->select_queue_depths != NULL)
+				(shpnt->select_queue_depths)(shpnt,
+							     shpnt->host_queue);
+
 			for (sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
 				if (sdtpnt->init && sdtpnt->dev_noticed)
 					(*sdtpnt->init) ();

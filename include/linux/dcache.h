@@ -61,8 +61,6 @@ struct dentry {
 	unsigned int d_flags;
 	struct inode  * d_inode;	/* Where the name belongs to - NULL is negative */
 	struct dentry * d_parent;	/* parent directory */
-	struct dentry * d_mounts;	/* mount information */
-	struct dentry * d_covers;
 	struct list_head d_vfsmnt;
 	struct list_head d_hash;	/* lookup hash list */
 	struct list_head d_lru;		/* d_count = 0 LRU list */
@@ -152,11 +150,11 @@ extern int d_invalidate(struct dentry *);
 #define shrink_dcache() prune_dcache(0)
 struct zone_struct;
 /* dcache memory management */
-extern int shrink_dcache_memory(int, unsigned int, struct zone_struct *);
+extern int shrink_dcache_memory(int, unsigned int);
 extern void prune_dcache(int);
 
 /* icache memory management (defined in linux/fs/inode.c) */
-extern int shrink_icache_memory(int, int, struct zone_struct *);
+extern int shrink_icache_memory(int, int);
 extern void prune_icache(int);
 
 /* only used at mount-time */

@@ -465,7 +465,7 @@ Example:
 
 Known bugs:
 - Xconfig does not write "# foo is not set" to .config (as well as
-  "#unset foo" to autoconf.h) if command is disabled by its dependencies.
+  "#undef foo" to autoconf.h) if command is disabled by its dependencies.
 
 
 === dep_mbool /prompt/ /symbol/ /dep/ ...
@@ -497,7 +497,7 @@ Example:
 
 Known bugs:
 - Xconfig does not write "# foo is not set" to .config (as well as
-  "#unset foo" to autoconf.h) if command is disabled by its dependencies.
+  "#undef foo" to autoconf.h) if command is disabled by its dependencies.
 
 
 === dep_hex /prompt/ /symbol/ /word/ /dep/ ...
@@ -540,7 +540,7 @@ Example:
 
 Known bugs:
 - Xconfig does not write "# foo is not set" to .config (as well as
-  "#unset foo" to autoconf.h) if command is disabled by its dependencies.
+  "#undef foo" to autoconf.h) if command is disabled by its dependencies.
 
 
 === unset /symbol/ ...

@@ -338,11 +338,11 @@ abort_negative:
 
 }
 		
-static int affs_writepage(struct file *file, struct dentry *dentry, struct page *page)
+static int affs_writepage(struct file *file, struct page *page)
 {
 	return block_write_full_page(page,affs_get_block);
 }
-static int affs_readpage(struct dentry *dentry, struct page *page)
+static int affs_readpage(struct file *file, struct page *page)
 {
 	return block_read_full_page(page,affs_get_block);
 }

@@ -98,9 +98,10 @@ io_error:
 }
 
 static int
-smb_readpage(struct dentry *dentry, struct page *page)
+smb_readpage(struct file *file, struct page *page)
 {
 	int		error;
+	struct dentry  *dentry = file->f_dentry;
 
 	pr_debug("SMB: smb_readpage %08lx\n", page_address(page));
 #ifdef SMBFS_PARANOIA
@@ -167,8 +168,9 @@ printk("smb_writepage_sync: short write, wsize=%d, result=%d\n", wsize, result);
  * We are called with the page locked and the caller unlocks.
  */
 static int
-smb_writepage(struct file *file, struct dentry *dentry, struct page *page)
+smb_writepage(struct file *file, struct page *page)
 {
+	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
 	unsigned long end_index = inode->i_size >> PAGE_CACHE_SHIFT;
 	unsigned offset = PAGE_CACHE_SIZE;

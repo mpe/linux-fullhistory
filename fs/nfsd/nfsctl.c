@@ -288,7 +288,7 @@ asmlinkage handle_sys_nfsservctl(int cmd, void *opaque_argp, void *opaque_resp)
 		break;
 	case NFSCTL_GETFS:
 		err = nfsctl_getfs(&arg->ca_getfs, &res->cr_getfs);
-		respsize = res->cr_getfs.fh_size+sizeof(int);
+		respsize = res->cr_getfs.fh_size+ (int)&((struct knfsd_fh*)0)->fh_base;
 		break;
 	default:
 		err = -EINVAL;

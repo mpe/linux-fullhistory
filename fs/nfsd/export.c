@@ -150,7 +150,7 @@ exp_export(struct nfsctl_export *nxp)
 	svc_client	*clp;
 	svc_export	*exp, *parent;
 	svc_export	**head;
-	struct dentry	*dentry = NULL;
+	struct nameidata nd;
 	struct inode	*inode = NULL;
 	int		i, err;
 	kdev_t		dev;
@@ -190,12 +190,13 @@ exp_export(struct nfsctl_export *nxp)
 	}
 
 	/* Look up the dentry */
-	err = -EINVAL;
-	dentry = lookup_dentry(nxp->ex_path, LOOKUP_POSITIVE);
-	if (IS_ERR(dentry))
+	err = 0;
+	if (path_init(nxp->ex_path, LOOKUP_POSITIVE, &nd))
+		err = path_walk(nxp->ex_path, &nd);
+	if (err)
 		goto out_unlock;
 
-	inode = dentry->d_inode;
+	inode = nd.dentry->d_inode;
 	err = -EINVAL;
 	if (inode->i_dev != dev || inode->i_ino != nxp->ex_ino) {
 		printk(KERN_DEBUG "exp_export: i_dev = %x, dev = %x\n",
@@ -218,12 +219,12 @@ exp_export(struct nfsctl_export *nxp)
 		goto finish;
 	}
 
-	if ((parent = exp_child(clp, dev, dentry)) != NULL) {
+	if ((parent = exp_child(clp, dev, nd.dentry)) != NULL) {
 		dprintk("exp_export: export not valid (Rule 3).\n");
 		goto finish;
 	}
 	/* Is this is a sub-export, must be a proper subset of FS */
-	if ((parent = exp_parent(clp, dev, dentry)) != NULL) {
+	if ((parent = exp_parent(clp, dev, nd.dentry)) != NULL) {
 		dprintk("exp_export: sub-export not valid (Rule 2).\n");
 		goto finish;
 	}
@@ -236,7 +237,8 @@ exp_export(struct nfsctl_export *nxp)
 	strcpy(exp->ex_path, nxp->ex_path);
 	exp->ex_client = clp;
 	exp->ex_parent = parent;
-	exp->ex_dentry = dentry;
+	exp->ex_dentry = nd.dentry;
+	exp->ex_mnt = nd.mnt;
 	exp->ex_flags = nxp->ex_flags;
 	exp->ex_dev = dev;
 	exp->ex_ino = ino;
@@ -270,7 +272,7 @@ out:
 
 	/* Release the dentry */
 finish:
-	dput(dentry);
+	path_release(&nd);
 	goto out_unlock;
 }
 
@@ -284,6 +286,7 @@ exp_do_unexport(svc_export *unexp)
 	svc_export	*exp;
 	svc_client	*clp;
 	struct dentry	*dentry;
+	struct vfsmount *mnt;
 	struct inode	*inode;
 	int		i;
 
@@ -296,10 +299,12 @@ exp_do_unexport(svc_export *unexp)
 	}
 
 	dentry = unexp->ex_dentry;
+	mnt = unexp->ex_mnt;
 	inode = dentry->d_inode;
 	if (unexp->ex_dev != inode->i_dev || unexp->ex_ino != inode->i_ino)
 		printk(KERN_WARNING "nfsd: bad dentry in unexport!\n");
 	dput(dentry);
+	mntput(mnt);
 
 	kfree(unexp);
 }
@@ -376,38 +381,40 @@ exp_rootfh(struct svc_client *clp, kdev_t dev, ino_t ino,
 	   char *path, struct knfsd_fh *f, int maxsize)
 {
 	struct svc_export	*exp;
-	struct dentry		*dentry = NULL;
+	struct nameidata	nd;
 	struct inode		*inode;
 	struct svc_fh		fh;
 	int			err;
 
 	err = -EPERM;
 	if (path) {
-		if (!(dentry = lookup_dentry(path, 0))) {
+		err = 0;
+		if (path_init(path, LOOKUP_POSITIVE, &nd))
+			err = path_walk(path, &nd);
+		if (err) {
 			printk("nfsd: exp_rootfh path not found %s", path);
 			return -EPERM;
 		}
-		dev = dentry->d_inode->i_dev;
-		ino = dentry->d_inode->i_ino;
+		dev = nd.dentry->d_inode->i_dev;
+		ino = nd.dentry->d_inode->i_ino;
 	
 		dprintk("nfsd: exp_rootfh(%s [%p] %s:%x/%ld)\n",
-		         path, dentry, clp->cl_ident, dev, (long) ino);
-		exp = exp_parent(clp, dev, dentry);
+		         path, nd.dentry, clp->cl_ident, dev, (long) ino);
+		exp = exp_parent(clp, dev, nd.dentry);
 	} else {
 		dprintk("nfsd: exp_rootfh(%s:%x/%ld)\n",
 		         clp->cl_ident, dev, (long) ino);
-		if ((exp = exp_get(clp, dev, ino)))
-			if (!(dentry = dget(exp->ex_dentry))) {
-				printk("exp_rootfh: Aieee, NULL dentry\n");
-				return -EPERM;
-			}
+		if ((exp = exp_get(clp, dev, ino))) {
+			nd.mnt = mntget(exp->ex_mnt);
+			nd.dentry = dget(exp->ex_dentry);
+		}
 	}
 	if (!exp) {
 		dprintk("nfsd: exp_rootfh export not found.\n");
 		goto out;
 	}
 
-	inode = dentry->d_inode;
+	inode = nd.dentry->d_inode;
 	if (!inode) {
 		printk("exp_rootfh: Aieee, NULL d_inode\n");
 		goto out;
@@ -423,7 +430,7 @@ exp_rootfh(struct svc_client *clp, kdev_t dev, ino_t ino,
 	 * fh must be initialized before calling fh_compose
 	 */
 	fh_init(&fh, maxsize);
-	if (fh_compose(&fh, exp, dentry))
+	if (fh_compose(&fh, exp, nd.dentry))
 		err = -EINVAL;
 	else
 		err = 0;
@@ -432,7 +439,7 @@ exp_rootfh(struct svc_client *clp, kdev_t dev, ino_t ino,
 	return err;
 
 out:
-	dput(dentry);
+	path_release(&nd);
 	return err;
 }
 

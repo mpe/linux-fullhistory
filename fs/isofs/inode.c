@@ -981,7 +981,7 @@ int isofs_bmap(struct inode *inode, int block)
 	return 0;
 }
 
-static int isofs_readpage(struct dentry *dentry, struct page *page)
+static int isofs_readpage(struct file *file, struct page *page)
 {
 	return block_read_full_page(page,isofs_get_block);
 }

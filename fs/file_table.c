@@ -131,9 +131,9 @@ static void __fput(struct file *filp)
 	filp->f_vfsmnt = NULL;
 	if (filp->f_mode & FMODE_WRITE)
 		put_write_access(inode);
+	dput(dentry);
 	if (mnt)
 		mntput(mnt);
-	dput(dentry);
 }
 
 void _fput(struct file *file)

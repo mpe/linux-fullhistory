@@ -388,9 +388,9 @@ out:	return ERR_PTR(res);
  */
 
 static int
-romfs_readpage(struct dentry * dentry, struct page * page)
+romfs_readpage(struct file *file, struct page * page)
 {
-	struct inode *inode = dentry->d_inode;
+	struct inode *inode = (struct inode*)page->mapping->host;
 	unsigned long buf;
 	unsigned long offset, avail, readlen;
 	int result = -EIO;

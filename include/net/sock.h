@@ -102,6 +102,7 @@ struct atm_vcc;
 struct unix_opt {
 	struct unix_address	*addr;
 	struct dentry *		dentry;
+	struct vfsmount *	mnt;
 	struct semaphore	readsem;
 	struct sock *		other;
 	struct sock **		list;

@@ -410,11 +410,11 @@ static void qnx4_put_super(struct super_block *sb)
 	return;
 }
 
-static int qnx4_writepage(struct file *file, struct dentry *dentry, struct page *page)
+static int qnx4_writepage(struct file *file, struct page *page)
 {
 	return block_write_full_page(page,qnx4_get_block);
 }
-static int qnx4_readpage(struct dentry *dentry, struct page *page)
+static int qnx4_readpage(struct file *file, struct page *page)
 {
 	return block_read_full_page(page,qnx4_get_block);
 }

@@ -217,11 +217,11 @@ int hfs_notify_change_hdr(struct dentry *dentry, struct iattr * attr)
 	return __hfs_notify_change(dentry, attr, HFS_HDR);
 }
 
-static int hfs_writepage(struct file *file, struct dentry *dentry, struct page *page)
+static int hfs_writepage(struct file *file, struct page *page)
 {
 	return block_write_full_page(page,hfs_get_block);
 }
-static int hfs_readpage(struct dentry *dentry, struct page *page)
+static int hfs_readpage(struct file *file, struct page *page)
 {
 	return block_read_full_page(page,hfs_get_block);
 }

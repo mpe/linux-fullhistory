@@ -393,8 +393,7 @@ static int proc_pid_follow_link(struct dentry *dentry, struct nameidata *nd)
 #endif
 
 	/* We don't need a base pointer in the /proc filesystem */
-	dput(nd->dentry);
-	mntput(nd->mnt);
+	path_release(nd);
 
 	error = proc_permission(inode, MAY_EXEC);
 	if (error)

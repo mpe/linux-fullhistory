@@ -10,11 +10,11 @@
 #include <linux/efs_fs.h>
 #include <linux/pagemap.h>
 
-static int efs_symlink_readpage(struct dentry *dentry, struct page *page)
+static int efs_symlink_readpage(struct file *file, struct page *page)
 {
 	char *link = (char*)kmap(page);
 	struct buffer_head * bh;
-	struct inode * inode = dentry->d_inode;
+	struct inode * inode = (struct inode*)page->mapping->host;
 	efs_block_t size = inode->i_size;
 	int err;
   

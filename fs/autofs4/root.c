@@ -120,7 +120,7 @@ static void autofs4_update_usage(struct dentry *dentry)
 	struct dentry *top = dentry->d_sb->s_root;
 
 	for(; dentry != top; dentry = dentry->d_parent) {
-		struct autofs_info *ino = autofs4_dentry_ino(dentry->d_covers);
+		struct autofs_info *ino = autofs4_dentry_ino(dentry);
 
 		if (ino) {
 			update_atime(dentry->d_inode);
@@ -575,11 +575,12 @@ static int autofs4_root_ioctl(struct inode *inode, struct file *filp,
 
 	/* return a single thing to expire */
 	case AUTOFS_IOC_EXPIRE:
-		return autofs4_expire_run(inode->i_sb,sbi,
+		return autofs4_expire_run(inode->i_sb,filp->f_vfsmnt,sbi,
 					 (struct autofs_packet_expire *)arg);
 	/* same as above, but can send multiple expires through pipe */
 	case AUTOFS_IOC_EXPIRE_MULTI:
-		return autofs4_expire_multi(inode->i_sb, sbi, (int *)arg);
+		return autofs4_expire_multi(inode->i_sb,filp->f_vfsmnt,sbi,
+					(int *)arg);
 
 	default:
 		return -ENOSYS;

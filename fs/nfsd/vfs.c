@@ -105,11 +105,6 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 	dparent = fhp->fh_dentry;
 	exp  = fhp->fh_export;
 
-#if 0
-	err = nfsd_permission(exp, dparent, MAY_EXEC);
-	if (err)
-		goto out;
-#endif
 	err = nfserr_acces;
 
 	/* Lookup the name, but don't follow links */
@@ -124,17 +119,23 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 			{
 				struct svc_export *exp2 = NULL;
 				struct dentry *dp;
-				dentry = dparent->d_covers->d_parent;
-				for (dp=dentry;
-				     exp2 == NULL && dp->d_parent != dp;
+				struct vfsmount *mnt = mntget(exp->ex_mnt);
+				dentry = dget(dparent);
+				while(follow_up(&mnt, &dentry))
+					;
+				dp = dget(dentry->d_parent);
+				dput(dentry);
+				dentry = dp;
+				for ( ; exp2 == NULL && dp->d_parent != dp;
 				     dp=dp->d_parent)
 					exp2 = exp_get(exp->ex_client, dp->d_inode->i_dev, dp->d_inode->i_ino);
-				if (exp2==NULL || dentry->d_sb != exp2->ex_dentry->d_sb) {
+				if (exp2==NULL) {
+					dput(dentry);
 					dentry = dget(dparent);
 				} else {
-					dget(dentry);
 					exp = exp2;
 				}
+				mntput(mnt);
 			}
 		} else
 			dentry = dget(dparent->d_parent);
@@ -148,7 +149,10 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 		 */
 		if (d_mountpoint(dentry)) {
 			struct svc_export *exp2 = NULL;
-			struct dentry *mounts = dget(dentry->d_mounts);
+			struct vfsmount *mnt = mntget(exp->ex_mnt);
+			struct dentry *mounts = dget(dentry);
+			while (follow_down(&mnt,&mounts)&&d_mountpoint(mounts))
+				;
 			exp2 = exp_get(rqstp->rq_client,
 				       mounts->d_inode->i_dev,
 				       mounts->d_inode->i_ino);
@@ -157,7 +161,8 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 				exp = exp2;
 				dput(dentry);
 				dentry = mounts;
-			}
+			} else
+				dput(mounts);
 		}
 	}
 	/*
@@ -192,11 +197,9 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 	int		size_change = 0;
 
 	if (iap->ia_valid & (ATTR_ATIME | ATTR_MTIME | ATTR_SIZE))
-		accmode |= MAY_WRITE;
-	if (iap->ia_valid & ATTR_SIZE) {
-		accmode |= MAY_OWNER_OVERRIDE;
+		accmode |= MAY_WRITE|MAY_OWNER_OVERRIDE;
+	if (iap->ia_valid & ATTR_SIZE)
 		ftype = S_IFREG;
-	}
 
 	/* Get inode */
 	err = fh_verify(rqstp, fhp, ftype, accmode);
@@ -1042,7 +1045,7 @@ nfsd_readlink(struct svc_rqst *rqstp, struct svc_fh *fhp, char *buf, int *lenp)
 	mm_segment_t	oldfs;
 	int		err;
 
-	err = fh_verify(rqstp, fhp, S_IFLNK, MAY_READ);
+	err = fh_verify(rqstp, fhp, S_IFLNK, MAY_NOP);
 	if (err)
 		goto out;
 

@@ -148,24 +148,35 @@ int permission(struct inode * inode,int mask)
 {
 	int mode = inode->i_mode;
 
-	if (inode->i_op && inode->i_op->permission)
-		return inode->i_op->permission(inode, mask);
-	else if ((mask & S_IWOTH) && IS_RDONLY(inode) &&
+	if (inode->i_op && inode->i_op->permission) {
+		int retval;
+		lock_kernel();
+		retval = inode->i_op->permission(inode, mask);
+		unlock_kernel();
+		return retval;
+	}
+
+	if ((mask & S_IWOTH) && IS_RDONLY(inode) &&
 		 (S_ISREG(mode) || S_ISDIR(mode) || S_ISLNK(mode)))
 		return -EROFS; /* Nobody gets write access to a read-only fs */
-	else if ((mask & S_IWOTH) && IS_IMMUTABLE(inode))
+
+	if ((mask & S_IWOTH) && IS_IMMUTABLE(inode))
 		return -EACCES; /* Nobody gets write access to an immutable file */
-	else if (current->fsuid == inode->i_uid)
+
+	if (current->fsuid == inode->i_uid)
 		mode >>= 6;
 	else if (in_group_p(inode->i_gid))
 		mode >>= 3;
+
 	if (((mode & mask & S_IRWXO) == mask) || capable(CAP_DAC_OVERRIDE))
 		return 0;
+
 	/* read and search access */
 	if ((mask == S_IROTH) ||
 	    (S_ISDIR(mode)  && !(mask & ~(S_IROTH | S_IXOTH))))
 		if (capable(CAP_DAC_READ_SEARCH))
 			return 0;
+
 	return -EACCES;
 }
 
@@ -195,6 +206,14 @@ int get_write_access(struct inode * inode)
 void put_write_access(struct inode * inode)
 {
 	atomic_dec(&inode->i_writecount);
+}
+
+void path_release(struct nameidata *nd)
+{
+	lock_kernel();
+	dput(nd->dentry);
+	mntput(nd->mnt);
+	unlock_kernel();
 }
 
 /*
@@ -271,24 +290,28 @@ static inline int do_follow_link(struct dentry *dentry, struct nameidata *nd)
 	current->link_count--;
 	return err;
 loop:
-	dput(nd->dentry);
-	mntput(nd->mnt);
+	path_release(nd);
 	return -ELOOP;
 }
 
-static inline int follow_up(struct vfsmount **mnt, struct dentry **base)
+static inline int __follow_up(struct vfsmount **mnt, struct dentry **base)
 {
 	struct vfsmount *parent=(*mnt)->mnt_parent;
 	struct dentry *dentry;
 	if (parent == *mnt)
 		return 0;
-	dentry=dget((*mnt)->mnt_mountpoint);
 	mntget(parent);
-	mntput(*mnt);
-	*mnt = parent;
+	dentry=dget((*mnt)->mnt_mountpoint);
 	dput(*base);
 	*base = dentry;
+	mntput(*mnt);
+	*mnt = parent;
 	return 1;
+}
+
+int follow_up(struct vfsmount **mnt, struct dentry **dentry)
+{
+	return __follow_up(mnt, dentry);
 }
 
 static inline int __follow_down(struct vfsmount **mnt, struct dentry **dentry)
@@ -323,7 +346,7 @@ int follow_down(struct vfsmount **mnt, struct dentry **dentry)
  *
  * We expect 'base' to be positive and a directory.
  */
-int walk_name(const char * name, struct nameidata *nd)
+int path_walk(const char * name, struct nameidata *nd)
 {
 	struct dentry *dentry;
 	struct inode *inode;
@@ -390,7 +413,7 @@ int walk_name(const char * name, struct nameidata *nd)
 						nd->dentry = dentry;
 						break;
 					}
-					if (!follow_up(&nd->mnt, &nd->dentry))
+					if (!__follow_up(&nd->mnt, &nd->dentry))
 						break;
 				}
 				inode = nd->dentry->d_inode;
@@ -470,7 +493,7 @@ last_component:
 						nd->dentry = dentry;
 						break;
 					}
-					if (!follow_up(&nd->mnt, &nd->dentry))
+					if (!__follow_up(&nd->mnt, &nd->dentry))
 						break;
 				}
 				inode = nd->dentry->d_inode;
@@ -533,8 +556,7 @@ out_dput:
 		dput(dentry);
 		break;
 	}
-	dput(nd->dentry);
-	mntput(nd->mnt);
+	path_release(nd);
 return_err:
 	return err;
 }
@@ -544,7 +566,7 @@ static int __emul_lookup_dentry(const char *name, struct nameidata *nd)
 {
 	nd->mnt = mntget(current->fs->altrootmnt);
 	nd->dentry = dget(current->fs->altroot);
-	if (walk_name(name, nd))
+	if (path_walk(name, nd))
 		return 0;
 
 	if (!nd->dentry->d_inode) {
@@ -553,18 +575,16 @@ static int __emul_lookup_dentry(const char *name, struct nameidata *nd)
 		nd_root.flags = nd->flags;
 		nd_root.mnt = mntget(current->fs->rootmnt);
 		nd_root.dentry = dget(current->fs->root);
-		if (walk_name(name, &nd_root))
+		if (path_walk(name, &nd_root))
 			return 1;
 		if (nd_root.dentry->d_inode) {
-			dput(nd->dentry);
-			mntput(nd->mnt);
+			path_release(nd);
 			nd->dentry = nd_root.dentry;
 			nd->mnt = nd_root.mnt;
 			nd->last = nd_root.last;
 			return 1;
 		}
-		dput(nd_root.dentry);
-		mntput(nd_root.mnt);
+		path_release(&nd_root);
 	}
 	return 1;
 }
@@ -579,7 +599,7 @@ void set_fs_altroot(void)
 		nd.mnt = mntget(current->fs->rootmnt);
 		nd.dentry = dget(current->fs->root);
 		nd.flags = LOOKUP_FOLLOW|LOOKUP_DIRECTORY|LOOKUP_POSITIVE;
-		if (walk_name(emul,&nd) == 0) {
+		if (path_walk(emul,&nd) == 0) {
 			mnt = nd.mnt;
 			dentry = nd.dentry;
 		}
@@ -605,7 +625,7 @@ walk_init_root(const char *name, struct nameidata *nd)
 	return 1;
 }
 
-int walk_init(const char *name,unsigned int flags,struct nameidata *nd)
+int path_init(const char *name,unsigned int flags,struct nameidata *nd)
 {
 	nd->last_type = LAST_ROOT; /* if there are only slashes... */
 	nd->flags = flags;
@@ -616,25 +636,11 @@ int walk_init(const char *name,unsigned int flags,struct nameidata *nd)
 	return 1;
 }
 
-struct dentry * lookup_dentry(const char * name, unsigned int lookup_flags)
-{
-	struct nameidata nd;
-	int err = 0;
-
-	if (walk_init(name, lookup_flags, &nd))
-		err = walk_name(name, &nd);
-	if (!err) {
-		mntput(nd.mnt);
-		return nd.dentry;
-	}
-	return ERR_PTR(err);
-}
-
 /*
  * Restricted form of lookup. Doesn't follow links, single-component only,
  * needs parent already locked. Doesn't follow mounts.
  */
-static inline struct dentry * lookup_hash(struct qstr *name, struct dentry * base)
+struct dentry * lookup_hash(struct qstr *name, struct dentry * base)
 {
 	struct dentry * dentry;
 	struct inode *inode;
@@ -710,18 +716,22 @@ access:
  * namei exists in two versions: namei/lnamei. The only difference is
  * that namei follows links, while lnamei does not.
  */
-struct dentry * __namei(const char *pathname, unsigned int lookup_flags)
+int __user_walk(const char *name, unsigned flags, struct nameidata *nd)
 {
-	char *name;
-	struct dentry *dentry;
+	char *tmp;
+	int err;
 
-	name = getname(pathname);
-	dentry = (struct dentry *) name;
-	if (!IS_ERR(name)) {
-		dentry = lookup_dentry(name,lookup_flags|LOOKUP_POSITIVE);
-		putname(name);
+	tmp = getname(name);
+	err = PTR_ERR(tmp);
+	if (!IS_ERR(tmp)) {
+		err = 0;
+		lock_kernel();
+		if (path_init(tmp, flags, nd))
+			err = path_walk(tmp, nd);
+		unlock_kernel();
+		putname(tmp);
 	}
-	return dentry;
+	return err;
 }
 
 /*
@@ -865,8 +875,8 @@ int open_namei(const char * pathname, int flag, int mode, struct nameidata *nd)
 
 	acc_mode = ACC_MODE(flag);
 	if (!(flag & O_CREAT)) {
-		if (walk_init(pathname, lookup_flags(flag), nd))
-			error = walk_name(pathname, nd);
+		if (path_init(pathname, lookup_flags(flag), nd))
+			error = path_walk(pathname, nd);
 		if (error)
 			return error;
 
@@ -874,8 +884,8 @@ int open_namei(const char * pathname, int flag, int mode, struct nameidata *nd)
 	} else {
 		struct dentry *dir;
 
-		if (walk_init(pathname, LOOKUP_PARENT, nd))
-			error = walk_name(pathname, nd);
+		if (path_init(pathname, LOOKUP_PARENT, nd))
+			error = path_walk(pathname, nd);
 		if (error)
 			return error;
 		/*
@@ -1013,41 +1023,29 @@ int open_namei(const char * pathname, int flag, int mode, struct nameidata *nd)
 exit_dput:
 	dput(dentry);
 exit:
-	dput(nd->dentry);
-	mntput(nd->mnt);
+	path_release(nd);
 	return error;
 }
 
-static struct dentry *lookup_create(const char *name, int is_dir)
+static struct dentry *lookup_create(struct nameidata *nd, int is_dir)
 {
-	struct nameidata nd;
 	struct dentry *dentry;
-	int err = 0;
-	if (walk_init(name, LOOKUP_PARENT, &nd))
-		err = walk_name(name, &nd);
-	dentry = ERR_PTR(err);
-	if (err)
-		goto out;
-	down(&nd.dentry->d_inode->i_sem);
+
+	down(&nd->dentry->d_inode->i_sem);
 	dentry = ERR_PTR(-EEXIST);
-	if (nd.last_type != LAST_NORM)
+	if (nd->last_type != LAST_NORM)
 		goto fail;
-	dentry = lookup_hash(&nd.last, nd.dentry);
+	dentry = lookup_hash(&nd->last, nd->dentry);
 	if (IS_ERR(dentry))
 		goto fail;
-	if (!is_dir && nd.last.name[nd.last.len] && !dentry->d_inode)
+	if (!is_dir && nd->last.name[nd->last.len] && !dentry->d_inode)
 		goto enoent;
-out_dput:
-	dput(nd.dentry);
-	mntput(nd.mnt);
-out:
 	return dentry;
 enoent:
 	dput(dentry);
 	dentry = ERR_PTR(-ENOENT);
 fail:
-	up(&nd.dentry->d_inode->i_sem);
-	goto out_dput;
+	return dentry;
 }
 
 int vfs_mknod(struct inode *dir, struct dentry *dentry, int mode, dev_t dev)
@@ -1075,33 +1073,12 @@ exit_lock:
 	return error;
 }
 
-struct dentry * do_mknod(const char * filename, int mode, dev_t dev)
-{
-	int error;
-	struct dentry *dir;
-	struct dentry *dentry, *retval;
-
-	dentry = lookup_create(filename, 0);
-	if (IS_ERR(dentry))
-		return dentry;
-
-	dir = dget(dentry->d_parent);
-
-	error = vfs_mknod(dir->d_inode, dentry, mode, dev);
-
-	retval = ERR_PTR(error);
-	if (!error)
-		retval = dget(dentry);
-	unlock_dir(dir);
-	dput(dentry);
-	return retval;
-}
-
 asmlinkage long sys_mknod(const char * filename, int mode, dev_t dev)
 {
-	int error;
+	int error = 0;
 	char * tmp;
-	struct dentry * dentry, *dir;
+	struct dentry * dentry;
+	struct nameidata nd;
 
 	if (S_ISDIR(mode))
 		return -EPERM;
@@ -1110,26 +1087,30 @@ asmlinkage long sys_mknod(const char * filename, int mode, dev_t dev)
 		return PTR_ERR(tmp);
 
 	lock_kernel();
-	dentry = lookup_create(tmp, 0);
-	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
+	if (path_init(tmp, LOOKUP_PARENT, &nd))
+		error = path_walk(tmp, &nd);
+	if (error)
 		goto out;
-	dir = dget(dentry->d_parent);
-	switch (mode & S_IFMT) {
-	case 0: case S_IFREG:
-		error = vfs_create(dir->d_inode, dentry, mode);
-		break;
-	case S_IFCHR: case S_IFBLK: case S_IFIFO: case S_IFSOCK:
-		error = vfs_mknod(dir->d_inode, dentry, mode, dev);
-		break;
-	case S_IFDIR:
-		error = -EPERM;
-		break;
-	default:
-		error = -EINVAL;
+	dentry = lookup_create(&nd, 0);
+	error = PTR_ERR(dentry);
+	if (!IS_ERR(dentry)) {
+		switch (mode & S_IFMT) {
+		case 0: case S_IFREG:
+			error = vfs_create(nd.dentry->d_inode,dentry,mode);
+			break;
+		case S_IFCHR: case S_IFBLK: case S_IFIFO: case S_IFSOCK:
+			error = vfs_mknod(nd.dentry->d_inode,dentry,mode,dev);
+			break;
+		case S_IFDIR:
+			error = -EPERM;
+			break;
+		default:
+			error = -EINVAL;
+		}
+		dput(dentry);
 	}
-	unlock_dir(dir);
-	dput(dentry);
+	up(&nd.dentry->d_inode->i_sem);
+	path_release(&nd);
 out:
 	unlock_kernel();
 	putname(tmp);
@@ -1161,27 +1142,32 @@ exit_lock:
 
 asmlinkage long sys_mkdir(const char * pathname, int mode)
 {
-	int error;
+	int error = 0;
 	char * tmp;
 
 	tmp = getname(pathname);
 	error = PTR_ERR(tmp);
 	if (!IS_ERR(tmp)) {
-		struct dentry *dir;
 		struct dentry *dentry;
+		struct nameidata nd;
 
 		lock_kernel();
-		dentry = lookup_create(tmp, 1);
+		if (path_init(tmp, LOOKUP_PARENT, &nd))
+			error = path_walk(tmp, &nd);
+		if (error)
+			goto out;
+		dentry = lookup_create(&nd, 1);
 		error = PTR_ERR(dentry);
 		if (!IS_ERR(dentry)) {
-			dir = dget(dentry->d_parent);
-			error = vfs_mkdir(dir->d_inode, dentry, mode);
-			unlock_dir(dir);
+			error = vfs_mkdir(nd.dentry->d_inode, dentry, mode);
 			dput(dentry);
 		}
+		up(&nd.dentry->d_inode->i_sem);
+		path_release(&nd);
+out:
 		unlock_kernel();
+		putname(tmp);
 	}
-	putname(tmp);
 
 	return error;
 }
@@ -1250,8 +1236,8 @@ asmlinkage long sys_rmdir(const char * pathname)
 		return PTR_ERR(name);
 	lock_kernel();
 
-	if (walk_init(name, LOOKUP_PARENT, &nd))
-		error = walk_name(name, &nd);
+	if (path_init(name, LOOKUP_PARENT, &nd))
+		error = path_walk(name, &nd);
 	if (error)
 		goto exit;
 
@@ -1272,8 +1258,7 @@ asmlinkage long sys_rmdir(const char * pathname)
 	}
 	up(&nd.dentry->d_inode->i_sem);
 exit1:
-	dput(nd.dentry);
-	mntput(nd.mnt);
+	path_release(&nd);
 exit:
 	unlock_kernel();
 	putname(name);
@@ -1309,8 +1294,8 @@ asmlinkage long sys_unlink(const char * pathname)
 		return PTR_ERR(name);
 	lock_kernel();
 
-	if (walk_init(name, LOOKUP_PARENT, &nd))
-		error = walk_name(name, &nd);
+	if (path_init(name, LOOKUP_PARENT, &nd))
+		error = path_walk(name, &nd);
 	if (error)
 		goto exit;
 	error = -EISDIR;
@@ -1329,8 +1314,7 @@ asmlinkage long sys_unlink(const char * pathname)
 	}
 	up(&nd.dentry->d_inode->i_sem);
 exit1:
-	dput(nd.dentry);
-	mntput(nd.mnt);
+	path_release(&nd);
 exit:
 	unlock_kernel();
 	putname(name);
@@ -1366,7 +1350,7 @@ exit_lock:
 
 asmlinkage long sys_symlink(const char * oldname, const char * newname)
 {
-	int error;
+	int error = 0;
 	char * from;
 	char * to;
 
@@ -1376,18 +1360,23 @@ asmlinkage long sys_symlink(const char * oldname, const char * newname)
 	to = getname(newname);
 	error = PTR_ERR(to);
 	if (!IS_ERR(to)) {
-		struct dentry *dir;
 		struct dentry *dentry;
+		struct nameidata nd;
 
 		lock_kernel();
-		dentry = lookup_create(to, 0);
+		if (path_init(to, LOOKUP_PARENT, &nd))
+			error = path_walk(to, &nd);
+		if (error)
+			goto out;
+		dentry = lookup_create(&nd, 0);
 		error = PTR_ERR(dentry);
 		if (!IS_ERR(dentry)) {
-			dir = dget(dentry->d_parent);
-			error = vfs_symlink(dir->d_inode, dentry, from);
-			unlock_dir(dir);
+			error = vfs_symlink(nd.dentry->d_inode, dentry, from);
 			dput(dentry);
 		}
+		up(&nd.dentry->d_inode->i_sem);
+		path_release(&nd);
+out:
 		unlock_kernel();
 		putname(to);
 	}
@@ -1452,23 +1441,32 @@ asmlinkage long sys_link(const char * oldname, const char * newname)
 	to = getname(newname);
 	error = PTR_ERR(to);
 	if (!IS_ERR(to)) {
-		struct dentry *old_dentry, *new_dentry, *dir;
+		struct dentry *new_dentry;
+		struct nameidata nd, old_nd;
 
 		lock_kernel();
-		old_dentry = lookup_dentry(from, LOOKUP_POSITIVE);
-		error = PTR_ERR(old_dentry);
-		if (IS_ERR(old_dentry))
+		error = 0;
+		if (path_init(from, LOOKUP_POSITIVE, &old_nd))
+			error = path_walk(from, &old_nd);
+		if (error)
 			goto exit;
-
-		new_dentry = lookup_create(to, 0);
+		if (path_init(to, LOOKUP_PARENT, &nd))
+			error = path_walk(to, &nd);
+		if (error)
+			goto out;
+		error = -EXDEV;
+		if (old_nd.mnt != nd.mnt)
+			goto out;
+		new_dentry = lookup_create(&nd, 0);
 		error = PTR_ERR(new_dentry);
 		if (!IS_ERR(new_dentry)) {
-			dir = dget(new_dentry->d_parent);
-			error = vfs_link(old_dentry, dir->d_inode, new_dentry);
-			unlock_dir(dir);
+			error = vfs_link(old_nd.dentry, nd.dentry->d_inode, new_dentry);
 			dput(new_dentry);
 		}
-		dput(old_dentry);
+		up(&nd.dentry->d_inode->i_sem);
+		path_release(&nd);
+out:
+		path_release(&old_nd);
 exit:
 		unlock_kernel();
 		putname(to);
@@ -1630,14 +1628,14 @@ static inline int do_rename(const char * oldname, const char * newname)
 	struct dentry * old_dentry, *new_dentry;
 	struct nameidata oldnd, newnd;
 
-	if (walk_init(oldname, LOOKUP_PARENT, &oldnd))
-		error = walk_name(oldname, &oldnd);
+	if (path_init(oldname, LOOKUP_PARENT, &oldnd))
+		error = path_walk(oldname, &oldnd);
 
 	if (error)
 		goto exit;
 
-	if (walk_init(newname, LOOKUP_PARENT, &newnd))
-		error = walk_name(newname, &newnd);
+	if (path_init(newname, LOOKUP_PARENT, &newnd))
+		error = path_walk(newname, &newnd);
 	if (error)
 		goto exit1;
 
@@ -1686,11 +1684,9 @@ exit4:
 exit3:
 	double_up(&new_dir->d_inode->i_sem, &old_dir->d_inode->i_sem);
 exit2:
-	dput(newnd.dentry);
-	mntput(newnd.mnt);
+	path_release(&newnd);
 exit1:
-	dput(oldnd.dentry);
-	mntput(oldnd.mnt);
+	path_release(&oldnd);
 exit:
 	return error;
 }
@@ -1740,17 +1736,15 @@ __vfs_follow_link(struct nameidata *nd, const char *link)
 		goto fail;
 
 	if (*link == '/') {
-		dput(nd->dentry);
-		mntput(nd->mnt);
+		path_release(nd);
 		if (!walk_init_root(link, nd))
 			/* weird __emul_prefix() stuff did it */
 			return 0;
 	}
-	return walk_name(link, nd);
+	return path_walk(link, nd);
 
 fail:
-	dput(nd->dentry);
-	mntput(nd->mnt);
+	path_release(nd);
 	return PTR_ERR(link);
 }
 

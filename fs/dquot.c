@@ -1544,15 +1544,15 @@ asmlinkage long sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 	dev = NODEV;
 	if (special != NULL || (cmds != Q_SYNC && cmds != Q_GETSTATS)) {
 		mode_t mode;
-		struct dentry * dentry;
+		struct nameidata nd;
 
-		dentry = namei(special);
-		if (IS_ERR(dentry))
+		ret = user_path_walk(special, &nd);
+		if (ret)
 			goto out;
 
-		dev = dentry->d_inode->i_rdev;
-		mode = dentry->d_inode->i_mode;
-		dput(dentry);
+		dev = nd.dentry->d_inode->i_rdev;
+		mode = nd.dentry->d_inode->i_mode;
+		path_release(&nd);
 
 		ret = -ENOTBLK;
 		if (!S_ISBLK(mode))

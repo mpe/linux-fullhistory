@@ -939,11 +939,11 @@ struct buffer_head *sysv_file_bread(struct inode *inode, int block, int create)
 	return NULL;
 }
 
-static int sysv_writepage(struct file *file, struct dentry *dentry, struct page *page)
+static int sysv_writepage(struct file *file, struct page *page)
 {
 	return block_write_full_page(page,sysv_get_block);
 }
-static int sysv_readpage(struct dentry *dentry, struct page *page)
+static int sysv_readpage(struct file *file, struct page *page)
 {
 	return block_read_full_page(page,sysv_get_block);
 }

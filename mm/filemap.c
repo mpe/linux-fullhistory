@@ -233,7 +233,7 @@ repeat:
 	spin_unlock(&pagecache_lock);
 }
 
-int shrink_mmap(int priority, int gfp_mask, zone_t *zone)
+int shrink_mmap(int priority, int gfp_mask)
 {
 	int ret = 0, count;
 	LIST_HEAD(young);
@@ -241,48 +241,34 @@ int shrink_mmap(int priority, int gfp_mask, zone_t *zone)
 	LIST_HEAD(forget);
 	struct list_head * page_lru, * dispose;
 	struct page * page = NULL;
-	struct zone_struct * p_zone;
 	
-	if (!zone)
-		BUG();
+	count = (nr_lru_pages << 1) >> (priority >> 1);
 
-	count = nr_lru_pages >> priority;
-	if (!count)
-		return ret;
-
-	spin_lock(&pagemap_lru_lock);
-again:
 	/* we need pagemap_lru_lock for list_del() ... subtle code below */
+	spin_lock(&pagemap_lru_lock);
 	while (count > 0 && (page_lru = lru_cache.prev) != &lru_cache) {
 		page = list_entry(page_lru, struct page, lru);
 		list_del(page_lru);
-		p_zone = page->zone;
 
-		/* This LRU list only contains a few pages from the system,
-		 * so we must fail and let swap_out() refill the list if
-		 * there aren't enough freeable pages on the list */
+		count--;
 
-		/* The page is in use, or was used very recently, put it in
-		 * &young to make sure that we won't try to free it the next
-		 * time */
-		dispose = &young;
-		if (PageTestandClearReferenced(page))
-			goto dispose_continue;
-
+		/*
+		 * Any page we can't touch (because it is
+		 * locked or shared or something), gets
+		 * put on the old list (maybe we can touch
+		 * it next time).
+		 *
+		 * We leave the Reference bit untouched,
+		 * so that it can stay "young" despite being
+		 * moved to the back of the queue.
+		 *
+		 * Avoid unscalable SMP locking for pages we can
+		 * immediate tell are untouchable..
+		 */
+		dispose = &old;
 		if (!page->buffers && page_count(page) > 1)
 			goto dispose_continue;
 
-		/*
-		 * Ok, it wasn't young, so leave it at the end of
-		 * the list ("old").
-		 */
-		dispose = &old;
-		if (p_zone->free_pages > p_zone->pages_high)
-			goto dispose_continue;
-
-		count--;
-		/* Page not used -> free it or put it on the old list
-		 * so it gets freed first the next time */
 		if (TryLockPage(page))
 			goto dispose_continue;
 
@@ -296,7 +282,10 @@ again:
 		/* avoid freeing the page while it's locked */
 		get_page(page);
 
-		/* Is it a buffer page? */
+		/*
+		 * Is it a buffer page? Try to clean it up regardless
+		 * of zone and Reference bits..
+		 */
 		if (page->buffers) {
 			if (!try_to_free_buffers(page))
 				goto unlock_continue;
@@ -307,12 +296,32 @@ again:
 			}
 		}
 
+		/*
+		 * Page is from a zone we don't care about.
+		 * Put it on the old list, but leave the reference
+		 * bit untouched - which may end up keeping
+		 * it young (so that the LRU for that zone is
+		 * not destroyed completely).
+		 */
+		if (page->zone->free_pages > page->zone->pages_high)
+			goto unlock_continue;
+
+		/*
+		 * The page is in use, or was used very recently, put it in
+		 * back at the top (it's young).. We may touch it after a
+		 * second pass if we haven't found anything else.
+		 */
+		dispose = &lru_cache;
+		if (PageTestandClearReferenced(page))
+			goto unlock_continue;
+
 		/* Take the pagecache_lock spinlock held to avoid
 		   other tasks to notice the page while we are looking at its
 		   page count. If it's a pagecache-page we'll free it
 		   in one atomic transaction after checking its page count. */
 		spin_lock(&pagecache_lock);
 
+		dispose = &old;
 		/*
 		 * We can't free pages unless there's just one user
 		 * (count == 2 because we added one ourselves above).
@@ -370,10 +379,6 @@ made_buffer_progress:
 	spin_lock(&pagemap_lru_lock);
 	/* nr_lru_pages needs the spinlock */
 	nr_lru_pages--;
-
-	/* wrong zone?  not looped too often?    roll again... */
-	if (page->zone != zone && count)
-		goto again;
 
 out:
 	list_splice(&young, &lru_cache);
@@ -584,7 +589,7 @@ static inline int page_cache_read(struct file * file, unsigned long offset)
 		return -ENOMEM;
 
 	if (!add_to_page_cache_unique(page, mapping, offset, hash)) {
-		int error = mapping->a_ops->readpage(file->f_dentry, page);
+		int error = mapping->a_ops->readpage(file, page);
 		page_cache_release(page);
 		return error;
 	}
@@ -1119,7 +1124,7 @@ page_not_up_to_date:
 
 readpage:
 		/* ... and start the actual read. The read will unlock the page. */
-		error = mapping->a_ops->readpage(filp->f_dentry, page);
+		error = mapping->a_ops->readpage(filp, page);
 
 		if (!error) {
 			if (Page_Uptodate(page))
@@ -1501,7 +1506,7 @@ page_not_uptodate:
 		goto success;
 	}
 
-	if (!mapping->a_ops->readpage(file->f_dentry, page)) {
+	if (!mapping->a_ops->readpage(file, page)) {
 		wait_on_page(page);
 		if (Page_Uptodate(page))
 			goto success;
@@ -1519,7 +1524,7 @@ page_not_uptodate:
 		goto success;
 	}
 	ClearPageError(page);
-	if (!mapping->a_ops->readpage(file->f_dentry, page)) {
+	if (!mapping->a_ops->readpage(file, page)) {
 		wait_on_page(page);
 		if (Page_Uptodate(page))
 			goto success;
@@ -1534,20 +1539,16 @@ page_not_uptodate:
 }
 
 static int filemap_write_page(struct file *file,
-			      unsigned long index,
 			      struct page * page,
 			      int wait)
 {
-	struct dentry * dentry = file->f_dentry;
-	struct inode * inode = dentry->d_inode;
-
 	/*
 	 * If a task terminates while we're swapping the page, the vma and
 	 * and file could be released: try_to_swap_out has done a get_file.
 	 * vma/file is guaranteed to exist in the unmap/sync cases because
 	 * mmap_sem is held.
 	 */
-	return inode->i_mapping->a_ops->writepage(file, dentry, page);
+	return page->mapping->a_ops->writepage(file, page);
 }
 
 
@@ -1559,7 +1560,7 @@ static int filemap_write_page(struct file *file,
 extern void wakeup_bdflush(int);
 int filemap_swapout(struct page * page, struct file * file)
 {
-	int retval = filemap_write_page(file, page->index, page, 0);
+	int retval = filemap_write_page(file, page, 0);
 	wakeup_bdflush(0);
 	return retval;
 }
@@ -1606,7 +1607,7 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 			pgoff, page->index, address, vma->vm_start, vma->vm_pgoff);
 	}
 	lock_page(page);
-	error = filemap_write_page(vma->vm_file, pgoff, page, 1);
+	error = filemap_write_page(vma->vm_file, page, 1);
 	UnlockPage(page);
 	page_cache_free(page);
 	return error;

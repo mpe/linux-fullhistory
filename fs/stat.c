@@ -122,19 +122,16 @@ static int cp_new_stat(struct inode * inode, struct stat * statbuf)
  */
 asmlinkage long sys_stat(char * filename, struct __old_kernel_stat * statbuf)
 {
-	struct dentry * dentry;
+	struct nameidata nd;
 	int error;
 
 	lock_kernel();
-	dentry = namei(filename);
-
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		error = do_revalidate(dentry);
+	error = user_path_walk(filename, &nd);
+	if (!error) {
+		error = do_revalidate(nd.dentry);
 		if (!error)
-			error = cp_old_stat(dentry->d_inode, statbuf);
-
-		dput(dentry);
+			error = cp_old_stat(nd.dentry->d_inode, statbuf);
+		path_release(&nd);
 	}
 	unlock_kernel();
 	return error;
@@ -143,19 +140,16 @@ asmlinkage long sys_stat(char * filename, struct __old_kernel_stat * statbuf)
 
 asmlinkage long sys_newstat(char * filename, struct stat * statbuf)
 {
-	struct dentry * dentry;
+	struct nameidata nd;
 	int error;
 
 	lock_kernel();
-	dentry = namei(filename);
-
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		error = do_revalidate(dentry);
+	error = user_path_walk(filename, &nd);
+	if (!error) {
+		error = do_revalidate(nd.dentry);
 		if (!error)
-			error = cp_new_stat(dentry->d_inode, statbuf);
-
-		dput(dentry);
+			error = cp_new_stat(nd.dentry->d_inode, statbuf);
+		path_release(&nd);
 	}
 	unlock_kernel();
 	return error;
@@ -169,19 +163,16 @@ asmlinkage long sys_newstat(char * filename, struct stat * statbuf)
  */
 asmlinkage long sys_lstat(char * filename, struct __old_kernel_stat * statbuf)
 {
-	struct dentry * dentry;
+	struct nameidata nd;
 	int error;
 
 	lock_kernel();
-	dentry = lnamei(filename);
-
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		error = do_revalidate(dentry);
+	error = user_path_walk_link(filename, &nd);
+	if (!error) {
+		error = do_revalidate(nd.dentry);
 		if (!error)
-			error = cp_old_stat(dentry->d_inode, statbuf);
-
-		dput(dentry);
+			error = cp_old_stat(nd.dentry->d_inode, statbuf);
+		path_release(&nd);
 	}
 	unlock_kernel();
 	return error;
@@ -191,19 +182,16 @@ asmlinkage long sys_lstat(char * filename, struct __old_kernel_stat * statbuf)
 
 asmlinkage long sys_newlstat(char * filename, struct stat * statbuf)
 {
-	struct dentry * dentry;
+	struct nameidata nd;
 	int error;
 
 	lock_kernel();
-	dentry = lnamei(filename);
-
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		error = do_revalidate(dentry);
+	error = user_path_walk_link(filename, &nd);
+	if (!error) {
+		error = do_revalidate(nd.dentry);
 		if (!error)
-			error = cp_new_stat(dentry->d_inode, statbuf);
-
-		dput(dentry);
+			error = cp_new_stat(nd.dentry->d_inode, statbuf);
+		path_release(&nd);
 	}
 	unlock_kernel();
 	return error;
@@ -257,26 +245,24 @@ asmlinkage long sys_newfstat(unsigned int fd, struct stat * statbuf)
 
 asmlinkage long sys_readlink(const char * path, char * buf, int bufsiz)
 {
-	struct dentry * dentry;
+	struct nameidata nd;
 	int error;
 
 	if (bufsiz <= 0)
 		return -EINVAL;
 
 	lock_kernel();
-	dentry = lnamei(path);
-
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		struct inode * inode = dentry->d_inode;
+	error = user_path_walk_link(path, &nd);
+	if (!error) {
+		struct inode * inode = nd.dentry->d_inode;
 
 		error = -EINVAL;
 		if (inode->i_op && inode->i_op->readlink &&
-		    !(error = do_revalidate(dentry))) {
+		    !(error = do_revalidate(nd.dentry))) {
 			UPDATE_ATIME(inode);
-			error = inode->i_op->readlink(dentry, buf, bufsiz);
+			error = inode->i_op->readlink(nd.dentry, buf, bufsiz);
 		}
-		dput(dentry);
+		path_release(&nd);
 	}
 	unlock_kernel();
 	return error;
@@ -344,19 +330,16 @@ static long cp_new_stat64(struct inode * inode, struct stat64 * statbuf)
 
 asmlinkage long sys_stat64(char * filename, struct stat64 * statbuf, long flags)
 {
-	struct dentry * dentry;
+	struct nameidata nd;
 	int error;
 
 	lock_kernel();
-	dentry = namei(filename);
-
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		error = do_revalidate(dentry);
+	error = user_path_walk(filename, &nd);
+	if (!error) {
+		error = do_revalidate(nd.dentry);
 		if (!error)
-			error = cp_new_stat64(dentry->d_inode, statbuf);
-
-		dput(dentry);
+			error = cp_new_stat64(nd.dentry->d_inode, statbuf);
+		path_release(&nd);
 	}
 	unlock_kernel();
 	return error;
@@ -364,19 +347,16 @@ asmlinkage long sys_stat64(char * filename, struct stat64 * statbuf, long flags)
 
 asmlinkage long sys_lstat64(char * filename, struct stat64 * statbuf, long flags)
 {
-	struct dentry * dentry;
+	struct nameidata nd;
 	int error;
 
 	lock_kernel();
-	dentry = lnamei(filename);
-
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		error = do_revalidate(dentry);
+	error = user_path_walk_link(filename, &nd);
+	if (!error) {
+		error = do_revalidate(nd.dentry);
 		if (!error)
-			error = cp_new_stat64(dentry->d_inode, statbuf);
-
-		dput(dentry);
+			error = cp_new_stat64(nd.dentry->d_inode, statbuf);
+		path_release(&nd);
 	}
 	unlock_kernel();
 	return error;

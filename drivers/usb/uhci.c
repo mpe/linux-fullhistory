@@ -2358,10 +2358,14 @@ static int found_uhci(struct pci_dev *dev)
 
 static int handle_pm_event(struct pm_dev *dev, pm_request_t rqst, void *data)
 {
+	struct uhci *uhci = dev->data;
 	switch (rqst) {
 	case PM_SUSPEND:
+		reset_hc(uhci);
 		break;
 	case PM_RESUME:
+		reset_hc(uhci);
+		start_hc(uhci);
 		break;
 	}
 	return 0;

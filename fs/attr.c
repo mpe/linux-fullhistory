@@ -8,6 +8,7 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/string.h>
+#include <linux/smp_lock.h>
 
 /* Taken over from the old code... */
 
@@ -91,6 +92,7 @@ int notify_change(struct dentry * dentry, struct iattr * attr)
 	if (!(ia_valid & ATTR_MTIME_SET))
 		attr->ia_mtime = now;
 
+	lock_kernel();
 	if (inode && inode->i_op && inode->i_op->setattr) 
 		error = inode->i_op->setattr(dentry, attr);
 	else {
@@ -98,5 +100,6 @@ int notify_change(struct dentry * dentry, struct iattr * attr)
 		if (!error)
 			inode_setattr(inode, attr);
 	}
+	unlock_kernel();
 	return error;
 }

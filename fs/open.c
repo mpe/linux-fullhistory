@@ -13,22 +13,36 @@
 
 #include <asm/uaccess.h>
 
+int vfs_statfs(struct super_block *sb, struct statfs *buf)
+{
+	int retval = -ENODEV;
+
+	if (sb) {
+		retval = -ENOSYS;
+		if (sb->s_op && sb->s_op->statfs) {
+			memset(buf, 0, sizeof(struct statfs));
+			lock_kernel();
+			retval = sb->s_op->statfs(sb, buf);
+			unlock_kernel();
+		}
+	}
+	return retval;
+}
+
+
 asmlinkage long sys_statfs(const char * path, struct statfs * buf)
 {
-	struct dentry * dentry;
+	struct nameidata nd;
 	int error;
 
-	lock_kernel();
-	dentry = namei(path);
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
+	error = user_path_walk(path, &nd);
+	if (!error) {
 		struct statfs tmp;
-		error = vfs_statfs(dentry->d_inode->i_sb, &tmp);
+		error = vfs_statfs(nd.dentry->d_inode->i_sb, &tmp);
 		if (!error && copy_to_user(buf, &tmp, sizeof(struct statfs)))
 			error = -EFAULT;
-		dput(dentry);
+		path_release(&nd);
 	}
-	unlock_kernel();
 	return error;
 }
 
@@ -42,11 +56,9 @@ asmlinkage long sys_fstatfs(unsigned int fd, struct statfs * buf)
 	file = fget(fd);
 	if (!file)
 		goto out;
-	lock_kernel();
 	error = vfs_statfs(file->f_dentry->d_inode->i_sb, &tmp);
 	if (!error && copy_to_user(buf, &tmp, sizeof(struct statfs)))
 		error = -EFAULT;
-	unlock_kernel();
 	fput(file);
 out:
 	return error;
@@ -72,22 +84,18 @@ int do_truncate(struct dentry *dentry, loff_t length)
 
 static inline long do_sys_truncate(const char * path, loff_t length)
 {
-	struct dentry * dentry;
+	struct nameidata nd;
 	struct inode * inode;
 	int error;
-
-	lock_kernel();
 
 	error = -EINVAL;
 	if (length < 0)	/* sorry, but loff_t says... */
 		goto out;
 
-	dentry = namei(path);
-
-	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
+	error = user_path_walk(path, &nd);
+	if (error)
 		goto out;
-	inode = dentry->d_inode;
+	inode = nd.dentry->d_inode;
 
 	error = -EACCES;
 	if (S_ISDIR(inode->i_mode))
@@ -105,6 +113,7 @@ static inline long do_sys_truncate(const char * path, loff_t length)
 	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
 		goto dput_and_out;
 
+	lock_kernel();
 	error = get_write_access(inode);
 	if (error)
 		goto dput_and_out;
@@ -112,13 +121,14 @@ static inline long do_sys_truncate(const char * path, loff_t length)
 	error = locks_verify_truncate(inode, NULL, length);
 	if (!error) {
 		DQUOT_INIT(inode);
-		error = do_truncate(dentry, length);
+		error = do_truncate(nd.dentry, length);
 	}
 	put_write_access(inode);
-dput_and_out:
-	dput(dentry);
-out:
 	unlock_kernel();
+
+dput_and_out:
+	path_release(&nd);
+out:
 	return error;
 }
 
@@ -149,8 +159,9 @@ static inline long do_sys_ftruncate(unsigned int fd, loff_t length)
 	error = -EPERM;
 	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
 		goto out_putf;
-	error = locks_verify_truncate(inode, file, length);
+
 	lock_kernel();
+	error = locks_verify_truncate(inode, file, length);
 	if (!error)
 		error = do_truncate(dentry, length);
 	unlock_kernel();
@@ -194,17 +205,14 @@ asmlinkage long sys_ftruncate64(unsigned int fd, loff_t length)
 asmlinkage long sys_utime(char * filename, struct utimbuf * times)
 {
 	int error;
-	struct dentry * dentry;
+	struct nameidata nd;
 	struct inode * inode;
 	struct iattr newattrs;
 
-	lock_kernel();
-	dentry = namei(filename);
-
-	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
+	error = user_path_walk(filename, &nd);
+	if (error)
 		goto out;
-	inode = dentry->d_inode;
+	inode = nd.dentry->d_inode;
 
 	error = -EROFS;
 	if (IS_RDONLY(inode))
@@ -225,11 +233,10 @@ asmlinkage long sys_utime(char * filename, struct utimbuf * times)
 		    (error = permission(inode,MAY_WRITE)) != 0)
 			goto dput_and_out;
 	}
-	error = notify_change(dentry, &newattrs);
+	error = notify_change(nd.dentry, &newattrs);
 dput_and_out:
-	dput(dentry);
+	path_release(&nd);
 out:
-	unlock_kernel();
 	return error;
 }
 
@@ -242,17 +249,15 @@ out:
 asmlinkage long sys_utimes(char * filename, struct timeval * utimes)
 {
 	int error;
-	struct dentry * dentry;
+	struct nameidata nd;
 	struct inode * inode;
 	struct iattr newattrs;
 
-	lock_kernel();
-	dentry = namei(filename);
+	error = user_path_walk(filename, &nd);
 
-	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
+	if (error)
 		goto out;
-	inode = dentry->d_inode;
+	inode = nd.dentry->d_inode;
 
 	error = -EROFS;
 	if (IS_RDONLY(inode))
@@ -272,11 +277,10 @@ asmlinkage long sys_utimes(char * filename, struct timeval * utimes)
 		if ((error = permission(inode,MAY_WRITE)) != 0)
 			goto dput_and_out;
 	}
-	error = notify_change(dentry, &newattrs);
+	error = notify_change(nd.dentry, &newattrs);
 dput_and_out:
-	dput(dentry);
+	path_release(&nd);
 out:
-	unlock_kernel();
 	return error;
 }
 
@@ -287,7 +291,7 @@ out:
  */
 asmlinkage long sys_access(const char * filename, int mode)
 {
-	struct dentry * dentry;
+	struct nameidata nd;
 	int old_fsuid, old_fsgid;
 	kernel_cap_t old_cap;
 	int res;
@@ -308,17 +312,14 @@ asmlinkage long sys_access(const char * filename, int mode)
 	else
 		current->cap_effective = current->cap_permitted;
 
-	lock_kernel();		
-	dentry = namei(filename);
-	res = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		res = permission(dentry->d_inode, mode);
+	res = user_path_walk(filename, &nd);
+	if (!res) {
+		res = permission(nd.dentry->d_inode, mode);
 		/* SuS v2 requires we report a read only fs too */
-		if(!res && (mode & S_IWOTH) && IS_RDONLY(dentry->d_inode))
+		if(!res && (mode & S_IWOTH) && IS_RDONLY(nd.dentry->d_inode))
 			res = -EROFS;
-		dput(dentry);
+		path_release(&nd);
 	}
-	unlock_kernel();
 
 	current->fsuid = old_fsuid;
 	current->fsgid = old_fsgid;
@@ -341,8 +342,8 @@ asmlinkage long sys_chdir(const char * filename)
 		goto out;
 
 	error = 0;
-	if (walk_init(name,LOOKUP_POSITIVE|LOOKUP_FOLLOW|LOOKUP_DIRECTORY,&nd))
-		error = walk_name(name, &nd);
+	if (path_init(name,LOOKUP_POSITIVE|LOOKUP_FOLLOW|LOOKUP_DIRECTORY,&nd))
+		error = path_walk(name, &nd);
 	putname(name);
 	if (error)
 		goto out;
@@ -354,8 +355,7 @@ asmlinkage long sys_chdir(const char * filename)
 	set_fs_pwd(current->fs, nd.mnt, nd.dentry);
 
 dput_and_out:
-	dput(nd.dentry);
-	mntput(nd.mnt);
+	path_release(&nd);
 out:
 	unlock_kernel();
 	return error;
@@ -406,9 +406,9 @@ asmlinkage long sys_chroot(const char * filename)
 	if (IS_ERR(name))
 		goto out;
 
-	walk_init(name, LOOKUP_POSITIVE | LOOKUP_FOLLOW |
+	path_init(name, LOOKUP_POSITIVE | LOOKUP_FOLLOW |
 		      LOOKUP_DIRECTORY | LOOKUP_NOALT, &nd);
-	error = walk_name(name, &nd);	
+	error = path_walk(name, &nd);	
 	putname(name);
 	if (error)
 		goto out;
@@ -425,8 +425,7 @@ asmlinkage long sys_chroot(const char * filename)
 	set_fs_altroot();
 	error = 0;
 dput_and_out:
-	dput(nd.dentry);
-	mntput(nd.mnt);
+	path_release(&nd);
 out:
 	unlock_kernel();
 	return error;
@@ -469,18 +468,15 @@ out:
 
 asmlinkage long sys_chmod(const char * filename, mode_t mode)
 {
-	struct dentry * dentry;
+	struct nameidata nd;
 	struct inode * inode;
 	int error;
 	struct iattr newattrs;
 
-	lock_kernel();
-	dentry = namei(filename);
-
-	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
+	error = user_path_walk(filename, &nd);
+	if (error)
 		goto out;
-	inode = dentry->d_inode;
+	inode = nd.dentry->d_inode;
 
 	error = -EROFS;
 	if (IS_RDONLY(inode))
@@ -494,12 +490,11 @@ asmlinkage long sys_chmod(const char * filename, mode_t mode)
 		mode = inode->i_mode;
 	newattrs.ia_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
 	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
-	error = notify_change(dentry, &newattrs);
+	error = notify_change(nd.dentry, &newattrs);
 
 dput_and_out:
-	dput(dentry);
+	path_release(&nd);
 out:
-	unlock_kernel();
 	return error;
 }
 
@@ -565,35 +560,27 @@ out:
 
 asmlinkage long sys_chown(const char * filename, uid_t user, gid_t group)
 {
-	struct dentry * dentry;
+	struct nameidata nd;
 	int error;
 
-	lock_kernel();
-	dentry = namei(filename);
-
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		error = chown_common(dentry, user, group);
-		dput(dentry);
+	error = user_path_walk(filename, &nd);
+	if (!error) {
+		error = chown_common(nd.dentry, user, group);
+		path_release(&nd);
 	}
-	unlock_kernel();
 	return error;
 }
 
 asmlinkage long sys_lchown(const char * filename, uid_t user, gid_t group)
 {
-	struct dentry * dentry;
+	struct nameidata nd;
 	int error;
 
-	lock_kernel();
-	dentry = lnamei(filename);
-
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		error = chown_common(dentry, user, group);
-		dput(dentry);
+	error = user_path_walk_link(filename, &nd);
+	if (!error) {
+		error = chown_common(nd.dentry, user, group);
+		path_release(&nd);
 	}
-	unlock_kernel();
 	return error;
 }
 
@@ -604,13 +591,10 @@ asmlinkage long sys_fchown(unsigned int fd, uid_t user, gid_t group)
 	int error = -EBADF;
 
 	file = fget(fd);
-	if (!file)
-		goto out;
-	lock_kernel();
-	error = chown_common(file->f_dentry, user, group);
-	unlock_kernel();
-	fput(file);
-out:
+	if (file) {
+		error = chown_common(file->f_dentry, user, group);
+		fput(file);
+	}
 	return error;
 }
 

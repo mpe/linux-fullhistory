@@ -301,7 +301,7 @@ int hpfs_mknod(struct inode *, struct dentry *, int, int);
 int hpfs_symlink(struct inode *, struct dentry *, const char *);
 int hpfs_unlink(struct inode *, struct dentry *);
 int hpfs_rmdir(struct inode *, struct dentry *);
-int hpfs_symlink_readpage(struct dentry *, struct page *);
+int hpfs_symlink_readpage(struct file *, struct page *);
 int hpfs_rename(struct inode *, struct dentry *, struct inode *, struct dentry *);
 
 /* super.c */

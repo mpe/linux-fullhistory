@@ -62,6 +62,7 @@ struct svc_export {
 	struct svc_export *	ex_parent;
 	struct svc_client *	ex_client;
 	int			ex_flags;
+	struct vfsmount *	ex_mnt;
 	struct dentry *		ex_dentry;
 	kdev_t			ex_dev;
 	ino_t			ex_ino;

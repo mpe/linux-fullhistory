@@ -729,11 +729,11 @@ static int is_exec(char *extension)
 	return 0;
 }
 
-static int fat_writepage(struct file *file, struct dentry *dentry, struct page *page)
+static int fat_writepage(struct file *file, struct page *page)
 {
 	return block_write_full_page(page,fat_get_block);
 }
-static int fat_readpage(struct dentry *dentry, struct page *page)
+static int fat_readpage(struct file *file, struct page *page)
 {
 	return block_read_full_page(page,fat_get_block);
 }

@@ -96,7 +96,7 @@ extern struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,
 						struct proc_dir_entry *parent);
 extern void remove_proc_entry(const char *name, struct proc_dir_entry *parent);
 
-extern struct super_block *proc_super_blocks;
+extern struct vfsmount *proc_mnt;
 extern struct super_block *proc_read_super(struct super_block *,void *,int);
 extern struct inode * proc_get_inode(struct super_block *, int, struct proc_dir_entry *);
 

@@ -495,7 +495,7 @@ void shrink_dcache_parent(struct dentry * parent)
  *  ...
  *   6 - base-level: try to shrink a bit.
  */
-int shrink_dcache_memory(int priority, unsigned int gfp_mask, zone_t * zone)
+int shrink_dcache_memory(int priority, unsigned int gfp_mask)
 {
 	int count = 0;
 	lock_kernel();
@@ -558,8 +558,6 @@ struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
 	} else
 		INIT_LIST_HEAD(&dentry->d_child);
 		
-	dentry->d_mounts = dentry;
-	dentry->d_covers = dentry;
 	INIT_LIST_HEAD(&dentry->d_vfsmnt);
 	INIT_LIST_HEAD(&dentry->d_hash);
 	INIT_LIST_HEAD(&dentry->d_lru);

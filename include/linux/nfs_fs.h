@@ -175,7 +175,7 @@ extern int nfs_lock(struct file *, int, struct file_lock *);
 /*
  * linux/fs/nfs/write.c
  */
-extern int  nfs_writepage(struct file *file, struct dentry *, struct page *);
+extern int  nfs_writepage(struct file *file, struct page *);
 extern int  nfs_flush_incompatible(struct file *file, struct page *page);
 extern int  nfs_updatepage(struct file *, struct page *, unsigned int, unsigned int);
 /*
@@ -232,7 +232,7 @@ nfs_wb_file(struct inode *inode, struct file *file)
 /*
  * linux/fs/nfs/read.c
  */
-extern int  nfs_readpage(struct dentry *, struct page *);
+extern int  nfs_readpage(struct file *, struct page *);
 extern int  nfs_pagein_inode(struct inode *, unsigned long, unsigned int);
 extern int  nfs_pagein_timeout(struct inode *);
 

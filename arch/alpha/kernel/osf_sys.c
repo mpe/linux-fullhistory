@@ -302,17 +302,14 @@ static int do_osf_statfs(struct dentry * dentry, struct osf_statfs *buffer, unsi
 
 asmlinkage int osf_statfs(char *path, struct osf_statfs *buffer, unsigned long bufsiz)
 {
-	struct dentry *dentry;
+	struct nameidata nd;
 	int retval;
 
-	lock_kernel();
-	dentry = namei(path);
-	retval = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		retval = do_osf_statfs(dentry, buffer, bufsiz);
-		dput(dentry);
+	retval = user_path_walk(path, &nd);
+	if (!retval) {
+		retval = do_osf_statfs(nd.dentry, buffer, bufsiz);
+		path_release(&nd);
 	}
-	unlock_kernel();
 	return retval;
 }
 

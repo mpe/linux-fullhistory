@@ -558,12 +558,6 @@ extern void usb_release_bandwidth(struct usb_device *, int);
 
 extern int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u8 requesttype, __u16 value, __u16 index, void *data, __u16 size, int timeout);
 
-extern int usb_request_irq(struct usb_device *, unsigned int, usb_device_irq, int, void *, void **);
-extern int usb_release_irq(struct usb_device *dev, void *handle, unsigned int pipe);
-
-extern void *usb_request_bulk(struct usb_device *, unsigned int, usb_device_irq, void *, int, void *);
-extern int usb_terminate_bulk(struct usb_device *, void *);
-
 extern void usb_init_root_hub(struct usb_device *dev);
 extern int usb_root_hub_string(int id, int serial, char *type, __u8 *data, int len);
 extern void usb_connect(struct usb_device *dev);

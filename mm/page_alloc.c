@@ -58,23 +58,6 @@ static int zone_balance_max[MAX_NR_ZONES] = { 255 , 255, 255, };
  */
 #define BAD_RANGE(zone,x) (((zone) != (x)->zone) || (((x)-mem_map) < (zone)->offset) || (((x)-mem_map) >= (zone)->offset+(zone)->size))
 
-#if 0
-
-static inline unsigned long classfree(zone_t *zone)
-{
-	unsigned long free = 0;
-	zone_t *z = zone->zone_pgdat->node_zones;
-
-	while (z != zone) {
-		free += z->free_pages;
-		z++;
-	}
-	free += zone->free_pages;
-	return(free);
-}
-
-#endif
-
 /*
  * Buddy system. Hairy. You really aren't expected to understand this
  *
@@ -227,69 +210,13 @@ static struct page * rmqueue(zone_t *zone, unsigned long order)
 	return NULL;
 }
 
-static int zone_balance_memory(zonelist_t *zonelist)
-{
-	int tried = 0, freed = 0;
-	zone_t **zone;
-	int gfp_mask = zonelist->gfp_mask;
-	extern wait_queue_head_t kswapd_wait;
-
-	zone = zonelist->zones;
-	for (;;) {
-		zone_t *z = *(zone++);
-		if (!z)
-			break;
-		if (z->free_pages > z->pages_low)
-			continue;
-
-		z->zone_wake_kswapd = 1;
-		wake_up_interruptible(&kswapd_wait);
-
-		/* Are we reaching the critical stage? */
-		if (!z->low_on_memory) {
-			/* Not yet critical, so let kswapd handle it.. */
-			if (z->free_pages > z->pages_min)
-				continue;
-			z->low_on_memory = 1;
-		}
-		/*
-		 * In the atomic allocation case we only 'kick' the
-		 * state machine, but do not try to free pages
-		 * ourselves.
-		 */
-		tried = 1;
-		freed |= try_to_free_pages(gfp_mask, z);
-	}
-	if (tried && !freed) {
-		if (!(gfp_mask & __GFP_HIGH))
-			return 0;
-	}
-	return 1;
-}
-
 /*
  * This is the 'heart' of the zoned buddy allocator:
  */
 struct page * __alloc_pages(zonelist_t *zonelist, unsigned long order)
 {
 	zone_t **zone = zonelist->zones;
-	int gfp_mask = zonelist->gfp_mask;
-	static int low_on_memory;
-
-	/*
-	 * If this is a recursive call, we'd better
-	 * do our best to just allocate things without
-	 * further thought.
-	 */
-	if (current->flags & PF_MEMALLOC)
-		goto allocate_ok;
-
-	/* If we're a memory hog, unmap some pages */
-	if (current->hog && low_on_memory && (gfp_mask & __GFP_WAIT)) {
-	//	swap_out(6, gfp_mask);
-	//	shm_swap(6, gfp_mask, (zone_t *)(zone));
-		try_to_free_pages(gfp_mask, (zone_t *)(zone));
-	}
+	extern wait_queue_head_t kswapd_wait;
 
 	/*
 	 * (If anyone calls gfp from interrupts nonatomically then it
@@ -306,38 +233,66 @@ struct page * __alloc_pages(zonelist_t *zonelist, unsigned long order)
 			BUG();
 
 		/* Are we supposed to free memory? Don't make it worse.. */
-		if (!z->zone_wake_kswapd && z->free_pages > z->pages_low) {
+		if (!z->zone_wake_kswapd) {
 			struct page *page = rmqueue(z, order);
-			low_on_memory = 0;
+			if (z->free_pages < z->pages_low) {
+				z->zone_wake_kswapd = 1;
+				if (waitqueue_active(&kswapd_wait))
+					wake_up_interruptible(&kswapd_wait);
+			}
 			if (page)
 				return page;
 		}
 	}
 
-	low_on_memory = 1;
 	/*
-	 * Ok, no obvious zones were available, start
-	 * balancing things a bit..
+	 * Ok, we don't have any zones that don't need some
+	 * balancing.. See if we have any that aren't critical..
 	 */
-	if (zone_balance_memory(zonelist)) {
-		zone = zonelist->zones;
-allocate_ok:
-		for (;;) {
-			zone_t *z = *(zone++);
-			if (!z)
-				break;
-			if (z->free_pages) {
-				struct page *page = rmqueue(z, order);
-				if (page)
-					return page;
-			}
+	zone = zonelist->zones;
+	for (;;) {
+		zone_t *z = *(zone++);
+		if (!z)
+			break;
+		if (!z->low_on_memory) {
+			struct page *page = rmqueue(z, order);
+			if (z->free_pages < z->pages_min)
+				z->low_on_memory = 1;
+			if (page)
+				return page;
 		}
 	}
-	return NULL;
 
-/*
- * The main chunk of the balancing code is in this offline branch:
- */
+	/*
+	 * Uhhuh. All the zones have been critical, which means that
+	 * we'd better do some synchronous swap-out. kswapd has not
+	 * been able to cope..
+	 */
+	if (!(current->flags & PF_MEMALLOC)) {
+		int gfp_mask = zonelist->gfp_mask;
+		if (!try_to_free_pages(gfp_mask)) {
+			if (!(gfp_mask & __GFP_HIGH))
+				return NULL;
+		}
+	}
+
+	/*
+	 * Final phase: allocate anything we can!
+	 */
+	zone = zonelist->zones;
+	for (;;) {
+		struct page *page;
+
+		zone_t *z = *(zone++);
+		if (!z)
+			break;
+		page = rmqueue(z, order);
+		if (page)
+			return page;
+	}
+
+	/* No luck.. */
+	return NULL;
 }
 
 /*

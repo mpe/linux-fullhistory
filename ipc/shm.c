@@ -132,7 +132,7 @@ static int shm_swapout(struct page *, struct file *);
 static int sysvipc_shm_read_proc(char *buffer, char **start, off_t offset, int length, int *eof, void *data);
 #endif
 
-static void zshm_swap (int prio, int gfp_mask, zone_t *zone);
+static void zshm_swap (int prio, int gfp_mask);
 static void zmap_unuse(swp_entry_t entry, struct page *page);
 static void shmzero_open(struct vm_area_struct *shmd);
 static void shmzero_close(struct vm_area_struct *shmd);
@@ -145,7 +145,7 @@ static struct dentry *zdent;
 
 static struct super_block * shm_sb;
 
-static DECLARE_FSTYPE(shm_fs_type, "shm", shm_read_super, 0);
+static DECLARE_FSTYPE(shm_fs_type, "shm", shm_read_super, FS_SINGLE);
 
 static struct super_operations shm_sops = {
 	read_inode:	shm_read_inode,
@@ -214,9 +214,15 @@ static ulong used_segs = 0;
 
 void __init shm_init (void)
 {
+	struct vfsmount *res;
 	ipc_init_ids(&shm_ids, 1);
 
 	register_filesystem (&shm_fs_type);
+	res = kern_mount(&shm_fs_type);
+	if (IS_ERR(res)) {
+		unregister_filesystem(&shm_fs_type);
+		return;
+	}
 #ifdef CONFIG_PROC_FS
 	create_proc_read_entry("sysvipc/shm", 0, 0, sysvipc_shm_read_proc, NULL);
 #endif
@@ -276,11 +282,6 @@ static struct super_block *shm_read_super(struct super_block *s,void *data,
 {
 	struct inode * root_inode;
 
-	if (shm_sb) {
-		printk(KERN_ERR "shm fs already mounted\n");
-		return NULL;
-	}
-
 	shm_ctlall = SHMALL;
 	shm_ctlmni = SHMMNI;
 	shm_mode   = S_IRWXUGO | S_ISVTX;
@@ -303,7 +304,6 @@ static struct super_block *shm_read_super(struct super_block *s,void *data,
 	s->s_root = d_alloc_root(root_inode);
 	if (!s->s_root)
 		goto out_no_root;
-	s->u.generic_sbp = (void*) shm_sb;
 	shm_sb = s;
 	return s;
 
@@ -342,16 +342,9 @@ static __inline__ int shm_addid(struct shmid_kernel *shp)
 
 static void shm_put_super(struct super_block *sb)
 {
-	struct super_block **p = &shm_sb;
 	int i;
 	struct shmid_kernel *shp;
 
-	while (*p != sb) {
-		if (!*p)	/* should never happen */
-			return;
-		p = (struct super_block **)&(*p)->u.generic_sbp;
-	}
-	*p = (struct super_block *)(*p)->u.generic_sbp;
 	down(&shm_ids.sem);
 	for(i = 0; i <= shm_ids.max_id; i++) {
 		if (i == zero_id)
@@ -778,13 +771,6 @@ asmlinkage long sys_shmget (key_t key, size_t size, int shmflg)
 {
 	struct shmid_kernel *shp;
 	int err, id = 0;
-	static int count=0;
-
-	if (!shm_sb) {
-		if(count++<5)
-			printk(KERN_WARNING "shmget: shm filesystem not mounted\n");
-		return -EINVAL;
-	}
 
 	if (size < SHMMIN)
 		return -EINVAL;
@@ -928,13 +914,6 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 	struct shm_setbuf setbuf;
 	struct shmid_kernel *shp;
 	int err, version;
-	static int count;
-
-	if (!shm_sb) {
-		if(count++<5)
-			printk (KERN_WARNING "shmctl: shm filesystem not mounted\n");
-		return -EINVAL;
-	}
 
 	if (cmd < 0 || shmid < 0)
 		return -EINVAL;
@@ -1162,7 +1141,6 @@ static int shm_mmap(struct file * file, struct vm_area_struct * vma)
 /*
  * Fix shmaddr, allocate descriptor, map shm, add attach descriptor to lists.
  */
-/* MOUNT_REWRITE: kernel vfsmnt of shmfs should be passed to __filp_open() */
 asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 {
 	unsigned long addr;
@@ -1202,6 +1180,7 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	sprintf (name, SHM_FMT, shmid);
 
 	lock_kernel();
+	mntget(shm_fs_type.kern_mnt);
 	dentry = lookup_one(name, lock_parent(shm_sb->s_root));
 	unlock_dir(shm_sb->s_root);
 	err = PTR_ERR(dentry);
@@ -1212,11 +1191,11 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		goto bad_file;
 	err = permission(dentry->d_inode, acc_mode);
 	if (err)
-		goto bad_file;
-	file = dentry_open(dentry, NULL, o_flags);
+		goto bad_file1;
+	file = dentry_open(dentry, shm_fs_type.kern_mnt, o_flags);
 	err = PTR_ERR(file);
 	if (IS_ERR (file))
-		goto bad_file;
+		goto bad_file1;
 	down(&current->mm->mmap_sem);
 	*raddr = do_mmap (file, addr, file->f_dentry->d_inode->i_size,
 			  prot, flags, 0);
@@ -1229,7 +1208,10 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	fput (file);
 	return err;
 
+bad_file1:
+	dput(dentry);
 bad_file:
+	mntput(shm_fs_type.kern_mnt);
 	unlock_kernel();
 	if (err == -ENOENT)
 		return -EINVAL;
@@ -1428,7 +1410,7 @@ static struct page * shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 #define RETRY	1
 #define FAILED	2
 
-static int shm_swap_core(struct shmid_kernel *shp, unsigned long idx, swp_entry_t swap_entry, zone_t *zone, int *counter, struct page **outpage)
+static int shm_swap_core(struct shmid_kernel *shp, unsigned long idx, swp_entry_t swap_entry, int *counter, struct page **outpage)
 {
 	pte_t page;
 	struct page *page_map;
@@ -1437,7 +1419,7 @@ static int shm_swap_core(struct shmid_kernel *shp, unsigned long idx, swp_entry_
 	if (!pte_present(page))
 		return RETRY;
 	page_map = pte_page(page);
-	if (zone && (!memclass(page_map->zone, zone)))
+	if (page_map->zone->free_pages > page_map->zone->pages_high)
 		return RETRY;
 	if (shp->id != zero_id) swap_attempts++;
 
@@ -1490,7 +1472,7 @@ static int shm_swap_preop(swp_entry_t *swap_entry)
 static unsigned long swap_id = 0; /* currently being swapped */
 static unsigned long swap_idx = 0; /* next to swap */
 
-int shm_swap (int prio, int gfp_mask, zone_t *zone)
+int shm_swap (int prio, int gfp_mask)
 {
 	struct shmid_kernel *shp;
 	swp_entry_t swap_entry;
@@ -1499,7 +1481,7 @@ int shm_swap (int prio, int gfp_mask, zone_t *zone)
 	int counter;
 	struct page * page_map;
 
-	zshm_swap(prio, gfp_mask, zone);
+	zshm_swap(prio, gfp_mask);
 	counter = shm_rss >> prio;
 	if (!counter)
 		return 0;
@@ -1531,7 +1513,7 @@ check_table:
 	if (idx >= shp->shm_npages)
 		goto next_id;
 
-	switch (shm_swap_core(shp, idx, swap_entry, zone, &counter, &page_map)) {
+	switch (shm_swap_core(shp, idx, swap_entry, &counter, &page_map)) {
 		case RETRY: goto check_table;
 		case FAILED: goto failed;
 	}
@@ -1693,7 +1675,6 @@ static struct vm_operations_struct shmzero_vm_ops = {
  * on the pseudo-file. This is possible because the open/close calls
  * are bracketed by the file count update calls.
  */
-/* MOUNT_REWRITE: set ->f_vfsmnt to shmfs one */
 static struct file *file_setup(struct file *fzero, struct shmid_kernel *shp)
 {
 	struct file *filp;
@@ -1711,14 +1692,14 @@ static struct file *file_setup(struct file *fzero, struct shmid_kernel *shp)
 		put_filp(filp);
 		return(0);
 	}
-	filp->f_vfsmnt = NULL;
+	filp->f_vfsmnt = mntget(shm_fs_type.kern_mnt);
 	d_instantiate(filp->f_dentry, inp);
 
 	/*
 	 * Copy over dev/ino for benefit of procfs. Use
 	 * ino to indicate seperate mappings.
 	 */
-	filp->f_dentry->d_inode->i_dev = shm_sb->s_dev;
+	filp->f_dentry->d_inode->i_dev = shm_fs_type.kern_mnt->mnt_sb->s_dev;
 	filp->f_dentry->d_inode->i_ino = (unsigned long)shp;
 	if (fzero)
 		fput(fzero);	/* release /dev/zero file */
@@ -1818,7 +1799,7 @@ static void zmap_unuse(swp_entry_t entry, struct page *page)
 	spin_unlock(&zmap_list_lock);
 }
 
-static void zshm_swap (int prio, int gfp_mask, zone_t *zone)
+static void zshm_swap (int prio, int gfp_mask)
 {
 	struct shmid_kernel *shp;
 	swp_entry_t swap_entry;
@@ -1863,7 +1844,7 @@ check_table:
 		goto next_id;
 	}
 
-	switch (shm_swap_core(shp, idx, swap_entry, zone, &counter, &page_map)) {
+	switch (shm_swap_core(shp, idx, swap_entry, &counter, &page_map)) {
 		case RETRY: goto check_table;
 		case FAILED: goto failed;
 	}

@@ -21,9 +21,10 @@ struct vfsmount
 	struct list_head mnt_clash;	/* those who are mounted on (other */
 					/* instances) of the same dentry */
 	struct super_block *mnt_sb;	/* pointer to superblock */
+	struct list_head mnt_mounts;	/* list of children, anchored here */
+	struct list_head mnt_child;	/* and going through their mnt_child */
 	atomic_t mnt_count;
 
-  kdev_t mnt_dev;			/* Device this applies to */
   char *mnt_devname;			/* Name of device e.g. /dev/dsk/hda1 */
   char *mnt_dirname;			/* Name of directory mounted on */
 	struct list_head mnt_list;

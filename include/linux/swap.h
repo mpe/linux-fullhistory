@@ -80,14 +80,13 @@ struct sysinfo;
 
 struct zone_t;
 /* linux/ipc/shm.c */
-extern int shm_swap (int, int, zone_t *);
+extern int shm_swap(int, int);
 
 /* linux/mm/swap.c */
-extern void swap_setup (void);
+extern void swap_setup(void);
 
 /* linux/mm/vmscan.c */
-extern int try_to_free_pages(unsigned int gfp_mask, zone_t *zone);
-extern int swap_out(unsigned int gfp_mask, int priority);
+extern int try_to_free_pages(unsigned int gfp_mask);
 
 /* linux/mm/page_io.c */
 extern void rw_swap_page(int, struct page *, int);

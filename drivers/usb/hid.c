@@ -78,7 +78,7 @@ static unsigned char hid_keyboard[256] = {
 static struct {
 	__s32 x;
 	__s32 y;
-}  hid_hat_to_axis[] = {{ 0, 0}, { 0,-1}, { 1,-1}, { 1, 0}, { 1, 1}, { 0, 1}, {-1, 1}, {-1, 0}, {-1,-1}};
+}  hid_hat_to_axis[] = {{ 0,-1}, { 1,-1}, { 1, 0}, { 1, 1}, { 0, 1}, {-1, 1}, {-1, 0}, {-1,-1}, { 0, 0}};
 
 /*
  * Register a new report for a device.
@@ -948,7 +948,8 @@ static void hid_process_event(struct input_dev *input, int *quirks, struct hid_f
 	hid_dump_input(usage, value);
 
 	if (usage->hat) {
-		if (usage->hat == 2) value = value * 2 - 1;
+		if (usage->hat == 2) value = value * 2;
+		if (value > 8) value = 8;
 		input_event(input, usage->type, usage->code    , hid_hat_to_axis[value].x);
 		input_event(input, usage->type, usage->code + 1, hid_hat_to_axis[value].y);
 		return;
@@ -1431,7 +1432,8 @@ static void* hid_probe(struct usb_device *dev, unsigned int ifnum)
 
 	printk(KERN_INFO "input%d: USB HID v%x.%02x %s\n",
 		hid->input.number, hid->version >> 8, hid->version & 0xff,
-		(hid->application & 0xffff) <= 8 ? hid_name[hid->application & 0xffff] : "device");
+		((hid->application >= 0x00010000) && (hid->application <= 0x00010008)) ?
+			hid_name[hid->application & 0xffff] : "device");
 
 	return hid;
 }

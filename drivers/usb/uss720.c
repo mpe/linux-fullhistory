@@ -620,7 +620,9 @@ static void uss720_disconnect(struct usb_device *usbdev, void *ptr)
 	struct parport *pp = (struct parport *)ptr;
 	struct parport_uss720_private *priv = pp->private_data;
 
+#if 0
 	usb_release_irq(usbdev, priv->irqhandle, priv->irqpipe);
+#endif
 	priv->usbdev = NULL;
 	parport_proc_unregister(pp);
 	parport_unregister_port(pp);

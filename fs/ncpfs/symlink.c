@@ -43,9 +43,9 @@ int ncp_create_new(struct inode *dir, struct dentry *dentry,
 
 /* ----- read a symbolic link ------------------------------------------ */
 
-static int ncp_symlink_readpage(struct dentry *dentry, struct page *page)
+static int ncp_symlink_readpage(struct file *file, struct page *page)
 {
-	struct inode *inode=dentry->d_inode;
+	struct inode *inode = (struct inode*)page->mapping->host;
 	int error, length, len, cnt;
 	char *link;
 	char *buf = (char*)kmap(page);

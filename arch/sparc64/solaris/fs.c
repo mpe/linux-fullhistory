@@ -477,17 +477,15 @@ static int report_statvfs64(struct inode *inode, u32 buf)
 
 asmlinkage int solaris_statvfs(u32 path, u32 buf)
 {
-	struct dentry * dentry;
+	struct nameidata nd;
 	int error;
 
 	lock_kernel();
-	dentry = namei((const char *)A(path));
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		struct inode * inode = dentry->d_inode;
-
+	error = user_path_walk((const char *)A(path),&nd);
+	if (!error) {
+		struct inode * inode = nd.dentry->d_inode;
 		error = report_statvfs(inode, buf);
-		dput(dentry);
+		path_release(&nd);
 	}
 	unlock_kernel();
 	return error;
@@ -512,17 +510,15 @@ asmlinkage int solaris_fstatvfs(unsigned int fd, u32 buf)
 
 asmlinkage int solaris_statvfs64(u32 path, u32 buf)
 {
-	struct dentry * dentry;
+	struct nameidata nd;
 	int error;
 
 	lock_kernel();
-	dentry = namei((const char *)A(path));
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		struct inode * inode = dentry->d_inode;
-
+	error = user_path_walk((const char *)A(path), &nd);
+	if (!error) {
+		struct inode * inode = nd.dentry->d_inode;
 		error = report_statvfs64(inode, buf);
-		dput(dentry);
+		path_release(&nd);
 	}
 	unlock_kernel();
 	return error;

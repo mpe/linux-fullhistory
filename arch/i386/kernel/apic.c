@@ -615,6 +615,7 @@ static inline void handle_smp_time (int user, int cpu)
 
 inline void smp_local_timer_interrupt(struct pt_regs * regs)
 {
+	int user = user_mode(regs);
 	int cpu = smp_processor_id();
 
 	/*
@@ -623,6 +624,8 @@ inline void smp_local_timer_interrupt(struct pt_regs * regs)
 	 * updated with atomic operations). This is especially
 	 * useful with a profiling multiplier != 1
 	 */
+	if (!user)
+		x86_do_profile(regs->eip);
 
 	if (--prof_counter[cpu] <= 0) {
 		/*
@@ -640,7 +643,7 @@ inline void smp_local_timer_interrupt(struct pt_regs * regs)
 		}
 
 #ifdef CONFIG_SMP
-		handle_smp_time(user_mode(regs), cpu);
+		handle_smp_time(user, cpu);
 #endif
 	}
 

@@ -22,9 +22,9 @@
 #include <linux/coda_cache.h>
 #include <linux/coda_proc.h>
 
-static int coda_symlink_filler(struct dentry *dentry, struct page *page)
+static int coda_symlink_filler(struct file *file, struct page *page)
 {
-	struct inode *inode = dentry->d_inode;
+	struct inode *inode = (struct inode*)page->mapping->host;
 	int error;
 	struct coda_inode_info *cnp;
 	unsigned int len = PAGE_SIZE;

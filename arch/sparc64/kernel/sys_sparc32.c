@@ -1584,25 +1584,23 @@ static int cp_new_stat32(struct inode *inode, struct stat32 *statbuf)
 
 asmlinkage int sys32_newstat(char * filename, struct stat32 *statbuf)
 {
-	struct dentry *dentry;
+	struct nameidata nd;
 	int error;
 
 	lock_kernel();
-	dentry = namei(filename);
-
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		struct inode *inode = dentry->d_inode;
+	error = user_path_walk(filename, &nd);
+	if (!error) {
+		struct inode *inode = nd.dentry->d_inode;
 
 		if (inode->i_op &&
 		    inode->i_op->revalidate)
-			error = inode->i_op->revalidate(dentry);
+			error = inode->i_op->revalidate(nd.dentry);
 		else
 			error = 0;
 		if (!error)
 			error = cp_new_stat32(inode, statbuf);
 
-		dput(dentry);
+		path_release(&nd);
 	}
 	unlock_kernel();
 	return error;
@@ -1610,25 +1608,23 @@ asmlinkage int sys32_newstat(char * filename, struct stat32 *statbuf)
 
 asmlinkage int sys32_newlstat(char * filename, struct stat32 *statbuf)
 {
-	struct dentry *dentry;
+	struct nameidata nd;
 	int error;
 
 	lock_kernel();
-	dentry = lnamei(filename);
-
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		struct inode *inode = dentry->d_inode;
+	error = user_path_walk_link(filename, &nd);
+	if (!error) {
+		struct inode *inode = nd.dentry->d_inode;
 
 		if (inode->i_op &&
 		    inode->i_op->revalidate)
-			error = inode->i_op->revalidate(dentry);
+			error = inode->i_op->revalidate(nd.dentry);
 		else
 			error = 0;
 		if (!error)
 			error = cp_new_stat32(inode, statbuf);
 
-		dput(dentry);
+		path_release(&nd);
 	}
 	unlock_kernel();
 	return error;

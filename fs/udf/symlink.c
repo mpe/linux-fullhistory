@@ -76,9 +76,9 @@ static void udf_pc_to_char(char *from, int fromlen, char *to)
 		p[0] = '\0';
 }
 
-static int udf_symlink_filler(struct dentry * dentry, struct page *page)
+static int udf_symlink_filler(struct file *file, struct page *page)
 {
-	struct inode *inode = dentry->d_inode;
+	struct inode *inode = (struct inode*)page->mapping->host;
 	struct buffer_head *bh = NULL;
 	char *symlink;
 	int err = -EIO;

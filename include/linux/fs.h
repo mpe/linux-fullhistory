@@ -20,6 +20,7 @@
 #include <linux/stat.h>
 #include <linux/cache.h>
 #include <linux/stddef.h>
+#include <linux/string.h>
 
 #include <asm/atomic.h>
 #include <asm/bitops.h>
@@ -78,7 +79,11 @@ extern int max_super_blocks, nr_super_blocks;
 #define FS_NO_PRELIM	4 /* prevent preloading of dentries, even if
 			   * FS_NO_DCACHE is not set.
 			   */
-
+#define FS_SINGLE	8 /*
+			   * Filesystem that can have only one superblock;
+			   * kernel-wide vfsmnt is kept in ->kern_mnt.
+			   */
+#define FS_NOMOUNT	16 /* Never mount from userland */
 /*
  * These are the fs-independent mount-flags: up to 16 flags are supported
  */
@@ -338,8 +343,8 @@ struct page;
 struct address_space;
 
 struct address_space_operations {
-	int (*writepage)(struct file *, struct dentry *, struct page *);
-	int (*readpage)(struct dentry *, struct page *);
+	int (*writepage)(struct file *, struct page *);
+	int (*readpage)(struct file *, struct page *);
 	int (*sync_page)(struct page *);
 	int (*prepare_write)(struct file *, struct page *, unsigned, unsigned);
 	int (*commit_write)(struct file *, struct page *, unsigned, unsigned);
@@ -770,6 +775,7 @@ struct file_system_type {
 	int fs_flags;
 	struct super_block *(*read_super) (struct super_block *, void *, int);
 	struct module *owner;
+	struct vfsmount *kern_mnt; /* For kernel mount, if it's FS_SINGLE fs */
 	struct file_system_type * next;
 };
 
@@ -786,17 +792,11 @@ struct file_system_type var = { \
 
 extern int register_filesystem(struct file_system_type *);
 extern int unregister_filesystem(struct file_system_type *);
+extern struct vfsmount *kern_mount(struct file_system_type *);
+extern void kern_umount(struct vfsmount *);
 extern int may_umount(struct vfsmount *);
 
-static inline int vfs_statfs(struct super_block *sb, struct statfs *buf)
-{
-	if (!sb)
-		return -ENODEV;
-	if (!sb->s_op || !sb->s_op->statfs)
-		return -ENOSYS;
-	memset(buf, 0, sizeof(struct statfs));
-	return sb->s_op->statfs(sb, buf);
-}
+extern int vfs_statfs(struct super_block *, struct statfs *);
 
 /* Return value for VFS lock functions - tells locks.c to lock conventionally
  * REALLY kosha for root NFS and nfs_lock
@@ -969,7 +969,6 @@ extern int notify_change(struct dentry *, struct iattr *);
 extern int permission(struct inode *, int);
 extern int get_write_access(struct inode *);
 extern void put_write_access(struct inode *);
-extern struct dentry * do_mknod(const char *, int, dev_t);
 extern int do_pipe(int *);
 
 extern int open_namei(const char *, int, int, struct nameidata *);
@@ -1032,15 +1031,16 @@ typedef int (*read_actor_t)(read_descriptor_t *, struct page *, unsigned long, u
 /* needed for stackable file system support */
 extern loff_t default_llseek(struct file *file, loff_t offset, int origin);
 
-extern struct dentry * lookup_dentry(const char *, unsigned int);
-extern int walk_init(const char *, unsigned, struct nameidata *);
-extern int walk_name(const char *, struct nameidata *);
+extern int __user_walk(const char *, unsigned, struct nameidata *);
+extern int path_init(const char *, unsigned, struct nameidata *);
+extern int path_walk(const char *, struct nameidata *);
+extern void path_release(struct nameidata *);
 extern int follow_down(struct vfsmount **, struct dentry **);
+extern int follow_up(struct vfsmount **, struct dentry **);
 extern struct dentry * lookup_one(const char *, struct dentry *);
-extern struct dentry * __namei(const char *, unsigned int);
-
-#define namei(pathname)		__namei(pathname, LOOKUP_FOLLOW)
-#define lnamei(pathname)	__namei(pathname, 0)
+extern struct dentry * lookup_hash(struct qstr *, struct dentry *);
+#define user_path_walk(name,nd)	 __user_walk(name, LOOKUP_FOLLOW|LOOKUP_POSITIVE, nd)
+#define user_path_walk_link(name,nd) __user_walk(name, LOOKUP_POSITIVE, nd)
 
 extern void iput(struct inode *);
 extern struct inode * igrab(struct inode *);
@@ -1085,7 +1085,6 @@ extern void wakeup_bdflush(int wait);
 
 extern int brw_page(int, struct page *, kdev_t, int [], int);
 
-typedef int (*writepage_t)(struct file *, struct page *, unsigned long, unsigned long, const char *);
 typedef int (get_block_t)(struct inode*,long,struct buffer_head*,int);
 
 /* Generic buffer handling for block filesystems.. */

@@ -539,17 +539,6 @@ static void usb_api_blocking_completion(urb_t *urb)
 }
 
 /*-------------------------------------------------------------------*
- * completion handler for compatibility wrappers (async bulk)        *
- *-------------------------------------------------------------------*/
-static void usb_api_async_completion(urb_t *urb)
-{
-	api_wrapper_data *awd = (api_wrapper_data *)urb->context;
-
-	if (awd->handler)
-		awd->handler(urb->status, urb->transfer_buffer, urb->actual_length, awd->stuff);
- }
-
-/*-------------------------------------------------------------------*
  *                         COMPATIBILITY STUFF                       *
  *-------------------------------------------------------------------*/
 
@@ -668,50 +657,6 @@ int usb_bulk_msg(struct usb_device *usb_dev, unsigned int pipe,
 
 	return usb_start_wait_urb(urb,timeout,actual_length);
 }
-/*-------------------------------------------------------------------*/
-
-void *usb_request_bulk(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, void *data, int len, void *dev_id)
-{
-	urb_t *urb;
-	api_wrapper_data *awd;
-
-	if (!(urb=usb_alloc_urb(0)))
-		return NULL;
-	if (!(awd = kmalloc(sizeof(api_wrapper_data), in_interrupt() ? GFP_ATOMIC : GFP_KERNEL))) {
-		kfree(urb);
-		return NULL;
-	}
-
-	/* build urb */
-	FILL_BULK_URB(urb, dev, pipe, data, len, (usb_complete_t)usb_api_async_completion, awd);
-
-	awd->handler=handler;
-	awd->stuff=dev_id;
-	if (usb_submit_urb(urb) < 0) {
-		kfree(awd);
-		kfree(urb);
-		return NULL;
-	}
-	return urb;
-}
-
-// compatibility wrapper. Remove urb only if it is called before the
-// transaction's completion interrupt. If called from within the
-// completion handler (urb->completed==1), it does nothing, since the
-// qh is already removed 
-
-int usb_terminate_bulk(struct usb_device *dev, void *first)
-{
-	urb_t *urb=(urb_t*)first;
-	dbg("usb_terminate_bulk: urb:%p",urb);
-	if (!urb) // none found? there is nothing to remove!
-		return -ENODEV;
-  
-	usb_unlink_urb(urb);
-	kfree(urb->context);
-	kfree(urb);
-	return USB_ST_NOERROR;
-}
 
 /*
  * usb_release_bandwidth():
@@ -726,106 +671,6 @@ void usb_release_bandwidth(struct usb_device *dev, int bw_alloc)
 		dev->bus->bandwidth_allocated,
 		dev->bus->bandwidth_int_reqs +
 		dev->bus->bandwidth_isoc_reqs);
-}
-
-static void irq_callback(urb_t *urb)
-{
-	struct irq_wrapper_data *wd = (struct irq_wrapper_data *)urb->context;
-
-	if (!wd->handler)
-		return;
-#if 0 // verbose...
-	if (!wd->handler(urb->status, urb->transfer_buffer, urb->actual_length, wd->context))
-		err("legacy irq callback returned 0!!!");
-#else
-	wd->handler(urb->status, urb->transfer_buffer, urb->actual_length, wd->context);
-#endif
-}
-
-int usb_request_irq(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id, void **handle)
-{
-	long    bustime;
-	int     ret;
-	struct irq_wrapper_data *wd;
-	urb_t *urb;
-	unsigned int maxsze = usb_maxpacket(dev, pipe, usb_pipeout(pipe));
-
-	*handle = NULL;
-	
-	//dbg("irq: dev:%p pipe:%08X handler:%p period:%d dev_id:%p max:%d", dev, pipe, handler, period, dev_id, maxsze);
-	
-	/* Check host controller's bandwidth for this int. request. */
-	bustime = calc_bus_time (usb_pipeslow(pipe), usb_pipein(pipe), 0,
-			usb_maxpacket(dev, pipe, usb_pipeout(pipe)));
-	bustime = NS_TO_US(bustime);	/* work in microseconds */
-	if (check_bandwidth_alloc (dev->bus->bandwidth_allocated, bustime))
-		return -EUSERS;  // no bandwidth left
-
-	if (!maxsze || !usb_pipeint(pipe))
-		return -EINVAL;
-
-	if (!(urb = usb_alloc_urb(0)))
-		return -ENOMEM;
-
-	if (!(wd = kmalloc(sizeof(struct irq_wrapper_data), in_interrupt() ? GFP_ATOMIC : GFP_KERNEL))) {
-		kfree(urb);
-		return -ENOMEM;
-	}
-	if (!(urb->transfer_buffer = kmalloc(maxsze, in_interrupt() ? GFP_ATOMIC : GFP_KERNEL))) {
-		kfree(urb);
-		kfree(wd);
-		return -ENOMEM;
-	}
-	wd->handler=handler;
-	wd->context=dev_id;
-	urb->dev = dev;
-	urb->pipe = pipe;
-	urb->transfer_buffer_length = urb->actual_length = maxsze;
-	urb->interval = period;
-	urb->context = wd;
-	urb->complete = irq_callback;
-	if ((ret = usb_submit_urb(urb)) < 0) {
-		kfree(wd);
-		kfree(urb->transfer_buffer);
-		kfree(urb);
-		return ret;
-	}
-	*handle = urb;
-
-	/* Claim the USB bandwidth if no error. */
-	if (!ret) {
-		dev->bus->bandwidth_allocated += bustime;
-		dev->bus->bandwidth_int_reqs++;
-		dbg("bw_alloc bumped to %d for %d requesters",
-			dev->bus->bandwidth_allocated,
-			dev->bus->bandwidth_int_reqs +
-			dev->bus->bandwidth_isoc_reqs);
-	}
-
-	return ret;
-}
-
-int usb_release_irq(struct usb_device *dev, void *handle, unsigned int pipe)
-{
-	long    bustime;
-	int	err;
-	urb_t *urb = (urb_t*)handle;
-
-	if (!urb)
-		return -EBADF;
-	err=usb_unlink_urb(urb);
-	kfree(urb->context);
-	kfree(urb->transfer_buffer);
-	kfree(urb);
-
-	/* Return the USB bandwidth if no error. */
-	if (!err) {
-		bustime = calc_bus_time (usb_pipeslow(pipe), usb_pipein(pipe), 0,
-				usb_maxpacket(dev, pipe, usb_pipeout(pipe)));
-		bustime = NS_TO_US(bustime);	/* work in microseconds */
-		usb_release_bandwidth(dev, bustime);
-	}
-	return err;
 }
 
 /*
@@ -1906,8 +1751,4 @@ EXPORT_SYMBOL(usb_submit_urb);
 EXPORT_SYMBOL(usb_unlink_urb);
 
 EXPORT_SYMBOL(usb_control_msg);
-EXPORT_SYMBOL(usb_request_irq);
-EXPORT_SYMBOL(usb_release_irq);
 EXPORT_SYMBOL(usb_bulk_msg);
-EXPORT_SYMBOL(usb_request_bulk);
-EXPORT_SYMBOL(usb_terminate_bulk);

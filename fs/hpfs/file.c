@@ -86,11 +86,11 @@ int hpfs_get_block(struct inode *inode, long iblock, struct buffer_head *bh_resu
 	return 0;
 }
 
-static int hpfs_writepage(struct file *file, struct dentry *dentry, struct page *page)
+static int hpfs_writepage(struct file *file, struct page *page)
 {
 	return block_write_full_page(page,hpfs_get_block);
 }
-static int hpfs_readpage(struct dentry *dentry, struct page *page)
+static int hpfs_readpage(struct file *file, struct page *page)
 {
 	return block_read_full_page(page,hpfs_get_block);
 }

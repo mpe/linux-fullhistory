@@ -330,6 +330,7 @@ static void unix_sock_destructor(struct sock *sk)
 static int unix_release_sock (unix_socket *sk, int embrion)
 {
 	struct dentry *dentry;
+	struct vfsmount *mnt;
 	unix_socket *skpair;
 	struct sk_buff *skb;
 	int state;
@@ -342,6 +343,8 @@ static int unix_release_sock (unix_socket *sk, int embrion)
 	sk->shutdown = SHUTDOWN_MASK;
 	dentry = sk->protinfo.af_unix.dentry;
 	sk->protinfo.af_unix.dentry=NULL;
+	mnt = sk->protinfo.af_unix.mnt;
+	sk->protinfo.af_unix.mnt=NULL;
 	state = sk->state;
 	sk->state = TCP_CLOSE;
 	unix_state_wunlock(sk);
@@ -379,6 +382,7 @@ static int unix_release_sock (unix_socket *sk, int embrion)
 	if (dentry) {
 		lock_kernel();
 		dput(dentry);
+		mntput(mnt);
 		unlock_kernel();
 	}
 
@@ -459,6 +463,7 @@ static struct sock * unix_create1(struct socket *sock)
 	sk->max_ack_backlog = sysctl_unix_max_dgram_qlen;
 	sk->destruct = unix_sock_destructor;
 	sk->protinfo.af_unix.dentry=NULL;
+	sk->protinfo.af_unix.mnt=NULL;
 	sk->protinfo.af_unix.lock = RW_LOCK_UNLOCKED;
 	atomic_set(&sk->protinfo.af_unix.inflight, 0);
 	init_MUTEX(&sk->protinfo.af_unix.readsem);/* single task reading lock */
@@ -564,30 +569,30 @@ static unix_socket *unix_find_other(struct sockaddr_un *sunname, int len,
 				    int type, unsigned hash, int *error)
 {
 	unix_socket *u;
-	struct dentry *dentry;
-	int err;
+	struct nameidata nd;
+	int err = 0;
 	
 	if (sunname->sun_path[0]) {
 		/* Do not believe to VFS, grab kernel lock */
 		lock_kernel();
-		dentry = lookup_dentry(sunname->sun_path,LOOKUP_POSITIVE);
-		err = PTR_ERR(dentry);
-		if (IS_ERR(dentry)) {
+		if (path_init(sunname->sun_path, LOOKUP_POSITIVE, &nd))
+			err = path_walk(sunname->sun_path, &nd);
+		if (err) {
 			unlock_kernel();
 			goto fail;
 		}
-		err = permission(dentry->d_inode,MAY_WRITE);
+		err = permission(nd.dentry->d_inode,MAY_WRITE);
 		if (err)
 			goto put_fail;
 
 		err = -ECONNREFUSED;
-		if (!S_ISSOCK(dentry->d_inode->i_mode))
+		if (!S_ISSOCK(nd.dentry->d_inode->i_mode))
 			goto put_fail;
-		u=unix_find_socket_byinode(dentry->d_inode);
+		u=unix_find_socket_byinode(nd.dentry->d_inode);
 		if (!u)
 			goto put_fail;
 
-		dput(dentry);
+		path_release(&nd);
 		unlock_kernel();
 
 		err=-EPROTOTYPE;
@@ -604,7 +609,7 @@ static unix_socket *unix_find_other(struct sockaddr_un *sunname, int len,
 	return u;
 
 put_fail:
-	dput(dentry);
+	path_release(&nd);
 	unlock_kernel();
 fail:
 	*error=err;
@@ -617,6 +622,7 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	struct sock *sk = sock->sk;
 	struct sockaddr_un *sunaddr=(struct sockaddr_un *)uaddr;
 	struct dentry * dentry = NULL;
+	struct nameidata nd;
 	int err;
 	unsigned hash;
 	struct unix_address *addr;
@@ -654,15 +660,29 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 
 	if (sunaddr->sun_path[0]) {
 		lock_kernel();
-		dentry = do_mknod(sunaddr->sun_path, S_IFSOCK|sock->inode->i_mode, 0);
-		if (IS_ERR(dentry)) {
-			err = PTR_ERR(dentry);
-			unlock_kernel();
-			if (err==-EEXIST)
-				err=-EADDRINUSE;
-			unix_release_addr(addr);
-			goto out_up;
-		}
+		err = 0;
+		if (path_init(sunaddr->sun_path, LOOKUP_PARENT, &nd))
+			err = path_walk(sunaddr->sun_path, &nd);
+		if (err)
+			goto out_mknod_parent;
+		err = -EEXIST;
+		if (nd.last_type != LAST_NORM)
+			goto out_mknod;
+		down(&nd.dentry->d_inode->i_sem);
+		dentry = lookup_hash(&nd.last, nd.dentry);
+		err = PTR_ERR(dentry);
+		if (IS_ERR(dentry))
+			goto out_mknod_unlock;
+		err = -ENOENT;
+		if (nd.last.name[nd.last.len] && !dentry->d_inode)
+			goto out_mknod_dput;
+		err = vfs_mknod(nd.dentry->d_inode, dentry,
+			S_IFSOCK|sock->inode->i_mode, 0);
+		if (err)
+			goto out_mknod_dput;
+		up(&nd.dentry->d_inode->i_sem);
+		dput(nd.dentry);
+		nd.dentry = dentry;
 		unlock_kernel();
 
 		addr->hash = UNIX_HASH_SIZE;
@@ -681,7 +701,8 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		list = &unix_socket_table[addr->hash];
 	} else {
 		list = &unix_socket_table[dentry->d_inode->i_ino & (UNIX_HASH_SIZE-1)];
-		sk->protinfo.af_unix.dentry = dentry;
+		sk->protinfo.af_unix.dentry = nd.dentry;
+		sk->protinfo.af_unix.mnt = nd.mnt;
 	}
 
 	err = 0;
@@ -695,6 +716,19 @@ out_up:
 	up(&sk->protinfo.af_unix.readsem);
 out:
 	return err;
+
+out_mknod_dput:
+	dput(dentry);
+out_mknod_unlock:
+	up(&nd.dentry->d_inode->i_sem);
+out_mknod:
+	path_release(&nd);
+out_mknod_parent:
+	unlock_kernel();
+	if (err==-EEXIST)
+		err=-EADDRINUSE;
+	unix_release_addr(addr);
+	goto out_up;
 }
 
 static int unix_dgram_connect(struct socket *sock, struct sockaddr *addr,
@@ -904,6 +938,7 @@ restart:
 		/* Damn, even dget is not SMP safe. It becomes ridiculous... */
 		lock_kernel();
 		newsk->protinfo.af_unix.dentry=dget(other->protinfo.af_unix.dentry);
+		newsk->protinfo.af_unix.mnt=mntget(other->protinfo.af_unix.mnt);
 		unlock_kernel();
 	}
 

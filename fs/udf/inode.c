@@ -125,12 +125,12 @@ void udf_discard_prealloc(struct inode * inode)
 		udf_trunc(inode);
 }
 
-static int udf_writepage(struct file *file, struct dentry *dentry, struct page *page)
+static int udf_writepage(struct file *file, struct page *page)
 {
 	return block_write_full_page(page, udf_get_block);
 }
 
-static int udf_readpage(struct dentry *dentry, struct page *page)
+static int udf_readpage(struct file *file, struct page *page)
 {
 	return block_read_full_page(page, udf_get_block);
 }
@@ -202,7 +202,7 @@ void udf_expand_file_adinicb(struct inode * inode, int newsize, int * err)
 	mark_buffer_dirty(bh, 1);
 	udf_release_data(bh);
 
-	inode->i_data.a_ops->writepage(NULL, NULL, page);
+	inode->i_data.a_ops->writepage(NULL, page);
 	UnlockPage(page);
 	page_cache_release(page);
 

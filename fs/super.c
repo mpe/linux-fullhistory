@@ -18,6 +18,7 @@
  *  Added kerneld support: Jacques Gelinas and Bjorn Ekwall
  *  Added change_root: Werner Almesberger & Hans Lermen, Feb '96
  *  Added devfs support: Richard Gooch <rgooch@atnf.csiro.au>, 13-JAN-1998
+ *  Heavily rewritten for 'one fs - one tree' dcache architecture. AV, Mar 2000
  */
 
 #include <linux/config.h>
@@ -297,7 +298,6 @@ static struct vfsmount *add_vfsmnt(struct super_block *sb,
 
 	atomic_set(&mnt->mnt_count,1);
 	mnt->mnt_sb = sb;
-	mnt->mnt_dev = sb->s_dev;
 	mnt->mnt_mountpoint = dget(mountpoint);
 	mnt->mnt_root = dget(root);
 	mnt->mnt_parent = parent ? mntget(parent) : mnt;
@@ -316,11 +316,14 @@ static struct vfsmount *add_vfsmnt(struct super_block *sb,
 		mnt->mnt_dirname = name;
 	}
 
+	if (parent)
+		list_add(&mnt->mnt_child, &parent->mnt_mounts);
+	else
+		INIT_LIST_HEAD(&mnt->mnt_child);
+	INIT_LIST_HEAD(&mnt->mnt_mounts);
 	list_add(&mnt->mnt_instances, &sb->s_mounts);
 	list_add(&mnt->mnt_clash, &mountpoint->d_vfsmnt);
 	list_add(&mnt->mnt_list, vfsmntlist.prev);
-	mountpoint->d_mounts = root;
-	root->d_covers = mountpoint;
 out:
 	return mnt;
 }
@@ -360,12 +363,14 @@ static void move_vfsmnt(struct vfsmount *mnt,
 	mnt->mnt_mountpoint = dget(mountpoint);
 	mnt->mnt_parent = parent ? mntget(parent) : mnt;
 	list_del(&mnt->mnt_clash);
+	list_del(&mnt->mnt_child);
 	list_add(&mnt->mnt_clash, &mountpoint->d_vfsmnt);
+	if (parent)
+		list_add(&mnt->mnt_child, &parent->mnt_mounts);
+	else
+		INIT_LIST_HEAD(&mnt->mnt_child);
 
 	/* put the old stuff */
-	old_mountpoint->d_mounts = old_mountpoint;
-	mountpoint->d_mounts = mnt->mnt_sb->s_root;
-	mnt->mnt_sb->s_root->d_covers = mountpoint;
 	dput(old_mountpoint);
 	if (old_parent != mnt)
 		mntput(old_parent);
@@ -373,18 +378,14 @@ static void move_vfsmnt(struct vfsmount *mnt,
 
 static void remove_vfsmnt(struct vfsmount *mnt)
 {
-	struct dentry * root = mnt->mnt_sb->s_root;
-	struct dentry * covered = mnt->mnt_mountpoint;
 	/* First of all, remove it from all lists */
 	list_del(&mnt->mnt_instances);
 	list_del(&mnt->mnt_clash);
 	list_del(&mnt->mnt_list);
+	list_del(&mnt->mnt_child);
 	/* Now we can work safely */
 	if (mnt->mnt_parent != mnt)
 		mntput(mnt->mnt_parent);
-
-	root->d_covers = root;
-	covered->d_mounts = covered;
 
 	dput(mnt->mnt_mountpoint);
 	dput(mnt->mnt_root);
@@ -709,20 +710,21 @@ void put_unnamed_dev(kdev_t dev)
 static struct super_block *get_sb_bdev(struct file_system_type *fs_type,
 	char *dev_name, int flags, void * data)
 {
-	struct dentry *dentry;
 	struct inode *inode;
 	struct block_device *bdev;
 	struct block_device_operations *bdops;
 	struct super_block * sb;
+	struct nameidata nd;
 	kdev_t dev;
-	int error;
+	int error = 0;
 	/* What device it is? */
 	if (!dev_name || !*dev_name)
 		return ERR_PTR(-EINVAL);
-	dentry = lookup_dentry(dev_name, LOOKUP_FOLLOW|LOOKUP_POSITIVE);
-	if (IS_ERR(dentry))
-		return (struct super_block *)dentry;
-	inode = dentry->d_inode;
+	if (path_init(dev_name, LOOKUP_FOLLOW|LOOKUP_POSITIVE, &nd))
+		error = path_walk(dev_name, &nd);
+	if (error)
+		return ERR_PTR(error);
+	inode = nd.dentry->d_inode;
 	error = -ENOTBLK;
 	if (!S_ISBLK(inode->i_mode))
 		goto out;
@@ -741,14 +743,10 @@ static struct super_block *get_sb_bdev(struct file_system_type *fs_type,
 		goto out;
 	sb = get_super(dev);
 	if (sb) {
-		error = -EBUSY;
-		goto out;
-		/* MOUNT_REWRITE: the following should be used
 		if (fs_type == sb->s_type) {
-			dput(dentry);
+			path_release(&nd);
 			return sb;
 		}
-		*/
 	} else {
 		mode_t mode = FMODE_READ; /* we always need it ;-) */
 		if (!(flags & MS_RDONLY))
@@ -760,13 +758,13 @@ static struct super_block *get_sb_bdev(struct file_system_type *fs_type,
 		sb = read_super(dev, bdev, fs_type, flags, data, 0);
 		if (sb) {
 			get_filesystem(fs_type);
-			dput(dentry);
+			path_release(&nd);
 			return sb;
 		}
 		blkdev_put(bdev, BDEV_FS);
 	}
 out:
-	dput(dentry);
+	path_release(&nd);
 	up(&mount_sem);
 	return ERR_PTR(error);
 }
@@ -790,6 +788,23 @@ static struct super_block *get_sb_nodev(struct file_system_type *fs_type,
 	}
 	up(&mount_sem);
 	return ERR_PTR(error);
+}
+
+static struct super_block *get_sb_single(struct file_system_type *fs_type,
+	int flags, void *data)
+{
+	struct super_block * sb;
+	/*
+	 * Get the superblock of kernel-wide instance, but
+	 * keep the reference to fs_type.
+	 */
+	down(&mount_sem);
+	sb = fs_type->kern_mnt->mnt_sb;
+	if (!sb)
+		BUG();
+	get_filesystem(fs_type);
+	do_remount_sb(sb, flags, data);
+	return sb;
 }
 
 static struct block_device *kill_super(struct super_block *sb, int umount_root)
@@ -867,6 +882,39 @@ static int do_remount_sb(struct super_block *sb, int flags, char *data)
 	return 0;
 }
 
+struct vfsmount *kern_mount(struct file_system_type *type)
+{
+	kdev_t dev = get_unnamed_dev();
+	struct super_block *sb;
+	struct vfsmount *mnt;
+	if (!dev)
+		return ERR_PTR(-EMFILE);
+	sb = read_super(dev, NULL, type, 0, NULL, 0);
+	if (!sb) {
+		put_unnamed_dev(dev);
+		return ERR_PTR(-EINVAL);
+	}
+	mnt = add_vfsmnt(sb, sb->s_root, sb->s_root, NULL, "none", type->name);
+	if (!mnt) {
+		kill_super(sb, 0);
+		return ERR_PTR(-ENOMEM);
+	}
+	type->kern_mnt = mnt;
+	return mnt;
+}
+
+/* Call only after unregister_filesystem() - it's a final cleanup */
+
+void kern_umount(struct vfsmount *mnt)
+{
+	struct super_block *sb = mnt->mnt_sb;
+	struct dentry *root = sb->s_root;
+	remove_vfsmnt(mnt);
+	dput(root);
+	sb->s_root = NULL;
+	kill_super(sb, 0);
+}
+
 /*
  * Doesn't take quota and stuff into account. IOW, in some cases it will
  * give false negatives. The main reason why it's here is that we need
@@ -874,39 +922,14 @@ static int do_remount_sb(struct super_block *sb, int flags, char *data)
  */
 int may_umount(struct vfsmount *mnt)
 {
-	struct super_block * sb = mnt->mnt_sb;
-	struct dentry * root;
-	int count;
-
 	if (atomic_read(&mnt->mnt_count) > 2)
 		return -EBUSY;
-
-	if (mnt->mnt_instances.next != mnt->mnt_instances.prev)
-		return 0;
-
-	/*
-	 * OK, at that point we have only one instance. We should have
-	 * one active reference from ->s_root, one active reference
-	 * from ->mnt_root (which may be different) and possibly one
-	 * active reference from ->mnt_mountpoint (if mnt->mnt_parent == mnt).
-	 * Anything above that means that tree is busy.
-	 */
-
-	root = sb->s_root;
-
-	count = d_active_refs(root);
-	if (mnt->mnt_parent == mnt)
-		count--;
-	if (count != 2)
-		return -EBUSY;
-
 	return 0;
 }
 
 static int do_umount(struct vfsmount *mnt, int umount_root, int flags)
 {
 	struct super_block * sb = mnt->mnt_sb;
-	int count;
 
 	if (mnt == current->fs->rootmnt && !umount_root) {
 		int retval = 0;
@@ -926,6 +949,8 @@ static int do_umount(struct vfsmount *mnt, int umount_root, int flags)
 	}
 
 	if (mnt->mnt_instances.next != mnt->mnt_instances.prev) {
+		if (sb->s_type->fs_flags && FS_SINGLE)
+			put_filesystem(sb->s_type);
 		mntput(mnt);
 		remove_vfsmnt(mnt);
 		return 0;
@@ -968,22 +993,6 @@ static int do_umount(struct vfsmount *mnt, int umount_root, int flags)
 		mntput(mnt);
 		return -EBUSY;
 	}
- 
-	/*
-	 * OK, at that point we have only one instance. We should have
-	 * one active reference from ->s_root, one active reference
-	 * from ->mnt_root (which may be different) and possibly one
-	 * active reference from ->mnt_mountpoint (if mnt->mnt_parent == mnt).
-	 * Anything above that means that tree is busy.
-	 */
-
-	count = d_active_refs(sb->s_root);
-	if (mnt->mnt_parent == mnt)
-		count--;
-	if (count != 2) {
-		mntput(mnt);
-		return -EBUSY;
-	}
 
 	if (sb->s_root->d_inode->i_state) {
 		mntput(mnt);
@@ -1022,8 +1031,8 @@ asmlinkage long sys_umount(char * name, int flags)
 	if (IS_ERR(kname))
 		goto out;
 	retval = 0;
-	if (walk_init(kname, LOOKUP_POSITIVE|LOOKUP_FOLLOW, &nd))
-		retval = walk_name(kname, &nd);
+	if (path_init(kname, LOOKUP_POSITIVE|LOOKUP_FOLLOW, &nd))
+		retval = path_walk(kname, &nd);
 	putname(kname);
 	if (retval)
 		goto out;
@@ -1038,8 +1047,7 @@ asmlinkage long sys_umount(char * name, int flags)
 	up(&mount_sem);
 	goto out;
 dput_and_out:
-	dput(nd.dentry);
-	mntput(nd.mnt);
+	path_release(&nd);
 out:
 	unlock_kernel();
 	return retval;
@@ -1055,6 +1063,50 @@ asmlinkage long sys_oldumount(char * name)
 }
 
 /*
+ * do loopback mount.
+ */
+static int do_loopback(char *old_name, char *new_name)
+{
+	struct nameidata old_nd, new_nd;
+	int err = 0;
+	if (!old_name || !*old_name)
+		return -EINVAL;
+	if (path_init(old_name, LOOKUP_POSITIVE|LOOKUP_DIRECTORY, &old_nd))
+		err = path_walk(old_name, &old_nd);
+	if (err)
+		goto out;
+	if (path_init(new_name, LOOKUP_POSITIVE|LOOKUP_DIRECTORY, &new_nd))
+		err = path_walk(new_name, &new_nd);
+	if (err)
+		goto out1;
+	err = -EPERM;
+	if (!capable(CAP_SYS_ADMIN) &&
+	     current->uid != new_nd.dentry->d_inode->i_uid)
+		goto out2;
+	down(&mount_sem);
+	err = -ENOENT;
+	if (d_unhashed(old_nd.dentry) && !IS_ROOT(old_nd.dentry))
+		goto out3;
+	if (d_unhashed(new_nd.dentry) && !IS_ROOT(new_nd.dentry))
+		goto out3;
+	/* there we go */
+	err = -ENOMEM;
+	if (old_nd.mnt->mnt_sb->s_type->fs_flags & FS_SINGLE)
+		get_filesystem(old_nd.mnt->mnt_sb->s_type);
+	if (add_vfsmnt(old_nd.mnt->mnt_sb, new_nd.dentry, old_nd.dentry,
+	               new_nd.mnt, old_nd.mnt->mnt_devname, new_name))
+		err = 0;
+out3:
+	up(&mount_sem);
+out2:
+	path_release(&new_nd);
+out1:
+	path_release(&old_nd);
+out:
+	return err;
+}
+
+/*
  * change filesystem flags. dir should be a physical root of filesystem.
  * If you've mounted a non-root directory somewhere and want to do remount
  * on it - tough luck.
@@ -1062,20 +1114,20 @@ asmlinkage long sys_oldumount(char * name)
 
 static int do_remount(const char *dir,int flags,char *data)
 {
-	struct dentry *dentry;
-	int retval;
+	struct nameidata nd;
+	int retval = 0;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	dentry = lookup_dentry(dir, LOOKUP_FOLLOW|LOOKUP_POSITIVE);
-	retval = PTR_ERR(dentry);
-	if (!IS_ERR(dentry)) {
-		struct super_block * sb = dentry->d_inode->i_sb;
+	if (path_init(dir, LOOKUP_FOLLOW|LOOKUP_POSITIVE, &nd))
+		retval = path_walk(dir, &nd);
+	if (!retval) {
+		struct super_block * sb = nd.dentry->d_inode->i_sb;
 		retval = -ENODEV;
 		if (sb) {
 			retval = -EINVAL;
-			if (dentry == sb->s_root) {
+			if (nd.dentry == sb->s_root) {
 				/*
 				 * Shrink the dcache and sync the device.
 				 */
@@ -1086,7 +1138,7 @@ static int do_remount(const char *dir,int flags,char *data)
 				retval = do_remount_sb(sb, flags, data);
 			}
 		}
-		dput(dentry);
+		path_release(&nd);
 	}
 	return retval;
 }
@@ -1164,7 +1216,8 @@ long do_sys_mount(char * dev_name, char * dir_name, char *type_page,
 		flags = new_flags & ~MS_MGC_MSK;
 
 	/* loopback mount? This is special - requires fewer capabilities */
-	/* MOUNT_REWRITE: ... and is yet to be merged */
+	if (strcmp(type_page, "bind")==0)
+		return do_loopback(dev_name, dir_name);
 
 	/* for the rest we _really_ need capabilities... */
 	if (!capable(CAP_SYS_ADMIN))
@@ -1176,14 +1229,18 @@ long do_sys_mount(char * dev_name, char * dir_name, char *type_page,
 		return -ENODEV;
 
 	/* ... and mountpoint. Do the lookup first to force automounting. */
-	if (walk_init(dir_name, LOOKUP_FOLLOW|LOOKUP_POSITIVE|LOOKUP_DIRECTORY, &nd))
-		retval = walk_name(dir_name, &nd);
+	if (path_init(dir_name, LOOKUP_FOLLOW|LOOKUP_POSITIVE|LOOKUP_DIRECTORY, &nd))
+		retval = path_walk(dir_name, &nd);
 	if (retval)
 		goto fs_out;
 
 	/* get superblock, locks mount_sem on success */
-	if (fstype->fs_flags & FS_REQUIRES_DEV)
+	if (fstype->fs_flags & FS_NOMOUNT)
+		sb = ERR_PTR(-EINVAL);
+	else if (fstype->fs_flags & FS_REQUIRES_DEV)
 		sb = get_sb_bdev(fstype, dev_name,flags, data_page);
+	else if (fstype->fs_flags & FS_SINGLE)
+		sb = get_sb_single(fstype, flags, data_page);
 	else
 		sb = get_sb_nodev(fstype, flags, data_page);
 
@@ -1192,7 +1249,7 @@ long do_sys_mount(char * dev_name, char * dir_name, char *type_page,
 		goto dput_out;
 
 	retval = -ENOENT;
-	if (d_unhashed(nd.dentry))
+	if (d_unhashed(nd.dentry) && !IS_ROOT(nd.dentry))
 		goto fail;
 
 	/* Something was mounted here while we slept */
@@ -1207,8 +1264,7 @@ long do_sys_mount(char * dev_name, char * dir_name, char *type_page,
 unlock_out:
 	up(&mount_sem);
 dput_out:
-	dput(nd.dentry);
-	mntput(nd.mnt);
+	path_release(&nd);
 fs_out:
 	put_filesystem(fstype);
 	return retval;
@@ -1486,8 +1542,8 @@ asmlinkage long sys_pivot_root(const char *new_root, const char *put_old)
 	if (IS_ERR(name))
 		goto out0;
 	error = 0;
-	if (walk_init(name, LOOKUP_POSITIVE|LOOKUP_FOLLOW|LOOKUP_DIRECTORY, &new_nd))
-		error = walk_name(name, &new_nd);
+	if (path_init(name, LOOKUP_POSITIVE|LOOKUP_FOLLOW|LOOKUP_DIRECTORY, &new_nd))
+		error = path_walk(name, &new_nd);
 	putname(name);
 	if (error)
 		goto out0;
@@ -1497,15 +1553,17 @@ asmlinkage long sys_pivot_root(const char *new_root, const char *put_old)
 	if (IS_ERR(name))
 		goto out0;
 	error = 0;
-	if (walk_init(name, LOOKUP_POSITIVE|LOOKUP_FOLLOW|LOOKUP_DIRECTORY, &old_nd))
-		error = walk_name(name, &old_nd);
+	if (path_init(name, LOOKUP_POSITIVE|LOOKUP_FOLLOW|LOOKUP_DIRECTORY, &old_nd))
+		error = path_walk(name, &old_nd);
 	putname(name);
 	if (error)
 		goto out1;
 
 	down(&mount_sem);
 	error = -ENOENT;
-	if (d_unhashed(new_nd.dentry) || d_unhashed(old_nd.dentry))
+	if (d_unhashed(new_nd.dentry) && !IS_ROOT(new_nd.dentry))
+		goto out2;
+	if (d_unhashed(old_nd.dentry) && !IS_ROOT(old_nd.dentry))
 		goto out2;
 	error = -EBUSY;
 	if (new_nd.mnt == root_mnt || old_nd.mnt == root_mnt)
@@ -1520,7 +1578,7 @@ asmlinkage long sys_pivot_root(const char *new_root, const char *put_old)
 				break;
 			tmp = tmp->mnt_parent;
 		}
-		if (!is_subdir(tmp->mnt_root, new_nd.dentry))
+		if (!is_subdir(tmp->mnt_mountpoint, new_nd.dentry))
 			goto out2;
 	} else if (!is_subdir(old_nd.dentry, new_nd.dentry))
 		goto out2;
@@ -1539,11 +1597,9 @@ asmlinkage long sys_pivot_root(const char *new_root, const char *put_old)
 	error = 0;
 out2:
 	up(&mount_sem);
-	dput(old_nd.dentry);
-	mntput(old_nd.mnt);
+	path_release(&old_nd);
 out1:
-	dput(new_nd.dentry);
-	mntput(new_nd.mnt);
+	path_release(&new_nd);
 out0:
 	unlock_kernel();
 	return error;
@@ -1560,8 +1616,8 @@ int __init change_root(kdev_t new_root_dev,const char *put_old)
 	int error = 0;
 
 	/*  First unmount devfs if mounted  */
-	if (walk_init("/dev", LOOKUP_FOLLOW|LOOKUP_POSITIVE, &devfs_nd))
-		error = walk_name("/dev", &devfs_nd);
+	if (path_init("/dev", LOOKUP_FOLLOW|LOOKUP_POSITIVE, &devfs_nd))
+		error = path_walk("/dev", &devfs_nd);
 	if (!error) {
 		struct super_block *sb = devfs_nd.dentry->d_inode->i_sb;
 
@@ -1572,10 +1628,8 @@ int __init change_root(kdev_t new_root_dev,const char *put_old)
 			/* puts devfs_nd.mnt */
 			do_umount(devfs_nd.mnt, 0, 0);
 			up(&mount_sem);
-		} else {
-			dput(devfs_nd.dentry);
-			mntput(devfs_nd.mnt);
-		}
+		} else 
+			path_release(&devfs_nd);
 	}
 	ROOT_DEV = new_root_dev;
 	mount_root();
@@ -1589,8 +1643,8 @@ int __init change_root(kdev_t new_root_dev,const char *put_old)
 	 * Get the new mount directory
 	 */
 	error = 0;
-	if (walk_init(put_old, LOOKUP_FOLLOW|LOOKUP_POSITIVE|LOOKUP_DIRECTORY, &nd))
-		error = walk_name(put_old, &nd);
+	if (path_init(put_old, LOOKUP_FOLLOW|LOOKUP_POSITIVE|LOOKUP_DIRECTORY, &nd))
+		error = path_walk(put_old, &nd);
 	if (error) {
 		int blivet;
 
@@ -1605,8 +1659,7 @@ int __init change_root(kdev_t new_root_dev,const char *put_old)
 	}
 	move_vfsmnt(old_rootmnt, nd.dentry, nd.mnt, "/dev/root.old", put_old);
 	mntput(old_rootmnt);
-	dput(nd.dentry);
-	mntput(nd.mnt);
+	path_release(&nd);
 	return 0;
 }
 

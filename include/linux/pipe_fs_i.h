@@ -1,6 +1,7 @@
 #ifndef _LINUX_PIPE_FS_I_H
 #define _LINUX_PIPE_FS_I_H
 
+#define PIPEFS_MAGIC 0x50495045
 struct pipe_inode_info {
 	wait_queue_head_t wait;
 	char *base;

@@ -724,7 +724,7 @@ struct irix_statfs {
 asmlinkage int irix_statfs(const char *path, struct irix_statfs *buf,
 			   int len, int fs_type)
 {
-	struct dentry *dentry;
+	struct nameidata nd;
 	struct statfs kbuf;
 	int error, i;
 
@@ -738,12 +738,11 @@ asmlinkage int irix_statfs(const char *path, struct irix_statfs *buf,
 	error = verify_area(VERIFY_WRITE, buf, sizeof(struct irix_statfs));
 	if (error)
 		goto out;
-	dentry = namei(path);
-	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
+	error = user_path_walk(path, &nd);
+	if (error)
 		goto out;
 
-	error = vfs_statfs(dentry->d_inode->i_sb, &kbuf);
+	error = vfs_statfs(nd.dentry->d_inode->i_sb, &kbuf);
 	if (error)
 		goto dput_and_out;
 
@@ -761,7 +760,7 @@ asmlinkage int irix_statfs(const char *path, struct irix_statfs *buf,
 	error = 0;
 
 dput_and_out:
-	dput(dentry);
+	path_release(&nd);
 out:
 	unlock_kernel();
 	return error;
@@ -1484,7 +1483,7 @@ struct irix_statvfs {
 
 asmlinkage int irix_statvfs(char *fname, struct irix_statvfs *buf)
 {
-	struct dentry *dentry;
+	struct nameidata nd;
 	struct statfs kbuf;
 	int error, i;
 
@@ -1494,11 +1493,10 @@ asmlinkage int irix_statvfs(char *fname, struct irix_statvfs *buf)
 	error = verify_area(VERIFY_WRITE, buf, sizeof(struct irix_statvfs));
 	if(error)
 		goto out;
-	dentry = namei(fname);
-	error = PTR_ERR(dentry);
-	if(!IS_ERR(dentry))
+	error = user_path_walk(fname, &nd);
+	if (err)
 		goto out;
-	error = vfs_statfs(dentry->d_inode->i_sb, &kbuf);
+	error = vfs_statfs(nd.dentry->d_inode->i_sb, &kbuf);
 	if (error)
 		goto dput_and_out;
 
@@ -1525,7 +1523,7 @@ asmlinkage int irix_statvfs(char *fname, struct irix_statvfs *buf)
 	error = 0;
 
 dput_and_out:
-	dput(dentry);
+	path_release(&nd);
 out:
 	unlock_kernel();
 	return error;
@@ -1759,7 +1757,7 @@ struct irix_statvfs64 {
 
 asmlinkage int irix_statvfs64(char *fname, struct irix_statvfs64 *buf)
 {
-	struct dentry *dentry;
+	struct nameidata nd;
 	struct statfs kbuf;
 	int error, i;
 
@@ -1769,11 +1767,10 @@ asmlinkage int irix_statvfs64(char *fname, struct irix_statvfs64 *buf)
 	error = verify_area(VERIFY_WRITE, buf, sizeof(struct irix_statvfs));
 	if(error)
 		goto out;
-	dentry = namei(fname);
-	error = PTR_ERR(dentry);
-	if(IS_ERR(dentry))
+	error = user_path_walk(fname, &nd);
+	if (error)
 		goto out;
-	error = vfs_statfs(dentry->d_inode->i_sb, &kbuf);
+	error = vfs_statfs(nd.dentry->d_inode->i_sb, &kbuf);
 	if (error)
 		goto dput_and_out;
 
@@ -1800,7 +1797,7 @@ asmlinkage int irix_statvfs64(char *fname, struct irix_statvfs64 *buf)
 	error = 0;
 
 dput_and_out:
-	dput(dentry);
+	path_release(&nd);
 out:
 	unlock_kernel();
 	return error;

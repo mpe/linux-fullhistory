@@ -62,7 +62,7 @@ static struct dentry * ramfs_lookup(struct inode *dir, struct dentry *dentry)
  * Read a page. Again trivial. If it didn't already exist
  * in the page cache, it is zero-filled.
  */
-static int ramfs_readpage(struct dentry *dentry, struct page * page)
+static int ramfs_readpage(struct file *file, struct page * page)
 {
 	if (!Page_Uptodate(page)) {
 		memset((void *) page_address(page), 0, PAGE_CACHE_SIZE);
@@ -76,7 +76,7 @@ static int ramfs_readpage(struct dentry *dentry, struct page * page)
  * Writing: just make sure the page gets marked dirty, so that
  * the page stealer won't grab it.
  */
-static int ramfs_writepage(struct file *file, struct dentry * dentry, struct page *page)
+static int ramfs_writepage(struct file *file, struct page *page)
 {
 	SetPageDirty(page);
 	return 0;

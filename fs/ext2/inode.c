@@ -620,11 +620,11 @@ struct buffer_head * ext2_bread (struct inode * inode, int block,
 	return NULL;
 }
 
-static int ext2_writepage(struct file *file, struct dentry *dentry, struct page *page)
+static int ext2_writepage(struct file *file, struct page *page)
 {
 	return block_write_full_page(page,ext2_get_block);
 }
-static int ext2_readpage(struct dentry *dentry, struct page *page)
+static int ext2_readpage(struct file *file, struct page *page)
 {
 	return block_read_full_page(page,ext2_get_block);
 }

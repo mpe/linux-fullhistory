@@ -114,7 +114,7 @@ drop_pte:
 	 * Don't do any of the expensive stuff if
 	 * we're not really interested in this zone.
 	 */
-	if (!page->zone->zone_wake_kswapd)
+	if (page->zone->free_pages > page->zone->pages_high)
 		goto out_unlock;
 
 	/*
@@ -340,7 +340,7 @@ static int swap_out_mm(struct mm_struct * mm, int gfp_mask)
  * N.B. This function returns only 0 or 1.  Return values != 1 from
  * the lower level routines result in continued processing.
  */
-int swap_out(unsigned int priority, int gfp_mask)
+static int swap_out(unsigned int priority, int gfp_mask)
 {
 	struct task_struct * p;
 	int counter;
@@ -375,7 +375,6 @@ int swap_out(unsigned int priority, int gfp_mask)
 		p = init_task.next_task;
 		for (; p != &init_task; p = p->next_task) {
 			struct mm_struct *mm = p->mm;
-			p->hog = 0;
 			if (!p->swappable || !mm)
 				continue;
 	 		if (mm->rss <= 0)
@@ -389,26 +388,9 @@ int swap_out(unsigned int priority, int gfp_mask)
 				pid = p->pid;
 			}
 		}
-		if (assign == 1) {
-			/* we just assigned swap_cnt, normalise values */
-			assign = 2;
-			p = init_task.next_task;
-			for (; p != &init_task; p = p->next_task) {
-				int i = 0;
-				struct mm_struct *mm = p->mm;
-				if (!p->swappable || !mm || mm->rss <= 0)
-					continue;
-				/* small processes are swapped out less */
-				while ((mm->swap_cnt << 2 * (i + 1) < max_cnt) && i++ < 10)
-					/* nothing */;
-				mm->swap_cnt >>= i;
-				mm->swap_cnt += i; /* if swap_cnt reaches 0 */
-				/* we're big -> hog treatment */
-				if (!i)
-					p->hog = 1;
-			}
-		}
 		read_unlock(&tasklist_lock);
+		if (assign == 1)
+			assign = 2;
 		if (!best) {
 			if (!assign) {
 				assign = 1;
@@ -445,7 +427,7 @@ out:
  * cluster them so that we get good swap-out behaviour. See
  * the "free_memory()" macro for details.
  */
-static int do_try_to_free_pages(unsigned int gfp_mask, zone_t *zone)
+static int do_try_to_free_pages(unsigned int gfp_mask)
 {
 	int priority;
 	int count = SWAP_CLUSTER_MAX;
@@ -455,7 +437,7 @@ static int do_try_to_free_pages(unsigned int gfp_mask, zone_t *zone)
 
 	priority = 6;
 	do {
-		while (shrink_mmap(priority, gfp_mask, zone)) {
+		while (shrink_mmap(priority, gfp_mask)) {
 			if (!--count)
 				goto done;
 		}
@@ -468,11 +450,11 @@ static int do_try_to_free_pages(unsigned int gfp_mask, zone_t *zone)
 		   	 * shrink_mmap() almost never fail when there's
 		   	 * really plenty of memory free. 
 			 */
-			count -= shrink_dcache_memory(priority, gfp_mask, zone);
-			count -= shrink_icache_memory(priority, gfp_mask, zone);
+			count -= shrink_dcache_memory(priority, gfp_mask);
+			count -= shrink_icache_memory(priority, gfp_mask);
 			if (count <= 0)
 				goto done;
-			while (shm_swap(priority, gfp_mask, zone)) {
+			while (shm_swap(priority, gfp_mask)) {
 				if (!--count)
 					goto done;
 			}
@@ -484,9 +466,10 @@ static int do_try_to_free_pages(unsigned int gfp_mask, zone_t *zone)
 				goto done;
 		}
 	} while (--priority >= 0);
-done:
+	return 0;
 
-	return priority >= 0;
+done:
+	return 1;
 }
 
 DECLARE_WAIT_QUEUE_HEAD(kswapd_wait);
@@ -539,7 +522,7 @@ int kswapd(void *unused)
 				if (!zone->size || !zone->zone_wake_kswapd)
 					continue;
 				something_to_do = 1;
-				do_try_to_free_pages(GFP_KSWAPD, zone);
+				do_try_to_free_pages(GFP_KSWAPD);
 				if (tsk->need_resched)
 					schedule();
 			}
@@ -569,13 +552,13 @@ int kswapd(void *unused)
  * can be done by just dropping cached pages without having
  * any deadlock issues.
  */
-int try_to_free_pages(unsigned int gfp_mask, zone_t *zone)
+int try_to_free_pages(unsigned int gfp_mask)
 {
 	int retval = 1;
 
 	if (gfp_mask & __GFP_WAIT) {
 		current->flags |= PF_MEMALLOC;
-		retval = do_try_to_free_pages(gfp_mask, zone);
+		retval = do_try_to_free_pages(gfp_mask);
 		current->flags &= ~PF_MEMALLOC;
 	}
 	return retval;

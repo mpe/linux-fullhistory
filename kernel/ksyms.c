@@ -144,12 +144,13 @@ EXPORT_SYMBOL(igrab);
 EXPORT_SYMBOL(iunique);
 EXPORT_SYMBOL(iget4);
 EXPORT_SYMBOL(iput);
-EXPORT_SYMBOL(__namei);
+EXPORT_SYMBOL(follow_up);
 EXPORT_SYMBOL(follow_down);
-EXPORT_SYMBOL(lookup_dentry);
-EXPORT_SYMBOL(walk_init);
-EXPORT_SYMBOL(walk_name);
+EXPORT_SYMBOL(path_init);
+EXPORT_SYMBOL(path_walk);
+EXPORT_SYMBOL(__user_walk);
 EXPORT_SYMBOL(lookup_one);
+EXPORT_SYMBOL(lookup_hash);
 EXPORT_SYMBOL(sys_close);
 EXPORT_SYMBOL(d_alloc_root);
 EXPORT_SYMBOL(d_delete);
@@ -309,6 +310,8 @@ EXPORT_SYMBOL(console_loglevel);
 /* filesystem registration */
 EXPORT_SYMBOL(register_filesystem);
 EXPORT_SYMBOL(unregister_filesystem);
+EXPORT_SYMBOL(kern_mount);
+EXPORT_SYMBOL(kern_umount);
 EXPORT_SYMBOL(may_umount);
 
 /* executable format registration */

@@ -14,108 +14,39 @@
 #include "autofs_i.h"
 
 /*
- * Determine if a dentry tree is in use.  This is much the
- * same as the standard is_root_busy() function, except
- * that :-
- *  - the extra dentry reference in autofs dentries is not
- *    considered to be busy
- *  - mountpoints within the tree are not busy
- *  - it traverses across mountpoints
- * XXX doesn't consider children of covered dentries at mountpoints
+ * Determine if a subtree of the namespace is busy.
  */
-static int is_tree_busy(struct dentry *root)
+static int is_tree_busy(struct vfsmount *mnt)
 {
-	struct dentry *this_parent;
+	struct vfsmount *this_parent = mnt;
 	struct list_head *next;
 	int count;
 
-	root = root->d_mounts;
-
-	count = root->d_count;
-	this_parent = root;
-
-	DPRINTK(("is_tree_busy: starting at %.*s/%.*s, d_count=%d\n",
-		 root->d_covers->d_parent->d_name.len,
-		 root->d_covers->d_parent->d_name.name,
-		 root->d_name.len, root->d_name.name,
-		 root->d_count));
-
-	/* Ignore autofs's extra reference */
-	if (is_autofs4_dentry(root)) {
-		DPRINTK(("is_tree_busy: autofs\n"));
-		count--;
-	}
-
-	/* Mountpoints don't count (either mountee or mounter) */
-	if (d_mountpoint(root) ||
-	    root != root->d_covers) {
-		DPRINTK(("is_tree_busy: mountpoint\n"));
-		count--;
-	}
-
+	count = atomic_read(&mnt->mnt_count);
 repeat:
-	next = this_parent->d_mounts->d_subdirs.next;
+	next = this_parent->mnt_mounts.next;
 resume:
-	while (next != &this_parent->d_mounts->d_subdirs) {
-		int adj = 0;
+	while (next != &this_parent->mnt_mounts) {
 		struct list_head *tmp = next;
-		struct dentry *dentry = list_entry(tmp, struct dentry,
-						   d_child);
-
+		struct vfsmount *p = list_entry(tmp, struct vfsmount,
+						mnt_child);
 		next = tmp->next;
-
-		dentry = dentry->d_mounts;
-
-		DPRINTK(("is_tree_busy: considering %.*s/%.*s, d_count=%d, count=%d\n",
-			 this_parent->d_name.len,
-			 this_parent->d_name.name,
-			 dentry->d_covers->d_name.len, 
-			 dentry->d_covers->d_name.name,
-			 dentry->d_count, count));
-
 		/* Decrement count for unused children */
-		count += (dentry->d_count - 1);
-
-		/* Mountpoints don't count */
-		if (d_mountpoint(dentry)) {
-			DPRINTK(("is_tree_busy: mountpoint dentry=%p covers=%p mounts=%p\n",
-				 dentry, dentry->d_covers, dentry->d_mounts));
-			adj++;
-		}
-
-		/* ... and roots - twice as much... */
-		if (dentry != dentry->d_covers) {
-			DPRINTK(("is_tree_busy: mountpoint dentry=%p covers=%p mounts=%p\n",
-				 dentry, dentry->d_covers, dentry->d_mounts));
-			adj+=2;
-		}
-
-		/* Ignore autofs's extra reference */
-		if (is_autofs4_dentry(dentry)) {
-			DPRINTK(("is_tree_busy: autofs\n"));
-			adj++;
-		}
-
-		count -= adj;
-
-		if (!list_empty(&dentry->d_mounts->d_subdirs)) {
-			this_parent = dentry->d_mounts;
+		count += atomic_read(&p->mnt_count) - 1;
+		if (!list_empty(&p->mnt_mounts)) {
+			this_parent = p;
 			goto repeat;
 		}
-
 		/* root is busy if any leaf is busy */
-		if (dentry->d_count != adj) {
-			DPRINTK(("is_tree_busy: busy leaf (d_count=%d adj=%d)\n",
-				 dentry->d_count, adj));
+		if (atomic_read(&p->mnt_count) > 1)
 			return 1;
-		}
 	}
 	/*
 	 * All done at this level ... ascend and resume the search.
 	 */
-	if (this_parent != root) {
-		next = this_parent->d_covers->d_child.next; 
-		this_parent = this_parent->d_covers->d_parent;
+	if (this_parent != mnt) {
+		next = this_parent->mnt_child.next; 
+		this_parent = this_parent->mnt_parent;
 		goto resume;
 	}
 
@@ -130,6 +61,7 @@ resume:
  *  - it has been unused for exp_timeout time
  */
 static struct dentry *autofs4_expire(struct super_block *sb,
+				    struct vfsmount *mnt,
 				    struct autofs_sb_info *sbi,
 				    int do_now)
 {
@@ -137,6 +69,8 @@ static struct dentry *autofs4_expire(struct super_block *sb,
 	unsigned long timeout;
 	struct dentry *root = sb->s_root;
 	struct list_head *tmp;
+	struct dentry *d;
+	struct vfsmount *p;
 
 	if (!sbi->exp_timeout || !root)
 		return NULL;
@@ -174,8 +108,14 @@ static struct dentry *autofs4_expire(struct super_block *sb,
 			   attempts if expire fails the first time */
 			ino->last_used = now;
 		}
+		p = mntget(mnt);
+		d = dget(dentry);
+		while(d_mountpoint(d) && follow_down(&p, &d))
+			;
 
-		if (!is_tree_busy(dentry)) {
+		if (!is_tree_busy(p)) {
+			dput(d);
+			mntput(p);
 			DPRINTK(("autofs_expire: returning %p %.*s\n",
 				 dentry, dentry->d_name.len, dentry->d_name.name));
 			/* Start from here next time */
@@ -183,6 +123,8 @@ static struct dentry *autofs4_expire(struct super_block *sb,
 			list_add(&root->d_subdirs, &dentry->d_child);
 			return dentry;
 		}
+		dput(d);
+		mntput(p);
 	}
 
 	return NULL;
@@ -190,6 +132,7 @@ static struct dentry *autofs4_expire(struct super_block *sb,
 
 /* Perform an expiry operation */
 int autofs4_expire_run(struct super_block *sb,
+		      struct vfsmount *mnt,
 		      struct autofs_sb_info *sbi,
 		      struct autofs_packet_expire *pkt_p)
 {
@@ -201,7 +144,7 @@ int autofs4_expire_run(struct super_block *sb,
 	pkt.hdr.proto_version = sbi->version;
 	pkt.hdr.type = autofs_ptype_expire;
 
-	if ((dentry = autofs4_expire(sb, sbi, 0)) == NULL)
+	if ((dentry = autofs4_expire(sb, mnt, sbi, 0)) == NULL)
 		return -EAGAIN;
 
 	pkt.len = dentry->d_name.len;
@@ -216,7 +159,7 @@ int autofs4_expire_run(struct super_block *sb,
 
 /* Call repeatedly until it returns -EAGAIN, meaning there's nothing
    more to be done */
-int autofs4_expire_multi(struct super_block *sb,
+int autofs4_expire_multi(struct super_block *sb, struct vfsmount *mnt,
 			struct autofs_sb_info *sbi, int *arg)
 {
 	struct dentry *dentry;
@@ -226,7 +169,7 @@ int autofs4_expire_multi(struct super_block *sb,
 	if (arg && get_user(do_now, arg))
 		return -EFAULT;
 
-	if ((dentry = autofs4_expire(sb, sbi, do_now)) != NULL) {
+	if ((dentry = autofs4_expire(sb, mnt, sbi, do_now)) != NULL) {
 		struct autofs_info *de_info = autofs4_dentry_ino(dentry);
 
 		/* This is synchronous because it makes the daemon a

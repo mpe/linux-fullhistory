@@ -42,7 +42,7 @@
 #include "udf_i.h"
 #include "udf_sb.h"
 
-static int udf_adinicb_readpage(struct dentry *dentry, struct page * page)
+static int udf_adinicb_readpage(struct file *file, struct page * page)
 {
 	struct inode *inode = (struct inode *)page->mapping->host;
 
@@ -65,7 +65,7 @@ static int udf_adinicb_readpage(struct dentry *dentry, struct page * page)
 	return 0;
 }
 
-static int udf_adinicb_writepage(struct file *file, struct dentry *dentry, struct page *page)
+static int udf_adinicb_writepage(struct file *file, struct page *page)
 {
 	struct inode *inode = (struct inode *)page->mapping->host;
 

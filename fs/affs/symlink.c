@@ -15,10 +15,10 @@
 #include <linux/amigaffs.h>
 #include <linux/pagemap.h>
 
-static int affs_symlink_readpage(struct dentry *dentry, struct page *page)
+static int affs_symlink_readpage(struct file *file, struct page *page)
 {
 	struct buffer_head *bh;
-	struct inode *inode = dentry->d_inode;
+	struct inode *inode = (struct inode*)page->mapping->host;
 	char *link = (char*)kmap(page);
 	struct slink_front *lf;
 	int err;

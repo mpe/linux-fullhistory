@@ -9,6 +9,8 @@
 #include <linux/poll.h>
 #include <linux/malloc.h>
 #include <linux/smp_lock.h>
+#include <linux/module.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 
@@ -463,6 +465,8 @@ fail_page:
 	return NULL;
 }
 
+static struct vfsmount *pipe_mnt = NULL;
+
 static struct inode * get_pipe_inode(void)
 {
 	struct inode *inode = get_empty_inode();
@@ -474,6 +478,7 @@ static struct inode * get_pipe_inode(void)
 		goto fail_iput;
 	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 1;
 	inode->i_fop = &rdwr_pipe_fops;
+	inode->i_sb = pipe_mnt->mnt_sb;
 
 	/*
 	 * Mark the inode dirty from the very beginning,
@@ -497,6 +502,9 @@ fail_inode:
 
 int do_pipe(int *fd)
 {
+	struct qstr this;
+	char name[32];
+	struct dentry *dentry;
 	struct inode * inode;
 	struct file *f1, *f2;
 	int error;
@@ -526,11 +534,16 @@ int do_pipe(int *fd)
 	j = error;
 
 	error = -ENOMEM;
-	f1->f_dentry = f2->f_dentry = dget(d_alloc_root(inode));
-	/* MOUNT_REWRITE: set to pipefs internal vfsmnt */
-	f1->f_vfsmnt = f2->f_vfsmnt = NULL;
-	if (!f1->f_dentry)
+	sprintf(name, "%lu", inode->i_ino);
+	this.name = name;
+	this.len = strlen(name);
+	/* We don't care for hash - it will never be looked up */
+	dentry = d_alloc(pipe_mnt->mnt_sb->s_root, &this);
+	if (!dentry)
 		goto close_f12_inode_i_j;
+	d_instantiate(dentry, inode);
+	f1->f_vfsmnt = f2->f_vfsmnt = mntget(mntget(pipe_mnt));
+	f1->f_dentry = f2->f_dentry = dget(dentry);
 
 	/* read file */
 	f1->f_pos = f2->f_pos = 0;
@@ -567,3 +580,67 @@ close_f1:
 no_files:
 	return error;	
 }
+
+/*
+ * pipefs should _never_ be mounted by userland - too much of security hassle,
+ * no real gain from having the whole whorehouse mounted. So we don't need
+ * any operations on the root directory. However, we need a non-trivial
+ * d_name - pipe: will go nicely and kill the special-casing in procfs.
+ */
+static int pipefs_statfs(struct super_block *sb, struct statfs *buf)
+{
+	buf->f_type = PIPEFS_MAGIC;
+	buf->f_bsize = 1024;
+	buf->f_namelen = 255;
+	return 0;
+}
+
+static struct super_operations pipefs_ops = {
+	statfs:		pipefs_statfs,
+};
+
+static struct super_block * pipefs_read_super(struct super_block *sb, void *data, int silent)
+{
+	struct inode *root = get_empty_inode();
+	if (!root)
+		return NULL;
+	root->i_mode = S_IFDIR | S_IRUSR | S_IWUSR;
+	root->i_uid = root->i_gid = 0;
+	root->i_atime = root->i_mtime = root->i_ctime = CURRENT_TIME;
+	sb->s_blocksize = 1024;
+	sb->s_blocksize_bits = 10;
+	sb->s_op	= &pipefs_ops;
+	sb->s_root = d_alloc(NULL, &(const struct qstr) { "pipe:", 5, 0 });
+	if (!sb->s_root) {
+		iput(root);
+		return NULL;
+	}
+	sb->s_root->d_sb = sb;
+	sb->s_root->d_parent = sb->s_root;
+	d_instantiate(sb->s_root, root);
+	return sb;
+}
+
+static DECLARE_FSTYPE(pipe_fs_type, "pipefs", pipefs_read_super,
+	FS_NOMOUNT|FS_SINGLE);
+
+static int __init init_pipe_fs(void)
+{
+	int err = register_filesystem(&pipe_fs_type);
+	if (!err) {
+		pipe_mnt = kern_mount(&pipe_fs_type);
+		err = PTR_ERR(pipe_mnt);
+		if (!IS_ERR(pipe_mnt))
+			err = 0;
+	}
+	return err;
+}
+
+static void __exit exit_pipe_fs(void)
+{
+	unregister_filesystem(&pipe_fs_type);
+	kern_umount(pipe_mnt);
+}
+
+module_init(init_pipe_fs)
+module_exit(exit_pipe_fs)

@@ -249,8 +249,9 @@ nfs_writepage_async(struct file *file, struct dentry *dentry, struct page *page,
  * Write an mmapped page to the server.
  */
 int
-nfs_writepage(struct file *file, struct dentry * dentry, struct page *page)
+nfs_writepage(struct file *file, struct page *page)
 {
+	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
 	unsigned long end_index = inode->i_size >> PAGE_CACHE_SHIFT;
 	unsigned offset = PAGE_CACHE_SIZE;

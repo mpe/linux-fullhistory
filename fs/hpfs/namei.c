@@ -393,10 +393,10 @@ int hpfs_rmdir(struct inode *dir, struct dentry *dentry)
 	return r == 2 ? -ENOSPC : r == 1 ? -EFSERROR : 0;
 }
 
-int hpfs_symlink_readpage(struct dentry *dentry, struct page *page)
+int hpfs_symlink_readpage(struct file *file, struct page *page)
 {
 	char *link = (char*)kmap(page);
-	struct inode *i = dentry->d_inode;
+	struct inode *i = (struct inode*)page->mapping->host;
 	struct fnode *fnode;
 	struct buffer_head *bh;
 	int err;
