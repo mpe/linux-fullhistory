@@ -133,7 +133,7 @@ static void poll_napi(struct netpoll *np)
 	int budget = 16;
 
 	if (test_bit(__LINK_STATE_RX_SCHED, &np->dev->state) &&
-	    np->poll_owner != __smp_processor_id() &&
+	    np->poll_owner != smp_processor_id() &&
 	    spin_trylock(&np->poll_lock)) {
 		np->rx_flags |= NETPOLL_RX_DROP;
 		atomic_inc(&trapped);
@@ -252,8 +252,8 @@ repeat:
 	}
 
 	/* avoid recursion */
-	if(np->poll_owner == __smp_processor_id() ||
-	   np->dev->xmit_lock_owner == __smp_processor_id()) {
+	if(np->poll_owner == smp_processor_id() ||
+	   np->dev->xmit_lock_owner == smp_processor_id()) {
 		if (np->drop)
 			np->drop(skb);
 		else

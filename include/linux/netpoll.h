@@ -46,7 +46,7 @@ static inline void netpoll_poll_lock(struct net_device *dev)
 {
 	if (dev->np) {
 		spin_lock(&dev->np->poll_lock);
-		dev->np->poll_owner = __smp_processor_id();
+		dev->np->poll_owner = smp_processor_id();
 	}
 }
 
