@@ -117,28 +117,29 @@ min(unsigned int a, unsigned int b)
 }
 
 
-void
-print_th(struct tcphdr *th)
+static void __print_th(struct tcphdr *th)
 {
-  unsigned char *ptr;
+	unsigned char *ptr;
 
-  if (inet_debug != DBG_TCP) return;
+	printk("TCP header:\n");
+	printk("    source=%d, dest=%d, seq =%ld, ack_seq = %ld\n",
+		ntohs(th->source), ntohs(th->dest),
+		ntohl(th->seq), ntohl(th->ack_seq));
+	printk("    fin=%d, syn=%d, rst=%d, psh=%d, ack=%d, urg=%d res1=%d res2=%d\n",
+		th->fin, th->syn, th->rst, th->psh, th->ack,
+		th->urg, th->res1, th->res2);
+	printk("    window = %d, check = %d urg_ptr = %d\n",
+		ntohs(th->window), ntohs(th->check), ntohs(th->urg_ptr));
+	printk("    doff = %d\n", th->doff);
+	ptr =(unsigned char *)(th + 1);
+	printk("    options = %d %d %d %d\n", ptr[0], ptr[1], ptr[2], ptr[3]);
+}
 
-  printk("TCP header:\n");
-  ptr =(unsigned char *)(th + 1);
-  printk("    source=%d, dest=%d, seq =%ld, ack_seq = %ld\n",
-	ntohs(th->source), ntohs(th->dest),
-	ntohl(th->seq), ntohl(th->ack_seq));
-  printk("    fin=%d, syn=%d, rst=%d, psh=%d, ack=%d, urg=%d res1=%d res2=%d\n",
-	th->fin, th->syn, th->rst, th->psh, th->ack,
-	th->urg, th->res1, th->res2);
-  printk("    window = %d, check = %d urg_ptr = %d\n",
-	ntohs(th->window), ntohs(th->check), ntohs(th->urg_ptr));
-  printk("    doff = %d\n", th->doff);
-  printk("    options = %d %d %d %d\n", ptr[0], ptr[1], ptr[2], ptr[3]);
- }
-
-
+static inline void print_th(struct tcphdr *th)
+{
+	if (inet_debug == DBG_TCP)
+		__print_th(th);
+}
 
 /* This routine grabs the first thing off of a rcv queue. */
 static struct sk_buff *
@@ -616,6 +617,13 @@ static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 	/* We need to complete and send the packet. */
 	tcp_send_check(skb->h.th, sk->saddr, sk->daddr, size, sk);
 
+	size -= 4*skb->h.th->doff;
+	if (skb->h.th->syn)
+		size++;
+	if (skb->h.th->fin)
+		size++;
+
+	sk->send_seq += size;
 	skb->h.seq = sk->send_seq;
 	if (after(sk->send_seq , sk->window_seq) ||
 	    (sk->retransmits && sk->timeout == TIME_WRITE) ||
@@ -736,6 +744,10 @@ if (inet_debug == DBG_SLIP) printk("\rtcp_ack: build_header failed\n");
 
   /* FIXME: */
   memcpy(t1, th, sizeof(*t1)); /* this should probably be removed */
+
+  /* hack-around */
+  if (after(sequence, sk->window_seq))
+	sequence = sk->window_seq;
 
   /* swap the send and the receive. */
   t1->dest = th->source;
@@ -920,7 +932,6 @@ tcp_write(struct sock *sk, unsigned char *from,
 			from += copy;
 			copied += copy;
 			len -= copy;
-			sk->send_seq += copy;
 		      }
 		if ((skb->len - hdrlen) >= sk->mss ||
 		    (flags & MSG_OOB) ||
@@ -943,14 +954,11 @@ tcp_write(struct sock *sk, unsigned char *from,
 	 *   be queued for later rather than sent.
 	 */
 
-	copy = diff(sk->window_seq, sk->send_seq);
-	/* what if max_window == 1?  In that case max_window >> 1 is 0.
-	 * however in that case copy == max_window, so it's OK to use 
-	 * the window */
-	if (copy < (sk->max_window >> 1))
-	  copy = sk->mss;
-	copy = min(copy, sk->mss);
-	copy = min(copy, len);
+	copy = sk->window_seq - sk->send_seq;
+	if (copy <= 0 || copy < (sk->max_window >> 1) || copy > sk->mss)
+		copy = sk->mss;
+	if (copy > len)
+		copy = len;
 
   /* We should really check the window here also. */
 	send_tmp = NULL;
@@ -1043,7 +1051,6 @@ tcp_write(struct sock *sk, unsigned char *from,
 	len -= copy;
 	skb->len += copy;
 	skb->free = 0;
-	sk->send_seq += copy;
 
 	if (send_tmp != NULL && sk->packets_out) {
 		tcp_enqueue_partial(send_tmp, sk);
@@ -1136,7 +1143,10 @@ tcp_read_wakeup(struct sock *sk)
   t1 =(struct tcphdr *)(buff->data +tmp);
 
   memcpy(t1,(void *) &sk->dummy_th, sizeof(*t1));
-  t1->seq = ntohl(sk->send_seq);
+  if (after(sk->send_seq, sk->window_seq))
+	t1->seq = ntohl(sk->window_seq);
+  else
+	t1->seq = ntohl(sk->send_seq);
   t1->ack = 1;
   t1->res1 = 0;
   t1->res2 = 0;
@@ -1613,13 +1623,13 @@ tcp_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
   
   if(th->ack)
   {
-  	t1->ack=0;
-  	t1->seq=th->ack_seq;
-  	t1->ack_seq=0;
+  	t1->ack = 0;
+  	t1->seq = th->ack_seq;
+  	t1->ack_seq = 0;
   }
   else
   {
-  	t1->ack=1;
+  	t1->ack = 1;
   	if(!th->syn)
   		t1->ack_seq=htonl(th->seq);
   	else
@@ -3049,75 +3059,60 @@ tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 }
 
 
-/* This functions checks to see if the tcp header is actually acceptible. */
+/* This functions checks to see if the tcp header is actually acceptable. */
 static int
 tcp_sequence(struct sock *sk, struct tcphdr *th, short len,
 	     struct options *opt, unsigned long saddr, struct device *dev)
 {
-  /*
-   * This isn't quite right.  sk->acked_seq could be more recent
-   * than sk->window.  This is however close enough.  We will accept
-   * slightly more packets than we should, but it should not cause
-   * problems unless someone is trying to forge packets.
-   */
-  DPRINTF((DBG_TCP, "tcp_sequence(sk=%X, th=%X, len = %d, opt=%d, saddr=%X)\n",
-	  sk, th, len, opt, saddr));
+	unsigned long next_seq;
 
-  if (between(th->seq, sk->acked_seq, sk->acked_seq + sk->window)||
-      between(th->seq + len-(th->doff*4), sk->acked_seq + 1,
-	      sk->acked_seq + sk->window) ||
-     (before(th->seq, sk->acked_seq) &&
-       after(th->seq + len -(th->doff*4), sk->acked_seq + sk->window))) {
-       return(1);
-   }
-  DPRINTF((DBG_TCP, "tcp_sequence: rejecting packet.\n"));
+	next_seq = len - 4*th->doff;
+	/* if we have a zero window, we can't have any data in the packet.. */
+	if (next_seq && !sk->window)
+		goto ignore_it;
+	next_seq += th->seq;
+	if (th->syn)
+		next_seq++;
 
-  /*
-   *	Send a reset if we get something not ours and we are
-   *	unsynchronized. Note: We don't do anything to our end. We
-   *	are just killing the bogus remote connection then we will
-   *	connect again and it will work (with luck).
-   */
+	/*
+	 * This isn't quite right.  sk->acked_seq could be more recent
+	 * than sk->window.  This is however close enough.  We will accept
+	 * slightly more packets than we should, but it should not cause
+	 * problems unless someone is trying to forge packets.
+	 */
+
+	/* have we already seen all of this packet? */
+	if (!after(next_seq+1, sk->acked_seq))
+		goto ignore_it;
+	/* or does it start beyond the window? */
+	if (!before(th->seq, sk->acked_seq + sk->window + 1))
+		goto ignore_it;
+
+	/* ok, at least part of this packet would seem interesting.. */
+	return 1;
+
+ignore_it:
+	DPRINTF((DBG_TCP, "tcp_sequence: rejecting packet.\n"));
+
+	/*
+	 *	Send a reset if we get something not ours and we are
+	 *	unsynchronized. Note: We don't do anything to our end. We
+	 *	are just killing the bogus remote connection then we will
+	 *	connect again and it will work (with luck).
+	 */
   	 
-  if(sk->state==TCP_SYN_SENT||sk->state==TCP_SYN_RECV)
-  {
-  	tcp_reset(sk->saddr,sk->daddr,th,sk->prot,NULL,dev, sk->ip_tos,sk->ip_ttl);
-  	return(1);
-  }
+	if (sk->state==TCP_SYN_SENT || sk->state==TCP_SYN_RECV) {
+		tcp_reset(sk->saddr,sk->daddr,th,sk->prot,NULL,dev, sk->ip_tos,sk->ip_ttl);
+		return 1;
+	}
 
-  /*
-   * If it's too far ahead, send an ack to let the
-   * other end know what we expect.
-   */
-  if (after(th->seq, sk->acked_seq + sk->window)) {
-	if(!th->rst)
-		tcp_send_ack(sk->send_seq, sk->acked_seq, sk, th, saddr);
-	return(0);
-  }
+	if (th->rst)
+		return 0;
 
-#ifdef undef
-/*
- * if we do this, we won't respond to keepalive packets, since those
- * are slightly out of window, and we have to generate an ack
- * a late ack out still not to have a sequence number less than
- * one we've seen before.  Berkeley doesn't seem to do this, but it's
- * always hard to be sure.
- */
-  /* In case it's just a late ack, let it through. */
-  if (th->ack && len == (th->doff * 4) &&
-      after(th->seq, sk->acked_seq - 32767) &&
-      !th->fin && !th->syn) return(1);
-#endif
-
-  if (!th->rst) {
 	/* Try to resync things. */
 	tcp_send_ack(sk->send_seq, sk->acked_seq, sk, th, saddr);
-  }
-  return(0);
+	return 0;
 }
-
-
-
 
 
 int
@@ -3175,14 +3170,12 @@ if (inet_debug == DBG_SLIP) printk("\rtcp_rcv: bad checksum\n");
 		return(0);
 	}
 
+	th->seq = ntohl(th->seq);
+
 	/* See if we know about the socket. */
 	if (sk == NULL) {
-		if (!th->rst) 
-		{	
-			th->seq = ntohl(th->seq);
-			/* So reset is always called with th->seq in host order */
+		if (!th->rst)
 			tcp_reset(daddr, saddr, th, &tcp_prot, opt,dev,skb->ip_hdr->tos,255);
-		}
 		skb->sk = NULL;
 		kfree_skb(skb, FREE_READ);
 		return(0);
@@ -3195,8 +3188,6 @@ if (inet_debug == DBG_SLIP) printk("\rtcp_rcv: bad checksum\n");
 	skb->free = 0;
 	skb->saddr = daddr;
 	skb->daddr = saddr;
-
-	th->seq = ntohl(th->seq);
 
 	/* We may need to add it to the backlog here. */
 	cli();
@@ -3317,12 +3308,11 @@ if (inet_debug == DBG_SLIP) printk("\rtcp_rcv: not in seq\n");
 			release_sock(sk);
 			return(0);
 		}
-		if (th->ack) {
-			if (!tcp_ack(sk, th, saddr, len)) {
-				kfree_skb(skb, FREE_READ);
-				release_sock(sk);
-				return(0);
-			}
+
+		if (th->ack && !tcp_ack(sk, th, saddr, len)) {
+			kfree_skb(skb, FREE_READ);
+			release_sock(sk);
+			return(0);
 		}
 
 		if (tcp_urg(sk, th, saddr, len)) {
@@ -3684,10 +3674,8 @@ tcp_send_probe0(struct sock *sk)
  * sends fin in a separate packet
  * syn, rst, had better be zero in original */
   t1->ack = 1;
-  t1->urg = 0;  /* urgent pointer might be beyond this fragment */
   t1->res2 = 0;
   t1->window = ntohs(tcp_select_window(sk)/*sk->prot->rspace(sk)*/);
-  t1->urg_ptr = 0;
   tcp_send_check(t1, sk->saddr, sk->daddr, len - hlen, sk);
   /* Send it and free it.
    * This will prevent the timer from automatically being restarted.

@@ -316,6 +316,7 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 	 struct SL_component * slp;
 	 slen = rr->len - 5;
 	 slp = &rr->u.SL.link;
+	 inode->i_size = 0;
 	 while (slen > 1){
 	   rootflag = 0;
 	   switch(slp->flags &~1){

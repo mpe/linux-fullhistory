@@ -394,8 +394,8 @@ void kfree_skb(struct sk_buff *skb, int rw)
 	skb->magic = 0;
 	if (skb->sk)
 	{
-	      if(skb->sk->prot!=NULL)
-	{
+		if(skb->sk->prot!=NULL)
+		{
 			if (rw)
 				skb->sk->prot->rfree(skb->sk, skb->mem_addr, skb->mem_len);
 			else

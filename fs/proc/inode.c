@@ -84,7 +84,8 @@ void proc_read_inode(struct inode * inode)
 	inode->i_nlink = 1;
 	inode->i_size = 0;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
-	inode->i_blocks = inode->i_blksize = 0;
+	inode->i_blocks = 0;
+	inode->i_blksize = 1024;
 	ino = inode->i_ino;
 	pid = ino >> 16;
 	p = task[0];

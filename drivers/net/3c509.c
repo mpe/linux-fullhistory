@@ -13,7 +13,7 @@
 	C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
 */
 
-static char *version = "3c509.c:pl13t 11/24/93 becker@super.org\n";
+static char *version = "3c509.c:pl15i 2/23/94 becker@super.org\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -549,19 +549,19 @@ el3_rx(struct device *dev)
 			   inw(ioaddr+EL3_STATUS), inw(ioaddr+RX_STATUS));
 	while ((rx_status = inw(ioaddr + RX_STATUS)) > 0) {
 		if (rx_status & 0x4000) { /* Error, update stats. */
-			short error = rx_status & 0x3C00;
+			short error = rx_status & 0x3800;
 			lp->stats.rx_errors++;
 			switch (error) {
-			case 0x2000:		lp->stats.rx_over_errors++; break;
-			case 0x2C00:		lp->stats.rx_length_errors++; break;
-			case 0x3400:		lp->stats.rx_crc_errors++; break;
-			case 0x2400:		lp->stats.rx_length_errors++; break;
-			case 0x3000:		lp->stats.rx_frame_errors++; break;
-			case 0x0800:		lp->stats.rx_frame_errors++; break;
+			case 0x0000:		lp->stats.rx_over_errors++; break;
+			case 0x0800:		lp->stats.rx_length_errors++; break;
+			case 0x1000:		lp->stats.rx_frame_errors++; break;
+			case 0x1800:		lp->stats.rx_length_errors++; break;
+			case 0x2000:		lp->stats.rx_frame_errors++; break;
+			case 0x2800:		lp->stats.rx_crc_errors++; break;
 			}
 		}
 		if ( (! (rx_status & 0x4000))
-			|| ! (rx_status & 0x2000)) { /* Dribble bits are OK. */
+			|| ! (rx_status & 0x1000)) { /* Dribble bits are OK. */
 			short pkt_len = rx_status & 0x7ff;
 			int sksize = sizeof(struct sk_buff) + pkt_len + 3;
 			struct sk_buff *skb;

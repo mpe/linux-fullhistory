@@ -223,11 +223,10 @@ asmlinkage int sys_select( unsigned long *buffer )
 		i = verify_area(VERIFY_WRITE, tvp, sizeof(*tvp));
 		if (i)
 			return i;
-		timeout = jiffies;
-		timeout += ROUND_UP(get_fs_long((unsigned long *)&tvp->tv_usec),(1000000/HZ));
+		timeout = ROUND_UP(get_fs_long((unsigned long *)&tvp->tv_usec),(1000000/HZ));
 		timeout += get_fs_long((unsigned long *)&tvp->tv_sec) * HZ;
-		if (timeout <= jiffies)
-			timeout = 0;
+		if (timeout)
+			timeout += jiffies + 1;
 	}
 	current->timeout = timeout;
 	i = do_select(n, &in, &out, &ex, &res_in, &res_out, &res_ex);

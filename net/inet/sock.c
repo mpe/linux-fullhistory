@@ -1578,10 +1578,13 @@ sock_wmalloc(struct sock *sk, unsigned long size, int force,
 {
   if (sk) {
 	if (sk->wmem_alloc + size < sk->sndbuf || force) {
-		cli();
-		sk->wmem_alloc+= size;
-		sti();
-		return(alloc_skb(size, priority));
+		struct sk_buff * c = alloc_skb(size, priority);
+		if (c) {
+			cli();
+			sk->wmem_alloc+= size;
+			sti();
+		}
+		return c;
 	}
 	DPRINTF((DBG_INET, "sock_wmalloc(%X,%d,%d,%d) returning NULL\n",
 						sk, size, force, priority));
@@ -1597,9 +1600,11 @@ sock_rmalloc(struct sock *sk, unsigned long size, int force, int priority)
   if (sk) {
 	if (sk->rmem_alloc + size < sk->rcvbuf || force) {
 		struct sk_buff *c = alloc_skb(size, priority);
-		cli();
-		if (c) sk->rmem_alloc += size;
-		sti();
+		if (c) {
+			cli();
+			sk->rmem_alloc += size;
+			sti();
+		}
 		return(c);
 	}
 	DPRINTF((DBG_INET, "sock_rmalloc(%X,%d,%d,%d) returning NULL\n",

@@ -304,9 +304,9 @@ int unmap_page_range(unsigned long from, unsigned long size)
 			if ((page = *page_table) != 0) {
 				*page_table = 0;
 				if (1 & page) {
-					if (!(mem_map[MAP_NR(page)]
-					      & MAP_PAGE_RESERVED))
-						--current->rss;
+					if (!(mem_map[MAP_NR(page)] & MAP_PAGE_RESERVED))
+						if (current->rss > 0)
+							--current->rss;
 					free_page(PAGE_MASK & page);
 				} else
 					swap_free(page);
@@ -364,9 +364,9 @@ int zeromap_page_range(unsigned long from, unsigned long size, int mask)
 			if ((page = *page_table) != 0) {
 				*page_table = 0;
 				if (page & PAGE_PRESENT) {
-					if (!(mem_map[MAP_NR(page)]
-					      & MAP_PAGE_RESERVED))
-						--current->rss;
+					if (!(mem_map[MAP_NR(page)] & MAP_PAGE_RESERVED))
+						if (current->rss > 0)
+							--current->rss;
 					free_page(PAGE_MASK & page);
 				} else
 					swap_free(page);
@@ -426,9 +426,9 @@ int remap_page_range(unsigned long from, unsigned long to, unsigned long size, i
 			if ((page = *page_table) != 0) {
 				*page_table = 0;
 				if (PAGE_PRESENT & page) {
-					if (!(mem_map[MAP_NR(page)]
-					      & MAP_PAGE_RESERVED))
-						--current->rss;
+					if (!(mem_map[MAP_NR(page)] & MAP_PAGE_RESERVED))
+						if (current->rss > 0)
+							--current->rss;
 					free_page(PAGE_MASK & page);
 				} else
 					swap_free(page);

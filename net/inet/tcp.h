@@ -80,10 +80,7 @@
  */
 static inline int before(unsigned long seq1, unsigned long seq2)
 {
-	/* this inequality is strict. */
-	if (seq1 == seq2)
-		return 0;
-	seq2 -= seq1;
+	seq2 -= seq1+1;
 	return (seq2 < 65536);
 }
 
@@ -118,7 +115,6 @@ tcp_connected(const int state)
 extern struct proto tcp_prot;
 
 
-extern void	print_th(struct tcphdr *);
 extern void	tcp_err(int err, unsigned char *header, unsigned long daddr,
 			unsigned long saddr, struct inet_protocol *protocol);
 extern void	tcp_shutdown (struct sock *sk, int how);

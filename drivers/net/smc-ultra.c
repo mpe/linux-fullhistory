@@ -14,7 +14,7 @@
 */
 
 static char *version =
-    "smc-ultra.c:v0.06 2/9/94 Donald Becker (becker@super.org)\n";
+    "smc-ultra.c:v0.07 3/1/94 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -63,7 +63,7 @@ int ultra_probe(struct device *dev)
     unsigned short ioaddr = dev->base_addr;
 
     if (ioaddr > 0x1ff)
-	return ! ultraprobe1(ioaddr, dev);
+	return ultraprobe1(ioaddr, dev);
     else if (ioaddr > 0)
 	return ENXIO;		/* Don't probe at all. */
 
@@ -158,7 +158,7 @@ int ultraprobe1(int ioaddr, struct device *dev)
   dev->mem_end = dev->rmem_end
       = dev->mem_start + (ei_status.stop_page - START_PG)*256;
 
-  printk(",%s IRQ %d memory %#x-%#x.\n", eeprom_irq ? "" : "assigned ",
+  printk(",%s IRQ %d memory %#lx-%#lx.\n", eeprom_irq ? "" : "assigned ",
 	 dev->irq, dev->mem_start, dev->mem_end-1);
   if (ei_debug > 0)
       printk(version);
@@ -193,7 +193,7 @@ ultra_reset_8390(struct device *dev)
     int cmd_port = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC base addr */
 
     outb(ULTRA_RESET, cmd_port);
-    if (ei_debug > 1) printk("resetting Ultra, t=%d...", jiffies);
+    if (ei_debug > 1) printk("resetting Ultra, t=%ld...", jiffies);
     ei_status.txing = 0;
 
     outb(ULTRA_MEMENB, cmd_port);

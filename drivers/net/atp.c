@@ -12,7 +12,7 @@
 */
 
 static char *version =
-	"atp.c:v0.03 1/19/94 Donald Becker (becker@super.org)\n";
+	"atp.c:v0.04 2/25/94 Donald Becker (becker@super.org)\n";
 
 /*
 	This file is a device driver for the RealTek (aka AT-Lan-Tec) pocket
@@ -477,7 +477,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 
 	/* For ethernet, fill in the header.  This should really be done by a
 	   higher level, rather than duplicated for each ethernet adaptor. */
-	if (!skb->arp  &&  dev->rebuild_header(skb+1, dev)) {
+	if (!skb->arp  &&  dev->rebuild_header(skb->data, dev)) {
 		skb->dev = dev;
 		arp_queue (skb);
 		return 0;
@@ -490,7 +490,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		printk("%s: Transmitter access conflict.\n", dev->name);
 	else {
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
-		unsigned char *buf = (void *)(skb+1);
+		unsigned char *buf = skb->data;
 		int flags;
 
 		/* Disable interrupts by writing 0x00 to the Interrupt Mask Register.
@@ -611,7 +611,7 @@ net_interrupt(int reg_ptr)
 		} else if (num_tx_since_rx > 8
 				   && jiffies > dev->last_rx + 100) {
 			if (net_debug > 2)
-				printk("%s: Missed packet? No Rx after %d Tx and %d jiffies"
+				printk("%s: Missed packet? No Rx after %d Tx and %ld jiffies"
 					   " status %02x  CMR1 %02x.\n", dev->name,
 					   num_tx_since_rx, jiffies - dev->last_rx, status,
 					   (read_nibble(ioaddr, CMR1) >> 3) & 15);
@@ -623,6 +623,8 @@ net_interrupt(int reg_ptr)
 			break;
     }
 
+	/* This following code fixes a rare (and very difficult to track down)
+	   problem where the adaptor forgets its ethernet address. */
 	{
 		int i;
 		for (i = 0; i < 6; i++)
@@ -686,12 +688,12 @@ static void net_rx(struct device *dev)
 		skb->len = pkt_len;
 		skb->dev = dev;
 		
-		/* 'skb+1' points to the start of sk_buff data area. */
-		read_block(ioaddr, pkt_len, (unsigned char *)(skb + 1), dev->if_port);
+		read_block(ioaddr, pkt_len, skb->data, dev->if_port);
 
 		if (net_debug > 6) {
-			unsigned char *data = (unsigned char *)(skb + 1);
-			printk(" data %02x%02x%02x %02x%02x%02x %02x%02x%02x %02x%02x%02x %02x%02x..",
+			unsigned char *data = skb->data;
+			printk(" data %02x%02x%02x %02x%02x%02x %02x%02x%02x"
+				   "%02x%02x%02x %02x%02x..",
 				   data[0], data[1], data[2], data[3], data[4], data[5],
 				   data[6], data[7], data[8], data[9], data[10], data[11],
 				   data[12], data[13]);

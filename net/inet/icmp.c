@@ -210,9 +210,11 @@ icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev)
   ip = iph->daddr;
   switch(icmph->code & 7) {
 	case ICMP_REDIR_NET:
+#ifdef not_a_good_idea
 		rt_add((RTF_DYNAMIC | RTF_MODIFIED | RTF_GATEWAY),
 			ip, 0, icmph->un.gateway, dev);
 		break;
+#endif
 	case ICMP_REDIR_HOST:
 		rt_add((RTF_DYNAMIC | RTF_MODIFIED | RTF_HOST | RTF_GATEWAY),
 			ip, 0, icmph->un.gateway, dev);

@@ -462,6 +462,8 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	shp->attaches = shmd;
 	shp->shm_lpid = current->pid;
 	shp->shm_atime = CURRENT_TIME;
+	if (!raddr)
+		return addr;
 	put_fs_long (addr, raddr);
 	return 0;
 }

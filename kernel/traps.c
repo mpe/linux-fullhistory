@@ -80,23 +80,33 @@ asmlinkage void alignment_check(void);
 /*static*/ void die_if_kernel(char * str, struct pt_regs * regs, long err)
 {
 	int i;
+	unsigned long esp;
+	unsigned short ss;
 
+	esp = (unsigned long) &regs->esp;
+	ss = KERNEL_DS;
 	if ((regs->eflags & VM_MASK) || (3 & regs->cs) == 3)
 		return;
-
+	if (regs->cs & 3) {
+		esp = regs->esp;
+		ss = regs->ss;
+	}
 	console_verbose();
 	printk("%s: %04lx\n", str, err & 0xffff);
 	printk("EIP:    %04x:%08lx\nEFLAGS: %08lx\n", 0xffff & regs->cs,regs->eip,regs->eflags);
 	printk("eax: %08lx   ebx: %08lx   ecx: %08lx   edx: %08lx\n",
 		regs->eax, regs->ebx, regs->ecx, regs->edx);
-	printk("esi: %08lx   edi: %08lx   ebp: %08lx\n",
-		regs->esi, regs->edi, regs->ebp);
-	printk("ds: %04x   es: %04x   fs: %04x   gs: %04x\n",
-		regs->ds, regs->es, regs->fs, regs->gs);
+	printk("esi: %08lx   edi: %08lx   ebp: %08lx   esp: %08lx\n",
+		regs->esi, regs->edi, regs->ebp, esp);
+	printk("ds: %04x   es: %04x   fs: %04x   gs: %04x   ss: %04x\n",
+		regs->ds, regs->es, regs->fs, regs->gs, ss);
 	store_TR(i);
-	printk("Pid: %d, process nr: %d (%s)\n", current->pid, 0xffff & i, current->comm);
+	printk("Pid: %d, process nr: %d (%s)\nCode: ", current->pid, 0xffff & i, current->comm);
 	for(i=0;i<20;i++)
 		printk("%02x ",0xff & get_seg_byte(regs->cs,(i+(char *)regs->eip)));
+	printk("\nStack: ");
+	for(i=0;i<5;i++)
+		printk("%08lx ", get_seg_long(ss,(i+(unsigned long *)esp)));
 	printk("\n");
 	do_exit(SIGSEGV);
 }

@@ -97,9 +97,19 @@ void emu_printall()
       printk(" [%02x]", byte1);
       address++;
     }
-  if ( i == MAX_PRINTED_BYTES ) printk(" [more..]");
-  printk("\n");
-  FPU_modrm = get_fs_byte(1 + (unsigned char *) address);
+  if ( i == MAX_PRINTED_BYTES )
+    printk(" [more..]\n");
+  else
+    {
+      FPU_modrm = get_fs_byte(1 + (unsigned char *) address);
+
+      if (FPU_modrm >= 0300)
+	printk(" %02x (%02x+%d)\n", FPU_modrm, FPU_modrm & 0xf8, FPU_modrm & 7);
+      else
+	printk(" /%d, mod=%d rm=%d\n",
+	       (FPU_modrm >> 3) & 7, (FPU_modrm >> 6) & 3, FPU_modrm & 7);
+    }
+
   partial_status = status_word();
 
 #ifdef DEBUGGING
@@ -117,12 +127,6 @@ if ( partial_status & SW_Zero_Div )    printk("SW: divide by zero\n");
 if ( partial_status & SW_Denorm_Op )   printk("SW: denormalized operand\n");
 if ( partial_status & SW_Invalid )     printk("SW: invalid operation\n");
 #endif DEBUGGING
-
-  if (FPU_modrm >= 0300)
-    printk("%02x (%02x+%d)\n", FPU_modrm, FPU_modrm & 0xf8, FPU_modrm & 7);
-  else
-    printk("/%d, mod=%d rm=%d\n",
-	   (FPU_modrm >> 3) & 7, (FPU_modrm >> 6) & 3, FPU_modrm & 7);
 
   printk(" SW: b=%d st=%ld es=%d sf=%d cc=%d%d%d%d ef=%d%d%d%d%d%d\n",
 	 partial_status & 0x8000 ? 1 : 0,   /* busy */

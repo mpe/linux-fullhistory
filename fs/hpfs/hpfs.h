@@ -131,7 +131,7 @@ struct hpfs_spare_block
 
 /* The code page info pointed to by the spare block consists of an index
    block and blocks containing character maps.  The following is pretty
-   sketchy, but Linux is Latin-1 so it doesn't matter. */
+   sketchy, but Linux doesn't use code pages so it doesn't matter. */
 
 /* block pointed to by spareblock->code_page_dir */
 

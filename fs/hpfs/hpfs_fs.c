@@ -6,7 +6,7 @@
  *  Chris Smith 1993
  *
  *  Sources & references:
- *   Duncan, _Design ... of HPFS_, MSSJ 4(5)   (C) 1989 Microsoft Corp
+ *   Duncan, _Design ... of HPFS_, MSJ 4(5)   (C) 1989 Microsoft Corp
  *   linux/fs/minix  Copyright (C) 1991, 1992, 1993  Linus Torvalds
  *   linux/fs/msdos  Written 1992, 1993 by Werner Almesberger
  *   linux/fs/isofs  Copyright (C) 1991  Eric Youngdale

@@ -191,6 +191,8 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 			    for (i = 0; i < dlen && i < NAME_MAX; i++) {
 			      if (!(c = dpnt[i])) break;
 			      if (c >= 'A' && c <= 'Z') c |= 0x20;  /* lower case */
+			      if (c == '.' && i == dlen-3 && de->name[i+1] == ';' && de->name[i+2] == '1')
+				break;  /* Drop trailing '.;1' (ISO9660:1988 7.5.1 requires period) */
 			      if (c == ';' && i == dlen-2 && de->name[i+1] == '1') 
 				break;  /* Drop trailing ';1' */
 			      if (c == ';') c = '.';  /* Convert remaining ';' to '.' */

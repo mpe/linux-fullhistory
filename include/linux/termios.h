@@ -150,9 +150,9 @@ struct termios {
 #define VTDLY	0040000
 #define   VT0	0000000
 #define   VT1	0040000
-#define FFDLY	0040000
+#define FFDLY	0100000
 #define   FF0	0000000
-#define   FF1	0040000
+#define   FF1	0100000
 
 /* c_cflag bit meaning */
 #define CBAUD	0000017

@@ -135,8 +135,6 @@ static char *version = "depca.c:v0.32 2/19/94 davies@wanton.enet.dec.com\n";
 #include "arp.h"
 #include "depca.h"
 
-extern int vsprintf(char *buf, const char *fmt, ...);
-
 #ifdef DEPCA_DEBUG
 int depca_debug = DEPCA_DEBUG;
 #else
@@ -344,7 +342,7 @@ int depca_probe(struct device *dev)
 		(num_eth > 0) && (num_eth < 9999)) {
 	      dev = dev->next;         /* point to the new device */
 	      dev->name = (char *)(dev + sizeof(struct device));
-	      vsprintf(dev->name,"eth%d", num_eth); /* New device name */
+	      sprintf(dev->name,"eth%d", num_eth); /* New device name */
 	      dev->base_addr = ioaddr; /* assign the io address */
 	      dev->next = (struct device *)NULL; /* mark the end of list */
 	      dev->init = &depca_probe;/* initialisation routine */

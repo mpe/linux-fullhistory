@@ -562,9 +562,9 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
 	    (int)(lp->tx_bounce_buffs + entry) | 0x83000000;
 	if (skb->free)
 	    kfree_skb (skb, FREE_WRITE);
-    } else
-    {
-    	/* Gimme!!! */
+    } else {
+    	/* We can't free the packet yet, so we inform the memory management
+	   code that we are still using it. */
     	if(skb->free==0)
     		skb_kept_by_device(skb);
 	lp->tx_ring[entry].base = (int)(skb+1) | 0x83000000;
@@ -655,7 +655,8 @@ lance_interrupt(int reg_ptr)
 		    kfree_skb(skb, FREE_WRITE);
 		else
 		    skb_device_release(skb,FREE_WRITE);
-		/* Warning: skb may well vanish at the point you call device_release! */
+		/* Warning: skb may well vanish at the point you call
+		   device_release! */
 	    }
 	    dirty_tx++;
 	}
@@ -705,8 +706,13 @@ lance_rx(struct device *dev)
     while (lp->rx_ring[entry].base >= 0) {
 	int status = lp->rx_ring[entry].base >> 24;
 
-	if (status & 0x40) {	/* There was an error. */
-	    lp->stats.rx_errors++;
+	if (status != 0x03) {		/* There was an error. */
+	    /* There is an tricky error noted by John Murphy,
+	       <murf@perftech.com> to Russ Nelson: Even with full-sized
+	       buffers it's possible for a jabber packet to use two
+	       buffers, with only the last correctly noting the error. */
+	    if (status & 0x01)	/* Only count a general error at the */
+		lp->stats.rx_errors++; /* end of a packet.*/
 	    if (status & 0x20) lp->stats.rx_frame_errors++;
 	    if (status & 0x10) lp->stats.rx_over_errors++;
 	    if (status & 0x08) lp->stats.rx_crc_errors++;

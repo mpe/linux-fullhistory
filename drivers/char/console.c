@@ -1828,6 +1828,14 @@ static void clear_selection()
 
 /*
  * PIO_FONT support.
+ *
+ * The font loading code goes back to the codepage package by
+ * Joel Hoffman (joel@wam.umd.edu). (He reports that the original
+ * reference is: "From: p. 307 of _Programmer's Guide to PC & PS/2
+ * Video Systems_ by Richard Wilton. 1987.  Microsoft Press".)
+ *
+ * Change for certain monochrome monitors by Yury Shevchuck
+ * (sizif@botik.yaroslavl.su).
  */
 
 #define colourmap ((char *)0xa0000)
@@ -1843,14 +1851,17 @@ static int set_get_font(char * arg, int set)
 #ifdef CAN_LOAD_EGA_FONTS
 	int i;
 	char *charmap;
+	int beg;
 
 	/* no use to "load" CGA... */
 
-	if (video_type == VIDEO_TYPE_EGAC)
+	if (video_type == VIDEO_TYPE_EGAC) {
 		charmap = colourmap;
-	else if (video_type == VIDEO_TYPE_EGAM)
+		beg = 0x0e;
+	} else if (video_type == VIDEO_TYPE_EGAM) {
 		charmap = blackwmap;
-	else
+		beg = 0x0a;
+	} else
 		return -EINVAL;
 
 	i = verify_area(set ? VERIFY_READ : VERIFY_WRITE, (void *)arg, cmapsz);
@@ -1897,7 +1908,7 @@ static int set_get_font(char * arg, int set)
 	outb_p( 0x05, gr_port_reg );
 	outb_p( 0x10, gr_port_val );    /* enable even-odd addressing */
 	outb_p( 0x06, gr_port_reg );
-	outb_p( 0x0e, gr_port_val );    /* map starts at b800:0000 */
+	outb_p( beg, gr_port_val );     /* map starts at b800:0 or b000:0 */
 	sti();
 
 	return 0;

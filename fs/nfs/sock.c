@@ -108,7 +108,7 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 					continue;
 				if (server->flags & NFS_MOUNT_SOFT) {
 					printk("NFS server %s not responding, "
-						"timed out", server_name);
+						"timed out\n", server_name);
 					result = -EIO;
 					break;
 				}

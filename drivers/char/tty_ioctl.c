@@ -487,6 +487,8 @@ int tty_ioctl(struct inode * inode, struct file * file,
 					     sizeof (pid_t));
 			if (retval)
 				return retval;
+			if (current->tty != termios_dev)
+				return -ENOTTY;
 			put_fs_long(termios_tty->pgrp, (pid_t *) arg);
 			return 0;
 		case TIOCSPGRP:
@@ -526,7 +528,7 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			return 0;
 		case TIOCSTI:
 			if ((current->tty != dev) && !suser())
-				return -EACCES;
+				return -EPERM;
 			retval = verify_area(VERIFY_READ, (void *) arg, 1);
 			if (retval)
 				return retval;
@@ -580,7 +582,7 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			else if (IS_A_PTY_SLAVE(dev))
 				redirect = tty;
 			else
-				return -EINVAL;
+				return -ENOTTY;
 			return 0;
 		case FIONBIO:
 			arg = get_fs_long((unsigned long *) arg);
@@ -590,8 +592,8 @@ int tty_ioctl(struct inode * inode, struct file * file,
 				file->f_flags &= ~O_NONBLOCK;
 			return 0;
 		case TIOCNOTTY:
-			if (MINOR(file->f_rdev) != current->tty)
-				return -EINVAL;
+			if (current->tty != dev)
+				return -ENOTTY;
 			if (current->leader)
 				disassociate_ctty(0);
 			current->tty = -1;
@@ -629,7 +631,7 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			return 0;
 		case TIOCPKT:
 			if (!IS_A_PTY_MASTER(dev))
-				return -EINVAL;
+				return -ENOTTY;
 			retval = verify_area(VERIFY_READ, (void *) arg,
 					     sizeof (unsigned long));
 			if (retval)
@@ -637,7 +639,7 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			if (get_fs_long(arg)) {
 				if (!tty->packet) {
 					tty->packet = 1;
-					tty->ctrl_status = 0;
+					tty->link->ctrl_status = 0;
 				}
 			} else
 				tty->packet = 0;

@@ -51,11 +51,10 @@ int reg_mul(FPU_REG const *a, FPU_REG const *b,
 	 one valid and the other zero.
 	 The result is therefore zero. */
       reg_move(&CONST_Z, dest);
-#ifdef PECULIAR_486
       /* The 80486 book says that the answer is +0, but a real
-	 80486 appears to behave this way... */
+	 80486 behaves this way.
+	 IEEE-754 apparently says it should be this way. */
       dest->sign = sign;
-#endif PECULIAR_486
       return 0;
     }
   else
