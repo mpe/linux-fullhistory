@@ -37,8 +37,7 @@
 #include <asm/uaccess.h>
 #include <asm/atomic.h>
 #include <linux/delay.h>
-
-#include "usb.h"
+#include <linux/usb.h>
 
 #include "dabusb.h"
 #include "dabfirmware.h"

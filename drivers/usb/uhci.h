@@ -2,8 +2,7 @@
 #define __LINUX_UHCI_H
 
 #include <linux/list.h>
-
-#include "usb.h"
+#include <linux/usb.h>
 
 /*
  * This nested spinlock code is courtesy of Davide Libenzi <dlibenzi@maticad.it>

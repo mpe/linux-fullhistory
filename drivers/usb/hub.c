@@ -13,13 +13,12 @@
 #include <linux/list.h>
 #include <linux/malloc.h>
 #include <linux/smp_lock.h>
+#define DEBUG
+#include <linux/usb.h>
 
 #include <asm/uaccess.h>
 #include <asm/byteorder.h>
 
-#define DEBUG
-
-#include "usb.h"
 #include "hub.h"
 
 /* Wakes up khubd */

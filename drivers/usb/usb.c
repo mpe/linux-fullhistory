@@ -24,10 +24,8 @@
 #include <linux/bitops.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>  /* for in_interrupt() */
-
 #define DEBUG
-
-#include "usb.h"
+#include <linux/usb.h>
 
 /*
  * Prototypes for the device driver probing/loading functions

@@ -60,9 +60,9 @@
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include <linux/time.h>
+#include <linux/usb.h>
 #include <asm/io.h>
 
-#include "usb.h"
 #include "ov511.h"
 
 #define OV511_I2C_RETRIES 3

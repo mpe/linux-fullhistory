@@ -9,8 +9,7 @@
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #define DEBUG
-
-#include "usb.h"
+#include <linux/usb.h>
 
 static void usb_show_endpoint(struct usb_endpoint_descriptor *endpoint)
 {

@@ -175,10 +175,8 @@
 #include <linux/tty.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
-
 #define DEBUG
-
-#include "../usb.h"
+#include <linux/usb.h>
 
 #ifdef CONFIG_USB_SERIAL_WHITEHEAT
 #include "whiteheat.h"		/* firmware for the ConnectTech WhiteHEAT device */

@@ -30,13 +30,13 @@
 #include <linux/malloc.h>
 #include <linux/spinlock.h>
 #include <linux/smp_lock.h>
+#include <linux/usb.h>
 
 #include <linux/blk.h>
 #include "../scsi/scsi.h"
 #include "../scsi/hosts.h"
 #include "../scsi/sd.h"
 
-#include "usb.h"
 #include "usb-storage.h"
 #include "usb-storage-debug.h"
 

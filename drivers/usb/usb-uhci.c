@@ -28,6 +28,9 @@
 #include <linux/unistd.h>
 #include <linux/interrupt.h>	/* for in_interrupt() */
 #include <linux/init.h>
+/* This enables debug printks */
+#define DEBUG
+#include <linux/usb.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -37,16 +40,12 @@
 /* This enables more detailed sanity checks in submit_iso */
 //#define ISO_SANITY_CHECK
 
-/* This enables debug printks */
-#define DEBUG
-
 /* This enables all symbols to be exported, to ease debugging oopses */
 //#define DEBUG_SYMBOLS
 
 /* This enables an extra UHCI slab for memory debugging */
 #define DEBUG_SLAB
 
-#include "usb.h"
 #include "usb-uhci.h"
 #include "usb-uhci-debug.h"
 

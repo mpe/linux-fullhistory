@@ -49,10 +49,8 @@
 #include <linux/tty_flip.h>
 #include <linux/tty.h>
 #include <linux/module.h>
-
 #define DEBUG
-
-#include "usb.h"
+#include <linux/usb.h>
 
 /*
  * CMSPAR, some architectures can't have space and mark parity.

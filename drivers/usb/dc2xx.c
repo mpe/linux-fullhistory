@@ -57,10 +57,8 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/module.h>
-
 #undef DEBUG
-
-#include "usb.h"
+#include <linux/usb.h>
 
 
 

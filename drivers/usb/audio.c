@@ -152,8 +152,8 @@
 #include <linux/bitops.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
+#include <linux/usb.h>
 
-#include "usb.h"
 #include "audio.h"
 
 #define AUDIO_DEBUG 1

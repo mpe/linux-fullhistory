@@ -33,14 +33,13 @@
 #include <linux/unistd.h>
 #include <linux/interrupt.h>
 #include <linux/spinlock.h>
+#define DEBUG
+#include <linux/usb.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/system.h>
-
-#define DEBUG
-#include "usb.h"
 
 #include "uhci.h"
 #include "uhci-debug.h"

@@ -40,10 +40,9 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-
 //#define DEBUG
+#include <linux/usb.h>
 
-#include "usb.h"
 #include "plusb.h"
 
 /* --------------------------------------------------------------------- */

@@ -53,9 +53,9 @@
 #include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/poll.h>
+#include <linux/usb.h>
 #include <asm/uaccess.h>
 
-#include "usb.h"
 #include "usbdevice_fs.h"
 
 #define MAX_TOPO_LEVEL		6

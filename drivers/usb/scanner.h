@@ -6,10 +6,8 @@
 #include <linux/malloc.h>
 #include <linux/delay.h>
 #include <linux/ioctl.h>
-
 // #define DEBUG
-
-#include "usb.h"
+#include <linux/usb.h>
 
 /* WARNING: These DATA_DUMP's can produce a lot of data. Caveat Emptor. */
 // #define RD_DATA_DUMP /* Enable to dump data - limited to 24 bytes */

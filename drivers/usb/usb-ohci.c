@@ -41,16 +41,16 @@
 #include <linux/timer.h>
 #include <linux/list.h>
 #include <linux/interrupt.h>  /* for in_interrupt() */
+#undef DEBUG
+#include <linux/usb.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/system.h>
 #include <asm/unaligned.h>
 
-#undef DEBUG
 #define OHCI_USE_NPS
 
-#include "usb.h"
 #include "usb-ohci.h"
 
 #include <linux/pm.h>

@@ -41,8 +41,7 @@
 #include <linux/socket.h>
 #include <linux/parport.h>
 #include <linux/init.h>
-
-#include "usb.h"
+#include <linux/usb.h>
 
 /* --------------------------------------------------------------------- */
 

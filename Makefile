@@ -136,6 +136,10 @@ ifdef CONFIG_NET_FC
 DRIVERS := $(DRIVERS) drivers/net/fc/fc.a
 endif
 
+ifdef CONFIG_ATALK
+DRIVERS := $(DRIVERS) drivers/net/appletalk/appletalk.a
+endif
+
 ifdef CONFIG_TR
 DRIVERS := $(DRIVERS) drivers/net/tokenring/tr.a
 endif

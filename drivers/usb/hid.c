@@ -39,13 +39,12 @@
 #include <linux/mm.h>
 #include <linux/smp_lock.h>
 #include <linux/spinlock.h>
+#undef DEBUG
+#undef DEBUG_DATA
+#include <linux/usb.h>
 
 #include <asm/unaligned.h>
 
-#undef DEBUG
-#undef DEBUG_DATA
-
-#include "usb.h"
 #include "hid.h"
 
 #ifdef DEBUG

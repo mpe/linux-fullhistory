@@ -13,11 +13,10 @@
 #include <linux/malloc.h>
 #include <linux/init.h>
 #include <linux/delay.h>
+#include <linux/usb.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
-
-#include "usb.h"
 
 #if LINUX_VERSION_CODE<0x2032d || !defined(__KERNEL__) || !defined(__OPTIMIZE__)
 #error You can not compile this driver on this kernel with this C options!

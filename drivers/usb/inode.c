@@ -36,9 +36,9 @@
 #include <linux/locks.h>
 #include <linux/init.h>
 #include <linux/proc_fs.h>
+#include <linux/usb.h>
 #include <asm/uaccess.h>
 
-#include "usb.h"
 #include "usbdevice_fs.h"
 
 /* --------------------------------------------------------------------- */

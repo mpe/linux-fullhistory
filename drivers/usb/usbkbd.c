@@ -33,7 +33,7 @@
 #include <linux/module.h>
 #include <linux/input.h>
 #include <linux/init.h>
-#include "usb.h"
+#include <linux/usb.h>
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
 

@@ -13,8 +13,7 @@
 #include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/config.h>
-
-#include "usb.h"
+#include <linux/usb.h>
 
 /*
  * USB core

@@ -40,9 +40,9 @@
 #include <linux/smp_lock.h>
 #include <linux/signal.h>
 #include <linux/poll.h>
+#include <linux/usb.h>
 #include <asm/uaccess.h>
 
-#include "usb.h"
 #include "usbdevice_fs.h"
 
 struct async {

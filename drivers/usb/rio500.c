@@ -35,8 +35,7 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/spinlock.h>
-
-#include "usb.h"
+#include <linux/usb.h>
 
 #include "rio500_usb.h"
 
