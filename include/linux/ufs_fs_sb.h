@@ -107,6 +107,8 @@ struct ufs_sb_private_info {
 	__u32	s_bpf;		/* bits per fragment */
 	__u32	s_bpfshift;	/* bits per fragment shift*/
 	__u32	s_bpfmask;	/* bits per fragment mask */
+
+	__u32	s_maxsymlinklen;/* upper limit on fast symlinks' size */
 };
 
 

@@ -1,4 +1,4 @@
-/* $Id: inode.c,v 1.2 1999/12/27 07:13:38 anton Exp $
+/* $Id: inode.c,v 1.3 2000/01/04 10:02:29 jj Exp $
  * openpromfs.c: /proc/openprom handling routines
  *
  * Copyright (C) 1996-1999 Jakub Jelinek  (jakub@redhat.com)
@@ -1097,6 +1097,7 @@ out_no_root:
 	iput(root_inode);
 	s->s_dev = 0;
 	unlock_super(s);
+	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 

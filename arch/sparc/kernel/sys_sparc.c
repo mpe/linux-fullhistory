@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.55 1999/12/21 14:09:09 jj Exp $
+/* $Id: sys_sparc.c,v 1.56 2000/01/04 11:01:26 jj Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -227,7 +227,9 @@ asmlinkage unsigned long sys_mmap2(unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long fd,
 	unsigned long pgoff)
 {
-	return do_mmap2(addr, len, prot, flags, fd, pgoff);
+	/* Make sure the shift for mmap2 is constant (12), no matter what PAGE_SIZE
+	   we have. */
+	return do_mmap2(addr, len, prot, flags, fd, pgoff >> (PAGE_SHIFT - 12));
 }
 
 asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,

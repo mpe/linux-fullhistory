@@ -205,7 +205,7 @@ static void inline soc_unsolicited (struct soc *s)
 		hwrsp = (soc_rsp *)sw_cq->pool + sw_cq->out;
 
 		hwrspc = NULL;
-		flags = hwrsp->shdr.flags;
+		flags = xram_get_16 ((xram_p)&hwrsp->shdr.flags);
 		count = xram_get_8 ((xram_p)&hwrsp->count);
 		fc = (fc_channel *)&s->port[flags & SOC_PORT_B];
 		SOD(("FC %08lx fcp_state_change %08lx\n",

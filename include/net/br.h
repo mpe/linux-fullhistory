@@ -1,3 +1,4 @@
+#include <linux/config.h>
 /*
  * Constants and structure definitions for the bridging code
  */

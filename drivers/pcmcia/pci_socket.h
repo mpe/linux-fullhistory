@@ -14,6 +14,7 @@ typedef struct pci_socket {
 	void *info;
 	struct pci_socket_ops *op;
 	socket_cap_t cap;
+	struct timer_list timer;
 } pci_socket_t;
 
 struct pci_socket_ops {

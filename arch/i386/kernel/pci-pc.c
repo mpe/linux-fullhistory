@@ -1063,6 +1063,7 @@ static char *pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *r
 	case ID(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371FB_0):
 	case ID(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371SB_0):
 	case ID(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB_0):
+	case ID(PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M1533):
 		/* Intel PIIX: PIRQ holds configuration register address */
 		pci_read_config_byte(router, pirq, &x);
 		if (x < 16) {

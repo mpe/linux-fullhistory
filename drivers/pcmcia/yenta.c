@@ -411,6 +411,13 @@ static void yenta_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	if (events && socket->handler)
 		socket->handler(socket->info, events);
+
+	mod_timer(&socket->timer, jiffies + HZ);
+}
+
+static void yenta_timer(unsigned long data)
+{
+	yenta_interrupt(0, (pci_socket_t *) data, NULL);
 }
 
 static unsigned int yenta_probe_irq(pci_socket_t *socket)
@@ -426,8 +433,10 @@ static unsigned int yenta_probe_irq(pci_socket_t *socket)
 		if (socket->cb_irq && socket->cb_irq < 16)
 			return 1 << socket->cb_irq;
 
-		printk("CardBus: Hmm.. Routing interrupts to bad PCI irq %d\n", socket->cb_irq);
-		return 0;
+		/* Uhhuh. Try falling back on ISA interrupts */
+		printk("CardBus: Hmm.. Bad PCI irq routing (irq%d)\n", socket->cb_irq);
+		bridge_ctrl |= CB_BRIDGE_INTR;
+		config_writew(socket, CB_BRIDGE_CONTROL, bridge_ctrl);
 	}
 
 	cb_writel(socket, CB_SOCKET_EVENT, -1);
@@ -627,14 +636,24 @@ static int yenta_open(pci_socket_t *socket)
 	/* Disable all events */
 	cb_writel(socket, CB_SOCKET_MASK, 0x0);
 
+	/* Set up the bridge regions.. */
+	yenta_allocate_resources(socket);
+
+	/*
+	 * Always poll the socket too, just in case the cardbus interrupt
+	 * doesn't exist (it happens), or we just lose an interrupt..
+	 */
+	init_timer(&socket->timer);
+	socket->timer.expires = jiffies + HZ;
+	socket->timer.data = (unsigned long)socket;
+	socket->timer.function = yenta_timer;
+	add_timer(&socket->timer);
+
 	if (dev->irq && !request_irq(dev->irq, yenta_interrupt, SA_SHIRQ, dev->name, socket))
 		socket->cb_irq = dev->irq;
 
-	/* Figure out what the dang thing can do.. */
+	/* And figure out what the dang thing can do for the PCMCIA layer... */
 	yenta_get_socket_capabilities(socket);
-
-	/* Set up the bridge regions.. */
-	yenta_allocate_resources(socket);
 
 	printk("Socket status: %08x\n", cb_readl(socket, CB_SOCKET_STATE));
 	return 0;

@@ -23,7 +23,6 @@
  * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#define EXPORT_SYMTAB
 #include <linux/config.h>
 #include <linux/version.h>
 #include <linux/module.h>

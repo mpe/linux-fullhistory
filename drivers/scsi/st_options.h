@@ -1,9 +1,9 @@
 /*
    The compile-time configurable defaults for the Linux SCSI tape driver.
 
-   Copyright 1995-1999 Kai Makisara.
+   Copyright 1995-2000 Kai Makisara.
 
-   Last modified: Sat Aug  7 13:42:21 1999 by makisara@kai.makisara.local
+   Last modified: Sat Jan  1 18:34:38 2000 by makisara@kai.makisara.local
 */
 
 #ifndef _ST_OPTIONS_H

@@ -265,7 +265,7 @@ struct file_operations def_blk_fops = {
 	NULL,		/* release */
 };
 
-struct inode_operations blkdev_inode_operations = {
+static struct inode_operations blkdev_inode_operations = {
 	&def_blk_fops,		/* default file operations */
 	NULL,			/* create */
 	NULL,			/* lookup */
@@ -320,7 +320,7 @@ struct file_operations def_chr_fops = {
 	NULL,		/* release */
 };
 
-struct inode_operations chrdev_inode_operations = {
+static struct inode_operations chrdev_inode_operations = {
 	&def_chr_fops,		/* default file operations */
 	NULL,			/* create */
 	NULL,			/* lookup */

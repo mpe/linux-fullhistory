@@ -35,7 +35,7 @@
 int			      drm_flags		= 0;
 
 /* drm_parse_option parses a single option.  See description for
-   drm_parse_drm for details. */
+   drm_parse_options for details. */
 
 static void drm_parse_option(char *s)
 {

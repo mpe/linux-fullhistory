@@ -636,10 +636,9 @@ int idescsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 {
 	ide_drive_t *drive = idescsi_drives[dev->id];
 	idescsi_scsi_t *scsi = drive->driver_data;
-	int enable = (int) arg;
 
 	if (cmd == SG_SET_TRANSFORM) {
-		if (enable)
+		if (arg)
 			set_bit(IDESCSI_SG_TRANSFORM, &scsi->transform);
 		else
 			clear_bit(IDESCSI_SG_TRANSFORM, &scsi->transform);

@@ -243,12 +243,9 @@ static int acm_tty_open(struct tty_struct *tty, struct file *filp)
 
 	if (!acm->present) return -EINVAL;
 
-	if (acm->used++) {
-		MOD_INC_USE_COUNT;
-		return 0;
-	}
-
 	MOD_INC_USE_COUNT;
+
+	if (acm->used++) return 0;
 
 	if (usb_submit_urb(&acm->ctrlurb))
 		acm_debug("usb_submit_urb(ctrl irq) failed");
@@ -265,18 +262,18 @@ static void acm_tty_close(struct tty_struct *tty, struct file *filp)
 {
 	struct acm *acm = tty->driver_data;
 
-	if (!ACM_READY(acm)) return;
-
-	if (--acm->used) {
-		MOD_DEC_USE_COUNT;
-		return;
-	}
-
-	acm_set_control(acm->ctrlout = 0, acm);
-	usb_unlink_urb(&acm->writeurb);
-	usb_unlink_urb(&acm->readurb);
+	if (!acm->used) return;
 
 	MOD_DEC_USE_COUNT;
+
+	if (--acm->used) return;
+	
+	if (acm->present) {
+		acm_set_control(acm->ctrlout = 0, acm);
+		usb_unlink_urb(&acm->ctrlurb);
+		usb_unlink_urb(&acm->writeurb);
+		usb_unlink_urb(&acm->readurb);
+	}
 }
 
 static int acm_tty_write(struct tty_struct *tty, int from_user, const unsigned char *buf, int count)
@@ -348,7 +345,6 @@ static void *acm_probe(struct usb_device *dev, unsigned int ifnum)
 	struct usb_endpoint_descriptor *epctrl, *epread, *epwrite;
 	int readsize, ctrlsize, minor, i;
 	unsigned char *buf;
-	char *s = NULL;
 
 	for (minor = 0; minor < ACM_TTY_MINORS &&
 		(acm_table[minor].present || acm_table[minor].used); minor++);
@@ -422,6 +418,8 @@ static void *acm_probe(struct usb_device *dev, unsigned int ifnum)
 
 		usb_driver_claim_interface(&acm_driver, acm->cfg->interface + 0, acm);
 		usb_driver_claim_interface(&acm_driver, acm->cfg->interface + 1, acm);
+
+		acm_set_control(acm->ctrlout, acm);
 
 		acm->present = 1;
 

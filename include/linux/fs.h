@@ -749,14 +749,12 @@ extern int unregister_blkdev(unsigned int, const char *);
 extern int blkdev_open(struct inode *, struct file *);
 extern int blkdev_release (struct inode *);
 extern struct file_operations def_blk_fops;
-extern struct inode_operations blkdev_inode_operations;
 
 /* fs/devices.c */
 extern int register_chrdev(unsigned int, const char *, struct file_operations *);
 extern int unregister_chrdev(unsigned int, const char *);
 extern int chrdev_open(struct inode *, struct file *);
 extern struct file_operations def_chr_fops;
-extern struct inode_operations chrdev_inode_operations;
 extern char * bdevname(kdev_t);
 extern char * cdevname(kdev_t);
 extern char * kdevname(kdev_t);

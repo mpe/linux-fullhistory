@@ -42,6 +42,7 @@
  *     
  ********************************************************************/
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/socket.h>
 #include <linux/sockios.h>

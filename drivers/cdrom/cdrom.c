@@ -636,9 +636,9 @@ int cdrom_release(struct inode *ip, struct file *fp)
 	int opened_for_data;
 
 	cdinfo(CD_CLOSE, "entering cdrom_release\n"); 
-	if (cdi == NULL)
-		return 0;
-	if (cdi->use_count > 0) cdi->use_count--;
+
+	if (cdi->use_count > 0)
+		cdi->use_count--;
 	if (cdi->use_count == 0)
 		cdinfo(CD_CLOSE, "Use count for \"/dev/%s\" now zero\n", cdi->name);
 	if (cdi->use_count == 0 &&
@@ -812,15 +812,12 @@ int media_changed(struct cdrom_device_info *cdi, int queue)
 	return ret;
 }
 
-static
-int cdrom_media_changed(kdev_t dev)
+static int cdrom_media_changed(kdev_t dev)
 {
 	struct cdrom_device_info *cdi = cdrom_find_device(dev);
 	/* This talks to the VFS, which doesn't like errors - just 1 or 0.  
 	 * Returning "0" is always safe (media hasn't been changed). Do that 
 	 * if the low-level cdrom driver dosn't support media changed. */ 
-	if (cdi == NULL)
-		return 0;
 	if (cdi->ops->media_changed == NULL)
 		return 0;
 	if (!CDROM_CAN(CDC_MEDIA_CHANGED))
@@ -828,6 +825,7 @@ int cdrom_media_changed(kdev_t dev)
 	return (media_changed(cdi, 0));
 }
 
+/* badly broken, I know. Is due for a fixup anytime. */
 void cdrom_count_tracks(struct cdrom_device_info *cdi, tracktype* tracks)
 {
 	struct cdrom_tochdr header;
@@ -913,12 +911,11 @@ void sanitize_format(union cdrom_addr *addr,
 	*curr = requested;
 }
 
-void init_cdrom_command(struct cdrom_generic_command *cgc,
-			void *buffer, int len)
+void init_cdrom_command(struct cdrom_generic_command *cgc, void *buf, int len)
 {
 	memset(cgc, 0, sizeof(struct cdrom_generic_command));
-	memset(buffer, 0, len);
-	cgc->buffer = (char *) buffer;
+	memset(buf, 0, len);
+	cgc->buffer = (char *) buf;
 	cgc->buflen = len;
 }
 
@@ -1382,37 +1379,21 @@ static int cdrom_read_block(struct cdrom_device_info *cdi,
 	return cdo->generic_packet(cdi, cgc);
 }
 
-/* Some of the cdrom ioctls are not implemented here, because these
- * appear to be either too device-specific, or it is not clear to me
- * what use they are. These are (number of drivers that support them
- * in parenthesis): CDROMREADMODE1 (2+ide), CDROMREADMODE2 (2+ide),
- * CDROMREADAUDIO (2+ide), CDROMREADRAW (2), CDROMREADCOOKED (2),
- * CDROMSEEK (2), CDROMPLAYBLK (scsi), CDROMREADALL (1). Read-audio,
- * OK (although i guess the record companies aren't too happy with
- * this, most drives therefore refuse to transport audio data).  But
- * why are there 5 different READs defined? For now, these functions
- * are left over to the device-specific ioctl routine,
- * cdo->dev_ioctl. Note that as a result of this, no
- * memory-verification is performed for these ioctls.
+/* Just about every imaginable ioctl is supported in the Uniform layer
+ * these days. ATAPI / SCSI specific code now mainly resides in
+ * mmc_ioct().
  */
-static
-int cdrom_ioctl(struct inode *ip, struct file *fp,
-		unsigned int cmd, unsigned long arg)
+static int cdrom_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
+		       unsigned long arg)
 {
 	kdev_t dev = ip->i_rdev;
 	struct cdrom_device_info *cdi = cdrom_find_device(dev);
-	struct cdrom_device_ops *cdo;
+	struct cdrom_device_ops *cdo = cdi->ops;
 	int ret;
-
-	if (cdi == NULL)
-		return -ENODEV;
-	cdo = cdi->ops;
 
 	/* the first few commands do not deal with audio drive_info, but
 	   only with routines in cdrom device operations. */
 	switch (cmd) {
-		/* maybe we should order cases after statistics of use? */
-
 	case CDROMMULTISESSION: {
 		struct cdrom_multisession ms_info;
 		u_char requested_format;
@@ -1902,8 +1883,7 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		/* get toc entry for start and end track */
 		if (cdo->audio_ioctl(cdi, CDROMREADTOCHDR, &tochdr))
 			return -EINVAL;
-		entry.cdte_track = ti.cdti_trk1 + 1;
-		if (entry.cdte_track > tochdr.cdth_trk1)
+		if ((entry.cdte_track = ti.cdti_trk0) > tochdr.cdth_trk1)
 			return -EINVAL;
 		if (cdo->audio_ioctl(cdi, CDROMREADTOCENTRY, &entry))
 			return -EINVAL;
@@ -1912,7 +1892,10 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		cgc.cmd[4] = entry.cdte_addr.msf.second;
 		cgc.cmd[5] = entry.cdte_addr.msf.frame;
 
-		entry.cdte_track = ti.cdti_trk1;
+		entry.cdte_track = ti.cdti_trk1 + 1;
+		if (entry.cdte_track > tochdr.cdth_trk1)
+			entry.cdte_track = CDROM_LEADOUT;
+
 		if (cdo->audio_ioctl(cdi, CDROMREADTOCENTRY, &entry))
 			return -EINVAL;
 

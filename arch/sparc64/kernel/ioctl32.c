@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.71 1999/12/19 23:13:13 davem Exp $
+/* $Id: ioctl32.c,v 1.72 2000/01/04 15:43:45 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -2181,7 +2181,6 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case PPPIOCSNPMODE:
 	case PPPIOCGDEBUG:
 	case PPPIOCSDEBUG:
-	case PPPIOCGIDLE:
 	case PPPIOCNEWUNIT:
 	case PPPIOCATTACH:
 	case PPPIOCDETACH:

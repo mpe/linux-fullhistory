@@ -13,7 +13,6 @@
 typedef struct {
 	unsigned char in_use;
 	unsigned char dma;	/* DMA-able buffer */
-	int this_size;		/* allocated size of the structure */
 	int buffer_size;
 	int buffer_blocks;
 	int buffer_bytes;

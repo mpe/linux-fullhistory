@@ -6,9 +6,12 @@
 O_TARGET	:= agp.o
 
 ifeq ($(CONFIG_AGP),y)
-  O_OBJS += agpgart.o
+  O_OBJS += agpgart_fe.o
+  OX_OBJS += agpgart_be.o
 else
   ifeq ($(CONFIG_AGP), m)
+    MI_OBJS += agpgart_fe.o
+    MIX_OBJS += agpgart_be.o
     M_OBJS += agpgart.o
   endif
 endif

@@ -764,7 +764,7 @@ int ufs_symlink (struct inode * dir, struct dentry * dentry,
 
 	err = -ENAMETOOLONG;
 	l = strlen(symname)+1;
-	if (l > dir->i_sb->s_blocksize)
+	if (l > sb->s_blocksize)
 		goto out;
 
 	err = -EIO;
@@ -774,8 +774,7 @@ int ufs_symlink (struct inode * dir, struct dentry * dentry,
 	}
 	inode->i_mode = S_IFLNK | S_IRWXUGO;
 
-	/***if (l > sizeof (inode->u.ufs_i.i_data)) {***/
-	if (1) {
+	if (l > sb->u.ufs_sb.s_uspi->s_maxsymlinklen) {
 		/* slow symlink */
 		inode->i_op = &ufs_symlink_inode_operations;
 		err = block_symlink(inode, symname, l);

@@ -15,11 +15,6 @@
  * $Id: uhci.c,v 1.149 1999/12/26 20:57:14 acher Exp $
  */
 
-
-#ifndef EXPORT_SYMTAB
-#define EXPORT_SYMTAB
-#endif
-
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/pci.h>
@@ -1807,7 +1802,6 @@ _static int process_interrupt (puhci_t s, purb_t purb)
 		else {
 			desc->hw.td.status &= ~TD_CTRL_IOC; // inactivate TD
 		}
-	err:
 	}
 
 	return ret;

@@ -25,7 +25,6 @@
  */
 
 #include <linux/module.h>
-#include <linux/config.h>	/* for CONFIG_INET */
 #include <linux/init.h>
 #include <linux/if_arp.h>
 #include <net/arp.h>

@@ -34,7 +34,7 @@ static char ixj_c_rcsid[] = "$Id: ixj.c,v 3.4 1999/12/16 22:18:36 root Exp root 
 #define MAXRINGS 5
 
 #include <linux/module.h>
-
+#include <linux/config.h>
 #include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>	/* printk() */

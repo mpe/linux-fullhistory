@@ -5,6 +5,7 @@
 #ifdef __KERNEL__
 
 #include <asm/atomic.h>
+#include <asm/bitops.h>
 #include <asm/system.h>
 
 struct semaphore {

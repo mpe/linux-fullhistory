@@ -10,16 +10,18 @@ L_TARGET := usb.a
 MOD_LIST_NAME := USB_MODULES
 
 ifeq ($(CONFIG_USB),y)
-  L_OBJS += usbcore.o
+  L_OBJS += usb-debug.o usb-core.o hub.o
+  LX_OBJS += usb.o
   ifeq ($(CONFIG_USB_PROC),y)
     L_OBJS += proc_usb.o
   endif
 endif
 ifeq ($(CONFIG_USB),m)
   M_OBJS += usbcore.o
-  MIX_OBJS += usb.o usb-debug.o usb-core.o
+  MI_OBJS += usb-debug.o usb-core.o hub.o
+  MIX_OBJS += usb.o
   ifeq ($(CONFIG_USB_PROC),y)
-    MIX_OBJS += proc_usb.o
+    MI_OBJS += proc_usb.o
   endif
 endif
 
@@ -92,16 +94,6 @@ endif
 
 ifeq ($(CONFIG_USB_OV511),m)
   M_OBJS += ov511.o
-  MI_OBJS += ov511.o
-endif
-
-ifeq ($(CONFIG_USB_OV511),y)
-  L_OBJS += ov511.o
-endif
-
-ifeq ($(CONFIG_USB_OV511),m)
-  M_OBJS += ov511.o
-  MI_OBJS += ov511.o
 endif
 
 ifeq ($(CONFIG_USB_DC2XX),y)

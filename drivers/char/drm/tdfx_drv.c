@@ -29,7 +29,6 @@
  *
  */
 
-#define EXPORT_SYMTAB
 #include <linux/config.h>
 #include "drmP.h"
 #include "tdfx_drv.h"
@@ -89,7 +88,9 @@ static drm_ioctl_desc_t	      tdfx_ioctls[] = {
 };
 #define TDFX_IOCTL_COUNT DRM_ARRAY_SIZE(tdfx_ioctls)
 
+#ifdef MODULE
 static char		      *tdfx = NULL;
+#endif
 
 MODULE_AUTHOR("Precision Insight, Inc., Cedar Park, Texas.");
 MODULE_DESCRIPTION("tdfx");
@@ -587,10 +588,11 @@ int tdfx_unlock(struct inode *inode, struct file *filp, unsigned int cmd,
 module_init(tdfx_init);
 module_exit(tdfx_cleanup);
 
+#ifndef MODULE
 /*
  * tdfx_setup is called by the kernel to parse command-line options passed
  * via the boot-loader (e.g., LILO).  It calls the insmod option routine,
- * drm_parse_drm.
+ * drm_parse_options.
  */
 static int __init tdfx_options(char *str)
 {
@@ -599,3 +601,4 @@ static int __init tdfx_options(char *str)
 }
 
 __setup("tdfx=", tdfx_options);
+#endif

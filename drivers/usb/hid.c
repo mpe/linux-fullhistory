@@ -177,8 +177,8 @@ static int close_collection(struct hid_parser *parser)
 
 static unsigned hid_lookup_collection(struct hid_parser *parser, unsigned type)
 {
-	unsigned n;
-	for (n = parser->collection_stack_ptr; n; n--)
+	int n;
+	for (n = parser->collection_stack_ptr - 1; n >= 0; n--)
 		if (parser->collection_stack[n].type == type)
 			return parser->collection_stack[n].usage;
 	return 0; /* we know nothing about this usage type */
@@ -296,7 +296,7 @@ static int hid_parser_global(struct hid_parser *parser, struct hid_item *item)
 		case HID_GLOBAL_ITEM_TAG_POP:
 
 			if (parser->global_stack_ptr > 0) {
-				memcpy(&parser->global, parser->global_stack + parser->global_stack_ptr--,
+				memcpy(&parser->global, parser->global_stack + --parser->global_stack_ptr,
 					sizeof(struct hid_parser));
 				return 0;
 			}
@@ -970,13 +970,15 @@ static void hid_init_input(struct hid_device *hid)
 #if 1
 		{
 			char rdata[rlen];
-			struct urb urb = {
-				transfer_buffer:	rdata,
-				actual_length:		rlen,
-				context:		hid
-			};	
+			struct urb urb;
 
+			memset(&urb, 0, sizeof(struct urb));
 			memset(rdata, 0, rlen);
+
+			urb.transfer_buffer = rdata;
+			urb.actual_length = rlen;
+			urb.context = hid;
+
 			hid_debug("getting report type %d id %d len %d", report->type + 1, report->id, rlen);
 
 			if ((read = usb_get_report(hid->dev, report->type + 1, report->id, hid->ifnum, rdata, rlen)) != rlen) {
@@ -1184,6 +1186,11 @@ static struct usb_driver hid_driver = {
 };
 
 #ifdef MODULE
+void cleanup_module(void)
+{
+	usb_deregister(&hid_driver);
+}
+
 int init_module(void)
 #else
 int hid_init(void)
@@ -1191,13 +1198,4 @@ int hid_init(void)
 {
 	usb_register(&hid_driver);
 	return 0;
-}
-
-#ifdef MODULE
-void module_cleanup(void)
-#else
-void hid_cleanup(void)
-#endif
-{
-	usb_deregister(&hid_driver);
 }

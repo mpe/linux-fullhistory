@@ -284,10 +284,8 @@ static void devpts_read_inode(struct inode *inode)
 	if ( ino >= sbi->max_ptys )
 		return;		/* Bogus */
 	
-	inode->i_mode = S_IFCHR;
-	inode->i_rdev = MKDEV(0,0); /* Gets filled in by devpts_pty_new() */
-
-	inode->i_op = &chrdev_inode_operations;
+	/* Gets filled in by devpts_pty_new() */
+	init_special_inode(inode,S_IFCHR,0);
 
 	return;
 }

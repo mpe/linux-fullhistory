@@ -96,6 +96,11 @@ static inline u32 xram_get_32low (xram_p x)
 	return (u32) sbus_readw(x + 0x02UL);
 }
 
+static inline u16 xram_get_16 (xram_p x)
+{
+	return sbus_readw(x);
+}
+
 static inline u8 xram_get_8 (xram_p x)
 {
 	if (x & (xram_p)0x1) {

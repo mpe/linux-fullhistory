@@ -131,16 +131,10 @@ void efs_read_inode(struct inode *inode) {
 			inode->i_op = &efs_symlink_inode_operations;
 			break;
 		case S_IFCHR:
-			inode->i_rdev = device;
-			inode->i_op = &chrdev_inode_operations; 
-			break;
 		case S_IFBLK:
-			inode->i_rdev = device;
-			inode->i_op = &blkdev_inode_operations; 
-			break;
 		case S_IFIFO:
-			init_fifo(inode);
-			break;    
+			init_special_inode(inode, inode->i_mode, device);
+			break;
 		default:
 			printk(KERN_WARNING "EFS: unsupported inode mode %o\n", inode->i_mode);
 			goto read_inode_error;

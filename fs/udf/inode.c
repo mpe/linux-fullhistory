@@ -1147,19 +1147,18 @@ static void udf_fill_inode(struct inode *inode, struct buffer_head *bh)
 		}
 		case FILE_TYPE_BLOCK:
 		{
-			inode->i_op = &blkdev_inode_operations;
 			inode->i_mode |= S_IFBLK;
 			break;
 		}
 		case FILE_TYPE_CHAR:
 		{
-			inode->i_op = &chrdev_inode_operations;
 			inode->i_mode |= S_IFCHR;
 			break;
 		}
 		case FILE_TYPE_FIFO:
 		{
-			init_fifo(inode);
+			init_special_inode(inode, inode->i_mode|S_FIFO, 0);
+			break;
 		}
 		case FILE_TYPE_SYMLINK:
 		{
@@ -1185,9 +1184,9 @@ static void udf_fill_inode(struct inode *inode, struct buffer_head *bh)
 
 		if (dsea)
 		{
-			inode->i_rdev = to_kdev_t(
-				(le32_to_cpu(dsea->majorDeviceIdent)) << 8) |
-				(le32_to_cpu(dsea->minorDeviceIdent) & 0xFF);
+			init_special_inode(inode, inode->i_mode, 
+				((le32_to_cpu(dsea->majorDeviceIdent)) << 8) |
+				(le32_to_cpu(dsea->minorDeviceIdent) & 0xFF));
 			/* Developer ID ??? */
 			udf_release_data(tbh);
 		}

@@ -497,6 +497,7 @@ struct super_block * ufs_read_super (struct super_block * sb, void * data,
 		uspi->s_fshift = 10;
 		uspi->s_sbsize = super_block_size = 2048;
 		uspi->s_sbbase = 0;
+		uspi->s_maxsymlinklen = 56;
 		flags |= UFS_DE_OLD | UFS_UID_EFT | UFS_ST_SUN | UFS_CG_SUN;
 		break;
 
@@ -507,6 +508,7 @@ struct super_block * ufs_read_super (struct super_block * sb, void * data,
 		uspi->s_fshift = 10;
 		uspi->s_sbsize = super_block_size = 2048;
 		uspi->s_sbbase = 0;
+		uspi->s_maxsymlinklen = 56;
 		flags |= UFS_DE_OLD | UFS_UID_EFT | UFS_ST_SUNx86 | UFS_CG_SUN;
 		break;
 
@@ -760,6 +762,10 @@ magic_found:
 	uspi->s_bpf = uspi->s_fsize << 3;
 	uspi->s_bpfshift = uspi->s_fshift + 3;
 	uspi->s_bpfmask = uspi->s_bpf - 1;
+	if ((sb->u.ufs_sb.s_mount_opt & UFS_MOUNT_UFSTYPE) ==
+	    UFS_MOUNT_UFSTYPE_44BSD)
+		uspi->s_maxsymlinklen =
+		    SWAB32(usb3->fs_u2.fs_44.fs_maxsymlinklen);
 	
 	sb->u.ufs_sb.s_flags = flags;
 	sb->u.ufs_sb.s_swab = swab;

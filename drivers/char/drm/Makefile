@@ -10,7 +10,6 @@
 # parent makes..
 #
 
-L_TARGET        := libdrm.a
 O_TARGET	:= drm.o
 
 L_OBJS		:= init.o memory.o proc.o auth.o context.o drawable.o bufs.o \
@@ -19,25 +18,33 @@ L_OBJS		:= init.o memory.o proc.o auth.o context.o drawable.o bufs.o \
 M_OBJS		:= 
 
 ifeq ($(CONFIG_DRM_GAMMA),y)
- O_OBJS += gamma.o
+ OX_OBJS += gamma_drv.o
+ O_OBJS += gamma_dma.o
 else
   ifeq ($(CONFIG_DRM_GAMMA),m)
+    MIX_OBJS += gamma_drv.o
+    MI_OBJS += gamma_dma.o
     M_OBJS += gamma.o
   endif
 endif
 
 ifeq ($(CONFIG_DRM_TDFX),y)
- O_OBJS += tdfx.o
+ OX_OBJS += tdfx_drv.o
+ O_OBJS += tdfx_context.o
 else
   ifeq ($(CONFIG_DRM_TDFX),m)
+    MIX_OBJS += tdfx_drv.o
+    MI_OBJS += tdfx_context.o
     M_OBJS += tdfx.o
   endif
 endif
 
+O_OBJS += $(L_OBJS)
+
 include $(TOPDIR)/Rules.make
 
-gamma.o: gamma_drv.o gamma_dma.o $(L_TARGET)
-	$(LD) $(LD_RFLAG) -r -o $@ gamma_drv.o gamma_dma.o -L. -ldrm
+gamma.o : gamma_drv.o gamma_dma.o $(L_OBJS)
+	$(LD) $(LD_RFLAG) -r -o $@ gamma_drv.o gamma_dma.o $(L_OBJS)
 
-tdfx.o: tdfx_drv.o tdfx_context.o $(L_TARGET)
-	$(LD) $(LD_RFLAG) -r -o $@ tdfx_drv.o tdfx_context.o -L. -ldrm
+tdfx.o: tdfx_drv.o tdfx_context.o $(L_OBJS)
+	$(LD) $(LD_RFLAG) -r -o $@ tdfx_drv.o tdfx_context.o $(L_OBJS)

@@ -135,7 +135,6 @@ static void socal_reset(fc_channel *fc)
 
 static void inline socal_solicited(struct socal *s, unsigned long qno)
 {
-	fc_hdr fchdr;
 	socal_rsp *hwrsp;
 	socal_cq *sw_cq;
 	int token;
@@ -144,11 +143,6 @@ static void inline socal_solicited(struct socal *s, unsigned long qno)
 
 	sw_cq = &s->rsp[qno];
 
-	if (sw_cq->pool == NULL) {
-		SOD(("address %08x xram %p\n", sw_cq->hw_cq->address, s->xram))
-		sw_cq->pool =
-			(socal_req *)(s->xram + (sw_cq->hw_cq->address & 0xfffe));
-	}
 	/* Finally an improvement against old SOC :) */
 	sw_cq->in = sbus_readb(s->regs + RESP + qno);
 	SOD (("socal_solicited, %d packets arrived\n",
@@ -199,13 +193,12 @@ static void inline socal_solicited(struct socal *s, unsigned long qno)
 					      token & ((1 << 11) - 1),
 					      FC_STATUS_OK, NULL);
 		} else {
-			socal_copy_from_xram(&fchdr, &hwrsp->fchdr, sizeof(fchdr));
 			/* We have intentionally defined FC_STATUS_* constants
 			 * to match SOCAL_* constants, otherwise we'd have to
 			 * translate status.
 			 */
 			fcp_receive_solicited(fc, token >> 12,
-					      token & ((1 << 11) - 1), status, &fchdr);
+					      token & ((1 << 11) - 1), status, &hwrsp->fchdr);
 		}
 			
 		if (++sw_cq->out > sw_cq->last) {
@@ -259,11 +252,6 @@ static void inline socal_unsolicited (struct socal *s, unsigned long qno)
 	fc_channel *fc;
 
 	sw_cq = &s->rsp[qno];
-	if (sw_cq->pool == NULL) {
-		SOD(("address %08x xram %lx\n", sw_cq->hw_cq->address, s->xram))
-		sw_cq->pool =
-			(socal_req *)(s->xram + (sw_cq->hw_cq->address & 0xfffe));
-	}
 
 	sw_cq->in = sbus_readb(s->regs + RESP + qno);
 	SOD (("socal_unsolicited, %d packets arrived, in %d\n",
@@ -352,7 +340,6 @@ static void inline socal_unsolicited (struct socal *s, unsigned long qno)
 			{
 				int r_ctl = *((u8 *)&hwrsp->fchdr);
 				unsigned len;
-				char buf[64];
 				
 				if ((r_ctl & 0xf0) == R_CTL_EXTENDED_SVC) {
 					len = hwrsp->shdr.bytecnt;
@@ -363,21 +350,19 @@ static void inline socal_unsolicited (struct socal *s, unsigned long qno)
 					} else {
 						if (len > 60)
 							len = 60;
-						socal_copy_from_xram(buf, hwrspc,
-								     (len + 3) & ~3);
-						if (*(u32 *)buf == LS_DISPLAY) {
+						if (*(u32 *)hwrspc == LS_DISPLAY) {
 							int i;
 							
 							for (i = 4; i < len; i++)
-								if (buf[i] == '\n')
-									buf[i] = ' ';
-							buf[len] = 0;
+								if (((u8 *)hwrspc)[i] == '\n')
+									((u8 *)hwrspc)[i] = ' ';
+							((u8 *)hwrspc)[len] = 0;
 							printk ("%s message: %s\n",
-								fc->name, buf + 4);
+								fc->name, ((u8 *)hwrspc) + 4);
 						} else {
 							printk ("%s: Unknown LS_CMD "
 								"%08x\n", fc->name,
-								*(u32 *)buf);
+								*(u32 *)hwrspc);
 						}
 					}
 				} else {

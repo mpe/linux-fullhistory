@@ -29,7 +29,6 @@
  *
  */
 
-#define EXPORT_SYMTAB
 #include <linux/config.h>
 #include "drmP.h"
 #include "gamma_drv.h"
@@ -122,7 +121,7 @@ void cleanup_module(void)
 #ifndef MODULE
 /* gamma_setup is called by the kernel to parse command-line options passed
  * via the boot-loader (e.g., LILO).  It calls the insmod option routine,
- * drm_parse_drm.
+ * drm_parse_options.
  *
  * This is not currently supported, since it requires changes to
  * linux/init/main.c. */

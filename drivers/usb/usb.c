@@ -18,10 +18,6 @@
  * $Id: usb.c,v 1.39 1999/12/27 15:17:47 acher Exp $
  */
 
-#ifndef EXPORT_SYMTAB
-#define EXPORT_SYMTAB
-#endif
-
 #define USB_DEBUG	1
 
 #include <linux/config.h>
@@ -1724,12 +1720,13 @@ static struct file_operations usb_fops = {
 	NULL		/* release */
 };
 
-void usb_major_init(void)
+int usb_major_init(void)
 {
 	if (register_chrdev(USB_MAJOR,"usb",&usb_fops)) {
-		printk("unable to get major %d for usb devices\n",
-		       USB_MAJOR);
+		printk("unable to get major %d for usb devices\n", USB_MAJOR);
+		return -EBUSY;
 	}
+	return 0;
 }
 
 void usb_major_cleanup(void)
