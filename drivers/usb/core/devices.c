@@ -460,7 +460,7 @@ static ssize_t usb_device_dump(char __user **buffer, size_t *nbytes, loff_t *ski
 		return 0;
 	
 	if (level > MAX_TOPO_LEVEL)
-		return total_written;
+		return 0;
 	/* allocate 2^1 pages = 8K (on i386); should be more than enough for one device */
         if (!(pages_start = (char*) __get_free_pages(GFP_KERNEL,1)))
                 return -ENOMEM;
@@ -527,10 +527,7 @@ static ssize_t usb_device_dump(char __user **buffer, size_t *nbytes, loff_t *ski
 			length = *nbytes;
 		if (copy_to_user(*buffer, pages_start + *skip_bytes, length)) {
 			free_pages((unsigned long)pages_start, 1);
-			
-			if (total_written == 0)
-				return -EFAULT;
-			return total_written;
+			return -EFAULT;
 		}
 		*nbytes -= length;
 		*file_offset += length;
