@@ -492,6 +492,7 @@ nlmsvc_callback_exit(struct rpc_task *task)
 					task->tk_pid, -task->tk_status);
 	}
 	nlm_release_host(call->a_host);
+	rpc_release_task(task);
 	kfree(call);
 }
 

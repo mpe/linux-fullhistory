@@ -61,7 +61,7 @@ extern int request_dma(unsigned int dmanr, char * deviceID);
 extern void free_dma(unsigned int dmanr);
 extern spinlock_t dma_spin_lock;
 
-#ifdef MODVERSIONS
+#ifdef CONFIG_MODVERSIONS
 const struct module_symbol __export_Using_Versions
 __attribute__((section("__ksymtab"))) = {
 	1 /* Version version */, "Using_Versions"
@@ -322,6 +322,8 @@ EXPORT_SYMBOL(printk);
 EXPORT_SYMBOL(sprintf);
 EXPORT_SYMBOL(vsprintf);
 EXPORT_SYMBOL(kdevname);
+EXPORT_SYMBOL(bdevname);
+EXPORT_SYMBOL(cdevname);
 EXPORT_SYMBOL(simple_strtoul);
 EXPORT_SYMBOL(system_utsname);	/* UTS data */
 EXPORT_SYMBOL(uts_sem);		/* UTS semaphore */
@@ -370,6 +372,7 @@ EXPORT_SYMBOL(is_bad_inode);
 EXPORT_SYMBOL(event);
 EXPORT_SYMBOL(__down);
 EXPORT_SYMBOL(__down_interruptible);
+EXPORT_SYMBOL(__down_trylock);
 EXPORT_SYMBOL(__up);
 EXPORT_SYMBOL(brw_page);
 

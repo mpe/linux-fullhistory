@@ -16,6 +16,7 @@ struct hw_interrupt_type {
 	void (*disable)(unsigned int irq);
 };
 
+extern struct hw_interrupt_type no_irq_type;
 
 /*
  * IRQ line status.
@@ -41,6 +42,18 @@ typedef struct {
 } irq_desc_t;
 
 /*
+ * IDT vectors usable for external interrupt sources start
+ * at 0x20:
+ */
+#define FIRST_EXTERNAL_VECTOR	0x20
+
+#define SYSCALL_VECTOR		0x80
+
+/*
+ * Vectors 0x20-0x2f are used for ISA interrupts.
+ */
+
+/*
  * Special IRQ vectors used by the SMP architecture:
  *
  * (some of the following vectors are 'rare', they might be merged
@@ -54,7 +67,7 @@ typedef struct {
 #define MTRR_CHANGE_VECTOR	0x50
 
 /*
- * First vector available to drivers: (vectors 0x51-0xfe)
+ * First APIC vector available to drivers: (vectors 0x51-0xfe)
  */
 #define IRQ0_TRAP_VECTOR	0x51
 
@@ -94,7 +107,9 @@ extern void send_IPI(int dest, int vector);
 extern void init_pic_mode(void);
 extern void print_IO_APIC(void);
 
-extern unsigned long long io_apic_irqs;
+extern unsigned long io_apic_irqs;
+
+extern char _stext, _etext;
 
 #define MAX_IRQ_SOURCES 128
 #define MAX_MP_BUSSES 32
@@ -126,7 +141,7 @@ static inline void irq_exit(int cpu, unsigned int irq)
 	hardirq_exit(cpu);
 }
 
-#define IO_APIC_IRQ(x) ((1<<x) & io_apic_irqs)
+#define IO_APIC_IRQ(x) (((x) >= 16) || ((1<<(x)) & io_apic_irqs))
 
 #else
 
@@ -201,6 +216,13 @@ __asm__( \
 	"pushl $ret_from_intr\n\t" \
 	"jmp "SYMBOL_NAME_STR(do_IRQ));
 
+/*
+ * subtle. orig_eax is used by the signal code to distinct between
+ * system calls and interrupted 'random user-space'. Thus we have
+ * to put a negative value into orig_eax here. (the problem is that
+ * both system calls and IRQs want to have small integer numbers in
+ * orig_eax, and the syscall code has won the optimization conflict ;)
+ */
 #define BUILD_IRQ(nr) \
 asmlinkage void IRQ_NAME(nr); \
 __asm__( \
@@ -216,7 +238,6 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
 static inline void x86_do_profile (unsigned long eip)
 {
 	if (prof_buffer && current->pid) {
-		extern int _stext;
 		eip -= (unsigned long) &_stext;
 		eip >>= prof_shift;
 		/*

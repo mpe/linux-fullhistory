@@ -144,7 +144,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, count, offset, wsize);
 
 		result = smb_proc_write(dentry, offset, wsize, buffer);
 		if (result < 0)
-			goto io_error;
+			break;
 		/* N.B. what if result < wsize?? */
 #ifdef SMBFS_PARANOIA
 if (result < wsize)
@@ -162,15 +162,7 @@ printk("smb_writepage_sync: short write, wsize=%d, result=%d\n", wsize, result);
 			inode->i_size = offset;
 		inode->u.smbfs_i.cache_valid |= SMB_F_LOCALWRITE;
 	} while (count);
-
-out:
-	smb_unlock_page(page);
 	return written ? written : result;
-
-io_error:
-	/* Must mark the page invalid after I/O error */
-	clear_bit(PG_uptodate, &page->flags);
-	goto out;
 }
 
 /*
@@ -190,6 +182,7 @@ smb_writepage(struct file *file, struct page *page)
 	set_bit(PG_locked, &page->flags);
 	atomic_inc(&page->count);
 	result = smb_writepage_sync(dentry, page, 0, PAGE_SIZE);
+	smb_unlock_page(page);
 	free_page(page_address(page));
 	return result;
 }

@@ -912,7 +912,7 @@ static __inline__ void tcp_build_and_update_options(__u32 *ptr, struct tcp_opt *
  * can generate.
  */
 extern __inline__ void tcp_syn_build_options(__u32 *ptr, int mss, int ts, int sack,
-					     int offer_wscale, int wscale, __u32 tstamp)
+					     int offer_wscale, int wscale, __u32 tstamp, __u32 ts_recent)
 {
 	/* We always get an MSS option.
 	 * The option bytes which will be seen in normal data
@@ -936,7 +936,7 @@ extern __inline__ void tcp_syn_build_options(__u32 *ptr, int mss, int ts, int sa
 			*ptr++ = __constant_htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16) |
 						  (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP);
 		*ptr++ = htonl(tstamp);		/* TSVAL */
-		*ptr++ = __constant_htonl(0);	/* TSECR */
+		*ptr++ = htonl(ts_recent);	/* TSECR */
 	} else if(sack)
 		*ptr++ = __constant_htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16) |
 					  (TCPOPT_SACK_PERM << 8) | TCPOLEN_SACK_PERM);

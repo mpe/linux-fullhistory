@@ -303,16 +303,9 @@ static inline void adjust_forks(struct hfs_cat_entry *entry,
 static void get_dates(const struct hfs_cat_entry *entry,
 		      const struct inode *inode,  hfs_u32 dates[3])
 {
-	if (HFS_SB(inode->i_sb)->s_afpd) {
-		/* AFPD compatible: use un*x times */
-		dates[0] = htonl(hfs_m_to_utime(entry->create_date));
-		dates[1] = htonl(hfs_m_to_utime(entry->modify_date));
-		dates[2] = htonl(hfs_m_to_utime(entry->backup_date));
-	} else {
-		dates[0] = hfs_m_to_htime(entry->create_date);
-		dates[1] = hfs_m_to_htime(entry->modify_date);
-		dates[2] = hfs_m_to_htime(entry->backup_date);
-	}
+	dates[0] = hfs_m_to_htime(entry->create_date);
+	dates[1] = hfs_m_to_htime(entry->modify_date);
+	dates[2] = hfs_m_to_htime(entry->backup_date);
 }
 
 /*
@@ -322,43 +315,23 @@ static void set_dates(struct hfs_cat_entry *entry, struct inode *inode,
 		      const hfs_u32 *dates)
 {
 	hfs_u32 tmp;
-	if (HFS_SB(inode->i_sb)->s_afpd) {
-		/* AFPD compatible: use un*x times */
-		tmp = hfs_u_to_mtime(ntohl(dates[0]));
-		if (entry->create_date != tmp) {
-			entry->create_date = tmp;
-			hfs_cat_mark_dirty(entry);
-		}
-		tmp = hfs_u_to_mtime(ntohl(dates[1]));
-		if (entry->modify_date != tmp) {
-			entry->modify_date = tmp;
-			inode->i_ctime = inode->i_atime = inode->i_mtime =
-				ntohl(dates[1]);
-			hfs_cat_mark_dirty(entry);
-		}
-		tmp = hfs_u_to_mtime(ntohl(dates[2]));
-		if (entry->backup_date != tmp) {
-			entry->backup_date = tmp;
-			hfs_cat_mark_dirty(entry);
-		}
-	} else {
-		tmp = hfs_h_to_mtime(dates[0]);
-		if (entry->create_date != tmp) {
-			entry->create_date = tmp;
-			hfs_cat_mark_dirty(entry);
-		}
-		tmp = hfs_h_to_mtime(dates[1]);
-		if (entry->modify_date != tmp) {
-			entry->modify_date = tmp;
-			inode->i_ctime = inode->i_atime = inode->i_mtime = 
-				hfs_h_to_utime(dates[1]);
-			hfs_cat_mark_dirty(entry);
-		}
-		tmp = hfs_h_to_mtime(dates[2]);
-		if (entry->backup_date != tmp) {
-			entry->backup_date = tmp;
-			hfs_cat_mark_dirty(entry);
-		}
+
+	tmp = hfs_h_to_mtime(dates[0]);
+	if (entry->create_date != tmp) {
+		entry->create_date = tmp;
+		hfs_cat_mark_dirty(entry);
+	}
+	tmp = hfs_h_to_mtime(dates[1]);
+	if (entry->modify_date != tmp) {
+		entry->modify_date = tmp;
+		inode->i_ctime = inode->i_atime = inode->i_mtime = 
+			hfs_h_to_utime(dates[1]);
+		hfs_cat_mark_dirty(entry);
+	}
+	tmp = hfs_h_to_mtime(dates[2]);
+	if (entry->backup_date != tmp) {
+		entry->backup_date = tmp;
+		hfs_cat_mark_dirty(entry);
 	}
 }
 

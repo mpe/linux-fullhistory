@@ -1348,7 +1348,7 @@ int hfs_cat_move(struct hfs_cat_entry *old_dir, struct hfs_cat_entry *new_dir,
 		hfs_sleep_on(&mdb->rename_wait);
 	}
 	spin_lock(&entry_lock);
-	mdb->rename_lock = 1;
+	mdb->rename_lock = 1; /* XXX: should be atomic_inc */
 	spin_unlock(&entry_lock);
 
 	/* keep readers from getting confused by changing dir size */
@@ -1385,7 +1385,6 @@ int hfs_cat_move(struct hfs_cat_entry *old_dir, struct hfs_cat_entry *new_dir,
 restart:
 	/* see if the destination exists, getting it if it does */
 	dest = hfs_cat_get(mdb, new_key);
-
 	if (!dest) {
 		/* destination doesn't exist, so create it */
 		struct hfs_cat_rec new_record;
@@ -1408,14 +1407,16 @@ restart:
 			goto bail3;
 		}
 
-		/* build the new record */
+		/* build the new record. make sure to zero out the
+                   record. */
+		memset(&new_record, 0, sizeof(new_record));
 		new_record.cdrType = entry->type;
 		__write_entry(entry, &new_record);
 
 		/* insert the new record */
 		error = hfs_binsert(mdb->cat_tree, HFS_BKEY(new_key),
 				    &new_record, is_dir ? 2 + sizeof(DIR_REC) :
-							  2 + sizeof(FIL_REC));
+				    2 + sizeof(FIL_REC));
 		if (error == -EEXIST) {
 			delete_entry(dest);
 			unlock_entry(dest);
@@ -1565,7 +1566,7 @@ done:
 	}
 	end_write(new_dir);
 	spin_lock(&entry_lock);
-	mdb->rename_lock = 0;
+	mdb->rename_lock = 0; /* XXX: should use atomic_dec */
 	hfs_wake_up(&mdb->rename_wait);
 	spin_unlock(&entry_lock);
 

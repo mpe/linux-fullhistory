@@ -561,6 +561,7 @@ nlmsvc_grant_callback(struct rpc_task *task)
 	block->b_incall = 0;
 
 	nlm_release_host(call->a_host);
+	rpc_release_task(task);
 }
 
 /*

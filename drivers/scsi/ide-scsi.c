@@ -731,9 +731,6 @@ int idescsi_queue (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *))
 		printk (KERN_ERR "ide-scsi: drive id %d not present\n", cmd->target);
 		goto abort;
 	}
-	if (cmd->lun != 0) {		/* Only respond to LUN 0. Drop others */
-		goto abort;
-	}
 	scsi = drive->driver_data;
 	pc = kmalloc (sizeof (idescsi_pc_t), GFP_ATOMIC);
 	rq = kmalloc (sizeof (struct request), GFP_ATOMIC);

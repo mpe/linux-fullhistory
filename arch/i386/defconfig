@@ -241,7 +241,7 @@ CONFIG_EEXPRESS_PRO100=y
 # CONFIG_ISDN is not set
 
 #
-# CD-ROM drivers (not for SCSI or IDE/ATAPI drives)
+# Old CD-ROM drivers (not SCSI, not IDE)
 #
 # CONFIG_CD_NO_IDESCSI is not set
 

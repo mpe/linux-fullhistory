@@ -478,7 +478,7 @@ nlmclnt_unlock_callback(struct rpc_task *task)
 	int		status = req->a_res.status;
 
 	if (RPC_ASSASSINATED(task))
-		return;
+		goto die;
 
 	if (task->tk_status < 0) {
 		dprintk("lockd: unlock failed (err = %d)\n", -task->tk_status);
@@ -490,6 +490,9 @@ nlmclnt_unlock_callback(struct rpc_task *task)
 	 && status != NLM_LCK_DENIED_GRACE_PERIOD) {
 		printk("lockd: unexpected unlock status: %d\n", status);
 	}
+
+die:
+	rpc_release_task(task);
 }
 
 /*
@@ -565,6 +568,7 @@ nlmclnt_cancel_callback(struct rpc_task *task)
 	}
 
 die:
+	rpc_release_task(task);
 	nlm_release_host(req->a_host);
 	kfree(req);
 	return;

@@ -734,7 +734,7 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	 * directories via NFS.
 	 */
 	err = 0;
-	if ((iap->ia_valid &= (ATTR_UID|ATTR_GID|ATTR_MODE)) != 0)
+	if ((iap->ia_valid &= ~(ATTR_UID|ATTR_GID|ATTR_MODE)) != 0)
 		err = nfsd_setattr(rqstp, resfhp, iap);
 out:
 	return err;

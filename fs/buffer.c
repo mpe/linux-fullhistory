@@ -385,7 +385,9 @@ asmlinkage int sys_fdatasync(unsigned int fd)
 		goto out_putf;
 
 	/* this needs further work, at the moment it is identical to fsync() */
+	down(&inode->i_sem);
 	err = file->f_op->fsync(file, dentry);
+	up(&inode->i_sem);
 
 out_putf:
 	fput(file);
@@ -812,8 +814,8 @@ void refile_buffer(struct buffer_head * buf)
 			 * If too high a percentage of the buffers are dirty...
 			 */
 			if (nr_buffers_type[BUF_DIRTY] > too_many ||
-			    (size_buffers_type[BUF_DIRTY] + size_buffers_type[BUF_LOCKED])/PAGE_SIZE > too_large) {
-				if (nr_buffers_type[BUF_LOCKED] > 2 * bdf_prm.b_un.ndirty)
+			    size_buffers_type[BUF_DIRTY]/PAGE_SIZE > too_large) {
+				if (nr_buffers_type[BUF_LOCKED] > 3 * bdf_prm.b_un.ndirty)
 					wakeup_bdflush(1);
 				else
 					wakeup_bdflush(0);
@@ -1767,7 +1769,7 @@ int bdflush(void * unused)
 #ifdef DEBUG
 		for(nlist = 0; nlist < NR_LIST; nlist++)
 #else
-		for(nlist = BUF_DIRTY; nlist <= BUF_DIRTY; nlist++)
+		for(nlist = BUF_LOCKED; nlist <= BUF_DIRTY; nlist++)
 #endif
 		 {
 			 ndirty = 0;
@@ -1786,11 +1788,16 @@ int bdflush(void * unused)
 					  }
 					  
 					  /* Clean buffer on dirty list?  Refile it */
-					  if (nlist == BUF_DIRTY && !buffer_dirty(bh) && !buffer_locked(bh))
-					   {
-						   refile_buffer(bh);
-						   continue;
-					   }
+					  if (nlist == BUF_DIRTY && !buffer_dirty(bh)) {
+						  refile_buffer(bh);
+						  continue;
+					  }
+					  
+					  /* Unlocked buffer on locked list?  Refile it */
+					  if (nlist == BUF_LOCKED && !buffer_locked(bh)) {
+						  refile_buffer(bh);
+						  continue;
+					  }
 					  
 					  if (buffer_locked(bh) || !buffer_dirty(bh))
 						   continue;

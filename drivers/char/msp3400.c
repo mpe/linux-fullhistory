@@ -774,7 +774,6 @@ static int msp3410d_thread(void *data)
 			goto done;
 		dprintk("msp3410: thread: sleep\n");
 		down_interruptible(&sem);
-		sem.owner = 0;
 		dprintk("msp3410: thread: wakeup\n");
 		if (msp->rmmod)
 			goto done;

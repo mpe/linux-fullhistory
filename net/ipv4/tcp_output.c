@@ -30,6 +30,7 @@
  *		David S. Miller	:	Charge memory using the right skb
  *					during syn/ack processing.
  *		David S. Miller :	Output engine completely rewritten.
+ *		Andrea Arcangeli:	SYNACK carry ts_recent in tsecr.
  *
  */
 
@@ -135,7 +136,8 @@ void tcp_transmit_skb(struct sock *sk, struct sk_buff *skb)
 					      (sysctl_flags & SYSCTL_FLAG_SACK),
 					      (sysctl_flags & SYSCTL_FLAG_WSCALE),
 					      tp->rcv_wscale,
-					      TCP_SKB_CB(skb)->when);
+					      TCP_SKB_CB(skb)->when,
+		      			      tp->ts_recent);
 		} else {
 			tcp_build_and_update_options((__u32 *)(th + 1),
 						     tp, TCP_SKB_CB(skb)->when);
@@ -862,7 +864,8 @@ struct sk_buff * tcp_make_synack(struct sock *sk, struct dst_entry *dst,
 	TCP_SKB_CB(skb)->when = jiffies;
 	tcp_syn_build_options((__u32 *)(th + 1), req->mss, req->tstamp_ok,
 			      req->sack_ok, req->wscale_ok, req->rcv_wscale,
-			      TCP_SKB_CB(skb)->when);
+			      TCP_SKB_CB(skb)->when,
+			      req->ts_recent);
 
 	skb->csum = 0;
 	th->doff = (tcp_header_size >> 2);

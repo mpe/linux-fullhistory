@@ -1323,6 +1323,10 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		newsk->pair = NULL;
 		skb_queue_head_init(&newsk->back_log);
 		skb_queue_head_init(&newsk->error_queue);
+#ifdef CONFIG_FILTER
+		if (newsk->filter)
+			sk_filter_charge(newsk, newsk->filter);
+#endif
 
 		/* Now setup tcp_opt */
 		newtp = &(newsk->tp_pinfo.af_tcp);
@@ -1553,12 +1557,10 @@ static inline struct sock *tcp_v4_hnd_req(struct sock *sk,struct sk_buff *skb)
 
 int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 {
+
 #ifdef CONFIG_FILTER
-	if (sk->filter)
-	{
-		if (sk_filter(skb, sk->filter_data, sk->filter))
-			goto discard;
-	}
+	if (sk->filter && sk_filter(skb, sk->filter))
+		goto discard;
 #endif /* CONFIG_FILTER */
 
 	/* 

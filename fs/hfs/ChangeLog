@@ -1,3 +1,13 @@
+1999-01-30  a sun  <asun@hecate.darksunrising.blah>
+
+	* catalog.c (hfs_cat_move): fixed corruption problem with
+	renames.
+
+1999-01-27  a sun  <asun@hecate.darksunrising.blah>
+
+	* file_hdr.c (get/set_dates): got rid of broken afpd times. NOTE:
+	you must use netatalk-1.4b2+asun2.1.2 or newer for this.
+
 1998-12-20  a sun  <asun@hecate.darksunrising.blah>
 
 	* bdelete.c (del_root): assign bthLNode and bthFNode only if the

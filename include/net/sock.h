@@ -453,8 +453,7 @@ struct sock {
 
 #ifdef CONFIG_FILTER
 	/* Socket Filtering Instructions */
-	int			filter;
-	struct sock_filter      *filter_data;
+	struct sk_filter      	*filter;
 #endif /* CONFIG_FILTER */
 
 	/* This is where all the private (optional) areas that don't
@@ -790,11 +789,11 @@ extern void sklist_destroy_socket(struct sock **list, struct sock *sk);
  * sk_run_filter. If pkt_len is 0 we toss packet. If skb->len is smaller
  * than pkt_len we keep whole skb->data.
  */
-extern __inline__ int sk_filter(struct sk_buff *skb, struct sock_filter *filter, int flen)
+extern __inline__ int sk_filter(struct sk_buff *skb, struct sk_filter *filter)
 {
 	int pkt_len;
 
-        pkt_len = sk_run_filter(skb->data, skb->len, filter, flen);
+        pkt_len = sk_run_filter(skb, filter->insns, filter->len);
         if(!pkt_len)
                 return 1;	/* Toss Packet */
         else
@@ -802,6 +801,23 @@ extern __inline__ int sk_filter(struct sk_buff *skb, struct sock_filter *filter,
 
 	return 0;
 }
+
+extern __inline__ void sk_filter_release(struct sock *sk, struct sk_filter *fp)
+{
+	unsigned int size = sk_filter_len(fp);
+
+	atomic_sub(size, &sk->omem_alloc);
+
+	if (atomic_dec_and_test(&fp->refcnt))
+		kfree_s(fp, size);
+}
+
+extern __inline__ void sk_filter_charge(struct sock *sk, struct sk_filter *fp)
+{
+	atomic_inc(&fp->refcnt);
+	atomic_add(sk_filter_len(fp), &sk->omem_alloc);
+}
+
 #endif /* CONFIG_FILTER */
 
 /*
@@ -837,11 +853,8 @@ extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
                 return -ENOMEM;
 
 #ifdef CONFIG_FILTER
-	if (sk->filter)
-	{
-		if (sk_filter(skb, sk->filter_data, sk->filter))
-			return -EPERM;	/* Toss packet */
-	}
+	if (sk->filter && sk_filter(skb, sk->filter))
+		return -EPERM;	/* Toss packet */
 #endif /* CONFIG_FILTER */
 
 	skb_set_owner_r(skb, sk);

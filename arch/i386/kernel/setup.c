@@ -807,7 +807,7 @@ int get_cpuinfo(char * buffer)
 			       c->x86_model,
 			       c->x86_model_id[0] ? c->x86_model_id : "unknown");
 		
-		if (c->x86_mask)
+		if (c->x86_mask || c->cpuid_level >= 0)
 			p += sprintf(p, "stepping\t: %d\n", c->x86_mask);
 		else
 			p += sprintf(p, "stepping\t: unknown\n");

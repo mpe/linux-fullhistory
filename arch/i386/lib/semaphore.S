@@ -31,6 +31,15 @@ ENTRY(__down_failed_interruptible)
 	popl %edx	/* restore %edx */
 	ret
 
+/* Don't save/restore %eax, because that will be our return value */
+ENTRY(__down_failed_trylock)
+	pushl %edx	/* save %edx */
+	pushl %ecx	/* save %ecx (and argument) */
+	call SYMBOL_NAME(__down_trylock)
+	popl %ecx	/* restore %ecx (count on __down_trylock not changing it) */
+	popl %edx	/* restore %edx */
+	ret
+
 ENTRY(__up_wakeup)
 	pushl %eax	/* save %eax */
 	pushl %edx	/* save %edx */

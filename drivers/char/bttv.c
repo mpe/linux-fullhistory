@@ -120,6 +120,7 @@ static struct bttv bttvs[BTTV_MAX];
 
 #define I2C_TIMING (0x7<<4)
 #define I2C_DELAY   10
+
 #define I2C_SET(CTRL,DATA) \
     { btwrite((CTRL<<1)|(DATA), BT848_I2C); udelay(I2C_DELAY); }
 #define I2C_GET()   (btread(BT848_I2C)&1)
@@ -244,6 +245,7 @@ static void i2c_setlines(struct i2c_bus *bus,int ctrl,int data)
 {
         struct bttv *btv = (struct bttv*)bus->data;
 	btwrite((ctrl<<1)|data, BT848_I2C);
+	btread(BT848_I2C); /* flush buffers */
 	udelay(I2C_DELAY);
 }
 

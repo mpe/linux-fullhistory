@@ -36,6 +36,7 @@
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/mmu_context.h>
+#include <asm/semaphore-helper.h>
 
 #include <linux/timex.h>
 
@@ -863,30 +864,28 @@ void __up(struct semaphore *sem)
 	struct task_struct *tsk = current;	\
 	struct wait_queue wait = { tsk, NULL };
 
-#define DOWN_HEAD(task_state)						 \
-									 \
-									 \
-	tsk->state = (task_state);					 \
-	add_wait_queue(&sem->wait, &wait);				 \
-									 \
-	/*								 \
-	 * Ok, we're set up.  sem->count is known to be less than zero	 \
-	 * so we must wait.						 \
-	 *								 \
-	 * We can let go the lock for purposes of waiting.		 \
-	 * We re-acquire it after awaking so as to protect		 \
-	 * all semaphore operations.					 \
-	 *								 \
-	 * If "up()" is called before we call waking_non_zero() then	 \
-	 * we will catch it right away.  If it is called later then	 \
-	 * we will have to go through a wakeup cycle to catch it.	 \
-	 *								 \
-	 * Multiple waiters contend for the semaphore lock to see	 \
-	 * who gets to gate through and who has to wait some more.	 \
-	 */								 \
-	for (;;) {							 \
-		if (waking_non_zero(sem, tsk))	/* are we waking up?  */ \
-			break;			/* yes, exit loop */
+#define DOWN_HEAD(task_state)						\
+									\
+									\
+	tsk->state = (task_state);					\
+	add_wait_queue(&sem->wait, &wait);				\
+									\
+	/*								\
+	 * Ok, we're set up.  sem->count is known to be less than zero	\
+	 * so we must wait.						\
+	 *								\
+	 * We can let go the lock for purposes of waiting.		\
+	 * We re-acquire it after awaking so as to protect		\
+	 * all semaphore operations.					\
+	 *								\
+	 * If "up()" is called before we call waking_non_zero() then	\
+	 * we will catch it right away.  If it is called later then	\
+	 * we will have to go through a wakeup cycle to catch it.	\
+	 *								\
+	 * Multiple waiters contend for the semaphore lock to see	\
+	 * who gets to gate through and who has to wait some more.	\
+	 */								\
+	for (;;) {
 
 #define DOWN_TAIL(task_state)			\
 		tsk->state = (task_state);	\
@@ -898,6 +897,8 @@ void __down(struct semaphore * sem)
 {
 	DOWN_VAR
 	DOWN_HEAD(TASK_UNINTERRUPTIBLE)
+	if (waking_non_zero(sem))
+		break;
 	schedule();
 	DOWN_TAIL(TASK_UNINTERRUPTIBLE)
 }
@@ -907,15 +908,23 @@ int __down_interruptible(struct semaphore * sem)
 	DOWN_VAR
 	int ret = 0;
 	DOWN_HEAD(TASK_INTERRUPTIBLE)
-	if (signal_pending(tsk))
+
+	ret = waking_non_zero_interruptible(sem, tsk);
+	if (ret)
 	{
-		ret = -EINTR;			/* interrupted */
-		atomic_inc(&sem->count);	/* give up on down operation */
+		if (ret == 1)
+			/* ret != 0 only if we get interrupted -arca */
+			ret = 0;
 		break;
 	}
 	schedule();
 	DOWN_TAIL(TASK_INTERRUPTIBLE)
 	return ret;
+}
+
+int __down_trylock(struct semaphore * sem)
+{
+	return waking_non_zero_trylock(sem);
 }
 
 #define	SLEEP_ON_VAR				\

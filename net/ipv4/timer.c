@@ -75,8 +75,7 @@ void net_timer (unsigned long data)
 	/* Only process if socket is not in use. */
 	if (atomic_read(&sk->sock_readers)) {
 		/* Try again later. */ 
-		sk->timer.expires = jiffies+HZ/20;
-		add_timer(&sk->timer);
+		mod_timer(&sk->timer, jiffies+HZ/20);
 		return;
 	}
 

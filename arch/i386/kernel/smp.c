@@ -42,7 +42,7 @@
 
 #include "irq.h"
 
-extern unsigned long start_kernel, _etext;
+extern unsigned long start_kernel;
 extern void update_one_process( struct task_struct *p,
 				unsigned long ticks, unsigned long user,
 				unsigned long system, int cpu);
@@ -319,8 +319,17 @@ static int __init smp_read_mpc(struct mp_config_table *mpc)
 						printk("Processor #%d unused. (Max %d processors).\n",m->mpc_apicid, NR_CPUS);
 					else
 					{
+						int ver = m->mpc_apicver;
+
 						cpu_present_map|=(1<<m->mpc_apicid);
-						apic_version[m->mpc_apicid]=m->mpc_apicver;
+						/*
+						 * Validate version
+						 */
+						if (ver == 0x0) {
+							printk("BIOS bug, APIC version is 0 for CPU#%d! fixing up to 0x10. (tell your hw vendor)\n", m->mpc_apicid);
+							ver = 0x10;
+						}
+						apic_version[m->mpc_apicid] = ver;
 					}
 				}
 				mpt+=sizeof(*m);
@@ -1806,8 +1815,10 @@ asmlinkage void smp_mtrr_interrupt(void)
  */
 asmlinkage void smp_spurious_interrupt(void)
 {
-	/* ack_APIC_irq();   see sw-dev-man vol 3, chapter 7.4.13.5 */
-	printk("spurious APIC interrupt, ayiee, should never happen.\n");
+	ack_APIC_irq();
+	/* see sw-dev-man vol 3, chapter 7.4.13.5 */
+	printk("spurious APIC interrupt on CPU#%d, should never happen.\n",
+			smp_processor_id());
 }
 
 /*
@@ -2058,3 +2069,4 @@ int setup_profiling_timer(unsigned int multiplier)
 }
 
 #undef APIC_DIVISOR
+

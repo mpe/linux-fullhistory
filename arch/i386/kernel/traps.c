@@ -42,6 +42,8 @@
 #include <asm/lithium.h>
 #endif
 
+#include "irq.h"
+
 asmlinkage int system_call(void);
 asmlinkage void lcall7(void);
 
@@ -125,7 +127,6 @@ static void show_registers(struct pt_regs *regs)
 	unsigned long esp;
 	unsigned short ss;
 	unsigned long *stack, addr, module_start, module_end;
-	extern char _stext, _etext;
 
 	esp = (unsigned long) (1+regs);
 	ss = __KERNEL_DS;
@@ -669,9 +670,6 @@ cobalt_init(void)
 #endif
 void __init trap_init(void)
 {
-	/* Initially up all of the IDT to jump to unexpected */
-	init_unexpected_irq();
-
 	if (readl(0x0FFFD9) == 'E' + ('I'<<8) + ('S'<<16) + ('A'<<24))
 		EISA_bus = 1;
 	set_call_gate(&default_ldt,lcall7);
@@ -693,7 +691,7 @@ void __init trap_init(void)
 	set_trap_gate(15,&spurious_interrupt_bug);
 	set_trap_gate(16,&coprocessor_error);
 	set_trap_gate(17,&alignment_check);
-	set_system_gate(0x80,&system_call);
+	set_system_gate(SYSCALL_VECTOR,&system_call);
 
 	/* set up GDT task & ldt entries */
 	set_tss_desc(0, &init_task.tss);
