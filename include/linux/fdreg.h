@@ -54,7 +54,7 @@
 #define ST1_EOC		0x80		/* End Of Cylinder */
 
 /* Bits of FD_ST2 */
-#define ST2_MAM		0x01		/* Missing Addess Mark (again) */
+#define ST2_MAM		0x01		/* Missing Address Mark (again) */
 #define ST2_BC		0x02		/* Bad Cylinder */
 #define ST2_SNS		0x04		/* Scan Not Satisfied */
 #define ST2_SEH		0x08		/* Scan Equal Hit */

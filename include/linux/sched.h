@@ -372,9 +372,8 @@ extern void notify_parent(struct task_struct * tsk);
 extern int send_sig(unsigned long sig,struct task_struct * p,int priv);
 extern int in_group_p(gid_t grp);
 
-extern int request_irq(unsigned int irq,void (*handler)(int));
+extern int request_irq(unsigned int irq,void (*handler)(int), unsigned long flags, const char *device);
 extern void free_irq(unsigned int irq);
-extern int irqaction(unsigned int irq,struct sigaction * sa);
 
 /*
  * Entry into gdt where to find first TSS. GDT layout:

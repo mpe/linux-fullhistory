@@ -17,6 +17,7 @@
 #include <linux/sys.h>
 #include <linux/utsname.h>
 #include <linux/interrupt.h>
+#include <linux/ioport.h>
 #include <linux/timer.h>
 #include <linux/binfmts.h>
 #include <linux/personality.h>
@@ -48,12 +49,6 @@ extern int do_execve(char * filename, char ** argv, char ** envp,
 extern int do_signal(unsigned long oldmask, struct pt_regs * regs);
 
 extern void (* iABI_hook)(struct pt_regs * regs);
-
-#ifdef CONFIG_INET
-extern void snarf_region(unsigned int, unsigned int);
-extern struct device *irq2dev_map[];
-#endif
-
 
 struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	{
@@ -95,6 +90,7 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(unregister_chrdev),
 	X(register_blkdev),
 	X(unregister_blkdev),
+
 	/* Module creation of serial units */
 	X(register_serial),
 	X(unregister_serial),
@@ -113,7 +109,6 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(unregister_exec_domain),
 
 	/* interrupt handling */
-	X(irqaction),
 	X(request_irq),
 	X(free_irq),
 	X(enable_irq),
@@ -125,8 +120,8 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 
 	/* dma handling */
 	X(request_dma),
-	X(free_dma),	
-	
+	X(free_dma),
+
 	/* process management */
 	X(wake_up),
 	X(wake_up_interruptible),
@@ -173,6 +168,7 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(ether_setup),
 	X(alloc_skb),
 	X(kfree_skb),
+	X(dev_kfree_skb),
 	X(snarf_region),
 	X(netif_rx),
 	X(dev_rint),

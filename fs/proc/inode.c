@@ -103,25 +103,28 @@ void proc_read_inode(struct inode * inode)
 		inode->i_op = &proc_root_inode_operations;
 		return;
 	}
-	if ((ino >= 128) && (ino <= 160)) { /* files within /proc/net */
+
+	/* files within /proc/net */
+	if ((ino >= PROC_NET_UNIX) && (ino < PROC_NET_LAST)) {
 		inode->i_mode = S_IFREG | S_IRUGO;
 		inode->i_op = &proc_net_inode_operations;
 		return;
 	}
+
 	if (!pid) {
 		switch (ino) {
-			case 5:
+			case PROC_KMSG:
 				inode->i_mode = S_IFREG | S_IRUGO;
 				inode->i_op = &proc_kmsg_inode_operations;
 				break;
-			case 8: /* for the net directory */
+			case PROC_NET:
 				inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
 				inode->i_nlink = 2;
 				inode->i_op = &proc_net_inode_operations;
 				break;
-			case 14:
+			case PROC_KCORE:
 				inode->i_mode = S_IFREG | S_IRUSR;
-				inode->i_op = &proc_array_inode_operations;
+				inode->i_op = &proc_kcore_inode_operations;
 				inode->i_size = high_memory + PAGE_SIZE;
 				break;
 			default:
@@ -135,56 +138,41 @@ void proc_read_inode(struct inode * inode)
 	inode->i_uid = p->euid;
 	inode->i_gid = p->egid;
 	switch (ino) {
-		case 2:
+		case PROC_PID_INO:
 			inode->i_nlink = 4;
 			inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
 			inode->i_op = &proc_base_inode_operations;
 			return;
-		case 3:
+		case PROC_PID_MEM:
 			inode->i_op = &proc_mem_inode_operations;
 			inode->i_mode = S_IFREG | S_IRUSR | S_IWUSR;
 			return;
-		case 4:
-		case 5:
-		case 6:
+		case PROC_PID_CWD:
+		case PROC_PID_ROOT:
+		case PROC_PID_EXE:
 			inode->i_op = &proc_link_inode_operations;
 			inode->i_size = 64;
 			inode->i_mode = S_IFLNK | S_IRWXU;
 			return;
-		case 7:
+		case PROC_PID_FD:
 			inode->i_mode = S_IFDIR | S_IRUSR | S_IXUSR;
 			inode->i_op = &proc_fd_inode_operations;
 			inode->i_nlink = 2;
 			return;
-		case 9:
-		case 10:
-		case 11:
-		case 12:
-		case 15:
+		case PROC_PID_ENVIRON:
+		case PROC_PID_CMDLINE:
+		case PROC_PID_STAT:
+		case PROC_PID_STATM:
+		case PROC_PID_MAPS:
 			inode->i_mode = S_IFREG | S_IRUGO;
 			inode->i_op = &proc_array_inode_operations;
 			return;
 	}
 	switch (ino >> 8) {
-		case 1:
+		case PROC_PID_FD_DIR:
 			ino &= 0xff;
 			if (ino >= NR_OPEN || !p->files->fd[ino])
 				return;
-			inode->i_op = &proc_link_inode_operations;
-			inode->i_size = 64;
-			inode->i_mode = S_IFLNK | S_IRWXU;
-			return;
-		case 2:
-			ino &= 0xff;
-			{
-				int j = 0;
-				struct vm_area_struct * mpnt;
-				for (mpnt = p->mm->mmap ; mpnt ; mpnt = mpnt->vm_next)
-					if(mpnt->vm_inode)
-						j++;
-				if (ino >= j)
-					return;
-			}
 			inode->i_op = &proc_link_inode_operations;
 			inode->i_size = 64;
 			inode->i_mode = S_IFLNK | S_IRWXU;

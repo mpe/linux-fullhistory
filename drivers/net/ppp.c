@@ -16,7 +16,7 @@
 
    Flags for this module (any combination is acceptable for testing.):
 
-   NET02D	      -	Define if using Net-2-Debugged in kernels earler
+   NET02D	      -	Define if using Net-2-Debugged in kernels earlier
    			than v1.1.4.
 
    NEW_TTY_DRIVERS    -	Define if using new Ted Ts'o's alpha TTY drivers
@@ -88,7 +88,7 @@
 int ppp_debug = 2;
 int ppp_debug_netpackets = 0;
 
-/* Define this string only once for all macro envocations */
+/* Define this string only once for all macro invocations */
 static char ppp_warning[] = KERN_WARNING "PPP: ALERT! not INUSE! %d\n";
 
 int ppp_init(struct device *);
@@ -1218,7 +1218,7 @@ ppp_read(struct tty_struct *tty, struct file *file, unsigned char *buf, unsigned
   int len, i;
 
   if (!ppp || ppp->magic != PPP_MAGIC) {
-    PRINTKN (1,(KERN_ERR "ppp_read: cannnot find ppp channel\n"));
+    PRINTKN (1,(KERN_ERR "ppp_read: cannot find ppp channel\n"));
     return -EIO;
   }
 

@@ -303,8 +303,6 @@ void pas16_setup(char *str, int *ints) {
 	}
 }
 
-static struct sigaction pas16_sigaction =  { pas16_intr, 0, SA_INTERRUPT , NULL };
-
 /* 
  * Function : int pas16_detect(Scsi_Host_Template * tpnt)
  *
@@ -368,7 +366,7 @@ int pas16_detect(Scsi_Host_Template * tpnt) {
 	    instance->irq = NCR5380_probe_irq(instance, PAS16_IRQS);
 
 	if (instance->irq != IRQ_NONE) 
-	    if (irqaction (instance->irq, &pas16_sigaction)) {
+	    if (request_irq(instance->irq, pas16_intr, SA_INTERRUPT, "pas16")) {
 		printk("scsi%d : IRQ%d not free, interrupts disabled\n", 
 		    instance->host_no, instance->irq);
 		instance->irq = IRQ_NONE;

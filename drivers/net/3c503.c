@@ -111,7 +111,7 @@ el2_pio_autoprobe(struct device *dev)
 }
 
 /* Probe for the Etherlink II card at I/O port base IOADDR,
-   returning non-zero on sucess.  If found, set the station
+   returning non-zero on success.  If found, set the station
    address and memory parameters in DEVICE. */
 int
 el2probe1(int ioaddr, struct device *dev)
@@ -247,13 +247,13 @@ el2_open(struct device *dev)
 
 	outb(EGACFR_NORM, E33G_GACFR);	/* Enable RAM and interrupts. */
 	do {
-	    if (request_irq (*irqp, NULL) != -EBUSY) {
+	    if (request_irq (*irqp, NULL, 0, "bogus") != -EBUSY) {
 		/* Twinkle the interrupt, and check if it's seen. */
 		autoirq_setup(0);
 		outb_p(0x04 << ((*irqp == 9) ? 2 : *irqp), E33G_IDCFR);
 		outb_p(0x00, E33G_IDCFR);
 		if (*irqp == autoirq_report(0)	 /* It's a good IRQ line! */
-		    && request_irq (dev->irq = *irqp, &ei_interrupt) == 0)
+		    && request_irq (dev->irq = *irqp, &ei_interrupt, 0, "3c503") == 0)
 		    break;
 	    }
 	} while (*++irqp);
@@ -262,7 +262,7 @@ el2_open(struct device *dev)
 	    return -EAGAIN;
 	}
     } else {
-	if (request_irq(dev->irq, &ei_interrupt)) {
+	if (request_irq(dev->irq, &ei_interrupt, 0, "3c503")) {
 	    return -EAGAIN;
 	}
     }

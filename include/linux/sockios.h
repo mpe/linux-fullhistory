@@ -84,7 +84,7 @@
 /*
  *	These 16 ioctls are available to devices via the do_ioctl() device
  *	vector. Each device should include this file and redefine these names
- *	as their own. Because these are device dependant it is a good idea
+ *	as their own. Because these are device dependent it is a good idea
  *	_NOT_ to issue them to random objects and hope.
  */
  

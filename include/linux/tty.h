@@ -60,14 +60,14 @@ extern struct screen_info screen_info;
 /*
  * This character is the same as _POSIX_VDISABLE: it cannot be used as
  * a c_cc[] character, but indicates that a particular special character
- * isn't in use (eg VINTR ahs no character etc)
+ * isn't in use (eg VINTR has no character etc)
  */
 #define __DISABLED_CHAR '\0'
 
 /*
  * This is the flip buffer used for the tty driver.  The buffer is
  * located in the tty structure, and is used as a high speed interface
- * between the tty driver and the tty line discpline.
+ * between the tty driver and the tty line discipline.
  */
 #define TTY_FLIPBUF_SIZE 512
 
@@ -211,7 +211,7 @@ struct tty_struct {
 #define N_TTY_BUF_SIZE 4096
 	
 	/*
-	 * The following is data for the N_TTY line discpline.  For
+	 * The following is data for the N_TTY line discipline.  For
 	 * historical reasons, this is included in the tty structure.
 	 */
 	unsigned int column;
@@ -237,7 +237,7 @@ struct tty_struct {
  * These bits are used in the flags field of the tty structure.
  * 
  * So that interrupts won't be able to mess up the queues,
- * copy_to_cooked must be atomic with repect to itself, as must
+ * copy_to_cooked must be atomic with respect to itself, as must
  * tty->write.  Thus, you must use the inline functions set_bit() and
  * clear_bit() to make things atomic.
  */

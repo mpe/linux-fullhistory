@@ -543,7 +543,7 @@ int ip_csum(struct iphdr *iph)
 }
 
 /*
- *	Generate a checksym for an outgoing IP datagram.
+ *	Generate a checksum for an outgoing IP datagram.
  */
 
 static void ip_send_check(struct iphdr *iph)
@@ -739,7 +739,7 @@ static struct ipq *ip_create(struct sk_buff *skb, struct iphdr *iph, struct devi
 	}
 
 	/*
-	 *	Allocate memory for the IP header (plus 8 octects for ICMP).
+	 *	Allocate memory for the IP header (plus 8 octets for ICMP).
 	 */
 
 	ihlen = (iph->ihl * sizeof(unsigned long));
@@ -834,7 +834,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	if ((skb = alloc_skb(len,GFP_ATOMIC)) == NULL)
 	{
 		ip_statistics.IpReasmFails++;
-		printk("IP: queue_glue: no memory for glueing queue 0x%X\n", (int) qp);
+		printk("IP: queue_glue: no memory for gluing queue 0x%X\n", (int) qp);
 		ip_free(qp);
 		return(NULL);
 	}
@@ -981,7 +981,7 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
 
 	/*
 	 * 	We found where to put this one.
-	 * 	Check for overlap with preceeding fragment, and, if needed,
+	 * 	Check for overlap with preceding fragment, and, if needed,
 	 * 	align things so that any overlaps are eliminated.
 	 */
 	if (prev != NULL && offset < prev->end)
@@ -1190,7 +1190,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 		skb2->h.raw=(char *) skb2->data;
 		/*
 		 *	Charge the memory for the fragment to any owner
-		 *	it might posess
+		 *	it might possess
 		 */
 
 		save_flags(flags);
@@ -1470,7 +1470,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	skb->len=ntohs(iph->tot_len);
 
 	/*
-	 *	Next anaylse the packet for options. Studies show under one packet in
+	 *	Next analyse the packet for options. Studies show under one packet in
 	 *	a thousand have options....
 	 */
 
@@ -1501,7 +1501,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 *
 	 *	This is inefficient. While finding out if it is for us we could also compute
 	 *	the routing table entry. This is where the great unified cache theory comes
-	 *	in as and when someone impliments it
+	 *	in as and when someone implements it
 	 */
 
 	if ((brd = ip_chk_addr(iph->daddr)) == 0)
@@ -1622,7 +1622,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  * Queues a packet to be sent, and starts the transmitter
  * if necessary.  if free = 1 then we free the block after
  * transmit, otherwise we don't. If free==2 we not only
- * free the block but also dont assign a new ip seq number.
+ * free the block but also don't assign a new ip seq number.
  * This routine also needs to put in the total length,
  * and compute the checksum
  */
@@ -1716,7 +1716,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	/*
 	 *	If a sender wishes the packet to remain unfreed
 	 *	we add it to his send queue. This arguably belongs
-	 *	in the TCP level since nobody elses uses it. BUT
+	 *	in the TCP level since nobody else uses it. BUT
 	 *	remember IPng might change all the rules.
 	 */
 
@@ -1916,7 +1916,7 @@ void ip_retransmit(struct sock *sk, int all)
  *	Socket option code for IP. This is the end of the line after any TCP,UDP etc options on
  *	an IP socket.
  *
- *	We impliment IP_TOS (type of service), IP_TTL (time to live).
+ *	We implement IP_TOS (type of service), IP_TTL (time to live).
  *
  *	Next release we will sort out IP_OPTIONS since for some people are kind of important.
  */

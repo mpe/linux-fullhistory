@@ -54,7 +54,7 @@ void umsdos_manglename (struct umsdos_info *info)
 			-The mangling is deterministic. Just by the extension, we
 			 are able to locate the entry in the EMD file.
 
-			-By keeping to beginning of the file name almost unchange,
+			-By keeping to beginning of the file name almost unchanged,
 			 we are helping the MSDOS user.
 
 			-The mangling produces names not too ugly, so an msdos user
@@ -146,7 +146,7 @@ int umsdos_parse (
 		const char *firstpt=NULL;	/* First place we saw a . in fname */
 		/* #Specification: file name / non MSDOS conforming / base length 0
 			file name beginning with a period '.' are invalid for MsDOS.
-			It needs absolutly a base name. So the file name is mangled
+			It needs absolutely a base name. So the file name is mangled
 		*/
 		int ivldchar = fname[0] == '.';/* At least one invalid character */
 		int msdos_len = len;
@@ -183,7 +183,7 @@ int umsdos_parse (
 			while (*spc != '\0') lkp[(unsigned char)(*spc++)] = '#';
 		}
 		/*	GLU
-			file name wich are longer than 8+'.'+3 are invalid for MsDOS.
+			file name which are longer than 8+'.'+3 are invalid for MsDOS.
 			So the file name is to be mangled no more test needed.
 			This Speed Up for long and very long name.
 			The position of the last point is no more necessary anyway.
@@ -280,7 +280,7 @@ int umsdos_parse (
 			base_len = msdos_len = (msdos_len>8) ? 8 : msdos_len;
 			/*
 				There is no '.' any more so we know for a fact that
-				the base lenght is the lenght.
+				the base length is the length.
 			*/
 			memcpy (info->fake.fname,fname,msdos_len);
 			for (i=0; i<msdos_len; i++, pt++) *pt = lkp[(unsigned char)(*pt)];
@@ -401,9 +401,9 @@ struct MANG_TEST tb[]={
 	et de tester apres si il y a d'autres caracters "mechants".
 	Bon, je ne l'ai pas fait, parceque ce n'est pas si facilement
 	modifiable que ca. Mais c'est pour le principe.
-	Evidemment cela augmente les chances de "Colision",
+	Evidemment cela augmente les chances de "Collision",
 	par exemple: entre "HELLO" et "Hello", mais ces problemes
-	peuvent etre traiter ailleur avec les autres colisions.
+	peuvent etre traiter ailleur avec les autres collisions.
 */
 	"HELLO",		1,	"hello",
 	"Hello.1",		1,	"hello_1",

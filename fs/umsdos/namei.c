@@ -76,7 +76,7 @@ void umsdos_lockcreate (struct inode *dir)
 
 		For some operation like hard link, things even get worse. Many
 		creation must occur at once (atomic). To simplify the design
-		a process is allowed to recursivly lock the directory for
+		a process is allowed to recursively lock the directory for
 		creation. The pid of the locking process is kept along with
 		a counter so a second level of locking is granted or not.
 	*/
@@ -191,7 +191,7 @@ static int umsdos_nevercreat(
 	
 /*
 	Add a new file (ordinary or special) into the alternate directory.
-	The file is added to the real MSDOS directory. If successfull, it
+	The file is added to the real MSDOS directory. If successful, it
 	is then added to the EDM file.
 
 	Return the status of the operation. 0 mean success.
@@ -469,11 +469,11 @@ int UMSDOS_link (
 	/* #Specification: hard link / strategy
 		Well ... hard link are difficult to implement on top of an
 		MsDOS fat file system. Unlike UNIX file systems, there are no
-		inode. A directory entry hold the functionnality of the inode
+		inode. A directory entry hold the functionality of the inode
 		and the entry.
 
 		We will used the same strategy as a normal Unix file system
-		(with inode) except we will do it symbolicly (using paths).
+		(with inode) except we will do it symbolically (using paths).
 
 		Because anything can happen during a DOS session (defragment,
 		directory sorting, etc...), we can't rely on MsDOS pseudo
@@ -493,7 +493,7 @@ int UMSDOS_link (
 
 		Using this strategy, we can operate on /foo/file or /foo/file2.
 		We can remove one and keep the other, like a normal Unix hard link.
-		We can rename /foo/file ou /tmp/file2 independantly.
+		We can rename /foo/file or /tmp/file2 independently.
 			
 		The entry -LINK1 will be hidden. It will hold a link count.
 		When all link are erased, the hidden file is erased too.
@@ -554,7 +554,7 @@ int UMSDOS_link (
 					/* #Specification: hard link / first hard link
 						The first time a hard link is done on a file, this
 						file must be renamed and hidden. Then an internal
-						simbolic link must be done on the hidden file.
+						symbolic link must be done on the hidden file.
 
 						The second link is done after on this hidden file.
 
@@ -627,7 +627,7 @@ int UMSDOS_link (
 }
 /*
 	Add a new file into the alternate directory.
-	The file is added to the real MSDOS directory. If successfull, it
+	The file is added to the real MSDOS directory. If successful, it
 	is then added to the EDM file.
 
 	Return the status of the operation. 0 mean success.
@@ -682,7 +682,7 @@ int UMSDOS_mkdir(
 					/* #Specification: mkdir / umsdos directory / create EMD
 						When we created a new sub-directory in a UMSDOS
 						directory (one with full UMSDOS semantic), we
-						create immediatly an EMD file in the new
+						create immediately an EMD file in the new
 						sub-directory so it inherit UMSDOS semantic.
 					*/
 					struct inode *subdir;
@@ -722,7 +722,7 @@ int UMSDOS_mknod(
 		Device special file, pipes, etc ... are created like normal
 		file in the msdos file system. Of course they remain empty.
 
-		One strategy was to create thoses files only in the EMD file
+		One strategy was to create those files only in the EMD file
 		since they were not important for MSDOS. The problem with
 		that, is that there were not getting inode number allocated.
 		The MSDOS filesystems is playing a nice game to fake inode
@@ -758,7 +758,7 @@ int UMSDOS_rmdir(
 		code.
 
 		The coding style I use all around is one where I am trying
-		to provide independant flow logic (I don't know how to
+		to provide independent flow logic (I don't know how to
 		name this). With this style, code is easier to understand
 		but you rapidly get iput() all around. Here is an exemple
 		of what I am trying to avoid.
@@ -770,7 +770,7 @@ int UMSDOS_rmdir(
 			}
 			...
 			if (c){
-				// Complexe state. Was b true ? 
+				// Complex state. Was b true ? 
 				...
 			}
 			...
@@ -824,7 +824,7 @@ int UMSDOS_rmdir(
 		return status;
 
 		Note that the umsdos_lockcreate() and umsdos_unlockcreate() function
-		paire goes against this practice of "forgetting" the inode as soon
+		pair goes against this practice of "forgetting" the inode as soon
 		as possible.
 	*/		
 	int ret = umsdos_nevercreat(dir,name,len,-EPERM);
@@ -895,7 +895,7 @@ int UMSDOS_unlink (
 				if (info.entry.flags & UMSDOS_HLINK){
 					/* #Specification: hard link / deleting a link
 						When we deletes a file, and this file is a link
-						we must substract 1 to the nlink field of the
+						we must subtract 1 to the nlink field of the
 						hidden link.
 
 						If the count goes to 0, we delete this hidden

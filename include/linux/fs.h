@@ -85,7 +85,7 @@ extern unsigned long name_cache_init(unsigned long start, unsigned long end);
 /*
  * Note that read-only etc flags are inode-specific: setting some file-system
  * flags just means all the inodes inherit those flags by default. It might be
- * possible to overrride it sevelctively if you really wanted to with some
+ * possible to override it selectively if you really wanted to with some
  * ioctl() that is not currently implemented.
  *
  * Exception: MS_RDONLY is always applied to the entire file system.
@@ -111,7 +111,7 @@ extern unsigned long name_cache_init(unsigned long start, unsigned long end);
 
 #define SCSI_IOCTL_GET_IDLUN 0x5382
 
-/* Used to turn on and off tagged queueing for scsi devices */
+/* Used to turn on and off tagged queuing for scsi devices */
 
 #define SCSI_IOCTL_TAGGED_ENABLE 0x5383
 #define SCSI_IOCTL_TAGGED_DISABLE 0x5384

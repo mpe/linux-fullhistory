@@ -93,7 +93,7 @@ struct async_struct {
 	int			timeout;
 	int			xmit_fifo_size;
 	int			custom_divisor;
-	int			x_char;	/* xon/xoff characater */
+	int			x_char;	/* xon/xoff character */
 	int			close_delay;
 	int			IER; 	/* Interrupt Enable Register */
 	int			MCR; 	/* Modem control register */

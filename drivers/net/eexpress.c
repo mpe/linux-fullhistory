@@ -5,7 +5,7 @@
 	Copyright 1993 United States Government as represented by the Director,
 	National Security Agency.  This software may only be used and distributed
 	according to the terms of the GNU Public License as modified by SRC,
-	incorported herein by reference.
+	incorporated herein by reference.
 
 	The author may be reached as becker@super.org or
 	C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
@@ -28,7 +28,7 @@ static char *version =
   Sources:
 	This driver wouldn't have been written with the availability of the
 	Crynwr driver source code.	It provided a known-working implementation
-	that filled in the gaping holes of the Intel documention.  Three cheers
+	that filled in the gaping holes of the Intel documentation.  Three cheers
 	for Russ Nelson.
 
 	Intel Microcommunications Databook, Vol. 1, 1990. It provides just enough
@@ -66,7 +66,7 @@ static unsigned int net_debug = NET_DEBUG;
   			Details of the i82586.
 
    You'll really need the databook to understand the details of this part,
-   but the outline is that the i82586 has two seperate processing units.
+   but the outline is that the i82586 has two separate processing units.
 
    The Rx unit uses a list of frame descriptors and a list of data buffer
    descriptors.  We use full-sized (1518 byte) data buffers, so there is
@@ -298,7 +298,7 @@ static void init_rx_bufs(struct device *dev);
 /* Check for a network adaptor of this type, and return '0' iff one exists.
    If dev->base_addr == 0, probe all likely locations.
    If dev->base_addr == 1, always return failure.
-   If dev->base_addr == 2, (detachable devices only) alloate space for the
+   If dev->base_addr == 2, (detachable devices only) allocate space for the
    device and return success.
    */
 int
@@ -348,7 +348,7 @@ int eexp_probe1(struct device *dev, short ioaddr)
 	station_addr[1] = read_eeprom(ioaddr, 3);
 	station_addr[2] = read_eeprom(ioaddr, 4);
 
-	/* Check the first three octets of the S.A. for the manufactor's code. */
+	/* Check the first three octets of the S.A. for the manufacturer's code. */
 	if (station_addr[2] != 0x00aa || (station_addr[1] & 0xff00) != 0x0000) {
 		printk(" rejected (invalid address %04x%04x%04x).\n",
 			   station_addr[2], station_addr[1], station_addr[0]);
@@ -422,7 +422,7 @@ eexp_open(struct device *dev)
 	if (irq2dev_map[dev->irq] != 0
 		/* This is always true, but avoid the false IRQ. */
 		|| (irq2dev_map[dev->irq] = dev) == 0
-		|| request_irq(dev->irq, &eexp_interrupt)) {
+		|| request_irq(dev->irq, &eexp_interrupt, 0, "EExpress")) {
 		return -EAGAIN;
 	}
 

@@ -373,7 +373,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 			correct_size = i;
 	}
 
-	/* Verify requested block sizees.  */
+	/* Verify requested block sizes.  */
 	for (i = 0; i < nr; i++) {
 		if (bh[i] && bh[i]->b_size != correct_size) {
 			printk(

@@ -178,7 +178,7 @@ ultra_open(struct device *dev)
 {
   int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
 
-  if (irqaction(dev->irq, &ei_sigaction))
+  if (request_irq(dev->irq, ei_interrupt, 0, "SMC Ultra"))
       return -EAGAIN;
 
   outb(ULTRA_MEMENB, ioaddr);	/* Enable memory, 16 bit mode. */

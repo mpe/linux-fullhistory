@@ -598,8 +598,6 @@ static int probe_irq;
 static void probe_intr (int sig) {
     probe_irq = sig;
 };
-static struct sigaction probe_sigaction = { probe_intr, 0, SA_INTERRUPT,
-    NULL};
 
 static int NCR5380_probe_irq (struct Scsi_Host *instance, int possible) {
     NCR5380_local_declare();
@@ -610,7 +608,7 @@ static int NCR5380_probe_irq (struct Scsi_Host *instance, int possible) {
     NCR5380_setup(instance);
 
     for (trying_irqs = i = 0, mask = 1; i < 16; ++i, mask <<= 1) 
-	if ((mask & possible) &&  (irqaction (i, &probe_sigaction) 
+	if ((mask & possible) &&  (request_irq(i, &probe_intr, SA_INTERRUPT, "NCR-probe") 
 	    == 0)) 
 	    trying_irqs |= mask;
 

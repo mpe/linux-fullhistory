@@ -328,7 +328,7 @@ static void scan_scsis (struct Scsi_Host * shpnt)
 	  if (!the_result)
 	    printk("scsi: INQUIRY successful\n");
 	  else
-	    printk("scsi: INQUIRY failed with code %08x\n");
+	    printk("scsi: INQUIRY failed with code %08x\n", the_result);
 #endif
 	  
 	  if(the_result) break; 

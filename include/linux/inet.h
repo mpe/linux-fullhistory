@@ -5,7 +5,7 @@
  *	from NET2D which was written by:
  * 		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *
- *		This work was derived friom Ross Biro's inspirational work
+ *		This work was derived from Ross Biro's inspirational work
  *		for the LINUX operating system.  His version numbers were:
  *
  *		$Id: Space.c,v     0.8.4.5  1992/12/12 19:25:04 bir7 Exp $

@@ -18,7 +18,7 @@
 	registers are set: first you do an inb() in what is normally the
 	station address region, and the low three bits of next outb() *address*
 	is used	as the write value for that register.  Either someone wasn't
-	too used to dem bit en bites, or they were trying to obfusicate the
+	too used to dem bit en bites, or they were trying to obfuscate the
 	programming	interface.
 
 	There is an additional complication when setting the window on the packet
@@ -50,7 +50,7 @@ static int e21_probe_list[] = {0x300, 0x280, 0x380, 0x220, 0};
 
 /* Offsets from the base_addr.
    Read from the ASIC register, and the low three bits of the next outb()
-   address is used to set the cooresponding register. */
+   address is used to set the corresponding register. */
 #define E21_NIC_OFFSET  0		/* Offset to the 8390 NIC. */
 #define E21_ASIC		0x10
 #define E21_MEM_ENABLE	0x10
@@ -164,7 +164,7 @@ int e21_probe1(struct device *dev, int ioaddr)
 	if (dev->irq < 2) {
 		int irqlist[] = {15,11,10,12,5,9,3,4}, i;
 		for (i = 0; i < 8; i++)
-			if (request_irq (irqlist[i], NULL) != -EBUSY) {
+			if (request_irq (irqlist[i], NULL, 0, "bogus") != -EBUSY) {
 				dev->irq = irqlist[i];
 				break;
 			}
@@ -235,7 +235,7 @@ e21_open(struct device *dev)
 {
 	short ioaddr = dev->base_addr;
 
-	if (irqaction (dev->irq, &ei_sigaction)) {
+	if (request_irq(dev->irq, ei_interrupt, 0, "e2100")) {
 		return EBUSY;
 	}
 	irq2dev_map[dev->irq] = dev;
@@ -299,7 +299,7 @@ e21_block_output(struct device *dev, int count, const unsigned char *buf,
 	volatile char *shared_mem = (char *)dev->mem_start;
 
 	/* Set the shared memory window start by doing a read, with the low address
-	   bits specifing the starting page. */
+	   bits specifying the starting page. */
 	*(shared_mem + start_page);
 	mem_on(ioaddr, shared_mem, start_page);
 

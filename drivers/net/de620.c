@@ -401,7 +401,7 @@ de620_get_register(byte reg)
 static int
 de620_open(struct device *dev)
 {
-	if (request_irq(DE620_IRQ, de620_interrupt)) {
+	if (request_irq(DE620_IRQ, de620_interrupt, 0, "de620")) {
 		printk ("%s: unable to get IRQ %d\n", dev->name, DE620_IRQ);
 		return 1;
 	}
@@ -917,7 +917,7 @@ read_eeprom(void)
 {
 	unsigned short wrd;
 
-	/* D-Link Ethernet adresses are in the series  00:80:c8:7X:XX:XX:XX */
+	/* D-Link Ethernet addresses are in the series  00:80:c8:7X:XX:XX:XX */
 	wrd = ReadAWord(0x1aa);	/* bytes 0 + 1 of NodeID */
 	if (wrd != htons(0x0080)) /* Valid D-Link ether sequence? */
 		return -1; /* Nope, not a DE-620 */

@@ -2,7 +2,7 @@
  *  linux/fs/umsdos/file.c
  *
  *  Written 1993 by Jacques Gelinas
- *	inpired from linux/fs/msdos/file.c Werner Almesberger
+ *	inspired from linux/fs/msdos/file.c Werner Almesberger
  *
  *  Extended MS-DOS regular file handling primitives
  */
@@ -61,10 +61,10 @@ static void UMSDOS_truncate(struct inode *inode)
 /*
 	See inode.c
 	
-	Some entry point are filled dynamicly with function pointers
+	Some entry point are filled dynamically with function pointers
 	from the msdos file_operations and file_inode_operations.
 	
-	The idea is to have the code as independant as possible from
+	The idea is to have the code as independent as possible from
 	the msdos file system.
 */
 

@@ -47,7 +47,7 @@ static int umsdos_readdir_x(
     struct dirent *dirent,	/* Will hold count directory entry */
 	int dirent_in_fs,		/* dirent point in user's space ? */
 	int count,
-	struct umsdos_dirent *u_entry,	/* Optionnal umsdos entry */
+	struct umsdos_dirent *u_entry,	/* Optional umsdos entry */
 	int follow_hlink,
 	off_t *pt_f_pos)		/* will hold the offset of the entry in EMD */
 {
@@ -272,7 +272,7 @@ void umsdos_lookup_patch (
 	/*
 		A lookup of a mount point directory yield the inode into
 		the other fs, so we don't care about initialising it. iget()
-		does this automaticly.
+		does this automatically.
 	*/
 	if (inode->i_sb == dir->i_sb && !umsdos_isinit(inode)){
 		if (S_ISDIR(inode->i_mode)) umsdos_lockcreate(inode);
@@ -583,7 +583,7 @@ static int umsdos_lookup_x (
 					*/
 					/*
 						This has to be allowed for resolving hard link
-						which are recorded independantly of the pseudo-root
+						which are recorded independently of the pseudo-root
 						mode.
 					*/
 					iput (pseudo_root);

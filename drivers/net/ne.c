@@ -57,7 +57,7 @@ static void ne_block_output(struct device *dev, const int count,
    SA prefix.
 
    Reading the SAPROM from a word-wide card with the 8390 set in byte-wide
-   mode results in doubled values, which can be detected and compansated for.
+   mode results in doubled values, which can be detected and compensated for.
 
    The probe is also responsible for initializing the card and filling
    in the 'dev' and 'ei_status' structures.
@@ -218,7 +218,7 @@ static int neprobe1(int ioaddr, struct device *dev, int verbose)
     /* Snarf the interrupt now.  There's no point in waiting since we cannot
        share and the board will usually be enabled. */
     {
-	int irqval = irqaction (dev->irq, &ei_sigaction);
+	int irqval = request_irq (dev->irq, ei_interrupt, 0, "ne");
 	if (irqval) {
 	    printk (" unable to get IRQ %d (irqval=%d).\n", dev->irq, irqval);
 	    return 0;
@@ -311,7 +311,7 @@ ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
 
     /* This was for the ALPHA version only, but enough people have
        encountering problems that it is still here.  If you see
-       this message you either 1) have an slightly imcompatible clone
+       this message you either 1) have a slightly incompatible clone
        or 2) have noise/speed problems with your bus. */
     if (ei_debug > 1) {		/* DMA termination address check... */
 	int addr, tries = 20;
@@ -360,7 +360,7 @@ ne_block_output(struct device *dev, int count,
 #if defined(rw_bugfix)
     /* Handle the read-before-write bug the same way as the
        Crynwr packet driver -- the NatSemi method doesn't work.
-       Actually this doesn't aways work either, but if you have
+       Actually this doesn't always work either, but if you have
        problems with your NEx000 this is better than nothing! */
     outb_p(0x42, nic_base + EN0_RCNTLO);
     outb_p(0x00,   nic_base + EN0_RCNTHI);

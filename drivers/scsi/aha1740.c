@@ -457,7 +457,7 @@ int aha1740_detect(Scsi_Host_Template * tpnt)
 
     DEB(printk("aha1740_detect: enable interrupt channel %d\n", irq_level));
 
-    if (request_irq(irq_level,aha1740_intr_handle))
+    if (request_irq(irq_level,aha1740_intr_handle, 0, "aha1740"))
     {
         printk("Unable to allocate IRQ for adaptec controller.\n");
         return 0;

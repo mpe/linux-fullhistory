@@ -26,7 +26,7 @@
 	0.3	Audio support added
 	0.3.1 Changes for mitsumi CRMC LU005S march version
 		   (stud11@cc4.kuleuven.ac.be)
-        0.3.2 bug fixes to the ioclts and merged with ALPHA0.99-pl12
+        0.3.2 bug fixes to the ioctls and merged with ALPHA0.99-pl12
 		   (Jon Tombs <jon@robots.ox.ac.uk>)
         0.3.3 Added more #defines and mcd_setup()
    		   (Jon Tombs <jon@gtex02.us.es>)
@@ -530,7 +530,7 @@ printk("VOL %d %d\n", volctrl.channel0 & 0xFF, volctrl.channel1 & 0xFF);
 		return 0;
 
 	case CDROMEJECT:
- 	       /* all drives can atleast stop! */
+ 	       /* all drives can at least stop! */
  		if (audioStatus == CDROM_AUDIO_PLAY) {
  		  outb(MCMD_STOP, MCDPORT(0));
  		  i = getMcdStatus(MCD_STATUS_DELAY);
@@ -695,7 +695,7 @@ mcd_poll(void)
 
 
 
- immediatly:
+ immediately:
   switch (mcd_state) {
 
 
@@ -733,14 +733,14 @@ mcd_poll(void)
 	mcd_invalidate_buffers();
       }
 
-    set_mode_immediatly:
+    set_mode_immediately:
 
       if ((st & MST_DOOR_OPEN) || !(st & MST_READY)) {
 	mcdDiskChanged = 1;
 	tocUpToDate = 0;
 	if (mcd_transfer_is_active) {
 	  mcd_state = MCD_S_START;
-	  goto immediatly;
+	  goto immediately;
 	}
 	printk((st & MST_DOOR_OPEN) ? "mcd: door open\n" : "mcd: disk removed\n");
 	mcd_state = MCD_S_IDLE;
@@ -773,14 +773,14 @@ mcd_poll(void)
 	mcd_invalidate_buffers();
       }
 
-    read_immediatly:
+    read_immediately:
 
       if ((st & MST_DOOR_OPEN) || !(st & MST_READY)) {
 	mcdDiskChanged = 1;
 	tocUpToDate = 0;
 	if (mcd_transfer_is_active) {
 	  mcd_state = MCD_S_START;
-	  goto immediatly;
+	  goto immediately;
 	}
 	printk((st & MST_DOOR_OPEN) ? "mcd: door open\n" : "mcd: disk removed\n");
 	mcd_state = MCD_S_IDLE;
@@ -801,7 +801,7 @@ mcd_poll(void)
 	McdTimeout = READ_TIMEOUT;
       } else {
 	mcd_state = MCD_S_STOP;
-	goto immediatly;
+	goto immediately;
       }
 
     }
@@ -814,7 +814,7 @@ mcd_poll(void)
 #endif
 
     st = inb(MCDPORT(1)) & (MFL_STATUSorDATA);
-  data_immediatly:
+  data_immediately:
 #ifdef TEST5
     printk("Status %02x\n",st);
 #endif
@@ -837,7 +837,7 @@ mcd_poll(void)
       }
       mcd_state = MCD_S_START;
       McdTimeout = READ_TIMEOUT;
-      goto immediatly;
+      goto immediately;
 
     case MFL_STATUSorDATA:
       break;
@@ -846,7 +846,7 @@ mcd_poll(void)
       McdTries = 5;
       if (!CURRENT_VALID && mcd_buf_in == mcd_buf_out) {
 	mcd_state = MCD_S_STOP;
-	goto immediatly;
+	goto immediately;
       }
       mcd_buf_bn[mcd_buf_in] = -1;
       READ_DATA(MCDPORT(0), mcd_buf + 2048 * mcd_buf_in, 2048);
@@ -868,7 +868,7 @@ mcd_poll(void)
 	  && (CURRENT -> sector / 4 < mcd_next_bn || 
 	      CURRENT -> sector / 4 > mcd_next_bn + 16)) {
 	mcd_state = MCD_S_STOP;
-	goto immediatly;
+	goto immediately;
       }
       McdTimeout = READ_TIMEOUT;
 #ifdef DOUBLE_QUICK_ONLY
@@ -883,7 +883,7 @@ mcd_poll(void)
 /*	    printk("Quickloop success at %d\n",QUICK_LOOP_COUNT-count); */
 	    printk(" %d ",QUICK_LOOP_COUNT-count);
 #   endif
-	    goto data_immediatly;
+	    goto data_immediately;
 	  }
 	}
 #   ifdef TEST4
@@ -979,9 +979,9 @@ mcd_poll(void)
     if (CURRENT_VALID) {
       if (st != -1) {
 	if (mcd_mode == 1)
-	  goto read_immediatly;
+	  goto read_immediately;
 	else
-	  goto set_mode_immediatly;
+	  goto set_mode_immediately;
       } else {
 	mcd_state = MCD_S_START;
 	McdTimeout = 1;
@@ -1090,18 +1090,6 @@ static struct file_operations mcd_fops = {
 
 
 /*
- * MCD interrupt descriptor
- */
-
-static struct sigaction mcd_sigaction = {
-	mcd_interrupt,
-	0,
-	SA_INTERRUPT,
-	NULL
-};
-
-
-/*
  * Test for presence of drive and initialize it.  Called at boot time.
  */
 
@@ -1175,7 +1163,7 @@ mcd_init(unsigned long mem_start, unsigned long mem_end)
 
 	/* don't get the IRQ until we know for sure the drive is there */
 
-	if (irqaction(mcd_irq,  &mcd_sigaction))
+	if (request_irq(mcd_irq, mcd_interrupt, SA_INTERRUPT, "Mitsumi CD"))
 	{
 		printk("Unable to get IRQ%d for Mitsumi CD-ROM\n", mcd_irq);
 		return mem_start;
@@ -1395,7 +1383,7 @@ GetQChannelInfo(struct mcd_Toc *qp)
 
 
 /*
- * Read the table of contents (TOC) and TOC header if neccessary
+ * Read the table of contents (TOC) and TOC header if necessary
  */
 
 static int

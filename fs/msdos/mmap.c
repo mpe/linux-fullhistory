@@ -39,7 +39,7 @@ static unsigned long msdos_file_mmap_nopage(
 	clear = 0;
 	gap = inode->i_size - pos;
 	if (gap <= 0){
-		/* mmaping beyong end of file */
+		/* mmaping beyond end of file */
 		clear = PAGE_SIZE;
 	}else{
 		int cur_read;

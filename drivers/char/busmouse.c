@@ -112,7 +112,7 @@ static int open_mouse(struct inode * inode, struct file * file)
 	mouse.dx = 0;
 	mouse.dy = 0;
 	mouse.buttons = 0x87;
-	if (request_irq(mouse_irq, mouse_interrupt))
+	if (request_irq(mouse_irq, mouse_interrupt, 0, "Busmouse"))
 		return -EBUSY;
 	mouse.active = 1;
 	MSE_INT_ON();

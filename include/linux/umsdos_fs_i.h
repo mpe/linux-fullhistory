@@ -49,7 +49,7 @@ struct dir_locking_info {
 	short int looking;		/* How many process doing a lookup */
 	short int creating;		/* Is there any creation going on here */
 							/* Only one at a time, although one */
-							/* may recursivly lock, so it is a counter */
+							/* may recursively lock, so it is a counter */
 	long pid;				/* pid of the process owning the creation */
 							/* lock */
 };
@@ -119,7 +119,7 @@ struct dir_locking_info {
 	short int looking;		/* How many process doing a lookup */
 	short int creating;		/* Is there any creation going on here */
 							/* Only one at a time, although one */
-							/* may recursivly lock, so it is a counter */
+							/* may recursively lock, so it is a counter */
 	long pid;				/* pid of the process owning the creation */
 							/* lock */
 };

@@ -1,13 +1,13 @@
-/* This file is derrived from the GAS 2.1.4 assembler control file.
+/* This file is derived from the GAS 2.1.4 assembler control file.
    The GAS product is under the GNU Public License, version 2 or later.
-   As such, this file is also uder that license.
+   As such, this file is also under that license.
 
    If the file format changes in the COFF object, this file should be
    subsequently updated to reflect the changes.
 
    The actual loader module only uses a few of these structures. The full
    set is documented here because I received the full set. If you wish
-   more information about COFF, then O'Rielly has a very excellent book.
+   more information about COFF, then O'Reilly has a very excellent book.
 */
 
 #define  E_SYMNMLEN  8   /* Number of characters in a symbol name         */
@@ -15,10 +15,10 @@
 #define  E_DIMNUM    4   /* Number of array dimensions in auxiliary entry */
 
 /*
- * These defines are byte order independant. There is no alignment of fields
+ * These defines are byte order independent. There is no alignment of fields
  * permitted in the structures. Therefore they are declared as characters
  * and the values loaded from the character positions. It also makes it
- * nice to have it "endian" independant.
+ * nice to have it "endian" independent.
  */
  
 /* Load a short int from the following tables with little-endian formats */
@@ -41,7 +41,7 @@
 				 ((unsigned long)((unsigned char)ps[2])<<8)  |\
 				 ((unsigned long)((unsigned char)ps[3])))))
 
-/* These may be overriden later by brain dead implementations which generate
+/* These may be overridden later by brain dead implementations which generate
    a big-endian header with little-endian data. In that case, generate a
    replacement macro which tests a flag and uses either of the two above
    as appropriate. */
@@ -67,9 +67,9 @@ struct COFF_filehdr {
  *   Bits for f_flags:
  *
  *	F_RELFLG	relocation info stripped from file
- *	F_EXEC		file is executable  (i.e. no unresolved externel
+ *	F_EXEC		file is executable  (i.e. no unresolved external
  *			references)
- *	F_LNNO		line nunbers stripped from file
+ *	F_LNNO		line numbers stripped from file
  *	F_LSYMS		local symbols stripped from file
  *	F_MINMAL	this is a minimal object file (".m") output of fextract
  *	F_UPDATE	this is a fully bound update file, output of ogen
@@ -145,7 +145,7 @@ COFF_AOUTHDR;
 #define COFF_OMAGIC     0404
 #define COFF_JMAGIC     0407    /* dirty text and data image, can't share  */
 #define COFF_DMAGIC     0410    /* dirty text segment, data aligned        */
-#define COFF_ZMAGIC     0413    /* The proper magic number for executabls  */
+#define COFF_ZMAGIC     0413    /* The proper magic number for executables  */
 #define COFF_SHMAGIC	0443	/* shared library header                   */
 
 /********************** SECTION HEADER **********************/
@@ -347,5 +347,5 @@ struct COFF_reloc {
 #define COFF_DEF_BSS_SECTION_ALIGNMENT   4
 #define COFF_DEF_TEXT_SECTION_ALIGNMENT  4
 
-/* For new sections we havn't heard of before */
+/* For new sections we haven't heard of before */
 #define COFF_DEF_SECTION_ALIGNMENT       4

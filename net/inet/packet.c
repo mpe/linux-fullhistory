@@ -69,7 +69,7 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 	struct sock *sk;
 	
 	/*
-	 *	When we registered the protcol we saved the socket in the data
+	 *	When we registered the protocol we saved the socket in the data
 	 *	field for just this event.
 	 */
 
@@ -87,7 +87,7 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 	skb->sk = sk;
 
 	/*
-	 *	Charge the memory to the socket. This is done specificially
+	 *	Charge the memory to the socket. This is done specifically
 	 *	to prevent sockets using all the memory up.
 	 */
 	 
@@ -260,7 +260,7 @@ static int packet_init(struct sock *sk)
 
 /*
  *	Pull a packet from our receive queue and hand it to the user.
- *	If neccessary we block.
+ *	If necessary we block.
  */
  
 int packet_recvfrom(struct sock *sk, unsigned char *to, int len,

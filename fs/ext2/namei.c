@@ -1014,13 +1014,13 @@ start_up:
 	 * ok, that's it
 	 */
 	new_de->inode = old_inode->i_ino;
+	new_dir->i_version = ++event;
 	dcache_add(new_dir, new_de->name, new_de->name_len, new_de->inode);
 	retval = ext2_delete_entry (old_de, old_bh);
 	if (retval == -ENOENT)
 		goto try_again;
 	if (retval)
 		goto end_rename;
-	new_dir->i_version = ++event;
 	old_dir->i_version = ++event;
 	if (new_inode) {
 		new_inode->i_nlink--;
@@ -1031,6 +1031,7 @@ start_up:
 	old_dir->i_dirt = 1;
 	if (dir_bh) {
 		PARENT_INO(dir_bh->b_data) = new_dir->i_ino;
+		dcache_add(old_inode, "..", 2, new_dir->i_ino);
 		mark_buffer_dirty(dir_bh, 1);
 		old_dir->i_nlink--;
 		old_dir->i_dirt = 1;

@@ -932,13 +932,6 @@ static void hd_interrupt(int unused)
  * We enable interrupts in some of the routines after making sure it's
  * safe.
  */
-static struct sigaction hd_sigaction = {
-	hd_interrupt,
-	0,
-	SA_INTERRUPT,
-	NULL
-};
-
 static void hd_geninit(void)
 {
 	int drive, i;
@@ -962,13 +955,13 @@ static void hd_geninit(void)
 		}
 
 	/*
-		We querry CMOS about hard disks : it could be that 
+		We query CMOS about hard disks : it could be that 
 		we have a SCSI/ESDI/etc controller that is BIOS
-		compatable with ST-506, and thus showing up in our
-		BIOS table, but not register compatable, and therefore
+		compatible with ST-506, and thus showing up in our
+		BIOS table, but not register compatible, and therefore
 		not present in CMOS.
 
-		Furthurmore, we will assume that our ST-506 drives
+		Furthermore, we will assume that our ST-506 drives
 		<if any> are the primary drives in the system, and 
 		the ones reflected as drive 1 or 2.
 
@@ -1013,7 +1006,7 @@ static void hd_geninit(void)
 		special_op[i] = 1;
 	}
 	if (NR_HD) {
-		if (irqaction(HD_IRQ,&hd_sigaction)) {
+		if (request_irq(HD_IRQ, hd_interrupt, SA_INTERRUPT, "hd")) {
 			printk("hd.c: unable to get IRQ%d for the harddisk driver\n",HD_IRQ);
 			NR_HD = 0;
 		}

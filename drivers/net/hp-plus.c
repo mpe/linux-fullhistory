@@ -42,7 +42,7 @@ static char *version =
 /*
    The HP EtherTwist chip implementation is a fairly routine DP8390
    implementation.  It allows both shared memory and programmed-I/O buffer
-   access, using a custom interface for both.  The programed-I/O mode is
+   access, using a custom interface for both.  The programmed-I/O mode is
    entirely implemented in the HP EtherTwist chip, bypassing the problem
    ridden built-in 8390 facilities used on NE2000 designs.  The shared
    memory mode is likewise special, with an offset register used to make
@@ -235,7 +235,7 @@ hpp_open(struct device *dev)
 	int ioaddr = dev->base_addr - NIC_OFFSET;
 	int option_reg;
 
-	if (request_irq(dev->irq, &ei_interrupt)) {
+	if (request_irq(dev->irq, &ei_interrupt, 0, "hp-plus")) {
 	    return -EAGAIN;
 	}
 

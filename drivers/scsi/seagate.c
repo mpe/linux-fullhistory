@@ -276,12 +276,6 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 #ifndef OVERRIDE
 	int i,j;
 #endif 
-static struct sigaction seagate_sigaction = {
-	&seagate_reconnect_intr,
-	0,
-	SA_INTERRUPT,
-	NULL
-};
 
 /*
  *	First, we try for the manual override.
@@ -350,7 +344,7 @@ static struct sigaction seagate_sigaction = {
  */
 		instance = scsi_register(tpnt, 0);
 		hostno = instance->host_no;
-		if (irqaction((int) irq, &seagate_sigaction)) {
+		if (request_irq((int) irq, seagate_reconnect_intr, SA_INTERRUPT, "seagate")) {
 			printk("scsi%d : unable to allocate IRQ%d\n",
 				hostno, (int) irq);
 			return 0;
@@ -1589,7 +1583,7 @@ int seagate_st0x_reset (Scsi_Cmnd * SCpnt)
 #ifdef DEBUG
 	printk("SCSI bus reset.\n");
 #endif
-	return SCSI_RESET_PENDING;
+	return SCSI_RESET_WAKEUP;
 	}
 
 #include <asm/segment.h>

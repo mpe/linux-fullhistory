@@ -68,8 +68,9 @@ _main:
 	movsw
 	jmpi	go,INITSEG
 
-go:	mov	ax,cs		
-	mov	di,#0x4000-12	! 0x4000 is arbitrary value >= length of
+! ax and es already contain INITSEG
+
+go:	mov	di,#0x4000-12	! 0x4000 is arbitrary value >= length of
 				! bootsect + length of setup + room for stack
 				! 12 is disk parm size
 
@@ -80,7 +81,6 @@ go:	mov	ax,cs
 ! drive table.
 
 	mov	ds,ax
-	mov	es,ax
 	mov	ss,ax		! put stack at INITSEG:0x4000-12.
 	mov	sp,di
 /*
@@ -100,14 +100,15 @@ go:	mov	ax,cs
  *		fs = 0, gs is unused.
  */
 
-	push	#0
-	pop	fs
+! cx contains 0 from rep movsw above
+
+	mov	fs,cx
 	mov	bx,#0x78		! fs:bx is parameter table address
 	push	ds
 	seg fs
 	lds	si,(bx)			! ds:si is source
 
-	mov	cx,#6			! copy 12 bytes
+	mov	cl,#6			! copy 12 bytes
 	cld
 	push	di
 
@@ -124,19 +125,20 @@ go:	mov	ax,cs
 	seg fs
 	mov	2(bx),es
 
+! load the setup-sectors directly after the bootblock.
+! Note that 'es' is already set up.
+! Also cx is 0 from rep movsw above.
+
+load_setup:
 	xor	ah,ah			! reset FDC 
 	xor	dl,dl
 	int 	0x13	
 
-! load the setup-sectors directly after the bootblock.
-! Note that 'es' is already set up.
-
-load_setup:
 	xor	dx, dx			! drive 0, head 0
-	mov	cx,#0x0002		! sector 2, track 0
+	mov	cl,#0x02		! sector 2, track 0
 	mov	bx,#0x0200		! address = 512, in INITSEG
-	mov	ax,#0x0200+SETUPSECS	! service 2, nr of sectors
-					! (assume all on head 0, track 0)
+	mov	ah,#0x02		! service 2, nr of sectors
+	mov	al,setup_sects		! (assume all on head 0, track 0)
 	int	0x13			! read it
 	jnc	ok_load_setup		! ok - continue
 
@@ -146,9 +148,6 @@ load_setup:
 	call	print_hex
 	pop	ax	
 	
-	xor	dl, dl			! reset FDC
-	xor	ah, ah
-	int	0x13
 	jmp	load_setup
 
 ok_load_setup:
@@ -176,13 +175,15 @@ ok_load_setup:
 probe_loop:
 	lodsb
 	cbw				! extend to word
-	seg cs
 	mov	sectors, ax
 	cmp	si,#disksizes+4
 	jae	got_sectors		! if all else fails, try 9
 	xchg	ax, cx			! cx = track and sector
 	xor	dx, dx			! drive 0, head 0
-	mov	bx,#0x0200+SETUPSECS*0x200  ! address after setup (es = cs)
+	xor	bl, bl
+	mov	bh,setup_sects
+	inc	bh
+	shl	bh,#1			! address after setup (es = cs)
 	mov	ax,#0x0201		! service 2, 1 sector
 	int	0x13
 	jc	probe_loop		! try next value
@@ -254,11 +255,14 @@ root_defined:
 !
 ! in:	es - starting address segment (normally 0x1000)
 !
-sread:	.word 1+SETUPSECS	! sectors read of current track
+sread:	.word 0			! sectors read of current track
 head:	.word 0			! current head
 track:	.word 0			! current track
 
 read_it:
+	mov	al,setup_sects
+	inc	al
+	mov	sread,al
 	mov ax,es
 	test ax,#0x0fff
 die:	jne die			! es must be at 64kB boundary
@@ -270,7 +274,6 @@ rp_read:
 	jbe ok1_read
 	ret
 ok1_read:
-	seg cs
 	mov ax,sectors
 	sub ax,sread
 	mov cx,ax
@@ -285,7 +288,6 @@ ok2_read:
 	call read_track
 	mov cx,ax
 	add ax,sread
-	seg cs
 	cmp ax,sectors
 	jne ok3_read
 	mov ax,#1
@@ -439,7 +441,9 @@ msg1:
 	.byte 13,10
 	.ascii "Loading"
 
-.org 498
+.org 497
+setup_sects:
+	.byte SETUPSECS
 root_flags:
 	.word CONFIG_ROOT_RDONLY
 syssize:

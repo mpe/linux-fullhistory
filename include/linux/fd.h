@@ -13,12 +13,12 @@
 #define FDFMTBEG 6 /* begin formatting a disk */
 #define	FDFMTTRK 7 /* format the specified track */
 #define FDFMTEND 8 /* end formatting a disk */
-#define FDSETEMSGTRESH	10	/* set fdc error reporting treshold */
+#define FDSETEMSGTRESH	10	/* set fdc error reporting threshold */
 #define FDFLUSH  11 /* flush buffers for media; either for verifying media, or for
                        handling a media change without closing the file
 		       descriptor */
-#define FDSETMAXERRS 12 /* set abortion and read_track treshold */
-#define FDGETMAXERRS 14 /* get abortion and read_track treshold */
+#define FDSETMAXERRS 12 /* set abortion and read_track threshold */
+#define FDGETMAXERRS 14 /* get abortion and read_track threshold */
 #define FDGETDRVTYP 16          /* get drive type: 5 1/4 or 3 1/2 */
 
 #define FDSETDRVPRM 20 /* set drive parameters */

@@ -7,7 +7,7 @@
 #ifdef i386
 /*
  * These have to be done with inline assembly: that way the bit-setting
- * is guaranteed to be atomic. All bitoperations return 0 if the bit
+ * is guaranteed to be atomic. All bit operations return 0 if the bit
  * was cleared before the operation and != 0 if it was not.
  *
  * bit 0 is the LSB of addr; bit 32 is the LSB of (addr+1).
@@ -67,7 +67,7 @@ extern __inline__ int test_bit(int nr, void * addr)
 /*
  * For the benefit of those who are trying to port Linux to another
  * architecture, here are some C-language equivalents.  You should
- * recode these in the native assmebly language, if at all possible.
+ * recode these in the native assembly language, if at all possible.
  * To guarantee atomicity, these routines call cli() and sti() to
  * disable interrupts while they operate.  (You have to provide inline
  * routines to cli() and sti().)

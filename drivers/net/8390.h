@@ -154,6 +154,6 @@ struct ei_device {
 struct e8390_pkt_hdr {
   unsigned char status; /* status */
   unsigned char next;   /* pointer to next packet. */
-  unsigned short count; /* header + packet lenght in bytes */
+  unsigned short count; /* header + packet length in bytes */
 };
 #endif /* _8390_h */

@@ -50,10 +50,10 @@ struct rtentry {
 };
 
 
-#define	RTF_UP		0x0001		/* route useable		  */
+#define	RTF_UP		0x0001		/* route usable		  */
 #define	RTF_GATEWAY	0x0002		/* destination is a gateway	  */
 #define	RTF_HOST	0x0004		/* host entry (net otherwise)	  */
-#define RTF_REINSTATE	0x0008		/* re-instate route after tmout	  */
+#define RTF_REINSTATE	0x0008		/* reinstate route after tmout	  */
 #define	RTF_DYNAMIC	0x0010		/* created dyn. (by redirect)	  */
 #define	RTF_MODIFIED	0x0020		/* modified dyn. (by redirect)	  */
 #define RTF_MSS		0x0040		/* specific MSS for this route	  */

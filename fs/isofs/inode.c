@@ -510,7 +510,7 @@ void isofs_read_inode(struct inode * inode)
 	inode->i_size = 0;
 	inode->i_nlink = 1;
 	inode->i_uid = inode->i_gid = 0;
-	inode->i_mode = S_IFREG;  /*Regular file, noone gets to read*/
+	inode->i_mode = S_IFREG;  /*Regular file, no one gets to read*/
 	inode->i_op = NULL;
 	return;
 }
@@ -519,7 +519,7 @@ void isofs_read_inode(struct inode * inode)
    a particular directory.  When control passes through a routine that
    has access to the parent information, it fills it into the inode structure,
    but sometimes the inode gets flushed out of the queue, and someone
-   remmembers the number.  When they try to open up again, we have lost
+   remembers the number.  When they try to open up again, we have lost
    the information.  The '..' entry on the disc points to the data area
    for a particular inode, so we can follow these links back up, but since
    we do not know the inode number, we do not actually know how large the

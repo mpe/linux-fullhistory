@@ -106,7 +106,7 @@ the buffers are only used when needed as low-memory bounce buffers.
 IIIB. 16M memory limitations.
 For the ISA bus master mode all structures used directly by the LANCE,
 the initialization block, Rx and Tx rings, and data buffers, must be
-accessable from the ISA bus, i.e. in the lower 16M of real memory.
+accessible from the ISA bus, i.e. in the lower 16M of real memory.
 This is a problem for current Linux kernels on >16M machines. The network
 devices are initialized after memory initialization, and the kernel doles out
 memory from the top of memory downward.  The current solution is to have a
@@ -367,7 +367,7 @@ lance_open(struct device *dev)
     int ioaddr = dev->base_addr;
     int i;
 
-    if (request_irq(dev->irq, &lance_interrupt)) {
+    if (request_irq(dev->irq, &lance_interrupt, 0, "lance")) {
 	return -EAGAIN;
     }
 

@@ -20,7 +20,7 @@
  *             		Donald Becker, <becker@super.org>
  *		Crynwr packet driver by
  *			Krishnan Gopalan and Gregg Stefancik,
- * 			   Clemson Univesity Engineering Computer Operations.
+ * 			   Clemson University Engineering Computer Operations.
  *			Portions of the code have been adapted from the 3c505
  *			   driver for NCSA Telnet by Bruce Orchard and later
  *			   modified by Warren Van Houten and krus@diku.dk.
@@ -888,7 +888,7 @@ static int elp_open (struct device *dev)
   /*
    * install our interrupt service routine
    */
-  if (request_irq(dev->irq, &elp_interrupt))  
+  if (request_irq(dev->irq, &elp_interrupt, 0, "3c505"))
     return -EAGAIN;
 
   /*
@@ -902,7 +902,7 @@ static int elp_open (struct device *dev)
   OUTB(CONTROL_CMDE, adapter->io_addr+PORT_CONTROL);
 
   /*
-   * device is now offically open!
+   * device is now officially open!
    */
   dev->start = 1;
 

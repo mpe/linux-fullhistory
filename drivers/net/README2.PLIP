@@ -4,7 +4,7 @@ Hi again
 
 About my previous mail: I've looked into parallel.asm, and I'm
 rather confused. Looks like the code agrees with you, but not
-the protocol description preceeding it?? I got to look more
+the protocol description preceding it?? I got to look more
 careful, but it wont be for a while (approx a week).
 
 >From plip.c (v0.04):
@@ -17,13 +17,13 @@ careful, but it wont be for a while (approx a week).
 I saw you removed 1 and 14 from the cable description, but not
 16 and 17. Why is that?
 
-Have been succesful in getting parallel.com working (the Messy-Loss
+Have been successful in getting parallel.com working (the Messy-Loss
 software). Using the pksend on the sender and pkall/pkwatch/whatnot
 gives me a hung receiver. (The cable works, I've tried unet11, a DOS
 cheap-net prog.)
 
 Using PLIP v0.03 and trying to ping the other end gives
-  88 timeout 88 timeout....(more) 2386 bogous packet size, dropped
+  88 timeout 88 timeout....(more) 2386 bogus packet size, dropped
 on the receiver, and on the sender lots of timeout, but of
 course I don't know how much is supposed to work.
 
@@ -32,7 +32,7 @@ long time ago. Use it for whatever you like, or dump it in the bin. ;^)
 
 /Tommy
 -----
-Becker [& Co] provdly presents PLIP
+Becker [& Co] proudly presents PLIP
 
 What is PLIP?
 =============
@@ -47,7 +47,7 @@ initiated by Crynwr.]
 Advantages of PLIP
 ==================
 
-It's cheap, it's availble everywhere, and it's easy.
+It's cheap, it's available everywhere, and it's easy.
 
 The PLIP cable is all that's needed to connect two Linux boxes, and it
 can be build for very bucks.
@@ -55,7 +55,7 @@ can be build for very bucks.
 Connecting two Linux boxes takes only a seconds decision and a few
 minutes work, no need to search for a [supported] netcard. This might
 even be especially important in the case of notebooks, where netcard
-are not easily availble.
+are not easily available.
 
 Not requiring a netcard also means that apart from connecting the
 cables, everything else is software configuration [which in principle
@@ -69,7 +69,7 @@ Can only be used to connect three (?) Linux boxes. Doesn't connect to
 an exiting ethernet. Isn't standard (not even de facto standard, like
 SLIP).
 
-Performens
+Performance
 ==========
 
 PLIP easily outperforms ethernet cards....(ups, I was dreaming, but

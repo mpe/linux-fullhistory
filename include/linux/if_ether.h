@@ -3,7 +3,7 @@
  *		operating system.  INET is implemented using the  BSD Socket
  *		interface as the means of communication with the user level.
  *
- *		Global definitions for the Ethernet IEE 802.3 interface.
+ *		Global definitions for the Ethernet IEEE 802.3 interface.
  *
  * Version:	@(#)if_ether.h	1.0.1a	02/08/94
  *

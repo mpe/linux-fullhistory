@@ -148,7 +148,7 @@ void put_sock(unsigned short num, struct sock *sk)
 	sk->next = NULL;
 	num = num &(SOCK_ARRAY_SIZE -1);
 
-	/* We can't have an interupt re-enter here. */
+	/* We can't have an interrupt re-enter here. */
 	cli();
 	if (sk->prot->sock_array[num] == NULL) 
 	{
@@ -514,7 +514,7 @@ static int inet_create(struct socket *sock, int protocol)
 			sk->reuse = 1;
 			sk->no_check = 0;	/*
 						 * Doesn't matter no checksum is
-						 * preformed anyway.
+						 * performed anyway.
 						 */
 			sk->num = protocol;
 			break;
@@ -533,7 +533,7 @@ static int inet_create(struct socket *sock, int protocol)
 			prot = &packet_prot;
 			sk->reuse = 1;
 			sk->no_check = 0;	/* Doesn't matter no checksum is
-						 * preformed anyway.
+						 * performed anyway.
 						 */
 			sk->num = protocol;
 			break;
@@ -735,7 +735,7 @@ static int inet_release(struct socket *sock, struct socket *peer)
 }
 
 
-/* this needs to be changed to dissallow
+/* this needs to be changed to disallow
    the rebinding of sockets.   What error
    should it return? */
 
@@ -833,7 +833,7 @@ static int inet_error(struct sock *sk)
 }
 
 /*
- *	Connect to a remote host. There is regretably still a little
+ *	Connect to a remote host. There is regrettably still a little
  *	TCP 'magic' in here.
  */
  
@@ -1146,7 +1146,7 @@ static int inet_select(struct socket *sock, int sel_type, select_table *wait )
  *
  *	NOTE: I like the idea of a module for the config stuff. ie ifconfig
  *	loads the devconfigure module does its configuring and unloads it.
- *	Theres a good 20K of config code hanging around the kernel.
+ *	There's a good 20K of config code hanging around the kernel.
  */
 
 static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
@@ -1230,7 +1230,7 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 /*
  * This routine must find a socket given a TCP or UDP header.
- * Everyhting is assumed to be in net order.
+ * Everything is assumed to be in net order.
  */
 
 struct sock *get_sock(struct proto *prot, unsigned short num,

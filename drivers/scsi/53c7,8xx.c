@@ -70,7 +70,7 @@
 
 /*
  * Design issues : 
- * The cumulative latency needed to propogate a read/write request 
+ * The cumulative latency needed to propagate a read/write request 
  * through the filesystem, buffer cache, driver stacks, SCSI host, and 
  * SCSI device is ultimately the limiting factor in throughput once we 
  * have a sufficiently fast host adapter.
@@ -78,7 +78,7 @@
  * So, to maximize performance we want to keep the ratio of latency to data 
  * transfer time to a minimum by
  * 1.  Minimizing the total number of commands sent (typical command latency
- *	including drive and busmatering host overhead is as high as 4.5ms)
+ *	including drive and busmastering host overhead is as high as 4.5ms)
  *	to transfer a given amount of data.  
  *
  *      This is accomplished by placing no arbitrary limit on the number
@@ -107,7 +107,7 @@
  * 		means that we must service an interrupt for each 
  *		disconnect/reconnect.
  * 
- * 3.  Eliminating latency by piplining operations at the different levels.
+ * 3.  Eliminating latency by pipelining operations at the different levels.
  * 	
  *	This driver allows a configurable number of commands to be enqueued
  *	for each target/lun combination (experimentally, I have discovered
@@ -116,7 +116,7 @@
  * 	
  *
  * Architecture : 
- * This driver is built arround two queues of commands waiting to 
+ * This driver is built around two queues of commands waiting to 
  * be executed - the Linux issue queue, and the shared Linux/NCR  
  * queue which are manipulated by the NCR53c7xx_queue_command and 
  * NCR53c7x0_intr routines.
@@ -192,7 +192,7 @@ static void NCR53c8x0_soft_reset (struct Scsi_Host *host);
 static struct Scsi_Host *first_host = NULL;	/* Head of list of NCR boards */
 static Scsi_Host_Template *the_template = NULL;	
 
-/* Alocate storage space for constant messages, etc. */
+/* Allocate storage space for constant messages, etc. */
 
 static long NCR53c7xx_zero = 0;			
 static long NCR53c7xx_sink;
@@ -231,14 +231,14 @@ static char scan_scsis_buf[512];
  *		programmed on selection, so we need to add more code.
  * 
  *     NCR53c700/700-66 - need to add code to refix addresses on 
- *		every nexus change, elimate all table indirect code.
+ *		every nexus change, eliminate all table indirect code.
  *
  * 3.  The NCR53c7x0 series is very popular on other platforms that 
  *     could be running Linux - ie, some high performance AMIGA SCSI 
  *     boards use it.  
  *	
  *     So, I should include #ifdef'd code so that it is 
- *     compatable with these systems.
+ *     compatible with these systems.
  *	
  *     Specifically, the little Endian assumptions I made in my 
  *     bit fields need to change, and if the NCR doesn't see memory
@@ -257,7 +257,7 @@ static char scan_scsis_buf[512];
  * different defines.
  *
  *
- * Allow for simultaneous existance of mutliple SCSI scripts so we 
+ * Allow for simultaneous existence of multiple SCSI scripts so we 
  * can have a single driver binary for all of the family.
  *
  * - one for NCR53c700 and NCR53c700-66 chips	(not yet supported)
@@ -327,7 +327,7 @@ static int no_overrides = 0;
  * Purpose : LILO command line initialization of the overrides array,
  * 
  * Inputs : board - currently, unsupported.  chip - 700, 70066, 710, 720
- * 	810, 815, 820, 825, allthough currently only the NCR53c810 is 
+ * 	810, 815, 820, 825, although currently only the NCR53c810 is 
  *	supported.
  * 
  */
@@ -390,9 +390,6 @@ setup_wrapper(815)
 setup_wrapper(820)
 setup_wrapper(825)
 
-static struct sigaction NCR53c7x0_sigaction =  { NCR53c7x0_intr, 0, 
-    SA_INTERRUPT , NULL };
-
 /* 
  * Function : static int NCR53c7x0_init (struct Scsi_Host *host)
  *
@@ -433,7 +430,7 @@ static int NCR53c7x0_init (struct Scsi_Host *host) {
     }
 
     /*
-     * Set up an interrupt handler if we aren't allready sharing an IRQ
+     * Set up an interrupt handler if we aren't already sharing an IRQ
      * with another board.
      */
 
@@ -441,7 +438,7 @@ static int NCR53c7x0_init (struct Scsi_Host *host) {
 	(search->irq != host->irq); search=search->next);
 
     if (!search) {
-	if (irqaction (host->irq, &NCR53c7x0_sigaction)) {
+	if (request_irq(host->irq, NCR53c7x0_intr, SA_INTERRUPT, "53c7,8xx")) {
 	    printk("scsi%d : IRQ%d not free, detaching\n", 
 		host->host_no, host->irq);
 	    scsi_unregister (host);
@@ -463,7 +460,7 @@ static int NCR53c7x0_init (struct Scsi_Host *host) {
 
 /* 
  * XXX - the NCR53c700 uses bitfielded registers for SCID, SDID, etc,
- *	as does the 710 with one bit per SCSI ID.  Conversly, the NCR
+ *	as does the 710 with one bit per SCSI ID.  Conversely, the NCR
  * 	uses a normal, 3 bit binary representation of these values.
  *
  * Get the rest of the NCR documentation, and FIND OUT where the change
@@ -499,7 +496,7 @@ static int NCR53c7x0_init (struct Scsi_Host *host) {
     }
 
     /*
-     * On NCR53c700 series chips, DCNTL controls the SCSI clock dvisior,
+     * On NCR53c700 series chips, DCNTL controls the SCSI clock divisor,
      * on 800 series chips, it allows for a totem-pole IRQ driver.
      */
     hostdata->saved_dcntl = NCR53c7x0_read8(DCNTL_REG);
@@ -578,7 +575,7 @@ static int NCR53c7x0_init (struct Scsi_Host *host) {
 	    hostdata->busy[i][j] = 0;
 	/* 
 	 * NCR53c700 and NCR53c700-66 chips lack the DSA and use a 
-	 * different architecture.  For chips using the DSA architecutre,
+	 * different architecture.  For chips using the DSA architecture,
 	 * initialize the per-target synchronous parameters. 
 	 */
 	if (hostdata->chip != 700 && hostdata->chip != 70066) {
@@ -652,7 +649,7 @@ static int NCR53c7x0_init (struct Scsi_Host *host) {
  * Purpose : initializes a NCR53c7,8x0 based on base addresses,
  *	IRQ, and DMA channel.	
  *	
- *	Useful where a new NCR chip is backwards compatable with
+ *	Useful where a new NCR chip is backwards compatible with
  *	a supported chip, but the DEVICE ID has changed so it 
  *	doesn't show up when the autoprobe does a pcibios_find_device.
  *
@@ -724,11 +721,11 @@ static int normal_init (Scsi_Host_Template *tpnt, int board, int chip,
     }
 
     /*
-     * Being memory mapped is more desireable, since 
+     * Being memory mapped is more desirable, since 
      *
      * - Memory accesses may be faster.
      *
-     * - The destination and source addresse spaces are the same for 
+     * - The destination and source address spaces are the same for 
      *	 all instructions, meaning we don't have to twiddle dmode or 
      *	 any other registers.
      *
@@ -780,7 +777,7 @@ static int normal_init (Scsi_Host_Template *tpnt, int board, int chip,
  * 	reprogramming of latency timer and determining addresses
  *	and weather bus mastering, etc. are OK.
  *	
- *	Useful where a new NCR chip is backwards compatable with
+ *	Useful where a new NCR chip is backwards compatible with
  *	a supported chip, but the DEVICE ID has changed so it 
  *	doesn't show up when the autoprobe does a pcibios_find_device.
  *
@@ -825,7 +822,7 @@ static int pci_init (Scsi_Host_Template *tpnt, int board, int chip,
 	(error = pcibios_read_config_byte (bus, device_fn, PCI_INTERRUPT_LINE,
 	    &irq))) {
 	printk ("scsi-ncr53c7,8xx : error %s not initializing due to error reading configuration space\n"
-		"	 perhaps you specied an incorrect PCI bus, device, or function.\n"
+		"	 perhaps you specified an incorrect PCI bus, device, or function.\n"
 		, pcibios_strerror(error));
 	return -1;
     }
@@ -904,7 +901,7 @@ static int pci_init (Scsi_Host_Template *tpnt, int board, int chip,
  * Function : int NCR53c7xx_detect(Scsi_Host_Template *tpnt)
  *
  * Purpose : detects and initializes NCR53c7,8x0 SCSI chips
- *	that were autoprobed, overriden on the LILO command line, 
+ *	that were autoprobed, overridden on the LILO command line, 
  *	or specified at compile time.
  *
  * Inputs : tpnt - template for this SCSI adapter
@@ -1028,9 +1025,9 @@ static void NCR53c8x0_init_fixup (struct Scsi_Host *host) {
     patch_abs_32 (hostdata->script, 0, addr_temp, base + TEMP_REG);
 
     /*
-     * I needed some variables in the script to be accessable to 
+     * I needed some variables in the script to be accessible to 
      * both the NCR chip and the host processor. For these variables,
-     * I made the arbitrary decession to store them directly in the 
+     * I made the arbitrary decision to store them directly in the 
      * hostdata structure rather than in the RELATIVE area of the 
      * SCRIPTS.
      */
@@ -1111,7 +1108,7 @@ static void NCR53c8x0_init_fixup (struct Scsi_Host *host) {
  * Function : static int NCR53c8xx_run_tests (struct Scsi_Host *host)
  *
  * Purpose : run various verification tests on the NCR chip, 
- *	including interrupt generation, and propper bus mastering
+ *	including interrupt generation, and proper bus mastering
  * 	operation.
  * 
  * Inputs : host - a properly initialized Scsi_Host structure
@@ -1393,7 +1390,7 @@ static void abnormal_finished (struct NCR53c7x0_cmd *cmd, int result) {
  * Function : static void intr_break (struct Scsi_Host *host,
  * 	struct NCR53c7x0_cmd *cmd)
  *
- * Purpose :  Handler for breakpoint interrutps from a SCSI script
+ * Purpose :  Handler for breakpoint interrupts from a SCSI script
  *
  * Inputs : host - pointer to this host adapter's structure,
  * 	cmd - pointer to the command (if any) dsa was pointing 
@@ -1516,11 +1513,11 @@ static const struct {
  * Purpose : reprogram transfers between the selected SCSI initiator and 
  *	target for synchronous SCSI transfers such that the synchronous 
  *	offset is less than that requested and period at least as long 
- *	as that requestion.  Also modify *msg such that it contains 
+ *	as that requested.  Also modify *msg such that it contains 
  *	an appropriate response. 
  *
  * Inputs : host - NCR53c7,8xx SCSI host, target - number SCSI target id,
- *	msg - synchronous tranfer request.
+ *	msg - synchronous transfer request.
  */
 
 
@@ -1531,7 +1528,7 @@ static void synchronous (struct Scsi_Host *host, int target, char *msg) {
     unsigned long *script;
     unsigned char scntl3, sxfer;
    
-/* Scale divisor by 10 to accomodate fractions */ 
+/* Scale divisor by 10 to accommodate fractions */ 
     desire = 1000000000L / (msg[3] * 4);
     divisor = desire / (hostdata->scsi_clock / 10);
 
@@ -1625,7 +1622,7 @@ static int NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	    hostdata->dsp_changed = 1;
 	    break;
 	case INITIATE_RECOVERY:
-	    printk ("scsi%d : extended contingent allegience not supported yet, rejecting\n",
+	    printk ("scsi%d : extended contingent allegiance not supported yet, rejecting\n",
 		host->host_no);
 	    hostdata->dsp = hostdata->script + hostdata->E_reject_message /
 		sizeof(long);
@@ -1709,7 +1706,7 @@ static int NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	hostdata->dsp_changed = 1;
 	return SPECIFIC_INT_NOTHING;
 /*
- * Since contingent allegience conditions are cleared by the next 
+ * Since contingent allegiance conditions are cleared by the next 
  * command issued to a target, we must issue a REQUEST SENSE 
  * command after receiving a CHECK CONDITION status, before
  * another command is issued.
@@ -1729,7 +1726,7 @@ static int NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	}
 
 /*
- * When a contingent allegience condition is created, the target 
+ * When a contingent allegiance condition is created, the target 
  * reverts to asynchronous transfers.
  */
 
@@ -1737,12 +1734,12 @@ static int NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 
 	/* 
 	 * Use normal one-byte selection message, with no attempts to 
-    	 * restablish synchronous or wide messages since this may
+    	 * reestablish synchronous or wide messages since this may
     	 * be the crux of our problem.
 	 *
-	 * XXX - once SCSI-II tagged queing is implemented, we'll
+	 * XXX - once SCSI-II tagged queuing is implemented, we'll
 	 * 	have to set this up so that the rest of the DSA
-	 *	aggrees with this being an untagged queue'd command.
+	 *	agrees with this being an untagged queue'd command.
 	 */
 
     	patch_dsa_32 (cmd->dsa, dsa_msgout, 0, 1);
@@ -1781,7 +1778,7 @@ static int NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
     	 * Currently, this command is flagged as completed, ie 
     	 * it has valid status and message data.  Reflag it as
     	 * incomplete.  Q - need to do something so that original
-	 * status, etc are uesed.
+	 * status, etc are used.
     	 */
 
         cmd->cmd->result = 0xffff;		
@@ -2388,7 +2385,7 @@ static struct NCR53c7x0_cmd *create_cmd (Scsi_Cmnd *cmd) {
     tmp->prev = NULL;
 
     /* 
-     * Calculate addresses of dynamnic code to fill in DSA
+     * Calculate addresses of dynamic code to fill in DSA
      */
 
     tmp->data_transfer_start = tmp->dsa + (hostdata->dsa_end - 
@@ -2475,7 +2472,7 @@ static struct NCR53c7x0_cmd *create_cmd (Scsi_Cmnd *cmd) {
  * In any case, this is how it _must_ be done for 53c700/700-66 chips,
  * so this stays even when we come up with something better.
  *
- * When we're limited to 1 simultaenous command, no overlapping processing,
+ * When we're limited to 1 simultaneous command, no overlapping processing,
  * we're seeing 630K/sec, with 7% CPU usage on a slow Syquest 45M
  * drive.
  *
@@ -2623,7 +2620,7 @@ int NCR53c7xx_queue_command (Scsi_Cmnd *cmd, void (* done)(Scsi_Cmnd *)) {
     }
 
     cmd->scsi_done = done;
-    cmd->result = 0xffff;		/* The NCR will overwite message
+    cmd->result = 0xffff;		/* The NCR will overwrite message
 					   and status with valid data */
     
     cmd->host_scribble = (unsigned char *) tmp = create_cmd (cmd);
@@ -2648,8 +2645,8 @@ int NCR53c7xx_queue_command (Scsi_Cmnd *cmd, void (* done)(Scsi_Cmnd *)) {
     
     /*
      * REQUEST sense commands need to be executed before all other 
-     * commands since any command will clear the contingent allegience 
-     * condition that exists and the sense data is only guranteed to be 
+     * commands since any command will clear the contingent allegiance 
+     * condition that exists and the sense data is only guaranteed to be 
      * valid while the condition exists.
      */
 
@@ -3002,12 +2999,12 @@ restart:
 			Scsi_Cmnd *tmp;
 
 			if (!cmd) {
-			    printk("scsi%d : very wierd.\n", host->host_no);
+			    printk("scsi%d : very weird.\n", host->host_no);
 			    break;
 			}
 
 			if (!(tmp = cmd->cmd)) {
-			    printk("scsi%d : wierd.  NCR53c7x0_cmd has no Scsi_Cmnd\n",
+			    printk("scsi%d : weird.  NCR53c7x0_cmd has no Scsi_Cmnd\n",
 				host->host_no);
 				continue;
 			}
@@ -3023,7 +3020,7 @@ restart:
 			search_found = 1;
 
 			/* Important - remove from list _before_ done is called */
-			/* XXX - SLL.  Seems like DLL is unecessary */
+			/* XXX - SLL.  Seems like DLL is unnecessary */
 			if (cmd->prev)
 			    cmd->prev->next = cmd->next;
 			if (cmd_prev_ptr)
@@ -3341,7 +3338,7 @@ static void intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd
 	/*
 	 * MSGOUT phase - shouldn't happen, because we haven't 
 	 *		asserted ATN.
-	 * CMDOUT phase - shouldn't happen, since we've allready
+	 * CMDOUT phase - shouldn't happen, since we've already
 	 * 		sent a valid command.
 	 * DATAIN/DATAOUT - other one shouldn't happen, since 
 	 * 		SCSI commands can ONLY have one or the other.
@@ -3408,7 +3405,7 @@ static void intr_dma (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
     dsa = (unsigned long *) NCR53c7x0_read32(DSA_REG);
 
     /*
-     * DSTAT_ABRT is the aborted interrupt.  This is set whenver the 
+     * DSTAT_ABRT is the aborted interrupt.  This is set whenever the 
      * SCSI chip is aborted.  
      * 
      * With NCR53c700 and NCR53c700-66 style chips, we should only 
@@ -3623,7 +3620,7 @@ static int print_insn (struct Scsi_Host *host, unsigned long *insn,
 /*
  * Function : int NCR53c7xx_abort (Scsi_Cmnd *cmd)
  * 
- * Purpose : Abort an erratant SCSI command, doing all necessary
+ * Purpose : Abort an errant SCSI command, doing all necessary
  *	cleanup of the issue_queue, running_list, shared Linux/NCR
  *	dsa issue and reconnect queues.
  *
@@ -3676,7 +3673,7 @@ int NCR53c7xx_abort (Scsi_Cmnd *cmd) {
     }
 
 /* 
- * That failing, the command could be in our list of allready executing 
+ * That failing, the command could be in our list of already executing 
  * commands.  If this is the case, drastic measures are called for.  
  */ 
 

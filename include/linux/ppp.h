@@ -39,7 +39,7 @@
 #define PPP_ADDRESS	0xFF	/* first character of frame   <--  (may be   */
 #define PPP_CONTROL	0x03	/* second character of frame  <-- compressed)*/
 #define	PPP_TRANS	0x20	/* Asynchronous transparency modifier */
-#define PPP_ESC		0x7d	/* escape charecter -- next character is
+#define PPP_ESC		0x7d	/* escape character -- next character is
 				   data, and the PPP_TRANS bit should be
 				   toggled. PPP_ESC PPP_FLAG is illegal */
 
@@ -98,7 +98,7 @@ struct ppp_lqp_packet_hdr {
   unsigned long		PeerInPackets;	/* Copied from SavedInPackets	 */
   unsigned long		PeerInDiscards; /* Copied from SavedInDiscards	 */
   unsigned long		PeerInErrors;	/* Copied from SavedInErrors	 */
-  unsigned long		PeerInOctets;	/* Copeid from SavedInOctets	 */
+  unsigned long		PeerInOctets;	/* Copied from SavedInOctets	 */
   unsigned long		PeerOutLQRs;	/* Copied from OutLQRs, plus 1	 */
   unsigned long		PeerOutPackets; /* Current ifOutUniPackets, + 1	 */
   unsigned long		PeerOutOctets;	/* Current ifOutOctets + LQR	 */
@@ -110,7 +110,7 @@ struct ppp_lqp_packet_hdr {
  */
 
 struct ppp_lqp_packet_trailer {
-  unsigned long		SaveInLQRs;	/* Current InLQRs on receiption	 */
+  unsigned long		SaveInLQRs;	/* Current InLQRs on reception	 */
   unsigned long		SaveInPackets;	/* Current ifInUniPackets	 */
   unsigned long		SaveInDiscards; /* Current ifInDiscards		 */
   unsigned long		SaveInErrors;	/* Current ifInErrors		 */
@@ -119,7 +119,7 @@ struct ppp_lqp_packet_trailer {
 
 /*
  * PPP LQP packet. The packet is changed by the driver immediately prior
- * to transmission and updated upon receiption with the current values.
+ * to transmission and updated upon reception with the current values.
  * So, it must be known to the driver as well as the pppd software.
  */
 

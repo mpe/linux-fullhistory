@@ -101,44 +101,43 @@ struct inode_operations proc_net_inode_operations = {
 };
 
 static struct proc_dir_entry net_dir[] = {
-	{ 1,2,".." },
-	{ 8,1,"." },
-	{ 128,4,"unix" }
+	{ PROC_NET,		1, "." },
+	{ PROC_ROOT_INO,	2, ".." },
+	{ PROC_NET_UNIX,	4, "unix" },
 #ifdef CONFIG_INET
-	,{ 129,3,"arp" },
-	{ 130,5,"route" },
-	{ 131,3,"dev" },
-	{ 132,3,"raw" },
-	{ 133,3,"tcp" },
-	{ 134,3,"udp" },
-	{ 135,4,"snmp" }
+	{ PROC_NET_ARP,		3, "arp" },
+	{ PROC_NET_ROUTE,	5, "route" },
+	{ PROC_NET_DEV,		3, "dev" },
+	{ PROC_NET_RAW,		3, "raw" },
+	{ PROC_NET_TCP,		3, "tcp" },
+	{ PROC_NET_UDP,		3, "udp" },
+	{ PROC_NET_SNMP,	4, "snmp" },
 #ifdef CONFIG_INET_RARP
-	,{ 136,4,"rarp"}
+	{ PROC_NET_RARP,	4, "rarp"},
 #endif
 #endif	/* CONFIG_INET */
 #ifdef CONFIG_IPX
-	,{ 137,9,"ipx_route" },
-	{ 138,3,"ipx" }
+	{ PROC_NET_IPX_ROUTE,	9, "ipx_route" },
+	{ PROC_NET_IPX,		3, "ipx" },
 #endif /* CONFIG_IPX */
 #ifdef CONFIG_AX25
-	,{ 139,10,"ax25_route" },
-	{ 140,4,"ax25" }
+	{ PROC_NET_AX25_ROUTE,	10, "ax25_route" },
+	{ PROC_NET_AX25,	4, "ax25" },
 #ifdef CONFIG_NETROM
-	,{ 141,8,"nr_nodes" },
-	{ 142,8,"nr_neigh" },
-	{ 143,2,"nr" }
+	{ PROC_NET_NR_NODES,	8, "nr_nodes" },
+	{ PROC_NET_NR_NEIGH,	8, "nr_neigh" },
+	{ PROC_NET_NR,		2, "nr" },
 #endif /* CONFIG_NETROM */
 #endif /* CONFIG_AX25 */
+	{ 0, 0, NULL }
 };
 
-#define NR_NET_DIRENTRY ((sizeof (net_dir))/(sizeof (net_dir[0])))
-
+#define NR_NET_DIRENTRY ((sizeof (net_dir))/(sizeof (net_dir[0])) - 1)
 
 static int proc_lookupnet(struct inode * dir,const char * name, int len,
 	struct inode ** result)
 {
-	unsigned int ino;
-	int i;
+	struct proc_dir_entry *de;
 
 	*result = NULL;
 	if (!dir)
@@ -147,20 +146,16 @@ static int proc_lookupnet(struct inode * dir,const char * name, int len,
 		iput(dir);
 		return -ENOENT;
 	}
-	i = NR_NET_DIRENTRY;
-	while (i-- > 0 && !proc_match(len,name,net_dir+i))
-		/* nothing */;
-	if (i < 0) {
+	for (de = net_dir ; de->name ; de++) {
+		if (!proc_match(len, name, de))
+			continue;
+		*result = iget(dir->i_sb, de->low_ino);
 		iput(dir);
-		return -ENOENT;
+		if (!*result)
+			return -ENOENT;
+		return 0;
 	}
-	ino = net_dir[i].low_ino;
-	if (!(*result = iget(dir->i_sb,ino))) {
-		iput(dir);
-		return -ENOENT;
-	}
-	iput(dir);
-	return 0;
+	return -ENOENT;
 }
 
 static int proc_readnetdir(struct inode * inode, struct file * filp,
@@ -217,60 +212,60 @@ static int proc_readnet(struct inode * inode, struct file * file,
 
 		switch (ino) 
 		{
-			case 128:
+			case PROC_NET_UNIX:
 				length = unix_get_info(page,&start,file->f_pos,thistime);
 				break;
 #ifdef CONFIG_INET
-			case 129:
+			case PROC_NET_ARP:
 				length = arp_get_info(page,&start,file->f_pos,thistime);
 				break;
-			case 130:
+			case PROC_NET_ROUTE:
 				length = rt_get_info(page,&start,file->f_pos,thistime);
 				break;
-			case 131:
+			case PROC_NET_DEV:
 				length = dev_get_info(page,&start,file->f_pos,thistime);
 				break;
-			case 132:
+			case PROC_NET_RAW:
 				length = raw_get_info(page,&start,file->f_pos,thistime);
 				break;
-			case 133:
+			case PROC_NET_TCP:
 				length = tcp_get_info(page,&start,file->f_pos,thistime);
 				break;
-			case 134:
+			case PROC_NET_UDP:
 				length = udp_get_info(page,&start,file->f_pos,thistime);
 				break;
-			case 135:
+			case PROC_NET_SNMP:
 				length = snmp_get_info(page, &start, file->f_pos,thistime);
 				break;
 #ifdef CONFIG_INET_RARP				
-			case 136:
+			case PROC_NET_RARP:
 				length = rarp_get_info(page,&start,file->f_pos,thistime);
 				break;
 #endif /* CONFIG_INET_RARP */				
 #endif /* CONFIG_INET */
 #ifdef CONFIG_IPX
-			case 137:
+			case PROC_NET_IPX_ROUTE:
 				length = ipx_rt_get_info(page,&start,file->f_pos,thistime);
 				break;
-			case 138:
+			case PROC_NET_IPX:
 				length = ipx_get_info(page,&start,file->f_pos,thistime);
 				break;
 #endif /* CONFIG_IPX */
 #ifdef CONFIG_AX25
-			case 139:
+			case PROC_NET_AX25_ROUTE:
 				length = ax25_rt_get_info(page,&start,file->f_pos,thistime);
 				break;
-			case 140:
+			case PROC_NET_AX25:
 				length = ax25_get_info(page,&start,file->f_pos,thistime);
 				break;
 #ifdef CONFIG_NETROM
-			case 141:
+			case PROC_NET_NR_NODES:
 				length = nr_nodes_get_info(page,&start,file->f_pos,thistime);
 				break;
-			case 142:
+			case PROC_NET_NR_NEIGH:
 				length = nr_neigh_get_info(page,&start,file->f_pos,thistime);
 				break;
-			case 143:
+			case PROC_NET_NR:
 				length = nr_get_info(page,&start,file->f_pos,thistime);
 				break;
 #endif /* CONFIG_NETROM */

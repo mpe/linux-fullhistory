@@ -394,7 +394,7 @@ depca_probe1(struct device *dev, short ioaddr)
     struct depca_private *lp;
     int i,j, status=0;
     unsigned long mem_start, mem_base[] = DEPCA_RAM_BASE_ADDRESSES;
-    char *name=(char *)NULL;
+    char *name = NULL;
     unsigned int nicsr, offset, netRAM;
 
 
@@ -420,7 +420,7 @@ depca_probe1(struct device *dev, short ioaddr)
 	if (((mem_chkd >> i) & 0x01) == 0) { /* has the memory been checked? */
 	  name = DepcaSignature(mem_base[i]);/* check for a DEPCA here */
 	  mem_chkd |= (0x01 << i);           /* mark location checked */
-	  if (*name != (char)NULL) {         /* one found? */
+	  if (*name != '\0') {			/* one found? */
 	    j = 1;                           /* set exit flag */
 	  } else {
 	    i++;                             /* increment search index */
@@ -428,7 +428,7 @@ depca_probe1(struct device *dev, short ioaddr)
 	}
       }
 
-      if (*name != (char)NULL) {             /* found a DEPCA device */
+      if (*name != '\0') {		/* found a DEPCA device */
 	mem_start = mem_base[i];
 	dev->base_addr = ioaddr;
 
@@ -448,7 +448,7 @@ depca_probe1(struct device *dev, short ioaddr)
 	 read the ROM info.
       */
 
-	if (strstr(name,"DE100")!=(char *)NULL) {
+	if (strstr(name,"DE100") != NULL) {
 	  j = 1;
 	} else {
 	  j = 0;
@@ -471,7 +471,7 @@ depca_probe1(struct device *dev, short ioaddr)
 	/*
 	** Set up the maximum amount of network RAM(kB)
 	*/
-	if (strstr(name,"DEPCA")==(char *)NULL) {
+	if (strstr(name,"DEPCA") == NULL) {
 	  netRAM=64;
 	} else {
 	  netRAM=48;
@@ -500,7 +500,7 @@ depca_probe1(struct device *dev, short ioaddr)
 	/*
 	** Enable the shadow RAM.
 	*/
-	if (strstr(name,"DEPCA")==(char *)NULL) {
+	if (strstr(name,"DEPCA") == NULL) {
 	  nicsr |= SHE;
 	  outb(nicsr, DEPCA_NICSR);
 	}
@@ -662,7 +662,7 @@ depca_open(struct device *dev)
     struct depca_private *lp = (struct depca_private *)dev->priv;
     int i,nicsr,ioaddr = dev->base_addr;
 
-    if (request_irq(dev->irq, &depca_interrupt)) {
+    if (request_irq(dev->irq, &depca_interrupt, 0, "depca")) {
         printk("depca_open(): Requested IRQ%d is busy\n",dev->irq);
 	return -EAGAIN;
     }
@@ -1289,8 +1289,7 @@ static void SetMulticastFilter(int num_addrs, char *addrs, char *multicast_table
 /*
 ** ISA bus I/O device probe
 */
-static struct device *isa_probe(dev)
-struct device *dev;
+static struct device *isa_probe(struct device *dev)
 {
   int *port, ports[] = DEPCA_IO_PORTS;
   int status;
@@ -1317,8 +1316,7 @@ struct device *dev;
 ** EISA bus I/O device probe. Probe from slot 1 since slot 0 is usually
 ** the motherboard.
 */
-static struct device *eisa_probe(dev)
-struct device *dev;
+static struct device *eisa_probe(struct device *dev)
 {
   int i, ioaddr = DEPCA_EISA_IO_PORTS;
   int status;
@@ -1344,14 +1342,12 @@ struct device *dev;
 ** Allocate the device by pointing to the next available space in the
 ** device structure. Should one not be available, it is created.
 */
-static struct device *alloc_device(dev, ioaddr)
-struct device *dev;
-int ioaddr;
+static struct device *alloc_device(struct device *dev, int ioaddr)
 {
   /*
   ** Check the device structures for an end of list or unused device
   */
-  while (dev->next != (struct device *)NULL) {
+  while (dev->next != NULL) {
     if (dev->next->base_addr == 0xffe0) break;
     dev = dev->next;         /* walk through eth device list */
     num_eth++;               /* increment eth device number */
@@ -1361,10 +1357,10 @@ int ioaddr;
   ** If no more device structures, malloc one up. If memory could
   ** not be allocated, print an error message.
   */
-  if (dev->next == (struct device *)NULL) {
+  if (dev->next == NULL) {
     dev->next = (struct device *)kmalloc(sizeof(struct device) + 8,
 					 GFP_KERNEL);
-    if (dev->next == (struct device *)NULL) {
+    if (dev->next == NULL) {
       printk("eth%d: Device not initialised, insufficient memory\n",
 	     num_eth);
     }
@@ -1375,14 +1371,14 @@ int ioaddr;
   ** and initialize it (name, I/O address, next device (NULL) and
   ** initialisation probe routine).
   */
-  if ((dev->next != (struct device *)NULL) &&
+  if ((dev->next != NULL) &&
       (num_eth > 0) && (num_eth < 9999)) {
-    dev = dev->next;                    /* point to the new device */
-    dev->name = (char *)(dev + sizeof(struct device));
+    dev = dev->next;			/* point to the new device */
+    dev->name = (char *)(dev + 1);
     sprintf(dev->name,"eth%d", num_eth);/* New device name */
-    dev->base_addr = ioaddr;            /* assign the io address */
-    dev->next = (struct device *)NULL;  /* mark the end of list */
-    dev->init = &depca_probe;           /* initialisation routine */
+    dev->base_addr = ioaddr;		/* assign the io address */
+    dev->next = NULL;			/* mark the end of list */
+    dev->init = &depca_probe;		/* initialisation routine */
     num_depcas++;
   }
 
@@ -1405,10 +1401,10 @@ static char *DepcaSignature(unsigned long mem_addr)
   for (i=0;i<16;i++) {                  /* copy the first 16 bytes of ROM to */
     tmpstr[i] = *(unsigned char *)(mem_addr+0xc000+i); /* a temporary string */
   }
-  tmpstr[i]=(char)NULL;
+  tmpstr[i] = '\0';
 
   strcpy(thisName,"");
-  for (i=0;*signatures[i]!=(char)NULL && *thisName==(char)NULL;i++) {
+  for (i = 0 ; *signatures[i] != '\0' && *thisName == '\0' ; i++) {
     for (j=0,k=0;j<16 && k<strlen(signatures[i]);j++) {
       if (signatures[i][k] == tmpstr[j]) {              /* track signature */
 	k++;
@@ -1463,7 +1459,7 @@ static int DevicePresent(short ioaddr)
 ** Convert the ascii signature to a hex equivalent & pack in place 
 */
   if (fp) {                               /* only do this once!... */
-    for (i=0,j=0;devSig[i]!=(char)NULL && !status;i+=2,j++) {
+    for (i=0,j=0;devSig[i] != '\0' && !status;i+=2,j++) {
       if ((devSig[i]=asc2hex(devSig[i]))>=0) {
 	devSig[i]<<=4;
 	if((devSig[i+1]=asc2hex(devSig[i+1]))>=0){

@@ -10,7 +10,7 @@
  *
  * Pauline Middelink :  Made cmdline,envline only break at '\0's, to
  *                      make sure SET_PROCTITLE works. Also removed
- *                      bad '!' which forced addres recalculation for
+ *                      bad '!' which forced address recalculation for
  *                      EVERY character on the current page.
  *                      <middelin@calvin.iaf.nl>
  */
@@ -25,6 +25,7 @@
 #include <linux/a.out.h>
 #include <linux/string.h>
 #include <linux/mman.h>
+#include <linux/proc_fs.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>
@@ -80,6 +81,15 @@ static int read_core(struct inode * inode, struct file * file,char * buf, int co
 	file->f_pos += read;
 	return read;
 }
+
+static struct file_operations proc_kcore_operations = {
+	NULL,           /* lseek */
+	read_core,
+};
+
+struct inode_operations proc_kcore_inode_operations = {
+	&proc_kcore_operations, 
+};
 
 static int get_loadavg(char * buffer)
 {
@@ -224,7 +234,7 @@ static int get_array(struct task_struct ** p, unsigned long start, unsigned long
 		} while (addr & ~PAGE_MASK);
 	}
 ready:
-	/* remove the trailing blanks, used to fillout argv,envp space */
+	/* remove the trailing blanks, used to fill out argv,envp space */
 	while (result>0 && buffer[result-1]==' ')
 		result--;
 	return result;
@@ -452,85 +462,102 @@ extern int get_module_list(char *);
 extern int get_device_list(char *);
 extern int get_filesystem_list(char *);
 extern int get_ksyms_list(char *);
+extern int get_irq_list(char *);
+
+static int get_root_array(char * page, int type)
+{
+	switch (type) {
+		case PROC_LOADAVG:
+			return get_loadavg(page);
+
+		case PROC_UPTIME:
+			return get_uptime(page);
+
+		case PROC_MEMINFO:
+			return get_meminfo(page);
+
+		case PROC_VERSION:
+			return get_version(page);
+
+#ifdef CONFIG_DEBUG_MALLOC
+		case PROC_MALLOC:
+			return get_malloc(page);
+#endif
+
+		case PROC_MODULES:
+			return get_module_list(page);
+
+		case PROC_STAT:
+			return get_kstat(page);
+
+		case PROC_DEVICES:
+			return get_device_list(page);
+
+		case PROC_INTERRUPTS:
+			return get_irq_list(page);
+
+		case PROC_FILESYSTEMS:
+			return get_filesystem_list(page);
+
+		case PROC_KSYMS:
+			return get_ksyms_list(page);
+	}
+	return -EBADF;
+}
+
+static int get_process_array(char * page, int pid, int type)
+{
+	switch (type) {
+		case PROC_PID_ENVIRON:
+			return get_env(pid, page);
+		case PROC_PID_CMDLINE:
+			return get_arg(pid, page);
+		case PROC_PID_STAT:
+			return get_stat(pid, page);
+		case PROC_PID_STATM:
+			return get_statm(pid, page);
+		case PROC_PID_MAPS:
+			return get_maps(pid, page);
+	}
+	return -EBADF;
+}
+
+
+static inline int fill_array(char * page, int pid, int type)
+{
+	if (pid)
+		return get_process_array(page, pid, type);
+	return get_root_array(page, type);
+}
 
 static int array_read(struct inode * inode, struct file * file,char * buf, int count)
 {
-	char * page;
+	unsigned long page;
 	int length;
 	int end;
 	unsigned int type, pid;
 
 	if (count < 0)
 		return -EINVAL;
-	if (!(page = (char*) __get_free_page(GFP_KERNEL)))
+	if (!(page = __get_free_page(GFP_KERNEL)))
 		return -ENOMEM;
 	type = inode->i_ino;
 	pid = type >> 16;
 	type &= 0x0000ffff;
-	switch (type) {
-		case 2:
-			length = get_loadavg(page);
-			break;
-		case 3:
-			length = get_uptime(page);
-			break;
-		case 4:
-			length = get_meminfo(page);
-			break;
-		case 6:
-			length = get_version(page);
-			break;
-		case 9:
-			length = get_env(pid, page);
-			break;
-		case 10:
-			length = get_arg(pid, page);
-			break;
-		case 11:
-			length = get_stat(pid, page);
-			break;
-		case 12:
-			length = get_statm(pid, page);
-			break;
-#ifdef CONFIG_DEBUG_MALLOC
-		case 13:
-			length = get_malloc(page);
-			break;
-#endif
-		case 14:
-			free_page((unsigned long) page);
-			return read_core(inode, file, buf, count);
-		case 15:
-			length = get_maps(pid, page);
-			break;
-		case 16:
-			length = get_module_list(page);
-			break;
-		case 17:
-			length = get_kstat(page);
-			break;
-		case 18:
-			length = get_device_list(page);
-			break;
-		case 19:
-			length = get_filesystem_list(page);
-			break;
-		case 20:
-			length = get_ksyms_list(page);
-			break;
-		default:
-			free_page((unsigned long) page);
-			return -EBADF;
+	length = fill_array((char *) page, pid, type);
+	if (length < 0) {
+		free_page(page);
+		return length;
 	}
 	if (file->f_pos >= length) {
-		free_page((unsigned long) page);
+		free_page(page);
 		return 0;
 	}
 	if (count + file->f_pos > length)
 		count = length - file->f_pos;
 	end = count + file->f_pos;
-	memcpy_tofs(buf, page + file->f_pos, count);
-	free_page((unsigned long) page);
+	memcpy_tofs(buf, (char *) page + file->f_pos, count);
+	free_page(page);
 	file->f_pos = end;
 	return count;
 }

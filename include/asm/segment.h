@@ -191,7 +191,7 @@ __asm__("cld\n\t" \
  __generic_memcpy_tofs((to),(from),(n)))
 
 /*
- * Someone who knows GNU asm better than I should double check the followig.
+ * Someone who knows GNU asm better than I should double check the following.
  * It seems to work, but I don't know if I'm doing something subtly wrong.
  * --- TYT, 11/24/91
  * [ nothing wrong here, Linus: I just changed the ax to be any reg ]

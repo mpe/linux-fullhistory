@@ -131,7 +131,7 @@ Released 1994-06-13
 
 	  DE-600:
 	  - The adapter is not recognized at boot, i.e. an Ethernet
-	    adress of 00:80:c8:... is not shown, try to add another
+	    address of 00:80:c8:... is not shown, try to add another
 	      "; SLOW_DOWN_IO"
 	    at DE600_SLOW_DOWN in the "tuning" section. As a last resort,
 	    uncomment: "#define REALLY_SLOW_IO" (see <asm/io.h> for hints).

@@ -151,7 +151,9 @@ bool 'Extended fs support' CONFIG_EXT_FS n
 bool 'Second extended fs support' CONFIG_EXT2_FS y
 bool 'xiafs filesystem support' CONFIG_XIA_FS n
 bool 'msdos fs support' CONFIG_MSDOS_FS y
+if [ "$CONFIG_MSDOS_FS" = "y" ]; then
 bool 'umsdos: Unix like fs on top of std MSDOS FAT fs' CONFIG_UMSDOS_FS n
+fi
 bool '/proc filesystem support' CONFIG_PROC_FS y
 if [ "$CONFIG_INET" = "y" ]; then
 bool 'NFS filesystem support' CONFIG_NFS_FS y

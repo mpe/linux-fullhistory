@@ -22,7 +22,7 @@ struct msdos_inode_info {
 		the ext2_inode_info. So it does not change anything to
 		the total size of a struct inode.
 
-		I have not put it conditionnal. With the advent of loadable
+		I have not put it conditional. With the advent of loadable
 		file system drivers, it would be very easy to compile
 		a MsDOS FS driver unaware of UMSDOS and then later to
 		load a (then incompatible) UMSDOS FS driver.

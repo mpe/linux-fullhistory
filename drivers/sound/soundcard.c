@@ -219,20 +219,13 @@ snd_set_irq_handler (int interrupt_level, void (*hndlr) (int))
 {
   int             retcode;
 
-  struct sigaction sa;
-
-  sa.sa_handler = hndlr;
-
+  retcode = request_irq(interrupt_level, &hndlr,
 #ifdef SND_SA_INTERRUPT
-  sa.sa_flags = SA_INTERRUPT;
+	SA_INTERRUPT,
 #else
-  sa.sa_flags = 0;
+	0,
 #endif
-
-  sa.sa_mask = 0;
-  sa.sa_restorer = NULL;
-
-  retcode = irqaction (interrupt_level, &sa);
+	"sound");
 
   if (retcode < 0)
     {

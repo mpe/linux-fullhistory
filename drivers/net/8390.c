@@ -53,6 +53,11 @@ static char *version =
 
 #include "8390.h"
 
+#ifdef MODULE
+#include <linux/module.h>
+#include "../../tools/version.h"
+#endif
+
 /* These are the operational function interfaces to board-specific
    routines.
 	void reset_8390(struct device *dev)
@@ -96,7 +101,6 @@ static void NS8390_trigger_send(struct device *dev, unsigned int length,
 static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 #endif
 
-struct sigaction ei_sigaction = { ei_interrupt, 0, 0, NULL, };
 
 /* Open/initialize the board.  This routine goes all-out, setting everything
    up anew at each open, even though many of these registers should only
@@ -130,12 +134,15 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 	   the board has died and kick it. */
 
     if (dev->tbusy) {	/* Do timeouts, just like the 8003 driver. */
-		int txsr = inb(e8390_base+EN0_TSR), isr;
+		int txsr = inb(e8390_base+EN0_TSR), isr, cmd;
 		int tickssofar = jiffies - dev->trans_start;
 		if (tickssofar < 10	||	(tickssofar < 15 && ! (txsr & ENTSR_PTX))) {
 			return 1;
 		}
 		isr = inb(e8390_base+EN0_ISR);
+		cmd = inb(e8390_base+E8390_CMD) & (E8390_STOP|E8390_START);
+		if ((cmd == 0) || (cmd == (E8390_STOP|E8390_START)))
+			return 1;
 		printk(KERN_DEBUG "%s: transmit timed out, TX status %#2x, ISR %#2x.\n",
 			   dev->name, txsr, isr);
 		/* Does the 8390 thinks it has posted an interrupt? */
@@ -238,7 +245,7 @@ void ei_interrupt(int reg_ptr)
     int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
     struct device *dev = (struct device *)(irq2dev_map[irq]);
     int e8390_base;
-    int interrupts, boguscount = 0;
+    int interrupts, cmd, boguscount = 0;
     struct ei_device *ei_local;
     
     if (dev == NULL) {
@@ -270,6 +277,12 @@ void ei_interrupt(int reg_ptr)
     /* !!Assumption!! -- we stay in page 0.	 Don't break this. */
     while ((interrupts = inb_p(e8390_base + EN0_ISR)) != 0
 		   && ++boguscount < 9) {
+		cmd = inb(e8390_base+E8390_CMD) & (E8390_STOP|E8390_START);
+		if ((cmd == 0) || (cmd == (E8390_STOP|E8390_START))) {
+			printk("%s: card not present\n", dev->name);
+			interrupts = 0;
+			break;
+			}
 		if (interrupts & ENISR_RDC) {
 			/* Ack meaningless DMA complete. */
 			outb_p(ENISR_RDC, e8390_base + EN0_ISR);
@@ -669,6 +682,19 @@ static void NS8390_trigger_send(struct device *dev, unsigned int length,
     return;
 }
 
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+
+int init_module(void)
+{
+     return 0;
+}
+
+void
+cleanup_module(void)
+{
+}
+#endif /* MODULE */
 
 /*
  * Local variables:

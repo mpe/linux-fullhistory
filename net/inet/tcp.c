@@ -648,7 +648,7 @@ static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 	     sk->packets_out >= sk->cong_window) 
 	{
 		/* checksum will be supplied by tcp_write_xmit.  So
-		 * we shouldn't need to set it at all.  I'm being paraoid */
+		 * we shouldn't need to set it at all.  I'm being paranoid */
 		th->check = 0;
 		if (skb->next != NULL) 
 		{
@@ -1003,7 +1003,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
  	 * If window < 1/2 the maximum window we've seen from this
  	 *   host, don't use it.  This is sender side
  	 *   silly window prevention, as specified in RFC1122.
- 	 *   (Note that this is diffferent than earlier versions of
+ 	 *   (Note that this is different than earlier versions of
  	 *   SWS prevention, e.g. RFC813.).  What we actually do is 
 	 *   use the whole MSS.  Since the results in the right
 	 *   edge of the packet being outside the window, it will
@@ -1148,7 +1148,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 	sk->err = 0;
 
 /*
- *	Nagles rule. Turn Nagle off with TCP_NODELAY for highly
+ *	Nagle's rule. Turn Nagle off with TCP_NODELAY for highly
  *	interactive fast network servers. It's meant to be on and
  *	it really improves the throughput though not the echo time
  *	on my slow slip link - Alan
@@ -1312,9 +1312,9 @@ static void cleanup_rbuf(struct sock *sk)
 		 * is to simply do nothing if the other end has room to send at
 		 * least 3 full packets, because the ack from those will auto-
 		 * matically update the window.  If the other end doesn't think
-		 * we have much space left, but we have room for atleast 1 more
+		 * we have much space left, but we have room for at least 1 more
 		 * complete packet than it thinks we do, we will send an ack
-		 * immediatedly.  Otherwise we will wait up to .5 seconds in case
+		 * immediately.  Otherwise we will wait up to .5 seconds in case
 		 * the user reads some more.
 		 */
 		sk->ack_backlog++;
@@ -2042,7 +2042,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 		newsk->mtu = rt->rt_mss - HEADER_SIZE;
 	else 
 	{
-#ifdef CONFIG_INET_SNARL	/* Sub Nets ARe Local */
+#ifdef CONFIG_INET_SNARL	/* Sub Nets Are Local */
 		if ((saddr ^ daddr) & default_mask(saddr))
 #else
 		if ((saddr ^ daddr) & dev->pa_mask)
@@ -2921,7 +2921,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int 
 	}
 
 	/*
-	 * Incomming ACK to a FIN we sent in the case of our initiating the close.
+	 * Incoming ACK to a FIN we sent in the case of our initiating the close.
 	 *
 	 * Move to FIN_WAIT2 to await a FIN from the other end.
 	 */
@@ -2947,7 +2947,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int 
 	}
 
 	/*
-	 *	Incoming ACK to a FIN we sent in the case of a simultanious close.
+	 *	Incoming ACK to a FIN we sent in the case of a simultaneous close.
 	 *
 	 *	Move to TIME_WAIT
 	 */
@@ -2981,7 +2981,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int 
 	 * would not be true.  If you look at the pattern of timing, you can
 	 * show that rto is increased fast enough that the next packet would
 	 * almost never be retransmitted immediately.  Then you'd end up
-	 * waiting for a timeout to send each packet on the retranmission
+	 * waiting for a timeout to send each packet on the retransmission
 	 * queue.  With my implementation of the Karn sampling algorithm,
 	 * the timeout would double each time.  The net result is that it would
 	 * take a hideous amount of time to recover from a single dropped packet.
@@ -3365,7 +3365,7 @@ static inline int tcp_urg(struct sock *sk, struct tcphdr *th,
  *  (and thence onto LAST-ACK and finally, CLOSE, we never enter
  *  TIME-WAIT)
  *
- *  If we are in FINWAIT-1, a received FIN indicates simultanious
+ *  If we are in FINWAIT-1, a received FIN indicates simultaneous
  *  close and we go into CLOSING (and later onto TIME-WAIT)
  *
  *  If we are in FINWAIT-2, a received FIN moves us to TIME-WAIT.
@@ -3415,7 +3415,7 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th,
 			return(0);
 		case TCP_FIN_WAIT1:
 			/*
-			 * This case occurs when a simultanious close
+			 * This case occurs when a simultaneous close
 			 * happens, we must ack the received FIN and
 			 * enter the CLOSING state.
 			 *
@@ -3585,7 +3585,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	
 
 	/*
-	 *	We need to build the routing stuff fromt the things saved in skb. 
+	 *	We need to build the routing stuff from the things saved in skb. 
 	 */
 
 	tmp = sk->prot->build_header(buff, sk->saddr, sk->daddr, &dev,
@@ -3875,7 +3875,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
  *	speed although further optimizing here is possible.
  */
  
-	/* Im trusting gcc to optimise this sensibly... might need judicious application of a software mallet */
+	/* I'm trusting gcc to optimise this sensibly... might need judicious application of a software mallet */
 	if(!(sk->shutdown & RCV_SHUTDOWN) && sk->state==TCP_ESTABLISHED && !th->urg && !th->syn && !th->fin && !th->rst)
 	{	
 		/* Packets in order. Fits window */
@@ -4279,7 +4279,7 @@ static void tcp_write_wakeup(struct sock *sk)
 	int tmp;
 
 	if (sk->zapped)
-		return;	/* Afer a valid reset we can send no more */
+		return;	/* After a valid reset we can send no more */
 
 	/*
 	 * Write data can still be transmitted/retransmitted in the
@@ -4349,7 +4349,7 @@ void
 tcp_send_probe0(struct sock *sk)
 {
 	if (sk->zapped)
-		return;		/* Afer a valid reset we can send no more */
+		return;		/* After a valid reset we can send no more */
 
 	tcp_write_wakeup(sk);
 

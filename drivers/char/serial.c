@@ -115,7 +115,7 @@ static void change_speed(struct async_struct *info);
  * While the access port and interrupt is configurable, the default
  * port locations are 0x302 for the port control register, and 0x303
  * for the data read/write register. Normally, the interrupt is at irq3
- * but can be anything from 3 to 7 inclusive. Note tht using 3 will
+ * but can be anything from 3 to 7 inclusive. Note that using 3 will
  * require disabling com2.
  */
 
@@ -221,7 +221,7 @@ static inline int serial_paranoia_check(struct async_struct *info,
 }
 
 /*
- * This is used to figure out the divsor speeds and the timeouts
+ * This is used to figure out the divisor speeds and the timeouts
  */
 static int baud_table[] = {
 	0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800,
@@ -720,7 +720,7 @@ static void do_softint(void *private)
 /*
  * This subroutine is called when the RS_TIMER goes off.  It is used
  * by the serial driver to handle ports that do not have an interrupt
- * (irq=0).  This doesn't work very well for 16450's, but gives bearly
+ * (irq=0).  This doesn't work very well for 16450's, but gives barely
  * passable results for a 16550A.  (Although at the expense of much
  * CPU overhead).
  */
@@ -781,15 +781,9 @@ static int grab_all_interrupts(int dontgrab)
 {
 	int 			irq_lines = 0;
 	int			i, mask;
-	struct sigaction 	sa;
-	
-	sa.sa_handler = rs_probe;
-	sa.sa_flags = (SA_INTERRUPT);
-	sa.sa_mask = 0;
-	sa.sa_restorer = NULL;
 	
 	for (i = 0, mask = 1; i < 16; i++, mask <<= 1) {
-		if (!(mask & dontgrab) && !irqaction(i, &sa)) {
+		if (!(mask & dontgrab) && !request_irq(i, rs_probe, SA_INTERRUPT, "serial probe")) {
 			irq_lines |= mask;
 		}
 	}
@@ -838,8 +832,8 @@ static int startup(struct async_struct * info)
 {
 	unsigned short ICP;
 	unsigned long flags;
-	int			retval;
-	struct sigaction	sa;
+	int	retval;
+	void (*handler)(int);
 
 	if (info->flags & ASYNC_INITIALIZED)
 		return 0;
@@ -895,14 +889,11 @@ static int startup(struct async_struct * info)
 			  !IRQ_ports[info->irq]->next_port)) {
 		if (IRQ_ports[info->irq]) {
 			free_irq(info->irq);
-			sa.sa_handler = rs_interrupt;
+			handler = rs_interrupt;
 		} else 
-			sa.sa_handler = rs_interrupt_single;
+			handler = rs_interrupt_single;
 
-		sa.sa_flags = (SA_INTERRUPT);
-		sa.sa_mask = 0;
-		sa.sa_restorer = NULL;
-		retval = irqaction(info->irq,&sa);
+		retval = request_irq(info->irq, handler, SA_INTERRUPT, "serial");
 		if (retval) {
 			restore_flags(flags);
 			if (suser()) {
@@ -995,7 +986,6 @@ static int startup(struct async_struct * info)
  */
 static void shutdown(struct async_struct * info)
 {
-	struct sigaction	sa;
 	unsigned long	flags;
 	unsigned long timeout;
 	int		retval;
@@ -1028,14 +1018,10 @@ static void shutdown(struct async_struct * info)
 			  !IRQ_ports[info->irq]->next_port)) {
 		if (IRQ_ports[info->irq]) {
 			free_irq(info->irq);
-			sa.sa_flags = (SA_INTERRUPT);
-			sa.sa_mask = 0;
-			sa.sa_restorer = NULL;
-			sa.sa_handler = rs_interrupt_single;
-			retval = irqaction(info->irq, &sa);
+			retval = request_irq(info->irq, rs_interrupt_single, 0, "serial");
 			
 			if (retval)
-				printk("serial shutdown: irqaction: error %d"
+				printk("serial shutdown: request_irq: error %d"
 				       "  Couldn't reacquire IRQ.\n", retval);
 		} else
 			free_irq(info->irq);
@@ -1054,7 +1040,7 @@ static void shutdown(struct async_struct * info)
 	}
 	
 	/*
-	 * Bebore we drop DTR, make sure the UART transmitter has
+	 * Before we drop DTR, make sure the UART transmitter has
 	 * completely drained; this is especially important if there
 	 * is a transmit FIFO!
 	 * 
@@ -1975,8 +1961,8 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 /*
  * This routine is called whenever a serial port is opened.  It
  * enables interrupts for a serial port, linking in its async structure into
- * the IRQ chain.   It also performs the serial-speicific
- * initalization for the tty structure.
+ * the IRQ chain.   It also performs the serial-specific
+ * initialization for the tty structure.
  */
 int rs_open(struct tty_struct *tty, struct file * filp)
 {
@@ -2200,7 +2186,7 @@ static void autoconfig(struct async_struct * info)
 	 * test, because they apparently don't implement the loopback
 	 * test mode.  So this test is skipped on the COM 1 through
 	 * COM 4 ports.  This *should* be safe, since no board
-	 * manufactucturer would be stupid enough to design a board
+	 * manufacturer would be stupid enough to design a board
 	 * that conflicts with COM 1-4 --- we hope!
 	 */
 	if (!(info->flags & ASYNC_SKIP_TEST)) {

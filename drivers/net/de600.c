@@ -194,9 +194,9 @@ typedef unsigned char byte;
 /*
  * command register, accessed through DATA_PORT with low bits = COMMAND
  */
-#define RX_ALL		0x01 /* PROMISCIOUS */
-#define RX_BP		0x02 /* default: BROADCAST & PHYSICAL ADRESS */
-#define RX_MBP		0x03 /* MULTICAST, BROADCAST & PHYSICAL ADRESS */
+#define RX_ALL		0x01 /* PROMISCUOUS */
+#define RX_BP		0x02 /* default: BROADCAST & PHYSICAL ADDRESS */
+#define RX_MBP		0x03 /* MULTICAST, BROADCAST & PHYSICAL ADDRESS */
 
 #define TX_ENABLE	0x04 /* bit 2 */
 #define RX_ENABLE	0x08 /* bit 3 */
@@ -340,7 +340,7 @@ de600_read_byte(unsigned char type, struct device *dev) { /* dev used by macros 
 static int
 de600_open(struct device *dev)
 {
-	if (request_irq(DE600_IRQ, de600_interrupt)) {
+	if (request_irq(DE600_IRQ, de600_interrupt, 0, "de600")) {
 		printk ("%s: unable to get IRQ %d\n", dev->name, DE600_IRQ);
 		return 1;
 	}
@@ -795,7 +795,7 @@ adapter_init(struct device *dev)
  * Note that the returned window info will never be smaller than
  * DE600_MIN_WINDOW, i.e. 1024
  * This differs from the standard function, that can return an
- * arbitraily small window!
+ * arbitrarily small window!
  */
 #define min(a,b)	((a)<(b)?(a):(b))
 static unsigned long

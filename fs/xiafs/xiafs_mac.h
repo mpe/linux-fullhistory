@@ -18,7 +18,7 @@ extern char internal_error_message[];
 #define XIAFS_INODES_PER_Z(sp)	(_XIAFS_INODES_PER_BLOCK << XIAFS_ZSHIFT(sp))
 
 /* Use the most significant bytes of zone pointers to store block counter. */
-/* This is ugly, but it works. Note, We have another 7 bytes for "expension". */
+/* This is ugly, but it works. Note, We have another 7 bytes for "expansion". */
 
 #define XIAFS_GET_BLOCKS(row_ip, blocks)  \
   blocks=((((row_ip)->i_zone[0] >> 24) & 0xff )|\

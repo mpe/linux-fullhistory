@@ -16,8 +16,8 @@
 
 #define UART_RX		0	/* In:  Receive buffer (DLAB=0) */
 #define UART_TX		0	/* Out: Transmit buffer (DLAB=0) */
-#define UART_DLL	0	/* Out: Devisor Latch Low (DLAB=1) */
-#define UART_DLM	1	/* Out: Devisor Latch High (DLAB=1) */
+#define UART_DLL	0	/* Out: Divisor Latch Low (DLAB=1) */
+#define UART_DLM	1	/* Out: Divisor Latch High (DLAB=1) */
 #define UART_IER	1	/* Out: Interrupt Enable Register */
 #define UART_IIR	2	/* In:  Interrupt ID Register */
 #define UART_FCR	2	/* Out: FIFO Control Register */
@@ -46,10 +46,10 @@
  * Note: if the word length is 5 bits (UART_LCR_WLEN5), then setting 
  * UART_LCR_STOP will select 1.5 stop bits, not 2 stop bits.
  */
-#define UART_LCR_DLAB	0x80	/* Devisor latch access bit */
+#define UART_LCR_DLAB	0x80	/* Divisor latch access bit */
 #define UART_LCR_SBC	0x40	/* Set break control */
 #define UART_LCR_SPAR	0x20	/* Stick parity (?) */
-#define UART_LCR_EPAR	0x10	/* Even paraity select */
+#define UART_LCR_EPAR	0x10	/* Even parity select */
 #define UART_LCR_PARITY	0x08	/* Parity Enable */
 #define UART_LCR_STOP	0x04	/* Stop bits: 0=1 stop bit, 1= 2 stop bits */
 #define UART_LCR_WLEN5  0x00	/* Wordlength: 5 bits */
@@ -69,7 +69,7 @@
 #define UART_LSR_DR	0x01	/* Receiver data ready */
 
 /*
- * These are the definitions for the Interrupt Indentification Register
+ * These are the definitions for the Interrupt Identification Register
  */
 #define UART_IIR_NO_INT	0x01	/* No interrupts pending */
 #define UART_IIR_ID	0x06	/* Mask for the interrupt ID */

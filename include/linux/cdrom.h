@@ -313,7 +313,7 @@ struct cdrom_read
 	};
 
 /*
- * preliminary extensions for transfering audio frames
+ * preliminary extensions for transferring audio frames
  * currently used by sbpcd.c
  * (still may change if other drivers will use it, too):
  */
@@ -365,7 +365,7 @@ struct cdrom_read_audio
 #define	CDROMEJECT		0x5309		/* eject CD-ROM media		*/
 
 #define	CDROMVOLCTRL		0x530a		/* (struct cdrom_volctrl)	*/
-                                                /* vlume control		*/
+                                                /* volume control		*/
 
 #define	CDROMSUBCHNL		0x530b		/* (struct cdrom_subchnl)	*/
                                                 /* read Q sub-channel data 	*/
@@ -376,7 +376,7 @@ struct cdrom_read_audio
 #define	CDROMREADMODE1		0x530d		/* (struct cdrom_read)		*/
                                                 /* read type-1 data 		*/
 /*
- * preliminary extension for transfering audio frames
+ * preliminary extension for transferring audio frames
  * currently used by sbpcd.c
  * (still may change if other drivers will use it, too):
  */

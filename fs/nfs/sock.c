@@ -203,7 +203,7 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 	 * same. 
 	 *
 	 * If they are not the same then a reply to a write request will be
-	 * a small acknowledgement, so even if wsize < rsize we should never
+	 * a small acknowledgment, so even if wsize < rsize we should never
 	 * cause data to be written past the end of the buffer (unless some
 	 * brain damaged implementation sends out a large write acknowledge).
 	 *
@@ -218,7 +218,7 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 }
 
 /*
- * For now we lock out other simulaneous nfs calls for the same filesytem
+ * For now we lock out other simultaneous nfs calls for the same filesystem
  * because we are single-threaded and don't want to get mismatched
  * RPC replies.
  */

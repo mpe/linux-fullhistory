@@ -22,7 +22,7 @@
  * Modified by Christoph Niemann (niemann@rubdv15.etdv.ruhr-uni-bochum.de)
  * Changes:  Better interrupt-handler (like in busmouse.c).
  *	     Some changes to reduce code-size.
- *	     Changed dectection code to use inb_p() instead of doing empty
+ *	     Changed detection code to use inb_p() instead of doing empty
  *	     loops to delay i/o.
  *
  * version 0.3a
@@ -86,7 +86,7 @@ static int open_mouse(struct inode * inode, struct file * file)
 	mouse.active = 1;
 	mouse.ready = mouse.dx = mouse.dy = 0;	
 	mouse.buttons = 0x80;
-	if (request_irq(MOUSE_IRQ, ms_mouse_interrupt)) {
+	if (request_irq(MOUSE_IRQ, ms_mouse_interrupt, 0, "MS Busmouse")) {
 		mouse.active = 0;
 		return -EBUSY;
 	}

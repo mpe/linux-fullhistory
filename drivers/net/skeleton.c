@@ -116,7 +116,7 @@ extern void chipset_init(struct device *dev, int startp);
 /* Check for a network adaptor of this type, and return '0' iff one exists.
    If dev->base_addr == 0, probe all likely locations.
    If dev->base_addr == 1, always return failure.
-   If dev->base_addr == 2, alloate space for the device and return success
+   If dev->base_addr == 2, allocate space for the device and return success
    (detachable devices only).
    */
 int
@@ -154,7 +154,7 @@ int netcard_probe1(struct device *dev, short ioaddr)
 	for (i = 0; i < 6; i++) {
 		station_addr[i] = inb(ioaddr + i);
 	}
-	/* Check the first three octets of the S.A. for the manufactor's code. */ 
+	/* Check the first three octets of the S.A. for the manufacturer's code. */ 
 	if (station_addr[0] != SA_ADDR0
 		||	 station_addr[1] != SA_ADDR1 || station_addr[2] != SA_ADDR2) {
 		return ENODEV;
@@ -166,7 +166,7 @@ int netcard_probe1(struct device *dev, short ioaddr)
 #ifdef jumpered_interrupts
 	/* If this board has jumpered interrupts, snarf the interrupt vector
 	   now.	 There is no point in waiting since no other device can use
-	   the interrupt, and this marks the 'irqaction' as busy. */
+	   the interrupt, and this marks the irq as busy. */
 
 	if (dev->irq == -1)
 		;			/* Do nothing: a user-level program will set it. */
@@ -182,7 +182,7 @@ int netcard_probe1(struct device *dev, short ioaddr)
 	 or don't know which one to set. */
 	  dev->irq = 9;
 
-	{	 int irqval = request_irq(dev->irq, &net_interrupt);
+	{	 int irqval = request_irq(dev->irq, &net_interrupt, 0, "skeleton");
 		 if (irqval) {
 			 printk ("%s: unable to get IRQ %d (irqval=%d).\n", dev->name,
 					 dev->irq, irqval);
@@ -230,7 +230,7 @@ net_open(struct device *dev)
 
 	/* This is used if the interrupt line can turned off (shared).
 	   See 3c503.c for an example of selecting the IRQ at config-time. */
-	if (request_irq(dev->irq, &net_interrupt)) {
+	if (request_irq(dev->irq, &net_interrupt, 0, "skeleton")) {
 		return -EAGAIN;
 	}
 

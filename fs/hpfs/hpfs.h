@@ -119,7 +119,7 @@ struct hpfs_spare_block
        secno from[n_spares];
        secno to[n_spares];
 
-   The to[] list is initalized to point to n_spares preallocated empty
+   The to[] list is initialized to point to n_spares preallocated empty
    sectors.  The from[] list contains the sector numbers of bad blocks
    which have been remapped to corresponding sectors in the to[] list.
    n_spares_used gives the length of the from[] list. */

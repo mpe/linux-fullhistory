@@ -9,7 +9,7 @@ one into a useful one.
 It gives you:
 
 	long file name
-	Permisssions and owner
+	Permissions and owner
 	Links
 	Special files (devices, pipe...)
 	All is need to be a linux root fs.
@@ -37,7 +37,7 @@ happen. This is why all mount options are passed to the Msdos fs driver.
 Umsdos use a special DOS file --linux-.--- to store the information
 which can't be handle by the normal MsDOS file system. This is the trick.
 
---linux-.--- is optionnal. There is one per directory.
+--linux-.--- is optional. There is one per directory.
 
 **** If --linux-.--- is missing, then Umsdos process the directory the
      same way the msdos driver do. Short file name, no goodies, default

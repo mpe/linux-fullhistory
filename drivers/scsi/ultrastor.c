@@ -493,7 +493,7 @@ static int ultrastor_14f_detect(Scsi_Host_Template * tpnt)
     config.mscp_free = ~0;
 #endif
 
-    if (request_irq(config.interrupt, ultrastor_interrupt)) {
+    if (request_irq(config.interrupt, ultrastor_interrupt, 0, "Ultrastor")) {
 	printk("Unable to allocate IRQ%u for UltraStor controller.\n",
 	       config.interrupt);
 	return FALSE;
@@ -563,7 +563,7 @@ static int ultrastor_24f_detect(Scsi_Host_Template * tpnt)
 	  printk("U24F: invalid IRQ\n");
 	  return FALSE;
 	}
-      if (request_irq(config.interrupt, ultrastor_interrupt))
+      if (request_irq(config.interrupt, ultrastor_interrupt, 0, "Ultrastor"))
 	{
 	  printk("Unable to allocate IRQ%u for UltraStor controller.\n",
 		 config.interrupt);

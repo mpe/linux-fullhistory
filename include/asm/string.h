@@ -295,7 +295,7 @@ __asm__ __volatile__(
 	"scasb\n\t"
 	"notl %%ecx\n\t"
 	"decl %%ecx\n\t"
-	"je 7f\n\t"			/* empty delimeter-string */
+	"je 7f\n\t"			/* empty delimiter-string */
 	"movl %%ecx,%%edx\n"
 	"2:\tlodsb\n\t"
 	"testb %%al,%%al\n\t"

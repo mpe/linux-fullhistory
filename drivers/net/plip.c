@@ -360,7 +360,7 @@ plip_open(struct device *dev)
     rcv->skb->len = dev->mtu;
     rcv->skb->dev = dev;
     cli();
-    if (request_irq(dev->irq , plip_interrupt) != 0) {
+    if (request_irq(dev->irq , plip_interrupt, 0, "plip") != 0) {
 	sti();
 	printk("%s: couldn't get IRQ %d.\n", dev->name, dev->irq);
 	return -EAGAIN;
@@ -433,7 +433,7 @@ plip_rebuild_header(void *buff, struct device *dev, unsigned long dst,
     int i;
 
     if (eth->h_proto != htons(ETH_P_IP)) {
-	printk("plip_rebuild_header: Don't know how to resolve type %d addreses?\n",(int)eth->h_proto);
+	printk("plip_rebuild_header: Don't know how to resolve type %d addresses?\n",(int)eth->h_proto);
 	memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
 	return 0;
     }

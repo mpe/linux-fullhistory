@@ -9,11 +9,11 @@ zOBJECTS = $(HEAD) inflate.o unzip.o misc.o
 CFLAGS = -O2 -DSTDC_HEADERS $(TEST)
 
 .c.s:
-	$(CC) $(CFLAGS) -S -o $*.s $<
+	$(CC) $(CFLAGS) -S $<
 .s.o:
 	$(AS) -o $*.o $<
 .c.o:
-	$(CC) $(CFLAGS) -c -o $*.o $<
+	$(CC) $(CFLAGS) -c $<
 
 all:	zSystem
 

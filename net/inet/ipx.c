@@ -180,7 +180,7 @@ int ipx_get_info(char *buffer, char **start, off_t offset, int length)
 	
 	/* The data in question runs from begin to begin+len */
 	*start=buffer+(offset-begin);	/* Start of wanted data */
-	len-=(offset-begin);		/* Remove unwanted header data from lenth */
+	len-=(offset-begin);		/* Remove unwanted header data from length */
 	if(len>length)
 		len=length;		/* Remove unwanted tail data from length */
 	

@@ -324,7 +324,7 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb,
 				break;
 			if (rt->rt_gateway != source)
 				break;
-			printk("redirect from %08lx\n", source);
+			printk("redirect from %s\n", in_ntoa(source));
 			ip_rt_add((RTF_DYNAMIC | RTF_MODIFIED | RTF_HOST | RTF_GATEWAY),
 				ip, 0, icmph->un.gateway, dev,0, 0);
 			break;
@@ -501,7 +501,7 @@ static void icmp_info(struct icmphdr *icmph, struct sk_buff *skb, struct device 
 
 
 /* 
- *	Handle ICMP_ADRESS_MASK requests. 
+ *	Handle ICMP_ADDRESS_MASK requests. 
  */
  
 static void icmp_address(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev,

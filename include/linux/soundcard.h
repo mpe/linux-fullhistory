@@ -30,7 +30,7 @@
  /* 
   * If you make modifications to this file, please contact me before
   * distributing the modified version. There is already enough 
-  * divercity in the world.
+  * diversity in the world.
   *
   * Regards,
   * Hannu Savolainen
@@ -57,6 +57,7 @@
 #define SNDCARD_GUS16		9
 #define SNDCARD_MSS		10
 #define SNDCARD_PSS     	11
+#define SNDCARD_SSCAPE		12
 
 /***********************************
  * IOCTL Commands for /dev/sequencer
@@ -123,7 +124,7 @@
  *	Sample loading mechanism for internal synthesizers (/dev/sequencer)
  *	The following patch_info structure has been designed to support
  *	Gravis UltraSound. It tries to be universal format for uploading
- *	sample based patches but is propably too limited.
+ *	sample based patches but is probably too limited.
  */
 
 struct patch_info {
@@ -888,12 +889,22 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
 #define SEQ_BENDER(dev, chn, value) \
 		_CHN_COMMON(dev, MIDI_PITCH_BEND, chn, 0, 0, value)
 
+
+#define SEQ_V2_X_CONTROL(dev, voice, controller, value)	{_SEQ_NEEDBUF(8);\
+					_seqbuf[_seqbufptr] = SEQ_EXTENDED;\
+					_seqbuf[_seqbufptr+1] = SEQ_CONTROLLER;\
+					_seqbuf[_seqbufptr+2] = (dev);\
+					_seqbuf[_seqbufptr+3] = (voice);\
+					_seqbuf[_seqbufptr+4] = (controller);\
+					*(short *)&_seqbuf[_seqbufptr+5] = (value);\
+					_seqbuf[_seqbufptr+7] = 0;\
+					_SEQ_ADVBUF(8);}
 /*
  * The following 5 macros are incorrectly implemented and obsolete.
  * Use SEQ_BENDER and SEQ_CONTROL (with proper controller) instead.
  */
-#define SEQ_PITCHBEND(dev, voice, value) SEQ_CONTROL(dev, voice, CTRL_PITCH_BENDER, value)
-#define SEQ_BENDER_RANGE(dev, voice, value) SEQ_CONTROL(dev, voice, CTRL_PITCH_BENDER_RANGE, value)
+#define SEQ_PITCHBEND(dev, voice, value) SEQ_V2_X_CONTROL(dev, voice, CTRL_PITCH_BENDER, value)
+#define SEQ_BENDER_RANGE(dev, voice, value) SEQ_V2_X_CONTROL(dev, voice, CTRL_PITCH_BENDER_RANGE, value)
 #define SEQ_EXPRESSION(dev, voice, value) SEQ_CONTROL(dev, voice, CTL_EXPRESSION, value*128)
 #define SEQ_MAIN_VOLUME(dev, voice, value) SEQ_CONTROL(dev, voice, CTL_MAIN_VOLUME, (value*16383)/100)
 #define SEQ_PANNING(dev, voice, pos) SEQ_CONTROL(dev, voice, CTL_PAN, (pos+128) / 2)
@@ -911,7 +922,7 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
 #endif
 
 /*
- * Timing and syncronization macros
+ * Timing and synchronization macros
  */
 
 #define _TIMER_EVENT(ev, parm)		{_SEQ_NEEDBUF(8);\

@@ -82,7 +82,7 @@ int umsdos_emd_dir_write (
 /*
 	Read a block of bytes from one EMD file.
 	The block of data is NOT in user space.
-	Retourne 0 if ok, -EIO if any error.
+	Return 0 if ok, -EIO if any error.
 */
 int umsdos_emd_dir_read (
 	struct inode *emd_dir,
@@ -102,7 +102,7 @@ int umsdos_emd_dir_read (
 
 }
 /*
-	Locate the EMD file in a directory and optionnally, creates it.
+	Locate the EMD file in a directory and optionally, creates it.
 
 	Return NULL if error. If ok, dir->u.umsdos_i.emd_inode 
 */
@@ -180,7 +180,7 @@ int umsdos_writeentry (
 		/* #Specification: EMD file / empty entries
 			Unused entry in the EMD file are identify
 			by the name_len field equal to 0. However to
-			help future extension (or bug corretion :-( ),
+			help future extension (or bug correction :-( ),
 			empty entries are filled with 0.
 		*/
 		memset (&entry0,0,sizeof(entry0));
@@ -219,7 +219,7 @@ struct find_buffer{
 	Fill the read buffer and take care of the byte remaining inside.
 	Unread bytes are simply move to the beginning.
 
-	Return -ENOENT if EOF, 0 if ok, a negativ error code if any problem.
+	Return -ENOENT if EOF, 0 if ok, a negative error code if any problem.
 */
 static int umsdos_fillbuf (
 	struct inode *inode,

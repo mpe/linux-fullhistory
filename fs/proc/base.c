@@ -51,18 +51,18 @@ struct inode_operations proc_base_inode_operations = {
 };
 
 static struct proc_dir_entry base_dir[] = {
-	{ 1,2,".." },
-	{ 2,1,"." },
-	{ 3,3,"mem" },
-	{ 4,3,"cwd" },
-	{ 5,4,"root" },
-	{ 6,3,"exe" },
-	{ 7,2,"fd" },
-	{ 9,7,"environ" },
-	{ 10,7,"cmdline" },
-	{ 11,4,"stat" },
-	{ 12,5,"statm" },
-	{ 15,4,"maps" }
+	{ PROC_PID_INO,		1, "." },
+	{ PROC_ROOT_INO,	2, ".." },
+	{ PROC_PID_MEM,		3, "mem" },
+	{ PROC_PID_CWD,		3, "cwd" },
+	{ PROC_PID_ROOT,	4, "root" },
+	{ PROC_PID_EXE,		3, "exe" },
+	{ PROC_PID_FD,		2, "fd" },
+	{ PROC_PID_ENVIRON,	7, "environ" },
+	{ PROC_PID_CMDLINE,	7, "cmdline" },
+	{ PROC_PID_STAT,	4, "stat" },
+	{ PROC_PID_STATM,	5, "statm" },
+	{ PROC_PID_MAPS,	4, "maps" }
 };
 
 #define NR_BASE_DIRENTRY ((sizeof (base_dir))/(sizeof (base_dir[0])))

@@ -54,7 +54,7 @@ unsigned long SCRIPT[] = {
 ;
 ; While the NCR53c700 and NCR53c700-66 lacked the facilities to fully
 ; automate SCSI transfers without host processor intervention, this 
-; isnt the case with the NCR53c710 and newer chips which allow 
+; isn't the case with the NCR53c710 and newer chips which allow 
 ;
 ; - reads and writes to the internal registers from within the SCSI
 ; 	scripts, allowing the SCSI SCRIPTS(tm) code to save processor
@@ -69,10 +69,10 @@ unsigned long SCRIPT[] = {
 ; where the same piece of code is run to handle I/O for multiple threads
 ; at once minimizing our need to relocate code.  Since the NCR53c700/
 ; NCR53c800 series have a unique combination of features, making a 
-; a standard ingoing/outgoing mailbox system, costly, Ive modified it.
+; a standard ingoing/outgoing mailbox system, costly, I've modified it.
 ;
 ; - Commands are stored in a linked list, rather than placed in 
-; 	arbitrary mailboxes.  This simiplifies the amount of processing
+; 	arbitrary mailboxes.  This simplifies the amount of processing
 ;	that must be done by the NCR53c810.
 ;
 ; - Mailboxes are a mixture of code and data.  This lets us greatly
@@ -251,7 +251,7 @@ ABSOLUTE addr_temp = 0x0
 ; 4 	testing interrupt 
 ; Next byte indicates specific error
 
-; XXX not yet implemented, Im not sure if I want to - 
+; XXX not yet implemented, I'm not sure if I want to - 
 ; Next byte indicates the routine the error occurred in
 ; The LSB indicates the specific place the error occurred
  
@@ -296,14 +296,14 @@ ABSOLUTE reselected_identify = 0
 ABSOLUTE reselected_tag = 0
 
 ; Request sense command pointer, its a 6 byte command, should
-; be constant for all commands since we allways want 16 bytes of 
-; sense and we dont need to change any fields as we did under 
+; be constant for all commands since we allays want 16 bytes of 
+; sense and we don't need to change any fields as we did under 
 ; SCSI-I when we actually cared about the LUN field.
 ;EXTERNAL NCR53c7xx_sense		; Request sense command
 
 
 ; dsa_schedule  
-; PURPOSE : after a DISCONNECT message has been recieved, and pointers
+; PURPOSE : after a DISCONNECT message has been received, and pointers
 ;	saved, insert the current DSA structure at the head of the 
 ; 	disconnected queue and fall through to the scheduler.
 ;
@@ -314,7 +314,7 @@ ABSOLUTE reselected_tag = 0
 ;
 ; MODIFIES : SCRATCH, reconnect_dsa_head
 ; 
-; EXITS : allways passes control to schedule
+; EXITS : allays passes control to schedule
 
 ENTRY dsa_schedule
 dsa_schedule:
@@ -328,7 +328,7 @@ dsa_schedule:
 at 0x0000002d : */	0x88080000,0x000007b8,
 /*
 ; XXX - we need to deal with the NCR53c710, which lacks an add with
-;	carry instruction, by moving arround the DSA alignment to avoid
+;	carry instruction, by moving around the DSA alignment to avoid
 ; 	carry in situations like this.
     MOVE SCRATCH0 + dsa_next TO SCRATCH0
 
@@ -472,7 +472,7 @@ at 0x00000063 : */	0x800c0000,0x00000560,
 ; PURPOSE : establish a nexus for the SCSI command referenced by DSA.
 ;	On success, the current DSA structure is removed from the issue 
 ;	queue.  Usually, this is entered as a fall-through from schedule,
-;	although the contingent allegience handling code will write
+;	although the contingent allegiance handling code will write
 ;	the select entry address to the DSP to restart a command as a 
 ;	REQUEST SENSE.  A message is sent (usually IDENTIFY, although
 ;	additional SDTR or WDTR messages may be sent).  COMMAND OUT
@@ -508,7 +508,7 @@ at 0x00000065 : */	0x60000200,0x00000000,
 ;
 ; So, for more performance, we could overlap the code which removes 
 ; the command from the NCRs issue queue with the selection, but 
-; at this point I dont want to deal with the error recovery.
+; at this point I don't want to deal with the error recovery.
 ;
 
 
@@ -665,7 +665,7 @@ at 0x0000008b : */	0x1a000000,0x00000048,
 ; MODIFIES : SCRATCH
 ;
 ; EXITS : if STATUS IN is detected, signifying command completion,
-;	the NCR jumpst to command_complete.  If MSG IN occurs, a 
+;	the NCR jumps to command_complete.  If MSG IN occurs, a 
 ;	CALL is made to msg_in.  Otherwise, other_transfer runs in 
 ;	an infinite loop.
 ;	
@@ -841,7 +841,7 @@ at 0x000000d3 : */	0x80080000,0x0000031c,
 ; munge_msg
 ;
 ; PURPOSE : process messages from a target.  msg_in is called when the 
-;	caller hasnt read the first byte of the message.  munge_message
+;	caller hasn't read the first byte of the message.  munge_message
 ;	is called when the caller has read the first byte of the message,
 ;	and left it in SFBR.
 ;
@@ -850,7 +850,7 @@ at 0x000000d3 : */	0x80080000,0x0000031c,
 ;	INITIATE RECOVERY messages.
 ;
 ;	When the host system handles one of these interrupts,
-;	it can respond by rentering at reject_message, 
+;	it can respond by reentering at reject_message, 
 ;	which rejects the message and returns control to
 ;	the caller of msg_in or munge_msg, accept_message
 ;	which clears ACK and returns control, or reply_message
@@ -866,7 +866,7 @@ at 0x000000d3 : */	0x80080000,0x0000031c,
 ; INPUTS : DSA - SCSI COMMAND, SFBR - first byte of message (munge_msg
 ;	only)
 ;
-; CALLS : NO.  The TEMP register isnt backed up to allow nested calls.
+; CALLS : NO.  The TEMP register isn't backed up to allow nested calls.
 ;
 ; MODIFIES : SCRATCH, DSA on DISCONNECT
 ;
@@ -892,12 +892,12 @@ at 0x000000d7 : */	0x800c0001,0x00000428,
 at 0x000000d9 : */	0x800cdf20,0x0000039c,
 /*
 ;
-; Ive seen a handful of broken SCSI devices which fail to issue
+; I've seen a handful of broken SCSI devices which fail to issue
 ; a SAVE POINTERS message before disconnecting in the middle of 
 ; a transfer, assuming that the DATA POINTER will be implicitly 
 ; restored.  So, we treat the SAVE DATA POINTER message as a NOP.
 ;
-; Ive also seen SCSI devices which dont issue a RESTORE DATA
+; I've also seen SCSI devices which don't issue a RESTORE DATA
 ; POINTER message and assume that thats implicit.
 ;
     JUMP accept_message, IF 0x02		; SAVE DATA POINTER
@@ -1151,7 +1151,7 @@ at 0x00000140 : */	0x90080000,0x00000000,
 ;	Abnormal (CHECK_CONDITION) termination results in an
 ;	int_err_check_condition interrupt so that a REQUEST SENSE
 ;	command can be issued out-of-order so that no other command
-;	clears the contingent allegience condition.
+;	clears the contingent allegiance condition.
 ;	
 ;
 ; INPUTS : DSA - command	
@@ -1207,7 +1207,7 @@ at 0x0000014c : */	0x72340000,0x00000000,
 ; interrupt the host processor to get them changed, or change them ourselves.
 ;
 ; Once SCSI-II tagged queueing is implemented, things will be even more
-; hairy, since contingent allegience conditions exist on a per-target/lun
+; hairy, since contingent allegiance conditions exist on a per-target/lun
 ; basis, and issuing a new command with a different tag would clear it.
 ; In these cases, we must interrupt the host processor to get a request 
 ; added to the HEAD of the queue with the request sense command, or we
@@ -1251,7 +1251,7 @@ at 0x00000156 : */	0x98080000,0x00030000,
 ;	waits for reselection, selection, and new commands.
 ;
 ;	When a successful reselection occurs, with the aid 
-;	of fixedup code in each DSA, wait_reselect walks the 
+;	of fixed up code in each DSA, wait_reselect walks the 
 ;	reconnect_dsa_queue, asking each dsa if the target ID
 ;	and LUN match its.
 ;
@@ -1268,7 +1268,7 @@ at 0x00000156 : */	0x98080000,0x00030000,
 ;
 ; EXITS : On successful reselection, control is returned to the 
 ;	DSA which called reselected_ok.  If the WAIT RESELECT
-;	was interrupted by a new commands arival signalled by 
+;	was interrupted by a new commands arrival signaled by 
 ;	SIG_P, control is passed to schedule.  If the NCR is 
 ;	selected, the host system is interrupted with an 
 ;	int_err_selected which is usually responded to by
@@ -1284,14 +1284,14 @@ at 0x00000158 : */	0x50000000,0x0000067c,
 /*
 
 reselected:
-    ; Read all data needed to restablish the nexus - 
+    ; Read all data needed to reestablish the nexus - 
     MOVE 1, reselected_identify, WHEN MSG_IN
 
 at 0x0000015a : */	0x0f000001,0x00000000,
 /*
 
     ; Well add a jump to here after some how determining that 
-    ; tagged queueing isnt in use on this device.
+    ; tagged queueing isn't in use on this device.
 reselected_notag:    
     MOVE MEMORY 1, NCR53c7xx_zero, reselected_tag
 
@@ -1378,11 +1378,11 @@ at 0x0000017d : */	0x72100000,0x00000000,
     ; XXX the ALU is only eight bits wide, and the assembler
     ; wont do the dirt work for us.  As long as dsa_check_reselect
     ; is negative, we need to sign extend with 1 bits to the full
-    ; 32 bit width oof the address.
+    ; 32 bit width of the address.
     ;
-    ; A potential work arround would be to have a known alignment 
+    ; A potential work around would be to have a known alignment 
     ; of the DSA structure such that the base address plus 
-    ; dsa_check_reselect doesnt require carryin from bytes 
+    ; dsa_check_reselect doesn't require carrying from bytes 
     ; higher than the LSB.
     ;
 
@@ -1517,7 +1517,7 @@ at 0x000001ab : */	0x80080000,0x00000130,
 ;	DSA on entry, and is useful for miscellaneous experimentation.
 ;
 
-; Verify that interrupts are working correctly and that we dont 
+; Verify that interrupts are working correctly and that we don't 
 ; have a cache invalidation problem.
 
 ABSOLUTE test_src = 0, test_dest = 0
@@ -1702,8 +1702,8 @@ at 0x000001ec : */	0x98080000,0x02040000,
 ; 	as the source or destination.  So, we provide a couple of subroutines
 ; 	that let us switch between the DSA register and scratch register.
 ;
-; 	Memory moves to/from the DSPS  register also dont work, but we 
-; 	dont use them.
+; 	Memory moves to/from the DSPS  register also don't work, but we 
+; 	don't use them.
 ;
 ;
 

@@ -3,7 +3,7 @@
 
 #include <linux/types.h>
 
-/* 0x54 is just a magic number to make these relatively uniqe ('T') */
+/* 0x54 is just a magic number to make these relatively unique ('T') */
 
 #define TCGETS		0x5401
 #define TCSETS		0x5402

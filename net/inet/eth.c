@@ -73,7 +73,7 @@ void eth_setup(char *str, int *ints)
 
 
 /*
- *	 Create the Ethernet MAC header for an arbitary protocol layer 
+ *	 Create the Ethernet MAC header for an arbitrary protocol layer 
  *
  *	saddr=NULL	means use device source address
  *	daddr=NULL	means leave destination address (eg unresolved arp)
@@ -141,7 +141,7 @@ int eth_rebuild_header(void *buff, struct device *dev, unsigned long dst,
 	 
 	if(eth->h_proto != htons(ETH_P_IP)) 
 	{
-		printk("eth_rebuild_header: Don't know how to resolve type %d addreses?\n",(int)eth->h_proto);
+		printk("eth_rebuild_header: Don't know how to resolve type %d addresses?\n",(int)eth->h_proto);
 		memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
 		return 0;
 	}

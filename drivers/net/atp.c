@@ -4,7 +4,7 @@
 	Copyright 1993 United States Government as represented by the Director,
 	National Security Agency.  This software may only be used and distributed
 	according to the terms of the GNU Public License as modified by SRC,
-	incorported herein by reference.
+	incorporated herein by reference.
 
 	The author may be reached as becker@super.org or
 	C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
@@ -65,7 +65,7 @@ static char *version =
 	it to stabilize.  This delay seems to be needed on most machines.
 
 	The data transfer mode is stored in the 'dev->if_port' field.  Its default
-	value is '4'.  It may be overriden at boot-time using the third parameter
+	value is '4'.  It may be overridden at boot-time using the third parameter
 	to the "ether=..." initialization.
 
 	The header file <atp.h> provides inline functions that encapsulate the
@@ -149,7 +149,7 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 /* Check for a network adaptor of this type, and return '0' iff one exists.
    If dev->base_addr == 0, probe all likely locations.
    If dev->base_addr == 1, always return failure.
-   If dev->base_addr == 2, alloate space for the device and return success
+   If dev->base_addr == 2, allocate space for the device and return success
    (detachable devices only).
    */
 int
@@ -208,7 +208,7 @@ static int atp_probe1(struct device *dev, short ioaddr)
 		dev->irq = 7;
 	else
 		dev->irq = 5;
-	write_reg_high(ioaddr, CMR1, CMR1h_TxRxOFF); /* Diable Tx and Rx units. */
+	write_reg_high(ioaddr, CMR1, CMR1h_TxRxOFF); /* Disable Tx and Rx units. */
 	write_reg(ioaddr, CMR2, CMR2_NULL);
 
 	dev->base_addr = ioaddr;
@@ -323,7 +323,7 @@ static int net_open(struct device *dev)
 	   port or interrupt may be shared. */
 	if (irq2dev_map[dev->irq] != 0
 		|| (irq2dev_map[dev->irq] = dev) == 0
-		|| request_irq(dev->irq, &net_interrupt)) {
+		|| request_irq(dev->irq, &net_interrupt, 0, "atp")) {
 		return -EAGAIN;
 	}
 
@@ -333,7 +333,7 @@ static int net_open(struct device *dev)
 }
 
 /* This routine resets the hardware.  We initialize everything, assuming that
-   the hardware may have been temporarily detacted. */
+   the hardware may have been temporarily detached. */
 static void hardware_init(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
@@ -459,7 +459,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		lp->pac_cnt_in_tx_buf++;
 		if (lp->tx_unit_busy == 0) {
 			trigger_send(ioaddr, length);
-			lp->saved_tx_size = 0; 				/* Redundent */
+			lp->saved_tx_size = 0; 				/* Redundant */
 			lp->re_tx = 0;
 			lp->tx_unit_busy = 1;
 		} else

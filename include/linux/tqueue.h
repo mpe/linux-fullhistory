@@ -28,7 +28,7 @@
  *   of them, as you want.
  * - No more scanning of a bit field is required upon call of a bottom half.
  * - Support for chained bottom half lists.  The run_task_queue() function can be
- *   used as a bottom half handler.  This is for example usefull for bottom
+ *   used as a bottom half handler.  This is for example useful for bottom
  *   halfs, which want to be delayed until the next clock tick.
  *
  * Problems:

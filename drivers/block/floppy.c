@@ -655,7 +655,7 @@ static void setup_DMA(void)
 	    (current_addr < floppy_track_buffer ||
 	     current_addr + raw_cmd.length >
 	     floppy_track_buffer + 1024 * MAX_BUFFER_SECTORS)){
-		printk("bad adrress. start=%p lg=%lx tb=%p\n",
+		printk("bad address. start=%p lg=%lx tb=%p\n",
 		       current_addr, raw_cmd.length, floppy_track_buffer);
 		if ( CURRENT ){
 			printk("buffer=%p nr=%lx cnr=%lx\n",
@@ -943,7 +943,7 @@ static int interpret_errors(void)
 	char bad;
 
 	if (inr!=7) {
-		printk(DEVICE_NAME ": -- FDC reply errror");
+		printk(DEVICE_NAME ": -- FDC reply error");
 		FDCS->reset = 1;
 		return 1;
 	}
@@ -2395,7 +2395,8 @@ static int invalidate_drive(int rdev)
 static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
     unsigned long param)
 {
-#define IOCTL_ALLOWED (filp && (filp->f_mode & 8 ))
+#define IOCTL_MODE_BIT 8
+#define IOCTL_ALLOWED (filp && (filp->f_mode & IOCTL_MODE_BIT))
 
 	struct floppy_struct newparams;
 	struct format_descr tmp_format_req;
@@ -2669,7 +2670,8 @@ static int floppy_open(struct inode * inode, struct file * filp)
 
 	if (exclusive)
 		return -EBUSY;
-	if ( !filp ){
+
+	if (!filp) {
 		printk(DEVICE_NAME ": Weird, open called with filp=0\n");
 		return -EIO;
 	}
@@ -2678,15 +2680,15 @@ static int floppy_open(struct inode * inode, struct file * filp)
 	if ( drive >= N_DRIVE )
 		return -ENXIO;
 
-	if (command_status == FD_COMMAND_DETECT && drive >= current_drive){
+	if (command_status == FD_COMMAND_DETECT && drive >= current_drive) {
 		lock_fdc(-1);
 		unlock_fdc();
 	}
 
-	if ( TYPE(inode->i_rdev) >= NUMBER(floppy_type))
-	  return -ENXIO;
+	if (TYPE(inode->i_rdev) >= NUMBER(floppy_type))
+		return -ENXIO;
 
-	if (filp->f_mode & 3){
+	if (filp->f_mode & 3) {
 		if ( !(UDRS->flags & FD_DRIVE_PRESENT))
 			return -ENXIO;
 	}
@@ -2694,67 +2696,49 @@ static int floppy_open(struct inode * inode, struct file * filp)
 	old_dev = UDRS->fd_device;
 	if (UDRS->fd_ref && old_dev != inode->i_rdev)
 		return -EBUSY;
+
+	if (filp->f_flags & O_EXCL) {
+		if (usage_count)
+			return -EBUSY;
+		else
+			exclusive = 1;
+	}
+
 	if (floppy_grab_irq_and_dma())
 		return -EBUSY;
 
-	if (filp->f_flags & O_EXCL ){
-		if (usage_count>1){
-			floppy_release_irq_and_dma();
-			return -EBUSY;
-		}else
-			exclusive=1;
-	}
+	UDRS->fd_ref++;
+	UDRS->fd_device = inode->i_rdev;
 
-	/* filp->f_op is NULL if the disk is mounted, and non-NULL if opened */
-	if (filp->f_op){
-		if (UDRS->fd_ref == -1)
-			return -EBUSY;
-		UDRS->fd_ref++;
-		UDRS->fd_device = inode->i_rdev;
-	} else {
-		if (UDRS->fd_ref ){
-			floppy_release_irq_and_dma();
-			return -EBUSY;
-		}
-		UDRS->fd_ref=-1;
-	}
-
-	if (old_dev && old_dev != inode->i_rdev){
-		if ( buffer_drive == drive )
+	if (old_dev && old_dev != inode->i_rdev) {
+		if (buffer_drive == drive)
 			buffer_track = -1;
 		invalidate_buffers(old_dev);
 	}
 
-	if (filp->f_mode & 2 || permission(inode,2))
-		filp->f_mode |= 8; /* keep mtools working */
+	/* Allow ioctls if we have write-permissions even if read-only open */
+	if ((filp->f_mode & 2) || permission(inode,2))
+		filp->f_mode |= IOCTL_MODE_BIT;
 
 	if (UFDCS->rawcmd == 1)
 	       UFDCS->rawcmd = 2;
 
 	if (filp->f_flags & O_NDELAY)
 		return 0;
+
 	if (filp->f_mode && !(UDRS->flags & FD_DRIVE_PRESENT))
 		RETERR(ENXIO);
-	if(user_reset_fdc(drive, FD_RESET_IF_NEEDED))
+
+	if (user_reset_fdc(drive, FD_RESET_IF_NEEDED))
 		RETERR(EIO);
 
-	if (filp->f_mode & 3){
+	if (filp->f_mode & 3) {
 		check_disk_change(inode->i_rdev);
-		if ( changed_floppies & ( 1 << drive )){
-			if ( suser() && filp->f_op)
-				/* prevent dosemu from crashing */
-				filp->f_mode &= ~3;
-			else
-				RETERR(ENXIO);
-		}
+		if (changed_floppies & ( 1 << drive ))
+			RETERR(ENXIO);
 	}
-	if ((filp->f_mode & 2) && UDRS->flags < FD_DISK_WRITABLE){
-		if ( suser() && filp->f_op)
-			/* prevent dosemu from crashing */
-			filp->f_mode &= ~2;
-		else
-			RETERR(EROFS);
-	}
+	if ((filp->f_mode & 2) && !(UDRS->flags & FD_DISK_WRITABLE))
+		RETERR(EROFS);
 	return 0;
 #undef RETERR
 }
@@ -2914,17 +2898,6 @@ static struct cont_t detect_cont={
 	empty,
 	(done_f) empty };
 
-/*
- * This is the floppy IRQ description. The SA_INTERRUPT in sa_flags
- * means we run the IRQ-handler with interrupts disabled.
- */
-static struct sigaction floppy_sigaction = {
-	floppy_interrupt,
-	0,
-	SA_INTERRUPT,
-	NULL
-};
-
 void floppy_init(void)
 {
 	int i;
@@ -2999,7 +2972,7 @@ int floppy_grab_irq_and_dma(void)
 {
 	if (usage_count++)
 		return 0;
-	if (irqaction(FLOPPY_IRQ,&floppy_sigaction)) {
+	if (request_irq(FLOPPY_IRQ, floppy_interrupt, SA_INTERRUPT, "floppy")) {
 		printk(DEVICE_NAME
 		       ": Unable to grab IRQ%d for the floppy driver\n",
 		       FLOPPY_IRQ);

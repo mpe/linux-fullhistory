@@ -17,7 +17,7 @@
  *		Florian  La Roche:	Changed for my new skbuff handling.
  *
  *	Note:
- *		A lot of this will change when the protocol/socket seperation
+ *		A lot of this will change when the protocol/socket separation
  *	occurs. Using this will make things reasonably clean.
  */
 
@@ -107,7 +107,7 @@ restart:
 			}
 			if(sk->err != 0)	/* Error while waiting for packet
 						   eg an icmp sent earlier by the
-						   peer has finaly turned up now */
+						   peer has finally turned up now */
 			{
 				*err = -sk->err;
 				sti();
@@ -119,7 +119,7 @@ restart:
 		sti();
 	  }
 	  /* Again only user level code calls this function, so nothing interrupt level
-	     will suddenely eat the receive_queue */
+	     will suddenly eat the receive_queue */
 	  if (!(flags & MSG_PEEK))
 	  {
 		skb=skb_dequeue(&sk->receive_queue);

@@ -88,7 +88,7 @@ static void pty_close(struct tty_struct * tty, struct file * filp)
 /*
  * The unthrottle routine is called by the line discipline to signal
  * that it can receive more characters.  For PTY's, the TTY_THROTTLED
- * flag is always set, to force the line discpline to always call the
+ * flag is always set, to force the line discipline to always call the
  * unthrottle routine when there are fewer than TTY_THRESHOLD_UNTHROTTLE 
  * characters in the queue.  This is necessary since each time this
  * happens, we need to wake up any sleeping processes that could be

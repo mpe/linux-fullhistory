@@ -4,7 +4,7 @@
 	Copyright 1993 United States Government as represented by the Director,
 	National Security Agency.  This software may only be used and distributed
 	according to the terms of the GNU Public License as modified by SRC,
-	incorported herein by reference.
+	incorporated herein by reference.
 
 	The author may be reached as becker@super.org or
 	C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715

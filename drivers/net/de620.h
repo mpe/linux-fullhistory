@@ -28,7 +28,7 @@
 /* DE-620 DIC Command */
 #define W_DUMMY		0x00	/* DIC reserved command */
 #define W_CR		0x20	/* DIC write command register */
-#define W_NPR		0x40	/* DIC write Nect Page Register */
+#define W_NPR		0x40	/* DIC write Next Page Register */
 #define W_TBR		0x60	/* DIC write Tx Byte Count 1 reg */
 #define W_RSA		0x80	/* DIC write Remote Start Addr 1 */
 
@@ -50,12 +50,12 @@
 #define	W_SCR		0xa7	/* write system configuration register */
 #define	W_TCR		0xa8	/* write Transceiver Configuration reg */
 #define	W_EIP		0xa9	/* write EEPM Interface port */
-#define	W_PAR0		0xaa	/* write physical address registr 0 */
-#define	W_PAR1		0xab	/* write physical address registr 1 */
-#define	W_PAR2		0xac	/* write physical address registr 2 */
-#define	W_PAR3		0xad	/* write physical address registr 3 */
-#define	W_PAR4		0xae	/* write physical address registr 4 */
-#define	W_PAR5		0xaf	/* write physical address registr 5 */
+#define	W_PAR0		0xaa	/* write physical address register 0 */
+#define	W_PAR1		0xab	/* write physical address register 1 */
+#define	W_PAR2		0xac	/* write physical address register 2 */
+#define	W_PAR3		0xad	/* write physical address register 3 */
+#define	W_PAR4		0xae	/* write physical address register 4 */
+#define	W_PAR5		0xaf	/* write physical address register 5 */
 
 /* IDC 2 Command */
 #define	R_STS		0xc0	/* read status register */
@@ -102,7 +102,7 @@
 #define AUTOFFSET	0x02	/* auto shift address to TPR+12 */
 #define AUTOTX		0x01	/* auto tx when leave RW mode */
 
-/* Tranceiver Configuration Register */
+/* Transceiver Configuration Register */
 #define JABBER		0x80	/* generate jabber condition */
 #define TXSUCINT	0x40	/* enable tx success interrupt */
 #define T16INT		0x20	/* enable T16 interrupt */

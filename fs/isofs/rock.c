@@ -32,7 +32,7 @@
       if(rr->u.SP.magic[1] != 0xef) FAIL;
 
 /* We define a series of macros because each function must do exactly the
-   same thing in certain places.  We use the macros to ensure that everyting
+   same thing in certain places.  We use the macros to ensure that everything
    is done correctly */
 
 #define CONTINUE_DECLS \

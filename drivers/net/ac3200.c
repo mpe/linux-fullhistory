@@ -139,7 +139,7 @@ static int ac_probe1(int ioaddr, struct device *dev)
 	else if (dev->irq == 2)
 		dev->irq = 9;
 
-	if (irqaction (dev->irq, &ei_sigaction)) {
+	if (request_irq(dev->irq, ei_interrupt, 0, "ac3200")) {
 		printk (" unable to get IRQ %d.\n", dev->irq);
 		return 0;
 	}
@@ -194,7 +194,7 @@ static int ac_open(struct device *dev)
 	/* Someday we may enable the IRQ and shared memory here. */
 	int ioaddr = dev->base_addr;
 
-	if (irqaction(dev->irq, &ei_sigaction))
+	if (request_irq(dev->irq, ei_interrupt, 0, "ac3200"))
 		return -EAGAIN;
 #endif
 

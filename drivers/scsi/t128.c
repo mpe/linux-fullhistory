@@ -178,8 +178,6 @@ void t128_setup(char *str, int *ints) {
 	}
 }
 
-static struct sigaction t128_sigaction =  { t128_intr, 0, SA_INTERRUPT , NULL };
-
 /* 
  * Function : int t128_detect(Scsi_Host_Template * tpnt)
  *
@@ -239,7 +237,7 @@ int t128_detect(Scsi_Host_Template * tpnt) {
 	    instance->irq = NCR5380_probe_irq(instance, T128_IRQS);
 
 	if (instance->irq != IRQ_NONE) 
-	    if (irqaction (instance->irq, &t128_sigaction)) {
+	    if (request_irq(instance->irq, t128_intr, SA_INTERRUPT, "t128")) {
 		printk("scsi%d : IRQ%d not free, interrupts disabled\n", 
 		    instance->host_no, instance->irq);
 		instance->irq = IRQ_NONE;

@@ -214,7 +214,7 @@ el_open(struct device *dev)
   if (el_debug > 2)
       printk("%s: Doing el_open()...", dev->name);
 
-  if (request_irq(dev->irq, &el_interrupt)) {
+  if (request_irq(dev->irq, &el_interrupt, 0, "3c501")) {
       if (el_debug > 2)
 	  printk("interrupt busy, exiting el_open().\n");
       return -EAGAIN;

@@ -437,7 +437,7 @@ static void hold(void)
 		return;
 
 	/*
-	 * Note: SCROLLOCK wil be set (cleared) by stop_tty (start_tty);
+	 * Note: SCROLLOCK will be set (cleared) by stop_tty (start_tty);
 	 * these routines are also activated by ^S/^Q.
 	 * (And SCROLLOCK can also be set by the ioctl KDSETLED.)
 	 */
@@ -893,7 +893,7 @@ unsigned long kbd_init(unsigned long kmem_start)
 	ttytab = console_driver.table;
 
 	bh_base[KEYBOARD_BH].routine = kbd_bh;
-	request_irq(KEYBOARD_IRQ,keyboard_interrupt);
+	request_irq(KEYBOARD_IRQ, keyboard_interrupt, 0, "keyboard");
 	mark_bh(KEYBOARD_BH);
 	return kmem_start;
 }

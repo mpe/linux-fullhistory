@@ -169,7 +169,7 @@ static int get_fd(struct inode *inode)
 		current->files->fd[fd] = file;
 	file->f_op = &socket_file_ops;
 	file->f_mode = 3;
-	file->f_flags = 0;
+	file->f_flags = O_RDWR;
 	file->f_count = 1;
 	file->f_inode = inode;
 	if (inode) 

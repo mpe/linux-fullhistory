@@ -18,7 +18,7 @@
 
 
 /* There are two different implementations of truncate() here.
- * One (by Bruno) needs to do locking to ensure that noone is writing
+ * One (by Bruno) needs to do locking to ensure that no one is writing
  * to a block being truncated away and incorporated into the free list.
  * The better one (by Linus) doesn't need locking because it can tell from
  * looking at bh->b_count whether a given block is in use elsewhere.

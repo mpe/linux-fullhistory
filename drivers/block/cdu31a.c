@@ -11,7 +11,7 @@
  * include/linux/cdrom.h).  With this interface, CDROMs can be
  * accessed and standard audio CDs can be played back normally.
  *
- * This interface is (unfortunatly) a polled interface.  This is
+ * This interface is (unfortunately) a polled interface.  This is
  * because most Sony interfaces are set up with DMA and interrupts
  * disables.  Some (like mine) do not even have the capability to
  * handle interrupts or DMA.  For this reason you will see a lot of
@@ -32,7 +32,7 @@
  *
  * This ugly hack waits for something to happen, sleeping a little
  * between every try.  it also handles attentions, which are
- * asyncronous events from the drive informing the driver that a disk
+ * asynchronous events from the drive informing the driver that a disk
  * has been inserted, removed, etc.
  *
  * NEWS FLASH - The driver now supports interrupts and DMA, but they are
@@ -578,7 +578,7 @@ get_result(unsigned char *result_buffer,
 
    /*
     * 0x20 means an error occured.  Byte 2 will have the error code.
-    * Otherwise, the command succeded, byte 2 will have the count of
+    * Otherwise, the command succeeded, byte 2 will have the count of
     * how many more status bytes are coming.
     *
     * The result register can be read 10 bytes at a time, a wait for
@@ -875,7 +875,7 @@ retry_data_operation:
       size_to_buf(1, &params[3]);
 
       num_retries++;
-      /* Issue a reset on an error (the second time), othersize just delay */
+      /* Issue a reset on an error (the second time), otherwise just delay */
       if (num_retries == 2)
       {
          restart_on_error();
@@ -1278,7 +1278,7 @@ try_read_again:
          break;
             
       default:
-         panic("Unkown SONY CD cmd");
+         panic("Unknown SONY CD cmd");
       }
    }
 
@@ -1952,13 +1952,6 @@ get_drive_configuration(unsigned short base_io,
 }
 
 
-static struct sigaction cdu31a_sigaction = {
-	cdu31a_interrupt,
-	0,
-	SA_INTERRUPT,
-	NULL
-};
-
 static int cdu31a_block_size;
 
 /*
@@ -2032,7 +2025,7 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
 
          if (irq_used > 0)
          {
-	    if (irqaction(irq_used,&cdu31a_sigaction))
+	    if (request_irq(irq_used, cdu31a_interrupt, SA_INTERRUPT, "cdu31a"))
             {
                irq_used = 0;
 	       printk("Unable to grab IRQ%d for the CDU31A driver\n", irq_used);

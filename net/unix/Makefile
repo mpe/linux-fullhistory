@@ -8,13 +8,11 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 .c.o:
-	$(CC) $(CFLAGS) \
-	-c -o $*.o $<
+	$(CC) $(CFLAGS) -c $<
 .s.o:
 	$(AS) -o $*.o $<
 .c.s:
-	$(CC) $(CFLAGS) \
-	-S -o $*.s $<
+	$(CC) $(CFLAGS) -S $<
 
 OBJS	= sock.o proc.o
 

@@ -107,7 +107,7 @@ static void do_load(void)
 	 * Check for a super block on the diskette.
 	 * The old-style boot/root diskettes had their RAM image
 	 * starting at block 512 of the boot diskette.  LINUX/Pro
-	 * uses the enire diskette as a file system, so in that
+	 * uses the entire diskette as a file system, so in that
 	 * case, we have to look at block 0.  Be intelligent about
 	 * this, and check both... - FvK
 	 */

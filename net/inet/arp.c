@@ -20,7 +20,7 @@
  *
  *
  * Fixes:
- *		Alan Cox	:	Removed the ethernet assumptions in Florians code
+ *		Alan Cox	:	Removed the ethernet assumptions in Florian's code
  *		Alan Cox	:	Fixed some small errors in the ARP logic
  *		Alan Cox	:	Allow >4K in /proc
  *		Alan Cox	:	Make ARP add its own protocol entry

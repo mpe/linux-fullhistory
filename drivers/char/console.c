@@ -9,7 +9,7 @@
  *
  * This module exports the console io functions:
  * 
- *	'long console_init(long, long)'
+ *	'long con_init(long)'
  *	'int con_open(struct tty_struct *tty, struct file * filp)'
  * 	'void update_screen(int new_console)'
  * 	'void blank_screen(void)'
@@ -1521,16 +1521,16 @@ static void con_unthrottle(struct tty_struct *tty)
 }
 
 /*
- *  long console_init(long, long);
+ *  long con_init(long);
  *
- * This routine initalizes console interrupts, and does nothing
+ * This routine initializes console interrupts, and does nothing
  * else. If you want the screen to clear, call tty_write with
- * the appropriate escape-sequece.
+ * the appropriate escape-sequence.
  *
  * Reads the information preserved by setup.s to determine the current display
  * type and sets everything accordingly.
  */
-long console_init(long kmem_start, long kmem_end)
+long con_init(long kmem_start)
 {
 	char *display_desc = "????";
 	int currcons = 0;
@@ -1867,7 +1867,7 @@ static inline int inword(const char c) {
    return ( inwordLut[(c>>5)&3] >> (c&0x1F) ) & 1;
 }
 
-/* set inwordLut conntents. Invoked by ioctl(). */
+/* set inwordLut contents. Invoked by ioctl(). */
 int sel_loadlut(const int arg)
 {
     memcpy_fromfs(inwordLut,(unsigned long *)(arg+4),16);
@@ -2155,7 +2155,7 @@ static int set_get_font(char * arg, int set)
 			put_fs_byte(*(charmap+i), arg+i);
 
 	cli();
-	outb_p( 0x00, seq_port_reg );   /* Frist, the sequencer */
+	outb_p( 0x00, seq_port_reg );   /* First, the sequencer */
 	outb_p( 0x01, seq_port_val );   /* Synchronous reset */
 	outb_p( 0x02, seq_port_reg );
 	outb_p( 0x03, seq_port_val );   /* CPU writes to maps 0 and 1 */

@@ -5,7 +5,74 @@
  * The proc filesystem constants/structures
  */
 
-#define PROC_ROOT_INO 1
+enum root_directory_inos {
+	PROC_ROOT_INO = 1,
+	PROC_LOADAVG,
+	PROC_UPTIME,
+	PROC_MEMINFO,
+	PROC_KMSG,
+	PROC_VERSION,
+	PROC_SELF,	/* will change inode # */
+	PROC_NET,
+#ifdef CONFIG_DEBUG_MALLOC
+	PROC_MALLOC,
+#endif
+	PROC_KCORE,
+	PROC_MODULES,
+	PROC_STAT,
+	PROC_DEVICES,
+	PROC_INTERRUPTS,
+	PROC_FILESYSTEMS,
+	PROC_KSYMS
+};
+
+enum pid_directory_inos {
+	PROC_PID_INO = 2,
+	PROC_PID_MEM,
+	PROC_PID_CWD,
+	PROC_PID_ROOT,
+	PROC_PID_EXE,
+	PROC_PID_FD,
+	PROC_PID_ENVIRON,
+	PROC_PID_CMDLINE,
+	PROC_PID_STAT,
+	PROC_PID_STATM,
+	PROC_PID_MAPS
+};
+
+enum pid_subdirectory_inos {
+	PROC_PID_FD_DIR = 1
+};
+
+enum net_directory_inos {
+	PROC_NET_UNIX = 128,
+#ifdef CONFIG_INET
+	PROC_NET_ARP,
+	PROC_NET_ROUTE,
+	PROC_NET_DEV,
+	PROC_NET_RAW,
+	PROC_NET_TCP,
+	PROC_NET_UDP,
+	PROC_NET_SNMP,
+#ifdef CONFIG_INET_RARP
+	PROC_NET_RARP,
+#endif
+#endif
+#ifdef CONFIG_IPX
+	PROC_NET_IPX_ROUTE,
+	PROC_NET_IPX,
+#endif
+#ifdef CONFIG_AX25
+	PROC_NET_AX25_ROUTE,
+	PROC_NET_AX25,
+#ifdef CONFIG_NETROM
+	PROC_NET_NR_NODES,
+	PROC_NET_NR_NEIGH,
+	PROC_NET_NR,
+#endif
+#endif
+	PROC_NET_LAST
+};
 
 #define PROC_SUPER_MAGIC 0x9fa0
 
@@ -28,6 +95,7 @@ extern struct inode_operations proc_base_inode_operations;
 extern struct inode_operations proc_net_inode_operations;
 extern struct inode_operations proc_mem_inode_operations;
 extern struct inode_operations proc_array_inode_operations;
+extern struct inode_operations proc_kcore_inode_operations;
 extern struct inode_operations proc_kmsg_inode_operations;
 extern struct inode_operations proc_link_inode_operations;
 extern struct inode_operations proc_fd_inode_operations;

@@ -55,7 +55,6 @@ static void autoirq_probe(int irq)
 	set_bit(irq, (void *)&irq_bitmap);	/* irq_bitmap |= 1 << irq; */
 	return;
 }
-struct sigaction autoirq_sigaction = { autoirq_probe, 0, SA_INTERRUPT, NULL};
 
 int autoirq_setup(int waittime)
 {
@@ -64,7 +63,7 @@ int autoirq_setup(int waittime)
 
     irq_handled = 0;
     for (i = 0; i < 16; i++) {
-	if (!irqaction(i, &autoirq_sigaction))
+	if (!request_irq(i, autoirq_probe, SA_INTERRUPT, "irq probe"))
 	    set_bit(i, (void *)&irq_handled);	/* irq_handled |= 1 << i;*/
     }
     /* Update our USED lists. */

@@ -447,7 +447,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 
 /*
  * make the child exit.  Best I can do is send it a sigkill. 
- * perhaps it should be put in the status that it want's to 
+ * perhaps it should be put in the status that it wants to 
  * exit.
  */
 		case PTRACE_KILL: {

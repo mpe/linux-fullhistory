@@ -59,7 +59,7 @@ void UMSDOS_statfs(struct super_block *sb,struct statfs *buf)
 
 /*
 	Call msdos_lookup, but set back the original msdos function table.
-	Retourne 0 if ok, or a negative error code if not.
+	Return 0 if ok, or a negative error code if not.
 */
 int umsdos_real_lookup (
 	struct inode *dir,
@@ -106,7 +106,7 @@ void umsdos_set_dirinfo(
 }
 /*
 	Tells if an Umsdos inode has been "patched" once.
-	Returne != 0 if so.
+	Return != 0 if so.
 */
 int umsdos_isinit (struct inode *inode)
 {
@@ -134,7 +134,7 @@ void umsdos_patch_inode (
 		will be done when dir != NULL only.
 
 		UMSDOS do run piggy back on top of msdos fs. It looks like something
-		is missing in the VFS to accomodate stacked fs. Still unclear what
+		is missing in the VFS to accommodate stacked fs. Still unclear what
 		(quite honestly).
 
 		Well, maybe one! A new entry "may_unmount" which would allow
@@ -149,7 +149,7 @@ void umsdos_patch_inode (
 			if (!is_init){
 				/*
 					I don't want to change the msdos file system code
-					so I get the adress of some subroutine dynamicly
+					so I get the address of some subroutine dynamically
 					once.
 				*/
 				umsdos_file_inode_operations.bmap = inode->i_op->bmap;
@@ -237,7 +237,7 @@ void UMSDOS_read_inode(struct inode *inode)
 			,inode->u.umsdos_i.u.dir_info.p));
 	}
 	/* #Specification: Inode / post initialisation
-		To completly initialise an inode, we need access to the owner
+		To completely initialise an inode, we need access to the owner
 		directory, so we can locate more info in the EMD file. This is
 		not available the first time the inode is access, we use
 		a value in the inode to tell if it has been finally initialised.
@@ -381,7 +381,7 @@ struct super_block *UMSDOS_read_super(
 		Umsdos run on top of msdos. Currently, it supports no
 		mount option, but happily pass all option received to
 		the msdos driver. I am not sure if all msdos mount option
-		make sens with Umsdos. Here are at least those who
+		make sense with Umsdos. Here are at least those who
 		are useful.
 			uid=
 			gid=

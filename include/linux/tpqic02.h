@@ -88,7 +88,7 @@
 /* #define QIC02_TAPE_IFC		ARCHIVE */
 /* #define QIC02_TAPE_IFC		MOUNTAIN */
 
-#define QIC02_TAPE_PORT 	0x300	/* controller port adress */
+#define QIC02_TAPE_PORT 	0x300	/* controller port address */
 #define QIC02_TAPE_IRQ		5	/* For IRQ2, use 9 here, others normal. */
 #define QIC02_TAPE_DMA		1	/* either 1 or 3, because 2 is used by the floppy */
 

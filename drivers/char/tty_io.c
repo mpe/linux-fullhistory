@@ -25,7 +25,7 @@
  * which can be dynamically activated and de-activated by the line
  * discipline handling modules (like SLIP).
  *
- * NOTE: pay no attention to the line discpline code (yet); its
+ * NOTE: pay no attention to the line discipline code (yet); its
  * interface is still subject to change in this version...
  * -- TYT, 1/31/92
  *
@@ -390,7 +390,7 @@ int tty_hung_up_p(struct file * filp)
 
 /*
  * This function is typically called only by the session leader, when
- * it wants to dissassociate itself from its controlling tty.
+ * it wants to disassociate itself from its controlling tty.
  *
  * It performs the following functions:
  * 	(1)  Sends a SIGHUP and SIGCONT to the foreground process group
@@ -1464,7 +1464,7 @@ void do_SAK( struct tty_struct *tty)
 
 /*
  * This routine is called out of the software interrupt to flush data
- * from the flip buffer to the line discpline.
+ * from the flip buffer to the line discipline.
  */
 static void flush_to_ldisc(void *private)
 {
@@ -1548,15 +1548,14 @@ int tty_register_driver(struct tty_driver *driver)
 	return 0;
 }
 
-long tty_init(long kmem_start)
+/*
+ * Initialize the console device. This is called *early*, so
+ * we can't necessarily depend on lots of kernel help here.
+ * Jus do some early initializations, and do the complex setup
+ * later.
+ */
+long console_init(long kmem_start, long kmem_end)
 {
-	if (sizeof(struct tty_struct) > PAGE_SIZE)
-		panic("size of tty structure > PAGE_SIZE!");
-	if (register_chrdev(TTY_MAJOR,"tty",&tty_fops))
-		panic("unable to get major %d for tty device", TTY_MAJOR);
-	if (register_chrdev(TTYAUX_MAJOR,"tty",&tty_fops))
-		panic("unable to get major %d for tty device", TTYAUX_MAJOR);
-
 	/* Setup the default TTY line discipline. */
 	memset(ldiscs, 0, sizeof(ldiscs));
 	(void) tty_register_ldisc(N_TTY, &tty_ldisc_N_TTY);
@@ -1572,7 +1571,27 @@ long tty_init(long kmem_start)
 	tty_std_termios.c_cflag = B38400 | CS8 | CREAD;
 	tty_std_termios.c_lflag = ISIG | ICANON | ECHO | ECHOE | ECHOK |
 		ECHOCTL | ECHOKE | IEXTEN;
-	
+
+	/*
+	 * set up the console device so that later boot sequences can 
+	 * inform about problems etc..
+	 */
+	return con_init(kmem_start);
+}
+
+/*
+ * Ok, now we can initialize the rest of the tty devices and can count
+ * on memory allocations, interrupts etc..
+ */
+long tty_init(long kmem_start)
+{
+	if (sizeof(struct tty_struct) > PAGE_SIZE)
+		panic("size of tty structure > PAGE_SIZE!");
+	if (register_chrdev(TTY_MAJOR,"tty",&tty_fops))
+		panic("unable to get major %d for tty device", TTY_MAJOR);
+	if (register_chrdev(TTYAUX_MAJOR,"tty",&tty_fops))
+		panic("unable to get major %d for tty device", TTYAUX_MAJOR);
+
 	kmem_start = kbd_init(kmem_start);
 	kmem_start = rs_init(kmem_start);
 	kmem_start = pty_init(kmem_start);

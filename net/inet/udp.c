@@ -22,7 +22,7 @@
  *					select and read wake correctly on errors
  *		Alan Cox	:	udp_send verify_area moved to avoid mem leak
  *		Alan Cox	:	UDP can count its memory
- *		Alan Cox	:	send to an uknown connection causes
+ *		Alan Cox	:	send to an unknown connection causes
  *					an ECONNREFUSED off the icmp, but
  *					does NOT close.
  *		Alan Cox	:	Switched to new sk_buff handlers. No more backlog!
@@ -104,7 +104,7 @@ void udp_err(int err, unsigned char *header, unsigned long daddr,
 	header += 4*ip->ihl;
 
 	/*
-	 *	Find the 8 bytes of post IP header ICMP included for usA
+	 *	Find the 8 bytes of post IP header ICMP included for us
 	 */  
 	
 	th = (struct udphdr *)header;  

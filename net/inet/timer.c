@@ -17,7 +17,7 @@
  *		Alan Cox	:	To avoid destroying a wait queue as we use it
  *					we defer destruction until the destroy timer goes
  *					off.
- *		Alan Cox	:	Destroy socket doesnt write a status value to the
+ *		Alan Cox	:	Destroy socket doesn't write a status value to the
  *					socket buffer _AFTER_ freeing it! Also sock ensures
  *					the socket will get removed BEFORE this is called
  *					otherwise if the timer TIME_DESTROY occurs inside
@@ -150,13 +150,13 @@ void net_timer (unsigned long data)
 		 */
 			if(sk->wmem_alloc!=0 || sk->rmem_alloc!=0)
 			{
-				sk->wmem_alloc++;	/* So it DOESNT go away */
+				sk->wmem_alloc++;	/* So it DOESN'T go away */
 				destroy_sock (sk);
 				sk->wmem_alloc--;	/* Might now have hit 0 - fall through and do it again if so */
 				sk->inuse = 0;	/* This will be ok, the destroy won't totally work */
 			}
 			if(sk->wmem_alloc==0 && sk->rmem_alloc==0)
-				destroy_sock(sk);	/* Socket gone, DONT update sk->inuse! */
+				destroy_sock(sk);	/* Socket gone, DON'T update sk->inuse! */
 				break;
 		case TIME_CLOSE:
 			/* We've waited long enough, close the socket. */

@@ -28,8 +28,8 @@ static char *version = "znet.c:v1.01 7/1/94 becker@cesdis.gsfc.nasa.gov\n";
 	DMA	channels, one interrupt, and one 8-bit I/O port.
 
 	While there	several ways to configure '593 DMA system, I chose the one
-	that seemed commesurate with the highest system performance in the face
-	of moderate interrupt latency: Both DMA channels are configued as
+	that seemed commensurate with the highest system performance in the face
+	of moderate interrupt latency: Both DMA channels are configured as
 	recirculating ring buffers, with one channel (#0) dedicated to Rx and
 	the other channel (#1) to Tx and configuration.  (Note that this is
 	different than the Crynwr driver, where the Tx DMA channel is initialized
@@ -126,7 +126,7 @@ struct znet_private {
 	/* The starting, current, and end pointers for the packet buffers. */
 	ushort *rx_start, *rx_cur, *rx_end;
 	ushort *tx_start, *tx_cur, *tx_end;
-	ushort tx_buf_len;			/* Tx buffer lenght, in words. */
+	ushort tx_buf_len;			/* Tx buffer length, in words. */
 };
 
 /* Only one can be built-in;-> */
@@ -136,14 +136,14 @@ static ushort dma_buffer2[DMA_BUF_SIZE/2];
 static ushort dma_buffer3[DMA_BUF_SIZE/2 + 8];
 
 /* The configuration block.  What an undocumented nightmare.  The first
-   set of values are those suggested (without explaination) for ethernet
+   set of values are those suggested (without explanation) for ethernet
    in the Intel 82586 databook.	 The rest appear to be completely undocumented,
    except for cryptic notes in the Crynwr packet driver.  This driver uses
    the Crynwr values verbatim. */
 
 static unsigned char i593_init[] = {
   0xAA,					/* 0: 16-byte input & 80-byte output FIFO. */
-						/*	  threshhold, 96-byte FIFO, 82593 mode. */
+						/*	  threshold, 96-byte FIFO, 82593 mode. */
   0x88,					/* 1: Continuous w/interrupts, 128-clock DMA.*/
   0x2E,					/* 2: 8-byte preamble, NO address insertion, */
 						/*	  6-byte Ethernet address, loopback off.*/
@@ -247,7 +247,7 @@ int znet_probe(struct device *dev)
 	zn.tx_dma = netinfo->dma2;
 
 	/* These should never fail.  You can't add devices to a sealed box! */
-	if (request_irq(dev->irq, &znet_interrupt)
+	if (request_irq(dev->irq, &znet_interrupt, 0, "ZNet")
 		|| request_dma(zn.rx_dma)
 		|| request_dma(zn.tx_dma)) {
 		printk(KERN_WARNING "%s: Not opened -- resource busy?!?\n", dev->name);

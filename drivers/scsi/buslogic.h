@@ -19,7 +19,7 @@ const char *buslogic_info(void);
 int buslogic_reset(Scsi_Cmnd *);
 int buslogic_biosparam(Disk *, int, int *);
 
-#define BUSLOGIC_CMDLUN 1	/* ??? */
+#define BUSLOGIC_CMDLUN 4	/* ??? */
 
 #define BUSLOGIC { NULL, 			\
 		   "BusLogic",			\

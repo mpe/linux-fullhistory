@@ -1,7 +1,7 @@
 #ifndef _ELF_H
 #define _ELF_H
 
-/* THese constants are for the segment types stored in the image headers */
+/* These constants are for the segment types stored in the image headers */
 #define PT_NULL    0
 #define PT_LOAD    1
 #define PT_DYNAMIC 2
@@ -83,7 +83,7 @@ struct dynamic{
   } d_un;
 };
 
-/* THe following are used with relocations */
+/* The following are used with relocations */
 #define ELF32_R_SYM(x) ((x) >> 8)
 #define ELF32_R_TYPE(x) ((x) & 0xff)
 

@@ -47,7 +47,7 @@
 
 
 # Most drivers also have a *_DEBUG setting that may be adjusted.
-# The 8390 drivers share the EI_DEBUG settting.
+# The 8390 drivers share the EI_DEBUG setting.
 
 # General options for Space.c
 OPTS		= # -DETH0_ADDR=0x300 -DETH0_IRQ=11

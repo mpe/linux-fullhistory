@@ -73,7 +73,7 @@
  *       return only zeroes. Is there no UPC/EAN code written?
  *
  *  1.5  Laborate with UPC/EAN code (not better yet).
- *       Adapt to kernel 1.1.8 change (have to explicitely include
+ *       Adapt to kernel 1.1.8 change (have to explicitly include
  *       <linux/string.h> now).
  *
  *  1.6  Trying to read audio frames as data. Impossible with the current
@@ -82,7 +82,7 @@
  *       Changed CDROMSTOP routine (stop somewhat "softer" so that Workman
  *       won't get confused).
  *       Added a third interface type: Sequoia S-1000, as used with the SPEA
- *       Media FX sound card. This interface (useable for Sony and Mitsumi 
+ *       Media FX sound card. This interface (usable for Sony and Mitsumi 
  *       drives, too) needs a special configuration setup and behaves like a 
  *       LaserMate type after that. Still experimental - I do not have such
  *       an interface.
@@ -2646,7 +2646,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
       DriveStruct[d].mode=READ_M1;
       return (0);
 
-    case CDROMREADMODE2: /* not useable at the moment */
+    case CDROMREADMODE2: /* not usable at the moment */
       DPRINTF((DBG_IOC,"SBPCD: ioctl: CDROMREADMODE2 requested.\n"));
       xx_ModeSelect(CD_FRAMESIZE_XA);
       xx_ModeSense();

@@ -258,7 +258,7 @@ Mon Mar 21 16:36:20 1994
 	* Linux 1.0, patchlevel3 released.
 
 	* sd.c, st.c, sr.c, sg.c: Return -ENXIO, not -ENODEV if we attempt
-	to open a non-existant device.
+	to open a non-existent device.
 
 	* scsi.c: Add Chinon cdrom to blacklist.
 

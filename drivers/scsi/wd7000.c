@@ -172,9 +172,8 @@ typedef struct adapter {
 /*
  * The following is set up by wd7000_detect, and used thereafter by
  * wd7000_intr_handle to map the irq level to the corresponding Adapter.
- * Note that if request_irq instead of irqaction to allocate the IRQ,
- * or if SA_INTERRUPT is not used, wd7000_intr_handle must be changed 
- * to pick up the IRQ level correctly.
+ * Note that if SA_INTERRUPT is not used, wd7000_intr_handle must be
+ * changed to pick up the IRQ level correctly.
  */
 Adapter *irq2host[16] = {NULL};  /* Possible IRQs are 0-15 */
 
@@ -802,8 +801,8 @@ void wd7000_intr_handle(int irq)
 {
 #ifdef 0
     /*
-     * Use irqp as the parm, and the following declaration, if request_irq
-     * is used or if SA_INTERRUPT is not used.
+     * Use irqp as the parm, and the following declaration, if
+     * SA_INTERRUPT is not used.
      */
     register int irq = *(((int *)irqp)-2);
 #endif
@@ -993,7 +992,6 @@ int wd7000_init( Adapter *host )
     InitCmd init_cmd = {
         INITIALIZATION, 7, BUS_ON, BUS_OFF, 0, 0,0,0, OGMB_CNT, ICMB_CNT
     };
-    struct sigaction sa = {wd7000_intr_handle, 0, SA_INTERRUPT, NULL};
     int diag;
 
     /*
@@ -1045,7 +1043,7 @@ int wd7000_init( Adapter *host )
     }
     WAIT(host->iobase+ASC_STAT, ASC_STATMASK, ASC_INIT, 0);
 
-    if (irqaction(host->irq, &sa))  {
+    if (request_irq(host->irq, wd7000_intr_handle, SA_INTERRUPT, "wd7000")) {
         printk("wd7000_init: can't get IRQ %d.\n", host->irq);
 	return 0;
     }

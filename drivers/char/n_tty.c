@@ -1,5 +1,5 @@
 /*
- * n_tty.c --- implements the N_TTY line discpline.
+ * n_tty.c --- implements the N_TTY line discipline.
  * 
  * This code used to be in tty_io.c, but things are getting hairy
  * enough that it made sense to split things off.  (The N_TTY
@@ -8,7 +8,7 @@
  *
  * Note that the open routine for N_TTY is guaranteed never to return
  * an error.  This is because Linux will fall back to setting a line
- * to N_TTY if it can not switch to any other line discpline.  
+ * to N_TTY if it can not switch to any other line discipline.  
  *
  * Written by Theodore Ts'o, Copyright 1994.
  * 
@@ -85,7 +85,7 @@ void n_tty_flush_buffer(struct tty_struct * tty)
 }
 
 /*
- * Return number of characters buffered to be delievered to user
+ * Return number of characters buffered to be delivered to user
  */
 int n_tty_chars_in_buffer(struct tty_struct *tty)
 {

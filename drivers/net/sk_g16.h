@@ -35,7 +35,7 @@
 #define CSR0_CERR	0x2000	/* Collision Error (RC) */
 #define CSR0_MISS	0x1000	/* Missed packet (RC) */
 #define CSR0_MERR	0x0800	/* Memory Error  (RC) */ 
-#define CSR0_RINT	0x0400	/* Reciever Interrupt (RC) */
+#define CSR0_RINT	0x0400	/* Receiver Interrupt (RC) */
 #define CSR0_TINT       0x0200	/* Transmit Interrupt (RC) */ 
 #define CSR0_IDON	0x0100	/* Initialization Done (RC) */
 #define CSR0_INTR	0x0080	/* Interrupt Flag (R) */
@@ -69,7 +69,7 @@
 #define MODE_DTCR	0x0008	/* Disable Transmit CRC) */
 #define MODE_LOOP	0x0004	/* Loopback */
 #define MODE_DTX	0x0002	/* Disable the Transmitter */ 
-#define MODE_DRX	0x0001  /* Disable the Reciever */
+#define MODE_DRX	0x0001  /* Disable the Receiver */
 
 #define MODE_NORMAL 	0x0000  /* Normal operation mode */
 

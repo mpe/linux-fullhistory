@@ -43,7 +43,7 @@
  *		Alan Cox	:	for new sk_buff allocations wmalloc/rmalloc now call alloc_skb
  *		Alan Cox	:	kfree_s calls now are kfree_skbmem so we can track skb resources
  *		Alan Cox	:	Supports socket option broadcast now as does udp. Packet and raw need fixing.
- *		Alan Cox	:	Added RCVBUF,SNDBUF size setting. It suddenely occured to me how easy it was so...
+ *		Alan Cox	:	Added RCVBUF,SNDBUF size setting. It suddenly occured to me how easy it was so...
  *		Rick Sladkey	:	Relaxed UDP rules for matching packets.
  *		C.E.Hawkins	:	IFF_PROMISC/SIOCGHWADDR support
  *	Pauline Middelink	:	Pidentd support

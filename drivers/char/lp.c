@@ -282,7 +282,6 @@ static int lp_open(struct inode * inode, struct file * file)
 	unsigned int minor = MINOR(inode->i_rdev);
 	int ret;
 	unsigned int irq;
-	struct sigaction sa;
 
 	if (minor >= LP_NO)
 		return -ENODEV;
@@ -296,11 +295,7 @@ static int lp_open(struct inode * inode, struct file * file)
 		if (!lp_table[minor].lp_buffer)
 			return -ENOMEM;
 
-		sa.sa_handler = lp_interrupt;
-		sa.sa_flags = SA_INTERRUPT;
-		sa.sa_mask = 0;
-		sa.sa_restorer = NULL;
-		ret = irqaction(irq, &sa);
+		ret = request_irq(irq, lp_interrupt, SA_INTERRUPT, "printer");
 		if (ret) {
 			kfree_s(lp_table[minor].lp_buffer, LP_BUFFER_SIZE);
 			lp_table[minor].lp_buffer = NULL;
@@ -362,7 +357,6 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 			int oldirq;
 			int newirq = arg;
 			struct lp_struct *lp = &lp_table[minor];
-			struct sigaction sa;
 
 			if (!suser())
 				return -EPERM;
@@ -381,14 +375,10 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 			}
 			if (newirq) {
 				/* Install new irq */
-				sa.sa_handler = lp_interrupt;
-				sa.sa_flags = SA_INTERRUPT;
-				sa.sa_mask = 0;
-				sa.sa_restorer = NULL;
-				if ((retval = irqaction(newirq, &sa))) {
+				if ((retval = request_irq(newirq, lp_interrupt, SA_INTERRUPT, "printer"))) {
 					if (oldirq) {
 						/* restore old irq */
-						irqaction(oldirq, &sa);
+						request_irq(oldirq, lp_interrupt, SA_INTERRUPT, "printer");
 					} else {
 						/* We don't need the buffer */
 						kfree_s(lp->lp_buffer, LP_BUFFER_SIZE);

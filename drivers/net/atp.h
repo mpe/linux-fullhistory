@@ -89,7 +89,7 @@ extern inline unsigned char inbyte(unsigned short port)
 }
 
 /* Read register OFFSET.
-   This command should aways be terminated with read_end(). */
+   This command should always be terminated with read_end(). */
 extern inline unsigned char read_nibble(short port, unsigned char offset)
 {
     unsigned char retval;

@@ -34,7 +34,7 @@
 
 /*
  * Size of the lookup cache in units of number of entries cached.
- * It is better not to make this too large although the optimimum
+ * It is better not to make this too large although the optimum
  * depends on a usage and environment.
  */
 

@@ -30,7 +30,7 @@
  *
  *
  * CHANGELOG :
- * Jun 17, 1994 : Modified to accomodate the broken pre-PCI BIOS SPECIFICATION
+ * Jun 17, 1994 : Modified to accommodate the broken pre-PCI BIOS SPECIFICATION
  *	Revision 2.0 present on <thys@dennis.ee.up.ac.za>'s ASUS mainboard.
  */
 
@@ -78,7 +78,7 @@
  * 	Revision 0.4 May 24, 1993
  * 	Phoenix Technologies Ltd.
  *	Norwood, MA
- * and the PCI BIOS specfication.
+ * and the PCI BIOS specification.
  */
 
 union bios32 {
@@ -425,8 +425,8 @@ unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end)
 	int i, length;
 
 	/*
-	 * Follow the standard procedure for locating the BIOS32 Serivce
-	 * directory by scanning the permissable address range from
+	 * Follow the standard procedure for locating the BIOS32 Service
+	 * directory by scanning the permissible address range from
 	 * 0xe0000 through 0xfffff for a valid BIOS32 structure.
 	 *
 	 * The PCI BIOS doesn't seem to work too well on many machines,

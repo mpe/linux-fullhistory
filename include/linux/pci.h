@@ -81,7 +81,7 @@
 #define PCI_BIST_CAPABLE	0x80	/* 1 if BIST capable */
 
 /*
- * Base adddresses specify locations in memory or I/O space.
+ * Base addresses specify locations in memory or I/O space.
  * Decoded size can be determined by writing a value of 
  * 0xffffffff to the register, and reading it back.  Only 
  * 1 bits are decoded.

@@ -118,7 +118,7 @@
 
 
 /*
- * The following are command paramters for the set drive parameter command
+ * The following are command parameters for the set drive parameter command
  */
 #define SONY_SD_DECODE_PARAM		0x00
 #define SONY_SD_INTERFACE_PARAM		0x01
@@ -284,7 +284,7 @@ struct s_sony_toc
 
 
 /*
- * The following are attention code for asyncronous events from the drive.
+ * The following are attention code for asynchronous events from the drive.
  */
 
 /* Standard attention group */

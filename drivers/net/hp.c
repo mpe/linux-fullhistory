@@ -124,13 +124,13 @@ int hpprobe1(struct device *dev, int ioaddr)
 		int *irqp = wordmode ? irq_16list : irq_8list;
 		do {
 			int irq = *irqp;
-			if (request_irq (irq, NULL) != -EBUSY) {
+			if (request_irq (irq, NULL, 0, "bogus") != -EBUSY) {
 				autoirq_setup(0);
 				/* Twinkle the interrupt, and check if it's seen. */
 				outb_p(irqmap[irq] | HP_RUN, ioaddr + HP_CONFIGURE);
 				outb_p( 0x00 | HP_RUN, ioaddr + HP_CONFIGURE);
 				if (irq == autoirq_report(0)		 /* It's a good IRQ line! */
-					&& request_irq (irq, &ei_interrupt) == 0) {
+					&& request_irq (irq, &ei_interrupt, 0, "hp") == 0) {
 					printk(" selecting IRQ %d.\n", irq);
 					dev->irq = *irqp;
 					break;
@@ -144,7 +144,7 @@ int hpprobe1(struct device *dev, int ioaddr)
 	} else {
 		if (dev->irq == 2)
 			dev->irq = 9;
-		if (irqaction(dev->irq, &ei_sigaction)) {
+		if (request_irq(dev->irq, ei_interrupt, 0, "hp")) {
 			printk (" unable to get IRQ %d.\n", dev->irq);
 			return EBUSY;
 		}

@@ -171,7 +171,7 @@ static char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
  */
 
 /* 
- * Scheider & Koch manufactorer code (00:00:a5).
+ * Scheider & Koch manufacturer code (00:00:a5).
  * This must be checked, that we are sure it is a SK card.
  */
 
@@ -227,7 +227,7 @@ static char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
 
 /* 
  * Register transfer: 0 = no transfer
- *                    1 = transfering data between LANCE and I/O reg 
+ *                    1 = transferring data between LANCE and I/O reg 
  */
 #define SK_IORUN        0x20   
 
@@ -260,7 +260,7 @@ static char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
 #define SK_DOIO         0x80   /* Do Transfer */ 
  
 /* 
- * LANCE RAP (Register Adress Port). 
+ * LANCE RAP (Register Address Port). 
  * ---------------------------------
  */
 
@@ -271,7 +271,7 @@ static char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
  * CSR0 - Status and Control flags 
  * CSR1 - Low order bits of initialize block (bits 15:00)
  * CSR2 - High order bits of initialize block (bits 07:00, 15:08 are reserved)
- * CSR3 - Allows redifinition of the Bus Master Interface.
+ * CSR3 - Allows redefinition of the Bus Master Interface.
  *        This register must be set to 0x0002, which means BSWAP = 0,
  *        ACON = 1, BCON = 0;
  *
@@ -356,7 +356,7 @@ static char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
  * Normal way of live is: 
  *
  * For the whole thing get going let both symbolic constants
- * undefined. If you face any problems and you know whats going
+ * undefined. If you face any problems and you know what's going
  * on (you know something about the card and you can interpret some
  * hex LANCE register output) then define SK_DEBUG
  * 
@@ -388,7 +388,7 @@ static char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
  *
  * dual ported RAM: This is the only memory region which the LANCE chip
  *      has access to. From the Lance it is addressed from 0x0000 to
- *      0x3fbf. The host accesses it normaly.
+ *      0x3fbf. The host accesses it normally.
  *
  * PROM: The PROM obtains the ETHERNET-MAC-Address. It is realised as a
  *       8-Bit PROM, this means only the 16 even addresses are used of the
@@ -514,8 +514,8 @@ int    SK_rread_reg(void);
 void   SK_write_reg(int reg_number, int value);
 
 /* 
- * Debuging functions
- * ------------------
+ * Debugging functions
+ * -------------------
  */
 
 void SK_print_pos(struct device *dev, char *text);
@@ -546,7 +546,7 @@ void SK_print_ram(struct device *dev);
  * Check for a network adaptor of this type, and return '0' if one exists.
  * If dev->base_addr == 0, probe all likely locations.
  * If dev->base_addr == 1, always return failure.
- * If dev->base_addr == 2, alloate space for the device and return success
+ * If dev->base_addr == 2, allocate space for the device and return success
  *                         (detachable devices only).
  */
 
@@ -624,7 +624,7 @@ int SK_init(struct device *dev)
  *                  
  * Parameters     : I : struct device *dev - SK_G16 device structure
  *                  I : short ioaddr       - I/O Port address where POS is.
- * Return Value   : 0 = Initilization done             
+ * Return Value   : 0 = Initialization done             
  * Errors         : ENODEV - No SK_G16 found
  *                  -1     - Configuration problem
  * Globals        : irq2dev_map - Which device uses which IRQ
@@ -761,7 +761,7 @@ int SK_probe(struct device *dev, short ioaddr)
 	dev->dev_addr[i] = board->rom[j];          
     }
 
-    /* Check for manufactorer code */
+    /* Check for manufacturer code */
     if (!(dev->dev_addr[0] == SK_MAC0 &&
 	  dev->dev_addr[1] == SK_MAC1 &&
 	  dev->dev_addr[2] == SK_MAC2) )
@@ -782,7 +782,7 @@ int SK_probe(struct device *dev, short ioaddr)
 	    dev->dev_addr[4],
 	    dev->dev_addr[5]);
 
-    /* Grap the I/O Port region */
+    /* Grab the I/O Port region */
     snarf_region(ioaddr, ETHERCARD_TOTAL_SIZE);
 
     /* Initialize device structure */
@@ -841,11 +841,11 @@ int SK_probe(struct device *dev, short ioaddr)
  * Date Created   : 94/05/26
  *
  * Description    : This function is called sometimes after booting 
- *                  when ifconfig programm is run.
+ *                  when ifconfig program is run.
  *
  *                  This function requests an IRQ, sets the correct
  *                  IRQ in the card. Then calls SK_lance_init() to 
- *                  init and start the LANCE chip. Then if everthing is 
+ *                  init and start the LANCE chip. Then if everything is 
  *                  ok returns with 0 (OK), which means SK_G16 is now
  *                  opened and operational.
  *
@@ -888,7 +888,7 @@ static int SK_open(struct device *dev)
 
 	do
 	{
-	  irqval = request_irq(irqtab[i], &SK_interrupt);
+	  irqval = request_irq(irqtab[i], &SK_interrupt, 0, "sk_g16");
 	  i++;
 	} while (irqval && irqtab[i]);
 
@@ -905,7 +905,7 @@ static int SK_open(struct device *dev)
     }
     else if (dev->irq == 2) /* IRQ2 is always IRQ9 */
     {
-	if (request_irq(9, &SK_interrupt))
+	if (request_irq(9, &SK_interrupt, 0, "sk_g16"))
 	{
 	    printk("%s: unable to get IRQ 9\n", dev->name);
 	    return -EAGAIN;
@@ -926,7 +926,7 @@ static int SK_open(struct device *dev)
 
 	/* check if IRQ free and valid. Then install Interrupt handler */
 
-	if (request_irq(dev->irq, &SK_interrupt))
+	if (request_irq(dev->irq, &SK_interrupt, 0, "sk_g16"))
 	{
 	    printk("%s: unable to get selected IRQ\n", dev->name);
 	    return -EAGAIN;
@@ -1071,7 +1071,7 @@ static int SK_lance_init(struct device *dev, unsigned short mode)
 
 	rmdp->u.s.status = RX_OWN;  
 
-	rmdp->blen = -PKT_BUF_SZ;    /* Buffer Size in a two's comliment */
+	rmdp->blen = -PKT_BUF_SZ;    /* Buffer Size in a two's complement */
 
 	rmdp->mlen = 0;              /* init message length */       
 	
@@ -1086,7 +1086,7 @@ static int SK_lance_init(struct device *dev, unsigned short mode)
 	(p->ram)->ib.paddr[i] = dev->dev_addr[i]; 
     }
 
-    for (i = 0; i < 8; i++)          /* Set multicast, logical adress */
+    for (i = 0; i < 8; i++)          /* Set multicast, logical address */
     {
 	(p->ram)->ib.laddr[i] = 0;   /* We do not use logical addressing */
     } 
@@ -1096,7 +1096,7 @@ static int SK_lance_init(struct device *dev, unsigned short mode)
     (p->ram)->ib.rdrp = (int)  p->rmdhead | RMDNUMMASK;
     (p->ram)->ib.tdrp = (int)  p->tmdhead | TMDNUMMASK;
 
-    /* Prepare LANCE Controll and Status Registers */
+    /* Prepare LANCE Control and Status Registers */
 
     cli();
 
@@ -1107,7 +1107,7 @@ static int SK_lance_init(struct device *dev, unsigned short mode)
      * PC Memory locations.
      *
      * In structure SK_ram is defined that the first thing in ram
-     * is the initalization block. So his address is for LANCE always
+     * is the initialization block. So his address is for LANCE always
      * 0x0000
      *
      * CSR1 contains low order bits 15:0 of initialization block address
@@ -1127,7 +1127,7 @@ static int SK_lance_init(struct device *dev, unsigned short mode)
     /* Initialize LANCE */
 
     /* 
-     * INIT = Initialize, when set, cuases the LANCE to begin the
+     * INIT = Initialize, when set, causes the LANCE to begin the
      * initialization procedure and access the Init Block.
      */
 
@@ -1429,7 +1429,7 @@ static void SK_txintr(struct device *dev)
             p->stats.tx_fifo_errors++;
 
             /* 
-             * If UFLO error occurs it will turn tranmitter of.
+             * If UFLO error occurs it will turn transmitter of.
              * So we must reinit LANCE
              */
 
@@ -1582,7 +1582,7 @@ static void SK_rxintr(struct device *dev)
 		 * to Lance, update statistics and go ahead.
 		 */
 
-		rmdp->u.s.status = RX_OWN;  /* Reliquish ownershipt to LANCE */
+		rmdp->u.s.status = RX_OWN;  /* Relinquish ownership to LANCE */
 		printk("%s: Couldn't allocate sk_buff, deferring packet.\n",
 		       dev->name);
 		p->stats.rx_dropped++;
@@ -1662,7 +1662,7 @@ static int SK_close(struct device *dev)
     dev->tbusy = 1;                /* Transmitter busy */
     dev->start = 0;                /* Card down */
 
-    printk("%s: Shuting %s down CSR0 %#06x\n", dev->name, SK_NAME, 
+    printk("%s: Shutting %s down CSR0 %#06x\n", dev->name, SK_NAME, 
            (int) SK_read_reg(CSR0));
 
     SK_write_reg(CSR0, CSR0_STOP); /* STOP the LANCE */
@@ -1670,7 +1670,7 @@ static int SK_close(struct device *dev)
     free_irq(dev->irq);            /* Free IRQ */
     irq2dev_map[dev->irq] = 0;     /* Mark IRQ as unused */
 
-    return 0; /* always succed */
+    return 0; /* always succeed */
     
 } /* End of SK_close() */
 
@@ -1710,14 +1710,14 @@ static struct enet_statistics *SK_get_stats(struct device *dev)
  * Author         : Patrick J.D. Weichmann
  * Date Created   : 94/05/26
  *
- * Description    : This function gets called when a programm performs
+ * Description    : This function gets called when a program performs
  *                  a SIOCSIFFLAGS call. Ifconfig does this if you call
- *                  'ifconfig [-]allmultie' which enables or disables the
- *                  Promiscous mode.
- *                  Promiscous mode is when the Network card accepts all
+ *                  'ifconfig [-]allmulti' which enables or disables the
+ *                  Promiscuous mode.
+ *                  Promiscuous mode is when the Network card accepts all
  *                  packets, not only the packets which match our MAC 
  *                  Address. It is useful for writing a network monitor,
- *                  but it is also a security problem. You have to remeber
+ *                  but it is also a security problem. You have to remember
  *                  that all information on the net is not encrypted.
  *
  * Parameters     : I : struct device *dev - SK_G16 device Structure
@@ -1733,7 +1733,7 @@ static struct enet_statistics *SK_get_stats(struct device *dev)
 
 /* Set or clear the multicast filter for SK_G16.
  *
- * num_addrs == -1      Promiscous mode, receive all packets
+ * num_addrs == -1      Promiscuous mode, receive all packets
  * num_addrs == 0       Normal mode, clear multicast list
  * num_addrs > 0        Multicast mode, receive normal and MC packets
  */
@@ -1853,7 +1853,7 @@ void SK_reset_board(void)
 {
     int i;
 
-    SK_PORT = 0x00;           /* Reset aktiv */
+    SK_PORT = 0x00;           /* Reset active */
     for (i = 0; i < 10 ; i++) /* Delay min 5ms */
 	;
     SK_PORT = SK_RESET;       /* Set back to normal operation */
@@ -1867,7 +1867,7 @@ void SK_reset_board(void)
  * Date Created   : 94/05/25
  *
  * Description    : Set LANCE Register Address Port to register
- *                  for later data trasfer.
+ *                  for later data transfer.
  *
  * Parameters     : I : reg_number - which CSR to read/write from/to
  * Return Value   : None
@@ -2067,7 +2067,7 @@ void SK_print_dev(struct device *dev, char *text)
  *
  * Description    : This function is used to check how are things set up
  *                  in the 16KB RAM. Also the pointers to the receive and 
- *                  transmit descriptor rings and rx und tx buffers locations.
+ *                  transmit descriptor rings and rx and tx buffers locations.
  *                  It contains a minor bug in printing, but has no effect to the values
  *                  only newlines are not correct.
  *

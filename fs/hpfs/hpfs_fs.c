@@ -720,7 +720,7 @@ static void hpfs_put_super(struct super_block *s)
 
 /*
  * statfs.  For free inode counts we report the count of dnodes in the
- * directory band -- not exactly right but pretty analagous.
+ * directory band -- not exactly right but pretty analogous.
  */
 
 static void hpfs_statfs(struct super_block *s, struct statfs *buf)

@@ -33,7 +33,7 @@
 #define	NEXT_DEV	NULL
 
 
-/* A unifed ethernet device probe.  This is the easiest way to have every
+/* A unified ethernet device probe.  This is the easiest way to have every
    ethernet adaptor have the name "eth[0123...]".
    */
 

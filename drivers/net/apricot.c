@@ -63,7 +63,7 @@ int i596_debug = 1;
 #define CMD_SUSP	0x4000	/* Suspend after doing cmd. */
 #define CMD_INTR	0x2000	/* Interrupt after doing cmd. */
 
-#define CMD_FLEX	0x0008	/* Enable flexable memory model */
+#define CMD_FLEX	0x0008	/* Enable flexible memory model */
 
 enum commands {
 	CmdNOp = 0, CmdSASetup = 1, CmdConfigure = 2, CmdMulticastList = 3,
@@ -488,7 +488,7 @@ static void i596_cleanup_cmd(struct i596_private *lp)
 static int
 i596_open(struct device *dev)
 {
-    if (request_irq(dev->irq, &i596_interrupt)) {
+    if (request_irq(dev->irq, &i596_interrupt, 0, "apricot")) {
 	return -EAGAIN;
     }
 
@@ -819,7 +819,7 @@ i596_interrupt(int reg_ptr)
 	if (dev->start) ack_cmd |= RX_START;
     }
 
-    /* acknowlage the interrupt */
+    /* acknowledge the interrupt */
 
 /*
     if ((lp->scb.cmd != (struct i596_cmd *) -1) && (dev->start)) ack_cmd |= CUC_START;

@@ -418,7 +418,7 @@ repeat:
 		 * the bitmap and then for any free bit.
 		 * 
 		 * Search first in the remainder of the current group; then,
-		 * cyclicly search throught the rest of the groups.
+		 * cyclicly search through the rest of the groups.
 		 */
 		p = ((char *) bh->b_data) + (j >> 3);
 		r = find_first_zero_byte (p, 

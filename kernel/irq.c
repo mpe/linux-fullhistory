@@ -16,8 +16,8 @@
  * is a SA_INTERRUPT flag etc). Naturally it's not a 1:1 relation, but there
  * are similarities.
  *
- * sa_handler(int irq_NR) is the default function called.
- * sa_mask is 0 if nothing uses this IRQ
+ * sa_handler(int irq_NR) is the default function called (0 if no).
+ * sa_mask is horribly ugly (I won't even mention it)
  * sa_flags contains various info: SA_INTERRUPT etc
  * sa_restorer is the unused
  */
@@ -190,6 +190,22 @@ static struct sigaction irq_sigaction[16] = {
 	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL }
 };
 
+int get_irq_list(char *buf)
+{
+	int i, len = 0;
+	struct sigaction * sa = irq_sigaction;
+
+	for (i = 0 ; i < 16 ; i++, sa++) {
+		if (!sa->sa_handler)
+			continue;
+		len += sprintf(buf+len, "%2d: %8d %c %s\n",
+			i, kstat.interrupts[i],
+			(sa->sa_flags & SA_INTERRUPT) ? '+' : ' ',
+			(char *) sa->sa_mask);
+	}
+	return len;
+}
+
 /*
  * do_IRQ handles IRQ's that have been installed without the
  * SA_INTERRUPT flag: it uses the full signal-handling return
@@ -218,7 +234,11 @@ asmlinkage void do_fast_IRQ(int irq)
 	sa->sa_handler(irq);
 }
 
-int irqaction(unsigned int irq, struct sigaction * new_sa)
+/*
+ * Using "struct sigaction" is slightly silly, but there
+ * are historical reasons and it works well, so..
+ */
+static int irqaction(unsigned int irq, struct sigaction * new_sa)
 {
 	struct sigaction * sa;
 	unsigned long flags;
@@ -226,14 +246,13 @@ int irqaction(unsigned int irq, struct sigaction * new_sa)
 	if (irq > 15)
 		return -EINVAL;
 	sa = irq + irq_sigaction;
-	if (sa->sa_mask)
+	if (sa->sa_handler)
 		return -EBUSY;
 	if (!new_sa->sa_handler)
 		return -EINVAL;
 	save_flags(flags);
 	cli();
 	*sa = *new_sa;
-	sa->sa_mask = 1;
 	if (sa->sa_flags & SA_INTERRUPT)
 		set_intr_gate(0x20+irq,fast_interrupt[irq]);
 	else
@@ -251,13 +270,14 @@ int irqaction(unsigned int irq, struct sigaction * new_sa)
 	return 0;
 }
 		
-int request_irq(unsigned int irq, void (*handler)(int))
+int request_irq(unsigned int irq, void (*handler)(int),
+	unsigned long flags, const char * devname)
 {
 	struct sigaction sa;
 
 	sa.sa_handler = handler;
-	sa.sa_flags = 0;
-	sa.sa_mask = 0;
+	sa.sa_flags = flags;
+	sa.sa_mask = (unsigned long) devname;
 	sa.sa_restorer = NULL;
 	return irqaction(irq,&sa);
 }
@@ -271,7 +291,7 @@ void free_irq(unsigned int irq)
 		printk("Trying to free IRQ%d\n",irq);
 		return;
 	}
-	if (!sa->sa_mask) {
+	if (!sa->sa_handler) {
 		printk("Trying to free free IRQ%d\n",irq);
 		return;
 	}
@@ -313,22 +333,15 @@ static void math_error_irq(int cpl)
 
 static void no_action(int cpl) { }
 
-static struct sigaction ignore_IRQ = {
-	no_action,
-	0,
-	SA_INTERRUPT,
-	NULL
-};
-
 void init_IRQ(void)
 {
 	int i;
 
 	for (i = 0; i < 16 ; i++)
 		set_intr_gate(0x20+i,bad_interrupt[i]);
-	if (irqaction(2,&ignore_IRQ))
+	if (request_irq(2, no_action, SA_INTERRUPT, "cascade"))
 		printk("Unable to get IRQ2 for cascade\n");
-	if (request_irq(13,math_error_irq))
+	if (request_irq(13,math_error_irq, 0, "math error"))
 		printk("Unable to get IRQ13 for math-error handler\n");
 
 	/* initialize the bottom half routines. */

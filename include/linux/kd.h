@@ -133,7 +133,7 @@ struct kd_quemode {
 
 #define KDSBORDER	0x4B39	/* set screen boarder in ega text mode */
 
-#define KDSETMODE	0x4B3A	/* set text/grahics mode */
+#define KDSETMODE	0x4B3A	/* set text/graphics mode */
 #define		KD_TEXT		0x00
 #define		KD_GRAPHICS	0x01
 #define		KD_TEXT0	0x02	/* ? */

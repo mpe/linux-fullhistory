@@ -153,7 +153,7 @@ int el3_probe(struct device *dev)
 	/* Next check for all ISA bus boards by sending the ID sequence to the
 	   ID_PORT.  We find cards past the first by setting the 'current_tag'
 	   on cards as they are found.  Cards with their tag set will not
-	   respond to subseqent ID seqences. */
+	   respond to subsequent ID sequences. */
 	outb(0x00, ID_PORT);
 	outb(0x00, ID_PORT);
 	for(i = 0; i < 255; i++) {
@@ -283,7 +283,7 @@ el3_open(struct device *dev)
 	int ioaddr = dev->base_addr;
 	int i;
 
-	if (request_irq(dev->irq, &el3_interrupt)) {
+	if (request_irq(dev->irq, &el3_interrupt, 0, "3c509")) {
 		return -EAGAIN;
 	}
 
@@ -367,7 +367,7 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 		return 0;
 
 	if (el3_debug > 4) {
-		printk("%s: el3_start_xmit(lenght = %ld) called, status %4.4x.\n",
+		printk("%s: el3_start_xmit(length = %ld) called, status %4.4x.\n",
 			   dev->name, skb->len, inw(ioaddr + EL3_STATUS));
 	}
 #ifndef final_version

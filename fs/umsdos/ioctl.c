@@ -50,8 +50,8 @@ int UMSDOS_ioctl_dir (
 			all this.
 
 			These ioctl generally allow one to work on the EMD or the
-			DOS directory independantly. These are essential to implement
-			the synchroniser.
+			DOS directory independently. These are essential to implement
+			the synchronise.
 		*/
 		PRINTK (("ioctl %d ",cmd));
 		if (cmd == UMSDOS_GETVERSION){
@@ -237,7 +237,7 @@ int UMSDOS_ioctl_dir (
 
 					Be aware that this apply ONLY to MsDOS directory
 					(those without EMD --linux-.---). Umsdos directory
-					have independant (standard) permission for each
+					have independent (standard) permission for each
 					and every file.
 
 					The field umsdos_dirent provide the information needed.

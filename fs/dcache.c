@@ -194,6 +194,7 @@ void dcache_add(struct inode * dir, const char * name, int len, unsigned long in
 		return;
 	hash = hash_table + hash_fn(dir->i_dev, dir->i_ino, namehash(name,len));
 	if ((de = find_entry(dir, name, len, hash)) != NULL) {
+		de->ino = ino;
 		update_lru(de);
 		return;
 	}

@@ -8,7 +8,7 @@
    C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
 
    This is a device driver for the Allied Telesis AT1700, which is a
-   straight-foward Fujitsu MB86965 implementation.
+   straightforward Fujitsu MB86965 implementation.
 */
 
 static char *version =
@@ -121,7 +121,7 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 /* Check for a network adaptor of this type, and return '0' iff one exists.
    If dev->base_addr == 0, probe all likely locations.
    If dev->base_addr == 1, always return failure.
-   If dev->base_addr == 2, alloate space for the device and return success
+   If dev->base_addr == 2, allocate space for the device and return success
    (detachable devices only).
    */
 int
@@ -184,7 +184,7 @@ int at1700_probe1(struct device *dev, short ioaddr)
 				 | (read_eeprom(ioaddr, 0)>>14)];
 
 	/* Snarf the interrupt vector now. */
-	if (request_irq(irq, &net_interrupt)) {
+	if (request_irq(irq, &net_interrupt, 0, "at1700")) {
 		printk ("AT1700 found at %#3x, but it's unusable due to a conflict on"
 				"IRQ %d.\n", ioaddr, irq);
 		return EAGAIN;
@@ -204,7 +204,7 @@ int at1700_probe1(struct device *dev, short ioaddr)
 	}
 
 	/* The EEPROM word 12 bit 0x0400 means use regular 100 ohm 10baseT signals,
-	   rather than 150 ohm shielded twisted pair compansation.
+	   rather than 150 ohm shielded twisted pair compensation.
 	   0x0000 == auto-sense the interface
 	   0x0800 == use TP interface
 	   0x1800 == use coax interface

@@ -137,7 +137,7 @@ extern int NCR53c7xx_reset(Scsi_Cmnd *);
 #define SIEN_REG_700		0x03	
 #define SIEN0_REG_800		0x40
 #define SIEN_MA			0x80	/* Phase mismatch (ini) or ATN (tgt) */
-#define SIEN_FC			0x40	/* Functin complete */
+#define SIEN_FC			0x40	/* Function complete */
 #define SIEN_700_STO		0x20	/* Selection or reselection timeout */
 #define SIEN_800_SEL		0x20	/* Selected */
 #define SIEN_700_SEL		0x10	/* Selected or reselected */
@@ -224,7 +224,7 @@ extern int NCR53c7xx_reset(Scsi_Cmnd *);
 #define SBCL_PHASE_MASK		(SBCL_CD|SBCL_IO|SBCL_MSG)
 
 /* 
- * SCSI first byte recieved latch ro 
+ * SCSI first byte received latch ro 
  * This register contains the first byte received during a block MOVE 
  * SCSI SCRIPTS instruction, including
  * 
@@ -252,7 +252,7 @@ extern int NCR53c7xx_reset(Scsi_Cmnd *);
 
 /* 
  * SCSI bus data lines ro 
- * This register reflects the instantenous status of the SCSI data 
+ * This register reflects the instantaneous status of the SCSI data 
  * lines.  Note that SCNTL0 must be set to disable parity checking, 
  * otherwise reading this register will latch new parity.
  */
@@ -278,7 +278,7 @@ extern int NCR53c7xx_reset(Scsi_Cmnd *);
 #define SOCL_CD			0x02	/*  C/D ro */
 #define SOCL_IO			0x01	/*  I/O ro */
 /* 
- * Syncronous SCSI Clock Control bits 
+ * Synchronous SCSI Clock Control bits 
  * 0 - set by DCNTL 
  * 1 - SCLK / 1.0
  * 2 - SCLK / 1.5
@@ -333,7 +333,7 @@ extern int NCR53c7xx_reset(Scsi_Cmnd *);
 #define SSTAT1_SDP		0x01	/* Instant readout of SDP/ */
 
 #define SSTAT2_REG		0x0f	/* SCSI status 2 ro */
-#define SSTAT2_FF3		0x80 	/* number of bytes in syncronous */
+#define SSTAT2_FF3		0x80 	/* number of bytes in synchronous */
 #define SSTAT2_FF2		0x40	/* data FIFO */
 #define SSTAT2_FF1		0x20	
 #define SSTAT2_FF0		0x10
@@ -386,7 +386,7 @@ extern int NCR53c7xx_reset(Scsi_Cmnd *);
 
 /* 0x80 - 0x40 are reserved on 700 series chips */
 #define CTEST2_700_SOFF		0x20	/* SCSI Offset Compare,
-					 * As an initator, this bit is 
+					 * As an initiator, this bit is 
 					 * one when the synchronous offset
 					 * is zero, as a target this bit 
 					 * is one when the synchronous 
@@ -474,11 +474,11 @@ extern int NCR53c7xx_reset(Scsi_Cmnd *);
  */
 #define CTEST5_BBCK		0x40
 /*
- * Reset SCSI Offset.  Setting this bit to 1 cleares the current offset
+ * Reset SCSI Offset.  Setting this bit to 1 clears the current offset
  * pointer in the SCSI synchronous offset counter (SSTAT).  This bit
  * is set to 1 if a SCSI Gross Error Condition occurs.  The offset should
  * be cleared when a synchronous transfer fails.  When written, it is 
- * automatically cleared after the SCSI syncrnous offset counter is 
+ * automatically cleared after the SCSI synchronous offset counter is 
  * reset.
  */
 /* Bit 5 is reserved on 800 series chips */
@@ -562,7 +562,7 @@ extern int NCR53c7xx_reset(Scsi_Cmnd *);
 #define ISTAT_700_PRE		0x04	/* Pointer register empty.
 					 * Set to 1 when DSPS and DSP
 					 * registers are empty in pipeline
-					 * mode, allways set otherwise.
+					 * mode, always set otherwise.
 					 */
 #define ISTAT_SIP		0x02	/* SCSI interrupt pending from
 					 * SCSI portion of SIOP see
@@ -618,14 +618,14 @@ extern int NCR53c7xx_reset(Scsi_Cmnd *);
 
 
 /* 
- * The CTEST9 register may be used to diffentiate between a
+ * The CTEST9 register may be used to differentiate between a
  * NCR53c700 and a NCR53c710.  
  *
  * Write 0xff to this register.
  * Read it.
  * If the contents are 0xff, it is a NCR53c700
  * If the contents are 0x00, it is a NCR53c700-66 first revision
- * If the contents are zome other value, it is some other NCR53c700-66
+ * If the contents are some other value, it is some other NCR53c700-66
  */
 #define CTEST9_REG_00		0x23	/* Chip test 9 ro */
 #define LCRC_REG_10		0x23	
@@ -635,7 +635,7 @@ extern int NCR53c7xx_reset(Scsi_Cmnd *);
  * write their high 8 bits into the DCMD register, the low 24 bits into
  * the DBC register.
  *
- * Function is dependant on the command type being executed.
+ * Function is dependent on the command type being executed.
  */
 
  
@@ -643,7 +643,7 @@ extern int NCR53c7xx_reset(Scsi_Cmnd *);
 /* 
  * For Block Move Instructions, DBC is a 24 bit quantity representing 
  *     the number of bytes to transfer.
- * For Transfer Control Intructions, DBC is bit fielded as follows : 
+ * For Transfer Control Instructions, DBC is bit fielded as follows : 
  */
 /* Bits 20 - 23 should be clear */
 #define DBC_TCI_TRUE		(1 << 19) 	/* Jump when true */
@@ -694,7 +694,7 @@ extern int NCR53c7xx_reset(Scsi_Cmnd *);
 #define DCMD_RWRI_OPC_MASK	0x38	/* Opcode mask */
 #define DCMD_RWRI_OPC_WRITE	0x28	/* Write SFBR to register */
 #define DCMD_RWRI_OPC_READ	0x30	/* Read register to SFBR */
-#define DCMD_RWRI_OPC_MODIFY	0x38	/* Modify inplace */
+#define DCMD_RWRI_OPC_MODIFY	0x38	/* Modify in place */
 
 #define DCMD_RWRI_OP_MASK	0x07
 #define DCMD_RWRI_OP_MOVE	0x00
@@ -795,7 +795,7 @@ extern int NCR53c7xx_reset(Scsi_Cmnd *);
 					 * but 286 mode bit  in DMODE. On the
 					 * NCR53c710, this bit moved to CTEST8
 					 */
-#define DCNTL_10_COM		0x01	/* 700 software compatability mode */
+#define DCNTL_10_COM		0x01	/* 700 software compatibility mode */
 
 #define DCNTL_700_SAVE ( DCNTL_CF_MASK | DCNTL_S16)
 
@@ -854,7 +854,7 @@ extern int NCR53c7xx_reset(Scsi_Cmnd *);
 #define STEST2_REG_800		0x4e	
 #define STEST2_800_SCE		0x80	/* Enable SOCL/SODL */
 #define STEST2_800_ROF		0x40	/* Reset SCSI sync offset */
-#define STEST2_800_SLB		0x10	/* Enable SCSI looback mode */
+#define STEST2_800_SLB		0x10	/* Enable SCSI loopback mode */
 #define STEST2_800_SZM		0x08	/* SCSI high impedance mode */
 #define STEST2_800_EXT		0x02	/* Extend REQ/ACK filter 30 to 60ns */
 #define STEST2_800_LOW		0x01	/* SCSI low level mode */
@@ -874,7 +874,7 @@ extern int NCR53c7xx_reset(Scsi_Cmnd *);
 
 #define OPTION_PARITY 		0x1	/* Enable parity checking */
 #define OPTION_TAGGED_QUEUE	0x2	/* Enable SCSI-II tagged queuing */
-#define OPTION_700		0x8	/* Allways run NCR53c700 scripts */
+#define OPTION_700		0x8	/* Always run NCR53c700 scripts */
 #define OPTION_INTFLY		0x10	/* Use INTFLY interrupts */
 #define OPTION_DEBUG_INTR	0x20	/* Debug interrupts */
 #define OPTION_DEBUG_INIT_ONLY	0x40	/* Run initialization code and 
@@ -922,7 +922,7 @@ struct NCR53c7x0_synchronous {
 
 #define CMD_FLAG_SDTR 		1	/* Initiating synchronous 
 					   transfer negotiation */
-#define CMD_FLAG_WDTR		2	/* Initiating wide tranfer
+#define CMD_FLAG_WDTR		2	/* Initiating wide transfer
 					   negotiation */
 #define CMD_FLAG_DID_SDTR	4	/* did SDTR */
 
@@ -980,7 +980,7 @@ struct NCR53c7x0_break {
 #define STATE_HALTED	0		
 /* 
  * Indicates that the NCR is executing the wait for select / reselect 
- * script.  Only used when running NCR53c700 compatable scripts, only 
+ * script.  Only used when running NCR53c700 compatible scripts, only 
  * state during which an ABORT is _not_ considered an error condition.
  */
 #define STATE_WAITING	1		
@@ -988,7 +988,7 @@ struct NCR53c7x0_break {
 #define STATE_RUNNING	2		
 /* 
  * Indicates that the NCR was being aborted.  Only used when running 
- * NCR53c700 compatable scripts.  
+ * NCR53c700 compatible scripts.  
  */
 #define STATE_ABORTING	3
     
@@ -1208,7 +1208,7 @@ struct NCR53c7x0_hostdata {
 						   executing on each target
     	    	    	    	    	    	 */
     /* 
-     * Eventually, I'll switch to a corroutine for calling 
+     * Eventually, I'll switch to a coroutine for calling 
      * cmd->done(cmd), etc. so that we can overlap interrupt
      * processing with this code for maximum performance.
      */

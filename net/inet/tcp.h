@@ -36,7 +36,7 @@
 #define URG_READ	0x0400
 
 #define TCP_RETR1	7	/*
-				 * This is howmany retries it does before it
+				 * This is how many retries it does before it
 				 * tries to figure out if the gateway is
 				 * down.
 				 */
@@ -47,7 +47,7 @@
 				 */
 
 #define TCP_TIMEOUT_LEN	(15*60*HZ) /* should be about 15 mins		*/
-#define TCP_TIMEWAIT_LEN (60*HZ) /* how long to wait to sucessfully 
+#define TCP_TIMEWAIT_LEN (60*HZ) /* how long to wait to successfully 
 				  * close the socket, about 60 seconds	*/
 #define TCP_ACK_TIME	(3*HZ)	/* time to delay before sending an ACK	*/
 #define TCP_DONE_TIME	250	/* maximum time to wait before actually

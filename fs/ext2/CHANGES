@@ -26,7 +26,7 @@ Changes from version 0.4a to version 0.4b
 	  `grpid', `bsdgroups'
 	  `nocheck'
 	  `nogrpid', `sysvgroups'
-	- truncate() now tries to deallocate contigous blocks in a single call
+	- truncate() now tries to deallocate contiguous blocks in a single call
 	  to ext2_free_blocks().
 	- lots of cosmetic changes.
 
@@ -80,7 +80,7 @@ Changes from version 0.3 to version 0.4
           incremented each time the file system is mounted read/write.   When
           this counter becomes bigger than a maximal mount counts (also stored
           in the super block), e2fsck checks the file system, even if it had
-          been unmounted cleany, and resets this counter to 0.
+          been unmounted cleanly, and resets this counter to 0.
         - File attributes are now supported.  One can associate a set of
           attributes to a file.  Three attributes are defined:
           `c': the file is marked for automatic compression,

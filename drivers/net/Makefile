@@ -12,11 +12,15 @@ NETDRV_OBJS := Space.o auto_irq.o net_init.o loopback.o
 CFLAGS := $(CFLAGS) -I../../net/inet
 CPP := $(CPP) -I../../net/inet
 
+.c.o:
+	$(CC) $(CFLAGS) -c $<
+
+
 # The point of the makefile...
 all: net.a modules
 
 Space.o: Space.c ../../include/linux/autoconf.h
-	$(CC) $(CFLAGS) $(OPTS) -c $< -o $@
+	$(CC) $(CFLAGS) $(OPTS) -c $<
 
 net_init.o: ../../include/linux/autoconf.h
 

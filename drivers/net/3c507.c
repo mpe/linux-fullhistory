@@ -4,7 +4,7 @@
 	Copyright 1993 United States Government as represented by the Director,
 	National Security Agency.  This software may only be used and distributed
 	according to the terms of the GNU Public License as modified by SRC,
-	incorported herein by reference.
+	incorporated herein by reference.
 
 	The author may be reached as becker@super.org or
 	C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
@@ -29,7 +29,7 @@ static char *version =
   Sources:
 	This driver wouldn't have been written with the availability of the
 	Crynwr driver source code.	It provided a known-working implementation
-	that filled in the gaping holes of the Intel documention.  Three cheers
+	that filled in the gaping holes of the Intel documentation.  Three cheers
 	for Russ Nelson.
 
 	Intel Microcommunications Databook, Vol. 1, 1990. It provides just enough
@@ -66,10 +66,10 @@ static unsigned int net_debug = NET_DEBUG;
   			Details of the i82586.
 
    You'll really need the databook to understand the details of this part,
-   but the outline is that the i82586 has two seperate processing units.
+   but the outline is that the i82586 has two separate processing units.
    Both are started from a list of three configuration tables, of which only
    the last, the System Control Block (SCB), is used after reset-time.  The SCB
-   has the following fileds:
+   has the following fields:
 		Status word
 		Command word
 		Tx/Command block addr.
@@ -142,7 +142,7 @@ struct net_local {
 
 /*  Since the 3c507 maps the shared memory window so that the last byte is
 	at 82586 address FFFF, the first byte is at 82586 address 0, 16K, 32K, or
-	48K cooresponding to window sizes of 64K, 48K, 32K and 16K respectively. 
+	48K corresponding to window sizes of 64K, 48K, 32K and 16K respectively. 
 	We can account for this be setting the 'SBC Base' entry in the ISCP table
 	below for all the 16 bit offset addresses, and also adding the 'SCB Base'
 	value to all 24 bit physical addresses (in the SCP table and the TX and RX
@@ -282,7 +282,7 @@ void init_82586_mem(struct device *dev);
 /* Check for a network adaptor of this type, and return '0' iff one exists.
 	If dev->base_addr == 0, probe all likely locations.
 	If dev->base_addr == 1, always return failure.
-	If dev->base_addr == 2, (detachable devices only) alloate space for the
+	If dev->base_addr == 2, (detachable devices only) allocate space for the
 	device and return success.
 	*/
 int
@@ -340,11 +340,11 @@ int el16_probe1(struct device *dev, short ioaddr)
 	printk("%s: 3c507 at %#x,", dev->name, ioaddr);
 
 	/* We should make a few more checks here, like the first three octets of
-	   the S.A. for the manufactor's code. */ 
+	   the S.A. for the manufacturer's code. */ 
 
 	irq = inb(ioaddr + IRQ_CONFIG) & 0x0f;
 
-	irqval = request_irq(irq, &el16_interrupt);
+	irqval = request_irq(irq, &el16_interrupt, 0, "3c507");
 	if (irqval) {
 		printk ("unable to get IRQ %d (irqval=%d).\n", irq, irqval);
 		return EAGAIN;

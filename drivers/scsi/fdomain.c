@@ -488,7 +488,6 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
 {
    int              i, j;
    int              flag = 0;
-   struct sigaction sa;
    int              retcode;
 #if DO_DETECT
    const int        buflen = 255;
@@ -651,12 +650,7 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
    } else {
       /* Register the IRQ with the kernel */
 
-      sa.sa_handler  = fdomain_16x0_intr;
-      sa.sa_flags    = SA_INTERRUPT;
-      sa.sa_mask     = 0;
-      sa.sa_restorer = NULL;
-      
-      retcode = irqaction( interrupt_level, &sa );
+      retcode = request_irq( interrupt_level, fdomain_16x0_intr, SA_INTERRUPT, "FDomain");
 
       if (retcode < 0) {
 	 if (retcode == -EINVAL) {

@@ -2796,20 +2796,6 @@ static struct file_operations qic02_tape_fops = {
 	NULL				/* fsync */
 };
 
-
-/* Attribute `SA_INTERRUPT' makes the interrupt atomic with
- * interrupts disabled. We could do without the atomic stuff, but
- * then dma_transfer() would have to disable interrupts explicitly.
- * System load is high enough as it is :-(
- */
-static struct sigaction qic02_tape_sigaction = {
-	qic02_tape_interrupt,
-	0,
-	SA_INTERRUPT,
-	NULL
-};
-
-
 /* align `a' at `size' bytes. `size' must be a power of 2 */
 static inline unsigned long const align_buffer(unsigned long a, unsigned size)
 {
@@ -2846,7 +2832,7 @@ static int qic02_get_resources(void)
 	 */
 
 	/* get IRQ */
-	if (irqaction(QIC02_TAPE_IRQ, &qic02_tape_sigaction)) {
+	if (request_irq(QIC02_TAPE_IRQ, qic02_tape_interrupt, SA_INTERRUP, "QIC-02")) {
 		printk(TPQIC02_NAME ": can't allocate IRQ%d for QIC-02 tape\n",
 			QIC02_TAPE_IRQ);
 		status_zombie = YES;

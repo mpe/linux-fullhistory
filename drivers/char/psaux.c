@@ -272,7 +272,7 @@ static int open_aux(struct inode * inode, struct file * file)
 		return -EBUSY;
 	aux_busy = 1;
 	queue->head = queue->tail = 0;	        /* Flush input queue */
-	if (request_irq(AUX_IRQ, aux_interrupt)) {
+	if (request_irq(AUX_IRQ, aux_interrupt, 0, "PS/2 Mouse")) {
 		aux_busy = 0;
 		return -EBUSY;
 	}
@@ -302,7 +302,7 @@ static int open_qp(struct inode * inode, struct file * file)
 	if (qp_busy)
 		return -EBUSY;
 
-	if (request_irq(QP_IRQ, qp_interrupt))
+	if (request_irq(QP_IRQ, qp_interrupt, 0, "PS/2 Mouse"))
 		return -EBUSY;
 
 	qp_busy = 1;

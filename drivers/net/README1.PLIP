@@ -61,7 +61,7 @@ nibbles into bytes.  This cable should not be used on unidirectional
 isn't configured for PLIP, as it will result in output driver
 conflicts and the (unlikely) possibility of damage.
 
-The cable for this tranfer mode should be constructed as follows:
+The cable for this transfer mode should be constructed as follows:
 
     STROBE->BUSY 1 - 11
     D0->D0	2 - 2
@@ -83,7 +83,7 @@ The cable for this tranfer mode should be constructed as follows:
 Once again, if the cable you are using has a metallic shield it should
 be connected to the metallic DB-25 shell at one end only.
 
-\section{PLIP Mode 0 tranfer protocol}
+\section{PLIP Mode 0 transfer protocol}
 The PLIP driver is compatible with the "Crynwr" parallel port transfer
 standard in Mode 0.  That standard specifies the following protocol:
 

@@ -166,7 +166,7 @@ static void xd_geninit (void)
 		for (i = 0; i < xd_drives; i++)
 			printk("xd_geninit: drive %d geometry - heads = %d, cylinders = %d, sectors = %d\n",i,xd_info[i].heads,xd_info[i].cylinders,xd_info[i].sectors);
 
-		if (!request_irq(xd_irq,xd_interrupt_handler)) {
+		if (!request_irq(xd_irq,xd_interrupt_handler, 0, "XT harddisk")) {
 			if (request_dma(xd_dma)) {
 				printk("xd_geninit: unable to get DMA%d\n",xd_dma);
 				free_irq(xd_irq);

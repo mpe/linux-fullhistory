@@ -23,7 +23,7 @@ struct linger {
 #define SOCK_PACKET	10		/* linux specific way of	*/
 					/* getting packets at the dev	*/
 					/* level.  For writing rarp and	*/
-					/* other similiar things on the	*/
+					/* other similar things on the	*/
 					/* user level.			*/
 
 /* Supported address families. */

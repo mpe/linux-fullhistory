@@ -68,7 +68,7 @@ struct inode_operations isofs_file_inode_operations = {
 
 /* This is a heuristic to determine if a file is text of binary.  If it
  * is text, then we translate all 0x0d characters to spaces.  If the 0x0d
- * character is not preceeded or followed by a 0x0a, then we turn it into
+ * character is not preceded or followed by a 0x0a, then we turn it into
  * a 0x0a.  A control-Z is also turned into a linefeed.
  */
 

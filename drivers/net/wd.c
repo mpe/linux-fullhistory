@@ -216,7 +216,7 @@ int wdprobe1(int ioaddr, struct device *dev)
 	
 	/* Snarf the interrupt now.  There's no point in waiting since we cannot
 	   share and the board will usually be enabled. */
-	if (irqaction (dev->irq, &ei_sigaction)) {
+	if (request_irq(dev->irq, ei_interrupt, 0, "wd")) {
 		printk (" unable to get IRQ %d.\n", dev->irq);
 		return 0;
 	}

@@ -328,10 +328,10 @@ static void aha1542_intr_handle(int foo)
     irqno = *irqp;
 
     shost = aha_host[irqno - 9];
+    if(!shost) panic("Splunge!");
+
     mb = HOSTDATA(shost)->mb;
     ccb = HOSTDATA(shost)->ccb;
-
-    if(!shost) panic("Splunge!");
 
 #ifdef DEBUG
     {
@@ -608,7 +608,7 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     ccb[mbo].linkptr[0] = ccb[mbo].linkptr[1] = ccb[mbo].linkptr[2] = 0;
     ccb[mbo].commlinkid = 0;
 
-#ifdef DEBUGd
+#ifdef DEBUG
     { int i;
     printk("aha1542_command: sending.. ");
     for (i = 0; i < sizeof(ccb[mbo])-10; i++)
@@ -870,7 +870,7 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 		    
 		    DEB(printk("aha1542_detect: enable interrupt channel %d\n", irq_level));
 		    cli();
-		    if (request_irq(irq_level,aha1542_intr_handle)) {
+		    if (request_irq(irq_level,aha1542_intr_handle, 0, "aha1542")) {
 			    printk("Unable to allocate IRQ for adaptec controller.\n");
 			    goto unregister;
 		    }

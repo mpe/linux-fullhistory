@@ -316,7 +316,7 @@ static int ext2_check_descriptors (struct super_block * sb)
 		if (gdp->bg_block_bitmap < block ||
 		    gdp->bg_block_bitmap >= block + EXT2_BLOCKS_PER_GROUP(sb))
 		{
-			ext2_error (sb, "ext2_check_desciptors",
+			ext2_error (sb, "ext2_check_descriptors",
 				    "Block bitmap for group %d"
 				    " not in group (block %lu)!",
 				    i, gdp->bg_block_bitmap);
@@ -325,7 +325,7 @@ static int ext2_check_descriptors (struct super_block * sb)
 		if (gdp->bg_inode_bitmap < block ||
 		    gdp->bg_inode_bitmap >= block + EXT2_BLOCKS_PER_GROUP(sb))
 		{
-			ext2_error (sb, "ext2_check_desciptors",
+			ext2_error (sb, "ext2_check_descriptors",
 				    "Inode bitmap for group %d"
 				    " not in group (block %lu)!",
 				    i, gdp->bg_inode_bitmap);
@@ -335,7 +335,7 @@ static int ext2_check_descriptors (struct super_block * sb)
 		    gdp->bg_inode_table + sb->u.ext2_sb.s_itb_per_group >=
 		    block + EXT2_BLOCKS_PER_GROUP(sb))
 		{
-			ext2_error (sb, "ext2_check_desciptors",
+			ext2_error (sb, "ext2_check_descriptors",
 				    "Inode table for group %d"
 				    " not in group (block %lu)!",
 				    i, gdp->bg_inode_table);

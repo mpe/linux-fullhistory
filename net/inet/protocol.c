@@ -137,7 +137,7 @@ inet_del_protocol(struct inet_protocol *prot)
 	/*
 	 * We have to worry if the protocol being deleted is
 	 * the last one on the list, then we may need to reset
-	 * someones copied bit.
+	 * someone's copied bit.
 	 */
 	if (p->next != NULL && p->next == prot) {
 		/*

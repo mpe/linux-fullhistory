@@ -11,7 +11,7 @@
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
-#include <linux/minix_fs.h>
+#include <linux/proc_fs.h>
 #include <linux/stat.h>
 
 static int proc_readlink(struct inode *, char *, int);
@@ -65,13 +65,13 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 		return -ENOENT;
 	inode = NULL;
 	switch (ino) {
-		case 4:
+		case PROC_PID_CWD:
 			inode = p->fs->pwd;
 			break;
-		case 5:
+		case PROC_PID_ROOT:
 			inode = p->fs->root;
 			break;
-		case 6: {
+		case PROC_PID_EXE: {
 			struct vm_area_struct * vma = p->mm->mmap;
 			while (vma) {
 				if (vma->vm_flags & VM_EXECUTABLE) {
@@ -84,26 +84,11 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 		}
 		default:
 			switch (ino >> 8) {
-				case 1:
+				case PROC_PID_FD_DIR:
 					ino &= 0xff;
 					if (ino < NR_OPEN && p->files->fd[ino])
 						inode = p->files->fd[ino]->f_inode;
 					break;
-				case 2:
-					ino &= 0xff;
-					{ int j = ino;
-					  struct vm_area_struct * mpnt;
-					  for(mpnt = p->mm->mmap; mpnt && j >= 0;
-					      mpnt = mpnt->vm_next){
-					    if(mpnt->vm_inode) {
-					      if(j == 0) {
-						inode = mpnt->vm_inode;
-						break;
-					      };
-					      j--;
-					    }
-					  }
-					};
 			}
 	}
 	if (!inode)

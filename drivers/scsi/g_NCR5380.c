@@ -104,9 +104,6 @@ void generic_NCR5380_setup(char *str, int *ints) {
 	}
 }
 
-static struct sigaction sa =  { generic_NCR5380_intr, 0, 
-    SA_INTERRUPT , NULL };
-
 /* 
  * Function : int generic_NCR5380_detect(Scsi_Host_Templace * tpnt)
  *
@@ -139,7 +136,7 @@ int generic_NCR5380_detect(Scsi_Host_Template * tpnt) {
 	    instance->irq = NCR5380_probe_irq(instance, 0xffff);
 
 	if (instance->irq != IRQ_NONE) 
-	    if (irqaction (instance->irq, &sa)) {
+	    if (request_irq(instance->irq, generic_NCR5380_intr, SA_INTERRUPT, "NCR5380")) {
 		printk("scsi%d : IRQ%d not free, interrupts disabled\n", 
 		    instance->host_no, instance->irq);
 		instance->irq = IRQ_NONE;

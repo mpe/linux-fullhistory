@@ -1,5 +1,5 @@
 #
-# Makefile for the Linix TCP/IP (INET) layer.
+# Makefile for the Linux TCP/IP (INET) layer.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
 # removes any old dependencies. DON'T put your own dependencies here
@@ -8,11 +8,11 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 .c.o:
-	$(CC) $(CFLAGS) -c -o $*.o $<
+	$(CC) $(CFLAGS) -c $<
 .s.o:
 	$(AS) -o $*.o $<
 .c.s:
-	$(CC) $(CFLAGS) -S -o $*.s $<
+	$(CC) $(CFLAGS) -S $<
 
 
 OBJS	:= sock.o eth.o dev.o skbuff.o datagram.o

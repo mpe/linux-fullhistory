@@ -1,5 +1,5 @@
 /*
- *	buslogic.c	(C) 1993 David B. Gentzel
+ *	buslogic.c	(C) 1993, 1994 David B. Gentzel
  *	Low-level scsi driver for BusLogic adapters
  *	by David B. Gentzel, Whitfield Software Services, Carnegie, PA
  *	    (gentzel@nova.enet.dec.com)
@@ -18,6 +18,7 @@
  *	4. See if we can make good use of having more than one command per lun.
  *	5. Test/improve/fix abort & reset functions.
  *	6. Look at command linking.
+ *	7. Allow multiple boards to share an IRQ if the bus allows (e.g. EISA).
  */
 
 /*
@@ -65,6 +66,7 @@
 #include <linux/head.h>
 #include <linux/types.h>
 #include <linux/ioport.h>
+#include <linux/delay.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
@@ -73,7 +75,7 @@
 #include "../block/blk.h"
 #include "scsi.h"
 #include "hosts.h"
-# include "sd.h"
+#include "sd.h"
 #define BUSLOGIC_PRIVATE_H	/* Get the "private" stuff */
 #include "buslogic.h"
 
@@ -82,15 +84,6 @@
 #endif
 
 #define BUSLOGIC_VERSION "1.00"
-
-/* ??? This *MAY* work to properly report the geometry of disks > 1G when the
-   alternate geometry is enabled on the host adapter.  It is completely
-   untested as I have no such disk to experiment with.  I rarely refuse gifts,
-   however... */
-/* Check out the stuff in aha1542.c - is this the same as how buslogic does
-   it? - ERY */
-/* ??? Not Yet Implemented */
-/*#ifdef BUSLOGIC_ALTERNATE_MAPPING*/
 
 /* Not a random value - if this is too large, the system hangs for a long time
    waiting for something to happen if a board is not installed. */
@@ -118,7 +111,7 @@
 /* BusLogic boards can be configured for quite a number of port addresses (six
    to be exact), but I generally do not want the driver poking around at
    random.  We allow two port addresses - this allows people to use a BusLogic
-   with a MIDI card, which frequently also used 0x330.  If different port
+   with a MIDI card, which frequently also uses 0x330.  If different port
    addresses are needed (e.g. to install more than two cards), you must define
    BUSLOGIC_PORT_OVERRIDE to be a list of the addresses which will be checked.
    This can also be used to resolve a conflict if the port-probing at a
@@ -131,15 +124,15 @@ static const unsigned int bases[] = {
 #endif
 };
 
-#define BIOS_TRANSLATION_6432 1		/* Default case */
-#define BIOS_TRANSLATION_25563 2	/* Big disk case */
+#define BIOS_TRANSLATION_6432 0		/* Default case */
+#define BIOS_TRANSLATION_25563 1	/* Big disk case */
 
 struct hostdata {
     unsigned char bus_type;
     int bios_translation;	/* Mapping bios uses - for compatibility */
     size_t last_mbi_used;
     size_t last_mbo_used;
-    Scsi_Cmnd *SCint[BUSLOGIC_MAILBOXES];
+    Scsi_Cmnd *sc[BUSLOGIC_MAILBOXES];
     struct mailbox mb[2 * BUSLOGIC_MAILBOXES];
     struct ccb ccbs[BUSLOGIC_MAILBOXES];
 };
@@ -149,7 +142,8 @@ struct hostdata {
 /* One for each IRQ level (9-15), although 13 will never be used. */
 static struct Scsi_Host *host[7] = { NULL, };
 
-static int setup_mailboxes(unsigned int base, struct Scsi_Host *SHpnt);
+static int setup_mailboxes(unsigned int base, struct Scsi_Host *shpnt);
+static int restart(struct Scsi_Host *shpnt);
 
 #define INTR_RESET(base) outb(RINT, CONTROL(base))
 
@@ -157,24 +151,32 @@ static int setup_mailboxes(unsigned int base, struct Scsi_Host *SHpnt);
 
 #define CHECK(cond) if (cond) ; else goto fail
 
-#define WAIT(port, mask, allof, noneof) CHECK(wait(port, mask, allof, noneof))
+#define WAIT(port, mask, allof, noneof) \
+    CHECK(wait(port, mask, allof, noneof, WAITNEXTTIMEOUT, FALSE))
 #define WAIT_WHILE(port, mask) WAIT(port, mask, 0, mask)
 #define WAIT_UNTIL(port, mask) WAIT(port, mask, mask, 0)
+#define WAIT_FAST(port, mask, allof, noneof) \
+    CHECK(wait(port, mask, allof, noneof, 100, TRUE))
+#define WAIT_WHILE_FAST(port, mask) WAIT_FAST(port, mask, 0, mask)
+#define WAIT_UNTIL_FAST(port, mask) WAIT_FAST(port, mask, mask, 0)
 
+/* If delay != 0, we use the udelay call to regulate the amount of time we
+   wait. */
 static __inline__ int wait(unsigned short port, unsigned char mask,
-			   unsigned char allof, unsigned char noneof)
+			   unsigned char allof, unsigned char noneof,
+			   unsigned int timeout, int delay)
 {
     int bits;
-    unsigned int timeout = WAITNEXTTIMEOUT;
 
     for (;;) {
 	bits = inb(port) & mask;
 	if ((bits & allof) == allof && (bits & noneof) == 0)
-	    break;
+	    return TRUE;
+	if (delay)
+	    udelay(1000);
 	if (--timeout == 0)
 	    return FALSE;
     }
-    return TRUE;
 }
 
 static void buslogic_prefix(void)
@@ -182,7 +184,7 @@ static void buslogic_prefix(void)
     printk("BusLogic SCSI: ");
 }
 
-#if 0
+#if BUSLOGIC_DEBUG
 static void buslogic_stat(unsigned int base)
 {
     int s = inb(STATUS(base)), i = inb(INTERRUPT(base));
@@ -197,7 +199,8 @@ static void buslogic_stat(unsigned int base)
    routine does not send something out while we are in the middle of this.
    Fortunately, it is only at boot time that multi-byte messages are ever
    sent. */
-static int buslogic_out(unsigned int base, const unsigned char *cmdp, size_t len)
+static int buslogic_out(unsigned int base, const unsigned char *cmdp,
+			size_t len)
 {
     if (len == 1) {
 	for (;;) {
@@ -226,6 +229,8 @@ static int buslogic_out(unsigned int base, const unsigned char *cmdp, size_t len
     return TRUE;
 }
 
+/* Only used at boot time, so we do not need to worry about latency as much
+   here. */
 static int buslogic_in(unsigned int base, unsigned char *cmdp, size_t len)
 {
     cli();
@@ -241,6 +246,25 @@ static int buslogic_in(unsigned int base, unsigned char *cmdp, size_t len)
     buslogic_stat(base);
     return TRUE;
 }
+
+#if 0
+/* Similar to buslogic_in, except that we wait a very short period of time.
+   We use this if we know the board is alive and awake, but we are not sure
+   whether the board will respond the the command we are about to send. */
+static int buslogic_in_fast(unsigned int base, unsigned char *cmdp, size_t len)
+{
+    cli();
+    while (len--) {
+	WAIT_UNTIL_FAST(STATUS(base), DIRRDY);
+	*cmdp++ = inb(DATA_IN(base));
+    }
+    sti();
+    return FALSE;
+  fail:
+    sti();
+    return TRUE;
+}
+#endif
 
 static unsigned int makecode(unsigned int hosterr, unsigned int scsierr)
 {
@@ -264,7 +288,7 @@ static unsigned int makecode(unsigned int hosterr, unsigned int scsierr)
 			   target.  The host adapter will generate a SCSI
 			   Reset Condition, notifying the host with a RSTS
 			   interrupt. */
-	hosterr = DID_RESET;	/* ??? Is this right? */
+	hosterr = DID_RESET;
 	break;
 
       case 0x12:	/* Data overrun/underrun: the target attempted to
@@ -315,7 +339,7 @@ static unsigned int makecode(unsigned int hosterr, unsigned int scsierr)
     return (hosterr << 16) | scsierr;
 }
 
-static int test_port(unsigned int base, struct Scsi_Host *SHpnt)
+static int test_port(unsigned int base, struct Scsi_Host *shpnt)
 {
     unsigned int i;
     unsigned char inquiry_cmd[] = { CMD_INQUIRY };
@@ -334,6 +358,9 @@ static int test_port(unsigned int base, struct Scsi_Host *SHpnt)
 #if BUSLOGIC_DEBUG
     buslogic_printk("test_port called\n");
 #endif
+
+    /* In case some other card was probing here, reset interrupts. */
+    INTR_RESET(base);	/* reset interrupts, so they don't block */
 
     outb(RSOFT | RINT/* | RSBUS*/, CONTROL(base));
 
@@ -396,50 +423,67 @@ static void buslogic_interrupt(int junk)
     void (*my_done)(Scsi_Cmnd *) = NULL;
     int errstatus, mbistatus = 0, number_serviced, found;
     size_t mbi, mbo = 0;
-    struct Scsi_Host *SHpnt;
-    Scsi_Cmnd *SCtmp;
-    int irqno, base;
+    struct Scsi_Host *shpnt;
+    Scsi_Cmnd *sctmp;
+    int irqno, base, flag;
+    int needs_restart;
     struct mailbox *mb;
     struct ccb *ccb;
 
     /* Magic - this -2 is only required for slow interrupt handlers */
     irqno = ((int *)junk)[-2];
 
-    SHpnt = host[irqno - 9];
-    if (!SHpnt)
+    shpnt = host[irqno - 9];
+    if (!shpnt)
 	panic("buslogic.c: NULL SCSI host entry");
 
-    mb = HOSTDATA(SHpnt)->mb;
-    ccb = HOSTDATA(SHpnt)->ccbs;
-    base = SHpnt->io_port;
+    mb = HOSTDATA(shpnt)->mb;
+    ccb = HOSTDATA(shpnt)->ccbs;
+    base = shpnt->io_port;
 
 #if BUSLOGIC_DEBUG
-    {
-	int flag = inb(INTERRUPT(base));
+    flag = inb(INTERRUPT(base));
 
-	buslogic_printk("buslogic_interrupt: ");
-	if (!(flag & INTV))
-	    printk("no interrupt? ");
-	if (flag & IMBL)
-	    printk("IMBL ");
-	if (flag & MBOR)
-	    printk("MBOR ");
-	if (flag & CMDC)
-	    printk("CMDC ");
-	if (flag & RSTS)
-	    printk("RSTS ");
-	printk("status %02X\n", inb(STATUS(base)));
-    }
+    buslogic_printk("buslogic_interrupt: ");
+    if (!(flag & INTV))
+	printk("no interrupt? ");
+    if (flag & IMBL)
+	printk("IMBL ");
+    if (flag & MBOR)
+	printk("MBOR ");
+    if (flag & CMDC)
+	printk("CMDC ");
+    if (flag & RSTS)
+	printk("RSTS ");
+    printk("status %02X\n", inb(STATUS(base)));
 #endif
 
     number_serviced = 0;
+    needs_restart = 0;
 
     for (;;) {
+	flag = inb(INTERRUPT(base));
+
+	/* Check for unusual interrupts.  If any of these happen, we should
+	   probably do something special, but for now just printing a message
+	   is sufficient.  A SCSI reset detected is something that we really
+	   need to deal with in some way. */
+	if (flag & ~IMBL) {
+	    if (flag & MBOR)
+		printk("MBOR ");
+	    if (flag & CMDC)
+		printk("CMDC ");
+	    if (flag & RSTS) {
+		needs_restart = 1;
+		printk("RSTS ");
+	    }
+	}
+
 	INTR_RESET(base);
 
 	cli();
 
-	mbi = HOSTDATA(SHpnt)->last_mbi_used + 1;
+	mbi = HOSTDATA(shpnt)->last_mbi_used + 1;
 	if (mbi >= 2 * BUSLOGIC_MAILBOXES)
 	    mbi = BUSLOGIC_MAILBOXES;
 
@@ -455,22 +499,25 @@ static void buslogic_interrupt(int junk)
 	    mbi++;
 	    if (mbi >= 2 * BUSLOGIC_MAILBOXES)
 		mbi = BUSLOGIC_MAILBOXES;
-	} while (mbi != HOSTDATA(SHpnt)->last_mbi_used);
+	} while (mbi != HOSTDATA(shpnt)->last_mbi_used);
 
 	if (found) {
 	    mbo = (struct ccb *)mb[mbi].ccbptr - ccb;
 	    mbistatus = mb[mbi].status;
 	    mb[mbi].status = MBX_NOT_IN_USE;
-	    HOSTDATA(SHpnt)->last_mbi_used = mbi;
+	    HOSTDATA(shpnt)->last_mbi_used = mbi;
 	}
 
 	sti();
 
 	if (!found) {
 	    /* Hmm, no mail.  Must have read it the last time around. */
-	    if (number_serviced)
-		return;
-	    buslogic_printk("interrupt received, but no mail\n");
+	    if (!number_serviced && !needs_restart)
+		buslogic_printk("interrupt received, but no mail.\n");
+	    /* We detected a reset.  Restart all pending commands for devices
+	       that use the hard reset option. */
+	    if (needs_restart)
+		restart(shpnt);
 	    return;
 	}
 
@@ -488,16 +535,28 @@ static void buslogic_interrupt(int junk)
 	buslogic_printk("...done %u %u\n", mbo, mbi);
 #endif
 
-	SCtmp = HOSTDATA(SHpnt)->SCint[mbo];
+	sctmp = HOSTDATA(shpnt)->sc[mbo];
 
-	if (!SCtmp || !SCtmp->scsi_done) {
+	if (!sctmp || !sctmp->scsi_done) {
 	    buslogic_printk("buslogic_interrupt: Unexpected interrupt\n");
+	    buslogic_printk("tarstat=%02X, hastat=%02X id=%d lun=%d ccb#=%d\n",
+			    ccb[mbo].tarstat, ccb[mbo].hastat,
+			    ccb[mbo].id, ccb[mbo].lun, mbo);
 	    return;
 	}
 
-	my_done = SCtmp->scsi_done;
-	if (SCtmp->host_scribble)
-	    scsi_free(SCtmp->host_scribble, BUSLOGIC_SG_MALLOC);
+	my_done = sctmp->scsi_done;
+	if (sctmp->host_scribble)
+	    scsi_free(sctmp->host_scribble, BUSLOGIC_SG_MALLOC);
+
+#if 0	/* ??? */
+	/* Fetch the sense data, and tuck it away, in the required slot.  The
+	   BusLogic automatically fetches it, and there is no guarantee that we
+	   will still have it in the cdb when we come back. */
+	if (ccb[mbo].tarstat == 2)	/* ??? */
+	    memcpy(sctmp->sense_buffer, &ccb[mbo].cdb[ccb[mbo].cdblen],
+		   sizeof sctmp->sense_buffer);
+#endif
 
 	/* ??? more error checking left out here */
 	if (mbistatus != 1)
@@ -514,9 +573,9 @@ static void buslogic_interrupt(int junk)
 	if (status_byte(ccb[mbo].tarstat) == CHECK_CONDITION) {
 	    size_t i;
 
-	    buslogic_printk("buslogic_interrupt: sense: ");
-	    for (i = 0; i < sizeof SCtmp->sense_buffer; i++)
-		printk(" %02X", SCtmp->sense_buffer[i]);
+	    buslogic_printk("buslogic_interrupt: sense:");
+	    for (i = 0; i < sizeof sctmp->sense_buffer; i++)
+		printk(" %02X", sctmp->sense_buffer[i]);
 	    printk("\n");
 	}
 
@@ -524,45 +583,47 @@ static void buslogic_interrupt(int junk)
 	    buslogic_printk("buslogic_interrupt: returning %08X\n", errstatus);
 #endif
 
-	SCtmp->result = errstatus;
-	HOSTDATA(SHpnt)->SCint[mbo] = NULL;	/* This effectively frees up
+	sctmp->result = errstatus;
+	HOSTDATA(shpnt)->sc[mbo] = NULL;	/* This effectively frees up
 						   the mailbox slot, as far as
-						   queuecommand is concerned. */
-	my_done(SCtmp);
+						   queuecommand is
+						   concerned. */
+	my_done(sctmp);
 	number_serviced++;
     }
 }
 
-int buslogic_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
+int buslogic_queuecommand(Scsi_Cmnd *scpnt, void (*done)(Scsi_Cmnd *))
 {
     static const unsigned char buscmd[] = { CMD_START_SCSI };
     unsigned char direction;
-    unsigned char *cmd = (unsigned char *)SCpnt->cmnd;
-    unsigned char target = SCpnt->target;
-    unsigned char lun = SCpnt->lun;
-    void *buff = SCpnt->request_buffer;
-    int bufflen = SCpnt->request_bufflen;
+    unsigned char *cmd = (unsigned char *)scpnt->cmnd;
+    unsigned char target = scpnt->target;
+    unsigned char lun = scpnt->lun;
+    void *buff = scpnt->request_buffer;
+    int bufflen = scpnt->request_bufflen;
     int mbo;
     struct mailbox *mb;
     struct ccb *ccb;
 
 #if BUSLOGIC_DEBUG
     if (target > 1) {
-	SCpnt->result = DID_TIME_OUT << 16;
-	done(SCpnt);
+	scpnt->result = DID_TIME_OUT << 16;
+	done(scpnt);
 	return 0;
     }
 #endif
 
     if (*cmd == REQUEST_SENSE) {
 #ifndef DEBUG
-	if (bufflen != sizeof SCpnt->sense_buffer) {
-	    buslogic_printk("Wrong buffer length supplied for request sense (%d)\n",
+	if (bufflen != sizeof scpnt->sense_buffer) {
+	    buslogic_printk("Wrong buffer length supplied for request sense"
+			    " (%d)\n",
 			    bufflen);
 	}
 #endif
-	SCpnt->result = 0;
-	done(SCpnt);
+	scpnt->result = 0;
+	done(scpnt);
 	return 0;
     }
 
@@ -570,16 +631,16 @@ int buslogic_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
     {
 	int i;
 
-	if (*cmd == READ_10 || *cmd == WRITE_10)
-	    i = xscsi2int(cmd + 2);
-	else if (*cmd == READ_6 || *cmd == WRITE_6)
-	    i = scsi2int(cmd + 2);
+	if (*cmd == READ_10 || *cmd == WRITE_10
+	    || *cmd == READ_6 || *cmd == WRITE_6)
+	    i = *(int *)(cmd + 2);
 	else
 	    i = -1;
-	buslogic_printk("buslogic_queuecommand: dev %d cmd %02X pos %d len %d ",
+	buslogic_printk("buslogic_queuecommand:"
+			" dev %d cmd %02X pos %d len %d ",
 			target, *cmd, i, bufflen);
-	buslogic_stat(SCpnt->host->io_port);
-	buslogic_printk("buslogic_queuecommand: dumping scsi cmd: ");
+	buslogic_stat(scpnt->host->io_port);
+	buslogic_printk("buslogic_queuecommand: dumping scsi cmd:");
 	for (i = 0; i < (COMMAND_SIZE(*cmd)); i++)
 	    printk(" %02X", cmd[i]);
 	printk("\n");
@@ -588,38 +649,39 @@ int buslogic_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
     }
 #endif
 
-    mb = HOSTDATA(SCpnt->host)->mb;
-    ccb = HOSTDATA(SCpnt->host)->ccbs;
+    mb = HOSTDATA(scpnt->host)->mb;
+    ccb = HOSTDATA(scpnt->host)->ccbs;
 
     /* Use the outgoing mailboxes in a round-robin fashion, because this
        is how the host adapter will scan for them. */
 
     cli();
 
-    mbo = HOSTDATA(SCpnt->host)->last_mbo_used + 1;
+    mbo = HOSTDATA(scpnt->host)->last_mbo_used + 1;
     if (mbo >= BUSLOGIC_MAILBOXES)
 	mbo = 0;
 
     do {
 	if (mb[mbo].status == MBX_NOT_IN_USE
-	    && HOSTDATA(SCpnt->host)->SCint[mbo] == NULL)
+	    && HOSTDATA(scpnt->host)->sc[mbo] == NULL)
 	    break;
 	mbo++;
 	if (mbo >= BUSLOGIC_MAILBOXES)
 	    mbo = 0;
-    } while (mbo != HOSTDATA(SCpnt->host)->last_mbo_used);
+    } while (mbo != HOSTDATA(scpnt->host)->last_mbo_used);
 
-    if (mb[mbo].status != MBX_NOT_IN_USE || HOSTDATA(SCpnt->host)->SCint[mbo]) {
-	/* ??? Instead of panicing, we should enable OMBR interrupts and
-	   sleep until we get one. */
+    if (mb[mbo].status != MBX_NOT_IN_USE
+	|| HOSTDATA(scpnt->host)->sc[mbo]) {
+	/* ??? Instead of panicing, should we enable OMBR interrupts and
+	   sleep until we get one? */
 	panic("buslogic.c: unable to find empty mailbox");
     }
 
-    HOSTDATA(SCpnt->host)->SCint[mbo] = SCpnt;	/* This will effectively
+    HOSTDATA(scpnt->host)->sc[mbo] = scpnt;	/* This will effectively
 						   prevent someone else from
 						   screwing with this cdb. */
 
-    HOSTDATA(SCpnt->host)->last_mbo_used = mbo;
+    HOSTDATA(scpnt->host)->last_mbo_used = mbo;
 
     sti();
 
@@ -643,33 +705,36 @@ int buslogic_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
 
     memcpy(ccb[mbo].cdb, cmd, ccb[mbo].cdblen);
 
-    if (SCpnt->use_sg) {
+    if (scpnt->use_sg) {
 	struct scatterlist *sgpnt;
 	struct chain *cptr;
 	size_t i;
 
-	ccb[mbo].op = CCB_OP_INIT_SG;	/* SCSI Initiator Command w/scatter-gather */
-	SCpnt->host_scribble = (unsigned char *)scsi_malloc(BUSLOGIC_SG_MALLOC);
-	if (SCpnt->host_scribble == NULL)
+	ccb[mbo].op = CCB_OP_INIT_SG;	/* SCSI Initiator Command
+					   w/scatter-gather */
+	scpnt->host_scribble
+	    = (unsigned char *)scsi_malloc(BUSLOGIC_SG_MALLOC);
+	if (scpnt->host_scribble == NULL)
 	    panic("buslogic.c: unable to allocate DMA memory");
-	sgpnt = (struct scatterlist *)SCpnt->request_buffer;
-	cptr = (struct chain *)SCpnt->host_scribble;
-	if (SCpnt->use_sg > SCpnt->host->sg_tablesize) {
-	    buslogic_printk("buslogic_queuecommand bad segment list, %d > %d\n",
-			    SCpnt->use_sg, SCpnt->host->sg_tablesize);
+	sgpnt = (struct scatterlist *)scpnt->request_buffer;
+	cptr = (struct chain *)scpnt->host_scribble;
+	if (scpnt->use_sg > scpnt->host->sg_tablesize) {
+	    buslogic_printk("buslogic_queuecommand: bad segment list,"
+			    " %d > %d\n",
+			    scpnt->use_sg, scpnt->host->sg_tablesize);
 	    panic("buslogic.c: bad segment list");
 	}
-	for (i = 0; i < SCpnt->use_sg; i++) {
+	for (i = 0; i < scpnt->use_sg; i++) {
 	    cptr[i].dataptr = sgpnt[i].address;
 	    cptr[i].datalen = sgpnt[i].length;
 	}
-	ccb[mbo].datalen = SCpnt->use_sg * sizeof (struct chain);
+	ccb[mbo].datalen = scpnt->use_sg * sizeof (struct chain);
 	ccb[mbo].dataptr = cptr;
 #if BUSLOGIC_DEBUG
 	{
 	    unsigned char *ptr;
 
-	    buslogic_printk("cptr %08X: ", cptr);
+	    buslogic_printk("cptr %08X:", cptr);
 	    ptr = (unsigned char *)cptr;
 	    for (i = 0; i < 18; i++)
 		printk(" %02X", ptr[i]);
@@ -678,15 +743,15 @@ int buslogic_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
 #endif
     } else {
 	ccb[mbo].op = CCB_OP_INIT;	/* SCSI Initiator Command */
-	SCpnt->host_scribble = NULL;
+	scpnt->host_scribble = NULL;
 	ccb[mbo].datalen = bufflen;
 	ccb[mbo].dataptr = buff;
     }
     ccb[mbo].id = target;
     ccb[mbo].lun = lun;
     ccb[mbo].dir = direction;
-    ccb[mbo].rsalen = sizeof SCpnt->sense_buffer;
-    ccb[mbo].senseptr = SCpnt->sense_buffer;
+    ccb[mbo].rsalen = sizeof scpnt->sense_buffer;
+    ccb[mbo].senseptr = scpnt->sense_buffer;
     ccb[mbo].linkptr = NULL;
     ccb[mbo].commlinkid = 0;
 
@@ -695,7 +760,7 @@ int buslogic_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
 	size_t i;
 
 	buslogic_printk("buslogic_queuecommand: sending...");
-	for (i = 0; i < sizeof ccb[mbo]; i++)
+	for (i = 0; i < sizeof ccb[mbo] - 10; i++)
 	    printk(" %02X", ((unsigned char *)&ccb[mbo])[i]);
 	printk("\n");
     }
@@ -704,15 +769,14 @@ int buslogic_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
     if (done) {
 #if BUSLOGIC_DEBUG
 	buslogic_printk("buslogic_queuecommand: now waiting for interrupt: ");
-	buslogic_stat(SCpnt->host->io_port);
+	buslogic_stat(scpnt->host->io_port);
 #endif
-	SCpnt->scsi_done = done;
+	scpnt->scsi_done = done;
 	mb[mbo].status = MBX_ACTION_START;
 	/* start scsi command */
-	buslogic_out(SCpnt->host->io_port, buscmd, sizeof buscmd);
+	buslogic_out(scpnt->host->io_port, buscmd, sizeof buscmd);
 #if BUSLOGIC_DEBUG
-	buslogic_printk("buslogic_queuecommand: status: ");
-	buslogic_stat(SCpnt->host->io_port);
+	buslogic_stat(scpnt->host->io_port);
 #endif
     } else
 	buslogic_printk("buslogic_queuecommand: done can't be NULL\n");
@@ -721,34 +785,33 @@ int buslogic_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
 }
 
 #if 0
-static void internal_done(Scsi_Cmnd *SCpnt)
+static void internal_done(Scsi_Cmnd *scpnt)
 {
-    SCpnt->SCp.Status++;
+    scpnt->SCp.Status++;
 }
 
-int buslogic_command(Scsi_Cmnd *SCpnt)
+int buslogic_command(Scsi_Cmnd *scpnt)
 {
 #if BUSLOGIC_DEBUG
     buslogic_printk("buslogic_command: ..calling buslogic_queuecommand\n");
 #endif
 
-    buslogic_queuecommand(SCpnt, internal_done);
+    buslogic_queuecommand(scpnt, internal_done);
 
-    SCpnt->SCp.Status = 0;
-    while (!SCpnt->SCp.Status)
+    scpnt->SCp.Status = 0;
+    while (!scpnt->SCp.Status)
 	continue;
-    return SCpnt->result;
-    return internal_done_errcode;
+    return scpnt->result;
 }
 #endif
 
 /* Initialize mailboxes. */
-static int setup_mailboxes(unsigned int base, struct Scsi_Host *SHpnt)
+static int setup_mailboxes(unsigned int base, struct Scsi_Host *shpnt)
 {
     size_t i;
     int ok = FALSE;		/* Innocent until proven guilty... */
-    struct mailbox *mb = HOSTDATA(SHpnt)->mb;
-    struct ccb *ccb = HOSTDATA(SHpnt)->ccbs;
+    struct mailbox *mb = HOSTDATA(shpnt)->mb;
+    struct ccb *ccb = HOSTDATA(shpnt)->ccbs;
     struct {
 	unsigned char cmd, count;
 	void *base PACKED;
@@ -777,10 +840,11 @@ static int setup_mailboxes(unsigned int base, struct Scsi_Host *SHpnt)
 	buslogic_printk("buslogic_detect: failed setting up mailboxes\n");
     }
     ok = TRUE;
-    return ok;
   must_be_adaptec:
     INTR_RESET(base);
-    printk("- must be Adaptec\n"); /* So that the adaptec detect looks clean */
+    if (!ok)
+	printk("- must be Adaptec\n");	/* So that the adaptec detect looks
+					   clean */
     return ok;
 }
 
@@ -822,7 +886,8 @@ static int getconfig(unsigned int base, unsigned char *irq,
 	*irq = 15;
 	break;
       default:
-	buslogic_printk("Unable to determine BusLogic IRQ level.  Disabling board.\n");
+	buslogic_printk("Unable to determine BusLogic IRQ level."
+			"  Disabling board.\n");
 	return TRUE;
     }
     *id = inquiry_result[2] & 0x7;
@@ -854,7 +919,7 @@ static int getconfig(unsigned int base, unsigned char *irq,
        DMA channel).  We ignore this. */
     if (*bus_type == 'A')
 	switch (*dma) {
-	  case 0:	/* This indicates a that no DMA channel is used. */
+	  case 0:	/* This indicates that no DMA channel is used. */
 	    *dma = 0;
 	    break;
 	  case 0x20:
@@ -867,7 +932,8 @@ static int getconfig(unsigned int base, unsigned char *irq,
 	    *dma = 7;
 	    break;
 	  default:
-	    buslogic_printk("Unable to determine BusLogic DMA channel.  Disabling board.\n");
+	    buslogic_printk("Unable to determine BusLogic DMA channel."
+			    "  Disabling board.\n");
 	    return TRUE;
 	}
     else
@@ -882,10 +948,18 @@ static int getconfig(unsigned int base, unsigned char *irq,
     return FALSE;
 }
 
+static int get_translation(unsigned int base)
+{
+    /* ??? This is wrong if disk is configured for > 1G mapping.
+       Unfortunately, unlike UltraStor, I see know way of determining whether
+       > 1G mapping has been enabled. */
+    return BIOS_TRANSLATION_6432;
+}
+
 /* Query the board to find out the model. */
 static int buslogic_query(unsigned int base, int *trans)
 {
-    unsigned const char inquiry_cmd[] = { CMD_INQUIRY };
+    static const unsigned char inquiry_cmd[] = { CMD_INQUIRY };
     unsigned char inquiry_result[4];
     int i;
 
@@ -897,22 +971,25 @@ static int buslogic_query(unsigned int base, int *trans)
     WAIT_UNTIL(INTERRUPT(base), CMDC);
     INTR_RESET(base);
 
-    buslogic_printk("Inquiry Bytes: %X %X %X %X\n",
-		    inquiry_result[0],inquiry_result[1],
-		    inquiry_result[2],inquiry_result[3]);
+#if 1 /* ??? Temporary */
+    buslogic_printk("Inquiry Bytes: %02X %02X %02X %02X\n",
+		    inquiry_result[0], inquiry_result[1],
+		    inquiry_result[2], inquiry_result[3]);
+#endif
+
     while (0) {
       fail:
 	buslogic_printk("buslogic_query: query board settings\n");
 	return TRUE;
     }
 
-    *trans = BIOS_TRANSLATION_6432;     /* Default case */
+    *trans = get_translation(base);
 
     return FALSE;
 }
 
 /* return non-zero on detection */
-int buslogic_detect(Scsi_Host_Template * tpnt)
+int buslogic_detect(Scsi_Host_Template *tpnt)
 {
     unsigned char dma;
     unsigned char irq;
@@ -921,10 +998,9 @@ int buslogic_detect(Scsi_Host_Template * tpnt)
     unsigned char bus_type;
     unsigned short max_sg;
     int trans;
-    struct Scsi_Host *SHpnt = NULL;
+    struct Scsi_Host *shpnt = NULL;
     int count = 0;
     int indx;
-    int val;
 
 #if BUSLOGIC_DEBUG
     buslogic_printk("buslogic_detect:\n");
@@ -932,11 +1008,11 @@ int buslogic_detect(Scsi_Host_Template * tpnt)
 
     for (indx = 0; indx < ARRAY_SIZE(bases); indx++)
 	if (!check_region(bases[indx], 3)) {
-	    SHpnt = scsi_register(tpnt, sizeof (struct hostdata));
+	    shpnt = scsi_register(tpnt, sizeof (struct hostdata));
 
 	    base = bases[indx];
 
-	    if (test_port(base, SHpnt))
+	    if (test_port(base, shpnt))
 		goto unregister;
 
 	    /* Set the Bus on/off-times as not to ruin floppy performance. */
@@ -956,7 +1032,8 @@ int buslogic_detect(Scsi_Host_Template * tpnt)
 		WAIT_UNTIL(INTERRUPT(base), CMDC);
 		while (0) {
 		  fail:
-		    buslogic_printk("buslogic_detect: setting bus on/off-time failed\n");
+		    buslogic_printk("buslogic_detect:"
+				    " setting bus on/off-time failed\n");
 		}
 		INTR_RESET(base);
 	    }
@@ -972,7 +1049,7 @@ int buslogic_detect(Scsi_Host_Template * tpnt)
 #endif
 	    /* Here is where we tell the men from the boys (i.e. an Adaptec
 	       will fail in setup_mailboxes, the men will not :-) */
-	    if (!setup_mailboxes(base, SHpnt))
+	    if (!setup_mailboxes(base, shpnt))
 		goto unregister;
 
 	    printk("Configuring BusLogic %s HA at port 0x%03X, IRQ %u",
@@ -993,8 +1070,7 @@ int buslogic_detect(Scsi_Host_Template * tpnt)
 #endif
 
 	    cli();
-	    val = request_irq(irq, buslogic_interrupt);
-	    if (val) {
+	    if (request_irq(irq, buslogic_interrupt, 0, "buslogic")) {
 		buslogic_printk("Unable to allocate IRQ for "
 				"BusLogic controller.\n");
 		sti();
@@ -1016,31 +1092,32 @@ int buslogic_detect(Scsi_Host_Template * tpnt)
 		}
 	    }
 
-	    host[irq - 9] = SHpnt;
-	    SHpnt->this_id = id;
+	    host[irq - 9] = shpnt;
+	    shpnt->this_id = id;
 #ifdef CONFIG_NO_BUGGY_BUSLOGIC
 	    /* Only type 'A' (AT/ISA) bus adapters use unchecked DMA. */
-	    SHpnt->unchecked_isa_dma = (bus_type == 'A');
+	    shpnt->unchecked_isa_dma = (bus_type == 'A');
 #else
-	    /* bugs in the firmware with 16M+. Gaah */
-	    SHpnt->unchecked_isa_dma = 1;
+	    /* Bugs in the firmware of the 445S with >16M.  This does not seem
+	       to affect Revision E boards with firmware 3.37. */
+	    shpnt->unchecked_isa_dma = 1;
 #endif
-	    SHpnt->sg_tablesize = max_sg;
-	    if (SHpnt->sg_tablesize > BUSLOGIC_MAX_SG)
-		SHpnt->sg_tablesize = BUSLOGIC_MAX_SG;
+	    shpnt->sg_tablesize = max_sg;
+	    if (shpnt->sg_tablesize > BUSLOGIC_MAX_SG)
+		shpnt->sg_tablesize = BUSLOGIC_MAX_SG;
 	    /* ??? If we can dynamically allocate the mailbox arrays, I'll
 	       probably bump up this number. */
-	    SHpnt->hostt->can_queue = BUSLOGIC_MAILBOXES;
-	    /*SHpnt->base = ???;*/
-	    SHpnt->io_port = base;
-	    SHpnt->dma_channel = dma;
-	    SHpnt->irq = irq;
-	    HOSTDATA(SHpnt)->bios_translation = trans;
+	    shpnt->hostt->can_queue = BUSLOGIC_MAILBOXES;
+	    /*shpnt->base = ???;*/
+	    shpnt->io_port = base;
+	    shpnt->dma_channel = dma;
+	    shpnt->irq = irq;
+	    HOSTDATA(shpnt)->bios_translation = trans;
 	    if (trans == BIOS_TRANSLATION_25563)
 		buslogic_printk("Using extended bios translation.\n");
-	    HOSTDATA(SHpnt)->last_mbi_used  = 2 * BUSLOGIC_MAILBOXES - 1;
-	    HOSTDATA(SHpnt)->last_mbo_used  = BUSLOGIC_MAILBOXES - 1;
-	    memset(HOSTDATA(SHpnt)->SCint, 0, sizeof HOSTDATA(SHpnt)->SCint);
+	    HOSTDATA(shpnt)->last_mbi_used = 2 * BUSLOGIC_MAILBOXES - 1;
+	    HOSTDATA(shpnt)->last_mbo_used = BUSLOGIC_MAILBOXES - 1;
+	    memset(HOSTDATA(shpnt)->sc, 0, sizeof HOSTDATA(shpnt)->sc);
 	    sti();
 
 #if 0
@@ -1057,9 +1134,9 @@ int buslogic_detect(Scsi_Host_Template * tpnt)
 		    buf[i] = 0x87;
 		for (i = 0; i < 2; i++)
 		    if (!buslogic_command(i, cmd, buf, sizeof buf)) {
-			buslogic_printk("bus_detect: LU %u sector_size %d "
-					"device_size %d\n",
-					i, xscsi2int(buf + 4), xscsi2int(buf));
+			buslogic_printk("buslogic_detect: LU %u "
+					"sector_size %d device_size %d\n",
+					i, *(int *)(buf + 4), *(int *)buf);
 		    }
 
 #if BUSLOGIC_DEBUG
@@ -1085,28 +1162,57 @@ int buslogic_detect(Scsi_Host_Template * tpnt)
 	    count++;
 	    continue;
 	  unregister:
-	    scsi_unregister(SHpnt);
+	    scsi_unregister(shpnt);
 	}
     return count;
+}
+
+static int restart(struct Scsi_Host *shpnt)
+{
+    unsigned int i;
+    unsigned int count = 0;
+#if 0
+    static const unsigned char buscmd[] = { CMD_START_SCSI };
+#endif
+
+    for (i = 0; i < BUSLOGIC_MAILBOXES; i++)
+	if (HOSTDATA(shpnt)->sc[i]
+	    && !HOSTDATA(shpnt)->sc[i]->device->soft_reset) {
+#if 0
+	    HOSTDATA(shpnt)->mb[i].status = 1;	/* Indicate ready to
+						   restart... */
+#endif
+	    count++;
+	}
+
+    buslogic_printk("Potential to restart %d stalled commands...\n", count);
+#if 0
+    /* start scsi command */
+    if (count)
+	buslogic_out(shpnt->host->io_port, buscmd, sizeof buscmd);
+#endif
+    return 0;
 }
 
 /* ??? The abort command for the aha1542 does not leave the device in a clean
    state where it is available to be used again.  As it is not clear whether
    the same problem exists with BusLogic boards, we will enable this and see
    if it works. */
-int buslogic_abort(Scsi_Cmnd *SCpnt)
+int buslogic_abort(Scsi_Cmnd *scpnt)
 {
+#if 1
     static const unsigned char buscmd[] = { CMD_START_SCSI };
     struct mailbox *mb;
-    int mbi, mbo, i;
+    size_t mbi, mbo;
+    unsigned int i;
 
     buslogic_printk("buslogic_abort: %X %X\n",
-		    inb(STATUS(SCpnt->host->io_port)),
-		    inb(INTERRUPT(SCpnt->host->io_port)));
+		    inb(STATUS(scpnt->host->io_port)),
+		    inb(INTERRUPT(scpnt->host->io_port)));
 
     cli();
-    mb = HOSTDATA(SCpnt->host)->mb;
-    mbi = HOSTDATA(SCpnt->host)->last_mbi_used + 1;
+    mb = HOSTDATA(scpnt->host)->mb;
+    mbi = HOSTDATA(scpnt->host)->last_mbi_used + 1;
     if (mbi >= 2 * BUSLOGIC_MAILBOXES)
 	mbi = BUSLOGIC_MAILBOXES;
 
@@ -1116,16 +1222,17 @@ int buslogic_abort(Scsi_Cmnd *SCpnt)
 	mbi++;
 	if (mbi >= 2 * BUSLOGIC_MAILBOXES)
 	    mbi = BUSLOGIC_MAILBOXES;
-    } while (mbi != HOSTDATA(SCpnt->host)->last_mbi_used);
+    } while (mbi != HOSTDATA(scpnt->host)->last_mbi_used);
     sti();
 
     if (mb[mbi].status != MBX_NOT_IN_USE) {
-	buslogic_printk("Lost interrupt discovered on irq %d - attempting to recover\n",
-			SCpnt->host->irq);
+	buslogic_printk("Lost interrupt discovered on irq %d"
+			" - attempting to recover\n",
+			scpnt->host->irq);
 	{
 	    int intval[3];
 
-	    intval[0] = SCpnt->host->irq;
+	    intval[0] = scpnt->host->irq;
 	    buslogic_interrupt((int)&intval[2]);
 	    return SCSI_ABORT_SUCCESS;
 	}
@@ -1134,18 +1241,19 @@ int buslogic_abort(Scsi_Cmnd *SCpnt)
     /* OK, no lost interrupt.  Try looking to see how many pending commands we
        think we have. */
     for (i = 0; i < BUSLOGIC_MAILBOXES; i++)
-	if (HOSTDATA(SCpnt->host)->SCint[i]) {
-	    if (HOSTDATA(SCpnt->host)->SCint[i] == SCpnt) {
+	if (HOSTDATA(scpnt->host)->sc[i]) {
+	    if (HOSTDATA(scpnt->host)->sc[i] == scpnt) {
 		buslogic_printk("Timed out command pending for %4.4X\n",
-				SCpnt->request.dev);
-		if (HOSTDATA(SCpnt->host)->mb[i].status != MBX_NOT_IN_USE) {
+				scpnt->request.dev);
+		if (HOSTDATA(scpnt->host)->mb[i].status != MBX_NOT_IN_USE) {
 		    buslogic_printk("OGMB still full - restarting\n");
-		    buslogic_out(SCpnt->host->io_port, buscmd, sizeof buscmd);
+		    buslogic_out(scpnt->host->io_port, buscmd, sizeof buscmd);
 		}
 	    } else
 		buslogic_printk("Other pending command %4.4X\n",
-				SCpnt->request.dev);
+				scpnt->request.dev);
 	}
+#endif
 
 #if (BUSLOGIC_DEBUG & BD_ABORT)
     buslogic_printk("buslogic_abort\n");
@@ -1156,37 +1264,86 @@ int buslogic_abort(Scsi_Cmnd *SCpnt)
        abort a command, and this merely makes it worse. */
     cli();
     for (mbo = 0; mbo < BUSLOGIC_MAILBOXES; mbo++)
-	if (SCpnt == HOSTDATA(SCpnt->host)->SCint[mbo]) {
-	    HOSTDATA(SCpnt->host)->mb[mbo].status = MBX_ACTION_ABORT;
-	    buslogic_out(SCpnt->host->io_port, buscmd, sizeof buscmd);
+	if (scpnt == HOSTDATA(scpnt->host)->sc[mbo]) {
+	    mb[mbo].status = MBX_ACTION_ABORT;
+	    buslogic_out(scpnt->host->io_port, buscmd, sizeof buscmd);
 	    break;
 	}
     sti();
 #endif
 
-    return SCSI_ABORT_PENDING;
+    return SCSI_ABORT_SNOOZE;
 }
 
 /* We do not implement a reset function here, but the upper level code assumes
-   that it will get some kind of response for the command in SCpnt.  We must
-   oblige, or the command will hang the SCSI system. */
-int buslogic_reset(Scsi_Cmnd *SCpnt)
+   that it will get some kind of response for the command in scpnt.  We must
+   oblige, or the command will hang the SCSI system.  For a first go, we assume
+   that the BusLogic notifies us with all of the pending commands (it does
+   implement soft reset, after all). */
+int buslogic_reset(Scsi_Cmnd *scpnt)
 {
+    static const unsigned char buscmd[] = { CMD_START_SCSI };
+    unsigned int i;
+
 #if BUSLOGIC_DEBUG
     buslogic_printk("buslogic_reset\n");
 #endif
+#if 0
+    /* This does a scsi reset for all devices on the bus. */
+    outb(RSBUS, CONTROL(scpnt->host->io_port));
+#else
+    /* This does a selective reset of just the one device. */
+    /* First locate the ccb for this command. */
+    for (i = 0; i < BUSLOGIC_MAILBOXES; i++)
+	if (HOSTDATA(scpnt->host)->sc[i] == scpnt) {
+	    HOSTDATA(scpnt->host)->ccbs[i].op = 0x81;	/* ??? BUS DEVICE
+							   RESET */
+
+	    /* Now tell the BusLogic to flush all pending commands for this
+	       target. */
+	    buslogic_out(scpnt->host->io_port, buscmd, sizeof buscmd);
+
+	    /* Here is the tricky part.  What to do next.  Do we get an
+	       interrupt for the commands that we aborted with the specified
+	       target, or do we generate this on our own?  Try it without first
+	       and see what happens. */
+	    buslogic_printk("Sent BUS DEVICE RESET to target %d\n",
+			    scpnt->target);
+
+	    /* If the first does not work, then try the second.  I think the
+	       first option is more likely to be correct.  Free the command
+	       block for all commands running on this target... */
+#if 1
+	    for (i = 0; i < BUSLOGIC_MAILBOXES; i++)
+		if (HOSTDATA(scpnt->host)->sc[i]
+		    && HOSTDATA(scpnt->host)->sc[i]->target == scpnt->target) {
+		    Scsi_Cmnd *sctmp = HOSTDATA(scpnt->host)->sc[i];
+
+		    sctmp->result = DID_RESET << 16;
+		    if (sctmp->host_scribble)
+			scsi_free(sctmp->host_scribble, BUSLOGIC_SG_MALLOC);
+		    printk("Sending DID_RESET for target %d\n", scpnt->target);
+		    sctmp->scsi_done(scpnt);
+
+		    HOSTDATA(scpnt->host)->sc[i] = NULL;
+		    HOSTDATA(scpnt->host)->mb[i].status = MBX_NOT_IN_USE;
+		}
+	    return SCSI_RESET_SUCCESS;
+#else
+	    return SCSI_RESET_PENDING;
+#endif
+	}
+#endif
+    /* No active command at this time, so this means that each time we got some
+       kind of response the last time through.  Tell the mid-level code to
+       request sense information in order to decide what to do next. */
     return SCSI_RESET_PUNT;
 }
 
-int buslogic_biosparam(Disk * disk, int dev, int *ip)
+int buslogic_biosparam(Disk *disk, int dev, int *ip)
 {
-  int size = disk->capacity;
-  int translation_algorithm;
-
-  /* ??? This is wrong if disk is configured for > 1G mapping.
-     Unfortunately, unlike UltraStor, I see know way of determining whether
-     > 1G mapping has been enabled. */
-
+    int size = disk->capacity;
+    int translation_algorithm;
 
     translation_algorithm = HOSTDATA(disk->device->host)->bios_translation;
     /* ??? Should this be > 1024, or >= 1024?  Enquiring minds want to know. */

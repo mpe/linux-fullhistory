@@ -507,7 +507,6 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 {
   int                 i, j,  ok;
   aha152x_config      conf;
-  struct sigaction    sa;
   int                 interrupt_level;
   
   if(setup_called)
@@ -625,12 +624,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 
   printk("detection complete\n");
  
-  sa.sa_handler  = aha152x_intr;
-  sa.sa_flags    = SA_INTERRUPT;
-  sa.sa_mask     = 0;
-  sa.sa_restorer = NULL;
-  
-  ok = irqaction( interrupt_level, &sa);
+  ok = request_irq(interrupt_level, aha152x_intr, SA_INTERRUPT, "aha152x");
   
   if(ok<0)
     {

@@ -56,7 +56,7 @@
  *
  * #define HD_TYPE { head, sect, cyl, wpcom, lzone, ctl}
  *
- * In case of two harddisks, the info should be sepatated by
+ * In case of two harddisks, the info should be separated by
  * commas:
  *
  * #define HD_TYPE { h,s,c,wpcom,lz,ctl },{ h,s,c,wpcom,lz,ctl }

@@ -233,7 +233,7 @@ struct ext2_inode {
 /*
  * File system states
  */
-#define	EXT2_VALID_FS			0x0001	/* Unmounted cleany */
+#define	EXT2_VALID_FS			0x0001	/* Unmounted cleanly */
 #define	EXT2_ERROR_FS			0x0002	/* Errors detected */
 
 /*

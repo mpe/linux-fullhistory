@@ -2,7 +2,7 @@
  *  linux/fs/umsdos/file.c
  *
  *  Written 1992 by Jacques Gelinas
- *	inpired from linux/fs/msdos/file.c Werner Almesberger
+ *	inspired from linux/fs/msdos/file.c Werner Almesberger
  *
  *  Extended MS-DOS regular file handling primitives
  */
@@ -23,7 +23,7 @@
 #define Printk(x)	printk x
 /*
 	Read the data associate with the symlink.
-	Return lenght read in buffer or  a negative error code.
+	Return length read in buffer or  a negative error code.
 */
 static int umsdos_readlink_x (
 	struct inode *inode,
@@ -41,7 +41,7 @@ static int umsdos_readlink_x (
 	return ret;
 }
 /*
-	Follow a symbolic link chain by calling open_namei recursivly
+	Follow a symbolic link chain by calling open_namei recursively
 	until an inode is found.
 
 	Return 0 if ok, or a negative error code if not.
