@@ -3440,7 +3440,7 @@ static void mpi_receive_802_3(struct airo_info *ai)
 	/* Make sure we got something */
 	if (rxd.rdy && rxd.valid == 0) {
 		len = rxd.len + 12;
-		if (len < 12 && len > 2048)
+		if (len < 12 || len > 2048)
 			goto badrx;
 
 		skb = dev_alloc_skb(len);
