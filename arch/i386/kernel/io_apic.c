@@ -271,7 +271,7 @@ void setup_IO_APIC_irqs (void)
 		if (!IO_APIC_IRQ(irq))
 			continue;
 
-		entry.vector = IO_APIC_GATE_OFFSET + (irq<<3);
+		entry.vector = IO_APIC_VECTOR(irq);
 
 		/*
 		 * Determine IRQ line polarity (high active or low active):
@@ -383,7 +383,7 @@ void setup_IO_APIC_irq_ISA_default (unsigned int irq)
 	entry.mask = 1;					/* unmask IRQ now */
 	entry.dest.logical.logical_dest = 0xff;		/* all CPUs */
 
-	entry.vector = IO_APIC_GATE_OFFSET + (irq<<3);
+	entry.vector = IO_APIC_VECTOR(irq);
 
 	entry.polarity=0;
 	entry.trigger=0;

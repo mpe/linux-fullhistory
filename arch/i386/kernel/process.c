@@ -314,10 +314,10 @@ void machine_restart(char * __unused)
 
 	/* Remap the kernel at virtual address zero, as well as offset zero
 	   from the kernel segment.  This assumes the kernel segment starts at
-	   virtual address 0xc0000000. */
+	   virtual address PAGE_OFFSET. */
 
-	memcpy (swapper_pg_dir, swapper_pg_dir + 768,
-		sizeof (swapper_pg_dir [0]) * 256);
+	memcpy (swapper_pg_dir, swapper_pg_dir + USER_PGD_PTRS,
+		sizeof (swapper_pg_dir [0]) * KERNEL_PGD_PTRS);
 
 	/* Make sure the first page is mapped to the start of physical memory.
 	   It is normally not mapped, to trap kernel NULL pointer dereferences. */

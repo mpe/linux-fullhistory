@@ -314,8 +314,7 @@ extern int espserial_init(void);
 
 extern int tty_paranoia_check(struct tty_struct *tty, kdev_t device,
 			      const char *routine);
-extern char *_tty_name(struct tty_struct *tty, char *buf);
-extern char *tty_name(struct tty_struct *tty);
+extern char *tty_name(struct tty_struct *tty, char *buf);
 extern void tty_wait_until_sent(struct tty_struct * tty, int timeout);
 extern int tty_check_change(struct tty_struct * tty);
 extern void stop_tty(struct tty_struct * tty);

@@ -837,8 +837,11 @@ static void add_stripe_bh (struct stripe_head *sh, struct buffer_head *bh, int d
 	struct raid5_data *raid_conf = sh->raid_conf;
 	struct buffer_head *bh_req;
 
-	if (sh->bh_new[dd_idx])
+	if (sh->bh_new[dd_idx]) {
 		printk("raid5: bug: stripe->bh_new[%d], sector %lu exists\n", dd_idx, sh->sector);
+		printk("forcing oops.\n");
+		*(int*)=0;
+	}
 
 	set_bit(BH_Lock, &bh->b_state);
 

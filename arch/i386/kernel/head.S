@@ -8,9 +8,13 @@
  */
 
 .text
+#include <linux/config.h>
 #include <linux/tasks.h>
 #include <linux/linkage.h>
 #include <asm/segment.h>
+#include <asm/page.h>
+#include <asm/pgtable.h>
+
 
 #define CL_MAGIC_ADDR	0x90020
 #define CL_MAGIC	0xA33F
@@ -54,9 +58,9 @@ startup_32:
  *	be using the global pages. 
  *
  *	NOTE! We have to correct for the fact that we're
- *	not yet offset 0xC0000000..
+ *	not yet offset PAGE_OFFSET..
  */
-#define cr4_bits mmu_cr4_features-0xC0000000
+#define cr4_bits mmu_cr4_features-__PAGE_OFFSET
 	movl %cr4,%eax		# Turn on 4Mb pages
 	orl cr4_bits,%eax
 	movl %eax,%cr4
@@ -368,7 +372,7 @@ check_x87:
  *  sets up a idt with 256 entries pointing to
  *  ignore_int, interrupt gates. It doesn't actually load
  *  idt - that can be done only after paging has been enabled
- *  and the kernel moved to 0xC0000000. Interrupts
+ *  and the kernel moved to PAGE_OFFSET. Interrupts
  *  are enabled elsewhere, when we can be relatively
  *  sure everything is ok.
  */
@@ -444,14 +448,16 @@ SYMBOL_NAME(gdt):
 /*
  * This is initialized to create a identity-mapping at 0-4M (for bootup
  * purposes) and another mapping of the 0-4M area at virtual address
- * 0xC0000000.
+ * PAGE_OFFSET.
  */
 .org 0x1000
 ENTRY(swapper_pg_dir)
 	.long 0x00102007
-	.fill 767,4,0
+	.fill __USER_PGD_PTRS-1,4,0
+	/* default: 767 entries */
 	.long 0x00102007
-	.fill 255,4,0
+	/* default: 255 entries */
+	.fill __KERNEL_PGD_PTRS-1,4,0
 
 /*
  * The page tables are initialized to only 4MB here - the final page
@@ -614,8 +620,8 @@ ENTRY(idt_table)
 	.fill 256,8,0		# idt is uninitialized
 
 /*
- * This gdt setup gives the kernel a 1GB address space at virtual
- * address 0xC0000000 - space enough for expansion, I hope.
+ * This gdt setup gives the kernel a CONFIG_MAX_MEMSIZE sized address space at
+ * virtual address PAGE_OFFSET.
  *
  * This contains up to 8192 quadwords depending on NR_TASKS - 64kB of
  * gdt entries.  Ugh. 

@@ -70,6 +70,7 @@ spinlock_t irq_controller_lock;
 
 static unsigned int irq_events [NR_IRQS] = { -1, };
 static int disabled_irq [NR_IRQS] = { 0, };
+static int ipi_pending [NR_IRQS] = { 0, };
 
 /*
  * Not all IRQs can be routed through the IO-APIC, eg. on certain (older)
@@ -489,12 +490,8 @@ static inline void wait_on_irq(int cpu)
  */
 void synchronize_bh(void)
 {
-	if (atomic_read(&global_bh_count)) {
-		int cpu = smp_processor_id();
-		if (!local_irq_count[cpu] && !local_bh_count[cpu]) {
+	if (atomic_read(&global_bh_count) && !in_interrupt())
 			wait_on_bh();
-		}
-	}
 }
 
 /*
@@ -672,8 +669,8 @@ void enable_8259A_irq (unsigned int irq)
 #ifdef __SMP__
 void enable_ioapic_irq (unsigned int irq)
 {
-	unsigned long flags;
-	int cpu = smp_processor_id(), should_handle_irq;
+	unsigned long flags, should_handle_irq;
+	int cpu = smp_processor_id();
 
 	spin_lock_irqsave(&irq_controller_lock, flags);
 	if (disabled_irq[irq])
@@ -682,18 +679,32 @@ void enable_ioapic_irq (unsigned int irq)
 		spin_unlock_irqrestore(&irq_controller_lock, flags);
 		return;
 	}
+#if 0
 	/*
 	 * In the SMP+IOAPIC case it might happen that there are an unspecified
-	 * number of pending IRQ events unhandled. We protect against multiple
-	 * enable_irq()'s executing them via disable_irq[irq]++
+	 * number of pending IRQ events unhandled. These cases are very rare,
+	 * so we 'resend' these IRQs via IPIs, to the same CPU. It's much
+	 * better to do it this way as thus we dont have to be aware of
+	 * 'pending' interrupts in the IRQ path, except at this point.
 	 */
+	if (!disabled_irq[irq] && irq_events[irq]) {
+		if (!ipi_pending[irq]) {
+			ipi_pending[irq] = 1;
+			--irq_events[irq];
+			send_IPI(cpu,IO_APIC_VECTOR(irq));
+		}
+	}
+	spin_unlock_irqrestore(&irq_controller_lock, flags);
+#else
 	if (!disabled_irq[irq] && irq_events[irq]) {
 		struct pt_regs regs; /* FIXME: these are fake currently */
 
 		disabled_irq[irq]++;
+		hardirq_enter(cpu);
 		spin_unlock(&irq_controller_lock);
+
 		release_irqlock(cpu);
-		irq_enter(cpu, irq);
+		while (test_bit(0,&global_irq_lock)) mb();
 again:
 		handle_IRQ_event(irq, &regs);
 
@@ -713,6 +724,7 @@ again:
 		__restore_flags(flags);
 	} else
 		spin_unlock_irqrestore(&irq_controller_lock, flags);
+#endif
 }
 #endif
 
@@ -775,15 +787,16 @@ static void do_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 	ack_APIC_irq();
 
 	spin_lock(&irq_controller_lock);
+	if (ipi_pending[irq])
+		ipi_pending[irq] = 0;
 
 	if (!irq_events[irq]++ && !disabled_irq[irq])
 		should_handle_irq = 1;
-
+	hardirq_enter(cpu);
 	spin_unlock(&irq_controller_lock);
 
-	irq_enter(cpu, irq);
-
 	if (should_handle_irq) {
+		while (test_bit(0,&global_irq_lock)) mb();
 again:
 		handle_IRQ_event(irq, regs);
 
@@ -797,7 +810,8 @@ again:
 			goto again;
 	}
 
-	irq_exit(cpu, irq);
+	hardirq_exit(cpu);
+	release_irqlock(cpu);
 }
 #endif
 
@@ -1034,7 +1048,7 @@ void init_IO_APIC_traps(void)
 	 * 0x80, because int 0x80 is hm, kindof importantish ;)
 	 */
 	for (i = 0; i < NR_IRQS ; i++)
-		if (IO_APIC_GATE_OFFSET+(i<<3) <= 0xfe)  /* HACK */ {
+		if (IO_APIC_VECTOR(i) <= 0xfe)  /* HACK */ {
 			if (IO_APIC_IRQ(i)) {
 				irq_handles[i] = &ioapic_irq_type;
 				/*
@@ -1071,8 +1085,8 @@ __initfunc(void init_IRQ(void))
 #ifdef __SMP__	
 
 	for (i = 0; i < NR_IRQS ; i++)
-		if (IO_APIC_GATE_OFFSET+(i<<3) <= 0xfe)  /* hack -- mingo */
-			set_intr_gate(IO_APIC_GATE_OFFSET+(i<<3),interrupt[i]);
+		if (IO_APIC_VECTOR(i) <= 0xfe)  /* hack -- mingo */
+			set_intr_gate(IO_APIC_VECTOR(i),interrupt[i]);
 
 	/*
 	 * The reschedule interrupt slowly changes it's functionality,

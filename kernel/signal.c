@@ -438,8 +438,16 @@ kill_sl_info(int sig, struct siginfo *info, pid_t sess)
 inline int
 kill_proc_info(int sig, struct siginfo *info, pid_t pid)
 {
-	struct task_struct *p = find_task_by_pid(pid);
-	return p ? send_sig_info(sig, info, p) : -ESRCH;
+	int error;
+	struct task_struct *p;
+
+	read_lock(&tasklist_lock);
+	p = find_task_by_pid(pid);
+	error = -ESRCH;
+	if (p)
+		error = send_sig_info(sig, info, p);
+	read_unlock(&tasklist_lock);
+	return error;
 }
 
 /*

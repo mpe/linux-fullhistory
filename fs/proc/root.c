@@ -812,14 +812,18 @@ static int proc_root_lookup(struct inode * dir, struct dentry * dentry)
 			break;
 		}
 	}
+	read_lock(&tasklist_lock);
 	p = find_task_by_pid(pid);
 	inode = NULL;
 	if (pid && p) {
 		unsigned long ino = (pid << 16) + PROC_PID_INO;
 		inode = proc_get_inode(dir->i_sb, ino, &proc_pid);
-		if (!inode)
+		if (!inode) {
+			read_unlock(&tasklist_lock);
 			return -EINVAL;
+		}
 	}
+	read_unlock(&tasklist_lock);
 
 	dentry->d_op = &proc_dentry_operations;
 	d_add(dentry, inode);

@@ -5,6 +5,7 @@
  * User space memory access functions
  */
 #include <linux/sched.h>
+#include <asm/page.h>
 
 #define VERIFY_READ 0
 #define VERIFY_WRITE 1
@@ -21,7 +22,7 @@
 
 
 #define KERNEL_DS	MAKE_MM_SEG(0xFFFFFFFF)
-#define USER_DS		MAKE_MM_SEG(0xC0000000)
+#define USER_DS		MAKE_MM_SEG(PAGE_OFFSET)
 
 #define get_ds()	(KERNEL_DS)
 #define get_fs()	(current->addr_limit)

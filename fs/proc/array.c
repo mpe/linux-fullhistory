@@ -446,7 +446,11 @@ static int get_array(struct task_struct *p, unsigned long start, unsigned long e
 
 static int get_env(int pid, char * buffer)
 {
-	struct task_struct *p = find_task_by_pid(pid);
+	struct task_struct *p;
+	
+	read_lock(&tasklist_lock);
+	p = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
 
 	if (!p || !p->mm)
 		return 0;
@@ -455,8 +459,11 @@ static int get_env(int pid, char * buffer)
 
 static int get_arg(int pid, char * buffer)
 {
-	struct task_struct *p = find_task_by_pid(pid);
+	struct task_struct *p;
 
+	read_lock(&tasklist_lock);
+	p = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
 	if (!p || !p->mm)
 		return 0;
 	return get_array(p, p->mm->arg_start, p->mm->arg_end, buffer);
@@ -760,8 +767,11 @@ static inline char * task_sig(struct task_struct *p, char *buffer)
 static int get_status(int pid, char * buffer)
 {
 	char * orig = buffer;
-	struct task_struct *tsk = find_task_by_pid(pid);
+	struct task_struct *tsk;
 
+	read_lock(&tasklist_lock);
+	tsk = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
 	if (!tsk)
 		return 0;
 	buffer = task_name(tsk, buffer);
@@ -773,7 +783,7 @@ static int get_status(int pid, char * buffer)
 
 static int get_stat(int pid, char * buffer)
 {
-	struct task_struct *tsk = find_task_by_pid(pid);
+	struct task_struct *tsk;
 	unsigned long vsize, eip, esp, wchan;
 	long priority, nice;
 	int tty_pgrp;
@@ -784,6 +794,9 @@ static int get_stat(int pid, char * buffer)
 	char sigcatch_str[sizeof(sigset_t)*2+1];
 	char state;
 
+	read_lock(&tasklist_lock);
+	tsk = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
 	if (!tsk)
 		return 0;
 	state = *get_task_state(tsk);
@@ -938,6 +951,9 @@ static int get_statm(int pid, char * buffer)
 	struct task_struct *tsk = find_task_by_pid(pid);
 	int size=0, resident=0, share=0, trs=0, lrs=0, drs=0, dt=0;
 
+	read_lock(&tasklist_lock);
+	tsk = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
 	if (!tsk)
 		return 0;
 	if (tsk->mm && tsk->mm != &init_mm) {
@@ -1020,7 +1036,9 @@ static ssize_t read_maps (int pid, struct file * file, char * buf,
 		goto out;
 
 	retval = -EINVAL;
+	read_lock(&tasklist_lock);
 	p = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
 	if (!p)
 		goto freepage_out;
 
@@ -1131,9 +1149,11 @@ static int get_pidcpu(int pid, char * buffer)
 {
 	struct task_struct * tsk = current ;
 	int i, len;
-	
+
+	read_lock(&tasklist_lock);
 	if (pid != tsk->pid)
 		tsk = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
 
 	if (tsk == NULL)
 		return 0;

@@ -578,14 +578,16 @@ asmlinkage int sys_setpgid(pid_t pid, pid_t pgid)
 	if (pgid < 0)
 		return -EINVAL;
 
-	if((p = find_task_by_pid(pid)) == NULL)
-		return -ESRCH;
-
 	/* From this point forward we keep holding onto the tasklist lock
 	 * so that our parent does not change from under us. -DaveM
 	 */
 	read_lock(&tasklist_lock);
+
 	err = -ESRCH;
+	p = find_task_by_pid(pid);
+	if (!p)
+		goto out;
+
 	if (p->p_pptr == current || p->p_opptr == current) {
 		err = -EPERM;
 		if (p->session != current->session)
@@ -622,12 +624,17 @@ asmlinkage int sys_getpgid(pid_t pid)
 	if (!pid) {
 		return current->pgrp;
 	} else {
-		struct task_struct *p = find_task_by_pid(pid);
+		int retval;
+		struct task_struct *p;
 
-		if(p)
-			return p->pgrp;
-		else
-			return -ESRCH;
+		read_lock(&tasklist_lock);
+		p = find_task_by_pid(pid);
+
+		retval = -ESRCH;
+		if (p)
+			retval = p->pgrp;
+		read_unlock(&tasklist_lock);
+		return retval;
 	}
 }
 
@@ -642,12 +649,17 @@ asmlinkage int sys_getsid(pid_t pid)
 	if (!pid) {
 		return current->session;
 	} else {
-		struct task_struct *p = find_task_by_pid(pid);
+		int retval;
+		struct task_struct *p;
 
+		read_lock(&tasklist_lock);
+		p = find_task_by_pid(pid);
+
+		retval = -ESRCH;
 		if(p)
-			return p->session;
-		else
-			return -ESRCH;
+			retval = p->session;
+		read_unlock(&tasklist_lock);
+		return retval;
 	}
 }
 

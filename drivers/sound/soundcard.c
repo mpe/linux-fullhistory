@@ -26,7 +26,6 @@
 #include <linux/fcntl.h>
 #include <linux/ctype.h>
 #include <linux/stddef.h>
-#include <linux/kerneld.h>
 #ifdef __KERNEL__
 #include <asm/io.h>
 #include <asm/segment.h>

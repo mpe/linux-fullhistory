@@ -28,6 +28,8 @@
  *  Major improvements to the timeout, abort, and reset processing,
  *  as well as performance modifications for large queue depths by
  *  Leonard N. Zubkoff <lnz@dandelion.com>
+ *
+ *  Converted cli() code to spinlocks, Ingo Molnar
  */
 
 #include <linux/config.h>
@@ -351,8 +353,8 @@ scsi_make_blocked_list(void)
      * (DB, 4 Feb 1995)
      */
 
-    save_flags(flags);
-    cli();
+   
+    spin_lock_irqsave(&io_request_lock, flags);
     host_active = NULL;
 
     for(shpnt=scsi_hostlist; shpnt; shpnt = shpnt->next) {
@@ -384,7 +386,7 @@ scsi_make_blocked_list(void)
 	       sh[index]->host_no);
     }
 
-    restore_flags(flags);
+    spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 static void scan_scsis_done (Scsi_Cmnd * SCpnt)
@@ -1131,21 +1133,21 @@ Scsi_Cmnd * scsi_allocate_device (struct request ** reqp, Scsi_Device * device,
 	    SCpnt = found;
 	}
 
-	save_flags(flags);
-	cli();
+        __save_flags(flags);
+	__cli();
 	/* See if this request has already been queued by an interrupt routine
 	 */
 	if (req && (req->rq_status == RQ_INACTIVE || req->rq_dev != dev)) {
-	    restore_flags(flags);
+	   __restore_flags(flags);
 	    return NULL;
 	}
 	if (!SCpnt || SCpnt->request.rq_status != RQ_INACTIVE)	/* Might have changed */
 	{
 		if (wait && SCwait && SCwait->request.rq_status != RQ_INACTIVE){
  			sleep_on(&device->device_wait);
- 			restore_flags(flags);
+			__restore_flags(flags);
 	 	} else {
- 			restore_flags(flags);
+			__restore_flags(flags);
 	 		if (!wait) return NULL;
  			if (!SCwait) {
 	 			printk("Attempt to allocate device channel %d,"
@@ -1195,7 +1197,7 @@ Scsi_Cmnd * scsi_allocate_device (struct request ** reqp, Scsi_Device * device,
 					      * to complete */
 	    }
             atomic_inc(&SCpnt->host->host_active); 
-	    restore_flags(flags);
+	    __restore_flags(flags);
             SCSI_LOG_MLQUEUE(5, printk("Activating command for device %d (%d)\n", 
                                        SCpnt->target,
                                        atomic_read(&SCpnt->host->host_active)));
@@ -1292,8 +1294,7 @@ inline int internal_cmnd (Scsi_Cmnd * SCpnt)
 
     host = SCpnt->host;
 
-    save_flags(flags);
-    cli();
+    spin_lock_irqsave(&io_request_lock, flags);
     /* Assign a unique nonzero serial_number. */
     if (++serial_number == 0) serial_number = 1;
     SCpnt->serial_number = serial_number;
@@ -1303,6 +1304,8 @@ inline int internal_cmnd (Scsi_Cmnd * SCpnt)
      * we can avoid the drive not being ready.
      */
     timeout = host->last_reset + MIN_RESET_DELAY;
+    spin_unlock(&io_request_lock);
+
     if (jiffies < timeout) {
 	int ticks_remaining = timeout - jiffies;
 	/*
@@ -1314,11 +1317,11 @@ inline int internal_cmnd (Scsi_Cmnd * SCpnt)
 	 * interrupt handler (assuming there is one irq-level per
 	 * host).
 	 */
-	sti();
+	__sti();
 	while (--ticks_remaining >= 0) udelay(1000000/HZ);
 	host->last_reset = jiffies - MIN_RESET_DELAY;
     }
-    restore_flags(flags);
+    __restore_flags(flags); /* this possibly puts us back into __cli() */
 
     if( host->hostt->use_new_eh_code )
       {
@@ -1449,21 +1452,20 @@ SCSI_LOG_MLQUEUE(4,
      * ourselves.
      */
 
-    save_flags(flags);
-    cli();
+    spin_lock_irqsave(&io_request_lock, flags);
     SCpnt->pid = scsi_pid++;
 
     while (SCSI_BLOCK((Scsi_Device *) NULL, host)) {
-	restore_flags(flags);
+	spin_unlock_irqrestore(&io_request_lock, flags);
 	SCSI_SLEEP(&host->host_wait, SCSI_BLOCK((Scsi_Device *) NULL, host));
-	cli();
+	spin_lock_irqsave(&io_request_lock, flags);
     }
 
     if (host->block) host_active = host;
 
     host->host_busy++;
     device->device_busy++;
-    restore_flags(flags);
+    spin_unlock_irqrestore(&io_request_lock, flags);
 
     /*
      * Our own function scsi_done (which marks the host as not busy, disables
@@ -1817,8 +1819,7 @@ void *scsi_malloc(unsigned int len)
     if(len % SECTOR_SIZE != 0 || len > PAGE_SIZE)
 	return NULL;
 
-    save_flags(flags);
-    cli();
+    spin_lock_irqsave(&io_request_lock, flags);
     nbits = len >> 9;
     mask = (1 << nbits) - 1;
 
@@ -1826,7 +1827,7 @@ void *scsi_malloc(unsigned int len)
 	for(j=0; j<=SECTORS_PER_PAGE - nbits; j++){
 	    if ((dma_malloc_freelist[i] & (mask << j)) == 0){
 		dma_malloc_freelist[i] |= (mask << j);
-		restore_flags(flags);
+		spin_unlock_irqrestore(&io_request_lock, flags);
 		scsi_dma_free_sectors -= nbits;
 #ifdef DEBUG
                 SCSI_LOG_MLQUEUE(3,printk("SMalloc: %d %p [From:%p]\n",len, dma_malloc_pages[i] + (j << 9)));
@@ -1835,7 +1836,7 @@ void *scsi_malloc(unsigned int len)
 		return (void *) ((unsigned long) dma_malloc_pages[i] + (j << 9));
 	    }
 	}
-    restore_flags(flags);
+    spin_unlock_irqrestore(&io_request_lock, flags);
     return NULL;  /* Nope.  No more */
 }
 
@@ -1869,19 +1870,20 @@ int scsi_free(void *obj, unsigned int len)
             if ((mask << sector) >= (1 << SECTORS_PER_PAGE))
                 panic ("scsi_free:Bad memory alignment");
 
-            save_flags(flags);
-            cli();
+	    spin_lock_irqsave(&io_request_lock, flags);
             if((dma_malloc_freelist[page] &
                 (mask << sector)) != (mask<<sector)){
+		spin_unlock_irqrestore(&io_request_lock, flags);
 #ifdef DEBUG
 		printk("scsi_free(obj=%p, len=%d) called from %08lx\n",
                        obj, len, ret);
 #endif
                 panic("scsi_free:Trying to free unused memory");
+		spin_lock_irqsave(&io_request_lock, flags);
             }
             scsi_dma_free_sectors += nbits;
             dma_malloc_freelist[page] &= ~(mask << sector);
-            restore_flags(flags);
+	    spin_unlock_irqrestore(&io_request_lock, flags);
             return 0;
 	}
     }
@@ -2545,8 +2547,7 @@ static void resize_dma_pool(void)
     /* When we dick with the actual DMA list, we need to
      * protect things
      */
-    save_flags(flags);
-    cli();
+    spin_lock_irqsave(&io_request_lock, flags);
     if (dma_malloc_freelist)
     {
         size = (dma_sectors / SECTORS_PER_PAGE)*sizeof(FreeSectorBitmap);
@@ -2566,7 +2567,7 @@ static void resize_dma_pool(void)
     dma_malloc_pages = new_dma_malloc_pages;
     dma_sectors = new_dma_sectors;
     scsi_need_isa_buffer = new_need_isa_buffer;
-    restore_flags(flags);
+    spin_unlock_irqrestore(&io_request_lock, flags);
 
 #ifdef DEBUG_INIT
     printk("resize_dma_pool: dma free sectors   = %d\n", scsi_dma_free_sectors);
@@ -2805,11 +2806,10 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 	    {
                 online_status = SDpnt->online;
                 SDpnt->online = FALSE;
-	        save_flags(flags);
-	        cli();
+		spin_lock_irqsave(&io_request_lock, flags);
 	        if(SCpnt->request.rq_status != RQ_INACTIVE) 
                 {
-		    restore_flags(flags);
+		    spin_unlock_irqrestore(&io_request_lock, flags);
                     printk("SCSI device not inactive - state=%d, id=%d\n",
                            SCpnt->request.rq_status, SCpnt->target);
                     for(SDpnt1 = shpnt->host_queue; SDpnt1; 
@@ -2830,7 +2830,7 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
                  */
                 SCpnt->state = SCSI_STATE_DISCONNECTING;
 	        SCpnt->request.rq_status = RQ_SCSI_DISCONNECTING;  /* Mark as busy */
-	        restore_flags(flags);
+		spin_unlock_irqrestore(&io_request_lock, flags);
 	    }
         }
     }

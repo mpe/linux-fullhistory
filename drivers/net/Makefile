@@ -158,13 +158,20 @@ endif
 ifeq ($(CONFIG_ULTRA),y)
 L_OBJS += smc-ultra.o
 CONFIG_8390_BUILTIN = y
-  ifeq ($(CONFIG_MCA),y)
-  L_OBJS += smc-mca.o
-  endif
 else
   ifeq ($(CONFIG_ULTRA),m)
   CONFIG_8390_MODULE = y
   M_OBJS += smc-ultra.o
+  endif
+endif
+
+ifeq ($(CONFIG_ULTRAMCA),y)
+L_OBJS += smc-mca.o
+CONFIG_8390_BUILTIN = y
+else
+  ifeq ($(CONFIG_ULTRAMCA),m)
+  CONFIG_8390_MODULE = y
+  M_OBJS += smc-mca.o
   endif
 endif
 

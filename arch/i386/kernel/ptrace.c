@@ -371,7 +371,10 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	if (pid == 1)		/* you may not mess with init */
 		goto out;
 	ret = -ESRCH;
-	if (!(child = find_task_by_pid(pid)))
+	read_lock(&tasklist_lock);
+	child = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!!! */
+	if (!child)
 		goto out;
 	ret = -EPERM;
 	if (request == PTRACE_ATTACH) {
@@ -390,9 +393,13 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			goto out;
 		child->flags |= PF_PTRACED;
 		if (child->p_pptr != current) {
+			unsigned long flags;
+
+			write_lock_irqsave(&tasklist_lock, flags);
 			REMOVE_LINKS(child);
 			child->p_pptr = current;
 			SET_LINKS(child);
+			write_unlock_irqrestore(&tasklist_lock, flags);
 		}
 		send_sig(SIGSTOP, child, 1);
 		ret = 0;
@@ -545,6 +552,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		}
 
 		case PTRACE_DETACH: { /* detach a process that was attached. */
+			unsigned long flags;
 			long tmp;
 
 			ret = -EIO;
@@ -553,9 +561,11 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
 			wake_up_process(child);
 			child->exit_code = data;
+			write_lock_irqsave(&tasklist_lock, flags);
 			REMOVE_LINKS(child);
 			child->p_pptr = child->p_opptr;
 			SET_LINKS(child);
+			write_unlock_irqrestore(&tasklist_lock, flags);
 			/* make sure the single step bit is not set. */
 			tmp = get_stack_long(child, EFL_OFFSET) & ~TRAP_FLAG;
 			put_stack_long(child, EFL_OFFSET, tmp);

@@ -5,7 +5,7 @@
  *
  *		TIMER - implementation of software timers for IP.
  *
- * Version:	$Id: timer.c,v 1.8 1998/03/06 00:09:24 davem Exp $
+ * Version:	$Id: timer.c,v 1.9 1998/03/11 07:12:44 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -89,31 +89,22 @@ void net_timer (unsigned long data)
 	struct sock *sk = (struct sock*)data;
 	int why = sk->timeout;
 
-	/* 
-	 * only process if socket is not in use
-	 */
-
-	if (sk->sock_readers)
-	{
+	/* Only process if socket is not in use. */
+	if (sk->sock_readers) {
 		sk->timer.expires = jiffies+HZ;
 		add_timer(&sk->timer);
-		sti();
 		return;
 	}
 
 	/* Always see if we need to send an ack. */
-
-	if (sk->ack_backlog && !sk->zapped) 
-	{
+	if (sk->ack_backlog && !sk->zapped) {
 		sk->prot->read_wakeup (sk);
-		if (! sk->dead)
-		sk->data_ready(sk,0);
+		if (!sk->dead)
+			sk->data_ready(sk,0);
 	}
 
 	/* Now we need to figure out why the socket was on the timer. */
-
-	switch (why) 
-	{
+	switch (why) {
 		case TIME_DONE:
 			/* If the socket hasn't been closed off, re-try a bit later */
 			if (!sk->dead) {
@@ -149,7 +140,8 @@ void net_timer (unsigned long data)
 			break;
 
 		default:
-			printk (KERN_DEBUG "net_timer: timer expired - reason %d is unknown\n", why);
+			/* I want to see these... */
+			printk ("net_timer: timer expired - reason %d is unknown\n", why);
 			break;
 	}
 }

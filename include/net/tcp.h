@@ -513,7 +513,7 @@ extern void tcp_send_partial(struct sock *);
 extern void tcp_write_wakeup(struct sock *);
 extern void tcp_send_fin(struct sock *sk);
 extern int  tcp_send_synack(struct sock *);
-extern void tcp_send_skb(struct sock *, struct sk_buff *);
+extern void tcp_send_skb(struct sock *, struct sk_buff *, int force_queue);
 extern void tcp_send_ack(struct sock *sk);
 extern void tcp_send_delayed_ack(struct tcp_opt *tp, int max_timeout);
 
@@ -597,6 +597,44 @@ extern __inline__ int tcp_raise_window(struct sock *sk)
 
 	return (new_win && (new_win > (cur_win << 1)));
 }
+
+/* This checks if the data bearing packet SKB (usually tp->send_head)
+ * should be put on the wire right now.
+ */
+static __inline__ int tcp_snd_test(struct sock *sk, struct sk_buff *skb)
+{
+	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	int nagle_check = 1;
+	int len;
+
+	/*	RFC 1122 - section 4.2.3.4
+	 *
+	 *	We must queue if
+	 *
+	 *	a) The right edge of this frame exceeds the window
+	 *	b) There are packets in flight and we have a small segment
+	 *	   [SWS avoidance and Nagle algorithm]
+	 *	   (part of SWS is done on packetization)
+	 *	c) We are retransmiting [Nagle]
+	 *	d) We have too many packets 'in flight'
+	 *
+	 * 	Don't use the nagle rule for urgent data.
+	 */
+	len = skb->end_seq - skb->seq;
+	if (!sk->nonagle && len < (sk->mss >> 1) && tp->packets_out && 
+	    !skb->h.th->urg)
+		nagle_check = 0;
+
+	return (nagle_check && tp->packets_out < tp->snd_cwnd &&
+		!after(skb->end_seq, tp->snd_una + tp->snd_wnd) &&
+		tp->retransmits == 0);
+}
+
+/* This tells the input processing path that an ACK should go out
+ * right now.
+ */
+#define tcp_enter_quickack_mode(__tp)	((__tp)->ato = (HZ/100))
+#define tcp_in_quickack_mode(__tp)	((__tp)->ato == (HZ/100))
 
 /*
  * List all states of a TCP socket that can be viewed as a "connected"
@@ -700,17 +738,6 @@ static inline void tcp_build_header_data(struct tcphdr *th, struct sock *sk, int
 	if (!push)
 		th->psh = 1;
 	tcp_build_options((__u32*)(th+1), tp);
-}
-
-static inline void tcp_build_header(struct tcphdr *th, struct sock *sk)
-{
-     	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-
-	memcpy(th,(void *) &(sk->dummy_th), sizeof(*th));
-	th->seq = htonl(tp->write_seq);
-	th->ack_seq = htonl(tp->last_ack_sent = tp->rcv_nxt);
-	th->window = htons(tcp_select_window(sk));
-	tcp_build_options((__u32 *)(th+1), tp);
 }
 
 /*

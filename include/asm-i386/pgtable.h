@@ -13,6 +13,7 @@
  * the i386 page table tree.
  */
 
+#ifndef __ASSEMBLY__
 /* Caches aren't brain-dead on the intel. */
 #define flush_cache_all()			do { } while (0)
 #define flush_cache_mm(mm)			do { } while (0)
@@ -155,6 +156,7 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 }
 #endif
 #endif
+#endif /* !__ASSEMBLY__ */
 
 
 /* Certain architectures need to do special things when pte's
@@ -181,6 +183,16 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 #define PTRS_PER_PMD	1
 #define PTRS_PER_PGD	1024
 
+/*
+ * pgd entries used up by user/kernel:
+ */
+
+#define USER_PGD_PTRS (PAGE_OFFSET >> PGDIR_SHIFT)
+#define KERNEL_PGD_PTRS (PTRS_PER_PGD-USER_PGD_PTRS)
+#define __USER_PGD_PTRS ((__PAGE_OFFSET >> PGDIR_SHIFT) & 0x3ff)
+#define __KERNEL_PGD_PTRS (PTRS_PER_PGD-__USER_PGD_PTRS)
+
+#ifndef __ASSEMBLY__
 /* Just any arbitrary offset to the start of the vmalloc VM area: the
  * current 8MB value just means that there will be a 8MB "hole" after the
  * physical memory until the kernel virtual memory starts.  That means that
@@ -496,5 +508,7 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 
 #define module_map      vmalloc
 #define module_unmap    vfree
+
+#endif /* !__ASSEMBLY__ */
 
 #endif /* _I386_PAGE_H */

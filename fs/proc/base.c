@@ -60,12 +60,14 @@ static void proc_pid_fill_inode(struct inode * inode, int fill)
 	int pid = inode->i_ino >> 16;
 	int ino = inode->i_ino & 0xffff;
 
+	read_lock(&tasklist_lock);
 	if (fill && (p = find_task_by_pid(pid)) != NULL) {
 		if (p->dumpable || ino == PROC_PID_INO) {
 			inode->i_uid = p->euid;
 			inode->i_gid = p->gid;
 		}
 	}
+	read_unlock(&tasklist_lock);
 }
 
 /*

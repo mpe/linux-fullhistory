@@ -21,7 +21,6 @@
 
 #include <linux/config.h>
 #include <linux/stddef.h>
-#include <linux/kerneld.h>
 
 #include "sound_config.h"
 

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.74 1998/03/10 05:11:15 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.76 1998/03/11 07:12:46 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -92,7 +92,11 @@ static void tcp_delack_estimator(struct tcp_opt *tp)
 {
 	if(tp->ato == 0) {
 		tp->lrcvtime = jiffies;
-		tp->ato = 2; /* Help sender leave slow start quickly */
+
+		/* Help sender leave slow start quickly,
+		 * this sets our initial ato value.
+		 */
+		tcp_enter_quickack_mode(tp);
 	} else {
 		int m = jiffies - tp->lrcvtime;
 
@@ -103,6 +107,10 @@ static void tcp_delack_estimator(struct tcp_opt *tp)
 			tp->ato = tp->rto;
 		else
 			tp->ato = (tp->ato >> 1) + m;
+
+		/* We are not in "quick ack" mode. */
+		if(tp->ato <= (HZ/100))
+			tp->ato = ((HZ/100)*2);
 	}
 }
 
@@ -1014,8 +1022,8 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 	if (!after(skb->end_seq, tp->rcv_nxt)) {
 		/* A retransmit, 2nd most common case.  Force an imediate ack. */
 		SOCK_DEBUG(sk, "retransmit received: seq %X\n", skb->seq);
-
-		tp->delayed_acks = MAX_DELAY_ACK;
+		tp->delayed_acks++;
+		tcp_enter_quickack_mode(tp);
 		kfree_skb(skb);
 		return;
 	}
@@ -1029,7 +1037,8 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 	}
 
 	/* Ok. This is an out_of_order segment, force an ack. */
-	tp->delayed_acks = MAX_DELAY_ACK;
+	tp->delayed_acks++;
+	tcp_enter_quickack_mode(tp);
 
 	/* Disable header predition. */
 	tp->pred_flags = 0;
@@ -1110,20 +1119,10 @@ static void tcp_data_snd_check(struct sock *sk)
 	if ((skb = tp->send_head)) {
 		if (!after(skb->end_seq, tp->snd_una + tp->snd_wnd) &&
 		    tp->packets_out < tp->snd_cwnd ) {
-			/* Add more data to the send queue. */
-
-			/* FIXME: the congestion window is checked
-			 * again in tcp_write_xmit anyway?! -- erics
-			 *
-			 * I think it must, it bumps tp->packets_out for
-			 * each packet it fires onto the wire. -DaveM
-			 */
+			/* Put more data onto the wire. */
 			tcp_write_xmit(sk);
 		} else if (tp->packets_out == 0 && !tp->pending) {
- 			/* Data to queue but no room. */
-			/* FIXME: Is it right to do a zero window probe into
-			 * a congestion window limited window??? -- erics
-			 */
+ 			/* Start probing the receivers window. */
  			tcp_reset_xmit_timer(sk, TIME_PROBE0, tp->rto);
  		}
 	}
@@ -1143,12 +1142,18 @@ static __inline__ void __tcp_ack_snd_check(struct sock *sk)
 	 *      - delay time <= 0.5 HZ
 	 *      - we don't have a window update to send
 	 *      - must send at least every 2 full sized packets
+	 *
+	 * With an extra heuristic to handle loss of packet
+	 * situations and also helping the sender leave slow
+	 * start in an expediant manner.
 	 */
 
 	    /* Two full frames received or... */
 	if (((tp->rcv_nxt - tp->rcv_wup) >= (sk->mss << 1)) ||
-	    /* We will update the window "significantly" */
-	    tcp_raise_window(sk)) {
+	    /* We will update the window "significantly" or... */
+	    tcp_raise_window(sk) ||
+	    /* We entered "quick ACK" mode */
+	    tcp_in_quickack_mode(tp)) {
 		/* Then ack it now */
 		tcp_send_ack(sk);
 	} else {

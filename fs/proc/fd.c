@@ -96,7 +96,9 @@ static int proc_lookupfd(struct inode * dir, struct dentry * dentry)
 			break;
 		}
 	}
+	read_lock(&tasklist_lock);
 	p = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!! This should be done only after not using 'p' any more */
 	if (!pid || !p)
 		return -ENOENT;
 
@@ -149,7 +151,9 @@ static int proc_readfd(struct file * filp,
 			return 0;
 	}
 
+	read_lock(&tasklist_lock);
 	p = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!! This should be done only after not using 'p' any more */
 	if(!p)
 		return 0;
 	tarrayp = p->tarray_ptr;

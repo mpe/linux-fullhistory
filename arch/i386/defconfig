@@ -15,6 +15,7 @@
 CONFIG_M586=y
 # CONFIG_M686 is not set
 # CONFIG_MATH_EMULATION is not set
+CONFIG_MAX_MEMSIZE=1024
 
 #
 # Loadable module support

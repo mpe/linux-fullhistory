@@ -24,7 +24,8 @@
 
 #include "ide.h"
 
-#define DEVID_PIIX	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371FB_1})
+#define DEVID_PIIXa	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371FB_0})
+#define DEVID_PIIXb	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371FB_1})
 #define DEVID_PIIX3	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371SB_1})
 #define DEVID_PIIX4	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371AB})
 #define DEVID_VP_IDE	((ide_pci_devid_t){PCI_VENDOR_ID_VIA,     PCI_DEVICE_ID_VIA_82C586_1})
@@ -87,7 +88,8 @@ typedef struct ide_pci_device_s {
 } ide_pci_device_t;
 
 static ide_pci_device_t ide_pci_chipsets[] __initdata = {
-	{DEVID_PIIX,	"PIIX",		NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}} },
+	{DEVID_PIIXa,	"PIIX",		NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}} },
+	{DEVID_PIIXb,	"PIIX",		NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}} },
 	{DEVID_PIIX3,	"PIIX3",	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}} },
 	{DEVID_PIIX4,	"PIIX4",	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}} },
 	{DEVID_VP_IDE,	"VP_IDE",	NULL,		{{0x40,0x02,0x02}, {0x40,0x01,0x01}} },
@@ -360,6 +362,13 @@ static inline void ide_scan_pci_device (unsigned int bus, unsigned int fn)
 		 || IDE_PCI_DEVID_EQ(devid, IDE_PCI_DEVID_NULL)
 		 || pcibios_read_config_dword(bus, fn, 0x08, &ccode))
 			return;
+		/* 
+		 * workaround Intel Advanced/ZP with bios <= 1.04;
+		 * these appear in some Dell Dimension XPS's 
+		 */
+		if (!hedt && IDE_PCI_DEVID_EQ(devid, DEVID_PIIXa))
+		        hedt = 0x80;
+
 		for (d = ide_pci_chipsets; d->devid.vid && !IDE_PCI_DEVID_EQ(d->devid, devid); ++d);
 		if (d->init_hwif == IDE_IGNORE)
 			printk("%s: ignored by ide_scan_pci_device() (uses own driver)\n", d->name);

@@ -260,7 +260,13 @@ void proc_read_inode(struct inode * inode)
 	inode->i_size = 0;
 	pid = ino >> 16;
 
-	if (!pid || ((p = find_task_by_pid(pid)) == NULL))
+	if (!pid)
+		return;
+	read_lock(&tasklist_lock);
+	p = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!! This should be done only after we have stopped using 'p' */
+
+	if (!p)
 		return;
 
 	ino &= 0x0000ffff;

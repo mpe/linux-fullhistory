@@ -534,6 +534,8 @@ static struct floppy_struct *_floppy = floppy_type;
 static unsigned char current_drive = 0;
 static long current_count_sectors = 0;
 static unsigned char sector_t; /* sector in track */
+static unsigned char in_sector_offset; /* offset within physical sector,
+										* expressed in units of 512 bytes */
 
 #ifndef fd_eject
 #define fd_eject(x) -EINVAL
@@ -2251,7 +2253,7 @@ static void request_done(int uptodate)
 /* Interrupt handler evaluating the result of the r/w operation */
 static void rw_interrupt(void)
 {
-	int nr_sectors, ssize, eoc;
+	int nr_sectors, ssize, eoc, heads;
 
 	if (!DRS->first_read_date)
 		DRS->first_read_date = jiffies;
@@ -2263,23 +2265,32 @@ static void rw_interrupt(void)
 		eoc = 1;
 	else
 		eoc = 0;
-	nr_sectors = ((R_TRACK-TRACK)*_floppy->head+R_HEAD-HEAD) *
-		_floppy->sect + ((R_SECTOR-SECTOR+eoc) <<  SIZECODE >> 2) -
-		(sector_t % _floppy->sect) % ssize;
+
+	if(COMMAND & 0x80)
+		heads = 2;
+	else
+		heads = 1;
+
+	nr_sectors = (((R_TRACK-TRACK) * heads + 
+				   R_HEAD-HEAD) * SECT_PER_TRACK +
+				  R_SECTOR-SECTOR + eoc) << SIZECODE >> 2;
 
 #ifdef FLOPPY_SANITY_CHECK
-	if (nr_sectors > current_count_sectors + ssize -
-	     (current_count_sectors + sector_t) % ssize +
-	     sector_t % ssize){
+	if (nr_sectors / ssize > 
+		(in_sector_offset + current_count_sectors + ssize - 1)/ssize) {
 		DPRINT("long rw: %x instead of %lx\n",
 			nr_sectors, current_count_sectors);
 		printk("rs=%d s=%d\n", R_SECTOR, SECTOR);
 		printk("rh=%d h=%d\n", R_HEAD, HEAD);
 		printk("rt=%d t=%d\n", R_TRACK, TRACK);
-		printk("spt=%d st=%d ss=%d\n", SECT_PER_TRACK,
-		       sector_t, ssize);
+		printk("heads=%d eoc=%d\n", heads, eoc);
+		printk("spt=%d st=%d ss=%d\n", SECT_PER_TRACK, 
+			   sector_t, ssize);
+		printk("in_sector_offset=%d\n", in_sector_offset);
 	}
 #endif
+
+	nr_sectors -= in_sector_offset;
 	INFBOUND(nr_sectors,0);
 	SUPBOUND(current_count_sectors, nr_sectors);
 
@@ -2472,7 +2483,7 @@ static inline int check_dma_crossing(char *start,
  * does not work with MT, hence we can only transfer one head at
  * a time
  */
-static int virtualdmabug_workaround() {
+static void virtualdmabug_workaround(void) {
 	int hard_sectors, end_sector;
 	if(CT(COMMAND) == FD_WRITE) {
 		COMMAND &= ~0x80; /* switch off multiple track mode */
@@ -2483,7 +2494,7 @@ static int virtualdmabug_workaround() {
 		if(end_sector > SECT_PER_TRACK) {
 			printk("too many sectors %d > %d\n", 
 				   end_sector, SECT_PER_TRACK);
-			return 0;
+			return;
 		}
 #endif
 		SECT_PER_TRACK = end_sector; /* make sure SECT_PER_TRACK points
@@ -2594,7 +2605,8 @@ static int make_raw_rw_request(void)
 		max_sector = _floppy->sect;
 	}
 
-	aligned_sector_t = sector_t - (sector_t % _floppy->sect) % ssize;
+	in_sector_offset = (sector_t % _floppy->sect) % ssize;
+	aligned_sector_t = sector_t - in_sector_offset;
 	max_size = CURRENT->nr_sectors;
 	if ((raw_cmd->track == buffer_track) && 
 	    (current_drive == buffer_drive) &&
@@ -2604,7 +2616,7 @@ static int make_raw_rw_request(void)
 			copy_buffer(1, max_sector, buffer_max);
 			return 1;
 		}
-	} else if (aligned_sector_t != sector_t || CURRENT->nr_sectors < ssize){
+	} else if (in_sector_offset || CURRENT->nr_sectors < ssize){
 		if (CT(COMMAND) == FD_WRITE){
 			if (sector_t + CURRENT->nr_sectors > ssize &&
 			    sector_t + CURRENT->nr_sectors < ssize + ssize)
@@ -2676,7 +2688,7 @@ static int make_raw_rw_request(void)
 	    sector_t > buffer_max ||
 	    sector_t < buffer_min ||
 	    ((CT(COMMAND) == FD_READ ||
-	      (aligned_sector_t == sector_t && CURRENT->nr_sectors >= ssize))&&
+	      (!in_sector_offset && CURRENT->nr_sectors >= ssize))&&
 	     max_sector > 2 * max_buffer_sectors + buffer_min &&
 	     max_size + sector_t > 2 * max_buffer_sectors + buffer_min)
 	    /* not enough space */){
@@ -2693,7 +2705,7 @@ static int make_raw_rw_request(void)
 		 * is either aligned or the data already in the buffer
 		 * (buffer will be overwritten) */
 #ifdef FLOPPY_SANITY_CHECK
-		if (sector_t != aligned_sector_t && buffer_track == -1)
+		if (in_sector_offset && buffer_track == -1)
 			DPRINT("internal error offset !=0 on write\n");
 #endif
 		buffer_track = raw_cmd->track;
@@ -2704,7 +2716,7 @@ static int make_raw_rw_request(void)
 			      2*max_buffer_sectors+buffer_min-aligned_sector_t);
 
 	/* round up current_count_sectors to get dma xfer size */
-	raw_cmd->length = sector_t+current_count_sectors-aligned_sector_t;
+	raw_cmd->length = in_sector_offset+current_count_sectors;
 	raw_cmd->length = ((raw_cmd->length -1)|(ssize-1))+1;
 	raw_cmd->length <<= 9;
 #ifdef FLOPPY_SANITY_CHECK

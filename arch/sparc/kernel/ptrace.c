@@ -550,9 +550,12 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		}
 		child->flags |= PF_PTRACED;
 		if(child->p_pptr != current) {
+			unsigned long flags;
+			write_lock_irqsave(&tasklist_lock, flags);
 			REMOVE_LINKS(child);
 			child->p_pptr = current;
 			SET_LINKS(child);
+			write_unlock_irqrestore(&tasklist_lock, flags);
 		}
 		send_sig(SIGSTOP, child, 1);
 		pt_succ_return(regs, 0);
@@ -851,6 +854,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 	}
 
 	case PTRACE_SUNDETACH: { /* detach a process that was attached. */
+		unsigned long flags;
 		if ((unsigned long) data > _NSIG) {
 			pt_error_return(regs, EIO);
 			goto out;
@@ -858,9 +862,11 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		child->flags &= ~(PF_PTRACED|PF_TRACESYS);
 		wake_up_process(child);
 		child->exit_code = data;
+		write_lock_irqsave(&tasklist_lock, flags);
 		REMOVE_LINKS(child);
 		child->p_pptr = child->p_opptr;
 		SET_LINKS(child);
+		write_unlock_irqrestore(&tasklist_lock, flags);
 		pt_succ_return(regs, 0);
 		goto out;
 	}

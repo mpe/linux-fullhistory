@@ -45,7 +45,9 @@ void tty_wait_until_sent(struct tty_struct * tty, int timeout)
 	struct wait_queue wait = { current, NULL };
 
 #ifdef TTY_DEBUG_WAIT_UNTIL_SENT
-	printk("%s wait until sent...\n", tty_name(tty));
+	char buf[64];
+	
+	printk("%s wait until sent...\n", tty_name(tty, buf));
 #endif
 	if (!tty->driver.chars_in_buffer)
 		return;
@@ -57,7 +59,8 @@ void tty_wait_until_sent(struct tty_struct * tty, int timeout)
 		current->timeout = (unsigned) -1;
 	do {
 #ifdef TTY_DEBUG_WAIT_UNTIL_SENT
-		printk("waiting %s...(%d)\n", tty_name(tty), tty->driver.chars_in_buffer(tty));
+		printk("waiting %s...(%d)\n", tty_name(tty, buf),
+		       tty->driver.chars_in_buffer(tty));
 #endif
 		current->state = TASK_INTERRUPTIBLE;
 		if (signal_pending(current))

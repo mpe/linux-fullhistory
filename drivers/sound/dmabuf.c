@@ -125,6 +125,7 @@ static void sound_free_dmap(struct dma_buffparms *dmap)
 
 	free_pages((unsigned long) dmap->raw_buf, sz);
 	dmap->raw_buf = NULL;
+	dmap->fragment_size = 0;
 }
 
 

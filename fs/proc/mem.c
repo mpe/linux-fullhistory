@@ -83,7 +83,9 @@ static ssize_t mem_read(struct file * file, char * buf,
 	char *tmp;
 	ssize_t scount, i;
 
+	read_lock(&tasklist_lock);
 	tsk = get_task(inode->i_ino >> 16);
+	read_unlock(&tasklist_lock);	/* FIXME: This should really be done only afetr not using tsk any more!!! */
 	if (!tsk)
 		return -ESRCH;
 	addr = *ppos;

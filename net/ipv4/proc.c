@@ -7,7 +7,7 @@
  *		PROC file system.  It is mainly used for debugging and
  *		statistics.
  *
- * Version:	$Id: proc.c,v 1.24 1998/03/06 01:23:06 davem Exp $
+ * Version:	$Id: proc.c,v 1.25 1998/03/11 07:12:56 davem Exp $
  *
  * Authors:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
@@ -101,15 +101,15 @@ static inline void get__sock(struct sock *sp, char *tmpbuf, int i, int format)
 	if (!timer_active1) tp->retransmit_timer.expires=0;
 	if (!timer_active2) sp->timer.expires=0;
 	timer_active=0;
-	timer_expires=(unsigned)-1;
+	timer_expires=jiffies;
 	if (timer_active1 && tp->retransmit_timer.expires < timer_expires) {
-		timer_active=timer_active1;
+		timer_active=1;
 		timer_expires=tp->retransmit_timer.expires;
 	}
 	if (timer_active2 && sp->timer.expires < timer_expires) {
-		timer_active=timer_active2;
+		timer_active=2;
 		timer_expires=sp->timer.expires;
-		}
+	}
 	sprintf(tmpbuf, "%4d: %08lX:%04X %08lX:%04X"
 		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld",
 		i, src, srcp, dest, destp, sp->state, 

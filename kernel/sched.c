@@ -1260,10 +1260,11 @@ asmlinkage int sys_nice(int increment)
 
 static inline struct task_struct *find_process_by_pid(pid_t pid)
 {
+	struct task_struct *tsk = current;
+
 	if (pid)
-		return find_task_by_pid(pid);
-	else
-		return current;
+		tsk = find_task_by_pid(pid);
+	return tsk;
 }
 
 static int setscheduler(pid_t pid, int policy, 
@@ -1278,7 +1279,9 @@ static int setscheduler(pid_t pid, int policy,
 	if (copy_from_user(&lp, param, sizeof(struct sched_param)))
 		return -EFAULT;
 
+	read_lock(&tasklist_lock);
 	p = find_process_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!!! */
 	if (!p)
 		return -ESRCH;
 			
@@ -1333,7 +1336,9 @@ asmlinkage int sys_sched_getscheduler(pid_t pid)
 	if (pid < 0)
 		return -EINVAL;
 
+	read_lock(&tasklist_lock);
 	p = find_process_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!!! */
 	if (!p)
 		return -ESRCH;
 			
@@ -1348,7 +1353,9 @@ asmlinkage int sys_sched_getparam(pid_t pid, struct sched_param *param)
 	if (!param || pid < 0)
 		return -EINVAL;
 
+	read_lock(&tasklist_lock);
 	p = find_process_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!!! */
 	if (!p)
 		return -ESRCH;
 

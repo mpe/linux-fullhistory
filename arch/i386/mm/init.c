@@ -204,8 +204,8 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 	/* unmap the original low memory mappings */
 	pgd_val(pg_dir[0]) = 0;
 
-	/* Map whole memory from 0xC0000000 */
-	pg_dir += 768;
+	/* Map whole memory from PAGE_OFFSET */
+	pg_dir += USER_PGD_PTRS;
 	while (address < end_mem) {
 		/*
 		 * If we're running on a Pentium CPU, we can use the 4MB

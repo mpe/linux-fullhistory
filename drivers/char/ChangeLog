@@ -1,3 +1,11 @@
+Thu Feb 19 14:24:08 1998  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* tty_io.c (tty_name): Remove the non-reentrant (and non-SMP safe)
+		version of tty_name, and rename the reentrant _tty_name
+		function to be tty_name.
+		(tty_open): Add a warning message stating callout devices
+		are deprecated.
+
 Mon Dec  1 08:24:15 1997  Theodore Ts'o  <tytso@rsts-11.mit.edu>
 
 	* tty_io.c (tty_get_baud_rate): Print a warning syslog if the

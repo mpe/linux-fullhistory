@@ -10,6 +10,7 @@
 #include <asm/vm86.h>
 #include <asm/math_emu.h>
 #include <asm/segment.h>
+#include <asm/page.h>
 
 /*
  *  CPU type and hardware bug flags. Kept separately for each CPU.
@@ -71,10 +72,9 @@ extern unsigned int machine_submodel_id;
 extern unsigned int BIOS_revision;
 
 /*
- * User space process size: 3GB. This is hardcoded into a few places,
- * so don't change it unless you know what you are doing.
+ * User space process size: 3GB (default).
  */
-#define TASK_SIZE	(0xC0000000UL)
+#define TASK_SIZE	(PAGE_OFFSET)
 
 /* This decides where the kernel will search for a free chunk of vm
  * space during mmap's.

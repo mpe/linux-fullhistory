@@ -101,7 +101,7 @@ void kmod_unload(unsigned long x)
 		once it is awake, reset the timer
 	*/
 	wake_up(&kmod_queue);
-	kmod_unload_timer.expires = jiffies + (kmod_unload_delay * 100);
+	kmod_unload_timer.expires = jiffies + (kmod_unload_delay * HZ);
 	add_timer(&kmod_unload_timer);
 }
 
@@ -113,7 +113,7 @@ int kmod_init(void)
 
 	kmod_unload_timer.next = NULL;
 	kmod_unload_timer.prev = NULL;
-	kmod_unload_timer.expires = jiffies + (300 * 100);
+	kmod_unload_timer.expires = jiffies + (5 * 60 * HZ);
 	kmod_unload_timer.data = 0L;
 	kmod_unload_timer.function = kmod_unload;
 	add_timer(&kmod_unload_timer);

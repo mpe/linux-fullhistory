@@ -43,8 +43,14 @@ static void release(struct task_struct * p)
 		charge_uid(p, -1);
 		nr_tasks--;
 		add_free_taskslot(p->tarray_ptr);
-		unhash_pid(p);
-		REMOVE_LINKS(p);
+		{
+			unsigned long flags;
+
+			write_lock_irqsave(&tasklist_lock, flags);
+			unhash_pid(p);
+			REMOVE_LINKS(p);
+			write_unlock_irqrestore(&tasklist_lock, flags);
+		}
 		release_thread(p);
 		current->cmin_flt += p->min_flt + p->cmin_flt;
 		current->cmaj_flt += p->maj_flt + p->cmaj_flt;

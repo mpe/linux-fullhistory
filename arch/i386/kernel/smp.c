@@ -1108,23 +1108,59 @@ __initfunc(void smp_boot_cpus(void))
 	setup_IO_APIC();
 }
 
+
+void send_IPI (int dest, int vector)
+{
+	unsigned long cfg;
+	unsigned long flags;
+
+	__save_flags(flags);
+	__cli();
+
+	/*
+	 * prepare target chip field
+	 */
+
+	cfg = apic_read(APIC_ICR2) & 0x00FFFFFF;
+	apic_write(APIC_ICR2, cfg|SET_APIC_DEST_FIELD(dest));
+
+	cfg = apic_read(APIC_ICR);
+	cfg &= ~0xFDFFF;
+	cfg |= APIC_DEST_FIELD|APIC_DEST_DM_FIXED|vector;
+	cfg |= dest;
+	
+	/*
+	 * Send the IPI. The write to APIC_ICR fires this off.
+	 */
+	
+	apic_write(APIC_ICR, cfg);
+	__restore_flags(flags);
+}
+
+void funny (void)
+{
+	send_IPI(APIC_DEST_ALLBUT,0x30 /*IO_APIC_VECTOR(11)*/);
+	for(;;)__cli();
+}
+
 /*
- *	A non wait message cannot pass data or cpu source info. This current setup
- *	is only safe because the kernel lock owner is the only person who can send a message.
+ * A non wait message cannot pass data or cpu source info. This current setup
+ * is only safe because the kernel lock owner is the only person who can send
+ * a message.
  *
- *	Wrapping this whole block in a spinlock is not the safe answer either. A processor may
- *	get stuck with irq's off waiting to send a message and thus not replying to the person
- *	spinning for a reply....
+ * Wrapping this whole block in a spinlock is not the safe answer either. A
+ * processor may get stuck with irq's off waiting to send a message and thus
+ * not replying to the person spinning for a reply....
  *
- *	In the end flush tlb ought to be the NMI and a very very short function (to avoid the old
- *	IDE disk problems), and other messages sent with IRQ's enabled in a civilised fashion. That
- *	will also boost performance.
+ * In the end flush tlb ought to be the NMI and a very very short function
+ * (to avoid the old IDE disk problems), and other messages sent with IRQ's
+ * enabled in a civilised fashion. That will also boost performance.
  */
 
 void smp_message_pass(int target, int msg, unsigned long data, int wait)
 {
-	unsigned long flags;
 	unsigned long cfg;
+	unsigned long dest = 0;
 	unsigned long target_map;
 	int p=smp_processor_id();
 	int irq;
@@ -1166,11 +1202,11 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	}
 
 	/*
-	 *	Sanity check we don't re-enter this across CPU's. Only the kernel
-	 *	lock holder may send messages. For a STOP_CPU we are bringing the
-	 *	entire box to the fastest halt we can.. A reschedule carries
-	 *	no data and can occur during a flush.. guess what panic
-	 *	I got to notice this bug...
+	 * Sanity check we don't re-enter this across CPU's. Only the kernel
+	 * lock holder may send messages. For a STOP_CPU we are bringing the
+	 * entire box to the fastest halt we can.. A reschedule carries
+	 * no data and can occur during a flush.. guess what panic
+	 * I got to notice this bug...
 	 */
 	
 	/*
@@ -1183,11 +1219,11 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 		p, msg, target);*/
 
 	/*
-	 *	Wait for the APIC to become ready - this should never occur. Its
-	 *	a debugging check really.
+	 * Wait for the APIC to become ready - this should never occur. Its
+	 * a debugging check really.
 	 */
 	
-	while(ct<1000)
+	while (ct<1000)
 	{
 		cfg=apic_read(APIC_ICR);
 		if(!(cfg&(1<<12)))
@@ -1204,49 +1240,32 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 		printk("CPU #%d: previous IPI still not cleared after 10mS\n", p);
 
 	/*
-	 *	Program the APIC to deliver the IPI
-	 */
-
-	__save_flags(flags);
-	__cli();
-	cfg=apic_read(APIC_ICR2);
-	cfg&=0x00FFFFFF;
-	apic_write(APIC_ICR2, cfg|SET_APIC_DEST_FIELD(target));			/* Target chip     		*/
-	cfg=apic_read(APIC_ICR);
-	cfg&=~0xFDFFF;								/* Clear bits 			*/
-	cfg|=APIC_DEST_FIELD|APIC_DEST_DM_FIXED|irq;				/* Send an IRQ 13		*/
-
-	/*
 	 *	Set the target requirement
 	 */
 	
 	if(target==MSG_ALL_BUT_SELF)
 	{
-		cfg|=APIC_DEST_ALLBUT;
+		dest=APIC_DEST_ALLBUT;
 		target_map=cpu_present_map;
 		cpu_callin_map[0]=(1<<p);
 	}
 	else if(target==MSG_ALL)
 	{
-		cfg|=APIC_DEST_ALLINC;
+		dest=APIC_DEST_ALLINC;
 		target_map=cpu_present_map;
 		cpu_callin_map[0]=0;
 	}
 	else
-	{
-		target_map=(1<<target);
-		cpu_callin_map[0]=0;
-	}
+		panic("huh?");
 
 	/*
-	 *	Send the IPI. The write to APIC_ICR fires this off.
+	 * Program the APIC to deliver the IPI
 	 */
-	
-	apic_write(APIC_ICR, cfg);
-	__restore_flags(flags);
+
+	send_IPI(dest,irq);
 
 	/*
-	 *	Spin waiting for completion
+	 * Spin waiting for completion
 	 */
 	
 	switch(wait)
@@ -1443,6 +1462,7 @@ asmlinkage void smp_reschedule_interrupt(void)
 	int cpu = smp_processor_id();
 
 	ack_APIC_irq();
+	for (;;) __cli();
 	/*
 	 * This looks silly, but we actually do need to wait
 	 * for the global interrupt lock.
@@ -1694,7 +1714,9 @@ __initfunc(void setup_APIC_clock (void))
 	/*
 	 * We ACK the APIC, just in case there is something pending.
 	 */
+
 	ack_APIC_irq ();
+
 
 	restore_flags(flags);
 }

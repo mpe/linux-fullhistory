@@ -1598,15 +1598,14 @@ int revalidate_scsidisk(kdev_t dev, int maxusage){
     target =  DEVICE_NR(dev);
     gdev = &GENDISK_STRUCT;
 
-    save_flags(flags);
-    cli();
+    spin_lock_irqsave(&io_request_lock, flags);
     if (DEVICE_BUSY || USAGE > maxusage) {
-	restore_flags(flags);
+	spin_unlock_irqrestore(&io_request_lock, flags);
 	printk("Device busy for revalidation (usage=%d)\n", USAGE);
 	return -EBUSY;
     }
     DEVICE_BUSY = 1;
-    restore_flags(flags);
+    spin_unlock_irqrestore(&io_request_lock, flags);
 
     max_p = gdev->max_p;
     start = target << gdev->minor_shift;

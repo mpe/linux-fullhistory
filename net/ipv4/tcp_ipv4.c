@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.99 1998/03/10 05:11:18 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.101 1998/03/11 07:12:54 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -612,12 +612,10 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	tp->write_seq = secure_tcp_sequence_number(sk->saddr, sk->daddr,
 						   sk->dummy_th.source,
 						   usin->sin_port);
-
 	tp->snd_wnd = 0;
 	tp->snd_wl1 = 0;
 	tp->snd_wl2 = tp->write_seq;
 	tp->snd_una = tp->write_seq;
-
 	tp->rcv_nxt = 0;
 
 	sk->err = 0;
@@ -720,6 +718,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 static int tcp_v4_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 {
+	struct tcp_opt *tp;
 	int retval = -EINVAL;
 
 	/* Do sanity checking for sendmsg/sendto/send. */
@@ -745,7 +744,10 @@ static int tcp_v4_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	lock_sock(sk);
 	retval = tcp_do_sendmsg(sk, msg->msg_iovlen, msg->msg_iov,
 				msg->msg_flags);
-
+	/* Push out partial tail frames if needed. */
+	tp = &(sk->tp_pinfo.af_tcp);
+	if(tp->send_head && tcp_snd_test(sk, tp->send_head))
+		tcp_write_xmit(sk);
 	release_sock(sk);
 
 out:

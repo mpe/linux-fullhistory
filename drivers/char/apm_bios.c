@@ -1203,17 +1203,17 @@ __initfunc(void apm_bios_init(void))
 	 * even though they are called in protected mode.
 	 */
 	set_base(gdt[APM_40 >> 3],
-		 0xc0000000 + ((unsigned long)0x40 << 4));
+		 __va((unsigned long)0x40 << 4));
 	set_limit(gdt[APM_40 >> 3], 4096 - (0x40 << 4));
 
 	apm_bios_entry.offset = apm_bios_info.offset;
 	apm_bios_entry.segment = APM_CS;
 	set_base(gdt[APM_CS >> 3],
-		 0xc0000000 + ((unsigned long)apm_bios_info.cseg << 4));
+		 __va((unsigned long)apm_bios_info.cseg << 4));
 	set_base(gdt[APM_CS_16 >> 3],
-		 0xc0000000 + ((unsigned long)apm_bios_info.cseg_16 << 4));
+		 __va((unsigned long)apm_bios_info.cseg_16 << 4));
 	set_base(gdt[APM_DS >> 3],
-		 0xc0000000 + ((unsigned long)apm_bios_info.dseg << 4));
+		 __va((unsigned long)apm_bios_info.dseg << 4));
 	if (apm_bios_info.version == 0x100) {
 		set_limit(gdt[APM_CS >> 3], 64 * 1024);
 		set_limit(gdt[APM_CS_16 >> 3], 64 * 1024);

@@ -127,11 +127,9 @@ static int tty_fasync(struct file * filp, int on);
 #endif
 
 /*
- * These two routines return the name of tty.  tty_name() should NOT
- * be used in interrupt drivers, since it's not re-entrant.  Use
- * _tty_name() instead.
+ * This routine returns the name of tty.
  */
-char *_tty_name(struct tty_struct *tty, char *buf)
+char *tty_name(struct tty_struct *tty, char *buf)
 {
 	if (tty)
 		sprintf(buf, "%s%d", tty->driver.name,
@@ -140,13 +138,6 @@ char *_tty_name(struct tty_struct *tty, char *buf)
 	else
 		strcpy(buf, "NULL tty");
 	return buf;
-}
-
-char *tty_name(struct tty_struct *tty)
-{
-	static char buf[64];
-
-	return(_tty_name(tty, buf));
 }
 
 inline int tty_paranoia_check(struct tty_struct *tty, kdev_t device,
@@ -213,6 +204,7 @@ static int tty_set_ldisc(struct tty_struct *tty, int ldisc)
 {
 	int	retval = 0;
 	struct	tty_ldisc o_ldisc;
+	char buf[64];
 
 	if ((ldisc < N_TTY) || (ldisc >= NR_LDISCS))
 		return -EINVAL;
@@ -255,7 +247,7 @@ static int tty_set_ldisc(struct tty_struct *tty, int ldisc)
 				if (r < 0)
 					panic("Couldn't open N_TTY ldisc for "
 					      "%s --- error %d.",
-					      tty_name(tty), r);
+					      tty_name(tty, buf), r);
 			}
 		}
 	}
@@ -456,7 +448,9 @@ void do_tty_hangup(void *data)
 void tty_hangup(struct tty_struct * tty)
 {
 #ifdef TTY_DEBUG_HANGUP
-	printk("%s hangup...\n", tty_name(tty));
+	char	buf[64];
+	
+	printk("%s hangup...\n", tty_name(tty, buf));
 #endif
 	queue_task(&tty->tq_hangup, &tq_timer);
 }
@@ -464,7 +458,9 @@ void tty_hangup(struct tty_struct * tty)
 void tty_vhangup(struct tty_struct * tty)
 {
 #ifdef TTY_DEBUG_HANGUP
-	printk("%s vhangup...\n", tty_name(tty));
+	char	buf[64];
+
+	printk("%s vhangup...\n", tty_name(tty, buf));
 #endif
 	do_tty_hangup((void *) tty);
 }
@@ -951,6 +947,7 @@ static void release_dev(struct file * filp)
 	struct tty_struct *tty, *o_tty;
 	int	pty_master, tty_closing, o_tty_closing, do_sleep;
 	int	idx;
+	char	buf[64];
 	
 	tty = (struct tty_struct *)filp->private_data;
 	if (tty_paranoia_check(tty, filp->f_dentry->d_inode->i_rdev, "release_dev"))
@@ -991,7 +988,7 @@ static void release_dev(struct file * filp)
 #endif
 
 #ifdef TTY_DEBUG_HANGUP
-	printk("release_dev of %s (tty count=%d)...", tty_name(tty),
+	printk("release_dev of %s (tty count=%d)...", tty_name(tty, buf),
 	       tty->count);
 #endif
 
@@ -1069,7 +1066,7 @@ static void release_dev(struct file * filp)
 			break;
 
 		printk("release_dev: %s: read/write wait queue active!\n",
-		       tty_name(tty));
+		       tty_name(tty, buf));
 		schedule();
 	}	
 
@@ -1085,13 +1082,13 @@ static void release_dev(struct file * filp)
 	if (pty_master) {
 		if (--o_tty->count < 0) {
 			printk("release_dev: bad pty slave count (%d) for %s\n",
-			       o_tty->count, tty_name(o_tty));
+			       o_tty->count, tty_name(o_tty, buf));
 			o_tty->count = 0;
 		}
 	}
 	if (--tty->count < 0) {
 		printk("release_dev: bad tty->count (%d) for %s\n",
-		       tty->count, tty_name(tty));
+		       tty->count, tty_name(tty, buf));
 		tty->count = 0;
 	}
 
@@ -1179,6 +1176,7 @@ static int tty_open(struct inode * inode, struct file * filp)
 	int noctty, retval;
 	kdev_t device;
 	unsigned short saved_flags;
+	char	buf[64];
 
 	saved_flags = filp->f_flags;
 retry_open:
@@ -1246,7 +1244,7 @@ init_dev_done:
 	    tty->driver.subtype == PTY_TYPE_MASTER)
 		noctty = 1;
 #ifdef TTY_DEBUG_HANGUP
-	printk("opening %s...", tty_name(tty));
+	printk("opening %s...", tty_name(tty, buf));
 #endif
 	if (tty->driver.open)
 		retval = tty->driver.open(tty, filp);
@@ -1259,7 +1257,8 @@ init_dev_done:
 
 	if (retval) {
 #ifdef TTY_DEBUG_HANGUP
-		printk("error %d in opening %s...", retval, tty_name(tty));
+		printk("error %d in opening %s...", retval,
+		       tty_name(tty, buf));
 #endif
 
 		release_dev(filp);
@@ -1282,6 +1281,11 @@ init_dev_done:
 		current->tty_old_pgrp = 0;
 		tty->session = current->session;
 		tty->pgrp = current->pgrp;
+	}
+	if ((tty->driver.type == TTY_DRIVER_TYPE_SERIAL) &&
+	    (tty->driver.subtype == SERIAL_TYPE_CALLOUT)) {
+		printk("Warning, %s opened, is a deprecated tty "
+		       "callout device\n", tty_name(tty, buf));
 	}
 	return 0;
 }

@@ -103,6 +103,17 @@ CONFIG_MATH_EMULATION
   you are not sure, say Y; apart from resulting in a 45kB bigger
   kernel, it won't hurt.
 
+Max physical memory
+CONFIG_MAX_MEMSIZE
+  Linux/x86 can use up to 3.8 gigabytes of physical memory. Default
+  is max 1 gigabyte physical memory (1024 MB), this is enough for
+  most systems.
+  A system with 2G physical memory should use a value of ~2400, a
+  system with 3.8G memory should use something like 3900. A bit of
+  experimentation with the limit wont hurt, the kernel needs a ~128M
+  window for vmalloc() plus PCI space uses up some memory too, thus
+  addresses above FD000000 should rather be kept free.
+
 Normal floppy disk support
 CONFIG_BLK_DEV_FD
   If you want to use your floppy disk drive(s) under Linux, say
@@ -6100,9 +6111,9 @@ CONFIG_ZFTAPE
   loadable module called `zft-compressor.o' which contains code to
   support user transparent on-the-fly compression based on Ross
   William's lzrw3 algorithm will be produced. If you have enabled
-  auto-loading of kernel modules via `kerneld' (i.e. have said `Y' to
-  CONFIG_KERNELD) then `zft-compressor.o' will be loaded automatically
-  by zftape when needed.
+  the kernel module loader (i.e. have said `Y' to CONFIG_KMOD) then
+  `zft-compressor.o' will be loaded automatically by zftape when
+  needed.
   Despite of its name zftape does NOT use compression by default. The
   file Documentation/ftape.txt contains a short description of the
   most important changes in the file system interface compared to

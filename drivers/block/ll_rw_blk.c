@@ -24,9 +24,6 @@
 
 #include <linux/module.h>
 
-#define ATOMIC_ON()	do { } while (0)
-#define ATOMIC_OFF()	do { } while (0)
-
 /*
  * The request-struct contains all necessary data
  * to load a nr of sectors into memory
@@ -419,8 +416,6 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	 * not to schedule or do something nonatomic
 	 */
 	spin_lock_irqsave(&io_request_lock,flags);
-	ATOMIC_ON();
-
 	req = *get_queue(bh->b_rdev);
 	if (!req) {
 		/* MD and loop can't handle plugging without deadlocking */
@@ -480,7 +475,6 @@ void make_request(int major,int rw, struct buffer_head * bh)
 				continue;
 
 			mark_buffer_clean(bh);
-			ATOMIC_OFF();
 			spin_unlock_irqrestore(&io_request_lock,flags);
 		    	return;
 
@@ -490,7 +484,6 @@ void make_request(int major,int rw, struct buffer_head * bh)
 /* find an unused request. */
 	req = get_request(max_req, bh->b_rdev);
 
-	ATOMIC_OFF();
 	spin_unlock_irqrestore(&io_request_lock,flags);
 
 /* if no request available: if rw_ahead, forget it; otherwise try again blocking.. */
@@ -665,9 +658,7 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 			} else {
 				unsigned long flags;
 				spin_lock_irqsave(&io_request_lock,flags);
-				ATOMIC_ON();
 				req[j] = get_request(max_req, rdev);
-				ATOMIC_OFF();
 				spin_unlock_irqrestore(&io_request_lock,flags);
 				if (req[j] == NULL)
 					break;

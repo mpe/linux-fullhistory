@@ -1,12 +1,13 @@
 /* ld script to make i386 Linux kernel
  * Written by Martin Mares <mj@atrey.karlin.mff.cuni.cz>
  */
+INCLUDE arch/i386/.kernel_offset.lds
 OUTPUT_FORMAT("elf32-i386", "elf32-i386", "elf32-i386")
 OUTPUT_ARCH(i386)
 ENTRY(_start)
 SECTIONS
 {
-  . = 0xc0100000;
+  . = __kernel_offset__ + 0x100000;
   _text = .;			/* Text and read-only data */
   .text : {
 	*(.text)

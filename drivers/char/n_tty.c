@@ -420,7 +420,7 @@ static inline void n_tty_receive_overrun(struct tty_struct *tty)
 
 	tty->num_overrun++;
 	if (tty->overrun_time < (jiffies - HZ)) {
-		printk("%s: %d input overrun(s)\n", _tty_name(tty, buf),
+		printk("%s: %d input overrun(s)\n", tty_name(tty, buf),
 		       tty->num_overrun);
 		tty->overrun_time = jiffies;
 		tty->num_overrun = 0;
@@ -656,6 +656,7 @@ static void n_tty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 	const unsigned char *p;
 	char *f, flags = TTY_NORMAL;
 	int	i;
+	char	buf[64];
 
 	if (!tty->read_buf)
 		return;
@@ -693,8 +694,8 @@ static void n_tty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 				n_tty_receive_overrun(tty);
 				break;
 			default:
-				printk("%s: unknown flag %d\n", tty_name(tty),
-				       flags);
+				printk("%s: unknown flag %d\n",
+				       tty_name(tty, buf), flags);
 				break;
 			}
 		}

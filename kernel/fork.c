@@ -41,7 +41,6 @@ kmem_cache_t *mm_cachep;
 kmem_cache_t *files_cachep; 
 
 struct task_struct *pidhash[PIDHASH_SZ];
-spinlock_t pidhash_lock = SPIN_LOCK_UNLOCKED;
 
 struct task_struct **tarray_freelist = NULL;
 spinlock_t taskslot_lock = SPIN_LOCK_UNLOCKED;
@@ -517,8 +516,15 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->start_time = jiffies;
 	p->tarray_ptr = &task[nr];
 	*p->tarray_ptr = p;
-	SET_LINKS(p);
-	hash_pid(p);
+
+	{
+		unsigned long flags;
+		write_lock_irqsave(&tasklist_lock, flags);
+		SET_LINKS(p);
+		hash_pid(p);
+		write_unlock_irqrestore(&tasklist_lock, flags);
+	}
+
 	nr_tasks++;
 
 	error = -ENOMEM;
@@ -575,8 +581,15 @@ bad_fork_cleanup:
 	if (p->binfmt && p->binfmt->module)
 		__MOD_DEC_USE_COUNT(p->binfmt->module);
 	add_free_taskslot(p->tarray_ptr);
-	unhash_pid(p);
-	REMOVE_LINKS(p);
+
+	{
+		unsigned long flags;
+		write_lock_irqsave(&tasklist_lock, flags); 
+		unhash_pid(p);
+		REMOVE_LINKS(p);
+		write_unlock_irqrestore(&tasklist_lock, flags);
+	}
+
 	nr_tasks--;
 bad_fork_free:
 	free_task_struct(p);

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.55 1998/03/10 05:11:21 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.56 1998/03/11 02:20:52 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -563,6 +563,7 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 
 static int tcp_v6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 {
+	struct tcp_opt *tp;
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 	int retval = -EINVAL;
 
@@ -594,7 +595,10 @@ static int tcp_v6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	lock_sock(sk);
 	retval = tcp_do_sendmsg(sk, msg->msg_iovlen, msg->msg_iov, 
 				msg->msg_flags);
-
+	/* Push out partial tail frames if needed. */
+	tp = &(sk->tp_pinfo.af_tcp);
+	if(tp->send_head && tcp_snd_test(sk, tp->send_head))
+		tcp_write_xmit(sk);
 	release_sock(sk);
 
 out:

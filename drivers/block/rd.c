@@ -520,7 +520,7 @@ __initfunc(static void rd_load_image(kdev_t device,int offset))
 			wait_for_keypress();
 			if (blkdev_open(&inode, &infile) != 0)  {
 				printk("Error opening disk.\n");
-				return;
+				goto done;
 			}
 			infile.f_pos = 0;
 			printk("Loading disk #%d... ", i/devblocks+1);

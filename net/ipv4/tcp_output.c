@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.56 1998/03/10 05:11:16 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.58 1998/03/11 07:12:49 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -45,6 +45,8 @@ static __inline__ void clear_delayed_acks(struct sock * sk)
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
 	tp->delayed_acks = 0;
+	if(tcp_in_quickack_mode(tp))
+		tp->ato = ((HZ/100)*2);
 	tcp_clear_xmit_timer(sk, TIME_DACK);
 }
 
@@ -57,41 +59,12 @@ static __inline__ void update_send_head(struct sock *sk)
 		tp->send_head = NULL;
 }
 
-static __inline__ int tcp_snd_test(struct sock *sk, struct sk_buff *skb)
-{
-	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	int nagle_check = 1;
-	int len;
-
-	/*	RFC 1122 - section 4.2.3.4
-	 *
-	 *	We must queue if
-	 *
-	 *	a) The right edge of this frame exceeds the window
-	 *	b) There are packets in flight and we have a small segment
-	 *	   [SWS avoidance and Nagle algorithm]
-	 *	   (part of SWS is done on packetization)
-	 *	c) We are retransmiting [Nagle]
-	 *	d) We have too many packets 'in flight'
-	 *
-	 * 	Don't use the nagle rule for urgent data.
-	 */
-	len = skb->end_seq - skb->seq;
-	if (!sk->nonagle && len < (sk->mss >> 1) && tp->packets_out && 
-	    !skb->h.th->urg)
-		nagle_check = 0;
-
-	return (nagle_check && tp->packets_out < tp->snd_cwnd &&
-		!after(skb->end_seq, tp->snd_una + tp->snd_wnd) &&
-		tp->retransmits == 0);
-}
-
 /*
  *	This is the main buffer sending routine. We queue the buffer
  *	having checked it is sane seeming.
  */
  
-void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
+void tcp_send_skb(struct sock *sk, struct sk_buff *skb, int force_queue)
 {
 	struct tcphdr * th = skb->h.th;
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
@@ -101,7 +74,7 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 	size = skb->len - ((unsigned char *) th - skb->data);
 
 	/* Sanity check it.. */
-	if (size < sizeof(struct tcphdr) || size > skb->len) {
+	if (size < tp->tcp_header_len || size > skb->len) {
 		printk(KERN_DEBUG "tcp_send_skb: bad skb "
 		       "(skb = %p, data = %p, th = %p, len = %u)\n",
 		       skb, skb->data, th, skb->len);
@@ -111,9 +84,8 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 
 	/* If we have queued a header size packet.. (these crash a few
 	 * tcp stacks if ack is not set)
-	 * FIXME: What is the equivalent below when we have options?
 	 */
-	if (size == sizeof(struct tcphdr)) {
+	if (size == tp->tcp_header_len) {
 		/* If it's got a syn or fin discard. */
 		if(!th->syn && !th->fin) {
 			printk(KERN_DEBUG "tcp_send_skb: attempt to queue a bogon.\n");
@@ -128,7 +100,7 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 
 	skb_queue_tail(&sk->write_queue, skb);
 
-	if (tp->send_head == NULL && tcp_snd_test(sk, skb)) {
+	if (!force_queue && tp->send_head == NULL && tcp_snd_test(sk, skb)) {
 		struct sk_buff * buff;
 
 		/* This is going straight out. */
@@ -164,11 +136,10 @@ queue:
 	/* Remember where we must start sending. */
 	if (tp->send_head == NULL)
 		tp->send_head = skb;
-	if (tp->packets_out == 0 && !tp->pending) {
+	if (!force_queue && tp->packets_out == 0 && !tp->pending) {
 		tp->pending = TIME_PROBE0;
 		tcp_reset_xmit_timer(sk, TIME_PROBE0, tp->rto);
 	}
-	return;
 }
 
 /*
@@ -280,14 +251,6 @@ static int tcp_wrxmit_frag(struct sock *sk, struct sk_buff *skb, int size)
 		tp->send_head = skb;
 		tp->packets_out--;
 		return -1;
-	} else {
-#if 0
-		/* If tcp_fragment succeded then
-		 * the send head is the resulting
-		 * fragment
-		 */
-		tp->send_head = skb->next;
-#endif
 	}
 	return 0;
 }
@@ -873,12 +836,6 @@ void tcp_send_ack(struct sock *sk)
 
   	/* Fill in the packet and send it. */
 	tp->af_specific->send_check(sk, th, tp->tcp_header_len, buff);
-
-#if 0
-	SOCK_DEBUG(sk, "\rtcp_send_ack: seq %x ack %x\n",
-		   tp->snd_nxt, tp->rcv_nxt);
-#endif
-
 	tp->af_specific->queue_xmit(buff);
   	tcp_statistics.TcpOutSegs++;
 }
@@ -965,7 +922,6 @@ void tcp_write_wakeup(struct sock *sk)
 		 */
 	 
 		t1->seq = htonl(tp->snd_nxt-1);
-/*		t1->fin = 0;	-- We are sending a 'previous' sequence, and 0 bytes of data - thus no FIN bit */
 		t1->ack_seq = htonl(tp->rcv_nxt);
 		t1->window = htons(tcp_select_window(sk));
 

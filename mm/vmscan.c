@@ -511,7 +511,6 @@ void kswapd_setup(void)
        printk ("Starting kswapd v%.*s\n", i, s);
 }
 
-#define MAX_SWAP_FAIL 3
 /*
  * The background pageout daemon.
  * Started as a kernel thread from the init process.
@@ -559,15 +558,8 @@ int kswapd(void *unused)
 		if (tries < min_free_pages) {
 			tries = min_free_pages;
 		}
-		else if (nr_free_pages < (free_pages_high + free_pages_low) / 2) {
+		else if (nr_free_pages < (free_pages_low + min_free_pages) / 2) 
 			tries <<= 1;
-			if (nr_free_pages < free_pages_low) {
-				tries <<= 1;
-				if (nr_free_pages <= min_free_pages) {
-					tries <<= 1;
-				}
-			}
-		}
 		while (tries--) {
 			int gfp_mask;
 

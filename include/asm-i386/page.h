@@ -7,6 +7,7 @@
 #define PAGE_MASK	(~(PAGE_SIZE-1))
 
 #ifdef __KERNEL__
+#ifndef __ASSEMBLY__
 
 #define STRICT_MM_TYPECHECKS
 
@@ -52,12 +53,14 @@ typedef unsigned long pgprot_t;
 #define __pgprot(x)	(x)
 
 #endif
+#endif /* !__ASSEMBLY__ */
 
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)	(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 
 /* This handles the memory map.. */
-#define PAGE_OFFSET		0xC0000000
+#define __PAGE_OFFSET		((0x1000-CONFIG_MAX_MEMSIZE)<<20)
+#define PAGE_OFFSET		((unsigned long)__PAGE_OFFSET)
 #define __pa(x)			((unsigned long)(x)-PAGE_OFFSET)
 #define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET))
 #define MAP_NR(addr)		(__pa(addr) >> PAGE_SHIFT)
