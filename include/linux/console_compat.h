@@ -8,10 +8,10 @@
  *  for more details.
  */
 
+#include <linux/config.h>
+
 #ifndef _LINUX_CONSOLE_COMPAT_H_
 #define _LINUX_CONSOLE_COMPAT_H_
-
-#include <linux/config.h>
 
 #undef video_num_columns
 #undef video_num_lines
@@ -23,8 +23,8 @@
 #undef can_do_color
 #undef scr_writew
 #undef scr_readw
-#undef memsetw
-#undef memcpyw
+#undef scr_memsetw
+#undef scr_memcpyw
 #undef set_cursor
 #undef hide_cursor
 #undef set_get_cmap
@@ -47,8 +47,8 @@
 #define can_do_color		compat_can_do_color
 #define scr_writew		compat_scr_writew
 #define scr_readw		compat_scr_readw
-#define memsetw			compat_memsetw
-#define memcpyw			compat_memcpyw
+#define scr_memsetw		compat_memsetw
+#define scr_memcpyw		compat_memcpyw
 #define set_cursor		compat_set_cursor
 #define hide_cursor		compat_hide_cursor
 #define set_get_cmap		compat_set_get_cmap

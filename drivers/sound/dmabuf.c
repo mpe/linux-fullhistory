@@ -765,6 +765,7 @@ static int find_output_space(int dev, char **buf, int *size)
 
 	offs = (dmap->user_counter % dmap->bytes_in_use) & ~SAMPLE_ROUNDUP;
 	if (offs < 0 || offs >= dmap->bytes_in_use) {
+		restore_flags(flags);
 		printk(KERN_ERR "Sound: Got unexpected offs %ld. Giving up.\n", offs);
 		printk("Counter = %ld, bytes=%d\n", dmap->user_counter, dmap->bytes_in_use);
 		return 0;

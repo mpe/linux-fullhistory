@@ -480,6 +480,7 @@ static inline void unlazy_fpu(struct task_struct *tsk)
 		tsk->flags &= ~PF_USEDFPU;
 		__asm__("fnsave %0":"=m" (tsk->tss.i387));
 		stts();
+		asm volatile("fwait");
 	}
 }
 
@@ -544,18 +545,18 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 {
 	struct pt_regs * childregs;
 
-	p->tss.tr = _TSS(nr);
-	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));
-	p->tss.ss0 = __KERNEL_DS;
-	p->tss.esp0 = 2*PAGE_SIZE + (unsigned long) p;
-
-	childregs = ((struct pt_regs *) (p->tss.esp0)) - 1;
+	childregs = ((struct pt_regs *) (2*PAGE_SIZE + (unsigned long) p)) - 1;
 	*childregs = *regs;
 	childregs->eax = 0;
 	childregs->esp = esp;
-	childregs->eflags = regs->eflags & 0xffffcfff;  /* iopl always 0 for a new process */
+	childregs->eflags = regs->eflags & 0xffffcfff;  /* iopl always 0 for a new process */	
 
 	p->tss.esp = (unsigned long) childregs;
+	p->tss.esp0 = (unsigned long) (childregs+1);
+	p->tss.ss0 = __KERNEL_DS;
+
+	p->tss.tr = _TSS(nr);
+	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));
 	p->tss.eip = (unsigned long) ret_from_fork;
 
 	savesegment(fs,p->tss.fs);
@@ -569,7 +570,6 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	p->tss.bitmap = sizeof(struct thread_struct);
 
 	unlazy_fpu(current);
-	asm volatile("fwait");
 	p->tss.i387 = current->tss.i387;
 
 	return 0;
@@ -585,7 +585,6 @@ int dump_fpu (struct pt_regs * regs, struct user_i387_struct* fpu)
 	fpvalid = current->used_math;
 	if (fpvalid) {
 		unlazy_fpu(current);
-		asm volatile("fwait");
 		memcpy(fpu,&current->tss.i387.hard,sizeof(*fpu));
 	}
 
@@ -678,18 +677,19 @@ void __switch_to(struct task_struct *prev, struct task_struct *next)
 	 * the vm86 bitmasks in case we ever use enhanced
 	 * v86 mode properly).
 	 *
-	 * We could do LDT things lazily if this turns out
-	 * to be a win. Most processes will have the default
-	 * LDT.
-	 *
-	 * We want to get rid of the TR register some day,
-	 * and copy the bitmaps around by hand. Oh, well.
-	 * In the meantime we have to clear the busy bit
-	 * in the TSS entry, ugh.
+	 * We may want to get rid of the TR register some
+	 * day, and copy the bitmaps around by hand. Oh,
+	 * well. In the meantime we have to clear the busy
+	 * bit in the TSS entry, ugh.
 	 */
 	gdt_table[next->tss.tr >> 3].b &= 0xfffffdff;
 	asm volatile("ltr %0": :"g" (*(unsigned short *)&next->tss.tr));
-	asm volatile("lldt %0": :"g" (*(unsigned short *)&next->tss.ldt));
+
+	/* Re-load LDT if necessary */
+	if (next->mm->segments != prev->mm->segments)
+		asm volatile("lldt %0": :"g" (*(unsigned short *)&next->tss.ldt));
+
+	/* Re-load page tables */
 	if (next->tss.cr3 != prev->tss.cr3)
 		asm volatile("movl %0,%%cr3": :"r" (next->tss.cr3));
 

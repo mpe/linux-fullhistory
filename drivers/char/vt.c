@@ -22,6 +22,7 @@
 #include <linux/malloc.h>
 #include <linux/major.h>
 #include <linux/fs.h>
+#include <linux/config.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -56,39 +57,10 @@ struct vt_struct *vt_cons[MAX_NR_CONSOLES];
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on);
 #endif
 
-extern int getkeycode(unsigned int scancode);
-extern int setkeycode(unsigned int scancode, unsigned int keycode);
-extern void compute_shiftstate(void);
-extern void complete_change_console(unsigned int new_console);
-extern int vt_waitactive(int vt);
-extern void do_blank_screen(int nopowersave);
-
-extern unsigned int keymap_count;
-
-/*
- * routines to load custom translation table, EGA/VGA font and
- * VGA colour palette from console.c
- */
-extern int con_set_trans_old(unsigned char * table);
-extern int con_get_trans_old(unsigned char * table);
-extern int con_set_trans_new(unsigned short * table);
-extern int con_get_trans_new(unsigned short * table);
-extern void con_clear_unimap(struct unimapinit *ui);
-extern int con_set_unimap(ushort ct, struct unipair *list);
-extern int con_get_unimap(ushort ct, ushort *uct, struct unipair *list);
-extern void con_set_default_unimap(void);
-extern int con_set_font(char * fontmap, int ch512);
-extern int con_get_font(char * fontmap);
-extern int con_set_cmap(unsigned char *cmap);
-extern int con_get_cmap(unsigned char *cmap);
-extern void reset_palette(int currcons);
-extern void set_palette(void) ;
-extern int con_adjust_height(unsigned long fontheight);
-
-extern int video_mode_512ch;
-extern unsigned long video_font_height;
-extern unsigned long default_font_height;
-extern unsigned long video_scan_lines;
+unsigned int video_mode_512ch;
+unsigned int video_font_height;
+unsigned int default_font_height;
+unsigned int video_scan_lines;
 
 /*
  * these are the valid i/o ports we're allowed to change. they map all the
@@ -152,6 +124,7 @@ kd_size_changed(int row, int col)
  * We also return immediately, which is what was implied within the X
  * comments - KDMKTONE doesn't put the process to sleep.
  */
+/* FIXME: This should go to arch-dependent code */
 static void
 kd_nosound(unsigned long ignored)
 {
@@ -396,9 +369,8 @@ do_kdgkb_ioctl(int cmd, struct kbsentry *user_kdgkb, int perm)
 static inline int 
 do_fontx_ioctl(int cmd, struct consolefontdesc *user_cfd, int perm)
 {
-	int nchar;
 	struct consolefontdesc cfdarg;
-	int i = 0;
+	int i;
 
 	if (copy_from_user(&cfdarg, user_cfd, sizeof(struct consolefontdesc))) 
 		return -EFAULT;
@@ -409,35 +381,21 @@ do_fontx_ioctl(int cmd, struct consolefontdesc *user_cfd, int perm)
 	case PIO_FONTX:
 		if (!perm)
 			return -EPERM;
-		if ( cfdarg.charcount == 256 ||
-		     cfdarg.charcount == 512 ) {
-			i = con_set_font(cfdarg.chardata,
-				cfdarg.charcount == 512);
-			if (i)
-				return i;
-			i = con_adjust_height(cfdarg.charheight);
-			/*
-			 *  ++Geert: vc_resize_con() will take note of the
-			 *	     changed screen size, if necessary
-			 */
-			return (i <= 0) ? i : 0;
-		} else
-			return -EINVAL;
-	case GIO_FONTX:
-		i = cfdarg.charcount;
-		cfdarg.charcount = nchar = video_mode_512ch ? 512 : 256;
-		cfdarg.charheight = video_font_height;
-		__copy_to_user(user_cfd, &cfdarg,
-			    sizeof(struct consolefontdesc)); 
-		if ( cfdarg.chardata )
-		{
-			if ( i < nchar )
-				return -ENOMEM;
-			return con_get_font(cfdarg.chardata);
-		} else
+		return con_set_font(cfdarg.chardata, 8, cfdarg.charheight, cfdarg.charcount);
+	case GIO_FONTX: {
+		int w, h;
+		int c= cfdarg.charcount;
+		if (!cfdarg.chardata)
 			return 0;
+		i = con_get_font(cfdarg.chardata, &w, &h, &c);
+		if (i)
+			return i;
+		if (copy_to_user(user_cfd, &cfdarg, sizeof(struct consolefontdesc)))
+			return -EFAULT;
+		return 0;
+		}
 	}
-	return 0;
+	return -EINVAL;
 }
 
 static inline int 
@@ -802,7 +760,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		if (arg == 0 || arg > MAX_NR_CONSOLES)
 			return -ENXIO;
 		arg--;
-		i = vc_allocate(arg);
+		i = vc_allocate(arg, 0);
 		if (i)
 			return i;
 		set_console(arg);
@@ -854,7 +812,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 				 */
 				int newvt = vt_cons[console]->vt_newvt;
 				vt_cons[console]->vt_newvt = -1;
-				i = vc_allocate(newvt);
+				i = vc_allocate(newvt, 0);
 				if (i)
 					return i;
 				/*
@@ -914,7 +872,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			return i;
 		__get_user(ll, &vtsizes->v_rows);
 		__get_user(cc, &vtsizes->v_cols);
-		i = vc_resize(ll, cc);
+		i = vc_resize_all(ll, cc);
 		return i ? i : 	kd_size_changed(ll, cc);
 	}
 
@@ -963,7 +921,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		if ( clin )
 		  video_font_height = clin;
 		
-		i = vc_resize(ll, cc);
+		i = vc_resize_all(ll, cc);
 		if (i)
 			return i;
 
@@ -974,27 +932,20 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	case PIO_FONT:
 		if (!perm)
 			return -EPERM;
-		if (vt_cons[fg_console]->vc_mode != KD_TEXT)
-			return -EINVAL;
-		return con_set_font((char *)arg, 0);
-		/* con_set_font() defined in console.c */
+		return con_set_font((char *)arg, 8, 0, 256);
 
-	case GIO_FONT:
-		if (vt_cons[fg_console]->vc_mode != KD_TEXT ||
-		    video_mode_512ch)
-			return -EINVAL;
-		return con_get_font((char *)arg);
-		/* con_get_font() defined in console.c */
+	case GIO_FONT: {
+		int w, h, s=256;
+		return con_get_font((char *)arg, &w, &h, &s);
+	}
 
 	case PIO_CMAP:
                 if (!perm)
 			return -EPERM;
                 return con_set_cmap((char *)arg);
-                /* con_set_cmap() defined in console.c */
 
 	case GIO_CMAP:
                 return con_get_cmap((char *)arg);
-                /* con_get_cmap() defined in console.c */
 
 	case PIO_FONTX:
 	case GIO_FONTX:
@@ -1004,8 +955,6 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	{
 		if (!perm)
 			return -EPERM;
-		if (vt_cons[fg_console]->vc_mode != KD_TEXT)
-			return -EINVAL;
 
 #ifdef BROKEN_GRAPHICS_PROGRAMS
 		/* With BROKEN_GRAPHICS_PROGRAMS defined, the default
@@ -1013,16 +962,9 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		return -ENOSYS;
 #else
 
-		i = con_set_font(NULL, 0);	/* Set font to default */
+		i = con_set_font(NULL, 0, 0, 0);	/* Set font to default */
 		if (i) return i;
-
-		i = con_adjust_height(default_font_height);
-			/*
-			 *  ++Geert: vc_resize_con() will take note of the
-			 *	     changed screen size, if necessary
-			 */
 		con_set_default_unimap();
-
 		return 0;
 #endif
 	}
@@ -1187,21 +1129,16 @@ void complete_change_console(unsigned int new_console)
 	/* Set the colour palette for this VT */
 	if (vt_cons[new_console]->vc_mode == KD_TEXT)
 		set_palette() ;
-	
+
+	/* FIXME: Do we still need this? */
 #ifdef CONFIG_SUN_CONSOLE
 	if (old_vc_mode != vt_cons[new_console]->vc_mode)
 	{
 	 	if (old_vc_mode == KD_GRAPHICS)
-		{
-			suncons_ops.clear_margin();
-			suncons_ops.render_screen();
-			suncons_ops.set_cursor(fg_console);
-		}
-		else
-			suncons_ops.hide_cursor();
+			update_screen(new_console);
 	}
 #endif		
-      /*
+	/*
 	 * Wake anyone waiting for their VT to activate
 	 */
 	vt_wake_waitactive();

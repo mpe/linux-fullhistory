@@ -2409,7 +2409,7 @@ do_install_cmap(int con, struct fb_info *info)
 	 * Open/Release the frame buffer device
 	 */
 
-static int atafb_open(struct fb_info *info)
+static int atafb_open(struct fb_info *info, int user)
 {
 	/*
 	 * Nothing, only a usage count for the moment
@@ -2419,7 +2419,7 @@ static int atafb_open(struct fb_info *info)
 	return(0);
 }
 
-static int atafb_release(struct fb_info *info)
+static int atafb_release(struct fb_info *info, int user)
 {
 	MOD_DEC_USE_COUNT;
 	return(0);
@@ -2727,15 +2727,14 @@ atafb_blank(int blank, struct fb_info *info)
 		do_install_cmap(currcon, info);
 }
 
-__initfunc(unsigned long atafb_init(unsigned long mem_start))
+__initfunc(void atafb_init(void))
 {
-	int err;
 	int pad;
 	int detected_mode;
 	unsigned long mem_req;
 
 	if (!MACH_IS_ATARI)
-	        return mem_start;
+	        return;
 
 	do {
 #ifdef ATAFB_EXT
@@ -2790,8 +2789,8 @@ __initfunc(unsigned long atafb_init(unsigned long mem_start))
 		mem_req = default_mem_req + ovsc_offset +
 			ovsc_addlen;
 		mem_req = ((mem_req + PAGE_SIZE - 1) & PAGE_MASK) + PAGE_SIZE;
-		screen_base = (unsigned long)atari_stram_alloc(mem_req, &mem_start,
-													   "atafb");
+		screen_base = (unsigned long)atari_stram_alloc(mem_req, NULL,
+							       "atafb");
 		memset((char *) screen_base, 0, mem_req);
 		pad = ((screen_base + PAGE_SIZE-1) & PAGE_MASK) - screen_base;
 		screen_base+=pad;
@@ -2811,13 +2810,11 @@ __initfunc(unsigned long atafb_init(unsigned long mem_start))
 		/* Map the video memory (physical address given) to somewhere
 		 * in the kernel address space.
 		 */
-		mem_start = PAGE_ALIGN(mem_start);
 		external_addr = kernel_map(external_addr, external_len,
-					   KERNELMAP_NO_COPYBACK, &mem_start);
+					   KERNELMAP_NO_COPYBACK, NULL);
 		if (external_vgaiobase)
 			external_vgaiobase = kernel_map(external_vgaiobase,
-				0x10000, KERNELMAP_NOCACHE_SER, &mem_start);
-		mem_start += PAGE_SIZE;
+				0x10000, KERNELMAP_NOCACHE_SER, NULL);
 		screen_base      =
 		real_screen_base = external_addr;
 		screen_len       = external_len & PAGE_MASK;
@@ -2836,26 +2833,24 @@ __initfunc(unsigned long atafb_init(unsigned long mem_start))
 	do_fb_set_var(&atafb_predefined[default_par-1], 1);
 	strcat(fb_info.modename, fb_var_names[default_par-1][0]);
 
-	err=register_framebuffer(&fb_info);
-	if (err < 0)
-		return(err);
-
 	atafb_get_var(&disp.var, -1, &fb_info);
 	atafb_set_disp(-1, &fb_info);
+	do_install_cmap(0, &fb_info);
+
+	if (register_framebuffer(&fb_info) < 0)
+		return;
+
 	printk("Determined %dx%d, depth %d\n",
 	       disp.var.xres, disp.var.yres, disp.var.bits_per_pixel);
 	if ((disp.var.xres != disp.var.xres_virtual) ||
 	    (disp.var.yres != disp.var.yres_virtual))
 	   printk("   virtual %dx%d\n",
 			  disp.var.xres_virtual, disp.var.yres_virtual);
-	do_install_cmap(0, &fb_info);
 	printk("fb%d: %s frame buffer device, using %dK of video memory\n",
 	       GET_FB_IDX(fb_info.node), fb_info.modename, screen_len>>10);
 
 	/* TODO: This driver cannot be unloaded yet */
 	MOD_INC_USE_COUNT;
-
-	return mem_start;
 }
 
 /* a strtok which returns empty strings, too */
@@ -3136,7 +3131,8 @@ __initfunc(void atafb_setup( char *options, int *ints ))
 #ifdef MODULE
 int init_module(void)
 {
-	return(atafb_init(NULL));
+	atafb_init();
+	return 0;
 }
 
 void cleanup_module(void)

@@ -119,13 +119,11 @@ void fbcon_cfb2_putc(struct vc_data *conp, struct display *p, int c, int yy,
 	int bytes=p->next_line,rows;
 	u32 eorx,fgx,bgx;
 
-	c &= 0xff;
-
 	dest = p->screen_base + yy * p->fontheight * bytes + xx * 2;
-	cdat = p->fontdata + c * p->fontheight;
+	cdat = p->fontdata + (c & 0xff) * p->fontheight;
 
-	fgx=3;/*attr_fgcol(p,conp)&0x0F;*/
-	bgx=attr_bgcol(p,conp)&0x0F;
+	fgx=3;/*attr_fgcol(p,c);*/
+	bgx=attr_bgcol(p,c);
 	fgx |= (fgx << 2);	/* expand color to 8 bits */
 	fgx |= (fgx << 4);
 	bgx |= (bgx << 2);
@@ -140,7 +138,7 @@ void fbcon_cfb2_putc(struct vc_data *conp, struct display *p, int c, int yy,
 	}
 }
 
-void fbcon_cfb2_putcs(struct vc_data *conp, struct display *p, const char *s,
+void fbcon_cfb2_putcs(struct vc_data *conp, struct display *p, const unsigned short *s,
 		      int count, int yy, int xx)
 {
 	u8 *cdat, c, *dest, *dest0;
@@ -148,8 +146,8 @@ void fbcon_cfb2_putcs(struct vc_data *conp, struct display *p, const char *s,
 	u32 eorx, fgx, bgx;
 
 	dest0 = p->screen_base + yy * p->fontheight * bytes + xx * 2;
-	fgx=3/*attr_fgcol(p,conp)*/;
-	bgx=attr_bgcol(p,conp);
+	fgx=3/*attr_fgcol(p,*s)*/;
+	bgx=attr_bgcol(p,*s);
 	fgx |= (fgx << 2);
 	fgx |= (fgx << 4);
 	bgx |= (bgx << 2);
@@ -189,6 +187,17 @@ struct display_switch fbcon_cfb2 = {
     fbcon_cfb2_setup, fbcon_cfb2_bmove, fbcon_cfb2_clear, fbcon_cfb2_putc,
     fbcon_cfb2_putcs, fbcon_cfb2_revc, NULL
 };
+
+
+#ifdef MODULE
+int init_module(void)
+{
+    return 0;
+}
+
+void cleanup_module(void)
+{}
+#endif /* MODULE */
 
 
     /*

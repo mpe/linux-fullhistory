@@ -14,7 +14,7 @@
  *	Alan Cox	:	Formatting and clean ups
  *
  * Status
- *	Mostly working. mmap bug still present (swaps channels)
+ *	Mostly working. Weird uart bug causing irq storms
  */
 
 #include <linux/config.h>
@@ -32,7 +32,7 @@ static int sb_audio_open(int dev, int mode)
 
 	if (devc == NULL)
 	{
-		  printk(KERN_ERR "SB: Incomplete initialization\n");
+		  printk(KERN_ERR "Sound Blaster: incomplete initialization.\n");
 		  return -ENXIO;
 	}
 	if (devc->caps & SB_NO_RECORDING && mode & OPEN_READ)
@@ -146,7 +146,7 @@ static void sb1_audio_output_block(int dev, unsigned long buf, int nr_bytes, int
 		sb_dsp_command(devc, (unsigned char) ((count >> 8) & 0xff));
 	}
 	else
-		printk(KERN_WARNING "soundblaster: Unable to start DAC\n");
+		printk(KERN_WARNING "Sound Blaster:  unable to start DAC.\n");
 	restore_flags(flags);
 	devc->intr_active = 1;
 }
@@ -177,7 +177,7 @@ static void sb1_audio_start_input(int dev, unsigned long buf, int nr_bytes, int 
 		sb_dsp_command(devc, (unsigned char) ((count >> 8) & 0xff));
 	}
 	else
-		printk(KERN_ERR "soundblaster: Unable to start ADC\n");
+		printk(KERN_ERR "Sound Blaster:  unable to start ADC.\n");
 	restore_flags(flags);
 
 	devc->intr_active = 1;
@@ -322,10 +322,10 @@ static void sb20_audio_output_block(int dev, unsigned long buf, int nr_bytes,
 			cmd = 0x90;	/* 8 bit high speed PCM output (SB2.01/Pro) */
 
 		if (!sb_dsp_command(devc, cmd))
-			printk(KERN_ERR "soundblaster: Unable to start DAC\n");
+			printk(KERN_ERR "Sound Blaster:  unable to start DAC.\n");
 	}
 	else
-		printk(KERN_ERR "soundblaster: Unable to start DAC\n");
+		printk(KERN_ERR "Sound Blaster: unable to start DAC.\n");
 	restore_flags(flags);
 	devc->intr_active = 1;
 }
@@ -362,10 +362,10 @@ static void sb20_audio_start_input(int dev, unsigned long buf, int nr_bytes, int
 			cmd = 0x98;	/* 8 bit high speed PCM input (SB2.01/Pro) */
 
 		if (!sb_dsp_command(devc, cmd))
-			printk(KERN_ERR "soundblaster: Unable to start ADC\n");
+			printk(KERN_ERR "Sound Blaster:  unable to start ADC.\n");
 	}
 	else
-		printk(KERN_ERR "soundblaster: Unable to start ADC\n");
+		printk(KERN_ERR "Sound Blaster:  unable to start ADC.\n");
 	restore_flags(flags);
 	devc->intr_active = 1;
 }
@@ -1138,7 +1138,7 @@ void sb_audio_init(sb_devc * devc, char *name)
 				audio_flags, format_mask, devc,
 				devc->dma8, devc->dma8)) < 0)
 	{
-		  printk(KERN_ERR "sb: unable to install audio.\n");
+		  printk(KERN_ERR "Sound Blaster:  unable to install audio.\n");
 		  return;
 	}
 	audio_devs[devc->my_dev]->mixer_dev = devc->my_mixerdev;

@@ -470,6 +470,13 @@ M:	mj@atrey.karlin.mff.cuni.cz
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+PCI SOUND DRIVERS (ES1370, ES1371 and SONICVIBES)
+P:	Thomas Sailer
+M:	sailer@ife.ee.ethz.ch
+L:	linux-sound@vger.rutgers.edu
+W:	http://www.ife.ee.ethz.ch/~sailer/linux/pciaudio.html
+S:	Maintained
+
 PCNET32 NETWORK DRIVER
 P:	Thomas Bogendoerfer
 M:	tsbogend@alpha.franken.de

@@ -1,16 +1,19 @@
 /*
  * pas2_pcm.c Audio routines for PAS16
- */
-/*
+ *
+ *
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
- */
-/*
+ *
+ *
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ * Alan Cox	   : Swatted a double allocation of device bug. Made a few
+ *		     more things module options.
  */
+
 #include <linux/config.h>
 
 #include "sound_config.h"
@@ -42,11 +45,10 @@ static int      pcm_busy = 0;
 int             pas_audiodev = 0;
 static int      open_mode = 0;
 
-static int
-pcm_set_speed(int arg)
+static int pcm_set_speed(int arg)
 {
-	int             foo, tmp;
-	unsigned long   flags;
+	int foo, tmp;
+	unsigned long flags;
 
 	if (arg == 0)
 		return pcm_speed;
@@ -57,30 +59,31 @@ pcm_set_speed(int arg)
 		arg = 5000;
 
 	if (pcm_channels & 2)
-	  {
-		  foo = (596590 + (arg / 2)) / arg;
-		  arg = (596590 + (foo / 2)) / foo;
-	} else
-	  {
-		  foo = (1193180 + (arg / 2)) / arg;
-		  arg = (1193180 + (foo / 2)) / foo;
-	  }
+	{
+		foo = (596590 + (arg / 2)) / arg;
+		arg = (596590 + (foo / 2)) / foo;
+	}
+	else
+	{
+		foo = (1193180 + (arg / 2)) / arg;
+		arg = (1193180 + (foo / 2)) / foo;
+	}
 
 	pcm_speed = arg;
 
 	tmp = pas_read(0x0B8A);
 
 	/*
-	   * Set anti-aliasing filters according to sample rate. You really *NEED*
-	   * to enable this feature for all normal recording unless you want to
-	   * experiment with aliasing effects.
-	   * These filters apply to the selected "recording" source.
-	   * I (pfw) don't know the encoding of these 5 bits. The values shown
-	   * come from the SDK found on ftp.uwp.edu:/pub/msdos/proaudio/.
-	   *
-	   * I cleared bit 5 of these values, since that bit controls the master
-	   * mute flag. (Olav Wölfelschneider)
-	   *
+	 * Set anti-aliasing filters according to sample rate. You really *NEED*
+	 * to enable this feature for all normal recording unless you want to
+	 * experiment with aliasing effects.
+	 * These filters apply to the selected "recording" source.
+	 * I (pfw) don't know the encoding of these 5 bits. The values shown
+	 * come from the SDK found on ftp.uwp.edu:/pub/msdos/proaudio/.
+	 *
+	 * I cleared bit 5 of these values, since that bit controls the master
+	 * mute flag. (Olav Wölfelschneider)
+	 *
 	 */
 #if !defined NO_AUTO_FILTER_SET
 	tmp &= 0xe0;
@@ -113,25 +116,23 @@ pcm_set_speed(int arg)
 	return pcm_speed;
 }
 
-static int
-pcm_set_channels(int arg)
+static int pcm_set_channels(int arg)
 {
 
 	if ((arg != 1) && (arg != 2))
 		return pcm_channels;
 
 	if (arg != pcm_channels)
-	  {
-		  pas_write(pas_read(0xF8A) ^ 0x20, 0xF8A);
+	{
+		pas_write(pas_read(0xF8A) ^ 0x20, 0xF8A);
 
-		  pcm_channels = arg;
-		  pcm_set_speed(pcm_speed);	/* The speed must be reinitialized */
-	  }
+		pcm_channels = arg;
+		pcm_set_speed(pcm_speed);	/* The speed must be reinitialized */
+	}
 	return pcm_channels;
 }
 
-static int
-pcm_set_bits(int arg)
+static int pcm_set_bits(int arg)
 {
 	if (arg == 0)
 		return pcm_bits;
@@ -140,11 +141,11 @@ pcm_set_bits(int arg)
 		return pcm_bits;
 
 	if (arg != pcm_bits)
-	  {
-		  pas_write(pas_read(0x8389) ^ 0x04, 0x8389);
+	{
+		pas_write(pas_read(0x8389) ^ 0x04, 0x8389);
 
-		  pcm_bits = arg;
-	  }
+		pcm_bits = arg;
+	}
 	return pcm_bits;
 }
 
@@ -154,9 +155,10 @@ static int pas_audio_ioctl(int dev, unsigned int cmd, caddr_t arg)
 
 	DEB(printk("pas2_pcm.c: static int pas_audio_ioctl(unsigned int cmd = %X, unsigned int arg = %X)\n", cmd, arg));
 
-	switch (cmd) {
+	switch (cmd) 
+	{
 	case SOUND_PCM_WRITE_RATE:
-		if (__get_user(val, (int *)arg)) 
+		if (get_user(val, (int *)arg)) 
 			return -EFAULT;
 		ret = pcm_set_speed(val);
 		break;
@@ -166,13 +168,13 @@ static int pas_audio_ioctl(int dev, unsigned int cmd, caddr_t arg)
 		break;
 		
 	case SNDCTL_DSP_STEREO:
-		if (__get_user(val, (int *)arg)) 
+		if (get_user(val, (int *)arg)) 
 			return -EFAULT;
 		ret = pcm_set_channels(val + 1) - 1;
 		break;
 
 	case SOUND_PCM_WRITE_CHANNELS:
-		if (__get_user(val, (int *)arg)) 
+		if (get_user(val, (int *)arg)) 
 			return -EFAULT;
 		ret = pcm_set_channels(val);
 		break;
@@ -182,7 +184,7 @@ static int pas_audio_ioctl(int dev, unsigned int cmd, caddr_t arg)
 		break;
 
 	case SNDCTL_DSP_SETFMT:
-		if (__get_user(val, (int *)arg))
+		if (get_user(val, (int *)arg))
 			return -EFAULT;
 		ret = pcm_set_bits(val);
 		break;
@@ -194,19 +196,17 @@ static int pas_audio_ioctl(int dev, unsigned int cmd, caddr_t arg)
 	default:
 		return -EINVAL;
 	}
-	return __put_user(ret, (int *)arg);
+	return put_user(ret, (int *)arg);
 }
 
-static void
-pas_audio_reset(int dev)
+static void pas_audio_reset(int dev)
 {
 	DEB(printk("pas2_pcm.c: static void pas_audio_reset(void)\n"));
 
 	pas_write(pas_read(0xF8A) & ~0x40, 0xF8A);	/* Disable PCM */
 }
 
-static int
-pas_audio_open(int dev, int mode)
+static int pas_audio_open(int dev, int mode)
 {
 	int             err;
 	unsigned long   flags;
@@ -216,10 +216,10 @@ pas_audio_open(int dev, int mode)
 	save_flags(flags);
 	cli();
 	if (pcm_busy)
-	  {
-		  restore_flags(flags);
-		  return -EBUSY;
-	  }
+	{
+		restore_flags(flags);
+		return -EBUSY;
+	}
 	pcm_busy = 1;
 	restore_flags(flags);
 
@@ -233,8 +233,7 @@ pas_audio_open(int dev, int mode)
 	return 0;
 }
 
-static void
-pas_audio_close(int dev)
+static void pas_audio_close(int dev)
 {
 	unsigned long   flags;
 
@@ -251,8 +250,7 @@ pas_audio_close(int dev)
 	restore_flags(flags);
 }
 
-static void
-pas_audio_output_block(int dev, unsigned long buf, int count,
+static void pas_audio_output_block(int dev, unsigned long buf, int count,
 		       int intrflag)
 {
 	unsigned long   flags, cnt;
@@ -280,15 +278,15 @@ pas_audio_output_block(int dev, unsigned long buf, int count,
 		count >>= 1;
 
 	if (count != pcm_count)
-	  {
-		  pas_write(pas_read(0x0B8A) & ~0x80, 0x0B8A);
-		  pas_write(0x40 | 0x30 | 0x04, 0x138B);
-		  pas_write(count & 0xff, 0x1389);
-		  pas_write((count >> 8) & 0xff, 0x1389);
-		  pas_write(pas_read(0x0B8A) | 0x80, 0x0B8A);
+	{
+		pas_write(pas_read(0x0B8A) & ~0x80, 0x0B8A);
+		pas_write(0x40 | 0x30 | 0x04, 0x138B);
+		pas_write(count & 0xff, 0x1389);
+		pas_write((count >> 8) & 0xff, 0x1389);
+		pas_write(pas_read(0x0B8A) | 0x80, 0x0B8A);
 
-		  pcm_count = count;
-	  }
+		pcm_count = count;
+	}
 	pas_write(pas_read(0x0B8A) | 0x80 | 0x40, 0x0B8A);
 #ifdef NO_TRIGGER
 	pas_write(pas_read(0xF8A) | 0x40 | 0x10, 0xF8A);
@@ -299,8 +297,7 @@ pas_audio_output_block(int dev, unsigned long buf, int count,
 	restore_flags(flags);
 }
 
-static void
-pas_audio_start_input(int dev, unsigned long buf, int count,
+static void pas_audio_start_input(int dev, unsigned long buf, int count,
 		      int intrflag)
 {
 	unsigned long   flags;
@@ -326,15 +323,15 @@ pas_audio_start_input(int dev, unsigned long buf, int count,
 		count >>= 1;
 
 	if (count != pcm_count)
-	  {
-		  pas_write(pas_read(0x0B8A) & ~0x80, 0x0B8A);
-		  pas_write(0x40 | 0x30 | 0x04, 0x138B);
-		  pas_write(count & 0xff, 0x1389);
-		  pas_write((count >> 8) & 0xff, 0x1389);
-		  pas_write(pas_read(0x0B8A) | 0x80, 0x0B8A);
+	{
+		pas_write(pas_read(0x0B8A) & ~0x80, 0x0B8A);
+		pas_write(0x40 | 0x30 | 0x04, 0x138B);
+		pas_write(count & 0xff, 0x1389);
+		pas_write((count >> 8) & 0xff, 0x1389);
+		pas_write(pas_read(0x0B8A) | 0x80, 0x0B8A);
 
-		  pcm_count = count;
-	  }
+		pcm_count = count;
+	}
 	pas_write(pas_read(0x0B8A) | 0x80 | 0x40, 0x0B8A);
 #ifdef NO_TRIGGER
 	pas_write((pas_read(0xF8A) | 0x40) & ~0x10, 0xF8A);
@@ -346,8 +343,7 @@ pas_audio_start_input(int dev, unsigned long buf, int count,
 }
 
 #ifndef NO_TRIGGER
-static void
-pas_audio_trigger(int dev, int state)
+static void pas_audio_trigger(int dev, int state)
 {
 	unsigned long   flags;
 
@@ -366,15 +362,13 @@ pas_audio_trigger(int dev, int state)
 }
 #endif
 
-static int
-pas_audio_prepare_for_input(int dev, int bsize, int bcount)
+static int pas_audio_prepare_for_input(int dev, int bsize, int bcount)
 {
 	pas_audio_reset(dev);
 	return 0;
 }
 
-static int
-pas_audio_prepare_for_output(int dev, int bsize, int bcount)
+static int pas_audio_prepare_for_output(int dev, int bsize, int bcount)
 {
 	pas_audio_reset(dev);
 	return 0;
@@ -397,8 +391,7 @@ static struct audio_driver pas_audio_driver =
 	pas_audio_trigger
 };
 
-void
-pas_pcm_init(struct address_info *hw_config)
+void pas_pcm_init(struct address_info *hw_config)
 {
 	DEB(printk("pas2_pcm.c: long pas_pcm_init()\n"));
 
@@ -408,55 +401,44 @@ pas_pcm_init(struct address_info *hw_config)
 
 	pcm_set_speed(DSP_DEFAULT_SPEED);
 
-	if ((pas_audiodev = sound_alloc_audiodev()) != -1)
-	  {
-
-		  if ((pas_audiodev = sound_install_audiodrv(AUDIO_DRIVER_VERSION,
-						    "Pro Audio Spectrum",
-						       &pas_audio_driver,
-					     sizeof(struct audio_driver),
-							     DMA_AUTOMODE,
-						   AFMT_U8 | AFMT_S16_LE,
-							     NULL,
-							  hw_config->dma,
-						    hw_config->dma)) < 0)
-		    {
-			    return;
-		    }
-	} else
+	if ((pas_audiodev = sound_install_audiodrv(AUDIO_DRIVER_VERSION,
+					"Pro Audio Spectrum",
+					&pas_audio_driver,
+					sizeof(struct audio_driver),
+					DMA_AUTOMODE,
+					AFMT_U8 | AFMT_S16_LE,
+					NULL,
+					hw_config->dma,
+					hw_config->dma)) < 0)
 		printk(KERN_WARNING "PAS16: Too many PCM devices available\n");
 }
 
-void
-pas_pcm_interrupt(unsigned char status, int cause)
+void pas_pcm_interrupt(unsigned char status, int cause)
 {
 	if (cause == 1)
-	  {
-		  /*
-		   * Halt the PCM first. Otherwise we don't have time to start a new
-		   * block before the PCM chip proceeds to the next sample
-		   */
+	{
+		/*
+		 * Halt the PCM first. Otherwise we don't have time to start a new
+		 * block before the PCM chip proceeds to the next sample
+		 */
 
-		  if (!(audio_devs[pas_audiodev]->flags & DMA_AUTOMODE))
-		    {
-			    pas_write(pas_read(0xF8A) & ~0x40,
-				      0xF8A);
-		    }
-		  switch (pcm_mode)
-		    {
+		if (!(audio_devs[pas_audiodev]->flags & DMA_AUTOMODE))
+			pas_write(pas_read(0xF8A) & ~0x40, 0xF8A);
 
-		    case PCM_DAC:
-			    DMAbuf_outputintr(pas_audiodev, 1);
-			    break;
+		switch (pcm_mode)
+		{
+			case PCM_DAC:
+				DMAbuf_outputintr(pas_audiodev, 1);
+				break;
 
-		    case PCM_ADC:
-			    DMAbuf_inputintr(pas_audiodev);
-			    break;
+			case PCM_ADC:
+				DMAbuf_inputintr(pas_audiodev);
+				break;
 
-		    default:
-			    printk("PAS: Unexpected PCM interrupt\n");
-		    }
-	  }
+			default:
+				printk(KERN_WARNING "PAS: Unexpected PCM interrupt\n");
+		}
+	}
 }
 
 #endif

@@ -24,8 +24,8 @@ L_OBJS   := tty_io.o n_tty.o tty_ioctl.o mem.o random.o
 LX_OBJS  := pty.o
 
 ifdef CONFIG_VT
-L_OBJS += console.o vt.o vc_screen.o consolemap.o consolemap_deftbl.o
-LX_OBJS += selection.o
+L_OBJS += vt.o vc_screen.o consolemap.o consolemap_deftbl.o
+LX_OBJS += console.o selection.o
 endif
 ifdef CONFIG_FB
   LX_OBJS += fbmem.o

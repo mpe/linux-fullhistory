@@ -9,6 +9,7 @@
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  */
 
+#include <asm/processor.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
@@ -881,7 +882,7 @@ __initfunc(int psched_calibrate_clock(void))
 	unsigned long stop;
 
 #if CPU == 586 || CPU == 686
-	if (!(boot_cpu_data.x86_capability & 16))
+	if (!(boot_cpu_data.x86_capability & X86_FEATURE_TSC)
 		return -1;
 #endif
 

@@ -42,6 +42,16 @@ static int	joystick = 0;
 #else
 static int 	joystick = 1;
 #endif
+#ifdef SYMPHONY_PAS
+static int 	symphony = 1;
+#else
+static int 	symphony = 0;
+#endif
+#ifdef BROKEN_BUS_CLOCK
+static int	broken_bus_clock = 1;
+#else
+static int	broken_bus_clock = 0;
+#endif
 
 
 char            pas_model = 0;
@@ -199,19 +209,21 @@ static int config_pas_hw(struct address_info *hw_config)
 	 * This fixes the timing problems of the PAS due to the Symphony chipset
 	 * as per Media Vision.  Only define this if your PAS doesn't work correctly.
 	 */
-#ifdef SYMPHONY_PAS
-	outb((0x05), 0xa8);
-	outb((0x60), 0xa9);
-#endif
 
-#ifdef BROKEN_BUS_CLOCK
-	pas_write(0x01 | 0x10 | 0x20 | 0x04, 0x8388);
-#else
-	/*
-	 * pas_write(0x01, 0x8388);
-	 */
-	pas_write(0x01 | 0x10 | 0x20, 0x8388);
-#endif
+	if(symphony)
+	{
+		outb((0x05), 0xa8);
+		outb((0x60), 0xa9);
+	}
+
+	if(broken_bus_clock)
+		pas_write(0x01 | 0x10 | 0x20 | 0x04, 0x8388);
+	else
+		/*
+		 * pas_write(0x01, 0x8388);
+		 */
+		pas_write(0x01 | 0x10 | 0x20, 0x8388);
+
 	pas_write(0x18, 0x838A);	/* ??? */
 	pas_write(0x20 | 0x01, 0x0B8A);		/* Mute off, filter = 17.897 kHz */
 	pas_write(8, 0xBF8A);
@@ -348,14 +360,12 @@ void attach_pas_card(struct address_info *hw_config)
 	}
 }
 
-int
-probe_pas(struct address_info *hw_config)
+int probe_pas(struct address_info *hw_config)
 {
 	return detect_pas_hw(hw_config);
 }
 
-void
-unload_pas(struct address_info *hw_config)
+void unload_pas(struct address_info *hw_config)
 {
 	sound_free_dma(hw_config->dma);
 	free_irq(hw_config->irq, NULL);
@@ -384,13 +394,15 @@ MODULE_PARM(sb_dma,"i");
 MODULE_PARM(sb_dma16,"i");
 
 MODULE_PARM(joystick,"i");
+MODULE_PARM(symphony,"i");
+MODULE_PARM(broken_bus_clock,"i");
 
 struct address_info config;
 struct address_info sbhw_config;
 
 int init_module(void)
 {
-	printk(KERN_INFO "MediaTrix audio driver Copyright (C) by Hannu Savolainen 1993-1996\n");
+	printk(KERN_INFO "Pro Audio Spectrum driver Copyright (C) by Hannu Savolainen 1993-1996\n");
 
 	if (io == -1 || dma == -1 || irq == -1)
 	{

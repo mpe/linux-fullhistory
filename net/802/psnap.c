@@ -60,9 +60,11 @@ int snap_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		 */
 
 		skb->h.raw += 5;
+		skb->nh.raw += 5;
 		skb_pull(skb,5);
 		if (psnap_packet_type.type == 0)
 			psnap_packet_type.type=htons(ETH_P_SNAP);
+
 		return proto->rcvfunc(skb, dev, &psnap_packet_type);
 	}
 	skb->sk = NULL;

@@ -993,7 +993,7 @@ int sequencer_open(int dev, struct file *file)
 
 	if (!sequencer_ok)
 	{
-/*		printk("Soundcard: Sequencer not initialized\n");*/
+/*		printk("Sound card: sequencer not initialized\n");*/
 		return -ENXIO;
 	}
 	if (dev)		/* Patch manager device (obsolete) */

@@ -90,11 +90,15 @@ void fbcon_mac_bmove(struct display *p, int sy, int sx, int dy, int dx,
      w = (r&~7) - ((l+7)&~7);
      dw = (dr&~7) - ((dl+7)&~7);
      if (lo != dlo) {
-       char err_str[256];
-       unsigned long cnt;
+       unsigned char err_str[128];
+       unsigned short err_buf[256];
+       unsigned long cnt, len;
        sprintf( err_str, "ERROR: Shift algorithm: sx=%d,sy=%d,dx=%d,dy=%d,w=%d,h=%d,bpp=%d",
 		sx,sy,dx,dy,width,height,p->var.bits_per_pixel);
-       fbcon_mac_putcs(p->conp, p, err_str, strlen(err_str), 0, 0);
+       len = strlen(err_str);
+       for (cnt = 0; cnt < len; cnt++)
+         err_buf[cnt] = 0x700 | err_str[cnt];
+       fbcon_mac_putcs(p->conp, p, err_buf, len, 0, 0);
        /* pause for the user */
        for(cnt = 0; cnt < 50000; cnt++)
 		udelay(100);
@@ -191,7 +195,7 @@ void fbcon_mac_clear(struct vc_data *conp, struct display *p, int sy, int sx,
    u8 *dest;
    int l,r,t,b,w,lo,s;
 
-   inverse = attr_reverse(p,conp);
+   inverse = attr_reverse(p,conp->vc_attr);
    pixel = inverse ? PIXEL_WHITE_MAC : PIXEL_BLACK_MAC;
    dest = (u8 *) (p->screen_base + sy * p->fontheight * p->next_line);
 
@@ -268,12 +272,10 @@ void fbcon_mac_putc(struct vc_data *conp, struct display *p, int c, int yy,
    u8 d;
    int j;
 
-   c &= 0xff;
-
-   cdat = p->fontdata+c*p->fontheight;
-   bold = attr_bold(p,conp);
-   ch_reverse = attr_reverse(p,conp);
-   ch_underline = attr_underline(p,conp);
+   cdat = p->fontdata+(c&0xff)*p->fontheight;
+   bold = attr_bold(p,c);
+   ch_reverse = attr_reverse(p,c);
+   ch_underline = attr_underline(p,c);
 
    for (rows = 0; rows < p->fontheight; rows++) {
       d = *cdat++;
@@ -293,10 +295,10 @@ void fbcon_mac_putc(struct vc_data *conp, struct display *p, int c, int yy,
 }
 
 
-void fbcon_mac_putcs(struct vc_data *conp, struct display *p, const char *s,
-		     int count, int yy, int xx)
+void fbcon_mac_putcs(struct vc_data *conp, struct display *p, 
+		     const unsigned short *s, int count, int yy, int xx)
 {
-   u8 c;
+   u16 c;
 
    while (count--) {
       c = *s++;
@@ -497,6 +499,17 @@ struct display_switch fbcon_mac = {
     fbcon_mac_setup, fbcon_mac_bmove, fbcon_mac_clear, fbcon_mac_putc,
     fbcon_mac_putcs, fbcon_mac_revc, NULL
 };
+
+
+#ifdef MODULE
+int init_module(void)
+{
+    return 0;
+}
+
+void cleanup_module(void)
+{}
+#endif /* MODULE */
 
 
     /*

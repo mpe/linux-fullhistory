@@ -839,10 +839,15 @@
 #define PCI_DEVICE_ID_COMPEX_RL2000	0x1401
 
 #define PCI_VENDOR_ID_RP               0x11fe
-#define PCI_DEVICE_ID_RP8OCTA          0x0001
+#define PCI_DEVICE_ID_RP32INTF         0x0001
 #define PCI_DEVICE_ID_RP8INTF          0x0002
 #define PCI_DEVICE_ID_RP16INTF         0x0003
-#define PCI_DEVICE_ID_RP32INTF         0x0004
+#define PCI_DEVICE_ID_RP4QUAD	       0x0004
+#define PCI_DEVICE_ID_RP8OCTA          0x0005
+#define PCI_DEVICE_ID_RP8J	       0x0006
+#define PCI_DEVICE_ID_RPP4	       0x000A
+#define PCI_DEVICE_ID_RPP8	       0x000B
+#define PCI_DEVICE_ID_RP8M	       0x000C
 
 #define PCI_VENDOR_ID_CYCLADES		0x120e
 #define PCI_DEVICE_ID_CYCLOM_Y_Lo	0x0100

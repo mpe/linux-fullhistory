@@ -1,5 +1,5 @@
 /*
- * Definitions for various on board processors on the soundcards. For
+ * Definitions for various on board processors on the sound cards. For
  * example DSP processors.
  */
 

@@ -109,7 +109,9 @@ void config_apollo(void) {
 	mach_floppy_setup    = dn_dummy_floppy_setup;
 #endif
 	mach_reset	     = dn_dummy_reset;  /* */
-	conswitchp	     = &fb_con;
+#ifdef CONFIG_DUMMY_CONSOLE
+	conswitchp	     = &dummy_con;
+#endif
 #if 0
 	mach_fb_init 	     = dn_fb_init; 
 	mach_video_setup     = dn_dummy_video_setup; 

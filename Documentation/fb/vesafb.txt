@@ -18,7 +18,7 @@ Advantages:
  * It provides a nice large console (128 cols + 48 lines with 1024x768)
    without using tiny, unreadable fonts.
  * You can run XF68_FBDev on top of /dev/fb0 (=> non-accelerated X11
-   support for every VBE 2.0 compilant graphics board).
+   support for every VBE 2.0 compliant graphics board).
  * Most important: boot logo :-)
 
 Disadvantages:

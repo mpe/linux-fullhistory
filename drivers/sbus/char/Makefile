@@ -50,7 +50,9 @@ endif
 #endif
 
 O_TARGET := sunchar.o
+ifneq ($(CONFIG_FB),y)
 O_OBJ    := ${FB_OBJS} suncons.o sbuscons.o pcicons.o sunfb.o
+endif
 O_OBJS   := ${O_OBJ} sunkbd.o sunkbdmap.o sunmouse.o sunserial.o zs.o
 M_OBJS   :=
 
@@ -122,8 +124,10 @@ endif
 
 # Add PCI console/fb drivers here.
 #
+ifneq ($(CONFIG_FB),y)
 ifeq ($(CONFIG_PCI),y)
 O_OBJS += mach64.o
+endif
 endif
 
 include $(TOPDIR)/Rules.make

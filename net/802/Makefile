@@ -23,6 +23,7 @@ endif
 
 ifdef CONFIG_TR
 O_OBJS += tr.o
+	SNAP=y
 endif
 
 ifdef CONFIG_FDDI
@@ -42,7 +43,7 @@ ifdef CONFIG_ATALK
 endif
 
 ifeq ($(SNAP),y)
-OX_OBJS += p8022.o psnap.o p8022tr.o
+OX_OBJS += p8022.o psnap.o
 endif
 
 

@@ -258,9 +258,8 @@ chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 	 */
 	sio_init();
 
-#ifdef CONFIG_FB
-	/* Frame buffer device based console */
-	conswitchp = &fb_con;
+#ifdef CONFIG_DUMMY_CONSOLE
+	conswitchp = &dummy_con;
 #endif
 #ifdef CONFIG_ABSCON_COMPAT
 	/* Console wrapper */

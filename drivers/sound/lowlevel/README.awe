@@ -1,12 +1,12 @@
 ================================================================
-	AWE32 Sound Driver for Linux / FreeBSD
+	AWE32 Sound Driver for Linux and FreeBSD
 		version 0.4.2c; Oct. 7, 1997
 ================================================================
 
 * GENERAL NOTES
 
-This is a sound driver extension for SoundBlaster AWE32 and other
-compatible cards (AWE32-PnP, SB32, SB32-PnP, AWE64 & etc) to enable
+This is a sound driver extension for the Sound Blaster AWE32 and other
+compatible cards (AWE32-PnP, SB32, SB32-PnP, AWE64, etc.) to enable
 the wave synth operations.  The driver is provided for both Linux
 1.2.x and 2.[01].x kernels, and also FreeBSD on Intel x86 and DEC
 Alpha systems.   See INSTALL.awe (or INSTALL.fbsd) document for
@@ -120,8 +120,8 @@ Define them only when the driver couldn't detect the card properly.
 [Sample Table Size]
 From ver.0.4.0, sample tables are allocated dynamically (except
 Linux-1.2.x system), so you need NOT to touch these parameters.
-Linux-1.2.x users may need to increase these values to apropriate size 
-if larger DRAM is equipped with the soundcard.
+Linux-1.2.x users may need to increase these values for sound 
+cards equipped with more DRAM.
 
 - AWE_MAX_SF_LISTS, AWE_MAX_SAMPLES, AWE_MAX_INFOS
 
@@ -135,7 +135,7 @@ if larger DRAM is equipped with the soundcard.
     passthrough channels. 
 
 - AWE_DEBUG_ON			(default: defined)
-    turns on debuggin messages if defined.
+    turns on debugging messages if defined.
 
 - AWE_HAS_GUS_COMPATIBILITY	(default: defined)
     Enables GUS compatibility mode if defined, reading GUS patches and 
@@ -166,26 +166,26 @@ if larger DRAM is equipped with the soundcard.
 
 * ACKNOWLEDGMENTS
 
-Thanks to Witold Jachimczyk (witek@xfactor.wpi.edu) for many advices
-to programming of AWE32.  Many codes are brought from his AWE32-native 
+Thanks to Witold Jachimczyk (witek@xfactor.wpi.edu) for much advice
+on programming of AWE32.  Much code is brought from his AWE32-native 
 MOD player, ALMP.
-The port of awedrv to FreeBSD is done by Randall Hopper
+The port of awedrv to FreeBSD was done by Randall Hopper
 (rhh@ct.picker.com).
 I also thank linux-awe-ml members for their efforts
-to reboot their system many times :-)
+to reboot their systems many times. :-)
 
 
 * BUGS & TODO'S
 
-- Can't detect DRAM size on some card
-- More smart patch management
-- More smart DRAM memory control
-- etc, etc, etc.
+- can't detect DRAM size on some cards
+- smarter patch management
+- smarter DRAM memory control
+- etc., etc., etc.
 
 
 * COPYRIGHT
 
-Copyright (C) 1996,1997 Takashi Iwai
+Copyright (C) 1996, 1997 Takashi Iwai
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

@@ -19,9 +19,6 @@
 #include "fbcon-cfb24.h"
 
 
-#warning Remove this warning after the test cycle was finalized
-
-
     /*
      *  24 bpp packed pixels
      */
@@ -123,13 +120,11 @@ void fbcon_cfb24_putc(struct vc_data *conp, struct display *p, int c, int yy,
     int bytes = p->next_line, rows;
     u32 eorx, fgx, bgx;
 
-    c &= 0xff;
-
     dest = p->screen_base + yy * p->fontheight * bytes + xx * 24;
-    cdat = p->fontdata + c * p->fontheight;
+    cdat = p->fontdata + (c & 0xff) * p->fontheight;
 
-    fgx = fbcon_cfb24_cmap[attr_fgcol(p, conp)];
-    bgx = fbcon_cfb24_cmap[attr_bgcol(p, conp)];
+    fgx = fbcon_cfb24_cmap[attr_fgcol(p, c)];
+    bgx = fbcon_cfb24_cmap[attr_bgcol(p, c)];
     eorx = fgx ^ bgx;
 
     for (rows = p->fontheight ; rows-- ; dest += bytes) {
@@ -148,16 +143,16 @@ void fbcon_cfb24_putc(struct vc_data *conp, struct display *p, int c, int yy,
     }
 }
 
-void fbcon_cfb24_putcs(struct vc_data *conp, struct display *p, const char *s,
-		       int count, int yy, int xx)
+void fbcon_cfb24_putcs(struct vc_data *conp, struct display *p, 
+		       const unsigned short *s, int count, int yy, int xx)
 {
     u8 *cdat, c, *dest, *dest0;
     int rows, bytes = p->next_line;
     u32 eorx, fgx, bgx;
 
     dest0 = p->screen_base + yy * p->fontheight * bytes + xx * 24;
-    fgx = fbcon_cfb24_cmap[attr_fgcol(p, conp)];
-    bgx = fbcon_cfb24_cmap[attr_bgcol(p, conp)];
+    fgx = fbcon_cfb24_cmap[attr_fgcol(p, *s)];
+    bgx = fbcon_cfb24_cmap[attr_bgcol(p, *s)];
     eorx = fgx ^ bgx;
     while (count--) {
 	c = *s++;
@@ -206,6 +201,17 @@ struct display_switch fbcon_cfb24 = {
     fbcon_cfb24_setup, fbcon_cfb24_bmove, fbcon_cfb24_clear, fbcon_cfb24_putc,
     fbcon_cfb24_putcs, fbcon_cfb24_revc, NULL
 };
+
+
+#ifdef MODULE
+int init_module(void)
+{
+    return 0;
+}
+
+void cleanup_module(void)
+{}
+#endif /* MODULE */
 
 
     /*

@@ -1,4 +1,4 @@
-/* $Id: linux_logo.h,v 1.3 1998/06/07 21:49:54 geert Exp $
+/* $Id: linux_logo.h,v 1.6 1998/07/07 13:34:56 jj Exp $
  * include/asm-i386/linux_logo.h: This is a linux logo
  *                                to be displayed on boot.
  *
@@ -28,49 +28,8 @@
 #ifdef INCLUDE_LINUX_LOGO_DATA
 
 #define INCLUDE_LINUX_LOGO16
+
 #include <linux/linux_logo.h>
-
-/* Painted by Johnny Stenback <jst@uwasa.fi> */
-
-unsigned char *linux_serial_image __initdata = "\n"
-"         .u$e.\n"
-"       .$$$$$:S\n"
-"       $\"*$/\"*$$\n"
-"       $.`$ . ^F\n"
-"       4k+#+T.$F\n"
-"       4P+++\"$\"$\n"
-"       :R\"+  t$$B\n"
-"    ___#       $$$\n"
-"    |  |       R$$k\n"
-"   dd. | Linux  $!$\n"
-"   ddd |  ia32  $9$F\n"
-" '!!!!!$       !!#!`\n"
-"  !!!!!*     .!!!!!`\n"
-"'!!!!!!!W..e$$!!!!!!`\n"
-" \"~^^~         ^~~^\n"
-"\n";
-
-/* The following created by Andrew Apted, May 1998 */
-
-unsigned char *linux_mda_image __initdata = "\n"
-"LINUX/IA32..........................\n"
-"::::::::::::::        ::::::::::::::\n"
-"::::::::::::             :::::::::::\n"
-"::::::::::::  ##   ##    :::::::::::\n"
-":::::::::::: # xxxx ##   :::::::::::\n"
-":::::::::::: xxxxxxxxx    ::::::::::\n"
-":::::::::::: ##xxx####     :::::::::\n"
-"::::::::::: ###########     ::::::::\n"
-":::::::::  #############      ::::::\n"
-"::::::::  ###############      :::::\n"
-"::::::   #################      ::::\n"
-"::::::  ##################      ::::\n"
-":::::xxx##################      ::::\n"
-":::xxxxxx  #############xxx   xxx:::\n"
-"xxxxxxxxxxx   ##########xxxxxxxxxx::\n"
-"xxxxxxxxxxxx ########## xxxxxxxxxxxx\n"
-"xxxxxxxxxxxxx#######    xxxxxxxxxxx:\n"
-":::::xxxxxxxx:::::::::::xxxxxx::::::\n\n";
 
 #else
 
@@ -84,9 +43,5 @@ extern unsigned char linux_logo16_red[];
 extern unsigned char linux_logo16_green[];
 extern unsigned char linux_logo16_blue[];
 extern unsigned char linux_logo16[];
-extern unsigned char *linux_serial_image;
-extern unsigned char *linux_mda_image;
-
-extern int (*console_show_logo)(void);
 
 #endif

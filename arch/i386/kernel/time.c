@@ -25,6 +25,7 @@
 #include <linux/init.h>
 #include <linux/smp.h>
 
+#include <asm/processor.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -534,7 +535,7 @@ __initfunc(void time_init(void))
  */
 #ifndef CONFIG_APM
 	/* If we have the CPU hardware time counters, use them */
-	if (boot_cpu_data.x86_capability & 16) {
+	if (boot_cpu_data.x86_capability & X86_FEATURE_TSC) { 
 		do_gettimeoffset = do_fast_gettimeoffset;
 		do_get_fast_time = do_x86_get_fast_time;
 

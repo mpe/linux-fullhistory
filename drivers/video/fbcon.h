@@ -26,7 +26,7 @@ struct display_switch {
 		  int height, int width);
     void (*putc)(struct vc_data *conp, struct display *p, int c, int yy,
     		 int xx);
-    void (*putcs)(struct vc_data *conp, struct display *p, const char *s,
+    void (*putcs)(struct vc_data *conp, struct display *p, const unsigned short *s,
 		  int count, int yy, int xx);     
     void (*revc)(struct display *p, int xx, int yy);
     void (*cursor)(struct display *p, int mode, int xx, int yy);
@@ -38,22 +38,31 @@ struct display_switch {
      */
 
 /* Color */
-#define attr_fgcol(p,conp)    \
-	(((conp)->vc_attr >> ((p)->inverse ? 4 : 0)) & 0x0f)
-#define attr_bgcol(p,conp)    \
-	(((conp)->vc_attr >> ((p)->inverse ? 0 : 4)) & 0x0f)
+#define attr_fgcol(p,s)    \
+	(((s) >> ((p)->inverse ? 12 : 8)) & 0x0f)
+#define attr_bgcol(p,s)    \
+	(((s) >> ((p)->inverse ? 8 : 12)) & 0x0f)
 #define	attr_bgcol_ec(p,conp) \
 	(((conp)->vc_video_erase_char >> ((p)->inverse ? 8 : 12)) & 0x0f)
 
 /* Monochrome */
-#define attr_bold(p,conp) \
-	((conp)->vc_attr & 2)
-#define attr_reverse(p,conp) \
-	(((conp)->vc_attr & 8) ^ ((p)->inverse ? 8 : 0))
-#define attr_underline(p,conp) \
-	((conp)->vc_attr & 4)
-#define attr_blink(p,conp) \
-	((conp)->vc_attr & 0x80)
+#define attr_bold(p,s) \
+	((s) & 0x200)
+#define attr_reverse(p,s) \
+	(((s) & 0x800) ^ ((p)->inverse ? 0x800 : 0))
+#define attr_underline(p,s) \
+	((s) & 0x400)
+#define attr_blink(p,s) \
+	((s) & 0x8000)
+	
+    /*
+     *  Scroll Method
+     */
+
+#define SCROLL_YWRAP	(0)
+#define SCROLL_YPAN	(1)
+#define SCROLL_YMOVE	(2)
+#define SCROLL_YREDRAW	(3)
 
 
 /* ================================================================= */

@@ -209,8 +209,8 @@ static struct fb_var_screeninfo cyberfb_default;
 
 void cyberfb_setup(char *options, int *ints);
 
-static int cyberfb_open(struct fb_info *info);
-static int cyberfb_release(struct fb_info *info);
+static int cyberfb_open(struct fb_info *info, int user);
+static int cyberfb_release(struct fb_info *info, int user);
 static int cyberfb_get_fix(struct fb_fix_screeninfo *fix, int con, struct
 fb_info *info);
 static int cyberfb_get_var(struct fb_var_screeninfo *var, int con, struct
@@ -231,7 +231,7 @@ static int cyberfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
  *    Interface to the low level console driver
  */
 
-unsigned long cyberfb_init(unsigned long mem_start);
+void cyberfb_init(void);
 static int Cyberfb_switch(int con, struct fb_info *info);
 static int Cyberfb_updatevar(int con, struct fb_info *info);
 static void Cyberfb_blank(int blank, struct fb_info *info);
@@ -771,7 +771,7 @@ static void do_install_cmap(int con, struct fb_info *info)
  *  Open/Release the frame buffer device
  */
 
-static int cyberfb_open(struct fb_info *info)
+static int cyberfb_open(struct fb_info *info, int user)
 {
 	/*
 	 * Nothing, only a usage count for the moment
@@ -781,7 +781,7 @@ static int cyberfb_open(struct fb_info *info)
 	return(0);
 }
 
-static int cyberfb_release(struct fb_info *info)
+static int cyberfb_release(struct fb_info *info, int user)
 {
 	MOD_DEC_USE_COUNT;
 	return(0);
@@ -1016,15 +1016,14 @@ __initfunc(void cyberfb_setup(char *options, int *ints))
  *    Initialization
  */
 
-__initfunc(unsigned long cyberfb_init(unsigned long mem_start))
+__initfunc(void cyberfb_init(void))
 {
-	int err;
 	struct cyberfb_par par;
 	unsigned long board_addr;
 	const struct ConfigDev *cd;
 
 	if (!(CyberKey = zorro_find(ZORRO_PROD_PHASE5_CYBERVISION64, 0, 0)))
-		return mem_start;
+		return;
 
 	cd = zorro_get_board (CyberKey);
 	zorro_config_board (CyberKey, 0);
@@ -1032,7 +1031,7 @@ __initfunc(unsigned long cyberfb_init(unsigned long mem_start))
 
 	/* This includes the video memory as well as the S3 register set */
 	CyberMem = kernel_map (board_addr + 0x01400000, 0x01000000,
-			       KERNELMAP_NOCACHE_SER, &mem_start);
+			       KERNELMAP_NOCACHE_SER, NULL);
 	CyberRegs = (char*) (CyberMem + 0x00c00000);
 
 	fbhw = &Cyber_switch;
@@ -1046,10 +1045,6 @@ __initfunc(unsigned long cyberfb_init(unsigned long mem_start))
 	fb_info.updatevar = &Cyberfb_updatevar;
 	fb_info.blank = &Cyberfb_blank;
 
-	err = register_framebuffer(&fb_info);
-	if (err < 0)
-		return mem_start;
-
 	fbhw->init();
 	fbhw->decode_var(&cyberfb_default, &par);
 	fbhw->encode_var(&cyberfb_default, &par);
@@ -1059,13 +1054,14 @@ __initfunc(unsigned long cyberfb_init(unsigned long mem_start))
 	cyberfb_set_disp(-1, &fb_info);
 	do_install_cmap(0, &fb_info);
 
+	if (register_framebuffer(&fb_info) < 0)
+		return;
+
 	printk("fb%d: %s frame buffer device, using %ldK of video memory\n",
 	       GET_FB_IDX(fb_info.node), fb_info.modename, CyberSize>>10);
 
 	/* TODO: This driver cannot be unloaded yet */
 	MOD_INC_USE_COUNT;
-
-	return mem_start;
 }
 
 
@@ -1164,7 +1160,7 @@ static void fbcon_cyber8_putc(struct vc_data *conp, struct display *p, int c,
 }
 
 static void fbcon_cyber8_putcs(struct vc_data *conp, struct display *p,
-			       const char *s, int count, int yy, int xx)
+			       const unsigned short *s, int count, int yy, int xx)
 {
     Cyber_WaitBlit();
     fbcon_cfb8_putcs(conp, p, s, count, yy, xx);
@@ -1186,7 +1182,8 @@ static struct display_switch fbcon_cyber8 = {
 #ifdef MODULE
 int init_module(void)
 {
-	return cyberfb_init(NULL);
+	cyberfb_init();
+	return 0;
 }
 
 void cleanup_module(void)

@@ -92,12 +92,11 @@ static inline int inword(const unsigned char c) {
 /* set inwordLut contents. Invoked by ioctl(). */
 int sel_loadlut(const unsigned long arg)
 {
-	int err;
+	int err = -EFAULT;
 
-	err = copy_from_user(inwordLut, (u32 *)(arg+4), 32);
-	if (err)
-		return -EFAULT;
-	return 0;
+	if (!copy_from_user(inwordLut, (u32 *)(arg+4), 32))
+		err = 0;
+	return err;
 }
 
 /* does screen address p correspond to character at LH/RH edge of screen? */
@@ -109,10 +108,7 @@ static inline int atedge(const int p, int size_row)
 /* constrain v such that v <= u */
 static inline unsigned short limit(const unsigned short v, const unsigned short u)
 {
-/* gcc miscompiles the ?: operator, so don't use it.. */
-	if (v > u)
-		return u;
-	return v;
+	return (v > u) ? u : v;
 }
 
 /* set the current selection. Invoked by ioctl() or by kernel code. */
@@ -258,16 +254,18 @@ int set_selection(const unsigned long arg, struct tty_struct *tty, int user)
 	sel_start = new_sel_start;
 	sel_end = new_sel_end;
 
-	if (sel_buffer)
-		kfree(sel_buffer);
-	sel_buffer = kmalloc((sel_end-sel_start)/2+1, GFP_KERNEL);
-	if (!sel_buffer) {
-		printk("selection: kmalloc() failed\n");
+	/* Allocate a new buffer before freeing the old one ... */
+	bp = kmalloc((sel_end-sel_start)/2+1, GFP_KERNEL);
+	if (!bp) {
+		printk(KERN_WARNING "selection: kmalloc() failed\n");
 		clear_selection();
 		return -ENOMEM;
 	}
+	if (sel_buffer)
+		kfree(sel_buffer);
+	sel_buffer = bp;
 
-	obp = bp = sel_buffer;
+	obp = bp;
 	for (i = sel_start; i <= sel_end; i += 2) {
 		*bp = sel_pos(i);
 		if (!isspace(*bp++))
@@ -286,31 +284,29 @@ int set_selection(const unsigned long arg, struct tty_struct *tty, int user)
 	return 0;
 }
 
-/* Insert the contents of the selection buffer into the queue of the
-   tty associated with the current console. Invoked by ioctl(). */
+/* Insert the contents of the selection buffer into the
+ * queue of the tty associated with the current console.
+ * Invoked by ioctl().
+ */
 int paste_selection(struct tty_struct *tty)
 {
-	struct wait_queue wait = { current, NULL };
-	char	*bp = sel_buffer;
-	int	c = sel_buffer_lth;
-	int	l;
 	struct vt_struct *vt = (struct vt_struct *) tty->driver_data;
+	int	pasted = 0, count;
+	struct wait_queue wait = { current, NULL };
 
-	if (!bp || !c)
-		return 0;
 	poke_blanked_console();
 	add_wait_queue(&vt->paste_wait, &wait);
-	do {
+	while (sel_buffer && sel_buffer_lth > pasted) {
 		current->state = TASK_INTERRUPTIBLE;
 		if (test_bit(TTY_THROTTLED, &tty->flags)) {
 			schedule();
 			continue;
 		}
-		l = MIN(c, tty->ldisc.receive_room(tty));
-		tty->ldisc.receive_buf(tty, bp, 0, l);
-		c -= l;
-		bp += l;
-	} while (c);
+		count = sel_buffer_lth - pasted;
+		count = MIN(count, tty->ldisc.receive_room(tty));
+		tty->ldisc.receive_buf(tty, sel_buffer + pasted, 0, count);
+		pasted += count;
+	}
 	remove_wait_queue(&vt->paste_wait, &wait);
 	current->state = TASK_RUNNING;
 	return 0;

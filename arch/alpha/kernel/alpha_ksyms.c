@@ -14,6 +14,7 @@
 #include <linux/in.h>
 #include <linux/in6.h>
 #include <linux/pci.h>
+#include <linux/tty.h>
 
 #include <asm/io.h>
 #include <asm/hwrpb.h>
@@ -46,6 +47,7 @@ EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
+EXPORT_SYMBOL(screen_info);
 
 /* platform dependent support */
 EXPORT_SYMBOL(_inb);
@@ -62,7 +64,7 @@ EXPORT_SYMBOL(_writew);
 EXPORT_SYMBOL(_writel);
 EXPORT_SYMBOL(_memcpy_fromio);
 EXPORT_SYMBOL(_memcpy_toio);
-EXPORT_SYMBOL(_memset_io);
+EXPORT_SYMBOL(_memset_c_io);
 EXPORT_SYMBOL(insb);
 EXPORT_SYMBOL(insw);
 EXPORT_SYMBOL(insl);
@@ -85,6 +87,7 @@ EXPORT_SYMBOL(memcmp);
 EXPORT_SYMBOL(memmove);
 EXPORT_SYMBOL(__memcpy);
 EXPORT_SYMBOL(__memset);
+EXPORT_SYMBOL(__memsetw);
 EXPORT_SYMBOL(__constant_c_memset);
 
 EXPORT_SYMBOL(dump_thread);

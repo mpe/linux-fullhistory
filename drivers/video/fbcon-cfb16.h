@@ -12,5 +12,5 @@ extern void fbcon_cfb16_clear(struct vc_data *conp, struct display *p, int sy,
 extern void fbcon_cfb16_putc(struct vc_data *conp, struct display *p, int c,
 			     int yy, int xx);
 extern void fbcon_cfb16_putcs(struct vc_data *conp, struct display *p,
-			      const char *s, int count, int yy, int xx);
+			      const unsigned short *s, int count, int yy, int xx);
 extern void fbcon_cfb16_revc(struct display *p, int xx, int yy);

@@ -56,8 +56,13 @@ struct  fbcmap {
         unsigned char   *blue;
 };
 
+#ifdef __KERNEL__
+#define FBIOPUTCMAP_SPARC _IOW('F', 3, struct fbcmap)
+#define FBIOGETCMAP_SPARC _IOW('F', 4, struct fbcmap)
+#else
 #define FBIOPUTCMAP _IOW('F', 3, struct fbcmap)
 #define FBIOGETCMAP _IOW('F', 4, struct fbcmap)
+#endif
 
 /* # of device specific values */
 #define FB_ATTR_NDEVSPECIFIC    8

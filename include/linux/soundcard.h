@@ -69,7 +69,7 @@
 #define SNDCARD_PSEUDO_MSS	24
 #define SNDCARD_GUSPNP		25
 #define SNDCARD_UART401		26
-/* Soundcard numbers 27 to N are reserved. Don't add more numbers here */
+/* Sound card numbers 27 to N are reserved. Don't add more numbers here. */
 
 /***********************************
  * IOCTL Commands for /dev/sequencer

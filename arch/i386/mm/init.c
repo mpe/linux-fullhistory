@@ -22,6 +22,7 @@
 #include <linux/blk.h>
 #endif
 
+#include <asm/processor.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -170,23 +171,6 @@ extern char __init_begin, __init_end;
 #define X86_CR4_MCE		0x0040		/* Machine check enable */
 #define X86_CR4_PGE		0x0080		/* enable global pages */
 #define X86_CR4_PCE		0x0100		/* enable performance counters at ipl 3 */
-
-#define X86_FEATURE_FPU		0x0001		/* internal FPU */
-#define X86_FEATURE_VME		0x0002		/* vm86 extensions */
-#define X86_FEATURE_DE		0x0004		/* debugging extensions */
-#define X86_FEATURE_PSE		0x0008		/* Page size extensions */
-#define X86_FEATURE_TSC		0x0010		/* Time stamp counter */
-#define X86_FEATURE_MSR		0x0020		/* RDMSR/WRMSR */
-#define X86_FEATURE_PAE		0x0040		/* Physical address extension */
-#define X86_FEATURE_MCE		0x0080		/* Machine check exception */
-#define X86_FEATURE_CXS		0x0100		/* cmpxchg8 available */
-#define X86_FEATURE_APIC	0x0200		/* internal APIC */
-#define X86_FEATURE_10		0x0400
-#define X86_FEATURE_11		0x0800
-#define X86_FEATURE_MTRR	0x1000		/* memory type registers */
-#define X86_FEATURE_PGE		0x2000		/* Global page */
-#define X86_FEATURE_MCA		0x4000		/* Machine Check Architecture */
-#define X86_FEATURE_CMOV	0x8000		/* Cmov/fcomi */
 
 /*
  * Save the cr4 feature set we're using (ie

@@ -114,8 +114,8 @@
 
 /* frame buffer operations */
 
-static int dnfb_open(struct fb_info *info);
-static int dnfb_release(struct fb_info *info);
+static int dnfb_open(struct fb_info *info, int user);
+static int dnfb_release(struct fb_info *info, int user);
 static int dnfb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			struct fb_info *info);
 static int dnfb_get_var(struct fb_var_screeninfo *var, int con,
@@ -149,7 +149,7 @@ static int currcon=0;
 
 static char dnfb_name[]="Apollo";
 
-static int dnfb_open(struct fb_info *info)
+static int dnfb_open(struct fb_info *info, int user)
 {
         /*
          * Nothing, only a usage count for the moment
@@ -159,7 +159,7 @@ static int dnfb_open(struct fb_info *info)
         return(0);
 }
 
-static int dnfb_release(struct fb_info *info)
+static int dnfb_release(struct fb_info *info, int user)
 {
         MOD_DEC_USE_COUNT;
         return(0);
@@ -311,10 +311,8 @@ static void dnfb_set_disp(int con, struct fb_info *info)
 #endif
 }
   
-unsigned long dnfb_init(unsigned long mem_start)
+void dnfb_init(void)
 {
-	int err;
-       
 	fb_info.changevar=NULL;
 	strcpy(&fb_info.modename[0],dnfb_name);
 	fb_info.fontname[0]=0;
@@ -325,13 +323,6 @@ unsigned long dnfb_init(unsigned long mem_start)
 	fb_info.node = -1;
 	fb_info.fbops = &dnfb_ops;
 	
-	err=register_framebuffer(&fb_info);
-	if(err < 0) {
-		panic("unable to register apollo frame buffer\n");
-	}
- 
-	/* now we have registered we can safely setup the hardware */
-
         outb(RESET_CREG, AP_CONTROL_3A);
         outw(0x0, AP_WRITE_ENABLE);
         outb(NORMAL_MODE,AP_CONTROL_0); 
@@ -339,16 +330,14 @@ unsigned long dnfb_init(unsigned long mem_start)
         outb(S_DATA_PLN, AP_CONTROL_2);
         outw(SWAP(0x3),AP_ROP_1);
 
-        printk("fb%d: apollo frame buffer alive and kicking !\n",
-	       GET_FB_IDX(fb_info.node));
-
-	
         dnfb_get_var(&disp[0].var, 0, &fb_info);
-
 	dnfb_set_disp(-1, &fb_info);
 
-	return mem_start;
-
+	if (register_framebuffer(&fb_info) < 0)
+		panic("unable to register apollo frame buffer\n");
+ 
+        printk("fb%d: apollo frame buffer alive and kicking !\n",
+	       GET_FB_IDX(fb_info.node));
 }	
 
 	

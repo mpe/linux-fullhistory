@@ -32,6 +32,7 @@
 
 #include <linux/hdlcdrv.h>
 #include <linux/soundmodem.h>
+#include <asm/processor.h>
 #include <linux/bitops.h>
 
 #define SM_DEBUG
@@ -297,7 +298,7 @@ extern inline unsigned int lcm(unsigned int x, unsigned int y)
 
 #include <asm/processor.h>
 
-#define HAS_RDTSC (current_cpu_data.x86_capability & 0x10)
+#define HAS_RDTSC (current_cpu_data.x86_capability & X86_FEATURE_TSC)
 
 /*
  * only do 32bit cycle counter arithmetic; we hope we won't overflow.

@@ -60,11 +60,11 @@ static int ofonly = 0;
      *  Interface used by the world
      */
 
-unsigned long offb_init(unsigned long mem_start);
+void offb_init(void);
 void offb_setup(char *options, int *ints);
 
-static int offb_open(struct fb_info *info);
-static int offb_release(struct fb_info *info);
+static int offb_open(struct fb_info *info, int user);
+static int offb_release(struct fb_info *info, int user);
 static int offb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			struct fb_info *info);
 static int offb_get_var(struct fb_var_screeninfo *var, int con,
@@ -123,7 +123,7 @@ static struct fb_ops offb_ops = {
      *  Open/Release the frame buffer device
      */
 
-static int offb_open(struct fb_info *info)
+static int offb_open(struct fb_info *info, int user)
 {
     /*
      *  Nothing, only a usage count for the moment
@@ -133,7 +133,7 @@ static int offb_open(struct fb_info *info)
     return(0);
 }
 
-static int offb_release(struct fb_info *info)
+static int offb_release(struct fb_info *info, int user)
 {
     MOD_DEC_USE_COUNT;
     return(0);
@@ -275,8 +275,7 @@ static int offb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 
 
 #ifdef CONFIG_FB_ATY
-extern unsigned long atyfb_of_init(unsigned long mem_start,
-				   struct device_node *dp);
+extern void atyfb_of_init(struct device_node *dp);
 
 static const char *aty_names[] = {
     "ATY,mach64", "ATY,XCLAIM", "ATY,264VT", "ATY,mach64ii", "ATY,264GT-B", 
@@ -285,7 +284,7 @@ static const char *aty_names[] = {
 };
 #endif /* CONFIG_FB_ATY */
 #ifdef CONFIG_FB_S3TRIO
-extern void s3triofb_init_of(unsigned long mem_start, struct device_node *dp);
+extern void s3triofb_init_of(struct device_node *dp);
 #endif /* CONFIG_FB_S3TRIO */
 
 
@@ -293,10 +292,10 @@ extern void s3triofb_init_of(unsigned long mem_start, struct device_node *dp);
      *  Initialisation
      */
 
-__initfunc(unsigned long offb_init(unsigned long mem_start))
+__initfunc(void offb_init(void))
 {
     struct device_node *dp;
-    int dpy, i, err, *pp, len;
+    int dpy, i, *pp, len;
     unsigned *up, address;
     struct fb_fix_screeninfo *fix;
     struct fb_var_screeninfo *var;
@@ -313,7 +312,7 @@ __initfunc(unsigned long offb_init(unsigned long mem_start))
 		if (!strcmp(dp->name, aty_names[i]))
 		    break;
 	    if (i < sizeof(aty_names)/sizeof(*aty_names)) {
-		mem_start = atyfb_of_init(mem_start, dp);
+		atyfb_of_init(dp);
 		continue;
 	    }
 #endif /* CONFIG_FB_ATY */
@@ -428,12 +427,6 @@ __initfunc(unsigned long offb_init(unsigned long mem_start))
 	info->info.updatevar = &offbcon_updatevar;
 	info->info.blank = &offbcon_blank;
 
-	err = register_framebuffer(&info->info);
-	if (err < 0) {
-	    kfree(info);
-	    return mem_start;
-	}
-
 	for (i = 0; i < 16; i++) {
 	    int j = color_table[i];
 	    info->palette[i].red = default_red[j];
@@ -441,6 +434,11 @@ __initfunc(unsigned long offb_init(unsigned long mem_start))
 	    info->palette[i].blue = default_blu[j];
 	}
 	offb_set_var(var, -1, &info->info);
+
+	if (register_framebuffer(&info->info) < 0) {
+	    kfree(info);
+	    return;
+	}
 
 	printk("fb%d: Open Firmware frame buffer device on %s\n",
 	       GET_FB_IDX(info->info.node), dp->full_name);
@@ -468,7 +466,6 @@ __initfunc(unsigned long offb_init(unsigned long mem_start))
 	}
 #endif /* CONFIG_FB_COMPAT_XPMAC) */
     }
-    return mem_start;
 }
 
 

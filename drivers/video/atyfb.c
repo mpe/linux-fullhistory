@@ -365,14 +365,14 @@ struct aty_features {
      *  Interface used by the world
      */
 
-unsigned long atyfb_init(unsigned long mem_start);
+void atyfb_init(void);
 #ifdef CONFIG_FB_OF
 void atyfb_of_init(struct device_node *dp);
 #endif
 void atyfb_setup(char *options, int *ints);
 
-static int atyfb_open(struct fb_info *info);
-static int atyfb_release(struct fb_info *info);
+static int atyfb_open(struct fb_info *info, int user);
+static int atyfb_release(struct fb_info *info, int user);
 static int atyfb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			 struct fb_info *info);
 static int atyfb_get_var(struct fb_var_screeninfo *var, int con,
@@ -1024,7 +1024,7 @@ static void atyfb_set_par(struct atyfb_par *par, struct fb_info_aty *info)
      *  Open/Release the frame buffer device
      */
 
-static int atyfb_open(struct fb_info *info)
+static int atyfb_open(struct fb_info *info, int user)
 
 {
     /*
@@ -1035,7 +1035,7 @@ static int atyfb_open(struct fb_info *info)
     return(0);
 }
 
-static int atyfb_release(struct fb_info *info)
+static int atyfb_release(struct fb_info *info, int user)
 {
     MOD_DEC_USE_COUNT;
     return(0);
@@ -1573,7 +1573,7 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
 {
     u32 chip_id;
     u32 i;
-    int j, k, err, sense;
+    int j, k, sense;
     struct fb_var_screeninfo var;
     struct aty_regvals *init;
     const char *chipname = NULL;
@@ -1756,19 +1756,19 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
 	info->palette[j].blue = default_blu[k];
     }
 
-    err = register_framebuffer(&info->fb_info);
-    if (err < 0)
-	return 0;
     atyfb_set_par(&info->default_par, info);
     encode_var(&var, &info->default_par, info);
     atyfb_set_var(&var, -1, &info->fb_info);
+
+    if (register_framebuffer(&info->fb_info) < 0)
+	return 0;
 
     printk("fb%d: %s frame buffer device on %s\n",
 	   GET_FB_IDX(info->fb_info.node), atyfb_name, name);
     return 1;
 }
 
-__initfunc(unsigned long atyfb_init(unsigned long mem_start))
+__initfunc(void atyfb_init(void))
 {
 #if defined(CONFIG_FB_OF)
     /* We don't want to be called like this. */
@@ -1787,9 +1787,7 @@ __initfunc(unsigned long atyfb_init(unsigned long mem_start))
 	    continue;
 	}
 
-	info = (struct fb_info_aty *)mem_start;
-	mem_start += sizeof(struct fb_info_aty);
-	mem_start = PAGE_ALIGN(mem_start);
+	info = kmalloc(sizeof(struct fb_info_aty), GFP_ATOMIC);
 
 	/*
 	 *  Map the video memory (physical address given) to somewhere in the
@@ -1797,20 +1795,19 @@ __initfunc(unsigned long atyfb_init(unsigned long mem_start))
 	 */
 	info->frame_buffer = kernel_map(phys_vmembase[m64_num],
 					phys_size[m64_num],
-					KERNELMAP_NOCACHE_SER, &mem_start);
+					KERNELMAP_NOCACHE_SER, NULL);
 	info->frame_buffer_phys = info->frame_buffer;
 	info->ati_regbase = kernel_map(phys_guiregbase[m64_num], 0x10000,
-				       KERNELMAP_NOCACHE_SER, &mem_start)
-			    +0xFC00ul;
+				       KERNELMAP_NOCACHE_SER, NULL)+0xFC00ul;
 	info->ati_regbase_phys = info->ati_regbase;
 
 	if (!aty_init(info, "ISA bus")) {
+	    kfree(info);
 	    /* This is insufficient! kernel_map has added two large chunks!! */
-	    return mem_start;
+	    return;
 	}
     }
 #endif
-    return mem_start;
 }
 
 #ifdef CONFIG_FB_OF
@@ -2232,7 +2229,7 @@ static void fbcon_aty8_putc(struct vc_data *conp, struct display *p, int c,
 }
 
 static void fbcon_aty8_putcs(struct vc_data *conp, struct display *p,
-			     const char *s, int count, int yy, int xx)
+			     const unsigned short *s, int count, int yy, int xx)
 {
     wait_for_idle((struct fb_info_aty *)p->fb_info);
     fbcon_cfb8_putcs(conp, p, s, count, yy, xx);
@@ -2253,7 +2250,7 @@ static void fbcon_aty16_putc(struct vc_data *conp, struct display *p, int c,
 }
 
 static void fbcon_aty16_putcs(struct vc_data *conp, struct display *p,
-			      const char *s, int count, int yy, int xx)
+			      const unsigned short *s, int count, int yy, int xx)
 {
     wait_for_idle((struct fb_info_aty *)p->fb_info);
     fbcon_cfb16_putcs(conp, p, s, count, yy, xx);
@@ -2274,7 +2271,7 @@ static void fbcon_aty32_putc(struct vc_data *conp, struct display *p, int c,
 }
 
 static void fbcon_aty32_putcs(struct vc_data *conp, struct display *p,
-			      const char *s, int count, int yy, int xx)
+			      const unsigned short *s, int count, int yy, int xx)
 {
     wait_for_idle((struct fb_info_aty *)p->fb_info);
     fbcon_cfb32_putcs(conp, p, s, count, yy, xx);

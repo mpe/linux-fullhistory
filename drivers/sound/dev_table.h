@@ -159,7 +159,7 @@ struct dma_buffparms
 
 /*
  * Structure for use with various microcontrollers and DSP processors 
- * in the recent soundcards.
+ * in the recent sound cards.
  */
 typedef struct coproc_operations 
 {

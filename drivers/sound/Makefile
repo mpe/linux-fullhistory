@@ -70,6 +70,11 @@ obj-$(CONFIG_SOUND_VMIDI)	+= v_midi.o
 obj-$(CONFIG_SOUND_YM3812)	+= adlib_card.o opl3.o
 obj-$(CONFIG_VIDC_SOUND)	+= vidc_mod.o
 
+#jnx
+obj-$(CONFIG_SOUND_ES1370)	+= es1370.o
+obj-$(CONFIG_SOUND_ES1371)	+= es1371.o
+obj-$(CONFIG_SOUND_SONICVIBES)	+= sonicvibes.o
+
 endif
 
 
@@ -221,7 +226,7 @@ pss.o: pss_boot.h
 
 ifeq ($(CONFIG_PSS_HAVE_BOOT),y)
     pss_boot.h: $(patsubst "%", %, $(CONFIG_PSS_BOOT_FILE)) bin2hex
-	bin2hex pss_synth < $(CONFIG_PSS_BOOT_FILE) > $@
+	./bin2hex pss_synth < $(CONFIG_PSS_BOOT_FILE) > $@
 else
     pss_boot.h:
 	(							\

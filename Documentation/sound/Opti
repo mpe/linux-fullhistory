@@ -10,8 +10,8 @@ kernel release will include these features.
 Please do not report inconsistencies on older Linux
 kernels.
 
-The OPTi 82C931 is supported in its non PnP mode.
-Usually you do not need to set jumpers etc... The sound driver
+The OPTi 82C931 is supported in its non-PnP mode.
+Usually you do not need to set jumpers, etc. The sound driver
 will check the card status and if it is required it will
 force the card into a mode in which it can be programmed.
 
@@ -34,7 +34,7 @@ Answer 'm' for  these items:
   Support for OPTi MAD16 and/or Mozart based cards	 	(CONFIG_MAD16)
   FM synthesizer (YM3812/OPL-3) support				(CONFIG_YM3812)
 
-The configuration menu may ask for addresses, irq lines or dma
+The configuration menu may ask for addresses, IRQ lines or DMA
 channels. If the card is used as a module the module loading
 options will override these values.
 
@@ -61,8 +61,8 @@ about your PnP cards. Then edit the resulting file and select
 the options of your choice. This file is normally installed as
 /etc/isapnp.conf.
 
-The driver had one limitation WRT io port resources.
-IO3 base should be 0x0E0C. Isapnp allows other io ports but this
+The driver has one limitation with respect to I/O port resources:
+IO3 base must be 0x0E0C.  Although isapnp allows other ports, this
 address is hard-coded into the driver.
 
 Using kmod and autoloading the sound driver
@@ -117,7 +117,7 @@ options opl3 io=0x388
 post-install mad16 /sbin/ad1848_mixer_reroute 14 8 15 3 16 6
 
 This sets resources and options for the mad16 and opl3 drivers.
-I use 2 dma channels (only one is required) to enable full duplex.
+I use two DMA channels (only one is required) to enable full duplex.
 joystick=1 enables the joystick port. cdtype=0 disables the cd port.
 You can also set mpu_io and mpu_irq in the mad16 options for the
 uart401 driver.

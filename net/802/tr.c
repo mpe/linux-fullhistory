@@ -9,6 +9,9 @@
  * Fixes:       3 Feb 97 Paul Norton <pnorton@cts.com> Minor routing fixes.
  *              Added rif table to /proc/net/tr_rif and rif timeout to
  *              /proc/sys/net/token-ring/rif_timeout.
+ *              22 Jun 98 Paul Norton <p.norton@computer.org> Rearranged
+ *              tr_header and tr_type_trans to handle passing IPX SNAP and
+ *              802.2 through the correct layers. Eliminated tr_reformat.
  *        
  */
 
@@ -84,9 +87,30 @@ int sysctl_tr_rif_timeout = RIF_TIMEOUT;
 int tr_header(struct sk_buff *skb, struct device *dev, unsigned short type,
               void *daddr, void *saddr, unsigned len) 
 {
+	struct trh_hdr *trh;
+	int hdr_len;
 
-	struct trh_hdr *trh=(struct trh_hdr *)skb_push(skb,dev->hard_header_len);
-	struct trllc *trllc=(struct trllc *)(trh+1);
+	/* 
+	 * Add the 802.2 SNAP header if IP as the IPv4 code calls  
+	 * dev->hard_header directly.
+	 */
+	if (type == ETH_P_IP || type == ETH_P_ARP)
+	{
+		struct trllc *trllc=(struct trllc *)(trh+1);
+
+		hdr_len = sizeof(struct trh_hdr) + sizeof(struct trllc);
+		trh = (struct trh_hdr *)skb_push(skb, hdr_len);
+		trllc = (struct trllc *)(trh+1);
+		trllc->dsap = trllc->ssap = EXTENDED_SAP;
+		trllc->llc = UI_CMD;
+		trllc->protid[0] = trllc->protid[1] = trllc->protid[2] = 0x00;
+		trllc->ethertype = htons(type);
+	}
+	else
+	{
+		hdr_len = sizeof(struct trh_hdr);
+		trh = (struct trh_hdr *)skb_push(skb, hdr_len);	
+	}
 
 	trh->ac=AC;
 	trh->fc=LLC_FRAME;
@@ -94,18 +118,7 @@ int tr_header(struct sk_buff *skb, struct device *dev, unsigned short type,
 	if(saddr)
 		memcpy(trh->saddr,saddr,dev->addr_len);
 	else
-		memset(trh->saddr,0,dev->addr_len); /* Adapter fills in address */
-
-	/*
-	 *	This is the stuff needed for IP encoding - IP over 802.2
-	 *	with SNAP.
-	 */
-	 
-	trllc->dsap=trllc->ssap=EXTENDED_SAP;
-	trllc->llc=UI_CMD;
-	
-	trllc->protid[0]=trllc->protid[1]=trllc->protid[2]=0x00;
-	trllc->ethertype=htons(type);
+		memcpy(trh->saddr,dev->dev_addr,dev->addr_len);
 
 	/*
 	 *	Build the destination and then source route the frame
@@ -115,10 +128,10 @@ int tr_header(struct sk_buff *skb, struct device *dev, unsigned short type,
 	{
 		memcpy(trh->daddr,daddr,dev->addr_len);
 		tr_source_route(skb,trh,dev);
-		return(dev->hard_header_len);
+		return(hdr_len);
 	}
-	return -dev->hard_header_len;
 
+	return -hdr_len;
 }
 	
 /*
@@ -161,12 +174,18 @@ unsigned short tr_type_trans(struct sk_buff *skb, struct device *dev)
 {
 
 	struct trh_hdr *trh=(struct trh_hdr *)skb->data;
-	struct trllc *trllc=(struct trllc *)(skb->data+sizeof(struct trh_hdr));
+	struct trllc *trllc;
+	unsigned riflen=0;
 	
 	skb->mac.raw = skb->data;
 	
-	skb_pull(skb,dev->hard_header_len);
-	
+       	if(trh->saddr[0] & TR_RII)
+		riflen = (ntohs(trh->rcf) & TR_RCF_LEN_MASK) >> 8;
+
+	trllc = (struct trllc *)(skb->data+sizeof(struct trh_hdr)-TR_MAXRIFLEN+riflen);
+
+	skb_pull(skb,sizeof(struct trh_hdr)-TR_MAXRIFLEN+riflen);
+
 	tr_add_rif_info(trh, dev);
 
 	if(*trh->daddr & 1) 
@@ -183,38 +202,20 @@ unsigned short tr_type_trans(struct sk_buff *skb, struct device *dev)
 			skb->pkt_type=PACKET_OTHERHOST;
 	}
 
- 	return trllc->ethertype;
-}
+	/*
+	 * Strip the SNAP header from ARP packets since we don't 
+	 * pass them through to the 802.2/SNAP layers.
+	 */
 
-/*
- *      Reformat the headers to make a "standard" frame. This is done
- *      in-place in the sk_buff. 
- */
-
-void tr_reformat(struct sk_buff *skb, unsigned int hdr_len)
-{
-	struct trllc *llc = (struct trllc *)(skb->data+hdr_len);
-	struct device *dev = skb->dev;
-	unsigned char *olddata = skb->data;
-	int slack;
-
-	if (llc->dsap == 0xAA && llc->ssap == 0xAA)
+	if (trllc->dsap == EXTENDED_SAP &&
+	    (trllc->ethertype == ntohs(ETH_P_IP) ||
+	     trllc->ethertype == ntohs(ETH_P_ARP)))
 	{
-		slack = sizeof(struct trh_hdr) - hdr_len;
-		skb_push(skb, slack);
-		memmove(skb->data, olddata, hdr_len);
-		memset(skb->data+hdr_len, 0, slack);
+		skb_pull(skb, sizeof(struct trllc));
+		return trllc->ethertype;
 	}
-	else
-	{
-		struct trllc *local_llc;
-		slack = sizeof(struct trh_hdr) - hdr_len + sizeof(struct trllc);
-		skb_push(skb, slack);
-		memmove(skb->data, olddata, hdr_len);
-		memset(skb->data+hdr_len, 0, slack);
-		local_llc = (struct trllc *)(skb->data+dev->hard_header_len);
-		local_llc->ethertype = htons(ETH_P_TR_802_2);
-       	}
+
+	return ntohs(ETH_P_802_2);
 }
 
 /*
@@ -350,22 +351,23 @@ printk("adding rif_entry: addr:%02X:%02X:%02X:%02X:%02X:%02X rcf:%04X\n",
 			return;
 		}
 
-		if (rii_p)
-		{
-			entry->rcf = trh->rcf & htons((unsigned short)~TR_RCF_BROADCAST_MASK);
-			memcpy(&(entry->rseg[0]),&(trh->rseg[0]),8*sizeof(unsigned short));
-			entry->local_ring = 0;
-		}
-		else
-		{
-			entry->local_ring = 1;
-		}
-
 		memcpy(&(entry->addr[0]),&(trh->saddr[0]),TR_ALEN);
 		memcpy(&(entry->iface[0]),dev->name,5);
 		entry->next=rif_table[hash];
 		entry->last_used=jiffies;
 		rif_table[hash]=entry;
+
+		if (rii_p)
+		{
+			entry->rcf = trh->rcf & htons((unsigned short)~TR_RCF_BROADCAST_MASK);
+			memcpy(&(entry->rseg[0]),&(trh->rseg[0]),8*sizeof(unsigned short));
+			entry->local_ring = 0;
+			trh->saddr[0]|=TR_RII; /* put the routing indicator back for tcpdump */
+		}
+		else
+		{
+			entry->local_ring = 1;
+		}
 	} 	
 	else	/* Y. Tahara added */
 	{ 
@@ -447,7 +449,7 @@ int rif_get_info(char *buffer,char **start, off_t offset, int length, int dummy)
 	rif_cache entry;
 
 	size=sprintf(buffer,
-		     "if     TR address       TTL   rcf   routing segments\n\n");
+		     "if     TR address       TTL   rcf   routing segments\n");
 	pos+=size;
 	len+=size;
 

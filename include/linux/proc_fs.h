@@ -281,6 +281,7 @@ extern int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
 				off_t offset, int length, int inout);
 
 extern struct proc_dir_entry proc_root;
+extern struct proc_dir_entry proc_root_fs;
 extern struct proc_dir_entry *proc_net;
 extern struct proc_dir_entry *proc_scsi;
 extern struct proc_dir_entry proc_sys;

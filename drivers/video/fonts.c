@@ -42,12 +42,19 @@ extern char fontname_6x11[];
 extern int fontwidth_6x11, fontheight_6x11;
 extern u8 fontdata_6x11[];
 
+/* SUN8x16 */
+extern char fontname_sun8x16[];
+extern int fontwidth_sun8x16, fontheight_sun8x16;
+extern u8 fontdata_sun8x16[];
+
+
 
    /*
     *    Font Descriptor Array
     */
 
 struct softfontdesc {
+   int idx;
    char *name;
    int *width;
    int *height;
@@ -58,13 +65,19 @@ struct softfontdesc {
 #define VGA8x16_IDX	1
 #define PEARL8x8_IDX	2
 #define VGA6x11_IDX	3
+#define SUN8x16_IDX	4
 
 static struct softfontdesc softfonts[] = {
-   { fontname_8x8, &fontwidth_8x8, &fontheight_8x8, fontdata_8x8 },
-   { fontname_8x16, &fontwidth_8x16, &fontheight_8x16, fontdata_8x16 },
-   { fontname_pearl8x8, &fontwidth_pearl8x8, &fontheight_pearl8x8,
+   { VGA8x8_IDX, fontname_8x8, &fontwidth_8x8, &fontheight_8x8, fontdata_8x8 },
+#ifndef __sparc__
+   { VGA8x16_IDX, fontname_8x16, &fontwidth_8x16, &fontheight_8x16, fontdata_8x16 },
+   { PEARL8x8_IDX, fontname_pearl8x8, &fontwidth_pearl8x8, &fontheight_pearl8x8,
      fontdata_pearl8x8 },
-   { fontname_6x11, &fontwidth_6x11, &fontheight_6x11, fontdata_6x11 },
+   { VGA6x11_IDX, fontname_6x11, &fontwidth_6x11, &fontheight_6x11, fontdata_6x11 },
+#else
+   { SUN8x16_IDX, fontname_sun8x16, &fontwidth_sun8x16, &fontheight_sun8x16, 
+     fontdata_sun8x16 },
+#endif
 };
 
 static unsigned int numsoftfonts = sizeof(softfonts)/sizeof(*softfonts);
@@ -99,7 +112,7 @@ int findsoftfont(char *name, int *width, int *height, u8 *data[])
 void getdefaultfont(int xres, int yres, char *name[], int *width, int *height,
                     u8 *data[])
 {
-    int i;
+    int i, j;
     
     if (yres < 400) {
 	i = VGA8x8_IDX;
@@ -120,12 +133,20 @@ void getdefaultfont(int xres, int yres, char *name[], int *width, int *height,
     }
 #endif
 
+#ifdef __sparc__
+    i = SUN8x16_IDX;
+#endif
+
+    for (j = 0; j < numsoftfonts; j++)
+        if (softfonts[j].idx == i)
+            break;
+
     if (name)
-	*name = softfonts[i].name;
+	*name = softfonts[j].name;
     if (width)
-	*width = *softfonts[i].width;
+	*width = *softfonts[j].width;
     if (height)
-	*height = *softfonts[i].height;
+	*height = *softfonts[j].height;
     if (data)
-	*data = softfonts[i].data;
+	*data = softfonts[j].data;
 }

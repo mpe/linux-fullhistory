@@ -108,8 +108,12 @@ source arch/arm/drivers/block/Config.in
 source drivers/acorn/block/Config.in
 
 source arch/arm/drivers/char/Config.in
+
+mainmenu_option next_comment
+comment 'Console drivers'
 bool 'Support Frame buffer devices' CONFIG_FB
 source drivers/video/Config.in
+endmenu
 
 if [ "$CONFIG_NET" = "y" ]; then
   source net/Config.in

@@ -238,8 +238,8 @@ static struct fb_var_screeninfo virgefb_default;
 
 void virgefb_setup(char *options, int *ints);
 
-static int virgefb_open(struct fb_info *info);
-static int virgefb_release(struct fb_info *info);
+static int virgefb_open(struct fb_info *info, int user);
+static int virgefb_release(struct fb_info *info, int user);
 static int virgefb_get_fix(struct fb_fix_screeninfo *fix, int con, struct
 fb_info *info);
 static int virgefb_get_var(struct fb_var_screeninfo *var, int con, struct
@@ -260,7 +260,7 @@ static int virgefb_ioctl(struct inode *inode, struct file *file, u_int cmd,
  *    Interface to the low level console driver
  */
 
-unsigned long virgefb_init(unsigned long mem_start);
+void virgefb_init(void);
 static int Cyberfb_switch(int con, struct fb_info *info);
 static int Cyberfb_updatevar(int con, struct fb_info *info);
 static void Cyberfb_blank(int blank, struct fb_info *info);
@@ -765,7 +765,7 @@ static void do_install_cmap(int con, struct fb_info *info)
  *  Open/Release the frame buffer device
  */
 
-static int virgefb_open(struct fb_info *info)
+static int virgefb_open(struct fb_info *info, int user)
 {
 	/*
 	 * Nothing, only a usage count for the moment
@@ -775,7 +775,7 @@ static int virgefb_open(struct fb_info *info)
 	return(0);
 }
 
-static int virgefb_release(struct fb_info *info)
+static int virgefb_release(struct fb_info *info, int user)
 {
 	MOD_DEC_USE_COUNT;
 	return(0);
@@ -1010,15 +1010,14 @@ __initfunc(void virgefb_setup(char *options, int *ints))
  *    Initialization
  */
 
-__initfunc(unsigned long virgefb_init(unsigned long mem_start))
+__initfunc(void virgefb_init(void))
 {
-	int err;
 	struct virgefb_par par;
 	unsigned long board_addr;
 	const struct ConfigDev *cd;
 
 	if (!(CyberKey = zorro_find(ZORRO_PROD_PHASE5_CYBERVISION64_3D, 0, 0)))
-		return mem_start;
+		return;
 
 	cd = zorro_get_board (CyberKey);
 	zorro_config_board (CyberKey, 0);
@@ -1033,22 +1032,17 @@ __initfunc(unsigned long virgefb_init(unsigned long mem_start))
 
 		CyberMem = ZTWO_VADDR(board_addr);
 		printk("CV3D detected running in Z2 mode ... not yet supported!\n");
-		return mem_start;
+		return;
 	}
 	else
 	{
-		CyberVGARegs = kernel_map(board_addr +0x0c000000,
-					       0x00010000,
-					       KERNELMAP_NOCACHE_SER,
-					       &mem_start);
+		CyberVGARegs = kernel_map(board_addr +0x0c000000, 0x00010000,
+					       KERNELMAP_NOCACHE_SER, NULL);
 		CyberRegs = (char *)kernel_map(board_addr +0x05000000,
 					       0x00010000,
-					       KERNELMAP_NOCACHE_SER,
-					       &mem_start);
-		CyberMem = kernel_map(board_addr + 0x04800000,
-				      0x00400000,
-				      KERNELMAP_NOCACHE_SER,
-				      &mem_start);
+					       KERNELMAP_NOCACHE_SER, NULL);
+		CyberMem = kernel_map(board_addr + 0x04800000, 0x00400000,
+				      KERNELMAP_NOCACHE_SER, NULL);
 		printk("CV3D detected running in Z3 mode\n");
 	}
 
@@ -1063,10 +1057,6 @@ __initfunc(unsigned long virgefb_init(unsigned long mem_start))
 	fb_info.updatevar = &Cyberfb_updatevar;
 	fb_info.blank = &Cyberfb_blank;
 
-	err = register_framebuffer(&fb_info);
-	if (err < 0)
-		return mem_start;
-
 	fbhw->init();
 	fbhw->decode_var(&virgefb_default, &par);
 	fbhw->encode_var(&virgefb_default, &par);
@@ -1076,13 +1066,14 @@ __initfunc(unsigned long virgefb_init(unsigned long mem_start))
 	virgefb_set_disp(-1, &fb_info);
 	do_install_cmap(0, &fb_info);
 
+	if (register_framebuffer(&fb_info) < 0)
+		return;
+
 	printk("fb%d: %s frame buffer device, using %ldK of video memory\n",
 	       GET_FB_IDX(fb_info.node), fb_info.modename, CyberSize>>10);
 
 	/* TODO: This driver cannot be unloaded yet */
 	MOD_INC_USE_COUNT;
-
-	return mem_start;
 }
 
 
@@ -1180,7 +1171,8 @@ static struct display_switch fbcon_virge8 = {
 #ifdef MODULE
 int init_module(void)
 {
-	return(virgefb_init(NULL));
+	virgefb_init();
+	return 0;
 }
 
 void cleanup_module(void)

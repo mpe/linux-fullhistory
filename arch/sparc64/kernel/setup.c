@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.20 1998/02/24 17:02:39 jj Exp $
+/*  $Id: setup.c,v 1.26 1998/07/08 10:21:15 jj Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -26,6 +26,7 @@
 #include <linux/blk.h>
 #include <linux/init.h>
 #include <linux/inet.h>
+#include <linux/console.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -41,13 +42,15 @@
 #include <net/ipconfig.h>
 #endif
 
+#undef PROM_DEBUG_CONSOLE
+
 struct screen_info screen_info = {
 	0, 0,			/* orig-x, orig-y */
-	{ 0, 0, },		/* unused */
+	0,			/* unused */
 	0,			/* orig-video-page */
 	0,			/* orig-video-mode */
 	128,			/* orig-video-cols */
-	0,0,0,			/* ega_ax, ega_bx, ega_cx */
+	0, 0, 0,		/* unused, ega_bx, unused */
 	54,			/* orig-video-lines */
 	0,                      /* orig-video-isVGA */
 	16                      /* orig-video-points */
@@ -63,7 +66,9 @@ unsigned int phys_bytes_of_ram, end_of_phys_memory;
 
 extern unsigned long sparc64_ttable_tl0;
 #if CONFIG_SUN_CONSOLE
-extern void console_restore_palette(void);
+void console_restore_palette(void) {
+/* FIXME */
+}
 #endif
 asmlinkage void sys_sync(void);	/* it's really int */
 
@@ -102,8 +107,7 @@ unsigned int boot_flags = 0;
 #define BOOTME_KGDB   0x4
 
 #ifdef CONFIG_SUN_CONSOLE
-extern char *console_fb_path;
-static int console_fb = 0;
+static int console_fb __initdata = 0;
 #endif
 static unsigned long memory_size = 0;
 
@@ -191,7 +195,6 @@ __initfunc(static void boot_flags_init(char *commands))
 					prom_printf ("Using /dev/ttyb as console.\n");
 				} else {
 					console_fb = 1;
-					console_fb_path = commands;
 				}
 			} else
 #endif
@@ -235,21 +238,31 @@ extern int root_mountflags;
 char saved_command_line[256];
 char reboot_command[256];
 
-unsigned long phys_base;
+extern unsigned long phys_base;
 
 static struct pt_regs fake_swapper_regs = { { 0, }, 0, 0, 0, 0 };
 
-#if 0
-#include <linux/console.h>
+extern struct consw sun_serial_con;
 
-static void prom_cons_write(struct console *con, const char *str, unsigned count)
+#ifdef PROM_DEBUG_CONSOLE
+static void
+prom_console_write(struct console *con, const char *s, unsigned n)
 {
-        while (count--)
-                prom_printf("%c", *str++);
+	prom_printf("%s", s);
 }
 
 static struct console prom_console = {
-        "PROM", prom_cons_write, 0, 0, 0, 0, 0, CON_PRINTBUFFER, 0, 0, 0
+	"prom",
+	prom_console_write,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	CON_PRINTBUFFER,
+	-1,
+	0,
+	NULL
 };
 #endif
 
@@ -260,7 +273,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 	unsigned long lowest_paddr;
 	int total, i;
 
-#if 0
+#ifdef PROM_DEBUG_CONSOLE
 	register_console(&prom_console);
 #endif
 
@@ -396,6 +409,13 @@ __initfunc(void setup_arch(char **cmdline_p,
 #else
 	serial_console = 0;
 #endif
+	if (!serial_console) {
+#ifdef CONFIG_PROM_CONSOLE
+		conswitchp = &prom_con;
+#elif defined(CONFIG_DUMMY_CONSOLE)	
+		conswitchp = &dummy_con;
+#endif
+	}
 }
 
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)

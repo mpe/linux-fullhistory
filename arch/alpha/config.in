@@ -173,10 +173,6 @@ fi
 #bool 'Echo console messages on /dev/ttyS0 (COM1)' CONFIG_SERIAL_ECHO
 
 if [ "$CONFIG_PCI" = "y" ]; then
-  bool 'TGA Console Support' CONFIG_TGA_CONSOLE
-#  if [ "$CONFIG_TGA_CONSOLE" = "y" ]; then
-#    bool 'VGA Console Support' CONFIG_VGA_CONSOLE
-#  fi
   bool 'PCI quirks' CONFIG_PCI_QUIRKS
   if [ "$CONFIG_PCI_QUIRKS" = "y" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
     bool 'PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE
@@ -202,12 +198,6 @@ if [ "$CONFIG_PARPORT" != "n" ]; then
   fi
 fi
 endmenu
-
-bool 'Support for frame buffer devices' CONFIG_FB
-if [ "$CONFIG_FB" = "y" ]; then
-  define_bool CONFIG_PCI_CONSOLE y
-fi
-source drivers/video/Config.in
 
 source drivers/pnp/Config.in
 
@@ -264,6 +254,18 @@ source fs/nls/Config.in
 
 source drivers/char/Config.in
 
+if [ "$CONFIG_VT" = "y" ]; then
+  mainmenu_option next_comment
+  comment 'Console drivers'
+  bool 'VGA text console' CONFIG_VGA_CONSOLE
+  bool 'Support for frame buffer devices' CONFIG_FB
+  if [ "$CONFIG_FB" = "y" ]; then
+    define_bool CONFIG_PCI_CONSOLE y
+  fi
+  source drivers/video/Config.in
+  endmenu
+fi
+
 mainmenu_option next_comment
 comment 'Sound'
 
@@ -289,7 +291,3 @@ fi
 
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
 endmenu
-
-if [ "$CONFIG_TGA_CONSOLE" = "n" ]; then
-  define_bool CONFIG_VGA_CONSOLE y
-fi

@@ -38,6 +38,7 @@
 #include <linux/init.h>
 #include <linux/selection.h>
 #include <linux/console.h>
+#include <linux/vt_kern.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -103,6 +104,40 @@ static inline u16 vga_readw(u16 *addr)
 #endif /* !__powerpc__ */	
 }
 
+/*
+ * By replacing the four outb_p with two back to back outw, we can reduce
+ * the window of opportunity to see text mislocated to the RHS of the
+ * console during heavy scrolling activity. However there is the remote
+ * possibility that some pre-dinosaur hardware won't like the back to back
+ * I/O. Since the Xservers get away with it, we should be able to as well.
+ */
+static inline void write_vga(unsigned char reg, unsigned int val)
+{
+#ifndef SLOW_VGA
+    unsigned int v1, v2;
+
+    v1 = reg + (val & 0xff00);
+    v2 = reg + 1 + ((val << 8) & 0xff00);
+    outw(v1, vga_video_port_reg);
+    outw(v2, vga_video_port_reg);
+#else
+    outb_p(reg, vga_video_port_reg);
+    outb_p(val >> 8, vga_video_port_val);
+    outb_p(reg+1, vga_video_port_reg);
+    outb_p(val & 0xff, vga_video_port_val);
+#endif
+}
+
+static inline void vga_set_origin(unsigned short location)
+{
+	write_vga(12, location >> 1);
+}
+
+static inline void vga_set_cursor(int location)
+{
+    write_vga(14, location >> 1);
+}
+
 static void vga_set_split(unsigned short linenum)
 {
 	unsigned long flags;
@@ -136,34 +171,19 @@ static void vga_set_split(unsigned short linenum)
 	restore_flags(flags);
 }
 
-
-/*
- * By replacing the four outb_p with two back to back outw, we can reduce
- * the window of opportunity to see text mislocated to the RHS of the
- * console during heavy scrolling activity. However there is the remote
- * possibility that some pre-dinosaur hardware won't like the back to back
- * I/O. Since the Xservers get away with it, we should be able to as well.
- */
-static inline void write_vga(unsigned char reg, unsigned int val)
+static inline void vga_set_palreg(u_int regno, u_int red, 
+				  u_int green, u_int blue)
 {
-#ifndef SLOW_VGA
-    unsigned int v1, v2;
+	unsigned long flags;
 
-    v1 = reg + (val & 0xff00);
-    v2 = reg + 1 + ((val << 8) & 0xff00);
-    outw(v1, vga_video_port_reg);
-    outw(v2, vga_video_port_reg);
-#else
-    outb_p(reg, vga_video_port_reg);
-    outb_p(val >> 8, vga_video_port_val);
-    outb_p(reg+1, vga_video_port_reg);
-    outb_p(val & 0xff, vga_video_port_val);
-#endif
-}
-
-static inline void vga_set_origin(unsigned short offset)
-{
-	write_vga(12, offset);
+	save_flags(flags); cli();
+	
+	outb_p(regno, dac_reg);
+	outb_p(red,   dac_val);
+	outb_p(green, dac_val);
+	outb_p(blue,  dac_val);
+	
+	restore_flags(flags);
 }
 
 
@@ -171,8 +191,8 @@ static inline void vga_set_origin(unsigned short offset)
      *  Interface used by the world
      */
 
-static int vgafb_open(struct fb_info *info);
-static int vgafb_release(struct fb_info *info);
+static int vgafb_open(struct fb_info *info, int user);
+static int vgafb_release(struct fb_info *info, int user);
 static int vgafb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			 struct fb_info *info);
 static int vgafb_get_var(struct fb_var_screeninfo *var, int con,
@@ -193,7 +213,7 @@ static int vgafb_ioctl(struct inode *inode, struct file *file, u_int cmd,
      *  Interface to the low level console driver
      */
 
-unsigned long vgafb_init(unsigned long mem_start);
+void vgafb_init(void);
 void vgafb_setup(char *options, int *ints);
 static int vgafbcon_switch(int con, struct fb_info *info);
 static int vgafbcon_updatevar(int con, struct fb_info *info);
@@ -228,7 +248,7 @@ static struct fb_ops vgafb_ops = {
      *  Open/Release the frame buffer device
      */
 
-static int vgafb_open(struct fb_info *info)
+static int vgafb_open(struct fb_info *info, int user)
 
 {
     /*
@@ -239,7 +259,7 @@ static int vgafb_open(struct fb_info *info)
     return(0);
 }
 
-static int vgafb_release(struct fb_info *info)
+static int vgafb_release(struct fb_info *info, int user)
 {
     MOD_DEC_USE_COUNT;
     return(0);
@@ -297,8 +317,9 @@ static int vgafb_set_var(struct fb_var_screeninfo *var, int con,
     if ((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NOW) {
 	oldbpp = display->var.bits_per_pixel;
 	display->var = *var;
-	vga_set_origin(var->yoffset/video_font_height*fb_fix.line_length/2);
+	vga_set_origin(var->yoffset/video_font_height*fb_fix.line_length);
     }
+
     if (oldbpp != var->bits_per_pixel) {
 	if ((err = fb_alloc_cmap(&display->cmap, 0, 0)))
 	    return err;
@@ -320,7 +341,7 @@ static int vgafb_pan_display(struct fb_var_screeninfo *var, int con,
     if (var->xoffset || var->yoffset+var->yres > var->yres_virtual)
 	return -EINVAL;
 
-    vga_set_origin(var->yoffset/video_font_height*fb_fix.line_length/2);
+    vga_set_origin(var->yoffset/video_font_height*fb_fix.line_length);
     return 0;
 }
 
@@ -379,21 +400,16 @@ static int vgafb_ioctl(struct inode *inode, struct file *file, u_int cmd,
      *  Move hardware vga cursor
      */
 
-static void vga_write_cursor(int location)
-{
-    write_vga(14, location >> 1);
-}
-
 static void fbcon_vgafb_cursor(struct display *p, int mode, int x, int y)
 {
     switch (mode) {
 	case CM_ERASE:
-	   vga_write_cursor(vga_video_mem_term - vga_video_mem_base - 1);
+	   vga_set_cursor(vga_video_mem_term - vga_video_mem_base - 1);
 	   break;
 
 	case CM_MOVE:
 	case CM_DRAW:
-	   vga_write_cursor(y*p->next_line + (x << 1));
+	   vga_set_cursor(y*p->next_line + (x << 1));
 	   break;
     }
 }
@@ -403,14 +419,13 @@ static void fbcon_vgafb_cursor(struct display *p, int mode, int x, int y)
      *  Initialisation
      */
 
-__initfunc(unsigned long vgafb_init(unsigned long mem_start))
+__initfunc(void vgafb_init(void))
 {
-    int err;
     u16 saved;
     u16 *p;
 
     if (screen_info.orig_video_isVGA == VIDEO_TYPE_VLFB)
-	return mem_start;
+	return;
 
     vga_video_num_lines = ORIG_VIDEO_LINES;
     vga_video_num_columns = ORIG_VIDEO_COLS;
@@ -480,10 +495,8 @@ __initfunc(unsigned long vgafb_init(unsigned long mem_start))
 		 * default values */
 
 		for (i = 0; i < 16; i++) {
-		    outb_p(color_table[i], dac_reg);
-		    outb_p(default_red[i], dac_val);
-		    outb_p(default_grn[i], dac_val);
-		    outb_p(default_blu[i], dac_val);
+		    vga_set_palreg(color_table[i], default_red[i],
+		    		   default_grn[i], default_blu[i]);
 		}
 	    }
 	} else {
@@ -503,12 +516,12 @@ __initfunc(unsigned long vgafb_init(unsigned long mem_start))
     vga_writew(0xAA55, p);
     if (vga_readw(p) != 0xAA55) {
 	vga_writew(saved, p);
-	return mem_start;
+	return;
     }
     vga_writew(0x55AA, p);
     if (vga_readw(p) != 0x55AA) {
 	vga_writew(saved, p);
-	return mem_start;
+	return;
     }
     vga_writew(saved, p);
 
@@ -525,8 +538,8 @@ __initfunc(unsigned long vgafb_init(unsigned long mem_start))
 
     fb_fix.smem_start = (char *) vga_video_mem_base;
     fb_fix.smem_len = vga_video_mem_term - vga_video_mem_base;
-    fb_fix.type = FB_TYPE_VGA_TEXT;
-    fb_fix.type_aux = 0;
+    fb_fix.type = FB_TYPE_TEXT;
+    fb_fix.type_aux = vga_can_do_color ? FB_AUX_TEXT_CGA : FB_AUX_TEXT_MDA;
     fb_fix.visual = FB_VISUAL_PSEUDOCOLOR;
     fb_fix.xpanstep = 0;
     fb_fix.ypanstep = video_font_height;
@@ -606,16 +619,13 @@ __initfunc(unsigned long vgafb_init(unsigned long mem_start))
     fb_info.updatevar = &vgafbcon_updatevar;
     fb_info.blank = &vgafbcon_blank;
 
-    err = register_framebuffer(&fb_info);
-    if (err < 0)
-	return mem_start;
-
     vgafb_set_var(&fb_var, -1, &fb_info);
+
+    if (register_framebuffer(&fb_info) < 0)
+	return;
 
     printk("fb%d: VGA frame buffer device, using %dK of video memory\n",
 	   GET_FB_IDX(fb_info.node), fb_fix.smem_len>>10);
-
-    return mem_start;
 }
 
 __initfunc(void vgafb_setup(char *options, int *ints))
@@ -635,7 +645,7 @@ static int vgafbcon_updatevar(int con, struct fb_info *info)
 		/* hardware scrolling */
 
 		vga_set_origin(var->yoffset / video_font_height *
-			fb_fix.line_length / 2);
+			fb_fix.line_length);
 
 		vga_set_split(var->yres - ((var->vmode & FB_VMODE_YWRAP) ?
 			var->yoffset+1 : 0));
@@ -666,18 +676,14 @@ static void vgafbcon_blank(int blank, struct fb_info *info)
 {
     int i;
 
-    outb_p(0, dac_reg);
     if (blank)
 	for (i = 0; i < 16; i++) {
-	    outb_p(0, dac_val);
-	    outb_p(0, dac_val);
-	    outb_p(0, dac_val);
+	    vga_set_palreg(i, 0, 0, 0);
 	}
     else
 	for (i = 0; i < 16; i++) {
-	    outb_p(palette[i].blue, dac_val);
-	    outb_p(palette[i].green, dac_val);
-	    outb_p(palette[i].blue, dac_val);
+	    vga_set_palreg(i, palette[i].red, palette[i].green,
+			      palette[i].blue);
 	}
 }
 
@@ -714,10 +720,7 @@ static int vgafb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     palette[regno].green = green;
     palette[regno].blue = blue;
 
-    outb_p(regno, dac_reg);
-    outb_p(red, dac_val);
-    outb_p(green, dac_val);
-    outb_p(blue, dac_val);
+    vga_set_palreg(regno, red, green, blue);
 
     return 0;
 }
@@ -744,3 +747,17 @@ static struct display_switch fbcon_vgafb = {
     fbcon_vga_setup, fbcon_vga_bmove, fbcon_vga_clear, fbcon_vga_putc,
     fbcon_vga_putcs, fbcon_vga_revc, fbcon_vgafb_cursor
 };
+
+
+#ifdef MODULE
+int init_module(void)
+{
+    vgafb_init();
+    return 0;
+}
+
+void cleanup_module(void)
+{
+    unregister_framebuffer(&fb_info);
+}
+#endif /* MODULE */

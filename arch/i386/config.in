@@ -56,18 +56,12 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Kernel support for JAVA binaries (obsolete)' CONFIG_BINFMT_JAVA
 fi
 
-bool 'Video mode selection support' CONFIG_VIDEO_SELECT
-
 tristate 'Parallel port support' CONFIG_PARPORT
 if [ "$CONFIG_PARPORT" != "n" ]; then
   dep_tristate '   PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
   if [ "$CONFIG_PARPORT_PC" != "n" ]; then
     bool '   Support foreign hardware' CONFIG_PARPORT_OTHER
   fi
-fi
-
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  bool 'Support for frame buffer devices (EXPERIMENTAL)' CONFIG_FB
 fi
 
 endmenu
@@ -125,11 +119,19 @@ source fs/Config.in
 
 source fs/nls/Config.in
 
-define_bool CONFIG_VGA_CONSOLE y
-
-source drivers/video/Config.in
-
 source drivers/char/Config.in
+
+if [ "$CONFIG_VT" = "y" ]; then
+  mainmenu_option next_comment
+  comment 'Console drivers'
+  bool 'VGA text console' CONFIG_VGA_CONSOLE
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    bool 'Video mode selection support' CONFIG_VIDEO_SELECT
+    bool 'Support for frame buffer devices (EXPERIMENTAL)' CONFIG_FB
+  fi
+  source drivers/video/Config.in
+  endmenu
+fi
 
 mainmenu_option next_comment
 comment 'Sound'

@@ -152,8 +152,6 @@
 #define TRUE  1
 #define FALSE 0
 
-#define X86_FEATURE_MTRR	0x1000		/* memory type registers */
-
 #define MTRRcap_MSR     0x0fe
 #define MTRRdefType_MSR 0x2ff
 

@@ -30,6 +30,7 @@
 #include <linux/sched.h>
 #include <linux/time.h>
 #include <linux/hfmodem.h>
+#include <asm/processor.h>
 
 /* --------------------------------------------------------------------- */
 
@@ -67,7 +68,7 @@ static int rdtsc_ok = 1;
 #ifdef __i386__
 __initfunc(static void i386_capability(void))
 {
-	if (boot_cpu_data.x86_capability & 0x10)
+	if (boot_cpu_data.x86_capability & X86_FEATURE_TSC))
 		rdtsc_ok = 1;
 	else
 		printk(KERN_INFO "%s: cpu does not support the rdtsc instruction\n", hfmodem_drvname);

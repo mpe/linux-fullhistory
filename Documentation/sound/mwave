@@ -1,4 +1,4 @@
-	How to try and survive an IBM Mwave under Linux SB drivers
+	How to try to survive an IBM Mwave under Linux SB drivers
 
 
 * IBM refuses to provide documentation. If anyone can ever find out what
@@ -13,33 +13,34 @@
 ----------------------------------------------------------------------------
 
 OK, first thing - the IRQ problem IS a problem, whether the test is bypassed or
-not. And it is NOT a linux problem - it is an MWAVE problem that is fixed with
-the latest MWAVE patches. So, in other words, don't bypass the test for MWAVES!
+not.  It is NOT a Linux problem, but an MWAVE problem that is fixed with the
+latest MWAVE patches. So, in other words, don't bypass the test for MWAVES!
 
-My config is Win 95 on HDA1, swap on HDA2, RH 5 on HDA3.
+I have Windows 95 on /dev/hda1, swap on /dev/hda2, and Red Hat 5 on /dev/hda3.
 
 The steps, then:
 
     Boot to Linux. 
-    Mount Win95 file system (assume mount mount = /dos95)
+    Mount Windows 95 file system (assume mount point = /dos95).
     mkdir /dos95/linux
     mkdir /dos95/linux/boot
     mkdir /dos95/linux/boot/parms
 
-    Copy the kernel, any initrd image, and loadlin to /dos95/linux/boot
+    Copy the kernel, any initrd image, and loadlin to /dos95/linux/boot/.
 
-    Reboot to win 95
+    Reboot to Windows 95.
 
-    Edit C:/msdos.sys and add/change the following:
+    Edit C:/msdos.sys and add or change the following:
 
         Logo=0
         BootGUI=0
 
-        [Note msdos.sys IS a text file but it needs to be 'unhidden' and make
-         read-writable before it can be edited]
+    Note that msdos.sys is a text file but it needs to be made 'unhidden',
+    readable and writable before it can be edited.  This can be done with
+    DOS' "attrib" command.
 
-    Edit Config .sys to have multiple config menus. I have one for win95, and
-    five for linux. Like this:
+    Edit config.sys to have multiple config menus. I have one for windows 95 and
+    five for Linux, like this:
 ------------
 [menu]
 menuitem=W95, Windows 95
@@ -70,11 +71,11 @@ DEVICE=C:\MWW\MANAGER\MWD50430.EXE
 SHELL=c:\command.com /e:2048
 -------------------
 
-The important things are the SHELL and DEVICE statements
+The important things are the SHELL and DEVICE statements.
 
-    Then change Autoexec.bat. Basically everything in there originally should be
-    done ONLY when Win95 is booted. Then you add new things specifically for
-    Linux.  Mine is as follows
+    Then change autoexec.bat. Basically everything in there originally should be
+    done ONLY when Windows 95 is booted. Then you add new things specifically
+    for Linux.  Mine is as follows
 
 ---------------
 @ECHO OFF
@@ -111,35 +112,35 @@ win
 
 ------------------------
 
-Now build a file in c:\linux\boot\parms for each linux config that you have.
+Now build a file in c:\linux\boot\parms for each Linux config that you have.
 
 For example, my LINDOC3 config is for a docked Thinkpad at runlevel 3 with no
-initrd image, and has a parm file named LINDOC3.PAR in c:\linux\boot\parms:
+initrd image, and has a parameter file named LINDOC3.PAR in c:\linux\boot\parms:
 
 -----------------------
 #   LOADLIN @param_file image=other_image root=/dev/other
 #
 #	Linux Console in docking station
 #
-c:\linux\boot\zImage.krn         # first value must be the filename of the Linux-kernel
-root=/dev/hda3                    # the device which gets mounted as root FS
-ro                                      # Other kernel arguments go here
+c:\linux\boot\zImage.krn        # First value must be filename of Linux kernel.
+root=/dev/hda3                  # device which gets mounted as root FS
+ro                              # Other kernel arguments go here.
 apm=off
 doc=yes
 3
 -----------------------
 
-the doc=yes parm is an environment variable that my init scripts use, it is not
+The doc=yes parameter is an environment variable used by my init scripts, not
 a kernel argument.
 
-However, the apm=off parm IS a kernel argument!  APM, at least in my setup,
+However, the apm=off parameter IS a kernel argument!  APM, at least in my setup,
 causes the kernel to crash when loaded via loadlin (but NOT when loaded via
 LILO). The APM stuff COULD be forced out of the kernel via the kernel compile
-options. BUT I, instead, got hold of an unofficial patch to the APM drivers that
-allows them to be dynamically deactivated via kernel arguments. Whatever you
-chose to document, APM, it seems, MUST be off for setups like mine.
+options. Instead, I got an unofficial patch to the APM drivers that allows them
+to be dynamically deactivated via kernel arguments. Whatever you chose to
+document, APM, it seems, MUST be off for setups like mine.
 
-Now check the C:\MWW\MWCONFIG.REF looks like this:
+Now make sure C:\MWW\MWCONFIG.REF looks like this:
 
 ----------------------
 [NativeDOS]
@@ -167,16 +168,16 @@ OR the Default= line COULD be
 
 Default=SBPRO
 
-Reboot to Win95 and choose Linux. When booted, use sndconfig to configure the  
-sound modules and VOILA - ThinkPad sound with Linux.
+Reboot to Windows 95 and choose Linux. When booted, use sndconfig to configure
+the sound modules and voilà - ThinkPad sound with Linux.
 
-Now the gotchas - You can either have CD sound OR Mixers but not both. That's a
-problem with the SB1.5(CD sound) or SBPRO(Mixers) settings. No-one knows why
+Now the gotchas - you can either have CD sound OR Mixers but not both. That's a
+problem with the SB1.5 (CD sound) or SBPRO (Mixers) settings. No one knows why
 this is!
 
-And, for some reason MPEG3 files, when played through mpg123, sound like they
-are playing at 1/8th speed - not very useful!!!!!!!!!!!! If you have ANY insight
-on why this second thing might be happening I would be grateful.
+For some reason MPEG3 files, when played through mpg123, sound like they
+are playing at 1/8th speed - not very useful!  If you have ANY insight
+on why this second thing might be happening, I would be grateful.
 
 ===========================================================
     _/      _/_/_/_/
@@ -188,5 +189,3 @@ _/      _/_/_/_/
 _/    _/
  _/_/
 ===========================================================
-
-

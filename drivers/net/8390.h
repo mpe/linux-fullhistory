@@ -13,7 +13,7 @@
 #include <linux/skbuff.h>
 
 /* With kmod, drivers can now load the 8390 module themselves! */
-#ifdef CONFIG_KMOD
+#if 0 /* def CONFIG_KMOD */
 #define LOAD_8390_BY_KMOD
 #endif
 

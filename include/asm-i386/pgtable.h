@@ -225,6 +225,9 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 #define _PAGE_4M	0x080	/* 4 MB page, Pentium+.. */
 #define _PAGE_GLOBAL	0x100	/* Global TLB entry PPro+ */
 
+#define _PAGE_READABLE  (_PAGE_PRESENT)             
+#define _PAGE_WRITABLE  (_PAGE_PRESENT | _PAGE_RW)
+
 #define _PAGE_TABLE	(_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | _PAGE_ACCESSED | _PAGE_DIRTY)
 #define _KERNPG_TABLE	(_PAGE_PRESENT | _PAGE_RW | _PAGE_ACCESSED | _PAGE_DIRTY)
 #define _PAGE_CHG_MASK	(PAGE_MASK | _PAGE_ACCESSED | _PAGE_DIRTY)
@@ -330,21 +333,25 @@ extern inline void pgd_clear(pgd_t * pgdp)	{ }
  * Undefined behaviour if not..
  */
 extern inline int pte_read(pte_t pte)		{ return pte_val(pte) & _PAGE_USER; }
-extern inline int pte_write(pte_t pte)		{ return pte_val(pte) & _PAGE_RW; }
 extern inline int pte_exec(pte_t pte)		{ return pte_val(pte) & _PAGE_USER; }
 extern inline int pte_dirty(pte_t pte)		{ return pte_val(pte) & _PAGE_DIRTY; }
 extern inline int pte_young(pte_t pte)		{ return pte_val(pte) & _PAGE_ACCESSED; }
 
-extern inline pte_t pte_wrprotect(pte_t pte)	{ pte_val(pte) &= ~_PAGE_RW; return pte; }
 extern inline pte_t pte_rdprotect(pte_t pte)	{ pte_val(pte) &= ~_PAGE_USER; return pte; }
 extern inline pte_t pte_exprotect(pte_t pte)	{ pte_val(pte) &= ~_PAGE_USER; return pte; }
 extern inline pte_t pte_mkclean(pte_t pte)	{ pte_val(pte) &= ~_PAGE_DIRTY; return pte; }
 extern inline pte_t pte_mkold(pte_t pte)	{ pte_val(pte) &= ~_PAGE_ACCESSED; return pte; }
-extern inline pte_t pte_mkwrite(pte_t pte)	{ pte_val(pte) |= _PAGE_RW; return pte; }
 extern inline pte_t pte_mkread(pte_t pte)	{ pte_val(pte) |= _PAGE_USER; return pte; }
 extern inline pte_t pte_mkexec(pte_t pte)	{ pte_val(pte) |= _PAGE_USER; return pte; }
 extern inline pte_t pte_mkdirty(pte_t pte)	{ pte_val(pte) |= _PAGE_DIRTY; return pte; }
 extern inline pte_t pte_mkyoung(pte_t pte)	{ pte_val(pte) |= _PAGE_ACCESSED; return pte; }
+
+/*
+ * These are harder, as writability is two bits, not one..
+ */
+extern inline int pte_write(pte_t pte)		{ return (pte_val(pte) & _PAGE_WRITABLE) == _PAGE_WRITABLE; }
+extern inline pte_t pte_wrprotect(pte_t pte)	{ pte_val(pte) &= ~((pte_val(pte) & _PAGE_PRESENT) << 1); return pte; }
+extern inline pte_t pte_mkwrite(pte_t pte)	{ pte_val(pte) |= _PAGE_RW; return pte; }
 
 /*
  * Conversion functions: convert a page and protection to a page entry,

@@ -1,29 +1,29 @@
-ALS-007 based soundcards
-========================
+ALS-007 based sound cards
+=========================
 
-Support for soundcards based around the Avance Logic ALS-007 chip is
+Support for sound cards based around the Avance Logic ALS-007 chip is
 included.  The ALS-007 is a single chip PnP sound solution which is mostly
 hardware compatible with the Sound Blaster 16 card, with most differences
-occuring in the use of the mixer registers.  For this reason the ALS-007 
+occurring in the use of the mixer registers.  For this reason the ALS-007 
 code is integrated as part of the Sound Blaster 16 driver (adding only 800
 bytes to the SB16 driver).
 
-To use an ALS-007 soundcard under Linux, enable the following options in the
+To use an ALS-007 sound card under Linux, enable the following options in the
 sound configuration section of the kernel config:
   - 100% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support
   - FM synthesizer (YM3812/OPL-3) support 
 Since the ALS-007 is a PnP card, the sound driver probably should be
-compiled as a module, with the isapnptools used to wake up the soundcard.
+compiled as a module, with the isapnptools used to wake up the sound card.
 Set the "I/O base for SB", "Sound Blaster IRQ" and "Sound Blaster DMA" (8 bit -
 either 0, 1 or 3) to the values used in your particular installation (they
 should match the values used to configure the card using isapnp).  The
 ALS-007 does NOT implement 16 bit DMA, so the "Sound Blaster 16 bit DMA"
-should be set to -1.  If you wish to use the externel MPU-401 interface on
+should be set to -1.  If you wish to use the external MPU-401 interface on
 the card, "MPU401 I/O base of SB16" and "SB MPU401 IRQ" should be set to
 the appropriate values for your installation.  (Note that the ALS-007
 requires a separate IRQ for the MPU-401, so don't specify -1 here).  (Note
 that the base port of the internal FM synth is fixed at 0x388 on the ALS007; 
-in any case the FM synth location is not setable in the kernel config).
+in any case the FM synth location cannot be set in the kernel configuration).
 
 The resulting sound driver will provide the following capabilities:
   - 8 and 16 bit audio playback

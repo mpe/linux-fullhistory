@@ -76,7 +76,7 @@ static unsigned long mac_videosize;
 	 * Open/Release the frame buffer device
 	 */
 
-static int macfb_open(struct fb_info *info)
+static int macfb_open(struct fb_info *info, int user)
 {
 	/*
 	 * Nothing, only a usage count for the moment
@@ -85,7 +85,7 @@ static int macfb_open(struct fb_info *info)
 	return(0);
 }
 
-static int macfb_release(struct fb_info *info)
+static int macfb_release(struct fb_info *info, int user)
 {
 	MOD_DEC_USE_COUNT;
 	return(0);
@@ -374,13 +374,12 @@ static struct nubus_device_specifier nb_video={
 	NULL
 };
 
-__initfunc(unsigned long macfb_init(unsigned long mem_start))
+__initfunc(void macfb_init(void))
 {
 	/* nubus_remap the video .. */
-	int err;
 
 	if (!MACH_IS_MAC) 
-		return mem_start;
+		return;
 
 	mac_xres=mac_bi_data.dimensions&0xFFFF;
 	mac_yres=(mac_bi_data.dimensions&0xFFFF0000)>>16;
@@ -419,13 +418,6 @@ __initfunc(unsigned long macfb_init(unsigned long mem_start))
 	fb_info.blank=&macfb_blank;
 	do_fb_set_var(&macfb_defined,1);
 
-	err=register_framebuffer(&fb_info);
-	if(err<0)
-	{
-		mac_boom(6);
-		return mem_start;
-	}
-
 	macfb_get_var(&disp.var, -1, &fb_info);
 	macfb_set_disp(-1);
 
@@ -435,10 +427,14 @@ __initfunc(unsigned long macfb_init(unsigned long mem_start))
 	 
 	register_nubus_device(&nb_video);
 
+	if (register_framebuffer(&fb_info) < 0)
+	{
+		mac_boom(6);
+		return;
+	}
+
 	printk("fb%d: %s frame buffer device using %ldK of video memory\n",
 	       GET_FB_IDX(fb_info.node), fb_info.modename, mac_videosize>>10);
-
-	return mem_start;
 }
 
 #if 0

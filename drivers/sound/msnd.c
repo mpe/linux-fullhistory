@@ -2,7 +2,7 @@
  *
  * msnd.c - Driver Base
  *
- * Turtle Beach MultiSound Soundcard Driver for Linux
+ * Turtle Beach MultiSound Sound Card Driver for Linux
  *
  * Copyright (C) 1998 Andrew Veliath
  *

@@ -30,6 +30,16 @@ static void coda_fill_inode(struct inode *inode, struct coda_vattr *attr)
                 inode->i_op = &coda_dir_inode_operations;
         else if (S_ISLNK(inode->i_mode))
                 inode->i_op = &coda_symlink_inode_operations;
+        else if (S_ISCHR(inode->i_mode)) {
+                inode->i_op = &chrdev_inode_operations;
+                inode->i_rdev = to_kdev_t(attr->va_rdev);
+        } else if (S_ISBLK(inode->i_mode)) {
+                inode->i_op = &blkdev_inode_operations;
+                inode->i_rdev = to_kdev_t(attr->va_rdev);
+        } else if (S_ISFIFO(inode->i_mode))
+                init_fifo(inode);
+	else if (S_ISSOCK(inode->i_mode))
+		inode->i_op = NULL;
         else {
                 printk ("coda_read_inode: what's this? i_mode = %o\n", 
 			inode->i_mode);
@@ -59,7 +69,7 @@ int coda_cnode_make(struct inode **inode, ViceFid *fid, struct super_block *sb)
 
 	error = venus_getattr(sb, fid, &attr);
 	if ( error ) {
-	    printk("coda_cnode_make: coda_getvattr returned %d for %s.\n", 
+	    CDEBUG(D_CNODE, "coda_cnode_make: coda_getvattr returned %d for %s.\n", 
 		   error, coda_f2s(fid));
 	    *inode = NULL;
 	    return error;
@@ -92,16 +102,16 @@ int coda_cnode_make(struct inode **inode, ViceFid *fid, struct super_block *sb)
 	if ( coda_f2i(fid) != ino ) {
 	        if ( !coda_fid_is_weird(fid) ) 
 		        printk("Coda: unknown weird fid: ino %ld, fid %s."
-			       "Tell Peter.", ino, coda_f2s(&cnp->c_fid));
+			       "Tell Peter.\n", ino, coda_f2s(&cnp->c_fid));
 		list_add(&cnp->c_volrootlist, &sbi->sbi_volroothead);
-		CDEBUG(D_CNODE, "Added %ld ,%s to volroothead\n",
+		CDEBUG(D_UPCALL, "Added %ld ,%s to volroothead\n",
 		       ino, coda_f2s(&cnp->c_fid));
 	}
 
         coda_fill_inode(*inode, &attr);
-	CDEBUG(D_CNODE, "Done linking: ino %ld,  at 0x%x with cnp 0x%x,"
-	       "cnp->c_vnode 0x%x\n", (*inode)->i_ino, (int) (*inode), 
-	       (int) cnp, (int)cnp->c_vnode);
+	CDEBUG(D_DOWNCALL, "Done making inode: ino %ld,  count %d with %s\n",
+	        (*inode)->i_ino, (*inode)->i_count, 
+	       coda_f2s(&cnp->c_fid));
 
         EXIT;
         return 0;
@@ -129,7 +139,6 @@ struct inode *coda_fid_to_inode(ViceFid *fid, struct super_block *sb)
 	struct coda_inode_info *cnp;
 	ENTRY;
 
-	CDEBUG(D_INODE, "%s\n", coda_f2s(fid));
 
 	if ( !sb ) {
 		printk("coda_fid_to_inode: no sb!\n");
@@ -140,6 +149,7 @@ struct inode *coda_fid_to_inode(ViceFid *fid, struct super_block *sb)
 		printk("coda_fid_to_inode: no fid!\n");
 		return NULL;
 	}
+	CDEBUG(D_INODE, "%s\n", coda_f2s(fid));
 
 
 	if ( coda_fid_is_weird(fid) ) {
@@ -151,9 +161,14 @@ struct inode *coda_fid_to_inode(ViceFid *fid, struct super_block *sb)
 		while ( (le = le->next) != lh ) {
 			cii = list_entry(le, struct coda_inode_info, 
 					 c_volrootlist);
+			CDEBUG(D_DOWNCALL, "iterating, now doing %s, ino %ld\n", 
+			       coda_f2s(&cii->c_fid), cii->c_vnode->i_ino);
 			if ( coda_fideq(&cii->c_fid, fid) ) {
 				inode = cii->c_vnode;
 				CDEBUG(D_INODE, "volume root, found %ld\n", cii->c_vnode->i_ino);
+				if ( cii->c_magic != CODA_CNODE_MAGIC )
+					printk("%s: Bad magic in inode, tell Peter.\n", 
+					       __FUNCTION__);
 				return cii->c_vnode;
 			}
 			
@@ -184,8 +199,8 @@ struct inode *coda_fid_to_inode(ViceFid *fid, struct super_block *sb)
 	   mount, but the fid will be wrong. 
 	*/
 	if ( !coda_fideq(fid, &(cnp->c_fid)) ) {
-		printk("coda_fid2inode: bad cnode (ino %ld, fid %s)"
-		       "Tell Peter.\n", nr, coda_f2s(fid));
+		/* printk("coda_fid2inode: bad cnode (ino %ld, fid %s)"
+		   "Tell Peter.\n", nr, coda_f2s(fid)); */
 		iput(inode);
 		return NULL;
 	}

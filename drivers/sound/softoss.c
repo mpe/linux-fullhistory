@@ -1015,7 +1015,7 @@ static int softsyn_open(int synthdev, int mode)
 	if (devc->bits != 16 || devc->channels != 2)
 	{
 		audio_release((devc->audiodev << 4) | SND_DEV_DSP16, &devc->finfo);
-/*		printk("SoftOSS: A 16 bit stereo soundcard is required\n");*/
+/*		printk("SoftOSS: A 16 bit stereo sound card is required\n");*/
 		return -EINVAL;
 	}
 	if (devc->max_playahead >= audio_devs[devc->audiodev]->dmap_out->nbufs)

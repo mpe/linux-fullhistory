@@ -77,8 +77,8 @@ static struct fb_var_screeninfo fb_var = { 0, };
      *  Interface used by the world
      */
 
-static int s3trio_open(struct fb_info *info);
-static int s3trio_release(struct fb_info *info);
+static int s3trio_open(struct fb_info *info, int user);
+static int s3trio_release(struct fb_info *info, int user);
 static int s3trio_get_fix(struct fb_fix_screeninfo *fix, int con,
 			  struct fb_info *info);
 static int s3trio_get_var(struct fb_var_screeninfo *var, int con,
@@ -107,7 +107,7 @@ static int s3trio_console_setmode(struct vc_mode *mode, int doit);
      *  Interface to the low level console driver
      */
 
-unsigned long s3trio_fb_init(unsigned long mem_start);
+void s3triofb_init(void);
 static int s3triofbcon_switch(int con, struct fb_info *info);
 static int s3triofbcon_updatevar(int con, struct fb_info *info);
 static void s3triofbcon_blank(int blank, struct fb_info *info);
@@ -158,7 +158,7 @@ static struct fb_ops s3trio_ops = {
      *  Open/Release the frame buffer device
      */
 
-static int s3trio_open(struct fb_info *info)
+static int s3trio_open(struct fb_info *info, int user)
 {
     /*
      *  Nothing, only a usage count for the moment
@@ -168,7 +168,7 @@ static int s3trio_open(struct fb_info *info)
     return(0);
 }
 
-static int s3trio_release(struct fb_info *info)
+static int s3trio_release(struct fb_info *info, int user)
 {
     MOD_DEC_USE_COUNT;
     return(0);
@@ -298,7 +298,7 @@ static int s3trio_ioctl(struct inode *inode, struct file *file, u_int cmd,
     return -EINVAL;
 }
 
-__initfunc(unsigned long s3triofb_init(unsigned long mem_start))
+__initfunc(void s3triofb_init(void))
 {
 #ifdef __powerpc__
     /* We don't want to be called like this. */
@@ -306,7 +306,6 @@ __initfunc(unsigned long s3triofb_init(unsigned long mem_start))
 #else /* !__powerpc__ */
     /* To be merged with cybervision */
 #endif /* !__powerpc__ */
-    return mem_start;
 }
 
 __initfunc(void s3trio_resetaccel(void)) {
@@ -415,7 +414,7 @@ __initfunc(int s3trio_init(struct device_node *dp)) {
 
 __initfunc(void s3triofb_init_of(struct device_node *dp))
 {
-    int i, err, *pp, len;
+    int i, *pp, len;
     unsigned long address;
     u_long *CursorBase;
 
@@ -622,8 +621,7 @@ __initfunc(void s3triofb_init_of(struct device_node *dp))
     }
 #endif /* CONFIG_FB_COMPAT_XPMAC) */
 
-    err = register_framebuffer(&fb_info);
-    if (err < 0)
+    if (register_framebuffer(&fb_info) < 0)
 	return;
 
     printk("fb%d: S3 Trio frame buffer device on %s\n",
@@ -921,7 +919,7 @@ static void fbcon_trio8_putc(struct vc_data *conp, struct display *p, int c,
 }
 
 static void fbcon_trio8_putcs(struct vc_data *conp, struct display *p,
-			      const char *s, int count, int yy, int xx)
+			      const unsigned short *s, int count, int yy, int xx)
 {
     Trio_WaitBlit();
     fbcon_cfb8_putcs(conp, p, s, count, yy, xx);

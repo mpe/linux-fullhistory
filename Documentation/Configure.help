@@ -3971,26 +3971,17 @@ CONFIG_WAVELAN
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
-Radio support
-CONFIG_MISC_RADIO
-  If you have a radio card (which enables your computer to receive
-  regular radio broadcasts), then you will want to say Y here and
-  make a character device file (usually /dev/radio) with major number
-  10 and minor 152 using mknod ("man mknod").  And then, don't forget
-  to pick up some useful tools to use said device (you _might_ find
-  something at ftp://ftp.lmh.ox.ac.uk/users/weejock/linux/, but I haven't
-  written anything too useful yet...)
-
 AIMSlab RadioTrack (aka RadioReveal) support
 CONFIG_RADIO_RTRACK
   Choose Y here if you have one of these FM radio cards, and then fill
   in the port address below.
-  
-  In order to control your radio card under the X window system, you
-  may use the program X-Tuner, available on the WWW at
-  http://gatekeeper.dec.com/pub/X11/R6-contrib/applications/; to
-  browse the WWW, you need to have access to a machine on the Internet
-  that has a program like lynx or netscape.
+
+  In order to control your radio card, you will need to use programs
+  that are compatible with the Video for Linux API.  Information on 
+  this API and pointers to "v4l" programs may be found on the WWW at
+  http://roadrunner.swansea.uk.linux.org/v4l.shtml; to browse the WWW,
+  you need to have access to a machine on the Internet that has a 
+  program like lynx or netscape.
 
   If you want to compile this driver as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -4633,18 +4624,6 @@ CONFIG_SMC9194
   it as a module, say M here and read Documentation/modules.txt as
   well as Documentation/networking/net-modules.txt.
 
-PCI NE2000 support
-CONFIG_NE2K_PCI
-  If you have a network (Ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via FTP (user: anonymous) in
-  ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
-
-  This driver is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called ne2k-pci.o. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt.
-
 Racal-Interlan (Micom) NI cards
 CONFIG_NET_VENDOR_RACAL
   If you have a network (Ethernet) card belonging to this class, such
@@ -5259,6 +5238,20 @@ CONFIG_ETH16I
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
+PCI NE2000 Support
+CONFIG_NE2K_PCI
+  This driver is for NE2000 compatible PCI cards.  It will not work
+  with ISA NE2000 cards.  If you have a network (Ethernet) card of
+  this type, say Y and read the Ethernet-HOWTO, available via FTP
+  (user: anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called ne2k-pci.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt.
+
+
 TI ThunderLAN support (EXPERIMENTAL)
 CONFIG_TLAN
   If you have a TLAN based network card which is supported by this
@@ -5386,12 +5379,12 @@ CONFIG_IBMTR
 
 SysKonnect adapter support
 CONFIG_SKTR
-  This is support for all SysKonnect Token Ring cards. Specificly
+  This is support for all SysKonnect Token Ring cards, specifically
   SysKonnect TR4/16(+) ISA (SK-4190), SysKonnect TR4/16(+) PCI
   (SK-4590), SysKonnect TR4/16 PCI (SK-4591) adapters.
 
   If you have such an adapter and would like to use it, say Y or M
-  and read the Token-Ring mini-HOWTO, available via ftp (user:anonymous)
+  and read the Token-Ring mini-HOWTO, available via FTP (user:  anonymous)
   from ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
   Also read the sktr.txt in linux/Documentation/networking or check
@@ -7563,6 +7556,24 @@ CONFIG_MTRR
 
   See Documentation/mtrr.txt for more information.
 
+Cyrix low power feature
+CONFIG_CYRIX_SUSP
+  Cyrix 6x86 family CPUs include a feature named "Suspend on Halt".
+  When enabled, a single "halt" instruction puts the CPU in suspend mode
+  till the next interruption. In suspend mode, the CPU dissipates less
+  than the fiftieth of its nominal power ; the good news is that Linux
+  executes a halt instruction when it has nothing to, so that your CPU
+  will spend its idle time in suspend mode. Note that you can also
+  manually activate/deactivate this feature by using the set6x86 tool
+  available at :
+      ftp://tsx-11.mit.edu/pub/linux/sources/sbin/set6x86.tar.gz
+
+  There's no risk to use this. The only reason why you would say no is
+  if you are enough of hearing you fans changing speed because of the
+  difference in power consumption between idle and work time.
+
+  Please email any comments to : tarreau@aemiaif.lip6.fr
+
 Main CPU frequency, only for DEC alpha machine
 CONFIG_FT_ALPHA_CLOCK
   On some DEC Alpha machines the CPU clock frequency cannot be
@@ -8096,13 +8107,15 @@ Full pathname of MSNDINIT.BIN firmware file
 CONFIG_MSNDCLAS_INIT_FILE
   The MultiSound cards have two firmware files which are required for
   operation, and are not currently included.  These files can be
-  obtained from Turtle Beach.
+  obtained from Turtle Beach.  See Documentation/sound/MultiSound for
+  information on how to obtain this.
 
 Full pathname of MSNDPERM.BIN firmware file
 CONFIG_MSNDCLAS_PERM_FILE
   The MultiSound cards have two firmware files which are required for
   operation, and are not currently included.  These files can be
-  obtained from Turtle Beach.
+  obtained from Turtle Beach.  See Documentation/sound/MultiSound for
+  information on how to obtain this.
 
 Support for Turtle Beach MultiSound Pinnacle, Fiji
 CONFIG_SOUND_MSNDPIN
@@ -8114,13 +8127,15 @@ Full pathname of PNDSPINI.BIN firmware file
 CONFIG_MSNDPIN_INIT_FILE
   The MultiSound cards have two firmware files which are required for
   operation, and are not currently included.  These files can be
-  obtained from Turtle Beach.
+  obtained from Turtle Beach.  See Documentation/sound/MultiSound for
+  information on how to obtain this.
 
 Full pathname of PNDSPERM.BIN firmware file
 CONFIG_MSNDPIN_PERM_FILE
   The MultiSound cards have two firmware files which are required for
   operation, and are not currently included.  These files can be
-  obtained from Turtle Beach.
+  obtained from Turtle Beach.  See Documentation/sound/MultiSound for
+  information on how to obtain this.
 
 /dev/dsp and /dev/audio support
 CONFIG_SOUND_AUDIO
@@ -8201,6 +8216,36 @@ CONFIG_AEDSP16_SBPRO
   Answer Y if you want your audio card to emulate Sound Blaster Pro.
   You should then say Y to "SoundBlaster (SB, SBPro, SB16, clones)
   support" and N to "Audio Excel DSP 16 (MSS emulation)".
+
+Ensoniq ES1370 based PCI soundcards
+CONFIG_SOUND_ES1370
+  Say Y or M if you have a PCI soundcard utilizing the Ensoniq
+  ES1370 chipset, such as Ensoniq's AudioPCI (non-97). To find
+  out if your soundcard uses an ES1370 without removing your
+  computer's cover, use lspci -n and look for the PCI ID 
+  1274:5000. Since Ensoniq was bought by Creative Labs,
+  SoundBlaster 64/PCI models are either ES1370 or ES1371 based.
+  This driver differs slightly from OSS/Free, so PLEASE READ
+  Documentation/sound/es1370.
+
+Ensoniq ES1371 based PCI soundcards
+CONFIG_SOUND_ES1371
+  Say Y or M if you have a PCI soundcard utilizing the Ensoniq
+  ES1371 chipset, such as Ensoniq's AudioPCI97. To find out if
+  your soundcard uses an ES1371 without removing your computer's
+  cover, use lspci -n and look for the PCI ID 1274:1371. Since
+  Ensoniq was bought by Creative Labs, SoundBlaster 64/PCI
+  models are either ES1370 or ES1371 based. This driver differs
+  slightly from OSS/Free, so PLEASE READ Documentation/sound/es1371.
+
+S3 SonicVibes based PCI soundcards
+CONFIG_SOUND_SONICVIBES
+  Say Y or M if you have a PCI soundcard utilizing the S3
+  SonicVibes chipset. To find out if your soundcard uses a
+  SonicVibes chip without removing your computer's cover, use
+  lspci -n and look for the PCI ID 5333:CA00. This driver 
+  differs slightly from OSS/Free, so PLEASE READ
+  Documentation/sound/sonicvibes.
 
 Kernel profiling support
 CONFIG_PROFILE

@@ -36,6 +36,13 @@ if [ "$CONFIG_AP1000" = "y" ]; then
 else
 	bool 'Support for SUN4 machines (disables SUN4[CDM] support)' CONFIG_SUN4
 
+	mainmenu_option next_comment
+	comment 'Console drivers'
+	bool 'PROM console' CONFIG_PROM_CONSOLE
+	bool 'Support Frame buffer devices' CONFIG_FB
+	source drivers/video/Config.in
+	endmenu
+
 	# Global things across all Sun machines.
 	define_bool CONFIG_SBUS y
 	define_bool CONFIG_SBUSCHAR y
@@ -48,8 +55,10 @@ else
 	define_bool CONFIG_SUN_AUXIO y
 	define_bool CONFIG_SUN_IO y
 	if [ "$CONFIG_SUN4" = "y" ]; then
-		bool 'Sun FB drivers appear in PROCFS' SUN_FBS_IN_PROCFS
-		bool 'bwtwo support' SUN_FB_BWTWO
+		if [ "$CONFIG_DUMMY_CONSOLE" = "n" ]; then
+			bool 'Sun FB drivers appear in PROCFS' SUN_FBS_IN_PROCFS
+			bool 'bwtwo support' SUN_FB_BWTWO
+		fi
 	else
 		source drivers/sbus/char/Config.in
 		source drivers/sbus/audio/Config.in

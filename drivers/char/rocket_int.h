@@ -483,6 +483,18 @@ Call:     sDisCTSFlowCtl(ChP)
 }
 
 /***************************************************************************
+Function: sDisIXANY
+Purpose:  Disable IXANY Software Flow Control
+Call:     sDisIXANY(ChP)
+          CHANNEL_T *ChP; Ptr to channel structure
+*/
+#define sDisIXANY(ChP) \
+{ \
+   (ChP)->R[0x0e] = 0x86; \
+   sOutDW((ChP)->IndexAddr,*(DWord_t *)&(ChP)->R[0x0c]); \
+}
+
+/***************************************************************************
 Function: DisParity
 Purpose:  Disable parity
 Call:     sDisParity(ChP)
@@ -573,6 +585,18 @@ Call:     sEnCTSFlowCtl(ChP)
 }
 
 /***************************************************************************
+Function: sEnIXANY
+Purpose:  Enable IXANY Software Flow Control
+Call:     sEnIXANY(ChP)
+          CHANNEL_T *ChP; Ptr to channel structure
+*/
+#define sEnIXANY(ChP) \
+{ \
+   (ChP)->R[0x0e] = 0x21; \
+   sOutDW((ChP)->IndexAddr,*(DWord_t *)&(ChP)->R[0x0c]); \
+}
+
+/***************************************************************************
 Function: EnParity
 Purpose:  Enable parity
 Call:     sEnParity(ChP)
@@ -644,6 +668,18 @@ Call:     sEnTransmit(ChP)
 { \
    (ChP)->TxControl[3] |= TX_ENABLE; \
    sOutDW((ChP)->IndexAddr,*(DWord_t *)&(ChP)->TxControl[0]); \
+}
+
+/***************************************************************************
+Function: sEnTxSoftFlowCtl
+Purpose:  Enable Tx Software Flow Control
+Call:     sEnTxSoftFlowCtl(ChP)
+          CHANNEL_T *ChP; Ptr to channel structure
+*/
+#define sEnTxSoftFlowCtl(ChP) \
+{ \
+   (ChP)->R[0x06] = 0xc5; \
+   sOutDW((ChP)->IndexAddr,*(DWord_t *)&(ChP)->R[0x04]); \
 }
 
 /***************************************************************************
@@ -985,6 +1021,32 @@ Call:     sSetStop2(ChP)
 }
 
 /***************************************************************************
+Function: sSetTxXOFFChar
+Purpose:  Set the Tx XOFF flow control character
+Call:     sSetTxXOFFChar(ChP,Ch)
+          CHANNEL_T *ChP; Ptr to channel structure
+          Byte_t Ch; The value to set the Tx XOFF character to
+*/
+#define sSetTxXOFFChar(ChP,CH) \
+{ \
+   (ChP)->R[0x07] = (CH); \
+   sOutDW((ChP)->IndexAddr,*(DWord_t *)&(ChP)->R[0x04]); \
+}
+
+/***************************************************************************
+Function: sSetTxXONChar
+Purpose:  Set the Tx XON flow control character
+Call:     sSetTxXONChar(ChP,Ch)
+          CHANNEL_T *ChP; Ptr to channel structure
+          Byte_t Ch; The value to set the Tx XON character to
+*/
+#define sSetTxXONChar(ChP,CH) \
+{ \
+   (ChP)->R[0x0b] = (CH); \
+   sOutDW((ChP)->IndexAddr,*(DWord_t *)&(ChP)->R[0x08]); \
+}
+
+/***************************************************************************
 Function: sStartRxProcessor
 Purpose:  Start a channel's receive processor
 Call:     sStartRxProcessor(ChP)
@@ -1133,17 +1195,25 @@ struct r_port {
 #undef PCI_DEVICE_ID_RP32INTF
 #endif
 
-#define PCI_VENDOR_ID_RP               0x11fe
-#define PCI_DEVICE_ID_RP32INTF         0x0001
-#define PCI_DEVICE_ID_RP8INTF          0x0002
-#define PCI_DEVICE_ID_RP16INTF         0x0003
-#define PCI_DEVICE_ID_RP8OCTA          0x0005
+#define PCI_VENDOR_ID_RP		0x11fe
+#define PCI_DEVICE_ID_RP32INTF		0x0001
+#define PCI_DEVICE_ID_RP8INTF		0x0002
+#define PCI_DEVICE_ID_RP16INTF		0x0003
+#define PCI_DEVICE_ID_RP8OCTA		0x0005
 
-#ifndef RP4QUAD
-#define PCI_DEVICE_ID_RP4QUAD	       0x0004
+#ifndef PCI_DEVICE_ID_RP4QUAD
+#define PCI_DEVICE_ID_RP4QUAD		0x0004
 #endif
-#ifndef RP8J
-#define PCI_DEVICE_ID_RP8J	       0x0006
+#ifndef PCI_DEVICE_ID_RP8J
+#define PCI_DEVICE_ID_RP8J		0x0006
 #endif
-
+#ifndef PCI_DEVICE_ID_RPP4
+#define PCI_DEVICE_ID_RPP4		0x000A
+#endif
+#ifndef PCI_DEVICE_ID_RPP8
+#define PCI_DEVICE_ID_RPP8		0x000B
+#endif
+#ifndef PCI_DEVICE_ID_RP8M
+#define PCI_DEVICE_ID_RP8M		0x000C
+#endif	
 

@@ -1,7 +1,7 @@
-Configuring version 3.8 (for Linux) with some most common soundcards
-====================================================================
+Configuring version 3.8 (for Linux) with some common sound cards
+================================================================
 
-This document describes configuring soundcards with freeware version of
+This document describes configuring sound cards with the freeware version of
 Open Sound Systems (OSS/Free). Information about the commercial version
 (OSS/Linux) and its configuration is available from 
 http://www.opensound.com/linux.html. Information presented here is
@@ -9,7 +9,7 @@ not valid for OSS/Linux.
 
 If you are unsure about how to configure OSS/Free
 you can download the free evaluation version of OSS/Linux from the above
-address. There is a chance that it can autodetect your soundcard. In this case
+address. There is a chance that it can autodetect your sound card. In this case
 you can use the information included in soundon.log when configuring OSS/Free.
 
 
@@ -24,8 +24,8 @@ IMPORTANT!	This document covers only cards that were "known" when
 		offered by these programs are not necessarily valid.
 
 
-THE BIGGEST MISTAKES YOU CAN DO
-===============================
+THE BIGGEST MISTAKES YOU CAN MAKE
+=================================
 
 1. Assuming that the card is Sound Blaster compatible when it's not.
 --------------------------------------------------------------------
@@ -37,12 +37,12 @@ are few sound chipsets which are SB compatible in Linux such as ESS1688 or
 Jazz16. Note that SB compatibility in DOS/Windows does _NOT_ mean anything
 in Linux. 
 
-IF YOU REALLY ARE 150% SURE YOU REALLY HAVE A SOUND BLASTER YOU CAN SKIP THE
-REST OF THIS CHAPTER.
+IF YOU REALLY ARE 150% SURE YOU HAVE A SOUND BLASTER YOU CAN SKIP THE REST OF
+THIS CHAPTER.
 
-For most other "supposed to be SB compatible" cards you have use other
-than SB drivers (see below). It is possible to get most soundcards to work
-in SB mode but in general it's complete waste of time. There are several
+For most other "supposed to be SB compatible" cards you have to use other
+than SB drivers (see below).  It is possible to get most sound cards to work
+in SB mode but in general it's a complete waste of time. There are several
 problems which you will encounter by using SB mode with cards that are not
 truly SB compatible:
 
@@ -53,7 +53,7 @@ many users claim that sound quality in Linux is much worse than in DOS.
 In addition some applications require 16 bit mode and they produce just
 noise with a 8 bit only device.
 - The card may work only in some cases but refuse to work most of the
-time. The SB compatible mode always requires special intialization which is 
+time. The SB compatible mode always requires special initialization which is 
 done by the DOS/Windows drivers. This kind of cards work in Linux after
 you have warm booted it after DOS but they don't work after cold boot
 (power on or reset).
@@ -64,8 +64,8 @@ get the above error message whenever you try to record or play. There are
 few other reasons to the DMA timeout message but using the SB mode seems
 to be the most common cause.
 
-2. Trying to use a PnP (Plug & Play) card just like an ordinary soundcard
--------------------------------------------------------------------------
+2. Trying to use a PnP (Plug & Play) card just like an ordinary sound card
+--------------------------------------------------------------------------
 
 Plug & Play is a protocol defined by Intel and Microsoft. It lets operating
 systems to easily identify and reconfigure I/O ports, IRQs and DMAs of ISA
@@ -74,39 +74,39 @@ cards. The problem with PnP cards is that the standard Linux doesn't currently
 to use some special tricks (see later) to get a PnP card alive. Many PnP cards
 work after they have been initialized but this is not always the case.
 
-There are usually both a non PnP and PnP versions of the same soundcard.
-The non PnP version is the original model which usually has been discontinued
-more than an year ago. The PnP version has the same name but with a PnP
-appended to it (sometimes not). This causes major confusion since even the
-non PnP model works with Linux the PnP one doesn't.
+There are sometimes both PnP and non-PnP versions of the same sound card.
+The non-PnP version is the original model which usually has been discontinued
+more than an year ago. The PnP version has the same name but with "PnP"
+appended to it (sometimes not). This causes major confusion since the non-PnP
+model works with Linux but the PnP one doesn't.
 
 You should carefully check if "Plug & Play" or "PnP" is mentioned in the name
 of the card or in the documentation or package that came with the card. 
-Everything described in the rest of this document is not necessarily valid
-for PnP models of soudcards even you have managed to wake up the card properly.
-Many PnP cards are simply too much different than their original non PnP
-ancestors which are covered by this document.
+Everything described in the rest of this document is not necessarily valid for
+PnP models of sound cards even you have managed to wake up the card properly.
+Many PnP cards are simply too different from their non-PnP ancestors which are
+covered by this document.
 
 
 Cards that are not (fully) supported by this driver
 ===================================================
 
-See http://www.opensound.com/ossfree for information about soundcards 
+See http://www.opensound.com/ossfree for information about sound cards 
 to be supported in future. 
 
 
 How to use sound without recompiling kernel and/or sound driver
 ===============================================================
 
-There is commercial sound driver which should be released during Apr 96.
-It comes in precompiled form and doesn't require recompiling of kernel. See
-http://www.4Front-tech.com/oss.html for more info.
+There is a commercial sound driver which comes in precompiled form and doesn't
+require recompiling of the kernel. See http://www.4Front-tech.com/oss.html for
+more info.
 
 
 Configuring PnP cards
 =====================
 
-New versions of most soundcards use so called ISA PnP protocol for
+New versions of most sound cards use the so-called ISA PnP protocol for
 soft configuring their I/O, IRQ, DMA and shared memory resources.
 Currently at least cards made by Creative Technology (SB32 and SB32AWE
 PnP), Gravis (GUS PnP and GUS PnP Pro), Ensoniq (Soundscape PnP) and
@@ -115,7 +115,7 @@ chip by Crystal Semiconductor (Intel Atlantis, HP Pavilion and many other
 motherboards) is also based on PnP technology but there is a "native" driver
 available for it (see information about CS4232 later in this document).
 
-PnP soundcards (as well as most other PnP ISA cards) are not supported
+PnP sound cards (as well as most other PnP ISA cards) are not supported
 by this version of the driver . Proper
 support for them should be released during 97 once the kernel level
 PnP support is available.
@@ -123,36 +123,34 @@ PnP support is available.
 There is a method to get most of the PnP cards to work. The basic method
 is the following:
 
-1) Boot DOS so that card's DOS drivers have chance to initialize the
-card.
-2) _Cold_ boot to Linux by using "loadlin.exe". Hitting ctrl-alt-del
-works with older machines but causes hard reset of all cards on latest
+1) Boot DOS so the card's DOS drivers have a chance to initialize it.
+2) _Cold_ boot to Linux by using "loadlin.exe".  Hitting ctrl-alt-del
+works with older machines but causes a hard reset of all cards on recent
 (Pentium) machines.
-3) If you have sound driver in Linux configured properly, the card should work
-now. "Proper" means here that I/O, IRQ and DMA settings are the same than in
-DOS. The hard part is to find which settings were used. See documentation of
+3) If you have the sound driver in Linux configured properly, the card should
+work now. "Proper" means that I/O, IRQ and DMA settings are the same as in
+DOS. The hard part is to find which settings were used. See the documentation of
 your card for more info.
 
-Windows 95 could work as well as DOS but running loadlin may be somehow 
-difficult. Probably you should "shut down" your machine to MS-DOS mode
-before running it.
+Windows 95 could work as well as DOS but running loadlin may be difficult.
+Probably you should "shut down" your machine to MS-DOS mode before running it.
 
-Some machines have BIOS utility for setting PnP resources. This is a good
+Some machines have a BIOS utility for setting PnP resources. This is a good
 way to configure some cards. In this case you don't need to boot DOS/Win95
-prior starting Linux.
+before starting Linux.
 
 Another way to initialize PnP cards without DOS/Win95 is a Linux based
 PnP isolation tool. When writing this there is a pre alpha test version
-of such tool available from ftp://ftp.demon.co.uk/pub/unix/linux/utils. The
+of such a tool available from ftp://ftp.demon.co.uk/pub/unix/linux/utils. The
 file is called isapnptools-*. Please note that this tool is just a temporary
 solution which may be incompatible with future kernel versions having proper
 support for PnP cards. There are bugs in setting DMA channels in earlier
-versions of isapnptools so at least version 1.6 is required with soundcards.
+versions of isapnptools so at least version 1.6 is required with sound cards.
 
-Yet another way to use PnP cards is to use (commercial) OSS/Linux drivers.
-See http://www.opensound.com/linux.html for more info. This is the way
-you probably like to do it if you don't waste hours of time in recompiling
-kernel and the required tools.
+Yet another way to use PnP cards is to use (commercial) OSS/Linux drivers.  See
+http://www.opensound.com/linux.html for more info. This is probably the way you
+should do it if you don't want to spend time recompiling the kernel and 
+required tools.
 
 
 Read this before trying to configure the driver
@@ -188,7 +186,7 @@ Sound Blasters
 		      using isapnptools before they work with OSS/Free.
 	SB16 compatible cards by other manufacturers than Creative.
 		You have been fooled since there are _no_ SB16 compatible
-		cards on the market (May 97). It's likely that your card
+		cards on the market (as of May 1997). It's likely that your card
 		is compatible just with SB Pro but there is also a non-SB-
 		compatible 16 bit mode. Usually it's MSS/WSS but it could also
 		be a proprietary one like MV Jazz16 or ESS ES688. OPTi
@@ -206,7 +204,7 @@ Sound Blasters
 		Most other "16 bit SB compatible" cards such as "OPTi/MAD16" or
 		"Crystal" are _NOT_ SB compatible in Linux.
 
-		Practically all soundcards have some kind of SB emulation mode
+		Practically all sound cards have some kind of SB emulation mode
 		in addition to their native (16 bit) mode. In most cases this
 		(8 bit only) SB compatible mode doesn't work with Linux. If
 		you get it working it may cause problems with games and
@@ -231,7 +229,7 @@ MPU-401	and compatibles
 	The driver works both with the full (intelligent mode) MPU-401
 	cards (such as MPU IPC-T and MQX-32M) and with the UART only
 	dumb MIDI ports. MPU-401 is currently the most common MIDI
-	interface. Most soundcards are compatible with it. However,
+	interface. Most sound cards are compatible with it. However,
 	don't enable MPU401 mode blindly. Many cards with native support
 	in the driver have their own MPU401 driver. Enabling the standard one
 	will cause a conflict with these cards. So check if your card is
@@ -242,7 +240,7 @@ Windows Sound System (MSS/WSS)
 	they managed to make it a standard. MSS compatible cards are based on 
 	a codec chip which is easily available from at least two manufacturers
 	(AD1848 by Analog Devices and CS4231/CS4248 by Crystal Semiconductor).
-	Currently most soundcards are based on one of the MSS compatible codec
+	Currently most sound cards are based on one of the MSS compatible codec
 	chips. The CS4231 is used in the high quality cards such as GUS MAX,
 	MediaTrix AudioTrix Pro and TB Tropez (GUS MAX is not MSS compatible). 
 
@@ -256,7 +254,7 @@ Windows Sound System (MSS/WSS)
 	enabling the MSS support.
 
 Yamaha FM synthesizers (OPL2, OPL3 (not OPL3-SA) and OPL4)
-	Most soundcards have a FM synthesizer chip. The OPL2 is a 2
+	Most sound cards have a FM synthesizer chip. The OPL2 is a 2
 	operator chip used in the original AdLib card. Currently it's used
 	only in the cheapest (8 bit mono) cards. The OPL3 is a 4 operator 
 	FM chip which provides better sound quality and/or more available 
@@ -280,7 +278,7 @@ Yamaha FM synthesizers (OPL2, OPL3 (not OPL3-SA) and OPL4)
 Yamaha OPL3-SA1
 
 	Yamaha OPL3-SA1 (YMF701) is an audio controller chip used on some
-	(Intel) motherboards and on cheap soundcards. It should not be
+	(Intel) motherboards and on cheap sound cards. It should not be
 	confused with the original OPL3 chip (YMF278) which is entirely
         different chip. OPL3-SA1 has support for MSS, MPU401 and SB Pro
 	(not used in OSS/Free) in addition to the OPL3 FM synth.
@@ -293,7 +291,7 @@ Yamaha OPL3-SA1
 4Front Technologies SoftOSS
 
 	SoftOSS is a software based wave table emulation which works with
-	any 16 bit stereo soundcard. Due to its nature a fast CPU is
+	any 16 bit stereo sound card. Due to its nature a fast CPU is
 	required (P133 is minimum). Although SoftOSS does _not_ use MMX
 	instructions it has proven out that recent processors (which appear
 	to have MMX) perform significantly better with SoftOSS than earlier
@@ -314,8 +312,8 @@ Yamaha OPL3-SA1
 	higher sampling rates. However using fewer voices decreases
 	playback quality more than decreasing the sampling rate.
 
-	SoftOSS keeps the samples loaded on system's RAM so large RAM is
-	required. SoftOSS should never be used on machines with less than 16M
+	SoftOSS keeps the samples loaded on the system's RAM so much RAM is
+	required. SoftOSS should never be used on machines with less than 16 MB
 	of RAM since this is potentially dangerous (you may accidently run out
 	of memory which probably crashes the machine). 
 
@@ -330,14 +328,14 @@ Yamaha OPL3-SA1
 	sites.
 
         *********************************************************************
-	IMPORTANT NOTICE! The original patch set distributed with Gravis 
+	IMPORTANT NOTICE! The original patch set distributed with the Gravis 
 	Ultrasound card is not in public domain (even though it's available from
-	some ftp sites). You should contact Voice Crystal (www.voicecrystal.com)
+	some FTP sites). You should contact Voice Crystal (www.voicecrystal.com)
 	if you like to use these patches with SoftOSS included in OSS/Free.
         *********************************************************************
 
 PSS based cards (AD1848 + ADSP-2115 + Echo ESC614 ASIC)
-	Analog Devices and Echo Speech have together defined a soundcard
+	Analog Devices and Echo Speech have together defined a sound card
 	architecture based on the above chips. The DSP chip is used
 	for emulation of SB Pro, FM and General MIDI/MT32.
 
@@ -355,19 +353,20 @@ MediaTrix AudioTrix Pro
 	General MIDI emulator. There is also a SB 1.5 compatible playback mode.
 
 Ensoniq SoundScape and compatibles
-	Ensoniq has designed a soundcard architecture based on the
+	Ensoniq has designed a sound card architecture based on the
 	OTTO synthesizer chip used in their professional MIDI synthesizers.
 	Several companies (including Ensoniq, Reveal and Spea) are selling
 	cards based on this architecture.
 
 	NOTE! The SoundScape PnP is not supported by OSS/Free. Ensoniq VIVO and
-	VIVO90 cards are not compatible with Soundscapes so the Soundscape driver
-	will not work with them. You may want to use OSS/Linux with these cards.
+	VIVO90 cards are not compatible with Soundscapes so the Soundscape
+        driver will not work with them. You may want to use OSS/Linux with these
+        cards.
 
 OPTi MAD16 and Mozart based cards
 	The Mozart (OAK OTI-601), MAD16 (OPTi 82C928), MAD16 Pro (OPTi 82C929),
 	OPTi 82C924/82C925 (in _non_ PnP mode) and OPTi 82C930 interface
-	chips are used in many different soundcards, including some
+	chips are used in many different sound cards, including some
 	cards by Reveal miro and Turtle Beach (Tropez). The purpose of these
 	chips is to connect other audio components to the PC bus. The
 	interface chip performs address decoding for the other chips.
@@ -394,8 +393,8 @@ Crystal CS4232 and CS4236 based cards such as AcerMagic S23, TB Tropez _Plus_ an
 	SB and MPU401 emulations. There is support for OPL3 too.
 	Unfortunately the MPU401 mode doesn't work (I don't know how to
 	initialize it). CS4236 is an enhanced (compatible) version of CS4232.
-	NOTE! Don't ever try to use isapnptools with CS4232 since this just
-	freezes your machine (due to chip bugs). If you have problems in getting
+	NOTE! Don't ever try to use isapnptools with CS4232 since this will just
+	freeze your machine (due to chip bugs). If you have problems in getting
 	CS4232 working you could try initializing it with DOS (CS4232C.EXE) and
 	then booting Linux using loadlin. CS4232C.EXE loads a secret firmware
 	patch which is not documented by Crystal.
@@ -413,7 +412,7 @@ Turtle Beach Maui and Tropez "classic"
 Jumpers and software configuration
 ==================================
 
-Some of the earliest soundcards were jumper configurable. You have to
+Some of the earliest sound cards were jumper configurable. You have to
 configure the driver use I/O, IRQ and DMA settings
 that match the jumpers. Just few 8 bit cards are fully jumper 
 configurable (SB 1.x/2.x, SB Pro and clones).
@@ -436,7 +435,7 @@ when installing new hardware to the machine).
 Sound driver sets the soft configurable parameters of the card automatically
 during boot. Usually you don't need to run any extra initialization
 programs when booting Linux but there are some exceptions. See the
-card specific instructions (below) for more info.
+card-specific instructions below for more info.
 
 The drawback of software configuration is that the driver needs to know
 how the card must be initialized. It cannot initialize unknown cards
@@ -448,7 +447,7 @@ What if your card was not listed above?
 =======================================
 
 The first thing to do is to look at the major IC chips on the card.
-Many of the latest soundcards are based on some standard chips. If you
+Many of the latest sound cards are based on some standard chips. If you
 are lucky, all of them could be supported by the driver. The most common ones
 are the OPTi MAD16, Mozart, SoundScape (Ensoniq) and the PSS architectures
 listed above. Also look at the end of this file for list of unsupported
@@ -458,21 +457,21 @@ The last resort is to send _exact_ name and model information of the card
 to me together with a list of the major IC chips (manufactured, model) to 
 me. I could then try to check if your card looks like something familiar.
 
-There are much more cards in the word than listed above. The first thing to
-do with these cards is to check if they emulate some other card/interface
+There are many more cards in the world than listed above. The first thing to
+do with these cards is to check if they emulate some other card or interface
 such as SB, MSS and/or MPU401. In this case there is a chance to get the
 card to work by booting DOS before starting Linux (boot DOS, hit ctrl-alt-del
 and boot Linux without hard resetting the machine). In this method the
-DOS based driver initializes the hardware to use a known I/O, IRQ and DMA
-settings. If sound driver is configured to use the same settings, everything should 
-work OK.
+DOS based driver initializes the hardware to use known I/O, IRQ and DMA
+settings. If sound driver is configured to use the same settings, everything
+should work OK.
 
 
 Configuring sound driver (with Linux)
 =====================================
 
-Sound driver is currently a part of Linux kernel distribution. The 
-driver files are located in directory /usr/src/linux/drivers/sound. 
+The sound driver is currently distributed as part of the Linux kernel. The 
+files are in /usr/src/linux/drivers/sound/. 
 
 ****************************************************************************
 *	ALWAYS USE THE SOUND DRIVER VERSION WHICH IS DISTRIBUTED WITH	   *
@@ -491,9 +490,9 @@ driver files are located in directory /usr/src/linux/drivers/sound.
 ****************************************************************************
 
 To configure the driver, run "make config" in the kernel source directory
-(/usr/src/linux). Answer y to the question about Sound card support (after
-questions about mouse, CD-ROM, ftape, etc. supports). Sound config options
-will then be asked after some additional questions.
+(/usr/src/linux). Answer "y" or "m" to the question about Sound card support
+(after the questions about mouse, CD-ROM, ftape, etc. support).  Questions
+about options for sound will then be asked.
 
 After configuring the kernel and sound driver, run "make dep" and compile
 the kernel following instructions in the kernel README.
@@ -501,9 +500,9 @@ the kernel following instructions in the kernel README.
 The sound driver configuration dialog
 -------------------------------------
 
-If you already have the sound driver installed, consult printout of
+If you already have the sound driver installed, consult a printout of
 "cat /dev/sndstat" when configuring the driver again. It gives the I/O,
-IRQ and DMA settings you have used earlier.
+IRQ and DMA settings you used earlier.
 
 Sound configuration starts by making some yes/no questions. Be careful
 when answering to these questions since answering y to a question may
@@ -559,7 +558,7 @@ select some options automatically as well.
 	  know what to answer with it.
   "MPU-401 support (NOT for SB16)",
 	- Be careful with this question. The MPU401 interface is supported
-	  by almost any soundcard today. However some natively supported cards
+	  by almost any sound card today. However some natively supported cards
 	  have their own driver for MPU401. Enabling the MPU401 option with
 	  these cards will cause a conflict. Also enabling MPU401 on a system
 	  that doesn't really have a MPU401 could cause some trouble. If your
@@ -569,7 +568,7 @@ select some options automatically as well.
 	  In MOST cases this MPU401 driver should only be used with "true"
 	  MIDI-only MPU401 professional cards. In most other cases there
 	  is another way to get the MPU401 compatible interface of a
-	  soundcard to work.
+	  sound card to work.
 	  Support for the MPU401 compatible MIDI port of SB16, ESS1688
 	  and MV Jazz16 cards is included in the SB driver. Use it instead
 	  of this separate MPU401 driver with these cards. As well 
@@ -607,9 +606,9 @@ select some options automatically as well.
 	  channels with cards that don't support this feature will prevent
 	  audio (at least recording) from working.
   "Ensoniq Soundscape support",
-	- Answer 'y' if you have a soundcard based on the Ensoniq SoundScape
+	- Answer 'y' if you have a sound card based on the Ensoniq SoundScape
 	  chipset. Such cards are being manufactured at least by Ensoniq,
-	  Spea and Reveal (note that Reveal makes other cards also). Oldest
+	  Spea and Reveal (note that Reveal makes other cards also).  The oldest
 	  cards made by Spea don't work properly with Linux. 
 	  Soundscape PnP as well as Ensoniq VIVO work only with the commercial
 	  OSS/Linux version.
@@ -695,7 +694,7 @@ first configure OSS/Free for one card. Then edit local.h manually and define
 SB2_BASE, SB2_IRQ, SB2_DMA and SB2_DMA2 for the second one. You can't get
 the OPL3, MIDI and EMU8000 devices of the second card to work. If you are
 going to use two PnP Sound Blasters, ensure that they are of different model
-and have different PnP ID's. There is no way to get two cards with the same
+and have different PnP IDs. There is no way to get two cards with the same
 card ID and serial number to work. The easiest way to check this is trying 
 if isapnptools can see both cards or just one.
 
@@ -710,7 +709,7 @@ First of all: There are no SB16 clones. There are SB Pro clones with a
 16 bit mode which is not SB16 compatible. The most likely alternative is that
 the 16 bit mode means MSS/WSS.
 
-There are just few fully 100% hardware SB or SB Pro compatible cards.
+There are just a few fully 100% hardware SB or SB Pro compatible cards.
 I know just Thunderboard and SM Games. Other cards require some kind of
 hardware initialization before they become SB compatible. Check if your card
 was listed in the beginning of this file. In this case you should follow
@@ -1004,7 +1003,7 @@ Logitech Soundman Wave
 
 Read the above MV Jazz specific instructions first.
 
-The Logitech SoundMan Wave (don't confuse with the SM16 or SM Games) is
+The Logitech SoundMan Wave (don't confuse this with the SM16 or SM Games) is
 a MV Jazz based card which has an additional OPL4 based wave table
 synthesizer. The OPL4 chip is handled by an on board microcontroller
 which must be initialized during boot. The config program asks if
@@ -1053,7 +1052,7 @@ with ES688).
 NOTE! ESS cards are not compatible with MSS/WSS so don't worry if MSS support
 of OSS doesn't work with it.
 
-There are some ES1688/688 based soundcards and (particularily) motherboards
+There are some ES1688/688 based sound cards and (particularily) motherboards
 which use software configurable I/O port relocation feature of the chip.
 This ESS proprietary feature is supported only by OSS/Linux.
 
@@ -1070,12 +1069,12 @@ Reveal cards
 
 There are several different cards made/marketed by Reveal. Some of them
 are compatible with SoundScape and some use the MAD16 chip. You may have
-to look at the card and try to identify origin of the card.
+to look at the card and try to identify its origin.
 
 Diamond
 -------
 
-The oldest (Sierra Aria based) soundcards made by Diamond are not supported
+The oldest (Sierra Aria based) sound cards made by Diamond are not supported
 (they may work if the card is initialized using DOS). The recent (LX?)
 models are based on the MAD16 chip which is supported by the driver.
 
@@ -1150,7 +1149,7 @@ make menuconfig/xconfig.
 Others?
 -------
 
-Since there are so many different soundcards, it's likely that I have 
+Since there are so many different sound cards, it's likely that I have 
 forgotten to mention many of them. Please inform me if you know yet another
 card which works with Linux, please inform me (or is anybody else
 willing to maintain a database of supported cards (just like in XF86)?).
@@ -1158,18 +1157,18 @@ willing to maintain a database of supported cards (just like in XF86)?).
 Cards not supported yet
 =======================
 
-Please check which version of sound driver you are using before 
-complaining that your card is not supported. It's possible that you are 
+Please check the version of sound driver you are using before 
+complaining that your card is not supported. It's possible you are 
 using a driver version which was released months before your card was
-introduced. Driver's release date is listed after its version number
-in "cat /dev/sndstat" printout and in file linux/drivers/sound/soundvers.h.
+introduced.  The driver's release date is listed after its version number in a
+"cat /dev/sndstat" printout and in the file linux/drivers/sound/soundvers.h.
 
-First of all. There is an easy way to make most soundcards to work
-with Linux. Just use the DOS based driver to initialize the card
-to a _known_ state. Then use loadlin.exe to boot Linux. If Linux is configured
-to use the same I/O, IRQ and DMA numbers than DOS, the card could work.
+First of all, there is an easy way to make most sound cards work with Linux.
+Just use the DOS based driver to initialize the card to a known state, then use
+loadlin.exe to boot Linux. If Linux is configured to use the same I/O, IRQ and
+DMA numbers as DOS, the card could work.
 (ctrl-alt-del can be used in place of loadlin.exe but it doesn't work with
-new motherboards). This method works also with all/most PnP soundcards.
+new motherboards). This method works also with all/most PnP sound cards.
 
 Don't get fooled with SB compatibility. Most cards are compatible with
 SB but that may require a TSR which is not possible with Linux. If
@@ -1178,7 +1177,7 @@ don't work in the SB and MSS modes at the same time.
 
 Then there are cards which are no longer manufactured and/or which
 are relatively rarely used (such as the 8 bit ProAudioSpectrum
-models). It's extremely unlikely that such cards never get supported.
+models). It's extremely unlikely that such cards ever get supported.
 Adding support for a new card requires much work and increases time
 required in maintaining the driver (some changes need to be done
 to all low level drivers and be tested too, maybe with multiple
@@ -1213,8 +1212,8 @@ get some support in future but I can't make any promises. Just look
 at the home page (http://www.opensound.com/ossfree/new_cards.html)
 for latest info.
 
-Information about unsupported soundcards and chipsets is welcome as well
-as free copies of soundcards, SDKs and operating systems.
+Information about unsupported sound cards and chipsets is welcome as well
+as free copies of sound cards, SDKs and operating systems.
 
 If you have any corrections and/or comments, please contact me.
 
@@ -1222,7 +1221,7 @@ Hannu Savolainen
 hannu@opensound.com
 
 Personal home page:	   http://www.compusonic.fi/~hannu
-www home page of OSS/Free: http://www.opensound.com/ossfree
+home page of OSS/Free: http://www.opensound.com/ossfree
 
-www home page of commercial OSS
+home page of commercial OSS
 (Open Sound System) drivers: http://www.opensound.com/oss.html

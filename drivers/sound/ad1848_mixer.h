@@ -15,7 +15,7 @@
 
 /*
  * The AD1848 codec has generic input lines called Line, Aux1 and Aux2.
- * Soundcard manufacturers have connected actual inputs (CD, synth, line,
+ * Sound card manufacturers have connected actual inputs (CD, synth, line,
  * etc) to these inputs in different order. Therefore it's difficult
  * to assign mixer channels to to these inputs correctly. The following
  * contains two alternative mappings. The first one is for GUS MAX and
@@ -71,7 +71,7 @@ typedef mixer_ent mixer_ents[2];
  * Most of the mixer entries work in backwards. Setting the polarity field
  * makes them to work correctly.
  *
- * The channel numbering used by individual soundcards is not fixed. Some
+ * The channel numbering used by individual sound cards is not fixed. Some
  * cards have assigned different meanings for the AUX1, AUX2 and LINE inputs.
  * The current version doesn't try to compensate this.
  */

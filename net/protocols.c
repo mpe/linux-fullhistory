@@ -86,7 +86,6 @@ extern void rif_init(struct net_proto *);
 
 #ifdef NEED_802
 #include <net/p8022call.h>
-#include <net/p8022trcall.h>
 #endif
 
 /*
@@ -108,7 +107,6 @@ struct net_proto protocols[] = {
 
 #ifdef NEED_802
   { "802.2",	p8022_proto_init },			/* 802.2 demultiplexor		*/
-  { "802.2TR",	p8022tr_proto_init },			/* 802.2 demultiplexor		*/
   { "SNAP",	snap_proto_init },			/* SNAP demultiplexor		*/
 #endif
 

@@ -48,7 +48,7 @@
 #endif
 
 #ifdef AWE_HAS_GUS_COMPATIBILITY
-/* include finetune table */
+/* include fine tuning table */
 #ifdef AWE_OBSOLETE_VOXWARE
 #  ifdef __FreeBSD__
 #    define SEQUENCER_C

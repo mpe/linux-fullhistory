@@ -257,8 +257,8 @@ static int z3fb_mode __initdata = 0;
 
 void retz3fb_setup(char *options, int *ints);
 
-static int retz3fb_open(struct fb_info *info);
-static int retz3fb_release(struct fb_info *info);
+static int retz3fb_open(struct fb_info *info, int user);
+static int retz3fb_release(struct fb_info *info, int user);
 static int retz3fb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			   struct fb_info *info);
 static int retz3fb_get_var(struct fb_var_screeninfo *var, int con,
@@ -280,7 +280,7 @@ static int retz3fb_ioctl(struct inode *inode, struct file *file,
  *    Interface to the low level console driver
  */
 
-unsigned long retz3fb_init(unsigned long mem_start);
+void retz3fb_init(void);
 static int z3fb_switch(int con, struct fb_info *info);
 static int z3fb_updatevar(int con, struct fb_info *info);
 static void z3fb_blank(int blank, struct fb_info *info);
@@ -1201,7 +1201,7 @@ static void do_install_cmap(int con, struct fb_info *info)
  *    Open/Release the frame buffer device
  */
 
-static int retz3fb_open(struct fb_info *info)
+static int retz3fb_open(struct fb_info *info, int user)
 {
 	/*
 	 * Nothing, only a usage count for the moment
@@ -1211,7 +1211,7 @@ static int retz3fb_open(struct fb_info *info)
 	return 0;
 }
 
-static int retz3fb_release(struct fb_info *info)
+static int retz3fb_release(struct fb_info *info, int user)
 {
 	MOD_DEC_USE_COUNT;
 	return 0;
@@ -1487,9 +1487,8 @@ __initfunc(void retz3fb_setup(char *options, int *ints))
  *    Initialization
  */
 
-__initfunc(unsigned long retz3fb_init(unsigned long mem_start))
+__initfunc(void retz3fb_init(void))
 {
-	int err;
 	unsigned long board_addr, board_size;
 	unsigned int key;
 	const struct ConfigDev *cd;
@@ -1497,7 +1496,7 @@ __initfunc(unsigned long retz3fb_init(unsigned long mem_start))
 	struct retz3fb_par par;
 
 	if (!(key = zorro_find(ZORRO_PROD_MACROSYSTEMS_RETINA_Z3, 0, 0)))
-		return mem_start;
+		return;
 
 	cd = zorro_get_board (key);
 	zorro_config_board (key, 0);
@@ -1505,7 +1504,7 @@ __initfunc(unsigned long retz3fb_init(unsigned long mem_start))
 	board_size = (unsigned long)cd->cd_BoardSize;
 
 	z3_mem = kernel_map (board_addr, board_size,
-			     KERNELMAP_NOCACHE_SER, &mem_start);
+			     KERNELMAP_NOCACHE_SER, NULL);
 
 	z3_regs = (char*) z3_mem;
 	z3_fbmem = z3_mem + VIDEO_MEM_OFFSET;
@@ -1527,10 +1526,6 @@ __initfunc(unsigned long retz3fb_init(unsigned long mem_start))
 	fb_info.updatevar = &z3fb_updatevar;
 	fb_info.blank = &z3fb_blank;
 
-	err = register_framebuffer(&fb_info);
-	if (err < 0)
-		return mem_start;
-
 	if (z3fb_mode == -1)
 		retz3fb_default = retz3fb_predefined[0].var;
 
@@ -1544,13 +1539,14 @@ __initfunc(unsigned long retz3fb_init(unsigned long mem_start))
 
 	do_install_cmap(0, &fb_info);
 
+	if (register_framebuffer(&fb_info) < 0)
+		return;
+
 	printk("fb%d: %s frame buffer device, using %ldK of video memory\n",
 	       GET_FB_IDX(fb_info.node), fb_info.modename, z3_size>>10);
 
 	/* TODO: This driver cannot be unloaded yet */
 	MOD_INC_USE_COUNT;
-
-	return mem_start;
 }
 
 
@@ -1613,7 +1609,8 @@ __initfunc(static int get_video_mode(const char *name))
 #ifdef MODULE
 int init_module(void)
 {
-	return(retz3fb_init(NULL));
+	retz3fb_init();
+	return 0;
 }
 
 void cleanup_module(void)

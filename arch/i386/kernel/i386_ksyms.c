@@ -103,3 +103,7 @@ EXPORT_SYMBOL(mca_set_adapter_procfn);
 EXPORT_SYMBOL(mca_isenabled);
 EXPORT_SYMBOL(mca_isadapter);
 #endif
+
+#ifdef CONFIG_VT
+EXPORT_SYMBOL(screen_info);
+#endif

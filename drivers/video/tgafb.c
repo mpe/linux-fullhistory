@@ -252,8 +252,8 @@ static struct fb_var_screeninfo fb_var = { 0, };
      *  Interface used by the world
      */
 
-static int tgafb_open(struct fb_info *info);
-static int tgafb_release(struct fb_info *info);
+static int tgafb_open(struct fb_info *info, int user);
+static int tgafb_release(struct fb_info *info, int user);
 static int tgafb_get_fix(struct fb_fix_screeninfo *fix, int con,
 			 struct fb_info *info);
 static int tgafb_get_var(struct fb_var_screeninfo *var, int con,
@@ -274,7 +274,7 @@ static int tgafb_ioctl(struct inode *inode, struct file *file, u_int cmd,
      *  Interface to the low level console driver
      */
 
-unsigned long tgafb_init(unsigned long mem_start);
+void tgafb_init(void);
 static int tgafbcon_switch(int con, struct fb_info *info);
 static int tgafbcon_updatevar(int con, struct fb_info *info);
 static void tgafbcon_blank(int blank, struct fb_info *info);
@@ -304,7 +304,7 @@ static struct fb_ops tgafb_ops = {
      *  Open/Release the frame buffer device
      */
 
-static int tgafb_open(struct fb_info *info)                                       
+static int tgafb_open(struct fb_info *info, int user)
 {
     /*                                                                     
      *  Nothing, only a usage count for the moment                          
@@ -314,7 +314,7 @@ static int tgafb_open(struct fb_info *info)
     return(0);                              
 }
         
-static int tgafb_release(struct fb_info *info)
+static int tgafb_release(struct fb_info *info, int user)
 {
     MOD_DEC_USE_COUNT;
     return(0);                                                    
@@ -453,15 +453,15 @@ static int tgafb_ioctl(struct inode *inode, struct file *file, u_int cmd,
      *  Initialisation
      */
 
-__initfunc(unsigned long tgafb_init(unsigned long mem_start))
+__initfunc(void tgafb_init(void))
 {
-    int i, j, temp, err;
+    int i, j, temp;
     unsigned char *cbp;
     struct pci_dev *pdev;
 
     pdev = pci_find_device(PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TGA, NULL);
     if (!pdev)
-	return mem_start;
+	return;
     tga_mem_base = pdev->base_address[0] & PCI_BASE_ADDRESS_MEM_MASK;
 #ifdef DEBUG
     printk("tgafb_init: mem_base 0x%x\n", tga_mem_base);
@@ -480,7 +480,7 @@ __initfunc(unsigned long tgafb_init(unsigned long mem_start))
 	    break;
 	default:
 	    printk("TGA type (0x%x) unrecognized!\n", tga_type);
-	    return mem_start;
+	    return;
     }
 
     tga_regs_base = ((unsigned long)tga_mem_base + TGA_REGS_OFFSET);
@@ -689,7 +689,7 @@ __initfunc(unsigned long tgafb_init(unsigned long mem_start))
     fb_var.xres = fb_var.xres_virtual = 640;
     fb_var.yres = fb_var.yres_virtual = 480;
     fb_fix.line_length = 80*fb_var.bits_per_pixel;
-    fb_fix.smem_start = (char *)__pa(tga_fb_base + LCA_DENSE_MEM);
+    fb_fix.smem_start = (char *)__pa(tga_fb_base + DENSE_MEM(tga_fb_base));
     fb_fix.smem_len = fb_fix.line_length*fb_var.yres;
     fb_fix.type = FB_TYPE_PACKED_PIXELS;
     fb_fix.type_aux = 0;
@@ -730,7 +730,7 @@ __initfunc(unsigned long tgafb_init(unsigned long mem_start))
     disp.cmap.start = 0;
     disp.cmap.len = 0;
     disp.cmap.red = disp.cmap.green = disp.cmap.blue = disp.cmap.transp = NULL;
-    disp.screen_base = (char *)tga_fb_base + LCA_DENSE_MEM;
+    disp.screen_base = (char *)tga_fb_base + DENSE_MEM(tga_fb_base);
     disp.visual = fb_fix.visual;
     disp.type = fb_fix.type;
     disp.type_aux = fb_fix.type_aux;
@@ -765,15 +765,13 @@ __initfunc(unsigned long tgafb_init(unsigned long mem_start))
     fb_info.updatevar = &tgafbcon_updatevar;
     fb_info.blank = &tgafbcon_blank;
 
-    err = register_framebuffer(&fb_info);
-    if (err < 0)
-	return mem_start;
-
     tgafb_set_var(&fb_var, -1, &fb_info);
+
+    if (register_framebuffer(&fb_info) < 0)
+	return;
 
     printk("fb%d: %s frame buffer device\n", GET_FB_IDX(fb_info.node),
 	   fb_fix.id);
-    return mem_start;
 }
 
 
@@ -927,9 +925,6 @@ set_cursor(int currcons)
 
   if (currcons != fg_console || console_blanked || vcmode == KD_GRAPHICS)
     return;
-
-  if (__real_origin != __origin)
-    __set_origin(__real_origin);
 
   save_flags(flags); cli();
 

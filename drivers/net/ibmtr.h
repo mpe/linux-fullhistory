@@ -182,8 +182,14 @@ struct tok_info {
 	unsigned char token_release;
 	unsigned char avail_shared_ram;
 	unsigned char shared_ram_paging;
-	unsigned char dhb_size4mb;
-	unsigned char dhb_size16mb;
+	unsigned short dhb_size4mb;
+	unsigned short rbuf_len4;
+	unsigned short rbuf_cnt4;
+	unsigned short maxmtu4;
+	unsigned short dhb_size16mb;
+	unsigned short rbuf_len16;
+	unsigned short rbuf_cnt16;
+	unsigned short maxmtu16;
 	/* Additions by David Morris       */
 	unsigned char do_tok_int;
 	struct wait_queue *wait_for_tok_int;
@@ -207,6 +213,7 @@ struct tok_info {
 	unsigned char readlog_pending;
 	unsigned short adapter_int_enable; /* Adapter-specific int enable */
         struct timer_list tr_timer;
+	unsigned char ring_speed;
 	__u32 func_addr;
 };
 

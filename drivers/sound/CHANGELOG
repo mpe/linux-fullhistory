@@ -41,7 +41,7 @@ stream of received 0x00 bytes when the MIDI receiver is enabled.
 
 Since 3.5
 - Changes almost everywhere.
-- Support for OPTi 82C924 based soundcards.
+- Support for OPTi 82C924-based sound cards.
 
 Since 3.5.4-beta8
 - Fixed a bug in handling of non-fragment sized writes in 16 bit/stereo mode
@@ -79,7 +79,7 @@ Since 3.5.4-beta2
 - Added the "lowlevel" subdirectory for additional low level drivers that
   are not part of USS core. See lowlevel/README for more info.
 - Included support for ACI mixer (by Markus Kuhn). ACI is a mixer used in
-  miroPCM soundcards. See lowlevel/aci.readme for more info.
+  miroPCM sound cards. See lowlevel/aci.readme for more info.
 - Support for Aztech Washington chipset (AZT2316 ASIC).
 
 Since 3.5.4-beta1
@@ -271,7 +271,7 @@ Since pre-3.0-940712
   GUS MAX, but it doesn't work yet.
 Since pre-3.0-940426
 - AD1848/CS4248/CS4231 codec support (MSS, GUS MAX, Aztec, Orchid etc).
-This codec chip is used in various soundcards. This version is developed
+This codec chip is used in various sound cards. This version is developed
 for the 16 bit daughtercard of GUS. It should work with other cards also
 if the following requirements are met:
 	- The I/O, IRQ and DMA settings are jumper selectable or
@@ -336,7 +336,7 @@ Since 2.2b
 - Support for the MPU emulation of the SB16.
 - Some big arrays are now allocated boot time. This makes the BSS segment
   smaller which makes it possible to use the full driver with
-  NetBSD. These arrays are not allocated if no suitable soundcard is available.
+  NetBSD. These arrays are not allocated if no suitable sound card is available.
 - Fixed a bug in the compute_and_set_volume in gus_wave.c
 - Fixed the too fast mono playback problem of SB Pro and PAS16.
 

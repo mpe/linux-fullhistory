@@ -274,7 +274,7 @@ __initfunc(void config_mac(void))
     mach_mksound         = mac_mksound;
 #endif
     mach_reset           = mac_reset;
-    conswitchp	         = &fb_con;
+    conswitchp	         = &dummy_con;
     mach_max_dma_address = 0xffffffff;
 #if 0
     mach_debug_init	 = mac_debug_init;

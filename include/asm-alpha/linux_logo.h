@@ -1,4 +1,4 @@
-/* $Id: linux_logo.h,v 1.2 1998/05/04 14:20:47 jj Exp $
+/* $Id: linux_logo.h,v 1.3 1998/06/29 19:36:17 geert Exp $
  * include/asm-alpha/linux_logo.h: This is a linux logo
  *                                 to be displayed on boot.
  *
@@ -28,27 +28,8 @@
 #ifdef INCLUDE_LINUX_LOGO_DATA
 
 #define INCLUDE_LINUX_LOGO16
+
 #include <linux/linux_logo.h>
-
-/* Painted by Johnny Stenback <jst@uwasa.fi> */
-
-unsigned char *linux_serial_image __initdata = "\n"
-"         .u$e.\n"
-"       .$$$$$:S\n"
-"       $\"*$/\"*$$\n"
-"       $.`$ . ^F\n"
-"       4k+#+T.$F\n"
-"       4P+++\"$\"$\n"
-"       :R\"+  t$$B\n"
-"    ___#       $$$\n"
-"    |  |       R$$k\n"
-"   dd. | Linux  $!$\n"
-"   ddd |   AXP  $9$F\n"
-" '!!!!!$       !!#!`\n"
-"  !!!!!*     .!!!!!`\n"
-"'!!!!!!!W..e$$!!!!!!`    %s\n"
-" \"~^^~         ^~~^\n"
-"\n";
 
 #else
 
@@ -62,8 +43,5 @@ extern unsigned char linux_logo16_red[];
 extern unsigned char linux_logo16_green[];
 extern unsigned char linux_logo16_blue[];
 extern unsigned char linux_logo16[];
-extern unsigned char *linux_serial_image;
-
-extern int (*console_show_logo)(void);
 
 #endif

@@ -82,7 +82,7 @@ int sb_dsp_command(sb_devc * devc, unsigned char val)
 			return 1;
 		}
 	}
-	printk(KERN_WARNING "soundblaster: DSP Command(%x) Timeout.\n", val);
+	printk(KERN_WARNING "Sound Blaster:  DSP command(%x) timeout.\n", val);
 	return 0;
 }
 
@@ -873,8 +873,8 @@ void sb_dsp_init(struct address_info *hw_config)
 	conf_printf(name, hw_config);
 
 	/*
-	 * Assuming that a soundcard is Sound Blaster (compatible) is the most common
-	 * configuration error and the mother of all problems. Usually soundcards
+	 * Assuming that a sound card is Sound Blaster (compatible) is the most common
+	 * configuration error and the mother of all problems. Usually sound cards
 	 * emulate SB Pro but in addition they have a 16 bit native mode which should be
 	 * used in Unix. See Readme.cards for more information about configuring OSS/Free
 	 * properly.
@@ -883,7 +883,7 @@ void sb_dsp_init(struct address_info *hw_config)
 	{
 		if (devc->major == 3 && devc->minor != 1)	/* "True" SB Pro should have v3.1 (rare ones may have 3.2). */
 		{
-			printk(KERN_INFO "This soundcard may not be fully Sound Blaster Pro compatible.\n");
+			printk(KERN_INFO "This sound card may not be fully Sound Blaster Pro compatible.\n");
 			printk(KERN_INFO "In many cases there is another way to configure OSS so that\n");
 			printk(KERN_INFO "it works properly with OSS (for example in 16 bit mode).\n");
 			printk(KERN_INFO "Please ignore this message if you _really_ have a SB Pro.\n");
@@ -908,14 +908,14 @@ void sb_dsp_init(struct address_info *hw_config)
 		if (devc->dma16 >= 0 && devc->dma16 != devc->dma8)
 		{
 			if (sound_alloc_dma(devc->dma16, "SoundBlaster16"))
-				printk(KERN_WARNING "soundblaster: Can't allocate 16 bit DMA channel %d\n", devc->dma16);
+				printk(KERN_WARNING "Sound Blaster:  can't allocate 16 bit DMA channel %d.\n", devc->dma16);
 		}
 		sb_audio_init(devc, name);
 		hw_config->slots[0]=devc->dev;
 	}
 	else
 	{
-		MDB(printk("soundblaster: No audio devices found.\n"));
+		MDB(printk("Sound Blaster:  no audio devices found.\n"));
 	}
 }
 
@@ -1262,7 +1262,7 @@ void attach_sbmpu(struct address_info *hw_config)
 {
 #if defined(CONFIG_MIDI) && defined(CONFIG_UART401)
 	attach_uart401(hw_config);
-	last_sb->midi_irq_cookie=midi_devs[hw_config->slots[4]];
+	last_sb->midi_irq_cookie=midi_devs[hw_config->slots[4]]->devc;
 #endif
 }
 
@@ -1289,7 +1289,7 @@ int probe_sbmpu(struct address_info *hw_config)
 		case MDL_SB16:
 			if (hw_config->io_base != 0x300 && hw_config->io_base != 0x330)
 			{
-				printk(KERN_ERR "SB16: Invalid MIDI port %x\n", hw_config->irq);
+				printk(KERN_ERR "SB16: Invalid MIDI port %x\n", hw_config->io_base);
 				return 0;
 			}
 			hw_config->name = "Sound Blaster 16";

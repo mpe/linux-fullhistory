@@ -69,6 +69,7 @@ pci_clone_list[] __initdata = {
 	{0x8e2e, 0x3000, "KTI ET32P2"},
 	{0x4a14, 0x5000, "NetVin NV5000SC"},
 	{0x1106, 0x0926, "Via 82C926"},
+	{0x10bd, 0x0e34, "SureCom NE34"},
 	{0,}
 };
 

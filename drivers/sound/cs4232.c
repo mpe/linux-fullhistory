@@ -34,8 +34,6 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#ifdef CONFIG_CS4232
-
 #define KEY_PORT	0x279	/* Same as LPT1 status port */
 #define CSN_NUM		0x99	/* Just a random number */
 
@@ -108,7 +106,7 @@ int probe_cs4232(struct address_info *hw_config)
 	 * method conflicts with possible PnP support in the OS. For this reason 
 	 * driver is just a temporary kludge.
 	 *
-	 * Also the Cirrus/Crystal method doesnt always work. Try ISAPnP first ;)
+	 * Also the Cirrus/Crystal method doesnt always work. Try ISA PnP first ;)
 	 */
 
 	/*
@@ -340,5 +338,4 @@ void cleanup_module(void)
 	SOUND_LOCK_END;
 }
 
-#endif
 #endif

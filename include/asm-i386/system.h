@@ -45,24 +45,24 @@ extern void FASTCALL(__switch_to(struct task_struct *prev, struct task_struct *n
  */
 #define switch_to(prev,next) do {					\
 	unsigned long eax, edx, ecx;					\
-	asm volatile("pushl %%edi\n\t"					\
+	asm volatile("pushl %%ebx\n\t"					\
 		     "pushl %%esi\n\t"					\
+		     "pushl %%edi\n\t"					\
 		     "pushl %%ebp\n\t"					\
-		     "pushl %%ebx\n\t"					\
 		     "movl %%esp,%0\n\t"	/* save ESP */		\
 		     "movl %5,%%esp\n\t"	/* restore ESP */	\
 		     "movl $1f,%1\n\t"		/* save EIP */		\
 		     "pushl %6\n\t"		/* restore EIP */	\
 		     "jmp __switch_to\n"				\
 		     "1:\t"						\
-		     "popl %%ebx\n\t"					\
 		     "popl %%ebp\n\t"					\
+		     "popl %%edi\n\t"					\
 		     "popl %%esi\n\t"					\
-		     "popl %%edi"					\
+		     "popl %%ebx"					\
 		     :"=m" (prev->tss.esp),"=m" (prev->tss.eip),	\
 		      "=a" (eax), "=d" (edx), "=c" (ecx)		\
 		     :"m" (next->tss.esp),"m" (next->tss.eip),		\
-		      "a" (prev), "d" (next));				\
+		      "a" (prev), "d" (next)); 				\
 } while (0)
 
 #define _set_base(addr,base) \

@@ -1,7 +1,7 @@
 /*
  * linux/drivers/sound/soundcard.c
  *
- * Soundcard driver for Linux
+ * Sound card driver for Linux
  */
 /*
  * Copyright (C) by Hannu Savolainen 1993-1997
@@ -435,7 +435,7 @@ static int sound_open(struct inode *inode, struct file *file)
 	}
 	dev = MINOR(inode->i_rdev);
 	if (!soundcard_configured && dev != SND_DEV_CTL && dev != SND_DEV_STATUS) {
-		/* printk("SoundCard Error: The soundcard system has not been configured\n");*/
+		/* printk("SoundCard Error: The sound system has not been configured\n");*/
 		return -ENXIO;
 	}
 	DEB(printk("sound_open(dev=%d)\n", dev));

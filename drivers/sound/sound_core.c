@@ -318,5 +318,23 @@ int soundcore_init(void)
 		printk(KERN_ERR "soundcore: sound device already in use.\n");
 		return -EBUSY;
 	}
+	/*
+	 *	Now init non OSS drivers
+	 */
+#ifdef CONFIG_SOUND_SONICVIBES
+	init_sonicvibes();
+#endif
+#ifdef CONFIG_SOUND_ES1370
+	init_es1370();
+#endif
+#ifdef CONFIG_SOUND_ES1371
+	init_es1371();
+#endif
+#ifdef CONFIG_SOUND_MSNDCLAS
+	msnd_classic_init();
+#endif
+#ifdef CONFIG_SOUND_MSNDPIN
+	msnd_pinnacle_init();
+#endif
 	return 0;
 }

@@ -375,7 +375,9 @@ __initfunc(void config_amiga(void))
   mach_floppy_setup    = amiga_floppy_setup;
 #endif
   mach_reset           = amiga_reset;
-  conswitchp           = &fb_con;
+#ifdef CONFIG_DUMMY_CONSOLE  
+  conswitchp           = &dummy_con;
+#endif
   kd_mksound           = amiga_mksound;
 #ifdef CONFIG_MAGIC_SYSRQ
   mach_sysrq_key = 0x5f;	     /* HELP */

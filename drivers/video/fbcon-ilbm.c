@@ -102,12 +102,10 @@ void fbcon_ilbm_putc(struct vc_data *conp, struct display *p, int c, int yy,
     u8 d;
     int fg0, bg0, fg, bg;
 
-    c &= 0xff;
-
     dest = p->screen_base+yy*p->fontheight*p->next_line+xx;
-    cdat = p->fontdata+c*p->fontheight;
-    fg0 = attr_fgcol(p,conp);
-    bg0 = attr_bgcol(p,conp);
+    cdat = p->fontdata+(c&0xff)*p->fontheight;
+    fg0 = attr_fgcol(p,c);
+    bg0 = attr_bgcol(p,c);
 
     for (rows = p->fontheight; rows--;) {
 	d = *cdat++;
@@ -146,8 +144,8 @@ void fbcon_ilbm_putc(struct vc_data *conp, struct display *p, int c, int yy,
      *  -- Geert
      */
 
-void fbcon_ilbm_putcs(struct vc_data *conp, struct display *p, const char *s,
-		      int count, int yy, int xx)
+void fbcon_ilbm_putcs(struct vc_data *conp, struct display *p, 
+		      const unsigned short *s, int count, int yy, int xx)
 {
     u8 *dest0, *dest, *cdat1, *cdat2, *cdat3, *cdat4;
     u_int rows, i;
@@ -156,8 +154,8 @@ void fbcon_ilbm_putcs(struct vc_data *conp, struct display *p, const char *s,
     int fg0, bg0, fg, bg;
 
     dest0 = p->screen_base+yy*p->fontheight*p->next_line+xx;
-    fg0 = attr_fgcol(p,conp);
-    bg0 = attr_bgcol(p,conp);
+    fg0 = attr_fgcol(p,*s);
+    bg0 = attr_bgcol(p,*s);
 
     while (count--)
 	if (xx&3 || count < 3) {	/* Slow version */
@@ -264,6 +262,17 @@ struct display_switch fbcon_ilbm = {
     fbcon_ilbm_setup, fbcon_ilbm_bmove, fbcon_ilbm_clear, fbcon_ilbm_putc,
     fbcon_ilbm_putcs, fbcon_ilbm_revc, NULL
 };
+
+
+#ifdef MODULE
+int init_module(void)
+{
+    return 0;
+}
+
+void cleanup_module(void)
+{}
+#endif /* MODULE */
 
 
     /*

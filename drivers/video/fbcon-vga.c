@@ -77,21 +77,17 @@ static inline void vga_memmovew(u16 *to, u16 *from, unsigned int count)
      */
 
 static inline u16 fbcon_vga_attr(struct display *p,
-				 struct vc_data *conp)
+				 unsigned short s)
 {
-	if (conp->vc_can_do_color) {
-		return conp->vc_attr << 8;
-	}
-
         /* Underline and reverse-video are mutually exclusive on MDA.
          * Since reverse-video is used for cursors and selected areas, 
 	 * it takes precedence.
          */
 
-	return (attr_reverse(p, conp) ? 0x7000 :
-		(attr_underline(p, conp) ? 0x0100 : 0x0700)) |
-	       (attr_bold(p, conp) ? 0x0800 : 0) |
-	       (attr_blink(p, conp) ? 0x8000 : 0);
+	return (attr_reverse(p, s) ? 0x7000 :
+		(attr_underline(p, s) ? 0x0100 : 0x0700)) |
+	       (attr_bold(p, s) ? 0x0800 : 0) |
+	       (attr_blink(p, s) ? 0x8000 : 0);
 }
 
 void fbcon_vga_setup(struct display *p)
@@ -146,16 +142,25 @@ void fbcon_vga_putc(struct vc_data *conp, struct display *p, int c, int y,
 		    int x)
 {
     u16 *dst = (u16 *)(p->screen_base+y*p->next_line+x*2);
-    vga_writew(fbcon_vga_attr(p, conp) | (c & 0xff), dst);
+    if (conp->vc_can_do_color)
+    	vga_writew(c, dst);
+    else
+    	vga_writew(fbcon_vga_attr(p, c) | (c & 0xff), dst);
 }
 
-void fbcon_vga_putcs(struct vc_data *conp, struct display *p, const char *s,
-		     int count, int y, int x)
+void fbcon_vga_putcs(struct vc_data *conp, struct display *p, 
+		     const unsigned short *s, int count, int y, int x)
 {
     u16 *dst = (u16 *)(p->screen_base+y*p->next_line+x*2);
-    u16 sattr = fbcon_vga_attr(p, conp);
-    while (count--)
-	vga_writew(sattr | ((int) (*s++) & 0xff), dst++);
+    u16 sattr;
+    if (conp->vc_can_do_color)
+    	while (count--)
+    	    vga_writew(*s++, dst++);
+    else {
+        sattr = fbcon_vga_attr(p, *s);
+        while (count--)
+	    vga_writew(sattr | ((int) (*s++) & 0xff), dst++);
+    }
 }
 
 void fbcon_vga_revc(struct display *p, int x, int y)
@@ -175,6 +180,17 @@ struct display_switch fbcon_vga = {
     fbcon_vga_setup, fbcon_vga_bmove, fbcon_vga_clear, fbcon_vga_putc,
     fbcon_vga_putcs, fbcon_vga_revc, NULL
 };
+
+
+#ifdef MODULE
+int init_module(void)
+{
+    return 0;
+}
+
+void cleanup_module(void)
+{}
+#endif /* MODULE */
 
 
     /*

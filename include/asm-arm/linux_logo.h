@@ -25,25 +25,3 @@ unsigned char linux_logo[] __initdata = { };
 unsigned char linux_logo16[] __initdata = { };
 unsigned char linux_logo_bw[] __initdata = { };
 
-/* Painted by Johnny Stenback <jst@uwasa.fi>
- * Modified by Russell King for ARM
- */
-unsigned char *linux_serial_image __initdata = "\n"
-"         .u$e.\n"
-"       .$$$$$:S\n"
-"       $\"*$/\"*$$\n"
-"       $.`$ . ^F\n"
-"       4k+#+T.$F\n"
-"       4P+++\"$\"$\n"
-"       :R\"+  t$$B\n"
-"    ___#       $$$\n"
-"    |  |       R$$k\n"
-"   dd. | Linux  $!$\n"
-"   ddd |   ARM  $9$F\n"
-" '!!!!!$       !!#!`\n"
-"  !!!!!*     .!!!!!`\n"
-"'!!!!!!!W..e$$!!!!!!`    %s\n"
-" \"~^^~         ^~~^\n"
-"\n";
-
-extern int (*console_show_logo)(void);

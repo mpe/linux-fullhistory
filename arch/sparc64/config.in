@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.46 1998/05/05 17:17:21 jj Exp $
+# $Id: config.in,v 1.51 1998/07/08 10:21:14 jj Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -26,6 +26,13 @@ define_bool CONFIG_VT_CONSOLE y
 
 bool 'Support for AP1000 multicomputer' CONFIG_AP1000
 
+mainmenu_option next_comment
+comment 'Console drivers'
+bool 'PROM console' CONFIG_PROM_CONSOLE
+bool 'Support Frame buffer devices' CONFIG_FB
+source drivers/video/Config.in
+endmenu
+
 if [ "$CONFIG_AP1000" = "y" ]; then
 	define_bool CONFIG_NO_KEYBOARD y
 	define_bool CONFIG_APFDDI y
@@ -45,6 +52,7 @@ else
 	define_bool CONFIG_SUN_AUXIO y
 	define_bool CONFIG_SUN_IO y
 	define_bool CONFIG_PCI y
+	define_bool CONFIG_PCI_CONSOLE y
 	source drivers/sbus/char/Config.in
 	source drivers/sbus/audio/Config.in
 fi

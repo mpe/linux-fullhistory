@@ -245,7 +245,7 @@ static void hpfb_blank(int blank, struct fb_info *info)
 	/* Not supported */
 }
 
-static int hpfb_open(struct fb_info *info)
+static int hpfb_open(struct fb_info *info, int user)
 {
 	/*
 	 * Nothing, only a usage count for the moment
@@ -280,7 +280,7 @@ static void hpfb_set_disp(int con)
 	display->dispsw = &fbcon_cfb8;
 }
 
-static int hpfb_release(struct fb_info *info)
+static int hpfb_release(struct fb_info *info, int user)
 {
 	MOD_DEC_USE_COUNT;
 	return(0);
@@ -304,7 +304,6 @@ static struct fb_ops hpfb_ops = {
 __initfunc(int hpfb_init_one(unsigned long base))
 {
 	unsigned long fboff;
-	int err;
 
 	fboff = (readb(base + TOPCAT_FBOMSB) << 8) 
 		| readb(base + TOPCAT_FBOLSB);
@@ -363,12 +362,11 @@ __initfunc(int hpfb_init_one(unsigned long base))
 	fb_info.blank = &hpfb_blank;
 	do_fb_set_var(&hpfb_defined, 1);
 
-	err = register_framebuffer(&fb_info);
-	if (err < 0)
-		return 1;
-
 	hpfb_get_var(&disp.var, -1, &fb_info);
 	hpfb_set_disp(-1);
+
+	if (register_framebuffer(&fb_info) < 0)
+		return 1;
 
 	return 0;
 }

@@ -4,7 +4,8 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *
  *  Enhanced CPU detection and feature setting code by Mike Jagdis
- *  and Martin Mares, November 1997.
+ *  and Martin Mares, November 1997, and partially recoded and moved
+ *  to setup.c by Willy Tarreau, July 1998.
  */
 
 .text
@@ -21,7 +22,9 @@
 #define CL_OFFSET	0x90022
 
 /*
- * References to members of the boot_cpu_data structure.
+ * References to members of the boot_cpu_data structure. Member
+ * definitions other than X86 and X86_HARD_MATH may be removed
+ * since they're no more used here.
  */
 
 #define CPU_PARAMS	SYMBOL_NAME(boot_cpu_data)
@@ -138,91 +141,13 @@ startup_32:
 #ifdef __SMP__
 checkCPUtype:
 #endif
-
-	movl $-1,X86_CPUID		#  -1 for no CPUID initially
-
-/* check if it is 486 or 386. */
 /*
+ * check if the cpu is >=486 or <=386.
  * XXX - this does a lot of unnecessary setup.  Alignment checks don't
  * apply at our cpl of 0 and the stack ought to be aligned already, and
  * we don't need to preserve eflags.
  */
 
-/*
- * Don't do this here. Do it in the CPU init code in C, right now we
- * must _not_ play unsafe games with the IO ports.
- *
- * A PPro and a P-II will also preserve the flags after a division,
- * so this "cyrix" test is just completely unsafe. IO port 0x22 is
- * some magic ACPI port on non-cyrix chips, so if this trashes that
- * we're screwed.
- *
- * This code belongs in "asm-i386/bugs.h" anyway (at which point we
- * _have_ done a CPUID for CPU's that support it directly, so we'll
- * be able to tell a intel P-II trivially at that point).
- */
-#undef CYRIX_CODE_BREAKAGE
-#ifdef CYRIX_CODE_BREAKAGE
-
-	/*
-	 * A Cyrix preserves flags in cases where other CPUs change
-	 * them in undefined ways. We need to know this since we may
-	 * need to enable the CPUID instruction at least. (Cyrix chips
-	 * prior to M2 have CPUID disabled by default, the Cx486s
-	 * didn't have it at all.)
-	 */
-	xor %ax,%ax
-	sahf
-	movb $5,%al
-	movb $2,%bl
-	div %bl
-	lahf
-	cmpb $2,%ah
-	jne ncyrix
-
-	/*
-	 * It behaves like a Cyrix so put "Cyrix" in the vendor id
-	 * field. It may be overwritten later with the real thing
-	 * if CPUID works.
-	 */
-	movl $0x69727943,X86_VENDOR_ID			# low 4 chars
-	movl $0x00000078,X86_VENDOR_ID+4		# next 4 chars
-
-	/*
-	 * N.B. The pattern of accesses to 0x22 and 0x23 is *important*
-	 *      so do not try and "optimise" it! For the same reason we
-	 *	do all this with interrupts off just to be sure.
-	 */
-#define setCx86(reg, val) \
-	movb reg,%al;	\
-	outb %al,$0x22;	\
-	movb val,%al;	\
-	outb %al,$0x23
-
-#define getCx86(reg) \
-	movb reg,%al;	\
-	outb %al,$0x22;	\
-	inb $0x23,%al
-
-	getCx86($0xc3)		# get CCR3
-	movb %al,%cl		# Save old value
-	movb %al,%bl
-	andb $0x0f,%bl		# Enable all config registers (for CCR4 access)
-	orb $0x10,%bl
-	setCx86($0xc3,%bl)
-
-	getCx86($0xe8)		# CCR4 |= CPUID
-	orb $0x80,%al
-	movb %al,%bl
-	setCx86($0xe8,%bl)
-
-	setCx86($0xc3,%cl)	# Restore old CCR3
-
-ncyrix:
-
-#endif
-
-	movl $3,X86		# at least 386
 	pushfl			# push EFLAGS
 	popl %eax		# get EFLAGS
 	movl %eax,%ecx		# save original EFLAGS
@@ -232,94 +157,21 @@ ncyrix:
 	pushfl			# get new EFLAGS
 	popl %eax		# put it in eax
 	xorl %ecx,%eax		# change in flags
+	pushl %ecx		# get original EFLAGS
+	popfl			# restore EFLAGS
 	andl $0x40000,%eax	# check if AC bit changed
-	je is386
+	movl %cr0,%eax		# prepares new EAX
+	je 1f			# at most a 386
 
 	movl $4,X86		# at least 486
-	movl %ecx,%eax
-	xorl $0x200000,%eax	# check ID flag
-	pushl %eax
-	popfl			# if we are on a straight 486DX, SX, or
-	pushfl			# 487SX we can't change it
-	popl %eax
-	xorl %ecx,%eax
-	pushl %ecx		# restore original EFLAGS
-	popfl
-	andl $0x200000,%eax
-	je nocpuid
-
-	/* get vendor info */
-	xorl %eax,%eax			# call CPUID with 0 -> return vendor ID
-	cpuid
-	movl %eax,X86_CPUID		# save CPUID level
-	movl %ebx,X86_VENDOR_ID		# lo 4 chars
-	movl %edx,X86_VENDOR_ID+4	# next 4 chars
-	movl %ecx,X86_VENDOR_ID+8	# last 4 chars
-
-	orl %eax,%eax			# do we have processor info as well?
-	je nocpuid
-
-	movl $1,%eax		# Use the CPUID instruction to get CPU type
-	cpuid
-	movb %al,%cl		# save reg for future use
-	andb $0x0f,%ah		# mask processor family
-	movb %ah,X86
-	andb $0xf0,%al		# mask model
-	shrb $4,%al
-	movb %al,X86_MODEL
-	andb $0x0f,%cl		# mask mask revision
-	movb %cl,X86_MASK
-	movl %edx,X86_CAPABILITY
-
-nocpuid:
-
-#ifdef CYRIX_CODE_BREAKAGE
-	/*
-	 * Even if we had CPUID Cyrix tries to look compatible with
-	 * Intel so we have to go elsewhere for the nitty gritty.
-	 */
-	cmpl $0x69727943,X86_VENDOR_ID		# "Cyri[x.*]"?
-	jne is486				# maybe ...
-
-	movb $0xfe,X86_MODEL			# Generic Cx486?
-	movb $0,X86_MASK
-
-	getCx86($0xc3)		# Test for DEVID by writing CCR3
-	movb %al,%cl
-	movb %al,%bl
-	orb $0x80,%bl
-	setCx86($0xc3,%bl)
-	getCx86($0xc0)		# dummy to change bus
-	getCx86($0xc3)
-	cmpb %al,%cl
-	je is486		# not writable == no DEVID
-
-	setCx86($0xc3,%cl)	# restore CCR3
-
-	getCx86($0xff)		# get DEVID in preference to any CPUID
-	movb %al,X86_MASK
-	getCx86($0xfe)
-	movb %al,X86_MODEL
-	andb $0xf0,%al		# Check for 6x86(L)
-	cmp $0x30,%al
-	jnz is486
-	getCx86($0xe9)		# CCR5: reset SLOP bit, so that the udelay loop
-	andb $0xfd,%al		# works well on 6x86(L) CPU's.
-	movb %al,%bl
-	setCx86($0xe9,%bl)
-#endif
-
-is486:
-	movl %cr0,%eax		# 486 or better
 	andl $0x80000011,%eax	# Save PG,PE,ET
 	orl $0x50022,%eax	# set AM, WP, NE and MP
 	jmp 2f
-
-is386:	pushl %ecx		# restore original EFLAGS
-	popfl
-	movl %cr0,%eax		# 386
+1:
+	movl $3,X86		# at most 386
 	andl $0x80000011,%eax	# Save PG,PE,ET
 	orl $2,%eax		# set MP
+
 2:	movl %eax,%cr0
 	call check_x87
 #ifdef __SMP__
@@ -357,6 +209,7 @@ is386:	pushl %ecx		# restore original EFLAGS
 	pushl %eax
 	pushl %eax
 	cld			# gcc2 wants the direction flag cleared at all times
+	call SYMBOL_NAME(refine_cpu_detection)	# get more info about cpu
 	call SYMBOL_NAME(start_kernel)
 L6:
 	jmp L6			# main should never return here, but

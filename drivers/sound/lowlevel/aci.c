@@ -13,7 +13,7 @@
  * software.
  * 
  * This Voxware ACI driver currently only supports the ACI functions
- * on the miroSOUND PCM12 card. Support for miro soundcards with
+ * on the miroSOUND PCM12 card. Support for miro sound cards with
  * additional ACI functions can easily be added later.
  *
  * Revision history:
@@ -76,6 +76,7 @@ static int aci_present = 0;
 
 #ifdef MODULE                  /* Whether the aci mixer is to be reset.    */
 int aci_reset = 0;             /* Default: don't reset if the driver is a  */
+MODULE_PARM(aci_reset,"i");
 #else                          /* module; use "insmod sound.o aci_reset=1" */
 int aci_reset = 1;             /* to override.                             */
 #endif
@@ -88,7 +89,7 @@ int aci_reset = 1;             /* to override.                             */
 /*
  * Wait until the ACI microcontroller has set the READYFLAG in the
  * Busy/IRQ Source Register to 0. This is required to avoid
- * overrunning the soundcard microcontroller. We do a busy wait here,
+ * overrunning the sound card microcontroller. We do a busy wait here,
  * because the microcontroller is not supposed to signal a busy
  * condition for more than a few clock cycles. In case of a time-out,
  * this function returns -1.
@@ -491,7 +492,7 @@ int attach_aci(void)
   }
 
   if (aci_idcode[0] == 0x6d) {
-    /* it looks like a miro soundcard */
+    /* It looks like a miro sound card. */
     switch (aci_idcode[1]) {
     case 0x41:
       boardname = "PCM1 pro / early PCM12";

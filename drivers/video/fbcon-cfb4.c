@@ -120,13 +120,11 @@ void fbcon_cfb4_putc(struct vc_data *conp, struct display *p, int c, int yy,
 	int bytes=p->next_line,rows;
 	u32 eorx,fgx,bgx;
 
-	c &= 0xff;
-
 	dest = p->screen_base + yy * p->fontheight * bytes + xx * 4;
-	cdat = p->fontdata + c * p->fontheight;
+	cdat = p->fontdata + (c & 0xff) * p->fontheight;
 
-	fgx=15;/*attr_fgcol(p,conp)&0x0F;*/
-	bgx=attr_bgcol(p,conp)&0x0F;
+	fgx=15;/*attr_fgcol(p,c);*/
+	bgx=attr_bgcol(p,c);
 	fgx |= (fgx << 4);
 	fgx |= (fgx << 8);
 	bgx |= (bgx << 4);
@@ -141,16 +139,16 @@ void fbcon_cfb4_putc(struct vc_data *conp, struct display *p, int c, int yy,
 	}
 }
 
-void fbcon_cfb4_putcs(struct vc_data *conp, struct display *p, const char *s,
-		      int count, int yy, int xx)
+void fbcon_cfb4_putcs(struct vc_data *conp, struct display *p, 
+		      const unsigned short *s, int count, int yy, int xx)
 {
 	u8 *cdat, c, *dest, *dest0;
 	int rows,bytes=p->next_line;
 	u32 eorx, fgx, bgx;
 
 	dest0 = p->screen_base + yy * p->fontheight * bytes + xx * 4;
-	fgx=15/*attr_fgcol(p,conp)*/;
-	bgx=attr_bgcol(p,conp);
+	fgx=15/*attr_fgcol(p,*s)*/;
+	bgx=attr_bgcol(p,*s);
 	fgx |= (fgx << 4);
 	fgx |= (fgx << 8);
 	fgx |= (fgx << 16);
@@ -192,6 +190,17 @@ struct display_switch fbcon_cfb4 = {
     fbcon_cfb4_setup, fbcon_cfb4_bmove, fbcon_cfb4_clear, fbcon_cfb4_putc,
     fbcon_cfb4_putcs, fbcon_cfb4_revc, NULL
 };
+
+
+#ifdef MODULE
+int init_module(void)
+{
+    return 0;
+}
+
+void cleanup_module(void)
+{}
+#endif /* MODULE */
 
 
     /*

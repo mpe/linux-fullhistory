@@ -243,6 +243,7 @@
 #include <linux/poll.h>
 #include <linux/init.h>
 
+#include <asm/processor.h>
 #include <asm/uaccess.h>
 #include <asm/irq.h>
 #include <asm/io.h>
@@ -701,7 +702,7 @@ static void add_timer_randomness(struct random_bucket *r,
 	begin_benchmark(&timer_benchmark);
 #endif
 #if defined (__i386__)
-	if (boot_cpu_data.x86_capability & 16) {
+	if (boot_cpu_data.x86_capability & X86_FEATURE_TSC) {
 		__u32 high;
 		__asm__(".byte 0x0f,0x31"
 			:"=a" (time), "=d" (high));

@@ -112,13 +112,11 @@ void fbcon_cfb16_putc(struct vc_data *conp, struct display *p, int c, int yy,
     int bytes = p->next_line, rows;
     u32 eorx, fgx, bgx;
 
-    c &= 0xff;
-
     dest = p->screen_base + yy * p->fontheight * bytes + xx * 16;
-    cdat = p->fontdata + c * p->fontheight;
+    cdat = p->fontdata + (c & 0xff) * p->fontheight;
 
-    fgx = fbcon_cfb16_cmap[attr_fgcol(p, conp)];
-    bgx = fbcon_cfb16_cmap[attr_bgcol(p, conp)];
+    fgx = fbcon_cfb16_cmap[attr_fgcol(p, c)];
+    bgx = fbcon_cfb16_cmap[attr_bgcol(p, c)];
     fgx |= (fgx << 16);
     bgx |= (bgx << 16);
     eorx = fgx ^ bgx;
@@ -132,16 +130,16 @@ void fbcon_cfb16_putc(struct vc_data *conp, struct display *p, int c, int yy,
     }
 }
 
-void fbcon_cfb16_putcs(struct vc_data *conp, struct display *p, const char *s,
-		       int count, int yy, int xx)
+void fbcon_cfb16_putcs(struct vc_data *conp, struct display *p, 
+		       const unsigned short *s, int count, int yy, int xx)
 {
     u8 *cdat, c, *dest, *dest0;
     int rows, bytes = p->next_line;
     u32 eorx, fgx, bgx;
 
     dest0 = p->screen_base + yy * p->fontheight * bytes + xx * 16;
-    fgx = fbcon_cfb16_cmap[attr_fgcol(p, conp)];
-    bgx = fbcon_cfb16_cmap[attr_bgcol(p, conp)];
+    fgx = fbcon_cfb16_cmap[attr_fgcol(p, *s)];
+    bgx = fbcon_cfb16_cmap[attr_bgcol(p, *s)];
     fgx |= (fgx << 16);
     bgx |= (bgx << 16);
     eorx = fgx ^ bgx;
@@ -183,6 +181,17 @@ struct display_switch fbcon_cfb16 = {
     fbcon_cfb16_setup, fbcon_cfb16_bmove, fbcon_cfb16_clear, fbcon_cfb16_putc,
     fbcon_cfb16_putcs, fbcon_cfb16_revc, NULL
 };
+
+
+#ifdef MODULE
+int init_module(void)
+{
+    return 0;
+}
+
+void cleanup_module(void)
+{}
+#endif /* MODULE */
 
 
     /*

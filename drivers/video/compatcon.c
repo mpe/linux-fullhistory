@@ -43,11 +43,11 @@ static void compatcon_deinit(struct vc_data *conp);
 static void compatcon_clear(struct vc_data *conp, int sy, int sx, int height,
 			    int width);
 static void compatcon_putc(struct vc_data *conp, int c, int ypos, int xpos);
-static void compatcon_putcs(struct vc_data *conp, const char *s, int count,
+static void compatcon_putcs(struct vc_data *conp, const unsigned short *s, int count,
 			    int ypos, int xpos);
 static void compatcon_cursor(struct vc_data *conp, int mode);
-static void compatcon_scroll(struct vc_data *conp, int t, int b, int dir,
-			     int count);
+static int compatcon_scroll(struct vc_data *conp, int t, int b, int dir,
+			    int count);
 static void compatcon_bmove(struct vc_data *conp, int sy, int sx, int dy,
 			    int dx, int height, int width);
 static int compatcon_switch(struct vc_data *conp);
@@ -61,10 +61,6 @@ static int compatcon_scrolldelta(struct vc_data *conp, int lines);
     /*
      *  Internal routines
      */
-
-#if 0
-static int compatcon_show_logo(void);
-#endif
 
 unsigned long video_num_columns;
 unsigned long video_num_lines;
@@ -100,10 +96,6 @@ __initfunc(static const char *compatcon_startup(void))
     video_screen_size = video_num_lines*video_size_row;
 
     con_type_init(&display_desc);
-#if 0
-    if (!console_show_logo)
-	console_show_logo = compatcon_show_logo;
-#endif
     return display_desc;
 }
 
@@ -152,11 +144,11 @@ static void compatcon_putc(struct vc_data *conp, int c, int ypos, int xpos)
 	return;
 
     p = (u16 *)(video_mem_base+ypos*video_size_row+xpos*2);
-    scr_writew(conp->vc_attr << 8 | c, p);
+    scr_writew(c, p);
 }
 
 
-static void compatcon_putcs(struct vc_data *conp, const char *s, int count,
+static void compatcon_putcs(struct vc_data *conp, const unsigned short *s, int count,
 			    int ypos, int xpos)
 {
     u16 *p;
@@ -166,9 +158,8 @@ static void compatcon_putcs(struct vc_data *conp, const char *s, int count,
 	return;
 
     p = (u16 *)(video_mem_base+ypos*video_size_row+xpos*2);
-    sattr = conp->vc_attr << 8;
     while (count--)
-	scr_writew(sattr | ((int) (*s++) & 0xff), p++);
+	scr_writew(*s++, p++);
 }
 
 
@@ -187,11 +178,11 @@ static void compatcon_cursor(struct vc_data *conp, int mode)
 }
 
 
-static void compatcon_scroll(struct vc_data *conp, int t, int b, int dir,
-			     int count)
+static int compatcon_scroll(struct vc_data *conp, int t, int b, int dir,
+			    int count)
 {
     if (console_blanked)
-	return;
+	return 0;
 
     compatcon_cursor(conp, CM_ERASE);
 
@@ -226,6 +217,7 @@ static void compatcon_scroll(struct vc_data *conp, int t, int b, int dir,
 	    compatcon_clear(conp, 0, t, conp->vc_rows, count);
 	    break;
     }
+    return 0;
 }
 
 
@@ -279,7 +271,7 @@ static void compatcon_bmove(struct vc_data *conp, int sy, int sx, int dy,
 
 static int compatcon_switch(struct vc_data *conp)
 {
-    return 0;
+    return 1;
 }
 
 
@@ -327,21 +319,6 @@ static int compatcon_scrolldelta(struct vc_data *conp, int lines)
     return -ENOSYS;
 }
 
-#if 0
-__initfunc(static int compatcon_show_logo( void ))
-{
-    int height = 0;
-    char *p;
-
-    printk(linux_serial_image);
-    for (p = linux_serial_image; *p; p++)
-	if (*p == '\n')
-	    height++;
-    return height;
-}
-#endif
-
-
     /*
      *  The console `switch' structure for the console wrapper
      */
@@ -350,5 +327,6 @@ struct consw compat_con = {
     compatcon_startup, compatcon_init, compatcon_deinit, compatcon_clear,
     compatcon_putc, compatcon_putcs, compatcon_cursor, compatcon_scroll,
     compatcon_bmove, compatcon_switch, compatcon_blank, compatcon_get_font,
-    compatcon_set_font, compatcon_set_palette, compatcon_scrolldelta
+    compatcon_set_font, compatcon_set_palette, compatcon_scrolldelta,
+    NULL, NULL
 };

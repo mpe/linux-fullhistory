@@ -314,6 +314,8 @@ check_if_enabled:
 		if (no_autodma)
 			hwif->no_autodma = 1;
 #ifdef CONFIG_BLK_DEV_IDEDMA
+		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_SIS5513))
+			hwif->no_autodma = 1;	/* too many SIS-5513 systems have troubles */
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246) ||
 		    ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && (dev->class & 0x80))) {
 			unsigned int extra = (!mate && IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246)) ? 16 : 0;

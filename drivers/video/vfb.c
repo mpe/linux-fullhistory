@@ -69,8 +69,8 @@ static int vfb_enable = 0;	/* disabled by default */
 
 void vfb_setup(char *options, int *ints);
 
-static int vfb_open(struct fb_info *info);
-static int vfb_release(struct fb_info *info);
+static int vfb_open(struct fb_info *info, int user);
+static int vfb_release(struct fb_info *info, int user);
 static int vfb_get_fix(struct fb_fix_screeninfo *fix, int con,
 		       struct fb_info *info);
 static int vfb_get_var(struct fb_var_screeninfo *var, int con,
@@ -91,7 +91,7 @@ static int vfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
      *  Interface to the low level console driver
      */
 
-unsigned long vfb_init(unsigned long mem_start);
+void vfb_init(void);
 static int vfbcon_switch(int con, struct fb_info *info);
 static int vfbcon_updatevar(int con, struct fb_info *info);
 static void vfbcon_blank(int blank, struct fb_info *info);
@@ -122,7 +122,7 @@ static struct fb_ops vfb_ops = {
      *  Open/Release the frame buffer device
      */
 
-static int vfb_open(struct fb_info *info)                                       
+static int vfb_open(struct fb_info *info, int user)
 {
     /*                                                                     
      *  Nothing, only a usage count for the moment                          
@@ -132,7 +132,7 @@ static int vfb_open(struct fb_info *info)
     return(0);                              
 }
         
-static int vfb_release(struct fb_info *info)
+static int vfb_release(struct fb_info *info, int user)
 {
     MOD_DEC_USE_COUNT;
     return(0);                                                    
@@ -417,21 +417,13 @@ __initfunc(void vfb_setup(char *options, int *ints))
      *  Initialisation
      */
 
-__initfunc(unsigned long vfb_init(unsigned long mem_start))
+__initfunc(void vfb_init(void))
 {
-    int err;
-
     if (!vfb_enable)
-	return mem_start;
+	return;
 
-    if (mem_start) {
-	videomemory = mem_start;
-	mem_start += videomemorysize;
-    } else
-	videomemory = (u_long)vmalloc(videomemorysize);
-
-    if (!videomemory)
-	return mem_start;
+    if (!(videomemory = (u_long)vmalloc(videomemorysize)))
+	return;
 
     strcpy(fb_info.modename, vfb_name);
     fb_info.changevar = NULL;
@@ -442,15 +434,15 @@ __initfunc(unsigned long vfb_init(unsigned long mem_start))
     fb_info.updatevar = &vfbcon_updatevar;
     fb_info.blank = &vfbcon_blank;
 
-    err = register_framebuffer(&fb_info);
-    if (err < 0)
-	return mem_start;
-
     vfb_set_var(&vfb_default, -1, &fb_info);
+
+    if (register_framebuffer(&fb_info) < 0) {
+	vfree((void *)videomemory);
+	return;
+    }
 
     printk("fb%d: Virtual frame buffer device, using %ldK of video memory\n",
 	   GET_FB_IDX(fb_info.node), videomemorysize>>10);
-    return mem_start;
 }
 
 
@@ -629,13 +621,14 @@ static void do_install_cmap(int con, struct fb_info *info)
 #ifdef MODULE
 int init_module(void)
 {
-    return(vfb_init(NULL));
+    vfb_init();
+    return 0;
 }
 
 void cleanup_module(void)
 {
     unregister_framebuffer(&fb_info);
-    vfree(videomemory);
+    vfree((void *)videomemory);
 }
 
 #endif /* MODULE */

@@ -1,4 +1,4 @@
-/* $Id: linux_logo.h,v 1.2 1998/05/04 14:20:59 jj Exp $
+/* $Id: linux_logo.h,v 1.3 1998/07/08 10:21:23 jj Exp $
  * include/asm-sparc/linux_logo.h: This is a linux logo
  *                                 to be displayed on boot.
  *
@@ -27,22 +27,3 @@
 
 #include <linux/linux_logo.h>
 
-/* Painted by Johnny Stenback <jst@uwasa.fi> */
-
-unsigned char *linux_serial_image __initdata = "\n"
-"         .u$e.\n"
-"       .$$$$$:S\n"
-"       $\"*$/\"*$$\n"
-"       $.`$ . ^F\n"
-"       4k+#+T.$F\n"
-"       4P+++\"$\"$\n"
-"       :R\"+  t$$B\n"
-"    ___#       $$$\n"
-"    |  |       R$$k\n"
-"   dd. | Linux  $!$\n"
-"   ddd |  Sparc $9$F\n"
-" '!!!!!$       !!#!`\n"
-"  !!!!!*     .!!!!!`\n"
-"'!!!!!!!W..e$$!!!!!!`    %s\n"
-" \"~^^~         ^~~^\n"
-"\n";

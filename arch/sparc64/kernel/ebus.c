@@ -361,7 +361,9 @@ __initfunc(void ebus_init(void))
 		++num_ebus;
 	}
 
+#ifndef CONFIG_FB
 	pci_console_init();
+#endif
 
 #ifdef CONFIG_SUN_OPENPROMIO
 	openprom_init();

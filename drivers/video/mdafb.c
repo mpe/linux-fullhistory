@@ -107,32 +107,31 @@ static inline void write_mda(unsigned char reg, unsigned int val)
 	restore_flags(flags);
 }
 
-static inline void mda_set_origin(unsigned short offset)
+static inline void mda_set_origin(unsigned short location)
 {
-	write_mda(12, offset);
+	write_mda(12, location >> 1);
 }
+
+static inline void mda_set_cursor(int location) 
+{
+	write_mda(14, location >> 1);
+}
+
 
     /*
      *  Move hardware mda cursor
      */
     
-static int mda_write_cursor (int location) 
-{
-	write_mda(14, location >> 1);
-	return 0;
-}
-
-
 void fbcon_mdafb_cursor(struct display *p, int mode, int x, int y)
 {
 	switch (mode) {
 		case CM_ERASE:
-			mda_write_cursor(mda_video_mem_len - 1);
+			mda_set_cursor(mda_video_mem_len - 1);
 			break;
 
 		case CM_MOVE:
 		case CM_DRAW:
-			mda_write_cursor(y*p->next_line + (x << 1));
+			mda_set_cursor(y*p->next_line + (x << 1));
 			break;
 	}
 }
@@ -152,13 +151,13 @@ static void mdafbcon_blank(int blank, struct fb_info *info);
      *  Open/Release the frame buffer device
      */
 
-static int mdafb_open(struct fb_info *info)
+static int mdafb_open(struct fb_info *info, int user)
 {
 	MOD_INC_USE_COUNT;
 	return 0;
 }
 
-static int mdafb_release(struct fb_info *info)
+static int mdafb_release(struct fb_info *info, int user)
 {
 	MOD_DEC_USE_COUNT;
 	return 0;
@@ -215,7 +214,7 @@ static int mdafb_set_var(struct fb_var_screeninfo *var, int con,
 
     if ((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NOW) {
 	display->var = *var;
-	mda_set_origin(var->yoffset/mda_font_height*fb_fix.line_length/2);
+	mda_set_origin(var->yoffset/mda_font_height*fb_fix.line_length);
     }
 
     return 0;
@@ -234,7 +233,7 @@ static int mdafb_pan_display(struct fb_var_screeninfo *var, int con,
 	if (var->xoffset || var->yoffset+var->yres > var->yres_virtual)
 		return -EINVAL;
 
-	mda_set_origin(var->yoffset/mda_font_height*fb_fix.line_length/2);
+	mda_set_origin(var->yoffset/mda_font_height*fb_fix.line_length);
 	return 0;
 }
 
@@ -295,9 +294,8 @@ static struct display_switch fbcon_mdafb = {
      *  Initialisation
      */
 
-__initfunc(unsigned long mdafb_init(unsigned long mem_start))
+__initfunc(void mdafb_init(void))
 {
-    int err;
     u16 saved;
     u16 *p;
 
@@ -322,19 +320,19 @@ __initfunc(unsigned long mdafb_init(unsigned long mem_start))
     mda_writew(0xAA55, p);
     if (mda_readw(p) != 0xAA55) {
 	mda_writew(saved, p);
-	return mem_start;
+	return;
     }
     mda_writew(0x55AA, p);
     if (mda_readw(p) != 0x55AA) {
 	mda_writew(saved, p);
-	return mem_start;
+	return;
     }
     mda_writew(saved, p);
 
     fb_fix.smem_start = (char *) mda_video_mem_base;
     fb_fix.smem_len = mda_video_mem_len;
-    fb_fix.type = FB_TYPE_VGA_TEXT;
-    fb_fix.type_aux = 0;
+    fb_fix.type = FB_TYPE_TEXT;
+    fb_fix.type_aux = FB_AUX_TEXT_MDA;
     fb_fix.visual = FB_VISUAL_PSEUDOCOLOR;
     fb_fix.ypanstep = mda_font_height;
     fb_fix.xpanstep = 0;
@@ -414,17 +412,13 @@ __initfunc(unsigned long mdafb_init(unsigned long mem_start))
     fb_info.updatevar = &mdafbcon_updatevar;
     fb_info.blank = &mdafbcon_blank;
 
-    err = register_framebuffer(&fb_info);
-
-    if (err < 0)
-	return mem_start;
-
     mdafb_set_var(&fb_var, -1, &fb_info);
+
+    if (register_framebuffer(&fb_info) < 0)
+	return;
 
     printk("fb%d: MDA frame buffer device, using %dK of video memory\n",
 	   GET_FB_IDX(fb_info.node), fb_fix.smem_len>>10);
-
-    return mem_start;
 }
 
 __initfunc(void mdafb_setup(char *options, int *ints))
@@ -444,7 +438,7 @@ static int mdafbcon_updatevar(int con, struct fb_info *info)
 		/* hardware scrolling */
 
 		mda_set_origin(var->yoffset / mda_font_height *
-			fb_fix.line_length / 2);
+			fb_fix.line_length);
 	}
 
 	return 0;

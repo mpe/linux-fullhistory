@@ -25,7 +25,7 @@ Important Notes - Read Before Using
 must obtain these images from Turtle Beach (they are included in the
 MultiSound Development Kits), and place them in /etc/sound for
 example, and give the full paths in the Linux configuration.  Please
-note these files must be binary files, not assember.
+note these files must be binary files, not assembler.
 
 * You need the following information to use this driver: the card's
 I/O base (i.e. 0x250), the IRQ (i.e. 5), and the shared memory area
@@ -88,8 +88,8 @@ calibrate_signal	Setting this to one calibrates the ADCs to the
 			to zero).
 
 
-Creating and Obtaining Firmware
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Obtaining and Creating Firmware Files
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 	For the Classic/Tahiti/Monterey
 	~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	

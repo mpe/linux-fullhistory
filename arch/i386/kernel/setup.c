@@ -3,8 +3,9 @@
  *
  *  Copyright (C) 1995  Linus Torvalds
  *
- *  Enhanced CPU type detection by Mike Jagdis, Patrick St. Jean
- *  and Martin Mares, November 1997.
+ *  Enhanced CPU detection and feature setting code by Mike Jagdis
+ *  and Martin Mares, November 1997, and partially recoded and moved
+ *  form head.S by Willy Tarreau, July 1998.
  */
 
 /*
@@ -32,6 +33,7 @@
 #ifdef CONFIG_BLK_DEV_RAM
 #include <linux/blk.h>
 #endif
+#include <asm/processor.h>
 #include <linux/console.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -173,7 +175,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 			if (to != command_line) to--;
 			if (!memcmp(from+4, "nopentium", 9)) {
 				from += 9+4;
-				boot_cpu_data.x86_capability &= ~8;
+				boot_cpu_data.x86_capability &= ~X86_FEATURE_PSE;
 			} else {
 				memory_end = simple_strtoul(from+4, &from, 0);
 				if ( *from == 'K' || *from == 'k' ) {
@@ -219,10 +221,10 @@ __initfunc(void setup_arch(char **cmdline_p,
 	request_region(0xf0,0x10,"fpu");
 
 #ifdef CONFIG_VT
-#ifdef CONFIG_FB
-	conswitchp = &fb_con;
-#else
+#if defined(CONFIG_VGA_CONSOLE)
 	conswitchp = &vga_con;
+#elif defined(CONFIG_DUMMY_CONSOLE)
+	conswitchp = &dummy_con;
 #endif
 #endif
 }
@@ -242,13 +244,233 @@ extern inline void cpuid(int op, int *eax, int *ebx, int *ecx, int *edx)
 		: "cc");
 }
 
+/*
+ *	Try to enable ID flag in EFLAGS, in order to allow CPUID instruction.
+ *	Return 0 if not possible, anything else if it succeeded.
+ *	
+ */
+
+extern __u32 enable_cpuid(void)
+{
+	__u32 ret;
+	__asm__ __volatile__ (
+		"pushfl\n\t"
+		"popl %%eax\n\t"
+		"movl %%eax,%%ecx\n\t"
+		"xorl $0x200000,%%eax\n\t"
+		"pushl %%eax\n\t"
+		"popfl\n\t"
+		"pushfl\n\t"
+		"popl %%eax\n\t"
+		"xorl %%ecx,%%eax\n\t"
+		"andl $0x200000,%%eax\n\t" /* get only the ID flag */
+		"orl  %%eax,%%ecx\n\t" /* and force it into EFLAGS */
+		"pushl %%ecx\n\t"
+		"popfl\n\t"
+		: "=a" (ret) : : "cc", "%ecx");
+	return ret;
+}
+
+/*
+ *	Returns 1 only if the DIV instruction keeps flags. This is the case on
+ *	all Cyrix, and on Intel's PPro/PII, but they can be distinguished from
+ *	a Cyrix. In other cases, it returns 0.
+ */
+
+extern inline __u32 div_keeps_flags(void)
+{
+	__u32 ret;
+	__asm__ __volatile__ (
+		"xorl %%eax,%%eax\n\t"
+		"sahf\n\t"
+		"movb $5,%%al\n\t"
+		"movb $2,%%bl\n\t"
+		"divb %%bl\n\t"
+		"lahf\n\t"
+		"cmpb $2,%%ah\n\t"
+		"setzb %%al\n\t"
+		"movzbl %%al, %%eax\n\t"	      
+		: "=a" (ret)
+		:
+		: "cc", "%ebx");
+	return ret;
+}
+
+/*
+ * Functions for getting/setting Cyrix's control registers (CCR).
+ */
+__initfunc(static inline void setCx86(__u8 reg, __u8 val))
+{
+	__asm__ __volatile__ ("outb %%al,$0x22\n\t"
+			      "mov %1,%%al\n\t"
+			      "outb %%al,$0x23\n\t"
+			      :
+			      : "a" (reg), "q" (val)
+			      : "eax");
+}
+
+__initfunc(static inline __u8 getCx86(__u8 reg))
+{
+	__u8 ret;
+	__asm__ __volatile__ ("outb %%al,$0x22\n\t"
+			      "inb $0x23,%%al\n\t"
+			      : "=a" (ret)
+			      : "a" (reg));
+
+	return ret;
+}
+
+__initfunc(static void refine_cyrix_detection(struct cpuinfo_x86 *c))
+{
+	__u8 ccr3;
+
+	ccr3 = getCx86(0xc3);
+	setCx86(0xc3, ccr3 | 0x80);
+	getCx86(0xc0);			/* dummy read to change the bus */
+	if (getCx86(0xc3) == ccr3)	/* ccr3 unchanged : DEVID not supported */
+		return;			/* let's end here. */
+
+	setCx86(0xc3, ccr3);	/* restore ccr3 */
+
+	/*
+	 * Now, fill x86_mask/model with DEVID.
+	 */
+	c->x86_model = getCx86(0xfe);	/* DIR0 to model */
+	c->x86_mask  = getCx86(0xff);	/* DIR1 to mask */
+
+	if ((c->x86_model & 0xF0) == 0x30) {	/* 6x86(L)! we got it !*/
+		/*
+		 * we'll do here a few optimizations.
+		 */
+
+		/* since 6x86(L) doesn't support SMP, we'll deactivate all LOCK# cycles
+		 * so that even if the kernel has been compiled with the -D__SMP__ option
+		 * as this is often the case, lock instructions won't hurt performance.
+		 */
+		setCx86(0xc1, getCx86(0xc1) | 0x10);	/* assert NO_LOCK */
+		setCx86(0xc3, (getCx86(0xc3) | 0x10) & 0x1F);	/* enables high registers */
+		setCx86(0xe8, getCx86(0xe8) | 0x10);	/* enable Directory Table Entry Cache */
+		setCx86(0xe9, getCx86(0xe9) | 0x01);	/* enable cache Write-Through Allocate */
+		setCx86(0xc3, getCx86(0xc3) & 0x0F);	/* disable high registers */
+	}
+
+#ifdef CONFIG_CYRIX_SUSP
+	/*
+	 * This option enables the low power feature of the 6x86: it can
+	 * suspend on halt without any performance hurt, as Cyrix claims.
+	 *
+	 * This option is not exported yet, as I wonder about the cycle
+	 * counter..			Linus
+	 */
+	if (((c->x86_model & 0xF0) == 0x30) ||	/* 6x86(L) */
+	    ((c->x86_model & 0xF0) == 0x50)) {	/* 6x86MX */
+		/*
+		 * suspend on halt : this amazingly reduces power consumption
+		 * and cpu overheat.
+		 */
+		setCx86(0xc2, getCx86(0xc2) | 0x08);
+	}
+#endif
+}
+
+/*
+ *	This function uses CPUID to get some precisions about the current
+ *	cpu. It's called directly from head.S, just before branching to
+ *	start_kernel. It could have been called from other points, but in
+ *	any case, it must be called before setup_arch() because this function
+ *	uses (and changes) x86_capability which, of course, must have been set.
+ */
+__initfunc(void refine_cpu_detection(void))
+{
+	unsigned int dummy, r;
+	struct cpuinfo_x86 *c=&boot_cpu_data;
+
+	c->cpuid_level=-1;
+	if (enable_cpuid()) {
+	/*
+	 * CPUID is supported by this cpu. It's a recent one.
+	 * All Pentium, PentiumPro, PentiumII, AmdK5, AmdK6, 6x86MX and some
+	 * latests 486 will go directly here.
+	 */
+
+		/* get vendor_id string */
+		cpuid(0, &c->cpuid_level,
+		         (int *)&c->x86_vendor_id[0],
+		         (int *)&c->x86_vendor_id[8],
+		         (int *)&c->x86_vendor_id[4]);
+		/* get model and mask */
+		cpuid(1, &r, &dummy, &dummy, (int *)&c->x86_capability);
+		c->x86       = (r>>8) & 0xF;
+		c->x86_model = (r>>4) & 0xF;
+		c->x86_mask  = r & 0xF;
+	} else {
+		/*
+		 * CPUID doesn't seem to be supported. But if the cpu is a Cyrix, we
+		 * can try to activate it. If not, it's simply an old 386 or 486 from
+		 * which we won't get anything more.
+		 */
+
+		__u8 ccr3;
+
+		if (c->x86 <= 3)	/* nothing more can be done, it's a 386. */
+			return;
+
+		/*
+		 * The following test can distinguish a Cyrix from an other 486 cpu.
+		 * As Intel's PPro and PII behaves like cyrix, we must use this code
+		 * only when we are certain that the cpu *is not* a PPro/PII.
+		 */
+		if (!div_keeps_flags())
+			return;	/* just a simple 486. let's forget CPUID. */
+
+		/*
+		 * now we know we have a Cyrix. let's activate its CPUID if it has one.
+		 */
+		setCx86(0xC3, ((ccr3=getCx86(0xC3)) & 0x0F) | 0x10); /* enable all CCRs */
+		setCx86(0xE8, getCx86(0xE8) | 0x80);
+		setCx86(0xC3, ccr3);
+
+		/*
+		 * first we assume it's a cx486 because it doesn't have cpuid.
+		 */
+		*(long long int*)&c->x86_vendor_id = 0x7869727943ULL; /* "Cyrix\0\0\0" */
+		c->x86_model = 0xFE;	/* Cx486 */
+		c->x86_mask  = 0;
+
+		/*
+		 * if CPUID is supported now, we'll use it, but won't trust it.
+		 */
+		if (enable_cpuid()) {
+			cpuid(0, &c->cpuid_level,
+			      (int *)&c->x86_vendor_id[0],
+			      (int *)&c->x86_vendor_id[8],
+			      (int *)&c->x86_vendor_id[4]);
+			cpuid(1, &r, &dummy, &dummy, (int*)&c->x86_capability);
+			c->x86       = (r>>8) & 0xF; /* cpu family */
+			c->x86_model = (r>>4) & 0xF;
+			c->x86_mask  = r & 0xF;
+		}
+	}
+		
+	/*
+	 * If we have any Cyrix, even the latest one, we'll read DEVID.
+	 * As it was assumed in head.S, we suppose that Cyrix's DEVID is
+	 * more accurate than its CPUID. So if available, we read it.
+	 */
+	if (*(int *)&c->x86_vendor_id == 0x69727943) {	/* "Cyri"... */
+		refine_cyrix_detection(c);
+	}
+	c->x86_vendor_id[12]=0; /* terminates the vendor id string. */
+}
+
+
 __initfunc(static int cyrix_model(struct cpuinfo_x86 *c))
 {
 	int nr = c->x86_model;
 	char *buf = c->x86_model_id;
 
 	/* Cyrix claims they have a TSC, but it is broken */
-	c->x86_capability &= ~16;
+	c->x86_capability &= ~X86_FEATURE_TSC;
 
 	/* Note that some of the possibilities this decoding allows
 	 * have never actually been manufactured - but those that
@@ -273,7 +495,7 @@ __initfunc(static int cyrix_model(struct cpuinfo_x86 *c))
 	} else if (nr >= 0x20 && nr <= 0x4f) {	/* 5x86, 6x86 or Gx86 */
 		char *s = "";
 		if (nr >= 0x30 && nr < 0x40) {	/* 6x86 */
-			if (c->x86 == 5 && (c->x86_capability & (1 << 8)))
+			if (c->x86 == 5 && (c->x86_capability & X86_FEATURE_CX8))
 				s = "L";	/* 6x86L */
 			else if (c->x86 == 6)
 				s = "MX";	/* 6x86MX */
@@ -451,12 +673,12 @@ int get_cpuinfo(char * buffer)
 {
 	char *p = buffer;
 	int sep_bug;
-        static char *x86_cap_flags[] = {
-                "fpu", "vme", "de", "pse", "tsc", "msr", "6", "mce",
-                "cx8", "9", "10", "sep", "12", "pge", "14", "cmov",
-                "16", "17", "18", "19", "20", "21", "22", "mmx",
-                "24", "25", "26", "27", "28", "29", "30", "31"
-        };
+	static char *x86_cap_flags[] = {
+	        "fpu", "vme", "de", "pse", "tsc", "msr", "6", "mce",
+	        "cx8", "9", "10", "sep", "12", "pge", "14", "cmov",
+	        "16", "17", "18", "19", "20", "21", "22", "mmx",
+	        "24", "25", "26", "27", "28", "29", "30", "31"
+	};
 	struct cpuinfo_x86 *c = cpu_data;
 	int i, n;
 
@@ -496,7 +718,7 @@ int get_cpuinfo(char * buffer)
 				x86_cap_flags[12] = "mtrr";
 				x86_cap_flags[14] = "mca";
 				x86_cap_flags[16] = "pat";
-				x86_cap_flags[17] = "pse";
+				x86_cap_flags[17] = "pse36";
 				x86_cap_flags[24] = "osfxsr";
 			}
 		}
@@ -504,10 +726,10 @@ int get_cpuinfo(char * buffer)
 		sep_bug = c->x86_vendor == X86_VENDOR_INTEL &&
 			  c->x86 == 0x06 &&
 			  c->cpuid_level >= 0 &&
-			  (c->x86_capability & 0x800) &&
+			  (c->x86_capability & X86_FEATURE_SEP) &&
 			  c->x86_model < 3 &&
 			  c->x86_mask < 3;
-        
+	
 		p += sprintf(p, "fdiv_bug\t: %s\n"
 			        "hlt_bug\t\t: %s\n"
 			        "sep_bug\t\t: %s\n"
@@ -533,5 +755,5 @@ int get_cpuinfo(char * buffer)
 			     (c->loops_per_sec+2500)/500000,
 			     ((c->loops_per_sec+2500)/5000) % 100);
 	}
-        return p - buffer;
+	return p - buffer;
 }

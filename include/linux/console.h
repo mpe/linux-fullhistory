@@ -14,8 +14,6 @@
 #ifndef _LINUX_CONSOLE_H_
 #define _LINUX_CONSOLE_H_ 1
 
-#define NPAR 16
-
 struct vc_data;
 
 /*
@@ -27,14 +25,14 @@ struct vc_data;
 /* DPC: 1994-04-13 !!! con_putcs is new entry !!! */
 
 struct consw {
-	unsigned long	(*con_startup)(unsigned long, const char **);
-	void	(*con_init)(struct vc_data *);
+	const char *(*con_startup)(void);
+	void	(*con_init)(struct vc_data *, int);
 	void	(*con_deinit)(struct vc_data *);
 	void	(*con_clear)(struct vc_data *, int, int, int, int);
 	void	(*con_putc)(struct vc_data *, int, int, int);
-	void	(*con_putcs)(struct vc_data *, const char *, int, int, int);
+	void	(*con_putcs)(struct vc_data *, const unsigned short *, int, int, int);
 	void	(*con_cursor)(struct vc_data *, int);
-	void	(*con_scroll)(struct vc_data *, int, int, int, int);
+	int	(*con_scroll)(struct vc_data *, int, int, int, int);
 	void	(*con_bmove)(struct vc_data *, int, int, int, int, int, int);
 	int	(*con_switch)(struct vc_data *);
 	int	(*con_blank)(int);
@@ -42,13 +40,17 @@ struct consw {
 	int	(*con_set_font)(struct vc_data *, int, int, char *);
 	int	(*con_set_palette)(struct vc_data *, unsigned char *);
 	int	(*con_scrolldelta)(struct vc_data *, int);
+	int	(*con_set_origin)(struct vc_data *);
+	void	(*con_save_screen)(struct vc_data *);
 };
 
 extern struct consw *conswitchp;
 
+extern struct consw dummy_con;	/* dummy console buffer */
 extern struct consw fb_con;	/* frame buffer based console */
 extern struct consw vga_con;	/* VGA text console */
 extern struct consw compat_con;	/* console wrapper */
+extern struct consw prom_con;	/* SPARC PROM console */
 
 /* flag bits */
 #define CON_INITED  (1)
@@ -63,9 +65,6 @@ extern struct consw compat_con;	/* console wrapper */
 #define CM_DRAW     (1)
 #define CM_ERASE    (2)
 #define CM_MOVE     (3)
-
-struct tty_struct;
-int tioclinux(struct tty_struct *tty, unsigned long arg);
 
 /*
  *	Array of consoles built from command line options (console=)

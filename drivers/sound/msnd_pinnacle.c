@@ -2,7 +2,7 @@
  *
  * msnd_pinnacle.c - Support for Turtle Beach Pinnacle and Fiji
  *
- * Turtle Beach MultiSound Soundcard Driver for Linux
+ * Turtle Beach MultiSound Sound Card Driver for Linux
  *
  * Copyright (C) 1998 Andrew Veliath
  *
@@ -1211,10 +1211,18 @@ static int io __initdata =		-1;
 static int irq __initdata =		-1;
 static int mem __initdata =		-1;
 static int fifosize __initdata =	DEFFIFOSIZE;
-static int
-calibrate_signal __initdata =		0;
+static int calibrate_signal __initdata;
 
 int init_module(void)
+#else
+static int io __initdata =		CONFIG_MSNDPIN_IO;
+static int irq __initdata =		CONFIG_MSNDPIN_IRQ;
+static int mem __initdata =		CONFIG_MSNDPIN_MEM;
+static int fifosize __initdata =	DEFFIFOSIZE;
+static int calibrate_signal __initdata;
+
+__initfunc(int msnd_pinnacle_init(void))
+#endif
 {
 	int err;
 
@@ -1323,6 +1331,8 @@ int init_module(void)
 
 	return 0;
 }
+
+#ifdef MODULE
 
 void cleanup_module(void)
 {

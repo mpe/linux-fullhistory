@@ -306,13 +306,11 @@ void fbcon_iplan2p2_putc(struct vc_data *conp, struct display *p, int c,
     int bytes = p->next_line;
     u16 eorx, fgx, bgx, fdx;
 
-    c &= 0xff;
-
     dest = p->screen_base + yy * p->fontheight * bytes + (xx>>1)*4 + (xx & 1);
-    cdat = p->fontdata + (c * p->fontheight);
+    cdat = p->fontdata + (c & 0xff) * p->fontheight;
 
-    fgx = expand2w(COLOR_2P(attr_fgcol(p,conp)));
-    bgx = expand2w(COLOR_2P(attr_bgcol(p,conp)));
+    fgx = expand2w(COLOR_2P(attr_fgcol(p,c)));
+    bgx = expand2w(COLOR_2P(attr_bgcol(p,c)));
     eorx = fgx ^ bgx;
 
     for (rows = p->fontheight ; rows-- ; dest += bytes) {
@@ -322,7 +320,7 @@ void fbcon_iplan2p2_putc(struct vc_data *conp, struct display *p, int c,
 }
 
 void fbcon_iplan2p2_putcs(struct vc_data *conp, struct display *p,
-			  const char *s, int count, int yy, int xx)
+			  const unsigned short *s, int count, int yy, int xx)
 {
     u8 *dest, *dest0;
     u8 *cdat, c;
@@ -332,8 +330,8 @@ void fbcon_iplan2p2_putcs(struct vc_data *conp, struct display *p,
 
     bytes = p->next_line;
     dest0 = p->screen_base + yy * p->fontheight * bytes + (xx>>1)*4 + (xx & 1);
-    fgx = expand2w(COLOR_2P(attr_fgcol(p,conp)));
-    bgx = expand2w(COLOR_2P(attr_bgcol(p,conp)));
+    fgx = expand2w(COLOR_2P(attr_fgcol(p,*s)));
+    bgx = expand2w(COLOR_2P(attr_bgcol(p,*s)));
     eorx = fgx ^ bgx;
 
     while (count--) {
@@ -378,6 +376,17 @@ struct display_switch fbcon_iplan2p2 = {
     fbcon_iplan2p2_setup, fbcon_iplan2p2_bmove, fbcon_iplan2p2_clear,
     fbcon_iplan2p2_putc, fbcon_iplan2p2_putcs, fbcon_iplan2p2_revc, NULL
 };
+
+
+#ifdef MODULE
+int init_module(void)
+{
+    return 0;
+}
+
+void cleanup_module(void)
+{}
+#endif /* MODULE */
 
 
     /*

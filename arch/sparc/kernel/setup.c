@@ -120,7 +120,6 @@ unsigned int boot_flags;
 #define BOOTME_KGDB   0xc
 
 #ifdef CONFIG_SUN_CONSOLE
-extern char *console_fb_path;
 static int console_fb = 0;
 #endif
 static unsigned long memory_size __initdata = 0;
@@ -220,7 +219,6 @@ __initfunc(static void boot_flags_init(char *commands))
 					prom_printf ("Using /dev/ttyb as console.\n");
 				} else {
 					console_fb = 1;
-					console_fb_path = commands;
 				}
 			} else
 #endif
@@ -466,6 +464,13 @@ __initfunc(void setup_arch(char **cmdline_p,
 	init_task.mm->context = (unsigned long) NO_CONTEXT;
 	init_task.tss.kregs = &fake_swapper_regs;
 
+	if (!serial_console) {
+#ifdef CONFIG_PROM_CONSOLE
+		conswitchp = &prom_con;
+#elif defined(CONFIG_DUMMY_CONSOLE)
+		conswitchp = &dummy_con;
+#endif
+	}
 }
 
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)

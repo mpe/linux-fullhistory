@@ -26,13 +26,13 @@ download instructions.
 If you are looking for the installation instructions, please
 look at Readme.linux.
 
-Supported soundcards
---------------------
+Supported sound cards
+---------------------
 
 See Readme.cards.
 
 Please check http://www.opensound.com/ossfree if you don't find
-your soundcard there.
+your sound card there.
 
 Contributors
 ------------
@@ -127,9 +127,9 @@ Also look at the home page (http://www.opensound.com/ossfree). It may
 contain info about some recent bug fixes.
 
 It's likely that you have some problems when trying to use the sound driver
-first time. Soundcards don't have standard configuration so there are no
+first time. Sound cards don't have standard configuration so there are no
 good default configuration to use. Please try to use same I/O, DMA and IRQ
-values for the soundcard than with DOS.
+values for the sound card than with DOS.
 
 If you get an error message when trying to use the driver, please look
 at /var/adm/messages for more verbose error message.
@@ -159,7 +159,7 @@ The following errors are likely with /dev/dsp and /dev/audio.
 	work if "digitized voice support" was not enabled during "make config".
 	
 	- "Device or resource busy". Probably the IRQ (or DMA) channel 
-	required by the soundcard is in use by some other device/driver.
+	required by the sound card is in use by some other device/driver.
 
 	- "I/O error". Almost certainly (99%) it's an IRQ or DMA conflict.
 	Look at the kernel messages in /var/adm/notice for more info.

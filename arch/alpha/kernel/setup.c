@@ -90,7 +90,7 @@ struct screen_info screen_info = {
 	16			/* orig-video-points */
 #else
 	0, 25,			/* orig-x, orig-y */
-	{ 0, 0 },		/* unused */
+	0,	 		/* unused */
 	0,			/* orig-video-page */
 	0,			/* orig-video-mode */
 	80,			/* orig-video-cols */
@@ -223,12 +223,12 @@ void setup_arch(char **cmdline_p,
 	setup_smp();
 #endif
 
-#ifdef CONFIG_VGA_CONSOLE
+#ifdef CONFIG_VT
+#if defined(CONFIG_VGA_CONSOLE)
 	conswitchp = &vga_con;
+#elif defined(CONFIG_DUMMY_CONSOLE)
+	conswitchp = &dummy_con;
 #endif
-#ifdef CONFIG_FB
-	/* Frame buffer device based console */
-	conswitchp = &fb_con;
 #endif
 }
 

@@ -2280,7 +2280,10 @@ int probe_ms_sound(struct address_info *hw_config)
 		hw_config->card_subtype = 1;
 		return 1;
 	}
-	if (hw_config->irq > 11)
+	if ((hw_config->irq != 7)  &&
+	    (hw_config->irq != 9)  &&
+	    (hw_config->irq != 10) &&
+	    (hw_config->irq != 11))
 	{
 		printk(KERN_ERR "MSS: Bad IRQ %d\n", hw_config->irq);
 		return 0;

@@ -1,4 +1,4 @@
-/* $Id: linux_logo.h,v 1.3 1997/08/25 07:50:35 jj Exp $
+/* $Id: linux_logo.h,v 1.4 1998/07/01 15:43:05 jj Exp $
  * include/asm-sparc64/linux_logo.h: This is a linux logo
  *                                   to be displayed on boot.
  *
@@ -24,6 +24,8 @@
 #define linux_logo_banner "Linux/UltraSPARC version " UTS_RELEASE
 
 #define LINUX_LOGO_COLORS 215
+
+#ifdef INCLUDE_LINUX_LOGO_DATA
 
 unsigned char linux_logo_red[] __initdata = {
   0x99, 0x95, 0x92, 0x8E, 0x8A, 0x86, 0x02, 0x00,
@@ -1021,22 +1023,22 @@ unsigned char linux_logo_bw[] __initdata = {
   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 };
 
-/* Painted by Johnny Stenback <jst@uwasa.fi> */
+unsigned char linux_logo16_red[0];
+unsigned char linux_logo16_green[0];
+unsigned char linux_logo16_blue[0];
+unsigned char linux_logo16[0];
 
-unsigned char *linux_serial_image __initdata = "\n"
-"         .u$e.\n"
-"       .$$$$$:S\n"
-"       $\"*$/\"*$$\n"
-"       $.`$ . ^F\n"
-"       4k+#+T.$F\n"
-"       4P+++\"$\"$\n"
-"       :R\"+  t$$B\n"
-"    ___#       $$$\n"
-"    |  |       R$$k\n"
-"   dd. | Linux  $!$\n"
-"   ddd |  Sparc $9$F\n"
-" '!!!!!$       !!#!`\n"
-"  !!!!!*     .!!!!!`\n"
-"'!!!!!!!W..e$$!!!!!!`    %s\n"
-" \"~^^~         ^~~^\n"
-"\n";
+#else
+
+/* prototypes only */
+extern unsigned char linux_logo_red[];
+extern unsigned char linux_logo_green[];
+extern unsigned char linux_logo_blue[];
+extern unsigned char linux_logo[];
+extern unsigned char linux_logo_bw[];
+extern unsigned char linux_logo16_red[];
+extern unsigned char linux_logo16_green[];
+extern unsigned char linux_logo16_blue[];
+extern unsigned char linux_logo16[];
+
+#endif

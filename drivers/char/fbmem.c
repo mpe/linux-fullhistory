@@ -19,6 +19,8 @@
 #include <linux/malloc.h>
 #include <linux/mman.h>
 #include <linux/tty.h>
+#include <linux/console.h>
+#include <linux/console_struct.h>
 #include <linux/init.h>
 #ifdef CONFIG_PROC_FS
 #include <linux/proc_fs.h>
@@ -44,49 +46,56 @@
      *  Frame buffer device initialization and setup routines
      */
 
-extern unsigned long amifb_init(unsigned long mem_start);
+extern unsigned long acornfb_init(void);
+extern void acornfb_setup(char *options, int *ints);
+extern void amifb_init(void);
 extern void amifb_setup(char *options, int *ints);
-extern unsigned long atafb_init(unsigned long mem_start);
+extern void atafb_init(void);
 extern void atafb_setup(char *options, int *ints);
-extern unsigned long macfb_init(unsigned long mem_start);
+extern void macfb_init(void);
 extern void macfb_setup(char *options, int *ints);
-extern unsigned long cyberfb_init(unsigned long mem_start);
+extern void cyberfb_init(void);
 extern void cyberfb_setup(char *options, int *ints);
-extern unsigned long retz3fb_init(unsigned long mem_start);
+extern void retz3fb_init(void);
 extern void retz3fb_setup(char *options, int *ints);
-extern unsigned long clgenfb_init(unsigned long mem_start);
+extern void clgenfb_init(void);
 extern void clgenfb_setup(char *options, int *ints);
-extern unsigned long vfb_init(unsigned long mem_start);
+extern void vfb_init(void);
 extern void vfb_setup(char *options, int *ints);
-extern unsigned long offb_init(unsigned long mem_start);
+extern void offb_init(void);
 extern void offb_setup(char *options, int *ints);
-extern unsigned long atyfb_init(unsigned long mem_start);
+extern void atyfb_init(void);
 extern void atyfb_setup(char *options, int *ints);
-extern unsigned long dnfb_init(unsigned long mem_start);
-extern unsigned long tgafb_init(unsigned long mem_start);
-extern unsigned long virgefb_init(unsigned long mem_start);
+extern void dnfb_init(void);
+extern void tgafb_init(void);
+extern void virgefb_init(void);
 extern void virgefb_setup(char *options, int *ints);
 extern void resolver_video_setup(char *options, int *ints);
-extern unsigned long s3triofb_init(unsigned long mem_start);
+extern void s3triofb_init(void);
 extern void s3triofb_setup(char *options, int *ints);
-extern unsigned long vgafb_init(unsigned long mem_start);
+extern void vgafb_init(void);
 extern void vgafb_setup(char *options, int *ints);
-extern unsigned long vesafb_init(unsigned long mem_start);
+extern void vesafb_init(void);
 extern void vesafb_setup(char *options, int *ints);
-extern unsigned long mdafb_init(unsigned long mem_start);
+extern void mdafb_init(void);
 extern void mdafb_setup(char *options, int *ints);
-extern unsigned long hpfb_init(unsigned long mem_start);
+extern void hpfb_init(void);
 extern void hpfb_setup(char *options, int *ints);
-
-
+extern void sbusfb_init(void);
+extern void sbusfb_setup(char *options, int *ints);
+extern void promfb_init(void);
+extern void promfb_setup(char *options, int *ints);
 
 static struct {
 	const char *name;
-	unsigned long (*init)(unsigned long mem_start);
+	void (*init)(void);
 	void (*setup)(char *options, int *ints);
 } fb_drivers[] __initdata = {
 #ifdef CONFIG_FB_RETINAZ3
 	{ "retz3", retz3fb_init, retz3fb_setup },
+#endif
+#ifdef CONFIG_FB_ACORN
+	{ "acorn", acornfb_init, acornfb_setup },
 #endif
 #ifdef CONFIG_FB_AMIGA
 	{ "amifb", amifb_init, amifb_setup },
@@ -102,9 +111,6 @@ static struct {
 #endif
 #ifdef CONFIG_FB_CLGEN
 	{ "clgen", clgenfb_init, clgenfb_setup },
-#endif
-#ifdef CONFIG_FB_VIRTUAL
-	{ "vfb", vfb_init, vfb_setup },
 #endif
 #ifdef CONFIG_FB_OF
 	{ "offb", offb_init, offb_setup },
@@ -136,15 +142,25 @@ static struct {
 #ifdef CONFIG_FB_HP300
 	{ "hpfb", hpfb_init, hpfb_setup },
 #endif 
+#ifdef CONFIG_FB_SBUS
+	{ "sbus", sbusfb_init, sbusfb_setup },
+#endif
+#ifdef CONFIG_FB_PROM
+	{ "prom", promfb_init, promfb_setup },
+#endif
 #ifdef CONFIG_GSP_RESOLVER
 	/* Not a real frame buffer device... */
 	{ "resolver", NULL, resolver_video_setup },
+#endif
+#ifdef CONFIG_FB_VIRTUAL
+	/* Must be last to avoid that vfb becomes your primary display */
+	{ "vfb", vfb_init, vfb_setup },
 #endif
 };
 
 #define NUM_FB_DRIVERS	(sizeof(fb_drivers)/sizeof(*fb_drivers))
 
-static fb_init_func *pref_init_funcs[FB_MAX];
+static void (*pref_init_funcs[FB_MAX])(void);
 static int num_pref_init_funcs __initdata = 0;
 
 
@@ -246,9 +262,9 @@ static void set_con2fb_map(int unit, int newidx)
     if (newidx != con2fb_map[unit]) {
        oldfb = registered_fb[oldidx];
        newfb = registered_fb[newidx];
-       if (newfb->fbops->fb_open(newfb))
+       if (newfb->fbops->fb_open(newfb,0))
 	   return;
-       oldfb->fbops->fb_release(oldfb);
+       oldfb->fbops->fb_release(oldfb,0);
        conp = fb_display[unit].conp;
        con2fb_map[unit] = newidx;
        fb_display[unit] = *(newfb->disp);
@@ -270,7 +286,7 @@ static void try_to_load(int fb)
 	sprintf(modname, "fb%d", fb);
 	request_module(modname);
 }
-#endif
+#endif /* CONFIG_KMOD */
 
 static int 
 fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
@@ -340,7 +356,7 @@ fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 #ifdef CONFIG_KMOD
 		if (!registered_fb[con2fb.framebuffer])
 		    try_to_load(con2fb.framebuffer);
-#endif
+#endif /* CONFIG_KMOD */
 		if (!registered_fb[con2fb.framebuffer])
 		    return -EINVAL;
 		if (con2fb.console != 0)
@@ -369,6 +385,8 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 
 	if (!fb)
 		return -ENODEV;
+	if (fb->fb_mmap)
+		return fb->fb_mmap(info, file, vma);
 	fb->fb_get_fix(&fix, PROC_CONSOLE(), info);
 
 	/* frame buffer memory */
@@ -402,6 +420,11 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 	}
 #elif defined(__powerpc__)
 	pgprot_val(vma->vm_page_prot) |= _PAGE_NO_CACHE|_PAGE_GUARDED;
+#elif defined(__alpha__)
+	/* Caching is off in the I/O space quadrant by design.  */
+#elif defined(__sparc__)
+	/* Should never get here, all fb drivers should have their own
+	   mmap routines */
 #else
 #warning What do we have to do here??
 #endif
@@ -422,10 +445,10 @@ fb_open(struct inode *inode, struct file *file)
 #ifdef CONFIG_KMOD
 	if (!(info = registered_fb[fbidx]))
 		try_to_load(fbidx);
-#endif
+#endif /* CONFIG_KMOD */
 	if (!(info = registered_fb[fbidx]))
 		return -ENODEV;
-	return info->fbops->fb_open(info);
+	return info->fbops->fb_open(info,1);
 }
 
 static int 
@@ -434,7 +457,7 @@ fb_release(struct inode *inode, struct file *file)
 	int fbidx = GET_FB_IDX(inode->i_rdev);
 	struct fb_info *info = registered_fb[fbidx];
 
-	info->fbops->fb_release(info);
+	info->fbops->fb_release(info,1);
 	return 0;
 }
 
@@ -451,11 +474,33 @@ static struct file_operations fb_fops = {
 	NULL		/* fsync 	*/
 };
 
+static inline void take_over_console(struct consw *sw)
+{
+    int i;
+    extern void set_palette(void);
+
+    conswitchp = sw;
+    conswitchp->con_startup();
+
+    for (i = 0; i < MAX_NR_CONSOLES; i++) {
+	if (!vc_cons[i].d || !vc_cons[i].d->vc_sw)
+	    continue;
+	if (i == fg_console &&
+	    vc_cons[i].d->vc_sw->con_save_screen)
+		vc_cons[i].d->vc_sw->con_save_screen(vc_cons[i].d);
+	vc_cons[i].d->vc_sw->con_deinit(vc_cons[i].d);
+	vc_cons[i].d->vc_sw = conswitchp;
+	vc_cons[i].d->vc_sw->con_init(vc_cons[i].d, 0);
+    }
+    set_palette();
+}
+
 int
 register_framebuffer(struct fb_info *fb_info)
 {
 	int i, j;
 	static int fb_ever_opened[FB_MAX];
+	static int first = 1;
 
 	if (num_registered_fb == FB_MAX)
 		return -ENXIO;
@@ -472,9 +517,15 @@ register_framebuffer(struct fb_info *fb_info)
 		 */
 		for (j = 0; j < MAX_NR_CONSOLES; j++)
 			if (con2fb_map[j] == i)
-				fb_info->fbops->fb_open(fb_info);
+				fb_info->fbops->fb_open(fb_info,0);
 		fb_ever_opened[i] = 1;
 	}
+
+	if (first) {
+		first = 0;
+		take_over_console(&fb_con);
+	}
+
 	return 0;
 }
 
@@ -501,6 +552,8 @@ static struct proc_dir_entry *proc_fbmem;
 __initfunc(void
 fbmem_init(void))
 {
+	int i;
+
 #ifdef CONFIG_PROC_FS
 	proc_fbmem = create_proc_entry("fb", 0, 0);
 	if (proc_fbmem)
@@ -509,6 +562,16 @@ fbmem_init(void))
 
 	if (register_chrdev(FB_MAJOR,"fb",&fb_fops))
 		printk("unable to get major %d for fb devs\n", FB_MAJOR);
+
+	/*
+	 *  Probe for all builtin frame buffer devices
+	 */
+	for (i = 0; i < num_pref_init_funcs; i++)
+		pref_init_funcs[i]();
+
+	for (i = 0; i < NUM_FB_DRIVERS; i++)
+		if (fb_drivers[i].init)
+			fb_drivers[i].init();
 }
 
 
@@ -541,25 +604,6 @@ int fbmon_valid_timings(u_int pixclock, u_int htotal, u_int vtotal,
 int fbmon_dpms(const struct fb_info *fb_info)
 {
     return fb_info->monspecs.dpms;
-}
-
-
-    /*
-     *  Probe for all builtin frame buffer devices
-     */
-
-__initfunc(unsigned long probe_framebuffers(unsigned long kmem_start))
-{
-    int i;
-
-    for (i = 0; i < num_pref_init_funcs; i++)
-	    kmem_start = pref_init_funcs[i](kmem_start);
-
-    for (i = 0; i < NUM_FB_DRIVERS; i++)
-	    if (fb_drivers[i].init)
-		    kmem_start = fb_drivers[i].init(kmem_start);
-
-    return kmem_start;
 }
 
 
@@ -609,7 +653,7 @@ __initfunc(void video_setup(char *options, int *ints))
     /*
      * If we get here no fb was specified and we default to pass the
      * options to the first frame buffer that has an init and a setup
-     * fuction.
+     * function.
      */
     for (i = 0; i < NUM_FB_DRIVERS; i++) {
 	    if (fb_drivers[i].init && fb_drivers[i].setup) {

@@ -323,7 +323,7 @@ static int lp_write_buf(unsigned int minor, const char *buf, int count)
 		return -ENXIO;
 
 	lp_table[minor].last_error = 0;
-	lp_table[minor].irq_detected = 0;
+	lp_table[minor].irq_detected = 1;
 	lp_table[minor].irq_missed = 0;
 
 	w_ctr(minor, LP_PSELECP | LP_PINITP);

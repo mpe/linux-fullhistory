@@ -81,7 +81,9 @@ static void     enter_uart_mode(uart401_devc * devc);
 
 static void uart401_input_loop(uart401_devc * devc)
 {
-	while (input_avail(devc))
+	int work_limit=30000;
+	
+	while (input_avail(devc) && --work_limit)
 	{
 		unsigned char   c = uart401_read(devc);
 
@@ -90,17 +92,19 @@ static void uart401_input_loop(uart401_devc * devc)
 		else if (devc->opened & OPEN_READ && devc->midi_input_intr)
 			devc->midi_input_intr(devc->my_dev, c);
 	}
+	if(work_limit==0)
+		printk(KERN_WARNING "Too much work in interrupt on uart401 (0x%X). UART jabbering ??\n", devc->base);
 }
 
 void uart401intr(int irq, void *dev_id, struct pt_regs *dummy)
 {
 	uart401_devc *devc = dev_id;
 
-	if (irq < 1 || irq > 15)
-		return;
-
 	if (devc == NULL)
+	{
+		printk(KERN_ERR "uart401: bad devc\n");
 		return;
+	}
 
 	if (input_avail(devc))
 		uart401_input_loop(devc);
@@ -115,9 +119,10 @@ uart401_open(int dev, int mode,
 	uart401_devc *devc = (uart401_devc *) midi_devs[dev]->devc;
 
 	if (devc->opened)
-	{
 		return -EBUSY;
-	}
+
+	/* Flush the UART */
+	
 	while (input_avail(devc))
 		uart401_read(devc);
 
@@ -311,9 +316,9 @@ void attach_uart401(struct address_info *hw_config)
 	if (midi_devs[devc->my_dev]->converter == NULL)
 	{
 		printk(KERN_WARNING "uart401: Failed to allocate memory\n");
-		sound_unload_mididev(devc->my_dev);
 		kfree(midi_devs[devc->my_dev]);
 		kfree(devc);
+		sound_unload_mididev(devc->my_dev);
 		devc=NULL;
 		return;
 	}

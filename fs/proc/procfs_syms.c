@@ -19,6 +19,7 @@ EXPORT_SYMBOL(proc_unregister);
 EXPORT_SYMBOL(create_proc_entry);
 EXPORT_SYMBOL(remove_proc_entry);
 EXPORT_SYMBOL(proc_root);
+EXPORT_SYMBOL(proc_root_fs);
 EXPORT_SYMBOL(proc_get_inode);
 EXPORT_SYMBOL(in_group_p);
 EXPORT_SYMBOL(proc_dir_inode_operations);

@@ -113,13 +113,11 @@ void fbcon_cfb8_putc(struct vc_data *conp, struct display *p, int c, int yy,
     int bytes=p->next_line,rows;
     u32 eorx,fgx,bgx;
 
-    c &= 0xff;
-
     dest = p->screen_base + yy * p->fontheight * bytes + xx * 8;
-    cdat = p->fontdata + c * p->fontheight;
+    cdat = p->fontdata + (c & 0xff) * p->fontheight;
 
-    fgx=attr_fgcol(p,conp);
-    bgx=attr_bgcol(p,conp);
+    fgx=attr_fgcol(p,c);
+    bgx=attr_bgcol(p,c);
     fgx |= (fgx << 8);
     fgx |= (fgx << 16);
     bgx |= (bgx << 8);
@@ -132,16 +130,16 @@ void fbcon_cfb8_putc(struct vc_data *conp, struct display *p, int c, int yy,
     }
 }
 
-void fbcon_cfb8_putcs(struct vc_data *conp, struct display *p, const char *s,
-		      int count, int yy, int xx)
+void fbcon_cfb8_putcs(struct vc_data *conp, struct display *p, 
+		      const unsigned short *s, int count, int yy, int xx)
 {
     u8 *cdat, c, *dest, *dest0;
     int rows,bytes=p->next_line;
     u32 eorx, fgx, bgx;
 
     dest0 = p->screen_base + yy * p->fontheight * bytes + xx * 8;
-    fgx=attr_fgcol(p,conp);
-    bgx=attr_bgcol(p,conp);
+    fgx=attr_fgcol(p,*s);
+    bgx=attr_bgcol(p,*s);
     fgx |= (fgx << 8);
     fgx |= (fgx << 16);
     bgx |= (bgx << 8);
@@ -180,6 +178,17 @@ struct display_switch fbcon_cfb8 = {
     fbcon_cfb8_setup, fbcon_cfb8_bmove, fbcon_cfb8_clear, fbcon_cfb8_putc,
     fbcon_cfb8_putcs, fbcon_cfb8_revc, NULL
 };
+
+
+#ifdef MODULE
+int init_module(void)
+{
+    return 0;
+}
+
+void cleanup_module(void)
+{}
+#endif /* MODULE */
 
 
     /*

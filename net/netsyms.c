@@ -375,7 +375,6 @@ EXPORT_SYMBOL(register_trdev);
 EXPORT_SYMBOL(unregister_trdev);
 EXPORT_SYMBOL(init_trdev);
 EXPORT_SYMBOL(tr_freedev);
-EXPORT_SYMBOL(tr_reformat);
 #endif
                   
 /* Used by at least ipip.c.  */

@@ -1,17 +1,16 @@
-
-insmod sound
+modprobe sound
 insmod uart401
 insmod sb ...
 
-This loads the driver for the soundblaster and assorted clones. Cards that
+This loads the driver for the Sound Blaster and assorted clones. Cards that
 are covered by other drivers should not be using this driver.
 
-The soundblaster module takes the following arguments
+The Sound Blaster module takes the following arguments
 
-io		I/O address of the soundblaster chip
-irq		IRQ of the soundblaster chip
-dma     	8bit DMA channel for the soundblaster
-dma16   	16bit DMA channel for SB16 and equivalent cards
+io		I/O address of the Sound Blaster chip
+irq		IRQ of the Sound Blaster chip
+dma     	8-bit DMA channel for the Sound Blaster
+dma16   	16-bit DMA channel for SB16 and equivalent cards
 mpu_io		I/O for MPU chip if present
 
 mad16=1 	Set when loading this as part of the MAD16 setup only

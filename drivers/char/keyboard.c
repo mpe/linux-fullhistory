@@ -58,9 +58,6 @@
 #endif
 
 extern void ctrl_alt_del(void);
-extern void reset_vc(unsigned int new_console);
-extern void scrollback(int);
-extern void scrollfront(int);
 
 struct wait_queue * keypress_wait = NULL;
 struct console;
@@ -199,7 +196,7 @@ void handle_scancode(unsigned char scancode)
 	mark_bh(CONSOLE_BH);
 	add_keyboard_randomness(scancode);
 
-	tty = ttytab[fg_console];
+	tty = ttytab? ttytab[fg_console]: NULL;
  	kbd = kbd_table + fg_console;
 	if ((raw_mode = (kbd->kbdmode == VC_RAW))) {
  		put_queue(scancode);

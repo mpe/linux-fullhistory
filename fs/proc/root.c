@@ -566,6 +566,14 @@ static struct proc_dir_entry proc_root_filesystems = {
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_array_inode_operations
 };
+struct proc_dir_entry proc_root_fs = {
+        PROC_FS, 2, "fs",
+        S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
+        0, &proc_dir_inode_operations,
+	NULL, NULL,
+	NULL,
+	NULL, NULL
+};
 static struct proc_dir_entry proc_root_dma = {
 	PROC_DMA, 3, "dma",
 	S_IFREG | S_IRUGO, 1, 0, 0,
@@ -660,6 +668,7 @@ void proc_root_init(void)
 	proc_register(&proc_root, &proc_root_devices);
 	proc_register(&proc_root, &proc_root_interrupts);
 	proc_register(&proc_root, &proc_root_filesystems);
+	proc_register(&proc_root, &proc_root_fs);
 	proc_register(&proc_root, &proc_root_dma);
 	proc_register(&proc_root, &proc_root_ioports);
 	proc_register(&proc_root, &proc_root_cmdline);

@@ -1,4 +1,3 @@
-
 			The Frame Buffer Device
 			-----------------------
 
@@ -158,10 +157,9 @@ work 100% with XF68_FBDev: the reported clock values are always incorrect.
 ---------------------
 
 A monitor draws an image on the screen by using an electron beam (3 electron
-beams for most color models, 1 electron beam for Trinitron color monitors and
-monochrone monitors). The front of the screen is covered by a pattern of
-colored phospors (pixels). If a phospor is hit by an electron, it emits a
-photon and thus becomes visible.
+beams for color models, 1 electron beam for monochrome monitors). The front of
+the screen is covered by a pattern of colored phosphors (pixels). If a phosphor
+is hit by an electron, it emits a photon and thus becomes visible.
 
 The electron beam draws horizontal lines (scanlines) from left to right, and
 from the top to the bottom of the screen. By modifying the intensity of the
@@ -275,7 +273,7 @@ The frame buffer device uses the following fields:
 
 1) Pixelclock:
    xfree: in MHz
-   fb: In Picoseconds (ps)
+   fb: in picoseconds (ps)
 
    pixclock = 1000000 / DCF
 

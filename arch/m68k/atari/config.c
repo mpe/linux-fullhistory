@@ -262,7 +262,9 @@ __initfunc(void config_atari(void))
 #ifdef CONFIG_ATARI_FLOPPY
     mach_floppy_setup	 = atari_floppy_setup;
 #endif
-    conswitchp	         = &fb_con;
+#ifdef CONFIG_DUMMY_CONSOLE
+    conswitchp	         = &dummy_con;
+#endif
     mach_max_dma_address = 0xffffff;
     kd_mksound		 = atari_mksound;
 #ifdef CONFIG_MAGIC_SYSRQ

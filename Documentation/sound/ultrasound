@@ -1,19 +1,18 @@
-
-insmod sound
+modprobe sound
 insmod ad1848
 insmod gus io=* irq=* dma=* ...
 
-This loads the driver for the Gravis Ultrasound family of soundcards.
+This loads the driver for the Gravis Ultrasound family of sound cards.
 
-The gus modules takes the following arguments
+The gus module takes the following arguments
 
-io		I/O address of the ultrasound card (eg. io=0x220)
-irq		IRQ of the soundblaster card 
-dma     	DMA channel for the soundblaster
+io		I/O address of the Ultrasound card (eg. io=0x220)
+irq		IRQ of the Sound Blaster card 
+dma     	DMA channel for the Sound Blaster
 dma16   	2nd DMA channel, only needed for full duplex operation
 type		1 for PnP card
 gus16		1 for using 16 bit sampling daughter board
-no_wave_dma	Set to disable dma usage for wavetable (see note)
+no_wave_dma	Set to disable DMA usage for wavetable (see note)
 db16		???
 
 

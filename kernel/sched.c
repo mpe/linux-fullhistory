@@ -1532,7 +1532,7 @@ static void show_task(int nr,struct task_struct * p)
 		printk(stat_nam[p->state]);
 	else
 		printk(" ");
-#if ((~0UL) == 0xffffffff)
+#if (BITS_PER_LONG == 32)
 	if (p == current)
 		printk(" current  ");
 	else
@@ -1595,7 +1595,7 @@ void show_state(void)
 {
 	struct task_struct *p;
 
-#if ((~0UL) == 0xffffffff)
+#if (BITS_PER_LONG == 32)
 	printk("\n"
 	       "                         free                        sibling\n");
 	printk("  task             PC    stack   pid father child younger older\n");

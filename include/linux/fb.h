@@ -30,8 +30,11 @@
 #define FB_TYPE_PACKED_PIXELS		0	/* Packed Pixels	*/
 #define FB_TYPE_PLANES			1	/* Non interleaved planes */
 #define FB_TYPE_INTERLEAVED_PLANES	2	/* Interleaved planes	*/
-#define FB_TYPE_VGA_TEXT		3	/* VGA text/attributes	*/
-#define FB_TYPE_S3_MMIO_TEXT		4	/* S3 MMIO text		*/
+#define FB_TYPE_TEXT			3	/* Text/attributes	*/
+
+#define FB_AUX_TEXT_MDA		0	/* Monochrome text */
+#define FB_AUX_TEXT_CGA		1	/* CGA/EGA/VGA Color text */
+#define FB_AUX_TEXT_S3_MMIO	2	/* S3 MMIO fasttext */
 
 #define FB_VISUAL_MONO01		0	/* Monochr. 1=Black 0=White */
 #define FB_VISUAL_MONO10		1	/* Monochr. 1=White 0=Black */
@@ -51,6 +54,9 @@
 #define FB_ACCEL_ATI_MACH64CT	8	/* ATI Mach 64CT family		*/
 #define FB_ACCEL_ATI_MACH64VT	9	/* ATI Mach 64CT family VT class */
 #define FB_ACCEL_ATI_MACH64GT	10	/* ATI Mach 64CT family GT class */
+#define FB_ACCEL_SUN_CREATOR	11	/* Sun Creator/Creator3D	*/
+#define FB_ACCEL_SUN_CGSIX	12	/* Sun cg6			*/
+#define FB_ACCEL_SUN_LEO	13	/* Sun leo/zx			*/
 
 struct fb_fix_screeninfo {
 	char id[16];			/* identification string eg "TT Builtin" */
@@ -181,7 +187,8 @@ struct fb_monspecs {
 
 struct fb_info;
 struct fb_info_gen;
-
+struct vm_area_struct;
+struct file;
 
     /*
      *  Frame buffer operations
@@ -189,8 +196,8 @@ struct fb_info_gen;
 
 struct fb_ops {
     /* open/release and usage marking */
-    int (*fb_open)(struct fb_info *info);
-    int (*fb_release)(struct fb_info *info);
+    int (*fb_open)(struct fb_info *info, int user);
+    int (*fb_release)(struct fb_info *info, int user);
     /* get non settable parameters */
     int (*fb_get_fix)(struct fb_fix_screeninfo *fix, int con,
 		      struct fb_info *info); 
@@ -212,6 +219,8 @@ struct fb_ops {
     /* perform fb specific ioctl */
     int (*fb_ioctl)(struct inode *inode, struct file *file, unsigned int cmd,
 		    unsigned long arg, int con, struct fb_info *info);
+    /* perform fb specific mmap */
+    int (*fb_mmap)(struct fb_info *info, struct file *file, struct vm_area_struct *vma);
 };
 
 
@@ -329,13 +338,9 @@ struct fb_videomode {
 };
 
 
-/* prototypes */
-typedef unsigned long fb_init_func(unsigned long);
-
 /* drivers/char/fbmem.c */
 extern int register_framebuffer(struct fb_info *fb_info);
 extern int unregister_framebuffer(const struct fb_info *fb_info);
-extern unsigned long probe_framebuffers(unsigned long kmem_start);
 extern int fbmon_valid_timings(u_int pixclock, u_int htotal, u_int vtotal,
 			       const struct fb_info *fb_info);
 extern int fbmon_dpms(const struct fb_info *fb_info);

@@ -117,7 +117,7 @@ void vesafb_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	 * Open/Release the frame buffer device
 	 */
 
-static int vesafb_open(struct fb_info *info)
+static int vesafb_open(struct fb_info *info, int user)
 {
 	/*
 	 * Nothing, only a usage count for the moment
@@ -126,7 +126,7 @@ static int vesafb_open(struct fb_info *info)
 	return(0);
 }
 
-static int vesafb_release(struct fb_info *info)
+static int vesafb_release(struct fb_info *info, int user)
 {
 	MOD_DEC_USE_COUNT;
 	return(0);
@@ -443,12 +443,12 @@ static void vesafb_blank(int blank, struct fb_info *info)
 	/* Not supported */
 }
 
-__initfunc(unsigned long vesafb_init(unsigned long mem_start))
+__initfunc(void vesafb_init(void))
 {
 	int i,j;
 
 	if (screen_info.orig_video_isVGA != VIDEO_TYPE_VLFB)
-		return mem_start;
+		return;
 
 	video_base          = (char*)screen_info.lfb_base;
 	video_bpp           = screen_info.lfb_depth;
@@ -517,16 +517,14 @@ __initfunc(unsigned long vesafb_init(unsigned long mem_start))
 	fb_info.blank=&vesafb_blank;
 	do_fb_set_var(&vesafb_defined,1);
 
-	if (register_framebuffer(&fb_info)<0)
-		return mem_start;
-
 	vesafb_get_var(&disp.var, -1, &fb_info);
 	vesafb_set_disp(-1);
 
+	if (register_framebuffer(&fb_info)<0)
+		return;
+
 	printk("fb%d: %s frame buffer device\n",
 	       GET_FB_IDX(fb_info.node), fb_info.modename);
-
-	return mem_start;
 }
 
 /*

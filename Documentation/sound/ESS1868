@@ -1,6 +1,6 @@
 Documentation for the ESS1868F AudioDrive PnP sound card
 
-The ESS1868 Sound card is a PnP ESS1688 compatible 16-bit sound card.
+The ESS1868 sound card is a PnP ESS1688-compatible 16-bit sound card.
 
 Notes about configuring the sound card:
 

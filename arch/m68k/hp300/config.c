@@ -66,8 +66,8 @@ __initfunc(void config_hp300(void))
 #ifdef CONFIG_HEARTBEAT
   mach_heartbeat       = hp300_pulse;
 #endif
-#ifdef CONFIG_FB
-  conswitchp	       = &fb_con;
+#ifdef CONFIG_DUMMY_CONSOLE
+  conswitchp	       = &dummy_con;
 #endif
   mach_max_dma_address = 0xffffffff;
 }

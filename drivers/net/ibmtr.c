@@ -62,6 +62,8 @@
  *	Changes by Paul Norton (pnorton@cts.com) :
  *      + moved the header manipulation code in tr_tx and tr_rx to
  *        net/802/tr.c. (July 12 1997)
+ *      + lifted 2000 byte mtu limit. now depends on shared-RAM size.
+ *        May 25 1998)
  */
 
 #ifdef PCMCIA
@@ -91,7 +93,7 @@
 /* version and credits */
 static char *version =
 "ibmtr.c: v1.3.57  8/ 7/94 Peter De Schrijver and Mark Swanson\n"
-"         v2.1.42  7/12/97 Paul Norton <pnorton@cts.com>\n";
+"         v2.1.106 6/22/98 Paul Norton <p.norton@computer.org>\n";
 
 static char pcchannelid[] = {
 	0x05, 0x00, 0x04, 0x09,
@@ -138,6 +140,8 @@ static char mcchannelid[] = {
 
 #define DPRINTK(format, args...) printk("%s: " format, dev->name , ## args)
 #define DPRINTD(format, args...) DummyCall("%s: " format, dev->name , ## args)
+#define MIN(X, Y) ((X) < (Y) ? (X) : (Y))
+#define MAX(X, Y) ((X) > (Y) ? (X) : (Y))
 
 #if TR_NEWFORMAT
 /* this allows displaying full adapter information */
@@ -185,6 +189,7 @@ static int	tok_send_packet(struct sk_buff *skb, struct device *dev);
 static struct net_device_stats * tok_get_stats(struct device *dev);
 void		ibmtr_readlog(struct device *dev);
 void		ibmtr_reset_timer(struct timer_list *tmr, struct device *dev);
+int             ibmtr_change_mtu(struct device *dev, int mtu);
 
 static unsigned int ibmtr_portlist[] __initdata = {
 	0xa20, 0xa24, 0
@@ -469,10 +474,36 @@ __initfunc(static int ibmtr_probe1(struct device *dev, int PIOaddr))
 	ti->shared_ram_paging = readb(ti->mmio + AIPSHRAMPAGE);
 
         /* Available DHB  4Mb size:   F=2048, E=4096, D=4464 */
-	ti->dhb_size4mb = readb(ti->mmio + AIP4MBDHB);
+	switch (readb(ti->mmio + AIP4MBDHB)) {
+	case 0xe : 
+		ti->dhb_size4mb = 4096;
+		break; 
+	case 0xd : 
+		ti->dhb_size4mb = 4464;
+		break; 
+	default  : 
+		ti->dhb_size4mb = 2048;
+		break; 
+	}
 
 	/* Available DHB 16Mb size:  F=2048, E=4096, D=8192, C=16384, B=17960 */
-	ti->dhb_size16mb = readb(ti->mmio + AIP16MBDHB);
+	switch (readb(ti->mmio + AIP16MBDHB)) {
+	case 0xe : 
+		ti->dhb_size16mb = 4096;
+		break; 
+	case 0xd : 
+		ti->dhb_size16mb = 8192;
+		break; 
+	case 0xc : 
+		ti->dhb_size16mb = 16384;
+		break; 
+	case 0xb : 
+		ti->dhb_size16mb = 17960;
+		break; 
+	default  : 
+		ti->dhb_size16mb = 2048;
+		break; 
+	}
 
 #if !TR_NEWFORMAT
 	DPRINTK("atype=%x, drate=%x, trel=%x, asram=%dK, srp=%x, "
@@ -598,6 +629,62 @@ __initfunc(static int ibmtr_probe1(struct device *dev, int PIOaddr))
 		dev->dev_addr[0], dev->dev_addr[1], dev->dev_addr[2],
 		dev->dev_addr[3], dev->dev_addr[4], dev->dev_addr[5]);
 #endif
+	/* Calculate the maximum DHB we can use */
+	switch (ti->mapped_ram_size) {
+	case  16 : /* 8KB shared RAM */
+		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 2048);
+		ti->rbuf_len4 = 2048;
+		ti->rbuf_cnt4 = 1;
+		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 2048);
+		ti->rbuf_len16 = 2048;
+		ti->rbuf_cnt16 = 1;
+		break;
+	case  32 : /* 16KB shared RAM */
+		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 4464);
+		ti->rbuf_len4 = 512;
+		ti->rbuf_cnt4 = 9;
+		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 4096);
+		ti->rbuf_len16 = 2048;
+		ti->rbuf_cnt16 = 2;
+		break;
+	case  64 : /* 32KB shared RAM */
+		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 4464);
+		ti->rbuf_len4 = 2048;
+		ti->rbuf_cnt4 = 3;
+		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 10240);
+		ti->rbuf_len16 = 2048;
+		ti->rbuf_cnt16 = 5;
+		break;
+	case 127 : /* 63KB shared RAM */
+		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 4464);
+		ti->rbuf_len4 = 2048;
+		ti->rbuf_cnt4 = 3;
+		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 16384);
+		ti->rbuf_len16 = 2048;
+		ti->rbuf_cnt16 = 8;
+		break;
+	case 128 : /* 64KB shared RAM */
+		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 4464);
+		ti->rbuf_len4 = 2048;
+		ti->rbuf_cnt4 = 3;
+		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 17960);
+		ti->rbuf_len16 = 2048;
+		ti->rbuf_cnt16 = 9;
+		break;
+	default  :
+		ti->dhb_size4mb  = 2048;
+		ti->rbuf_len4 = 2048;
+		ti->rbuf_cnt4 = 1;
+		ti->dhb_size16mb = 2048;
+		ti->rbuf_len16 = 2048;
+		ti->rbuf_cnt16 = 1;
+		break;
+	}
+
+	ti->maxmtu16 = ti->dhb_size16mb-((ti->rbuf_cnt16)<<3)-TR_HLEN;
+	ti->maxmtu4  = ti->dhb_size4mb-((ti->rbuf_cnt4)<<3)-TR_HLEN;
+	DPRINTK("Maximum MTU 16Mbps: %d, 4Mbps: %d\n",
+		ti->maxmtu16, ti->maxmtu4);
 
 	dev->base_addr=PIOaddr; /* set the value for device */
 
@@ -639,9 +726,9 @@ __initfunc(static int trdev_init(struct device *dev))
 	dev->open		= tok_open;
 	dev->stop		= tok_close;
 	dev->hard_start_xmit	= tok_send_packet;
-	dev->get_stats 		= NULL;
 	dev->get_stats 		= tok_get_stats;
 	dev->set_multicast_list = NULL;
+	dev->change_mtu         = ibmtr_change_mtu;
 
 #ifndef MODULE
 	tr_setup(dev);
@@ -1111,13 +1198,13 @@ static void initial_tok_int(struct device *dev)
 #endif
 
 	encoded_addr=(ti->sram + ntohs(hw_encoded_addr));
-
+	ti->ring_speed = readb(ti->init_srb+offsetof(struct srb_init_response, init_status)) & 0x01 ? 16 : 4;
 #if !TR_NEWFORMAT
 	DPRINTK("encoded addr (%04X,%04X,%08X): ", hw_encoded_addr,
 		ntohs(hw_encoded_addr), encoded_addr);
 #else
-	DPRINTK("Initial interrupt : %s Mbps, shared RAM base %08x.\n",
-		(readb(ti->init_srb+offsetof(struct srb_init_response, init_status)) & 0x01) ? "16" : "4", ti->sram);
+	DPRINTK("Initial interrupt : %d Mbps, shared RAM base %08x.\n",
+		ti->ring_speed, ti->sram);
 #endif
 
 	ti->auto_ringspeedsave=readb(ti->init_srb
@@ -1217,13 +1304,22 @@ void tok_open_adapter(unsigned long dev_addr)
 	       ti->init_srb + offsetof(struct dir_open_adapter, command));
 	writew(htons(OPEN_PASS_BCON_MAC),
 	       ti->init_srb + offsetof(struct dir_open_adapter, open_options));
-	writew(htons(NUM_RCV_BUF),
-	       ti->init_srb + offsetof(struct dir_open_adapter, num_rcv_buf));
-	writew(htons(RCV_BUF_LEN),
-	       ti->init_srb + offsetof(struct dir_open_adapter, rcv_buf_len));
-	writew(htons(DHB_LENGTH),
-	       ti->init_srb + offsetof(struct dir_open_adapter, dhb_length));
-	writeb(NUM_DHB,
+	if (ti->ring_speed == 16) {
+		writew(htons(ti->dhb_size16mb),
+		       ti->init_srb + offsetof(struct dir_open_adapter, dhb_length));
+		writew(htons(ti->rbuf_cnt16),
+		       ti->init_srb + offsetof(struct dir_open_adapter, num_rcv_buf));
+		writew(htons(ti->rbuf_len16),
+		       ti->init_srb + offsetof(struct dir_open_adapter, rcv_buf_len));
+	} else {
+		writew(htons(ti->dhb_size4mb),
+		       ti->init_srb + offsetof(struct dir_open_adapter, dhb_length));
+		writew(htons(ti->rbuf_cnt4),
+		       ti->init_srb + offsetof(struct dir_open_adapter, num_rcv_buf));
+		writew(htons(ti->rbuf_len4),
+		       ti->init_srb + offsetof(struct dir_open_adapter, rcv_buf_len));
+	}
+	writeb(NUM_DHB, /* always 2 */ 
 	       ti->init_srb + offsetof(struct dir_open_adapter, num_dhb));
 	writeb(DLC_MAX_SAP,
 	       ti->init_srb + offsetof(struct dir_open_adapter, dlc_max_sap));
@@ -1260,10 +1356,10 @@ static void tr_tx(struct device *dev)
 	
 	/* Figure out the size of the 802.5 header */
 	if (!(trhdr->saddr[0] & 0x80)) /* RIF present? */
-		hdr_len=sizeof(struct trh_hdr)-18;
+		hdr_len=sizeof(struct trh_hdr)-TR_MAXRIFLEN;
 	else 
 		hdr_len=((ntohs(trhdr->rcf) & TR_RCF_LEN_MASK)>>8)
-			+sizeof(struct trh_hdr)-18;
+			+sizeof(struct trh_hdr)-TR_MAXRIFLEN;
 
 	llc = (struct trllc *)(ti->current_skb->data + hdr_len);
 
@@ -1304,6 +1400,7 @@ static void tr_tx(struct device *dev)
 	memcpy_toio(dhb, ti->current_skb->data, ti->current_skb->len);
 
 	writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+	ti->tr_stats.tx_bytes+=ti->current_skb->len;
 	dev->tbusy=0;
 	dev_kfree_skb(ti->current_skb);
 	ti->current_skb=NULL;
@@ -1364,8 +1461,8 @@ static void tr_rx(struct device *dev)
 		return;
 	}
 
-       	if ((readb(llc + offsetof(struct trllc, dsap))==0xAA) &&
-       	    (readb(llc + offsetof(struct trllc, ssap))==0xAA)) {
+       	if ((readb(llc + offsetof(struct trllc, dsap))==EXTENDED_SAP) &&
+       	    (readb(llc + offsetof(struct trllc, ssap))==EXTENDED_SAP)) {
        		IPv4_p = 1;
        	}
 
@@ -1452,9 +1549,9 @@ static void tr_rx(struct device *dev)
 
        	writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 
+	ti->tr_stats.rx_bytes += skb->len;
        	ti->tr_stats.rx_packets++;
 
-	tr_reformat(skb, lan_hdr_len); 
 	skb->protocol = tr_type_trans(skb,dev);
 
  	if (IPv4_p){
@@ -1525,6 +1622,17 @@ static struct net_device_stats * tok_get_stats(struct device *dev) {
 	struct tok_info *toki;
 	toki=(struct tok_info *) dev->priv;
 	return (struct net_device_stats *) &toki->tr_stats;
+}
+
+int ibmtr_change_mtu(struct device *dev, int mtu) {
+	struct tok_info *ti = (struct tok_info *) dev->priv;
+	
+	if (ti->ring_speed == 16 && mtu > ti->maxmtu16)
+		return -EINVAL;
+	if (ti->ring_speed == 4 && mtu > ti->maxmtu4)
+		return -EINVAL;
+	dev->mtu = mtu;
+	return 0;
 }
 
 #ifdef MODULE

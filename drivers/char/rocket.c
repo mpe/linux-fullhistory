@@ -48,6 +48,9 @@
 
 #if (LINUX_VERSION_CODE > 66304)
 #define NEW_MODULES
+#ifdef LOCAL_ROCKET_H		/* We're building standalone */
+#define MODULE
+#endif
 #endif
 
 #ifdef NEW_MODULES
@@ -81,6 +84,9 @@
 #include <linux/ioport.h>
 #ifdef ENABLE_PCI
 #include <linux/pci.h>
+#if (LINUX_VERSION_CODE < 0x020163) /* 2.1.99 */
+#include <linux/bios32.h>
+#endif
 #endif
 #if (LINUX_VERSION_CODE >= 131343) /* 2.1.15 -- XX get correct version */
 #include <linux/init.h>
@@ -89,12 +95,17 @@
 #endif
 	
 #include "rocket_int.h"
+#ifdef LOCAL_ROCKET_H
+#include "rocket.h"
+#include "version.h"
+#else
 #include <linux/rocket.h>
-
-#define ROCKET_VERSION "1.14a"
-#define ROCKET_DATE "19-Jul-97"
+#define ROCKET_VERSION "1.14b"
+#define ROCKET_DATE "29-Jun-98"
+#endif /* LOCAL_ROCKET_H */
 
 #define ROCKET_PARANOIA_CHECK
+#define ROCKET_SOFT_FLOW
 
 #undef ROCKET_DEBUG_OPEN
 #undef ROCKET_DEBUG_INTR
@@ -177,9 +188,30 @@ static unsigned long time_stat_long = 0;
 static unsigned long time_counter = 0;
 #endif
 
+#if ((LINUX_VERSION_CODE > 0x020111) && defined(MODULE))
+MODULE_AUTHOR("Theodore Ts'o");
+MODULE_DESCRIPTION("Comtrol Rocketport driver");
+MODULE_PARM(board1,     "i");
+MODULE_PARM_DESC(board1, "I/O port for (ISA) board #1");
+MODULE_PARM(board2,     "i");
+MODULE_PARM_DESC(board2, "I/O port for (ISA) board #2");
+MODULE_PARM(board3,     "i");
+MODULE_PARM_DESC(board3, "I/O port for (ISA) board #3");
+MODULE_PARM(board4,     "i");
+MODULE_PARM_DESC(board4, "I/O port for (ISA) board #4");
+MODULE_PARM(controller, "i");
+MODULE_PARM_DESC(controller, "I/O port for (ISA) rocketport controller");
+MODULE_PARM(support_low_speed, "i");
+MODULE_PARM_DESC(support_low_speed, "0 means support 50 baud, 1 means support 460400 baud");	
+#endif
+
 /*
  * Provide backwards compatibility for kernels prior to 2.1.8.
  */
+#if (LINUX_VERSION_CODE < 0x20000)
+typedef dev_t kdev_t;
+#endif
+
 #if (LINUX_VERSION_CODE < 131336)
 int copy_from_user(void *to, const void *from_user, unsigned long len)
 {
@@ -202,6 +234,12 @@ int copy_to_user(void *to_user, const void *from, unsigned long len)
 	memcpy_tofs(to_user, from, len);
 	return 0;
 }
+
+static inline int signal_pending(struct task_struct *p)
+{
+	return (p->signal & (~p->blocked != 0));
+}
+
 #else
 #include <asm/uaccess.h>
 #endif
@@ -720,6 +758,27 @@ static void configure_r_port(struct r_port *info)
 		info->intmask |= DELTA_CD;
 		restore_flags(flags);
 	}
+
+	/*
+	 * Handle software flow control in the board
+	 */
+#ifdef ROCKET_SOFT_FLOW
+	if (I_IXON(info->tty)) {
+		sEnTxSoftFlowCtl(cp);
+		if (I_IXANY(info->tty)) {
+			sEnIXANY(cp);
+		} else {
+			sDisIXANY(cp);
+		}
+		sSetTxXONChar(cp, START_CHAR(info->tty));
+		sSetTxXOFFChar(cp, STOP_CHAR(info->tty));
+	} else {
+		sDisTxSoftFlowCtl(cp);
+		sDisIXANY(cp);
+		sClrTxXOFF(cp);
+	}
+#endif
+	
 	/*
 	 * Set up ignore/read mask words
 	 */
@@ -728,7 +787,7 @@ static void configure_r_port(struct r_port *info)
 		info->read_status_mask |= STMFRAMEH | STMPARITYH;
 	if (I_BRKINT(info->tty) || I_PARMRK(info->tty))
 		info->read_status_mask |= STMBREAKH;
-	
+
 	/*
 	 * Characters to ignore
 	 */
@@ -751,7 +810,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 {
 	struct wait_queue wait = { current, NULL };
 	int		retval;
-	int		do_clocal = 0;
+	int		do_clocal = 0, extra_count = 0;
 	unsigned long	flags;
 
 	/*
@@ -820,8 +879,10 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	       info->line, info->count);
 #endif
 	save_flags(flags); cli();
-	if (!tty_hung_up_p(filp))
+	if (!tty_hung_up_p(filp)) {
+		extra_count = 1;
 		info->count--;
+	}
 	restore_flags(flags);
 	info->blocked_open++;
 	while (1) {
@@ -857,7 +918,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	current->state = TASK_RUNNING;
 	remove_wait_queue(&info->open_wait, &wait);
 	cli();
-	if (!tty_hung_up_p(filp))
+	if (extra_count)
 		info->count++;
 	restore_flags(flags);
 	info->blocked_open--;
@@ -1315,7 +1376,12 @@ static int set_config(struct r_port * info, struct rocket_config * new_info)
 	if (copy_from_user(&new_serial, new_info, sizeof(new_serial)))
 		return -EFAULT;
 
-	if (!capable(CAP_SYS_ADMIN)) {
+#ifdef CAP_SYS_ADMIN
+	if (!capable(CAP_SYS_ADMIN))
+#else
+	if (!suser())
+#endif
+	{
 		if ((new_serial.flags & ~ROCKET_USR_MASK) !=
 		    (info->flags & ~ROCKET_USR_MASK))
 			return -EPERM;
@@ -1754,7 +1820,6 @@ static int rp_write(struct tty_struct * tty, int from_user,
 	
 	save_flags(flags);
 	while (1) {
-		cli();
 		if (info->tty == 0) {
 			restore_flags(flags);
 			goto end;
@@ -1778,10 +1843,10 @@ static int rp_write(struct tty_struct * tty, int from_user,
 			/* In case we got pre-empted */
 			if (info->tty == 0)
 				goto end_intr;
-			c = MIN(c, MIN(XMIT_BUF_SIZE - info->xmit_cnt - 1,
-				       XMIT_BUF_SIZE - info->xmit_head));
-				
 		}
+		cli();
+		c = MIN(c, MIN(XMIT_BUF_SIZE - info->xmit_cnt - 1,
+			       XMIT_BUF_SIZE - info->xmit_head));
 		memcpy(info->xmit_buf + info->xmit_head, b, c);
 		info->xmit_head = (info->xmit_head + c) & (XMIT_BUF_SIZE-1);
 		info->xmit_cnt += c;
@@ -1868,6 +1933,35 @@ static void rp_flush_buffer(struct tty_struct *tty)
 }
 
 #ifdef ENABLE_PCI
+#if (LINUX_VERSION_CODE < 0x020163) /* 2.1.99 */
+/* For compatibility */
+static struct pci_dev *pci_find_slot(char bus, char device_fn)
+{
+	unsigned short		vendor_id, device_id;
+	int			ret, error;
+	static struct pci_dev	ret_struct;
+	
+	error = pcibios_read_config_word(bus, device_fn, PCI_VENDOR_ID,
+		&vendor_id);
+	ret = pcibios_read_config_word(bus, device_fn, PCI_DEVICE_ID,
+		&device_id);
+	if (error == 0)
+		error = ret;
+
+	if (error) {
+		printk("PCI RocketPort error: %s not initializing due to error"
+		       "reading configuration space\n",
+		       pcibios_strerror(error));
+		return(0);
+	}
+
+	memset(&ret_struct, 0, sizeof(ret_struct));
+	ret_struct.device = device_id;
+
+	return &ret_struct;
+}
+#endif
+     
 __initfunc(int register_PCI(int i, char bus, char device_fn))
 {
 	int	num_aiops, aiop, max_num_aiops, num_chan, chan;
@@ -1875,8 +1969,23 @@ __initfunc(int register_PCI(int i, char bus, char device_fn))
 	char *str;
 	CONTROLLER_t	*ctlp;
 	struct pci_dev *dev = pci_find_slot(bus, device_fn);
+#if (LINUX_VERSION_CODE < 0x020163) /* 2.1.99 */
+	int	ret;
+	unsigned int port;
+#endif
 
+	if (!dev)
+		return 0;
+
+#if (LINUX_VERSION_CODE >= 0x020163) /* 2.1.99 */
 	rcktpt_io_addr[i] = dev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
+#else
+	ret = pcibios_read_config_dword(bus, device_fn, PCI_BASE_ADDRESS_0,
+		&port);
+	if (ret)
+		return 0;
+	rcktpt_io_addr[i] = port & PCI_BASE_ADDRESS_IO_MASK;
+#endif	
 	switch(dev->device) {
 	case PCI_DEVICE_ID_RP4QUAD:
 		str = "Quadcable";
@@ -1901,6 +2010,18 @@ __initfunc(int register_PCI(int i, char bus, char device_fn))
 	case PCI_DEVICE_ID_RP32INTF:
 		str = "32";
 		max_num_aiops = 4;
+		break;
+	case PCI_DEVICE_ID_RPP4:
+		str = "Plus Quadcable";
+		max_num_aiops = 1;
+		break;
+	case PCI_DEVICE_ID_RPP8:
+		str = "Plus Octacable";
+		max_num_aiops = 1;
+		break;
+	case PCI_DEVICE_ID_RP8M:
+		str = "8-port Modem";
+		max_num_aiops = 1;
 		break;
 	default:
 		str = "(unknown/unsupported)";
@@ -1936,20 +2057,48 @@ __initfunc(static int init_PCI(int boards_found))
 	int	i, count = 0;
 
 	for(i=0; i < (NUM_BOARDS - boards_found); i++) {
-		if(!pcibios_find_device(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RP8OCTA,
-			i, &bus, &device_fn)) 
+		if (!pcibios_find_device(PCI_VENDOR_ID_RP,
+			PCI_DEVICE_ID_RP4QUAD, i, &bus, &device_fn)) 
+			if (register_PCI(count+boards_found, bus, device_fn))
+				count++;
+		if (!pcibios_find_device(PCI_VENDOR_ID_RP,
+			PCI_DEVICE_ID_RP8J, i, &bus, &device_fn)) 
+			if (register_PCI(count+boards_found, bus, device_fn))
+				count++;
+		if(!pcibios_find_device(PCI_VENDOR_ID_RP,
+			PCI_DEVICE_ID_RP8OCTA, i, &bus, &device_fn)) 
 			if(register_PCI(count+boards_found, bus, device_fn))
 				count++;
-		if(!pcibios_find_device(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RP8INTF,
-			i, &bus, &device_fn)) 
+		if(!pcibios_find_device(PCI_VENDOR_ID_RP,
+			PCI_DEVICE_ID_RP8INTF, i, &bus, &device_fn)) 
 			if(register_PCI(count+boards_found, bus, device_fn))
 				count++;
-		if(!pcibios_find_device(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RP16INTF,
-			i, &bus, &device_fn)) 
+		if(!pcibios_find_device(PCI_VENDOR_ID_RP,
+			PCI_DEVICE_ID_RP16INTF, i, &bus, &device_fn)) 
 			if(register_PCI(count+boards_found, bus, device_fn))
 				count++;
-		if(!pcibios_find_device(PCI_VENDOR_ID_RP, PCI_DEVICE_ID_RP32INTF,
-			i, &bus, &device_fn)) 
+		if(!pcibios_find_device(PCI_VENDOR_ID_RP,
+			PCI_DEVICE_ID_RP32INTF, i, &bus, &device_fn)) 
+			if(register_PCI(count+boards_found, bus, device_fn))
+				count++;
+		if(!pcibios_find_device(PCI_VENDOR_ID_RP,
+			PCI_DEVICE_ID_RP4QUAD, i, &bus, &device_fn)) 
+			if(register_PCI(count+boards_found, bus, device_fn))
+				count++;
+		if(!pcibios_find_device(PCI_VENDOR_ID_RP,
+			PCI_DEVICE_ID_RP8J, i, &bus, &device_fn)) 
+			if(register_PCI(count+boards_found, bus, device_fn))
+				count++;
+		if(!pcibios_find_device(PCI_VENDOR_ID_RP,
+			PCI_DEVICE_ID_RPP4, i, &bus, &device_fn)) 
+			if(register_PCI(count+boards_found, bus, device_fn))
+				count++;
+		if(!pcibios_find_device(PCI_VENDOR_ID_RP,
+			PCI_DEVICE_ID_RPP8, i, &bus, &device_fn)) 
+			if(register_PCI(count+boards_found, bus, device_fn))
+				count++;
+		if(!pcibios_find_device(PCI_VENDOR_ID_RP,
+			PCI_DEVICE_ID_RP8M, i, &bus, &device_fn)) 
 			if(register_PCI(count+boards_found, bus, device_fn))
 				count++;
 	}
@@ -2073,7 +2222,7 @@ __initfunc(int rp_init(void))
 			isa_boards_found++;
 	}
 #ifdef ENABLE_PCI
-	if (pci_present()) {
+	if (pcibios_present()) {
 		if(isa_boards_found < NUM_BOARDS)
 			pci_boards_found = init_PCI(isa_boards_found);
 	} else {

@@ -49,6 +49,7 @@
  *	Revision 0.38:  Asynchronous socket stuff made current.
  *	Revision 0.39:  SPX interfaces
  *	Revision 0.40:  Tiny SIOCGSTAMP fix (chris@cybernet.co.nz)
+ *      Revision 0.41:  802.2TR removed (p.norton@computer.org)
  *
  *	Protect the module by a MOD_INC_USE_COUNT/MOD_DEC_USE_COUNT
  *	pair. Also, now usage count is managed this way
@@ -89,12 +90,12 @@
 #include <linux/termios.h>	/* For TIOCOUTQ/INQ */
 #include <linux/interrupt.h>
 #include <net/p8022.h>
-#include <net/p8022tr.h>
 #include <net/psnap.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/firewall.h>
 #include <linux/init.h>
+#include <linux/if_arp.h>
 
 #ifdef MODULE
 static void ipx_proto_finito(void);
@@ -107,7 +108,6 @@ static char		ipxcfg_auto_create_interfaces = 0;
 
 /* Global Variables */
 static struct datalink_proto	*p8022_datalink 	= NULL;
-static struct datalink_proto	*p8022tr_datalink 	= NULL;
 static struct datalink_proto	*pEII_datalink 		= NULL;
 static struct datalink_proto	*p8023_datalink 	= NULL;
 static struct datalink_proto	*pSNAP_datalink 	= NULL;
@@ -853,9 +853,6 @@ static int ipx_map_frame_type(unsigned char type)
 		case IPX_FRAME_8022:
 			return (htons(ETH_P_802_2));
 
-		case IPX_FRAME_TR_8022:
-			return (htons(ETH_P_TR_802_2));
-
 		case IPX_FRAME_SNAP:
 			return (htons(ETH_P_SNAP));
 
@@ -883,22 +880,31 @@ static int ipxitf_create(ipx_interface_definition *idef)
 		&& (ipxitf_find_using_net(idef->ipx_network) != NULL))
 		return (-EADDRINUSE);
 
+	dev = dev_get(idef->ipx_device);
+	if(dev == NULL)
+		return (-ENODEV);
+
 	switch(idef->ipx_dlink_type) 
 	{
-		case IPX_FRAME_ETHERII:
-			dlink_type 	= htons(ETH_P_IPX);
-			datalink 	= pEII_datalink;
-			break;
-
 		case IPX_FRAME_TR_8022:
-			dlink_type 	= htons(ETH_P_TR_802_2);
-			datalink 	= p8022tr_datalink;
-			break;
+			printk("IPX frame type 802.2TR is obsolete. Use 802.2 instead.\n");
+			/* fall through */
 
 		case IPX_FRAME_8022:
 			dlink_type 	= htons(ETH_P_802_2);
 			datalink 	= p8022_datalink;
 			break;
+
+		case IPX_FRAME_ETHERII:
+			if (dev->type != ARPHRD_IEEE802)
+			{
+				dlink_type 	= htons(ETH_P_IPX);
+				datalink 	= pEII_datalink;
+				break;
+			}
+			else 
+				printk("IPX frame type EtherII over token-ring is obsolete. Use SNAP instead.\n");
+			/* fall through */
 
 		case IPX_FRAME_SNAP:
 			dlink_type 	= htons(ETH_P_SNAP);
@@ -915,19 +921,15 @@ static int ipxitf_create(ipx_interface_definition *idef)
 			break;
 	}
 
-	if(datalink == NULL)
-		return (-EPROTONOSUPPORT);
-
-	dev = dev_get(idef->ipx_device);
-	if(dev == NULL)
-		return (-ENODEV);
-
 	if(!(dev->flags & IFF_UP))
 		return (-ENETDOWN);
 
 	/* Check addresses are suitable */
 	if(dev->addr_len > IPX_NODE_LEN)
 		return (-EINVAL);
+
+	if(datalink == NULL)
+		return (-EPROTONOSUPPORT);
 
 	if((intrfc = ipxitf_find_using_phys(dev, dlink_type)) == NULL)
 	{
@@ -1012,10 +1014,6 @@ static ipx_interface *ipxitf_auto_create(struct device *dev,
 
 		case ETH_P_802_2:
 			datalink = p8022_datalink;
-			break;
-
-		case ETH_P_TR_802_2:
-			datalink = p8022tr_datalink;
 			break;
 
 		case ETH_P_SNAP:
@@ -2360,9 +2358,6 @@ void ipx_proto_init(struct net_proto *pro)
 	if((p8022_datalink = register_8022_client(ipx_8022_type,ipx_rcv)) == NULL)
 		printk(KERN_CRIT "IPX: Unable to register with 802.2\n");
 
-	if((p8022tr_datalink = register_8022tr_client(ipx_8022_type,ipx_rcv)) == NULL)
-		printk(KERN_CRIT "IPX: Unable to register with 802.2TR\n");
-
 	if((pSNAP_datalink = register_snap_client(ipx_snap_id,ipx_rcv)) == NULL)
 		printk(KERN_CRIT "IPX: Unable to register with SNAP\n");
 
@@ -2431,9 +2426,6 @@ static void ipx_proto_finito(void)
 
 	unregister_snap_client(ipx_snap_id);
 	pSNAP_datalink 	= NULL;
-
-	unregister_8022tr_client(ipx_8022_type);
-	p8022tr_datalink = NULL;
 
 	unregister_8022_client(ipx_8022_type);
 	p8022_datalink 	= NULL;
