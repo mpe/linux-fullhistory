@@ -102,6 +102,13 @@ module_param(delay_use, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(delay_use, "seconds to delay before using a new device");
 
 
+/* These are used to make sure the module doesn't unload before all the
+ * threads have exited.
+ */
+static atomic_t total_threads = ATOMIC_INIT(0);
+static DECLARE_COMPLETION(threads_gone);
+
+
 static int storage_probe(struct usb_interface *iface,
 			 const struct usb_device_id *id);
 
@@ -286,10 +293,12 @@ static int usb_stor_control_thread(void * __us)
 	 * so get rid of all our resources.
 	 */
 	daemonize("usb-storage");
-
 	current->flags |= PF_NOFREEZE;
-
 	unlock_kernel();
+
+	/* acquire a reference to the host, so it won't be deallocated
+	 * until we're ready to exit */
+	scsi_host_get(host);
 
 	/* signal that we've started the thread */
 	complete(&(us->notify));
@@ -394,6 +403,8 @@ SkipForAbort:
 		up(&(us->dev_semaphore));
 	} /* for (;;) */
 
+	scsi_host_put(host);
+
 	/* notify the exit routine that we're actually exiting now 
 	 *
 	 * complete()/wait_for_completion() is similar to up()/down(),
@@ -408,7 +419,7 @@ SkipForAbort:
 	 * This is important in preemption kernels, which transfer the flow
 	 * of execution immediately upon a complete().
 	 */
-	complete_and_exit(&(us->notify), 0);
+	complete_and_exit(&threads_gone, 0);
 }	
 
 /***********************************************************************
@@ -757,6 +768,7 @@ static int usb_stor_acquire_resources(struct us_data *us)
 		return p;
 	}
 	us->pid = p;
+	atomic_inc(&total_threads);
 
 	/* Wait for the thread to start */
 	wait_for_completion(&(us->notify));
@@ -817,6 +829,13 @@ static int usb_stor_scan_thread(void * __us)
 	daemonize("usb-stor-scan");
 	unlock_kernel();
 
+	/* Acquire a reference to the host, so it won't be deallocated
+	 * until we're ready to exit */
+	scsi_host_get(us_to_host(us));
+
+	/* Signal that we've started the thread */
+	complete(&(us->notify));
+
 	printk(KERN_DEBUG
 		"usb-storage: device found at %d\n", us->pusb_dev->devnum);
 
@@ -838,9 +857,12 @@ retry:
 	if (!test_bit(US_FLIDX_DISCONNECTING, &us->flags)) {
 		scsi_scan_host(us_to_host(us));
 		printk(KERN_DEBUG "usb-storage: device scan complete\n");
+
+		/* Should we unbind if no devices were detected? */
 	}
 
-	complete_and_exit(&us->scsi_scan_done, 0);
+	scsi_host_put(us_to_host(us));
+	complete_and_exit(&threads_gone, 0);
 }
 
 
@@ -941,6 +963,10 @@ static int storage_probe(struct usb_interface *intf,
 		scsi_remove_host(host);
 		goto BadDevice;
 	}
+	atomic_inc(&total_threads);
+
+	/* Wait for the thread to start */
+	wait_for_completion(&(us->notify));
 
 	return 0;
 
@@ -967,10 +993,8 @@ static void storage_disconnect(struct usb_interface *intf)
 	usb_stor_stop_transport(us);
 	wake_up(&us->dev_reset_wait);
 
-	/* Interrupt the SCSI-device-scanning thread's time delay, and
-	 * wait for the thread to finish */
+	/* Interrupt the SCSI-device-scanning thread's time delay */
 	wake_up(&us->scsi_scan_wait);
-	wait_for_completion(&us->scsi_scan_done);
 
 	/* Wait for the current command to finish, then remove the host */
 	down(&us->dev_semaphore);
@@ -1013,6 +1037,16 @@ static void __exit usb_stor_exit(void)
 	 */
 	US_DEBUGP("-- calling usb_deregister()\n");
 	usb_deregister(&usb_storage_driver) ;
+
+	/* Don't return until all of our control and scanning threads
+	 * have exited.  Since each thread signals threads_gone as its
+	 * last act, we have to call wait_for_completion the right number
+	 * of times.
+	 */
+	while (atomic_read(&total_threads) > 0) {
+		wait_for_completion(&threads_gone);
+		atomic_dec(&total_threads);
+	}
 }
 
 module_init(usb_stor_init);
