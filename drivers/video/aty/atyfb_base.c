@@ -100,8 +100,8 @@
 /*
  * Debug flags.
  */
-/*#undef DEBUG*/
-#define DEBUG
+#undef DEBUG
+/*#define DEBUG*/
 
 /* Make sure n * PAGE_SIZE is protected at end of Aperture for GUI-regs */
 /*  - must be large enough to catch all GUI-Regs   */
