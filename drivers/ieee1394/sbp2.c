@@ -907,6 +907,7 @@ alloc_fail:
 	 * allows someone else to login instead. One second makes sense. */
 	msleep_interruptible(1000);
 	if (signal_pending(current)) {
+		SBP2_WARN("aborting sbp2_start_device due to event");
 		sbp2_remove_device(scsi_id);
 		return -EINTR;
 	}
