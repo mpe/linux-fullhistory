@@ -1,7 +1,8 @@
 /* 3c509.c: A 3c509 EtherLink3 ethernet driver for linux. */
 /*
-	Written 1993 by Donald Becker.
+	Written 1993,1994 by Donald Becker.
 
+	Copyright 1994 by Donald Becker. 
 	Copyright 1993 United States Government as represented by the
 	Director, National Security Agency.	 This software may be used and
 	distributed according to the terms of the GNU Public License,
@@ -9,11 +10,21 @@
 	
 	This driver is for the 3Com EtherLinkIII series.
 
-	The author may be reached as becker@super.org or
-	C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
+	The author may be reached as becker@cesdis.gsfc.nasa.gov or
+	C/O Center of Excellence in Space Data and Information Sciences
+		Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
+
+	Known limitations:
+	Because of the way 3c509 ISA detection works it's difficult to predict
+	a priori which of several ISA-mode cards will be detected first.
+
+	This driver does not use predictive interrupt mode, resulting in higher
+	packet latency but lower overhead.  If interrupts are disabled for an
+	unusually long time it could also result in missed packets, but in
+	practice this rarely happens.
 */
 
-static char *version = "3c509.c:pl15k 3/5/94 becker@super.org\n";
+static char *version = "3c509.c:1.01 7/5/94 becker@cesdis.gsfc.nasa.gov\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -92,11 +103,14 @@ int el3_probe(struct device *dev)
 	short *phys_addr = (short *)dev->dev_addr;
 	static int current_tag = 0;
 
-	/* First check for a board on the EISA bus. */
+	/* First check all slots of the EISA bus.  The next slot address to
+	   probe is kept in 'eisa_addr' to support multiple probe() calls. */
 	if (EISA_bus) {
-		static int eisa_addr;
-		for (ioaddr=0x1000 ; ioaddr < 0x9000; ioaddr += 0x1000) {
-			eisa_addr = ioaddr;
+		static int eisa_addr = 0x1000;
+		while (eisa_addr < 0x9000) {
+			ioaddr = eisa_addr;
+			eisa_addr += 0x1000;
+
 			/* Check the standard EISA ID register for an encoded '3Com'. */
 			if (inw(ioaddr + 0xC80) != 0x6d50)
 				continue;
@@ -136,7 +150,10 @@ int el3_probe(struct device *dev)
 	}
 #endif	  
 
-	/* Send the ID sequence to the ID_PORT. */
+	/* Next check for all ISA bus boards by sending the ID sequence to the
+	   ID_PORT.  We find cards past the first by setting the 'current_tag'
+	   on cards as they are found.  Cards with their tag set will not
+	   respond to subseqent ID seqences. */
 	outb(0x00, ID_PORT);
 	outb(0x00, ID_PORT);
 	for(i = 0; i < 255; i++) {
@@ -169,9 +186,6 @@ int el3_probe(struct device *dev)
 	}
 	irq = id_read_eeprom(9) >> 12;
 
-	/* The current Space.c structure makes it difficult to have more
-	   than one adaptor initialized.  Send me email if you have a need for
-	   multiple adaptors, and we'll work out something.	 -becker@super.org */
 	if (dev->base_addr != 0
 		&&	dev->base_addr != (unsigned short)ioaddr) {
 		return -ENODEV;

@@ -127,10 +127,10 @@ int check_disk_change(dev_t dev)
 	i = MAJOR(dev);
 	if (i >= MAX_BLKDEV || (fops = blkdevs[i].fops) == NULL)
 		return 0;
-	if (fops->check_media_change != NULL) {
-		if (!fops->check_media_change(dev))
-			return 0;
-	} 
+	if (fops->check_media_change == NULL)
+		return 0;
+	if (!fops->check_media_change(dev))
+		return 0;
 
 	printk("VFS: Disk change detected on device %d/%d\n",
 					MAJOR(dev), MINOR(dev));
