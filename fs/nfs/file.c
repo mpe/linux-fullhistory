@@ -71,15 +71,14 @@ struct inode_operations nfs_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* bmap */
 	nfs_readpage,		/* readpage */
 	nfs_writepage,		/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
-	NULL,			/* updatepage */
 	nfs_revalidate,		/* revalidate */
-	NULL,			/* flushpage */
 };
 
 /* Hack for future NFS swap support */

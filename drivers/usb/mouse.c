@@ -60,7 +60,7 @@ static struct mouse_state static_mouse_state;
 
 spinlock_t usb_mouse_lock = SPIN_LOCK_UNLOCKED;
 
-static int mouse_irq(int state, void *__buffer, void *dev_id)
+static int mouse_irq(int state, void *__buffer, int len, void *dev_id)
 {
 	signed char *data = __buffer;
 	/* finding the mouse is easy when there's only one */

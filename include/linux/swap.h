@@ -107,6 +107,7 @@ extern int FASTCALL(swap_count(unsigned long));
 /*
  * Make these inline later once they are working properly.
  */
+extern void __delete_from_swap_cache(struct page *page);
 extern void delete_from_swap_cache(struct page *page);
 extern void free_page_and_swap_cache(unsigned long addr);
 

@@ -1519,11 +1519,14 @@ struct inode_operations proc_array_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
-	NULL			/* permission */
+	NULL,			/* permission */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 static ssize_t arraylong_read(struct file * file, char * buf,
@@ -1567,9 +1570,12 @@ struct inode_operations proc_arraylong_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
-	NULL			/* permission */
+	NULL,			/* permission */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };

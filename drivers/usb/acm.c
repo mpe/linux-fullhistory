@@ -50,7 +50,7 @@ static struct acm_state static_acm_state;
 
 spinlock_t usb_acm_lock = SPIN_LOCK_UNLOCKED;
 
-static int acm_irq(int state, void *__buffer, void *dev_id)
+static int acm_irq(int state, void *__buffer, int len, void *dev_id)
 {
 //	unsigned char *data = __buffer;
         struct acm_state *acm = &static_acm_state; 

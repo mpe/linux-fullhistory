@@ -113,7 +113,7 @@ static int ext2_writepage (struct file * file, struct page * page)
 
 static long ext2_write_one_page (struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
 {
-	return block_write_one_page(file, page, offset, bytes, buf, ext2_getblk_block);
+	return block_write_partial_page(file, page, offset, bytes, buf, ext2_getblk_block);
 }
 
 /*
@@ -122,7 +122,14 @@ static long ext2_write_one_page (struct file *file, struct page *page, unsigned 
 static ssize_t
 ext2_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
-	return generic_file_write(file, buf, count, ppos, ext2_write_one_page);
+	ssize_t retval = generic_file_write(file, buf, count, ppos, ext2_write_one_page);
+	if (retval > 0) {
+		struct inode *inode = file->f_dentry->d_inode;
+		remove_suid(inode);
+		inode->i_ctime = inode->i_mtime = CURRENT_TIME;
+		mark_inode_dirty(inode);
+	}
+	return retval;
 }
 
 /*
@@ -188,13 +195,12 @@ struct inode_operations ext2_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	generic_readpage,	/* readpage */
-	ext2_writepage,		/* writepage */
 	ext2_bmap,		/* bmap */
+	block_read_full_page,	/* readpage */
+	ext2_writepage,		/* writepage */
+	block_flushpage,	/* flushpage */
 	ext2_truncate,		/* truncate */
 	ext2_permission,	/* permission */
 	NULL,			/* smap */
-	NULL,			/* updatepage */
 	NULL,			/* revalidate */
-	generic_block_flushpage,/* flushpage */
 };

@@ -39,15 +39,14 @@ static struct inode_operations swapper_inode_operations = {
 	NULL,				/* rename */
 	NULL,				/* readlink */
 	NULL,				/* follow_link */
+	NULL,				/* bmap */
 	NULL,				/* readpage */
 	NULL,				/* writepage */
-	NULL,				/* bmap */
+	block_flushpage,		/* flushpage */
 	NULL,				/* truncate */
 	NULL,				/* permission */
 	NULL,				/* smap */
-	NULL,				/* updatepage */
-	NULL,				/* revalidate */
-	generic_block_flushpage,	/* flushpage */
+	NULL				/* revalidate */
 };
 
 struct inode swapper_inode = { i_op: &swapper_inode_operations };
@@ -221,16 +220,13 @@ static inline void remove_from_swap_cache(struct page *page)
 	remove_inode_page(page);
 }
 
-
 /*
  * This must be called only on pages that have
  * been verified to be in the swap cache.
  */
-void delete_from_swap_cache(struct page *page)
+void __delete_from_swap_cache(struct page *page)
 {
 	long entry = page->offset;
-
-	lock_page(page);
 
 #ifdef SWAP_CACHE_INFO
 	swap_cache_del_total++;
@@ -241,9 +237,21 @@ void delete_from_swap_cache(struct page *page)
 		   page_address(page), page_count(page), entry);
 #endif
 	remove_from_swap_cache (page);
+	swap_free (entry);
+}
+
+/*
+ * This must be called only on pages that have
+ * been verified to be in the swap cache.
+ */
+void delete_from_swap_cache(struct page *page)
+{
+	lock_page(page);
+
+	__delete_from_swap_cache(page);
+
 	UnlockPage(page);
 	page_cache_release(page);
-	swap_free (entry);
 }
 
 /* 
@@ -258,9 +266,8 @@ void free_page_and_swap_cache(unsigned long addr)
 	/* 
 	 * If we are the only user, then free up the swap cache. 
 	 */
-	if (PageSwapCache(page) && !is_page_shared(page)) {
+	if (PageSwapCache(page) && !is_page_shared(page))
 		delete_from_swap_cache(page);
-	}
 	
 	__free_page(page);
 }

@@ -148,7 +148,6 @@ static struct inode_operations proc_mca_inode_operations = {
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
-	NULL,			/* updatepage */
 	NULL			/* revalidate */
 };
 #endif

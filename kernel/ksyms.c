@@ -167,7 +167,6 @@ EXPORT_SYMBOL(add_blkdev_randomness);
 EXPORT_SYMBOL(generic_file_read);
 EXPORT_SYMBOL(generic_file_write);
 EXPORT_SYMBOL(generic_file_mmap);
-EXPORT_SYMBOL(generic_readpage);
 EXPORT_SYMBOL(file_lock_table);
 EXPORT_SYMBOL(posix_lock_file);
 EXPORT_SYMBOL(posix_test_lock);

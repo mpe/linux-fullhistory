@@ -95,7 +95,7 @@ void us_show_command(Scsi_Cmnd *srb)
     case READ_ELEMENT_STATUS: what = "READ_ELEMENT_STATUS"; break;
     case SEND_VOLUME_TAG: what = "SEND_VOLUME_TAG"; break;
     case WRITE_LONG_2: what = "WRITE_LONG_2"; break;
-    default: what = "??"; break;
+    default: break;
     }
     printk(KERN_DEBUG USB_SCSI "Command %s (%d bytes)\n", what, srb->cmd_len);
     printk(KERN_DEBUG USB_SCSI "  %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",

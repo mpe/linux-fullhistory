@@ -55,6 +55,7 @@
 #include <linux/sunrpc/clnt.h>
 #include <linux/nfs_fs.h>
 #include <asm/uaccess.h>
+#include <linux/smp_lock.h>
 
 #define NFS_PARANOIA 1
 #define NFSDBG_FACILITY		NFSDBG_PAGECACHE
@@ -93,6 +94,7 @@ nfs_writepage_sync(struct dentry *dentry, struct inode *inode,
 	u8		*buffer;
 	struct nfs_fattr fattr;
 
+	lock_kernel();
 	dprintk("NFS:      nfs_writepage_sync(%s/%s %d@%ld)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
 		count, page->offset + offset);
@@ -153,6 +155,7 @@ io_error:
 				inode->i_ino, fattr.fileid);
 	}
 
+	unlock_kernel();
 	return written? written : result;
 }
 

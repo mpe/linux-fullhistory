@@ -461,11 +461,14 @@ struct inode_operations pipe_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
-	NULL			/* permission */
+	NULL,			/* permission */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 int do_pipe(int *fd)

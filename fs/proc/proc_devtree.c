@@ -57,12 +57,14 @@ struct inode_operations devtree_symlink_inode_operations = {
 	NULL,			/* rename */
 	devtree_readlink,	/* readlink */
 	devtree_follow_link,	/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
-	NULL			/* smap */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 static struct dentry *devtree_follow_link(struct dentry *dentry,

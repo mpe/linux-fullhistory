@@ -33,7 +33,7 @@ static int khubd_pid = 0;
  * the low-level driver that it wants to be re-activated,
  * or zero to say "I'm done".
  */
-static int hub_irq(int status, void *__buffer, void *dev_id)
+static int hub_irq(int status, void *__buffer, int len, void *dev_id)
 {
 	struct usb_hub *hub = dev_id;
 	unsigned long flags;

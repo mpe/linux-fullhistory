@@ -277,22 +277,24 @@ static struct file_operations omirr_operations = {
 };
 
 struct inode_operations proc_omirr_inode_operations = {
-    &omirr_operations,
-    NULL, /* create */
-    NULL, /* lookup */
-    NULL, /* link */
-    NULL, /* unlink */
-    NULL, /* symlink */
-    NULL, /* mkdir */
-    NULL, /* rmdir */
-    NULL, /* mknod */
-    NULL, /* rename */
-    NULL, /* readlink */
-    NULL, /* follow_link */
-    NULL, /* readpage */
-    NULL, /* writepage */
-    NULL, /* bmap */
-    NULL, /* truncate */
-    NULL, /* permission */
-    NULL  /* smap */
+	&omirr_operations,
+	NULL,			/* create */
+	NULL,			/* lookup */
+	NULL,			/* link */
+	NULL,			/* unlink */
+	NULL,			/* symlink */
+	NULL,			/* mkdir */
+	NULL,			/* rmdir */
+	NULL,			/* mknod */
+	NULL,			/* rename */
+	NULL,			/* readlink */
+	NULL,			/* follow_link */
+	NULL,			/* bmap */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
+	NULL,			/* flushpage */
+	NULL,			/* truncate */
+	NULL,			/* permission */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };

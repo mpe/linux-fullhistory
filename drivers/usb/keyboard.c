@@ -92,7 +92,7 @@ usb_kbd_repeat(unsigned long dev_id)
 }
 
 static int
-usb_kbd_irq(int state, void *buffer, void *dev_id)
+usb_kbd_irq(int state, void *buffer, int len, void *dev_id)
 {
     struct usb_keyboard *kbd = (struct usb_keyboard*) dev_id;
     unsigned long *down = (unsigned long*) buffer;

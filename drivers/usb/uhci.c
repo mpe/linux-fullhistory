@@ -126,7 +126,7 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 
 		tmp = td->first;
 		printk("uhci_td_result() failed with status %x\n", status);
-		show_status(dev->uhci);
+		//show_status(dev->uhci);
 		do {
 			show_td(tmp);
 			if ((tmp->link & 1) || (tmp->link & 2))
@@ -422,7 +422,7 @@ static int uhci_remove_irq(struct usb_device *usb_dev, unsigned int pipe, usb_de
 
 	    /* notify removal */
 
-	    td->completed(USB_ST_REMOVED, NULL, td->dev_id);
+	    td->completed(USB_ST_REMOVED, NULL, 0, td->dev_id);
 
 	    /* this is DANGEROUS - not sure whether this is right */
 
@@ -645,7 +645,7 @@ void uhci_delete_isochronous(struct usb_device *usb_dev, void *_isodesc)
  */
 static DECLARE_WAIT_QUEUE_HEAD(control_wakeup);
 
-static int uhci_control_completed(int status, void *buffer, void *dev_id)
+static int uhci_control_completed(int status, void *buffer, int len, void *dev_id)
 {
 	wake_up(&control_wakeup);
 	return 0;			/* Don't re-instate */
@@ -692,7 +692,7 @@ static int uhci_run_control(struct uhci_device *dev, struct uhci_td *first, stru
 //	show_status(dev->uhci);
 //	show_queues(dev->uhci);
 
-	schedule_timeout(HZ/10);
+	schedule_timeout(HZ*5);
 
 //	control should be empty here...	
 //	show_status(dev->uhci);
@@ -736,8 +736,7 @@ static int uhci_run_control(struct uhci_device *dev, struct uhci_td *first, stru
  * information, that's just ridiculously high. Most
  * control messages have just a few bytes of data.
  */
-static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe,
-			    devrequest *cmd, void *data, int len)
+static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, void *cmd, void *data, int len)
 {
 	struct uhci_device *dev = usb_to_uhci(usb_dev);
 	struct uhci_td *first, *td, *prevtd;
@@ -805,17 +804,18 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe,
 	}
 
 	/*
-	 * Build the final TD for control status
+	 * Build the final TD for control status 
 	 */
 	destination ^= (0xE1 ^ 0x69);			/* OUT -> IN */
 	destination |= 1 << 19;				/* End in Data1 */
 
-	td->link = 1;					/* Terminate */
-	td->status = status | (1 << 24);		/* IOC */
+	td->backptr = &prevtd->link;
+	td->status = (status /* & ~(3 << 27) */) | (1 << 24);	/* no limit on final packet */
 	td->info = destination | (0x7ff << 21);		/* 0 bytes of data */
 	td->buffer = 0;
 	td->first = first;
-	td->backptr = &prevtd->link;
+	td->link = 1;					/* Terminate */
+
 
 	/* Start it up.. */
 	ret = uhci_run_control(dev, first, td);
@@ -841,7 +841,7 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe,
 	}
 
 	if (uhci_debug && ret) {
-		__u8 *p = (__u8 *) cmd;
+		__u8 *p = cmd;
 
 		printk("Failed cmd - %02X %02X %02X %02X %02X %02X %02X %02X\n",
 		       p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
@@ -860,7 +860,7 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe,
  */
 static DECLARE_WAIT_QUEUE_HEAD(bulk_wakeup);
 
-static int uhci_bulk_completed(int status, void *buffer, void *dev_id)
+static int uhci_bulk_completed(int status, void *buffer, int len, void *dev_id)
 {
 	wake_up(&bulk_wakeup);
 	return 0;			/* Don't re-instate */
@@ -908,10 +908,11 @@ static int uhci_run_bulk(struct uhci_device *dev, struct uhci_td *first, struct 
 //	show_status(dev->uhci);
 //	show_queues(dev->uhci);
 
-	schedule_timeout(HZ/10);
+	schedule_timeout(HZ*5);
 //	show_status(dev->uhci);
 //	show_queues(dev->uhci);
 
+	//show_queue(first->qh);
 	remove_wait_queue(&bulk_wakeup, &wait);
 
 	/* Clean up in case it failed.. */
@@ -1243,6 +1244,7 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 {
 	struct list_head *head = &uhci->interrupt_list;
 	struct list_head *tmp;
+	int status;
 
 	spin_lock(&irqlist_lock);
 	tmp = head->next;
@@ -1252,12 +1254,14 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 
 		next = tmp->next;
 
-		if (!(td->status & (1 << 23))) {	/* No longer active? */
+		if (!((status = td->status) & (1 << 23)) ||  /* No longer active? */
+		    ((td->qh->element & ~15) && 
+		      !((status = uhci_link_to_td(td->qh->element)->status) & (1 <<23)) &&
+		      (status & 0x760000) /* is in error state (Stall, db, babble, timeout, bitstuff) */)) {	
 			/* remove from IRQ list */
 			__list_del(tmp->prev, next);
 			INIT_LIST_HEAD(tmp);
-			if (td->completed(uhci_map_status((td->status & 0xff)>> 16, 0),
-					  bus_to_virt(td->buffer), td->dev_id)) {
+			if (td->completed(uhci_map_status(status, 0), bus_to_virt(td->buffer), -1, td->dev_id)) {
 				list_add(&td->irq_list, &uhci->interrupt_list);
 
 				if (!(td->status & (1 << 25))) {
@@ -1284,7 +1288,7 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 			/* If completed wants to not reactivate, then it's */
 			/* responsible for free'ing the TD's and QH's */
 			/* or another function (such as run_control) */
-		}
+		} 
 		tmp = next;
 	}
 	spin_unlock(&irqlist_lock);
@@ -1564,6 +1568,7 @@ static int uhci_control_thread(void * __uhci)
 {
 	struct uhci *uhci = (struct uhci *)__uhci;
 	struct uhci_device * root_hub =usb_to_uhci(uhci->bus->root_hub);
+
 	lock_kernel();
 	request_region(uhci->io_addr, 32, "usb-uhci");
 

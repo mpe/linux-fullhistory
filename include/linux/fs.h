@@ -596,15 +596,23 @@ struct inode_operations {
 			struct inode *, struct dentry *);
 	int (*readlink) (struct dentry *, char *,int);
 	struct dentry * (*follow_link) (struct dentry *, struct dentry *, unsigned int);
+	/*
+	 * the order of these functions within the VFS template has been
+	 * changed because SMP locking has changed: from now on all bmap,
+	 * readpage, writepage and flushpage functions are supposed to do
+	 * whatever locking they need to get proper SMP operation - for
+	 * now in most cases this means a lock/unlock_kernel at entry/exit.
+	 * [The new order is also slightly more logical :)]
+	 */
+	int (*bmap) (struct inode *,int);
 	int (*readpage) (struct file *, struct page *);
 	int (*writepage) (struct file *, struct page *);
-	int (*bmap) (struct inode *,int);
+	int (*flushpage) (struct inode *, struct page *, unsigned long);
+
 	void (*truncate) (struct inode *);
 	int (*permission) (struct inode *, int);
 	int (*smap) (struct inode *,int);
-	int (*updatepage) (struct file *, struct page *, unsigned long, unsigned int);
 	int (*revalidate) (struct dentry *);
-	int (*flushpage) (struct inode *, struct page *, unsigned long);
 };
 
 struct super_operations {
@@ -745,21 +753,36 @@ void mark_buffer_uptodate(struct buffer_head *, int);
 
 extern inline void mark_buffer_clean(struct buffer_head * bh)
 {
-	if (test_and_clear_bit(BH_Dirty, &bh->b_state)) {
-		if (bh->b_list == BUF_DIRTY)
-			refile_buffer(bh);
-	}
+	if (test_and_clear_bit(BH_Dirty, &bh->b_state))
+		refile_buffer(bh);
 }
+
+extern void FASTCALL(__mark_buffer_dirty(struct buffer_head *bh, int flag));
+extern void FASTCALL(__atomic_mark_buffer_dirty(struct buffer_head *bh, int flag));
+
+#define atomic_set_buffer_dirty(bh) test_and_set_bit(BH_Dirty, &(bh)->b_state)
 
 extern inline void mark_buffer_dirty(struct buffer_head * bh, int flag)
 {
-	if (!test_and_set_bit(BH_Dirty, &bh->b_state)) {
-		set_writetime(bh, flag);
-		if (bh->b_list != BUF_DIRTY)
-			refile_buffer(bh);
-	}
+	if (!atomic_set_buffer_dirty(bh))
+		__mark_buffer_dirty(bh, flag);
 }
 
+/*
+ * SMP-safe version of the above - does synchronization with
+ * other users of buffer-cache data structures.
+ *
+ * since we test-set the dirty bit in a CPU-atomic way we also
+ * have optimized the common 'redirtying' case away completely.
+ */
+extern inline void atomic_mark_buffer_dirty(struct buffer_head * bh, int flag)
+{
+	if (!atomic_set_buffer_dirty(bh))
+		__atomic_mark_buffer_dirty(bh, flag);
+}
+
+
+extern void balance_dirty(kdev_t);
 extern int check_disk_change(kdev_t);
 extern int invalidate_inodes(struct super_block *);
 extern void invalidate_inode_pages(struct inode *);
@@ -850,14 +873,15 @@ extern int brw_page(int, struct page *, kdev_t, int [], int, int);
 typedef long (*writepage_t)(struct file *, struct page *, unsigned long, unsigned long, const char *);
 typedef int (*fs_getblock_t)(struct inode *, long, int, int *, int *);
 
+/* Generic buffer handling for block filesystems.. */
+extern int block_read_full_page(struct file *, struct page *);
+extern int block_write_full_page (struct file *, struct page *, fs_getblock_t);
+extern int block_write_partial_page (struct file *, struct page *, unsigned long, unsigned long, const char *, fs_getblock_t);
+extern int block_flushpage(struct inode *, struct page *, unsigned long);
 
-extern int generic_readpage(struct file *, struct page *);
 extern int generic_file_mmap(struct file *, struct vm_area_struct *);
 extern ssize_t generic_file_read(struct file *, char *, size_t, loff_t *);
 extern ssize_t generic_file_write(struct file *, const char *, size_t, loff_t *, writepage_t);
-extern int generic_block_flushpage(struct inode *, struct page *, unsigned long);
-extern int block_write_one_page (struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf, fs_getblock_t fs_get_block);
-extern int block_write_full_page (struct file *file, struct page *page, fs_getblock_t fs_get_block);
 
 
 extern struct super_block *get_super(kdev_t);

@@ -67,12 +67,14 @@ struct inode_operations ext2_dir_inode_operations = {
 	ext2_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	ext2_permission,	/* permission */
-	NULL			/* smap */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 int ext2_check_dir_entry (const char * function, struct inode * dir,

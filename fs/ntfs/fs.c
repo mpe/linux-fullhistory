@@ -445,7 +445,6 @@ static struct inode_operations ntfs_inode_operations_nobmap = {
 	NULL, /* truncate */
 	NULL, /* permission */
 	NULL, /* smap */
-	NULL, /* updatepage */
 	NULL, /* revalidate */
 };
 
@@ -628,7 +627,6 @@ static struct inode_operations ntfs_inode_operations = {
 	NULL, /* truncate */
 	NULL, /* permission */
 	NULL, /* smap */
-	NULL, /* updatepage */
 	NULL, /* revalidate */
 };
 
@@ -677,7 +675,6 @@ static struct inode_operations ntfs_dir_inode_operations = {
 	NULL, /* truncate */
 	NULL, /* permission */
 	NULL, /* smap */
-	NULL, /* updatepage */
 	NULL, /* revalidate */
 };
 

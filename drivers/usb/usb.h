@@ -242,10 +242,12 @@ struct usb_driver {
  *         until we come up with a common meaning.
  *     void *buffer - This is a pointer to the data used in this
  *         USB transfer.
+ *     int length - This is the number of bytes transferred in or out
+ *         of the buffer by this transfer.  (-1 = unknown/unsupported)
  *     void *dev_id - This is a user defined pointer set when the IRQ
  *         is requested that is passed back.
  */
-typedef int (*usb_device_irq)(int, void *, void *);
+typedef int (*usb_device_irq)(int, void *, int, void *);
 
 struct usb_operations {
 	struct usb_device *(*allocate)(struct usb_device *);

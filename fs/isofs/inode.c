@@ -26,6 +26,7 @@
 #include <linux/init.h>
 #include <linux/nls.h>
 #include <linux/ctype.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -909,7 +910,7 @@ int isofs_statfs (struct super_block *sb, struct statfs *buf, int bufsiz)
 	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
 }
 
-int isofs_bmap(struct inode * inode,int block)
+static int do_isofs_bmap(struct inode * inode,int block)
 {
 	off_t b_off, offset, size;
 	struct inode *ino;
@@ -991,6 +992,15 @@ int isofs_bmap(struct inode * inode,int block)
 	return (b_off - offset + firstext) >> ISOFS_BUFFER_BITS(inode);
 }
 
+int isofs_bmap(struct inode * inode,int block)
+{
+	int retval;
+
+	lock_kernel();
+	retval = do_isofs_bmap(inode, block);
+	unlock_kernel();
+	return retval;
+}
 
 static void test_and_set_uid(uid_t *p, uid_t value)
 {

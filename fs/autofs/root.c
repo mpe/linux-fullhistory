@@ -60,7 +60,6 @@ struct inode_operations autofs_root_inode_operations = {
         NULL,                   /* truncate */
         NULL,			/* permission */
 	NULL,			/* smap */
-	NULL,			/* updatepage */
 	NULL			/* revalidate */
 };
 

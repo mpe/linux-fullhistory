@@ -228,12 +228,14 @@ repeat:
 	spin_unlock(&pagecache_lock);
 }
 
+extern atomic_t too_many_dirty_buffers;
+
 int shrink_mmap(int priority, int gfp_mask)
 {
 	static unsigned long clock = 0;
 	unsigned long limit = num_physpages;
 	struct page * page;
-	int count, err;
+	int count, users;
 
 	count = limit >> priority;
 
@@ -262,24 +264,64 @@ int shrink_mmap(int priority, int gfp_mask)
 		if ((gfp_mask & __GFP_DMA) && !PageDMA(page))
 			continue;
 
-		if (PageLocked(page))
+		/*
+		 * Some common cases that we just short-circuit without
+		 * getting the locks - we need to re-check this once we
+		 * have the lock, but that's fine.
+		 */
+		users = page_count(page);
+		if (!users)
 			continue;
+		if (!page->buffers) {
+			if (!page->inode)
+				continue;
+			if (users > 1)
+				continue;
+		}
+
+		/*
+		 * ok, now the page looks interesting. Re-check things
+		 * and keep the lock.
+		 */
+		spin_lock(&pagecache_lock);
+		if (!page->inode && !page->buffers) {
+			spin_unlock(&pagecache_lock);
+			continue;
+		}
+		if (!page_count(page)) {
+//			BUG();
+			spin_unlock(&pagecache_lock);
+			continue;
+		}
+		get_page(page);
+		if (TryLockPage(page)) {
+			spin_unlock(&pagecache_lock);
+			goto put_continue;
+		}
+
+		/*
+		 * we keep pagecache_lock locked and unlock it in
+		 * each branch, so that the page->inode case doesnt
+		 * have to re-grab it. Here comes the 'real' logic
+		 * to free memory:
+		 */
 
 		/* Is it a buffer page? */
 		if (page->buffers) {
-			if (TryLockPage(page))
-				continue;
-			err = try_to_free_buffers(page);
-			UnlockPage(page);
-
-			if (!err)
-				continue;
-			goto out;
+			kdev_t dev = page->buffers->b_dev;
+			spin_unlock(&pagecache_lock);
+			if (try_to_free_buffers(page))
+				goto made_progress;
+			if (!atomic_read(&too_many_dirty_buffers)) {
+				atomic_set(&too_many_dirty_buffers, 1);
+				balance_dirty(dev);
+			}
+			goto unlock_continue;
 		}
 
 		/* We can't free pages unless there's just one user */
-		if (page_count(page) != 1)
-			continue;
+		if (page_count(page) != 2)
+			goto spin_unlock_continue;
 
 		count--;
 
@@ -289,44 +331,36 @@ int shrink_mmap(int priority, int gfp_mask)
 		 * were to be marked referenced..
 		 */
 		if (PageSwapCache(page)) {
-			if (referenced && swap_count(page->offset) != 1)
-				continue;
-			delete_from_swap_cache(page);
-			err = 1;
-			goto out;
+			spin_unlock(&pagecache_lock);
+			if (referenced && swap_count(page->offset) != 2)
+				goto unlock_continue;
+			__delete_from_swap_cache(page);
+			page_cache_release(page);
+			goto made_progress;
 		}	
 
-		if (referenced)
-			continue;
-
 		/* is it a page-cache page? */
-		spin_lock(&pagecache_lock);
-		if (page->inode) {
-			if (pgcache_under_min())
-				goto unlock_continue;
-			if (TryLockPage(page))
-				goto unlock_continue;
-
-			if (page_count(page) == 1) {
-				remove_page_from_inode_queue(page);
-				remove_page_from_hash_queue(page);
-				page->inode = NULL;
-			}
+		if (!referenced && page->inode && !pgcache_under_min()) {
+			remove_page_from_inode_queue(page);
+			remove_page_from_hash_queue(page);
+			page->inode = NULL;
 			spin_unlock(&pagecache_lock);
 
-			UnlockPage(page);
 			page_cache_release(page);
-			err = 1;
-			goto out;
-unlock_continue:
-			spin_unlock(&pagecache_lock);
-			continue;
+			goto made_progress;
 		}
+spin_unlock_continue:
 		spin_unlock(&pagecache_lock);
+unlock_continue:
+		UnlockPage(page);
+put_continue:
+		put_page(page);
 	} while (count > 0);
-	err = 0;
-out:
-	return err;
+	return 0;
+made_progress:
+	UnlockPage(page);
+	put_page(page);
+	return 1;
 }
 
 static inline struct page * __find_page_nolock(struct inode * inode, unsigned long offset, struct page *page)
@@ -499,9 +533,7 @@ static unsigned long try_to_read_ahead(struct file * file,
 			 * We do not have to check the return value here
 			 * because it's a readahead.
 			 */
-			lock_kernel();
 			inode->i_op->readpage(file, page);
-			unlock_kernel();
 			page_cache = 0;
 			page_cache_release(page);
 		}
@@ -522,15 +554,13 @@ void ___wait_on_page(struct page *page)
 	DECLARE_WAITQUEUE(wait, tsk);
 
 	add_wait_queue(&page->wait, &wait);
-	tsk->state = TASK_UNINTERRUPTIBLE;
-	run_task_queue(&tq_disk);
-	if (PageLocked(page)) {
-		do {
-			tsk->state = TASK_UNINTERRUPTIBLE;
-			run_task_queue(&tq_disk);
-			schedule();
-		} while (PageLocked(page));
-	}
+	do {
+		tsk->state = TASK_UNINTERRUPTIBLE;
+		run_task_queue(&tq_disk);
+		if (!PageLocked(page))
+			break;
+		schedule();
+	} while (PageLocked(page));
 	tsk->state = TASK_RUNNING;
 	remove_wait_queue(&page->wait, &wait);
 }
@@ -1039,11 +1069,9 @@ page_not_up_to_date:
 			goto page_ok;
 		}
 
-read_page:
+readpage:
 		/* ... and start the actual read. The read will unlock the page. */
-		lock_kernel();
 		error = inode->i_op->readpage(filp, page);
-		unlock_kernel();
 
 		if (!error) {
 			if (Page_Uptodate(page))
@@ -1095,7 +1123,7 @@ no_cached_page:
 		spin_unlock(&pagecache_lock);
 
 		page_cache = 0;
-		goto read_page;
+		goto readpage;
 	}
 
 	*ppos = pos;
@@ -1221,6 +1249,7 @@ asmlinkage ssize_t sys_sendfile(int out_fd, int in_fd, off_t *offset, size_t cou
 	if (retval)
 		goto fput_out;
 
+	unlock_kernel();
 	retval = 0;
 	if (count) {
 		read_descriptor_t desc;
@@ -1230,7 +1259,7 @@ asmlinkage ssize_t sys_sendfile(int out_fd, int in_fd, off_t *offset, size_t cou
 		ppos = &in_file->f_pos;
 		if (offset) {
 			if (get_user(pos, offset))
-				goto fput_out;
+				goto fput_out_lock;
 			ppos = &pos;
 		}
 
@@ -1247,7 +1276,8 @@ asmlinkage ssize_t sys_sendfile(int out_fd, int in_fd, off_t *offset, size_t cou
 			put_user(pos, offset);
 	}
 
-
+fput_out_lock:
+	lock_kernel();
 fput_out:
 	fput(out_file);
 fput_in:
@@ -1283,6 +1313,7 @@ static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long 
 	offset = (address & PAGE_MASK) - area->vm_start + area->vm_offset;
 	if (offset >= inode->i_size && (area->vm_flags & VM_SHARED) && area->vm_mm == current->mm)
 		goto no_page_nolock;
+
 	unlock_kernel();
 
 	/*
@@ -1306,10 +1337,12 @@ found_page:
 			goto failure;
 	}
 
-	wait_on_page(page);
-
-	if (!Page_Uptodate(page))
-		PAGE_BUG(page);
+	if (!Page_Uptodate(page)) {
+		lock_page(page);
+		if (!Page_Uptodate(page))
+			goto page_not_uptodate;
+		UnlockPage(page);
+	}
 
 success:
 	/*
@@ -1377,9 +1410,8 @@ no_cached_page:
 	 */
 	new_page = 0;
 
-	lock_kernel();
+page_not_uptodate:
 	error = inode->i_op->readpage(file, page);
-	unlock_kernel();
 
 	if (!error) {
 		wait_on_page(page);
@@ -1398,9 +1430,7 @@ page_read_error:
 	if (!PageLocked(page))
 		PAGE_BUG(page);
 	ClearPageError(page);
-	lock_kernel();
 	error = inode->i_op->readpage(file, page);
-	unlock_kernel();
 	if (error)
 		goto failure;
 	wait_on_page(page);

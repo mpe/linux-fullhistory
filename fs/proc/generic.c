@@ -51,20 +51,23 @@ struct inode_operations proc_file_inode_operations = {
 	&proc_file_operations,  /* default proc file-ops */
 	NULL,		/* create	*/
 	NULL,		/* lookup	*/
-    NULL,		/* link		*/
-    NULL,		/* unlink	*/
-    NULL,		/* symlink	*/
-    NULL,		/* mkdir	*/
-    NULL,	    /* rmdir	   */
-    NULL,	    /* mknod	   */
-    NULL,	    /* rename	   */
-    NULL,	    /* readlink	   */
-    NULL,	    /* follow_link */
-    NULL,	    /* readpage	   */
-    NULL,	    /* writepage   */
-    NULL,	    /* bmap	   */
-    NULL,	    /* truncate	   */
-    NULL	    /* permission  */
+	NULL,		/* link		*/
+	NULL,		/* unlink	*/
+	NULL,		/* symlink	*/
+	NULL,		/* mkdir	*/
+	NULL,		/* rmdir	*/
+	NULL,		/* mknod	*/
+	NULL,		/* rename	*/
+	NULL,		/* readlink	*/
+	NULL,		/* follow_link 	*/
+	NULL,		/* bmap 	*/
+	NULL,		/* readpage 	*/
+	NULL,		/* writepage 	*/
+	NULL,		/* flushpage 	*/
+	NULL,		/* truncate 	*/
+	NULL,		/* permission 	*/
+	NULL,		/* smap 	*/
+	NULL		/* revalidate 	*/
 };
 
 /*
@@ -83,11 +86,14 @@ struct inode_operations proc_net_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
-	NULL			/* permission */
+	NULL,			/* permission */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 

@@ -83,7 +83,6 @@ struct inode_operations hfs_cap_info_inode_operations = {
 	cap_info_truncate,		/* truncate */
 	NULL,				/* permission */
 	NULL,				/* smap */
-	NULL,				/* updatepage */
 	NULL				/* revalidata */
 };
 

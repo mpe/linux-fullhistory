@@ -336,9 +336,12 @@ struct inode_operations proc_mem_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
-	proc_permission		/* permission */
+	proc_permission,	/* permission */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };

@@ -43,12 +43,14 @@ struct inode_operations ext2_symlink_inode_operations = {
 	NULL,			/* rename */
 	ext2_readlink,		/* readlink */
 	ext2_follow_link,	/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
-	NULL			/* smap */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 static struct dentry * ext2_follow_link(struct dentry * dentry,

@@ -141,7 +141,6 @@ struct inode_operations umsdos_symlink_inode_operations =
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
-	NULL,			/* updatepage */
 	NULL			/* revalidate */
 };
 

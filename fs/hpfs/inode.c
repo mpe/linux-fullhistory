@@ -48,7 +48,6 @@ static const struct inode_operations hpfs_file_iops =
 	&hpfs_truncate,			/* truncate */
 	NULL,				/* permission */
 	NULL,				/* smap */
-	NULL,				/* updatepage */
 	NULL,				/* revalidate */
 };
 
@@ -91,7 +90,6 @@ static const struct inode_operations hpfs_dir_iops =
 	NULL,				/* truncate */
 	NULL,				/* permission */
 	NULL,				/* smap */
-	NULL,				/* updatepage */
 	NULL,				/* revalidate */
 };
 
@@ -115,7 +113,6 @@ const struct inode_operations hpfs_symlink_iops =
 	NULL,				/* truncate */
 	NULL,				/* permission */
 	NULL,				/* smap */
-	NULL,				/* updatepage */
 	NULL,				/* revalidate */
 };
 

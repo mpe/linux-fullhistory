@@ -99,7 +99,6 @@ struct inode_operations hfs_nat_ndir_inode_operations = {
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
-	NULL,                   /* updatepage */
 	NULL                    /* revalidate */
 };
 
@@ -122,7 +121,6 @@ struct inode_operations hfs_nat_hdir_inode_operations = {
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
-	NULL,                   /* updatepage */
 	NULL                    /* revalidate */
 };
 

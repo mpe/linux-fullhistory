@@ -85,7 +85,6 @@ struct inode_operations hfs_hdr_inode_operations = {
 	hdr_truncate,		/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
-	NULL,			/* updatepage */
 	NULL			/* revalidate */
 };
 

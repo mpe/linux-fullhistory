@@ -57,7 +57,6 @@ struct inode_operations devpts_root_inode_operations = {
 	NULL,                   /* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
-	NULL,			/* updatepage */
 	NULL			/* revalidate */
 };
 

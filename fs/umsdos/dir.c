@@ -838,6 +838,5 @@ struct inode_operations umsdos_dir_inode_operations =
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
-	NULL,			/* updatepage */
 	NULL,			/* revalidate */
 };

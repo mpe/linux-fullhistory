@@ -26,6 +26,7 @@
 #include <linux/pagemap.h>
 #include <linux/sunrpc/clnt.h>
 #include <linux/nfs_fs.h>
+#include <linux/smp_lock.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -222,6 +223,7 @@ nfs_readpage(struct file *file, struct page *page)
 	struct inode *inode = dentry->d_inode;
 	int		error;
 
+	lock_kernel();
 	dprintk("NFS: nfs_readpage (%p %ld@%ld)\n",
 		page, PAGE_SIZE, page->offset);
 	get_page(page);
@@ -254,5 +256,6 @@ out_error:
 out_free:
 	free_page(page_address(page));
 out:
+	unlock_kernel();
 	return error;
 }

@@ -121,11 +121,14 @@ struct inode_operations proc_sys_inode_operations =
 	NULL,		/* rename */
 	NULL,		/* readlink */
 	NULL,		/* follow_link */
+	NULL,		/* bmap */
 	NULL,		/* readpage */
 	NULL,		/* writepage */
-	NULL,		/* bmap */
+	NULL,		/* flushpage */
 	NULL,		/* truncate */
-	proc_sys_permission
+	proc_sys_permission, /* permission */
+	NULL,		/* smap */
+	NULL		/* revalidate */
 };
 
 extern struct proc_dir_entry proc_sys_root;

@@ -24,6 +24,8 @@
  * - RMK
  */
 
+#include <linux/sched.h>
+#include <linux/fs.h>
 #include <linux/malloc.h>
 #include <linux/locks.h>
 #include <linux/errno.h>
@@ -771,25 +773,44 @@ static void file_buffer(struct buffer_head *bh, int list)
 
 /*
  * if a new dirty buffer is created we need to balance bdflush.
+ *
+ * in the future we might want to make bdflush aware of different
+ * pressures on different devices - thus the (currently unused)
+ * 'dev' parameter.
  */
-static inline void balance_dirty (kdev_t dev)
+void balance_dirty(kdev_t dev)
 {
-	int too_many = (nr_buffers * bdf_prm.b_un.nfract/100);
+	int dirty = nr_buffers_type[BUF_DIRTY];
+	int ndirty = bdf_prm.b_un.ndirty;
 
-	/* This buffer is dirty, maybe we need to start flushing.
-	 * If too high a percentage of the buffers are dirty...
-	 */
-	if (nr_buffers_type[BUF_DIRTY] > too_many) {
-		wakeup_bdflush(1);
+	if (dirty > ndirty) {
+		int wait = 0;
+		if (dirty > 2*ndirty)
+			wait = 1;
+		wakeup_bdflush(wait);
 	}
+}
 
-	/* If this is a loop device, and
-	 * more than half of the buffers are dirty...
-	 * (Prevents no-free-buffers deadlock with loop device.)
-	 */
-	if (MAJOR(dev) == LOOP_MAJOR &&
-	    nr_buffers_type[BUF_DIRTY]*2>nr_buffers)
-		wakeup_bdflush(1);
+atomic_t too_many_dirty_buffers;
+
+static inline void __mark_dirty(struct buffer_head *bh, int flag)
+{
+	set_writetime(bh, flag);
+	refile_buffer(bh);
+	if (atomic_read(&too_many_dirty_buffers))
+		balance_dirty(bh->b_dev);
+}
+
+void __mark_buffer_dirty(struct buffer_head *bh, int flag)
+{
+	__mark_dirty(bh, flag);
+}
+
+void __atomic_mark_buffer_dirty(struct buffer_head *bh, int flag)
+{
+	lock_kernel();
+	__mark_dirty(bh, flag);
+	unlock_kernel();
 }
 
 /*
@@ -800,21 +821,19 @@ void refile_buffer(struct buffer_head * buf)
 {
 	int dispose;
 
-	if(buf->b_dev == B_FREE) {
+	if (buf->b_dev == B_FREE) {
 		printk("Attempt to refile free buffer\n");
 		return;
 	}
+
+	dispose = BUF_CLEAN;
+	if (buffer_locked(buf))
+		dispose = BUF_LOCKED;
 	if (buffer_dirty(buf))
 		dispose = BUF_DIRTY;
-	else if (buffer_locked(buf))
-		dispose = BUF_LOCKED;
-	else
-		dispose = BUF_CLEAN;
-	if(dispose != buf->b_list) {
+
+	if (dispose != buf->b_list)
 		file_buffer(buf, dispose);
-		if (dispose == BUF_DIRTY)
-			balance_dirty(buf->b_dev);
-	}
 }
 
 /*
@@ -1239,7 +1258,9 @@ static int create_page_buffers (int rw, struct page *page, kdev_t dev, int b[], 
 	 * They show up in the buffer hash table and are registered in
 	 * page->buffers.
 	 */
+	lock_kernel();
 	head = create_buffers(page_address(page), size, 1);
+	unlock_kernel();
 	if (page->buffers)
 		BUG();
 	if (!head)
@@ -1275,7 +1296,7 @@ static int create_page_buffers (int rw, struct page *page, kdev_t dev, int b[], 
  * we have truncated the file and are going to free the
  * blocks on-disk..
  */
-int generic_block_flushpage(struct inode *inode, struct page *page, unsigned long offset)
+int block_flushpage(struct inode *inode, struct page *page, unsigned long offset)
 {
 	struct buffer_head *head, *bh, *next;
 	unsigned int curr_off = 0;
@@ -1284,6 +1305,7 @@ int generic_block_flushpage(struct inode *inode, struct page *page, unsigned lon
 		BUG();
 	if (!page->buffers)
 		return 0;
+	lock_kernel();
 
 	head = page->buffers;
 	bh = head;
@@ -1311,21 +1333,25 @@ int generic_block_flushpage(struct inode *inode, struct page *page, unsigned lon
 
 	/*
 	 * subtle. We release buffer-heads only if this is
-	 * the 'final' flushpage. We invalidate the bmap
-	 * cached value in all cases.
+	 * the 'final' flushpage. We have invalidated the bmap
+	 * cached value unconditionally, so real IO is not
+	 * possible anymore.
 	 */
 	if (!offset)
 		try_to_free_buffers(page);
 
+	unlock_kernel();
 	return 0;
 }
 
-static inline void create_empty_buffers (struct page *page,
+static void create_empty_buffers (struct page *page,
 			struct inode *inode, unsigned long blocksize)
 {
 	struct buffer_head *bh, *head, *tail;
 
+	lock_kernel();
 	head = create_buffers(page_address(page), blocksize, 1);
+	unlock_kernel();
 	if (page->buffers)
 		BUG();
 
@@ -1341,6 +1367,10 @@ static inline void create_empty_buffers (struct page *page,
 	get_page(page);
 }
 
+/*
+ * block_write_full_page() is SMP-safe - currently it's still
+ * being called with the kernel lock held, but the code is ready.
+ */
 int block_write_full_page (struct file *file, struct page *page, fs_getblock_t fs_get_block)
 {
 	struct dentry *dentry = file->f_dentry;
@@ -1381,12 +1411,13 @@ int block_write_full_page (struct file *file, struct page *page, fs_getblock_t f
 			bh->b_state = (1<<BH_Uptodate);
 		} else {
 			/*
-			 * block already exists, just mark it dirty:
+			 * block already exists, just mark it uptodate and
+			 * dirty:
 			 */
 			bh->b_end_io = end_buffer_io_sync;
 			set_bit(BH_Uptodate, &bh->b_state);
 		}
-		mark_buffer_dirty(bh, 0);
+		atomic_mark_buffer_dirty(bh,0);
 
 		bh = bh->b_this_page;
 		block++;
@@ -1399,12 +1430,12 @@ out:
 	return err;
 }
 
-int block_write_one_page (struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf, fs_getblock_t fs_get_block)
+int block_write_partial_page (struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf, fs_getblock_t fs_get_block)
 {
 	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
 	unsigned long block;
-	int err, created;
+	int err, created, partial;
 	unsigned long blocksize, start_block, end_block;
 	unsigned long start_offset, start_bytes, end_bytes;
 	unsigned long bbits, phys, blocks, i, len;
@@ -1412,7 +1443,6 @@ int block_write_one_page (struct file *file, struct page *page, unsigned long of
 	char * target_buf;
 
 	target_buf = (char *)page_address(page) + offset;
-	lock_kernel();
 
 	if (!PageLocked(page))
 		BUG();
@@ -1449,14 +1479,52 @@ int block_write_one_page (struct file *file, struct page *page, unsigned long of
 
 	i = 0;
 	bh = head;
+	partial = 0;
 	do {
 		if (!bh)
 			BUG();
 
 		if ((i < start_block) || (i > end_block)) {
+			if (!buffer_uptodate(bh))
+				partial = 1;
 			goto skip;
 		}
-		unlock_kernel();
+		if (!bh->b_blocknr) {
+			err = -EIO;
+			down(&inode->i_sem);
+			phys = fs_get_block (inode, block, 1, &err, &created);
+			up(&inode->i_sem);
+			if (!phys)
+				goto out;
+
+			init_buffer(bh, inode->i_dev, phys, end_buffer_io_sync, NULL);
+
+			/*
+			 * if partially written block which has contents on
+			 * disk, then we have to read it first.
+			 * We also rely on the fact that filesystem holes
+			 * cannot be written.
+			 */
+			if (!created && (start_offset ||
+					(end_bytes && (i == end_block)))) {
+				bh->b_state = 0;
+				ll_rw_block(READ, 1, &bh);
+				lock_kernel();
+				wait_on_buffer(bh);
+				unlock_kernel();
+				err = -EIO;
+				if (!buffer_uptodate(bh))
+					goto out;
+			}
+
+			bh->b_state = (1<<BH_Uptodate);
+		} else {
+			/*
+			 * block already exists, just mark it uptodate:
+			 */
+			bh->b_end_io = end_buffer_io_sync;
+			set_bit(BH_Uptodate, &bh->b_state);
+		}
 
 		err = -EFAULT;
 		if (start_offset) {
@@ -1473,7 +1541,7 @@ int block_write_one_page (struct file *file, struct page *page, unsigned long of
 			len = blocksize;
 		}
 		if (copy_from_user(target_buf, buf, len))
-			goto out_nolock;
+			goto out;
 		target_buf += len;
 		buf += len;
 
@@ -1482,52 +1550,23 @@ int block_write_one_page (struct file *file, struct page *page, unsigned long of
 		 * the page - this way we can dirty the buffer even if
 		 * the bh is still doing IO.
 		 */
-		lock_kernel();
-		if (!bh->b_blocknr) {
-			err = -EIO;
-			down(&inode->i_sem);
-			phys = fs_get_block (inode, block, 1, &err, &created);
-			up(&inode->i_sem);
-			if (!phys)
-				goto out;
-
-			init_buffer(bh, inode->i_dev, phys, end_buffer_io_sync, NULL);
-
-			/*
-			 * if partially written block which has contents on
-			 * disk, then we have to read it first.
-			 */
-			if (!created && (start_offset ||
-					(end_bytes && (i == end_block)))) {
-				bh->b_state = 0;
-				ll_rw_block(READ, 1, &bh);
-				wait_on_buffer(bh);
-				err = -EIO;
-				if (!buffer_uptodate(bh))
-					goto out;
-			}
-
-			bh->b_state = (1<<BH_Uptodate);
-		} else {
-			/*
-			 * block already exists, just mark it uptodate:
-			 */
-			bh->b_end_io = end_buffer_io_sync;
-			set_bit(BH_Uptodate, &bh->b_state);
-		}
-		mark_buffer_dirty(bh, 0);
+		atomic_mark_buffer_dirty(bh,0);
 skip:
 		i++;
 		block++;
 		bh = bh->b_this_page;
 	} while (bh != head);
-	unlock_kernel();
 
-	SetPageUptodate(page);
+	/*
+	 * is this a partial write that happened to make all buffers
+	 * uptodate then we can optimize away a bogus readpage() for
+	 * the next read(). Here we 'discover' wether the page went
+	 * uptodate as a result of this (potentially partial) write.
+	 */
+	if (!partial)
+		SetPageUptodate(page);
 	return bytes;
 out:
-	unlock_kernel();
-out_nolock:
 	ClearPageUptodate(page);
 	return err;
 }
@@ -1537,11 +1576,14 @@ out_nolock:
  * This function expects the page to be locked and may return
  * before I/O is complete. You then have to check page->locked,
  * page->uptodate, and maybe wait on page->wait.
+ *
+ * brw_page() is SMP-safe, although it's being called with the
+ * kernel lock held - but the code is ready.
  */
 int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 {
 	struct buffer_head *head, *bh, *arr[MAX_BUF_PER_PAGE];
-	int nr, fresh, block;
+	int nr, fresh /* temporary debugging flag */, block;
 
 	if (!PageLocked(page))
 		panic("brw_page: page not locked for I/O");
@@ -1590,7 +1632,7 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 					BUG();
 			}
 			set_bit(BH_Uptodate, &bh->b_state);
-			mark_buffer_dirty(bh, 0);
+			atomic_mark_buffer_dirty(bh, 0);
 			arr[nr++] = bh;
 		}
 		bh = bh->b_this_page;
@@ -1600,20 +1642,15 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 	if ((rw == READ) && nr) {
 		if (Page_Uptodate(page))
 			BUG();
-		unlock_kernel();
 		ll_rw_block(rw, nr, arr);
-		lock_kernel();
 	} else {
 		if (!nr && rw == READ) {
 			SetPageUptodate(page);
 			page->owner = (int)current;
 			UnlockPage(page);
 		}
-		if (nr && (rw == WRITE)) {
-			unlock_kernel();
+		if (nr && (rw == WRITE))
 			ll_rw_block(rw, nr, arr);
-			lock_kernel();
-		}
 	}
 	return 0;
 }
@@ -1648,33 +1685,70 @@ void mark_buffer_uptodate(struct buffer_head * bh, int on)
  * mark_buffer_uptodate() functions propagate buffer state into the
  * page struct once IO has completed.
  */
-int generic_readpage(struct file * file, struct page * page)
+int block_read_full_page(struct file * file, struct page * page)
 {
 	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
-	unsigned long block;
-	int *p, nr[PAGE_SIZE/512];
-	int i;
+	unsigned long iblock, phys_block;
+	struct buffer_head *bh, *head, *arr[MAX_BUF_PER_PAGE];
+	unsigned int blocksize, blocks;
+	int nr;
 
-	if (page->buffers) {
-		printk("hm, no brw_page(%p) because IO already started.\n",
-					 page);
-		goto out;
-	}
+	if (!PageLocked(page))
+		PAGE_BUG(page);
+	blocksize = inode->i_sb->s_blocksize;
+	if (!page->buffers)
+		create_empty_buffers(page, inode, blocksize);
+	head = page->buffers;
 
-	i = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
-	block = page->offset >> inode->i_sb->s_blocksize_bits;
-	p = nr;
+	blocks = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
+	iblock = page->offset >> inode->i_sb->s_blocksize_bits;
+	page->owner = -1;
+	head = page->buffers;
+	bh = head;
+	nr = 0;
 	do {
-		*p = inode->i_op->bmap(inode, block);
-		i--;
-		block++;
-		p++;
-	} while (i > 0);
+		phys_block = bh->b_blocknr;
+		/*
+		 * important, we have to retry buffers that already have
+		 * their bnr cached but had an IO error!
+		 */
+		if (!buffer_uptodate(bh)) {
+			phys_block = inode->i_op->bmap(inode, iblock);
+			/*
+			 * this is safe to do because we hold the page lock:
+			 */
+			if (phys_block) {
+				init_buffer(bh, inode->i_dev, phys_block,
+						end_buffer_io_async, NULL);
+				arr[nr] = bh;
+				nr++;
+			} else {
+				/*
+				 * filesystem 'hole' represents zero-contents:
+				 */
+				memset(bh->b_data, 0, blocksize);
+				set_bit(BH_Uptodate, &bh->b_state);
+			}
+		}
+		iblock++;
+		bh = bh->b_this_page;
+	} while (bh != head);
 
-	/* IO start */
-	brw_page(READ, page, inode->i_dev, nr, inode->i_sb->s_blocksize, 1);
-out:
+	++current->maj_flt;
+	if (nr) {
+		if (Page_Uptodate(page))
+			BUG();
+		ll_rw_block(READ, nr, arr);
+	} else {
+		/*
+		 * all buffers are uptodate - we can set the page
+		 * uptodate as well.
+		 */
+		SetPageUptodate(page);
+		page->owner = (int)current;
+		UnlockPage(page);
+	}
 	return 0;
 }
 
@@ -1753,8 +1827,6 @@ int try_to_free_buffers(struct page * page)
 		tmp = tmp->b_this_page;
 		if (!buffer_busy(p))
 			continue;
-
-		wakeup_bdflush(0);
 		return 0;
 	} while (tmp != bh);
 
@@ -2151,9 +2223,14 @@ int bdflush(void * unused)
 		run_task_queue(&tq_disk);
 		wake_up(&bdflush_done);
 		
-		/* If there are still a lot of dirty buffers around, skip the sleep
-		   and flush some more */
-		if(ndirty == 0 || nr_buffers_type[BUF_DIRTY] <= nr_buffers * bdf_prm.b_un.nfract/100) {
+		/*
+		 * If there are still a lot of dirty buffers around,
+		 * skip the sleep and flush some more
+		 */
+		if ((ndirty == 0) || (nr_buffers_type[BUF_DIRTY] <=
+				 nr_buffers * bdf_prm.b_un.nfract/100)) {
+
+			atomic_set(&too_many_dirty_buffers, 0);
 			spin_lock_irq(&current->sigmask_lock);
 			flush_signals(current);
 			spin_unlock_irq(&current->sigmask_lock);

@@ -777,7 +777,7 @@ static DECLARE_WAIT_QUEUE_HEAD(control_wakeup);
  *
  *  This function is called from the interrupt handler.
  */
-static int ohci_control_completed(int stats, void *buffer, void *dev_id)
+static int ohci_control_completed(int stats, void *buffer, int len, void *dev_id)
 {
 	/* pass the TDs completion status back to control_msg */
 	if (dev_id) {
@@ -1456,7 +1456,7 @@ static void ohci_reap_donelist(struct ohci *ohci)
 
 		/* Check if TD should be re-queued */
 		if ((td->completed != NULL) &&
-		    (td->completed(cc, td->data, td->dev_id))) {
+		    (td->completed(cc, td->data, -1 /* XXX */, td->dev_id))) {
 			/* Mark the TD as active again:
 			 * Set the not accessed condition code
 			 * Reset the Error count

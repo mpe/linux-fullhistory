@@ -27,7 +27,7 @@ static struct usb_driver usb_audio_driver =
 };
 
 
-static int usb_audio_irq(int state, void *buffer, void *dev_id)
+static int usb_audio_irq(int state, void *buffer, int len, void *dev_id)
 {
 	struct usb_audio *aud = (struct usb_audio*) dev_id;
 	return 1;

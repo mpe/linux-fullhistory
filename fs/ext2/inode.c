@@ -31,6 +31,7 @@
 #include <linux/string.h>
 #include <linux/locks.h>
 #include <linux/mm.h>
+#include <linux/smp_lock.h>
 
 static int ext2_update_inode(struct inode * inode, int do_sync);
 
@@ -131,58 +132,66 @@ static int ext2_alloc_block (struct inode * inode, unsigned long goal, int *err)
 
 int ext2_bmap (struct inode * inode, int block)
 {
-	int i;
+	int i, ret;
 	int addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
 	int addr_per_block_bits = EXT2_ADDR_PER_BLOCK_BITS(inode->i_sb);
 
+	ret = 0;
+	lock_kernel();
 	if (block < 0) {
 		ext2_warning (inode->i_sb, "ext2_bmap", "block < 0");
-		return 0;
+		goto out;
 	}
 	if (block >= EXT2_NDIR_BLOCKS + addr_per_block +
 		(1 << (addr_per_block_bits * 2)) +
 		((1 << (addr_per_block_bits * 2)) << addr_per_block_bits)) {
 		ext2_warning (inode->i_sb, "ext2_bmap", "block > big");
-		return 0;
+		goto out;
 	}
-	if (block < EXT2_NDIR_BLOCKS)
-		return inode_bmap (inode, block);
+	if (block < EXT2_NDIR_BLOCKS) {
+		ret = inode_bmap (inode, block);
+		goto out;
+	}
 	block -= EXT2_NDIR_BLOCKS;
 	if (block < addr_per_block) {
 		i = inode_bmap (inode, EXT2_IND_BLOCK);
 		if (!i)
-			return 0;
-		return block_bmap (bread (inode->i_dev, i,
+			goto out;
+		ret = block_bmap (bread (inode->i_dev, i,
 					  inode->i_sb->s_blocksize), block);
+		goto out;
 	}
 	block -= addr_per_block;
 	if (block < (1 << (addr_per_block_bits * 2))) {
 		i = inode_bmap (inode, EXT2_DIND_BLOCK);
 		if (!i)
-			return 0;
+			goto out;
 		i = block_bmap (bread (inode->i_dev, i,
 				       inode->i_sb->s_blocksize),
 				block >> addr_per_block_bits);
 		if (!i)
-			return 0;
-		return block_bmap (bread (inode->i_dev, i,
+			goto out;
+		ret = block_bmap (bread (inode->i_dev, i,
 					  inode->i_sb->s_blocksize),
-				   block & (addr_per_block - 1));
+				block & (addr_per_block - 1));
 	}
 	block -= (1 << (addr_per_block_bits * 2));
 	i = inode_bmap (inode, EXT2_TIND_BLOCK);
 	if (!i)
-		return 0;
+		goto out;
 	i = block_bmap (bread (inode->i_dev, i, inode->i_sb->s_blocksize),
 			block >> (addr_per_block_bits * 2));
 	if (!i)
-		return 0;
+		goto out;
 	i = block_bmap (bread (inode->i_dev, i, inode->i_sb->s_blocksize),
 			(block >> addr_per_block_bits) & (addr_per_block - 1));
 	if (!i)
-		return 0;
-	return block_bmap (bread (inode->i_dev, i, inode->i_sb->s_blocksize),
+		goto out;
+	ret = block_bmap (bread (inode->i_dev, i, inode->i_sb->s_blocksize),
 			   block & (addr_per_block - 1));
+out:
+	unlock_kernel();
+	return ret;
 }
 
 int ext2_bmap_create (struct inode * inode, int block)
@@ -461,18 +470,20 @@ int ext2_getblk_block (struct inode * inode, long block,
 	unsigned long b;
 	unsigned long addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
 	int addr_per_block_bits = EXT2_ADDR_PER_BLOCK_BITS(inode->i_sb);
-	int phys_block;
+	int phys_block, ret;
 
+	lock_kernel();
+	ret = 0;
 	*err = -EIO;
 	if (block < 0) {
 		ext2_warning (inode->i_sb, "ext2_getblk", "block < 0");
-		return 0;
+		goto abort;
 	}
 	if (block > EXT2_NDIR_BLOCKS + addr_per_block +
 		(1 << (addr_per_block_bits * 2)) +
 		((1 << (addr_per_block_bits * 2)) << addr_per_block_bits)) {
 		ext2_warning (inode->i_sb, "ext2_getblk", "block > big");
-		return 0;
+		goto abort;
 	}
 	/*
 	 * If this is a sequential block allocation, set the next_alloc_block
@@ -527,13 +538,14 @@ int ext2_getblk_block (struct inode * inode, long block,
 		inode->i_sb->s_blocksize, b, err, 0, &phys_block, created);
 
 out:
-	if (!phys_block) {
-		return 0;
-	}
-	if (*err) {
-		return 0;
-	}
-	return phys_block;
+	if (!phys_block)
+		goto abort;
+	if (*err)
+		goto abort;
+	ret = phys_block;
+abort:
+	unlock_kernel();
+	return ret;
 }
 
 struct buffer_head * ext2_getblk (struct inode * inode, long block,

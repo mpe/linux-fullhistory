@@ -182,7 +182,6 @@ struct inode_operations ufs_file_inode_operations = {
 	ufs_truncate,		/* truncate */
 	NULL, 			/* permission */
 	NULL,			/* smap */
-	NULL,			/* updatepage */
 	NULL,			/* revalidate */
-	generic_block_flushpage,/* flushpage */
+	block_flushpage,	/* flushpage */
 };

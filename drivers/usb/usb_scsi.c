@@ -74,7 +74,9 @@ struct us_data {
 	__u8			ep_int;			/* interrupt . */
 	__u8			subclass;		/* as in overview */
 	__u8			protocol;		/* .............. */
+	__u8			attention_done;		/* force attention on first command */
 	int (*pop)(Scsi_Cmnd *);			/* protocol specific do cmd */
+	int (*pop_reset)(struct us_data *);		/* ................. device reset */
 	GUID(guid);					/* unique dev id */
 	struct Scsi_Host	*host;			/* our dummy host data */
 	Scsi_Host_Template	*htmplt;		/* own host template */
@@ -142,6 +144,9 @@ static int us_one_transfer(struct us_data *us, int pipe, char *buf, int length)
 
 	    /* we want to retry if the device reported NAK */
 	    if (result == USB_ST_TIMEOUT) {
+		if (partial != this_xfer) {
+		    return 0;	/* I do not like this */
+		}
 		if (!maxtry--)
 		    break;
 		this_xfer -= partial;
@@ -150,6 +155,11 @@ static int us_one_transfer(struct us_data *us, int pipe, char *buf, int length)
 		/* short data - assume end */
 		result = USB_ST_DATAUNDERRUN;
 		break;
+	    } else if (result == USB_ST_STALL && us->protocol == US_PR_CB) {
+		if (!maxtry--)
+		    break;
+		this_xfer -= partial;
+		buf += partial;
 	    } else
 		break;
 	} while ( this_xfer );
@@ -216,27 +226,57 @@ static unsigned int us_transfer_length(Scsi_Cmnd *srb)
 
 }
 
-static int pop_CBI_irq(int state, void *buffer, void *dev_id)
+static int pop_CBI_irq(int state, void *buffer, int len, void *dev_id)
 {
     struct us_data *us = (struct us_data *)dev_id;
 
     if (state != USB_ST_REMOVED) {
 	us->ip_data = *(__u16 *)buffer;
-	us->ip_wanted = 0;
+	US_DEBUGP("Interrupt Status %x\n", us->ip_data);
     }
-    wake_up(&us->ip_waitq);
+    if (us->ip_wanted)
+	wake_up(&us->ip_waitq);
+    us->ip_wanted = 0;
 
     /* we dont want another interrupt */
 
     return 0;
 }
+
+static int pop_CB_reset(struct us_data *us)
+{
+    unsigned char cmd[12];
+    devrequest dr;
+    int result;
+
+    dr.requesttype = USB_TYPE_CLASS | USB_RT_INTERFACE;
+    dr.request = US_CBI_ADSC;
+    dr.value = 0;
+    dr.index = us->pusb_dev->ifnum;
+    dr.length = 12;
+    memset(cmd, -1, sizeof(cmd));
+    cmd[0] = SEND_DIAGNOSTIC;
+    cmd[1] = 4;
+    us->pusb_dev->bus->op->control_msg(us->pusb_dev, 
+					usb_sndctrlpipe(us->pusb_dev,0),
+					&dr, cmd, 12);
+
+    usb_clear_halt(us->pusb_dev, us->ep_in | 0x80);
+    usb_clear_halt(us->pusb_dev, us->ep_out);
+
+    /* long wait for reset */
+
+    schedule_timeout(HZ*5);
+    return 0;
+}
+
 static int pop_CB_command(Scsi_Cmnd *srb)
 {
     struct us_data *us = (struct us_data *)srb->host_scribble;
     devrequest dr;
     unsigned char cmd[16];
     int result;
-    int retry = 1;
+    int retry = 5;
     int done_start = 0;
 
     while (retry--) {
@@ -279,7 +319,8 @@ static int pop_CB_command(Scsi_Cmnd *srb)
 	    result = us->pusb_dev->bus->op->control_msg(us->pusb_dev, 
 						  usb_sndctrlpipe(us->pusb_dev,0),
 						  &dr, cmd, us->fixedlength);
-	    if (!done_start && us->subclass == US_SC_UFI && cmd[0] == TEST_UNIT_READY && result) {
+	    if (!done_start && (us->subclass == US_SC_UFI /*|| us->subclass == US_SC_8070*/)
+		 && cmd[0] == TEST_UNIT_READY && result) {
 		/* as per spec try a start command, wait and retry */
 
 		done_start++;
@@ -302,35 +343,47 @@ static int pop_CB_command(Scsi_Cmnd *srb)
     return result;
 }
 
-/* Protocol command handlers */
+/*
+ * Control/Bulk status handler
+ */
 
-static int pop_CBI(Scsi_Cmnd *srb)
+static int pop_CB_status(Scsi_Cmnd *srb)
 {
     struct us_data *us = (struct us_data *)srb->host_scribble;
     int result;
+    __u8 status[2];
+    devrequest dr;
+    int retry = 5;
 
-    /* run the command */
+    switch (us->protocol) {
+    case US_PR_CB:
+	/* get from control */
 
-    if ((result = pop_CB_command(srb))) {
-	US_DEBUGP("CBI command %x\n", result);
-	if (result == USB_ST_STALL || result == USB_ST_TIMEOUT)
-	    return (DID_OK << 16) | 2;
-	return DID_ABORT << 16;
-    }
-
-    /* transfer the data */
-
-    if (us_transfer_length(srb)) {
-	result = us_transfer(srb, US_DIRECTION(srb->cmnd[0]));
-	if (result && result != USB_ST_DATAUNDERRUN) {
-	    US_DEBUGP("CBI  transfer %x\n", result);
+	while (retry--) {
+	    dr.requesttype = 0x80 | USB_TYPE_STANDARD | USB_RT_DEVICE;
+	    dr.request = USB_REQ_GET_STATUS;
+	    dr.index = 0;
+	    dr.value = 0;
+	    dr.length = 2;
+	    result = us->pusb_dev->bus->op->control_msg(us->pusb_dev, 
+						  usb_rcvctrlpipe(us->pusb_dev,0),
+						  &dr, status, sizeof(status));
+	    if (result != USB_ST_TIMEOUT)
+		break;
+	}
+	if (result) {
+	    US_DEBUGP("Bad AP status request %d\n", result);
 	    return DID_ABORT << 16;
 	}
-    }
+	US_DEBUGP("Got AP status %x %x\n", status[0], status[1]);
+	if (srb->cmnd[0] != REQUEST_SENSE && srb->cmnd[0] != INQUIRY && 
+	    ( (status[0] & ~3) || status[1]))
+	    return (DID_OK << 16) | 2;
+	else
+	    return DID_OK << 16;
+	break;
 
-    /* get status */
-
-    if (us->protocol == US_PR_CBI) {
+    case US_PR_CBI:
 	/* get from interrupt pipe */
 
 	/* add interrupt transfer, marked for removal */
@@ -367,10 +420,46 @@ static int pop_CBI(Scsi_Cmnd *srb)
 	    return DID_ABORT << 16;
 	}
 	return (DID_OK << 16) + ((us->ip_data & 0x300) ? 2 : 0);
-    } else {
-       /* get from where? */
     }
     return DID_ERROR << 16;
+}
+
+/* Protocol command handlers */
+
+static int pop_CBI(Scsi_Cmnd *srb)
+{
+    struct us_data *us = (struct us_data *)srb->host_scribble;
+    int result;
+
+    /* run the command */
+
+    if ((result = pop_CB_command(srb))) {
+	US_DEBUGP("CBI command %x\n", result);
+	if (result == USB_ST_STALL || result == USB_ST_TIMEOUT)	{
+	    return (DID_OK << 16) | 2;
+	}
+	return DID_ABORT << 16;
+    }
+
+    /* transfer the data */
+
+    if (us_transfer_length(srb)) {
+	result = us_transfer(srb, US_DIRECTION(srb->cmnd[0]));
+	if (result && result != USB_ST_DATAUNDERRUN) {
+	    US_DEBUGP("CBI  transfer %x\n", result);
+	    return DID_ABORT << 16;
+	} else if (result == USB_ST_DATAUNDERRUN) {
+	    return DID_OK << 16;
+	}
+    } else {
+	if (!result) {
+	    return DID_OK << 16;
+	}
+    }
+
+    /* get status */
+
+    return pop_CB_status(srb);
 }
 
 static int pop_Bulk_reset(struct us_data *us)
@@ -380,21 +469,20 @@ static int pop_Bulk_reset(struct us_data *us)
 
     dr.requesttype = USB_TYPE_CLASS | USB_RT_INTERFACE;
     dr.request = US_BULK_RESET;
-    dr.value = US_BULK_RESET_SOFT;
+    dr.value = US_BULK_RESET_HARD;
     dr.index = 0;
     dr.length = 0;
 
-    US_DEBUGP("Bulk soft reset\n");
     result = us->pusb_dev->bus->op->control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev,0), &dr, NULL, 0);
-    if (result) {
-	US_DEBUGP("Bulk soft reset failed %d\n", result);
-	dr.value = US_BULK_RESET_HARD;
-	result = us->pusb_dev->bus->op->control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev,0), &dr, NULL, 0);
-	if (result)
-	    US_DEBUGP("Bulk hard reset failed %d\n", result);
-    }
+    if (result)
+	US_DEBUGP("Bulk hard reset failed %d\n", result);
     usb_clear_halt(us->pusb_dev, us->ep_in | 0x80);
     usb_clear_halt(us->pusb_dev, us->ep_out);
+
+    /* long wait for reset */
+
+    schedule_timeout(HZ*5);
+
     return result;
 }
 /*
@@ -453,8 +541,6 @@ static int pop_Bulk(Scsi_Cmnd *srb)
 
     stall = 0;
     do {
-	//usb_settoggle(us->pusb_dev, us->ep_in, 0);	/* AAARgh!! */
-	US_DEBUGP("Toggle is %d\n", usb_gettoggle(us->pusb_dev, us->ep_in));
 	result = us->pusb_dev->bus->op->bulk_msg(us->pusb_dev,
 			 usb_rcvbulkpipe(us->pusb_dev, us->ep_in), &bcs, 
 						US_BULK_CS_WRAP_LEN, &partial);
@@ -564,6 +650,9 @@ static int us_queuecommand( Scsi_Cmnd *srb , void (*done)(Scsi_Cmnd *))
     struct us_data *us = (struct us_data *)srb->host->hostdata[0];
 
     US_DEBUGP("Command wakeup\n");
+    if (us->srb) {
+	/* busy */
+    }
     srb->host_scribble = (unsigned char *)us;
     us->srb = srb;
     srb->scsi_done = done;
@@ -581,9 +670,12 @@ static int us_abort( Scsi_Cmnd *srb )
     return 0;
 }
 
-static int us_device_reset( Scsi_Cmnd *srb )
+static int us_bus_reset( Scsi_Cmnd *srb )
 {
-    return 0;
+    struct us_data *us = (struct us_data *)srb->host->hostdata[0];
+
+    us->pop_reset(us);
+    return SUCCESS;
 }
 
 static int us_host_reset( Scsi_Cmnd *srb )
@@ -591,10 +683,6 @@ static int us_host_reset( Scsi_Cmnd *srb )
     return 0;
 }
 
-static int us_bus_reset( Scsi_Cmnd *srb )
-{
-    return 0;
-}
 
 #undef SPRINTF
 #define SPRINTF(args...) { if (pos < (buffer + length)) pos += sprintf (pos, ## args); }
@@ -623,9 +711,9 @@ int usb_scsi_proc_info (char *buffer, char **start, off_t offset, int length, in
     if (inout)
 	return length;
 
-    if (!(vendor = usb_string(us->pusb_dev, us->pusb_dev->descriptor.iManufacturer)))
+    if (!us->pusb_dev || !(vendor = usb_string(us->pusb_dev, us->pusb_dev->descriptor.iManufacturer)))
 	vendor = "?";
-    if (!(product = usb_string(us->pusb_dev, us->pusb_dev->descriptor.iProduct)))
+    if (!us->pusb_dev || !(product = usb_string(us->pusb_dev, us->pusb_dev->descriptor.iProduct)))
 	product = "?";
 
     switch (us->protocol) {
@@ -677,7 +765,7 @@ static Scsi_Host_Template my_host_template = {
     us_queuecommand,
     NULL,			/* eh_strategy */
     us_abort,
-    us_device_reset,
+    us_bus_reset,
     us_bus_reset,
     us_host_reset,
     NULL,			/* abort */
@@ -695,6 +783,25 @@ static Scsi_Host_Template my_host_template = {
     TRUE			/* emulated */
 };
 
+static unsigned char sense_notready[] = {
+    0x70,			/* current error */
+    0x00,
+    0x02,			/* not ready */
+    0x00,
+    0x00,
+    10,				/* additional length */
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x04,			/* not ready */
+    0x03,			/* manual intervention */
+    0x00,
+    0x00,
+    0x00,
+    0x00
+};
+
 static int usbscsi_control_thread(void * __us)
 {
     struct us_data *us = (struct us_data *)__us;
@@ -710,7 +817,7 @@ static int usbscsi_control_thread(void * __us)
     exit_files(current);
     //exit_fs(current);
 
-    sprintf(current->comm, "usbscsi%d", us->host_no);
+    sprintf(current->comm, "usbscsi%d", us->host_number);
     
     unlock_kernel();
 
@@ -727,18 +834,160 @@ static int usbscsi_control_thread(void * __us)
 
 	    switch (action) {
 	    case US_ACT_COMMAND       :
-		if (!us->pusb_dev || us->srb->target || us->srb->lun) {
+		if (us->srb->target || us->srb->lun) {
 		    /* bad device */
 		    US_DEBUGP( "Bad device number (%d/%d) or dev %x\n", us->srb->target, us->srb->lun, (unsigned int)us->pusb_dev);
 		    us->srb->result = DID_BAD_TARGET << 16;
+		} else if (!us->pusb_dev) {
+
+		    /* our device has gone - pretend not ready */
+
+		    if (us->srb->cmnd[0] == REQUEST_SENSE) {
+			memcpy(us->srb->request_buffer, sense_notready, sizeof(sense_notready));
+			us->srb->result = DID_OK << 16;
+		    } else {
+			us->srb->result = (DID_OK << 16) | 2;
+		    }
 		} else {
 		    US_DEBUG(us_show_command(us->srb));
+
+		    /* check for variable length - do properly if so */
+
 		    if (us->filter && us->filter->command)
 		        us->srb->result = us->filter->command(us->fdata, us->srb);
-		    else
+		    else if (us->srb->cmnd[0] == START_STOP &&
+			     us->pusb_dev->descriptor.idProduct == 0x0001 &&
+			     us->pusb_dev->descriptor.idVendor == 0x04e6)
+			us->srb->result = DID_OK << 16;
+		    else {
+			unsigned int savelen = us->srb->request_bufflen;
+			unsigned int saveallocation;
+
+			switch (us->srb->cmnd[0]) {
+			case REQUEST_SENSE:
+			    if (us->srb->request_bufflen > 18)
+				us->srb->request_bufflen = 18;
+			    else
+				break;
+			    saveallocation = us->srb->cmnd[4];
+                            us->srb->cmnd[4] = 18;
+			    break;
+
+			case INQUIRY:
+			    if (us->srb->request_bufflen > 36)
+				us->srb->request_bufflen = 36;
+			    else
+				break;
+			    saveallocation = us->srb->cmnd[4];
+                            us->srb->cmnd[4] = 36;
+			    break;
+
+			case MODE_SENSE:
+			    if (us->srb->request_bufflen > 4)
+				us->srb->request_bufflen = 4;
+			    else
+				break;
+			    saveallocation = us->srb->cmnd[4];
+                            us->srb->cmnd[4] = 4;
+			    break;
+
+			case LOG_SENSE:
+			case MODE_SENSE_10:
+			    if (us->srb->request_bufflen > 8)
+				us->srb->request_bufflen = 8;
+			    else
+				break;
+			    saveallocation = (us->srb->cmnd[7] << 8) | us->srb->cmnd[8];
+                            us->srb->cmnd[7] = 0;
+                            us->srb->cmnd[8] = 8;
+			    break;
+
+			default:
+			    break;
+			}
 		        us->srb->result = us->pop(us->srb);
+
+			if (savelen != us->srb->request_bufflen &&
+			    us->srb->result == (DID_OK << 16)) {
+			    unsigned char *p = (unsigned char *)us->srb->request_buffer;
+			    unsigned int length;
+
+			    /* set correct length and retry */
+			    switch (us->srb->cmnd[0]) {
+			    case REQUEST_SENSE:
+				/* simply return 18 bytes */
+				p[7] = 10;
+				length = us->srb->request_bufflen;;
+				break;
+
+			    case INQUIRY:
+				length = p[4] + 5 > savelen ? savelen : p[4] + 5;
+				us->srb->cmnd[4] = length;
+				break;
+
+			    case MODE_SENSE:
+				length = p[0] + 4 > savelen ? savelen : p[0] + 4;
+				us->srb->cmnd[4] = 4;
+				break;
+
+			    case LOG_SENSE:
+				length = ((p[2] << 8) + p[3]) + 4 > savelen ? savelen : ((p[2] << 8) + p[3]) + 4;
+				us->srb->cmnd[7] = length >> 8;
+				us->srb->cmnd[8] = length;
+				break;
+
+			    case MODE_SENSE_10:
+				length = ((p[0] << 8) + p[1]) + 8 > savelen ? savelen : ((p[0] << 8) + p[1]) + 8;
+				us->srb->cmnd[7] = length >> 8;
+				us->srb->cmnd[8] = length;
+				break;
+			    }
+
+			    US_DEBUGP("Old/New length = %d/%d\n", savelen, length);
+
+			    if (us->srb->request_bufflen != length) {
+				us->srb->request_bufflen = length;
+				us->srb->result = us->pop(us->srb);
+			    }
+			    /* reset back to original values */
+
+			    us->srb->request_bufflen = savelen;
+			    switch (us->srb->cmnd[0]) {
+			    case REQUEST_SENSE:
+			    case INQUIRY:
+			    case MODE_SENSE:
+				us->srb->cmnd[4] = saveallocation;
+				break;
+
+			    case LOG_SENSE:
+			    case MODE_SENSE_10:
+				us->srb->cmnd[7] = saveallocation >> 8;
+				us->srb->cmnd[8] = saveallocation;
+				break;
+			    }
+			}
+			/* force attention on first command */
+			if (!us->attention_done) {
+			    if (us->srb->cmnd[0] == REQUEST_SENSE) {
+				if (us->srb->result == (DID_OK << 16)) {
+				    unsigned char *p = (unsigned char *)us->srb->request_buffer;
+
+				    us->attention_done = 1;
+				    if ((p[2] & 0x0f) != UNIT_ATTENTION) {
+					p[2] = UNIT_ATTENTION;
+					p[12] = 0x29;	/* power on, reset or bus-reset */
+					p[13] = 0;
+				    }
+				}
+			    } else if (us->srb->cmnd[0] != INQUIRY &&
+				       us->srb->result == (DID_OK << 16)) {
+				us->srb->result |= 2;	/* force check condition */
+			    }
+			}
+		    }
 		}
 		us->srb->scsi_done(us->srb);
+		us->srb = NULL;
 		break;
 
 	    case US_ACT_ABORT         :
@@ -820,7 +1069,7 @@ static int scsi_probe(struct usb_device *dev)
 	if (dev->descriptor.idVendor == 0x04e6 &&
 	    dev->descriptor.idProduct == 0x0001) {
 	    /* shuttle E-USB */
-	    protocol = US_PR_ZIP;
+	    protocol = US_PR_CB;
 	    subclass = US_SC_8070;	/* an assumption */
 	} else if (dev->descriptor.bDeviceClass != 0 ||
 	    dev->config->altsetting->interface->bInterfaceClass != 8 ||
@@ -835,11 +1084,15 @@ static int scsi_probe(struct usb_device *dev)
 	    usb_string(dev, dev->descriptor.iSerialNumber) ) {
 	    make_guid(guid, dev->descriptor.idVendor, dev->descriptor.idProduct,
 		      usb_string(dev, dev->descriptor.iSerialNumber));
-	    for (ss = us_list; ss; ss = ss->next) {
-		if (GUID_EQUAL(guid, ss->guid))	{
-		    US_DEBUGP("Found existing GUID " GUID_FORMAT "\n", GUID_ARGS(guid));
-		    break;
-		}
+	} else {
+	    make_guid(guid, dev->descriptor.idVendor, dev->descriptor.idProduct,
+		      "0");
+	}
+	for (ss = us_list; ss; ss = ss->next) {
+	    if (!ss->pusb_dev && GUID_EQUAL(guid, ss->guid))	{
+		US_DEBUGP("Found existing GUID " GUID_FORMAT "\n", GUID_ARGS(guid));
+		flags = ss->flags;
+		break;
 	    }
 	}
     }
@@ -865,6 +1118,7 @@ static int scsi_probe(struct usb_device *dev)
 	ss->subclass = interface->bInterfaceSubClass;
 	ss->protocol = interface->bInterfaceProtocol;
     }
+    ss->attention_done = 0;
 
     /* set the protocol op */
 
@@ -873,16 +1127,19 @@ static int scsi_probe(struct usb_device *dev)
     case US_PR_CB:
 	US_DEBUGPX("Control/Bulk\n");
 	ss->pop = pop_CBI;
+	ss->pop_reset = pop_CB_reset;
 	break;
 
     case US_PR_CBI:
 	US_DEBUGPX("Control/Bulk/Interrupt\n");
 	ss->pop = pop_CBI;
+	ss->pop_reset = pop_CB_reset;
 	break;
 
     default:
 	US_DEBUGPX("Bulk\n");
 	ss->pop = pop_Bulk;
+	ss->pop_reset = pop_Bulk_reset;
 	break;
     }
 
@@ -907,6 +1164,7 @@ static int scsi_probe(struct usb_device *dev)
     /* exit if strange looking */
 
     if (usb_set_configuration(dev, dev->config[0].bConfigurationValue) ||
+	usb_set_interface(dev, interface->bInterfaceNumber, 0) ||
 	!ss->ep_in || !ss->ep_out || (ss->protocol == US_PR_CBI && ss->ep_int == 0)) {
 	US_DEBUGP("Problems with device\n");
 	if (ss->host) {
@@ -933,13 +1191,8 @@ static int scsi_probe(struct usb_device *dev)
 
 	/* make unique id if possible */
 
-	if (dev->descriptor.iSerialNumber && 
-	    usb_string(dev, dev->descriptor.iSerialNumber) ) {
-	    make_guid(ss->guid, dev->descriptor.idVendor, dev->descriptor.idProduct,
-		      usb_string(dev, dev->descriptor.iSerialNumber));
-	}
-
 	US_DEBUGP("New GUID " GUID_FORMAT "\n", GUID_ARGS(guid));
+	memcpy(ss->guid, guid, sizeof(guid));
 
 	/* set class specific stuff */
 
@@ -986,8 +1239,29 @@ static int scsi_probe(struct usb_device *dev)
 
 
 	(struct us_data *)htmplt->proc_dir = ss;
-	if (ss->protocol == US_PR_CBI)
+
+	if (dev->descriptor.idVendor == 0x04e6 &&
+	    dev->descriptor.idProduct == 0x0001) {
+	    devrequest dr;
+	    __u8 qstat[2];
+
+	    /* shuttle E-USB */
+	    dr.requesttype = 0xC0;
+	    dr.request = 1;
+	    dr.index = 0;
+	    dr.value = 0;
+	    dr.length = 0;
+	    ss->pusb_dev->bus->op->control_msg(ss->pusb_dev, usb_rcvctrlpipe(dev,0), &dr, qstat, 2);
+	    US_DEBUGP("C0 status %x %x\n", qstat[0], qstat[1]);
 	    init_waitqueue_head(&ss->ip_waitq);
+	    ss->pusb_dev->bus->op->request_irq(ss->pusb_dev, 
+						usb_rcvctrlpipe(ss->pusb_dev, ss->ep_int),
+						pop_CBI_irq, 0, (void *)ss);
+	    interruptible_sleep_on_timeout(&ss->ip_waitq, HZ*5);
+
+	} else if (ss->protocol == US_PR_CBI)
+	    init_waitqueue_head(&ss->ip_waitq);
+
 
 	/* start up our thread */
 

@@ -131,7 +131,7 @@ void show_queue(struct uhci_qh *qh)
 #if 0
 	printk("    link = %p, element = %p\n", qh->link, qh->element);
 #endif
-	if(!qh->element) {
+	if(!(qh->element & ~0xF)) {
 		printk("    td 0 = NULL\n");
 		return;
 	}

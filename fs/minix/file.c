@@ -110,7 +110,6 @@ struct inode_operations minix_file_inode_operations = {
 	minix_truncate,		/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
-	NULL,			/* updatepage */
 	NULL,			/* revalidate */
-	generic_block_flushpage,/* flushpage */
+	block_flushpage,	/* flushpage */
 };

@@ -43,11 +43,14 @@ struct inode_operations nfs_symlink_inode_operations = {
 	NULL,			/* rename */
 	nfs_readlink,		/* readlink */
 	nfs_follow_link,	/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
-	NULL			/* permission */
+	NULL,			/* permission */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 /* Symlink caching in the page cache is even more simplistic

@@ -451,7 +451,7 @@ printk("copying\n");
 	}
 }
 
-static int cpia_isoc_irq(int status, void *__buffer, void *dev_id)
+static int cpia_isoc_irq(int status, void *__buffer, int len, void *dev_id)
 {
 	struct usb_cpia *cpia = dev_id;
 	struct usb_device *dev = cpia->dev;

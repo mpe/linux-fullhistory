@@ -80,7 +80,6 @@ struct inode_operations affs_file_inode_operations = {
 	affs_truncate,		/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
-	NULL,			/* updatepage */
 	NULL			/* revalidate */
 };
 
@@ -121,7 +120,6 @@ struct inode_operations affs_file_inode_operations_ofs = {
 	affs_truncate,		/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
-	NULL,			/* updatepage */
 	NULL			/* revalidate */
 };
 

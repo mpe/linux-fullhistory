@@ -102,7 +102,7 @@ static int sohci_int_handler(void * ohci_in, unsigned int ep_addr, int ctrl_len,
 	OHCI_DEBUG( for(i=0; i < data_len; i++ ) printk(" %02x", ((__u8 *) data)[i]);)
 	OHCI_DEBUG( printk(" ret_status: %x\n", status); })
 	
- 	ret = handler(cc_to_status[status & 0xf], data, dev_id);
+ 	ret = handler(cc_to_status[status & 0xf], data, data_len, dev_id);
 	if(ret == 0) return 0; /* 0 .. do not requeue  */
 	if(status > 0) return -1; /* error occured do not requeue ? */
 	ohci_trans_req(ohci, ep_addr, 0, NULL, data, 8, (__OHCI_BAG) handler, (__OHCI_BAG) dev_id); /* requeue int request */

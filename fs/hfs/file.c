@@ -69,7 +69,6 @@ struct inode_operations hfs_file_inode_operations = {
 	hfs_file_truncate,	/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
-	NULL,			/* updatepage */
 	NULL			/* revalidate */
 };
 

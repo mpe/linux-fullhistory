@@ -98,7 +98,6 @@ struct inode_operations ncp_dir_inode_operations =
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
-	NULL,			/* updatepage */
 	NULL,			/* revalidate */
 };
 

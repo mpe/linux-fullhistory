@@ -118,21 +118,24 @@ static struct file_operations proc_sysvipc_operations = {
  * proc directories can do almost nothing..
  */
 struct inode_operations proc_sysvipc_inode_operations = {
-	&proc_sysvipc_operations,	/* default net file-ops */
-	NULL,				/* create */
-	NULL,				/* lookup */
-	NULL,				/* link */
-	NULL,				/* unlink */
-	NULL,				/* symlink */
-	NULL,				/* mkdir */
-	NULL,				/* rmdir */
-	NULL,				/* mknod */
-	NULL,				/* rename */
-	NULL,				/* readlink */
-	NULL,				/* follow_link */
-	NULL,				/* readpage */
-	NULL,				/* writepage */
-	NULL,				/* bmap */
-	NULL,				/* truncate */
-	NULL				/* permission */
+	&proc_sysvipc_operations, /* default net file-ops */
+	NULL,			/* create */
+	NULL,			/* lookup */
+	NULL,			/* link */
+	NULL,			/* unlink */
+	NULL,			/* symlink */
+	NULL,			/* mkdir */
+	NULL,			/* rmdir */
+	NULL,			/* mknod */
+	NULL,			/* rename */
+	NULL,			/* readlink */
+	NULL,			/* follow_link */
+	NULL,			/* bmap */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
+	NULL,			/* flushpage */
+	NULL,			/* truncate */
+	NULL,			/* permission */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };

@@ -47,13 +47,23 @@ pci_find_slot(unsigned int bus, unsigned int devfn)
 struct pci_dev *
 pci_find_device(unsigned int vendor, unsigned int device, struct pci_dev *from)
 {
-	if (!from)
-		from = pci_devices;
-	else
-		from = from->next;
-	while (from && (from->vendor != vendor && vendor != PCI_ANY_ID || from->device != device && device != PCI_ANY_ID))
-		from = from->next;
-	return from;
+	struct pci_dev *next;
+
+	next = pci_devices;
+	if (from)
+		next = from->next;
+
+	while (next) {
+		struct pci_dev *dev = next;
+		next = next->next;
+		if (vendor != PCI_ANY_ID && dev->vendor != vendor)
+			continue;
+		if (device != PCI_ANY_ID && dev->device != device)
+			continue;
+
+		return dev;
+	}
+	return NULL;
 }
 
 

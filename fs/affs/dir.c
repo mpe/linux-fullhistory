@@ -63,7 +63,6 @@ struct inode_operations affs_dir_inode_operations = {
 	NULL,			/* truncate */
 	NULL,			/* permissions */
 	NULL,			/* smap */
-	NULL,			/* updatepage */
 	NULL			/* revalidate */
 };
 

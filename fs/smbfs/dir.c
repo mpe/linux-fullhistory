@@ -65,7 +65,6 @@ struct inode_operations smb_dir_inode_operations =
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
-	NULL,			/* updatepage */
 	smb_revalidate_inode,	/* revalidate */
 };
 

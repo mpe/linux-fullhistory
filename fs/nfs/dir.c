@@ -78,13 +78,13 @@ struct inode_operations nfs_dir_inode_operations = {
 	nfs_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* bmap */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
-	NULL,			/* updatepage */
 	nfs_revalidate,		/* revalidate */
 };
 
