@@ -3043,6 +3043,7 @@ static int tigon3_4gb_hwbug_workaround(struct tg3 *tp, struct sk_buff *skb,
 			tp->tx_buffers[entry].skb = NULL;
 		}
 		entry = NEXT_TX(entry);
+		i++;
 	}
 
 	dev_kfree_skb(skb);
