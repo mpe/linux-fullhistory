@@ -4,9 +4,3 @@ NOTE!	This driver version is not compatible with the version 1.0c.
 	other programs using ioctl calls of the driver, they must be
 	recompiled. Most of them will not work without some source
 	modifications.
-
-	******** LINUX VERSION 0.99.14 OR LATER IS REQUIRED *******
-
-	See sound/Readme for more details
-
-		Hannu

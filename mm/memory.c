@@ -1011,6 +1011,8 @@ void show_mem(void)
 	show_buffers();
 }
 
+extern unsigned long free_area_init(unsigned long, unsigned long);
+
 /*
  * paging_init() sets up the page tables - note that the first 4MB are
  * already mapped by head.S.
@@ -1056,7 +1058,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 		}
 	}
 	invalidate();
-	return start_mem;
+	return free_area_init(start_mem, end_mem);
 }
 
 void mem_init(unsigned long start_low_mem,
@@ -1065,33 +1067,12 @@ void mem_init(unsigned long start_low_mem,
 	int codepages = 0;
 	int reservedpages = 0;
 	int datapages = 0;
-	unsigned long tmp, mask;
-	unsigned short * p;
+	unsigned long tmp;
 	extern int etext;
 
 	cli();
 	end_mem &= PAGE_MASK;
 	high_memory = end_mem;
-	start_mem +=  0x0000000f;
-	start_mem &= ~0x0000000f;
-	tmp = MAP_NR(end_mem);
-	mem_map = (unsigned short *) start_mem;
-	p = mem_map + tmp;
-	start_mem = (unsigned long) p;
-	while (p > mem_map)
-		*--p = MAP_PAGE_RESERVED;
-
-	/* set up the free-area data structures */
-	for (mask = PAGE_MASK, tmp = 0 ; tmp < NR_MEM_LISTS ; tmp++, mask <<= 1) {
-		unsigned long bitmap_size;
-		free_area_list[tmp].prev = free_area_list[tmp].next = &free_area_list[tmp];
-		end_mem = (end_mem + ~mask) & mask;
-		bitmap_size = end_mem >> (PAGE_SHIFT + tmp);
-		bitmap_size = (bitmap_size + 7) >> 3;
-		free_area_map[tmp] = (unsigned char *) start_mem;
-		memset((void *) start_mem, 0, bitmap_size);
-		start_mem += bitmap_size;
-	}
 
 	/* mark usable pages in the mem_map[] */
 	start_low_mem = PAGE_ALIGN(start_low_mem);

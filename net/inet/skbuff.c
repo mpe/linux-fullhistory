@@ -387,7 +387,8 @@ void kfree_skb(struct sk_buff *skb, int rw)
 {
 	if (skb == NULL) 
 	{
-		printk("kfree_skb: skb = NULL\n");
+		printk("kfree_skb: skb = NULL (from %08lx)\n",
+			((unsigned long *) &skb)[-1]);
 		return;
   	}
 	IS_SKB(skb);
@@ -397,9 +398,11 @@ void kfree_skb(struct sk_buff *skb, int rw)
 		return;
   	}
   	if (skb->free == 2)
-		printk("Warning: kfree_skb passed an skb that nobody set the free flag on!\n");
+		printk("Warning: kfree_skb passed an skb that nobody set the free flag on! (from %08lx)\n",
+			((unsigned long *) &skb)[-1]);
 	if (skb->next)
-	 	printk("Warning: kfree_skb passed an skb still on a list.\n");
+	 	printk("Warning: kfree_skb passed an skb still on a list (from %08lx).\n",
+			((unsigned long *) &skb)[-1]);
 	if (skb->sk) 
 	{
 	        if(skb->sk->prot!=NULL)

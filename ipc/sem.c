@@ -144,7 +144,7 @@ static void freeary (int id)
 			wake_up (&sma->eventn);
 		schedule();
 	}
-	kfree_s (sma, sizeof (*sma) + sma->sem_nsems * sizeof (struct sem));
+	kfree(sma);
 	return;
 }
 

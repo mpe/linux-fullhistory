@@ -22,13 +22,14 @@
 /*
  * virtual flags (16 and 32-bit versions)
  */
-#define VFLAGS(regs)	(*(unsigned short *)&(current->v86flags))
-#define VEFLAGS(regs)	(current->v86flags)
+#define VFLAGS	(*(unsigned short *)&(current->v86flags))
+#define VEFLAGS	(current->v86flags)
 
 #define set_flags(X,new,mask) \
 ((X) = ((X) & ~(mask)) | ((new) & (mask)))
 
 #define SAFE_MASK	(0xDD5)
+#define RETURN_MASK	(0xDFF)
 
 asmlinkage struct pt_regs * save_v86_state(struct vm86_regs * regs)
 {
@@ -38,6 +39,7 @@ asmlinkage struct pt_regs * save_v86_state(struct vm86_regs * regs)
 		printk("no vm86_info: BAD\n");
 		do_exit(SIGSEGV);
 	}
+	set_flags(regs->eflags, VEFLAGS, VIF_MASK | current->v86mask);
 	memcpy_tofs(&current->vm86_info->regs,regs,sizeof(*regs));
 	put_fs_long(current->screen_bitmap,&current->vm86_info->screen_bitmap);
 	tmp = current->tss.esp0;
@@ -91,9 +93,9 @@ asmlinkage int sys_vm86(struct vm86_struct * v86)
  * has set it up safely, so this makes sure interrupt etc flags are
  * inherited from protected mode.
  */
- 	current->v86flags = info.regs.eflags;
+ 	VEFLAGS = info.regs.eflags;
 	info.regs.eflags &= SAFE_MASK;
-	info.regs.eflags |= ~SAFE_MASK & pt_regs->eflags;
+	info.regs.eflags |= pt_regs->eflags & ~SAFE_MASK;
 	info.regs.eflags |= VM_MASK;
 
 	switch (info.cpu_type) {
@@ -142,14 +144,14 @@ static inline void return_to_32bit(struct vm86_regs * regs16, int retval)
 
 static inline void set_IF(struct vm86_regs * regs)
 {
-	current->v86flags |= VIF_MASK;
-	if (current->v86flags & VIP_MASK)
+	VEFLAGS |= VIF_MASK;
+	if (VEFLAGS & VIP_MASK)
 		return_to_32bit(regs, VM86_STI);
 }
 
 static inline void clear_IF(struct vm86_regs * regs)
 {
-	current->v86flags &= ~VIF_MASK;
+	VEFLAGS &= ~VIF_MASK;
 }
 
 static inline void clear_TF(struct vm86_regs * regs)
@@ -159,7 +161,7 @@ static inline void clear_TF(struct vm86_regs * regs)
 
 static inline void set_vflags_long(unsigned long eflags, struct vm86_regs * regs)
 {
-	set_flags(VEFLAGS(regs), eflags, current->v86mask);
+	set_flags(VEFLAGS, eflags, current->v86mask);
 	set_flags(regs->eflags, eflags, SAFE_MASK);
 	if (eflags & IF_MASK)
 		set_IF(regs);
@@ -167,7 +169,7 @@ static inline void set_vflags_long(unsigned long eflags, struct vm86_regs * regs
 
 static inline void set_vflags_short(unsigned short flags, struct vm86_regs * regs)
 {
-	set_flags(VFLAGS(regs), flags, current->v86mask);
+	set_flags(VFLAGS, flags, current->v86mask);
 	set_flags(regs->eflags, flags, SAFE_MASK);
 	if (flags & IF_MASK)
 		set_IF(regs);
@@ -175,11 +177,19 @@ static inline void set_vflags_short(unsigned short flags, struct vm86_regs * reg
 
 static inline unsigned long get_vflags(struct vm86_regs * regs)
 {
-	unsigned long flags = regs->eflags & SAFE_MASK;
+	unsigned long flags = regs->eflags & RETURN_MASK;
 
-	if (current->v86flags & VIF_MASK)
+	if (VEFLAGS & VIF_MASK)
 		flags |= IF_MASK;
-	return flags | (VEFLAGS(regs) & current->v86mask);
+	return flags | (VEFLAGS & current->v86mask);
+}
+
+static inline int is_revectored(int nr, struct revectored_struct * bitmap)
+{
+	__asm__ __volatile__("btl %2,%%fs:%1\n\tsbbl %0,%0"
+		:"=r" (nr)
+		:"m" (*bitmap),"r" (nr));
+	return nr;
 }
 
 /*

@@ -2,11 +2,11 @@
 #define SND_SA_INTERRUPT
 /*
  * sound/pas2_card.c
- * 
+ *
  * Detection routine for the Pro Audio Spectrum cards.
- * 
+ *
  * Copyright by Hannu Savolainen 1993
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met: 1. Redistributions of source code must retain the above copyright
@@ -14,7 +14,7 @@
  * Redistributions in binary form must reproduce the above copyright notice,
  * this list of conditions and the following disclaimer in the documentation
  * and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -26,7 +26,7 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- * 
+ *
  */
 
 #include "sound_config.h"
@@ -196,14 +196,14 @@ config_pas_hw (struct address_info *hw_config)
 	  ok = 0;
 	}
     }
-  
-/*
+
+  /*
  * This fixes the timing problems of the PAS due to the Symphony chipset
  * as per Media Vision.  Only define this if your PAS doesn't work correctly.
  */
 #ifdef SYMPHONY_PAS
-	OUTB(0x05,0xa8);
-	OUTB(0x60,0xa9);
+  OUTB (0x05, 0xa8);
+  OUTB (0x60, 0xa9);
 #endif
 
 #ifdef BROKEN_BUS_CLOCK
@@ -228,35 +228,35 @@ config_pas_hw (struct address_info *hw_config)
 
 #if !defined(EXCLUDE_SB_EMULATION) || !defined(EXCLUDE_SB)
 
-    {
-	struct address_info *sb_config;
+  {
+    struct address_info *sb_config;
 
-	if ((sb_config=sound_getconf(SNDCARD_SB)))
-        {
-		unsigned char irq_dma;
+    if ((sb_config = sound_getconf (SNDCARD_SB)))
+      {
+	unsigned char   irq_dma;
 
-  /* Turn on Sound Blaster compatibility */
-  /* bit 1 = SB emulation */
-  /* bit 0 = MPU401 emulation (CDPC only :-( ) */
-  pas_write (0x02, COMPATIBILITY_ENABLE);
+	/* Turn on Sound Blaster compatibility */
+	/* bit 1 = SB emulation */
+	/* bit 0 = MPU401 emulation (CDPC only :-( ) */
+	pas_write (0x02, COMPATIBILITY_ENABLE);
 
-  /* "Emulation address"	 */
-            pas_write ((sb_config->io_base >> 4) & 0x0f, EMULATION_ADDRESS);
+	/* "Emulation address"         */
+	pas_write ((sb_config->io_base >> 4) & 0x0f, EMULATION_ADDRESS);
 
-	    if (!E_C_SB_DMA_translate[sb_config->dma]) 
-               printk("\n\nPAS16 Warning: Invalid SB DMA %d\n\n",
-			sb_config->dma);
+	if (!E_C_SB_DMA_translate[sb_config->dma])
+	  printk ("\n\nPAS16 Warning: Invalid SB DMA %d\n\n",
+		  sb_config->dma);
 
-	    if (!E_C_SB_IRQ_translate[sb_config->irq]) 
-               printk("\n\nPAS16 Warning: Invalid SB IRQ %d\n\n",
-			sb_config->irq);
+	if (!E_C_SB_IRQ_translate[sb_config->irq])
+	  printk ("\n\nPAS16 Warning: Invalid SB IRQ %d\n\n",
+		  sb_config->irq);
 
-	    irq_dma = E_C_SB_DMA_translate[sb_config->dma] | 
-		      E_C_SB_IRQ_translate[sb_config->irq];
+	irq_dma = E_C_SB_DMA_translate[sb_config->dma] |
+	  E_C_SB_IRQ_translate[sb_config->irq];
 
-	    pas_write(irq_dma, EMULATION_CONFIGURATION);
-        }
-   }
+	pas_write (irq_dma, EMULATION_CONFIGURATION);
+      }
+  }
 #endif
 
   if (!ok)
@@ -327,11 +327,11 @@ attach_pas_card (long mem_start, struct address_info *hw_config)
 	  mem_start = pas_pcm_init (mem_start, hw_config);
 #endif
 
-# if !defined(EXCLUDE_SB_EMULATION) && !defined(EXCLUDE_SB)
+#if !defined(EXCLUDE_SB_EMULATION) && !defined(EXCLUDE_SB)
 
 	  sb_dsp_disable_midi ();	/* The SB emulation don't support
 					 * midi */
-# endif
+#endif
 
 #ifndef EXCLUDE_YM3812
 	  enable_opl3_mode (0x388, 0x38a, 0);

@@ -1,4 +1,4 @@
-Sound Driver version 2.4 for Linux
+Sound Driver version 2.5 for Linux
 ----------------------------------
 
 NOTE!	The sound driver is now a part of the Linux kernel distribution.
@@ -174,7 +174,8 @@ If you want to play modules on a 386sx while recompiling the world, buy a GUS.
 It runs without burning your CPU.
 
 Hannu Savolainen
-hsavolai@cs.helsinki.fi
+Hannu.Savolainen@Helsinki.fi
+(hannu@voxware.pp.fi (april 94 ->))
 
 ----------------- cut here ------------------------------
 #!/bin/sh

@@ -365,9 +365,7 @@ __asm__("str %%ax\n\t" \
  * tha math co-processor latest.
  */
 #define switch_to(tsk) \
-__asm__("cmpl %%ecx,_current\n\t" \
-	"je 1f\n\t" \
-	"cli\n\t" \
+__asm__("cli\n\t" \
 	"xchgl %%ecx,_current\n\t" \
 	"ljmp %0\n\t" \
 	"sti\n\t" \

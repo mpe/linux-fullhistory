@@ -222,7 +222,7 @@ confuse_gcc1:
 		++current->counter;
 	}
 #endif
-	c = -1;
+	c = -1000;
 	next = p = &init_task;
 	for (;;) {
 		if ((p = p->next_task) == &init_task)
@@ -235,8 +235,9 @@ confuse_gcc2:
 		for_each_task(p)
 			p->counter = (p->counter >> 1) + p->priority;
 	}
-	if(current != next)
-		kstat.context_swtch++;
+	if (current == next)
+		return;
+	kstat.context_swtch++;
 	switch_to(next);
 	/* Now maybe reload the debug registers */
 	if(current->debugreg[7]){
@@ -634,8 +635,8 @@ static void do_timer(struct pt_regs * regs)
 		}
 #endif
 	}
-	if (current == task[0] || (--current->counter)<=0) {
-		current->counter=0;
+	if (current != task[0] && 0 > --current->counter) {
+		current->counter = 0;
 		need_resched = 1;
 	}
 	/* Update ITIMER_PROF for the current task */

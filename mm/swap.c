@@ -264,17 +264,6 @@ static inline int try_to_swap_out(unsigned long * table_ptr)
 }
 
 /*
- * sys_idle() does nothing much: it just searches for likely candidates for
- * swapping out or forgetting about. This speeds up the search when we
- * actually have to swap.
- */
-asmlinkage int sys_idle(void)
-{
-	need_resched = 1;
-	return 0;
-}
-
-/*
  * A new implementation of swap_out().  We do not swap complete processes,
  * but only a small number of blocks, before we continue with the next
  * process.  The number of blocks actually swapped is determined on the
@@ -895,4 +884,35 @@ void si_swapinfo(struct sysinfo *val)
 	val->freeswap <<= PAGE_SHIFT;
 	val->totalswap <<= PAGE_SHIFT;
 	return;
+}
+
+/*
+ * set up the free-area data structures:
+ *   - mark all pages MAP_PAGE_RESERVED
+ *   - mark all memory queues empty
+ *   - clear the memory bitmaps
+ */
+unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
+{
+	unsigned short * p;
+	unsigned long mask = PAGE_MASK;
+	int i;
+
+	mem_map = (unsigned short *) start_mem;
+	p = mem_map + MAP_NR(end_mem);
+	start_mem = (unsigned long) p;
+	while (p > mem_map)
+		*--p = MAP_PAGE_RESERVED;
+
+	for (i = 0 ; i < NR_MEM_LISTS ; i++, mask <<= 1) {
+		unsigned long bitmap_size;
+		free_area_list[i].prev = free_area_list[i].next = &free_area_list[i];
+		end_mem = (end_mem + ~mask) & mask;
+		bitmap_size = end_mem >> (PAGE_SHIFT + i);
+		bitmap_size = (bitmap_size + 7) >> 3;
+		free_area_map[i] = (unsigned char *) start_mem;
+		memset((void *) start_mem, 0, bitmap_size);
+		start_mem += bitmap_size;
+	}
+	return start_mem;
 }

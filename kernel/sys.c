@@ -35,6 +35,23 @@ asmlinkage int sys_ni_syscall(void)
 	return -EINVAL;
 }
 
+asmlinkage int sys_idle(void)
+{
+	int i;
+
+	/* Map out the low memory: it's no longer needed */
+	for (i = 0 ; i < 768 ; i++)
+		swapper_pg_dir[i] = 0;
+
+	/* endless idle loop with no priority at all */
+	current->counter = -100;
+	for (;;) {
+		if (!need_resched)
+			__asm__("hlt");
+		schedule();
+	}
+}
+
 static int proc_sel(struct task_struct *p, int which, int who)
 {
 	switch (which) {

@@ -58,6 +58,9 @@ struct generic_midi_info{
 
 struct audio_operations {
         char name[32];
+	int flags;
+#define NOTHING_SPECIAL 	0
+#define NEEDS_RESTART		1
 	int (*open) (int dev, int mode);
 	void (*close) (int dev);
 	void (*output_block) (int dev, unsigned long buf, 
@@ -96,6 +99,7 @@ struct synth_operations {
 	void (*aftertouch) (int dev, int voice, int pressure);
 	void (*controller) (int dev, int voice, int ctrl_num, int value);
 	void (*panning) (int dev, int voice, int value);
+	void (*volume_method) (int dev, int mode);
 	int (*pmgr_interface) (int dev, struct patmgr_info *info);
 };
 
@@ -177,7 +181,7 @@ struct generic_midi_operations {
 			{SBC_BASE, SBC_IRQ, SBC_DMA}, SND_DEFAULT_ENABLE},
 #endif
 
-#if !defined(EXCLUDE_SB) && !defined(EXCLUDE_SB16)
+#if !defined(EXCLUDE_SB) && !defined(EXCLUDE_SB16) && !defined(EXCLUDE_SBPRO)
 #ifndef EXCLUDE_AUDIO
 		{SNDCARD_SB16,	"SoundBlaster16",	sb16_dsp_init, sb16_dsp_detect,
 			{SBC_BASE, SBC_IRQ, SB16_DMA}, SND_DEFAULT_ENABLE},

@@ -1,11 +1,11 @@
 #define _PAS2_PCM_C_
 /*
  * sound/pas2_pcm.c
- * 
+ *
  * The low level driver for the Pro Audio Spectrum ADC/DAC.
- * 
+ *
  * Copyright by Hannu Savolainen 1993
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met: 1. Redistributions of source code must retain the above copyright
@@ -13,7 +13,7 @@
  * Redistributions in binary form must reproduce the above copyright notice,
  * this list of conditions and the following disclaimer in the documentation
  * and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -25,7 +25,7 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- * 
+ *
  */
 
 #include "sound_config.h"
@@ -149,7 +149,7 @@ pas_pcm_ioctl (int dev, unsigned int cmd, unsigned int arg, int local)
 
     case SOUND_PCM_WRITE_CHANNELS:
       if (local)
-         return pcm_set_channels (arg);
+	return pcm_set_channels (arg);
       return IOCTL_OUT (arg, pcm_set_channels (IOCTL_IN (arg)));
       break;
 
@@ -234,7 +234,7 @@ pas_pcm_close (int dev)
 }
 
 static void
-pas_pcm_output_block (int dev, unsigned long buf, int count, 
+pas_pcm_output_block (int dev, unsigned long buf, int count,
 		      int intrflag, int restart_dma)
 {
   unsigned long   flags, cnt;
@@ -255,8 +255,8 @@ pas_pcm_output_block (int dev, unsigned long buf, int count,
   pas_write (pas_read (PCM_CONTROL) & ~P_C_PCM_ENABLE,
 	     PCM_CONTROL);
 
-  if (restart_dma) 
-     DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE);
+  if (restart_dma)
+    DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE);
 
   if (sound_dsp_dmachan[dev] > 3)
     count >>= 1;
@@ -280,7 +280,7 @@ pas_pcm_output_block (int dev, unsigned long buf, int count,
 }
 
 static void
-pas_pcm_start_input (int dev, unsigned long buf, int count, 
+pas_pcm_start_input (int dev, unsigned long buf, int count,
 		     int intrflag, int restart_dma)
 {
   unsigned long   flags;
@@ -300,7 +300,7 @@ pas_pcm_start_input (int dev, unsigned long buf, int count,
   DISABLE_INTR (flags);
 
   if (restart_dma)
-     DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ);
+    DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ);
 
   if (sound_dsp_dmachan[dev] > 3)
     count >>= 1;
@@ -337,14 +337,15 @@ pas_pcm_prepare_for_output (int dev, int bsize, int bcount)
 static struct audio_operations pas_pcm_operations =
 {
   "Pro Audio Spectrum",
-  pas_pcm_open,			/* */
-  pas_pcm_close,		/* */
-  pas_pcm_output_block,		/* */
-  pas_pcm_start_input,		/* */
-  pas_pcm_ioctl,		/* */
-  pas_pcm_prepare_for_input,	/* */
-  pas_pcm_prepare_for_output,	/* */
-  pas_pcm_reset,		/* */
+  NOTHING_SPECIAL,
+  pas_pcm_open,
+  pas_pcm_close,
+  pas_pcm_output_block,
+  pas_pcm_start_input,
+  pas_pcm_ioctl,
+  pas_pcm_prepare_for_input,
+  pas_pcm_prepare_for_output,
+  pas_pcm_reset,
   pas_pcm_reset,		/* halt_xfer */
   NULL,				/* has_output_drained */
   NULL				/* copy_from_user */
@@ -379,9 +380,9 @@ pas_pcm_init (long mem_start, struct address_info *hw_config)
 	  sound_dma_automode[my_devnum] = 1;
 	}
 #else
-	  sound_buffcounts[my_devnum] = 2;
-	  sound_buffsizes[my_devnum] = DSP_BUFFSIZE;
-	  sound_dma_automode[my_devnum] = 0;
+      sound_buffcounts[my_devnum] = 2;
+      sound_buffsizes[my_devnum] = DSP_BUFFSIZE;
+      sound_dma_automode[my_devnum] = 0;
 #endif
     }
   else

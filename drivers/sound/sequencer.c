@@ -1,10 +1,10 @@
 /*
  * sound/sequencer.c
- * 
+ *
  * The sequencer personality manager.
- * 
+ *
  * Copyright by Hannu Savolainen 1993
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met: 1. Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  * Redistributions in binary form must reproduce the above copyright notice,
  * this list of conditions and the following disclaimer in the documentation
  * and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -24,7 +24,7 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- * 
+ *
  */
 
 #define SEQUENCER_C
@@ -46,7 +46,7 @@ static int      midi_opened[MAX_MIDI_DEV] =
 static int      midi_written[MAX_MIDI_DEV] =
 {0};
 
-long            seq_time = 0;	/* Reference point for the timer */
+unsigned long   seq_time = 0;	/* Reference point for the timer */
 
 #include "tuning.h"
 
@@ -77,6 +77,7 @@ int
 sequencer_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 {
   int             c = count, p = 0;
+  unsigned long   flags;
 
   dev = dev >> 4;
 
@@ -85,12 +86,22 @@ sequencer_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 
   while (c > 3)
     {
+      DISABLE_INTR (flags);
       if (!iqlen)
 	{
+	  if (c != count)	/* Some data has been received */
+	    {
+	      RESTORE_INTR (flags);
+	      return count - c;	/* Return what we have */
+	    }
+
 	  DO_SLEEP (midi_sleeper, midi_sleep_flag, 0);
 
 	  if (!iqlen)
-	    return count - c;
+	    {
+	      RESTORE_INTR (flags);
+	      return count - c;
+	    }
 	}
 
       COPY_TO_USER (buf, p, &iqueue[iqhead * IEV_SZ], IEV_SZ);
@@ -99,6 +110,7 @@ sequencer_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 
       iqhead = (iqhead + 1) % SEQ_MAX_QUEUE;
       iqlen--;
+      RESTORE_INTR (flags);
     }
 
   return count - c;
@@ -118,11 +130,11 @@ copy_to_input (unsigned char *event)
   if (iqlen >= (SEQ_MAX_QUEUE - 1))
     return;			/* Overflow */
 
+  DISABLE_INTR (flags);
   memcpy (&iqueue[iqtail * IEV_SZ], event, IEV_SZ);
   iqlen++;
   iqtail = (iqtail + 1) % SEQ_MAX_QUEUE;
 
-  DISABLE_INTR (flags);
   if (SOMEONE_WAITING (midi_sleeper, midi_sleep_flag))
     {
       WAKE_UP (midi_sleeper, midi_sleep_flag);
@@ -327,6 +339,10 @@ extended_event (unsigned char *q)
       synth_devs[dev]->controller (dev, q[3], q[4], *(short *) &q[5]);
       break;
 
+    case SEQ_VOLMODE:
+      synth_devs[dev]->volume_method (dev, q[3]);
+      break;
+
     default:
       return RET_ERROR (EINVAL);
     }
@@ -346,7 +362,7 @@ seq_startplay (void)
       qhead = ((this_one = qhead) + 1) % SEQ_MAX_QUEUE;
       qlen--;
 
-      q = &queue[this_one*EV_SZ];
+      q = &queue[this_one * EV_SZ];
 
       switch (q[0])
 	{
@@ -463,87 +479,87 @@ seq_startplay (void)
 
 int
 sequencer_open (int dev, struct fileinfo *file)
-  {
-    int             retval, mode, i;
+{
+  int             retval, mode, i;
 
-    dev = dev >> 4;
-    mode = file->mode & O_ACCMODE;
+  dev = dev >> 4;
+  mode = file->mode & O_ACCMODE;
 
-    DEB (printk ("sequencer_open(dev=%d)\n", dev));
+  DEB (printk ("sequencer_open(dev=%d)\n", dev));
 
-    if (!sequencer_ok)
-      {
-	printk ("Soundcard: Sequencer not initialized\n");
-	return RET_ERROR (ENXIO);
-      }
-
-    if (dev)			/* Patch manager device */
-      {
-	int             err;
-
-	dev--;
-	if (pmgr_present[dev])
-	  return RET_ERROR (EBUSY);
-	if ((err = pmgr_open (dev)) < 0)
-	  return err;		/* Failed */
-
-	pmgr_present[dev] = 1;
-	return err;
-      }
-
-    if (sequencer_busy)
-      {
-	printk ("Sequencer busy\n");
-	return RET_ERROR (EBUSY);
-      }
-
-    if (!(num_synths + num_midis))
+  if (!sequencer_ok)
+    {
+      printk ("Soundcard: Sequencer not initialized\n");
       return RET_ERROR (ENXIO);
+    }
 
-    synth_open_mask = 0;
+  if (dev)			/* Patch manager device */
+    {
+      int             err;
 
-    if (mode == OPEN_WRITE || mode == OPEN_READWRITE)
-      for (i = 0; i < num_synths; i++)	/* Open synth devices */
-	if (synth_devs[i]->open (i, mode) < 0)
-	  printk ("Sequencer: Warning! Cannot open synth device #%d\n", i);
-	else
-	  synth_open_mask |= (1 << i);
+      dev--;
+      if (pmgr_present[dev])
+	return RET_ERROR (EBUSY);
+      if ((err = pmgr_open (dev)) < 0)
+	return err;		/* Failed */
 
-    seq_time = GET_TIME ();
+      pmgr_present[dev] = 1;
+      return err;
+    }
 
-    for (i = 0; i < num_midis; i++)
-      {
-	midi_opened[i] = 0;
-	midi_written[i] = 0;
-      }
+  if (sequencer_busy)
+    {
+      printk ("Sequencer busy\n");
+      return RET_ERROR (EBUSY);
+    }
 
-    if (mode == OPEN_READ || mode == OPEN_READWRITE)
-      {				/* Initialize midi input devices */
-	if (!num_midis)
-	  {
-	    printk ("Sequencer: No Midi devices. Input not possible\n");
-	    return RET_ERROR (ENXIO);
-	  }
+  if (!(num_synths + num_midis))
+    return RET_ERROR (ENXIO);
 
-	for (i = 0; i < num_midis; i++)
-	  {
-	    if ((retval = midi_devs[i]->open (i, mode,
+  synth_open_mask = 0;
+
+  if (mode == OPEN_WRITE || mode == OPEN_READWRITE)
+    for (i = 0; i < num_synths; i++)	/* Open synth devices */
+      if (synth_devs[i]->open (i, mode) < 0)
+	printk ("Sequencer: Warning! Cannot open synth device #%d\n", i);
+      else
+	synth_open_mask |= (1 << i);
+
+  seq_time = GET_TIME ();
+
+  for (i = 0; i < num_midis; i++)
+    {
+      midi_opened[i] = 0;
+      midi_written[i] = 0;
+    }
+
+  if (mode == OPEN_READ || mode == OPEN_READWRITE)
+    {				/* Initialize midi input devices */
+      if (!num_midis)
+	{
+	  printk ("Sequencer: No Midi devices. Input not possible\n");
+	  return RET_ERROR (ENXIO);
+	}
+
+      for (i = 0; i < num_midis; i++)
+	{
+	  if ((retval = midi_devs[i]->open (i, mode,
 			 sequencer_midi_input, sequencer_midi_output)) >= 0)
-	      midi_opened[i] = 1;
-	  }
-      }
+	    midi_opened[i] = 1;
+	}
+    }
 
-    sequencer_busy = 1;
-    RESET_WAIT_QUEUE (seq_sleeper, seq_sleep_flag);
-    RESET_WAIT_QUEUE (midi_sleeper, midi_sleep_flag);
-    output_treshold = SEQ_MAX_QUEUE / 2;
+  sequencer_busy = 1;
+  RESET_WAIT_QUEUE (seq_sleeper, seq_sleep_flag);
+  RESET_WAIT_QUEUE (midi_sleeper, midi_sleep_flag);
+  output_treshold = SEQ_MAX_QUEUE / 2;
 
-    for (i = 0; i < num_synths; i++)
-      if (pmgr_present[i])
-	pmgr_inform (i, PM_E_OPENED, 0, 0, 0, 0);
+  for (i = 0; i < num_synths; i++)
+    if (pmgr_present[i])
+      pmgr_inform (i, PM_E_OPENED, 0, 0, 0, 0);
 
-    return 0;
-  }
+  return 0;
+}
 
 void
 seq_drain_midi_queues (void)
@@ -578,53 +594,53 @@ seq_drain_midi_queues (void)
 
 void
 sequencer_release (int dev, struct fileinfo *file)
-  {
-    int             i;
-    int             mode = file->mode & O_ACCMODE;
+{
+  int             i;
+  int             mode = file->mode & O_ACCMODE;
 
-    dev = dev >> 4;
+  dev = dev >> 4;
 
-    DEB (printk ("sequencer_release(dev=%d)\n", dev));
+  DEB (printk ("sequencer_release(dev=%d)\n", dev));
 
-    if (dev)			/* Patch manager device */
-      {
-	dev--;
-	pmgr_release (dev);
-	pmgr_present[dev] = 0;
-	return;
-      }
+  if (dev)			/* Patch manager device */
+    {
+      dev--;
+      pmgr_release (dev);
+      pmgr_present[dev] = 0;
+      return;
+    }
 
-    /*
+  /*
      * Wait until the queue is empty
-     */
+   */
 
-    while (!PROCESS_ABORTING (seq_sleeper, seq_sleep_flag) && qlen)
-      {
-	seq_sync ();
-      }
+  while (!PROCESS_ABORTING (seq_sleeper, seq_sleep_flag) && qlen)
+    {
+      seq_sync ();
+    }
 
-    if (mode != OPEN_READ)
-      seq_drain_midi_queues ();	/* Ensure the output queues are empty */
-    seq_reset ();
-    if (mode != OPEN_READ)
-      seq_drain_midi_queues ();	/* Flush the all notes off messages */
+  if (mode != OPEN_READ)
+    seq_drain_midi_queues ();	/* Ensure the output queues are empty */
+  seq_reset ();
+  if (mode != OPEN_READ)
+    seq_drain_midi_queues ();	/* Flush the all notes off messages */
 
-    for (i = 0; i < num_midis; i++)
-      if (midi_opened[i])
-	midi_devs[i]->close (i);
+  for (i = 0; i < num_midis; i++)
+    if (midi_opened[i])
+      midi_devs[i]->close (i);
 
-    if (mode == OPEN_WRITE || mode == OPEN_READWRITE)
-      for (i = 0; i < num_synths; i++)
-	if (synth_open_mask & (1 << i))	/* Actually opened */
-	  if (synth_devs[i])
-	    synth_devs[i]->close (i);
-
+  if (mode == OPEN_WRITE || mode == OPEN_READWRITE)
     for (i = 0; i < num_synths; i++)
-      if (pmgr_present[i])
-	pmgr_inform (i, PM_E_CLOSED, 0, 0, 0, 0);
+      if (synth_open_mask & (1 << i))	/* Actually opened */
+	if (synth_devs[i])
+	  synth_devs[i]->close (i);
 
-    sequencer_busy = 0;
-  }
+  for (i = 0; i < num_synths; i++)
+    if (pmgr_present[i])
+      pmgr_inform (i, PM_E_CLOSED, 0, 0, 0, 0);
+
+  sequencer_busy = 0;
+}
 
 static int
 seq_sync (void)
@@ -686,8 +702,8 @@ seq_reset (void)
       {
 	for (chn = 0; chn < 16; chn++)
 	  {
-	    midi_outc (i, 
-		(unsigned char)(0xb0 + (chn & 0xff))); /* Channel msg */
+	    midi_outc (i,
+		       (unsigned char) (0xb0 + (chn & 0xff)));	/* Channel msg */
 	    midi_outc (i, 0x7b);/* All notes off */
 	    midi_outc (i, 0);	/* Dummy parameter */
 	  }
@@ -1040,7 +1056,7 @@ note_to_freq (int note_num)
   else if (octave > BASE_OCTAVE)
     note_freq <<= (octave - BASE_OCTAVE);
 
-  /* note_freq >>= 1;	 */
+  /* note_freq >>= 1;    */
 
   return note_freq;
 }
@@ -1049,7 +1065,7 @@ unsigned long
 compute_finetune (unsigned long base_freq, int bend, int range)
 {
   unsigned long   amount;
-  int             negative, semitones, cents;
+  int             negative, semitones, cents, multiplier = 1;
 
   if (!bend)
     return base_freq;
@@ -1073,13 +1089,20 @@ compute_finetune (unsigned long base_freq, int bend, int range)
   if (bend > range)
     bend = range;
 
-  if (bend > 2399)
-    bend = 2399;
+  /*
+     if (bend > 2399)
+     bend = 2399;
+   */
+  while (bend > 2399)
+    {
+      multiplier *= 4;
+      bend -= 2400;
+    }
 
   semitones = bend / 100;
   cents = bend % 100;
 
-  amount = semitone_tuning[semitones] * cent_tuning[cents] / 10000;
+  amount = semitone_tuning[semitones] * multiplier * cent_tuning[cents] / 10000;
 
   if (negative)
     return (base_freq * 10000) / amount;	/* Bend down */
@@ -1093,8 +1116,9 @@ sequencer_init (long mem_start)
 {
 
   sequencer_ok = 1;
-  PERMANENT_MALLOC(unsigned char*, queue, SEQ_MAX_QUEUE*EV_SZ, mem_start);
-  PERMANENT_MALLOC(unsigned char*, iqueue, SEQ_MAX_QUEUE*IEV_SZ, mem_start);
+  PERMANENT_MALLOC (unsigned char *, queue, SEQ_MAX_QUEUE * EV_SZ, mem_start);
+  PERMANENT_MALLOC (unsigned char *, iqueue, SEQ_MAX_QUEUE * IEV_SZ, mem_start);
+
   return mem_start;
 }
 
@@ -1114,14 +1138,14 @@ sequencer_write (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 
 int
 sequencer_open (int dev, struct fileinfo *file)
-  {
-    return RET_ERROR (ENXIO);
-  }
+{
+  return RET_ERROR (ENXIO);
+}
 
 void
 sequencer_release (int dev, struct fileinfo *file)
-  {
-  }
+{
+}
 int
 sequencer_ioctl (int dev, struct fileinfo *file,
 		 unsigned int cmd, unsigned int arg)

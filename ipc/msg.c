@@ -84,7 +84,7 @@ int sys_msgsnd (int msqid, struct msgbuf *msgp, int msgsz, int msgflg)
 	
 	if (msgque[id] == IPC_UNUSED || msgque[id] == IPC_NOID
 		|| ipcp->seq != msqid / MSGMNI) {
-		kfree_s (msgh, sizeof(*msgh) + msgsz);
+		kfree(msgh);
 		return -EIDRM;
 	}
 
@@ -194,7 +194,7 @@ int sys_msgrcv (int msqid, struct msgbuf *msgp, int msgsz, long msgtyp,
 				wake_up (&msq->wwait);
 			put_fs_long (nmsg->msg_type, &msgp->mtype);
 			memcpy_tofs (msgp->mtext, nmsg->msg_spot, msgsz);
-			kfree_s (nmsg, sizeof(*nmsg) + msgsz); 
+			kfree(nmsg);
 			return msgsz;
 		} else {  /* did not find a message */
 			if (msgflg & IPC_NOWAIT)
@@ -311,9 +311,9 @@ static void freeque (int id)
 	for (msgp = msq->msg_first; msgp; msgp = msgh ) {
 		msgh = msgp->msg_next;
 		msghdrs--;
-		kfree_s (msgp, sizeof(*msgp) + msgp->msg_ts);
+		kfree(msgp);
 	}
-	kfree_s (msq, sizeof (*msq));
+	kfree(msq);
 }
 
 int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)

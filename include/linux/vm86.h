@@ -40,7 +40,7 @@
 #define VM86_SIGNAL	0	/* return due to signal */
 #define VM86_UNKNOWN	1	/* unhandled GP fault - IO-instruction or similar */
 #define VM86_INTx	2	/* int3/int x instruction (ARG = x) */
-#define VM86_STI	3	/* sti/popfl instruction enabled virtual interrupts */
+#define VM86_STI	3	/* sti/popf/iret instruction enabled virtual interrupts */
 
 /*
  * This is the stack-layout when we have done a "SAVE_ALL" from vm86
@@ -102,14 +102,6 @@ struct vm86_struct {
 #ifdef __KERNEL__
 
 void handle_vm86_fault(struct vm86_regs *, long);
-
-extern inline int is_revectored(int nr, struct revectored_struct * bitmap)
-{
-	__asm__ __volatile__("btl %2,%%fs:%1\n\tsbbl %0,%0"
-		:"=r" (nr)
-		:"m" (*bitmap),"r" (nr));
-	return nr;
-}
 
 #endif
 

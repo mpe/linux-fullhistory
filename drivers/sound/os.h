@@ -37,7 +37,6 @@
 #include <linux/timer.h>
 #include <linux/tty.h>
 #include <linux/ctype.h>
-#include <linux/string.h>
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -46,6 +45,7 @@
 #include <linux/wait.h>
 #include <linux/malloc.h>
 #include <linux/soundcard.h>
+#include <linux/string.h>
 
 typedef char snd_rw_buf;
 
@@ -141,7 +141,7 @@ struct snd_wait {
 
 #define DEFINE_TIMER(name, proc) \
   static struct timer_list name = \
-  {NULL, NULL, 0, 0, proc}
+  {NULL, 0, 0, 0, proc}
 
 /*
  * The ACTIVATE_TIMER requests system to call 'proc' after 'time' ticks.

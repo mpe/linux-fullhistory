@@ -186,6 +186,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, struct device *dev)
 		icmp_statistics.IcmpOutErrors++;
 		return;
 	}
+	skb->free = 1;
 
 	/*
 	 *	Build Layer 2-3 headers for message back to source. 

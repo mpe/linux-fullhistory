@@ -1,8 +1,8 @@
 /*
- * sound/configure.c	- Configuration program for the Linux Sound Driver
- * 
+ * sound/configure.c  - Configuration program for the Linux Sound Driver
+ *
  * Copyright by Hannu Savolainen 1993
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met: 1. Redistributions of source code must retain the above copyright
@@ -10,7 +10,7 @@
  * Redistributions in binary form must reproduce the above copyright notice,
  * this list of conditions and the following disclaimer in the documentation
  * and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -22,7 +22,7 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- * 
+ *
  */
 
 #include <stdio.h>
@@ -48,12 +48,12 @@
 #define OPT_MIDI_AUTO	8
 #define OPT_MIDI	9
 #define OPT_YM3812_AUTO	10	/* Select this automaticly if user selects
-				 * MIDI or AdLib driver */
+				   * MIDI or AdLib driver */
 #define OPT_YM3812	11	/* Select this if the previous one was not
-				 * selected */
+				   * selected */
 #define OPT_SEQUENCER	12
 #define OPT_CHIP_MIDI   13	/* New support added at UW - Milwauklee UW -
-				 * Milwauklee */
+				   * Milwauklee */
 #define OPT_LAST	12
 
 #define ANY_DEVS (B(OPT_AUDIO)|B(OPT_MIDI)|B(OPT_SEQUENCER)|B(OPT_GUS)|B(OPT_MPU401))
@@ -65,7 +65,7 @@ typedef struct
     char            macro[20];
     int             verify;
     int             alias;
-    int		    default_answ;
+    int             default_answ;
   }
 
 hw_entry;
@@ -77,11 +77,11 @@ hw_entry;
  * second field is a set of options which are not allowed with this one. If
  * the fourth field is zero, the option is selected without asking
  * confirmation from the user.
- * 
+ *
  * With this version of the rule table it is possible to select just one type of
  * hardware.
- * 
- * NOTE!	Keep the following table and the questions array in sync with the
+ *
+ * NOTE!        Keep the following table and the questions array in sync with the
  * option numbering!
  */
 
@@ -127,7 +127,7 @@ char           *questions[] =
 };
 
 unsigned long   selected_options = 0;
-int sb_dma = 0;
+int             sb_dma = 0;
 
 int
 can_select_option (int nr)
@@ -272,11 +272,11 @@ main (int argc, char *argv[])
 		}
 	      else
 		{
-		  int def_answ = hw_table[i].default_answ;
+		  int             def_answ = hw_table[i].default_answ;
 
-		  fprintf (stderr, 
-		     def_answ ? "  %s (y/n) ? " : "  %s (n/y) ? ", 
-		     questions[i]);
+		  fprintf (stderr,
+			   def_answ ? "  %s (y/n) ? " : "  %s (n/y) ? ",
+			   questions[i]);
 		  if (think_positively (def_answ))
 		    if (hw_table[i].alias)
 		      selected_options |= B (hw_table[i].alias);
@@ -286,8 +286,8 @@ main (int argc, char *argv[])
 	  }
     }
 
-  if (selected_options & B(OPT_SB16))
-     selected_options |= B(OPT_SBPRO);
+  if (selected_options & B (OPT_SB16))
+    selected_options |= B (OPT_SBPRO);
 
   if (!(selected_options & ANY_DEVS))
     {
@@ -319,8 +319,9 @@ main (int argc, char *argv[])
   if (selected_options & B (OPT_SB) && selected_options & (B (OPT_AUDIO) | B (OPT_MIDI)))
     {
       fprintf (stderr, "\nIRQ number for SoundBlaster?\n"
-	       "The IRQ adress is defined by the jumpers on your card and\n"
-	       "7 is the factory default. Valid values are 9, 5, 7 and 10.\n"
+	       "The IRQ address is defined by the jumpers on your card.\n"
+	  "The factory default is either 5 or 7 (depending on the model).\n"
+	       "Valid values are 9, 5, 7 and 10.\n"
 	       "Enter the value: ");
 
       num = ask_value ("%d", 7);
@@ -331,9 +332,10 @@ main (int argc, char *argv[])
 	  num = 7;
 	}
       fprintf (stderr, "SoundBlaster IRQ set to %d\n", num);
+      printf ("#define SBC_BASE 0x220\n");
       printf ("#define SBC_IRQ %d\n", num);
 
-      if (selected_options & B (OPT_SBPRO))
+      if (selected_options & (B (OPT_SBPRO) | B (OPT_PAS)))
 	{
 
 	  fprintf (stderr, "\nDMA channel for SoundBlaster?\n"
@@ -359,7 +361,7 @@ main (int argc, char *argv[])
 	{
 
 	  fprintf (stderr, "\n16 bit DMA channel for SoundBlaster 16?\n"
-	  	   "Possible values are 5, 6 or 7\n"
+		   "Possible values are 5, 6 or 7\n"
 		   "The default value is 6\n"
 		   "Enter the value: ");
 
@@ -373,14 +375,14 @@ main (int argc, char *argv[])
 	  fprintf (stderr, "SoundBlaster DMA set to %d\n", num);
 	  printf ("#define SB16_DMA %d\n", num);
 
-          fprintf (stderr, "\nI/O base for SB16 Midi?\n"
-	       "Possible values are 300 and 330\n"
-	       "The factory default is 330\n"
-	       "Enter the SB16 Midi I/O base: ");
+	  fprintf (stderr, "\nI/O base for SB16 Midi?\n"
+		   "Possible values are 300 and 330\n"
+		   "The factory default is 330\n"
+		   "Enter the SB16 Midi I/O base: ");
 
-          num = ask_value ("%x", 0x330);
-          fprintf (stderr, "SB16 Midi I/O base set to %03x\n", num);
-          printf ("#define SB16MIDI_BASE 0x%03x\n", num);
+	  num = ask_value ("%x", 0x330);
+	  fprintf (stderr, "SB16 Midi I/O base set to %03x\n", num);
+	  printf ("#define SB16MIDI_BASE 0x%03x\n", num);
 	}
     }
 
@@ -428,7 +430,7 @@ main (int argc, char *argv[])
   if (selected_options & B (OPT_GUS))
     {
       fprintf (stderr, "\nI/O base for Gravis Ultrasound?\n"
-	       "Valid choises are 210, 220, 230, 240, 250 or 260\n"
+	       "Valid choices are 210, 220, 230, 240, 250 or 260\n"
 	       "The factory default is 220\n"
 	       "Enter the GUS I/O base: ");
 
@@ -515,12 +517,12 @@ main (int argc, char *argv[])
     {
       def_size = 16384;
 
-      if (selected_options & (B (OPT_SBPRO) | B (OPT_PAS) | B(OPT_SB16)))
+      if (selected_options & (B (OPT_SBPRO) | B (OPT_PAS) | B (OPT_SB16)))
 	def_size = 32768;
 
 #ifndef __386BSD__
-      if (((selected_options & B (OPT_PAS)) || (selected_options & B (OPT_SB16))) && 
-          !full_driver)
+      if (((selected_options & B (OPT_PAS)) || (selected_options & B (OPT_SB16))) &&
+	  !full_driver)
 	def_size = 65536;	/* PAS16 or SB16 */
 #endif
 
@@ -543,7 +545,7 @@ main (int argc, char *argv[])
   fprintf (stderr, "The sound driver is now configured.\n");
 
 #if defined(SCO) || defined(ISC) || defined(SYSV)
-	fprintf(stderr, "Rember to update the System file\n");
+  fprintf (stderr, "Remember to update the System file\n");
 #endif
 
   exit (0);

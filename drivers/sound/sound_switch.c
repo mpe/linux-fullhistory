@@ -1,10 +1,10 @@
 /*
  * sound/sound_switch.c
- * 
+ *
  * The system call switch
- * 
+ *
  * Copyright by Hannu Savolainen 1993
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met: 1. Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  * Redistributions in binary form must reproduce the above copyright notice,
  * this list of conditions and the following disclaimer in the documentation
  * and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -24,7 +24,7 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- * 
+ *
  */
 
 #include "sound_config.h"
@@ -32,13 +32,16 @@
 #ifdef CONFIGURE_SOUNDCARD
 
 struct sbc_device
-{
-  int             usecount;
-};
+  {
+    int             usecount;
+  };
 
-static struct sbc_device sbc_devices[SND_NDEVS] = {{0}};
+static struct sbc_device sbc_devices[SND_NDEVS] =
+{
+  {0}};
 
 static int      in_use = 0;	/* Total # of open device files (excluding
+
 				 * minor 0) */
 
 /*
@@ -53,7 +56,7 @@ put_status (char *s)
 {
   int             l;
 
-  for (l=0;l<256,s[l];l++);	/* l=strlen(s); */
+  for (l = 0; l < 256, s[l]; l++);	/* l=strlen(s); */
 
   if (status_len + l >= 4000)
     return 0;
@@ -69,27 +72,28 @@ put_status_int (unsigned int val, int radix)
 {
   int             l, v;
 
-  static char hx[] = "0123456789abcdef";
-  char buf[11];
+  static char     hx[] = "0123456789abcdef";
+  char            buf[11];
 
-  if (!val) return put_status("0");
+  if (!val)
+    return put_status ("0");
 
   l = 0;
-  buf[10]=0;
+  buf[10] = 0;
 
   while (val)
-  {
-  	v = val % radix;
-  	val = val / radix;
+    {
+      v = val % radix;
+      val = val / radix;
 
-  	buf[9-l] = hx[v];
-  	l++;
-  }
+      buf[9 - l] = hx[v];
+      l++;
+    }
 
   if (status_len + l >= 4000)
     return 0;
 
-  memcpy (&status_buf[status_len], &buf[10-l], l);
+  memcpy (&status_buf[status_len], &buf[10 - l], l);
   status_len += l;
 
   return 1;
@@ -114,32 +118,42 @@ init_status (void)
 
   if (!put_status ("Config options: "))
     return;
-  if (!put_status_int(SELECTED_SOUND_OPTIONS, 16))
-     return;
+  if (!put_status_int (SELECTED_SOUND_OPTIONS, 16))
+    return;
 
   if (!put_status ("\n\nHW config: \n"))
     return;
 
   for (i = 0; i < (num_sound_drivers - 1); i++)
     {
-      if (!supported_drivers[i].enabled) 
-      if (!put_status ("("))
+      if (!supported_drivers[i].enabled)
+	if (!put_status ("("))
+	  return;
+
+      if (!put_status ("Type "))
+	return;
+      if (!put_status_int (supported_drivers[i].card_type, 10))
+	return;
+      if (!put_status (": "))
+	return;
+      if (!put_status (supported_drivers[i].name))
+	return;
+      if (!put_status (" at 0x"))
+	return;
+      if (!put_status_int (supported_drivers[i].config.io_base, 16))
+	return;
+      if (!put_status (" irq "))
+	return;
+      if (!put_status_int (supported_drivers[i].config.irq, 10))
+	return;
+      if (!put_status (" drq "))
+	return;
+      if (!put_status_int (supported_drivers[i].config.dma, 10))
 	return;
 
-      if (!put_status ("Type ")) return;
-      if (!put_status_int(supported_drivers[i].card_type, 10)) return;
-      if (!put_status (": ")) return;
-      if (!put_status (supported_drivers[i].name)) return;
-      if (!put_status (" at 0x")) return;
-      if (!put_status_int(supported_drivers[i].config.io_base, 16)) return;
-      if (!put_status (" irq ")) return;
-      if (!put_status_int(supported_drivers[i].config.irq, 10)) return;
-      if (!put_status (" drq ")) return;
-      if (!put_status_int(supported_drivers[i].config.dma, 10)) return;
-
-      if (!supported_drivers[i].enabled) 
-      if (!put_status (")"))
-	return;
+      if (!supported_drivers[i].enabled)
+	if (!put_status (")"))
+	  return;
 
       if (!put_status ("\n"))
 	return;
@@ -150,10 +164,14 @@ init_status (void)
 
   for (i = 0; i < num_dspdevs; i++)
     {
-      if (!put_status_int(i, 10)) return;
-      if (!put_status(": "))return;
-      if (!put_status(dsp_devs[i]->name))return;
-      if (!put_status("\n"))return;
+      if (!put_status_int (i, 10))
+	return;
+      if (!put_status (": "))
+	return;
+      if (!put_status (dsp_devs[i]->name))
+	return;
+      if (!put_status ("\n"))
+	return;
     }
 
   if (!put_status ("\nSynth devices:\n"))
@@ -161,10 +179,14 @@ init_status (void)
 
   for (i = 0; i < num_synths; i++)
     {
-      if (!put_status_int(i, 10)) return;
-      if (!put_status(": "))return;
-      if (!put_status(synth_devs[i]->info->name))return;
-      if (!put_status("\n"))return;
+      if (!put_status_int (i, 10))
+	return;
+      if (!put_status (": "))
+	return;
+      if (!put_status (synth_devs[i]->info->name))
+	return;
+      if (!put_status ("\n"))
+	return;
     }
 
   if (!put_status ("\nMidi devices:\n"))
@@ -172,10 +194,14 @@ init_status (void)
 
   for (i = 0; i < num_midis; i++)
     {
-      if (!put_status_int(i, 10)) return;
-      if (!put_status(": "))return;
-      if (!put_status(midi_devs[i]->info.name))return;
-      if (!put_status("\n"))return;
+      if (!put_status_int (i, 10))
+	return;
+      if (!put_status (": "))
+	return;
+      if (!put_status (midi_devs[i]->info.name))
+	return;
+      if (!put_status ("\n"))
+	return;
     }
 
   if (num_mixers)
@@ -191,7 +217,7 @@ init_status (void)
 }
 
 static int
-read_status (snd_rw_buf *buf, int count)
+read_status (snd_rw_buf * buf, int count)
 {
   /*
    * Return at most 'count' bytes from the status_buf.
@@ -206,14 +232,14 @@ read_status (snd_rw_buf *buf, int count)
   if (l <= 0)
     return 0;
 
-  COPY_TO_USER(buf, 0, &status_buf[status_ptr], l);
+  COPY_TO_USER (buf, 0, &status_buf[status_ptr], l);
   status_ptr += l;
 
   return l;
 }
 
 int
-sound_read_sw (int dev, struct fileinfo *file, snd_rw_buf *buf, int count)
+sound_read_sw (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 {
   DEB (printk ("sound_read_sw(dev=%d, count=%d)\n", dev, count));
 
@@ -246,7 +272,7 @@ sound_read_sw (int dev, struct fileinfo *file, snd_rw_buf *buf, int count)
 }
 
 int
-sound_write_sw (int dev, struct fileinfo *file, snd_rw_buf *buf, int count)
+sound_write_sw (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 {
 
   DEB (printk ("sound_write_sw(dev=%d, count=%d)\n", dev, count));
@@ -275,6 +301,7 @@ int
 sound_open_sw (int dev, struct fileinfo *file)
 {
   int             retval;
+
   DEB (printk ("sound_open_sw(dev=%d) : usecount=%d\n", dev, sbc_devices[dev].usecount));
 
   if ((dev >= SND_NDEVS) || (dev < 0))
@@ -373,7 +400,7 @@ sound_release_sw (int dev, struct fileinfo *file)
 
 int
 sound_ioctl_sw (int dev, struct fileinfo *file,
-	     unsigned int cmd, unsigned long arg)
+		unsigned int cmd, unsigned long arg)
 {
   DEB (printk ("sound_ioctl_sw(dev=%d, cmd=0x%x, arg=0x%x)\n", dev, cmd, arg));
 
@@ -414,4 +441,5 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
 
   return RET_ERROR (EPERM);
 }
+
 #endif

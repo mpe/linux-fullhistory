@@ -1,10 +1,10 @@
 /*
  * sound/sb_dsp.c
- * 
+ *
  * The low level driver for the SoundBlaster DSP chip.
- * 
+ *
  * Copyright by Hannu Savolainen 1993
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met: 1. Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  * Redistributions in binary form must reproduce the above copyright notice,
  * this list of conditions and the following disclaimer in the documentation
  * and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -24,7 +24,11 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- * 
+ *
+ * Modified:
+ *	Hunyue Yau	Jan 6 1994
+ *	Added code to support Sound Galaxy NX Pro
+ *
  */
 
 #include "sound_config.h"
@@ -35,8 +39,9 @@
 #include "sb_mixer.h"
 #undef SB_TEST_IRQ
 
-int      sbc_base = 0;
+int             sbc_base = 0;
 static int      sbc_irq = 0;
+static int	open_mode=0;
 
 /*
  * The DSP channel can be used either for input or output. Variable
@@ -46,32 +51,33 @@ static int      sbc_irq = 0;
  * future version of this driver.
  */
 
-int      sb_dsp_ok = 0;	/* Set to 1 after successful initialization */
+int             sb_dsp_ok = 0;	/* Set to 1 after successful initialization */
 static int      midi_disabled = 0;
-int      sb_dsp_highspeed = 0;
-static int	major=1, minor=0;	/* DSP version */
-static int	dsp_stereo = 0;
+int             sb_dsp_highspeed = 0;
+int             sbc_major = 1;
+int             sbc_minor = 0;	/* DSP version */
+static int      dsp_stereo = 0;
 static int      dsp_current_speed = DSP_DEFAULT_SPEED;
 static int      sb16 = 0;
-static int	irq_verified = 0;
+static int      irq_verified = 0;
 
-int      sb_midi_mode = NORMAL_MIDI;
-int      sb_midi_busy = 0;	/* 1 if the process has output to MIDI */
-int      sb_dsp_busy = 0;
+int             sb_midi_mode = NORMAL_MIDI;
+int             sb_midi_busy = 0;	/* 1 if the process has output to MIDI */
+int             sb_dsp_busy = 0;
 
-volatile int sb_irq_mode = IMODE_NONE;	/* IMODE_INPUT, IMODE_OUTPUT
+volatile int    sb_irq_mode = IMODE_NONE;	/* IMODE_INPUT, IMODE_OUTPUT
+
 						 * or IMODE_NONE */
 static volatile int irq_ok = 0;
 
-int      sb_dsp_model = 1;	/* 1=SB, 2=SB Pro */
-int      sb_duplex_midi = 0;
+int             sb_duplex_midi = 0;
 static int      my_dev = 0;
 
-volatile int sb_intr_active = 0;
+volatile int    sb_intr_active = 0;
 
 static int      dsp_speed (int);
 static int      dsp_set_stereo (int mode);
-int      sb_dsp_command (unsigned char val);
+int             sb_dsp_command (unsigned char val);
 
 #if !defined(EXCLUDE_MIDI) || !defined(EXCLUDE_AUDIO)
 
@@ -80,9 +86,10 @@ int      sb_dsp_command (unsigned char val);
 int
 sb_dsp_command (unsigned char val)
 {
-  int             i, limit;
+  int             i;
+  unsigned long   limit;
 
-  limit = GET_TIME () + 10;	/* The timeout is 0.1 secods */
+  limit = GET_TIME () + HZ / 10;/* The timeout is 0.1 secods */
 
   /*
    * Note! the i<500000 is an emergency exit. The sb_dsp_command() is sometimes
@@ -109,7 +116,7 @@ sb_dsp_command (unsigned char val)
 void
 sbintr (int unit)
 {
-  int             status, data;
+  int             status;
 
 #ifndef EXCLUDE_SBPRO
   if (sb16)
@@ -117,10 +124,12 @@ sbintr (int unit)
       unsigned char   src = sb_getmixer (IRQ_STAT);	/* Interrupt source register */
 
 #ifndef EXCLUDE_SB16
-      if (src & 3) sb16_dsp_interrupt(unit);
+      if (src & 3)
+	sb16_dsp_interrupt (unit);
 
 #ifndef EXCLUDE_MIDI
-      if (src & 4) sb16midiintr (unit);			/* MPU401 interrupt */
+      if (src & 4)
+	sb16midiintr (unit);	/* MPU401 interrupt */
 #endif
 
 #endif
@@ -152,10 +161,7 @@ sbintr (int unit)
 	break;
 
       case IMODE_MIDI:
-	printk ("+");
-	data = INB (DSP_READ);
-	printk ("%x", data);
-
+	sb_midi_interrupt (unit);
 	break;
 
       default:
@@ -163,29 +169,32 @@ sbintr (int unit)
       }
 }
 
-static int sb_irq_usecount = 0;
+static int      sb_irq_usecount = 0;
 
 int
-sb_get_irq(void)
+sb_get_irq (void)
 {
-	int ok;
+  int             ok;
 
-	if (!sb_irq_usecount)
-	  if ((ok=snd_set_irq_handler(sbc_irq, sbintr))<0) return ok;
+  if (!sb_irq_usecount)
+    if ((ok = snd_set_irq_handler (sbc_irq, sbintr)) < 0)
+      return ok;
 
-	sb_irq_usecount++;
+  sb_irq_usecount++;
 
-	return 0; 
+  return 0;
 }
 
-void 
-sb_free_irq(void)
+void
+sb_free_irq (void)
 {
-	if (!sb_irq_usecount) return;
+  if (!sb_irq_usecount)
+    return;
 
-	sb_irq_usecount--;
+  sb_irq_usecount--;
 
-	if (!sb_irq_usecount) snd_release_irq(sbc_irq);
+  if (!sb_irq_usecount)
+    snd_release_irq (sbc_irq);
 }
 
 int
@@ -227,17 +236,31 @@ dsp_speed (int speed)
 {
   unsigned char   tconst;
   unsigned long   flags;
+  int             max_speed = 44100;
 
   if (speed < 4000)
     speed = 4000;
 
-  if (speed > 44100)
-    speed = 44100;		/* Invalid speed */
+  /*
+ * Older SB models don't support higher speeds than 22050.
+ */
 
-  if (sb_dsp_model == 1 && speed > 22050)
-    speed = 22050;
-  /* SB Classic doesn't support higher speed */
+  if (sbc_major < 2 ||
+      (sbc_major == 2 && sbc_minor == 0))
+    max_speed = 22050;
 
+  /*
+ * SB models earlier than SB Pro have low limit for the input speed.
+ */
+  if (open_mode != OPEN_WRITE)	/* Recording is possible */
+    if (sbc_major < 3)		/* Limited input speed with these cards */
+      if (sbc_major == 2 && sbc_minor > 0)
+	max_speed = 15000;
+      else
+	max_speed = 13000;
+
+  if (speed > max_speed)
+    speed = max_speed;		/* Invalid speed */
 
   if (dsp_stereo && speed > 22050)
     speed = 22050;
@@ -256,10 +279,10 @@ dsp_speed (int speed)
 
   if (speed > 22050)
     {				/* High speed mode */
-      int tmp;
+      int             tmp;
 
-      tconst = (unsigned char) ((65536 - 
-      				((256000000+speed/2) / speed)) >> 8);
+      tconst = (unsigned char) ((65536 -
+				 ((256000000 + speed / 2) / speed)) >> 8);
       sb_dsp_highspeed = 1;
 
       DISABLE_INTR (flags);
@@ -268,22 +291,22 @@ dsp_speed (int speed)
       RESTORE_INTR (flags);
 
       tmp = 65536 - (tconst << 8);
-      speed = (256000000+tmp/2) / tmp;
+      speed = (256000000 + tmp / 2) / tmp;
     }
   else
     {
-      int tmp;
+      int             tmp;
 
       sb_dsp_highspeed = 0;
-      tconst = (256 - ((1000000+speed/2) / speed)) & 0xff;
+      tconst = (256 - ((1000000 + speed / 2) / speed)) & 0xff;
 
       DISABLE_INTR (flags);
-      if (sb_dsp_command (0x40))	/* Set time constant */
+      if (sb_dsp_command (0x40))/* Set time constant */
 	sb_dsp_command (tconst);
       RESTORE_INTR (flags);
 
       tmp = 256 - tconst;
-      speed = (1000000+tmp/2) / tmp;
+      speed = (1000000 + tmp / 2) / tmp;
     }
 
   if (dsp_stereo)
@@ -301,7 +324,7 @@ dsp_set_stereo (int mode)
 #ifdef EXCLUDE_SBPRO
   return 0;
 #else
-  if (sb_dsp_model == 1 || sb16)
+  if (sbc_major < 3 || sb16)
     return 0;			/* Sorry no stereo */
 
   if (mode && sb_midi_busy)
@@ -316,7 +339,7 @@ dsp_set_stereo (int mode)
 }
 
 static void
-sb_dsp_output_block (int dev, unsigned long buf, int count, 
+sb_dsp_output_block (int dev, unsigned long buf, int count,
 		     int intrflag, int restart_dma)
 {
   unsigned long   flags;
@@ -334,11 +357,11 @@ sb_dsp_output_block (int dev, unsigned long buf, int count,
   if (sb_dsp_highspeed)
     {
       DISABLE_INTR (flags);
-      if (sb_dsp_command (0x48))	/* High speed size */
+      if (sb_dsp_command (0x48))/* High speed size */
 	{
-	  sb_dsp_command ((unsigned char)(count & 0xff));
-	  sb_dsp_command ((unsigned char)((count >> 8) & 0xff));
-	  sb_dsp_command (0x91);	/* High speed 8 bit DAC */
+	  sb_dsp_command ((unsigned char) (count & 0xff));
+	  sb_dsp_command ((unsigned char) ((count >> 8) & 0xff));
+	  sb_dsp_command (0x91);/* High speed 8 bit DAC */
 	}
       else
 	printk ("SB Error: Unable to start (high speed) DAC\n");
@@ -347,10 +370,10 @@ sb_dsp_output_block (int dev, unsigned long buf, int count,
   else
     {
       DISABLE_INTR (flags);
-      if (sb_dsp_command (0x14))	/* 8-bit DAC (DMA) */
+      if (sb_dsp_command (0x14))/* 8-bit DAC (DMA) */
 	{
-	  sb_dsp_command ((unsigned char)(count & 0xff));
-	  sb_dsp_command ((unsigned char)((count >> 8) & 0xff));
+	  sb_dsp_command ((unsigned char) (count & 0xff));
+	  sb_dsp_command ((unsigned char) ((count >> 8) & 0xff));
 	}
       else
 	printk ("SB Error: Unable to start DAC\n");
@@ -380,11 +403,11 @@ sb_dsp_start_input (int dev, unsigned long buf, int count, int intrflag,
   if (sb_dsp_highspeed)
     {
       DISABLE_INTR (flags);
-      if (sb_dsp_command (0x48))	/* High speed size */
+      if (sb_dsp_command (0x48))/* High speed size */
 	{
-	  sb_dsp_command ((unsigned char)(count & 0xff));
-	  sb_dsp_command ((unsigned char)((count >> 8) & 0xff));
-	  sb_dsp_command (0x99);	/* High speed 8 bit ADC */
+	  sb_dsp_command ((unsigned char) (count & 0xff));
+	  sb_dsp_command ((unsigned char) ((count >> 8) & 0xff));
+	  sb_dsp_command (0x99);/* High speed 8 bit ADC */
 	}
       else
 	printk ("SB Error: Unable to start (high speed) ADC\n");
@@ -393,10 +416,10 @@ sb_dsp_start_input (int dev, unsigned long buf, int count, int intrflag,
   else
     {
       DISABLE_INTR (flags);
-      if (sb_dsp_command (0x24))	/* 8-bit ADC (DMA) */
+      if (sb_dsp_command (0x24))/* 8-bit ADC (DMA) */
 	{
-	  sb_dsp_command ((unsigned char)(count & 0xff));
-	  sb_dsp_command ((unsigned char)((count >> 8) & 0xff));
+	  sb_dsp_command ((unsigned char) (count & 0xff));
+	  sb_dsp_command ((unsigned char) ((count >> 8) & 0xff));
 	}
       else
 	printk ("SB Error: Unable to start ADC\n");
@@ -418,16 +441,16 @@ sb_dsp_prepare_for_input (int dev, int bsize, int bcount)
   dsp_cleanup ();
   dsp_speaker (OFF);
 
-  if (major == 3)	/* SB Pro */
-  {
-    if (dsp_stereo)
-       sb_dsp_command(0xa8);
-    else
-       sb_dsp_command(0xa0);
+  if (sbc_major == 3)		/* SB Pro */
+    {
+      if (dsp_stereo)
+	sb_dsp_command (0xa8);
+      else
+	sb_dsp_command (0xa0);
 
-    dsp_speed (dsp_current_speed);/* Speed must be recalculated if #channels
-				   * changes */
-  }
+      dsp_speed (dsp_current_speed);	/* Speed must be recalculated if #channels
+					   * changes */
+    }
   return 0;
 }
 
@@ -438,12 +461,12 @@ sb_dsp_prepare_for_output (int dev, int bsize, int bcount)
   dsp_speaker (ON);
 
 #ifndef EXCLUDE_SBPRO
-  if (major == 3)	/* SB Pro */
-  {
-    sb_mixer_set_stereo(dsp_stereo);
-    dsp_speed (dsp_current_speed);/* Speed must be recalculated if #channels
-				   * changes */
-  }
+  if (sbc_major == 3)		/* SB Pro */
+    {
+      sb_mixer_set_stereo (dsp_stereo);
+      dsp_speed (dsp_current_speed);	/* Speed must be recalculated if #channels
+					   * changes */
+    }
 #endif
   return 0;
 }
@@ -457,7 +480,7 @@ static int
 verify_irq (void)
 {
 #if 0
-  DEFINE_WAIT_QUEUE(testq, testf);
+  DEFINE_WAIT_QUEUE (testq, testf);
 
   irq_ok = 0;
 
@@ -470,11 +493,11 @@ verify_irq (void)
 
   sb_irq_mode = IMODE_INIT;
 
-  sb_dsp_command (0xf2);		/* This should cause immediate interrupt */
+  sb_dsp_command (0xf2);	/* This should cause immediate interrupt */
 
-  DO_SLEEP(testq, testf, HZ / 5);
+  DO_SLEEP (testq, testf, HZ / 5);
 
-  sb_free_irq();
+  sb_free_irq ();
 
   if (!irq_ok)
     {
@@ -506,13 +529,12 @@ sb_dsp_open (int dev, int mode)
 
   if (!irq_verified)
     {
-  	verify_irq();
-  	irq_verified = 1;
+      verify_irq ();
+      irq_verified = 1;
     }
-  else
-    if (!irq_ok)
-       printk("SB Warning: Incorrect IRQ setting %d\n",
-  	      sbc_irq);
+  else if (!irq_ok)
+    printk ("SB Warning: Incorrect IRQ setting %d\n",
+	    sbc_irq);
 
   retval = sb_get_irq ();
   if (retval)
@@ -528,6 +550,7 @@ sb_dsp_open (int dev, int mode)
   sb_irq_mode = IMODE_NONE;
 
   sb_dsp_busy = 1;
+  open_mode = mode;
 
   return 0;
 }
@@ -541,6 +564,7 @@ sb_dsp_close (int dev)
   dsp_speaker (OFF);
   sb_dsp_busy = 0;
   sb_dsp_highspeed = 0;
+  open_mode = 0;
 }
 
 static int
@@ -562,7 +586,7 @@ sb_dsp_ioctl (int dev, unsigned int cmd, unsigned int arg, int local)
 
     case SOUND_PCM_WRITE_CHANNELS:
       if (local)
-         return dsp_set_stereo (arg - 1) + 1;
+	return dsp_set_stereo (arg - 1) + 1;
       return IOCTL_OUT (arg, dsp_set_stereo (IOCTL_IN (arg) - 1) + 1);
       break;
 
@@ -605,6 +629,7 @@ sb_dsp_reset (int dev)
   DISABLE_INTR (flags);
 
   sb_reset_dsp ();
+  dsp_speed (dsp_current_speed);
   dsp_cleanup ();
 
   RESTORE_INTR (flags);
@@ -631,6 +656,7 @@ sb_dsp_detect (struct address_info *hw_config)
 static struct audio_operations sb_dsp_operations =
 {
   "SoundBlaster",
+  NOTHING_SPECIAL,
   sb_dsp_open,
   sb_dsp_close,
   sb_dsp_output_block,
@@ -650,80 +676,85 @@ long
 sb_dsp_init (long mem_start, struct address_info *hw_config)
 {
   int             i;
+  int             prostat = 0;
 
-  major = minor = 0;
-  sb_dsp_command (0xe1);		/* Get version */
+  sbc_major = sbc_minor = 0;
+  sb_dsp_command (0xe1);	/* Get version */
 
   for (i = 1000; i; i--)
     {
       if (INB (DSP_DATA_AVAIL) & 0x80)
 	{			/* wait for Data Ready */
-	  if (major == 0)
-	    major = INB (DSP_READ);
+	  if (sbc_major == 0)
+	    sbc_major = INB (DSP_READ);
 	  else
 	    {
-	      minor = INB (DSP_READ);
+	      sbc_minor = INB (DSP_READ);
 	      break;
 	    }
 	}
     }
 
-      if (major == 2 || major == 3)
-	sb_duplex_midi = 1;
+  if (sbc_major == 2 || sbc_major == 3)	/* SB 2.0 or SB Pro */
+    sb_duplex_midi = 1;
 
-      if (major == 4)
-	sb16 = 1;
-
-      if (major >= 3)
-	sb_dsp_model = 2;
+  if (sbc_major == 4)
+    sb16 = 1;
 
 #ifndef EXCLUDE_SBPRO
-      if (major >= 3)
-         sb_mixer_init(major);
+  if (sbc_major >= 3 ||
+      (sbc_major == 2 && sbc_minor == 1))	/* Sound Galaxy ??? */
+    prostat = sb_mixer_init (sbc_major);
 #endif
 
 #ifndef EXCLUDE_YM3812
-      if (major > 3 || (major == 3 && minor > 0))	/* SB Pro2 or later */
-	{
-	  enable_opl3_mode (OPL3_LEFT, OPL3_RIGHT, OPL3_BOTH);
-	}
+  if (sbc_major > 3 ||
+      (sbc_major == 3 && INB (0x388) == 0x00))	/* Non OPL-3 should return 0x06 */
+    enable_opl3_mode (OPL3_LEFT, OPL3_RIGHT, OPL3_BOTH);
 #endif
 
-    if (major >= 3)
-      {
+  if (sbc_major >= 3)
+    {
 #ifndef SCO
-      	sprintf (sb_dsp_operations.name, "SoundBlaster Pro %d.%d", major, minor);
+      if (prostat)
+	{
+	  sprintf (sb_dsp_operations.name, "Sound Galaxy NX Pro %d.%d", sbc_major, sbc_minor);
+	}
+      else
+	{
+	  sprintf (sb_dsp_operations.name, "SoundBlaster Pro %d.%d", sbc_major, sbc_minor);
+	}
 #endif
-      }
-    else
-      {
+    }
+  else
+    {
 #ifndef SCO
-    	sprintf (sb_dsp_operations.name, "SoundBlaster %d.%d", major, minor);
+      sprintf (sb_dsp_operations.name, "SoundBlaster %d.%d", sbc_major, sbc_minor);
 #endif
-      }
+    }
 
   printk (" <%s>", sb_dsp_operations.name);
 
 #ifndef EXCLUDE_AUDIO
-#  if !defined(EXCLUDE_SB16) && !defined(EXCLUDE_SBPRO)
-  if (!sb16)	/* There is a better driver for SB16	*/
-#  endif
-  if (num_dspdevs < MAX_DSP_DEV)
-    {
-      dsp_devs[my_dev = num_dspdevs++] = &sb_dsp_operations;
-      sound_buffcounts[my_dev] = DSP_BUFFCOUNT;
-      sound_buffsizes[my_dev] = DSP_BUFFSIZE;
-      sound_dsp_dmachan[my_dev] = hw_config->dma;
-      sound_dma_automode[my_dev] = 0;
-    }
-  else
-    printk ("SB: Too many DSP devices available\n");
+#if !defined(EXCLUDE_SB16) && !defined(EXCLUDE_SBPRO)
+  if (!sb16)			/* There is a better driver for SB16    */
+#endif
+    if (num_dspdevs < MAX_DSP_DEV)
+      {
+	dsp_devs[my_dev = num_dspdevs++] = &sb_dsp_operations;
+	sound_buffcounts[my_dev] = DSP_BUFFCOUNT;
+	sound_buffsizes[my_dev] = DSP_BUFFSIZE;
+	sound_dsp_dmachan[my_dev] = hw_config->dma;
+	sound_dma_automode[my_dev] = 0;
+      }
+    else
+      printk ("SB: Too many DSP devices available\n");
 #endif
 
 #ifndef EXCLUDE_MIDI
   if (!midi_disabled && !sb16)	/* Midi don't work in the SB emulation mode
 				 * of PAS, SB16 has better midi interface */
-	sb_midi_init(major);
+    sb_midi_init (sbc_major);
 #endif
 
   sb_dsp_ok = 1;

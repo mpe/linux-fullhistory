@@ -407,9 +407,11 @@ int do_mknod(const char * filename, int mode, dev_t dev)
 		iput(dir);
 		return -EPERM;
 	}
+	dir->i_count++;
 	down(&dir->i_sem);
 	error = dir->i_op->mknod(dir,basename,namelen,mode,dev);
 	up(&dir->i_sem);
+	iput(dir);
 	return error;
 }
 
@@ -462,9 +464,11 @@ static int do_mkdir(const char * pathname, int mode)
 		iput(dir);
 		return -EPERM;
 	}
+	dir->i_count++;
 	down(&dir->i_sem);
 	error = dir->i_op->mkdir(dir,basename,namelen,mode);
 	up(&dir->i_sem);
+	iput(dir);
 	return error;
 }
 
@@ -588,9 +592,11 @@ static int do_symlink(const char * oldname, const char * newname)
 		iput(dir);
 		return -EPERM;
 	}
+	dir->i_count++;
 	down(&dir->i_sem);
 	error = dir->i_op->symlink(dir,basename,namelen,oldname);
 	up(&dir->i_sem);
+	iput(dir);
 	return error;
 }
 
@@ -647,9 +653,11 @@ static int do_link(struct inode * oldinode, const char * newname)
 		iput(oldinode);
 		return -EPERM;
 	}
+	dir->i_count++;
 	down(&dir->i_sem);
 	error = dir->i_op->link(oldinode, dir, basename, namelen);
 	up(&dir->i_sem);
+	iput(dir);
 	return error;
 }
 
@@ -723,10 +731,12 @@ static int do_rename(const char * oldname, const char * newname)
 		iput(new_dir);
 		return -EPERM;
 	}
+	new_dir->i_count++;
 	down(&new_dir->i_sem);
 	error = old_dir->i_op->rename(old_dir, old_base, old_len, 
 		new_dir, new_base, new_len);
 	up(&new_dir->i_sem);
+	iput(new_dir);
 	return error;
 }
 

@@ -95,7 +95,7 @@ found:
 		shm_segs[id] = (struct shmid_ds *) IPC_UNUSED;
 		if (shm_lock)
 			wake_up (&shm_lock);
-		kfree_s (shp, sizeof (*shp));
+		kfree(shp);
 		return -ENOMEM;
 	}
 
@@ -186,9 +186,9 @@ static void killseg (int id)
 			shm_swp--;
 		}
 	}
-	kfree_s (shp->shm_pages, numpages * sizeof (ulong));
+	kfree(shp->shm_pages);
 	shm_tot -= numpages;
-	kfree_s (shp, sizeof (*shp));
+	kfree(shp);
 	return;
 }
 
@@ -439,7 +439,7 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	if (!shmd)
 		return -ENOMEM;
 	if ((shp != shm_segs[id]) || (shp->shm_perm.seq != shmid / SHMMNI)) {
-		kfree_s (shmd, sizeof (*shmd));
+		kfree(shmd);
 		return -EIDRM;
 	}
 	shmd->shm_sgn = (SHM_SWP_TYPE << 1) | (id << SHM_ID_SHIFT) |
@@ -458,7 +458,7 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	if ((err = shm_map (shmd, shmflg & SHM_REMAP))) {
 		if (--shp->shm_nattch <= 0 && shp->shm_perm.mode & SHM_DEST)
 			killseg(id);
-		kfree_s (shmd, sizeof (*shmd));
+		kfree(shmd);
 		return err;
 	}
 		
@@ -497,7 +497,7 @@ static void detach (struct shm_desc **shmdp)
 	
  found:
 	unmap_page_range (shmd->start, shp->shm_segsz); /* sleeps */
-	kfree_s (shmd, sizeof (*shmd));
+	kfree(shmd);
   	shp->shm_lpid = current->pid;
 	shp->shm_dtime = CURRENT_TIME;
 	if (--shp->shm_nattch <= 0 && shp->shm_perm.mode & SHM_DEST)
@@ -550,7 +550,7 @@ int shm_fork (struct task_struct *p1, struct task_struct *p2)
 		if (!tmp) {
 			while (new_desc) { 
 				tmp = new_desc->task_next; 
-				kfree_s (new_desc, sizeof (*new_desc)); 
+				kfree(new_desc);
 				new_desc = tmp; 
 			}
 			free_page_tables (p2);
