@@ -51,12 +51,13 @@ static struct sock *econet_sklist;
    how you count) it makes sense to use a simple lookup table. */
 static struct net_device *net2dev_map[256];
 
+#define EC_PORT_IP	0xd2
+
 #ifdef CONFIG_ECONET_AUNUDP
 static spinlock_t aun_queue_lock;
 static struct socket *udpsock;
 #define AUN_PORT	0x8000
 
-#define EC_PORT_IP	0xd2
 
 struct aunhdr
 {
@@ -750,6 +751,28 @@ struct sock *ec_listening_socket(unsigned char port, unsigned char
 	return NULL;
 }
 
+/*
+ *	Queue a received packet for a socket.
+ */
+
+static int ec_queue_packet(struct sock *sk, struct sk_buff *skb,
+			   unsigned char stn, unsigned char net,
+			   unsigned char cb, unsigned char port)
+{
+	struct ec_cb *eb = (struct ec_cb *)&skb->cb;
+	struct sockaddr_ec *sec = (struct sockaddr_ec *)&eb->sec;
+
+	memset(sec, 0, sizeof(struct sockaddr_ec));
+	sec->sec_family = AF_ECONET;
+	sec->type = ECTYPE_PACKET_RECEIVED;
+	sec->port = port;
+	sec->cb = cb;
+	sec->addr.net = net;
+	sec->addr.station = stn;
+
+	return sock_queue_rcv_skb(sk, skb);
+}
+
 #ifdef CONFIG_ECONET_AUNUDP
 
 /*
@@ -792,27 +815,6 @@ static void aun_send_response(__u32 addr, unsigned long seq, int code, int cb)
 	set_fs(oldfs);
 }
 
-/*
- *	Queue a received packet for a socket.
- */
-
-static int ec_queue_packet(struct sock *sk, struct sk_buff *skb,
-			   unsigned char stn, unsigned char net,
-			   unsigned char cb, unsigned char port)
-{
-	struct ec_cb *eb = (struct ec_cb *)&skb->cb;
-	struct sockaddr_ec *sec = (struct sockaddr_ec *)&eb->sec;
-
-	memset(sec, 0, sizeof(struct sockaddr_ec));
-	sec->sec_family = AF_ECONET;
-	sec->type = ECTYPE_PACKET_RECEIVED;
-	sec->port = port;
-	sec->cb = cb;
-	sec->addr.net = net;
-	sec->addr.station = stn;
-
-	return sock_queue_rcv_skb(sk, skb);
-}
 
 /*
  *	Handle incoming AUN packets.  Work out if anybody wants them,
@@ -1132,9 +1134,9 @@ void __exit econet_proto_exit(void)
 int __init econet_proto_init(struct net_proto *pro)
 {
 	extern void econet_sysctl_register(void);
-	spin_lock_init(&aun_queue_lock);
 	sock_register(&econet_family_ops);
 #ifdef CONFIG_ECONET_AUNUDP
+	spin_lock_init(&aun_queue_lock);
 	aun_udp_initialise();
 #endif
 #ifdef CONFIG_ECONET_NATIVE

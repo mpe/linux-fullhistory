@@ -549,24 +549,24 @@ static void scsi_debug_send_self_command(struct Scsi_Host * shpnt)
 	static unsigned char cmd[6] =
 	{TEST_UNIT_READY, 0, 0, 0, 0, 0};
 
-        Scsi_Cmnd     * scp;
+        Scsi_Request  * scp;
         Scsi_Device   * sdev;
         
         printk("Allocating host dev\n");
         sdev = scsi_get_host_dev(shpnt);
         printk("Got %p. Allocating command block\n", sdev);
-        scp  = scsi_allocate_device(sdev, 1, FALSE);
+        scp  = scsi_allocate_request(sdev);
         printk("Got %p\n", scp);
 
-        scp->cmd_len = 6;
-        scp->use_sg = 0;
+        scp->sr_cmd_len = 6;
+        scp->sr_use_sg = 0;
         
         printk("Sending command\n");
-        scsi_wait_cmd (scp, (void *) cmd, (void *) NULL,
+        scsi_wait_req (scp, (void *) cmd, (void *) NULL,
                        0, 100, 3);
         
         printk("Releasing command\n");
-        scsi_release_command(scp);
+        scsi_release_request(scp);
         printk("Freeing device\n");
         scsi_free_host_dev(sdev);
 }

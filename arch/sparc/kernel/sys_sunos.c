@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.114 2000/03/07 22:27:27 davem Exp $
+/* $Id: sys_sunos.c,v 1.115 2000/03/13 21:57:23 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -294,57 +294,6 @@ asmlinkage void sunos_madvise(unsigned long address, unsigned long len,
 	       strategy <= 4 ? mstrings[strategy] : "BOGUS",
 	       address, len);
 	unlock_kernel();
-}
-
-/* Places into character array, the status of all the pages in the passed
- * range from 'addr' to 'addr + len'.  -1 on failure, 0 on success...
- * The encoding in each character is:
- * low-bit is zero == Page is not in physical ram right now
- * low-bit is one  == Page is currently residing in core
- * All other bits are undefined within the character so there...
- * Also, if you try to get stats on an area outside of the user vm area
- * *or* the passed base address is not aligned on a page boundary you
- * get an error.
- */
-asmlinkage int sunos_mincore(unsigned long addr, unsigned long len, char *array)
-{
-	pgd_t *pgdp;
-	pmd_t *pmdp;
-	pte_t *ptep;
-	unsigned long limit;
-	int num_pages, pnum, retval = -EINVAL;
-
-	lock_kernel();
-	if(addr & ~(PAGE_MASK))
-		goto out;
-
-	num_pages = (len / PAGE_SIZE);
-	retval = -EFAULT;
-	if(verify_area(VERIFY_WRITE, array, num_pages))
-		goto out;
-	retval = -ENOMEM;
-	if((addr >= PAGE_OFFSET) || ((addr + len) > PAGE_OFFSET))
-		goto out; /* I'm sure you're curious about kernel mappings.. */
-
-	/* Wheee, go through pte's */
-	pnum = 0;
-	for(limit = addr + len; addr < limit; addr += PAGE_SIZE, pnum++) {
-		pgdp = pgd_offset(current->mm, addr);
-		if(pgd_none(*pgdp))
-			goto out; /* As per SunOS manpage */
-		pmdp = pmd_offset(pgdp, addr);
-		if(pmd_none(*pmdp))
-			goto out; /* As per SunOS manpage */
-		ptep = pte_offset(pmdp, addr);
-		if(pte_none(*ptep))
-			goto out; /* As per SunOS manpage */
-		/* Page in core or Swapped page? */
-		__put_user((pte_present(*ptep) ? 1 : 0), &array[pnum]);
-	}
-	retval = 0; /* Success... I think... */
-out:
-	unlock_kernel();
-	return retval;
 }
 
 /* This just wants the soft limit (ie. rlim_cur element) of the RLIMIT_NOFILE

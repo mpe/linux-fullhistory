@@ -706,7 +706,7 @@ static int __init init_ncp_fs(void)
 	ncp_malloced = 0;
 	ncp_current_malloced = 0;
 #endif
-	return init_ncp_fs();
+	return register_filesystem(&ncp_fs_type);
 }
 
 static void __exit exit_ncp_fs(void)

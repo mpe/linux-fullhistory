@@ -94,24 +94,20 @@ static int ioctl_internal_command(Scsi_Device * dev, char *cmd,
 				  int timeout, int retries)
 {
 	int result;
-	Scsi_Cmnd *SCpnt;
+	Scsi_Request *SRpnt;
 	Scsi_Device *SDpnt;
 
 
 	SCSI_LOG_IOCTL(1, printk("Trying ioctl with scsi command %d\n", cmd[0]));
-	SCpnt = scsi_allocate_device(dev, TRUE, TRUE);
-        if( SCpnt == NULL )
-        {
-                return -EINTR;
-        }
+	SRpnt = scsi_allocate_request(dev);
 
-	SCpnt->sc_data_direction = SCSI_DATA_NONE;
-        scsi_wait_cmd(SCpnt, cmd, NULL, 0, timeout, retries);
+	SRpnt->sr_data_direction = SCSI_DATA_NONE;
+        scsi_wait_req(SRpnt, cmd, NULL, 0, timeout, retries);
 
-	SCSI_LOG_IOCTL(2, printk("Ioctl returned  0x%x\n", SCpnt->result));
+	SCSI_LOG_IOCTL(2, printk("Ioctl returned  0x%x\n", SRpnt->sr_result));
 
-	if (driver_byte(SCpnt->result) != 0)
-		switch (SCpnt->sense_buffer[2] & 0xf) {
+	if (driver_byte(SRpnt->sr_result) != 0)
+		switch (SRpnt->sr_sense_buffer[2] & 0xf) {
 		case ILLEGAL_REQUEST:
 			if (cmd[0] == ALLOW_MEDIUM_REMOVAL)
 				dev->lockable = 0;
@@ -126,7 +122,7 @@ static int ioctl_internal_command(Scsi_Device * dev, char *cmd,
 		case UNIT_ATTENTION:
 			if (dev->removable) {
 				dev->changed = 1;
-				SCpnt->result = 0;	/* This is no longer considered an error */
+				SRpnt->sr_result = 0;	/* This is no longer considered an error */
 				/* gag this error, VFS will log it anyway /axboe */
 				/* printk(KERN_INFO "Disc change detected.\n"); */
 				break;
@@ -136,20 +132,20 @@ static int ioctl_internal_command(Scsi_Device * dev, char *cmd,
 			       dev->host->host_no,
 			       dev->id,
 			       dev->lun,
-			       SCpnt->result);
+			       SRpnt->sr_result);
 			printk("\tSense class %x, sense error %x, extended sense %x\n",
-			       sense_class(SCpnt->sense_buffer[0]),
-			       sense_error(SCpnt->sense_buffer[0]),
-			       SCpnt->sense_buffer[2] & 0xf);
+			       sense_class(SRpnt->sr_sense_buffer[0]),
+			       sense_error(SRpnt->sr_sense_buffer[0]),
+			       SRpnt->sr_sense_buffer[2] & 0xf);
 
 		};
 
-	result = SCpnt->result;
+	result = SRpnt->sr_result;
 
 	SCSI_LOG_IOCTL(2, printk("IOCTL Releasing command\n"));
-	SDpnt = SCpnt->device;
-	scsi_release_command(SCpnt);
-	SCpnt = NULL;
+	SDpnt = SRpnt->sr_device;
+	scsi_release_request(SRpnt);
+	SRpnt = NULL;
 
 	return result;
 }
@@ -192,7 +188,7 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 	char *buf;
 	unsigned char cmd[MAX_COMMAND_SIZE];
 	char *cmd_in;
-	Scsi_Cmnd *SCpnt;
+	Scsi_Request *SRpnt;
 	Scsi_Device *SDpnt;
 	unsigned char opcode;
 	int inlen, outlen, cmdlen;
@@ -235,9 +231,9 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 			return -ENOMEM;
 		memset(buf, 0, buf_needed);
 		if( inlen == 0 ) {
-			data_direction = SCSI_DATA_WRITE;
-		} else if (outlen == 0 ) {
 			data_direction = SCSI_DATA_READ;
+		} else if (outlen == 0 ) {
+			data_direction = SCSI_DATA_WRITE;
 		} else {
 			/*
 			 * Can this ever happen?
@@ -297,38 +293,38 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 #ifndef DEBUG_NO_CMD
 
 
-	SCpnt = scsi_allocate_device(dev, TRUE, TRUE);
-        if( SCpnt == NULL )
+	SRpnt = scsi_allocate_request(dev);
+        if( SRpnt == NULL )
         {
                 return -EINTR;
         }
 
-	SCpnt->sc_data_direction = data_direction;
-        scsi_wait_cmd(SCpnt, cmd, buf, needed, timeout, retries);
+	SRpnt->sr_data_direction = data_direction;
+        scsi_wait_req(SRpnt, cmd, buf, needed, timeout, retries);
 
 	/* 
 	 * If there was an error condition, pass the info back to the user. 
 	 */
-	if (SCpnt->result) {
-		int sb_len = sizeof(SCpnt->sense_buffer);
+	if (SRpnt->sr_result) {
+		int sb_len = sizeof(SRpnt->sr_sense_buffer);
 
 		sb_len = (sb_len > OMAX_SB_LEN) ? OMAX_SB_LEN : sb_len;
 		result = verify_area(VERIFY_WRITE, cmd_in, sb_len);
 		if (result)
 			return result;
-		copy_to_user(cmd_in, SCpnt->sense_buffer, sb_len);
+		copy_to_user(cmd_in, SRpnt->sr_sense_buffer, sb_len);
 	} else {
 		result = verify_area(VERIFY_WRITE, cmd_in, outlen);
 		if (result)
 			return result;
 		copy_to_user(cmd_in, buf, outlen);
 	}
-	result = SCpnt->result;
+	result = SRpnt->sr_result;
 
 
-	SDpnt = SCpnt->device;
-	scsi_release_command(SCpnt);
-	SCpnt = NULL;
+	SDpnt = SRpnt->sr_device;
+	scsi_release_request(SRpnt);
+	SRpnt = NULL;
 
 	if (buf)
 		scsi_free(buf, buf_needed);

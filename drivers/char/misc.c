@@ -122,6 +122,22 @@ static struct file_operations misc_fops = {
 	open:		misc_open,
 };
 
+/**
+ *	misc_register	-	register a miscellaneous device
+ *	@misc: device structure
+ *	
+ *	Register a miscellaneous device with the kernel. If the minor
+ *	number is set to MISC_DYNAMIC_MINOR a minor number is assigned
+ *	and placed in the minor field of the structure. For other cases
+ *	the minor number requested is used.
+ *
+ *	The structure passed is linked into the kernel and may not be
+ *	destroyed until it has been unregistered
+ *
+ *	A zero is returned on success and a negative errno code for
+ *	failure.
+ */
+ 
 int misc_register(struct miscdevice * misc)
 {
 	static devfs_handle_t devfs_handle = NULL;
@@ -156,6 +172,16 @@ int misc_register(struct miscdevice * misc)
 	misc->next->prev = misc;
 	return 0;
 }
+
+/**
+ *	misc_deregister - unregister a miscellaneous device
+ *	@misc: device to unregister
+ *
+ *	Unregister a miscellaneous device that was previously
+ *	successfully registered with misc_register. Success
+ *	is indicated by a zero return, a negative errno code
+ *	indicates an error.
+ */
 
 int misc_deregister(struct miscdevice * misc)
 {

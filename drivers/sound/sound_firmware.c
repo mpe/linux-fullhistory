@@ -47,6 +47,24 @@ static int do_mod_firmware_load(const char *fn, char **fp)
 	return (int) l;
 }
 
+/**
+ *	mod_firmware_load - load sound driver firmware
+ *	@fn: filename
+ *	@fp: return for the buffer.
+ *
+ *	Load the firmware for a sound module (up to 128K) into a buffer.
+ *	The buffer is returned in *fp. It is allocated with vmalloc so is
+ *	virtually linear and not DMAable. The caller should free it with
+ *	vfree when finished.
+ *
+ *	The length of the buffer is returned on a successful load, the
+ *	value zero on a failure.
+ *
+ *	Caution: This API is not recommended. Firmware should be loaded via
+ *	an ioctl call and a setup application. This function may disappear
+ *	in future.
+ */
+ 
 int mod_firmware_load(const char *fn, char **fp)
 {
 	int r;

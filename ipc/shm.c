@@ -1129,11 +1129,13 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	if (IS_ERR (name))
 		return PTR_ERR (name);
 
+	lock_kernel();
 	file = filp_open (name, O_RDWR, 0);
 	putname (name);
-	if (IS_ERR (file))
+	if (IS_ERR (file)) {
+		unlock_kernel();
 		goto bad_file;
-	lock_kernel();
+	}
 	*raddr = do_mmap (file, addr, file->f_dentry->d_inode->i_size,
 			  (shmflg & SHM_RDONLY ? PROT_READ :
 			   PROT_READ | PROT_WRITE), flags, 0);

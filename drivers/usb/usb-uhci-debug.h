@@ -1,41 +1,32 @@
 #ifdef DEBUG
-
 static void uhci_show_qh (puhci_desc_t qh)
 {
 	if (qh->type != QH_TYPE) {
 		dbg("qh has not QH_TYPE");
 		return;
 	}
-	dbg("uhci_show_qh %p (%08lX):", qh, virt_to_bus (qh));
+	dbg("QH @ %p/%08lX:", qh, virt_to_bus (qh));
 
 	if (qh->hw.qh.head & UHCI_PTR_TERM)
-		dbg("Head Terminate");
-	else {
-		if (qh->hw.qh.head & UHCI_PTR_QH)
-			dbg("Head points to QH");
-		else
-			dbg("Head points to TD");
+		dbg("    Head Terminate");
+	else 
+		dbg("    Head: %s @ %08X",
+		    (qh->hw.qh.head & UHCI_PTR_QH?"QH":"TD"),
+		    qh->hw.qh.head & ~UHCI_PTR_BITS);
 
-		dbg("head: %08X", qh->hw.qh.head & ~UHCI_PTR_BITS);
-	}
 	if (qh->hw.qh.element & UHCI_PTR_TERM)
-		dbg("Element Terminate");
-	else {
-
-		if (qh->hw.qh.element & UHCI_PTR_QH)
-			dbg("Element points to QH");
-		else
-			dbg("Element points to TD");
-		dbg("element: %08X", qh->hw.qh.element & ~UHCI_PTR_BITS);
-	}
+		dbg("    Element Terminate");
+	else 
+		dbg("    Element: %s @ %08X",
+		    (qh->hw.qh.element & UHCI_PTR_QH?"QH":"TD"),
+		    qh->hw.qh.element & ~UHCI_PTR_BITS);
 }
 #endif
 
 static void uhci_show_td (puhci_desc_t td)
 {
 	char *spid;
-	warn("uhci_show_td %p (%08lX) ", td, virt_to_bus (td));
-
+	
 	switch (td->hw.td.info & 0xff) {
 	case USB_PID_SETUP:
 		spid = "SETUP";
@@ -51,16 +42,16 @@ static void uhci_show_td (puhci_desc_t td)
 		break;
 	}
 
-	warn("MaxLen=%02x DT%d EndPt=%x Dev=%x, PID=%x(%s) (buf=%08x)",
+	warn("  TD @ %p/%08lX, MaxLen=%02x DT%d EP=%x Dev=%x PID=(%s) buf=%08x",
+	     td, virt_to_bus (td),
 	     td->hw.td.info >> 21,
 	     ((td->hw.td.info >> 19) & 1),
 	     (td->hw.td.info >> 15) & 15,
 	     (td->hw.td.info >> 8) & 127,
-	     (td->hw.td.info & 0xff),
 	     spid,
 	     td->hw.td.buffer);
 
-	warn("Len=%02x e%d %s%s%s%s%s%s%s%s%s%s",
+	warn("    Len=%02x e%d %s%s%s%s%s%s%s%s%s%s",
 	     td->hw.td.status & 0x7ff,
 	     ((td->hw.td.status >> 27) & 3),
 	     (td->hw.td.status & TD_CTRL_SPD) ? "SPD " : "",
@@ -74,50 +65,41 @@ static void uhci_show_td (puhci_desc_t td)
 	     (td->hw.td.status & TD_CTRL_CRCTIMEO) ? "CRC/Timeo " : "",
 	     (td->hw.td.status & TD_CTRL_BITSTUFF) ? "BitStuff " : ""
 		);
-#if 1
+
 	if (td->hw.td.link & UHCI_PTR_TERM)
-		warn("Link Terminate");
-	else {
-		if (td->hw.td.link & UHCI_PTR_QH)
-			warn("%s, link points to QH @ %08x",
-			     (td->hw.td.link & UHCI_PTR_DEPTH ? "Depth first" : " Breadth first"),
-			     td->hw.td.link & ~UHCI_PTR_BITS);
-		else
-			warn("%s, link points to TD @ %08x",
-			     (td->hw.td.link & UHCI_PTR_DEPTH ? "Depth first" : " Breadth first"),
-			     td->hw.td.link & ~UHCI_PTR_BITS);
-	}
-#endif
+		warn("   TD Link Terminate");
+	else 
+		warn("    Link points to %s @ %08x, %s",
+		     (td->hw.td.link & UHCI_PTR_QH?"QH":"TD"),
+		     td->hw.td.link & ~UHCI_PTR_BITS,
+		     (td->hw.td.link & UHCI_PTR_DEPTH ? "Depth first" : "Breadth first"));
 }
 #ifdef DEBUG
 static void uhci_show_td_queue (puhci_desc_t td)
 {
-	dbg("uhci_show_td_queue %p (%08lX):", td, virt_to_bus (td));
+	//dbg("uhci_show_td_queue %p (%08lX):", td, virt_to_bus (td));
 	while (1) {
 		uhci_show_td (td);
 		if (td->hw.td.link & UHCI_PTR_TERM)
 			break;
-		//if(!(td->hw.td.link&UHCI_PTR_DEPTH))
-		//      break;
 		if (td != bus_to_virt (td->hw.td.link & ~UHCI_PTR_BITS))
 			td = bus_to_virt (td->hw.td.link & ~UHCI_PTR_BITS);
 		else {
 			dbg("td points to itself!");
 			break;
 		}
-//              schedule();
 	}
 }
 
 static void uhci_show_queue (puhci_desc_t qh)
 {
+	uhci_desc_t *start_qh=qh;
+
 	dbg("uhci_show_queue %p:", qh);
 	while (1) {
 		uhci_show_qh (qh);
 
-		if (qh->hw.qh.element & UHCI_PTR_QH)
-			dbg("Warning: qh->element points to qh!");
-		else if (!(qh->hw.qh.element & UHCI_PTR_TERM))
+		if (!(qh->hw.qh.element & UHCI_PTR_TERM))
 			uhci_show_td_queue (bus_to_virt (qh->hw.qh.element & ~UHCI_PTR_BITS));
 
 		if (qh->hw.qh.head & UHCI_PTR_TERM)
@@ -129,7 +111,12 @@ static void uhci_show_queue (puhci_desc_t qh)
 			dbg("qh points to itself!");
 			break;
 		}
-	}
+		
+		if (qh==start_qh) { // avoid loop
+			dbg("Loop detect");
+			break;
+		}
+	}		
 }
 
 static void uhci_show_sc (int port, unsigned short status)

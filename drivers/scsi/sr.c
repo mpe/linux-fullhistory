@@ -486,7 +486,7 @@ void get_sectorsize(int i)
 
 		SRpnt->sr_data_direction = SCSI_DATA_READ;
 		scsi_wait_req(SRpnt, (void *) cmd, (void *) buffer,
-			      512, SR_TIMEOUT, MAX_RETRIES);
+			      8, SR_TIMEOUT, MAX_RETRIES);
 
 		the_result = SRpnt->sr_result;
 		retries--;
@@ -663,7 +663,7 @@ static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command
 
 	/* do the locking and issue the command */
 	SRpnt->sr_request.rq_dev = cdi->dev;
-	/* scsi_wait_cmd sets the command length */
+	/* scsi_wait_req sets the command length */
 	SRpnt->sr_cmd_len = 0;
 
 	SRpnt->sr_data_direction = cgc->data_direction;

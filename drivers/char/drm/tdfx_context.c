@@ -1,6 +1,5 @@
 /* tdfx_context.c -- IOCTLs for tdfx contexts -*- linux-c -*-
  * Created: Thu Oct  7 10:50:22 1999 by faith@precisioninsight.com
- * Revised: Sat Oct  9 23:39:56 1999 by faith@precisioninsight.com
  *
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
  * All Rights Reserved.
@@ -24,8 +23,8 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  * 
- * $PI$
- * $XFree86$
+ * Authors:
+ *    Rickard E. (Rik) Faith <faith@precisioninsight.com>
  *
  */
 

@@ -912,6 +912,9 @@ void scsi_request_fn(request_queue_t * q)
 			 * be in an interrupt handler.  Only do this
 			 * from user space, since we do not want to
 			 * sleep from an interrupt.
+			 *
+			 * FIXME(eric) - have the error handler thread do
+			 * this work.
 			 */
 			SDpnt->was_reset = 0;
 			if (SDpnt->removable && !in_interrupt()) {
@@ -953,6 +956,9 @@ void scsi_request_fn(request_queue_t * q)
 			if( SRpnt->sr_magic == SCSI_REQ_MAGIC ) {
 				SCpnt = scsi_allocate_device(SRpnt->sr_device, 
 							     FALSE, FALSE);
+				if( !SCpnt ) {
+					break;
+				}
 				scsi_init_cmd_from_req(SCpnt, SRpnt);
 			}
 

@@ -252,12 +252,12 @@ static int get_device_flags(unsigned char *response_data)
  *  devices to the disk driver.
  */
 void scan_scsis(struct Scsi_Host *shpnt,
-		       unchar hardcoded,
-		       unchar hchannel,
-		       unchar hid,
-		       unchar hlun)
+		       uint hardcoded,
+		       uint hchannel,
+		       uint hid,
+		       uint hlun)
 {
-	int channel;
+	uint channel;
 	int dev;
 	int lun;
 	int max_dev_lun;
@@ -298,8 +298,6 @@ void scan_scsis(struct Scsi_Host *shpnt,
 	SDpnt->queue_depth = 1;
 	SDpnt->host = shpnt;
 	SDpnt->online = TRUE;
-
-	scsi_build_commandblocks(SDpnt);
 
 	initialize_merge_fn(SDpnt);
 
@@ -405,7 +403,7 @@ void scan_scsis(struct Scsi_Host *shpnt,
 
       leave:
 
-	{			/* Unchain SCpnt from host_queue */
+	{			/* Unchain SRpnt from host_queue */
 		Scsi_Device *prev, *next;
 		Scsi_Device *dqptr;
 
@@ -422,8 +420,6 @@ void scan_scsis(struct Scsi_Host *shpnt,
 				next->prev = prev;
 		}
 	}
-
-	scsi_release_commandblocks(SDpnt);
 
 	/* Last device block does not exist.  Free memory. */
 	if (SDpnt != NULL)
@@ -460,7 +456,7 @@ static int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	unsigned char scsi_cmd[MAX_COMMAND_SIZE];
 	struct Scsi_Device_Template *sdtpnt;
 	Scsi_Device *SDtail, *SDpnt = *SDpnt2;
-	Scsi_Cmnd * SCpnt;
+	Scsi_Request * SRpnt;
 	int bflags, type = -1;
 	static int ghost_channel=-1, ghost_dev=-1;
 	int org_lun = lun;
@@ -472,6 +468,7 @@ static int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	SDpnt->channel = channel;
 	SDpnt->online = TRUE;
 
+	scsi_build_commandblocks(SDpnt);
  
 	if ((channel == ghost_channel) && (dev == ghost_dev) && (lun == 1)) {
 		SDpnt->lun = 0;
@@ -496,37 +493,32 @@ static int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	scsi_cmd[1] = lun << 5;
 	scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[4] = scsi_cmd[5] = 0;
 
-	SCpnt = scsi_allocate_device(SDpnt, 0, 0);
+	SRpnt = scsi_allocate_request(SDpnt);
 
-	SCpnt->host = SDpnt->host;
-	SCpnt->device = SDpnt;
-	SCpnt->target = SDpnt->id;
-	SCpnt->lun = SDpnt->lun;
-	SCpnt->channel = SDpnt->channel;
-	SCpnt->sc_data_direction = SCSI_DATA_NONE;
+	SRpnt->sr_data_direction = SCSI_DATA_NONE;
 
-	scsi_wait_cmd (SCpnt, (void *) scsi_cmd,
+	scsi_wait_req (SRpnt, (void *) scsi_cmd,
 	          (void *) NULL,
 	          0, SCSI_TIMEOUT + 4 * HZ, 5);
 
 	SCSI_LOG_SCAN_BUS(3, printk("scsi: scan_scsis_single id %d lun %d. Return code 0x%08x\n",
-				    dev, lun, SCpnt->result));
-	SCSI_LOG_SCAN_BUS(3, print_driverbyte(SCpnt->result));
-	SCSI_LOG_SCAN_BUS(3, print_hostbyte(SCpnt->result));
+				    dev, lun, SRpnt->sr_result));
+	SCSI_LOG_SCAN_BUS(3, print_driverbyte(SRpnt->sr_result));
+	SCSI_LOG_SCAN_BUS(3, print_hostbyte(SRpnt->sr_result));
 	SCSI_LOG_SCAN_BUS(3, printk("\n"));
 
-	if (SCpnt->result) {
-		if (((driver_byte(SCpnt->result) & DRIVER_SENSE) ||
-		     (status_byte(SCpnt->result) & CHECK_CONDITION)) &&
-		    ((SCpnt->sense_buffer[0] & 0x70) >> 4) == 7) {
-			if (((SCpnt->sense_buffer[2] & 0xf) != NOT_READY) &&
-			    ((SCpnt->sense_buffer[2] & 0xf) != UNIT_ATTENTION) &&
-			    ((SCpnt->sense_buffer[2] & 0xf) != ILLEGAL_REQUEST || lun > 0)) {
-				scsi_release_command(SCpnt);
+	if (SRpnt->sr_result) {
+		if (((driver_byte(SRpnt->sr_result) & DRIVER_SENSE) ||
+		     (status_byte(SRpnt->sr_result) & CHECK_CONDITION)) &&
+		    ((SRpnt->sr_sense_buffer[0] & 0x70) >> 4) == 7) {
+			if (((SRpnt->sr_sense_buffer[2] & 0xf) != NOT_READY) &&
+			    ((SRpnt->sr_sense_buffer[2] & 0xf) != UNIT_ATTENTION) &&
+			    ((SRpnt->sr_sense_buffer[2] & 0xf) != ILLEGAL_REQUEST || lun > 0)) {
+				scsi_release_request(SRpnt);
 				return 1;
 			}
 		} else {
-			scsi_release_command(SCpnt);
+			scsi_release_request(SRpnt);
 			return 0;
 		}
 	}
@@ -540,18 +532,18 @@ static int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	scsi_cmd[3] = 0;
 	scsi_cmd[4] = 255;
 	scsi_cmd[5] = 0;
-	SCpnt->cmd_len = 0;
-	SCpnt->sc_data_direction = SCSI_DATA_READ;
+	SRpnt->sr_cmd_len = 0;
+	SRpnt->sr_data_direction = SCSI_DATA_READ;
 
-	scsi_wait_cmd (SCpnt, (void *) scsi_cmd,
+	scsi_wait_req (SRpnt, (void *) scsi_cmd,
 	          (void *) scsi_result,
 	          256, SCSI_TIMEOUT, 3);
 
 	SCSI_LOG_SCAN_BUS(3, printk("scsi: INQUIRY %s with code 0x%x\n",
-		SCpnt->result ? "failed" : "successful", SCpnt->result));
+		SRpnt->sr_result ? "failed" : "successful", SRpnt->sr_result));
 
-	if (SCpnt->result) {
-		scsi_release_command(SCpnt);
+	if (SRpnt->sr_result) {
+		scsi_release_request(SRpnt);
 		return 0;	/* assume no peripheral if any sort of error */
 	}
 
@@ -560,7 +552,7 @@ static int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	 * are supported here or not.
 	 */
 	if ((scsi_result[0] >> 5) == 3) {
-		scsi_release_command(SCpnt);
+		scsi_release_request(SRpnt);
 		return 0;	/* assume no peripheral if any sort of error */
 	}
 
@@ -705,15 +697,15 @@ static int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 		scsi_cmd[3] = 0;
 		scsi_cmd[4] = 0x2a;
 		scsi_cmd[5] = 0;
-		SCpnt->cmd_len = 0;
-		SCpnt->sc_data_direction = SCSI_DATA_READ;
-		scsi_wait_cmd (SCpnt, (void *) scsi_cmd,
+		SRpnt->sr_cmd_len = 0;
+		SRpnt->sr_data_direction = SCSI_DATA_READ;
+		scsi_wait_req (SRpnt, (void *) scsi_cmd,
 	        	(void *) scsi_result, 0x2a,
 	        	SCSI_TIMEOUT, 3);
 	}
 
-	scsi_release_command(SCpnt);
-	SCpnt = NULL;
+	scsi_release_request(SRpnt);
+	SRpnt = NULL;
 
 	scsi_release_commandblocks(SDpnt);
 
@@ -733,8 +725,6 @@ static int scan_scsis_single(int channel, int dev, int lun, int *max_dev_lun,
 	SDpnt->queue_depth = 1;
 	SDpnt->host = shpnt;
 	SDpnt->online = TRUE;
-
-	scsi_build_commandblocks(SDpnt);
 
 	/*
 	 * Register the queue for the device.  All I/O requests will come

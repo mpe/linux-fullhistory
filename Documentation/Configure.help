@@ -2894,6 +2894,12 @@ CONFIG_PARPORT_PC_FIFO
   FIFO. See Documentation/parport.txt to find out how to specify
   which IRQ/DMA to use.
 
+SuperIO chipset support (EXPERIMENTAL)
+CONFIG_PARPORT_PC_SUPERIO
+  Saying Y here enables some probes for Super-IO chipsets in order to
+  find out things like base addresses, IRQ lines and DMA channels.  It
+  is safe to say N.
+
 Support for PCMCIA management for PC-style ports
 CONFIG_PARPORT_PC_PCMCIA
   Say Y here if you need PCMCIA support for your PC-style parallel
@@ -4494,18 +4500,6 @@ CONFIG_CHR_DEV_ST
   The module will be called st.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt and
   Documentation/scsi.txt .
-
-Extra SCSI Tapes
-CONFIG_ST_EXTRA_DEVS
-  This controls the amount of additional space allocated in tables for
-  drivers that are loaded as modules after the kernel is booted.  In the
-  event that the SCSI core itself was loaded as a module, this this value
-  is the number of additional tape devices that can be loaded after the
-  first host driver is loaded.
-
-  Admittedly this isn't pretty, but there are tons of race conditions
-  involved with resizing the internal arrays on the fly.  Someday this
-  flag will go away, and everything will work automatically.
 
 SCSI CDROM support
 CONFIG_BLK_DEV_SR

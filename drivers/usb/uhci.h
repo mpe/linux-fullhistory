@@ -338,7 +338,11 @@ struct uhci {
 struct urb_priv {
 	struct uhci_qh *qh;		/* QH for this URB */
 
-	int fsbr;
+	int fsbr;			/* Did this URB turn on FSBR? */
+
+	char short_control_packet;	/* If we get a short packet during */
+					/*  a control transfer, retrigger */
+					/*  the status phase */
 
 	unsigned long inserttime;	/* In jiffies */
 

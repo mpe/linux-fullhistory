@@ -50,6 +50,7 @@ int gs_debug = 0;
 #define RELEASEIT restore_flags (flags)
 #endif
 
+#define RS_EVENT_WRITE_WAKEUP	1
 
 #ifdef DEBUG
 static void my_hd (unsigned char *addr, int len)

@@ -60,6 +60,8 @@
 #include <linux/parport_pc.h>
 #include <asm/parport.h>
 
+#define PARPORT_PC_MAX_PORTS PARPORT_MAX
+
 /* ECR modes */
 #define ECR_SPP 00
 #define ECR_PS2 01
@@ -84,8 +86,10 @@ static struct superio_struct {	/* For Super-IO chips autodetection */
 	int io;
 	int irq;
 	int dma;
-} superios[NR_SUPERIOS]= { {0,},};
-	
+} superios[NR_SUPERIOS] __devinitdata = { {0,},};
+
+static int user_specified __devinitdata = 0;
+
 /* frob_control, but for ECR */
 static void frob_econtrol (struct parport *pb, unsigned char m,
 			   unsigned char v)
@@ -1015,9 +1019,9 @@ struct parport_operations parport_pc_ops =
 	parport_ieee1284_read_byte,
 };
 
+#ifdef CONFIG_PARPORT_PC_SUPERIO
 /* Super-IO chipset detection, Winbond, SMSC */
-
-static void show_parconfig_smsc37c669(int io, int key)
+static void __devinit show_parconfig_smsc37c669(int io, int key)
 {
 	int cr1,cr4,cra,cr23,cr26,cr27,i=0;
 	char *modes[]={ "SPP and Bidirectional (PS/2)",	
@@ -1092,7 +1096,7 @@ static void show_parconfig_smsc37c669(int io, int key)
 }
 
 
-static void show_parconfig_winbond(int io, int key)
+static void __devinit show_parconfig_winbond(int io, int key)
 {
 	int cr30,cr60,cr61,cr70,cr74,crf0,i=0;
 	char *modes[]={ "Standard (SPP) and Bidirectional(PS/2)", /* 0 */
@@ -1152,7 +1156,7 @@ static void show_parconfig_winbond(int io, int key)
 	}
 }
 
-static void decode_winbond(int efer, int key, int devid, int devrev, int oldid)
+static void __devinit decode_winbond(int efer, int key, int devid, int devrev, int oldid)
 {
 	char *type=NULL;
 	int id,progif=2;
@@ -1188,7 +1192,7 @@ static void decode_winbond(int efer, int key, int devid, int devrev, int oldid)
 	return;
 }
 
-static void decode_smsc(int efer, int key, int devid, int devrev)
+static void __devinit decode_smsc(int efer, int key, int devid, int devrev)
 {
         char *type=NULL;
 	void (*func)(int io, int key);
@@ -1219,7 +1223,7 @@ static void decode_smsc(int efer, int key, int devid, int devrev)
 }
 
 
-static void winbond_check(int io, int key)
+static void __devinit winbond_check(int io, int key)
 {
 	int devid,devrev,oldid;
 
@@ -1237,7 +1241,7 @@ static void winbond_check(int io, int key)
 	decode_winbond(io,key,devid,devrev,oldid);
 }
 
-static void winbond_check2(int io,int key)
+static void __devinit winbond_check2(int io,int key)
 {
         int devid,devrev,oldid;
 
@@ -1254,7 +1258,7 @@ static void winbond_check2(int io,int key)
         decode_winbond(io,key,devid,devrev,oldid);
 }
 
-static void smsc_check(int io, int key)
+static void __devinit smsc_check(int io, int key)
 {
         int devid,devrev;
 
@@ -1271,7 +1275,7 @@ static void smsc_check(int io, int key)
 }
 
 
-static void detect_and_report_winbond (void)
+static void __devinit detect_and_report_winbond (void)
 { 
 	printk("Winbond Super-IO detection, now testing ports 3F0,370,250,4E,2E ...\n");
 
@@ -1284,7 +1288,7 @@ static void detect_and_report_winbond (void)
 	winbond_check2(0x250,0x89);
 }
 
-static void detect_and_report_smsc (void)
+static void __devinit detect_and_report_smsc (void)
 {
 	printk("SMSC Super-IO detection, now testing Ports 2F0, 370 ...\n");
 	smsc_check(0x3f0,0x55);
@@ -1292,8 +1296,9 @@ static void detect_and_report_smsc (void)
 	smsc_check(0x3f0,0x44);
 	smsc_check(0x370,0x44);
 }
+#endif /* CONFIG_PARPORT_PC_SUPERIO */
 
-static int get_superio_dma (struct parport *p)
+static int __devinit get_superio_dma (struct parport *p)
 {
 	int i=0;
 	while( (superios[i].io != p->base) && (i<NR_SUPERIOS))
@@ -1303,7 +1308,7 @@ static int get_superio_dma (struct parport *p)
 	return PARPORT_DMA_NONE;
 }
 
-static int get_superio_irq (struct parport *p)
+static int __devinit get_superio_irq (struct parport *p)
 {
 	int i=0;
         while( (superios[i].io != p->base) && (i<NR_SUPERIOS))
@@ -2330,7 +2335,7 @@ static struct pci_driver parport_pc_pci_driver = {
 	probe:		parport_pc_pci_probe,
 };
 
-static int __devinit parport_pc_init_superio (void)
+static int __init parport_pc_init_superio (void)
 {
 #ifdef CONFIG_PCI
 	const struct pci_device_id *id;
@@ -2346,6 +2351,74 @@ static int __devinit parport_pc_init_superio (void)
 #endif /* CONFIG_PCI */
 
 	return 0; /* zero devices found */
+}
+
+/* This is called by parport_pc_find_nonpci_ports (in asm/parport.h) */
+static int __init __attribute__((unused))
+parport_pc_find_isa_ports (int autoirq, int autodma)
+{
+	int count = 0;
+
+	if (parport_pc_probe_port(0x3bc, 0x7bc, autoirq, autodma, NULL))
+		count++;
+	if (parport_pc_probe_port(0x378, 0x778, autoirq, autodma, NULL))
+		count++;
+	if (parport_pc_probe_port(0x278, 0x678, autoirq, autodma, NULL))
+		count++;
+
+	return count;
+}
+
+/* This function is called by parport_pc_init if the user didn't
+ * specify any ports to probe.  Its job is to find some ports.  Order
+ * is important here -- we want ISA ports to be registered first,
+ * followed by PCI cards (for least surprise), but before that we want
+ * to do chipset-specific tests for some onboard ports that we know
+ * about.
+ *
+ * autoirq is PARPORT_IRQ_NONE, PARPORT_IRQ_AUTO, or PARPORT_IRQ_PROBEONLY
+ * autodma is PARPORT_DMA_NONE or PARPORT_DMA_AUTO
+ */
+static int __init parport_pc_find_ports (int autoirq, int autodma)
+{
+	int count = 0, r;
+
+#ifdef CONFIG_PARPORT_PC_SUPERIO
+	detect_and_report_winbond ();
+	detect_and_report_smsc ();
+#endif
+
+	/* Onboard SuperIO chipsets that show themselves on the PCI bus. */
+	count += parport_pc_init_superio ();
+
+	/* ISA ports and whatever (see asm/parport.h). */
+	count += parport_pc_find_nonpci_ports (autoirq, autodma);
+
+	r = pci_register_driver (&parport_pc_pci_driver);
+	if (r > 0)
+		count += r;
+
+	return count;
+}
+
+int __init parport_pc_init (int *io, int *io_hi, int *irq, int *dma)
+{
+	int count = 0, i = 0;
+
+	if (io && *io) {
+		/* Only probe the ports we were given. */
+		user_specified = 1;
+		do {
+			if (!*io_hi) *io_hi = 0x400 + *io;
+			if (parport_pc_probe_port(*(io++), *(io_hi++),
+						  *(irq++), *(dma++), NULL))
+				count++;
+		} while (*io && (++i < PARPORT_PC_MAX_PORTS));
+	} else {
+		count += parport_pc_find_ports (irq[0], dma[0]);
+	}
+
+	return count;
 }
 
 /* Exported symbols. */
@@ -2367,7 +2440,6 @@ static int dmaval[PARPORT_PC_MAX_PORTS] = { [0 ... PARPORT_PC_MAX_PORTS-1] = PAR
 static int irqval[PARPORT_PC_MAX_PORTS] = { [0 ... PARPORT_PC_MAX_PORTS-1] = PARPORT_IRQ_PROBEONLY };
 static const char *irq[PARPORT_PC_MAX_PORTS] = { NULL, };
 static const char *dma[PARPORT_PC_MAX_PORTS] = { NULL, };
-static int superio = 0;
 
 MODULE_AUTHOR("Phil Blundell, Tim Waugh, others");
 MODULE_DESCRIPTION("PC-style parallel port driver");
@@ -2379,18 +2451,12 @@ MODULE_PARM_DESC(irq, "IRQ line");
 MODULE_PARM(irq, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "s");
 MODULE_PARM_DESC(dma, "DMA channel");
 MODULE_PARM(dma, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "s");
-MODULE_PARM_DESC(superio, "Enable Super-IO chipset probe");
-MODULE_PARM(superio, "i");
 
 int init_module(void)
 {	
 	/* Work out how many ports we have, then get parport_share to parse
 	   the irq values. */
-	unsigned int i, n;
-	if (superio) {
-		detect_and_report_winbond ();
-		detect_and_report_smsc ();
-	}
+	unsigned int i;
 	for (i = 0; i < PARPORT_PC_MAX_PORTS && io[i]; i++);
 	if (i) {
 		if (parport_parse_irqs(i, irq, irqval)) return 1;
@@ -2415,12 +2481,7 @@ int init_module(void)
 			}
 	}
 
-	n = parport_pc_init_superio ();
-	n += parport_pc_init (io, io_hi, irqval, dmaval);
-	i = pci_register_driver (&parport_pc_pci_driver);
-
-	if (i > 0) n += i;
-	return !n;
+	return !parport_pc_init (io, io_hi, irqval, dmaval);
 }
 
 void cleanup_module(void)

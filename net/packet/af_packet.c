@@ -5,7 +5,7 @@
  *
  *		PACKET - implements raw packet sockets.
  *
- * Version:	$Id: af_packet.c,v 1.32 2000/02/21 16:25:55 davem Exp $
+ * Version:	$Id: af_packet.c,v 1.33 2000/03/13 22:11:50 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1439,6 +1439,7 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg
 		case SIOCGIFBR:
 		case SIOCSIFBR:
 #if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
+#ifdef CONFIG_INET
 #ifdef CONFIG_KMOD
 			if (br_ioctl_hook == NULL)
 				request_module("bridge");
@@ -1446,6 +1447,7 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg
 			if (br_ioctl_hook != NULL)
 				return br_ioctl_hook(arg);
 #endif
+#endif				
 
 			return -ENOPKG;
 			

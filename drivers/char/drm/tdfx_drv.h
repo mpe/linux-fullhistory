@@ -1,6 +1,5 @@
 /* tdfx_drv.h -- Private header for tdfx driver -*- linux-c -*-
  * Created: Thu Oct  7 10:40:04 1999 by faith@precisioninsight.com
- * Revised: Sat Oct  9 23:38:19 1999 by faith@precisioninsight.com
  *
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
  * All rights reserved.
@@ -24,8 +23,9 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  * 
- * $PI$
- * $XFree86$
+ * Authors:
+ *    Rickard E. (Rik) Faith <faith@precisioninsight.com>
+ *    Daryll Strauss <daryll@precisioninsight.com>
  * 
  */
 

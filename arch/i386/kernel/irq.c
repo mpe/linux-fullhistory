@@ -456,6 +456,18 @@ int handle_IRQ_event(unsigned int irq, struct pt_regs * regs, struct irqaction *
  * hardware disable after having gotten the irq
  * controller lock. 
  */
+ 
+/**
+ *	disable_irq_nosync - disable an irq without waiting
+ *	@irq: Interrupt to disable
+ *
+ *	Disable the selected interrupt line. Disables of an interrupt
+ *	stack. Unlike disable_irq, this function does not ensure existing
+ *	instances of the irq handler have completed before returning.
+ *
+ *	This function may be called from IRQ context.
+ */
+ 
 void inline disable_irq_nosync(unsigned int irq)
 {
 	irq_desc_t *desc = irq_desc + irq;
@@ -469,10 +481,19 @@ void inline disable_irq_nosync(unsigned int irq)
 	spin_unlock_irqrestore(&desc->lock, flags);
 }
 
-/*
- * Synchronous version of the above, making sure the IRQ is
- * no longer running on any other IRQ..
+/**
+ *	disable_irq - disable an irq and wait for completion
+ *	@irq: Interrupt to disable
+ *
+ *	Disable the selected interrupt line. Disables of an interrupt
+ *	stack. That is for two disables you need two enables. This
+ *	function waits for any pending IRQ handlers for this interrupt
+ *	to complete before returning. If you use this function while
+ *	holding a resource the IRQ handler may need you will deadlock.
+ *
+ *	This function may be called - with care - from IRQ context.
  */
+ 
 void disable_irq(unsigned int irq)
 {
 	disable_irq_nosync(irq);
@@ -484,6 +505,16 @@ void disable_irq(unsigned int irq)
 	}
 }
 
+/**
+ *	enable_irq - enable interrupt handling on an irq
+ *	@irq: Interrupt to enable
+ *
+ *	Re-enables the processing of interrupts on this IRQ line
+ *	providing no disable_irq calls are now in effect.
+ *
+ *	This function may be called from IRQ context.
+ */
+ 
 void enable_irq(unsigned int irq)
 {
 	irq_desc_t *desc = irq_desc + irq;
@@ -598,6 +629,38 @@ out:
 	return 1;
 }
 
+/**
+ *	request_irq - allocate an interrupt line
+ *	@irq: Interrupt line to allocate
+ *	@handler: Function to be called when the IRQ occurs
+ *	@irqflags: Interrupt type flags
+ *	@devname: An ascii name for the claiming device
+ *	@dev_id: A cookie passed back to the handler function
+ *
+ *	This call allocates interrupt resources and enables the
+ *	interrupt line and IRQ handling. From the point this
+ *	call is made your handler function may be invoked. Since
+ *	your handler function must clear any interrupt the board 
+ *	raises, you must take care both to initialise your hardware
+ *	and to set up the interrupt handler in the right order.
+ *
+ *	Dev_id must be globally unique. Normally the address of the
+ *	device data structure is used as the cookie. Since the handler
+ *	receives this value it makes sense to use it.
+ *
+ *	If your interrupt is shared you must pass a non NULL dev_id
+ *	as this is required when freeing the interrupt.
+ *
+ *	Flags:
+ *
+ *	SA_SHIRQ		Interrupt is shared
+ *
+ *	SA_INTERRUPT		Disable local interrupts while processing
+ *
+ *	SA_SAMPLE_RANDOM	The interrupt can be used for entropy
+ *
+ */
+ 
 int request_irq(unsigned int irq, 
 		void (*handler)(int, void *, struct pt_regs *),
 		unsigned long irqflags, 
@@ -642,7 +705,25 @@ int request_irq(unsigned int irq,
 		kfree(action);
 	return retval;
 }
-		
+
+/**
+ *	free_irq - free an interrupt
+ *	@irq: Interrupt line to free
+ *	@dev_id: Device identity to free
+ *
+ *	Remove an interrupt handler. The handler is removed and if the
+ *	interrupt line is no longer in use by any driver it is disabled.
+ *	On a shared IRQ the caller must ensure the interrupt is disabled
+ *	on the card it drives before calling this function. The function
+ *	does not return until any executing interrupts for this IRQ
+ *	have completed.
+ *
+ *	This function may be called from interrupt context. 
+ *
+ *	Bugs: Attempting to free an irq in a handler for the same irq hangs
+ *	      the machine.
+ */
+ 
 void free_irq(unsigned int irq, void *dev_id)
 {
 	irq_desc_t *desc;
@@ -693,6 +774,15 @@ void free_irq(unsigned int irq, void *dev_id)
  * with "IRQ_WAITING" cleared and the interrupt
  * disabled.
  */
+
+/**
+ *	probe_irq_on	- begin an interrupt autodetect
+ *
+ *	Commence probing for an interrupt. The interrupts are scanned
+ *	and a mask of potential interrupt lines is returned.
+ *
+ */
+ 
 unsigned long probe_irq_on(void)
 {
 	unsigned int i;
@@ -770,6 +860,16 @@ unsigned long probe_irq_on(void)
  * Return a mask of triggered interrupts (this
  * can handle only legacy ISA interrupts).
  */
+ 
+/**
+ *	probe_irq_mask
+ *	@val:	mask of interrupts to consider
+ *
+ *	Scan the ISA bus interrupt lines and return a bitmap of
+ *	active interrupts. The interrupt probe logic state is then
+ *	returned to its previous value.
+ */
+ 
 unsigned int probe_irq_mask(unsigned long val)
 {
 	int i;
@@ -798,8 +898,27 @@ unsigned int probe_irq_mask(unsigned long val)
 
 /*
  * Return the one interrupt that triggered (this can
- * handle any interrupt source)
+ * handle any interrupt source).
  */
+
+/**
+ *	probe_irq_off	- end an interrupt autodetect
+ *	@val: mask of potential interrupts (unused)
+ *
+ *	Scans the unused interrupt lines and returns the line which
+ *	appears to have triggered the interrupt. If no interrupt was
+ *	found then zero is returned. If more than one interrupt is
+ *	found then minus the first candidate is returned to indicate
+ *	their is doubt.
+ *
+ *	The interrupt probe logic state is returned to its previous
+ *	value.
+ *
+ *	BUGS: When used in a module (which arguably shouldnt happen)
+ *	nothing prevents two IRQ probe callers from overlapping. The
+ *	results of this are non-optimal.
+ */
+ 
 int probe_irq_off(unsigned long val)
 {
 	int i, irq_found, nr_irqs;

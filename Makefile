@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 3
-SUBLEVEL = 52
-EXTRAVERSION =
+SUBLEVEL = 99
+EXTRAVERSION = -pre1
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -116,149 +116,53 @@ DRIVERS		=drivers/block/block.a \
 LIBS		=$(TOPDIR)/lib/lib.a
 SUBDIRS		=kernel drivers mm fs net ipc lib
 
-ifdef CONFIG_DRM
-DRIVERS += drivers/char/drm/drm.o
-endif
+DRIVERS-n :=
+DRIVERS-y :=
+DRIVERS-m :=
+DRIVERS-  :=
 
-ifeq ($(CONFIG_AGP),y)
-DRIVERS += drivers/char/agp/agp.o
-endif
-
-ifdef CONFIG_NUBUS
-DRIVERS := $(DRIVERS) drivers/nubus/nubus.a
-endif
-
-ifeq ($(CONFIG_ISDN),y)
-DRIVERS := $(DRIVERS) drivers/isdn/isdn.a
-endif
-
-ifdef CONFIG_NET_FC
-DRIVERS := $(DRIVERS) drivers/net/fc/fc.a
-endif
-
-ifdef CONFIG_APPLETALK
-DRIVERS := $(DRIVERS) drivers/net/appletalk/appletalk.a
-endif
-
-ifdef CONFIG_TR
-DRIVERS := $(DRIVERS) drivers/net/tokenring/tr.a
-endif
-
-ifdef CONFIG_WAN
-DRIVERS := $(DRIVERS) drivers/net/wan/wan.a
-endif
-
-ifeq ($(CONFIG_ARCNET),y)
-DRIVERS := $(DRIVERS) drivers/net/arcnet/arcnet.a
-endif
-
-ifdef CONFIG_ATM
-DRIVERS := $(DRIVERS) drivers/atm/atm.a
-endif
-
-ifeq ($(CONFIG_IDE),y)
-DRIVERS := $(DRIVERS) drivers/ide/ide.a
-endif
-
-ifeq ($(CONFIG_SCSI),y)
-DRIVERS := $(DRIVERS) drivers/scsi/scsi.a
-endif
-
-ifeq ($(CONFIG_IEEE1394),y)
-DRIVERS := $(DRIVERS) drivers/ieee1394/ieee1394.a
-endif
+DRIVERS-$(CONFIG_DRM) += drivers/char/drm/drm.o
+DRIVERS-$(CONFIG_AGP) += drivers/char/agp/agp.o
+DRIVERS-$(CONFIG_NUBUS) += drivers/nubus/nubus.a
+DRIVERS-$(CONFIG_ISDN) += drivers/isdn/isdn.a
+DRIVERS-$(CONFIG_NET_FC) += drivers/net/fc/fc.a
+DRIVERS-$(CONFIG_APPLETALK) += drivers/net/appletalk/appletalk.a
+DRIVERS-$(CONFIG_TR) += drivers/net/tokenring/tr.a
+DRIVERS-$(CONFIG_WAN) += drivers/net/wan/wan.a
+DRIVERS-$(CONFIG_ARCNET) += drivers/net/arcnet/arcnet.a
+DRIVERS-$(CONFIG_ATM) += drivers/atm/atm.a
+DRIVERS-$(CONFIG_IDE) += drivers/ide/ide.a
+DRIVERS-$(CONFIG_SCSI) += drivers/scsi/scsi.a
+DRIVERS-$(CONFIG_IEEE1394) += drivers/ieee1394/ieee1394.a
 
 ifneq ($(CONFIG_CD_NO_IDESCSI)$(CONFIG_BLK_DEV_IDECD)$(CONFIG_BLK_DEV_SR)$(CONFIG_PARIDE_PCD),)
-DRIVERS := $(DRIVERS) drivers/cdrom/cdrom.a
+DRIVERS-y += drivers/cdrom/cdrom.a
 endif
 
-ifeq ($(CONFIG_SOUND),y)
-DRIVERS := $(DRIVERS) drivers/sound/sounddrivers.o
-endif
+DRIVERS-$(CONFIG_SOUND) += drivers/sound/sounddrivers.o
+DRIVERS-$(CONFIG_PCI) += drivers/pci/pci.a
+DRIVERS-$(CONFIG_PCMCIA) += drivers/pcmcia/pcmcia.o
+DRIVERS-$(CONFIG_PCMCIA_NETCARD) += drivers/net/pcmcia/pcmcia_net.o
+DRIVERS-$(CONFIG_PCMCIA_CHRDEV) += drivers/char/pcmcia/pcmcia_char.o
+DRIVERS-$(CONFIG_DIO) += drivers/dio/dio.a
+DRIVERS-$(CONFIG_SBUS) += drivers/sbus/sbus.a
+DRIVERS-$(CONFIG_ZORRO) += drivers/zorro/zorro.a
+DRIVERS-$(CONFIG_FC4) += drivers/fc4/fc4.a
+DRIVERS-$(CONFIG_PPC) += drivers/macintosh/macintosh.a
+DRIVERS-$(CONFIG_MAC) += drivers/macintosh/macintosh.a
+DRIVERS-$(CONFIG_ISAPNP) += drivers/pnp/pnp.o
+DRIVERS-$(CONFIG_SGI_IP22) += drivers/sgi/sgi.a
+DRIVERS-$(CONFIG_VT) += drivers/video/video.o
+DRIVERS-$(CONFIG_PARIDE) += drivers/block/paride/paride.a
+DRIVERS-$(CONFIG_HAMRADIO) += drivers/net/hamradio/hamradio.o
+DRIVERS-$(CONFIG_TC) += drivers/tc/tc.a
+DRIVERS-$(CONFIG_USB) += drivers/usb/usbdrv.o
+DRIVERS-$(CONFIG_I2O) += drivers/i2o/i2o.a
+DRIVERS-$(CONFIG_IRDA) += drivers/net/irda/irda_drivers.a
+DRIVERS-$(CONFIG_I2C) += drivers/i2c/i2c.a
+DRIVERS-$(CONFIG_PHONE) += drivers/telephony/telephony.a
 
-ifdef CONFIG_PCI
-DRIVERS := $(DRIVERS) drivers/pci/pci.a
-endif
-
-ifeq ($(CONFIG_PCMCIA),y)
-DRIVERS := $(DRIVERS) drivers/pcmcia/pcmcia.o
-endif
-
-ifeq ($(CONFIG_PCMCIA_NETCARD),y)
-DRIVERS := $(DRIVERS) drivers/net/pcmcia/pcmcia_net.o
-endif
-
-ifeq ($(CONFIG_PCMCIA_CHRDEV),y)
-DRIVERS := $(DRIVERS) drivers/char/pcmcia/pcmcia_char.o
-endif
-
-ifdef CONFIG_DIO
-DRIVERS := $(DRIVERS) drivers/dio/dio.a
-endif
-
-ifdef CONFIG_SBUS
-DRIVERS := $(DRIVERS) drivers/sbus/sbus.a
-endif
-
-ifdef CONFIG_ZORRO
-DRIVERS := $(DRIVERS) drivers/zorro/zorro.a
-endif
-
-ifeq ($(CONFIG_FC4),y)
-DRIVERS := $(DRIVERS) drivers/fc4/fc4.a
-endif
-
-ifdef CONFIG_PPC
-DRIVERS := $(DRIVERS) drivers/macintosh/macintosh.a
-endif
-
-ifdef CONFIG_MAC
-DRIVERS := $(DRIVERS) drivers/macintosh/macintosh.a
-endif
-
-ifeq ($(CONFIG_ISAPNP),y)
-DRIVERS := $(DRIVERS) drivers/pnp/pnp.o
-endif
-
-ifdef CONFIG_SGI_IP22
-DRIVERS := $(DRIVERS) drivers/sgi/sgi.a
-endif
-
-ifdef CONFIG_VT
-DRIVERS := $(DRIVERS) drivers/video/video.o
-endif
-
-ifeq ($(CONFIG_PARIDE),y)
-DRIVERS := $(DRIVERS) drivers/block/paride/paride.a
-endif
-
-ifdef CONFIG_HAMRADIO
-DRIVERS := $(DRIVERS) drivers/net/hamradio/hamradio.o
-endif
-
-ifeq ($(CONFIG_TC),y)
-DRIVERS := $(DRIVERS) drivers/tc/tc.a
-endif
-
-ifeq ($(CONFIG_USB),y)
-DRIVERS := $(DRIVERS) drivers/usb/usbdrv.o
-endif
-
-ifeq ($(CONFIG_I2O),y)
-DRIVERS := $(DRIVERS) drivers/i2o/i2o.a
-endif
-
-ifeq ($(CONFIG_IRDA),y)
-DRIVERS := $(DRIVERS) drivers/net/irda/irda_drivers.a
-endif
-
-ifeq ($(CONFIG_I2C),y)
-DRIVERS := $(DRIVERS) drivers/i2c/i2c.a
-endif
-
-ifeq ($(CONFIG_PHONE),y)
-DRIVERS := $(DRIVERS) drivers/telephony/telephony.a
-endif
+DRIVERS += $(DRIVERS-y)
 
 include arch/$(ARCH)/Makefile
 

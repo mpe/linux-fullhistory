@@ -497,9 +497,6 @@ extern void scsi_do_cmd(Scsi_Cmnd *, const void *cmnd,
 			void *buffer, unsigned bufflen,
 			void (*done) (struct scsi_cmnd *),
 			int timeout, int retries);
-extern void scsi_wait_cmd(Scsi_Cmnd *, const void *cmnd,
-  			  void *buffer, unsigned bufflen,
-  			  int timeout, int retries);
 extern int scsi_dev_init(void);
 
 /*
@@ -571,7 +568,7 @@ struct scsi_device {
 	Scsi_Cmnd *device_queue;	/* queue of SCSI Command structures */
 
 /* public: */
-	unsigned char id, lun, channel;
+	unsigned int id, lun, channel;
 
 	unsigned int manufacturer;	/* Manufacturer of device, for using 
 					 * vendor-specific cmd's */
@@ -731,9 +728,9 @@ struct scsi_cmnd {
 
 /* public: */
 
-	unsigned char target;
-	unsigned char lun;
-	unsigned char channel;
+	unsigned int target;
+	unsigned int lun;
+	unsigned int channel;
 	unsigned char cmd_len;
 	unsigned char old_cmd_len;
 	unsigned char sc_data_direction;

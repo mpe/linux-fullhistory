@@ -15,8 +15,8 @@
 #define MAX_ORDER 10
 
 typedef struct free_area_struct {
-	struct list_head free_list;
-	unsigned int * map;
+	struct list_head	free_list;
+	unsigned int		*map;
 } free_area_t;
 
 struct pglist_data;
@@ -25,30 +25,31 @@ typedef struct zone_struct {
 	/*
 	 * Commonly accessed fields:
 	 */
-	spinlock_t lock;
-	unsigned long offset;
-	unsigned long free_pages;
-	char low_on_memory;
-	char zone_wake_kswapd;
-	unsigned long pages_min, pages_low, pages_high;
+	spinlock_t		lock;
+	unsigned long		offset;
+	unsigned long		free_pages;
+	char			low_on_memory;
+	char			zone_wake_kswapd;
+	unsigned long		pages_min, pages_low, pages_high;
+	struct list_head	lru_cache;
 
 	/*
 	 * free areas of different sizes
 	 */
-	free_area_t free_area[MAX_ORDER];
+	free_area_t		free_area[MAX_ORDER];
 
 	/*
 	 * rarely used fields:
 	 */
-	char * name;
-	unsigned long size;
+	char			*name;
+	unsigned long		size;
 	/*
 	 * Discontig memory support fields.
 	 */
-	struct pglist_data *zone_pgdat;
-	unsigned long zone_start_paddr;
-	unsigned long zone_start_mapnr;
-	struct page * zone_mem_map;
+	struct pglist_data	*zone_pgdat;
+	unsigned long		zone_start_paddr;
+	unsigned long		zone_start_mapnr;
+	struct page		*zone_mem_map;
 } zone_t;
 
 #define ZONE_DMA		0

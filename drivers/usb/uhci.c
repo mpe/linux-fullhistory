@@ -236,7 +236,7 @@ static void uhci_remove_td(struct uhci *uhci, struct uhci_td *td)
 static void uhci_insert_tds_in_qh(struct uhci_qh *qh, struct urb *urb, int breadth)
 {
 	struct urb_priv *urbp = (struct urb_priv *)urb->hcpriv;
-	struct uhci_td *td, *prevtd = NULL;
+	struct uhci_td *td, *prevtd;
 
 	if (!urbp)
 		return;
@@ -617,6 +617,8 @@ static int uhci_submit_control(urb_t *urb)
 	return -EINPROGRESS;
 }
 
+static int usb_control_retrigger_status(urb_t *urb);
+
 static int uhci_result_control(urb_t *urb)
 {
 	struct urb_priv *urbp = urb->hcpriv;
@@ -629,6 +631,9 @@ static int uhci_result_control(urb_t *urb)
 	td = urbp->list.begin;
 	if (!td)
 		return -EINVAL;
+
+	if (urbp->short_control_packet)
+		goto status_phase;
 
 	/* The first TD is the SETUP phase, check the status, but skip */
 	/*  the count */
@@ -653,10 +658,9 @@ static int uhci_result_control(urb_t *urb)
 
 		/* If SPD is set then we received a short packet */
 		/*  There will be no status phase at the end */
-		/* FIXME: Re-setup the queue to run the STATUS phase? */
 		if ((td->status & TD_CTRL_SPD) &&
 		    (uhci_actual_length(td->status) < uhci_expected_length(td->info)))
-			return 0;
+			return usb_control_retrigger_status(urb);
 
 		if (status)
 			goto td_error;
@@ -664,12 +668,13 @@ static int uhci_result_control(urb_t *urb)
 		td = td->list.next;
 	}
 
+status_phase:
 	/* Control status phase */
 	status = uhci_status_bits(td->status);
 
 	/* APC BackUPS Pro kludge */
-	/* It tries to send all of the descriptor instead of */
-	/*  the amount we requested */
+	/* It tries to send all of the descriptor instead of the amount */
+	/*  we requested */
 	if (td->status & TD_CTRL_IOC &&
 	    status & TD_CTRL_ACTIVE &&
 	    status & TD_CTRL_NAK)
@@ -698,6 +703,47 @@ td_error:
 	    			uhci_packetout(td->info));
 
 	return uhci_map_status(status, uhci_packetout(td->info));
+}
+
+static int usb_control_retrigger_status(urb_t *urb)
+{
+	struct urb_priv *urbp = (struct urb_priv *)urb->hcpriv;
+	struct uhci *uhci = urb->dev->bus->hcpriv;
+	struct uhci_td *td, *nexttd;
+
+	urbp->short_control_packet = 1;
+
+	/* Delete all of the TD's except for the status TD at the end */
+	td = urbp->list.begin;
+	while (td && td->list.next) {
+		nexttd = td->list.next;
+
+		uhci_remove_td_from_urb(urb, td);
+
+		uhci_remove_td(uhci, td);
+
+		uhci_free_td(td);
+		
+		td = nexttd;
+	}
+
+	/* Create a new QH to avoid pointer overwriting problems */
+	uhci_remove_qh(uhci, urbp->qh);
+
+	urbp->qh = uhci_alloc_qh(urb->dev);
+	if (!urbp->qh)
+		return -ENOMEM;
+
+	/* One TD, who cares about Breadth first? */
+	uhci_insert_tds_in_qh(urbp->qh, urb, 0);
+
+	/* Low speed or small transfers gets a different queue and treatment */
+	if (urb->pipe & TD_CTRL_LS)
+		uhci_insert_qh(uhci, &uhci->skel_ls_control_qh, urbp->qh);
+	else
+		uhci_insert_qh(uhci, &uhci->skel_hs_control_qh, urbp->qh);
+
+	return -EINPROGRESS;
 }
 
 /*

@@ -60,6 +60,7 @@ struct vm_area_struct {
 	struct vm_operations_struct * vm_ops;
 	unsigned long vm_pgoff;		/* offset in PAGE_SIZE units, *not* PAGE_CACHE_SIZE */
 	struct file * vm_file;
+	unsigned long vm_raend;
 	void * vm_private_data;		/* was vm_pte (shared mem) */
 };
 
@@ -83,9 +84,18 @@ struct vm_area_struct {
 
 #define VM_EXECUTABLE	0x00001000
 #define VM_LOCKED	0x00002000
-#define VM_IO           0x00004000  /* Memory mapped I/O or similar */
+#define VM_IO           0x00004000	/* Memory mapped I/O or similar */
+
+#define VM_SEQ_READ	0x00008000	/* App will access data sequentially */
+#define VM_RAND_READ	0x00010000	/* App will not benefit from clustered reads */
 
 #define VM_STACK_FLAGS	0x00000177
+
+#define VM_READHINTMASK			(VM_SEQ_READ | VM_RAND_READ)
+#define VM_ClearReadHint(v)		(v)->vm_flags &= ~VM_READHINTMASK
+#define VM_NormalReadHint(v)		(!((v)->vm_flags & VM_READHINTMASK))
+#define VM_SequentialReadHint(v)	((v)->vm_flags & VM_SEQ_READ)
+#define VM_RandomReadHint(v)		((v)->vm_flags & VM_RAND_READ)
 
 /*
  * mapping from the currently active vm_flags protection bits (the
@@ -105,7 +115,6 @@ struct vm_operations_struct {
 	void (*unmap)(struct vm_area_struct *area, unsigned long, size_t);
 	void (*protect)(struct vm_area_struct *area, unsigned long, size_t, unsigned int newprot);
 	int (*sync)(struct vm_area_struct *area, unsigned long, size_t, unsigned int flags);
-	void (*advise)(struct vm_area_struct *area, unsigned long, size_t, unsigned int advise);
 	struct page * (*nopage)(struct vm_area_struct * area, unsigned long address, int write_access);
 	struct page * (*wppage)(struct vm_area_struct * area, unsigned long address, struct page * page);
 	int (*swapout)(struct page *, struct file *);

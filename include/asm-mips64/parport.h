@@ -9,47 +9,10 @@
 #ifndef _ASM_PARPORT_H
 #define _ASM_PARPORT_H 1
 
-#include <linux/config.h>
-
-/* Maximum number of ports to support.  It is useless to set this greater
-   than PARPORT_MAX (in <linux/parport.h>).  */
-#define PARPORT_PC_MAX_PORTS  8
-
-/* If parport_cs (PCMCIA) is managing ports for us, we'll need the
- * probing routines forever; otherwise we can lose them at boot time. */
-#ifdef CONFIG_PARPORT_PC_PCMCIA
-#define __maybe_initdata
-#define __maybe_init
-#else
-#define __maybe_initdata __initdata
-#define __maybe_init __init
-#endif
-
-static int user_specified __maybe_initdata = 0;
-int __init
-parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
+static int __devinit parport_pc_find_isa_ports (int autoirq, int autodma);
+static int __devinit parport_pc_find_nonpci_ports (int autoirq, int autodma)
 {
-	int count = 0, i = 0;
-
-	if (io && *io) {
-		/* Only probe the ports we were given. */
-		user_specified = 1;
-		do {
-			if (!*io_hi) *io_hi = 0x400 + *io;
-			if (parport_pc_probe_port(*(io++), *(io_hi++),
-						  *(irq++), *(dma++), NULL))
-				count++;
-		} while (*io && (++i < PARPORT_PC_MAX_PORTS));
-	} else {
-		if (parport_pc_probe_port(0x3bc, 0x7bc, irq[0], dma[0], NULL))
-			count++;
-		if (parport_pc_probe_port(0x378, 0x778, irq[0], dma[0], NULL))
-			count++;
-		if (parport_pc_probe_port(0x278, 0x678, irq[0], dma[0], NULL))
-			count++;
-	}
-
-        return count;
+	return parport_pc_find_isa_ports (autoirq, autodma);
 }
 
 #endif /* !(_ASM_PARPORT_H) */

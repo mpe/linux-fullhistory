@@ -480,6 +480,8 @@ static void shaper_cache_update(struct hh_cache *hh, struct net_device *dev,
 }
 #endif
 
+#ifdef CONFIG_INET
+
 static int shaper_neigh_setup(struct neighbour *n)
 {
 	if (n->nud_state == NUD_NONE) {
@@ -498,6 +500,15 @@ static int shaper_neigh_setup_dev(struct net_device *dev, struct neigh_parms *p)
 	}
 	return 0;
 }
+
+#else /* !(CONFIG_INET) */
+
+static int shaper_neigh_setup_dev(struct net_device *dev, struct neigh_parms *p)
+{
+	return 0;
+}
+
+#endif
 
 static int shaper_attach(struct net_device *shdev, struct shaper *sh, struct net_device *dev)
 {

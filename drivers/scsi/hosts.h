@@ -469,10 +469,10 @@ extern void scsi_deregister_blocked_host(struct Scsi_Host * SHpnt);
  * Prototypes for functions/data in scsi_scan.c
  */
 extern void scan_scsis(struct Scsi_Host *shpnt,
-		       unchar hardcoded,
-		       unchar hchannel,
-		       unchar hid,
-                       unchar hlun);
+		       uint hardcoded,
+		       uint hchannel,
+		       uint hid,
+                       uint hlun);
 
 extern void scsi_mark_host_reset(struct Scsi_Host *Host);
 
@@ -485,12 +485,12 @@ struct Scsi_Device_Template
     const char * tag;
     struct module * module;	  /* Used for loadable modules */
     unsigned char scsi_type;
-    unsigned char major;
-    unsigned char min_major;      /* Minimum major in range. */ 
-    unsigned char max_major;      /* Maximum major in range. */
-    unsigned char nr_dev;	  /* Number currently attached */
-    unsigned char dev_noticed;	  /* Number of devices detected. */
-    unsigned char dev_max;	  /* Current size of arrays */
+    unsigned int major;
+    unsigned int min_major;      /* Minimum major in range. */ 
+    unsigned int max_major;      /* Maximum major in range. */
+    unsigned int nr_dev;	  /* Number currently attached */
+    unsigned int dev_noticed;	  /* Number of devices detected. */
+    unsigned int dev_max;	  /* Current size of arrays */
     unsigned blk:1;		  /* 0 if character device */
     int (*detect)(Scsi_Device *); /* Returns 1 if we can attach this device */
     int (*init)(void);		  /* Sizes arrays based upon number of devices
@@ -534,20 +534,18 @@ extern void scsi_unregister_module(int, void *);
  * Note: These things are all evil and all need to go away.  My plan is to
  * tackle the character devices first, as there aren't any locking implications
  * in the block device layer.   The block devices will require more work.
+ *
+ * The generics driver has been updated to resize as required.  So as the tape
+ * driver. Two down, two more to go.
  */
 #ifndef CONFIG_SD_EXTRA_DEVS
 #define CONFIG_SD_EXTRA_DEVS 2
-#endif
-#ifndef CONFIG_ST_EXTRA_DEVS
-#define CONFIG_ST_EXTRA_DEVS 2
 #endif
 #ifndef CONFIG_SR_EXTRA_DEVS
 #define CONFIG_SR_EXTRA_DEVS 2
 #endif
 #define SD_EXTRA_DEVS CONFIG_SD_EXTRA_DEVS
-#define ST_EXTRA_DEVS CONFIG_ST_EXTRA_DEVS
 #define SR_EXTRA_DEVS CONFIG_SR_EXTRA_DEVS
-#define SG_EXTRA_DEVS (SD_EXTRA_DEVS + SR_EXTRA_DEVS + ST_EXTRA_DEVS)
 
 #endif
 /*

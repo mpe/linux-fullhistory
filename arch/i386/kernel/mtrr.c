@@ -1101,8 +1101,44 @@ static int cyrix_get_free_region (unsigned long base, unsigned long size)
 static int (*get_free_region) (unsigned long base,
 			       unsigned long size) = generic_get_free_region;
 
-int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
-	      char increment)
+/**
+ *	mtrr_add - Add a memory type region
+ *	@base: Physical base address of region
+ *	@size: Physical size of region
+ *	@type: Type of MTRR desired
+ *	@increment: If this is true do usage counting on the region
+ *
+ *	Memory type region registers control the caching on newer Intel and
+ *	non Intel processors. This function allows drivers to request an
+ *	MTRR is added. The details and hardware specifics of each processors
+ *	implementation are hidden from the caller, but nevertheless the 
+ *	caller should expect to need to provide a power of two size on an
+ *	equivalent power of two boundary.
+ *
+ *	If the region cannot be added either because all regions are in use
+ *	or the CPU cannot support it a negative value is returned. On success
+ *	the register number for this entry is returned, but should be treated
+ *	as a cookie only.
+ *
+ *	On a multiprocessor machine the changes are made to all processors.
+ *	This is required on x86 by the Intel processors.
+ *
+ *	The available types are
+ *
+ *	MTRR_TYPE_UNCACHEABLE	-	No caching
+ *
+ *	MTRR_TYPE_WRITEBACK	-	Write data back in bursts whenever
+ *
+ *	MTRR_TYPE_WRCOMB	-	Write data back soon but allow bursts
+ *
+ *	MTRR_TYPE_WRTHROUGH	-	Cache reads but not writes
+ *
+ *	BUGS: Needs a quiet flag for the cases where drivers do not mind
+ *	failures and do not wish system log messages to be sent.
+ */
+
+int mtrr_add(unsigned long base, unsigned long size, unsigned int type, char increment)
+{
 /*  [SUMMARY] Add an MTRR entry.
     <base> The starting (base) address of the region.
     <size> The size (in bytes) of the region.
@@ -1113,7 +1149,6 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
     the error code.
     [NOTE] This routine uses a spinlock.
 */
-{
     int i, max;
     mtrr_type ltype;
     unsigned long lbase, lsize, last;
@@ -1145,7 +1180,7 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
 	    if ( (boot_cpu_data.x86 == 6) && (boot_cpu_data.x86_model == 1) &&
 		 (boot_cpu_data.x86_mask <= 7) && ( base & ( (1 << 22) -1 ) ) )
 	    {
-		printk ("mtrr: base(0x%lx) is not 4 MiB aligned\n", base);
+		printk (KERN_WARNING "mtrr: base(0x%lx) is not 4 MiB aligned\n", base);
 		return -EINVAL;
 	    }
 	}
@@ -1162,13 +1197,13 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
 	{
 	    if (type != MTRR_TYPE_WRCOMB)
 	    {
-		printk ("mtrr: only write-combining is supported\n");
+		printk (KERN_WARNING "mtrr: only write-combining is supported\n");
 		return -EINVAL;
 	    }
 	}
 	else if (base + size < 0x100000)
 	{
-	    printk ("mtrr: cannot set region below 1 MiB (0x%lx,0x%lx)\n",
+	    printk (KERN_WARNING "mtrr: cannot set region below 1 MiB (0x%lx,0x%lx)\n",
 		    base, size);
 	    return -EINVAL;
 	}
@@ -1179,7 +1214,7 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
 	     lbase = lbase >> 1, last = last >> 1);
 	if (lbase != last)
 	{
-	    printk ("mtrr: base(0x%lx) is not aligned on a size(0x%lx) boundary\n",
+	    printk (KERN_WARNING "mtrr: base(0x%lx) is not aligned on a size(0x%lx) boundary\n",
 		    base, size);
 	    return -EINVAL;
 	}
@@ -1196,7 +1231,7 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
     /*  If the type is WC, check that this processor supports it  */
     if ( (type == MTRR_TYPE_WRCOMB) && !have_wrcomb () )
     {
-        printk ("mtrr: your processor doesn't support write-combining\n");
+        printk (KERN_WARNING "mtrr: your processor doesn't support write-combining\n");
         return -ENOSYS;
     }
     increment = increment ? 1 : 0;
@@ -1212,7 +1247,7 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
 	if ( (base < lbase) || (base + size > lbase + lsize) )
 	{
 	    up(&main_lock);
-	    printk ("mtrr: 0x%lx,0x%lx overlaps existing 0x%lx,0x%lx\n",
+	    printk (KERN_WARNING "mtrr: 0x%lx,0x%lx overlaps existing 0x%lx,0x%lx\n",
 		    base, size, lbase, lsize);
 	    return -EINVAL;
 	}
@@ -1245,6 +1280,21 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
     return i;
 }   /*  End Function mtrr_add  */
 
+/**
+ *	mtrr_del
+ *	@reg: Register returned by mtrr_add
+ *	@base: Physical base address
+ *	@size: Size of region
+ *
+ *	If register is supplied then base and size are ignored. This is
+ *	how drivers should call it.
+ *
+ *	Releases an MTRR region. If the usage count drops to zero the 
+ *	register is freed and the region returns to default state.
+ *	On success the register is returned, on failure a negative error
+ *	code.
+ */
+ 
 int mtrr_del (int reg, unsigned long base, unsigned long size)
 /*  [SUMMARY] Delete MTRR/decrement usage count.
     <reg> The register. If this is less than 0 then <<base>> and <<size>> must

@@ -364,16 +364,20 @@ struct usb_driver {
  */
 typedef int (*usb_device_irq)(int, void *, int, void *);
 
-/* --------------------------------------------------------------------------* 
- * New USB Structures                                                        *
- * --------------------------------------------------------------------------*/
+/* -------------------------------------------------------------------------------------* 
+ * New USB Structures                                                                   *
+ * -------------------------------------------------------------------------------------*/
 
-#define USB_DISABLE_SPD		1
-#define USB_ISO_ASAP		2
-#define USB_URB_EARLY_COMPLETE	4
-#define USB_ASYNC_UNLINK	8
 
-typedef struct {
+#define USB_DISABLE_SPD         0x0001
+#define USB_ISO_ASAP            0x0002
+#define USB_URB_EARLY_COMPLETE  0x0004
+#define USB_ASYNC_UNLINK        0x0008
+#define USB_QUEUE_BULK          0x0010
+#define USB_TIMEOUT_KILLED	0x1000	// only set by HCD!
+
+typedef struct
+{
 	unsigned int offset;
 	unsigned int length;		// expected length
 	unsigned int actual_length;
@@ -402,6 +406,7 @@ typedef struct urb
 	int number_of_packets;		// number of packets in this request (iso/irq only)
 	int interval;                   // polling interval (irq only)
 	int error_count;		// number of errors in this transfer (iso only)
+	int timeout;			// timeout (in jiffies)
 	//
 	void *context;			// context for completion routine
 	usb_complete_t complete;	// pointer to completion routine
@@ -445,6 +450,31 @@ typedef struct urb
 	(a)->start_frame=-1;\
     } while (0)
 
+#define FILL_CONTROL_URB_TO(a,aa,b,c,d,e,f,g,h) \
+    do {\
+	spin_lock_init(&(a)->lock);\
+	(a)->dev=aa;\
+	(a)->pipe=b;\
+	(a)->setup_packet=c;\
+	(a)->transfer_buffer=d;\
+	(a)->transfer_buffer_length=e;\
+	(a)->complete=f;\
+	(a)->context=g;\
+	(a)->timeout=h;\
+    } while (0)
+
+#define FILL_BULK_URB_TO(a,aa,b,c,d,e,f,g) \
+    do {\
+	spin_lock_init(&(a)->lock);\
+	(a)->dev=aa;\
+	(a)->pipe=b;\
+	(a)->transfer_buffer=c;\
+	(a)->transfer_buffer_length=d;\
+	(a)->complete=e;\
+	(a)->context=f;\
+	(a)->timeout=g;\
+    } while (0)
+    
 purb_t usb_alloc_urb(int iso_packets);
 void usb_free_urb (purb_t purb);
 int usb_submit_urb(purb_t purb);

@@ -2,10 +2,11 @@
 #define __LINUX_UHCI_H
 
 /*
-   $Id: usb-uhci.h,v 1.41 2000/02/13 21:37:38 acher Exp $
+   $Id: usb-uhci.h,v 1.50 2000/03/13 21:18:04 fliegl Exp $
  */
 #define MODNAME "usb-uhci"
-#define VERSTR "version v1.184 time " __TIME__ " " __DATE__
+#define VERSTR "$Revision: 1.50 $ time " __TIME__ " " __DATE__
+#define UHCI_LATENCY_TIMER 0
 
 static __inline__ void uhci_wait_ms(unsigned int ms)
 {
@@ -154,9 +155,13 @@ typedef struct {
 
 typedef struct {
 	struct list_head desc_list;	// list pointer to all corresponding TDs/QHs associated with this request
-	int short_control_packet;
 	unsigned long started;
-	int use_loop;
+	urb_t *next_queued_urb;         // next queued urb for this EP
+	urb_t *prev_queued_urb;
+	uhci_desc_t *bottom_qh;
+	uhci_desc_t *next_qh;       	// next helper QH
+	char use_loop;
+	char short_control_packet;
 } urb_priv_t, *purb_priv_t;
 
 struct virt_root_hub {
@@ -186,12 +191,14 @@ typedef struct uhci {
 	spinlock_t urb_list_lock;	// lock to keep consistency 
 
 	int unlink_urb_done;
+	atomic_t avoid_bulk;
 	
 	struct usb_bus *bus;	// our bus
 
 	__u32 *framelist;
 	uhci_desc_t **iso_td;
 	uhci_desc_t *int_chain[8];
+	uhci_desc_t *ls_control_chain;
 	uhci_desc_t *control_chain;
 	uhci_desc_t *bulk_chain;
 	uhci_desc_t *chain_end;
@@ -200,6 +207,9 @@ typedef struct uhci {
 	spinlock_t td_lock;
 	struct virt_root_hub rh;	//private data of the virtual root hub
 	int loop_usage;            // URBs using bandwidth reclamation
+
+	struct list_head urb_unlinked;	// list of all unlinked  urbs
+	int frame_counter;
 } uhci_t, *puhci_t;
 
 

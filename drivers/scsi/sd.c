@@ -662,7 +662,7 @@ static int sd_init_onedisk(int i)
 	unsigned long spintime_value = 0;
 	int the_result, retries, spintime;
 	int sector_size;
-	Scsi_Cmnd *SCpnt;
+	Scsi_Request *SRpnt;
 
 	/*
 	 * Get the name of the disk, in case we need to log it somewhere.
@@ -681,7 +681,7 @@ static int sd_init_onedisk(int i)
 	 * just after a scsi bus reset.
 	 */
 
-	SCpnt = scsi_allocate_device(rscsi_disks[i].device, 1, FALSE);
+	SRpnt = scsi_allocate_request(rscsi_disks[i].device);
 
 	buffer = (unsigned char *) scsi_malloc(512);
 
@@ -696,18 +696,18 @@ static int sd_init_onedisk(int i)
 			cmd[0] = TEST_UNIT_READY;
 			cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
 			memset((void *) &cmd[2], 0, 8);
-			SCpnt->cmd_len = 0;
-			SCpnt->sense_buffer[0] = 0;
-			SCpnt->sense_buffer[2] = 0;
-			SCpnt->sc_data_direction = SCSI_DATA_READ;
+			SRpnt->sr_cmd_len = 0;
+			SRpnt->sr_sense_buffer[0] = 0;
+			SRpnt->sr_sense_buffer[2] = 0;
+			SRpnt->sr_data_direction = SCSI_DATA_READ;
 
-			scsi_wait_cmd (SCpnt, (void *) cmd, (void *) buffer,
+			scsi_wait_req (SRpnt, (void *) cmd, (void *) buffer,
 				0/*512*/, SD_TIMEOUT, MAX_RETRIES);
 
-			the_result = SCpnt->result;
+			the_result = SRpnt->sr_result;
 			retries++;
 			if (the_result == 0
-			    || SCpnt->sense_buffer[2] != UNIT_ATTENTION)
+			    || SRpnt->sr_sense_buffer[2] != UNIT_ATTENTION)
 				break;
 		}
 
@@ -718,8 +718,8 @@ static int sd_init_onedisk(int i)
 		 */
 		if( the_result != 0
 		    && ((driver_byte(the_result) & DRIVER_SENSE) != 0)
-		    && SCpnt->sense_buffer[2] == UNIT_ATTENTION
-		    && SCpnt->sense_buffer[12] == 0x3A ) {
+		    && SRpnt->sr_sense_buffer[2] == UNIT_ATTENTION
+		    && SRpnt->sr_sense_buffer[12] == 0x3A ) {
 			rscsi_disks[i].capacity = 0x1fffff;
 			sector_size = 512;
 			rscsi_disks[i].device->changed = 1;
@@ -730,7 +730,7 @@ static int sd_init_onedisk(int i)
 		/* Look for non-removable devices that return NOT_READY.
 		 * Issue command to spin up drive for these cases. */
 		if (the_result && !rscsi_disks[i].device->removable &&
-		    SCpnt->sense_buffer[2] == NOT_READY) {
+		    SRpnt->sr_sense_buffer[2] == NOT_READY) {
 			unsigned long time1;
 			if (!spintime) {
 				printk("%s: Spinning up disk...", nbuff);
@@ -739,12 +739,12 @@ static int sd_init_onedisk(int i)
 				cmd[1] |= 1;	/* Return immediately */
 				memset((void *) &cmd[2], 0, 8);
 				cmd[4] = 1;	/* Start spin cycle */
-				SCpnt->cmd_len = 0;
-				SCpnt->sense_buffer[0] = 0;
-				SCpnt->sense_buffer[2] = 0;
+				SRpnt->sr_cmd_len = 0;
+				SRpnt->sr_sense_buffer[0] = 0;
+				SRpnt->sr_sense_buffer[2] = 0;
 
-				SCpnt->sc_data_direction = SCSI_DATA_READ;
-				scsi_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
+				SRpnt->sr_data_direction = SCSI_DATA_READ;
+				scsi_wait_req(SRpnt, (void *) cmd, (void *) buffer,
 					    0/*512*/, SD_TIMEOUT, MAX_RETRIES);
 			}
 			spintime = 1;
@@ -770,15 +770,15 @@ static int sd_init_onedisk(int i)
 		cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
 		memset((void *) &cmd[2], 0, 8);
 		memset((void *) buffer, 0, 8);
-		SCpnt->cmd_len = 0;
-		SCpnt->sense_buffer[0] = 0;
-		SCpnt->sense_buffer[2] = 0;
+		SRpnt->sr_cmd_len = 0;
+		SRpnt->sr_sense_buffer[0] = 0;
+		SRpnt->sr_sense_buffer[2] = 0;
 
-		SCpnt->sc_data_direction = SCSI_DATA_READ;
-		scsi_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
+		SRpnt->sr_data_direction = SCSI_DATA_READ;
+		scsi_wait_req(SRpnt, (void *) cmd, (void *) buffer,
 			    8, SD_TIMEOUT, MAX_RETRIES);
 
-		the_result = SCpnt->result;
+		the_result = SRpnt->sr_result;
 		retries--;
 
 	} while (the_result && retries);
@@ -808,7 +808,7 @@ static int sd_init_onedisk(int i)
 		    );
 		if (driver_byte(the_result) & DRIVER_SENSE)
 			printk("%s : extended sense code = %1x \n",
-			       nbuff, SCpnt->sense_buffer[2] & 0xf);
+			       nbuff, SRpnt->sr_sense_buffer[2] & 0xf);
 		else
 			printk("%s : sense not available. \n", nbuff);
 
@@ -820,7 +820,7 @@ static int sd_init_onedisk(int i)
 		/* Set dirty bit for removable devices if not ready - sometimes drives
 		 * will not report this properly. */
 		if (rscsi_disks[i].device->removable &&
-		    SCpnt->sense_buffer[2] == NOT_READY)
+		    SRpnt->sr_sense_buffer[2] == NOT_READY)
 			rscsi_disks[i].device->changed = 1;
 
 	} else {
@@ -921,16 +921,16 @@ static int sd_init_onedisk(int i)
 		cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
 		cmd[2] = 1;	/* page code 1 ?? */
 		cmd[4] = 12;
-		SCpnt->cmd_len = 0;
-		SCpnt->sense_buffer[0] = 0;
-		SCpnt->sense_buffer[2] = 0;
+		SRpnt->sr_cmd_len = 0;
+		SRpnt->sr_sense_buffer[0] = 0;
+		SRpnt->sr_sense_buffer[2] = 0;
 
 		/* same code as READCAPA !! */
-		SCpnt->sc_data_direction = SCSI_DATA_READ;
-		scsi_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
+		SRpnt->sr_data_direction = SCSI_DATA_READ;
+		scsi_wait_req(SRpnt, (void *) cmd, (void *) buffer,
 			    512, SD_TIMEOUT, MAX_RETRIES);
 
-		the_result = SCpnt->result;
+		the_result = SRpnt->sr_result;
 
 		if (the_result) {
 			printk("%s: test WP failed, assume Write Protected\n", nbuff);
@@ -942,12 +942,12 @@ static int sd_init_onedisk(int i)
 		}
 
 	}			/* check for write protect */
-	SCpnt->device->ten = 1;
-	SCpnt->device->remap = 1;
-	SCpnt->device->sector_size = sector_size;
+	SRpnt->sr_device->ten = 1;
+	SRpnt->sr_device->remap = 1;
+	SRpnt->sr_device->sector_size = sector_size;
 	/* Wake up a process waiting for device */
-	scsi_release_command(SCpnt);
-	SCpnt = NULL;
+	scsi_release_request(SRpnt);
+	SRpnt = NULL;
 
 	scsi_free(buffer, 512);
 	return i;

@@ -1226,10 +1226,10 @@ static int idefloppy_get_flexible_disk_page (ide_drive_t *drive)
 	drive->bios_head = page->heads;
 	drive->bios_sect = page->sectors;
 	lba_capacity = floppy->blocks * floppy->block_size;
-	if (capacity != lba_capacity) {
-		printk (KERN_NOTICE "%s: The drive reports both %d and %d bytes as its capacity\n",
-			drive->name, capacity, lba_capacity);
-		capacity = IDEFLOPPY_MIN(capacity, lba_capacity);
+	if (capacity < lba_capacity) {
+		printk (KERN_NOTICE "%s: The disk reports a capacity of %d bytes, "
+			"but the drive only handles %d\n",
+			drive->name, lba_capacity, capacity);
 		floppy->blocks = floppy->block_size ? capacity / floppy->block_size : 0;
 	}
 	return 0;

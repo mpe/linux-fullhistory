@@ -35,8 +35,6 @@
 #include <asm/uaccess.h>
 #include <asm/pgalloc.h>
 
-#include <linux/config.h>
-
 #define DLINFO_ITEMS 13
 
 #include <linux/elf.h>

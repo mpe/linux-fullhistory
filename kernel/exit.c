@@ -55,8 +55,8 @@ static void release(struct task_struct * p)
 		 * was given away by the parent in the first place.)
 		 */
 		current->counter += p->counter;
-		if (current->counter > current->priority*2)
-			current->counter = current->priority*2;
+		if (current->counter >= current->priority*2)
+			current->counter = current->priority*2-1;
 		free_task_struct(p);
 	} else {
 		printk("task releasing itself\n");

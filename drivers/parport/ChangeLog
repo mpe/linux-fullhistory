@@ -1,3 +1,24 @@
+2000-03-13    <twaugh@redhat.com>
+
+	* parport_pc.c (parport_pc_init): Moved from asm/parport.h.
+
+	* Config.in: CONFIG_PARPORT_PC_SUPERIO: new option.
+
+	* parport_pc.c (show_parconfig_smsc37c669): Make __devinit.
+	(show_parconfig_winbond): Likewise.
+	(decode_winbond): Likewise.
+	(decode_smsc): Likewise.
+	(winbond_check): Likewise.
+	(winbond_check2): Likewise.
+	(smsc_check): Likewise.
+	(detect_and_report_winbond): Likewise.
+	(detect_and_report_smsc): Likewise.
+	(get_superio_dma): Likewise.
+	(get_superio_irq): Likewise.
+	(parport_pc_find_isa_ports): New function.
+	(parport_pc_find_ports): New function.
+	(init_module): Make superio a config option, not a parameter.
+
 2000-03-10    <twaugh@redhat.com>
 
 	* parport_pc.c (decode_winbond): Use correct 83877ATF chip ID.

@@ -1378,11 +1378,12 @@ static int atalk_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 
 		if (n < 0)
 			return n;
-	} else
+	} else {
 		sk->protinfo.af_at.src_port = addr->sat_port;
 
-	if (atalk_find_or_insert_socket(sk, addr) != NULL)
-		return -EADDRINUSE;
+		if (atalk_find_or_insert_socket(sk, addr) != NULL)
+			return -EADDRINUSE;
+	}
 
 	sk->zapped = 0;
 

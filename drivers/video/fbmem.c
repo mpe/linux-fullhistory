@@ -424,10 +424,13 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 	int fbidx = GET_FB_IDX(file->f_dentry->d_inode->i_rdev);
 	struct fb_info *info = registered_fb[fbidx];
 	struct fb_ops *fb = info->fbops;
+	unsigned long off;
+#if !defined(__sparc__) || defined(__sparc_v9__)
 	struct fb_fix_screeninfo fix;
 	struct fb_var_screeninfo var;
-	unsigned long start, off;
+	unsigned long start;
 	u32 len;
+#endif
 
 	if (vma->vm_pgoff > (~0UL >> PAGE_SHIFT))
 		return -EINVAL;

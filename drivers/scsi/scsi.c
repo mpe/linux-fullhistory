@@ -218,23 +218,6 @@ static void scsi_wait_done(Scsi_Cmnd * SCpnt)
 	}
 }
 
-void scsi_wait_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
-		  void *buffer, unsigned bufflen, 
-		  int timeout, int retries)
-{
-	DECLARE_MUTEX_LOCKED(sem);
-	
-        if (buffer != NULL && SCpnt->sc_data_direction == SCSI_DATA_NONE)
-                BUG();
-	SCpnt->request.sem = &sem;
-	SCpnt->request.rq_status = RQ_SCSI_BUSY;
-	scsi_do_cmd (SCpnt, (void *) cmnd,
-		buffer, bufflen, scsi_wait_done, timeout, retries);
-	down (&sem);
-	SCpnt->request.sem = NULL;
-}
-
-
 /*
  * This lock protects the freelist for all devices on the system.
  * We could make this finer grained by having a single lock per
@@ -2499,7 +2482,6 @@ static void scsi_dump_status(int level)
 		       atomic_read(&shpnt->host_active),
 		       shpnt->host_blocked,
 		       shpnt->host_self_blocked);
-
 	}
 
 	printk("\n\n");

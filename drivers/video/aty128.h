@@ -264,6 +264,8 @@
 /* DAC_CNTL bit constants */                       
 #define DAC_8BIT_EN				0x00000100
 #define DAC_MASK				0xFF000000
+#define DAC_BLANKING				0x00000004
+#define DAC_RANGE_CNTL				0x00000003
 
 /* GEN_RESET_CNTL bit constants */
 #define SOFT_RESET_GUI				0x00000001

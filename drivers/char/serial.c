@@ -4520,9 +4520,24 @@ int __init rs_init(void)
 }
 
 /*
- * register_serial and unregister_serial allows for serial ports to be
+ * register_serial and unregister_serial allows for 16x50 serial ports to be
  * configured at run-time, to support PCMCIA modems.
  */
+ 
+/**
+ *	register_serial - configure a 16x50 serial port at runtime
+ *	@req: request structure
+ *
+ *	Configure the serial port specified by the request. If the
+ *	port exists and is in use an error is returned. If the port
+ *	is not currently in the table it is added.
+ *
+ *	The port is then probed and if neccessary the IRQ is autodetected
+ *	If this fails an error is returned.
+ *
+ *	On success the port is ready to use and the line number is returned.	
+ */
+ 
 int register_serial(struct serial_struct *req)
 {
 	int i;
@@ -4580,7 +4595,7 @@ int register_serial(struct serial_struct *req)
 	if ((state->flags & ASYNC_AUTO_IRQ) && CONFIGURED_SERIAL_PORT(state))
 		state->irq = detect_uart_irq(state);
 
-       printk(KERN_INFO "ttyS%02d at %s 0x%04lx (irq = %d) is a %s\n",
+	printk(KERN_INFO "ttyS%02d at %s 0x%04lx (irq = %d) is a %s\n",
 	      state->line + SERIAL_DEV_OFFSET,
 	      state->iomem_base ? "iomem" : "port",
 	      state->iomem_base ? (unsigned long)state->iomem_base :
@@ -4592,6 +4607,15 @@ int register_serial(struct serial_struct *req)
 			   callout_driver.minor_start + state->line);
 	return state->line + SERIAL_DEV_OFFSET;
 }
+
+/**
+ *	unregister_serial - deconfigure a 16x50 serial port
+ *	@line: line to deconfigure
+ *
+ *	The port specified is deconfigured and its resources are freed. Any
+ *	user of the port is disconnected as if carrier was dropped. Line is
+ *	the port number returned by register_serial.
+ */
 
 void unregister_serial(int line)
 {

@@ -9,9 +9,6 @@ if [ ! "$CONFIG_USB" = "n" ]; then
 
 comment 'USB Controllers'
    dep_tristate '  UHCI (Intel PIIX4, VIA, ...) support' CONFIG_USB_UHCI $CONFIG_USB
-   if [ "$CONFIG_USB_UHCI" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      bool '    USB-UHCI High Bandwidth (EXPERIMENTAL)' CONFIG_USB_UHCI_HIGH_BANDWIDTH
-   fi
    if [ "$CONFIG_USB_UHCI" != "y" ]; then
       dep_tristate '  UHCI Alternate Driver (JE) support' CONFIG_USB_UHCI_ALT $CONFIG_USB
       if [ "$CONFIG_USB_UHCI_ALT" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then

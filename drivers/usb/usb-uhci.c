@@ -12,7 +12,7 @@
  * (C) Copyright 1999 Johannes Erdfelt
  * (C) Copyright 1999 Randy Dunlap
  *
- * $Id: usb-uhci.c,v 1.197 2000/02/15 17:44:22 acher Exp $
+ * $Id: usb-uhci.c,v 1.222 2000/03/13 21:18:02 fliegl Exp $
  */
 
 #include <linux/config.h>
@@ -28,9 +28,9 @@
 #include <linux/unistd.h>
 #include <linux/interrupt.h>	/* for in_interrupt() */
 #include <linux/init.h>
-/* This enables debug printks */
-#define DEBUG
-#include <linux/usb.h>
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,44)
+#include <linux/pm.h>
+#endif
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -40,51 +40,56 @@
 /* This enables more detailed sanity checks in submit_iso */
 //#define ISO_SANITY_CHECK
 
+/* This enables debug printks */
+#define DEBUG
+
 /* This enables all symbols to be exported, to ease debugging oopses */
 //#define DEBUG_SYMBOLS
 
 /* This enables an extra UHCI slab for memory debugging */
 #define DEBUG_SLAB
 
+#include <linux/usb.h>
 #include "usb-uhci.h"
 #include "usb-uhci-debug.h"
 
 #undef DEBUG
 #undef dbg
 #define dbg(format, arg...) do {} while (0)
-
-#include <linux/pm.h>
-
+#define DEBUG_SYMBOLS
 #ifdef DEBUG_SYMBOLS
 	#define _static
 	#ifndef EXPORT_SYMTAB
-	#define EXPORT_SYMTAB
+		#define EXPORT_SYMTAB
 	#endif
 #else
 	#define _static static
 #endif
+
+#define queue_dbg dbg //err
+#define async_dbg dbg //err
 
 #ifdef DEBUG_SLAB
 	static kmem_cache_t *uhci_desc_kmem;
 	static kmem_cache_t *urb_priv_kmem;
 #endif
 
+#define SLAB_FLAG     (in_interrupt ()? SLAB_ATOMIC : SLAB_KERNEL)
+#define KMALLOC_FLAG  (in_interrupt ()? GFP_ATOMIC : GFP_KERNEL)
+
+#define CONFIG_USB_UHCI_HIGH_BANDWIDTH 
 #define USE_CTRL_DEPTH_FIRST 0  // 0: Breadth first, 1: Depth first
 #define USE_BULK_DEPTH_FIRST 0  // 0: Breadth first, 1: Depth first
 
-#ifdef CONFIG_USB_UHCI_HIGH_BANDWIDTH
-#define USE_RECLAMATION_LOOP
-#else
-//#define USE_RECLAMATION_LOOP
-#endif
-
-// stop bandwidth reclamation after (roughly) 50ms (depends also on
-// hub polling interval)
+// stop bandwidth reclamation after (roughly) 50ms
 #define IDLE_TIMEOUT  (HZ/20)
 
 _static int rh_submit_urb (urb_t *urb);
 _static int rh_unlink_urb (urb_t *urb);
 _static int delete_qh (uhci_t *s, uhci_desc_t *qh);
+_static int process_transfer (uhci_t *s, urb_t *urb, int mode);
+_static int process_interrupt (uhci_t *s, urb_t *urb);
+_static int process_iso (uhci_t *s, urb_t *urb, int force);
 
 static uhci_t *devs = NULL;
 
@@ -105,58 +110,47 @@ void clean_descs(uhci_t *s, int force)
 		qh = list_entry (q, uhci_desc_t, horizontal);
 		if ((qh->last_used!=now) || force)
 			delete_qh(s,qh);
+
 		q=qh->horizontal.prev;
 	}
 }
 /*-------------------------------------------------------------------*/
-#ifdef USE_RECLAMATION_LOOP
+#ifdef CONFIG_USB_UHCI_HIGH_BANDWIDTH
 _static void enable_desc_loop(uhci_t *s, urb_t *urb)
 {
 	int flags;
-	
-	dbg("enable_desc_loop: enter");
-	
+
 	spin_lock_irqsave (&s->qh_lock, flags);
-	s->chain_end->hw.qh.head=virt_to_bus(s->control_chain)|UHCI_PTR_QH;
+	s->chain_end->hw.qh.head&=~UHCI_PTR_TERM; 
+	mb();
 	s->loop_usage++;
 	((urb_priv_t*)urb->hcpriv)->use_loop=1;
 	spin_unlock_irqrestore (&s->qh_lock, flags);
-	
-	dbg("enable_desc_loop: finished");
 }
 /*-------------------------------------------------------------------*/
 _static void disable_desc_loop(uhci_t *s, urb_t *urb)
 {
 	int flags;
-	
-	dbg("disable_desc_loop: enter\n");
-	
+
 	spin_lock_irqsave (&s->qh_lock, flags);
 
 	if (((urb_priv_t*)urb->hcpriv)->use_loop) {
 		s->loop_usage--;
 
-		if (!s->loop_usage)
-			s->chain_end->hw.qh.head=UHCI_PTR_TERM;
-
+		if (!s->loop_usage) {
+			s->chain_end->hw.qh.head|=UHCI_PTR_TERM;
+			mb();
+		}
 		((urb_priv_t*)urb->hcpriv)->use_loop=0;
 	}
 	spin_unlock_irqrestore (&s->qh_lock, flags);
-	
-	dbg("disable_desc_loop: finished");
-
 }
 #endif
 /*-------------------------------------------------------------------*/
-_static void queue_urb (uhci_t *s, urb_t *urb)
+_static void queue_urb_unlocked (uhci_t *s, urb_t *urb)
 {
-	unsigned long flags=0;
 	struct list_head *p=&urb->urb_list;
-	
-
-	spin_lock_irqsave (&s->urb_list_lock, flags);
-
-#ifdef USE_RECLAMATION_LOOP
+#ifdef CONFIG_USB_UHCI_HIGH_BANDWIDTH
 	{
 		int type;
 		type=usb_pipetype (urb->pipe);
@@ -166,15 +160,21 @@ _static void queue_urb (uhci_t *s, urb_t *urb)
 	}
 #endif
 	((urb_priv_t*)urb->hcpriv)->started=jiffies;
-	list_add_tail (p, &s->urb_list);
-	
+	list_add (p, &s->urb_list);
+}
+/*-------------------------------------------------------------------*/
+_static void queue_urb (uhci_t *s, urb_t *urb)
+{
+	unsigned long flags=0;
+
+	spin_lock_irqsave (&s->urb_list_lock, flags);
+	queue_urb_unlocked(s,urb);
 	spin_unlock_irqrestore (&s->urb_list_lock, flags);
 }
-
 /*-------------------------------------------------------------------*/
 _static void dequeue_urb (uhci_t *s, urb_t *urb)
 {
-#ifdef USE_RECLAMATION_LOOP
+#ifdef CONFIG_USB_UHCI_HIGH_BANDWIDTH
 	int type;
 
 	type=usb_pipetype (urb->pipe);
@@ -189,9 +189,9 @@ _static void dequeue_urb (uhci_t *s, urb_t *urb)
 _static int alloc_td (uhci_desc_t ** new, int flags)
 {
 #ifdef DEBUG_SLAB
-	*new= kmem_cache_alloc(uhci_desc_kmem, in_interrupt ()? SLAB_ATOMIC : SLAB_KERNEL);
+	*new= kmem_cache_alloc(uhci_desc_kmem, SLAB_FLAG);
 #else
-	*new = (uhci_desc_t *) kmalloc (sizeof (uhci_desc_t), in_interrupt ()? GFP_ATOMIC : GFP_KERNEL);
+	*new = (uhci_desc_t *) kmalloc (sizeof (uhci_desc_t), KMALLOC_FLAG);
 #endif
 	if (!*new)
 		return -ENOMEM;
@@ -203,6 +203,19 @@ _static int alloc_td (uhci_desc_t ** new, int flags)
 	INIT_LIST_HEAD (&(*new)->horizontal);
 	
 	return 0;
+}
+/*-------------------------------------------------------------------*/
+// append a qh to td.link physically, the SW linkage is not affected
+_static void append_qh(uhci_t *s, uhci_desc_t *td, uhci_desc_t* qh, int  flags)
+{
+	unsigned long xxx;
+	
+	spin_lock_irqsave (&s->td_lock, xxx);
+
+	td->hw.td.link = virt_to_bus (qh) | (flags & UHCI_PTR_DEPTH) | UHCI_PTR_QH;
+       
+	mb();
+	spin_unlock_irqrestore (&s->td_lock, xxx);
 }
 /*-------------------------------------------------------------------*/
 /* insert td at last position in td-list of qh (vertical) */
@@ -271,10 +284,9 @@ _static int unlink_td (uhci_t *s, uhci_desc_t *element, int phys_unlink)
 		if (prev->type == TD_TYPE)
 			prev->hw.td.link = element->hw.td.link;
 		else
-			prev->hw.qh.element = element->hw.td.link;	
+			prev->hw.qh.element = element->hw.td.link;
 	}
 
-	element->hw.td.link=UHCI_PTR_TERM;
 	mb ();
 
 	if (dir == 0)
@@ -302,9 +314,9 @@ _static int delete_desc (uhci_desc_t *element)
 _static int alloc_qh (uhci_desc_t ** new)
 {
 #ifdef DEBUG_SLAB
-	*new= kmem_cache_alloc(uhci_desc_kmem, in_interrupt ()? SLAB_ATOMIC : SLAB_KERNEL);
+	*new= kmem_cache_alloc(uhci_desc_kmem, SLAB_FLAG);
 #else
-	*new = (uhci_desc_t *) kmalloc (sizeof (uhci_desc_t), in_interrupt ()? GFP_ATOMIC : GFP_KERNEL);
+	*new = (uhci_desc_t *) kmalloc (sizeof (uhci_desc_t), KMALLOC_FLAG);
 #endif	
 	if (!*new)
 		return -ENOMEM;
@@ -350,9 +362,10 @@ _static int insert_qh (uhci_t *s, uhci_desc_t *pos, uhci_desc_t *new, int order)
 	mb ();
 	
 	spin_unlock_irqrestore (&s->qh_lock, flags);
-	
+
 	return 0;
 }
+
 /*-------------------------------------------------------------------*/
 _static int unlink_qh (uhci_t *s, uhci_desc_t *element)
 {
@@ -406,6 +419,14 @@ _static void clean_td_chain (uhci_desc_t *td)
 	
 	delete_desc (td);
 }
+
+/*-------------------------------------------------------------------*/
+_static void fill_td (uhci_desc_t *td, int status, int info, __u32 buffer)
+{
+	td->hw.td.status = status;
+	td->hw.td.info = info;
+	td->hw.td.buffer = buffer;
+}
 /*-------------------------------------------------------------------*/
 // Removes ALL qhs in chain (paranoia!)
 _static void cleanup_skel (uhci_t *s)
@@ -441,19 +462,20 @@ _static void cleanup_skel (uhci_t *s)
 		qh = s->control_chain;
 		while ((p = qh->horizontal.next) != &qh->horizontal) {
 			qh1 = list_entry (p, uhci_desc_t, horizontal);
-			dbg("delete_qh @ %p",qh1);
 			delete_qh (s, qh1);
 		}
-			dbg("delete_qh last @ %p",qh);
+
 		delete_qh (s, qh);
 	}
 	else {
+		if (s->ls_control_chain)
+			delete_desc (s->ls_control_chain);
 		if (s->control_chain)
-			kfree (s->control_chain);
+			 delete_desc(s->control_chain);
 		if (s->bulk_chain)
-			kfree (s->bulk_chain);
+			delete_desc (s->bulk_chain);
 		if (s->chain_end)
-			kfree (s->chain_end);
+			delete_desc (s->chain_end);
 	}
 	dbg("cleanup_skel finished");	
 }
@@ -480,6 +502,7 @@ _static int init_skel (uhci_t *s)
 	if (!s->iso_td)
 		goto init_skel_cleanup;
 
+	s->ls_control_chain = NULL;
 	s->control_chain = NULL;
 	s->bulk_chain = NULL;
 	s->chain_end = NULL;
@@ -499,25 +522,45 @@ _static int init_skel (uhci_t *s)
 	
 	if (ret)
 		goto init_skel_cleanup;
-	
+				
 	s->chain_end = qh;
+
+	ret = alloc_td (&td, 0);
+
+	if (ret)
+		goto init_skel_cleanup;
+	
+	fill_td (td, TD_CTRL_IOC, 0, 0); // generate 1ms interrupt
+	insert_td (s, qh, td, 0);
 
 	dbg("allocating qh: bulk_chain");
 	ret = alloc_qh (&qh);
-	
 	if (ret)
 		goto init_skel_cleanup;
 	
 	insert_qh (s, s->chain_end, qh, 0);
 	s->bulk_chain = qh;
+
 	dbg("allocating qh: control_chain");
 	ret = alloc_qh (&qh);
-	
 	if (ret)
 		goto init_skel_cleanup;
 	
 	insert_qh (s, s->bulk_chain, qh, 0);
 	s->control_chain = qh;
+
+#ifdef	CONFIG_USB_UHCI_HIGH_BANDWIDTH
+	// disabled reclamation loop
+	s->chain_end->hw.qh.head=virt_to_bus(s->control_chain) | UHCI_PTR_QH | UHCI_PTR_TERM;
+#endif
+
+	dbg("allocating qh: ls_control_chain");
+	ret = alloc_qh (&qh);
+	if (ret)
+		goto init_skel_cleanup;
+	
+	insert_qh (s, s->control_chain, qh, 0);
+	s->ls_control_chain = qh;
 
 	for (n = 0; n < 8; n++)
 		s->int_chain[n] = 0;
@@ -532,7 +575,7 @@ _static int init_skel (uhci_t *s)
 			goto init_skel_cleanup;
 		s->int_chain[n] = td;
 		if (n == 0) {
-			s->int_chain[0]->hw.td.link = virt_to_bus (s->control_chain) | UHCI_PTR_QH;
+			s->int_chain[0]->hw.td.link = virt_to_bus (s->ls_control_chain) | UHCI_PTR_QH;
 		}
 		else {
 			s->int_chain[n]->hw.td.link = virt_to_bus (s->int_chain[0]);
@@ -547,32 +590,20 @@ _static int init_skel (uhci_t *s)
 		dbg("framelist[%i]=%x",n,s->framelist[n]);
 		if ((n&127)==127) 
 			((uhci_desc_t*) s->iso_td[n])->hw.td.link = virt_to_bus(s->int_chain[0]);
-		else {
-			for (o = 1, m = 2; m <= 128; o++, m += m) {
-				// n&(m-1) = n%m
-				if ((n & (m - 1)) == ((m - 1) / 2)) {
+		else 
+			for (o = 1, m = 2; m <= 128; o++, m += m)
+				if ((n & (m - 1)) == ((m - 1) / 2))
 					((uhci_desc_t*) s->iso_td[n])->hw.td.link = virt_to_bus (s->int_chain[o]);
-				}
-			}
-		}
 	}
 
 	mb();
 	//uhci_show_queue(s->control_chain);   
 	dbg("init_skel exit");
-	return 0;		// OK
+	return 0;
 
       init_skel_cleanup:
 	cleanup_skel (s);
 	return -ENOMEM;
-}
-
-/*-------------------------------------------------------------------*/
-_static void fill_td (uhci_desc_t *td, int status, int info, __u32 buffer)
-{
-	td->hw.td.status = status;
-	td->hw.td.info = info;
-	td->hw.td.buffer = buffer;
 }
 
 /*-------------------------------------------------------------------*/
@@ -586,9 +617,14 @@ _static int uhci_submit_control_urb (urb_t *urb)
 	urb_priv_t *urb_priv = urb->hcpriv;
 	unsigned long destination, status;
 	int maxsze = usb_maxpacket (urb->dev, urb->pipe, usb_pipeout (urb->pipe));
-	unsigned long len, bytesrequested;
+	unsigned long len;
 	char *data;
 	int depth_first=USE_CTRL_DEPTH_FIRST;  // UHCI descriptor chasing method
+
+	if (!maxsze) {
+		err("uhci_submit_control_urb: pipesize for pipe %x is zero", urb->pipe);
+		return -EINVAL;
+	}
 
 	dbg("uhci_submit_control start");
 	alloc_qh (&qh);		// alloc qh for this request
@@ -615,26 +651,21 @@ _static int uhci_submit_control_urb (urb_t *urb)
 
 	insert_td (s, qh, td, 0);	// queue 'setup stage'-td in qh
 #if 0
-	dbg("SETUP to pipe %x: %x %x %x %x %x %x %x %x", urb->pipe,
-		urb->setup_packet[0], urb->setup_packet[1], urb->setup_packet[2], urb->setup_packet[3],
-		urb->setup_packet[4], urb->setup_packet[5], urb->setup_packet[6], urb->setup_packet[7]);
+	{
+		char *sp=urb->setup_packet;
+		dbg("SETUP to pipe %x: %x %x %x %x %x %x %x %x", urb->pipe,
+		    sp[0],sp[1],sp[2],sp[3],sp[4],sp[5],sp[6],sp[7]);
+	}
 	//uhci_show_td(td);
 #endif
 
-	/*  Build the DATA TD's */
 	len = urb->transfer_buffer_length;
-	bytesrequested = len;
 	data = urb->transfer_buffer;
 
 	/* If direction is "send", change the frame from SETUP (0x2D)
 	   to OUT (0xE1). Else change it from SETUP to IN (0x69). */
 
-	destination &= ~UHCI_PID;
-	
-	if (usb_pipeout (urb->pipe))
-		destination |= USB_PID_OUT;
-	else
-		destination |= USB_PID_IN;	
+	destination = (urb->pipe & PIPE_DEVEP_MASK) | (usb_pipeout (urb->pipe)?USB_PID_OUT:USB_PID_IN);
 
 	while (len > 0) {
 		int pktsze = len;
@@ -664,7 +695,7 @@ _static int uhci_submit_control_urb (urb_t *urb)
 
 	destination &= ~UHCI_PID;
 
-	if (usb_pipeout (urb->pipe) || (bytesrequested == 0))
+	if (usb_pipeout (urb->pipe) || (urb->transfer_buffer_length == 0))
 		destination |= USB_PID_IN;
 	else
 		destination |= USB_PID_OUT;
@@ -690,32 +721,34 @@ _static int uhci_submit_control_urb (urb_t *urb)
 	urb->status = -EINPROGRESS;
 	queue_urb (s, urb);	// queue before inserting in desc chain
 
-	qh->hw.qh.element&=~UHCI_PTR_TERM;
+	qh->hw.qh.element &= ~UHCI_PTR_TERM;
 
 	//uhci_show_queue(qh);
 	/* Start it up... put low speed first */
 	if (urb->pipe & TD_CTRL_LS)
-		insert_qh (s, s->control_chain, qh, 1);	// insert after control chain
+		insert_qh (s, s->control_chain, qh, 0);
 	else
-		insert_qh (s, s->bulk_chain, qh, 0);	// insert before bulk chain
-	//uhci_show_queue(qh);
+		insert_qh (s, s->bulk_chain, qh, 0);
 
 	dbg("uhci_submit_control end");
 	return 0;
 }
 /*-------------------------------------------------------------------*/
-_static int uhci_submit_bulk_urb (urb_t *urb)
+// For queued bulk transfers, two additional QH helpers are allocated (nqh, bqh)
+// Due to the linking with other bulk urbs, it has to be locked with urb_list_lock!
+
+_static int uhci_submit_bulk_urb (urb_t *urb, urb_t *bulk_urb)
 {
 	uhci_t *s = (uhci_t*) urb->dev->bus->hcpriv;
 	urb_priv_t *urb_priv = urb->hcpriv;
-	uhci_desc_t *qh, *td;
+	uhci_desc_t *qh, *td, *nqh, *bqh;
 	unsigned long destination, status;
 	char *data;
 	unsigned int pipe = urb->pipe;
 	int maxsze = usb_maxpacket (urb->dev, pipe, usb_pipeout (pipe));
 	int info, len;
 	int depth_first=USE_BULK_DEPTH_FIRST;  // UHCI descriptor chasing method
-
+	urb_priv_t *upriv, *bpriv;
 
 	if (usb_endpoint_halted (urb->dev, usb_pipeendpoint (pipe), usb_pipeout (pipe)))
 		return -EPIPE;
@@ -727,12 +760,55 @@ _static int uhci_submit_bulk_urb (urb_t *urb)
 	
 	if (!maxsze)
 		return -EMSGSIZE;
-	/* FIXME: should tell the client that the endpoint is invalid, i.e. not in the descriptor */
+	
+	queue_dbg("uhci_submit_bulk_urb: urb %p, old %p, pipe %08x, len %i",
+		  urb,bulk_urb,urb->pipe,urb->transfer_buffer_length);
 
-	alloc_qh (&qh);		// get qh for this request
+	upriv=(urb_priv_t*)urb->hcpriv;
 
-	if (!qh)
-		return -ENOMEM;
+	if (!bulk_urb) {
+		alloc_qh (&qh);		// get qh for this request
+		
+		if (!qh)
+			return -ENOMEM;
+
+		if (urb->transfer_flags & USB_QUEUE_BULK) {
+			alloc_qh(&nqh); // placeholder for clean unlink
+			if (!nqh) {
+				delete_desc (qh);
+				return -ENOMEM;
+			}
+			upriv->next_qh = nqh;
+			queue_dbg("new next qh %p",nqh);
+		}
+	}
+	else { 
+		bpriv = (urb_priv_t*)bulk_urb->hcpriv;
+		qh = bpriv->bottom_qh;  // re-use bottom qh and next qh
+		nqh = bpriv->next_qh;
+		upriv->next_qh=nqh;
+		bpriv->next_queued_urb=urb;
+		upriv->prev_queued_urb=bulk_urb;
+	}
+
+	queue_dbg("uhci_submit_bulk: qh=%p, nqh=%p\n",bqh,nqh);
+
+	if (urb->transfer_flags & USB_QUEUE_BULK) {
+		alloc_qh (&bqh); // "bottom" QH,
+		
+		if (!bqh) {
+			if (!bulk_urb) { 
+				delete_desc(qh);
+				delete_desc(nqh);
+			}
+			return -ENOMEM;
+		}
+		bqh->hw.qh.element = UHCI_PTR_TERM;
+		bqh->hw.qh.element = virt_to_bus(nqh)|UHCI_PTR_QH;
+		upriv->bottom_qh = bqh;
+		queue_dbg("uhci_submit_bulk: new bqh %p\n",bqh);
+	}
+	
 
 	/* The "pipe" thing contains the destination in bits 8--18. */
 	destination = (pipe & PIPE_DEVEP_MASK) | usb_packetid (pipe);
@@ -744,7 +820,6 @@ _static int uhci_submit_bulk_urb (urb_t *urb)
 	/* Build the TDs for the bulk request */
 	len = urb->transfer_buffer_length;
 	data = urb->transfer_buffer;
-	dbg("uhci_submit_bulk_urb: pipe %x, len %d", pipe, len);
 	
 	do {					// TBD: Really allow zero-length packets?
 		int pktsze = len;
@@ -770,54 +845,149 @@ _static int uhci_submit_bulk_urb (urb_t *urb)
 
 		if (!len)
 			td->hw.td.status |= TD_CTRL_IOC;	// last one generates INT
-		//dbg("insert td %p, len %i",td,pktsze);
 
 		insert_td (s, qh, td, UHCI_PTR_DEPTH * depth_first);
-		
-		/* Alternate Data0/1 (start with Data0) */
 		usb_dotoggle (urb->dev, usb_pipeendpoint (pipe), usb_pipeout (pipe));
+
 	} while (len > 0);
 
 	list_add (&qh->desc_list, &urb_priv->desc_list);
 
+	if (urb->transfer_flags & USB_QUEUE_BULK) {
+		qh->hw.qh.element&=~UHCI_PTR_TERM;
+		append_qh(s, td, bqh, UHCI_PTR_DEPTH * depth_first);
+	}
+
 	urb->status = -EINPROGRESS;
-	queue_urb (s, urb);
+	queue_urb_unlocked (s, urb);
 	
-	qh->hw.qh.element&=~UHCI_PTR_TERM;
+	qh->hw.qh.element  &= ~UHCI_PTR_TERM;
 
-	insert_qh (s, s->chain_end, qh, 0);	// insert before end marker
+	if (!bulk_urb) { 
+		if (urb->transfer_flags & USB_QUEUE_BULK) {
+			spin_lock (&s->td_lock);			// both QHs in one go
+			insert_qh (s, s->chain_end, qh, 0);	// Main QH
+			insert_qh (s, s->chain_end, nqh, 0);	// Helper QH
+			spin_unlock (&s->td_lock);
+		}
+		else
+			insert_qh (s, s->chain_end, qh, 0);
+	}
+	
 	//uhci_show_queue(s->bulk_chain);
-
-	dbg("uhci_submit_bulk_urb: exit");
+	//dbg("uhci_submit_bulk_urb: exit\n");
 	return 0;
 }
+/*-------------------------------------------------------------------*/
+_static void uhci_clean_iso_step1(uhci_t *s, urb_priv_t *urb_priv)
+{
+	struct list_head *p;
+	uhci_desc_t *td;
 
+	for (p = urb_priv->desc_list.next; p != &urb_priv->desc_list; p = p->next) {
+				td = list_entry (p, uhci_desc_t, desc_list);
+				unlink_td (s, td, 1);
+	}
+}
+/*-------------------------------------------------------------------*/
+_static void uhci_clean_iso_step2(uhci_t *s, urb_priv_t *urb_priv)
+{
+	struct list_head *p;
+	uhci_desc_t *td;
+
+	while ((p = urb_priv->desc_list.next) != &urb_priv->desc_list) {
+				td = list_entry (p, uhci_desc_t, desc_list);
+				list_del (p);
+				delete_desc (td);
+	}
+}
+/*-------------------------------------------------------------------*/
+// mode: 0: unlink + no deletion mark, 1: regular (unlink/delete-mark), 2: don't unlink
+// looks a bit complicated because of all the bulk queueing goodies
+
+_static void uhci_clean_transfer (uhci_t *s, urb_t *urb, uhci_desc_t *qh, int mode)
+{
+	uhci_desc_t *bqh, *nqh, *prevqh;
+	int now;
+	urb_priv_t *priv=(urb_priv_t*)urb->hcpriv;
+
+	now=UHCI_GET_CURRENT_FRAME(s);
+
+	dbg("clean transfer urb %p, qh %p, mode %i",urb,qh,mode);
+	bqh=priv->bottom_qh;	
+
+	if (!priv->next_queued_urb)  { // no more appended bulk queues
+
+		if (mode != 2) 
+			unlink_qh (s, qh);
+	
+		if (priv->prev_queued_urb) {
+			urb_priv_t* ppriv=(urb_priv_t*)priv->prev_queued_urb->hcpriv;
+
+			ppriv->bottom_qh = priv->bottom_qh;
+			ppriv->next_queued_urb = NULL;
+		}
+		else if (bqh) {  // queue dead
+			nqh=priv->next_qh;
+			
+			if (mode != 2)
+				unlink_qh(s, nqh);
+
+			if (mode) {
+				nqh->last_used = bqh->last_used = now;
+				list_add_tail (&nqh->horizontal, &s->free_desc);
+				list_add_tail (&bqh->horizontal, &s->free_desc);
+			}			
+		}
+	}
+	else { // there are queued urbs following
+		urb_t *nurb;
+		unsigned long flags;
+		
+       		nurb=priv->next_queued_urb;
+		spin_lock_irqsave (&s->qh_lock, flags);
+		
+		if (!priv->prev_queued_urb) { // top
+			if (mode !=2) {
+				prevqh = list_entry (qh->horizontal.prev, uhci_desc_t, horizontal);
+				prevqh->hw.qh.head = virt_to_bus(bqh) | UHCI_PTR_QH;
+				queue_dbg ("TOP relink of %p to %p-%p",qh,prevqh,bqh);	
+			
+				list_del (&qh->horizontal);
+				list_add (&bqh->horizontal, &prevqh->horizontal);
+			}	
+		}
+		else {		//intermediate
+			urb_priv_t* ppriv=(urb_priv_t*)priv->prev_queued_urb->hcpriv;
+			uhci_desc_t * bnqh;
+			
+			bnqh=list_entry (&((urb_priv_t*)(nurb->hcpriv))->desc_list.next, uhci_desc_t, desc_list);
+			ppriv->bottom_qh=bnqh;
+			ppriv->next_queued_urb=nurb;
+			
+			if (mode!=2) {
+				prevqh = list_entry (ppriv->desc_list.next, uhci_desc_t, desc_list);
+				prevqh->hw.qh.head = virt_to_bus(bqh) | UHCI_PTR_QH;
+				queue_dbg ("IM relink of %p to %p-%p",qh,prevqh,bqh);	
+			}
+		}
+		mb();
+		spin_unlock_irqrestore (&s->qh_lock, flags);
+		((urb_priv_t*)nurb->hcpriv)->prev_queued_urb=priv->prev_queued_urb;	
+	}
+
+	if (mode) {
+		qh->last_used = now;
+		list_add_tail (&qh->horizontal, &s->free_desc); // mark for later deletion
+	}
+}
 /*-------------------------------------------------------------------*/
 // unlinks an urb by dequeuing its qh, waits some frames and forgets it
-// Problem: unlinking in interrupt requires waiting for one frame (udelay)
-// to allow the whole structures to be safely removed
-_static int uhci_unlink_urb (urb_t *urb)
+_static int uhci_unlink_urb_sync (uhci_t *s, urb_t *urb)
 {
-	uhci_t *s;
 	uhci_desc_t *qh;
-	uhci_desc_t *td;
 	urb_priv_t *urb_priv;
 	unsigned long flags=0;
-
-	struct list_head *p;
-
-	if (!urb || !urb->dev)		// you never know...
-		return -EINVAL;
-
-	s = (uhci_t*) urb->dev->bus->hcpriv;	// get pointer to uhci struct
-
-	if (usb_pipedevice (urb->pipe) == s->rh.devnum)
-		return rh_unlink_urb (urb);
-
-	if (!urb->hcpriv)		// you never know...
-		return -EINVAL;
-
-	//dbg("unlink_urb called %p",urb);
 
 	spin_lock_irqsave (&s->urb_list_lock, flags);
 
@@ -833,32 +1003,22 @@ _static int uhci_unlink_urb (urb_t *urb)
 		switch (usb_pipetype (urb->pipe)) {
 		case PIPE_ISOCHRONOUS:
 		case PIPE_INTERRUPT:
-			for (p = urb_priv->desc_list.next; p != &urb_priv->desc_list; p = p->next) {
-				td = list_entry (p, uhci_desc_t, desc_list);
-				unlink_td (s, td, 1);
-			}
-			// wait at least 1 Frame
-			uhci_wait_ms(1);	
-			while ((p = urb_priv->desc_list.next) != &urb_priv->desc_list) {
-				td = list_entry (p, uhci_desc_t, desc_list);
-				list_del (p);
-				delete_desc (td);
-			}
+			uhci_clean_iso_step1(s, urb_priv);
+			uhci_wait_ms(1);
+			uhci_clean_iso_step2(s, urb_priv);
 			break;
 
 		case PIPE_BULK:
 		case PIPE_CONTROL:
 			qh = list_entry (urb_priv->desc_list.next, uhci_desc_t, desc_list);
-
-			unlink_qh (s, qh);	// remove this qh from qh-list
-			qh->last_used=UHCI_GET_CURRENT_FRAME(s);
-			list_add_tail (&qh->horizontal, &s->free_desc); // mark for later deletion
-			// wait at least 1 Frame
+			spin_lock_irqsave (&s->urb_list_lock, flags);
+			uhci_clean_transfer(s, urb, qh, 1);
+			spin_unlock_irqrestore (&s->urb_list_lock, flags);
 			uhci_wait_ms(1);
 		}
 		
 #ifdef DEBUG_SLAB
-		kmem_cache_free(urb_priv_kmem, urb->hcpriv);
+		kmem_cache_free (urb_priv_kmem, urb->hcpriv);
 #else
 		kfree (urb->hcpriv);
 #endif
@@ -874,6 +1034,147 @@ _static int uhci_unlink_urb (urb_t *urb)
 	return 0;
 }
 /*-------------------------------------------------------------------*/
+// async unlink_urb completion/cleanup work
+// has to be protected by urb_list_lock!
+// features: if set in transfer_flags, the resulting status of the killed
+// transaction is not overwritten
+
+_static void uhci_cleanup_unlink(uhci_t *s, int force)
+{
+	struct list_head *q;
+	urb_t *urb;
+	struct usb_device *dev;
+	int pipe,now;
+	urb_priv_t *urb_priv;
+
+	q=s->urb_unlinked.next;
+	now=UHCI_GET_CURRENT_FRAME(s);
+
+	while (q != &s->urb_unlinked) {
+
+		urb = list_entry (q, urb_t, urb_list);
+
+		urb_priv = (urb_priv_t*)urb->hcpriv;
+		q = urb->urb_list.next;
+		
+		if (force ||
+ 		    ((urb_priv->started != 0xffffffff) && (urb_priv->started != now))) {
+			async_dbg("async cleanup %p",urb);
+			switch (usb_pipetype (urb->pipe)) { // process descriptors
+			case PIPE_CONTROL:
+				process_transfer (s, urb, 2);
+				break;
+			case PIPE_BULK:
+				if (!s->avoid_bulk.counter)
+					process_transfer (s, urb, 2); // don't unlink (already done)
+				else
+					continue;
+				break;
+			case PIPE_ISOCHRONOUS:
+				process_iso (s, urb, 1); // force, don't unlink
+				break;
+			case PIPE_INTERRUPT:
+				process_interrupt (s, urb);
+				break;
+			}
+
+			if (!(urb->transfer_flags & USB_TIMEOUT_KILLED))
+		  		urb->status = -ECONNRESET; // mark as asynchronously killed
+
+			pipe = urb->pipe;		// completion may destroy all...
+			dev = urb->dev;
+			urb_priv = urb->hcpriv;
+
+			if (urb->complete) {
+				spin_unlock(&s->urb_list_lock);
+				urb->complete ((struct urb *) urb);
+				spin_lock(&s->urb_list_lock);
+			}
+
+			if (!(urb->transfer_flags & USB_TIMEOUT_KILLED))
+				urb->status = -ENOENT;  // now the urb is really dead
+	
+			usb_dec_dev_use (dev);
+#ifdef DEBUG_SLAB
+			kmem_cache_free (urb_priv_kmem, urb_priv);
+#else
+			kfree (urb_priv);
+#endif
+			switch (usb_pipetype (pipe)) {
+			case PIPE_ISOCHRONOUS:
+			case PIPE_INTERRUPT:
+				uhci_clean_iso_step2(s, urb_priv);
+				break;
+			}
+			list_del (&urb->urb_list);
+		}
+	}
+}
+
+/*-------------------------------------------------------------------*/
+_static int uhci_unlink_urb_async (uhci_t *s,urb_t *urb)
+{
+	uhci_desc_t *qh;
+	urb_priv_t *urb_priv;
+	
+	async_dbg("unlink_urb_async called %p",urb);
+
+	if (urb->status == -EINPROGRESS) {
+		((urb_priv_t*)urb->hcpriv)->started = ~0;
+		dequeue_urb (s, urb);
+		list_add_tail (&urb->urb_list, &s->urb_unlinked); // store urb
+
+		s->unlink_urb_done = 1;
+		
+		urb->status = -ECONNABORTED;	// mark urb as "waiting to be killed"	
+		urb_priv = (urb_priv_t*)urb->hcpriv;
+
+		switch (usb_pipetype (urb->pipe)) {
+		case PIPE_ISOCHRONOUS:
+		case PIPE_INTERRUPT:
+			uhci_clean_iso_step1 (s, urb_priv);
+			break;
+
+		case PIPE_BULK:
+		case PIPE_CONTROL:
+			qh = list_entry (urb_priv->desc_list.next, uhci_desc_t, desc_list);
+			uhci_clean_transfer (s, urb, qh, 0);
+			break;
+		}
+		((urb_priv_t*)urb->hcpriv)->started = UHCI_GET_CURRENT_FRAME(s);
+	}		
+
+	return -EINPROGRESS;
+}
+/*-------------------------------------------------------------------*/
+_static int uhci_unlink_urb (urb_t *urb)
+{
+	uhci_t *s;
+	unsigned long flags=0;
+	dbg("uhci_unlink_urb called for %p",urb);
+	if (!urb || !urb->dev)		// you never know...
+		return -EINVAL;
+	
+	s = (uhci_t*) urb->dev->bus->hcpriv;
+
+	if (usb_pipedevice (urb->pipe) == s->rh.devnum)
+		return rh_unlink_urb (urb);
+
+	if (!urb->hcpriv)
+		return -EINVAL;
+
+	if (urb->transfer_flags & USB_ASYNC_UNLINK) {
+		int ret;
+
+		spin_lock_irqsave (&s->urb_list_lock, flags);
+		ret = uhci_unlink_urb_async(s, urb);
+		spin_unlock_irqrestore (&s->urb_list_lock, flags);
+		return ret;
+	}
+	else
+		return uhci_unlink_urb_sync(s, urb);
+}
+/*-------------------------------------------------------------------*/
 // In case of ASAP iso transfer, search the URB-list for already queued URBs
 // for this EP and calculate the earliest start frame for the new
 // URB (easy seamless URB continuation!)
@@ -886,9 +1187,9 @@ _static int find_iso_limits (urb_t *urb, unsigned int *start, unsigned int *end)
 	unsigned long flags;
 	
 	spin_lock_irqsave (&s->urb_list_lock, flags);
-	p=s->urb_list.next;
+	p=s->urb_list.prev;
 
-	for (; p != &s->urb_list; p = p->next) {
+	for (; p != &s->urb_list; p = p->prev) {
 		u = list_entry (p, urb_t, urb_list);
 		// look for pending URBs with identical pipe handle
 		// works only because iso doesn't toggle the data bit!
@@ -906,8 +1207,7 @@ _static int find_iso_limits (urb_t *urb, unsigned int *start, unsigned int *end)
 	
 	spin_unlock_irqrestore(&s->urb_list_lock, flags);
 	
-	return ret;	// no previous urb found
-
+	return ret;
 }
 /*-------------------------------------------------------------------*/
 // adjust start_frame according to scheduling constraints (ASAP etc)
@@ -940,35 +1240,7 @@ _static int iso_find_start (urb_t *urb)
 				info("iso_find_start: gap in seamless isochronous scheduling");
 				dbg("iso_find_start: now %u start_frame %u number_of_packets %u pipe 0x%08x",
 					now, urb->start_frame, urb->number_of_packets, urb->pipe);
-// The following code is only for debugging purposes...
-#if 0
-				{
-					uhci_t *s = (uhci_t*) urb->dev->bus->hcpriv;
-					struct list_head *p;
-					urb_t *u;
-					int a = -1, b = -1;
-					unsigned long flags;
-
-					spin_lock_irqsave (&s->urb_list_lock, flags);
-					p=s->urb_list.next;
-
-					for (; p != &s->urb_list; p = p->next) {
-						u = list_entry (p, urb_t, urb_list);
-						if (urb->dev != u->dev)
-							continue;
-						dbg("urb: pipe 0x%08x status %d start_frame %u number_of_packets %u",
-							u->pipe, u->status, u->start_frame, u->number_of_packets);
-						if (!usb_pipeisoc (u->pipe))
-							continue;
-						if (a == -1)
-							a = u->start_frame;
-						b = (u->start_frame + u->number_of_packets - 1) & 1023;
-					}
-					spin_unlock_irqrestore(&s->urb_list_lock, flags);
-				}
-#endif
 				urb->start_frame = (now + 5) & 1023;	// 5ms setup should be enough //FIXME!
-				//return -EAGAIN; //FIXME
 			}
 		}
 	}
@@ -996,7 +1268,7 @@ _static int iso_find_start (urb_t *urb)
 /*-------------------------------------------------------------------*/
 // submits USB interrupt (ie. polling ;-) 
 // ASAP-flag set implicitely
-// if period==0, the the transfer is only done once (usb_scsi need this...)
+// if period==0, the the transfer is only done once
 
 _static int uhci_submit_int_urb (urb_t *urb)
 {
@@ -1005,11 +1277,8 @@ _static int uhci_submit_int_urb (urb_t *urb)
 	int nint, n, ret;
 	uhci_desc_t *td;
 	int status, destination;
-	int now;
 	int info;
 	unsigned int pipe = urb->pipe;
-
-	//dbg("SUBMIT INT");
 
 	if (urb->interval < 0 || urb->interval >= 256)
 		return -EINVAL;
@@ -1029,8 +1298,7 @@ _static int uhci_submit_int_urb (urb_t *urb)
 
 	dbg("Rounded interval to %i, chain  %i", urb->interval, nint);
 
-	now = UHCI_GET_CURRENT_FRAME (s) & 1023;
-	urb->start_frame = now;	// remember start frame, just in case...
+	urb->start_frame = UHCI_GET_CURRENT_FRAME (s) & 1023;	// remember start frame, just in case...
 
 	urb->number_of_packets = 1;
 
@@ -1062,13 +1330,6 @@ _static int uhci_submit_int_urb (urb_t *urb)
 
 	usb_dotoggle (urb->dev, usb_pipeendpoint (pipe), usb_pipeout (pipe));
 
-#if 0
-	td = tdm[urb->number_of_packets];
-	fill_td (td, TD_CTRL_IOC, 0, 0);
-	insert_td_horizontal (s, s->iso_td[(urb->start_frame + (urb->number_of_packets) * urb->interval + 1) & 1023], td);
-	list_add_tail (&td->desc_list, &urb_priv->desc_list);
-#endif
-
 	return 0;
 }
 /*-------------------------------------------------------------------*/
@@ -1086,11 +1347,11 @@ _static int uhci_submit_iso_urb (urb_t *urb)
 	__save_flags(flags);
 	__cli();		      // Disable IRQs to schedule all ISO-TDs in time
 	ret = iso_find_start (urb);	// adjusts urb->start_frame for later use
-
+	
 	if (ret)
 		goto err;
 
-	tdm = (uhci_desc_t **) kmalloc (urb->number_of_packets * sizeof (uhci_desc_t*), in_interrupt ()? GFP_ATOMIC : GFP_KERNEL);
+	tdm = (uhci_desc_t **) kmalloc (urb->number_of_packets * sizeof (uhci_desc_t*), KMALLOC_FLAG);
 
 	if (!tdm) {
 		ret = -ENOMEM;
@@ -1105,14 +1366,16 @@ _static int uhci_submit_iso_urb (urb_t *urb)
 			tdm[n] = 0;
 			continue;
 		}
-		#ifdef ISO_SANITY_CHECK
+		
 		if(urb->iso_frame_desc[n].length > maxsze) {
+#ifdef ISO_SANITY_CHECK
 			err("submit_iso: urb->iso_frame_desc[%d].length(%d)>%d",n , urb->iso_frame_desc[n].length, maxsze);
 			tdm[n] = 0;
 			ret=-EINVAL;
 			goto inval;
+#endif
 		}
-		#endif
+		
 		ret = alloc_td (&td, UHCI_PTR_DEPTH);
 	inval:
 		if (ret) {
@@ -1120,7 +1383,7 @@ _static int uhci_submit_iso_urb (urb_t *urb)
 
 			for (i = 0; i < n; n++)
 				if (tdm[i])
-					kfree (tdm[i]);
+					 delete_desc(tdm[i]);
 			kfree (tdm);
 			goto err;
 		}
@@ -1165,15 +1428,16 @@ _static int uhci_submit_iso_urb (urb_t *urb)
 
 }
 /*-------------------------------------------------------------------*/
-_static int search_dev_ep (uhci_t *s, urb_t *urb)
+// returns: 0 (no transfer queued), urb* (this urb already queued)
+ 
+_static urb_t* search_dev_ep (uhci_t *s, urb_t *urb)
 {
-	unsigned long flags;
 	struct list_head *p;
 	urb_t *tmp;
 	unsigned int mask = usb_pipecontrol(urb->pipe) ? (~USB_DIR_IN) : (~0);
 
 	dbg("search_dev_ep:");
-	spin_lock_irqsave (&s->urb_list_lock, flags);
+
 	p=s->urb_list.next;
 
 	for (; p != &s->urb_list; p = p->next) {
@@ -1181,13 +1445,12 @@ _static int search_dev_ep (uhci_t *s, urb_t *urb)
 		dbg("urb: %p", tmp);
 		// we can accept this urb if it is not queued at this time 
 		// or if non-iso transfer requests should be scheduled for the same device and pipe
-		if ((!usb_pipeisoc(urb->pipe) && tmp->dev == urb->dev && !((tmp->pipe ^ urb->pipe) & mask)) ||
+		if ((!usb_pipeisoc(urb->pipe) && (tmp->dev == urb->dev) && !((tmp->pipe ^ urb->pipe) & mask)) ||
 		    (urb == tmp)) {
-			spin_unlock_irqrestore (&s->urb_list_lock, flags);
-			return 1;	// found another urb already queued for processing
+			return tmp;	// found another urb already queued for processing
 		}
 	}
-	spin_unlock_irqrestore (&s->urb_list_lock, flags);
+
 	return 0;
 }
 /*-------------------------------------------------------------------*/
@@ -1196,59 +1459,92 @@ _static int uhci_submit_urb (urb_t *urb)
 	uhci_t *s;
 	urb_priv_t *urb_priv;
 	int ret = 0;
-
+	unsigned long flags;
+	urb_t *bulk_urb=NULL;
+		
 	if (!urb->dev || !urb->dev->bus)
 		return -ENODEV;
 
 	s = (uhci_t*) urb->dev->bus->hcpriv;
 	//dbg("submit_urb: %p type %d",urb,usb_pipetype(urb->pipe));
-
+	
+	if (!s->running)
+		return -ENODEV;
+		
 	if (usb_pipedevice (urb->pipe) == s->rh.devnum)
 		return rh_submit_urb (urb);	/* virtual root hub */
 
 	usb_inc_dev_use (urb->dev);
 
-	if (search_dev_ep (s, urb)) {
-		usb_dec_dev_use (urb->dev);
-		return -ENXIO;	// urb already queued
+	spin_lock_irqsave (&s->urb_list_lock, flags);
 
+	bulk_urb = search_dev_ep (s, urb);
+
+	if (bulk_urb) {
+
+		queue_dbg("found bulk urb %p\n",bulk_urb);
+
+		if ((usb_pipetype (urb->pipe) != PIPE_BULK) ||
+		    ((usb_pipetype (urb->pipe) == PIPE_BULK) &&
+		     (!(urb->transfer_flags & USB_QUEUE_BULK) || !(bulk_urb->transfer_flags & USB_QUEUE_BULK)))) {
+			spin_unlock_irqrestore (&s->urb_list_lock, flags);
+			usb_dec_dev_use (urb->dev);
+			err("ENXIO1 %08x, flags %x, urb %p, burb %p",urb->pipe,urb->transfer_flags,urb,bulk_urb);
+			return -ENXIO;	// urb already queued
+		}
 	}
 
 #ifdef DEBUG_SLAB
-	urb_priv = kmem_cache_alloc(urb_priv_kmem, in_interrupt ()? SLAB_ATOMIC : SLAB_KERNEL);
+	urb_priv = kmem_cache_alloc(urb_priv_kmem, SLAB_FLAG);
 #else
-	urb_priv = kmalloc (sizeof (urb_priv_t), in_interrupt ()? GFP_ATOMIC : GFP_KERNEL);
+	urb_priv = kmalloc (sizeof (urb_priv_t), KMALLOC_FLAG);
 #endif
 	if (!urb_priv) {
 		usb_dec_dev_use (urb->dev);
+		spin_unlock_irqrestore (&s->urb_list_lock, flags);
 		return -ENOMEM;
 	}
 
 	urb->hcpriv = urb_priv;
 	INIT_LIST_HEAD (&urb_priv->desc_list);
-	urb_priv->short_control_packet=0;
+	urb_priv->short_control_packet = 0;
 	dbg("submit_urb: scheduling %p", urb);
-
-	switch (usb_pipetype (urb->pipe)) {
-	case PIPE_ISOCHRONOUS:
-		ret = uhci_submit_iso_urb (urb);
-		break;
-	case PIPE_INTERRUPT:
-		ret = uhci_submit_int_urb (urb);
-		break;
-	case PIPE_CONTROL:
-		//dump_urb (urb);
-		ret = uhci_submit_control_urb (urb);
-		break;
-	case PIPE_BULK:
-		ret = uhci_submit_bulk_urb (urb);
-		break;
-	default:
-		ret = -EINVAL;
+	urb_priv->next_queued_urb = NULL;
+	urb_priv->prev_queued_urb = NULL;
+	urb_priv->bottom_qh = NULL;
+	urb_priv->next_qh = NULL;
+	
+	if (usb_pipetype (urb->pipe) == PIPE_BULK) {
+	
+		if (bulk_urb) {
+			while (((urb_priv_t*)bulk_urb->hcpriv)->next_queued_urb)  // find last queued bulk
+				bulk_urb=((urb_priv_t*)bulk_urb->hcpriv)->next_queued_urb;
+			
+			((urb_priv_t*)bulk_urb->hcpriv)->next_queued_urb=urb;
+		}
+		atomic_inc (&s->avoid_bulk);
+		ret = uhci_submit_bulk_urb (urb, bulk_urb);
+		atomic_dec (&s->avoid_bulk);
+		spin_unlock_irqrestore (&s->urb_list_lock, flags);
+	}
+	else {
+		spin_unlock_irqrestore (&s->urb_list_lock, flags);
+		switch (usb_pipetype (urb->pipe)) {
+		case PIPE_ISOCHRONOUS:
+			ret = uhci_submit_iso_urb (urb);
+			break;
+		case PIPE_INTERRUPT:
+			ret = uhci_submit_int_urb (urb);
+			break;
+		case PIPE_CONTROL:
+			ret = uhci_submit_control_urb (urb);
+			break;
+		default:
+			ret = -EINVAL;
+		}
 	}
 
 	dbg("submit_urb: scheduled with ret: %d", ret);
-	
 	
 	if (ret != 0) {
 		usb_dec_dev_use (urb->dev);
@@ -1262,41 +1558,43 @@ _static int uhci_submit_urb (urb_t *urb)
 
 	return 0;
 }
-#ifdef USE_RECLAMATION_LOOP
-// Removes bandwidth reclamation if URB idles too long
-void check_idling_urbs(uhci_t *s)
+
+// Checks for URB timeout and removes bandwidth reclamation 
+// if URB idles too long
+_static void uhci_check_timeouts(uhci_t *s)
 {
 	struct list_head *p,*p2;
 	urb_t *urb;
 	int type;	
 
-	//dbg("check_idling_urbs: enter i:%d",in_interrupt());
-	
-	spin_lock (&s->urb_list_lock);
 	p = s->urb_list.prev;	
 
 	while (p != &s->urb_list) {
+		urb_priv_t *hcpriv;
+
 		p2 = p;
 		p = p->prev;
-		urb=list_entry (p2, urb_t, urb_list);
-		type=usb_pipetype (urb->pipe);
+		urb = list_entry (p2, urb_t, urb_list);
+		type = usb_pipetype (urb->pipe);
 
-#if 0
-		err("URB timers: %li now: %li %i\n",
-			((urb_priv_t*)urb->hcpriv)->started +IDLE_TIMEOUT, jiffies,
-			type);
-#endif			 
-		if (((type == PIPE_BULK) || (type == PIPE_CONTROL)) &&  
-		    (((urb_priv_t*)urb->hcpriv)->use_loop) &&
-		    ((((urb_priv_t*)urb->hcpriv)->started +IDLE_TIMEOUT) < jiffies))
-			disable_desc_loop(s,urb);
+		hcpriv = (urb_priv_t*)urb->hcpriv;
+				
+		if ( urb->timeout && 
+			((hcpriv->started + urb->timeout) < jiffies)) {
+			urb->transfer_flags |= USB_TIMEOUT_KILLED | USB_ASYNC_UNLINK;
+			async_dbg("uhci_check_timeout: timeout for %p",urb);
+			uhci_unlink_urb_async(s, urb);
+		}
+#ifdef CONFIG_USB_UHCI_HIGH_BANDWIDTH
+		else if (((type == PIPE_BULK) || (type == PIPE_CONTROL)) &&  
+		     (hcpriv->use_loop) &&
+		     ((hcpriv->started + IDLE_TIMEOUT) < jiffies))
+			disable_desc_loop(s, urb);
+#endif
 
 	}
-	spin_unlock (&s->urb_list_lock);
-	
-	//dbg("check_idling_urbs: finished");
 }
-#endif
+
 /*-------------------------------------------------------------------
  Virtual Root Hub
  -------------------------------------------------------------------*/
@@ -1396,7 +1694,6 @@ _static int rh_send_irq (urb_t *urb)
 		dbg("Root-Hub INT complete: port1: %x port2: %x data: %x",
 		     inw (io_addr + USBPORTSC1), inw (io_addr + USBPORTSC2), data);
 		urb->complete (urb);
-
 	}
 	return 0;
 }
@@ -1411,10 +1708,6 @@ _static void rh_int_timer_do (unsigned long ptr)
 	urb_t *urb = (urb_t*) ptr;
 	uhci_t *uhci = urb->dev->bus->hcpriv;
 
-#ifdef USE_RECLAMATION_LOOP
-	check_idling_urbs(uhci);
-#endif
-
 	if (uhci->rh.send) {
 		len = rh_send_irq (urb);
 		if (len > 0) {
@@ -1427,7 +1720,9 @@ _static void rh_int_timer_do (unsigned long ptr)
 }
 
 /*-------------------------------------------------------------------------*/
-/* Root Hub INTs are polled by this timer */
+/* Root Hub INTs are polled by this timer, polling interval 20ms */
+/* This time is also used for URB-timeout checking */
+
 _static int rh_init_int_timer (urb_t *urb)
 {
 	uhci_t *uhci = urb->dev->bus->hcpriv;
@@ -1436,7 +1731,7 @@ _static int rh_init_int_timer (urb_t *urb)
 	init_timer (&uhci->rh.rh_int_timer);
 	uhci->rh.rh_int_timer.function = rh_int_timer_do;
 	uhci->rh.rh_int_timer.data = (unsigned long) urb;
-	uhci->rh.rh_int_timer.expires = jiffies + (HZ * (urb->interval < 30 ? 30 : urb->interval)) / 1000;
+	uhci->rh.rh_int_timer.expires = jiffies + (HZ * 20) / 1000;
 	add_timer (&uhci->rh.rh_int_timer);
 
 	return 0;
@@ -1640,7 +1935,6 @@ _static int rh_submit_urb (urb_t *urb)
 		stat = -EPIPE;
 	}
 
-
 	dbg("Root-Hub stat port1: %x port2: %x",
 	     inw (io_addr + USBPORTSC1), inw (io_addr + USBPORTSC2));
 
@@ -1716,13 +2010,19 @@ _static void uhci_unlink_urbs(uhci_t *s, struct usb_device *usb_dev, int remove_
 	p = s->urb_list.prev;	
 	while (p != &s->urb_list) {
 		p2 = p;
-		p = p->prev;
+		p = p->prev ;
 		urb = list_entry (p2, urb_t, urb_list);
-		dbg("urb: %p", urb);
+		dbg("urb: %p, dev %p, %p", urb, usb_dev,urb->dev);
+		
+		//urb->transfer_flags |=USB_ASYNC_UNLINK; 
+			
 		if (remove_all || (usb_dev == urb->dev)) {
+			spin_unlock_irqrestore (&s->urb_list_lock, flags);
 			warn("forced removing of queued URB %p due to disconnect",urb);
 			uhci_unlink_urb(urb);
-			urb->dev = NULL; // avoid further processing of this URB
+			urb->dev = NULL; // avoid further processing of this UR
+			spin_lock_irqsave (&s->urb_list_lock, flags);
+			p = s->urb_list.prev;	
 		}
 	}
 	spin_unlock_irqrestore (&s->urb_list_lock, flags);
@@ -1732,13 +2032,11 @@ _static int uhci_free_dev (struct usb_device *usb_dev)
 {
 	uhci_t *s;
 	
-	dbg("uhci_free_dev");	
 
 	if(!usb_dev || !usb_dev->bus || !usb_dev->bus->hcpriv)
 		return -EINVAL;
 	
-	s=(uhci_t*) usb_dev->bus->hcpriv;
-	
+	s=(uhci_t*) usb_dev->bus->hcpriv;	
 	uhci_unlink_urbs(s, usb_dev, 0);
 
 	return 0;
@@ -1769,12 +2067,10 @@ struct usb_operations uhci_device_operations =
  * have announced. This leads to a queue abort due to the short packet,
  * the status stage is not executed. If this happens, the status stage
  * is manually re-executed.
- * FIXME: Stall-condition may override 'nearly' successful CTRL-IN-transfer
- * when the transfered length fits exactly in maxsze-packets. A bit
- * more intelligence is needed to detect this and finish without error.
+ * mode: 0: QHs already unlinked
  */
 
-_static int process_transfer (uhci_t *s, urb_t *urb)
+_static int process_transfer (uhci_t *s, urb_t *urb, int mode)
 {
 	int ret = 0;
 	urb_priv_t *urb_priv = urb->hcpriv;
@@ -1784,25 +2080,21 @@ _static int process_transfer (uhci_t *s, urb_t *urb)
 	uhci_desc_t *desc= list_entry (urb_priv->desc_list.prev, uhci_desc_t, desc_list);
 	uhci_desc_t *last_desc = list_entry (desc->vertical.prev, uhci_desc_t, vertical);
 	int data_toggle = usb_gettoggle (urb->dev, usb_pipeendpoint (urb->pipe), usb_pipeout (urb->pipe));	// save initial data_toggle
-
-
-	// extracted and remapped info from TD
-	int maxlength;
+	int maxlength; 	// extracted and remapped info from TD
 	int actual_length;
 	int status = 0;
 
-	dbg("process_transfer: urb contains bulk/control request");
-
+	//dbg("process_transfer: urb contains bulk/control request");
 
 	/* if the status phase has been retriggered and the
 	   queue is empty or the last status-TD is inactive, the retriggered
 	   status stage is completed
 	 */
-#if 1
+
 	if (urb_priv->short_control_packet && 
 		((qh->hw.qh.element == UHCI_PTR_TERM) ||(!(last_desc->hw.td.status & TD_CTRL_ACTIVE)))) 
 		goto transfer_finished;
-#endif
+
 	urb->actual_length=0;
 
 	for (; p != &qh->vertical; p = p->next) {
@@ -1810,33 +2102,26 @@ _static int process_transfer (uhci_t *s, urb_t *urb)
 
 		if (desc->hw.td.status & TD_CTRL_ACTIVE)	// do not process active TDs
 			return ret;
-
-		// extract transfer parameters from TD
-		actual_length = (desc->hw.td.status + 1) & 0x7ff;
+	
+		actual_length = (desc->hw.td.status + 1) & 0x7ff;		// extract transfer parameters from TD
 		maxlength = (((desc->hw.td.info >> 21) & 0x7ff) + 1) & 0x7ff;
 		status = uhci_map_status (uhci_status_bits (desc->hw.td.status), usb_pipeout (urb->pipe));
 
-		// see if EP is stalled
-		if (status == -EPIPE) {
+		if (status == -EPIPE) { 		// see if EP is stalled
 			// set up stalled condition
 			usb_endpoint_halt (urb->dev, usb_pipeendpoint (urb->pipe), usb_pipeout (urb->pipe));
 		}
 
-		// if any error occured stop processing of further TDs
-		if (status != 0) {
+		if (status != 0) {		// if any error occured stop processing of further TDs
 			// only set ret if status returned an error
-			uhci_show_td (desc);
+			if (status != -EPIPE) 
+				uhci_show_td (desc);
 			ret = status;
 			urb->error_count++;
 			break;
 		}
 		else if ((desc->hw.td.info & 0xff) != USB_PID_SETUP)
 			urb->actual_length += actual_length;
-
-#if 0
-		//	if (i++==0)
-		       	uhci_show_td (desc);	// show first TD of each transfer
-#endif
 
 		// got less data than requested
 		if ( (actual_length < maxlength)) {
@@ -1852,8 +2137,8 @@ _static int process_transfer (uhci_t *s, urb_t *urb)
 			
 					qh->hw.qh.element = virt_to_bus (last_desc);  // re-trigger status stage
 					dbg("short packet during control transfer, retrigger status stage @ %p",last_desc);
-					uhci_show_td (desc);
-					uhci_show_td (last_desc);
+					//uhci_show_td (desc);
+					//uhci_show_td (last_desc);
 					urb_priv->short_control_packet=1;
 					return 0;
 				}
@@ -1864,34 +2149,24 @@ _static int process_transfer (uhci_t *s, urb_t *urb)
 		}
 
 		data_toggle = uhci_toggle (desc->hw.td.info);
-		//dbg("process_transfer: len:%d status:%x mapped:%x toggle:%d", actual_length, desc->hw.td.status,status, data_toggle);      
+		queue_dbg("process_transfer: len:%d status:%x mapped:%x toggle:%d", actual_length, desc->hw.td.status,status, data_toggle);      
 
 	}
-	usb_settoggle (urb->dev, usb_pipeendpoint (urb->pipe), usb_pipeout (urb->pipe), !data_toggle);
-	transfer_finished:
 
-	unlink_qh (s, qh);
-	//delete_qh (s, qh);
-	qh->last_used=UHCI_GET_CURRENT_FRAME(s);
-	list_add_tail (&qh->horizontal, &s->free_desc); // mark for later deletion
+	usb_settoggle (urb->dev, usb_pipeendpoint (urb->pipe), usb_pipeout (urb->pipe), !data_toggle);
+
+ transfer_finished:
+	
+	uhci_clean_transfer(s, urb, qh, (mode==0?2:1));
 
 	urb->status = status;
 
-#ifdef USE_RECLAMATION_LOOP	
+#ifdef CONFIG_USB_UHCI_HIGH_BANDWIDTH	
 	disable_desc_loop(s,urb);
 #endif	
 
-	dbg("process_transfer: urb %p, wanted len %d, len %d status %x err %d",
+	queue_dbg("process_transfer: (end) urb %p, wanted len %d, len %d status %x err %d",
 		urb,urb->transfer_buffer_length,urb->actual_length, urb->status, urb->error_count);
-	//dbg("process_transfer: exit");
-#if 0
-	if (urb->actual_length){
-		char *uu;
-		uu=urb->transfer_buffer;
-		dbg("%x %x %x %x %x %x %x %x",
-			*uu,*(uu+1),*(uu+2),*(uu+3),*(uu+4),*(uu+5),*(uu+6),*(uu+7));
-	}
-#endif
 	return ret;
 }
 
@@ -1934,14 +2209,12 @@ _static int process_interrupt (uhci_t *s, urb_t *urb)
 
 		// if any error occured: ignore this td, and continue
 		if (status != 0) {
-			uhci_show_td (desc);
+			//uhci_show_td (desc);
 			urb->error_count++;
 			goto recycle;
 		}
 		else
 			urb->actual_length = actual_length;
-
-		// FIXME: SPD?
 
 	recycle:
 		if (urb->complete) {
@@ -1962,6 +2235,7 @@ _static int process_interrupt (uhci_t *s, urb_t *urb)
 
 			desc->hw.td.info &= ~(1 << TD_TOKEN_TOGGLE);
 			if (status==0) {
+				((urb_priv_t*)urb->hcpriv)->started=jiffies;
 				desc->hw.td.info |= (usb_gettoggle (urb->dev, usb_pipeendpoint (urb->pipe),
 				      usb_pipeout (urb->pipe)) << TD_TOKEN_TOGGLE);
 				usb_dotoggle (urb->dev, usb_pipeendpoint (urb->pipe), usb_pipeout (urb->pipe));
@@ -1981,8 +2255,8 @@ _static int process_interrupt (uhci_t *s, urb_t *urb)
 	return ret;
 }
 
-
-_static int process_iso (uhci_t *s, urb_t *urb)
+// mode: 1: force processing, don't unlink tds (already unlinked)
+_static int process_iso (uhci_t *s, urb_t *urb, int mode)
 {
 	int i;
 	int ret = 0;
@@ -1991,16 +2265,18 @@ _static int process_iso (uhci_t *s, urb_t *urb)
 	uhci_desc_t *desc = list_entry (urb_priv->desc_list.prev, uhci_desc_t, desc_list);
 
 	dbg("urb contains iso request");
-	if (desc->hw.td.status & TD_CTRL_ACTIVE)
+	if ((desc->hw.td.status & TD_CTRL_ACTIVE) && !mode)
 		return -EXDEV;	// last TD not finished
 
 	urb->error_count = 0;
 	urb->actual_length = 0;
 	urb->status = 0;
+	dbg("process iso urb %p, %li, %i, %i, %i %08x",urb,jiffies,UHCI_GET_CURRENT_FRAME(s),
+	    urb->number_of_packets,mode,desc->hw.td.status);
 
 	for (i = 0; p != &urb_priv->desc_list; p = p->next, i++) {
 		desc = list_entry (p, uhci_desc_t, desc_list);
-
+		
 		//uhci_show_td(desc);
 		if (desc->hw.td.status & TD_CTRL_ACTIVE) {
 			// means we have completed the last TD, but not the TDs before
@@ -2013,7 +2289,8 @@ _static int process_iso (uhci_t *s, urb_t *urb)
 			goto err;
 		}
 
-		unlink_td (s, desc, 1);
+		if (!mode)
+			unlink_td (s, desc, 1);
 
 		if (urb->number_of_packets <= i) {
 			dbg("urb->number_of_packets (%d)<=(%d)", urb->number_of_packets, i);
@@ -2038,13 +2315,14 @@ _static int process_iso (uhci_t *s, urb_t *urb)
 			urb->error_count++;
 			urb->status = urb->iso_frame_desc[i].status;
 		}
-		dbg("process_iso: len:%d status:%x",
-		     urb->iso_frame_desc[i].length, urb->iso_frame_desc[i].status);
+		dbg("process_iso: %i: len:%d %08x status:%x",
+		     i, urb->iso_frame_desc[i].actual_length, desc->hw.td.status,urb->iso_frame_desc[i].status);
 
 		delete_desc (desc);
 		list_del (p);
 	}
-	dbg("process_iso: exit %i (%d)", i, ret);
+	
+	dbg("process_iso: exit %i (%d), actual_len %i", i, ret,urb->actual_length);
 	return ret;
 }
 
@@ -2056,15 +2334,20 @@ _static int process_urb (uhci_t *s, struct list_head *p)
 
 
 	urb=list_entry (p, urb_t, urb_list);
-	dbg("found queued urb: %p", urb);
+	//dbg("process_urb: found queued urb: %p", urb);
 
 	switch (usb_pipetype (urb->pipe)) {
 	case PIPE_CONTROL:
+		ret = process_transfer (s, urb, 1);
+		break;
 	case PIPE_BULK:
-		ret = process_transfer (s, urb);
+		if (!s->avoid_bulk.counter)
+			ret = process_transfer (s, urb, 1);
+		else
+			return 0;
 		break;
 	case PIPE_ISOCHRONOUS:
-		ret = process_iso (s, urb);
+		ret = process_iso (s, urb, 0);
 		break;
 	case PIPE_INTERRUPT:
 		ret = process_interrupt (s, urb);
@@ -2158,23 +2441,18 @@ _static void uhci_interrupt (int irq, void *__uhci, struct pt_regs *regs)
 	if (status != 1) {
 		warn("interrupt, status %x, frame# %i", status, 
 		     UHCI_GET_CURRENT_FRAME(s));
-		//uhci_show_queue(s->control_chain);
+
 		// remove host controller halted state
 		if ((status&0x20) && (s->running)) {
-			// more to be done - check TDs for invalid entries
-			// but TDs are only invalid if somewhere else is a (memory ?) problem
 			outw (USBCMD_RS | inw(io_addr + USBCMD), io_addr + USBCMD);
 		}
 		//uhci_show_status (s);
 	}
-	//beep(1000);           
 	/*
-	 * the following is very subtle and was blatantly wrong before
 	 * traverse the list in *reverse* direction, because new entries
 	 * may be added at the end.
 	 * also, because process_urb may unlink the current urb,
 	 * we need to advance the list before
-	 * - Thomas Sailer
 	 */
 
 	spin_lock (&s->urb_list_lock);
@@ -2186,18 +2464,23 @@ restart:
 		p2 = p;
 		p = p->prev;
 		process_urb (s, p2);
-		if(s->unlink_urb_done)
-		{
+		if (s->unlink_urb_done) {
 			s->unlink_urb_done=0;
 			goto restart;
 		}
 	}
-	spin_unlock (&s->urb_list_lock);
-	clean_descs(s,0);	
+	if ((s->frame_counter & 63) == 0)
+		uhci_check_timeouts(s);
 
+	clean_descs(s,0);
+	uhci_cleanup_unlink(s, 0);
+	
+	spin_unlock (&s->urb_list_lock);
+	
+	s->frame_counter++;
 	outw (status, io_addr + USBSTS);
 
-	dbg("done");
+	//dbg("uhci_interrupt: done");
 }
 
 _static void reset_hc (uhci_t *s)
@@ -2249,15 +2532,19 @@ _static void __exit uhci_cleanup_dev(uhci_t *s)
 {
 	struct usb_device *root_hub = s->bus->root_hub;
 
+	s->running = 0;		    // Don't allow submit_urb
+
 	if (root_hub)
 		usb_disconnect (&root_hub);
 
-	uhci_unlink_urbs(s, 0, 1);  // Forced unlink of remaining URBs
+	reset_hc (s);
+	wait_ms (1);
 
+	uhci_unlink_urbs (s, 0, 1);  // Forced unlink of remaining URBs
+	uhci_cleanup_unlink (s, 1);  // force cleanup of async killed URBs
+	
 	usb_deregister_bus (s->bus);
 
-	s->running = 0;
-	reset_hc (s);
 	release_region (s->io_addr, s->io_size);
 	free_irq (s->irq, s);
 	usb_free_bus (s->bus);
@@ -2285,6 +2572,7 @@ _static int __init uhci_start_usb (uhci_t *s)
 	return 0;
 }
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,44)
 _static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data)
 {
 	uhci_t *s = (uhci_t*) dev->data;
@@ -2301,6 +2589,7 @@ _static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data)
 	}
 	return 0;
 }
+#endif
 
 _static int __init alloc_uhci (struct pci_dev *dev, int irq, unsigned int io_addr, unsigned int io_size)
 {
@@ -2315,14 +2604,17 @@ _static int __init alloc_uhci (struct pci_dev *dev, int irq, unsigned int io_add
 	memset (s, 0, sizeof (uhci_t));
 	INIT_LIST_HEAD (&s->free_desc);
 	INIT_LIST_HEAD (&s->urb_list);
+	INIT_LIST_HEAD (&s->urb_unlinked);
 	spin_lock_init (&s->urb_list_lock);
 	spin_lock_init (&s->qh_lock);
 	spin_lock_init (&s->td_lock);
+	atomic_set(&s->avoid_bulk, 0);
 	s->irq = -1;
 	s->io_addr = io_addr;
 	s->io_size = io_size;
 	s->next = devs;	//chain new uhci device into global list	
-
+	s->frame_counter = 0;
+	
 	bus = usb_alloc_bus (&uhci_device_operations);
 	if (!bus) {
 		kfree (s);
@@ -2389,11 +2681,11 @@ _static int __init alloc_uhci (struct pci_dev *dev, int irq, unsigned int io_add
 
 	//chain new uhci device into global list
 	devs = s;
-
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,44)
 	pmdev = pm_register(PM_PCI_DEV, PM_PCI_ID(dev), handle_pm_event);
 	if (pmdev)
 		pmdev->data = s;
-
+#endif
 	return 0;
 }
 
@@ -2407,7 +2699,7 @@ _static int __init start_uhci (struct pci_dev *dev)
 		unsigned int io_addr = dev->resource[i].start;
 		unsigned int io_size =
 		dev->resource[i].end - dev->resource[i].start + 1;
-		if (!(dev->resource[i].flags & IORESOURCE_IO))
+		if (!(dev->resource[i].flags & 1))
 			continue;
 #else
 		unsigned int io_addr = dev->base_address[i];
@@ -2422,6 +2714,10 @@ _static int __init start_uhci (struct pci_dev *dev)
 			break;
 		/* disable legacy emulation */
 		pci_write_config_word (dev, USBLEGSUP, USBLEGSUP_DEFAULT);
+		if(dev->vendor==0x8086) {
+			info("Intel USB controller: setting latency timer to %d", UHCI_LATENCY_TIMER);
+			pci_write_config_byte(dev, PCI_LATENCY_TIMER, UHCI_LATENCY_TIMER);
+		}
 		return alloc_uhci(dev, dev->irq, io_addr, io_size);
 	}
 	return -1;
@@ -2452,6 +2748,9 @@ int __init uhci_init (void)
 #endif	
 	info(VERSTR);
 
+#ifdef CONFIG_USB_UHCI_HIGH_BANDWIDTH
+	info("High bandwidth mode enabled");	
+#endif
 	for (;;) {
 		dev = pci_find_class (PCI_CLASS_SERIAL_USB << 8, dev);
 		if (!dev)
@@ -2506,7 +2805,9 @@ int init_module (void)
 
 void cleanup_module (void)
 {
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,44)
 	pm_unregister_all (handle_pm_event);
+#endif
 	uhci_cleanup ();
 }
 

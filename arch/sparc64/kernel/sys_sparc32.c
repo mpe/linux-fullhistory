@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.135 2000/03/12 03:52:09 davem Exp $
+/* $Id: sys_sparc32.c,v 1.136 2000/03/13 21:57:29 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -4217,4 +4217,13 @@ out_sem:
 	up(&current->mm->mmap_sem);
 out:
 	return ret;       
+}
+
+extern asmlinkage long sys_mincore(unsigned long start, size_t len, unsigned char *vec);
+
+asmlinkage long sys32_mincore(unsigned long start, u32 __len, unsigned char *vec)
+{
+	size_t len = (size_t) __len;
+
+	return sys_mincore(start, len, vec);
 }

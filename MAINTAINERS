@@ -845,9 +845,7 @@ S:	Maintained
 RAGE128 FRAMEBUFFER DISPLAY DRIVER
 P:	Brad Douglas
 M:	brad@neruo.com
-P:	Anthony Tong
-M:	atong@uiuc.edu
-L:	linux-fbdev@vcuser.vc.union.edu
+L:	linux-fbdev@vuser.vc.union.edu
 S:	Maintained
 
 RAYLINK/WEBGEAR 802.11 WIRELESS LAN DRIVER
@@ -1114,6 +1112,12 @@ S:	Maintained
 USB OHCI DRIVER
 P:	Roman Weissgaerber
 M:	weissg@vienna.at
+L:	linux-usb@suse.com
+S:	Maintained
+
+USB PEGASUS DRIVER
+P:	Petko Manolov
+M:	petkan@spct.net
 L:	linux-usb@suse.com
 S:	Maintained
 

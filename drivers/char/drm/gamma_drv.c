@@ -1,8 +1,7 @@
 /* gamma.c -- 3dlabs GMX 2000 driver -*- linux-c -*-
  * Created: Mon Jan  4 08:58:31 1999 by faith@precisioninsight.com
- * Revised: Tue Oct 12 08:51:36 1999 by faith@precisioninsight.com
  *
- * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
+ * Copyright 1999, 2000 Precision Insight, Inc., Cedar Park, Texas.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -24,12 +23,11 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  * 
- * $PI: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/gamma_drv.c,v 1.17 1999/08/30 13:05:00 faith Exp $
- * $XFree86: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/gamma_drv.c,v 1.1 1999/09/25 14:38:00 dawes Exp $
+ * Authors:
+ *    Rickard E. (Rik) Faith <faith@precisioninsight.com>
  *
  */
 
-#include <linux/config.h>
 #include "drmP.h"
 #include "gamma_drv.h"
 EXPORT_SYMBOL(gamma_init);
@@ -52,6 +50,7 @@ static struct file_operations gamma_fops = {
 	mmap:	 drm_mmap,
 	read:	 drm_read,
 	fasync:	 drm_fasync,
+	poll:	 drm_poll,
 };
 
 static struct miscdevice      gamma_misc = {

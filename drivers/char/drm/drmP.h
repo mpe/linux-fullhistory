@@ -1,6 +1,5 @@
 /* drmP.h -- Private header for Direct Rendering Manager -*- linux-c -*-
  * Created: Mon Jan  4 10:05:05 1999 by faith@precisioninsight.com
- * Revised: Mon Dec  6 16:06:49 1999 by faith@precisioninsight.com
  *
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
  * All rights reserved.
@@ -24,8 +23,8 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  * 
- * $PI: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/drmP.h,v 1.58 1999/08/30 13:05:00 faith Exp $
- * $XFree86: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/drmP.h,v 1.1 1999/09/25 14:37:59 dawes Exp $
+ * Authors:
+ *    Rickard E. (Rik) Faith <faith@precisioninsight.com>
  * 
  */
 
@@ -49,6 +48,10 @@
 #include <asm/uaccess.h>
 #ifdef CONFIG_MTRR
 #include <asm/mtrr.h>
+#endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
+#include <asm/spinlock.h>
+#include <linux/poll.h>
 #endif
 #include "drm.h"
 
@@ -475,6 +478,7 @@ extern int	     drm_fasync(int fd, struct file *filp, int on);
 extern ssize_t	     drm_read(struct file *filp, char *buf, size_t count,
 			      loff_t *off);
 extern int	     drm_write_string(drm_device_t *dev, const char *s);
+extern unsigned int  drm_poll(struct file *filp, struct poll_table_struct *wait);
 
 				/* Mapping support (vm.c) */
 #if LINUX_VERSION_CODE < 0x020317

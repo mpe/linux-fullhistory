@@ -35,8 +35,6 @@
 #include <asm/mipsregs.h>
 #include <asm/prctl.h>
 
-#include <linux/config.h>
-
 #define DLINFO_ITEMS 12
 
 #include <linux/elf.h>

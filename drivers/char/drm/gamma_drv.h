@@ -1,6 +1,5 @@
 /* gamma_drv.h -- Private header for 3dlabs GMX 2000 driver -*- linux-c -*-
  * Created: Mon Jan  4 10:05:05 1999 by faith@precisioninsight.com
- * Revised: Fri Aug 20 09:24:27 1999 by faith@precisioninsight.com
  *
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
  * All rights reserved.
@@ -24,8 +23,8 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  * 
- * $PI: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/gamma_drv.h,v 1.4 1999/08/30 13:05:00 faith Exp $
- * $XFree86: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/gamma_drv.h,v 1.1 1999/09/25 14:38:00 dawes Exp $
+ * Authors:
+ *    Rickard E. (Rik) Faith <faith@precisioninsight.com>
  * 
  */
 

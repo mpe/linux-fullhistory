@@ -249,6 +249,9 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 	vma->vm_flags = vm_flags(prot,flags) | mm->def_flags;
 
 	if (file) {
+		VM_ClearReadHint(vma);
+		vma->vm_raend = 0;
+
 		if (file->f_mode & 1)
 			vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
 		if (flags & MAP_SHARED) {
@@ -549,6 +552,7 @@ static struct vm_area_struct * unmap_fixup(struct vm_area_struct *area,
 		mpnt->vm_end = area->vm_end;
 		mpnt->vm_page_prot = area->vm_page_prot;
 		mpnt->vm_flags = area->vm_flags;
+		mpnt->vm_raend = 0;
 		mpnt->vm_ops = area->vm_ops;
 		mpnt->vm_pgoff = area->vm_pgoff + ((end - area->vm_start) >> PAGE_SHIFT);
 		mpnt->vm_file = area->vm_file;

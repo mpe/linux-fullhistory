@@ -69,7 +69,7 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 
     Scsi_Device *scd, *SDev;
     struct Scsi_Host *HBA_ptr;
-    Scsi_Cmnd  * scmd;
+    Scsi_Request  * scmd;
     char cmnd[MAX_COMMAND_SIZE];
     static u8 buff[512];
     static u8 buff2[512];
@@ -153,7 +153,7 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 
     } else {
         SDev = scsi_get_host_dev(HBA_ptr);
-	scmd  = scsi_allocate_device(SDev, 1, FALSE);
+	scmd  = scsi_allocate_request(SDev);
 
 	cmnd[0] = LOG_SENSE;
 	cmnd[1] = 0;
@@ -166,13 +166,13 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	cmnd[8] = 0x66;
 	cmnd[9] = 0;
 
-	scmd->cmd_len = 10;
-	scmd->sc_data_direction = SCSI_DATA_READ;
+	scmd->sr_cmd_len = 10;
+	scmd->sr_data_direction = SCSI_DATA_READ;
 	
 	/*
 	 * Do the command and wait for it to finish.
 	 */	
-	scsi_wait_cmd (scmd, cmnd, buff + 0x144, 0x66,  
+	scsi_wait_req (scmd, cmnd, buff + 0x144, 0x66,  
 		       1 * HZ, 1);
 
 	size = sprintf(buffer + len, "IRQ: %2d, %s triggered\n", cc->interrupt,
@@ -291,13 +291,13 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	    cmnd[8] = 0x44;
 	    cmnd[9] = 0;
 	    
-	    scmd->cmd_len = 10;
-	    scmd->sc_data_direction = SCSI_DATA_READ;
+	    scmd->sr_cmd_len = 10;
+	    scmd->sr_data_direction = SCSI_DATA_READ;
 
 	    /*
 	     * Do the command and wait for it to finish.
 	     */	
-	    scsi_wait_cmd (scmd, cmnd, buff2, 0x144,
+	    scsi_wait_req (scmd, cmnd, buff2, 0x144,
 			   1 * HZ, 1);
 
 	    swap_statistics(buff2);
@@ -333,7 +333,7 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	    pos = begin + len;
 	}
 
-	scsi_release_command(scmd);
+	scsi_release_request(scmd);
 	scsi_free_host_dev(SDev);
     }
     

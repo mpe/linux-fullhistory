@@ -26,7 +26,6 @@
 
 int nr_swap_pages = 0;
 int nr_lru_pages;
-LIST_HEAD(lru_cache);
 pg_data_t *pgdat_list = (pg_data_t *)0;
 
 static char *zone_names[MAX_NR_ZONES] = { "DMA", "Normal", "HighMem" };
@@ -58,6 +57,19 @@ static int zone_balance_max[MAX_NR_ZONES] = { 255 , 255, 255, };
  * Temporary debugging check.
  */
 #define BAD_RANGE(zone,x) (((zone) != (x)->zone) || (((x)-mem_map) < (zone)->offset) || (((x)-mem_map) >= (zone)->offset+(zone)->size))
+
+static inline unsigned long classfree(zone_t *zone)
+{
+	unsigned long free = 0;
+	zone_t *z = zone->zone_pgdat->node_zones;
+
+	while (z != zone) {
+		free += z->free_pages;
+		z++;
+	}
+	free += zone->free_pages;
+	return(free);
+}
 
 /*
  * Buddy system. Hairy. You really aren't expected to understand this
@@ -135,6 +147,9 @@ void __free_pages_ok (struct page *page, unsigned long order)
 	memlist_add_head(&(base + page_idx)->list, &area->free_list);
 
 	spin_unlock_irqrestore(&zone->lock, flags);
+
+	if (classfree(zone) > zone->pages_high)
+		zone->zone_wake_kswapd = 0;
 }
 
 #define MARK_USED(index, order, area) \
@@ -201,19 +216,6 @@ static inline struct page * rmqueue (zone_t *zone, unsigned long order)
 	return NULL;
 }
 
-static inline unsigned long classfree(zone_t *zone)
-{
-	unsigned long free = 0;
-	zone_t *z = zone->zone_pgdat->node_zones;
-
-	while (z != zone) {
-		free += z->free_pages;
-		z++;
-	}
-	free += zone->free_pages;
-	return(free);
-}
-
 static inline int zone_balance_memory (zone_t *zone, int gfp_mask)
 {
 	int freed;
@@ -263,21 +265,12 @@ struct page * __alloc_pages (zonelist_t *zonelist, unsigned long order)
 		{
 			unsigned long free = classfree(z);
 
-			if (free > z->pages_high)
-			{
-				if (z->low_on_memory)
-					z->low_on_memory = 0;
-				z->zone_wake_kswapd = 0;
-			}
-			else
+			if (free <= z->pages_high)
 			{
 				extern wait_queue_head_t kswapd_wait;
 
-				if (free <= z->pages_low) {
-					z->zone_wake_kswapd = 1;
-					wake_up_interruptible(&kswapd_wait);
-				} else
-					z->zone_wake_kswapd = 0;
+				z->zone_wake_kswapd = 1;
+				wake_up_interruptible(&kswapd_wait);
 
 				if (free <= z->pages_min)
 					z->low_on_memory = 1;
@@ -585,6 +578,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 			unsigned long bitmap_size;
 
 			memlist_init(&zone->free_area[i].free_list);
+			memlist_init(&zone->lru_cache);
 			mask += mask;
 			size = (size + ~mask) & mask;
 			bitmap_size = size >> i;

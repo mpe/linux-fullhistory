@@ -23,7 +23,7 @@ videobook.sgml: videobook.tmpl
 
 clean:
 	rm -f core *~
-	rm -r$BOOKS
+	rm -r $(BOOKS)
 
 include $(TOPDIR)/Rules.make
 

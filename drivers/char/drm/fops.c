@@ -1,8 +1,7 @@
 /* fops.c -- File operations for DRM -*- linux-c -*-
  * Created: Mon Jan  4 08:58:31 1999 by faith@precisioninsight.com
- * Revised: Fri Dec  3 10:26:26 1999 by faith@precisioninsight.com
  *
- * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
+ * Copyright 1999, 2000 Precision Insight, Inc., Cedar Park, Texas.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -24,8 +23,9 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  * 
- * $PI: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/fops.c,v 1.3 1999/08/20 15:36:45 faith Exp $
- * $XFree86: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/fops.c,v 1.1 1999/09/25 14:37:59 dawes Exp $
+ * Authors:
+ *    Rickard E. (Rik) Faith <faith@precisioninsight.com>
+ *    Daryll Strauss <daryll@precisioninsight.com>
  *
  */
 
@@ -220,5 +220,15 @@ int drm_write_string(drm_device_t *dev, const char *s)
 #endif
 	DRM_DEBUG("waking\n");
 	wake_up_interruptible(&dev->buf_readers);
+	return 0;
+}
+
+unsigned int drm_poll(struct file *filp, struct poll_table_struct *wait)
+{
+	drm_file_t   *priv = filp->private_data;
+	drm_device_t *dev  = priv->dev;
+
+	poll_wait(filp, &dev->buf_readers, wait);
+	if (dev->buf_wp != dev->buf_rp) return POLLIN | POLLRDNORM;
 	return 0;
 }

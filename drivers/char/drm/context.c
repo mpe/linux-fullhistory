@@ -1,6 +1,5 @@
 /* context.c -- IOCTLs for contexts and DMA queues -*- linux-c -*-
  * Created: Tue Feb  2 08:37:54 1999 by faith@precisioninsight.com
- * Revised: Fri Aug 20 11:32:09 1999 by faith@precisioninsight.com
  *
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
  * All Rights Reserved.
@@ -24,8 +23,8 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  * 
- * $PI: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/context.c,v 1.5 1999/08/30 13:05:00 faith Exp $
- * $XFree86: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/context.c,v 1.1 1999/09/25 14:37:58 dawes Exp $
+ * Authors:
+ *    Rickard E. (Rik) Faith <faith@precisioninsight.com>
  *
  */
 

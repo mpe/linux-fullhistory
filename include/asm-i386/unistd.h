@@ -223,6 +223,8 @@
 #define __NR_setfsgid32		216
 #define __NR_pivot_root		217
 #define __NR_mincore		218
+#define __NR_madvise		219
+#define __NR_madvise1		219	/* delete when C lib stub is removed */
 
 /* user-visible error numbers are in the range -1 - -124: see <asm-i386/errno.h> */
 

@@ -1,8 +1,7 @@
 /* tdfx.c -- tdfx driver -*- linux-c -*-
  * Created: Thu Oct  7 10:38:32 1999 by faith@precisioninsight.com
- * Revised: Tue Oct 12 08:51:35 1999 by faith@precisioninsight.com
  *
- * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
+ * Copyright 1999, 2000 Precision Insight, Inc., Cedar Park, Texas.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -23,17 +22,15 @@
  * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
- * 
- * $PI$
- * $XFree86$
+ *
+ * Authors:
+ *    Rickard E. (Rik) Faith <faith@precisioninsight.com>
+ *    Daryll Strauss <daryll@precisioninsight.com>
  *
  */
 
-#include <linux/config.h>
 #include "drmP.h"
 #include "tdfx_drv.h"
-EXPORT_SYMBOL(tdfx_init);
-EXPORT_SYMBOL(tdfx_cleanup);
 
 #define TDFX_NAME	 "tdfx"
 #define TDFX_DESC	 "tdfx"
@@ -53,6 +50,7 @@ static struct file_operations tdfx_fops = {
 	mmap:	 drm_mmap,
 	read:	 drm_read,
 	fasync:	 drm_fasync,
+	poll:	 drm_poll,
 };
 
 static struct miscdevice      tdfx_misc = {
@@ -542,6 +540,12 @@ int tdfx_lock(struct inode *inode, struct file *filp, unsigned int cmd,
 #endif
 		}
         }
+
+	if (lock.context != tdfx_res_ctx.handle) {
+		current->counter = 5;
+		current->priority = DEF_PRIORITY/4;
+	}
+
         DRM_DEBUG("%d %s\n", lock.context, ret ? "interrupted" : "has lock");
 
 #if DRM_DMA_HISTOGRAM
@@ -582,6 +586,11 @@ int tdfx_unlock(struct inode *inode, struct file *filp, unsigned int cmd,
 		}
 	}
 	
+	if (lock.context != tdfx_res_ctx.handle) {
+		current->counter = 5;
+		current->priority = DEF_PRIORITY;
+	}
+
 	return 0;
 }
 

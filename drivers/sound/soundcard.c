@@ -838,8 +838,8 @@ void conf_printf(char *name, struct address_info *hw_config)
 			printk(",%d", hw_config->dma2);
 	}
 	printk("\n");
-}
 #endif
+}
 
 void conf_printf2(char *name, int base, int irq, int dma, int dma2)
 {
@@ -858,8 +858,8 @@ void conf_printf2(char *name, int base, int irq, int dma, int dma2)
 			  printk(",%d", dma2);
 	}
 	printk("\n");
-}
 #endif
+}
 
 /*
  *	Module and lock management

@@ -504,8 +504,7 @@ int kswapd(void *unused)
 			while (pgdat) {
 				for (i = 0; i < MAX_NR_ZONES; i++) {
 					zone = pgdat->node_zones + i;
-					if ((!zone->size) || 
-							(!zone->zone_wake_kswapd))
+					if ((!zone->size) || (!zone->zone_wake_kswapd))
 						continue;
 					do_try_to_free_pages(GFP_KSWAPD, zone);
 				}

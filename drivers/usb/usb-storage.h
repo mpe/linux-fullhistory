@@ -9,13 +9,11 @@
 
 #define USB_STORAGE "usb-storage: "
 
-extern int usb_stor_debug;
-
 #ifdef CONFIG_USB_STORAGE_DEBUG
 void us_show_command(Scsi_Cmnd *srb);
-#define US_DEBUGP(x...) { if(usb_stor_debug) printk( KERN_DEBUG USB_STORAGE ## x ); }
-#define US_DEBUGPX(x...) { if(usb_stor_debug) printk( ## x ); }
-#define US_DEBUG(x)  { if(usb_stor_debug) x; }
+#define US_DEBUGP(x...) printk( KERN_DEBUG USB_STORAGE ## x )
+#define US_DEBUGPX(x...) printk( ## x )
+#define US_DEBUG(x) x 
 #else
 #define US_DEBUGP(x...)
 #define US_DEBUGPX(x...)
@@ -83,15 +81,22 @@ struct bulk_cs_wrap {
 #define US_BULK_RESET_HARD	0
 
 /*
+ * us_bulk_transfer() return codes
+ */
+#define US_BULK_TRANSFER_GOOD   0
+#define US_BULK_TRANSFER_SHORT  1
+#define US_BULK_TRANSFER_FAILED 2
+
+/*
  * Transport return codes
  */
 
-#define USB_STOR_TRANSPORT_GOOD    0    /* Transport good, command good    */
-#define USB_STOR_TRANSPORT_FAILED  1    /* Transport good, command failed  */
-#define USB_STOR_TRANSPORT_ERROR   2    /* Transport bad (i.e. device dead */
+#define USB_STOR_TRANSPORT_GOOD    0   /* Transport good, command good     */
+#define USB_STOR_TRANSPORT_FAILED  1   /* Transport good, command failed   */
+#define USB_STOR_TRANSPORT_ERROR   2   /* Transport bad (i.e. device dead) */
 
 /*
- * CBI style
+ * CBI accept device specific command
  */
 
 #define US_CBI_ADSC		0
@@ -128,3 +133,4 @@ static inline void make_guid( __u32 *pg, __u16 vendor, __u16 product, char *seri
 #define US_FL_FIXED_COMMAND   0x00000002 /* expand commands to fixed size */
 #define US_FL_MODE_XLATE      0x00000004 /* translate _6 to _10 comands for
 					    Win/MacOS compatibility */
+

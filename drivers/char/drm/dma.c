@@ -1,6 +1,5 @@
 /* dma.c -- DMA IOCTL and function support -*- linux-c -*-
  * Created: Fri Mar 19 14:30:16 1999 by faith@precisioninsight.com
- * Revised: Thu Sep 16 12:55:39 1999 by faith@precisioninsight.com
  *
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
  * All Rights Reserved.
@@ -24,8 +23,8 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  * 
- * $PI: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/dma.c,v 1.7 1999/09/16 16:56:18 faith Exp $
- * $XFree86: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/dma.c,v 1.1 1999/09/25 14:37:58 dawes Exp $
+ * Authors:
+ *    Rickard E. (Rik) Faith <faith@precisioninsight.com>
  *
  */
 

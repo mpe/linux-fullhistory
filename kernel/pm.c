@@ -28,9 +28,17 @@ int pm_active = 0;
 static spinlock_t pm_devs_lock = SPIN_LOCK_UNLOCKED;
 static LIST_HEAD(pm_devs);
 
-/*
- * Register a device with power management
+/**
+ *	pm_register - register a device with power management
+ *	@type: The device type 
+ *	@id: Device ID
+ *	@callback: Callback function
+ *
+ *	Add a device to the list of devices that wish to be notified about
+ *	power management events. A pm_dev structure is returnd on success,
+ *	on failure the return is NULL
  */
+ 
 struct pm_dev *pm_register(pm_dev_t type,
 			   unsigned long id,
 			   pm_callback callback)
@@ -51,9 +59,14 @@ struct pm_dev *pm_register(pm_dev_t type,
 	return dev;
 }
 
-/*
- * Unregister a device with power management
+/**
+ *	pm_unregister -  unregister a device with power management
+ *	@dev: device to unregister
+ *
+ *	Remove a device from the power management notification lists. The
+ *	dev passed must be a handle previously returned by pm_register.
  */
+ 
 void pm_unregister(struct pm_dev *dev)
 {
 	if (dev) {
@@ -67,9 +80,16 @@ void pm_unregister(struct pm_dev *dev)
 	}
 }
 
-/*
- * Unregister all devices with matching callback
+/**
+ *	pm_unregister_all - unregister all devices with matching callback
+ *	@callback: callback function pointer
+ *
+ *	Unregister every device that would call the callback passed. This
+ *	is primarily meant as a helper function for loadable modules. It
+ *	enables a module to give up all its managed devices without keeping
+ *	its own private list.
  */
+ 
 void pm_unregister_all(pm_callback callback)
 {
 	struct list_head *entry;
@@ -86,9 +106,21 @@ void pm_unregister_all(pm_callback callback)
 	}
 }
 
-/*
- * Send request to a single device
+/**
+ *	pm_send - send request to a single device
+ *	@dev: device to send to
+ *	@rqst: power management request
+ *	@data: data for the callback
+ *
+ *	Issue a power management request to a given device. The 
+ *	PM_SUSPEND and PM_RESUME events are handled specially. The
+ *	data field must hold the intented next state. No call is made
+ *	if the state matches.
+ *
+ *	BUGS: what stops two power management requests occuring in parallel
+ *	and conflicting.
  */
+ 
 int pm_send(struct pm_dev *dev, pm_request_t rqst, void *data)
 {
 	int status = 0;
@@ -138,9 +170,26 @@ static void pm_undo_all(struct pm_dev *last)
 	}
 }
 
-/*
- * Send a request to all devices
+/**
+ *	pm_send - send request to all managed device
+ *	@rqst: power management request
+ *	@data: data for the callback
+ *
+ *	Issue a power management request to a all devices. The 
+ *	PM_SUSPEND events are handled specially. Any device is 
+ *	permitted to fail a suspend by returning a non zero (error)
+ *	value from its callback function. If any device vetoes a 
+ *	suspend request then all other devices that have suspended 
+ *	during the processing of this request are restored to their
+ *	previous state.
+ *
+ *	Zero is returned on success. If a suspend fails then the status
+ *	from the device that vetoes the suspend is returned.
+ *
+ *	BUGS: what stops two power management requests occuring in parallel
+ *	and conflicting.
  */
+ 
 int pm_send_all(pm_request_t rqst, void *data)
 {
 	struct list_head *entry = pm_devs.next;
@@ -162,9 +211,19 @@ int pm_send_all(pm_request_t rqst, void *data)
 	return 0;
 }
 
-/*
- * Find a device
+/**
+ *	pm_find  - find a device
+ *	@type: type of device
+ *	@from: Where to start looking
+ *
+ *	Scan the power management list for devices of a specific type. The
+ *	return value for a matching device may be passed to further calls
+ *	to this function to find further matches. A NULL indicates the end
+ *	of the list. 
+ *
+ *	To search from the beginning pass NULL as the from value.
  */
+ 
 struct pm_dev *pm_find(pm_dev_t type, struct pm_dev *from)
 {
 	struct list_head *entry = from ? from->entry.next:pm_devs.next;

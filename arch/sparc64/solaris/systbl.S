@@ -1,4 +1,4 @@
-/* $Id: systbl.S,v 1.10 2000/01/12 02:59:26 davem Exp $
+/* $Id: systbl.S,v 1.11 2000/03/13 21:57:35 davem Exp $
  * systbl.S: System call entry point table for Solaris compatibility.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -142,7 +142,7 @@ solaris_sys_table:
 	.word solaris_unimplemented	/* async		111	*/
 	.word solaris_unimplemented	/* priocntlsys		112	*/
 	.word solaris_pathconf		/* pathconf	sd	113	*/
-	.word solaris_unimplemented	/* mincore	xdx	114	*/
+	.word CHAIN(mincore)		/* mincore	d	114	*/
 	.word solaris_mmap		/* mmap		xxxxdx	115	*/
 	.word CHAIN(mprotect)		/* mprotect	xdx	116	*/
 	.word CHAIN(munmap)		/* munmap	xd	117	*/

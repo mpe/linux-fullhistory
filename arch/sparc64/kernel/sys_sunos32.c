@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.40 2000/03/07 22:27:31 davem Exp $
+/* $Id: sys_sunos32.c,v 1.41 2000/03/13 21:57:31 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -250,56 +250,6 @@ asmlinkage void sunos_madvise(u32 address, u32 len, u32 strategy)
 	       current->comm, strategy <= 4 ? mstrings[strategy] : "BOGUS",
 	       address, len);
 	unlock_kernel();
-}
-
-/* Places into character array, the status of all the pages in the passed
- * range from 'addr' to 'addr + len'.  -1 on failure, 0 on success...
- * The encoding in each character is:
- * low-bit is zero == Page is not in physical ram right now
- * low-bit is one  == Page is currently residing in core
- * All other bits are undefined within the character so there...
- * Also, if you try to get stats on an area outside of the user vm area
- * *or* the passed base address is not aligned on a page boundary you
- * get an error.
- */
-asmlinkage int sunos_mincore(u32 __addr, u32 len, u32 u_array)
-{
-	pgd_t *pgdp;
-	pmd_t *pmdp;
-	pte_t *ptep;
-	unsigned long limit, addr = (unsigned long)__addr;
-	int num_pages, pnum, retval = -EINVAL;
-	char *array = (char *)A(u_array);
-
-	lock_kernel();
-	if(addr & ~(4096))
-		goto out;
-	num_pages = (len / 4096);
-	retval = -EFAULT;
-	if(verify_area(VERIFY_WRITE, array, num_pages))
-		goto out;
-	retval = -ENOMEM;
-	if((addr >= 0xf0000000) || ((addr + len) > 0xf0000000))
-		goto out; /* I'm sure you're curious about kernel mappings.. */
-	/* Wheee, go through pte's */
-	pnum = 0;
-	for(limit = addr + len; addr < limit; addr += 4096, pnum++) {
-		pgdp = pgd_offset(current->mm, addr);
-		if(pgd_none(*pgdp))
-			goto out; /* As per SunOS manpage */
-		pmdp = pmd_offset(pgdp, addr);
-		if(pmd_none(*pmdp))
-			goto out; /* As per SunOS manpage */
-		ptep = pte_offset(pmdp, addr);
-		if(pte_none(*ptep))
-			goto out; /* As per SunOS manpage */
-		/* Page in core or Swapped page? */
-		__put_user((pte_present(*ptep) ? 1 : 0), &array[pnum]);
-	}
-	retval = 0; /* Success... I think... */
-out:
-	unlock_kernel();
-	return retval;
 }
 
 /* This just wants the soft limit (ie. rlim_cur element) of the RLIMIT_NOFILE

@@ -217,6 +217,16 @@ static void sound_remove_unit(struct sound_unit **list, int unit)
 
 static struct sound_unit *chains[16];
 
+/**
+ *	register_sound_special
+ *	@fops: File operations for the driver
+ *	@unit: Unit number to allocate
+ *
+ *	Allocate a special sound device by minor number from the sound
+ *	subsystem. The allocated number is returned on succes. On failure
+ *	a negative error code is returned.
+ */
+ 
 int register_sound_special(struct file_operations *fops, int unit)
 {
 	char *name;
@@ -277,6 +287,16 @@ int register_sound_special(struct file_operations *fops, int unit)
  
 EXPORT_SYMBOL(register_sound_special);
 
+/**
+ *	register_sound_mixer
+ *	@fops: File operations for the driver
+ *	@dev: Unit number to allocate
+ *
+ *	Allocate a mixer device. Unit is the number of the mixer requested.
+ *	Pass -1 to request the next free mixer unit. On success the allocated
+ *	number is returned, on failure a negative error code is returned.
+ */
+
 int register_sound_mixer(struct file_operations *fops, int dev)
 {
 	return sound_insert_unit(&chains[0], fops, dev, 0, 128,
@@ -284,6 +304,16 @@ int register_sound_mixer(struct file_operations *fops, int dev)
 }
 
 EXPORT_SYMBOL(register_sound_mixer);
+
+/**
+ *	register_sound_midi
+ *	@fops: File operations for the driver
+ *	@dev: Unit number to allocate
+ *
+ *	Allocate a midi device. Unit is the number of the midi device requested.
+ *	Pass -1 to request the next free midi unit. On success the allocated
+ *	number is returned, on failure a negative error code is returned.
+ */
 
 int register_sound_midi(struct file_operations *fops, int dev)
 {
@@ -298,6 +328,19 @@ EXPORT_SYMBOL(register_sound_midi);
  *	in open - see below.
  */
  
+/**
+ *	register_sound_dsp
+ *	@fops: File operations for the driver
+ *	@dev: Unit number to allocate
+ *
+ *	Allocate a DSP device. Unit is the number of the DSP requested.
+ *	Pass -1 to request the next free DSP unit. On success the allocated
+ *	number is returned, on failure a negative error code is returned.
+ *
+ *	This function allocates both the audio and dsp device entries together
+ *	and will always allocate them as a matching pair - eg dsp3/audio3
+ */
+
 int register_sound_dsp(struct file_operations *fops, int dev)
 {
 	return sound_insert_unit(&chains[3], fops, dev, 3, 131,
@@ -305,6 +348,17 @@ int register_sound_dsp(struct file_operations *fops, int dev)
 }
 
 EXPORT_SYMBOL(register_sound_dsp);
+
+/**
+ *	register_sound_synth
+ *	@fops: File operations for the driver
+ *	@dev: Unit number to allocate
+ *
+ *	Allocate a synth device. Unit is the number of the synth device requested.
+ *	Pass -1 to request the next free synth unit. On success the allocated
+ *	number is returned, on failure a negative error code is returned.
+ */
+
 
 int register_sound_synth(struct file_operations *fops, int dev)
 {
@@ -314,12 +368,29 @@ int register_sound_synth(struct file_operations *fops, int dev)
 
 EXPORT_SYMBOL(register_sound_synth);
 
+/**
+ *	unregister_sound_special
+ *	@unit: Unit number to allocate
+ *
+ *	Release a sound device that was allocated with register_sound_special.
+ *	The unit passed is the return value from the register function.
+ */
+
+
 void unregister_sound_special(int unit)
 {
 	sound_remove_unit(&chains[unit&15], unit);
 }
  
 EXPORT_SYMBOL(unregister_sound_special);
+
+/**
+ *	unregister_sound_mixer
+ *	@unit: Unit number to allocate
+ *
+ *	Release a sound device that was allocated with register_sound_mixer.
+ *	The unit passed is the return value from the register function.
+ */
 
 void unregister_sound_mixer(int unit)
 {
@@ -328,6 +399,14 @@ void unregister_sound_mixer(int unit)
 
 EXPORT_SYMBOL(unregister_sound_mixer);
 
+/**
+ *	unregister_sound_midi
+ *	@unit: Unit number to allocate
+ *
+ *	Release a sound device that was allocated with register_sound_midi.
+ *	The unit passed is the return value from the register function.
+ */
+
 void unregister_sound_midi(int unit)
 {
 	return sound_remove_unit(&chains[2], unit);
@@ -335,12 +414,31 @@ void unregister_sound_midi(int unit)
 
 EXPORT_SYMBOL(unregister_sound_midi);
 
+/**
+ *	unregister_sound_dsp
+ *	@unit: Unit number to allocate
+ *
+ *	Release a sound device that was allocated with register_sound_dsp.
+ *	The unit passed is the return value from the register function.
+ *
+ *	Both of the allocated units are released together automatically.
+ */
+
 void unregister_sound_dsp(int unit)
 {
 	return sound_remove_unit(&chains[3], unit);
 }
 
+
 EXPORT_SYMBOL(unregister_sound_dsp);
+
+/**
+ *	unregister_sound_synth
+ *	@unit: Unit number to allocate
+ *
+ *	Release a sound device that was allocated with register_sound_synth.
+ *	The unit passed is the return value from the register function.
+ */
 
 void unregister_sound_synth(int unit)
 {
