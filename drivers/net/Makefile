@@ -324,7 +324,9 @@ OX_OBJS         := $(filter     $(export-objs), $(obj-y))
 M_OBJS          := $(sort $(filter-out $(export-objs), $(obj-m)))
 MX_OBJS         := $(sort $(filter     $(export-objs), $(obj-m)))
 
+ifneq ($(ARCH),s390)
 O_OBJS += auto_irq.o
+endif
 
 include $(TOPDIR)/Rules.make
 

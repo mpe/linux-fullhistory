@@ -17,8 +17,8 @@
  * any later version.
  *
  */
- static char * sg_version_str = "Version: 3.1.12 (20000222)";
- static int sg_version_num = 30112; /* 2 digits for each component */
+ static char * sg_version_str = "Version: 3.1.13 (20000323)";
+ static int sg_version_num = 30113; /* 2 digits for each component */
 /*
  *  D. P. Gilbert (dgilbert@interlog.com, dougg@triode.net.au), notes:
  *      - scsi logging is available via SCSI_LOG_TIMEOUT macros. First
@@ -66,7 +66,9 @@
 #ifdef CONFIG_PROC_FS
 #include <linux/proc_fs.h>
 static int sg_proc_init(void);
+#ifdef MODULE
 static void sg_proc_cleanup(void);
+#endif
 #endif
 
 #ifndef LINUX_VERSION_CODE
@@ -548,12 +550,16 @@ static ssize_t sg_write(struct file * filp, const char * buf,
     hp->cmd_len = (unsigned char)cmd_size;
     hp->iovec_count = 0;
     hp->mx_sb_len = 0;
+#if 1
+    hp->dxfer_direction = SG_DXFER_UNKNOWN;
+#else
     if (input_size > 0)
 	hp->dxfer_direction = ((old_hdr.reply_len - size_sg_header) > 0) ?
 			      SG_DXFER_TO_FROM_DEV : SG_DXFER_TO_DEV;
     else
 	hp->dxfer_direction = (mxsize > 0) ? SG_DXFER_FROM_DEV :
 					     SG_DXFER_NONE;
+#endif
     hp->dxfer_len = mxsize;
     hp->dxferp = (unsigned char *)buf + cmd_size;
     hp->sbp = NULL;
@@ -671,6 +677,8 @@ static int sg_common_write(Sg_fd * sfp, Sg_request * srp,
 	SCpnt->sc_data_direction = SCSI_DATA_READ; break;
     case SG_DXFER_TO_DEV:
 	SCpnt->sc_data_direction = SCSI_DATA_WRITE; break;
+    case SG_DXFER_UNKNOWN:
+	SCpnt->sc_data_direction = SCSI_DATA_UNKNOWN; break;
     default:
 	SCpnt->sc_data_direction = SCSI_DATA_NONE; break;
     }
@@ -1166,9 +1174,10 @@ static int sg_attach(Scsi_Device * scsidp)
 
     for(k = 0; k < sg_template.dev_max; k++)
         if(! sg_dev_arr[k]) break;
-    if(k >= sg_template.dev_max) panic ("sg_dev_arr corrupt");
-
-    sdp = (Sg_device *)kmalloc(sizeof(Sg_device), GFP_ATOMIC);
+    if(k < sg_template.dev_max)
+    	sdp = (Sg_device *)kmalloc(sizeof(Sg_device), GFP_ATOMIC);
+    else
+    	sdp = NULL;
     if (NULL == sdp) {
 	scsidp->attached--;
 	write_unlock_irqrestore(&sg_dev_arr_lock, flags);
@@ -1318,12 +1327,16 @@ static int sg_start_req(Sg_request * srp)
     Sg_fd * sfp = srp->parentfp;
     sg_io_hdr_t * hp = &srp->header;
     int dxfer_len = (int)hp->dxfer_len;
+    int dxfer_dir = hp->dxfer_direction;
     Sg_scatter_hold * req_schp = &srp->data;
     Sg_scatter_hold * rsv_schp = &sfp->reserve;
 
     SCSI_LOG_TIMEOUT(4, printk("sg_start_req: dxfer_len=%d\n", dxfer_len));
-    if ((hp->flags & SG_FLAG_DIRECT_IO) && (dxfer_len > 0) &&
-	(hp->dxfer_direction != SG_DXFER_NONE) && (0 == hp->iovec_count) &&
+    if ((dxfer_len <= 0) || (dxfer_dir == SG_DXFER_NONE))
+    	return 0;
+    if ((hp->flags & SG_FLAG_DIRECT_IO) && 
+	(dxfer_dir != SG_DXFER_UNKNOWN) &&
+	(0 == hp->iovec_count) &&
 	(! sfp->parentdp->device->host->unchecked_isa_dma)) {
 	res = sg_build_dir(srp, sfp, dxfer_len);
 	if (res <= 0)   /* -ve -> error, 0 -> done, 1 -> try indirect */
@@ -1563,12 +1576,13 @@ static int sg_write_xfer(Sg_request * srp)
     int num_xfer = 0;
     int j, k, onum, usglen, ksglen, res, ok;
     int iovec_count = (int)hp->iovec_count;
+    int dxfer_dir = hp->dxfer_direction;
     unsigned char * p;
     unsigned char * up;
     int new_interface = ('\0' == hp->interface_id) ? 0 : 1;
 
-    if ((SG_DXFER_TO_DEV == hp->dxfer_direction) ||
-	(SG_DXFER_TO_FROM_DEV == hp->dxfer_direction)) {
+    if ((SG_DXFER_UNKNOWN == dxfer_dir) || (SG_DXFER_TO_DEV == dxfer_dir) ||
+	(SG_DXFER_TO_FROM_DEV == dxfer_dir)) {
 	num_xfer = (int)(new_interface ?  hp->dxfer_len : hp->flags);
 	if (schp->bufflen < num_xfer)
 	    num_xfer = schp->bufflen;
@@ -1711,12 +1725,13 @@ static int sg_read_xfer(Sg_request * srp)
     int num_xfer = 0;
     int j, k, onum, usglen, ksglen, res, ok;
     int iovec_count = (int)hp->iovec_count;
+    int dxfer_dir = hp->dxfer_direction;
     unsigned char * p;
     unsigned char * up;
     int new_interface = ('\0' == hp->interface_id) ? 0 : 1;
 
-    if ((SG_DXFER_FROM_DEV == hp->dxfer_direction) ||
-	(SG_DXFER_TO_FROM_DEV == hp->dxfer_direction)) {
+    if ((SG_DXFER_UNKNOWN == dxfer_dir) || (SG_DXFER_FROM_DEV == dxfer_dir) ||
+	(SG_DXFER_TO_FROM_DEV == dxfer_dir)) {
 	num_xfer =  hp->dxfer_len;
 	if (schp->bufflen < num_xfer)
 	    num_xfer = schp->bufflen;
@@ -2445,6 +2460,7 @@ static int sg_proc_init()
     return 0;
 }
 
+#ifdef MODULE
 static void sg_proc_cleanup()
 {
     int k;
@@ -2456,6 +2472,7 @@ static void sg_proc_cleanup()
 	remove_proc_entry(sg_proc_leaf_names[k], sg_proc_sgp);
     remove_proc_entry(sg_proc_sg_dirname, proc_scsi);
 }
+#endif
 
 static int sg_proc_dressz_read(char * buffer, char ** start, off_t offset,
 			       int size, int * eof, void * data)
@@ -2505,7 +2522,7 @@ static int sg_proc_debug_info(char * buffer, int * len, off_t * begin,
     }
     read_lock(&sg_dev_arr_lock);
     max_dev = sg_last_dev();
-    PRINT_PROC("dev_max=%d max_active_device=%d (origin 1)\n",
+    PRINT_PROC("dev_max(currently)=%d max_active_device=%d (origin 1)\n",
 	       sg_template.dev_max, max_dev);
     PRINT_PROC(" scsi_dma_free_sectors=%u sg_pool_secs_aval=%d "
 	       "def_reserved_size=%d\n",
@@ -2523,12 +2540,13 @@ static int sg_proc_debug_info(char * buffer, int * len, off_t * begin,
 	    }
 	    dev = MINOR(sdp->i_rdev);
 
-	    PRINT_PROC(" >>> device=%d(sg%d) ", dev, dev);
-	    PRINT_PROC("scsi%d chan=%d id=%d lun=%d   em=%d sg_tablesize=%d"
+	    if ((fp = sdp->headfp)) {
+		PRINT_PROC(" >>> device=%d(sg%d) ", dev, dev);
+		PRINT_PROC("scsi%d chan=%d id=%d lun=%d   em=%d sg_tablesize=%d"
 		       " excl=%d\n", scsidp->host->host_no, scsidp->channel,
 		       scsidp->id, scsidp->lun, scsidp->host->hostt->emulated,
 		       sdp->sg_tablesize, sdp->exclude);
-	    fp = sdp->headfp;
+	    }
 	    for (k = 1; fp; fp = fp->nextfp, ++k) {
 		PRINT_PROC("   FD(%d): timeout=%d bufflen=%d "
 			   "(res)sgat=%d low_dma=%d\n",
@@ -2543,13 +2561,13 @@ static int sg_proc_debug_info(char * buffer, int * len, off_t * begin,
 		while (srp) {
 		    hp = &srp->header;
 /* stop indenting so far ... */
-	PRINT_PROC(srp->res_used ? "     reserved_buff>> " :
+	PRINT_PROC(srp->res_used ? "     rb>> " :
 	    ((SG_INFO_DIRECT_IO_MASK & hp->info) ? "     dio>> " : "     "));
 	blen = srp->my_cmdp ? srp->my_cmdp->bufflen : srp->data.bufflen;
 	usg = srp->my_cmdp ? srp->my_cmdp->use_sg : srp->data.k_use_sg;
 	PRINT_PROC(srp->done ? "rcv: id=%d" : (srp->my_cmdp ? "act: id=%d" :
 		    "prior: id=%d"), srp->header.pack_id);
-	if (! srp->res_used) PRINT_PROC(" blen=%d", blen);
+	PRINT_PROC(" blen=%d", blen);
 	if (srp->done)
 	    PRINT_PROC(" dur=%d", sg_jif_to_ms(hp->duration));
 	else

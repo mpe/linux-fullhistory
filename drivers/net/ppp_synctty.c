@@ -29,10 +29,8 @@
  * PPP driver, written by Michael Callahan and Al Longyear, and
  * subsequently hacked by Paul Mackerras.
  *
- * ==FILEVERSION 991018==
+ * ==FILEVERSION 20000322==
  */
-
-/* $Id: ppp_synctty.c,v 1.3 1999/09/02 05:30:10 paulus Exp $ */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -43,9 +41,17 @@
 #include <linux/ppp_defs.h>
 #include <linux/if_ppp.h>
 #include <linux/ppp_channel.h>
+#include <linux/init.h>
 #include <asm/uaccess.h>
 
-#define PPP_VERSION	"2.4.0"
+#ifndef spin_trylock_bh
+#define spin_trylock_bh(lock)	({ int __r; local_bh_disable();	\
+				   __r = spin_trylock(lock);	\
+				   if (!__r) local_bh_enable();	\
+				   __r; })
+#endif
+
+#define PPP_VERSION	"2.4.1"
 
 /* Structure for storing local state. */
 struct syncppp {
@@ -53,29 +59,25 @@ struct syncppp {
 	unsigned int	flags;
 	unsigned int	rbits;
 	int		mru;
-	unsigned long	busy;
+	spinlock_t	xmit_lock;
+	spinlock_t	recv_lock;
+	unsigned long	xmit_flags;
 	u32		xaccm[8];
 	u32		raccm;
 	unsigned int	bytes_sent;
 	unsigned int	bytes_rcvd;
 
 	struct sk_buff	*tpkt;
-	struct sk_buff_head xq;
 	unsigned long	last_xmit;
 
 	struct sk_buff	*rpkt;
-	struct sk_buff_head rq;
-	wait_queue_head_t rwait;
 
 	struct ppp_channel chan;	/* interface to generic ppp layer */
-	int		connected;
 };
 
-/* Bit numbers in busy */
-#define XMIT_BUSY	0
-#define RECV_BUSY	1
-#define XMIT_WAKEUP	2
-#define XMIT_FULL	3
+/* Bit numbers in xmit_flags */
+#define XMIT_WAKEUP	0
+#define XMIT_FULL	1
 
 /* Bits in rbits */
 #define SC_RCV_BITS	(SC_RCV_B7_1|SC_RCV_B7_0|SC_RCV_ODDP|SC_RCV_EVNP)
@@ -85,15 +87,18 @@ struct syncppp {
 /*
  * Prototypes.
  */
-static struct sk_buff* ppp_sync_txdequeue(struct syncppp *ap);
+static struct sk_buff* ppp_sync_txmunge(struct syncppp *ap, struct sk_buff *);
 static int ppp_sync_send(struct ppp_channel *chan, struct sk_buff *skb);
+static int ppp_sync_ioctl(struct ppp_channel *chan, unsigned int cmd,
+			  unsigned long arg);
 static int ppp_sync_push(struct syncppp *ap);
 static void ppp_sync_flush_output(struct syncppp *ap);
 static void ppp_sync_input(struct syncppp *ap, const unsigned char *buf,
-			    char *flags, int count);
+			   char *flags, int count);
 
 struct ppp_channel_ops sync_ops = {
-	ppp_sync_send
+	ppp_sync_send,
+	ppp_sync_ioctl
 };
 
 /*
@@ -157,50 +162,6 @@ ppp_print_buffer (const char *name, const __u8 *buf, int count)
 	}
 }
 
-/*
- * Routines for locking and unlocking the transmit and receive paths.
- */
-static inline void
-lock_path(struct syncppp *ap, int bit)
-{
-	do {
-		while (test_bit(bit, &ap->busy))
-		       mb();
-	} while (test_and_set_bit(bit, &ap->busy));
-	mb();
-}
-
-static inline int
-trylock_path(struct syncppp *ap, int bit)
-{
-	if (test_and_set_bit(bit, &ap->busy))
-		return 0;
-	mb();
-	return 1;
-}
-
-static inline void
-unlock_path(struct syncppp *ap, int bit)
-{
-	mb();
-	clear_bit(bit, &ap->busy);
-}
-
-#define lock_xmit_path(ap)	lock_path(ap, XMIT_BUSY)
-#define trylock_xmit_path(ap)	trylock_path(ap, XMIT_BUSY)
-#define unlock_xmit_path(ap)	unlock_path(ap, XMIT_BUSY)
-#define lock_recv_path(ap)	lock_path(ap, RECV_BUSY)
-#define trylock_recv_path(ap)	trylock_path(ap, RECV_BUSY)
-#define unlock_recv_path(ap)	unlock_path(ap, RECV_BUSY)
-
-static inline void
-flush_skb_queue(struct sk_buff_head *q)
-{
-	struct sk_buff *skb;
-
-	while ((skb = skb_dequeue(q)) != 0)
-		kfree_skb(skb);
-}
 
 /*
  * Routines implementing the synchronous PPP line discipline.
@@ -213,26 +174,34 @@ static int
 ppp_sync_open(struct tty_struct *tty)
 {
 	struct syncppp *ap;
+	int err;
 
 	ap = kmalloc(sizeof(*ap), GFP_KERNEL);
 	if (ap == 0)
 		return -ENOMEM;
 
-	MOD_INC_USE_COUNT;
-
 	/* initialize the syncppp structure */
 	memset(ap, 0, sizeof(*ap));
 	ap->tty = tty;
 	ap->mru = PPP_MRU;
+	spin_lock_init(&ap->xmit_lock);
+	spin_lock_init(&ap->recv_lock);
 	ap->xaccm[0] = ~0U;
 	ap->xaccm[3] = 0x60000000U;
 	ap->raccm = ~0U;
-	skb_queue_head_init(&ap->xq);
-	skb_queue_head_init(&ap->rq);
-	init_waitqueue_head(&ap->rwait);
+
+	ap->chan.private = ap;
+	ap->chan.ops = &sync_ops;
+	ap->chan.mtu = PPP_MRU;
+	err = ppp_register_channel(&ap->chan);
+	if (err) {
+		kfree(ap);
+		return err;
+	}
 
 	tty->disc_data = ap;
 
+	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -248,122 +217,197 @@ ppp_sync_close(struct tty_struct *tty)
 	if (ap == 0)
 		return;
 	tty->disc_data = 0;
-	lock_xmit_path(ap);
-	lock_recv_path(ap);
+	ppp_unregister_channel(&ap->chan);
 	if (ap->rpkt != 0)
 		kfree_skb(ap->rpkt);
-	flush_skb_queue(&ap->rq);
 	if (ap->tpkt != 0)
 		kfree_skb(ap->tpkt);
-	flush_skb_queue(&ap->xq);
-	if (ap->connected)
-		ppp_unregister_channel(&ap->chan);
 	kfree(ap);
 	MOD_DEC_USE_COUNT;
 }
 
 /*
- * Read a PPP frame.  pppd can use this to negotiate over the
- * channel before it joins it to a bundle.
+ * Read a PPP frame, for compatibility until pppd is updated.
  */
 static ssize_t
 ppp_sync_read(struct tty_struct *tty, struct file *file,
 	       unsigned char *buf, size_t count)
 {
 	struct syncppp *ap = tty->disc_data;
-	DECLARE_WAITQUEUE(wait, current);
-	ssize_t ret;
-	struct sk_buff *skb = 0;
 
-	ret = -ENXIO;
 	if (ap == 0)
-		goto out;		/* should never happen */
-
-	add_wait_queue(&ap->rwait, &wait);
-	current->state = TASK_INTERRUPTIBLE;
-	for (;;) {
-		ret = -EAGAIN;
-		skb = skb_dequeue(&ap->rq);
-		if (skb)
-			break;
-		if (file->f_flags & O_NONBLOCK)
-			break;
-		ret = -ERESTARTSYS;
-		if (signal_pending(current))
-			break;
-		schedule();
-	}
-	current->state = TASK_RUNNING;
-	remove_wait_queue(&ap->rwait, &wait);
-
-	if (skb == 0)
-		goto out;
-
-	ret = -EOVERFLOW;
-	if (skb->len > count)
-		goto outf;
-	ret = -EFAULT;
-	if (copy_to_user(buf, skb->data, skb->len))
-		goto outf;
-	ret = skb->len;
-
- outf:
-	kfree_skb(skb);
- out:
-	return ret;
+		return -ENXIO;
+	return ppp_channel_read(&ap->chan, file, buf, count);
 }
 
 /*
- * Write a ppp frame.  pppd can use this to send frames over
- * this particular channel.
+ * Write a ppp frame, for compatibility until pppd is updated.
  */
 static ssize_t
 ppp_sync_write(struct tty_struct *tty, struct file *file,
 		const unsigned char *buf, size_t count)
 {
 	struct syncppp *ap = tty->disc_data;
-	struct sk_buff *skb;
-	ssize_t ret;
 
-	ret = -ENXIO;
 	if (ap == 0)
-		goto out;	/* should never happen */
-
-	ret = -ENOMEM;
-	skb = alloc_skb(count + 2, GFP_KERNEL);
-	if (skb == 0)
-		goto out;
-	skb_reserve(skb, 2);
-	ret = -EFAULT;
-	if (copy_from_user(skb_put(skb, count), buf, count)) {
-		kfree_skb(skb);
-		goto out;
-	}
-
-	skb_queue_tail(&ap->xq, skb);
-	ppp_sync_push(ap);
-
-	ret = count;
-
- out:
-	return ret;
+		return -ENXIO;
+	return ppp_channel_write(&ap->chan, buf, count);
 }
 
 static int
-ppp_sync_ioctl(struct tty_struct *tty, struct file *file,
-		unsigned int cmd, unsigned long arg)
+ppp_synctty_ioctl(struct tty_struct *tty, struct file *file,
+		  unsigned int cmd, unsigned long arg)
 {
 	struct syncppp *ap = tty->disc_data;
 	int err, val;
-	u32 accm[8];
-	struct sk_buff *skb;
 
-	err = -ENXIO;
+	err = -EFAULT;
+	switch (cmd) {
+	case PPPIOCGUNIT:
+		err = -ENXIO;
+		if (ap == 0)
+			break;
+		err = -EFAULT;
+		if (put_user(ppp_channel_index(&ap->chan), (int *) arg))
+			break;
+		err = 0;
+		break;
+
+	case TCGETS:
+	case TCGETA:
+		err = n_tty_ioctl(tty, file, cmd, arg);
+		break;
+
+	case TCFLSH:
+		/* flush our buffers and the serial port's buffer */
+		if (arg == TCIOFLUSH || arg == TCOFLUSH)
+			ppp_sync_flush_output(ap);
+		err = n_tty_ioctl(tty, file, cmd, arg);
+		break;
+
+	case FIONREAD:
+		val = 0;
+		if (put_user(val, (int *) arg))
+			break;
+		err = 0;
+		break;
+
+	/*
+	 * Compatibility calls until pppd is updated.
+	 */
+	case PPPIOCGFLAGS:
+	case PPPIOCSFLAGS:
+	case PPPIOCGASYNCMAP:
+	case PPPIOCSASYNCMAP:
+	case PPPIOCGRASYNCMAP:
+	case PPPIOCSRASYNCMAP:
+	case PPPIOCGXASYNCMAP:
+	case PPPIOCSXASYNCMAP:
+	case PPPIOCGMRU:
+	case PPPIOCSMRU:
+		err = -EPERM;
+		if (!capable(CAP_NET_ADMIN))
+			break;
+		err = ppp_sync_ioctl(&ap->chan, cmd, arg);
+		break;
+
+	case PPPIOCATTACH:
+	case PPPIOCDETACH:
+		err = ppp_channel_ioctl(&ap->chan, cmd, arg);
+		break;
+
+	default:
+		err = -ENOIOCTLCMD;
+	}
+
+	return err;
+}
+
+static unsigned int
+ppp_sync_poll(struct tty_struct *tty, struct file *file, poll_table *wait)
+{
+	struct syncppp *ap = tty->disc_data;
+	unsigned int mask;
+
+	mask = POLLOUT | POLLWRNORM;
+	/* compatibility for old pppd */
+	if (ap != 0)
+		mask |= ppp_channel_poll(&ap->chan, file, wait);
+	if (test_bit(TTY_OTHER_CLOSED, &tty->flags) || tty_hung_up_p(file))
+		mask |= POLLHUP;
+	return mask;
+}
+
+static int
+ppp_sync_room(struct tty_struct *tty)
+{
+	return 65535;
+}
+
+static void
+ppp_sync_receive(struct tty_struct *tty, const unsigned char *buf,
+		  char *flags, int count)
+{
+	struct syncppp *ap = tty->disc_data;
+
 	if (ap == 0)
-		goto out;	/* should never happen */
-	err = -EPERM;
-	if (!capable(CAP_NET_ADMIN))
-		goto out;
+		return;
+	spin_lock_bh(&ap->recv_lock);
+	ppp_sync_input(ap, buf, flags, count);
+	spin_unlock_bh(&ap->recv_lock);
+	if (test_and_clear_bit(TTY_THROTTLED, &tty->flags)
+	    && tty->driver.unthrottle)
+		tty->driver.unthrottle(tty);
+}
+
+static void
+ppp_sync_wakeup(struct tty_struct *tty)
+{
+	struct syncppp *ap = tty->disc_data;
+
+	clear_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
+	if (ap == 0)
+		return;
+	if (ppp_sync_push(ap))
+		ppp_output_wakeup(&ap->chan);
+}
+
+
+static struct tty_ldisc ppp_sync_ldisc = {
+	magic:	TTY_LDISC_MAGIC,
+	name:	"pppsync",
+	open:	ppp_sync_open,
+	close:	ppp_sync_close,
+	read:	ppp_sync_read,
+	write:	ppp_sync_write,
+	ioctl:	ppp_synctty_ioctl,
+	poll:	ppp_sync_poll,
+	receive_room: ppp_sync_room,
+	receive_buf: ppp_sync_receive,
+	write_wakeup: ppp_sync_wakeup,
+};
+
+int
+ppp_sync_init(void)
+{
+	int err;
+
+	err = tty_register_ldisc(N_SYNC_PPP, &ppp_sync_ldisc);
+	if (err != 0)
+		printk(KERN_ERR "PPP_sync: error %d registering line disc.\n",
+		       err);
+	return err;
+}
+
+/*
+ * The following routines provide the PPP channel interface.
+ */
+static int
+ppp_sync_ioctl(struct ppp_channel *chan, unsigned int cmd, unsigned long arg)
+{
+	struct syncppp *ap = chan->private;
+	int err, val;
+	u32 accm[8];
 
 	err = -EFAULT;
 	switch (cmd) {
@@ -377,7 +421,9 @@ ppp_sync_ioctl(struct tty_struct *tty, struct file *file,
 		if (get_user(val, (int *) arg))
 			break;
 		ap->flags = val & ~SC_RCV_BITS;
+		spin_lock_bh(&ap->recv_lock);
 		ap->rbits = val & SC_RCV_BITS;
+		spin_unlock_bh(&ap->recv_lock);
 		err = 0;
 		break;
 
@@ -431,133 +477,9 @@ ppp_sync_ioctl(struct tty_struct *tty, struct file *file,
 		err = 0;
 		break;
 
-	case PPPIOCATTACH:
-		if (get_user(val, (int *) arg))
-			break;
-		err = -EALREADY;
-		if (ap->connected)
-			break;
-		ap->chan.private = ap;
-		ap->chan.ops = &sync_ops;
-		err = ppp_register_channel(&ap->chan);
-		if (err != 0)
-			break;
-		ap->connected = 1;
-		break;
-	case PPPIOCDETACH:
-		err = -ENXIO;
-		if (!ap->connected)
-			break;
-		ppp_unregister_channel(&ap->chan);
-		ap->connected = 0;
-		err = 0;
-		break;
-
-	case TCGETS:
-	case TCGETA:
-		err = n_tty_ioctl(tty, file, cmd, arg);
-		break;
-
-	case TCFLSH:
-		/* flush our buffers and the serial port's buffer */
-		if (arg == TCIFLUSH || arg == TCIOFLUSH)
-			flush_skb_queue(&ap->rq);
-		if (arg == TCIOFLUSH || arg == TCOFLUSH)
-			ppp_sync_flush_output(ap);
-		err = n_tty_ioctl(tty, file, cmd, arg);
-		break;
-
-	case FIONREAD:
-		val = 0;
-		if ((skb = skb_peek(&ap->rq)) != 0)
-			val = skb->len;
-		if (put_user(val, (int *) arg))
-			break;
-		err = 0;
-		break;
-
 	default:
-		err = -ENOIOCTLCMD;
+		err = -ENOTTY;
 	}
- out:
-	return err;
-}
-
-static unsigned int
-ppp_sync_poll(struct tty_struct *tty, struct file *file, poll_table *wait)
-{
-	struct syncppp *ap = tty->disc_data;
-	unsigned int mask;
-
-	if (ap == 0)
-		return 0;	/* should never happen */
-	poll_wait(file, &ap->rwait, wait);
-	mask = POLLOUT | POLLWRNORM;
-	if (skb_peek(&ap->rq))
-		mask |= POLLIN | POLLRDNORM;
-	if (test_bit(TTY_OTHER_CLOSED, &tty->flags) || tty_hung_up_p(file))
-		mask |= POLLHUP;
-	return mask;
-}
-
-static int
-ppp_sync_room(struct tty_struct *tty)
-{
-	return 65535;
-}
-
-static void
-ppp_sync_receive(struct tty_struct *tty, const unsigned char *buf,
-		  char *flags, int count)
-{
-	struct syncppp *ap = tty->disc_data;
-
-	if (ap == 0)
-		return;
-	trylock_recv_path(ap);
-	ppp_sync_input(ap, buf, flags, count);
-	unlock_recv_path(ap);
-	if (test_and_clear_bit(TTY_THROTTLED, &tty->flags)
-	    && tty->driver.unthrottle)
-		tty->driver.unthrottle(tty);
-}
-
-static void
-ppp_sync_wakeup(struct tty_struct *tty)
-{
-	struct syncppp *ap = tty->disc_data;
-
-	clear_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
-	if (ap == 0)
-		return;
-	if (ppp_sync_push(ap) && ap->connected)
-		ppp_output_wakeup(&ap->chan);
-}
-
-
-static struct tty_ldisc ppp_sync_ldisc = {
-	magic:	TTY_LDISC_MAGIC,
-	name:	"pppsync",
-	open:	ppp_sync_open,
-	close:	ppp_sync_close,
-	read:	ppp_sync_read,
-	write:	ppp_sync_write,
-	ioctl:	ppp_sync_ioctl,
-	poll:	ppp_sync_poll,
-	receive_room: ppp_sync_room,
-	receive_buf: ppp_sync_receive,
-	write_wakeup: ppp_sync_wakeup,
-};
-
-int
-ppp_sync_init(void)
-{
-	int err;
-
-	err = tty_register_ldisc(N_SYNC_PPP, &ppp_sync_ldisc);
-	if (err != 0)
-		printk(KERN_ERR "PPP_sync: error %d registering line disc.\n",
-		       err);
 	return err;
 }
 
@@ -566,49 +488,44 @@ ppp_sync_init(void)
  */
 
 struct sk_buff*
-ppp_sync_txdequeue(struct syncppp *ap)
+ppp_sync_txmunge(struct syncppp *ap, struct sk_buff *skb)
 {
 	int proto;
 	unsigned char *data;
 	int islcp;
-	struct sk_buff *skb;
 
-	while ((skb = skb_dequeue(&ap->xq)) != NULL) {
+	data  = skb->data;
+	proto = (data[0] << 8) + data[1];
 
-		data  = skb->data;
-		proto = (data[0] << 8) + data[1];
+	/* LCP packets with codes between 1 (configure-request)
+	 * and 7 (code-reject) must be sent as though no options
+	 * have been negotiated.
+	 */
+	islcp = proto == PPP_LCP && 1 <= data[2] && data[2] <= 7;
 
-		/* LCP packets with codes between 1 (configure-request)
-		 * and 7 (code-reject) must be sent as though no options
-		 * have been negotiated.
-		 */
-		islcp = proto == PPP_LCP && 1 <= data[2] && data[2] <= 7;
+	/* compress protocol field if option enabled */
+	if (data[0] == 0 && (ap->flags & SC_COMP_PROT) && !islcp)
+		skb_pull(skb,1);
 
-		/* compress protocol field if option enabled */
-                if (data[0] == 0 && (ap->flags & SC_COMP_PROT) && !islcp)
-			skb_pull(skb,1);
-
-		/* prepend address/control fields if necessary */
-		if ((ap->flags & SC_COMP_AC) == 0 || islcp) {
-			if (skb_headroom(skb) < 2) {
-				struct sk_buff *npkt = dev_alloc_skb(skb->len + 2);
-				if (npkt == NULL) {
-					kfree_skb(skb);
-					continue;
-				}
-				skb_reserve(npkt,2);
-				memcpy(skb_put(npkt,skb->len), skb->data, skb->len);
+	/* prepend address/control fields if necessary */
+	if ((ap->flags & SC_COMP_AC) == 0 || islcp) {
+		if (skb_headroom(skb) < 2) {
+			struct sk_buff *npkt = dev_alloc_skb(skb->len + 2);
+			if (npkt == NULL) {
 				kfree_skb(skb);
-				skb = npkt;
+				return NULL;
 			}
-			skb_push(skb,2);
-			skb->data[0] = PPP_ALLSTATIONS;
-			skb->data[1] = PPP_UI;
+			skb_reserve(npkt,2);
+			memcpy(skb_put(npkt,skb->len), skb->data, skb->len);
+			kfree_skb(skb);
+			skb = npkt;
 		}
-
-		ap->last_xmit = jiffies;
-		break;
+		skb_push(skb,2);
+		skb->data[0] = PPP_ALLSTATIONS;
+		skb->data[1] = PPP_UI;
 	}
+
+	ap->last_xmit = jiffies;
 
 	if (skb && ap->flags & SC_LOG_OUTPKT)
 		ppp_print_buffer ("send buffer", skb->data, skb->len);
@@ -633,9 +550,13 @@ ppp_sync_send(struct ppp_channel *chan, struct sk_buff *skb)
 
 	ppp_sync_push(ap);
 
-	if (test_and_set_bit(XMIT_FULL, &ap->busy))
+	if (test_and_set_bit(XMIT_FULL, &ap->xmit_flags))
 		return 0;	/* already full */
-	skb_queue_head(&ap->xq,skb);
+	skb = ppp_sync_txmunge(ap, skb);
+	if (skb != NULL)
+		ap->tpkt = skb;
+	else
+		clear_bit(XMIT_FULL, &ap->xmit_flags);
 
 	ppp_sync_push(ap);
 	return 1;
@@ -651,20 +572,13 @@ ppp_sync_push(struct syncppp *ap)
 	struct tty_struct *tty = ap->tty;
 	int tty_stuffed = 0;
 
-	if (!trylock_xmit_path(ap)) {
-		set_bit(XMIT_WAKEUP, &ap->busy);
+	set_bit(XMIT_WAKEUP, &ap->xmit_flags);
+	if (!spin_trylock_bh(&ap->xmit_lock))
 		return 0;
-	}
 	for (;;) {
-		if (test_and_clear_bit(XMIT_WAKEUP, &ap->busy))
+		if (test_and_clear_bit(XMIT_WAKEUP, &ap->xmit_flags))
 			tty_stuffed = 0;
-		if (ap->tpkt == 0) {
-			if ((ap->tpkt = ppp_sync_txdequeue(ap)) == 0) {
-				clear_bit(XMIT_FULL, &ap->busy);
-			        done = 1;
-			}
-		}
-		if (!tty_stuffed && ap->tpkt != NULL) {
+		if (!tty_stuffed && ap->tpkt != 0) {
 			set_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
 			sent = tty->driver.write(tty, 0, ap->tpkt->data, ap->tpkt->len);
 			if (sent < 0)
@@ -674,15 +588,17 @@ ppp_sync_push(struct syncppp *ap)
 			} else {
 				kfree_skb(ap->tpkt);
 				ap->tpkt = 0;
+				clear_bit(XMIT_FULL, &ap->xmit_flags);
+				done = 1;
 			}
 			continue;
 		}
 		/* haven't made any progress */
-		unlock_xmit_path(ap);
-		if (!(test_bit(XMIT_WAKEUP, &ap->busy)
+		spin_unlock_bh(&ap->xmit_lock);
+		if (!(test_bit(XMIT_WAKEUP, &ap->xmit_flags)
 		      || (!tty_stuffed && ap->tpkt != 0)))
 			break;
-		if (!trylock_xmit_path(ap))
+		if (!spin_trylock_bh(&ap->xmit_lock))
 			break;
 	}
 	return done;
@@ -691,10 +607,10 @@ flush:
 	if (ap->tpkt != 0) {
 		kfree_skb(ap->tpkt);
 		ap->tpkt = 0;
-		clear_bit(XMIT_FULL, &ap->busy);
+		clear_bit(XMIT_FULL, &ap->xmit_flags);
 		done = 1;
 	}
-	unlock_xmit_path(ap);
+	spin_unlock_bh(&ap->xmit_lock);
 	return done;
 }
 
@@ -707,16 +623,15 @@ ppp_sync_flush_output(struct syncppp *ap)
 {
 	int done = 0;
 
-	flush_skb_queue(&ap->xq);
-	lock_xmit_path(ap);
+	spin_lock_bh(&ap->xmit_lock);
 	if (ap->tpkt != NULL) {
 		kfree_skb(ap->tpkt);
 		ap->tpkt = 0;
-		clear_bit(XMIT_FULL, &ap->busy);
+		clear_bit(XMIT_FULL, &ap->xmit_flags);
 		done = 1;
 	}
-	unlock_xmit_path(ap);
-	if (done && ap->connected)
+	spin_unlock_bh(&ap->xmit_lock);
+	if (done)
 		ppp_output_wakeup(&ap->chan);
 }
 
@@ -750,30 +665,13 @@ process_input_packet(struct syncppp *ap)
 	} else if (skb->len < 2)
 		goto err;
 
-	/* pass to generic layer or queue it */
-	if (ap->connected) {
-		ppp_input(&ap->chan, skb);
-	} else {
-		skb_queue_tail(&ap->rq, skb);
-		/* drop old frames if queue too long */
-		while (ap->rq.qlen > PPPSYNC_MAX_RQLEN
-		       && (skb = skb_dequeue(&ap->rq)) != 0)
-			kfree(skb);
-		wake_up_interruptible(&ap->rwait);
-	}
+	/* pass to generic layer */
+	ppp_input(&ap->chan, skb);
 	return;
 
  err:
 	kfree_skb(skb);
-	if (ap->connected)
-		ppp_input_error(&ap->chan, code);
-}
-
-static inline void
-input_error(struct syncppp *ap, int code)
-{
-	if (ap->connected)
-		ppp_input_error(&ap->chan, code);
+	ppp_input_error(&ap->chan, code);
 }
 
 /* called when the tty driver has data for us. 
@@ -794,7 +692,7 @@ ppp_sync_input(struct syncppp *ap, const unsigned char *buf,
 
 	/* if flag set, then error, ignore frame */
 	if (flags != 0 && *flags) {
-		input_error(ap, *flags);
+		ppp_input_error(&ap->chan, *flags);
 		return;
 	}
 
@@ -805,7 +703,7 @@ ppp_sync_input(struct syncppp *ap, const unsigned char *buf,
 	if ((skb = ap->rpkt) == 0) {
 		if ((skb = dev_alloc_skb(ap->mru + PPP_HDRLEN + 2)) == 0) {
 			printk(KERN_ERR "PPPsync: no memory (input pkt)\n");
-			input_error(ap, 0);
+			ppp_input_error(&ap->chan, 0);
 			return;
 		}
 		/* Try to get the payload 4-byte aligned */
@@ -815,7 +713,7 @@ ppp_sync_input(struct syncppp *ap, const unsigned char *buf,
 	}
 	if (count > skb_tailroom(skb)) {
 		/* packet overflowed MRU */
-		input_error(ap, 1);
+		ppp_input_error(&ap->chan, 1);
 	} else {
 		sp = skb_put(skb, count);
 		memcpy(sp, buf, count);
@@ -823,17 +721,12 @@ ppp_sync_input(struct syncppp *ap, const unsigned char *buf,
 	}
 }
 
-#ifdef MODULE
-int
-init_module(void)
-{
-	return ppp_sync_init();
-}
-
-void
-cleanup_module(void)
+void __exit
+ppp_sync_cleanup(void)
 {
 	if (tty_register_ldisc(N_SYNC_PPP, NULL) != 0)
 		printk(KERN_ERR "failed to unregister Sync PPP line discipline\n");
 }
-#endif /* MODULE */
+
+module_init(ppp_sync_init);
+module_exit(ppp_sync_cleanup);

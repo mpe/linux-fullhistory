@@ -4,6 +4,8 @@ mainmenu_option next_comment
 comment 'General setup'
 
 define_bool CONFIG_IA64 y
+define_bool CONFIG_ISA n
+define_bool CONFIG_SBUS n
 
 choice 'IA-64 system type'					\
 	"Generic		CONFIG_IA64_GENERIC		\
@@ -50,7 +52,12 @@ tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 bool 'PCI support' CONFIG_PCI
 source drivers/pci/Config.in
 
-source drivers/pcmcia/Config.in
+bool 'Support for hot-pluggable devices' CONFIG_HOTPLUG
+if [ "$CONFIG_HOTPLUG" = "y" ]; then
+   source drivers/pcmcia/Config.in
+else
+   define_bool CONFIG_PCMCIA n
+fi
 
 mainmenu_option next_comment
  comment 'Code maturity level options'
@@ -134,7 +141,6 @@ fi
 endmenu
 
 source drivers/char/Config.in
-source drivers/usb/Config.in
 #source drivers/misc/Config.in
 
 source fs/Config.in
@@ -160,6 +166,8 @@ if [ "$CONFIG_SOUND" != "n" ]; then
   source drivers/sound/Config.in
 fi
 endmenu
+
+source drivers/usb/Config.in
 
 mainmenu_option next_comment
 comment 'Kernel hacking'

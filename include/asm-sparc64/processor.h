@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.61 2000/01/21 11:39:22 jj Exp $
+/* $Id: processor.h,v 1.62 2000/03/26 09:13:53 davem Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -51,15 +51,16 @@ struct thread_struct {
 	unsigned long ksp __attribute__ ((aligned(16)));
 	unsigned char wstate, cwp, flags;
 	mm_segment_t current_ds;
-	unsigned char w_saved, fpdepth;
+	unsigned char w_saved, fpdepth, fault_code, __pad1;
+	unsigned long fault_address;
 	unsigned char fpsaved[7];
-	unsigned char __pad1[3];
-	struct pt_regs *kregs;
+	unsigned char __pad2;
 	
 	/* D$ line 2, 3, 4 */
+	struct pt_regs *kregs;
 	unsigned long *utraps;
 	unsigned char gsr[7];
-	unsigned char __pad2;
+	unsigned char __pad3;
 	unsigned long xfsr[7];
 
 	struct reg_window reg_window[NSWINS];
@@ -73,11 +74,16 @@ struct thread_struct {
 
 #endif /* !(__ASSEMBLY__) */
 
-#define SPARC_FLAG_UNALIGNED    0x01    /* is allowed to do unaligned accesses */
-#define SPARC_FLAG_NEWSIGNALS   0x02    /* task wants new-style signals */
-#define SPARC_FLAG_32BIT        0x04    /* task is older 32-bit binary */
-#define SPARC_FLAG_NEWCHILD     0x08    /* task is just-spawned child process */
-#define SPARC_FLAG_PERFCTR	0x10    /* task has performance counters active */
+#define SPARC_FLAG_UNALIGNED    0x01    /* is allowed to do unaligned accesses	*/
+#define SPARC_FLAG_NEWSIGNALS   0x02    /* task wants new-style signals		*/
+#define SPARC_FLAG_32BIT        0x04    /* task is older 32-bit binary		*/
+#define SPARC_FLAG_NEWCHILD     0x08    /* task is just-spawned child process	*/
+#define SPARC_FLAG_PERFCTR	0x10    /* task has performance counters active	*/
+
+#define FAULT_CODE_WRITE	0x01	/* Write access, implies D-TLB		*/
+#define FAULT_CODE_DTLB		0x02	/* Miss happened in D-TLB		*/
+#define FAULT_CODE_ITLB		0x04	/* Miss happened in I-TLB		*/
+#define FAULT_CODE_WINFIXUP	0x08	/* Miss happened during spill/fill	*/
 
 #define INIT_MMAP { &init_mm, 0xfffff80000000000, 0xfffff80001000000, \
 		    NULL, PAGE_SHARED , VM_READ | VM_WRITE | VM_EXEC, 1, NULL, NULL }
@@ -85,10 +91,12 @@ struct thread_struct {
 #define INIT_THREAD  {					\
 /* ksp, wstate, cwp, flags, current_ds, */ 		\
    0,   0,      0,   0,     KERNEL_DS,			\
-/* w_saved, fpdepth, fpsaved, pad1,  kregs, */		\
-   0,       0,       { 0 },   { 0 }, 0,			\
-/* utraps, gsr,   pad2, xfsr, */			\
-   0,	   { 0 }, 0,    { 0 },				\
+/* w_saved, fpdepth, fault_code, __pad1, */		\
+   0,       0,       0,          0,			\
+/* fault_address, fpsaved, __pad2, kregs, */		\
+   0,             { 0 },   0,      0,			\
+/* utraps, gsr,   __pad3, xfsr, */			\
+   0,	   { 0 }, 0,      { 0 },			\
 /* reg_window */					\
    { { { 0, }, { 0, } }, }, 				\
 /* rwbuf_stkptrs */					\

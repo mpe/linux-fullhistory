@@ -15,10 +15,12 @@ IP_NF_CONNTRACK_OBJ:=ip_conntrack_core.o ip_conntrack_proto_generic.o ip_conntra
 
 IP_NF_NAT_OBJ:=ip_nat_core.o ip_nat_proto_unknown.o ip_nat_proto_tcp.o ip_nat_proto_udp.o ip_nat_proto_icmp.o
 
+# All the parts of conntrack and NAT required for compatibility layer.
+IP_NF_COMPAT_LAYER:=ip_fw_compat.o ip_fw_compat_redir.o ip_fw_compat_masq.o $(IP_NF_CONNTRACK_OBJ) $(IP_NF_NAT_OBJ)
+
 # Link order matters here.
 ifeq ($(CONFIG_IP_NF_CONNTRACK),y)
-OX_OBJS += ip_conntrack_standalone.o
-O_OBJS += $(IP_NF_CONNTRACK_OBJ)
+O_OBJS += ip_conntrack_standalone.o $(IP_NF_CONNTRACK_OBJ)
 else
   ifeq ($(CONFIG_IP_NF_CONNTRACK),m)
   MI_OBJS += $(IP_NF_CONNTRACK_OBJ)
@@ -27,16 +29,8 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_IP_NF_QUEUE),y)
-O_OBJS += ip_queue.o
-else
-  ifeq ($(CONFIG_IP_NF_QUEUE),m)
-  M_OBJS += ip_queue.o
-  endif
-endif
-
 ifeq ($(CONFIG_IP_NF_FTP),y)
-OX_OBJS += ip_conntrack_ftp.o
+O_OBJS += ip_conntrack_ftp.o
 else
   ifeq ($(CONFIG_IP_NF_FTP),m)
   MX_OBJS += ip_conntrack_ftp.o
@@ -47,7 +41,7 @@ ifeq ($(CONFIG_IP_NF_IPTABLES),y)
 O_OBJS += ip_tables.o
 else
   ifeq ($(CONFIG_IP_NF_IPTABLES),m)
-  M_OBJS += ip_tables.o
+  MX_OBJS += ip_tables.o
   endif
 endif
 
@@ -115,17 +109,8 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_IP_NF_FILTER),y)
-O_OBJS += iptable_filter.o
-else
-  ifeq ($(CONFIG_IP_NF_FILTER),m)
-  M_OBJS += iptable_filter.o
-  endif
-endif
-
 ifeq ($(CONFIG_IP_NF_NAT),y)
-OX_OBJS += ip_nat_standalone.o
-O_OBJS += ip_nat_rule.o $(IP_NF_NAT_OBJ) 
+O_OBJS += ip_nat_standalone.o ip_nat_rule.o $(IP_NF_NAT_OBJ) 
   ifeq ($(CONFIG_IP_NF_FTP),y)
   O_OBJS += ip_nat_ftp.o
   endif
@@ -137,6 +122,14 @@ else
     ifeq ($(CONFIG_IP_NF_FTP),m)
     M_OBJS += ip_nat_ftp.o
     endif
+  endif
+endif
+
+ifeq ($(CONFIG_IP_NF_FILTER),y)
+O_OBJS += iptable_filter.o
+else
+  ifeq ($(CONFIG_IP_NF_FILTER),m)
+  M_OBJS += iptable_filter.o
   endif
 endif
 
@@ -205,7 +198,7 @@ else
 endif
 
 ifeq ($(CONFIG_IP_NF_COMPAT_IPCHAINS),y)
-O_OBJS += ipchains.o
+O_OBJS += ipchains_core.o $(IP_NF_COMPAT_LAYER)
 else
   ifeq ($(CONFIG_IP_NF_COMPAT_IPCHAINS),m)
   M_OBJS += ipchains.o
@@ -213,10 +206,18 @@ else
 endif
 
 ifeq ($(CONFIG_IP_NF_COMPAT_IPFWADM),y)
-O_OBJS += ipfwadm.o
+O_OBJS += ipfwadm_core.o $(IP_NF_COMPAT_LAYER)
 else
   ifeq ($(CONFIG_IP_NF_COMPAT_IPFWADM),m)
   M_OBJS += ipfwadm.o
+  endif
+endif
+
+ifeq ($(CONFIG_IP_NF_QUEUE),y)
+O_OBJS += ip_queue.o
+else
+  ifeq ($(CONFIG_IP_NF_QUEUE),m)
+  M_OBJS += ip_queue.o
   endif
 endif
 
@@ -228,11 +229,8 @@ ip_conntrack.o: ip_conntrack_standalone.o $(IP_NF_CONNTRACK_OBJ)
 iptable_nat.o: ip_nat_standalone.o ip_nat_rule.o $(IP_NF_NAT_OBJ) 
 	$(LD) -r -o $@ ip_nat_standalone.o ip_nat_rule.o $(IP_NF_NAT_OBJ)
 
-# All the parts of conntrack and NAT required for compatibility layer.
-IP_NF_COMPAT_LAYER:=ip_fw_compat.o ip_fw_compat_redir.o ip_fw_compat_masq.o $(IP_NF_CONNTRACK_OBJ) $(IP_NF_NAT_OBJ)
-
 ipfwadm.o: ipfwadm_core.o $(IP_NF_COMPAT_LAYER)
 	$(LD) -r -o $@ ipfwadm_core.o $(IP_NF_COMPAT_LAYER)
 
-ipchains.o: ipchains_core.o $(IP_NF_COMPAT_LAYER)
+ipchains.o: ipchains_core.o $(IP_NF_COMPAT_LAYER) 
 	$(LD) -r -o $@ ipchains_core.o $(IP_NF_COMPAT_LAYER)

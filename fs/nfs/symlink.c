@@ -14,8 +14,9 @@
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/sunrpc/clnt.h>
-#include <linux/nfs_fs.h>
 #include <linux/nfs.h>
+#include <linux/nfs2.h>
+#include <linux/nfs_fs.h>
 #include <linux/pagemap.h>
 #include <linux/stat.h>
 #include <linux/mm.h>

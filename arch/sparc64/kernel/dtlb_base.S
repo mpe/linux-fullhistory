@@ -1,4 +1,4 @@
-/* $Id: dtlb_base.S,v 1.5 2000/01/31 04:59:12 davem Exp $
+/* $Id: dtlb_base.S,v 1.7 2000/03/26 09:13:48 davem Exp $
  * dtlb_base.S:	Front end to DTLB miss replacement strategy.
  *              This is included directly into the trap table.
  *
@@ -56,19 +56,19 @@
 	be,pn		%xcc, 3f			! Yep, special processing
 	 srax		%g4, VPTE_SHIFT, %g6		! Create VPTE offset
 	ldxa		[%g3 + %g6] ASI_S, %g5		! Load VPTE
-1:	brlz,pt		%g5, 2f				! Valid, load into TLB
+1:	brlz,pt		%g5, 9f				! Valid, load into TLB
 	 and		%g5, (_PAGE_PRESENT|_PAGE_READ), %g4	! Mask readable bits
 	ba,a,pt		%xcc, 4f			! Invalid, branch out
 
 /* DTLB ** ICACHE line 2: Quick kernel TLB misses	*/
-3:	brgez,a,pn	%g4, 1b				! Kernel virtual map?
-	 ldxa		[%g3 + %g6] ASI_N, %g5		! Yep, load k-vpte
-	srlx		%g4, 40, %g5			! Else compute phys-kpte
-	andcc		%g5, 1, %g0			! I/O area?
-	be,pt		%xcc, 2f			! Nope, go and load TLB
+3:	brlz,pt		%g4, 9f				! Kernel virtual map?
 	 xor		%g2, %g4, %g5			! Finish bit twiddles
-	ba,pt		%xcc, 2f			! Yes, I/O space, back back
-	 xor		%g5, (KERN_IOBITS), %g5		! After set E, clear CP/CV
+	ldxa		[%g3 + %g6] ASI_N, %g5		! Yep, load k-vpte
+	ba,pt		%xcc, 1b			! Continue tlb reload
+	 nop
+9:	stxa		%g5, [%g0] ASI_DTLB_DATA_IN	! Reload TLB
+	retry						! Trap return
+	nop
 
 /* DTLB ** ICACHE line 3: winfixups+real_faults		*/
 4:	cmp		%g4, (_PAGE_PRESENT|_PAGE_READ)	! Readable page?
@@ -81,14 +81,14 @@
 	mov		TLB_TAG_ACCESS, %g4		! Prepare for fault processing
 
 /* DTLB ** ICACHE line 4: padding		*/
+	ldxa		[%g4] ASI_DMMU, %g5		! Load faulting VA page
 	be,pt		%xcc, sparc64_realfault_common	! Jump to normal fault handling
-	 ldxa		[%g4] ASI_DMMU, %g5		! And load faulting VA page
+	 mov		FAULT_CODE_DTLB, %g4		! It was read from DTLB
 	ba,a,pt		%xcc, winfix_trampoline		! Call window fixup code
 5:	or		%g5, _PAGE_ACCESSED, %g5	! Indicate reference
 	or		%g5, %g4, %g5			! Set valid
 	stxa		%g5, [%g3 + %g6] ASI_S		! Update PTE table (cant trap)
-2:	stxa		%g5, [%g0] ASI_DTLB_DATA_IN	! Reload TLB
-	retry						! Trap return
+	ba,a,pt		%xcc, 9b			! Complete tlb miss
 
 #undef TAG_CONTEXT_BITS
 #undef VPTE_SHIFT

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.2 1999/12/23 12:13:53 gniibe Exp gniibe $
+# $Id: Makefile,v 1.4 2000/03/08 15:14:14 gniibe Exp $
 #
 # This file is subject to the terms and conditions of the GNU General Public
 # License.  See the file "COPYING" in the main directory of this archive

@@ -276,7 +276,6 @@ m8xx_init_IRQ(void)
 	int i;
 	void cpm_interrupt_init(void);
 
-        ppc8xx_pic.irq_offset = 0;
         for ( i = 0 ; i < NR_SIU_INTS ; i++ )
                 irq_desc[i].handler = &ppc8xx_pic;
 	

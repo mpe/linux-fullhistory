@@ -55,7 +55,9 @@ if [ "$CONFIG_SCSI_AIC7XXX" != "n" ]; then
    bool '  Collect statistics to report in /proc' CONFIG_AIC7XXX_PROC_STATS
    int  '  Delay in seconds after SCSI bus reset' CONFIG_AIC7XXX_RESET_DELAY 5
 fi
-dep_tristate 'IBM ServeRAID support' CONFIG_SCSI_IPS $CONFIG_SCSI
+if [ "$CONFIG_X86" = "y" ]; then
+   dep_tristate 'IBM ServeRAID support' CONFIG_SCSI_IPS $CONFIG_SCSI
+fi
 dep_tristate 'AdvanSys SCSI support' CONFIG_SCSI_ADVANSYS $CONFIG_SCSI
 dep_tristate 'Always IN2000 SCSI support' CONFIG_SCSI_IN2000 $CONFIG_SCSI
 dep_tristate 'AM53/79C974 PCI SCSI support' CONFIG_SCSI_AM53C974 $CONFIG_SCSI
@@ -65,6 +67,7 @@ dep_tristate 'BusLogic SCSI support' CONFIG_SCSI_BUSLOGIC $CONFIG_SCSI
 if [ "$CONFIG_SCSI_BUSLOGIC" != "n" ]; then
    bool '  Omit FlashPoint support' CONFIG_SCSI_OMIT_FLASHPOINT
 fi
+dep_tristate 'DMX3191D SCSI support' CONFIG_SCSI_DMX3191D $CONFIG_SCSI $CONFIG_PCI
 dep_tristate 'DTC3180/3280 SCSI support' CONFIG_SCSI_DTC3280 $CONFIG_SCSI
 dep_tristate 'EATA ISA/EISA/PCI (DPT and generic EATA/DMA-compliant boards) support' CONFIG_SCSI_EATA $CONFIG_SCSI
 if [ "$CONFIG_SCSI_EATA" != "n" ]; then
@@ -86,10 +89,8 @@ if [ "$CONFIG_SCSI_GENERIC_NCR5380" != "n" ]; then
 		"Port CONFIG_SCSI_G_NCR5380_PORT \
 		 Memory CONFIG_SCSI_G_NCR5380_MEM" Port
 fi
-if [ "$CONFIG_PCI" = "y" ]; then
-   dep_tristate 'Initio 9100U(W) support' CONFIG_SCSI_INITIO $CONFIG_SCSI
-   dep_tristate 'Initio INI-A100U2W support' CONFIG_SCSI_INIA100 $CONFIG_SCSI
-fi
+dep_tristate 'Initio 9100U(W) support' CONFIG_SCSI_INITIO $CONFIG_SCSI $CONFIG_PCI
+dep_tristate 'Initio INI-A100U2W support' CONFIG_SCSI_INIA100 $CONFIG_SCSI $CONFIG_PCI
 if [ "$CONFIG_PARPORT" != "n" ]; then
    dep_tristate 'IOMEGA parallel port (ppa - older drives)' CONFIG_SCSI_PPA $CONFIG_SCSI $CONFIG_PARPORT
    dep_tristate 'IOMEGA parallel port (imm - newer drives)' CONFIG_SCSI_IMM $CONFIG_SCSI $CONFIG_PARPORT
@@ -101,13 +102,11 @@ fi
 dep_tristate 'NCR53c406a SCSI support' CONFIG_SCSI_NCR53C406A $CONFIG_SCSI
 dep_tristate 'symbios 53c416 SCSI support' CONFIG_SCSI_SYM53C416 $CONFIG_SCSI
 dep_tristate 'Simple 53c710 SCSI support (Compaq, NCR machines)' CONFIG_SCSI_SIM710 $CONFIG_SCSI
-if [ "$CONFIG_PCI" = "y" ]; then
-   dep_tristate 'NCR53c7,8xx SCSI support'  CONFIG_SCSI_NCR53C7xx $CONFIG_SCSI
-   if [ "$CONFIG_SCSI_NCR53C7xx" != "n" ]; then
-      bool '  always negotiate synchronous transfers' CONFIG_SCSI_NCR53C7xx_sync
-      bool '  allow FAST-SCSI [10MHz]' CONFIG_SCSI_NCR53C7xx_FAST
-      bool '  allow DISCONNECT' CONFIG_SCSI_NCR53C7xx_DISCONNECT
-   fi
+dep_tristate 'NCR53c7,8xx SCSI support'  CONFIG_SCSI_NCR53C7xx $CONFIG_SCSI $CONFIG_PCI
+if [ "$CONFIG_SCSI_NCR53C7xx" != "n" ]; then
+   bool '  always negotiate synchronous transfers' CONFIG_SCSI_NCR53C7xx_sync
+   bool '  allow FAST-SCSI [10MHz]' CONFIG_SCSI_NCR53C7xx_FAST
+   bool '  allow DISCONNECT' CONFIG_SCSI_NCR53C7xx_DISCONNECT
 fi
 if [ "$CONFIG_PCI" = "y" -a "$CONFIG_SCSI_NCR53C7xx" != "y" ]; then
    dep_tristate 'NCR53C8XX SCSI support' CONFIG_SCSI_NCR53C8XX $CONFIG_SCSI
@@ -149,7 +148,9 @@ if [ "$CONFIG_PCI" = "y" ]; then
    dep_tristate 'Qlogic ISP FC SCSI support' CONFIG_SCSI_QLOGIC_FC $CONFIG_SCSI
    dep_tristate 'Qlogic QLA 1280 SCSI support' CONFIG_SCSI_QLOGIC_1280 $CONFIG_SCSI
 fi
-dep_tristate 'Seagate ST-02 and Future Domain TMC-8xx SCSI support' CONFIG_SCSI_SEAGATE $CONFIG_SCSI
+if [ "$CONFIG_X86" = "y" ]; then
+   dep_tristate 'Seagate ST-02 and Future Domain TMC-8xx SCSI support' CONFIG_SCSI_SEAGATE $CONFIG_SCSI
+fi
 if [ "$CONFIG_PCI" = "y" ]; then
    dep_tristate 'Tekram DC390(T) and Am53/79C974 SCSI support' CONFIG_SCSI_DC390T $CONFIG_SCSI
    if [ "$CONFIG_SCSI_DC390T" != "n" ]; then
@@ -162,7 +163,9 @@ dep_tristate 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F $CONFIG_SCSI
       bool '  enable elevator sorting' CONFIG_SCSI_U14_34F_LINKED_COMMANDS
       int  '  maximum number of queued commands' CONFIG_SCSI_U14_34F_MAX_TAGS 8
    fi
-dep_tristate 'UltraStor SCSI support' CONFIG_SCSI_ULTRASTOR $CONFIG_SCSI
+if [ "$CONFIG_X86" = "y" ]; then
+   dep_tristate 'UltraStor SCSI support' CONFIG_SCSI_ULTRASTOR $CONFIG_SCSI
+fi
 #
 # Note - this is a very special 'host' adapter that simulates the presence of some disks.
 # It can come in very handy for troubleshooting.  Anyone else is welcome to use it - all

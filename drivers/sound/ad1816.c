@@ -1266,8 +1266,7 @@ static int __initdata dma = -1;
 static int __initdata dma2 = -1;
 
 #if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE
-struct pci_dev	*ad1816_dev  = NULL,
-		*mpu_dev = NULL;
+struct pci_dev	*ad1816_dev  = NULL;
 
 static int activated	= 1;
 

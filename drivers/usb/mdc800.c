@@ -26,11 +26,15 @@
  * To use the Camera you must support the USB Protocoll of the camera
  * to the Kernel Node.
  * The Driver uses a misc device Node. Create it with :
- * mknod /dev/mustek c 10 171
+ * mknod /dev/mustek c 180 32
  *
  * The driver supports only one camera.
  *
  * version 0.7.1
+ * The mdc800 driver gets assigned the USB Minor 32-47. The Registration
+ * was updated to use these values.
+ * (26/03/2000)
+ *
  * The Init und Exit Module Function are updated.
  * (01/03/2000)
  *
@@ -57,7 +61,6 @@
 #include <linux/signal.h>
 #include <linux/spinlock.h>
 #include <linux/errno.h>
-#include <linux/miscdevice.h>
 #include <linux/random.h>
 #include <linux/poll.h>
 #include <linux/init.h>
@@ -67,7 +70,7 @@
 #include <linux/usb.h>
 
 #define VERSION 		"0.7.1"
-#define RELEASE_DATE "(01/03/2000)"
+#define RELEASE_DATE "(26/03/2000)"
 
 /* Vendor and Product Information */
 #define MDC800_VENDOR_ID 	0x055f
@@ -81,8 +84,8 @@
 #define TO_WRITE_GET_READY			3000
 #define TO_DEFAULT_COMMAND			5000
 
-/* Minor Number of the device (create with mknod /dev/mustek c 10 171) */
-#define MDC800_DEVICE_MINOR 171
+/* Minor Number of the device (create with mknod /dev/mustek c 180 32) */
+#define MDC800_DEVICE_MINOR_BASE 32
 
 
 /**************************************************************************
@@ -792,21 +795,6 @@ static ssize_t mdc800_device_write (struct file *file, const char *buf, size_t l
 	Init and Cleanup this driver (Structs and types)
 ****************************************************************************/
 
-
-/*
- * USB Driver Struct for this device
- */
-static struct usb_driver mdc800_usb_driver =
-{
-	"mdc800",
-	mdc800_usb_probe,
-	mdc800_usb_disconnect,
-	{ 0,0 },
-	0,
-	0
-};
-
-
 /* File Operations of this drivers */
 static struct file_operations mdc800_device_ops =
 {
@@ -828,15 +816,20 @@ static struct file_operations mdc800_device_ops =
 };
 
 
+
 /*
- * The Misc Device Configuration Struct
+ * USB Driver Struct for this device
  */
-static struct miscdevice mdc800_device =
+static struct usb_driver mdc800_usb_driver =
 {
-	MDC800_DEVICE_MINOR,
-	"USB Mustek MDC800 Camera",
-	&mdc800_device_ops
+	"mdc800",
+	mdc800_usb_probe,
+	mdc800_usb_disconnect,
+	{ 0,0 },
+	&mdc800_device_ops,
+	MDC800_DEVICE_MINOR_BASE
 };
+
 
 
 /************************************************************************
@@ -872,8 +865,6 @@ int __init usb_mdc800_init (void)
 	/* Register the driver */
 	if (usb_register (&mdc800_usb_driver) < 0)
 		goto cleanup_on_fail;
-	if (misc_register (&mdc800_device) < 0)
-		goto cleanup_on_misc_register_fail;
 
 	info ("Mustek Digital Camera Driver " VERSION " (MDC800)");
 	info (RELEASE_DATE " Henning Zabel <henning@uni-paderborn.de>");
@@ -881,9 +872,6 @@ int __init usb_mdc800_init (void)
 	return 0;
 
 	/* Clean driver up, when something fails */
-
-cleanup_on_misc_register_fail:
-	usb_deregister (&mdc800_usb_driver);
 
 cleanup_on_fail:
 
@@ -909,7 +897,6 @@ cleanup_on_fail:
 void __exit usb_mdc800_cleanup (void)
 {
 	usb_deregister (&mdc800_usb_driver);
-	misc_deregister (&mdc800_device);
 
 	usb_free_urb (mdc800->irq_urb);
 	usb_free_urb (mdc800->download_urb);

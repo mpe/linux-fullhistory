@@ -1,11 +1,13 @@
 /*
  *	Generate devlist.h and classlist.h from the PCI ID file.
  *
- *	(c) 1999 Martin Mares <mj@suse.cz>
+ *	(c) 1999--2000 Martin Mares <mj@suse.cz>
  */
 
 #include <stdio.h>
 #include <string.h>
+
+#define MAX_NAME_SIZE 79
 
 static void
 pq(FILE *f, const char *c)
@@ -22,9 +24,11 @@ pq(FILE *f, const char *c)
 int
 main(void)
 {
-	char line[1024], *c, vend[8];
+	char line[1024], *c, *bra, vend[8];
 	int vendors = 0;
 	int mode = 0;
+	int lino = 0;
+	int vendor_len = 0;
 	FILE *devf, *clsf;
 
 	devf = fopen("devlist.h", "w");
@@ -35,6 +39,7 @@ main(void)
 	}
 
 	while (fgets(line, sizeof(line)-1, stdin)) {
+		lino++;
 		if ((c = strchr(line, '\n')))
 			*c = 0;
 		if (!line[0] || line[0] == '#')
@@ -56,6 +61,16 @@ main(void)
 					c = line + 5;
 					while (*c == ' ')
 						*c++ = 0;
+					if (vendor_len + strlen(c) + 1 > MAX_NAME_SIZE) {
+						/* Too long, try cutting off long description */
+						bra = strchr(c, '[');
+						if (bra && bra > c && bra[-1] == ' ')
+							bra[-1] = 0;
+						if (vendor_len + strlen(c) + 1 > MAX_NAME_SIZE) {
+							fprintf(stderr, "Line %d: Device name too long\n", lino);
+							return 1;
+						}
+					}
 					fprintf(devf, "\tDEVICE(%s,%s,\"", vend, line+1);
 					pq(devf, c);
 					fputs("\")\n", devf);
@@ -80,13 +95,18 @@ main(void)
 				fputs("ENDVENDOR()\n\n", devf);
 			vendors++;
 			strcpy(vend, line);
+			vendor_len = strlen(c);
+			if (vendor_len + 24 > MAX_NAME_SIZE) {
+				fprintf(stderr, "Line %d: Vendor name too long\n", lino);
+				return 1;
+			}
 			fprintf(devf, "VENDOR(%s,\"", vend);
 			pq(devf, c);
 			fputs("\")\n", devf);
 			mode = 1;
 		} else {
 		err:
-			fprintf(stderr, "Syntax error in mode %d: %s\n", mode, line);
+			fprintf(stderr, "Line %d: Syntax error in mode %d: %s\n", lino, mode, line);
 			return 1;
 		}
 	}

@@ -14,8 +14,6 @@
 #define duprintf(format, args...)
 #endif
 
-EXPORT_NO_SYMBOLS;
-
 /* Returns 1 if the port is matched by the test, 0 otherwise. */
 static inline int
 ports_match(const u_int16_t *portlist, enum ipt_multiport_flags flags,

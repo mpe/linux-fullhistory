@@ -23,7 +23,7 @@ Currently supported:
 	- RS232 serial ports
 	- audio output
 	- LCD screen
-	- keyboard (needs to be cleaned up badly... any volunteer?)
+	- keyboard
 	
 The actual Brutus support may not be complete without extra patches. 
 If such patches exist, they should be found from 

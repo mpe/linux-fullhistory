@@ -12,8 +12,8 @@ static __inline__ struct task_struct * get_current(void)
 {
 	struct task_struct *current;
 
-	__asm__("stc	r4_bank,%0\n\t"
-		"add	%1,%0"
+	__asm__("stc	$r4_bank, %0\n\t"
+		"add	%1, %0"
 		:"=&r" (current)
 		:"r" (-8192));
 	return current;

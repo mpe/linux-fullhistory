@@ -20,6 +20,8 @@
 #include <linux/pagemap.h>
 #include <linux/proc_fs.h>
 #include <linux/sunrpc/clnt.h>
+#include <linux/nfs.h>
+#include <linux/nfs2.h>
 #include <linux/nfs_fs.h>
 
 /* Uncomment this to support servers requiring longword lengths */
@@ -96,6 +98,13 @@ xdr_decode_string2(u32 *p, char **string, unsigned int *len,
 	return p + QUADLEN(*len);
 }
 
+static inline u32*
+xdr_decode_time(u32 *p, u64 *timep)
+{
+	*timep = ((u64)ntohl(*p++) << 32) + (u64)ntohl(*p++);
+	return p;
+}
+
 static inline u32 *
 xdr_decode_fattr(u32 *p, struct nfs_fattr *fattr)
 {
@@ -105,17 +114,20 @@ xdr_decode_fattr(u32 *p, struct nfs_fattr *fattr)
 	fattr->uid = ntohl(*p++);
 	fattr->gid = ntohl(*p++);
 	fattr->size = ntohl(*p++);
-	fattr->blocksize = ntohl(*p++);
+	fattr->du.nfs2.blocksize = ntohl(*p++);
 	fattr->rdev = ntohl(*p++);
-	fattr->blocks = ntohl(*p++);
+	fattr->du.nfs2.blocks = ntohl(*p++);
 	fattr->fsid = ntohl(*p++);
 	fattr->fileid = ntohl(*p++);
-	fattr->atime.seconds = ntohl(*p++);
-	fattr->atime.useconds = ntohl(*p++);
-	fattr->mtime.seconds = ntohl(*p++);
-	fattr->mtime.useconds = ntohl(*p++);
-	fattr->ctime.seconds = ntohl(*p++);
-	fattr->ctime.useconds = ntohl(*p++);
+	p = xdr_decode_time(p, &fattr->atime);
+	p = xdr_decode_time(p, &fattr->mtime);
+	p = xdr_decode_time(p, &fattr->ctime);
+	fattr->valid |= NFS_ATTR_FATTR;
+	if (fattr->type == NFCHR && fattr->rdev == NFS_FIFO_DEV) {
+		fattr->type = NFFIFO;
+		fattr->mode = (fattr->mode & ~S_IFMT) | S_IFIFO;
+		fattr->rdev = 0;
+	}
 	return p;
 }
 
@@ -381,7 +393,7 @@ nfs_xdr_readdirargs(struct rpc_rqst *req, u32 *p, struct nfs_readdirargs *args)
 	struct rpc_task	*task = req->rq_task;
 	struct rpc_auth	*auth = task->tk_auth;
 	int		bufsiz = args->bufsiz;
-	int		replen;
+	int		buflen, replen;
 
 	p = xdr_encode_fhandle(p, args->fh);
 	*p++ = htonl(args->cookie);
@@ -398,90 +410,96 @@ nfs_xdr_readdirargs(struct rpc_rqst *req, u32 *p, struct nfs_readdirargs *args)
 
 	/* set up reply iovec */
 	replen = (RPC_REPHDRSIZE + auth->au_rslack + NFS_readdirres_sz) << 2;
+	buflen = req->rq_rvec[0].iov_len;
 	req->rq_rvec[0].iov_len  = replen;
 	req->rq_rvec[1].iov_base = args->buffer;
 	req->rq_rvec[1].iov_len  = bufsiz;
-	req->rq_rlen = replen + bufsiz;
-	req->rq_rnr = 2;
+	req->rq_rvec[2].iov_base = (u8 *) req->rq_rvec[0].iov_base + replen;
+	req->rq_rvec[2].iov_len  = buflen - replen;
+	req->rq_rlen = buflen + bufsiz;
+	req->rq_rnr += 2;
 
 	return 0;
 }
 
 /*
  * Decode the result of a readdir call.
+ * We're not really decoding anymore, we just leave the buffer untouched
+ * and only check that it is syntactically correct.
+ * The real decoding happens in nfs_decode_entry below, called directly
+ * from nfs_readdir for each entry.
  */
-#define NFS_DIRENT_MAXLEN	(5 * sizeof(u32) + (NFS_MAXNAMLEN + 1))
 static int
 nfs_xdr_readdirres(struct rpc_rqst *req, u32 *p, struct nfs_readdirres *res)
 {
 	struct iovec		*iov = req->rq_rvec;
 	int			 status, nr;
-	u32			*end;
-	u32			last_cookie = res->cookie;
+	u32			*end, *entry, len;
 
-	status = ntohl(*p++);
-	if (status) {
-		nr = -nfs_stat_to_errno(status);
-		goto error;
-	}
+	if ((status = ntohl(*p++)))
+		return -nfs_stat_to_errno(status);
 	if ((void *) p != ((u8 *) iov->iov_base+iov->iov_len)) {
 		/* Unexpected reply header size. Punt. */
-		printk("NFS: Odd RPC header size in readdirres reply\n");
-		nr = -errno_NFSERR_IO;
-		goto error;
+		printk(KERN_WARNING "NFS: Odd RPC header size in readdirres reply\n");
+		return -errno_NFSERR_IO;
 	}
 
-	/* Get start and end address of XDR readdir response. */
+	/* Get start and end address of XDR data */
 	p   = (u32 *) iov[1].iov_base;
 	end = (u32 *) ((u8 *) p + iov[1].iov_len);
+
+	/* Get start and end of dirent buffer */
+	if (res->buffer != p) {
+		printk(KERN_ERR "NFS: Bad result buffer in readdir\n");
+		return -errno_NFSERR_IO;
+	}
+
 	for (nr = 0; *p++; nr++) {
-		__u32 len;
-
-		/* Convert fileid. */
-		*p = ntohl(*p);
-		p++;
-
-		/* Convert and capture len */
-		len = *p = ntohl(*p);
-		p++;
-
-		if ((p + QUADLEN(len) + 3) > end) {
-			struct rpc_clnt *clnt = req->rq_task->tk_client;
-
-			clnt->cl_flags |= NFS_CLNTF_BUFSIZE;
-			p -= 2;
-			p[-1] = 0;
-			p[0] = 0;
+		entry = p - 1;
+		p++; /* fileid */
+		len = ntohl(*p++);
+		p += XDR_QUADLEN(len) + 1;	/* name plus cookie */
+		if (len > NFS2_MAXNAMLEN) {
+			printk(KERN_WARNING "NFS: giant filename in readdir (len 0x%x)!\n",
+						len);
+			return -errno_NFSERR_IO;
+		}
+		if (p + 2 > end) {
+			printk(KERN_NOTICE
+				"NFS: short packet in readdir reply!\n");
+			entry[0] = entry[1] = 0;
 			break;
 		}
-		if (len > NFS_MAXNAMLEN) {
-			nr = -errno_NFSERR_IO;
-			goto error;
-		}
-		p += QUADLEN(len);
-
-		/* Convert and capture cookie. */
-		last_cookie = *p = ntohl(*p);
-		p++;
 	}
-	p -= 1;
-	status = ((end - p) << 2);
-	if (!p[1] && (status >= NFS_DIRENT_MAXLEN)) {
-		status = ((__u8 *)p - (__u8 *)iov[1].iov_base);
-		res->buffer += status;
-		res->bufsiz -= status;
-	} else if (p[1]) {
-		status = (int)((long)p & ~PAGE_CACHE_MASK);
-		res->bufsiz = -status;
-	} else {
-		res->bufsiz = 0;
-	}
-	res->cookie = last_cookie;
-	return nr;
+	p++; /* EOF flag */
 
-error:
-	res->bufsiz = 0;
+	if (p > end) {
+		printk(KERN_NOTICE
+			"NFS: short packet in readdir reply!\n");
+		return -errno_NFSERR_IO;
+	}
 	return nr;
+}
+
+u32 *
+nfs_decode_dirent(u32 *p, struct nfs_entry *entry, int plus)
+{
+	if (!*p++) {
+		if (!*p)
+			return ERR_PTR(-EAGAIN);
+		entry->eof = 1;
+		return ERR_PTR(-EBADCOOKIE);
+	}
+
+	entry->ino	  = ntohl(*p++);
+	entry->len	  = ntohl(*p++);
+	entry->name	  = (const char *) p;
+	p		 += XDR_QUADLEN(entry->len);
+	entry->prev_cookie	  = entry->cookie;
+	entry->cookie	  = ntohl(*p++);
+	entry->eof	  = !p[0] && p[1];
+
+	return p;
 }
 
 /*
@@ -522,8 +540,9 @@ nfs_xdr_attrstat(struct rpc_rqst *req, u32 *p, struct nfs_fattr *fattr)
 	if ((status = ntohl(*p++)))
 		return -nfs_stat_to_errno(status);
 	xdr_decode_fattr(p, fattr);
-	dprintk("RPC:      attrstat OK type %d mode %o dev %x ino %x\n",
-		fattr->type, fattr->mode, fattr->fsid, fattr->fileid);
+	dprintk("RPC:      attrstat OK type %d mode %o dev %Lx ino %Lx\n",
+		fattr->type, fattr->mode,
+		(long long)fattr->fsid, (long long)fattr->fileid);
 	return 0;
 }
 
@@ -541,9 +560,9 @@ nfs_xdr_diropres(struct rpc_rqst *req, u32 *p, struct nfs_diropok *res)
 		return -nfs_stat_to_errno(status);
 	p = xdr_decode_fhandle(p, res->fh);
 	xdr_decode_fattr(p, res->fattr);
-	dprintk("RPC:      diropres OK type %x mode %o dev %x ino %x\n",
+	dprintk("RPC:      diropres OK type %x mode %o dev %Lx ino %Lx\n",
 		res->fattr->type, res->fattr->mode,
-		res->fattr->fsid, res->fattr->fileid);
+		(long long)res->fattr->fsid, (long long)res->fattr->fileid);
 	return 0;
 }
 

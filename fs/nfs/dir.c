@@ -17,7 +17,6 @@
  *  6 Jun 1999	Cache readdir lookups in the page cache. -DaveM
  */
 
-#define NFS_NEED_XDR_TYPES
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/stat.h>
@@ -28,7 +27,7 @@
 #include <linux/mm.h>
 #include <linux/sunrpc/clnt.h>
 #include <linux/nfs_fs.h>
-#include <linux/nfs.h>
+#include <linux/nfs_mount.h>
 #include <linux/pagemap.h>
 
 #include <asm/segment.h>	/* for fs functions */
@@ -71,201 +70,130 @@ struct inode_operations nfs_dir_inode_operations = {
 	setattr:	nfs_notify_change,
 };
 
-/* Each readdir response is composed of entries which look
- * like the following, as per the NFSv2 RFC:
- *
- *	__u32	not_end			zero if end of response
- *	__u32	file ID			opaque ino_t
- *	__u32	namelen			size of name string
- *	VAR	name string		the string, padded to modulo 4 bytes
- *	__u32	cookie			opaque ID of next entry
- *
- * When you hit not_end being zero, the next __u32 is non-zero if
- * this is the end of the complete set of readdir entires for this
- * directory.  This can be used, for example, to initiate pre-fetch.
- *
- * In order to know what to ask the server for, we only need to know
- * the final cookie of the previous page, and offset zero has cookie
- * zero, so we cache cookie to page offset translations in chunks.
- */
-#define COOKIES_PER_CHUNK (8 - ((sizeof(void *) / sizeof(__u32))))
-struct nfs_cookie_table {
-	struct nfs_cookie_table *next;
-	__u32	cookies[COOKIES_PER_CHUNK];
-};
-static kmem_cache_t *nfs_cookie_cachep;
+typedef u32 * (*decode_dirent_t)(u32 *, struct nfs_entry *, int);
 
-/* This whole scheme relies on the fact that dirent cookies
- * are monotonically increasing.
+/*
+ * Given a pointer to a buffer that has already been filled by a call
+ * to readdir, find the next entry.
  *
- * Another invariant is that once we have a valid non-zero
- * EOF marker cached, we also have the complete set of cookie
- * table entries.
- *
- * We return the page offset assosciated with the page where
- * cookie must be if it exists at all, however if we can not
- * figure that out conclusively, we return < 0.
+ * If the end of the buffer has been reached, return -EAGAIN, if not,
+ * return the offset within the buffer of the next entry to be
+ * read.
  */
-static long __nfs_readdir_offset(struct inode *inode, __u32 cookie)
+static inline
+long find_dirent(struct page *page, loff_t offset,
+		 struct nfs_entry *entry,
+		 decode_dirent_t decode, int plus, int use_cookie)
 {
-	struct nfs_cookie_table *p;
-	unsigned long ret = 0;
+	u8		*p = (u8 *)kmap(page),
+			*start = p;
+	unsigned long	base = page_offset(page),
+			pg_offset = 0;
+	int		loop_count = 0;
 
-	for(p = NFS_COOKIES(inode); p != NULL; p = p->next) {
-		int i;
-
-		for (i = 0; i < COOKIES_PER_CHUNK; i++) {
-			__u32 this_cookie = p->cookies[i];
-
-			/* End of known cookies, EOF is our only hope. */
-			if (!this_cookie)
-				goto check_eof;
-
-			/* Next cookie is larger, must be in previous page. */
-			if (this_cookie > cookie)
-				return ret;
-
-			ret += 1;
-
-			/* Exact cookie match, it must be in this page :-) */
-			if (this_cookie == cookie)
-				return ret;
+	if (!p)
+		return -EIO;
+	for(;;) {
+		p = (u8*)decode((__u32*)p, entry, plus);
+		if (IS_ERR(p))
+			break;
+		pg_offset = p - start;
+		entry->prev = entry->offset;
+		entry->offset = base + pg_offset;
+		if ((use_cookie ? entry->cookie : entry->offset) > offset)
+			break;
+		if (loop_count++ > 200) {
+			loop_count = 0;
+			schedule();
 		}
 	}
-check_eof:
-	if (NFS_DIREOF(inode) != 0)
-		return ret;
 
-	return -1L;
+	kunmap(page);
+	return (IS_ERR(p)) ?  PTR_ERR(p) : (long)pg_offset;
 }
 
-static __inline__ long nfs_readdir_offset(struct inode *inode, __u32 cookie)
-{
-	/* Cookie zero is always at page offset zero.   Optimize the
-	 * other common case since most directories fit entirely
-	 * in one page.
-	 */
-	if (!cookie || (!NFS_COOKIES(inode) && NFS_DIREOF(inode)))
-		return 0;
-	return __nfs_readdir_offset(inode, cookie);
-}
-
-/* Since a cookie of zero is declared special by the NFS
- * protocol, we easily can tell if a cookie in an existing
- * table chunk is valid or not.
+/*
+ * Find the given page, and call find_dirent() in order to try to
+ * return the next entry.
  *
- * NOTE: The cookies are indexed off-by-one because zero
- *       need not an entry.
+ * Returns -EIO if the page is not available, or up to date.
  */
-static __inline__ __u32 *find_cookie(struct inode *inode, unsigned long off)
+static inline
+long find_dirent_page(struct inode *inode, loff_t offset,
+		      struct nfs_entry *entry)
 {
-	static __u32 cookie_zero = 0;
-	struct nfs_cookie_table *p;
-	__u32 *ret;
+	decode_dirent_t	decode = nfs_decode_dirent;
+	struct page	*page;
+	unsigned long	index = entry->offset >> PAGE_CACHE_SHIFT;
+	long		status = -EIO;
+	int		plus = NFS_USE_READDIRPLUS(inode),
+			use_cookie = NFS_MONOTONE_COOKIES(inode);
 
-	if (!off)
-		return &cookie_zero;
-	off -= 1;
-	p = NFS_COOKIES(inode);
-	while(off >= COOKIES_PER_CHUNK && p) {
-		off -= COOKIES_PER_CHUNK;
-		p = p->next;
-	}
-	ret = NULL;
-	if (p) {
-		ret = &p->cookies[off];
-		if (!*ret)
-			ret = NULL;
-	}
-	return ret;
+	dfprintk(VFS, "NFS: find_dirent_page() searching directory page %ld\n", entry->offset & PAGE_CACHE_MASK);
+
+	if (entry->page)
+		page_cache_release(entry->page);
+
+	page = find_get_page(&inode->i_data, index);
+
+	if (page && Page_Uptodate(page))
+		status = find_dirent(page, offset, entry, decode, plus, use_cookie);
+
+	/* NB: on successful return we will be holding the page */
+	if (status < 0) {
+		entry->page = NULL;
+		if (page)
+			page_cache_release(page);
+	} else
+		entry->page = page;
+
+	dfprintk(VFS, "NFS: find_dirent_page() returns %ld\n", status);
+	return status;
 }
 
-#define NFS_NAMELEN_ALIGN(__len) ((((__len)+3)>>2)<<2)
-static int create_cookie(__u32 cookie, unsigned long off, struct inode *inode)
-{
-	struct nfs_cookie_table **cpp;
 
-	cpp = (struct nfs_cookie_table **) &NFS_COOKIES(inode);
-	while (off >= COOKIES_PER_CHUNK && *cpp) {
-		off -= COOKIES_PER_CHUNK;
-		cpp = &(*cpp)->next;
-	}
-	if (*cpp) {
-		(*cpp)->cookies[off] = cookie;
-	} else {
-		struct nfs_cookie_table *new;
-		int i;
-
-		new = kmem_cache_alloc(nfs_cookie_cachep, SLAB_ATOMIC);
-		if(!new)
-			return -1;
-		*cpp = new;
-		new->next = NULL;
-		for(i = 0; i < COOKIES_PER_CHUNK; i++) {
-			if (i == off) {
-				new->cookies[i] = cookie;
-			} else {
-				new->cookies[i] = 0;
-			}
-		}
-	}
-	return 0;
-}
-
-static struct page *try_to_get_dirent_page(struct file *, __u32, int);
-
-/* Recover from a revalidation flush.  The case here is that
- * the inode for the directory got invalidated somehow, and
- * all of our cached information is lost.  In order to get
- * a correct cookie for the current readdir request from the
- * user, we must (re-)fetch older readdir page cache entries.
+/*
+ * Recurse through the page cache pages, and return a
+ * filled nfs_entry structure of the next directory entry if possible.
  *
- * Returns < 0 if some error occurrs, else it is the page offset
- * to fetch.
+ * The target for the search is position 'offset'.
+ * The latter may either be an offset into the page cache, or (better)
+ * a cookie depending on whether we're interested in strictly following
+ * the RFC wrt. not assuming monotonicity of cookies or not.
+ *
+ * For most systems, the latter is more reliable since it naturally
+ * copes with holes in the directory.
  */
-static long refetch_to_readdir_cookie(struct file *file, struct inode *inode)
+static inline
+long search_cached_dirent_pages(struct inode *inode, loff_t offset,
+				struct nfs_entry *entry)
 {
-	struct page *page;
-	u32 goal_cookie = file->f_pos;
-	long cur_off, ret = -1L;
+	long		res = 0;
+	int		loop_count = 0;
 
-again:
-	cur_off = 0;
+	dfprintk(VFS, "NFS: search_cached_dirent_pages() searching for cookie %Ld\n", (long long)offset);
 	for (;;) {
-		page = find_get_page(&inode->i_data, cur_off);
-		if (page) {
-			if (!Page_Uptodate(page))
-				goto out_error;
-		} else {
-			__u32 *cp = find_cookie(inode, cur_off);
-
-			if (!cp)
-				goto out_error;
-
-			page = try_to_get_dirent_page(file, *cp, 0);
-			if (!page) {
-				if (!cur_off)
-					goto out_error;
-
-				/* Someone touched the dir on us. */
-				goto again;
-			}
+		res = find_dirent_page(inode, offset, entry);
+		if (res == -EAGAIN) {
+			/* Align to beginning of next page */
+			entry->offset &= PAGE_CACHE_MASK;
+			entry->offset += PAGE_CACHE_SIZE;
 		}
-		page_cache_release(page);
-
-		if ((ret = nfs_readdir_offset(inode, goal_cookie)) >= 0)
-			goto out;
-
-		cur_off += 1;
+		if (res != -EAGAIN)
+			break;
+		if (loop_count++ > 200) {
+			loop_count = 0;
+			schedule();
+		}
 	}
-out:
-	return ret;
-
-out_error:
-	if (page)
-		page_cache_release(page);
-	goto out;
+	if (res < 0 && entry->page) {
+		page_cache_release(entry->page);
+		entry->page = NULL;
+	}
+	dfprintk(VFS, "NFS: search_cached_dirent_pages() returned %ld\n", res);
+	return res;
 }
+
 
 /* Now we cache directories properly, by stuffing the dirent
  * data directly in the page cache.
@@ -279,198 +207,242 @@ out_error:
  *	 page-in of the RPC reply, nowhere else, this simplies
  *	 things substantially.
  */
-
-static int nfs_dir_filler(struct dentry *dentry, struct page *page)
+static inline
+long try_to_get_dirent_page(struct file *file, struct inode *inode,
+			    struct nfs_entry *entry)
 {
-	struct nfs_readdirargs rd_args;
-	struct nfs_readdirres rd_res;
-	struct inode *inode = dentry->d_inode;
-	long offset = page->index;
-	__u32 *cookiep;
-	int err;
+	struct dentry	*dir = file->f_dentry;
+	struct page	*page;
+	struct nfs_fattr	dir_attr;
+	__u32		*p;
+	unsigned long	index = entry->offset >> PAGE_CACHE_SHIFT;
+	long		res = 0;
+	unsigned int	dtsize = NFS_SERVER(inode)->dtsize;
+	int		plus = NFS_USE_READDIRPLUS(inode);
 
-	kmap(page);
+	dfprintk(VFS, "NFS: try_to_get_dirent_page() reading directory page @ index %ld\n", index);
 
-	err = -EIO;
-	cookiep = find_cookie(inode, offset);
-	if (!cookiep)
-		goto fail;
+	page = grab_cache_page(&inode->i_data, index);
 
-	rd_args.fh = NFS_FH(dentry);
-	rd_res.buffer = (char *)page_address(page);
-	rd_res.bufsiz = PAGE_CACHE_SIZE;
-	rd_res.cookie = *cookiep;
-	do {
-		rd_args.buffer = rd_res.buffer;
-		rd_args.bufsiz = rd_res.bufsiz;
-		rd_args.cookie = rd_res.cookie;
-		err = rpc_call(NFS_CLIENT(inode),
-			     NFSPROC_READDIR, &rd_args, &rd_res, 0); 
-		if (err < 0)
-			goto fail;
-	} while(rd_res.bufsiz > 0);
+	if (!page) {
+		res = -ENOMEM;
+		goto out;
+	}
 
-	err = -EIO;
-	if (rd_res.bufsiz < 0)
-		NFS_DIREOF(inode) = rd_res.cookie;
-	else if (create_cookie(rd_res.cookie, offset, inode))
-		goto fail;
+	if (Page_Uptodate(page)) {
+		dfprintk(VFS, "NFS: try_to_get_dirent_page(): page already up to date.\n");
+		goto unlock_out;
+	}
 
+	p = (__u32 *)kmap(page);
+
+	if (dtsize > PAGE_CACHE_SIZE)
+		dtsize = PAGE_CACHE_SIZE;
+	res = nfs_proc_readdir(dir, &dir_attr, entry->cookie, p, dtsize, plus);
+
+	kunmap(page);
+
+	if (res < 0)
+		goto error;
+	nfs_refresh_inode(inode, &dir_attr);
+	if (PageError(page))
+		ClearPageError(page);
 	SetPageUptodate(page);
-	kunmap(page);
+
+ unlock_out:
 	UnlockPage(page);
-	return 0;
-fail:
+	page_cache_release(page);
+ out:
+	dfprintk(VFS, "NFS: try_to_get_dirent_page() returns %ld\n", res);
+	return res;
+ error:
 	SetPageError(page);
-	kunmap(page);
-	UnlockPage(page);
-	return err;
+	goto unlock_out;
 }
 
-static struct page *try_to_get_dirent_page(struct file *file, __u32 cookie, int refetch_ok)
+/* Recover from a revalidation flush.  The case here is that
+ * the inode for the directory got invalidated somehow, and
+ * all of our cached information is lost.  In order to get
+ * a correct cookie for the current readdir request from the
+ * user, we must (re-)fetch all the older readdir page cache
+ * entries.
+ *
+ * Returns < 0 if some error occurs.
+ */
+static inline
+long refetch_to_readdir(struct file *file, struct inode *inode,
+			loff_t off, struct nfs_entry *entry)
 {
-	struct dentry *dentry = file->f_dentry;
-	struct inode *inode = dentry->d_inode;
-	struct page *page;
-	long offset;
+	struct nfs_entry	my_dirent,
+				*dirent = &my_dirent;
+	long			res;
+	int			plus = NFS_USE_READDIRPLUS(inode),
+				use_cookie = NFS_MONOTONE_COOKIES(inode),
+				loop_count = 0;
 
-	if ((offset = nfs_readdir_offset(inode, cookie)) < 0) {
-		if (!refetch_ok ||
-		    (offset = refetch_to_readdir_cookie(file, inode)) < 0) {
-			goto fail;
+	dfprintk(VFS, "NFS: refetch_to_readdir() searching for cookie %Ld\n", (long long)off);
+	*dirent = *entry;
+	entry->page = NULL;
+
+	for (res = 0;res >= 0;) {
+		if (loop_count++ > 200) {
+			loop_count = 0;
+			schedule();
+		}
+
+		/* Search for last cookie in page cache */
+		res = search_cached_dirent_pages(inode, off, dirent);
+
+		if (res >= 0) {
+			/* Cookie was found */
+			if ((use_cookie?dirent->cookie:dirent->offset) > off) {
+				*entry = *dirent;
+				dirent->page = NULL;
+				break;
+			}
+			continue;
+		}
+
+		if (dirent->page)
+			page_cache_release(dirent->page);
+		dirent->page = NULL;
+
+		if (res != -EIO) {
+			*entry = *dirent;
+			break;
+		}
+
+		/* Read in a new page */
+		res = try_to_get_dirent_page(file, inode, dirent);
+		if (res == -EBADCOOKIE) {
+			memset(dirent, 0, sizeof(*dirent));
+			nfs_zap_caches(inode);
+			res = 0;
+		}
+		/* We requested READDIRPLUS, but the server doesn't grok it */
+		if (plus && res == -ENOTSUPP) {
+			NFS_FLAGS(inode) &= ~NFS_INO_ADVISE_RDPLUS;
+			memset(dirent, 0, sizeof(*dirent));
+			nfs_zap_caches(inode);
+			plus = 0;
+			res = 0;
 		}
 	}
+	if (dirent->page)
+		page_cache_release(dirent->page);
 
-	page = read_cache_page(&inode->i_data, offset,
-				(filler_t *)nfs_dir_filler, dentry);
-	if (IS_ERR(page))
-		goto fail;
-	if (!Page_Uptodate(page))
-		goto fail2;
-	return page;
-
-fail2:
-	page_cache_release(page);
-fail:
-	return NULL;
+	dfprintk(VFS, "NFS: refetch_to_readdir() returns %ld\n", res);
+	return res;
 }
 
-/* Seek up to dirent assosciated with the passed in cookie,
- * then fill in dirents found.  Return the last cookie
- * actually given to the user, to update the file position.
+/*
+ * Once we've found the start of the dirent within a page: fill 'er up...
  */
-static __inline__ u32 nfs_do_filldir(__u32 *p, u32 cookie,
-				     void *dirent, filldir_t filldir)
+static
+int nfs_do_filldir(struct file *file, struct inode *inode,
+		   struct nfs_entry *entry, void *dirent, filldir_t filldir)
 {
-	u32 end;
+	decode_dirent_t	decode = nfs_decode_dirent;
+	struct page	*page = entry->page;
+	__u8		*p,
+			*start;
+	unsigned long	base = page_offset(page),
+			offset = entry->offset,
+			pg_offset,
+			fileid;
+	int		plus = NFS_USE_READDIRPLUS(inode),
+			use_cookie = NFS_MONOTONE_COOKIES(inode),
+			loop_count = 0,
+			res = 0;
 
-	while((end = *p++) != 0) {
-		__u32 fileid, len, skip, this_cookie;
-		char *name;
+	dfprintk(VFS, "NFS: nfs_do_filldir() filling starting @ offset %ld\n", entry->offset);
+	pg_offset = offset & ~PAGE_CACHE_MASK;
+	start = (u8*)kmap(page);
+	p = start + pg_offset;
 
-		fileid = *p++;
-		len = *p++;
-		name = (char *) p;
-		skip = NFS_NAMELEN_ALIGN(len);
-		p += (skip >> 2);
-		this_cookie = *p++;
-
-		if (this_cookie < cookie)
-			continue;
-
-		cookie = this_cookie;
-		if (filldir(dirent, name, len, cookie, fileid) < 0)
+	for(;;) {
+		/* Note: entry->prev contains the offset of the start of the
+		 *       current dirent */
+		fileid = nfs_fileid_to_ino_t(entry->ino);
+		if (use_cookie)
+			res = filldir(dirent, entry->name, entry->len, entry->prev_cookie, fileid);
+		else
+			res = filldir(dirent, entry->name, entry->len, entry->prev, fileid);
+		if (res < 0)
 			break;
+		file->f_pos = (use_cookie) ? entry->cookie : entry->offset;
+		p = (u8*)decode((__u32*)p, entry, plus);
+		if (!p || IS_ERR(p))
+			break;
+		pg_offset = p - start;
+		entry->prev = entry->offset;
+		entry->offset = base + pg_offset;
+		if (loop_count++ > 200) {
+			loop_count = 0;
+			schedule();
+		}
 	}
+	kunmap(page);
 
-	return cookie;
+	dfprintk(VFS, "NFS: nfs_do_filldir() filling ended @ offset %ld; returning = %d\n", entry->offset, res);
+	return res;
 }
 
-/* The file offset position is represented in pure bytes, to
- * make the page cache interface straight forward.
- *
- * However, some way is needed to make the connection between the
- * opaque NFS directory entry cookies and our offsets, so a per-inode
- * cookie cache table is used.
+/* The file offset position is now represented as a true offset into the
+ * page cache as is the case in most of the other filesystems.
  */
 static int nfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
-	struct dentry *dentry = filp->f_dentry;
-	struct inode *inode = dentry->d_inode;
-	struct page *page;
-	long offset;
-	int res;
+	struct dentry	*dentry = filp->f_dentry;
+	struct inode	*inode = dentry->d_inode;
+	struct page	*page;
+	struct nfs_entry my_entry,
+			*entry = &my_entry;
+	loff_t		offset;
+	long		res;
 
-	res = nfs_revalidate_inode(NFS_DSERVER(dentry), dentry);
+	res = nfs_revalidate(dentry);
 	if (res < 0)
 		return res;
 
-	if (NFS_DIREOF(inode) && filp->f_pos >= NFS_DIREOF(inode))
-		return 0;
+	/*
+	 * filp->f_pos points to the file offset in the page cache.
+	 * but if the cache has meanwhile been zapped, we need to
+	 * read from the last dirent to revalidate f_pos
+	 * itself.
+	 */
+	memset(entry, 0, sizeof(*entry));
 
-	if ((offset = nfs_readdir_offset(inode, filp->f_pos)) < 0)
-		goto no_dirent_page;
+	offset = filp->f_pos;
 
-	page = find_get_page(&inode->i_data, offset);
-	if (!page)
-		goto no_dirent_page;
-	if (!Page_Uptodate(page))
-		goto dirent_read_error;
-success:
-	kmap(page);
-	filp->f_pos = nfs_do_filldir((__u32 *) page_address(page),
-				     filp->f_pos, dirent, filldir);
-	kunmap(page);
-	page_cache_release(page);
+	while(!entry->eof) {
+		res = search_cached_dirent_pages(inode, offset, entry);
+
+		if (res < 0) {
+			if (entry->eof)
+				break;
+			res = refetch_to_readdir(filp, inode, offset, entry);
+			if (res < 0)
+				break;
+		}
+
+		page = entry->page;
+		if (!page)
+			printk(KERN_ERR "NFS: Missing page...\n");
+		res = nfs_do_filldir(filp, inode, entry, dirent, filldir);
+		page_cache_release(page);
+		entry->page = NULL;
+		if (res < 0) {
+			res = 0;
+			break;
+		}
+		offset = filp->f_pos;
+	}
+	if (entry->page)
+		page_cache_release(entry->page);
+	if (res < 0 && res != -EBADCOOKIE)
+		return res;
 	return 0;
-
-no_dirent_page:
-	page = try_to_get_dirent_page(filp, filp->f_pos, 1);
-	if (!page)
-		goto no_page;
-
-	if (Page_Uptodate(page))
-		goto success;
-dirent_read_error:
-	page_cache_release(page);
-no_page:
-	return -EIO;
-}
-
-/* Flush directory cookie and EOF caches for an inode.
- * So we don't thrash allocating/freeing cookie tables,
- * we keep the cookies around until the inode is
- * deleted/reused.
- */
-__inline__ void nfs_flush_dircache(struct inode *inode)
-{
-	struct nfs_cookie_table *p = NFS_COOKIES(inode);
-
-	while (p != NULL) {
-		int i;
-
-		for(i = 0; i < COOKIES_PER_CHUNK; i++)
-			p->cookies[i] = 0;
-
-		p = p->next;
-	}
-	NFS_DIREOF(inode) = 0;
-}
-
-/* Free up directory cache state, this happens when
- * nfs_delete_inode is called on an NFS directory.
- */
-void nfs_free_dircache(struct inode *inode)
-{
-	struct nfs_cookie_table *p = NFS_COOKIES(inode);
-
-	while (p != NULL) {
-		struct nfs_cookie_table *next = p->next;
-		kmem_cache_free(nfs_cookie_cachep, p);
-		p = next;
-	}
-	NFS_COOKIES(inode) = NULL;
-	NFS_DIREOF(inode) = 0;
 }
 
 /*
@@ -580,7 +552,8 @@ static int nfs_lookup_revalidate(struct dentry * dentry, int flags)
 		goto out_bad;
 
 	/* Inode number matches? */
-	if (NFS_FSID(inode) != fattr.fsid ||
+	if (!(fattr.valid & NFS_ATTR_FATTR) ||
+	    NFS_FSID(inode) != fattr.fsid ||
 	    NFS_FILEID(inode) != fattr.fileid)
 		goto out_bad;
 
@@ -603,10 +576,10 @@ out_bad:
 		goto out_valid;
 	d_drop(dentry);
 	/* Purge readdir caches. */
-	if (dentry->d_parent->d_inode) {
+	if (dentry->d_parent->d_inode)
 		nfs_zap_caches(dentry->d_parent->d_inode);
-		NFS_CACHEINV(dentry->d_parent->d_inode);
-	}
+	if (inode && S_ISDIR(inode->i_mode))
+		nfs_zap_caches(inode);
 	return 0;
 }
 
@@ -768,8 +741,7 @@ static int nfs_create(struct inode *dir, struct dentry *dentry, int mode)
 	/*
 	 * Invalidate the dir cache before the operation to avoid a race.
 	 */
-	invalidate_inode_pages(dir);
-	nfs_flush_dircache(dir);
+	nfs_zap_caches(dir);
 	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dentry->d_parent),
 			dentry->d_name.name, &attr, &fhandle, &fattr);
 	if (!error)
@@ -800,8 +772,7 @@ static int nfs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rde
 		attr.ia_valid |= ATTR_SIZE;
 	}
 
-	invalidate_inode_pages(dir);
-	nfs_flush_dircache(dir);
+	nfs_zap_caches(dir);
 	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dentry->d_parent),
 				dentry->d_name.name, &attr, &fhandle, &fattr);
 	if (!error)
@@ -834,8 +805,7 @@ static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	 * depending on potentially bogus information.
 	 */
 	d_drop(dentry);
-	invalidate_inode_pages(dir);
-	nfs_flush_dircache(dir);
+	nfs_zap_caches(dir);
 	error = nfs_proc_mkdir(NFS_DSERVER(dentry), NFS_FH(dentry->d_parent),
 				dentry->d_name.name, &attr, &fhandle, &fattr);
 	if (!error)
@@ -850,8 +820,7 @@ static int nfs_rmdir(struct inode *dir, struct dentry *dentry)
 	dfprintk(VFS, "NFS: rmdir(%x/%ld, %s\n",
 		dir->i_dev, dir->i_ino, dentry->d_name.name);
 
-	invalidate_inode_pages(dir);
-	nfs_flush_dircache(dir);
+	nfs_zap_caches(dir);
 	error = nfs_proc_rmdir(NFS_SERVER(dir), NFS_FH(dentry->d_parent),
 				dentry->d_name.name);
 
@@ -923,8 +892,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 			goto out;
 	} while(sdentry->d_inode != NULL); /* need negative lookup */
 
-	invalidate_inode_pages(dir);
-	nfs_flush_dircache(dir);
+	nfs_zap_caches(dir);
 	error = nfs_proc_rename(NFS_SERVER(dir),
 				NFS_FH(dentry->d_parent), dentry->d_name.name,
 				NFS_FH(dentry->d_parent), silly);
@@ -987,8 +955,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
 			inode->i_nlink --;
 		d_delete(dentry);
 	}
-	invalidate_inode_pages(dir);
-	nfs_flush_dircache(dir);
+	nfs_zap_caches(dir);
 	error = nfs_proc_remove(NFS_SERVER(dir), NFS_FH(dentry->d_parent),
 				dentry->d_name.name);
 	/*
@@ -1053,8 +1020,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 	 * can't instantiate the new inode.
 	 */
 	d_drop(dentry);
-	invalidate_inode_pages(dir);
-	nfs_flush_dircache(dir);
+	nfs_zap_caches(dir);
 	error = nfs_proc_symlink(NFS_SERVER(dir), NFS_FH(dentry->d_parent),
 				dentry->d_name.name, symname, &attr);
 	if (!error) {
@@ -1084,8 +1050,7 @@ nfs_link(struct dentry *old_dentry, struct inode *dir, struct dentry *dentry)
 	 * we can't use the existing dentry.
 	 */
 	d_drop(dentry);
-	invalidate_inode_pages(dir);
-	nfs_flush_dircache(dir);
+	nfs_zap_caches(dir);
 	error = nfs_proc_link(NFS_DSERVER(old_dentry), NFS_FH(old_dentry),
 				NFS_FH(dentry->d_parent), dentry->d_name.name);
 	if (!error) {
@@ -1197,10 +1162,8 @@ go_ahead:
 	if (new_inode)
 		d_delete(new_dentry);
 
-	invalidate_inode_pages(new_dir);
-	nfs_flush_dircache(new_dir);
-	invalidate_inode_pages(old_dir);
-	nfs_flush_dircache(old_dir);
+	nfs_zap_caches(new_dir);
+	nfs_zap_caches(old_dir);
 	error = nfs_proc_rename(NFS_DSERVER(old_dentry),
 			NFS_FH(old_dentry->d_parent), old_dentry->d_name.name,
 			NFS_FH(new_dentry->d_parent), new_dentry->d_name.name);
@@ -1227,13 +1190,6 @@ int nfs_init_fhcache(void)
 					  0, SLAB_HWCACHE_ALIGN,
 					  NULL, NULL);
 	if (nfs_fh_cachep == NULL)
-		return -ENOMEM;
-
-	nfs_cookie_cachep = kmem_cache_create("nfs_dcookie",
-					      sizeof(struct nfs_cookie_table),
-					      0, SLAB_HWCACHE_ALIGN,
-					      NULL, NULL);
-	if (nfs_cookie_cachep == NULL)
 		return -ENOMEM;
 
 	return 0;

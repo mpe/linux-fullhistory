@@ -642,11 +642,10 @@ static void sb_mixer_reset(sb_devc * devc)
 {
 	char name[32];
 	int i;
-	extern int sm_games;
 
 	sprintf(name, "SB_%d", devc->sbmixnum);
 
-	if (sm_games)
+	if (devc->sbmo.sm_games)
 		devc->levels = load_mixer_volumes(name, smg_default_levels, 1);
 	else
 		devc->levels = load_mixer_volumes(name, sb_default_levels, 1);

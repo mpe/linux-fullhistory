@@ -32,8 +32,6 @@ extern struct tasklet_struct keyboard_tasklet;
 extern void kbd_reset_kdown(void);
 int kbd_read_mask;
 
-#define IRQ_KEYBOARDRX 15
-
 #define VERSION 100
 
 #define KBD_REPORT_ERR
@@ -330,6 +328,10 @@ int __init ps2kbd_init_hw(void)
 {
 	unsigned long flags;
 
+	/* Reset the keyboard state machine. */
+	outb(0, IOMD_KCTRL);
+	outb(8, IOMD_KCTRL);
+
 	save_flags_cli (flags);
 	if (request_irq (IRQ_KEYBOARDRX, ps2kbd_rx, 0, "keyboard", NULL) != 0)
 		panic("Could not allocate keyboard receive IRQ!");
@@ -342,4 +344,3 @@ int __init ps2kbd_init_hw(void)
 	printk (KERN_INFO "PS/2 keyboard driver v%d.%02d\n", VERSION/100, VERSION%100);
 	return 0;
 }
-

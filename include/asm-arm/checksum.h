@@ -123,12 +123,14 @@ csum_tcpudp_magic(unsigned long saddr, unsigned long daddr, unsigned short len,
 	adcs	%0, %0, %3
 	adcs	%0, %0, %4
 	adcs	%0, %0, %5
+	adc	%0, %0, #0
 	adds	%0, %0, %0, lsl #16
-	addcs	%0, %0, #0x10000"
+	addcs	%0, %0, #0x10000
+	mvn	%0, %0"
 	: "=&r"(sum)
-	: "r" (sum), "r" (daddr), "r" (saddr), "r" (ntohs(len) << 16), "Ir" (proto << 8)
+	: "r" (sum), "r" (daddr), "r" (saddr), "r" (ntohs(len)), "Ir" (proto << 8)
 	: "cc");
-	return (~sum) >> 16;
+	return sum >> 16;
 }
 
 

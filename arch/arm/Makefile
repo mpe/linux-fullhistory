@@ -100,7 +100,7 @@ endif
 
 LIBGCC		:= $(shell $(CC) $(CFLAGS) --print-libgcc-file-name)
 
-export	LIBGCC
+export	LIBGCC MACHINE PROCESSOR TEXTADDR
 
 ifeq ($(CONFIG_ARCH_A5K),y)
 MACHINE		 = a5k
@@ -216,7 +216,7 @@ archclean:
 	@$(MAKEBOOT) clean
 	$(RM) arch/arm/lib/constants.h arch/arm/vmlinux.lds
 
-archdep:
+archdep: symlinks
 	@$(MAKEBOOT) dep
 
 # My testing targets (that short circuit a few dependencies)
@@ -256,3 +256,8 @@ victor_config:
 empeg_config:
 	$(RM) arch/arm/defconfig
 	cp arch/arm/def-configs/empeg arch/arm/defconfig
+
+thinclient_config:
+	$(RM) arch/arm/defconfig
+	cp arch/arm/def-configs/thinclient arch/arm/defconfig
+

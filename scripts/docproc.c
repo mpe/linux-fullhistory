@@ -12,7 +12,7 @@
 int main(int argc, char *argv[])
 {
 	char buf[1024];
-	char *vec[1024];
+	char *vec[8192];
 	char type[64];
 	int i;
 	int vp=2;
@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
 	 */
 	vec[0]="kernel-doc";
 	vec[1]="-docbook";
-	for(i=1;vp<1021;i++)
+	for(i=1;vp<8189;i++)
 	{
 		if(argv[i]==NULL)
 			break;
@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
 					exit(1);
 				case  0:
 					execvp("scripts/kernel-doc", vec);
-					perror("exec");
+					perror("exec scripts/kernel-doc");
 					exit(1);
 				default:
 					waitpid(pid, NULL,0);

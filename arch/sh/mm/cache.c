@@ -1,4 +1,4 @@
-/* $Id: cache.c,v 1.9 2000/02/14 12:45:26 gniibe Exp $
+/* $Id: cache.c,v 1.10 2000/03/07 11:58:34 gniibe Exp $
  *
  *  linux/arch/sh/mm/cache.c
  *
@@ -67,36 +67,15 @@ static struct _cache_system_info cache_system_info;
 #define CACHE_IC_NUM_WAYS	  1
 #endif
 
-#define jump_to_p2(__dummy) \
-	asm volatile("mova	1f,%0\n\t" \
-		     "add	%1,%0\n\t" \
-		     "jmp	@r0		! Jump to P2 area\n\t" \
-		     " nop\n\t" \
-		     ".balign 4\n" \
-		     "1:" \
-		     : "=&z" (__dummy) \
-		     : "r" (0x20000000))
-
-#define back_to_p1(__dummy) \
-	asm volatile("nop;nop;nop;nop;nop;nop\n\t" \
-		     "mova	9f,%0\n\t" \
-		     "sub	%1,%0\n\t" \
-		     "jmp	@r0		! Back to P1 area\n\t" \
-		     " nop\n\t" \
-		     ".balign 4\n" \
-		     "9:" \
-		     : "=&z" (__dummy) \
-		     : "r" (0x20000000), "0" (__dummy))
-
 /* Write back caches to memory (if needed) and invalidates the caches */
 void cache_flush_area(unsigned long start, unsigned long end)
 {
-	unsigned long flags, __dummy;
+	unsigned long flags;
 	unsigned long addr, data, v, p;
 
 	start &= ~(L1_CACHE_BYTES-1);
 	save_and_cli(flags);
-	jump_to_p2(__dummy);
+	jump_to_P2();
 
 	for (v = start; v < end; v+=L1_CACHE_BYTES) {
 		p = __pa(v);
@@ -110,7 +89,7 @@ void cache_flush_area(unsigned long start, unsigned long end)
 			     : "m" (__m(v)));
 #endif
 	}
-	back_to_p1(__dummy);
+	back_to_P1();
 	restore_flags(flags);
 }
 
@@ -124,12 +103,12 @@ void cache_flush_area(unsigned long start, unsigned long end)
    the cache line. */
 void cache_purge_area(unsigned long start, unsigned long end)
 {
-	unsigned long flags, __dummy;
+	unsigned long flags;
 	unsigned long addr, data, v, p, j;
 
 	start &= ~(L1_CACHE_BYTES-1);
 	save_and_cli(flags);
-	jump_to_p2(__dummy);
+	jump_to_P2();
 
 	for (v = start; v < end; v+=L1_CACHE_BYTES) {
 		p = __pa(v);
@@ -150,19 +129,19 @@ void cache_purge_area(unsigned long start, unsigned long end)
 			     : "m" (__m(v)));
 #endif
 	}
-	back_to_p1(__dummy);
+	back_to_P1();
 	restore_flags(flags);
 }
 
 /* write back the dirty cache, but not invalidate the cache */
 void cache_wback_area(unsigned long start, unsigned long end)
 {
-	unsigned long flags, __dummy;
+	unsigned long flags;
 	unsigned long v;
 
 	start &= ~(L1_CACHE_BYTES-1);
 	save_and_cli(flags);
-	jump_to_p2(__dummy);
+	jump_to_P2();
 
 	for (v = start; v < end; v+=L1_CACHE_BYTES) {
 #if CACHE_IC_ADDRESS_ARRAY == CACHE_OC_ADDRESS_ARRAY
@@ -187,7 +166,7 @@ void cache_wback_area(unsigned long start, unsigned long end)
 			     : "m" (__m(v)));
 #endif
 	}
-	back_to_p1(__dummy);
+	back_to_P1();
 	restore_flags(flags);
 }
 
@@ -199,11 +178,11 @@ void cache_wback_area(unsigned long start, unsigned long end)
  */
 static void cache_wback_all(void)
 {
-	unsigned long flags, __dummy;
+	unsigned long flags;
 	unsigned long addr, data, i, j;
 
 	save_and_cli(flags);
-	jump_to_p2(__dummy);
+	jump_to_P2();
 
 	for (i=0; i<CACHE_OC_NUM_ENTRIES; i++) {
 		for (j=0; j<CACHE_OC_NUM_WAYS; j++) {
@@ -217,7 +196,7 @@ static void cache_wback_all(void)
 		}
 	}
 
-	back_to_p1(__dummy);
+	back_to_P1();
 	restore_flags(flags);
 }
 
@@ -225,9 +204,9 @@ static void
 detect_cpu_and_cache_system(void)
 {
 #if defined(__sh3__)
-	unsigned long __dummy, addr0, addr1, data0, data1, data2, data3;
+	unsigned long addr0, addr1, data0, data1, data2, data3;
 
-	jump_to_p2(__dummy);
+	jump_to_P2();
 	/* Check if the entry shadows or not.
 	 * When shadowed, it's 128-entry system.
 	 * Otherwise, it's 256-entry system.
@@ -245,7 +224,7 @@ detect_cpu_and_cache_system(void)
 	/* Invaliate them, in case the cache has been enabled already. */
 	ctrl_outl(data0&~0x00000001,addr0);
 	ctrl_outl(data2&~0x00000001,addr1);
-	back_to_p1(__dummy);
+	back_to_P1();
 
 	if (data0 == data1 && data2 == data3) {	/* Shadow */
 		cache_system_info.way_shift = 11;
@@ -265,7 +244,7 @@ detect_cpu_and_cache_system(void)
 
 void __init cache_init(void)
 {
-	unsigned long __dummy, ccr;
+	unsigned long ccr;
 
 	detect_cpu_and_cache_system();
 
@@ -277,19 +256,19 @@ void __init cache_init(void)
 		   we only need to flush the half of the caches. */
 		cache_wback_all();
 
-	jump_to_p2(__dummy);
+	jump_to_P2();
 	ctrl_outl(CCR_CACHE_INIT, CCR);
-	back_to_p1(__dummy);
+	back_to_P1();
 }
 
 #if defined(__SH4__)
 void flush_icache_page(struct vm_area_struct *vma, struct page *pg)
 {
-	unsigned long flags, __dummy;
+	unsigned long flags;
 	unsigned long addr, data, v;
 
 	save_and_cli(flags);
-	jump_to_p2(__dummy);
+	jump_to_P2();
 
 	v = page_address(pg);
 
@@ -303,18 +282,18 @@ void flush_icache_page(struct vm_area_struct *vma, struct page *pg)
 	data = (v&0xfffffc00); /* Valid=0 */
 	ctrl_outl(data,addr);
 
-	back_to_p1(__dummy);
+	back_to_P1();
 	restore_flags(flags);
 }
 
 void flush_icache_range(unsigned long start, unsigned long end)
 {
-	unsigned long flags, __dummy;
+	unsigned long flags;
 	unsigned long addr, data, v;
 
 	start &= ~(L1_CACHE_BYTES-1);
 	save_and_cli(flags);
-	jump_to_p2(__dummy);
+	jump_to_P2();
 
 	for (v = start; v < end; v+=L1_CACHE_BYTES) {
 		/* Write back O Cache */
@@ -327,22 +306,22 @@ void flush_icache_range(unsigned long start, unsigned long end)
 		data = (v&0xfffffc00); /* Valid=0 */
 		ctrl_outl(data,addr);
 	}
-	back_to_p1(__dummy);
+	back_to_P1();
 	restore_flags(flags);
 }
 
 void flush_cache_all(void)
 {
-	unsigned long flags,__dummy;
+	unsigned long flags;
 
 	/* Write back Operand Cache */
 	cache_wback_all ();
 
 	/* Then, invalidate Instruction Cache and Operand Cache */
 	save_and_cli(flags);
-	jump_to_p2(__dummy);
+	jump_to_P2();
 	ctrl_outl(CCR_CACHE_INIT, CCR);
-	back_to_p1(__dummy);
+	back_to_P1();
 	restore_flags(flags);
 }
 
@@ -356,12 +335,12 @@ void flush_cache_mm(struct mm_struct *mm)
 void flush_cache_range(struct mm_struct *mm, unsigned long start,
 		       unsigned long end)
 {
-	unsigned long flags, __dummy;
+	unsigned long flags;
 	unsigned long addr, data, v;
 
 	start &= ~(L1_CACHE_BYTES-1);
 	save_and_cli(flags);
-	jump_to_p2(__dummy);
+	jump_to_P2();
 
 	for (v = start; v < end; v+=L1_CACHE_BYTES) {
 		addr = CACHE_IC_ADDRESS_ARRAY |
@@ -372,7 +351,7 @@ void flush_cache_range(struct mm_struct *mm, unsigned long start,
 			(v&CACHE_OC_ENTRY_MASK) | 0x8 /* A-bit */;
 		ctrl_outl(data,addr);
 	}
-	back_to_p1(__dummy);
+	back_to_P1();
 	restore_flags(flags);
 }
 

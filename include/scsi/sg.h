@@ -11,9 +11,13 @@ Original driver (sg.h):
 Version 2 and 3 extensions to driver:
 *       Copyright (C) 1998 - 2000 Douglas Gilbert
 
-    Version: 3.1.12 (20000222)
+    Version: 3.1.13 (20000323)
     This version is for 2.3/2.4 series kernels.
 
+    Changes since 3.1.12 (20000222)
+    	- make sg_header interface use SCSI_DATA_UNKNOWN
+    	- add SG_DXFER_UNKNOWN define to sg interface
+    	- stop allocating data buffers to non data transfer commands
     Changes since 3.1.10 (20000123)
     	- make device allocation dynamic (get rid of SG_EXTRA_DEVS)
 	- move to sg0,sg1,sg2 rather than sga,sgb,sgc
@@ -147,6 +151,7 @@ typedef struct sg_io_hdr
 				   additional property than during indirect
 				   IO the user buffer is copied into the
 				   kernel buffers before the transfer */
+#define SG_DXFER_UNKNOWN -5     /* Unknown data direction */
 
 /* following flag values can be "or"-ed together */
 #define SG_FLAG_DIRECT_IO 1     /* default is indirect IO */

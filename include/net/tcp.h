@@ -669,8 +669,6 @@ extern void		       	tcp_v4_send_check(struct sock *sk,
 						  struct tcphdr *th, int len, 
 						  struct sk_buff *skb);
 
-extern void			tcp_v4_send_reset(struct sk_buff *skb);
-
 extern int			tcp_v4_conn_request(struct sock *sk,
 						    struct sk_buff *skb);
 
@@ -907,6 +905,13 @@ struct tcp_skb_cb {
 };
 
 #define TCP_SKB_CB(__skb)	((struct tcp_skb_cb *)&((__skb)->cb[0]))
+
+/*
+ *	Compute minimal free write space needed to queue new packets. 
+ */
+#define tcp_min_write_space(__sk) \
+	(atomic_read(&(__sk)->wmem_alloc) / 2)
+
 
 /* This determines how many packets are "in the network" to the best
  * of our knowledge.  In many cases it is conservative, but where
@@ -1342,6 +1347,15 @@ extern __inline__ void tcp_init_buffer_space(struct sock *sk)
 
 	if (sk->rcvbuf < 3*rcvbuf)
 		sk->rcvbuf = min (3*rcvbuf, sysctl_rmem_max);
+
+	/* Reserve slack space to reduce jitter of advertised window. */
+	if (tp->window_clamp >= tcp_full_space(sk)) {
+		int nwin = tcp_full_space(sk) - tp->mss_clamp;
+
+		if (nwin >= MAX_TCP_WINDOW && nwin >= 2*tp->advmss)
+			tp->window_clamp = nwin;
+	}
+
 	if (sk->sndbuf < 3*sndbuf)
 		sk->sndbuf = min (3*sndbuf, sysctl_wmem_max);
 }

@@ -13,11 +13,11 @@ extern __inline__ char *strcpy(char *__dest, const char *__src)
 	unsigned long __dummy;
 
 	__asm__ __volatile__("1:\n\t"
-			     "mov.b	@%1+,%2\n\t"
-			     "mov.b	%2,@%0\n\t"
-			     "cmp/eq	#0,%2\n\t"
+			     "mov.b	@%1+, %2\n\t"
+			     "mov.b	%2, @%0\n\t"
+			     "cmp/eq	#0, %2\n\t"
 			     "bf/s	1b\n\t"
-			     " add	#1,%0\n\t"
+			     " add	#1, %0\n\t"
 			     : "=r" (__dest), "=r" (__src), "=&z" (__dummy)
 			     : "0" (__dest), "1" (__src)
 			     : "memory");
@@ -36,13 +36,13 @@ extern __inline__ char *strncpy(char *__dest, const char *__src, size_t __n)
 
 	__asm__ __volatile__(
 		"1:\n"
-		"mov.b	@%1+,%2\n\t"
-		"mov.b	%2,@%0\n\t"
-		"cmp/eq	#0,%2\n\t"
+		"mov.b	@%1+, %2\n\t"
+		"mov.b	%2, @%0\n\t"
+		"cmp/eq	#0, %2\n\t"
 		"bt/s	2f\n\t"
 		" cmp/eq	%5,%1\n\t"
 		"bf/s	1b\n\t"
-		" add	#1,%0\n"
+		" add	#1, %0\n"
 		"2:"
 		: "=r" (__dest), "=r" (__src), "=&z" (__dummy)
 		: "0" (__dest), "1" (__src), "r" (__src+__n)
@@ -58,17 +58,17 @@ extern __inline__ int strcmp(const char *__cs, const char *__ct)
 	unsigned long __dummy;
 
 	__asm__ __volatile__(
-		"mov.b	@%1+,%3\n"
+		"mov.b	@%1+, %3\n"
 		"1:\n\t"
-		"mov.b	@%0+,%2\n\t"
-		"cmp/eq #0,%3\n\t"
+		"mov.b	@%0+, %2\n\t"
+		"cmp/eq #0, %3\n\t"
 		"bt	2f\n\t"
-		"cmp/eq %2,%3\n\t"
+		"cmp/eq %2, %3\n\t"
 		"bt/s	1b\n\t"
-		" mov.b	@%1+,%3\n\t"
-		"add	#-2,%1\n\t"
-		"mov.b	@%1,%3\n\t"
-		"sub	%3,%2\n"
+		" mov.b	@%1+, %3\n\t"
+		"add	#-2, %1\n\t"
+		"mov.b	@%1, %3\n\t"
+		"sub	%3, %2\n"
 		"2:"
 		: "=r" (__cs), "=r" (__ct), "=&r" (__res), "=&z" (__dummy)
 		: "0" (__cs), "1" (__ct));
@@ -83,20 +83,20 @@ extern __inline__ int strncmp(const char *__cs, const char *__ct, size_t __n)
 	unsigned long __dummy;
 
 	__asm__ __volatile__(
-		"mov.b	@%1+,%3\n"
+		"mov.b	@%1+, %3\n"
 		"1:\n\t"
-		"mov.b	@%0+,%2\n\t"
-		"cmp/eq %6,%0\n\t"
+		"mov.b	@%0+, %2\n\t"
+		"cmp/eq %6, %0\n\t"
 		"bt/s	2f\n\t"
-		" cmp/eq #0,%3\n\t"
+		" cmp/eq #0, %3\n\t"
 		"bt/s	3f\n\t"
-		" cmp/eq %3,%2\n\t"
+		" cmp/eq %3, %2\n\t"
 		"bt/s	1b\n\t"
-		" mov.b	@%1+,%3\n\t"
-		"add	#-2,%1\n\t"
-		"mov.b	@%1,%3\n"
+		" mov.b	@%1+, %3\n\t"
+		"add	#-2, %1\n\t"
+		"mov.b	@%1, %3\n"
 		"2:\n\t"
-		"sub	%3,%2\n"
+		"sub	%3, %2\n"
 		"3:"
 		:"=r" (__cs), "=r" (__ct), "=&r" (__res), "=&z" (__dummy)
 		: "0" (__cs), "1" (__ct), "r" (__cs+__n));

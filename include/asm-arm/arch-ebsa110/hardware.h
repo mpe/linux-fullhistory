@@ -27,6 +27,7 @@
  * RAM definitions
  */
 #define FLUSH_BASE_PHYS		0x40000000
+#define UNCACHEABLE_ADDR	0xf3000000
 
 #else	/* __ASSEMBLY__ */
 

@@ -231,7 +231,7 @@ static struct i2c_adapter pcf_isa_ops = {
 	pcf_isa_unreg,
 };
 
-static int __init i2c_pcfisa_init(void) 
+int __init i2c_pcfisa_init(void) 
 {
 
 	struct i2c_pcf_isa *pisa = &gpi;

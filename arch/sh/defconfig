@@ -29,10 +29,12 @@ CONFIG_MEMORY_START=0c000000
 # General setup
 #
 # CONFIG_ISA is not set
+# CONFIG_SBUS is not set
 # CONFIG_NET is not set
 CONFIG_CF_ENABLER=y
 # CONFIG_PCI is not set
 # CONFIG_HOTPLUG is not set
+# CONFIG_PCMCIA is not set
 # CONFIG_SYSVIPC is not set
 # CONFIG_BSD_PROCESS_ACCT is not set
 # CONFIG_SYSCTL is not set

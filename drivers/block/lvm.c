@@ -931,7 +931,7 @@ static int lvm_blk_ioctl(struct inode *inode, struct file *file,
 		printk(KERN_DEBUG
 		       "%s -- lvm_blk_ioctl -- BLKRAGET\n", lvm_name);
 #endif
-		if (put_user(lv->lv_read_ahead, (long *)arg))
+		if (put_user(lv_ptr->lv_read_ahead, (long *)arg))
 			return -EFAULT;
 		break;
 

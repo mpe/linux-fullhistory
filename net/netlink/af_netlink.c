@@ -436,7 +436,7 @@ retry:
 
 		if (signal_pending(current)) {
 			kfree_skb(skb);
-			return -ERESTARTSYS;
+			return sock_intr_errno(timeo);
 		}
 		goto retry;
 	}

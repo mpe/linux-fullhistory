@@ -791,7 +791,7 @@ static int __init probe_mad16_mpu(struct address_info *hw_config)
 
 		mad_write(MC3_PORT, tmp | 0x04);
 		hw_config->driver_use_1 = SB_MIDI_ONLY;
-		return sb_dsp_detect(hw_config, 0, 0);
+		return sb_dsp_detect(hw_config, 0, 0, NULL);
 #else
 		/* assuming all later Mozart cards are identified as
 		 * either 82C928 or Mozart. If so, following code attempts

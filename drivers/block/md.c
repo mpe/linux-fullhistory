@@ -3265,7 +3265,7 @@ static int __init md_setup(char *str)
 	md_setup_args.devices[minor][i] = (kdev_t) 0;
 	md_setup_args.pers[minor] = level | factor | (fault << FAULT_SHIFT);
 	md_setup_args.set |= (1 << minor);
-	return 0;
+	return 1;
 }
 #endif
 

@@ -11,8 +11,6 @@
 #include <linux/netfilter_ipv4/ip_nat_rule.h>
 #include <linux/netfilter_ipv4/ip_tables.h>
 
-EXPORT_NO_SYMBOLS;
-
 #if 0
 #define DEBUGP printk
 #else

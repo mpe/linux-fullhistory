@@ -12,8 +12,10 @@ CONFIG_EXPERIMENTAL=y
 # Platform dependent setup
 #
 # CONFIG_ISA is not set
+# CONFIG_PCMCIA is not set
 CONFIG_AMIGA=y
 # CONFIG_ATARI is not set
+# CONFIG_HADES is not set
 # CONFIG_PCI is not set
 # CONFIG_MAC is not set
 # CONFIG_APOLLO is not set
@@ -195,6 +197,10 @@ CONFIG_AMIGA_BUILTIN_SERIAL=y
 # CONFIG_GVPIOEXT_LP is not set
 # CONFIG_GVPIOEXT_PLIP is not set
 # CONFIG_MULTIFACE_III_TTY is not set
+# CONFIG_SUN3X_ZS is not set
+# CONFIG_SUN_KEYBOARD is not set
+# CONFIG_SUN_MOUSE is not set
+# CONFIG_SBUS is not set
 # CONFIG_SERIAL_CONSOLE is not set
 # CONFIG_USERIAL is not set
 # CONFIG_WATCHDOG is not set

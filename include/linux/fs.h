@@ -79,7 +79,6 @@ extern int max_super_blocks, nr_super_blocks;
 #define FS_NO_PRELIM	4 /* prevent preloading of dentries, even if
 			   * FS_NO_DCACHE is not set.
 			   */
-#define FS_IBASKET	8 /* FS does callback to free_ibasket() if space gets low. */
 
 /*
  * These are the fs-independent mount-flags: up to 16 flags are supported
@@ -582,9 +581,6 @@ struct super_block {
 	struct dentry		*s_root;
 	wait_queue_head_t	s_wait;
 
-	struct inode		*s_ibasket;
-	short int		s_ibasket_count;
-	short int		s_ibasket_max;
 	struct list_head	s_dirty;	/* dirty inodes */
 	struct list_head	s_files;
 

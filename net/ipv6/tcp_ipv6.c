@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.121 2000/03/08 19:36:47 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.122 2000/03/25 01:52:11 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -910,7 +910,6 @@ static void tcp_v6_send_check(struct sock *sk, struct tcphdr *th, int len,
 			      struct sk_buff *skb)
 {
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
-	th->check = 0;
 	
 	th->check = csum_ipv6_magic(&np->saddr, &np->daddr, len, IPPROTO_TCP, 
 				    csum_partial((char *)th, th->doff<<2, 

@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@redhat.com>
  *
- *	Version: $Id: icmp.c,v 1.66 2000/03/17 14:41:50 davem Exp $
+ *	Version: $Id: icmp.c,v 1.67 2000/03/25 01:55:11 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -1128,6 +1128,7 @@ void __init icmp_init(struct net_proto_family *ops)
 	if ((err=ops->create(icmp_socket, IPPROTO_ICMP))<0)
 		panic("Failed to create the ICMP control socket.\n");
 	icmp_socket->sk->allocation=GFP_ATOMIC;
+	icmp_socket->sk->sndbuf = SK_WMEM_MAX*2;
 	icmp_socket->sk->protinfo.af_inet.ttl = MAXTTL;
 
 	/* Unhash it so that IP input processing does not even

@@ -406,7 +406,8 @@ extern int check_pgt_cache(void);
 
 extern void free_area_init(unsigned long * zones_size);
 extern void free_area_init_node(int nid, pg_data_t *pgdat, 
-		unsigned long * zones_size, unsigned long zone_start_paddr);
+	unsigned long * zones_size, unsigned long zone_start_paddr, 
+	unsigned long *zholes_size);
 extern void mem_init(void);
 extern void show_mem(void);
 extern void si_meminfo(struct sysinfo * val);

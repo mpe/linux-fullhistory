@@ -22,6 +22,7 @@
 #include <net/checksum.h>
 #include <linux/stddef.h>
 #include <linux/sysctl.h>
+#include <linux/slab.h>
 
 /* This rwlock protects the main hash table, protocol/helper/expected
    registrations, conntrack timers*/
@@ -43,13 +44,14 @@
 DECLARE_RWLOCK(ip_conntrack_lock);
 
 void (*ip_conntrack_destroyed)(struct ip_conntrack *conntrack) = NULL;
-static LIST_HEAD(expect_list);
-static LIST_HEAD(protocol_list);
+LIST_HEAD(expect_list);
+LIST_HEAD(protocol_list);
 static LIST_HEAD(helpers);
 unsigned int ip_conntrack_htable_size = 0;
 static int ip_conntrack_max = 0;
 static atomic_t ip_conntrack_count = ATOMIC_INIT(0);
 struct list_head *ip_conntrack_hash;
+static kmem_cache_t *ip_conntrack_cachep;
 
 extern struct ip_conntrack_protocol ip_conntrack_generic_protocol;
 
@@ -167,7 +169,7 @@ destroy_conntrack(struct nf_conntrack *nfct)
 
 	if (ip_conntrack_destroyed)
 		ip_conntrack_destroyed(ct);
-	kfree(ct);
+	kmem_cache_free(ip_conntrack_cachep, ct);
 	atomic_dec(&ip_conntrack_count);
 }
 
@@ -355,7 +357,7 @@ init_conntrack(const struct ip_conntrack_tuple *tuple,
 		return 1;
 	}
 
-	conntrack = kmalloc(sizeof(struct ip_conntrack), GFP_ATOMIC);
+	conntrack = kmem_cache_alloc(ip_conntrack_cachep, GFP_ATOMIC);
 	if (!conntrack) {
 		DEBUGP("Can't allocate conntrack.\n");
 		return 1;
@@ -374,7 +376,7 @@ init_conntrack(const struct ip_conntrack_tuple *tuple,
 		conntrack->infos[i].master = &conntrack->ct_general;
 
 	if (!protocol->new(conntrack, skb->nh.iph, skb->len)) {
-		kfree(conntrack);
+		kmem_cache_free(ip_conntrack_cachep, conntrack);
 		return 1;
 	}
 
@@ -384,7 +386,7 @@ init_conntrack(const struct ip_conntrack_tuple *tuple,
 	if (__ip_conntrack_find(tuple, NULL)) {
 		WRITE_UNLOCK(&ip_conntrack_lock);
 		printk("ip_conntrack: Wow someone raced us!\n");
-		kfree(conntrack);
+		kmem_cache_free(ip_conntrack_cachep, conntrack);
 		return 0;
 	}
 	conntrack->helper = LIST_FIND(&helpers, helper_cmp,
@@ -796,6 +798,7 @@ static struct nf_sockopt_ops so_getorigdst
 #define NET_IP_CONNTRACK_MAX 2089
 #define NET_IP_CONNTRACK_MAX_NAME "ip_conntrack_max"
 
+#ifdef CONFIG_SYSCTL
 static struct ctl_table_header *ip_conntrack_sysctl_header;
 
 static ctl_table ip_conntrack_table[] = {
@@ -813,6 +816,7 @@ static ctl_table ip_conntrack_root_table[] = {
 	{CTL_NET, "net", NULL, 0, 0555, ip_conntrack_dir_table, 0, 0, 0, 0, 0},
 	{ 0 }
 };
+#endif /*CONFIG_SYSCTL*/
 
 static int kill_all(const struct ip_conntrack *i, void *data)
 {
@@ -823,8 +827,11 @@ static int kill_all(const struct ip_conntrack *i, void *data)
    supposed to kill the mall. */
 void ip_conntrack_cleanup(void)
 {
+#ifdef CONFIG_SYSCTL
 	unregister_sysctl_table(ip_conntrack_sysctl_header);
+#endif
 	ip_ct_selective_cleanup(kill_all, NULL);
+	kmem_cache_destroy(ip_conntrack_cachep);
 	vfree(ip_conntrack_hash);
 	nf_unregister_sockopt(&so_getorigdst);
 }
@@ -855,6 +862,16 @@ int __init ip_conntrack_init(void)
 		return -ENOMEM;
 	}
 
+	ip_conntrack_cachep = kmem_cache_create("ip_conntrack",
+	                                        sizeof(struct ip_conntrack), 0,
+	                                        SLAB_HWCACHE_ALIGN, NULL, NULL);
+	if (!ip_conntrack_cachep) {
+		printk(KERN_ERR "Unable to create ip_conntrack slab cache\n");
+		vfree(ip_conntrack_hash);
+		nf_unregister_sockopt(&so_getorigdst);
+		return -ENOMEM;
+	}
+	
 	/* Don't NEED lock here, but good form anyway. */
 	WRITE_LOCK(&ip_conntrack_lock);
 	/* Sew in builtin protocols. */
@@ -873,19 +890,12 @@ int __init ip_conntrack_init(void)
 	ip_conntrack_sysctl_header
 		= register_sysctl_table(ip_conntrack_root_table, 0);
 	if (ip_conntrack_sysctl_header == NULL) {
+		kmem_cache_destroy(ip_conntrack_cachep);
 		vfree(ip_conntrack_hash);
 		nf_unregister_sockopt(&so_getorigdst);
 		return -ENOMEM;
 	}
 #endif /*CONFIG_SYSCTL*/
 
-	ret = ip_conntrack_protocol_tcp_init();
-	if (ret != 0) {
-		unregister_sysctl_table(ip_conntrack_sysctl_header);
-		vfree(ip_conntrack_hash);
-		nf_unregister_sockopt(&so_getorigdst);
-	}
-
 	return ret;
 }
-

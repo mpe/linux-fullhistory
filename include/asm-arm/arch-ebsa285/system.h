@@ -8,7 +8,28 @@
 #include <asm/hardware.h>
 #include <asm/leds.h>
 
-#define arch_do_idle()		cpu_do_idle()
+extern __inline__ void arch_idle(void)
+{
+	unsigned long start_idle;
+
+	start_idle = jiffies;
+
+	do {
+		if (current->need_resched || hlt_counter)
+			goto slow_out;
+		cpu_do_idle(IDLE_WAIT_FAST);
+	} while (time_before(start_idle, jiffies + HZ/3));
+
+	cpu_do_idle(IDLE_CLOCK_SLOW);
+
+	while (!current->need_resched && !hlt_counter) {
+		cpu_do_idle(IDLE_WAIT_SLOW);
+	}
+
+	cpu_do_idle(IDLE_CLOCK_FAST);
+slow_out:
+}
+
 #define arch_power_off()	do { } while (0)
 
 extern __inline__ void arch_reset(char mode)

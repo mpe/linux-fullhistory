@@ -7,8 +7,6 @@
 #include <linux/netfilter_ipv4/ip_tables.h>
 #include <linux/netfilter_ipv4/ipt_MARK.h>
 
-EXPORT_NO_SYMBOLS;
-
 static unsigned int
 target(struct sk_buff **pskb,
        unsigned int hooknum,
@@ -53,15 +51,15 @@ static struct ipt_target ipt_mark_reg
 
 static int __init init(void)
 {
-    if (ipt_register_target(&ipt_mark_reg))
-	return -EINVAL;
+	if (ipt_register_target(&ipt_mark_reg))
+		return -EINVAL;
 
-    return 0;
+	return 0;
 }
 
 static void __exit fini(void)
 {
-    ipt_unregister_target(&ipt_mark_reg);
+	ipt_unregister_target(&ipt_mark_reg);
 }
 
 module_init(init);

@@ -603,6 +603,8 @@ check_if_enabled:
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT366) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CS5530) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CY82C693) ||
+		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CMD646) ||
+		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CMD648) ||
 		    ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && (dev->class & 0x80))) {
 			unsigned long dma_base = ide_get_or_set_dma_base(hwif, (!mate && d->extra) ? d->extra : 0, d->name);
 			if (dma_base && !(pcicmd & PCI_COMMAND_MASTER)) {

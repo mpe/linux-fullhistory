@@ -145,7 +145,9 @@
 /*#define DEBUG_IP_FIREWALL_USER*/
 /*#define DEBUG_IP_FIREWALL_LOCKING*/
 
+#if defined(CONFIG_NETLINK_DEV) || defined(CONFIG_NETLINK_DEV_MODULE)
 static struct sock *ipfwsk;
+#endif
 
 #ifdef CONFIG_SMP
 #define SLOT_NUMBER() (cpu_number_map(smp_processor_id())*2 + !in_interrupt())

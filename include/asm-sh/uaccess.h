@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.6 1999/10/29 13:10:44 gniibe Exp $
+/* $Id: uaccess.h,v 1.10 2000/03/24 13:53:45 gniibe Exp $
  *
  * User space memory access functions
  *
@@ -47,7 +47,7 @@
  */
 #define __range_ok(addr,size) ({ \
 	unsigned long flag,sum; \
-	__asm__("clrt; addc %3,%1; movt %0; cmp/hi %4,%1; rotcl %0" \
+	__asm__("clrt; addc %3, %1; movt %0; cmp/hi %4, %1; rotcl %0" \
 		:"=&r" (flag), "=r" (sum) \
 		:"1" (addr), "r" ((int)(size)), "r" (current->addr_limit.seg)); \
 	flag; })
@@ -137,17 +137,17 @@ default: __get_user_unknown(); break; \
 ({ \
 __asm__ __volatile__( \
 	"1:\n\t" \
-	"mov." insn "	%2,%1\n\t" \
-	"mov	#0,%0\n" \
-	"2:\n\t" \
+	"mov." insn "	%2, %1\n\t" \
+	"mov	#0, %0\n" \
+	"2:\n" \
 	".section	.fixup,\"ax\"\n" \
 	"3:\n\t" \
-	"mov	#0,%1\n\t" \
-	"mov.l	4f,%0\n\t" \
+	"mov	#0, %1\n\t" \
+	"mov.l	4f, %0\n\t" \
 	"jmp	@%0\n\t" \
-	" mov	%3,%0\n" \
+	" mov	%3, %0\n" \
 	"4:	.long	2b\n\t" \
-	".previous\n\t" \
+	".previous\n" \
 	".section	__ex_table,\"a\"\n\t" \
 	".long	1b, 3b\n\t" \
 	".previous" \
@@ -189,17 +189,17 @@ default: __put_user_unknown(); break; \
 ({ \
 __asm__ __volatile__( \
 	"1:\n\t" \
-	"mov." insn "	%1,%2\n\t" \
-	"mov	#0,%0\n" \
-	"2:\n\t" \
+	"mov." insn "	%1, %2\n\t" \
+	"mov	#0, %0\n" \
+	"2:\n" \
 	".section	.fixup,\"ax\"\n" \
 	"3:\n\t" \
 	"nop\n\t" \
-	"mov.l	4f,%0\n\t" \
+	"mov.l	4f, %0\n\t" \
 	"jmp	@%0\n\t" \
-	"mov	%3,%0\n" \
+	"mov	%3, %0\n" \
 	"4:	.long	2b\n\t" \
-	".previous\n\t" \
+	".previous\n" \
 	".section	__ex_table,\"a\"\n\t" \
 	".long	1b, 3b\n\t" \
 	".previous" \
@@ -218,18 +218,18 @@ __copy_user(void *__to, const void *__from, __kernel_size_t __n)
 
 	__asm__ __volatile__(
 		"9:\n\t"
-		"mov.b	@%2+,%1\n\t"
+		"mov.b	@%2+, %1\n\t"
 		"dt	%0\n"
 		"1:\n\t"
-		"mov.b	%1,@%3\n\t"
+		"mov.b	%1, @%3\n\t"
 		"bf/s	9b\n\t"
-		" add	#1,%3\n"
-		"2:"
+		" add	#1, %3\n"
+		"2:\n"
 		".section .fixup,\"ax\"\n"
 		"3:\n\t"
-		"mov.l	5f,%1\n\t"
+		"mov.l	5f, %1\n\t"
 		"jmp	@%1\n\t"
-		" mov	%7,%0\n\t"
+		" mov	%7, %0\n\t"
 		".balign 4\n"
 		"5:	.long 2b\n"
 		".previous\n"
@@ -238,7 +238,7 @@ __copy_user(void *__to, const void *__from, __kernel_size_t __n)
 		"	.long 9b,3b\n"
 		"	.long 1b,2b\n"
 		".previous"
-		: "=&r" (res), "=&z" (__dummy), "=&r" (_f), "=&r" (_t)
+		: "=r" (res), "=&z" (__dummy), "=r" (_f), "=r" (_t)
 		: "2" (__from), "3" (__to), "0" (__n), "i" (-EFAULT)
 		: "memory");
 
@@ -297,23 +297,21 @@ if (__copy_from_user(to,from,n)) \
 extern __inline__ __kernel_size_t
 __clear_user(void *addr, __kernel_size_t size)
 {
-	__kernel_size_t res;
-	unsigned long __a, __s;
+	unsigned long __a;
 
 	__asm__ __volatile__(
 		"9:\n\t"
-		"dt	%2\n"
+		"dt	%0\n"
 		"1:\n\t"
-		"mov.b	%5,@%1\n\t"
+		"mov.b	%4, @%1\n\t"
 		"bf/s	9b\n\t"
-		" add	#1,%1\n\t"
-		"sub	%2,%0\n"
+		" add	#1, %1\n"
 		"2:\n"
 		".section .fixup,\"ax\"\n"
 		"3:\n\t"
-		"mov.l	4f,%0\n\t"
-		"jmp	@%0\n\t"
-		" mov	%7,%0\n"
+		"mov.l	4f, %1\n\t"
+		"jmp	@%1\n\t"
+		" nop\n"
 		".balign 4\n"
 		"4:	.long 2b\n"
 		".previous\n"
@@ -321,10 +319,10 @@ __clear_user(void *addr, __kernel_size_t size)
 		"	.balign 4\n"
 		"	.long 1b,3b\n"
 		".previous"
-		: "=&r" (res), "=&r" (__a), "=&r" (__s)
-		: "1" (addr), "2" (size), "r" (0), "0" (size), "i" (-EFAULT));
+		: "=r" (size), "=r" (__a)
+		: "0" (size), "1" (addr), "r" (0));
 
-	return res;
+	return size;
 }
 
 #define clear_user(addr,n) ({ \
@@ -342,31 +340,31 @@ __strncpy_from_user(unsigned long __dest, unsigned long __src, int __count)
 
 	__asm__ __volatile__(
 		"9:\n"
-		"mov.b	@%2+,%1\n\t"
-		"cmp/eq	#0,%1\n\t"
+		"mov.b	@%2+, %1\n\t"
+		"cmp/eq	#0, %1\n\t"
 		"bt/s	2f\n"
 		"1:\n"
-		"mov.b	%1,@%3\n\t"
-		"dt	%0\n\t"
+		"mov.b	%1, @%3\n\t"
+		"dt	%7\n\t"
 		"bf/s	9b\n\t"
-		" add	#1,%3\n\t"
-		"sub	%6,%0\n"
-		"2:\n"
+		" add	#1, %3\n\t"
+		"2:\n\t"
+		"sub	%7, %0\n"
+		"3:\n"
 		".section .fixup,\"ax\"\n"
-		"3:\n\t"
-		"mov.l	4f,%1\n\t"
+		"4:\n\t"
+		"mov.l	5f, %1\n\t"
 		"jmp	@%1\n\t"
-		" mov	%8,%0\n\t"
+		" mov	%8, %0\n\t"
 		".balign 4\n"
-		"4:	.long 2b\n"
+		"5:	.long 3b\n"
 		".previous\n"
 		".section __ex_table,\"a\"\n"
 		"	.balign 4\n"
-		"	.long 9b,3b\n"
-		"	.long 1b,2b\n"
+		"	.long 9b,4b\n"
 		".previous"
-		: "=&r" (res), "=&z" (__dummy), "=&r" (_s), "=&r" (_d)
-		: "2" (__src), "3" (__dest), "r" (__count), "0" (__count),
+		: "=r" (res), "=&z" (__dummy), "=r" (_s), "=r" (_d)
+		: "0" (__count), "2" (__src), "3" (__dest), "r" (__count),
 		  "i" (-EFAULT)
 		: "memory");
 
@@ -393,19 +391,19 @@ extern __inline__ long __strnlen_user(const char *__s, long __n)
 
 	__asm__ __volatile__(
 		"9:\n"
-		"cmp/eq	%4,%0\n\t"
+		"cmp/eq	%4, %0\n\t"
 		"bt	2f\n"
 		"1:\t"
-		"mov.b	@(%0,%3),%1\n\t"
-		"tst	%1,%1\n\t"
+		"mov.b	@(%0,%3), %1\n\t"
+		"tst	%1, %1\n\t"
 		"bf/s	9b\n\t"
-		" add	#1,%0\n"
+		" add	#1, %0\n"
 		"2:\n"
 		".section .fixup,\"ax\"\n"
 		"3:\n\t"
-		"mov.l	4f,%1\n\t"
+		"mov.l	4f, %1\n\t"
 		"jmp	@%1\n\t"
-		" mov	%5,%0\n"
+		" mov	%5, %0\n"
 		".balign 4\n"
 		"4:	.long 2b\n"
 		".previous\n"

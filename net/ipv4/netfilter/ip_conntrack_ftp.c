@@ -10,6 +10,7 @@
 #include <linux/netfilter_ipv4/ip_conntrack_ftp.h>
 
 DECLARE_LOCK(ip_ftp_lock);
+struct module *ip_conntrack_ftp = THIS_MODULE;
 
 #define SERVER_STRING "227 Entering Passive Mode ("
 #define CLIENT_STRING "PORT "
@@ -239,10 +240,6 @@ static void __exit fini(void)
 {
 	ip_conntrack_helper_unregister(&ftp);
 }
-
-struct module *ip_conntrack_ftp = THIS_MODULE;
-EXPORT_SYMBOL(ip_conntrack_ftp);
-EXPORT_SYMBOL(ip_ftp_lock);
 
 module_init(init);
 module_exit(fini);

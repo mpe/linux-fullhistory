@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.55 2000/03/05 01:48:58 gniibe Exp $
+/* $Id: entry.S,v 1.71 2000/03/22 13:29:33 gniibe Exp $
  *
  *  linux/arch/sh/entry.S
  *
@@ -33,10 +33,9 @@
  *
  *	syscall #
  *	ssr
- *	r15 = stack pointer
  *	r0
  *      ...
- *	r14
+ *	r15 = stack pointer
  *	gbr
  *	mach
  *	macl
@@ -46,7 +45,7 @@
  */
 
 /*
- * these are offsets into the task-struct.
+ * These are offsets into the task-struct.
  */
 state		=  0
 flags		=  4
@@ -78,8 +77,8 @@ MMU_TEA = 0xff00000c		! TLB Exception Address Register
 /* Offsets to the stack */
 SYSCALL_NR =  0
 SR	   =  4
-SP	   =  8
-R0         =  12
+R0         =  8
+SP	   =  (8+15*4)
 
 #define k0	r0
 #define k1	r1
@@ -96,7 +95,7 @@ R0         =  12
 	k2	scratch (Exception code)
 	k3	scratch (Return address)
 	k4	Stack base = current+8192
-	k5	reserved
+	k5	Global Interrupt Mask (0--15)
 	k6	reserved
 	k7	reserved
 */
@@ -115,109 +114,113 @@ R0         =  12
 ! this first version depends *much* on C implementation.
 !
 
-#define DO_FAULT(write)			\
-	mov.l	4f,r0;			\
-	mov.l	@r0,r6; 		\
-	/* STI */ 			\
-	mov.l	3f,r1; 			\
-	stc	sr,r0; 			\
-	and	r1,r0; 			\
-	ldc	r0,sr; 			\
-	/*    */ 			\
-	mov	r15,r4; 		\
-	mov.l	2f,r0; 			\
-	jmp	@r0; 			\
-	 mov	#write,r5;
+#define RESTORE_FLAGS()			\
+	mov.l	@(SR,$r15), $r0;	\
+	and	#0xf0, $r0;		\
+	shlr8	$r0;			\
+	cmp/eq	#0x0f, $r0;		\
+	bt	9f;			\
+	mov.l	__INV_IMASK, $r1;	\
+	stc	$sr, $r0;		\
+	and	$r1, $r0;		\
+	stc	$r5_bank, $r1;		\
+	or	$r1, $r0;		\
+	ldc	$r0, $sr
 
 	.balign	4
 tlb_protection_violation_load:
 tlb_miss_load:
-	mov	#-1,r0
-	mov.l	r0,@r15		! syscall nr = -1
-	DO_FAULT(0)
+	mov	#-1, $r0
+	mov.l	$r0, @$r15	! syscall nr = -1
+	mov.l	2f, $r0
+	mov.l	@$r0, $r6
+	RESTORE_FLAGS()
+9:	mov	$r15, $r4
+	mov.l	1f, $r0
+	jmp	@$r0
+	 mov	#0, $r5
 
 	.balign	4
 tlb_protection_violation_store:
 tlb_miss_store:
 initial_page_write:
-	mov	#-1,r0
-	mov.l	r0,@r15		! syscall nr = -1
-	DO_FAULT(1)
+	mov	#-1, $r0
+	mov.l	$r0, @$r15	! syscall nr = -1
+	mov.l	2f, $r0
+	mov.l	@$r0, $r6
+	RESTORE_FLAGS()
+9:	mov	$r15, $r4
+	mov.l	1f, $r0
+	jmp	@$r0
+	 mov	#1, $r5
 
 	.balign 4
-2:	.long	SYMBOL_NAME(do_page_fault)
-3:	.long	0xefffffff	! BL=0
-4:	.long	MMU_TEA
+1:	.long	SYMBOL_NAME(do_page_fault)
+2:	.long	MMU_TEA
 
 #ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
 	.balign	4
 	/* Unwind the stack and jmp to the debug entry */
 debug:
-	add	#4,r15		! skip syscall number
-	mov.l	@r15+,r11	! SSR
-	mov.l	@r15+,r10	! original stack
-	mov.l	@r15+,r0
-	mov.l	@r15+,r1
-	mov.l	@r15+,r2
-	mov.l	@r15+,r3
-	mov.l	@r15+,r4
-	mov.l	@r15+,r5
-	mov.l	@r15+,r6
-	mov.l	@r15+,r7
-	stc	sr,r14
-	mov.l	8f,r9			! BL =1, RB=1
-	or	r9,r14
-	ldc	r14,sr			! here, change the register bank
-	mov	r10,k0
-	mov	r11,k1
-	mov.l	@r15+,r8
-	mov.l	@r15+,r9
-	mov.l	@r15+,r10
-	mov.l	@r15+,r11
-	mov.l	@r15+,r12
-	mov.l	@r15+,r13
-	mov.l	@r15+,r14
-	ldc.l	@r15+,gbr
-	lds.l	@r15+,mach
-	lds.l	@r15+,macl
-	lds.l	@r15+,pr
-	ldc.l	@r15+,spc
-	mov	k0,r15
+	add	#4, $r15	! skip syscall number
+	mov.l	@$r15+, $r11	! SSR
+	mov.l	@$r15+, $r0
+	mov.l	@$r15+, $r1
+	mov.l	@$r15+, $r2
+	mov.l	@$r15+, $r3
+	mov.l	@$r15+, $r4
+	mov.l	@$r15+, $r5
+	mov.l	@$r15+, $r6
+	mov.l	@$r15+, $r7
+	stc	$sr, $r14
+	mov.l	1f, $r9			! BL =1, RB=1
+	or	$r9, $r14
+	ldc	$r14, $sr		! here, change the register bank
+	mov	$r11, $k1
+	mov.l	@$r15+, $r8
+	mov.l	@$r15+, $r9
+	mov.l	@$r15+, $r10
+	mov.l	@$r15+, $r11
+	mov.l	@$r15+, $r12
+	mov.l	@$r15+, $r13
+	mov.l	@$r15+, $r14
+	mov.l	@$r15+, $k0
+	ldc.l	@$r15+, $gbr
+	lds.l	@$r15+, $mach
+	lds.l	@$r15+, $macl
+	lds.l	@$r15+, $pr
+	ldc.l	@$r15+, $spc
+	mov	$k0, $r15
 	!
-	mov.l	9f,k0
-	jmp	@k0
-	 ldc	k1,ssr
+	mov.l	2f, $k0
+	jmp	@$k0
+	 ldc	$k1, $ssr
 	.balign	4
-8:	.long	0x300000f0
-9:	.long	0xa0000100
+1:	.long	0x300000f0
+2:	.long	0xa0000100
 #endif
 
 	.balign	4
 error:	
-	! STI
-	mov.l	2f,r1
-	stc	sr,r0
-	and	r1,r0
-	ldc	r0,sr
 	!
-	mov.l	1f,r1
-	mov	#-1,r0
-	jmp	@r1
-	 mov.l	r0,@r15		! syscall nr = -1
+	RESTORE_FLAGS()
+9:	mov.l	1f, $r1
+	mov	#-1, $r0
+	jmp	@$r1
+	 mov.l	$r0, @$r15		! syscall nr = -1
 	.balign	4
 1:	.long	SYMBOL_NAME(do_exception_error)
-2:	.long	0xefffffff	! BL=0
 
-badsys:	mov	#-ENOSYS,r0
+badsys:	mov	#-ENOSYS, $r0
 	rts			! go to ret_from_syscall..
-	 mov.l	r0,@(R0,r15)
+	 mov.l	$r0, @(R0,$r15)
 
 !
 !
 !
 ENTRY(ret_from_fork)
 	bra	SYMBOL_NAME(ret_from_syscall)
-	 add	#4,r15		! pop down bogus r0 (see switch_to MACRO)
+	 add	#4, $r15	! pop down bogus r0 (see switch_to MACRO)
 
 !
 ! The immediate value of "trapa" indicates the number of arguments
@@ -226,83 +229,77 @@ ENTRY(ret_from_fork)
 ! Note that TRA register contains the value = Imm x 4.
 !
 system_call:
-	mov.l	1f,r2
-	mov.l	@r2,r8
+	mov.l	1f, $r2
+	mov.l	@$r2, $r8
 	!
 	! DEBUG DEBUG
-	! mov.l	led,r1
-	! mov	r0,r2
-	! mov.b	r2,@r1
+	! mov.l	led, $r1
+	! mov	$r0, $r2
+	! mov.b	$r2, @$r1
 	!
 #ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
-	mov	#0x20,r1
-	extu.b	r1,r1
-	shll2	r1
-	cmp/hs	r1,r8
+	mov	#0x20, $r1
+	extu.b	$r1, $r1
+	shll2	$r1
+	cmp/hs	$r1, $r8
 	bt	debug
 #endif
-	! STI
-	mov.l	2f,r1
-	stc	sr,r2
-	and	r1,r2
-	ldc	r2,sr
 	!
-	mov.l	__n_sys,r1
-	cmp/hs	r1,r0
-	bt/s	badsys
-	 mov	r0,r2
+	mov	$r0, $r2
+	RESTORE_FLAGS()
+9:	mov.l	__n_sys, $r1
+	cmp/hs	$r1, $r2
+	bt	badsys
 	!
-	stc	ksp,r1		!
-	mov.l	__tsk_flags,r0	!
-	add	r0,r1		!
-	mov.l	@r1,r0		! Is it trace?
-	tst	#PF_TRACESYS,r0
+	stc	$ksp, $r1
+	mov.l	__tsk_flags, $r0
+	add	$r0, $r1	!
+	mov.l	@$r1, $r0	! Is it trace?
+	tst	#PF_TRACESYS, $r0
 	bt	5f
 	!                     Trace system call
-	mov	#-ENOSYS,r1
-	mov.l	r1,@(R0,r15)
-	mov.l	3f,r1
-	jsr	@r1
+	mov	#-ENOSYS, $r1
+	mov.l	$r1, @(R0,$r15)
+	mov.l	3f, $r1
+	jsr	@$r1
 	 nop
-	mova	4f,r0
+	mova	3f, $r0
 	bra	6f
-	 lds	r0,pr
+	 lds	$r0, $pr
 	!
-5:	mova	ret,r0		! normal case
-	lds	r0,pr
-	!			Build the stack frame if TRA > 0
-	!
-6:	mov	r2,r3
-	mov	r8,r2
-	cmp/pl	r8
-	bf	9f
-	mov.l	@(SP,r15),r0	! get original stack
-7:	add	#-4,r8
-8:	mov.l	@(r0,r8),r1	! May cause address error exception..
-	mov.l	r1,@-r15
-	cmp/pl	r8
+5:	mova	syscall_ret, $r0
+	lds	$r0, $pr
+	!				  Build the stack frame if TRA > 0
+6:	mov	$r2, $r3
+	mov	$r8, $r2
+	cmp/pl	$r8
+	bf	0f
+	mov	#SP, $r0
+	mov.l	@($r0,$r15), $r0	! get original stack
+7:	add	#-4, $r8
+4:	mov.l	@($r0,$r8), $r1		! May cause address error exception..
+	mov.l	$r1, @-$r15
+	cmp/pl	$r8
 	bt	7b
 	!
-9:	mov	r3,r0
-	shll2	r0		! x4
-	mov.l	__sct,r1
-	add	r1,r0
-	mov.l	@r0,r1
-	jmp	@r1
-	 mov	r2,r8
-
+0:	mov	$r3, $r0
+	shll2	$r0		! x4
+	mov.l	__sct, $r1
+	add	$r1, $r0
+	mov.l	@$r0, $r1
+	jmp	@$r1
+	 mov	$r2, $r8
 	! In case of trace
 	.balign	4
-4:	add	r8,r15		! pop off the arguments
-	mov.l	r0,@(R0,r15)	! save the return value
-	mov.l	3f,r1
-	mova	SYMBOL_NAME(ret_from_syscall),r0
-	jmp	@r1
-	 lds	r0,pr
+3:	add	$r8, $r15		! pop off the arguments
+	mov.l	$r0, @(R0,$r15)		! save the return value
+	mov.l	2f, $r1
+	mova	SYMBOL_NAME(ret_from_syscall), $r0
+	jmp	@$r1
+	 lds	$r0, $pr
 	.balign	4
-3:	.long	SYMBOL_NAME(syscall_trace)
-2:	.long	0xefffffff	! BL=0
 1:	.long	TRA
+2:	.long	SYMBOL_NAME(syscall_trace)
 __n_sys:	.long	NR_syscalls
 __sct:		.long	SYMBOL_NAME(sys_call_table)
 __tsk_flags:	.long	flags-8192	! offset from stackbase to tsk->flags
@@ -311,85 +308,80 @@ led:	.long	0xa8000000	! For my board -- gN
 	.section	.fixup,"ax"
 fixup_syscall_argerr:
 	rts
-	 mov.l	1f,r0
+	 mov.l	1f, $r0
 1:	.long	-22	! -EINVAL
 .previous
 
 	.section	__ex_table, "a"
 	.balign	4
-	.long	8b,fixup_syscall_argerr
+	.long	4b,fixup_syscall_argerr
 .previous
 
+	.balign	4
 reschedule:
-	mova	SYMBOL_NAME(ret_from_syscall),r0
-	mov.l	1f,r1
-	jmp	@r1
-	 lds	r0,pr
+	mova	SYMBOL_NAME(ret_from_syscall), $r0
+	mov.l	1f, $r1
+	jmp	@$r1
+	 lds	$r0, $pr
 	.balign	4
 1:	.long	SYMBOL_NAME(schedule)
 
 ENTRY(ret_from_irq)
-	mov.l	@(SR,r15),r0	! get status register
-	shll	r0
-	shll	r0		! kernel space?
+	mov.l	@(SR,$r15), $r0	! get status register
+	shll	$r0
+	shll	$r0		! kernel space?
 	bt	restore_all	! Yes, it's from kernel, go back soon
-	! STI
-	mov.l	1f, $r1
-	stc	$sr, $r2
-	and	$r1, $r2
-	ldc	$r2, $sr
 	!
-	bra	ret_with_reschedule
+	RESTORE_FLAGS()
+9:	bra	ret_with_reschedule
 	 nop
 
 ENTRY(ret_from_exception)
-	mov.l	@(SR,r15),r0	! get status register
-	shll	r0
-	shll	r0		! kernel space?
+	mov.l	@(SR,$r15), $r0	! get status register
+	shll	$r0
+	shll	$r0		! kernel space?
 	bt	restore_all	! Yes, it's from kernel, go back soon
-	! STI
-	mov.l	1f, $r1
-	stc	$sr, $r2
-	and	$r1, $r2
-	ldc	$r2, $sr
 	!
-	bra	ret_from_syscall
+	RESTORE_FLAGS()
+9:	bra	ret_from_syscall
 	 nop
 	.balign	4
-1:	.long	0xefffffff	! BL=0
+__INV_IMASK:
+	.long	0xffffff0f	! ~(IMASK)
 
 	.balign 4
-ret:	add	r8,r15		! pop off the arguments
-	mov.l	r0,@(R0,r15)	! save the return value
+syscall_ret:
+	add	$r8, $r15	! pop off the arguments
+	mov.l	$r0, @(R0,$r15)	! save the return value
 	/* fall through */
 
 ENTRY(ret_from_syscall)
-	mov.l	__softirq_state,r0
-	mov.l	@r0,r1
-	mov.l	@(4,r0),r2
-	tst	r2,r1
+	mov.l	__softirq_state, $r0
+	mov.l	@$r0, $r1
+	mov.l	@(4,$r0), $r2
+	tst	$r2, $r1
 	bt	ret_with_reschedule
 handle_softirq:
-	mov.l	__do_softirq,r0
-	jsr	@r0
+	mov.l	__do_softirq, $r0
+	jsr	@$r0
 	 nop
 ret_with_reschedule:
-	stc	ksp,r1
-	mov.l	__minus8192,r0
-	add	r0,r1
-	mov.l	@(need_resched,r1),r0
-	tst	#0xff,r0
+	stc	$ksp, $r1
+	mov.l	__minus8192, $r0
+	add	$r0, $r1
+	mov.l	@(need_resched,$r1), $r0
+	tst	#0xff, $r0
 	bf	reschedule
-	mov.l	@(sigpending,r1),r0
-	tst	#0xff,r0
+	mov.l	@(sigpending,$r1), $r0
+	tst	#0xff, $r0
 	bt	restore_all
 signal_return:
-	mov	r15,r4
-	mov	#0,r5
-	mov.l	__do_signal,r1
-	mova	restore_all,r0
-	jmp	@r1
-	 lds	r0,pr
+	mov	$r15, $r4
+	mov	#0, $r5
+	mov.l	__do_signal, $r1
+	mova	restore_all, $r0
+	jmp	@$r1
+	 lds	$r0, $pr
 	.balign	4
 __do_signal:
 	.long	SYMBOL_NAME(do_signal)
@@ -407,56 +399,57 @@ restore_all:
 	jsr	@$r1
 	 stc	$sr, $r4
 #endif
-	add	#4,r15		! Skip syscall number
-	mov.l	@r15+,r11	! Got SSR into R11
+	add	#4, $r15	! Skip syscall number
+	mov.l	@$r15+, $r11	! Got SSR into R11
 #if defined(__SH4__)
 	mov	$r11, $r12
 #endif
 	!
-	mov.l	1f,r1
-	stc	sr,r0
-	and	r1,r0		! Get IMASK+FD
-	mov.l	2f,r1
-	and	r1,r11
-	or	r0,r11		! Inherit the IMASK+FD value of SR
+	mov.l	1f, $r1
+	stc	$sr, $r0
+	and	$r1, $r0	! Get FD
+	mov.l	2f, $r1
+	and	$r1, $r11
+	or	$r0, $r11	! Inherit the FD value of SR
+	stc	$r5_bank, $r0
+	or	$r0, $r11	! Inherit the IMASK value
 	!
-	mov.l	@r15+,r10	! original stack
-	mov.l	@r15+,r0
-	mov.l	@r15+,r1
-	mov.l	@r15+,r2
-	mov.l	@r15+,r3
-	mov.l	@r15+,r4
-	mov.l	@r15+,r5
-	mov.l	@r15+,r6
-	mov.l	@r15+,r7
-	stc	sr,r14
-	mov.l	__blrb_flags,r9		! BL =1, RB=1
-	or	r9,r14
-	ldc	r14,sr			! here, change the register bank
-	mov	r10,k0
-	mov	r11,k1
+	mov.l	@$r15+, $r0
+	mov.l	@$r15+, $r1
+	mov.l	@$r15+, $r2
+	mov.l	@$r15+, $r3
+	mov.l	@$r15+, $r4
+	mov.l	@$r15+, $r5
+	mov.l	@$r15+, $r6
+	mov.l	@$r15+, $r7
+	stc	$sr, $r14
+	mov.l	__blrb_flags, $r9	! BL =1, RB=1
+	or	$r9, $r14
+	ldc	$r14, $sr		! here, change the register bank
+	mov	$r11, $k1
 #if defined(__SH4__)
 	mov	$r12, $k2
 #endif
-	mov.l	@r15+,r8
-	mov.l	@r15+,r9
-	mov.l	@r15+,r10
-	mov.l	@r15+,r11
-	mov.l	@r15+,r12
-	mov.l	@r15+,r13
-	mov.l	@r15+,r14
-	ldc.l	@r15+,gbr
-	lds.l	@r15+,mach
-	lds.l	@r15+,macl
-	lds.l	@r15+,pr
-	ldc.l	@r15+,spc
-	ldc	k1,ssr
+	mov.l	@$r15+, $r8
+	mov.l	@$r15+, $r9
+	mov.l	@$r15+, $r10
+	mov.l	@$r15+, $r11
+	mov.l	@$r15+, $r12
+	mov.l	@$r15+, $r13
+	mov.l	@$r15+, $r14
+	mov.l	@$r15+, $k0	! original stack
+	ldc.l	@$r15+, $gbr
+	lds.l	@$r15+, $mach
+	lds.l	@$r15+, $macl
+	lds.l	@$r15+, $pr
+	ldc.l	@$r15+, $spc
+	ldc	$k1, $ssr
 #if defined(__SH4__)
 	shll	$k1
 	shll	$k1
 	bf	9f		! user mode
 	/* Kernel to kernel transition */
-	mov.l	3f, $k1
+	mov.l	1f, $k1
 	tst	$k1, $k2
 	bf	9f		! it hadn't FPU
 	! Kernel to kernel and FPU was used
@@ -496,7 +489,7 @@ restore_all:
 	lds.l	@$r15+, $fpul
 9:
 #endif
-	mov	k0,r15
+	mov	$k0, $r15
 	rte
 	 nop
 
@@ -510,9 +503,8 @@ __init_task_flags:
 __PF_USEDFPU:
 	.long	PF_USEDFPU
 #endif
-1:	.long	0x000080f0	! IMASK+FD
+1:	.long	0x00008000	! FD
 2:	.long	0xffff7f0f	! ~(IMASK+FD)
-3:	.long	0x00008000	! FD=1
 
 ! Exception Vector Base
 !
@@ -524,10 +516,10 @@ ENTRY(vbr_base)
 !
 	.balign 	256,0,256
 general_exception:
-	mov.l	1f,k2
-	mov.l	2f,k3
+	mov.l	1f, $k2
+	mov.l	2f, $k3
 	bra	handle_exception
-	 mov.l	@k2,k2
+	 mov.l	@$k2, $k2
 	.balign	4
 2:	.long	SYMBOL_NAME(ret_from_exception)
 1:	.long	EXPEVT
@@ -535,17 +527,17 @@ general_exception:
 !
 	.balign 	1024,0,1024
 tlb_miss:
-	mov.l	1f,k2
-	mov.l	4f,k3
+	mov.l	1f, $k2
+	mov.l	4f, $k3
 	bra	handle_exception
-	 mov.l	@k2,k2
+	 mov.l	@$k2, $k2
 !
 	.balign 	512,0,512
 interrupt:
-	mov.l	2f,k2
-	mov.l	3f,k3
+	mov.l	2f, $k2
+	mov.l	3f, $k3
 	bra	handle_exception
-	 mov.l	@k2,k2
+	 mov.l	@$k2, $k2
 
 	.balign	4
 1:	.long	EXPEVT
@@ -559,9 +551,9 @@ handle_exception:
 	! Using k0, k1 for scratch registers (r0_bank1, r1_bank),
 	! save all registers onto stack.
 	!
-	stc	ssr,k0		! from kernel space?
-	shll	k0		! Check MD bit (bit30)
-	shll	k0
+	stc	$ssr, $k0	! from kernel space?
+	shll	$k0		! Check MD bit (bit30)
+	shll	$k0
 #if defined(__SH4__)
 	bf/s	8f		! it's from user to kernel transition
 	 mov	$r15, $k0	! save original stack to k0
@@ -569,6 +561,7 @@ handle_exception:
 	mov.l	2f, $k1
 	stc	$ssr, $k0
 	tst	$k1, $k0
+	mov.l	4f, $k1
 	bf/s	9f		! FPU is not used
 	 mov	$r15, $k0	! save original stack to k0
 	! FPU is used, save FPU
@@ -593,64 +586,63 @@ handle_exception:
 	fmov.s	$fr1, @-$r15
 	fmov.s	$fr0, @-$r15
 	bra 9f
-	 mov	#0, $k1
+	 mov.l	3f, $k1
 #else
+	mov.l	3f, $k1
 	bt/s	9f		! it's from kernel to kernel transition
-	 mov	r15,k0		! save original stack to k0 anyway
+	 mov	$r15, $k0	! save original stack to k0 anyway
 #endif
 8:	/* User space to kernel */
-	mov	kernel_sp, $r15	! change to kernel stack
-#if defined(__SH4__)
-	mov.l	2f, $k1		! let kernel release FPU
-#endif
-9:	stc.l	spc,@-r15
-	sts.l	pr,@-r15
+	mov	$kernel_sp, $r15	! change to kernel stack
+	mov.l	4f, $k1			! let kernel release FPU
+9:	stc.l	$spc, @-$r15
+	sts.l	$pr, @-$r15
 	!
-	lds	k3,pr		! Set the return address to pr
+	lds	$k3, $pr		! Set the return address to pr
 	!
-	sts.l	macl,@-r15
-	sts.l	mach,@-r15
-	stc.l	gbr,@-r15
-	mov.l	r14,@-r15
+	sts.l	$macl, @-$r15
+	sts.l	$mach, @-$r15
+	stc.l	$gbr, @-$r15
+	mov.l	$k0, @-$r15	! save orignal stack
+	mov.l	$r14, @-$r15
 	!
-	stc	sr,r14		! Back to normal register bank, and
-#if defined(__SH4__)
-	or	$k1, $r14	! may release FPU
-#endif
-	mov.l	3f,k1
-	and	k1,r14		! ...
-	ldc	r14,sr		! ...changed here.
+	stc	$sr, $r14	! Back to normal register bank, and
+	or	$k1, $r14	! Block all interrupts, may release FPU
+	mov.l	5f, $k1
+	and	$k1, $r14	! ...
+	ldc	$r14, $sr	! ...changed here.
 	!
-	mov.l	r13,@-r15
-	mov.l	r12,@-r15
-	mov.l	r11,@-r15
-	mov.l	r10,@-r15
-	mov.l	r9,@-r15
-	mov.l	r8,@-r15
-	mov.l	r7,@-r15
-	mov.l	r6,@-r15
-	mov.l	r5,@-r15
-	mov.l	r4,@-r15
-	mov.l	r3,@-r15
-	mov.l	r2,@-r15
-	mov.l	r1,@-r15
-	mov.l	r0,@-r15
-	stc.l	r0_bank,@-r15	! save orignal stack
-	stc.l	ssr,@-r15
-	mov.l	r0,@-r15	! push r0 again (for syscall number)
+	mov.l	$r13, @-$r15
+	mov.l	$r12, @-$r15
+	mov.l	$r11, @-$r15
+	mov.l	$r10, @-$r15
+	mov.l	$r9, @-$r15
+	mov.l	$r8, @-$r15
+	mov.l	$r7, @-$r15
+	mov.l	$r6, @-$r15
+	mov.l	$r5, @-$r15
+	mov.l	$r4, @-$r15
+	mov.l	$r3, @-$r15
+	mov.l	$r2, @-$r15
+	mov.l	$r1, @-$r15
+	mov.l	$r0, @-$r15
+	stc.l	$ssr, @-$r15
+	mov.l	$r0, @-$r15	! push $r0 again (for syscall number)
 	! Then, dispatch to the handler, according to the excepiton code.
-	stc	k_ex_code,r1
-	shlr2	r1
-	shlr	r1
-	mov.l	1f,r0
-	add	r1,r0
-	mov.l	@r0,r0
-	jmp	@r0
-	 mov.l	@r15,r0		! recovering r0..
+	stc	$k_ex_code, $r1
+	shlr2	$r1
+	shlr	$r1
+	mov.l	1f, $r0
+	add	$r1, $r0
+	mov.l	@$r0, $r0
+	jmp	@$r0
+	 mov.l	@$r15, $r0	! recovering $r0..
 	.balign	4
 1:	.long	SYMBOL_NAME(exception_handling_table)
 2:	.long	0x00008000	! FD=1
-3:	.long	0xdfffffff	! RB=0, leave BL=1
+3:	.long	0x000000f0	! FD=0, IMASK=15
+4:	.long	0x000080f0	! FD=1, IMASK=15
+5:	.long	0xcfffffff	! RB=0, BL=0
 
 none:
 	rts
@@ -679,7 +671,7 @@ ENTRY(exception_handling_table)
 ENTRY(nmi_slot)
 	.long	none				! Not implemented yet
 ENTRY(user_break_point_trap)
-	.long	error				! Not implemented yet
+	.long	break_point_trap
 ENTRY(interrupt_table)
 	! external hardware
 	.long	SYMBOL_NAME(do_IRQ)	! 0000
@@ -985,6 +977,8 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_setfsuid)		/* 215 */
 	.long SYMBOL_NAME(sys_setfsgid)
 	.long SYMBOL_NAME(sys_pivot_root)
+	.long SYMBOL_NAME(sys_mincore)
+	.long SYMBOL_NAME(sys_madvise)
 
 	/*
 	 * NOTE!! This doesn't have to be exact - we just have
@@ -992,7 +986,7 @@ ENTRY(sys_call_table)
 	 * entries. Don't panic if you notice that this hasn't
 	 * been shrunk every time we add a new system call.
 	 */
-	.rept NR_syscalls-217
+	.rept NR_syscalls-219
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr
 

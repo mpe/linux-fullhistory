@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.117 2000/03/15 02:43:32 davem Exp $
+/* $Id: sys_sunos.c,v 1.118 2000/03/26 11:28:56 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -702,7 +702,7 @@ static int get_default (int value, int def_value)
 	return def_value;
 }
 
-asmlinkage int sunos_nfs_mount(char *dir_name, int linux_flags, void *data)
+static int sunos_nfs_mount(char *dir_name, int linux_flags, void *data)
 {
 	int  server_fd;
 	char *the_name;

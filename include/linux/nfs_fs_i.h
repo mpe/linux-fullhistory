@@ -1,8 +1,8 @@
 #ifndef _NFS_FS_I
 #define _NFS_FS_I
 
-#include <linux/nfs.h>
-#include <linux/pipe_fs_i.h>
+#include <asm/types.h>
+#include <linux/list.h>
 
 /*
  * nfs fs inode data in memory
@@ -11,8 +11,8 @@ struct nfs_inode_info {
 	/*
 	 * The 64bit 'inode number'
 	 */
-	__u32 fsid;
-	__u32 fileid;
+	__u64 fsid;
+	__u64 fileid;
 
 	/*
 	 * Various flags
@@ -37,8 +37,18 @@ struct nfs_inode_info {
 	 *	mtime != read_cache_mtime
 	 */
 	unsigned long		read_cache_jiffies;
-	unsigned long		read_cache_mtime;
+	__u64			read_cache_ctime;
+	__u64			read_cache_mtime;
+	__u64			read_cache_atime;
+	__u64			read_cache_isize;
 	unsigned long		attrtimeo;
+	unsigned long		attrtimeo_timestamp;
+
+	/*
+	 * This is the cookie verifier used for NFSv3 readdir
+	 * operations
+	 */
+	__u32			cookieverf[2];
 
 	/*
 	 * This is the list of dirty unwritten pages.
@@ -55,15 +65,12 @@ struct nfs_inode_info {
 	struct inode		*hash_next,
 				*hash_prev;
 	unsigned long		nextscan;
-
-	/* Readdir caching information. */
-	void *cookies;
-	u32 direof;
 };
 
 /*
  * Legal inode flag values
  */
+#define NFS_INO_ADVISE_RDPLUS   0x0002          /* advise readdirplus */
 #define NFS_INO_REVALIDATING	0x0004		/* revalidating attrs */
 #define NFS_IS_SNAPSHOT		0x0010		/* a snapshot file */
 #define NFS_INO_FLUSH		0x0020		/* inode is due for flushing */

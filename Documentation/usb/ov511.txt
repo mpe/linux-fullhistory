@@ -12,35 +12,37 @@ grab a frame in color (YUV420) at 640x480 or 320x240 using either vidcat or
 xawtv. Other utilities may work but have not yet been tested.
 
 NEW IN THIS VERSION:
- o Preliminary snapshot support
- o Experimental red-blue misalignment fixes
- o Better YUV420 color conversion
- o Module options
- o Finer-grained debug message control
- o Support for new cameras (4, 36)
- o Uses initcalls
+ o Autoadjust disable works, but is not perfect yet
+ o Partial support for OV511+
+ o Detection and support for OV7610, OV7620, and OV7620AE sensors
+ o Various code cleanups and improvements
 
-SUPPORTED CAMERAS:
-_________________________________________________________
-Manufacturer     | Model           | Custom ID | Status
------------------+-----------------+-----------+---------
-MediaForte       | MV300           | 0         | Working
-Aiptek           | HyperVCam ?     | 0         | Working
-NetView          | NV300M          | 0         | Working
-D-Link           | DSB-C300        | 3         | Working
-Hawking Tech.    | ???             | 3         | Working
-???              | Generic         | 4         | Untested
-Puretek          | PT-6007         | 5         | Working
-Creative Labs    | WebCam 3        | 21        | Working
-???              | Koala-Cam       | 36        | Untested
-Lifeview         | RoboCam         | 100       | Untested
-AverMedia        | InterCam Elite  | 102       | Working
-MediaForte       | MV300           | 112       | Working
-Omnivision       | OV7110 EV board | 112       | Working*
----------------------------------------------------------
-(*) uses OV7110 (monochrome)
+KNOWN CAMERAS:
+____________________________________________________________________
+Manufacturer  | Model           | ID  | Bridge | Sensor   | Status
+--------------+-----------------+-----+--------+----------+-----------
+MediaForte    | MV300           | 0   | OV511  | OV7610 * | Working
+Aiptek        | HyperVCam ?     | 0   | OV511  | OV7610 * | Working
+NetView       | NV300M          | 0   | OV511  | OV7610 * | Working
+D-Link        | DSB-C300        | 3   | OV511  | OV7620AE | Working
+Hawking Tech. | ???             | 3   | OV511  | OV7610 * | Working
+???           | Generic         | 4   | OV511  | OV7610 * | Untested
+Puretek       | PT-6007         | 5   | OV511  | OV7610 * | Working
+Creative Labs | WebCam 3        | 21  | OV511  | OV7610 * | Working 
+???           | Koala-Cam       | 36  | OV511  | OV7610 * | Untested
+Lifeview      | USB Life TV     | 38  | OV511  | N/A      | Unsupported
+Lifeview      | RoboCam         | 100 | OV511  | OV7610 * | Untested
+AverMedia     | InterCam Elite  | 102 | OV511  | OV7610 * | Working
+MediaForte    | MV300           | 112 | OV511  | OV7610 * | Working
+Omnivision    | OV7110 EV board | 112 | OV511  | OV7110   | Working
+---------------------------------------------------------------------
 
-Any camera using the OV511 and the OV7610 CCD should work with this driver. The
+(*) These have not been verified. If you have one of these, please report
+    the sensor type to me.
+
+NOTE - the OV511+ is not yet supported
+
+Any camera using the OV511 and the OV7610 or OV7620AE CCD should work. The
 driver only detects known cameras though, based on their custom id number. If
 you have a currently unsupported camera, the ID number should be reported to you
 in the kernel logs. Please send me the model, manufacturer and ID number and I 
@@ -140,7 +142,7 @@ MODULE PARAMETERS:
   DESC: The camera normally adjusts exposure, gain, and hue automatically. This
         can be set to 0 to disable this automatic adjustment. Note that there is
         currently no way to set these parameters manually once autoadjust is
-        disabled. (This feature is not working yet)
+        disabled.
 
   NAME: debug
   TYPE: integer (0-6)
@@ -174,12 +176,14 @@ WORKING FEATURES:
  o Color streaming/capture at 640x480 and 320x240
  o YUV420 color
  o Monochrome
- o Setting/getting of saturation, contrast and brightness (no color yet)
+ o Setting/getting of saturation, contrast and brightness (no hue yet; only
+   works with OV7610, not the OV7620 or OV7620AE)
 
 EXPERIMENTAL FEATURES:
  o fix_rgb_offset: Sometimes works, but other times causes errors with xawtv and
    corrupted frames.
  o Snapshot mode (only works with some read() based apps; see below for more)
+ o OV511+ support; not complete yet.
 
 TODO:
  o Fix the noise / grainy image problem.
@@ -197,13 +201,14 @@ TODO:
  o Get hue (red/blue channel balance) adjustment working (in ov511_get_picture()
    and ov511_set_picture())
  o Get autoadjust disable working
- o Devise some clean way to support different types of CCDs (based on Custom ID)
- o OV511A support
+ o OV7620 support
  o V4L2 support (Probably not until it goes into the kernel)
  o Fix I2C initialization. Some people are reporting problems with reading the
    7610 registers. This could be due to timing differences, an excessive I2C
    clock rate, or a problem with ov511_i2c_read().
  o Get rid of the memory management functions (put them in videodev.c??)
+ o Setting of contrast and brightness not working with 7620
+ o Driver/camera state save/restore for when USB supports suspend/resume
 
 HOW TO CONTACT ME:
 

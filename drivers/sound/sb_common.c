@@ -53,14 +53,6 @@ static unsigned char jazz_dma_bits[] = {
 	0, 1, 0, 2, 0, 3, 0, 4
 };
 
-/* Do acer notebook init? */
-int acer = 0;
-
-/* soundman games? */
-int sm_games = 0;
-
-extern int esstype;
-
 void *smw_free = NULL;
 
 /*
@@ -503,12 +495,16 @@ static void relocate_ess1688(sb_devc * devc)
 #endif
 }
 
-int sb_dsp_detect(struct address_info *hw_config, int pci, int pciio)
+int sb_dsp_detect(struct address_info *hw_config, int pci, int pciio, struct sb_module_options *sbmo)
 {
 	sb_devc sb_info;
 	sb_devc *devc = &sb_info;
 
 	memset((char *) &sb_info, 0, sizeof(sb_info));	/* Zero everything */
+
+	/* Copy module options in place */
+	if(sbmo) memcpy(&devc->sbmo, sbmo, sizeof(struct sb_module_options));
+
 	sb_info.my_mididev = -1;
 	sb_info.my_mixerdev = -1;
 	sb_info.dev = -1;
@@ -553,7 +549,7 @@ int sb_dsp_detect(struct address_info *hw_config, int pci, int pciio)
 		printk("Yamaha PCI mode.\n");
 	}
 	
-	if (acer)
+	if (devc->sbmo.acer)
 	{
 		cli();
 		inb(devc->base + 0x09);
@@ -1294,10 +1290,6 @@ void unload_sbmpu(struct address_info *hw_config)
 #endif
 	unload_uart401(hw_config);
 }
-
-MODULE_PARM(acer, "i");
-MODULE_PARM(sm_games, "i");
-MODULE_PARM(esstype, "i");
 
 EXPORT_SYMBOL(sb_dsp_init);
 EXPORT_SYMBOL(sb_dsp_detect);

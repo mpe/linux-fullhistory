@@ -499,19 +499,19 @@ int kswapd(void *unused)
 		 * the processes needing more memory will wake us
 		 * up on a more timely basis.
 		 */
-		do {
-			pgdat = pgdat_list;
-			while (pgdat) {
-				for (i = 0; i < MAX_NR_ZONES; i++) {
-					zone = pgdat->node_zones + i;
-					if ((!zone->size) || (!zone->zone_wake_kswapd))
-						continue;
-					do_try_to_free_pages(GFP_KSWAPD, zone);
-				}
-				pgdat = pgdat->node_next;
+		pgdat = pgdat_list;
+		while (pgdat) {
+			for (i = 0; i < MAX_NR_ZONES; i++) {
+				zone = pgdat->node_zones + i;
+				if (tsk->need_resched)
+					schedule();
+				if ((!zone->size) || (!zone->zone_wake_kswapd))
+					continue;
+				do_try_to_free_pages(GFP_KSWAPD, zone);
 			}
-			run_task_queue(&tq_disk);
-		} while (!tsk->need_resched);
+			pgdat = pgdat->node_next;
+		}
+		run_task_queue(&tq_disk);
 		tsk->state = TASK_INTERRUPTIBLE;
 		interruptible_sleep_on(&kswapd_wait);
 	}

@@ -1,4 +1,4 @@
-/* $Id: pci_common.c,v 1.6 2000/01/06 23:51:49 davem Exp $
+/* $Id: pci_common.c,v 1.7 2000/03/25 05:18:11 davem Exp $
  * pci_common.c: PCI controller common support.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -563,6 +563,165 @@ void __init pci_fixup_irq(struct pci_pbm_info *pbm,
 	walk = &pbus->children;
 	for (walk = walk->next; walk != &pbus->children; walk = walk->next)
 		pci_fixup_irq(pbm, pci_bus_b(walk));
+}
+
+#undef DEBUG_BUSMASTERING
+
+static void pdev_setup_busmastering(struct pci_dev *pdev, int is_66mhz)
+{
+	u16 cmd;
+	u8 hdr_type, min_gnt, ltimer;
+
+#ifdef DEBUG_BUSMASTERING
+	printk("PCI: Checking DEV(%s), ", pdev->name);
+#endif
+
+	pci_read_config_word(pdev, PCI_COMMAND, &cmd);
+	cmd |= PCI_COMMAND_MASTER;
+	pci_write_config_word(pdev, PCI_COMMAND, cmd);
+
+	/* Read it back, if the mastering bit did not
+	 * get set, the device does not support bus
+	 * mastering so we have nothing to do here.
+	 */
+	pci_read_config_word(pdev, PCI_COMMAND, &cmd);
+	if ((cmd & PCI_COMMAND_MASTER) == 0) {
+#ifdef DEBUG_BUSMASTERING
+		printk("no bus mastering...\n");
+#endif
+		return;
+	}
+
+	/* Set correct cache line size, 64-byte on all
+	 * Sparc64 PCI systems.  Note that the value is
+	 * measured in 32-bit words.
+	 */
+#ifdef DEBUG_BUSMASTERING
+	printk("set cachelinesize, ");
+#endif
+	pci_write_config_byte(pdev, PCI_CACHE_LINE_SIZE,
+			      64 / sizeof(u32));
+
+	pci_read_config_byte(pdev, PCI_HEADER_TYPE, &hdr_type);
+	hdr_type &= ~0x80;
+	if (hdr_type != PCI_HEADER_TYPE_NORMAL) {
+#ifdef DEBUG_BUSMASTERING
+		printk("hdr_type=%x, exit\n", hdr_type);
+#endif
+		return;
+	}
+
+	/* If the latency timer is already programmed with a non-zero
+	 * value, assume whoever set it (OBP or whoever) knows what
+	 * they are doing.
+	 */
+	pci_read_config_byte(pdev, PCI_LATENCY_TIMER, &ltimer);
+	if (ltimer != 0) {
+#ifdef DEBUG_BUSMASTERING
+		printk("ltimer was %x, exit\n", ltimer);
+#endif
+		return;
+	}
+
+	/* XXX Since I'm tipping off the min grant value to
+	 * XXX choose a suitable latency timer value, I also
+	 * XXX considered making use of the max latency value
+	 * XXX as well.  Unfortunately I've seen too many bogusly
+	 * XXX low settings for it to the point where it lacks
+	 * XXX any usefulness.  In one case, an ethernet card
+	 * XXX claimed a min grant of 10 and a max latency of 5.
+	 * XXX Now, if I had two such cards on the same bus I
+	 * XXX could not set the desired burst period (calculated
+	 * XXX from min grant) without violating the max latency
+	 * XXX bound.  Duh...
+	 * XXX
+	 * XXX I blame dumb PC bios implementors for stuff like
+	 * XXX this, most of them don't even try to do something
+	 * XXX sensible with latency timer values and just set some
+	 * XXX default value (usually 32) into every device.
+	 */
+
+	pci_read_config_byte(pdev, PCI_MIN_GNT, &min_gnt);
+
+	if (min_gnt == 0) {
+		/* If no min_gnt setting then use a default
+		 * value.
+		 */
+		if (is_66mhz)
+			ltimer = 16;
+		else
+			ltimer = 32;
+	} else {
+		int shift_factor;
+
+		if (is_66mhz)
+			shift_factor = 2;
+		else
+			shift_factor = 3;
+
+		/* Use a default value when the min_gnt value
+		 * is erroneously high.
+		 */
+		if (((unsigned int) min_gnt << shift_factor) > 512 ||
+		    ((min_gnt << shift_factor) & 0xff) == 0) {
+			ltimer = 8 << shift_factor;
+		} else {
+			ltimer = min_gnt << shift_factor;
+		}
+	}
+
+	pci_write_config_byte(pdev, PCI_LATENCY_TIMER, ltimer);
+#ifdef DEBUG_BUSMASTERING
+	printk("set ltimer to %x\n", ltimer);
+#endif
+}
+
+void pci_determine_66mhz_disposition(struct pci_pbm_info *pbm,
+				     struct pci_bus *pbus)
+{
+	struct list_head *walk;
+	int all_are_66mhz;
+	u16 status;
+
+	if (pbm->is_66mhz_capable == 0) {
+		all_are_66mhz = 0;
+		goto out;
+	}
+
+	walk = &pbus->devices;
+	all_are_66mhz = 1;
+	for (walk = walk->next; walk != &pbus->devices; walk = walk->next) {
+		struct pci_dev *pdev = pci_dev_b(walk);
+
+		pci_read_config_word(pdev, PCI_STATUS, &status);
+		if (!(status & PCI_STATUS_66MHZ)) {
+			all_are_66mhz = 0;
+			break;
+		}
+	}
+out:
+	pbm->all_devs_66mhz = all_are_66mhz;
+
+	printk("PCI%d(PBM%c): Bus running at %dMHz\n",
+	       pbm->parent->index,
+	       (pbm == &pbm->parent->pbm_A) ? 'A' : 'B',
+	       (all_are_66mhz ? 66 : 33));
+}
+
+void pci_setup_busmastering(struct pci_pbm_info *pbm,
+			    struct pci_bus *pbus)
+{
+	struct list_head *walk = &pbus->devices;
+	int is_66mhz;
+
+	is_66mhz = pbm->is_66mhz_capable && pbm->all_devs_66mhz;
+
+	for (walk = walk->next; walk != &pbus->devices; walk = walk->next)
+		pdev_setup_busmastering(pci_dev_b(walk), is_66mhz);
+
+	walk = &pbus->children;
+	for (walk = walk->next; walk != &pbus->children; walk = walk->next)
+		pci_setup_busmastering(pbm, pci_bus_b(walk));
 }
 
 /* Generic helper routines for PCI error reporting. */

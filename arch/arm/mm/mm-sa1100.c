@@ -36,10 +36,8 @@ struct mem_desc {
 #if defined(CONFIG_SA1100_BRUTUS)
 	{ 0xc0000000, 0x00400000 },	/* 4MB */
 	{ 0xc8000000, 0x00400000 },	/* 4MB */
-#if 0	/* only two banks until the bootmem stuff is fixed... */
 	{ 0xd0000000, 0x00400000 },	/* 4MB */
 	{ 0xd8000000, 0x00400000 }	/* 4MB */
-#endif
 #elif defined(CONFIG_SA1100_EMPEG)
 	{ 0xc0000000, 0x00400000 },	/* 4MB */
 	{ 0xc8000000, 0x00400000 }	/* 4MB */
@@ -50,6 +48,8 @@ struct mem_desc {
 	{ 0xc9000000, 0x00800000 }	/* 8MB */
 #elif defined(CONFIG_SA1100_VICTOR)
 	{ 0xc0000000, 0x00400000 }	/* 4MB */
+#elif defined(CONFIG_SA1100_THINCLIENT)
+	{ 0xc0000000, 0x01000000 }	/* 16MB */
 #elif defined(CONFIG_SA1100_TIFON)
 	{ 0xc0000000, 0x01000000 },	/* 16MB */
 	{ 0xc8000000, 0x01000000 }	/* 16MB */
@@ -67,12 +67,24 @@ struct map_desc io_desc[] __initdata = {
 	{ 0xd0000000,      0x00000000,  0x00200000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash */
 #elif defined(CONFIG_SA1100_EMPEG)
 	{ EMPEG_FLASHBASE, 0x00000000,  0x00200000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash */
+#elif defined(CONFIG_SA1100_THINCLIENT)
+#if 1
+	/* ThinClient: only one of those... */
+//	{ 0xd0000000,      0x00000000,  0x01000000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 0 when JP1 2-4 */
+	{ 0xd0000000,      0x08000000,  0x01000000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 1 when JP1 3-4 */
+#else
+	/* GraphicsClient: */
+	{ 0xd0000000,      0x08000000,  0x00800000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 1 */
+	{ 0xd0800000,      0x18000000,  0x00800000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 3 */
+#endif
 #elif defined(CONFIG_SA1100_TIFON)
 	{ 0xd0000000,      0x00000000,  0x00800000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 1 */
 	{ 0xd0800000,      0x08000000,  0x00800000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 2 */
 #endif
-#ifdef CONFIG_SA1101
+#if defined( CONFIG_SA1101 )
 	{ 0xdc000000,      SA1101_BASE, 0x00400000, DOMAIN_IO, 1, 1, 0, 0 }, /* SA1101 */
+#elif defined( CONFIG_SA1100_THINCLIENT )
+	{ 0xdc000000,      0x10000000,  0x00400000, DOMAIN_IO, 0, 1, 0, 0 }, /* CPLD */
 #endif
 	{ 0xe0000000,      0x20000000,  0x04000000, DOMAIN_IO, 0, 1, 0, 0 }, /* PCMCIA0 IO */
 	{ 0xe4000000,      0x30000000,  0x04000000, DOMAIN_IO, 0, 1, 0, 0 }, /* PCMCIA1 IO */

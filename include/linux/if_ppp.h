@@ -21,7 +21,7 @@
  */
 
 /*
- *  ==FILEVERSION 20000115==
+ *  ==FILEVERSION 20000324==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, please set the above date.
@@ -140,6 +140,7 @@ struct ifpppcstatsreq {
 #define PPPIOCCONNECT	_IOW('t', 58, int)	/* connect channel to unit */
 #define PPPIOCDISCONN	_IO('t', 57)		/* disconnect channel */
 #define PPPIOCATTCHAN	_IOW('t', 56, int)	/* attach to ppp channel */
+#define PPPIOCGCHAN	_IOR('t', 55, int)	/* get ppp channel number */
 
 #define SIOCGPPPSTATS   (SIOCDEVPRIVATE + 0)
 #define SIOCGPPPVER     (SIOCDEVPRIVATE + 1)	/* NEVER change this!! */

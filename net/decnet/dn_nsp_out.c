@@ -133,13 +133,13 @@ struct sk_buff *dn_alloc_send_skb(struct sock *sk, int *size, int noblock, int *
 		}
 
 		if (space < len) {
-			sk->socket->flags |= SO_NOSPACE;
+			set_bit(SOCK_ASYNC_NOSPACE, &sk->socket->flags);
 			if (noblock) {
 				*err = EWOULDBLOCK;
 				break;
 			}
 
-			sk->socket->flags &= ~SO_NOSPACE;
+			clear_bit(SOCK_ASYNC_WAITDATA, &sk->socket->flags);
 			SOCK_SLEEP_PRE(sk)
 
 			if ((sk->sndbuf - atomic_read(&sk->wmem_alloc)) < len)

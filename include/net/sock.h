@@ -266,7 +266,8 @@ struct tcp_opt {
 	__u8	dup_acks;	/* Consequetive duplicate acks seen from other end */
 	__u8	retransmits;
 
-	__u16	__empty1;
+	__u8	__empty1;
+	__u8	sorry;
 	__u8	defer_accept;
 
 /* RTT measurement */
@@ -726,7 +727,7 @@ do {	spin_lock_bh(&((__sk)->lock.slock)); \
 	if ((__sk)->backlog.tail != NULL) \
 		__release_sock(__sk); \
 	(__sk)->lock.users = 0; \
-	wake_up(&((__sk)->lock.wq)); \
+        if (waitqueue_active(&((__sk)->lock.wq))) wake_up(&((__sk)->lock.wq)); \
 	spin_unlock_bh(&((__sk)->lock.slock)); \
 } while(0)
 
@@ -1135,6 +1136,12 @@ extern __inline__ unsigned long sock_wspace(struct sock *sk)
 	return amt;
 }
 
+extern __inline__ void sk_wake_async(struct sock *sk, int how, int band)
+{
+	if (sk->socket && sk->socket->fasync_list)
+		sock_wake_async(sk->socket, how, band);
+}
+
 #define SOCK_MIN_SNDBUF 2048
 #define SOCK_MIN_RCVBUF 128
 /* Must be less or equal SOCK_MIN_SNDBUF */
@@ -1167,6 +1174,14 @@ extern __inline__ long sock_sndtimeo(struct sock *sk, int noblock)
 extern __inline__ int sock_rcvlowat(struct sock *sk, int waitall, int len)
 {
 	return waitall ? len : min(sk->rcvlowat, len);
+}
+
+/* Alas, with timeout socket operations are not restartable.
+ * Compare this to poll().
+ */
+extern __inline__ int sock_intr_errno(long timeo)
+{
+	return timeo == MAX_SCHEDULE_TIMEOUT ? -ERESTARTSYS : -EINTR;
 }
 
 /* 

@@ -12,14 +12,12 @@
 #include <linux/tcp.h>
 #include <linux/udp.h>
 #include <linux/icmp.h>
+#include <net/ip.h>
 #include <asm/uaccess.h>
 #include <asm/semaphore.h>
+#include <linux/proc_fs.h>
 
 #include <linux/netfilter_ipv4/ip_tables.h>
-
-#ifndef IP_OFFSET
-#define IP_OFFSET 0x1FFF
-#endif
 
 /*#define DEBUG_IP_FIREWALL*/
 /*#define DEBUG_ALLOW_ALL*/ /* Useful for remote debugging */
@@ -288,9 +286,16 @@ ipt_do_table(struct sk_buff **pskb,
 		+ TABLE_OFFSET(table->private, smp_processor_id());
 	e = get_entry(table_base, table->private->hook_entry[hook]);
 
-	/* Check noone else using our table */
-	IP_NF_ASSERT(((struct ipt_entry *)table_base)->comefrom == 0xdead57ac);
 #ifdef CONFIG_NETFILTER_DEBUG
+	/* Check noone else using our table */
+	if (((struct ipt_entry *)table_base)->comefrom != 0xdead57ac
+	    && ((struct ipt_entry *)table_base)->comefrom != 0xeeeeeeec) {
+		printk("ASSERT: CPU #%u, %s comefrom(%p) = %X\n",
+		       smp_processor_id(),
+		       table->name,
+		       &((struct ipt_entry *)table_base)->comefrom,
+		       ((struct ipt_entry *)table_base)->comefrom);
+	}
 	((struct ipt_entry *)table_base)->comefrom = 0x57acc001;
 #endif
 
@@ -343,11 +348,28 @@ ipt_do_table(struct sk_buff **pskb,
 
 				e = get_entry(table_base, v);
 			} else {
+				/* Targets which reenter must return
+                                   abs. verdicts */
+#ifdef CONFIG_NETFILTER_DEBUG
+				((struct ipt_entry *)table_base)->comefrom
+					= 0xeeeeeeec;
+#endif
 				verdict = t->u.target->target(pskb, hook,
 							      in, out,
 							      t->data,
 							      userdata);
 
+#ifdef CONFIG_NETFILTER_DEBUG
+				if (((struct ipt_entry *)table_base)->comefrom
+				    != 0xeeeeeeec
+				    && verdict == IPT_CONTINUE) {
+					printk("Target %s reentered!\n",
+					       t->u.target->name);
+					verdict = NF_DROP;
+				}
+				((struct ipt_entry *)table_base)->comefrom
+					= 0x57acc001;
+#endif
 				/* Target might have changed stuff. */
 				ip = (*pskb)->nh.iph;
 				protohdr = (u_int32_t *)ip + ip->ihl;
@@ -1631,6 +1653,43 @@ static struct ipt_match udp_matchstruct
 static struct ipt_match icmp_matchstruct
 = { { NULL, NULL }, "icmp", &icmp_match, &icmp_checkentry, NULL };
 
+#ifdef CONFIG_PROC_FS
+static inline int print_name(const struct ipt_table *t,
+			     off_t start_offset, char *buffer, int length,
+			     off_t *pos, unsigned int *count)
+{
+	if ((*count)++ >= start_offset) {
+		unsigned int namelen;
+
+		namelen = sprintf(buffer + *pos, "%s\n", t->name);
+		if (*pos + namelen > length) {
+			/* Stop iterating */
+			return 1;
+		}
+		*pos += namelen;
+	}
+	return 0;
+}
+
+static int ipt_get_tables(char *buffer, char **start, off_t offset, int length)
+{
+	off_t pos = 0;
+	unsigned int count = 0;
+
+	if (down_interruptible(&ipt_mutex) != 0)
+		return 0;
+
+	LIST_FIND(&ipt_tables, print_name, struct ipt_table *,
+		  offset, buffer, length, &pos, &count);
+
+	up(&ipt_mutex);
+
+	/* `start' hack - see fs/proc/generic.c line ~105 */
+	*start=(char *)((unsigned long)count-offset);
+	return pos;
+}
+#endif /*CONFIG_PROC_FS*/
+
 static int __init init(void)
 {
 	int ret;
@@ -1651,13 +1710,23 @@ static int __init init(void)
 		return ret;
 	}
 
-	printk("iptables: (c)2000 Netfilter core team\n");
+#ifdef CONFIG_PROC_FS
+	if (!proc_net_create("ip_tables_names", 0, ipt_get_tables)) {
+		nf_unregister_sockopt(&ipt_sockopts);
+		return -ENOMEM;
+	}
+#endif
+
+	printk("ip_tables: (c)2000 Netfilter core team\n");
 	return 0;
 }
 
 static void __exit fini(void)
 {
 	nf_unregister_sockopt(&ipt_sockopts);
+#ifdef CONFIG_PROC_FS
+	proc_net_remove("ip_tables_names");
+#endif
 }
 
 module_init(init);

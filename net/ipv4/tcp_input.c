@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.190 2000/03/21 19:34:23 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.191 2000/03/25 01:55:13 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1181,6 +1181,9 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 	if (ack != tp->snd_una || (flag == 0 && !th->fin))
 		dst_confirm(sk->dst_cache);
 
+	if (ack != tp->snd_una)
+		tp->sorry = 1;
+
 	/* Remember the highest ack received. */
 	tp->snd_una = ack;
 	return 1;
@@ -1614,7 +1617,7 @@ static void tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
 	tp->fin_seq = TCP_SKB_CB(skb)->end_seq;
-	tcp_send_ack(sk);
+	tp->ack.pending = 1;
 
 	sk->shutdown |= RCV_SHUTDOWN;
 
@@ -1644,6 +1647,7 @@ static void tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 			break;
 		case TCP_FIN_WAIT2:
 			/* Received a FIN -- send ACK and enter TIME_WAIT. */
+			tcp_send_ack(sk);
 			tcp_time_wait(sk, TCP_TIME_WAIT, 0);
 			break;
 		default:
@@ -1944,7 +1948,7 @@ queue_and_out:
 
 		if (eaten) {
 			kfree_skb(skb);
-		} else
+		} else if (!sk->dead)
 			sk->data_ready(sk, 0);
 		return;
 	}
@@ -2074,6 +2078,30 @@ drop:
 	kfree_skb(skb);
 }
 
+/* When incoming ACK allowed to free some skb from write_queue,
+ * we remember this in flag tp->sorry and wake up socket on the exit
+ * from tcp input handler. Probably, handler has already eat this space
+ * sending ACK and cloned frames from tcp_write_xmit().
+ */
+static __inline__ void tcp_new_space(struct sock *sk)
+{
+	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	struct socket *sock;
+
+	tp->sorry = 0;
+
+	if (sock_wspace(sk) >= tcp_min_write_space(sk) &&
+	    (sock = sk->socket) != NULL) {
+		clear_bit(SOCK_NOSPACE, &sock->flags);
+
+		if (sk->sleep && waitqueue_active(sk->sleep))
+			wake_up_interruptible(sk->sleep);
+
+		if (sock->fasync_list)
+			sock_wake_async(sock, 2, POLL_OUT);
+	}
+}
+
 static void __tcp_data_snd_check(struct sock *sk, struct sk_buff *skb)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
@@ -2114,7 +2142,14 @@ static __inline__ void __tcp_ack_snd_check(struct sock *sk, int ofo_possible)
 	 */
 
 	    /* More than one full frame received or... */
-	if (((tp->rcv_nxt - tp->rcv_wup) > tp->ack.rcv_mss) ||
+	if (((tp->rcv_nxt - tp->rcv_wup) > tp->ack.rcv_mss
+#ifdef TCP_MORE_COARSE_ACKS
+	     /* Avoid to send immediate ACK from input path, if it
+	      * does not advance window far enough. tcp_recvmsg() will do this.
+	      */
+	     && (!sysctl_tcp_retrans_collapse || __tcp_select_window(sk) >= tp->rcv_wnd)
+#endif
+	     ) ||
 	    /* We ACK each frame or... */
 	    tcp_in_quickack_mode(tp) ||
 	    /* We have out of order data or */
@@ -2480,6 +2515,8 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 					TCP_SKB_CB(skb)->ack_seq, len); 
 				kfree_skb(skb); 
 				tcp_data_snd_check(sk);
+				if (tp->sorry)
+					tcp_new_space(sk);
 				return 0;
 			} else { /* Header too small */
 				TCP_INC_STATS_BH(TcpInErrs);
@@ -2633,6 +2670,8 @@ step5:
 	if(sk->state != TCP_CLOSE) {
 		tcp_data_snd_check(sk);
 		tcp_ack_snd_check(sk);
+		if (tp->sorry)
+			tcp_new_space(sk);
 	}
 
 	return 0;
@@ -2739,6 +2778,7 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		newtp->saw_tstamp = 0;
 
 		newtp->probes_out = 0;
+		newtp->num_sacks = 0;
 		newtp->syn_seq = req->rcv_isn;
 		newtp->fin_seq = req->rcv_isn;
 		newtp->urg_data = 0;
@@ -3112,6 +3152,7 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 		tcp_sync_mss(sk, tp->pmtu_cookie);
 		tcp_initialize_rcv_mss(sk);
 		tcp_init_metrics(sk);
+		tcp_init_buffer_space(sk);
 
 		if (sk->keepopen)
 			tcp_reset_keepalive_timer(sk, keepalive_time_when(tp));
@@ -3516,6 +3557,8 @@ step6:
 	if (sk->state != TCP_CLOSE) {
 		tcp_data_snd_check(sk);
 		tcp_ack_snd_check(sk);
+		if (tp->sorry)
+			tcp_new_space(sk);
 	}
 
 	if (!queued) { 

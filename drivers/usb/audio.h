@@ -30,7 +30,7 @@
 #define MAX_FREQ			16
 #define MAX_IFACE			8
 #define MAX_FORMAT			8
-#define MAX_ALT				8
+#define MAX_ALT				32 	/* Sorry, we need quite a few for the Philips webcams */
 
 struct usb_audio_terminal
 {	

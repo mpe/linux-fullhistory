@@ -45,8 +45,10 @@ extern struct sh_cpuinfo boot_cpu_data;
 
 /*
  * User space process size: 2GB.
+ *
+ * Since SH7709 and SH7750 have "area 7", we can't use 0x7c000000--0x7fffffff
  */
-#define TASK_SIZE	0x80000000
+#define TASK_SIZE	0x7c000000UL
 
 /* This decides where the kernel will search for a free chunk of vm
  * space during mmap's.
@@ -54,19 +56,25 @@ extern struct sh_cpuinfo boot_cpu_data;
 #define TASK_UNMAPPED_BASE	(TASK_SIZE / 3)
 
 /*
+ * Bit of SR register
+ *
+ * FD-bit:
+ *     When it's set, it means the processor doesn't have right to use FPU,
+ *     and it results exception when the floating operation is executed.
+ *
+ * IMASK-bit:
+ *     Interrupt level mask
+ */
+#define SR_FD    0x00008000
+#define SR_IMASK 0x000000f0
+
+/*
  * FPU structure and data
  */
-/* FD-bit of SR register.
- * When it's set, it means the processor doesn't have right to use FPU,
- * and it results exception when the floating operation is executed.
- */
-#define SR_FD	0x00008000
-
-#define NUM_FPU_REGS	16
 
 struct sh_fpu_hard_struct {
-	unsigned long fp_regs[NUM_FPU_REGS];
-	unsigned long xf_regs[NUM_FPU_REGS];
+	unsigned long fp_regs[16];
+	unsigned long long xd_regs[8];
 	unsigned long fpscr;
 	unsigned long fpul;
 
@@ -75,13 +83,13 @@ struct sh_fpu_hard_struct {
 
 /* Dummy fpu emulator  */
 struct sh_fpu_soft_struct {
-	unsigned long fp_regs[NUM_FPU_REGS];
+	unsigned long fp_regs[16];
+	unsigned long long xd_regs[8];
 	unsigned long fpscr;
 	unsigned long fpul;
-	unsigned long xf_regs[NUM_FPU_REGS];
 
-	unsigned char	lookahead;
-	unsigned long	entry_pc;
+	unsigned char lookahead;
+	unsigned long entry_pc;
 };
 
 union sh_fpu_union {
@@ -120,7 +128,7 @@ struct thread_struct {
 	regs->pr = 0;   		 	 \
 	regs->sr = 0;		/* User mode. */ \
 	regs->pc = new_pc;			 \
-	regs->sp = new_sp
+	regs->regs[15] = new_sp
 
 /* Forward declaration, a strange C thing */
 struct task_struct;
@@ -188,6 +196,9 @@ extern void save_fpu(struct task_struct *__tsk);
 	if ((tsk)->flags & PF_USEDFPU)	 	\
 		(tsk)->flags &= ~PF_USEDFPU; 	\
 } while (0)
+
+/* Double presision, NANS as NANS, rounding to nearest, no exceptions */
+#define FPSCR_INIT  0x00080000
 
 /*
  * Return saved PC of a blocked thread.

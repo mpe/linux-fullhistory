@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.104 2000/03/01 02:53:32 davem Exp $
+/*  $Id: process.c,v 1.105 2000/03/26 09:13:48 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -451,7 +451,7 @@ static unsigned long clone_stackframe(unsigned long csp, unsigned long psp)
 {
 	unsigned long fp, distance, rval;
 
-	if(!(current->thread.flags & SPARC_FLAG_32BIT)) {
+	if (!(current->thread.flags & SPARC_FLAG_32BIT)) {
 		csp += STACK_BIAS;
 		psp += STACK_BIAS;
 		__get_user(fp, &(((struct reg_window *)psp)->ins[6]));
@@ -466,14 +466,14 @@ static unsigned long clone_stackframe(unsigned long csp, unsigned long psp)
 
 	distance = fp - psp;
 	rval = (csp - distance);
-	if(copy_in_user(rval, psp, distance))
+	if (copy_in_user(rval, psp, distance))
 		rval = 0;
-	else if(current->thread.flags & SPARC_FLAG_32BIT) {
-		if(put_user(((u32)csp), &(((struct reg_window32 *)rval)->ins[6])))
+	else if (current->thread.flags & SPARC_FLAG_32BIT) {
+		if (put_user(((u32)csp), &(((struct reg_window32 *)rval)->ins[6])))
 			rval = 0;
 	} else {
-		if(put_user(((u64)csp - STACK_BIAS),
-			    &(((struct reg_window *)rval)->ins[6])))
+		if (put_user(((u64)csp - STACK_BIAS),
+			     &(((struct reg_window *)rval)->ins[6])))
 			rval = 0;
 		else
 			rval = rval - STACK_BIAS;
@@ -488,7 +488,7 @@ static inline void shift_window_buffer(int first_win, int last_win,
 {
 	int i;
 
-	for(i = first_win; i < last_win; i++) {
+	for (i = first_win; i < last_win; i++) {
 		t->rwbuf_stkptrs[i] = t->rwbuf_stkptrs[i+1];
 		memcpy(&t->reg_window[i], &t->reg_window[i+1],
 		       sizeof(struct reg_window));
@@ -501,11 +501,11 @@ void synchronize_user_stack(void)
 	unsigned long window;
 
 	flush_user_windows();
-	if((window = t->w_saved) != 0) {
+	if ((window = t->w_saved) != 0) {
 		int winsize = REGWIN_SZ;
 		int bias = 0;
 
-		if(t->flags & SPARC_FLAG_32BIT)
+		if (t->flags & SPARC_FLAG_32BIT)
 			winsize = REGWIN32_SZ;
 		else
 			bias = STACK_BIAS;
@@ -515,11 +515,11 @@ void synchronize_user_stack(void)
 			unsigned long sp = (t->rwbuf_stkptrs[window] + bias);
 			struct reg_window *rwin = &t->reg_window[window];
 
-			if(!copy_to_user((char *)sp, rwin, winsize)) {
+			if (!copy_to_user((char *)sp, rwin, winsize)) {
 				shift_window_buffer(window, t->w_saved - 1, t);
 				t->w_saved--;
 			}
-		} while(window--);
+		} while (window--);
 	}
 }
 
@@ -530,25 +530,29 @@ void fault_in_user_windows(struct pt_regs *regs)
 	int winsize = REGWIN_SZ;
 	int bias = 0;
 
-	if(t->flags & SPARC_FLAG_32BIT)
+	if (t->flags & SPARC_FLAG_32BIT)
 		winsize = REGWIN32_SZ;
 	else
 		bias = STACK_BIAS;
+
 	flush_user_windows();
 	window = t->w_saved;
-	if(window != 0) {
+
+	if (window != 0) {
 		window -= 1;
 		do {
 			unsigned long sp = (t->rwbuf_stkptrs[window] + bias);
 			struct reg_window *rwin = &t->reg_window[window];
 
-			if(copy_to_user((char *)sp, rwin, winsize))
+			if (copy_to_user((char *)sp, rwin, winsize))
 				goto barf;
-		} while(window--);
+		} while (window--);
 	}
 	t->w_saved = 0;
 	return;
+
 barf:
+	t->w_saved = window + 1;
 	do_exit(SIGILL);
 }
 
@@ -578,7 +582,8 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	t->kregs = (struct pt_regs *)(child_trap_frame+sizeof(struct reg_window));
 	t->cwp = (regs->tstate + 1) & TSTATE_CWP;
 	t->fpsaved[0] = 0;
-	if(regs->tstate & TSTATE_PRIV) {
+
+	if (regs->tstate & TSTATE_PRIV) {
 		/* Special case, if we are spawning a kernel thread from
 		 * a userspace task (via KMOD, NFS, or similar) we must
 		 * disable performance counters in the child because the
@@ -597,7 +602,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		       sizeof(struct reg_window));
 		t->kregs->u_regs[UREG_G6] = (unsigned long) p;
 	} else {
-		if(t->flags & SPARC_FLAG_32BIT) {
+		if (t->flags & SPARC_FLAG_32BIT) {
 			sp &= 0x00000000ffffffffUL;
 			regs->u_regs[UREG_FP] &= 0x00000000ffffffffUL;
 		}
@@ -607,7 +612,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 			unsigned long csp;
 
 			csp = clone_stackframe(sp, regs->u_regs[UREG_FP]);
-			if(!csp)
+			if (!csp)
 				return -EFAULT;
 			t->kregs->u_regs[UREG_FP] = csp;
 		}
@@ -621,19 +626,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 
 	/* Set the second return value for the parent. */
 	regs->u_regs[UREG_I1] = 0;
-#if 0
-	printk("\ncopy_thread: c(%p[mm(%p:%p)]) p(%p[mm(%p:%p)])\n",
-	       current, current->mm, current->active_mm,
-	       p, p->mm, p->active_mm);
-	printk("copy_thread: c MM_ctx(%016lx) MM_pgd(%016lx)\n",
-	       (current->mm ? current->mm->context : 0),
-	       (current->mm ? pgd_val(current->mm->pgd[0]) : 0));
-	printk("copy_thread: p MM_ctx(%016lx) MM_pgd(%08x)\n",
-	       (p->mm ? p->mm->context : 0),
-	       (p->mm ? pgd_val(p->mm->pgd[0]) : 0));
-	printk("copy_thread: c->flags(%x) p->flags(%x) ",
-	       current->thread.flags, p->thread.flags);
-#endif
+
 	return 0;
 }
 

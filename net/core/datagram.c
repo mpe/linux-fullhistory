@@ -87,9 +87,8 @@ static int wait_for_packet(struct sock * sk, int *err, long *timeo_p)
 		goto out;
 
 	/* handle signals */
-	error = -ERESTARTSYS;
 	if (signal_pending(current))
-		goto out;
+		goto interrupted;
 
 	*timeo_p = schedule_timeout(*timeo_p);
 
@@ -98,6 +97,8 @@ ready:
 	remove_wait_queue(sk->sleep, &wait);
 	return 0;
 
+interrupted:
+	error = sock_intr_errno(*timeo_p);
 out:
 	current->state = TASK_RUNNING;
 	remove_wait_queue(sk->sleep, &wait);
@@ -248,7 +249,7 @@ unsigned int datagram_poll(struct file * file, struct socket *sock, poll_table *
 	if (sock_writeable(sk))
 		mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
 	else
-		sk->socket->flags |= SO_NOSPACE;
+		set_bit(SOCK_ASYNC_NOSPACE, &sk->socket->flags);
 
 	return mask;
 }

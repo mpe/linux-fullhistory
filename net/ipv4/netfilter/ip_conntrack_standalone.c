@@ -276,6 +276,7 @@ static void __exit fini(void)
 module_init(init);
 module_exit(fini);
 
+#ifdef MODULE
 EXPORT_SYMBOL(ip_conntrack_protocol_register);
 EXPORT_SYMBOL(invert_tuplepr);
 EXPORT_SYMBOL(ip_conntrack_alter_reply);
@@ -284,11 +285,9 @@ EXPORT_SYMBOL(ip_conntrack_get);
 EXPORT_SYMBOL(ip_conntrack_module);
 EXPORT_SYMBOL(ip_conntrack_helper_register);
 EXPORT_SYMBOL(ip_conntrack_helper_unregister);
-EXPORT_SYMBOL(ip_conntrack_lock);
-EXPORT_SYMBOL(find_proto);
-EXPORT_SYMBOL(get_tuple);
 EXPORT_SYMBOL(ip_ct_selective_cleanup);
 EXPORT_SYMBOL(ip_ct_refresh);
 EXPORT_SYMBOL(ip_conntrack_expect_related);
 EXPORT_SYMBOL(ip_conntrack_tuple_taken);
 EXPORT_SYMBOL(ip_ct_gather_frags);
+#endif

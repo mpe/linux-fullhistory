@@ -1210,7 +1210,7 @@ aty128_set_par(struct aty128fb_par *par,
     if (par->accel_flags & FB_ACCELF_TEXT)
         aty128_init_engine(par, info);
 
-#ifdef CONFIG_FB_COMPAT_XPMAC
+#if 0/*def CONFIG_FB_COMPAT_XPMAC*/
 #if 0 /* use this when macmodes gets updated */
     if (!console_fb_info || console_fb_info == &info->fb_info) {
 	disp_info.width = ((par->crtc.v_total >> 16) & 0x7ff)+1;

@@ -26,7 +26,7 @@ IOFF = 0
 ISZ = 0
 
 TFTPIMAGE=/tftpboot/zImage.mbx
-ZLINKFLAGS = -T ../vmlinux.lds -Ttext 0x00100000
+ZLINKFLAGS = -T ../vmlinux.lds -Ttext 0x00180000
 
 OBJECTS := head.o misc.o ../coffboot/zlib.o m8xx_tty.o
 CFLAGS = $(CPPFLAGS) -O2 -DSTDC_HEADERS -fno-builtin -DCONFIG_8xx

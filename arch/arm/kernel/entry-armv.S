@@ -201,6 +201,38 @@ irq_prio_ebsa110:
 		.byte	 6, 6, 6, 6, 2, 2, 2, 2, 3, 3, 6, 6, 2, 2, 2, 2
 		.endm
 
+#elif defined(CONFIG_ARCH_SHARK)
+
+		.macro	disable_fiq
+		.endm
+
+		.macro	get_irqnr_and_base, irqnr, irqstat, base
+		mov	r4, #0xe0000000
+		orr	r4, r4, #0x20
+
+		mov	\irqstat, #0x0C
+		strb	\irqstat, [r4]			@outb(0x0C, 0x20) /* Poll command */
+		ldrb	\irqnr, [r4]			@irq = inb(0x20) & 7
+		and	\irqstat, \irqnr, #0x80
+		teq	\irqstat, #0
+		beq	43f
+		and	\irqnr, \irqnr, #7
+		teq	\irqnr, #2
+		bne	44f
+43:		mov	\irqstat, #0x0C
+		strb	\irqstat, [r4, #0x80]		@outb(0x0C, 0xA0) /* Poll command */
+		ldrb	\irqnr, [r4, #0x80]		@irq = (inb(0xA0) & 7) + 8
+		and	\irqstat, \irqnr, #0x80
+		teq	\irqstat, #0
+		beq	44f
+		and	\irqnr, \irqnr, #7
+		add	\irqnr, \irqnr, #8
+44:		teq	\irqstat, #0
+		.endm
+
+		.macro	irq_prio_table
+		.endm
+
 #elif defined(CONFIG_HOST_FOOTBRIDGE) || defined(CONFIG_ADDIN_FOOTBRIDGE)
 #include <asm/dec21285.h>
 
@@ -295,9 +327,12 @@ irq_prio_ebsa110:
 		.endm
 
 		.macro	get_irqnr_and_base, irqnr, irqstat, base
-		ldr	r4, =0xffe00000
-		ldr	\irqstat, [r4, #0x180]		@ get interrupts
+		ldr	\irqstat, =INTCONT_BASE
+		ldr	\base, =soft_irq_mask
+		ldr	\irqstat, [\irqstat]		@ get interrupts
+		ldr	\base, [\base]
 		mov	\irqnr, #0
+		and	\irqstat, \irqstat, \base	@ mask out disabled ones
 1001:		tst	\irqstat, #1
 		addeq	\irqnr, \irqnr, #1
 		moveq	\irqstat, \irqstat, lsr #1
@@ -307,6 +342,39 @@ irq_prio_ebsa110:
 		.endm
 
 		.macro	irq_prio_table
+		.ltorg
+		.bss
+ENTRY(soft_irq_mask)
+		.word	0
+		.text
+		.endm
+
+#elif defined(CONFIG_ARCH_TBOX)
+
+		.macro	disable_fiq
+		.endm
+
+		.macro	get_irqnr_and_base, irqnr, irqstat, base
+		ldr	\irqstat, =0xffff7000
+		ldr	\irqstat, [\irqstat]		@ get interrupts
+		ldr	\base, =soft_irq_mask
+		ldr	\base, [\base]
+		mov	\irqnr, #0
+		and	\irqstat, \irqstat, \base	@ mask out disabled ones
+1001:		tst	\irqstat, #1
+		addeq	\irqnr, \irqnr, #1
+		moveq	\irqstat, \irqstat, lsr #1
+		tsteq	\irqnr, #32
+		beq	1001b
+		teq	\irqnr, #32
+		.endm
+
+		.macro	irq_prio_table
+		.ltorg
+		.bss
+ENTRY(soft_irq_mask)
+		.word	0
+		.text
 		.endm
 
 #elif defined(CONFIG_ARCH_SA1100)

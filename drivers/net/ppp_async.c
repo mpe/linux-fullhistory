@@ -215,6 +215,16 @@ ppp_asynctty_ioctl(struct tty_struct *tty, struct file *file,
 
 	err = -EFAULT;
 	switch (cmd) {
+	case PPPIOCGCHAN:
+		err = -ENXIO;
+		if (ap == 0)
+			break;
+		err = -EFAULT;
+		if (put_user(ppp_channel_index(&ap->chan), (int *) arg))
+			break;
+		err = 0;
+		break;
+
 	case PPPIOCGUNIT:
 		err = -ENXIO;
 		if (ap == 0)
@@ -257,10 +267,14 @@ ppp_asynctty_ioctl(struct tty_struct *tty, struct file *file,
 	case PPPIOCSXASYNCMAP:
 	case PPPIOCGMRU:
 	case PPPIOCSMRU:
+		err = -EPERM;
+		if (!capable(CAP_NET_ADMIN))
+			break;
 		err = ppp_async_ioctl(&ap->chan, cmd, arg);
 		break;
 
 	case PPPIOCATTACH:
+	case PPPIOCDETACH:
 		err = ppp_channel_ioctl(&ap->chan, cmd, arg);
 		break;
 

@@ -19,7 +19,6 @@ enum ip_ct_ftp_type
 	IP_CT_FTP_PASV = IP_CT_DIR_REPLY
 };
 
-/* Protected by ip_conntrack_lock */
 /* We record seq number and length of ftp ip/port text here: all in
    host order. */
 struct ip_ct_ftp

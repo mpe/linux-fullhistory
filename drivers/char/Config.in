@@ -152,7 +152,7 @@ comment 'Video For Linux'
 
 tristate 'Video For Linux' CONFIG_VIDEO_DEV
 if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
-   dep_tristate '  I2C on parallel port' CONFIG_I2C_PARPORT $CONFIG_PARPORT
+   dep_tristate '  I2C on parallel port' CONFIG_I2C_PARPORT $CONFIG_PARPORT $CONFIG_I2C
    comment 'Radio Adapters'
    dep_tristate '  ADS Cadet AM/FM Tuner' CONFIG_RADIO_CADET $CONFIG_VIDEO_DEV
    dep_tristate '  AIMSlab RadioTrack (aka RadioReveal) support' CONFIG_RADIO_RTRACK $CONFIG_VIDEO_DEV
@@ -208,6 +208,15 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
       if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	 dep_tristate '  QuickCam Colour Video For Linux (EXPERIMENTAL)' CONFIG_VIDEO_CQCAM $CONFIG_VIDEO_DEV $CONFIG_PARPORT
       fi
+   fi
+   dep_tristate 'CPiA Video For Linux' CONFIG_VIDEO_CPIA $CONFIG_VIDEO_DEV
+   if [ "$CONFIG_VIDEO_CPIA" != "n" ]; then
+     if [ "CONFIG_PARPORT_1284" != "n" ]; then
+       dep_tristate 'CPiA Parallel Port Lowlevel Support' CONFIG_VIDEO_CPIA_PP $CONFIG_VIDEO_CPIA $CONFIG_PARPORT
+     fi
+     if [ "$CONFIG_USB" != "n" ]; then
+       dep_tristate 'CPiA USB Lowlevel Support' CONFIG_VIDEO_CPIA_USB $CONFIG_VIDEO_CPIA $CONFIG_USB
+     fi
    fi
    dep_tristate '  SAA5249 Teletext processor' CONFIG_VIDEO_SAA5249 $CONFIG_VIDEO_DEV $CONFIG_I2C
    dep_tristate '  SAB3036 tuner' CONFIG_TUNER_3036 $CONFIG_VIDEO_DEV $CONFIG_I2C

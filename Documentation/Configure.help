@@ -187,9 +187,9 @@ CONFIG_NOHIGHMEM
   If you are compiling a kernel which will never run on a machine
   with more than 1 Gigabyte total physical RAM, answer "off"
   here (default choice).  This will result in the old "3GB/1GB"
-  virtual/physical memory split. 3BG are mapped so as each processus
+  virtual/physical memory split. 3GB are mapped so as each processus
   sees a 3GB virtual memory space.
-  The remaining part of the 4G virtual memory space is used by the
+  The remaining part of the 4GB virtual memory space is used by the
   kernel to 'permanently map' as much physical memory as possible.
   Certain types of applications perform better if there is more
   'permanently mapped' kernel memory.
@@ -4899,14 +4899,15 @@ CONFIG_CHR_DEV_SG
   about anything having "SCSI" in its name other than hard disks,
   CDROMs or tapes, say Y here. These won't be supported by the kernel
   directly, so you need some additional software which knows how to
-  talk to these devices using the SCSI protocol. For CD-writers, you
-  would need the program cdwrite, available from
-  ftp://metalab.unc.edu/pub/Linux/utils/disk-management ; for other
-  devices, it's possible that you'll have to write the driver software
-  yourself, so have a look at the SCSI-HOWTO and at the
-  SCSI-Programming-HOWTO, both available from
-  http://www.linuxdoc.org/docs.html#howto . Please read the file
-  Documentation/scsi-generic.txt for more information.
+  talk to these devices using the SCSI protocol. For scanners, look at
+  SANE (www.mostang.com/sane). For CD writer software look at cdrecord
+  (www.fokus.gmd.de/research/cc/glone/employees/joerg.schilling/private
+  /cdrecord.html) and for burning a "disk at once": cdrdao
+  (www.ping.de/sites/daneb/cdrdao.html). Cdparanoia is a high quality
+  digital reader of audio CDs (www.xiph.org/paranoia).
+  For other devices, it's possible that you'll have to write the driver
+  software yourself. Please read the file Documentation/scsi-generic.txt
+  for more information.
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -5164,6 +5165,15 @@ CONFIG_SCSI_OMIT_FLASHPOINT
   BusLogic SCSI driver. The FlashPoint SCCB Manager code is
   substantial, so users of MultiMaster Host Adapters may wish to omit
   it.
+
+DMX3191D SCSI support
+CONFIG_SCSI_DMX3191D
+  This is support for Domex DMX3191D SCSI Host Adapters.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called dmx3191d.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
 
 DTC3180/3280 SCSI support
 CONFIG_SCSI_DTC3280
@@ -8986,6 +8996,12 @@ CONFIG_USB
   The module will be called usbcore.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
+USB verbose debug messages
+CONFIG_USB_DEBUG
+  Say Y here if you want the USB core drivers to produce a bunch of
+  debug messages to the system log. Select this if you are having a
+  problem with USB support and want to see more of what is going on.
+
 UHCI (intel PIIX4, VIA, ...) support?
 CONFIG_USB_UHCI
   The Universal Host Controller Interface is a standard by Intel for
@@ -9203,22 +9219,6 @@ CONFIG_USB_PRINTER
   The module will be called printer.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-USB CPiA Camera support
-CONFIG_USB_CPIA
-  Say Y here if you want to connect this type of camera to your
-  computer's USB port.
-
-  This driver uses the Video For Linux API.  You must enable
-  (Y or M in config) Video For Linux (under Character Devices)
-  to use this driver.  Information on this API and pointers to
-  "v4l" programs may be found on the WWW at
-  http://roadrunner.swansea.uk.linux.org/v4l.shtml .
-
-  This code is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called cpia.o. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt.
-
 USB IBM (Xirlink) C-It Camera support
 CONFIG_USB_IBMCAM
   Say Y here if you want to connect this type of camera to your
@@ -9285,7 +9285,7 @@ CONFIG_USB_MDC800
   Say Y here if you want to connect this type of still camera to
   your computer's USB port. This driver can be used with gphoto 0.4.3
   and higher (look at www.gphoto.org).
-  To use it create a devicenode with mknod /dev/mustek c 10 171 and
+  To use it create a devicenode with mknod /dev/mustek c 180 32 and
   configure it in your software.
 
   This code is also available as a module ( = code which can be
@@ -14915,6 +14915,31 @@ CONFIG_I2C_CHARDEV
   Here you find the drivers which allow you to use the i2c-* device 
   files, usually found in the /dev directory on your system. They
   make it possible to have user-space programs use the I2C bus.
+
+CPiA Video For Linux
+CONFIG_VIDEO_CPIA
+  This is the video4linux driver for cameras based on Vision's CPiA
+  (Colour Processor Interface ASIC), such as the Creative Labs Video
+  Blaster Webcam II. If you have one of these cameras, say Y here
+  and select parallel port and/or USB lowlevel support below,
+  otherwise say N. This will not work with the Creative Webcam III.
+  It is also available as a module (cpia.o).
+
+CPiA Parallel Port Lowlevel Support
+CONFIG_VIDEO_CPIA_PP
+  This is the lowlevel parallel port support for cameras based on
+  Vision's CPiA (Colour Processor Interface ASIC), such as the
+  Creative Webcam II. If you have the parallel port version of one
+  of these cameras, say Y here, otherwise say N. It is also available
+  as a module (cpia_pp.o).
+
+CPiA USB Lowlevel Support
+CONFIG_VIDEO_CPIA_USB
+  This is the lowlevel USB support for cameras based on Vision's CPiA
+  (Colour Processor Interface ASIC), such as the Creative Webcam II.
+  If you have the USB version of one of these cameras, say Y here,
+  otherwise say N. This will not work with the Creative Webcam III.
+  It is also available as a module (cpia_usb.o).
 
 #
 # A couple of things I keep forgetting:

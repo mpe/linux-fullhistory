@@ -1,4 +1,4 @@
-/* $Id: pci_psycho.c,v 1.14 2000/03/10 02:42:15 davem Exp $
+/* $Id: pci_psycho.c,v 1.15 2000/03/25 05:18:11 davem Exp $
  * pci_psycho.c: PSYCHO/U2P specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1193,6 +1193,23 @@ static void __init pbm_bridge_reconfigure(struct pci_controller_info *p)
 	pbm_renumber(&p->pbm_A, 0xff);
 }
 
+static void __init pbm_config_busmastering(struct pci_pbm_info *pbm)
+{
+	u8 *addr;
+
+	/* Set cache-line size to 64 bytes, this is actually
+	 * a nop but I do it for completeness.
+	 */
+	addr = psycho_pci_config_mkaddr(pbm, pbm->pci_first_busno,
+					0, PCI_CACHE_LINE_SIZE);
+	pci_config_write8(addr, 64 / sizeof(u32));
+
+	/* Set PBM latency timer to 64 PCI clocks. */
+	addr = psycho_pci_config_mkaddr(pbm, pbm->pci_first_busno,
+					0, PCI_LATENCY_TIMER);
+	pci_config_write8(addr, 64);
+}
+
 static void __init pbm_scan_bus(struct pci_controller_info *p,
 				struct pci_pbm_info *pbm)
 {
@@ -1203,11 +1220,17 @@ static void __init pbm_scan_bus(struct pci_controller_info *p,
 	pci_record_assignments(pbm, pbm->pci_bus);
 	pci_assign_unassigned(pbm, pbm->pci_bus);
 	pci_fixup_irq(pbm, pbm->pci_bus);
+	pci_determine_66mhz_disposition(pbm, pbm->pci_bus);
+	pci_setup_busmastering(pbm, pbm->pci_bus);
 }
 
 static void __init psycho_scan_bus(struct pci_controller_info *p)
 {
 	pbm_bridge_reconfigure(p);
+	pbm_config_busmastering(&p->pbm_B);
+	p->pbm_B.is_66mhz_capable = 0;
+	pbm_config_busmastering(&p->pbm_A);
+	p->pbm_A.is_66mhz_capable = 1;
 	pbm_scan_bus(p, &p->pbm_B);
 	pbm_scan_bus(p, &p->pbm_A);
 

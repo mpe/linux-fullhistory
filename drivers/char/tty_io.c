@@ -153,6 +153,12 @@ extern long serial167_console_init(void);
 extern console_8xx_init(void);
 extern int rs_8xx_init(void);
 #endif /* CONFIG_8xx */
+#ifdef CONFIG_HWC
+extern void hwc_console_init(void);
+#endif
+#ifdef CONFIG_3215
+extern void con3215_init(void);
+#endif /* CONFIG_3215 */
 
 
 #ifndef MIN
@@ -2191,6 +2197,12 @@ void __init console_init(void)
 #if defined(CONFIG_SERIAL167)
 	serial167_console_init();
 #endif
+#endif
+#ifdef CONFIG_3215
+        con3215_init();
+#endif
+#ifdef CONFIG_HWC
+        hwc_console_init();
 #endif
 }
 

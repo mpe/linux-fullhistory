@@ -63,13 +63,13 @@
  * Like the LANCE driver:
  * The driver runs as two independent, single-threaded flows of control.  One
  * is the send-packet routine, which enforces single-threaded use by the
- * dev->tbusy flag.  The other thread is the interrupt handler, which is single
- * threaded by the hardware and other software.
+ * cep->tx_busy flag.  The other thread is the interrupt handler, which is
+ * single threaded by the hardware and other software.
  *
- * The send packet thread has partial control over the Tx ring and 'dev->tbusy'
- * flag.  It sets the tbusy flag whenever it's queuing a Tx packet. If the next
- * queue slot is empty, it clears the tbusy flag when finished otherwise it sets
- * the 'lp->tx_full' flag.
+ * The send packet thread has partial control over the Tx ring and the
+ * 'cep->tx_busy' flag.  It sets the tx_busy flag whenever it's queuing a Tx
+ * packet. If the next queue slot is empty, it clears the tx_busy flag when
+ * finished otherwise it sets the 'lp->tx_full' flag.
  *
  * The MBX has a control register external to the MPC8xx that has some
  * control of the Ethernet interface.  Control Register 1 has the
@@ -149,8 +149,10 @@ struct cpm_enet_private {
 	cbd_t	*dirty_tx;	/* The ring entries to be free()ed. */
 	scc_t	*sccp;
 	struct	net_device_stats stats;
-	char	tx_full;
+	uint	tx_full;
+	uint	tx_busy;
 	unsigned long lock;
+	int	interrupt;
 };
 
 static int cpm_enet_open(struct net_device *dev);
@@ -190,10 +192,7 @@ cpm_enet_open(struct net_device *dev)
 	 * a simple way to do that.
 	 */
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
-
+	netif_start_queue(dev);
 	return 0;					/* Always succeed */
 }
 
@@ -205,7 +204,7 @@ cpm_enet_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	unsigned long flags;
 
 	/* Transmitter timeout, serious problems. */
-	if (dev->tbusy) {
+	if (cep->tx_busy) {
 		int tickssofar = jiffies - dev->trans_start;
 		if (tickssofar < 200)
 			return 1;
@@ -233,22 +232,23 @@ cpm_enet_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 #endif
 
-		dev->tbusy=0;
+		cep->tx_busy=0;
 		dev->trans_start = jiffies;
 
 		return 0;
 	}
 
 	/* Block a timer-based transmit from overlapping.  This could better be
-	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
+	 * done with atomic_swap(1, cep->tx_busy), but set_bit() works as well.
+	 */
+	if (test_and_set_bit(0, (void*)&cep->tx_busy) != 0) {
 		printk("%s: Transmitter access conflict.\n", dev->name);
 		return 1;
 	}
 
 	if (test_and_set_bit(0, (void*)&cep->lock) != 0) {
 		printk("%s: tx queue lock!.\n", dev->name);
-		/* don't clear dev->tbusy flag. */
+		/* don't clear cep->tx_busy flag. */
 		return 1;
 	}
 
@@ -258,7 +258,7 @@ cpm_enet_start_xmit(struct sk_buff *skb, struct net_device *dev)
 #ifndef final_version
 	if (bdp->cbd_sc & BD_ENET_TX_READY) {
 		/* Ooops.  All transmit buffers are full.  Bail out.
-		 * This should not happen, since dev->tbusy should be set.
+		 * This should not happen, since cep->tx_busy should be set.
 		 */
 		printk("%s: tx queue full!.\n", dev->name);
 		cep->lock = 0;
@@ -314,7 +314,7 @@ cpm_enet_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (bdp->cbd_sc & BD_ENET_TX_READY)
 		cep->tx_full = 1;
 	else
-		dev->tbusy=0;
+		cep->tx_busy=0;
 	restore_flags(flags);
 
 	cep->cur_tx = (cbd_t *)bdp;
@@ -335,10 +335,10 @@ cpm_enet_interrupt(void *dev_id)
 	int	must_restart;
 
 	cep = (struct cpm_enet_private *)dev->priv;
-	if (dev->interrupt)
+	if (cep->interrupt)
 		printk("%s: Re-entering the interrupt handler.\n", dev->name);
 
-	dev->interrupt = 1;
+	cep->interrupt = 1;
 
 	/* Get the interrupt events that caused us to be here.
 	*/
@@ -399,7 +399,7 @@ cpm_enet_interrupt(void *dev_id)
 
 		/* Free the sk buffer associated with this last transmit.
 		*/
-		dev_kfree_skb(cep->tx_skbuff[cep->skb_dirty]/*, FREE_WRITE*/);
+		dev_kfree_skb_irq(cep->tx_skbuff[cep->skb_dirty]);
 		cep->skb_dirty = (cep->skb_dirty + 1) & TX_RING_MOD_MASK;
 
 		/* Update pointer to next buffer descriptor to be transmitted.
@@ -421,10 +421,10 @@ cpm_enet_interrupt(void *dev_id)
 		/* Since we have freed up a buffer, the ring is no longer
 		 * full.
 		 */
-		if (cep->tx_full && dev->tbusy) {
+		if (cep->tx_full && cep->tx_busy) {
 			cep->tx_full = 0;
-			dev->tbusy = 0;
-			mark_bh(NET_BH);
+			cep->tx_busy = 0;
+			netif_wake_queue(dev);
 		}
 
 		cep->dirty_tx = (cbd_t *)bdp;
@@ -455,7 +455,7 @@ cpm_enet_interrupt(void *dev_id)
 		printk("CPM ENET: BSY can't happen.\n");
 	}
 
-	dev->interrupt = 0;
+	cep->interrupt = 0;
 
 	return;
 }
@@ -564,6 +564,7 @@ cpm_enet_close(struct net_device *dev)
 {
 	/* Don't know what to do yet.
 	*/
+	netif_stop_queue(dev);
 
 	return 0;
 }

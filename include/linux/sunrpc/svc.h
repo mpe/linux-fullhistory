@@ -10,6 +10,7 @@
 #ifndef SUNRPC_SVC_H
 #define SUNRPC_SVC_H
 
+#include <linux/in.h>
 #include <linux/sunrpc/types.h>
 #include <linux/sunrpc/xdr.h>
 #include <linux/sunrpc/svcauth.h>

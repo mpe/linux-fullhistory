@@ -1188,7 +1188,7 @@ static char *pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *r
 		} else if (newirq) {
 			DBG(" -> [VIA] set to %02x\n", newirq);
 			x = (pirq & 1) ? ((x & 0x0f) | (newirq << 4)) : ((x & 0xf0) | newirq);
-			pci_write_config_byte(router, reg, y);
+			pci_write_config_byte(router, reg, x);
 			msg = "VIA-NEW";
 		} else DBG(" -> [VIA] sink\n");
 		break;

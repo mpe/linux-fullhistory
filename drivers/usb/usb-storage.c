@@ -1174,6 +1174,7 @@ static int us_queuecommand( Scsi_Cmnd *srb , void (*done)(Scsi_Cmnd *))
 /* FIXME: This doesn't actually abort anything */
 static int us_abort( Scsi_Cmnd *srb )
 {
+	printk(KERN_CRIT "usb-storage: abort() requested but not implemented\n" );
 	return 0;
 }
 
@@ -1182,6 +1183,7 @@ static int us_bus_reset( Scsi_Cmnd *srb )
 {
 	struct us_data *us = (struct us_data *)srb->host->hostdata[0];
 
+	printk(KERN_CRIT "usb-storage: bus_reset() requested but not implemented\n" );
 	US_DEBUGP("Bus reset requested\n");
 	if (us->ip_wanted)
 		up(&(us->ip_waitq));
@@ -1192,6 +1194,7 @@ static int us_bus_reset( Scsi_Cmnd *srb )
 /* FIXME: This doesn't actually reset anything */
 static int us_host_reset( Scsi_Cmnd *srb )
 {
+	printk(KERN_CRIT "usb-storage: host_reset() requested but not implemented\n" );
 	return 0;
 }
 
@@ -1298,36 +1301,27 @@ int usb_stor_proc_info (char *buffer, char **start, off_t offset,
  */
 
 static Scsi_Host_Template my_host_template = {
-	NULL,			    /* next */
-	NULL,			    /* module */
-	NULL,			    /* proc_dir */
-	usb_stor_proc_info,
-	NULL,			    /* name - points to unique */
-	us_detect,
-	us_release,
-	NULL,			    /* info */
-	NULL,			    /* ioctl */
-	us_command,
-	us_queuecommand,
-	NULL,			    /* eh_strategy */
-	us_abort,
-	us_bus_reset,
-	us_bus_reset,
-	us_host_reset,
-	NULL,			    /* abort */
-	NULL,			    /* reset */
-	NULL,			    /* slave_attach */
-	NULL,			    /* bios_param */
-	NULL,			    /* select_queue_depths */
-	1,			    /* can_queue */
-	-1,			    /* this_id */
-	SG_ALL, 		    /* sg_tablesize */
-	1,			    /* cmd_per_lun */
-	0,			    /* present */
-	FALSE,		            /* unchecked_isa_dma */
-	TRUE,  		            /* use_clustering */
-	TRUE,			    /* use_new_eh_code */
-	TRUE			    /* emulated */
+	proc_info:	usb_stor_proc_info,
+	detect:		us_detect,
+	release:	us_release,
+	command:	us_command,
+	queuecommand:	us_queuecommand,
+
+	eh_abort_handler:	us_abort,
+	eh_device_reset_handler:us_bus_reset,
+	eh_bus_reset_handler:	us_bus_reset,
+	eh_host_reset_handler:	us_host_reset,
+
+	can_queue:	1,
+	this_id:	-1,
+
+	sg_tablesize:	   SG_ALL,
+	cmd_per_lun:	   1,
+	present:	   0,
+	unchecked_isa_dma: FALSE,
+	use_clustering:	   TRUE,
+	use_new_eh_code:   TRUE,
+	emulated:	   TRUE,
 };
 
 static unsigned char sense_notready[] = {
@@ -1795,7 +1789,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		down(&(ss->notify));
 			
 		/* now register - our detect function will be called */
-		ss->htmplt.module = &__this_module;
+		ss->htmplt.module = THIS_MODULE;
 		scsi_register_module(MODULE_SCSI_HA, &(ss->htmplt));
 		
 		/* put us in the list */
@@ -1849,19 +1843,6 @@ static void storage_disconnect(struct usb_device *dev, void *ptr)
 
 int __init usb_stor_init(void)
 {
-	/* 
-	 * Check to see if the host template is a different size from
-	 * what we're expected -- people have updated this in the past
-	 * and forgotten about this driver.
-	 */
-	if (sizeof(my_host_template) != SCSI_HOST_TEMPLATE_SIZE) {
-		printk(KERN_ERR "usb-storage: SCSI_HOST_TEMPLATE_SIZE bad\n");
-		printk(KERN_ERR 
-		       "usb-storage: expected %d bytes, got %d bytes\n", 
-		       SCSI_HOST_TEMPLATE_SIZE, sizeof(my_host_template)) ;
-		return -1 ;
-	}
-
 	/* register the driver, return -1 if error */
 	if (usb_register(&storage_driver) < 0)
 		return -1;

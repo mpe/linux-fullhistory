@@ -940,7 +940,6 @@ svc_create_socket(struct svc_serv *serv, int protocol, struct sockaddr_in *sin)
 	if (protocol == IPPROTO_TCP) {
 		if ((error = sock->ops->listen(sock, 5)) < 0)
 			goto bummer;
-		sock->flags |= SO_ACCEPTCON;
 	}
 
 	if ((svsk = svc_setup_socket(serv, sock, &error, 1)) != NULL)

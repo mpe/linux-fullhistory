@@ -1,4 +1,4 @@
-/* $Id: blockops.S,v 1.22 2000/03/15 07:18:55 davem Exp $
+/* $Id: blockops.S,v 1.23 2000/03/26 09:13:50 davem Exp $
  * blockops.S: UltraSparc block zero optimized routines.
  *
  * Copyright (C) 1996, 1998, 1999, 2000 David S. Miller (davem@redhat.com)
@@ -38,21 +38,21 @@ copy_page: /* %o0=dest, %o1=src */
 	sethi		%hi(8192), %o2
 1:	TOUCH(f0, f2, f4, f6, f8, f10, f12, f14)
 	ldda		[%o1] ASI_BLK_P, %f32
+	stda		%f48, [%o0] ASI_BLK_P
 	add		%o1, 0x40, %o1
 	sub		%o2, 0x40, %o2
-	stda		%f48, [%o0] ASI_BLK_P
 	add		%o0, 0x40, %o0
 	TOUCH(f16, f18, f20, f22, f24, f26, f28, f30)
 	ldda		[%o1] ASI_BLK_P, %f0
+	stda		%f48, [%o0] ASI_BLK_P
 	add		%o1, 0x40, %o1
 	sub		%o2, 0x40, %o2
-	stda		%f48, [%o0] ASI_BLK_P
 	add		%o0, 0x40, %o0
 	TOUCH(f32, f34, f36, f38, f40, f42, f44, f46)
 	ldda		[%o1] ASI_BLK_P, %f16
-	add		%o1, 0x40, %o1
-	sub		%o2, 0x40, %o2
 	stda		%f48, [%o0] ASI_BLK_P
+	sub		%o2, 0x40, %o2
+	add		%o1, 0x40, %o1
 	cmp		%o2, 0x80
 	bne,pt		%xcc, 1b
 	 add		%o0, 0x40, %o0
@@ -130,21 +130,21 @@ copy_user_page: /* %o0=dest, %o1=src, %o2=vaddr */
 	sethi		%hi(8192), %o2
 1:	TOUCH(f0, f2, f4, f6, f8, f10, f12, f14)
 	ldda		[%o1] ASI_BLK_P, %f32
+	stda		%f48, [%o0] ASI_BLK_P
 	add		%o1, 0x40, %o1
 	sub		%o2, 0x40, %o2
-	stda		%f48, [%o0] ASI_BLK_P
 	add		%o0, 0x40, %o0
 	TOUCH(f16, f18, f20, f22, f24, f26, f28, f30)
 	ldda		[%o1] ASI_BLK_P, %f0
+	stda		%f48, [%o0] ASI_BLK_P
 	add		%o1, 0x40, %o1
 	sub		%o2, 0x40, %o2
-	stda		%f48, [%o0] ASI_BLK_P
 	add		%o0, 0x40, %o0
 	TOUCH(f32, f34, f36, f38, f40, f42, f44, f46)
 	ldda		[%o1] ASI_BLK_P, %f16
-	add		%o1, 0x40, %o1
-	sub		%o2, 0x40, %o2
 	stda		%f48, [%o0] ASI_BLK_P
+	sub		%o2, 0x40, %o2
+	add		%o1, 0x40, %o1
 	cmp		%o2, 0x80
 	bne,pt		%xcc, 1b
 	 add		%o0, 0x40, %o0
@@ -213,6 +213,7 @@ clear_user_page:	/* %o0=dest, %o1=vaddr */
 	mov		1, %o4
 
 clear_page_common:
+	membar		#StoreLoad | #StoreStore | #LoadStore	! LSU	Group
 	fzero		%f0				! FPA	Group
 	mov		32, %o1				! IEU0
 	fzero		%f2				! FPA	Group
@@ -223,7 +224,6 @@ clear_page_common:
 
 	faddd		%f0, %f2, %f12			! FPA	Group
 	fmuld		%f0, %f2, %f14			! FPM
-	membar		#StoreLoad | #StoreStore | #LoadStore	! LSU	Group
 1:	stda		%f0, [%o0 + %g0] ASI_BLK_P	! Store	Group
 	add		%o0, 0x40, %o0			! IEU0
 	stda		%f0, [%o0 + %g0] ASI_BLK_P	! Store	Group

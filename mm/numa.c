@@ -22,10 +22,11 @@ pg_data_t contig_page_data = { bdata: &contig_bootmem_data };
  * Should be invoked with paramters (0, 0, unsigned long *[], start_paddr).
  */
 void __init free_area_init_node(int nid, pg_data_t *pgdat, 
-		unsigned long *zones_size, unsigned long zone_start_paddr)
+	unsigned long *zones_size, unsigned long zone_start_paddr, 
+	unsigned long *zholes_size)
 {
 	free_area_init_core(0, NODE_DATA(0), &mem_map, zones_size, 
-							zone_start_paddr);
+						zone_start_paddr, zholes_size);
 }
 
 #endif /* !CONFIG_DISCONTIGMEM */
@@ -55,7 +56,8 @@ void show_free_areas_node(int nid)
  * Nodes can be initialized parallely, in no particular order.
  */
 void __init free_area_init_node(int nid, pg_data_t *pgdat, 
-		unsigned long *zones_size, unsigned long zone_start_paddr)
+	unsigned long *zones_size, unsigned long zone_start_paddr, 
+	unsigned long *zholes_size)
 {
 	int i, size = 0;
 	struct page *discard;
@@ -63,7 +65,8 @@ void __init free_area_init_node(int nid, pg_data_t *pgdat,
 	if (mem_map == (mem_map_t *)NULL)
 		mem_map = (mem_map_t *)PAGE_OFFSET;
 
-	free_area_init_core(nid, pgdat, &discard, zones_size, zone_start_paddr);
+	free_area_init_core(nid, pgdat, &discard, zones_size, zone_start_paddr,
+						zholes_size);
 	pgdat->node_id = nid;
 
 	/*

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.203 2000/03/22 17:55:03 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.205 2000/03/26 09:16:08 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -1039,7 +1039,6 @@ out:
 void tcp_v4_send_check(struct sock *sk, struct tcphdr *th, int len, 
 		       struct sk_buff *skb)
 {
-	th->check = 0;
 	th->check = tcp_v4_check(th, len, sk->saddr, sk->daddr,
 				 csum_partial((char *)th, th->doff<<2, skb->csum));
 }
@@ -1057,7 +1056,7 @@ void tcp_v4_send_check(struct sock *sk, struct tcphdr *th, int len,
  *	Exception: precedence violation. We do not implement it in any case.
  */
 
-void tcp_v4_send_reset(struct sk_buff *skb)
+static void tcp_v4_send_reset(struct sk_buff *skb)
 {
 	struct tcphdr *th = skb->h.th;
 	struct tcphdr rth;

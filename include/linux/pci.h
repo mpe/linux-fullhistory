@@ -340,7 +340,7 @@ struct pci_dev {
 	struct resource dma_resource[DEVICE_COUNT_DMA];
 	struct resource irq_resource[DEVICE_COUNT_IRQ];
 
-	char		name[48];	/* device name */
+	char		name[80];	/* device name */
 	char		slot_name[8];	/* slot name */
 	int		active;		/* ISAPnP: device is active */
 	int		ro;		/* ISAPnP: read only */
@@ -510,6 +510,7 @@ int pci_assign_resource(struct pci_dev *dev, int i);
 
 int pci_claim_resource(struct pci_dev *, int);
 void pci_assign_unassigned_resources(void);
+void pdev_assign_unassigned_resources(struct pci_dev *dev);
 void pci_set_bus_ranges(void);
 void pci_fixup_irqs(u8 (*)(struct pci_dev *, u8 *),
 		    int (*)(struct pci_dev *, u8, u8));

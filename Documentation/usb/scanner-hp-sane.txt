@@ -1,10 +1,11 @@
 Copyright (C) 1999, 2000 David E. Nelson
 
-Jan. 22, 2000
+Mar. 23, 2000
 
 CHANGES
 
 - Amended for Linux-2.3.40
+- Updated for multiple scanner support
 
 
 INTRODUCTION
@@ -30,13 +31,13 @@ http://www.mostang.com/sane/.  Testing has been performed using
 version SANE-1.0.1.  For instructions on building and installing SANE,
 refer to the various README files within the SANE distribution.
 
-The latest SANE HP backend available from http://www.kirchgessner.net.
+The latest SANE HP backend is available from http://www.kirchgessner.net.
 At the time of this writing, version 0.83 was available.
 
 
 OK, I'VE INSTALLED SANE. SO WHAT DO I DO NOW?
 
-NOTE: $INSTALL_DIR is the location where SANE was installed.  It may
+NOTE: $INSTALL_DIR is the location where SANE is installed.  It may
 be /usr/local, /usr, /opt or somewhere else.  If you don't know, ask
 your system administrator.
 
@@ -53,6 +54,9 @@ files: dll.conf, hp.conf.
 
     /dev/usbscanner
     option connect-device
+
+NOTE: If you are using multiple scanners, make sure to have the correct
+devince, ie /dev/usbscanner0.  See scanner.txt for more info.
 
 3) You should now be able to use SANE (xscanimage or scanimage).
 

@@ -52,7 +52,7 @@
 #include <linux/if_ether.h>	/* For the statistics structure. */
 #include <linux/if_arp.h>	/* For ARPHRD_ETHER */
 
-#define LOOPBACK_MTU	(PAGE_SIZE - 172)
+#define LOOPBACK_OVERHEAD (128 + MAX_HEADER + 16 + 16)
 
 /*
  * The higher levels take care of making this non-reentrant (it's
@@ -61,13 +61,6 @@
 static int loopback_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_device_stats *stats = (struct net_device_stats *)dev->priv;
-
-	/*
-	 *	Take this out if the debug says its ok
-	 */
-	   
-	if (skb == NULL || dev == NULL) 
-		printk(KERN_DEBUG "loopback fed NULL data - splat\n");
 
 	/*
 	 *	Optimise so buffers with skb->free=1 are not copied but
@@ -110,7 +103,7 @@ static struct net_device_stats *get_stats(struct net_device *dev)
 /* Initialize the rest of the LOOPBACK device. */
 int __init loopback_init(struct net_device *dev)
 {
-	dev->mtu		= LOOPBACK_MTU;
+	dev->mtu		= PAGE_SIZE - LOOPBACK_OVERHEAD;
 	dev->hard_start_xmit	= loopback_xmit;
 	dev->hard_header	= eth_header;
 	dev->hard_header_cache	= eth_header_cache;
@@ -126,6 +119,9 @@ int __init loopback_init(struct net_device *dev)
 			return -ENOMEM;
 	memset(dev->priv, 0, sizeof(struct net_device_stats));
 	dev->get_stats = get_stats;
+
+	if (num_physpages >= ((128*1024*1024)>>PAGE_SHIFT))
+		dev->mtu = 4096*4 - LOOPBACK_OVERHEAD;
 
 	/*
 	 *	Fill in the generic fields of the device structure. 

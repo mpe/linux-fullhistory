@@ -1,4 +1,4 @@
-/* $Id: VIScopy.S,v 1.22 2000/03/16 16:44:38 davem Exp $
+/* $Id: VIScopy.S,v 1.23 2000/03/26 09:13:49 davem Exp $
  * VIScopy.S: High speed copy operations utilizing the UltraSparc
  *            Visual Instruction Set.
  *
@@ -135,11 +135,11 @@
 #define MAIN_LOOP_CHUNK(src, dest, fdest, fsrc, len, jmptgt)	\
 	EXVIS(LDBLK		[%src] ASIBLK, %fdest);		\
 	ASI_SETDST_BLK						\
+	EXVIS2(STBLK		%fsrc, [%dest] ASIBLK);		\
 	add			%src, 0x40, %src;		\
-	add			%dest, 0x40, %dest;		\
 	subcc			%len, 0x40, %len;		\
 	be,pn			%xcc, jmptgt;			\
-	 EXVIS2(STBLK		%fsrc, [%dest - 0x40] ASIBLK);	\
+	 add			%dest, 0x40, %dest;		\
 	ASI_SETSRC_BLK
 
 #define LOOP_CHUNK1(src, dest, len, branch_dest)		\

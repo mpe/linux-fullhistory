@@ -340,7 +340,6 @@ EXPORT_SYMBOL(tcp_sendmsg);
 EXPORT_SYMBOL(tcp_v4_rebuild_header);
 EXPORT_SYMBOL(tcp_v4_send_check);
 EXPORT_SYMBOL(tcp_v4_conn_request);
-EXPORT_SYMBOL(tcp_v4_send_reset);
 EXPORT_SYMBOL(tcp_create_openreq_child);
 EXPORT_SYMBOL(tcp_bucket_create);
 EXPORT_SYMBOL(__tcp_put_port);
@@ -594,6 +593,51 @@ EXPORT_SYMBOL(nf_hook_slow);
 EXPORT_SYMBOL(nf_hooks);
 EXPORT_SYMBOL(nf_setsockopt);
 EXPORT_SYMBOL(nf_getsockopt);
+#endif
+
+#ifdef CONFIG_IP_NF_CONNTRACK
+#include <linux/netfilter_ipv4/ip_conntrack_protocol.h>
+#include <linux/netfilter_ipv4/ip_conntrack_helper.h>
+#include <linux/netfilter_ipv4/ip_conntrack_core.h>
+EXPORT_SYMBOL(ip_conntrack_protocol_register);
+EXPORT_SYMBOL(invert_tuplepr);
+EXPORT_SYMBOL(ip_conntrack_alter_reply);
+EXPORT_SYMBOL(ip_conntrack_destroyed);
+EXPORT_SYMBOL(ip_conntrack_get);
+EXPORT_SYMBOL(ip_conntrack_module);
+EXPORT_SYMBOL(ip_conntrack_helper_register);
+EXPORT_SYMBOL(ip_conntrack_helper_unregister);
+EXPORT_SYMBOL(ip_ct_selective_cleanup);
+EXPORT_SYMBOL(ip_ct_refresh);
+EXPORT_SYMBOL(ip_conntrack_expect_related);
+EXPORT_SYMBOL(ip_conntrack_tuple_taken);
+EXPORT_SYMBOL(ip_ct_gather_frags);
+#ifdef CONFIG_IP_NF_FTP
+#include <linux/netfilter_ipv4/ip_conntrack_ftp.h>
+EXPORT_SYMBOL(ip_ftp_lock);
+#endif
+#endif /*CONFIG_IP_NF_CONNTRACK*/
+
+#ifdef CONFIG_IP_NF_NAT
+#include <linux/netfilter_ipv4/ip_nat.h>
+#include <linux/netfilter_ipv4/ip_nat_helper.h>
+#include <linux/netfilter_ipv4/ip_nat_rule.h>
+EXPORT_SYMBOL(ip_nat_setup_info);
+EXPORT_SYMBOL(ip_nat_helper_register);
+EXPORT_SYMBOL(ip_nat_helper_unregister);
+EXPORT_SYMBOL(ip_nat_expect_register);
+EXPORT_SYMBOL(ip_nat_expect_unregister);
+EXPORT_SYMBOL(ip_nat_cheat_check);
+#endif
+
+#ifdef CONFIG_IP_NF_IPTABLES
+#include <linux/netfilter_ipv4/ip_tables.h>
+EXPORT_SYMBOL(ipt_register_table);
+EXPORT_SYMBOL(ipt_unregister_table);
+EXPORT_SYMBOL(ipt_register_target);
+EXPORT_SYMBOL(ipt_unregister_target);
+EXPORT_SYMBOL(ipt_register_match);
+EXPORT_SYMBOL(ipt_unregister_match);
 #endif
 
 EXPORT_SYMBOL(register_gifconf);

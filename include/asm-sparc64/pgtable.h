@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.121 2000/03/02 20:37:41 davem Exp $
+/* $Id: pgtable.h,v 1.123 2000/03/26 09:13:53 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -258,9 +258,8 @@ extern pgd_t swapper_pg_dir[1];
 
 /* There used to be some funny code here which tried to guess which
  * TLB wanted the mapping, that wasn't accurate enough to justify it's
- * existance.  The real way to do that is to have each TLB miss handler
- * pass in a distinct code to do_sparc64_fault() and do it more accurately
- * there.
+ * existance.  Instead we now have each TLB miss handler record a
+ * distinct code in the thread struct.
  *
  * What we do need to handle here is prevent I-cache corruption.  The
  * deal is that the I-cache snoops stores from other CPUs and all DMA
@@ -282,13 +281,24 @@ extern pgd_t swapper_pg_dir[1];
  * 4) Splat.
  */
 extern void __flush_icache_page(unsigned long phys_page);
+extern void __prefill_dtlb(unsigned long vaddr, unsigned long pteval);
+extern void __prefill_itlb(unsigned long vaddr, unsigned long pteval);
 #define update_mmu_cache(__vma, __address, _pte) \
 do { \
 	unsigned short __flags = ((__vma)->vm_flags); \
-	if ((__flags & VM_EXEC) != 0 && \
-	    ((pte_val(_pte) & (_PAGE_PRESENT | _PAGE_WRITE | _PAGE_MODIFIED)) == \
-	     (_PAGE_PRESENT | _PAGE_WRITE | _PAGE_MODIFIED))) { \
+	unsigned long pteval = pte_val(_pte); \
+	if ((__flags & VM_EXEC) != 0 && ((__vma)->vm_file != NULL) && \
+	    ((pteval & (_PAGE_PRESENT | _PAGE_WRITE | _PAGE_MODIFIED)) == \
+	     (_PAGE_PRESENT | _PAGE_WRITE | _PAGE_MODIFIED))) \
 		__flush_icache_page(pte_pagenr(_pte) << PAGE_SHIFT); \
+	if ((__vma)->vm_mm == current->mm && \
+	    (__flags = current->thread.fault_code) != 0) { \
+		unsigned long tag = (__address & PAGE_MASK); \
+		tag |= CTX_HWBITS(current->mm->context); \
+		if (__flags & FAULT_CODE_DTLB) \
+			__prefill_dtlb(tag, pteval); \
+		else \
+			__prefill_itlb(tag, pteval); \
 	} \
 } while(0)
 

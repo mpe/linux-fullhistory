@@ -145,7 +145,7 @@ static struct nfs_bool_opts {
 	{ "nocto",	~NFS_MOUNT_NOCTO,	NFS_MOUNT_NOCTO },
 	{ "ac",		~NFS_MOUNT_NOAC,	0 },
 	{ "noac",	~NFS_MOUNT_NOAC,	NFS_MOUNT_NOAC },
-	{ "lock",	~NFS_MOUNT_LOCK,	0 },
+	{ "lock",	~NFS_MOUNT_NONLM,	0 },
 	{ "nolock",	~NFS_MOUNT_NONLM,	NFS_MOUNT_NONLM },
 	{ NULL,		0,			0 }
 };

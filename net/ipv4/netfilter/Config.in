@@ -39,6 +39,7 @@ if [ "$CONFIG_IP_NF_IPTABLES" != "n" ]; then
   if [ "$CONFIG_IP_NF_CONNTRACK" != "n" ]; then
     dep_tristate '  Full NAT' CONFIG_IP_NF_NAT $CONFIG_IP_NF_IPTABLES 
     if [ "$CONFIG_IP_NF_NAT" != "n" ]; then
+      define_bool CONFIG_IP_NF_NAT_NEEDED y
       dep_tristate '    MASQUERADE target support' CONFIG_IP_NF_TARGET_MASQUERADE $CONFIG_IP_NF_NAT
       dep_tristate '    REDIRECT target support' CONFIG_IP_NF_TARGET_REDIRECT $CONFIG_IP_NF_NAT
     fi
@@ -56,8 +57,14 @@ fi
 if [ "$CONFIG_IP_NF_CONNTRACK" != "y" ]; then
   if [ "$CONFIG_IP_NF_IPTABLES" != "y" ]; then
     tristate 'ipchains (2.2-style) support' CONFIG_IP_NF_COMPAT_IPCHAINS
+    if [ "$CONFIG_IP_NF_COMPAT_IPCHAINS" != "n" ]; then
+      define_bool CONFIG_IP_NF_NAT_NEEDED y
+    fi
     if [ "$CONFIG_IP_NF_COMPAT_IPCHAINS" != "y" ]; then
       tristate 'ipfwadm (2.0-style) support' CONFIG_IP_NF_COMPAT_IPFWADM
+      if [ "$CONFIG_IP_NF_COMPAT_IPFWADM" != "n" ]; then
+	define_bool CONFIG_IP_NF_NAT_NEEDED y
+      fi
     fi
   fi
 fi

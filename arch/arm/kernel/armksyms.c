@@ -190,6 +190,8 @@ EXPORT_SYMBOL(uaccess_kernel);
 EXPORT_SYMBOL(uaccess_user);
 #endif
 
+	/* consistent area handling */
+EXPORT_SYMBOL(pci_alloc_consistent);
 EXPORT_SYMBOL(consistent_alloc);
 EXPORT_SYMBOL(consistent_free);
 EXPORT_SYMBOL(consistent_sync);

@@ -14,8 +14,6 @@ struct notifier_block;
 #include <linux/netfilter_ipv4/compat_firewall.h>
 #include <linux/netfilter_ipv4/ip_conntrack.h>
 
-EXPORT_NO_SYMBOLS;
-
 static struct firewall_ops *fwops;
 
 /* From ip_fw_compat_redir.c */

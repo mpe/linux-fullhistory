@@ -23,7 +23,6 @@
  */
 .text
 
-#define __ASSEMBLY__
 #include <linux/linkage.h>
 #include <asm/segment.h>
 

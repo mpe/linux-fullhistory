@@ -19,11 +19,10 @@ if [ "$CONFIG_SGI_IP27" = "y" ]; then
    bool '  Discontiguous Memory Support' CONFIG_DISCONTIGMEM
    #bool '  IP27 XXL' CONFIG_SGI_SN0_XXL
 fi
-endmenu
-
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    bool 'Symmetric Multi-Processing support' CONFIG_SMP
 fi
+endmenu
 
 #
 # Select some configuration options automatically based on user selections
@@ -37,6 +36,7 @@ unset CONFIG_COHERENT_IO
 unset CONFIG_BINFMT_ELF32
 
 define_bool CONFIG_ISA n
+define_bool CONFIG_SBUS n
 
 if [ "$CONFIG_SGI_IP22" = "y" ]; then
    define_bool CONFIG_BOOT_ELF32 y
@@ -78,7 +78,14 @@ bool 'Generate little endian code' CONFIG_CPU_LITTLE_ENDIAN
 bool 'Networking support' CONFIG_NET
 
 source drivers/pci/Config.in
-source drivers/pcmcia/Config.in
+
+bool 'Support for hot-pluggable devices' CONFIG_HOTPLUG
+
+if [ "$CONFIG_HOTPLUG" = "y" ] ; then
+   source drivers/pcmcia/Config.in
+else
+   define_bool CONFIG_PCMCIA n
+fi
 
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
@@ -191,7 +198,6 @@ endmenu
 
 source drivers/char/Config.in
 
-source drivers/usb/Config.in
 
 #source drivers/misc/Config.in
 
@@ -225,6 +231,8 @@ endmenu
 if [ "$CONFIG_SGI_IP22" = "y" ]; then
    source drivers/sgi/Config.in
 fi
+
+source drivers/usb/Config.in
 
 mainmenu_option next_comment
 comment 'Kernel hacking'

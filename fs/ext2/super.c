@@ -197,6 +197,8 @@ static int parse_options (char * options, unsigned long * sb_block,
 			set_opt (*mount_options, GRPID);
 		else if (!strcmp (this_char, "minixdf"))
 			set_opt (*mount_options, MINIX_DF);
+		else if (!strcmp (this_char, "nocheck"))
+			clear_opt (*mount_options, CHECK);
 		else if (!strcmp (this_char, "nogrpid") ||
 			 !strcmp (this_char, "sysvgroups"))
 			clear_opt (*mount_options, GRPID);
@@ -300,13 +302,6 @@ static void ext2_setup_super (struct super_block * sb,
 		}
 #endif
 	}
-#if 0 /* ibasket's still have unresolved bugs... -DaveM */
-
-	/* [T. Schoebel-Theuer] This limit should be maintained on disk.
-	 * This is just provisionary.
-	 */
-	sb->s_ibasket_max = 100;
-#endif
 }
 
 static int ext2_check_descriptors (struct super_block * sb)

@@ -39,6 +39,8 @@
 #include <linux/in.h>
 #include <linux/pagemap.h>
 #include <linux/sunrpc/clnt.h>
+#include <linux/nfs.h>
+#include <linux/nfs2.h>
 #include <linux/nfs_fs.h>
 
 #include <asm/segment.h>
@@ -58,6 +60,7 @@ nfs_proc_getattr(struct nfs_server *server, struct nfs_fh *fhandle,
 	int	status;
 
 	dprintk("NFS call  getattr\n");
+	fattr->valid = 0;
 	status = rpc_call(server->client, NFSPROC_GETATTR, fhandle, fattr, 0);
 	dprintk("NFS reply getattr\n");
 	return status;
@@ -71,6 +74,7 @@ nfs_proc_setattr(struct nfs_server *server, struct nfs_fh *fhandle,
 	int	status;
 
 	dprintk("NFS call  setattr\n");
+	fattr->valid = 0;
 	status = rpc_call(server->client, NFSPROC_SETATTR, &arg, fattr, 0);
 	dprintk("NFS reply setattr\n");
 	return status;
@@ -85,6 +89,7 @@ nfs_proc_lookup(struct nfs_server *server, struct nfs_fh *dir, const char *name,
 	int			status;
 
 	dprintk("NFS call  lookup %s\n", name);
+	fattr->valid = 0;
 	status = rpc_call(server->client, NFSPROC_LOOKUP, &arg, &res, 0);
 	dprintk("NFS reply lookup: %d\n", status);
 	return status;
@@ -100,6 +105,7 @@ nfs_proc_read(struct nfs_server *server, struct nfs_fh *fhandle, int swap,
 	int			status;
 
 	dprintk("NFS call  read %d @ %ld\n", count, offset);
+	fattr->valid = 0;
 	status = rpc_call(server->client, NFSPROC_READ, &arg, &res,
 			swap? NFS_RPC_SWAPFLAGS : 0);
 	dprintk("NFS reply read: %d\n", status);
@@ -111,7 +117,8 @@ nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle, int swap,
 			unsigned long offset, unsigned int count,
 			const void *buffer, struct nfs_fattr *fattr)
 {
-	struct nfs_writeargs	arg = { fhandle, offset, count, 1, 1,
+	struct nfs_writeargs	arg = { fhandle, offset, count,
+					NFS_FILE_SYNC, 1,
 					{{(void *) buffer, count}, {0,0}, {0,0}, {0,0},
 					{0,0}, {0,0}, {0,0}, {0,0}}};
 	struct nfs_writeverf	verf;
@@ -119,6 +126,7 @@ nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle, int swap,
 	int			status;
 
 	dprintk("NFS call  write %d @ %ld\n", count, offset);
+	fattr->valid = 0;
 	status = rpc_call(server->client, NFSPROC_WRITE, &arg, &res,
 			swap? (RPC_TASK_SWAPPER|RPC_TASK_ROOTCREDS) : 0);
 	dprintk("NFS reply read: %d\n", status);
@@ -135,6 +143,7 @@ nfs_proc_create(struct nfs_server *server, struct nfs_fh *dir,
 	int			status;
 
 	dprintk("NFS call  create %s\n", name);
+	fattr->valid = 0;
 	status = rpc_call(server->client, NFSPROC_CREATE, &arg, &res, 0);
 	dprintk("NFS reply create: %d\n", status);
 	return status;
@@ -203,6 +212,7 @@ nfs_proc_mkdir(struct nfs_server *server, struct nfs_fh *dir,
 	int			status;
 
 	dprintk("NFS call  mkdir %s\n", name);
+	fattr->valid = 0;
 	status = rpc_call(server->client, NFSPROC_MKDIR, &arg, &res, 0);
 	dprintk("NFS reply mkdir: %d\n", status);
 	return status;
@@ -217,6 +227,42 @@ nfs_proc_rmdir(struct nfs_server *server, struct nfs_fh *dir, const char *name)
 	dprintk("NFS call  rmdir %s\n", name);
 	status = rpc_call(server->client, NFSPROC_RMDIR, &arg, NULL, 0);
 	dprintk("NFS reply rmdir: %d\n", status);
+	return status;
+}
+
+/*
+ * The READDIR implementation is somewhat hackish - we pass a temporary
+ * buffer to the encode function, which installs it in the receive
+ * the receive iovec. The decode function just parses the reply to make
+ * sure it is syntactically correct; the entries itself are decoded
+ * from nfs_readdir by calling the decode_entry function directly.
+ */
+int
+nfs_proc_readdir(struct dentry *dir, struct nfs_fattr *dir_attr,
+		 __u64 cookie, void *entry, unsigned int size, int plus)
+{
+	struct nfs_readdirargs	arg;
+	struct nfs_readdirres	res;
+	struct rpc_message	msg = { NFSPROC_READDIR, &arg, &res, NULL };
+	struct nfs_server       *server = NFS_DSERVER(dir);
+	int			status;
+
+	if (server->rsize < size)
+		size = server->rsize;
+
+	dir_attr->valid = 0;
+	arg.fh = NFS_FH(dir);
+	arg.cookie = cookie;
+	arg.buffer = entry;
+	arg.bufsiz = size;
+	res.buffer = entry;
+	res.bufsiz = size;
+
+	dir_attr->valid = 0;
+	dprintk("NFS call  readdir %d\n", (unsigned int)cookie);
+	status = rpc_call_sync(NFS_CLIENT(dir->d_inode), &msg, 0);
+
+	dprintk("NFS reply readdir: %d\n", status);
 	return status;
 }
 

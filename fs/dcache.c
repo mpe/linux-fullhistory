@@ -30,11 +30,6 @@
 /* Right now the dcache depends on the kernel lock */
 #define check_lock()	if (!kernel_locked()) BUG()
 
-/* For managing the dcache */
-extern unsigned long num_physpages, page_cache_size;
-extern int inodes_stat[];
-#define nr_inodes (inodes_stat[0])
-
 kmem_cache_t *dentry_cache; 
 
 /*
@@ -661,8 +656,6 @@ out:
  */
 void d_delete(struct dentry * dentry)
 {
-	check_lock();
-
 	check_lock();
 
 	/*

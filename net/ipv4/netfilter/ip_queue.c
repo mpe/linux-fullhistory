@@ -2,7 +2,7 @@
  * This is a module which is used for queueing IPv4 packets and
  * communicating with userspace via netlink.
  *
- * (C) 2000 James Morris
+ * Copyright (C) 2000 James Morris
  */
 #include <linux/module.h>
 #include <linux/skbuff.h>
@@ -20,8 +20,6 @@
 #include <net/sock.h>
 
 #include <linux/netfilter_ipv4/ip_queue.h>
-
-EXPORT_NO_SYMBOLS;
 
 #define IPQ_THR_NAME "kipq"
 #define IPQ_NAME "ip_queue"

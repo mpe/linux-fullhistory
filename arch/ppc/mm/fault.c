@@ -182,31 +182,41 @@ bad_page_fault(struct pt_regs *regs, unsigned long address)
 
 #ifdef CONFIG_8xx
 
-unsigned long va_to_phys(unsigned long address)
+/* The pgtable.h claims some functions generically exist, but I
+ * can't find them......
+ */
+pte_t *find_pte(struct mm_struct *mm, unsigned long address)
 {
 	pgd_t *dir;
 	pmd_t *pmd;
 	pte_t *pte;
-	
-	dir = pgd_offset(current->mm, address & PAGE_MASK);
-	if (dir)
-	{
+
+	dir = pgd_offset(mm, address & PAGE_MASK);
+	if (dir) {
 		pmd = pmd_offset(dir, address & PAGE_MASK);
-		if (pmd && pmd_present(*pmd))
-		{
+		if (pmd && pmd_present(*pmd)) {
 			pte = pte_offset(pmd, address & PAGE_MASK);
-			if (pte && pte_present(*pte))
-			{
-				return(pte_page(*pte) | (address & ~(PAGE_MASK-1)));
+			if (pte && pte_present(*pte)) {
+				return(pte);
 			}
-		} else
-		{
+		}
+		else {
 			return (0);
 		}
-	} else
-	{
+	}
+	else {
 		return (0);
 	}
+	return (0);
+}
+
+unsigned long va_to_phys(unsigned long address)
+{
+	pte_t *pte;
+	
+	pte = find_pte(current->mm, address);
+	if (pte)
+		return((unsigned long)(pte_page(*pte)) | (address & ~(PAGE_MASK-1)));
 	return (0);
 }
 
@@ -227,8 +237,8 @@ print_8xx_pte(struct mm_struct *mm, unsigned long addr)
                                 printk(" (0x%08lx)->(0x%08lx)->0x%08lx\n",
                                         (long)pgd, (long)pte, (long)pte_val(*pte));
 #define pp ((long)pte_val(*pte))				
-				printk(" RPN: %05x PP: %x SPS: %x SH: %x "
-				       "CI: %x v: %x\n",
+				printk(" RPN: %05x PP: %x SPS: %x SH: %lx "
+				       "CI: %lx v: %lx\n",
 				       pp>>12,    /* rpn */
 				       (pp>>10)&3, /* pp */
 				       (pp>>3)&1, /* small */

@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.43 2000/03/14 03:59:46 davem Exp $
+/* $Id: fault.c,v 1.44 2000/03/26 09:13:51 davem Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -92,162 +92,208 @@ void unhandled_fault(unsigned long address, struct task_struct *tsk,
 	die_if_kernel("Oops", regs);
 }
 
-/* #define DEBUG_EXCEPTIONS */
-/* #define DEBUG_LOCKUPS */
-
-/* #define INSN_VPTE_LOOKUP */
-
-static inline u32 get_user_insn(unsigned long tpc)
+static unsigned int get_user_insn(unsigned long tpc)
 {
-	u32 insn;
-#ifndef INSN_VPTE_LOOKUP
 	pgd_t *pgdp = pgd_offset(current->mm, tpc);
 	pmd_t *pmdp;
-	pte_t *ptep;
+	pte_t *ptep, pte;
+	unsigned long pa;
+	u32 insn = 0;
 
 	if(pgd_none(*pgdp))
-		return 0;
+		goto out;
 	pmdp = pmd_offset(pgdp, tpc);
 	if(pmd_none(*pmdp))
-		return 0;
+		goto out;
 	ptep = pte_offset(pmdp, tpc);
-	if(!pte_present(*ptep))
-		return 0;
-	insn = *(unsigned int *)
-		((unsigned long)__va(pte_pagenr(*ptep) << PAGE_SHIFT) +
-		 (tpc & ~PAGE_MASK));
-#else
-	register unsigned long pte asm("l1");
+	pte = *ptep;
+	if(!pte_present(pte))
+		goto out;
 
-	/* So that we don't pollute TLB, we read the instruction
-	 * using PHYS bypass. For that, we of course need
-	 * to know its page table entry. Do this by simulating
-	 * dtlb_miss handler. -jj */
-	pte = ((((long)tpc) >> (PAGE_SHIFT-3)) & ~7);
-	asm volatile ("
-		rdpr    %%pstate, %%l0
-		wrpr    %%l0, %2, %%pstate
-		wrpr    %%g0, 1, %%tl
-		mov	%%l1, %%g6
-		ldxa    [%%g3 + %%l1] %3, %%g5
-		mov     %%g5, %%l1
-		wrpr    %%g0, 0, %%tl
-		wrpr    %%l0, 0, %%pstate
-	" : "=r" (pte) : "0" (pte), "i" (PSTATE_MG|PSTATE_IE), "i" (ASI_S) : "l0");
-			
-	if ((long)pte >= 0) return 0;
+	pa = (pte_pagenr(pte) << PAGE_SHIFT) + (tpc & ~PAGE_MASK);
 
-	pte = (pte & _PAGE_PADDR) + (tpc & ~PAGE_MASK);
-	asm ("lduwa	[%1] %2, %0" : "=r" (insn) : "r" (pte), "i" (ASI_PHYS_USE_EC));
-#endif
+	/* Use phys bypass so we don't pollute dtlb/dcache. */
+	__asm__ __volatile__("lduwa [%1] %2, %0"
+			     : "=r" (insn)
+			     : "r" (pa), "i" (ASI_PHYS_USE_EC));
 
+out:
 	return insn;
 }
 
-asmlinkage void do_sparc64_fault(struct pt_regs *regs, unsigned long address, int write)
+static void do_fault_siginfo(int code, int sig, unsigned long address)
+{
+	siginfo_t info;
+
+	info.si_code = code;
+	info.si_signo = sig;
+	info.si_errno = 0;
+	info.si_addr = (void *) address;
+	info.si_trapno = 0;
+	force_sig_info(sig, &info, current);
+}
+
+extern int handle_ldf_stq(u32, struct pt_regs *);
+extern int handle_ld_nf(u32, struct pt_regs *);
+
+static void do_kernel_fault(struct pt_regs *regs, int si_code, int fault_code,
+			    unsigned int insn, unsigned long address)
+{
+	unsigned long g2;
+	unsigned char asi = ASI_P;
+		
+	if (!insn) {
+		if (regs->tstate & TSTATE_PRIV) {
+			if (regs->tpc & 0x3)
+				goto cannot_handle;
+			insn = *(unsigned int *)regs->tpc;
+		} else {
+			insn = get_user_insn(regs->tpc);
+		}
+	}
+
+	/* If user insn could be read (thus insn is zero), that
+	 * is fine.  We will just gun down the process with a signal
+	 * in that case.
+	 */
+
+	if (!(fault_code & FAULT_CODE_WRITE) &&
+	    (insn & 0xc0800000) == 0xc0800000) {
+		if (insn & 0x2000)
+			asi = (regs->tstate >> 24);
+		else
+			asi = (insn >> 5);
+		if ((asi & 0xf2) == 0x82) {
+			if (insn & 0x1000000) {
+				handle_ldf_stq(insn, regs);
+			} else {
+				/* This was a non-faulting load. Just clear the
+				 * destination register(s) and continue with the next
+				 * instruction. -jj
+				 */
+				handle_ld_nf(insn, regs);
+			}
+			return;
+		}
+	}
+		
+	g2 = regs->u_regs[UREG_G2];
+
+	/* Is this in ex_table? */
+	if (regs->tstate & TSTATE_PRIV) {
+		unsigned long fixup;
+
+		if (asi == ASI_P && (insn & 0xc0800000) == 0xc0800000) {
+			if (insn & 0x2000)
+				asi = (regs->tstate >> 24);
+			else
+				asi = (insn >> 5);
+		}
+	
+		/* Look in asi.h: All _S asis have LS bit set */
+		if ((asi & 0x1) &&
+		    (fixup = search_exception_table (regs->tpc, &g2))) {
+			regs->tpc = fixup;
+			regs->tnpc = regs->tpc + 4;
+			regs->u_regs[UREG_G2] = g2;
+			return;
+		}
+	} else {
+		/* The si_code was set to make clear whether
+		 * this was a SEGV_MAPERR or SEGV_ACCERR fault.
+		 */
+		do_fault_siginfo(si_code, SIGSEGV, address);
+		return;
+	}
+
+cannot_handle:
+	unhandled_fault (address, current, regs);
+}
+
+asmlinkage void do_sparc64_fault(struct pt_regs *regs)
 {
 	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
 	unsigned int insn = 0;
-	siginfo_t info;
-#ifdef DEBUG_LOCKUPS
-	static unsigned long lastaddr, lastpc;
-	static int lastwrite, lockcnt;
-#endif
+	int si_code, fault_code;
+	unsigned long address;
 
-	info.si_code = SEGV_MAPERR;
+	si_code = SEGV_MAPERR;
+	fault_code = current->thread.fault_code;
+	address = current->thread.fault_address;
+
+	if ((fault_code & FAULT_CODE_ITLB) &&
+	    (fault_code & FAULT_CODE_DTLB))
+		BUG();
+
 	/*
 	 * If we're in an interrupt or have no user
 	 * context, we must not take the fault..
 	 */
 	if (in_interrupt() || !mm)
-		goto do_kernel_fault;
+		goto handle_kernel_fault;
 
 	down(&mm->mmap_sem);
-#ifdef DEBUG_LOCKUPS
-	if (regs->tpc == lastpc &&
-	    address == lastaddr &&
-	    write == lastwrite) {
-		lockcnt++;
-		if (lockcnt == 100000) {
-			unsigned char tmp;
-			register unsigned long tmp1 asm("o5");
-			register unsigned long tmp2 asm("o4");
-
-			printk("do_sparc64_fault[%s:%d]: possible fault loop for %016lx %s\n",
-			       current->comm, current->pid,
-			       address, write ? "write" : "read");
-			printk("do_sparc64_fault: CHECK[papgd[%016lx],pcac[%016lx]]\n",
-			       __pa(mm->pgd), pgd_val(mm->pgd[0])<<11UL);
-			__asm__ __volatile__(
-				"wrpr	%%g0, 0x494, %%pstate\n\t"
-				"mov	%3, %%g4\n\t"
-				"mov	%%g7, %0\n\t"
-				"ldxa	[%%g4] %2, %1\n\t"
-				"wrpr	%%g0, 0x096, %%pstate"
-				: "=r" (tmp1), "=r" (tmp2)
-				: "i" (ASI_DMMU), "i" (TSB_REG));
-			printk("do_sparc64_fault:    IS[papgd[%016lx],pcac[%016lx]]\n",
-			       tmp1, tmp2);
-			printk("do_sparc64_fault: CHECK[ctx(%016lx)] IS[ctx(%016lx)]\n",
-			       mm->context, spitfire_get_secondary_context());
-			__asm__ __volatile__("rd	%%asi, %0"
-					     : "=r" (tmp));
-			printk("do_sparc64_fault: CHECK[seg(%02x)] IS[seg(%02x)]\n",
-			       current->thread.current_ds.seg, tmp);
-			show_regs(regs);
-			__sti();
-			while(1)
-				barrier();
-		}
-	} else {
-		lastpc = regs->tpc;
-		lastaddr = address;
-		lastwrite = write;
-		lockcnt = 0;
-	}
-#endif
 	vma = find_vma(mm, address);
-	if(!vma)
+	if (!vma)
 		goto bad_area;
-#ifndef INSN_VPTE_LOOKUP
-	write &= 0xf;
-#else
-	if (write & 0x10) {
-		write = 0;
-		if((vma->vm_flags & VM_WRITE)) {
-			if (regs->tstate & TSTATE_PRIV)
-				insn = *(unsigned int *)regs->tpc;
-			else
-				insn = get_user_insn(regs->tpc);
-			if ((insn & 0xc0200000) == 0xc0200000 && (insn & 0x1780000) != 0x1680000)
-				write = 1;
+
+	/* Pure DTLB misses do not tell us whether the fault causing
+	 * load/store/atomic was a write or not, it only says that there
+	 * was no match.  So in such a case we (carefully) read the
+	 * instruction to try and figure this out.  It's an optimization
+	 * so it's ok if we can't do this.
+	 *
+	 * Special hack, window spill/fill knows the exact fault type.
+	 */
+	if (((fault_code &
+	      (FAULT_CODE_DTLB | FAULT_CODE_WRITE | FAULT_CODE_WINFIXUP)) == FAULT_CODE_DTLB) &&
+	    (vma->vm_flags & VM_WRITE) != 0) {
+		unsigned long tpc = regs->tpc;
+
+		if (tpc & 0x3)
+			goto continue_fault;
+
+		if (regs->tstate & TSTATE_PRIV)
+			insn = *(unsigned int *)tpc;
+		else
+			insn = get_user_insn(tpc);
+
+		if ((insn & 0xc0200000) == 0xc0200000 &&
+		    (insn & 0x1780000) != 0x1680000) {
+			/* Don't bother updating thread struct value,
+			 * because update_mmu_cache only cares which tlb
+			 * the access came from.
+			 */
+			fault_code |= FAULT_CODE_WRITE;
 		}
 	}
-#endif
-	if(vma->vm_start <= address)
+continue_fault:
+
+	if (vma->vm_start <= address)
 		goto good_area;
-	if(!(vma->vm_flags & VM_GROWSDOWN))
+	if (!(vma->vm_flags & VM_GROWSDOWN))
 		goto bad_area;
-	if(expand_stack(vma, address))
+	if (expand_stack(vma, address))
 		goto bad_area;
 	/*
 	 * Ok, we have a good vm_area for this memory access, so
 	 * we can handle it..
 	 */
 good_area:
-	info.si_code = SEGV_ACCERR;
-	if(write) {
-		if(!(vma->vm_flags & VM_WRITE))
+	si_code = SEGV_ACCERR;
+	if (fault_code & FAULT_CODE_WRITE) {
+		if (!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
 	} else {
 		/* Allow reads even for write-only mappings */
-		if(!(vma->vm_flags & (VM_READ | VM_EXEC)))
+		if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
 			goto bad_area;
 	}
 
 	{
-		int fault = handle_mm_fault(current, vma, address, write);
+		int fault = handle_mm_fault(current, vma,
+					    address, (fault_code & FAULT_CODE_WRITE));
 
 		if (fault < 0)
 			goto out_of_memory;
@@ -255,7 +301,8 @@ good_area:
 			goto do_sigbus;
 	}
 	up(&mm->mmap_sem);
-	return;
+	goto fault_done;
+
 	/*
 	 * Something tried to access memory that isn't in our memory map..
 	 * Fix it, but check if it's kernel or user first..
@@ -263,89 +310,10 @@ good_area:
 bad_area:
 	up(&mm->mmap_sem);
 
-do_kernel_fault:
-	{
-		unsigned long g2;
-		unsigned char asi = ASI_P;
-		
-		if (!insn) {
-			if (regs->tstate & TSTATE_PRIV)
-				insn = *(unsigned int *)regs->tpc;
-			else
-				insn = get_user_insn(regs->tpc);
-		}
-		if (write != 1 && (insn & 0xc0800000) == 0xc0800000) {
-			if (insn & 0x2000)
-				asi = (regs->tstate >> 24);
-			else
-				asi = (insn >> 5);
-			if ((asi & 0xf2) == 0x82) {
-				/* This was a non-faulting load. Just clear the
-				   destination register(s) and continue with the next
-				   instruction. -jj */
-				if (insn & 0x1000000) {
-					extern int handle_ldf_stq(u32, struct pt_regs *);
-					
-					handle_ldf_stq(insn, regs);
-				} else {
-					extern int handle_ld_nf(u32, struct pt_regs *);
-					
-					handle_ld_nf(insn, regs);
-				}
-				return;
-			}
-		}
-		
-		g2 = regs->u_regs[UREG_G2];
+handle_kernel_fault:
+	do_kernel_fault(regs, si_code, fault_code, insn, address);
 
-		/* Is this in ex_table? */
-		if (regs->tstate & TSTATE_PRIV) {
-			unsigned long fixup;
-
-			if (asi == ASI_P && (insn & 0xc0800000) == 0xc0800000) {
-				if (insn & 0x2000)
-					asi = (regs->tstate >> 24);
-				else
-					asi = (insn >> 5);
-			}
-	
-			/* Look in asi.h: All _S asis have LS bit set */
-			if ((asi & 0x1) &&
-			    (fixup = search_exception_table (regs->tpc, &g2))) {
-#ifdef DEBUG_EXCEPTIONS
-				printk("Exception: PC<%016lx> faddr<%016lx>\n",
-				       regs->tpc, address);
-				printk("EX_TABLE: insn<%016lx> fixup<%016lx> "
-				       "g2<%016lx>\n", regs->tpc, fixup, g2);
-#endif
-				regs->tpc = fixup;
-				regs->tnpc = regs->tpc + 4;
-				regs->u_regs[UREG_G2] = g2;
-				return;
-			}
-		} else {
-#if 0
-			extern void __show_regs(struct pt_regs *);
-			printk("SHIT(%s:%d:cpu(%d)): PC[%016lx] ADDR[%016lx]\n",
-			       current->comm, current->pid, smp_processor_id(),
-			       regs->tpc, address);
-			__show_regs(regs);
-			__sti();
-			while(1)
-				barrier();
-#endif
-			info.si_signo = SIGSEGV;
-			info.si_errno = 0;
-			/* info.si_code set above to make clear whether
-			   this was a SEGV_MAPERR or SEGV_ACCERR fault.  */
-			info.si_addr = (void *)address;
-			info.si_trapno = 0;
-			force_sig_info (SIGSEGV, &info, current);
-			return;
-		}
-		unhandled_fault (address, current, regs);
-	}
-	return;
+	goto fault_done;
 
 /*
  * We ran out of memory, or some other thing happened to us that made
@@ -356,7 +324,7 @@ out_of_memory:
 	printk("VM: killing process %s\n", current->comm);
 	if (!(regs->tstate & TSTATE_PRIV))
 		do_exit(SIGKILL);
-	goto do_kernel_fault;
+	goto handle_kernel_fault;
 
 do_sigbus:
 	up(&mm->mmap_sem);
@@ -365,14 +333,14 @@ do_sigbus:
 	 * Send a sigbus, regardless of whether we were in kernel
 	 * or user mode.
 	 */
-	info.si_signo = SIGBUS;
-	info.si_errno = 0;
-	info.si_code = BUS_ADRERR;
-	info.si_addr = (void *)address;
-	info.si_trapno = 0;
-	force_sig_info (SIGBUS, &info, current);
+	do_fault_siginfo(BUS_ADRERR, SIGBUS, address);
 
 	/* Kernel mode? Handle exceptions or die */
 	if (regs->tstate & TSTATE_PRIV)
-		goto do_kernel_fault;
+		goto handle_kernel_fault;
+
+fault_done:
+	/* These values are no longer needed, clear them. */
+	current->thread.fault_code = 0;
+	current->thread.fault_address = 0;
 }

@@ -238,6 +238,7 @@ sub output_highlight {
 	if ($line eq ""){
 	    print $lineprefix, $blankline;
 	} else {
+            $line =~ s/\\\\\\/\&/g;
 	    print $lineprefix, $line;
 	}
 	print "\n";
@@ -640,6 +641,12 @@ sub dump_function {
 	    }
 	    $type = join " ", @args;
 
+	    if ($type eq "" && $param eq "...")
+	    {
+		$type="...";
+		$param="...";
+		$parameters{"..."} = "variable arguments";
+	    }
 	    if ($type eq "")
 	    {
 		$type="";
@@ -753,6 +760,9 @@ foreach $file (@ARGV) {
 		$newcontents = $2;
 
 		if ($contents ne "") {
+		    $contents =~ s/\&/\\\\\\amp;/g;
+		    $contents =~ s/\</\\\\\\lt;/g;
+		    $contents =~ s/\>/\\\\\\gt;/g;
 		    dump_section($section, $contents);
 		    $section = $section_default;
 		}
@@ -765,6 +775,9 @@ foreach $file (@ARGV) {
 	    } elsif (/$doc_end/) {
 
 		if ($contents ne "") {
+		    $contents =~ s/\&/\\\\\\amp;/g;
+		    $contents =~ s/\</\\\\\\lt;/g;
+		    $contents =~ s/\>/\\\\\\gt;/g;
 		    dump_section($section, $contents);
 		    $section = $section_default;
 		    $contents = "";
@@ -777,6 +790,9 @@ foreach $file (@ARGV) {
 		# miguel-style comment kludge, look for blank lines after
 		# @parameter line to signify start of description
 		if ($1 eq "" && $section =~ m/^@/) {
+		    $contents =~ s/\&/\\\\\\amp;/g;
+		    $contents =~ s/\</\\\\\\lt;/g;
+		    $contents =~ s/\>/\\\\\\gt;/g;
 		    dump_section($section, $contents);
 		    $section = $section_default;
 		    $contents = "";

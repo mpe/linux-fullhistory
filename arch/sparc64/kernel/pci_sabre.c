@@ -1,4 +1,4 @@
-/* $Id: pci_sabre.c,v 1.15 2000/03/10 02:42:16 davem Exp $
+/* $Id: pci_sabre.c,v 1.16 2000/03/25 05:18:12 davem Exp $
  * pci_sabre.c: Sabre specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1060,6 +1060,13 @@ static void __init sabre_scan_bus(struct pci_controller_info *p)
 	struct pci_bus *sabre_bus;
 	struct list_head *walk;
 
+	/* The APB bridge speaks to the Sabre host PCI bridge
+	 * at 66Mhz, but the front side of APB runs at 33Mhz
+	 * for both segments.
+	 */
+	p->pbm_A.is_66mhz_capable = 0;
+	p->pbm_B.is_66mhz_capable = 0;
+
 	/* Unlike for PSYCHO, we can only have one SABRE
 	 * in a system.  Having multiple SABREs is thus
 	 * and error, and as a consequence we do not need
@@ -1079,6 +1086,17 @@ static void __init sabre_scan_bus(struct pci_controller_info *p)
 	sabre_bus = pci_scan_bus(p->pci_first_busno,
 				 p->pci_ops,
 				 &p->pbm_A);
+
+	{
+		unsigned int devfn;
+		u8 *addr;
+
+		devfn = PCI_DEVFN(0, 0);
+		addr = sabre_pci_config_mkaddr(&p->pbm_A, 0,
+					       devfn, PCI_LATENCY_TIMER);
+		pci_config_write8(addr, 32);
+	}
+
 	apb_init(p, sabre_bus);
 
 	walk = &sabre_bus->children;
@@ -1099,6 +1117,8 @@ static void __init sabre_scan_bus(struct pci_controller_info *p)
 		pci_record_assignments(pbm, pbus);
 		pci_assign_unassigned(pbm, pbus);
 		pci_fixup_irq(pbm, pbus);
+		pci_determine_66mhz_disposition(pbm, pbus);
+		pci_setup_busmastering(pbm, pbus);
 	}
 
 	sabre_register_error_handlers(p);

@@ -29,6 +29,8 @@ bool 'Support for SNI RM200 PCI' CONFIG_SNI_RM200_PCI
 unset CONFIG_MIPS_JAZZ
 unset CONFIG_VIDEO_G364
 
+define_bool CONFIG_SBUS n
+
 if [ "$CONFIG_ALGOR_P4032" = "y" -o "$CONFIG_SNI_RM200_PCI" = "y" -o \
      "$CONFIG_DDB5074" = "y" ]; then
    define_bool CONFIG_PCI y
@@ -127,7 +129,13 @@ tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 bool 'Networking support' CONFIG_NET
 
 source drivers/pci/Config.in
-source drivers/pcmcia/Config.in
+
+bool 'Support for hot-pluggable devices' CONFIG_HOTPLUG
+if [ "$CONFIG_HOTPLUG" = "y" ]; then
+   source drivers/pcmcia/Config.in
+else
+   define_bool CONFIG_PCMCIA n
+fi
 
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
@@ -252,8 +260,11 @@ if [ "$CONFIG_NET" = "y" ]; then
 fi
 
 if [ "$CONFIG_SGI" != "y" -a "$CONFIG_DECSTATION" != "y" -a "$CONFIG_BAGET_MIPS" != "y" ]; then
-   source drivers/net/hamradio/Config.in
+   mainmenu_option next_comment
+   # comment 'AX.25 network device drivers'
 
+   source drivers/net/hamradio/Config.in
+   endmenu
 
    mainmenu_option next_comment
    comment 'ISDN subsystem'
@@ -307,7 +318,6 @@ else
    endmenu
 fi
 
-source drivers/usb/Config.in
 
 #source drivers/misc/Config.in
 
@@ -347,6 +357,8 @@ fi
 if [ "$CONFIG_SGI_IP22" = "y" ]; then
    source drivers/sgi/Config.in
 fi
+
+source drivers/usb/Config.in
 
 mainmenu_option next_comment
 comment 'Kernel hacking'

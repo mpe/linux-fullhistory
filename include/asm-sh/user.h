@@ -30,16 +30,16 @@
  */
 
 struct user_fpu_struct {
-	unsigned long fp_regs[NUM_FPU_REGS];
-	unsigned long xf_regs[NUM_FPU_REGS];
+	unsigned long fp_regs[16];
+	unsigned long long xd_regs[8];
 	unsigned long fpscr;
 	unsigned long fpul;
 };
 
 struct user {
 	struct pt_regs	regs;			/* entire machine state */
-	struct user_fpu_struct fpu;	/* Math Co-processor registers. */
-	int u_fpvalid;		/* True if math co-processor being used. */
+	struct user_fpu_struct fpu;	/* Math Co-processor registers  */
+	int u_fpvalid;		/* True if math co-processor being used */
 	size_t		u_tsize;		/* text size (pages) */
 	size_t		u_dsize;		/* data size (pages) */
 	size_t		u_ssize;		/* stack size (pages) */
@@ -48,7 +48,7 @@ struct user {
 	unsigned long	start_stack;		/* stack starting address */
 	long int	signal;			/* signal causing core dump */
 	struct regs *	u_ar0;			/* help gdb find registers */
-	struct user_fpu_struct* u_fpstate;	/* Math Co-processor pointer. */
+	struct user_fpu_struct* u_fpstate;	/* Math Co-processor pointer */
 	unsigned long	magic;			/* identifies a core file */
 	char		u_comm[32];		/* user command name */
 };

@@ -504,6 +504,10 @@ void pcibios_align_resource(void *data, struct resource *res, unsigned long size
 {
 }
 
+void pcibios_set_master(struct pci_dev *dev)
+{
+}
+
 int pcibios_enable_device(struct pci_dev *dev)
 {
 	u16 cmd, old_cmd;

@@ -1,9 +1,10 @@
-/* $Id: sh-sci.c,v 1.32 2000-03-05 13:56:18+09 gniibe Exp $
+/* $Id: sh-sci.c,v 1.36 2000/03/22 13:32:10 gniibe Exp $
  *
  *  linux/drivers/char/sh-sci.c
  *
  *  SuperH on-chip serial module support.  (SCI with no FIFO / with FIFO)
  *  Copyright (C) 1999, 2000  Niibe Yutaka
+ *  Copyright (C) 2000  Sugioka Toshinobu
  *
  * TTY code is based on sx.c (Specialix SX driver) by:
  *
@@ -38,7 +39,7 @@
 #include <asm/uaccess.h>
 #include <asm/bitops.h>
 
-#include "generic_serial.h"
+#include <linux/generic_serial.h>
 #include "sh-sci.h"
 
 #ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
@@ -54,7 +55,7 @@ static void sci_disable_rx_interrupts(void *ptr);
 static void sci_enable_rx_interrupts(void *ptr);
 static int  sci_get_CD(void *ptr);
 static void sci_shutdown_port(void *ptr);
-static void sci_set_real_termios(void *ptr);
+static int sci_set_real_termios(void *ptr);
 static void sci_hungup(void *ptr);
 static void sci_close(void *ptr);
 static int sci_chars_in_buffer(void *ptr);
@@ -142,7 +143,11 @@ static void sci_set_baud(struct sci_port *port)
 	}
 
 	if (t > 0) {
-		sci_setsignals (port, 1, -1); 
+		sci_setsignals (port, 1, -1);
+		if(t >= 256) {
+			ctrl_out((ctrl_in(SCSMR) & ~3) | 1, SCSMR);
+			t >>= 2;
+		}
 		ctrl_outb(t, SCBRR);
 		ctrl_outw(0xa400, RFCR); /* Refresh counter clear */
 		while (ctrl_inw(RFCR) < WAIT_RFCR_COUNTER)
@@ -155,7 +160,7 @@ static void sci_set_baud(struct sci_port *port)
 static void sci_set_termios_cflag(struct sci_port *port)
 {
 	unsigned short status;
-	unsigned short smr_val=0;
+	unsigned short smr_val;
 #if defined(CONFIG_SH_SCIF_SERIAL)
 	unsigned short fcr_val=6; /* TFRST=1, RFRST=1 */
 #endif
@@ -172,6 +177,7 @@ static void sci_set_termios_cflag(struct sci_port *port)
 	fcr_val = 0;
 #endif
 
+	smr_val = ctrl_in(SCSMR) & 3;
 	if ((port->gs.tty->termios->c_cflag & CSIZE) == CS7)
 		smr_val |= 0x40;
 	if (C_PARENB(port->gs.tty))
@@ -196,7 +202,7 @@ static void sci_set_termios_cflag(struct sci_port *port)
 	sci_enable_rx_interrupts(port);
 }
 
-static void sci_set_real_termios(void *ptr)
+static int sci_set_real_termios(void *ptr)
 {
 	struct sci_port *port = ptr;
 
@@ -218,6 +224,8 @@ static void sci_set_real_termios(void *ptr)
 		set_bit(TTY_HW_COOK_OUT, &port->gs.tty->flags);
 	else
 		clear_bit(TTY_HW_COOK_OUT, &port->gs.tty->flags);
+
+	return 0;
 }
 
 /* ********************************************************************** *
@@ -352,10 +360,16 @@ static inline void sci_receive_chars(struct sci_port *port)
 static void sci_rx_interrupt(int irq, void *ptr, struct pt_regs *regs)
 {
 	struct sci_port *port = ptr;
+	unsigned long flags;
 
 	if (port->gs.flags & GS_ACTIVE)
-		if (!(port->gs.flags & SCI_RX_THROTTLE))
+		if (!(port->gs.flags & SCI_RX_THROTTLE)) {
 			sci_receive_chars(port);
+			return;
+		}
+	save_and_cli(flags);
+	ctrl_out(ctrl_in(SCSCR) & ~SCI_CTRL_FLAGS_RIE, SCSCR);
+	restore_flags(flags);
 }
 
 static void sci_tx_interrupt(int irq, void *ptr, struct pt_regs *regs)
@@ -363,9 +377,14 @@ static void sci_tx_interrupt(int irq, void *ptr, struct pt_regs *regs)
 	struct sci_port *port = ptr;
 
 	if (port->gs.flags & GS_ACTIVE)
-		if (port->gs.xmit_cnt) {
-			sci_transmit_chars(port);
-		}
+		sci_transmit_chars(port);
+	else {
+		unsigned long flags;
+
+		save_and_cli(flags);
+		ctrl_out(ctrl_in(SCSCR) & ~SCI_CTRL_FLAGS_TIE, SCSCR);
+		restore_flags(flags);
+	}
 }
 
 static void sci_er_interrupt(int irq, void *ptr, struct pt_regs *regs)

@@ -192,7 +192,6 @@ asmlinkage long sys_sysfs(int option, unsigned long arg1, unsigned long arg2)
 {
 	int retval = -EINVAL;
 
-	lock_kernel();
 	switch (option) {
 		case 1:
 			retval = fs_index((const char *) arg1);
@@ -206,7 +205,6 @@ asmlinkage long sys_sysfs(int option, unsigned long arg1, unsigned long arg2)
 			retval = fs_maxindex();
 			break;
 	}
-	unlock_kernel();
 	return retval;
 }
 

@@ -176,6 +176,15 @@ int netdev_nit=0;
  *	change it and subsequent readers will get broken packet.
  *							--ANK (980803)
  */
+
+/**
+ *	dev_add_pack - add packet handler
+ *	@pt: packet type declaration
+ * 
+ *	Add a protocol handler to the networking stack. The passed packet_type
+ *	is linked into kernel lists and may not be freed until it has been
+ *	removed from the kernel lists.
+ */
  
 void dev_add_pack(struct packet_type *pt)
 {
@@ -203,8 +212,14 @@ void dev_add_pack(struct packet_type *pt)
 }
 
 
-/*
- *	Remove a protocol ID from the list.
+/**
+ *	dev_remove_pack	 - remove packet handler
+ *	@pt: packet type declaration
+ * 
+ *	Remove a protocol handler that was previously added to the kernel
+ *	protocol handlers by dev_add_pack. The passed packet_type is removed
+ *	from the kernel lists and can be freed or reused once this function
+ *	returns.
  */
  
 void dev_remove_pack(struct packet_type *pt)
@@ -241,9 +256,15 @@ void dev_remove_pack(struct packet_type *pt)
 
 ******************************************************************************************/
 
-/* 
- *	Find an interface by name. May be called under rtnl semaphore
- *	or dev_base_lock.
+/**
+ *	__dev_get_by_name	- find a device by its name 
+ *	@name: name to find
+ *
+ *	Find an interface by name. Must be called under rtnl semaphore
+ *	or dev_base_lock. If the name is found a pointer to the device
+ *	is returned. If the name is not found then NULL is returned. The
+ *	reference counters are not incremented so the caller must be
+ *	careful with locks.
  */
  
 
@@ -258,8 +279,15 @@ struct net_device *__dev_get_by_name(const char *name)
 	return NULL;
 }
 
-/* 
- *	Find an interface by name. Any context, dev_put() to release.
+/**
+ *	dev_get_by_name		- find a device by its name
+ *	@name: name to find
+ *
+ *	Find an interface by name. This can be called from any 
+ *	context and does its own locking. The returned handle has
+ *	the usage count incremented and the caller must use dev_put() to
+ *	release it when it is no longer needed. NULL is returned if no
+ *	matching device is found.
  */
 
 struct net_device *dev_get_by_name(const char *name)
@@ -282,6 +310,18 @@ struct net_device *dev_get_by_name(const char *name)
    is meaningless, if it was not issued under rtnl semaphore.
  */
 
+/**
+ *	dev_get	-	test if a device exists
+ *	@name:	name to test for
+ *
+ *	Test if a name exists. Returns true if the name is found. In order
+ *	to be sure the name is not allocated or removed during the test the
+ *	caller must hold the rtnl semaphore.
+ *
+ *	This function primarily exists for back compatibility with older
+ *	drivers. 
+ */
+ 
 int dev_get(const char *name)
 {
 	struct net_device *dev;
@@ -292,8 +332,14 @@ int dev_get(const char *name)
 	return dev != NULL;
 }
 
-/* 
- *	Find an interface by index. May be called under rtnl semaphore
+/**
+ *	__dev_get_by_index - find a device by its ifindex
+ *	@ifindex: index of device
+ *
+ *	Search for an interface by index. Returns NULL if the device
+ *	is not found or a pointer to the device. The device has not
+ *	had its reference counter increased so the caller must be careful
+ *	about locking. The caller must hold either the rtnl semaphore
  *	or dev_base_lock.
  */
 
@@ -308,8 +354,15 @@ struct net_device * __dev_get_by_index(int ifindex)
 	return NULL;
 }
 
-/* 
- *	Find an interface by index. Any context, dev_put() to release.
+
+/**
+ *	dev_get_by_index - find a device by its ifindex
+ *	@ifindex: index of device
+ *
+ *	Search for an interface by index. Returns NULL if the device
+ *	is not found or a pointer to the device. The device returned has 
+ *	had a reference added and the pointer is safe until the user calls
+ *	dev_put to indicate they have finished with it.
  */
 
 struct net_device * dev_get_by_index(int ifindex)
@@ -324,8 +377,18 @@ struct net_device * dev_get_by_index(int ifindex)
 	return dev;
 }
 
-/* 
- *	Find an interface by ll addr. May be called only under rtnl semaphore.
+/**
+ *	dev_getbyhwaddr - find a device by its hardware addres
+ *	@type: media type of device
+ *	@ha: hardware address
+ *
+ *	Search for an interface by MAC address. Returns NULL if the device
+ *	is not found or a pointer to the device. The caller must hold the
+ *	rtnl semaphore. The returned device has not had its ref count increased
+ *	and the caller must therefore be careful about locking
+ *
+ *	BUGS:
+ *	If the API was consistent this would be __dev_get_by_hwaddr
  */
 
 struct net_device *dev_getbyhwaddr(unsigned short type, char *ha)
@@ -342,9 +405,16 @@ struct net_device *dev_getbyhwaddr(unsigned short type, char *ha)
 	return NULL;
 }
 
-/*
+/**
+ *	dev_alloc_name - allocate a name for a device
+ *	@dev: device 
+ *	@name: name format string
+ *
  *	Passed a format string - eg "lt%d" it will try and find a suitable
- *	id. Not efficient for many devices, not called a lot..
+ *	id. Not efficient for many devices, not called a lot. The caller
+ *	must hold the dev_base or rtnl lock while allocating the name and
+ *	adding the device in order to avoid duplicates. Returns the number
+ *	of the unit assigned or a negative errno code.
  */
 
 int dev_alloc_name(struct net_device *dev, const char *name)
@@ -365,6 +435,22 @@ int dev_alloc_name(struct net_device *dev, const char *name)
 	return -ENFILE;	/* Over 100 of the things .. bail out! */
 }
 
+/**
+ *	dev_alloc - allocate a network device and name
+ *	@name: name format string
+ *	@err: error return pointer
+ *
+ *	Passed a format string - eg "lt%d" it will allocate a network device
+ *	and space for the name. NULL is returned if no memory is available.
+ *	If the allocation succeeds then the name is assigned and the 
+ *	device pointer returned. NULL is returned if the name allocation failed.
+ *	The cause of an error is returned as a negative errno code in the 
+ *	variable err points to.
+ *
+ *	The claler must hold the dev_base or rtnl locks when doing this in order
+ *	to avoid duplicate name allocations.
+ */
+
 struct net_device *dev_alloc(const char *name, int *err)
 {
 	struct net_device *dev=kmalloc(sizeof(struct net_device)+16, GFP_KERNEL);
@@ -382,6 +468,15 @@ struct net_device *dev_alloc(const char *name, int *err)
 	return dev;
 }
 
+/**
+ *	netdev_state_change - device changes state
+ *	@dev: device to cause notification
+ *
+ *	Called to indicate a device has changed state. This function calls
+ *	the notifier chains for netdev_chain and sends a NEWLINK message
+ *	to the routing socket.
+ */
+ 
 void netdev_state_change(struct net_device *dev)
 {
 	if (dev->flags&IFF_UP) {
@@ -391,11 +486,16 @@ void netdev_state_change(struct net_device *dev)
 }
 
 
-/*
- *	Find and possibly load an interface.
- */
- 
 #ifdef CONFIG_KMOD
+
+/**
+ *	dev_load 	- load a network module
+ *	@name: name of interface
+ *
+ *	If a network interface is not present and the process has suitable
+ *	privileges this function loads the module. If module loading is not
+ *	available in this kernel then it becomes a nop.
+ */
 
 void dev_load(const char *name)
 {
@@ -416,8 +516,17 @@ static int default_rebuild_header(struct sk_buff *skb)
 	return 1;
 }
 
-/*
- *	Prepare an interface for use. 
+/**
+ *	dev_open	- prepare an interface for use. 
+ *	@dev:	device to open
+ *
+ *	Takes a device from down to up state. The devices private open
+ *	function is invoked and then the multicast lists are loaded. Finally
+ *	the device is moved into the up state and a NETDEV_UP message is
+ *	sent to the netdev notifier chain.
+ *
+ *	Calling this function on an active interface is a nop. On a failure
+ *	a negative errno code is returned.
  */
  
 int dev_open(struct net_device *dev)
@@ -508,8 +617,14 @@ void dev_clear_fastroute(struct net_device *dev)
 }
 #endif
 
-/*
- *	Completely shutdown an interface.
+/**
+ *	dev_close - shutdown an interface.
+ *	@dev: device to shutdown
+ *
+ *	This function moves an active device into down state. A 
+ *	NETDEV_GOING_DOWN is sent to the netev notifier chain. The device
+ *	is then deactivated and finally a NETDEV_DOWN is sent to the notifier
+ *	chain.
  */
  
 int dev_close(struct net_device *dev)
@@ -560,11 +675,30 @@ int dev_close(struct net_device *dev)
  *	Device change register/unregister. These are not inline or static
  *	as we export them to the world.
  */
+ 
+/**
+ *	register_netdevice_notifier - register a network notifier block
+ *	@nb: notifier
+ *
+ *	Register a notifier to be called when network device events occur.
+ *	The notifier passed is linked into the kernel structures and must
+ *	not be reused until it has been unregistered. A negative errno code
+ *	is returned on a failure.
+ */
 
 int register_netdevice_notifier(struct notifier_block *nb)
 {
 	return notifier_chain_register(&netdev_chain, nb);
 }
+
+/**
+ *	unregister_netdevice_notifier - unregister a network notifier block
+ *	@nb: notifier
+ *
+ *	Unregister a notifier previously registered by register_netdevice_notifier
+ *	The notifier is unlinked into the kernel structures and may
+ *	then be reused. A negative errno code is returned on a failure.
+ */
 
 int unregister_netdevice_notifier(struct notifier_block *nb)
 {
@@ -637,6 +771,19 @@ void dev_loopback_xmit(struct sk_buff *skb)
 	netif_rx(newskb);
 }
 
+/**
+ *	dev_queue_xmit - transmit a buffer
+ *	@skb: buffer to transmit
+ *	
+ *	Queue a buffer for transmission to a network device. The caller must
+ *	have set the device and priority and built the buffer before calling this 
+ *	function. The function can be called from an interrupt.
+ *
+ *	A negative errno code is returned on a failure. A success does not
+ *	guarantee the frame will be transmitted as it may be dropped due
+ *	to congestion or traffic shaping.
+ */
+ 
 int dev_queue_xmit(struct sk_buff *skb)
 {
 	struct net_device *dev = skb->dev;
@@ -770,9 +917,14 @@ static void netdev_wakeup(void)
 }
 #endif
 
-/*
- *	Receive a packet from a device driver and queue it for the upper
- *	(protocol) levels.  It always succeeds. 
+/**
+ *	netif_rx	-	post buffer to the network code
+ *	@skb: buffer to post
+ *
+ *	This function receives a packet from a device driver and queues it for
+ *	the upper (protocol) levels to process.  It always succeeds. The buffer
+ *	may be dropped during processing for congestion control or by the 
+ *	protocol layers.
  */
 
 void netif_rx(struct sk_buff *skb)
@@ -922,6 +1074,14 @@ static void net_tx_action(struct softirq_action *h)
 	}
 }
 
+/**
+ *	net_call_rx_atomic
+ *	@fn: function to call
+ *
+ *	Make a function call that is atomic with respect to the protocol
+ *	layers
+ */
+ 
 void net_call_rx_atomic(void (*fn)(void))
 {
 	br_write_lock_bh(BR_NETPROTO_LOCK);
@@ -1063,10 +1223,18 @@ softnet_break:
 	return;
 }
 
-/* Protocol dependent address dumping routines */
-
 static gifconf_func_t * gifconf_list [NPROTO];
 
+/**
+ *	register_gifconf	-	register a SIOCGIF handler
+ *	@family: Address family
+ *	@gifconf: Function handler
+ *
+ *	Register protocol dependent address dumping routines. The handler
+ *	that is passed must not be freed or reused until it has been replaced
+ *	by another handler.
+ */
+ 
 int register_gifconf(unsigned int family, gifconf_func_t * gifconf)
 {
 	if (family>=NPROTO)
@@ -1381,6 +1549,18 @@ static int dev_get_wireless_info(char * buffer, char **start, off_t offset,
 #endif	/* CONFIG_PROC_FS */
 #endif	/* WIRELESS_EXT */
 
+/**
+ *	netdev_set_master	-	set up master/slave pair
+ *	@slave: slave device
+ *	@master: new master device
+ *
+ *	Changes the master device of the slave. Pass NULL to break the
+ *	bonding. The caller must hold the RTNL semaphore. On a failure
+ *	a negative errno code is returned. On success the reference counts
+ *	are adjusted, RTM_NEWLINK is sent to the routing socket and the
+ *	function returns zero.
+ */
+ 
 int netdev_set_master(struct net_device *slave, struct net_device *master)
 {
 	struct net_device *old = slave->master;
@@ -1409,6 +1589,17 @@ int netdev_set_master(struct net_device *slave, struct net_device *master)
 	return 0;
 }
 
+/**
+ *	dev_set_promiscuity	- update promiscuity count on a device
+ *	@dev: device
+ *	@inc: modifier
+ *
+ *	Add or remove promsicuity from a device. While the count in the device
+ *	remains above zero the interface remains promiscuous. Once it hits zero
+ *	the device reverts back to normal filtering operation. A negative inc
+ *	value is used to drop promiscuity on the device.
+ */
+ 
 void dev_set_promiscuity(struct net_device *dev, int inc)
 {
 	unsigned short old_flags = dev->flags;
@@ -1429,6 +1620,18 @@ void dev_set_promiscuity(struct net_device *dev, int inc)
 		       dev->name, (dev->flags&IFF_PROMISC) ? "entered" : "left");
 	}
 }
+
+/**
+ *	dev_set_allmulti	- update allmulti count on a device
+ *	@dev: device
+ *	@inc: modifier
+ *
+ *	Add or remove reception of all multicast frames to a device. While the
+ *	count in the device remains above zero the interface remains listening
+ *	to all interfaces. Once it hits zero the device reverts back to normal
+ *	filtering operation. A negative inc value is used to drop the counter
+ *	when releasing a resource needing all multicasts.
+ */
 
 void dev_set_allmulti(struct net_device *dev, int inc)
 {
@@ -1673,10 +1876,20 @@ static int dev_ifsioc(struct ifreq *ifr, unsigned int cmd)
 	return -EINVAL;
 }
 
-
 /*
  *	This function handles all "interface"-type I/O control requests. The actual
  *	'doing' part of this is dev_ifsioc above.
+ */
+
+/**
+ *	dev_ioctl	-	network device ioctl
+ *	@cmd: command to issue
+ *	@arg: pointer to a struct ifreq in user space
+ *
+ *	Issue ioctl functions to devices. This is normally called by the
+ *	user space syscall interfaces but can sometimes be useful for 
+ *	other purposes. The return value is the return from the syscall if
+ *	positive or a negative errno code on error.
  */
 
 int dev_ioctl(unsigned int cmd, void *arg)
@@ -1811,6 +2024,15 @@ int dev_ioctl(unsigned int cmd, void *arg)
 	}
 }
 
+
+/**
+ *	dev_new_index	-	allocate an ifindex
+ *
+ *	Returns a suitable unique value for a new device interface number.
+ *	The caller must hold the rtnl semaphore to be sure it remains 
+ *	unique.
+ */
+ 
 int dev_new_index(void)
 {
 	static int ifindex;
@@ -1824,6 +2046,19 @@ int dev_new_index(void)
 
 static int dev_boot_phase = 1;
 
+/**
+ *	register_netdevice	- register a network device
+ *	@dev: device to register
+ *	
+ *	Take a completed network device structure and add it to the kernel
+ *	interfaces. A NETDEV_REGISTER message is sent to the netdev notifier
+ *	chain. 0 is returned on success. A negative errno code is returned
+ *	on a failure to set up the device, or if the name is a duplicate.
+ *
+ *	BUGS:
+ *	The locking appears insufficient to guarantee two parallel registers
+ *	will not get the same name.
+ */
 
 int register_netdevice(struct net_device *dev)
 {
@@ -1917,6 +2152,14 @@ int register_netdevice(struct net_device *dev)
 	return 0;
 }
 
+/**
+ *	netdev_finish_unregister - complete unregistration
+ *	@dev: device
+ *
+ *	Destroy and free a dead device. A value of zero is returned on
+ *	success.
+ */
+ 
 int netdev_finish_unregister(struct net_device *dev)
 {
 	BUG_TRAP(dev->ip_ptr==NULL);
@@ -1924,7 +2167,7 @@ int netdev_finish_unregister(struct net_device *dev)
 	BUG_TRAP(dev->dn_ptr==NULL);
 
 	if (!dev->deadbeaf) {
-		printk("Freeing alive device %p, %s\n", dev, dev->name);
+		printk(KERN_ERR "Freeing alive device %p, %s\n", dev, dev->name);
 		return 0;
 	}
 #ifdef NET_REFCNT_DEBUG
@@ -1936,6 +2179,15 @@ int netdev_finish_unregister(struct net_device *dev)
 		kfree(dev);
 	return 0;
 }
+
+/**
+ *	unregister_netdevice - remove device from the kernel
+ *	@dev: device
+ *
+ *	This function shuts down a device interface and removes it
+ *	from the kernel tables. On success 0 is returned, on a failure
+ *	a negative errno code is returned.
+ */
 
 int unregister_netdevice(struct net_device *dev)
 {

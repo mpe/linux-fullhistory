@@ -1,4 +1,4 @@
-/* $Id: ebus.c,v 1.46 1999/11/19 05:52:48 davem Exp $
+/* $Id: ebus.c,v 1.47 2000/03/25 05:18:10 davem Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -278,7 +278,6 @@ void __init ebus_init(void)
 	struct linux_ebus *ebus;
 	struct pci_dev *pdev;
 	struct pcidev_cookie *cookie;
-	unsigned short pci_command;
 	int nd, ebusnd;
 	int num_ebus = 0;
 
@@ -327,17 +326,6 @@ void __init ebus_init(void)
 		ebus->prom_node = ebusnd;
 		ebus->self = pdev;
 		ebus->parent = pbm = cookie->pbm;
-
-		/* Enable BUS Master. */
-		pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
-		pci_command |= PCI_COMMAND_MASTER;
-		pci_write_config_word(pdev, PCI_COMMAND, pci_command);
-
-		/* Set reasonable cache line size and latency timer values. */
-		pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 64);
-
-		/* NOTE: Cache line size is in 32-bit word units. */
-		pci_write_config_byte(pdev, PCI_CACHE_LINE_SIZE, 64/sizeof(u32));
 
 		ebus_ranges_init(ebus);
 		ebus_intmap_init(ebus);

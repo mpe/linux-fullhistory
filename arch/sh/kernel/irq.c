@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.11 2000/02/29 11:03:40 gniibe Exp $
+/* $Id: irq.c,v 1.12 2000/03/06 14:07:50 gniibe Exp $
  *
  * linux/arch/sh/kernel/irq.c
  *
@@ -238,11 +238,11 @@ asmlinkage int do_IRQ(unsigned long r4, unsigned long r5,
 	regs.syscall_nr = -1;	/* It's not system call */
 
 	/* Get IRQ number */
-	asm volatile("stc	r2_bank,%0\n\t"
+	asm volatile("stc	$r2_bank, %0\n\t"
 		     "shlr2	%0\n\t"
 		     "shlr2	%0\n\t"
 		     "shlr	%0\n\t"
-		     "add	#-16,%0\n\t"
+		     "add	#-16, %0\n\t"
 		     :"=z" (irq));
 
 	kstat.irqs[cpu][irq]++;

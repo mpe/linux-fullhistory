@@ -412,21 +412,6 @@ static int __init skge_probe (void)
 
 		pci_set_master(pdev);
 
-#ifdef __sparc__
-		/* Set the proper cache line size value, plus enable
-		 * write-invalidate and fast back-to-back on Sparc.
-		 */
-		{
-			SK_U16 pci_command;
-
-			SkPciWriteCfgByte(pAC, PCI_CACHE_LINE_SIZE, 0x10);
-
-			SkPciReadCfgWord(pAC, PCI_COMMAND, &pci_command);
-			pci_command |= (PCI_COMMAND_INVALIDATE | PCI_COMMAND_FAST_BACK);
-			SkPciWriteCfgWord(pAC, PCI_COMMAND, pci_command);
-		}
-#endif
-
 		base_address = pdev->resource[0].start;
 
 #ifdef SK_BIG_ENDIAN

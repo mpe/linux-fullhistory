@@ -7,7 +7,7 @@
  *		handler for protocols to use and generic option handler.
  *
  *
- * Version:	$Id: sock.c,v 1.90 2000/02/27 19:48:11 davem Exp $
+ * Version:	$Id: sock.c,v 1.91 2000/03/25 01:55:03 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -731,11 +731,12 @@ static long sock_wait_for_wmem(struct sock * sk, long timeo)
 {
 	DECLARE_WAITQUEUE(wait, current);
 
-	sk->socket->flags &= ~SO_NOSPACE;
+	clear_bit(SOCK_ASYNC_NOSPACE, &sk->socket->flags);
 	add_wait_queue(sk->sleep, &wait);
 	for (;;) {
 		if (signal_pending(current))
 			break;
+		set_bit(SOCK_NOSPACE, &sk->socket->flags);
 		set_current_state(TASK_INTERRUPTIBLE);
 		if (atomic_read(&sk->wmem_alloc) < sk->sndbuf)
 			break;
@@ -802,18 +803,20 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size,
 		 *	This means we have too many buffers for this socket already.
 		 */
 
-		sk->socket->flags |= SO_NOSPACE;
+		set_bit(SOCK_ASYNC_NOSPACE, &sk->socket->flags);
+		set_bit(SOCK_NOSPACE, &sk->socket->flags);
 		err = -EAGAIN;
 		if (!timeo)
 			goto failure;
-		err = -ERESTARTSYS;
 		if (signal_pending(current))
-			goto failure;
+			goto interrupted;
 		timeo = sock_wait_for_wmem(sk, timeo);
 	}
 
 	return skb;
 
+interrupted:
+	err = sock_intr_errno(timeo);
 failure:
 	*errcode = err;
 	return NULL;
@@ -1079,7 +1082,7 @@ int sock_no_mmap(struct file *file, struct socket *sock, struct vm_area_struct *
 void sock_def_wakeup(struct sock *sk)
 {
 	read_lock(&sk->callback_lock);
-	if(!sk->dead)
+	if (sk->sleep && waitqueue_active(sk->sleep))
 		wake_up_interruptible_all(sk->sleep);
 	read_unlock(&sk->callback_lock);
 }
@@ -1087,20 +1090,18 @@ void sock_def_wakeup(struct sock *sk)
 void sock_def_error_report(struct sock *sk)
 {
 	read_lock(&sk->callback_lock);
-	if (!sk->dead) {
+	if (sk->sleep && waitqueue_active(sk->sleep))
 		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket,0,POLL_ERR); 
-	}
+	sk_wake_async(sk,0,POLL_ERR); 
 	read_unlock(&sk->callback_lock);
 }
 
 void sock_def_readable(struct sock *sk, int len)
 {
 	read_lock(&sk->callback_lock);
-	if(!sk->dead) {
+	if (sk->sleep && waitqueue_active(sk->sleep))
 		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket,1,POLL_IN);
-	}
+	sk_wake_async(sk,1,POLL_IN);
 	read_unlock(&sk->callback_lock);
 }
 
@@ -1111,14 +1112,15 @@ void sock_def_write_space(struct sock *sk)
 	/* Do not wake up a writer until he can make "significant"
 	 * progress.  --DaveM
 	 */
-	if(!sk->dead &&
-	   ((atomic_read(&sk->wmem_alloc) << 1) <= sk->sndbuf)) {
-		wake_up_interruptible(sk->sleep);
+	if((atomic_read(&sk->wmem_alloc) << 1) <= sk->sndbuf) {
+		if (sk->sleep && waitqueue_active(sk->sleep))
+			wake_up_interruptible(sk->sleep);
 
 		/* Should agree with poll, otherwise some programs break */
 		if (sock_writeable(sk))
-			sock_wake_async(sk->socket, 2, POLL_OUT);
+			sk_wake_async(sk, 2, POLL_OUT);
 	}
+
 	read_unlock(&sk->callback_lock);
 }
 

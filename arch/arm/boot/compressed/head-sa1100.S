@@ -17,8 +17,9 @@ __SA1100_start:
 #error What am I doing here...
 #endif
 
-#ifdef CONFIG_SA1100_BRUTUS
-@ need to enter SVC mode
+#if	defined( CONFIG_SA1100_BRUTUS ) || \
+	defined( CONFIG_SA1100_THINCLIENT )
+@ Booting from Angel -- need to enter SVC mode
 #define angel_SWIreason_EnterSVC 0x17   /* from arm.h, in angel source */
 #define angel_SWI_ARM (0xEF123456 & 0xffffff)
 		mov	r0, #angel_SWIreason_EnterSVC

@@ -1362,7 +1362,7 @@ Use the <TAB> key to move from the input field to the buttons below it."
 
 DIALOG="./scripts/lxdialog/lxdialog"
 
-kernel_version="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"
+kernel_version="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}${EXTRAVERSION}"
 
 backtitle="Linux Kernel v$kernel_version Configuration"
 

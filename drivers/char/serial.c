@@ -4360,6 +4360,9 @@ static struct pci_board pnp_devices[] __initdata = {
 	/* U.S. Robotics 56K FAX INT */
 	{	ISAPNP_VENDOR('U', 'S', 'R'), ISAPNP_DEVICE(0x3031), 0, 0,
 		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
+	/* Viking 56K FAX INT */
+	{	ISAPNP_VENDOR('R', 'S', 'S'), ISAPNP_DEVICE(0x0262), 0, 0,
+		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
 
 	/* These ID's are taken from M$ documentation */
 	/* Compaq 14400 Modem */

@@ -178,9 +178,6 @@ static int get_fifo_residue (struct parport *p)
 	int cnfga;
 	const struct parport_pc_private *priv = p->physport->private_data;
 
-	/* Prevent further data transfer. */
-	frob_econtrol (p, 0xe0, ECR_TST << 5);
-
 	/* Adjust for the contents of the FIFO. */
 	for (residue = priv->fifo_depth; ; residue--) {
 		if (inb (ECONTROL (p)) & 0x2)
@@ -862,7 +859,8 @@ size_t parport_pc_ecp_read_block_pio (struct parport *port,
 						       length, flags);
 
 	/* Switch to reverse mode if necessary. */
-	if (port->ieee1284.phase != IEEE1284_PH_REV_IDLE) {
+	if ((port->ieee1284.phase != IEEE1284_PH_REV_IDLE) &&
+	    (port->ieee1284.phase != IEEE1284_PH_REV_DATA)) {
 		/* Event 38: Set nAutoFd low */
 		parport_frob_control (port,
 				      PARPORT_CONTROL_AUTOFD,
@@ -879,7 +877,7 @@ size_t parport_pc_ecp_read_block_pio (struct parport *port,
 		parport_wait_peripheral (port, PARPORT_STATUS_PAPEROUT, 0);
 	}
 
-	/* Set up ECP parallel port mode.*/
+	/* Set up ECP FIFO mode.*/
 	parport_pc_data_reverse (port); /* Must be in PS2 mode */
 	parport_pc_frob_control (port,
 				 PARPORT_CONTROL_STROBE |
@@ -951,14 +949,23 @@ size_t parport_pc_ecp_read_block_pio (struct parport *port,
 		left--;
 	}
 
-	/* Finish up. */
-	if (change_mode (port, ECR_PS2) == -EBUSY) {
-		int lost = get_fifo_residue (port);
-		printk (KERN_DEBUG "%s: DATA LOSS (%d bytes)!\n", port->name,
-			lost);
-	}
-
 	port->ieee1284.phase = IEEE1284_PH_REV_IDLE;
+
+	/* Go to forward idle mode to shut the peripheral up. */
+	parport_frob_control (port, PARPORT_CONTROL_INIT, 0);
+	parport_wait_peripheral (port,
+				 PARPORT_STATUS_PAPEROUT,
+				 PARPORT_STATUS_PAPEROUT);
+	port->ieee1284.phase = IEEE1284_PH_FWD_IDLE;
+
+	/* Finish up. */
+	{
+		int lost = get_fifo_residue (port);
+		if (lost)
+			/* Shouldn't happen with compliant peripherals. */
+			printk (KERN_DEBUG "%s: DATA LOSS (%d bytes)!\n",
+				port->name, lost);
+	}
 
 	return length - left;
 }

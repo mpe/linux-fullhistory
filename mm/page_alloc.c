@@ -487,12 +487,13 @@ static inline void build_zonelists(pg_data_t *pgdat)
  *   - clear the memory bitmaps
  */
 void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
-	unsigned long *zones_size, unsigned long zone_start_paddr)
+	unsigned long *zones_size, unsigned long zone_start_paddr, 
+	unsigned long *zholes_size)
 {
 	struct page *p, *lmem_map;
 	unsigned long i, j;
 	unsigned long map_size;
-	unsigned long totalpages, offset;
+	unsigned long totalpages, offset, realtotalpages;
 	unsigned int cumulative = 0;
 
 	pgdat->node_next = pgdat_list;
@@ -503,7 +504,12 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 		unsigned long size = zones_size[i];
 		totalpages += size;
 	}
-	printk("On node %d totalpages: %lu\n", nid, totalpages);
+	realtotalpages = totalpages;
+	if (zholes_size)
+		for (i = 0; i < MAX_NR_ZONES; i++)
+			realtotalpages -= zholes_size[i];
+			
+	printk("On node %d totalpages: %lu\n", nid, realtotalpages);
 
 	/*
 	 * Select nr of pages we try to keep free for important stuff
@@ -512,7 +518,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 	 * This is fairly arbitrary, but based on some behaviour
 	 * analysis.
 	 */
-	i = totalpages >> 7;
+	i = realtotalpages >> 7;
 	if (i < 10)
 		i = 10;
 	if (i > 256)
@@ -553,21 +559,24 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 	for (j = 0; j < MAX_NR_ZONES; j++) {
 		zone_t *zone = pgdat->node_zones + j;
 		unsigned long mask;
-		unsigned long size;
+		unsigned long size, realsize;
 
-		size = zones_size[j];
+		realsize = size = zones_size[j];
+		if (zholes_size)
+			realsize -= zholes_size[j];
 
 		printk("zone(%lu): %lu pages.\n", j, size);
 		zone->size = size;
 		zone->name = zone_names[j];
 		zone->lock = SPIN_LOCK_UNLOCKED;
 		zone->zone_pgdat = pgdat;
+		zone->free_pages = 0;
 		if (!size)
 			continue;
 
 		zone->offset = offset;
 		cumulative += size;
-		mask = (size / zone_balance_ratio[j]);
+		mask = (realsize / zone_balance_ratio[j]);
 		if (mask < zone_balance_min[j])
 			mask = zone_balance_min[j];
 		else if (mask > zone_balance_max[j])
@@ -611,7 +620,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 
 void __init free_area_init(unsigned long *zones_size)
 {
-	free_area_init_core(0, NODE_DATA(0), &mem_map, zones_size, 0);
+	free_area_init_core(0, NODE_DATA(0), &mem_map, zones_size, 0, 0);
 }
 
 static int __init setup_mem_frac(char *str)

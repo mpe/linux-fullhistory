@@ -16,16 +16,15 @@ mainmenu_option next_comment
 comment 'Platform dependent setup'
 
 define_bool CONFIG_ISA n
+define_bool CONFIG_PCMCIA n
+
 bool 'Amiga support' CONFIG_AMIGA
 bool 'Atari support' CONFIG_ATARI
-if [ "$CONFIG_ATARI" = "y" ]; then
-   bool '  Hades support' CONFIG_HADES
-   if [ "$CONFIG_HADES" = "y" ]; then
-      define_bool CONFIG_PCI y
-   fi  
-fi
-if [ "$CONFIG_HADES" != "y" ]; then
-  define_bool CONFIG_PCI n
+dep_bool '  Hades support' CONFIG_HADES $CONFIG_ATARI
+if [ "$CONFIG_HADES" = "y" ]; then
+   define_bool CONFIG_PCI y
+else
+   define_bool CONFIG_PCI n
 fi  
 bool 'Macintosh support' CONFIG_MAC
 if [ "$CONFIG_MAC" = "y" ]; then
@@ -421,19 +420,21 @@ fi
 if [ "$CONFIG_HP300" = "y" -a "$CONFIG_DIO" = "y" ]; then
    tristate 'HP DCA serial support' CONFIG_HPDCA
 fi
-if [ "$CONFIG_SUN3X" = "y" ]; then
-   bool 'Sun3x builtin serial support' CONFIG_SUN3X_ZS
-   if [ "$CONFIG_SUN3X_ZS" = "y" ]; then
-      bool '  Sun keyboard support' CONFIG_SUN_KEYBOARD
-      bool '  Sun mouse support' CONFIG_SUN_MOUSE
-      if [ "$CONFIG_SUN_MOUSE" != "n" ]; then
-         define_bool CONFIG_BUSMOUSE y
-    fi
-    define_bool CONFIG_SBUS y
-    define_bool CONFIG_SBUSCHAR y
-    define_bool CONFIG_SUN_SERIAL y
-  fi  
+
+dep_bool 'Sun3x builtin serial support' CONFIG_SUN3X_ZS $CONFIG_SUN3X
+dep_bool '  Sun keyboard support' CONFIG_SUN_KEYBOARD $CONFIG_SUN3X_ZS
+dep_bool '  Sun mouse support' CONFIG_SUN_MOUSE $CONFIG_SUN3X_ZS
+if [ "$CONFIG_SUN_MOUSE" = "y" ]; then
+   define_bool CONFIG_BUSMOUSE y
 fi
+if [ "$CONFIG_SUN3X_ZS" = "y" ]; then
+   define_bool CONFIG_SBUS y
+   define_bool CONFIG_SBUSCHAR y
+   define_bool CONFIG_SUN_SERIAL y
+else
+   define_bool CONFIG_SBUS n
+fi
+
 if [ "$CONFIG_AMIGA" = "y" -o "$CONFIG_ATARI" = "y" -o \
      "$CONFIG_MAC" = "y" -o "$CONFIG_HP300" = "y" -o \
      "$CONFIG_SUN3X" = "y" ]; then

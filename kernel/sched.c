@@ -405,6 +405,7 @@ signed long schedule_timeout(signed long timeout)
  */
 static inline void __schedule_tail(struct task_struct *prev)
 {
+	current->need_resched |= prev->need_resched;
 #ifdef __SMP__
 	if ((prev->state == TASK_RUNNING) &&
 			(prev != idle_task(smp_processor_id()))) {

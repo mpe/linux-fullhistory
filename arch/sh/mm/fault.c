@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.12 2000/03/01 11:15:27 gniibe Exp $
+/* $Id: fault.c,v 1.13 2000/03/07 12:05:24 gniibe Exp $
  *
  *  linux/arch/sh/mm/fault.c
  *  Copyright (C) 1999  Niibe Yutaka
@@ -283,9 +283,6 @@ static void __flush_tlb_page(struct mm_struct *mm, unsigned long page)
 {
 	unsigned long addr, data, asid;
 	unsigned long saved_asid = MMU_NO_ASID;
-#if defined(__SH4__)
-	int i;
-#endif
 
 	if (mm->context == NO_CONTEXT)
 		return;
@@ -305,19 +302,25 @@ static void __flush_tlb_page(struct mm_struct *mm, unsigned long page)
 	data = (page & 0xfffe0000) | asid; /* VALID bit is off */
 	ctrl_outl(data, addr);
 #elif defined(__SH4__)
+	jump_to_P2();
 	addr = MMU_UTLB_ADDRESS_ARRAY | MMU_PAGE_ASSOC_BIT;
 	data = page | asid; /* VALID bit is off */
 	ctrl_outl(data, addr);
-
-	for (i=0; i<4; i++) {
-		addr = MMU_ITLB_ADDRESS_ARRAY | (i<<8);
-		data = ctrl_inl(addr);
-		data &= ~0x300;
-		if (data == (page | asid)) {
-			ctrl_outl(data, addr);
-			break;
+#if 0 	/* Not need when using ASSOC. ??? */
+	{
+		int i;
+		for (i=0; i<4; i++) {
+			addr = MMU_ITLB_ADDRESS_ARRAY | (i<<8);
+			data = ctrl_inl(addr);
+			data &= ~0x300;
+			if (data == (page | asid)) {
+				ctrl_outl(data, addr);
+				break;
+			}
 		}
 	}
+#endif
+	back_to_P1();
 #endif
 	if (saved_asid != MMU_NO_ASID)
 		set_asid(saved_asid);

@@ -19,7 +19,7 @@ static __inline__ __const__ __u32 ___arch__swab32(__u32 x)
 
 static __inline__ __const__ __u16 ___arch__swab16(__u16 x)
 {
-	__asm__("swap.b %0,%0"
+	__asm__("swap.b %0, %0"
 		: "=r" (x)
 		:  "0" (x));
 	return x;

@@ -227,7 +227,7 @@ xprt_sendmsg(struct rpc_xprt *xprt, struct rpc_rqst *req)
 		 */
 		break;
 	case -EAGAIN:
-		if (sock->flags & SO_NOSPACE)
+		if (test_bit(SOCK_NOSPACE, &sock->flags))
 			result = -ENOMEM;
 		break;
 	case -ENOTCONN:

@@ -47,6 +47,9 @@ extern int i2c_tuner_init(struct video_init *);
 #ifdef CONFIG_VIDEO_BWQCAM
 extern int init_bw_qcams(struct video_init *);
 #endif
+#ifdef CONFIG_VIDEO_CPIA
+extern int cpia_init(struct video_init *);
+#endif
 #ifdef CONFIG_VIDEO_PLANB
 extern int init_planbs(struct video_init *);
 #endif
@@ -61,6 +64,9 @@ static struct video_init video_init_list[]={
 #endif	
 #ifdef CONFIG_VIDEO_BWQCAM
 	{"bw-qcam", init_bw_qcams},
+#endif	
+#ifdef CONFIG_VIDEO_CPIA
+	{"cpia", cpia_init},
 #endif	
 #ifdef CONFIG_VIDEO_PLANB
 	{"planb", init_planbs},
@@ -133,9 +139,11 @@ static int video_open(struct inode *inode, struct file *file)
 	if(vfl==NULL) {
 		char modname[20];
 
+		MOD_INC_USE_COUNT;
 		sprintf (modname, "char-major-%d-%d", VIDEO_MAJOR, minor);
 		request_module(modname);
 		vfl=video_device[minor];
+		MOD_DEC_USE_COUNT;
 		if (vfl==NULL)
 			return -ENODEV;
 	}

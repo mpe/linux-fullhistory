@@ -228,7 +228,7 @@ static void __init pcibios_allocate_resources(int pass)
 				if (!pr || request_resource(pr, r) < 0) {
 					printk(KERN_ERR "PCI: Cannot allocate resource region %d of device %s\n", idx, dev->slot_name);
 					/* We'll assign a new address later */
-					r->start -= r->end;
+					r->end -= r->start;
 					r->start = 0;
 				}
 			}
@@ -317,6 +317,8 @@ int pcibios_enable_resources(struct pci_dev *dev)
 		if (r->flags & IORESOURCE_MEM)
 			cmd |= PCI_COMMAND_MEMORY;
 	}
+	if (dev->resource[PCI_ROM_RESOURCE].start)
+		cmd |= PCI_COMMAND_MEMORY;
 	if (cmd != old_cmd) {
 		printk("PCI: Enabling device %s (%04x -> %04x)\n", dev->slot_name, old_cmd, cmd);
 		pci_write_config_word(dev, PCI_COMMAND, cmd);

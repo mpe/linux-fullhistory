@@ -89,7 +89,7 @@ pci_assign_resource(struct pci_dev *dev, int i)
 	return 0;
 }
 
-static void
+void
 pdev_assign_unassigned_resources(struct pci_dev *dev)
 {
 	u32 reg;

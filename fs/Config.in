@@ -10,9 +10,7 @@ tristate 'Kernel automounter version 4 support (also supports v3)' CONFIG_AUTOFS
 
 
 dep_tristate 'ADFS file system support' CONFIG_ADFS_FS $CONFIG_EXPERIMENTAL
-if [ "$CONFIG_ADFS_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   bool '  ADFS write support (DANGEROUS)' CONFIG_ADFS_FS_RW
-fi
+dep_mbool '  ADFS write support (DANGEROUS)' CONFIG_ADFS_FS_RW $CONFIG_ADFS_FS $CONFIG_EXPERIMENTAL
 
 tristate 'Amiga FFS file system support' CONFIG_AFFS_FS
 
@@ -30,19 +28,12 @@ dep_tristate 'EFS file system support (read only) (EXPERIMENTAL)' CONFIG_EFS_FS 
 tristate 'Compressed ROM file system support' CONFIG_CRAMFS
 
 tristate 'ISO 9660 CDROM file system support' CONFIG_ISO9660_FS
-if [ "$CONFIG_ISO9660_FS" != "n" ]; then
-   bool '  Microsoft Joliet CDROM extensions' CONFIG_JOLIET
-else
-   # needed by nls/Config.in
-   define_bool CONFIG_JOLIET n
-fi
+dep_mbool '  Microsoft Joliet CDROM extensions' CONFIG_JOLIET $CONFIG_ISO9660_FS
 
 tristate 'Minix fs support' CONFIG_MINIX_FS
 
 tristate 'NTFS file system support (read only)' CONFIG_NTFS_FS
-if [ "$CONFIG_NTFS_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   bool '  NTFS write support (DANGEROUS)' CONFIG_NTFS_RW
-fi
+dep_mbool '  NTFS write support (DANGEROUS)' CONFIG_NTFS_RW $CONFIG_NTFS_FS $CONFIG_EXPERIMENTAL
 
 tristate 'OS/2 HPFS file system support' CONFIG_HPFS_FS
 
@@ -58,44 +49,32 @@ dep_bool '  Debug devfs' CONFIG_DEVFS_DEBUG $CONFIG_DEVFS_FS
 dep_bool '/dev/pts file system for Unix98 PTYs' CONFIG_DEVPTS_FS $CONFIG_UNIX98_PTYS
 
 dep_tristate 'QNX4 file system support (read only) (EXPERIMENTAL)' CONFIG_QNX4FS_FS $CONFIG_EXPERIMENTAL
-if [ "$CONFIG_QNX4FS_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   bool '  QNX4FS write support (DANGEROUS)' CONFIG_QNX4FS_RW
-fi
+dep_mbool '  QNX4FS write support (DANGEROUS)' CONFIG_QNX4FS_RW $CONFIG_QNX4FS_FS $CONFIG_EXPERIMENTAL
 
 tristate 'ROM file system support' CONFIG_ROMFS_FS
 
 tristate 'Second extended fs support' CONFIG_EXT2_FS
 
 tristate 'System V and Coherent file system support (read only)' CONFIG_SYSV_FS
-if [ "$CONFIG_SYSV_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   bool '  SYSV file system write support (DANGEROUS)' CONFIG_SYSV_FS_WRITE
-fi
+dep_mbool '  SYSV file system write support (DANGEROUS)' CONFIG_SYSV_FS_WRITE $CONFIG_SYSV_FS $CONFIG_EXPERIMENTAL
 
 tristate 'UDF file system support (read only)' CONFIG_UDF_FS
-if [ "$CONFIG_UDF_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   bool '  UDF write support (DANGEROUS)' CONFIG_UDF_RW
-fi
+dep_mbool '  UDF write support (DANGEROUS)' CONFIG_UDF_RW $CONFIG_UDF_FS $CONFIG_EXPERIMENTAL
 
 tristate 'UFS file system support (read only)' CONFIG_UFS_FS
-if [ "$CONFIG_UFS_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   bool '  UFS file system write support (DANGEROUS)' CONFIG_UFS_FS_WRITE
-fi
+dep_mbool '  UFS file system write support (DANGEROUS)' CONFIG_UFS_FS_WRITE $CONFIG_UFS_FS $CONFIG_EXPERIMENTAL
 
 if [ "$CONFIG_NET" = "y" ]; then
 
-mainmenu_option next_comment
-comment 'Network File Systems'
+   mainmenu_option next_comment
+   comment 'Network File Systems'
 
-if [ "$CONFIG_INET" = "y" ]; then
-   tristate 'Coda file system support (advanced network fs)' CONFIG_CODA_FS
-
-   tristate 'NFS file system support' CONFIG_NFS_FS
+   dep_tristate 'Coda file system support (advanced network fs)' CONFIG_CODA_FS $CONFIG_INET
+   dep_tristate 'NFS file system support' CONFIG_NFS_FS $CONFIG_INET
    dep_bool '  Root file system on NFS' CONFIG_ROOT_NFS $CONFIG_NFS_FS $CONFIG_IP_PNP
 
-   tristate 'NFS server support' CONFIG_NFSD
-   if [ "$CONFIG_NFSD" != "n" ]; then
-      bool '  Provide NFSv3 server support (EXPERIMENTAL)' CONFIG_NFSD_V3
-   fi
+   dep_tristate 'NFS server support' CONFIG_NFSD $CONFIG_INET
+   dep_mbool '  Provide NFSv3 server support (EXPERIMENTAL)' CONFIG_NFSD_V3 $CONFIG_NFSD
 
    if [ "$CONFIG_NFS_FS" = "y" -o "$CONFIG_NFSD" = "y" ]; then
       define_tristate CONFIG_SUNRPC y
@@ -112,16 +91,21 @@ if [ "$CONFIG_INET" = "y" ]; then
    if [ "$CONFIG_NFSD_V3" = "y" ]; then
      define_bool CONFIG_LOCKD_V4 y
    fi
-   tristate 'SMB file system support (to mount Windows shares etc.)' CONFIG_SMB_FS
-fi
-if [ "$CONFIG_IPX" != "n" -o "$CONFIG_INET" != "n" ]; then
-   tristate 'NCP file system support (to mount NetWare volumes)' CONFIG_NCP_FS
-   if [ "$CONFIG_NCP_FS" != "n" ]; then
-      source fs/ncpfs/Config.in
-   fi
-fi
 
-endmenu
+   dep_tristate 'SMB file system support (to mount Windows shares etc.)' CONFIG_SMB_FS $CONFIG_INET
+
+   if [ "$CONFIG_IPX" != "n" -o "$CONFIG_INET" != "n" ]; then
+      tristate 'NCP file system support (to mount NetWare volumes)' CONFIG_NCP_FS
+      source fs/ncpfs/Config.in
+   else
+      # for fs/nls/Config.in
+      define_bool CONFIG_NCPFS_NLS n
+   fi
+   endmenu
+
+else
+   # for fs/nls/Config.in
+   define_bool CONFIG_NCPFS_NLS n
 fi
 
 mainmenu_option next_comment

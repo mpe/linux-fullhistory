@@ -1245,7 +1245,7 @@
 10db  Rohm LSI Systems, Inc.
 10dc  CERN/ECP/EDU
 	0001  STAR/RD24 SCI-PCI (PMC)
-	0002  TAR/RD24 SCI-PCI (PMC) [ATT 2C15-3 (FPGA)  SCI bridge on PCI 5 Volt card]
+	0002  TAR/RD24 SCI-PCI (PMC)
 	0021  HIPPI destination
 	0022  HIPPI source
 	10dc  ATT2C15-3 FPGA
@@ -1328,7 +1328,7 @@
 	8089  Kingsberg Spacetec Serial Output Board
 	809c  S5933_HEPC3
 	811a  PCI-IEEE1355-DS-DE Interface
-	8170  S5933 "Matchmaker" PCI Chipset Development Tool
+	8170  S5933 "Matchmaker" [PCI Chipset Development Tool]
 10e9  Alps Electric Co., Ltd.
 10ea  Intergraphics Systems
 	1680  IGA-1680

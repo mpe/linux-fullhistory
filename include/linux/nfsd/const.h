@@ -10,6 +10,7 @@
 #define _LINUX_NFSD_CONST_H
 
 #include <linux/nfs.h>
+#include <linux/nfs2.h>
 
 /*
  * Maximum protocol version supported by knfsd
@@ -20,11 +21,6 @@
  * Maximum blocksize supported by daemon currently at 8K
  */
 #define NFSSVC_MAXBLKSIZE	8192
-
-#define NFS2_MAXPATHLEN		1024
-#define NFS2_MAXNAMLEN		255
-#define NFS2_FHSIZE		NFS_FHSIZE
-#define NFS2_COOKIESIZE		4
 
 #define NFS3_MAXPATHLEN		PATH_MAX
 #define NFS3_MAXNAMLEN		NAME_MAX

@@ -45,10 +45,7 @@
 #include <asm/byteorder.h>
 #include <asm/uaccess.h>
 #include <asm/atomic.h>
-
-#ifdef CONFIG_ATM_FORE200E_PCA
 #include <linux/pci.h>
-#endif
 
 #ifdef CONFIG_ATM_FORE200E_SBA
 #include <asm/idprom.h>

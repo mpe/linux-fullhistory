@@ -48,6 +48,7 @@ mainmenu_option next_comment
 comment 'General setup'
 
 define_bool CONFIG_ISA n
+define_bool CONFIG_SBUS n
 
 bool 'Networking support' CONFIG_NET
 
@@ -73,6 +74,8 @@ bool 'Support for hot-pluggable devices' CONFIG_HOTPLUG
 
 if [ "$CONFIG_HOTPLUG" = "y" ] ; then
    source drivers/pcmcia/Config.in
+else
+   define_bool CONFIG_PCMCIA n
 fi
 
 bool 'System V IPC' CONFIG_SYSVIPC
@@ -169,8 +172,6 @@ endmenu
 if [ "$CONFIG_HOTPLUG" = "y" -a "$CONFIG_PCMCIA" != "n" ]; then
    source drivers/char/pcmcia/Config.in
 fi
-
-#source drivers/misc/Config.in
 
 source fs/Config.in
 

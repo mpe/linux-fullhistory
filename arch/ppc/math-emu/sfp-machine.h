@@ -166,7 +166,7 @@ extern int  fp_pack_ds(void *, long, unsigned long, unsigned long, long, long);
 #include <linux/kernel.h>
 #include <linux/sched.h>
 
-#define __FPU_FPSCR	(current->tss.fpscr)
+#define __FPU_FPSCR	(current->thread.fpscr)
 
 /* We only actually write to the destination register
  * if exceptions signalled (if any) will not trap.

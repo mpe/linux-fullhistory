@@ -29,7 +29,6 @@
 #include <linux/route.h>
 struct in_device;
 #include <net/route.h>
-EXPORT_NO_SYMBOLS;
 
 #if 0
 #define DEBUGP printk
@@ -49,7 +48,7 @@ static int route_mirror(struct sk_buff *skb)
 	}
 	/* check if the interface we are living by is the same as the one we arrived on */
 
-	if (skb->rx_dev != rt->u.dst.dev) {
+	if (skb->rx_dev == rt->u.dst.dev) {
 		/* Drop old route. */
 		dst_release(skb->dst);
 		skb->dst = &rt->u.dst;

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: icmp.c,v 1.27 2000/02/22 23:54:28 davem Exp $
+ *	$Id: icmp.c,v 1.28 2000/03/25 01:55:20 davem Exp $
  *
  *	Based on net/ipv4/icmp.c
  *
@@ -660,6 +660,7 @@ int __init icmpv6_init(struct net_proto_family *ops)
 
 	sk = icmpv6_socket->sk;
 	sk->allocation = GFP_ATOMIC;
+	sk->sndbuf = SK_WMEM_MAX*2;
 	sk->prot->unhash(sk);
 
 	inet6_add_protocol(&icmpv6_protocol);

@@ -1526,9 +1526,10 @@ D: SLS distribution
 D: Initial implementation of VC's, pty's and select()
 
 N: Pavel Machek
-E: pavel@atrey.karlin.mff.cuni.cz
-D: Softcursor for vga, hypertech cdrom support, vcsa bugfix
-D: Network block device, sun4/330 port 
+E: pavel@ucw.cz
+E: pavel@suse.cz
+D: Softcursor for vga, hypertech cdrom support, vcsa bugfix, nbd
+D: sun4/330 port, capabilities for elf, speedup for rm on ext2, USB
 S: Volkova 1131
 S: 198 00 Praha 9
 S: Czech Republic

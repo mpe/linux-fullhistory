@@ -10,14 +10,15 @@
 #define _LINUX_NFS_FS_H
 
 #include <linux/config.h>
-#include <linux/signal.h>
-#include <linux/sched.h>
-#include <linux/pagemap.h>
 #include <linux/in.h>
+#include <linux/mm.h>
+#include <linux/pagemap.h>
 
-#include <linux/sunrpc/sched.h>
+#include <linux/sunrpc/debug.h>
+
 #include <linux/nfs.h>
-#include <linux/nfs_mount.h>
+#include <linux/nfs2.h>
+#include <linux/nfs_xdr.h>
 
 /*
  * Enable debugging support for nfs client.
@@ -66,14 +67,16 @@
 #define NFS_REQUESTLIST(inode)		(NFS_SERVER(inode)->rw_requests)
 #define NFS_ADDR(inode)			(RPC_PEERADDR(NFS_CLIENT(inode)))
 #define NFS_CONGESTED(inode)		(RPC_CONGESTED(NFS_CLIENT(inode)))
-
+#define NFS_COOKIEVERF(inode)		((inode)->u.nfs_i.cookieverf)
 #define NFS_READTIME(inode)		((inode)->u.nfs_i.read_cache_jiffies)
-#define NFS_OLDMTIME(inode)		((inode)->u.nfs_i.read_cache_mtime)
+#define NFS_CACHE_CTIME(inode)		((inode)->u.nfs_i.read_cache_ctime)
+#define NFS_CACHE_MTIME(inode)		((inode)->u.nfs_i.read_cache_mtime)
+#define NFS_CACHE_ATIME(inode)		((inode)->u.nfs_i.read_cache_atime)
+#define NFS_CACHE_ISIZE(inode)		((inode)->u.nfs_i.read_cache_isize)
 #define NFS_NEXTSCAN(inode)		((inode)->u.nfs_i.nextscan)
 #define NFS_CACHEINV(inode) \
 do { \
-	NFS_READTIME(inode) = jiffies - 1000000; \
-	NFS_OLDMTIME(inode) = 0; \
+	NFS_READTIME(inode) = jiffies - NFS_MAXATTRTIMEO(inode) - 1; \
 } while (0)
 #define NFS_ATTRTIMEO(inode)		((inode)->u.nfs_i.attrtimeo)
 #define NFS_MINATTRTIMEO(inode) \
@@ -82,14 +85,17 @@ do { \
 #define NFS_MAXATTRTIMEO(inode) \
 	(S_ISDIR(inode->i_mode)? NFS_SERVER(inode)->acdirmax \
 			       : NFS_SERVER(inode)->acregmax)
+#define NFS_ATTRTIMEO_UPDATE(inode)	((inode)->u.nfs_i.attrtimeo_timestamp)
 
 #define NFS_FLAGS(inode)		((inode)->u.nfs_i.flags)
 #define NFS_REVALIDATING(inode)		(NFS_FLAGS(inode) & NFS_INO_REVALIDATING)
-#define NFS_COOKIES(inode)		((inode)->u.nfs_i.cookies)
-#define NFS_DIREOF(inode)		((inode)->u.nfs_i.direof)
 
 #define NFS_FILEID(inode)		((inode)->u.nfs_i.fileid)
 #define NFS_FSID(inode)			((inode)->u.nfs_i.fsid)
+
+/* Inode Flags */
+#define NFS_USE_READDIRPLUS(inode)	((NFS_FLAGS(inode) & NFS_INO_ADVISE_RDPLUS) ? 1 : 0)
+#define NFS_MONOTONE_COOKIES(inode)	((NFS_SERVER(inode)->flags & NFS_NONMONOTONE_COOKIES) ? 0 : 1)
 
 /*
  * These are the default flags for swap requests
@@ -124,45 +130,6 @@ unsigned long page_index(struct page *page)
 }
 
 #ifdef __KERNEL__
-
-/*
- * linux/fs/nfs/proc.c
- */
-extern int nfs_proc_getattr(struct nfs_server *server, struct nfs_fh *fhandle,
-			struct nfs_fattr *fattr);
-extern int nfs_proc_setattr(struct nfs_server *server, struct nfs_fh *fhandle,
-			struct nfs_fattr *fattr, struct iattr *sattr);
-extern int nfs_proc_lookup(struct nfs_server *server, struct nfs_fh *dir,
-			const char *name, struct nfs_fh *fhandle,
-			struct nfs_fattr *fattr);
-extern int nfs_proc_read(struct nfs_server *server, struct nfs_fh *fhandle,
-			int swap, unsigned long offset, unsigned int count,
-			void *buffer, struct nfs_fattr *fattr);
-extern int nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle,
-			int swap, unsigned long offset, unsigned int count,
-			const void *buffer, struct nfs_fattr *fattr);
-extern int nfs_proc_create(struct nfs_server *server, struct nfs_fh *dir,
-			const char *name, struct iattr *sattr,
-			struct nfs_fh *fhandle, struct nfs_fattr *fattr);
-extern int nfs_proc_remove(struct nfs_server *server, struct nfs_fh *dir,
-			const char *name);
-extern int nfs_proc_rename(struct nfs_server *server,
-			struct nfs_fh *old_dir, const char *old_name,
-			struct nfs_fh *new_dir, const char *new_name);
-extern int nfs_proc_link(struct nfs_server *server, struct nfs_fh *fhandle,
-			struct nfs_fh *dir, const char *name);
-extern int nfs_proc_symlink(struct nfs_server *server, struct nfs_fh *dir,
-			const char *name, const char *path,
-			struct iattr *sattr);
-extern int nfs_proc_mkdir(struct nfs_server *server, struct nfs_fh *dir,
-			const char *name, struct iattr *sattr,
-			struct nfs_fh *fhandle, struct nfs_fattr *fattr);
-extern int nfs_proc_rmdir(struct nfs_server *server, struct nfs_fh *dir,
-			const char *name);
-extern int nfs_proc_statfs(struct nfs_server *server, struct nfs_fh *fhandle,
-			struct nfs_fsinfo *res);
-
-
 /*
  * linux/fs/nfs/inode.c
  */
@@ -191,8 +158,6 @@ extern struct address_space_operations nfs_file_aops;
 extern struct inode_operations nfs_dir_inode_operations;
 extern struct file_operations nfs_dir_operations;
 extern struct dentry_operations nfs_dentry_operations;
-extern void nfs_flush_dircache(struct inode *);
-extern void nfs_free_dircache(struct inode *);
 
 /*
  * linux/fs/nfs/symlink.c
@@ -244,7 +209,7 @@ nfs_wb_all(struct inode *inode)
 static inline int
 nfs_wb_page(struct inode *inode, struct page* page)
 {
-	int error = nfs_sync_file(inode, 0, page_offset(page), PAGE_CACHE_SIZE, FLUSH_WAIT | FLUSH_STABLE);
+	int error = nfs_sync_file(inode, 0, page_index(page), 1, FLUSH_WAIT | FLUSH_STABLE);
 	return (error < 0) ? error : 0;
 }
 
@@ -279,6 +244,30 @@ nfs_revalidate_inode(struct nfs_server *server, struct dentry *dentry)
 	if (time_before(jiffies, NFS_READTIME(inode)+NFS_ATTRTIMEO(inode)))
 		return 0;
 	return __nfs_revalidate_inode(server, dentry);
+}
+
+static inline loff_t
+nfs_size_to_loff_t(__u64 size)
+{
+	loff_t maxsz = (((loff_t) ULONG_MAX) << PAGE_CACHE_SHIFT) + PAGE_CACHE_SIZE - 1;
+	if (size > maxsz)
+		return maxsz;
+	return (loff_t) size;
+}
+
+static inline ino_t
+nfs_fileid_to_ino_t(u64 fileid)
+{
+	ino_t ino = (ino_t) fileid;
+	if (sizeof(ino_t) < sizeof(u64))
+		ino ^= fileid >> (sizeof(u64)-sizeof(ino_t)) * 8;
+	return ino;
+}
+
+static inline time_t
+nfs_time_to_secs(__u64 time)
+{
+	return (time_t)(time >> 32);
 }
 
 /* NFS root */

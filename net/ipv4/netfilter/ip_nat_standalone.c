@@ -230,11 +230,13 @@ static int init_or_cleanup(int init)
 		printk("ip_nat_init: can't register local out hook.\n");
 		goto cleanup_outops;
 	}
-	__MOD_INC_USE_COUNT(ip_conntrack_module);
+	if (ip_conntrack_module)
+		__MOD_INC_USE_COUNT(ip_conntrack_module);
 	return ret;
 
  cleanup:
-	__MOD_DEC_USE_COUNT(ip_conntrack_module);
+	if (ip_conntrack_module)
+		__MOD_DEC_USE_COUNT(ip_conntrack_module);
 	nf_unregister_hook(&ip_nat_local_out_ops);
  cleanup_outops:
 	nf_unregister_hook(&ip_nat_out_ops);
@@ -262,9 +264,11 @@ static void __exit fini(void)
 module_init(init);
 module_exit(fini);
 
+#ifdef MODULE
 EXPORT_SYMBOL(ip_nat_setup_info);
 EXPORT_SYMBOL(ip_nat_helper_register);
 EXPORT_SYMBOL(ip_nat_helper_unregister);
 EXPORT_SYMBOL(ip_nat_expect_register);
 EXPORT_SYMBOL(ip_nat_expect_unregister);
 EXPORT_SYMBOL(ip_nat_cheat_check);
+#endif

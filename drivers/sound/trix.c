@@ -318,7 +318,7 @@ static int __init probe_trix_sb(struct address_info *hw_config)
 	sb_initialized = 1;
 
 	hw_config->name = "AudioTrix SB";
-	return sb_dsp_detect(hw_config, 0, 0);
+	return sb_dsp_detect(hw_config, 0, 0, NULL);
 }
 
 static void __init attach_trix_sb(struct address_info *hw_config)

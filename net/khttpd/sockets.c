@@ -79,7 +79,6 @@ int StartListening(const int Port)
 	error=sock->ops->listen(sock,48);	
 	if (error!=0)
 		(void)printk(KERN_ERR "kHTTPd: Error listening on socket \n");
-	sock->flags |= SO_ACCEPTCON;	
 	
 	MainSocket = sock;
 	

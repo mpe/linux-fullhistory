@@ -125,146 +125,17 @@ struct nfs_fh {
 
 #endif /* __KERNEL__ */
 
-#if defined(__KERNEL__) || defined(NFS_NEED_KERNEL_TYPES)
+#if defined(__KERNEL__)
 
 extern struct rpc_program	nfs_program;
 extern struct rpc_stat		nfs_rpcstat;
-
-struct nfs_time {
-	__u32			seconds;
-	__u32			useconds;
-};
-
-struct nfs_fattr {
-	enum nfs_ftype		type;
-	__u32			mode;
-	__u32			nlink;
-	__u32			uid;
-	__u32			gid;
-	__u32			size;
-	__u32			blocksize;
-	__u32			rdev;
-	__u32			blocks;
-	__u32			fsid;
-	__u32			fileid;
-	struct nfs_time		atime;
-	struct nfs_time		mtime;
-	struct nfs_time		ctime;
-};
-
-struct nfs_fsinfo {
-	__u32			tsize;
-	__u32			bsize;
-	__u32			blocks;
-	__u32			bfree;
-	__u32			bavail;
-};
-
-/* Arguments to the write call.
- * Note that NFS_WRITE_MAXIOV must be <= (MAX_IOVEC-2) from sunrpc/xprt.h
- */
-#define NFS_WRITE_MAXIOV        8
 
 enum nfs3_stable_how {
 	NFS_UNSTABLE = 0,
 	NFS_DATA_SYNC = 1,
 	NFS_FILE_SYNC = 2
 };
-
-struct nfs_writeargs {
-	struct nfs_fh *		fh;
-	__u32			offset;
-	__u32			count;
-	enum nfs3_stable_how	stable;
-	unsigned int		nriov;
-	struct iovec		iov[NFS_WRITE_MAXIOV];
-};
-
-struct nfs_writeverf {
-	enum nfs3_stable_how	committed;
-	__u32			verifier[2];
-};
-
-struct nfs_writeres {
-	struct nfs_fattr *	fattr;
-	struct nfs_writeverf *	verf;
-	__u32			count;
-};
-
-#ifdef NFS_NEED_XDR_TYPES
-
-struct nfs_sattrargs {
-	struct nfs_fh *		fh;
-	struct iattr *		sattr;
-};
-
-struct nfs_diropargs {
-	struct nfs_fh *		fh;
-	const char *		name;
-};
-
-struct nfs_readlinkargs {
-	struct nfs_fh *		fh;
-	const void *		buffer;
-};
-
-struct nfs_readargs {
-	struct nfs_fh *		fh;
-	__u32			offset;
-	__u32			count;
-	void *			buffer;
-};
-
-struct nfs_createargs {
-	struct nfs_fh *		fh;
-	const char *		name;
-	struct iattr *		sattr;
-};
-
-struct nfs_renameargs {
-	struct nfs_fh *		fromfh;
-	const char *		fromname;
-	struct nfs_fh *		tofh;
-	const char *		toname;
-};
-
-struct nfs_linkargs {
-	struct nfs_fh *		fromfh;
-	struct nfs_fh *		tofh;
-	const char *		toname;
-};
-
-struct nfs_symlinkargs {
-	struct nfs_fh *		fromfh;
-	const char *		fromname;
-	const char *		topath;
-	struct iattr *		sattr;
-};
-
-struct nfs_readdirargs {
-	struct nfs_fh *		fh;
-	__u32			cookie;
-	void *			buffer;
-	int			bufsiz;
-};
-
-struct nfs_diropok {
-	struct nfs_fh *		fh;
-	struct nfs_fattr *	fattr;
-};
-
-struct nfs_readres {
-	struct nfs_fattr *	fattr;
-	unsigned int		count;
-};
-
-struct nfs_readdirres {
-	void *			buffer;
-	int			bufsiz;
-	u32			cookie;
-};
-
-#endif /* NFS_NEED_XDR_TYPES */
 #endif /* __KERNEL__ */
+
 
 #endif

@@ -53,6 +53,7 @@ if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
 	    Itsy		CONFIG_SA1100_ITSY \
 	    LART		CONFIG_SA1100_LART \
 	    PLEB		CONFIG_SA1100_PLEB \
+	    ThinClient		CONFIG_SA1100_THINCLIENT \
 	    Victor		CONFIG_SA1100_VICTOR \
 	    Tifon		CONFIG_SA1100_TIFON" Brutus
 fi
@@ -136,6 +137,9 @@ else
    define_bool CONFIG_ISA_DMA n
 fi
 
+define_bool CONFIG_SBUS n
+define_bool CONFIG_PCMCIA n
+
 if [ "$CONFIG_CPU_32" = "y" -a "$CONFIG_ARCH_EBSA110" != "y" ]; then
    bool 'Kernel-mode alignment trap handler' CONFIG_ALIGNMENT_TRAP
 fi
@@ -218,7 +222,6 @@ if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
    fi
 fi
 
-source drivers/usb/Config.in
 
 #source drivers/misc/Config.in
 
@@ -297,6 +300,8 @@ if [ "$CONFIG_ARCH_ACORN" = "y" -o \
 fi
 
 source fs/Config.in
+
+source drivers/usb/Config.in
 
 mainmenu_option next_comment
 comment 'Kernel hacking'

@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.108 2000/02/21 16:25:59 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.109 2000/03/25 01:55:10 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -607,7 +607,7 @@ int inet_stream_connect(struct socket *sock, struct sockaddr * uaddr,
 		if (!timeo || !inet_wait_for_connect(sk, timeo))
 			goto out;
 
-		err = -ERESTARTSYS;
+		err = sock_intr_errno(timeo);
 		if (signal_pending(current))
 			goto out;
 	}

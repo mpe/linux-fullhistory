@@ -98,6 +98,8 @@ extern int valkyriefb_setup(char*);
 extern int control_init(void);
 extern int control_setup(char*);
 extern int g364fb_init(void);
+extern void sa1100fb_init(void);
+extern void sa1100fb_setup(char*);
 extern int fm2fb_init(void);
 extern int fm2fb_setup(char*);
 extern int q40fb_init(void);
@@ -215,6 +217,9 @@ static struct {
 #endif
 #ifdef CONFIG_FB_G364
 	{ "g364", g364fb_init, NULL },
+#endif
+#ifdef CONFIG_FB_SA1100
+	{ "sa1100", sa1100fb_init, sa1100fb_setup },
 #endif
 #ifdef CONFIG_FB_FM2
 	{ "fm2fb", fm2fb_init, fm2fb_setup },

@@ -34,6 +34,7 @@ CONFIG_KMOD=y
 # General setup
 #
 # CONFIG_ISA is not set
+# CONFIG_SBUS is not set
 CONFIG_PCI=y
 CONFIG_NET=y
 CONFIG_SYSCTL=y
@@ -45,6 +46,7 @@ CONFIG_KERNEL_ELF=y
 # CONFIG_BINFMT_MISC is not set
 # CONFIG_PCI_NAMES is not set
 # CONFIG_HOTPLUG is not set
+# CONFIG_PCMCIA is not set
 
 #
 # Parallel port support
@@ -185,6 +187,7 @@ CONFIG_IDEDMA_PCI_EXPERIMENTAL=y
 # CONFIG_BLK_DEV_AEC6210 is not set
 # CONFIG_AEC6210_TUNING is not set
 # CONFIG_BLK_DEV_ALI15X3 is not set
+# CONFIG_WDC_ALI15X3 is not set
 # CONFIG_BLK_DEV_AMD7409 is not set
 # CONFIG_AMD7409_OVERRIDE is not set
 # CONFIG_BLK_DEV_CMD64X is not set

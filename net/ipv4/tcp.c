@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.165 2000/03/23 05:30:32 davem Exp $
+ * Version:	$Id: tcp.c,v 1.166 2000/03/25 01:55:11 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -445,12 +445,6 @@ static __inline__ unsigned int tcp_listen_poll(struct sock *sk, poll_table *wait
 }
 
 /*
- *	Compute minimal free write space needed to queue new packets. 
- */
-#define tcp_min_write_space(__sk) \
-	(atomic_read(&(__sk)->wmem_alloc) / 2)
-
-/*
  *	Wait for a TCP event.
  *
  *	Note that we don't need to lock the socket, as the upper poll layers
@@ -520,7 +514,15 @@ unsigned int tcp_poll(struct file * file, struct socket *sock, poll_table *wait)
 			if (sock_wspace(sk) >= tcp_min_write_space(sk)) {
 				mask |= POLLOUT | POLLWRNORM;
 			} else {  /* send SIGIO later */
-				sk->socket->flags |= SO_NOSPACE;
+				set_bit(SOCK_ASYNC_NOSPACE, &sk->socket->flags);
+				set_bit(SOCK_NOSPACE, &sk->socket->flags);
+
+				/* Race breaker. If space is freed after
+				 * wspace test but before the flags are set,
+				 * IO signal will be lost.
+				 */
+				if (sock_wspace(sk) >= tcp_min_write_space(sk))
+					mask |= POLLOUT | POLLWRNORM;
 			}
 		}
 
@@ -534,18 +536,26 @@ unsigned int tcp_poll(struct file * file, struct socket *sock, poll_table *wait)
  *	Socket write_space callback.
  *	This (or rather the sock_wake_async) should agree with poll.
  *
- *	WARNING. This callback is called from any context (process,
- *	bh or irq). Do not make anything more smart from it.
+ *	WARNING. This callback is called, when socket is not locked.
+ *
+ *	This wakeup is used by TCP only as dead-lock breaker, real
+ *	wakeup occurs when incoming ack frees some space in buffer.
  */
 void tcp_write_space(struct sock *sk)
 {
-	read_lock(&sk->callback_lock);
-	if (!sk->dead) {
-		/* Why??!! Does it really not overshedule? --ANK */
-		wake_up_interruptible(sk->sleep);
+	struct socket *sock;
 
-		if (sock_wspace(sk) >= tcp_min_write_space(sk))
-			sock_wake_async(sk->socket, 2, POLL_OUT);
+	read_lock(&sk->callback_lock);
+	if ((sock = sk->socket) != NULL && atomic_read(&sk->wmem_alloc) == 0) {
+		if (test_bit(SOCK_NOSPACE, &sock->flags)) {
+			if (sk->sleep && waitqueue_active(sk->sleep)) {
+				clear_bit(SOCK_NOSPACE, &sock->flags);
+				wake_up_interruptible(sk->sleep);
+			}
+		}
+
+		if (sock->fasync_list)
+			sock_wake_async(sock, 2, POLL_OUT);
 	}
 	read_unlock(&sk->callback_lock);
 }
@@ -636,7 +646,6 @@ int tcp_listen_start(struct sock *sk)
 		sk->write_space = tcp_listen_write_space;
 		sk_dst_reset(sk);
 		sk->prot->hash(sk);
-		sk->socket->flags |= SO_ACCEPTCON;
 
 		return 0;
 	}
@@ -742,7 +751,7 @@ static int wait_for_tcp_connect(struct sock * sk, int flags, long *timeo_p)
 		if(!*timeo_p)
 			return -EAGAIN;
 		if(signal_pending(tsk))
-			return -ERESTARTSYS;
+			return sock_intr_errno(*timeo_p);
 
 		__set_task_state(tsk, TASK_INTERRUPTIBLE);
 		add_wait_queue(sk->sleep, &wait);
@@ -772,9 +781,12 @@ static long wait_for_tcp_memory(struct sock * sk, long timeo)
 	if (!tcp_memory_free(sk)) {
 		DECLARE_WAITQUEUE(wait, current);
 
-		sk->socket->flags &= ~SO_NOSPACE;
+		clear_bit(SOCK_ASYNC_NOSPACE, &sk->socket->flags);
+
 		add_wait_queue(sk->sleep, &wait);
 		for (;;) {
+			set_bit(SOCK_NOSPACE, &sk->socket->flags);
+
 			set_current_state(TASK_INTERRUPTIBLE);
 
 			if (signal_pending(current))
@@ -830,7 +842,7 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, int size)
 			goto out_unlock;
 
 	/* This should be in poll */
-	sk->socket->flags &= ~SO_NOSPACE; /* clear SIGIO XXX */
+	clear_bit(SOCK_ASYNC_NOSPACE, &sk->socket->flags);
 
 	mss_now = tcp_current_mss(sk);
 
@@ -943,13 +955,15 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, int size)
 
 			/* If we didn't get any memory, we need to sleep. */
 			if (skb == NULL) {
-				sk->socket->flags |= SO_NOSPACE;
+				set_bit(SOCK_ASYNC_NOSPACE, &sk->socket->flags);
+				set_bit(SOCK_NOSPACE, &sk->socket->flags);
+
 				if (!timeo) {
 					err = -EAGAIN;
 					goto do_interrupted;
 				}
 				if (signal_pending(current)) {
-					err = -ERESTARTSYS;
+					err = sock_intr_errno(timeo);
 					goto do_interrupted;
 				}
 				__tcp_push_pending_frames(sk, tp, mss_now);
@@ -1062,7 +1076,8 @@ static int tcp_recv_urg(struct sock * sk, long timeo,
 		msg->msg_flags|=MSG_OOB;
 
 		if(len>0) {
-			err = memcpy_toiovec(msg->msg_iov, &c, 1);
+			if (!(flags & MSG_PEEK))
+				err = memcpy_toiovec(msg->msg_iov, &c, 1);
 			len = 1;
 		} else
 			msg->msg_flags|=MSG_TRUNC;
@@ -1188,14 +1203,14 @@ static long tcp_data_wait(struct sock *sk, long timeo)
 
 	__set_current_state(TASK_INTERRUPTIBLE);
 
-	sk->socket->flags |= SO_WAITDATA;
+	set_bit(SOCK_ASYNC_WAITDATA, &sk->socket->flags);
 	release_sock(sk);
 
 	if (skb_queue_empty(&sk->receive_queue))
 		timeo = schedule_timeout(timeo);
 
 	lock_sock(sk);
-	sk->socket->flags &= ~SO_WAITDATA;
+	clear_bit(SOCK_ASYNC_WAITDATA, &sk->socket->flags);
 
 	remove_wait_queue(sk->sleep, &wait);
 	__set_current_state(TASK_RUNNING);
@@ -1287,9 +1302,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		if (signal_pending(current)) {
 			if (copied)
 				break;
-			copied = -ERESTARTSYS;
-			if (!timeo)
-				copied = -EAGAIN;
+			copied = timeo ? sock_intr_errno(timeo) : -EAGAIN;
 			break;
 		}
 
@@ -1362,7 +1375,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 
 		if (tp->ucopy.task == user_recv) {
 			/* Install new reader */
-			if (user_recv == NULL && !(flags&MSG_PEEK)) {
+			if (user_recv == NULL && !(flags&(MSG_TRUNC|MSG_PEEK))) {
 				user_recv = current;
 				tp->ucopy.task = user_recv;
 				tp->ucopy.iov = msg->msg_iov;
@@ -1370,7 +1383,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 
 			tp->ucopy.len = len;
 
-			BUG_TRAP(tp->copied_seq == tp->rcv_nxt || (flags&MSG_PEEK));
+			BUG_TRAP(tp->copied_seq == tp->rcv_nxt || (flags&(MSG_PEEK|MSG_TRUNC)));
 
 			/* Ugly... If prequeue is not empty, we have to
 			 * process it before releasing socket, otherwise
@@ -1458,12 +1471,15 @@ do_prequeue:
 			}
 		}
 
-		err = memcpy_toiovec(msg->msg_iov, ((unsigned char *)skb->h.th) + skb->h.th->doff*4 + offset, used);
-		if (err) {
-			/* Exception. Bailout! */
-			if (!copied)
-				copied = -EFAULT;
-			break;
+		err = 0;
+		if (!(flags&MSG_TRUNC)) {
+			err = memcpy_toiovec(msg->msg_iov, ((unsigned char *)skb->h.th) + skb->h.th->doff*4 + offset, used);
+			if (err) {
+				/* Exception. Bailout! */
+				if (!copied)
+					copied = -EFAULT;
+				break;
+			}
 		}
 
 		*seq += used;
@@ -1961,7 +1977,7 @@ static int wait_for_connect(struct sock * sk, long timeo)
 		err = -EINVAL;
 		if (sk->state != TCP_LISTEN)
 			break;
-		err = -ERESTARTSYS;
+		err = sock_intr_errno(timeo);
 		if (signal_pending(current))
 			break;
 		err = -EAGAIN;

@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.42 2000/03/15 02:43:35 davem Exp $
+/* $Id: sys_sunos32.c,v 1.43 2000/03/26 11:28:53 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -676,7 +676,7 @@ static int get_default (int value, int def_value)
 }
 
 /* XXXXXXXXXXXXXXXXXXXX */
-asmlinkage int sunos_nfs_mount(char *dir_name, int linux_flags, void *data)
+static int sunos_nfs_mount(char *dir_name, int linux_flags, void *data)
 {
 	int  server_fd;
 	char *the_name;

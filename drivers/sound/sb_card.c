@@ -32,6 +32,10 @@
  * 13-03-2000 Added some more cards, thanks to Torsten Werner.
  *  Removed joystick and wavetable code, there are better places for them.
  *  Code cleanup plus some fixes. 
+ *  Alessandro Zummo <azummo@ita.flashnet.it>
+ * 
+ * 26-03-2000 Fixed acer, esstype and sm_games module options.
+ *  Alessandro Zummo <azummo@ita.flashnet.it>
  *
  */
 
@@ -51,6 +55,22 @@ static int sbmpu = 0;
 
 extern void *smw_free;
 
+/*
+ *    Note DMA2 of -1 has the right meaning in the SB16 driver as well
+ *    as here. It will cause either an error if it is needed or a fallback
+ *    to the 8bit channel.
+ */
+
+static int __initdata mpu_io	= 0;
+static int __initdata io	= -1;
+static int __initdata irq	= -1;
+static int __initdata dma	= -1;
+static int __initdata dma16	= -1;   /* Set this for modules that need it */
+static int __initdata type	= 0;    /* Can set this to a specific card type */
+static int __initdata esstype   = 0;	/* ESS chip type */
+static int __initdata acer 	= 0;	/* Do acer notebook init? */
+static int __initdata sm_games 	= 0;	/* Logitech soundman games? */
+
 static void __init attach_sb_card(struct address_info *hw_config)
 {
 	if(!sb_dsp_init(hw_config))
@@ -60,6 +80,8 @@ static void __init attach_sb_card(struct address_info *hw_config)
 
 static int __init probe_sb(struct address_info *hw_config)
 {
+	struct sb_module_options sbmo;
+
 	if (hw_config->io_base == -1 || hw_config->dma == -1 || hw_config->irq == -1)
 	{
 		printk(KERN_ERR "sb_card: I/O, IRQ, and DMA are mandatory\n");
@@ -127,14 +149,21 @@ iobase=0x%x irq=%d lo_dma=%d hi_dma=%d\n",
 	}
 #endif
 
-	/* This is useless since is done by sb_dsp_detect - azummo */
+	/* This is useless since it is done by sb_dsp_detect - azummo */
 	
 	if (check_region(hw_config->io_base, 16))
 	{
 		printk(KERN_ERR "sb_card: I/O port 0x%x is already in use\n\n", hw_config->io_base);
 		return 0;
 	}
-	return sb_dsp_detect(hw_config, 0, 0);
+
+	/* Setup extra module options */
+
+	sbmo.acer 	= acer;
+	sbmo.sm_games	= sm_games;
+	sbmo.esstype	= esstype;
+
+	return sb_dsp_detect(hw_config, 0, 0, &sbmo);
 }
 
 static void __exit unload_sb(struct address_info *hw_config)
@@ -143,25 +172,11 @@ static void __exit unload_sb(struct address_info *hw_config)
 		sb_dsp_unload(hw_config, sbmpu);
 }
 
-extern int esstype;	/* ESS chip type */
-
 static struct address_info cfg;
 static struct address_info cfg_mpu;
 
 struct pci_dev 	*sb_dev 	= NULL, 
 		*mpu_dev	= NULL;
-/*
- *    Note DMA2 of -1 has the right meaning in the SB16 driver as well
- *    as here. It will cause either an error if it is needed or a fallback
- *    to the 8bit channel.
- */
-
-static int __initdata mpu_io	= 0;
-static int __initdata io	= -1;
-static int __initdata irq	= -1;
-static int __initdata dma	= -1;
-static int __initdata dma16	= -1;   /* Set this for modules that need it */
-static int __initdata type	= 0;    /* Can set this to a specific card type */
 
 
 #if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE

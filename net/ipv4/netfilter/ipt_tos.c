@@ -5,8 +5,6 @@
 #include <linux/netfilter_ipv4/ipt_tos.h>
 #include <linux/netfilter_ipv4/ip_tables.h>
 
-EXPORT_NO_SYMBOLS;
-
 static int
 match(const struct sk_buff *skb,
       const struct net_device *in,

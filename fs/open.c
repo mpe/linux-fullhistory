@@ -685,9 +685,7 @@ struct file *dentry_open(struct dentry *dentry, int flags)
 	f->f_dentry = dentry;
 	f->f_pos = 0;
 	f->f_reada = 0;
-	f->f_op = NULL;
-	if (inode->i_op)
-		f->f_op = inode->i_fop;
+	f->f_op = inode->i_fop;
 	if (inode->i_sb)
 		file_move(f, &inode->i_sb->s_files);
 	if (f->f_op && f->f_op->open) {

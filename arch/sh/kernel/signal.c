@@ -1,4 +1,4 @@
-/* $Id: signal.c,v 1.16 2000/01/29 11:31:31 gniibe Exp gniibe $
+/* $Id: signal.c,v 1.21 2000/03/11 14:06:21 gniibe Exp $
  *
  *  linux/arch/sh/kernel/signal.c
  *
@@ -6,7 +6,7 @@
  *
  *  1997-11-28  Modified for POSIX.1b signals by Richard Henderson
  *
- *  SuperH version:  Copyright (C) 1999  Niibe Yutaka
+ *  SuperH version:  Copyright (C) 1999, 2000  Niibe Yutaka & Kaz Kojima
  *
  */
 
@@ -125,7 +125,7 @@ sys_sigaltstack(const stack_t *uss, stack_t *uoss,
 		unsigned long r6, unsigned long r7,
 		struct pt_regs regs)
 {
-	return do_sigaltstack(uss, uoss, regs.sp);
+	return do_sigaltstack(uss, uoss, regs.regs[15]);
 }
 
 
@@ -136,7 +136,6 @@ sys_sigaltstack(const stack_t *uss, stack_t *uoss,
 struct sigframe
 {
 	struct sigcontext sc;
-	/* FPU data should come here: SH-3 has no FPU */
 	unsigned long extramask[_NSIG_WORDS-1];
 	char retcode[4];
 };
@@ -147,10 +146,38 @@ struct rt_sigframe
 	void *puc;
 	struct siginfo info;
 	struct ucontext uc;
-	/* FPU should come here: SH-3 has no FPU */
 	char retcode[4];
 };
 
+#if defined(__SH4__)
+static inline int restore_sigcontext_fpu(struct sigcontext *sc)
+{
+	current->used_math = 1;
+	return __copy_from_user(&tsk->thread.fpu.hard, &sc->sc_fpregs[0],
+				sizeof(long)*(NUM_FPU_REGS*2+2));
+}
+
+static inline int save_sigcontext_fpu(struct sigcontext *sc)
+{
+	struct task_struct *tsk = current;
+
+	if (!tsk->used_math) {
+		sc->owend_fp = 0;
+		return 0;
+	}
+
+	sc->owend_fp = 1;
+
+	/* This will cause a "finit" to be triggered by the next
+	   attempted FPU operation by the 'current' process.
+	   */
+	tsk->used_math = 0;
+
+	unlazy_fpu(tsk);
+	return __copy_to_user(&sc->sc_fpregs[0], &tsk->thread.fpu.hard,
+			      sizeof(long)*(NUM_FPU_REGS*2+2));
+}
+#endif
 
 static int
 restore_sigcontext(struct pt_regs *regs, struct sigcontext *sc, int *r0_p)
@@ -165,15 +192,28 @@ restore_sigcontext(struct pt_regs *regs, struct sigcontext *sc, int *r0_p)
 	COPY(regs[8]);	COPY(regs[9]);
 	COPY(regs[10]);	COPY(regs[11]);
 	COPY(regs[12]);	COPY(regs[13]);
-	COPY(regs[14]);	COPY(sp);
+	COPY(regs[14]);	COPY(regs[15]);
 	COPY(gbr);	COPY(mach);
 	COPY(macl);	COPY(pr);
 	COPY(sr);	COPY(pc);
 #undef COPY
 
+#if defined(__SH4__)
+	{
+		int owned_fp;
+		struct task_struct *tsk = current;
+
+		regs->sr |= SR_FD; /* Release FPU */
+		clear_fpu(tsk);
+		current->used_math = 0;
+		__get_user (owned_fp, &context->sc_ownedfp);
+		if (owned_fp)
+			err |= restore_sigcontext_fpu(sc);
+	}
+#endif
+
 	regs->syscall_nr = -1;		/* disable syscall checks */
 	err |= __get_user(*r0_p, &sc->sc_regs[0]);
-
 	return err;
 }
 
@@ -181,7 +221,7 @@ asmlinkage int sys_sigreturn(unsigned long r4, unsigned long r5,
 			     unsigned long r6, unsigned long r7,
 			     struct pt_regs regs)
 {
-	struct sigframe *frame = (struct sigframe *)regs.sp;
+	struct sigframe *frame = (struct sigframe *)regs.regs[15];
 	sigset_t set;
 	int r0;
 
@@ -214,7 +254,7 @@ asmlinkage int sys_rt_sigreturn(unsigned long r4, unsigned long r5,
 				unsigned long r6, unsigned long r7,
 				struct pt_regs regs)
 {
-	struct rt_sigframe *frame = (struct rt_sigframe *)regs.sp;
+	struct rt_sigframe *frame = (struct rt_sigframe *)regs.regs[15];
 	sigset_t set;
 	stack_t st;
 	int r0;
@@ -238,7 +278,7 @@ asmlinkage int sys_rt_sigreturn(unsigned long r4, unsigned long r5,
 		goto badframe;
 	/* It is more difficult to avoid calling this function than to
 	   call it and ignore errors.  */
-	do_sigaltstack(&st, NULL, regs.sp);
+	do_sigaltstack(&st, NULL, regs.regs[15]);
 
 	return r0;
 
@@ -265,11 +305,15 @@ setup_sigcontext(struct sigcontext *sc, struct pt_regs *regs,
 	COPY(regs[8]);	COPY(regs[9]);
 	COPY(regs[10]);	COPY(regs[11]);
 	COPY(regs[12]);	COPY(regs[13]);
-	COPY(regs[14]);	COPY(sp);
+	COPY(regs[14]);	COPY(regs[15]);
 	COPY(gbr);	COPY(mach);
 	COPY(macl);	COPY(pr);
 	COPY(sr);	COPY(pc);
 #undef COPY
+
+#if defined(__SH4__)
+	err |= save_sigcontext_fpu(sc);
+#endif
 
 	/* non-iBCS2 extensions.. */
 	err |= __put_user(mask, &sc->oldmask);
@@ -296,7 +340,7 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 	int err = 0;
 	int signal;
 
-	frame = get_sigframe(ka, regs->sp, sizeof(*frame));
+	frame = get_sigframe(ka, regs->regs[15], sizeof(*frame));
 
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		goto give_sigsegv;
@@ -334,7 +378,7 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 		goto give_sigsegv;
 
 	/* Set up registers for signal handler */
-	regs->sp = (unsigned long) frame;
+	regs->regs[15] = (unsigned long) frame;
 	regs->regs[4] = signal; /* Arg for signal handler */
 	regs->pc = (unsigned long) ka->sa.sa_handler;
 
@@ -361,7 +405,7 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	int err = 0;
 	int signal;
 
-	frame = get_sigframe(ka, regs->sp, sizeof(*frame));
+	frame = get_sigframe(ka, regs->regs[15], sizeof(*frame));
 
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		goto give_sigsegv;
@@ -381,7 +425,8 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	err |= __put_user(0, &frame->uc.uc_link);
 	err |= __put_user((void *)current->sas_ss_sp,
 			  &frame->uc.uc_stack.ss_sp);
-	err |= __put_user(sas_ss_flags(regs->sp), &frame->uc.uc_stack.ss_flags);
+	err |= __put_user(sas_ss_flags(regs->regs[15]),
+			  &frame->uc.uc_stack.ss_flags);
 	err |= __put_user(current->sas_ss_size, &frame->uc.uc_stack.ss_size);
 	err |= setup_sigcontext(&frame->uc.uc_mcontext,
 			        regs, set->sig[0]);
@@ -407,7 +452,7 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 		goto give_sigsegv;
 
 	/* Set up registers for signal handler */
-	regs->sp = (unsigned long) frame;
+	regs->regs[15] = (unsigned long) frame;
 	regs->regs[4] = signal; /* Arg for signal handler */
 	regs->pc = (unsigned long) ka->sa.sa_handler;
 

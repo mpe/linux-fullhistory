@@ -1073,6 +1073,12 @@ int __init blk_dev_init(void)
 #ifdef CONFIG_BLK_DEV_NBD
 	nbd_init();
 #endif
+#ifdef CONFIG_MDISK
+	mdisk_init();
+#endif
+#ifdef CONFIG_DASD
+	dasd_init();
+#endif
 	return 0;
 };
 

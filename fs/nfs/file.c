@@ -22,6 +22,7 @@
 #include <linux/fcntl.h>
 #include <linux/stat.h>
 #include <linux/nfs_fs.h>
+#include <linux/nfs_mount.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <linux/pagemap.h>

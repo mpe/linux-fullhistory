@@ -9,8 +9,6 @@
 
 #include <linux/netfilter_ipv4/ip_tables.h>
 
-EXPORT_NO_SYMBOLS;
-
 #define limpk(format, args...)						 \
 do {									 \
 	if (net_ratelimit())						 \

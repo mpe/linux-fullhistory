@@ -435,17 +435,35 @@ ENTRY(cpu_sa1100_proc_fin)
 		ldmfd	sp!, {r1, pc}
 
 		.align	5
+idle:		mcr	p15, 0, r0, c15, c8, 2		@ Wait for interrupt
+		mov	r0, r0				@ safety
+		mov	pc, lr
+/*
+ * Function: *_do_idle
+ * Params  : r0 = call type:
+ *           0 = slow idle
+ *           1 = fast idle
+ *           2 = switch to slow processor clock
+ *           3 = switch to fast processor clock
+ */
 ENTRY(cpu_sa110_do_idle)
 ENTRY(cpu_sa1100_do_idle)
-		mov	r0, #0
-		mcr	p15, 0, r0, c15, c2, 2		@ Disable clock switching
-		ldr	r1, =FLUSH_BASE+FLUSH_OFFSET*2	@ load from uncacheable loc
-		ldr	r1, [r1, #0]
-		b	1f
+		mov	ip, #0
+		cmp	r0, #4
+		addcc	pc, pc, r0, lsl #2
+		mov	pc, lr
 
-		.align	5
-1:		mcr	p15, 0, r0, c15, c8, 2		@ Wait for interrupt
-		mcr	p15, 0, r0, c15, c1, 2		@ Enable clock switching
+		b	idle
+		b	idle
+		b	slow_clock
+		b	fast_clock
+
+fast_clock:	mcr	p15, 0, ip, c15, c1, 2		@ enable clock switching
+		mov	pc, lr
+
+slow_clock:	mcr	p15, 0, ip, c15, c2, 2		@ disable clock switching
+		ldr	r1, =UNCACHEABLE_ADDR		@ load from uncacheable loc
+		ldr	r1, [r1, #0]			@ force switch to MCLK
 		mov	pc, lr
 
 /*

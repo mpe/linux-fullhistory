@@ -8,8 +8,11 @@
 
 #include <asm/iomd.h>
 
-#define arch_do_idle()				\
-	outb(0, IOMD_SUSMODE)
+extern __inline__ void arch_idle(void)
+{
+	while (!current->need_resched && !hlt_counter)
+		outb(0, IOMD_SUSMODE);
+}
 
 #define arch_reset(mode)			\
 	do {					\

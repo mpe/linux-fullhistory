@@ -58,7 +58,7 @@
 #define FLASH_BASE		0xf8000000
 
 #define PCIMEM_SIZE		0x01000000
-#define PCIMEM_BASE		0xe0000000
+#define PCIMEM_BASE		0xf0000000
 
 #elif defined(CONFIG_ARCH_CO285)
 
@@ -105,6 +105,7 @@
 #define PARAMS_BASE		(PAGE_OFFSET + PARAMS_OFFSET)
 
 #define FLUSH_BASE_PHYS		0x50000000
+#define UNCACHEABLE_ADDR	(ARMCSR_BASE + 0x108)
 
 
 /* PIC irq control */

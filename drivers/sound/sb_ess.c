@@ -196,8 +196,6 @@
 #define ESSTYPE_LIKE20	-1		/* Mimic 2.0 behaviour					*/
 #define ESSTYPE_DETECT	0		/* Mimic 2.0 behaviour					*/
 
-int esstype = ESSTYPE_DETECT; /* module parameter in sb_card.c */
-
 #define SUBMDL_ES1788	0x10	/* Subtype ES1788 for specific handling */
 #define SUBMDL_ES1868	0x11	/* Subtype ES1868 for specific handling */
 #define SUBMDL_ES1869	0x12	/* Subtype ES1869 for specific handling */
@@ -1066,7 +1064,7 @@ int ess_init(sb_devc * devc, struct address_info *hw_config)
 		char *chip = NULL;
 		int submodel = -1;
 
-		switch (esstype) {
+		switch (devc->sbmo.esstype) {
 		case ESSTYPE_DETECT:
 		case ESSTYPE_LIKE20:
 			break;
@@ -1098,12 +1096,12 @@ int ess_init(sb_devc * devc, struct address_info *hw_config)
 			submodel = SUBMDL_ES1888;
 			break;
 		default:
-			printk (KERN_ERR "Invalid esstype=%d specified\n", esstype);
+			printk (KERN_ERR "Invalid esstype=%d specified\n", devc->sbmo.esstype);
 			return 0;
 		};
 		if (submodel != -1) {
 			devc->submodel = submodel;
-			sprintf (modelname, "ES%d", esstype);
+			sprintf (modelname, "ES%d", devc->sbmo.esstype);
 			chip = modelname;
 		};
 		if (chip == NULL && (ess_minor & 0x0f) < 8) {
@@ -1116,7 +1114,7 @@ FKS_test (devc);
 		 * If Nothing detected yet, and we want 2.0 behaviour...
 		 * Then let's assume it's ES1688.
 		 */
-		if (chip == NULL && esstype == ESSTYPE_LIKE20) {
+		if (chip == NULL && devc->sbmo.esstype == ESSTYPE_LIKE20) {
 			chip = "ES1688";
 		};
 
@@ -1185,11 +1183,11 @@ FKS_test (devc);
 
 	    printk ( KERN_INFO "ESS chip %s %s%s\n"
                , chip
-               , ( esstype == ESSTYPE_DETECT || esstype == ESSTYPE_LIKE20
+               , ( devc->sbmo.esstype == ESSTYPE_DETECT || devc->sbmo.esstype == ESSTYPE_LIKE20
                  ? "detected"
                  : "specified"
                  )
-               , ( esstype == ESSTYPE_LIKE20
+               , ( devc->sbmo.esstype == ESSTYPE_LIKE20
                  ? " (kernel 2.0 compatible)"
                  : ""
                  )

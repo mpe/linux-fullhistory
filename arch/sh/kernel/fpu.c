@@ -1,4 +1,4 @@
-/* $Id: fpu.c,v 1.27 2000/03/05 01:48:34 gniibe Exp $
+/* $Id: fpu.c,v 1.29 2000/03/22 13:42:10 gniibe Exp $
  *
  * linux/arch/sh/kernel/fpu.c
  *
@@ -114,8 +114,6 @@ restore_fpu(struct task_struct *tsk)
  * has the property that no matter wether considered as single or as
  * double precission represents signaling NANS.  
  */
-/* Double presision, NANS as NANS, rounding to nearest, no exceptions */
-#define FPU_DEFAULT  0x00080000
 
 void fpu_init(void)
 {
@@ -156,7 +154,7 @@ void fpu_init(void)
 		     "fsts	$fpul, $fr15\n\t"
 		     "frchg"
 		     : /* no output */
-		     : "r" (0), "r" (FPU_DEFAULT));
+		     : "r" (0), "r" (FPSCR_INIT));
 }
 
 asmlinkage void

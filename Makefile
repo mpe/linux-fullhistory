@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 3
 SUBLEVEL = 99
-EXTRAVERSION = -pre3
+EXTRAVERSION = -pre4
 
 KERNELRELEASE=$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)
 
@@ -88,7 +88,7 @@ CPPFLAGS += -D__SMP__
 endif
 
 CFLAGS := $(CPPFLAGS) -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
-AFLAGS := $(CPPFLAGS)
+AFLAGS := $(CPPFLAGS) -D__ASSEMBLY__ -traditional
 
 # use '-fno-strict-aliasing', but only if the compiler can take it
 CFLAGS += $(shell if $(CC) -fno-strict-aliasing -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-fno-strict-aliasing"; fi)
@@ -185,9 +185,9 @@ include arch/$(ARCH)/Makefile
 export	NETWORKS DRIVERS LIBS HEAD LDFLAGS LINKFLAGS MAKEBOOT ASFLAGS
 
 .S.s:
-	$(CPP) -D__ASSEMBLY__ $(AFLAGS) -traditional -o $*.s $<
+	$(CPP) $(AFLAGS) -o $*.s $<
 .S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c -o $*.o $<
+	$(CC) $(AFLAGS) -c -o $*.o $<
 
 Version: dummy
 	@rm -f include/linux/compile.h
@@ -374,6 +374,7 @@ clean:	archclean
 	rm -f net/khttpd/times.h
 	rm -f submenu*
 	rm -rf modules
+	$(MAKE) -C Documentation/DocBook clean
 
 mrproper: clean archmrproper
 	rm -f include/linux/autoconf.h include/linux/version.h
@@ -398,8 +399,7 @@ mrproper: clean archmrproper
 	rm -f .hdepend scripts/mkdep scripts/split-include scripts/docproc
 	rm -f $(TOPDIR)/include/linux/modversions.h
 	rm -rf $(TOPDIR)/include/linux/modules
-	make clean TOPDIR=$(TOPDIR) -C Documentation/DocBook
-
+	$(MAKE) -C Documentation/DocBook mrproper
 distclean: mrproper
 	rm -f core `find . \( -name '*.orig' -o -name '*.rej' -o -name '*~' \
 		-o -name '*.bak' -o -name '#*#' -o -name '.*.orig' \
@@ -412,6 +412,14 @@ backup: mrproper
 sgmldocs: 
 	$(MAKE) -C $(TOPDIR)/Documentation/DocBook books
 
+psdocs: sgmldocs
+	$(MAKE) -C scripts docproc
+	$(MAKE) -C Documentation/DocBook ps
+
+pdfdocs: sgmldocs
+	$(MAKE) -C scripts docproc
+	$(MAKE) -C Documentation/DocBook pdf
+ 
 sums:
 	find . -type f -print | sort | xargs sum > .SUMS
 

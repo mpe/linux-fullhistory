@@ -1670,14 +1670,14 @@ static int dn_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 			goto out;
 		}
 
-		sock->flags |= SO_WAITDATA;
+		set_bit(SOCK_ASYNC_WAITDATA, &sock->flags);
 		SOCK_SLEEP_PRE(sk)
 
 		if (!dn_data_ready(sk, queue, flags, target))
 			schedule();
 
 		SOCK_SLEEP_POST(sk)
-		sock->flags &= ~SO_WAITDATA;
+		clear_bit(SOCK_ASYNC_WAITDATA, &sock->flags);
 	}
 
 	for(skb = queue->next; skb != (struct sk_buff *)queue; skb = nskb) {

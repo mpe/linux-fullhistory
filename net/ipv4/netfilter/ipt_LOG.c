@@ -24,10 +24,6 @@ struct esphdr {
 	__u32   spi;
 }; /* FIXME evil kludge */
         
-/* Make init and cleanup non-static, so gcc doesn't warn about unused,
-   but don't export the symbols */
-EXPORT_NO_SYMBOLS;
-
 /* Use lock to serialize, so printks don't overlap */
 static spinlock_t log_lock = SPIN_LOCK_UNLOCKED;
 
@@ -353,15 +349,15 @@ static struct ipt_target ipt_log_reg
 
 static int __init init(void)
 {
-    if (ipt_register_target(&ipt_log_reg))
-	return -EINVAL;
+	if (ipt_register_target(&ipt_log_reg))
+		return -EINVAL;
 
-    return 0;
+	return 0;
 }
 
 static void __exit fini(void)
 {
-    ipt_unregister_target(&ipt_log_reg);
+	ipt_unregister_target(&ipt_log_reg);
 }
 
 module_init(init);

@@ -9,7 +9,7 @@
  * 
  * Released under GPL v.2 license.
  *
- * Version: 1.09
+ * Version: 1.10
  *
  * Please see the file: linux/Documentation/usb/ov511.txt 
  * and the website at:  http://alpha.dyndns.org/ov511 
@@ -33,8 +33,6 @@
  */
 
 #define __NO_VERSION__
-
-/* Handle mangled (versioned) external symbols */
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -83,10 +81,14 @@ static int fix_rgb_offset = 0;
 /* Snapshot mode enabled flag */
 static int snapshot = 0;
 
+/* Sensor detection override (global for all attached cameras) */
+static int sensor = 0;
+
 MODULE_PARM(autoadjust, "i");
 MODULE_PARM(debug, "i");
 MODULE_PARM(fix_rgb_offset, "i");
 MODULE_PARM(snapshot, "i");
+MODULE_PARM(sensor, "i");
 
 MODULE_AUTHOR("Mark McClelland (and others)");
 MODULE_DESCRIPTION("OV511 USB Camera Driver");
@@ -210,7 +212,9 @@ static void rvfree(void *mem, unsigned long size)
 	vfree(mem);
 }
 
-int ov511_reg_write(struct usb_device *dev, unsigned char reg, unsigned char value)
+static int ov511_reg_write(struct usb_device *dev,
+                           unsigned char reg,
+                           unsigned char value)
 {
 	int rc;
 
@@ -219,14 +223,17 @@ int ov511_reg_write(struct usb_device *dev, unsigned char reg, unsigned char val
 		2 /* REG_IO */,
 		USB_TYPE_CLASS | USB_RECIP_DEVICE,
 		0, (__u16)reg, &value, 1, HZ);	
-			
+
 	PDEBUG(5, "reg write: 0x%02X:0x%02X, 0x%x", reg, value, rc);
-		
+
+	if (rc < 0)
+		err("ov511_reg_write: error %d", rc);
+
 	return rc;
 }
 
 /* returns: negative is error, pos or zero is data */
-int ov511_reg_read(struct usb_device *dev, unsigned char reg)
+static int ov511_reg_read(struct usb_device *dev, unsigned char reg)
 {
 	int rc;
 	unsigned char buffer[1];
@@ -239,13 +246,17 @@ int ov511_reg_read(struct usb_device *dev, unsigned char reg)
                                
 	PDEBUG(5, "reg read: 0x%02X:0x%02X", reg, buffer[0]);
 	
-	if(rc < 0)
+	if(rc < 0) {
+		err("ov511_reg_read: error %d", rc);
 		return rc;
+	}
 	else
 		return buffer[0];	
 }
 
-int ov511_i2c_write(struct usb_device *dev, unsigned char reg, unsigned char value)
+static int ov511_i2c_write(struct usb_device *dev,
+                           unsigned char reg,
+                           unsigned char value)
 {
 	int rc, retries;
 
@@ -255,19 +266,19 @@ int ov511_i2c_write(struct usb_device *dev, unsigned char reg, unsigned char val
 	for(retries = OV511_I2C_RETRIES;;) {
 		/* Select camera register */
 		rc = ov511_reg_write(dev, OV511_REG_I2C_SUB_ADDRESS_3_BYTE, reg);
-		if (rc < 0) return rc;
+		if (rc < 0) goto error;
 
 		/* Write "value" to I2C data port of OV511 */
 		rc = ov511_reg_write(dev, OV511_REG_I2C_DATA_PORT, value);	
-		if (rc < 0) return rc;
+		if (rc < 0) goto error;
 
 		/* Initiate 3-byte write cycle */
 		rc = ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x01);
-		if (rc < 0) return rc;
+		if (rc < 0) goto error;
 
 		do rc = ov511_reg_read(dev, OV511_REG_I2C_CONTROL);
 		while(rc > 0 && ((rc&1) == 0)); /* Retry until idle */
-		if (rc < 0) return rc;
+		if (rc < 0) goto error;
 
 		if((rc&2) == 0) /* Ack? */
 			break;
@@ -275,14 +286,22 @@ int ov511_i2c_write(struct usb_device *dev, unsigned char reg, unsigned char val
 		/* I2C abort */	
 		ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x10);
 #endif
-		if (--retries < 0) return -1;
+		if (--retries < 0) {
+			err("i2c write retries exhausted");
+			rc = -1;
+			goto error;
+		}
 	}
 
 	return 0;
+
+error:
+	err("ov511_i2c_write: error %d", rc);
+	return rc;
 }
 
 /* returns: negative is error, pos or zero is data */
-int ov511_i2c_read(struct usb_device *dev, unsigned char reg)
+static int ov511_i2c_read(struct usb_device *dev, unsigned char reg)
 {
 	int rc, value, retries;
 
@@ -290,15 +309,15 @@ int ov511_i2c_read(struct usb_device *dev, unsigned char reg)
 	for(retries = OV511_I2C_RETRIES;;) {
 		/* Select camera register */
 		rc = ov511_reg_write(dev, OV511_REG_I2C_SUB_ADDRESS_2_BYTE, reg);
-		if (rc < 0) return rc;
+		if (rc < 0) goto error;
 
 		/* Initiate 2-byte write cycle */
 		rc = ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x03);
-		if (rc < 0) return rc;
+		if (rc < 0) goto error;
 
 		do rc = ov511_reg_read(dev, OV511_REG_I2C_CONTROL);
 		while(rc > 0 && ((rc&1) == 0)); /* Retry until idle */
-		if (rc < 0) return rc;
+		if (rc < 0) goto error;
 
 		if((rc&2) == 0) /* Ack? */
 			break;
@@ -306,27 +325,35 @@ int ov511_i2c_read(struct usb_device *dev, unsigned char reg)
 		/* I2C abort */	
 		ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x10);
 
-		if (--retries < 0) return -1;
+		if (--retries < 0) {
+			err("i2c write retries exhausted");
+			rc = -1;
+			goto error;
+		}
 	}
 
 	/* Two byte read cycle */
 	for(retries = OV511_I2C_RETRIES;;) {
 		/* Initiate 2-byte read cycle */
 		rc = ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x05);
-		if (rc < 0) return rc;
+		if (rc < 0) goto error;
 
 		do rc = ov511_reg_read(dev, OV511_REG_I2C_CONTROL);
 		while(rc > 0 && ((rc&1) == 0)); /* Retry until idle */
-		if (rc < 0) return rc;
+		if (rc < 0) goto error;
 
 		if((rc&2) == 0) /* Ack? */
 			break;
 
 		/* I2C abort */	
 		rc = ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x10);
-		if (rc < 0) return rc;
+		if (rc < 0) goto error;
 
-		if (--retries < 0) return -1;
+		if (--retries < 0) {
+			err("i2c read retries exhausted");
+			rc = -1;
+			goto error;
+		}
 	}
 
 	value = ov511_reg_read(dev, OV511_REG_I2C_DATA_PORT);
@@ -335,60 +362,41 @@ int ov511_i2c_read(struct usb_device *dev, unsigned char reg)
 		
 	/* This is needed to make ov511_i2c_write() work */
 	rc = ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x05);
-	if (rc < 0) return rc;
+	if (rc < 0) goto error;
 	
-	return (value);
+	return value;
+
+error:
+	err("ov511_i2c_read: error %d", rc);
+	return rc;
 }
-
-
-// This version doesn't always work
-#if 0
- /* returns: negative is error, pos or zero is data */
- int ov511_i2c_read(struct usb_device *dev, unsigned char reg)
- {
-	int rc, value;
-
-	/* Select camera register */
-	rc = ov511_reg_write(dev, OV511_REG_I2C_SUB_ADDRESS_2_BYTE, reg);
-	if (rc < 0) return rc;
- 
-
-	/* Initiate 2-byte write cycle */
-	rc = ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x03);
-	if (rc < 0) return rc;
- 
-
-	/* Initiate 2-byte read cycle */
-	rc = ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x05);
-	if (rc < 0) return rc;
- 
- 	value = ov511_reg_read(dev, OV511_REG_I2C_DATA_PORT);
-
- 	PDEBUG(5, "i2c read: 0x%02X:0x%02X", reg, value);
- 		
- 	return (value);
- }
-#endif
 
 static int ov511_write_regvals(struct usb_device *dev,
 			       struct ov511_regvals * pRegvals)
 {
-	int ret;
+	int rc;
+
 	while(pRegvals->bus != OV511_DONE_BUS) {
 		if (pRegvals->bus == OV511_REG_BUS) {
-			if ((ret = ov511_reg_write(dev, pRegvals->reg,
+			if ((rc = ov511_reg_write(dev, pRegvals->reg,
 			                           pRegvals->val)) < 0)
-				return ret;
+				goto error;
 		} else if (pRegvals->bus == OV511_I2C_BUS) {
-			if ((ret = ov511_i2c_write(dev, pRegvals->reg, 
+			if ((rc = ov511_i2c_write(dev, pRegvals->reg, 
 			                           pRegvals->val)) < 0)
-				return ret;
+				goto error;
 		} else {
-		  err("Bad regval array");
+			err("Bad regval array");
+			rc = -1;
+			goto error;
 		}
 		pRegvals++;
 	}
 	return 0;
+
+error:
+	err("ov511_write_regvals: error %d", rc);
+	return rc;
 }
 
 #if 0
@@ -396,10 +404,9 @@ static void ov511_dump_i2c_range( struct usb_device *dev, int reg1, int regn)
 {
 	int i;
 	int rc;
-	for(i=reg1; i<=regn; i++) {
-	  rc = ov511_i2c_read(dev, i);
-
-	  PDEBUG(1, "OV7610[0x%X] = 0x%X", i, rc);
+	for(i = reg1; i <= regn; i++) {
+		rc = ov511_i2c_read(dev, i);
+		PDEBUG(1, "OV7610[0x%X] = 0x%X", i, rc);
 	}
 }
 
@@ -413,7 +420,7 @@ static void ov511_dump_reg_range( struct usb_device *dev, int reg1, int regn)
 {
 	int i;
 	int rc;
-	for(i=reg1; i<=regn; i++) {
+	for(i = reg1; i <= regn; i++) {
 	  rc = ov511_reg_read(dev, i);
 	  PDEBUG(1, "OV511[0x%X] = 0x%X", i, rc);
 	}
@@ -443,72 +450,82 @@ static void ov511_dump_regs( struct usb_device *dev)
 }
 #endif
 
-int ov511_reset(struct usb_device *dev, unsigned char reset_type)
+static int ov511_reset(struct usb_device *dev, unsigned char reset_type)
 {
 	int rc;
 	
 	PDEBUG(3, "Reset: type=0x%X", reset_type);
 	rc = ov511_reg_write(dev, OV511_REG_SYSTEM_RESET, reset_type);
-	if (rc < 0)
-		err("reset: command failed");
-
 	rc = ov511_reg_write(dev, OV511_REG_SYSTEM_RESET, 0);
+
 	if (rc < 0)
 		err("reset: command failed");
 
 	return rc;
 }
 
-int ov511_set_packet_size(struct usb_ov511 *ov511, int size)
+/* Temporarily stops OV511 from functioning. Must do this before changing
+ * registers while the camera is streaming */
+static inline int ov511_stop(struct usb_device *dev)
 {
-	int alt, multiplier, rc;
-		
-	PDEBUG(3, "set packet size: %d", size);
-	
-	switch (size) {
-		case 992:
-			alt = 0;
-			multiplier = 31;
-			break;
-		case 993:
-			alt = 1;
-			multiplier = 31;
-			break;
-		case 768:
-			alt = 2;
-			multiplier = 24;
-			break;
-		case 769:
-			alt = 3;
-			multiplier = 24;
-			break;
-		case 512:
-			alt = 4;
-			multiplier = 16;
-			break;
-		case 513:
-			alt = 5;
-			multiplier = 16;
-			break;
-		case 257:
-			alt = 6;
-			multiplier = 8;
-			break;
-		case 0:
-			alt = 7;
-			multiplier = 1; // FIXME - is this correct?
-			break;
-		default:
+	PDEBUG(5, "ov511_stop()");
+	return (ov511_reg_write(dev, OV511_REG_SYSTEM_RESET, 0x3d));
+}
+
+/* Restarts OV511 after ov511_stop() is called */
+static inline int ov511_restart(struct usb_device *dev)
+{
+	PDEBUG(5, "ov511_restart()");
+	return (ov511_reg_write(dev, OV511_REG_SYSTEM_RESET, 0x00));
+}
+
+static int ov511_set_packet_size(struct usb_ov511 *ov511, int size)
+{
+	int alt, mult;
+
+	if (ov511_stop(ov511->dev) < 0)
+		return -EIO;
+
+	mult = size / 32;
+
+	if (ov511->bridge == BRG_OV511) {
+		if (size == 0) alt = OV511_ALT_SIZE_0;
+		else if (size == 257) alt = OV511_ALT_SIZE_257;
+		else if (size == 512) alt = OV511_ALT_SIZE_512;
+		else if (size == 513) alt = OV511_ALT_SIZE_513;
+		else if (size == 768) alt = OV511_ALT_SIZE_768;
+		else if (size == 769) alt = OV511_ALT_SIZE_769;
+		else if (size == 992) alt = OV511_ALT_SIZE_992;
+		else if (size == 993) alt = OV511_ALT_SIZE_993;
+		else {
 			err("Set packet size: invalid size (%d)", size);
 			return -EINVAL;
+		}
+	}
+	else if (ov511->bridge == BRG_OV511PLUS) {
+		if (size == 0) alt = OV511PLUS_ALT_SIZE_0;
+		else if (size == 33) alt = OV511PLUS_ALT_SIZE_33;
+		else if (size == 129) alt = OV511PLUS_ALT_SIZE_129;
+		else if (size == 257) alt = OV511PLUS_ALT_SIZE_257;
+		else if (size == 385) alt = OV511PLUS_ALT_SIZE_385;
+		else if (size == 513) alt = OV511PLUS_ALT_SIZE_513;
+		else if (size == 769) alt = OV511PLUS_ALT_SIZE_769;
+		else if (size == 961) alt = OV511PLUS_ALT_SIZE_961;
+		else {
+			err("Set packet size: invalid size (%d)", size);
+			return -EINVAL;
+		}
+	}
+	else {
+		err("Set packet size: Invalid bridge type");
+		return -EINVAL;
 	}
 
-	rc = ov511_reg_write(ov511->dev, OV511_REG_FIFO_PACKET_SIZE,
-	                     multiplier);
-	if (rc < 0) {
-		err("Set packet size: Set FIFO size ret %d", rc);
+	PDEBUG(3, "set packet size: %d, mult=%d, alt=%d", size, mult, alt);
+
+	if (ov511_reg_write(ov511->dev, OV511_REG_FIFO_PACKET_SIZE,
+	                     mult) < 0)
 		return -ENOMEM;
-	}
 	
 	if (usb_set_interface(ov511->dev, ov511->iface, alt) < 0) {
 		err("Set packet size: set interface error");
@@ -519,6 +536,11 @@ int ov511_set_packet_size(struct usb_ov511 *ov511, int size)
 	if (ov511_reset(ov511->dev, OV511_RESET_NOREGS) < 0)
 		return -ENOMEM;
 
+	ov511->packet_size = size;
+
+	if (ov511_restart(ov511->dev) < 0)
+		return -EIO;
+
 	return 0;
 }
 
@@ -526,34 +548,31 @@ static inline int ov7610_set_picture(struct usb_ov511 *ov511,
                                      struct video_picture *p)
 {
 	int ret;
+	struct usb_device *dev = ov511->dev;
 
-	/* Stop the camera */
-	if (ov511_reg_write(ov511->dev, OV511_REG_SYSTEM_RESET, 0x3d) < 0) {
-		err("reset: command failed");
+	if (ov511_stop(dev) < 0)
 		return -EIO;
-	}
 
-	if((ret = ov511_i2c_read(ov511->dev, OV7610_REG_COM_B)) < 0)
+	if((ret = ov511_i2c_read(dev, OV7610_REG_COM_B)) < 0)
 		return -EIO;
 #if 0
-	if(ov511_i2c_write(ov511->dev, OV7610_REG_COM_B, ret & 0xfe) < 0)
+	if(ov511_i2c_write(dev, OV7610_REG_COM_B, ret & 0xfe) < 0)
 		return -EIO;
 #endif
+	if (ov511->sensor == SEN_OV7610 || ov511->sensor == SEN_OV7620AE)
+		if(ov511_i2c_write(dev, OV7610_REG_SAT, p->colour >> 8) < 0)
+			return -EIO;
 
-	if(ov511_i2c_write(ov511->dev, OV7610_REG_SAT, p->colour >> 8) < 0)
-		return -EIO;
+	if (ov511->sensor == SEN_OV7610) {
+		if(ov511_i2c_write(dev, OV7610_REG_CNT, p->contrast >> 8) < 0)
+			return -EIO;
 
-	if(ov511_i2c_write(ov511->dev, OV7610_REG_CNT, p->contrast >> 8) < 0)
-		return -EIO;
-
-	if(ov511_i2c_write(ov511->dev, OV7610_REG_BRT, p->brightness >> 8) < 0)
-		return -EIO;
-
-	/* Restart the camera */
-	if (ov511_reg_write(ov511->dev, OV511_REG_SYSTEM_RESET, 0x0) < 0) {
-		err("reset: command failed");
-		return -EIO;
+		if(ov511_i2c_write(dev, OV7610_REG_BRT, p->brightness >> 8) < 0)
+			return -EIO;
 	}
+
+	if (ov511_restart(dev) < 0)
+		return -EIO;
 
 	return 0;
 }
@@ -562,20 +581,18 @@ static inline int ov7610_get_picture(struct usb_ov511 *ov511,
                                      struct video_picture *p)
 {
 	int ret;
+	struct usb_device *dev = ov511->dev;
 
-	/* Stop the camera */
-	if (ov511_reg_write(ov511->dev, OV511_REG_SYSTEM_RESET, 0x3d) < 0) {
-		err("reset: command failed");
+	if (ov511_stop(dev) < 0)
 		return -EIO;
-	}
 
-	if((ret = ov511_i2c_read(ov511->dev, OV7610_REG_SAT)) < 0) return -EIO;
+	if((ret = ov511_i2c_read(dev, OV7610_REG_SAT)) < 0) return -EIO;
 	p->colour = ret << 8;
 
-	if((ret = ov511_i2c_read(ov511->dev, OV7610_REG_CNT)) < 0) return -EIO;
+	if((ret = ov511_i2c_read(dev, OV7610_REG_CNT)) < 0) return -EIO;
 	p->contrast = ret << 8;
 
-	if((ret = ov511_i2c_read(ov511->dev, OV7610_REG_BRT)) < 0) return -EIO;
+	if((ret = ov511_i2c_read(dev, OV7610_REG_BRT)) < 0) return -EIO;
 	p->brightness = ret << 8;
 
 	p->hue = 0x8000;
@@ -583,11 +600,8 @@ static inline int ov7610_get_picture(struct usb_ov511 *ov511,
 	p->depth = 3;  /* Don't know if this is right */
 	p->palette = VIDEO_PALETTE_RGB24;
 
-	/* Restart the camera */
-	if (ov511_reg_write(ov511->dev, OV511_REG_SYSTEM_RESET, 0x0) < 0) {
-		err("reset: command failed");
+	if (ov511_restart(dev) < 0)
 		return -EIO;
-	}
 
 	return 0;
 }
@@ -601,23 +615,20 @@ static int ov511_mode_init_regs(struct usb_ov511 *ov511,
 	PDEBUG(3, "ov511_mode_init_regs(ov511, w:%d, h:%d, mode:%d, sub:%d)",
 	       width, height, mode, sub_flag);
 
-//	ov511_set_packet_size(ov511, 0);
-	if (ov511_reg_write(dev, OV511_REG_SYSTEM_RESET, 0x3d) < 0) {
-		err("reset: command failed");
+	if (ov511_stop(ov511->dev) < 0)
 		return -EIO;
-	}
 
 	if (mode == VIDEO_PALETTE_GREY) {
 		ov511_reg_write(dev, 0x16, 0x00);
 		ov511_i2c_write(dev, 0x0e, 0x44);
-		ov511_i2c_write(dev, 0x13, 0x21);
+		ov511_i2c_write(dev, 0x13, autoadjust ? 0x21 : 0x20);
 		/* For snapshot */
 		ov511_reg_write(dev, 0x1e, 0x00);
 		ov511_reg_write(dev, 0x1f, 0x01);
 	} else {
 		ov511_reg_write(dev, 0x16, 0x01);
 		ov511_i2c_write(dev, 0x0e, 0x04);
-		ov511_i2c_write(dev, 0x13, 0x01);
+		ov511_i2c_write(dev, 0x13, autoadjust ? 0x01 : 0x00);
 		/* For snapshot */
 		ov511_reg_write(dev, 0x1e, 0x01);
 		ov511_reg_write(dev, 0x1f, 0x03);
@@ -625,34 +636,34 @@ static int ov511_mode_init_regs(struct usb_ov511 *ov511,
 
 	if (width == 640 && height == 480) {
 		if (sub_flag) {
-			ov511_i2c_write(ov511->dev, 0x17, 0x38+(ov511->subx>>2));
-			ov511_i2c_write(ov511->dev, 0x18,
+			ov511_i2c_write(dev, 0x17, 0x38+(ov511->subx>>2));
+			ov511_i2c_write(dev, 0x18,
 					0x3a+((ov511->subx+ov511->subw)>>2));
-			ov511_i2c_write(ov511->dev, 0x19, 0x5+(ov511->suby>>1));
-			ov511_i2c_write(ov511->dev, 0x1a,
+			ov511_i2c_write(dev, 0x19, 0x5+(ov511->suby>>1));
+			ov511_i2c_write(dev, 0x1a,
 					0x5+((ov511->suby+ov511->subh)>>1));
-			ov511_reg_write(ov511->dev, 0x12, (ov511->subw>>3)-1);
-			ov511_reg_write(ov511->dev, 0x13, (ov511->subh>>3)-1);
+			ov511_reg_write(dev, 0x12, (ov511->subw>>3)-1);
+			ov511_reg_write(dev, 0x13, (ov511->subh>>3)-1);
 			ov511_i2c_write(dev, 0x11, 0x01);
 
 			/* Snapshot additions */
-			ov511_reg_write(ov511->dev, 0x1a, (ov511->subw>>3)-1);
-			ov511_reg_write(ov511->dev, 0x1b, (ov511->subh>>3)-1);
-			ov511_reg_write(ov511->dev, 0x1c, 0x00);
-			ov511_reg_write(ov511->dev, 0x1d, 0x00);
+			ov511_reg_write(dev, 0x1a, (ov511->subw>>3)-1);
+			ov511_reg_write(dev, 0x1b, (ov511->subh>>3)-1);
+			ov511_reg_write(dev, 0x1c, 0x00);
+			ov511_reg_write(dev, 0x1d, 0x00);
 		} else {
-			ov511_i2c_write(ov511->dev, 0x17, 0x38);
-			ov511_i2c_write(ov511->dev, 0x18, 0x3a + (640>>2));
-			ov511_i2c_write(ov511->dev, 0x19, 0x5);
-			ov511_i2c_write(ov511->dev, 0x1a, 5 + (480>>1));
+			ov511_i2c_write(dev, 0x17, 0x38);
+			ov511_i2c_write(dev, 0x18, 0x3a + (640>>2));
+			ov511_i2c_write(dev, 0x19, 0x5);
+			ov511_i2c_write(dev, 0x1a, 5 + (480>>1));
 			ov511_reg_write(dev, 0x12, 0x4f);
 			ov511_reg_write(dev, 0x13, 0x3d);
 
 			/* Snapshot additions */
-			ov511_reg_write(ov511->dev, 0x1a, 0x4f);
-			ov511_reg_write(ov511->dev, 0x1b, 0x3d);
-			ov511_reg_write(ov511->dev, 0x1c, 0x00);
-			ov511_reg_write(ov511->dev, 0x1d, 0x00);
+			ov511_reg_write(dev, 0x1a, 0x4f);
+			ov511_reg_write(dev, 0x1b, 0x3d);
+			ov511_reg_write(dev, 0x1c, 0x00);
+			ov511_reg_write(dev, 0x1d, 0x00);
 
 			if (mode == VIDEO_PALETTE_GREY) {
 			  ov511_i2c_write(dev, 0x11, 4); /* check */
@@ -697,12 +708,8 @@ static int ov511_mode_init_regs(struct usb_ov511 *ov511,
 		rc = -EINVAL;
 	}
 
-//	ov511_set_packet_size(ov511, 993);
-
-	if (ov511_reg_write(dev, OV511_REG_SYSTEM_RESET, 0x00) < 0) {
-		err("reset: command failed");
+	if (ov511_restart(ov511->dev) < 0)
 		return -EIO;
-	}
 
 	return rc;
 }
@@ -928,29 +935,30 @@ static void ov511_parse_data_grey(unsigned char * pIn0,
  *************************************************************/
 static void fixFrameRGBoffset(struct ov511_frame *frame)
 {
-  int x,y;
-  int rowBytes=frame->width*3,w=frame->width;
-  unsigned char *rgb=frame->data;
-  const int shift=1;//Distance to shift pixels by, vertically
+  int x, y;
+  int rowBytes = frame->width*3, w = frame->width;
+  unsigned char *rgb = frame->data;
+  const int shift = 1;   //Distance to shift pixels by, vertically
 
-  if (frame->width<400) 
-	   return;//Don't bother with little images
+  if (frame->width < 400) 
+	   return;     //Don't bother with little images
 
   //Shift red channel up
-  for (y=shift;y<frame->height;y++)
+  for (y = shift; y < frame->height; y++)
   {
-    int lp=(y-shift)*rowBytes;//Previous line offset
-    int lc=y*rowBytes;//Current line offset
-    for (x=0;x<w;x++)
-      rgb[lp+x*3+2]=rgb[lc+x*3+2];//Shift red up
+    int lp = (y-shift)*rowBytes;     //Previous line offset
+    int lc = y*rowBytes;             //Current line offset
+    for (x = 0; x < w; x++)
+      rgb[lp+x*3+2] = rgb[lc+x*3+2]; //Shift red up
   }
+
   //Shift blue channel down
-  for (y=frame->height-shift-1;y>=0;y--)
+  for (y=frame->height-shift-1; y >= 0; y--)
   {
-    int ln=(y+shift)*rowBytes;//Next line offset
-    int lc=y*rowBytes;//Current line offset
-    for (x=0;x<w;x++)
-      rgb[ln+x*3+0]=rgb[lc+x*3+0];//Shift blue down
+    int ln = (y+shift)*rowBytes;   //Next line offset
+    int lc = y*rowBytes;           //Current line offset
+    for (x = 0; x < w; x++)
+      rgb[ln+x*3+0] = rgb[lc+x*3+0]; //Shift blue down
   }
 }
 
@@ -1172,10 +1180,10 @@ static int ov511_init_isoc(struct usb_ov511 *ov511)
 	urb->transfer_buffer = ov511->sbuf[0].data;
  	urb->complete = ov511_isoc_irq;
  	urb->number_of_packets = FRAMES_PER_DESC;
- 	urb->transfer_buffer_length = FRAME_SIZE_PER_DESC * FRAMES_PER_DESC;
+ 	urb->transfer_buffer_length = ov511->packet_size * FRAMES_PER_DESC;
  	for (fx = 0; fx < FRAMES_PER_DESC; fx++) {
- 		urb->iso_frame_desc[fx].offset = FRAME_SIZE_PER_DESC * fx;
-		urb->iso_frame_desc[fx].length = FRAME_SIZE_PER_DESC;
+ 		urb->iso_frame_desc[fx].offset = ov511->packet_size * fx;
+		urb->iso_frame_desc[fx].length = ov511->packet_size;
 	}
 
 	urb = usb_alloc_urb(FRAMES_PER_DESC);
@@ -1191,10 +1199,10 @@ static int ov511_init_isoc(struct usb_ov511 *ov511)
 	urb->transfer_buffer = ov511->sbuf[1].data;
  	urb->complete = ov511_isoc_irq;
  	urb->number_of_packets = FRAMES_PER_DESC;
- 	urb->transfer_buffer_length = FRAME_SIZE_PER_DESC * FRAMES_PER_DESC;
+ 	urb->transfer_buffer_length = ov511->packet_size * FRAMES_PER_DESC;
  	for (fx = 0; fx < FRAMES_PER_DESC; fx++) {
- 		urb->iso_frame_desc[fx].offset = FRAME_SIZE_PER_DESC * fx;
-		urb->iso_frame_desc[fx].length = FRAME_SIZE_PER_DESC;
+ 		urb->iso_frame_desc[fx].offset = ov511->packet_size * fx;
+		urb->iso_frame_desc[fx].length = ov511->packet_size;
 	}
 
 	ov511->sbuf[1].urb->next = ov511->sbuf[0].urb;
@@ -1311,10 +1319,10 @@ static int ov511_open(struct video_device *dev, int flags)
 	PDEBUG(4, "frame [0] @ %p", ov511->frame[0].data);
 	PDEBUG(4, "frame [1] @ %p", ov511->frame[1].data);
 
-	ov511->sbuf[0].data = kmalloc(FRAMES_PER_DESC * FRAME_SIZE_PER_DESC, GFP_KERNEL);
+	ov511->sbuf[0].data = kmalloc(FRAMES_PER_DESC * MAX_FRAME_SIZE_PER_DESC, GFP_KERNEL);
 	if (!ov511->sbuf[0].data)
 		goto open_err_on0;
-	ov511->sbuf[1].data = kmalloc(FRAMES_PER_DESC * FRAME_SIZE_PER_DESC, GFP_KERNEL);
+	ov511->sbuf[1].data = kmalloc(FRAMES_PER_DESC * MAX_FRAME_SIZE_PER_DESC, GFP_KERNEL);
 	if (!ov511->sbuf[1].data)
 		goto open_err_on1;
 		
@@ -1835,9 +1843,11 @@ static struct video_device ov511_template = {
 	initialize:	ov511_init_done,
 };
 
-static int ov7610_configure(struct usb_device *dev)
+static int ov7610_configure(struct usb_ov511 *ov511)
 {
+	struct usb_device *dev = ov511->dev;
 	int tries;
+	int rc;
 
 	if(ov511_reg_write(dev, OV511_REG_I2C_SLAVE_ID_WRITE,
 	                        OV7610_I2C_WRITE_ID) < 0)
@@ -1865,11 +1875,40 @@ static int ov7610_configure(struct usb_device *dev)
 		--tries;
 	}
 	
-	if (tries == 0) {
+	if (tries == 1) {
 		err("Failed to read OV7610 ID. You might not have an OV7610,");
 		err("or it may be not responding. Report this to");
 		err("mmcclelland@delphi.com");
 		return -1;
+	}
+
+	if (sensor == 0) {
+		rc = ov511_i2c_read(dev, OV7610_REG_COM_I);
+
+		if (rc < 0) {
+			err("Error detecting sensor type");
+			return -1;
+		}
+		else if((rc & 3) == 3) {
+			printk("ov511: Sensor is an OV7610\n");
+			ov511->sensor = SEN_OV7610;
+		}
+		else if((rc & 3) == 1) {
+			printk("ov511: Sensor is an OV7620AE\n");
+			ov511->sensor = SEN_OV7620AE;
+		}
+		else if((rc & 3) == 0) {
+			printk("ov511: Sensor is an OV7620\n");
+			ov511->sensor = SEN_OV7620;
+		}
+		else {
+			err("Unknown image sensor version: %d", rc & 3);
+			return -1;
+		}
+	}
+	else {  /* sensor != 0; user overrode detection */
+		ov511->sensor = sensor;
+		printk("ov511: Sensor set to type %d\n", ov511->sensor);
 	}
 
 	return 0;
@@ -1931,7 +1970,7 @@ static int ov511_configure(struct usb_ov511 *ov511)
 	 {OV511_I2C_BUS, 0x29, 0x03}, /* 91 */
 	 {OV511_I2C_BUS, 0x2a, 0x04},
 	 {OV511_I2C_BUS, 0x2c, 0xfe},
-	 {OV511_I2C_BUS, 0x2d, 0x93}, /* d7 */
+//	 {OV511_I2C_BUS, 0x2d, 0x93}, /* d7 */
 	 {OV511_I2C_BUS, 0x30, 0x71},
 	 {OV511_I2C_BUS, 0x31, 0x60},
 	 {OV511_I2C_BUS, 0x32, 0x26},
@@ -1945,12 +1984,6 @@ static int ov511_configure(struct usb_ov511 *ov511)
 #endif
 	 {OV511_DONE_BUS, 0x0, 0x00},
 	};
-
-	/* Set altsetting 0 */
-	if (usb_set_interface(dev, ov511->iface, 0) < 0) {
-		err("usb_set_interface error");
-		return -EBUSY;
-	}
 
 	memcpy(&ov511->vdev, &ov511_template, sizeof(ov511_template));
 
@@ -1966,18 +1999,17 @@ static int ov511_configure(struct usb_ov511 *ov511)
 	if ((rc = ov511_write_regvals(dev, aRegvalsInit)))
 		return rc;
 
-	if(ov7610_configure(dev) < 0) {
+	if(ov7610_configure(ov511) < 0) {
 		err("failed to configure OV7610");
  		goto error;	
 	}
 
-	/* Disable compression */
-	if (ov511_reg_write(dev, OV511_OMNICE_ENABLE, 0x00) < 0) {
-		err("disable compression: command failed");
-		goto error;
-	}
+	ov511_set_packet_size(ov511, 0);
 
-	ov511->compress = 0;
+	/* Disable compression */
+	if (ov511_reg_write(dev, OV511_OMNICE_ENABLE, 0x00) < 0)
+		goto error;
+
 	ov511->snap_enabled = snapshot;	
 
 	/* Set default sizes in case IOCTL (VIDIOCMCAPTURE) is not used
@@ -1996,9 +2028,12 @@ static int ov511_configure(struct usb_ov511 *ov511)
 
 	if (autoadjust) {
 		if (ov511_i2c_write(dev, 0x13, 0x01) < 0) goto error;
+		if (ov511_i2c_write(dev, 0x2d, 0x93) < 0) goto error;
 	}
 	else {
-		if (ov511_i2c_write(dev, 0x13, 0x00) < 0 ) goto error;
+		if (ov511_i2c_write(dev, 0x13, 0x00) < 0) goto error;
+		if (ov511_i2c_write(dev, 0x2d, 0x83) < 0) goto error;
+		ov511_i2c_write(dev, 0x28, ov511_i2c_read(dev, 0x28) | 8);
 	}
 
 	return 0;
@@ -2009,6 +2044,7 @@ error:
 		&dev->actconfig->interface[ov511->iface]);
 
 	kfree(ov511);
+	ov511 = NULL;
 
 	return -EBUSY;	
 }
@@ -2027,10 +2063,11 @@ static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
 
 	interface = &dev->actconfig->interface[ifnum].altsetting[0];
 
-	/* Is it an OV511? */
+	/* Is it an OV511/OV511+? */
 	if (dev->descriptor.idVendor != 0x05a9)
 		return NULL;
-	if (dev->descriptor.idProduct != 0x0511)
+	if (dev->descriptor.idProduct != 0x0511
+	 && dev->descriptor.idProduct != 0xA511)
 		return NULL;
 
 	/* Checking vendor/product should be enough, but what the hell */
@@ -2038,9 +2075,6 @@ static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
 		return NULL;
 	if (interface->bInterfaceSubClass != 0x00)
 		return NULL;
-
-	/* We found one */
-	printk(KERN_INFO "ov511: USB OV511-based camera found\n");
 
 	if ((ov511 = kmalloc(sizeof(*ov511), GFP_KERNEL)) == NULL) {
 		err("couldn't kmalloc ov511 struct");
@@ -2052,15 +2086,24 @@ static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
 	ov511->dev = dev;
 	ov511->iface = interface->bInterfaceNumber;
 
+	if (dev->descriptor.idProduct == 0x0511) {
+		info("USB OV511 camera found");
+		ov511->bridge = BRG_OV511;
+	}
+	else if (dev->descriptor.idProduct == 0xA511) {
+		info("USB OV511+ camera found");
+		ov511->bridge = BRG_OV511PLUS;
+	}
+
 	rc = ov511_reg_read(dev, OV511_REG_SYSTEM_CUSTOM_ID);
 	if (rc < 0) {
 		err("Unable to read camera bridge registers");
-		return NULL;
+		goto error;
 	}
 	
 	switch(ov511->customid = rc) {
 	case 0: /* This also means that no custom ID was set */
-		printk("ov511: Camera is probably a MediaForte MV300\n");
+		printk("ov511: Camera is a generic model (no ID)\n");
 		break;
 	case 3:
 		printk("ov511: Camera is a D-Link DSB-C300\n");
@@ -2077,6 +2120,11 @@ static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
 	case 36:
 		printk("ov511: Camera is a Koala-Cam\n");
 		break;
+	case 38:
+		printk("ov511: Camera is a Lifeview USB Life TV\n");
+		printk("ov511: This device is not supported, exiting...\n");
+		goto error;
+		break;
 	case 100:
 		printk("ov511: Camera is a Lifeview RoboCam\n");
 		break;
@@ -2090,8 +2138,12 @@ static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
 		err("Specific camera type (%d) not recognized", rc);
 		err("Please contact mmcclelland@delphi.com to request");
 		err("support for your camera.");
-		return NULL;
 	}
+
+//	if (ov511->bridge == BRG_OV511PLUS) {
+//		err("Sorry, the OV511+ chip is not supported yet");
+//		goto error;
+//	}
 
 	if (!ov511_configure(ov511)) {
 		ov511->user=0;
@@ -2100,10 +2152,18 @@ static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
 	}
 	else {
 		err("Failed to configure camera");
-		return NULL;
+		goto error;
 	}
     	
      	return ov511;
+
+error:
+	if (ov511) {
+		kfree(ov511);
+		ov511 = NULL;
+	}
+
+	return NULL;	
 }
 
 static void ov511_disconnect(struct usb_device *dev, void *ptr)

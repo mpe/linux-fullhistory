@@ -205,6 +205,10 @@
 #include "t128.h"
 #endif
 
+#ifdef CONFIG_SCSI_DMX3191D
+#include "dmx3191d.h"
+#endif
+
 #ifdef CONFIG_SCSI_DTC3280
 #include "dtc.h"
 #endif
@@ -549,6 +553,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_T128
     TRANTOR_T128,
+#endif
+#ifdef CONFIG_SCSI_DMX3191D
+        DMX3191D,
 #endif
 #ifdef CONFIG_SCSI_DTC3280
         DTC3x80,

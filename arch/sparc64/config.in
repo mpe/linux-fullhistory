@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.105 2000/03/24 00:34:11 davem Exp $
+# $Id: config.in,v 1.106 2000/03/24 10:00:09 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -18,6 +18,8 @@ define_bool CONFIG_VT_CONSOLE y
 bool 'Symmetric multi-processing support' CONFIG_SMP
 
 # Global things across all Sun machines.
+define_bool CONFIG_ISA n
+define_bool CONFIG_PCMCIA n
 define_bool CONFIG_SBUS y
 define_bool CONFIG_SBUSCHAR y
 define_bool CONFIG_BUSMOUSE y
@@ -29,7 +31,6 @@ define_bool CONFIG_SUN_KEYBOARD y
 define_bool CONFIG_SUN_CONSOLE y
 define_bool CONFIG_SUN_AUXIO y
 define_bool CONFIG_SUN_IO y
-define_bool CONFIG_ISA n
 bool 'PCI support' CONFIG_PCI
 source drivers/pci/Config.in
 

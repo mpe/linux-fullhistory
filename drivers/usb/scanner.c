@@ -1,7 +1,7 @@
 /* -*- linux-c -*- */
 
 /* 
- * Driver for USB Scanners (linux-2.3.42)
+ * Driver for USB Scanners (linux-2.3.99-pre3-7)
  *
  * Copyright (C) 1999, 2000 David E. Nelson
  *
@@ -148,8 +148,29 @@
  *    - Increased the timeout parameter in read_scanner() to 120 Secs.
  *
  *
+ *  0.4.2  3/23/2000
+ *
+ *    - Added Umax 1236U ID.  Thanks to Philipp Baer <ph_baer@npw.net>.
+ *    - Added Primax, ReadyScan, Visioneer, Colorado, and Genius ID's.
+ *      Thanks to Adrian Perez Jorge <adrianpj@easynews.com>.
+ *    - Fixed error number reported for non-existant devices.  Thanks to
+ *      Spyridon Papadimitriou <Spyridon_Papadimitriou@gs91.sp.cs.cmu.edu>.
+ *    - Added Acer Prisascan 620U ID's.  Thanks to Joao <joey@knoware.nl>.
+ *    - Replaced __initcall() with module_init()/module_exit(). Updates
+ *      from patch-2.3.48.
+ *    - Replaced file_operations structure with new syntax.  Updates
+ *      from patch-2.3.49.
+ *    - Changed #include "usb.h" to #include <linux/usb.h>
+ *    - Added #define SCN_IOCTL to exclude development areas 
+ *      since 2.4.x is about to be released. This mainly affects the 
+ *      ioctl() stuff.  See scanner.h for more details.
+ *    - Changed the return value for signal_pending() from -ERESTARTSYS to
+ *      -EINTR.
+ *
+ *
  *  TODO
  *
+ *    - Performance
  *    - Select/poll methods
  *    - More testing
  *    - Proper registry/assignment for LM9830 ioctl's
@@ -214,7 +235,7 @@ open_scanner(struct inode * inode, struct file * file)
 
 	if (!p_scn_table[scn_minor]) {
 		err("open_scanner(%d): invalid scn_minor", scn_minor);
-		return -ENOIOCTLCMD;
+		return -ENODEV;
 	}
 
 	scn = p_scn_table[scn_minor];
@@ -255,7 +276,7 @@ close_scanner(struct inode * inode, struct file * file)
 
 	if (!p_scn_table[scn_minor]) {
 		err("close_scanner(%d): invalid scn_minor", scn_minor);
-		return -ENOIOCTLCMD;
+		return -ENODEV;
 	}
 
 	scn = p_scn_table[scn_minor];
@@ -279,6 +300,8 @@ write_scanner(struct file * file, const char * buffer,
 	ssize_t bytes_written = 0; /* Overall count of bytes written */
 	ssize_t ret = 0;
 
+	kdev_t scn_minor;
+
 	int this_write;		/* Number of bytes to write */
 	int partial;		/* Number of bytes successfully written */
 	int result = 0;
@@ -287,6 +310,8 @@ write_scanner(struct file * file, const char * buffer,
 
 	scn = file->private_data;
 
+	scn_minor = scn->scn_minor;
+
 	obuf = scn->obuf;
 
 	dev = scn->scn_dev;
@@ -294,7 +319,7 @@ write_scanner(struct file * file, const char * buffer,
 	while (count > 0) {
 
 		if (signal_pending(current)) {
-			ret = -ERESTARTSYS;
+			ret = -EINTR;
 			break;
 		}
 
@@ -306,14 +331,14 @@ write_scanner(struct file * file, const char * buffer,
 		}
 
 		result = usb_bulk_msg(dev,usb_sndbulkpipe(dev, scn->bulk_out_ep), obuf, this_write, &partial, 60*HZ);
-		dbg("write stats(%d): result:%d this_write:%d partial:%d", scn->scn_minor, result, this_write, partial);
+		dbg("write stats(%d): result:%d this_write:%d partial:%d", scn_minor, result, this_write, partial);
 
 		if (result == USB_ST_TIMEOUT) {	/* NAK -- shouldn't happen */
 			warn("write_scanner: NAK recieved.");
 			ret = -ETIME;
 			break;
 		} else if (result < 0) { /* We should not get any I/O errors */
-			warn("write_scanner(%d): funky result: %d. Please notify the maintainer.", scn->scn_minor, result);
+			warn("write_scanner(%d): funky result: %d. Please notify the maintainer.", scn_minor, result);
 			ret = -EIO;
 			break;
 		} 
@@ -322,7 +347,7 @@ write_scanner(struct file * file, const char * buffer,
 		if (partial) {
 			unsigned char cnt, cnt_max;
 			cnt_max = (partial > 24) ? 24 : partial;
-			printk(KERN_DEBUG "dump(%d): ", scn->scn_minor);
+			printk(KERN_DEBUG "dump(%d): ", scn_minor);
 			for (cnt=0; cnt < cnt_max; cnt++) {
 				printk("%X ", obuf[cnt]);
 			}
@@ -355,8 +380,10 @@ read_scanner(struct file * file, char * buffer,
 	struct scn_usb_data *scn;
 	struct usb_device *dev;
 
-	ssize_t bytes_read = 0;	/* Overall count of bytes_read */
-	ssize_t ret = 0;
+	ssize_t bytes_read;	/* Overall count of bytes_read */
+	ssize_t ret;
+
+	kdev_t scn_minor;
 
 	int partial;		/* Number of bytes successfully read */
 	int this_read;		/* Max number of bytes to read */
@@ -366,29 +393,32 @@ read_scanner(struct file * file, char * buffer,
 
 	scn = file->private_data;
 
+	scn_minor = scn->scn_minor;
+
 	ibuf = scn->ibuf;
 
 	dev = scn->scn_dev;
 
 	bytes_read = 0;
+	ret = 0;
 
 	while (count) {
 		if (signal_pending(current)) {
-			ret = -ERESTARTSYS;
+			ret = -EINTR;
 			break;
 		}
 
 		this_read = (count >= IBUF_SIZE) ? IBUF_SIZE : count;
 		
 		result = usb_bulk_msg(dev, usb_rcvbulkpipe(dev, scn->bulk_in_ep), ibuf, this_read, &partial, 120*HZ);
-		dbg("read stats(%d): result:%d this_read:%d partial:%d", scn->scn_minor, result, this_read, partial);
+		dbg("read stats(%d): result:%d this_read:%d partial:%d", scn_minor, result, this_read, partial);
 
 		if (result == USB_ST_TIMEOUT) { /* NAK -- shouldn't happen */
-			warn("read_scanner(%d): NAK received", scn->scn_minor);
+			warn("read_scanner(%d): NAK received", scn_minor);
 			ret = -ETIME;
 			break;
 		} else if ((result < 0) && (result != USB_ST_DATAUNDERRUN)) {
-			warn("read_scanner(%d): funky result:%d. Please notify the maintainer.", scn->scn_minor, (int)result);
+			warn("read_scanner(%d): funky result:%d. Please notify the maintainer.", scn_minor, (int)result);
 			ret = -EIO;
 			break;
 		}
@@ -397,7 +427,7 @@ read_scanner(struct file * file, char * buffer,
 		if (partial) {
 			unsigned char cnt, cnt_max;
 			cnt_max = (partial > 24) ? 24 : partial;
-			printk(KERN_DEBUG "dump(%d): ", scn->scn_minor);
+			printk(KERN_DEBUG "dump(%d): ", scn_minor);
 			for (cnt=0; cnt < cnt_max; cnt++) {
 				printk("%X ", ibuf[cnt]);
 			}
@@ -492,15 +522,17 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 		
 		if (dev->descriptor.idVendor == 0x1606) {          /* Umax */
 			if (dev->descriptor.idProduct == 0x0010 || /* Astra 1220U */
-			    dev->descriptor.idProduct == 0x0030) { /* Astra 2000U */
+			    dev->descriptor.idProduct == 0x0030 || /* Astra 2000U */
+			    dev->descriptor.idProduct == 0x0002) { /* Astra 1236U */
 				valid_device = 1;
 				break;
 			}
 		}
 		
 		if (dev->descriptor.idVendor == 0x04b8)	{          /* Seiko/Epson Corp. */
-			if (dev->descriptor.idProduct == 0x0101 || /* Perfection 636 */
-			    dev->descriptor.idProduct == 0x0104) { /* Perfection 1200U */
+			if (dev->descriptor.idProduct == 0x0101 || /* Perfection 636U and 636Photo */
+			    dev->descriptor.idProduct == 0x0103 || /* Perfection 610 */
+			    dev->descriptor.idProduct == 0x0104) { /* Perfection 1200U and 1200Photo */
 				valid_device = 1;
 				break;
 			}
@@ -526,15 +558,56 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 			}
 		}
 
+		if (dev->descriptor.idVendor == 0x0461) {          /* Primax/Colorado */
+			if (dev->descriptor.idProduct == 0x0300 || /* G2-300 #1 */
+			    dev->descriptor.idProduct == 0x0380 || /* G2-600 #1 */
+			    dev->descriptor.idProduct == 0x0301 || /* G2E-300 */
+			    dev->descriptor.idProduct == 0x0381 || /* ReadyScan 636i */
+			    dev->descriptor.idProduct == 0x0302 || /* G2-300 #2 */
+			    dev->descriptor.idProduct == 0x0382 || /* G2-600 #2 */
+			    dev->descriptor.idProduct == 0x0303 || /* G2E-300 */
+			    dev->descriptor.idProduct == 0x0383 || /* G2E-600 */
+			    dev->descriptor.idProduct == 0x0340 || /* Colorado USB 9600 */
+			    dev->descriptor.idProduct == 0x0360 || /* Colorado USB 19200 */
+			    dev->descriptor.idProduct == 0x0341 || /* Colorado 600u */
+			    dev->descriptor.idProduct == 0x0361) { /* Colorado 1200u */
+				valid_device = 1;
+				break;
+			}
+		}
+		
+		if (dev->descriptor.idVendor == 0x04a7) {          /* Visioneer */
+			if (dev->descriptor.idProduct == 0x0221 || /* OneTouch 5300 */
+			    dev->descriptor.idProduct == 0x0221 || /* OneTouch 7600 */
+			    dev->descriptor.idProduct == 0x0231) { /* 6100 */
+				valid_device = 1;
+				break;
+			}
+		}
+		
+		if (dev->descriptor.idVendor == 0x0458) {          /* Genius */
+			if(dev->descriptor.idProduct == 0x2001) { /* ColorPage-Vivid Pro */
+				valid_device = 1;
+				break;
+			}
+		}
+		
+		if (dev->descriptor.idVendor == 0x04a5) {          /* Acer */
+			if(dev->descriptor.idProduct == 0x2060) { /* Prisa Acerscan 620U */
+				valid_device = 1;
+				break;
+			}
+		}
+		
 		if (dev->descriptor.idVendor == vendor &&   /* User specified */
 		    dev->descriptor.idProduct == product) { /* User specified */
 			valid_device = 1;
 			break;
 		}
-
-
+		
+		
 	} while (0);
-
+	
 	if (!valid_device)	
 		return NULL;	/* We didn't find anything pleasing */
 
@@ -714,6 +787,7 @@ disconnect_scanner(struct usb_device *dev, void *ptr)
 	kfree (scn);
 }
 
+#ifdef SCN_IOCTL
 static int
 ioctl_scanner(struct inode *inode, struct file *file,
 	      unsigned int cmd, unsigned long arg)
@@ -728,7 +802,7 @@ ioctl_scanner(struct inode *inode, struct file *file,
 
 	if (!p_scn_table[scn_minor]) {
 		err("ioctl_scanner(%d): invalid scn_minor", scn_minor);
-		return -ENOIOCTLCMD;
+		return -ENODEV;
 	}
 
 	dev = p_scn_table[scn_minor]->scn_dev;
@@ -790,12 +864,15 @@ ioctl_scanner(struct inode *inode, struct file *file,
 	}
 	return 0;
 }
+#endif /* SCN_IOCTL */
 
 static struct
 file_operations usb_scanner_fops = {
 	read:		read_scanner,
 	write:		write_scanner,
+#ifdef SCN_IOCTL
 	ioctl:		ioctl_scanner,
+#endif /* SCN_IOCTL */
 	open:		open_scanner,
 	release:	close_scanner,
 };
@@ -810,12 +887,14 @@ usb_driver scanner_driver = {
        SCN_BASE_MNR
 };
 
-void __exit usb_scanner_exit(void)
+void __exit
+usb_scanner_exit(void)
 {
 	usb_deregister(&scanner_driver);
 }
 
-int __init usb_scanner_init(void)
+int __init
+usb_scanner_init (void)
 {
         if (usb_register(&scanner_driver) < 0)
                 return -1;

@@ -1,4 +1,4 @@
-/* $Id: process.c,v 1.28 2000/03/05 02:16:15 gniibe Exp $
+/* $Id: process.c,v 1.33 2000/03/25 00:06:15 gniibe Exp $
  *
  *  linux/arch/sh/kernel/process.c
  *
@@ -94,7 +94,7 @@ void show_regs(struct pt_regs * regs)
 {
 	printk("\n");
 	printk("PC  : %08lx SP  : %08lx SR  : %08lx TEA : %08lx\n",
-	       regs->pc, regs->sp, regs->sr, ctrl_inl(MMU_TEA));
+	       regs->pc, regs->regs[15], regs->sr, ctrl_inl(MMU_TEA));
 	printk("R0  : %08lx R1  : %08lx R2  : %08lx R3  : %08lx\n",
 	       regs->regs[0],regs->regs[1],
 	       regs->regs[2],regs->regs[3]);
@@ -210,22 +210,22 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 		struct task_struct *p, struct pt_regs *regs)
 {
 	struct pt_regs *childregs;
+#if defined(__SH4__)
 	struct task_struct *tsk = current;
 
-	childregs = ((struct pt_regs *)(THREAD_SIZE + (unsigned long) p)) - 1;
-	struct_cpy(childregs, regs);
-
-#if defined(__SH4__)
 	if (tsk != &init_task) {
 		unlazy_fpu(tsk);
-		struct_cpy(&p->thread.fpu, &current->thread.fpu);
+		p->thread.fpu = current->thread.fpu;
 		p->used_math = tsk->used_math;
 	}
 #endif
+	childregs = ((struct pt_regs *)(THREAD_SIZE + (unsigned long) p)) - 1;
+	*childregs = *regs;
+
 	if (user_mode(regs)) {
-		childregs->sp = usp;
+		childregs->regs[15] = usp;
 	} else {
-		childregs->sp = (unsigned long)p+2*PAGE_SIZE;
+		childregs->regs[15] = (unsigned long)p+2*PAGE_SIZE;
 	}
 	childregs->regs[0] = 0; /* Set return value for child */
 	childregs->sr |= SR_FD; /* Invalidate FPU flag */
@@ -244,7 +244,7 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->magic = CMAGIC;
 	dump->start_code = current->mm->start_code;
 	dump->start_data  = current->mm->start_data;
-	dump->start_stack = regs->sp & ~(PAGE_SIZE - 1);
+	dump->start_stack = regs->regs[15] & ~(PAGE_SIZE - 1);
 	dump->u_tsize = (current->mm->end_code - dump->start_code) >> PAGE_SHIFT;
 	dump->u_dsize = (current->mm->brk + (PAGE_SIZE-1) - dump->start_data) >> PAGE_SHIFT;
 	dump->u_ssize = (current->mm->start_stack - dump->start_stack +
@@ -279,7 +279,7 @@ asmlinkage int sys_fork(unsigned long r4, unsigned long r5,
 			unsigned long r6, unsigned long r7,
 			struct pt_regs regs)
 {
-	return do_fork(SIGCHLD, regs.sp, &regs);
+	return do_fork(SIGCHLD, regs.regs[15], &regs);
 }
 
 asmlinkage int sys_clone(unsigned long clone_flags, unsigned long newsp,
@@ -287,7 +287,7 @@ asmlinkage int sys_clone(unsigned long clone_flags, unsigned long newsp,
 			 struct pt_regs regs)
 {
 	if (!newsp)
-		newsp = regs.sp;
+		newsp = regs.regs[15];
 	return do_fork(clone_flags, newsp, &regs);
 }
 
@@ -305,7 +305,7 @@ asmlinkage int sys_vfork(unsigned long r4, unsigned long r5,
 			 unsigned long r6, unsigned long r7,
 			 struct pt_regs regs)
 {
-	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs.sp, &regs);
+	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs.regs[15], &regs);
 }
 
 /*
@@ -369,4 +369,13 @@ asmlinkage void print_syscall(int x)
 	       (current->flags&PF_USEDFPU)?'C':' ',
 	       (init_task.flags&PF_USEDFPU)?'K':' ', (sr&SR_FD)?' ':'F');
 	restore_flags(flags);
+}
+
+asmlinkage void break_point_trap(void)
+{
+	/* Clear traicng.  */
+	ctrl_outw(0, UBC_BBRA);
+	ctrl_outw(0, UBC_BBRB);
+
+	force_sig(SIGTRAP, current);
 }

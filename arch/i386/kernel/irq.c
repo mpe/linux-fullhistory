@@ -862,7 +862,7 @@ unsigned long probe_irq_on(void)
  */
  
 /**
- *	probe_irq_mask
+ *	probe_irq_mask - scan a bitmap of interrupt lines
  *	@val:	mask of interrupts to consider
  *
  *	Scan the ISA bus interrupt lines and return a bitmap of

@@ -1,4 +1,4 @@
-/* $Id: sunhme.c,v 1.94 2000/03/15 06:47:04 davem Exp $
+/* $Id: sunhme.c,v 1.95 2000/03/25 05:18:15 davem Exp $
  * sunhme.c: Sparc HME/BigMac 10/100baseT half/full duplex auto switching,
  *           auto carrier detecting ethernet driver.  Also known as the
  *           "Happy Meal Ethernet" found on SunSwift SBUS cards.
@@ -2688,7 +2688,6 @@ static int __init happy_meal_pci_init(struct net_device *dev, struct pci_dev *pd
 	struct pcidev_cookie *pcp;
 	struct happy_meal *hp;
 	unsigned long hpreg_base;
-	unsigned short pci_command;
 	int i, node, qfe_slot = -1;
 	char prom_name[64];
 
@@ -2844,20 +2843,6 @@ static int __init happy_meal_pci_init(struct net_device *dev, struct pci_dev *pd
 	happy_meal_set_initial_advertisement(hp);
 
 	ether_setup(dev);
-
-	/* If we don't do this, nothing works. */
-	pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
-	pci_command |= PCI_COMMAND_MASTER;
-	pci_write_config_word(pdev, PCI_COMMAND, pci_command);
-
-	/* Set the latency timer and cache line size as well,
-	 * PROM leaves it at zero.
-	 */
-	pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 64);
-#ifdef __sparc_v9__
-	/* NOTE: Cache line size is in 32-bit word units. */
-	pci_write_config_byte(pdev, PCI_CACHE_LINE_SIZE, 0x10);
-#endif
 
 #ifdef MODULE
 	/* We are home free at this point, link us in to the happy

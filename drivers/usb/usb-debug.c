@@ -8,7 +8,11 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
-#define DEBUG
+#ifdef CONFIG_USB_DEBUG
+	#define DEBUG
+#else
+	#undef DEBUG
+#endif
 #include <linux/usb.h>
 
 static void usb_show_endpoint(struct usb_endpoint_descriptor *endpoint)

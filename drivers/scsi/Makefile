@@ -613,6 +613,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_DMX3191D),y)
+L_OBJS += dmx3191d.o
+else
+  ifeq ($(CONFIG_SCSI_DMX3191D),m)
+  M_OBJS += dmx3191d.o
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_DTC3280),y)
 L_OBJS += dtc.o
 else

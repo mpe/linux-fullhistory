@@ -284,7 +284,7 @@ void __init paging_init(void)
 		PLAT_NODE_DATA(node)->physstart = (start_pfn << PAGE_SHIFT);
 		PLAT_NODE_DATA(node)->size = (zones_size[ZONE_DMA] << PAGE_SHIFT);
 		free_area_init_node(node, NODE_DATA(node), zones_size, 
-						start_pfn << PAGE_SHIFT);
+						start_pfn << PAGE_SHIFT, 0);
 		PLAT_NODE_DATA(node)->start_mapnr = 
 					(NODE_DATA(node)->node_mem_map - mem_map);
 		if ((PLAT_NODE_DATA(node)->start_mapnr + 

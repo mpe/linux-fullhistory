@@ -13,6 +13,7 @@
 #define FLUSH_BASE_PHYS		0xe0000000	/* SA1100 zero bank */
 #define FLUSH_BASE		0xdf000000
 #define FLUSH_BASE_MINICACHE	0xdf800000
+#define UNCACHEABLE_ADDR	0xfa050000
 
 /*
  * PCMCIA IO is mapped to 0xe0000000.  We are likely to use in*()/out*()

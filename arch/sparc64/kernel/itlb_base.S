@@ -1,4 +1,4 @@
-/* $Id: itlb_base.S,v 1.8 2000/01/31 04:59:12 davem Exp $
+/* $Id: itlb_base.S,v 1.9 2000/03/26 09:13:48 davem Exp $
  * itlb_base.S:	Front end to ITLB miss replacement strategy.
  *              This is included directly into the trap table.
  *
@@ -40,25 +40,25 @@
 
 /* ITLB ** ICACHE line 3: Real faults			*/
 	rdpr		%tpc, %g5			! And load faulting VA
-	clr		%g4				! It was read
+	mov		FAULT_CODE_ITLB, %g4		! It was read from ITLB
 sparc64_realfault_common:				! Called by TL0 dtlb_miss too
-	sethi		%hi(1f), %g7			! Save state
-	ba,pt		%xcc, etrap			! ...
-1:	 or		%g7, %lo(1b), %g7		! ...
-	mov		%l4, %o2			! Read/Write/No idea
-	srlx		%l5, PAGE_SHIFT, %o1		! Page align faulting VA
-	add		%sp, STACK_BIAS + REGWIN_SZ, %o0! Compute pt_regs arg
-
-/* ITLB ** ICACHE line 4: Call fault processing code	 */
+	stb		%g4, [%g6 + AOFF_task_thread + AOFF_thread_fault_code]
+	stx		%g5, [%g6 + AOFF_task_thread + AOFF_thread_fault_address]
+	ba,pt		%xcc, etrap			! Save state
+1:	 rd		%pc, %g7			! ...
 	call		do_sparc64_fault		! Call fault handler
-	 sllx		%o1, PAGE_SHIFT, %o1		! Finish page alignment
-	ba,a,pt		%xcc, rtrap_clr_l6		! Restore cpu state
-	nop
+	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0! Compute pt_regs arg
+
+/* ITLB ** ICACHE line 4: Finish faults + window fixups	*/
+	ba,pt		%xcc, rtrap_clr_l6		! Restore cpu state
+	 nop
 winfix_trampoline:
 	rdpr		%tpc, %g3			! Prepare winfixup TNPC
 	or		%g3, 0x7c, %g3			! Compute offset to branch
 	wrpr		%g3, %tnpc			! Write it into TNPC
 	done						! Do it to it
+	nop
+	nop
 
 #undef TAG_CONTEXT_BITS
 #undef VPTE_SHIFT

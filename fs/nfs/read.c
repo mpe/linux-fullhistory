@@ -60,6 +60,7 @@ nfs_readreq_setup(struct nfs_rreq *req, struct nfs_fh *fh,
 	req->ra_args.buffer = buffer;
 	req->ra_res.fattr   = &req->ra_fattr;
 	req->ra_res.count   = rsize;
+	req->ra_fattr.valid = 0;
 }
 
 
@@ -99,6 +100,7 @@ nfs_readpage_sync(struct dentry *dentry, struct inode *inode, struct page *page)
 		lock_kernel();
 		result = rpc_call(NFS_CLIENT(inode), NFSPROC_READ, &rqst.ra_args, &rqst.ra_res, flags);
 		unlock_kernel();
+		nfs_refresh_inode(inode, &rqst.ra_fattr);
 
 		/*
 		 * Even if we had a partial success we can't mark the page
@@ -124,9 +126,6 @@ nfs_readpage_sync(struct dentry *dentry, struct inode *inode, struct page *page)
 io_error:
 	kunmap(page);
 	UnlockPage(page);
-	/* Note: we don't refresh if the call returned error */
-	if (refresh && result >= 0)
-		nfs_refresh_inode(inode, &rqst.ra_fattr);
 	return result;
 }
 
@@ -146,12 +145,12 @@ nfs_readpage_result(struct rpc_task *task)
 	dprintk("NFS: %4d received callback for page %lx, result %d\n",
 			task->tk_pid, address, result);
 
+	nfs_refresh_inode(req->ra_inode, &req->ra_fattr);
 	if (result >= 0) {
 		result = req->ra_res.count;
 		if (result < PAGE_SIZE) {
 			memset((char *) address + result, 0, PAGE_SIZE - result);
 		}
-		nfs_refresh_inode(req->ra_inode, &req->ra_fattr);
 		SetPageUptodate(page);
 		succ++;
 	} else {

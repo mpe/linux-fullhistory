@@ -95,7 +95,7 @@ extern struct processor {
 	/*
 	 * Idle the processor
 	 */
-	int (*_do_idle)(void);
+	int (*_do_idle)(int mode);
 	/*
 	 * flush I cache for a page
 	 */
@@ -110,7 +110,7 @@ extern const struct processor sa110_processor_functions;
 #define cpu_check_bugs()			processor._check_bugs()
 #define cpu_proc_init()				processor._proc_init()
 #define cpu_proc_fin()				processor._proc_fin()
-#define cpu_do_idle()				processor._do_idle()
+#define cpu_do_idle(mode)			processor._do_idle(mode)
 
 #define cpu_flush_cache_all()			processor._flush_cache_all()
 #define cpu_flush_cache_area(start,end,flags)	processor._flush_cache_area(start,end,flags)

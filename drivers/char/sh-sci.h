@@ -1,4 +1,4 @@
-/* $Id: sh-sci.h,v 1.5 2000-03-05 13:54:32+09 gniibe Exp $
+/* $Id: sh-sci.h,v 1.8 2000/03/08 15:19:39 gniibe Exp $
  *
  *  linux/drivers/char/sh-sci.h
  *
@@ -18,12 +18,17 @@
 #define SC_SR  (volatile unsigned char *)0xfffffe88
 #define SC_RDR  0xfffffe8a
 #define SCSPTR 0xffffff7c
+#elif defined(__SH4__)
+#define SCSMR	(volatile unsigned char *)0xffe00000
+#define SCBRR	0xffe00004
+#define SCSCR	(volatile unsigned char *)0xffe00008
+#define SC_TDR	0xffe0000c
+#define SC_SR	(volatile unsigned char *)0xffe00010
+#define SC_RDR	0xffe00014
+#define SCSPTR	0xffe0001c
+#endif
 
 #define SCSCR_INIT	0x30	/* TIE=0,RIE=0,TE=1,RE=1 */
-
-#elif defined(__SH4__)
-Not yet.
-#endif
 
 #define SCI_TD_E  0x80
 #define SCI_RD_F  0x40
@@ -44,8 +49,6 @@ Not yet.
 /* TEIE=0x04 */
 #define SCI_CTRL_FLAGS_CKE1 0x02
 #define SCI_CTRL_FLAGS_CKE0 0x01
-
-#define RFCR    0xffffff74
 
 #define SCI_ERI_IRQ	23
 #define SCI_RXI_IRQ	24
@@ -69,8 +72,6 @@ Not yet.
 #undef  SCSPTR /* Is there any register for RTS?? */
 #undef  SCLSR
 
-#define RFCR   0xffffff74
-
 #define SCSCR_INIT	0x30	/* TIE=0,RIE=0,TE=1,RE=1 */
 				/* 0x33 when external clock is used */
 #define SCI_IPR_OFFSET	(64+4)
@@ -86,8 +87,6 @@ Not yet.
 #define SCFDR  0xFFE8001C
 #define SCSPTR 0xFFE80020
 #define SCLSR  0xFFE80024
-
-#define RFCR   0xFF800028
 
 #define SCSCR_INIT	0x0038	/* TIE=0,RIE=0,TE=1,RE=1,REIE=1 */
 #define SCI_IPR_OFFSET	(32+4)
@@ -131,6 +130,12 @@ Not yet.
 #endif
 #endif
 
+#if defined(__sh3__)
+#define RFCR   0xffffff74
+#elif defined(__SH4__)
+#define RFCR   0xFF800028
+#endif
+
 #define SCI_PRIORITY	3
 
 #define SCI_MINOR_START		64
@@ -183,14 +188,15 @@ struct sci_port {
  */
 
 #if defined(__sh3__)
-#define BPS_2400       191
-#define BPS_4800       95
-#define BPS_9600       47
-#define BPS_19200      23
-#define BPS_38400      11
-#define BPS_115200     3
+#define PCLK           14745600
 #elif defined(__SH4__)
-/* Values for SH-4 please! */
-
-#define BPS_115200     8
+#define PCLK           33333333
 #endif
+
+#define SCBRR_VALUE(bps) (PCLK/(32*bps)-1)
+#define BPS_2400       SCBRR_VALUE(2400)
+#define BPS_4800       SCBRR_VALUE(4800)
+#define BPS_9600       SCBRR_VALUE(9600)
+#define BPS_19200      SCBRR_VALUE(19200)
+#define BPS_38400      SCBRR_VALUE(38400)
+#define BPS_115200     SCBRR_VALUE(115200)

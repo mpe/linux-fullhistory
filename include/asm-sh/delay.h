@@ -8,7 +8,7 @@
 extern __inline__ void __delay(unsigned long loops)
 {
 	__asm__ __volatile__(
-		"tst	%0,%0\n\t"
+		"tst	%0, %0\n\t"
 		"1:\t"
 		"bf/s	1b\n\t"
 		" dt	%0"
@@ -19,8 +19,8 @@ extern __inline__ void __delay(unsigned long loops)
 extern __inline__ void __udelay(unsigned long usecs, unsigned long lps)
 {
 	usecs *= 0x000010c6;		/* 2**32 / 1000000 */
-	__asm__("dmulu.l	%0,%2\n\t"
-		"sts	mach,%0"
+	__asm__("dmulu.l	%0, %2\n\t"
+		"sts	$mach, %0"
 		: "=r" (usecs)
 		: "0" (usecs), "r" (lps)
 		: "macl", "mach");

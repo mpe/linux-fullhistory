@@ -293,9 +293,14 @@ static void __init create_mapping(struct map_desc *md)
  */
 void setup_mm_for_reboot(char mode)
 {
-	pgd_t *pgd = current->mm->pgd;
+	pgd_t *pgd;
 	pmd_t pmd;
 	int i;
+
+	if (current->mm && current->mm->pgd)
+		pgd = current->mm->pgd;
+	else
+		pgd = init_mm.pgd;
 
 	for (i = 0; i < FIRST_USER_PGD_NR + USER_PTRS_PER_PGD; i++) {
 		pmd_val(pmd) = (i << PGDIR_SHIFT) |

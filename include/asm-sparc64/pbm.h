@@ -1,4 +1,4 @@
-/* $Id: pbm.h,v 1.21 2000/03/10 02:42:17 davem Exp $
+/* $Id: pbm.h,v 1.22 2000/03/25 05:18:30 davem Exp $
  * pbm.h: UltraSparc PCI controller software state.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@redhat.com)
@@ -142,6 +142,10 @@ struct pci_pbm_info {
 	/* PBM I/O and Memory space resources. */
 	struct resource			io_space;
 	struct resource			mem_space;
+
+	/* State of 66MHz capabilities on this PBM. */
+	int				is_66mhz_capable;
+	int				all_devs_66mhz;
 
 	/* This PBM's streaming buffer. */
 	struct pci_strbuf		stc;

@@ -1,3 +1,8 @@
+2000-03-27  Tim Waugh  <twaugh@redhat.com>
+
+	* parport_pc.c (parport_pc_ecp_read_block_pio): Correct operation
+	when peripheral is trying to send data when we stop listening.
+
 2000-03-22  Tim Waugh  <twaugh@redhat.com>
 
 	* init.c (parport_setup): Fix return value.

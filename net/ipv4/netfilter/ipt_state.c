@@ -6,7 +6,6 @@
 #include <linux/netfilter_ipv4/ip_conntrack.h>
 #include <linux/netfilter_ipv4/ip_tables.h>
 #include <linux/netfilter_ipv4/ipt_state.h>
-EXPORT_NO_SYMBOLS;
 
 static int
 match(const struct sk_buff *skb,
@@ -47,14 +46,17 @@ static struct ipt_match state_match
 
 static int __init init(void)
 {
-	__MOD_INC_USE_COUNT(ip_conntrack_module);
+	/* NULL if ip_conntrack not a module */
+	if (ip_conntrack_module)
+		__MOD_INC_USE_COUNT(ip_conntrack_module);
 	return ipt_register_match(&state_match);
 }
 
 static void __exit fini(void)
 {
 	ipt_unregister_match(&state_match);
-	__MOD_DEC_USE_COUNT(ip_conntrack_module);
+	if (ip_conntrack_module)
+		__MOD_DEC_USE_COUNT(ip_conntrack_module);
 }
 
 module_init(init);

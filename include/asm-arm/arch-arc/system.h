@@ -20,7 +20,11 @@
 
 #endif
 
-#define arch_do_idle()		do { } while (0)
+extern __inline__ void arch_idle(void)
+{
+	while (!current->need_resched && !hlt_counter);
+}
+
 #define arch_power_off()	do { } while (0)
 
 extern __inline__ void arch_reset(char mode)

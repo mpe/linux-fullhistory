@@ -1383,6 +1383,7 @@ static int __init setup_aedsp16(char *str)
 	mss_base = ints[4];
 	mpu_base = ints[5];
 	mpu_irq	 = ints[6];
+	return 1;
 }
 
 __setup("aedsp16=", setup_aedsp16);

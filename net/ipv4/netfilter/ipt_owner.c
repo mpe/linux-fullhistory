@@ -1,7 +1,7 @@
 /* Kernel module to match various things tied to sockets associated with
    locally generated outgoing packets.
 
-   (C)2000 Marc Boucher
+   Copyright (C) 2000 Marc Boucher
  */
 #include <linux/module.h>
 #include <linux/skbuff.h>
@@ -10,8 +10,6 @@
 
 #include <linux/netfilter_ipv4/ipt_owner.h>
 #include <linux/netfilter_ipv4/ip_tables.h>
-
-EXPORT_NO_SYMBOLS;
 
 static int
 match_pid(const struct sk_buff *skb, pid_t pid)

@@ -32,6 +32,8 @@
 
 #include <linux/sunrpc/clnt.h>
 
+#include <linux/nfs.h>
+
 
 #define RPC_SLACK_SPACE		1024	/* total overkill */
 
@@ -715,7 +717,7 @@ call_decode(struct rpc_task *task)
 	 * The following is an NFS-specific hack to cater for setuid
 	 * processes whose uid is mapped to nobody on the server.
 	 */
-	if (task->tk_client->cl_prog == 100003 && 
+	if (task->tk_client->cl_prog == NFS_PROGRAM && 
             (ntohl(*p) == NFSERR_ACCES || ntohl(*p) == NFSERR_PERM)) {
 		if (RPC_IS_SETUID(task) && task->tk_suid_retry) {
 			dprintk("RPC: %4d retry squashed uid\n", task->tk_pid);

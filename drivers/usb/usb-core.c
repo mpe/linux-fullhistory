@@ -29,7 +29,6 @@ void usb_major_cleanup(void);
  */
 
 int usb_audio_init(void);
-int usb_cpia_init(void);
 int usb_ibmcam_init(void);
 int dabusb_init(void);
 int plusb_init(void);
@@ -70,9 +69,6 @@ int usb_init(void)
 #ifndef CONFIG_USB_MODULE
 #ifdef CONFIG_USB_AUDIO
 	usb_audio_init();
-#endif
-#ifdef CONFIG_USB_CPIA
-	usb_cpia_init();
 #endif
 #ifdef CONFIG_USB_IBMCAM
 	usb_ibmcam_init();

@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.82 2000/03/17 14:41:50 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.83 2000/03/25 01:52:08 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -415,14 +415,13 @@ int ip_queue_xmit(struct sk_buff *skb)
 
 	/* OK, we know where to send it, allocate and build IP header. */
 	iph = (struct iphdr *) skb_push(skb, sizeof(struct iphdr) + (opt ? opt->optlen : 0));
-	iph->version  = 4;
-	iph->ihl      = 5;
-	iph->tos      = sk->protinfo.af_inet.tos;
+	*((__u16 *)iph)	= htons((4 << 12) | (5 << 8) | (sk->protinfo.af_inet.tos & 0xff));
+	iph->tot_len = htons(skb->len);
 	iph->frag_off = 0;
 	iph->ttl      = sk->protinfo.af_inet.ttl;
-	iph->daddr    = rt->rt_dst;
-	iph->saddr    = rt->rt_src;
 	iph->protocol = sk->protocol;
+	iph->saddr    = rt->rt_src;
+	iph->daddr    = rt->rt_dst;
 	skb->nh.iph   = iph;
 	/* Transport layer set skb->h.foo itself. */
 
@@ -430,8 +429,6 @@ int ip_queue_xmit(struct sk_buff *skb)
 		iph->ihl += opt->optlen >> 2;
 		ip_options_build(skb, opt, sk->daddr, rt, 0);
 	}
-
-	iph->tot_len = htons(skb->len);
 
 	return NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, skb, NULL, rt->u.dst.dev,
 		       ip_queue_xmit2);

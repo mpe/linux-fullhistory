@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.16 2000/03/02 00:01:15 gniibe Exp $
+/* $Id: head.S,v 1.17 2000/03/06 12:44:24 gniibe Exp $
  *
  *  arch/sh/kernel/head.S
  *
@@ -37,8 +37,11 @@ ENTRY(empty_zero_page)
  */
 ENTRY(_stext)
 	!			Initialize Status Register
-	mov.l	1f, $r0		! MD=1, RB=0, BL=1
+	mov.l	1f, $r0		! MD=1, RB=0, BL=0, IMASK=0xF
 	ldc	$r0, $sr
+	!			Initialize global interrupt mask
+	mov	#0, $r0
+	ldc	$r0, $r5_bank
 	!
 	mov.l	2f, $r0
 	mov	$r0, $r15	! Set initial r15 (stack pointer)
@@ -62,7 +65,7 @@ ENTRY(_stext)
 	 nop
 
 	.balign 4
-1:	.long	0x50000000		! MD=1, RB=0, BL=1, FD=0
+1:	.long	0x400000F0		! MD=1, RB=0, BL=0, FD=0, IMASK=0xF
 2:	.long	SYMBOL_NAME(stack)
 3:	.long	SYMBOL_NAME(__bss_start)
 4:	.long	SYMBOL_NAME(_end)

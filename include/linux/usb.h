@@ -1,13 +1,6 @@
 #ifndef __LINUX_USB_H
 #define __LINUX_USB_H
 
-#include <linux/types.h>
-#include <linux/ioctl.h>
-#include <linux/version.h>
-#include <linux/sched.h>
-#include <linux/delay.h>
-#include <linux/interrupt.h>	/* for in_interrupt() */
-
 /* USB constants */
 
 /*
@@ -130,6 +123,12 @@
 
 #ifdef __KERNEL__
 
+#include <linux/types.h>
+#include <linux/ioctl.h>
+#include <linux/version.h>
+#include <linux/sched.h>
+#include <linux/delay.h>
+#include <linux/interrupt.h>	/* for in_interrupt() */
 #include <linux/config.h>
 #include <linux/list.h>
 
@@ -364,10 +363,9 @@ struct usb_driver {
  */
 typedef int (*usb_device_irq)(int, void *, int, void *);
 
-/* -------------------------------------------------------------------------------------* 
- * New USB Structures                                                                   *
- * -------------------------------------------------------------------------------------*/
-
+/*----------------------------------------------------------------------------* 
+ * New USB Structures                                                         *
+ *----------------------------------------------------------------------------*/
 
 #define USB_DISABLE_SPD         0x0001
 #define USB_ISO_ASAP            0x0002
@@ -499,7 +497,7 @@ struct irq_wrapper_data {
 	usb_device_irq handler;
 };
 
-/* ------------------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
 
 struct usb_operations {
 	int (*allocate)(struct usb_device *);

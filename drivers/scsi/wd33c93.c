@@ -1638,7 +1638,7 @@ int wd33c93_setup (char *str)
       setup_used[i] = 0;
    done_setup = 1;
 
-   return 0;
+   return 1;
 }
 
 __setup("wd33c93", wd33c93_setup);

@@ -6,8 +6,15 @@
 #include <linux/malloc.h>
 #include <linux/delay.h>
 #include <linux/ioctl.h>
+
 // #define DEBUG
+
+/* Enable to activate the ioctl interface.  This is mainly meant for */
+/* development purposes until an ioctl number is officially registered */
+// #define SCN_IOCTL
+
 #include <linux/usb.h>
+// #include "usb.h"
 
 /* WARNING: These DATA_DUMP's can produce a lot of data. Caveat Emptor. */
 // #define RD_DATA_DUMP /* Enable to dump data - limited to 24 bytes */

@@ -28,15 +28,24 @@
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
-#include <asm/arch/system.h>
 #include <asm/io.h>
+
+/*
+ * Values for cpu_do_idle()
+ */
+#define IDLE_WAIT_SLOW	0
+#define IDLE_WAIT_FAST	1
+#define IDLE_CLOCK_SLOW	2
+#define IDLE_CLOCK_FAST	3
 
 extern char *processor_modes[];
 extern void setup_mm_for_reboot(char mode);
 
 asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
 
-static int hlt_counter;
+static volatile int hlt_counter;
+
+#include <asm/arch/system.h>
 
 void disable_hlt(void)
 {
@@ -64,7 +73,9 @@ __setup("nohlt", nohlt_setup);
 __setup("hlt", hlt_setup);
 
 /*
- * The idle loop on an ARM...
+ * The idle thread.  We try to conserve power, while trying to keep
+ * overall latency low.  The architecture specific idle is passed
+ * a value to indicate the level of "idleness" of the system.
  */
 void cpu_idle(void)
 {
@@ -72,15 +83,13 @@ void cpu_idle(void)
 	init_idle();
 	current->priority = 0;
 	current->counter = -100;
+
 	while (1) {
-		if (!hlt_counter)
-			arch_do_idle();
-		if (current->need_resched) {
-			schedule();
+		arch_idle();
+		schedule();
 #ifndef CONFIG_NO_PGT_CACHE
-			check_pgt_cache();
+		check_pgt_cache();
 #endif
-		}
 	}
 }
 
@@ -89,7 +98,7 @@ static char reboot_mode = 'h';
 int __init reboot_setup(char *str)
 {
 	reboot_mode = str[0];
-	return 0;
+	return 1;
 }
 
 __setup("reboot=", reboot_setup);

@@ -39,6 +39,7 @@
 #define SCREEN1_BASE		0xd0000000
 
 #define FLUSH_BASE		0xdf000000
+#define UNCACHEABLE_ADDR	0xdf010000
 
 
 #ifndef __ASSEMBLY__

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.122 2000/02/21 15:51:41 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.123 2000/03/25 01:52:05 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -126,7 +126,7 @@ int tcp_transmit_skb(struct sock *sk, struct sk_buff *skb)
 #define SYSCTL_FLAG_SACK	0x4
 
 		sysctl_flags = 0;
-		if(tcb->flags & TCPCB_FLAG_SYN) {
+		if (tcb->flags & TCPCB_FLAG_SYN) {
 			tcp_header_size = sizeof(struct tcphdr) + TCPOLEN_MSS;
 			if(sysctl_tcp_timestamps) {
 				tcp_header_size += TCPOLEN_TSTAMP_ALIGNED;
@@ -141,7 +141,7 @@ int tcp_transmit_skb(struct sock *sk, struct sk_buff *skb)
 				if(!(sysctl_flags & SYSCTL_FLAG_TSTAMPS))
 					tcp_header_size += TCPOLEN_SACKPERM_ALIGNED;
 			}
-		} else if(tp->sack_ok && tp->num_sacks) {
+		} else if (tp->num_sacks) {
 			/* A SACK is 2 pad bytes, a 2 byte header, plus
 			 * 2 32-bit sequence numbers for each SACK block.
 			 */
@@ -157,16 +157,19 @@ int tcp_transmit_skb(struct sock *sk, struct sk_buff *skb)
 		th->dest		= sk->dport;
 		th->seq			= htonl(TCP_SKB_CB(skb)->seq);
 		th->ack_seq		= htonl(tp->rcv_nxt);
-		th->doff		= (tcp_header_size >> 2);
-		th->res1		= 0;
-		*(((__u8 *)th) + 13)	= tcb->flags;
-		th->check		= 0;
-		th->urg_ptr		= ntohs(tcb->urg_ptr);
-		if(tcb->flags & TCPCB_FLAG_SYN) {
+		*(((__u16 *)th) + 6)	= htons(((tcp_header_size >> 2) << 12) | tcb->flags);
+		if (tcb->flags & TCPCB_FLAG_SYN) {
 			/* RFC1323: The window in SYN & SYN/ACK segments
 			 * is never scaled.
 			 */
 			th->window	= htons(tp->rcv_wnd);
+		} else {
+			th->window	= htons(tcp_select_window(sk));
+		}
+		th->check		= 0;
+		th->urg_ptr		= ntohs(tcb->urg_ptr);
+
+		if (tcb->flags & TCPCB_FLAG_SYN) {
 			tcp_syn_build_options((__u32 *)(th + 1),
 					      tcp_advertise_mss(sk),
 					      (sysctl_flags & SYSCTL_FLAG_TSTAMPS),
@@ -176,13 +179,12 @@ int tcp_transmit_skb(struct sock *sk, struct sk_buff *skb)
 					      TCP_SKB_CB(skb)->when,
 		      			      tp->ts_recent);
 		} else {
-			th->window	= htons(tcp_select_window(sk));
 			tcp_build_and_update_options((__u32 *)(th + 1),
 						     tp, TCP_SKB_CB(skb)->when);
 		}
 		tp->af_specific->send_check(sk, th, skb->len, skb);
 
-		if (th->ack)
+		if (tcb->flags & TCPCB_FLAG_ACK)
 			tcp_event_ack_sent(sk);
 
 		if (skb->len != tcp_header_size)
@@ -1097,10 +1099,26 @@ err_out:
 void tcp_send_delayed_ack(struct sock *sk)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+	long ato = tp->ack.ato;
 	unsigned long timeout;
 
+	if (ato > TCP_DELACK_MIN) {
+		int max_ato;
+
+		/* If some rtt estimate is known, use it to bound delayed ack.
+		 * Do not use tp->rto here, use results of rtt measurements
+		 * directly.
+		 */
+		if (tp->srtt)
+			max_ato = (tp->srtt >> 3) + tp->mdev;
+		else
+			max_ato = TCP_DELACK_MAX;
+
+		ato = min(ato, max_ato);
+	}
+
 	/* Stay within the limit we were given */
-	timeout = jiffies + tp->ack.ato;
+	timeout = jiffies + ato;
 
 	/* Use new timeout only if there wasn't a older one earlier. */
 	spin_lock_bh(&sk->timer_lock);
@@ -1111,7 +1129,7 @@ void tcp_send_delayed_ack(struct sock *sk)
 		/* If delack timer was blocked or is about to expire,
 		 * send ACK now.
 		 */
-		if (tp->ack.blocked || time_before_eq(tp->delack_timer.expires, jiffies+(tp->ack.ato>>2))) {
+		if (tp->ack.blocked || time_before_eq(tp->delack_timer.expires, jiffies+(ato>>2))) {
 			spin_unlock_bh(&sk->timer_lock);
 
 			tcp_send_ack(sk);

@@ -1,4 +1,4 @@
-/* $Id: pci_impl.h,v 1.5 2000/02/08 05:11:32 jj Exp $
+/* $Id: pci_impl.h,v 1.6 2000/03/25 05:18:11 davem Exp $
  * pci_impl.h: Helper definitions for PCI controller support.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -28,6 +28,10 @@ extern void pci_assign_unassigned(struct pci_pbm_info *pbm,
 				  struct pci_bus *pbus);
 extern void pci_fixup_irq(struct pci_pbm_info *pbm,
 			  struct pci_bus *pbus);
+extern void pci_determine_66mhz_disposition(struct pci_pbm_info *pbm,
+					    struct pci_bus *pbus);
+extern void pci_setup_busmastering(struct pci_pbm_info *pbm,
+				   struct pci_bus *pbus);
 
 /* Error reporting support. */
 extern void pci_scan_for_target_abort(struct pci_controller_info *, struct pci_pbm_info *, struct pci_bus *);

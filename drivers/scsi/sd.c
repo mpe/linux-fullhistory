@@ -120,7 +120,6 @@ static int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, 
 	struct Scsi_Host * host;
 	Scsi_Device * SDev;
 	int diskinfo[4];
-	struct hd_geometry *loc = (struct hd_geometry *) arg;
     
 	SDev = rscsi_disks[DEVICE_NR(dev)].device;
 	/*
@@ -138,6 +137,8 @@ static int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, 
 	switch (cmd) 
 	{
 		case HDIO_GETGEO:   /* Return BIOS disk parameters */
+		{
+			struct hd_geometry *loc = (struct hd_geometry *) arg;
 			if(!loc)
 				return -EINVAL;
 
@@ -164,6 +165,7 @@ static int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, 
 				put_user(sd[SD_PARTITION(inode->i_rdev)].start_sect, &loc->start))
 				return -EFAULT;
 			return 0;
+		}
 		case BLKGETSIZE:   /* Return device size */
 			if (!arg)
 				return -EINVAL;

@@ -8,6 +8,8 @@
  *
  *  structure passed from user-space to kernel-space during an nfs mount
  */
+#include <linux/in.h>
+#include <linux/nfs.h>
 
 /*
  * WARNING!  Do not delete or change the order of these fields.  If
@@ -49,5 +51,13 @@ struct nfs_mount_data {
 #define NFS_MOUNT_VER3		0x0080	/* 3 */
 #define NFS_MOUNT_KERBEROS	0x0100	/* 3 */
 #define NFS_MOUNT_NONLM		0x0200	/* 3 */
+#define NFS_MOUNT_FLAGMASK	0xFFFF
+
+/*
+ * Private flags - not to be set by mount program
+ */
+#ifdef __KERNEL__
+#define NFS_NONMONOTONE_COOKIES	0x00010000
+#endif /* __KERNEL__ */
  
 #endif

@@ -1395,25 +1395,30 @@ static int usbout_start(struct usb_audiodev *as)
 
 /* --------------------------------------------------------------------- */
 
-static unsigned int find_format(struct audioformat *afp, unsigned int nr, unsigned int fmt)
+static unsigned int find_format(struct audioformat *afp, unsigned int nr, unsigned int fmt, unsigned int rate)
 {
 	unsigned int i;
 
-	/* first find an exact match */
-	for (i = 0; i < nr; i++)
-		if (afp[i].format == fmt)
+	/* first find an exact match, taking both format and sample rate into account,
+	   but ignore stereo bit */
+	for (i = 0; i < nr; i++) {
+		if (afp[i].format == (fmt & ~AFMT_STEREO) && rate >= afp[i].sratelo && rate <= afp[i].sratehi)
 			return i;
+	}
+		
 	/* second find a match with the same stereo/mono and 8bit/16bit property */
 	for (i = 0; i < nr; i++)
 		if (!AFMT_ISSTEREO(afp[i].format) == !AFMT_ISSTEREO(fmt) &&
-		    !AFMT_IS16BIT(afp[i].format) == !AFMT_IS16BIT(fmt))
+		    !AFMT_IS16BIT(afp[i].format) == !AFMT_IS16BIT(fmt) && 
+		    rate >= afp[i].sratelo && rate <= afp[i].sratehi)
 			return i;
 	/* third find a match with the same number of channels */
 	for (i = 0; i < nr; i++)
-		if (!AFMT_ISSTEREO(afp[i].format) == !AFMT_ISSTEREO(fmt))
+		if (!AFMT_ISSTEREO(afp[i].format) == !AFMT_ISSTEREO(fmt) && 
+		    rate >= afp[i].sratelo && rate <= afp[i].sratehi)
 			return i;
-	/* return anything */
-	return 0;
+	/* return failure */
+	return -1;
 }
 
 static int set_format_in(struct usb_audiodev *as)
@@ -1432,7 +1437,13 @@ static int set_format_in(struct usb_audiodev *as)
 	if (u->interface < 0 || u->interface >= config->bNumInterfaces)
 		return 0;
 	iface = &config->interface[u->interface];
-	fmtnr = find_format(as->fmtin, as->numfmtin, d->format);
+
+	fmtnr = find_format(as->fmtin, as->numfmtin, d->format, d->srate);
+	if (fmtnr < 0) {
+		printk(KERN_ERR "usbaudio: set_format_in(): failed to find desired format/speed combination.\n");
+		return -1;
+	}
+
 	fmt = as->fmtin + fmtnr;
 	alts = &iface->altsetting[fmt->altsetting];
 	u->format = fmt->format;
@@ -1513,7 +1524,13 @@ static int set_format_out(struct usb_audiodev *as)
 	if (u->interface < 0 || u->interface >= config->bNumInterfaces)
 		return 0;
 	iface = &config->interface[u->interface];
-	fmtnr = find_format(as->fmtout, as->numfmtout, d->format);
+
+	fmtnr = find_format(as->fmtout, as->numfmtout, d->format, d->srate);
+	if (fmtnr < 0) {
+		printk(KERN_ERR "usbaudio: set_format_out(): failed to find desired format/speed combination.\n");
+		return -1;
+	}
+
 	fmt = as->fmtout + fmtnr;
 	u->format = fmt->format;
 	alts = &iface->altsetting[fmt->altsetting];
@@ -3330,7 +3347,7 @@ static void *usb_audio_parsecontrol(struct usb_device *dev, unsigned char *buffe
 	struct usb_interface *iface;
 	unsigned char ifin[USB_MAXINTERFACES], ifout[USB_MAXINTERFACES];
 	unsigned char *p1;
-	unsigned int i, j, numifin = 0, numifout = 0;
+	unsigned int i, j, k, numifin = 0, numifout = 0;
 	
 	if (!(s = kmalloc(sizeof(struct usb_audio_state), GFP_KERNEL)))
 		return NULL;
@@ -3377,11 +3394,24 @@ static void *usb_audio_parsecontrol(struct usb_device *dev, unsigned char *buffe
 			       dev->devnum, ctrlif, j);
 			continue;
 		}
-		if (iface->num_altsetting < 2 ||
-		    iface->altsetting[0].bNumEndpoints > 0) {
-			printk(KERN_ERR "usbaudio: device %d audiocontrol interface %u altsetting 0 not zero bandwidth\n",
-			       dev->devnum, ctrlif);
+		if (iface->num_altsetting == 0) {
+			printk(KERN_ERR "usbaudio: device %d audiocontrol interface %u has no working interface.\n", dev->devnum, ctrlif);
 			continue;
+		}
+		if (iface->num_altsetting == 1) {
+			printk(KERN_ERR "usbaudio: device %d audiocontrol interface %u has only 1 altsetting.\n", dev->devnum, ctrlif);
+			continue;
+		}
+		if (iface->altsetting[0].bNumEndpoints > 0) {
+			/* Check all endpoints; should they all have a bandwidth of 0 ? */
+			for (k = 0; k < iface->altsetting[0].bNumEndpoints; k++) {
+				if (iface->altsetting[0].endpoint[k].wMaxPacketSize > 0) {
+					printk(KERN_ERR "usbaudio: device %d audiocontrol interface %u endpoint %d does not have 0 bandwidth at alt[0]\n", dev->devnum, ctrlif, k);
+					break;
+				}
+			}
+			if (k < iface->altsetting[0].bNumEndpoints)
+				continue;
 		}
 		if (iface->altsetting[1].bNumEndpoints < 1) {
 			printk(KERN_ERR "usbaudio: device %d audiocontrol interface %u interface %u has no endpoint\n",
@@ -3418,7 +3448,7 @@ static void *usb_audio_parsecontrol(struct usb_device *dev, unsigned char *buffe
 		p1 = find_csinterface_descriptor(buffer, buflen, p1, OUTPUT_TERMINAL, ctrlif, -1);
 	}
 
- ret:
+ret:
 	if (list_empty(&s->audiolist) && list_empty(&s->mixerlist)) {
 		kfree(s);
 		return NULL;

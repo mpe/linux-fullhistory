@@ -103,7 +103,7 @@ extern __inline__ unsigned long ffz(unsigned long word)
 {
 	unsigned long result;
 
-	__asm__("1:\n"
+	__asm__("1:\n\t"
 		"shlr	%1\n\t"
 		"bt/s	1b\n\t"
 		" add	#1, %0"

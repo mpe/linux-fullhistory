@@ -1281,7 +1281,7 @@ int mtrr_add(unsigned long base, unsigned long size, unsigned int type, char inc
 }   /*  End Function mtrr_add  */
 
 /**
- *	mtrr_del
+ *	mtrr_del - delete a memory type region
  *	@reg: Register returned by mtrr_add
  *	@base: Physical base address
  *	@size: Size of region

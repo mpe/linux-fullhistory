@@ -33,6 +33,9 @@ if [ "$CONFIG_FB" = "y" ]; then
    if [ "$CONFIG_ARCH_NETWINDER" = "y" ]; then
       tristate '  Cyber2000 support' CONFIG_FB_CYBER2000
    fi
+   if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
+      bool '  SA-1100 LCD support' CONFIG_FB_SA1100
+   fi
    if [ "$CONFIG_APOLLO" = "y" ]; then
       define_bool CONFIG_FB_APOLLO y
    fi
@@ -193,12 +196,12 @@ if [ "$CONFIG_FB" = "y" ]; then
 	 fi
       fi
       if [ "$CONFIG_FB_ACORN" = "y" -o "$CONFIG_FB_MAC" = "y" -o \
-	   "$CONFIG_FB_VIRTUAL" = "y" ]; then
+	   "$CONFIG_FB_SA1100" = "y" -o "$CONFIG_FB_VIRTUAL" = "y" ]; then
 	 define_tristate CONFIG_FBCON_CFB2 y
 	 define_tristate CONFIG_FBCON_CFB4 y
       else
 	 if [ "$CONFIG_FB_ACORN" = "m" -o "$CONFIG_FB_MAC" = "m" -o \
-	      "$CONFIG_FB_VIRTUAL" = "m" ]; then
+	      "$CONFIG_FB_SA1100" = "m" -o "$CONFIG_FB_VIRTUAL" = "m" ]; then
 	    define_tristate CONFIG_FBCON_CFB2 m
 	    define_tristate CONFIG_FBCON_CFB4 m
 	 fi
@@ -217,7 +220,7 @@ if [ "$CONFIG_FB" = "y" ]; then
 	   "$CONFIG_FB_P9100" = "y" -o "$CONFIG_FB_ATY128" = "y" -o \
 	   "$CONFIG_FB_RIVA" = "y" -o \
 	   "$CONFIG_FB_SGIVW" = "y" -o "$CONFIG_FB_CYBER2000" = "y" -o \
-	   "$CONFIG_FB_3DFX" = "y" ]; then
+	   "$CONFIG_FB_SA1100" = "y" -o "$CONFIG_FB_3DFX" = "y" ]; then
 	 define_tristate CONFIG_FBCON_CFB8 y
       else
 	 if [ "$CONFIG_FB_ACORN" = "m" -o "$CONFIG_FB_ATARI" = "m" -o \
@@ -232,7 +235,8 @@ if [ "$CONFIG_FB" = "y" ]; then
               "$CONFIG_FB_IGA" = "m" -o "$CONFIG_FB_MATROX" = "m" -o \
 	      "$CONFIG_FB_CT65550" = "m" -o "$CONFIG_FB_PM2" = "m" -o \
 	      "$CONFIG_FB_P9100" = "m" -o "$CONFIG_FB_ATY128" = "m" -o \
-	      "$CONFIG_FB_SGIVW" = "m" -o "$CONFIG_FB_CYBER2000" = "m" ]; then
+	      "$CONFIG_FB_SGIVW" = "m" -o "$CONFIG_FB_CYBER2000" = "m" -o \
+	      "$CONFIG_FB_SA1100" = "m" ]; then
 	    define_tristate CONFIG_FBCON_CFB8 m
 	 fi
       fi

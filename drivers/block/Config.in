@@ -12,9 +12,7 @@ if [ "$CONFIG_ATARI" = "y" ]; then
    tristate 'Atari floppy support' CONFIG_ATARI_FLOPPY
 fi
 if [ "$CONFIG_MAC" = "y" ]; then
-   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      bool 'Macintosh IIfx/Quadra 900/Quadra 950 floppy support (EXPERIMENTAL)' CONFIG_BLK_DEV_SWIM_IOP
-   fi
+   dep_bool 'Macintosh IIfx/Quadra 900/Quadra 950 floppy support (EXPERIMENTAL)' CONFIG_BLK_DEV_SWIM_IOP $CONFIG_EXPERIMENTAL
 fi
 if [ "$CONFIG_MCA" = "y" ]; then
    tristate 'PS/2 ESDI hard disk support' CONFIG_BLK_DEV_PS2
@@ -30,36 +28,28 @@ if [ "$CONFIG_ATARI" = "y" ]; then
       tristate '  Atari SLM laser printer support' CONFIG_ATARI_SLM
    fi
 fi
-tristate 'XT hard disk support' CONFIG_BLK_DEV_XD
+dep_tristate 'XT hard disk support' CONFIG_BLK_DEV_XD $CONFIG_ISA
 dep_tristate 'Parallel port IDE device support' CONFIG_PARIDE $CONFIG_PARPORT
 if [ "$CONFIG_PARIDE" = "y" -o "$CONFIG_PARIDE" = "m" ]; then
    source drivers/block/paride/Config.in
 fi
-
-if [ "$CONFIG_PCI" = "y" ]; then
-   tristate 'Compaq SMART2 support' CONFIG_BLK_CPQ_DA
-   tristate 'Mylex DAC960/DAC1100 PCI RAID Controller support' CONFIG_BLK_DEV_DAC960
-fi
+dep_tristate 'Compaq SMART2 support' CONFIG_BLK_CPQ_DA $CONFIG_PCI
+dep_tristate 'Mylex DAC960/DAC1100 PCI RAID Controller support' CONFIG_BLK_DEV_DAC960 $CONFIG_PCI
 
 comment 'Additional Block Devices'
 
 tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
-if [ "$CONFIG_NET" = "y" ]; then
-   tristate 'Network block device support' CONFIG_BLK_DEV_NBD
-fi
+dep_tristate 'Network block device support' CONFIG_BLK_DEV_NBD $CONFIG_NET
+
 bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD
-if [ "$CONFIG_BLK_DEV_MD" = "y" ]; then
-   tristate '  Linear (append) mode' CONFIG_MD_LINEAR
-   tristate '  RAID-0 (striping) mode' CONFIG_MD_STRIPED
-#   tristate '  RAID-1 (mirroring) mode' CONFIG_MD_MIRRORING
-#   tristate '  RAID-4/RAID-5 mode' CONFIG_MD_RAID5
-fi
+dep_tristate '  Linear (append) mode' CONFIG_MD_LINEAR $CONFIG_BLK_DEV_MD
+dep_tristate '  RAID-0 (striping) mode' CONFIG_MD_STRIPED $CONFIG_BLK_DEV_MD
+#dep_tristate '  RAID-1 (mirroring) mode' CONFIG_MD_MIRRORING $CONFIG_BLK_DEV_MD
+#dep_tristate '  RAID-4/RAID-5 mode' CONFIG_MD_RAID5 $CONFIG_BLK_DEV_MD
 #if [ "$CONFIG_MD_LINEAR" = "y" -o "$CONFIG_MD_STRIPED" = "y" ]; then
 #   bool '    Boot support (linear, striped)' CONFIG_MD_BOOT
 #fi
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
-if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
-   bool '  Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD
-fi
+dep_bool '  Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD $CONFIG_BLK_DEV_RAM
 
 endmenu

@@ -1,6 +1,13 @@
 BOOKS	:= wanbook.sgml z8530book.sgml mcabook.sgml videobook.sgml kernel-api.sgml
-	
+
+PS	:=	$(patsubst %.sgml, %.ps, $(BOOKS))
+PDF	:=	$(patsubst %.sgml, %.pdf, $(BOOKS))
+
 books:	docproc $(BOOKS)
+
+ps:	$(PS)
+
+pdf:	$(PDF)
 
 docproc:
 	$(MAKE) -C $(TOPDIR)/scripts docproc
@@ -38,9 +45,24 @@ kernel-api.sgml: kernel-api.tmpl
 		$(TOPDIR)/kernel/pm.c \
 		<kernel-api.tmpl >kernel-api.sgml
 
+DVI	:=	$(patsubst %.sgml, %.dvi, $(BOOKS))
+AUX	:=	$(patsubst %.sgml, %.aux, $(BOOKS))
+TEX	:=	$(patsubst %.sgml, %.tex, $(BOOKS))
+LOG	:=	$(patsubst %.sgml, %.log, $(BOOKS))
+
 clean:
-	rm -f core *~
-	rm -f $(BOOKS)
+	$(RM) core *~
+	$(RM) $(BOOKS)
+	$(RM) $(DVI) $(AUX) $(TEX) $(LOG)
+
+mrproper: clean
+	$(RM) $(PS) $(PDF)
+
+%.ps : %.sgml
+	db2ps $<
+
+%.pdf : %.sgml
+	db2pdf $<
 
 include $(TOPDIR)/Rules.make
 

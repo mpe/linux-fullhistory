@@ -486,7 +486,7 @@ static int __init via_probe_sb(struct address_info *hw_config)
 		return 0;
 	}
 	DPRINTK("EXIT after sb_dsp_detect\n");
-	return sb_dsp_detect(hw_config, 0, 0);
+	return sb_dsp_detect(hw_config, 0, 0, NULL);
 }
 
 

@@ -13,9 +13,9 @@ if [ "$CONFIG_NETLINK" = "y" ]; then
    tristate '  Netlink device emulation' CONFIG_NETLINK_DEV
 fi
 bool 'Network packet filtering (replaces ipchains)' CONFIG_NETFILTER
-#if [ "$CONFIG_NETFILTER" = "y" ]; then
-#   bool '  Network packet filtering debugging' CONFIG_NETFILTER_DEBUG
-#fi
+if [ "$CONFIG_NETFILTER" = "y" ]; then
+   bool '  Network packet filtering debugging' CONFIG_NETFILTER_DEBUG
+fi
 bool 'Socket Filtering'  CONFIG_FILTER
 tristate 'Unix domain sockets' CONFIG_UNIX
 bool 'TCP/IP networking' CONFIG_INET

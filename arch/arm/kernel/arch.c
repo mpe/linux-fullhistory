@@ -23,6 +23,9 @@ unsigned int memc_ctrl_reg;
 unsigned int number_mfm_drives;
 #endif
 
+extern void setup_initrd(unsigned int start, unsigned int size);
+extern void setup_ramdisk(int doload, int prompt, int start, unsigned int rd_sz);
+
 /*
  * Architecture specific fixups.  This is where any
  * parameters in the params struct are fixed up, or
@@ -157,11 +160,15 @@ fixup_sa1100(struct machine_desc *desc, struct param_struct *params,
 #if defined(CONFIG_SA1100_BRUTUS)
 	ROOT_DEV = MKDEV(RAMDISK_MAJOR,0);
 	setup_ramdisk( 1, 0, 0, 8192 );
-	setup_initrd( __phys_to_virt(0xd8000000), 0x00400000 );
+	setup_initrd( __phys_to_virt(0xd8000000), 3*1024*1024 );
 #elif defined(CONFIG_SA1100_EMPEG)
 	ROOT_DEV = MKDEV( 3, 1 );  /* /dev/hda1 */
 	setup_ramdisk( 1, 0, 0, 4096 );
 	setup_initrd( 0xd0000000+((1024-320)*1024), (320*1024) );
+#elif defined(CONFIG_SA1100_THINCLIENT)
+	ROOT_DEV = MKDEV(RAMDISK_MAJOR,0);
+	setup_ramdisk( 1, 0, 0, 8192 );
+	setup_initrd( __phys_to_virt(0xc0800000), 4*1024*1024 );
 #elif defined(CONFIG_SA1100_TIFON)
 	ROOT_DEV = MKDEV(UNNAMED_MAJOR, 0);
 	setup_ramdisk(1, 0, 0, 4096);
@@ -198,7 +205,7 @@ static struct machine_desc machine_desc[] __attribute__ ((__section__ (".arch.in
 		"EBSA110",	/* RMK			*/
 		0x00000400,
 		NO_VIDEO,
-		1, 0, 1, 1, 1,
+		1, 0, 1, 0, 1,
 		NULL
 	},
 #endif

@@ -67,13 +67,13 @@ struct ip_conntrack_expect
 	struct ip_conntrack *expectant;
 };
 
-#if defined(CONFIG_IP_NF_NAT) || defined(CONFIG_IP_NF_NAT_MODULE)
+#ifdef CONFIG_IP_NF_NAT_NEEDED
 #include <linux/netfilter_ipv4/ip_nat.h>
 #endif
 
 #if defined(CONFIG_IP_NF_FTP) || defined(CONFIG_IP_NF_FTP_MODULE)
 #include <linux/netfilter_ipv4/ip_conntrack_ftp.h>
-#if defined(CONFIG_IP_NF_NAT) || defined(CONFIG_IP_NF_NAT_MODULE)
+#ifdef CONFIG_IP_NF_NAT_NEEDED
 #include <linux/netfilter_ipv4/ip_nat_ftp.h>
 #endif
 #endif
@@ -119,7 +119,7 @@ struct ip_conntrack
 #endif
 	} help;
 
-#if defined(CONFIG_IP_NF_NAT) || defined(CONFIG_IP_NF_NAT_MODULE)
+#ifdef CONFIG_IP_NF_NAT_NEEDED
 	struct {
 		struct ip_nat_info info;
 		union {
@@ -132,7 +132,7 @@ struct ip_conntrack
 		int masq_index;
 #endif
 	} nat;
-#endif /* CONFIG_IP_NF_NAT || CONFIG_IP_NF_NAT_MODULE */
+#endif /* CONFIG_IP_NF_NAT_NEEDED */
 
 };
 

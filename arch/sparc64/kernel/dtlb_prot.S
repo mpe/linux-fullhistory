@@ -1,4 +1,4 @@
-/* $Id: dtlb_prot.S,v 1.19 2000/01/31 04:59:12 davem Exp $
+/* $Id: dtlb_prot.S,v 1.20 2000/03/26 09:13:48 davem Exp $
  * dtlb_prot.S: DTLB protection trap strategy.
  *              This is included directly into the trap table.
  *
@@ -40,15 +40,15 @@
 /* PROT ** ICACHE line 3: Real user faults		*/
 1:	rdpr		%pstate, %g5			! Move into alternate globals
 	wrpr		%g5, PSTATE_AG|PSTATE_MG, %pstate
-	rdpr		%tl, %g4			! Need to do a winfixup?
-	cmp		%g4, 1				! Trap level >1?
+	rdpr		%tl, %g1			! Need to do a winfixup?
+	cmp		%g1, 1				! Trap level >1?
 	mov		TLB_TAG_ACCESS, %g4		! Prepare reload of vaddr
 	bgu,pn		%xcc, winfix_trampoline		! Yes, perform winfixup
 	 ldxa		[%g4] ASI_DMMU, %g5		! Put tagaccess in %g5
 	ba,pt		%xcc, sparc64_realfault_common	! Nope, normal fault
 
 /* PROT ** ICACHE line 4: More real fault processing */
-	 mov		1, %g4				! Indicate this was a write
+	 mov		FAULT_CODE_DTLB | FAULT_CODE_WRITE, %g4
 	nop
 	nop
 	nop

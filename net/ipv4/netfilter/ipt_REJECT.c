@@ -6,12 +6,11 @@
 #include <linux/skbuff.h>
 #include <linux/ip.h>
 #include <net/icmp.h>
-#include <net/tcp.h>
+#include <net/ip.h>
 struct in_device;
 #include <net/route.h>
 #include <linux/netfilter_ipv4/ip_tables.h>
 #include <linux/netfilter_ipv4/ipt_REJECT.h>
-EXPORT_NO_SYMBOLS;
 
 #if 0
 #define DEBUGP printk
@@ -28,6 +27,9 @@ static unsigned int reject(struct sk_buff **pskb,
 {
 	const struct ipt_reject_info *reject = targinfo;
 
+	/* WARNING: This code has causes reentry within iptables.
+	   This means that the iptables jump stack is now crap.  We
+	   must return an absolute verdict. --RR */
     	switch (reject->with) {
     	case IPT_ICMP_NET_UNREACHABLE:
     		icmp_send(*pskb, ICMP_DEST_UNREACH, ICMP_NET_UNREACH, 0);
@@ -62,9 +64,6 @@ static unsigned int reject(struct sk_buff **pskb,
 		}
 	}
 	break;
-	case IPT_TCP_RESET:
-		tcp_v4_send_reset(*pskb);
-		break;
 	}
 
 	return NF_DROP;
@@ -113,12 +112,6 @@ static int check(const char *tablename,
 		/* Must contain ICMP match. */
 		if (IPT_MATCH_ITERATE(e, find_ping_match) == 0) {
 			DEBUGP("REJECT: ECHOREPLY illegal for non-ping\n");
-			return 0;
-		}
-	} else if (rejinfo->with == IPT_TCP_RESET) {
-		if (e->ip.proto != IPPROTO_TCP
-		    || (e->ip.invflags & IPT_INV_PROTO)) {
-			DEBUGP("REJECT: TCP_RESET illegal for non-tcp\n");
 			return 0;
 		}
 	}

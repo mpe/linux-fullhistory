@@ -102,7 +102,7 @@ extern pg_data_t *pgdat_list;
  */
 extern void show_free_areas_core(int);
 extern void free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
-		unsigned long *zones_size, unsigned long paddr);
+  unsigned long *zones_size, unsigned long paddr, unsigned long *zholes_size);
 
 #ifndef CONFIG_DISCONTIGMEM
 

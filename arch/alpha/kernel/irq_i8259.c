@@ -146,12 +146,6 @@ isa_device_interrupt(unsigned long vector, struct pt_regs *regs)
 	 */
 	int j = *(vuip) IACK_SC;
 	j &= 0xff;
-	if (j == 7) {
-		if (!(inb(0x20) & 0x80)) {
-			/* It's only a passive release... */
-			return;
-		}
-	}
 	handle_irq(j, regs);
 }
 #endif

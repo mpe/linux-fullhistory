@@ -53,11 +53,13 @@ typedef enum {
   SS_DISCONNECTING			/* in process of disconnecting	*/
 } socket_state;
 
-#define SO_ACCEPTCON	(1<<16)		/* performed a listen		*/
-#define SO_WAITDATA	(1<<17)		/* wait data to read		*/
-#define SO_NOSPACE	(1<<18)		/* no space to write		*/
+#define __SO_ACCEPTCON	(1<<16)		/* performed a listen		*/
 
 #ifdef __KERNEL__
+
+#define SOCK_ASYNC_NOSPACE	0
+#define SOCK_ASYNC_WAITDATA	1
+#define SOCK_NOSPACE		2
 
 struct socket
 {

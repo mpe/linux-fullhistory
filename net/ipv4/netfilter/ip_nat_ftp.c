@@ -11,8 +11,6 @@
 #include <linux/netfilter_ipv4/ip_conntrack_ftp.h>
 #include <linux/netfilter_ipv4/ip_conntrack_helper.h>
 
-EXPORT_NO_SYMBOLS;
-
 #if 0
 #define DEBUGP printk
 #else
@@ -374,8 +372,6 @@ static struct ip_nat_helper ftp
 static struct ip_nat_expect ftp_expect
 = { { NULL, NULL }, ftp_nat_expected };
 
-extern struct module *ip_conntrack_ftp;
-
 static int __init init(void)
 {
 	int ret;
@@ -384,9 +380,7 @@ static int __init init(void)
 	if (ret == 0) {
 		ret = ip_nat_helper_register(&ftp);
 
-		if (ret == 0)
-			__MOD_INC_USE_COUNT(ip_conntrack_ftp);
-		else
+		if (ret != 0)
 			ip_nat_expect_unregister(&ftp_expect);
 	}
 	return ret;
@@ -394,7 +388,6 @@ static int __init init(void)
 
 static void __exit fini(void)
 {
-	__MOD_DEC_USE_COUNT(ip_conntrack_ftp);
 	ip_nat_helper_unregister(&ftp);
 	ip_nat_expect_unregister(&ftp_expect);
 }

@@ -1,8 +1,6 @@
 #ifndef __LINUX_OV511_H
 #define __LINUX_OV511_H
 
-//#include <linux/list.h>
-
 #define OV511_DEBUG	/* Turn on debug messages */
 
 #ifdef OV511_DEBUG
@@ -75,14 +73,16 @@ if (debug >= level) printk("ov511: " fmt "\n" , ## args)
 #define OV511_REG_SYSTEM_CLOCK_DIVISOR		0x51
 #define OV511_REG_SYSTEM_SNAPSHOT			0x52
 #define OV511_REG_SYSTEM_INIT         		0x53
+#define OV511_REG_SYSTEM_PWR_CLK      		0x54    /* OV511+ only */
+#define OV511_REG_SYSTEM_LED_CTL      		0x55    /* OV511+ only */
 #define OV511_REG_SYSTEM_USER_DEFINED		0x5E
 #define OV511_REG_SYSTEM_CUSTOM_ID			0x5F
 
 /* OmniCE register numbers */
-#define OV511_OMNICE_PREDICATION_HORIZ_Y	0x70
-#define OV511_OMNICE_PREDICATION_HORIZ_UV	0x71
-#define OV511_OMNICE_PREDICATION_VERT_Y		0x72
-#define OV511_OMNICE_PREDICATION_VERT_UV	0x73
+#define OV511_OMNICE_PREDICTION_HORIZ_Y	0x70
+#define OV511_OMNICE_PREDICTION_HORIZ_UV	0x71
+#define OV511_OMNICE_PREDICTION_VERT_Y		0x72
+#define OV511_OMNICE_PREDICTION_VERT_UV	0x73
 #define OV511_OMNICE_QUANTIZATION_HORIZ_Y	0x74
 #define OV511_OMNICE_QUANTIZATION_HORIZ_UV	0x75
 #define OV511_OMNICE_QUANTIZATION_VERT_Y	0x76
@@ -94,15 +94,25 @@ if (debug >= level) printk("ov511: " fmt "\n" , ## args)
 #define OV511_OMNICE_UV_LUT_BEGIN			0xA0
 #define OV511_OMNICE_UV_LUT_END				0xBF
 
-/* Alternate numbers for various max packet sizes */
-#define OV511_ALTERNATE_SIZE_992	0
-#define OV511_ALTERNATE_SIZE_993	1
-#define OV511_ALTERNATE_SIZE_768	2
-#define OV511_ALTERNATE_SIZE_769	3
-#define OV511_ALTERNATE_SIZE_512	4
-#define OV511_ALTERNATE_SIZE_513	5
-#define OV511_ALTERNATE_SIZE_257	6
-#define OV511_ALTERNATE_SIZE_0		7
+/* Alternate numbers for various max packet sizes (OV511 only) */
+#define OV511_ALT_SIZE_992	0
+#define OV511_ALT_SIZE_993	1
+#define OV511_ALT_SIZE_768	2
+#define OV511_ALT_SIZE_769	3
+#define OV511_ALT_SIZE_512	4
+#define OV511_ALT_SIZE_513	5
+#define OV511_ALT_SIZE_257	6
+#define OV511_ALT_SIZE_0	7
+
+/* Alternate numbers for various max packet sizes (OV511+ only) */
+#define OV511PLUS_ALT_SIZE_0	0
+#define OV511PLUS_ALT_SIZE_33	1
+#define OV511PLUS_ALT_SIZE_129	2
+#define OV511PLUS_ALT_SIZE_257	3
+#define OV511PLUS_ALT_SIZE_385	4
+#define OV511PLUS_ALT_SIZE_513	5
+#define OV511PLUS_ALT_SIZE_769	6
+#define OV511PLUS_ALT_SIZE_961	7
 
 /* ov7610 registers */
 #define OV7610_REG_GAIN          0x00
@@ -154,7 +164,8 @@ if (debug >= level) printk("ov511: " fmt "\n" , ## args)
 #define SCRATCH_BUF_SIZE 384
 
 #define FRAMES_PER_DESC		10  /* FIXME - What should this be? */
-#define FRAME_SIZE_PER_DESC	993	/* FIXME - Shouldn't be hardcoded */
+#define FRAME_SIZE_PER_DESC	993	/* FIXME - Deprecated */
+#define MAX_FRAME_SIZE_PER_DESC	993  /* For statically allocated stuff */
 
 // FIXME - should this be 0x81 (endpoint address) or 0x01 (endpoint number)?
 #define OV511_ENDPOINT_ADDRESS 0x81 /* Address of isoc endpoint */
@@ -171,6 +182,19 @@ int usb_ov511_reg_write(struct usb_device *dev,
                         unsigned char reg,
                         unsigned char value);
 
+/* Bridge types */
+enum {
+	BRG_OV511,
+	BRG_OV511PLUS,
+};
+
+/* Sensor types */
+enum {
+	SEN_UNKNOWN,
+	SEN_OV7610,
+	SEN_OV7620,
+	SEN_OV7620AE,
+};
 
 enum {
 	STATE_SCANNING,		/* Scanning for start */
@@ -214,7 +238,7 @@ struct ov511_frame {
 	int hdrheight;		/* Height */
 
 	int sub_flag;		/* Sub-capture mode for this frame? */
-	int format;		/* Format for this frame */
+	int format;			/* Format for this frame */
 	int segsize;		/* How big is each segment from the camera? */
 
 	volatile int grabstate;	/* State of grabbing */
@@ -274,6 +298,11 @@ struct usb_ov511 {
 	wait_queue_head_t wq;	/* Processes waiting */
 
 	int snap_enabled;   /* Snapshot mode enabled */
+	
+	int bridge;         /* Type of bridge (OV511 or OV511+) */
+	int sensor;         /* Type of image sensor chip */
+
+	int packet_size;    /* Frame size per isoc desc */
 };
 
 #endif
