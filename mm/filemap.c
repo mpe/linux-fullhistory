@@ -1256,6 +1256,7 @@ asmlinkage int sys_msync(unsigned long start, size_t len, int flags)
 	struct vm_area_struct * vma;
 	int unmapped_error, error = -EINVAL;
 
+	down(&current->mm->mmap_sem);
 	lock_kernel();
 	if (start & ~PAGE_MASK)
 		goto out;
@@ -1303,6 +1304,7 @@ asmlinkage int sys_msync(unsigned long start, size_t len, int flags)
 	}
 out:
 	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	return error;
 }
 

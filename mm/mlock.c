@@ -127,13 +127,25 @@ static int mlock_fixup(struct vm_area_struct * vma,
 			pages = -pages;
 		vma->vm_mm->locked_vm += pages;
 
-		if (newflags & VM_LOCKED)
+#if 0
+/*
+ * This is horribly broken. See the comment on the same
+ * brokenness in mm/mmap.c (essentially, this doesn't
+ * work anyway for PROT_NONE and writable pages, and now
+ * that we properly get the mmap semaphore it would just
+ * lock up on us).
+ *
+ * Fix the same way.
+ */
+		if (newflags & VM_LOCKED) {
 			while (start < end) {
 				int c;
 				get_user(c,(int *) start);
 				__asm__ __volatile__("": :"r" (c));
 				start += PAGE_SIZE;
 			}
+		}
+#endif
 	}
 	return retval;
 }
@@ -192,6 +204,7 @@ asmlinkage int sys_mlock(unsigned long start, size_t len)
 	unsigned long lock_limit;
 	int error = -ENOMEM;
 
+	down(&current->mm->mmap_sem);
 	lock_kernel();
 	len = (len + (start & ~PAGE_MASK) + ~PAGE_MASK) & PAGE_MASK;
 	start &= PAGE_MASK;
@@ -214,6 +227,7 @@ asmlinkage int sys_mlock(unsigned long start, size_t len)
 	error = do_mlock(start, len, 1);
 out:
 	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	return error;
 }
 
@@ -221,11 +235,13 @@ asmlinkage int sys_munlock(unsigned long start, size_t len)
 {
 	int ret;
 
+	down(&current->mm->mmap_sem);
 	lock_kernel();
 	len = (len + (start & ~PAGE_MASK) + ~PAGE_MASK) & PAGE_MASK;
 	start &= PAGE_MASK;
 	ret = do_mlock(start, len, 0);
 	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	return ret;
 }
 
@@ -263,6 +279,7 @@ asmlinkage int sys_mlockall(int flags)
 	unsigned long lock_limit;
 	int ret = -EINVAL;
 
+	down(&current->mm->mmap_sem);
 	lock_kernel();
 	if (!flags || (flags & ~(MCL_CURRENT | MCL_FUTURE)))
 		goto out;
@@ -282,6 +299,7 @@ asmlinkage int sys_mlockall(int flags)
 	ret = do_mlockall(flags);
 out:
 	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	return ret;
 }
 
@@ -289,8 +307,10 @@ asmlinkage int sys_munlockall(void)
 {
 	int ret;
 
+	down(&current->mm->mmap_sem);
 	lock_kernel();
 	ret = do_mlockall(0);
 	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	return ret;
 }

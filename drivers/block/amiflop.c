@@ -68,11 +68,11 @@
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/init.h>
+#include <linux/amifdreg.h>
+#include <linux/amifd.h>
 
 #include <asm/setup.h>
 #include <asm/uaccess.h>
-#include <asm/amifdreg.h>
-#include <asm/amifd.h>
 #include <asm/amigahw.h>
 #include <asm/amigaints.h>
 #include <asm/irq.h>

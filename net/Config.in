@@ -56,7 +56,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   if [ "$CONFIG_NET_SCHED" = "y" ]; then
     source net/sched/Config.in
   fi
-  bool 'Network code profiler' CONFIG_NET_PROFILE
+#  bool 'Network code profiler' CONFIG_NET_PROFILE
   fi
 fi
 endmenu

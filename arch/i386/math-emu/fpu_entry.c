@@ -677,14 +677,15 @@ void math_abort(struct info * info, unsigned int signal)
 #define sstatus_word() \
   ((S387->swd & ~SW_Top & 0xffff) | ((S387->ftop << SW_Top_Shift) & SW_Top))
 
-void restore_i387_soft(void *s387, struct _fpstate *buf)
+int restore_i387_soft(void *s387, struct _fpstate *buf)
 {
   u_char *d = (u_char *)buf;
   int offset, other, i, tags, regnr, tag, newtop;
 
   RE_ENTRANT_CHECK_OFF;
   FPU_verify_area(VERIFY_READ, d, 7*4 + 8*10);
-  __copy_from_user(&S387->cwd, d, 7*4);
+  if (__copy_from_user(&S387->cwd, d, 7*4))
+    return -1;
   RE_ENTRANT_CHECK_ON;
 
   d += 7*4;
@@ -695,9 +696,11 @@ void restore_i387_soft(void *s387, struct _fpstate *buf)
 
   RE_ENTRANT_CHECK_OFF;
   /* Copy all registers in stack order. */
-  __copy_from_user(((u_char *)&S387->st_space)+offset, d, other);
+  if (__copy_from_user(((u_char *)&S387->st_space)+offset, d, other))
+    return -1;
   if ( offset )
-    __copy_from_user((u_char *)&S387->st_space, d+other, offset);
+    if (__copy_from_user((u_char *)&S387->st_space, d+other, offset))
+      return -1;
   RE_ENTRANT_CHECK_ON;
 
   /* The tags may need to be corrected now. */
@@ -716,10 +719,11 @@ void restore_i387_soft(void *s387, struct _fpstate *buf)
     }
   S387->twd = tags;
 
+  return 0;
 }
 
 
-struct _fpstate * save_i387_soft(void *s387, struct _fpstate * buf)
+int save_i387_soft(void *s387, struct _fpstate * buf)
 {
   u_char *d = (u_char *)buf;
   int offset = (S387->ftop & 7) * 10, other = 80 - offset;
@@ -742,10 +746,12 @@ struct _fpstate * save_i387_soft(void *s387, struct _fpstate * buf)
 
   RE_ENTRANT_CHECK_OFF;
   /* Copy all registers in stack order. */
-  __copy_to_user(d, ((u_char *)&S387->st_space)+offset, other);
+  if (__copy_to_user(d, ((u_char *)&S387->st_space)+offset, other))
+    return -1;
   if ( offset )
-    __copy_to_user(d+other, (u_char *)&S387->st_space, offset);
+    if (__copy_to_user(d+other, (u_char *)&S387->st_space, offset))
+      return -1
   RE_ENTRANT_CHECK_ON;
 
-  return buf;
+  return 1;
 }

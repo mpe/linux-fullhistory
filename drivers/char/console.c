@@ -1254,18 +1254,16 @@ static void setterm_command(int currcons)
 	}
 }
 
-static void insert_char(int currcons)
+static void insert_char(int currcons, unsigned int nr)
 {
 	unsigned int i = x;
-	unsigned short tmp, old = video_erase_char;
-	unsigned short * p = (unsigned short *) pos;
+	unsigned short * p, * q = (unsigned short *) pos;
 
-	while (i++ < video_num_columns) {
-		tmp = scr_readw(p);
-		scr_writew(old, p);
-		old = tmp;
+	while (i++ <= video_num_columns - nr) {
+		scr_writew(scr_readw(p), p + nr);
 		p++;
 	}
+	memsetw(q, video_erase_char, nr*2);
 	need_wrap = 0;
 }
 
@@ -1275,16 +1273,16 @@ static void insert_line(int currcons, unsigned int nr)
 	need_wrap = 0;
 }
 
-static void delete_char(int currcons)
+static void delete_char(int currcons, unsigned int nr)
 {
 	unsigned int i = x;
 	unsigned short * p = (unsigned short *) pos;
 
-	while (++i < video_num_columns) {
-		scr_writew(scr_readw(p+1), p);
+	while (++i <= video_num_columns - nr) {
+		scr_writew(scr_readw(p+nr), p);
 		p++;
 	}
-	scr_writew(video_erase_char, p);
+	memsetw(p, video_erase_char, nr*2);
 	need_wrap = 0;
 }
 
@@ -1300,8 +1298,7 @@ static void csi_at(int currcons, unsigned int nr)
 		nr = video_num_columns;
 	else if (!nr)
 		nr = 1;
-	while (nr--)
-		insert_char(currcons);
+	insert_char(currcons, nr);
 }
 
 static void csi_L(int currcons, unsigned int nr)
@@ -1319,8 +1316,7 @@ static void csi_P(int currcons, unsigned int nr)
 		nr = video_num_columns;
 	else if (!nr)
 		nr = 1;
-	while (nr--)
-		delete_char(currcons);
+	delete_char(currcons, nr);
 }
 
 static void csi_M(int currcons, unsigned int nr)
@@ -1583,7 +1579,7 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 				lf(currcons);
 			}
 			if (decim)
-				insert_char(currcons);
+				insert_char(currcons, 1);
 			scr_writew( video_mode_512ch ?
 			   ((attr & 0xf7) << 8) + ((tc & 0x100) << 3) +
 			   (tc & 0x0ff) : (attr << 8) + tc,

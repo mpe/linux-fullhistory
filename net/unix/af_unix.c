@@ -86,6 +86,7 @@
 #include <linux/proc_fs.h>
 #include <net/scm.h>
 #include <linux/init.h>
+#include <linux/poll.h>
 
 #include <asm/checksum.h>
 
@@ -99,6 +100,8 @@ unix_socket *unix_socket_table[UNIX_HASH_SIZE+1];
 #define unix_sockets_unbound	(unix_socket_table[UNIX_HASH_SIZE])
 
 #define UNIX_ABSTRACT(sk)	((sk)->protinfo.af_unix.addr->hash!=UNIX_HASH_SIZE)
+
+static void unix_destroy_socket(unix_socket *sk);
 
 extern __inline__ unsigned unix_hash_fold(unsigned hash)
 {
@@ -127,7 +130,7 @@ extern __inline__ void unix_lock(unix_socket *sk)
 
 extern __inline__ int unix_unlock(unix_socket *sk)
 {
-	return sk->sock_readers--;
+	return --sk->sock_readers;
 }
 
 extern __inline__ int unix_locked(unix_socket *sk)
@@ -254,6 +257,10 @@ static void unix_destroy_timer(unsigned long data)
 	if(!unix_locked(sk) && atomic_read(&sk->wmem_alloc) == 0)
 	{
 		sk_free(sk);
+		unix_remove_socket(sk);
+	
+		/* socket destroyed, decrement count		      */
+		MOD_DEC_USE_COUNT;
 		return;
 	}
 	
@@ -273,28 +280,56 @@ static void unix_delayed_delete(unix_socket *sk)
 	sk->timer.function=unix_destroy_timer;
 	add_timer(&sk->timer);
 }
+
+static int unix_release_sock (unix_socket *sk)
+{
+	unix_socket *skpair;
+
+	sk->state_change(sk);
+	sk->dead=1;
+	sk->socket = NULL;
+
+	skpair=unix_peer(sk);
+
+	/* Try to flush out this socket. Throw out buffers at least */
+	unix_destroy_socket(sk);
+
+	if (skpair!=NULL)
+	{
+		if (sk->type==SOCK_STREAM && unix_our_peer(sk, skpair))
+		{
+			skpair->state_change(skpair);
+			skpair->shutdown=SHUTDOWN_MASK;	/* No more writes*/
+		}
+		unix_unlock(skpair); /* It may now die */
+	}
+
+	/*
+	 * Fixme: BSD difference: In BSD all sockets connected to use get
+	 *	  ECONNRESET and we die on the spot. In Linux we behave
+	 *	  like files and pipes do and wait for the last
+	 *	  dereference.
+	 *
+	 * Can't we simply set sock->err?
+	 */
+
+	unix_gc();		/* Garbage collect fds */	
+	return 0;
+}
 	
 static void unix_destroy_socket(unix_socket *sk)
 {
 	struct sk_buff *skb;
 
-	unix_remove_socket(sk);
-	
 	while((skb=skb_dequeue(&sk->receive_queue))!=NULL)
 	{
 		if(sk->state==TCP_LISTEN)
 		{
-			unix_socket *osk=skb->sk;
-			osk->state=TCP_CLOSE;
-			kfree_skb(skb);			/* Now surplus - free the skb first before the socket */
-			osk->state_change(osk);		/* So the connect wakes and cleans up (if any) */
-			/* osk will be destroyed when it gets to close or the timer fires */			
+			unix_unlock(sk);
+			unix_release_sock(skb->sk);
 		}
-		else
-		{
-			/* passed fds are erased in the kfree_skb hook */
-			kfree_skb(skb);
-		}
+		/* passed fds are erased in the kfree_skb hook	      */
+		kfree_skb(skb);
 	}
 	
 	if(sk->protinfo.af_unix.dentry!=NULL)
@@ -306,15 +341,18 @@ static void unix_destroy_socket(unix_socket *sk)
 	if(!unix_unlock(sk) && atomic_read(&sk->wmem_alloc) == 0)
 	{
 		sk_free(sk);
+		unix_remove_socket(sk);
+	
+		/* socket destroyed, decrement count		      */
+		MOD_DEC_USE_COUNT;
 	}
 	else
 	{
+		sk->state=TCP_CLOSE;
 		sk->dead=1;
 		unix_delayed_delete(sk);	/* Try every so often until buffers are all freed */
 	}
 
-	/* socket destroyed, decrement count */
-	MOD_DEC_USE_COUNT;
 }
 
 static int unix_listen(struct socket *sock, int backlog)
@@ -332,23 +370,29 @@ static int unix_listen(struct socket *sock, int backlog)
 		sk->state_change(sk);
 	sk->state=TCP_LISTEN;
 	sock->flags |= SO_ACCEPTCON;
+	/* set credentials so connect can copy them */
+	sk->peercred.pid = current->pid;
+	sk->peercred.uid = current->euid;
+	sk->peercred.gid = current->egid;
 	return 0;
 }
 
 extern struct proto_ops unix_stream_ops;
 extern struct proto_ops unix_dgram_ops;
 
-static int unix_create(struct socket *sock, int protocol)
+static int unix_create1(struct socket *sock, struct sock **skp, int protocol)
 {
 	struct sock *sk;
-
-	sock->state = SS_UNCONNECTED;
 
 	if (protocol && protocol != PF_UNIX)
 		return -EPROTONOSUPPORT;
 
-	switch (sock->type)
+	if (sock)
 	{
+		sock->state = SS_UNCONNECTED;
+
+		switch (sock->type)
+		{
 		case SOCK_STREAM:
 			sock->ops = &unix_stream_ops;
 			break;
@@ -363,6 +407,7 @@ static int unix_create(struct socket *sock, int protocol)
 			break;
 		default:
 			return -ESOCKTNOSUPPORT;
+		}
 	}
 	sk = sk_alloc(PF_UNIX, GFP_KERNEL, 1);
 	if (!sk)
@@ -378,51 +423,32 @@ static int unix_create(struct socket *sock, int protocol)
 	sk->mtu=4096;
 	sk->protinfo.af_unix.list=&unix_sockets_unbound;
 	unix_insert_socket(sk);
-
+	if (skp)
+		*skp =sk;
+	
 	/* socket created, increment count */
 	MOD_INC_USE_COUNT;
 
 	return 0;
 }
 
+static int unix_create(struct socket *sock, int protocol)
+{
+	return unix_create1(sock, NULL, protocol);
+}
+
 static int unix_release(struct socket *sock, struct socket *peer)
 {
 	unix_socket *sk = sock->sk;
-	unix_socket *skpair;
 
 	if (!sk)
 		return 0;
 	
+	sock->sk = NULL;
 	if (sock->state != SS_UNCONNECTED)
 		sock->state = SS_DISCONNECTING;
 
-	sk->state_change(sk);
-	sk->dead=1;
-	skpair=unix_peer(sk);
-	if (sock->type==SOCK_STREAM && skpair)
-	{
-		if (unix_our_peer(sk, skpair))
-			skpair->shutdown=SHUTDOWN_MASK;	/* No more writes */
-		if (skpair->state!=TCP_LISTEN)
-			skpair->state_change(skpair);	/* Wake any blocked writes */
-	}
-	if (skpair!=NULL)
-		unix_unlock(skpair);			/* It may now die */
-	unix_peer(sk)=NULL;				/* No pair */
-	unix_destroy_socket(sk);			/* Try to flush out this socket. Throw out buffers at least */
-	unix_gc();					/* Garbage collect fds */	
-
-	/*
-	 *	FIXME: BSD difference: In BSD all sockets connected to use get ECONNRESET and we die on the spot. In
-	 *	Linux we behave like files and pipes do and wait for the last dereference.
-	 */
-	if (sk->socket)
-	{
-		sk->socket = NULL;
-		sock->sk = NULL;
-	}
-	 
-	return 0;
+	return unix_release_sock (sk);
 }
 
 static int unix_autobind(struct socket *sock)
@@ -625,18 +651,17 @@ static int unix_dgram_connect(struct socket *sock, struct sockaddr *addr,
 	return 0;
 }
 
-static int unix_stream_connect1(struct socket *sock, struct msghdr *msg,
-				int len, struct unix_skb_parms *cmsg, int nonblock)
+static int unix_stream_connect(struct socket *sock, struct sockaddr *uaddr,
+			       int addr_len, int flags)
 {
-	struct sockaddr_un *sunaddr=(struct sockaddr_un *)msg->msg_name;
-	struct sock *sk = sock->sk;
+	struct sockaddr_un *sunaddr=(struct sockaddr_un *)uaddr;
+	struct sock *sk = sock->sk, *newsk;
 	unix_socket *other;
 	struct sk_buff *skb;
 	int err;
 	unsigned hash;
-	int addr_len;
 
-	addr_len = unix_mkname(sunaddr, msg->msg_namelen, &hash);
+	addr_len = unix_mkname(sunaddr, addr_len, &hash);
 	if (addr_len < 0)
 		return addr_len;
 
@@ -648,121 +673,78 @@ static int unix_stream_connect1(struct socket *sock, struct msghdr *msg,
 		case SS_CONNECTED:
 			/* Socket is already connected */
 			return -EISCONN;
-		case SS_CONNECTING:
-			/* Not yet connected... we will check this. */
-			break;
 		default:
 			return(-EINVAL);
 	}
 
-
-	if (unix_peer(sk))
-	{
-		if (sock->state==SS_CONNECTING && sk->state==TCP_ESTABLISHED)
-		{
-			sock->state=SS_CONNECTED;
-			if (!sk->protinfo.af_unix.addr)
-				unix_autobind(sock);
-			return 0;
-		}
-		if (sock->state==SS_CONNECTING && sk->state == TCP_CLOSE)
-		{
-			sock->state=SS_UNCONNECTED;
-			return -ECONNREFUSED;
-		}
-		if (sock->state!=SS_CONNECTING)
-			return -EISCONN;
-		if (nonblock)
-			return -EALREADY;
-		/*
-		 *	Drop through the connect up logic to the wait.
-		 */
-	}
-
-	if (sock->state==SS_UNCONNECTED)
-	{
-		/*
-		 *	Now ready to connect
-		 */
-	 
-		skb=sock_alloc_send_skb(sk, len, 0, nonblock, &err); /* Marker object */
-		if(skb==NULL)
-			goto out;
-		memcpy(&UNIXCB(skb), cmsg, sizeof(*cmsg));
-		if (len) {
-			err = memcpy_fromiovec(skb_put(skb,len), msg->msg_iov,
-						len);
-			if (err)
-				goto out_free;
-		}
-
-		sk->state=TCP_CLOSE;
-		other=unix_find_other(sunaddr, addr_len, sk->type, hash, &err);
-		if(other==NULL)
-			goto out_free;
-		other->ack_backlog++;
-		unix_peer(sk)=other;
-		skb_queue_tail(&other->receive_queue,skb);
-		sk->state=TCP_SYN_SENT;
-		sock->state=SS_CONNECTING;
-		other->data_ready(other,0);		/* Wake up ! */		
-	}
-			
-	
-	/* Wait for an accept */
-	
-	while(sk->state==TCP_SYN_SENT)
-	{
-		if(nonblock)
-			return -EINPROGRESS;
-		interruptible_sleep_on(sk->sleep);
-		if(signal_pending(current))
-			return -ERESTARTSYS;
-	}
-	
 	/*
-	 *	Has the other end closed on us ?
+	 *	Now ready to connect
 	 */
 	 
-	if(sk->state==TCP_CLOSE)
-	{
-		unix_unlock(unix_peer(sk));
-		unix_peer(sk)=NULL;
-		sock->state=SS_UNCONNECTED;
-		return -ECONNREFUSED;
-	}
+	sk->state=TCP_CLOSE;
 	
-	/*
-	 *	Amazingly it has worked
-	 */
-	 
+	/*  Find listening sock */
+	other=unix_find_other(sunaddr, addr_len, sk->type, hash, &err);
+	if(other==NULL)
+		goto out;
+
+	/* create new sock for complete connection */
+	err = unix_create1(NULL, &newsk, PF_UNIX);
+	if (newsk == NULL)
+		goto out;
+
+	/* Allocate skb for sending to listening sock */
+	skb=sock_alloc_send_skb(newsk, 0, 0, flags&O_NONBLOCK, &err);
+	if(skb==NULL)
+		/*
+		 * if it gives EAGAIN we should give back
+		 * EINPROGRESS. But this should not happen since the
+		 * socket should have some writespace left (it did not
+		 * allocate any memory until now)
+		 */
+		goto out_release;
+
+	UNIXCB(skb).attr = MSG_SYN;
+
+	/* set up connecting socket */
 	sock->state=SS_CONNECTED;
 	if (!sk->protinfo.af_unix.addr)
 		unix_autobind(sock);
+	unix_peer(sk)=newsk;
+	unix_lock(sk);
+	sk->state=TCP_ESTABLISHED;
+	/* Set credentials */
+	sk->peercred = other->peercred;
+	
+	/* set up newly created sock */
+	unix_peer(newsk)=sk;
+	unix_lock(newsk);
+	newsk->state=TCP_ESTABLISHED;
+	newsk->type=SOCK_STREAM;
+	newsk->peercred.pid = current->pid;
+	newsk->peercred.uid = current->euid;
+	newsk->peercred.gid = current->egid;
+
+	/* copy address information from listening to new sock*/
+	if (other->protinfo.af_unix.addr)
+	{
+		atomic_inc(&other->protinfo.af_unix.addr->refcnt);
+		newsk->protinfo.af_unix.addr=other->protinfo.af_unix.addr;
+	}
+	if (other->protinfo.af_unix.dentry)
+		newsk->protinfo.af_unix.dentry=dget(other->protinfo.af_unix.dentry);
+
+	/* send info to listening sock */
+	other->ack_backlog++;
+	skb_queue_tail(&other->receive_queue,skb);
+	other->data_ready(other,0);		/* Wake up !	      */
+
 	return 0;
 
-out_free:
-	kfree_skb(skb);
+out_release:
+	unix_destroy_socket(newsk);
 out:
 	return err;
-}
-
-
-static int unix_stream_connect(struct socket *sock, struct sockaddr *uaddr,
-			       int addr_len, int flags)
-{
-	struct msghdr msg;
-	struct unix_skb_parms cmsg;
-
-	msg.msg_name = uaddr;
-	msg.msg_namelen = addr_len;
-	cmsg.fp = NULL;
-	cmsg.attr = MSG_SYN;
-	cmsg.creds.pid = current->pid;
-	cmsg.creds.uid = current->euid;
-	cmsg.creds.gid = current->egid;
-
-	return unix_stream_connect1(sock, &msg, 0, &cmsg, flags&O_NONBLOCK);
 }
 
 static int unix_socketpair(struct socket *socka, struct socket *sockb)
@@ -802,14 +784,6 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 	if (sk->state!=TCP_LISTEN)
 		return -EINVAL;
 		
-	if (sk->protinfo.af_unix.addr)
-	{
-		atomic_inc(&sk->protinfo.af_unix.addr->refcnt);
-		newsk->protinfo.af_unix.addr=sk->protinfo.af_unix.addr;
-	}
-	if (sk->protinfo.af_unix.dentry)
-		newsk->protinfo.af_unix.dentry=dget(sk->protinfo.af_unix.dentry);
-		
 	for (;;)
 	{
 		skb=skb_dequeue(&sk->receive_queue);
@@ -834,20 +808,19 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 
 	tsk=skb->sk;
 	sk->ack_backlog--;
-	unix_peer(newsk)=tsk;
-	unix_peer(tsk)=newsk;
-	tsk->state=TCP_ESTABLISHED;
-	newsk->state=TCP_ESTABLISHED;
-	memcpy(&newsk->peercred, UNIXCREDS(skb), sizeof(struct ucred));
-	tsk->peercred.pid = current->pid;
-	tsk->peercred.uid = current->euid;
-	tsk->peercred.gid = current->egid;
-	unix_lock(newsk);		/* Swap lock over */
-	unix_unlock(sk);		/* Locked to child socket not master */
-	unix_lock(tsk);			/* Back lock */
-	kfree_skb(skb);			/* The buffer is just used as a tag */
-	tsk->state_change(tsk);		/* Wake up any sleeping connect */
-	sock_wake_async(tsk->socket, 0);
+	unix_unlock(sk);	/* No longer locked to master	   */
+	kfree_skb(skb);
+
+	/* attach accepted sock to socket */
+	newsock->state=SS_CONNECTED;
+	newsock->sk=tsk;
+	tsk->sleep=newsk->sleep;
+	tsk->socket=newsock;
+
+	/* destroy handed sock */
+	newsk->socket = NULL;
+	unix_destroy_socket(newsk);
+
 	return 0;
 }
 
@@ -1389,6 +1362,38 @@ static int unix_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	return(0);
 }
 
+static unsigned int unix_poll(struct file * file, struct socket *sock, poll_table *wait)
+{
+	struct sock *sk = sock->sk;
+	unsigned int mask;
+
+	poll_wait(file, sk->sleep, wait);
+	mask = 0;
+
+	/* exceptional events? */
+	if (sk->err)
+		mask |= POLLERR;
+	if (sk->shutdown & RCV_SHUTDOWN)
+		mask |= POLLHUP;
+
+	/* readable? */
+	if (!skb_queue_empty(&sk->receive_queue))
+		mask |= POLLIN | POLLRDNORM;
+
+	/* Connection-based need to check for termination and startup */
+	if (sk->type == SOCK_STREAM && sk->state==TCP_CLOSE)
+		mask |= POLLHUP;
+
+	/*
+	 * we set writable also when the other side has shut down the
+	 * connection. This prevents stuck sockets.
+	 */
+	if (sk->sndbuf - atomic_read(&sk->wmem_alloc) >= MIN_WRITE_SPACE)
+			mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
+
+	return mask;
+}
+
 #ifdef CONFIG_PROC_FS
 static int unix_read_proc(char *buffer, char **start, off_t offset,
 			  int length, int *eof, void *data)
@@ -1410,7 +1415,9 @@ static int unix_read_proc(char *buffer, char **start, off_t offset,
 			0,
 			s->socket ? s->socket->flags : 0,
 			s->type,
-			s->socket ? s->socket->state : 0,
+			s->socket ? s->socket->state :
+			     (s->state == TCP_ESTABLISHED ?
+			      SS_CONNECTING : SS_DISCONNECTING),
 			s->socket ? s->socket->inode->i_ino : 0);
 
 		if (s->protinfo.af_unix.addr)
@@ -1426,7 +1433,7 @@ static int unix_read_proc(char *buffer, char **start, off_t offset,
 		}
 		buffer[len++]='\n';
 		
-		pos=begin+len;
+		pos+=len;
 		if(pos<offset)
 		{
 			len=0;
@@ -1441,6 +1448,8 @@ done:
 	len-=(offset-begin);
 	if(len>length)
 		len=length;
+	if (len < 0)
+		len = 0;
 	return len;
 }
 #endif
@@ -1455,7 +1464,7 @@ struct proto_ops unix_stream_ops = {
 	unix_socketpair,
 	unix_accept,
 	unix_getname,
-	datagram_poll,
+	unix_poll,
 	unix_ioctl,
 	unix_listen,
 	unix_shutdown,
@@ -1537,6 +1546,9 @@ void cleanup_module(void)
 	sock_unregister(PF_UNIX);
 #ifdef CONFIG_SYSCTL
 	unix_sysctl_unregister();
+#endif
+#ifdef CONFIG_PROC_FS
+	remove_proc_entry("net/unix", 0);
 #endif
 }
 #endif

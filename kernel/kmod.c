@@ -93,6 +93,13 @@ int request_module(const char * module_name)
 	int pid;
 	int waitpid_result;
 
+	/* Don't allow request_mode() before the root fs is mounted!  */
+	if ( ! current->fs->root ) {
+		printk(KERN_ERR "request_module[%s]: Root fs not mounted\n",
+			module_name);
+		return -EPERM;
+	}
+
 	pid = kernel_thread(exec_modprobe, (void*) module_name, CLONE_FS);
 	if (pid < 0) {
 		printk(KERN_ERR "kmod: fork failed, errno %d\n", -pid);

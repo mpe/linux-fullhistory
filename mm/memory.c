@@ -895,6 +895,9 @@ static inline void handle_pte_fault(struct task_struct *tsk,
 	do_wp_page(tsk, vma, address, write_access, pte);
 }
 
+/*
+ * By the time we get here, we already hold the mm semaphore
+ */
 void handle_mm_fault(struct task_struct *tsk, struct vm_area_struct * vma,
 	unsigned long address, int write_access)
 {
@@ -909,7 +912,9 @@ void handle_mm_fault(struct task_struct *tsk, struct vm_area_struct * vma,
 	pte = pte_alloc(pmd, address);
 	if (!pte)
 		goto no_memory;
+	lock_kernel();
 	handle_pte_fault(tsk, vma, address, write_access, pte);
+	unlock_kernel();
 	update_mmu_cache(vma, address, *pte);
 	return;
 no_memory:

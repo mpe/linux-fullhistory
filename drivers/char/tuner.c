@@ -243,6 +243,8 @@ struct i2c_driver i2c_driver_tuner =
 	tuner_command
 };
 
+EXPORT_NO_SYMBOLS;
+
 #ifdef MODULE
 int init_module(void)
 #else

@@ -390,7 +390,7 @@ static int etherdev_get_index(struct device *dev)
 	for (i = 0; i < MAX_ETH_CARDS; ++i)	{
 		if (ethdev_index[i] == NULL) {
 			sprintf(dev->name, "eth%d", i);
-			printk("loading device '%s'...\n", dev->name);
+/*			printk("loading device '%s'...\n", dev->name);*/
 			ethdev_index[i] = dev;
 			return i;
 		}

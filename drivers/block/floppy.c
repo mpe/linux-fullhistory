@@ -3,6 +3,7 @@
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *  Copyright (C) 1993, 1994  Alain Knaff
+ *  Copyright (C) 1998 Alan Cox
  */
 /*
  * 02.12.91 - Changed to static variables to indicate need for reset
@@ -95,7 +96,11 @@
  * 1995/10/18 -- Ralf Baechle -- Portability cleanup; move machine dependent
  * features to asm/floppy.h.
  */
-
+ 
+/*
+ * 1998/06/07 -- Alan Cox -- Merged the 2.0.34 fixes for resource allocation
+ * failures.
+ */
 
 #define FLOPPY_SANITY_CHECK
 #undef  FLOPPY_SILENT_DCL_CLEAR
@@ -114,9 +119,11 @@ static int print_unex=1;
  * motor of these drives causes system hangs on some PCI computers. drive
  * 0 is the low bit (0x1), and drive 7 is the high bit (0x80). Bits are on if
  * a drive is allowed. */
+ 
 static int FLOPPY_IRQ=6;
 static int FLOPPY_DMA=2;
 static int allowed_drive_mask = 0x33;
+static int irqdma_allocated = 0;
  
 
 #include <linux/sched.h>
@@ -759,6 +766,11 @@ static int set_dor(int fdc, char mask, char data)
 			UDRS->select_date = jiffies;
 		}
 	}
+	/*
+	 *	We should propogate failures to grab the resources back
+	 *	nicely from here. Actually we ought to rewrite the fd
+	 *	driver some day too.
+	 */
 	if (newdor & FLOPPY_MOTOR_MASK)
 		floppy_grab_irq_and_dma();
 	if (olddor & FLOPPY_MOTOR_MASK)
@@ -818,10 +830,11 @@ static int lock_fdc(int drive, int interruptible)
 	unsigned long flags;
 
 	if (!usage_count){
-		printk("trying to lock fdc while usage count=0\n");
+		printk(KERN_ERR "Trying to lock fdc while usage count=0\n");
 		return -1;
 	}
-	floppy_grab_irq_and_dma();
+	if(floppy_grab_irq_and_dma()==-1)
+		return -EBUSY;
 	INT_OFF;
 	while (fdc_busy && NO_SIGNAL)
 		interruptible_sleep_on(&fdc_wait);
@@ -4208,7 +4221,12 @@ static int floppy_grab_irq_and_dma(void)
 	for (fdc = 0; fdc < N_FDC; fdc++)
 		if (FDCS->address != -1)
 			fd_outb(FDCS->dor, FD_DOR);
+	/*
+	 *	The driver will try and free resources and relies on us
+	 *	to know if they were allocated or not.
+	 */
 	fdc = 0;
+	irqdma_allocated = 1;
 	return 0;
 }
 
@@ -4230,10 +4248,13 @@ static void floppy_release_irq_and_dma(void)
 		return;
 	}
 	INT_ON;
-	fd_disable_dma();
-	fd_free_dma();
-	fd_free_irq();
-
+	if(irqdma_allocated)
+	{
+		fd_disable_dma();
+		fd_free_dma();
+		fd_free_irq();
+		irqdma_allocated=0;
+	}
 	set_dor(0, ~0, 8);
 #if N_FDC > 1
 	set_dor(1, ~8, 0);
@@ -4384,10 +4405,12 @@ void floppy_eject(void)
 	int dummy;
 	if(have_no_fdc)
 		return;
-	floppy_grab_irq_and_dma();
-	lock_fdc(MAXTIMEOUT,0);
-	dummy=fd_eject(0);
-	process_fd_request();
-	floppy_release_irq_and_dma();
+	if(floppy_grab_irq_and_dma()==0)
+	{
+		lock_fdc(MAXTIMEOUT,0);
+		dummy=fd_eject(0);
+		process_fd_request();
+		floppy_release_irq_and_dma();
+	}
 }
 #endif

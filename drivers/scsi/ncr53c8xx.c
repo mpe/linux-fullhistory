@@ -369,8 +369,8 @@ static void unmap_pci_mem(vm_offset_t vaddr, u_long size)
 
 static void DELAY(long us)
 {
-	if (us/1000) mdelay(us/1000);
-	if (us%1000) udelay(us%1000);
+	for (;us>1000;us-=1000) udelay(1000);
+	if (us) udelay(us);
 }
 
 /*

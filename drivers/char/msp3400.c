@@ -916,7 +916,7 @@ static int msp3400c_attach(struct i2c_device *device)
 	if (-1 == msp3400c_reset(msp->bus)) {
 		UNLOCK_I2C_BUS(msp->bus);
 		kfree(msp);
-		return -1;
+		return -EIO;
 	}
     
 	msp3400c_setmode(msp, MSP_MODE_FM_TERRA);
@@ -1088,6 +1088,8 @@ struct i2c_driver i2c_driver_msp = {
 	msp3400c_detach,
 	msp3400c_command
 };
+
+EXPORT_NO_SYMBOLS;
 
 #ifdef MODULE
 int init_module(void)

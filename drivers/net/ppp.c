@@ -8,7 +8,9 @@
  *  Dynamic PPP devices by Jim Freeman <jfree@caldera.com>.
  *  ppp_tty_receive ``noisy-raise-bug'' fixed by Ove Ewerlid <ewerlid@syscon.uu.se>
  *
- *  ==FILEVERSION 980501==
+ *  Machine hang caused by NULLing a live wait queue fix. <Alan.Cox@linux.org>
+ *
+ *  ==FILEVERSION 980607==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, please set the number above to the
@@ -415,8 +417,6 @@ ppp_init_ctrl_blk (register struct ppp *ppp)
 	ppp->ubuf	= NULL;
 	ppp->cbuf	= NULL;
 	ppp->slcomp	= NULL;
-	ppp->read_wait	= NULL;
-	ppp->write_wait = NULL;
 	ppp->last_xmit	= jiffies - flag_time;
 	ppp->last_recv  = jiffies;
 

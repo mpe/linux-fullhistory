@@ -204,7 +204,6 @@ static inline int dup_mmap(struct mm_struct * mm)
 	int retval;
 
 	flush_cache_mm(current->mm);
-	down(&current->mm->mmap_sem);
 	pprev = &mm->mmap;
 	for (mpnt = current->mm->mmap ; mpnt ; mpnt = mpnt->vm_next) {
 		struct file *file;
@@ -254,7 +253,6 @@ static inline int dup_mmap(struct mm_struct * mm)
 
 fail_nomem:
 	flush_tlb_mm(current->mm);
-	up(&current->mm->mmap_sem);
 	return retval;
 }
 
@@ -466,6 +464,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	int error = -ENOMEM;
 	struct task_struct *p;
 
+	down(&current->mm->mmap_sem);
 	lock_kernel();
 	p = alloc_task_struct();
 	if (!p)
@@ -570,6 +569,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	++total_forks;
 	error = p->pid;
 bad_fork:
+	up(&current->mm->mmap_sem);
 	unlock_kernel();
 	return error;
 

@@ -114,8 +114,8 @@ asmlinkage void do_page_fault(unsigned long address, unsigned long mmcsr,
 	   (or is suppressed by the PALcode).  Support that for older cpu's
 	   by ignoring such an instruction.  */
 	if (cause == 0) {
-		/* No need for get_user.. we know the insn is there.  */
-		unsigned int insn = *(unsigned int *)regs->pc;
+		unsigned int insn;
+		__get_user(insn, (unsigned int *)regs->pc);
 		if ((insn >> 21 & 0x1f) == 0x1f &&
 		    /* ldq ldl ldt lds ldg ldf ldwu ldbu */
 		    (1ul << (insn >> 26) & 0x30f00001400ul)) {
@@ -124,8 +124,8 @@ asmlinkage void do_page_fault(unsigned long address, unsigned long mmcsr,
 		}
 	}
 
-	lock_kernel();
 	down(&mm->mmap_sem);
+	lock_kernel();
 	vma = find_vma(mm, address);
 	if (!vma)
 		goto bad_area;

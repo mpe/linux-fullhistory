@@ -72,7 +72,7 @@ typedef unsigned long sigset_t;
 /*
  * SA_FLAGS values:
  *
- * SA_ONSTACK is not currently supported, but will allow sigaltstack(2).
+ * SA_ONSTACK indicates that a registered stack_t will be used.
  * SA_INTERRUPT is a no-op, but left due to historical reasons. Use the
  * SA_RESTART flag to get restarting signals (which were the default long ago)
  * SA_NOCLDSTOP flag to turn off SIGCHLD when children stop.
@@ -96,6 +96,15 @@ typedef unsigned long sigset_t;
 #define SA_INTERRUPT	0x20000000 /* dummy -- ignored */
 
 #define SA_RESTORER	0x04000000
+
+/* 
+ * sigaltstack controls
+ */
+#define SS_ONSTACK	1
+#define SS_DISABLE	2
+
+#define MINSIGSTKSZ	2048
+#define SIGSTKSZ	8192
 
 #ifdef __KERNEL__
 

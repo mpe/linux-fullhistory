@@ -743,6 +743,50 @@ asmlinkage long osf_proplist_syscall(enum pl_code code, union pl_args *args)
 	return error;
 }
 
+asmlinkage int osf_sigstack(struct sigstack *uss, struct sigstack *uoss)
+{
+	unsigned long usp = rdusp();
+	unsigned long oss_sp, oss_os;
+	int error;
+
+	if (uoss) {
+		oss_sp = current->sas_ss_sp + current->sas_ss_size;
+		oss_os = on_sig_stack(usp);
+	}
+
+	if (uss) {
+		unsigned long ss_sp;
+
+		error = -EFAULT;
+		if (get_user(ss_sp, &uss->ss_sp))
+			goto out;
+
+		/* If the current stack was set with sigaltstack, don't
+		   swap stacks while we are on it.  */
+		error = -EPERM;
+		if (current->sas_ss_sp && on_sig_stack(usp))
+			goto out;
+
+		/* Since we don't know the extent of the stack, and we don't
+		   track onstack-ness, but rather calculate it, we must 
+		   presume a size.  Ho hum this interface is lossy.  */
+		current->sas_ss_sp = ss_sp - SIGSTKSZ;
+		current->sas_ss_size = SIGSTKSZ;
+	}
+
+	if (uoss) {
+		error = -EFAULT;
+		if (! access_ok(VERIFY_WRITE, uoss, sizeof(*uoss))
+		    || __put_user(oss_sp, &uoss->ss_sp)
+		    || __put_user(oss_os, &uoss->ss_onstack))
+			goto out;
+	}
+
+	error = 0;
+out:
+	return error;
+}
+
 /*
  * The Linux kernel isn't good at returning values that look
  * like negative longs (they are mistaken as error values).

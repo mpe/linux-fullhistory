@@ -47,6 +47,7 @@ struct termio {
 #define N_AX25		5
 #define N_X25		6	/* X.25 async */
 #define N_6PACK		7
+#define N_MASC		8	/* Reserved fo Mobitex module <kaz@cafe.net> */
 
 #ifdef __KERNEL__
 

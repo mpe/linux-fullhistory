@@ -113,7 +113,7 @@
 #define __NR_osf_old_sigblock	109	/* not implemented */
 #define __NR_osf_old_sigsetmask	110	/* not implemented */
 #define __NR_sigsuspend		111
-#define __NR_osf_sigstack	112	/* not implemented */
+#define __NR_osf_sigstack	112
 #define __NR_recvmsg		113
 #define __NR_sendmsg		114
 #define __NR_osf_old_vtrace	115	/* not implemented */
@@ -205,7 +205,7 @@
 
 #define __NR_getpgid		233
 #define __NR_getsid		234
-#define __NR_osf_sigaltstack	235	/* not implemented */
+#define __NR_sigaltstack	235
 #define __NR_osf_waitid		236	/* not implemented */
 #define __NR_osf_priocntlset	237	/* not implemented */
 #define __NR_osf_sigsendset	238	/* not implemented */
@@ -305,7 +305,8 @@
 #define __NR_wait4			365
 #define __NR_adjtimex			366
 #define __NR_getcwd			367
-
+#define __NR_capget			368
+#define __NR_capset			369
 
 #if defined(__LIBRARY__) && defined(__GNUC__)
 

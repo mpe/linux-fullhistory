@@ -924,7 +924,7 @@ sys_call_table:
 	.quad alpha_ni_syscall
 	.quad alpha_ni_syscall			/* 110 */
 	.quad sys_sigsuspend
-	.quad sys_ni_syscall
+	.quad osf_sigstack
 	.quad sys_recvmsg
 	.quad sys_sendmsg
 	.quad alpha_ni_syscall			/* 115 */
@@ -1047,7 +1047,7 @@ sys_call_table:
 	.quad alpha_ni_syscall
 	.quad sys_getpgid
 	.quad sys_getsid
-	.quad alpha_ni_syscall			/* 235 */
+	.quad sys_sigaltstack			/* 235 */
 	.quad alpha_ni_syscall
 	.quad alpha_ni_syscall
 	.quad alpha_ni_syscall
@@ -1181,5 +1181,6 @@ sys_call_table:
 	.quad sys_wait4				/* 365 */
 	.quad sys_adjtimex
 	.quad sys_getcwd
-	.quad sys_ni_syscall
-	.quad sys_ni_syscall			/* 369 */
+	.quad sys_capget
+	.quad sys_capset
+	.quad sys_ni_syscall			/* 370 */

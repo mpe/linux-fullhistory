@@ -840,6 +840,62 @@ do_sigaction(int sig, const struct k_sigaction *act, struct k_sigaction *oact)
 	return 0;
 }
 
+int 
+do_sigaltstack (const stack_t *uss, stack_t *uoss, unsigned long sp)
+{
+	stack_t oss;
+	int error;
+
+	if (uoss) {
+		oss.ss_sp = (void *) current->sas_ss_sp;
+		oss.ss_size = current->sas_ss_size;
+		oss.ss_flags = sas_ss_flags(sp);
+	}
+
+	if (uss) {
+		void *ss_sp;
+		size_t ss_size;
+		int ss_flags;
+
+		error = -EFAULT;
+		if (verify_area(VERIFY_READ, uss, sizeof(*uss))
+		    || __get_user(ss_sp, &uss->ss_sp)
+		    || __get_user(ss_flags, &uss->ss_flags)
+		    || __get_user(ss_size, &uss->ss_size))
+			goto out;
+
+		error = -EPERM;
+		if (on_sig_stack (sp))
+			goto out;
+
+		error = -EINVAL;
+		if (ss_flags & ~SS_DISABLE)
+			goto out;
+
+		if (ss_flags & SS_DISABLE) {
+			ss_size = 0;
+			ss_sp = NULL;
+		} else {
+			error = -ENOMEM;
+			if (ss_size < MINSIGSTKSZ)
+				goto out;
+		}
+
+		current->sas_ss_sp = (unsigned long) ss_sp;
+		current->sas_ss_size = ss_size;
+	}
+
+	if (uoss) {
+		error = -EFAULT;
+		if (copy_to_user(uoss, &oss, sizeof(oss)))
+			goto out;
+	}
+
+	error = 0;
+out:
+	return error;
+}
+
 #if !defined(__alpha__)
 /* Alpha has its own versions with special arguments.  */
 
@@ -908,6 +964,7 @@ sys_sigpending(old_sigset_t *set)
 	return error;
 }
 
+#ifndef __sparc__
 asmlinkage int
 sys_rt_sigaction(int sig, const struct sigaction *act, struct sigaction *oact,
 		 size_t sigsetsize)
@@ -933,6 +990,7 @@ sys_rt_sigaction(int sig, const struct sigaction *act, struct sigaction *oact,
 out:
 	return ret;
 }
+#endif /* __sparc__ */
 #endif
 
 #if !defined(__alpha__)

@@ -167,6 +167,7 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 	struct vm_area_struct *vma;
 	unsigned long ret = -EINVAL;
 
+	down(&current->mm->mmap_sem);
 	lock_kernel();
 	if (addr & ~PAGE_MASK)
 		goto out;
@@ -233,5 +234,6 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 		ret = -ENOMEM;
 out:
 	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	return ret;
 }

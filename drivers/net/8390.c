@@ -850,8 +850,11 @@ static void set_multicast_list(struct device *dev)
   		outb_p(E8390_RXCONFIG, e8390_base + EN0_RXCR);
 }
 
-/* Initialize the rest of the 8390 device structure. */
-__initfunc(int ethdev_init(struct device *dev))
+/*
+ * Initialize the rest of the 8390 device structure.  Do NOT __initfunc
+ * this, as it is used by 8390 based modular drivers too.
+ */
+int ethdev_init(struct device *dev)
 {
 	if (ei_debug > 1)
 		printk(version);

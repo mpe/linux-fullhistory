@@ -284,6 +284,8 @@ struct task_struct {
 	struct signal_struct *sig;
 	sigset_t signal, blocked;
 	struct signal_queue *sigqueue, **sigqueue_tail;
+	unsigned long sas_ss_sp;
+	size_t sas_ss_size;
 /* SMP state */
 	int has_cpu;
 	int processor;
@@ -365,6 +367,7 @@ struct task_struct {
 /* files */	&init_files, \
 /* mm */	&init_mm, \
 /* signals */	&init_signals, {{0}}, {{0}}, NULL, &init_task.sigqueue, \
+		0, 0, \
 /* SMP */	0,0,0,0, \
 /* locks */	INIT_LOCKS \
 }
@@ -480,6 +483,7 @@ extern int kill_sl(pid_t, int, int);
 extern int kill_proc(pid_t, int, int);
 extern int do_sigaction(int sig, const struct k_sigaction *act,
 			struct k_sigaction *oact);
+extern int do_sigaltstack(const stack_t *ss, stack_t *oss, unsigned long sp);
 
 extern inline int signal_pending(struct task_struct *p)
 {
@@ -517,6 +521,19 @@ static inline void recalc_sigpending(struct task_struct *t)
 	t->sigpending = (ready != 0);
 }
 
+/* True if we are on the alternate signal stack.  */
+
+static inline int on_sig_stack(unsigned long sp)
+{
+	return (sp >= current->sas_ss_sp
+		&& sp < current->sas_ss_sp + current->sas_ss_size);
+}
+
+static inline int sas_ss_flags(unsigned long sp)
+{
+	return (current->sas_ss_size == 0 ? SS_DISABLE
+		: on_sig_stack(sp) ? SS_ONSTACK : 0);
+}
 
 extern int request_irq(unsigned int irq,
 		       void (*handler)(int, void *, struct pt_regs *),

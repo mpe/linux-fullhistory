@@ -223,7 +223,7 @@ static int aha1542_in(unsigned int base, unchar *cmdp, int len)
 
 /* Similar to aha1542_in, except that we wait a very short period of time.
    We use this if we know the board is alive and awake, but we are not sure
-   if the board will respond the command we are about to send or not */
+   if the board will respond to the command we are about to send or not */
 static int aha1542_in1(unsigned int base, unchar *cmdp, int len)
 {
     unsigned long flags;

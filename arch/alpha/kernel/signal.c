@@ -203,6 +203,12 @@ do_rt_sigsuspend(sigset_t *uset, size_t sigsetsize,
 	}
 }
 
+asmlinkage int
+sys_sigaltstack(const stack_t *uss, stack_t *uoss)
+{
+	return do_sigaltstack(uss, uoss, rdusp());
+}
+
 /*
  * Do a signal return; undo the signal stack.
  */
@@ -225,66 +231,64 @@ struct rt_sigframe
 #define INSN_LDI_R0		0x201f0000
 #define INSN_CALLSYS		0x00000083
 
-
-static void
+static long
 restore_sigcontext(struct sigcontext *sc, struct pt_regs *regs,
 		   struct switch_stack *sw)
 {
 	unsigned long usp;
-	int i;
+	long i, err = 0;
 
-	__get_user(regs->pc, &sc->sc_pc);
+	err |= __get_user(regs->pc, &sc->sc_pc);
 	sw->r26 = (unsigned long) ret_from_sys_call;
 
-	__get_user(regs->r0, sc->sc_regs+0);
-	__get_user(regs->r1, sc->sc_regs+1);
-	__get_user(regs->r2, sc->sc_regs+2);
-	__get_user(regs->r3, sc->sc_regs+3);
-	__get_user(regs->r4, sc->sc_regs+4);
-	__get_user(regs->r5, sc->sc_regs+5);
-	__get_user(regs->r6, sc->sc_regs+6);
-	__get_user(regs->r7, sc->sc_regs+7);
-	__get_user(regs->r8, sc->sc_regs+8);
-	__get_user(sw->r9, sc->sc_regs+9);
-	__get_user(sw->r10, sc->sc_regs+10);
-	__get_user(sw->r11, sc->sc_regs+11);
-	__get_user(sw->r12, sc->sc_regs+12);
-	__get_user(sw->r13, sc->sc_regs+13);
-	__get_user(sw->r14, sc->sc_regs+14);
-	__get_user(sw->r15, sc->sc_regs+15);
-	__get_user(regs->r16, sc->sc_regs+16);
-	__get_user(regs->r17, sc->sc_regs+17);
-	__get_user(regs->r18, sc->sc_regs+18);
-	__get_user(regs->r19, sc->sc_regs+19);
-	__get_user(regs->r20, sc->sc_regs+20);
-	__get_user(regs->r21, sc->sc_regs+21);
-	__get_user(regs->r22, sc->sc_regs+22);
-	__get_user(regs->r23, sc->sc_regs+23);
-	__get_user(regs->r24, sc->sc_regs+24);
-	__get_user(regs->r25, sc->sc_regs+25);
-	__get_user(regs->r26, sc->sc_regs+26);
-	__get_user(regs->r27, sc->sc_regs+27);
-	__get_user(regs->r28, sc->sc_regs+28);
-	__get_user(regs->gp, sc->sc_regs+29);
-	__get_user(usp, sc->sc_regs+30);
+	err |= __get_user(regs->r0, sc->sc_regs+0);
+	err |= __get_user(regs->r1, sc->sc_regs+1);
+	err |= __get_user(regs->r2, sc->sc_regs+2);
+	err |= __get_user(regs->r3, sc->sc_regs+3);
+	err |= __get_user(regs->r4, sc->sc_regs+4);
+	err |= __get_user(regs->r5, sc->sc_regs+5);
+	err |= __get_user(regs->r6, sc->sc_regs+6);
+	err |= __get_user(regs->r7, sc->sc_regs+7);
+	err |= __get_user(regs->r8, sc->sc_regs+8);
+	err |= __get_user(sw->r9, sc->sc_regs+9);
+	err |= __get_user(sw->r10, sc->sc_regs+10);
+	err |= __get_user(sw->r11, sc->sc_regs+11);
+	err |= __get_user(sw->r12, sc->sc_regs+12);
+	err |= __get_user(sw->r13, sc->sc_regs+13);
+	err |= __get_user(sw->r14, sc->sc_regs+14);
+	err |= __get_user(sw->r15, sc->sc_regs+15);
+	err |= __get_user(regs->r16, sc->sc_regs+16);
+	err |= __get_user(regs->r17, sc->sc_regs+17);
+	err |= __get_user(regs->r18, sc->sc_regs+18);
+	err |= __get_user(regs->r19, sc->sc_regs+19);
+	err |= __get_user(regs->r20, sc->sc_regs+20);
+	err |= __get_user(regs->r21, sc->sc_regs+21);
+	err |= __get_user(regs->r22, sc->sc_regs+22);
+	err |= __get_user(regs->r23, sc->sc_regs+23);
+	err |= __get_user(regs->r24, sc->sc_regs+24);
+	err |= __get_user(regs->r25, sc->sc_regs+25);
+	err |= __get_user(regs->r26, sc->sc_regs+26);
+	err |= __get_user(regs->r27, sc->sc_regs+27);
+	err |= __get_user(regs->r28, sc->sc_regs+28);
+	err |= __get_user(regs->gp, sc->sc_regs+29);
+	err |= __get_user(usp, sc->sc_regs+30);
 	wrusp(usp);
 
 	for (i = 0; i < 31; i++)
-		__get_user(sw->fp[i], sc->sc_fpregs+i);
-	__get_user(sw->fp[31], &sc->sc_fpcr);
+		err |= __get_user(sw->fp[i], sc->sc_fpregs+i);
+	err |= __get_user(sw->fp[31], &sc->sc_fpcr);
+
+	return err;
 }
 
 asmlinkage void
 do_sigreturn(struct sigframe *frame, struct pt_regs *regs,
 	     struct switch_stack *sw)
 {
-	unsigned long ps;
 	sigset_t set;
 
 	/* Verify that it's a good sigcontext before using it */
 	if (verify_area(VERIFY_READ, frame, sizeof(*frame)))
-		goto give_sigsegv;
-	if (__get_user(ps, &frame->sc.sc_ps) || ps != 8)
 		goto give_sigsegv;
 	if (__get_user(set.sig[0], &frame->sc.sc_mask)
 	    || (_NSIG_WORDS > 1
@@ -298,7 +302,8 @@ do_sigreturn(struct sigframe *frame, struct pt_regs *regs,
 	recalc_sigpending(current);
 	spin_unlock_irq(&current->sigmask_lock);
 
-	restore_sigcontext(&frame->sc, regs, sw);
+	if (restore_sigcontext(&frame->sc, regs, sw))
+		goto give_sigsegv;
 
 	/* Send SIGTRAP if we're single-stepping: */
 	if (ptrace_cancel_bpt (current))
@@ -306,21 +311,18 @@ do_sigreturn(struct sigframe *frame, struct pt_regs *regs,
 	return;
 
 give_sigsegv:
-	lock_kernel();
-	do_exit(SIGSEGV);
+	force_sig(SIGSEGV, current);
 }
 
 asmlinkage void
 do_rt_sigreturn(struct rt_sigframe *frame, struct pt_regs *regs,
 		struct switch_stack *sw)
 {
-	unsigned long ps;
 	sigset_t set;
+	stack_t st;
 
 	/* Verify that it's a good sigcontext before using it */
 	if (verify_area(VERIFY_READ, frame, sizeof(*frame)))
-		goto give_sigsegv;
-	if (__get_user(ps, &frame->uc.uc_mcontext.sc_ps) || ps != 8)
 		goto give_sigsegv;
 	if (__copy_from_user(&set, &frame->uc.uc_sigmask, sizeof(set)))
 		goto give_sigsegv;
@@ -331,7 +333,14 @@ do_rt_sigreturn(struct rt_sigframe *frame, struct pt_regs *regs,
 	recalc_sigpending(current);
 	spin_unlock_irq(&current->sigmask_lock);
 
-	restore_sigcontext(&frame->uc.uc_mcontext, regs, sw);
+	if (restore_sigcontext(&frame->uc.uc_mcontext, regs, sw))
+		goto give_sigsegv;
+
+	if (__copy_from_user(&st, &frame->uc.uc_stack, sizeof(st)))
+		goto give_sigsegv;
+	/* It is more difficult to avoid calling this function than to
+	   call it and ignore errors.  */
+	do_sigaltstack(&st, NULL, rdusp());
 
 	/* Send SIGTRAP if we're single-stepping: */
 	if (ptrace_cancel_bpt (current))
@@ -339,8 +348,7 @@ do_rt_sigreturn(struct rt_sigframe *frame, struct pt_regs *regs,
 	return;
 
 give_sigsegv:
-	lock_kernel();
-	do_exit(SIGSEGV);
+	force_sig(SIGSEGV, current);
 }
 
 
@@ -348,99 +356,113 @@ give_sigsegv:
  * Set up a signal frame.
  */
 
-static void 
+static inline void *
+get_sigframe(struct k_sigaction *ka, unsigned long sp, size_t frame_size)
+{
+	if ((ka->sa.sa_flags & SA_ONSTACK) != 0 && ! on_sig_stack(sp))
+		sp = current->sas_ss_sp + current->sas_ss_size;
+
+	return (void *)((sp - frame_size) & -32ul);
+}
+
+static long
 setup_sigcontext(struct sigcontext *sc, struct pt_regs *regs, 
 		 struct switch_stack *sw, unsigned long mask, unsigned long sp)
 {
-	long i;
+	long i, err = 0;
 
-	__put_user(0, &sc->sc_onstack);
-	__put_user(mask, &sc->sc_mask);
-	__put_user(regs->pc, &sc->sc_pc);
-	__put_user(8, &sc->sc_ps);
+	err |= __put_user(on_sig_stack((unsigned long)sc), &sc->sc_onstack);
+	err |= __put_user(mask, &sc->sc_mask);
+	err |= __put_user(regs->pc, &sc->sc_pc);
+	err |= __put_user(8, &sc->sc_ps);
 
-	__put_user(regs->r0 , sc->sc_regs+0);
-	__put_user(regs->r1 , sc->sc_regs+1);
-	__put_user(regs->r2 , sc->sc_regs+2);
-	__put_user(regs->r3 , sc->sc_regs+3);
-	__put_user(regs->r4 , sc->sc_regs+4);
-	__put_user(regs->r5 , sc->sc_regs+5);
-	__put_user(regs->r6 , sc->sc_regs+6);
-	__put_user(regs->r7 , sc->sc_regs+7);
-	__put_user(regs->r8 , sc->sc_regs+8);
-	__put_user(sw->r9   , sc->sc_regs+9);
-	__put_user(sw->r10  , sc->sc_regs+10);
-	__put_user(sw->r11  , sc->sc_regs+11);
-	__put_user(sw->r12  , sc->sc_regs+12);
-	__put_user(sw->r13  , sc->sc_regs+13);
-	__put_user(sw->r14  , sc->sc_regs+14);
-	__put_user(sw->r15  , sc->sc_regs+15);
-	__put_user(regs->r16, sc->sc_regs+16);
-	__put_user(regs->r17, sc->sc_regs+17);
-	__put_user(regs->r18, sc->sc_regs+18);
-	__put_user(regs->r19, sc->sc_regs+19);
-	__put_user(regs->r20, sc->sc_regs+20);
-	__put_user(regs->r21, sc->sc_regs+21);
-	__put_user(regs->r22, sc->sc_regs+22);
-	__put_user(regs->r23, sc->sc_regs+23);
-	__put_user(regs->r24, sc->sc_regs+24);
-	__put_user(regs->r25, sc->sc_regs+25);
-	__put_user(regs->r26, sc->sc_regs+26);
-	__put_user(regs->r27, sc->sc_regs+27);
-	__put_user(regs->r28, sc->sc_regs+28);
-	__put_user(regs->gp , sc->sc_regs+29);
-	__put_user(sp, sc->sc_regs+30);
-	__put_user(0, sc->sc_regs+31);
+	err |= __put_user(regs->r0 , sc->sc_regs+0);
+	err |= __put_user(regs->r1 , sc->sc_regs+1);
+	err |= __put_user(regs->r2 , sc->sc_regs+2);
+	err |= __put_user(regs->r3 , sc->sc_regs+3);
+	err |= __put_user(regs->r4 , sc->sc_regs+4);
+	err |= __put_user(regs->r5 , sc->sc_regs+5);
+	err |= __put_user(regs->r6 , sc->sc_regs+6);
+	err |= __put_user(regs->r7 , sc->sc_regs+7);
+	err |= __put_user(regs->r8 , sc->sc_regs+8);
+	err |= __put_user(sw->r9   , sc->sc_regs+9);
+	err |= __put_user(sw->r10  , sc->sc_regs+10);
+	err |= __put_user(sw->r11  , sc->sc_regs+11);
+	err |= __put_user(sw->r12  , sc->sc_regs+12);
+	err |= __put_user(sw->r13  , sc->sc_regs+13);
+	err |= __put_user(sw->r14  , sc->sc_regs+14);
+	err |= __put_user(sw->r15  , sc->sc_regs+15);
+	err |= __put_user(regs->r16, sc->sc_regs+16);
+	err |= __put_user(regs->r17, sc->sc_regs+17);
+	err |= __put_user(regs->r18, sc->sc_regs+18);
+	err |= __put_user(regs->r19, sc->sc_regs+19);
+	err |= __put_user(regs->r20, sc->sc_regs+20);
+	err |= __put_user(regs->r21, sc->sc_regs+21);
+	err |= __put_user(regs->r22, sc->sc_regs+22);
+	err |= __put_user(regs->r23, sc->sc_regs+23);
+	err |= __put_user(regs->r24, sc->sc_regs+24);
+	err |= __put_user(regs->r25, sc->sc_regs+25);
+	err |= __put_user(regs->r26, sc->sc_regs+26);
+	err |= __put_user(regs->r27, sc->sc_regs+27);
+	err |= __put_user(regs->r28, sc->sc_regs+28);
+	err |= __put_user(regs->gp , sc->sc_regs+29);
+	err |= __put_user(sp, sc->sc_regs+30);
+	err |= __put_user(0, sc->sc_regs+31);
 
 	for (i = 0; i < 31; i++)
-		__put_user(sw->fp[i], sc->sc_fpregs+i);
-	__put_user(0, sc->sc_fpregs+31);
-	__put_user(sw->fp[31], &sc->sc_fpcr);
+		err |= __put_user(sw->fp[i], sc->sc_fpregs+i);
+	err |= __put_user(0, sc->sc_fpregs+31);
+	err |= __put_user(sw->fp[31], &sc->sc_fpcr);
 
-	__put_user(regs->trap_a0, &sc->sc_traparg_a0);
-	__put_user(regs->trap_a1, &sc->sc_traparg_a1);
-	__put_user(regs->trap_a2, &sc->sc_traparg_a2);
+	err |= __put_user(regs->trap_a0, &sc->sc_traparg_a0);
+	err |= __put_user(regs->trap_a1, &sc->sc_traparg_a1);
+	err |= __put_user(regs->trap_a2, &sc->sc_traparg_a2);
+
+	return err;
 }
 
 static void
 setup_frame(int sig, struct k_sigaction *ka, sigset_t *set,
 	    struct pt_regs *regs, struct switch_stack * sw)
 {
-	unsigned long oldsp;
+	unsigned long oldsp, r26, err = 0;
 	struct sigframe *frame;
 
 	oldsp = rdusp();
-	frame = (struct sigframe *)((oldsp - sizeof(*frame)) & -32);
-
-	/* XXX: Check here if we would need to switch stacks.. */
+	frame = get_sigframe(ka, oldsp, sizeof(*frame));
 	if (verify_area(VERIFY_WRITE, frame, sizeof(*frame)))
 		goto give_sigsegv;
 
-	setup_sigcontext(&frame->sc, regs, sw, set->sig[0], oldsp);
+	err |= setup_sigcontext(&frame->sc, regs, sw, set->sig[0], oldsp);
 	if (_NSIG_WORDS > 1) {
-		__copy_to_user(frame->extramask, &set->sig[1], 
-			       sizeof(frame->extramask));
+		err |= __copy_to_user(frame->extramask, &set->sig[1], 
+				      sizeof(frame->extramask));
 	}
 
 	/* Set up to return from userspace.  If provided, use a stub
 	   already in userspace.  */
 	if (ka->ka_restorer) {
-		regs->r26 = (unsigned long) ka->ka_restorer;
+		r26 = (unsigned long) ka->ka_restorer;
 	} else {
-		__put_user(INSN_MOV_R30_R16, frame->retcode+0);
-		__put_user(INSN_LDI_R0+__NR_sigreturn, frame->retcode+1);
-		__put_user(INSN_CALLSYS, frame->retcode+2);
+		err |= __put_user(INSN_MOV_R30_R16, frame->retcode+0);
+		err |= __put_user(INSN_LDI_R0+__NR_sigreturn, frame->retcode+1);
+		err |= __put_user(INSN_CALLSYS, frame->retcode+2);
 		imb();
-		regs->r26 = (unsigned long) frame->retcode;
+		r26 = (unsigned long) frame->retcode;
 	}
 
+	/* Check that everything was written properly.  */
+	if (err)
+		goto give_sigsegv;
+
 	/* "Return" to the handler */
+	regs->r26 = r26;
 	regs->r27 = regs->pc = (unsigned long) ka->sa.sa_handler;
 	regs->r16 = sig;			/* a0: signal number */
 	regs->r17 = 0;				/* a1: exception code */
 	regs->r18 = (unsigned long) &frame->sc;	/* a2: sigcontext pointer */
 	wrusp((unsigned long) frame);
-
+	
 #if DEBUG_SIG
 	printk("SIG deliver (%s:%d): sp=%p pc=%p ra=%p\n",
 		current->comm, current->pid, frame, regs->pc, regs->r26);
@@ -449,47 +471,54 @@ setup_frame(int sig, struct k_sigaction *ka, sigset_t *set,
 	return;
 
 give_sigsegv:
-	lock_kernel();
-	do_exit(SIGSEGV);
+	if (sig == SIGSEGV)
+		ka->sa.sa_handler = SIG_DFL;
+	force_sig(SIGSEGV, current);
 }
 
 static void
 setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	       sigset_t *set, struct pt_regs *regs, struct switch_stack * sw)
 {
-	unsigned long oldsp;
+	unsigned long oldsp, r26, err = 0;
 	struct rt_sigframe *frame;
 
 	oldsp = rdusp();
-	frame = (struct rt_sigframe *)((oldsp - sizeof(*frame)) & -32);
-
-	/* XXX: Check here if we would need to switch stacks.. */
+	frame = get_sigframe(ka, oldsp, sizeof(*frame));
 	if (verify_area(VERIFY_WRITE, frame, sizeof(*frame)))
 		goto give_sigsegv;
 
-	__copy_to_user(&frame->info, info, sizeof(siginfo_t));
+	err |= __copy_to_user(&frame->info, info, sizeof(siginfo_t));
 
-	/* Zero all bits of the ucontext besides the sigcontext.  */
-	__clear_user(&frame->uc, offsetof(struct ucontext, uc_mcontext));
-
-	/* Copy in the bits we actually use.  */
-	__put_user(set->sig[0], &frame->uc.uc_osf_sigmask);
-	setup_sigcontext(&frame->uc.uc_mcontext, regs, sw, set->sig[0], oldsp);
-	__copy_to_user(&frame->uc.uc_sigmask, set, sizeof(*set));
+	/* Create the ucontext.  */
+	err |= __put_user(0, &frame->uc.uc_flags);
+	err |= __put_user(0, &frame->uc.uc_link);
+	err |= __put_user(set->sig[0], &frame->uc.uc_osf_sigmask);
+	err |= __put_user(current->sas_ss_sp, &frame->uc.uc_stack.ss_sp);
+	err |= __put_user(sas_ss_flags(oldsp), &frame->uc.uc_stack.ss_flags);
+	err |= __put_user(current->sas_ss_size, &frame->uc.uc_stack.ss_size);
+	err |= setup_sigcontext(&frame->uc.uc_mcontext, regs, sw,
+				set->sig[0], oldsp);
+	err |= __copy_to_user(&frame->uc.uc_sigmask, set, sizeof(*set));
 
 	/* Set up to return from userspace.  If provided, use a stub
 	   already in userspace.  */
 	if (ka->ka_restorer) {
-		regs->r26 = (unsigned long) ka->ka_restorer;
+		r26 = (unsigned long) ka->ka_restorer;
 	} else {
-		__put_user(INSN_MOV_R30_R16, frame->retcode+0);
-		__put_user(INSN_LDI_R0+__NR_rt_sigreturn, frame->retcode+1);
-		__put_user(INSN_CALLSYS, frame->retcode+2);
+		err |= __put_user(INSN_MOV_R30_R16, frame->retcode+0);
+		err |= __put_user(INSN_LDI_R0+__NR_rt_sigreturn,
+				  frame->retcode+1);
+		err |= __put_user(INSN_CALLSYS, frame->retcode+2);
 		imb();
-		regs->r26 = (unsigned long) frame->retcode;
+		r26 = (unsigned long) frame->retcode;
 	}
 
+	if (err)
+		goto give_sigsegv;
+
 	/* "Return" to the handler */
+	regs->r26 = r26;
 	regs->r27 = regs->pc = (unsigned long) ka->sa.sa_handler;
 	regs->r16 = sig;			  /* a0: signal number */
 	regs->r17 = (unsigned long) &frame->info; /* a1: siginfo pointer */
@@ -504,8 +533,9 @@ setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	return;
 
 give_sigsegv:
-	lock_kernel();
-	do_exit(SIGSEGV);
+	if (sig == SIGSEGV)
+		ka->sa.sa_handler = SIG_DFL;
+	force_sig(SIGSEGV, current);
 }
 
 

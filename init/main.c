@@ -378,6 +378,17 @@ static struct dev_name_struct {
 	{ "sdc",     0x0820 },
 	{ "sdd",     0x0830 },
 	{ "sde",     0x0840 },
+	{ "sdf",     0x0850 },
+	{ "sdg",     0x0860 },
+	{ "sdh",     0x0870 },
+	{ "sdi",     0x0880 },
+	{ "sdj",     0x0890 },
+	{ "sdk",     0x08a0 },
+	{ "sdl",     0x08b0 },
+	{ "sdm",     0x08c0 },
+	{ "sdn",     0x08d0 },
+	{ "sdo",     0x08e0 },
+	{ "sdp",     0x08f0 },
 #endif
 #ifdef CONFIG_ATARI_ACSI
 	{ "ada",     0x1c00 },
@@ -667,7 +678,7 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef CONFIG_ISP16_CDI
 	{ "isp16=", isp16_setup },
 #endif CONFIG_ISP16_CDI
-#ifdef CONFIG_SOUND
+#ifdef CONFIG_SOUND_OSS
 	{ "sound=", sound_setup },
 #endif
 #ifdef CONFIG_ISDN_DRV_ICN

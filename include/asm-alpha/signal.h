@@ -76,7 +76,7 @@ typedef unsigned long sigset_t;
 /*
  * SA_FLAGS values:
  *
- * SA_ONSTACK is not currently supported, but will allow sigaltstack(2).
+ * SA_ONSTACK indicates that a registered stack_t will be used.
  * SA_INTERRUPT is a no-op, but left due to historical reasons. Use the
  * SA_RESTART flag to get restarting signals (which were the default long ago)
  * SA_NOCLDSTOP flag to turn off SIGCHLD when children stop.
@@ -99,6 +99,16 @@ typedef unsigned long sigset_t;
 #define SA_ONESHOT	SA_RESETHAND
 #define SA_NOMASK	SA_NODEFER
 #define SA_INTERRUPT	0x20000000 /* dummy -- ignored */
+
+/* 
+ * sigaltstack controls
+ */
+#define SS_ONSTACK	1
+#define SS_DISABLE	2
+
+#define MINSIGSTKSZ	4096
+#define SIGSTKSZ	16384
+
 
 #ifdef __KERNEL__
 /*
@@ -163,6 +173,15 @@ typedef struct sigaltstack {
 	int ss_flags;
 	size_t ss_size;
 } stack_t;
+
+/* sigstack(2) is deprecated, and will be withdrawn in a future version
+   of the X/Open CAE Specification.  Use sigaltstack instead.  It is only
+   implemented here for OSF/1 compatability.  */
+
+struct sigstack {
+	void *ss_sp;
+	int ss_onstack;
+};
 
 #ifdef __KERNEL__
 #include <asm/sigcontext.h>

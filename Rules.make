@@ -189,9 +189,14 @@ else
 endif
 
 $(MODINCL)/%.ver: %.c
-	$(CC) $(CFLAGS) -E -D__GENKSYMS__ $<\
-	| $(GENKSYMS) $(genksyms_smp_prefix) -k $(VERSION).$(PATCHLEVEL).$(SUBLEVEL) > $@.tmp
-	mv $@.tmp $@
+	@if [ ! -r $(MODINCL)/$*.stamp -o $(MODINCL)/$*.stamp -ot $< ]; then \
+		echo '$(CC) $(CFLAGS) -E -D__GENKSYMS__ $<'; \
+		echo '| $(GENKSYMS) $(genksyms_smp_prefix) -k $(VERSION).$(PATCHLEVEL).$(SUBLEVEL) > $@.tmp'; \
+		$(CC) $(CFLAGS) -E -D__GENKSYMS__ $< \
+		| $(GENKSYMS) $(genksyms_smp_prefix) -k $(VERSION).$(PATCHLEVEL).$(SUBLEVEL) > $@.tmp; \
+		if [ -r $@ ] && cmp -s $@ $@.tmp; then echo $@ is unchanged; rm -f $@.tmp; \
+		else echo mv $@.tmp $@; mv -f $@.tmp $@; fi; \
+	fi; touch $(MODINCL)/$*.stamp
 	
 $(addprefix $(MODINCL)/,$(SYMTAB_OBJS:.o=.ver)): $(TOPDIR)/include/linux/autoconf.h
 

@@ -157,6 +157,7 @@ int mitsumi_bug_93_wait = 0;
 
 static short mcd_port = MCD_BASE_ADDR; /* used as "mcd" by "insmod" */
 static int   mcd_irq  = MCD_INTR_NR; /* must directly follow mcd_port */
+MODULE_PARM(mcd, "1-2i");
 
 static int McdTimeout, McdTries;
 static struct wait_queue *mcd_waitq = NULL;

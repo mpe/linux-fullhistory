@@ -4941,6 +4941,20 @@ CONFIG_ETH16I
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
+PCI NE2000 Support
+CONFIG_NE2K_PCI
+  This driver is for NE2000 compatible PCI cards.  It will not work
+  with ISA NE2000 cards.  If you have a network (Ethernet) card of
+  this type, say Y and read the Ethernet-HOWTO, available via FTP
+  (user: anonymous) in ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called ne2k-pci.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt.
+
+
 TI ThunderLAN support (EXPERIMENTAL)
 CONFIG_TLAN
   If you have a TLAN based network card which is supported by this

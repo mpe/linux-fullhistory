@@ -277,7 +277,7 @@ __initfunc(int net_profile_init(void))
 	printk("Evaluating net profiler cost ...");
 #if CPU == 586 || CPU == 686
 	if (!(boot_cpu_data.x86_capability & 16)) {
-		panic("Sorry, you CPU does not support tsc. I am dying...\n");
+		printk(KERN_ERR "Sorry, you CPU does not support tsc. Net profiler is dying...\n");
 		return -1;
 	}
 #endif
