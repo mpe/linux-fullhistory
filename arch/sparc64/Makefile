@@ -32,7 +32,7 @@ HEAD := arch/sparc64/kernel/head.o
 SUBDIRS := $(SUBDIRS) arch/sparc64/kernel arch/sparc64/lib arch/sparc64/mm \
 	arch/sparc64/prom
 
-ARCHIVES := arch/sparc64/kernel/kernel.o arch/sparc64/mm/mm.o $(ARCHIVES)
+CORE_FILES := arch/sparc64/kernel/kernel.o arch/sparc64/mm/mm.o $(CORE_FILES)
 
 LIBS := $(TOPDIR)/lib/lib.a $(LIBS) $(TOPDIR)/arch/sparc64/prom/promlib.a \
 	$(TOPDIR)/arch/sparc64/lib/lib.a

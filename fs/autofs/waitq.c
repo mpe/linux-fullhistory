@@ -10,8 +10,9 @@
  *
  * ------------------------------------------------------------------------- */
 
-#include <linux/modversions.h>
 #include <linux/malloc.h>
+#include <linux/signal.h>
+#include <linux/sched.h>
 #include <linux/auto_fs.h>
 
 /* We make this a static variable rather than a part of the superblock; it
@@ -40,6 +41,7 @@ void autofs_catatonic_mode(struct autofs_sb_info *sbi)
 static int autofs_write(struct file *file, const void *addr, int bytes)
 {
 	unsigned short fs;
+	unsigned long old_signal;
 	const char *data = (const char *)addr;
 	int written;
 
@@ -49,9 +51,17 @@ static int autofs_write(struct file *file, const void *addr, int bytes)
 	fs = get_fs();
 	set_fs(KERNEL_DS);
 
+	old_signal = current->signal;
+
 	while ( bytes && (written = file->f_op->write(file->f_inode,file,data,bytes)) > 0 ) {
 		data += written;
 		bytes -= written;
+	}
+
+	if ( written == -EPIPE && !(old_signal & (1 << (SIGPIPE-1))) ) {
+		/* Keep the currently executing process from receiving a
+		   SIGPIPE unless it was already supposed to get one */
+		current->signal &= ~(1 << (SIGPIPE-1));
 	}
 	set_fs(fs);
 

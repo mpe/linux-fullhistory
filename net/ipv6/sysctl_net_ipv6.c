@@ -33,6 +33,8 @@ struct ipv6_config ipv6_config =
 	30*HZ,				/* rt gc period		*/
 };
 
+#ifdef CONFIG_SYSCTL
+
 int ipv6_sysctl_forwarding(ctl_table *ctl, int write, struct file * filp,
 			   void *buffer, size_t *lenp)
 {
@@ -140,3 +142,8 @@ void ipv6_sysctl_unregister(void)
 	unregister_sysctl_table(ipv6_sysctl_header);
 }
 #endif	/* MODULE */
+
+#endif /* CONFIG_SYSCTL */
+
+
+

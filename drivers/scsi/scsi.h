@@ -34,6 +34,7 @@
 # define FALSE 0
 #endif
 
+#define MAX_SCSI_DEVICE_CODE 10
 
 extern void scsi_make_blocked_list(void);
 extern volatile int in_scan_scsis;

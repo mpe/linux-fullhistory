@@ -22,7 +22,7 @@
 /*
  * stack offsets
  */
-#define SP_OFF		160
+#define SP_OFF		184
 
 #define SWITCH_STACK_SIZE 320
 
@@ -47,9 +47,11 @@
  * regs 9-15 preserved by C code
  * regs 16-18 saved by PAL-code
  * regs 29-30 saved and set up by PAL-code
+ * JRP - Save regs 16-18 in a special area of the stack, so that
+ * the palcode-provided values are available to the signal handler.
  */
 #define SAVE_ALL			\
-	subq	$30,160,$30;		\
+	subq	$30,184,$30;		\
 	stq	$0,0($30);		\
 	stq	$1,8($30);		\
 	stq	$2,16($30);		\
@@ -71,7 +73,10 @@
 	stq	$26,128($30);		\
 	stq	$27,136($30);		\
 	stq	$28,144($30);		\
-	stq	$2,152($30)
+	stq	$2,152($30);		\
+	stq	$16,160($30);		\
+	stq	$17,168($30);		\
+	stq	$18,176($30)
 
 #define RESTORE_ALL			\
 	lda	$19,hae;		\
@@ -108,7 +113,7 @@
 	ldq	$26,128($30);		\
 	ldq	$27,136($30);		\
 	ldq	$28,144($30);		\
-	addq	$30,160,$30
+	addq	$30,184,$30
 
 .text
 .set noat

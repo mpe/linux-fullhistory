@@ -40,6 +40,8 @@
 static unsigned char cache_21 = 0xff;
 static unsigned char cache_A1 = 0xff;
 
+unsigned int local_irq_count[NR_CPUS];
+
 #ifdef __SMP_PROF__
 static unsigned int int_count[NR_CPUS][NR_IRQS] = {{0},};
 #endif
@@ -329,7 +331,6 @@ int get_smp_prof_list(char *buf) {
 unsigned char global_irq_holder = NO_PROC_ID;
 unsigned volatile int global_irq_lock;
 unsigned volatile int global_irq_count;
-unsigned int local_irq_count[NR_CPUS];
 
 #define irq_active(cpu) \
 	(global_irq_count != local_irq_count[cpu])
@@ -353,11 +354,11 @@ static inline void check_smp_invalidate(int cpu)
 static unsigned long previous_irqholder;
 
 #undef INIT_STUCK
-#define INIT_STUCK 10000000
+#define INIT_STUCK 100000000
 
 #undef STUCK
 #define STUCK \
-if (!--stuck) {printk("wait_on_irq stuck at %08lx, waiting for %08lx (local=%d, global=%d)\n", where, previous_irqholder, local_count, global_irq_count); stuck = INIT_STUCK;}
+if (!--stuck) {printk("wait_on_irq CPU#%d stuck at %08lx, waiting for %08lx (local=%d, global=%d)\n", cpu, where, previous_irqholder, local_count, global_irq_count); stuck = INIT_STUCK; }
 
 static inline void wait_on_irq(int cpu, unsigned long where)
 {
@@ -390,6 +391,28 @@ static inline void wait_on_irq(int cpu, unsigned long where)
 				break;
 		}
 		atomic_add(local_count, &global_irq_count);
+	}
+}
+
+/*
+ * This is called when we want to synchronize with
+ * interrupts. We may for example tell a device to
+ * stop sending interrupts: but to make sure there
+ * are no interrupts that are executing on another
+ * CPU we need to call this function.
+ *
+ * On UP this is a no-op.
+ */
+void synchronize_irq(void)
+{
+	int cpu = smp_processor_id();
+	int local_count = local_irq_count[cpu];
+
+	/* Do we need to wait? */
+	if (local_count != global_irq_count) {
+		/* The stupid way to do this */
+		cli();
+		sti();
 	}
 }
 
@@ -436,7 +459,7 @@ void __global_cli(void)
 	int cpu = smp_processor_id();
 	unsigned long where;
 
-	__asm__("movl 12(%%esp),%0":"=r" (where));
+	__asm__("movl 16(%%esp),%0":"=r" (where));
 	__cli();
 	get_irqlock(cpu, where);
 }

@@ -39,6 +39,9 @@ extern int tcp_sysctl_congavoid(ctl_table *ctl, int write, struct file * filp,
 				void *buffer, size_t *lenp);
 
 struct ipv4_config ipv4_config = { 1, 1, 1, 1, };
+
+#ifdef CONFIG_SYSCTL
+
 struct ipv4_config ipv4_def_router_config = { 0, 1, 1, 1, 1, 1, 1, };
 struct ipv4_config ipv4_def_host_config = { 1, 1, 1, 1, };
 
@@ -121,3 +124,5 @@ ctl_table ipv4_table[] = {
          &proc_dointvec},
 	{0}
 };
+
+#endif /* CONFIG_SYSCTL */

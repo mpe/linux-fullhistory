@@ -150,6 +150,7 @@ EXPORT_SYMBOL(fsync_dev);
 EXPORT_SYMBOL(permission);
 EXPORT_SYMBOL(inode_setattr);
 EXPORT_SYMBOL(inode_change_ok);
+EXPORT_SYMBOL(get_hardblocksize);
 EXPORT_SYMBOL(set_blocksize);
 EXPORT_SYMBOL(getblk);
 EXPORT_SYMBOL(bread);

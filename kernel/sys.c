@@ -893,13 +893,14 @@ int in_group_p(gid_t grp)
 			gid_t *groups = current->groups;
 			do {
 				if (*groups == grp)
-					break;
+					goto out;
 				groups++;
 				i--;
 			} while (i);
 		}
 		return 0;
 	}
+out:
 	return 1;
 }
 
@@ -1138,7 +1139,6 @@ out:
 
 asmlinkage int sys_umask(int mask)
 {
-	/* The xchg() isn't SMP-safe on x86 right now.. */
 	mask = xchg(&current->fs->umask, mask & S_IRWXUGO);
 	return mask;
 }

@@ -117,6 +117,8 @@ static inline int lp_char_interrupt(char lpchar, int minor)
 	struct lp_stats *stats;
 
 	do {
+	    if(need_resched)
+		schedule();
 	    if ((status = LP_S(minor)) & LP_PBUSY) {
 		if (!LP_CAREFUL_READY(minor, status))
 			return 0;

@@ -1376,7 +1376,9 @@ void nr_proto_init(struct net_proto *pro)
 	for (i = 0; i < 4; i++)
 		register_netdev(&dev_nr[i]);
 
+#ifdef CONFIG_SYSCTL
 	nr_register_sysctl();
+#endif
 
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&proc_net_nr);
@@ -1411,8 +1413,9 @@ void cleanup_module(void)
 
 	unregister_netdevice_notifier(&nr_dev_notifier);
 
+#ifdef CONFIG_SYSCTL
 	nr_unregister_sysctl();
-
+#endif
 	sock_unregister(AF_NETROM);
 
 	for (i = 0; i < 4; i++) {

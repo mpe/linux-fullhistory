@@ -60,9 +60,10 @@ struct Scsi_Device_Template sr_template = {NULL, "cdrom", "sr", NULL, TYPE_ROM,
                                            sr_finish, sr_attach, sr_detach};
 
 Scsi_CD * scsi_CDs = NULL;
-static int * sr_sizes;
+static int * sr_sizes = NULL;
 
-static int * sr_blocksizes;
+static int * sr_blocksizes = NULL;
+static int * sr_hardsizes = NULL;              /* Hardware sector size */
 
 static int sr_open(struct cdrom_device_info*, int);
 void get_sectorsize(int);
@@ -121,7 +122,8 @@ int sr_media_change(struct cdrom_device_info *cdi, int slot){
 	retval = scsi_ioctl(scsi_CDs[MINOR(cdi->dev)].device,
                             SCSI_IOCTL_TEST_UNIT_READY, 0);
 
-	if(retval){
+	if(retval)
+        {
                 /* Unable to test, unit probably not ready.  This usually
 		 * means there is no disc in the drive.  Mark as changed,
 		 * and we will figure it out later once the drive is
@@ -140,7 +142,18 @@ int sr_media_change(struct cdrom_device_info *cdi, int slot){
 #ifdef CONFIG_BLK_DEV_SR_VENDOR
                 sr_cd_check(cdi);
 #endif
+
+                 /* 
+                  * If the disk changed, the capacity will now be different,
+                  * so we force a re-read of this information 
+                  * Force 2048 for the sector size so that filesystems won't
+                  * be trying to use something that is too small if the disc
+                  * has changed.
+                  */
                 scsi_CDs[MINOR(cdi->dev)].needs_sector_size = 1;
+
+                scsi_CDs[MINOR(cdi->dev)].sector_size = 
+                  sr_hardsizes[MINOR(cdi->dev)] = 2048;
         }
 	return retval;
 }
@@ -894,6 +907,12 @@ void get_sectorsize(int i){
 			scsi_CDs[i].capacity = 0;
 			scsi_CDs[i].needs_sector_size = 1;
 	}
+
+        /*
+         * Add this so that we have the ability to correctly gauge
+         * what the device is capable of.
+         */
+        sr_hardsizes[i] = scsi_CDs[i].sector_size;
 	scsi_CDs[i].needs_sector_size = 0;
 	sr_sizes[i] = scsi_CDs[i].capacity >> (BLOCK_SIZE_BITS - 9);
     };
@@ -928,8 +947,16 @@ static int sr_init()
 
     sr_blocksizes = (int *) scsi_init_malloc(sr_template.dev_max *
 					 sizeof(int), GFP_ATOMIC);
+    sr_hardsizes =  (int *) scsi_init_malloc(sr_template.dev_max * 
+                                         sizeof(int), GFP_ATOMIC);
+
+    /*
+     * These are good guesses for the time being.
+     */
     for(i=0;i<sr_template.dev_max;i++) sr_blocksizes[i] = 2048;
+    for(i=0;i<sr_template.dev_max;i++) sr_hardsizes[i] = 2048;
     blksize_size[MAJOR_NR] = sr_blocksizes;
+    hardsect_size[MAJOR_NR] = sr_hardsizes;
     return 0;
 }
 
@@ -1023,7 +1050,13 @@ void cleanup_module( void)
 		       * sizeof(Scsi_CD));
 
 	scsi_init_free((char *) sr_sizes, sr_template.dev_max * sizeof(int));
+        sr_sizes = NULL;
+
 	scsi_init_free((char *) sr_blocksizes, sr_template.dev_max * sizeof(int));
+        sr_blocksizes = NULL;
+
+	scsi_init_free((char *) sr_hardsizes,  sr_template.dev_max * sizeof(int));
+        sr_hardsizes = NULL;
     }
 
     blksize_size[MAJOR_NR] = NULL;

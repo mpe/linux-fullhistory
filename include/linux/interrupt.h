@@ -80,9 +80,8 @@ extern inline void enable_bh(int nr)
 extern inline void start_bh_atomic(void)
 {
 #ifdef __SMP__
-	cli();
 	atomic_inc(&intr_count);
-	sti();
+	synchronize_irq();
 #else
 	intr_count++;
 	barrier();

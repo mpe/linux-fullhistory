@@ -228,7 +228,7 @@ int ipv6_getsockopt(struct sock *sk, int level, int optname, char *optval,
 	return 0;
 }
 
-#ifdef MODULE
+#if defined(MODULE) && defined(CONFIG_SYSCTL)
 
 /*
  *	sysctl registration functions defined in sysctl_net_ipv6.c
@@ -244,7 +244,7 @@ void ipv6_init(void)
 
 	dev_add_pack(&ipv6_packet_type);
 
-#ifdef MODULE
+#if defined(MODULE) && defined(CONFIG_SYSCTL)
 	ipv6_sysctl_register();
 #endif
 
@@ -258,9 +258,13 @@ void ipv6_cleanup(void)
 {
 	unregister_netdevice_notifier(&ipv6_dev_notf);
 	dev_remove_pack(&ipv6_packet_type);
+#ifdef CONFIG_SYSCTL
 	ipv6_sysctl_unregister();	
+#endif
 	ip6_route_cleanup();
 	ndisc_cleanup();
 	addrconf_cleanup();	
 }
 #endif
+
+

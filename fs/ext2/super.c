@@ -32,6 +32,7 @@
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/locks.h>
+#include <linux/blkdev.h>
 
 static char error_buf[1024];
 
@@ -377,9 +378,25 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	unsigned short resuid = EXT2_DEF_RESUID;
 	unsigned short resgid = EXT2_DEF_RESGID;
 	unsigned long logic_sb_block = 1;
+	unsigned long offset = 0;
 	kdev_t dev = sb->s_dev;
+	int blocksize = BLOCK_SIZE;
+	int hblock;
 	int db_count;
 	int i, j;
+
+	/*
+	 * See what the current blocksize for the device is, and
+	 * use that as the blocksize.  Otherwise (or if the blocksize
+	 * is smaller than the default) use the default.
+	 * This is important for devices that have a hardware
+	 * sectorsize that is larger than the default.
+	 */
+	blocksize = get_hardblocksize(dev);
+	if( blocksize == 0 || blocksize < BLOCK_SIZE )
+	  {
+	    blocksize = BLOCK_SIZE;
+	  }
 
 	sb->u.ext2_sb.s_mount_opt = 0;
 	set_opt (sb->u.ext2_sb.s_mount_opt, CHECK_NORMAL);
@@ -391,8 +408,19 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 
 	MOD_INC_USE_COUNT;
 	lock_super (sb);
-	set_blocksize (dev, BLOCK_SIZE);
-	if (!(bh = bread (dev, sb_block, BLOCK_SIZE))) {
+	set_blocksize (dev, blocksize);
+
+	/*
+	 * If the superblock doesn't start on a sector boundary,
+	 * calculate the offset.  FIXME(eric) this doesn't make sense
+	 * that we would have to do this.
+	 */
+	if (blocksize != BLOCK_SIZE) {
+		logic_sb_block = (sb_block*BLOCK_SIZE) / blocksize;
+		offset = (sb_block*BLOCK_SIZE) % blocksize;
+	}
+
+	if (!(bh = bread (dev, logic_sb_block, blocksize))) {
 		sb->s_dev = 0;
 		unlock_super (sb);
 		printk ("EXT2-fs: unable to read superblock\n");
@@ -403,7 +431,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	 * Note: s_es must be initialized s_es as soon as possible because
 	 * some ext2 macro-instructions depend on its value
 	 */
-	es = (struct ext2_super_block *) bh->b_data;
+	es = (struct ext2_super_block *) (((char *)bh->b_data) + offset);
 	sb->u.ext2_sb.s_es = es;
 	sb->s_magic = le16_to_cpu(es->s_magic);
 	if (sb->s_magic != EXT2_SUPER_MAGIC) {
@@ -438,7 +466,17 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	if (sb->s_blocksize != BLOCK_SIZE &&
 	    (sb->s_blocksize == 1024 || sb->s_blocksize == 2048 ||
 	     sb->s_blocksize == 4096)) {
-		unsigned long offset;
+		/*
+		 * Make sure the blocksize for the filesystem is larger
+		 * than the hardware sectorsize for the machine.
+		 */
+		hblock = get_hardblocksize(dev);
+		if(    (hblock != 0)
+		    && (sb->s_blocksize < hblock) )
+		{
+			printk("EXT2-fs: blocksize too small for device.\n");
+			goto failed_mount;
+		}
 
 		brelse (bh);
 		set_blocksize (dev, sb->s_blocksize);

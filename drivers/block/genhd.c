@@ -24,9 +24,7 @@
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/string.h>
-#ifdef CONFIG_BLK_DEV_INITRD
 #include <linux/blk.h>
-#endif
 
 #include <asm/system.h>
 
@@ -109,6 +107,52 @@ static inline int is_extended_partition(struct partition *p)
 		SYS_IND(p) == LINUX_EXTENDED_PARTITION);
 }
 
+static unsigned int get_ptable_blocksize(kdev_t dev)
+{
+  int ret = 1024;
+
+  /*
+   * See whether the low-level driver has given us a minumum blocksize.
+   * If so, check to see whether it is larger than the default of 1024.
+   */
+  if (!blksize_size[MAJOR(dev)])
+    {
+      return ret;
+    }
+
+  /*
+   * Check for certain special power of two sizes that we allow.
+   * With anything larger than 1024, we must force the blocksize up to
+   * the natural blocksize for the device so that we don't have to try
+   * and read partial sectors.  Anything smaller should be just fine.
+   */
+  switch( blksize_size[MAJOR(dev)][MINOR(dev)] )
+    {
+    case 2048:
+      ret = 2048;
+      break;
+    case 4096:
+      ret = 4096;
+      break;
+    case 8192:
+      ret = 8192;
+      break;
+    case 1024:
+    case 512:
+    case 256:
+    case 0:
+      /*
+       * These are all OK.
+       */
+      break;
+    default:
+      panic("Strange blocksize for partition table\n");
+    }
+
+  return ret;
+
+}
+
 #ifdef CONFIG_MSDOS_PARTITION
 /*
  * Create devices for each logical partition in an extended partition.
@@ -138,7 +182,7 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 	while (1) {
 		if ((current_minor & mask) == 0)
 			return;
-		if (!(bh = bread(dev,0,1024)))
+		if (!(bh = bread(dev,0,get_ptable_blocksize(dev))))
 			return;
 	  /*
 	   * This block is from a device that we're about to stomp on.
@@ -222,7 +266,7 @@ static void bsd_disklabel_partition(struct gendisk *hd, kdev_t dev)
 	struct bsd_partition *p;
 	int mask = (1 << hd->minor_shift) - 1;
 
-	if (!(bh = bread(dev,0,1024)))
+	if (!(bh = bread(dev,0,get_ptable_blocksize(dev))))
 		return;
 	bh->b_state = 0;
 	l = (struct bsd_disklabel *) (bh->b_data+512);
@@ -259,7 +303,7 @@ static int msdos_partition(struct gendisk *hd, kdev_t dev, unsigned long first_s
 
 read_mbr:
 #endif
-	if (!(bh = bread(dev,0,1024))) {
+	if (!(bh = bread(dev,0,get_ptable_blocksize(dev)))) {
 		printk(" unable to read partition table\n");
 		return -1;
 	}
@@ -438,7 +482,7 @@ static int osf_partition(struct gendisk *hd, unsigned int dev, unsigned long fir
 	struct d_partition * partition;
 #define DISKLABELMAGIC (0x82564557UL)
 
-	if (!(bh = bread(dev,0,1024))) {
+	if (!(bh = bread(dev,0,get_ptable_blocksize(dev)))) {
 		printk("unable to read partition table\n");
 		return -1;
 	}
@@ -501,7 +545,7 @@ static int sun_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sec
 	unsigned long spc;
 #define SUN_LABEL_MAGIC          0xDABE
 
-	if(!(bh = bread(dev, 0, 1024))) {
+	if(!(bh = bread(dev, 0, get_ptable_blocksize(dev)))) {
 		printk("Dev %s: unable to read partition table\n",
 		       kdevname(dev));
 		return -1;

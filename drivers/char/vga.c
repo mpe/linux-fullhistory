@@ -115,14 +115,10 @@ set_palette (void)
 void
 __set_origin(unsigned short offset)
 {
-	unsigned long flags;
-
 	clear_selection();
 
-	save_flags(flags); cli();
 	__origin = offset;
 	write_vga(12, offset);
-	restore_flags(flags);
 }
 
 /*
@@ -140,18 +136,14 @@ hide_cursor(void)
 void
 set_cursor(int currcons)
 {
-	unsigned long flags;
-
 	if (currcons != fg_console || console_blanked || vcmode == KD_GRAPHICS)
 		return;
 	if (__real_origin != __origin)
 		__set_origin(__real_origin);
-	save_flags(flags); cli();
 	if (deccm) {
 		write_vga(14, (pos - video_mem_base)>>1);
 	} else
 		hide_cursor();
-	restore_flags(flags);
 }
 
 unsigned long

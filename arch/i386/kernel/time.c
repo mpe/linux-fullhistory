@@ -454,7 +454,8 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 	  )*60 + sec; /* finally seconds */
 }
 
-static unsigned long get_cmos_time(void)
+/* not static: needed by APM */
+unsigned long get_cmos_time(void)
 {
 	unsigned int year, mon, day, hour, min, sec;
 	int i;

@@ -10,7 +10,6 @@
  *
  * ------------------------------------------------------------------------- */
 
-#include <linux/modversions.h>
 #include <linux/errno.h>
 #include <linux/stat.h>
 #include <linux/malloc.h>

@@ -49,6 +49,7 @@ fi
 tristate 'Openprom tree appears in /proc/openprom (EXPERIMENTAL)' CONFIG_SUN_OPENPROMFS
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
+bool 'Sysctl support' CONFIG_SYSCTL
 tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then

@@ -150,10 +150,6 @@ EXPORT_SYMBOL(sklist_insert_socket);
 EXPORT_SYMBOL(scm_detach_fds);
 #endif
 
-#ifdef CONFIG_SMB_FS_MODULE
-EXPORT_SYMBOL(scm_detach_fds);
-#endif
-
 #ifdef CONFIG_INET
 /* Internet layer registration */
 EXPORT_SYMBOL(inet_add_protocol);
@@ -264,7 +260,6 @@ EXPORT_SYMBOL(tr_type_trans);
 EXPORT_SYMBOL(register_trdev);
 EXPORT_SYMBOL(unregister_trdev);
 EXPORT_SYMBOL(init_trdev);
-EXPORT_SYMBOL(csum_partial_copy);
 #endif
                   
 #ifdef CONFIG_NET_ALIAS

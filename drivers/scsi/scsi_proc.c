@@ -239,25 +239,12 @@ int parseOpt(parseHandle *handle, char **param)
     return(cmdIndex);
 }
 
-#define MAX_SCSI_DEVICE_CODE 10
-const char *const scsi_dev_types[MAX_SCSI_DEVICE_CODE] =
-{
-    "Direct-Access    ",
-    "Sequential-Access",
-    "Printer          ",
-    "Processor        ",
-    "WORM             ",
-    "CD-ROM           ",
-    "Scanner          ",
-    "Optical Device   ",
-    "Medium Changer   ",
-    "Communications   "
-};
-
 void proc_print_scsidevice(Scsi_Device *scd, char *buffer, int *size, int len)
 {	    
+  
     int x, y = *size;
-    
+    extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
+        
     y = sprintf(buffer + len, 
 		    "Host: scsi%d Channel: %02d Id: %02d Lun: %02d\n  Vendor: ",
 		    scd->host->host_no, scd->channel, scd->id, scd->lun);
@@ -285,7 +272,7 @@ void proc_print_scsidevice(Scsi_Device *scd, char *buffer, int *size, int len)
     
     y += sprintf(buffer + len + y, "  Type:   %s ",
 		     scd->type < MAX_SCSI_DEVICE_CODE ? 
-		     scsi_dev_types[(int)scd->type] : "Unknown          " );
+		     scsi_device_types[(int)scd->type] : "Unknown          " );
     y += sprintf(buffer + len + y, "               ANSI"
 		     " SCSI revision: %02x", (scd->scsi_level < 3)?1:2);
     if (scd->scsi_level == 2)
@@ -315,3 +302,4 @@ void proc_print_scsidevice(Scsi_Device *scd, char *buffer, int *size, int len)
  * tab-width: 8
  * End:
  */
+

@@ -1398,7 +1398,9 @@ void rose_proto_init(struct net_proto *pro)
 	for (i = 0; i < 6; i++)
 		register_netdev(&dev_rose[i]);
 
+#ifdef CONFIG_SYSCTL
 	rose_register_sysctl();
+#endif
 
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&proc_net_rose);
@@ -1436,8 +1438,9 @@ void cleanup_module(void)
 	if (ax25cmp(&rose_callsign, &null_ax25_address) != 0)
 		ax25_listen_release(&rose_callsign, NULL);
 
+#ifdef CONFIG_SYSCTL
 	rose_unregister_sysctl();
-
+#endif
 	unregister_netdevice_notifier(&rose_dev_notifier);
 
 	sock_unregister(AF_ROSE);

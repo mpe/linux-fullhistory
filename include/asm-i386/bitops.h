@@ -30,7 +30,7 @@ extern __inline__ int set_bit(int nr, volatile void * addr)
 {
 	int oldbit;
 
-	__asm__ __volatile__(LOCK_PREFIX
+	__asm__ __volatile__( LOCK_PREFIX
 		"btsl %2,%1\n\tsbbl %0,%0"
 		:"=r" (oldbit),"=m" (ADDR)
 		:"ir" (nr));
@@ -41,7 +41,7 @@ extern __inline__ int clear_bit(int nr, volatile void * addr)
 {
 	int oldbit;
 
-	__asm__ __volatile__(LOCK_PREFIX
+	__asm__ __volatile__( LOCK_PREFIX
 		"btrl %2,%1\n\tsbbl %0,%0"
 		:"=r" (oldbit),"=m" (ADDR)
 		:"ir" (nr));
@@ -52,7 +52,7 @@ extern __inline__ int change_bit(int nr, volatile void * addr)
 {
 	int oldbit;
 
-	__asm__ __volatile__(LOCK_PREFIX
+	__asm__ __volatile__( LOCK_PREFIX
 		"btcl %2,%1\n\tsbbl %0,%0"
 		:"=r" (oldbit),"=m" (ADDR)
 		:"ir" (nr));

@@ -79,6 +79,10 @@ asmlinkage int sys_setup(void)
 	init_proc_fs();
 #endif
 
+#ifdef CONFIG_LOCKD
+	nlmxdr_init();
+#endif
+
 #ifdef CONFIG_NFS_FS
 	init_nfs_fs();
 #endif

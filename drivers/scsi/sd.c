@@ -60,7 +60,7 @@
  */
 
 #define SD_TIMEOUT (15 * HZ)
-#define SD_MOD_TIMEOUT (15 * HZ)
+#define SD_MOD_TIMEOUT (75 * HZ)
 
 #define CLUSTERABLE_DEVICE(SC) (SC->host->use_clustering && \
 				SC->device->type != TYPE_MOD)
@@ -253,6 +253,11 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 	  {
 	    error_sector <<= 1;
 	    if (block_sectors < 2) block_sectors = 2;
+	  }
+        else if (sector_size == 2048)
+	  {
+	    error_sector <<= 2;
+	    if (block_sectors < 4) block_sectors = 4;
 	  }
 	else if (sector_size == 256)
 	  error_sector >>= 1;
@@ -634,6 +639,13 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 	    goto repeat;
 	}
 
+     if (rscsi_disks[dev].sector_size == 2048)
+ 	if((block & 3) || (SCpnt->request.nr_sectors & 3)) {
+ 	    printk("sd.c:Bad block number requested");
+ 	    SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
+ 	    goto repeat;
+ 	}
+     
     switch (SCpnt->request.cmd)
     {
     case WRITE :
@@ -900,6 +912,13 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 
     cmd[1] = (SCpnt->lun << 5) & 0xe0;
 
+     if (rscsi_disks[dev].sector_size == 2048){
+ 	if(block & 3) panic("sd.c:Bad block number requested");
+ 	if(this_count & 3) panic("sd.c:Bad block number requested");
+ 	block = block >> 2;
+ 	this_count = this_count >> 2;
+     }
+     
     if (rscsi_disks[dev].sector_size == 1024){
 	if(block & 1) panic("sd.c:Bad block number requested");
 	if(this_count & 1) panic("sd.c:Bad block number requested");
@@ -1201,6 +1220,7 @@ static int sd_init_onedisk(int i)
 
 	if (rscsi_disks[i].sector_size != 512 &&
 	    rscsi_disks[i].sector_size != 1024 &&
+	    rscsi_disks[i].sector_size != 2048 &&
 	    rscsi_disks[i].sector_size != 256)
 	{
 	    printk ("sd%c : unsupported sector size %d.\n",
@@ -1215,6 +1235,22 @@ static int sd_init_onedisk(int i)
 		return i;
 	    }
 	}
+
+        if( rscsi_disks[i].sector_size == 2048 )
+          {
+            int m;
+
+            /*
+             * We must fix the sd_blocksizes and sd_hardsizes
+             * to allow us to read the partition tables.
+             * The disk reading code does not allow for reading
+             * of partial sectors.
+             */
+            for (m=i<<4; m<((i+1)<<4); m++)
+              {
+                sd_blocksizes[m] = 2048;
+              }
+          }
     {
 	/*
 	 * The msdos fs needs to know the hardware sector size
@@ -1238,6 +1274,8 @@ static int sd_init_onedisk(int i)
 		i+'a', hard_sector, rscsi_disks[i].capacity,
                 mb, sz_quot, sz_rem);
     }
+	if(rscsi_disks[i].sector_size == 2048)
+	    rscsi_disks[i].capacity <<= 2;  /* Change into 512 byte sectors */
 	if(rscsi_disks[i].sector_size == 1024)
 	    rscsi_disks[i].capacity <<= 1;  /* Change into 512 byte sectors */
 	if(rscsi_disks[i].sector_size == 256)
@@ -1341,10 +1379,12 @@ static int sd_init()
     sd_hardsizes = (int *) scsi_init_malloc((sd_template.dev_max << 4) *
 					    sizeof(int), GFP_ATOMIC);
 
-    for(i=0;i<(sd_template.dev_max << 4);i++){
-	sd_blocksizes[i] = 1024;
-	sd_hardsizes[i] = 512;
-    }
+     for(i=0;i<(sd_template.dev_max << 4);i++)
+       {
+         sd_blocksizes[i] = 1024;
+         sd_hardsizes[i] = 512;
+       }
+ 
     blksize_size[MAJOR_NR] = sd_blocksizes;
     hardsect_size[MAJOR_NR] = sd_hardsizes;
     sd = (struct hd_struct *) scsi_init_malloc((sd_template.dev_max << 4) *
@@ -1477,9 +1517,15 @@ int revalidate_scsidisk(kdev_t dev, int maxusage){
 	gdev->part[minor].nr_sects = 0;
         /*
          * Reset the blocksize for everything so that we can read
-         * the partition table.
+         * the partition table.  Technically we will determine the
+         * correct block size when we revalidate, but we do this just
+         * to make sure that everything remains consistent.
          */
         blksize_size[MAJOR_NR][minor] = 1024;
+        if( rscsi_disks[target].sector_size == 2048 )
+          blksize_size[MAJOR_NR][minor] = 2048;
+        else
+          blksize_size[MAJOR_NR][minor] = 1024;
     }
 
 #ifdef MAYBE_REINIT

@@ -37,6 +37,10 @@ struct pt_regs {
 	unsigned long r27;
 	unsigned long r28;
 	unsigned long hae;
+/* JRP - These are the values provided to a0-a2 by PALcode */
+	unsigned long trap_a0;
+	unsigned long trap_a1;
+	unsigned long trap_a2;
 /* These are saved by PAL-code: */
 	unsigned long ps;
 	unsigned long pc;

@@ -86,7 +86,10 @@ static int parse_options(char *options, struct iso9660_options * popt)
 	popt->check = 's';		/* default: strict */
 	popt->conversion = 'b';		/* default: no conversion */
 	popt->blocksize = 1024;
-	popt->mode = S_IRUGO;
+	popt->mode = S_IRUGO | S_IXUGO; /* r-x for all.  The disc could
+					   be shared with DOS machines so
+					   virtually anything could be
+					   a valid executable. */
 	popt->gid = 0;
 	popt->uid = 0;
 	if (!options) return 1;
@@ -227,23 +230,22 @@ static unsigned int isofs_get_last_session(kdev_t dev)
 struct super_block *isofs_read_super(struct super_block *s,void *data,
 				     int silent)
 {
-	struct buffer_head *bh=NULL;
-	int iso_blknum;
-	unsigned int blocksize_bits;
-	int high_sierra;
-	kdev_t dev = s->s_dev;
-	unsigned int vol_desc_start;
-	int orig_zonesize;
+	struct buffer_head	      * bh = NULL;
+	unsigned int			blocksize;
+	unsigned int			blocksize_bits;
+	kdev_t				dev = s->s_dev;
+	struct hs_volume_descriptor   * hdp;
+	struct hs_primary_descriptor  * h_pri = NULL;
+	int				high_sierra;
+	int				iso_blknum;
+	struct iso9660_options		opt;
+	int				orig_zonesize;
+	struct iso_primary_descriptor * pri = NULL;
+	struct iso_directory_record   * rootp;
+	struct iso_volume_descriptor  * vdp;
+	unsigned int			vol_desc_start;
 
-	struct iso_volume_descriptor *vdp;
-	struct hs_volume_descriptor *hdp;
 
-	struct iso_primary_descriptor *pri = NULL;
-	struct hs_primary_descriptor *h_pri = NULL;
-
-	struct iso_directory_record *rootp;
-
-	struct iso9660_options opt;
 
 	MOD_INC_USE_COUNT;
 
@@ -265,6 +267,23 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	printk("uid = %d\n", opt.uid);
 #endif
 
+ 	/*
+ 	 * First of all, get the hardware blocksize for this device.
+ 	 * If we don't know what it is, or the hardware blocksize is
+ 	 * larger than the blocksize the user specified, then use
+ 	 * that value.
+ 	 */
+ 	blocksize = get_hardblocksize(dev);
+ 	if(    (blocksize != 0)
+ 	    && (blocksize > opt.blocksize) )
+ 	  {
+ 	    /*
+ 	     * Force the blocksize we are going to use to be the
+ 	     * hardware blocksize.
+ 	     */
+ 	    opt.blocksize = blocksize;
+ 	  }
+ 
 	blocksize_bits = 0;
 	{
 	  int i = opt.blocksize;
@@ -273,6 +292,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	    i >>=1;
 	  }
 	}
+
 	set_blocksize(dev, opt.blocksize);
 
 	lock_super(s);
@@ -362,6 +382,24 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	/* RDE: convert log zone size to bit shift */
 
 	orig_zonesize = s -> u.isofs_sb.s_log_zone_size;
+
+	/*
+	 * If the zone size is smaller than the hardware sector size,
+	 * this is a fatal error.  This would occur if the
+	 * disc drive had sectors that were 2048 bytes, but the filesystem
+	 * had blocks that were 512 bytes (which should only very rarely
+	 * happen.
+	 */
+	if(    (blocksize != 0)
+	    && (orig_zonesize < blocksize) )
+	  {
+	      printk("Logical zone size(%ld) < hardware blocksize(%ld)\n", 
+		     orig_zonesize, blocksize);
+	      goto out;
+
+	  }
+
+
 	switch (s -> u.isofs_sb.s_log_zone_size)
 	  { case  512: s -> u.isofs_sb.s_log_zone_size =  9; break;
 	    case 1024: s -> u.isofs_sb.s_log_zone_size = 10; break;
@@ -403,8 +441,20 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	 * Force the blocksize to 512 for 512 byte sectors.  The file
 	 * read primitives really get it wrong in a bad way if we don't
 	 * do this.
+	 *
+	 * Note - we should never be setting the blocksize to something
+	 * less than the hardware sector size for the device.  If we
+	 * do, we would end up having to read larger buffers and split
+	 * out portions to satisfy requests.
+	 *
+	 * Note2- the idea here is that we want to deal with the optimal
+	 * zonesize in the filesystem.  If we have it set to something less,
+	 * then we have horrible problems with trying to piece together
+	 * bits of adjacent blocks in order to properly read directory
+	 * entries.  By forcing the blocksize in this way, we ensure
+	 * that we will never be required to do this.
 	 */
-	if( orig_zonesize < opt.blocksize )
+	if( orig_zonesize != opt.blocksize )
 	  {
 	    opt.blocksize = orig_zonesize;
 	    blocksize_bits = 0;
@@ -482,6 +532,34 @@ int isofs_bmap(struct inode * inode,int block)
 		printk("_isofs_bmap: block<0");
 		return 0;
 	}
+
+	/*
+	 * If we are beyond the end of this file, don't give out any
+	 * blocks.
+	 */
+	if( (block << ISOFS_BUFFER_BITS(inode)) >= inode->i_size )
+	  {
+	    off_t	max_legal_read_offset;
+
+	    /*
+	     * If we are *way* beyond the end of the file, print a message.
+	     * Access beyond the end of the file up to the next page boundary
+	     * is normal, however because of the way the page cache works.
+	     * In this case, we just return 0 so that we can properly fill
+	     * the page with useless information without generating any
+	     * I/O errors.
+	     */
+	    max_legal_read_offset = (inode->i_size + PAGE_SIZE - 1) 
+	      & ~(PAGE_SIZE - 1);
+	    if( (block << ISOFS_BUFFER_BITS(inode)) >= max_legal_read_offset )
+	      {
+
+		printk("_isofs_bmap: block>= EOF(%d, %d)", block, 
+		       inode->i_size);
+	      }
+	    return 0;
+	  }
+
 	return (inode->u.isofs_i.i_first_extent >> ISOFS_BUFFER_BITS(inode)) + block;
 }
 
@@ -502,7 +580,6 @@ void isofs_read_inode(struct inode * inode)
 	struct buffer_head * bh;
 	struct iso_directory_record * raw_inode;
 	unsigned char *pnt = NULL;
-	void *cpnt = NULL;
 	int high_sierra;
 	int block;
 	int volume_seq_no ;
@@ -518,30 +595,6 @@ void isofs_read_inode(struct inode * inode)
 	       + (inode->i_ino & (bufsize - 1)));
 	raw_inode = ((struct iso_directory_record *) pnt);
 	high_sierra = inode->i_sb->u.isofs_sb.s_high_sierra;
-
-	if ((inode->i_ino & (bufsize - 1)) + *pnt > bufsize){
-	        int frag1, offset;
-
-		offset = (inode->i_ino & (bufsize - 1));
-		frag1 = bufsize - offset;
-	        cpnt = kmalloc(*pnt,GFP_KERNEL);
-		if (cpnt == NULL) {
-			printk(KERN_INFO "NoMem ISO inode %lu\n",inode->i_ino);
-			brelse(bh);
-			goto fail;
-		}
-		memcpy(cpnt, bh->b_data + offset, frag1);
-		brelse(bh);
-		if (!(bh = bread(inode->i_dev,++block, bufsize))) {
-			kfree(cpnt);
-			printk("unable to read i-node block");
-			goto fail;
-		}
-		offset += *pnt - bufsize;
-		memcpy((char *)cpnt+frag1, bh->b_data, offset);
-		pnt = ((unsigned char *) cpnt);
-		raw_inode = ((struct iso_directory_record *) pnt);
-	}
 
 	if (raw_inode->flags[-high_sierra] & 2) {
 		inode->i_mode = S_IRUGO | S_IXUGO | S_IFDIR;
@@ -682,10 +735,6 @@ void isofs_read_inode(struct inode * inode)
 	  else if (S_ISFIFO(inode->i_mode))
 	    init_fifo(inode);
 	}
-	if (cpnt) {
-		kfree (cpnt);
-		cpnt = NULL;
-	}
 	return;
       fail:
 	/* With a data error we return this information */
@@ -725,8 +774,6 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 	unsigned char bufbits = ISOFS_BUFFER_BITS(parent);
 	unsigned int block,offset;
 	int parent_dir, inode_number;
-	int old_offset;
-	void * cpnt = NULL;
 	int result;
 	int directory_size;
 	struct buffer_head * bh;
@@ -786,7 +833,7 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 		   CDROM sector.  If we are at the end of the directory, we
 		   kick out of the while loop. */
 
-		if (*((unsigned char *) de) == 0)
+ 		if ((*((unsigned char *) de) == 0) || (offset == bufsize) )
 		{
 			brelse(bh);
 			offset = 0;
@@ -813,31 +860,12 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 		   bh block.  If not, we malloc a buffer, and put the two
 		   halves together, so that we can cleanly read the block.  */
 
-		old_offset = offset;
 		offset += *((unsigned char *) de);
 
-		if (offset >= bufsize)
+		if (offset > bufsize)
 		{
- 		        unsigned int frag1;
- 			frag1 = bufsize - old_offset;
- 			cpnt = kmalloc(*((unsigned char *) de),GFP_KERNEL);
-			if (!cpnt) return -1;
- 			memcpy(cpnt, bh->b_data + old_offset, frag1);
- 			de = (struct iso_directory_record *) ((char *)cpnt);
-			brelse(bh);
-			offset -= bufsize;
- 			directory_size -= bufsize;
-			if(directory_size < 0)
-			{
-				printk("Directory size < 0\n");
-				return -1;
-			}
-			block++;
-			if(!(bh = bread(parent->i_dev,block,bufsize))) {
- 			        kfree(cpnt);
-				return -1;
-			}
- 			memcpy((char *)cpnt+frag1, bh->b_data, offset);
+ 			printk("Directory overrun\n");
+ 			goto out;
 		}
 
 		if (find_rock_ridge_relocation(de, parent) == extent){
@@ -845,20 +873,12 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 			goto out;
 		}
 
-		if (cpnt) {
-			kfree(cpnt);
-			cpnt = NULL;
-		}
 	}
 
 	/* We go here for any condition we cannot handle.
 	   We also drop through to here at the end of the directory. */
 
  out:
-	if (cpnt) {
-	        kfree(cpnt);
-		cpnt = NULL;
-	}
 	brelse(bh);
 #ifdef DEBUG
 	printk("Resultant Inode %d\n",result);

@@ -1797,7 +1797,9 @@ void ax25_proto_init(struct net_proto *pro)
 	ax25_packet_type.type = htons(ETH_P_AX25);
 	dev_add_pack(&ax25_packet_type);
 	register_netdevice_notifier(&ax25_dev_notifier);
+#ifdef CONFIG_SYSCTL
 	ax25_register_sysctl();
+#endif
 
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&proc_ax25_route);
@@ -1828,8 +1830,9 @@ void cleanup_module(void)
 	ax25_uid_free();
 	ax25_dev_free();
 
+#ifdef CONFIG_SYSCTL
 	ax25_unregister_sysctl();
-
+#endif
 	unregister_netdevice_notifier(&ax25_dev_notifier);
 
 	ax25_packet_type.type = htons(ETH_P_AX25);

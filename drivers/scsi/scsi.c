@@ -110,7 +110,6 @@ static volatile struct Scsi_Host * host_active = NULL;
 #define SCSI_BLOCK(HOST) ((HOST->block && host_active && HOST != host_active) \
 			  || (HOST->can_queue && HOST->host_busy >= HOST->can_queue))
 
-#define MAX_SCSI_DEVICE_CODE 10
 const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE] =
 {
     "Direct-Access    ",

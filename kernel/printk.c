@@ -9,6 +9,7 @@
  * to the console.  Added hook for sending the console messages
  * elsewhere, in preparation for a serial line console (someday).
  * Ted Ts'o, 2/11/93.
+ * Modified for sysctl support, 1/8/97, Chris Horn.
  */
 
 #include <stdarg.h>
@@ -40,7 +41,12 @@ static char buf[1024];
 
 unsigned long log_size = 0;
 struct wait_queue * log_wait = NULL;
+
+/* Keep together for sysctl support */
 int console_loglevel = DEFAULT_CONSOLE_LOGLEVEL;
+int default_message_loglevel = DEFAULT_MESSAGE_LOGLEVEL;
+int minimum_console_loglevel = MINIMUM_CONSOLE_LOGLEVEL;
+int default_console_loglevel = DEFAULT_CONSOLE_LOGLEVEL;
 
 struct console *console_drivers = NULL;
 static char log_buf[LOG_BUF_LEN];
@@ -141,17 +147,17 @@ asmlinkage int sys_syslog(int type, char * buf, int len)
 		logged_chars = 0;
 		break;
 	case 6:		/* Disable logging to console */
-		console_loglevel = MINIMUM_CONSOLE_LOGLEVEL;
+		console_loglevel = minimum_console_loglevel;
 		break;
 	case 7:		/* Enable logging to console */
-		console_loglevel = DEFAULT_CONSOLE_LOGLEVEL;
+		console_loglevel = default_console_loglevel;
 		break;
 	case 8:
 		error = -EINVAL;
 		if (len < 1 || len > 8)
 			goto out;
-		if (len < MINIMUM_CONSOLE_LOGLEVEL)
-			len = MINIMUM_CONSOLE_LOGLEVEL;
+		if (len < minimum_console_loglevel)
+			len = minimum_console_loglevel;
 		console_loglevel = len;
 		error = 0;
 		break;
@@ -190,7 +196,7 @@ asmlinkage int printk(const char *fmt, ...)
 			) {
 				p -= 3;
 				p[0] = '<';
-				p[1] = DEFAULT_MESSAGE_LOGLEVEL + '0';
+				p[1] = default_message_loglevel + '0';
 				p[2] = '>';
 			} else
 				msg += 3;

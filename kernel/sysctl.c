@@ -7,6 +7,8 @@
  * Added hooks for /proc/sys/net (minor, minor patch), 96/4/1, Mike Shaver.
  * Added kernel/java-{interpreter,appletviewer}, 96/5/10, Mike Shaver.
  * Dynamic registration fixes, Stephen Tweedie.
+ * Added kswapd-interval, ctrl-alt-del, printk stuff, 1/8/97, Chris Horn.
+ * Made sysctl support optional via CONFIG_SYSCTL, 1/10/97, Chris Horn.
  */
 
 #include <linux/config.h>
@@ -26,24 +28,43 @@
 #include <asm/bitops.h>
 #include <asm/uaccess.h>
 
-/* External variables not in a header file. */
-extern int panic_timeout;
-
-
 #ifdef CONFIG_ROOT_NFS
 #include <linux/nfs_fs.h>
 #endif
+
+#ifdef CONFIG_SYSCTL
+
+/* External variables not in a header file. */
+extern int panic_timeout;
+extern int console_loglevel, default_message_loglevel;
+extern int minimum_console_loglevel, default_console_loglevel;
+extern int C_A_D, swapout_interval;
+extern int bdf_prm[], bdflush_min[], bdflush_max[];
+extern char binfmt_java_interpreter[], binfmt_java_appletviewer[];
+extern int sysctl_overcommit_memory;
+
+#ifdef __sparc__
+extern char reboot_command [];
+#endif
+
+static int parse_table(int *, int, void *, size_t *, void *, size_t,
+		       ctl_table *, void **);
+static int do_securelevel_strategy (ctl_table *, int *, int, void *, size_t *,
+				    void *, size_t, void **);
+
 
 static ctl_table root_table[];
 static struct ctl_table_header root_table_header = 
 	{root_table, DNODE_SINGLE(&root_table_header)};
 
-static int parse_table(int *, int, void *, size_t *, void *, size_t,
-		       ctl_table *, void **);
-
 static ctl_table kern_table[];
 static ctl_table vm_table[];
 extern ctl_table net_table[];
+static ctl_table proc_table[];
+static ctl_table fs_table[];
+static ctl_table debug_table[];
+static ctl_table dev_table[];
+
 
 /* /proc declarations: */
 
@@ -96,24 +117,16 @@ static void register_proc_table(ctl_table *, struct proc_dir_entry *);
 static void unregister_proc_table(ctl_table *, struct proc_dir_entry *);
 #endif
 
-extern int bdf_prm[], bdflush_min[], bdflush_max[];
-
-static int do_securelevel_strategy (ctl_table *, int *, int, void *, size_t *,
-				    void *, size_t, void **);
-
-extern char binfmt_java_interpreter[], binfmt_java_appletviewer[];
-extern int sysctl_overcommit_memory;
-
-#ifdef __sparc__
-extern char reboot_command [];
-#endif
-
 /* The default sysctl tables: */
 
 static ctl_table root_table[] = {
 	{CTL_KERN, "kernel", NULL, 0, 0555, kern_table},
 	{CTL_VM, "vm", NULL, 0, 0555, vm_table},
 	{CTL_NET, "net", NULL, 0, 0555, net_table},
+	{CTL_PROC, "proc", NULL, 0, 0555, proc_table},
+	{CTL_FS, "fs", NULL, 0, 0555, fs_table},
+	{CTL_DEBUG, "debug", NULL, 0, 0555, debug_table},
+        {CTL_DEV, "dev", NULL, 0, 0555, dev_table},
 	{0}
 };
 
@@ -160,6 +173,10 @@ static ctl_table kern_table[] = {
 	{KERN_SPARC_REBOOT, "reboot-cmd", reboot_command,
 	 256, 0644, NULL, &proc_dostring, &sysctl_string },
 #endif
+	{KERN_CTLALTDEL, "ctrl-alt-del", &C_A_D, sizeof(int),
+	 0644, NULL, &proc_dointvec},
+	{KERN_PRINTK, "printk", &console_loglevel, 4*sizeof(int),
+	 0644, NULL, &proc_dointvec},
 	{0}
 };
 
@@ -168,6 +185,8 @@ static ctl_table vm_table[] = {
 	 &swap_control, sizeof(swap_control_t), 0600, NULL, &proc_dointvec},
 	{VM_KSWAPD, "kswapd", 
 	 &kswapd_ctl, sizeof(kswapd_ctl), 0600, NULL, &proc_dointvec},
+	{VM_SWAPOUT, "kswapd-interval",
+	 &swapout_interval, sizeof(int), 0600, NULL, &proc_dointvec},
 	{VM_FREEPG, "freepages", 
 	 &min_free_pages, 3*sizeof(int), 0600, NULL, &proc_dointvec},
 	{VM_BDFLUSH, "bdflush", &bdf_prm, 9*sizeof(int), 0600, NULL,
@@ -177,6 +196,23 @@ static ctl_table vm_table[] = {
 	 sizeof(sysctl_overcommit_memory), 0644, NULL, &proc_dointvec},
 	{0}
 };
+
+static ctl_table proc_table[] = {
+	{0}
+};
+
+static ctl_table fs_table[] = {
+	{0}
+};
+
+static ctl_table debug_table[] = {
+	{0}
+};
+
+static ctl_table dev_table[] = {
+	{0}
+};  
+
 
 void sysctl_init(void)
 {
@@ -942,4 +978,59 @@ int do_struct (
 			return -EFAULT;
 	return 0;
 }
+
+
+#else /* CONFIG_SYSCTL */
+
+
+extern asmlinkage int sys_sysctl(struct __sysctl_args *args)
+{
+	return -ENOSYS;
+}
+
+int sysctl_string(ctl_table *table, int *name, int nlen,
+		  void *oldval, size_t *oldlenp,
+		  void *newval, size_t newlen, void **context)
+{
+	return -ENOSYS;
+}
+
+int sysctl_intvec(ctl_table *table, int *name, int nlen,
+		void *oldval, size_t *oldlenp,
+		void *newval, size_t newlen, void **context)
+{
+	return -ENOSYS;
+}
+
+int proc_dostring(ctl_table *table, int write, struct file *filp,
+		  void *buffer, size_t *lenp)
+{
+	return -ENOSYS;
+}
+
+int proc_dointvec(ctl_table *table, int write, struct file *filp,
+		  void *buffer, size_t *lenp)
+{
+	return -ENOSYS;
+}
+
+int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
+		    void *buffer, size_t *lenp)
+{
+	return -ENOSYS;
+}
+
+struct ctl_table_header * register_sysctl_table(ctl_table * table, 
+						int insert_at_head)
+{
+	return 0;
+}
+
+void unregister_sysctl_table(struct ctl_table_header * table)
+{
+}
+
+#endif /* CONFIG_SYSCTL */
+
+
 

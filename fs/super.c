@@ -325,6 +325,7 @@ int get_filesystem_info( char *buf )
 				len += sprintf(buf+len, ",wsize=%d",
 					       nfss->wsize);
 			}
+#if 0
 			if (nfss->timeo != 7*HZ/10) {
 				len += sprintf(buf+len, ",timeo=%d",
 					       nfss->timeo*10/HZ);
@@ -333,6 +334,7 @@ int get_filesystem_info( char *buf )
 				len += sprintf(buf+len, ",retrans=%d",
 					       nfss->retrans);
 			}
+#endif
 			if (nfss->acregmin != 3*HZ) {
 				len += sprintf(buf+len, ",acregmin=%d",
 					       nfss->acregmin/HZ);

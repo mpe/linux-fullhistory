@@ -203,6 +203,17 @@ int get_rock_ridge_filename(struct iso_directory_record * de,
 	break;
       case SIG('N','M'):
 	if (truncate) break;
+        /*
+	 * If the flags are 2 or 4, this indicates '.' or '..'.
+	 * We don't want to do anything with this, because it
+	 * screws up the code that calls us.  We don't really
+	 * care anyways, since we can just use the non-RR
+	 * name.
+	 */
+	if (rr->u.NM.flags & 6) {
+	  break;
+	}
+
 	if (rr->u.NM.flags & ~1) {
 	  printk("Unsupported NM flag settings (%d)\n",rr->u.NM.flags);
 	  break;

@@ -29,6 +29,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/vmalloc.h>
+#include <linux/blkdev.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -496,6 +497,31 @@ struct buffer_head * get_hash_table(kdev_t dev, int block, int size)
 			return bh;
 		bh->b_count--;
 	}
+}
+
+unsigned int get_hardblocksize(kdev_t dev)
+{
+  int blksize = 0;
+
+  /*
+   * Get the hard sector size for the given device.  If we don't know
+   * what it is, return 0.
+   */
+
+  if (hardsect_size[MAJOR(dev)] != NULL)
+    {
+      blksize = hardsect_size[MAJOR(dev)][MINOR(dev)];
+      if (blksize != 0)
+	{
+	  return blksize;
+	}
+  }
+
+  /*
+   * We don't know what the hardware sector size for this device is.
+   * Return 0 indicating that we don't know.
+   */
+  return 0;
 }
 
 void set_blocksize(kdev_t dev, int size)
@@ -979,17 +1005,15 @@ static void get_more_buffer_heads(void)
 static inline void recover_reusable_buffer_heads(void)
 {
 	if (reuse_list) {
-		struct buffer_head *bh;
-		unsigned long flags;
+		struct buffer_head *head;
+
+		head = xchg(&reuse_list, NULL);
 	
-		save_flags(flags);
 		do {
-			cli();
-			bh = reuse_list;
-			reuse_list = bh->b_next_free;
-			restore_flags(flags);
+			struct buffer_head *bh = head;
+			head = head->b_next_free;
 			put_unused_buffer_head(bh);
-		} while (reuse_list);
+		} while (head);
 	}
 }
 

@@ -114,7 +114,7 @@ int kstack_depth_to_print = 24;
 #define VMALLOC_OFFSET (8*1024*1024)
 #define MODULE_RANGE (8*1024*1024)
 
-/*static*/ void die_if_kernel(const char * str, struct pt_regs * regs, long err)
+static void show_regs(struct pt_regs *regs)
 {
 	int i;
 	unsigned long esp;
@@ -130,8 +130,6 @@ int kstack_depth_to_print = 24;
 		esp = regs->esp;
 		ss = regs->xss & 0xffff;
 	}
-	console_verbose();
-	printk("%s: %04lx\n", str, err & 0xffff);
 	printk("CPU:    %d\n", smp_processor_id());
 	printk("EIP:    %04x:[<%08lx>]\nEFLAGS: %08lx\n", 0xffff & regs->xcs,regs->eip,regs->eflags);
 	printk("eax: %08lx   ebx: %08lx   ecx: %08lx   edx: %08lx\n",
@@ -182,6 +180,13 @@ int kstack_depth_to_print = 24;
 	for(i=0;i<20;i++)
 		printk("%02x ",0xff & get_seg_byte(regs->xcs & 0xffff,(i+(char *)regs->eip)));
 	printk("\n");
+}	
+
+/*static*/ void die_if_kernel(const char * str, struct pt_regs * regs, long err)
+{
+	console_verbose();
+	printk("%s: %04lx\n", str, err & 0xffff);
+	show_regs(regs);
 	do_exit(SIGSEGV);
 }
 
@@ -231,6 +236,7 @@ out:
 
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 {
+	printk("NMI\n"); show_regs(regs);
 #ifdef CONFIG_SMP_NMI_INVAL
 	smp_flush_tlb_rcv();
 #else

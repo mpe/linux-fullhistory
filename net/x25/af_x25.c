@@ -1293,7 +1293,9 @@ void x25_proto_init(struct net_proto *pro)
 
 	printk(KERN_INFO "X.25 for Linux. Version 0.1 for Linux 2.1.15\n");
 
+#ifdef CONFIG_SYSCTL
 	x25_register_sysctl();
+#endif
 
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&proc_net_x25);
@@ -1337,7 +1339,9 @@ void cleanup_module(void)
 	x25_link_free();
 	x25_route_free();
 
+#ifdef CONFIG_SYSCTL
 	x25_unregister_sysctl();
+#endif
 
 	unregister_netdevice_notifier(&x25_dev_notifier);
 

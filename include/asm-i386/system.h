@@ -187,6 +187,9 @@ __asm__ __volatile__ ( \
 struct __xchg_dummy { unsigned long a[100]; };
 #define __xg(x) ((struct __xchg_dummy *)(x))
 
+/*
+ * Note: no "lock" prefix even on SMP: xchg always implies lock anyway
+ */
 static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
 {
 	switch (size) {

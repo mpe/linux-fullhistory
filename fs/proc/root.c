@@ -137,6 +137,7 @@ struct proc_dir_entry proc_mca = {
 };
 #endif
 
+#ifdef CONFIG_SYSCTL
 struct proc_dir_entry proc_sys_root = {
 	PROC_SYS, 3, "sys",			/* inode, name */
 	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,	/* mode, nlink, uid, gid */
@@ -145,6 +146,7 @@ struct proc_dir_entry proc_sys_root = {
 	NULL,					/* next */
 	NULL, NULL				/* parent, subdir */
 };
+#endif
 
 #if defined(CONFIG_SUN_OPENPROMFS) || defined(CONFIG_SUN_OPENPROMFS_MODULE)
 
@@ -556,7 +558,9 @@ void proc_root_init(void)
 	proc_register(&proc_root, &proc_root_self);
 	proc_net = create_proc_entry("net", S_IFDIR, 0);
 	proc_scsi = create_proc_entry("scsi", S_IFDIR, 0);
+#ifdef CONFIG_SYSCTL
 	proc_register(&proc_root, &proc_sys_root);
+#endif
 #ifdef CONFIG_MCA
 	proc_register(&proc_root, &proc_mca);
 #endif

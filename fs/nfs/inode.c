@@ -17,25 +17,21 @@
 #include <linux/module.h>
 
 #include <linux/sched.h>
-#include <linux/nfs_fs.h>
-#include <linux/nfsiod.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/stat.h>
 #include <linux/errno.h>
 #include <linux/locks.h>
-#include <linux/smp.h>
-#include <linux/smp_lock.h>
+#include <linux/unistd.h>
+#include <linux/sunrpc/clnt.h>
+#include <linux/nfs_fs.h>
+#include <linux/lockd/bind.h>
 
 #include <asm/system.h>
-#include <asm/uaccess.h>
+# include <asm/uaccess.h>
 
-/* This is for kernel_thread */
-#define __KERNEL_SYSCALLS__
-#include <linux/unistd.h>
-
-extern int close_fp(struct file *filp);
+#define NFSDBG_FACILITY		NFSDBG_VFS
 
 static int nfs_notify_change(struct inode *, struct iattr *);
 static void nfs_put_inode(struct inode *);
@@ -43,7 +39,7 @@ static void nfs_put_super(struct super_block *);
 static void nfs_read_inode(struct inode *);
 static void nfs_statfs(struct super_block *, struct statfs *, int bufsiz);
 
-static struct super_operations nfs_sops = {
+static struct super_operations nfs_sops = { 
 	nfs_read_inode,		/* read inode */
 	nfs_notify_change,	/* notify change */
 	NULL,			/* write inode */
@@ -54,6 +50,7 @@ static struct super_operations nfs_sops = {
 	NULL
 };
 
+
 /*
  * The "read_inode" function doesn't actually do anything:
  * the real data is filled in later in nfs_fhget. Here we
@@ -61,31 +58,36 @@ static struct super_operations nfs_sops = {
  * (the latter makes "nfs_refresh_inode" do the right thing
  * wrt pipe inodes)
  */
-static void nfs_read_inode(struct inode * inode)
+static void
+nfs_read_inode(struct inode * inode)
 {
-	int rsize = inode->i_sb->u.nfs_sb.s_server.rsize;
-	int size = inode->i_sb->u.nfs_sb.s_server.wsize;
-
-	if (rsize > size)
-		size = rsize;
-	inode->i_blksize = size;
+	inode->i_blksize = inode->i_sb->s_blocksize;
 	inode->i_mode = 0;
 	inode->i_op = NULL;
 	NFS_CACHEINV(inode);
 }
 
-static void nfs_put_inode(struct inode * inode)
+static void
+nfs_put_inode(struct inode * inode)
 {
+	dprintk("NFS: put_inode(%x/%ld)\n", inode->i_dev, inode->i_ino);
+
 	if (NFS_RENAMED_DIR(inode))
 		nfs_sillyrename_cleanup(inode);
 	if (inode->i_pipe)
 		clear_inode(inode);
 }
 
-void nfs_put_super(struct super_block *sb)
+void
+nfs_put_super(struct super_block *sb)
 {
-	close_fp(sb->u.nfs_sb.s_server.file);
-	rpc_closesock(sb->u.nfs_sb.s_server.rsock);
+	struct rpc_clnt	*rpc;
+
+	if ((rpc = sb->u.nfs_sb.s_server.client) != NULL)
+		rpc_shutdown_client(rpc);
+
+	lockd_down();		/* release rpc.lockd */
+	rpciod_down();		/* release rpciod */
 	lock_super(sb);
 	sb->s_dev = 0;
 	unlock_super(sb);
@@ -93,22 +95,50 @@ void nfs_put_super(struct super_block *sb)
 }
 
 /*
- * The way this works is that the mount process passes a structure
- * in the data argument which contains an open socket to the NFS
- * server and the root file handle obtained from the server's mount
- * daemon.  We stash these away in the private superblock fields.
- * Later we can add other mount parameters like caching values.
+ * Compute and set NFS server blocksize
  */
-
-struct super_block *nfs_read_super(struct super_block *sb, void *raw_data,
-				   int silent)
+static unsigned int
+nfs_block_size(unsigned int bsize, unsigned char *nrbitsp)
 {
-	struct nfs_mount_data *data = (struct nfs_mount_data *) raw_data;
-	struct nfs_server *server;
-	unsigned int fd;
-	struct file *filp;
+	if (bsize < 1024)
+		bsize = NFS_DEF_FILE_IO_BUFFER_SIZE;
+	else if (bsize >= NFS_MAX_FILE_IO_BUFFER_SIZE)
+		bsize = NFS_MAX_FILE_IO_BUFFER_SIZE;
 
-	kdev_t dev = sb->s_dev;
+	/* make sure blocksize is a power of two */
+	if ((bsize & (bsize - 1)) || nrbitsp) {
+		unsigned int	nrbits;
+
+		for (nrbits = 31; nrbits && !(bsize & (1 << nrbits)); nrbits--)
+			;
+		bsize = 1 << nrbits;
+		if (nrbitsp)
+			*nrbitsp = nrbits;
+		if (bsize < NFS_DEF_FILE_IO_BUFFER_SIZE)
+			bsize = NFS_DEF_FILE_IO_BUFFER_SIZE;
+	}
+
+	return bsize;
+}
+
+/*
+ * The way this works is that the mount process passes a structure
+ * in the data argument which contains the server's IP address
+ * and the root file handle obtained from the server's mount
+ * daemon. We stash these away in the private superblock fields.
+ */
+struct super_block *
+nfs_read_super(struct super_block *sb, void *raw_data, int silent)
+{
+	struct nfs_mount_data	*data = (struct nfs_mount_data *) raw_data;
+	struct sockaddr_in	srvaddr;
+	struct nfs_server	*server;
+	struct rpc_timeout	timeparms;
+	struct rpc_xprt		*xprt;
+	struct rpc_clnt		*clnt;
+	unsigned int		authflavor;
+	int			tcp;
+	kdev_t			dev = sb->s_dev;
 
 	MOD_INC_USE_COUNT;
 	if (!data) {
@@ -117,97 +147,106 @@ struct super_block *nfs_read_super(struct super_block *sb, void *raw_data,
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
-	fd = data->fd;
 	if (data->version != NFS_MOUNT_VERSION) {
 		printk("nfs warning: mount version %s than kernel\n",
 			data->version < NFS_MOUNT_VERSION ? "older" : "newer");
+		if (data->version < 2)
+			data->namlen = 0;
+		if (data->version < 3)
+			data->bsize  = 0;
 	}
-	if (fd >= NR_OPEN || !(filp = current->files->fd[fd])) {
-		printk("nfs_read_super: invalid file descriptor\n");
-		sb->s_dev = 0;
-		MOD_DEC_USE_COUNT;
-		return NULL;
-	}
-	if (!S_ISSOCK(filp->f_inode->i_mode)) {
-		printk("nfs_read_super: not a socket\n");
-		sb->s_dev = 0;
-		MOD_DEC_USE_COUNT;
-		return NULL;
-	}
-	filp->f_count++;
+
 	lock_super(sb);
 
-	sb->s_blocksize = 1024; /* XXX */
-	sb->s_blocksize_bits = 10;
-	sb->s_magic = NFS_SUPER_MAGIC;
-	sb->s_dev = dev;
-	sb->s_op = &nfs_sops;
-	server = &sb->u.nfs_sb.s_server;
-	server->file = filp;
-	server->lock = 0;
-	server->wait = NULL;
-	server->flags = data->flags;
-	server->rsize = data->rsize;
-	if (server->rsize <= 0)
-		server->rsize = NFS_DEF_FILE_IO_BUFFER_SIZE;
-	else if (server->rsize >= NFS_MAX_FILE_IO_BUFFER_SIZE)
-		server->rsize = NFS_MAX_FILE_IO_BUFFER_SIZE;
-	server->wsize = data->wsize;
-	if (server->wsize <= 0)
-		server->wsize = NFS_DEF_FILE_IO_BUFFER_SIZE;
-	else if (server->wsize >= NFS_MAX_FILE_IO_BUFFER_SIZE)
-		server->wsize = NFS_MAX_FILE_IO_BUFFER_SIZE;
-	server->timeo = data->timeo*HZ/10;
-	server->retrans = data->retrans;
+	server           = &sb->u.nfs_sb.s_server;
+	sb->s_magic      = NFS_SUPER_MAGIC;
+	sb->s_dev        = dev;
+	sb->s_op         = &nfs_sops;
+	sb->s_blocksize  = nfs_block_size(data->bsize, &sb->s_blocksize_bits);
+	server->rsize    = nfs_block_size(data->rsize, NULL);
+	server->wsize    = nfs_block_size(data->wsize, NULL);
+	server->flags    = data->flags;
 	server->acregmin = data->acregmin*HZ;
 	server->acregmax = data->acregmax*HZ;
 	server->acdirmin = data->acdirmin*HZ;
 	server->acdirmax = data->acdirmax*HZ;
 	strcpy(server->hostname, data->hostname);
-
-	/* Start of JSP NFS patch */
-	/* Check if passed address in data->addr */
-	if (data->addr.sin_addr.s_addr == INADDR_ANY) {  /* No address passed */
-	  if (((struct sockaddr_in *)(&server->toaddr))->sin_addr.s_addr == INADDR_ANY) {
-	    printk("NFS: Error passed unconnected socket and no address\n") ;
-	    MOD_DEC_USE_COUNT;
-	    return NULL ;
-	  } else {
-	    /* Need access to socket internals  JSP */
-	    struct socket *sock;
-	    int dummylen ;
-
-	 /*   printk("NFS: using socket address\n") ;*/
-
-	    sock = &((filp->f_inode)->u.socket_i);
-
-	    /* extract the other end of the socket into server->toaddr */
-	    sock->ops->getname(sock, &(server->toaddr), &dummylen, 1) ;
-	  }
-	} else {
-	/*  printk("NFS: copying passed addr to server->toaddr\n") ;*/
-	  memcpy((char *)&(server->toaddr),(char *)(&data->addr),sizeof(server->toaddr));
-	}
-	/* End of JSP NFS patch */
-
-	if ((server->rsock = rpc_makesock(filp)) == NULL) {
-		printk("NFS: cannot create RPC socket.\n");
-		MOD_DEC_USE_COUNT;
-		return NULL;
-	}
-
 	sb->u.nfs_sb.s_root = data->root;
-	unlock_super(sb);
-	if (!(sb->s_mounted = nfs_fhget(sb, &data->root, NULL))) {
-		sb->s_dev = 0;
-		printk("nfs_read_super: get root inode failed\n");
+
+	/* We now require that the mount process passes the remote address */
+	memcpy(&srvaddr, &data->addr, sizeof(srvaddr));
+	if (srvaddr.sin_addr.s_addr == INADDR_ANY) {
+		printk("NFS: mount program didn't pass remote address!\n");
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
-	return sb;
+
+	/* Which protocol do we use? */
+	tcp   = (data->flags & NFS_MOUNT_TCP);
+
+	/* Initialize timeout values */
+	timeparms.to_initval = data->timeo * HZ / 10;
+	timeparms.to_retries = data->retrans;
+	timeparms.to_maxval  = tcp? RPC_MAX_TCP_TIMEOUT : RPC_MAX_UDP_TIMEOUT;
+	timeparms.to_exponential = 1;
+
+	/* Choose authentication flavor */
+	if (data->flags & NFS_MOUNT_SECURE) {
+		authflavor = RPC_AUTH_DES;
+	} else if (data->flags & NFS_MOUNT_KERBEROS) {
+		authflavor = RPC_AUTH_KRB;
+	} else {
+		authflavor = RPC_AUTH_UNIX;
+	}
+
+	/* Now create transport and client */
+	xprt = xprt_create_proto(tcp? IPPROTO_TCP : IPPROTO_UDP,
+						&srvaddr, &timeparms);
+	if (xprt == NULL) {
+		printk("NFS: cannot create RPC transport.\n");
+		goto failure;
+	}
+
+	clnt = rpc_create_client(xprt, server->hostname, &nfs_program,
+						NFS_VERSION, authflavor);
+	if (clnt == NULL) {
+		printk("NFS: cannot create RPC client.\n");
+		xprt_destroy(xprt);
+		goto failure;
+	}
+
+	clnt->cl_intr     = (data->flags & NFS_MOUNT_INTR)? 1 : 0;
+	clnt->cl_softrtry = (data->flags & NFS_MOUNT_SOFT)? 1 : 0;
+	clnt->cl_chatty   = 1;
+	server->client    = clnt;
+
+	/* Fire up rpciod if not yet running */
+	rpciod_up();
+
+	/* Unlock super block and try to get root fh attributes */
+	unlock_super(sb);
+
+	if ((sb->s_mounted = nfs_fhget(sb, &data->root, NULL)) != NULL) {
+		/* We're airborne */
+		lockd_up();
+		return sb;
+	}
+
+	/* Yargs. It didn't work out. */
+	printk("nfs_read_super: get root inode failed\n");
+	rpc_shutdown_client(server->client);
+	rpciod_down();
+
+failure:
+	MOD_DEC_USE_COUNT;
+	if (sb->s_lock)
+		unlock_super(sb);
+	sb->s_dev = 0;
+	return NULL;
 }
 
-void nfs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
+static void
+nfs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 {
 	int error;
 	struct nfs_fsinfo res;
@@ -238,9 +277,9 @@ void nfs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
  * We just have to be careful not to subvert iget's special handling
  * of mount points.
  */
-
-struct inode *nfs_fhget(struct super_block *sb, struct nfs_fh *fhandle,
-			struct nfs_fattr *fattr)
+struct inode *
+nfs_fhget(struct super_block *sb, struct nfs_fh *fhandle,
+				  struct nfs_fattr *fattr)
 {
 	struct nfs_fattr newfattr;
 	int error;
@@ -271,39 +310,43 @@ struct inode *nfs_fhget(struct super_block *sb, struct nfs_fh *fhandle,
 		*NFS_FH(inode) = *fhandle;
 		nfs_refresh_inode(inode, fattr);
 	}
+	dprintk("NFS: fhget(%x/%ld ct=%d)\n",
+				inode->i_dev, inode->i_ino, inode->i_count);
+
 	return inode;
 }
 
-int nfs_notify_change(struct inode *inode, struct iattr *attr)
+int
+nfs_notify_change(struct inode *inode, struct iattr *attr)
 {
 	struct nfs_sattr sattr;
 	struct nfs_fattr fattr;
 	int error;
 
-	sattr.mode = (unsigned) -1;
-	if (attr->ia_valid & ATTR_MODE)
+	sattr.mode = (u32) -1;
+	if (attr->ia_valid & ATTR_MODE) 
 		sattr.mode = attr->ia_mode;
 
-	sattr.uid = (unsigned) -1;
+	sattr.uid = (u32) -1;
 	if (attr->ia_valid & ATTR_UID)
 		sattr.uid = attr->ia_uid;
 
-	sattr.gid = (unsigned) -1;
+	sattr.gid = (u32) -1;
 	if (attr->ia_valid & ATTR_GID)
 		sattr.gid = attr->ia_gid;
 
 
-	sattr.size = (unsigned) -1;
-	if (attr->ia_valid & ATTR_SIZE)
-		sattr.size = S_ISREG(inode->i_mode) ? attr->ia_size : -1;
+	sattr.size = (u32) -1;
+	if ((attr->ia_valid & ATTR_SIZE) && S_ISREG(inode->i_mode))
+		sattr.size = attr->ia_size;
 
-	sattr.mtime.seconds = sattr.mtime.useconds = (unsigned) -1;
+	sattr.mtime.seconds = sattr.mtime.useconds = (u32) -1;
 	if (attr->ia_valid & ATTR_MTIME) {
 		sattr.mtime.seconds = attr->ia_mtime;
 		sattr.mtime.useconds = 0;
 	}
 
-	sattr.atime.seconds = sattr.atime.useconds = (unsigned) -1;
+	sattr.atime.seconds = sattr.atime.useconds = (u32) -1;
 	if (attr->ia_valid & ATTR_ATIME) {
 		sattr.atime.seconds = attr->ia_atime;
 		sattr.atime.useconds = 0;
@@ -311,64 +354,117 @@ int nfs_notify_change(struct inode *inode, struct iattr *attr)
 
 	error = nfs_proc_setattr(NFS_SERVER(inode), NFS_FH(inode),
 		&sattr, &fattr);
-	if (!error)
+	if (!error) {
+		nfs_truncate_dirty_pages(inode, sattr.size);
 		nfs_refresh_inode(inode, &fattr);
+	}
 	inode->i_dirt = 0;
 	return error;
 }
 
-/* Every kernel module contains stuff like this. */
+/*
+ * Externally visible revalidation function
+ */
+int
+nfs_revalidate(struct inode *inode)
+{
+	return nfs_revalidate_inode(NFS_SERVER(inode), inode);
+}
 
+/*
+ * This function is called whenever some part of NFS notices that
+ * the cached attributes have to be refreshed.
+ *
+ * This is a bit tricky because we have to make sure all dirty pages
+ * have been sent off to the server before calling invalidate_inode_pages.
+ * To make sure no other process adds more write requests while we try
+ * our best to flush them, we make them sleep during the attribute refresh.
+ *
+ * A very similar scenario holds for the dir cache.
+ */
+int
+_nfs_revalidate_inode(struct nfs_server *server, struct inode *inode)
+{
+	struct nfs_fattr fattr;
+	int		 status;
+
+	if (jiffies - NFS_READTIME(inode) < NFS_ATTRTIMEO(inode))
+		return 0;
+
+	dfprintk(PAGECACHE, "NFS: revalidating %x/%ld inode\n",
+			inode->i_dev, inode->i_ino);
+	NFS_READTIME(inode) = jiffies;
+	if ((status = nfs_proc_getattr(server, NFS_FH(inode), &fattr)) < 0)
+		goto done;
+
+	nfs_refresh_inode(inode, &fattr);
+	if (fattr.mtime.seconds != NFS_OLDMTIME(inode)) {
+		if (!S_ISDIR(inode->i_mode)) {
+			/* This sends off all dirty pages off to the server.
+			 * Note that this function must not sleep. */
+			nfs_invalidate_pages(inode);
+			invalidate_inode_pages(inode);
+		} else {
+			nfs_invalidate_dircache(inode);
+		}
+
+		NFS_OLDMTIME(inode)  = fattr.mtime.seconds;
+		NFS_ATTRTIMEO(inode) = NFS_MINATTRTIMEO(inode);
+	} else {
+		/* Update attrtimeo value */
+		if ((NFS_ATTRTIMEO(inode) <<= 1) > NFS_MAXATTRTIMEO(inode))
+			NFS_ATTRTIMEO(inode) = NFS_MAXATTRTIMEO(inode);
+	}
+	status = 0;
+
+done:
+	dfprintk(PAGECACHE,
+		"NFS: inode %x/%ld revalidation complete (status %d).\n",
+				inode->i_dev, inode->i_ino, status);
+	return status;
+}
+
+/*
+ * File system information
+ */
 static struct file_system_type nfs_fs_type = {
 	nfs_read_super, "nfs", 0, NULL
 };
 
 /*
- * Start up an nfsiod process. This is an awful hack, because when running
- * as a module, we will keep insmod's memory. Besides, the current->comm
- * hack won't work in this case
- * The best would be to have a syscall for nfs client control that (among
- * other things) forks biod's.
- * Alternatively, we might want to have the idle task spawn biod's on demand.
+ * Initialize NFS
  */
-static int run_nfsiod(void *dummy)
+int
+init_nfs_fs(void)
 {
-	int	ret;
-
-	lock_kernel();
-	MOD_INC_USE_COUNT;
-	exit_mm(current);
-	current->session = 1;
-	current->pgrp = 1;
-	sprintf(current->comm, "nfsiod");
-	ret = nfsiod();
-	MOD_DEC_USE_COUNT;
-	unlock_kernel();
-	return ret;
-}
-
-int init_nfs_fs(void)
-{
-	/* Fork four biod's */
-	kernel_thread(run_nfsiod, NULL, 0);
-	kernel_thread(run_nfsiod, NULL, 0);
-	kernel_thread(run_nfsiod, NULL, 0);
-	kernel_thread(run_nfsiod, NULL, 0);
+#ifdef CONFIG_PROC_FS
+	rpcstat_register(&nfs_rpcstat);
+#endif
         return register_filesystem(&nfs_fs_type);
 }
 
+/*
+ * Every kernel module contains stuff like this.
+ */
 #ifdef MODULE
-EXPORT_NO_SYMBOLS;
 
-int init_module(void)
+EXPORT_NO_SYMBOLS;
+/* Not quite true; I just maintain it */
+MODULE_AUTHOR("Olaf Kirch <okir@monad.swb.de>");
+
+int
+init_module(void)
 {
 	return init_nfs_fs();
 }
 
-void cleanup_module(void)
+void
+cleanup_module(void)
 {
+#ifdef CONFIG_PROC_FS
+	rpcstat_unregister(&nfs_rpcstat);
+#endif
 	unregister_filesystem(&nfs_fs_type);
-	nfs_kfree_cache();
+	nfs_free_dircache();
 }
-
 #endif

@@ -15,15 +15,6 @@
 #endif
 
 
-/* Turn this on to have the driver print out the meanings of the
-   ATAPI error codes.  This will use up additional kernel-space
-   memory, though. */
-
-#ifndef VERBOSE_IDE_CD_ERRORS
-#define VERBOSE_IDE_CD_ERRORS 0
-#endif
-
-
 /* Turning this on will remove code to work around various nonstandard
    ATAPI implementations.  If you know your drive follows the standard,
    this will give you a slightly smaller kernel. */

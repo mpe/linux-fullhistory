@@ -1,34 +1,32 @@
 #ifndef _NFS_FS_SB
 #define _NFS_FS_SB
 
-#include <linux/rpcsock.h>
 #include <linux/nfs.h>
+#include <linux/in.h>
 
+/*
+ * NFS client parameters
+ * Part of this is duplicated in rpc_clnt and is therefore obsolete.
+ */
 struct nfs_server {
-	struct file *file;
-	struct rpc_sock *rsock;
-	struct sockaddr toaddr ;  /* Added for change to NFS code to use sendto()  1995-06-02  JSP */
-	int lock;
-	struct wait_queue *wait;
-	int flags;
-	int rsize;
-	int wsize;
-	int timeo;
-	int retrans;
-	int acregmin;
-	int acregmax;
-	int acdirmin;
-	int acdirmax;
-	char hostname[256];
+	struct rpc_clnt *	client;		/* RPC client handle */
+	int			flags;		/* various flags */
+	int			rsize;		/* read size */
+	int			wsize;		/* write size */
+	unsigned int		bsize;		/* server block size */
+	unsigned int		acregmin;	/* attr cache timeouts */
+	unsigned int		acregmax;
+	unsigned int		acdirmin;
+	unsigned int		acdirmax;
+	char			hostname[256];	/* remote hostname */
 };
 
 /*
  * nfs super-block data in memory
  */
-
 struct nfs_sb_info {
-	struct nfs_server s_server;
-	struct nfs_fh s_root;
+	struct nfs_server	s_server;
+	struct nfs_fh		s_root;
 };
 
 #endif

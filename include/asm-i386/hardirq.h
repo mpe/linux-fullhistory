@@ -12,6 +12,8 @@ extern unsigned int local_irq_count[NR_CPUS];
 #define hardirq_enter(cpu)	(local_irq_count[cpu]++)
 #define hardirq_exit(cpu)	(local_irq_count[cpu]--)
 
+#define synchronize_irq()	do { } while (0)
+
 #else
 
 extern unsigned char global_irq_holder;
@@ -61,7 +63,9 @@ static inline void hardirq_endlock(int cpu)
 	__cli();
 	hardirq_exit(cpu);
 	__sti();
-}	
+}
+
+extern void synchronize_irq(void);
 
 #endif /* __SMP__ */
 

@@ -26,14 +26,14 @@ HEAD := arch/sparc/kernel/head.o
 SUBDIRS := $(SUBDIRS) arch/sparc/kernel arch/sparc/lib arch/sparc/mm \
 	arch/sparc/prom
 
-ARCHIVES := arch/sparc/kernel/kernel.o arch/sparc/mm/mm.o $(ARCHIVES)
+CORE_FILES := arch/sparc/kernel/kernel.o arch/sparc/mm/mm.o $(CORE_FILES)
 
 LIBS := $(TOPDIR)/lib/lib.a $(LIBS) $(TOPDIR)/arch/sparc/prom/promlib.a \
 	$(TOPDIR)/arch/sparc/lib/lib.a
 
 ifdef CONFIG_AP1000
 SUBDIRS := $(SUBDIRS) arch/sparc/ap1000 mpp
-ARCHIVES := $(TOPDIR)/arch/sparc/ap1000/ap1000lib.o $(TOPDIR)/mpp/mpplib.o $(ARCHIVES) 
+CORE_FILES := $(TOPDIR)/arch/sparc/ap1000/ap1000lib.o $(TOPDIR)/mpp/mpplib.o $(CORE_FILES) 
 DRIVERS := $(DRIVERS) drivers/ap1000/ap1000.a
 CFLAGS := $(CFLAGS) -D__MPP__=1
 endif

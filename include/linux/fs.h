@@ -667,6 +667,7 @@ extern inline void bforget(struct buffer_head *buf)
 		__bforget(buf);
 }
 extern void set_blocksize(kdev_t dev, int size);
+extern unsigned int get_hardblocksize(kdev_t dev);
 extern struct buffer_head * bread(kdev_t dev, int block, int size);
 extern struct buffer_head * breada(kdev_t dev,int block, int size, 
 				   unsigned int pos, unsigned int filesize);

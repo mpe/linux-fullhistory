@@ -172,8 +172,8 @@ static int parse_options(char *options,int *fat, int *blksize, int *debug,
 			*blksize = simple_strtoul(value,&value,0);
 			if (*value)
 				return 0;
-			if (*blksize != 512 && *blksize != 1024){
-				printk ("MSDOS FS: Invalid blocksize (512 or 1024)\n");
+			if (*blksize != 512 && *blksize != 1024 && *blksize != 2048){
+				printk ("MSDOS FS: Invalid blocksize (512, 1024 or 2048)\n");
 			}
 		}
 		else if (!strcmp(this_char,"sys_immutable")) {
@@ -205,16 +205,26 @@ struct super_block *fat_read_super(struct super_block *sb,void *data, int silent
 		}
 	}
 	if (!parse_options((char *) data, &fat, &blksize, &debug, &opts)
-		|| (blksize != 512 && blksize != 1024)) {
+		|| (blksize != 512 && blksize != 1024 && blksize != 2048)) 
+	{
 		sb->s_dev = 0;
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	cache_init();
 	lock_super(sb);
-	/* The first read is always 1024 bytes */
-	sb->s_blocksize = 1024;
-	set_blocksize(sb->s_dev, 1024);
+	if( blksize > 1024 )
+	  {
+	    /* Force the superblock to a larger size here. */
+	    sb->s_blocksize = blksize;
+	    set_blocksize(sb->s_dev, blksize);
+	  }
+	else
+	  {
+	    /* The first read is always 1024 bytes */
+	    sb->s_blocksize = 1024;
+	    set_blocksize(sb->s_dev, 1024);
+	  }
 	bh = fat_bread(sb, 0);
 	unlock_super(sb);
 	if (bh == NULL || !fat_is_uptodate(sb,bh)) {
@@ -285,7 +295,7 @@ struct super_block *fat_read_super(struct super_block *sb,void *data, int silent
 				/* the misfit with buffer cache and cluster */
 				/* because clusters (DOS) are often aligned */
 				/* on odd sectors. */
-	sb->s_blocksize_bits = blksize == 512 ? 9 : 10;
+	sb->s_blocksize_bits = blksize == 512 ? 9 : (blksize == 1024 ? 10 : 11);
 	if (error || debug) {
 		/* The MSDOS_CAN_BMAP is obsolete, but left just to remember */
 		printk("[MS-DOS FS Rel. 12,FAT %d,check=%c,conv=%c,"
@@ -451,7 +461,7 @@ void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_o
 		       !is_exec(raw_entry->ext)))
 		    	? S_IRUGO|S_IWUGO : S_IRWXUGO)
 		    & ~MSDOS_SB(sb)->options.fs_umask) | S_IFREG;
-		inode->i_op = (sb->s_blocksize == 1024)
+		inode->i_op = (sb->s_blocksize == 1024 || sb->s_blocksize == 2048)
 			? &fat_file_inode_operations_1024
 			: &fat_file_inode_operations;
 		MSDOS_I(inode)->i_start = CF_LE_W(raw_entry->start);

@@ -1359,8 +1359,9 @@ de4x5_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	
     if (dev->interrupt)
       printk("%s: Re-entering the interrupt handler.\n", dev->name);
-	
+
     DISABLE_IRQs;                        /* Ensure non re-entrancy */
+    synchronize_irq();
     dev->interrupt = MASK_INTERRUPTS;
 	
     for (limit=0; limit<8; limit++) {
@@ -1389,13 +1390,11 @@ de4x5_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		   dev->name, sts);
 	    return;
 	}
-if (sts & (STS_AIS | STS_UNF | STS_SE | STS_LNF | STS_RWT | STS_RU | STS_TJT))
-	printk("STS=%08x\n",sts);
     }
 
     /* Load the TX ring with any locally stored packets */
     if (!set_bit(0, (void *)&lp->cache.lock)) {
-	while (lp->cache.skb && !dev->tbusy && lp->tx_enable) {
+	if (lp->cache.skb && !dev->tbusy && lp->tx_enable) {
 	    de4x5_queue_pkt(de4x5_get_cache(dev), dev);
 	}
 	lp->cache.lock = 0;

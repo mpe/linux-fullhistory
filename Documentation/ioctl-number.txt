@@ -1,5 +1,5 @@
 Ioctl Numbers
-16 Dec 1996
+12 Feb 1997
 Michael Chastain
 <mec@shout.net>
 
@@ -108,3 +108,5 @@ Code	Seq#	Include File		Comments
 0x90	00	linux/sbpcd.h
 0x99	00-0F	537-Addinboard driver	in development, e-mail contact:
 					b.kohl@ipn-b.comlink.apc.org
+0xA0	all	Small Device Project	in development, e-mail contact:
+					khollis@northwest.com

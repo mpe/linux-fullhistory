@@ -27,7 +27,7 @@
 
 static int
 _recvfrom(struct socket *sock, unsigned char *ubuf, int size,
-	  int noblock, unsigned flags)
+	  unsigned flags)
 {
 	struct iovec iov;
 	struct msghdr msg;
@@ -41,9 +41,6 @@ _recvfrom(struct socket *sock, unsigned char *ubuf, int size,
 	iov.iov_base = ubuf;
 	iov.iov_len = size;
 	
-	if (noblock) {
-		flags |= MSG_DONTWAIT;
-	}
 	memset(&scm, 0,sizeof(scm));
 	size=sock->ops->recvmsg(sock, &msg, size, flags, &scm);
 	if(size>=0)
@@ -52,8 +49,7 @@ _recvfrom(struct socket *sock, unsigned char *ubuf, int size,
 }
 
 static int
-_send(struct socket *sock, const void *buff, int len,
-      int noblock, unsigned flags)
+_send(struct socket *sock, const void *buff, int len)
 {
 	struct iovec iov;
 	struct msghdr msg;
@@ -69,12 +65,8 @@ _send(struct socket *sock, const void *buff, int len,
 	
 	iov.iov_base = (void *)buff;
 	iov.iov_len = len;
-	
 
-	if (noblock) 
-		flags |= MSG_DONTWAIT;
-
-	msg.msg_flags = flags;
+	msg.msg_flags = 0;
 
 	err = scm_send(sock, &msg, &scm);
         if (err < 0)
@@ -98,12 +90,14 @@ smb_data_callback(struct sock *sk, int len)
 		fs = get_fs();
 		set_fs(get_ds());
 
-		result = _recvfrom(sock, (void *) peek_buf, 1, 1, MSG_PEEK);
+		result = _recvfrom(sock, (void *) peek_buf, 1,
+				   MSG_PEEK | MSG_DONTWAIT);
 
 		while ((result != -EAGAIN) && (peek_buf[0] == 0x85))
 		{
 			/* got SESSION KEEP ALIVE */
-			result = _recvfrom(sock, (void *) peek_buf, 4, 1, 0);
+			result = _recvfrom(sock, (void *) peek_buf, 4,
+					   MSG_DONTWAIT);
 
 			DDPRINTK("smb_data_callback:"
 				 " got SESSION KEEP ALIVE\n");
@@ -112,8 +106,8 @@ smb_data_callback(struct sock *sk, int len)
 			{
 				break;
 			}
-			result = _recvfrom(sock, (void *) peek_buf,
-					   1, 1, MSG_PEEK);
+			result = _recvfrom(sock, (void *) peek_buf, 1,
+					   MSG_PEEK | MSG_DONTWAIT);
 		}
 		set_fs(fs);
 
@@ -233,7 +227,7 @@ smb_send_raw(struct socket *sock, unsigned char *source, int length)
 	{
 		result = _send(sock,
 			       (void *) (source + already_sent),
-			       length - already_sent, 0, 0);
+			       length - already_sent);
 
 		if (result == 0)
 		{
@@ -260,7 +254,7 @@ smb_receive_raw(struct socket *sock, unsigned char *target, int length)
 	{
 		result = _recvfrom(sock,
 				   (void *) (target + already_read),
-				   length - already_read, 0, 0);
+				   length - already_read, 0);
 
 		if (result == 0)
 		{
@@ -393,7 +387,6 @@ smb_receive_trans2(struct smb_server *server,
 	int total_data = 0;
 	int total_param = 0;
 	int result;
-	unsigned char *inbuf = server->packet;
 	unsigned char *rcv_buf;
 	int buf_len;
 	int data_len = 0;
@@ -409,8 +402,8 @@ smb_receive_trans2(struct smb_server *server,
 		*ldata = *lparam = 0;
 		return 0;
 	}
-	total_data = WVAL(inbuf, smb_tdrcnt);
-	total_param = WVAL(inbuf, smb_tprcnt);
+	total_data = WVAL(server->packet, smb_tdrcnt);
+	total_param = WVAL(server->packet, smb_tprcnt);
 
 	DDPRINTK("smb_receive_trans2: td=%d,tp=%d\n", total_data, total_param);
 
@@ -435,6 +428,8 @@ smb_receive_trans2(struct smb_server *server,
 
 	while (1)
 	{
+		unsigned char *inbuf = server->packet;
+
 		if (WVAL(inbuf, smb_prdisp) + WVAL(inbuf, smb_prcnt)
 		    > total_param)
 		{

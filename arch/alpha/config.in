@@ -91,8 +91,10 @@ if [ "$CONFIG_PCI" = "y" ]; then
 fi
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
+bool 'Sysctl support' CONFIG_SYSCTL
 tristate 'Kernel support for a.out (ECOFF) binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
+tristate 'Kernel support for Linux/Intel ELF binaries' CONFIG_BINFMT_EM86
 endmenu
 
 source drivers/block/Config.in

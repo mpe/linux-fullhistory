@@ -9,7 +9,11 @@
 
 O_TARGET := ethernet.o
 
-OBJS	:= eth.o sysctl_net_ether.o
+OBJS	:= eth.o
+
+ifeq ($(CONFIG_SYSCTL),y)
+OBJS += sysctl_net_ether.o
+endif
 
 ifdef CONFIG_IPX
 OBJ2	:= pe2.o

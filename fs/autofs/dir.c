@@ -10,7 +10,6 @@
  *
  * ------------------------------------------------------------------------- */
 
-#include <linux/modversions.h>
 #include <linux/auto_fs.h>
 
 static int autofs_dir_readdir(struct inode *inode, struct file *filp,

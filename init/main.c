@@ -909,7 +909,9 @@ asmlinkage void start_kernel(void)
 #ifdef __SMP__
 	smp_init();
 #endif
+#ifdef CONFIG_SYSCTL
 	sysctl_init();
+#endif
 	/* 
 	 *	We count on the initial thread going ok 
 	 *	Like idlers init is an unlocked kernel thread, which will

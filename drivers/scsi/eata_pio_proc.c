@@ -1,19 +1,3 @@
-
-#define MAX_SCSI_DEVICE_CODE 10
-const char *const pio_scsi_dev_types[MAX_SCSI_DEVICE_CODE] =
-{
-    "Direct-Access    ",
-    "Sequential-Access",
-    "Printer          ",
-    "Processor        ",
-    "WORM             ",
-    "CD-ROM           ",
-    "Scanner          ",
-    "Optical Device   ",
-    "Medium Changer   ",
-    "Communications   "
-};
-
 /*
  * eata_set_info
  * buffer : pointer to the data that has been written to the hostfile
@@ -147,4 +131,3 @@ int eata_pio_proc_info(char *buffer, char **start, off_t offset, int length,
  * tab-width: 8
  * End:
  */
-

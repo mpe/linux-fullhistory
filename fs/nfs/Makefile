@@ -8,11 +8,11 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := nfs.o
-O_OBJS   := proc.o sock.o rpcsock.o inode.o file.o bio.o \
-	    nfsiod.o dir.o symlink.o
+O_OBJS   := inode.o file.o read.o write.o dir.o symlink.o proc.o \
+	    nfs2xdr.o
 
 ifdef CONFIG_ROOT_NFS
-O_OBJS += nfsroot.o
+  O_OBJS += nfsroot.o
 endif
 
 M_OBJS   := $(O_TARGET)

@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 31
+SUBLEVEL = 32
 
 ARCH = i386
 
@@ -114,8 +114,9 @@ endif
 # Include the make variables (CC, etc...)
 #
 
-ARCHIVES	=kernel/kernel.o mm/mm.o fs/fs.o ipc/ipc.o net/network.a
+CORE_FILES	=kernel/kernel.o mm/mm.o fs/fs.o ipc/ipc.o
 FILESYSTEMS	=fs/filesystems.a
+NETWORKS	=net/network.a
 DRIVERS		=drivers/block/block.a \
 		 drivers/char/char.a
 LIBS		=$(TOPDIR)/lib/lib.a
@@ -173,8 +174,9 @@ boot: vmlinux
 
 vmlinux: $(CONFIGURATION) init/main.o init/version.o linuxsubdirs
 	$(LD) $(LINKFLAGS) $(HEAD) init/main.o init/version.o \
-		$(ARCHIVES) \
+		$(CORE_FILES) \
 		$(FILESYSTEMS) \
+		$(NETWORKS) \
 		$(DRIVERS) \
 		$(LIBS) \
 		-o vmlinux

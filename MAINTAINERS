@@ -249,7 +249,7 @@ S:	Maintained
 
 NCP FILESYSTEM:
 P:	Volker Lendecke
-M:	lendecke@namu01.Num.Math.Uni-Goettingen.de
+M:	lendecke@Math.Uni-Goettingen.de
 L:	linware@sh.cvut.cz
 S:	Maintained
 
@@ -301,9 +301,9 @@ S:     Supported
 
 SMB FILESYSTEM:
 P:	Volker Lendecke
-M:	lendecke@namu01.Num.Math.Uni-Goettingen.de
+M:	lendecke@Math.Uni-Goettingen.de
 L:	samba@listproc.anu.edu.au
-S:	Odd Fixes
+S:	Maintained
 
 SMP: (except SPARC)
 P:	Alan Cox

@@ -758,7 +758,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		short ioaddr = dev->base_addr;
 		unsigned long flags;
 
-		if (net_debug > 3)printk("%s: sent %ld byte packet of type %x\n", dev->name, skb->len, (skb->data[ETH_ALEN+ETH_ALEN] << 8) | skb->data[ETH_ALEN+ETH_ALEN+1]);
+		if (net_debug > 3)printk("%s: sent %d byte packet of type %x\n", dev->name, skb->len, (skb->data[ETH_ALEN+ETH_ALEN] << 8) | skb->data[ETH_ALEN+ETH_ALEN+1]);
 
 		/* keep the upload from being interrupted, since we
                    ask the chip to start transmitting before the

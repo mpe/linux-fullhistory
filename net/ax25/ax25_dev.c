@@ -81,7 +81,9 @@ void ax25_dev_device_up(struct device *dev)
 		return;
 	}
 
+#ifdef CONFIG_SYSCTL
 	ax25_unregister_sysctl();
+#endif
 
 	memset(ax25_dev, 0x00, sizeof(*ax25_dev));
 
@@ -112,7 +114,9 @@ void ax25_dev_device_up(struct device *dev)
 	ax25_dev_list  = ax25_dev;
 	restore_flags(flags);
 
+#ifdef CONFIG_SYSCTL
 	ax25_register_sysctl();
+#endif
 }
 
 void ax25_dev_device_down(struct device *dev)
@@ -123,7 +127,9 @@ void ax25_dev_device_down(struct device *dev)
 	if ((ax25_dev = ax25_dev_ax25dev(dev)) == NULL)
 		return;
 
+#ifdef CONFIG_SYSCTL
 	ax25_unregister_sysctl();
+#endif
 
 	save_flags(flags); cli();
 
@@ -142,7 +148,9 @@ void ax25_dev_device_down(struct device *dev)
 		ax25_dev_list = s->next;
 		restore_flags(flags);
 		kfree_s(ax25_dev, sizeof(ax25_dev));
+#ifdef CONFIG_SYSCTL
 		ax25_register_sysctl();
+#endif
 		return;
 	}
 
@@ -151,7 +159,9 @@ void ax25_dev_device_down(struct device *dev)
 			s->next = ax25_dev->next;
 			restore_flags(flags);
 			kfree_s(ax25_dev, sizeof(ax25_dev));
+#ifdef CONFIG_SYSCTL
 			ax25_register_sysctl();
+#endif
 			return;
 		}
 
@@ -159,7 +169,9 @@ void ax25_dev_device_down(struct device *dev)
 	}
 
 	restore_flags(flags);
+#ifdef CONFIG_SYSCTL
 	ax25_register_sysctl();
+#endif
 }
 
 int ax25_fwd_ioctl(unsigned int cmd, struct ax25_fwd_struct *fwd)

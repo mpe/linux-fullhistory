@@ -50,6 +50,7 @@ bool 'Networking support' CONFIG_NET
 #  fi
 #fi
 bool 'System V IPC' CONFIG_SYSVIPC
+bool 'Sysctl support' CONFIG_SYSCTL
 endmenu
 
 mainmenu_option next_comment

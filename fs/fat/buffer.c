@@ -16,13 +16,18 @@ struct buffer_head *fat_bread (
 {
 	struct buffer_head *ret = NULL;
 
-	/* Note that the blocksize is 512 or 1024, but the first read
-	   is always of size 1024. Doing readahead may be counterproductive
+	/* Note that the blocksize is 512, 1024 or 2048, but the first read
+	   is always of size 1024 (or 2048). Doing readahead may be counterproductive
 	   or just plain wrong. */
 	if (sb->s_blocksize == 512) {
 		ret = bread (sb->s_dev,block,512);
 	} else {
-		struct buffer_head *real = bread (sb->s_dev,block>>1,1024);
+		struct buffer_head *real;
+		if (sb->s_blocksize == 1024){
+			real = bread (sb->s_dev,block>>1,1024);
+		}else{
+			real = bread (sb->s_dev,block>>2,2048);
+		}
 
 		if (real != NULL){
 			ret = (struct buffer_head *)
@@ -59,7 +64,11 @@ struct buffer_head *fat_bread (
 				*/
 				memset (ret,0,sizeof(*ret));
 				ret->b_data = real->b_data;
-				if (block & 1) ret->b_data += 512;
+				if (sb->s_blocksize == 2048) {
+					if (block & 3) ret->b_data += (block & 3) << 9;
+				}else{
+					if (block & 1) ret->b_data += 512;
+				}
 				ret->b_next = real;
 			}else{
 				brelse (real);

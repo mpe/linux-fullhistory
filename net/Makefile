@@ -9,7 +9,7 @@
 
 MOD_SUB_DIRS := ipv4
 ALL_SUB_DIRS := 802 ax25 bridge core ethernet ipv4 ipv6 ipx unix appletalk \
-		netrom rose lapb x25 wanrouter #decnet
+		netrom rose lapb x25 wanrouter sunrpc #decnet
 SUB_DIRS     := core ethernet unix
 MOD_LIST_NAME := NET_MISC_MODULES
 
@@ -97,6 +97,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SUNRPC),y)
+SUB_DIRS += sunrpc
+else
+  ifeq ($(CONFIG_SUNRPC),m)
+  MOD_SUB_DIRS += sunrpc
+  endif
+endif
+
 # We must attach netsyms.o to socket.o, as otherwise there is nothing
 # to pull the object file from the archive.
 
@@ -111,9 +119,13 @@ endif
 endif
 
 L_TARGET     := network.a
-L_OBJS	     := $(SOCK) protocols.o sysctl_net.o $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
+L_OBJS	     := $(SOCK) protocols.o $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
 
 M_OBJS	     :=
+
+ifeq ($(CONFIG_SYSCTL),y)
+L_OBJS += sysctl_net.o
+endif
 
 CONFIG_NETLINK_BUILTIN :=
 CONFIG_NETLINK_MODULE :=

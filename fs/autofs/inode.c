@@ -10,7 +10,6 @@
  *
  * ------------------------------------------------------------------------- */
 
-#include <linux/modversions.h>
 #include <linux/kernel.h>
 #include <linux/malloc.h>
 #include <linux/file.h>
@@ -143,6 +142,7 @@ struct super_block *autofs_read_super(struct super_block *s, void *data,
         sbi = (struct autofs_sb_info *) kmalloc(sizeof(struct autofs_sb_info), GFP_KERNEL);
 	if ( !sbi ) {
 		s->s_dev = 0;
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	DPRINTK(("autofs: starting up, sbi = %p\n",sbi));
@@ -208,7 +208,7 @@ static void autofs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz
         struct statfs tmp;
 
         tmp.f_type = AUTOFS_SUPER_MAGIC;
-        tmp.f_bsize = PAGE_SIZE/sizeof(long);
+        tmp.f_bsize = 1024;
         tmp.f_blocks = 0;
         tmp.f_bfree = 0;
         tmp.f_bavail = 0;

@@ -18,6 +18,8 @@ bool '/proc filesystem support' CONFIG_PROC_FS
 if [ "$CONFIG_INET" = "y" ]; then
   tristate 'NFS filesystem support' CONFIG_NFS_FS
   if [ "$CONFIG_NFS_FS" = "y" ]; then
+    define_bool CONFIG_SUNRPC y
+    define_bool CONFIG_LOCKD y
     bool '   Root file system on NFS' CONFIG_ROOT_NFS
     if [ "$CONFIG_ROOT_NFS" = "y" ]; then
       bool '      BOOTP support' CONFIG_RNFS_BOOTP

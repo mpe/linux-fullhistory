@@ -9,8 +9,12 @@
 
 O_TARGET := core.o
 
-O_OBJS	:= sock.o skbuff.o iovec.o datagram.o sysctl_net_core.o dst.o scm.o \
+O_OBJS	:= sock.o skbuff.o iovec.o datagram.o dst.o scm.o \
 	neighbour.o
+
+ifeq ($(CONFIG_SYSCTL),y)
+O_OBJS += sysctl_net_core.o
+endif
 
 ifdef CONFIG_NET
 

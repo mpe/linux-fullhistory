@@ -614,7 +614,7 @@ int init_module(void)
 	if(err<0)
 		return err;
 	printk(SHAPER_BANNER);	
-	if (register_netdev(dev) != 0)
+	if (register_netdev(&dev_shape) != 0)
 		return -EIO;
 	printk("Traffic shaper initialised.\n");
 	return 0;

@@ -1,65 +1,28 @@
+/*
+ * NFS protocol definitions
+ */
 #ifndef _LINUX_NFS_H
 #define _LINUX_NFS_H
 
-#define NFS_PORT 2049
-#define NFS_MAXDATA 8192
-#define NFS_MAXPATHLEN 1024
-#define NFS_MAXNAMLEN 255
-#define NFS_MAXGROUPS 16
-#define NFS_FHSIZE 32
-#define NFS_COOKIESIZE 4
-#define NFS_FIFO_DEV (-1)
-#define NFSMODE_FMT 0170000
-#define NFSMODE_DIR 0040000
-#define NFSMODE_CHR 0020000
-#define NFSMODE_BLK 0060000
-#define NFSMODE_REG 0100000
-#define NFSMODE_LNK 0120000
-#define NFSMODE_SOCK 0140000
-#define NFSMODE_FIFO 0010000
+#include <linux/sunrpc/msg_prot.h>
 
-#ifdef __KERNEL__ /* user programs should get these from the rpc header files */
+#define NFS_PORT	2049
+#define NFS_MAXDATA	8192
+#define NFS_MAXPATHLEN	1024
+#define NFS_MAXNAMLEN	255
+#define NFS_MAXGROUPS	16
+#define NFS_FHSIZE	32
+#define NFS_COOKIESIZE	4
+#define NFS_FIFO_DEV	(-1)
+#define NFSMODE_FMT	0170000
+#define NFSMODE_DIR	0040000
+#define NFSMODE_CHR	0020000
+#define NFSMODE_BLK	0060000
+#define NFSMODE_REG	0100000
+#define NFSMODE_LNK	0120000
+#define NFSMODE_SOCK	0140000
+#define NFSMODE_FIFO	0010000
 
-#define RPC_VERSION 2
-
-enum rpc_auth_flavor {
-	RPC_AUTH_NULL = 0,
-	RPC_AUTH_UNIX = 1,
-	RPC_AUTH_SHORT = 2
-};
-
-enum rpc_msg_type {
-	RPC_CALL = 0,
-	RPC_REPLY = 1
-};
-
-enum rpc_reply_stat {
-	RPC_MSG_ACCEPTED = 0,
-	RPC_MSG_DENIED = 1
-};
-
-enum rpc_accept_stat {
-	RPC_SUCCESS = 0,
-	RPC_PROG_UNAVAIL = 1,
-	RPC_PROG_MISMATCH = 2,
-	RPC_PROC_UNAVAIL = 3,
-	RPC_GARBAGE_ARGS = 4
-};
-
-enum rpc_reject_stat {
-	RPC_MISMATCH = 0,
-	RPC_AUTH_ERROR = 1
-};
-
-enum rpc_auth_stat {
-	RPC_AUTH_BADCRED = 1,
-	RPC_AUTH_REJECTEDCRED = 2,
-	RPC_AUTH_BADVERF = 3,
-	RPC_AUTH_REJECTEDVERF = 4,
-	RPC_AUTH_TOOWEAK = 5
-};
-
-#endif /* __KERNEL__ */
 	
 enum nfs_stat {
 	NFS_OK = 0,
@@ -96,6 +59,10 @@ enum nfs_ftype {
 	NFFIFO = 8
 };
 
+struct nfs_fh {
+	char			data[NFS_FHSIZE];
+};
+
 #define NFS_PROGRAM		100003
 #define NFS_VERSION		2
 #define NFSPROC_NULL		0
@@ -117,54 +84,140 @@ enum nfs_ftype {
 #define NFSPROC_READDIR		16
 #define NFSPROC_STATFS		17
 
-struct nfs_fh {
-	char data[NFS_FHSIZE];
-};
+#if defined(__KERNEL__) || defined(NFS_NEED_KERNEL_TYPES)
+
+extern struct rpc_program	nfs_program;
+extern struct rpc_stat		nfs_rpcstat;
 
 struct nfs_time {
-	u_int seconds;
-	u_int useconds;
+	__u32			seconds;
+	__u32			useconds;
 };
 
 struct nfs_fattr {
-	enum nfs_ftype type;
-	u_int mode;
-	u_int nlink;
-	u_int uid;
-	u_int gid;
-	u_int size;
-	u_int blocksize;
-	u_int rdev;
-	u_int blocks;
-	u_int fsid;
-	u_int fileid;
-	struct nfs_time atime;
-	struct nfs_time mtime;
-	struct nfs_time ctime;
+	enum nfs_ftype		type;
+	__u32			mode;
+	__u32			nlink;
+	__u32			uid;
+	__u32			gid;
+	__u32			size;
+	__u32			blocksize;
+	__u32			rdev;
+	__u32			blocks;
+	__u32			fsid;
+	__u32			fileid;
+	struct nfs_time		atime;
+	struct nfs_time		mtime;
+	struct nfs_time		ctime;
 };
 
 struct nfs_sattr {
-	u_int mode;
-	u_int uid;
-	u_int gid;
-	u_int size;
-	struct nfs_time atime;
-	struct nfs_time mtime;
+	__u32			mode;
+	__u32			uid;
+	__u32			gid;
+	__u32			size;
+	struct nfs_time		atime;
+	struct nfs_time		mtime;
 };
 
 struct nfs_entry {
-	u_int fileid;
-	char *name;
-	int cookie;
-	int eof;
+	__u32			fileid;
+	char *			name;
+	unsigned int		length;
+	__u32			cookie;
+	__u32			eof;
 };
 
 struct nfs_fsinfo {
-	u_int tsize;
-	u_int bsize;
-	u_int blocks;
-	u_int bfree;
-	u_int bavail;
+	__u32			tsize;
+	__u32			bsize;
+	__u32			blocks;
+	__u32			bfree;
+	__u32			bavail;
 };
+
+#ifdef NFS_NEED_XDR_TYPES
+
+struct nfs_sattrargs {
+	struct nfs_fh *		fh;
+	struct nfs_sattr *	sattr;
+};
+
+struct nfs_diropargs {
+	struct nfs_fh *		fh;
+	const char *		name;
+};
+
+struct nfs_readargs {
+	struct nfs_fh *		fh;
+	__u32			offset;
+	__u32			count;
+	void *			buffer;
+};
+
+struct nfs_writeargs {
+	struct nfs_fh *		fh;
+	__u32			offset;
+	__u32			count;
+	const void *		buffer;
+};
+
+struct nfs_createargs {
+	struct nfs_fh *		fh;
+	const char *		name;
+	struct nfs_sattr *	sattr;
+};
+
+struct nfs_renameargs {
+	struct nfs_fh *		fromfh;
+	const char *		fromname;
+	struct nfs_fh *		tofh;
+	const char *		toname;
+};
+
+struct nfs_linkargs {
+	struct nfs_fh *		fromfh;
+	struct nfs_fh *		tofh;
+	const char *		toname;
+};
+
+struct nfs_symlinkargs {
+	struct nfs_fh *		fromfh;
+	const char *		fromname;
+	const char *		topath;
+	struct nfs_sattr *	sattr;
+};
+
+struct nfs_readdirargs {
+	struct nfs_fh *		fh;
+	__u32			cookie;
+	void *			buffer;
+	unsigned int		bufsiz;
+};
+
+struct nfs_diropok {
+	struct nfs_fh *		fh;
+	struct nfs_fattr *	fattr;
+};
+
+struct nfs_readres {
+	struct nfs_fattr *	fattr;
+	unsigned int		count;
+};
+
+struct nfs_readlinkres {
+	char **			string;
+	unsigned int *		lenp;
+	unsigned int		maxlen;
+	void *			buffer;
+};
+
+struct nfs_readdirres {
+	void *			buffer;
+	unsigned int		bufsiz;
+};
+
+#endif /* NFS_NEED_XDR_TYPES */
+#endif /* __KERNEL__ */
 
 #endif

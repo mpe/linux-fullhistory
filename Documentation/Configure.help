@@ -703,6 +703,18 @@ CONFIG_SYSVIPC
   or with the program info ("man info"). Saying Y here enlarges
   your kernel by about 7kB. Just say Y.
 
+Sysctl support
+CONFIG_SYSCTL
+  The sysctl interface provides a means of dynamically changing certain
+  kernel parameters and variables on the fly without requiring a
+  recompile of the kernel or reboot of the system. The primary interface
+  consists of a system call, but if the /proc filesystem is enabled, a
+  tree of modifiable sysctl entries will be generated beneath the 
+  /proc/sys directory. Note that enabling this option will enlarge the 
+  kernel by at least 8kB. As it is generally a good thing, you probably
+  want to say Y here unless building a kernel for install/rescue disks
+  or your system is very limited in memory.
+
 Kernel support for ELF binaries
 CONFIG_BINFMT_ELF
   ELF (Executable and Linkable Format) is a format for libraries and

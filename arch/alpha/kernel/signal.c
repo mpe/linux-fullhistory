@@ -218,6 +218,9 @@ static void setup_frame(struct sigaction * sa,
 	put_user(regs->gp , sc->sc_regs+29);
 	for (i = 0; i < 31; i++)
 		put_user(sw->fp[i], sc->sc_fpregs+i);
+	put_user(regs->trap_a0, &sc->sc_traparg_a0);
+	put_user(regs->trap_a1, &sc->sc_traparg_a1);
+	put_user(regs->trap_a2, &sc->sc_traparg_a2);
 
 	/*
 	 * The following is:
