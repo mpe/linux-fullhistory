@@ -956,7 +956,8 @@ static int pegasus_close(struct net_device *net)
 	return 0;
 }
 
-void pegasus_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *info)
+static void pegasus_get_drvinfo(struct net_device *dev,
+				struct ethtool_drvinfo *info)
 {
 	pegasus_t *pegasus = netdev_priv(dev);
 	strncpy(info->driver, driver_name, sizeof (info->driver) - 1);
@@ -1156,10 +1157,10 @@ static inline void setup_pegasus_II(pegasus_t * pegasus)
 }
 
 
-struct workqueue_struct *pegasus_workqueue = NULL;
+static struct workqueue_struct *pegasus_workqueue = NULL;
 #define CARRIER_CHECK_DELAY (2 * HZ)
 
-void check_carrier(void *data)
+static void check_carrier(void *data)
 {
 	pegasus_t *pegasus = data;
 	set_carrier(pegasus->net);
