@@ -5,12 +5,14 @@
 #
 # Code maturity level options
 #
-# CONFIG_EXPERIMENTAL is not set
+CONFIG_EXPERIMENTAL=y
 
 #
 # Loadable module support
 #
-# CONFIG_MODULES is not set
+CONFIG_MODULES=y
+# CONFIG_MODVERSIONS is not set
+# CONFIG_KERNELD is not set
 
 #
 # General setup
@@ -45,25 +47,31 @@ SUN_FB_CREATOR=y
 #
 # Misc Linux/SPARC drivers
 #
-# CONFIG_SUN_OPENPROMIO is not set
+CONFIG_SUN_OPENPROMIO=m
 CONFIG_SUN_MOSTEK_RTC=y
-# CONFIG_SUN_OPENPROMFS is not set
+# CONFIG_SUN_BPP is not set
+# CONFIG_SUN_VIDEOPIX is not set
+CONFIG_SUN_OPENPROMFS=m
 CONFIG_NET=y
 CONFIG_SYSVIPC=y
 CONFIG_SYSCTL=y
 CONFIG_SPARC32_COMPAT=y
-CONFIG_BINFMT_AOUT=y
 CONFIG_BINFMT_ELF=y
 CONFIG_BINFMT_ELF32=y
+CONFIG_BINFMT_AOUT32=y
+CONFIG_BINFMT_JAVA=m
+CONFIG_BINFMT_MISC=m
 
 #
 # Floppy, IDE, and other block devices
 #
 # CONFIG_BLK_DEV_FD is not set
-# CONFIG_BLK_DEV_MD is not set
+CONFIG_BLK_DEV_MD=y
+CONFIG_MD_LINEAR=m
+CONFIG_MD_STRIPED=m
 CONFIG_BLK_DEV_RAM=y
-# CONFIG_BLK_DEV_INITRD is not set
-# CONFIG_BLK_DEV_LOOP is not set
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_BLK_DEV_LOOP=m
 
 #
 # Networking options
@@ -86,15 +94,22 @@ CONFIG_INET=y
 CONFIG_PATH_MTU_DISCOVERY=y
 CONFIG_IP_NOSR=y
 CONFIG_SKB_LARGE=y
+# CONFIG_IPV6 is not set
 
 #
 #  
 #
-CONFIG_IPX=y
+CONFIG_IPX=m
 # CONFIG_IPX_INTERN is not set
-CONFIG_ATALK=y
+# CONFIG_IPX_PPROP_ROUTING is not set
+CONFIG_ATALK=m
 # CONFIG_IPDDP is not set
 # CONFIG_AX25 is not set
+# CONFIG_X25 is not set
+# CONFIG_LAPB is not set
+# CONFIG_BRIDGE is not set
+# CONFIG_LLC is not set
+# CONFIG_WAN_ROUTER is not set
 
 #
 # SCSI support
@@ -108,7 +123,7 @@ CONFIG_BLK_DEV_SD=y
 # CONFIG_CHR_DEV_ST is not set
 CONFIG_BLK_DEV_SR=y
 CONFIG_BLK_DEV_SR_VENDOR=y
-# CONFIG_CHR_DEV_SG is not set
+CONFIG_CHR_DEV_SG=m
 
 #
 # Some SCSI devices (e.g. CD jukebox) support multiple LUNs
@@ -120,7 +135,7 @@ CONFIG_SCSI_CONSTANTS=y
 # SCSI low-level drivers
 #
 CONFIG_SCSI_SUNESP=y
-# CONFIG_SCSI_QLOGICPTI is not set
+CONFIG_SCSI_QLOGICPTI=m
 
 #
 # Network device support
@@ -130,8 +145,8 @@ CONFIG_DUMMY=y
 # CONFIG_PPP is not set
 # CONFIG_SLIP is not set
 CONFIG_SUNLANCE=y
-# CONFIG_HAPPYMEAL is not set
-# CONFIG_SUNQE is not set
+CONFIG_HAPPYMEAL=m
+CONFIG_SUNQE=m
 # CONFIG_MYRI_SBUS is not set
 
 #
@@ -152,7 +167,7 @@ CONFIG_NFS_FS=y
 CONFIG_ROOT_NFS=y
 CONFIG_RNFS_BOOTP=y
 # CONFIG_RNFS_RARP is not set
-# CONFIG_NFSD is not set
+CONFIG_NFSD=m
 CONFIG_SUNRPC=y
 CONFIG_LOCKD=y
 # CONFIG_SMB_FS is not set
@@ -162,7 +177,7 @@ CONFIG_ISO9660_FS=y
 # CONFIG_SYSV_FS is not set
 # CONFIG_AFFS_FS is not set
 # CONFIG_ROMFS_FS is not set
-# CONFIG_AUTOFS_FS is not set
+CONFIG_AUTOFS_FS=m
 CONFIG_UFS_FS=y
 CONFIG_BSD_DISKLABEL=y
 CONFIG_SMD_DISKLABEL=y
@@ -171,3 +186,4 @@ CONFIG_SMD_DISKLABEL=y
 # Kernel hacking
 #
 # CONFIG_PROFILE is not set
+# CONFIG_EC_FLUSH_TRAP is not set

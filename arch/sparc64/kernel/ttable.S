@@ -1,8 +1,10 @@
-/* $Id: ttable.S,v 1.13 1997/06/02 06:33:34 davem Exp $
+/* $Id: ttable.S,v 1.18 1997/07/05 09:52:41 davem Exp $
  * ttable.S: Sparc V9 Trap Table(s) with SpitFire extensions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  */
+
+#include <linux/config.h>
 
 	.globl	sparc64_ttable_tl0, sparc64_ttable_tl1
 
@@ -18,7 +20,7 @@ tl0_privop:	TRAP(do_privop)
 tl0_resv012:	BTRAP(0x12) BTRAP(0x13) BTRAP(0x14) BTRAP(0x15) BTRAP(0x16) BTRAP(0x17)
 tl0_resv018:	BTRAP(0x18) BTRAP(0x19) BTRAP(0x1a) BTRAP(0x1b) BTRAP(0x1c) BTRAP(0x1d)
 tl0_resv01e:	BTRAP(0x1e) BTRAP(0x1f)
-tl0_fpdis:	TRAP(do_fpdis)
+tl0_fpdis:	TRAP_NOSAVE(do_fpdis)
 tl0_fpieee:	TRAP(do_fpieee)
 tl0_fpother:	TRAP(do_fpother)
 tl0_tof:	TRAP(do_tof)
@@ -124,7 +126,13 @@ tl0_resv15a:	BTRAP(0x15a) BTRAP(0x15b) BTRAP(0x15c) BTRAP(0x15d) BTRAP(0x15e)
 tl0_resv15f:	BTRAP(0x15f) BTRAP(0x160) BTRAP(0x161) BTRAP(0x162) BTRAP(0x163)
 tl0_resv164:	BTRAP(0x164) BTRAP(0x165) BTRAP(0x166) BTRAP(0x167) BTRAP(0x168)
 tl0_resv169:	BTRAP(0x169) BTRAP(0x16a) BTRAP(0x16b) BTRAP(0x16c) BTRAP(0x16d)
-tl0_resv16e:	BTRAP(0x16e) BTRAP(0x16f) BTRAP(0x170) BTRAP(0x171) BTRAP(0x172)
+tl0_gsctx:	TRAP(sparc64_get_context) TRAP(sparc64_set_context)
+tl0_resv170:	BTRAP(0x170) BTRAP(0x171) 
+#ifdef CONFIG_EC_FLUSH_TRAP
+					  TRAP(cache_flush_trap)
+#else
+					  BTRAP(0x172)
+#endif
 tl0_resv173:	BTRAP(0x173) BTRAP(0x174) BTRAP(0x175) BTRAP(0x176) BTRAP(0x177)
 tl0_resv178:	BTRAP(0x178) BTRAP(0x179) BTRAP(0x17a) BTRAP(0x17b) BTRAP(0x17c)
 tl0_resv17d:	BTRAP(0x17d) BTRAP(0x17e) BTRAP(0x17f)
@@ -151,7 +159,7 @@ tl1_resv012:	BTRAPTL1(0x12) BTRAPTL1(0x13) BTRAPTL1(0x14) BTRAPTL1(0x15)
 tl1_resv016:	BTRAPTL1(0x16) BTRAPTL1(0x17) BTRAPTL1(0x18) BTRAPTL1(0x19)
 tl1_resv01a:	BTRAPTL1(0x1a) BTRAPTL1(0x1b) BTRAPTL1(0x1c) BTRAPTL1(0x1d)
 tl1_resv01e:	BTRAPTL1(0x1e) BTRAPTL1(0x1f)
-tl1_fpdis:	TRAPTL1(do_fpdis_tl1)
+tl1_fpdis:	TRAP_NOSAVE(do_fpdis)
 tl1_fpieee:	TRAPTL1(do_fpieee_tl1)
 tl1_fpother:	TRAPTL1(do_fpother_tl1)
 tl1_tof:	TRAPTL1(do_tof_tl1)

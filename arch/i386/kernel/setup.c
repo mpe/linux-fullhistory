@@ -219,7 +219,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 	request_region(0x40,0x20,"timer");
 	request_region(0x80,0x10,"dma page reg");
 	request_region(0xc0,0x20,"dma2");
-	request_region(0xf0,0x10,"npu");
+	request_region(0xf0,0x10,"fpu");
 }
 
 static const char * i486model(unsigned int nr)

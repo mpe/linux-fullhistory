@@ -1,4 +1,4 @@
-/* $Id: psrcompat.h,v 1.3 1997/06/05 06:22:54 davem Exp $ */
+/* $Id: psrcompat.h,v 1.4 1997/06/20 11:54:39 davem Exp $ */
 #ifndef _SPARC64_PSRCOMPAT_H
 #define _SPARC64_PSRCOMPAT_H
 
@@ -23,33 +23,19 @@
 
 extern inline unsigned int tstate_to_psr(unsigned long tstate)
 {
-	unsigned int psr;
 	unsigned long vers;
 
-	/* These fields are in the same place. */
-	psr  = (tstate & (TSTATE_CWP | TSTATE_PEF));
-
-	/* This is what the user would have always seen. */
-	psr |= PSR_S;
-
-	/* Slam in the 32-bit condition codes. */
-	psr |= ((tstate & TSTATE_ICC) >> 12);
-
-	/* This is completely arbitrary. */
 	__asm__ __volatile__("rdpr	%%ver, %0" : "=r" (vers));
-	psr |= ((vers << 8) >> 32) & PSR_IMPL;
-	psr |= ((vers << 24) >> 36) & PSR_VERS;
-
-	return psr;
+	return ((tstate & TSTATE_CWP)			|
+		PSR_S					|
+		((tstate & TSTATE_ICC) >> 12)		|
+		(((vers << 8) >> 32) & PSR_IMPL)	|
+		(((vers << 24) >> 36) & PSR_VERS));
 }
 
 extern inline unsigned long psr_to_tstate_icc(unsigned int psr)
 {
-	unsigned long tstate;
-
-	tstate = ((unsigned long)(psr & PSR_ICC)) << 12;
-
-	return tstate;
+	return ((unsigned long)(psr & PSR_ICC)) << 12;
 }
 
 #endif /* !(_SPARC64_PSRCOMPAT_H) */

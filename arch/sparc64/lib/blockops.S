@@ -1,170 +1,70 @@
-/* $Id: blockops.S,v 1.7 1997/06/14 21:27:55 davem Exp $
+/* $Id: blockops.S,v 1.10 1997/06/24 17:29:10 jj Exp $
  * arch/sparc64/lib/blockops.S: UltraSparc block zero optimized routines.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
-#include <asm/asi.h>
-
-#undef VIS_BLOCKOPS
-
-	/* Zero out 256 bytes of memory at (buf + offset). */
-#define BLAST_BLOCK(buf, offset)				\
-	stda		%f48, [buf + offset + 0x00] %asi;	\
-	stda		%f48, [buf + offset + 0x40] %asi;	\
-	stda		%f48, [buf + offset + 0x80] %asi;	\
-	stda		%f48, [buf + offset + 0xc0] %asi;
-
-	/* Copy 256 bytes of memory at (src + offset) to
-	 * (dst + offset).
-	 */
-#define MIRROR_BLOCK(dst, src, offset, sync)			\
-	ldda		[src + offset + 0x000] %asi, %f0;	\
-	ldda		[src + offset + 0x040] %asi, %f16;	\
-	ldda		[src + offset + 0x080] %asi, %f32;	\
-	ldda		[src + offset + 0x0c0] %asi, %f48;	\
-	membar		sync;					\
-	stda		%f0, [dst + offset + 0x000] %asi;	\
-	stda		%f16, [dst + offset + 0x040] %asi;	\
-	stda		%f32, [dst + offset + 0x080] %asi;	\
-	stda		%f48, [dst + offset + 0x0c0] %asi;
+#include "VIS.h"
 
 	.text
-	.align	4
+	.align		32
 
-#ifdef VIS_BLOCKOPS
-	.globl		__bzero_1page
-__bzero_1page:
-	/* %o0 = buf */
-	mov		%o0, %o1
-	wr		%g0, ASI_BLK_P, %asi
-	mov		0x08, %g2
-	membar		#Sync|#StoreLoad
-	fzero		%f48
-	fzero		%f50
-	fzero		%f52
-	fzero		%f54
-	fzero		%f56
-	fzero		%f58
-	fzero		%f60
-	fzero		%f62
-1:
-	BLAST_BLOCK(%o0, 0x000)
-	BLAST_BLOCK(%o0, 0x100)
-	BLAST_BLOCK(%o0, 0x200)
-	BLAST_BLOCK(%o0, 0x300)
-	subcc		%g2, 1, %g2
-	bne,pt		%icc, 1b
-	 add		%o0, 0x400, %o0
+	.globl		__bfill64
+__bfill64:		/* %o0 = buf, %o1= ptr to pattern */
+	wr		%g0, FPRS_FEF, %fprs		! FPU	Group
+	ldd		[%o1], %f48			! Load	Group
+	wr		%g0, ASI_BLK_P, %asi		! LSU	Group
+	membar		#StoreStore | #LoadStore	! LSU	Group
+	mov		32, %g2				! IEU0	Group
 
-	membar		#Sync|#LoadStore|#StoreStore
+	/* Cannot perform real arithmatic on the pattern, that can
+	 * lead to fp_exception_other ;-)
+	 */
+	fmovd		%f48, %f50			! FPA	Group
+	fmovd		%f48, %f52			! FPA	Group
+	fmovd		%f48, %f54			! FPA	Group
+	fmovd		%f48, %f56			! FPA	Group
+	fmovd		%f48, %f58			! FPA	Group
+	fmovd		%f48, %f60			! FPA	Group
+	fmovd		%f48, %f62			! FPA	Group
 
-	retl
-	 mov		%o1, %o0
-#else
-#define BZERO_256BYTES(base)						\
-	stx	%g0, [base + 0x00];	stx	%g0, [base + 0x08];	\
-	stx	%g0, [base + 0x10];	stx	%g0, [base + 0x18];	\
-	stx	%g0, [base + 0x20];	stx	%g0, [base + 0x28];	\
-	stx	%g0, [base + 0x30];	stx	%g0, [base + 0x38];	\
-	stx	%g0, [base + 0x40];	stx	%g0, [base + 0x48];	\
-	stx	%g0, [base + 0x50];	stx	%g0, [base + 0x58];	\
-	stx	%g0, [base + 0x60];	stx	%g0, [base + 0x68];	\
-	stx	%g0, [base + 0x70];	stx	%g0, [base + 0x78];	\
-	stx	%g0, [base + 0x80];	stx	%g0, [base + 0x88];	\
-	stx	%g0, [base + 0x90];	stx	%g0, [base + 0x98];	\
-	stx	%g0, [base + 0xa0];	stx	%g0, [base + 0xa8];	\
-	stx	%g0, [base + 0xb0];	stx	%g0, [base + 0xb8];	\
-	stx	%g0, [base + 0xc0];	stx	%g0, [base + 0xc8];	\
-	stx	%g0, [base + 0xd0];	stx	%g0, [base + 0xd8];	\
-	stx	%g0, [base + 0xe0];	stx	%g0, [base + 0xe8];	\
-	stx	%g0, [base + 0xf0];	stx	%g0, [base + 0xf8];
+1:	stda		%f48, [%o0 + 0x00] %asi		! Store	Group
+	stda		%f48, [%o0 + 0x40] %asi		! Store	Group
+	stda		%f48, [%o0 + 0x80] %asi		! Store	Group
+	stda		%f48, [%o0 + 0xc0] %asi		! Store	Group
+	subcc		%g2, 1, %g2			! IEU1	Group
+	bne,pt		%icc, 1b			! CTI
+	 add		%o0, 0x100, %o0			! IEU0
+	membar		#Sync				! LSU	Group
+
+	jmpl		%o7 + 0x8, %g0			! CTI	Group brk forced
+	 wr		%g0, 0, %fprs			! FPU	Group
 
 	.align		32
 	.globl		__bzero_1page
 __bzero_1page:
-	mov		32, %g1
-1:
-	BZERO_256BYTES(%g2)
-	subcc		%g1, 1, %g1
-	bne,pt		%icc, 1b
-	 add		%g2, 0x100, %g2
-	jmpl		%o7 + 0x8, %g0
-	 mov		%g3, %o7
-#endif
+	wr		%g0, FPRS_FEF, %fprs		! FPU	Group
+	fzero		%f0				! FPA	Group
+	mov		32, %g1				! IEU0
+	fzero		%f2				! FPA	Group
+	faddd		%f0, %f2, %f4			! FPA	Group
+	fmuld		%f0, %f2, %f6			! FPM
+	faddd		%f0, %f2, %f8			! FPA	Group
+	fmuld		%f0, %f2, %f10			! FPM
 
-	.globl		__bfill64
-__bfill64:
-#if 1
-	/* %o0 = buf, %o1 = 64-bit pattern */
-#define FILL_BLOCK(buf, offset) \
-	stx	%o1, [buf + offset + 0x38]; \
-	stx	%o1, [buf + offset + 0x30]; \
-	stx	%o1, [buf + offset + 0x28]; \
-	stx	%o1, [buf + offset + 0x20]; \
-	stx	%o1, [buf + offset + 0x18]; \
-	stx	%o1, [buf + offset + 0x10]; \
-	stx	%o1, [buf + offset + 0x08]; \
-	stx	%o1, [buf + offset + 0x00];
+	faddd		%f0, %f2, %f12			! FPA	Group
+	fmuld		%f0, %f2, %f14			! FPM
+	wr		%g0, ASI_BLK_P, %asi		! LSU	Group
+	membar		#StoreStore | #LoadStore	! LSU	Group
+1:	stda		%f0, [%o0 + 0x00] %asi		! Store	Group
+	stda		%f0, [%o0 + 0x40] %asi		! Store	Group
+	stda		%f0, [%o0 + 0x80] %asi		! Store	Group
+	stda		%f0, [%o0 + 0xc0] %asi		! Store	Group
 
-	mov	0x20, %g2
-1:
-	FILL_BLOCK(%o0, 0x00)
-	FILL_BLOCK(%o0, 0x40)
-	FILL_BLOCK(%o0, 0x80)
-	FILL_BLOCK(%o0, 0xc0)
-	subcc	%g2, 1, %g2
-	bne,pt	%icc, 1b
-	 add	%o0, 0x100, %o0
-	retl
-	 nop
-#undef FILL_BLOCK
-
-#else
-	/* %o0 = buf */
-	stx		%o1, [%sp + 0x7ff + 128]
-	wr		%g0, ASI_BLK_P, %asi
-	mov		0x08, %g2
-	ldd		[%sp + 0x7ff + 128], %f48
-	membar		#Sync|#StoreLoad
-	fmovd		%f48, %f50
-	fmovd		%f48, %f52
-	fmovd		%f48, %f54
-	fmovd		%f48, %f56
-	fmovd		%f48, %f58
-	fmovd		%f48, %f60
-	fmovd		%f48, %f62
-1:
-	BLAST_BLOCK(%o0, 0x000)
-	BLAST_BLOCK(%o0, 0x100)
-	BLAST_BLOCK(%o0, 0x200)
-	BLAST_BLOCK(%o0, 0x300)
-	subcc		%g2, 1, %g2
-	bne,pt		%icc, 1b
-	 add		%o0, 0x400, %o0
-
-	retl
-	 membar		#Sync|#LoadStore|#StoreStore
-#endif
-
-#if 0
-	.globl		__copy_1page
-__copy_1page:
-	/* %o0 = dst, %o1 = src */
-	or		%g0, 0x08, %g1
-	wr		%g0, ASI_BLK_P, %asi
-	membar		#Sync|#StoreLoad
-1:
-	MIRROR_BLOCK(%o0, %o1, 0x000, #Sync)
-	MIRROR_BLOCK(%o0, %o1, 0x100, #Sync)
-	MIRROR_BLOCK(%o0, %o1, 0x200, #Sync)
-	MIRROR_BLOCK(%o0, %o1, 0x300, #Sync)
-	subcc		%g1, 1, %g1
-	add		%o0, 0x400, %o0
-	bne,pt		%icc, 1b
-	 add		%o1, 0x400, %o1
-
-	retl
-	 membar		#Sync|#LoadStore|#StoreStore
-#endif
+	subcc		%g1, 1, %g1			! IEU1
+	bne,pt		%icc, 1b			! CTI
+	 add		%o0, 0x100, %o0			! IEU0	Group
+	membar		#Sync				! LSU	Group
+	jmpl		%o7 + 0x8, %g0			! CTI	Group brk forced
+	 wr		%g0, 0, %fprs			! FPU	Group

@@ -63,8 +63,8 @@
 /* 119 is the non-posix getpgrp tty ioctl */
 #define __TIOCCDTR        _IO('t', 120) /* SunOS Specific */
 #define __TIOCSDTR        _IO('t', 121) /* SunOS Specific */
-#define __TIOCCBRK        _IO('t', 122) /* SunOS Specific */
-#define __TIOCSBRK        _IO('t', 123) /* SunOS Specific */
+#define TIOCCBRK        _IO('t', 122)
+#define TIOCSBRK        _IO('t', 123)
 #define __TIOCLGET        _IOW('t', 124, int) /* SunOS Specific */
 #define __TIOCLSET        _IOW('t', 125, int) /* SunOS Specific */
 #define __TIOCLBIC        _IOW('t', 126, int) /* SunOS Specific */

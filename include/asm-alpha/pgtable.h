@@ -517,4 +517,7 @@ extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
 #define SWP_OFFSET(entry) ((entry) >> 40)
 #define SWP_ENTRY(type,offset) pte_val(mk_swap_pte((type),(offset)))
 
+#define module_map	vmalloc
+#define module_unmap	vfree
+
 #endif /* _ALPHA_PGTABLE_H */

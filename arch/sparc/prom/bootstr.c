@@ -1,4 +1,4 @@
-/* $Id: bootstr.c,v 1.12 1996/12/18 06:46:54 tridge Exp $
+/* $Id: bootstr.c,v 1.14 1997/06/19 16:28:49 jj Exp $
  * bootstr.c:  Boot string/argument acquisition from the PROM.
  *
  * Copyright(C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -7,13 +7,14 @@
 #include <linux/config.h>
 #include <linux/string.h>
 #include <asm/oplib.h>
+#include <linux/init.h>
 
 #define BARG_LEN  256
-static char barg_buf[BARG_LEN];
-static char fetched = 0;
+static char barg_buf[BARG_LEN] __initdata = { 0 };
+static char fetched __initdata = 0;
 
-char *
-prom_getbootargs(void)
+__initfunc(char *
+prom_getbootargs(void))
 {
 	int iter;
 	char *cp, *arg;

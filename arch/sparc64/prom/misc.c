@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.6 1997/04/10 05:13:05 davem Exp $
+/* $Id: misc.c,v 1.7 1997/07/05 09:52:51 davem Exp $
  * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
@@ -6,6 +6,7 @@
  * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -45,8 +46,8 @@ void
 prom_cmdline(void)
 {
 	extern void kernel_enter_debugger(void);
-	extern void install_obp_ticker(void);
-	extern void install_linux_ticker(void);
+	/* extern void install_obp_ticker(void); */
+	/* extern void install_linux_ticker(void); */
 	unsigned long flags;
     
 	/* kernel_enter_debugger(); */

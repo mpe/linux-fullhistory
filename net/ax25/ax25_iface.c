@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 036
+ *	AX.25 release 037
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -44,7 +44,7 @@ static struct protocol_struct {
 
 static struct linkfail_struct {
 	struct linkfail_struct *next;
-	void (*func)(ax25_address *, struct device *);
+	void (*func)(ax25_cb *, int);
 } *linkfail_list = NULL;
 
 static struct listen_struct {
@@ -114,7 +114,7 @@ void ax25_protocol_release(unsigned int pid)
 	restore_flags(flags);
 }
 
-int ax25_linkfail_register(void (*func)(ax25_address *, struct device *))
+int ax25_linkfail_register(void (*func)(ax25_cb *, int))
 {
 	struct linkfail_struct *linkfail;
 	unsigned long flags;
@@ -135,7 +135,7 @@ int ax25_linkfail_register(void (*func)(ax25_address *, struct device *))
 	return 1;
 }
 
-void ax25_linkfail_release(void (*func)(ax25_address *, struct device *))
+void ax25_linkfail_release(void (*func)(ax25_cb *, int))
 {
 	struct linkfail_struct *s, *linkfail = linkfail_list;
 	unsigned long flags;
@@ -248,21 +248,12 @@ int ax25_listen_mine(ax25_address *callsign, struct device *dev)
 	return 0;
 }
 
-void ax25_link_failed(ax25_address *callsign, struct device *dev)
+void ax25_link_failed(ax25_cb *ax25, int reason)
 {
 	struct linkfail_struct *linkfail;
 
 	for (linkfail = linkfail_list; linkfail != NULL; linkfail = linkfail->next)
-		(linkfail->func)(callsign, dev);
-}
-
-/*
- *	Return the state of an AX.25 link given source, destination, and
- *	device.
- */
-int ax25_link_up(ax25_address *src, ax25_address *dest, ax25_digi *digi, struct device *dev)
-{
-	return ax25_find_cb(src, dest, digi, dev) != NULL;
+		(linkfail->func)(ax25, reason);
 }
 
 int ax25_protocol_is_registered(unsigned int pid)

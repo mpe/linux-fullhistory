@@ -1,5 +1,5 @@
 /*
- *	X.25 Packet Layer release 001
+ *	X.25 Packet Layer release 002
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 

@@ -1,8 +1,5 @@
 /*
- *	LAPB release 001
- *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
+ *	LAPB release 002
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -14,6 +11,7 @@
  *
  *	History
  *	LAPB 001	Jonathan Naulor	Started Coding
+ *	LAPB 002	Jonathan Naylor	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -63,10 +61,10 @@ static void lapb_state0_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 				printk(KERN_DEBUG "lapb: (%p) S0 -> S3\n", lapb->token);
 #endif
 				lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
+				lapb_stop_t1timer(lapb);
+				lapb_stop_t2timer(lapb);
 				lapb->state     = LAPB_STATE_3;
 				lapb->condition = 0x00;
-				lapb->t1timer   = 0;
-				lapb->t2timer   = 0;
 				lapb->n2count   = 0;
 				lapb->vs        = 0;
 				lapb->vr        = 0;
@@ -87,10 +85,10 @@ static void lapb_state0_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 				printk(KERN_DEBUG "lapb: (%p) S0 -> S3\n", lapb->token);
 #endif
 				lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
+				lapb_stop_t1timer(lapb);
+				lapb_stop_t2timer(lapb);
 				lapb->state     = LAPB_STATE_3;
 				lapb->condition = 0x00;
-				lapb->t1timer   = 0;
-				lapb->t2timer   = 0;
 				lapb->n2count   = 0;
 				lapb->vs        = 0;
 				lapb->vr        = 0;
@@ -176,10 +174,10 @@ static void lapb_state1_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S1 -> S3\n", lapb->token);
 #endif
+				lapb_stop_t1timer(lapb);
+				lapb_stop_t2timer(lapb);
 				lapb->state     = LAPB_STATE_3;
 				lapb->condition = 0x00;
-				lapb->t1timer   = 0;
-				lapb->t2timer   = 0;
 				lapb->n2count   = 0;
 				lapb->vs        = 0;
 				lapb->vr        = 0;
@@ -197,9 +195,9 @@ static void lapb_state1_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 				printk(KERN_DEBUG "lapb: (%p) S1 -> S0\n", lapb->token);
 #endif
 				lapb_clear_queues(lapb);
-				lapb->state   = LAPB_STATE_0;
-				lapb->t1timer = lapb->t1;
-				lapb->t2timer = 0;
+				lapb->state = LAPB_STATE_0;
+				lapb_start_t1timer(lapb);
+				lapb_stop_t2timer(lapb);
 				lapb_disconnect_indication(lapb, LAPB_REFUSED);
 			}
 			break;
@@ -243,9 +241,9 @@ static void lapb_state2_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S2 -> S0\n", lapb->token);
 #endif
-				lapb->state   = LAPB_STATE_0;
-				lapb->t1timer = lapb->t1;
-				lapb->t2timer = 0;
+				lapb->state = LAPB_STATE_0;
+				lapb_start_t1timer(lapb);
+				lapb_stop_t2timer(lapb);
 				lapb_disconnect_confirmation(lapb, LAPB_OK);
 			}
 			break;
@@ -258,9 +256,9 @@ static void lapb_state2_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S2 -> S0\n", lapb->token);
 #endif
-				lapb->state   = LAPB_STATE_0;
-				lapb->t1timer = lapb->t1;
-				lapb->t2timer = 0;
+				lapb->state = LAPB_STATE_0;
+				lapb_start_t1timer(lapb);
+				lapb_stop_t2timer(lapb);
 				lapb_disconnect_confirmation(lapb, LAPB_NOTCONNECTED);
 			}
 			break;
@@ -309,9 +307,9 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 				printk(KERN_DEBUG "lapb: (%p) S3 TX UA(%d)\n", lapb->token, frame->pf);
 #endif
 				lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
+				lapb_stop_t1timer(lapb);
+				lapb_stop_t2timer(lapb);
 				lapb->condition = 0x00;
-				lapb->t1timer   = 0;
-				lapb->t2timer   = 0;
 				lapb->n2count   = 0;
 				lapb->vs        = 0;
 				lapb->vr        = 0;
@@ -329,9 +327,9 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 				printk(KERN_DEBUG "lapb: (%p) S3 TX UA(%d)\n", lapb->token, frame->pf);
 #endif
 				lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
+				lapb_stop_t1timer(lapb);
+				lapb_stop_t2timer(lapb);
 				lapb->condition = 0x00;
-				lapb->t1timer   = 0;
-				lapb->t2timer   = 0;
 				lapb->n2count   = 0;
 				lapb->vs        = 0;
 				lapb->vr        = 0;
@@ -354,9 +352,9 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 #endif
 			lapb_clear_queues(lapb);
 			lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
-			lapb->state   = LAPB_STATE_0;
-			lapb->t1timer = lapb->t1;
-			lapb->t2timer = 0;
+			lapb_start_t1timer(lapb);
+			lapb_stop_t2timer(lapb);
+			lapb->state = LAPB_STATE_0;
 			lapb_disconnect_indication(lapb, LAPB_OK);
 			break;
 
@@ -368,9 +366,9 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 			printk(KERN_DEBUG "lapb: (%p) S3 -> S0\n", lapb->token);
 #endif
 			lapb_clear_queues(lapb);
-			lapb->state   = LAPB_STATE_0;
-			lapb->t1timer = lapb->t1;
-			lapb->t2timer = 0;
+			lapb->state = LAPB_STATE_0;
+			lapb_start_t1timer(lapb);
+			lapb_stop_t2timer(lapb);
 			lapb_disconnect_indication(lapb, LAPB_NOTCONNECTED);
 			break;
 
@@ -389,10 +387,10 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S3 -> S4\n", lapb->token);
 #endif
-				lapb->state     = LAPB_STATE_4;
-				lapb->t1timer   = lapb->t1;
-				lapb->t2timer   = 0;
-				lapb->n2count   = 0;
+				lapb_start_t1timer(lapb);
+				lapb_stop_t2timer(lapb);
+				lapb->state   = LAPB_STATE_4;
+				lapb->n2count = 0;
 			}
 			break;
 
@@ -411,10 +409,10 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S3 -> S4\n", lapb->token);
 #endif
-				lapb->state     = LAPB_STATE_4;
-				lapb->t1timer   = lapb->t1;
-				lapb->t2timer   = 0;
-				lapb->n2count   = 0;
+				lapb_start_t1timer(lapb);
+				lapb_stop_t2timer(lapb);
+				lapb->state   = LAPB_STATE_4;
+				lapb->n2count = 0;
 			}
 			break;
 
@@ -426,7 +424,7 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 			lapb_check_need_response(lapb, frame->cr, frame->pf);
 			if (lapb_validate_nr(lapb, frame->nr)) {
 				lapb_frames_acked(lapb, frame->nr);
-				lapb->t1timer = 0;
+				lapb_stop_t1timer(lapb);
 				lapb->n2count = 0;
 				lapb_requeue_frames(lapb);
 			} else {
@@ -436,10 +434,10 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S3 -> S4\n", lapb->token);
 #endif
-				lapb->state     = LAPB_STATE_4;
-				lapb->t1timer   = lapb->t1;
-				lapb->t2timer   = 0;
-				lapb->n2count   = 0;
+				lapb_start_t1timer(lapb);
+				lapb_stop_t2timer(lapb);
+				lapb->state   = LAPB_STATE_4;
+				lapb->n2count = 0;
 			}
 			break;
 
@@ -454,10 +452,10 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S3 -> S4\n", lapb->token);
 #endif
-				lapb->state     = LAPB_STATE_4;
-				lapb->t1timer   = lapb->t1;
-				lapb->t2timer   = 0;
-				lapb->n2count   = 0;
+				lapb_start_t1timer(lapb);
+				lapb_stop_t2timer(lapb);
+				lapb->state   = LAPB_STATE_4;
+				lapb->n2count = 0;
 				break;
 			}
 			if (lapb->condition & LAPB_PEER_RX_BUSY_CONDITION) {
@@ -473,8 +471,8 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 					lapb_enquiry_response(lapb);
 				} else {
 					if (!(lapb->condition & LAPB_ACK_PENDING_CONDITION)) {
-						lapb->t2timer = lapb->t2;
 						lapb->condition |= LAPB_ACK_PENDING_CONDITION;
+						lapb_start_t2timer(lapb);
 					}
 				}
 			} else {
@@ -514,10 +512,10 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 #if LAPB_DEBUG > 0
 			printk(KERN_DEBUG "lapb: (%p) S3 -> S4\n", lapb->token);
 #endif
-			lapb->state     = LAPB_STATE_4;
-			lapb->t1timer   = lapb->t1;
-			lapb->t2timer   = 0;
-			lapb->n2count   = 0;
+			lapb_start_t1timer(lapb);
+			lapb_stop_t2timer(lapb);
+			lapb->state   = LAPB_STATE_4;
+			lapb->n2count = 0;
 			break;
 
 		default:
@@ -552,10 +550,10 @@ static void lapb_state4_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 				printk(KERN_DEBUG "lapb: (%p) S4 -> S3\n", lapb->token);
 #endif
 				lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
+				lapb_stop_t1timer(lapb);
+				lapb_stop_t2timer(lapb);
 				lapb->state     = LAPB_STATE_3;
 				lapb->condition = 0x00;
-				lapb->t1timer   = 0;
-				lapb->t2timer   = 0;
 				lapb->n2count   = 0;
 				lapb->vs        = 0;
 				lapb->vr        = 0;
@@ -576,10 +574,10 @@ static void lapb_state4_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 				printk(KERN_DEBUG "lapb: (%p) S4 -> S3\n", lapb->token);
 #endif
 				lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
+				lapb_stop_t1timer(lapb);
+				lapb_stop_t2timer(lapb);
 				lapb->state     = LAPB_STATE_3;
 				lapb->condition = 0x00;
-				lapb->t1timer   = 0;
-				lapb->t2timer   = 0;
 				lapb->n2count   = 0;
 				lapb->vs        = 0;
 				lapb->vr        = 0;
@@ -626,6 +624,8 @@ void lapb_data_input(lapb_cb *lapb, struct sk_buff *skb)
 			lapb_state4_machine(lapb, skb, &frame);
 			break;
 	}
+
+	lapb_kick(lapb);
 }
 
 #endif

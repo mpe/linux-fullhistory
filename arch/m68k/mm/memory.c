@@ -555,16 +555,18 @@ void cache_clear (unsigned long paddr, int len)
 	int tmp;
 
 	/*
-	 * cwe need special treatment for the first page, in case it
-	 * is not page-aligned.
+	 * We need special treatment for the first page, in case it
+	 * is not page-aligned. Page align the addresses to work
+	 * around bug I17 in the 68060.
 	 */
 	if ((tmp = -paddr & (PAGE_SIZE - 1))) {
-	    pushcl040(paddr);
+	    pushcl040(paddr & PAGE_MASK);
 	    if ((len -= tmp) <= 0)
 		return;
 	    paddr += tmp;
 	}
 	tmp = PAGE_SIZE;
+	paddr &= PAGE_MASK;
 	while ((len -= tmp) >= 0) {
 	    clear040(paddr);
 	    paddr += tmp;
@@ -600,6 +602,13 @@ void cache_push (unsigned long paddr, int len)
 	 * the '060!
 	 */
 	len += paddr & (PAGE_SIZE - 1);
+
+	/*
+	 * Work around bug I17 in the 68060 affecting some instruction
+	 * lines not being invalidated properly.
+	 */
+	paddr &= PAGE_MASK;
+
 	do {
 	    pushcli040(paddr);
 	    paddr += tmp;
@@ -638,6 +647,13 @@ void cache_push_v (unsigned long vaddr, int len)
 
 	/* on 68040, push cache lines for pages in the range */
 	len += vaddr & (PAGE_SIZE - 1);
+
+	/*
+	 * Work around bug I17 in the 68060 affecting some instruction
+	 * lines not being invalidated properly.
+	 */
+	vaddr &= PAGE_MASK;
+
 	do {
 	    pushv040(vaddr);
 	    vaddr += tmp;

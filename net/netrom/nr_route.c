@@ -1,5 +1,5 @@
 /*
- *	NET/ROM release 006
+ *	NET/ROM release 007
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -93,6 +93,7 @@ static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax2
 
 		nr_neigh->callsign = *ax25;
 		nr_neigh->digipeat = NULL;
+		nr_neigh->ax25     = NULL;
 		nr_neigh->dev      = dev;
 		nr_neigh->quality  = sysctl_netrom_default_path_quality;
 		nr_neigh->locked   = 0;
@@ -372,6 +373,7 @@ static int nr_add_neigh(ax25_address *callsign, ax25_digi *ax25_digi, struct dev
 
 	nr_neigh->callsign = *callsign;
 	nr_neigh->digipeat = NULL;
+	nr_neigh->ax25     = NULL;
 	nr_neigh->dev      = dev;
 	nr_neigh->quality  = quality;
 	nr_neigh->locked   = 1;
@@ -582,7 +584,7 @@ static ax25_digi *nr_call_to_digi(int ndigis, ax25_address *digipeaters)
 	}
 
 	ax25_digi.ndigi      = ndigis;
-	ax25_digi.lastrepeat = 0;
+	ax25_digi.lastrepeat = -1;
 
 	return &ax25_digi;
 }
@@ -594,14 +596,12 @@ int nr_rt_ioctl(unsigned int cmd, void *arg)
 {
 	struct nr_route_struct nr_route;
 	struct device *dev;
-	int err;
 
 	switch (cmd) {
 
 		case SIOCADDRT:
-			if ((err = verify_area(VERIFY_READ, arg, sizeof(struct nr_route_struct))) != 0)
-				return err;
-			copy_from_user(&nr_route, arg, sizeof(struct nr_route_struct));
+			if (copy_from_user(&nr_route, arg, sizeof(struct nr_route_struct)))
+				return -EFAULT;
 			if ((dev = nr_ax25_dev_get(nr_route.device)) == NULL)
 				return -EINVAL;
 			if (nr_route.ndigis < 0 || nr_route.ndigis > AX25_MAX_DIGIS)
@@ -623,9 +623,8 @@ int nr_rt_ioctl(unsigned int cmd, void *arg)
 			}
 
 		case SIOCDELRT:
-			if ((err = verify_area(VERIFY_READ, arg, sizeof(struct nr_route_struct))) != 0)
-				return err;
-			copy_from_user(&nr_route, arg, sizeof(struct nr_route_struct));
+			if (copy_from_user(&nr_route, arg, sizeof(struct nr_route_struct)))
+				return -EFAULT;
 			if ((dev = nr_ax25_dev_get(nr_route.device)) == NULL)
 				return -EINVAL;
 			switch (nr_route.type) {
@@ -653,16 +652,18 @@ int nr_rt_ioctl(unsigned int cmd, void *arg)
  * 	A level 2 link has timed out, therefore it appears to be a poor link,
  *	then don't use that neighbour until it is reset.
  */
-void nr_link_failed(ax25_address *callsign, struct device *dev)
+void nr_link_failed(ax25_cb *ax25, int reason)
 {
 	struct nr_neigh *nr_neigh;
 	struct nr_node  *nr_node;
 
 	for (nr_neigh = nr_neigh_list; nr_neigh != NULL; nr_neigh = nr_neigh->next)
-		if (ax25cmp(&nr_neigh->callsign, callsign) == 0 && nr_neigh->dev == dev)
+		if (nr_neigh->ax25 == ax25)
 			break;
 
 	if (nr_neigh == NULL) return;
+
+	nr_neigh->ax25 = NULL;
 
 	if (++nr_neigh->failed < sysctl_netrom_link_fails_count) return;
 
@@ -724,7 +725,9 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	dptr  = skb_push(skb, 1);
 	*dptr = AX25_P_NETROM;
 
-	return ax25_send_frame(skb, 256, (ax25_address *)dev->dev_addr, &nr_neigh->callsign, nr_neigh->digipeat, nr_neigh->dev);
+	nr_neigh->ax25 = ax25_send_frame(skb, 256, (ax25_address *)dev->dev_addr, &nr_neigh->callsign, nr_neigh->digipeat, nr_neigh->dev);
+
+	return (nr_neigh->ax25 != NULL);
 }
 
 int nr_nodes_get_info(char *buffer, char **start, off_t offset,

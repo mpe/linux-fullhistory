@@ -632,7 +632,8 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	 */
 	sb->s_dev = dev;
 	sb->s_op = &ext2_sops;
-	if (!(sb->s_mounted = iget (sb, EXT2_ROOT_INO))) {
+	sb->s_root = d_alloc_root(iget(sb, EXT2_ROOT_INO), NULL);
+	if (!sb->s_root) {
 		sb->s_dev = 0;
 		for (i = 0; i < db_count; i++)
 			if (sb->u.ext2_sb.s_group_desc[i])

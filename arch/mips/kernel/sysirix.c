@@ -1,4 +1,4 @@
-/* $Id: sysirix.c,v 1.1 1997/06/06 09:33:25 ralf Exp $
+/* $Id: sysirix.c,v 1.2 1997/06/17 15:24:26 ralf Exp $
  * sysirix.c: IRIX system call emulation.
  *
  * Copyright (C) 1996 David S. Miller
@@ -664,7 +664,7 @@ asmlinkage int irix_statfs(const char *path, struct irix_statfs *buf,
 	error = verify_area(VERIFY_WRITE, buf, sizeof(struct irix_statfs));
 	if (error)
 		goto out;
-	error = namei(path,&inode);
+	error = namei(NAM_FOLLOW_LINK, path, &inode);
 	if (error)
 		goto out;
 	if (!inode->i_sb->s_op->statfs) {
@@ -1390,7 +1390,7 @@ asmlinkage int irix_statvfs(char *fname, struct irix_statvfs *buf)
 	error = verify_area(VERIFY_WRITE, buf, sizeof(struct irix_statvfs));
 	if(error)
 		goto out;
-	error = namei(fname, &inode);
+	error = namei(NAM_FOLLOW_LINK, fname, &inode);
 	if(error)
 		goto out;
 	if(!inode->i_sb->s_op->statfs) {
@@ -1489,8 +1489,8 @@ out:
 	return error;
 }
 
-#define NOFOLLOW_LINKS  0
-#define FOLLOW_LINKS    1
+#define NOFOLLOW_LINKS  NAM_FOLLOW_TRAILSLASH
+#define FOLLOW_LINKS    NAM_FOLLOW_LINK
 
 static inline int chown_common(char *filename, uid_t user, gid_t group, int follow)
 {
@@ -1498,10 +1498,7 @@ static inline int chown_common(char *filename, uid_t user, gid_t group, int foll
 	int error;
 	struct iattr newattrs;
 
-	if(follow == NOFOLLOW_LINKS)
-		error = lnamei(filename,&inode);
-	else
-		error = namei(filename,&inode);
+	error = namei(follow, filename,&inode);
 	if (error)
 		return error;
 	if (IS_RDONLY(inode)) {
@@ -1734,7 +1731,7 @@ asmlinkage int irix_statvfs64(char *fname, struct irix_statvfs64 *buf)
 	error = verify_area(VERIFY_WRITE, buf, sizeof(struct irix_statvfs));
 	if(error)
 		goto out;
-	error = namei(fname, &inode);
+	error = namei(NAM_FOLLOW_LINK, fname, &inode);
 	if(error)
 		goto out;
 	if(!inode->i_sb->s_op->statfs) {

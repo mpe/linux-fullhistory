@@ -23,11 +23,11 @@ extern unsigned long get_video_size_row(unsigned int console);
 #define get_video_num_columns(dummy) video_num_columns
 #define get_video_num_lines(dummy) video_num_lines
 #define get_video_size_row(dummy) video_size_row
-#endif
-
 extern unsigned long video_num_columns;
 extern unsigned long video_num_lines;
 extern unsigned long video_size_row;
+#endif
+
 extern unsigned char video_type;
 extern unsigned long video_mem_base;
 extern unsigned long video_mem_term;
@@ -72,6 +72,8 @@ extern void putconsxy(int currcons, char *p);
 
 
 /* how to access screen memory */
+
+#include <linux/config.h>
 
 #if defined(CONFIG_TGA_CONSOLE)
 

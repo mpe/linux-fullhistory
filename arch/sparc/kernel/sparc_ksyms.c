@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.59 1997/05/08 17:45:20 davem Exp $
+/* $Id: sparc_ksyms.c,v 1.60 1997/06/17 13:25:13 jj Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -59,6 +59,7 @@ extern void *__memscan_zero(void *, size_t);
 extern void *__memscan_generic(void *, int, size_t);
 extern int __memcmp(const void *, const void *, __kernel_size_t);
 extern int __strncmp(const char *, const char *, __kernel_size_t);
+extern char saved_command_line[];
 
 extern void bcopy (const char *, char *, int);
 extern int __ashrdi3(int, int);
@@ -200,7 +201,7 @@ EXPORT_SYMBOL(prom_getproplen);
 EXPORT_SYMBOL(prom_getproperty);
 EXPORT_SYMBOL(prom_node_has_property);
 EXPORT_SYMBOL(prom_setprop);
-EXPORT_SYMBOL(prom_getbootargs);
+EXPORT_SYMBOL(saved_command_line);
 EXPORT_SYMBOL(prom_apply_obio_ranges);
 EXPORT_SYMBOL(prom_getname);
 EXPORT_SYMBOL(prom_feval);

@@ -1,8 +1,8 @@
-/* $Id: atomic.h,v 1.14 1997/04/16 05:57:06 davem Exp $
+/* $Id: atomic.h,v 1.15 1997/07/03 09:18:09 davem Exp $
  * atomic.h: Thankfully the V9 is at least reasonable for this
  *           stuff.
  *
- * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
  */
 
 #ifndef __ARCH_SPARC64_ATOMIC__
@@ -22,73 +22,63 @@ typedef struct { int counter; } atomic_t;
 
 extern __inline__ void atomic_add(int i, atomic_t *v)
 {
-	unsigned long temp0, temp1;
 	__asm__ __volatile__("
-	lduw		[%3], %0
-1:
-	add		%0, %2, %1
-	cas		[%3], %0, %1
-	cmp		%0, %1
-	bne,a,pn	%%icc, 1b
-	 lduw		[%3], %0
-2:
-" 	: "=&r" (temp0), "=&r" (temp1)
+1:	lduw		[%1], %%g1
+	add		%%g1, %0, %%g2
+	cas		[%1], %%g1, %%g2
+	sub		%%g1, %%g2, %%g1
+	brnz,pn		%%g1, 1b
+	 nop"
+	: /* No outputs */
 	: "HIr" (i), "r" (__atomic_fool_gcc(v))
-	: "cc");
+	: "g1", "g2");
 }
 
 extern __inline__ void atomic_sub(int i, atomic_t *v)
 {
-	unsigned long temp0, temp1;
 	__asm__ __volatile__("
-	lduw		[%3], %0
-1:
-	sub		%0, %2, %1
-	cas		[%3], %0, %1
-	cmp		%0, %1
-	bne,a,pn	%%icc, 1b
-	 lduw		[%3], %0
-2:
-"	: "=&r" (temp0), "=&r" (temp1)
+1:	lduw		[%1], %%g1
+	sub		%%g1, %0, %%g2
+	cas		[%1], %%g1, %%g2
+	sub		%%g1, %%g2, %%g1
+	brnz,pn		%%g1, 1b
+	 nop"
+	: /* No outputs */
 	: "HIr" (i), "r" (__atomic_fool_gcc(v))
-	: "cc");
+	: "g1", "g2");
 }
 
 /* Same as above, but return the result value. */
 extern __inline__ int atomic_add_return(int i, atomic_t *v)
 {
-	unsigned long temp0, oldval;
+	unsigned long oldval;
 	__asm__ __volatile__("
-	lduw		[%3], %0
-1:
-	add		%0, %2, %1
-	cas		[%3], %0, %1
-	cmp		%0, %1
-	bne,a,pn	%%icc, 1b
-	 lduw		[%3], %0
-2:
-"	: "=&r" (temp0), "=&r" (oldval)
+1:	lduw		[%2], %%g1
+	add		%%g1, %1, %%g2
+	cas		[%2], %%g1, %%g2
+	sub		%%g1, %%g2, %%g1
+	brnz,pn		%%g1, 1b
+	 add		%%g2, %1, %0"
+	: "=&r" (oldval)
 	: "HIr" (i), "r" (__atomic_fool_gcc(v))
-	: "cc");
-	return (((int)oldval) + 1);
+	: "g1", "g2");
+	return (int)oldval;
 }
 
 extern __inline__ int atomic_sub_return(int i, atomic_t *v)
 {
-	unsigned long temp0, oldval;
+	unsigned long oldval;
 	__asm__ __volatile__("
-	lduw		[%3], %0
-1:
-	sub		%0, %2, %1
-	cas		[%3], %0, %1
-	cmp		%0, %1
-	bne,a,pn	%%icc, 1b
-	 lduw		[%3], %0
-2:
-"	: "=&r" (temp0), "=&r" (oldval)
+1:	lduw		[%2], %%g1
+	sub		%%g1, %1, %%g2
+	cas		[%2], %%g1, %%g2
+	sub		%%g1, %%g2, %%g1
+	brnz,pn		%%g1, 1b
+	 sub		%%g2, %1, %0"
+	: "=&r" (oldval)
 	: "HIr" (i), "r" (__atomic_fool_gcc(v))
-	: "cc");
-	return (((int)oldval) - 1);
+	: "g1", "g2");
+	return (int)oldval;
 }
 
 #define atomic_dec_return(v) atomic_sub_return(1,(v))

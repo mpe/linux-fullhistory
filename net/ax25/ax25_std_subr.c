@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 036
+ *	AX.25 release 037
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -17,6 +17,7 @@
  *
  *	History
  *	AX.25 036	Jonathan(G4KLX)	Split from ax25_out.c.
+ *	AX.25 037	Jonathan(G4KLX)	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -62,9 +63,11 @@ void ax25_std_establish_data_link(ax25_cb *ax25)
 	else
 		ax25_send_control(ax25, AX25_SABME, AX25_POLLON, AX25_COMMAND);
 
-	ax25->t3timer = 0;
-	ax25->t2timer = 0;
-	ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
+	ax25_calculate_t1(ax25);
+	ax25_stop_idletimer(ax25);
+	ax25_stop_t3timer(ax25);
+	ax25_stop_t2timer(ax25);
+	ax25_start_t1timer(ax25);
 }
 
 void ax25_std_transmit_enquiry(ax25_cb *ax25)
@@ -76,7 +79,8 @@ void ax25_std_transmit_enquiry(ax25_cb *ax25)
 
 	ax25->condition &= ~AX25_COND_ACK_PENDING;
 
-	ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
+	ax25_calculate_t1(ax25);
+	ax25_start_t1timer(ax25);
 }
  	
 void ax25_std_enquiry_response(ax25_cb *ax25)

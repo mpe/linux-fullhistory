@@ -2896,6 +2896,8 @@ static void raw_cmd_done(int flag)
 		raw_cmd->flags |= FD_RAW_HARDFAILURE;
 	} else {
 		raw_cmd->reply_count = inr;
+		if(raw_cmd->reply_count > MAX_REPLIES)
+			raw_cmd->reply_count=0;
 		for (i=0; i< raw_cmd->reply_count; i++)
 			raw_cmd->reply[i] = reply_buffer[i];
 

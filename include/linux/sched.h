@@ -130,7 +130,7 @@ struct files_struct {
 struct fs_struct {
 	int count;
 	int umask;
-	struct inode * root, * pwd;
+	struct dentry * root, * pwd;
 };
 
 #define INIT_FS { \

@@ -2,8 +2,6 @@
 #define _LAPB_H 
 #include <linux/lapb.h>
 
-#define LAPB_SLOWHZ	10		/* Run timing at 1/10 second */
-
 #define	LAPB_HEADER_LEN	20		/* LAPB over Ethernet + a bit more */
 
 #define	LAPB_ACK_PENDING_CONDITION	0x01
@@ -58,10 +56,10 @@ enum {
 };
 
 #define	LAPB_DEFAULT_MODE		(LAPB_STANDARD | LAPB_SLP | LAPB_DTE)
-#define	LAPB_DEFAULT_WINDOW		7			/* Window=7 */
-#define	LAPB_DEFAULT_T1			(5 * LAPB_SLOWHZ)	/* T1=5s    */
-#define	LAPB_DEFAULT_T2			(1 * LAPB_SLOWHZ)	/* T2=1s    */
-#define	LAPB_DEFAULT_N2			20			/* N2=20    */
+#define	LAPB_DEFAULT_WINDOW		7		/* Window=7 */
+#define	LAPB_DEFAULT_T1			(5 * HZ)	/* T1=5s    */
+#define	LAPB_DEFAULT_T2			(1 * HZ)	/* T2=1s    */
+#define	LAPB_DEFAULT_N2			20		/* N2=20    */
 
 #define	LAPB_SMODULUS	8
 #define	LAPB_EMODULUS	128
@@ -91,14 +89,12 @@ typedef struct lapb_cb {
 	unsigned char		condition;
 	unsigned short		n2, n2count;
 	unsigned short		t1, t2;
-	unsigned short		t1timer, t2timer;
+	struct timer_list	t1timer, t2timer;
 
 	/* Internal control information */
-	struct sk_buff_head	input_queue;
 	struct sk_buff_head	write_queue;
 	struct sk_buff_head	ack_queue;
 	unsigned char		window;
-	struct timer_list	timer;
 	struct lapb_register_struct callbacks;
 
 	/* FRMR control information */
@@ -136,7 +132,11 @@ extern void lapb_send_control(lapb_cb *, int, int, int);
 extern void lapb_transmit_frmr(lapb_cb *);
 
 /* lapb_timer.c */
-extern void lapb_set_timer(lapb_cb *);
+extern void lapb_start_t1timer(lapb_cb *);
+extern void lapb_start_t2timer(lapb_cb *);
+extern void lapb_stop_t1timer(lapb_cb *);
+extern void lapb_stop_t2timer(lapb_cb *);
+extern int  lapb_t1timer_running(lapb_cb *);
 
 /*
  * Debug levels.

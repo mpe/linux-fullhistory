@@ -76,6 +76,7 @@ struct cpu_iu_info linux_sparc_chips[] = {
   { 0, 0, "Fujitsu  MB86900/1A or LSI L64831 SparcKIT-40"},
   /* borned STP1012PGA */
   { 0, 4, "Fujitsu  MB86904"},
+  { 0, 5, "Fujitsu TurboSparc MB86907"},
   /* SparcStation2, SparcServer 490 & 690 */
   { 1, 0, "LSI Logic Corporation - L64811"},
   /* SparcStation2 */

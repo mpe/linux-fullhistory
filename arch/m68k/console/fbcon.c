@@ -97,7 +97,6 @@ extern int console_blanked;
 #undef CONFIG_FBCON_CYBER
 #undef CONFIG_FBCON_RETINAZ3
 
-
 /* Monochrome is default */
 
 #define CONFIG_FBCON_MONO
@@ -450,14 +449,17 @@ static void putcs_cyber(struct vc_data *conp, struct display *p, const char *s,
                         int count, int yy, int xx);
 static void rev_char_cyber(struct display *p, int xx, int yy);
 
-extern void Cyber_WaitQueue(u_short fifo);
+extern void Cyber_WaitQueue(unsigned short fifo);
 extern void Cyber_WaitBlit(void);
-extern void Cyber_BitBLT(u_short curx, u_short cury, u_short destx,
-                         u_short desty, u_short width, u_short height,
-                         u_short mode);
-extern void Cyber_RectFill(u_short xx, u_short yy, u_short width, u_short height,
-                           u_short mode, u_short color);
-extern void Cyber_MoveCursor(u_short xx, u_short yy);
+extern void Cyber_BitBLT(unsigned short curx, unsigned short cury,
+			 unsigned short destx, unsigned short desty,
+			 unsigned short width, unsigned short height,
+                         unsigned short mode);
+extern void Cyber_RectFill(unsigned short xx, unsigned short yy,
+			   unsigned short width, unsigned short
+			   height, unsigned short mode,
+			   unsigned short fcolor); 
+extern void Cyber_MoveCursor(unsigned short xx, unsigned short yy);
 #endif /* CONFIG_FBCON_CYBER */
 
 #ifdef CONFIG_FBCON_RETINAZ3
@@ -3835,7 +3837,7 @@ static void putc_cyber(struct vc_data *conp, struct display *p, int c, int yy,
 
 	c &= 0xff;
 
-	dest = p->screen_base+y*p->fontheight*p->next_line+8*x;
+	dest = p->screen_base + yy * p->fontheight * p->next_line + 8 * xx;
 	cdat = p->fontdata+(c*p->fontheight);
 	fg = disp->fgcol;
 	bg = disp->bgcol;
@@ -3874,7 +3876,7 @@ static void putcs_cyber(struct vc_data *conp, struct display *p, const char *s,
 	u_char c, d;
 	u_char fg, bg;
 
-	dest0 = p->screen_base+y*p->fontheight*p->next_line+8*x;
+	dest0 = p->screen_base + yy * p->fontheight * p->next_line + 8 * xx;
 	fg = disp->fgcol;
 	bg = disp->bgcol;
 	revs = conp->vc_reverse;
@@ -3918,7 +3920,7 @@ static void rev_char_cyber(struct display *p, int xx, int yy)
 	fg = disp->fgcol;
 	bg = disp->bgcol;
 
-	dest = p->screen_base+y*p->fontheight*p->next_line+8*x;
+	dest = p->screen_base + yy * p->fontheight * p->next_line + 8 * xx;
    Cyber_WaitBlit();
 	for (rows = p->fontheight; rows--; dest += p->next_line) {
 		*dest = (*dest == fg) ? bg : fg;

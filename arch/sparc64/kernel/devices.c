@@ -6,7 +6,6 @@
 
 #include <linux/kernel.h>
 #include <linux/tasks.h>
-#include <linux/config.h>
 #include <linux/init.h>
 
 #include <asm/page.h>
@@ -15,7 +14,7 @@
 #include <asm/smp.h>
 
 struct prom_cpuinfo linux_cpus[NCPUS];
-int linux_num_cpus;
+int linux_num_cpus = 0;
 
 extern void cpu_probe(void);
 
@@ -54,7 +53,7 @@ device_scan(unsigned long mem_start))
 		};
 		if(cpu_ctr == 0) {
 			printk("No CPU nodes found, cannot continue.\n");
-			halt();
+			prom_halt();
 		}
 		printk("Found %d CPU prom device tree node(s).\n", cpu_ctr);
 	};

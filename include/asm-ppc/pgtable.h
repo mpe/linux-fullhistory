@@ -361,4 +361,7 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 #define SWP_OFFSET(entry) ((entry) >> 8)
 #define SWP_ENTRY(type,offset) (((type) << 1) | ((offset) << 8))
 
+#define module_map      vmalloc
+#define module_unmap    vfree
+
 #endif /* _PPC_PAGE_H */

@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 036
+ *	AX.25 release 037
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -21,6 +21,7 @@
  *	AX.25 036	Jonathan(G4KLX)	Split Standard and DAMA code into seperate files.
  *			Joerg(DL1BKE)	Fixed DAMA Slave. We are *required* to start with
  *					standard AX.25 mode.
+ *	AX.25 037	Jonathan(G4KLX)	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -46,48 +47,205 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 
-static void ax25_timer(unsigned long);
+static void ax25_heartbeat_expiry(unsigned long);
+static void ax25_t1timer_expiry(unsigned long);
+static void ax25_t2timer_expiry(unsigned long);
+static void ax25_t3timer_expiry(unsigned long);
+static void ax25_idletimer_expiry(unsigned long);
 
-/*
- *	Linux set timer
- */
-void ax25_set_timer(ax25_cb *ax25)
+void ax25_start_heartbeat(ax25_cb *ax25)
 {
-	unsigned long flags;	
-
-	save_flags(flags); cli();
 	del_timer(&ax25->timer);
-	restore_flags(flags);
 
 	ax25->timer.data     = (unsigned long)ax25;
-	ax25->timer.function = &ax25_timer;
-	ax25->timer.expires  = jiffies + (HZ / 10);
+	ax25->timer.function = &ax25_heartbeat_expiry;
+	ax25->timer.expires  = jiffies + 5 * HZ;
 
 	add_timer(&ax25->timer);
 }
 
-/*
- *	AX.25 TIMER 
- *
- *	This routine is called every 100ms. Decrement timer by this
- *	amount - if expired then process the event.
- */
-static void ax25_timer(unsigned long param)
+void ax25_start_t1timer(ax25_cb *ax25)
+{
+	del_timer(&ax25->t1timer);
+
+	ax25->t1timer.data     = (unsigned long)ax25;
+	ax25->t1timer.function = &ax25_t1timer_expiry;
+	ax25->t1timer.expires  = jiffies + ax25->t1;
+
+	add_timer(&ax25->t1timer);
+}
+
+void ax25_start_t2timer(ax25_cb *ax25)
+{
+	del_timer(&ax25->t2timer);
+
+	ax25->t2timer.data     = (unsigned long)ax25;
+	ax25->t2timer.function = &ax25_t2timer_expiry;
+	ax25->t2timer.expires  = jiffies + ax25->t2;
+
+	add_timer(&ax25->t2timer);
+}
+
+void ax25_start_t3timer(ax25_cb *ax25)
+{
+	del_timer(&ax25->t3timer);
+
+	if (ax25->t3 > 0) {
+		ax25->t3timer.data     = (unsigned long)ax25;
+		ax25->t3timer.function = &ax25_t3timer_expiry;
+		ax25->t3timer.expires  = jiffies + ax25->t3;
+
+		add_timer(&ax25->t3timer);
+	}
+}
+
+void ax25_start_idletimer(ax25_cb *ax25)
+{
+	del_timer(&ax25->idletimer);
+
+	if (ax25->idle > 0) {
+		ax25->idletimer.data     = (unsigned long)ax25;
+		ax25->idletimer.function = &ax25_idletimer_expiry;
+		ax25->idletimer.expires  = jiffies + ax25->idle;
+
+		add_timer(&ax25->idletimer);
+	}
+}
+
+void ax25_stop_heartbeat(ax25_cb *ax25)
+{
+	del_timer(&ax25->timer);
+}
+
+void ax25_stop_t1timer(ax25_cb *ax25)
+{
+	del_timer(&ax25->t1timer);
+}
+
+void ax25_stop_t2timer(ax25_cb *ax25)
+{
+	del_timer(&ax25->t2timer);
+}
+
+void ax25_stop_t3timer(ax25_cb *ax25)
+{
+	del_timer(&ax25->t3timer);
+}
+
+void ax25_stop_idletimer(ax25_cb *ax25)
+{
+	del_timer(&ax25->idletimer);
+}
+
+int ax25_t1timer_running(ax25_cb *ax25)
+{
+	return (ax25->t1timer.prev != NULL || ax25->t1timer.next != NULL);
+}
+
+unsigned long ax25_display_timer(struct timer_list *timer)
+{
+	if (timer->prev == NULL && timer->next == NULL)
+		return 0;
+
+	return timer->expires - jiffies;
+}
+
+static void ax25_heartbeat_expiry(unsigned long param)
 {
 	ax25_cb *ax25 = (ax25_cb *)param;
 
 	switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
 		case AX25_PROTO_STD_SIMPLEX:
 		case AX25_PROTO_STD_DUPLEX:
-			ax25_std_timer(ax25);
+			ax25_std_heartbeat_expiry(ax25);
 			break;
 
 #ifdef CONFIG_AX25_DAMA_SLAVE
 		case AX25_PROTO_DAMA_SLAVE:
 			if (ax25->ax25_dev->dama.slave)
-				ax25_ds_timer(ax25);
+				ax25_ds_heartbeat_expiry(ax25);
 			else
-				ax25_std_timer(ax25);
+				ax25_std_heartbeat_expiry(ax25);
+			break;
+#endif
+	}
+}
+
+static void ax25_t1timer_expiry(unsigned long param)
+{
+	ax25_cb *ax25 = (ax25_cb *)param;
+
+	switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
+		case AX25_PROTO_STD_SIMPLEX:
+		case AX25_PROTO_STD_DUPLEX:
+			ax25_std_t1timer_expiry(ax25);
+			break;
+
+#ifdef CONFIG_AX25_DAMA_SLAVE
+		case AX25_PROTO_DAMA_SLAVE:
+			if (!ax25->ax25_dev->dama.slave)
+				ax25_std_t1timer_expiry(ax25);
+			break;
+#endif
+	}
+}
+
+static void ax25_t2timer_expiry(unsigned long param)
+{
+	ax25_cb *ax25 = (ax25_cb *)param;
+
+	switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
+		case AX25_PROTO_STD_SIMPLEX:
+		case AX25_PROTO_STD_DUPLEX:
+			ax25_std_t2timer_expiry(ax25);
+			break;
+
+#ifdef CONFIG_AX25_DAMA_SLAVE
+		case AX25_PROTO_DAMA_SLAVE:
+			if (!ax25->ax25_dev->dama.slave)
+				ax25_std_t2timer_expiry(ax25);
+			break;
+#endif
+	}
+}
+
+static void ax25_t3timer_expiry(unsigned long param)
+{
+	ax25_cb *ax25 = (ax25_cb *)param;
+
+	switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
+		case AX25_PROTO_STD_SIMPLEX:
+		case AX25_PROTO_STD_DUPLEX:
+			ax25_std_t3timer_expiry(ax25);
+			break;
+
+#ifdef CONFIG_AX25_DAMA_SLAVE
+		case AX25_PROTO_DAMA_SLAVE:
+			if (ax25->ax25_dev->dama.slave)
+				ax25_ds_t3timer_expiry(ax25);
+			else
+				ax25_std_t3timer_expiry(ax25);
+			break;
+#endif
+	}
+}
+
+static void ax25_idletimer_expiry(unsigned long param)
+{
+	ax25_cb *ax25 = (ax25_cb *)param;
+
+	switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
+		case AX25_PROTO_STD_SIMPLEX:
+		case AX25_PROTO_STD_DUPLEX:
+			ax25_std_idletimer_expiry(ax25);
+			break;
+
+#ifdef CONFIG_AX25_DAMA_SLAVE
+		case AX25_PROTO_DAMA_SLAVE:
+			if (ax25->ax25_dev->dama.slave)
+				ax25_ds_idletimer_expiry(ax25);
+			else
+				ax25_std_idletimer_expiry(ax25);
 			break;
 #endif
 	}

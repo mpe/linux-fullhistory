@@ -137,6 +137,7 @@ static int openprom_sunos_ioctl(struct inode * inode, struct file * file,
 	struct openpromio *opp;
 	unsigned long flags;
 	int bufsize, len, error = 0;
+	extern char saved_command_line[];
 
 	if (cmd == OPROMSETOPT)
 		bufsize = getstrings((void *)arg, &opp);
@@ -172,7 +173,7 @@ static int openprom_sunos_ioctl(struct inode * inode, struct file * file,
 	case OPROMNXTOPT:
 	case OPROMNXTPROP:
 		save_and_cli(flags);
-		buf = prom_nextprop(node, opp->oprom_array);
+		buf = prom_nextprop(node, opp->oprom_array, buffer);
 		restore_flags(flags);
 
 		len = strlen(buf);
@@ -229,9 +230,7 @@ static int openprom_sunos_ioctl(struct inode * inode, struct file * file,
 		break;
 
 	case OPROMGETBOOTARGS:
-		save_and_cli(flags);
-		buf = prom_getbootargs();
-		restore_flags(flags);
+		buf = saved_command_line;
 
 		len = strlen(buf);
 
@@ -315,6 +314,7 @@ static int openprom_bsd_ioctl(struct inode * inode, struct file * file,
 	unsigned long flags;
 	int error, node, len;
 	char *str, *tmp;
+	char buffer[64];
 
 	switch (cmd) {
 	case OPIOCGET:
@@ -378,7 +378,7 @@ static int openprom_bsd_ioctl(struct inode * inode, struct file * file,
 			return error;
 
 		save_and_cli(flags);
-		tmp = prom_nextprop(op.op_nodeid,str);
+		tmp = prom_nextprop(op.op_nodeid,str,buffer);
 		restore_flags(flags);
 
 		if (tmp) {

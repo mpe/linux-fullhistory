@@ -42,16 +42,15 @@ struct nfs_dirent {
 static int nfs_dir_open(struct inode * inode, struct file * file);
 static long nfs_dir_read(struct inode *, struct file *, char *, unsigned long);
 static int nfs_readdir(struct inode *, struct file *, void *, filldir_t);
-static int nfs_lookup(struct inode *, const char *, int, struct inode **);
-static int nfs_create(struct inode *, const char *, int, int, struct inode **);
-static int nfs_mkdir(struct inode *, const char *, int, int);
-static int nfs_rmdir(struct inode *, const char *, int);
-static int nfs_unlink(struct inode *, const char *, int);
-static int nfs_symlink(struct inode *, const char *, int, const char *);
-static int nfs_link(struct inode *, struct inode *, const char *, int);
-static int nfs_mknod(struct inode *, const char *, int, int, int);
-static int nfs_rename(struct inode *, const char *, int,
-		      struct inode *, const char *, int);
+static int nfs_lookup(struct inode *, struct qstr *, struct inode **);
+static int nfs_create(struct inode *, struct dentry *, int);
+static int nfs_mkdir(struct inode *, struct dentry *, int);
+static int nfs_rmdir(struct inode *, struct dentry *);
+static int nfs_unlink(struct inode *, struct dentry *);
+static int nfs_symlink(struct inode *, struct dentry *, const char *);
+static int nfs_link(struct inode *, struct inode *, struct dentry *);
+static int nfs_mknod(struct inode *, struct dentry *, int, int);
+static int nfs_rename(struct inode *, struct dentry *, struct inode *, struct dentry *);
 
 static struct file_operations nfs_dir_operations = {
 	NULL,			/* lseek - default */
@@ -78,6 +77,7 @@ struct inode_operations nfs_dir_inode_operations = {
 	nfs_mknod,		/* mknod */
 	nfs_rename,		/* rename */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -328,488 +328,268 @@ nfs_free_dircache(void)
 }
  
 
-/*
- * Lookup caching is a big win for performance but this is just
- * a trial to see how well it works on a small scale.
- * For example, bash does a lookup on ".." 13 times for each path
- * element when running pwd.  Yes, hard to believe but true.
- * Try pwd in a filesystem mounted with noac.
- *
- * It trades a little cpu time and memory for a lot of network bandwidth.
- * Since the cache is not hashed yet, it is a good idea not to make it too
- * large because every lookup looks through the entire cache even
- * though most of them will fail.
- *
- * FIXME: The lookup cache should also cache failed lookups. This can
- * be a considerable win on diskless clients.
- */
-
-static struct nfs_lookup_cache_entry {
-	kdev_t		dev;
-	ino_t		inode;
-	char		filename[NFS_MAXNAMLEN + 1];
-	struct nfs_fh	fhandle;
-	struct nfs_fattr fattr;
-	unsigned long	expiration_date;
-} nfs_lookup_cache[NFS_LOOKUP_CACHE_SIZE];
-
-static struct nfs_lookup_cache_entry *nfs_lookup_cache_index(struct inode *dir,
-							     const char *filename)
-{
-	struct nfs_lookup_cache_entry *entry;
-	int i;
-
-	for (i = 0; i < NFS_LOOKUP_CACHE_SIZE; i++) {
-		entry = nfs_lookup_cache + i;
-		if (entry->dev == dir->i_dev
-		    && entry->inode == dir->i_ino
-		    && !strncmp(filename, entry->filename, NFS_MAXNAMLEN))
-			return entry;
-	}
-	return NULL;
-}
-
-static int nfs_lookup_cache_lookup(struct inode *dir, const char *filename,
-				   struct nfs_fh *fhandle,
-				   struct nfs_fattr *fattr)
-{
-	static int nfs_lookup_cache_in_use = 0;
-
-	struct nfs_lookup_cache_entry *entry;
-
-	dfprintk(LOOKUPCACHE, "NFS: lookup_cache_lookup(%x/%ld, %s)\n",
-				dir->i_dev, dir->i_ino, filename);
-	if (!nfs_lookup_cache_in_use) {
-		memset(nfs_lookup_cache, 0, sizeof(nfs_lookup_cache));
-		nfs_lookup_cache_in_use = 1;
-	}
-	if ((entry = nfs_lookup_cache_index(dir, filename))) {
-		if (jiffies > entry->expiration_date) {
-			entry->dev = 0;
-			return 0;
-		}
-		*fhandle = entry->fhandle;
-		*fattr = entry->fattr;
-		return 1;
-	}
-	return 0;
-}
-
-static void nfs_lookup_cache_add(struct inode *dir, const char *filename,
-				 struct nfs_fh *fhandle,
-				 struct nfs_fattr *fattr)
-{
-	static int nfs_lookup_cache_pos = 0;
-	struct nfs_lookup_cache_entry *entry;
-
-	dfprintk(LOOKUPCACHE, "NFS: lookup_cache_add(%x/%ld, %s\n",
-				dir->i_dev, dir->i_ino, filename);
-
-	/* compensate for bug in SGI NFS server */
-	if (fattr->size == -1 || fattr->uid == -1 || fattr->gid == -1
-	    || fattr->atime.seconds == -1 || fattr->mtime.seconds == -1)
-		return;
-	if (!(entry = nfs_lookup_cache_index(dir, filename))) {
-		entry = nfs_lookup_cache + nfs_lookup_cache_pos++;
-		if (nfs_lookup_cache_pos == NFS_LOOKUP_CACHE_SIZE)
-			nfs_lookup_cache_pos = 0;
-	}
-
-	entry->dev = dir->i_dev;
-	entry->inode = dir->i_ino;
-	strcpy(entry->filename, filename);
-	entry->fhandle = *fhandle;
-	entry->fattr = *fattr;
-	entry->expiration_date = jiffies + (S_ISDIR(fattr->mode)
-		? NFS_SERVER(dir)->acdirmin : NFS_SERVER(dir)->acregmin);
-}
-
-static void nfs_lookup_cache_remove(struct inode *dir, struct inode *inode,
-				    const char *filename)
-{
-	struct nfs_lookup_cache_entry *entry;
-	kdev_t	dev;
-	ino_t	fileid;
-	int	i;
-
-	if (inode) {
-		dev = inode->i_dev;
-		fileid = inode->i_ino;
-	}
-	else if ((entry = nfs_lookup_cache_index(dir, filename))) {
-		dev = entry->dev;
-		fileid = entry->fattr.fileid;
-	}
-	else
-		return;
-
-	dfprintk(LOOKUPCACHE, "NFS: lookup_cache_remove(%x/%ld)\n",
-				dev, (long)fileid);
-
-	for (i = 0; i < NFS_LOOKUP_CACHE_SIZE; i++) {
-		entry = nfs_lookup_cache + i;
-		if (entry->dev == dev && entry->fattr.fileid == fileid)
-			entry->dev = 0;
-	}
-}
-
-static void nfs_lookup_cache_refresh(struct inode *file,
-				     struct nfs_fattr *fattr)
-{
-	struct nfs_lookup_cache_entry *entry;
-	kdev_t dev = file->i_dev;
-	int fileid = file->i_ino;
-	int i;
-
-	for (i = 0; i < NFS_LOOKUP_CACHE_SIZE; i++) {
-		entry = nfs_lookup_cache + i;
-		if (entry->dev == dev && entry->fattr.fileid == fileid)
-			entry->fattr = *fattr;
-	}
-}
-
-static int nfs_lookup(struct inode *dir, const char *__name, int len,
+static int nfs_lookup(struct inode *dir, struct qstr * __name,
 		      struct inode **result)
 {
 	struct nfs_fh fhandle;
 	struct nfs_fattr fattr;
+	int len = __name->len;
 	char name[len > NFS_MAXNAMLEN? 1 : len+1];
 	int error;
 
 	dfprintk(VFS, "NFS: lookup(%x/%ld, %.*s)\n",
-				dir->i_dev, dir->i_ino, len, __name);
+				dir->i_dev, dir->i_ino, len, __name->name);
 
 	*result = NULL;
 	if (!dir || !S_ISDIR(dir->i_mode)) {
 		printk("nfs_lookup: inode is NULL or not a directory\n");
-		iput(dir);
 		return -ENOENT;
 	}
-	if (len > NFS_MAXNAMLEN) {
-		iput(dir);
+
+	if (len > NFS_MAXNAMLEN)
 		return -ENAMETOOLONG;
-	}
-	memcpy(name,__name,len);
+
+	memcpy(name,__name->name,len);
 	name[len] = '\0';
-	if (len == 0 || (len == 1 && name[0] == '.')) { /* cheat for "" and "." */
-		*result = dir;
-		return 0;
-	}
-	if ((NFS_SERVER(dir)->flags & NFS_MOUNT_NOAC)
-	    || !nfs_lookup_cache_lookup(dir, name, &fhandle, &fattr)) {
-		if ((error = nfs_proc_lookup(NFS_SERVER(dir), NFS_FH(dir),
-		    name, &fhandle, &fattr))) {
-			iput(dir);
-			return error;
-		}
-		nfs_lookup_cache_add(dir, name, &fhandle, &fattr);
-	}
-	if (!(*result = nfs_fhget(dir->i_sb, &fhandle, &fattr))) {
-		iput(dir);
+
+	error = nfs_proc_lookup(NFS_SERVER(dir), NFS_FH(dir),
+		name, &fhandle, &fattr);
+	if (error)
+		return error;
+
+	if (!(*result = nfs_fhget(dir->i_sb, &fhandle, &fattr)))
 		return -EACCES;
-	}
-	iput(dir);
+
 	return 0;
 }
 
-static int nfs_create(struct inode *dir, const char *name, int len, int mode,
-		      struct inode **result)
+static int nfs_create(struct inode *dir, struct dentry * dentry, int mode)
 {
 	struct nfs_sattr sattr;
 	struct nfs_fattr fattr;
 	struct nfs_fh fhandle;
+	struct inode *inode;
 	int error;
 
 	dfprintk(VFS, "NFS: create(%x/%ld, %s\n",
-				dir->i_dev, dir->i_ino, name);
+				dir->i_dev, dir->i_ino, dentry->d_name.name);
 
-	*result = NULL;
 	if (!dir || !S_ISDIR(dir->i_mode)) {
 		printk("nfs_create: inode is NULL or not a directory\n");
-		iput(dir);
 		return -ENOENT;
 	}
-	if (len > NFS_MAXNAMLEN) {
-		iput(dir);
+
+	if (dentry->d_name.len > NFS_MAXNAMLEN)
 		return -ENAMETOOLONG;
-	}
+
 	sattr.mode = mode;
 	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
 	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
-	if ((error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dir),
-		name, &sattr, &fhandle, &fattr))) {
-		iput(dir);
+	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dir),
+		dentry->d_name.name, &sattr, &fhandle, &fattr);
+
+	if (error)
 		return error;
-	}
-	if (!(*result = nfs_fhget(dir->i_sb, &fhandle, &fattr))) {
-		iput(dir);
+
+	inode = nfs_fhget(dir->i_sb, &fhandle, &fattr);
+	if (!inode)
 		return -EACCES;
-	}
-	nfs_lookup_cache_add(dir, name, &fhandle, &fattr);
-	nfs_invalidate_dircache(dir);
-	iput(dir);
+
+	d_instantiate(dentry, inode, 0);
 	return 0;
 }
 
-static int nfs_mknod(struct inode *dir, const char *name, int len,
-		     int mode, int rdev)
+static int nfs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rdev)
 {
 	struct nfs_sattr sattr;
 	struct nfs_fattr fattr;
 	struct nfs_fh fhandle;
+	struct inode *inode;
 	int error;
 
 	dfprintk(VFS, "NFS: mknod(%x/%ld, %s\n",
-				dir->i_dev, dir->i_ino, name);
+				dir->i_dev, dir->i_ino, dentry->d_name.name);
 
 	if (!dir || !S_ISDIR(dir->i_mode)) {
 		printk("nfs_mknod: inode is NULL or not a directory\n");
-		iput(dir);
 		return -ENOENT;
 	}
-	if (len > NFS_MAXNAMLEN) {
-		iput(dir);
+
+	if (dentry->d_name.len > NFS_MAXNAMLEN)
 		return -ENAMETOOLONG;
-	}
+
 	sattr.mode = mode;
-	sattr.uid = sattr.gid = (unsigned) -1;
+	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
 	if (S_ISCHR(mode) || S_ISBLK(mode))
 		sattr.size = rdev; /* get out your barf bag */
-	else
-		sattr.size = (unsigned) -1;
+
 	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
 	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dir),
-		name, &sattr, &fhandle, &fattr);
-	if (!error)
-		nfs_lookup_cache_add(dir, name, &fhandle, &fattr);
-	nfs_invalidate_dircache(dir);
-	iput(dir);
-	return error;
+		dentry->d_name.name, &sattr, &fhandle, &fattr);
+
+	if (error)
+		return error;
+
+	inode = nfs_fhget(dir->i_sb, &fhandle, &fattr);
+	if (!inode)
+		return -EACCES;
+
+	d_instantiate(dentry, inode, 0);
+	return 0;
 }
 
-static int nfs_mkdir(struct inode *dir, const char *name, int len, int mode)
+static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
 	struct nfs_sattr sattr;
 	struct nfs_fattr fattr;
 	struct nfs_fh fhandle;
+	struct inode * inode;
 	int error;
 
 	dfprintk(VFS, "NFS: mkdir(%x/%ld, %s\n",
-				dir->i_dev, dir->i_ino, name);
+				dir->i_dev, dir->i_ino, dentry->d_name.name);
 
 	if (!dir || !S_ISDIR(dir->i_mode)) {
 		printk("nfs_mkdir: inode is NULL or not a directory\n");
-		iput(dir);
 		return -ENOENT;
 	}
-	if (len > NFS_MAXNAMLEN) {
-		iput(dir);
+
+	if (dentry->d_name.len > NFS_MAXNAMLEN)
 		return -ENAMETOOLONG;
-	}
+
 	sattr.mode = mode;
 	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
 	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
+
 	error = nfs_proc_mkdir(NFS_SERVER(dir), NFS_FH(dir),
-		name, &sattr, &fhandle, &fattr);
-	if (!error)
-		nfs_lookup_cache_add(dir, name, &fhandle, &fattr);
-	nfs_invalidate_dircache(dir);
-	iput(dir);
-	return error;
+		dentry->d_name.name, &sattr, &fhandle, &fattr);
+
+	if (error)
+		return error;
+
+	inode = nfs_fhget(dir->i_sb, &fhandle, &fattr);
+	if (!inode)
+		return -EACCES;
+
+	d_instantiate(dentry, inode, D_DIR);
+	return 0;
 }
 
-static int nfs_rmdir(struct inode *dir, const char *name, int len)
+static int nfs_rmdir(struct inode *dir, struct dentry *dentry)
 {
 	int error;
 
 	dfprintk(VFS, "NFS: rmdir(%x/%ld, %s\n",
-				dir->i_dev, dir->i_ino, name);
+				dir->i_dev, dir->i_ino, dentry->d_name.name);
 
 	if (!dir || !S_ISDIR(dir->i_mode)) {
 		printk("nfs_rmdir: inode is NULL or not a directory\n");
-		iput(dir);
 		return -ENOENT;
 	}
-	if (len > NFS_MAXNAMLEN) {
-		iput(dir);
+
+	if (dentry->d_name.len > NFS_MAXNAMLEN)
 		return -ENAMETOOLONG;
-	}
-	error = nfs_proc_rmdir(NFS_SERVER(dir), NFS_FH(dir), name);
-	if (!error)
-		nfs_lookup_cache_remove(dir, NULL, name);
-	nfs_invalidate_dircache(dir);
-	iput(dir);
-	return error;
-}
 
-static int nfs_sillyrename(struct inode *dir, const char *name, int len)
-{
-	struct inode	*inode;
-	char		silly[16];
-	int		slen, ret;
+	error = nfs_proc_rmdir(NFS_SERVER(dir), NFS_FH(dir), dentry->d_name.name);
+	if (error)
+		return error;
 
-	atomic_inc(&dir->i_count);
-	if (nfs_lookup(dir, name, len, &inode) < 0)
-		return -EIO;		/* arbitrary */
-
-	if (atomic_read(&inode->i_count) == 1) {
-		iput(inode);
-		return -EIO;
-	}
-	if (NFS_RENAMED_DIR(inode)) {
-		iput(NFS_RENAMED_DIR(inode));
-		NFS_RENAMED_DIR(inode) = NULL;
-		iput(inode);
-		return -EIO;
-	}
-
-	slen = sprintf(silly, ".nfs%ld", inode->i_ino);
-	if (len == slen && !strncmp(name, silly, len)) {
-		iput(inode);
-		return -EIO;		/* DWIM */
-	}
-
-	dfprintk(VFS, "NFS: sillyrename(%x/%ld, %s)\n",
-				dir->i_dev, dir->i_ino, name);
-
-	ret = nfs_proc_rename(NFS_SERVER(dir), NFS_FH(dir), name,
-					       NFS_FH(dir), silly);
-	if (ret >= 0) {
-		nfs_lookup_cache_remove(dir, NULL, name);
-		nfs_lookup_cache_remove(dir, NULL, silly);
-		NFS_RENAMED_DIR(inode) = dir;
-		atomic_inc(&dir->i_count);
-	}
-	nfs_invalidate_dircache(dir);
-	iput(inode);
-	return ret;
+	d_delete(dentry);
+	return 0;
 }
 
 /*
- * When releasing the inode, finally remove any unlinked but open files.
- * Note that we have to clear the set of pending signals temporarily;
- * otherwise the RPC call will fail.
+ * We should do silly-rename here, but I'm too lazy to fix
+ * up the directory entry implications of it..
  */
-void nfs_sillyrename_cleanup(struct inode *inode)
-{
-	unsigned long	oldsig;
-	struct inode	*dir = NFS_RENAMED_DIR(inode);
-	char		silly[14];
-	int		error, slen;
-
-	dfprintk(VFS, "NFS: sillyrename cleanup(%x/%ld)\n",
-				inode->i_dev, inode->i_ino);
-
-	oldsig = current->signal;
-	current->signal = 0;
-
-	slen = sprintf(silly, ".nfs%ld", inode->i_ino);
-	error = nfs_proc_remove(NFS_SERVER(dir), NFS_FH(dir), silly);
-	if (error < 0)
-		printk("NFS: silly_rename cleanup failed (err %d)\n", -error);
-
-	nfs_lookup_cache_remove(dir, NULL, silly);
-	nfs_invalidate_dircache(dir);
-	NFS_RENAMED_DIR(inode) = NULL;
-	iput(dir);
-
-	current->signal |= oldsig;
-}
-
-static int nfs_unlink(struct inode *dir, const char *name, int len)
+static int nfs_unlink(struct inode *dir, struct dentry *dentry)
 {
 	int error;
 
 	dfprintk(VFS, "NFS: unlink(%x/%ld, %s)\n",
-				dir->i_dev, dir->i_ino, name);
+				dir->i_dev, dir->i_ino, dentry->d_name.name);
 
 	if (!dir || !S_ISDIR(dir->i_mode)) {
 		printk("nfs_unlink: inode is NULL or not a directory\n");
-		iput(dir);
 		return -ENOENT;
 	}
-	if (len > NFS_MAXNAMLEN) {
-		iput(dir);
+
+	if (dentry->d_name.len > NFS_MAXNAMLEN)
 		return -ENAMETOOLONG;
-	}
-	if ((error = nfs_sillyrename(dir, name, len)) < 0) {
-		error = nfs_proc_remove(NFS_SERVER(dir), NFS_FH(dir), name);
-		if (!error)
-			nfs_lookup_cache_remove(dir, NULL, name);
-	}
-	nfs_invalidate_dircache(dir);
-	iput(dir);
-	return error;
+
+	error = nfs_proc_remove(NFS_SERVER(dir), NFS_FH(dir), dentry->d_name.name);
+	if (error)
+		return error;
+
+	d_delete(dentry);
+	return 0;
 }
 
-static int nfs_symlink(struct inode *dir, const char *name, int len,
-		       const char *symname)
+static int nfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 {
 	struct nfs_sattr sattr;
+	struct nfs_fattr fattr;
+	struct nfs_fh fhandle;
+	struct inode * inode;
 	int error;
 
 	dfprintk(VFS, "NFS: symlink(%x/%ld, %s, %s)\n",
-				dir->i_dev, dir->i_ino, name, symname);
+				dir->i_dev, dir->i_ino, dentry->d_name.name, symname);
 
 	if (!dir || !S_ISDIR(dir->i_mode)) {
 		printk("nfs_symlink: inode is NULL or not a directory\n");
-		iput(dir);
 		return -ENOENT;
 	}
-	if (len > NFS_MAXNAMLEN) {
-		iput(dir);
+
+	if (dentry->d_name.len > NFS_MAXNAMLEN)
 		return -ENAMETOOLONG;
-	}
-	if (strlen(symname) > NFS_MAXPATHLEN) {
-		iput(dir);
+
+	if (strlen(symname) > NFS_MAXPATHLEN)
 		return -ENAMETOOLONG;
-	}
+
 	sattr.mode = S_IFLNK | S_IRWXUGO; /* SunOS 4.1.2 crashes without this! */
 	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
 	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
+
 	error = nfs_proc_symlink(NFS_SERVER(dir), NFS_FH(dir),
-		name, symname, &sattr);
-	nfs_invalidate_dircache(dir);
-	iput(dir);
-	return error;
+		dentry->d_name.name, symname, &sattr);
+
+	if (error)
+		return error;
+
+	inode = nfs_fhget(dir->i_sb, &fhandle, &fattr);
+	if (!inode)
+		return -EACCES;
+
+	d_instantiate(dentry, inode, 0);
+	return 0;
 }
 
-static int nfs_link(struct inode *oldinode, struct inode *dir,
-		    const char *name, int len)
+static int nfs_link(struct inode *inode, struct inode *dir, struct dentry *dentry)
 {
 	int error;
 
 	dfprintk(VFS, "NFS: link(%x/%ld -> %x/%ld, %s)\n",
-				oldinode->i_dev, oldinode->i_ino,
-				dir->i_dev, dir->i_ino, name);
+				inode->i_dev, inode->i_ino,
+				dir->i_dev, dir->i_ino, dentry->d_name.name);
 
-	if (!oldinode) {
-		printk("nfs_link: old inode is NULL\n");
-		iput(oldinode);
-		iput(dir);
-		return -ENOENT;
-	}
 	if (!dir || !S_ISDIR(dir->i_mode)) {
 		printk("nfs_link: dir is NULL or not a directory\n");
-		iput(oldinode);
-		iput(dir);
 		return -ENOENT;
 	}
-	if (len > NFS_MAXNAMLEN) {
-		iput(oldinode);
-		iput(dir);
+
+	if (dentry->d_name.len > NFS_MAXNAMLEN)
 		return -ENAMETOOLONG;
-	}
-	error = nfs_proc_link(NFS_SERVER(oldinode), NFS_FH(oldinode),
-		NFS_FH(dir), name);
-	if (!error) {
-		nfs_lookup_cache_remove(dir, oldinode, NULL);
-		NFS_READTIME(oldinode) = 0;	/* force getattr */
-	}
-	nfs_invalidate_dircache(dir);
-	iput(oldinode);
-	iput(dir);
-	return error;
+
+	error = nfs_proc_link(NFS_SERVER(inode), NFS_FH(inode),
+		NFS_FH(dir), dentry->d_name.name);
+
+	if (error)
+		return error;
+
+	atomic_inc(&inode->i_count);
+	d_instantiate(dentry, inode, 0);
+	return 0;
 }
 
 /*
@@ -821,45 +601,39 @@ static int nfs_link(struct inode *oldinode, struct inode *dir,
  * rename the old file using the silly_rename stuff. This way, the original
  * file in old_dir will go away when the last process iput()s the inode.
  */
-static int nfs_rename(struct inode *old_dir, const char *old_name, int old_len,
-		      struct inode *new_dir, const char *new_name, int new_len)
+static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
+		      struct inode *new_dir, struct dentry *new_dentry)
 {
 	int error;
 
 	dfprintk(VFS, "NFS: rename(%x/%ld, %s -> %x/%ld, %s)\n",
-				old_dir->i_dev, old_dir->i_ino, old_name,
-				new_dir->i_dev, new_dir->i_ino, new_name);
+				old_dir->i_dev, old_dir->i_ino, old_dentry->d_name.name,
+				new_dir->i_dev, new_dir->i_ino, new_dentry->d_name.name);
 
 	if (!old_dir || !S_ISDIR(old_dir->i_mode)) {
 		printk("nfs_rename: old inode is NULL or not a directory\n");
-		iput(old_dir);
-		iput(new_dir);
 		return -ENOENT;
-	}
-	if (!new_dir || !S_ISDIR(new_dir->i_mode)) {
-		printk("nfs_rename: new inode is NULL or not a directory\n");
-		iput(old_dir);
-		iput(new_dir);
-		return -ENOENT;
-	}
-	if (old_len > NFS_MAXNAMLEN || new_len > NFS_MAXNAMLEN) {
-		iput(old_dir);
-		iput(new_dir);
-		return -ENAMETOOLONG;
 	}
 
-	error = nfs_proc_rename(NFS_SERVER(old_dir),
-		NFS_FH(old_dir), old_name,
-		NFS_FH(new_dir), new_name);
-	if (!error) {
-		nfs_lookup_cache_remove(old_dir, NULL, old_name);
-		nfs_lookup_cache_remove(new_dir, NULL, new_name);
+	if (!new_dir || !S_ISDIR(new_dir->i_mode)) {
+		printk("nfs_rename: new inode is NULL or not a directory\n");
+		return -ENOENT;
 	}
-	nfs_invalidate_dircache(old_dir);
-	nfs_invalidate_dircache(new_dir);
-	iput(old_dir);
-	iput(new_dir);
-	return error;
+
+	if (old_dentry->d_name.len > NFS_MAXNAMLEN || new_dentry->d_name.len > NFS_MAXNAMLEN)
+		return -ENAMETOOLONG;
+
+	error = nfs_proc_rename(NFS_SERVER(old_dir),
+		NFS_FH(old_dir), old_dentry->d_name.name,
+		NFS_FH(new_dir), new_dentry->d_name.name);
+
+	if (error)
+		return error;
+
+	/* Update the dcache */
+	d_move(old_dentry, new_dentry->d_parent, &new_dentry->d_name);
+	d_delete(new_dentry);
+	return 0;
 }
 
 /*
@@ -925,6 +699,4 @@ void nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 			init_fifo(inode);
 	} else
 		inode->i_op = NULL;
-	nfs_lookup_cache_refresh(inode, fattr);
 }
-

@@ -163,7 +163,8 @@ struct super_block *autofs_read_super(struct super_block *s, void *data,
         s->s_magic = AUTOFS_SUPER_MAGIC;
         s->s_op = &autofs_sops;
         unlock_super(s);
-        if (!(s->s_mounted = iget(s, AUTOFS_ROOT_INO))) {
+        s->s_root = d_alloc_root(iget(s, AUTOFS_ROOT_INO), NULL);
+        if (!s->s_root) {
                 s->s_dev = 0;
 		kfree(sbi);
                 printk("autofs: get root inode failed\n");
@@ -171,8 +172,8 @@ struct super_block *autofs_read_super(struct super_block *s, void *data,
                 return NULL;
         }
 
-        if ( parse_options(data,&pipefd,&s->s_mounted->i_uid,&s->s_mounted->i_gid,&sbi->oz_pgrp,&minproto,&maxproto) ) {
-		iput(s->s_mounted);
+        if ( parse_options(data,&pipefd,&s->s_root->d_inode->i_uid,&s->s_root->d_inode->i_gid,&sbi->oz_pgrp,&minproto,&maxproto) ) {
+        	d_delete(s->s_root);
                 s->s_dev = 0;
 		kfree(sbi);
                 printk("autofs: called with bogus options\n");
@@ -181,7 +182,7 @@ struct super_block *autofs_read_super(struct super_block *s, void *data,
         }
 
 	if ( minproto > AUTOFS_PROTO_VERSION || maxproto < AUTOFS_PROTO_VERSION ) {
-		iput(s->s_mounted);
+		d_delete(s->s_root);
 		s->s_dev = 0;
 		kfree(sbi);
 		printk("autofs: kernel does not match daemon version\n");
@@ -198,7 +199,7 @@ struct super_block *autofs_read_super(struct super_block *s, void *data,
 		} else {
 			printk("autofs: could not open pipe file descriptor\n");
 		}
-		iput(s->s_mounted);
+		d_delete(s->s_root);
 		s->s_dev = 0;
 		kfree(sbi);
 		MOD_DEC_USE_COUNT;
@@ -244,8 +245,8 @@ static void autofs_read_inode(struct inode *inode)
                 return;
         } 
 	
-        inode->i_uid = inode->i_sb->s_mounted->i_uid;
-        inode->i_gid = inode->i_sb->s_mounted->i_gid;
+        inode->i_uid = inode->i_sb->s_root->d_inode->i_uid;
+        inode->i_gid = inode->i_sb->s_root->d_inode->i_gid;
         
 	if ( ino >= AUTOFS_FIRST_SYMLINK && ino < AUTOFS_FIRST_DIR_INO ) {
 		/* Symlink inode - should be in symlink list */

@@ -103,6 +103,7 @@ struct inode_operations proc_sys_inode_operations =
 	NULL,		/* mknod */
 	NULL,		/* rename */
 	NULL,		/* readlink */
+	NULL,		/* follow_link */
 	NULL,		/* readpage */
 	NULL,		/* writepage */
 	NULL,		/* bmap */

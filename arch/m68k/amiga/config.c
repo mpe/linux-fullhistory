@@ -85,6 +85,7 @@ static void amiga_serial_console_write(const char *s, unsigned int count);
 static void amiga_debug_init(void);
 
 extern void amiga_video_setup(char *, int *);
+extern void amiga_init_sound(void);
 
 static struct console amiga_console_driver = {
     NULL, NULL, amiga_wait_key
@@ -799,14 +800,18 @@ void amiga_serial_gets(char *s, int len)
 
 __initfunc(static void amiga_debug_init(void))
 {
-    if (!strcmp( m68k_debug_device, "ser" )) {
-        /* no initialization required (?) */
-	amiga_console_driver.write = amiga_serial_console_write;
-    } else if (!strcmp( m68k_debug_device, "mem" )) {
-	amiga_savekmsg_init();
-	amiga_console_driver.write = amiga_mem_console_write;
-    }
-    register_console(&amiga_console_driver);
+	if (!strcmp( m68k_debug_device, "ser" )) {
+		/* no initialization required (?) */
+		amiga_console_driver.write = amiga_serial_console_write;
+	} else if (!strcmp( m68k_debug_device, "mem" )) {
+		amiga_savekmsg_init();
+		amiga_console_driver.write = amiga_mem_console_write;
+	}
+	register_console(&amiga_console_driver);
+
+	/* our beloved beeper */
+	if (AMIGAHW_PRESENT(AMI_AUDIO))
+		amiga_init_sound();
 }
 
 

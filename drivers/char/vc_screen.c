@@ -237,6 +237,11 @@ vcs_write(struct inode *inode, struct file *file, const char *buf, unsigned long
 			func_scr_writew((func_scr_readw(org) & 0xff00) | c, org);
 		}
 	}
+#ifdef CONFIG_FB_CONSOLE
+	if (currcons == fg_console)
+		/* Horribly inefficient if count < screen size.  */
+		update_screen(currcons);
+#endif
 	written = buf - buf0;
 	file->f_pos += written;
 	RETURN( written );

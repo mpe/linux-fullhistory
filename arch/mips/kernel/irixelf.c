@@ -465,7 +465,7 @@ static inline int look_for_irix_interpreter(char **name,
 			goto losing;
 
 		old_fs = get_fs(); set_fs(get_ds());
-		retval = namei(*name, interpreter_inode);
+		retval = namei(NAM_FOLLOW_LINK, *name, interpreter_inode);
 		set_fs(old_fs);
 		if(retval < 0)
 			goto losing;
@@ -973,6 +973,7 @@ unsigned long irix_mapelf(int fd, struct elf_phdr *user_phdrp, int cnt)
  */
 static int dump_write(struct file *file, const void *addr, int nr)
 {
+	file->f_inode->i_status |= ST_MODIFIED;
 	return file->f_op->write(file->f_inode, file, addr, nr) == nr;
 }
 

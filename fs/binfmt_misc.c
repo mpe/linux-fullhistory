@@ -7,9 +7,11 @@
  *  a specified wrapper. This should obsolete binfmt_java, binfmt_em86 and
  *  binfmt_mz.
  *
- *  25.4.97 first version
- *    [...]
- *  19.5.97 cleanup
+ *  1997-04-25 first version
+ *  [...]
+ *  1997-05-19 cleanup
+ *  1997-06-26 hpa: pass the real filename rather than argv[0]
+ *  1997-06-30 minor cleanup
  */
 
 #include <linux/module.h>
@@ -85,7 +87,6 @@ static void clear_entry(int id)
 		*ep = e->next;
 		entry_proc_cleanup(e);
 		kfree(e);
-		MOD_DEC_USE_COUNT;
 	}
 	write_unlock(&entries_lock);
 }
@@ -102,7 +103,6 @@ static void clear_entries(void)
 		entries = entries->next;
 		entry_proc_cleanup(e);
 		kfree(e);
-		MOD_DEC_USE_COUNT;
 	}
 	write_unlock(&entries_lock);
 }
@@ -161,7 +161,6 @@ static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 	char *iname_addr = iname, *p;
 	int retval, fmt_flags = 0;
 
-	MOD_INC_USE_COUNT;
 	if (!enabled) {
 		retval = -ENOEXEC;
 		goto _ret;
@@ -185,12 +184,11 @@ static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 
 	/* Build args for interpreter */
 	if ((fmt_flags & ENTRY_STRIP_EXT) &&
-	    (p = strrchr(bprm->filename, '.'))) {
+	    (p = strrchr(bprm->filename, '.')))
 		*p = '\0';
-		remove_arg_zero(bprm);
-		bprm->p = copy_strings(1, &bprm->filename, bprm->page, bprm->p, 2);
-		bprm->argc++;
-	}
+	remove_arg_zero(bprm);
+	bprm->p = copy_strings(1, &bprm->filename, bprm->page, bprm->p, 2);
+	bprm->argc++;
 	bprm->p = copy_strings(1, &iname_addr, bprm->page, bprm->p, 2);
 	bprm->argc++;
 	if (!bprm->p) {
@@ -206,7 +204,6 @@ static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 	if ((retval = prepare_binprm(bprm)) >= 0)
 		retval = search_binary_handler(bprm, regs);
 _ret:
-	MOD_DEC_USE_COUNT;
 	return retval;
 }
 
@@ -265,18 +262,13 @@ static int proc_write_register(struct file *file, const char *buffer,
 	struct binfmt_entry *e;
 	int memsize, cnt = count - 1, err = 0;
 
-	MOD_INC_USE_COUNT;
 	/* some sanity checks */
-	if ((count < 11) || (count > 256)) {
-		err = -EINVAL;
-		goto _err;
-	}
+	if ((count < 11) || (count > 256))
+		return -EINVAL;
 
 	memsize = sizeof(struct binfmt_entry) + count;
-	if (!(e = (struct binfmt_entry *) kmalloc(memsize, GFP_USER))) {
-		err = -ENOMEM;
-		goto _err;
-	}
+	if (!(e = (struct binfmt_entry *) kmalloc(memsize, GFP_USER)))
+		return -ENOMEM;
 
 	sp = buffer + 1;
 	del = buffer[0];
@@ -313,8 +305,7 @@ static int proc_write_register(struct file *file, const char *buffer,
 	    !(e->proc_name) || !(e->interpreter) ||
 	    entry_proc_setup(e)) {
 		kfree(e);
-		err = -EINVAL;
-		goto _err;
+		return -EINVAL;
 	}
 
 	write_lock(&entries_lock);
@@ -323,9 +314,6 @@ static int proc_write_register(struct file *file, const char *buffer,
 	write_unlock(&entries_lock);
 
 	return count;
-_err:
-	MOD_DEC_USE_COUNT;
-	return err;
 }
 
 /*
@@ -340,7 +328,6 @@ static int proc_read_status(char *page, char **start, off_t off,
 	char *dp;
 	int elen, i;
 
-	MOD_INC_USE_COUNT;
 #ifndef VERBOSE_STATUS
 	if (data) {
 		read_lock(&entries_lock);
@@ -400,7 +387,6 @@ _out:
 	*eof = (elen <= count) ? 1 : 0;
 	*start = page + off;
 
-	MOD_DEC_USE_COUNT;
 	return elen;
 }
 
@@ -414,7 +400,6 @@ static int proc_write_status(struct file *file, const char *buffer,
 	struct binfmt_entry *e;
 	int res = count;
 
-	MOD_INC_USE_COUNT;
 	if (((buffer[0] == '1') || (buffer[0] == '0')) &&
 	    ((count == 1) || ((count == 2) && (buffer[1] == '\n')))) {
 		if (data) {
@@ -434,7 +419,6 @@ static int proc_write_status(struct file *file, const char *buffer,
 	} else {
 		res = -EINVAL;
 	}
-	MOD_DEC_USE_COUNT;
 	return res;
 }
 
@@ -499,6 +483,7 @@ void cleanup_module(void)
 	unregister_binfmt(&misc_format);
 	remove_proc_entry("register", bm_dir);
 	remove_proc_entry("status", bm_dir);
+	clear_entries();
 	remove_proc_entry("sys/fs/binfmt_misc", NULL);
 }
 #endif

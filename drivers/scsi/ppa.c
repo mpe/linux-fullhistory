@@ -115,6 +115,8 @@
  *                                              [Curtin-1-08-STABLE]
  */
 
+#include <linux/config.h>
+
 /* The following #define is to avoid a clash with hosts.c */
 #define PPA_CODE 1
 #include  "ppa.h"

@@ -1,4 +1,4 @@
-/* $Id: pstate.h,v 1.4 1997/05/29 12:45:02 jj Exp $ */
+/* $Id: pstate.h,v 1.6 1997/06/25 07:39:45 jj Exp $ */
 #ifndef _SPARC64_PSTATE_H
 #define _SPARC64_PSTATE_H
 
@@ -14,6 +14,9 @@
 #define PSTATE_CLE	0x0000000000000200	/* Current Little Endian.	*/
 #define PSTATE_TLE	0x0000000000000100	/* Trap Little Endian.		*/
 #define PSTATE_MM	0x00000000000000c0	/* Memory Model.		*/
+#define PSTATE_TSO	0x0000000000000000	/* MM: Total Store Order	*/
+#define PSTATE_PSO	0x0000000000000040	/* MM: Partial Store Order	*/
+#define PSTATE_RMO	0x0000000000000080	/* MM: Relaxed Memory Order	*/
 #define PSTATE_RED	0x0000000000000020	/* Reset Error Debug State.	*/
 #define PSTATE_PEF	0x0000000000000010	/* Floating Point Enable.	*/
 #define PSTATE_AM	0x0000000000000008	/* Address Mask.		*/
@@ -47,6 +50,9 @@
 #define TSTATE_CLE	0x0000000000020000	/* Current Little Endian.	*/
 #define TSTATE_TLE	0x0000000000010000	/* Trap Little Endian.		*/
 #define TSTATE_MM	0x000000000000c000	/* Memory Model.		*/
+#define TSTATE_TSO	0x0000000000000000	/* MM: Total Store Order	*/
+#define TSTATE_PSO	0x0000000000004000	/* MM: Partial Store Order	*/
+#define TSTATE_RMO	0x0000000000008000	/* MM: Relaxed Memory Order	*/
 #define TSTATE_RED	0x0000000000002000	/* Reset Error Debug State.	*/
 #define TSTATE_PEF	0x0000000000001000	/* Floating Point Enable.	*/
 #define TSTATE_AM	0x0000000000000800	/* Address Mask.		*/

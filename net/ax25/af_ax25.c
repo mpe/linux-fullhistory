@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 036
+ *	AX.25 release 037
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -92,6 +92,7 @@
  *	AX.25 036	Jonathan(G4KLX)		Major restructuring.
  *			Joerg(DL1BKE)		Fixed DAMA Slave.
  *			Jonathan(G4KLX)		Fix widlcard listen parameter setting.
+ *	AX.25 037	Jonathan(G4KLX)		New timer architecture.
  */
 
 #include <linux/config.h>
@@ -161,8 +162,7 @@ static void ax25_remove_socket(ax25_cb *ax25)
 	ax25_cb *s;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_flags(flags); cli();
 
 	if ((s = ax25_list) == ax25) {
 		ax25_list = s->next;
@@ -196,16 +196,8 @@ static void ax25_kill_by_device(struct device *dev)
 
 	for (s = ax25_list; s != NULL; s = s->next) {
 		if (s->ax25_dev == ax25_dev) {
-			s->state    = AX25_STATE_0;
 			s->ax25_dev = NULL;
-			if (s->sk != NULL) {
-				s->sk->state     = TCP_CLOSE;
-				s->sk->err       = ENETUNREACH;
-				s->sk->shutdown |= SEND_SHUTDOWN;
-				if (!s->sk->dead)
-					s->sk->state_change(s->sk);
-				s->sk->dead  = 1;
-			}
+			ax25_disconnect(s, ENETUNREACH);
 		}
 	}
 }
@@ -308,7 +300,7 @@ struct sock *ax25_find_socket(ax25_address *my_addr, ax25_address *dest_addr, in
  *	Find an AX.25 control block given both ends. It will only pick up
  *	floating AX.25 control blocks or non Raw socket bound control blocks.
  */
-ax25_cb *ax25_find_cb(ax25_address *my_addr, ax25_address *dest_addr, ax25_digi *digi, struct device *dev)
+ax25_cb *ax25_find_cb(ax25_address *src_addr, ax25_address *dest_addr, ax25_digi *digi, struct device *dev)
 {
 	ax25_cb *s;
 	unsigned long flags;
@@ -319,11 +311,16 @@ ax25_cb *ax25_find_cb(ax25_address *my_addr, ax25_address *dest_addr, ax25_digi 
 	for (s = ax25_list; s != NULL; s = s->next) {
 		if (s->sk != NULL && s->sk->type != SOCK_SEQPACKET)
 			continue;
-		if (ax25cmp(&s->source_addr, my_addr) == 0 && ax25cmp(&s->dest_addr, dest_addr) == 0 && s->ax25_dev->dev == dev) {
-			if (digi != NULL) {
-				if (s->digipeat == NULL && digi->ndigi != 0)
+		if (s->ax25_dev == NULL)
+			continue;
+		if (ax25cmp(&s->source_addr, src_addr) == 0 && ax25cmp(&s->dest_addr, dest_addr) == 0 && s->ax25_dev->dev == dev) {
+			if (digi != NULL && digi->ndigi != 0) {
+				if (s->digipeat == NULL)
 					continue;
-				if (s->digipeat != NULL && ax25digicmp(s->digipeat, digi) != 0)
+				if (ax25digicmp(s->digipeat, digi) != 0)
+					continue;
+			} else {
+				if (s->digipeat != NULL && s->digipeat->ndigi != 0)
 					continue;
 			}
 			restore_flags(flags);
@@ -402,10 +399,13 @@ void ax25_destroy_socket(ax25_cb *ax25)	/* Not static as it's used by the timer 
 	struct sk_buff *skb;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_flags(flags); cli();
 
-	del_timer(&ax25->timer);
+	ax25_stop_heartbeat(ax25);
+	ax25_stop_t1timer(ax25);
+	ax25_stop_t2timer(ax25);
+	ax25_stop_t3timer(ax25);
+	ax25_stop_idletimer(ax25);
 
 	ax25_remove_socket(ax25);
 	ax25_clear_queues(ax25);	/* Flush the queues */
@@ -414,7 +414,7 @@ void ax25_destroy_socket(ax25_cb *ax25)	/* Not static as it's used by the timer 
 		while ((skb = skb_dequeue(&ax25->sk->receive_queue)) != NULL) {
 			if (skb->sk != ax25->sk) {			/* A pending connection */
 				skb->sk->dead = 1;	/* Queue the unaccepted socket for death */
-				ax25_set_timer(skb->sk->protinfo.ax25);
+				ax25_start_heartbeat(skb->sk->protinfo.ax25);
 				skb->sk->protinfo.ax25->state = AX25_STATE_0;
 			}
 
@@ -451,13 +451,9 @@ static int ax25_ctl_ioctl(const unsigned int cmd, void *arg)
 	struct ax25_ctl_struct ax25_ctl;
 	ax25_dev *ax25_dev;
 	ax25_cb *ax25;
-	unsigned long flags;
-	int err;
 
-	if ((err = verify_area(VERIFY_READ, arg, sizeof(ax25_ctl))) != 0)
-		return err;
-
-	copy_from_user(&ax25_ctl, arg, sizeof(ax25_ctl));
+	if (copy_from_user(&ax25_ctl, arg, sizeof(ax25_ctl)))
+		return -EFAULT;
 
 	if ((ax25_dev = ax25_addr_ax25dev(&ax25_ctl.port_addr)) == NULL)
 		return -ENODEV;
@@ -467,22 +463,12 @@ static int ax25_ctl_ioctl(const unsigned int cmd, void *arg)
 
 	switch (ax25_ctl.cmd) {
 		case AX25_KILL:
-			ax25_clear_queues(ax25);
 			ax25_send_control(ax25, AX25_DISC, AX25_POLLON, AX25_COMMAND);
-			ax25->state = AX25_STATE_0;
 #ifdef CONFIG_AX25_DAMA_SLAVE
 			if (ax25_dev->dama.slave && ax25->ax25_dev->values[AX25_VALUES_PROTOCOL] == AX25_PROTO_DAMA_SLAVE)
 				ax25_dama_off(ax25);
 #endif
-			if (ax25->sk != NULL) {
-				ax25->sk->state     = TCP_CLOSE;
-				ax25->sk->err       = ENETRESET;
-				ax25->sk->shutdown |= SEND_SHUTDOWN;
-				if (!ax25->sk->dead)
-					ax25->sk->state_change(ax25->sk);
-				ax25->sk->dead  = 1;
-			}
-			ax25_set_timer(ax25);
+			ax25_disconnect(ax25, ENETRESET);
 			break;
 
 	  	case AX25_WINDOW:
@@ -499,22 +485,14 @@ static int ax25_ctl_ioctl(const unsigned int cmd, void *arg)
 	  	case AX25_T1:
   			if (ax25_ctl.arg < 1)
   				return -EINVAL;
-  			ax25->rtt = (ax25_ctl.arg * AX25_SLOWHZ) / 2;
-  			ax25->t1 = ax25_ctl.arg * AX25_SLOWHZ;
-  			save_flags(flags); cli();
-  			if (ax25->t1timer > ax25->t1)
-  				ax25->t1timer = ax25->t1;
-  			restore_flags(flags);
+  			ax25->rtt = (ax25_ctl.arg * HZ) / 2;
+  			ax25->t1  = ax25_ctl.arg * HZ;
   			break;
 
 	  	case AX25_T2:
 	  		if (ax25_ctl.arg < 1)
 	  			return -EINVAL;
-	  		save_flags(flags); cli();
-	  		ax25->t2 = ax25_ctl.arg * AX25_SLOWHZ;
-	  		if (ax25->t2timer > ax25->t2)
-	  			ax25->t2timer = ax25->t2;
-	  		restore_flags(flags);
+	  		ax25->t2 = ax25_ctl.arg * HZ;
 	  		break;
 
 	  	case AX25_N2:
@@ -527,21 +505,13 @@ static int ax25_ctl_ioctl(const unsigned int cmd, void *arg)
 	  	case AX25_T3:
 	  		if (ax25_ctl.arg < 0)
 	  			return -EINVAL;
-	  		save_flags(flags); cli();
-	  		ax25->t3 = ax25_ctl.arg * AX25_SLOWHZ;
-	  		if (ax25->t3timer != 0)
-	  			ax25->t3timer = ax25->t3;
-	  		restore_flags(flags);
+	  		ax25->t3 = ax25_ctl.arg * HZ;
 	  		break;
 
 	  	case AX25_IDLE:
 	  		if (ax25_ctl.arg < 0)
 	  			return -EINVAL;
-			save_flags(flags); cli();
-	  		ax25->idle = ax25_ctl.arg * AX25_SLOWHZ * 60;
-	  		if (ax25->idletimer != 0)
-	  			ax25->idletimer = ax25->idle;
-	  		restore_flags(flags);
+	  		ax25->idle = ax25_ctl.arg * 60 * HZ;
 	  		break;
 
 	  	case AX25_PACLEN:
@@ -622,6 +592,10 @@ ax25_cb *ax25_create_cb(void)
 	skb_queue_head_init(&ax25->reseq_queue);
 
 	init_timer(&ax25->timer);
+	init_timer(&ax25->t1timer);
+	init_timer(&ax25->t2timer);
+	init_timer(&ax25->t3timer);
+	init_timer(&ax25->idletimer);
 
 	ax25_fillin_cb(ax25, NULL);
 
@@ -664,13 +638,14 @@ static int ax25_setsockopt(struct socket *sock, int level, int optname, char *op
 		case AX25_T1:
 			if (opt < 1)
 				return -EINVAL;
-			sk->protinfo.ax25->rtt = (opt * AX25_SLOWHZ) / 2;
+			sk->protinfo.ax25->rtt = (opt * HZ) / 2;
+			sk->protinfo.ax25->t1  = opt * HZ;
 			return 0;
 
 		case AX25_T2:
 			if (opt < 1)
 				return -EINVAL;
-			sk->protinfo.ax25->t2 = opt * AX25_SLOWHZ;
+			sk->protinfo.ax25->t2 = opt * HZ;
 			return 0;
 
 		case AX25_N2:
@@ -682,13 +657,13 @@ static int ax25_setsockopt(struct socket *sock, int level, int optname, char *op
 		case AX25_T3:
 			if (opt < 1)
 				return -EINVAL;
-			sk->protinfo.ax25->t3 = opt * AX25_SLOWHZ;
+			sk->protinfo.ax25->t3 = opt * HZ;
 			return 0;
 
 		case AX25_IDLE:
 			if (opt < 0)
 				return -EINVAL;
-			sk->protinfo.ax25->idle = opt * AX25_SLOWHZ * 60;
+			sk->protinfo.ax25->idle = opt * 60 * HZ;
 			return 0;
 
 		case AX25_BACKOFF:
@@ -738,11 +713,11 @@ static int ax25_getsockopt(struct socket *sock, int level, int optname, char *op
 			break;
 
 		case AX25_T1:
-			val = (sk->protinfo.ax25->t1 * 2) / AX25_SLOWHZ;
+			val = sk->protinfo.ax25->t1 / HZ;
 			break;
 
 		case AX25_T2:
-			val = sk->protinfo.ax25->t2 / AX25_SLOWHZ;
+			val = sk->protinfo.ax25->t2 / HZ;
 			break;
 
 		case AX25_N2:
@@ -750,11 +725,11 @@ static int ax25_getsockopt(struct socket *sock, int level, int optname, char *op
 			break;
 
 		case AX25_T3:
-			val = sk->protinfo.ax25->t3 / AX25_SLOWHZ;
+			val = sk->protinfo.ax25->t3 / HZ;
 			break;
 
 		case AX25_IDLE:
-			val = sk->protinfo.ax25->idle / (AX25_SLOWHZ * 60);
+			val = sk->protinfo.ax25->idle / (60 * HZ);
 			break;
 
 		case AX25_BACKOFF:
@@ -963,22 +938,14 @@ static int ax25_release(struct socket *sock, struct socket *peer)
 	if (sk->type == SOCK_SEQPACKET) {
 		switch (sk->protinfo.ax25->state) {
 			case AX25_STATE_0:
-				sk->state       = TCP_CLOSE;
-				sk->shutdown   |= SEND_SHUTDOWN;
-				sk->state_change(sk);
-				sk->dead        = 1;
+				ax25_disconnect(sk->protinfo.ax25, 0);
 				ax25_destroy_socket(sk->protinfo.ax25);
 				break;
 
 			case AX25_STATE_1:
 			case AX25_STATE_2:
-				ax25_clear_queues(sk->protinfo.ax25);
 				ax25_send_control(sk->protinfo.ax25, AX25_DISC, AX25_POLLON, AX25_COMMAND);
-				sk->protinfo.ax25->state = AX25_STATE_0;
-				sk->state                = TCP_CLOSE;
-				sk->shutdown            |= SEND_SHUTDOWN;
-				sk->state_change(sk);
-				sk->dead                 = 1;
+				ax25_disconnect(sk->protinfo.ax25, 0);
 				ax25_destroy_socket(sk->protinfo.ax25);
 				break;
 
@@ -990,31 +957,34 @@ static int ax25_release(struct socket *sock, struct socket *peer)
 					case AX25_PROTO_STD_SIMPLEX:
 					case AX25_PROTO_STD_DUPLEX:
 						ax25_send_control(sk->protinfo.ax25, AX25_DISC, AX25_POLLON, AX25_COMMAND);
-						sk->protinfo.ax25->t3timer = 0;
+						ax25_stop_t2timer(sk->protinfo.ax25);
+						ax25_stop_t3timer(sk->protinfo.ax25);
+						ax25_stop_idletimer(sk->protinfo.ax25);
 						break;
 #ifdef AX25_CONFIG_DAMA_SLAVE
 					case AX25_PROTO_DAMA_SLAVE:
-						sk->protinfo.ax25->t3timer = 0;
+						ax25_stop_t3timer(sk->protinfo.ax25);
 						break;
 #endif
 				}
-				sk->protinfo.ax25->t1timer = sk->protinfo.ax25->t1 = ax25_calculate_t1(sk->protinfo.ax25);
-				sk->protinfo.ax25->state   = AX25_STATE_2;
-				sk->state                  = TCP_CLOSE;
-				sk->shutdown              |= SEND_SHUTDOWN;
+				ax25_calculate_t1(sk->protinfo.ax25);
+				ax25_start_t1timer(sk->protinfo.ax25);
+				sk->protinfo.ax25->state = AX25_STATE_2;
+				sk->state                = TCP_CLOSE;
+				sk->shutdown            |= SEND_SHUTDOWN;
 				sk->state_change(sk);
-				sk->dead                   = 1;
-				sk->destroy                = 1;
+				sk->dead                 = 1;
+				sk->destroy              = 1;
 				break;
 
 			default:
 				break;
 		}
 	} else {
-		sk->state       = TCP_CLOSE;
-		sk->shutdown   |= SEND_SHUTDOWN;
+		sk->state     = TCP_CLOSE;
+		sk->shutdown |= SEND_SHUTDOWN;
 		sk->state_change(sk);
-		sk->dead        = 1;
+		sk->dead      = 1;
 		ax25_destroy_socket(sk->protinfo.ax25);
 	}
 
@@ -1092,8 +1062,9 @@ static int ax25_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 static int ax25_connect(struct socket *sock, struct sockaddr *uaddr, int addr_len, int flags)
 {
 	struct sock *sk = sock->sk;
-	struct sockaddr_ax25 *addr = (struct sockaddr_ax25 *)uaddr;
-	int err;
+	struct full_sockaddr_ax25 *fsa = (struct full_sockaddr_ax25 *)uaddr;
+	ax25_digi *digi = NULL;
+	int ct = 0, err;
 
 	if (sk->state == TCP_ESTABLISHED && sock->state == SS_CONNECTING) {
 		sock->state = SS_CONNECTED;
@@ -1114,36 +1085,36 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 	if (addr_len != sizeof(struct sockaddr_ax25) && addr_len != sizeof(struct full_sockaddr_ax25))
 		return -EINVAL;
 
-	if (addr->sax25_family != AF_AX25)
+	if (fsa->fsa_ax25.sax25_family != AF_AX25)
 		return -EINVAL;
+
+	if (sk->protinfo.ax25->digipeat != NULL) {
+		kfree(sk->protinfo.ax25->digipeat);
+		sk->protinfo.ax25->digipeat = NULL;
+	}
 
 	/*
 	 *	Handle digi-peaters to be used.
 	 */
-	if (addr_len == sizeof(struct full_sockaddr_ax25) && addr->sax25_ndigis != 0) {
-		int ct           = 0;
-		struct full_sockaddr_ax25 *fsa = (struct full_sockaddr_ax25 *)addr;
-
+	if (addr_len == sizeof(struct full_sockaddr_ax25) && fsa->fsa_ax25.sax25_ndigis != 0) {
 		/* Valid number of digipeaters ? */
-		if (addr->sax25_ndigis < 1 || addr->sax25_ndigis > AX25_MAX_DIGIS)
+		if (fsa->fsa_ax25.sax25_ndigis < 1 || fsa->fsa_ax25.sax25_ndigis > AX25_MAX_DIGIS)
 			return -EINVAL;
 
-		if (sk->protinfo.ax25->digipeat == NULL) {
-			if ((sk->protinfo.ax25->digipeat = kmalloc(sizeof(ax25_digi), GFP_KERNEL)) == NULL)
-				return -ENOBUFS;
-		}
+		if ((digi = kmalloc(sizeof(ax25_digi), GFP_KERNEL)) == NULL)
+			return -ENOBUFS;
 
-		sk->protinfo.ax25->digipeat->ndigi      = addr->sax25_ndigis;
-		sk->protinfo.ax25->digipeat->lastrepeat = -1;
+		digi->ndigi      = fsa->fsa_ax25.sax25_ndigis;
+		digi->lastrepeat = -1;
 
-		while (ct < addr->sax25_ndigis) {
+		while (ct < fsa->fsa_ax25.sax25_ndigis) {
 			if ((fsa->fsa_digipeater[ct].ax25_call[6] & AX25_HBIT) && sk->protinfo.ax25->iamdigi) {
-				sk->protinfo.ax25->digipeat->repeated[ct] = 1;
-				sk->protinfo.ax25->digipeat->lastrepeat   = ct;
+				digi->repeated[ct] = 1;
+				digi->lastrepeat   = ct;
 			} else {
-				sk->protinfo.ax25->digipeat->repeated[ct] = 0;
+				digi->repeated[ct] = 0;
 			}
-			sk->protinfo.ax25->digipeat->calls[ct] = fsa->fsa_digipeater[ct];
+			digi->calls[ct] = fsa->fsa_digipeater[ct];
 			ct++;
 		}
 	}
@@ -1154,7 +1125,7 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 	 *	been filled in, error if it hasn't.
 	 */
 	if (sk->zapped) {
-		if ((err = ax25_rt_autobind(sk->protinfo.ax25, &addr->sax25_call)) < 0)
+		if ((err = ax25_rt_autobind(sk->protinfo.ax25, &fsa->fsa_ax25.sax25_call)) < 0)
 			return err;
 		ax25_fillin_cb(sk->protinfo.ax25, sk->protinfo.ax25->ax25_dev);
 		ax25_insert_socket(sk->protinfo.ax25);
@@ -1163,10 +1134,13 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 			return -EHOSTUNREACH;
 	}
 
-	if (sk->type == SOCK_SEQPACKET && ax25_find_cb(&sk->protinfo.ax25->source_addr, &addr->sax25_call, NULL, sk->protinfo.ax25->ax25_dev->dev) != NULL)
+	if (sk->type == SOCK_SEQPACKET && ax25_find_cb(&sk->protinfo.ax25->source_addr, &fsa->fsa_ax25.sax25_call, digi, sk->protinfo.ax25->ax25_dev->dev) != NULL) {
+		if (digi != NULL) kfree(digi);
 		return -EADDRINUSE;			/* Already such a connection */
+	}
 
-	sk->protinfo.ax25->dest_addr = addr->sax25_call;
+	sk->protinfo.ax25->dest_addr = fsa->fsa_ax25.sax25_call;
+	sk->protinfo.ax25->digipeat  = digi;
 
 	/* First the easy one */
 	if (sk->type != SOCK_SEQPACKET) {
@@ -1198,7 +1172,8 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 	}
 
 	sk->protinfo.ax25->state = AX25_STATE_1;
-	ax25_set_timer(sk->protinfo.ax25);		/* Start going SABM SABM until a UA or a give up and DM */
+
+	ax25_start_heartbeat(sk->protinfo.ax25);
 
 	/* Now the loop */
 	if (sk->state != TCP_ESTABLISHED && (flags & O_NONBLOCK))
@@ -1532,38 +1507,35 @@ static int ax25_shutdown(struct socket *sk, int how)
 static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	struct sock *sk = sock->sk;
-	struct ax25_info_struct ax25_info;
-	int err;
-	long amount = 0;
 
 	switch (cmd) {
-		case TIOCOUTQ:
-			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(int))) != 0)
-				return err;
+		case TIOCOUTQ: {
+			long amount;
 			amount = sk->sndbuf - atomic_read(&sk->wmem_alloc);
 			if (amount < 0)
 				amount = 0;
-			put_user(amount, (int *)arg);
+			if (put_user(amount, (int *)arg))
+				return -EFAULT;
 			return 0;
+		}
 
 		case TIOCINQ: {
 			struct sk_buff *skb;
+			long amount = 0L;
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if ((skb = skb_peek(&sk->receive_queue)) != NULL)
 				amount = skb->len;
-			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(int))) != 0)
-				return err;
-			put_user(amount, (int *)arg);
+			if (put_user(amount, (int *)arg))
+				return -EFAULT;
 			return 0;
 		}
 
 		case SIOCGSTAMP:
 			if (sk != NULL) {
-				if (sk->stamp.tv_sec==0)
+				if (sk->stamp.tv_sec == 0)
 					return -ENOENT;
-				if ((err = verify_area(VERIFY_WRITE,(void *)arg,sizeof(struct timeval))) != 0)
-					return err;
-				copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval));
+				if (copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval)))
+					return -EFAULT;
 				return 0;
 			}
 			return -EINVAL;
@@ -1572,22 +1544,22 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCAX25DELUID:	/* Delete a uid from the uid/call map table */
 		case SIOCAX25GETUID: {
 			struct sockaddr_ax25 sax25;
-			if ((err = verify_area(VERIFY_READ, (void *)arg, sizeof(struct sockaddr_ax25))) != 0)
-				return err;
-			copy_from_user(&sax25, (void *)arg, sizeof(sax25));
+			if (copy_from_user(&sax25, (void *)arg, sizeof(sax25)))
+				return -EFAULT;
 			return ax25_uid_ioctl(cmd, &sax25);
 		}
 
-		case SIOCAX25NOUID:	/* Set the default policy (default/bar) */
-			if ((err = verify_area(VERIFY_READ, (void *)arg, sizeof(unsigned long))) != 0)
-				return err;
+		case SIOCAX25NOUID: {	/* Set the default policy (default/bar) */
+			long amount;
 			if (!suser())
 				return -EPERM;
-			get_user(amount, (long *)arg);
+			if (get_user(amount, (long *)arg))
+				return -EFAULT;
 			if (amount > AX25_NOUID_BLOCK)
 				return -EINVAL;
 			ax25_uid_policy = amount;
 			return 0;
+		}
 
 		case SIOCADDRT:
 		case SIOCDELRT:
@@ -1601,33 +1573,33 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 				return -EPERM;
 			return ax25_ctl_ioctl(cmd, (void *)arg);
 
-		case SIOCAX25GETINFO:
-			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(ax25_info))) != 0)
-				return err;
-			ax25_info.t1        = sk->protinfo.ax25->t1;
-			ax25_info.t2        = sk->protinfo.ax25->t2;
-			ax25_info.t3        = sk->protinfo.ax25->t3;
-			ax25_info.idle      = sk->protinfo.ax25->idle;
+		case SIOCAX25GETINFO: {
+			struct ax25_info_struct ax25_info;
+			ax25_info.t1        = sk->protinfo.ax25->t1   / HZ;
+			ax25_info.t2        = sk->protinfo.ax25->t2   / HZ;
+			ax25_info.t3        = sk->protinfo.ax25->t3   / HZ;
+			ax25_info.idle      = sk->protinfo.ax25->idle / (60 * HZ);
 			ax25_info.n2        = sk->protinfo.ax25->n2;
-			ax25_info.t1timer   = sk->protinfo.ax25->t1timer;
-			ax25_info.t2timer   = sk->protinfo.ax25->t2timer;
-			ax25_info.t3timer   = sk->protinfo.ax25->t3timer;
-			ax25_info.idletimer = sk->protinfo.ax25->idletimer;
+			ax25_info.t1timer   = ax25_display_timer(&sk->protinfo.ax25->t1timer)   / HZ;
+			ax25_info.t2timer   = ax25_display_timer(&sk->protinfo.ax25->t2timer)   / HZ;
+			ax25_info.t3timer   = ax25_display_timer(&sk->protinfo.ax25->t3timer)   / HZ;
+			ax25_info.idletimer = ax25_display_timer(&sk->protinfo.ax25->idletimer) / (60 * HZ);
 			ax25_info.n2count   = sk->protinfo.ax25->n2count;
 			ax25_info.state     = sk->protinfo.ax25->state;
 			ax25_info.rcv_q     = atomic_read(&sk->rmem_alloc);
 			ax25_info.snd_q     = atomic_read(&sk->wmem_alloc);
-			copy_to_user((void *)arg, &ax25_info, sizeof(ax25_info));
+			if (copy_to_user((void *)arg, &ax25_info, sizeof(ax25_info)))
+				return -EFAULT;
 			return 0;
+		}
 
 		case SIOCAX25ADDFWD:
 		case SIOCAX25DELFWD: {
 			struct ax25_fwd_struct ax25_fwd;
 			if (!suser())
 				return -EPERM;
-			if ((err = verify_area(VERIFY_READ, (void *)arg, sizeof(ax25_fwd))) != 0)
-				return err;
-			copy_from_user(&ax25_fwd, (void *)arg, sizeof(ax25_fwd));
+			if (copy_from_user(&ax25_fwd, (void *)arg, sizeof(ax25_fwd)))
+				return -EFAULT;
 			return ax25_fwd_ioctl(cmd, &ax25_fwd);
 		}
 
@@ -1655,13 +1627,14 @@ static int ax25_get_info(char *buffer, char **start, off_t offset, int length, i
 {
 	ax25_cb *ax25;
 	const char *devname;
+	char callbuf[15];
 	int len = 0;
 	off_t pos = 0;
 	off_t begin = 0;
 
 	cli();
 
-	len += sprintf(buffer, "dest_addr src_addr  dev  st  vs  vr  va    t1     t2     t3      idle   n2  rtt wnd paclen   Snd-Q Rcv-Q\n");
+	len += sprintf(buffer, "dest_addr src_addr   dev  st  vs  vr  va    t1     t2     t3      idle   n2  rtt wnd paclen   Snd-Q Rcv-Q\n");
 
 	for (ax25 = ax25_list; ax25 != NULL; ax25 = ax25->next) {
 		if (ax25->ax25_dev == NULL)
@@ -1671,20 +1644,28 @@ static int ax25_get_info(char *buffer, char **start, off_t offset, int length, i
 
 		len += sprintf(buffer + len, "%-9s ",
 			ax2asc(&ax25->dest_addr));
-		len += sprintf(buffer + len, "%-9s %-4s %2d %3d %3d %3d %3d/%03d %2d/%02d %3d/%03d %3d/%03d %2d/%02d %3d %3d  %5d",
-			ax2asc(&ax25->source_addr), devname,
+
+		sprintf(callbuf, "%s%c", ax2asc(&ax25->source_addr),
+					 (ax25->iamdigi) ? '*' : ' ');
+
+		len += sprintf(buffer + len, "%-10s %-4s %2d %3d %3d %3d %3lu/%03lu %2lu/%02lu %3lu/%03lu %3lu/%03lu %2d/%02d %3lu %3d  %5d",
+			callbuf,
+			devname,
 			ax25->state,
-			ax25->vs, ax25->vr, ax25->va,
-			ax25->t1timer / AX25_SLOWHZ,
-			ax25->t1      / AX25_SLOWHZ,
-			ax25->t2timer / AX25_SLOWHZ,
-			ax25->t2      / AX25_SLOWHZ,
-			ax25->t3timer / AX25_SLOWHZ,
-			ax25->t3      / AX25_SLOWHZ,
-			ax25->idletimer / (AX25_SLOWHZ * 60),
-			ax25->idle      / (AX25_SLOWHZ * 60),
-			ax25->n2count, ax25->n2,
-			ax25->rtt     / AX25_SLOWHZ,
+			ax25->vs,
+			ax25->vr,
+			ax25->va,
+			ax25_display_timer(&ax25->t1timer) / HZ,
+			ax25->t1 / HZ,
+			ax25_display_timer(&ax25->t2timer) / HZ,
+			ax25->t2 / HZ,
+			ax25_display_timer(&ax25->t3timer) / HZ,
+			ax25->t3 / HZ,
+			ax25_display_timer(&ax25->idletimer) / (60 * HZ), 
+			ax25->idle / (60 * HZ),
+			ax25->n2count,
+			ax25->n2,
+			ax25->rtt / HZ,
 			ax25->window,
 			ax25->paclen);
 
@@ -1764,7 +1745,7 @@ static struct notifier_block ax25_dev_notifier = {
 EXPORT_SYMBOL(ax25_encapsulate);
 EXPORT_SYMBOL(ax25_rebuild_header);
 EXPORT_SYMBOL(ax25_findbyuid);
-EXPORT_SYMBOL(ax25_link_up);
+EXPORT_SYMBOL(ax25_find_cb);
 EXPORT_SYMBOL(ax25_linkfail_register);
 EXPORT_SYMBOL(ax25_linkfail_release);
 EXPORT_SYMBOL(ax25_listen_register);
@@ -1777,6 +1758,7 @@ EXPORT_SYMBOL(ax25cmp);
 EXPORT_SYMBOL(ax2asc);
 EXPORT_SYMBOL(asc2ax);
 EXPORT_SYMBOL(null_ax25_address);
+EXPORT_SYMBOL(ax25_display_timer);
 
 #ifdef CONFIG_PROC_FS
 static struct proc_dir_entry proc_ax25_route = {
@@ -1815,7 +1797,7 @@ __initfunc(void ax25_proto_init(struct net_proto *pro))
 	proc_net_register(&proc_ax25_calls);
 #endif
 
-	printk(KERN_INFO "G4KLX/GW4PTS AX.25 for Linux. Version 0.36 for Linux NET3.038 (Linux 2.1)\n");
+	printk(KERN_INFO "G4KLX/GW4PTS AX.25 for Linux. Version 0.37 for Linux NET3.038 (Linux 2.1)\n");
 }
 
 #ifdef MODULE

@@ -110,7 +110,7 @@ void xcheck(char * txt, struct inode * p)
 {
 	int i;
 	for(i=xcnt-1; i>=0; i--)
-		if(xtst[i] == p)
+		if (xtst[i] == p)
 			return;
 	printk("Bogus inode %p in %s\n", p, txt);
 }
@@ -123,7 +123,7 @@ static inline struct inode * grow_inodes(void)
 	struct inode * res;
 	struct inode * inode = res = (struct inode*)__get_free_page(GFP_KERNEL);
 	int size = PAGE_SIZE;
-	if(!inode)
+	if (!inode)
 		return NULL;
 	
 	size -= sizeof(struct inode);
@@ -178,7 +178,7 @@ static inline blocking int release_io(struct inode * inode, unsigned short flags
 	int res = 0; 
 	vfs_lock();
 	inode->i_status &= ~flags;
-	if(inode->i_status & ST_WAITING) {
+	if (inode->i_status & ST_WAITING) {
 		inode->i_status &= ~ST_WAITING;
 		vfs_unlock();
 		wake_up(&inode->i_wait);
@@ -191,10 +191,10 @@ static inline blocking void _io(void (*op)(struct inode*), struct inode * inode,
 				unsigned short waitflags, unsigned short setflags)
 {
 	/* Do nothing if the same op is already in progress. */
-	if(op && !(inode->i_status & setflags)) {
+	if (op && !(inode->i_status & setflags)) {
 		set_io(inode, waitflags, setflags);
 		op(inode);
-		if(release_io(inode, setflags)) {
+		if (release_io(inode, setflags)) {
 			/* Somebody grabbed my inode from under me. */
 #ifdef DEBUG
 			printk("_io grab!\n");
@@ -204,36 +204,10 @@ static inline blocking void _io(void (*op)(struct inode*), struct inode * inode,
 	}
 }
 
-blocking int _free_ibasket(struct super_block * sb)
-{
-	if(sb->s_ibasket) {
-		struct inode * delinquish = sb->s_ibasket->i_basket_prev;
-#if 0
-printpath(delinquish->i_dentry);
-printk(" delinquish\n");
-#endif
-		_clear_inode(delinquish, 0, 1);
-		return 1;
-	}
-	return 0;
-}
-
-static /*inline*/ void _put_ibasket(struct inode * inode)
-{
-	struct super_block * sb = inode->i_sb;
-	if(!(inode->i_status & ST_IBASKET)) {
-		inode->i_status |= ST_IBASKET;
-		insert_ibasket(&sb->s_ibasket, inode);
-		sb->s_ibasket_count++;
-		if(sb->s_ibasket_count > sb->s_ibasket_max)
-			(void)_free_ibasket(sb);
-	}
-}
-
 blocking void _clear_inode(struct inode * inode, int external, int verbose)
 {
 xcheck("_clear_inode",inode);
-	if(inode->i_status & ST_IBASKET) {
+	if (inode->i_status & ST_IBASKET) {
 		struct super_block * sb = inode->i_sb;
 		remove_ibasket(&sb->s_ibasket, inode);
 		sb->s_ibasket_count--;
@@ -243,32 +217,29 @@ printpath(inode->i_dentry);
 printk(" put_inode\n");
 #endif
 		_io(sb->s_op->put_inode, inode, ST_TO_PUT|ST_TO_WRITE, ST_TO_PUT);
-		if(inode->i_status & ST_EMPTY)
+		if (inode->i_status & ST_EMPTY)
 			return;
 	}
-	if(inode->i_status & ST_HASHED)
+	if (inode->i_status & ST_HASHED)
 		remove_hash(&hashtable[hash(inode->i_dev, inode->i_ino)], inode);
-	if(inode->i_status & ST_AGED) {
+	if (inode->i_status & ST_AGED) {
 		/* "cannot happen" when called from an fs because at least
 		 * the caller must use it. Can happen when called from
 		 * invalidate_inodes(). */
-		if(verbose)
+		if (verbose)
 			printk("VFS: clearing aged inode\n");
-		if(atomic_read(&inode->i_count))
+		if (atomic_read(&inode->i_count))
 			printk("VFS: aged inode is in use\n");
 		remove_lru(&aged_i[inode->i_level], inode);
 		inodes_stat.aged_count[inode->i_level]--;
 	}
-	if(!external && inode->i_status & ST_IO) {
+	if (!external && inode->i_status & ST_IO) {
 		printk("VFS: clearing inode during IO operation\n");
 	}
-	if(!(inode->i_status & ST_EMPTY)) {
+	if (!(inode->i_status & ST_EMPTY)) {
 		remove_all(&all_i, inode);
 		inode->i_status = ST_EMPTY;
-		while(inode->i_dentry) {
-			d_del(inode->i_dentry, D_NO_CLEAR_INODE);
-		}
-		if(inode->i_pages) {
+		if (inode->i_pages) {
 			vfs_unlock(); /* may block, can that be revised? */
 			truncate_inode_pages(inode, 0);
 			vfs_lock();
@@ -291,7 +262,7 @@ void insert_inode_hash(struct inode * inode)
 {
 xcheck("insert_inode_hash",inode);
 	vfs_lock();
-	if(!(inode->i_status & ST_HASHED)) {
+	if (!(inode->i_status & ST_HASHED)) {
 		insert_hash(&hashtable[hash(inode->i_dev, inode->i_ino)], inode);
 		inode->i_status |= ST_HASHED;
 	} else
@@ -306,42 +277,42 @@ blocking struct inode * _get_empty_inode(void)
 
 retry:
 	inode = empty_i;
-	if(inode) {
+	if (inode) {
 		remove_all(&empty_i, inode);
 		inodes_stat.nr_free_inodes--;
 	} else if(inodes_stat.nr_inodes < max_inodes || retry > 2) {
 		inode = grow_inodes();
 	}
-	if(!inode) {
+	if (!inode) {
 		int level;
 		int usable = 0;
 		for(level = 0; level <= NR_LEVELS; level++)
-			if(aged_i[level]) {
+			if (aged_i[level]) {
 				inode = aged_i[level]->i_lru_prev;
 				/* Here is the picking strategy, tune this */
-				if(aged_reused[level] < (usable++ ?
+				if (aged_reused[level] < (usable++ ?
 							 inodes_stat.aged_count[level] :
 							 2))
 					break;
 				aged_reused[level] = 0;
 			}
-		if(inode) {
-			if(!(inode->i_status & ST_AGED))
+		if (inode) {
+			if (!(inode->i_status & ST_AGED))
 				printk("VFS: inode aging inconsistency\n");
-			if(atomic_read(&inode->i_count) + inode->i_ddir_count)
+			if (atomic_read(&inode->i_count))
 				printk("VFS: i_count of aged inode is not zero\n");
-			if(inode->i_dirt)
+			if (inode->i_dirt)
 				printk("VFS: Hey, somebody made my aged inode dirty\n");
 			_clear_inode(inode, 0, 0);
 			goto retry;
 		}
 	}
-	if(!inode) {
+	if (!inode) {
 		vfs_unlock();
 		schedule();
-		if(retry > 10)
+		if (retry > 10)
 			panic("VFS: cannot repair inode shortage");
-		if(retry > 2)
+		if (retry > 2)
 			printk("VFS: no free inodes\n");
 		retry++;
 		vfs_lock();
@@ -363,8 +334,8 @@ static inline blocking struct inode * _get_empty_inode_hashed(dev_t i_dev,
 {
 	struct inode ** base = &hashtable[hash(i_dev, i_ino)];
 	struct inode * inode = *base;
-	if(inode) do {
-		if(inode->i_ino == i_ino && inode->i_dev == i_dev) {
+	if (inode) do {
+		if (inode->i_ino == i_ino && inode->i_dev == i_dev) {
 			atomic_inc(&inode->i_count);
 			printk("VFS: inode %lx is already in use\n", i_ino);
 			return inode;
@@ -391,17 +362,17 @@ blocking struct inode * get_empty_inode_hashed(dev_t i_dev, unsigned long i_ino)
 
 void _get_inode(struct inode * inode)
 {
-	if(inode->i_status & ST_IBASKET) {
+	if (inode->i_status & ST_IBASKET) {
 		inode->i_status &= ~ST_IBASKET;
 		remove_ibasket(&inode->i_sb->s_ibasket, inode);
 		inode->i_sb->s_ibasket_count--;
 	}
-	if(inode->i_status & ST_AGED) {
+	if (inode->i_status & ST_AGED) {
 		inode->i_status &= ~ST_AGED;
 		remove_lru(&aged_i[inode->i_level], inode);
 		inodes_stat.aged_count[inode->i_level]--;
 		aged_reused[inode->i_level]++;
-		if(S_ISDIR(inode->i_mode))
+		if (S_ISDIR(inode->i_mode))
 			/* make dirs less thrashable */
 			inode->i_level = NR_LEVELS-1;
 		else if(inode->i_nlink > 1)
@@ -410,30 +381,28 @@ void _get_inode(struct inode * inode)
 		else if(++inode->i_reuse_count >= age_table[inode->i_level]
 			&& inode->i_level < NR_LEVELS-1)
 			inode->i_level++;
-		if(atomic_read(&inode->i_count) != 1)
-			printk("VFS: inode count was not zero\n");
+		if (atomic_read(&inode->i_count) != 1)
+			printk("VFS: inode count was not zero (%d after ++)\n", atomic_read(&inode->i_count));
 	} else if(inode->i_status & ST_EMPTY)
 		printk("VFS: invalid reuse of empty inode\n");
 }
 
-blocking struct inode * __iget(struct super_block * sb,
-			       unsigned long i_ino,
-			       int crossmntp)
+blocking struct inode * iget(struct super_block * sb, unsigned long i_ino)
 {
 	struct inode ** base;
 	struct inode * inode;
 	dev_t i_dev;
 	
-	if(!sb)
+	if (!sb)
 		panic("VFS: iget with sb == NULL");
 	i_dev = sb->s_dev;
-	if(!i_dev)
+	if (!i_dev)
 		panic("VFS: sb->s_dev is NULL\n");
 	base = &hashtable[hash(i_dev, i_ino)];
 	vfs_lock();
 	inode = *base;
-	if(inode) do {
-		if(inode->i_ino == i_ino && inode->i_dev == i_dev) {
+	if (inode) do {
+		if (inode->i_ino == i_ino && inode->i_dev == i_dev) {
 			atomic_inc(&inode->i_count);
 			_get_inode(inode);
 
@@ -455,21 +424,14 @@ blocking struct inode * __iget(struct super_block * sb,
 	inode = _get_empty_inode_hashed(i_dev, i_ino);
 	inode->i_sb = sb;
 	inode->i_flags = sb->s_flags;
-	if(sb->s_op && sb->s_op->read_inode) {
+	if (sb->s_op && sb->s_op->read_inode) {
 		set_io(inode, 0, ST_TO_READ); /* do not wait at all */
 		sb->s_op->read_inode(inode);
-		if(release_io(inode, ST_TO_READ))
+		if (release_io(inode, ST_TO_READ))
 			goto done;
 	}
 	vfs_unlock();
 done:
-	while(crossmntp && inode->i_mount) {
-		struct inode * tmp = inode->i_mount;
-		iinc(tmp);
-		iput(inode);
-		inode = tmp;
-	}
-xcheck("_iget",inode);
 	return inode;
 }
 
@@ -477,68 +439,43 @@ blocking void __iput(struct inode * inode)
 {
 	struct super_block * sb;
 xcheck("_iput",inode);
-	if(atomic_read(&inode->i_count) + inode->i_ddir_count < 0)
+
+	if (atomic_read(&inode->i_count) < 0)
 		printk("VFS: i_count is negative\n");
-	if((atomic_read(&inode->i_count) + inode->i_ddir_count) ||
-	   (inode->i_status & ST_FREEING)) {
+
+	if (atomic_read(&inode->i_count) || (inode->i_status & ST_FREEING))
 		return;
-	}
+
 	inode->i_status |= ST_FREEING;
-#ifdef CONFIG_OMIRR
-	if(inode->i_status & ST_MODIFIED) {
-		inode->i_status &= ~ST_MODIFIED;
-		omirr_printall(inode, " W %ld ", CURRENT_TIME);
-	}
-#endif
-	if(inode->i_pipe) {
+	if (inode->i_pipe) {
 		free_page((unsigned long)PIPE_BASE(*inode));
 		PIPE_BASE(*inode)= NULL;
 	}
-	if((sb = inode->i_sb)) {
-		if(sb->s_type && (sb->s_type->fs_flags & FS_NO_DCACHE)) {
-			while(inode->i_dentry)
-				d_del(inode->i_dentry, D_NO_CLEAR_INODE);
-			if(atomic_read(&inode->i_count) + inode->i_ddir_count)
-				goto done;
-		}
-		if(sb->s_op) {
-			if(inode->i_nlink <= 0 && inode->i_dent_count &&
-			   !(inode->i_status & (ST_EMPTY|ST_IBASKET)) &&
-			   (sb->s_type->fs_flags & FS_IBASKET)) {
-				_put_ibasket(inode);
+	if ((sb = inode->i_sb)) {
+		if (sb->s_op) {
+			if (inode->i_nlink <= 0 &&
+			    !(inode->i_status & (ST_EMPTY|ST_IBASKET))) {
+				_clear_inode(inode, 0, 1);
 				goto done;
 			}
-			if(!inode->i_dent_count ||
-			   (sb->s_type->fs_flags & FS_NO_DCACHE)) {
-				_io(sb->s_op->put_inode, inode, 
-				    ST_TO_PUT|ST_TO_WRITE, ST_TO_PUT);
-				if(atomic_read(&inode->i_count) + inode->i_ddir_count)
-					goto done;
-				if(inode->i_nlink <= 0) {
-					if(!(inode->i_status & ST_EMPTY)) {
-						_clear_inode(inode, 0, 1);
-					}
-					goto done;
-				}
-			}
-			if(inode->i_dirt) {
+			if (inode->i_dirt) {
 				inode->i_dirt = 0;
 				_io(sb->s_op->write_inode, inode,
 				    ST_TO_PUT|ST_TO_WRITE, ST_TO_WRITE);
-				if(atomic_read(&inode->i_count) + inode->i_ddir_count)
+				if (atomic_read(&inode->i_count))
 					goto done;
 			}
 		}
-		if(IS_WRITABLE(inode) && sb->dq_op) {
+		if (IS_WRITABLE(inode) && sb->dq_op) {
 			/* can operate in parallel to other ops ? */
 			_io(sb->dq_op->drop, inode, 0, ST_TO_DROP);
-			if(atomic_read(&inode->i_count) + inode->i_ddir_count)
+			if (atomic_read(&inode->i_count))
 				goto done;
 		}
 	}
-	if(inode->i_mmap)
+	if (inode->i_mmap)
 		printk("VFS: inode has mappings\n");
-	if(inode->i_status & ST_AGED) {
+	if (inode->i_status & ST_AGED) {
 		printk("VFS: reaging inode\n");
 #if defined(DEBUG)
 printpath(inode->i_dentry);
@@ -546,11 +483,11 @@ printk("\n");
 #endif
 		goto done;
 	}
-	if(!(inode->i_status & (ST_HASHED|ST_EMPTY))) {
+	if (!(inode->i_status & (ST_HASHED|ST_EMPTY))) {
 		_clear_inode(inode, 0, 1);
 		goto done;
 	}
-	if(inode->i_status & ST_EMPTY) {
+	if (inode->i_status & ST_EMPTY) {
 		printk("VFS: aging an empty inode\n");
 		goto done;
 	}
@@ -573,10 +510,10 @@ blocking void sync_inodes(kdev_t dev)
 	struct inode * inode;
 	vfs_lock();
 	inode = all_i;
-	if(inode) do {
+	if (inode) do {
 xcheck("sync_inodes",inode);
-		if(inode->i_dirt && (inode->i_dev == dev || !dev)) {
-			if(inode->i_sb && inode->i_sb->s_op &&
+		if (inode->i_dirt && (inode->i_dev == dev || !dev)) {
+			if (inode->i_sb && inode->i_sb->s_op &&
 			   !(inode->i_status & ST_FREEING)) {
 				inode->i_dirt = 0; 
 				_io(inode->i_sb->s_op->write_inode, inode,
@@ -596,12 +533,12 @@ blocking int _check_inodes(kdev_t dev, int complain)
 	vfs_lock();
 startover:
 	inode = all_i;
-	if(inode) do {
+	if (inode) do {
 		struct inode * next;
 xcheck("_check_inodes",inode);
 		next = inode->i_next;
-		if(inode->i_dev == dev) {
-			if(inode->i_dirt || atomic_read(&inode->i_count)) {
+		if (inode->i_dev == dev) {
+			if (inode->i_dirt || atomic_read(&inode->i_count)) {
 				bad++;
 			} else {
 				_clear_inode(inode, 0, 0);
@@ -609,14 +546,14 @@ xcheck("_check_inodes",inode);
 				/* _clear_inode() may recursively clear other
 				 * inodes, probably also the next one.
 				 */
-				if(next->i_status & ST_EMPTY)
+				if (next->i_status & ST_EMPTY)
 					goto startover;
 			}
 		}
 		inode = next;
 	} while(inode != all_i);
 	vfs_unlock();
-	if(complain && bad)
+	if (complain && bad)
 		printk("VFS: %d inode(s) busy on removed device `%s'\n",
 		       bad, kdevname(dev));
 	return (bad == 0);
@@ -642,16 +579,14 @@ int fs_may_remount_ro(kdev_t dev)
 	return 1; /* not checked any more */
 }
 
-int fs_may_umount(kdev_t dev, struct inode * mount_root)
+int fs_may_umount(kdev_t dev, struct dentry * root)
 {
 	struct inode * inode;
 	vfs_lock();
 	inode = all_i;
-	if(inode) do {
-xcheck("fs_may_umount",inode);
-		if(inode->i_dev == dev && atomic_read(&inode->i_count))
-			if(inode != mount_root || atomic_read(&inode->i_count) > 
-			   (inode->i_mount == inode ? 2 : 1)) {
+	if (inode) do {
+		if (inode->i_dev == dev && atomic_read(&inode->i_count))
+			if (inode != root->d_inode) {
 				vfs_unlock();
 				return 0;
 			}
@@ -668,7 +603,7 @@ blocking struct inode * get_pipe_inode(void)
 	struct inode * inode = get_empty_inode();
 
 	PIPE_BASE(*inode) = (char*)__get_free_page(GFP_USER);
-	if(!(PIPE_BASE(*inode))) {
+	if (!(PIPE_BASE(*inode))) {
 		iput(inode);
 		return NULL;
 	}
@@ -682,21 +617,6 @@ blocking struct inode * get_pipe_inode(void)
 	inode->i_op = &pipe_inode_operations;
 	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 1;
 
-	/* I hope this does not introduce security problems.
-	 * Please check and give me response.
-	 */
-	{
-		char dummyname[32];
-		struct qstr dummy = { dummyname, 0 };
-		struct dentry * new;
-		sprintf(dummyname, ".anonymous-pipe-%06lud", inode->i_ino);
-		dummy.len = strlen(dummyname);
-		vfs_lock();
-		new = d_alloc(the_root, dummy.len, 0);
-		if(new)
-			d_add(new, inode, &dummy, D_BASKET);
-		vfs_unlock();
-	}
 	return inode;
 }
 

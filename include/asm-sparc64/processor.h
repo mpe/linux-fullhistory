@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.29 1997/06/16 04:45:05 davem Exp $
+/* $Id: processor.h,v 1.32 1997/07/01 21:59:38 davem Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -32,35 +32,24 @@
 
 /* The Sparc processor specific thread struct. */
 struct thread_struct {
-	/* Floating point regs */
-	/* Please check asm_offsets, so that not to much precious space
-	   is wasted by this alignment and move the float_regs wherever
-	   is better in this structure. Remember every byte of alignment
-	   is multiplied by 512 to get the amount of wasted kernel memory. */
-	unsigned int    float_regs[64] __attribute__ ((aligned (64)));
-	unsigned long   fsr;
-	
-	/* Context switch saved kernel state. */
-	unsigned long ksp, kpc, wstate, cwp, ctx;
+/*DC1*/	unsigned long ksp __attribute__ ((aligned(16)));
+	unsigned long kpc;
+/*DC2*/	unsigned long wstate;
+	unsigned int cwp;
+	unsigned int ctx;
 
-	/* Storage for windows when user stack is bogus. */
+/*DC3*/	unsigned int flags;
+	unsigned int new_signal;
+	unsigned long current_ds;
+/*DC4*/	unsigned long w_saved;
+	struct pt_regs *kregs;
+
 	struct reg_window reg_window[NSWINS] __attribute__ ((aligned (16)));
 	unsigned long rwbuf_stkptrs[NSWINS] __attribute__ ((aligned (8)));
-	unsigned long w_saved;
 	
-	/* Arch-specific task state flags, see below. */
-	unsigned long flags;
-
-	/* For signal handling */
 	unsigned long sig_address __attribute__ ((aligned (8)));
 	unsigned long sig_desc;
-
 	struct sigstack sstk_info;
-	unsigned long current_ds;
-	unsigned long new_signal;
-	
-	struct pt_regs *kregs;
-	
 	struct exec core_exec;     /* just what it says. */
 };
 
@@ -75,30 +64,18 @@ struct thread_struct {
 		    PAGE_SHARED , VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
 
 #define INIT_TSS  {							\
-/* FPU regs */   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	\
-                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	\
-                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	\
-                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },	\
-/* FPU status */ 							\
-   0, 									\
 /* ksp, kpc, wstate, cwp, secctx */ 					\
    0,   0,   0,	     0,	  0,						\
+/* flags,              new_signal, current_ds, */			\
+   SPARC_FLAG_KTHREAD, 0,          USER_DS,				\
+/* w_saved, kregs, */							\
+   0,       0,								\
 /* reg_window */							\
-{ { { 0, }, { 0, } }, }, 						\
+   { { { 0, }, { 0, } }, }, 						\
 /* rwbuf_stkptrs */							\
-{ 0, 0, 0, 0, 0, 0, 0, 0, },						\
-/* w_saved */								\
-   0, 									\
-/* flags */								\
-   SPARC_FLAG_KTHREAD,							\
-/* sig_address, sig_desc */						\
-   0,           0,							\
-/* ex,     sstk_info, current_ds, */					\
-   { 0, 0, }, USER_DS,							\
-/* new_signal, kregs */							\
-  0,           0,							\
-/* core_exec */								\
-{ 0, },									\
+   { 0, 0, 0, 0, 0, 0, 0, 0, },						\
+/* sig_address, sig_desc, sstk_info, core_exec */			\
+   0,           0,        { 0, 0, }, { 0, },				\
 }
 
 #ifndef __ASSEMBLY__
@@ -112,11 +89,12 @@ extern __inline__ unsigned long thread_saved_pc(struct thread_struct *t)
 /* Do necessary setup to start up a newly executed thread. */
 #define start_thread(regs, pc, sp) \
 do { \
-	regs->tstate = (regs->tstate & (TSTATE_CWP)) | TSTATE_IE; \
+	regs->tstate = (regs->tstate & (TSTATE_CWP)) | (TSTATE_IE|TSTATE_PEF); \
 	regs->tpc = ((pc & (~3)) - 4); \
 	regs->tnpc = regs->tpc + 4; \
 	regs->y = 0; \
 	current->tss.flags &= ~SPARC_FLAG_32BIT; \
+	current->tss.wstate = (1 << 3); \
 	__asm__ __volatile__( \
 	"stx		%%g0, [%0 + %2 + 0x00]\n\t" \
 	"stx		%%g0, [%0 + %2 + 0x08]\n\t" \
@@ -147,11 +125,12 @@ do { \
 	pc &= 0x00000000ffffffffUL; \
 	sp &= 0x00000000ffffffffUL; \
 \
-	regs->tstate = (regs->tstate & (TSTATE_CWP)) | (TSTATE_IE | TSTATE_AM); \
+	regs->tstate = (regs->tstate & (TSTATE_CWP))|(TSTATE_IE|TSTATE_AM|TSTATE_PEF); \
 	regs->tpc = ((pc & (~3)) - 4); \
 	regs->tnpc = regs->tpc + 4; \
 	regs->y = 0; \
 	current->tss.flags |= SPARC_FLAG_32BIT; \
+	current->tss.wstate = (2 << 3); \
 	zero = 0; \
 	__asm__ __volatile__( \
 	"stx		%%g0, [%0 + %2 + 0x00]\n\t" \

@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 036
+ *	AX.25 release 037
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -35,6 +35,7 @@
  *	AX.25 035	Hans(PE1AYX)	Fixed interface to IP layer.
  *	AX.25 036	Jonathan(G4KLX)	Move DAMA code into own file.
  *			Joerg(DL1BKE)	Fixed DAMA Slave.
+ *	AX.25 037	Jonathan(G4KLX)	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -136,7 +137,7 @@ int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 
 	if (skb == NULL) return 0;
 
-	ax25->idletimer = ax25->idle;
+	ax25_start_idletimer(ax25);
 
 	pid = *skb->data;
 
@@ -193,8 +194,6 @@ static int ax25_process_rx_frame(ax25_cb *ax25, struct sk_buff *skb, int type, i
 	if (ax25->state == AX25_STATE_0)
 		return 0;
 
-	del_timer(&ax25->timer);
-
 	switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
 		case AX25_PROTO_STD_SIMPLEX:
 		case AX25_PROTO_STD_DUPLEX:
@@ -210,8 +209,6 @@ static int ax25_process_rx_frame(ax25_cb *ax25, struct sk_buff *skb, int type, i
 			break;
 #endif
 	}
-
-	ax25_set_timer(ax25);
 
 	return queued;
 }
@@ -413,7 +410,6 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		}
 
 		ax25_fillin_cb(ax25, ax25_dev);
-		ax25->idletimer = ax25->idle;
 	}
 
 	ax25->source_addr = dest;
@@ -453,12 +449,13 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		ax25_dama_on(ax25);
 #endif
 
-	ax25->t3timer = ax25->t3;
-	ax25->state   = AX25_STATE_3;
+	ax25->state = AX25_STATE_3;
 
 	ax25_insert_socket(ax25);
 
-	ax25_set_timer(ax25);
+	ax25_start_heartbeat(ax25);
+	ax25_start_t3timer(ax25);
+	ax25_start_idletimer(ax25);
 
 	if (sk != NULL) {
 		if (!sk->dead)

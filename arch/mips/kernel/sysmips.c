@@ -5,7 +5,9 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995 by Ralf Baechle
+ * Copyright (C) 1995, 1996, 1997 by Ralf Baechle
+ *
+ * $Id: sysmips.c,v 1.4 1997/06/30 15:52:37 ralf Exp $
  */
 #include <linux/errno.h>
 #include <linux/linkage.h>
@@ -79,8 +81,7 @@ sys_sysmips(int cmd, int arg1, int arg2, int arg3)
 		retval = verify_area(VERIFY_WRITE, p, sizeof(*p));
 		if (retval)
 			goto out;
-		save_flags(flags);
-		cli();
+		save_and_cli(flags);
 		retval = *p;
 		*p = arg2;
 		restore_flags(flags);

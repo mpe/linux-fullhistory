@@ -1,4 +1,4 @@
-/* $Id: sigcontext.h,v 1.6 1997/06/16 00:29:25 richard Exp $ */
+/* $Id: sigcontext.h,v 1.8 1997/06/20 11:54:41 davem Exp $ */
 #ifndef __SPARC64_SIGCONTEXT_H
 #define __SPARC64_SIGCONTEXT_H
 
@@ -67,17 +67,6 @@ typedef struct {
 } __siginfo32_t;
 
 typedef struct {
-	unsigned int si_float_regs [32];
-	unsigned int si_fsr;
-	unsigned int si_fpqdepth;
-	struct {
-		unsigned int *insn_addr;
-		unsigned int insn;
-	} si_fpqueue [16];
-} __siginfo_fpu32_t;
-
-
-typedef struct {
 	struct     pt_regs si_regs;
 	int si_mask;
 } __siginfo_t;
@@ -85,6 +74,7 @@ typedef struct {
 typedef struct {
 	unsigned   int si_float_regs [64];
 	unsigned   long si_fsr;
+	unsigned   long si_gsr;
 	unsigned   int si_fpqdepth;
 	struct {
 		unsigned int *insn_addr;

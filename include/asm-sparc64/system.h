@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.23 1997/06/16 06:17:06 davem Exp $ */
+/* $Id: system.h,v 1.26 1997/06/28 10:04:03 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -95,44 +95,14 @@ extern __inline__ void flushw_user(void)
 {
 	__asm__ __volatile__("
 		rdpr		%%otherwin, %%g1
-		brz,pt		%%g1, 2f
+		brz,pt		%%g1, 1f
+		 mov		%%o7, %%g3
+		call		__flushw_user
 		 clr		%%g2
-1:
-		save		%%sp, %0, %%sp
-		rdpr		%%otherwin, %%g1
-		brnz,pt		%%g1, 1b
-		 add		%%g2, 1, %%g2
-1:
-		subcc		%%g2, 1, %%g2
-		bne,pt		%%xcc, 1b
-		 restore	%%g0, %%g0, %%g0
-2:
-	" : : "i" (-REGWIN_SZ)
-	  : "g1", "g2", "cc");
+1:"	: : : "g1", "g2", "g3");
 }
 
 #define flush_user_windows flushw_user
-
-#ifdef __SMP__
-
-#include <asm/fpumacro.h>
-
-#define SWITCH_ENTER(prev)						\
-	if((prev)->flags & PF_USEDFPU) { 				\
-		fprs_write(FPRS_FEF);					\
-		fpsave((unsigned long *) &(prev)->tss.float_regs[0],	\
-		       &(prev)->tss.fsr);				\
-		(prev)->flags &= ~PF_USEDFPU;				\
-		(prev)->tss.kregs->tstate &= ~TSTATE_PEF;		\
-	}
-
-#define SWITCH_DO_LAZY_FPU(next)
-#else
-#define SWITCH_ENTER(prev)
-#define SWITCH_DO_LAZY_FPU(next)			\
-	if(last_task_used_math != (next))		\
-		(next)->tss.kregs->tstate &= ~TSTATE_PEF
-#endif
 
 	/* See what happens when you design the chip correctly?
 	 * NOTE NOTE NOTE this is extremely non-trivial what I
@@ -146,13 +116,13 @@ extern __inline__ void flushw_user(void)
 do {											\
 	__label__ switch_continue;							\
 	register unsigned long task_pc asm("o7");					\
-	SWITCH_ENTER(prev)								\
-	SWITCH_DO_LAZY_FPU(next);							\
+	(prev)->tss.kregs->fprs = 0;							\
 	task_pc = ((unsigned long) &&switch_continue) - 0x8;				\
 	__asm__ __volatile__(								\
 	"rdpr	%%pstate, %%g2\n\t"							\
-	"wrpr	%%g2, 0x2, %%pstate\n\t"						\
+	"wrpr	%%g2, 0x3, %%pstate\n\t"						\
 	"flushw\n\t"									\
+/*XXX*/	"wr	%%g0, 0, %%fprs\n\t"							\
 	"stx	%%i6, [%%sp + 2047 + 0x70]\n\t"						\
 	"stx	%%i7, [%%sp + 2047 + 0x78]\n\t"						\
 	"rdpr	%%wstate, %%o5\n\t"							\
@@ -160,19 +130,20 @@ do {											\
 	"stx	%%o5, [%%g6 + %2]\n\t"							\
 	"rdpr	%%cwp, %%o5\n\t"							\
 	"stx	%%o7, [%%g6 + %4]\n\t"							\
-	"stx	%%o5, [%%g6 + %5]\n\t"							\
+	"st	%%o5, [%%g6 + %5]\n\t"							\
 	"mov	%0, %%g6\n\t"								\
-	"ldx	[%0 + %5], %%g1\n\t"							\
-	"wr	%0, 0x0, %%pic\n\t"							\
+	"ld	[%0 + %5], %%g1\n\t"							\
 	"wrpr	%%g1, %%cwp\n\t"							\
 	"ldx	[%%g6 + %2], %%o5\n\t"							\
 	"ldx	[%%g6 + %3], %%o6\n\t"							\
 	"ldx	[%%g6 + %4], %%o7\n\t"							\
+	"mov	%%g6, %0\n\t"								\
 	"wrpr	%%o5, 0x0, %%wstate\n\t"						\
 	"ldx	[%%sp + 2047 + 0x70], %%i6\n\t"						\
 	"ldx	[%%sp + 2047 + 0x78], %%i7\n\t"						\
+	"wrpr	%%g0, 0x96, %%pstate\n\t"						\
 	"jmpl	%%o7 + 0x8, %%g0\n\t"							\
-	" wrpr	%%g2, 0x0, %%pstate\n\t"						\
+	" mov	%0, %%g6\n\t"								\
 	: /* No outputs */								\
 	: "r" (next), "r" (task_pc),							\
 	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.wstate)),		\

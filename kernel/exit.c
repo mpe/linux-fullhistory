@@ -404,8 +404,8 @@ static inline void __exit_fs(struct task_struct *tsk)
 	if (fs) {
 		tsk->fs = NULL;
 		if (!--fs->count) {
-			iput(fs->root);
-			iput(fs->pwd);
+			dput(fs->root);
+			dput(fs->pwd);
 			kfree(fs);
 		}
 	}

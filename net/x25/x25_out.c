@@ -1,5 +1,5 @@
 /*
- *	X.25 Packet Layer release 001
+ *	X.25 Packet Layer release 002
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -14,6 +14,7 @@
  *
  *	History
  *	X.25 001	Jonathan Naylor	Started coding.
+ *	X.25 002	Jonathan Naylor	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -129,7 +130,8 @@ void x25_kick(struct sock *sk)
 	unsigned short end;
 	int modulus;
 
-	del_timer(&sk->timer);
+	if (sk->protinfo.x25->state != X25_STATE_3)
+		return;
 
 	/*
 	 *	Transmit interrupt data.
@@ -140,38 +142,39 @@ void x25_kick(struct sock *sk)
 		x25_transmit_link(skb, sk->protinfo.x25->neighbour);
 	}
 
+	if (sk->protinfo.x25->condition & X25_COND_PEER_RX_BUSY)
+		return;
+
+	if (skb_peek(&sk->write_queue) == NULL)
+		return;
+
 	modulus = (sk->protinfo.x25->neighbour->extended) ? X25_EMODULUS : X25_SMODULUS;
 	end     = (sk->protinfo.x25->va + sk->protinfo.x25->facilities.winsize_out) % modulus;
 
+	if (sk->protinfo.x25->vs == end)
+		return;
+
 	/*
-	 *	Transmit normal stream data.
+	 * Transmit data until either we're out of data to send or
+	 * the window is full.
 	 */
-	if (!(sk->protinfo.x25->condition & X25_COND_PEER_RX_BUSY) &&
-	    sk->protinfo.x25->vs != end                            &&
-	    skb_peek(&sk->write_queue) != NULL) {
+
+	skb = skb_dequeue(&sk->write_queue);
+
+	do {
 		/*
-		 * Transmit data until either we're out of data to send or
-		 * the window is full.
+		 * Transmit the frame.
 		 */
+		x25_send_iframe(sk, skb);
 
-		skb = skb_dequeue(&sk->write_queue);
+		sk->protinfo.x25->vs = (sk->protinfo.x25->vs + 1) % modulus;
 
-		do {
-			/*
-			 * Transmit the frame.
-			 */
-			x25_send_iframe(sk, skb);
+	} while (sk->protinfo.x25->vs != end && (skb = skb_dequeue(&sk->write_queue)) != NULL);
 
-			sk->protinfo.x25->vs = (sk->protinfo.x25->vs + 1) % modulus;
+	sk->protinfo.x25->vl         = sk->protinfo.x25->vr;
+	sk->protinfo.x25->condition &= ~X25_COND_ACK_PENDING;
 
-		} while (sk->protinfo.x25->vs != end && (skb = skb_dequeue(&sk->write_queue)) != NULL);
-
-		sk->protinfo.x25->vl         = sk->protinfo.x25->vr;
-		sk->protinfo.x25->condition &= ~X25_COND_ACK_PENDING;
-		sk->protinfo.x25->timer      = 0;
-	}
-
-	x25_set_timer(sk);
+	x25_stop_timer(sk);
 }
 
 /*
@@ -188,7 +191,8 @@ void x25_enquiry_response(struct sock *sk)
 
 	sk->protinfo.x25->vl         = sk->protinfo.x25->vr;
 	sk->protinfo.x25->condition &= ~X25_COND_ACK_PENDING;
-	sk->protinfo.x25->timer      = 0;
+
+	x25_stop_timer(sk);
 }
 
 void x25_check_iframes_acked(struct sock *sk, unsigned short nr)

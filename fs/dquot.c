@@ -1038,7 +1038,7 @@ asmlinkage int sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 	if (special == (char *)NULL && (cmds == Q_SYNC || cmds == Q_GETSTATS))
 		dev = 0;
 	else {
-		int error = namei(NAM_FOLLOW_LINK, special, &ino);
+		int error = namei(special, &ino);
 		if(error)
 			goto out;
 		dev = ino->i_rdev;

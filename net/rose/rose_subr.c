@@ -1,5 +1,5 @@
 /*
- *	ROSE release 002
+ *	ROSE release 003
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -11,6 +11,8 @@
  *
  *	History
  *	ROSE 001	Jonathan(G4KLX)	Cloned from nr_subr.c
+ *	ROSE 002	Jonathan(G4KLX)	Centralised disconnect processing.
+ *	ROSE 003	Jonathan(G4KLX)	Added use count to neighbours.
  */
 
 #include <linux/config.h>
@@ -92,11 +94,7 @@ void rose_write_internal(struct sock *sk, int frametype)
 		case ROSE_CALL_ACCEPTED:
 		case ROSE_CLEAR_REQUEST:
 		case ROSE_RESET_REQUEST:
-		case ROSE_DIAGNOSTIC:
 			len   += 2;
-			break;
-		case ROSE_INTERRUPT:
-			len   += 1;
 			break;
 	}
 
@@ -137,24 +135,23 @@ void rose_write_internal(struct sock *sk, int frametype)
 			break;
 
 		case ROSE_CLEAR_REQUEST:
+			*dptr++ = ROSE_GFI | lci1;
+			*dptr++ = lci2;
+			*dptr++ = frametype;
+			*dptr++ = sk->protinfo.rose->cause;
+			*dptr++ = sk->protinfo.rose->diagnostic;
+			break;
+
 		case ROSE_RESET_REQUEST:
 			*dptr++ = ROSE_GFI | lci1;
 			*dptr++ = lci2;
 			*dptr++ = frametype;
-			*dptr++ = 0x00;		/* XXX */
-			*dptr++ = 0x00;		/* XXX */
-			break;
-
-		case ROSE_INTERRUPT:
-			*dptr++ = ROSE_GFI | lci1;
-			*dptr++ = lci2;
-			*dptr++ = frametype;
-			*dptr++ = 0x00;		/* XXX */
+			*dptr++ = ROSE_DTE_ORIGINATED;
+			*dptr++ = 0;
 			break;
 
 		case ROSE_RR:
 		case ROSE_RNR:
-		case ROSE_REJ:
 			*dptr++ = ROSE_GFI | lci1;
 			*dptr++ = lci2;
 			*dptr   = frametype;
@@ -162,7 +159,6 @@ void rose_write_internal(struct sock *sk, int frametype)
 			break;
 
 		case ROSE_CLEAR_CONFIRMATION:
-		case ROSE_INTERRUPT_CONFIRMATION:
 		case ROSE_RESET_CONFIRMATION:
 			*dptr++ = ROSE_GFI | lci1;
 			*dptr++ = lci2;
@@ -191,23 +187,15 @@ int rose_decode(struct sk_buff *skb, int *ns, int *nr, int *q, int *d, int *m)
 		case ROSE_CALL_ACCEPTED:
 		case ROSE_CLEAR_REQUEST:
 		case ROSE_CLEAR_CONFIRMATION:
-		case ROSE_INTERRUPT:
-		case ROSE_INTERRUPT_CONFIRMATION:
 		case ROSE_RESET_REQUEST:
 		case ROSE_RESET_CONFIRMATION:
-		case ROSE_RESTART_REQUEST:
-		case ROSE_RESTART_CONFIRMATION:
-		case ROSE_REGISTRATION_REQUEST:
-		case ROSE_REGISTRATION_CONFIRMATION:
-		case ROSE_DIAGNOSTIC:
 			return frame[2];
 		default:
 			break;
 	}
 
 	if ((frame[2] & 0x1F) == ROSE_RR  ||
-	    (frame[2] & 0x1F) == ROSE_RNR ||
-	    (frame[2] & 0x1F) == ROSE_REJ) {
+	    (frame[2] & 0x1F) == ROSE_RNR) {
 		*nr = (frame[2] >> 5) & 0x07;
 		return frame[2] & 0x1F;
 	}
@@ -435,6 +423,32 @@ int rose_create_facilities(unsigned char *buffer, rose_cb *rose)
 	buffer[0] = len - 1;
 
 	return len;
+}
+
+void rose_disconnect(struct sock *sk, int reason, int cause, int diagnostic)
+{
+	rose_stop_timer(sk);
+	rose_stop_idletimer(sk);
+
+	rose_clear_queues(sk);
+
+	sk->protinfo.rose->lci   = 0;
+	sk->protinfo.rose->state = ROSE_STATE_0;
+
+	if (cause != -1)
+		sk->protinfo.rose->cause = cause;
+
+	if (diagnostic != -1)
+		sk->protinfo.rose->diagnostic = diagnostic;
+
+	sk->state     = TCP_CLOSE;
+	sk->err       = reason;
+	sk->shutdown |= SEND_SHUTDOWN;
+
+	if (!sk->dead)
+		sk->state_change(sk);
+
+	sk->dead  = 1;
 }
 
 #endif

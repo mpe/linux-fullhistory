@@ -1,4 +1,4 @@
-/* $Id: unaligned.c,v 1.1 1997/06/06 10:56:19 jj Exp $
+/* $Id: unaligned.c,v 1.3 1997/06/25 10:12:15 jj Exp $
  * unaligned.c: Unaligned load/store trap handling with special
  *              cases for the kernel to do them more quickly.
  *
@@ -18,7 +18,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 
-#define DEBUG_MNA
+/* #define DEBUG_MNA */
 
 enum direction {
 	load,    /* ld, ldd, ldh, ldsh */
@@ -205,19 +205,19 @@ __asm__ __volatile__ (								\
 	"stx	%%g7, [%0 + 8]\n"						\
 "0:\n\n\t"									\
 	".section __ex_table\n\t"						\
-	".word	4b, " #errh "\n\t"						\
-	".word	5b, " #errh "\n\t"						\
-	".word	6b, " #errh "\n\t"						\
-	".word	7b, " #errh "\n\t"						\
-	".word	8b, " #errh "\n\t"						\
-	".word	9b, " #errh "\n\t"						\
-	".word	10b, " #errh "\n\t"						\
-	".word	11b, " #errh "\n\t"						\
-	".word	12b, " #errh "\n\t"						\
-	".word	13b, " #errh "\n\t"						\
-	".word	14b, " #errh "\n\t"						\
-	".word	15b, " #errh "\n\t"						\
-	".word	16b, " #errh "\n\n\t"						\
+	".xword	4b, " #errh "\n\t"						\
+	".xword	5b, " #errh "\n\t"						\
+	".xword	6b, " #errh "\n\t"						\
+	".xword	7b, " #errh "\n\t"						\
+	".xword	8b, " #errh "\n\t"						\
+	".xword	9b, " #errh "\n\t"						\
+	".xword	10b, " #errh "\n\t"						\
+	".xword	11b, " #errh "\n\t"						\
+	".xword	12b, " #errh "\n\t"						\
+	".xword	13b, " #errh "\n\t"						\
+	".xword	14b, " #errh "\n\t"						\
+	".xword	15b, " #errh "\n\t"						\
+	".xword	16b, " #errh "\n\n\t"						\
 	".previous\n\t"								\
 	: : "r" (dest_reg), "r" (size), "r" (saddr), "r" (is_signed), "r" (asi)	\
 	: "l1", "l2", "g7", "g1", "cc");					\
@@ -259,20 +259,20 @@ __asm__ __volatile__ (								\
 "17:\t"	"stba	%%l1, [%0 + 1] %%asi\n"						\
 "0:\n\n\t"									\
 	".section __ex_table\n\t"						\
-	".word	4b, " #errh "\n\t"						\
-	".word	5b, " #errh "\n\t"						\
-	".word	6b, " #errh "\n\t"						\
-	".word	7b, " #errh "\n\t"						\
-	".word	8b, " #errh "\n\t"						\
-	".word	9b, " #errh "\n\t"						\
-	".word	10b, " #errh "\n\t"						\
-	".word	11b, " #errh "\n\t"						\
-	".word	12b, " #errh "\n\t"						\
-	".word	13b, " #errh "\n\t"						\
-	".word	14b, " #errh "\n\t"						\
-	".word	15b, " #errh "\n\t"						\
-	".word	16b, " #errh "\n\t"						\
-	".word	17b, " #errh "\n\n\t"						\
+	".xword	4b, " #errh "\n\t"						\
+	".xword	5b, " #errh "\n\t"						\
+	".xword	6b, " #errh "\n\t"						\
+	".xword	7b, " #errh "\n\t"						\
+	".xword	8b, " #errh "\n\t"						\
+	".xword	9b, " #errh "\n\t"						\
+	".xword	10b, " #errh "\n\t"						\
+	".xword	11b, " #errh "\n\t"						\
+	".xword	12b, " #errh "\n\t"						\
+	".xword	13b, " #errh "\n\t"						\
+	".xword	14b, " #errh "\n\t"						\
+	".xword	15b, " #errh "\n\t"						\
+	".xword	16b, " #errh "\n\t"						\
+	".xword	17b, " #errh "\n\n\t"						\
 	".previous\n\t"								\
 	: : "r" (dst_addr), "r" (size), "r" (src_val), "r" (asi)		\
 	: "l1", "l2", "g7", "g1", "cc");					\

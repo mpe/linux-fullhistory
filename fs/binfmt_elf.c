@@ -111,23 +111,20 @@ create_elf_tables(char *p, int argc, int envc,
 {
 	elf_caddr_t *argv;
 	elf_caddr_t *envp;
-	elf_addr_t *sp;
+	elf_addr_t *sp, *csp;
 
 	/*
-	 * Force 16 byte alignment here for generality.
+	 * Force 16 byte _final_ alignment here for generality.
 	 */
 	sp = (elf_addr_t *) (~15UL & (unsigned long) p);
-#ifdef __sparc__
-{
-	elf_addr_t *csp;
 	csp = sp;
 	csp -= exec ? DLINFO_ITEMS*2 : 2;
 	csp -= envc+1;
 	csp -= argc+1;
-	if (!(((unsigned long) csp) & 4))
-		sp--;
-}
-#endif
+	csp -= (!ibcs ? 3 : 1);	/* argc itself */
+	if ((unsigned long)csp & 15UL) {
+		sp -= (16UL - ((unsigned long)csp & 15UL)) / sizeof(*sp);
+	}
 
 	/*
 	 * Put the ELF interpreter info on the stack
@@ -142,17 +139,17 @@ create_elf_tables(char *p, int argc, int envc,
 	if (exec) {
 		sp -= 11*2;
 
-	  NEW_AUX_ENT (0, AT_PHDR, load_addr + exec->e_phoff);
-	  NEW_AUX_ENT (1, AT_PHENT, sizeof (struct elf_phdr));
-	  NEW_AUX_ENT (2, AT_PHNUM, exec->e_phnum);
-	  NEW_AUX_ENT (3, AT_PAGESZ, ELF_EXEC_PAGESIZE);
-	  NEW_AUX_ENT (4, AT_BASE, interp_load_addr);
-	  NEW_AUX_ENT (5, AT_FLAGS, 0);
-	  NEW_AUX_ENT (6, AT_ENTRY, (elf_addr_t) exec->e_entry);
-	  NEW_AUX_ENT (7, AT_UID, (elf_addr_t) current->uid);
-	  NEW_AUX_ENT (8, AT_EUID, (elf_addr_t) current->euid);
-	  NEW_AUX_ENT (9, AT_GID, (elf_addr_t) current->gid);
-	  NEW_AUX_ENT (10, AT_EGID, (elf_addr_t) current->egid);
+		NEW_AUX_ENT (0, AT_PHDR, load_addr + exec->e_phoff);
+		NEW_AUX_ENT (1, AT_PHENT, sizeof (struct elf_phdr));
+		NEW_AUX_ENT (2, AT_PHNUM, exec->e_phnum);
+		NEW_AUX_ENT (3, AT_PAGESZ, ELF_EXEC_PAGESIZE);
+		NEW_AUX_ENT (4, AT_BASE, interp_load_addr);
+		NEW_AUX_ENT (5, AT_FLAGS, 0);
+		NEW_AUX_ENT (6, AT_ENTRY, (elf_addr_t) exec->e_entry);
+		NEW_AUX_ENT (7, AT_UID, (elf_addr_t) current->uid);
+		NEW_AUX_ENT (8, AT_EUID, (elf_addr_t) current->euid);
+		NEW_AUX_ENT (9, AT_GID, (elf_addr_t) current->gid);
+		NEW_AUX_ENT (10, AT_EGID, (elf_addr_t) current->egid);
 	}
 #undef NEW_AUX_ENT
 

@@ -1,4 +1,4 @@
-/* $Id: checksum.h,v 1.8 1997/05/29 12:45:03 jj Exp $ */
+/* $Id: checksum.h,v 1.9 1997/06/26 04:05:17 davem Exp $ */
 #ifndef __SPARC64_CHECKSUM_H
 #define __SPARC64_CHECKSUM_H
 
@@ -108,31 +108,30 @@ extern __inline__ unsigned short ip_fast_csum(__const__ unsigned char *iph,
 	 *       both operands.
 	 */
 	__asm__ __volatile__("
-	sub		%2, 4, %%g7
-	lduw		[%1 + 0x00], %0
-	lduw		[%1 + 0x04], %%g2
-	lduw		[%1 + 0x08], %%g3
-	addcc		%%g2, %0, %0
-	addccc		%%g3, %0, %0
-	lduw		[%1 + 0x0c], %%g2
-	lduw		[%1 + 0x10], %%g3
-	addccc		%%g2, %0, %0
-	addc		%0, %%g0, %0
-1:
-	addcc		%%g3, %0, %0
-	add		%1, 4, %1
-	addccc		%0, %%g0, %0
-	subcc		%%g7, 1, %%g7
-	be,a,pt		%%icc, 2f
-	 sll		%0, 16, %%g2
-	ba,pt		%%xcc, 1b
-	 lduw		[%1 + 0x10], %%g3
-2:
-	addcc		%0, %%g2, %%g2
-	srl		%%g2, 16, %0
-	addc		%0, %%g0, %0
-	xnor		%%g0, %0, %0
-	srl		%0, 0, %0
+	sub		%2, 4, %%g7		! IEU0
+	lduw		[%1 + 0x00], %0		! Load	Group
+	lduw		[%1 + 0x04], %%g2	! Load	Group
+	lduw		[%1 + 0x08], %%g3	! Load	Group
+	addcc		%%g2, %0, %0		! IEU1	1 Load Bubble + Group
+	lduw		[%1 + 0x0c], %%g2	! Load
+	addccc		%%g3, %0, %0		! Sngle	Group no Bubble
+	lduw		[%1 + 0x10], %%g3	! Load	Group
+	addccc		%%g2, %0, %0		! Sngle	Group no Bubble
+	addc		%0, %%g0, %0		! Sngle Group
+1:	addcc		%%g3, %0, %0		! IEU1	Group no Bubble
+	add		%1, 4, %1		! IEU0
+	addccc		%0, %%g0, %0		! Sngle Group no Bubble
+	subcc		%%g7, 1, %%g7		! IEU1	Group
+	be,a,pt		%%icc, 2f		! CTI
+	 sll		%0, 16, %%g2		! IEU0
+	lduw		[%1 + 0x10], %%g3	! Load	Group
+	ba,pt		%%xcc, 1b		! CTI
+	 nop					! IEU0
+2:	addcc		%0, %%g2, %%g2		! IEU1	Group
+	srl		%%g2, 16, %0		! IEU0	Group regdep	XXX Scheisse!
+	addc		%0, %%g0, %0		! Sngle	Group
+	xnor		%%g0, %0, %0		! IEU0	Group
+	srl		%0, 0, %0		! IEU0	Group		XXX Scheisse!
 "	: "=r" (sum), "=&r" (iph)
 	: "r" (ihl), "1" (iph)
 	: "g2", "g3", "g7", "cc");

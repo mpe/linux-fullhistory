@@ -124,4 +124,24 @@ void output_mm_defines(void)
 	linefeed;
 }
 
+void output_sc_defines(void)
+{
+	text("/* Linux sigcontext offsets. */");
+	offset("#define SC_REGMASK    ", struct sigcontext, sc_regmask);
+	offset("#define SC_STATUS     ", struct sigcontext, sc_status);
+	offset("#define SC_PC         ", struct sigcontext, sc_pc);
+	offset("#define SC_REGS       ", struct sigcontext, sc_regs);
+	offset("#define SC_FPREGS     ", struct sigcontext, sc_fpregs);
+	offset("#define SC_OWNEDFP    ", struct sigcontext, sc_ownedfp);
+	offset("#define SC_FPC_CSR    ", struct sigcontext, sc_fpc_csr);
+	offset("#define SC_FPC_EIR    ", struct sigcontext, sc_fpc_eir);
+	offset("#define SC_SSFLAGS    ", struct sigcontext, sc_ssflags);
+	offset("#define SC_MDHI       ", struct sigcontext, sc_mdhi);
+	offset("#define SC_MDLO       ", struct sigcontext, sc_mdlo);
+	offset("#define SC_CAUSE      ", struct sigcontext, sc_cause);
+	offset("#define SC_BADVADDR   ", struct sigcontext, sc_badvaddr);
+	offset("#define SC_SIGSET     ", struct sigcontext, sc_sigset);
+	linefeed;
+}
+
 text("#endif /* !(_MIPS_OFFSET_H) */");

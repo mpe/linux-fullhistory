@@ -1,5 +1,5 @@
 /*
- *	NET/ROM release 006
+ *	NET/ROM release 007
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -12,6 +12,7 @@
  *	History
  *	NET/ROM 001	Jonathan(G4KLX)	Cloned from ax25_subr.c
  *	NET/ROM	003	Jonathan(G4KLX)	Added G8BPQ NET/ROM extensions.
+ *	NET/ROM 007	Jonathan(G4KLX)	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -172,7 +173,7 @@ void nr_write_internal(struct sock *sk, int frametype)
 	switch (frametype & 0x0F) {
 
 		case NR_CONNREQ:
-			timeout  = sk->protinfo.nr->t1 / NR_SLOWHZ;
+			timeout  = sk->protinfo.nr->t1 / HZ;
 			*dptr++  = sk->protinfo.nr->my_index;
 			*dptr++  = sk->protinfo.nr->my_id;
 			*dptr++  = 0;
@@ -266,6 +267,27 @@ void nr_transmit_dm(struct sk_buff *skb)
 
 	if (!nr_route_frame(skbn, NULL))
 		kfree_skb(skbn, FREE_WRITE);
+}
+
+void nr_disconnect(struct sock *sk, int reason)
+{
+	nr_stop_t1timer(sk);
+	nr_stop_t2timer(sk);
+	nr_stop_t4timer(sk);
+	nr_stop_idletimer(sk);
+
+	nr_clear_queues(sk);
+
+	sk->protinfo.nr->state = NR_STATE_0;
+
+	sk->state     = TCP_CLOSE;
+	sk->err       = reason;
+	sk->shutdown |= SEND_SHUTDOWN;
+
+	if (!sk->dead)
+		sk->state_change(sk);
+
+	sk->dead = 1;
 }
 
 #endif

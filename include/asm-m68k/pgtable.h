@@ -95,38 +95,23 @@ extern void cache_push_v (unsigned long vaddr, int len);
 
 extern inline void flush_cache_mm(struct mm_struct *mm)
 {
-#if FLUSH_VIRTUAL_CACHE_040
-	if (mm == current->mm) __flush_cache_all();
-#else
-	if (mm == current->mm) __flush_cache_030();
-#endif
+	if (mm == current->mm)
+		__flush_cache_030();
 }
 
 extern inline void flush_cache_range(struct mm_struct *mm,
 				     unsigned long start,
 				     unsigned long end)
 {
-	if (mm == current->mm){
-#if FLUSH_VIRTUAL_CACHE_040
-	    if (CPU_IS_040_OR_060)
-	        cache_push_v(start, end-start);
-	    else
-#endif
+	if (mm == current->mm)
 	        __flush_cache_030();
-	}
 }
 
 extern inline void flush_cache_page(struct vm_area_struct *vma,
 				    unsigned long vmaddr)
 {
-	if (vma->vm_mm == current->mm){
-#if FLUSH_VIRTUAL_CACHE_040
-	    if (CPU_IS_040_OR_060)
-	        cache_push_v(vmaddr, PAGE_SIZE);
-	    else
-#endif
+	if (vma->vm_mm == current->mm)
 	        __flush_cache_030();
-	}
 }
 
 /* Push the page at kernel virtual address and clear the icache */
@@ -782,5 +767,8 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 #endif
 
 #endif /* __ASSEMBLY__ */
+
+#define module_map      vmalloc
+#define module_unmap    vfree
 
 #endif /* _M68K_PGTABLE_H */

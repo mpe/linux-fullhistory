@@ -1,5 +1,5 @@
-/* $Id: sparc64_ksyms.c,v 1.4 1997/04/14 17:04:43 jj Exp $
- * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
+/* $Id: sparc64_ksyms.c,v 1.8 1997/07/07 04:58:14 davem Exp $
+ * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 Eddie C. Dost (ecd@skynet.be)
@@ -38,19 +38,17 @@ struct poll {
 	short revents;
 };
 
-extern int svr4_getcontext (svr4_ucontext_t *, struct pt_regs *);
-extern int svr4_setcontext (svr4_ucontext_t *, struct pt_regs *);
 extern unsigned long sunos_mmap(unsigned long, unsigned long, unsigned long,
 				unsigned long, unsigned long, unsigned long);
 void _sigpause_common (unsigned int set, struct pt_regs *);
-extern void __copy_1page(void *, const void *);
-extern void *bzero_1page(void *);
+extern void *__bzero_1page(void *);
 extern void *__bzero(void *, size_t);
 extern void *__memscan_zero(void *, size_t);
 extern void *__memscan_generic(void *, int, size_t);
 extern int __memcmp(const void *, const void *, __kernel_size_t);
 extern int __strncmp(const char *, const char *, __kernel_size_t);
 extern unsigned int __csum_partial_copy_sparc_generic (const char *, char *);
+extern char saved_command_line[];
 
 extern void bcopy (const char *, char *, int);
 extern int __ashrdi3(int, int);
@@ -74,6 +72,8 @@ EXPORT_SYMBOL(klock_info);
 #endif
 EXPORT_SYMBOL_PRIVATE(_lock_kernel);
 EXPORT_SYMBOL_PRIVATE(_unlock_kernel);
+
+EXPORT_SYMBOL_PRIVATE(flushw_user);
 
 EXPORT_SYMBOL(mstk48t02_regs);
 EXPORT_SYMBOL(request_fast_irq);
@@ -99,8 +99,6 @@ EXPORT_SYMBOL(dma_chain);
 #endif
 
 /* Solaris/SunOS binary compatibility */
-EXPORT_SYMBOL(svr4_setcontext);
-EXPORT_SYMBOL(svr4_getcontext);
 EXPORT_SYMBOL(_sigpause_common);
 EXPORT_SYMBOL(sunos_mmap);
 
@@ -119,7 +117,7 @@ EXPORT_SYMBOL(prom_getproplen);
 EXPORT_SYMBOL(prom_getproperty);
 EXPORT_SYMBOL(prom_node_has_property);
 EXPORT_SYMBOL(prom_setprop);
-EXPORT_SYMBOL(prom_getbootargs);
+EXPORT_SYMBOL(saved_command_line);
 EXPORT_SYMBOL(prom_getname);
 EXPORT_SYMBOL(prom_feval);
 EXPORT_SYMBOL(prom_getstring);
@@ -148,10 +146,9 @@ EXPORT_SYMBOL(strstr);
 EXPORT_SYMBOL(strspn);
 
 /* Special internal versions of library functions. */
-EXPORT_SYMBOL(__copy_1page);
 EXPORT_SYMBOL(__memcpy);
 EXPORT_SYMBOL(__memset);
-EXPORT_SYMBOL(bzero_1page);
+EXPORT_SYMBOL(__bzero_1page);
 EXPORT_SYMBOL(__bzero);
 EXPORT_SYMBOL(__memscan_zero);
 EXPORT_SYMBOL(__memscan_generic);

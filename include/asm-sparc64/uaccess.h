@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.14 1997/06/13 14:03:11 davem Exp $ */
+/* $Id: uaccess.h,v 1.19 1997/06/30 10:31:46 jj Exp $ */
 #ifndef _ASM_UACCESS_H
 #define _ASM_UACCESS_H
 
@@ -40,7 +40,7 @@ do {						\
 		current->tss.ctx = (current->mm->context & 0x1fff); \
 	}					\
 	spitfire_set_secondary_context(current->tss.ctx); \
-	__asm__ __volatile__("flush %g4");	\
+	__asm__ __volatile__("flush %g6");	\
 } while(0)
 
 #define __user_ok(addr,size) 1
@@ -255,8 +255,47 @@ __asm__ __volatile__(							\
 
 extern int __get_user_bad(void);
 
-extern __kernel_size_t __copy_to_user(void *to, void *from, __kernel_size_t size);
-extern __kernel_size_t __copy_from_user(void *to, void *from, __kernel_size_t size);
+extern __kernel_size_t __memcpy_short(void *to, const void *from, __kernel_size_t size, long asi_src, long asi_dst);
+extern __kernel_size_t __memcpy_entry(void *to, const void *from, __kernel_size_t size, long asi_src, long asi_dst);
+extern __kernel_size_t __memcpy_16plus(void *to, const void *from, __kernel_size_t size, long asi_src, long asi_dst);
+extern __kernel_size_t __memcpy_386plus(void *to, const void *from, __kernel_size_t size, long asi_src, long asi_dst);
+
+#if 0
+extern __inline__ __kernel_size_t __copy_to_user(void *to, void *from, __kernel_size_t size)
+{
+	if (__builtin_constant_p(size)) {
+		if (!size) return 0;
+		if (size < 16)
+			return __memcpy_short(to,(const void *)from,size,ASI_BLK_P,ASI_BLK_S);
+		else if (size < 384)
+			return __memcpy_16plus(to,(const void *)from,size,ASI_BLK_P,ASI_BLK_S);
+		else
+			return __memcpy_386plus(to,(const void *)from,size,ASI_BLK_P,ASI_BLK_S);
+	} else {
+		if (!size) return 0;
+		return __memcpy_entry(to,(const void *)from,size,ASI_BLK_P,ASI_BLK_S);
+	}
+}
+
+extern __inline__ __kernel_size_t __copy_from_user(void *to, void *from, __kernel_size_t size)
+{
+	if (__builtin_constant_p(size)) {
+		if (!size) return 0;
+		if (size < 16)
+			return __memcpy_short(to,(const void *)from,size,ASI_BLK_S,ASI_BLK_P);
+		else if (size < 384)
+			return __memcpy_16plus(to,(const void *)from,size,ASI_BLK_S,ASI_BLK_P);
+		else
+			return __memcpy_386plus(to,(const void *)from,size,ASI_BLK_S,ASI_BLK_P);
+	} else {
+		if (!size) return 0;
+		return __memcpy_entry(to,(const void *)from,size,ASI_BLK_S,ASI_BLK_P);
+	}
+}
+#else
+extern __kernel_size_t __copy_from_user(void *to, const void *from, __kernel_size_t size);
+extern __kernel_size_t __copy_to_user(void *to, const void *from, __kernel_size_t size);
+#endif
 
 #define copy_to_user(to,from,n) \
 	__copy_to_user((void *)(to), \
@@ -288,21 +327,11 @@ if (__copy_from_user(to,from,n)) \
 
 extern __inline__ __kernel_size_t __clear_user(void *addr, __kernel_size_t size)
 {
-  __kernel_size_t ret;
-  __asm__ __volatile__ ("
-	.section __ex_table,#alloc
-	.align 8
-	.xword 1f,3
-	.previous
-1:
-	wr %%g0, %3, %%asi
-	mov %2, %%o1
-	call __bzero_noasi
-	 mov %1, %%o0
-	mov %%o0, %0
-	" : "=r" (ret) : "r" (addr), "r" (size), "i" (ASI_S) :
-	"cc", "o0", "o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g5", "g7");
-  return ret;
+	extern __kernel_size_t __bzero_noasi(void *addr, __kernel_size_t size);
+	
+	
+	__asm__ __volatile__ ("wr %%g0, %0, %%asi" : : "i" (ASI_S));
+	return __bzero_noasi(addr, size);
 }
 
 #define clear_user(addr,n) \

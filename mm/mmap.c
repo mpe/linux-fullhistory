@@ -311,6 +311,8 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	if (correct_wcount)
 		file->f_inode->i_writecount++;
 	merge_segments(mm, vma->vm_start, vma->vm_end);
+	
+	addr = vma->vm_start;
 
 	/* merge_segments might have merged our vma, so we can't use it any more */
 	mm->total_vm += len >> PAGE_SHIFT;

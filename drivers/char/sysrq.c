@@ -1,6 +1,6 @@
 /* -*- linux-c -*-
  *
- *	$Id: sysrq.c,v 1.2 1997/05/31 18:33:11 mj Exp $
+ *	$Id: sysrq.c,v 1.3 1997/06/18 09:42:12 mj Exp $
  *
  *	Linux Magic System Request Key Hacks
  *
@@ -112,7 +112,7 @@ void handle_sysrq(int key, struct pt_regs *pt_regs,
 		show_mem();
 		break;
 	case 2 ... 11:					    /* 0-9 -- set console logging level */
-		key -= 2;
+		key--;
 		if (key == 10)
 			key = 0;
 		orig_log_level = key;

@@ -1,5 +1,5 @@
 /*
- *	NET/ROM release 006
+ *	NET/ROM release 007
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -21,6 +21,7 @@
  *			Darryl(G7LED)	Added missing INFO with NAK case, optimized
  *					INFOACK handling, removed reconnect on error.
  *	NET/ROM 006	Jonathan(G4KLX)	Hdrincl removal changes.
+ *	NET/ROM 007	Jonathan(G4KLX)	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -53,6 +54,8 @@ static int nr_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
 	struct sk_buff *skbo, *skbn = skb;
 
 	skb_pull(skb, NR_NETWORK_LEN + NR_TRANSPORT_LEN);
+
+	nr_start_idletimer(sk);
 
 	if (more) {
 		sk->protinfo.nr->fraglen += skb->len;
@@ -90,11 +93,10 @@ static int nr_state1_machine(struct sock *sk, struct sk_buff *skb, int frametype
 	switch (frametype) {
 
 		case NR_CONNACK:
+			nr_stop_t1timer(sk);
+			nr_start_idletimer(sk);
 			sk->protinfo.nr->your_index = skb->data[17];
 			sk->protinfo.nr->your_id    = skb->data[18];
-			sk->protinfo.nr->t1timer    = 0;
-			sk->protinfo.nr->t2timer    = 0;
-			sk->protinfo.nr->t4timer    = 0;
 			sk->protinfo.nr->vs         = 0;
 			sk->protinfo.nr->va         = 0;
 			sk->protinfo.nr->vr         = 0;
@@ -103,20 +105,12 @@ static int nr_state1_machine(struct sock *sk, struct sk_buff *skb, int frametype
 			sk->protinfo.nr->n2count    = 0;
 			sk->protinfo.nr->window     = skb->data[20];
 			sk->state                   = TCP_ESTABLISHED;
-			/* For WAIT_SABM connections we will produce an accept ready socket here */
 			if (!sk->dead)
 				sk->state_change(sk);
 			break;
 
 		case NR_CONNACK | NR_CHOKE_FLAG:
-			nr_clear_queues(sk);
-			sk->protinfo.nr->state = NR_STATE_0;
-			sk->state              = TCP_CLOSE;
-			sk->err                = ECONNREFUSED;
-			sk->shutdown          |= SEND_SHUTDOWN;
-			if (!sk->dead)
-				sk->state_change(sk);
-			sk->dead               = 1;
+			nr_disconnect(sk, ECONNREFUSED);
 			break;
 
 		default:
@@ -139,13 +133,7 @@ static int nr_state2_machine(struct sock *sk, struct sk_buff *skb, int frametype
 			nr_write_internal(sk, NR_DISCACK);
 
 		case NR_DISCACK:
-			sk->protinfo.nr->state = NR_STATE_0;
-			sk->state              = TCP_CLOSE;
-			sk->err                = 0;
-			sk->shutdown          |= SEND_SHUTDOWN;
-			if (!sk->dead)
-				sk->state_change(sk);
-			sk->dead               = 1;
+			nr_disconnect(sk, 0);
 			break;
 
 		default:
@@ -178,26 +166,12 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 			break;
 
 		case NR_DISCREQ:
-			nr_clear_queues(sk);
 			nr_write_internal(sk, NR_DISCACK);
-			sk->protinfo.nr->state = NR_STATE_0;
-			sk->state              = TCP_CLOSE;
-			sk->err                = 0;
-			sk->shutdown          |= SEND_SHUTDOWN;
-			if (!sk->dead)
-				sk->state_change(sk);
-			sk->dead               = 1;
+			nr_disconnect(sk, 0);
 			break;
 
 		case NR_DISCACK:
-			nr_clear_queues(sk);
-			sk->protinfo.nr->state = NR_STATE_0;
-			sk->state              = TCP_CLOSE;
-			sk->err                = ECONNRESET;
-			sk->shutdown          |= SEND_SHUTDOWN;
-			if (!sk->dead)
-				sk->state_change(sk);
-			sk->dead               = 1;
+			nr_disconnect(sk, ECONNRESET);
 			break;
 
 		case NR_INFOACK:
@@ -206,10 +180,10 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 		case NR_INFOACK | NR_NAK_FLAG | NR_CHOKE_FLAG:
 			if (frametype & NR_CHOKE_FLAG) {
 				sk->protinfo.nr->condition |= NR_COND_PEER_RX_BUSY;
-				sk->protinfo.nr->t4timer = sk->protinfo.nr->t4;
+				nr_start_t4timer(sk);
 			} else {
 				sk->protinfo.nr->condition &= ~NR_COND_PEER_RX_BUSY;
-				sk->protinfo.nr->t4timer = 0;
+				nr_stop_t4timer(sk);
 			}
 			if (!nr_validate_nr(sk, nr)) {
 				break;
@@ -236,10 +210,10 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 		case NR_INFO | NR_NAK_FLAG | NR_CHOKE_FLAG | NR_MORE_FLAG:
 			if (frametype & NR_CHOKE_FLAG) {
 				sk->protinfo.nr->condition |= NR_COND_PEER_RX_BUSY;
-				sk->protinfo.nr->t4timer = sk->protinfo.nr->t4;
+				nr_start_t4timer(sk);
 			} else {
 				sk->protinfo.nr->condition &= ~NR_COND_PEER_RX_BUSY;
-				sk->protinfo.nr->t4timer = 0;
+				nr_stop_t4timer(sk);
 			}
 			if (nr_validate_nr(sk, nr)) {
 				if (frametype & NR_NAK_FLAG) {
@@ -286,8 +260,8 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 				nr_enquiry_response(sk);
 			} else {
 				if (!(sk->protinfo.nr->condition & NR_COND_ACK_PENDING)) {
-					sk->protinfo.nr->t2timer = sk->protinfo.nr->t2;
 					sk->protinfo.nr->condition |= NR_COND_ACK_PENDING;
+					nr_start_t2timer(sk);
 				}
 			}
 			break;
@@ -307,8 +281,6 @@ int nr_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 	if (sk->protinfo.nr->state == NR_STATE_0)
 		return 0;
 
-	del_timer(&sk->timer);
-
 	frametype = skb->data[19];
 
 	switch (sk->protinfo.nr->state) {
@@ -323,7 +295,7 @@ int nr_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 			break;
 	}
 
-	nr_set_timer(sk);
+	nr_kick(sk);
 
 	return queued;
 }

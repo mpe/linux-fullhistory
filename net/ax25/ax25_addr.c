@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 036
+ *	AX.25 release 037
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -165,27 +165,23 @@ unsigned char *ax25_addr_parse(unsigned char *buf, int len, ax25_address *src, a
 
 	if (len < 14) return NULL;
 
-	if (flags != NULL) {
-		*flags = 0;
+	*flags = 0;
 
-		if (buf[6] & AX25_CBIT)
-			*flags = AX25_COMMAND;
-		if (buf[13] & AX25_CBIT)
-			*flags = AX25_RESPONSE;
-	}
+	if (buf[6] & AX25_CBIT)
+		*flags = AX25_COMMAND;
+	if (buf[13] & AX25_CBIT)
+		*flags = AX25_RESPONSE;
 
 	if (dama != NULL) 
 		*dama = ~buf[13] & AX25_DAMA_FLAG;
 
 	/* Copy to, from */
-	if (dest != NULL) 
-		memcpy(dest, buf + 0, AX25_ADDR_LEN);
-
-	if (src != NULL)  
-		memcpy(src,  buf + 7, AX25_ADDR_LEN);
+	memcpy(dest, buf + 0, AX25_ADDR_LEN);
+	memcpy(src,  buf + 7, AX25_ADDR_LEN);
 
 	buf += 2 * AX25_ADDR_LEN;
 	len -= 2 * AX25_ADDR_LEN;
+
 	digi->lastrepeat = -1;
 	digi->ndigi      = 0;
 
@@ -193,15 +189,14 @@ unsigned char *ax25_addr_parse(unsigned char *buf, int len, ax25_address *src, a
 		if (d >= AX25_MAX_DIGIS)  return NULL;	/* Max of 6 digis */
 		if (len < 7) return NULL;	/* Short packet */
 
-		if (digi != NULL) {
-			memcpy(&digi->calls[d], buf, AX25_ADDR_LEN);
-			digi->ndigi = d + 1;
-			if (buf[6] & AX25_HBIT) {
-				digi->repeated[d] = 1;
-				digi->lastrepeat  = d;
-			} else {
-				digi->repeated[d] = 0;
-			}
+		memcpy(&digi->calls[d], buf, AX25_ADDR_LEN);
+		digi->ndigi = d + 1;
+
+		if (buf[6] & AX25_HBIT) {
+			digi->repeated[d] = 1;
+			digi->lastrepeat  = d;
+		} else {
+			digi->repeated[d] = 0;
 		}
 
 		buf += AX25_ADDR_LEN;
@@ -285,15 +280,15 @@ int ax25_addr_size(ax25_digi *dp)
  */
 void ax25_digi_invert(ax25_digi *in, ax25_digi *out)
 {
-	int ct = 0;
+	int ct;
 
 	out->ndigi      = in->ndigi;
 	out->lastrepeat = in->ndigi - in->lastrepeat - 2;
 
 	/* Invert the digipeaters */
+	for (ct = 0; ct < in->ndigi; ct++) {
+		out->calls[ct] = in->calls[in->ndigi - ct - 1];
 
-	while (ct < in->ndigi) {
-		out->calls[ct]    = in->calls[in->ndigi - ct - 1];
 		if (ct <= out->lastrepeat) {
 			out->calls[ct].ax25_call[6] |= AX25_HBIT;
 			out->repeated[ct]            = 1;
@@ -301,7 +296,6 @@ void ax25_digi_invert(ax25_digi *in, ax25_digi *out)
 			out->calls[ct].ax25_call[6] &= ~AX25_HBIT;
 			out->repeated[ct]            = 0;
 		}
-		ct++;
 	}
 }
 

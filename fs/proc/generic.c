@@ -23,6 +23,15 @@ static long proc_file_write(struct inode * inode, struct file * file,
 static long long proc_file_lseek(struct inode * inode, struct file * file, 
 				 long long offset, int orig);
 
+int proc_match(int len, const char *name,struct proc_dir_entry * de)
+{
+	if (!de || !de->low_ino)
+		return 0;
+	if (de->namelen != len)
+		return 0;
+	return !memcmp(name, de->name, len);
+}
+
 static struct file_operations proc_file_operations = {
     proc_file_lseek,	/* lseek   */
     proc_file_read,	/* read	   */
@@ -51,6 +60,7 @@ struct inode_operations proc_file_inode_operations = {
     NULL,	    /* mknod	   */
     NULL,	    /* rename	   */
     NULL,	    /* readlink	   */
+    NULL,	    /* follow_link */
     NULL,	    /* readpage	   */
     NULL,	    /* writepage   */
     NULL,	    /* bmap	   */
@@ -73,6 +83,7 @@ struct inode_operations proc_net_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */

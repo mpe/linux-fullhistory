@@ -67,6 +67,7 @@
 #include <linux/socket.h>
 #include <linux/fcntl.h>
 #include <linux/file.h>
+#include <linux/dalloc.h>
 #include <linux/net.h>
 #include <linux/interrupt.h>
 #include <linux/netdevice.h>
@@ -266,6 +267,7 @@ struct socket *sock_alloc(void)
 	inode = get_empty_inode();
 	if (!inode)
 		return NULL;
+
 	sock = socki_lookup(inode);
 
 	inode->i_mode = S_IFSOCK;

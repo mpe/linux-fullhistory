@@ -419,7 +419,7 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
 		     * break_flag...
 		     * */
 		    int keyval = plain_map[scancode], keytyp;
-
+		    
 		    set_bit( scancode, broken_keys );
 		    self_test_last_rcv = jiffies;
 		    keyval = plain_map[scancode];

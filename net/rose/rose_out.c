@@ -1,5 +1,5 @@
 /*
- *	ROSE release 002
+ *	ROSE release 003
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -11,6 +11,7 @@
  *
  *	History
  *	ROSE 001	Jonathan(G4KLX)	Cloned from nr_out.c
+ *	ROSE 003	Jonathan(G4KLX)	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -80,8 +81,7 @@ void rose_output(struct sock *sk, struct sk_buff *skb)
 		skb_queue_tail(&sk->write_queue, skb);		/* Throw it on the queue */
 	}
 
-	if (sk->protinfo.rose->state == ROSE_STATE_3)
-		rose_kick(sk);
+	rose_kick(sk);
 }
 
 /* 
@@ -96,6 +96,8 @@ static void rose_send_iframe(struct sock *sk, struct sk_buff *skb)
 	skb->data[2] |= (sk->protinfo.rose->vr << 5) & 0xE0;
 	skb->data[2] |= (sk->protinfo.rose->vs << 1) & 0x0E;
 
+	rose_start_idletimer(sk);
+
 	rose_transmit_link(skb, sk->protinfo.rose->neighbour);	
 }
 
@@ -104,36 +106,41 @@ void rose_kick(struct sock *sk)
 	struct sk_buff *skb;
 	unsigned short end;
 
-	del_timer(&sk->timer);
+	if (sk->protinfo.rose->state != ROSE_STATE_3)
+		return;
+
+	if (sk->protinfo.rose->condition & ROSE_COND_PEER_RX_BUSY)
+		return;
+
+	if (skb_peek(&sk->write_queue) == NULL)
+		return;
 
 	end = (sk->protinfo.rose->va + sysctl_rose_window_size) % ROSE_MODULUS;
 
-	if (!(sk->protinfo.rose->condition & ROSE_COND_PEER_RX_BUSY) &&
-	    sk->protinfo.rose->vs != end                             &&
-	    skb_peek(&sk->write_queue) != NULL) {
+	if (sk->protinfo.rose->vs == end)
+		return;
+
+	/*
+	 * Transmit data until either we're out of data to send or
+	 * the window is full.
+	 */
+
+	skb  = skb_dequeue(&sk->write_queue);
+
+	do {
 		/*
-		 * Transmit data until either we're out of data to send or
-		 * the window is full.
+		 * Transmit the frame.
 		 */
+		rose_send_iframe(sk, skb);
 
-		skb  = skb_dequeue(&sk->write_queue);
+		sk->protinfo.rose->vs = (sk->protinfo.rose->vs + 1) % ROSE_MODULUS;
 
-		do {
-			/*
-			 * Transmit the frame.
-			 */
-			rose_send_iframe(sk, skb);
+	} while (sk->protinfo.rose->vs != end && (skb = skb_dequeue(&sk->write_queue)) != NULL);
 
-			sk->protinfo.rose->vs = (sk->protinfo.rose->vs + 1) % ROSE_MODULUS;
+	sk->protinfo.rose->vl         = sk->protinfo.rose->vr;
+	sk->protinfo.rose->condition &= ~ROSE_COND_ACK_PENDING;
 
-		} while (sk->protinfo.rose->vs != end && (skb = skb_dequeue(&sk->write_queue)) != NULL);
-
-		sk->protinfo.rose->vl         = sk->protinfo.rose->vr;
-		sk->protinfo.rose->condition &= ~ROSE_COND_ACK_PENDING;
-		sk->protinfo.rose->timer      = 0;
-	}
-
-	rose_set_timer(sk);
+	rose_stop_timer(sk);
 }
 
 /*
@@ -150,7 +157,8 @@ void rose_enquiry_response(struct sock *sk)
 
 	sk->protinfo.rose->vl         = sk->protinfo.rose->vr;
 	sk->protinfo.rose->condition &= ~ROSE_COND_ACK_PENDING;
-	sk->protinfo.rose->timer      = 0;
+
+	rose_stop_timer(sk);
 }
 
 void rose_check_iframes_acked(struct sock *sk, unsigned short nr)

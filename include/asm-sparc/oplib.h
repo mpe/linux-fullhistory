@@ -1,4 +1,4 @@
-/* $Id: oplib.h,v 1.15 1997/03/18 18:00:18 jj Exp $
+/* $Id: oplib.h,v 1.16 1997/06/27 14:55:04 jj Exp $
  * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *
@@ -272,12 +272,12 @@ extern int prom_searchsiblings(int node_start, char *name);
 /* Return the first property type, as a string, for the given node.
  * Returns a null string on error.
  */
-extern char *prom_firstprop(int node);
+extern char *prom_firstprop(int node, char *buffer);
 
 /* Returns the next property after the passed property for the given
  * node.  Returns null string on failure.
  */
-extern char *prom_nextprop(int node, char *prev_property);
+extern char *prom_nextprop(int node, char *prev_property, char *buffer);
 
 /* Returns 1 if the specified node has given property. */
 extern int prom_node_has_property(int node, char *property);

@@ -1,4 +1,4 @@
-/* $Id: generic.c,v 1.1 1996/12/26 10:24:23 davem Exp $
+/* $Id: generic.c,v 1.2 1997/07/01 09:11:42 jj Exp $
  * generic.c: Generic Sparc mm routines that are not dependent upon
  *            MMU type but are Sparc specific.
  *
@@ -66,13 +66,35 @@ static inline void io_remap_pte_range(pte_t * pte, unsigned long address, unsign
 	if (end > PMD_SIZE)
 		end = PMD_SIZE;
 	do {
-		pte_t oldpage = *pte;
-		pte_clear(pte);
-		set_pte(pte, mk_pte_io(offset, prot, space));
-		forget_pte(oldpage);
-		address += PAGE_SIZE;
+		pte_t oldpage;
+		pte_t entry;
+		unsigned long curend = address + PAGE_SIZE;
+		
+		entry = mk_pte_io(offset, prot, space);
 		offset += PAGE_SIZE;
-		pte++;
+		if (!(address & 0xffff)) {
+			if (!(address & 0x3fffff) && !(offset & 0x3fffff) && end >= address + 0x400000) {
+				entry = mk_pte_io(offset, __pgprot(pgprot_val (prot) | _PAGE_SZ4MB), space);
+				curend = address + 0x400000;
+				offset += 0x400000 - PAGE_SIZE;
+			} else if (!(address & 0x7ffff) && !(offset & 0x7ffff) && end >= address + 0x80000) {
+				entry = mk_pte_io(offset, __pgprot(pgprot_val (prot) | _PAGE_SZ512K), space);
+				curend = address + 0x80000;
+				offset += 0x80000 - PAGE_SIZE;
+			} else if (!(offset & 0xffff) && end >= address + 0x10000) {
+				entry = mk_pte_io(offset, __pgprot(pgprot_val (prot) | _PAGE_SZ64K), space);
+				curend = address + 0x10000;
+				offset += 0x10000 - PAGE_SIZE;
+			}
+		}
+		do {
+			oldpage = *pte;
+			pte_clear(pte);
+			set_pte(pte, entry);
+			forget_pte(oldpage);
+			address += PAGE_SIZE;
+			pte++;
+		} while (address < curend);
 	} while (address < end);
 }
 

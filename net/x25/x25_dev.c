@@ -1,5 +1,5 @@
 /*
- *	X.25 Packet Layer release 001
+ *	X.25 Packet Layer release 002
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -73,7 +73,7 @@ static int x25_receive_data(struct sk_buff *skb, struct x25_neigh *neigh)
 	/*
 	 *	Find an existing socket.
 	 */
-	if ((sk = x25_find_socket(lci)) != NULL) {
+	if ((sk = x25_find_socket(lci, neigh)) != NULL) {
 		skb->h.raw = skb->data;
 		return x25_process_rx_frame(sk, skb);
 	}

@@ -10,18 +10,13 @@
  * for more details.
  *
  * Copyright (C) 1996 by Ralf Baechle
+ *
+ * $Id: atomic.h,v 1.2 1997/06/25 19:10:33 ralf Exp $
  */
 #ifndef __ASM_MIPS_ATOMIC_H
 #define __ASM_MIPS_ATOMIC_H
 
 #include <asm/sgidefs.h>
-
-/*
- * Make sure gcc doesn't try to be clever and move things around
- * on us. We need to use _exactly_ the address the user gave us,
- * not some alias that contains the same information.
- */
-#define __atomic_fool_gcc(x) (*(struct { int a[100]; } *)x)
 
 #ifdef __SMP__
 typedef struct { volatile int counter; } atomic_t;
@@ -29,6 +24,7 @@ typedef struct { volatile int counter; } atomic_t;
 typedef struct { int counter; } atomic_t;
 #endif
 
+#ifdef __KERNEL__
 #define ATOMIC_INIT(i)    { (i) }
 
 #define atomic_read(v)	((v)->counter)
@@ -97,6 +93,14 @@ extern __inline__ int atomic_sub_return(int i, atomic_t * v)
  * ... while for MIPS II and better we can use ll/sc instruction.  This
  * implementation is SMP safe ...
  */
+
+/*
+ * Make sure gcc doesn't try to be clever and move things around
+ * on us. We need to use _exactly_ the address the user gave us,
+ * not some alias that contains the same information.
+ */
+#define __atomic_fool_gcc(x) (*(struct { int a[100]; } *)x)
+
 extern __inline__ void atomic_add(int i, volatile atomic_t * v)
 {
 	unsigned long temp;
@@ -181,5 +185,6 @@ extern __inline__ int atomic_sub_return(int i, atomic_t * v)
 
 #define atomic_inc(v) atomic_add(1,(v))
 #define atomic_dec(v) atomic_sub(1,(v))
+#endif /* defined(__KERNEL__) */
 
 #endif /* __ASM_MIPS_ATOMIC_H */

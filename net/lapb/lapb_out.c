@@ -1,8 +1,5 @@
 /*
- *	LAPB release 001
- *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
+ *	LAPB release 002
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -14,6 +11,7 @@
  *
  *	History
  *	LAPB 001	Jonathan Naylor	Started Coding
+ *	LAPB 002	Jonathan Naylor	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -77,8 +75,6 @@ void lapb_kick(lapb_cb *lapb)
 	struct sk_buff *skb, *skbn;
 	unsigned short modulus, start, end;
 
-	del_timer(&lapb->timer);
-
 	modulus = (lapb->mode & LAPB_EXTENDED) ? LAPB_EMODULUS : LAPB_SMODULUS;
 
 	start = (skb_peek(&lapb->ack_queue) == NULL) ? lapb->va : lapb->vs;
@@ -120,11 +116,9 @@ void lapb_kick(lapb_cb *lapb)
 
 		lapb->condition &= ~LAPB_ACK_PENDING_CONDITION;
 
-		if (lapb->t1timer == 0)
-			lapb->t1timer = lapb->t1;
+		if (!lapb_t1timer_running(lapb))
+			lapb_start_t1timer(lapb);
 	}
-
-	lapb_set_timer(lapb);
 }
 
 void lapb_transmit_buffer(lapb_cb *lapb, struct sk_buff *skb, int type)
@@ -184,8 +178,8 @@ void lapb_establish_data_link(lapb_cb *lapb)
 		lapb_send_control(lapb, LAPB_SABM, LAPB_POLLON, LAPB_COMMAND);
 	}
 
-	lapb->t2timer = 0;
-	lapb->t1timer = lapb->t1;
+	lapb_start_t1timer(lapb);
+	lapb_stop_t2timer(lapb);
 }
 
 void lapb_enquiry_response(lapb_cb *lapb)
@@ -214,12 +208,12 @@ void lapb_check_iframes_acked(lapb_cb *lapb, unsigned short nr)
 {
 	if (lapb->vs == nr) {
 		lapb_frames_acked(lapb, nr);
-		lapb->t1timer = 0;
+		lapb_stop_t1timer(lapb);
 		lapb->n2count = 0;
 	} else {
 		if (lapb->va != nr) {
 			lapb_frames_acked(lapb, nr);
-			lapb->t1timer = lapb->t1;
+			lapb_start_t1timer(lapb);
 		}
 	}
 }

@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.7 1997/04/10 05:13:01 davem Exp $
+/* $Id: ioport.c,v 1.10 1997/06/30 09:24:02 jj Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995,1996 David S. Miller (davem@caip.rutgers.edu)
@@ -64,13 +64,7 @@ void *sparc_alloc_io (u32 address, void *virtual, int len, char *name,
 		/* Tell Linux resource manager about the mapping */
 		request_region ((vaddr | offset), len, name);
 	} else {
-		vaddr = occupy_region(sparc_iobase_vaddr, IOBASE_END,
-				(offset + len + PAGE_SIZE-1) & PAGE_MASK, PAGE_SIZE, name);
-		if (vaddr == 0) {
-			/* Usually we cannot see printks in this case. */
-			prom_printf("alloc_io: cannot occupy %d region\n", len);
-			prom_halt();
-		}
+		return __va(addr);
 	}
 
 	base_address = vaddr;
@@ -88,6 +82,9 @@ void sparc_free_io (void *virtual, int len)
 {
 	unsigned long vaddr = (unsigned long) virtual & PAGE_MASK;
 	unsigned long plen = (((unsigned long)virtual & ~PAGE_MASK) + len + PAGE_SIZE-1) & PAGE_MASK;
+	
+	if (virtual >= PAGE_OFFSET + 0x10000000000UL)
+		return;
 
 	release_region(vaddr, plen);
 

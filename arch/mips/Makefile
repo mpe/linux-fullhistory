@@ -1,6 +1,4 @@
 #
-# $Id: Makefile,v 1.5 1997/06/16 00:34:01 ralf Exp $
-#
 # arch/mips/Makefile
 #
 # This file is included by the global makefile so that you can add your own
@@ -15,27 +13,26 @@
 # Copyright (C) 1994, 1995, 1996 by Ralf Baechle
 # DECStation modifications by Paul M. Antoine, 1996
 #
+# $Id: Makefile,v 1.7 1997/06/30 15:52:03 ralf Exp $
+#
 
+#
+# Select the object file format to substitute into the linker script.
+#
 ifdef CONFIG_CPU_LITTLE_ENDIAN
-CROSS_COMPILE	= mipsel-
+CROSS_COMPILE = mipsel-linux-
 ifdef CONFIG_MIPS_ECOFF
-oformat		= ecoff-littlemips
+oformat               = ecoff-littlemips
 else
-oformat		= a.out-mips-big-linux
+oformat               = elf32-littlemips
 endif
 else
-CROSS_COMPILE	= mips-
+CROSS_COMPILE = mips-linux-
 ifdef CONFIG_MIPS_ECOFF
-oformat		= ecoff-bigmips
+oformat               = ecoff-bigmips
 else
-oformat		= a.out-mips-big-linux
+oformat               = elf32-bigmips
 endif
-endif
-
-ifdef CONFIG_EXTRA_ELF_COMPILER
-CROSS_COMPILE	:= $(CROSS_COMPILE)linuxelf-
-else
-CROSS_COMPILE	:= $(CROSS_COMPILE)linux-
 endif
 
 LINKFLAGS	= -static -N
@@ -95,11 +92,6 @@ CORE_FILES    += arch/mips/algor/algor.o
 SUBDIRS       += arch/mips/algor
 #LOADADDR      += 0x80000000
 endif
-ifdef CONFIG_ACER_PICA_61
-CORE_FILES    += arch/mips/jazz/jazz.o
-SUBDIRS       += arch/mips/jazz
-LOADADDR      += 0x80000000
-endif
 ifdef CONFIG_DECSTATION
 CORE_FILES    += arch/mips/dec/dec.o
 SUBDIRS       += arch/mips/dec
@@ -116,17 +108,15 @@ CORE_FILES    += arch/mips/deskstation/deskstation.o
 SUBDIRS       += arch/mips/deskstation
 LOADADDR      += 0x80000000
 endif
+#
+# Acer PICA 61, Mips Magnum 4000 and Olivetti M700.
+#
+ifdef CONFIG_MIPS_JAZZ
+CORE_FILES    += arch/mips/jazz/jazz.o
+SUBDIRS       += arch/mips/jazz
+LOADADDR      += 0x80000000
+endif
 ifdef CONFIG_MIPS_MAGNUM_3000
-LOADADDR      += 0x80000000
-endif
-ifdef CONFIG_MIPS_MAGNUM_4000
-CORE_FILES    += arch/mips/jazz/jazz.o
-SUBDIRS       += arch/mips/jazz
-LOADADDR      += 0x80000000
-endif
-ifdef CONFIG_OLIVETTI_M700
-CORE_FILES    += arch/mips/jazz/jazz.o
-SUBDIRS       += arch/mips/jazz
 LOADADDR      += 0x80000000
 endif
 ifdef CONFIG_SNI_RM200_PCI

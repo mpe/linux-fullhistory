@@ -697,7 +697,7 @@ start_up:
 	retval = -ENOENT;
 	if (!old_bh)
 		goto end_rename;
-	old_inode = __iget(old_dir->i_sb, old_de->inode,0); /* don't cross mnt-points */
+	old_inode = __iget(old_dir->i_sb, old_de->inode);
 	if (!old_inode)
 		goto end_rename;
 	retval = -EPERM;
@@ -707,7 +707,7 @@ start_up:
 		goto end_rename;
 	new_bh = minix_find_entry(new_dir,new_name,new_len,&new_de);
 	if (new_bh) {
-		new_inode = __iget(new_dir->i_sb, new_de->inode, 0);
+		new_inode = __iget(new_dir->i_sb, new_de->inode);
 		if (!new_inode) {
 			brelse(new_bh);
 			new_bh = NULL;

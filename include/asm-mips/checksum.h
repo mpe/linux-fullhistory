@@ -52,23 +52,20 @@ unsigned int csum_partial_copy_from_user(const char *src, char *dst, int len, un
  */
 static inline unsigned short int csum_fold(unsigned int sum)
 {
-	unsigned int __res;
-
-    __asm__("
-	.set	noat
-	srl	$1,%0,16
-	andi	%0,0xffff
-	addu	$1,%0
-	srl	%0,$1,16		# addup halfword carry
-	andi	$1,0xffff
-	addu	$1,%0
-	nor	%0,$0,$1
+	__asm__("
+	.set	noat            
+	sll	$1,%0,16
+	addu	%0,$1
+	sltu	$1,%0,$1
+	srl	%0,%0,16
+	addu	%0,$1
+	xori	%0,0xffff
 	.set	at"
-	: "=r"(__res)
+	: "=r" (sum)
 	: "0" (sum)
 	: "$1");
 
- 	return __res;
+ 	return sum;
 }
  
 /*
@@ -140,20 +137,14 @@ static inline unsigned short int csum_tcpudp_magic(unsigned long saddr,
 	addu	%0,%2
 	sltu	$1,%0,%2
 	addu	%0,$1
+
 	addu	%0,%3
 	sltu	$1,%0,%3
 	addu	%0,$1
+
 	addu	%0,%4
 	sltu	$1,%0,%4
 	addu	%0,$1
-
-	srl	$1,%0,16
-	andi	%0,0xffff
-	addu	%0,$1
-	srl	$1,%0,16		# addup halfword carry
-	andi	%0,0xffff
-	addu	%0,$1
-	nor	%0,$0,%0
 	.set	at"
 	: "=r" (sum)
 	: "0" (daddr), "r"(saddr),
@@ -165,7 +156,7 @@ static inline unsigned short int csum_tcpudp_magic(unsigned long saddr,
 	    "r"(sum)
 	: "$1");
 
-	return (unsigned short)sum;
+	return csum_fold(sum);
 }
 
 /*
@@ -174,22 +165,10 @@ static inline unsigned short int csum_tcpudp_magic(unsigned long saddr,
  */
 static inline unsigned short ip_compute_csum(unsigned char * buff, int len)
 {
-    unsigned short int sum;
+	unsigned int sum;
 
-    __asm__("
-	.set	noat
-	srl	$1,%0,16
-	andi	%0,0xffff
-	addu	%0,$1
-	sltu	$1,%0,$1
-	addu	%0,$1
-	nor	%0,$0,%0
-	.set	at"
-	: "=r"(sum)
-	: "0" (csum_partial(buff, len, 0))
-	: "$1");
-
-	return sum;
+	sum = csum_partial(buff, len, 0);
+	return csum_fold(sum);
 }
 
 #define _HAVE_ARCH_IPV6_CSUM

@@ -1615,7 +1615,7 @@ kmalloc(size_t size, int flags)
 }
 
 void
-kfree(void *objp)
+kfree(const void *objp)
 {
 	struct page *page;
 	int	nr;

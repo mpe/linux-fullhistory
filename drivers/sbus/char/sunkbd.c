@@ -419,27 +419,27 @@ void sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
 
 	if(ch == SKBD_RESET) {
 		kbd_reset_pending = 1;
-		return;
+		goto out;
 	}
 	if(ch == SKBD_LYOUT) {
 		kbd_layout_pending = 1;
-		return;
+		goto out;
 	}
 	if(kbd_reset_pending) {
 		sunkbd_type = ch;
 		kbd_reset_pending = 0;
 		if(ch == SUNKBD_TYPE4)
 			send_cmd(SKBDCMD_GLAYOUT);
-		return;
+		goto out;
 	} else if(kbd_layout_pending) {
 		sunkbd_layout = ch;
 		kbd_layout_pending = 0;
-		return;
+		goto out;
 	} else if(ch == SKBD_ALLUP) {
 		del_timer (&auto_repeat_timer);
 		memset(key_down, 0, sizeof(key_down));
 		compute_shiftstate();
-		return;
+		goto out;
 	}
 #ifdef SKBD_DEBUG
 	if(ch == 0x7f)
@@ -456,11 +456,11 @@ void sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
 	} else {
 		keycode = ch;
 	}
-	add_keyboard_randomness(keycode);
 	
-	mark_bh(KEYBOARD_BH);
 	do_poke_blanked_console = 1;
 	mark_bh(CONSOLE_BH);
+	add_keyboard_randomness(keycode);
+
 	kbd = kbd_table + fg_console;
 	tty = ttytab[fg_console];
 	if((raw_mode = (kbd->kbdmode == VC_RAW))) {
@@ -491,11 +491,11 @@ void sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
 	}
 
 	if(raw_mode)
-		return;
+		goto out;
 
 	if(kbd->kbdmode == VC_MEDIUMRAW) {
 		put_queue(keycode + up_flag);
-		return;
+		goto out;
 	}
 
  	/*
@@ -545,6 +545,8 @@ void sunkbd_inchar(unsigned char ch, struct pt_regs *regs)
 			compute_shiftstate();
 		}
 	}
+out:
+	mark_bh(KEYBOARD_BH);
 }
 
 static void put_queue(int ch)

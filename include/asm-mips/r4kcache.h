@@ -1,4 +1,4 @@
-/* $Id: r4kcache.h,v 1.1 1997/06/06 09:39:42 ralf Exp $
+/* $Id: r4kcache.h,v 1.2 1997/06/25 17:04:19 ralf Exp $
  * r4kcache.h: Inline assembly cache operations.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
@@ -339,6 +339,7 @@ extern inline void blast_dcache32_page(unsigned long page)
 	unsigned long start = page;
 	unsigned long end = (start + PAGE_SIZE);
 
+	__asm__ __volatile__("nop;nop;nop;nop");
 	while(start < end) {
 		__asm__ __volatile__("
 			.set noreorder
@@ -429,7 +430,7 @@ extern inline void blast_dcache32_page_indexed(unsigned long page)
 			.set reorder"
 			:
 			: "r" (start),
-			  "i" (Index_Invalidate_I));
+			  "i" (Index_Writeback_Inv_D));
 		start += 0x800;
 	}
 }

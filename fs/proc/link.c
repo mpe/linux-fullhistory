@@ -17,6 +17,7 @@
 #include <linux/dalloc.h>
 
 static int proc_readlink(struct inode *, char *, int);
+static struct dentry * proc_follow_link(struct inode *, struct dentry *);
 
 /*
  * PLAN9_SEMANTICS won't work any more: it used an ugly hack that broke 
@@ -52,6 +53,7 @@ struct inode_operations proc_link_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	proc_readlink,		/* readlink */
+	proc_follow_link,	/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -59,59 +61,52 @@ struct inode_operations proc_link_inode_operations = {
 	NULL			/* permission */
 };
 
-/* [Feb-1997 T. Schoebel-Theuer] This is no longer called from the
- * VFS, but only from proc_readlink(). All the functionality
- * should the moved there (without using temporary inodes any more)
- * and then it could be eliminated.
- */
-static int proc_follow_link(struct inode * dir, struct inode * inode,
-	int flag, int mode, struct inode ** res_inode)
+static struct dentry * proc_follow_link(struct inode *inode, struct dentry *base)
 {
-	unsigned int pid, ino;
-	struct task_struct * p;
-	struct inode * new_inode;
+	struct task_struct *p;
+	struct dentry * result;
+	int ino, pid;
 	int error;
 
-	*res_inode = NULL;
-	if (dir)
-		iput(dir);
-	if (!inode)
-		return -ENOENT;
-	if ((error = permission(inode, MAY_EXEC)) != 0){
-		iput(inode);
-		return error;
-	}
+	/* We don't need a base pointer in the /proc filesystem */
+	dput(base);
+
+	error = permission(inode, MAY_EXEC);
+	result = ERR_PTR(error);
+	if (error)
+		return result;
+
 	ino = inode->i_ino;
 	pid = ino >> 16;
 	ino &= 0x0000ffff;
 
 	p = find_task_by_pid(pid);
-	if (!p) {
-		iput(inode);
-		return -ENOENT;
-	}
-	new_inode = NULL;
+	result = ERR_PTR(-ENOENT);
+	if (!p)
+		return result;
+
 	switch (ino) {
 		case PROC_PID_CWD:
-			if (!p->fs)
+			if (!p->fs || !p->fs->pwd)
 				break;
-			new_inode = p->fs->pwd;
+			result = dget(p->fs->pwd);
 			break;
+
 		case PROC_PID_ROOT:
-			if (!p->fs)
+			if (!p->fs || !p->fs->root)
 				break;
-			new_inode = p->fs->root;
+			result = dget(p->fs->root);
 			break;
+
 		case PROC_PID_EXE: {
 			struct vm_area_struct * vma;
 			if (!p->mm)
 				break;
 			vma = p->mm->mmap;
 			while (vma) {
-				if (vma->vm_flags & VM_EXECUTABLE) {
-					new_inode = vma->vm_inode;
-					break;
-				}
+				if (vma->vm_flags & VM_EXECUTABLE)
+					return dget(vma->vm_inode->i_dentry);
+
 				vma = vma->vm_next;
 			}
 			break;
@@ -122,45 +117,38 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 				if (!p->files)
 					break;
 				ino &= 0xff;
-				if (ino < NR_OPEN && p->files->fd[ino]) {
-					new_inode = p->files->fd[ino]->f_inode;
-				}
+				if (ino >= NR_OPEN)
+					break;
+				if (!p->files->fd[ino])
+					break;
+				if (!p->files->fd[ino]->f_inode)
+					break;
+				result = dget(p->files->fd[ino]->f_inode->i_dentry);
 				break;
 			}
 	}
-	iput(inode);
-	if (!new_inode)
-		return -ENOENT;
-	*res_inode = new_inode;
-	atomic_inc(&new_inode->i_count);
-	return 0;
+	return result;
 }
 
 static int proc_readlink(struct inode * inode, char * buffer, int buflen)
 {
-	int error = proc_follow_link(NULL, inode, 0, 0, &inode);
+	int error;
+	struct dentry * dentry = proc_follow_link(inode, NULL);
 
-	if (error)
-		return error;
-	if (!inode)
-		return -EIO;
-
-	/* This will return *one* of the alias names (which is not quite
-	 * correct). I have to rethink the problem, so this is only a
-	 * quick hack...
-	 */
-	if(inode->i_dentry) {
-		char * tmp = (char*)__get_free_page(GFP_KERNEL);
-		int len = d_path(inode->i_dentry, current->fs->root, tmp);
-		int min = buflen<PAGE_SIZE ? buflen : PAGE_SIZE;
-		if(len <= min)
-			min = len+1;
-		copy_to_user(buffer, tmp, min);
-		free_page((unsigned long)tmp);
-		error = len;
-	} else {
-		error= -ENOENT;
+	error = PTR_ERR(dentry);
+	if (!IS_ERR(dentry)) {
+		error = -ENOENT;
+		if (dentry) {
+			char * tmp = (char*)__get_free_page(GFP_KERNEL);
+			int len = d_path(dentry, current->fs->root, tmp);
+			int min = buflen<PAGE_SIZE ? buflen : PAGE_SIZE;
+			if(len <= min)
+				min = len+1;
+			dput(dentry);
+			copy_to_user(buffer, tmp, min);
+			free_page((unsigned long)tmp);
+			error = len;
+		}
 	}
-	iput(inode);
 	return error;
 }

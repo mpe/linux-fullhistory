@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.37 1997/06/13 14:03:06 davem Exp $
+/* $Id: pgtable.h,v 1.49 1997/06/30 09:24:12 jj Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -51,7 +51,7 @@
 #define PTRS_PER_PAGE	(1UL << (PAGE_SHIFT-3))
 
 /* NOTE: TLB miss handlers depend heavily upon where this is. */
-#define VMALLOC_START		0xFFFFFc0000000000UL
+#define VMALLOC_START		0x0000000800000000UL
 #define VMALLOC_VMADDR(x)	((unsigned long)(x))
 
 #endif /* !(__ASSEMBLY__) */
@@ -78,11 +78,11 @@
 #define _PAGE_G		0x0000000000000001	/* Global                             */
 
 /* Here are the SpitFire software bits we use in the TTE's. */
-#define _PAGE_PRESENT	0x0000000000001000	/* Present Page (ie. not swapped out) */
 #define _PAGE_MODIFIED	0x0000000000000800	/* Modified Page (ie. dirty)          */
 #define _PAGE_ACCESSED	0x0000000000000400	/* Accessed Page (ie. referenced)     */
 #define _PAGE_READ	0x0000000000000200	/* Readable SW Bit                    */
 #define _PAGE_WRITE	0x0000000000000100	/* Writable SW Bit                    */
+#define _PAGE_PRESENT	0x0000000000000080	/* Present Page (ie. not swapped out) */
 
 #define _PAGE_CACHE	(_PAGE_CP | _PAGE_CV)
 
@@ -146,8 +146,7 @@ extern pte_t *__bad_pte(void);
  * hit for all __pa()/__va() operations.
  */
 extern unsigned long phys_base;
-
-#define ZERO_PAGE	(PAGE_OFFSET + phys_base)
+#define ZERO_PAGE	((unsigned long)__va(phys_base))
 
 /* This is for making TLB miss faster to process. */
 extern unsigned long null_pmd_table;
@@ -159,156 +158,47 @@ extern void *sparc_init_alloc(unsigned long *kbrk, unsigned long size);
 
 /* Cache and TLB flush operations. */
 
-extern __inline__ void flush_cache_all(void)
-{
-	unsigned long addr;
+#define flush_cache_all()	\
+do {	unsigned long va;	\
+	flushw_all();		\
+	for(va = 0;		\
+	    va<(PAGE_SIZE<<1);	\
+	    va += 32)		\
+spitfire_put_icache_tag(va,0x0);\
+} while(0)
 
-	flushw_all();
-	for(addr = 0; addr < (PAGE_SIZE << 1); addr += 32)
-		spitfire_put_icache_tag(addr, 0x0UL);
-}
-
-extern __inline__ void flush_cache_mm(struct mm_struct *mm)
-{
-	if(mm->context != NO_CONTEXT) {
-		unsigned long addr;
-
-		flushw_user();
-		for(addr = 0; addr < (PAGE_SIZE << 1); addr += 32)
-			spitfire_put_icache_tag(addr, 0x0UL);
-	}
-}
-
-extern __inline__ void flush_cache_range(struct mm_struct *mm, unsigned long start,
-					 unsigned long end)
-{
-	if(mm->context != NO_CONTEXT) {
-		unsigned long addr;
-
-		flushw_user();
-		for(addr = 0; addr < (PAGE_SIZE << 1); addr += 32)
-			spitfire_put_icache_tag(addr, 0x0UL);
-	}
-}
-
-extern __inline__ void flush_cache_page(struct vm_area_struct *vma, unsigned long page)
-{
-	struct mm_struct *mm = vma->vm_mm;
-
-	if(mm->context != NO_CONTEXT) {
-		unsigned long addr;
-
-		flushw_user();
-		for(addr = 0; addr < (PAGE_SIZE << 1); addr += 32)
-			spitfire_put_icache_tag(addr, 0x0UL);
-	}
-}
+#define flush_cache_mm(mm)			do { } while(0)
+#define flush_cache_range(mm, start, end)	do { } while(0)
+#define flush_cache_page(vma, page)		do { } while(0)
 
 /* This operation in unnecessary on the SpitFire since D-CACHE is write-through. */
 #define flush_page_to_ram(page)		do { } while (0)
 
-extern __inline__ void flush_tlb_all(void)
-{
-	unsigned long flags;
-	int entry;
+extern void flush_tlb_all(void);
 
-	/* Invalidate all non-locked TTE's in both the dtlb and itlb. */
-	save_and_cli(flags);
-	__asm__ __volatile__("stxa	%%g0, [%0] %1\n\t"
-			     "stxa	%%g0, [%0] %2"
-			     : /* No outputs */
-			     : "r" (TLB_TAG_ACCESS), "i" (ASI_IMMU), "i" (ASI_DMMU));
-	for(entry = 0; entry < 62; entry++) {
-		spitfire_put_dtlb_data(entry, 0x0UL);
-		spitfire_put_itlb_data(entry, 0x0UL);
-	}
-	membar("#Sync");
-	flushi(PAGE_OFFSET);
-	restore_flags(flags);
-}
-
+extern void __flush_tlb_mm(unsigned long context);
 extern __inline__ void flush_tlb_mm(struct mm_struct *mm)
 {
-	if(mm->context != NO_CONTEXT) {
-		__asm__ __volatile__("
-	/* flush_tlb_mm() */
-	rdpr		%%pil, %%g1
-	mov		%1, %%g7
-	wrpr		%%g0, 15, %%pil
-	ldxa		[%%g7] %2, %%g2
-	cmp		%%g2, %0
-	be,pt		%%icc, 1f
-	 mov		0x50, %%g3
-	stxa		%0, [%%g7] %2
-1:
-	stxa		%%g0, [%%g3] %3
-	stxa		%%g0, [%%g3] %4
-	be,pt		%%icc, 1f
-	 nop
-	stxa		%%g2, [%%g7] %2
-1:
-	flush		%%g4
-	wrpr		%%g1, 0x0, %%pil
-"	: /* no outputs */
-	: "r" (mm->context & 0x1fff), "i" (SECONDARY_CONTEXT), "i" (ASI_DMMU),
-	  "i" (ASI_DMMU_DEMAP), "i" (ASI_IMMU_DEMAP)
-	: "g1", "g2", "g3", "g7", "cc");
-	}
+	if(mm->context != NO_CONTEXT)
+		__flush_tlb_mm(mm->context & 0x1fff);
 }
 
+extern void __flush_tlb_range(unsigned long context, unsigned long start,
+			      unsigned long end);
 extern __inline__ void flush_tlb_range(struct mm_struct *mm, unsigned long start,
 				       unsigned long end)
 {
-	if(mm->context != NO_CONTEXT) {
-		unsigned long old_ctx = spitfire_get_secondary_context();
-		unsigned long new_ctx = (mm->context & 0x1fff);
-		unsigned long flags;
-
-		start &= PAGE_MASK;
-		save_and_cli(flags);
-		if(new_ctx != old_ctx)
-			spitfire_set_secondary_context(new_ctx);
-		while(start < end) {
-			spitfire_flush_dtlb_secondary_page(start);
-			spitfire_flush_itlb_secondary_page(start);
-			start += PAGE_SIZE;
-		}
-		if(new_ctx != old_ctx)
-			spitfire_set_secondary_context(old_ctx);
-		__asm__ __volatile__("flush %g4");
-		restore_flags(flags);
-	}
+	if(mm->context != NO_CONTEXT)
+		__flush_tlb_range(mm->context & 0x1fff, start, end);
 }
 
+extern void __flush_tlb_page(unsigned long context, unsigned long page);
 extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 {
 	struct mm_struct *mm = vma->vm_mm;
 
-	if(mm->context != NO_CONTEXT) {
-	__asm__ __volatile__("
-	/* flush_tlb_page() */
-	rdpr		%%pil, %%g1
-	mov		%1, %%g7
-	wrpr		%%g0, 15, %%pil
-	ldxa		[%%g7] %2, %%g2
-	cmp		%%g2, %0
-	be,pt		%%icc, 1f
-	 or		%5, 0x10, %%g3
-	stxa		%0, [%%g7] %2
-1:
-	stxa		%%g0, [%%g3] %3
-	stxa		%%g0, [%%g3] %4
-	be,pt		%%icc, 1f
-	 nop
-	stxa		%%g2, [%%g7] %2
-1:
-	flush		%%g4
-	wrpr		%%g1, 0x0, %%pil
-"	: /* no outputs */
-	: "r" (mm->context & 0x1fff), "i" (SECONDARY_CONTEXT), "i" (ASI_DMMU),
-	  "i" (ASI_DMMU_DEMAP), "i" (ASI_IMMU_DEMAP), "r" (page & PAGE_MASK)
-	: "g1", "g2", "g3", "g7", "cc");
-	}
+	if(mm->context != NO_CONTEXT)
+		__flush_tlb_page(mm->context & 0x1fff, page & PAGE_MASK);
 }
 
 extern inline pte_t mk_pte(unsigned long page, pgprot_t pgprot)
@@ -393,24 +283,6 @@ extern inline pte_t pte_mkyoung(pte_t pte)
 		return __pte(pte_val(pte) | (_PAGE_ACCESSED));
 }
 
-extern inline void SET_PAGE_DIR(struct task_struct *tsk, pgd_t *pgdir)
-{
-	register unsigned long paddr asm("o5");
-
-	paddr = __pa(pgdir);
-
-	if(tsk == current) {
-		__asm__ __volatile__ ("
-			rdpr		%%pstate, %%o4
-			wrpr		%%o4, %1, %%pstate
-			mov		%0, %%g7
-			wrpr		%%o4, 0x0, %%pstate
-		" : /* No outputs */
-		  : "r" (paddr), "i" (PSTATE_MG|PSTATE_IE)
-		  : "o4");
-	}
-}
-
 /* to find an entry in a page-table-directory. */
 extern inline pgd_t *pgd_offset(struct mm_struct *mm, unsigned long address)
 { return mm->pgd + ((address >> PGDIR_SHIFT) & (PTRS_PER_PAGE - 1)); }
@@ -428,10 +300,15 @@ extern inline pte_t *pte_offset(pmd_t *dir, unsigned long address)
 
 extern __inline__ void __init_pmd(pmd_t *pmdp)
 {
-	extern void __bfill64(void *, unsigned long);
+	extern void __bfill64(void *, unsigned long *);
 	
-	__bfill64((void *)pmdp, null_pte_table);
+	__bfill64((void *)pmdp, &null_pte_table);
 }
+
+/* Turning this off makes things much faster, but eliminates some
+ * sanity checking as well.
+ */
+/* #define PGTABLE_SANITY_CHECKS */
 
 /* Allocate and free page tables. The xxx_kernel() versions are
  * used to allocate a kernel page table - this turns on supervisor
@@ -455,11 +332,13 @@ extern inline pte_t * pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 		}
 		free_page((unsigned long) page);
 	}
+#ifdef PGTABLE_SANITY_CHECKS
 	if (pmd_bad(*pmd)) {
 		printk("Bad pmd in pte_alloc_kernel: %08lx\n", pmd_val(*pmd));
 		pmd_set(pmd, BAD_PTE);
 		return NULL;
 	}
+#endif
 	return (pte_t *) pmd_page(*pmd) + address;
 }
 
@@ -482,11 +361,13 @@ extern inline pmd_t * pmd_alloc_kernel(pgd_t *pgd, unsigned long address)
 		}
 		free_page((unsigned long) page);
 	}
+#ifdef PGTABLE_SANITY_CHECKS
 	if (pgd_bad(*pgd)) {
 		printk("Bad pgd in pmd_alloc_kernel: %08lx\n", pgd_val(*pgd));
 		pgd_set(pgd, BAD_PMD);
 		return NULL;
 	}
+#endif
 	return (pmd_t *) pgd_page(*pgd) + address;
 }
 
@@ -508,11 +389,13 @@ extern inline pte_t * pte_alloc(pmd_t *pmd, unsigned long address)
 		}
 		free_page((unsigned long) page);
 	}
+#ifdef PGTABLE_SANITY_CHECKS
 	if (pmd_bad(*pmd)) {
 		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
 		pmd_set(pmd, BAD_PTE);
 		return NULL;
 	}
+#endif
 	return (pte_t *) pmd_page(*pmd) + address;
 }
 
@@ -535,11 +418,13 @@ extern inline pmd_t * pmd_alloc(pgd_t *pgd, unsigned long address)
 		}
 		free_page((unsigned long) page);
 	}
+#ifdef PGTABLE_SANITY_CHECKS
 	if (pgd_bad(*pgd)) {
 		printk("Bad pgd in pmd_alloc: %08lx\n", pgd_val(*pgd));
 		pgd_set(pgd, BAD_PMD);
 		return NULL;
 	}
+#endif
 	return (pmd_t *) pgd_page(*pgd) + address;
 }
 
@@ -548,15 +433,32 @@ extern inline void pgd_free(pgd_t * pgd)
 
 extern inline pgd_t * pgd_alloc(void)
 {
-	extern void __bfill64(void *, unsigned long);
+	extern void __bfill64(void *, unsigned long *);
 	pgd_t *pgd = (pgd_t *) __get_free_page(GFP_KERNEL);
 	
 	if (pgd)
-		__bfill64((void *)pgd, null_pmd_table);
+		__bfill64((void *)pgd, &null_pmd_table);
 	return pgd;
 }
 
 extern pgd_t swapper_pg_dir[1024];
+
+extern inline void SET_PAGE_DIR(struct task_struct *tsk, pgd_t *pgdir)
+{
+	if(pgdir != swapper_pg_dir && tsk == current) {
+		register unsigned long paddr asm("o5");
+
+		paddr = __pa(pgdir);
+		__asm__ __volatile__ ("
+			rdpr		%%pstate, %%o4
+			wrpr		%%o4, %1, %%pstate
+			mov		%0, %%g7
+			wrpr		%%o4, 0x0, %%pstate
+		" : /* No outputs */
+		  : "r" (paddr), "i" (PSTATE_MG|PSTATE_IE)
+		  : "o4");
+	}
+}
 
 /* Routines for getting a dvma scsi buffer. */
 struct mmu_sglist {
@@ -575,61 +477,15 @@ extern void  mmu_get_scsi_sgl(struct mmu_sglist *, int, struct linux_sbus *sbus)
 #define mmu_lockarea(vaddr, len)		(vaddr)
 #define mmu_unlockarea(vaddr, len)		do { } while(0)
 
+extern void fixup_dcache_alias(struct vm_area_struct *vma, unsigned long address,
+			       pte_t pte);
+
 extern inline void update_mmu_cache(struct vm_area_struct * vma,
 	unsigned long address, pte_t pte)
 {
 	/* Find and fix bad virutal cache aliases. */
-	if((vma->vm_flags & (VM_WRITE|VM_SHARED)) == (VM_WRITE|VM_SHARED)) {
-		struct vm_area_struct *vmaring;
-		struct inode *inode;
-		unsigned long vaddr, offset, start;
-		pgd_t *pgdp;
-		pmd_t *pmdp;
-		pte_t *ptep;
-		int alias_found = 0;
-
-		inode = vma->vm_inode;
-		if(!inode)
-			return;
-
-		offset = (address & PAGE_MASK) - vma->vm_start;
-		vmaring = inode->i_mmap;
-		do {
-			vaddr = vmaring->vm_start + offset;
-
-			/* This conditional is misleading... */
-			if((vaddr ^ address) & PAGE_SIZE) {
-				alias_found++;
-				start = vmaring->vm_start;
-				while(start < vmaring->vm_end) {
-					pgdp = pgd_offset(vmaring->vm_mm, start);
-					if(!pgdp) goto next;
-					pmdp = pmd_offset(pgdp, start);
-					if(!pmdp) goto next;
-					ptep = pte_offset(pmdp, start);
-					if(!ptep) goto next;
-
-					if(pte_val(*ptep) & _PAGE_PRESENT) {
-						flush_cache_page(vmaring, start);
-						*ptep = __pte(pte_val(*ptep) &
-							      ~(_PAGE_CV));
-						flush_tlb_page(vmaring, start);
-					}
-				next:
-					start += PAGE_SIZE;
-				}
-			}
-		} while((vmaring = vmaring->vm_next_share) != NULL);
-
-		if(alias_found && (pte_val(pte) & _PAGE_CV)) {
-			pgdp = pgd_offset(vma->vm_mm, address);
-			pmdp = pmd_offset(pgdp, address);
-			ptep = pte_offset(pmdp, address);
-			flush_cache_page(vma, address);
-			*ptep = __pte(pte_val(*ptep) & ~(_PAGE_CV));
-			flush_tlb_page(vma, address);
-		}
-	}
+	if((vma->vm_flags & (VM_WRITE|VM_SHARED)) == (VM_WRITE|VM_SHARED))
+		fixup_dcache_alias(vma, address, pte);
 }
 
 /* Make a non-present pseudo-TTE. */
@@ -649,7 +505,9 @@ sun4u_get_pte (unsigned long addr)
 	pgd_t *pgdp;
 	pmd_t *pmdp;
 	pte_t *ptep;
-	
+
+	if (addr >= PAGE_OFFSET)
+		return addr & _PAGE_PADDR;
 	pgdp = pgd_offset_k (addr);
 	pmdp = pmd_offset (pgdp, addr);
 	ptep = pte_offset (pmdp, addr);
@@ -667,6 +525,9 @@ __get_iospace (unsigned long addr)
 {
 	return ((sun4u_get_pte (addr) & 0xf0000000) >> 28);
 }
+
+extern void * module_map (unsigned long size);
+extern void module_unmap (void *addr);
 
 #endif /* !(__ASSEMBLY__) */
 

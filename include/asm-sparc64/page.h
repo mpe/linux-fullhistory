@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.9 1997/06/14 21:28:09 davem Exp $ */
+/* $Id: page.h,v 1.14 1997/06/26 22:32:03 davem Exp $ */
 
 #ifndef _SPARC64_PAGE_H
 #define _SPARC64_PAGE_H
@@ -18,17 +18,15 @@
 
 #ifndef __ASSEMBLY__
 
-#define clear_page(page)					\
-	__asm__ __volatile__(	"mov	%%o7, %%g3\n\t"		\
-				"call	__bzero_1page\n\t"	\
-				" mov	%0, %%g2\n\t"		\
-				: /* No outputs */		\
-				: "r" (page)			\
-				: "g1", "g2", "g3")
+#define clear_page(page) memset((void *)(page), 0, PAGE_SIZE)
 
-#define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
+extern void copy_page(unsigned long to, unsigned long from);
 
-#define STRICT_MM_TYPECHECKS
+/* GROSS, defining this makes gcc pass these types as aggregates,
+ * and thus on the stack, turn this crap off... -DaveM
+ */
+
+/* #define STRICT_MM_TYPECHECKS */
 
 #ifdef STRICT_MM_TYPECHECKS
 /* These are used to make use of C type-checking.. */
@@ -96,7 +94,9 @@ typedef unsigned long iopgprot_t;
 #define PAGE_ALIGN(addr)	(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 
 #ifndef __ASSEMBLY__
-#define PAGE_OFFSET		0xFFFFF80000000000UL
+/* Do prdele, look what happens to be in %g4... */
+register unsigned long page_offset asm("g4");
+#define PAGE_OFFSET		page_offset
 #else
 #define PAGE_OFFSET		0xFFFFF80000000000
 #endif

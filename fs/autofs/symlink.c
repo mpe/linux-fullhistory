@@ -19,16 +19,19 @@ static int autofs_readlink(struct inode *inode, char *buffer, int buflen)
 	struct autofs_symlink *sl;
 	int len;
 
-	if (!S_ISLNK(inode->i_mode)) {
-		iput(inode);
-		return -EINVAL;
-	}
 	sl = (struct autofs_symlink *)inode->u.generic_ip;
 	len = sl->len;
 	if (len > buflen) len = buflen;
 	copy_to_user(buffer,sl->data,len);
-	iput(inode);
 	return len;
+}
+
+static struct dentry * autofs_follow_link(struct inode *inode, struct dentry *base)
+{
+	struct autofs_symlink *sl;
+
+	sl = (struct autofs_symlink *)inode->u.generic_ip;
+	return lookup_dentry(sl->data, base, 1);
 }
 
 struct inode_operations autofs_symlink_inode_operations = {
@@ -43,6 +46,7 @@ struct inode_operations autofs_symlink_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	autofs_readlink,	/* readlink */
+	autofs_follow_link,	/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */

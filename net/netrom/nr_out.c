@@ -1,5 +1,5 @@
 /*
- *	NET/ROM release 006
+ *	NET/ROM release 007
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -13,6 +13,7 @@
  *	NET/ROM 001	Jonathan(G4KLX)	Cloned from ax25_out.c
  *	NET/ROM 003	Jonathan(G4KLX)	Added NET/ROM fragmentation.
  *			Darryl(G7LED)	Fixed NAK, to give out correct reponse.
+ *	NET/ROM 007	Jonathan(G4KLX)	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -83,8 +84,7 @@ void nr_output(struct sock *sk, struct sk_buff *skb)
 		skb_queue_tail(&sk->write_queue, skb);		/* Throw it on the queue */
 	}
 
-	if (sk->protinfo.nr->state == NR_STATE_3)
-		nr_kick(sk);
+	nr_kick(sk);
 }
 
 /* 
@@ -101,6 +101,8 @@ static void nr_send_iframe(struct sock *sk, struct sk_buff *skb)
 
 	if (sk->protinfo.nr->condition & NR_COND_OWN_RX_BUSY)
 		skb->data[4] |= NR_CHOKE_FLAG;
+
+	nr_start_idletimer(sk);
 
 	nr_transmit_buffer(sk, skb);	
 }
@@ -125,7 +127,8 @@ void nr_send_nak_frame(struct sock *sk)
 
 	sk->protinfo.nr->condition &= ~NR_COND_ACK_PENDING;
 	sk->protinfo.nr->vl         = sk->protinfo.nr->vr;
-	sk->protinfo.nr->t1timer    = 0;
+
+	nr_stop_t1timer(sk);
 }
 
 void nr_kick(struct sock *sk)
@@ -133,57 +136,60 @@ void nr_kick(struct sock *sk)
 	struct sk_buff *skb, *skbn;
 	unsigned short start, end;
 
-	del_timer(&sk->timer);
+	if (sk->protinfo.nr->state != NR_STATE_3)
+		return;
+
+	if (sk->protinfo.nr->condition & NR_COND_PEER_RX_BUSY)
+		return;
+
+	if (skb_peek(&sk->write_queue) == NULL)
+		return;
 
 	start = (skb_peek(&sk->protinfo.nr->ack_queue) == NULL) ? sk->protinfo.nr->va : sk->protinfo.nr->vs;
 	end   = (sk->protinfo.nr->va + sk->protinfo.nr->window) % NR_MODULUS;
 
-	if (!(sk->protinfo.nr->condition & NR_COND_PEER_RX_BUSY) &&
-	    start != end                                         &&
-	    skb_peek(&sk->write_queue) != NULL) {
+	if (start == end)
+		return;
 
-		sk->protinfo.nr->vs = start;
+	sk->protinfo.nr->vs = start;
+
+	/*
+	 * Transmit data until either we're out of data to send or
+	 * the window is full.
+	 */
+
+	/*
+	 * Dequeue the frame and copy it.
+	 */
+	skb  = skb_dequeue(&sk->write_queue);
+
+	do {
+		if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
+			skb_queue_head(&sk->write_queue, skb);
+			break;
+		}
+
+		skb_set_owner_w(skbn, sk);
 
 		/*
-		 * Transmit data until either we're out of data to send or
-		 * the window is full.
+		 * Transmit the frame copy.
 		 */
+		nr_send_iframe(sk, skbn);
+
+		sk->protinfo.nr->vs = (sk->protinfo.nr->vs + 1) % NR_MODULUS;
 
 		/*
-		 * Dequeue the frame and copy it.
+		 * Requeue the original data frame.
 		 */
-		skb  = skb_dequeue(&sk->write_queue);
+		skb_queue_tail(&sk->protinfo.nr->ack_queue, skb);
 
-		do {
-			if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
-				skb_queue_head(&sk->write_queue, skb);
-				break;
-			}
+	} while (sk->protinfo.nr->vs != end && (skb = skb_dequeue(&sk->write_queue)) != NULL);
 
-			skb_set_owner_w(skbn, sk);
+	sk->protinfo.nr->vl         = sk->protinfo.nr->vr;
+	sk->protinfo.nr->condition &= ~NR_COND_ACK_PENDING;
 
-			/*
-			 * Transmit the frame copy.
-			 */
-			nr_send_iframe(sk, skbn);
-
-			sk->protinfo.nr->vs = (sk->protinfo.nr->vs + 1) % NR_MODULUS;
-
-			/*
-			 * Requeue the original data frame.
-			 */
-			skb_queue_tail(&sk->protinfo.nr->ack_queue, skb);
-
-		} while (sk->protinfo.nr->vs != end && (skb = skb_dequeue(&sk->write_queue)) != NULL);
-
-		sk->protinfo.nr->vl         = sk->protinfo.nr->vr;
-		sk->protinfo.nr->condition &= ~NR_COND_ACK_PENDING;
-
-		if (sk->protinfo.nr->t1timer == 0)
-			sk->protinfo.nr->t1timer = sk->protinfo.nr->t1;
-	}
-
-	nr_set_timer(sk);
+	if (!nr_t1timer_running(sk))
+		nr_start_t1timer(sk);
 }
 
 void nr_transmit_buffer(struct sock *sk, struct sk_buff *skb)
@@ -211,13 +217,7 @@ void nr_transmit_buffer(struct sock *sk, struct sk_buff *skb)
 
 	if (!nr_route_frame(skb, NULL)) {
 		kfree_skb(skb, FREE_WRITE);
-
-		sk->state     = TCP_CLOSE;
-		sk->err       = ENETUNREACH;
-		sk->shutdown |= SEND_SHUTDOWN;
-		if (!sk->dead)
-			sk->state_change(sk);
-		sk->dead      = 1;
+		nr_disconnect(sk, ENETUNREACH);
 	}
 }
 
@@ -233,8 +233,10 @@ void nr_establish_data_link(struct sock *sk)
 
 	nr_write_internal(sk, NR_CONNREQ);
 
-	sk->protinfo.nr->t2timer = 0;
-	sk->protinfo.nr->t1timer = sk->protinfo.nr->t1;
+	nr_stop_t2timer(sk);
+	nr_stop_t4timer(sk);
+	nr_stop_idletimer(sk);
+	nr_start_t1timer(sk);
 }
 
 /*
@@ -261,12 +263,12 @@ void nr_check_iframes_acked(struct sock *sk, unsigned short nr)
 {
 	if (sk->protinfo.nr->vs == nr) {
 		nr_frames_acked(sk, nr);
-		sk->protinfo.nr->t1timer = 0;
+		nr_stop_t1timer(sk);
 		sk->protinfo.nr->n2count = 0;
 	} else {
 		if (sk->protinfo.nr->va != nr) {
 			nr_frames_acked(sk, nr);
-			sk->protinfo.nr->t1timer = sk->protinfo.nr->t1;
+			nr_start_t1timer(sk);
 		}
 	}
 }

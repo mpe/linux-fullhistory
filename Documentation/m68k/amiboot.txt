@@ -1,9 +1,9 @@
 
-		Linux/m68k Amiga Bootstrap version 5.5
+		Linux/m68k Amiga Bootstrap version 5.6
 		--------------------------------------
 
 Maintained by Geert Uytterhoeven (Geert.Uytterhoeven@cs.kuleuven.ac.be)
-Last revised: March 27, 1997
+Last revised: June 12, 1997
 
 
 0. Introduction
@@ -22,7 +22,7 @@ and the Installation Guide
 first. Although the Installation Guide is getting a bit outdated, it's still a
 good starting point.
 
-Amiboot 5.5 is meant for Linux/m68k 2.0.x, 2.1.x or higher (kernel bootinfo
+Amiboot 5.6 is meant for Linux/m68k 2.0.x, 2.1.x or higher (kernel bootinfo
 interface versions 1.x and 2.x). Please use an older version for older kernels.
 
 

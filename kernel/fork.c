@@ -302,10 +302,8 @@ static inline int copy_fs(unsigned long clone_flags, struct task_struct * tsk)
 		return -1;
 	tsk->fs->count = 1;
 	tsk->fs->umask = current->fs->umask;
-	if ((tsk->fs->root = current->fs->root))
-		atomic_inc(&tsk->fs->root->i_count);
-	if ((tsk->fs->pwd = current->fs->pwd))
-		atomic_inc(&tsk->fs->pwd->i_count);
+	tsk->fs->root = dget(current->fs->root);
+	tsk->fs->pwd = dget(current->fs->pwd);
 	return 0;
 }
 

@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.13 1997/05/27 07:54:28 davem Exp $
+/* $Id: irq.c,v 1.14 1997/06/24 17:30:26 davem Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -558,6 +558,8 @@ struct sun5_timer {
 	volatile u32 limit1, _unused3;
 } *prom_timers;
 
+static u32 prom_limit0, prom_limit1;
+
 static void map_prom_timers(void)
 {
 	unsigned int addr[3];
@@ -590,24 +592,39 @@ static void kill_prom_timer(void)
 	if(!prom_timers)
 		return;
 
+	/* Save them away for later. */
+	prom_limit0 = prom_timers->limit0;
+	prom_limit1 = prom_timers->limit1;
+
 	/* Just as in sun4c/sun4m PROM uses timer which ticks at IRQ 14.
 	 * We turn both off here just to be paranoid.
 	 */
 	prom_timers->limit0 = 0;
 	prom_timers->limit1 = 0;
+
+	/* Wheee, eat the interrupt packet too... */
+	__asm__ __volatile__("
+	mov	0x40, %%g2
+	ldxa	[%%g0] %0, %%g1
+	ldxa	[%%g2] %1, %%g1
+	stxa	%%g0, [%%g0] %0
+	membar	#Sync
+"	: /* no outputs */
+	: "i" (ASI_INTR_RECEIVE), "i" (ASI_UDB_INTR_R)
+	: "g1", "g2");
 }
 
-#if 0 /* Unused at this time. -DaveM */
-static void enable_prom_timer(void)
+void enable_prom_timer(void)
 {
 	if(!prom_timers)
 		return;
 
-	/* Set it to fire off every 10ms. */
-	prom_timers->limit1 = 0xa000270f;
+	/* Set it to whatever was there before. */
+	prom_timers->limit1 = prom_limit1;
 	prom_timers->count1 = 0;
+	prom_timers->limit0 = prom_limit0;
+	prom_timers->count0 = 0;
 }
-#endif
 
 __initfunc(void init_IRQ(void))
 {

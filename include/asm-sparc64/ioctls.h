@@ -1,4 +1,4 @@
-/* $Id: ioctls.h,v 1.3 1997/06/14 17:35:08 davem Exp $ */
+/* $Id: ioctls.h,v 1.4 1997/06/23 07:26:03 davem Exp $ */
 #ifndef _ASM_SPARC64_IOCTLS_H
 #define _ASM_SPARC64_IOCTLS_H
 
@@ -64,8 +64,8 @@
 /* 119 is the non-posix getpgrp tty ioctl */
 #define __TIOCCDTR        _IO('t', 120) /* SunOS Specific */
 #define __TIOCSDTR        _IO('t', 121) /* SunOS Specific */
-#define __TIOCCBRK        _IO('t', 122) /* SunOS Specific */
-#define __TIOCSBRK        _IO('t', 123) /* SunOS Specific */
+#define TIOCCBRK        _IO('t', 122)
+#define TIOCSBRK        _IO('t', 123)
 #define __TIOCLGET        _IOW('t', 124, int) /* SunOS Specific */
 #define __TIOCLSET        _IOW('t', 125, int) /* SunOS Specific */
 #define __TIOCLBIC        _IOW('t', 126, int) /* SunOS Specific */

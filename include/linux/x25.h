@@ -13,6 +13,7 @@
 #define	SIOCX25SFACILITIES	(SIOCPROTOPRIVATE + 3)
 #define	SIOCX25GCALLUSERDATA	(SIOCPROTOPRIVATE + 4)
 #define	SIOCX25SCALLUSERDATA	(SIOCPROTOPRIVATE + 5)
+#define	SIOCX25GCAUSEDIAG	(SIOCPROTOPRIVATE + 6)
 
 /*
  *	Values for {get,set}sockopt.
@@ -33,42 +34,11 @@
 #define	X25_PS4096		12
 
 /*
- *	X.25 Reset error and diagnostic codes.
- */
-#define	X25_ERR_RESET		100	/* Call Reset			*/
-#define	X25_ERR_ROUT		101	/* Out of Order			*/
-#define	X25_ERR_RRPE		102	/* Remote Procedure Error	*/
-#define	X25_ERR_RLPE		103	/* Local Procedure Error	*/
-#define	X25_ERR_RNCG		104	/* Network Congestion		*/
-#define	X25_ERR_RRDO		105	/* Remote DTE Operational	*/
-#define	X25_ERR_RNOP		106	/* Network Operational		*/
-#define	X25_ERR_RINV		107	/* Invalid Call			*/
-#define	X25_ERR_RNOO		108	/* Network Out of Order		*/
-
-/*
- *	X.25 Clear error and diagnostic codes.
- */
-#define	X25_ERR_CLEAR		110	/* Call Cleared			*/
-#define	X25_ERR_CBUSY		111	/* Number Busy			*/
-#define	X25_ERR_COUT		112	/* Out of Order			*/
-#define	X25_ERR_CRPE		113	/* Remote Procedure Error	*/
-#define	X25_ERR_CRRC		114	/* Collect Call Refused		*/
-#define	X25_ERR_CINV		115	/* Invalid Call			*/
-#define	X25_ERR_CNFS		116	/* Invalid Fast Select		*/
-#define	X25_ERR_CSA		117	/* Ship Absent			*/
-#define	X25_ERR_CIFR		118	/* Invalid Facility Request	*/
-#define	X25_ERR_CAB		119	/* Access Barred		*/
-#define	X25_ERR_CLPE		120	/* Local Procedure Error	*/
-#define	X25_ERR_CNCG		121	/* Network Congestion		*/
-#define	X25_ERR_CNOB		122	/* Not Obtainable		*/
-#define	X25_ERR_CROO		123	/* RPOA Out of Order		*/
-
-/*
  * An X.121 address, it is held as ASCII text, null terminated, up to 15
  * digits and a null terminator.
  */
 typedef struct {
-	char x25_addr[16];
+	char		x25_addr[16];
 } x25_address;
 
 /*
@@ -112,6 +82,14 @@ struct x25_facilities {
 struct x25_calluserdata {
 	unsigned int	cudlength;
 	unsigned char	cuddata[128];
+};
+
+/*
+ *	Call clearing Cause and Diagnostic structure.
+ */
+struct x25_causediag {
+	unsigned char	cause;
+	unsigned char	diagnostic;
 };
 
 #endif

@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.2 1997/04/10 03:02:35 davem Exp $
+/* $Id: time.c,v 1.3 1997/06/17 13:25:29 jj Exp $
  * time.c: UltraSparc timer and TOD clock support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -146,9 +146,6 @@ static int has_low_battery(void)
 	return (data1 == data2);	/* Was the write blocked? */
 }
 
-/* XXX HACK HACK HACK, delete me soon */
-static struct linux_prom_ranges XXX_sbus_ranges[PROMREG_MAX];
-static int XXX_sbus_nranges;
 
 /* Probe for the real time clock chip. */
 __initfunc(static void clock_probe(void))
@@ -156,6 +153,10 @@ __initfunc(static void clock_probe(void))
 	struct linux_prom_registers clk_reg[2];
 	char model[128];
 	int node, sbusnd, err;
+
+	/* XXX HACK HACK HACK, delete me soon */
+	struct linux_prom_ranges XXX_sbus_ranges[PROMREG_MAX];
+	int XXX_sbus_nranges;
 
 	node = prom_getchild(prom_root_node);
 	sbusnd = prom_searchsiblings(node, "sbus");

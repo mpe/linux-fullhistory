@@ -74,8 +74,6 @@ nfs_put_inode(struct inode * inode)
 {
 	dprintk("NFS: put_inode(%x/%ld)\n", inode->i_dev, inode->i_ino);
 
-	if (NFS_RENAMED_DIR(inode))
-		nfs_sillyrename_cleanup(inode);
 	if (inode->i_pipe)
 		clear_inode(inode);
 }
@@ -230,7 +228,8 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	/* Unlock super block and try to get root fh attributes */
 	unlock_super(sb);
 
-	if ((sb->s_mounted = nfs_fhget(sb, &data->root, NULL)) != NULL) {
+	sb->s_root = d_alloc_root(nfs_fhget(sb, &data->root, NULL), NULL);
+	if (sb->s_root != NULL) {
 		/* We're airborne */
 		if (!(server->flags & NFS_MOUNT_NONLM))
 			lockd_up();

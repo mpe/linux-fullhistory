@@ -171,7 +171,7 @@ void mouse_baud_detection(unsigned char c)
 			ctr = 0;
 			wait_for_synchron = 1;
 			if(mouse_baud_changing == 1) {
-				printk("sunmouse: Successfully adjusted to %d baud.\n",
+				printk(KERN_DEBUG "sunmouse: Successfully adjusted to %d baud.\n",
 				       mouse_baud);
 				mouse_baud_changing = 0;
 			}

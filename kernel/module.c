@@ -79,7 +79,8 @@ get_mod_name(const char *user_name, char **buf)
 	unsigned long page;
 	long retval;
 
-	if ((unsigned long)user_name >= TASK_SIZE)
+	if ((unsigned long)user_name >= TASK_SIZE
+	    && get_fs () != KERNEL_DS)
 		return -EFAULT;
 
 	page = __get_free_page(GFP_KERNEL);
@@ -134,7 +135,7 @@ sys_create_module(const char *name_user, size_t size)
 		error = -EEXIST;
 		goto err1;
 	}
-	if ((mod = (struct module *)vmalloc(size)) == NULL) {
+	if ((mod = (struct module *)module_map(size)) == NULL) {
 		error = -ENOMEM;
 		goto err1;
 	}
@@ -685,6 +686,7 @@ sys_get_kernel_syms(struct kernel_sym *table)
 {
 	struct module *mod;
 	int i;
+	struct kernel_sym ksym;
 
 	lock_kernel();
 	for (mod = module_list, i = 0; mod; mod = mod->next) {
@@ -695,8 +697,10 @@ sys_get_kernel_syms(struct kernel_sym *table)
 	if (table == NULL)
 		goto out;
 
+	/* So that we don't give the user our stack content */
+	memset (&ksym, 0, sizeof (ksym));
+
 	for (mod = module_list, i = 0; mod; mod = mod->next) {
-		struct kernel_sym ksym;
 		struct module_symbol *msym;
 		unsigned int j;
 
@@ -790,7 +794,7 @@ free_module(struct module *mod)
 
 	/* And free the memory.  */
 
-	vfree(mod);
+	module_unmap(mod);
 }
 
 /*

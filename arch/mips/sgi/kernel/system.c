@@ -1,7 +1,9 @@
-/* $Id: system.c,v 1.1 1997/06/06 09:36:36 ralf Exp $
+/*
  * system.c: Probe the system type using ARCS prom interface library.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
+ *
+ * $Id: system.c,v 1.2 1997/06/30 15:26:32 ralf Exp $
  */
 #include <linux/kernel.h>
 #include <linux/types.h>
@@ -88,6 +90,10 @@ static int string_to_cpu(char *s)
 	return 0;
 }
 
+/*
+ * We' call this early before loadmmu().  If we do the other way around
+ * the firmware will crash and burn.
+ */
 void sgi_sysinit(void)
 {
 	pcomponent *p, *toplev, *cpup = 0;

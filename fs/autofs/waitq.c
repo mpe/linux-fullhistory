@@ -90,15 +90,15 @@ static void autofs_notify_daemon(struct autofs_sb_info *sbi, struct autofs_wait_
 		autofs_catatonic_mode(sbi);
 }
 
-int autofs_wait(struct autofs_sb_info *sbi, autofs_hash_t hash, const char *name, int len)
+int autofs_wait(struct autofs_sb_info *sbi, struct qstr * name)
 {
 	struct autofs_wait_queue *wq;
 	int status;
 
 	for ( wq = sbi->queues ; wq ; wq = wq->next ) {
-		if ( wq->hash == hash &&
-		     wq->len == len &&
-		     wq->name && !memcmp(wq->name,name,len) )
+		if ( wq->hash == name->hash &&
+		     wq->len == name->len &&
+		     wq->name && !memcmp(wq->name,name->name,name->len) )
 			break;
 	}
 	
@@ -108,17 +108,17 @@ int autofs_wait(struct autofs_sb_info *sbi, autofs_hash_t hash, const char *name
 		if ( !wq )
 			return -ENOMEM;
 
-		wq->name = kmalloc(len,GFP_KERNEL);
+		wq->name = kmalloc(name->len,GFP_KERNEL);
 		if ( !wq->name ) {
 			kfree(wq);
 			return -ENOMEM;
 		}
 		wq->wait_queue_token = autofs_next_wait_queue++;
 		init_waitqueue(&wq->queue);
-		wq->hash = hash;
-		wq->len = len;
+		wq->hash = name->hash;
+		wq->len = name->len;
 		wq->status = -EINTR; /* Status return if interrupted */
-		memcpy(wq->name, name, len);
+		memcpy(wq->name, name->name, name->len);
 		wq->next = sbi->queues;
 		sbi->queues = wq;
 

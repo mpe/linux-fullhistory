@@ -671,7 +671,7 @@ Cyber_WaitQueue (0x8000);
  * Rectangle Fill Solid
  */
 void Cyber_RectFill (u_short x, u_short y, u_short width, u_short height,
-                     u_short mode, u_short color)
+                     u_short mode, u_short fcolor)
 {
 u_short blitcmd = S3_FILLEDRECT;
 

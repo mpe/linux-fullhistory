@@ -492,17 +492,15 @@ extern int ext2_ioctl (struct inode *, struct file *, unsigned int,
 
 /* namei.c */
 extern void ext2_release (struct inode *, struct file *);
-extern int ext2_lookup (struct inode *,const char *, int, struct inode **);
-extern int ext2_create (struct inode *,const char *, int, int,
-			struct inode **);
-extern int ext2_mkdir (struct inode *, const char *, int, int);
-extern int ext2_rmdir (struct inode *, const char *, int);
-extern int ext2_unlink (struct inode *, const char *, int);
-extern int ext2_symlink (struct inode *, const char *, int, const char *);
-extern int ext2_link (struct inode *, struct inode *, const char *, int);
-extern int ext2_mknod (struct inode *, const char *, int, int, int);
-extern int ext2_rename (struct inode *, const char *, int,
-			struct inode *, const char *, int);
+extern int ext2_lookup (struct inode *,struct qstr *, struct inode **);
+extern int ext2_create (struct inode *,struct dentry *,int);
+extern int ext2_mkdir (struct inode *,struct dentry *,int);
+extern int ext2_rmdir (struct inode *,struct dentry *);
+extern int ext2_unlink (struct inode *,struct dentry *);
+extern int ext2_symlink (struct inode *,struct dentry *,const char *);
+extern int ext2_link (struct inode *, struct inode *, struct dentry *);
+extern int ext2_mknod (struct inode *, struct dentry *, int, int);
+extern int ext2_rename (struct inode *, struct dentry *,struct inode *, struct dentry *);
 
 /* super.c */
 extern void ext2_error (struct super_block *, const char *, const char *, ...)

@@ -113,9 +113,6 @@ else
   endif
 endif
 
-# We must attach netsyms.o to socket.o, as otherwise there is nothing
-# to pull the object file from the archive.
-
 SOCK         := socket.o
 ifeq ($(CONFIG_NET),y)
 ifeq ($(CONFIG_MODULES),y)

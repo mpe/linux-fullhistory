@@ -24,7 +24,7 @@
 #define FIRST_PROCESS_ENTRY 256
 
 static int proc_root_readdir(struct inode *, struct file *, void *, filldir_t);
-static int proc_root_lookup(struct inode *,const char *,int,struct inode **);
+static int proc_root_lookup(struct inode *,struct qstr *,struct inode **);
 
 static unsigned char proc_alloc_map[PROC_NDYNAMIC / 8] = {0};
 
@@ -64,6 +64,7 @@ struct inode_operations proc_dir_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -104,6 +105,7 @@ static struct inode_operations proc_root_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -149,14 +151,14 @@ struct proc_dir_entry proc_sys_root = {
 #if defined(CONFIG_SUN_OPENPROMFS) || defined(CONFIG_SUN_OPENPROMFS_MODULE)
 
 static int (*proc_openprom_defreaddir_ptr)(struct inode *, struct file *, void *, filldir_t);
-static int (*proc_openprom_deflookup_ptr)(struct inode *, const char *, int, struct inode **);
+static int (*proc_openprom_deflookup_ptr)(struct inode *, struct qstr *, struct inode **);
 void (*proc_openprom_use)(struct inode *, int) = 0;
 static struct openpromfs_dev *proc_openprom_devices = NULL;
 static ino_t proc_openpromdev_ino = PROC_OPENPROMD_FIRST;
 
 struct inode_operations *
 proc_openprom_register(int (*readdir)(struct inode *, struct file *, void *, filldir_t),
-		       int (*lookup)(struct inode *, const char *, int, struct inode **),
+		       int (*lookup)(struct inode *, struct qstr *, struct inode **),
 		       void (*use)(struct inode *, int),
 		       struct openpromfs_dev ***devices)
 {
@@ -218,14 +220,13 @@ proc_openprom_defreaddir(struct inode * inode, struct file * filp,
 }
 
 static int 
-proc_openprom_deflookup(struct inode * dir,const char * name, int len,
-			struct inode ** result)
+proc_openprom_deflookup(struct inode * dir, struct qstr *str, struct inode ** result)
 {
 	request_module("openpromfs");
 	if (proc_openprom_inode_operations.lookup !=
 	    proc_openprom_deflookup)
 		return proc_openprom_inode_operations.lookup 
-				(dir, name, len, result);
+				(dir, str, result);
 	iput(dir);
 	return -ENOENT;
 }
@@ -264,6 +265,7 @@ struct inode_operations proc_openprom_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -350,13 +352,21 @@ static int proc_self_readlink(struct inode * inode, char * buffer, int buflen)
 	int len;
 	char tmp[30];
 
-	iput(inode);
 	len = sprintf(tmp, "%d", current->pid);
 	if (buflen < len)
 		len = buflen;
 	copy_to_user(buffer, tmp, len);
 	return len;
 }
+
+static struct dentry * proc_self_follow_link(struct inode *inode, struct dentry *base)
+{
+	int len;
+	char tmp[30];
+
+	len = sprintf(tmp, "%d", current->pid);
+	return lookup_dentry(tmp, base, 1);
+}	
 
 static struct inode_operations proc_self_inode_operations = {
 	NULL,			/* no file-ops */
@@ -370,6 +380,7 @@ static struct inode_operations proc_self_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	proc_self_readlink,	/* readlink */
+	proc_self_follow_link,	/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -612,90 +623,41 @@ void proc_root_init(void)
 }
 
 
-int proc_match(int len,const char * name,struct proc_dir_entry * de)
-{
-	if (!de || !de->low_ino)
-		return 0;
-	/* "" means "." ---> so paths like "/usr/lib//libc.a" work */
-	if (!len && (de->name[0]=='.') && (de->name[1]=='\0'))
-		return 1;
-	if (de->namelen != len)
-		return 0;
-	return !memcmp(name, de->name, len);
-}
-
-int proc_lookup(struct inode * dir,const char * name, int len,
-	struct inode ** result)
+int proc_lookup(struct inode * dir, struct qstr * str, struct inode ** result)
 {
 	struct proc_dir_entry * de;
-	int ino;
 
 	*result = NULL;
-	if (!dir || !S_ISDIR(dir->i_mode)) {
-		iput(dir);
+	if (!dir || !S_ISDIR(dir->i_mode))
 		return -ENOTDIR;
-	}
 
 	de = (struct proc_dir_entry *) dir->u.generic_ip;
-	if (!de) {
-		iput(dir);
+	if (!de)
 		return -EINVAL;
-	}
-
-	/* Either remove this as soon as possible due to security problems,
-	 * or uncomment the root-only usage.
-	 */
-
-	/* Allow generic inode lookups everywhere.
-	 * No other name in /proc must begin with a '['.
-	 */
-	if(/*!current->uid &&*/ name[0] == '[')
-		return proc_arbitrary_lookup(dir,name,len,result);
-
-	/* Special case "." and "..": they aren't on the directory list */
-	*result = dir;
-	if (!len)
-		return 0;
-	if (name[0] == '.') {
-		if (len == 1)
-			return 0;
-		if (name[1] == '.' && len == 2) {
-			struct inode * inode;
-			inode = proc_get_inode(dir->i_sb, de->parent->low_ino, de->parent);
-			iput(dir);
-			if (!inode)
-				return -EINVAL;
-			*result = inode;
-			return 0;
-		}
-	}
 
 	*result = NULL;
 	for (de = de->subdir; de ; de = de->next) {
-		if (proc_match(len, name, de))
-			break;
+		if (!de || !de->low_ino)
+			continue;
+		if (de->namelen != str->len)
+			continue;
+		if (!memcmp(str->name, de->name, str->len)) {
+			int ino = de->low_ino | (dir->i_ino & ~(0xffff));
+			if (!(*result = proc_get_inode(dir->i_sb, ino, de)))
+				return -EINVAL;
+			return 0;
+		}
 	}
-	if (!de) {
-		iput(dir);
-		return -ENOENT;
-	}
-
-	ino = de->low_ino | (dir->i_ino & ~(0xffff));
-
-	if (!(*result = proc_get_inode(dir->i_sb, ino, de))) {
-		iput(dir);
-		return -EINVAL;
-	}
-	iput(dir);
-	return 0;
+	return -ENOENT;
 }
 
-static int proc_root_lookup(struct inode * dir,const char * name, int len,
-	struct inode ** result)
+static int proc_root_lookup(struct inode * dir,struct qstr *str, struct inode ** result)
 {
 	unsigned int pid, c;
 	int ino, retval;
 	struct task_struct *p;
+	const char *name;
+	int len;
 
 	atomic_inc(&dir->i_count);
 
@@ -710,13 +672,13 @@ static int proc_root_lookup(struct inode * dir,const char * name, int len,
 		read_unlock(&tasklist_lock);
 	}
 
-	retval = proc_lookup(dir, name, len, result);
-	if (retval != -ENOENT) {
-		iput(dir);
+	retval = proc_lookup(dir, str, result);
+	if (retval != -ENOENT)
 		return retval;
-	}
 	
 	pid = 0;
+	name = str->name;
+	len = str->len;
 	while (len-- > 0) {
 		c = *name - '0';
 		name++;
@@ -732,16 +694,12 @@ static int proc_root_lookup(struct inode * dir,const char * name, int len,
 		}
 	}
 	p = find_task_by_pid(pid);
-	if (!pid || !p) {
-		iput(dir);
+	if (!pid || !p)
 		return -ENOENT;
-	}
+
 	ino = (pid << 16) + PROC_PID_INO;
-	if (!(*result = proc_get_inode(dir->i_sb, ino, &proc_pid))) {
-		iput(dir);
+	if (!(*result = proc_get_inode(dir->i_sb, ino, &proc_pid)))
 		return -EINVAL;
-	}
-	iput(dir);
 	return 0;
 }
 

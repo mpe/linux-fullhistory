@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.18 1997/06/13 14:02:42 davem Exp $
+/*  $Id: process.c,v 1.26 1997/07/01 21:15:07 jj Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -137,7 +137,7 @@ void machine_restart(char * cmd)
 		prom_reboot(cmd);
 	if (*reboot_command)
 		prom_reboot(reboot_command);
-	prom_feval ("reset");
+	prom_reboot("");
 	panic("Reboot failed!");
 }
 
@@ -146,8 +146,55 @@ void machine_power_off(void)
 	machine_halt();
 }
 
-void show_regwindow(struct reg_window *rw)
+static void show_regwindow32(struct pt_regs *regs)
 {
+	struct reg_window32 *rw;
+	struct reg_window32 r_w;
+	unsigned long old_fs;
+	
+	__asm__ __volatile__ ("flushw");
+	rw = (struct reg_window32 *)((long)(unsigned)regs->u_regs[14]);
+	old_fs = get_fs();
+	set_fs (USER_DS);
+	if (copy_from_user (&r_w, rw, sizeof(r_w))) {
+		set_fs (old_fs);
+		return;
+	}
+	rw = &r_w;
+	set_fs (old_fs);			
+	printk("l0: %016x l1: %016x l2: %016x l3: %016x\n"
+	       "l4: %016x l5: %016x l6: %016x l7: %016x\n",
+	       rw->locals[0], rw->locals[1], rw->locals[2], rw->locals[3],
+	       rw->locals[4], rw->locals[5], rw->locals[6], rw->locals[7]);
+	printk("i0: %016x i1: %016x i2: %016x i3: %016x\n"
+	       "i4: %016x i5: %016x i6: %016x i7: %016x\n",
+	       rw->ins[0], rw->ins[1], rw->ins[2], rw->ins[3],
+	       rw->ins[4], rw->ins[5], rw->ins[6], rw->ins[7]);
+}
+
+static void show_regwindow(struct pt_regs *regs)
+{
+	struct reg_window *rw;
+	struct reg_window r_w;
+	unsigned long old_fs;
+
+	if ((regs->tstate & TSTATE_PRIV) || !(current->tss.flags & SPARC_FLAG_32BIT)) {
+		__asm__ __volatile__ ("flushw");
+		rw = (struct reg_window *)(regs->u_regs[14] + STACK_BIAS);
+		if (!(regs->tstate & TSTATE_PRIV)) {
+			old_fs = get_fs();
+			set_fs (USER_DS);
+			if (copy_from_user (&r_w, rw, sizeof(r_w))) {
+				set_fs (old_fs);
+				return;
+			}
+			rw = &r_w;
+			set_fs (old_fs);			
+		}
+	} else {
+		show_regwindow32(regs);
+		return;
+	}
 	printk("l0: %016lx l1: %016lx l2: %016lx l3: %016lx\n",
 	       rw->locals[0], rw->locals[1], rw->locals[2], rw->locals[3]);
 	printk("l4: %016lx l5: %016lx l6: %016lx l7: %016lx\n",
@@ -155,18 +202,6 @@ void show_regwindow(struct reg_window *rw)
 	printk("i0: %016lx i1: %016lx i2: %016lx i3: %016lx\n",
 	       rw->ins[0], rw->ins[1], rw->ins[2], rw->ins[3]);
 	printk("i4: %016lx i5: %016lx i6: %016lx i7: %016lx\n",
-	       rw->ins[4], rw->ins[5], rw->ins[6], rw->ins[7]);
-}
-
-void show_regwindow32(struct reg_window32 *rw)
-{
-	printk("l0: %08x l1: %08x l2: %08x l3: %08x\n"
-	       "l4: %08x l5: %08x l6: %08x l7: %08x\n",
-	       rw->locals[0], rw->locals[1], rw->locals[2], rw->locals[3],
-	       rw->locals[4], rw->locals[5], rw->locals[6], rw->locals[7]);
-	printk("i0: %08x i1: %08x i2: %08x i3: %08x\n"
-	       "i4: %08x i5: %08x i6: %08x i7: %08x\n",
-	       rw->ins[0], rw->ins[1], rw->ins[2], rw->ins[3],
 	       rw->ins[4], rw->ins[5], rw->ins[6], rw->ins[7]);
 }
 
@@ -231,7 +266,7 @@ void show_regs(struct pt_regs * regs)
 #if __MPP__
 	printk("CID: %d\n",mpp_cid());
 #endif
-        printk("TSTATE: %016lx TPC: %016lx TNPC: %016lx Y: %016lx\n", regs->tstate,
+        printk("TSTATE: %016lx TPC: %016lx TNPC: %016lx Y: %08x\n", regs->tstate,
 	       regs->tpc, regs->tnpc, regs->y);
 	printk("g0: %016lx g1: %016lx g2: %016lx g3: %016lx\n",
 	       regs->u_regs[0], regs->u_regs[1], regs->u_regs[2],
@@ -245,9 +280,7 @@ void show_regs(struct pt_regs * regs)
 	printk("o4: %016lx o5: %016lx sp: %016lx ret_pc: %016lx\n",
 	       regs->u_regs[12], regs->u_regs[13], regs->u_regs[14],
 	       regs->u_regs[15]);
-#if 0
-	show_regwindow((struct reg_window *)(regs->u_regs[14] + STACK_BIAS));
-#endif
+	show_regwindow(regs);
 }
 
 void show_regs32(struct pt_regs32 *regs)
@@ -269,7 +302,6 @@ void show_regs32(struct pt_regs32 *regs)
 	printk("o4: %08x o5: %08x sp: %08x ret_pc: %08x\n",
 	       regs->u_regs[12], regs->u_regs[13], regs->u_regs[14],
 	       regs->u_regs[15]);
-	show_regwindow32((struct reg_window32 *)((unsigned long)regs->u_regs[14]));
 }
 
 void show_thread(struct thread_struct *tss)
@@ -290,46 +322,22 @@ void show_thread(struct thread_struct *tss)
 			continue;
 		printk("reg_window[%d]:\n", i);
 		printk("stack ptr:         0x%016lx\n", tss->rwbuf_stkptrs[i]);
-		show_regwindow(&tss->reg_window[i]);
 	}
 	printk("w_saved:           0x%08lx\n", tss->w_saved);
-
-	/* XXX missing: float_regs */
-	printk("fsr:               0x%016lx\n", tss->fsr);
 
 	printk("sstk_info.stack:   0x%016lx\n",
 	        (unsigned long)tss->sstk_info.the_stack);
 	printk("sstk_info.status:  0x%016lx\n",
 	        (unsigned long)tss->sstk_info.cur_status);
-	printk("flags:             0x%016lx\n", tss->flags);
-	printk("current_ds:        0x%016x\n", tss->current_ds);
+	printk("flags:             0x%08x\n", tss->flags);
+	printk("current_ds:        0x%016lx\n", tss->current_ds);
 
 	/* XXX missing: core_exec */
 }
 
-/*
- * Free current thread data structures etc..
- */
+/* Free current thread data structures etc.. */
 void exit_thread(void)
 {
-#ifndef __SMP__
-	if(last_task_used_math == current) {
-#else
-	if(current->flags & PF_USEDFPU) {
-#endif
-		fprs_write(FPRS_FEF);
-		if(current->tss.flags & SPARC_FLAG_32BIT)
-			fpsave32((unsigned long *)&current->tss.float_regs[0],
-				 &current->tss.fsr);
-		else
-			fpsave((unsigned long *)&current->tss.float_regs[0],
-			       &current->tss.fsr);
-#ifndef __SMP__
-		last_task_used_math = NULL;
-#else
-		current->flags &= ~PF_USEDFPU;
-#endif
-	}
 }
 
 void flush_thread(void)
@@ -338,26 +346,9 @@ void flush_thread(void)
 	current->tss.sstk_info.cur_status = 0;
 	current->tss.sstk_info.the_stack = 0;
 
-	/* No new signal delivery by default */
+	/* No new signal delivery by default. */
 	current->tss.new_signal = 0;
-#ifndef __SMP__
-	if(last_task_used_math == current) {
-#else
-	if(current->flags & PF_USEDFPU) {
-#endif
-		fprs_write(FPRS_FEF);
-		if(current->tss.flags & SPARC_FLAG_32BIT)
-			fpsave32((unsigned long *)&current->tss.float_regs[0],
-				 &current->tss.fsr);
-		else
-			fpsave((unsigned long *)&current->tss.float_regs[0],
-			       &current->tss.fsr);
-#ifndef __SMP__
-		last_task_used_math = NULL;
-#else
-		current->flags &= ~PF_USEDFPU;
-#endif
-	}
+	current->flags &= ~PF_USEDFPU;
 	
 	/* Now, this task is no longer a kernel thread. */
 	current->tss.current_ds = USER_DS;
@@ -371,54 +362,7 @@ void flush_thread(void)
 	}
 	current->tss.ctx = current->mm->context & 0x1fff;
 	spitfire_set_secondary_context (current->tss.ctx);
-}
-
-static __inline__ void copy_regs(struct pt_regs *dst, struct pt_regs *src)
-{
-	__asm__ __volatile__("ldd\t[%1 + 0x00], %%g2\n\t"
-			     "ldd\t[%1 + 0x08], %%g4\n\t"
-			     "ldd\t[%1 + 0x10], %%o4\n\t"
-			     "std\t%%g2, [%0 + 0x00]\n\t"
-			     "std\t%%g4, [%0 + 0x08]\n\t"
-			     "std\t%%o4, [%0 + 0x10]\n\t"
-			     "ldd\t[%1 + 0x18], %%g2\n\t"
-			     "ldd\t[%1 + 0x20], %%g4\n\t"
-			     "ldd\t[%1 + 0x28], %%o4\n\t"
-			     "std\t%%g2, [%0 + 0x18]\n\t"
-			     "std\t%%g4, [%0 + 0x20]\n\t"
-			     "std\t%%o4, [%0 + 0x28]\n\t"
-			     "ldd\t[%1 + 0x30], %%g2\n\t"
-			     "ldd\t[%1 + 0x38], %%g4\n\t"
-			     "ldd\t[%1 + 0x40], %%o4\n\t"
-			     "std\t%%g2, [%0 + 0x30]\n\t"
-			     "std\t%%g4, [%0 + 0x38]\n\t"
-			     "ldd\t[%1 + 0x48], %%g2\n\t"
-			     "std\t%%o4, [%0 + 0x40]\n\t"
-			     "std\t%%g2, [%0 + 0x48]\n\t" : :
-			     "r" (dst), "r" (src) :
-			     "g2", "g3", "g4", "g5", "o4", "o5");
-}
-
-static __inline__ void copy_regwin(struct reg_window *dst, struct reg_window *src)
-{
-	__asm__ __volatile__("ldd\t[%1 + 0x00], %%g2\n\t"
-			     "ldd\t[%1 + 0x08], %%g4\n\t"
-			     "ldd\t[%1 + 0x10], %%o4\n\t"
-			     "std\t%%g2, [%0 + 0x00]\n\t"
-			     "std\t%%g4, [%0 + 0x08]\n\t"
-			     "std\t%%o4, [%0 + 0x10]\n\t"
-			     "ldd\t[%1 + 0x18], %%g2\n\t"
-			     "ldd\t[%1 + 0x20], %%g4\n\t"
-			     "ldd\t[%1 + 0x28], %%o4\n\t"
-			     "std\t%%g2, [%0 + 0x18]\n\t"
-			     "std\t%%g4, [%0 + 0x20]\n\t"
-			     "std\t%%o4, [%0 + 0x28]\n\t"
-			     "ldd\t[%1 + 0x30], %%g2\n\t"
-			     "ldd\t[%1 + 0x38], %%g4\n\t"
-			     "std\t%%g2, [%0 + 0x30]\n\t"
-			     "std\t%%g4, [%0 + 0x38]\n\t" : :
-			     "r" (dst), "r" (src) :
-			     "g2", "g3", "g4", "g5", "o4", "o5");
+	__asm__ __volatile__("flush %g6");
 }
 
 static __inline__ struct sparc_stackf *
@@ -462,16 +406,19 @@ void synchronize_user_stack(void)
 	flush_user_windows();
 	if((window = tp->w_saved) != 0) {
 		int winsize = REGWIN_SZ;
+		int bias = 0;
 
 #ifdef DEBUG_WINFIXUPS
 		printk("sus(%d", (int)window);
 #endif
 		if(tp->flags & SPARC_FLAG_32BIT)
 			winsize = REGWIN32_SZ;
+		else
+			bias = STACK_BIAS;
 
 		window -= 1;
 		do {
-			unsigned long sp = tp->rwbuf_stkptrs[window];
+			unsigned long sp = (tp->rwbuf_stkptrs[window] + bias);
 			struct reg_window *rwin = &tp->reg_window[window];
 
 			if(!copy_to_user((char *)sp, rwin, winsize)) {
@@ -490,9 +437,12 @@ void fault_in_user_windows(struct pt_regs *regs)
 	struct thread_struct *tp = &current->tss;
 	unsigned long window;
 	int winsize = REGWIN_SZ;
+	int bias = 0;
 
 	if(tp->flags & SPARC_FLAG_32BIT)
 		winsize = REGWIN32_SZ;
+	else
+		bias = STACK_BIAS;
 	flush_user_windows();
 	window = tp->w_saved;
 #ifdef DEBUG_WINFIXUPS
@@ -501,7 +451,7 @@ void fault_in_user_windows(struct pt_regs *regs)
 	if(window != 0) {
 		window -= 1;
 		do {
-			unsigned long sp = tp->rwbuf_stkptrs[window];
+			unsigned long sp = (tp->rwbuf_stkptrs[window] + bias);
 			struct reg_window *rwin = &tp->reg_window[window];
 
 			if(copy_to_user((char *)sp, rwin, winsize))
@@ -531,51 +481,34 @@ extern void ret_from_syscall(void);
 int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		struct task_struct *p, struct pt_regs *regs)
 {
-	struct pt_regs *childregs;
-	struct reg_window *new_stack, *old_stack;
 	unsigned long stack_offset;
+	char *child_trap_frame;
+	int tframe_size;
 
-#ifndef __SMP__
-	if(last_task_used_math == current) {
-#else
-	if(current->flags & PF_USEDFPU) {
-#endif
-		fprs_write(FPRS_FEF);
-		fpsave((unsigned long *)&p->tss.float_regs[0], &p->tss.fsr);
-#ifdef __SMP__
-		current->flags &= ~PF_USEDFPU;
-#endif
-	}
-
-	/* Calculate offset to stack_frame & pt_regs */
-	stack_offset = ((PAGE_SIZE<<1) - TRACEREG_SZ);
-
+#if 0	/* Now all syscall entries flip off the fpu. */
 	if(regs->tstate & TSTATE_PRIV)
-		stack_offset -= REGWIN_SZ;
-
-	childregs = ((struct pt_regs *) (((unsigned long)p) + stack_offset));
-	*childregs = *regs;
-	new_stack = (((struct reg_window *) childregs) - 1);
-	old_stack = (((struct reg_window *) regs) - 1);
-	*new_stack = *old_stack;
-
-	p->tss.ksp = ((unsigned long) new_stack) - STACK_BIAS;
+		regs->fprs = 0;
+#endif
+	/* Calculate offset to stack_frame & pt_regs */
+	stack_offset = (((PAGE_SIZE << 1) -
+			((sizeof(unsigned int)*64) + (2*sizeof(unsigned long)))) &
+		~(64 - 1)) - (TRACEREG_SZ+REGWIN_SZ);
+	tframe_size = (TRACEREG_SZ + REGWIN_SZ) +
+		(sizeof(unsigned int) * 64) + (2 * sizeof(unsigned long));
+	child_trap_frame = ((char *)p) + stack_offset;
+	memcpy(child_trap_frame, (((struct reg_window *)regs)-1), tframe_size);
+	p->tss.ksp = ((unsigned long) child_trap_frame) - STACK_BIAS;
 	p->tss.kpc = ((unsigned long) ret_from_syscall) - 0x8;
-	p->tss.kregs = childregs;
-
-	/* Don't look... */
+	p->tss.kregs = (struct pt_regs *)(child_trap_frame+sizeof(struct reg_window));
 	p->tss.cwp = regs->u_regs[UREG_G0];
-
-	/* tss.wstate was copied by do_fork() */
-
 	if(regs->tstate & TSTATE_PRIV) {
-		childregs->u_regs[UREG_FP] = p->tss.ksp;
+		p->tss.kregs->u_regs[UREG_FP] = p->tss.ksp;
 		p->tss.flags |= SPARC_FLAG_KTHREAD;
 		p->tss.current_ds = KERNEL_DS;
 		p->tss.ctx = 0;
-		childregs->u_regs[UREG_G6] = (unsigned long) p;
+		p->tss.kregs->u_regs[UREG_G6] = (unsigned long) p;
 	} else {
-		childregs->u_regs[UREG_FP] = sp;
+		p->tss.kregs->u_regs[UREG_FP] = sp;
 		p->tss.flags &= ~SPARC_FLAG_KTHREAD;
 		p->tss.current_ds = USER_DS;
 		p->tss.ctx = (p->mm->context & 0x1fff);
@@ -590,39 +523,20 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 			 */
 			childstack = (struct sparc_stackf *)sp;
 			parentstack = (struct sparc_stackf *)regs->u_regs[UREG_FP];
-
-#if 0
-			printk("clone: parent stack:\n");
-			show_stackframe(parentstack);
-#endif
-
 			childstack = clone_stackframe(childstack, parentstack);
 			if (!childstack)
 				return -EFAULT;
-
-#if 0
-			printk("clone: child stack:\n");
-			show_stackframe(childstack);
-#endif
-
 			childregs->u_regs[UREG_FP] = (unsigned long)childstack;
 		}
 #endif
 	}
 
 	/* Set the return value for the child. */
-	childregs->u_regs[UREG_I0] = current->pid;
-	childregs->u_regs[UREG_I1] = 1;
+	p->tss.kregs->u_regs[UREG_I0] = current->pid;
+	p->tss.kregs->u_regs[UREG_I1] = 1;
 
-	/* Set the return value for the parent. */
+	/* Set the second return value for the parent. */
 	regs->u_regs[UREG_I1] = 0;
-#if 0
-	printk("CHILD register dump\n");
-	show_regs(childregs);
-	show_regwindow(new_stack);
-	while(1)
-		barrier();
-#endif
 	return 0;
 }
 
@@ -684,5 +598,9 @@ asmlinkage int sparc_execve(struct pt_regs *regs)
 	error = do_execve(filename, (char **) regs->u_regs[base + UREG_I1],
 			  (char **) regs->u_regs[base + UREG_I2], regs);
 	putname(filename);
+	if(!error) {
+		fprs_write(0);
+		regs->fprs = 0;
+	}
 	return error;
 }

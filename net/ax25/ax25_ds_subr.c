@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 036
+ *	AX.25 release 037
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -19,6 +19,7 @@
  *	AX.25 036	Jonathan(G4KLX)	Cloned from ax25_out.c and ax25_subr.c.
  *			Joerg(DL1BKE)	Changed ax25_ds_enquiry_response(),
  *					fixed ax25_dama_on() and ax25_dama_off().
+ *	AX.25 037	Jonathan(G4KLX)	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -91,7 +92,7 @@ void ax25_ds_enquiry_response(ax25_cb *ax25)
 	else
 		ax25->n2count = 0;
 
-	ax25->t3timer = ax25->t3;
+	ax25_start_t3timer(ax25);
 	ax25_ds_set_timer(ax25->ax25_dev);
 
 	for (ax25o = ax25_list; ax25o != NULL; ax25o = ax25o->next) {
@@ -114,7 +115,7 @@ void ax25_ds_enquiry_response(ax25_cb *ax25)
 		if (ax25o->state == AX25_STATE_1 || ax25o->state == AX25_STATE_2 || skb_peek(&ax25o->ack_queue) != NULL)
 			ax25_ds_t1_timeout(ax25o);
 
-		ax25o->t3timer = ax25o->t3;
+		ax25_start_t3timer(ax25o);
 	}
 }
 
@@ -122,9 +123,10 @@ void ax25_ds_establish_data_link(ax25_cb *ax25)
 {
 	ax25->condition &= AX25_COND_DAMA_MODE;
 	ax25->n2count    = 0;
-	ax25->t3timer    = ax25->t3;
-	ax25->t2timer    = 0;
-	ax25->t1timer    = ax25->t1 = ax25_calculate_t1(ax25);
+	ax25_calculate_t1(ax25);
+	ax25_start_t1timer(ax25);
+	ax25_stop_t2timer(ax25);
+	ax25_start_t3timer(ax25);
 }
 
 /*

@@ -7,6 +7,9 @@
 
 #include <linux/mm.h>
 #include <linux/sysctl.h>
+#include <linux/config.h>
+
+#ifdef CONFIG_SYSCTL
 
 extern __u32 sysctl_wmem_max;
 extern __u32 sysctl_rmem_max;
@@ -33,3 +36,4 @@ ctl_table core_table[] = {
 	 &proc_dointvec_jiffies},
 	{ 0 }
 };
+#endif

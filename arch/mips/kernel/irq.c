@@ -10,6 +10,8 @@
  * should be easier.
  *
  * Mips support by Ralf Baechle and Andreas Busse
+ *
+ * $Id: irq.c,v 1.6 1997/06/30 15:52:34 ralf Exp $
  */
 #include <linux/config.h>
 #include <linux/errno.h>
@@ -78,8 +80,7 @@ void disable_irq(unsigned int irq_nr)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	mask_irq(irq_nr);
 	restore_flags(flags);
 }
@@ -87,8 +88,7 @@ void disable_irq(unsigned int irq_nr)
 void enable_irq(unsigned int irq_nr)
 {
 	unsigned long flags;
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	unmask_irq(irq_nr);
 	restore_flags(flags);
 }
@@ -226,8 +226,7 @@ int setup_x86_irq(int irq, struct irqaction * new)
 	if (new->flags & SA_SAMPLE_RANDOM)
 		rand_initialize_irq(irq);
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 	*p = new;
 
 	if (!shared) {
@@ -287,8 +286,7 @@ void free_irq(unsigned int irq, void *dev_id)
 			continue;
 
 		/* Found it - now free it */
-		save_flags(flags);
-		cli();
+		save_and_cli(flags);
 		*p = action->next;
 		if (!irq[irq_action]) {
 			mask_irq(irq);

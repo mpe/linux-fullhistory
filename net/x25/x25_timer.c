@@ -1,5 +1,5 @@
 /*
- *	X.25 Packet Layer release 001
+ *	X.25 Packet Layer release 002
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -14,6 +14,8 @@
  *
  *	History
  *	X.25 001	Jonathan Naylor	Started coding.
+ *	X.25 002	Jonathan Naylor	New timer architecture.
+ *					Centralised disconnection processing.
  */
 
 #include <linux/config.h>
@@ -39,42 +41,93 @@
 #include <linux/interrupt.h>
 #include <net/x25.h>
 
-static void x25_timer(unsigned long);
+static void x25_heartbeat_expiry(unsigned long);
+static void x25_timer_expiry(unsigned long);
 
-/*
- *	Linux set timer
- */
-void x25_set_timer(struct sock *sk)
+void x25_start_heartbeat(struct sock *sk)
 {
-	unsigned long flags;
-
-	save_flags(flags); cli();
 	del_timer(&sk->timer);
-	restore_flags(flags);
 
 	sk->timer.data     = (unsigned long)sk;
-	sk->timer.function = &x25_timer;
-	sk->timer.expires  = jiffies + (HZ / 1);
+	sk->timer.function = &x25_heartbeat_expiry;
+	sk->timer.expires  = jiffies + 5 * HZ;
 
 	add_timer(&sk->timer);
 }
 
-/*
- *	X.25 TIMER 
- *
- *	This routine is called every second. Decrement timer by this
- *	amount - if expired then process the event.
- */
-static void x25_timer(unsigned long param)
+void x25_stop_heartbeat(struct sock *sk)
+{
+	del_timer(&sk->timer);
+}
+
+void x25_start_t2timer(struct sock *sk)
+{
+	del_timer(&sk->protinfo.x25->timer);
+
+	sk->protinfo.x25->timer.data     = (unsigned long)sk;
+	sk->protinfo.x25->timer.function = &x25_timer_expiry;
+	sk->protinfo.x25->timer.expires  = jiffies + sk->protinfo.x25->t2;
+
+	add_timer(&sk->protinfo.x25->timer);
+}
+
+void x25_start_t21timer(struct sock *sk)
+{
+	del_timer(&sk->protinfo.x25->timer);
+
+	sk->protinfo.x25->timer.data     = (unsigned long)sk;
+	sk->protinfo.x25->timer.function = &x25_timer_expiry;
+	sk->protinfo.x25->timer.expires  = jiffies + sk->protinfo.x25->t21;
+
+	add_timer(&sk->protinfo.x25->timer);
+}
+
+void x25_start_t22timer(struct sock *sk)
+{
+	del_timer(&sk->protinfo.x25->timer);
+
+	sk->protinfo.x25->timer.data     = (unsigned long)sk;
+	sk->protinfo.x25->timer.function = &x25_timer_expiry;
+	sk->protinfo.x25->timer.expires  = jiffies + sk->protinfo.x25->t22;
+
+	add_timer(&sk->protinfo.x25->timer);
+}
+
+void x25_start_t23timer(struct sock *sk)
+{
+	del_timer(&sk->protinfo.x25->timer);
+
+	sk->protinfo.x25->timer.data     = (unsigned long)sk;
+	sk->protinfo.x25->timer.function = &x25_timer_expiry;
+	sk->protinfo.x25->timer.expires  = jiffies + sk->protinfo.x25->t23;
+
+	add_timer(&sk->protinfo.x25->timer);
+}
+
+void x25_stop_timer(struct sock *sk)
+{
+	del_timer(&sk->protinfo.x25->timer);
+}
+
+unsigned long x25_display_timer(struct sock *sk)
+{
+	if (sk->protinfo.x25->timer.prev == NULL &&
+	    sk->protinfo.x25->timer.next == NULL)
+		return 0;
+
+	return sk->protinfo.x25->timer.expires - jiffies;
+}
+
+static void x25_heartbeat_expiry(unsigned long param)
 {
 	struct sock *sk = (struct sock *)param;
 
 	switch (sk->protinfo.x25->state) {
+
 		case X25_STATE_0:
 			/* Magic here: If we listen() and a new link dies before it
 			   is accepted() it isn't 'dead' so doesn't get removed. */
 			if (sk->destroy || (sk->state == TCP_LISTEN && sk->dead)) {
-				del_timer(&sk->timer);
 				x25_destroy_socket(sk);
 				return;
 			}
@@ -89,30 +142,26 @@ static void x25_timer(unsigned long param)
 				sk->protinfo.x25->condition &= ~X25_COND_OWN_RX_BUSY;
 				sk->protinfo.x25->condition &= ~X25_COND_ACK_PENDING;
 				sk->protinfo.x25->vl         = sk->protinfo.x25->vr;
-				sk->protinfo.x25->timer      = 0;
 				x25_write_internal(sk, X25_RR);
+				x25_stop_timer(sk);
 				break;
 			}
-			/*
-			 * Check for frames to transmit.
-			 */
-			x25_kick(sk);
-			break;
-
-		default:
 			break;
 	}
 
-	if (sk->protinfo.x25->timer == 0 || --sk->protinfo.x25->timer > 0) {
-		x25_set_timer(sk);
-		return;
-	}
+	x25_start_heartbeat(sk);
+}
 
-	/*
-	 * Timer has expired, it may have been T2, T21, T22, or T23. We can tell
-	 * by the state machine state.
-	 */
+/*
+ *	Timer has expired, it may have been T2, T21, T22, or T23. We can tell
+ *	by the state machine state.
+ */
+static void x25_timer_expiry(unsigned long param)
+{
+	struct sock *sk = (struct sock *)param;
+
 	switch (sk->protinfo.x25->state) {
+
 		case X25_STATE_3:	/* T2 */
 			if (sk->protinfo.x25->condition & X25_COND_ACK_PENDING) {
 				sk->protinfo.x25->condition &= ~X25_COND_ACK_PENDING;
@@ -124,22 +173,13 @@ static void x25_timer(unsigned long param)
 		case X25_STATE_4:	/* T22 */
 			x25_write_internal(sk, X25_CLEAR_REQUEST);
 			sk->protinfo.x25->state = X25_STATE_2;
-			sk->protinfo.x25->timer = sk->protinfo.x25->t23;
+			x25_start_t23timer(sk);
 			break;
 
 		case X25_STATE_2:	/* T23 */
-			x25_clear_queues(sk);
-			sk->protinfo.x25->state = X25_STATE_0;
-			sk->state               = TCP_CLOSE;
-			sk->err                 = ETIMEDOUT;
-			sk->shutdown           |= SEND_SHUTDOWN;
-			if (!sk->dead)
-				sk->state_change(sk);
-			sk->dead                = 1;
+			x25_disconnect(sk, ETIMEDOUT, 0, 0);
 			break;
 	}
-
-	x25_set_timer(sk);
 }
 
 #endif

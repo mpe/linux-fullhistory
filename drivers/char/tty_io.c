@@ -1654,6 +1654,7 @@ static void initialize_tty_struct(struct tty_struct *tty)
 	tty->flip.flag_buf_ptr = tty->flip.flag_buf;
 	tty->flip.tqueue.routine = flush_to_ldisc;
 	tty->flip.tqueue.data = tty;
+	tty->flip.pty_sem = MUTEX;
 }
 
 /*

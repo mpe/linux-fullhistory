@@ -4,6 +4,8 @@
  * Data structure and defines shared between console.c, vga.c and tga.c
  */
 
+#include <linux/config.h>
+
 #define NPAR 16
 
 struct vc_data {
@@ -17,12 +19,17 @@ struct vc_data {
 	unsigned char	vc_halfcolor;		/* Colour for half intensity mode */
 	unsigned long	vc_origin;		/* Used for EGA/VGA fast scroll	*/
 	unsigned long	vc_scr_end;		/* Used for EGA/VGA fast scroll	*/
-	unsigned long	vc_pos;
 	unsigned long	vc_x,vc_y;
 	unsigned long	vc_top,vc_bottom;
 	unsigned long	vc_state;
 	unsigned long	vc_npar,vc_par[NPAR];
+#ifdef CONFIG_FB_CONSOLE
+	unsigned short	*vc_video_mem_start;	/* Start of video RAM		*/
+	unsigned short	*vc_pos;
+#else
+	unsigned long	vc_pos;
 	unsigned long	vc_video_mem_start;	/* Start of video RAM		*/
+#endif
 	unsigned long	vc_video_mem_end;	/* End of video RAM (sort of)	*/
 	unsigned long	vc_saved_x;
 	unsigned long	vc_saved_y;

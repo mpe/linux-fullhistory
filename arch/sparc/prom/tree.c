@@ -1,4 +1,4 @@
-/* $Id: tree.c,v 1.18 1997/05/14 20:45:03 davem Exp $
+/* $Id: tree.c,v 1.19 1997/06/27 14:52:54 jj Exp $
  * tree.c: Basic device tree traversal/scanning for the Linux
  *         prom library.
  *
@@ -231,7 +231,7 @@ int prom_getname (int node, char *buffer, int len)
 
 /* Return the first property type for node 'node'.
  */
-char * prom_firstprop(int node)
+char * prom_firstprop(int node, char *buffer)
 {
 	unsigned long flags;
 	char *ret;
@@ -248,7 +248,7 @@ char * prom_firstprop(int node)
  * at node 'node' .  Returns NULL string if no more
  * property types for this node.
  */
-char * prom_nextprop(int node, char *oprop)
+char * prom_nextprop(int node, char *oprop, char *buffer)
 {
 	char *ret;
 	unsigned long flags;
@@ -293,7 +293,7 @@ int prom_node_has_property(int node, char *prop)
 	char *current_property = "";
 
 	do {
-		current_property = prom_nextprop(node, current_property);
+		current_property = prom_nextprop(node, current_property, NULL);
 		if(!strcmp(current_property, prop))
 		   return 1;
 	} while (*current_property);

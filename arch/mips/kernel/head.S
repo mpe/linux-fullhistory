@@ -347,6 +347,8 @@ probe_done:
 
 	jal	prom_init /* prom_init(argc, argv, envp); */
 	 nop
+	jal	sgi_sysinit
+	 nop
 #endif
 	/* Get the very one tags we need early in the boot process */
 	nop
@@ -405,7 +407,6 @@ probe_done:
 	mfc0	t0, CP0_STATUS
 	li	t1, ~(ST0_CU1|ST0_CU2|ST0_CU3|ST0_KX|ST0_SX)
 	and	t0, t1
-	li	t1, ST0_CU0
 	or	t0, ST0_CU0
 	mtc0	t0, CP0_STATUS
 

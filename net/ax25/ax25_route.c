@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 036
+ *	AX.25 release 037
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -120,13 +120,12 @@ int ax25_rt_ioctl(unsigned int cmd, void *arg)
 	struct ax25_routes_struct route;
 	struct ax25_route_opt_struct rt_option;
 	ax25_dev *ax25_dev;
-	int i, err;
+	int i;
 
 	switch (cmd) {
 		case SIOCADDRT:
-			if ((err = verify_area(VERIFY_READ, arg, sizeof(route))) != 0)
-				return err;		
-			copy_from_user(&route, arg, sizeof(route));
+			if (copy_from_user(&route, arg, sizeof(route)))
+				return -EFAULT;
 			if ((ax25_dev = ax25_addr_ax25dev(&route.port_addr)) == NULL)
 				return -EINVAL;
 			if (route.digi_count > AX25_MAX_DIGIS)
@@ -175,9 +174,8 @@ int ax25_rt_ioctl(unsigned int cmd, void *arg)
 			break;
 
 		case SIOCDELRT:
-			if ((err = verify_area(VERIFY_READ, arg, sizeof(route))) != 0)
-				return err;
-			copy_from_user(&route, arg, sizeof(route));
+			if (copy_from_user(&route, arg, sizeof(route)))
+				return -EFAULT;
 			if ((ax25_dev = ax25_addr_ax25dev(&route.port_addr)) == NULL)
 				return -EINVAL;
 			ax25_rt = ax25_route_list;
@@ -206,9 +204,8 @@ int ax25_rt_ioctl(unsigned int cmd, void *arg)
 			break;
 
 		case SIOCAX25OPTRT:
-			if ((err = verify_area(VERIFY_READ, arg, sizeof(rt_option))) != 0)
-				return err;
-			copy_from_user(&rt_option, arg, sizeof(rt_option));
+			if (copy_from_user(&rt_option, arg, sizeof(rt_option)))
+				return -EFAULT;
 			if ((ax25_dev = ax25_addr_ax25dev(&rt_option.port_addr)) == NULL)
 				return -EINVAL;
 			for (ax25_rt = ax25_route_list; ax25_rt != NULL; ax25_rt = ax25_rt->next) {
@@ -390,48 +387,32 @@ int ax25_rt_autobind(ax25_cb *ax25, ax25_address *addr)
  *	dl1bke 960117: build digipeater path
  *	dl1bke 960301: use the default route if it exists
  */
-void ax25_rt_build_path(ax25_cb *ax25, ax25_address *addr, struct device *dev)
+ax25_route *ax25_rt_find_route(ax25_address *addr, struct device *dev)
 {
+	static ax25_route route;
 	ax25_route *ax25_rt;
 
-	if ((ax25_rt = ax25_find_route(addr, dev)) == NULL)
-		return;
+	if ((ax25_rt = ax25_find_route(addr, dev)) == NULL) {
+		route.next     = NULL;
+		route.callsign = *addr;
+		route.dev      = dev;
+		route.digipeat = NULL;
+		route.ip_mode  = ' ';
+		return &route;
+	}
 
-	if (ax25_rt->digipeat == NULL)
-		return;
-
-	if ((ax25->digipeat = kmalloc(sizeof(ax25_digi), GFP_ATOMIC)) == NULL)
-		return;
-
-	if ((ax25->ax25_dev = ax25_dev_ax25dev(ax25_rt->dev)) == NULL)
-		return;
-
-	*ax25->digipeat = *ax25_rt->digipeat;
-	ax25_adjust_path(addr, ax25->digipeat);
+	return ax25_rt;
 }
 
-struct sk_buff *ax25_dg_build_path(struct sk_buff *skb, ax25_address *addr, struct device *dev)
+struct sk_buff *ax25_rt_build_path(struct sk_buff *skb, ax25_address *src, ax25_address *dest, ax25_digi *digi)
 {
 	struct sk_buff *skbn;
-	ax25_route *ax25_rt;
-	ax25_digi digipeat;
-	ax25_address src, dest;
 	unsigned char *bp;
 	int len;
 
 	skb_pull(skb, 1);	/* skip KISS command */
 
-	if ((ax25_rt = ax25_find_route(addr, dev)) == NULL)
-		return skb;
-
-	if (ax25_rt->digipeat == NULL)
-		return skb;
-
-	digipeat = *ax25_rt->digipeat;
-
-	ax25_adjust_path(addr, &digipeat);
-
-	len = ax25_rt->digipeat->ndigi * AX25_ADDR_LEN;
+	len = digi->ndigi * AX25_ADDR_LEN;
 
 	if (skb_headroom(skb) < len) {
 		if ((skbn = skb_realloc_headroom(skb, len)) == NULL) {
@@ -447,28 +428,11 @@ struct sk_buff *ax25_dg_build_path(struct sk_buff *skb, ax25_address *addr, stru
 		skb = skbn;
 	}
 
-	memcpy(&dest, skb->data + 0, AX25_ADDR_LEN);
-	memcpy(&src,  skb->data + 7, AX25_ADDR_LEN);
-
 	bp = skb_push(skb, len);
 
-	ax25_addr_build(bp, &src, &dest, ax25_rt->digipeat, AX25_COMMAND, AX25_MODULUS);
+	ax25_addr_build(bp, src, dest, digi, AX25_COMMAND, AX25_MODULUS);
 
 	return skb;
-}
-
-/*
- *	Return the IP mode of a given callsign/device pair.
- */
-char ax25_ip_mode_get(ax25_address *callsign, struct device *dev)
-{
-	ax25_route *ax25_rt;
-
-	for (ax25_rt = ax25_route_list; ax25_rt != NULL; ax25_rt = ax25_rt->next)
-		if (ax25cmp(&ax25_rt->callsign, callsign) == 0 && ax25_rt->dev == dev)
-			return ax25_rt->ip_mode;
-
-	return ' ';
 }
 
 #ifdef MODULE

@@ -1,7 +1,9 @@
-/* $Id: r2300.c,v 1.1 1997/06/06 09:35:14 ralf Exp $
+/*
  * r2300.c: R2000 and R3000 specific mmu/cache code.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
+ *
+ * $Id: r2300.c,v 1.2 1997/06/30 15:52:51 ralf Exp $
  */
 
 #include <linux/kernel.h>
@@ -126,7 +128,7 @@ static inline void r2300_flush_tlb_all(void)
 	unsigned long flags;
 	int entry;
 
-	save_flags(flags); cli();
+	save_and_cli(flags);
 	write_32bit_cp0_register(CP0_ENTRYLO0, 0);
 	for(entry = 0; entry < mips_tlb_entries; entry++) {
 		write_32bit_cp0_register(CP0_INDEX, entry);
@@ -160,7 +162,7 @@ static void r2300_load_pgd(unsigned long pg_dir)
 {
 	unsigned long flags;
 
-	save_flags(flags); cli();
+	save_and_cli(flags);
 	write_32bit_cp0_register(CP0_ENTRYHI, TLB_ROOT);
 	write_32bit_cp0_register(CP0_INDEX, 0);
 	write_32bit_cp0_register(CP0_ENTRYLO0, ((pg_dir >> 6) | 0x00e0));

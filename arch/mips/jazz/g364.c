@@ -25,6 +25,11 @@
 #include <linux/major.h>
 #include <linux/mm.h>
 #include <linux/ioport.h>
+#include <linux/kbd_kern.h>
+#include <linux/vt_kern.h>
+#include <linux/consolemap.h>
+#include <linux/selection.h>
+#include <linux/console_struct.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
@@ -32,12 +37,6 @@
 #include <asm/bitops.h>
 #include <asm/bootinfo.h>
 #include <asm/types.h>
-
-#include "../../../drivers/char/kbd_kern.h"
-#include "../../../drivers/char/vt_kern.h"
-#include "../../../drivers/char/consolemap.h"
-#include "../../../drivers/char/selection.h"
-#include "../../../drivers/char/console_struct.h"
 
 extern void register_console(void (*proc)(const char *));
 extern void console_print(const char *);

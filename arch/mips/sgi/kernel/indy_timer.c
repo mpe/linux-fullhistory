@@ -1,7 +1,9 @@
-/* $Id: indy_timer.c,v 1.1 1997/06/06 09:36:28 ralf Exp $
+/*
  * indy_timer.c: Setting up the clock on the INDY 8254 controller.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
+ *
+ * $Id: indy_timer.c,v 1.2 1997/06/30 15:53:04 ralf Exp $
  */
 
 #include <linux/errno.h>
@@ -280,7 +282,7 @@ void do_gettimeofday(struct timeval *tv)
 {
 	unsigned long flags;
 
-	save_flags(flags); cli();
+	save_and_cli(flags);
 	*tv = xtime;
 	restore_flags(flags);
 }

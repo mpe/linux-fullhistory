@@ -1,5 +1,5 @@
 /*
- *	X.25 Packet Layer release 001
+ *	X.25 Packet Layer release 002
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -14,6 +14,7 @@
  *
  *	History
  *	X.25 001	Jonathan Naylor	Started coding.
+ *	X.25 002	Jonathan Naylor	Centralised disconnection processing.
  */
 
 #include <linux/config.h>
@@ -279,6 +280,27 @@ int x25_decode(struct sock *sk, struct sk_buff *skb, int *ns, int *nr, int *q, i
 	printk(KERN_DEBUG "X.25: invalid PLP frame %02X %02X %02X\n", frame[0], frame[1], frame[2]);
 
 	return X25_ILLEGAL;
+}
+
+void x25_disconnect(struct sock *sk, int reason, unsigned char cause, unsigned char diagnostic)
+{
+	x25_clear_queues(sk);
+	x25_stop_timer(sk);
+
+	sk->protinfo.x25->lci   = 0;
+	sk->protinfo.x25->state = X25_STATE_0;
+
+	sk->protinfo.x25->causediag.cause      = cause;
+	sk->protinfo.x25->causediag.diagnostic = diagnostic;
+
+	sk->state     = TCP_CLOSE;
+	sk->err       = reason;
+	sk->shutdown |= SEND_SHUTDOWN;
+
+	if (!sk->dead)
+		sk->state_change(sk);
+
+	sk->dead = 1;
 }
 
 #endif

@@ -3,6 +3,8 @@
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *  Copyright (C) 1994, 1995, 1996  Ralf Baechle
+ *
+ * $Id: signal.c,v 1.7 1997/06/25 19:25:08 ralf Exp $
  */
 #include <linux/config.h>
 #include <linux/sched.h>
@@ -69,24 +71,36 @@ asmlinkage int sys_sigreturn(struct pt_regs *regs)
 	    (regs->regs[29] & (SZREG - 1)))
 		goto badframe;
 
-	current->blocked = context->sc_sigset & _BLOCKABLE;
-	regs->cp0_epc = context->sc_pc;
+	current->blocked = context->sc_sigset & _BLOCKABLE; /* XXX */
+	regs->cp0_epc = context->sc_pc; /* XXX */
 
+/*
+ * Disabled because we only use the lower 32 bit of the registers.
+ */
+#if 0
 	/*
 	 * We only allow user processes in 64bit mode (n32, 64 bit ABI) to
 	 * restore the upper half of registers.
 	 */
-	if (read_32bit_cp0_register(CP0_STATUS) & ST0_UX)
+	if (read_32bit_cp0_register(CP0_STATUS) & ST0_UX) {
 		for(i = 31;i >= 0;i--)
 			__get_user(regs->regs[i], &context->sc_regs[i]);
-	else
+		__get_user(regs->hi, &context->sc_mdhi);
+		__get_user(regs->lo, &context->sc_mdlo);
+	} else
+#endif
+	{
+		long long reg;
 		for(i = 31;i >= 0;i--) {
-			__get_user(regs->regs[i], &context->sc_regs[i]);
-			regs->regs[i] = (int) regs->regs[i];
+			__get_user(reg, &context->sc_regs[i]);
+			regs->regs[i] = (int) reg;
 		}
+		__get_user(reg, &context->sc_mdhi);
+		regs->hi = (int) reg;
+		__get_user(reg, &context->sc_mdlo);
+		regs->lo = (int) reg;
+	}
 
-	__get_user(regs->hi, &context->sc_mdhi);
-	__get_user(regs->lo, &context->sc_mdlo);
 	restore_fp_context(context);
 
 	/*

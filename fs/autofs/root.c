@@ -16,11 +16,11 @@
 #include "autofs_i.h"
 
 static int autofs_root_readdir(struct inode *,struct file *,void *,filldir_t);
-static int autofs_root_lookup(struct inode *,const char *,int,struct inode **);
-static int autofs_root_symlink(struct inode *,const char *,int,const char *);
-static int autofs_root_unlink(struct inode *,const char *,int);
-static int autofs_root_rmdir(struct inode *,const char *,int);
-static int autofs_root_mkdir(struct inode *,const char *,int,int);
+static int autofs_root_lookup(struct inode *,struct qstr *,struct inode **);
+static int autofs_root_symlink(struct inode *,struct dentry *,const char *);
+static int autofs_root_unlink(struct inode *,struct dentry *);
+static int autofs_root_rmdir(struct inode *,struct dentry *);
+static int autofs_root_mkdir(struct inode *,struct dentry *,int);
 static int autofs_root_ioctl(struct inode *, struct file *,unsigned int,unsigned long);
 
 static struct file_operations autofs_root_operations = {
@@ -48,6 +48,7 @@ struct inode_operations autofs_root_inode_operations = {
         NULL,                   /* mknod */
         NULL,                   /* rename */
         NULL,                   /* readlink */
+        NULL,                   /* follow_link */
         NULL,                   /* readpage */
         NULL,                   /* writepage */
         NULL,                   /* bmap */
@@ -92,95 +93,70 @@ static int autofs_root_readdir(struct inode *inode, struct file *filp,
 	return 0;
 }
 
-static int autofs_root_lookup(struct inode *dir, const char *name, int len,
-			      struct inode **result)
+static int autofs_root_lookup(struct inode *dir, struct qstr *str, struct inode **result)
 {
 	struct autofs_sb_info *sbi;
 	struct autofs_dir_ent *ent;
 	struct inode *res;
-	autofs_hash_t hash;
 	int status, oz_mode;
 
 	DPRINTK(("autofs_root_lookup: name = "));
-	autofs_say(name,len);
+	autofs_say(str->name,str->len);
 
 	*result = NULL;
 	if (!dir)
 		return -ENOENT;
-	if (!S_ISDIR(dir->i_mode)) {
-		iput(dir);
+	if (!S_ISDIR(dir->i_mode))
 		return -ENOTDIR;
-	}
-
-	/* Handle special cases: . and ..; since this is a root directory,
-	   they both point to the inode itself */
-	*result = dir;
-	if (!len)
-		return 0;
-	if (name[0] == '.') {
-		if (len == 1)
-			return 0;
-		if (name[1] == '.' && len == 2)
-			return 0;
-	}
 
 	*result = res = NULL;
 	sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
-
-	hash = autofs_hash(name,len);
 
 	oz_mode = autofs_oz_mode(sbi);
 	DPRINTK(("autofs_lookup: pid = %u, pgrp = %u, catatonic = %d, oz_mode = %d\n", current->pid, current->pgrp, sbi->catatonic, oz_mode));
 
 	do {
-		while ( !(ent = autofs_hash_lookup(&sbi->dirhash,hash,name,len)) ) {
+		while ( !(ent = autofs_hash_lookup(&sbi->dirhash,str)) ) {
 			DPRINTK(("lookup failed, pid = %u, pgrp = %u\n", current->pid, current->pgrp));
 			
-			if ( oz_mode ) {
-				iput(dir);
+			if ( oz_mode )
 				return -ENOENT;
-			} else {
-				status = autofs_wait(sbi,hash,name,len);
-				DPRINTK(("autofs_wait returned %d\n", status));
-				if ( status ) {
-					iput(dir);
-					return status;
-				}
-			}
+			up(&dir->i_sem);
+			status = autofs_wait(sbi,str);
+			down(&dir->i_sem);
+			DPRINTK(("autofs_wait returned %d\n", status));
+			if ( status )
+				return status;
 		}
 
 		DPRINTK(("lookup successful, inode = %08x\n", (unsigned int)ent->ino));
 
 		if (!(res = iget(dir->i_sb,ent->ino))) {
 			printk("autofs: iget returned null!\n");
-			iput(dir);
 			return -EACCES;
 		}
 		
 		if ( !oz_mode && S_ISDIR(res->i_mode) && res->i_sb == dir->i_sb ) {
 			/* Not a mount point yet, call 1-800-DAEMON */
 			DPRINTK(("autofs: waiting on non-mountpoint dir, inode = %lu, pid = %u, pgrp = %u\n", res->i_ino, current->pid, current->pgrp));
-			iput(res);
 			res = NULL;
-			status = autofs_wait(sbi,hash,name,len);
-			if ( status ) {
-				iput(dir);
+			up(&dir->i_sem);
+			status = autofs_wait(sbi,str);
+			down(&dir->i_sem);
+			if ( status )
 				return status;
-			}
 		}
 	} while(!res);
 	autofs_update_usage(&sbi->dirhash,ent);
 	
 	*result = res;
-	iput(dir);
 	return 0;
 }
 
-static int autofs_root_symlink(struct inode *dir, const char *name, int len, const char *symname)
+static int autofs_root_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 {
 	struct autofs_sb_info *sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
 	struct autofs_dirhash *dh = &sbi->dirhash;
-	autofs_hash_t hash = autofs_hash(name,len);
 	struct autofs_dir_ent *ent;
 	unsigned int n;
 	int slsize;
@@ -189,70 +165,64 @@ static int autofs_root_symlink(struct inode *dir, const char *name, int len, con
 	DPRINTK(("autofs_root_symlink: %s <- ", symname));
 	autofs_say(name,len);
 
-	if ( !autofs_oz_mode(sbi) ) {
-		iput(dir);
+	if ( !autofs_oz_mode(sbi) )
 		return -EPERM;
-	}
-	if ( autofs_hash_lookup(dh,hash,name,len) ) {
-		iput(dir);
+
+	if ( autofs_hash_lookup(dh, &dentry->d_name) )
 		return -EEXIST;
-	}
+
 	n = find_first_zero_bit(sbi->symlink_bitmap,AUTOFS_MAX_SYMLINKS);
-	if ( n >= AUTOFS_MAX_SYMLINKS ) {
-		iput(dir);
+	if ( n >= AUTOFS_MAX_SYMLINKS )
 		return -ENOSPC;
-	}
+
 	set_bit(n,sbi->symlink_bitmap);
 	sl = &sbi->symlink[n];
 	sl->len = strlen(symname);
 	sl->data = kmalloc(slsize = sl->len+1, GFP_KERNEL);
 	if ( !sl->data ) {
 		clear_bit(n,sbi->symlink_bitmap);
-		iput(dir);
 		return -ENOSPC;
 	}
+
 	ent = kmalloc(sizeof(struct autofs_dir_ent), GFP_KERNEL);
 	if ( !ent ) {
 		kfree(sl->data);
 		clear_bit(n,sbi->symlink_bitmap);
-		iput(dir);
 		return -ENOSPC;
 	}
-	ent->name = kmalloc(len, GFP_KERNEL);
+
+	ent->name = kmalloc(dentry->d_name.len, GFP_KERNEL);
 	if ( !ent->name ) {
 		kfree(sl->data);
 		kfree(ent);
 		clear_bit(n,sbi->symlink_bitmap);
-		iput(dir);
 		return -ENOSPC;
 	}
+
 	memcpy(sl->data,symname,slsize);
 	sl->mtime = CURRENT_TIME;
 
 	ent->ino = AUTOFS_FIRST_SYMLINK + n;
-	ent->hash = hash;
-	memcpy(ent->name,name,ent->len = len);
+	ent->hash = dentry->d_name.hash;
+	memcpy(ent->name, dentry->d_name.name,ent->len = dentry->d_name.len);
 
 	autofs_hash_insert(dh,ent);
-	iput(dir);
+	d_instantiate(dentry, iget(dir->i_sb,ent->ino), 0);
 
 	return 0;
 }
 
-static int autofs_root_unlink(struct inode *dir, const char *name, int len)
+static int autofs_root_unlink(struct inode *dir, struct dentry *dentry)
 {
 	struct autofs_sb_info *sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
 	struct autofs_dirhash *dh = &sbi->dirhash;
-	autofs_hash_t hash = autofs_hash(name,len);
 	struct autofs_dir_ent *ent;
 	unsigned int n;
-
-	iput(dir);		/* Nothing below can sleep */
 
 	if ( !autofs_oz_mode(sbi) )
 		return -EPERM;
 
-	ent = autofs_hash_lookup(dh,hash,name,len);
+	ent = autofs_hash_lookup(dh, &dentry->d_name);
 	if ( !ent )
 		return -ENOENT;
 
@@ -263,75 +233,68 @@ static int autofs_root_unlink(struct inode *dir, const char *name, int len)
 	autofs_hash_delete(ent);
 	clear_bit(n,sbi->symlink_bitmap);
 	kfree(sbi->symlink[n].data);
+	d_delete(dentry);
 	
 	return 0;
 }
 
-static int autofs_root_rmdir(struct inode *dir, const char *name, int len)
+static int autofs_root_rmdir(struct inode *dir, struct dentry *dentry)
 {
 	struct autofs_sb_info *sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
 	struct autofs_dirhash *dh = &sbi->dirhash;
-	autofs_hash_t hash = autofs_hash(name,len);
 	struct autofs_dir_ent *ent;
 
-	if ( !autofs_oz_mode(sbi) ) {
-		iput(dir);
+	if ( !autofs_oz_mode(sbi) )
 		return -EPERM;
-	}
-	ent = autofs_hash_lookup(dh,hash,name,len);
-	if ( !ent ) {
-		iput(dir);
+
+	ent = autofs_hash_lookup(dh, &dentry->d_name);
+	if ( !ent )
 		return -ENOENT;
-	}
-	if ( (unsigned int)ent->ino < AUTOFS_FIRST_DIR_INO ) {
-		iput(dir);
+
+	if ( (unsigned int)ent->ino < AUTOFS_FIRST_DIR_INO )
 		return -ENOTDIR; /* Not a directory */
-	}
+
 	autofs_hash_delete(ent);
 	dir->i_nlink--;
-	iput(dir);
+	d_delete(dentry);
 
 	return 0;
 }
 
-static int autofs_root_mkdir(struct inode *dir, const char *name, int len, int mode)
+static int autofs_root_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
 	struct autofs_sb_info *sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
 	struct autofs_dirhash *dh = &sbi->dirhash;
-	autofs_hash_t hash = autofs_hash(name,len);
 	struct autofs_dir_ent *ent;
 
-	if ( !autofs_oz_mode(sbi) ) {
-		iput(dir);
+	if ( !autofs_oz_mode(sbi) )
 		return -EPERM;
-	}
-	ent = autofs_hash_lookup(dh,hash,name,len);
-	if ( ent ) {
-		iput(dir);
+
+	ent = autofs_hash_lookup(dh, &dentry->d_name);
+	if ( ent )
 		return -EEXIST;
-	}
+
 	if ( sbi->next_dir_ino < AUTOFS_FIRST_DIR_INO ) {
 		printk("autofs: Out of inode numbers -- what the heck did you do??\n");
-		iput(dir);
 		return -ENOSPC;
 	}
+
 	ent = kmalloc(sizeof(struct autofs_dir_ent), GFP_KERNEL);
-	if ( !ent ) {
-		iput(dir);
+	if ( !ent )
 		return -ENOSPC;
-	}
-	ent->name = kmalloc(len, GFP_KERNEL);
+
+	ent->name = kmalloc(dentry->d_name.len, GFP_KERNEL);
 	if ( !ent->name ) {
 		kfree(ent);
-		iput(dir);
 		return -ENOSPC;
 	}
-	ent->hash = hash;
-	memcpy(ent->name, name, ent->len = len);
+
+	ent->hash = dentry->d_name.hash;
+	memcpy(ent->name, dentry->d_name.name, ent->len = dentry->d_name.len);
 	ent->ino = sbi->next_dir_ino++;
 	autofs_hash_insert(dh,ent);
 	dir->i_nlink++;
-	iput(dir);
+	d_instantiate(dentry, iget(dir->i_sb,ent->ino), D_DIR);
 
 	return 0;
 }

@@ -8,8 +8,6 @@
 #define _X25_H 
 #include <linux/x25.h>
 
-#define	X25_SLOWHZ			1	/* Run timing at 1 Hz */
-
 #define	X25_ADDR_LEN			16
 
 #define	X25_MAX_L2_LEN			18	/* 802.2 LLC */
@@ -67,11 +65,11 @@ enum {
 	X25_LINK_STATE_3
 };
 
-#define X25_DEFAULT_T20		(180 * X25_SLOWHZ)	/* Default T20 value */
-#define X25_DEFAULT_T21		(200 * X25_SLOWHZ)	/* Default T21 value */
-#define X25_DEFAULT_T22		(180 * X25_SLOWHZ)	/* Default T22 value */
-#define	X25_DEFAULT_T23		(180 * X25_SLOWHZ)	/* Default T23 value */
-#define	X25_DEFAULT_T2		(3   * X25_SLOWHZ)	/* Default ack holdback value */
+#define X25_DEFAULT_T20		(180 * HZ)		/* Default T20 value */
+#define X25_DEFAULT_T21		(200 * HZ)		/* Default T21 value */
+#define X25_DEFAULT_T22		(180 * HZ)		/* Default T22 value */
+#define	X25_DEFAULT_T23		(180 * HZ)		/* Default T23 value */
+#define	X25_DEFAULT_T2		(3   * HZ)		/* Default ack holdback value */
 
 #define	X25_DEFAULT_WINDOW_SIZE	2			/* Default Window Size	*/
 #define	X25_DEFAULT_PACKET_SIZE	X25_PS128		/* Default Packet Size */
@@ -113,8 +111,8 @@ struct x25_neigh {
 	unsigned int		state;
 	unsigned int		extended;
 	struct sk_buff_head	queue;
-	unsigned short		t20, t20timer;
-	struct timer_list	timer;
+	unsigned long		t20;
+	struct timer_list	t20timer;
 };
 
 typedef struct {
@@ -123,13 +121,14 @@ typedef struct {
 	unsigned int		lci;
 	unsigned char		state, condition, qbitincl, intflag;
 	unsigned short		vs, vr, va, vl;
-	unsigned short		timer;
-	unsigned short		t2, t21, t22, t23;
+	unsigned long		t2, t21, t22, t23;
 	unsigned short		fraglen;
 	struct sk_buff_head	fragment_queue;
 	struct sk_buff_head	interrupt_in_queue;
 	struct sk_buff_head	interrupt_out_queue;
 	struct sock		*sk;		/* Backlink to socket */
+	struct timer_list	timer;
+	struct x25_causediag	causediag;
 	struct x25_facilities	facilities;
 	struct x25_calluserdata	calluserdata;
 } x25_cb;
@@ -143,8 +142,8 @@ extern int  sysctl_x25_ack_holdback_timeout;
 
 extern int  x25_addr_ntoa(unsigned char *, x25_address *, x25_address *);
 extern int  x25_addr_aton(unsigned char *, x25_address *, x25_address *);
-extern unsigned int x25_new_lci(void);
-extern struct sock *x25_find_socket(unsigned int);
+extern unsigned int x25_new_lci(struct x25_neigh *);
+extern struct sock *x25_find_socket(unsigned int, struct x25_neigh *);
 extern void x25_destroy_socket(struct sock *);
 extern int  x25_rx_call_request(struct sk_buff *, struct x25_neigh *, unsigned int);
 
@@ -199,9 +198,17 @@ extern void x25_clear_queues(struct sock *);
 extern int  x25_validate_nr(struct sock *, unsigned short);
 extern void x25_write_internal(struct sock *, int);
 extern int  x25_decode(struct sock *, struct sk_buff *, int *, int *, int *, int *, int *);
+extern void x25_disconnect(struct sock *, int, unsigned char, unsigned char);
 
 /* x25_timer.c */
-extern void x25_set_timer(struct sock *);
+extern void x25_start_heartbeat(struct sock *);
+extern void x25_start_t2timer(struct sock *);
+extern void x25_start_t21timer(struct sock *);
+extern void x25_start_t22timer(struct sock *);
+extern void x25_start_t23timer(struct sock *);
+extern void x25_stop_heartbeat(struct sock *);
+extern void x25_stop_timer(struct sock *);
+extern unsigned long x25_display_timer(struct sock *);
 
 /* sysctl_net_x25.c */
 extern void x25_register_sysctl(void);

@@ -295,7 +295,7 @@ asmlinkage int osf_statfs(char *path, struct osf_statfs *buffer, unsigned long b
 	retval = verify_area(VERIFY_WRITE, buffer, bufsiz);
 	if (retval)
 		goto out;
-	retval = namei(NAM_FOLLOW_LINK, path, &inode);
+	retval = namei(path, &inode);
 	if (retval)
 		goto out;
 	retval = -ENOSYS;
@@ -376,7 +376,7 @@ static int getdev(const char *name, int rdonly, struct inode **ino)
 	struct file_operations *fops;
 	int retval;
 
-	retval = namei(NAM_FOLLOW_LINK, name, &inode);
+	retval = namei(name, &inode);
 	if (retval)
 		return retval;
 	if (!S_ISBLK(inode->i_mode)) {
@@ -876,6 +876,9 @@ asmlinkage unsigned long osf_getsysinfo(unsigned long op, void *buffer,
 	return -EOPNOTSUPP;
 }
 
+/* Dummy functions for now */
+#define wrfpcr(x)	do { } while (0)
+#define rdfpcr()	0
 
 asmlinkage unsigned long osf_setsysinfo(unsigned long op, void *buffer,
 					unsigned long nbytes,

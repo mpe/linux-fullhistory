@@ -19,6 +19,7 @@
 #include <asm/uaccess.h>
 
 static int nfs_readlink(struct inode *, char *, int);
+static struct dentry *nfs_follow_link(struct inode *, struct dentry *);
 
 /*
  * symlinks can't do much...
@@ -35,6 +36,7 @@ struct inode_operations nfs_symlink_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	nfs_readlink,		/* readlink */
+	nfs_follow_link,	/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -55,7 +57,6 @@ static int nfs_readlink(struct inode *inode, char *buffer, int buflen)
 		buflen = NFS_MAXPATHLEN;
 	error = nfs_proc_readlink(NFS_SERVER(inode), NFS_FH(inode), &mem,
 		&res, &len, buflen);
-	iput(inode);
 	if (! error) {
 		copy_to_user(buffer, res, len);
 		put_user('\0', buffer + len);
@@ -63,4 +64,37 @@ static int nfs_readlink(struct inode *inode, char *buffer, int buflen)
 	}
 	kfree(mem);
 	return error;
+}
+
+static struct dentry * nfs_follow_link(struct inode * inode, struct dentry *base)
+{
+	int error;
+	unsigned int len;
+	char *res;
+	void *mem;
+	char *path;
+
+	dfprintk(VFS, "nfs: follow_link(%x/%ld)\n", inode->i_dev, inode->i_ino);
+
+	error = nfs_proc_readlink(NFS_SERVER(inode), NFS_FH(inode), &mem,
+		&res, &len, NFS_MAXPATHLEN);
+
+	if (error) {
+		dput(base);
+		kfree(mem);
+		return ERR_PTR(error);
+	}
+	path = kmalloc(len + 1, GFP_KERNEL);
+	if (!path) {
+		dput(base);
+		kfree(mem);
+		return ERR_PTR(-ENOMEM);
+	}
+	memcpy(path, res, len);
+	path[len] = 0;
+	kfree(mem);
+
+	base = lookup_dentry(path, base, 1);
+	kfree(path);
+	return base;
 }

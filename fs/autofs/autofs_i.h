@@ -69,10 +69,8 @@ static inline int copy_from_user(void *dst, void *src, unsigned long len)
 
 #define AUTOFS_HASH_SIZE 67
 
-typedef u32 autofs_hash_t;	/* Type returned by autofs_hash() */
-
 struct autofs_dir_ent {
-	autofs_hash_t hash;
+	int hash;
 	struct autofs_dir_ent *next;
 	struct autofs_dir_ent **back;
 	char *name;
@@ -94,7 +92,7 @@ struct autofs_wait_queue {
 	struct wait_queue *queue;
 	struct autofs_wait_queue *next;
 	/* We use the following to see what we are waiting for */
-	autofs_hash_t hash;
+	int hash;
 	int len;
 	char *name;
 	/* This is for status reporting upon return */
@@ -151,9 +149,8 @@ void autofs_check_waitlist_integrity(struct autofs_sb_info *,char *);
 
 /* Hash operations */
 
-autofs_hash_t autofs_hash(const char *,int);
 void autofs_initialize_hash(struct autofs_dirhash *);
-struct autofs_dir_ent *autofs_hash_lookup(const struct autofs_dirhash *,autofs_hash_t,const char *,int);
+struct autofs_dir_ent *autofs_hash_lookup(const struct autofs_dirhash *,struct qstr *);
 void autofs_hash_insert(struct autofs_dirhash *,struct autofs_dir_ent *);
 void autofs_hash_delete(struct autofs_dir_ent *);
 struct autofs_dir_ent *autofs_hash_enum(const struct autofs_dirhash *,off_t *);
@@ -176,7 +173,7 @@ struct super_block *autofs_read_super(struct super_block *, void *,int);
 
 /* Queue management functions */
 
-int autofs_wait(struct autofs_sb_info *,autofs_hash_t,const char *,int);
+int autofs_wait(struct autofs_sb_info *,struct qstr *);
 int autofs_wait_release(struct autofs_sb_info *,unsigned long,int);
 void autofs_catatonic_mode(struct autofs_sb_info *);
 

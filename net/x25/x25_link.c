@@ -1,5 +1,5 @@
 /*
- *	X.25 Packet Layer release 001
+ *	X.25 Packet Layer release 002
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -14,6 +14,7 @@
  *
  *	History
  *	X.25 001	Jonathan Naylor	Started coding.
+ *	X.25 002	Jonathan Naylor	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -43,49 +44,34 @@
 
 static struct x25_neigh *x25_neigh_list = NULL;
 
-static void x25_link_timer(unsigned long);
+static void x25_t20timer_expiry(unsigned long);
 
 /*
  *	Linux set/reset timer routines
  */
-static void x25_link_set_timer(struct x25_neigh *neigh)
+static void x25_start_t20timer(struct x25_neigh *neigh)
 {
-	unsigned long flags;
+	del_timer(&neigh->t20timer);
 
-	save_flags(flags); cli();
-	del_timer(&neigh->timer);
-	restore_flags(flags);
+	neigh->t20timer.data     = (unsigned long)neigh;
+	neigh->t20timer.function = &x25_t20timer_expiry;
+	neigh->t20timer.expires  = jiffies + neigh->t20;
 
-	neigh->timer.data     = (unsigned long)neigh;
-	neigh->timer.function = &x25_link_timer;
-	neigh->timer.expires  = jiffies + (HZ / 1);
-
-	add_timer(&neigh->timer);
+	add_timer(&neigh->t20timer);
 }
 
-/*
- *	X.25 Link TIMER 
- *
- *	This routine is called every second. Decrement timer by this
- *	amount - if expired then process the event.
- */
-static void x25_link_timer(unsigned long param)
+static void x25_t20timer_expiry(unsigned long param)
 {
 	struct x25_neigh *neigh = (struct x25_neigh *)param;
 
-	if (neigh->t20timer == 0 || --neigh->t20timer > 0) {
-		x25_link_set_timer(neigh);
-		return;
-	}
-
-	/*
-	 * T20 for a link has expired.
-	 */
 	x25_transmit_restart_request(neigh);
 
-	neigh->t20timer = neigh->t20;
+	x25_start_t20timer(neigh);
+}
 
-	x25_link_set_timer(neigh);
+static void x25_stop_t20timer(struct x25_neigh *neigh)
+{
+	del_timer(&neigh->t20timer);
 }
 
 /*
@@ -97,16 +83,14 @@ void x25_link_control(struct sk_buff *skb, struct x25_neigh *neigh, unsigned sho
 
 	switch (frametype) {
 		case X25_RESTART_REQUEST:
-			neigh->t20timer = 0;
-			neigh->state    = X25_LINK_STATE_3;
-			del_timer(&neigh->timer);
+			x25_stop_t20timer(neigh);
+			neigh->state = X25_LINK_STATE_3;
 			x25_transmit_restart_confirmation(neigh);
 			break;
 
 		case X25_RESTART_CONFIRMATION:
-			neigh->t20timer = 0;
-			neigh->state    = X25_LINK_STATE_3;
-			del_timer(&neigh->timer);
+			x25_stop_t20timer(neigh);
+			neigh->state = X25_LINK_STATE_3;
 			break;
 
 		case X25_DIAGNOSTIC:
@@ -272,9 +256,8 @@ void x25_link_established(struct x25_neigh *neigh)
 			break;
 		case X25_LINK_STATE_1:
 			x25_transmit_restart_request(neigh);
-			neigh->state    = X25_LINK_STATE_2;
-			neigh->t20timer = neigh->t20;
-			x25_link_set_timer(neigh);
+			neigh->state = X25_LINK_STATE_2;
+			x25_start_t20timer(neigh);
 			break;
 	}
 }
@@ -300,12 +283,12 @@ void x25_link_device_up(struct device *dev)
 		return;
 
 	skb_queue_head_init(&x25_neigh->queue);
-	init_timer(&x25_neigh->timer);
+
+	init_timer(&x25_neigh->t20timer);
 
 	x25_neigh->dev      = dev;
 	x25_neigh->state    = X25_LINK_STATE_0;
 	x25_neigh->extended = 0;
-	x25_neigh->t20timer = 0;
 	x25_neigh->t20      = sysctl_x25_restart_request_timeout;
 
 	save_flags(flags); cli();
@@ -323,10 +306,9 @@ static void x25_remove_neigh(struct x25_neigh *x25_neigh)
 	while ((skb = skb_dequeue(&x25_neigh->queue)) != NULL)
 		kfree_skb(skb, FREE_WRITE);
 
-	del_timer(&x25_neigh->timer);
+	x25_stop_t20timer(x25_neigh);
 
-	save_flags(flags);
-	cli();
+	save_flags(flags); cli();
 
 	if ((s = x25_neigh_list) == x25_neigh) {
 		x25_neigh_list = x25_neigh->next;
@@ -387,25 +369,22 @@ int x25_subscr_ioctl(unsigned int cmd, void *arg)
 	struct x25_subscrip_struct x25_subscr;
 	struct x25_neigh *x25_neigh;
 	struct device *dev;
-	int err;
 
 	switch (cmd) {
 
 		case SIOCX25GSUBSCRIP:
-			if ((err = verify_area(VERIFY_WRITE, arg, sizeof(struct x25_subscrip_struct))) != 0)
-				return err;
 			if ((dev = x25_dev_get(x25_subscr.device)) == NULL)
 				return -EINVAL;
 			if ((x25_neigh = x25_get_neigh(dev)) == NULL)
 				return -EINVAL;
 			x25_subscr.extended = x25_neigh->extended;
-			copy_to_user(arg, &x25_subscr, sizeof(struct x25_subscrip_struct));
+			if (copy_to_user(arg, &x25_subscr, sizeof(struct x25_subscrip_struct)))
+				return -EFAULT;
 			break;
 
 		case SIOCX25SSUBSCRIP:
-			if ((err = verify_area(VERIFY_READ, arg, sizeof(struct x25_subscrip_struct))) != 0)
-				return err;
-			copy_from_user(&x25_subscr, arg, sizeof(struct x25_subscrip_struct));
+			if (copy_from_user(&x25_subscr, arg, sizeof(struct x25_subscrip_struct)))
+				return -EFAULT;
 			if ((dev = x25_dev_get(x25_subscr.device)) == NULL)
 				return -EINVAL;
 			if ((x25_neigh = x25_get_neigh(dev)) == NULL)

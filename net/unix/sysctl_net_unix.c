@@ -13,6 +13,9 @@
 
 #include <linux/mm.h>
 #include <linux/sysctl.h>
+#include <linux/config.h>
+
+#ifdef CONFIG_SYSCTL
 
 extern int sysctl_unix_destroy_delay;
 extern int sysctl_unix_delete_delay;
@@ -26,3 +29,4 @@ ctl_table unix_table[] = {
 	 &proc_dointvec_jiffies},
 	{0}
 };
+#endif

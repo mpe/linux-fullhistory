@@ -23,8 +23,8 @@ static char ascii_extensions[] =
   "TXT" "ME " "HTM" "1ST" "LOG" "   " 	/* text files */
   "C  " "H  " "CPP" "LIS" "PAS" "FOR"  /* programming languages */
   "F  " "MAK" "INC" "BAS" 		/* programming languages */
-  "BAT" "SH"				/* program code :) */
-  "INI "				/* config files */
+  "BAT" "SH "				/* program code :) */
+  "INI"					/* config files */
   "PBM" "PGM" "DXF"			/* graphics */
   "TEX";				/* TeX */
 

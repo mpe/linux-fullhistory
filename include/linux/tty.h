@@ -90,13 +90,19 @@ extern struct screen_info screen_info;
 
 struct tty_flip_buffer {
 	struct tq_struct tqueue;
-	unsigned char	char_buf[2*TTY_FLIPBUF_SIZE];
-	char		flag_buf[2*TTY_FLIPBUF_SIZE];
+	struct semaphore pty_sem;
 	char		*char_buf_ptr;
 	unsigned char	*flag_buf_ptr;
 	int		count;
 	int		buf_num;
+	unsigned char	char_buf[2*TTY_FLIPBUF_SIZE];
+	char		flag_buf[2*TTY_FLIPBUF_SIZE];
+	unsigned char	slop[4]; /* N.B. bug overwrites buffer by 1 */
 };
+/*
+ * The pty uses char_buf and flag_buf as a contiguous buffer
+ */
+#define PTY_BUF_SIZE	4*TTY_FLIPBUF_SIZE
 
 /*
  * When a break, frame error, or parity error happens, these codes are
@@ -198,7 +204,7 @@ struct tty_flip_buffer {
  * most often used by a windowing system, which will set the correct
  * size each time the window is created or resized anyway.
  * IMPORTANT: since this structure is dynamically allocated, it must
- * be no larger than 4096 bytes.  Changing TTY_BUF_SIZE will change
+ * be no larger than 4096 bytes.  Changing TTY_FLIPBUF_SIZE will change
  * the size of this structure, and it needs to be done with care.
  * 						- TYT, 9/14/92
  */

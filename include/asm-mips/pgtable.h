@@ -765,4 +765,7 @@ extern inline void set_context(unsigned long val)
 
 #endif /* !defined (__LANGUAGE_ASSEMBLY__) */
 
+#define module_map      vmalloc
+#define module_unmap    vfree
+
 #endif /* __ASM_MIPS_PGTABLE_H */

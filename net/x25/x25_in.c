@@ -1,5 +1,5 @@
 /*
- *	X.25 Packet Layer release 001
+ *	X.25 Packet Layer release 002
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -14,6 +14,8 @@
  *
  *	History
  *	X.25 001	Jonathan Naylor	Started coding.
+ *	X.25 002	Jonathan Naylor	Centralised disconnection code.
+ *					New timer architecture.
  */
 
 #include <linux/config.h>
@@ -88,8 +90,8 @@ static int x25_state1_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 	switch (frametype) {
 
 		case X25_CALL_ACCEPTED:
+			x25_stop_timer(sk);
 			sk->protinfo.x25->condition = 0x00;
-			sk->protinfo.x25->timer     = 0;
 			sk->protinfo.x25->vs        = 0;
 			sk->protinfo.x25->va        = 0;
 			sk->protinfo.x25->vr        = 0;
@@ -114,15 +116,8 @@ static int x25_state1_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 			break;
 
 		case X25_CLEAR_REQUEST:
-			x25_clear_queues(sk);
 			x25_write_internal(sk, X25_CLEAR_CONFIRMATION);
-			sk->protinfo.x25->state = X25_STATE_0;
-			sk->state               = TCP_CLOSE;
-			sk->err                 = ECONNREFUSED;
-			sk->shutdown           |= SEND_SHUTDOWN;
-			if (!sk->dead)
-				sk->state_change(sk);
-			sk->dead                = 1;
+			x25_disconnect(sk, ECONNREFUSED, skb->data[3], skb->data[4]);
 			break;
 
 		default:
@@ -143,15 +138,11 @@ static int x25_state2_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 
 		case X25_CLEAR_REQUEST:
 			x25_write_internal(sk, X25_CLEAR_CONFIRMATION);
+			x25_disconnect(sk, 0, skb->data[3], skb->data[4]);
+			break;
+
 		case X25_CLEAR_CONFIRMATION:
-			x25_clear_queues(sk);
-			sk->protinfo.x25->state = X25_STATE_0;
-			sk->state               = TCP_CLOSE;
-			sk->err                 = 0;
-			sk->shutdown           |= SEND_SHUTDOWN;
-			if (!sk->dead)
-				sk->state_change(sk);
-			sk->dead                = 1;
+			x25_disconnect(sk, 0, 0, 0);
 			break;
 
 		default:
@@ -177,8 +168,8 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 
 		case X25_RESET_REQUEST:
 			x25_write_internal(sk, X25_RESET_CONFIRMATION);
+			x25_stop_timer(sk);
 			sk->protinfo.x25->condition = 0x00;
-			sk->protinfo.x25->timer     = 0;
 			sk->protinfo.x25->vs        = 0;
 			sk->protinfo.x25->vr        = 0;
 			sk->protinfo.x25->va        = 0;
@@ -186,15 +177,8 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 			break;
 
 		case X25_CLEAR_REQUEST:
-			x25_clear_queues(sk);
 			x25_write_internal(sk, X25_CLEAR_CONFIRMATION);
-			sk->protinfo.x25->state = X25_STATE_0;
-			sk->state               = TCP_CLOSE;
-			sk->err                 = 0;
-			sk->shutdown           |= SEND_SHUTDOWN;
-			if (!sk->dead)
-				sk->state_change(sk);
-			sk->dead                = 1;
+			x25_disconnect(sk, 0, skb->data[3], skb->data[4]);
 			break;
 
 		case X25_RR:
@@ -207,13 +191,13 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 			if (!x25_validate_nr(sk, nr)) {
 				x25_clear_queues(sk);
 				x25_write_internal(sk, X25_RESET_REQUEST);
+				x25_start_t22timer(sk);
 				sk->protinfo.x25->condition = 0x00;
 				sk->protinfo.x25->vs        = 0;
 				sk->protinfo.x25->vr        = 0;
 				sk->protinfo.x25->va        = 0;
 				sk->protinfo.x25->vl        = 0;
 				sk->protinfo.x25->state     = X25_STATE_4;
-				sk->protinfo.x25->timer     = sk->protinfo.x25->t22;
 			} else {
 				if (sk->protinfo.x25->condition & X25_COND_PEER_RX_BUSY) {
 					sk->protinfo.x25->va = nr;
@@ -228,13 +212,13 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 			if (!x25_validate_nr(sk, nr)) {
 				x25_clear_queues(sk);
 				x25_write_internal(sk, X25_RESET_REQUEST);
+				x25_start_t22timer(sk);
 				sk->protinfo.x25->condition = 0x00;
 				sk->protinfo.x25->vs        = 0;
 				sk->protinfo.x25->vr        = 0;
 				sk->protinfo.x25->va        = 0;
 				sk->protinfo.x25->vl        = 0;
 				sk->protinfo.x25->state     = X25_STATE_4;
-				sk->protinfo.x25->timer     = sk->protinfo.x25->t22;
 				break;
 			}
 			if (sk->protinfo.x25->condition & X25_COND_PEER_RX_BUSY) {
@@ -258,11 +242,11 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 			 */
 			if (((sk->protinfo.x25->vl + sk->protinfo.x25->facilities.winsize_in) % modulus) == sk->protinfo.x25->vr) {
 				sk->protinfo.x25->condition &= ~X25_COND_ACK_PENDING;
-				sk->protinfo.x25->timer      = 0;
+				x25_stop_timer(sk);
 				x25_enquiry_response(sk);
 			} else {
 				sk->protinfo.x25->condition |= X25_COND_ACK_PENDING;
-				sk->protinfo.x25->timer      = sk->protinfo.x25->t2;
+				x25_start_t2timer(sk);
 			}
 			break;
 
@@ -307,7 +291,7 @@ static int x25_state4_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 		case X25_RESET_REQUEST:
 			x25_write_internal(sk, X25_RESET_CONFIRMATION);
 		case X25_RESET_CONFIRMATION:
-			sk->protinfo.x25->timer     = 0;
+			x25_stop_timer(sk);
 			sk->protinfo.x25->condition = 0x00;
 			sk->protinfo.x25->va        = 0;
 			sk->protinfo.x25->vr        = 0;
@@ -317,16 +301,8 @@ static int x25_state4_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 			break;
 
 		case X25_CLEAR_REQUEST:
-			x25_clear_queues(sk);
 			x25_write_internal(sk, X25_CLEAR_CONFIRMATION);
-			sk->protinfo.x25->timer = 0;
-			sk->protinfo.x25->state = X25_STATE_0;
-			sk->state               = TCP_CLOSE;
-			sk->err                 = 0;
-			sk->shutdown           |= SEND_SHUTDOWN;
-			if (!sk->dead)
-				sk->state_change(sk);
-			sk->dead                = 1;
+			x25_disconnect(sk, 0, skb->data[3], skb->data[4]);
 			break;
 
 		default:
@@ -343,8 +319,6 @@ int x25_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 
 	if (sk->protinfo.x25->state == X25_STATE_0)
 		return 0;
-
-	del_timer(&sk->timer);
 
 	frametype = x25_decode(sk, skb, &ns, &nr, &q, &d, &m);
 
@@ -363,7 +337,7 @@ int x25_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 			break;
 	}
 
-	x25_set_timer(sk);
+	x25_kick(sk);
 
 	return queued;
 }

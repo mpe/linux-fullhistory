@@ -291,7 +291,7 @@ int ext2_new_block (const struct inode * inode, unsigned long goal,
 		printk ("ext2_new_block: nonexistent device");
 		return 0;
 	}
-retry:
+
 	lock_super (sb);
 	es = sb->u.ext2_sb.s_es;
 	if (le32_to_cpu(es->s_free_blocks_count) <= le32_to_cpu(es->s_r_blocks_count) &&
@@ -299,8 +299,6 @@ retry:
 	     (sb->u.ext2_sb.s_resgid == 0 ||
 	      !in_group_p (sb->u.ext2_sb.s_resgid)))) {
 		unlock_super (sb);
-		if(sb->s_ibasket && free_ibasket(sb))
-			goto retry;
 		return 0;
 	}
 
@@ -392,8 +390,6 @@ repeat:
 	}
 	if (k >= sb->u.ext2_sb.s_groups_count) {
 		unlock_super (sb);
-		if(sb->s_ibasket && free_ibasket(sb))
-			goto retry;
 		return 0;
 	}
 	bitmap_nr = load_block_bitmap (sb, i);

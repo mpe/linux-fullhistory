@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.23 1997/06/06 10:56:20 jj Exp $
+# $Id: Makefile,v 1.28 1997/07/05 09:52:20 davem Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -16,21 +16,26 @@
 all: kernel.o head.o init_task.o
 
 O_TARGET := kernel.o
-O_OBJS   := etrap.o rtrap.o hack.o process.o setup.o cpu.o idprom.o \
-	    systbls.o traps.o entry.o devices.o auxio.o ioport.o \
-	    irq.o ptrace.o time.o sys_sparc.o signal.o winfixup.o \
-	    unaligned.o
+O_OBJS   := process.o setup.o cpu.o idprom.o \
+	    systbls.o traps.o devices.o auxio.o ioport.o \
+	    irq.o ptrace.o time.o sys_sparc.o signal.o \
+	    unaligned.o sys_sunos32.o sunos_ioctl32.o
 OX_OBJS  := sparc64_ksyms.o
 
 ifdef CONFIG_SPARC32_COMPAT
-  O_OBJS += sys_sparc32.o signal32.o ioctl32.o
+  O_OBJS += sys32.o sys_sparc32.o signal32.o ioctl32.o
 endif
 
 ifdef CONFIG_BINFMT_ELF32
   O_OBJS += binfmt_elf32.o
 endif
 
-head.o: head.S ttable.S itlb_miss.S dtlb_miss.S dtlb_prot.S
+ifdef CONFIG_BINFMT_AOUT32
+  O_OBJS += binfmt_aout32.o
+endif
+
+head.o: head.S ttable.S itlb_miss.S dtlb_miss.S dtlb_prot.S etrap.S rtrap.S \
+	winfixup.S entry.S
 	$(CC) -D__ASSEMBLY__ -ansi -c $*.S -o $*.o
 
 #

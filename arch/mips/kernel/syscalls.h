@@ -6,6 +6,8 @@
  * for more details.
  *
  * Copyright (C) 1995, 1996 by Ralf Baechle
+ *
+ * $Id: syscalls.h,v 1.5 1997/06/25 17:08:35 ralf Exp $
  */
 
 /*
@@ -174,7 +176,6 @@ SYS(sys_mlock, 2)
 SYS(sys_munlock, 2)				/* 4155 */
 SYS(sys_mlockall, 1)
 SYS(sys_munlockall, 0)
-SYS(sys_nfsservctl, 3)
 SYS(sys_sched_setparam,2)
 SYS(sys_sched_getparam,2)
 SYS(sys_sched_setscheduler,3)			/* 4160 */

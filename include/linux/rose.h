@@ -8,8 +8,9 @@
 #define	ROSE_KERNEL_H
 
 #define PF_ROSE		AF_ROSE
-#define ROSE_MTU	128
+#define ROSE_MTU	251
 
+#define	ROSE_DEFER	1
 #define ROSE_T1		2
 #define	ROSE_T2		3
 #define	ROSE_T3		4
@@ -17,7 +18,22 @@
 #define	ROSE_QBITINCL	6
 #define	ROSE_HOLDBACK	7
 
+#define	SIOCRSGCAUSE		(SIOCPROTOPRIVATE+0)
+#define	SIOCRSSCAUSE		(SIOCPROTOPRIVATE+1)
 #define	SIOCRSL2CALL		(SIOCPROTOPRIVATE+2)
+#define	SIOCRSACCEPT		(SIOCPROTOPRIVATE+3)
+#define	SIOCRSCLRRT		(SIOCPROTOPRIVATE+4)
+
+#define	ROSE_DTE_ORIGINATED	0x00
+#define	ROSE_NUMBER_BUSY	0x01
+#define	ROSE_INVALID_FACILITY	0x03
+#define	ROSE_NETWORK_CONGESTION	0x05
+#define	ROSE_OUT_OF_ORDER	0x09
+#define	ROSE_ACCESS_BARRED	0x0B
+#define	ROSE_NOT_OBTAINABLE	0x0D
+#define	ROSE_REMOTE_PROCEDURE	0x11
+#define	ROSE_LOCAL_PROCEDURE	0x13
+#define	ROSE_SHIP_ABSENT	0x39
 
 typedef struct {
 	char		rose_addr[5];
@@ -38,6 +54,11 @@ struct rose_route_struct {
 	char		device[16];
 	unsigned char	ndigis;
 	ax25_address	digipeaters[AX25_MAX_DIGIS];
+};
+
+struct rose_cause_struct {
+	unsigned char	cause;
+	unsigned char	diagnostic;
 };
 
 #endif

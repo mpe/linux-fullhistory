@@ -68,7 +68,7 @@ static inline void free_area_pmd(pgd_t * dir, unsigned long address, unsigned lo
 	}
 }
 
-static void free_area_pages(unsigned long address, unsigned long size)
+void vmfree_area_pages(unsigned long address, unsigned long size)
 {
 	pgd_t * dir;
 	unsigned long end = address + size;
@@ -125,7 +125,7 @@ static inline int alloc_area_pmd(pmd_t * pmd, unsigned long address, unsigned lo
 	return 0;
 }
 
-static int alloc_area_pages(unsigned long address, unsigned long size)
+int vmalloc_area_pages(unsigned long address, unsigned long size)
 {
 	pgd_t * dir;
 	unsigned long end = address + size;
@@ -181,7 +181,7 @@ void vfree(void * addr)
 	for (p = &vmlist ; (tmp = *p) ; p = &tmp->next) {
 		if (tmp->addr == addr) {
 			*p = tmp->next;
-			free_area_pages(VMALLOC_VMADDR(tmp->addr), tmp->size);
+			vmfree_area_pages(VMALLOC_VMADDR(tmp->addr), tmp->size);
 			kfree(tmp);
 			return;
 		}
@@ -201,7 +201,7 @@ void * vmalloc(unsigned long size)
 	if (!area)
 		return NULL;
 	addr = area->addr;
-	if (alloc_area_pages(VMALLOC_VMADDR(addr), size)) {
+	if (vmalloc_area_pages(VMALLOC_VMADDR(addr), size)) {
 		vfree(addr);
 		return NULL;
 	}

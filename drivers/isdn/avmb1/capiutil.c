@@ -26,6 +26,7 @@
  *
  */
 #include <linux/module.h>
+#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/ctype.h>
 #include <linux/stddef.h>

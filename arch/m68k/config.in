@@ -52,6 +52,10 @@ bool 'System V IPC' CONFIG_SYSVIPC
 bool 'Sysctl support' CONFIG_SYSCTL
 tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
+fi
+
 if [ "$CONFIG_AMIGA" = "y" ]; then
   bool 'Amiga AutoConfig Identification' CONFIG_ZORRO
   bool 'Amiga OCS chipset support' CONFIG_AMIFB_OCS
@@ -153,6 +157,7 @@ if [ "$CONFIG_AMIGA" = "y" ]; then
     bool 'A4000T SCSI support' CONFIG_A4000T_SCSI
     bool 'A4091 SCSI support' CONFIG_A4091_SCSI
     bool 'WarpEngine SCSI support' CONFIG_WARPENGINE_SCSI
+    bool 'GVP Turbo 040/060 SCSI support' CONFIG_GVP_TURBO_SCSI
   fi
 fi
 if [ "$CONFIG_ATARI" = "y" ]; then
@@ -273,5 +278,6 @@ bool 'Kernel profiling support' CONFIG_PROFILE
 if [ "$CONFIG_PROFILE" = "y" ]; then
   int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 fi
+bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
 bool 'Remote debugging support' CONFIG_KGDB
 endmenu

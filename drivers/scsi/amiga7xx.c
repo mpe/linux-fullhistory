@@ -36,7 +36,7 @@ struct proc_dir_entry proc_scsi_amiga7xx = {
 int amiga7xx_detect(Scsi_Host_Template *tpnt)
 {
     static unsigned char called = 0;
-    int key;
+    int key, clock;
     int num = 0;
     unsigned long address;
     long long options;
@@ -59,8 +59,7 @@ int amiga7xx_detect(Scsi_Host_Template *tpnt)
 	clock = 50000000;	/* 50MHz SCSI Clock */
 
 	ncr53c7xx_init(tpnt, 0, 710, (u32)(unsigned char *)(address + 0x40000),
-			0, IRQ_AMIGA_PORTS, DMA_NONE, 
-			options, clock);
+			0, IRQ_AMIGA_PORTS, DMA_NONE, options, clock);
 
 	zorro_config_board(key, 0);
 	num++;
@@ -74,16 +73,16 @@ int amiga7xx_detect(Scsi_Host_Template *tpnt)
 
 	clock = 50000000;	/* 50MHz SCSI Clock */
 
-    	ncr53c7xx_init(tpnt, 0, 710, (u32)(unsigned char *)ZTWO_VADDR(0xDD0040),
-			0, IRQ_AMIGA_PORTS, DMA_NONE,
-			options, clock);
+    	ncr53c7xx_init(tpnt, 0, 710,
+		       (u32)(unsigned char *)ZTWO_VADDR(0xDD0040),
+		       0, IRQ_AMIGA_PORTS, DMA_NONE, options, clock);
     	num++;
     }
 #endif
 
 #ifdef CONFIG_A4091_SCSI
     while ( (key = zorro_find(MANUF_COMMODORE, PROD_A4091, 0, 0)) ||
-	 (key = zorro_find(MANUF_COMMODORE2, PROD_A4091_2, 0, 0)) )
+	    (key = zorro_find(MANUF_COMMODORE2, PROD_A4091_2, 0, 0)) )
     {
 	cd = zorro_get_board(key);
 	address = (unsigned long)kernel_map((unsigned long)cd->cd_BoardAddr,

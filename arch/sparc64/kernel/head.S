@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.31 1997/05/30 22:35:28 davem Exp $
+/* $Id: head.S,v 1.43 1997/07/07 03:05:25 davem Exp $
  * head.S: Initial boot code for the Sparc64 port of Linux.
  *
  * Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -8,20 +8,25 @@
  */
 
 #include <linux/version.h>
+#include <linux/errno.h>
+#include <asm/asm_offsets.h>
+#include <asm/asi.h>
 #include <asm/pstate.h>
 #include <asm/ptrace.h>
 #include <asm/spitfire.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/errno.h>
+#include <asm/signal.h>
+#include <asm/processor.h>
 #include <asm/lsu.h>
 #include <asm/head.h>
 	
 /* This section from from _start to sparc64_boot_end should fit into
- * 0xffff.f800.0000.4000 to 0xffff.f800.0000.8000 and will be sharing space
- * with bootup_user_stack, which is from 0xffff.f800.0000.4000 to
- * 0xffff.f800.0000.6000 and bootup_kernel_stack, which is from
- * 0xffff.f800.0000.6000 to 0xffff.f800.0000.8000. 
+ * 0x0000.0000.0040.4000 to 0x0000.0000.0040.8000 and will be sharing space
+ * with bootup_user_stack, which is from 0x0000.0000.0040.4000 to
+ * 0x0000.0000.0040.6000 and bootup_kernel_stack, which is from
+ * 0x0000.0000.0040.6000 to 0x0000.0000.0040.8000. 
  */
 
 	.text
@@ -31,7 +36,7 @@ start:
 _stext:
 stext:
 bootup_user_stack:
-! 0xfffff80000004000
+! 0x0000000000404000
 	b	sparc64_boot
 	 flushw					/* Flush register file.      */
 
@@ -41,10 +46,11 @@ bootup_user_stack:
  */
         .global root_flags, ram_flags, root_dev
         .global ramdisk_image, ramdisk_size
+	.globl	silo_args
 
         .ascii  "HdrS"
         .word   LINUX_VERSION_CODE
-        .half   0x0201          /* HdrS version */
+        .half   0x0202          /* HdrS version */
 root_flags:
         .half   1
 root_dev:
@@ -55,7 +61,8 @@ ramdisk_image:
         .word   0
 ramdisk_size:
         .word   0
-        .xword   reboot_command
+        .xword  reboot_command
+	.xword	bootstr_len
 
 	/* We must be careful, 32-bit OpenBOOT will get confused if it
 	 * tries to save away a register window to a 64-bit kernel
@@ -80,26 +87,7 @@ sparc64_boot:
 	 * Again, typically PROM has left %pil at 13 or similar, and
 	 * (PSTATE_PRIV | PSTATE_PEF | PSTATE_IE) in %pstate.
          */
-	wrpr	%g0, 0xf, %pil			/* Interrupts off.           */
-	wrpr    %g0, (PSTATE_PRIV|PSTATE_PEF), %pstate
-
-	/* Check if we are mapped where we expect to be in virtual
-	 * memory.  The Solaris /boot elf format bootloader
-	 * will peek into our elf header and load us where
-	 * we want to be, otherwise we have to re-map.
-	 */
-current_pc:
-	rd	%pc, %g3
-	sethi	%uhi(KERNBASE), %g4
-	sllx	%g4, 32, %g4
-
-	/* Check the run time program counter. */
-
-	set	current_pc, %g5
-	add	%g5, %g4, %g5
-	cmp	%g3, %g5
-	be	%xcc, sun4u_init
-	 nop
+	wrpr    %g0, (PSTATE_PRIV|PSTATE_PEF|PSTATE_IE), %pstate
 
 create_mappings:
 	/* %g5 holds the tlb data */
@@ -136,14 +124,9 @@ create_mappings:
 	cmp	%g1, %g2
 	be,a,pn	%xcc, got_tlbentry
 	 ldxa	[%l0] ASI_ITLB_DATA_ACCESS, %g1
-	cmp	%l1, (63 << 3)
+	cmp	%l0, (63 << 3)
 	blu,pt	%xcc, 1b
 	 add	%l0, (1 << 3), %l0
-
-boot_failed:
-	/* Debugging 8-) */
-	set	0xdeadbeef, %g1
-	t	0x11
 
 got_tlbentry:
 	/* Nops here again, perhaps Cheetah/Blackbird are better behaved... */
@@ -159,33 +142,73 @@ got_tlbentry:
 
 	or	%g5, %g1, %g5		/* Or it into TAG being built.        */
 
-	/* PROM never puts any TLB entries into the MMU with the lock bit
-	 * set.  So we gladly use tlb entry 63 for KERNBASE, 62 for
-	 * boot time locked PROM CIF handler page, we remove the locked
-	 * bit for the CIF page in paging_init().
-	 */
-	mov	TLB_TAG_ACCESS, %g3
-	mov	(63 << 3), %g7
-	stxa	%g4, [%g3] ASI_IMMU		/* KERNBASE into TLB TAG	*/
-	stxa	%g5, [%g7] ASI_ITLB_DATA_ACCESS	/* TTE into TLB DATA		*/
-	membar	#Sync
+	clr	%l0			/* TLB entry walker. */
+	sethi	%hi(KERNBASE), %g3	/* 4M lower limit */
+	sethi	%hi(KERNBASE<<1), %g7	/* 8M upper limit */
+	mov	TLB_TAG_ACCESS, %l7
+1:
+	/* Yes, the nops seem to be necessary for now, don't ask me why. -DaveM */
+	ldxa	[%l0] ASI_ITLB_TAG_READ, %g1
+	nop
+	nop
+	nop
+	andn	%g1, %l2, %g1		/* Get vaddr */
+	cmp	%g1, %g3
+	blu,pn	%xcc, 2f
+	 cmp	%g1, %g7
+	bgeu,pn	%xcc, 2f
+	 nop
+	stxa	%g0, [%l7] ASI_IMMU
+	stxa	%g0, [%l0] ASI_ITLB_DATA_ACCESS
+2:
+	cmp	%l0, (63 << 3)
+	blu,pt	%xcc, 1b
+	 add	%l0, (1 << 3), %l0
 
-	/* Same for DTLB */
-	stxa	%g4, [%g3] ASI_DMMU		/* KERNBASE into TLB TAG	*/
+	nop; nop; nop
+
+	clr	%l0			/* TLB entry walker. */
+1:
+	/* Yes, the nops seem to be necessary for now, don't ask me why. -DaveM */
+	ldxa	[%l0] ASI_DTLB_TAG_READ, %g1
+	nop
+	nop
+	nop
+	andn	%g1, %l2, %g1		/* Get vaddr */
+	cmp	%g1, %g3
+	blu,pn	%xcc, 2f
+	 cmp	%g1, %g7
+	bgeu,pn	%xcc, 2f
+	 nop
+	stxa	%g0, [%l7] ASI_DMMU
+	stxa	%g0, [%l0] ASI_DTLB_DATA_ACCESS
+2:
+	cmp	%l0, (63 << 3)
+	blu,pt	%xcc, 1b
+	 add	%l0, (1 << 3), %l0
+
+	nop; nop; nop
+
+
+	/* PROM never puts any TLB entries into the MMU with the lock bit
+	 * set.  So we gladly use tlb entry 63 for KERNBASE.
+	 */
+
+	sethi	%hi(KERNBASE), %g3
+	mov	(63 << 3), %g7
+	stxa	%g3, [%l7] ASI_DMMU		/* KERNBASE into TLB TAG	*/
 	stxa	%g5, [%g7] ASI_DTLB_DATA_ACCESS	/* TTE into TLB DATA		*/
 	membar	#Sync
-
-	/* Kill instruction prefetch queues. */
-	flush	%g4
+	stxa	%g3, [%l7] ASI_IMMU		/* KERNBASE into TLB TAG	*/
+	stxa	%g5, [%g7] ASI_ITLB_DATA_ACCESS	/* TTE into TLB DATA		*/
 	membar	#Sync
-
-	ba,pt	%xcc, go_to_highmem
+	flush	%g3
+	membar	#Sync
+	ba,pt	%xcc, 1f
 	 nop
-
-go_to_highmem:
-	/* Now do a non-relative jump so that PC is in high-memory */
+1:
 	set	sun4u_init, %g2
-	jmpl     %g2 + %g4, %g0
+	jmpl    %g2 + %g0, %g0
 	 nop
 
 sun4u_init:
@@ -198,42 +221,16 @@ sun4u_init:
 	stxa	%g0, [%g7] ASI_DMMU
 	membar	#Sync
 
-	/* The lock bit has to be removed from this page later on, 
-	 * but before firing up init we will use PROM a lot, so we
-	 * lock it there now...
-	 */
-
-	/* Compute PROM CIF interface page TTE. */
-	sethi	%hi(__p1275_loc), %g7
-	or	%g7, (_PAGE_CP | _PAGE_CV | _PAGE_P | _PAGE_W | _PAGE_L), %g7
-	sethi	%uhi(_PAGE_VALID), %g5
-	sethi	%hi(0x8000), %g3
-	sllx	%g5, 32, %g5
-	mov	TLB_TAG_ACCESS, %g6
-	or	%g5, %g7, %g5
-	add	%g5, %g1, %g5				/* Add in physbase. */
-
-	mov	(62 << 3), %g7				/* TLB entry 62		  */
-	stxa	%g3, [%g6] ASI_IMMU			/* CIF page into TLB TAG  */
-	stxa	%g5, [%g7] ASI_ITLB_DATA_ACCESS		/* TTE into TLB DATA	  */
-	membar	#Sync
-
-	/* Same for DTLB */
-	stxa	%g3, [%g6] ASI_DMMU			/* CIF page into TLB TAG  */
-	stxa	%g5, [%g7] ASI_DTLB_DATA_ACCESS		/* TTE into TLB DATA	  */
-	membar	#Sync
-
-	/* Kill instruction prefetch queues. */
-	flush	%g3
-	membar	#Sync
+	sethi	%uhi(PAGE_OFFSET), %g4
+	sllx	%g4, 32, %g4
 
 	/* We are now safely (we hope) in Nucleus context (0), rewrite
 	 * the KERNBASE TTE's so they no longer have the global bit set.
 	 * Don't forget to setup TAG_ACCESS first 8-)
 	 */
 	mov	TLB_TAG_ACCESS, %g2
-	stxa	%g4, [%g2] ASI_IMMU
-	stxa	%g4, [%g2] ASI_DMMU
+	stxa	%g3, [%g2] ASI_IMMU
+	stxa	%g3, [%g2] ASI_DMMU
 
 	mov	(63 << 3), %g7
 	ldxa	[%g7] ASI_ITLB_DATA_ACCESS, %g1
@@ -247,30 +244,22 @@ sun4u_init:
 	membar	#Sync
 
 	/* Kill instruction prefetch queues. */
-	flush	%g4
+	flush	%g3
 	membar	#Sync
-
-	/* Compute the number of windows in this machine
-	 * store this in nwindows and nwindowsm1
-	 */
-	rdpr	%ver, %g1			/* Get VERSION register.	*/
-	sethi   %hi(nwindows), %g2
-	and     %g1, VERS_MAXWIN, %g5
-	or	%g2,%lo(nwindows),%g2
-	add	%g5, 1, %g6
-	add	%g2, (nwindows - nwindowsm1), %g3
-	stx     %g6, [%g2 + %g4]
-	stx     %g5, [%g3 + %g4]
 
 	sethi	%hi(init_task_union), %g6
 	or	%g6, %lo(init_task_union), %g6
-	add	%g6, %g4, %g6			! g6 usage is fixed as well
 	mov	%sp, %l6
 	mov	%o4, %l7
+
+#if 0	/* We don't do it like this anymore, but for historical hack value
+	 * I leave this snippet here to show how crazy we can be sometimes. 8-)
+	 */
 
 	/* Setup "Linux Current Register", thanks Sun 8-) */
 	wr	%g0, 0x1, %pcr
 	wr	%g6, 0x0, %pic
+#endif
 
 	mov	1, %g5
 	sllx	%g5, (PAGE_SHIFT + 1), %g5
@@ -291,23 +280,19 @@ sun4u_init:
 	add	%l1, %l2, %l1
 	andn	%l1, %l2, %l1
 	add	%l2, 1, %l2
-	add	%l0, %g4, %o0
+	add	%l0, %g0, %o0
 1:
-	clr	%o1
-	sethi	%hi(PAGE_SIZE), %o2
-	or	%o2, %lo(PAGE_SIZE), %o2
-	call	__memset
+	mov	%l2, %o1
+	call	__bzero
 	 add	%l0, %l2, %l0
 	cmp	%l0, %l1
 	blu,pt	%xcc, 1b
-	 add	%l0, %g4, %o0
+	 add	%l0, %g0, %o0
 
 	/* Now clear empty_zero_page */
-	clr	%o1
-	sethi	%hi(PAGE_SIZE), %o2
-	or	%o2, %lo(PAGE_SIZE), %o2
-	call	__memset
-	 mov	%g4, %o0
+	mov	%l2, %o1
+	call	__bzero
+	 mov	%g3, %o0
 
 	mov	%l6, %o1			! OpenPROM stack
 	call	prom_init
@@ -320,36 +305,45 @@ sun4u_init:
 
 	.globl	setup_tba
 setup_tba:
+	save	%sp, -160, %sp
+
+	rdpr	%tba, %g7
+	sethi	%hi(prom_tba), %o1
+	or	%o1, %lo(prom_tba), %o1
+	stx	%g7, [%o1]
+
+	/* Setup "Linux" globals 8-) */
+	rdpr	%pstate, %o1
+	mov	%g6, %o2
+	wrpr	%o1, (PSTATE_AG|PSTATE_IE), %pstate
 	sethi	%hi(sparc64_ttable_tl0), %g5
-	add	%g5, %g4, %g5
 	wrpr	%g5, %tba
+	mov	%o2, %g6
 
 	/* Set up MMU globals */
-	rdpr	%pstate, %o1
-	wrpr	%o1, PSTATE_MG, %pstate
+	wrpr	%o1, (PSTATE_MG|PSTATE_IE), %pstate
 
 	/* PGD/PMD offset mask, used by TLB miss handlers. */
 	sethi	%hi(0x1ff8), %g2
 	or	%g2, %lo(0x1ff8), %g2
 
 	/* Kernel PGDIR used by TLB miss handlers. */
-	mov	%o0, %g6
+	mov	%i0, %g6
 
 	/* To catch bootup bugs, this is user PGDIR for TLB miss handlers. */
 	clr	%g7
 
 	/* Setup Interrupt globals */
-	wrpr	%o1, PSTATE_IG, %pstate
-	sethi	%uhi(ivector_to_mask), %g4
-	or	%g4, %ulo(ivector_to_mask), %g4
+	wrpr	%o1, (PSTATE_IG|PSTATE_IE), %pstate
 	sethi	%hi(ivector_to_mask), %g5
-	or	%g5, %lo(ivector_to_mask), %g5
-	or	%g5, %g4, %g1			/* IVECTOR table */
+	or	%g5, %lo(ivector_to_mask), %g1  /* IVECTOR table */
 	mov	0x40, %g2			/* INTR data 0 register */
 
-	andn	%o1, PSTATE_IE, %o1
+	/* Ok, we're done setting up all the state our trap mechanims needs,
+	 * now get back into normal globals and let the PROM know what it up.
+	 */
 	wrpr	%g0, %g0, %wstate
-	wrpr	%o1, %g0, %pstate
+	wrpr	%o1, PSTATE_IE, %pstate
 
 	/* Zap TSB BASE to zero with TSB_size==1. */
 	mov	TSB_REG, %o4
@@ -359,8 +353,16 @@ setup_tba:
 
 	membar	#Sync
 
-	retl
-	 nop
+	sethi	%hi(sparc64_ttable_tl0), %g5
+	call	prom_set_trap_table
+	 mov	%g5, %o0
+
+	rdpr	%pstate, %o1
+	or	%o1, PSTATE_IE, %o1
+	wrpr	%o1, 0, %pstate
+
+	ret
+	 restore
 
 sparc64_boot_end:
 	.skip	0x2000 + _start - sparc64_boot_end
@@ -369,18 +371,21 @@ bootup_user_stack_end:
 bootup_kernel_stack:
 	.skip	0x2000
 
-! 0xfffff80000008000
+! 0x0000000000408000
 
 #include "ttable.S"
+#include "etrap.S"
+#include "rtrap.S"
+#include "winfixup.S"
+#include "entry.S"
 
 	/* This is just anal retentiveness on my part... */
 	.align	16384
 
 	.data
 	.align	8
-	.globl	nwindows, nwindowsm1 
-nwindows:	.xword	0
-nwindowsm1:	.xword	0
+	.globl	prom_tba
+prom_tba:	.xword	0
 	.section	".fixup",#alloc,#execinstr
 	.globl	__ret_efault
 __ret_efault:

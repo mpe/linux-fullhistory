@@ -1,4 +1,4 @@
-/* $Id: mmu_context.h,v 1.11 1997/06/13 14:03:04 davem Exp $ */
+/* $Id: mmu_context.h,v 1.16 1997/07/05 09:54:46 davem Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 
@@ -24,34 +24,7 @@ extern unsigned long tlb_context_cache;
 #define CTX_VERSION_MASK	((~0UL) << CTX_VERSION_SHIFT)
 #define CTX_FIRST_VERSION	((1UL << CTX_VERSION_SHIFT) + 1UL)
 
-extern __inline__ void get_new_mmu_context(struct mm_struct *mm,
-					   unsigned long ctx)
-{
-	if((ctx & ~(CTX_VERSION_MASK)) == 0) {
-		unsigned long flags;
-		int entry;
-
-		save_and_cli(flags);
-		__asm__ __volatile__("stxa	%%g0, [%0] %1\n\t"
-				     "stxa	%%g0, [%0] %2"
-				     : /* No outputs */
-				     : "r" (TLB_TAG_ACCESS), "i" (ASI_IMMU),
-				       "i" (ASI_DMMU));
-		for(entry = 0; entry < 62; entry++) {
-			spitfire_put_dtlb_data(entry, 0x0UL);
-			spitfire_put_itlb_data(entry, 0x0UL);
-		}
-		membar("#Sync");
-		__asm__ __volatile__("flush %g4");
-		restore_flags(flags);
-
-		ctx = (ctx & CTX_VERSION_MASK) + CTX_FIRST_VERSION;
-		if(ctx == 1) /* _not_ zero! */
-			ctx = CTX_FIRST_VERSION;
-	}
-	tlb_context_cache = ctx + 1;
-	mm->context = ctx;
-}
+extern void get_new_mmu_context(struct mm_struct *mm, unsigned long ctx);
 
 extern __inline__ void get_mmu_context(struct task_struct *tsk)
 {
@@ -71,7 +44,7 @@ extern __inline__ void get_mmu_context(struct task_struct *tsk)
 	} else
 		tsk->tss.ctx = 0;
 	spitfire_set_secondary_context(tsk->tss.ctx);
-	__asm__ __volatile__("flush %g4");
+	__asm__ __volatile__("flush %g6");
 	paddr = __pa(mm->pgd);
 	__asm__ __volatile__("
 		rdpr		%%pstate, %%o4

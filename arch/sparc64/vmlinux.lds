@@ -5,10 +5,10 @@ ENTRY(_start)
 
 SECTIONS
 {
-  empty_zero_page = 0xfffff80000000000;
-  swapper_pg_dir =  0xfffff80000002000;
+  empty_zero_page = 0x0000000000400000;
+  swapper_pg_dir =  0x0000000000402000;
   . = 0x4000;
-  .text 0xfffff80000004000 :
+  .text 0x0000000000404000 :
   {
     *(.text)
     *(.gnu.warning)
@@ -40,12 +40,6 @@ SECTIONS
   .data.init : { *(.data.init) }
   . = ALIGN(8192);
   __init_end = .;
-  __p1275_loc = .;
-  .p1275 :
-  {
-	*(.p1275)
-	. = ALIGN(8192);
-  }
   __bss_start = .;
   .sbss      : { *(.sbss) *(.scommon) }
   .bss       :

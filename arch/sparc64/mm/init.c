@@ -1,15 +1,17 @@
-/*  $Id: init.c,v 1.30 1997/06/06 10:56:21 jj Exp $
+/*  $Id: init.c,v 1.39 1997/07/07 02:50:57 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
  *  Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
  
+#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/init.h>
 #include <linux/blk.h>
 #include <linux/swap.h>
 
+#include <asm/head.h>
 #include <asm/system.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
@@ -33,7 +35,7 @@ extern unsigned long empty_null_pte_table;
 unsigned long tlb_context_cache = CTX_FIRST_VERSION;
 
 /* References to section boundaries */
-extern char __init_begin, __init_end, etext, __p1275_loc, __bss_start;
+extern char __init_begin, __init_end, etext, __bss_start;
 
 /*
  * BAD_PAGE is the page that is used for page faults when linux
@@ -59,13 +61,15 @@ pmd_t *__bad_pmd(void)
 pte_t *__bad_pte(void)
 {
 	memset((void *) &empty_bad_pte_table, 0, PAGE_SIZE);
-	return (pte_t *) (((unsigned long)&empty_bad_pte_table) + phys_base);
+	return (pte_t *) (((unsigned long)&empty_bad_pte_table) 
+		- ((unsigned long)&empty_zero_page) + phys_base + PAGE_OFFSET);
 }
 
 pte_t __bad_page(void)
 {
 	memset((void *) &empty_bad_page, 0, PAGE_SIZE);
-	return pte_mkdirty(mk_pte((((unsigned long) &empty_bad_page)+phys_base),
+	return pte_mkdirty(mk_pte((((unsigned long) &empty_bad_page) 
+		- ((unsigned long)&empty_zero_page) + phys_base + PAGE_OFFSET),
 				  PAGE_SHARED));
 }
 
@@ -288,7 +292,7 @@ struct linux_prom_translation {
 };
 
 #define MAX_TRANSLATIONS 64
-static void inherit_prom_mappings(void)
+static inline void inherit_prom_mappings(void)
 {
 	struct linux_prom_translation transl[MAX_TRANSLATIONS];
 	pgd_t *pgdp;
@@ -332,7 +336,11 @@ static void inherit_prom_mappings(void)
 	}
 }
 
-static void inherit_locked_prom_mappings(void)
+int prom_itlb_ent, prom_dtlb_ent;
+unsigned long prom_itlb_tag, prom_itlb_data;
+unsigned long prom_dtlb_tag, prom_dtlb_data;
+
+static inline void inherit_locked_prom_mappings(void)
 {
 	int i;
 	int dtlb_seen = 0;
@@ -359,6 +367,9 @@ static void inherit_locked_prom_mappings(void)
 		data = spitfire_get_dtlb_data(i);
 		if(!dtlb_seen && (data & _PAGE_L)) {
 			unsigned long tag = spitfire_get_dtlb_tag(i);
+			prom_dtlb_ent = i;
+			prom_dtlb_tag = tag;
+			prom_dtlb_data = data;
 			__asm__ __volatile__("stxa %%g0, [%0] %1"
 					     : : "r" (TLB_TAG_ACCESS), "i" (ASI_DMMU));
 			membar("#Sync");
@@ -379,6 +390,9 @@ static void inherit_locked_prom_mappings(void)
 		data = spitfire_get_itlb_data(i);
 		if(!itlb_seen && (data & _PAGE_L)) {
 			unsigned long tag = spitfire_get_itlb_tag(i);
+			prom_itlb_ent = i;
+			prom_itlb_tag = tag;
+			prom_itlb_data = data;
 			__asm__ __volatile__("stxa %%g0, [%0] %1"
 					     : : "r" (TLB_TAG_ACCESS), "i" (ASI_IMMU));
 			membar("#Sync");
@@ -397,6 +411,64 @@ static void inherit_locked_prom_mappings(void)
 				break;
 		}
 	}
+}
+
+/* Give PROM back his world, done during reboots... */
+void prom_reload_locked(void)
+{
+	__asm__ __volatile__("stxa %0, [%1] %2"
+			     : : "r" (prom_dtlb_tag), "r" (TLB_TAG_ACCESS),
+			     "i" (ASI_DMMU));
+	membar("#Sync");
+	spitfire_put_dtlb_data(prom_dtlb_ent, prom_dtlb_data);
+	membar("#Sync");
+
+	__asm__ __volatile__("stxa %0, [%1] %2"
+			     : : "r" (prom_itlb_tag), "r" (TLB_TAG_ACCESS),
+			     "i" (ASI_IMMU));
+	membar("#Sync");
+	spitfire_put_itlb_data(prom_itlb_ent, prom_itlb_data);
+	membar("#Sync");
+}
+
+/* If not locked, zap it. */
+void flush_tlb_all(void)
+{
+	unsigned long flags;
+	int i;
+
+	save_flags(flags); cli();
+	for(i = 0; i < 64; i++) {
+		if(!(spitfire_get_dtlb_data(i) & _PAGE_L)) {
+			__asm__ __volatile__("stxa %%g0, [%0] %1"
+					     : /* no outputs */
+					     : "r" (TLB_TAG_ACCESS), "i" (ASI_DMMU));
+			membar("#Sync");
+			spitfire_put_dtlb_data(i, 0x0UL);
+			membar("#Sync");
+		}
+		if(!(spitfire_get_itlb_data(i) & _PAGE_L)) {
+			__asm__ __volatile__("stxa %%g0, [%0] %1"
+					     : /* no outputs */
+					     : "r" (TLB_TAG_ACCESS), "i" (ASI_IMMU));
+			membar("#Sync");
+			spitfire_put_itlb_data(i, 0x0UL);
+			membar("#Sync");
+		}
+	}
+	restore_flags(flags);
+}
+
+void get_new_mmu_context(struct mm_struct *mm, unsigned long ctx)
+{
+	if((ctx & ~(CTX_VERSION_MASK)) == 0) {
+		flush_tlb_all();
+		ctx = (ctx & CTX_VERSION_MASK) + CTX_FIRST_VERSION;
+		if(ctx == 1)
+			ctx = CTX_FIRST_VERSION;
+	}
+	tlb_context_cache = ctx + 1;
+	mm->context = ctx;
 }
 
 __initfunc(static void
@@ -500,51 +572,42 @@ paging_init(unsigned long start_mem, unsigned long end_mem))
 {
 	extern unsigned long phys_base;
 	extern void setup_tba(unsigned long kpgdir);
-	extern void __bfill64(void *, unsigned long);
-	pgd_t *pgdp;
+	extern void __bfill64(void *, unsigned long *);
 	pmd_t *pmdp;
-	pte_t *ptep, pte;
 	int i;
-
-	/* Must create 2nd locked DTLB entry if physical ram starts at
-	 * 4MB absolute or higher, kernel image has been placed in the
-	 * right place at PAGE_OFFSET but references to start_mem and pages
-	 * will be to the perfect alias mapping, so set it up now.
+	unsigned long alias_base = phys_base + PAGE_OFFSET;
+	unsigned long pt;
+	unsigned long flags;
+	unsigned long shift = alias_base - ((unsigned long)&empty_zero_page);
+	
+	/* We assume physical memory starts at some 4mb multiple,
+	 * if this were not true we wouldn't boot up to this point
+	 * anyways.
 	 */
-	if(phys_base >= (4 * 1024 * 1024)) {
-		unsigned long alias_base = phys_base + PAGE_OFFSET;
-		unsigned long pte;
-		unsigned long flags;
+	pt  = phys_base | _PAGE_VALID | _PAGE_SZ4MB;
+	pt |= _PAGE_CP | _PAGE_CV | _PAGE_P | _PAGE_L | _PAGE_W;
+	save_flags(flags); cli();
+	__asm__ __volatile__("
+	stxa	%1, [%0] %3
+	stxa	%2, [%5] %4
+	membar	#Sync
+	flush	%%g6
+	nop
+	nop
+	nop"
+	: /* No outputs */
+	: "r" (TLB_TAG_ACCESS), "r" (alias_base), "r" (pt),
+	  "i" (ASI_DMMU), "i" (ASI_DTLB_DATA_ACCESS), "r" (61 << 3)
+	: "memory");
+	restore_flags(flags);
+	
+	/* Now set kernel pgd to upper alias so physical page computations
+	 * work.
+	 */
+	init_mm.pgd += ((shift) / (sizeof(pgd_t *)));
 
-		/* We assume physical memory starts at some 4mb multiple,
-		 * if this were not true we wouldn't boot up to this point
-		 * anyways.
-		 */
-		pte  = phys_base | _PAGE_VALID | _PAGE_SZ4MB;
-		pte |= _PAGE_CP | _PAGE_CV | _PAGE_P | _PAGE_L | _PAGE_W;
-		save_flags(flags); cli();
-		__asm__ __volatile__("
-		stxa	%1, [%0] %3
-		stxa	%2, [%5] %4
-		membar	#Sync
-		flush	%%g4
-		nop
-		nop
-		nop"
-		: /* No outputs */
-		: "r" (TLB_TAG_ACCESS), "r" (alias_base), "r" (pte),
-		  "i" (ASI_DMMU), "i" (ASI_DTLB_DATA_ACCESS), "r" (61 << 3)
-		: "memory");
-		restore_flags(flags);
-
-		/* Now set kernel pgd to upper alias so physical page computations
-		 * work.
-		 */
-		init_mm.pgd += (phys_base / (sizeof(pgd_t *)));
-	}
-
-	null_pmd_table = __pa(((unsigned long)&empty_null_pmd_table) + phys_base);
-	null_pte_table = __pa(((unsigned long)&empty_null_pte_table) + phys_base);
+	null_pmd_table = __pa(((unsigned long)&empty_null_pmd_table) + shift);
+	null_pte_table = __pa(((unsigned long)&empty_null_pte_table) + shift);
 
 	pmdp = (pmd_t *) &empty_null_pmd_table;
 	for(i = 0; i < 1024; i++)
@@ -553,13 +616,13 @@ paging_init(unsigned long start_mem, unsigned long end_mem))
 	memset((void *) &empty_null_pte_table, 0, PAGE_SIZE);
 
 	/* Now can init the kernel/bad page tables. */
-	__bfill64((void *)swapper_pg_dir, null_pmd_table);
-	__bfill64((void *)&empty_bad_pmd_table, null_pte_table);
+	__bfill64((void *)swapper_pg_dir, &null_pmd_table);
+	__bfill64((void *)&empty_bad_pmd_table, &null_pte_table);
 
 	/* We use mempool to create page tables, therefore adjust it up
 	 * such that __pa() macros etc. work.
 	 */
-	mempool = PAGE_ALIGN(start_mem) + phys_base;
+	mempool = PAGE_ALIGN(start_mem) + shift;
 
 	/* FIXME: This should be done much nicer.
 	 * Just now we allocate 64M for each.
@@ -567,48 +630,29 @@ paging_init(unsigned long start_mem, unsigned long end_mem))
 	allocate_ptable_skeleton(IOBASE_VADDR, IOBASE_VADDR + 0x4000000);
 	allocate_ptable_skeleton(DVMA_VADDR, DVMA_VADDR + 0x4000000);
 	inherit_prom_mappings();
-	allocate_ptable_skeleton(0, 0x8000 + PAGE_SIZE);
-
-	/* Map prom interface page. */
-	pgdp = pgd_offset(init_task.mm, 0x8000);
-	pmdp = pmd_offset(pgdp, 0x8000);
-	ptep = pte_offset(pmdp, 0x8000);
-	pte  = mk_pte(((unsigned long)&__p1275_loc)+phys_base, PAGE_KERNEL);
-	set_pte(ptep, pte);
-
+	
 	/* Ok, we can use our TLB miss and window trap handlers safely. */
 	setup_tba((unsigned long)init_mm.pgd);
 
-	/* Kill locked PROM interface page mapping, the mapping will
-	 * re-enter on the next PROM interface call via our TLB miss
-	 * handlers.
-	 */
-	spitfire_flush_dtlb_primary_page(0x8000);
-	membar("#Sync");
-	spitfire_flush_itlb_primary_page(0x8000);
-	membar("#Sync");
-
 	/* Really paranoid. */
-	flushi(PAGE_OFFSET);
+	flushi((long)&empty_zero_page);
 	membar("#Sync");
 
 	/* Cleanup the extra locked TLB entry we created since we have the
 	 * nice TLB miss handlers of ours installed now.
 	 */
-	if(phys_base >= (4 * 1024 * 1024)) {
-		/* We only created DTLB mapping of this stuff. */
-		spitfire_flush_dtlb_nucleus_page(phys_base + PAGE_OFFSET);
-		membar("#Sync");
+	/* We only created DTLB mapping of this stuff. */
+	spitfire_flush_dtlb_nucleus_page(alias_base);
+	membar("#Sync");
 
-		/* Paranoid */
-		flushi(PAGE_OFFSET);
-		membar("#Sync");
-	}
+	/* Paranoid */
+	flushi((long)&empty_zero_page);
+	membar("#Sync");
 
 	inherit_locked_prom_mappings();
-
+	
 	flush_tlb_all();
-
+	
 	start_mem = free_area_init(PAGE_ALIGN(mempool), end_mem);
 
 	return device_scan (PAGE_ALIGN (start_mem));
@@ -642,9 +686,8 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 	int codepages = 0;
 	int datapages = 0;
 	int initpages = 0;
-	int prompages = 0;
 	unsigned long tmp2, addr;
-	unsigned long data_end;
+	unsigned long alias_base = phys_base + PAGE_OFFSET - (long)(&empty_zero_page);
 
 	end_mem &= PAGE_MASK;
 	max_mapnr = MAP_NR(end_mem);
@@ -665,16 +708,14 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 	}
 
 	taint_real_pages(start_mem, end_mem);
-	data_end = start_mem - phys_base;
 	for (addr = PAGE_OFFSET; addr < end_mem; addr += PAGE_SIZE) {
 		if(PageReserved(mem_map + MAP_NR(addr))) {
-			if ((addr < (unsigned long) &etext) && (addr >= PAGE_OFFSET))
+			if ((addr < ((unsigned long) &etext) + alias_base) && (addr >= alias_base))
 				codepages++;
-			else if((addr >= (unsigned long)&__init_begin && addr < (unsigned long)&__init_end))
+			else if((addr >= ((unsigned long)&__init_begin) + alias_base)
+				&& (addr < ((unsigned long)&__init_end) + alias_base))
 				initpages++;
-			else if((addr >= (unsigned long)&__p1275_loc && addr < (unsigned long)&__bss_start))
-				prompages++;
-			else if((addr < data_end) && (addr >= PAGE_OFFSET))
+			else if((addr < start_mem) && (addr >= alias_base))
 				datapages++;
 			continue;
 		}
@@ -689,12 +730,11 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 
 	tmp2 = nr_free_pages << PAGE_SHIFT;
 
-	printk("Memory: %luk available (%dk kernel code, %dk data, %dk init, %dk prom) [%016lx,%016lx]\n",
+	printk("Memory: %luk available (%dk kernel code, %dk data, %dk init) [%016lx,%016lx]\n",
 	       tmp2 >> 10,
 	       codepages << (PAGE_SHIFT-10),
 	       datapages << (PAGE_SHIFT-10), 
 	       initpages << (PAGE_SHIFT-10), 
-	       prompages << (PAGE_SHIFT-10), 
 	       PAGE_OFFSET, end_mem);
 
 	min_free_pages = nr_free_pages >> 7;
@@ -702,11 +742,6 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 		min_free_pages = 16;
 	free_pages_low = min_free_pages + (min_free_pages >> 1);
 	free_pages_high = min_free_pages + min_free_pages;
-
-#if 0
-	printk("Testing fault handling...\n");
-	*(char *)0x00000deadbef0000UL = 0;
-#endif
 }
 
 void free_initmem (void)
@@ -715,10 +750,8 @@ void free_initmem (void)
 	
 	addr = (unsigned long)(&__init_begin);
 	for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
-		unsigned long page = addr;
-
-		if(page < ((unsigned long)__va(phys_base)))
-			page += phys_base;
+		unsigned long page = addr + (long)__va(phys_base)
+					- (long)(&empty_zero_page);
 
 		mem_map[MAP_NR(page)].flags &= ~(1 << PG_reserved);
 		atomic_set(&mem_map[MAP_NR(page)].count, 1);

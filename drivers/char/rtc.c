@@ -152,7 +152,7 @@ static long rtc_read(struct inode *inode, struct file *file, char *buf,
 		     unsigned long count)
 {
 	struct wait_queue wait = { current, NULL };
-	int retval;
+	int retval = 0;
 	
 	if (count < sizeof(unsigned long))
 		return -EINVAL;

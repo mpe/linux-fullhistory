@@ -131,12 +131,13 @@ struct super_block *proc_read_super(struct super_block *s,void *data,
 	s->s_magic = PROC_SUPER_MAGIC;
 	s->s_op = &proc_sops;
 	unlock_super(s);
-	if (!(s->s_mounted = proc_get_inode(s, PROC_ROOT_INO, &proc_root))) {
+	s->s_root = d_alloc_root(proc_get_inode(s, PROC_ROOT_INO, &proc_root), NULL);
+	if (!s->s_root) {
 		s->s_dev = 0;
 		printk("get root inode failed\n");
 		return NULL;
 	}
-	parse_options(data, &s->s_mounted->i_uid, &s->s_mounted->i_gid);
+	parse_options(data, &s->s_root->d_inode->i_uid, &s->s_root->d_inode->i_gid);
 	return s;
 }
 

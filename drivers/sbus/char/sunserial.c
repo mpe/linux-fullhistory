@@ -1,4 +1,4 @@
-/* $Id: sunserial.c,v 1.42 1997/05/26 20:10:20 davem Exp $
+/* $Id: sunserial.c,v 1.43 1997/07/05 09:53:23 davem Exp $
  * serial.c: Serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -348,10 +348,12 @@ static void batten_down_hatches(void)
 	 */
 	printk("\n");
 	flush_user_windows();
+#ifndef __sparc_v9__
 	if((((unsigned long)linux_dbvec)>=DEBUG_FIRSTVADDR) &&
 	   (((unsigned long)linux_dbvec)<=DEBUG_LASTVADDR))
 		sp_enter_debugger();
 	else
+#endif
 		prom_cmdline();
 
 	/* XXX We want to notify the keyboard driver that all
@@ -396,7 +398,9 @@ static _INLINE_ void rs_sched_event(struct sun_serial *info,
 	mark_bh(SERIAL_BH);
 }
 
+#ifndef __sparc_v9__
 extern void breakpoint(void);  /* For the KGDB frame character */
+#endif
 
 static _INLINE_ void receive_chars(struct sun_serial *info, struct pt_regs *regs)
 {
@@ -453,6 +457,7 @@ static _INLINE_ void receive_chars(struct sun_serial *info, struct pt_regs *regs
 			/* It is a 'keyboard interrupt' ;-) */
 			wake_up(&keypress_wait);
 		}
+#ifndef __sparc_v9__
 		/* Look for kgdb 'stop' character, consult the gdb
 		 * documentation for remote target debugging and
 		 * arch/sparc/kernel/sparc-stub.c to see how all this works.
@@ -461,7 +466,7 @@ static _INLINE_ void receive_chars(struct sun_serial *info, struct pt_regs *regs
 			breakpoint();
 			return;
 		}
-
+#endif
 		if(!tty)
 			return;
 
@@ -1867,7 +1872,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.42 $";
+	char *revision = "$Revision: 1.43 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');

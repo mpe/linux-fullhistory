@@ -1,4 +1,4 @@
-/* $Id: setup.c,v 1.1 1997/06/06 09:36:33 ralf Exp $
+/* $Id: setup.c,v 1.2 1997/06/30 15:26:24 ralf Exp $
  * setup.c: SGI specific setup, including init of the feature struct.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
@@ -58,8 +58,6 @@ void sgi_setup(void)
 	_machine_power_off = sgi_machine_power_off;
 
 	/* register_console(sgi_print); */
-
-	sgi_sysinit();
 
 	/* Init the INDY HPC I/O controller.  Need to call this before
 	 * fucking with the memory controller because it needs to know the

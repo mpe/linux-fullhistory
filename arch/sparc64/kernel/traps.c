@@ -1,14 +1,15 @@
-/* $Id: traps.c,v 1.19 1997/06/05 06:22:49 davem Exp $
- * arch/sparc/kernel/traps.c
+/* $Id: traps.c,v 1.29 1997/07/05 09:52:38 davem Exp $
+ * arch/sparc64/kernel/traps.c
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
 /*
- * I hate traps on the sparc, grrr...
+ * I like traps on v9, :))))
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>  /* for jiffies */
 #include <linux/kernel.h>
 #include <linux/signal.h>
@@ -123,6 +124,8 @@ void syscall_trace_entry(unsigned long g1, struct pt_regs *regs)
 	int i;
 #endif
 
+	if(strcmp(current->comm, "bash.sunos"))
+		return;
 	printk("SYS[%s:%d]: PC(%016lx) <%3d> ",
 	       current->comm, current->pid, regs->tpc, (int)g1);
 #ifdef VERBOSE_SYSCALL_TRACING
@@ -153,52 +156,11 @@ void syscall_trace_entry(unsigned long g1, struct pt_regs *regs)
 
 unsigned long syscall_trace_exit(unsigned long retval, struct pt_regs *regs)
 {
-	printk("ret[%016lx]\n", retval);
+	if(!strcmp(current->comm, "bash.sunos"))
+		printk("ret[%016lx]\n", retval);
 	return retval;
 }
 #endif /* SYSCALL_TRACING */
-
-#if 0
-void user_rtrap_report(struct pt_regs *regs)
-{
-	static int hits = 0;
-
-	/* Bwahhhhrggg... */
-	if(regs->tpc == 0x1f294UL && ++hits == 2) {
-		register unsigned long ctx asm("o4");
-		register unsigned long paddr asm("o5");
-		unsigned long cwp, wstate;
-
-		printk("RT[%016lx:%016lx] ", regs->tpc, regs->u_regs[UREG_I6]);
-		__asm__ __volatile__("rdpr %%cwp, %0" : "=r" (cwp));
-		__asm__ __volatile__("rdpr %%wstate, %0" : "=r" (wstate));
-		printk("CWP[%d] WSTATE[%016lx]\n"
-		       "TSS( ksp[%016lx] kpc[%016lx] wstate[%016lx] w_saved[%d] flgs[%x]"
-		       " cur_ds[%d] )\n", cwp, wstate,
-		       current->tss.ksp, current->tss.kpc, current->tss.wstate,
-		       (int) current->tss.w_saved, current->tss.flags,
-		       current->tss.current_ds);
-		__asm__ __volatile__("
-		rdpr	%%pstate, %%o3
-		wrpr	%%o3, %2, %%pstate
-		mov	%%g7, %%o5
-		mov	0x10, %%o4
-		ldxa	[%%o4] %3, %%o4
-		wrpr	%%o3, 0x0, %%pstate
-		" : "=r" (ctx), "=r" (paddr)
-		  : "i" (PSTATE_MG|PSTATE_IE), "i" (ASI_DMMU));
-
-		printk("MMU[ppgd(%016lx)sctx(%d)] ", paddr, ctx);
-		printk("mm->context(%016lx) mm->pgd(%p)\n",
-		       current->mm->context, current->mm->pgd);
-		printk("TASK: signal[%016lx] blocked[%016lx]\n",
-		       current->signal, current->blocked);
-		show_regs(regs);
-		while(1)
-			barrier();
-	}
-}
-#endif
 
 void bad_trap (struct pt_regs *regs, long lvl)
 {
@@ -221,168 +183,44 @@ void bad_trap_tl1 (struct pt_regs *regs, long lvl)
 {
 	char buffer[24];
 	
-	lock_kernel ();
+	lock_kernel();
 	sprintf (buffer, "Bad trap %lx at tl>0", lvl);
 	die_if_kernel (buffer, regs);
+	unlock_kernel();
 }
 
 void data_access_exception (struct pt_regs *regs)
 {
-	lock_kernel ();
-	printk ("Unhandled data access exception ");
-	printk("sfsr %016lx sfar %016lx\n", spitfire_get_dsfsr(), spitfire_get_sfar());
-	die_if_kernel("Data access exception", regs);
+	send_sig(SIGSEGV, current, 1);
 }
 
 void do_dae(struct pt_regs *regs)
 {
-	printk("DAE: at %016lx\n", regs->tpc);
-	while(1)
-		barrier();
+	send_sig(SIGSEGV, current, 1);
 }
 
 void instruction_access_exception (struct pt_regs *regs)
 {
-	lock_kernel ();
-	printk ("Unhandled instruction access exception ");
-	printk("sfsr %016lx\n", spitfire_get_isfsr());
-	die_if_kernel("Instruction access exception", regs);
+	send_sig(SIGSEGV, current, 1);
 }
 
 void do_iae(struct pt_regs *regs)
 {
-	printk("IAE at %016lx\n", regs->tpc);
-	while(1)
-		barrier();
+	send_sig(SIGSEGV, current, 1);
 }
-
-static unsigned long init_fsr = 0x0UL;
-static unsigned int init_fregs[64] __attribute__ ((aligned (64))) =
-                { ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U,
-		  ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U,
-		  ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U,
-		  ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U,
-		  ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U,
-		  ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U,
-		  ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U,
-		  ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U };
-
-void do_fpdis(struct pt_regs *regs)
-{
-	lock_kernel();
-
-	regs->tstate |= TSTATE_PEF;
-	fprs_write(FPRS_FEF);
-
-	/* This is allowed now because the V9 ABI varargs passes floating
-	 * point args in floating point registers, so vsprintf() and sprintf()
-	 * cause problems.  Luckily we never actually pass floating point values
-	 * to those routines in the kernel and the code generated just does
-	 * stores of them to the stack.  Therefore, for the moment this fix
-	 * is sufficient. -DaveM
-	 */
-	if(regs->tstate & TSTATE_PRIV)
-		goto out;
-
-#ifndef __SMP__
-	if(last_task_used_math == current)
-		goto out;
-	if(last_task_used_math) {
-		struct task_struct *fptask = last_task_used_math;
-
-		if(fptask->tss.flags & SPARC_FLAG_32BIT)
-			fpsave32((unsigned long *)&fptask->tss.float_regs[0],
-				 &fptask->tss.fsr);
-		else
-			fpsave((unsigned long *)&fptask->tss.float_regs[0],
-			       &fptask->tss.fsr);
-	}
-	last_task_used_math = current;
-	if(current->used_math) {
-		if(current->tss.flags & SPARC_FLAG_32BIT)
-			fpload32(&current->tss.float_regs[0],
-				 &current->tss.fsr);
-		else
-			fpload(&current->tss.float_regs[0],
-			       &current->tss.fsr);
-	} else {
-		/* Set inital sane state. */
-		fpload(&init_fregs[0], &init_fsr);
-		current->used_math = 1;
-	}
-#else
-	if(!current->used_math) {
-		fpload(&init_fregs[0], &init_fsr);
-		current->used_math = 1;
-	} else {
-		if(current->tss.flags & SPARC_FLAG_32BIT)
-			fpload32(&current->tss.float_regs[0],
-				 &current->tss.fsr);
-		else
-			fpload(&current->tss.float_regs[0],
-			       &current->tss.fsr);
-	}
-	current->flags |= PF_USEDFPU;
-#endif
-#ifndef __SMP__
-out:
-#endif
-	unlock_kernel();
-}
-
-static unsigned long fake_regs[32] __attribute__ ((aligned (8)));
-static unsigned long fake_fsr;
 
 void do_fpe_common(struct pt_regs *regs)
 {
-	static int calls = 0;
-#ifndef __SMP__
-	struct task_struct *fpt = last_task_used_math;
-#else
-	struct task_struct *fpt = current;
-#endif
-
-	lock_kernel();
-	fprs_write(FPRS_FEF);
-
-#ifndef __SMP__
-	if(!fpt) {
-#else
-	if(!(fpt->flags & PF_USEDFPU)) {
-#endif
-		fpsave(&fake_regs[0], &fake_fsr);
-		regs->tstate &= ~(TSTATE_PEF);
-		goto out;
-	}
-	if(fpt->tss.flags & SPARC_FLAG_32BIT)
-		fpsave32((unsigned long *)&fpt->tss.float_regs[0], &fpt->tss.fsr);
-	else
-		fpsave((unsigned long *)&fpt->tss.float_regs[0], &fpt->tss.fsr);
-	fpt->tss.sig_address = regs->tpc;
-	fpt->tss.sig_desc = SUBSIG_FPERROR;
-#ifdef __SMP__
-	fpt->flags &= ~PF_USEDFPU;
-#endif
 	if(regs->tstate & TSTATE_PRIV) {
-		printk("WARNING: FPU exception from kernel mode. at pc=%016lx\n",
-		       regs->tpc);
 		regs->tpc = regs->tnpc;
 		regs->tnpc += 4;
-		calls++;
-		if(calls > 2)
-			die_if_kernel("Too many Penguin-FPU traps from kernel mode",
-				      regs);
-		goto out;
+	} else {
+		lock_kernel();
+		current->tss.sig_address = regs->tpc;
+		current->tss.sig_desc = SUBSIG_FPERROR;
+		send_sig(SIGFPE, current, 1);
+		unlock_kernel();
 	}
-	send_sig(SIGFPE, fpt, 1);
-#ifndef __SMP__
-	last_task_used_math = NULL;
-#endif
-	regs->tstate &= ~TSTATE_PEF;
-	if(calls > 0)
-		calls = 0;
-out:
-	unlock_kernel();
 }
 
 void do_fpieee(struct pt_regs *regs)
@@ -397,16 +235,16 @@ void do_fpother(struct pt_regs *regs)
 
 void do_tof(struct pt_regs *regs)
 {
-	printk("TOF: at %016lx\n", regs->tpc);
-	while(1)
-		barrier();
+	if(regs->tstate & TSTATE_PRIV)
+		die_if_kernel("Penguin overflow trap from kernel mode", regs);
+	current->tss.sig_address = regs->tpc;
+	current->tss.sig_desc = SUBSIG_TAG; /* as good as any */
+	send_sig(SIGEMT, current, 1);
 }
 
 void do_div0(struct pt_regs *regs)
 {
-	printk("DIV0: at %016lx\n", regs->tpc);
-	while(1)
-		barrier();
+	send_sig(SIGILL, current, 1);
 }
 
 void instruction_dump (unsigned int *pc)
@@ -426,7 +264,7 @@ void die_if_kernel(char *str, struct pt_regs *regs)
 	/* Amuse the user. */
 	printk(
 "              \\|/ ____ \\|/\n"
-"              \"@'/ .` \\`@\"\n"
+"              \"@'/ .. \\`@\"\n"
 "              /_| \\__/ |_\\\n"
 "                 \\__U_/\n");
 
@@ -437,17 +275,15 @@ void die_if_kernel(char *str, struct pt_regs *regs)
 		struct reg_window *rw = (struct reg_window *)
 			(regs->u_regs[UREG_FP] + STACK_BIAS);
 
-		if(rw) {
+		/* Stop the back trace when we hit userland or we
+		 * find some badly aligned kernel stack.
+		 */
+		while(rw					&&
+		      (((unsigned long) rw) >= PAGE_OFFSET)	&&
+		      !(((unsigned long) rw) & 0x7)) {
 			printk("Caller[%016lx]\n", rw->ins[7]);
 			rw = (struct reg_window *)
 				(rw->ins[6] + STACK_BIAS);
-			if(rw) {
-				printk("Caller[%016lx]\n", rw->ins[7]);
-				rw = (struct reg_window *)
-					(rw->ins[6] + STACK_BIAS);
-				if(rw)
-					printk("Caller[%016lx]\n", rw->ins[7]);
-			}
 		}
 	}
 	printk("Instruction DUMP:");
@@ -465,16 +301,6 @@ void do_illegal_instruction(struct pt_regs *regs)
 	lock_kernel();
 	if(tstate & TSTATE_PRIV)
 		die_if_kernel("Kernel illegal instruction", regs);
-#if 1
-	{
-		unsigned int insn;
-
-		printk("Ill instr. at pc=%016lx ", pc);
-		get_user(insn, ((unsigned int *)pc));
-		printk("insn=[%08x]\n", insn);
-		show_regs(regs);
-	}
-#endif
 	current->tss.sig_address = pc;
 	current->tss.sig_desc = SUBSIG_ILLINST;
 	send_sig(SIGILL, current, 1);
@@ -483,13 +309,11 @@ void do_illegal_instruction(struct pt_regs *regs)
 
 void mem_address_unaligned(struct pt_regs *regs)
 {
-	printk("AIEEE: do_mna at %016lx\n", regs->tpc);
-	show_regs(regs);
 	if(regs->tstate & TSTATE_PRIV) {
-		printk("MNA from kernel, spinning\n");
-		sti();
-		while(1)
-			barrier();
+		extern void kernel_unaligned_trap(struct pt_regs *regs,
+						  unsigned int insn);
+
+		return kernel_unaligned_trap(regs, *((unsigned int *)regs->tpc));
 	} else {
 		current->tss.sig_address = regs->tpc;
 		current->tss.sig_desc = SUBSIG_PRIVINST;
@@ -499,16 +323,17 @@ void mem_address_unaligned(struct pt_regs *regs)
 
 void do_privop(struct pt_regs *regs)
 {
-	printk("PRIVOP: at %016lx\n", regs->tpc);
-	while(1)
-		barrier();
+	current->tss.sig_address = regs->tpc;
+	current->tss.sig_desc = SUBSIG_PRIVINST;
+	send_sig(SIGILL, current, 1);
 }
 
 void do_privact(struct pt_regs *regs)
 {
-	printk("PRIVACT: at %016lx\n", regs->tpc);
-	while(1)
-		barrier();
+	current->tss.sig_address = regs->tpc;
+	current->tss.sig_desc = SUBSIG_PRIVINST;
+	send_sig(SIGILL, current, 1);
+	unlock_kernel();
 }
 
 void do_priv_instruction(struct pt_regs *regs, unsigned long pc, unsigned long npc,
@@ -537,11 +362,6 @@ void do_memaccess_unaligned(struct pt_regs *regs, unsigned long pc, unsigned lon
 	}
 	current->tss.sig_address = pc;
 	current->tss.sig_desc = SUBSIG_PRIVINST;
-#if 0
-	show_regs (regs);
-	instruction_dump ((unsigned long *) regs->tpc);
-	printk ("do_MNA!\n");
-#endif
 	send_sig(SIGBUS, current, 1);
 	unlock_kernel();
 }
@@ -553,6 +373,134 @@ void handle_hw_divzero(struct pt_regs *regs, unsigned long pc, unsigned long npc
 	send_sig(SIGILL, current, 1);
 	unlock_kernel();
 }
+
+/* Trap level 1 stuff or other traps we should never see... */
+void do_cee(struct pt_regs *regs)
+{
+	die_if_kernel("TL0: Cache Error Exception", regs);
+}
+
+void do_cee_tl1(struct pt_regs *regs)
+{
+	die_if_kernel("TL1: Cache Error Exception", regs);
+}
+
+void do_dae_tl1(struct pt_regs *regs)
+{
+	die_if_kernel("TL1: Data Access Exception", regs);
+}
+
+void do_iae_tl1(struct pt_regs *regs)
+{
+	die_if_kernel("TL1: Instruction Access Exception", regs);
+}
+
+void do_div0_tl1(struct pt_regs *regs)
+{
+	die_if_kernel("TL1: DIV0 Exception", regs);
+}
+
+void do_fpdis_tl1(struct pt_regs *regs)
+{
+	die_if_kernel("TL1: FPU Disabled", regs);
+}
+
+void do_fpieee_tl1(struct pt_regs *regs)
+{
+	die_if_kernel("TL1: FPU IEEE Exception", regs);
+}
+
+void do_fpother_tl1(struct pt_regs *regs)
+{
+	die_if_kernel("TL1: FPU Other Exception", regs);
+}
+
+void do_ill_tl1(struct pt_regs *regs)
+{
+	die_if_kernel("TL1: Illegal Instruction Exception", regs);
+}
+
+void do_irq_tl1(struct pt_regs *regs)
+{
+	die_if_kernel("TL1: IRQ Exception", regs);
+}
+
+void do_lddfmna(struct pt_regs *regs)
+{
+	die_if_kernel("TL0: LDDF Exception", regs);
+}
+
+void do_lddfmna_tl1(struct pt_regs *regs)
+{
+	die_if_kernel("TL1: LDDF Exception", regs);
+}
+
+void do_stdfmna(struct pt_regs *regs)
+{
+	die_if_kernel("TL0: STDF Exception", regs);
+}
+
+void do_stdfmna_tl1(struct pt_regs *regs)
+{
+	die_if_kernel("TL1: STDF Exception", regs);
+}
+
+void do_paw(struct pt_regs *regs)
+{
+	die_if_kernel("TL0: Phys Watchpoint Exception", regs);
+}
+
+void do_paw_tl1(struct pt_regs *regs)
+{
+	die_if_kernel("TL1: Phys Watchpoint Exception", regs);
+}
+
+void do_vaw(struct pt_regs *regs)
+{
+	die_if_kernel("TL0: Virt Watchpoint Exception", regs);
+}
+
+void do_vaw_tl1(struct pt_regs *regs)
+{
+	die_if_kernel("TL1: Virt Watchpoint Exception", regs);
+}
+
+void do_tof_tl1(struct pt_regs *regs)
+{
+	die_if_kernel("TL1: Tag Overflow Exception", regs);
+}
+
+#ifdef CONFIG_EC_FLUSH_TRAP
+void cache_flush_trap(struct pt_regs *regs)
+{
+#ifndef __SMP__
+	unsigned node = linux_cpus[get_cpuid()].prom_node;
+#else
+#error SMP not supported on sparc64 yet
+#endif
+	int size = prom_getintdefault(node, "ecache-size", 512*1024);
+	int i, j;
+	unsigned long addr, page_nr;
+
+	regs->tpc = regs->tnpc;
+	regs->tnpc = regs->tnpc + 4;
+	if (!suser()) return;
+	size >>= PAGE_SHIFT;
+	addr = PAGE_OFFSET - PAGE_SIZE;
+	for (i = 0; i < size; i++) {
+		do {
+			addr += PAGE_SIZE;
+			page_nr = MAP_NR(addr);
+			if (page_nr >= max_mapnr) {
+				return;
+			}
+		} while (!PageReserved (mem_map + page_nr));
+		/* E-Cache line size is 64B. Let us pollute it :)) */
+		for (j = 0; j < PAGE_SIZE; j += 64)
+			__asm__ __volatile__ ("ldx [%0 + %1], %%g1" : : "r" (j), "r" (addr) : "g1");
+	}
+}
+#endif
 
 void trap_init(void)
 {

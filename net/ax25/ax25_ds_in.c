@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 036
+ *	AX.25 release 037
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -18,6 +18,7 @@
  *	History
  *	AX.25 036	Jonathan(G4KLX)	Cloned from ax25_in.c
  *			Joerg(DL1BKE)	Fixed it.
+ *	AX.25 037	Jonathan(G4KLX)	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -64,9 +65,9 @@ static int ax25_ds_state1_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 
 		case AX25_UA:
 			ax25_calculate_rtt(ax25);
-			ax25->t1timer = 0;
-			ax25->t3timer = ax25->t3;
-			ax25->idletimer = ax25->idle;
+			ax25_stop_t1timer(ax25);
+			ax25_start_t3timer(ax25);
+			ax25_start_idletimer(ax25);
 			ax25->vs      = 0;
 			ax25->va      = 0;
 			ax25->vr      = 0;
@@ -90,23 +91,11 @@ static int ax25_ds_state1_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 			break;
 
 		case AX25_DM:
-			if (pf) {
-				ax25_clear_queues(ax25);
-				ax25->state = AX25_STATE_0;
-				if (ax25->sk != NULL) {
-					ax25->sk->state     = TCP_CLOSE;
-					ax25->sk->err       = ECONNREFUSED;
-					ax25->sk->shutdown |= SEND_SHUTDOWN;
-					if (!ax25->sk->dead)
-						ax25->sk->state_change(ax25->sk);
-					ax25->sk->dead      = 1;
-				}
-			}
+			if (pf) ax25_disconnect(ax25, ECONNREFUSED);
 			break;
 
 		default:
-			if (pf)
-				ax25_send_control(ax25, AX25_SABM, AX25_POLLON, AX25_COMMAND);
+			if (pf) ax25_send_control(ax25, AX25_SABM, AX25_POLLON, AX25_COMMAND);
 			break;
 	}
 
@@ -128,31 +117,15 @@ static int ax25_ds_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 
 		case AX25_DISC:
 			ax25_send_control(ax25, AX25_UA, pf, AX25_RESPONSE);
-			ax25->state = AX25_STATE_0;
 			ax25_dama_off(ax25);
-			if (ax25->sk != NULL) {
-				ax25->sk->state     = TCP_CLOSE;
-				ax25->sk->err       = 0;
-				ax25->sk->shutdown |= SEND_SHUTDOWN;
-				if (!ax25->sk->dead)
-					ax25->sk->state_change(ax25->sk);
-				ax25->sk->dead      = 1;
-			}
+			ax25_disconnect(ax25, 0);
 			break;
 
 		case AX25_DM:
 		case AX25_UA:
 			if (pf) {
-				ax25->state = AX25_STATE_0;
 				ax25_dama_off(ax25);
-				if (ax25->sk != NULL) {
-					ax25->sk->state     = TCP_CLOSE;
-					ax25->sk->err       = 0;
-					ax25->sk->shutdown |= SEND_SHUTDOWN;
-					if (!ax25->sk->dead)
-						ax25->sk->state_change(ax25->sk);
-					ax25->sk->dead      = 1;
-				}
+				ax25_disconnect(ax25, 0);
 			}
 			break;
 
@@ -187,10 +160,10 @@ static int ax25_ds_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 			ax25->modulus   = AX25_MODULUS;
 			ax25->window    = ax25->ax25_dev->values[AX25_VALUES_WINDOW];
 			ax25_send_control(ax25, AX25_UA, pf, AX25_RESPONSE);
+			ax25_stop_t1timer(ax25);
+			ax25_start_t3timer(ax25);
+			ax25_start_idletimer(ax25);
 			ax25->condition = 0x00;
-			ax25->t1timer   = 0;
-			ax25->t3timer   = ax25->t3;
-			ax25->idletimer = ax25->idle;
 			ax25->vs        = 0;
 			ax25->va        = 0;
 			ax25->vr        = 0;
@@ -199,34 +172,14 @@ static int ax25_ds_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 			break;
 
 		case AX25_DISC:
-			ax25_clear_queues(ax25);
 			ax25_send_control(ax25, AX25_UA, pf, AX25_RESPONSE);
-			ax25->t3timer = 0;
-			ax25->state   = AX25_STATE_0;
 			ax25_dama_off(ax25);
-			if (ax25->sk != NULL) {
-				ax25->sk->state     = TCP_CLOSE;
-				ax25->sk->err       = 0;
-				ax25->sk->shutdown |= SEND_SHUTDOWN;
-				if (!ax25->sk->dead)
-					ax25->sk->state_change(ax25->sk);
-				ax25->sk->dead      = 1;
-			}
+			ax25_disconnect(ax25, 0);
 			break;
 
 		case AX25_DM:
-			ax25_clear_queues(ax25);
-			ax25->t3timer = 0;
-			ax25->state   = AX25_STATE_0;
 			ax25_dama_off(ax25);
-			if (ax25->sk != NULL) {
-				ax25->sk->state     = TCP_CLOSE;
-				ax25->sk->err       = ECONNRESET;
-				ax25->sk->shutdown |= SEND_SHUTDOWN;
-				if (!ax25->sk->dead)
-					ax25->sk->state_change(ax25->sk);
-				ax25->sk->dead      = 1;
-			}
+			ax25_disconnect(ax25, ECONNRESET);
 			break;
 
 		case AX25_RR:
@@ -250,9 +203,9 @@ static int ax25_ds_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 			if (ax25_validate_nr(ax25, nr)) {
 				ax25_frames_acked(ax25, nr);
 				ax25_calculate_rtt(ax25);
+				ax25_stop_t1timer(ax25);
+				ax25_start_t3timer(ax25);
 				ax25->n2count = 0;
-				ax25->t1timer = 0;
-				ax25->t3timer = ax25->t3;
 				ax25_requeue_frames(ax25);
 				if (type == AX25_COMMAND && pf)
 					ax25_ds_enquiry_response(ax25);
@@ -281,18 +234,15 @@ static int ax25_ds_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 			if (ns == ax25->vr) {
 				ax25->vr = (ax25->vr + 1) % AX25_MODULUS;
 				queued = ax25_rx_iframe(ax25, skb);
-				if (ax25->condition & AX25_COND_OWN_RX_BUSY) {
+				if (ax25->condition & AX25_COND_OWN_RX_BUSY)
 					ax25->vr = ns;	/* ax25->vr - 1 */
-					if (pf) ax25_ds_enquiry_response(ax25);
-					break;
-				}
 				ax25->condition &= ~AX25_COND_REJECT;
 				if (pf) {
 					ax25_ds_enquiry_response(ax25);
 				} else {
 					if (!(ax25->condition & AX25_COND_ACK_PENDING)) {
-						ax25->t2timer = ax25->t2;
 						ax25->condition |= AX25_COND_ACK_PENDING;
+						ax25_start_t2timer(ax25);
 					}
 				}
 			} else {

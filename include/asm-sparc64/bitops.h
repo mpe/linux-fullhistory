@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.17 1997/06/14 17:35:05 davem Exp $
+/* $Id: bitops.h,v 1.18 1997/06/30 12:36:18 davem Exp $
  * bitops.h: Bit string operations on the V9.
  *
  * Copyright 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -121,7 +121,7 @@ extern __inline__ unsigned long ffz(unsigned long word)
 	  : "0" (word)
 	  : "g1", "g2");
 #else
-#ifdef EASY_CHEESE_VERSION
+#if 1 /* def EASY_CHEESE_VERSION */
 	result = 0;
 	while(word & 1) {
 		result++;
@@ -177,13 +177,11 @@ extern __inline__ unsigned long find_next_zero_bit(void *addr, unsigned long siz
 		size -= 64;
 		result += 64;
 	}
-	offset = size >> 6;
-	size &= 63UL;
-	while (offset) {
+	while (size & ~63UL) {
 		if (~(tmp = *(p++)))
 			goto found_middle;
 		result += 64;
-		offset--;
+		size -= 64;
 	}
 	if (!size)
 		return result;
@@ -289,13 +287,11 @@ extern __inline__ unsigned long find_next_zero_le_bit(void *addr, unsigned long 
 		size -= 64;
 		result += 64;
 	}
-	offset = size >> 6;
-	size &= 63UL;
-	while(offset) {
+	while(size & ~63) {
 		if(~(tmp = __swab64p(p++)))
 			goto found_middle;
 		result += 64;
-		offset--;
+		size -= 64;
 	}
 	if(!size)
 		return result;

@@ -12,4 +12,6 @@ extern unsigned int local_irq_count[NR_CPUS];
 #define hardirq_enter(cpu)	(local_irq_count[cpu]++)
 #define hardirq_exit(cpu)	(local_irq_count[cpu]--)
 
+#define synchronize_irq()	do { } while (0)
+
 #endif

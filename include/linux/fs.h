@@ -24,6 +24,8 @@
  */
 #define blocking /*routine may schedule()*/
 
+#include <linux/dalloc.h>
+
 /*
  * It's silly to have NR_OPEN bigger than NR_FILE, but I'll fix
  * that later. Anyway, now the file code is no longer dependent
@@ -104,13 +106,6 @@ extern int max_files, nr_files;
  */
 #define MS_MGC_VAL 0xC0ED0000	/* magic flag number to indicate "new" flags */
 #define MS_MGC_MSK 0xffff0000	/* magic flag number mask */
-
-/*
- * Public flags for namei()
- */
-#define NAM_PLAIN		0 /* Retrieve last component of pathname as is. */
-#define NAM_FOLLOW_LINK		2 /* If last component of path is a symlink, follow it */
-#define NAM_FOLLOW_TRAILSLASH	4 /* Follow last symlink only if trailed by slash. */
 
 /*
  * Note that read-only etc flags are inode-specific: setting some file-system
@@ -342,12 +337,9 @@ struct inode {
 	struct inode		*i_basket_prev;
 	struct dentry		*i_dentry;
 
-	short			i_ddir_count;
-	short			i_dent_count;
 	unsigned short		i_status;
 	unsigned short		i_reuse_count;
 
-	struct inode		*i_mount;
 	unsigned int		i_flags;
 	unsigned char		i_lock;
 	unsigned char		i_dirt;
@@ -503,8 +495,7 @@ struct super_block {
 	unsigned long		s_flags;
 	unsigned long		s_magic;
 	unsigned long		s_time;
-	struct inode		*s_covered;
-	struct inode		*s_mounted;
+	struct dentry		*s_root;
 	struct wait_queue	*s_wait;
 
 	struct inode		*s_ibasket;
@@ -553,16 +544,17 @@ struct file_operations {
 
 struct inode_operations {
 	struct file_operations * default_file_ops;
-	int (*create) (struct inode *,const char *,int,int,struct inode **);
-	int (*lookup) (struct inode *,const char *,int,struct inode **);
-	int (*link) (struct inode *,struct inode *,const char *,int);
-	int (*unlink) (struct inode *,const char *,int);
-	int (*symlink) (struct inode *,const char *,int,const char *);
-	int (*mkdir) (struct inode *,const char *,int,int);
-	int (*rmdir) (struct inode *,const char *,int);
-	int (*mknod) (struct inode *,const char *,int,int,int);
-	int (*rename) (struct inode *,const char *,int,struct inode *,const char *,int);
+	int (*create) (struct inode *,struct dentry *,int);
+	int (*lookup) (struct inode *,struct qstr *name,struct inode **);
+	int (*link) (struct inode *,struct inode *,struct dentry *);
+	int (*unlink) (struct inode *,struct dentry *);
+	int (*symlink) (struct inode *,struct dentry *,const char *);
+	int (*mkdir) (struct inode *,struct dentry *,int);
+	int (*rmdir) (struct inode *,struct dentry *);
+	int (*mknod) (struct inode *,struct dentry *,int,int);
+	int (*rename) (struct inode *,struct dentry *,struct inode *,struct dentry *);
 	int (*readlink) (struct inode *,char *,int);
+	struct dentry * (*follow_link) (struct inode *, struct dentry *);
 	int (*readpage) (struct inode *, struct page *);
 	int (*writepage) (struct inode *, struct page *);
 	int (*bmap) (struct inode *,int);
@@ -640,7 +632,7 @@ extern struct file_operations rdwr_pipe_fops;
 extern struct file_system_type *get_fs_type(const char *name);
 
 extern int fs_may_mount(kdev_t dev);
-extern int fs_may_umount(kdev_t dev, struct inode * mount_root);
+extern int fs_may_umount(kdev_t dev, struct dentry * root);
 extern int fs_may_remount_ro(kdev_t dev);
 
 extern struct file *inuse_filps;
@@ -689,14 +681,31 @@ extern int fsync_dev(kdev_t dev);
 extern void sync_supers(kdev_t dev);
 extern int bmap(struct inode * inode,int block);
 extern int notify_change(struct inode *, struct iattr *);
-extern int namei(int retr_mode, const char *pathname, struct inode **res_inode);
 extern int permission(struct inode * inode,int mask);
 extern int get_write_access(struct inode *inode);
 extern void put_write_access(struct inode *inode);
 extern int open_namei(const char * pathname, int flag, int mode,
-	struct inode ** res_inode, struct inode * base);
+	struct inode ** res_inode, struct dentry * base);
 extern int do_mknod(const char * filename, int mode, dev_t dev);
 extern int do_pipe(int *);
+
+/*
+ * Kernel pointers have redundant information, so we can use a
+ * scheme where we can return either an error code or a dentry
+ * pointer with the same return value.
+ *
+ * This should be a per-architecture thing, to allow different
+ * error and pointer decisions.
+ */
+#define ERR_PTR(err)	((void *)((long)(err)))
+#define PTR_ERR(ptr)	((long)(ptr))
+#define IS_ERR(ptr)	((unsigned long)(ptr) > (unsigned long)(-1000))
+
+extern struct dentry * lookup_dentry(const char *, struct dentry *, int);
+extern int __namei(const char *, struct inode **, int);
+
+#define namei(pathname, inode_p)	__namei(pathname, inode_p, 1)
+#define lnamei(pathname, inode_p)	__namei(pathname, inode_p, 0)
 
 #include <asm/semaphore.h>
 
@@ -728,51 +737,24 @@ extern inline void vfs_unlock(void)
 extern void _get_inode(struct inode * inode);
 extern blocking void __iput(struct inode * inode);
 
-/* This must not be called if the inode is not in use (i.e. given
- * back with iput(). The atomic inc assumes that the inode is
- * already in use, and just has to be incremented higher. 
- * Please do not directly manipulate i_count any more.
- * Use iget, iinc and iput.
- * You may test i_count for zero if you are aware that it
- * might change under you.
- */
-extern inline void iinc(struct inode * inode)
-{
-	atomic_inc(&inode->i_count);
-}
-
-/* The same, but the inode may not be in use. This must be called
- * with vfslock() held, and be asure that the inode argument is
- * valid (i.e. not out of cache). So the vfs_lock() must span the
- * retrieval method of the inode.
- */
-extern inline void iinc_zero(struct inode * inode)
-{
-	if(!atomic_read(&inode->i_count)) {
-		atomic_inc(&inode->i_count);
-		_get_inode(inode);
-	} else
-		atomic_inc(&inode->i_count);
-}
-
 extern blocking void _iput(struct inode * inode);
 extern inline blocking void iput(struct inode * inode)
 {
-	if(inode) {
+	if (inode) {
 		extern void wake_up_interruptible(struct wait_queue **q);
 
-		if(inode->i_pipe)
+		if (inode->i_pipe)
 			wake_up_interruptible(&inode->u.pipe_i.wait);
 
 		/* It does not matter if somebody re-increments it in between,
 		 * only the _last_ user needs to call _iput().
 		 */
-		if(atomic_dec_and_test(&inode->i_count) && inode->i_ddir_count <= 0)
+		if (atomic_dec_and_test(&inode->i_count))
 			_iput(inode);
 	}
 }
 
-extern blocking struct inode * __iget(struct super_block * sb, unsigned long nr, int crsmnt);
+extern blocking struct inode * iget(struct super_block * sb, unsigned long nr);
 extern blocking void _clear_inode(struct inode * inode, int external, int verbose);
 extern blocking inline void clear_inode(struct inode * inode)
 {
@@ -794,16 +776,6 @@ extern inline blocking struct inode * get_empty_inode(void)
  * It allows for better checking and less race conditions.
  */
 blocking struct inode * get_empty_inode_hashed(dev_t i_dev, unsigned long i_ino);
-
-extern blocking int _free_ibasket(struct super_block * sb);
-extern inline blocking int free_ibasket(struct super_block * sb)
-{
-	int res;
-	vfs_lock();
-	res = _free_ibasket(sb);
-	vfs_unlock();
-	return res;
-}
 
 extern void insert_inode_hash(struct inode *);
 extern blocking struct inode * get_pipe_inode(void);
@@ -871,12 +843,6 @@ extern int dcache_lookup(struct inode *, const char *, int, unsigned long *);
 
 extern int inode_change_ok(struct inode *, struct iattr *);
 extern void inode_setattr(struct inode *, struct iattr *);
-
-extern inline blocking 
-struct inode * iget(struct super_block * sb, unsigned long nr)
-{
-	return __iget(sb, nr, 1);
-}
 
 /* kludge to get SCSI modules working */
 #include <linux/minix_fs.h>

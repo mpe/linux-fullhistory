@@ -14,7 +14,7 @@
 #include <linux/stat.h>
 
 static int proc_readfd(struct inode *, struct file *, void *, filldir_t);
-static int proc_lookupfd(struct inode *,const char *,int,struct inode **);
+static int proc_lookupfd(struct inode *,struct qstr *,struct inode **);
 
 static struct file_operations proc_fd_operations = {
 	NULL,			/* lseek - default */
@@ -44,6 +44,7 @@ struct inode_operations proc_fd_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -51,12 +52,13 @@ struct inode_operations proc_fd_inode_operations = {
 	NULL			/* permission */
 };
 
-static int proc_lookupfd(struct inode * dir, const char * name, int len,
-	struct inode ** result)
+static int proc_lookupfd(struct inode * dir, struct qstr *str, struct inode ** result)
 {
 	unsigned int ino, pid, fd, c;
 	struct task_struct * p;
 	struct super_block * sb;
+	const char *name;
+	int len;
 
 	*result = NULL;
 	ino = dir->i_ino;
@@ -65,25 +67,12 @@ static int proc_lookupfd(struct inode * dir, const char * name, int len,
 	if (!dir)
 		return -ENOENT;
 	sb = dir->i_sb;
-	if (!pid || ino != PROC_PID_FD || !S_ISDIR(dir->i_mode)) {
-		iput(dir);
+	if (!pid || ino != PROC_PID_FD || !S_ISDIR(dir->i_mode))
 		return -ENOENT;
-	}
-	if (!len || (name[0] == '.' && (len == 1 ||
-	    (name[1] == '.' && len == 2)))) {
-		if (len < 2) {
-			*result = dir;
-			return 0;
-		}
-		if (!(*result = proc_get_inode(sb, (pid << 16)+PROC_PID_INO, &proc_pid))) {
-			iput(dir);
-			return -ENOENT;
-		}
-		iput(dir);
-		return 0;
-	}
-	iput(dir);
+
 	fd = 0;
+	len = str->len;
+	name = str->name;
 	while (len-- > 0) {
 		c = *name - '0';
 		name++;

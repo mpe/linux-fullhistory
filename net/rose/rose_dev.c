@@ -1,5 +1,5 @@
 /*
- *	ROSE release 002
+ *	ROSE release 003
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -101,7 +101,7 @@ static int rose_rebuild_header(struct sk_buff *skb)
 	unsigned char *bp = (unsigned char *)skb->data;
 	struct sk_buff *skbn;
 
-	if (!arp_find(bp + 7, skb)) {
+	if (arp_find(bp + 7, skb)) {
 		kfree_skb(skb, FREE_WRITE);
 		return 1;
 	}

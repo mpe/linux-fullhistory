@@ -628,7 +628,10 @@ __initfunc(int psaux_init(void))
 		poll_aux_status_nosleep();
 #endif /* INITIALIZE_DEVICE */
 		outb_p(KBD_CCMD_MOUSE_DISABLE, KBD_CNTL_REG); /* Disable Aux device */
-		aux_write_dev_nosleep(AUX_INTS_OFF);	    /* Disable controller interrupts */
+		poll_aux_status_nosleep();
+		outb_p(KBD_CCMD_WRITE_MODE, KBD_CNTL_REG);
+		poll_aux_status_nosleep();
+		outb_p(AUX_INTS_OFF, KBD_DATA_REG);                
 	}
 	return 0;
 }

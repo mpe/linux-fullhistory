@@ -1,8 +1,5 @@
 /*
- *	LAPB release 001
- *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
+ *	LAPB release 002
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -14,6 +11,7 @@
  *
  *	History
  *	LAPB 001	Jonathan Naylor	Started Coding
+ *	LAPB 002	Jonathan Naylor	New timer architecture.
  */
  
 #include <linux/config.h>
@@ -63,8 +61,7 @@ static void lapb_remove_cb(lapb_cb *lapb)
 	lapb_cb *s;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_flags(flags); cli();
 
 	if ((s = lapb_list) == lapb) {
 		lapb_list = s->next;
@@ -92,8 +89,7 @@ static void lapb_insert_cb(lapb_cb *lapb)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_flags(flags); cli();
 
 	lapb->next = lapb_list;
 	lapb_list  = lapb;
@@ -130,11 +126,11 @@ static lapb_cb *lapb_create_cb(void)
 
 	memset(lapb, 0x00, sizeof(*lapb));
 
-	skb_queue_head_init(&lapb->input_queue);
 	skb_queue_head_init(&lapb->write_queue);
 	skb_queue_head_init(&lapb->ack_queue);
 
-	init_timer(&lapb->timer);
+	init_timer(&lapb->t1timer);
+	init_timer(&lapb->t2timer);
 
 	lapb->t1      = LAPB_DEFAULT_T1;
 	lapb->t2      = LAPB_DEFAULT_T2;
@@ -161,9 +157,7 @@ int lapb_register(void *token, struct lapb_register_struct *callbacks)
 
 	lapb_insert_cb(lapb);
 
-	lapb->t1timer = lapb->t1;
-
-	lapb_set_timer(lapb);
+	lapb_start_t1timer(lapb);
 
 	return LAPB_OK;
 }
@@ -175,7 +169,8 @@ int lapb_unregister(void *token)
 	if ((lapb = lapb_tokentostruct(token)) == NULL)
 		return LAPB_BADTOKEN;
 
-	del_timer(&lapb->timer);
+	lapb_stop_t1timer(lapb);
+	lapb_stop_t2timer(lapb);
 
 	lapb_clear_queues(lapb);
 
@@ -193,15 +188,23 @@ int lapb_getparms(void *token, struct lapb_parms_struct *parms)
 	if ((lapb = lapb_tokentostruct(token)) == NULL)
 		return LAPB_BADTOKEN;
 
-	parms->t1      = lapb->t1;
-	parms->t1timer = lapb->t1timer;
-	parms->t2      = lapb->t2;
-	parms->t2timer = lapb->t2timer;
+	parms->t1      = lapb->t1 / HZ;
+	parms->t2      = lapb->t2 / HZ;
 	parms->n2      = lapb->n2;
 	parms->n2count = lapb->n2count;
 	parms->state   = lapb->state;
 	parms->window  = lapb->window;
 	parms->mode    = lapb->mode;
+
+	if (lapb->t1timer.prev == NULL && lapb->t1timer.next == NULL)
+		parms->t1timer = 0;
+	else
+		parms->t1timer = (lapb->t1timer.expires - jiffies) / HZ;
+
+	if (lapb->t2timer.prev == NULL && lapb->t2timer.next == NULL)
+		parms->t2timer = 0;
+	else
+		parms->t2timer = (lapb->t2timer.expires - jiffies) / HZ;
 
 	return LAPB_OK;
 }
@@ -235,8 +238,8 @@ int lapb_setparms(void *token, struct lapb_parms_struct *parms)
 		lapb->window  = parms->window;
 	}
 
-	lapb->t1    = parms->t1;
-	lapb->t2    = parms->t2;
+	lapb->t1    = parms->t1 * HZ;
+	lapb->t2    = parms->t2 * HZ;
 	lapb->n2    = parms->n2;
 
 	return LAPB_OK;
@@ -287,8 +290,8 @@ int lapb_disconnect_request(void *token)
 			printk(KERN_DEBUG "lapb: (%p) S1 -> S0\n", lapb->token);
 #endif
 			lapb_send_control(lapb, LAPB_DISC, LAPB_POLLON, LAPB_COMMAND);
-			lapb->state   = LAPB_STATE_0;
-			lapb->t1timer = lapb->t1;
+			lapb->state = LAPB_STATE_0;
+			lapb_start_t1timer(lapb);
 			return LAPB_NOTCONNECTED;
 
 		case LAPB_STATE_2:
@@ -298,9 +301,9 @@ int lapb_disconnect_request(void *token)
 	lapb_clear_queues(lapb);
 	lapb->n2count = 0;
 	lapb_send_control(lapb, LAPB_DISC, LAPB_POLLON, LAPB_COMMAND);
-	lapb->t1timer = lapb->t1;
-	lapb->t2timer = 0;
-	lapb->state   = LAPB_STATE_2;
+	lapb_start_t1timer(lapb);
+	lapb_stop_t2timer(lapb);
+	lapb->state = LAPB_STATE_2;
 
 #if LAPB_DEBUG > 1
 	printk(KERN_DEBUG "lapb: (%p) S3 DISC(1)\n", lapb->token);
@@ -336,7 +339,7 @@ int lapb_data_received(void *token, struct sk_buff *skb)
 	if ((lapb = lapb_tokentostruct(token)) == NULL)
 		return LAPB_BADTOKEN;
 
-	skb_queue_tail(&lapb->input_queue, skb);
+	lapb_data_input(lapb, skb);
 
 	return LAPB_OK;
 }

@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 036
+ *	AX.25 release 037
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -26,6 +26,7 @@
  *					AX.25 I-Frames. Added PACLEN parameter.
  *			Joerg(DL1BKE)	Fixed a problem with buffer allocation
  *					for fragments.
+ *	AX.25 037	Jonathan(G4KLX)	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -52,7 +53,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 
-int ax25_send_frame(struct sk_buff *skb, int paclen, ax25_address *src, ax25_address *dest, ax25_digi *digi, struct device *dev)
+ax25_cb *ax25_send_frame(struct sk_buff *skb, int paclen, ax25_address *src, ax25_address *dest, ax25_digi *digi, struct device *dev)
 {
 	ax25_dev *ax25_dev;
 	ax25_cb *ax25;
@@ -65,15 +66,14 @@ int ax25_send_frame(struct sk_buff *skb, int paclen, ax25_address *src, ax25_add
 	 */
 	if ((ax25 = ax25_find_cb(src, dest, digi, dev)) != NULL) {
 		ax25_output(ax25, paclen, skb);
-		ax25->idletimer = ax25->idle;
-		return 1;		/* It already existed */
+		return ax25;		/* It already existed */
 	}
 
 	if ((ax25_dev = ax25_dev_ax25dev(dev)) == NULL)
-		return 0;
+		return NULL;
 
 	if ((ax25 = ax25_create_cb()) == NULL)
-		return 0;
+		return NULL;
 
 	ax25_fillin_cb(ax25, ax25_dev);
 
@@ -83,11 +83,9 @@ int ax25_send_frame(struct sk_buff *skb, int paclen, ax25_address *src, ax25_add
 	if (digi != NULL) {
 		if ((ax25->digipeat = kmalloc(sizeof(ax25_digi), GFP_ATOMIC)) == NULL) {
 			ax25_free_cb(ax25);
-			return 0;
+			return NULL;
 		}
 		*ax25->digipeat = *digi;
-	} else {
-		ax25_rt_build_path(ax25, dest, dev);
 	}
 
 	switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
@@ -106,19 +104,15 @@ int ax25_send_frame(struct sk_buff *skb, int paclen, ax25_address *src, ax25_add
 #endif
 	}
 
-	/* idle timeouts only for mode vc connections */
-
-	ax25->idletimer = ax25->idle;
-
 	ax25_insert_socket(ax25);
 
 	ax25->state = AX25_STATE_1;
 
-	ax25_set_timer(ax25);
+	ax25_start_heartbeat(ax25);
 
 	ax25_output(ax25, paclen, skb);
 
-	return 1;			/* We had to create it */
+	return ax25;			/* We had to create it */
 }
 
 /*
@@ -195,10 +189,8 @@ void ax25_output(ax25_cb *ax25, int paclen, struct sk_buff *skb)
 	}
 
 	if (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL] == AX25_PROTO_STD_SIMPLEX ||
-	    ax25->ax25_dev->values[AX25_VALUES_PROTOCOL] == AX25_PROTO_STD_DUPLEX) {
-		if (ax25->state == AX25_STATE_3 || ax25->state == AX25_STATE_4)
-			ax25_kick(ax25);
-	}
+	    ax25->ax25_dev->values[AX25_VALUES_PROTOCOL] == AX25_PROTO_STD_DUPLEX)
+		ax25_kick(ax25);
 }
 
 /* 
@@ -228,6 +220,8 @@ static void ax25_send_iframe(ax25_cb *ax25, struct sk_buff *skb, int poll_bit)
 		frame[1] |= (ax25->vr << 1);
 	}
 
+	ax25_start_idletimer(ax25);
+
 	ax25_transmit_buffer(ax25, skb, AX25_COMMAND);
 }
 
@@ -237,76 +231,80 @@ void ax25_kick(ax25_cb *ax25)
 	int last = 1;
 	unsigned short start, end, next;
 
-	del_timer(&ax25->timer);
+	if (ax25->state != AX25_STATE_3 && ax25->state != AX25_STATE_4)
+		return;
+
+	if (ax25->condition & AX25_COND_PEER_RX_BUSY)
+		return;
+
+	if (skb_peek(&ax25->write_queue) == NULL)
+		return;
 
 	start = (skb_peek(&ax25->ack_queue) == NULL) ? ax25->va : ax25->vs;
 	end   = (ax25->va + ax25->window) % ax25->modulus;
 
-	if (!(ax25->condition & AX25_COND_PEER_RX_BUSY) &&
-	    start != end                                &&
-	    skb_peek(&ax25->write_queue) != NULL) {
+	if (start == end)
+		return;
 
-		ax25->vs = start;
+	ax25->vs = start;
+
+	/*
+	 * Transmit data until either we're out of data to send or
+	 * the window is full. Send a poll on the final I frame if
+	 * the window is filled.
+	 */
+
+	/*
+	 * Dequeue the frame and copy it.
+	 */
+	skb  = skb_dequeue(&ax25->write_queue);
+
+	do {
+		if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
+			skb_queue_head(&ax25->write_queue, skb);
+			break;
+		}
+
+		if (skb->sk != NULL)
+			skb_set_owner_w(skbn, skb->sk);
+
+		next = (ax25->vs + 1) % ax25->modulus;
+		last = (next == end);
 
 		/*
-		 * Transmit data until either we're out of data to send or
-		 * the window is full. Send a poll on the final I frame if
-		 * the window is filled.
+		 * Transmit the frame copy.
+		 * bke 960114: do not set the Poll bit on the last frame
+		 * in DAMA mode.
 		 */
-
-		/*
-		 * Dequeue the frame and copy it.
-		 */
-		skb  = skb_dequeue(&ax25->write_queue);
-
-		do {
-			if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
-				skb_queue_head(&ax25->write_queue, skb);
+		switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
+			case AX25_PROTO_STD_SIMPLEX:
+			case AX25_PROTO_STD_DUPLEX:
+				ax25_send_iframe(ax25, skbn, (last) ? AX25_POLLON : AX25_POLLOFF);
 				break;
-			}
-
-			if (skb->sk != NULL)
-				skb_set_owner_w(skbn, skb->sk);
-
-			next = (ax25->vs + 1) % ax25->modulus;
-			last = (next == end);
-
-			/*
-			 * Transmit the frame copy.
-			 * bke 960114: do not set the Poll bit on the last frame
-			 * in DAMA mode.
-			 */
-			switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
-				case AX25_PROTO_STD_SIMPLEX:
-				case AX25_PROTO_STD_DUPLEX:
-					ax25_send_iframe(ax25, skbn, (last) ? AX25_POLLON : AX25_POLLOFF);
-					break;
 
 #ifdef CONFIG_AX25_DAMA_SLAVE
-				case AX25_PROTO_DAMA_SLAVE:
-					ax25_send_iframe(ax25, skbn, AX25_POLLOFF);
-					break;
+			case AX25_PROTO_DAMA_SLAVE:
+				ax25_send_iframe(ax25, skbn, AX25_POLLOFF);
+				break;
 #endif
-			}
-
-			ax25->vs = next;
-
-			/*
-			 * Requeue the original data frame.
-			 */
-			skb_queue_tail(&ax25->ack_queue, skb);
-
-		} while (!last && (skb = skb_dequeue(&ax25->write_queue)) != NULL);
-
-		ax25->condition &= ~AX25_COND_ACK_PENDING;
-
-		if (ax25->t1timer == 0) {
-			ax25->t3timer = 0;
-			ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
 		}
-	}
 
-	ax25_set_timer(ax25);
+		ax25->vs = next;
+
+		/*
+		 * Requeue the original data frame.
+		 */
+		skb_queue_tail(&ax25->ack_queue, skb);
+
+	} while (!last && (skb = skb_dequeue(&ax25->write_queue)) != NULL);
+
+	ax25->condition &= ~AX25_COND_ACK_PENDING;
+
+	if (!ax25_t1timer_running(ax25)) {
+		ax25_stop_t3timer(ax25);
+		ax25_calculate_t1(ax25);
+		ax25_start_t1timer(ax25);
+	}
 }
 
 void ax25_transmit_buffer(ax25_cb *ax25, struct sk_buff *skb, int type)
@@ -316,14 +314,7 @@ void ax25_transmit_buffer(ax25_cb *ax25, struct sk_buff *skb, int type)
 	int headroom;
 
 	if (ax25->ax25_dev == NULL) {
-		if (ax25->sk != NULL) {
-			ax25->sk->state     = TCP_CLOSE;
-			ax25->sk->err       = ENETUNREACH;
-			ax25->sk->shutdown |= SEND_SHUTDOWN;
-			if (!ax25->sk->dead)
-				ax25->sk->state_change(ax25->sk);
-			ax25->sk->dead      = 1;
-		}
+		ax25_disconnect(ax25, ENETUNREACH);
 		return;
 	}
 
@@ -381,12 +372,13 @@ void ax25_check_iframes_acked(ax25_cb *ax25, unsigned short nr)
 	if (ax25->vs == nr) {
 		ax25_frames_acked(ax25, nr);
 		ax25_calculate_rtt(ax25);
-		ax25->t1timer = 0;
-		ax25->t3timer = ax25->t3;
+		ax25_stop_t1timer(ax25);
+		ax25_start_t3timer(ax25);
 	} else {
 		if (ax25->va != nr) {
 			ax25_frames_acked(ax25, nr);
-			ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
+			ax25_calculate_t1(ax25);
+			ax25_start_t1timer(ax25);
 		}
 	}
 }

@@ -53,6 +53,5 @@ int proc_arbitrary_lookup(struct inode * dir, const char * name,
 			error = 0;
 	}
 done:
-	iput(dir);
 	return error;
 }

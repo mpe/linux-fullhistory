@@ -566,12 +566,12 @@ start_up:
 	old_bh = affs_find_entry(old_dir,old_name,old_len,&old_ino);
 	if (!old_bh)
 		goto end_rename;
-	old_inode = __iget(old_dir->i_sb,old_ino,0);
+	old_inode = __iget(old_dir->i_sb,old_ino);
 	if (!old_inode)
 		goto end_rename;
 	new_bh = affs_find_entry(new_dir,new_name,new_len,&new_ino);
 	if (new_bh) {
-		new_inode = __iget(new_dir->i_sb,new_ino,0);
+		new_inode = __iget(new_dir->i_sb,new_ino);
 		if (!new_inode) {		/* What does this mean? */
 			affs_brelse(new_bh);
 			new_bh = NULL;

@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 036
+ *	AX.25 release 037
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -105,10 +105,14 @@ int ax25_encapsulate(struct sk_buff *skb, struct device *dev, unsigned short typ
 int ax25_rebuild_header(struct sk_buff *skb)
 {
 	struct sk_buff *ourskb;
-	int mode;
 	unsigned char *bp  = skb->data;
 	struct device *dev = skb->dev;
+	ax25_address *src, *dst;
+	ax25_route *route;
 	ax25_dev *ax25_dev;
+
+	dst = (ax25_address *)(bp + 1);
+	src = (ax25_address *)(bp + 8);
 
   	if (arp_find(bp + 1, skb))
   		return 1;
@@ -116,9 +120,10 @@ int ax25_rebuild_header(struct sk_buff *skb)
 	if ((ax25_dev = ax25_dev_ax25dev(dev)) == NULL)
 		return 1;
 
+	route = ax25_rt_find_route(dst, dev);
+
 	if (bp[16] == AX25_P_IP) {
-		mode = ax25_ip_mode_get((ax25_address *)(bp + 1), dev);
-		if (mode == 'V' || (mode == ' ' && ax25_dev->values[AX25_VALUES_IPDEFMODE])) {
+		if (route->ip_mode == 'V' || (route->ip_mode == ' ' && ax25_dev->values[AX25_VALUES_IPDEFMODE])) {
 			/*
 			 *	We copy the buffer and release the original thereby
 			 *	keeping it straight
@@ -146,7 +151,7 @@ int ax25_rebuild_header(struct sk_buff *skb)
 
 			skb_pull(ourskb, AX25_HEADER_LEN - 1);	/* Keep PID */
 
-			ax25_send_frame(ourskb, ax25_dev->values[AX25_VALUES_PACLEN], (ax25_address *)(bp + 8), (ax25_address *)(bp + 1), NULL, dev);
+			ax25_send_frame(ourskb, ax25_dev->values[AX25_VALUES_PACLEN], src, dst, route->digipeat, dev);
 
 			return 1;
 		}
@@ -160,15 +165,19 @@ int ax25_rebuild_header(struct sk_buff *skb)
   	bp[14] |= AX25_EBIT;
   	bp[14] |= AX25_SSSID_SPARE;
 
-	if ((ourskb = ax25_dg_build_path(skb, (ax25_address *)(bp + 1), dev)) == NULL) {
-		kfree_skb(skb, FREE_WRITE);
-		return 1;
+	if (route->digipeat != NULL) {
+		if ((ourskb = ax25_rt_build_path(skb, src, dst, route->digipeat)) == NULL) {
+			kfree_skb(skb, FREE_WRITE);
+			return 1;
+		}
+
+		skb = ourskb;
 	}
 
-	ourskb->dev      = dev;
-	ourskb->priority = SOPRI_NORMAL;
+	skb->dev      = dev;
+	skb->priority = SOPRI_NORMAL;
 
-	ax25_queue_xmit(ourskb);
+	ax25_queue_xmit(skb);
 
   	return 1;
 }

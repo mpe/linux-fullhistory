@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.49 1997/06/09 13:27:35 freitag Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.51 1997/07/04 23:35:02 freitag Exp $
  *
  *		IPv4 specific functions
  *
@@ -701,6 +701,12 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp)
 	}
 
 	/* FIXME: What about the IP layer options size here? */
+	/* FIXME: add a timeout here, to cope with broken devices that
+		  drop all DF=1 packets. Do some more sanity checking 
+		  here to prevent DOS attacks?
+		  This code should kick the tcp_output routine to
+		  retransmit a packet immediately because we know that
+		  the last packet has been dropped. -AK */
 	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED) {
 		if (sk->ip_pmtudisc != IP_PMTUDISC_DONT) {
 			int new_mtu = sk->dst_cache->pmtu - sizeof(struct iphdr) - tp->tcp_header_len;

@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.7 1997/05/20 07:58:56 jj Exp $
+/*  $Id: setup.c,v 1.9 1997/07/05 09:52:29 davem Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -62,7 +62,6 @@ unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end)
  */
 
 extern unsigned long sparc64_ttable_tl0;
-extern void breakpoint(void);
 #if CONFIG_SUN_CONSOLE
 extern void console_restore_palette(void);
 #endif
@@ -108,23 +107,13 @@ static int console_fb = 0;
 #endif
 static unsigned long memory_size = 0;
 
+/* XXX Implement this at some point... */
 void kernel_enter_debugger(void)
 {
-#if 0
-	if (boot_flags & BOOTME_KGDB) {
-		printk("KGDB: Entered\n");
-		breakpoint();
-	}
-#endif
 }
 
 int obp_system_intr(void)
 {
-	if (boot_flags & BOOTME_KGDB) {
-		printk("KGDB: system interrupted\n");
-		breakpoint();
-		return 1;
-	}
 	if (boot_flags & BOOTME_DEBUG) {
 		printk("OBP: system interrupted\n");
 		prom_halt();
@@ -148,7 +137,7 @@ __initfunc(static void process_switch(char c))
 		break;
 	case 'h':
 		prom_printf("boot_flags_init: Halt!\n");
-		halt();
+		prom_halt();
 		break;
 	default:
 		printk("Unknown boot switch (-%c)\n", c);
@@ -266,23 +255,9 @@ __initfunc(void setup_arch(char **cmdline_p,
 	*cmdline_p = prom_getbootargs();
 	strcpy(saved_command_line, *cmdline_p);
 
-	prom_printf("BOOT: args[%s] saved[%s]\n", *cmdline_p, saved_command_line);
-
 	printk("ARCH: SUN4U\n");
 
 	boot_flags_init(*cmdline_p);
-#if 0	
-	if((boot_flags&BOOTME_DEBUG) && (linux_dbvec!=0) && 
-	   ((*(short *)linux_dbvec) != -1)) {
-		printk("Booted under KADB. Syncing trap table.\n");
-		(*(linux_dbvec->teach_debugger))();
-	}
-	if((boot_flags & BOOTME_KGDB)) {
-		set_debug_traps();
-		prom_printf ("Breakpoint!\n");
-		breakpoint();
-	}
-#endif	
 
 	idprom_init();
 	total = prom_probe_memory();
@@ -424,7 +399,11 @@ extern char *mmu_info(void);
 
 int get_cpuinfo(char *buffer)
 {
-	int cpuid=get_cpuid();
+#ifndef __SMP__
+	int cpuid=0;
+#else
+#error SMP not supported on sparc64 yet
+#endif
 
 	return sprintf(buffer, "cpu\t\t: %s\n"
             "fpu\t\t: %s\n"

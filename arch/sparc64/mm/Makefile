@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.1 1996/12/26 10:24:22 davem Exp $
+# $Id: Makefile,v 1.3 1997/06/27 14:53:38 jj Exp $
 # Makefile for the linux Sparc64-specific parts of the memory manager.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -7,7 +7,13 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
+.S.s:
+	$(CPP) -D__ASSEMBLY__ -ansi $< -o $*.s
+
+.S.o:
+	$(CC) -D__ASSEMBLY__ -ansi -c $< -o $*.o
+
 O_TARGET := mm.o
-O_OBJS   := fault.o init.o generic.o asyncd.o extable.o
+O_OBJS   := ultra.o fault.o init.o generic.o asyncd.o extable.o modutil.o
 
 include $(TOPDIR)/Rules.make

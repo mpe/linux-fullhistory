@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.16 1997/06/16 05:37:41 davem Exp $
+/* $Id: systbls.S,v 1.21 1997/07/05 07:09:17 davem Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -53,15 +53,15 @@ sys_call_table32:
 	.xword sys32_quotactl, sys_nis_syscall, sys32_mount, sys32_ustat, sys_nis_syscall
 /*170*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_getdents
 	.xword sys_setsid, sys_fchdir, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
-/*180*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_sigpending, sys32_no_modules
+/*180*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_sigpending, sys32_query_module
 	.xword sys_setpgid, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_newuname
-/*190*/	.xword sys32_no_modules, sys32_personality, sys_prof, sys_break, sys_lock
+/*190*/	.xword sys32_init_module, sys32_personality, sys_prof, sys_break, sys_lock
 	.xword sys_mpx, sys_ulimit, sys_getppid, sparc32_sigaction, sys_sgetmask
 /*200*/	.xword sys_ssetmask, sys_sigsuspend, sys32_newlstat, sys32_uselib, old32_readdir
 	.xword sys_nis_syscall, sys32_socketcall, sys32_syslog, sys32_olduname, sys_nis_syscall
 /*210*/	.xword sys_idle, sys_nis_syscall, sys32_waitpid, sys32_swapoff, sys32_sysinfo
 	.xword sys32_ipc, sys_sigreturn, sys_clone, sys_nis_syscall, sys32_adjtimex
-/*220*/	.xword sys32_sigprocmask, sys32_no_modules, sys32_no_modules, sys32_no_modules, sys_getpgid
+/*220*/	.xword sys32_sigprocmask, sys32_create_module, sys32_delete_module, sys32_get_kernel_syms, sys_getpgid
 	.xword sys32_bdflush, sys32_sysfs, sys_nis_syscall, sys_setfsuid, sys_setfsgid
 /*230*/	.xword sys32_llseek, sys32_time, sys_nis_syscall, sys_stime, sys_nis_syscall
 	.xword sys_nis_syscall, sys32_llseek, sys32_mlock, sys32_munlock, sys_mlockall
@@ -111,7 +111,7 @@ sys_call_table:
 	.xword sys_quotactl, sys_nis_syscall, sys_mount, sys_ustat, sys_nis_syscall
 /*170*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getdents
 	.xword sys_setsid, sys_fchdir, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
-/*180*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_sigpending, sys_nis_syscall
+/*180*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_sigpending, sys_query_module
 	.xword sys_setpgid, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_newuname
 /*190*/	.xword sys_init_module, sys_personality, sys_prof, sys_break, sys_lock
 	.xword sys_mpx, sys_ulimit, sys_getppid, sparc_sigaction, sys_sgetmask
@@ -130,72 +130,72 @@ sys_call_table:
 
 	/* Now the 32-bit SunOS syscall table. */
 
-	.align 4
+	.align 8
 	.globl sunos_sys_table
 sunos_sys_table:
 /*0*/	.xword sunos_indir, sys_exit, sys_fork
 	.xword sunos_read, sunos_write, sunos_open
-	.xword sys_close, sunos_wait4, sys_creat
-	.xword sys_link, sys_unlink, sunos_execv
-	.xword sys_chdir, sunos_nosys, sys_mknod
-	.xword sys_chmod, sys_chown, sunos_brk
-	.xword sunos_nosys, sys_lseek, sunos_getpid
+	.xword sys_close, sunos_wait4, sys32_creat
+	.xword sys32_link, sys32_unlink, sunos_execv
+	.xword sys32_chdir, sunos_nosys, sys32_mknod
+	.xword sys32_chmod, sys32_chown, sunos_brk
+	.xword sunos_nosys, sys32_lseek, sunos_getpid
 	.xword sunos_nosys, sunos_nosys, sunos_nosys
 	.xword sunos_getuid, sunos_nosys, sys_ptrace
 	.xword sunos_nosys, sunos_nosys, sunos_nosys
 	.xword sunos_nosys, sunos_nosys, sunos_nosys
-	.xword sys_access, sunos_nosys, sunos_nosys
-	.xword sys_sync, sys_kill, sys_newstat
-	.xword sunos_nosys, sys_newlstat, sys_dup
+	.xword sys32_access, sunos_nosys, sunos_nosys
+	.xword sys_sync, sys_kill, sys32_newstat
+	.xword sunos_nosys, sys32_newlstat, sys_dup
 	.xword sys_pipe, sunos_nosys, sys_profil
 	.xword sunos_nosys, sunos_nosys, sunos_getgid
 	.xword sunos_nosys, sunos_nosys
-/*50*/	.xword sunos_nosys, sys_acct, sunos_nosys
-	.xword sunos_mctl, sunos_ioctl, sys_reboot
-	.xword sunos_nosys, sys_symlink, sys_readlink
-	.xword sys32_execve, sys_umask, sys_chroot
-	.xword sys_newfstat, sunos_nosys, sys_getpagesize
-	.xword sys_msync, sys_vfork, sunos_nosys
+/*50*/	.xword sunos_nosys, sys32_acct, sunos_nosys
+	.xword sunos_mctl, sunos_ioctl, sys32_reboot
+	.xword sunos_nosys, sys32_symlink, sys32_readlink
+	.xword sys32_execve, sys_umask, sys32_chroot
+	.xword sys32_newfstat, sunos_nosys, sys_getpagesize
+	.xword sys32_msync, sys_vfork, sunos_nosys
 	.xword sunos_nosys, sunos_sbrk, sunos_sstk
-	.xword sunos_mmap, sunos_vadvise, sys_munmap
-	.xword sys_mprotect, sunos_madvise, sys_vhangup
-	.xword sunos_nosys, sunos_mincore, sys_getgroups
-	.xword sys_setgroups, sys_getpgrp, sunos_setpgrp
-	.xword sys_setitimer, sunos_nosys, sys_swapon
-	.xword sys_getitimer, sys_gethostname, sys_sethostname
+	.xword sunos_mmap, sunos_vadvise, sys32_munmap
+	.xword sys32_mprotect, sunos_madvise, sys_vhangup
+	.xword sunos_nosys, sunos_mincore, sys32_getgroups
+	.xword sys32_setgroups, sys_getpgrp, sunos_setpgrp
+	.xword sys32_setitimer, sunos_nosys, sys32_swapon
+	.xword sys32_getitimer, sys32_gethostname, sys32_sethostname
 	.xword sunos_getdtablesize, sys_dup2, sunos_nop
-	.xword sys_fcntl, sunos_select, sunos_nop
+	.xword sys32_fcntl, sunos_select, sunos_nop
 	.xword sys_fsync, sys_setpriority, sys_socket
-	.xword sys_connect, sunos_accept
+	.xword sys32_connect, sunos_accept
 /*100*/	.xword sys_getpriority, sunos_send, sunos_recv
-	.xword sunos_nosys, sys_bind, sunos_setsockopt
+	.xword sunos_nosys, sys32_bind, sunos_setsockopt
 	.xword sys_listen, sunos_nosys, sunos_sigaction
 	.xword sunos_sigblock, sunos_sigsetmask, sys_sigpause
-	.xword sys_sigstack, sys_recvmsg, sys_sendmsg
-	.xword sunos_nosys, sys_gettimeofday, sys_getrusage
+	.xword sys32_sigstack, sys32_recvmsg, sys32_sendmsg
+	.xword sunos_nosys, sys_gettimeofday, sys32_getrusage
 	.xword sunos_getsockopt, sunos_nosys, sunos_readv
 	.xword sunos_writev, sys_settimeofday, sys_fchown
-	.xword sys_fchmod, sys_recvfrom, sys_setreuid
-	.xword sys_setregid, sys_rename, sys_truncate
-	.xword sys_ftruncate, sys_flock, sunos_nosys
-	.xword sys_sendto, sys_shutdown, sys_socketpair
-	.xword sys_mkdir, sys_rmdir, sys_utimes
-	.xword sys_sigreturn, sunos_nosys, sys_getpeername
-	.xword sunos_gethostid, sunos_nosys, sys_getrlimit
-	.xword sys_setrlimit, sunos_killpg, sunos_nosys
+	.xword sys_fchmod, sys32_recvfrom, sys32_setreuid
+	.xword sys_setregid, sys32_rename, sys32_truncate
+	.xword sys32_ftruncate, sys_flock, sunos_nosys
+	.xword sys32_sendto, sys_shutdown, sys_socketpair
+	.xword sys32_mkdir, sys32_rmdir, sys32_utimes
+	.xword sys_sigreturn, sunos_nosys, sys32_getpeername
+	.xword sunos_gethostid, sunos_nosys, sys32_getrlimit
+	.xword sys32_setrlimit, sunos_killpg, sunos_nosys
 	.xword sunos_nosys, sunos_nosys
-/*150*/	.xword sys_getsockname, sunos_nosys, sunos_nosys
-	.xword sunos_poll, sunos_nosys, sunos_nosys
-	.xword sunos_getdirentries, sys_statfs, sys_fstatfs
-	.xword sys_umount, sunos_nosys, sunos_nosys
-	.xword sunos_getdomainname, sys_setdomainname
-	.xword sunos_nosys, sys_quotactl, sunos_nosys
-	.xword sunos_mount, sys_ustat, sunos_semsys
+/*150*/	.xword sys32_getsockname, sunos_nosys, sunos_nosys
+	.xword sys32_poll, sunos_nosys, sunos_nosys
+	.xword sunos_getdirentries, sys32_statfs, sys32_fstatfs
+	.xword sys32_umount, sunos_nosys, sunos_nosys
+	.xword sunos_getdomainname, sys32_setdomainname
+	.xword sunos_nosys, sys32_quotactl, sunos_nosys
+	.xword sunos_mount, sys32_ustat, sunos_semsys
 	.xword sunos_nosys, sunos_shmsys, sunos_audit
 	.xword sunos_nosys, sunos_getdents, sys_setsid
 	.xword sys_fchdir, sunos_nosys, sunos_nosys
 	.xword sunos_nosys, sunos_nosys, sunos_nosys
-	.xword sunos_nosys, sys_sigpending, sunos_nosys
+	.xword sunos_nosys, sys32_sigpending, sunos_nosys
 	.xword sys_setpgid, sunos_pathconf, sunos_fpathconf
 	.xword sunos_sysconf, sunos_uname, sunos_nosys
 	.xword sunos_nosys, sunos_nosys, sunos_nosys

@@ -1,5 +1,5 @@
 /*
- *	ROSE release 002
+ *	ROSE release 003
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -17,6 +17,8 @@
  *
  *	History
  *	ROSE 001	Jonathan(G4KLX)	Cloned from nr_in.c
+ *	ROSE 002	Jonathan(G4KLX)	Return cause and diagnostic codes from Clear Requests.
+ *	ROSE 003	Jonathan(G4KLX)	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -47,6 +49,8 @@
 static int rose_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
 {
 	struct sk_buff *skbo, *skbn = skb;
+
+	rose_start_idletimer(sk);
 
 	if (more) {
 		sk->protinfo.rose->fraglen += skb->len;
@@ -89,8 +93,9 @@ static int rose_state1_machine(struct sock *sk, struct sk_buff *skb, int framety
 	switch (frametype) {
 
 		case ROSE_CALL_ACCEPTED:
+			rose_stop_timer(sk);
+			rose_start_idletimer(sk);
 			sk->protinfo.rose->condition = 0x00;
-			sk->protinfo.rose->timer     = 0;
 			sk->protinfo.rose->vs        = 0;
 			sk->protinfo.rose->va        = 0;
 			sk->protinfo.rose->vr        = 0;
@@ -102,15 +107,9 @@ static int rose_state1_machine(struct sock *sk, struct sk_buff *skb, int framety
 			break;
 
 		case ROSE_CLEAR_REQUEST:
-			rose_clear_queues(sk);
 			rose_write_internal(sk, ROSE_CLEAR_CONFIRMATION);
-			sk->protinfo.rose->state = ROSE_STATE_0;
-			sk->state                = TCP_CLOSE;
-			sk->err                  = ECONNREFUSED;
-			sk->shutdown            |= SEND_SHUTDOWN;
-			if (!sk->dead)
-				sk->state_change(sk);
-			sk->dead                 = 1;
+			rose_disconnect(sk, ECONNREFUSED, skb->data[3], skb->data[4]);
+			sk->protinfo.rose->neighbour->use--;
 			break;
 
 		default:
@@ -131,15 +130,13 @@ static int rose_state2_machine(struct sock *sk, struct sk_buff *skb, int framety
 
 		case ROSE_CLEAR_REQUEST:
 			rose_write_internal(sk, ROSE_CLEAR_CONFIRMATION);
+			rose_disconnect(sk, 0, skb->data[3], skb->data[4]);
+			sk->protinfo.rose->neighbour->use--;
+			break;
+
 		case ROSE_CLEAR_CONFIRMATION:
-			rose_clear_queues(sk);
-			sk->protinfo.rose->state = ROSE_STATE_0;
-			sk->state                = TCP_CLOSE;
-			sk->err                  = 0;
-			sk->shutdown            |= SEND_SHUTDOWN;
-			if (!sk->dead)
-				sk->state_change(sk);
-			sk->dead                 = 1;
+			rose_disconnect(sk, 0, -1, -1);
+			sk->protinfo.rose->neighbour->use--;
 			break;
 
 		default:
@@ -161,9 +158,10 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 	switch (frametype) {
 
 		case ROSE_RESET_REQUEST:
+			rose_stop_timer(sk);
+			rose_start_idletimer(sk);
 			rose_write_internal(sk, ROSE_RESET_CONFIRMATION);
 			sk->protinfo.rose->condition = 0x00;
-			sk->protinfo.rose->timer     = 0;
 			sk->protinfo.rose->vs        = 0;
 			sk->protinfo.rose->vr        = 0;
 			sk->protinfo.rose->va        = 0;
@@ -171,15 +169,9 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 			break;
 
 		case ROSE_CLEAR_REQUEST:
-			rose_clear_queues(sk);
 			rose_write_internal(sk, ROSE_CLEAR_CONFIRMATION);
-			sk->protinfo.rose->state = ROSE_STATE_0;
-			sk->state                = TCP_CLOSE;
-			sk->err                  = 0;
-			sk->shutdown            |= SEND_SHUTDOWN;
-			if (!sk->dead)
-				sk->state_change(sk);
-			sk->dead                 = 1;
+			rose_disconnect(sk, 0, skb->data[3], skb->data[4]);
+			sk->protinfo.rose->neighbour->use--;
 			break;
 
 		case ROSE_RR:
@@ -189,7 +181,6 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 			else
 				sk->protinfo.rose->condition &= ~ROSE_COND_PEER_RX_BUSY;
 			if (!rose_validate_nr(sk, nr)) {
-				rose_clear_queues(sk);
 				rose_write_internal(sk, ROSE_RESET_REQUEST);
 				sk->protinfo.rose->condition = 0x00;
 				sk->protinfo.rose->vs        = 0;
@@ -197,7 +188,8 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 				sk->protinfo.rose->va        = 0;
 				sk->protinfo.rose->vl        = 0;
 				sk->protinfo.rose->state     = ROSE_STATE_4;
-				sk->protinfo.rose->timer     = sk->protinfo.rose->t2;
+				rose_start_t2timer(sk);
+				rose_stop_idletimer(sk);
 			} else {
 				if (sk->protinfo.rose->condition & ROSE_COND_PEER_RX_BUSY) {
 					sk->protinfo.rose->va = nr;
@@ -210,7 +202,6 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 		case ROSE_DATA:	/* XXX */
 			sk->protinfo.rose->condition &= ~ROSE_COND_PEER_RX_BUSY;
 			if (!rose_validate_nr(sk, nr)) {
-				rose_clear_queues(sk);
 				rose_write_internal(sk, ROSE_RESET_REQUEST);
 				sk->protinfo.rose->condition = 0x00;
 				sk->protinfo.rose->vs        = 0;
@@ -218,7 +209,8 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 				sk->protinfo.rose->va        = 0;
 				sk->protinfo.rose->vl        = 0;
 				sk->protinfo.rose->state     = ROSE_STATE_4;
-				sk->protinfo.rose->timer     = sk->protinfo.rose->t2;
+				rose_start_t2timer(sk);
+				rose_stop_idletimer(sk);
 				break;
 			}
 			if (sk->protinfo.rose->condition & ROSE_COND_PEER_RX_BUSY) {
@@ -242,11 +234,11 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 			 */
 			if (((sk->protinfo.rose->vl + sysctl_rose_window_size) % ROSE_MODULUS) == sk->protinfo.rose->vr) {
 				sk->protinfo.rose->condition &= ~ROSE_COND_ACK_PENDING;
-				sk->protinfo.rose->timer      = 0;
+				rose_stop_timer(sk);
 				rose_enquiry_response(sk);
 			} else {
 				sk->protinfo.rose->condition |= ROSE_COND_ACK_PENDING;
-				sk->protinfo.rose->timer      = sk->protinfo.rose->hb;
+				rose_start_hbtimer(sk);
 			}
 			break;
 
@@ -270,7 +262,8 @@ static int rose_state4_machine(struct sock *sk, struct sk_buff *skb, int framety
 		case ROSE_RESET_REQUEST:
 			rose_write_internal(sk, ROSE_RESET_CONFIRMATION);
 		case ROSE_RESET_CONFIRMATION:
-			sk->protinfo.rose->timer     = 0;
+			rose_stop_timer(sk);
+			rose_start_idletimer(sk);
 			sk->protinfo.rose->condition = 0x00;
 			sk->protinfo.rose->va        = 0;
 			sk->protinfo.rose->vr        = 0;
@@ -280,20 +273,29 @@ static int rose_state4_machine(struct sock *sk, struct sk_buff *skb, int framety
 			break;
 
 		case ROSE_CLEAR_REQUEST:
-			rose_clear_queues(sk);
 			rose_write_internal(sk, ROSE_CLEAR_CONFIRMATION);
-			sk->protinfo.rose->timer = 0;
-			sk->protinfo.rose->state = ROSE_STATE_0;
-			sk->state                = TCP_CLOSE;
-			sk->err                  = 0;
-			sk->shutdown            |= SEND_SHUTDOWN;
-			if (!sk->dead)
-				sk->state_change(sk);
-			sk->dead                 = 1;
+			rose_disconnect(sk, 0, skb->data[3], skb->data[4]);
+			sk->protinfo.rose->neighbour->use--;
 			break;
 
 		default:
 			break;
+	}
+
+	return 0;
+}
+
+/*
+ * State machine for state 5, Awaiting Call Acceptance State.
+ * The handling of the timer(s) is in file rose_timer.c
+ * Handling of state 0 and connection release is in af_rose.c.
+ */
+static int rose_state5_machine(struct sock *sk, struct sk_buff *skb, int frametype)
+{
+	if (frametype == ROSE_CLEAR_REQUEST) {
+		rose_write_internal(sk, ROSE_CLEAR_CONFIRMATION);
+		rose_disconnect(sk, 0, skb->data[3], skb->data[4]);
+		sk->protinfo.rose->neighbour->use--;
 	}
 
 	return 0;
@@ -306,8 +308,6 @@ int rose_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 
 	if (sk->protinfo.rose->state == ROSE_STATE_0)
 		return 0;
-
-	del_timer(&sk->timer);
 
 	frametype = rose_decode(skb, &ns, &nr, &q, &d, &m);
 
@@ -324,9 +324,12 @@ int rose_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 		case ROSE_STATE_4:
 			queued = rose_state4_machine(sk, skb, frametype);
 			break;
+		case ROSE_STATE_5:
+			queued = rose_state5_machine(sk, skb, frametype);
+			break;
 	}
 
-	rose_set_timer(sk);
+	rose_kick(sk);
 
 	return queued;
 }

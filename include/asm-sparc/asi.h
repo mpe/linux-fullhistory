@@ -1,4 +1,4 @@
-/* $Id: asi.h,v 1.16 1996/04/25 06:12:43 davem Exp $ */
+/* $Id: asi.h,v 1.17 1997/06/24 15:48:10 jj Exp $ */
 #ifndef _SPARC_ASI_H
 #define _SPARC_ASI_H
 
@@ -69,7 +69,7 @@
 /* Block-copy operations are available only on certain V8 cpus. */
 #define ASI_M_BCOPY         0x17   /* Block copy */
 
-/* These affect only the ICACHE and are Ross HyperSparc specific. */
+/* These affect only the ICACHE and are Ross HyperSparc and TurboSparc specific. */
 #define ASI_M_IFLUSH_PAGE   0x18   /* Flush I Cache Line (page); wo, ss */
 #define ASI_M_IFLUSH_SEG    0x19   /* Flush I Cache Line (seg); wo, ss */
 #define ASI_M_IFLUSH_REGION 0x1A   /* Flush I Cache Line (region); wo, ss */
@@ -97,7 +97,7 @@
 /* This is ROSS HyperSparc only. */
 #define ASI_M_FLUSH_IWHOLE 0x31   /* Flush entire ICACHE; wo, ss */
 
-/* Tsunami/Viking i/d cache flash clear. */
+/* Tsunami/Viking/TurboSparc i/d cache flash clear. */
 #define ASI_M_IC_FLCLEAR   0x36
 #define ASI_M_DC_FLCLEAR   0x37
 

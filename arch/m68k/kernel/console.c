@@ -109,6 +109,7 @@
 #include <linux/interrupt.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
+#include <linux/console.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/errno.h>
@@ -164,9 +165,12 @@ extern void set_palette(void);
 void poke_blanked_console(void);
 void do_blank_screen(int);
 
+#if 0
+/* Make sure there are no references left to this variables.  */
 unsigned long	video_num_lines;
 unsigned long	video_num_columns;
 unsigned long	video_size_row;
+#endif
 
 static int printable = 0;			/* Is console ready for printing? */
 unsigned long video_font_height;	/* Height of current screen font */

@@ -1,8 +1,5 @@
 /*
- *	LAPB release 001
- *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
+ *	LAPB release 002
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -14,6 +11,7 @@
  *
  *	History
  *	LAPB 001	Jonathan Naylor	Started Coding
+ *	LAPB 002	Jonathan Naylor	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -38,72 +36,60 @@
 #include <linux/interrupt.h>
 #include <net/lapb.h>
 
-static void lapb_timer(unsigned long);
+static void lapb_t1timer_expiry(unsigned long);
+static void lapb_t2timer_expiry(unsigned long);
 
-/*
- *	Linux set timer
- */
-void lapb_set_timer(lapb_cb *lapb)
+void lapb_start_t1timer(lapb_cb *lapb)
 {
-	unsigned long flags;	
+	del_timer(&lapb->t1timer);
 
-	save_flags(flags); cli();
-	del_timer(&lapb->timer);
-	restore_flags(flags);
+	lapb->t1timer.data     = (unsigned long)lapb;
+	lapb->t1timer.function = &lapb_t1timer_expiry;
+	lapb->t1timer.expires  = jiffies + lapb->t1;
 
-	lapb->timer.data     = (unsigned long)lapb;
-	lapb->timer.function = &lapb_timer;
-	lapb->timer.expires  = jiffies + (HZ / 10);
-
-	add_timer(&lapb->timer);
+	add_timer(&lapb->t1timer);
 }
 
-/*
- *	LAPB TIMER 
- *
- *	This routine is called every 100ms. Decrement timer by this
- *	amount - if expired then process the event.
- */
-static void lapb_timer(unsigned long param)
+void lapb_start_t2timer(lapb_cb *lapb)
+{
+	del_timer(&lapb->t2timer);
+
+	lapb->t2timer.data     = (unsigned long)lapb;
+	lapb->t2timer.function = &lapb_t2timer_expiry;
+	lapb->t2timer.expires  = jiffies + lapb->t2;
+
+	add_timer(&lapb->t2timer);
+}
+
+void lapb_stop_t1timer(lapb_cb *lapb)
+{
+	del_timer(&lapb->t1timer);
+}
+
+void lapb_stop_t2timer(lapb_cb *lapb)
+{
+	del_timer(&lapb->t2timer);
+}
+
+int lapb_t1timer_running(lapb_cb *lapb)
+{
+	return (lapb->t1timer.prev != NULL || lapb->t1timer.next != NULL);
+}
+
+static void lapb_t2timer_expiry(unsigned long param)
 {
 	lapb_cb *lapb = (lapb_cb *)param;
-	struct sk_buff *skb;
 
-	/*
-	 *	Process all packet received since the last clock tick.
-	 */
-	while ((skb = skb_dequeue(&lapb->input_queue)) != NULL)
-		lapb_data_input(lapb, skb);
-
-	/*
-	 *	If in a data transfer state, transmit any data.
-	 */
-	if (lapb->state == LAPB_STATE_3)
-		lapb_kick(lapb);
-
-	/*
-	 *	T2 expiry code.
-	 */
-	if (lapb->t2timer > 0 && --lapb->t2timer == 0) {
-		if (lapb->state == LAPB_STATE_3) {
-			if (lapb->condition & LAPB_ACK_PENDING_CONDITION) {
-				lapb->condition &= ~LAPB_ACK_PENDING_CONDITION;
-				lapb_timeout_response(lapb);
-			}
-		}
+	if (lapb->condition & LAPB_ACK_PENDING_CONDITION) {
+		lapb->condition &= ~LAPB_ACK_PENDING_CONDITION;
+		lapb_timeout_response(lapb);
 	}
+}
 
-	/*
-	 *	If T1 isn't running, or hasn't timed out yet, keep going.
-	 */
-	if (lapb->t1timer == 0 || --lapb->t1timer > 0) {
-		lapb_set_timer(lapb);
-		return;
-	}
+static void lapb_t1timer_expiry(unsigned long param)
+{
+	lapb_cb *lapb = (lapb_cb *)param;
 
-	/*
-	 *	T1 has expired.
-	 */
 	switch (lapb->state) {
 
 		/*
@@ -120,12 +106,12 @@ static void lapb_timer(unsigned long param)
 		case LAPB_STATE_1: 
 			if (lapb->n2count == lapb->n2) {
 				lapb_clear_queues(lapb);
-				lapb->state   = LAPB_STATE_0;
-				lapb->t2timer = 0;
+				lapb->state = LAPB_STATE_0;
 				lapb_disconnect_indication(lapb, LAPB_TIMEDOUT);
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S1 -> S0\n", lapb->token);
 #endif
+				return;
 			} else {
 				lapb->n2count++;
 				if (lapb->mode & LAPB_EXTENDED) {
@@ -148,12 +134,12 @@ static void lapb_timer(unsigned long param)
 		case LAPB_STATE_2:
 			if (lapb->n2count == lapb->n2) {
 				lapb_clear_queues(lapb);
-				lapb->state   = LAPB_STATE_0;
-				lapb->t2timer = 0;
+				lapb->state = LAPB_STATE_0;
 				lapb_disconnect_confirmation(lapb, LAPB_TIMEDOUT);
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S2 -> S0\n", lapb->token);
 #endif
+				return;
 			} else {
 				lapb->n2count++;
 #if LAPB_DEBUG > 1
@@ -169,12 +155,13 @@ static void lapb_timer(unsigned long param)
 		case LAPB_STATE_3:
 			if (lapb->n2count == lapb->n2) {
 				lapb_clear_queues(lapb);
-				lapb->state   = LAPB_STATE_0;
-				lapb->t2timer = 0;
+				lapb->state = LAPB_STATE_0;
+				lapb_stop_t2timer(lapb);
 				lapb_disconnect_indication(lapb, LAPB_TIMEDOUT);
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S3 -> S0\n", lapb->token);
 #endif
+				return;
 			} else {
 				lapb->n2count++;
 				lapb_requeue_frames(lapb);
@@ -187,12 +174,12 @@ static void lapb_timer(unsigned long param)
 		case LAPB_STATE_4:
 			if (lapb->n2count == lapb->n2) {
 				lapb_clear_queues(lapb);
-				lapb->state   = LAPB_STATE_0;
-				lapb->t2timer = 0;
+				lapb->state = LAPB_STATE_0;
 				lapb_disconnect_indication(lapb, LAPB_TIMEDOUT);
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S4 -> S0\n", lapb->token);
 #endif
+				return;
 			} else {
 				lapb->n2count++;
 				lapb_transmit_frmr(lapb);
@@ -200,9 +187,7 @@ static void lapb_timer(unsigned long param)
 			break;
 	}
 
-	lapb->t1timer = lapb->t1;
-
-	lapb_set_timer(lapb);
+	lapb_start_t1timer(lapb);
 }
 
 #endif

@@ -24,6 +24,7 @@
  *      - Jay Schulist <Jay.Schulist@spacs.k12.wi.us>
  */
 
+#include <linux/config.h>
 
 #ifdef CONFIG_COPS_DAYNA
 

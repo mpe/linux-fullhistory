@@ -1,4 +1,4 @@
-/* $Id: ptrace.h,v 1.8 1997/05/27 19:30:27 jj Exp $ */
+/* $Id: ptrace.h,v 1.12 1997/06/24 16:30:35 davem Exp $ */
 #ifndef _SPARC64_PTRACE_H
 #define _SPARC64_PTRACE_H
 
@@ -15,7 +15,8 @@ struct pt_regs {
 	unsigned long tstate;
 	unsigned long tpc;
 	unsigned long tnpc;
-	unsigned long y;
+	unsigned int y;
+	unsigned int fprs;
 };
 
 struct pt_regs32 {
@@ -137,6 +138,7 @@ extern void show_regs(struct pt_regs *);
 #define PT_V9_TPC    0x88
 #define PT_V9_TNPC   0x90
 #define PT_V9_Y      0x98
+#define PT_V9_FPRS   0x9c
 #define PT_TSTATE	PT_V9_TSTATE
 #define PT_TPC		PT_V9_TPC
 #define PT_TNPC		PT_V9_TNPC
@@ -265,6 +267,28 @@ extern void show_regs(struct pt_regs *);
 #define PTRACE_GETFPAREGS         20
 #define PTRACE_SETFPAREGS         21
 
+/* There are for debugging 64-bit processes, either from a 32 or 64 bit
+ * parent.  Thus their compliments are for debugging 32-bit processes only.
+ */
+
+#define PTRACE_GETREGS64	  22
+#define PTRACE_SETREGS64	  23
+/* PTRACE_SYSCALL is 24 */
+#define PTRACE_GETFPREGS64	  25
+#define PTRACE_SETFPREGS64	  26
+
 #define PTRACE_GETUCODE           29  /* stupid bsd-ism */
+
+/* These are for 32-bit processes debugging 64-bit ones.
+ * Here addr and addr2 are passed in %g2 and %g3 respectively.
+ */
+#define PTRACE_PEEKTEXT64         (30 + PTRACE_PEEKTEXT)
+#define PTRACE_POKETEXT64         (30 + PTRACE_POKETEXT)
+#define PTRACE_PEEKDATA64         (30 + PTRACE_PEEKDATA)
+#define PTRACE_POKEDATA64         (30 + PTRACE_POKEDATA)
+#define PTRACE_READDATA64         (30 + PTRACE_READDATA)
+#define PTRACE_WRITEDATA64        (30 + PTRACE_WRITEDATA)
+#define PTRACE_READTEXT64         (30 + PTRACE_READTEXT)
+#define PTRACE_WRITETEXT64        (30 + PTRACE_WRITETEXT)
 
 #endif /* !(_SPARC64_PTRACE_H) */

@@ -48,35 +48,23 @@ struct autofs_dir_ent *autofs_expire(struct autofs_dirhash *dh,
 	return (jiffies - ent->last_usage >= timeout) ? ent : NULL;
 }
 
-/* Adapted from the Dragon Book, page 436 */
-/* This particular hashing algorithm requires autofs_hash_t == u32 */
-autofs_hash_t autofs_hash(const char *name, int len)
-{
-	autofs_hash_t h = 0;
-	while ( len-- ) {
-		h = (h << 4) + (unsigned char) (*name++);
-		h ^= ((h & 0xf0000000) >> 24);
-	}
-	return h;
-}
-
 void autofs_initialize_hash(struct autofs_dirhash *dh) {
 	memset(&dh->h, 0, AUTOFS_HASH_SIZE*sizeof(struct autofs_dir_ent *));
 	dh->expiry_head.exp_next = dh->expiry_head.exp_prev =
 		&dh->expiry_head;
 }
 
-struct autofs_dir_ent *autofs_hash_lookup(const struct autofs_dirhash *dh, autofs_hash_t hash, const char *name, int len)
+struct autofs_dir_ent *autofs_hash_lookup(const struct autofs_dirhash *dh, struct qstr *name)
 {
 	struct autofs_dir_ent *dhn;
 
-	DPRINTK(("autofs_hash_lookup: hash = 0x%08x, name = ", hash));
-	autofs_say(name,len);
+	DPRINTK(("autofs_hash_lookup: hash = 0x%08x, name = ", name->hash));
+	autofs_say(name->name,name->len);
 
-	for ( dhn = dh->h[hash % AUTOFS_HASH_SIZE] ; dhn ; dhn = dhn->next ) {
-		if ( hash == dhn->hash &&
-		     len == dhn->len &&
-		     !memcmp(name, dhn->name, len) )
+	for ( dhn = dh->h[(unsigned) name->hash % AUTOFS_HASH_SIZE] ; dhn ; dhn = dhn->next ) {
+		if ( name->hash == dhn->hash &&
+		     name->len == dhn->len &&
+		     !memcmp(name->name, dhn->name, name->len) )
 			break;
 	}
 
@@ -92,7 +80,7 @@ void autofs_hash_insert(struct autofs_dirhash *dh, struct autofs_dir_ent *ent)
 
 	autofs_init_usage(dh,ent);
 
-	dhnp = &dh->h[ent->hash % AUTOFS_HASH_SIZE];
+	dhnp = &dh->h[(unsigned) ent->hash % AUTOFS_HASH_SIZE];
 	ent->next = *dhnp;
 	ent->back = dhnp;
 	*dhnp = ent;

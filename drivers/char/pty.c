@@ -26,20 +26,6 @@ struct pty_struct {
 
 #define PTY_MAGIC 0x5001
 
-#define PTY_BUF_SIZE PAGE_SIZE/2
-
-/*
- * tmp_buf is used as a temporary buffer by pty_write.  We need to
- * lock it in case the copy_from_user blocks while swapping in a page,
- * and some other program tries to do a pty write at the same time.
- * Since the lock will only come under contention when the system is
- * swapping and available memory is low, it makes sense to share one
- * buffer across all the PTY's, since it significantly saves memory if
- * large numbers of PTY's are open.
- */
-static unsigned char *tmp_buf;
-static struct semaphore tmp_buf_sem = MUTEX;
-
 static struct tty_driver pty_driver, pty_slave_driver;
 static struct tty_driver old_pty_driver, old_pty_slave_driver;
 static int pty_refcount;
@@ -104,37 +90,51 @@ static void pty_unthrottle(struct tty_struct * tty)
 	set_bit(TTY_THROTTLED, &tty->flags);
 }
 
+/*
+ * WSH 05/24/97: modified to 
+ *   (1) use space in tty->flip instead of a shared temp buffer
+ *	 The flip buffers aren't being used for a pty, so there's lots
+ *	 of space available.  The buffer is protected by a per-pty
+ *	 semaphore that should almost never come under contention.
+ *   (2) avoid redundant copying for cases where count >> receive_room
+ * N.B. Calls from user space may now return an error code instead of
+ * a count.
+ */
 static int pty_write(struct tty_struct * tty, int from_user,
 		       const unsigned char *buf, int count)
 {
 	struct tty_struct *to = tty->link;
-	int	c=0, n, r;
+	int	c=0, n;
 	char	*temp_buffer;
 
 	if (!to || tty->stopped)
 		return 0;
-	
+
 	if (from_user) {
-		down(&tmp_buf_sem);
-		temp_buffer = tmp_buf +
-			((tty->driver.subtype-1) * PTY_BUF_SIZE);
+		down(&tty->flip.pty_sem);
+		temp_buffer = &tty->flip.char_buf[0];
 		while (count > 0) {
-			n = MIN(count, PTY_BUF_SIZE);
+			/* check space so we don't copy needlessly */ 
+			n = MIN(count, to->ldisc.receive_room(to));
+			if (!n) break;
+
+			n  = MIN(n, PTY_BUF_SIZE);
 			n -= copy_from_user(temp_buffer, buf, n);
 			if (!n) {
 				if (!c)
 					c = -EFAULT;
 				break;
 			}
-			r = to->ldisc.receive_room(to);
-			if (r <= 0)
-				break;
-			n = MIN(n, r);
-			to->ldisc.receive_buf(to, temp_buffer, 0, n);
-			buf += n;  c+= n;
+
+			/* check again in case the buffer filled up */
+			n = MIN(n, to->ldisc.receive_room(to));
+			if (!n) break;
+			buf   += n; 
+			c     += n;
 			count -= n;
+			to->ldisc.receive_buf(to, temp_buffer, 0, n);
 		}
-		up(&tmp_buf_sem);
+		up(&tty->flip.pty_sem);
 	} else {
 		c = MIN(count, to->ldisc.receive_room(to));
 		to->ldisc.receive_buf(to, buf, 0, c);
@@ -153,14 +153,42 @@ static int pty_write_room(struct tty_struct *tty)
 	return to->ldisc.receive_room(to);
 }
 
+/*
+ *	WSH 05/24/97:  Modified for asymmetric MASTER/SLAVE behavior
+ *	The chars_in_buffer() value is used by the ldisc select() function 
+ *	to hold off writing when chars_in_buffer > WAKEUP_CHARS (== 256).
+ *	The pty driver chars_in_buffer() Master/Slave must behave differently:
+ *
+ *      The Master side needs to allow typed-ahead commands to accumulate
+ *      while being canonicalized, so we report "our buffer" as empty until
+ *	some threshold is reached, and then report the count. (Any count >
+ *	WAKEUP_CHARS is regarded by select() as "full".)  To avoid deadlock 
+ *	the count returned must be 0 if no canonical data is available to be 
+ *	read. (The N_TTY ldisc.chars_in_buffer now knows this.)
+ *  
+ *	The Slave side passes all characters in raw mode to the Master side's
+ *	buffer where they can be read immediately, so in this case we can
+ *	return the true count in the buffer.
+ */
 static int pty_chars_in_buffer(struct tty_struct *tty)
 {
 	struct tty_struct *to = tty->link;
+	int count;
 
 	if (!to || !to->ldisc.chars_in_buffer)
 		return 0;
 
-	return to->ldisc.chars_in_buffer(to);
+	/* The ldisc must report 0 if no characters available to be read */
+	count = to->ldisc.chars_in_buffer(to);
+
+	if (tty->driver.subtype == PTY_TYPE_SLAVE) return count;
+
+	/* Master side driver ... if the other side's read buffer is less than 
+	 * half full, return 0 to allow writers to proceed; otherwise return
+	 * the count.  This leaves a comfortable margin to avoid overflow, 
+	 * and still allows half a buffer's worth of typed-ahead commands.
+	 */
+	return ((count < N_TTY_BUF_SIZE/2) ? 0 : count);
 }
 
 static void pty_flush_buffer(struct tty_struct *tty)
@@ -194,17 +222,6 @@ static int pty_open(struct tty_struct *tty, struct file * filp)
 	pty = pty_state + line;
 	tty->driver_data = pty;
 
-	if (!tmp_buf) {
-		unsigned long page = __get_free_page(GFP_KERNEL);
-		if (!tmp_buf) {
-			retval = -ENOMEM;
-			if (!page)
-				goto out;
-			tmp_buf = (unsigned char *) page;
-			memset((void *) page, 0, PAGE_SIZE);
-		} else
-			free_page(page);
-	}
 	retval = -EIO;
 	if (test_bit(TTY_OTHER_CLOSED, &tty->flags))
 		goto out;
@@ -287,8 +304,6 @@ __initfunc(int pty_init(void))
 	old_pty_slave_driver.minor_start = 192;
 	old_pty_slave_driver.num = (NR_PTYS > 64) ? 64 : NR_PTYS;
 	old_pty_slave_driver.other = &old_pty_driver;
-
-	tmp_buf = 0;
 
 	if (tty_register_driver(&pty_driver))
 		panic("Couldn't register pty driver");

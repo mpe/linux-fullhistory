@@ -1,5 +1,5 @@
 /*
- *	X.25 Packet Layer release 001
+ *	X.25 Packet Layer release 002
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -183,14 +183,12 @@ int x25_route_ioctl(unsigned int cmd, void *arg)
 {
 	struct x25_route_struct x25_route;
 	struct device *dev;
-	int err;
 
 	switch (cmd) {
 
 		case SIOCADDRT:
-			if ((err = verify_area(VERIFY_READ, arg, sizeof(struct x25_route_struct))) != 0)
-				return err;
-			copy_from_user(&x25_route, arg, sizeof(struct x25_route_struct));
+			if (copy_from_user(&x25_route, arg, sizeof(struct x25_route_struct)))
+				return -EFAULT;
 			if (x25_route.sigdigits < 0 || x25_route.sigdigits > 15)
 				return -EINVAL;
 			if ((dev = x25_dev_get(x25_route.device)) == NULL)
@@ -198,9 +196,8 @@ int x25_route_ioctl(unsigned int cmd, void *arg)
 			return x25_add_route(&x25_route.address, x25_route.sigdigits, dev);
 
 		case SIOCDELRT:
-			if ((err = verify_area(VERIFY_READ, arg, sizeof(struct x25_route_struct))) != 0)
-				return err;
-			copy_from_user(&x25_route, arg, sizeof(struct x25_route_struct));
+			if (copy_from_user(&x25_route, arg, sizeof(struct x25_route_struct)))
+				return -EFAULT;
 			if (x25_route.sigdigits < 0 || x25_route.sigdigits > 15)
 				return -EINVAL;
 			if ((dev = x25_dev_get(x25_route.device)) == NULL)
@@ -227,7 +224,8 @@ int x25_routes_get_info(char *buffer, char **start, off_t offset, int length, in
 
 	for (x25_route = x25_route_list; x25_route != NULL; x25_route = x25_route->next) {
 		len += sprintf(buffer + len, "%-15s  %-6d  %-5s\n",
-			x25_route->address.x25_addr, x25_route->sigdigits,
+			x25_route->address.x25_addr,
+			x25_route->sigdigits,
 			(x25_route->dev != NULL) ? x25_route->dev->name : "???");
 
 		pos = begin + len;

@@ -1,9 +1,10 @@
-/* $Id: srmmu.c,v 1.147 1997/05/20 07:58:42 jj Exp $
+/* $Id: srmmu.c,v 1.148 1997/06/24 15:48:02 jj Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
  * Copyright (C) 1995 Peter A. Zaitcev (zaitcev@ithil.mcst.ru)
  * Copyright (C) 1996 Eddie C. Dost    (ecd@skynet.be)
+ * Copyright (C) 1997 Jakub Jelinek    (jj@sunsite.mff.cuni.cz)
  */
 
 #include <linux/config.h>
@@ -36,6 +37,7 @@
 #include <asm/ross.h>
 #include <asm/tsunami.h>
 #include <asm/swift.h>
+#include <asm/turbosparc.h>
 
 enum mbus_module srmmu_modtype;
 unsigned int hwbug_bitmask;
@@ -2595,6 +2597,78 @@ __initfunc(static void init_swift(void))
 	poke_srmmu = poke_swift;
 }
 
+/* turbosparc.S */
+extern void turbosparc_flush_cache_all();
+extern void turbosparc_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr);
+
+static void poke_turbosparc(void)
+{
+	unsigned long mreg = srmmu_get_mmureg();
+	unsigned long ccreg;
+
+	/* Clear any crap from the cache or else... */
+	turbosparc_flush_cache_all();
+	mreg &= ~(TURBOSPARC_ICENABLE | TURBOSPARC_DCENABLE); /* Temporarily disable I & D caches */
+	mreg &= ~(TURBOSPARC_PCENABLE);		/* Don't check parity */
+	srmmu_set_mmureg(mreg);
+	
+	ccreg = turbosparc_get_ccreg();
+
+#ifdef TURBOSPARC_WRITEBACK
+	ccreg |= (TURBOSPARC_SNENABLE);		/* Do DVMA snooping in Dcache */
+	ccreg &= ~(TURBOSPARC_uS2 | TURBOSPARC_WTENABLE);
+			/* Write-back D-cache, emulate VLSI 
+			 * abortion number three, not number one */
+#else
+	/* For now let's play safe, optimize later */
+	ccreg |= (TURBOSPARC_SNENABLE | TURBOSPARC_WTENABLE);
+			/* Do DVMA snooping in Dcache, Write-thru D-cache */
+	ccreg &= ~(TURBOSPARC_uS2);
+			/* Emulate VLSI abortion number three, not number one */
+#endif			 
+	switch (ccreg & 7) {
+	case 0: /* No SE cache */
+	case 7: /* Test mode */
+		break;
+	default:
+		ccreg |= (TURBOSPARC_SCENABLE);
+	}
+	turbosparc_set_ccreg (ccreg);
+
+	mreg |= (TURBOSPARC_ICENABLE | TURBOSPARC_DCENABLE); /* I & D caches on */
+	mreg |= (TURBOSPARC_ICSNOOP);		/* Icache snooping on */
+	srmmu_set_mmureg(mreg);
+}
+
+__initfunc(static void init_turbosparc(void))
+{
+	srmmu_name = "Fujitsu TurboSparc";
+	srmmu_modtype = TurboSparc;
+
+	flush_cache_all = turbosparc_flush_cache_all;
+	flush_cache_mm = hypersparc_flush_cache_mm;
+	flush_cache_page = hypersparc_flush_cache_page;
+	flush_cache_range = hypersparc_flush_cache_range;
+
+	flush_tlb_all = hypersparc_flush_tlb_all;
+	flush_tlb_mm = hypersparc_flush_tlb_mm;
+	flush_tlb_page = hypersparc_flush_tlb_page;
+	flush_tlb_range = hypersparc_flush_tlb_range;
+
+#ifdef TURBOSPARC_WRITEBACK
+	flush_page_to_ram = hypersparc_flush_page_to_ram;
+	flush_chunk = hypersparc_flush_chunk;
+#else
+	flush_page_to_ram = swift_flush_page_to_ram;
+	flush_chunk = swift_flush_chunk;
+#endif
+
+	flush_sig_insns = turbosparc_flush_sig_insns;
+	flush_page_for_dma = hypersparc_flush_page_for_dma;
+
+	poke_srmmu = poke_turbosparc;
+}
+
 static void poke_tsunami(void)
 {
 	unsigned long mreg = srmmu_get_mmureg();
@@ -2785,9 +2859,33 @@ __initfunc(static void get_srmmu_type(void))
 		};
 		return;
 	}
+	
+	/* Now Fujitsu TurboSparc. It might happen that it is
+	   in Swift emulation mode, so we will check later... */
+	if (psr_typ == 0 && psr_vers == 5) {
+		init_turbosparc();
+		return;
+	}
 
 	/* Next check for Fujitsu Swift. */
 	if(psr_typ == 0 && psr_vers == 4) {
+		int cpunode;
+		char node_str[128];
+
+		/* Look if it is not a TurboSparc emulating Swift... */
+		cpunode = prom_getchild(prom_root_node);
+		while((cpunode = prom_getsibling(cpunode)) != 0) {
+			prom_getstring(cpunode, "device_type", node_str, sizeof(node_str));
+			if(!strcmp(node_str, "cpu")) {
+				if (!prom_getintdefault(cpunode, "psr-implementation", 1) &&
+				    prom_getintdefault(cpunode, "psr-version", 1) == 5) {
+					init_turbosparc();
+					return;
+				}
+				break;
+			}
+		}
+		
 		init_swift();
 		return;
 	}

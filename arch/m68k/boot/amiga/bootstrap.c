@@ -36,10 +36,12 @@
 #include <stdarg.h>
 #include <string.h>
 #include <sys/file.h>
-#include <sys/types.h>
 #include <unistd.h>
 
 /* required Linux/m68k include files */
+#define __KERNEL_STRICT_NAMES		/* This is ugly, I know */
+#define _LINUX_POSIX_TYPES_H
+#include <asm/posix_types.h>
 #include <linux/a.out.h>
 #include <linux/elf.h>
 #include <asm/amigahw.h>

@@ -1,10 +1,10 @@
-/* $Id: head.h,v 1.23 1997/06/14 13:25:50 davem Exp $ */
+/* $Id: head.h,v 1.26 1997/07/07 03:05:23 davem Exp $ */
 #ifndef _SPARC64_HEAD_H
 #define _SPARC64_HEAD_H
 
 #include <asm/pstate.h>
 
-#define KERNBASE    0xFFFFF80000000000
+#define KERNBASE    0x400000
 #define BOOT_KERNEL b sparc64_boot; nop; nop; nop; nop; nop; nop; nop;
 
 /* We need a "cleaned" instruction... */
@@ -43,17 +43,6 @@
 	nop;						\
 	nop;
 	
-/* Just for testing */
-#define PROM_TRAP					\
-	rd	%pc, %g1;				\
-	sethi	%uhi(KERNBASE), %g4;			\
-	sethi	%hi(0xf0000000-0x8000), %g2;		\
-	sllx	%g4, 32, %g4;				\
-	add	%g1, %g2, %g1;				\
-	sub	%g1, %g4, %g1;				\
-	jmpl	%g1 + %g0, %g0;				\
-	nop;
-
 #define TRAP_ARG(routine, arg)				\
 	ba,pt	%xcc, etrap;				\
 	 rd	%pc, %g7;				\
@@ -105,12 +94,12 @@
 #define SUNOS_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall, sunos_sys_table)
 #define	LINUX_32BIT_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall, sys_call_table32)
 #define LINUX_64BIT_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall, sys_call_table64)
+#define GETCC_TRAP TRAP(getcc)
+#define SETCC_TRAP TRAP(setcc)
 /* FIXME: Write these actually */	
 #define NETBSD_SYSCALL_TRAP TRAP(netbsd_syscall)
 #define SOLARIS_SYSCALL_TRAP TRAP(solaris_syscall)
 #define BREAKPOINT_TRAP TRAP(breakpoint_trap)
-#define GETCC_TRAP TRAP(getcc)
-#define SETCC_TRAP TRAP(setcc)
 #define INDIRECT_SOLARIS_SYSCALL(tlvl) TRAP_ARG(indirect_syscall, tlvl)
 
 #define TRAP_IRQ(routine, level)			\

@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 036
+ *	AX.25 release 037
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -19,6 +19,7 @@
  *	AX.25 033	Jonathan(G4KLX)	Modularisation functions.
  *	AX.25 035	Frederic(F1OAT)	Support for pseudo-digipeating.
  *	AX.25 036	Jonathan(G4KLX)	Split from ax25_timer.c.
+ *	AX.25 037	Jonathan(G4KLX)	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -44,14 +45,14 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 
-void ax25_std_timer(ax25_cb *ax25)
+void ax25_std_heartbeat_expiry(ax25_cb *ax25)
 {
 	switch (ax25->state) {
+
 		case AX25_STATE_0:
 			/* Magic here: If we listen() and a new link dies before it
 			   is accepted() it isn't 'dead' so doesn't get removed. */
 			if (ax25->sk == NULL || ax25->sk->destroy || (ax25->sk->state == TCP_LISTEN && ax25->sk->dead)) {
-				del_timer(&ax25->timer);
 				ax25_destroy_socket(ax25);
 				return;
 			}
@@ -71,78 +72,57 @@ void ax25_std_timer(ax25_cb *ax25)
 					break;
 				}
 			}
-			/*
-			 * Check for frames to transmit.
-			 */
-			ax25_kick(ax25);
-			break;
-
-		default:
-			break;
 	}
 
-	if (ax25->t2timer > 0 && --ax25->t2timer == 0) {
-		if (ax25->state == AX25_STATE_3 || ax25->state == AX25_STATE_4) {
-			if (ax25->condition & AX25_COND_ACK_PENDING) {
-				ax25->condition &= ~AX25_COND_ACK_PENDING;
-				ax25_std_timeout_response(ax25);
-			}
-		}
+	ax25_start_heartbeat(ax25);
+}
+
+void ax25_std_t2timer_expiry(ax25_cb *ax25)
+{
+	if (ax25->condition & AX25_COND_ACK_PENDING) {
+		ax25->condition &= ~AX25_COND_ACK_PENDING;
+		ax25_std_timeout_response(ax25);
 	}
+}
 
-	if (ax25->t3timer > 0 && --ax25->t3timer == 0) {
-		if (ax25->state == AX25_STATE_3) {
-			ax25->n2count = 0;
-			ax25_std_transmit_enquiry(ax25);
-			ax25->state   = AX25_STATE_4;
-		}
-		ax25->t3timer = ax25->t3;
+void ax25_std_t3timer_expiry(ax25_cb *ax25)
+{
+	ax25->n2count = 0;
+	ax25_std_transmit_enquiry(ax25);
+	ax25->state   = AX25_STATE_4;
+}
+
+void ax25_std_idletimer_expiry(ax25_cb *ax25)
+{
+	ax25_clear_queues(ax25);
+
+	ax25->n2count = 0;
+	ax25_send_control(ax25, AX25_DISC, AX25_POLLON, AX25_COMMAND);
+	ax25->state   = AX25_STATE_2;
+
+	ax25_calculate_t1(ax25);
+	ax25_start_t1timer(ax25);
+	ax25_stop_t2timer(ax25);
+	ax25_stop_t3timer(ax25);
+
+	if (ax25->sk != NULL) {
+		ax25->sk->state     = TCP_CLOSE;
+		ax25->sk->err       = 0;
+		ax25->sk->shutdown |= SEND_SHUTDOWN;
+		if (!ax25->sk->dead)
+			ax25->sk->state_change(ax25->sk);
+		ax25->sk->dead      = 1;
 	}
+}
 
-	if (ax25->idletimer > 0 && --ax25->idletimer == 0) {
-		/* dl1bke 960228: close the connection when IDLE expires */
-		/* 		  similar to DAMA T3 timeout but with    */
-		/* 		  a "clean" disconnect of the connection */
-
-		ax25_clear_queues(ax25);
-
-		ax25->n2count = 0;
-		ax25->t3timer = 0;
-		ax25_send_control(ax25, AX25_DISC, AX25_POLLON, AX25_COMMAND);
-		ax25->state   = AX25_STATE_2;
-		ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
-
-		if (ax25->sk != NULL) {
-			ax25->sk->state     = TCP_CLOSE;
-			ax25->sk->err       = 0;
-			ax25->sk->shutdown |= SEND_SHUTDOWN;
-			if (!ax25->sk->dead)
-				ax25->sk->state_change(ax25->sk);
-			ax25->sk->dead      = 1;
-			ax25->sk->destroy   = 1;
-		}
-	}
-
-	if (ax25->t1timer == 0 || --ax25->t1timer > 0) {
-		ax25_set_timer(ax25);
-		return;
-	}
-
+void ax25_std_t1timer_expiry(ax25_cb *ax25)
+{
 	switch (ax25->state) {
 		case AX25_STATE_1: 
 			if (ax25->n2count == ax25->n2) {
 				if (ax25->modulus == AX25_MODULUS) {
-					ax25_link_failed(&ax25->dest_addr, ax25->ax25_dev->dev);
-					ax25_clear_queues(ax25);
-					ax25->state = AX25_STATE_0;
-					if (ax25->sk != NULL) {
-						ax25->sk->state     = TCP_CLOSE;
-						ax25->sk->err       = ETIMEDOUT;
-						ax25->sk->shutdown |= SEND_SHUTDOWN;
-						if (!ax25->sk->dead)
-							ax25->sk->state_change(ax25->sk);
-						ax25->sk->dead      = 1;
-					}
+					ax25_disconnect(ax25, ETIMEDOUT);
+					return;
 				} else {
 					ax25->modulus = AX25_MODULUS;
 					ax25->window  = ax25->ax25_dev->values[AX25_VALUES_WINDOW];
@@ -160,19 +140,9 @@ void ax25_std_timer(ax25_cb *ax25)
 
 		case AX25_STATE_2:
 			if (ax25->n2count == ax25->n2) {
-				ax25_link_failed(&ax25->dest_addr, ax25->ax25_dev->dev);
-				ax25_clear_queues(ax25);
-				ax25->state = AX25_STATE_0;
 				ax25_send_control(ax25, AX25_DISC, AX25_POLLON, AX25_COMMAND);
-
-				if (ax25->sk != NULL) {
-					ax25->sk->state     = TCP_CLOSE;
-					ax25->sk->err       = ETIMEDOUT;
-					ax25->sk->shutdown |= SEND_SHUTDOWN;
-					if (!ax25->sk->dead)
-						ax25->sk->state_change(ax25->sk);
-					ax25->sk->dead      = 1;
-				}
+				ax25_disconnect(ax25, ETIMEDOUT);
+				return;
 			} else {
 				ax25->n2count++;
 				ax25_send_control(ax25, AX25_DISC, AX25_POLLON, AX25_COMMAND);
@@ -187,19 +157,9 @@ void ax25_std_timer(ax25_cb *ax25)
 
 		case AX25_STATE_4:
 			if (ax25->n2count == ax25->n2) {
-				ax25_link_failed(&ax25->dest_addr, ax25->ax25_dev->dev);
-				ax25_clear_queues(ax25);
 				ax25_send_control(ax25, AX25_DM, AX25_POLLON, AX25_RESPONSE);
-				ax25->state = AX25_STATE_0;
-				if (ax25->sk != NULL) {
-					SOCK_DEBUG(ax25->sk, "AX.25 link Failure\n");
-					ax25->sk->state     = TCP_CLOSE;
-					ax25->sk->err       = ETIMEDOUT;
-					ax25->sk->shutdown |= SEND_SHUTDOWN;
-					if (!ax25->sk->dead)
-						ax25->sk->state_change(ax25->sk);
-					ax25->sk->dead      = 1;
-				}
+				ax25_disconnect(ax25, ETIMEDOUT);
+				return;
 			} else {
 				ax25->n2count++;
 				ax25_std_transmit_enquiry(ax25);
@@ -207,9 +167,8 @@ void ax25_std_timer(ax25_cb *ax25)
 			break;
 	}
 
-	ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
-
-	ax25_set_timer(ax25);
+	ax25_calculate_t1(ax25);
+	ax25_start_t1timer(ax25);
 }
 
 #endif

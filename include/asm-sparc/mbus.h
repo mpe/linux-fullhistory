@@ -1,4 +1,4 @@
-/* $Id: mbus.h,v 1.8 1996/08/29 09:48:21 davem Exp $
+/* $Id: mbus.h,v 1.9 1997/06/24 15:48:12 jj Exp $
  * mbus.h:  Various defines for MBUS modules.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -25,7 +25,8 @@ enum mbus_module {
 	Viking_30         = 10,
 	Viking_35         = 11,
 	Viking_new        = 12,
-	SRMMU_INVAL_MOD   = 13,
+	TurboSparc	  = 13,
+	SRMMU_INVAL_MOD   = 14,
 };
 
 extern enum mbus_module srmmu_modtype;
@@ -71,6 +72,7 @@ extern unsigned int hwbug_bitmask;
 
 /* Fujitsu */
 #define FMI_AURORA		0x4   /* MB8690x, a Swift module... */
+#define FMI_TURBO		0x5   /* MB86907, a TurboSparc module... */
 
 /* For multiprocessor support we need to be able to obtain the CPU id and
  * the MBUS Module id.

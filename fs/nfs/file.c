@@ -69,6 +69,7 @@ struct inode_operations nfs_file_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
 	nfs_readpage,		/* readpage */
 	nfs_writepage,		/* writepage */
 	NULL,			/* bmap */

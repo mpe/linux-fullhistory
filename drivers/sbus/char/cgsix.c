@@ -1,4 +1,4 @@
-/* $Id: cgsix.c,v 1.32 1997/06/14 15:26:08 davem Exp $
+/* $Id: cgsix.c,v 1.33 1997/07/01 09:12:05 jj Exp $
  * cgsix.c: cgsix frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -234,10 +234,31 @@ cg6_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 {
 	uint size, page, r, map_size;
 	unsigned long map_offset = 0;
-	
+
 	size = vma->vm_end - vma->vm_start;
         if (vma->vm_offset & ~PAGE_MASK)
                 return -ENXIO;
+
+#ifdef __sparc_v9__
+	/* Try to align RAM */
+#define ALIGNMENT 0x80000
+	map_offset = vma->vm_offset + size;
+	if (vma->vm_offset <= CG6_RAM && map_offset >= CG6_RAM + fb->type.fb_size) {
+		struct vm_area_struct *vmm = find_vma(current->mm, vma->vm_start);
+		int alignment = ALIGNMENT - ((vma->vm_start + CG6_RAM - vma->vm_offset) & (ALIGNMENT - 1));
+		int sz = 0, fbsz; 
+
+		if (alignment == ALIGNMENT) alignment = 0;
+		fbsz = ((fb->type.fb_size + ALIGNMENT - 1) & ~(ALIGNMENT - 1));
+		if (map_offset < CG6_RAM + fbsz)
+			sz = fbsz - map_offset + CG6_RAM;
+		if ((sz || alignment) && (!vmm || vmm->vm_start >= vma->vm_end + sz + alignment)) {
+			vma->vm_start += alignment;
+			vma->vm_end += alignment + sz;
+		}
+	}
+#undef ALIGNMENT
+#endif	
 
 	/* To stop the swapper from even considering these pages */
 	vma->vm_flags |= FB_MMAP_VM_FLAGS;

@@ -208,7 +208,7 @@ static void math_error_irq(int cpl, void *dev_id, struct pt_regs *regs)
 	math_error();
 }
 
-static struct irqaction irq13 = { math_error_irq, 0, 0, "math error", NULL, NULL };
+static struct irqaction irq13 = { math_error_irq, 0, 0, "fpu", NULL, NULL };
 
 /*
  * IRQ2 is cascade interrupt to second interrupt controller

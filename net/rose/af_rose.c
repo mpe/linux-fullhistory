@@ -1,5 +1,5 @@
 /*
- *	ROSE release 002
+ *	ROSE release 003
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -17,6 +17,9 @@
  *	ROSE 002	Jonathan(G4KLX)	Changed hdrincl to qbitincl.
  *					Added random number facilities entry.
  *					Variable number of ROSE devices.
+ *	ROSE 003	Jonathan(G4KLX)	New timer architecture.
+ *					Implemented idle timer.
+ *					Added use count to neighbour.
  */
 
 #include <linux/config.h>
@@ -172,8 +175,7 @@ static void rose_remove_socket(struct sock *sk)
 	struct sock *s;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_flags(flags); cli();
 
 	if ((s = rose_list) == sk) {
 		rose_list = s->next;
@@ -204,13 +206,9 @@ void rose_kill_by_neigh(struct rose_neigh *neigh)
 
 	for (s = rose_list; s != NULL; s = s->next) {
 		if (s->protinfo.rose->neighbour == neigh) {
-			s->protinfo.rose->state     = ROSE_STATE_0;
+			rose_disconnect(s, ENETUNREACH, ROSE_OUT_OF_ORDER, 0);
+			s->protinfo.rose->neighbour->use--;
 			s->protinfo.rose->neighbour = NULL;
-			s->state                    = TCP_CLOSE;
-			s->err                      = ENETUNREACH;
-			s->shutdown                |= SEND_SHUTDOWN;
-			s->state_change(s);
-			s->dead                     = 1;
 		}
 	}
 }
@@ -224,13 +222,9 @@ static void rose_kill_by_device(struct device *dev)
 	
 	for (s = rose_list; s != NULL; s = s->next) {
 		if (s->protinfo.rose->device == dev) {
-			s->protinfo.rose->state  = ROSE_STATE_0;
+			rose_disconnect(s, ENETUNREACH, ROSE_OUT_OF_ORDER, 0);
+			s->protinfo.rose->neighbour->use--;
 			s->protinfo.rose->device = NULL;
-			s->state                 = TCP_CLOSE;
-			s->err                   = ENETUNREACH;
-			s->shutdown             |= SEND_SHUTDOWN;
-			s->state_change(s);
-			s->dead                  = 1;
 		}
 	}
 }
@@ -265,8 +259,7 @@ static void rose_insert_socket(struct sock *sk)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_flags(flags); cli();
 
 	sk->next  = rose_list;
 	rose_list = sk;
@@ -283,8 +276,7 @@ static struct sock *rose_find_listener(rose_address *addr, ax25_address *call)
 	unsigned long flags;
 	struct sock *s;
 
-	save_flags(flags);
-	cli();
+	save_flags(flags); cli();
 
 	for (s = rose_list; s != NULL; s = s->next) {
 		if (rosecmp(&s->protinfo.rose->source_addr, addr) == 0 && ax25cmp(&s->protinfo.rose->source_call, call) == 0 && s->protinfo.rose->source_ndigis == 0 && s->state == TCP_LISTEN) {
@@ -312,8 +304,7 @@ struct sock *rose_find_socket(unsigned int lci, struct rose_neigh *neigh)
 	struct sock *s;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_flags(flags); cli();
 
 	for (s = rose_list; s != NULL; s = s->next) {
 		if (s->protinfo.rose->lci == lci && s->protinfo.rose->neighbour == neigh) {
@@ -371,10 +362,11 @@ void rose_destroy_socket(struct sock *sk)	/* Not static as it's used by the time
 	struct sk_buff *skb;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_flags(flags); cli();
 
-	del_timer(&sk->timer);
+	rose_stop_heartbeat(sk);
+	rose_stop_idletimer(sk);
+	rose_stop_timer(sk);
 
 	rose_remove_socket(sk);
 	rose_clear_queues(sk);		/* Flush the queues */
@@ -382,7 +374,7 @@ void rose_destroy_socket(struct sock *sk)	/* Not static as it's used by the time
 	while ((skb = skb_dequeue(&sk->receive_queue)) != NULL) {
 		if (skb->sk != sk) {			/* A pending connection */
 			skb->sk->dead = 1;	/* Queue the unaccepted socket for death */
-			rose_set_timer(skb->sk);
+			rose_start_heartbeat(skb->sk);
 			skb->sk->protinfo.rose->state = ROSE_STATE_0;
 		}
 
@@ -424,34 +416,38 @@ static int rose_setsockopt(struct socket *sock, int level, int optname,
 		return -EFAULT;
 
 	switch (optname) {
+		case ROSE_DEFER:
+			sk->protinfo.rose->defer = opt ? 1 : 0;
+			return 0;
+
 		case ROSE_T1:
 			if (opt < 1)
 				return -EINVAL;
-			sk->protinfo.rose->t1 = opt * ROSE_SLOWHZ;
+			sk->protinfo.rose->t1 = opt * HZ;
 			return 0;
 
 		case ROSE_T2:
 			if (opt < 1)
 				return -EINVAL;
-			sk->protinfo.rose->t2 = opt * ROSE_SLOWHZ;
+			sk->protinfo.rose->t2 = opt * HZ;
 			return 0;
 
 		case ROSE_T3:
 			if (opt < 1)
 				return -EINVAL;
-			sk->protinfo.rose->t3 = opt * ROSE_SLOWHZ;
+			sk->protinfo.rose->t3 = opt * HZ;
 			return 0;
 
 		case ROSE_HOLDBACK:
 			if (opt < 1)
 				return -EINVAL;
-			sk->protinfo.rose->hb = opt * ROSE_SLOWHZ;
+			sk->protinfo.rose->hb = opt * HZ;
 			return 0;
 
 		case ROSE_IDLE:
-			if (opt < 1)
+			if (opt < 0)
 				return -EINVAL;
-			sk->protinfo.rose->idle = opt * 60 * ROSE_SLOWHZ;
+			sk->protinfo.rose->idle = opt * 60 * HZ;
 			return 0;
 
 		case ROSE_QBITINCL:
@@ -477,24 +473,28 @@ static int rose_getsockopt(struct socket *sock, int level, int optname,
 		return -EFAULT;
 	
 	switch (optname) {
+		case ROSE_DEFER:
+			val = sk->protinfo.rose->defer;
+			break;
+
 		case ROSE_T1:
-			val = sk->protinfo.rose->t1 / ROSE_SLOWHZ;
+			val = sk->protinfo.rose->t1 / HZ;
 			break;
 
 		case ROSE_T2:
-			val = sk->protinfo.rose->t2 / ROSE_SLOWHZ;
+			val = sk->protinfo.rose->t2 / HZ;
 			break;
 
 		case ROSE_T3:
-			val = sk->protinfo.rose->t3 / ROSE_SLOWHZ;
+			val = sk->protinfo.rose->t3 / HZ;
 			break;
 
 		case ROSE_HOLDBACK:
-			val = sk->protinfo.rose->hb / ROSE_SLOWHZ;
+			val = sk->protinfo.rose->hb / HZ;
 			break;
 
 		case ROSE_IDLE:
-			val = sk->protinfo.rose->idle / (ROSE_SLOWHZ * 60);
+			val = sk->protinfo.rose->idle / (60 * HZ);
 			break;
 
 		case ROSE_QBITINCL:
@@ -550,7 +550,10 @@ static int rose_create(struct socket *sock, int protocol)
 	
 	sock->ops    = &rose_proto_ops;
 	sk->protocol = protocol;
-	sk->mtu      = ROSE_MTU;	/* 128 */
+	sk->mtu      = ROSE_MTU;	/* 253 */
+
+	init_timer(&rose->timer);
+	init_timer(&rose->idletimer);
 
 	skb_queue_head_init(&rose->frag_queue);
 
@@ -592,6 +595,9 @@ static struct sock *rose_make_new(struct sock *osk)
 	sk->sleep    = osk->sleep;
 	sk->zapped   = osk->zapped;
 
+	init_timer(&rose->timer);
+	init_timer(&rose->idletimer);
+
 	skb_queue_head_init(&rose->frag_queue);
 
 	rose->t1      = osk->protinfo.rose->t1;
@@ -600,6 +606,7 @@ static struct sock *rose_make_new(struct sock *osk)
 	rose->hb      = osk->protinfo.rose->hb;
 	rose->idle    = osk->protinfo.rose->idle;
 
+	rose->defer    = osk->protinfo.rose->defer;
 	rose->device   = osk->protinfo.rose->device;
 	rose->qbitincl = osk->protinfo.rose->qbitincl;
 
@@ -625,28 +632,24 @@ static int rose_release(struct socket *sock, struct socket *peer)
 	switch (sk->protinfo.rose->state) {
 
 		case ROSE_STATE_0:
-			sk->state     = TCP_CLOSE;
-			sk->shutdown |= SEND_SHUTDOWN;
-			sk->state_change(sk);
-			sk->dead      = 1;
+			rose_disconnect(sk, 0, -1, -1);
 			rose_destroy_socket(sk);
 			break;
 
 		case ROSE_STATE_2:
-			sk->protinfo.rose->state = ROSE_STATE_0;
-			sk->state                = TCP_CLOSE;
-			sk->shutdown            |= SEND_SHUTDOWN;
-			sk->state_change(sk);
-			sk->dead                 = 1;
+			sk->protinfo.rose->neighbour->use--;
+			rose_disconnect(sk, 0, -1, -1);
 			rose_destroy_socket(sk);
-			break;			
+			break;
 
 		case ROSE_STATE_1:
 		case ROSE_STATE_3:
 		case ROSE_STATE_4:
+		case ROSE_STATE_5:
 			rose_clear_queues(sk);
+			rose_stop_idletimer(sk);
 			rose_write_internal(sk, ROSE_CLEAR_REQUEST);
-			sk->protinfo.rose->timer = sk->protinfo.rose->t3;
+			rose_start_t3timer(sk);
 			sk->protinfo.rose->state = ROSE_STATE_2;
 			sk->state                = TCP_CLOSE;
 			sk->shutdown            |= SEND_SHUTDOWN;
@@ -714,6 +717,7 @@ static int rose_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 {
 	struct sock *sk = sock->sk;
 	struct sockaddr_rose *addr = (struct sockaddr_rose *)uaddr;
+	unsigned char cause, diagnostic;
 	ax25_address *user;
 	struct device *dev;
 
@@ -739,7 +743,7 @@ static int rose_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 	if (addr->srose_family != AF_ROSE)
 		return -EINVAL;
 
-	if ((sk->protinfo.rose->neighbour = rose_get_neigh(&addr->srose_addr)) == NULL)
+	if ((sk->protinfo.rose->neighbour = rose_get_neigh(&addr->srose_addr, &cause, &diagnostic)) == NULL)
 		return -ENETUNREACH;
 
 	if ((sk->protinfo.rose->lci = rose_new_lci(sk->protinfo.rose->neighbour)) == 0)
@@ -775,10 +779,12 @@ static int rose_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 	sk->state     = TCP_SYN_SENT;
 
 	sk->protinfo.rose->state = ROSE_STATE_1;
-	sk->protinfo.rose->timer = sk->protinfo.rose->t1;
-	rose_write_internal(sk, ROSE_CALL_REQUEST);
 
-	rose_set_timer(sk);
+	sk->protinfo.rose->neighbour->use++;
+
+	rose_write_internal(sk, ROSE_CALL_REQUEST);
+	rose_start_heartbeat(sk);
+	rose_start_t1timer(sk);
 
 	/* Now the loop */
 	if (sk->state != TCP_ESTABLISHED && (flags & O_NONBLOCK))
@@ -911,11 +917,8 @@ int rose_rx_call_request(struct sk_buff *skb, struct device *dev, struct rose_ne
 	/*
 	 *	skb->data points to the rose frame start
 	 */
-
-	/*
-	 * XXX This is an error.
-	 */
 	if (!rose_parse_facilities(skb, &facilities)) {
+		rose_transmit_clear_request(neigh, lci, ROSE_INVALID_FACILITY, 76);
 		return 0;
 	}
 
@@ -925,7 +928,7 @@ int rose_rx_call_request(struct sk_buff *skb, struct device *dev, struct rose_ne
 	 * We can't accept the Call Request.
 	 */
 	if (sk == NULL || sk->ack_backlog == sk->max_ack_backlog || (make = rose_make_new(sk)) == NULL) {
-		rose_transmit_clear_request(neigh, lci, 0x01);
+		rose_transmit_clear_request(neigh, lci, ROSE_NETWORK_CONGESTION, 120);
 		return 0;
 	}
 
@@ -944,14 +947,21 @@ int rose_rx_call_request(struct sk_buff *skb, struct device *dev, struct rose_ne
 	make->protinfo.rose->neighbour     = neigh;
 	make->protinfo.rose->device        = dev;
 
-	rose_write_internal(make, ROSE_CALL_ACCEPTED);
+	make->protinfo.rose->neighbour->use++;
+
+	if (sk->protinfo.rose->defer) {
+		make->protinfo.rose->state = ROSE_STATE_5;
+	} else {
+		rose_write_internal(make, ROSE_CALL_ACCEPTED);
+		make->protinfo.rose->state = ROSE_STATE_3;
+		rose_start_idletimer(make);
+	}
 
 	make->protinfo.rose->condition = 0x00;
 	make->protinfo.rose->vs        = 0;
 	make->protinfo.rose->va        = 0;
 	make->protinfo.rose->vr        = 0;
 	make->protinfo.rose->vl        = 0;
-	make->protinfo.rose->state     = ROSE_STATE_3;
 	sk->ack_backlog++;
 	make->pair = sk;
 
@@ -959,7 +969,7 @@ int rose_rx_call_request(struct sk_buff *skb, struct device *dev, struct rose_ne
 
 	skb_queue_head(&sk->receive_queue, skb);
 
-	rose_set_timer(make);
+	rose_start_heartbeat(make);
 
 	if (!sk->dead)
 		sk->data_ready(sk, skb->len);
@@ -1146,37 +1156,35 @@ static int rose_shutdown(struct socket *sk, int how)
 static int rose_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	struct sock *sk = sock->sk;
-	int err;
-	long amount = 0;
 
 	switch (cmd) {
-		case TIOCOUTQ:
-			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(unsigned int))) != 0)
-				return err;
+		case TIOCOUTQ: {
+			long amount;
 			amount = sk->sndbuf - atomic_read(&sk->wmem_alloc);
 			if (amount < 0)
 				amount = 0;
-			put_user(amount, (unsigned int *)arg);
+			if (put_user(amount, (unsigned int *)arg))
+				return -EFAULT;
 			return 0;
+		}
 
 		case TIOCINQ: {
 			struct sk_buff *skb;
+			long amount = 0L;
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if ((skb = skb_peek(&sk->receive_queue)) != NULL)
-				amount = skb->len - 20;
-			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(unsigned int))) != 0)
-				return err;
-			put_user(amount, (unsigned int *)arg);
+				amount = skb->len;
+			if (put_user(amount, (unsigned int *)arg))
+				return -EFAULT;
 			return 0;
 		}
 
 		case SIOCGSTAMP:
 			if (sk != NULL) {
-				if (sk->stamp.tv_sec==0)
+				if (sk->stamp.tv_sec == 0)
 					return -ENOENT;
-				if ((err = verify_area(VERIFY_WRITE,(void *)arg,sizeof(struct timeval))) != 0)
-					return err;
-				copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval));
+				if (copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval)))
+					return -EFAULT;
 				return 0;
 			}
 			return -EINVAL;
@@ -1195,18 +1203,49 @@ static int rose_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 		case SIOCADDRT:
 		case SIOCDELRT:
+		case SIOCRSCLRRT:
 			if (!suser()) return -EPERM;
 			return rose_rt_ioctl(cmd, (void *)arg);
 
+		case SIOCRSGCAUSE: {
+			struct rose_cause_struct rose_cause;
+			rose_cause.cause      = sk->protinfo.rose->cause;
+			rose_cause.diagnostic = sk->protinfo.rose->diagnostic;
+			if (copy_to_user((void *)arg, &rose_cause, sizeof(struct rose_cause_struct)))
+				return -EFAULT;
+			return 0;
+		}
+
+		case SIOCRSSCAUSE: {
+			struct rose_cause_struct rose_cause;
+			if (copy_from_user(&rose_cause, (void *)arg, sizeof(struct rose_cause_struct)))
+				return -EFAULT;
+			sk->protinfo.rose->cause      = rose_cause.cause;
+			sk->protinfo.rose->diagnostic = rose_cause.diagnostic;
+			return 0;
+		}
+
 		case SIOCRSL2CALL:
 			if (!suser()) return -EPERM;
-			if ((err = verify_area(VERIFY_READ, (void *)arg, sizeof(ax25_address))) != 0)
-				return err;
 			if (ax25cmp(&rose_callsign, &null_ax25_address) != 0)
 				ax25_listen_release(&rose_callsign, NULL);
-			copy_from_user(&rose_callsign, (void *)arg, sizeof(ax25_address));
+			if (copy_from_user(&rose_callsign, (void *)arg, sizeof(ax25_address)))
+				return -EFAULT;
 			if (ax25cmp(&rose_callsign, &null_ax25_address) != 0)
 				ax25_listen_register(&rose_callsign, NULL);
+			return 0;
+
+		case SIOCRSACCEPT:
+			if (sk->protinfo.rose->state == ROSE_STATE_5) {
+				rose_write_internal(sk, ROSE_CALL_ACCEPTED);
+				rose_start_idletimer(sk);
+				sk->protinfo.rose->condition = 0x00;
+				sk->protinfo.rose->vs        = 0;
+				sk->protinfo.rose->va        = 0;
+				sk->protinfo.rose->vr        = 0;
+				sk->protinfo.rose->vl        = 0;
+				sk->protinfo.rose->state     = ROSE_STATE_3;
+			}
 			return 0;
 
 		default:
@@ -1228,7 +1267,7 @@ static int rose_get_info(char *buffer, char **start, off_t offset, int length, i
 
 	cli();
 
-	len += sprintf(buffer, "dest_addr  dest_call src_addr   src_call  dev   lci st vs vr va   t  t1  t2  t3  hb  Snd-Q Rcv-Q\n");
+	len += sprintf(buffer, "dest_addr  dest_call src_addr   src_call  dev   lci st vs vr va   t  t1  t2  t3  hb    idle Snd-Q Rcv-Q\n");
 
 	for (s = rose_list; s != NULL; s = s->next) {
 		if ((dev = s->protinfo.rose->device) == NULL)
@@ -1245,17 +1284,24 @@ static int rose_get_info(char *buffer, char **start, off_t offset, int length, i
 		else
 			callsign = ax2asc(&s->protinfo.rose->source_call);
 
-		len += sprintf(buffer + len, "%-10s %-9s %-5s %3.3X  %d  %d  %d  %d %3d %3d %3d %3d %3d %5d %5d\n",
-			rose2asc(&s->protinfo.rose->source_addr), callsign,
-			devname,  s->protinfo.rose->lci & 0x0FFF,
+		len += sprintf(buffer + len, "%-10s %-9s %-5s %3.3X  %d  %d  %d  %d %3lu %3lu %3lu %3lu %3lu %3lu/%03lu %5d %5d\n",
+			rose2asc(&s->protinfo.rose->source_addr),
+			callsign,
+			devname, 
+			s->protinfo.rose->lci & 0x0FFF,
 			s->protinfo.rose->state,
-			s->protinfo.rose->vs, s->protinfo.rose->vr, s->protinfo.rose->va,
-			s->protinfo.rose->timer / ROSE_SLOWHZ,
-			s->protinfo.rose->t1    / ROSE_SLOWHZ,
-			s->protinfo.rose->t2    / ROSE_SLOWHZ,
-			s->protinfo.rose->t3    / ROSE_SLOWHZ,
-			s->protinfo.rose->hb    / ROSE_SLOWHZ,
-			atomic_read(&s->wmem_alloc), atomic_read(&s->rmem_alloc));
+			s->protinfo.rose->vs,
+			s->protinfo.rose->vr,
+			s->protinfo.rose->va,
+			ax25_display_timer(&s->protinfo.rose->timer) / HZ,
+			s->protinfo.rose->t1 / HZ,
+			s->protinfo.rose->t2 / HZ,
+			s->protinfo.rose->t3 / HZ,
+			s->protinfo.rose->hb / HZ,
+			ax25_display_timer(&s->protinfo.rose->idletimer) / (60 * HZ),
+			s->protinfo.rose->idle / (60 * HZ),
+			atomic_read(&s->wmem_alloc),
+			atomic_read(&s->rmem_alloc));
 
 		pos = begin + len;
 
@@ -1360,7 +1406,7 @@ __initfunc(void rose_proto_init(struct net_proto *pro))
 
 	sock_register(&rose_family_ops);
 	register_netdevice_notifier(&rose_dev_notifier);
-	printk(KERN_INFO "G4KLX ROSE for Linux. Version 0.2 for AX25.035 Linux 2.1\n");
+	printk(KERN_INFO "G4KLX ROSE for Linux. Version 0.3 for AX25.037 Linux 2.1\n");
 
 	ax25_protocol_register(AX25_P_ROSE, rose_route_frame);
 	ax25_linkfail_register(rose_link_failed);

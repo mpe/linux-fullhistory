@@ -13,8 +13,12 @@
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
+ *
+ * $Id: checksum.c,v 1.4 1997/07/03 09:43:16 ralf Exp $
  */
 #include <net/checksum.h>
+#include <linux/types.h>
+#include <asm/byteorder.h>
 #include <asm/string.h>
 #include <asm/uaccess.h>
 
@@ -36,7 +40,7 @@ static inline unsigned long do_csum(const unsigned char * buff, int len)
 		goto out;
 	odd = 1 & (unsigned long) buff;
 	if (odd) {
-		result = *buff;
+		result = be16_to_cpu(*buff);
 		len--;
 		buff++;
 	}
@@ -68,7 +72,7 @@ static inline unsigned long do_csum(const unsigned char * buff, int len)
 		}
 	}
 	if (len & 1)
-		result += (*buff << 8);
+		result += le16_to_cpu(*buff);
 	result = from32to16(result);
 	if (odd)
 		result = ((result >> 8) & 0xff) | ((result & 0xff) << 8);

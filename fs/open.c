@@ -35,7 +35,7 @@ asmlinkage int sys_statfs(const char * path, struct statfs * buf)
 	error = verify_area(VERIFY_WRITE, buf, sizeof(struct statfs));
 	if (error)
 		goto out;
-	error = namei(NAM_FOLLOW_LINK, path, &inode);
+	error = namei(path, &inode);
 	if (error)
 		goto out;
 	error = -ENOSYS;
@@ -102,7 +102,7 @@ asmlinkage int sys_truncate(const char * path, unsigned long length)
 	int error;
 
 	lock_kernel();
-	error = namei(NAM_FOLLOW_LINK, path, &inode);
+	error = namei(path, &inode);
 	if (error)
 		goto out;
 
@@ -189,7 +189,7 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 
 	lock_kernel();
 	/* Hmm, should I always follow symlinks or not ? */
-	error = namei(NAM_FOLLOW_LINK, filename, &inode);
+	error = namei(filename, &inode);
 	if (error)
 		goto out;
 	error = -EROFS;
@@ -237,7 +237,7 @@ asmlinkage int sys_utimes(char * filename, struct timeval * utimes)
 	struct iattr newattrs;
 
 	lock_kernel();
-	error = namei(NAM_FOLLOW_LINK, filename, &inode);
+	error = namei(filename, &inode);
 	if (error)
 		goto out;
 	error = -EROFS;
@@ -287,7 +287,7 @@ asmlinkage int sys_access(const char * filename, int mode)
 	old_fsgid = current->fsgid;
 	current->fsuid = current->uid;
 	current->fsgid = current->gid;
-	res = namei(NAM_FOLLOW_LINK, filename, &inode);
+	res = namei(filename, &inode);
 	if (!res) {
 		res = permission(inode, mode);
 		iput(inode);
@@ -301,24 +301,37 @@ out:
 
 asmlinkage int sys_chdir(const char * filename)
 {
-	struct inode * inode;
-	struct inode * tmpi;
 	int error;
+	struct inode *inode;
+	struct dentry *dentry, *tmp;
 
 	lock_kernel();
-	error = namei(NAM_FOLLOW_LINK, filename, &inode);
-	if (error)
+	
+	dentry = lookup_dentry(filename, NULL, 1);
+	error = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
 		goto out;
-	error = -ENOTDIR;
-	if (!S_ISDIR(inode->i_mode))
-		goto iput_and_out;
-	if ((error = permission(inode,MAY_EXEC)) != 0)
-		goto iput_and_out;
 
-	/* exchange inodes */
-	tmpi = current->fs->pwd; current->fs->pwd = inode; inode = tmpi;
-iput_and_out:
-	iput(inode);
+	error = -ENOENT;
+	if (dentry->d_flag & D_NEGATIVE)
+		goto dput_and_out;
+
+	error = -ENOTDIR;
+	inode = dentry->d_inode;
+	if (!S_ISDIR(inode->i_mode))
+		goto dput_and_out;
+
+	error = permission(inode,MAY_EXEC);
+	if (error)
+		goto dput_and_out;
+
+	/* exchange dentries */
+	tmp = current->fs->pwd;
+	current->fs->pwd = dentry;
+	dentry = tmp;
+
+dput_and_out:
+	dput(dentry);
 out:
 	unlock_kernel();
 	return error;
@@ -326,24 +339,33 @@ out:
 
 asmlinkage int sys_fchdir(unsigned int fd)
 {
-	struct inode * inode;
-	struct file * file;
-	int error = -EBADF;
+	struct file *file;
+	struct inode *inode;
+	struct dentry *dentry, *tmp;
+	int error;
 
 	lock_kernel();
+
+	error = -EBADF;
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		goto out;
+
 	error = -ENOENT;
 	if (!(inode = file->f_inode))
 		goto out;
+
 	error = -ENOTDIR;
 	if (!S_ISDIR(inode->i_mode))
 		goto out;
-	if ((error = permission(inode,MAY_EXEC)) != 0)
+
+	error = permission(inode,MAY_EXEC);
+	if (error)
 		goto out;
-	iput(current->fs->pwd);
-	current->fs->pwd = inode;
-	atomic_inc(&inode->i_count);
+
+	dentry = dget(inode->i_dentry);
+	tmp = current->fs->pwd;
+	current->fs->pwd = dentry;
+	dput(tmp);
 out:
 	unlock_kernel();
 	return error;
@@ -351,24 +373,41 @@ out:
 
 asmlinkage int sys_chroot(const char * filename)
 {
-	struct inode * inode;
-	struct inode * tmpi;
 	int error;
+	struct inode *inode;
+	struct dentry *dentry, *tmp;
 
 	lock_kernel();
-	error = namei(NAM_FOLLOW_LINK, filename, &inode);
-	if (error)
+	
+	dentry = lookup_dentry(filename, NULL, 1);
+	error = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
 		goto out;
+
+	error = -ENOENT;
+	if (dentry->d_flag & D_NEGATIVE)
+		goto dput_and_out;
+
 	error = -ENOTDIR;
+	inode = dentry->d_inode;
 	if (!S_ISDIR(inode->i_mode))
-		goto iput_and_out;
+		goto dput_and_out;
+
+	error = permission(inode,MAY_EXEC);
+	if (error)
+		goto dput_and_out;
+
 	error = -EPERM;
 	if (!fsuser())
-		goto iput_and_out;
-	tmpi = current->fs->root; current->fs->root = inode; inode = tmpi;
-	error = 0;
-iput_and_out:
-	iput(inode);
+		goto dput_and_out;
+
+	/* exchange dentries */
+	tmp = current->fs->root;
+	current->fs->root = dentry;
+	dentry = tmp;
+
+dput_and_out:
+	dput(dentry);
 out:
 	unlock_kernel();
 	return error;
@@ -419,7 +458,7 @@ asmlinkage int sys_chmod(const char * filename, mode_t mode)
 	 * because permissions on symlinks now can never be changed,
 	 * but on the other hand they are never needed.
 	 */
-	error = namei(NAM_FOLLOW_LINK, filename, &inode);
+	error = namei(filename, &inode);
 	if (error)
 		goto out;
 	error = -EROFS;
@@ -517,7 +556,7 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 	struct iattr newattrs;
 
 	lock_kernel();
-	error = namei(NAM_FOLLOW_TRAILSLASH, filename, &inode);
+	error = namei(filename, &inode);
 	if (error)
 		goto out;
 	error = -EROFS;

@@ -11,6 +11,8 @@
  *  Send complaints, suggestions etc. to <andy@waldorf-gmbh.de>
  *
  *  Copyright (C) 1995 Andreas Busse
+ *
+ * $Id: gdb-stub.c,v 1.4 1997/06/30 15:52:25 ralf Exp $
  */
 
 /*
@@ -328,7 +330,7 @@ void set_debug_traps(void)
 	unsigned long flags;
 	unsigned char c;
 
-	save_flags(flags); cli();
+	save_and_cli(flags);
 	for (ht = hard_trap_info; ht->tt && ht->signo; ht++)
 		set_except_vector(ht->tt, trap_low);
   

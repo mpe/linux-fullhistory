@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.61 1997/06/06 10:56:34 jj Exp $ */
+/* $Id: pgtable.h,v 1.62 1997/06/27 14:55:00 jj Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -393,5 +393,8 @@ __get_iospace (unsigned long addr)
 		return -1;
 	}
 }
+
+#define module_map      vmalloc
+#define module_unmap    vfree
 
 #endif /* !(_SPARC_PGTABLE_H) */

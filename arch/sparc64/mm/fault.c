@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.12 1997/06/13 14:02:52 davem Exp $
+/* $Id: fault.c,v 1.17 1997/07/04 01:41:10 davem Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -134,61 +134,14 @@ asmlinkage int lookup_fault(unsigned long pc, unsigned long ret_pc,
 	return 0;
 }
 
-/* #define FAULT_TRACER */
-/* #define FAULT_TRACER_VERBOSE */
+/* #define DEBUG_EXCEPTIONS */
 
-#ifdef FAULT_TRACER
-/* Set and clear this elsewhere at critical moment, for oodles of debugging fun. */
-int fault_trace_enable = 0;
-#endif
-
-#include <asm/hardirq.h>
-
-asmlinkage void do_sparc64_fault(struct pt_regs *regs, int text_fault, int write,
-				 unsigned long address, unsigned long tag,
-				 unsigned long sfsr)
+asmlinkage void do_sparc64_fault(struct pt_regs *regs, unsigned long address, int write)
 {
+	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
-	struct task_struct *tsk = current;
-	struct mm_struct *mm = tsk->mm;
-	unsigned long fixup;
-	unsigned long g2;
-	int from_user = !(regs->tstate & TSTATE_PRIV);
-#ifdef FAULT_TRACER
-	static unsigned long last_addr = 0;
-	static int rcnt = 0;
 
-	if(fault_trace_enable) {
-#ifdef FAULT_TRACER_VERBOSE
-		printk("FAULT(PC[%016lx],t[%d],w[%d],addr[%016lx])...",
-		       regs->tpc, text_fault, write, address);
-#else
-		printk("F[%016lx:%016lx:w(%d)", regs->tpc, address, write);
-#endif
-		if(address == last_addr) {
-			if(rcnt++ > 15) {
-				printk("Wheee lotsa bogus faults, something wrong, "
-				       "spinning\n");
-				printk("pctx[%016lx]sctx[%016lx]mmctx[%016lx]DS(%x)"
-				       "tctx[%016lx] flgs[%016lx]\n",
-				       spitfire_get_primary_context(),
-				       spitfire_get_secondary_context(),
-				       mm->context, (unsigned)current->tss.current_ds,
-				       current->tss.ctx, current->tss.flags);
-				__asm__ __volatile__("flushw");
-				printk("o7[%016lx] i7[%016lx]\n",
-				       regs->u_regs[UREG_I7],
-		      ((struct reg_window *)(regs->u_regs[UREG_FP]+STACK_BIAS))->ins[7]);
-				sti();
-				while(1)
-					barrier();
-			}
-		} else rcnt = 0;
-		last_addr = address;
-	}
-#endif
-
-	lock_kernel ();
+	lock_kernel();
 	down(&mm->mmap_sem);
 	vma = find_vma(mm, address);
 	if(!vma)
@@ -221,42 +174,99 @@ good_area:
 	 */
 bad_area:
 	up(&mm->mmap_sem);
-	/* Is this in ex_table? */
+
+	{
+		unsigned long g2 = regs->u_regs[UREG_G2];
+
+		/* Is this in ex_table? */
+		if (regs->tstate & TSTATE_PRIV) {
+			unsigned char asi = ASI_P;
+			unsigned int insn;
+			unsigned long fixup;
+		
+			insn = *(unsigned int *)regs->tpc;
+			if ((insn & 0xc0800000) == 0xc0800000) {
+				if (insn & 0x2000)
+					asi = (regs->tstate >> 24);
+				else
+					asi = (insn >> 5);
+			}
 	
-	g2 = regs->u_regs[UREG_G2];
-	if (!from_user && (fixup = search_exception_table (regs->tpc, &g2))) {
-		printk("Exception: PC<%016lx> faddr<%016lx>\n", regs->tpc, address);
-		printk("EX_TABLE: insn<%016lx> fixup<%016lx> g2<%016lx>\n",
-			regs->tpc, fixup, g2);
-		regs->tpc = fixup;
-		regs->tnpc = regs->tpc + 4;
-		regs->u_regs[UREG_G2] = g2;
-		goto out;
-	}
-	if(from_user) {
-#if 1
-		unsigned long cpc;
-		__asm__ __volatile__("mov %%i7, %0" : "=r" (cpc));
-		printk("[%s:%d] SIGSEGV pc[%016lx] addr[%016lx] w[%d] sfsr[%016lx] "
-		       "caller[%016lx]\n", current->comm, current->pid, regs->tpc,
-		       address, write, sfsr, cpc);
+			/* Look in asi.h: All _S asis have LS bit set */
+			if ((asi & 0x1) &&
+			    (fixup = search_exception_table (regs->tpc, &g2))) {
+#ifdef DEBUG_EXCEPTIONS
+				printk("Exception: PC<%016lx> faddr<%016lx>\n",
+				       regs->tpc, address);
+				printk("EX_TABLE: insn<%016lx> fixup<%016lx> "
+				       "g2<%016lx>\n", regs->tpc, fixup, g2);
 #endif
-		tsk->tss.sig_address = address;
-		tsk->tss.sig_desc = SUBSIG_NOMAPPING;
-		send_sig(SIGSEGV, tsk, 1);
-		goto out;
+				regs->tpc = fixup;
+				regs->tnpc = regs->tpc + 4;
+				regs->u_regs[UREG_G2] = g2;
+				goto out;
+			}
+		} else {
+			current->tss.sig_address = address;
+			current->tss.sig_desc = SUBSIG_NOMAPPING;
+			send_sig(SIGSEGV, current, 1);
+			goto out;
+		}
+		unhandled_fault (address, current, regs);
 	}
-	unhandled_fault (address, tsk, regs);
 out:
 	unlock_kernel();
-#ifdef FAULT_TRACER
-	if(fault_trace_enable) {
-#ifdef FAULT_TRACER_VERBOSE
-		printk(" done\n");
-#else
-		printk("]");
-#endif
-	}
-#endif
 }
 
+void fixup_dcache_alias(struct vm_area_struct *vma, unsigned long address, pte_t pte)
+{
+	struct vm_area_struct *vmaring;
+	struct inode *inode;
+	unsigned long vaddr, offset, start;
+	pgd_t *pgdp;
+	pmd_t *pmdp;
+	pte_t *ptep;
+	int alias_found = 0;
+
+	inode = vma->vm_inode;
+	if(!inode)
+		return;
+
+	offset = (address & PAGE_MASK) - vma->vm_start;
+	vmaring = inode->i_mmap;
+	do {
+		vaddr = vmaring->vm_start + offset;
+
+		/* This conditional is misleading... */
+		if((vaddr ^ address) & PAGE_SIZE) {
+			alias_found++;
+			start = vmaring->vm_start;
+			while(start < vmaring->vm_end) {
+				pgdp = pgd_offset(vmaring->vm_mm, start);
+				if(!pgdp) goto next;
+				pmdp = pmd_offset(pgdp, start);
+				if(!pmdp) goto next;
+				ptep = pte_offset(pmdp, start);
+				if(!ptep) goto next;
+
+				if(pte_val(*ptep) & _PAGE_PRESENT) {
+					flush_cache_page(vmaring, start);
+					*ptep = __pte(pte_val(*ptep) &
+						      ~(_PAGE_CV));
+					flush_tlb_page(vmaring, start);
+				}
+			next:
+				start += PAGE_SIZE;
+			}
+		}
+	} while((vmaring = vmaring->vm_next_share) != NULL);
+
+	if(alias_found && (pte_val(pte) & _PAGE_CV)) {
+		pgdp = pgd_offset(vma->vm_mm, address);
+		pmdp = pmd_offset(pgdp, address);
+		ptep = pte_offset(pmdp, address);
+		flush_cache_page(vma, address);
+		*ptep = __pte(pte_val(*ptep) & ~(_PAGE_CV));
+		flush_tlb_page(vma, address);
+	}
+}

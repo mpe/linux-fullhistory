@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 036
+ *	AX.25 release 037
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -30,6 +30,7 @@
  *	AX.25 032	Joerg(DL1BKE)	Added ax25_queue_length to count the number of
  *					enqueued buffers of a socket..
  *	AX.25 035	Frederic(F1OAT)	Support for pseudo-digipeating.
+ *	AX.25 037	Jonathan(G4KLX)	New timer architecture.
  */
 
 #include <linux/config.h>
@@ -259,7 +260,7 @@ void ax25_return_dm(struct device *dev, ax25_address *src, ax25_address *dest, a
 /*
  *	Exponential backoff for AX.25
  */
-unsigned short ax25_calculate_t1(ax25_cb *ax25)
+void ax25_calculate_t1(ax25_cb *ax25)
 {
 	int n, t = 2;
 
@@ -278,7 +279,7 @@ unsigned short ax25_calculate_t1(ax25_cb *ax25)
 			break;
 	}
 
-	return t * ax25->rtt;
+	ax25->t1 = t * ax25->rtt;
 }
 
 /*
@@ -289,14 +290,37 @@ void ax25_calculate_rtt(ax25_cb *ax25)
 	if (ax25->backoff == 0)
 		return;
 
-	if (ax25->t1timer > 0 && ax25->n2count == 0)
-		ax25->rtt = (9 * ax25->rtt + ax25->t1 - ax25->t1timer) / 10;
+	if (ax25_t1timer_running(ax25) && ax25->n2count == 0)
+		ax25->rtt = (9 * ax25->rtt + ax25->t1 - ax25_display_timer(&ax25->t1timer)) / 10;
 
 	if (ax25->rtt < AX25_T1CLAMPLO)
 		ax25->rtt = AX25_T1CLAMPLO;
 
 	if (ax25->rtt > AX25_T1CLAMPHI)
 		ax25->rtt = AX25_T1CLAMPHI;
+}
+
+void ax25_disconnect(ax25_cb *ax25, int reason)
+{
+	ax25_clear_queues(ax25);
+
+	ax25_stop_t1timer(ax25);
+	ax25_stop_t2timer(ax25);
+	ax25_stop_t3timer(ax25);
+	ax25_stop_idletimer(ax25);
+
+	ax25->state = AX25_STATE_0;
+
+	ax25_link_failed(ax25, reason);
+
+	if (ax25->sk != NULL) {
+		ax25->sk->state     = TCP_CLOSE;
+		ax25->sk->err       = reason;
+		ax25->sk->shutdown |= SEND_SHUTDOWN;
+		if (!ax25->sk->dead)
+			ax25->sk->state_change(ax25->sk);
+		ax25->sk->dead      = 1;
+	}
 }
 
 #endif

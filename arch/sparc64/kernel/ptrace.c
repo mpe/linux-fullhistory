@@ -100,7 +100,16 @@ static inline void put_long(struct task_struct * tsk, struct vm_area_struct * vm
 /* this is a hack for non-kernel-mapped video buffers and similar */
 	flush_cache_page(vma, addr);
 	if (MAP_NR(page) < max_mapnr) {
-		*(unsigned long *) (page + (addr & ~PAGE_MASK)) = data;
+		unsigned long pgaddr;
+
+		pgaddr = page + (addr & ~PAGE_MASK);
+		*(unsigned long *) (pgaddr) = data;
+
+		__asm__ __volatile__("
+		membar	#StoreStore
+		flush	%0
+"		: : "r" (pgaddr & ~7) : "memory");
+
 		flush_page_to_ram(page);
 	}
 /* we're bypassing pagetables, so we have to set the dirty bit ourselves */
@@ -138,7 +147,16 @@ static inline void put_int(struct task_struct * tsk, struct vm_area_struct * vma
 /* this is a hack for non-kernel-mapped video buffers and similar */
 	flush_cache_page(vma, addr);
 	if (MAP_NR(page) < max_mapnr) {
-		*(unsigned int *) (page + (addr & ~PAGE_MASK)) = data;
+		unsigned long pgaddr;
+
+		pgaddr = page + (addr & ~PAGE_MASK);
+		*(unsigned int *) (pgaddr) = data;
+
+		__asm__ __volatile__("
+		membar	#StoreStore
+		flush	%0
+"		: : "r" (pgaddr & ~7) : "memory");
+
 		flush_page_to_ram(page);
 	}
 /* we're bypassing pagetables, so we have to set the dirty bit ourselves */
@@ -570,6 +588,21 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		pt_error_return(regs, ESRCH);
 		goto out;
 	}
+
+	if(!(child->tss.flags & SPARC_FLAG_32BIT)	&&
+	   ((request == PTRACE_READDATA64)		||
+	    (request == PTRACE_WRITEDATA64)		||
+	    (request == PTRACE_READTEXT64)		||
+	    (request == PTRACE_WRITETEXT64)		||
+	    (request == PTRACE_PEEKTEXT64)		||
+	    (request == PTRACE_POKETEXT64)		||
+	    (request == PTRACE_PEEKDATA64)		||
+	    (request == PTRACE_POKEDATA64))) {
+		addr = regs->u_regs[UREG_G2];
+		addr2 = regs->u_regs[UREG_G3];
+		request -= 30; /* wheee... */
+	}
+
 	switch(request) {
 	case PTRACE_PEEKTEXT: /* read word at location addr. */ 
 	case PTRACE_PEEKDATA: {
@@ -641,195 +674,207 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		goto out;
 	}
 
-	case PTRACE_GETREGS: 
-		if (current->tss.flags & SPARC_FLAG_32BIT) {
-			struct pt_regs32 *pregs = (struct pt_regs32 *) addr;
-			struct pt_regs *cregs = child->tss.kregs;
-			int rval;
+	case PTRACE_GETREGS: {
+		struct pt_regs32 *pregs = (struct pt_regs32 *) addr;
+		struct pt_regs *cregs = child->tss.kregs;
+		int rval;
 
-			if (__put_user(tstate_to_psr(cregs->tstate), (&pregs->psr)) ||
-			    __put_user(cregs->tpc, (&pregs->pc)) ||
-			    __put_user(cregs->tnpc, (&pregs->npc)) ||
-			    __put_user(cregs->y, (&pregs->y))) {
+		if (__put_user(tstate_to_psr(cregs->tstate), (&pregs->psr)) ||
+		    __put_user(cregs->tpc, (&pregs->pc)) ||
+		    __put_user(cregs->tnpc, (&pregs->npc)) ||
+		    __put_user(cregs->y, (&pregs->y))) {
+			pt_error_return(regs, EFAULT);
+			goto out;
+		}
+		for(rval = 1; rval < 16; rval++)
+			if (__put_user(cregs->u_regs[rval], (&pregs->u_regs[rval - 1]))) {
 				pt_error_return(regs, EFAULT);
 				goto out;
 			}
-			for(rval = 1; rval < 16; rval++)
-				if (__put_user(cregs->u_regs[rval], (&pregs->u_regs[rval - 1]))) {
-					pt_error_return(regs, EFAULT);
-					goto out;
-				}
-			pt_succ_return(regs, 0);
+		pt_succ_return(regs, 0);
 #ifdef DEBUG_PTRACE
-			printk ("PC=%lx nPC=%lx o7=%lx\n", cregs->tpc, cregs->tnpc, cregs->u_regs [15]);
+		printk ("PC=%lx nPC=%lx o7=%lx\n", cregs->tpc, cregs->tnpc, cregs->u_regs [15]);
 #endif
-			goto out;
-		} else {
-			struct pt_regs *pregs = (struct pt_regs *) addr;
-			struct pt_regs *cregs = child->tss.kregs;
-			int rval;
+		goto out;
+	}
 
-			if (__put_user(cregs->tstate, (&pregs->tstate)) ||
-			    __put_user(cregs->tpc, (&pregs->tpc)) ||
-			    __put_user(cregs->tnpc, (&pregs->tnpc)) ||
-			    __put_user(cregs->y, (&pregs->y))) {
+	case PTRACE_GETREGS64: {
+		struct pt_regs *pregs = (struct pt_regs *) addr;
+		struct pt_regs *cregs = child->tss.kregs;
+		int rval;
+
+		if (__put_user(cregs->tstate, (&pregs->tstate)) ||
+		    __put_user(cregs->tpc, (&pregs->tpc)) ||
+		    __put_user(cregs->tnpc, (&pregs->tnpc)) ||
+		    __put_user(cregs->y, (&pregs->y))) {
+			pt_error_return(regs, EFAULT);
+			goto out;
+		}
+		for(rval = 1; rval < 16; rval++)
+			if (__put_user(cregs->u_regs[rval], (&pregs->u_regs[rval - 1]))) {
 				pt_error_return(regs, EFAULT);
 				goto out;
 			}
-			for(rval = 1; rval < 16; rval++)
-				if (__put_user(cregs->u_regs[rval], (&pregs->u_regs[rval - 1]))) {
-					pt_error_return(regs, EFAULT);
-					goto out;
-				}
-			pt_succ_return(regs, 0);
+		pt_succ_return(regs, 0);
 #ifdef DEBUG_PTRACE
-			printk ("PC=%lx nPC=%lx o7=%lx\n", cregs->tpc, cregs->tnpc, cregs->u_regs [15]);
+		printk ("PC=%lx nPC=%lx o7=%lx\n", cregs->tpc, cregs->tnpc, cregs->u_regs [15]);
 #endif
+		goto out;
+	}
+
+	case PTRACE_SETREGS: {
+		struct pt_regs32 *pregs = (struct pt_regs32 *) addr;
+		struct pt_regs *cregs = child->tss.kregs;
+		unsigned int psr, pc, npc, y;
+		int i;
+
+		/* Must be careful, tracing process can only set certain
+		 * bits in the psr.
+		 */
+		if (__get_user(psr, (&pregs->psr)) ||
+		    __get_user(pc, (&pregs->pc)) ||
+		    __get_user(npc, (&pregs->npc)) ||
+		    __get_user(y, (&pregs->y))) {
+			pt_error_return(regs, EFAULT);
 			goto out;
 		}
-
-	case PTRACE_SETREGS: 
-		if (current->tss.flags & SPARC_FLAG_32BIT) {
-			struct pt_regs32 *pregs = (struct pt_regs32 *) addr;
-			struct pt_regs *cregs = child->tss.kregs;
-			unsigned int psr, pc, npc, y;
-			int i;
-
-			/* Must be careful, tracing process can only set certain
-			 * bits in the psr.
-			 */
-			if (__get_user(psr, (&pregs->psr)) ||
-			    __get_user(pc, (&pregs->pc)) ||
-			    __get_user(npc, (&pregs->npc)) ||
-			    __get_user(y, (&pregs->y))) {
+		cregs->tstate &= ~(TSTATE_ICC);
+		cregs->tstate |= psr_to_tstate_icc(psr);
+               	if(!((pc | npc) & 3)) {
+			cregs->tpc = pc;
+			cregs->tpc = npc;
+		}
+		cregs->y = y;
+		for(i = 1; i < 16; i++)
+			if (__get_user(cregs->u_regs[i], (&pregs->u_regs[i-1]))) {
 				pt_error_return(regs, EFAULT);
 				goto out;
 			}
-			cregs->tstate &= ~(TSTATE_ICC);
-			cregs->tstate |= psr_to_tstate_icc(psr);
-                	if(!((pc | npc) & 3)) {
-				cregs->tpc = pc;
-				cregs->tpc = npc;
-			}
-			cregs->y = y;
-			for(i = 1; i < 16; i++)
-				if (__get_user(cregs->u_regs[i], (&pregs->u_regs[i-1]))) {
-					pt_error_return(regs, EFAULT);
-					goto out;
-				}
-			pt_succ_return(regs, 0);
-			goto out;
-		} else {
-			struct pt_regs *pregs = (struct pt_regs *) addr;
-			struct pt_regs *cregs = child->tss.kregs;
-			unsigned long tstate, tpc, tnpc, y;
-			int i;
+		pt_succ_return(regs, 0);
+		goto out;
+	}
 
-			/* Must be careful, tracing process can only set certain
-			 * bits in the psr.
-			 */
-			if (__get_user(tstate, (&pregs->tstate)) ||
-			    __get_user(tpc, (&pregs->tpc)) ||
-			    __get_user(tnpc, (&pregs->tnpc)) ||
-			    __get_user(y, (&pregs->y))) {
-				pt_error_return(regs, EFAULT);
-				goto out;
-			}
-			tstate &= (TSTATE_ICC | TSTATE_XCC);
-			cregs->tstate &= ~(TSTATE_ICC | TSTATE_XCC);
-			cregs->tstate |= tstate;
-			if(!((tpc | tnpc) & 3)) {
-				cregs->tpc = tpc;
-				cregs->tnpc = tnpc;
-			}
-			cregs->y = y;
-			for(i = 1; i < 16; i++)
-				if (__get_user(cregs->u_regs[i], (&pregs->u_regs[i-1]))) {
-					pt_error_return(regs, EFAULT);
-					goto out;
-				}
-			pt_succ_return(regs, 0);
+	case PTRACE_SETREGS64: {
+		struct pt_regs *pregs = (struct pt_regs *) addr;
+		struct pt_regs *cregs = child->tss.kregs;
+		unsigned long tstate, tpc, tnpc, y;
+		int i;
+
+		/* Must be careful, tracing process can only set certain
+		 * bits in the psr.
+		 */
+		if (__get_user(tstate, (&pregs->tstate)) ||
+		    __get_user(tpc, (&pregs->tpc)) ||
+		    __get_user(tnpc, (&pregs->tnpc)) ||
+		    __get_user(y, (&pregs->y))) {
+			pt_error_return(regs, EFAULT);
 			goto out;
 		}
-
-	case PTRACE_GETFPREGS: 
-		if (current->tss.flags & SPARC_FLAG_32BIT) {
-			struct fps {
-				unsigned int regs[32];
-				unsigned int fsr;
-				unsigned int flags;
-				unsigned int extra;
-				unsigned int fpqd;
-				struct fq {
-					unsigned int insnaddr;
-					unsigned int insn;
-				} fpq[16];
-			} *fps = (struct fps *) addr;
-
-			if (copy_to_user(&fps->regs[0], &child->tss.float_regs[0], (32 * sizeof(unsigned int))) ||
-			    __put_user(child->tss.fsr, (&fps->fsr)) ||
-			    __put_user(0, (&fps->fpqd)) ||
-			    __put_user(0, (&fps->flags)) ||
-			    __put_user(0, (&fps->extra)) ||
-			    clear_user(&fps->fpq[0], 32 * sizeof(unsigned int))) {
+		tstate &= (TSTATE_ICC | TSTATE_XCC);
+		cregs->tstate &= ~(TSTATE_ICC | TSTATE_XCC);
+		cregs->tstate |= tstate;
+		if(!((tpc | tnpc) & 3)) {
+			cregs->tpc = tpc;
+			cregs->tnpc = tnpc;
+		}
+		cregs->y = y;
+		for(i = 1; i < 16; i++)
+			if (__get_user(cregs->u_regs[i], (&pregs->u_regs[i-1]))) {
 				pt_error_return(regs, EFAULT);
 				goto out;
 			}
-			pt_succ_return(regs, 0);
-			goto out;
-		} else {
-			struct fps {
-				unsigned int regs[64];
-				unsigned long fsr;
-			} *fps = (struct fps *) addr;
+		pt_succ_return(regs, 0);
+		goto out;
+	}
 
-			if (copy_to_user(&fps->regs[0], &child->tss.float_regs[0], (64 * sizeof(unsigned int))) ||
-			    __put_user(child->tss.fsr, (&fps->fsr))) {
-				pt_error_return(regs, EFAULT);
-				goto out;
-			}
-			pt_succ_return(regs, 0);
+	case PTRACE_GETFPREGS: {
+		struct fps {
+			unsigned int regs[32];
+			unsigned int fsr;
+			unsigned int flags;
+			unsigned int extra;
+			unsigned int fpqd;
+			struct fq {
+				unsigned int insnaddr;
+				unsigned int insn;
+			} fpq[16];
+		} *fps = (struct fps *) addr;
+		unsigned long *fpregs = (unsigned long *)(child->tss.kregs+1);
+
+		if (copy_to_user(&fps->regs[0], fpregs,
+				 (32 * sizeof(unsigned int))) ||
+		    __put_user(((unsigned int)fpregs[32]), (&fps->fsr)) ||
+		    __put_user(0, (&fps->fpqd)) ||
+		    __put_user(0, (&fps->flags)) ||
+		    __put_user(0, (&fps->extra)) ||
+		    clear_user(&fps->fpq[0], 32 * sizeof(unsigned int))) {
+			pt_error_return(regs, EFAULT);
 			goto out;
 		}
+		pt_succ_return(regs, 0);
+		goto out;
+	}
 
-	case PTRACE_SETFPREGS:
-		if (current->tss.flags & SPARC_FLAG_32BIT) {
-			struct fps {
-				unsigned int regs[32];
-				unsigned int fsr;
-				unsigned int flags;
-				unsigned int extra;
-				unsigned int fpqd;
-				struct fq {
-					unsigned int insnaddr;
-					unsigned int insn;
-				} fpq[16];
-			} *fps = (struct fps *) addr;
-			unsigned fsr;
+	case PTRACE_GETFPREGS64: {
+		struct fps {
+			unsigned int regs[64];
+			unsigned long fsr;
+		} *fps = (struct fps *) addr;
+		unsigned long *fpregs = (unsigned long *)(child->tss.kregs+1);
 
-			if (copy_from_user(&child->tss.float_regs[0], &fps->regs[0], (32 * sizeof(unsigned int))) ||
-			    __get_user(fsr, (&fps->fsr))) {
-				pt_error_return(regs, EFAULT);
-				goto out;
-			}
-			child->tss.fsr &= 0xffffffff00000000UL;
-			child->tss.fsr |= fsr;
-			pt_succ_return(regs, 0);
-			goto out;
-		} else {
-			struct fps {
-				unsigned int regs[64];
-				unsigned long fsr;
-			} *fps = (struct fps *) addr;
-
-			if (copy_from_user(&child->tss.float_regs[0], &fps->regs[0], (64 * sizeof(unsigned int))) ||
-			    __get_user(child->tss.fsr, (&fps->fsr))) {
-				pt_error_return(regs, EFAULT);
-				goto out;
-			}
-			pt_succ_return(regs, 0);
+		if (copy_to_user(&fps->regs[0], fpregs,
+				 (64 * sizeof(unsigned int))) ||
+		    __put_user(fpregs[32], (&fps->fsr))) {
+			pt_error_return(regs, EFAULT);
 			goto out;
 		}
+		pt_succ_return(regs, 0);
+		goto out;
+	}
+
+	case PTRACE_SETFPREGS: {
+		struct fps {
+			unsigned int regs[32];
+			unsigned int fsr;
+			unsigned int flags;
+			unsigned int extra;
+			unsigned int fpqd;
+			struct fq {
+				unsigned int insnaddr;
+				unsigned int insn;
+			} fpq[16];
+		} *fps = (struct fps *) addr;
+		unsigned long *fpregs = (unsigned long *)(child->tss.kregs+1);
+		unsigned fsr;
+
+		if (copy_from_user(fpregs, &fps->regs[0],
+				   (32 * sizeof(unsigned int))) ||
+		    __get_user(fsr, (&fps->fsr))) {
+			pt_error_return(regs, EFAULT);
+			goto out;
+		}
+		fpregs[32] &= 0xffffffff00000000UL;
+		fpregs[32] |= fsr;
+		pt_succ_return(regs, 0);
+		goto out;
+	}
+
+	case PTRACE_SETFPREGS64: {
+		struct fps {
+			unsigned int regs[64];
+			unsigned long fsr;
+		} *fps = (struct fps *) addr;
+		unsigned long *fpregs = (unsigned long *)(child->tss.kregs+1);
+
+		if (copy_from_user(fpregs, &fps->regs[0],
+				   (64 * sizeof(unsigned int))) ||
+		    __get_user(fpregs[32], (&fps->fsr))) {
+			pt_error_return(regs, EFAULT);
+			goto out;
+		}
+		pt_succ_return(regs, 0);
+		goto out;
+	}
 
 	case PTRACE_READTEXT:
 	case PTRACE_READDATA: {
@@ -1022,7 +1067,10 @@ asmlinkage void syscall_trace(void)
 		current->pid, current->exit_code);
 #endif
 	if (current->exit_code) {
-		set_bit(current->exit_code + 31, &current->signal);
+		/* spin_lock_irq(&current->sigmask_lock); */
+		current->signal |= (1 << (current->exit_code - 1));
+		/* spin_unlock_irq(&current->sigmask_lock); */
 	}
+
 	current->exit_code = 0;
 }

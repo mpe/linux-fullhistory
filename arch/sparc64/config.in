@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.7 1997/06/17 03:54:52 davem Exp $
+# $Id: config.in,v 1.9 1997/07/04 11:33:05 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -51,10 +51,10 @@ bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'Sysctl support' CONFIG_SYSCTL
 bool 'Kernel support for Linux/Sparc 32bit binary compatibility' CONFIG_SPARC32_COMPAT
-tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for 64-bit ELF binaries' CONFIG_BINFMT_ELF
 if [ "$CONFIG_SPARC32_COMPAT" != "n" ]; then
   tristate 'Kernel support for 32-bit ELF binaries' CONFIG_BINFMT_ELF32
+  bool 'Kernel support for 32-bit (ie. SunOS) a.out binaries' CONFIG_BINFMT_AOUT32
 fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Kernel support for JAVA binaries' CONFIG_BINFMT_JAVA
@@ -157,4 +157,5 @@ bool 'Kernel profiling support' CONFIG_PROFILE
 if [ "$CONFIG_PROFILE" = "y" ]; then
 	int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 fi
+bool 'ECache flush trap support at ta 0x72' CONFIG_EC_FLUSH_TRAP
 endmenu
