@@ -37,12 +37,16 @@
  *                                      if it really needed.
  *		Alan Cox	:	Free slhc buffers in the right place.
  *		Alan Cox	:	Allow for digipeated IP over AX.25
+ *		Matti Aarnio	:	Dynamic SLIP devices, with ideas taken
+ *					from Jim Freeman's <jfree@caldera.com>
+ *					dynamic PPP devices.  We do NOT kfree()
+ *					device entries, just reg./unreg. them
+ *					as they are needed.  We kfree() them
+ *					at module cleanup.
+ *					With MODULE-loading ``insmod'', user can
+ *					issue parameter:   slip_maxdev=1024
+ *					(Or how much he/she wants.. Default is 256)
  *
- *
- *
- *	FIXME:	This driver still makes some IP'ish assumptions. It should build cleanly KISS TNC only without
- *	CONFIG_INET defined.
- *      I hope now it is fixed ;)
  */
 
 #define SL_CHECK_TRANSMIT
@@ -86,9 +90,15 @@
 #endif
 
 
-static struct slip	sl_ctrl[SL_NRUNIT];
+typedef struct slip_ctrl {
+	char		if_name[8];	/* "sl0\0" .. "sl99999\0"	*/
+	struct slip	ctrl;		/* SLIP things			*/
+	struct device	dev;		/* the device			*/
+} slip_ctrl_t;
+static slip_ctrl_t	**slip_ctrls = NULL;
+int slip_maxdev = SL_NRUNIT;		/* Can be overridden with insmod! */
+
 static struct tty_ldisc	sl_ldisc;
-static int		already = 0;
 
 static int slip_esc(unsigned char *p, unsigned char *d, int len);
 static void slip_unesc(struct slip *sl, unsigned char c);
@@ -102,15 +112,67 @@ static void slip_unesc6(struct slip *sl, unsigned char c);
 static inline struct slip *
 sl_alloc(void)
 {
-	struct slip *sl;
+	slip_ctrl_t *slp;
 	int i;
 
-	for (i = 0; i < SL_NRUNIT; i++) {
-		sl = &sl_ctrl[i];
-		if (!set_bit(SLF_INUSE, &sl->flags)) {
-			return sl;
-		}
+	if (slip_ctrls == NULL) return NULL;	/* Master array missing ! */
+
+	for (i = 0; i < slip_maxdev; i++) {
+	  slp = slip_ctrls[i];
+	  /* Not allocated ? */
+	  if (slp == NULL)
+	    break;
+	  /* Not in use ? */
+	  if (!set_bit(SLF_INUSE, &slp->ctrl.flags))
+	    break;
 	}
+	/* SLP is set.. */
+
+	/* Sorry, too many, all slots in use */
+	if (i >= slip_maxdev) return NULL;
+
+	/* If no channels are available, allocate one */
+	if (!slp &&
+	    (slip_ctrls[i] = (slip_ctrl_t *)kmalloc(sizeof(slip_ctrl_t),
+						    GFP_KERNEL)) != NULL) {
+	  slp = slip_ctrls[i];
+	  memset(slp, 0, sizeof(slip_ctrl_t));
+
+	  /* Initialize channel control data */
+	  set_bit(SLF_INUSE, &slp->ctrl.flags);
+	  slp->ctrl.tty         = NULL;
+	  sprintf(slp->if_name, "sl%d", i);
+	  slp->dev.name         = slp->if_name;
+	  slp->dev.base_addr    = i;
+	  slp->dev.priv         = (void*)&(slp->ctrl);
+	  slp->dev.next         = NULL;
+	  slp->dev.init         = slip_init;
+/* printk(KERN_INFO "slip: kmalloc()ed SLIP control node for line %s\n",
+   slp->if_name); */
+	}
+	if (slp != NULL) {
+
+	  /* register device so that it can be ifconfig'ed       */
+	  /* slip_init() will be called as a side-effect         */
+	  /* SIDE-EFFECT WARNING: slip_init() CLEARS slp->ctrl ! */
+
+	  if (register_netdev(&(slp->dev)) == 0) {
+	    /* (Re-)Set the INUSE bit.   Very Important! */
+	    set_bit(SLF_INUSE, &slp->ctrl.flags);
+	    slp->ctrl.dev = &(slp->dev);
+	    slp->dev.priv = (void*)&(slp->ctrl);
+
+/* printk(KERN_INFO "slip: linked in netdev %s for active use\n",
+   slp->if_name); */
+
+	    return (&(slp->ctrl));
+
+	  } else {
+	    clear_bit(SLF_INUSE,&(slp->ctrl.flags));
+	    printk("sl_alloc() - register_netdev() failure.\n");
+	  }
+	}
+
 	return NULL;
 }
 
@@ -150,9 +212,9 @@ sl_free(struct slip *sl)
 	}
 }
 
-/* MTU has been changed by the IP layer. Unfortunately we are not told about this, but
-   we spot it ourselves and fix things up. We could be in an upcall from the tty
-   driver, or in an ip packet queue. */
+/* MTU has been changed by the IP layer. Unfortunately we are not told
+   about this, but we spot it ourselves and fix things up. We could be
+   in an upcall from the tty driver, or in an ip packet queue. */
 
 static void sl_changedmtu(struct slip *sl)
 {
@@ -418,7 +480,7 @@ static void slip_write_wakeup(struct tty_struct *tty)
 static int
 sl_xmit(struct sk_buff *skb, struct device *dev)
 {
-	struct slip *sl = &sl_ctrl[dev->base_addr];
+	struct slip *sl = (struct slip*)(dev->priv);
 
 	if (!dev->start)  {
 		printk("%s: xmit call when iface is down\n", dev->name);
@@ -473,7 +535,7 @@ sl_header(struct sk_buff *skb, struct device *dev, unsigned short type,
 {
 #ifdef CONFIG_AX25
 #ifdef CONFIG_INET
-	struct slip *sl = &sl_ctrl[dev->base_addr];
+	struct slip *sl = (struct slip*)(dev->priv);
 
 	if (((sl->mode & SL_MODE_AX25) || (sl->mode & SL_MODE_AX25VC)) && type != htons(ETH_P_AX25))  {
 		return ax25_encapsulate(skb, dev, type, daddr, saddr, len);
@@ -491,7 +553,7 @@ sl_rebuild_header(void *buff, struct device *dev, unsigned long raddr,
 {
 #ifdef CONFIG_AX25
 #ifdef CONFIG_INET
-	struct slip *sl = &sl_ctrl[dev->base_addr];
+	struct slip *sl = (struct slip*)(dev->priv);
 
 	if ((sl->mode & SL_MODE_AX25) || (sl->mode & SL_MODE_AX25VC)) {
 		return ax25_rebuild_header(buff, dev, raddr, skb);
@@ -506,7 +568,7 @@ sl_rebuild_header(void *buff, struct device *dev, unsigned long raddr,
 static int
 sl_open(struct device *dev)
 {
-	struct slip *sl = &sl_ctrl[dev->base_addr];
+	struct slip *sl = (struct slip*)(dev->priv);
 	unsigned long len;
 
 	if (sl->tty == NULL) {
@@ -590,7 +652,7 @@ norbuff:
 static int
 sl_close(struct device *dev)
 {
-	struct slip *sl = &sl_ctrl[dev->base_addr];
+	struct slip *sl = (struct slip*)(dev->priv);
 
 	if (sl->tty == NULL) {
 		return -EBUSY;
@@ -729,6 +791,7 @@ slip_close(struct tty_struct *tty)
 	tty->disc_data = 0;
 	sl->tty = NULL;
 	sl_free(sl);
+	unregister_netdev(sl->dev);
 #ifdef MODULE
 	MOD_DEC_USE_COUNT;
 #endif
@@ -739,7 +802,7 @@ static struct enet_statistics *
 sl_get_stats(struct device *dev)
 {
 	static struct enet_statistics stats;
-	struct slip *sl = &sl_ctrl[dev->base_addr];
+	struct slip *sl = (struct slip*)(dev->priv);
 #ifdef SL_INCLUDE_CSLIP
 	struct slcompress *comp;
 #endif
@@ -948,7 +1011,7 @@ sl_set_dev_mac_address(struct device *dev, void *addr)
 
 int sl_get_ax25_mode(struct device *dev)
 {
-	struct slip *sl = &sl_ctrl[dev->base_addr];
+	struct slip *sl = (struct slip*)(dev->priv);
 
 	return sl->mode & SL_MODE_AX25VC;
 }
@@ -1049,17 +1112,82 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 
 static int sl_open_dev(struct device *dev)
 {
-	struct slip *sl = &sl_ctrl[dev->base_addr];
+	struct slip *sl = (struct slip*)(dev->priv);
 	if(sl->tty==NULL)
 		return -ENODEV;
 	return 0;
 }
 
+/* Initialize SLIP control device -- register SLIP line discipline */
+#ifdef MODULE
+static int slip_init_ctrl_dev()
+#else	/* !MODULE */
+int
+slip_init_ctrl_dev(struct device *dummy)
+#endif	/* !MODULE */
+{
+	int status;
+
+	if (slip_maxdev < 4) slip_maxdev = 4; /* Sanity */
+
+	printk("SLIP: version %s (dynamic channels, max=%d)"
+#ifdef CONFIG_SLIP_MODE_SLIP6
+	       " (6 bit encapsulation enabled)"
+#endif
+	       "\n",
+	       SLIP_VERSION, slip_maxdev );
+#if defined(SL_INCLUDE_CSLIP) && !defined(MODULE)
+	printk("CSLIP: code copyright 1989 Regents of the University of California\n");
+#endif
+#ifdef CONFIG_AX25
+	printk("AX25: KISS encapsulation enabled\n");
+#endif
+
+	slip_ctrls = (slip_ctrl_t **) kmalloc(sizeof(void*)*slip_maxdev, GFP_KERNEL);
+	if (slip_ctrls == NULL) {
+	  printk("SLIP: Can't allocate slip_ctrls[] array!  Uaargh! (-> No SLIP available)\n");
+	  return -ENOMEM;
+	}
+	
+	/* Clear the pointer array, we allocate devices when we need them */
+	memset(slip_ctrls, 0, sizeof(void*)*slip_maxdev); /* Pointers */
+
+	/* Fill in our line protocol discipline, and register it */
+	memset(&sl_ldisc, 0, sizeof(sl_ldisc));
+	sl_ldisc.magic  = TTY_LDISC_MAGIC;
+	sl_ldisc.flags  = 0;
+	sl_ldisc.open   = slip_open;
+	sl_ldisc.close  = slip_close;
+	sl_ldisc.read   = NULL;
+	sl_ldisc.write  = NULL;
+	sl_ldisc.ioctl  = (int (*)(struct tty_struct *, struct file *,
+				   unsigned int, unsigned long)) slip_ioctl;
+	sl_ldisc.select = NULL;
+	sl_ldisc.receive_buf = slip_receive_buf;
+	sl_ldisc.receive_room = slip_receive_room;
+	sl_ldisc.write_wakeup = slip_write_wakeup;
+	if ((status = tty_register_ldisc(N_SLIP, &sl_ldisc)) != 0)  {
+	  printk("SLIP: can't register line discipline (err = %d)\n", status);
+	}
+
+
+	/* If not loadable module, a bootstrap Space.c slip_proto dev
+	 *  now needs to be unregistered.
+	 */
+#ifndef MODULE
+	printk("SLIP: Unregistering bootstrap device "
+	       "'slip_proto' - slip OK\n");
+	unregister_netdev(dummy);
+#endif
+	return status;
+      }
+
+
 /* Initialize the SLIP driver.  Called by DDI. */
 int
 slip_init(struct device *dev)
 {
-	struct slip *sl = &sl_ctrl[dev->base_addr];
+	struct slip *sl = (struct slip*)(dev->priv);
 	int i;
 #ifdef CONFIG_AX25
 	static char ax25_bcast[AX25_ADDR_LEN] =
@@ -1068,39 +1196,8 @@ slip_init(struct device *dev)
 		{'L'<<1,'I'<<1,'N'<<1,'U'<<1,'X'<<1,' '<<1,'1'<<1};
 #endif
 
-	if (already++ == 0) {
-		printk("SLIP: version %s (%d channels) %s\n",
-		       SLIP_VERSION, SL_NRUNIT,
-#ifdef CONFIG_SLIP_MODE_SLIP6
-		       "(6 bit encapsulation enabled)"
-#else
-		       ""
-#endif
-		       );
-#if defined(SL_INCLUDE_CSLIP) && !defined(MODULE)
-		printk("CSLIP: code copyright 1989 Regents of the University of California\n");
-#endif
-#ifdef CONFIG_AX25
-		printk("AX25: KISS encapsulation enabled\n");
-#endif
-		/* Fill in our LDISC request block. */
-		memset(&sl_ldisc, 0, sizeof(sl_ldisc));
-		sl_ldisc.magic	= TTY_LDISC_MAGIC;
-		sl_ldisc.flags	= 0;
-		sl_ldisc.open	= slip_open;
-		sl_ldisc.close	= slip_close;
-		sl_ldisc.read	= NULL;
-		sl_ldisc.write	= NULL;
-		sl_ldisc.ioctl	= (int (*)(struct tty_struct *, struct file *,
-					   unsigned int, unsigned long)) slip_ioctl;
-		sl_ldisc.select = NULL;
-		sl_ldisc.receive_buf = slip_receive_buf;
-		sl_ldisc.receive_room = slip_receive_room;
-		sl_ldisc.write_wakeup = slip_write_wakeup;
-		if ((i = tty_register_ldisc(N_SLIP, &sl_ldisc)) != 0)  {
-			printk("SLIP: can't register line discipline (err = %d)\n", i);
-		}
-	}
+	if (sl == NULL)		/* Allocation failed ?? */
+	  return -ENODEV;
 
 	/* Set up the "SLIP Control Block". (And clear statistics) */
 	
@@ -1149,47 +1246,10 @@ slip_init(struct device *dev)
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
 
-static struct device dev_slip[SL_NRUNIT] =  {
-	{
-		"sl0",		/* slip */
-		0, 0, 0, 0,	/* memory */
-		0, 0,		/* base, irq */
-		0, 0, 0, NULL, slip_init,
-	},
-	{ "sl1" , 0, 0, 0, 0,  1, 0, 0, 0, 0, NULL, slip_init },
-	{ "sl2" , 0, 0, 0, 0,  2, 0, 0, 0, 0, NULL, slip_init },
-	{ "sl3" , 0, 0, 0, 0,  3, 0, 0, 0, 0, NULL, slip_init },
-#ifdef SL_SLIP_LOTS
-	{ "sl4" , 0, 0, 0, 0,  4, 0, 0, 0, 0, NULL, slip_init },
-	{ "sl5" , 0, 0, 0, 0,  5, 0, 0, 0, 0, NULL, slip_init },
-	{ "sl6" , 0, 0, 0, 0,  6, 0, 0, 0, 0, NULL, slip_init },
-	{ "sl7" , 0, 0, 0, 0,  7, 0, 0, 0, 0, NULL, slip_init },
-	{ "sl8" , 0, 0, 0, 0,  8, 0, 0, 0, 0, NULL, slip_init },
-	{ "sl9" , 0, 0, 0, 0,  9, 0, 0, 0, 0, NULL, slip_init },
-	{ "sl10", 0, 0, 0, 0, 10, 0, 0, 0, 0, NULL, slip_init },
-	{ "sl11", 0, 0, 0, 0, 11, 0, 0, 0, 0, NULL, slip_init },
-	{ "sl12", 0, 0, 0, 0, 12, 0, 0, 0, 0, NULL, slip_init },
-	{ "sl13", 0, 0, 0, 0, 13, 0, 0, 0, 0, NULL, slip_init },
-	{ "sl14", 0, 0, 0, 0, 14, 0, 0, 0, 0, NULL, slip_init },
-	{ "sl15", 0, 0, 0, 0, 15, 0, 0, 0, 0, NULL, slip_init },
-#endif /* SL_SLIP_LOTS */
-};
-
 int
 init_module(void)
 {
-	int err;
-	int i;
-
-	for (i = 0; i < SL_NRUNIT; i++)  {
-		if ((err = register_netdev(&dev_slip[i])))  {
-			if (err == -EEXIST)  {
-				printk("SLIP: devices already present. Module not loaded.\n");
-			}
-			return err;
-		}
-	}
-	return 0;
+	return slip_init_ctrl_dev();
 }
 
 void
@@ -1201,12 +1261,18 @@ cleanup_module(void)
 		printk("SLIP: device busy, remove delayed\n");
 		return;
 	}
-	for (i = 0; i < SL_NRUNIT; i++)  {
-		unregister_netdev(&dev_slip[i]);
+	if (slip_ctrls != NULL) {
+	  for (i = 0; i < slip_maxdev; i++)  {
+	    if (slip_ctrls[i] != NULL) {
+	      unregister_netdev(&(slip_ctrls[i]->dev));
+	      kfree(slip_ctrls[i]);
+	    }
+	  }
+	  kfree(slip_ctrls);
+	  slip_ctrls = NULL;
 	}
 	if ((i = tty_register_ldisc(N_SLIP, NULL)))  {
-		printk("SLIP: can't unregister line discipline (err = %d)\n", i);
+	  printk("SLIP: can't unregister line discipline (err = %d)\n", i);
 	}
-	already = 0;
 }
 #endif /* MODULE */

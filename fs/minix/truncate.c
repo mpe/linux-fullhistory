@@ -52,7 +52,10 @@ repeat:
 		}
 		*p = 0;
 		inode->i_dirt = 1;
-		brelse(bh);
+		if (bh) {
+			mark_buffer_clean(bh);
+			brelse(bh);
+		}
 		minix_free_block(inode->i_sb,tmp);
 	}
 	return retry;

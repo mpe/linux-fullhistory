@@ -28,8 +28,6 @@
 
 #include <asm/segment.h>
 
-extern int *blksize_size[];
-
 void msdos_put_inode(struct inode *inode)
 {
 	struct inode *depend;

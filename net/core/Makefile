@@ -13,7 +13,7 @@
 	$(AS) -o $*.o $<
 
 
-OBJS	:= sock.o dev.o dev_mcast.o skbuff.o datagram.o
+OBJS	:= sock.o dev.o dev_mcast.o skbuff.o datagram.o iovec.o
 
 ifdef CONFIG_NET
 

@@ -77,7 +77,7 @@ static int sg_ioctl(struct inode * inode,struct file * file,
     switch(cmd_in)
     {
     case SG_SET_TIMEOUT:
-        result = verify_area(VERIFY_READ, arg, sizeof(long));
+        result = verify_area(VERIFY_READ, (const void *)arg, sizeof(long));
         if (result) return result;
 
 	scsi_generics[dev].timeout=get_user((int *) arg);

@@ -720,8 +720,9 @@ repeat:
 	bh->b_dirt=0;
 	bh->b_lock=0;
 	bh->b_uptodate=0;
-	bh->b_flushtime = 0;
+	bh->b_flushtime=0;
 	bh->b_req=0;
+	bh->b_reuse=0;
 	bh->b_dev=dev;
 	bh->b_blocknr=block;
 	insert_into_queues(bh);
@@ -788,6 +789,15 @@ void brelse(struct buffer_head * buf)
 		if (--buf->b_count)
 			return;
 		wake_up(&buffer_wait);
+		if (buf->b_reuse) {
+			if (!buf->b_lock && !buf->b_dirt && !buf->b_wait) {
+			    	buf->b_reuse = 0;
+				if(buf->b_dev == 0xffff) panic("brelse: Wrong list");
+				remove_from_queues(buf);
+				buf->b_dev = 0xffff;
+				put_last_free(buf);
+			}
+		}
 		return;
 	}
 	printk("VFS: brelse: Trying to free free buffer\n");

@@ -85,6 +85,10 @@ repeat:
 			memset(bh->b_data, RANDOM_INT, inode->i_sb->s_blocksize);
 			mark_buffer_dirty(bh, 1);
 		}
+		else if (bh) {
+			mark_buffer_clean(bh);
+			bh->b_reuse = 1;
+		}
 		brelse (bh);
 		if (free_count == 0) {
 			block_to_free = tmp;
@@ -160,6 +164,10 @@ repeat:
 			memset(bh->b_data, RANDOM_INT, inode->i_sb->s_blocksize);
 			mark_buffer_dirty(bh, 1);
 		}
+		else if (bh) {
+			mark_buffer_clean(bh);
+			bh->b_reuse = 1;
+		}
 		brelse (bh);
 		if (free_count == 0) {
 			block_to_free = tmp;
@@ -185,6 +193,7 @@ repeat:
 		if (ind_bh->b_count != 1)
 			retry = 1;
 		else {
+			ind_bh->b_reuse = 1;
 			tmp = *p;
 			*p = 0;
 			inode->i_blocks -= blocks;
@@ -245,6 +254,7 @@ repeat:
 		if (dind_bh->b_count != 1)
 			retry = 1;
 		else {
+			dind_bh->b_reuse = 1;
 			tmp = *p;
 			*p = 0;
 			inode->i_blocks -= blocks;
@@ -304,6 +314,7 @@ repeat:
 		if (tind_bh->b_count != 1)
 			retry = 1;
 		else {
+			tind_bh->b_reuse = 1;
 			tmp = *p;
 			*p = 0;
 			inode->i_blocks -= blocks;

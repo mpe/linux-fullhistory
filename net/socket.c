@@ -32,6 +32,7 @@
  *		Alan Cox	:	Made sock_alloc()/sock_release() public
  *					for NetROM and future kernel nfsd type
  *					stuff.
+ *		Alan Cox	:	sendmsg/recvmsg basics.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -115,7 +116,7 @@ static int sockets_in_use  = 0;
 
 #define MAX_SOCK_ADDR	128		/* 108 for Unix domain - 16 for IP, 16 for IPX, about 80 for AX.25 */
  
-static int move_addr_to_kernel(void *uaddr, int ulen, void *kaddr)
+int move_addr_to_kernel(void *uaddr, int ulen, void *kaddr)
 {
 	int err;
 	if(ulen<0||ulen>MAX_SOCK_ADDR)
@@ -128,7 +129,7 @@ static int move_addr_to_kernel(void *uaddr, int ulen, void *kaddr)
 	return 0;
 }
 
-static int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen)
+int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen)
 {
 	int err;
 	int len;
@@ -1089,6 +1090,86 @@ asmlinkage int sys_shutdown(int fd, int how)
 	return(sock->ops->shutdown(sock, how));
 }
 
+/*
+ *	BSD sendmsg interface
+ */
+ 
+asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned int flags)
+{
+	struct socket *sock;
+	struct file *file;
+	char address[MAX_SOCK_ADDR];
+	struct iovec iov[MAX_IOVEC];
+	struct msghdr msg_sys;
+	int err;
+	int total_len;
+	
+	if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
+		return(-EBADF);
+	if (!(sock = sockfd_lookup(fd, NULL)))
+		return(-ENOTSOCK);
+	
+	err=verify_area(VERIFY_READ, msg,sizeof(struct msghdr));
+	if(err)
+		return err;
+	memcpy_fromfs(&msg_sys,msg,sizeof(struct msghdr));
+	if(msg_sys.msg_iovlen>MAX_IOVEC)
+		return -EINVAL;
+	err=verify_iovec(&msg_sys,iov,address, VERIFY_READ);
+	if(err<0)
+		return err;
+	total_len=err;
+	
+	if(sock->ops->sendmsg==NULL)
+		return -EOPNOTSUPP;
+	return sock->ops->sendmsg(sock, &msg_sys, total_len, (file->f_flags&O_NONBLOCK), flags);
+}
+
+/*
+ *	BSD recvmsg interface
+ */
+ 
+asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
+{
+	struct socket *sock;
+	struct file *file;
+	char address[MAX_SOCK_ADDR];
+	struct iovec iov[MAX_IOVEC];
+	struct msghdr msg_sys;
+	int err;
+	int total_len;
+	int addr_len;
+	int len;
+	
+	if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
+		return(-EBADF);
+	if (!(sock = sockfd_lookup(fd, NULL)))
+		return(-ENOTSOCK);
+	
+	err=verify_area(VERIFY_READ, msg,sizeof(struct msghdr));
+	if(err)
+		return err;
+	memcpy_fromfs(&msg_sys,msg,sizeof(struct msghdr));
+	if(msg_sys.msg_iovlen>MAX_IOVEC)
+		return -EINVAL;
+	err=verify_iovec(&msg_sys,iov,address, VERIFY_WRITE);
+	if(err<0)
+		return err;
+	total_len=err;
+	
+	if(sock->ops->recvmsg==NULL)
+		return -EOPNOTSUPP;
+	len=sock->ops->recvmsg(sock, &msg_sys, total_len, (file->f_flags&O_NONBLOCK), flags, &addr_len);
+	if(len<0)
+		return len;
+	/*
+	 *	Fixme: writing actual length into original msghdr.
+	 */
+	if(msg_sys.msg_name!=NULL && (err=move_addr_to_user(address,addr_len, msg_sys.msg_name, &msg_sys.msg_namelen))<0)
+		return err;
+	return len;
+}
+
 
 /*
  *	Perform a file control on a socket file descriptor.
@@ -1120,12 +1201,12 @@ int sock_fcntl(struct file *filp, unsigned int cmd, unsigned long arg)
 asmlinkage int sys_socketcall(int call, unsigned long *args)
 {
 	int er;
-	unsigned char nargs[16]={0,3,3,3,2,3,3,3,
-				 4,4,4,6,6,2,5,5};
+	unsigned char nargs[18]={0,3,3,3,2,3,3,3,
+				 4,4,4,6,6,2,5,5,3,3};
 
 	unsigned long a0,a1;
 				 
-	if(call<1||call>SYS_GETSOCKOPT)
+	if(call<1||call>SYS_RECVMSG)
 		return -EINVAL;
 		
 	er=verify_area(VERIFY_READ, args, nargs[call] * sizeof(unsigned long));
@@ -1198,6 +1279,14 @@ asmlinkage int sys_socketcall(int call, unsigned long *args)
 				get_user(args+2),
 				(char *)get_user(args+3),
 				(int *)get_user(args+4)));
+		case SYS_SENDMSG:
+				return sys_sendmsg(a0,
+					(struct msghdr *) a1,
+					get_user(args+2));
+		case SYS_RECVMSG:
+				return sys_recvmsg(a0,
+					(struct msghdr *) a1,
+					get_user(args+2));
 	}
 	return -EINVAL; /* to keep gcc happy */
 }

@@ -128,7 +128,7 @@ void hd_setup(char *str, int *ints)
 	NR_HD = hdind+1;
 }
 
-static void dump_status (char *msg, unsigned int stat)
+static void dump_status (const char *msg, unsigned int stat)
 {
 	unsigned long flags;
 	char devc;

@@ -24,8 +24,6 @@
 /* In fact, it is very slow if it has to spin up first */
 #define IOCTL_TIMEOUT 3000
 
-extern int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
-
 static void sr_ioctl_done(Scsi_Cmnd * SCpnt)
 {
     struct request * req;

@@ -87,14 +87,8 @@
 #include <asm/segment.h>
 #include <asm/bitops.h>
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <ctype.h>
-#include <time.h>
 #include <linux/kernel.h>
 
-
-long scc_init(long kmem_start);
 
 int scc_open(struct tty_struct *tty, struct file *filp);
 static void scc_close(struct tty_struct *tty, struct file *filp);

@@ -73,7 +73,6 @@ extern void reset_vc(unsigned int new_console);
 extern void change_console(unsigned int new_console);
 extern void scrollback(int);
 extern void scrollfront(int);
-extern int vc_cons_allocated(unsigned int);
 
 #ifdef __i386__
 #define fake_keyboard_interrupt() __asm__ __volatile__("int $0x21")

@@ -80,7 +80,9 @@ extern void rd_load(void);
 extern long rd_init(long mem_start, int length);
 extern int ramdisk_size;
 
+#ifdef CONFIG_BLK_DEV_XD
 extern unsigned long xd_init(unsigned long mem_start, unsigned long mem_end);
+#endif
 
 #define RO_IOCTLS(dev,where) \
   case BLKROSET: if (!suser()) return -EACCES; \

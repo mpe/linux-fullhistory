@@ -25,6 +25,10 @@
  * as published by the Free Software Foundation; either version
  * 2 of the License, or (at your option) any later version.
  *
+ * Fixes
+ *	Alan Cox	:	Rarp delete on device down needed as
+ *				reported by Walter Wolfgang.
+ *
  */
 
 #include <linux/types.h>
@@ -87,16 +91,6 @@ static struct packet_type rarp_packet_type =
 
 static initflag = 1;
 
-/*
- *	Called once when data first added to rarp cache with ioctl.
- */
-
-static void rarp_init (void)
-{
-	/* Register the packet type */
-	rarp_packet_type.type=htons(ETH_P_RARP);
-	dev_add_pack(&rarp_packet_type);
-}
 
 /*
  *	Release the memory for this entry.
@@ -133,6 +127,56 @@ static void rarp_destroy(unsigned long ip_addr)
 	sti();
 }
 
+/*
+ *	Flush a device.
+ */
+
+static void rarp_destroy_dev(struct device *dev)
+{
+	struct rarp_table *entry;
+	struct rarp_table **pentry;
+  
+	cli();
+	pentry = &rarp_tables;
+	while ((entry = *pentry) != NULL)
+	{
+		if (entry->dev == dev)
+		{
+			*pentry = entry->next;
+			sti();
+			rarp_release_entry(entry);
+		}
+		else
+			pentry = &entry->next;
+	}
+	sti();
+}
+
+static int rarp_device_event(unsigned long event, void *ptr)
+{
+	if(event!=NETDEV_DOWN)
+		return NOTIFY_DONE;
+	rarp_destroy_dev((struct device *)ptr);
+	return NOTIFY_DONE;
+}
+
+/*
+ *	Called once when data first added to rarp cache with ioctl.
+ */
+ 
+static struct notifier_block rarp_dev_notifier={
+	rarp_device_event,
+	NULL,
+	0
+};
+ 
+static void rarp_init (void)
+{
+	/* Register the packet type */
+	rarp_packet_type.type=htons(ETH_P_RARP);
+	dev_add_pack(&rarp_packet_type);
+	register_netdevice_notifier(&rarp_dev_notifier);
+}
 
 /*
  *	Receive an arp request by the device layer.  Maybe it should be 
@@ -145,8 +189,8 @@ int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 /*
  *	We shouldn't use this type conversion. Check later.
  */
-	struct arphdr *rarp = (struct arphdr *)skb->h.raw;
-	unsigned char *rarp_ptr = (unsigned char *)(rarp+1);
+	struct arphdr *rarp = (struct arphdr *)skb_pull(skb,sizeof(struct arphdr));
+	unsigned char *rarp_ptr = skb->data;
 	struct rarp_table *entry;
 	long sip,tip;
 	unsigned char *sha,*tha;            /* s for "source", t for "target" */

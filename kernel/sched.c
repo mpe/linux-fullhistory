@@ -716,12 +716,18 @@ static void do_timer(int irq, struct pt_regs * regs)
 asmlinkage unsigned int sys_alarm(unsigned int seconds)
 {
 	struct itimerval it_new, it_old;
+	unsigned int oldalarm;
 
 	it_new.it_interval.tv_sec = it_new.it_interval.tv_usec = 0;
 	it_new.it_value.tv_sec = seconds;
 	it_new.it_value.tv_usec = 0;
 	_setitimer(ITIMER_REAL, &it_new, &it_old);
-	return(it_old.it_value.tv_sec + (it_old.it_value.tv_usec / 1000000));
+	oldalarm = it_old.it_value.tv_sec;
+	/* ehhh.. We can't return 0 if we have an alarm pending.. */
+	/* And we'd better return too much than too little anyway */
+	if (it_old.it_value.tv_usec)
+		oldalarm++;
+	return oldalarm;
 }
 
 asmlinkage int sys_getpid(void)

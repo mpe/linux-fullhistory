@@ -123,8 +123,6 @@ static struct enet_statistics *ni65_get_stats(struct device *);
 
 static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 
-extern void *irq2dev_map[16];
-
 struct priv 
 {
   struct init_block ib; 
@@ -223,7 +221,7 @@ static int ni65_probe1(struct device *dev,int ioaddr)
   if(dev->dma == 0)  
     dev->dma = dmatab[inw(PORT+L_CONFIG)&3];
 
-  printk("%s: %s found at %#3x, IRQ %d DMA %d.\n", dev->name,
+  printk("%s: %s found at %#3lx, IRQ %d DMA %d.\n", dev->name,
            "network card", dev->base_addr, dev->irq,dev->dma);
 
   {        

@@ -2,6 +2,12 @@
 #define _I386_PGTABLE_H
 
 /*
+ * Define CONFIG_PENTIUM_MM if you want the 4MB page table optimizations.
+ * This works only on a intel Pentium.
+ */
+#define CONFIG_PENTIUM_MM 1
+
+/*
  * The Linux memory management assumes a three-level page table setup. On
  * the i386, we use that, but "fold" the mid level into the top-level page
  * table, so that we physically have the same two-level page table as the
@@ -40,12 +46,20 @@
 #define VMALLOC_START ((high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1))
 #define VMALLOC_VMADDR(x) (TASK_SIZE + (unsigned long)(x))
 
+/*
+ * The 4MB page is guessing..  Detailed in the infamous "Chapter H"
+ * of the Pentium details, but assuming intel did the straigtforward
+ * thing, this bit set in the page directory entry just means that
+ * the page directory entry points directly to a 4MB-aligned block of
+ * memory. 
+ */
 #define _PAGE_PRESENT	0x001
 #define _PAGE_RW	0x002
 #define _PAGE_USER	0x004
 #define _PAGE_PCD	0x010
 #define _PAGE_ACCESSED	0x020
 #define _PAGE_DIRTY	0x040
+#define _PAGE_4M	0x080	/* 4 MB page, Pentium+.. */
 #define _PAGE_COW	0x200	/* implemented in software (one of the AVL bits) */
 
 #define _PAGE_TABLE	(_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | _PAGE_ACCESSED | _PAGE_DIRTY)
@@ -127,8 +141,6 @@ do { \
 		__asm__ __volatile__("movl %0,%%cr3": :"a" ((tsk)->tss.cr3)); \
 } while (0)
 
-extern unsigned long high_memory;
-
 extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
 extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_PRESENT; }
 extern inline int pte_inuse(pte_t *ptep)	{ return mem_map[MAP_NR(ptep)] != 1; }
@@ -142,7 +154,11 @@ extern inline void pte_reuse(pte_t * ptep)
 extern inline int pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
 extern inline int pmd_bad(pmd_t pmd)		{ return (pmd_val(pmd) & ~PAGE_MASK) != _PAGE_TABLE || pmd_val(pmd) > high_memory; }
 extern inline int pmd_present(pmd_t pmd)	{ return pmd_val(pmd) & _PAGE_PRESENT; }
+#ifdef CONFIG_PENTIUM_MM
+extern inline int pmd_inuse(pmd_t *pmdp)	{ return (pmd_val(*pmdp) & _PAGE_4M) != 0; }
+#else
 extern inline int pmd_inuse(pmd_t *pmdp)	{ return 0; }
+#endif
 extern inline void pmd_clear(pmd_t * pmdp)	{ pmd_val(*pmdp) = 0; }
 extern inline void pmd_reuse(pmd_t * pmdp)	{ }
 
@@ -261,6 +277,7 @@ extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
  */
 extern inline void pmd_free_kernel(pmd_t * pmd)
 {
+	pmd_val(*pmd) = 0;
 }
 
 extern inline pmd_t * pmd_alloc_kernel(pgd_t * pgd, unsigned long address)
@@ -302,6 +319,7 @@ extern inline pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
  */
 extern inline void pmd_free(pmd_t * pmd)
 {
+	pmd_val(*pmd) = 0;
 }
 
 extern inline pmd_t * pmd_alloc(pgd_t * pgd, unsigned long address)

@@ -22,11 +22,6 @@
 
 extern void locks_remove_locks(struct task_struct *, struct file *);
 
-asmlinkage int sys_ustat(int dev, struct ustat * ubuf)
-{
-	return -ENOSYS;
-}
-
 asmlinkage int sys_statfs(const char * path, struct statfs * buf)
 {
 	struct inode * inode;

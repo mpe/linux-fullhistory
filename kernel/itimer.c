@@ -30,8 +30,8 @@ static unsigned long tvtojiffies(struct timeval *value)
 	unsigned long sec = (unsigned) value->tv_sec;
 	unsigned long usec = (unsigned) value->tv_usec;
 
-	if (sec > (unsigned) (LONG_MAX / HZ))
-		return LONG_MAX;
+	if (sec > (ULONG_MAX / HZ))
+		return ULONG_MAX;
 	usec += 1000000 / HZ - 1;
 	usec /= 1000000 / HZ;
 	return HZ*sec+usec;
@@ -46,17 +46,20 @@ static void jiffiestotv(unsigned long jiffies, struct timeval *value)
 
 static int _getitimer(int which, struct itimerval *value)
 {
-	register long val, interval;
+	register unsigned long val, interval;
 
 	switch (which) {
 	case ITIMER_REAL:
 		interval = current->it_real_incr;
 		val = 0;
 		if (del_timer(&current->real_timer)) {
-			val = current->real_timer.expires-jiffies;
+			unsigned long now = jiffies;
+			val = current->real_timer.expires;
 			add_timer(&current->real_timer);
-			if (val <= 0)
-				val = interval;
+			/* look out for negative/zero itimer.. */
+			if (val <= now)
+				val = now+1;
+			val -= now;
 		}
 		break;
 	case ITIMER_VIRTUAL:
@@ -95,10 +98,16 @@ asmlinkage int sys_getitimer(int which, struct itimerval *value)
 void it_real_fn(unsigned long __data)
 {
 	struct task_struct * p = (struct task_struct *) __data;
+	unsigned long interval;
 
 	send_sig(SIGALRM, p, 1);
-	if (p->it_real_incr) {
-		p->real_timer.expires = jiffies+p->it_real_incr;
+	interval = p->it_real_incr;
+	if (interval) {
+		unsigned long timeout = jiffies + interval;
+		/* check for overflow */
+		if (timeout < interval)
+			timeout = ULONG_MAX;
+		p->real_timer.expires = timeout;
 		add_timer(&p->real_timer);
 	}
 }
@@ -115,12 +124,16 @@ int _setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 	switch (which) {
 		case ITIMER_REAL:
 			del_timer(&current->real_timer);
-			if (j) {
-				current->real_timer.expires = jiffies+j;
-				add_timer(&current->real_timer);
-			}
 			current->it_real_value = j;
 			current->it_real_incr = i;
+			if (!j)
+				break;
+			i = j + jiffies;
+			/* check for overflow.. */
+			if (i < j)
+				i = ULONG_MAX;
+			current->real_timer.expires = i;
+			add_timer(&current->real_timer);
 			break;
 		case ITIMER_VIRTUAL:
 			if (j)

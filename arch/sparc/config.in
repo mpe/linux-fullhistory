@@ -76,7 +76,6 @@ bool 'Dummy net driver support' CONFIG_DUMMY n
 bool 'SLIP (serial line) support' CONFIG_SLIP n
 if [ "$CONFIG_SLIP" = "y" ]; then
   bool ' CSLIP compressed headers' SL_COMPRESSED y
-  bool ' 16 channels instead of 4' SL_SLIP_LOTS n
 #  bool ' SLIP debugging on' SL_DUMP y
 fi
 bool 'PPP (point-to-point) support' CONFIG_PPP n

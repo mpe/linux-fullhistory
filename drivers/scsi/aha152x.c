@@ -225,7 +225,9 @@
 
 /* For PCMCIA cards, always use AUTOCONF */
 #if defined(PCMCIA) || defined(MODULE)
+#if !defined(AUTOCONF)
 #define AUTOCONF
+#endif
 #endif
 
 /* If auto configuration is disabled, IRQ, SCSI_ID and RECONNECT have to

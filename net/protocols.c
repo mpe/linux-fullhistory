@@ -13,7 +13,7 @@
 #define CONFIG_UNIX		/* always present...	*/
 
 #ifdef	CONFIG_UNIX
-#include <net/unix.h>
+#include <net/af_unix.h>
 #endif
 #ifdef	CONFIG_INET
 #include <linux/inet.h>

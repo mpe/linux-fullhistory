@@ -7,7 +7,7 @@ Initial patches to catch up with things we want to add.
 
 o	Merged in the Jorge Cwik fast checksum.		[TESTED]
 o	Added Arnt Gulbrandsen's fast UDP build.	[TESTED]
-o	Pauline Middelinks masquerade patch		[IN/COMPILES]
+o	Pauline Middelinks masquerade patch		[TESTED(bar spoof bug)]
 
 
 0.1
@@ -30,7 +30,7 @@ o	Protocol header cache support			[TESTED]
 o	Fixed ip_build_xmit loopback bugs		[TESTED]
 o	Fixes for SIOCGSTAMP on SOCK_PACKET		[TESTED]
 o	Perfect hash on net_bh().			[TESTED]
-o	Sonix ISDN driver.				[NOT INCLUDED YET]
+o	Sonix ISDN driver.				[SEPERATED/SENT]
 o	Use ip_build_xmit for raw sockets		[TESTED]
 o	3c501 fixed for speed				[TESTED]
 ------->>>>>  ALPHA 002  <<<<<--------
@@ -46,7 +46,7 @@ o	IP build xmit fragment fixes			[TESTED]
 o	TCP SWS probe fix				[TESTED]
 o	Appletalk DDP					[TESTED]
 o	IP firewall bug fixed				[TESTED]
-o	IP masquerade ftp port spoof			[IN]
+o	IP masquerade ftp port spoof			[IN/BUG]
 o	gcc 2.6.3 -O3 fix for checksum assembler	[TESTED]
 o	/proc support shows both timers			[TESTED]
 o	TCP irtt support				[TESTED]
@@ -73,7 +73,7 @@ o	Fixed a _stupid_ appletalk bug			[TESTED]
 o	Missing include					[TESTED]
 		-- Lots of people
 o	Can drop all source routes			[TESTED]
-o	Printing fixes for ip_fw			[IN]
+o	Printing fixes for ip_fw			[TESTED]
 o	UDP checksum fix (Gerhard)			[TESTED]
 o	Newer 3c505 driver from Juha Laiho		[IN]
 o	Security fix to axassociate			[TESTED]
@@ -86,16 +86,16 @@ o	IP Firewall accounting zero bug			[TESTED]
 
 o	Merged loadable firewall code			[NOT INCLUDED YET]
 o	New buffers used totally non optimally		[TESTED]
-o	Fast ip_forwarding (needs changing)		[NOT INCLUDED YET]
+o	Fast ip_forwarding (needs changing)		[NOW INCLUDED IN 1.3.15]
 o	Fixed connection hang bug in new SWS code	[TESTED]
 o	Buffer management hack putting skbuff control
 	after data in the frame because kmalloc is
 	totally cache non-optimal			[TESTED]
-o	Faster checksum [Tom May]			[IN]
-o	Appletalk router fixes [Michael Callahan]	[IN]
+o	Faster checksum [Tom May]			[TESTED]
+o	Appletalk router fixes [Michael Callahan]	[TESTED]
 o	TCP state error fixes [Mark Tamsky]		[TESTED]
 o	Verify area fixes [Heiko Eissfeldt]		[TESTED]
-o	Routes use metric field	[John Naylor]		[IN]
+o	Routes use metric field	[John Naylor]		[TESTED/NOT YET AS BSD]
 o	Major AX.25/NetROM fixes [John Nalor]		[TESTED]
 
 ------->>>>>  NET3 030  <<<<<----------
@@ -103,40 +103,40 @@ o	Major AX.25/NetROM fixes [John Nalor]		[TESTED]
 o	Long word align ethernet IP headers (64byte align for pentium) [TESTED]
 		(less helpful than I'd have liked)
 o	Fixed variable length header support to really work	[TESTED]
-o	Mend appletalk/ipx partially			[IN]
+o	Mend appletalk/ipx partially			[TESTED]
 o	Start playing with input checksum & copy	[TESTED]
-o	Fixed PPP and other oddments			[IN]
-o	Mended IPIP					[Might work ;)]
+o	Fixed PPP and other oddments			[TESTED]
+o	Mended IPIP					[TESTED]
 
 ------->>>>>    1.3.7   <<<<<----------
 
 o	Checksum bug fixed				[TESTED]
-o	Lance driver panic cured			[BROKEN]
+o	Lance driver panic cured			[TESTED]
 o	DEC ALPHA stuff (Linus)				[ASK HIM NOT ME]
 o	Always try to keep output packet order
 	(eg for vat and BSD fast path tcp)		[TESTED]
 o	Copy the mac pointer in skb_clone		[TESTED]
-o	Fix tcpdump panic				[IN]
+o	Fix tcpdump panic				[TESTED]
 o	Fix dev_alloc_skb NULL deref bug		[TESTED]
 o	Fix Security error in SIGURG stuff		[TESTED]
-o	Missing 15 byte slack on ip_loopback		[IN, still has mcast bugs left!]
+o	Missing 15 byte slack on ip_loopback		[TESTED]
 
 ------->>>>>    1.3.8   <<<<<----------
 
-o	UDP snmp count fixed				[IN]
-o	IP snmp out count fixed				[IN]  (fragment still wrong)
-o	First bit of Dave Bonn's fast forwarding	[IN]
-o	Fix leaks and double free in firewalling	[IN]
+o	UDP snmp count fixed				[TESTED]
+o	IP snmp out count fixed				[TESTED]
+o	First bit of Dave Bonn's fast forwarding	[TESTED/NOW WORKS]
+o	Fix leaks and double free in firewalling	[TESTED]
 o	Fix memory scribble in ip_build_xmit		[TESTED]
 o	Do fast cases of ip_build_xmit first
 	slows fragmented I/O down, speeds up smaller
 	packets. UDP send ttcp can now touch 7.5Mbyte/sec
 	with nothing else going on. UDP recv is slower 8( [TESTED]
-o	Fixed and enabled ethernet header caches	[IN]
-o	Removed junk from igmp				[IN]
-o	Obscure UDP/copy&sum bug fix			[IN]
-o	Fixed multicast					[IN]
-o	TCP does rerouting for most cases		[NOT WORKING YET]
+o	Fixed and enabled ethernet header caches	[TESTED]
+o	Removed junk from igmp				[TESTED]
+o	Obscure UDP/copy&sum bug fix			[TESTED]
+o	Fixed multicast					[TESTED]
+o	TCP does rerouting for most cases		[TESTED]
 
 ------->>>>>    1.3.14  <<<<<----------
 
@@ -145,24 +145,35 @@ o	NetROM works					[IN]
 o	AX.25 works					[IN]
 o	Most modules need recompiling even though they
 	load OK 					[BLAME LINUS]
+o	Appletalk works nicely				[CHECKED]
+o	Fast IP forwarding part 1 works			[CHECKED]
 
 ------->>>>>   1.3.15  <<<<<---------
 o	Mike Shaver has started RFC1122 verification	[IN PROGRESS]
 o	Minor bug fixes					[IN]
 
-------->>>> ???? <<<--------
+------->>>> 1.3.16 <<<--------
+
+o	Missing patches for device change in TCP	[IN]
+o	Device locking					[IN]
+o	Infinite slip devices				[IN]
+o	New AF_UNIX sockets				[IN]
+o	Sendmsg/recvmsg (for some stuff only)		[IN]
+o	Device unload loopholes fixed			[IN]
+o	Extra firewall abilities			[IN]
+o	Appletalk node probe bug fix			[IN]
+
+
 o	Finish merging the bridge code
-o	Device locking
 o	SIOCSLEEPRT patch
 o	Options support in ip_build_xmit		[PENDING]
 o	Fast checksum/copy on outgoing TCP
 o	Fast dev_grab_next() transmit reload function
 	and dev_push_failed() ??
-o	Faster ip_forward				[PENDING]
+o	Faster ip_forward last hit cache		[PENDING]
 o	Forwarding queue control (+ fairness algorithms ??)
 o	IP forward flow control.
-o	Infinite PPP/SLIP devices.
-o	PI2 card doesn't do AX.25 VC yet		[PENDING]
+o	Infinite PPP devices.
 o	AX.25 set protocol type
 o	Clean up RAW AX.25 sockets.
 o	Finish 802.2 Class I code to be compliant to the oddities of 802.2
@@ -171,7 +182,6 @@ o	Tidy BPQ support
 
 0.2
 ---
-o	New UNIX sockets include Pedro Roque's shutdown.
 o	New icmp.c.
 o	Better TCP window handling [Pedro Roque]
 o	IP option support.
@@ -197,7 +207,8 @@ Possible projects for victim^H^H^H^H^Holunteers
 
 1.	Verifying the correctness of implementation against RFC1122 and
 making a list of violations (BSD is sufficiently screwed up you can't
-implement all of RFC1122 and talk to it usefully).
+implement all of RFC1122 and talk to it usefully). [In progress - Mike
+Shaver]
 
 2.	Verifying all the error returns match the BSD ones (grotty job I
 wouldn't wish on anyone).
@@ -218,7 +229,7 @@ potential high speed TCP problems.
 5.	Fixing the IP fragment handling so that the total space allocated to
 fragments is limited and old fragments are deleted to make room for new ones
 when space is exhausted. Fixing the fragment handling to work at a decent
-speed wouldn't be bad either.
+speed wouldn't be bad either. [In progress - Arnt Gulbrandsen]
 
 6.	Delayed ack. This is mostly supported but not actually set up and
 used yet. Basically ack frames are held back 1/10th of a second in the hope
@@ -255,7 +266,8 @@ a maybe (so is finishing it ;))][Someone is working on Frame Relay].
 14.	Bidirectional PLIP. Also PLIP for the newer style parallel ports.
 
 15.	802.2LLC and thus Netbeui sockets. Becoming less important since the
-rumour is microsoft are phasing out netbeui for netbios/IP.
+rumour is microsoft are phasing out netbeui for netbios/IP.	
+	[Tentatively in progress]
 
 16.	X.25. This is one for a real head case with far too much time on 
 their hands. [Provisionally taken]
@@ -264,6 +276,8 @@ their hands. [Provisionally taken]
 
 18.	Implement swIPe under Linux.
 [In progress]
+
+19.	IPv4 IP-AH and IP-ESP.
 
 BTW: Don't let the magic words 'kernel programming' worry you. Its like DOS
 - you make a mistake you have to reboot. You do at least get dumps and a

@@ -19,6 +19,9 @@
  *	Porting bidirectional entries from BSD, fixing accounting issues,
  *	adding struct ip_fwpkt for checking packets with interface address
  *		Jos Vos 5/Mar/1995.
+ *	Established connections (ACK check), ACK check on bidirectional rules,
+ *	ICMP type check.
+ *		Wilfred Mollenvanger 7/7/1995.
  *
  * Masquerading functionality
  *
@@ -179,10 +182,11 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 	struct ip_fw *f;
 	struct tcphdr		*tcp=(struct tcphdr *)((unsigned long *)ip+ip->ihl);
 	struct udphdr		*udp=(struct udphdr *)((unsigned long *)ip+ip->ihl);
+	struct icmphdr		*icmp=(struct icmphdr *)((unsigned long *)ip+ip->ihl);
 	__u32			src, dst;
-	__u16			src_port=0, dst_port=0;
+	__u16			src_port=0, dst_port=0, icmp_type=0;
 	unsigned short		f_prt=0, prt;
-	char			notcpsyn=1, frag1, match;
+	char			notcpsyn=1, notcpack=1, frag1, match;
 	unsigned short		f_flag;
 
 	/*
@@ -233,7 +237,10 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 			if (frag1) {
 				src_port=ntohs(tcp->source);
 				dst_port=ntohs(tcp->dest);
-				if(tcp->syn && !tcp->ack)
+				if(tcp->ack)
+					/* We *DO* have ACK, value FALSE */
+					notcpack=0;
+				if(tcp->syn && notcpack)
 					/* We *DO* have SYN, value FALSE */
 					notcpsyn=0;
 			}
@@ -249,7 +256,8 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 			prt=IP_FW_F_UDP;
 			break;
 		case IPPROTO_ICMP:
-			dprintf2("ICMP:%d ",((char *)portptr)[0]&0xff);
+			icmp_type=(__u16)(icmp->type);
+			dprintf2("ICMP:%d ",icmp_type);
 			prt=IP_FW_F_ICMP;
 			break;
 		default:
@@ -335,6 +343,21 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 			 
 			 if((f->fw_flg&IP_FW_F_TCPSYN) && notcpsyn)
 			 	continue;
+
+			/*
+			 * When a bidirectional rule is used we only check
+			 * for ack bits on reverse matches. This way it's
+			 * easy to set up rules which only allow connections
+			 * initiated from "normal" match adresses.
+			 */
+
+			if((f->fw_flg&IP_FW_F_TCPACK) && notcpack)
+				if(f->fw_flg&IP_FW_F_BIDIR) {
+					if(match & 0x02)
+						continue;
+				} else
+					continue;
+
 			/*
 			 *	Specific firewall - packet's protocol
 			 *	must match firewall's.
@@ -343,7 +366,10 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 			if(prt!=f_prt)
 				continue;
 				
-			if(!(prt==IP_FW_F_ICMP || ((match & 0x01) &&
+			if((prt==IP_FW_F_ICMP &&
+				! port_match(&f->fw_pts[0], f->fw_nsp,
+					icmp_type,f->fw_flg&IP_FW_F_SRNG)) ||
+			    !(prt==IP_FW_F_ICMP || ((match & 0x01) &&
 				port_match(&f->fw_pts[0], f->fw_nsp, src_port,
 					f->fw_flg&IP_FW_F_SRNG) &&
 				port_match(&f->fw_pts[f->fw_nsp], f->fw_ndp, dst_port,
@@ -612,12 +638,13 @@ static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip
  		if (!ftp->init_seq)
  			ftp->init_seq = th->seq;
  
-		skb2 = alloc_skb(skb->len+ftp->delta, GFP_ATOMIC);
+		skb2 = alloc_skb(MAX_HEADER + skb->len+ftp->delta, GFP_ATOMIC);
  		if (skb2 == NULL) {
  			printk("MASQUERADE: No memory available\n");
  			return skb;
  		}
  		skb2->free = skb->free;
+ 		skb_reserve(skb2,MAX_HEADER);
  		skb_put(skb2,skb->len + ftp->delta);
  		skb2->h.raw = &skb2->data[skb->h.raw - skb->data];
  
@@ -1289,7 +1316,7 @@ int ip_fw_ctl(int stage, void *m, int len)
 		if ( len < sizeof(struct ip_fwpkt) )
 		{
 #ifdef DEBUG_CONFIG_IP_FIREWALL
-			printf("ip_fw_ctl: length=%d, expected %d\n",
+			printk("ip_fw_ctl: length=%d, expected %d\n",
 				len, sizeof(struct ip_fwpkt));
 #endif
 			return( EINVAL );

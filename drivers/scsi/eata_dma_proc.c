@@ -1,6 +1,3 @@
-extern void proc_print_scsidevice(Scsi_Device *scd, char *buffer, 
-				  int *size, int len);
-
 
 void swap_statistics(u8 *p)
 {

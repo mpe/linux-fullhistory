@@ -192,7 +192,7 @@ static int restart(struct Scsi_Host *shpnt);
 
 #if defined(MODULE) && !defined(GFP_DMA)
 # define CHECK_DMA_ADDR(isa, addr, badstmt) \
-    do { if ((isa) && (addr) > (void *)ISA_DMA_THRESHOLD) badstmt; } while (0)
+    do { if ((isa) && ((const void *)addr) > (const void *)ISA_DMA_THRESHOLD) badstmt; } while (0)
 #else
 # define CHECK_DMA_ADDR(isa, addr, badstmt)
 #endif

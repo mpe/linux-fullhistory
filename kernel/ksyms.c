@@ -68,16 +68,16 @@ extern struct file_operations * get_blkfops(unsigned int);
   
 extern void *sys_call_table;
 
-extern int aout_core_dump(long signr, struct pt_regs * regs);
-
 #ifdef CONFIG_FTAPE
 extern char * ftape_big_buffer;
 #endif
 
 #ifdef CONFIG_SCSI
 #include "../drivers/scsi/scsi.h"
+#include "../drivers/scsi/scsi_ioctl.h"
 #include "../drivers/scsi/hosts.h"
 #include "../drivers/scsi/constants.h"
+#include <linux/scsicam.h>
 
 extern int generic_proc_info(char *, char **, off_t, int, int, int);
 #endif
@@ -150,6 +150,7 @@ struct symbol_table symbol_table = {
 	X(kmalloc),
 	X(kfree_s),
 	X(vmalloc),
+	X(vremap),
 	X(vfree),
  	X(mem_map),
 

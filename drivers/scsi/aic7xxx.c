@@ -940,7 +940,6 @@ static int num_aic7xxx_syncrates =
     sizeof(aic7xxx_syncrates) / sizeof(aic7xxx_syncrates[0]);
 
 #ifdef AIC7XXX_DEBUG
-extern int vsprintf(char *, const char *, va_list);
 
 static void
 debug(const char *fmt, ...)

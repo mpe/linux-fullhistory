@@ -349,7 +349,10 @@ int tok_probe(struct device *dev) {
   ti->page_mask=0;
   if (ti->shared_ram_paging == 0xf) { /* No paging in adapter */
     ti->mapped_ram_size = ti->avail_shared_ram;
-  } else { unsigned char pg_size;
+  } else {
+#ifdef ENABLE_PAGING
+    unsigned char pg_size;
+#endif
 
 	DPRINTK("shared ram page size: %dK\n",ti->mapped_ram_size/2);
 #ifdef ENABLE_PAGING

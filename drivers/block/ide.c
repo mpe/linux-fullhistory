@@ -1753,8 +1753,9 @@ static void do_identify (ide_dev_t *dev, byte cmd)
 	bswap = 1;
 	if (cmd == WIN_PIDENTIFY) {
 		if ((id->model[0] == 'N' && id->model[1] == 'E')
-		 || (id->model[0] == 'F' && id->model[1] == 'X'))
-			bswap = 0;	/* NEC and *some* Mitsumi units */
+		 || (id->model[0] == 'F' && id->model[1] == 'X')
+		 || (id->model[0] == 'P' && id->model[1] == 'i'))
+			bswap = 0;	/* NEC, Pioneer and *some* Mitsumi units */
 	}				/* Vertos drives may still be weird */
 	fixstring (id->model,     sizeof(id->model),     bswap);
 	fixstring (id->fw_rev,    sizeof(id->fw_rev),    bswap);

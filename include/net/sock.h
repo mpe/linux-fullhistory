@@ -57,6 +57,21 @@
 
 
 /*
+ *	The AF_UNIX specific socket options
+ */
+ 
+struct unix_opt
+{
+	int 			family;
+	char *			name;
+	int  			locks;
+	struct inode *		inode;
+	struct semaphore	readsem;
+	struct sock *		other;
+};
+
+
+/*
  * This structure really needs to be cleaned up.
  * Most of it is for TCP, and not used by any of
  * the other protocols.
@@ -160,6 +175,16 @@ struct sock {
 #ifdef CONFIG_ATALK
   struct atalk_sock		at;
 #endif
+  
+/*
+ *	This is where all the private (optional) areas that dont overlap will eventually live
+ *	for now just AF_UNIX is here.
+ */
+
+  union
+  {
+  	struct unix_opt		af_unix;
+  } protinfo;  		
 
 /* IP 'private area' or will be eventually */
   int				ip_ttl;			/* TTL setting 				*/

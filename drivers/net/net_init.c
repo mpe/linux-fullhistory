@@ -314,33 +314,37 @@ void unregister_netdev(struct device *dev)
 
 	printk("unregister_netdev: device ");
 
-	if (dev == NULL) {
+	if (dev == NULL) 
+	{
 		printk("was NULL\n");
 		restore_flags(flags);
 		return;
 	}
 	/* else */
 	if (dev->start)
-		printk("'%s' busy\n", dev->name);
-	else {
-		if (dev_base == dev)
-			dev_base = dev->next;
-		else {
-			while (d && (d->next != dev))
-				d = d->next;
-
-			if (d && (d->next == dev)) {
-				d->next = dev->next;
-				printk("'%s' unlinked\n", dev->name);
-			}
-			else {
-				printk("'%s' not found\n", dev->name);
-				restore_flags(flags);
-				return;
-			}
+		printk("ERROR '%s' busy and not MOD_IN_USE.\n", dev->name);
+	if (dev_base == dev)
+		dev_base = dev->next;
+	else 
+	{
+		while (d && (d->next != dev))
+			d = d->next;
+			
+		if (d && (d->next == dev)) 
+		{
+			d->next = dev->next;
+			printk("'%s' unlinked\n", dev->name);
 		}
-		for (i = 0; i < MAX_ETH_CARDS; ++i) {
-			if (ethdev_index[i] == dev) {
+		else 
+		{
+			printk("'%s' not found\n", dev->name);
+			restore_flags(flags);
+			return;
+		}
+		for (i = 0; i < MAX_ETH_CARDS; ++i) 
+		{
+			if (ethdev_index[i] == dev) 
+			{
 				ethdev_index[i] = NULL;
 				break;
 			}

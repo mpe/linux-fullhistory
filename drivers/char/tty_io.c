@@ -73,7 +73,6 @@
 #define CHECK_TTY_COUNT
 
 extern void do_blank_screen(int nopowersave);
-extern void do_unblank_screen(void);
 extern void set_vesa_blanking(const unsigned long arg);
 
 struct termios tty_std_termios;		/* for the benefit of tty drivers  */

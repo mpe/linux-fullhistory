@@ -33,8 +33,10 @@
  *
  *   Variable                   Description
  *
- *   hp100_default_rx_ratio	Range 1-99 - onboard memory used for RX 
+ *   hp100_rx_ratio		Range 1-99 - onboard memory used for RX
  *                              packets in %.
+ *   hp100_priority_tx		If this variable is nonzero - all outgoing
+ *                              packets will be transmitted as priority.
  *   hp100_port			Adapter port (for example 0x380).
  *
  * ----------------------------------------------------------------------------
@@ -54,8 +56,12 @@
  * TO DO:
  * ======
  *       - ioctl handling - some runtime setup things
- *       - high priority communications support
- *       - memory mapped access support for PCI cards
+ *       - 100Mb/s Voice Grade AnyLAN network adapter/hub services support
+ *		- 802.5 frames
+ *		- promiscuous mode
+ *		- bridge mode
+ *		- cascaded repeater mode
+ *		- 100Mbit MAC
  *
  * Revision history:
  * =================
@@ -70,6 +76,9 @@
  *      0.12    14-Jul-95   Link down is now handled better.
  *      0.20    01-Aug-95   Added PCI support for HP J2585A card.
  *                          Statistics bug fixed.
+ *      0.21    04-Aug-95   Memory mapped access support for PCI card.
+ *                          Added priority transmit support for 100Mb/s
+ *                          Voice Grade AnyLAN network.
  *
  */
 
@@ -111,9 +120,14 @@
 #define HP100_MAX_PACKET_SIZE	(1536+4)
 #define HP100_MIN_PACKET_SIZE	60
 
-#ifndef HP100_RX_RATIO
+#ifndef HP100_DEFAULT_RX_RATIO
 /* default - 65% onboard memory on the card are used for RX packets */
-#define HP100_RX_RATIO		65
+#define HP100_DEFAULT_RX_RATIO	65
+#endif
+
+#ifndef HP100_DEFAULT_PRIORITY_TX
+/* default - don't enable transmit outgoing packets as priority */
+#define HP100_DEFAULT_PRIORITY_TX 0
 #endif
 
 /*
@@ -130,9 +144,11 @@ struct hp100_private {
   struct hp100_eisa_id *id;
   u_short soft_model;
   u_int memory_size;
-  u_short rx_ratio;
+  u_short rx_ratio;		    /* 1 - 99 */
+  u_short priority_tx;	            /* != 0 - priority tx */
   short mem_mapped;		    /* memory mapped access */
-  u_char *mem_ptr;		    /* pointer to memory mapped area */
+  u_char *mem_ptr_virt;		    /* virtual memory mapped area, maybe NULL */
+  u_char *mem_ptr_phys;		    /* physical memory mapped area */
   short lan_type;		    /* 10Mb/s, 100Mb/s or -1 (error) */
   int hub_status;		    /* login to hub was successfull? */
   u_char mac1_mode;
@@ -166,9 +182,8 @@ static struct hp100_eisa_id hp100_eisa_ids[] = {
   { 0x01030103c, "HP J2585", 	   HP100_BUS_PCI },
 };
 
-#ifdef MODULE
-int hp100_default_rx_ratio = HP100_RX_RATIO;
-#endif
+int hp100_rx_ratio = HP100_DEFAULT_RX_RATIO;
+int hp100_priority_tx = HP100_DEFAULT_PRIORITY_TX;
 
 /*
  *  prototypes
@@ -292,7 +307,7 @@ static int hp100_probe1( struct device *dev, int ioaddr, int bus )
   u_char uc, uc_1;
   u_int eisa_id;
   short mem_mapped;
-  u_char *mem_ptr;
+  u_char *mem_ptr_phys, *mem_ptr_virt;
   struct hp100_private *lp;
   struct hp100_eisa_id *eid;
 
@@ -366,30 +381,30 @@ static int hp100_probe1( struct device *dev, int ioaddr, int bus )
   hp100_page( HW_MAP );
   mem_mapped = ( hp100_inw( OPTION_LSW ) & 
                  ( HP100_MEM_EN | HP100_BM_WRITE | HP100_BM_READ ) ) != 0;
-  mem_ptr = NULL;
+  mem_ptr_phys = mem_ptr_virt = NULL;
   if ( mem_mapped )
     {
-      mem_ptr = (u_char *)( hp100_inw( MEM_MAP_LSW ) | 
-                            ( hp100_inw( MEM_MAP_MSW ) << 16 ) );
-      (u_int)mem_ptr &= ~0x1fff;	/* 8k aligment */
-      if ( bus == HP100_BUS_ISA && ( (u_int)mem_ptr & ~0xfffff ) != 0 )
+      mem_ptr_phys = (u_char *)( hp100_inw( MEM_MAP_LSW ) | 
+                               ( hp100_inw( MEM_MAP_MSW ) << 16 ) );
+      (u_int)mem_ptr_phys &= ~0x1fff;	/* 8k aligment */
+      if ( bus == HP100_BUS_ISA && ( (u_long)mem_ptr_phys & ~0xfffff ) != 0 )
         {
-          mem_ptr = NULL;
+          mem_ptr_phys = NULL;
           mem_mapped = 0;
         }
       if ( mem_mapped && bus == HP100_BUS_PCI )
         {
-#if 0
-          printk( "writeb !!!\n" );
-          writeb( 0, mem_ptr );
-#endif
-          mem_ptr = NULL;
-          mem_mapped = 0;
+          if ( ( mem_ptr_virt = vremap( (u_long)mem_ptr_phys, 0x2000 ) ) == NULL )
+            {
+              printk( "hp100: vremap for high PCI memory at 0x%lx failed\n", (u_long)mem_ptr_phys );
+              mem_ptr_phys = NULL;
+              mem_mapped = 0;
+            }
         }
     }
 #else
   mem_mapped = 0;
-  mem_ptr = NULL;
+  mem_ptr_phys = mem_ptr_virt = NULL;
 #endif
 
   if ( ( dev -> priv = kmalloc( sizeof( struct hp100_private ), GFP_KERNEL ) ) == NULL )
@@ -399,7 +414,8 @@ static int hp100_probe1( struct device *dev, int ioaddr, int bus )
   lp = (struct hp100_private *)dev -> priv;
   lp -> id = eid;
   lp -> mem_mapped = mem_mapped;
-  lp -> mem_ptr = mem_ptr;
+  lp -> mem_ptr_phys = mem_ptr_phys;
+  lp -> mem_ptr_virt = mem_ptr_virt;
   hp100_page( ID_MAC_ADDR );
   lp -> soft_model = hp100_inb( SOFT_MODEL );
   lp -> mac1_mode = HP100_MAC1MODE3;
@@ -410,11 +426,7 @@ static int hp100_probe1( struct device *dev, int ioaddr, int bus )
   dev -> irq = hp100_inb( IRQ_CHANNEL ) & HP100_IRQ_MASK;
   if ( dev -> irq == 2 ) dev -> irq = 9;
   lp -> memory_size = 0x200 << ( ( hp100_inb( SRAM ) & 0xe0 ) >> 5 );
-#ifndef MODULE
-  lp -> rx_ratio = HP100_RX_RATIO;
-#else
-  lp -> rx_ratio = hp100_default_rx_ratio;
-#endif
+  lp -> rx_ratio = hp100_rx_ratio;
 
   dev -> open = hp100_open;
   dev -> stop = hp100_close;
@@ -446,8 +458,13 @@ static int hp100_probe1( struct device *dev, int ioaddr, int bus )
   printk( " bus, %dk SRAM (rx/tx %d%%).\n",
     lp -> memory_size >> ( 10 - 4 ), lp -> rx_ratio );
   if ( mem_mapped )
-    printk( "%s: Memory mapped access used at 0x%x-0x%x.\n", 
-		dev -> name, (u_int)mem_ptr, (u_int)mem_ptr + 0x1fff );
+    {
+      printk( "%s: Memory area at 0x%lx-0x%lx",
+		dev -> name, (u_long)mem_ptr_phys, (u_long)mem_ptr_phys + 0x1fff );
+      if ( mem_ptr_virt )
+        printk( " (virtual base 0x%lx)", (u_long)mem_ptr_virt );
+      printk( ".\n" );
+    }
   printk( "%s: ", dev -> name );
   if ( lp -> lan_type != HP100_LAN_ERR )
     printk( "Adapter is attached to " );
@@ -507,12 +524,9 @@ static int hp100_open( struct device *dev )
               HP100_IO_EN | HP100_SET_LB, OPTION_LSW );
   hp100_outw( HP100_DEBUG_EN | HP100_RX_HDR | HP100_EE_EN | HP100_RESET_HB |
               HP100_FAKE_INT | HP100_RESET_LB, OPTION_LSW );
-#if 0
-  hp100_outw( HP100_PRIORITY_TX | HP100_ADV_NXT_PKT | 
-              HP100_TX_CMD | HP100_RESET_LB, OPTION_MSW );
-#else
-  hp100_outw( HP100_ADV_NXT_PKT | HP100_TX_CMD | HP100_RESET_LB, OPTION_MSW );
-#endif
+  hp100_outw( HP100_ADV_NXT_PKT | HP100_TX_CMD | HP100_RESET_LB |
+                HP100_PRIORITY_TX | ( hp100_priority_tx ? HP100_SET_HB : HP100_RESET_HB ),
+              OPTION_MSW );
               				
   hp100_page( MAC_ADDRESS );
   for ( i = 0; i < 6; i++ )
@@ -569,7 +583,7 @@ static int hp100_close( struct device *dev )
 
 static int hp100_start_xmit( struct sk_buff *skb, struct device *dev )
 {
-  int i;
+  int i, ok_flag;
   int ioaddr = dev -> base_addr;
   u_short val;
   struct hp100_private *lp = (struct hp100_private *)dev -> priv;
@@ -653,39 +667,31 @@ static int hp100_start_xmit( struct sk_buff *skb, struct device *dev )
 #ifdef HP100_DEBUG_TX
   printk( "hp100_start_xmit: irq_status = 0x%x, len = %d\n", val, (int)skb -> len );
 #endif
+  ok_flag = skb -> len >= HP100_MIN_PACKET_SIZE;
+  i = ok_flag ? skb -> len : HP100_MIN_PACKET_SIZE;
+  hp100_outw( i, DATA32 );		/* length to memory manager */
+  hp100_outw( i, FRAGMENT_LEN );
   if ( lp -> mem_mapped )
     {
-      if ( skb -> len >= HP100_MIN_PACKET_SIZE )
+      if ( lp -> mem_ptr_virt )
         {
-          hp100_outw( skb -> len, DATA32 );	/* length to memory manager */
-          hp100_outw( skb -> len, FRAGMENT_LEN );
-          memcpy_toio( lp -> mem_ptr, skb -> data, skb -> len );
+          memcpy( lp -> mem_ptr_virt, skb -> data, skb -> len );
+          if ( !ok_flag )
+            memset( lp -> mem_ptr_virt, 0, HP100_MIN_PACKET_SIZE - skb -> len );
         }
        else
         {
-          hp100_outw( HP100_MIN_PACKET_SIZE, DATA32 ); /* length to memory manager */
-          hp100_outw( HP100_MIN_PACKET_SIZE, FRAGMENT_LEN );
-          memcpy_toio( lp -> mem_ptr, skb -> data, skb -> len );
-          memset_io( lp -> mem_ptr, 0, HP100_MIN_PACKET_SIZE - skb -> len );
+          memcpy_toio( lp -> mem_ptr_phys, skb -> data, skb -> len );
+          if ( !ok_flag )
+            memset_io( lp -> mem_ptr_phys, 0, HP100_MIN_PACKET_SIZE - skb -> len );
         }
     }
    else
     {
-      if ( skb -> len >= HP100_MIN_PACKET_SIZE )
-        {
-          hp100_outw( skb -> len, DATA32 );	/* length to memory manager */
-          hp100_outw( skb -> len, FRAGMENT_LEN );
-          outsl( ioaddr + HP100_REG_DATA32, skb -> data, ( skb -> len + 3 ) >> 2 );
-        }
-       else
-        {
-          hp100_outw( HP100_MIN_PACKET_SIZE, DATA32 ); /* length to memory manager */
-          hp100_outw( HP100_MIN_PACKET_SIZE, FRAGMENT_LEN );
-          i = skb -> len + 3;
-          outsl( ioaddr + HP100_REG_DATA32, skb -> data, i >> 2 );
-          for ( i &= ~3; i < HP100_MIN_PACKET_SIZE; i += 4 ) 
-            hp100_outl( 0, DATA32 );
-        }
+      outsl( ioaddr + HP100_REG_DATA32, skb -> data, ( skb -> len + 3 ) >> 2 );
+      if ( !ok_flag )
+        for ( i = ( skb -> len + 3 ) & ~3; i < HP100_MIN_PACKET_SIZE; i += 4 )
+          hp100_outl( 0, DATA32 );
     }
   hp100_outw( HP100_TX_CMD | HP100_SET_LB, OPTION_MSW ); /* send packet */
   lp -> stats.tx_packets++;
@@ -735,7 +741,15 @@ static void hp100_rx( struct device *dev )
           printk( "hp100_rx: busy, remaining packets = %d\n", packets );
 #endif    
         }
-      header = lp -> mem_mapped ? readl( lp -> mem_ptr ) : hp100_inl( DATA32 );
+      if ( lp -> mem_mapped )
+        {
+          if ( lp -> mem_ptr_virt )
+            header = *(__u32 *)lp -> mem_ptr_virt;
+           else
+            header = readl( lp -> mem_ptr_phys );
+        }
+       else
+        header = hp100_inl( DATA32 );
       pkt_len = header & HP100_PKT_LEN_MASK;
 #ifdef HP100_DEBUG_RX
       printk( "hp100_rx: new packet - length = %d, errors = 0x%x, dest = 0x%x\n",
@@ -761,7 +775,12 @@ static void hp100_rx( struct device *dev )
           skb -> dev = dev;
           ptr = (u_char *)skb_put( skb, pkt_len );
           if ( lp -> mem_mapped )
-            memcpy_fromio( ptr, lp -> mem_ptr, ( pkt_len + 3 ) & ~3 );
+            {
+              if ( lp -> mem_ptr_virt )
+                memcpy( ptr, lp -> mem_ptr_virt, ( pkt_len + 3 ) & ~3 );
+               else
+                memcpy_fromio( ptr, lp -> mem_ptr_phys, ( pkt_len + 3 ) & ~3 );
+            }
            else
             insl( ioaddr + HP100_REG_DATA32, ptr, ( pkt_len + 3 ) >> 2 );
           skb -> protocol = eth_type_trans( skb, dev );
@@ -869,7 +888,7 @@ static void hp100_set_multicast_list( struct device *dev, int num_addrs, void *a
       lp -> mac1_mode = HP100_MAC1MODE5;  /* broadcasts and all multicasts */
     }
    else
-     {
+    {
       lp -> mac2_mode = HP100_MAC2MODE3;  /* normal mode, packets for me */
       lp -> mac1_mode = HP100_MAC1MODE3;  /* and broadcasts */
     }
@@ -1116,8 +1135,10 @@ static struct device dev_hp100 = {
 
 int init_module( void )
 {
-  if ( hp100_port > 0 ) dev_hp100.base_addr = hp100_port;
-  if ( register_netdev( &dev_hp100 ) != 0 ) return -EIO;
+  if ( hp100_port > 0 )
+    dev_hp100.base_addr = hp100_port;
+  if ( register_netdev( &dev_hp100 ) != 0 )
+    return -EIO;
   return 0;
 }         
 
@@ -1125,6 +1146,8 @@ void cleanup_module( void )
 {
   unregister_netdev( &dev_hp100 );
   release_region( dev_hp100.base_addr, HP100_REGION_SIZE );
+  if ( ((struct hp100_private *)dev_hp100.priv) -> mem_ptr_virt )
+    vfree( ((struct hp100_private *)dev_hp100.priv) -> mem_ptr_virt );
   kfree_s( dev_hp100.priv, sizeof( struct hp100_private ) );
   dev_hp100.priv = NULL;
 }

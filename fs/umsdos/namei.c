@@ -126,7 +126,6 @@ void umsdos_startlookup (struct inode *dir)
 	while (umsdos_waitcreate (dir) != 0);
 	dir->u.umsdos_i.u.dir_info.looking++;
 }
-void check_page_tables(void);
 
 /*
 	Unlock the directory.

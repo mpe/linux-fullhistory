@@ -241,76 +241,13 @@ static struct device eth0_dev = {
 #endif  /* PLIP */
 
 #if defined(SLIP) || defined(CONFIG_SLIP)
-    extern int slip_init(struct device *);
-    
-#ifdef SL_SLIP_LOTS
-
-    static struct device slip15_dev={"sl15",0,0,0,0,15,0,0,0,0,NEXT_DEV,slip_init};
-    static struct device slip14_dev={"sl14",0,0,0,0,14,0,0,0,0,&slip15_dev,slip_init};
-    static struct device slip13_dev={"sl13",0,0,0,0,13,0,0,0,0,&slip14_dev,slip_init};
-    static struct device slip12_dev={"sl12",0,0,0,0,12,0,0,0,0,&slip13_dev,slip_init};
-    static struct device slip11_dev={"sl11",0,0,0,0,11,0,0,0,0,&slip12_dev,slip_init};
-    static struct device slip10_dev={"sl10",0,0,0,0,10,0,0,0,0,&slip11_dev,slip_init};
-    static struct device slip9_dev={"sl9",0,0,0,0,9,0,0,0,0,&slip10_dev,slip_init};
-    static struct device slip8_dev={"sl8",0,0,0,0,8,0,0,0,0,&slip9_dev,slip_init};
-    static struct device slip7_dev={"sl7",0,0,0,0,7,0,0,0,0,&slip8_dev,slip_init};
-    static struct device slip6_dev={"sl6",0,0,0,0,6,0,0,0,0,&slip7_dev,slip_init};
-    static struct device slip5_dev={"sl5",0,0,0,0,5,0,0,0,0,&slip6_dev,slip_init};
-    static struct device slip4_dev={"sl4",0,0,0,0,4,0,0,0,0,&slip5_dev,slip_init};
-#   undef	NEXT_DEV
-#   define	NEXT_DEV	(&slip4_dev)
-#endif	/* SL_SLIP_LOTS */
-    
-    static struct device slip3_dev = {
-	"sl3",			/* Internal SLIP driver, channel 3	*/
-	0x0,			/* recv memory end			*/
-	0x0,			/* recv memory start			*/
-	0x0,			/* memory end				*/
-	0x0,			/* memory start				*/
-	0x3,			/* base I/O address			*/
-	0,			/* IRQ					*/
-	0, 0, 0,		/* flags				*/
-	NEXT_DEV,		/* next device				*/
-	slip_init		/* slip_init should set up the rest	*/
-    };
-    static struct device slip2_dev = {
-	"sl2",			/* Internal SLIP driver, channel 2	*/
-	0x0,			/* recv memory end			*/
-	0x0,			/* recv memory start			*/
-	0x0,			/* memory end				*/
-	0x0,			/* memory start				*/
-	0x2,			/* base I/O address			*/
-	0,			/* IRQ					*/
-	0, 0, 0,		/* flags				*/
-	&slip3_dev,		/* next device				*/
-	slip_init		/* slip_init should set up the rest	*/
-    };
-    static struct device slip1_dev = {
-	"sl1",			/* Internal SLIP driver, channel 1	*/
-	0x0,			/* recv memory end			*/
-	0x0,			/* recv memory start			*/
-	0x0,			/* memory end				*/
-	0x0,			/* memory start				*/
-	0x1,			/* base I/O address			*/
-	0,			/* IRQ					*/
-	0, 0, 0,		/* flags				*/
-	&slip2_dev,		/* next device				*/
-	slip_init		/* slip_init should set up the rest	*/
-    };
-    static struct device slip0_dev = {
-	"sl0",			/* Internal SLIP driver, channel 0	*/
-	0x0,			/* recv memory end			*/
-	0x0,			/* recv memory start			*/
-	0x0,			/* memory end				*/
-	0x0,			/* memory start				*/
-	0x0,			/* base I/O address			*/
-	0,			/* IRQ					*/
-	0, 0, 0,		/* flags				*/
-	&slip1_dev,		/* next device				*/
-	slip_init		/* slip_init should set up the rest	*/
-    };
-#   undef	NEXT_DEV
-#   define	NEXT_DEV	(&slip0_dev)
+	/* To be exact, this node just hooks the initialization
+	   routines to the device structures.			*/
+extern int slip_init_ctrl_dev(struct device *);
+static struct device slip_bootstrap = {
+  "slip_proto", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, slip_init_ctrl_dev, };
+#undef NEXT_DEV
+#define NEXT_DEV (&slip_bootstrap)
 #endif	/* SLIP */
   
 #if defined(CONFIG_PPP)
@@ -388,7 +325,6 @@ struct device eql_dev = {
 #   define	NEXT_DEV	(&ibmtr_dev1)
 
 
-    extern int tok_probe(struct device *dev);
     static struct device ibmtr_dev0 = {
 	"tr0",			/* IBM Token Ring (Non-DMA) Interface */
 	0x0,			/* recv memory end			*/

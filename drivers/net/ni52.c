@@ -146,9 +146,6 @@ sizeof(nop_cmd) = 8;
       printk("%s: scb_cmd timed out .. resetting i82586\n",dev->name); \
       ni_reset586(); } } }
 
-extern void autoirq_setup(int waittime);
-extern int  autoirq_report(int waittime);
-extern void *irq2dev_map[16];
 
 #define NI52_TOTAL_SIZE 16
 #define NI52_ADDR0 0x02
@@ -357,7 +354,7 @@ static int ni52_probe1(struct device *dev,int ioaddr)
                                     || dev->dev_addr[2] != NI52_ADDR2)
     return ENODEV;
 
-  printk("%s: Ni52 found at %#3x, ",dev->name,dev->base_addr);
+  printk("%s: Ni52 found at %#3lx, ",dev->name,dev->base_addr);
 
   request_region(ioaddr,NI52_TOTAL_SIZE,"ni52");
 

@@ -1,5 +1,5 @@
 #
-# Makefile for the UNIX Protocol Family.
+# Makefile for the Linux TCP/IP (INET) layer.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
 # removes any old dependencies. DON'T put your own dependencies here
@@ -12,16 +12,18 @@
 .s.o:
 	$(AS) -o $*.o $<
 
-OBJS	= sock.o proc.o
 
-unix.o: $(OBJS)
-	$(LD) -r -o unix.o $(OBJS)
+OBJS	:= af_unix.o
+
+
+unix.o:	$(OBJS)
+		$(LD) -r -o unix.o $(OBJS)
 
 dep:
-	$(CPP) -M *.c > .depend
+		$(CPP) -M *.c > .depend
 
 tar:
-	tar -cvf /dev/f1 .
+		tar -cvf /dev/f1 .
 
 
 include $(TOPDIR)/Rules.make

@@ -37,7 +37,6 @@
 #define LO_WORD(l) ((word)(l % 0xFFFF))
 
 void smb_printerr(int class, int num);
-int smb_request(struct smb_server *);
 static int smb_request_ok(struct smb_server *s, int command, int wct, int bcc);
 
 /*****************************************************************************/

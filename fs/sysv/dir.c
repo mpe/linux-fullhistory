@@ -23,6 +23,7 @@
 #include <linux/fs.h>
 #include <linux/sysv_fs.h>
 #include <linux/stat.h>
+#include <linux/string.h>
 
 static int sysv_dir_read(struct inode * inode, struct file * filp, char * buf, int count)
 {

@@ -87,7 +87,8 @@ struct ip_fw
 #define IP_FW_F_TCPSYN	0x080	/* For tcp packets-check SYN only     */
 #define IP_FW_F_ICMPRPL 0x100	/* Send back icmp unreachable packet  */
 #define IP_FW_F_MASQ	0x200	/* Masquerading			      */
-#define IP_FW_F_MASK	0x3FF	/* All possible flag bits mask        */
+#define IP_FW_F_TCPACK	0x400	/* For tcp-packets match if ACK is set*/
+#define IP_FW_F_MASK	0x7FF	/* All possible flag bits mask        */
 
 /*    
  *	New IP firewall options for [gs]etsockopt at the RAW IP level.

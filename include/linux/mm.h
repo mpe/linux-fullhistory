@@ -193,6 +193,7 @@ extern void si_meminfo(struct sysinfo * val);
 /* vmalloc.c */
 
 extern void * vmalloc(unsigned long size);
+extern void * vremap(unsigned long offset, unsigned long size);
 extern void vfree(void * addr);
 extern int vread(char *buf, char *addr, int count);
 

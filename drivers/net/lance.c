@@ -285,7 +285,7 @@ unsigned long lance_init(unsigned long mem_start, unsigned long mem_end)
 		printk("lance.c: PCI bios is present, checking for devices...\n");
 		for (pci_index = 0; pci_index < 8; pci_index++) {
 			unsigned char pci_bus, pci_device_fn;
-			unsigned long pci_ioaddr;
+			unsigned int pci_ioaddr;
 			unsigned short pci_command;
 
 			if (pcibios_find_device (PCI_VENDOR_ID_AMD,
@@ -310,7 +310,7 @@ unsigned long lance_init(unsigned long mem_start, unsigned long mem_end)
 				pcibios_write_config_word(pci_bus, pci_device_fn,
 										  PCI_COMMAND, pci_command);
 			}
-			printk("Found PCnet/PCI at %#lx, irq %d (mem_start is %#lx).\n",
+			printk("Found PCnet/PCI at %#x, irq %d (mem_start is %#lx).\n",
 				   pci_ioaddr, pci_irq_line, mem_start);
 			mem_start = lance_probe1(pci_ioaddr, mem_start);
 			pci_irq_line = 0;

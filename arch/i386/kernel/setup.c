@@ -39,7 +39,7 @@ int fdiv_bug = 0;		/* set if Pentium(TM) with FP bug */
 char x86_vendor_id[13] = "Unknown";
 
 char ignore_irq13 = 0;		/* set if exception 16 works */
-char wp_works_ok = 0;		/* set if paging hardware honours WP */ 
+char wp_works_ok = -1;		/* set if paging hardware honours WP */ 
 char hlt_works_ok = 1;		/* set if the "hlt" instruction works */
 
 /*

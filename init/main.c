@@ -369,7 +369,6 @@ static void parse_options(char *line)
 	envp_init[envs+1] = NULL;
 }
 
-extern void check_bugs(void);
 extern void setup_arch(char **, unsigned long *, unsigned long *);
 
 asmlinkage void start_kernel(void)

@@ -546,8 +546,8 @@ struct scc_channel {
 #define FDA	0x40		/* FIFO Data Available Status */
 #define FOY	0x80		/* FIFO Overflow Status */
 
-#endif	/* _SCC_H */
-
 /* global functions */
 
 extern long scc_init(long kmem_start);
+
+#endif	/* _SCC_H */

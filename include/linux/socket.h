@@ -3,7 +3,7 @@
 
 #include <asm/socket.h>			/* arch-dependent defines	*/
 #include <linux/sockios.h>		/* the SIOCxxx I/O controls	*/
-
+#include <linux/uio.h>			/* iovec support		*/
 
 struct sockaddr {
   unsigned short	sa_family;	/* address family, AF_xxx	*/
@@ -13,6 +13,16 @@ struct sockaddr {
 struct linger {
   int 			l_onoff;	/* Linger active		*/
   int			l_linger;	/* How long to linger for	*/
+};
+
+struct msghdr 
+{
+	void	*	msg_name;	/* Socket name			*/
+	int		msg_namelen;	/* Length of name		*/
+	struct iovec *	msg_iov;	/* Data blocks			*/
+	int 		msg_iovlen;	/* Number of blocks		*/
+	void 	*	msg_accrights;	/* Per protocol magic (eg BSD file descriptor passing) */
+	int		msg_accrightslen;	/* Length of rights list */
 };
 
 /* Socket types. */
@@ -103,4 +113,11 @@ struct linger {
 #define SOPRI_NORMAL		1
 #define SOPRI_BACKGROUND	2
 
+#ifdef __KERNEL__
+extern void memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len);
+extern int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode);
+extern void memcpy_toiovec(struct iovec *v, unsigned char *kdata, int len);
+extern int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen);
+extern int move_addr_to_kernel(void *uaddr, int ulen, void *kaddr);
+#endif
 #endif /* _LINUX_SOCKET_H */

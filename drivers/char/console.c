@@ -154,7 +154,6 @@ extern void register_console(void (*proc)(const char *));
 extern void vesa_blank(void);
 extern void vesa_unblank(void);
 extern void compute_shiftstate(void);
-extern int conv_uni_to_pc(long ucs);
 extern void reset_palette (int currcons) ;
 extern void set_palette (void) ;
 

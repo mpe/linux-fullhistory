@@ -76,6 +76,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( INTEL,		INTEL_82371,	"82471 Triton"),
 	DEVICE( INTEL,		INTEL_82438,	"82438"),
 	DEVICE( INTEL,		INTEL_7116,	"SAA7116"),
+	DEVICE( INTEL,		INTEL_82865,	"82865"),
 	DEVICE( SMC,		SMC_37C665,	"FDC 37C665"),
 	DEVICE( ATI,		ATI_M32,	"Mach 32"),
 	DEVICE( ATI,		ATI_M64,	"Mach 64"),
@@ -93,6 +94,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( AL,		AL_M1445,	"M1445"),
 	DEVICE( AL,		AL_M1449,	"M1449"),
 	DEVICE( AL,		AL_M1451,	"M1451"),
+	DEVICE( AL,		AL_M1461,	"M1461"),
 	DEVICE( AL,		AL_M4803,	"M4803"),
 	DEVICE( TSENG,		TSENG_W32P_2,	"ET4000W32P"),
 	DEVICE( TSENG,		TSENG_W32P_b,	"ET4000W32P rev B"),
@@ -259,11 +261,13 @@ const char *pci_strclass (unsigned int class)
 	      case PCI_CLASS_STORAGE_IDE:		return "IDE controller";
 	      case PCI_CLASS_STORAGE_FLOPPY:		return "Floppy disk controller";
 	      case PCI_CLASS_STORAGE_IPI:		return "IPI bus controller";
+	      case PCI_CLASS_STORAGE_RAID:		return "RAID bus controller";
 	      case PCI_CLASS_STORAGE_OTHER:		return "Unknown mass storage controller";
 
 	      case PCI_CLASS_NETWORK_ETHERNET:		return "Ethernet controller";
 	      case PCI_CLASS_NETWORK_TOKEN_RING:	return "Token ring network controller";
 	      case PCI_CLASS_NETWORK_FDDI:		return "FDDI network controller";
+	      case PCI_CLASS_NETWORK_ATM:		return "ATM network controller";
 	      case PCI_CLASS_NETWORK_OTHER:		return "Network controller";
 
 	      case PCI_CLASS_DISPLAY_VGA:		return "VGA compatible controller";
@@ -284,7 +288,39 @@ const char *pci_strclass (unsigned int class)
 	      case PCI_CLASS_BRIDGE_MC:			return "MicroChannel bridge";
 	      case PCI_CLASS_BRIDGE_PCI:		return "PCI bridge";
 	      case PCI_CLASS_BRIDGE_PCMCIA:		return "PCMCIA bridge";
+	      case PCI_CLASS_BRIDGE_NUBUS:		return "NuBus bridge";
+	      case PCI_CLASS_BRIDGE_CARDBUS:		return "CardBus bridge";
 	      case PCI_CLASS_BRIDGE_OTHER:		return "Bridge";
+
+	      case PCI_CLASS_COMMUNICATION_SERIAL:	return "Serial controller";
+	      case PCI_CLASS_COMMUNICATION_PARALLEL:	return "Parallel controller";
+	      case PCI_CLASS_COMMUNICATION_OTHER:	return "Communication controller";
+
+	      case PCI_CLASS_SYSTEM_PIC:		return "PIC";
+	      case PCI_CLASS_SYSTEM_DMA:		return "DMA controller";
+	      case PCI_CLASS_SYSTEM_TIMER:		return "Timer";
+	      case PCI_CLASS_SYSTEM_RTC:		return "RTC";
+	      case PCI_CLASS_SYSTEM_OTHER:		return "System peripheral";
+
+	      case PCI_CLASS_INPUT_KEYBOARD:		return "Keyboard controller";
+	      case PCI_CLASS_INPUT_PEN:			return "Digitizer Pen";
+	      case PCI_CLASS_INPUT_MOUSE:		return "Mouse controller";
+	      case PCI_CLASS_INPUT_OTHER:		return "Input device controller";
+
+	      case PCI_CLASS_DOCKING_GENERIC:		return "Generic Docking Station";
+	      case PCI_CLASS_DOCKING_OTHER:		return "Docking Station";
+
+	      case PCI_CLASS_PROCESSOR_386:		return "386";
+	      case PCI_CLASS_PROCESSOR_486:		return "486";
+	      case PCI_CLASS_PROCESSOR_PENTIUM:		return "Pentium";
+	      case PCI_CLASS_PROCESSOR_ALPHA:		return "Alpha";
+	      case PCI_CLASS_PROCESSOR_POWERPC:		return "Power PC";
+	      case PCI_CLASS_PROCESSOR_CO:		return "Co-processor";
+
+	      case PCI_CLASS_SERIAL_FIREWIRE:		return "FireWire (IEEE 1394)";
+	      case PCI_CLASS_SERIAL_ACCESS:		return "ACCESS Bus";
+	      case PCI_CLASS_SERIAL_SSA:		return "SSA";
+	      case PCI_CLASS_SERIAL_FIBER:		return "Fiber Channel";
 
 	      default:					return "Unknown class";
 	}

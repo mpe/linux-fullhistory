@@ -223,7 +223,7 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 	 *	See if we need to look up the device.
 	 */
 
-#ifdef CONFIG_INET_MULTICAST	
+#ifdef CONFIG_IP_MULTICAST	
 	if(MULTICAST(daddr) && *dev==NULL && skb->sk && *skb->sk->ip_mc_name)
 		*dev=dev_get(skb->sk->ip_mc_name);
 #endif
@@ -854,9 +854,12 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 	 */
 
 	raw = skb->data;
-	iph = (struct iphdr *) (raw + dev->hard_header_len);
-
+#if 0
+	iph = (struct iphdr *) (raw + dev->hard_header_len);	
 	skb->ip_hdr = iph;
+#else
+	iph = skb->ip_hdr;
+#endif
 
 	/*
 	 *	Setup starting values.
@@ -1741,7 +1744,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	      struct sk_buff *skb, int free)
 {
 	struct iphdr *iph;
-	unsigned char *ptr;
+/*	unsigned char *ptr;*/
 
 	/* Sanity check */
 	if (dev == NULL)
@@ -1768,11 +1771,15 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	 *	header length problem
 	 */
 
+#if 0
 	ptr = skb->data;
 	ptr += dev->hard_header_len;
-	iph = (struct iphdr *)ptr;
+	iph = (struct iphdr *)ptr;	
 	skb->ip_hdr = iph;
-	iph->tot_len = ntohs(skb->len-dev->hard_header_len);
+#else
+	iph = skb->ip_hdr;
+#endif
+	iph->tot_len = ntohs(skb->len-(((unsigned char *)iph)-skb->data));
 
 #ifdef CONFIG_IP_FIREWALL
 	if(ip_fw_chk(iph, dev, ip_fw_blk_chain, ip_fw_blk_policy, 0) != 1)
@@ -1801,7 +1808,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	 *	bits of it.
 	 */
 
-	if(skb->len > dev->mtu + dev->hard_header_len)
+	if(ntohs(iph->tot_len)> dev->mtu)
 	{
 		ip_fragment(sk,skb,dev,0);
 		IS_SKB(skb);
@@ -2370,13 +2377,17 @@ int ip_build_xmit(struct sock *sk,
 	ip_statistics.IpOutRequests++;
 
 
-#ifdef CONFIG_INET_MULTICAST	
+#ifdef CONFIG_IP_MULTICAST	
 	if(sk && MULTICAST(daddr) && *sk->ip_mc_name)
 	{
-		dev=dev_get(skb->ip_mc_name);
+		dev=dev_get(sk->ip_mc_name);
 		if(!dev)
 			return -ENODEV;
 		rt=NULL;
+		if (sk->saddr && (!LOOPBACK(sk->saddr) || LOOPBACK(daddr)))
+			saddr = sk->saddr;
+		else
+			saddr = dev->pa_addr;
 	}
 	else
 	{
@@ -2438,7 +2449,7 @@ int ip_build_xmit(struct sock *sk,
 			saddr = sk->saddr;
 			
 		dev=rt->rt_dev;
-#ifdef CONFIG_INET_MULTICAST
+#ifdef CONFIG_IP_MULTICAST
 	}
 #endif		
 
@@ -2691,15 +2702,15 @@ int ip_build_xmit(struct sock *sk,
 			if(sk==NULL || sk->ip_mc_loop) 
 			{
 				if(skb->daddr==IGMP_ALL_HOSTS)
-					ip_loopback(rt->rt_dev,skb);
+					ip_loopback(rt?rt->rt_dev:dev,skb);
 				else 
 				{
-					struct ip_mc_list *imc=rt->rt_dev->ip_mc_list;
+					struct ip_mc_list *imc=rt?rt->rt_dev->ip_mc_list:dev->ip_mc_list;
 					while(imc!=NULL) 
 					{
 						if(imc->multiaddr==daddr) 
 						{
-							ip_loopback(rt->rt_dev,skb);
+							ip_loopback(rt?rt->rt_dev:dev,skb);
 							break;
 						}
 						imc=imc->next;

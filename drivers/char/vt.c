@@ -29,7 +29,6 @@
 #include "selection.h"
 
 extern struct tty_driver console_driver;
-extern int sel_cons;
 
 #define VT_IS_IN_USE(i)	(console_driver.table[i] && console_driver.table[i]->count)
 #define VT_BUSY(i)	(VT_IS_IN_USE(i) || i == fg_console || i == sel_cons)
@@ -58,7 +57,6 @@ extern void change_console(unsigned int new_console);
 extern void complete_change_console(unsigned int new_console);
 extern int vt_waitactive(void);
 extern void do_blank_screen(int nopowersave);
-extern void do_unblank_screen(void);
 
 extern unsigned int keymap_count;
 

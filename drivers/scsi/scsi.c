@@ -111,8 +111,6 @@ extern int (* dispatch_scsi_info_ptr)(int ino, char *buffer, char **start,
 extern int dispatch_scsi_info(int ino, char *buffer, char **start, 
                               off_t offset, int length, int inout); 
 
-extern void proc_print_scsidevice(Scsi_Device *scd, char *buffer, 
-                                  int *size, int len);
 
 /*
  *  As the scsi do command functions are intelligent, and may need to

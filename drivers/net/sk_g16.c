@@ -465,7 +465,7 @@ struct priv
 
 /* IRQ map used to reserve a IRQ (see SK_open()) */
 
-extern void *irq2dev_map[16]; 
+/* extern void *irq2dev_map[16]; */ /* Declared in <linux/ioport.h> */
 
 /* static variables */
 
@@ -2045,10 +2045,10 @@ void SK_print_dev(struct device *dev, char *text)
     else
     {
 	printk("## %s: Device Structure. %s\n", SK_NAME, text);
-	printk("## Device Name: %s Base Address: %#06x IRQ: %d\n", 
+	printk("## Device Name: %s Base Address: %#06lx IRQ: %d\n", 
                dev->name, dev->base_addr, dev->irq);
 	       
-	printk("##   FLAGS: start: %d tbusy: %d int: %d\n", 
+	printk("##   FLAGS: start: %d tbusy: %ld int: %d\n", 
                dev->start, dev->tbusy, dev->interrupt);
 
 	printk("## next device: %#08x init function: %#08x\n", 

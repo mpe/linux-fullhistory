@@ -113,12 +113,15 @@ done:
 
 static int msdos_partition(struct gendisk *hd, unsigned int dev, unsigned long first_sector)
 {
-	int i, minor = current_minor, tested_for_dm6 = 0;
+	int i, minor = current_minor;
 	struct buffer_head *bh;
 	struct partition *p;
 	int mask = (1 << hd->minor_shift) - 1;
+#ifdef CONFIG_BLK_DEV_IDE
+	int tested_for_dm6 = 0;
 
 read_mbr:
+#endif
 	if (!(bh = bread(dev,0,1024))) {
 		printk(" unable to read partition table\n");
 		return -1;

@@ -213,7 +213,7 @@ static int atp_probe1(struct device *dev, short ioaddr)
 	/* Read the station address PROM.  */
 	get_node_ID(dev);
 
-	printk("%s: Pocket adapter found at %#3x, IRQ %d, SAPROM "
+	printk("%s: Pocket adapter found at %#3lx, IRQ %d, SAPROM "
 		   "%02X:%02X:%02X:%02X:%02X:%02X.\n", dev->name, dev->base_addr,
 		   dev->irq, dev->dev_addr[0], dev->dev_addr[1], dev->dev_addr[2],
 		   dev->dev_addr[3], dev->dev_addr[4], dev->dev_addr[5]);

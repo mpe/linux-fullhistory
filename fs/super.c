@@ -254,6 +254,38 @@ void put_super(dev_t dev)
 		sb->s_op->put_super(sb);
 }
 
+asmlinkage int sys_ustat(dev_t dev, struct ustat * ubuf)
+{
+        struct super_block *s;
+        struct ustat tmp;
+        struct statfs sbuf;
+        unsigned long old_fs;
+        int error;
+
+        s = get_super(dev);
+        if (s == NULL)
+                return -EINVAL;
+
+        if (!(s->s_op->statfs))
+                return -ENOSYS;
+
+        error = verify_area(VERIFY_WRITE,ubuf,sizeof(struct ustat));
+        if (error)
+                return error;
+
+        old_fs = get_fs();
+        set_fs(get_ds());
+        s->s_op->statfs(s,&sbuf,sizeof(struct statfs));
+        set_fs(old_fs);
+
+        memset(&tmp,0,sizeof(struct ustat));
+        tmp.f_tfree = sbuf.f_bfree;
+        tmp.f_tinode = sbuf.f_ffree;
+
+        memcpy_tofs(ubuf,&tmp,sizeof(struct ustat));
+        return 0;
+}
+
 static struct super_block * read_super(dev_t dev,const char *name,int flags,
 				       void *data, int silent)
 {

@@ -118,7 +118,6 @@ static inline void free_one_pmd(pmd_t * dir)
 
 static inline void free_one_pgd(pgd_t * dir)
 {
-	int j;
 	pmd_t * pmd;
 
 	if (pgd_none(*dir))
@@ -130,12 +129,11 @@ static inline void free_one_pgd(pgd_t * dir)
 	}
 	pmd = pmd_offset(dir, 0);
 	pgd_clear(dir);
-	if (pmd_inuse(pmd)) {
-		pmd_free(pmd);
-		return;
+	if (!pmd_inuse(pmd)) {
+		int j;
+		for (j = 0; j < PTRS_PER_PMD ; j++)
+			free_one_pmd(pmd+j);
 	}
-	for (j = 0; j < PTRS_PER_PMD ; j++)
-		free_one_pmd(pmd+j);
 	pmd_free(pmd);
 }
 	
@@ -258,7 +256,7 @@ static inline int copy_one_pmd(pmd_t * old_pmd, pmd_t * new_pmd)
 	if (pmd_none(*old_pmd))
 		return 0;
 	if (pmd_bad(*old_pmd)) {
-		printk("copy_one_pmd: bad page table: probable memory corruption\n");
+		printk("copy_one_pmd: bad page table (%08lx): probable memory corruption\n", pmd_val(*old_pmd));
 		pmd_clear(old_pmd);
 		return 0;
 	}

@@ -50,7 +50,6 @@ extern sysfun_p sys_call_table[];
 
 static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs);
 static int load_elf_library(int fd);
-extern int aout_core_dump(long signr, struct pt_regs * regs);
 static int elf_core_dump(long signr, struct pt_regs * regs);
 extern int dump_fpu (elf_fpregset_t *);
 

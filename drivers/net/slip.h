@@ -31,11 +31,9 @@
 #endif
 
 /* SLIP configuration. */
-#ifndef SL_SLIP_LOTS
-#define SL_NRUNIT	4		/* number of SLIP channels	*/
-#else
-#define SL_NRUNIT	16
-#endif
+#define SL_NRUNIT	256		/* MAX number of SLIP channels;
+					   This can be overridden with
+					   insmod -oslip_maxdev=nnn	*/
 #define SL_MTU		296		/* 296; I am used to 600- FvK	*/
 
 /* SLIP protocol characters. */

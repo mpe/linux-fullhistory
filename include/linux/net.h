@@ -43,6 +43,8 @@
 #define SYS_SHUTDOWN	13		/* sys_shutdown(2)		*/
 #define SYS_SETSOCKOPT	14		/* sys_setsockopt(2)		*/
 #define SYS_GETSOCKOPT	15		/* sys_getsockopt(2)		*/
+#define SYS_SENDMSG	16		/* sys_sendmsg(2)		*/
+#define SYS_RECVMSG	17		/* sys_recvmsg(2)		*/
 
 
 typedef enum {
@@ -124,6 +126,8 @@ struct proto_ops {
 			 char *optval, int *optlen);
   int	(*fcntl)	(struct socket *sock, unsigned int cmd,
 			 unsigned long arg);	
+  int   (*sendmsg)	(struct socket *sock, struct msghdr *m, int total_len, int nonblock, int flags);
+  int   (*recvmsg)	(struct socket *sock, struct msghdr *m, int total_len, int nonblock, int flags, int *addr_len);
 };
 
 struct net_proto {

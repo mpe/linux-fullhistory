@@ -138,8 +138,7 @@ struct buffer_head {
 	unsigned char b_lock;		/* 0 - ok, 1 -locked */
 	unsigned char b_req;		/* 0 if the buffer has been invalidated */
 	unsigned char b_list;		/* List that this buffer appears */
-	unsigned char b_retain;         /* Expected number of times this will
-					   be used.  Put on freelist when 0 */
+	unsigned char b_reuse;		/* 0 - normal, 1 - better reused for something else */
 	unsigned long b_flushtime;      /* Time when this (dirty) buffer should be written */
 	unsigned long b_lru_time;       /* Time when this buffer was last used. */
 	struct wait_queue * b_wait;

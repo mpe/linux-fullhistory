@@ -288,8 +288,6 @@ __asm__ __volatile__(
 return __res;
 }
 
-extern char * ___strtok;
-
 #define __HAVE_ARCH_STRTOK
 extern inline char * strtok(char * s,const char * ct)
 {

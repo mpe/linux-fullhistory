@@ -219,7 +219,7 @@ int znet_probe(struct device *dev)
 	dev->base_addr = netinfo->iobase1;
 	dev->irq = netinfo->irq1;
 
-	printk(KERN_INFO "%s: ZNET at %#3x,", dev->name, dev->base_addr);
+	printk(KERN_INFO "%s: ZNET at %#3lx,", dev->name, dev->base_addr);
 
 	/* The station address is in the "netidblk" at 0x0f0000. */
 	for (i = 0; i < 6; i++)
@@ -319,7 +319,7 @@ static int znet_send_packet(struct sk_buff *skb, struct device *dev)
 	int ioaddr = dev->base_addr;
 
 	if (znet_debug > 4)
-		printk(KERN_DEBUG "%s: ZNet_send_packet(%d).\n", dev->name, dev->tbusy);
+		printk(KERN_DEBUG "%s: ZNet_send_packet(%ld).\n", dev->name, dev->tbusy);
 
 	/* Transmitter timeout, likely just recovery after suspending the machine. */
 	if (dev->tbusy) {

@@ -31,7 +31,6 @@
 
 extern int close_fp(struct file *filp);
 
-int smb_notify_change(struct inode *, struct iattr *);
 static void smb_put_inode(struct inode *);
 static void smb_read_inode(struct inode *);
 static void smb_put_super(struct super_block *);

@@ -11,6 +11,8 @@
  *
  *	Fixes:
  *		Michael Callahan	:	Made routing work
+ *		Wesley Craig		:	Fix probing to listen to a
+ *						passed node id.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -318,6 +320,7 @@ static int atif_probe_device(struct atalk_iface *atif)
 	int ct;
 	int netrange=ntohs(atif->nets.nr_lastnet)-ntohs(atif->nets.nr_firstnet)+1;
 	int probe_net=ntohs(atif->address.s_net);
+	int probe_node=atif->address.s_node;
 	int netct;
 	int nodect;
 	
@@ -334,6 +337,9 @@ static int atif_probe_device(struct atalk_iface *atif)
 			probe_net=ntohs(atif->nets.nr_firstnet) + (jiffies%netrange);
 	}
 	
+	if(probe_node == ATADDR_ANYNODE)
+		probe_node = jiffies&0xFF;
+	
 	
 	/*
 	 *	Scan the networks.
@@ -342,14 +348,13 @@ static int atif_probe_device(struct atalk_iface *atif)
 	for(netct=0;netct<=netrange;netct++)
 	{
 		/*
-		 *	Sweep the available nodes from a random start.
+		 *	Sweep the available nodes from a given start.
 		 */
-		int nodeoff=jiffies&255;
-		
+
 		atif->address.s_net=htons(probe_net);
 		for(nodect=0;nodect<256;nodect++)
 		{
-			atif->address.s_node=((nodect+nodeoff)&0xFF);
+			atif->address.s_node=((nodect+probe_node)&0xFF);
 			if(atif->address.s_node>0&&atif->address.s_node<254)
 			{
 				/*

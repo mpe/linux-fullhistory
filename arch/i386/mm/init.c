@@ -115,10 +115,35 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 #if 0
 	memset((void *) 0, 0, PAGE_SIZE);
 #endif
+#ifdef CONFIG_TEST_VERIFY_AREA
+	wp_works_ok = 0;
+#endif
 	start_mem = PAGE_ALIGN(start_mem);
 	address = 0;
 	pg_dir = swapper_pg_dir;
 	while (address < end_mem) {
+#ifdef CONFIG_PENTIUM_MM
+		if (address <= end_mem + 4*1024*1024 &&
+		    (x86_capability & 8)) {
+#ifdef GAS_KNOWS_CR4
+			__asm__("movl %%cr4,%%eax\n\t"
+				"orl $16,%%eax\n\t"
+				"movl %%eax,%%cr4"
+				: : :"ax");
+#else
+			__asm__(".byte 0x0f,0x20,0xe0\n\t"
+				"orl $16,%%eax\n\t"
+				".byte 0x0f,0x22,0xe0"
+				: : :"ax");
+#endif
+			wp_works_ok = 1;
+			pgd_val(pg_dir[0]) = _PAGE_TABLE | _PAGE_4M | address;
+			pgd_val(pg_dir[768]) = _PAGE_TABLE | _PAGE_4M | address;
+			pg_dir++;
+			address += 4*1024*1024;
+			continue;
+		}
+#endif
 		/* map the memory at virtual addr 0xC0000000 */
 		pg_table = (pte_t *) (PAGE_MASK & pgd_val(pg_dir[768]));
 		if (!pg_table) {
@@ -202,17 +227,15 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 		reservedpages << (PAGE_SHIFT-10),
 		datapages << (PAGE_SHIFT-10));
 /* test if the WP bit is honoured in supervisor mode */
-	wp_works_ok = -1;
-	pg0[0] = pte_val(mk_pte(0, PAGE_READONLY));
-	invalidate();
-	__asm__ __volatile__("movb 0,%%al ; movb %%al,0": : :"ax", "memory");
-	pg0[0] = 0;
-	invalidate();
-	if (wp_works_ok < 0)
-		wp_works_ok = 0;
-#ifdef CONFIG_TEST_VERIFY_AREA
-	wp_works_ok = 0;
-#endif
+	if (wp_works_ok < 0) {
+		pg0[0] = pte_val(mk_pte(0, PAGE_READONLY));
+		invalidate();
+		__asm__ __volatile__("movb 0,%%al ; movb %%al,0": : :"ax", "memory");
+		pg0[0] = 0;
+		invalidate();
+		if (wp_works_ok < 0)
+			wp_works_ok = 0;
+	}
 	return;
 }
 

@@ -215,6 +215,45 @@ extern int		dev_ioctl(unsigned int cmd, void *);
 
 extern void		dev_init(void);
 
+/* Locking protection for page faults during outputs to devices unloaded during the fault */
+
+extern int		dev_lockct;
+
+/*
+ *	These two dont currently need to be interrupt safe
+ *	but they may do soon. Do it properly anyway.
+ */
+
+extern __inline__ void  dev_lock_list(void)
+{
+	unsigned long flags;
+	save_flags(flags);
+	cli();
+	dev_lockct++;
+	restore_flags(flags);
+}
+
+extern __inline__ void  dev_unlock_list(void)
+{
+	unsigned long flags;
+	save_flags(flags);
+	cli();
+	dev_lockct--;
+	restore_flags(flags);
+}
+
+/*
+ *	This almost never occurs, isnt in performance critical paths
+ *	and we can thus be relaxed about it
+ */
+ 
+extern __inline__ void dev_lock_wait(void)
+{
+	while(dev_lockct)
+		schedule();
+}
+
+
 /* These functions live elsewhere (drivers/net/net_init.c, but related) */
 
 extern void		ether_setup(struct device *dev);

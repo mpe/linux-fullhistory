@@ -1380,8 +1380,8 @@ static void load_packet(struct device *dev, char *buf, u32 flags, struct sk_buff
 }
 /*
 ** Set or clear the multicast filter for this adaptor.
-** num_addrs == -1	Promiscuous mode, receive all packets - not supported.
-**                      Use the ioctls.
+** num_addrs == -1	Promiscuous mode, receive all packets - now supported.
+**                      Can also use the ioctls.
 ** num_addrs == 0	Normal mode, clear multicast list
 ** num_addrs > 0	Multicast mode, receive normal and MC packets, and do
 ** 			best-effort filtering.
@@ -1409,6 +1409,11 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
       lp->tx_new = (++lp->tx_new) % lp->txRingSize;
       outl(POLL_DEMAND, DE4X5_TPD);                /* Start the TX */
       dev->trans_start = jiffies;
+    } else { /* set promiscuous mode */
+      u32 omr;
+      omr = inl(DE4X5_OMR);
+      omr |= OMR_PR;
+      outl(omr, DE4X5_OMR);
     }
   }
 
@@ -1472,6 +1477,9 @@ static void SetMulticastFilter(struct device *dev, int num_addrs, char *addrs)
       }
     }
   }
+
+  if (num_addrs == 0)
+    omr &= ~OMR_PR;
   outl(omr, DE4X5_OMR);
 
   return;

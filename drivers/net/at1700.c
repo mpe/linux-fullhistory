@@ -571,7 +571,6 @@ net_rx(struct device *dev)
 /* The inverse routine to net_open(). */
 static int net_close(struct device *dev)
 {
-	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
 
 	dev->tbusy = 1;

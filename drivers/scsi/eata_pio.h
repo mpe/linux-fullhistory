@@ -19,7 +19,7 @@
 
 #define VER_MAJOR 0
 #define VER_MINOR 0
-#define VER_SUB	  "1a"
+#define VER_SUB	  "1b"
 
 /************************************************************************
  * Here you can switch parts of the code on and of			*
@@ -112,7 +112,6 @@ int eata_pio_release(struct Scsi_Host *);
  * c-label-offset: -4
  * c-continued-statement-offset: 4
  * c-continued-brace-offset: 0
- * indent-tabs-mode: nil
  * tab-width: 8
  * End:
  */
