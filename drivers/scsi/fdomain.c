@@ -704,7 +704,7 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
 
 				/* Log I/O ports with kernel */
 
-   snarf_region( port_base, 0x10 );
+   register_iomem( port_base, 0x10 ,"fdomain");
 
    if ((bios_major == 3 && bios_minor >= 2) || bios_major < 0) {
       adapter_mask = 0x80;

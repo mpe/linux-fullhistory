@@ -32,6 +32,7 @@
 #include <linux/fcntl.h>
 #include <linux/ptrace.h>
 #include <linux/major.h>
+#include <linux/ioport.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -369,11 +370,15 @@ static _INLINE_ void receive_chars(struct async_struct *info,
 {
 	struct tty_struct *tty = info->tty;
 	unsigned char ch;
+	int ignored = 0;
 
 	do {
 		ch = serial_inp(info, UART_RX);
-		if (*status & info->ignore_status_mask)
+		if (*status & info->ignore_status_mask) {
+			if (++ignored > 100)
+				break;
 			goto ignore_char;
+		}
 		if (tty->flip.count >= TTY_FLIPBUF_SIZE)
 			break;
 		tty->flip.count++;
@@ -1462,6 +1467,7 @@ static int set_serial_info(struct async_struct * info,
 	info->type = new_serial.type;
 	info->close_delay = new_serial.close_delay;
 
+	release_region(info->port,8);
 	if (change_port || change_irq) {
 		/*
 		 * We need to shutdown the serial port at the old
@@ -1472,6 +1478,9 @@ static int set_serial_info(struct async_struct * info,
 		info->port = new_serial.port;
 		info->hub6 = new_serial.hub6;
 	}
+	if(info->type != PORT_UNKNOWN)
+		register_iomem(info->port,8,"serial(set)");
+
 	
 check_and_exit:
 	if (!info->port || !info->type)
@@ -2344,6 +2353,7 @@ static void autoconfig(struct async_struct * info)
 		if ((status1 != 0xa5) || (status2 != 0x5a))
 			info->type = PORT_8250;
 	}
+	register_iomem(info->port,8,"serial(auto)");
 
 	/*
 	 * Reset the UART.

@@ -19,6 +19,7 @@
 extern void reserve_setup(char *str, int *ints);
 extern int check_region(unsigned int from, unsigned int extent);
 extern void snarf_region(unsigned int from, unsigned int extent);
+extern void register_iomem(unsigned int from, unsigned int extent,char* name);
 extern void release_region(unsigned int from, unsigned int extent);
 extern int get_ioport_list(char *);
 

@@ -8,6 +8,8 @@
  * Copyright (C) David S. Miller (davem@caip.rutgers.edu)
  */
 
+#define MAX_DMA_CHANNELS 8
+
 #ifndef _ASM_SPARC_DMA_H
 #define _ASM_SPARC_DMA_H
 

@@ -438,7 +438,8 @@ static int ultrastor_14f_detect(Scsi_Host_Template * tpnt)
     /* All above tests passed, must be the right thing.  Get some useful
        info. */
 
-    snarf_region(config.port_address, 0x0c); /* Register the I/O space that we use */
+    register_iomem(config.port_address, 0x0c,"ultrastor"); 
+    /* Register the I/O space that we use */
 
     *(char *)&config_1 = inb(CONFIG(config.port_address + 0));
     *(char *)&config_2 = inb(CONFIG(config.port_address + 1));

@@ -4,6 +4,14 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
+
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/kernel.h>
@@ -63,6 +71,7 @@ void minix_put_super(struct super_block *sb)
 		brelse(sb->u.minix_sb.s_zmap[i]);
 	brelse (sb->u.minix_sb.s_sbh);
 	unlock_super(sb);
+	MOD_DEC_USE_COUNT;
 	return;
 }
 
@@ -207,6 +216,7 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
  	else if (s->u.minix_sb.s_mount_state & MINIX_ERROR_FS)
 		printk ("MINIX-fs: mounting file system with errors, "
 			"running fsck is recommended.\n");
+	MOD_INC_USE_COUNT;
 	return s;
 }
 
@@ -511,3 +521,30 @@ int minix_sync_inode(struct inode * inode)
 	brelse (bh);
 	return err;
 }
+
+#ifdef MODULE
+
+char kernel_version[] = UTS_RELEASE;
+
+static struct file_system_type minix_fs_type = {
+	minix_read_super, "minix", 1, NULL
+};
+
+int init_module(void)
+{
+	register_filesystem(&minix_fs_type);
+	return 0;
+}
+
+void cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("ne: device busy, remove delayed\n");
+	else
+	{
+		unregister_filesystem(&minix_fs_type);
+	}
+}
+
+#endif
+

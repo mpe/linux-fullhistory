@@ -9,7 +9,7 @@ Major features of ide.c & ide-cd.c:
 
 	- support for up to two IDE interfaces on one or two IRQs
 	- support for any mix of up to four disk and/or cdrom drives
-	- support for reading IDE ATAPI cdrom drives (NEC, MITSUMI, VERSA)
+	- support for reading IDE ATAPI cdrom drives (NEC, MITSUMI, VERSA, SONY)
 	- support for audio functions on FX400,NEC-260 cdrom drives (others?)
 	- auto-detection of interfaces, drives, IRQs, and disk geometries
 	- support for BIOSs which report "more than 16 heads" on disk drives
@@ -47,14 +47,24 @@ or	hdx=cdrom
 
 where hdx can be any of {hda,hdb,hdc,hdd}, or simply hd, for the "next" drive
 in sequence.  Only the first three parameters are required (cyls,heads,sects),
-and wpcom is ignored for IDE drives.
+and wpcom is ignored for IDE drives.  For example:
 
-	Example:  hdc=1050,32,64 hdd=cdrom
+	hdc=1050,32,64 hdd=cdrom
 
 If an irq number is given, it will apply to both drives on the same interface,
 either {hda,hdb} or {hdc,hdd}.  The results of successful auto-probing may
 override the physical geometry/irq specified, though the "original" geometry
 is retained as the "logical" geometry for partitioning purposes (fdisk).
+
+If the auto-probing during boot time confuses a drive (ie. the drive works
+with hd.c but not with ide.c), then an command line option may be specified
+for each drive for which you'd like the drive to skip the hardware
+probe/identification sequence.  For example:
+
+	hdb=noprobe
+or
+	hdc=768,16,32
+	hdc=noprobe
 
 Courtesy of Scott Snyder, the driver now supports ATAPI cdrom drives
 such as the NEC-260 and the new MITSUMI triple/quad speed drives.
@@ -95,7 +105,7 @@ has more than 1024 cylinders.  This presents two problems to most systems:
 	addresses, giving a limit of 1024cyls for programs which use it.
 
 	2. The physical geometry fields of the disk partition table only
-	allows 10-bits for cylinder addresses, giving a similar limit of 1024
+	allow 10-bits for cylinder addresses, giving a similar limit of 1024
 	cyls for operating systems that do not use the "sector count" fields
 	instead of the physical Cyl/Head/Sect (CHS) geometry fields.
 
@@ -106,7 +116,7 @@ fields of the partition table instead of the physical CHS geometry fields.
 	a) Most folks use LILO to load linux.  LILO uses the INT13 interface
 	to the BIOS to load the kernel at boot time.  Therefore, LILO can only
 	load linux if the files it needs (usually just the kernel images) are
-	located below the magic 1024 cylinder "boundary".
+	located below the magic 1024 cylinder "boundary" (more on this later).
 
 	b) Many folks also like to have bootable DOS partitions on their
 	drive(s).  DOS also uses the INT13 interface to the BIOS, not only
@@ -127,17 +137,17 @@ between the cylinder and head number fields.  This is activated by entering
 a translated logical geometry into the BIOS/CMOS setup for the drive.
 Thus, if the drive has a geometry of 2100/16/63 (CHS), then the BIOS could
 present a "logical" geometry of 525/64/63 by "shifting" two bits from the
-cylinder number into the head number field for purposes of the partition table, CMOS setup, and INT13 interfaces.  Linux kernels 1.1.39 and higher detect and
+cylinder number into the head number field for purposes of the partition table,
+CMOS setup, and INT13 interfaces.  Linux kernels 1.1.39 and higher detect and
 "handle" this translation automatically, making this a rather painless solution
 for the 1024 cyls problem.  If for some reason Linux gets confused (unlikely),
 then use the kernel command line parameters to pass the *logical* geometry,
 as in:  hda=525,64,63
 
 If the BIOS does not support this form of drive translation, then several
-options remain, listed below in order of increasing popularity:
+options remain, listed below in inverse order of popularity:
 
-	- rewrite LILO to bypass the BIOS and talk directly to the drive
-	- boot from a floppy disk instead of the hard drive (takes 10 seconds)
+	- boot from a floppy disk instead of the hard drive (takes 10 seconds).
 	- use a partition below the 1024 cyl boundary to hold the linux
 	boot files (kernel images and /boot directory), and place the rest
 	of linux anywhere else on the drive.  These files can reside in a DOS
@@ -145,9 +155,9 @@ options remain, listed below in order of increasing popularity:
 
 If you cannot use drive translation, *and* your BIOS also restricts you to
 entering no more than 1024 cylinders in the geometry field in the CMOS setup,
-then you'll have to set it to 1024.  As of v3.5 of this driver, Linux will
-automatically determine the *real* number of cylinders for fdisk to use,
-allowing easy access to the full disk capacity.
+then just set it to 1024.  As of v3.5 of this driver, Linux automatically
+determines the *real* number of cylinders for fdisk to use, allowing easy
+access to the full disk capacity without having to fiddle around.
 
 Regardless of what you do, all DOS partitions *must* be contained entirely
 within the first 1024 logical cylinders.  For a 1Gig WD disk drive, here's
@@ -158,16 +168,29 @@ a good "half and half" partitioning scheme to start with:
 	/dev/hda2 from cyl  993 to 1023		swap
 	/dev/hda3 from cyl 1024 to 2100		linux
 
-After installing slackware (or whatever), boot from floppy and mount the dos
-partition under /dos, and then move the /boot directory to /dos/boot,
-and move the /vmlinuz kernel file into /dos/boot.  Then create a symlink
-to put it back where the filesystem standard wants it:  ln -s /dos/boot /boot
-Finally, edit /etc/lilo.conf and change the reference to /vmlinuz to point
-at /boot/vmlinuz and then re-run lilo.  Have Fun.  :)
+To ensure that LILO can boot linux, the boot files (kernel and /boot/*)
+must reside within the first 1024 cylinders of the drive.  If your linux
+root partition is *not* completely within the first 1024 cyls (quite common),
+then you can use LILO to boot linux from files on your DOS partition
+by doing the following after installing slackware (or whatever):
+
+	0. Boot from the "boot floppy" created during the installation
+        1. Mount your DOS partition as /dos (and stick it in /etc/fstab)
+        2. Move your kernel (/vmlinuz) to /dos/vmlinuz with:  mv /vmlinuz /dos
+        3. Edit /etc/lilo.conf to change /vmlinuz to /dos/vmlinuz 
+        4. Move /boot to /dos/boot with:  cp -a /boot /dos ; rm -r /boot
+        5. Create a symlink for LILO to use with:  ln -s /dos/boot /boot
+        6. Re-run LILO with:  lilo
 
 If you "don't do DOS", then partition as you please, but remember to create
 a small partition to hold the /boot directory (and vmlinuz) as described above
-such that it all lies within the first 1024 cylinders.
+such that they stay within the first 1024 cylinders.
+
+Note that when creating partitions that span beyond cylinder 1024,
+Linux fdisk will complain about "Partition X has different physical/logical
+endings" and emit messages such as "This is larger than 1024, and may cause
+problems with some software".   Ignore them for linux partitions.  The "some
+software" refers to DOS, the BIOS, and LILO, as described previously.
 
 Western Digital now ships a "DiskManager 6.03" diskette with all of their big
 hard drives.  Burn it!  That idiotic piece of garbage isn't even universally

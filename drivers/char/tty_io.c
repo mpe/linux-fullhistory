@@ -52,6 +52,7 @@
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
+#include <linux/config.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -1442,6 +1443,8 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			arg = get_fs_long((unsigned long *) arg);
 			return tty_set_ldisc(tty, arg);
 		case TIOCLINUX:
+			if (current->tty != tty && !suser())
+				return -EPERM;
 			retval = verify_area(VERIFY_READ, (void *) arg, 1);
 			if (retval)
 				return retval;

@@ -19,7 +19,6 @@
 static char *version =
 	"smc-ultra.c:v1.11 11/21/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -148,7 +147,7 @@ int ultra_probe1(struct device *dev, int ioaddr)
 
 
 	/* OK, were are certain this is going to work.  Setup the device. */
-	snarf_region(ioaddr, 32);
+	register_iomem(ioaddr, 32,"smc-ultra");
 
 	/* The 8390 isn't at the base address, so fake the offset */
 	dev->base_addr = ioaddr+ULTRA_NIC_OFFSET;

@@ -370,7 +370,7 @@ int el16_probe1(struct device *dev, int ioaddr)
 	}
 	
 	/* We've committed to using the board, and can start filling in *dev. */
-	snarf_region(ioaddr, EL16_IO_EXTENT);
+	register_iomem(ioaddr, EL16_IO_EXTENT,"3c507");
 	dev->base_addr = ioaddr;
 
 	outb(0x01, ioaddr + MISC_CTRL);

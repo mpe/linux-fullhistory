@@ -32,15 +32,12 @@ static char *version=
 "auto_irq.c:v1.11 Donald Becker (becker@cesdis.gsfc.nasa.gov)";
 #endif
 
-/*#include <linux/config.h>*/
-/*#include <linux/kernel.h>*/
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <linux/netdevice.h>
-/*#include <asm/system.h>*/
 
 struct device *irq2dev_map[16] = {0, 0, /* ... zeroed */};
 

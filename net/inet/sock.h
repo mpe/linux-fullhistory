@@ -33,6 +33,7 @@
 #include <linux/timer.h>
 #include <linux/ip.h>		/* struct options */
 #include <linux/tcp.h>		/* struct tcphdr */
+#include <linux/config.h>
 
 #include <linux/skbuff.h>	/* struct sk_buff */
 #include "protocol.h"		/* struct inet_protocol */
@@ -159,6 +160,10 @@ struct sock {
   int				ip_ttl;		/* TTL setting */
   int				ip_tos;		/* TOS */
   struct tcphdr			dummy_th;
+  struct timer_list		keepalive_timer;	/* TCP keepalive hack */
+  struct timer_list		retransmit_timer;	/* TCP retransmit timer */
+  struct timer_list		ack_timer;		/* TCP delayed ack timer */
+  int				ip_xmit_timeout;	/* Why the timeout is running */
 #ifdef CONFIG_IP_MULTICAST  
   int				ip_mc_ttl;			/* Multicasting TTL */
   int				ip_mc_loop;			/* Loopback (not implemented yet) */
@@ -168,7 +173,7 @@ struct sock {
 
   /* This part is used for the timeout functions (timer.c). */
   int				timeout;	/* What are we waiting for? */
-  struct timer_list		timer;
+  struct timer_list		timer;		/* This is the TIME_WAIT/receive timer when we are doing IP */
   struct timeval		stamp;
 
   /* identd */

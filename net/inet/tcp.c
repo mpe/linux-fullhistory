@@ -117,6 +117,10 @@
  *					works see the 4.4lite source.
  *		A.N.Kuznetsov	:	Don't time wait on completion of tidy 
  *					close.
+ *		Linus Torvalds	:	Fin/Shutdown & copied_seq changes.
+ *		Linus Torvalds	:	Fixed BSD port reuse to work first syn
+ *		Alan Cox	:	Reimplemented timers as per the RFC and using multiple
+ *					timers for sanity. 
  *
  *
  * To Fix:
@@ -179,6 +183,7 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/string.h>
+#include <linux/config.h>
 #include <linux/socket.h>
 #include <linux/sockios.h>
 #include <linux/termios.h>
@@ -191,6 +196,7 @@
 #include "protocol.h"
 #include "icmp.h"
 #include "tcp.h"
+#include "arp.h"
 #include <linux/skbuff.h>
 #include "sock.h"
 #include "route.h"
@@ -201,6 +207,8 @@
 #include <linux/mm.h>
 
 #undef TCP_FASTPATH
+
+#define reset_msl_timer(x,y,z)	reset_timer(x,y,z)
 
 #define SEQ_TICK 3
 unsigned long seq_offset;
@@ -350,7 +358,7 @@ static void tcp_time_wait(struct sock *sk)
 	sk->shutdown = SHUTDOWN_MASK;
 	if (!sk->dead)
 		sk->state_change(sk);
-	reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+	reset_msl_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 }
 
 /*
@@ -455,11 +463,29 @@ void tcp_do_retransmit(struct sock *sk, int all)
 }
 
 /*
+ *	Reset the retransmission timer
+ */
+ 
+static void reset_xmit_timer(struct sock *sk, int why, unsigned long when)
+{
+	del_timer(&sk->retransmit_timer);
+	sk->ip_xmit_timeout = why;
+	if((int)when < 0)
+	{
+		when=3;
+		printk("Error: Negative timer in xmit_timer\n");
+	}
+	sk->retransmit_timer.expires=when;
+	add_timer(&sk->retransmit_timer);
+}
+
+/*
  * 	This is the normal code called for timeouts.  It does the retransmission
  * 	and then does backoff.  tcp_do_retransmit is separated out because
  * 	tcp_ack needs to send stuff from the retransmit queue without
  * 	initiating a backoff.
  */
+
 
 void tcp_retransmit_time(struct sock *sk, int all)
 {
@@ -481,7 +507,7 @@ void tcp_retransmit_time(struct sock *sk, int all)
 	sk->retransmits++;
 	sk->backoff++;
 	sk->rto = min(sk->rto << 1, 120*HZ);
-	reset_timer(sk, TIME_WRITE, sk->rto);
+	reset_xmit_timer(sk, TIME_WRITE, sk->rto);
 }
 
 
@@ -510,6 +536,154 @@ static void tcp_retransmit(struct sock *sk, int all)
 	tcp_retransmit_time(sk, all);
 }
 
+/*
+ *	The TCP retransmit timer.
+ */
+
+
+
+static void retransmit_timer(unsigned long data)
+{
+	struct sock *sk = (struct sock*)data;
+	int why = sk->ip_xmit_timeout;
+
+	/* 
+	 * only process if socket is not in use
+	 */
+
+	cli();
+	if (sk->inuse || in_bh) 
+	{
+		sk->retransmit_timer.expires = 10;
+		add_timer(&sk->timer);
+		sti();
+		return;
+	}
+
+	sk->inuse = 1;
+	sti();
+
+	/* Always see if we need to send an ack. */
+
+	if (sk->ack_backlog && !sk->zapped) 
+	{
+		sk->prot->read_wakeup (sk);
+		if (! sk->dead)
+			sk->data_ready(sk,0);
+	}
+
+	/* Now we need to figure out why the socket was on the timer. */
+
+	switch (why) 
+	{
+		/* Window probing */
+		case TIME_PROBE0:
+			tcp_send_probe0(sk);
+			release_sock (sk);
+			break;
+		/* Retransmitting */
+		case TIME_WRITE:
+			/* It could be we got here because we needed to send an ack.
+			 * So we need to check for that.
+			 */
+		{
+			struct sk_buff *skb;
+			unsigned long flags;
+
+			save_flags(flags);
+			cli();
+			skb = sk->send_head;
+			if (!skb) 
+			{
+				restore_flags(flags);
+			} 
+			else 
+			{
+				if (jiffies < skb->when + sk->rto) 
+				{
+					reset_xmit_timer (sk, TIME_WRITE, skb->when + sk->rto - jiffies);
+					restore_flags(flags);
+					release_sock (sk);
+					break;
+				}
+				restore_flags(flags);
+				/* printk("timer: seq %d retrans %d out %d cong %d\n", sk->send_head->h.seq,
+					sk->retransmits, sk->packets_out, sk->cong_window); */
+				sk->prot->retransmit (sk, 0);
+				if ((sk->state == TCP_ESTABLISHED && sk->retransmits && !(sk->retransmits & 7))
+					|| (sk->state != TCP_ESTABLISHED && sk->retransmits > TCP_RETR1)) 
+				{
+					arp_destroy (sk->daddr, 0);
+					ip_route_check (sk->daddr);
+				}
+				if (sk->state != TCP_ESTABLISHED && sk->retransmits > TCP_RETR2) 
+				{
+					sk->err = ETIMEDOUT;
+					if (sk->state == TCP_FIN_WAIT1 || sk->state == TCP_FIN_WAIT2 || sk->state == TCP_CLOSING) 
+					{
+						sk->state = TCP_TIME_WAIT;
+						reset_msl_timer (sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+					}
+					else
+					{
+						sk->prot->close (sk, 1);
+							break;
+					}
+				}
+			}
+			release_sock (sk);
+			break;
+		}
+		/* Sending Keepalives */
+		case TIME_KEEPOPEN:
+			/* 
+			 * this reset_timer() call is a hack, this is not
+			 * how KEEPOPEN is supposed to work.
+			 */
+			reset_timer (sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
+
+			/* Send something to keep the connection open. */
+			if (sk->prot->write_wakeup)
+				  sk->prot->write_wakeup (sk);
+			sk->retransmits++;
+			if (sk->shutdown == SHUTDOWN_MASK) 
+			{
+				sk->prot->close (sk, 1);
+				sk->state = TCP_CLOSE;
+			}
+			if ((sk->state == TCP_ESTABLISHED && sk->retransmits && !(sk->retransmits & 7))
+				|| (sk->state != TCP_ESTABLISHED && sk->retransmits > TCP_RETR1)) 
+			{
+				arp_destroy (sk->daddr, 0);
+				ip_route_check (sk->daddr);
+				release_sock (sk);
+				break;
+			}
+			if (sk->state != TCP_ESTABLISHED && sk->retransmits > TCP_RETR2) 
+			{
+				arp_destroy (sk->daddr, 0);
+				sk->err = ETIMEDOUT;
+				if (sk->state == TCP_FIN_WAIT1 || sk->state == TCP_FIN_WAIT2) 
+				{
+					sk->state = TCP_TIME_WAIT;
+					if (!sk->dead)
+						sk->state_change(sk);
+					release_sock (sk);
+				  } 
+				  else 
+				  {
+					sk->prot->close (sk, 1);
+				  }
+				  break;
+			}
+			release_sock (sk);
+			break;
+		default:
+			printk ("rexmit_timer: timer expired - reason unknown\n");
+			release_sock (sk);
+			break;
+	}
+}
 
 /*
  * This routine is called by the ICMP module when it gets some
@@ -896,7 +1070,7 @@ static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 
 	skb->h.seq = ntohl(th->seq) + size - 4*th->doff;
 	if (after(skb->h.seq, sk->window_seq) ||
-	    (sk->retransmits && sk->timeout == TIME_WRITE) ||
+	    (sk->retransmits && sk->ip_xmit_timeout == TIME_WRITE) ||
 	     sk->packets_out >= sk->cong_window) 
 	{
 		/* checksum will be supplied by tcp_write_xmit.  So
@@ -911,7 +1085,7 @@ static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		if (before(sk->window_seq, sk->write_queue.next->h.seq) &&
 		    sk->send_head == NULL &&
 		    sk->ack_backlog == 0)
-			reset_timer(sk, TIME_PROBE0, sk->rto);
+			reset_xmit_timer(sk, TIME_PROBE0, sk->rto);
 	} 
 	else 
 	{
@@ -922,6 +1096,7 @@ static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 
 		sk->sent_seq = sk->write_seq;
 		sk->prot->queue_xmit(sk, skb->dev, skb, 0);
+		reset_xmit_timer(sk, TIME_WRITE, sk->rto);
 	}
 }
 
@@ -998,9 +1173,9 @@ static void tcp_send_ack(unsigned long sequence, unsigned long ack,
 	{
 		/* Force it to send an ack. */
 		sk->ack_backlog++;
-		if (sk->timeout != TIME_WRITE && tcp_connected(sk->state)) 
+		if (sk->ip_xmit_timeout != TIME_WRITE && tcp_connected(sk->state)) 
 		{
-			reset_timer(sk, TIME_WRITE, 10);
+			reset_xmit_timer(sk, TIME_WRITE, 10);
 		}
 		return;
 	}
@@ -1048,10 +1223,10 @@ static void tcp_send_ack(unsigned long sequence, unsigned long ack,
 		sk->bytes_rcv = 0;
 		sk->ack_timed = 0;
 		if (sk->send_head == NULL && skb_peek(&sk->write_queue) == NULL
-				  && sk->timeout == TIME_WRITE) 
+				  && sk->ip_xmit_timeout == TIME_WRITE) 
 		{
 			if(sk->keepopen) {
-				reset_timer(sk,TIME_KEEPOPEN,TCP_TIMEOUT_LEN);
+				reset_xmit_timer(sk,TIME_KEEPOPEN,TCP_TIMEOUT_LEN);
 			} else {
 				delete_timer(sk);
 			}
@@ -1303,6 +1478,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 
 		if (skb == NULL) 
 		{
+			sk->socket->flags |= SO_NOSPACE;
 			if (nonblock) 
 			{
 				release_sock(sk);
@@ -1325,6 +1501,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 				  (sk->state == TCP_ESTABLISHED||sk->state == TCP_CLOSE_WAIT)
 				&& sk->err == 0) 
 			{
+				sk->socket->flags &= ~SO_NOSPACE;
 				interruptible_sleep_on(sk->sleep);
 				if (current->signal & ~current->blocked) 
 				{
@@ -1466,7 +1643,7 @@ static void tcp_read_wakeup(struct sock *sk)
 	if (buff == NULL) 
 	{
 		/* Try again real soon. */
-		reset_timer(sk, TIME_WRITE, 10);
+		reset_xmit_timer(sk, TIME_WRITE, 10);
 		return;
  	}
 
@@ -1589,13 +1766,13 @@ static void cleanup_rbuf(struct sock *sk)
 		else 
 		{
 			/* Force it to send an ack soon. */
-			int was_active = del_timer(&sk->timer);
+			int was_active = del_timer(&sk->retransmit_timer);
 			if (!was_active || TCP_ACK_TIME < sk->timer.expires) 
 			{
-				reset_timer(sk, TIME_WRITE, TCP_ACK_TIME);
+				reset_xmit_timer(sk, TIME_WRITE, TCP_ACK_TIME);
 			} 
 			else
-				add_timer(&sk->timer);
+				add_timer(&sk->retransmit_timer);
 		}
 	}
 } 
@@ -1688,7 +1865,7 @@ static int tcp_read(struct sock *sk, unsigned char *to,
 		unsigned long offset;
 	
 		/*
-		 * are we at urgent data? Stop if we have read anything.
+		 * Are we at urgent data? Stop if we have read anything.
 		 */
 		if (copied && sk->urg_data && sk->urg_seq == *seq)
 			break;
@@ -1750,7 +1927,9 @@ static int tcp_read(struct sock *sk, unsigned char *to,
 
 		cleanup_rbuf(sk);
 		release_sock(sk);
+		sk->socket->flags |= SO_WAITDATA;
 		schedule();
+		sk->socket->flags &= ~SO_WAITDATA;
 		sk->inuse = 1;
 
 		if (current->signal & ~current->blocked) 
@@ -1953,6 +2132,7 @@ void tcp_shutdown(struct sock *sk, int how)
   	{
         	sk->sent_seq = sk->write_seq;
 		sk->prot->queue_xmit(sk, dev, buff, 0);
+		reset_xmit_timer(sk, TIME_WRITE, sk->rto);
 	}
 
 	if (sk->state == TCP_ESTABLISHED) 
@@ -2265,6 +2445,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	newsk->fin_seq = skb->h.th->seq;
 	newsk->state = TCP_SYN_RECV;
 	newsk->timeout = 0;
+	newsk->ip_xmit_timeout = 0;
 	newsk->write_seq = seq; 
 	newsk->window_seq = newsk->write_seq;
 	newsk->rcv_ack_seq = newsk->write_seq;
@@ -2273,8 +2454,11 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	newsk->linger=0;
 	newsk->destroy = 0;
 	init_timer(&newsk->timer);
+	init_timer(&newsk->retransmit_timer);
 	newsk->timer.data = (unsigned long)newsk;
 	newsk->timer.function = &net_timer;
+	newsk->retransmit_timer.data = (unsigned long)newsk;
+	newsk->retransmit_timer.function=&retransmit_timer;
 	newsk->dummy_th.source = skb->h.th->dest;
 	newsk->dummy_th.dest = skb->h.th->source;
 	
@@ -2421,8 +2605,9 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 
 	tcp_send_check(t1, daddr, saddr, sizeof(*t1)+4, newsk);
 	newsk->prot->queue_xmit(newsk, ndev, buff, 0);
+	reset_xmit_timer(newsk, TIME_WRITE, newsk->rto);
 
-	reset_timer(newsk, TIME_WRITE , TCP_TIMEOUT_INIT);
+	reset_xmit_timer(newsk, TIME_WRITE , TCP_TIMEOUT_INIT);
 	skb->sk = newsk;
 
 	/*
@@ -2509,7 +2694,7 @@ static void tcp_close(struct sock *sk, int timeout)
 				if (timer_active)
 					add_timer(&sk->timer);
 				else
-					reset_timer(sk, TIME_CLOSE, 4 * sk->rto);
+					reset_msl_timer(sk, TIME_CLOSE, 4 * sk->rto);
 			}
 			if (timeout) 
 				tcp_time_wait(sk);
@@ -2551,7 +2736,7 @@ static void tcp_close(struct sock *sk, int timeout)
 				release_sock(sk);
 				if (sk->state != TCP_CLOSE_WAIT)
 					tcp_set_state(sk,TCP_ESTABLISHED);
-				reset_timer(sk, TIME_CLOSE, 100);
+				reset_msl_timer(sk, TIME_CLOSE, 100);
 				return;
 			}
 			buff->sk = sk;
@@ -2580,7 +2765,7 @@ static void tcp_close(struct sock *sk, int timeout)
 					tcp_set_state(sk,TCP_FIN_WAIT1);
 				else
 					tcp_set_state(sk,TCP_FIN_WAIT2);
-				reset_timer(sk, TIME_CLOSE,4*sk->rto);
+				reset_msl_timer(sk, TIME_CLOSE,4*sk->rto);
 				if(timeout)
 					tcp_time_wait(sk);
 
@@ -2615,10 +2800,11 @@ static void tcp_close(struct sock *sk, int timeout)
 			{
 				sk->sent_seq = sk->write_seq;
 				prot->queue_xmit(sk, dev, buff, 0);
+				reset_xmit_timer(sk, TIME_WRITE, sk->rto);
 			} 
 			else 
 			{
-				reset_timer(sk, TIME_WRITE, sk->rto);
+				reset_xmit_timer(sk, TIME_WRITE, sk->rto);
 				if (buff->next != NULL) 
 				{
 					printk("tcp_close: next != NULL\n");
@@ -2665,7 +2851,7 @@ tcp_write_xmit(struct sock *sk)
 	while((skb = skb_peek(&sk->write_queue)) != NULL &&
 		before(skb->h.seq, sk->window_seq + 1) &&
 		(sk->retransmits == 0 ||
-		 sk->timeout != TIME_WRITE ||
+		 sk->ip_xmit_timeout != TIME_WRITE ||
 		 before(skb->h.seq, sk->rcv_ack_seq + 1))
 		&& sk->packets_out < sk->cong_window) 
 	{
@@ -2703,6 +2889,7 @@ tcp_write_xmit(struct sock *sk)
 
 			sk->sent_seq = skb->h.seq;
 			sk->prot->queue_xmit(sk, skb->dev, skb, skb->free);
+			reset_xmit_timer(sk, TIME_WRITE, sk->rto);
 		}
 	}
 }
@@ -2738,7 +2925,7 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 #endif	
 	}
 
-	if (sk->retransmits && sk->timeout == TIME_KEEPOPEN)
+	if (sk->retransmits && sk->ip_xmit_timeout == TIME_KEEPOPEN)
 	  	sk->retransmits = 0;
 
 	if (after(ack, sk->sent_seq) || before(ack, sk->rcv_ack_seq)) 
@@ -2756,8 +2943,8 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 		}
 		if (sk->keepopen) 
 		{
-			if(sk->timeout==TIME_KEEPOPEN)
-				reset_timer(sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
+			if(sk->ip_xmit_timeout==TIME_KEEPOPEN)
+				reset_xmit_timer(sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
 		}
 		return(1);
 	}
@@ -2846,7 +3033,7 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 	sk->window_seq = ack + ntohs(th->window);
 
 	/* We don't want too many packets out there. */
-	if (sk->timeout == TIME_WRITE && 
+	if (sk->ip_xmit_timeout == TIME_WRITE && 
 		sk->cong_window < 2048 && after(ack, sk->rcv_ack_seq)) 
 	{
 		/* 
@@ -2887,7 +3074,7 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 	 *	it needs to be for normal retransmission.
 	 */
 
-	if (sk->timeout == TIME_PROBE0) 
+	if (sk->ip_xmit_timeout == TIME_PROBE0) 
 	{
   		if (skb_peek(&sk->write_queue) != NULL &&   /* should always be non-null */
 		    ! before (sk->window_seq, sk->write_queue.next->h.seq)) 
@@ -3044,7 +3231,7 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 	{
 		if (after (sk->window_seq+1, sk->write_queue.next->h.seq) &&
 		        (sk->retransmits == 0 || 
-			 sk->timeout != TIME_WRITE ||
+			 sk->ip_xmit_timeout != TIME_WRITE ||
 			 before(sk->write_queue.next->h.seq, sk->rcv_ack_seq + 1))
 			&& sk->packets_out < sk->cong_window) 
 		{
@@ -3056,7 +3243,7 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
  			sk->ack_backlog == 0 &&
  			sk->state != TCP_TIME_WAIT) 
  		{
- 	        	reset_timer(sk, TIME_PROBE0, sk->rto);
+ 	        	reset_xmit_timer(sk, TIME_PROBE0, sk->rto);
  		}		
 	}
 	else
@@ -3080,7 +3267,7 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 			 * keep us in TIME_WAIT until we stop getting packets,
 			 * reset the timeout.
 			 */
-			reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+			reset_msl_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 			break;
 		case TCP_CLOSE:
 			/*
@@ -3093,11 +3280,12 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 			 * to determine which timeout to use.
 			 */
 			if (sk->send_head || skb_peek(&sk->write_queue) != NULL || sk->ack_backlog) {
-				reset_timer(sk, TIME_WRITE, sk->rto);
+				reset_xmit_timer(sk, TIME_WRITE, sk->rto);
 			} else if (sk->keepopen) {
-				reset_timer(sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
+				reset_xmit_timer(sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
 			} else {
-				delete_timer(sk);
+				del_timer(&sk->retransmit_timer);
+				sk->ip_xmit_timeout = 0;
 			}
 			break;
 		}
@@ -3228,7 +3416,7 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 		else
 		{
 			tcp_do_retransmit(sk, 1);
-			reset_timer(sk, TIME_WRITE, sk->rto);
+			reset_xmit_timer(sk, TIME_WRITE, sk->rto);
 		}
 	}
 
@@ -3259,6 +3447,7 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 	if (!sk->dead) 
 	{
 		sk->state_change(sk);
+		sock_wake_async(sk->socket, 1);
 	}
 
 	switch(sk->state) 
@@ -3270,7 +3459,7 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 			 * move to CLOSE_WAIT, tcp_data() already handled
 			 * sending the ack.
 			 */	/* Check me --------------vvvvvvv */
-			reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+			reset_msl_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 			tcp_set_state(sk,TCP_CLOSE_WAIT);
 			if (th->rst)
 				sk->shutdown = SHUTDOWN_MASK;
@@ -3288,7 +3477,7 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 			 * received a retransmission of the FIN,
 			 * restart the TIME_WAIT timer.
 			 */
-			reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+			reset_msl_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 			return(0);
 		case TCP_FIN_WAIT1:
 			/*
@@ -3303,15 +3492,15 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 			 * for handling this timeout.
 			 */
 
-			if(sk->timeout != TIME_WRITE)
-				reset_timer(sk, TIME_WRITE, sk->rto);
+			if(sk->ip_xmit_timeout != TIME_WRITE)
+				reset_xmit_timer(sk, TIME_WRITE, sk->rto);
 			tcp_set_state(sk,TCP_CLOSING);
 			break;
 		case TCP_FIN_WAIT2:
 			/*
 			 * received a FIN -- send ACK and enter TIME_WAIT
 			 */
-			reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+			reset_msl_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 			sk->shutdown|=SHUTDOWN_MASK;
 			tcp_set_state(sk,TCP_TIME_WAIT);
 			break;
@@ -3324,7 +3513,7 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 			tcp_set_state(sk,TCP_LAST_ACK);
 	
 			/* Start the timers. */
-			reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+			reset_msl_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 			return(0);
 	}
 
@@ -3391,7 +3580,7 @@ extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk,
 			/* Do this the way 4.4BSD treats it. Not what I'd
 			   regard as the meaning of the spec but its what BSD
 			   does and clearly they know everything 8) */
-			
+
 			/*
 			 *	This is valid because of two things
 			 *
@@ -3594,7 +3783,7 @@ extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk,
 				sk->ack_backlog++;
 				if(sk->debug)
 					printk("Ack queued.\n");
-				reset_timer(sk, TIME_WRITE, TCP_ACK_TIME);
+				reset_xmit_timer(sk, TIME_WRITE, TCP_ACK_TIME);
 			}
 		}
 	}
@@ -3637,7 +3826,7 @@ extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk,
 		}
 		tcp_send_ack(sk->sent_seq, sk->acked_seq, sk, th, saddr);
 		sk->ack_backlog++;
-		reset_timer(sk, TIME_WRITE, TCP_ACK_TIME);
+		reset_xmit_timer(sk, TIME_WRITE, TCP_ACK_TIME);
 	}
 	else
 	{
@@ -3941,10 +4130,14 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 
 	tcp_set_state(sk,TCP_SYN_SENT);
 	sk->rto = TCP_TIMEOUT_INIT;
-	reset_timer(sk, TIME_WRITE, sk->rto);	/* Timer for repeating the SYN until an answer */
+	init_timer(&sk->retransmit_timer);
+	sk->retransmit_timer.function=&retransmit_timer;
+	sk->retransmit_timer.data = (unsigned long)sk;
+	reset_xmit_timer(sk, TIME_WRITE, sk->rto);	/* Timer for repeating the SYN until an answer */
 	sk->retransmits = TCP_RETR2 - TCP_SYN_RETRIES;
 
 	sk->prot->queue_xmit(sk, dev, buff, 0);  
+	reset_xmit_timer(sk, TIME_WRITE, sk->rto);
 	tcp_statistics.TcpActiveOpens++;
 	tcp_statistics.TcpOutSegs++;
   
@@ -4275,7 +4468,10 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 				sk->dummy_th.dest=th->source;
 				sk->copied_seq = sk->acked_seq;
 				if(!sk->dead)
+				{
 					sk->state_change(sk);
+					sock_wake_async(sk->socket, 0);
+				}
 				if(sk->max_window==0)
 				{
 					sk->max_window = 32;
@@ -4519,7 +4715,7 @@ void tcp_send_probe0(struct sock *sk)
 
 	sk->backoff++;
 	sk->rto = min(sk->rto << 1, 120*HZ);
-	reset_timer (sk, TIME_PROBE0, sk->rto);
+	reset_xmit_timer (sk, TIME_PROBE0, sk->rto);
 	sk->retransmits++;
 	sk->prot->retransmits ++;
 }

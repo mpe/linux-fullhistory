@@ -498,9 +498,9 @@ repeat:
 
 	
 	if (contiguous && SCpnt->request.bh &&
-	    ((int) SCpnt->request.bh->b_data) + (SCpnt->request.nr_sectors << 9) - 1 > 
+	    ((long) SCpnt->request.bh->b_data) + (SCpnt->request.nr_sectors << 9) - 1 > 
 	    ISA_DMA_THRESHOLD && SCpnt->host->unchecked_isa_dma) {
-	  if(((int) SCpnt->request.bh->b_data) > ISA_DMA_THRESHOLD)
+	  if(((long) SCpnt->request.bh->b_data) > ISA_DMA_THRESHOLD)
 	    bounce_buffer = (char *) scsi_malloc(bounce_size);
 	  if(!bounce_buffer) contiguous = 0;
 	};
@@ -558,7 +558,7 @@ repeat:
 	    if(!bhp || !CONTIGUOUS_BUFFERS(bhp,bh) ||
 	       !CLUSTERABLE_DEVICE(SCpnt) ||
 	       (SCpnt->host->unchecked_isa_dma &&
-	       ((unsigned int) bh->b_data-1) == ISA_DMA_THRESHOLD)) {
+	       ((unsigned long) bh->b_data-1) == ISA_DMA_THRESHOLD)) {
 	      if (count < SCpnt->host->sg_tablesize) count++;
 	      else break;
 	    };
@@ -597,7 +597,7 @@ repeat:
 	      sgpnt[count].length += bh->b_size;
 	      counted += bh->b_size >> 9;
 
-	      if (((int) sgpnt[count].address) + sgpnt[count].length - 1 > 
+	      if (((long) sgpnt[count].address) + sgpnt[count].length - 1 > 
 		  ISA_DMA_THRESHOLD && (SCpnt->host->unchecked_isa_dma) &&
 		  !sgpnt[count].alt_address) {
 		sgpnt[count].alt_address = sgpnt[count].address;
@@ -640,7 +640,7 @@ repeat:
 	      if(bhp && CONTIGUOUS_BUFFERS(bh,bhp) && CLUSTERABLE_DEVICE(SCpnt)) {
 		char * tmp;
 
-		if (((int) sgpnt[count].address) + sgpnt[count].length +
+		if (((long) sgpnt[count].address) + sgpnt[count].length +
 		    bhp->b_size - 1 > ISA_DMA_THRESHOLD && 
 		    (SCpnt->host->unchecked_isa_dma) &&
 		    !sgpnt[count].alt_address) continue;
@@ -696,7 +696,7 @@ repeat:
 /* Now handle the possibility of DMA to addresses > 16Mb */
 
 	if(SCpnt->use_sg == 0){
-	  if (((int) buff) + (this_count << 9) - 1 > ISA_DMA_THRESHOLD && 
+	  if (((long) buff) + (this_count << 9) - 1 > ISA_DMA_THRESHOLD && 
 	    (SCpnt->host->unchecked_isa_dma)) {
 	    if(bounce_buffer)
 	      buff = bounce_buffer;

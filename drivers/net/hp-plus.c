@@ -21,7 +21,6 @@
 static char *version =
 "hp-plus.c:v1.10 9/24/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
-#include <linux/config.h>
 #include <linux/string.h>		/* Important -- this inlines word moves. */
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -179,7 +178,7 @@ int hpp_probe1(struct device *dev, int ioaddr)
 	}
 
 	/* Grab the region so we can find another board if something fails. */
-	snarf_region(ioaddr, HP_IO_EXTENT);
+	register_iomem(ioaddr, HP_IO_EXTENT,"hp-plus");
 
 	/* Read the IRQ line. */
 	outw(HW_Page, ioaddr + HP_PAGING);

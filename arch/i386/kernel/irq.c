@@ -39,11 +39,6 @@
 static unsigned char cache_21 = 0xff;
 static unsigned char cache_A1 = 0xff;
 
-unsigned long intr_count = 0;
-unsigned long bh_active = 0;
-unsigned long bh_mask = 0xFFFFFFFF;
-struct bh_struct bh_base[32]; 
-
 void disable_irq(unsigned int irq_nr)
 {
 	unsigned long flags;
@@ -82,34 +77,6 @@ void enable_irq(unsigned int irq_nr)
 	cache_A1 &= mask;
 	outb(cache_A1,0xA1);
 	restore_flags(flags);
-}
-
-/*
- * do_bottom_half() runs at normal kernel priority: all interrupts
- * enabled.  do_bottom_half() is atomic with respect to itself: a
- * bottom_half handler need not be re-entrant.
- */
-asmlinkage void do_bottom_half(void)
-{
-	unsigned long active;
-	unsigned long mask, left;
-	struct bh_struct *bh;
-
-	bh = bh_base;
-	active = bh_active & bh_mask;
-	for (mask = 1, left = ~0 ; left & active ; bh++,mask += mask,left += left) {
-		if (mask & active) {
-			void (*fn)(void *);
-			bh_active &= ~mask;
-			fn = bh->routine;
-			if (!fn)
-				goto bad_bh;
-			fn(bh->data);
-		}
-	}
-	return;
-bad_bh:
-	printk ("irq.c:bad bottom half entry %08lx\n", mask);
 }
 
 /*
@@ -400,12 +367,4 @@ void init_IRQ(void)
 		printk("Unable to get IRQ2 for cascade\n");
 	if (request_irq(13,math_error_irq, 0, "math error"))
 		printk("Unable to get IRQ13 for math-error handler\n");
-
-	/* initialize the bottom half routines. */
-	for (i = 0; i < 32; i++) {
-		bh_base[i].routine = NULL;
-		bh_base[i].data = NULL;
-	}
-	bh_active = 0;
-	intr_count = 0;
 }

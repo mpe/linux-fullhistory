@@ -81,15 +81,6 @@ extern long rd_init(long mem_start, int length);
 unsigned long net_dev_init(unsigned long, unsigned long);
 extern long bios32_init(long, long);
 
-#ifdef CONFIG_BLK_DEV_IDE
-extern void ide_setup(char *str, int *ints);
-extern void hda_setup(char *str, int *ints);
-extern void hdb_setup(char *str, int *ints);
-extern void hdc_setup(char *str, int *ints);
-extern void hdd_setup(char *str, int *ints);
-#else
-extern void hd_setup(char *str, int *ints);
-#endif /* CONFIG_BLK_DEV_IDE */
 extern void bmouse_setup(char *str, int *ints);
 extern void eth_setup(char *str, int *ints);
 extern void xd_setup(char *str, int *ints);
@@ -107,6 +98,7 @@ extern void aha274x_setup(char *str, int *ints);
 extern void buslogic_setup(char *str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
+extern void sock_setup(char *str, int *ints);
 #ifdef CONFIG_SBPCD
 extern void sbpcd_setup(char *str, int *ints);
 #endif CONFIG_SBPCD

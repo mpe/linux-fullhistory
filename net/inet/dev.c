@@ -27,6 +27,7 @@
  *		Tim Kordas	:	SIOCADDMULTI/SIOCDELMULTI
  *		Alan Cox	:	100 backlog just doesn't cut it when
  *					you start doing multicast video 8)
+ *		Alan Cox	:	Rewrote net_bh and list manager.
  *
  *	Cleaned up and recommented by Alan Cox 2nd April 1994. I hope to have
  *	the rest as well commented in the end.
@@ -54,6 +55,7 @@
 #include <linux/inet.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/notifier.h>
 #include "ip.h"
 #include "route.h"
 #include <linux/skbuff.h>
@@ -67,6 +69,12 @@
  */
 
 struct packet_type *ptype_base = NULL;
+
+/*
+ *	Our notifier list
+ */
+ 
+struct notifier_block *netdev_chain=NULL;
 
 /*
  *	Device drivers call our routines to queue packets here. We empty the
@@ -88,13 +96,6 @@ static struct sk_buff_head backlog =
 static int backlog_size = 0;
 
 /*
- *	The number of sockets open for 'all' protocol use. We have to
- *	know this to copy a buffer the correct number of times.
- */
- 
-static int dev_nit=0;
-
-/*
  *	Return the lesser of the two values. 
  */
  
@@ -110,70 +111,24 @@ static __inline__ unsigned long min(unsigned long a, unsigned long b)
 
 *******************************************************************************************/
 
+/*
+ *	For efficiency
+ */
+
+static int dev_nit=0;
 
 /*
- *	Add a protocol ID to the list.
+ *	Add a protocol ID to the list. Now that the input handler is
+ *	smarter we can dispense with all the messy stuff that used to be
+ *	here.
  */
  
 void dev_add_pack(struct packet_type *pt)
 {
-	struct packet_type *p1;
+	if(pt->type==htons(ETH_P_ALL))
+		dev_nit++;
 	pt->next = ptype_base;
-
-	/* 
-	 *	Don't use copy counts on ETH_P_ALL. Instead keep a global
- 	 *	count of number of these and use it and pt->copy to decide
-	 *	copies 
-	 */
-	 
-	pt->copy=0;	/* Assume we will not be copying the buffer before 
-			 * this routine gets it
-			 */
-			 
-	if(pt->type == htons(ETH_P_ALL))
-  		dev_nit++;	/* I'd like a /dev/nit too one day 8) */
-	else
-	{
-  		/*
-  		 *	See if we need to copy it - that is another process also
-  		 *	wishes to receive this type of packet.
-  		 */
-		for (p1 = ptype_base; p1 != NULL; p1 = p1->next) 
-		{
-			if (p1->type == pt->type) 
-			{
-				pt->copy = 1;	/* We will need to copy */
-				break;
-			}
-	  	}
-	}
-  
-  /*
-   *	NIT taps must go at the end or net_bh will leak!
-   */
-   
-	if (pt->type == htons(ETH_P_ALL))
-	{
-  		pt->next=NULL;
-  		if(ptype_base==NULL)
-		  	ptype_base=pt;
-		else
-		{
-			/* 
-			 *	Move to the end of the list
-			 */
-			for(p1=ptype_base;p1->next!=NULL;p1=p1->next);
-			/*
-			 *	Hook on the end
-			 */
-			p1->next=pt;
-		}
-	 }
-	else
-/*
- *	It goes on the start 
- */
-		ptype_base = pt;
+	ptype_base = pt;
 }
 
 
@@ -183,47 +138,16 @@ void dev_add_pack(struct packet_type *pt)
  
 void dev_remove_pack(struct packet_type *pt)
 {
-	struct packet_type *lpt, *pt1;
-
-	/*
-	 *	Keep the count of nit (Network Interface Tap) sockets correct.
-	 */
-	 
-	if (pt->type == htons(ETH_P_ALL))
-	  	dev_nit--;
-	  	
-	/*
-	 *	If we are first, just unhook us.
-	 */
-	 
-	if (pt == ptype_base) 
+	struct packet_type **pt1;
+	if(pt->type==htons(ETH_P_ALL))
+		dev_nit--;
+	for(pt1=&ptype_base; (*pt1)!=NULL; pt1=&((*pt1)->next))
 	{
-		ptype_base = pt->next;
-		return;
-	}
-
-	lpt = NULL;
-	
-	/*
-	 *	This is harder. What we do is to walk the list of sockets 
-	 *	for this type. We unhook the entry, and if there is a previous
-	 *	entry that is copying _and_ we are not copying, (ie we are the
-	 *	last entry for this type) then the previous one is set to
-	 *	non-copying as it is now the last.
-	 */
-	for (pt1 = ptype_base; pt1->next != NULL; pt1 = pt1->next) 
-	{
-		if (pt1->next == pt ) 
+		if(pt==(*pt1))
 		{
-			cli();
-			if (!pt->copy && lpt) 
-				lpt->copy = 0;
-			pt1->next = pt->next;
-			sti();
+			*pt1=pt->next;
 			return;
 		}
-		if (pt1->next->type == pt->type && pt->type != htons(ETH_P_ALL))
-			lpt = pt1->next;
 	}
 }
 
@@ -281,6 +205,7 @@ int dev_open(struct device *dev)
 		ip_mc_allhost(dev);
 #endif				
 		dev_mc_upload(dev);
+		notifier_call_chain(&netdev_chain, NETDEV_UP, dev);
 	}
 	return(ret);
 }
@@ -288,11 +213,6 @@ int dev_open(struct device *dev)
 
 /*
  *	Completely shutdown an interface.
- *
- *	WARNING: Both because of the way the upper layers work (that can be fixed)
- *	and because of races during a close (that can't be fixed any other way)
- *	a device may be given things to transmit EVEN WHEN IT IS DOWN. The driver
- *	MUST cope with this (eg by freeing and dumping the frame).
  */
  
 int dev_close(struct device *dev)
@@ -310,6 +230,9 @@ int dev_close(struct device *dev)
 		 */
 		if (dev->stop) 
 			dev->stop(dev);
+			
+		notifier_call_chain(&netdev_chain, NETDEV_DOWN, dev);
+#if 0		
 		/*
 		 *	Delete the route to the device.
 		 */
@@ -320,6 +243,7 @@ int dev_close(struct device *dev)
 #ifdef CONFIG_IPX
 		ipxrtr_device_down(dev);
 #endif	
+#endif
 		/*
 		 *	Flush the multicast chain
 		 */
@@ -345,6 +269,23 @@ int dev_close(struct device *dev)
 	}
 	return(0);
 }
+
+
+/*
+ *	Device change register/unregister. These are not inline or static
+ *	as we export them to the world.
+ */
+
+int register_netdevice_notifier(struct notifier_block *nb)
+{
+	return notifier_chain_register(&netdev_chain, nb);
+}
+
+int unregister_netdevice_notifer(struct notifier_block *nb)
+{
+	return notifier_chain_unregister(&netdev_chain,nb);
+}
+
 
 
 /*
@@ -445,9 +386,10 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	/* copy outgoing packets to any sniffer packet handlers */
 	if(!where)
 	{
-		for (nitcount = dev_nit, ptype = ptype_base; nitcount > 0 && ptype != NULL; ptype = ptype->next) 
+		for (nitcount= dev_nit, ptype = ptype_base; nitcount > 0 && ptype != NULL; ptype = ptype->next) 
 		{
-			if (ptype->type == htons(ETH_P_ALL)) {
+			if (ptype->type == htons(ETH_P_ALL) && (ptype->dev==dev || !ptype->dev)) 
+			{
 				struct sk_buff *skb2;
 				if ((skb2 = skb_clone(skb, GFP_ATOMIC)) == NULL)
 					break;
@@ -669,9 +611,8 @@ void net_bh(void *tmp)
 {
 	struct sk_buff *skb;
 	struct packet_type *ptype;
+	struct packet_type *pt_prev=NULL;
 	unsigned short type;
-	unsigned char flag = 0;
-	int nitcount;
 
 	/*
 	 *	Atomically check and mark our BUSY state. 
@@ -707,8 +648,6 @@ void net_bh(void *tmp)
 		 */
   		backlog_size--;
 
-	  	nitcount=dev_nit;
-		flag=0;
 		sti();
 		
 	       /*
@@ -748,66 +687,48 @@ void net_bh(void *tmp)
 		 
 		for (ptype = ptype_base; ptype != NULL; ptype = ptype->next) 
 		{
-			if (ptype->type == type || ptype->type == htons(ETH_P_ALL)) 
+			if ((ptype->type == type || ptype->type == htons(ETH_P_ALL)) && (!ptype->dev || ptype->dev==skb->dev))
 			{
-				struct sk_buff *skb2;
-
-				if (ptype->type == htons(ETH_P_ALL))
-					nitcount--;
-				if (ptype->copy || nitcount) 
-				{	
-					/*
-					 *	copy if we need to
-					 */
-#ifdef OLD
-					skb2 = alloc_skb(skb->len, GFP_ATOMIC);
-					if (skb2 == NULL) 
-						continue;
-					memcpy(skb2, skb, skb2->mem_len);
-					skb2->mem_addr = skb2;
-					skb2->h.raw = (unsigned char *)(
-					    (unsigned long) skb2 +
-					    (unsigned long) skb->h.raw -
-					    (unsigned long) skb
-					);
-					skb2->free = 1;
-#else
-					skb2=skb_clone(skb, GFP_ATOMIC);
-					if(skb2==NULL)
-						continue;
-#endif				
-				} 
-				else 
+				/*
+				 *	We already have a match queued. Deliver
+				 *	to it and then remember the new match
+				 */
+				if(pt_prev)
 				{
-					skb2 = skb;
+					struct sk_buff *skb2;
+
+					skb2=skb_clone(skb, GFP_ATOMIC);
+
+					/*
+					 *	Kick the protocol handler. This should be fast
+					 *	and efficient code.
+					 */
+
+					if(skb2)
+						pt_prev->func(skb2, skb->dev, pt_prev);
 				}
-
-				/*
-				 *	Protocol located. 
-				 */
-				 
-				flag = 1;
-
-				/*
-				 *	Kick the protocol handler. This should be fast
-				 *	and efficient code.
-				 */
-
-				ptype->func(skb2, skb->dev, ptype);
+				/* Remember the current last to do */
+				pt_prev=ptype;
 			}
 		} /* End of protocol list loop */
+		
+		/*
+		 *	Is there a last item to send to ?
+		 */
 
+		if(pt_prev)
+			pt_prev->func(skb, skb->dev, pt_prev);
 		/*
 		 * 	Has an unknown packet has been received ?
 		 */
 	 
-		if (!flag) 
-		{
+		else
 			kfree_skb(skb, FREE_WRITE);
-		}
 
 		/*
 		 *	Again, see if we can transmit anything now. 
+		 *	[Ought to take this out judging by tests it slows
+		 *	 us down not speeds us up]
 		 */
 
 		dev_transmit();
@@ -1266,12 +1187,12 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 	
 		case SIOCGIFMEM:	/* Get the per device memory space. We can add this but currently
 					   do not support it */
-			printk("NET: ioctl(SIOCGIFMEM, 0x%08X)\n", (int)arg);
+			printk("NET: ioctl(SIOCGIFMEM, %p)\n", arg);
 			ret = -EINVAL;
 			break;
 		
 		case SIOCSIFMEM:	/* Set the per device memory buffer space. Not applicable in our case */
-			printk("NET: ioctl(SIOCSIFMEM, 0x%08X)\n", (int)arg);
+			printk("NET: ioctl(SIOCSIFMEM, %p)\n", arg);
 			ret = -EINVAL;
 			break;
 

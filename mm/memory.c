@@ -72,8 +72,7 @@ int nr_free_pages = 0;
 struct mem_list free_area_list[NR_MEM_LISTS];
 unsigned char * free_area_map[NR_MEM_LISTS];
 
-#define copy_page(from,to) \
-__asm__("cld ; rep ; movsl": :"S" (from),"D" (to),"c" (1024):"cx","di","si")
+#define copy_page(from,to) memcpy((void *) to, (void *) from, PAGE_SIZE)
 
 unsigned short * mem_map = NULL;
 

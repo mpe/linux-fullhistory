@@ -60,6 +60,9 @@
  *		Alan Cox	:	RAW sockets demultiplex in the BSD style.
  *		Gunther Mayer	:	Fix the SNMP reporting typo
  *		Alan Cox	:	Always in group 224.0.0.1
+ *		Alan Cox	:	Multicast loopback error for 224.0.0.1
+ *		Alan Cox	:	IP_MULTICAST_LOOP option.
+ *		Alan Cox	:	Use notifiers.
  *
  * To Fix:
  *		IP option processing is mostly not needed. ip_forward needs to know about routing rules
@@ -85,12 +88,15 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/errno.h>
+#include <linux/config.h>
+
 #include <linux/socket.h>
 #include <linux/sockios.h>
 #include <linux/in.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+
 #include "snmp.h"
 #include "ip.h"
 #include "protocol.h"
@@ -1923,9 +1929,6 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 
 		/* Interrupt restore */
 		restore_flags(flags);
-		/* Set the IP write timeout to the round trip time for the packet.
-		   If an acknowledge has not arrived by then we may wish to act */
-		reset_timer(sk, TIME_WRITE, sk->rto);
 	}
 	else
 		/* Remember who owns the buffer */
@@ -1950,7 +1953,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	{
 		if(sk==NULL || sk->ip_mc_loop)
 		{
-			if(skb->daddr==IGMP_ALL_HOSTS)
+			if(iph->daddr==IGMP_ALL_HOSTS)
 				ip_loopback(dev,skb);
 			else
 			{
@@ -2405,12 +2408,28 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 static struct packet_type ip_packet_type =
 {
 	0,	/* MUTTER ntohs(ETH_P_IP),*/
-	0,		/* copy */
+	NULL,	/* All devices */
 	ip_rcv,
 	NULL,
 	NULL,
 };
 
+/*
+ *	Device notifier
+ */
+ 
+static int ip_rt_event(unsigned long event, void *ptr)
+{
+	if(event==NETDEV_DOWN)
+		ip_rt_flush(ptr);
+	return NOTIFY_DONE;
+}
+
+struct notifier_block ip_rt_notifier={
+	ip_rt_event,
+	NULL,
+	0
+};
 
 /*
  *	IP registers the packet type and then calls the subprotocol initialisers
@@ -2420,6 +2439,9 @@ void ip_init(void)
 {
 	ip_packet_type.type=htons(ETH_P_IP);
 	dev_add_pack(&ip_packet_type);
+
+	/* So we flush routes when a device is downed */	
+	register_netdevice_notifier(&ip_rt_notifier);
 /*	ip_raw_init();
 	ip_packet_init();
 	ip_tcp_init();

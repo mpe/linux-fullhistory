@@ -19,6 +19,7 @@
 	The statistics need to be updated correctly.
 
         Modularized by Pauline Middelink <middelin@polyware.iaf.nl>
+        Changed to support io= irq= by Alan Cox <Alan.Cox@linux.org>
 */
 
 static char *version =
@@ -362,7 +363,7 @@ int eexp_probe1(struct device *dev, short ioaddr)
 	}
 
 	/* We've committed to using the board, and can start filling in *dev. */
-	snarf_region(ioaddr, 16);
+	register_iomem(ioaddr, 16,"eexpress");
 	dev->base_addr = ioaddr;
 
 	for (i = 0; i < 6; i++) {
@@ -1003,10 +1004,16 @@ eexp_rx(struct device *dev)
 char kernel_version[] = UTS_RELEASE;
 static struct device dev_eexpress = {
 	"        " /*"eexpress"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, express_probe };
+	
+
+int irq=0;
+int io=0;	
 
 int
 init_module(void)
 {
+	dev_eexpress.base_addr=io;
+	dev_eexpress.irq=irq;
 	if (register_netdev(&dev_eexpress) != 0)
 		return -EIO;
 	return 0;

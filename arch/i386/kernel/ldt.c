@@ -4,7 +4,6 @@
  * Copyright (C) 1992 Krishna Balasubramanian and Linus Torvalds
  */
 
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/string.h>

@@ -6,6 +6,7 @@
  *
  *	Fixes:	
  *		Alan Cox	:	Fixed the worst of the load balancer bugs.
+ *		Dave Platt	:	Interrupt stacking fix
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -364,11 +365,15 @@ void kfree_skb(struct sk_buff *skb, int rw)
 		}
 		else
 		{
+			unsigned long flags;
 			/* Non INET - default wmalloc/rmalloc handler */
+			save_flags(flags);
+			cli();
 			if (rw)
 				skb->sk->rmem_alloc-=skb->mem_len;
 			else
 				skb->sk->wmem_alloc-=skb->mem_len;
+			restore_flags(flags);
 			if(!skb->sk->dead)
 				skb->sk->write_space(skb->sk);
 			kfree_skbmem(skb,skb->mem_len);

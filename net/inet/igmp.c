@@ -21,6 +21,7 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
+#include <linux/config.h>
 #include <linux/socket.h>
 #include <linux/sockios.h>
 #include <linux/in.h>
@@ -177,6 +178,7 @@ static void igmp_group_dropped(struct ip_mc_list *im)
 	del_timer(&im->timer);
 	igmp_send_report(im->interface, im->multiaddr, IGMP_HOST_LEAVE_MESSAGE);
 	ip_mc_filter_del(im->interface, im->multiaddr);
+	printk("Left group %lX\n",im->multiaddr);
 }
 
 static void igmp_group_added(struct ip_mc_list *im)
@@ -184,6 +186,7 @@ static void igmp_group_added(struct ip_mc_list *im)
 	igmp_init_timer(im);
 	igmp_send_report(im->interface, im->multiaddr, IGMP_HOST_MEMBERSHIP_REPORT);
 	ip_mc_filter_add(im->interface, im->multiaddr);
+	printk("Joined group %lX\n",im->multiaddr);
 }
 
 int igmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,

@@ -12,6 +12,10 @@
  *      Drew@Colorado.EDU
  *      +1 (303) 786-7975
  *
+ * Pciprobe added by Frederic Potter 1994
+ *	Potter@Cao-Vlsi.Ibp.FR
+ *
+ *
  * For more information, please consult
  *
  * PCI BIOS Specification Revision
@@ -407,6 +411,173 @@ char *pcibios_strerror (int error)
 	}
 }
 
+
+/* Recognize multi-function device */
+
+int multi_function(unsigned char bus,unsigned char dev_fn)
+{
+	unsigned char header;
+		pcibios_read_config_byte(
+			bus, dev_fn, (unsigned char) PCI_HEADER_TYPE, &header);
+		return (header&7==7);
+}
+
+/* Returns Interrupt register */
+
+int interrupt_decod(unsigned char bus,unsigned char dev_fn)
+{
+	unsigned char interrupt;
+		pcibios_read_config_byte(
+			bus, dev_fn, (unsigned char) PCI_INTERRUPT_LINE, &interrupt);
+		if (interrupt>16) return 0;
+		return interrupt;
+}
+
+/* probe for being bist capable */
+
+int bist_probe(unsigned char bus,unsigned char dev_fn)
+{
+	unsigned char   	bist;
+		pcibios_read_config_byte(
+			bus, dev_fn, (unsigned char) PCI_BIST, &bist);
+		return (bist & PCI_BIST_CAPABLE !=0);
+}
+
+
+/* Get the chip revision */
+
+int revision_decode(unsigned char bus,unsigned char dev_fn)
+{
+	unsigned char   	revision;
+       		pcibios_read_config_byte(
+			bus, dev_fn, (unsigned char) PCI_CLASS_REVISION, &revision);
+		return revision;
+}
+
+
+
+/* Gives the Class code using the 16 higher bits */
+/* of the PCI_CLASS_REVISION configuration register */
+
+int class_decode(unsigned char bus,unsigned char dev_fn)
+{
+	struct pci_class_type 	pci_class[PCI_CLASS_NUM+1] = PCI_CLASS_TYPE;
+	int 			i;
+	unsigned long   	class;
+		pcibios_read_config_dword(
+			bus, dev_fn, (unsigned char) PCI_CLASS_REVISION, &class);
+		class=class >> 16;
+		for (i=0;i<PCI_CLASS_NUM;i++) 
+			if (class==pci_class[i].class_id) break;
+		return i;
+}
+
+
+
+
+int device_decode(unsigned char bus,unsigned char dev_fn,unsigned short vendor)
+{
+	struct pci_device_type 	pci_device[PCI_DEVICE_NUM+1] = PCI_DEVICE_TYPE;
+	int 			i;
+	unsigned short   	device;
+		pcibios_read_config_word(
+			bus, dev_fn, (unsigned char) PCI_DEVICE_ID, &device);
+		for (i=0;i<PCI_DEVICE_NUM;i++) 
+			if ((device==pci_device[i].device_id) 
+			 && (vendor==pci_device[i].vendor_id)) break;
+		return i;
+}
+
+
+
+
+
+
+int vendor_decode(unsigned char bus,unsigned char dev_fn)
+{
+	struct pci_vendor_type 	pci_vendor[PCI_VENDOR_NUM+1] = PCI_VENDOR_TYPE;
+	int			i;
+	unsigned short   	vendor;
+
+		pcibios_read_config_word(
+			bus, dev_fn, (unsigned char) PCI_VENDOR_ID, &vendor);
+		for (i=0;i<PCI_VENDOR_NUM;i++) 
+			if (vendor==pci_vendor[i].vendor_id) return i;
+		return i;
+}
+
+
+
+
+/* Call all the information procedures */
+
+void info(unsigned char bus,unsigned char dev_fn)
+{
+	struct	pci_class_type		pci_class[PCI_CLASS_NUM+1] = PCI_CLASS_TYPE;
+	struct	pci_vendor_type		pci_vendor[PCI_VENDOR_NUM+1] = PCI_VENDOR_TYPE;
+	struct	pci_device_type		pci_device[PCI_DEVICE_NUM+1] = PCI_DEVICE_TYPE;
+	int				pr;
+		pr=vendor_decode(bus,dev_fn);
+		printk("       %s : %s %s (rev %d). "
+			,pci_class[class_decode(bus,dev_fn)].class_name
+			,pci_vendor[pr].vendor_name
+			,pci_device[device_decode(bus,dev_fn,pci_vendor[pr].vendor_id)].device_name
+			,revision_decode(bus,dev_fn));
+			
+		if (bist_probe(bus,dev_fn))
+			printk("BIST capable. ");
+		if ((pr=interrupt_decod(bus,dev_fn))!=0)
+			printk("8259's interrupt %d.",pr);
+		printk("\n");
+}
+
+/* In futur version in case we detect a PCI to PCi bridge, we will go 
+for a recursive device search*/
+
+void probe_devices(unsigned char bus)
+{
+	unsigned long	res;
+	unsigned char	dev_fn;
+
+/* For a mysterious reason, my PC crash if I try to probe device 31 function 7  */
+/* (i.e. dev_fn=0xff) It can be a bug in my BIOS, or I havn't understood all about */
+/* PCI */
+
+
+		for (dev_fn=0x0;dev_fn<0xff;dev_fn++) {
+			pcibios_read_config_dword(
+				bus, dev_fn, (unsigned char) PCI_CLASS_REVISION, &res);
+
+/* First we won't try to talk to non_present chip */
+/* Second, we get rid of non multi-function device that seems to be lazy  */
+/* and not fully decode the function number */
+
+			if ((res!=0xffffffff) && 
+				(((dev_fn & 7) == 0) || multi_function(bus,dev_fn))) {
+				printk("Bus %d Device %d Function %d.\n",
+						(int) bus,
+						(int) ((dev_fn & 0xf8) >> 3),
+						(int) (dev_fn & 7));
+				info(bus,dev_fn);
+			}
+		}
+}
+
+
+
+
+
+
+
+void probe_pci(void)
+{
+	if (pcibios_present()==0) printk("ProbePci PCI bios not detected.\n");
+	 else {
+		printk( "Probing PCI hardware.\n");
+		probe_devices(0);
+	}
+}
+
 #endif
 
 unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end)
@@ -460,6 +631,7 @@ unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end)
 #ifdef CONFIG_PCI
 	if (bios32_entry) {
 		memory_start = pcibios_init (memory_start, memory_end);
+		probe_pci();
 	}
 #endif
 	return memory_start;

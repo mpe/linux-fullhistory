@@ -6,6 +6,13 @@
 # unless its something special (ie not a .c file).
 #
 
+.c.s:
+	$(CC) $(CFLAGS) -S $<
+.s.o:
+	$(AS) -c -o $*.o $<
+.c.o:
+	$(CC) $(CFLAGS) -c $<
+
 AHA152X	= -DDEBUG_AHA152X -DAUTOCONF
 
 ifeq (${CFLAGS},)

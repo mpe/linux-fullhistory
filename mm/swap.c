@@ -526,8 +526,7 @@ static int try_to_free_page(int priority)
 static inline void add_mem_queue(struct mem_list * head, struct mem_list * entry)
 {
 	entry->prev = head;
-	entry->next = head->next;
-	entry->next->prev = entry;
+	(entry->next = head->next)->prev = entry;
 	head->next = entry;
 }
 
@@ -1043,9 +1042,10 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 	while (p > mem_map)
 		*--p = MAP_PAGE_RESERVED;
 
-	for (i = 0 ; i < NR_MEM_LISTS ; i++, mask <<= 1) {
+	for (i = 0 ; i < NR_MEM_LISTS ; i++) {
 		unsigned long bitmap_size;
 		free_area_list[i].prev = free_area_list[i].next = &free_area_list[i];
+		mask += mask;
 		end_mem = (end_mem + ~mask) & mask;
 		bitmap_size = end_mem >> (PAGE_SHIFT + i);
 		bitmap_size = (bitmap_size + 7) >> 3;

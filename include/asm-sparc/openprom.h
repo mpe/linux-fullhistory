@@ -19,7 +19,7 @@
 #define	LINUX_OPPROM_MAGIC      0x10010407
 
 /* The device functions structure for the v0 prom. Nice and neat, open,
-   close, read & write divied up between net + block + char devices. We
+   close, read & write divvied up between net + block + char devices. We
    also have a seek routine only usable for block devices. The divide
    and conquer strategy of this struct becomes unnecessary for v2.
 
@@ -54,7 +54,7 @@ struct linux_dev_v0_funcs {
    the time can be a pain in the rear after a while. Why v2 has memory
    allocations in here are beyond me. Perhaps they figure that if you
    are going to use only the prom's device drivers then your memory
-   management is either non-existant or pretty sad. :-)
+   management is either non-existent or pretty sad. :-)
 */
 
 struct linux_dev_v2_funcs {
@@ -67,7 +67,7 @@ struct linux_dev_v2_funcs {
 	char* 	(*v2_dumb_mem_alloc)(char*  va, unsigned sz);
 	void	(*v2_dumb_mem_free)(char*  va, unsigned sz);
 
-	/* "dumb" mmap() munmap(), copy on write? whats that? */
+	/* "dumb" mmap() munmap(), copy on write? what's that? */
 	char* 	(*v2_dumb_mmap)(char*  virta, int asi, unsigned prot, unsigned sz);
 	void	(*v2_dumb_munmap)(char*  virta, unsigned size);
 
@@ -106,7 +106,7 @@ struct linux_mem_v0 {
 	struct  linux_mlist_v0 **v0_available;	/* what phys. is left over */
 };
 
-/* Arguements sent to the kernel from the boot prompt. */
+/* Arguments sent to the kernel from the boot prompt. */
 
 struct linux_arguments_v0 {
 	char	*argv[8];		/* argv format for boot string */
@@ -141,7 +141,7 @@ struct linux_romvec {
 	unsigned int	pv_magic_cookie;      /* Magic Mushroom... */
 	unsigned int	pv_romvers;	      /* iface vers (0, 2, or 3) */
 	unsigned int	pv_plugin_revision;   /* revision relative to above vers */
-	unsigned int	pv_printrev;	      /* printrevision */
+	unsigned int	pv_printrev;	      /* print revision */
 
 	/* Version 0 memory descriptors (see below). */
 	struct linux_mem_v0 pv_v0mem;	      /* V0: Memory description lists. */
@@ -215,7 +215,7 @@ struct linux_romvec {
 	 */
 	void	(*pv_setctxt)(int ctxt, char*  va, int pmeg);
 
-	/* Prov version 3 Multiprocessor routines. This stuff is crazy.
+	/* Prom version 3 Multiprocessor routines. This stuff is crazy.
 	 * No joke. Calling these when there is only one cpu probably
 	 * crashes the machine, have to test this. :-)
          */
@@ -229,7 +229,7 @@ struct linux_romvec {
 	int (*v3_cpustart)(unsigned int whichcpu, int cancontext,
 			   int thiscontext, char* prog_counter);
 
-	/* v3_cpustop() will cause cpu 'whichcpu' to stop executint
+	/* v3_cpustop() will cause cpu 'whichcpu' to stop executing
 	 * until a resume cpu call is made.
 	 */
 

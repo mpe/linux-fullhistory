@@ -11,44 +11,56 @@ SUBDIRS = minix ext ext2 msdos proc isofs nfs xiafs umsdos hpfs sysv
 
 ifdef CONFIG_MINIX_FS
 FS_SUBDIRS := $(FS_SUBDIRS) minix
+else
+MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) minix
 endif
+
 ifdef CONFIG_EXT_FS
 FS_SUBDIRS := $(FS_SUBDIRS) ext
 endif
+
 ifdef CONFIG_EXT2_FS
 FS_SUBDIRS := $(FS_SUBDIRS) ext2
 endif
+
 ifdef CONFIG_MSDOS_FS
 FS_SUBDIRS := $(FS_SUBDIRS) msdos
 else
 MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) msdos
 endif
+
 ifdef CONFIG_PROC_FS
 FS_SUBDIRS := $(FS_SUBDIRS) proc
 endif
+
 ifdef CONFIG_ISO9660_FS
 FS_SUBDIRS := $(FS_SUBDIRS) isofs
 else
 MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) isofs
 endif
+
 ifdef CONFIG_NFS_FS
 FS_SUBDIRS := $(FS_SUBDIRS) nfs
 endif
+
 ifdef CONFIG_XIA_FS
 FS_SUBDIRS := $(FS_SUBDIRS) xiafs
 else
 MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) xiafs
 endif
+
 ifdef CONFIG_UMSDOS_FS
 FS_SUBDIRS := $(FS_SUBDIRS) umsdos
 else
 MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) umsdos
 endif
+
 ifdef CONFIG_SYSV_FS
 FS_SUBDIRS := $(FS_SUBDIRS) sysv
 else
 MODULE_FS_SUBDIRS := $(MODULE_FS_SUBDIRS) sysv
 endif
+
 ifdef CONFIG_HPFS_FS
 FS_SUBDIRS := $(FS_SUBDIRS) hpfs
 endif
@@ -70,7 +82,7 @@ OBJS=	open.o read_write.o inode.o devices.o file_table.o buffer.o super.o \
 	block_dev.o stat.o exec.o pipe.o namei.o fcntl.o ioctl.o \
 	select.o fifo.o locks.o filesystems.o dcache.o $(BINFMTS)
 
-all: fs.o filesystems.a modules modules_fs
+all: fs.o filesystems.a
 
 fs.o: $(OBJS)
 	$(LD) -r -o fs.o $(OBJS)
@@ -81,32 +93,8 @@ filesystems.a: dummy
 	  test ! -d $$i || \
 	    { $(MAKE) -C $$i; $(AR) rcs filesystems.a $$i/$$i.o; }; done
 
-ifdef MODULES
-
 modules:
-	$(MAKE) CFLAGS="$(CFLAGS) -DMODULE" $(MODULES)
-	(cd ../modules;for i in $(MODULES); do ln -sf ../fs/$$i .; done)
-
-else
-
-modules:
-
-endif
-
-ifdef MODULE_FS_SUBDIRS
-
-modules_fs:
-	set -e; for i in $(MODULE_FS_SUBDIRS); do \
-	  test ! -d $$i || \
-	    { $(MAKE) -C $$i; }; done
-	(cd ../modules; \
-	 for i in $(MODULE_FS_SUBDIRS); do ln -sf ../fs/$$i/$$i.o .; done)
-
-else
-
-modules_fs:
-
-endif
+	set -e; for i in $(MODULE_FS_SUBDIRS); do $(MAKE) -C $$i modules; done
 
 depend dep:
 	$(CPP) -M *.c > .depend

@@ -28,8 +28,8 @@
 #include <sys/sysmacros.h>
 #include <unistd.h>	/* contains read/write */
 #include <fcntl.h>
-#include <linux/config.h>
 #include <linux/a.out.h>
+#include <linux/config.h>
 
 #define MINIX_HEADER 32
 

@@ -607,7 +607,7 @@ static void do_timer(struct pt_regs * regs)
 
 	jiffies++;
 	calc_load();
-	if ((VM_MASK & regs->eflags) || (3 & regs->cs)) {
+	if (user_mode(regs)) {
 		current->utime++;
 		if (current != task[0]) {
 			if (current->priority < 15)

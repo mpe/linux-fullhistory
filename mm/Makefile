@@ -19,6 +19,8 @@ OBJS	= memory.o swap.o mmap.o filemap.o mprotect.o kmalloc.o vmalloc.o
 mm.o: $(OBJS)
 	$(LD) -r -o mm.o $(OBJS)
 
+modules:
+
 dep:
 	$(CPP) -M *.c > .depend
 

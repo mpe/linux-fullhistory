@@ -1,6 +1,0 @@
-#define KERNSIZE	134217728
-#define KERNBASE	-134217728
-#define NBPG		4096	
-#define UPAGES		2
-#define PROM_BASE	-1568768
-

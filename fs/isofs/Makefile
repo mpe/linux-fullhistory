@@ -23,6 +23,7 @@ OBJS=	namei.o inode.o file.o dir.o util.o rock.o symlink.o
 isofs.o: $(OBJS)
 	$(LD) -r -o isofs.o $(OBJS)
 
+modules: isofs.o
 dep:
 	$(CPP) -M *.c > .depend
 

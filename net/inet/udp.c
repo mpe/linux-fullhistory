@@ -60,6 +60,7 @@
 #include <linux/timer.h>
 #include <linux/termios.h>
 #include <linux/mm.h>
+#include <linux/config.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
 #include "snmp.h"

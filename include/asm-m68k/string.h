@@ -15,23 +15,23 @@ extern inline char * strcpy(char * dest,const char *src)
   return xdest;
 }
 
-extern inline void * strncpy(char *dest, const void *src, size_t n)
+extern inline char * strncpy(char *dest, const char *src, size_t n)
 {
   char *xdest = dest;
 
   if (n == 0)
     return xdest;
 
-  __asm__
+  __asm__ __volatile__
        ("1:\tmoveb %1@+,%0@+\n\t"
 	"beq 2f\n\t"
-        "subql #1,%3\n\t"
+        "subql #1,%2\n\t"
         "bne 1b\n\t"
         "2:"
         : "=a" (dest), "=a" (src), "=d" (n)
         : "0" (dest), "1" (src), "2" (n)
         : "memory");
-return dest;
+  return xdest;
 }
 
 #define __USE_PORTABLE_strcat

@@ -45,6 +45,8 @@
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/errno.h>
+#include <linux/config.h>
+
 #include "arp.h"
 
 void eth_setup(char *str, int *ints)

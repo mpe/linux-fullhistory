@@ -21,6 +21,7 @@
 
 
 #include <linux/ip.h>
+#include <linux/config.h>
 
 #ifndef _SNMP_H
 #include "snmp.h"

@@ -25,7 +25,6 @@
 static char *version =
     "3c503.c:v1.10 9/23/93  Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -173,7 +172,7 @@ el2_probe1(struct device *dev, int ioaddr)
 	return ENODEV;
     }
 
-    snarf_region(ioaddr, EL2_IO_EXTENT);
+    register_iomem(ioaddr, EL2_IO_EXTENT,"3c503");
 
     if (dev == NULL)
 	dev = init_etherdev(0, sizeof(struct ei_device), 0);

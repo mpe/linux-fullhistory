@@ -228,6 +228,7 @@ static struct super_block * detected_sysv4 (struct super_block *sb, struct buffe
 	sb->sv_sb_flc_blocks = &sbd->s_free[0];
 	sb->sv_sb_total_free_blocks = &sbd->s_tfree;
 	sb->sv_sb_time = &sbd->s_time;
+	sb->sv_sb_state = &sbd->s_state;
 	sb->sv_block_base = 0;
 	sb->sv_firstinodezone = 2;
 	sb->sv_firstdatazone = sbd->s_isize;
@@ -285,6 +286,7 @@ static struct super_block * detected_sysv2 (struct super_block *sb, struct buffe
 	sb->sv_sb_flc_blocks = &sbd->s_free[0];
 	sb->sv_sb_total_free_blocks = &sbd->s_tfree;
 	sb->sv_sb_time = &sbd->s_time;
+	sb->sv_sb_state = &sbd->s_state;
 	sb->sv_block_base = 0;
 	sb->sv_firstinodezone = 2;
 	sb->sv_firstdatazone = sbd->s_isize;
@@ -332,6 +334,7 @@ static struct super_block * detected_coherent (struct super_block *sb, struct bu
 	sb->sv_sb_flc_blocks = &sbd->s_free[0];
 	sb->sv_sb_total_free_blocks = &sbd->s_tfree;
 	sb->sv_sb_time = &sbd->s_time;
+	sb->sv_sb_state = &sbd->s_state;
 	sb->sv_block_base = 0;
 	sb->sv_firstinodezone = 2;
 	sb->sv_firstdatazone = sbd->s_isize;
@@ -502,8 +505,19 @@ void sysv_write_super (struct super_block *sb)
 	lock_super(sb);
 	if (sb->sv_bh1->b_dirt || sb->sv_bh2->b_dirt) {
 		/* If we are going to write out the super block,
-		   then attach current time stamp. */
+		   then attach current time stamp.
+		   But if the filesystem was marked clean, keep it clean. */
 		unsigned long time = CURRENT_TIME;
+		unsigned long old_time = *sb->sv_sb_time;
+		if (sb->sv_convert)
+			old_time = from_coh_ulong(old_time);
+		switch (sb->sv_type) {
+			case FSTYPE_SYSV4:
+				if (*sb->sv_sb_state == 0x7c269d38 - old_time)
+					*sb->sv_sb_state = 0x7c269d38 - time;
+			default:
+				break;
+		}
 		if (sb->sv_convert)
 			time = to_coh_ulong(time);
 		*sb->sv_sb_time = time;

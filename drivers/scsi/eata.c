@@ -385,7 +385,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
    sh[j]->cmd_per_lun = MAX_CMD_PER_LUN;
 
    /* Register the I/O space that we use */
-   snarf_region(sh[j]->io_port, REG_REGION);
+   register_iomem(sh[j]->io_port, REG_REGION,"eata");
 
    memset(HD(j), 0, sizeof(struct hostdata));
    HD(j)->subversion = subversion;

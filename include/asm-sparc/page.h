@@ -14,7 +14,7 @@
  * do an invalidate is flush the VAC.
  */
 
-#define invalidate() flush_vac_context()  /* how conveeeiiiiinnnent :> */
+#define invalidate() flush_vac_context()  /* how conveeeiiiiinnnient :> */
 
 
 #define PAGE_SHIFT   12             /* This is the virtual page... */

@@ -57,6 +57,7 @@ struct sysv_sb_info {
 	unsigned long  *s_sb_flc_blocks; /* pointer to s_sbd->s_free */
 	unsigned long  *s_sb_total_free_blocks;/* pointer to s_sbd->s_tfree */
 	unsigned long  *s_sb_time;	/* pointer to s_sbd->s_time */
+	unsigned long  *s_sb_state;	/* pointer to s_sbd->s_state */
 	/* We keep those superblock entities that don't change here;
 	   this saves us an indirection and perhaps a conversion. */
 	unsigned long  s_firstinodezone; /* index of first inode zone */
@@ -110,6 +111,7 @@ struct sysv_sb_info {
 #define sv_sb_flc_blocks			u.sysv_sb.s_sb_flc_blocks
 #define sv_sb_total_free_blocks			u.sysv_sb.s_sb_total_free_blocks
 #define sv_sb_time				u.sysv_sb.s_sb_time
+#define sv_sb_state				u.sysv_sb.s_sb_state
 #define sv_firstinodezone			u.sysv_sb.s_firstinodezone
 #define sv_firstdatazone			u.sysv_sb.s_firstdatazone
 #define sv_ninodes				u.sysv_sb.s_ninodes

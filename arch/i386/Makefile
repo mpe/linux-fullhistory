@@ -37,6 +37,21 @@ CFLAGS := $(CFLAGS) -m386
 endif
 endif
 
+HEAD := arch/i386/kernel/head.o
+
+SUBDIRS := $(SUBDIRS) arch/i386/kernel
+ARCHIVES := arch/i386/kernel/kernel.o $(ARCHIVES)
+
+ifdef CONFIG_IBCS
+SUBDIRS := $(SUBDIRS) arch/i386/ibcs
+DRIVERS := $(DRIVERS) arch/i386/ibcs/ibcs.o
+endif
+
+ifdef CONFIG_MATH_EMULATION
+SUBDIRS := $(SUBDIRS) arch/i386/math-emu
+DRIVERS := $(DRIVERS) arch/i386/math-emu/math.a
+endif
+
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 
 zImage: vmlinux
@@ -46,6 +61,12 @@ compressed: zImage
 
 zlilo: vmlinux
 	@$(MAKEBOOT) zlilo
+
+zdisk: vmlinux
+	@$(MAKEBOOT) zdisk
+
+install: vmlinux
+	@$(MAKEBOOT) install
 
 archclean:
 	@$(MAKEBOOT) clean

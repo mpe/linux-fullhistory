@@ -64,7 +64,7 @@ static inline void put_user_quad(unsigned long val,long * addr)
 #define memcpy_tofs(to, from, n) memcpy((to),(from),(n))
 
 /*
- * For segmented arhictectures, these are used to specify which segment
+ * For segmented architectures, these are used to specify which segment
  * to use for the above functions.
  *
  * The alpha is not segmented, so these are just dummies.

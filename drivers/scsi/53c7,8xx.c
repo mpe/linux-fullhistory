@@ -207,6 +207,23 @@ static char NCR53c7xx_msg_nop = NOP;
 static int scan_scsis_buf_busy = 0;
 static char scan_scsis_buf[512];
 
+
+/*
+ * Spl-levels are evil. We shouldn't emulate braindamage.
+ *		Linus
+ */
+static int splx (int new_level)
+{
+    register int old_level, tmp;
+    save_flags(tmp);
+    old_level = (tmp & 0x200) ? 7 : 0;
+    if (new_level)
+	sti();
+    else 
+	cli();
+    return old_level;
+}
+
 /*
  * TODO : 
  *

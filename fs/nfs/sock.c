@@ -18,7 +18,6 @@
  *
  */
 
-#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/nfs_fs.h>
 #include <linux/errno.h>

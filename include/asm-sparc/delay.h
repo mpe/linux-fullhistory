@@ -33,7 +33,7 @@ extern __inline__ void udelay(unsigned int usecs)
 
 extern __inline__ unsigned long muldiv(unsigned long a, unsigned long b, unsigned long c)
 {
-	return ((a/c)*c);
+	return ((a*b)/c);
 }
 
 #endif /* defined(__SPARC_DELAY_H) */

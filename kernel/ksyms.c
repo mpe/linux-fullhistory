@@ -30,6 +30,8 @@
 #include <linux/locks.h>
 #include <linux/string.h>
 #include <linux/delay.h>
+#include <linux/config.h>
+
 #ifdef CONFIG_INET
 #include <linux/net.h>
 #include <linux/netdevice.h>
@@ -59,10 +61,6 @@ extern int sys_tz;
 extern int request_dma(unsigned int dmanr, char * deviceID);
 extern void free_dma(unsigned int dmanr);
 
-extern int do_execve(char * filename, char ** argv, char ** envp,
-		struct pt_regs * regs);
-extern int do_signal(unsigned long oldmask, struct pt_regs * regs);
-
 extern void (* iABI_hook)(struct pt_regs * regs);
 
 struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
@@ -72,7 +70,9 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 
 	/* system info variables */
 	X(EISA_bus),
+#ifdef __i386__
 	X(wp_works_ok),
+#endif
 
 #ifdef CONFIG_PCI
 	/* PCI BIOS support */
@@ -217,7 +217,7 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(send_sig),
 
 	/* Program loader interfaces */
-	X(change_ldt),
+	X(setup_arg_pages),
 	X(copy_strings),
 	X(create_tables),
 	X(do_execve),
@@ -247,6 +247,7 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(kfree_skb),
 	X(dev_kfree_skb),
 	X(snarf_region),
+	X(register_iomem),
 	X(release_region),
 	X(netif_rx),
 	X(dev_rint),
@@ -275,6 +276,8 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(get_hash_table),
 	X(get_empty_inode),
 	X(insert_inode_hash),
+	X(event),
+	X(__down),
 #if defined(CONFIG_MSDOS_FS) && !defined(CONFIG_UMSDOS_FS)
 	/* support for umsdos fs */
 	X(msdos_create),

@@ -40,7 +40,6 @@
  *	40(%esp) - %oldss
  */
 
-#define __ASSEMBLY__
 #include <linux/sys.h>
 #include <asm/segment.h>
 

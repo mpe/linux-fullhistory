@@ -24,13 +24,12 @@ extern __inline__ unsigned int set_bit(unsigned int nr, void *addr)
   __asm__ __volatile__("or %%g0, 0x1, %3\n\t"     /* produce the mask */
 		       "sll %3, %4, %3\n\t"
 		       "rd %%psr, %5\n\t"         /* read the psr */
-		       "andn %5, 0x20, %5\n\t"    /* clear ET bit */
-		       "wr %5, 0x0, %%psr\n\t"    /* traps disabled */
+		       "wr %5, 0x20, %%psr\n\t"   /* traps disabled */
 		       "ld [%1], %2\n\t"          /* critical section */
 		       "and %3, %2, %0\n\t"
 		       "or  %3, %2, %2\n\t"
 		       "st  %2, [%1]\n\t"
-		       "wr %5, 0x20, %%psr\n\t" : /* re-enable traps */
+		       "wr %5, 0x0, %%psr\n\t" :  /* re-enable traps */
                        "=r" (retval) :
                        "r" (addr), "r" (tmp=0), "r" (mask=0),
                        "r" (nr), "r" (psr=0));
@@ -46,13 +45,12 @@ extern __inline__ unsigned int clear_bit(unsigned int nr, void *addr)
   __asm__ __volatile__("or %%g0, 0x1, %3\n\t"
 		       "sll %3, %4, %3\n\t"
 		       "rd %%psr, %5\n\t"
-		       "andn %5, 0x20, %5\n\t"    /* clear ET bit */
-		       "wr %5, 0x0, %%psr\n\t"    /* disable traps */
+		       "wr %5, 0x20, %%psr\n\t"   /* disable traps */
                        "ld [%1], %2\n\t"
 		       "and %2, %3, %0\n\t"       /* get old bit */
 		       "andn %2, %3, %2\n\t"      /* set new val */
 		       "st  %2, [%1]\n\t"
-		       "wr %5, 0x20, %%psr\n\t" : /* enable traps */
+		       "wr %5, 0x0, %%psr\n\t" :  /* enable traps */
 		       "=r" (retval) :
 		       "r" (addr), "r" (tmp=0), "r" (mask=0),
 		       "r" (nr), "r" (psr=0));
@@ -68,13 +66,12 @@ extern __inline__ unsigned int change_bit(unsigned int nr, void *addr)
   __asm__ __volatile__("or %%g0, 0x1, %3\n\t"
 		       "sll %3, %4, %3\n\t"
 		       "rd %%psr, %5\n\t"
-		       "andn %5, 0x20, %5\n\t"    /* clear ET bit */
-		       "wr %5, 0x0, %%psr\n\t"    /* disable traps */
+		       "wr %5, 0x20, %%psr\n\t"   /* disable traps */
                        "ld [%1], %2\n\t"
 		       "and %3, %2, %0\n\t"       /* get old bit val */
 		       "xor %3, %2, %2\n\t"       /* set new val */
 		       "st  %2, [%1]\n\t"
-		       "wr %5, 0x20, %%psr\n\t" : /* enable traps */
+		       "wr %5, 0x0, %%psr\n\t" :  /* enable traps */
 		       "=r" (retval) :
 		       "r" (addr), "r" (tmp=0), "r" (mask=0),
 		       "r" (nr), "r" (psr=0));
@@ -173,3 +170,4 @@ found_middle:
 
 
 #endif /* defined(_SPARC_BITOPS_H) */
+

@@ -7,12 +7,15 @@
 #define __LIBRARY__
 #include <linux/unistd.h>
 
+#define exit __sys_exit
+static inline _syscall0(int, exit)
+#undef exit
+
 volatile void _exit(int exit_code)
 {
 fake_volatile:
-	__asm__("movl %1,%%ebx\n\t"
-		"int $0x80"
-		: /* no outputs */
-		:"a" (__NR_exit),"g" (exit_code));
+	__sys_exit();
 	goto fake_volatile;
 }
+
+

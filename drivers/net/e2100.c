@@ -34,7 +34,6 @@
 static char *version =
 	"e2100.c:v1.01 7/21/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -148,7 +147,7 @@ int e21_probe1(struct device *dev, int ioaddr)
 		return ENODEV;
 
 	/* Grab the region so we can find a different board if IRQ select fails. */
-	snarf_region(ioaddr, E21_IO_EXTENT);
+	register_iomem(ioaddr, E21_IO_EXTENT,"e2100");
 
 	/* Read the station address PROM.  */
 	for (i = 0; i < 6; i++)

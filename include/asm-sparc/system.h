@@ -9,7 +9,7 @@
 /*
  * I wish the boot time image was as beautiful as the Alpha's
  * but no such luck. The icky PROM loads us at 0x0, and jumps
- * to magic addess 0x4000 to start thing going. This means that
+ * to magic address 0x4000 to start thing going. This means that
  * I can stick the pcb and user/kernel stacks in the area from
  * 0x0-0x4000 and be reasonably sure that this is sane.
  *
@@ -34,7 +34,7 @@ extern struct linux_romvec *romvec;
 #define move_to_user_mode() halt()
 #define switch_to(x) halt()
 
-#ifndef stbar  /* store barrier Sparc insn to snchronize stores in PSO */
+#ifndef stbar  /* store barrier Sparc insn to synchronize stores in PSO */
 #define stbar() __asm__ __volatile__("stbar": : :"memory")
 #endif
 
@@ -62,6 +62,25 @@ __old_ipl; })
 #define save_flags(flags)	do { flags = swpipl(15); } while (0)
 #define restore_flags(flags)	swpipl(flags)
 
+#define iret() __asm__ __volatile__ ("jmp %%l1\n\t" \
+				     "rett %l2\n\t": : :"memory")
+
+#define _set_gate(gate_addr,type,dpl,addr) \
+__asm__ __volatile__ ("nop\n\t")
+
+#define set_intr_gate(n,addr) \
+	_set_gate(&idt[n],14,0,addr)
+
+#define set_trap_gate(n,addr) \
+	_set_gate(&idt[n],15,0,addr)
+
+#define set_system_gate(n,addr) \
+	_set_gate(&idt[n],15,3,addr)
+
+#define set_call_gate(a,addr) \
+	_set_gate(a,12,3,addr)
+
+
 /* Must this be atomic? */
 
 extern inline void *xchg_u32(int * m, unsigned long val)
@@ -69,11 +88,11 @@ extern inline void *xchg_u32(int * m, unsigned long val)
 	unsigned long dummy;
 
 	__asm__ __volatile__(
-		"ld %1,%2\n\t"
-		"st %0, %1\n\t"
+		"ld [%1],%2\n\t"
+		"st %0, [%1]\n\t"
 		"or %%g0, %2, %0"
-		: "=r" (val), "=m" (*m), "=r" (dummy)
-		: "1" (*m), "2" (val));
+		: "=r" (val), "=r" (m), "=r" (dummy)
+		: "0" (val));
 	return (void *)val;
 }
 
@@ -86,6 +105,8 @@ extern inline void *xchg_ptr(void *m, void *val)
 {
 	return (void *) xchg_u32((int *) m, (unsigned long) val);
 }
+
+
 
 #endif /* __ASSEMBLY__ */
 

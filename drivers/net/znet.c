@@ -62,7 +62,6 @@ static char *version = "znet.c:v1.02 9/23/94 becker@cesdis.gsfc.nasa.gov\n";
 	functionality from the serial subsystem.
  */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>

@@ -117,7 +117,7 @@ rename_module_symbol(char *old_name, char *new_name)
 /*
  * Allocate space for a module.
  */
-asmlinkage int
+asmlinkage unsigned long
 sys_create_module(char *module_name, unsigned long size)
 {
 	struct module *mp;
@@ -162,7 +162,7 @@ sys_create_module(char *module_name, unsigned long size)
 
 	PRINTK(("module `%s' (%lu pages @ 0x%08lx) created\n",
 		mp->name, (unsigned long) mp->size, (unsigned long) mp->addr));
-	return (int) addr;
+	return (unsigned long) addr;
 }
 
 /*
@@ -248,7 +248,7 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 		/* relocate name pointers, index referred from start of table */
 		for (sym = &(newtab->symbol[0]), i = 0;
 			i < newtab->n_symbols; ++sym, ++i) {
-			if ((int)sym->name < legal_start || size <= (int)sym->name) {
+			if ((unsigned long)sym->name < legal_start || size <= (unsigned long)sym->name) {
 				printk("Illegal symbol table! Rejected!\n");
 				kfree_s(newtab, size);
 				return -EINVAL;

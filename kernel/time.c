@@ -18,7 +18,6 @@
  *	fixed set_rtc_mmss, fixed time.year for >= 2000, new mktime
  */
 
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>

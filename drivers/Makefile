@@ -16,11 +16,7 @@
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
-SUBDIRS	= block char net
-
-ifdef CONFIG_MATH_EMULATION
-SUBDIRS := $(SUBDIRS) FPU-emu
-endif
+SUBDIRS	= block char net #streams
 
 ifdef CONFIG_SCSI
 SUBDIRS := $(SUBDIRS) scsi
@@ -34,6 +30,9 @@ all: driversubdirs
 
 driversubdirs: dummy
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done
+
+modules: dummy
+	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i modules; done
 
 dep:
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i dep; done

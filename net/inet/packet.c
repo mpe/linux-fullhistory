@@ -23,7 +23,10 @@
  *		Alan Cox	:	Re-commented the code.
  *		Alan Cox	:	Use new kernel side addressing
  *		Rob Janssen	:	Correct MTU usage.
- *
+ *		Dave Platt	:	Counter leaks caused by incorrect
+ *					interrupt locking and some slightly
+ *					dubious gcc output. Can you read
+ *					compiler: it said _VOLATILE_
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -67,6 +70,7 @@ static unsigned long min(unsigned long a, unsigned long b)
 int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 {
 	struct sock *sk;
+	unsigned long flags;
 	
 	/*
 	 *	When we registered the protocol we saved the socket in the data
@@ -84,19 +88,28 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 	skb->dev = dev;
 	skb->len += dev->hard_header_len;
 
-	skb->sk = sk;
-
 	/*
 	 *	Charge the memory to the socket. This is done specifically
 	 *	to prevent sockets using all the memory up.
 	 */
 	 
+	if (sk->rmem_alloc & 0xFF000000) {
+		printk("packet_rcv: sk->rmem_alloc = %ld\n", sk->rmem_alloc);
+		sk->rmem_alloc = 0;
+	}
+
 	if (sk->rmem_alloc + skb->mem_len >= sk->rcvbuf) 
 	{
+/*	        printk("packet_rcv: drop, %d+%d>%d\n", sk->rmem_alloc, skb->mem_len, sk->rcvbuf); */
 		skb->sk = NULL;
 		kfree_skb(skb, FREE_READ);
 		return(0);
 	}
+
+	save_flags(flags);
+	cli();
+
+	skb->sk = sk;
 	sk->rmem_alloc += skb->mem_len;	
 
 	/*
@@ -104,7 +117,10 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 	 */
 
 	skb_queue_tail(&sk->receive_queue,skb);
-	wake_up_interruptible(sk->sleep);
+	if(!sk->dead)
+		sk->data_ready(sk,skb->len);
+		
+	restore_flags(flags);
 
 	/*
 	 *	Processing complete.
@@ -246,6 +262,7 @@ static int packet_init(struct sock *sk)
 	p->func = packet_rcv;
 	p->type = sk->num;
 	p->data = (void *)sk;
+	p->dev = NULL;
 	dev_add_pack(p);
    
 	/*

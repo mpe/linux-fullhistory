@@ -27,14 +27,18 @@
 
 #define MINIX_INODES_PER_BLOCK ((BLOCK_SIZE)/(sizeof (struct minix_inode)))
 
+/*
+ * This is the original minix inode layout on disk.
+ * Note the 8-bit gid and atime and ctime.
+ */
 struct minix_inode {
-	unsigned short i_mode;
-	unsigned short i_uid;
-	unsigned long i_size;
-	unsigned long i_time;
-	unsigned char i_gid;
-	unsigned char i_nlinks;
-	unsigned short i_zone[9];
+	u16 i_mode;
+	u16 i_uid;
+	u32 i_size;
+	u32 i_time;
+	u8  i_gid;
+	u8  i_nlinks;
+	u16 i_zone[9];
 };
 
 /*
@@ -44,34 +48,34 @@ struct minix_inode {
  * now 16-bit. The inode is now 64 bytes instead of 32.
  */
 struct new_minix_inode {
-	unsigned short i_mode;
-	unsigned short i_nlinks;
-	unsigned short i_uid;
-	unsigned short i_gid;
-	unsigned long i_size;
-	unsigned long i_atime;
-	unsigned long i_mtime;
-	unsigned long i_ctime;
-	unsigned long i_zone[10];
+	u16 i_mode;
+	u16 i_nlinks;
+	u16 i_uid;
+	u16 i_gid;
+	u32 i_size;
+	u32 i_atime;
+	u32 i_mtime;
+	u32 i_ctime;
+	u32 i_zone[10];
 };
 
 /*
  * minix super-block data on disk
  */
 struct minix_super_block {
-	unsigned short s_ninodes;
-	unsigned short s_nzones;
-	unsigned short s_imap_blocks;
-	unsigned short s_zmap_blocks;
-	unsigned short s_firstdatazone;
-	unsigned short s_log_zone_size;
-	unsigned long s_max_size;
-	unsigned short s_magic;
-	unsigned short s_state;
+	u16 s_ninodes;
+	u16 s_nzones;
+	u16 s_imap_blocks;
+	u16 s_zmap_blocks;
+	u16 s_firstdatazone;
+	u16 s_log_zone_size;
+	u32 s_max_size;
+	u16 s_magic;
+	u16 s_state;
 };
 
 struct minix_dir_entry {
-	unsigned short inode;
+	u16 inode;
 	char name[0];
 };
 

@@ -31,11 +31,9 @@
  *	Revision 0.29:  Assorted major errors removed <Mark Evans>
  *			Small correction to promisc mode error fix <Alan Cox>
  *			Asynchronous I/O support.
- *
- *			
- *
+ *			Changed to use notifiers and the newer packet_type stuff.
  */
- 
+  
 #include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/types.h>
@@ -390,11 +388,14 @@ static int ipxrtr_delete(long net)
 	return -ENOENT;
 }
 
-void ipxrtr_device_down(struct device *dev)
+int ipxrtr_device_event(unsigned long event, void *ptr)
 {
+	struct device *dev=ptr;
 	ipx_route **r = &ipx_router_list;
 	ipx_route *tmp;
 
+	if(event!=NETDEV_DOWN)
+		return NOTIFY_DONE;
 	while ((tmp = *r) != NULL) {
 		if (tmp->dev == dev) {
 			*r = tmp->next;
@@ -404,6 +405,7 @@ void ipxrtr_device_down(struct device *dev)
 		}
 		r = &tmp->next;
 	}
+	return NOTIFY_DONE;
 }
 
 static int ipxrtr_ioctl(unsigned int cmd, void *arg)
@@ -568,7 +570,7 @@ static void def_callback2(struct sock *sk, int len)
 	if(!sk->dead)
 	{
 		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket);
+		sock_wake_async(sk->socket, 1);
 	}
 }
 
@@ -1328,12 +1330,18 @@ static struct packet_type ipx_8023_packet_type =
 static struct packet_type ipx_dix_packet_type = 
 {
 	0,	/* MUTTER ntohs(ETH_P_IPX),*/
-	0,		/* copy */
+	NULL,		/* Al devices */
 	ipx_rcv,
 	NULL,
 	NULL,
 };
  
+static struct notifier_block ipx_dev_notifier={
+	ipxrtr_device_event,
+	NULL,
+	0
+};
+
 
 extern struct datalink_proto	*make_EII_client(void);
 extern struct datalink_proto	*make_8023_client(void);
@@ -1353,8 +1361,10 @@ void ipx_proto_init(struct net_proto *pro)
 	
 	if ((p8022_datalink = register_8022_client(val, ipx_rcv)) == NULL)
 		printk("IPX: Unable to register with 802.2\n");
-	
-	printk("Swansea University Computer Society IPX 0.29 BETA for NET3.017\n");
+
+	register_netdevice_notifier(&ipx_dev_notifier);
+		
+	printk("Swansea University Computer Society IPX 0.29 BETA for NET3.019\n");
 	
 }
 #endif

@@ -20,6 +20,8 @@
  *		Rob Janssen	:	Allow 0 length sends.
  *		Alan Cox	:	Asynchronous I/O support (cribbed from the
  *					tty drivers).
+ *		Niibe Yutaka	:	Asynchronous I/O for writes (4.4BSD style)
+ *		Jeff Uphoff	:	Made max number of sockets command-line configurable.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -88,9 +90,9 @@ static struct file_operations socket_file_ops = {
 };
 
 /*
- *	The list of sockets - make this atomic.
+ *	The list of sockets -- allocated in sock_init().
  */
-static struct socket sockets[NSOCKETS];
+static struct socket *sockets = NULL;
 /*
  *	Used to wait for a socket.
  */
@@ -99,8 +101,20 @@ static struct wait_queue *socket_wait_free = NULL;
  *	The protocol list. Each protocol is registered in here.
  */
 static struct proto_ops *pops[NPROTO];
+/*      
+ *	Maximum number of sockets -- override-able on command-line.
+ */
+static int nsockets = NSOCKETS;
 
-#define last_socket	(sockets + NSOCKETS - 1)
+#define last_socket	(sockets + nsockets - 1)
+
+/*      
+ *	Overrides default max number of sockets if supplied on command-line.
+ */
+void sock_setup(char *str, int *ints)
+{
+	nsockets = ints[0] ? ints[1] : NSOCKETS;
+}
 
 
 /*
@@ -302,6 +316,7 @@ static inline void sock_release_peer(struct socket *peer)
 {
 	peer->state = SS_DISCONNECTING;
 	wake_up_interruptible(peer->wait);
+	sock_wake_async(peer, 1);
 }
 
 
@@ -536,11 +551,27 @@ static int sock_fasync(struct inode *inode, struct file *filp, int on)
 	return 0;
 }
 
-int sock_wake_async(struct socket *sock)
+int sock_wake_async(struct socket *sock, int how)
 {
 	if (!sock || !sock->fasync_list)
 		return -1;
-	kill_fasync(sock->fasync_list, SIGIO);
+	switch (how)
+	{
+		case 0:
+			kill_fasync(sock->fasync_list, SIGIO);
+			break;
+		case 1:
+			if (!(sock->flags & SO_WAITDATA))
+				kill_fasync(sock->fasync_list, SIGIO);
+			break;
+		case 2:
+			if (sock->flags & SO_NOSPACE)
+			{
+				kill_fasync(sock->fasync_list, SIGIO);
+				sock->flags &= ~SO_NOSPACE;
+			}
+			break;
+	}
 	return 0;
 }
 
@@ -549,7 +580,7 @@ int sock_wake_async(struct socket *sock)
  *	Wait for a connection.
  */
 
-int sock_awaitconn(struct socket *mysock, struct socket *servsock)
+int sock_awaitconn(struct socket *mysock, struct socket *servsock, int flags)
 {
 	struct socket *last;
 
@@ -584,8 +615,13 @@ int sock_awaitconn(struct socket *mysock, struct socket *servsock)
 	 * SS_CONNECTED if we're connected.
 	 */
 	wake_up_interruptible(servsock->wait);
+	sock_wake_async(servsock, 0);
+
 	if (mysock->state != SS_CONNECTED) 
 	{
+		if (flags & O_NONBLOCK)
+			return -EINPROGRESS;
+
 		interruptible_sleep_on(mysock->wait);
 		if (mysock->state != SS_CONNECTED &&
 		    mysock->state != SS_DISCONNECTING) 
@@ -906,8 +942,7 @@ static int sock_connect(int fd, struct sockaddr *uservaddr, int addrlen)
 			 *	an async connect fork and both children connect. Clean
 			 *	this up in the protocols!
 			 */
-			return(sock->ops->connect(sock, uservaddr,
-				  addrlen, file->f_flags));
+			break;
 		default:
 			return(-EINVAL);
 	}
@@ -1374,8 +1409,13 @@ void sock_init(void)
 	struct socket *sock;
 	int i;
 
-	printk("Swansea University Computer Society NET3.017\n");
+	printk("Swansea University Computer Society NET3.019\n");
 
+	/*
+	 *	The list of sockets.
+	 */
+	sockets = (struct socket *)kmalloc(sizeof(struct socket) * nsockets, GFP_KERNEL);
+	printk("Allocated %d sockets.\n", nsockets);
 	/*
 	 *	Release all sockets. 
 	 */

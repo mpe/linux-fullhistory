@@ -16,6 +16,7 @@
 #include <linux/locks.h>
 #include <linux/malloc.h>
 #include <linux/errno.h>
+#include <linux/cdrom.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -63,6 +64,7 @@ struct iso9660_options{
   char cruft;
   unsigned char conversion;
   unsigned int blocksize;
+  mode_t mode;
   gid_t gid;
   uid_t uid;
 };
@@ -76,6 +78,7 @@ static int parse_options(char *options, struct iso9660_options * popt)
 	popt->cruft = 'n';
 	popt->conversion = 'a';
 	popt->blocksize = 1024;
+	popt->mode = S_IRUGO;
 	popt->gid = 0;
 	popt->uid = 0;
 	if (!options) return 1;
@@ -108,6 +111,7 @@ static int parse_options(char *options, struct iso9660_options * popt)
 		}
 		else if (value && 
 			 (!strcmp(this_char,"block") ||
+			  !strcmp(this_char,"mode") ||
 			  !strcmp(this_char,"uid") ||
 			  !strcmp(this_char,"gid"))) {
 		  char * vpnt = value;
@@ -130,6 +134,9 @@ static int parse_options(char *options, struct iso9660_options * popt)
 		  case 'g':
 		    popt->gid = ivalue;
 		    break;
+		  case 'm':
+		    popt->mode = ivalue;
+		    break;
 		  }
 		}
 		else return 0;
@@ -140,11 +147,15 @@ static int parse_options(char *options, struct iso9660_options * popt)
 struct super_block *isofs_read_super(struct super_block *s,void *data,
 				     int silent)
 {
-	struct buffer_head *bh;
+	struct buffer_head *bh=NULL;
 	int iso_blknum;
 	unsigned int blocksize_bits;
 	int high_sierra;
 	int dev=s->s_dev;
+	int i;
+	unsigned int vol_desc_start;
+	struct inode inode_fake;
+	extern struct file_operations * get_blkfops(unsigned int);
 	struct iso_volume_descriptor *vdp;
 	struct hs_volume_descriptor *hdp;
 
@@ -184,7 +195,25 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 
 	s->u.isofs_sb.s_high_sierra = high_sierra = 0; /* default is iso9660 */
 
-	for (iso_blknum = 16; iso_blknum < 100; iso_blknum++) {
+	/*
+	 * look if the driver can tell the multi session redirection value
+	 * <emoenke@gwdg.de>
+	 */
+	vol_desc_start=0;
+	inode_fake.i_rdev=dev;
+	i=get_blkfops(MAJOR(dev))->ioctl(&inode_fake,
+					 NULL,
+					 CDROMMULTISESSION_SYS,
+					 (unsigned long) &vol_desc_start);
+#if 0
+	printk("isofs.inode: CDROMMULTISESSION_SYS rc=%d\n",i);
+	printk("isofs.inode: vol_desc_start = %d\n", vol_desc_start);
+#endif 0
+	if (i!=0) vol_desc_start=0;
+	for (iso_blknum = vol_desc_start+16; iso_blknum < vol_desc_start+100; iso_blknum++) {
+#if 0
+	printk("isofs.inode: iso_blknum=%d\n", iso_blknum);
+#endif 0
 		if (!(bh = bread(dev, iso_blknum << (ISOFS_BLOCK_BITS-blocksize_bits), opt.blocksize))) {
 			s->s_dev=0;
 			printk("isofs_read_super: bread failed, dev 0x%x iso_blknum %d\n",
@@ -298,6 +327,11 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	s->u.isofs_sb.s_cruft = opt.cruft;
 	s->u.isofs_sb.s_uid = opt.uid;
 	s->u.isofs_sb.s_gid = opt.gid;
+	/*
+	 * It would be incredibly stupid to allow people to mark every file on the disk
+	 * as suid, so we merely allow them to set the default permissions.
+	 */
+	s->u.isofs_sb.s_mode = opt.mode & 0777;
 	s->s_blocksize = opt.blocksize;
 	s->s_blocksize_bits = blocksize_bits;
 	s->s_mounted = iget(s, isonum_733 (rootp->extent) << s -> u.isofs_sb.s_log_zone_size);
@@ -391,9 +425,6 @@ void isofs_read_inode(struct inode * inode)
 		raw_inode = ((struct iso_directory_record *) pnt);
 	}
 
-	inode->i_mode = S_IRUGO; /* Everybody gets to read the file. */
-	inode->i_nlink = 1;
-	
 	if (raw_inode->flags[-high_sierra] & 2) {
 		inode->i_mode = S_IRUGO | S_IXUGO | S_IFDIR;
 		inode->i_nlink = 1; /* Set to 1.  We know there are 2, but
@@ -402,7 +433,7 @@ void isofs_read_inode(struct inode * inode)
 				       easier to give 1 which tells find to
 				       do it the hard way. */
 	} else {
-		inode->i_mode = S_IRUGO; /* Everybody gets to read the file. */
+		inode->i_mode = inode->i_sb->u.isofs_sb.s_mode; /* Everybody gets to read the file. */
 		inode->i_nlink = 1;
 	        inode->i_mode |= S_IFREG;
 /* If there are no periods in the name, then set the execute permission bit */

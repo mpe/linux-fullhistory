@@ -44,7 +44,6 @@
  * 30.Sep.93: Added nop-chain .. driver now runs with only one Xmit-Buff, too (MH)
  */
  
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -182,7 +181,7 @@ extern void *irq2dev_map[16];
 
 #ifndef HAVE_PORTRESERVE
 #define check_region(ioaddr, size) 		0
-#define	snarf_region(ioaddr, size);		do ; while (0)
+#define	register_iomem(ioaddr, size,name);		do ; while (0)
 #endif
 
 #define NI52_TOTAL_SIZE 16
@@ -389,7 +388,7 @@ static int ni52_probe1(struct device *dev,int ioaddr)
 
   printk("%s: Ni52 found at %#3x, ",dev->name,dev->base_addr);
 
-  snarf_region(ioaddr,NI52_TOTAL_SIZE);
+  register_iomem(ioaddr,NI52_TOTAL_SIZE,"ni52");
 
   dev->priv = (void *) kmalloc(sizeof(struct priv),GFP_KERNEL); 
                                   /* warning: we don't free it on errors */

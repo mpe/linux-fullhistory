@@ -165,7 +165,7 @@ struct device
 
 struct packet_type {
   unsigned short	type;	/* This is really htons(ether_type). */
-  unsigned short	copy:1;
+  struct device *	dev;
   int			(*func) (struct sk_buff *, struct device *,
 				 struct packet_type *);
   void			*data;
@@ -174,6 +174,8 @@ struct packet_type {
 
 
 #ifdef __KERNEL__
+
+#include <linux/notifier.h>
 
 /* Used by dev_rint */
 #define IN_SKBUFF	1
@@ -219,14 +221,15 @@ extern int		ether_config(struct device *dev, struct ifmap *map);
 /* Support for loadable net-drivers */
 extern int		register_netdev(struct device *dev);
 extern void		unregister_netdev(struct device *dev);
-
+extern int 		register_netdevice_notifier(struct notifier_block *nb);
+extern int		unregister_netdevice_notifier(struct notifier_block *nb);
 /* Functions used for multicast support */
-
 extern void		dev_mc_upload(struct device *dev);
 extern void 		dev_mc_delete(struct device *dev, void *addr, int alen, int all);
 extern void		dev_mc_add(struct device *dev, void *addr, int alen, int newonly);
 extern void		dev_mc_discard(struct device *dev);
-
+/* This is the wrong place but it'll do for the moment */
+extern void		ip_mc_allhost(struct device *dev);
 #endif /* __KERNEL__ */
 
 #endif	/* _LINUX_DEV_H */

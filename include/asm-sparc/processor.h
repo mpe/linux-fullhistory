@@ -18,7 +18,7 @@ extern int EISA_bus;
  *
  * "this is gonna have to change to 1gig for the sparc" - David S. Miller
  */
-#define TASK_SIZE	0xc0000000
+#define TASK_SIZE	(0xc0000000UL)
 
 /*
  * Size of io_bitmap in longwords: 32 is ports 0-0x3ff.
@@ -28,18 +28,91 @@ extern int EISA_bus;
 struct thread_struct {
 	unsigned long ksp;          /* kernel stack pointer */
 	unsigned long usp;          /* user's sp, throw reg windows here */
-	unsigned long ptbr;
+	unsigned long cr3;          /* why changed from ptbr? */
 	unsigned int pcc;
 	unsigned int asn;
 	unsigned long unique;
 	unsigned long flags;
 	unsigned long res1, res2;
+	unsigned long psr;          /* save for condition codes */
+	unsigned long pc;           /* program counter */
+	unsigned long npc;          /* next program counter */
+
+/* 8 local registers + 8 in registers * 24 register windows.
+ * Most sparc's I know of only have 8 windows implemented,
+ * we determine how many at boot time and store that value
+ * in nwindows.
+ */
+	unsigned long globl_regs[8];  /* global regs need to be saved too */
+	unsigned long reg_window[16*24];
+	unsigned long yreg;
+	unsigned long uwindows;       /* how many user windows are in the set */
+	unsigned long float_regs[64]; /* V8 and below have 32, V9 has 64 */
 };
 
 #define INIT_TSS  { \
-	0, 0, 0, \
-	0, 0, 0, \
-	0, 0, 0, \
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, \
+        { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, }, \
+	0, 0, \
+        { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, }, \
+}
+
+/*
+ * These are the "cli()" and "sti()" for software interrupts
+ * They work by increasing/decreasing the "intr_count" value, 
+ * and as such can be nested arbitrarily.
+ */
+extern inline void start_bh_atomic(void)
+{
+	unsigned long dummy, psr;
+	__asm__ __volatile__("rd %%psr, %2\n\t"
+			     "wr %2, 0x20, %%psr\n\t"  /* disable traps */
+			     "ld %1,%0\n\t"
+			     "add %0,1,%0\n\t"
+			     "st %0,%1\n\t"
+			     "wr %2, 0x0, %%psr\n\t"   /* enable traps */
+			     : "=r" (dummy), "=m" (intr_count)
+			     : "0" (0), "r" (psr=0));
+}
+
+extern inline void end_bh_atomic(void)
+{
+	unsigned long dummy, psr;
+	__asm__ __volatile__("rd %%psr, %2\n\t"
+			     "wr %2, 0x20, %%psr\n\t"
+			     "ld %1,%0\n\t"
+			     "sub %0,1,%0\n\t"
+			     "st %0,%1\n\t"
+			     "wr %2, 0x0, %2\n\t"
+			     : "=r" (dummy), "=m" (intr_count)
+			     : "0" (0), "r" (psr=0));
 }
 
 #endif /* __ASM_SPARC_PROCESSOR_H */

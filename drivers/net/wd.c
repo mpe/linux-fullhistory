@@ -20,7 +20,6 @@
 static char *version =
 	"wd.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -236,7 +235,7 @@ int wd_probe1(struct device *dev, int ioaddr)
 	}
 
 	/* OK, were are certain this is going to work.  Setup the device. */
-	snarf_region(ioaddr, WD_IO_EXTENT);
+	register_iomem(ioaddr, WD_IO_EXTENT,"wd");
 	ethdev_init(dev);
 
 	ei_status.name = model_name;

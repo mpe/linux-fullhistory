@@ -102,21 +102,21 @@ extern inline void outb_local(unsigned char b, unsigned long addr)
 	mb();
 }
 
-extern inline unsigned long inb(unsigned long addr)
+extern inline unsigned int inb(unsigned long addr)
 {
 	long result = *(volatile int *) ((addr << 7) + EISA_IO + 0x00);
 	result >>= (addr & 3) * 8;
 	return 0xffUL & result;
 }
 
-extern inline unsigned long inw(unsigned long addr)
+extern inline unsigned int inw(unsigned long addr)
 {
 	long result = *(volatile int *) ((addr << 7) + EISA_IO + 0x20);
 	result >>= (addr & 3) * 8;
 	return 0xffffUL & result;
 }
 
-extern inline unsigned long inl(unsigned long addr)
+extern inline unsigned int inl(unsigned long addr)
 {
 	return *(volatile unsigned int *) ((addr << 7) + EISA_IO + 0x60);
 }

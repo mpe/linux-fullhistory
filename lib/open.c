@@ -8,19 +8,17 @@
 #include <linux/unistd.h>
 #include <stdarg.h>
 
+#define open __sys_open
+static inline _syscall3(int, open, const char *, filename, int, flag, int, mode)
+#undef open
+
 int open(const char * filename, int flag, ...)
 {
-	register int res;
+	int res;
 	va_list arg;
 
 	va_start(arg,flag);
-	__asm__("movl %2,%%ebx\n\t"
-		"int $0x80"
-		:"=a" (res)
-		:"0" (__NR_open),"g" ((long)(filename)),"c" (flag),
-		"d" (va_arg(arg,int)));
-	if (res>=0)
-		return res;
-	errno = -res;
-	return -1;
+	res = __sys_open(filename, flag, va_arg(arg, int));
+	va_end(arg);
+	return res;
 }

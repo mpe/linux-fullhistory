@@ -2863,7 +2863,7 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
 
    if (drive_found)
    {
-      snarf_region(sony_cd_base_io, 4);
+      register_iomem(sony_cd_base_io, 4,"cdu31a");
       
       if (register_blkdev(MAJOR_NR,"cdu31a",&scd_fops))
       {

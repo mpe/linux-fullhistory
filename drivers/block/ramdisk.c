@@ -8,7 +8,6 @@
  */
 
 
-#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/ext2_fs.h>

@@ -264,6 +264,14 @@ extern int in_group_p(gid_t grp);
 extern int request_irq(unsigned int irq,void (*handler)(int), unsigned long flags, const char *device);
 extern void free_irq(unsigned int irq);
 
+extern unsigned long copy_thread(int, unsigned long, struct task_struct *, struct pt_regs *);
+extern void start_thread(struct pt_regs *, unsigned long pc, unsigned long sp);
+extern void flush_thread(void);
+extern void exit_thread(void);
+
+extern int do_execve(char *, char **, char **, struct pt_regs *);
+asmlinkage int do_signal(unsigned long, struct pt_regs *);
+
 /*
  * The wait-queues are circular lists, and you have to be *very* sure
  * to keep them correct. Use only these two functions to add/remove

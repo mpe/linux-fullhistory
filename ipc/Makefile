@@ -28,6 +28,7 @@ ipc.o: $(OBJS)
 dep:
 	$(CPP) -M $(SRCS) > .depend
 
+modules:
 dummy:
 
 #

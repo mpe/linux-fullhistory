@@ -4,10 +4,21 @@
  *  Copyright (C) 1992  Rick Sladkey
  *
  *  nfs inode and superblock handling functions
+ *
+ *  Modularised by Alan Cox <Alan.Cox@linux.org>, while hacking some
+ *  experimental NFS changes. Modularisation taken straight from SYS5 fs.
  */
 
 #include <asm/system.h>
 #include <asm/segment.h>
+
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
 
 #include <linux/sched.h>
 #include <linux/nfs_fs.h>
@@ -48,6 +59,7 @@ void nfs_put_super(struct super_block *sb)
 	lock_super(sb);
 	sb->s_dev = 0;
 	unlock_super(sb);
+	MOD_DEC_USE_COUNT;
 }
 
 /*
@@ -123,6 +135,7 @@ struct super_block *nfs_read_super(struct super_block *sb, void *raw_data,
 		printk("nfs_read_super: get root inode failed\n");
 		return NULL;
 	}
+	MOD_INC_USE_COUNT;
 	return sb;
 }
 
@@ -238,3 +251,37 @@ int nfs_notify_change(struct inode *inode, struct iattr *attr)
 	inode->i_dirt = 0;
 	return error;
 }
+
+#ifdef MODULE
+
+/* Every kernel module contains stuff like this. */
+
+char kernel_version[] = UTS_RELEASE;
+
+static struct file_system_type nfs_fs_type = {
+	nfs_read_super, "nfs", 1, NULL
+};
+
+int init_module(void)
+{
+	int i;
+
+	register_filesystem(&nfs_fs_type);
+
+	return 0;
+}
+
+void cleanup_module(void)
+{
+	int i;
+
+	if (MOD_IN_USE) 
+	{
+		printk("NFS cannot be removed, currently in use\n");
+		return;
+	}
+
+	unregister_filesystem(&nfs_fs_type);
+}
+
+#endif

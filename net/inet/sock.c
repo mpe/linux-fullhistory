@@ -320,9 +320,11 @@ struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force, int
 			struct sk_buff * c = alloc_skb(size, priority);
 			if (c) 
 			{
+				unsigned long flags;
+				save_flags(flags);
 				cli();
 				sk->wmem_alloc+= c->mem_len;
-				sti();
+				restore_flags(flags); /* was sti(); */
 			}
 			return c;
 		}
@@ -341,9 +343,11 @@ struct sk_buff *sock_rmalloc(struct sock *sk, unsigned long size, int force, int
 			struct sk_buff *c = alloc_skb(size, priority);
 			if (c) 
 			{
+				unsigned long flags;
+				save_flags(flags);
 				cli();
 				sk->rmem_alloc += c->mem_len;
-				sti();
+				restore_flags(flags); /* was sti(); */
 			}
 			return(c);
 		}
@@ -392,7 +396,11 @@ void sock_wfree(struct sock *sk, struct sk_buff *skb, unsigned long size)
 	kfree_skbmem(skb, size);
 	if (sk) 
 	{
+		unsigned long flags;
+		save_flags(flags);
+		cli();
 		sk->wmem_alloc -= size;
+		restore_flags(flags);
 		/* In case it might be waiting for more memory. */
 		if (!sk->dead)
 			sk->write_space(sk);
@@ -409,7 +417,11 @@ void sock_rfree(struct sock *sk, struct sk_buff *skb, unsigned long size)
 	kfree_skbmem(skb, size);
 	if (sk) 
 	{
+		unsigned long flags;
+		save_flags(flags);
+		cli();
 		sk->rmem_alloc -= size;
+		restore_flags(flags);
 	}
 }
 
@@ -447,6 +459,8 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, int nob
 		if(skb==NULL)
 		{
 			unsigned long tmp;
+
+			sk->socket->flags |= SO_NOSPACE;
 			if(noblock)
 			{
 				*errcode=-EAGAIN;
@@ -468,6 +482,7 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, int nob
 			
 			if( tmp <= sk->wmem_alloc)
 			{
+				sk->socket->flags &= ~SO_NOSPACE;
 				interruptible_sleep_on(sk->sleep);
 				if (current->signal & ~current->blocked) 
 				{
@@ -491,10 +506,14 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, int nob
 
 int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 {
+	unsigned long flags;
 	if(sk->rmem_alloc + skb->mem_len >= sk->rcvbuf)
 		return -ENOMEM;
+	save_flags(flags);
+	cli();
 	sk->rmem_alloc+=skb->mem_len;
 	skb->sk=sk;
+	restore_flags(flags);
 	skb_queue_tail(&sk->receive_queue,skb);
 	if(!sk->dead)
 		sk->data_ready(sk,skb->len);

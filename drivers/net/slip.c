@@ -3,7 +3,7 @@
  *		devices like TTY.  It interfaces between a raw TTY, and the
  *		kernel's INET protocol layers (via DDI).
  *
- * Version:	@(#)slip.c	0.8.2	11/29/94
+ * Version:	@(#)slip.c	0.8.3	12/24/94
  *
  * Authors:	Laurence Culhane, <loz@holmes.demon.co.uk>
  *		Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
@@ -32,6 +32,9 @@
  *                                      ifconfig sl? up & down now works correctly.
  *					Modularization.
  *              Alan Cox        :       Oops - fix AX.25 buffer lengths
+ *      Dmitry Gorodchanin      :       Even more cleanups. Preserve CSLIP
+ *                                      statistics. Include CSLIP code only
+ *                                      if it really needed.
  *
  *
  *
@@ -49,6 +52,7 @@
  */
 #define CONFIG_SLIP_COMPRESSED
 #endif
+/* Undef this, if you don't need 6bit encapsulation code in the driver */
 #define CONFIG_SLIP_MODE_SLIP6
 
 #include <asm/system.h>
@@ -80,9 +84,9 @@
 
 
 #ifdef MODULE
-#define SLIP_VERSION    "0.8.1-NET3.014-NEWTTY-MODULAR"
+#define SLIP_VERSION    "0.8.3-NET3.019-NEWTTY-MODULAR"
 #else
-#define	SLIP_VERSION	"0.8.1-NET3.014-NEWTTY"
+#define	SLIP_VERSION	"0.8.3-NET3.019-NEWTTY"
 #endif
 
 
@@ -97,19 +101,6 @@ static int slip_esc6(unsigned char *p, unsigned char *d, int len);
 static void slip_unesc6(struct slip *sl, unsigned char c);
 #endif
 
-/* Initialize a SLIP control block for use. */
-static void
-sl_initialize(struct slip *sl, struct device *dev)
-{
-	memset(sl, 0, sizeof (struct slip));
-	sl->magic  = SLIP_MAGIC;
-	sl->dev	   = dev;
-	sl->mode   = SL_MODE_DEFAULT;
-	dev->type  = ARPHRD_SLIP + sl->mode;
-	if (dev->type == 260) {		/* KISS */
-		dev->type = ARPHRD_AX25;
-	}
-}
 
 /* Find a free SLIP channel, and link in this `tty' line. */
 static inline struct slip *
@@ -145,7 +136,7 @@ static void sl_changedmtu(struct slip *sl)
 {
 	struct device *dev = sl->dev;
 	unsigned char *xbuff, *rbuff, *oxbuff, *orbuff;
-#ifdef CONFIG_INET
+#ifdef SL_INCLUDE_CSLIP
 	unsigned char *cbuff, *ocbuff;
 #endif
 	int len;
@@ -163,11 +154,11 @@ static void sl_changedmtu(struct slip *sl)
 
 	xbuff = (unsigned char *) kmalloc (len + 4, GFP_ATOMIC);
 	rbuff = (unsigned char *) kmalloc (len + 4, GFP_ATOMIC);
-#ifdef CONFIG_INET
+#ifdef SL_INCLUDE_CSLIP
 	cbuff = (unsigned char *) kmalloc (len + 4, GFP_ATOMIC);
 #endif
 
-#ifdef CONFIG_INET
+#ifdef SL_INCLUDE_CSLIP
 	if (xbuff == NULL || rbuff == NULL || cbuff == NULL)  {
 #else
 	if (xbuff == NULL || rbuff == NULL)  {
@@ -181,7 +172,7 @@ static void sl_changedmtu(struct slip *sl)
 		if (rbuff != NULL)  {
 			kfree(rbuff);
 		}
-#ifdef CONFIG_INET
+#ifdef SL_INCLUDE_CSLIP
 		if (cbuff != NULL)  {
 			kfree(cbuff);
 		}
@@ -195,7 +186,7 @@ static void sl_changedmtu(struct slip *sl)
 	sl->xbuff = xbuff;
 	orbuff    = sl->rbuff;
 	sl->rbuff = rbuff;
-#ifdef CONFIG_INET
+#ifdef SL_INCLUDE_CSLIP
 	ocbuff    = sl->cbuff;
 	sl->cbuff = cbuff;
 #endif
@@ -233,7 +224,7 @@ static void sl_changedmtu(struct slip *sl)
 	if (orbuff != NULL)    {
 		kfree(orbuff);
 	}
-#ifdef CONFIG_INET
+#ifdef SL_INCLUDE_CSLIP
 	if (ocbuff != NULL)  {
 		kfree(ocbuff);
 	}
@@ -268,7 +259,7 @@ sl_bump(struct slip *sl)
 	int count;
 
 	count = sl->rcount;
-#ifdef CONFIG_INET
+#ifdef SL_INCLUDE_CSLIP
 	if (sl->mode & (SL_MODE_ADAPTIVE | SL_MODE_CSLIP)) {
 		unsigned char c;
 		if ((c = sl->rbuff[0]) & SL_TYPE_COMPRESSED_TCP) {
@@ -290,6 +281,7 @@ sl_bump(struct slip *sl)
 			if (!(sl->mode & SL_MODE_CSLIP)) {
 				/* turn on header compression */
 				sl->mode |= SL_MODE_CSLIP;
+				sl->mode &= ~SL_MODE_ADAPTIVE;
 				printk("%s: header compression turned on\n", sl->dev->name);
 			}
 			sl->rbuff[0] &= 0x4f;
@@ -298,7 +290,7 @@ sl_bump(struct slip *sl)
 			}
 		}
 	}
-#endif  /* CONFIG INET */
+#endif  /* SL_INCLUDE_CSLIP */
 
 	skb = alloc_skb(count, GFP_ATOMIC);
 	if (skb == NULL)  {
@@ -338,7 +330,7 @@ sl_encaps(struct slip *sl, unsigned char *icp, int len)
 	}
 
 	p = icp;
-#ifdef CONFIG_INET
+#ifdef SL_INCLUDE_CSLIP
 	if (sl->mode & SL_MODE_CSLIP)  {
 		len = slhc_compress(sl->slcomp, p, len, sl->cbuff, &p, 1);
 	}
@@ -505,7 +497,7 @@ sl_open(struct device *dev)
 	unsigned long len;
 
 	if (sl->tty == NULL) {
-		return -ENXIO;
+		return -ENODEV;
 	}
 
 	/*
@@ -532,7 +524,7 @@ sl_open(struct device *dev)
 	if (sl->xbuff == NULL)   {
 		goto noxbuff;
 	}
-#ifdef CONFIG_INET
+#ifdef SL_INCLUDE_CSLIP
 	sl->cbuff = (unsigned char *) kmalloc(len + 4, GFP_KERNEL);
 	if (sl->cbuff == NULL)   {
 		goto nocbuff;
@@ -556,20 +548,19 @@ sl_open(struct device *dev)
 	sl->xbits    = 0;
 #endif
 	sl->flags   &= (1 << SLF_INUSE);      /* Clear ESCAPE & ERROR flags */
-	sl->mode     = SL_MODE_DEFAULT;
 
 	/* Needed because address '0' is special */
 	if (dev->pa_addr == 0)  {
 		dev->pa_addr=ntohl(0xC0A80001);
 	}
 	dev->tbusy  = 0;
-	dev->flags |= IFF_UP;
+/*	dev->flags |= IFF_UP; */
 	dev->start  = 1;
 
 	return 0;
 
 	/* Cleanup */
-#ifdef CONFIG_INET
+#ifdef SL_INCLUDE_CSLIP
 noslcomp:
 	kfree(sl->cbuff);
 nocbuff:
@@ -593,20 +584,34 @@ sl_close(struct device *dev)
 	}
 	sl->tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 	dev->tbusy = 1;
-	dev->flags &= ~IFF_UP;
+	dev->start = 0;
+	
+/*	dev->flags &= ~IFF_UP; */
 
 	/* Free all SLIP frame buffers. */
-	kfree(sl->rbuff);
+	if (sl->rbuff)  {
+		kfree(sl->rbuff);
+	}
 	sl->rbuff = NULL;
-	kfree(sl->xbuff);
+	if (sl->xbuff)  {
+		kfree(sl->xbuff);
+	}
 	sl->xbuff = NULL;
-#ifdef CONFIG_INET
-	kfree(sl->cbuff);
+#ifdef SL_INCLUDE_CSLIP
+	/* Save CSLIP statistics */
+	if (sl->slcomp)  {
+		sl->rx_compressed += sl->slcomp->sls_i_compressed;
+		sl->rx_dropped    += sl->slcomp->sls_i_tossed;
+		sl->tx_compressed += sl->slcomp->sls_o_compressed;
+		sl->tx_misses     += sl->slcomp->sls_o_misses;
+	}
+	if (sl->cbuff)  {
+		kfree(sl->cbuff);
+	}
 	sl->cbuff = NULL;
 	slhc_free(sl->slcomp);
 	sl->slcomp = NULL;
 #endif
-	dev->start = 0;
 	return 0;
 }
 
@@ -671,6 +676,7 @@ static int
 slip_open(struct tty_struct *tty)
 {
 	struct slip *sl = (struct slip *) tty->disc_data;
+	int err;
 
 	/* First make sure we're not already connected. */
 	if (sl && sl->magic == SLIP_MAGIC) {
@@ -691,9 +697,19 @@ slip_open(struct tty_struct *tty)
 		tty->ldisc.flush_buffer(tty);
 	}
 
+	/* Restore default settings */
+	sl->mode      = SL_MODE_DEFAULT;
+	sl->dev->type = ARPHRD_SLIP + sl->mode;
+#ifdef CONFIG_AX25	
+	if (sl->dev->type == 260) {	/* KISS */
+		sl->dev->type = ARPHRD_AX25;
+	}
+#endif	
 	/* Perform the low-level SLIP initialization. */
-	(void) sl_open(sl->dev);
-
+	if ((err = sl_open(sl->dev)))  {
+		return err;
+	}
+	
 #ifdef MODULE
 	MOD_INC_USE_COUNT;
 #endif
@@ -720,7 +736,7 @@ slip_close(struct tty_struct *tty)
 	}
 
 	(void) dev_close(sl->dev);
-
+	
 	tty->disc_data = 0;
 	sl->tty = NULL;
 	sl_free(sl);
@@ -735,31 +751,29 @@ sl_get_stats(struct device *dev)
 {
 	static struct enet_statistics stats;
 	struct slip *sl = &sl_ctrl[dev->base_addr];
-#ifdef CONFIG_INET
+#ifdef SL_INCLUDE_CSLIP
 	struct slcompress *comp;
 #endif
 
-	if (! sl)  {
-		return NULL;
-	}
-
 	memset(&stats, 0, sizeof(struct enet_statistics));
 
-	stats.rx_packets = sl->rx_packets;
-	stats.tx_packets = sl->tx_packets;
-	stats.rx_dropped = sl->rx_dropped;
-	stats.tx_dropped = sl->tx_dropped;
-	stats.tx_errors   = sl->tx_errors;
-	stats.rx_errors   = sl->rx_errors;
+	stats.rx_packets     = sl->rx_packets;
+	stats.tx_packets     = sl->tx_packets;
+	stats.rx_dropped     = sl->rx_dropped;
+	stats.tx_dropped     = sl->tx_dropped;
+	stats.tx_errors      = sl->tx_errors;
+	stats.rx_errors      = sl->rx_errors;
 	stats.rx_over_errors = sl->rx_over_errors;
-
-#ifdef CONFIG_INET
+#ifdef SL_INCLUDE_CSLIP
+	stats.rx_fifo_errors = sl->rx_compressed;
+	stats.tx_fifo_errors = sl->tx_compressed;
+	stats.collisions     = sl->tx_misses;
 	comp = sl->slcomp;
 	if (comp) {
-		stats.rx_fifo_errors = comp->sls_i_compressed;
-		stats.rx_dropped += comp->sls_i_tossed;
-		stats.tx_fifo_errors = comp->sls_o_compressed;
-		stats.collisions = comp->sls_o_misses;
+		stats.rx_fifo_errors += comp->sls_i_compressed;
+		stats.rx_dropped     += comp->sls_i_tossed;
+		stats.tx_fifo_errors += comp->sls_o_compressed;
+		stats.collisions     += comp->sls_o_misses;
 	}
 #endif /* CONFIG_INET */
 	return (&stats);
@@ -920,10 +934,7 @@ slip_unesc6(struct slip *sl, unsigned char s)
 }
 #endif /* CONFIG_SLIP_MODE_SLIP6 */
 
-
-
 #ifdef CONFIG_AX25
-
 int
 sl_set_mac_address(struct device *dev, void *addr)
 {
@@ -945,7 +956,6 @@ sl_set_dev_mac_address(struct device *dev, void *addr)
 	memcpy(dev->dev_addr, addr, 7);
 	return 0;
 }
-
 #endif /* CONFIG_AX25 */
 
 
@@ -985,9 +995,15 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 			return -err;
 		}
 		tmp = get_fs_long((long *)arg);
-#ifndef CONFIG_INET
-		if (tmp & SL_MODE_CSLIP)  {
+#ifndef SL_INCLUDE_CSLIP
+		if (tmp & (SL_MODE_CSLIP|SL_MODE_ADAPTIVE))  {
 			return -EINVAL;
+		}
+#else
+		if ((tmp & (SL_MODE_ADAPTIVE | SL_MODE_CSLIP)) ==
+		    (SL_MODE_ADAPTIVE | SL_MODE_CSLIP))  {
+			/* return -EINVAL; */
+			tmp &= ~SL_MODE_ADAPTIVE;
 		}
 #endif
 #ifndef CONFIG_SLIP_MODE_SLIP6
@@ -1010,9 +1026,11 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 #endif
 		sl->mode = tmp;
 		sl->dev->type = ARPHRD_SLIP+sl->mode;
+#ifdef CONFIG_AX25		
 		if (sl->dev->type == 260)  {
 			sl->dev->type = ARPHRD_AX25;
 		}
+#endif		
 		return 0;
 
 	 case SIOCSIFHWADDR:
@@ -1055,7 +1073,7 @@ slip_init(struct device *dev)
 		       ""
 #endif
 		       );
-#if defined(CONFIG_INET) && !defined(MODULE)
+#if defined(SL_INCLUDE_CSLIP) && !defined(MODULE)
 		printk("CSLIP: code copyright 1989 Regents of the University of California\n");
 #endif
 #ifdef CONFIG_AX25
@@ -1081,8 +1099,11 @@ slip_init(struct device *dev)
 	}
 
 	/* Set up the "SLIP Control Block". (And clear statistics) */
-	sl_initialize(sl, dev);
-
+	
+	memset(sl, 0, sizeof (struct slip));
+	sl->magic  = SLIP_MAGIC;
+	sl->dev	   = dev;
+	
 	/* Finish setting up the DEVICE info. */
 	dev->mtu		= SL_MTU;
 	dev->hard_start_xmit	= sl_xmit;
@@ -1098,8 +1119,11 @@ slip_init(struct device *dev)
 #endif
 	dev->hard_header_len	= 0;
 	dev->addr_len		= 0;
-	dev->type		= 0;
+	dev->type		= ARPHRD_SLIP + SL_MODE_DEFAULT;
 #ifdef CONFIG_AX25
+	if (sl->dev->type == 260)  {
+		sl->dev->type = ARPHRD_AX25;
+	}
 	memcpy(dev->broadcast, ax25_bcast, 7); /* Only activated in AX.25 mode */
 	memcpy(dev->dev_addr, ax25_test, 7);   /*    ""      ""       ""    "" */
 #endif

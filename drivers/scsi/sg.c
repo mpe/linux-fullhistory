@@ -116,6 +116,8 @@ static int sg_open(struct inode * inode, struct file * filp)
    }
   if (!scsi_generics[dev].users)
    scsi_generics[dev].timeout=SG_DEFAULT_TIMEOUT;
+  if (scsi_generics[dev].device->host->hostt->usage_count)
+    (*scsi_generics[dev].device->host->hostt->usage_count)++;
   scsi_generics[dev].users++;
   return 0;
  }
@@ -124,6 +126,8 @@ static void sg_close(struct inode * inode, struct file * filp)
  {
   int dev=MINOR(inode->i_rdev);
   scsi_generics[dev].users--;
+  if (scsi_generics[dev].device->host->hostt->usage_count)
+    (*scsi_generics[dev].device->host->hostt->usage_count)--;
   scsi_generics[dev].exclude=0;
   wake_up(&scsi_generics[dev].generic_wait);
  }
@@ -230,7 +234,11 @@ static int sg_write(struct inode *inode,struct file *filp,char *buf,int count)
 
   if ((i=verify_area(VERIFY_READ,buf,count)))
    return i;
-  if (count<sizeof(struct sg_header))
+  /*
+   * The minimum scsi command length is 6 bytes.  If we get anything less than this,
+   * it is clearly bogus.
+   */
+  if (count<(sizeof(struct sg_header) + 6))
    return -EIO;
   /* make sure we can fit */
   while(device->pending)
@@ -283,6 +291,18 @@ static int sg_write(struct inode *inode,struct file *filp,char *buf,int count)
   size=COMMAND_SIZE(opcode);
   if (opcode >= 0xc0 && device->header.twelve_byte) size = 12;
   SCpnt->cmd_len = size;
+  /*
+   * Verify that the user has actually passed enough bytes for this command.
+   */
+  if (count<(sizeof(struct sg_header) + size))
+    {
+      device->pending=0;
+      wake_up(&device->write_wait);
+      sg_free(device->buff,device->buff_len);
+      device->buff = NULL;
+      return -EIO;
+    }
+
   memcpy_fromfs(cmnd,buf,size);
   buf+=size;
   memcpy_fromfs(device->buff,buf,device->header.pack_len-size-sizeof(struct sg_header));
@@ -291,7 +311,8 @@ static int sg_write(struct inode *inode,struct file *filp,char *buf,int count)
   printk("do cmd\n");
 #endif
   scsi_do_cmd (SCpnt,(void *) cmnd,
-               (void *) device->buff,amt,sg_command_done,device->timeout,SG_DEFAULT_RETRIES);
+               (void *) device->buff,device->header.pack_len-size-sizeof(struct sg_header),
+	       sg_command_done,device->timeout,SG_DEFAULT_RETRIES);
 #ifdef DEBUG
   printk("done cmd\n");
 #endif               

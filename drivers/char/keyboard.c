@@ -24,7 +24,6 @@
 #include <linux/tty_flip.h>
 #include <linux/mm.h>
 #include <linux/ptrace.h>
-#include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/string.h>
 

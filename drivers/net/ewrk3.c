@@ -78,6 +78,8 @@
     6) run the net startup bits for your new eth?? interface manually 
     (usually /etc/rc.inet[12] at boot time). 
     7) enjoy!
+    
+    [Alan Cox: Changed this so you can insmod ewrk3.o irq=x io=y]
 
     Note that autoprobing is not allowed in loadable modules - the system is
     already up and running and you're messing with interrupts.
@@ -126,7 +128,6 @@
 static char *version = "ewrk3.c:v0.31 12/5/94 davies@wanton.lkg.dec.com\n";
 
 #include <stdarg.h>
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -351,7 +352,7 @@ int ewrk3_probe(struct device *dev)
       if (!check_region(base_addr, EWRK3_IOP_INC)) {
 	if (((mem_chkd >> ((base_addr - EWRK3_IO_BASE)/ EWRK3_IOP_INC))&0x01)==1) {
 	  if (DevicePresent(base_addr) == 0) {      /* Is EWRK3 really here? */
-	    snarf_region(base_addr, EWRK3_IOP_INC); /* Register I/O region */
+	    register_iomem(base_addr, EWRK3_IOP_INC,"ewrk3"); /* Register I/O region */
 	    status = ewrk3_hw_init(dev, base_addr);
 	  } else {
 	    printk("ewrk3_probe(): No device found\n");
@@ -1343,7 +1344,7 @@ static struct device *isa_probe(struct device *dev)
 ** Device found. Mark its (I/O) location for future reference. Only 24
 ** EtherWORKS devices can exist between 0x100 and 0x3e0.
 */
-	  snarf_region(iobase, EWRK3_IOP_INC);
+	  register_iomem(iobase, EWRK3_IOP_INC,"ewrk3");
 	  if (num_ewrk3s > 0) {        /* only gets here in autoprobe */
 	    dev = alloc_device(dev, iobase);
 	  } else {
@@ -1386,7 +1387,7 @@ static struct device *eisa_probe(struct device *dev)
 ** EtherWORKS devices can exist in EISA space....
 */
 	mem_chkd |= (0x01 << (i + 24));
-	snarf_region(iobase, EWRK3_IOP_INC);
+	register_iomem(iobase, EWRK3_IOP_INC,"ewrk3");
 	if (num_ewrk3s > 0) {        /* only gets here in autoprobe */
 	  dev = alloc_device(dev, iobase);
 	} else {
@@ -1824,12 +1825,18 @@ char kernel_version[] = UTS_RELEASE;
 static struct device thisEthwrk = {
   "        ", /* device name inserted by /linux/drivers/net/net_init.c */
   0, 0, 0, 0,
-  0x300, 5,  /* I/O address, IRQ <--- EDIT THIS LINE FOR YOUR CONFIGURATION */
+  0x300, 5,  /* I/O address, IRQ */
   0, 0, 0, NULL, ewrk3_probe };
 	
+	
+int io=0x300;	/* <--- EDIT THESE LINES FOR YOUR CONFIGURATION */
+int irq=5;	/* or use the insmod io= irq= options 		*/
+
 int
 init_module(void)
 {
+  thisEthwrk.base_addr=io;
+  thisEthwrk.irq=irq;
   if (register_netdev(&thisEthwrk) != 0)
     return -EIO;
   return 0;

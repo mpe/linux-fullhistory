@@ -1,51 +1,47 @@
-#define KERNSIZE	134217728
-#define KERNBASE	0           /* new strategy */
-#define LOAD_ADDR       0x4000
+#ifndef __SPARC_HEAD_H
+#define __SPARC_HEAD_H
+
+#define KERNSIZE	134217728   /* this is how much of a mapping the prom promises */
+#define PAGESIZE	4096        /* luckily this is the same on sun4c's and sun4m's */
+#define PAGESHIFT       12
+#define PROM_BASE	-1568768    /* casa 'de PROM */
+#define LOAD_ADDR       0x4000      /* prom jumps to us here */
 #define C_STACK         96
 #define SUN4C_SEGSZ     (1 << 18)
-#define NBPG		4096	
-#define UPAGES		2
-#define PROM_BASE	-1568768
-#define PAGESHIFT_SUN4C 12          /* This is good for sun4m's also */
-#define ASI_CONTROL     0x02        /* for cache enable, context registers, etc. */
-#define ASI_SEGMAP      0x03
-#define ASI_PTE         0x04
-#define AC_CONTEXT      0x30000000
-#define USRSTACK        KERNBASE
-#define IE_REG_PTE_PG   -201326592
+#define USRSTACK        0x0         /* no joke, this is temporary, trust me */
 #define INT_ENABLE_REG_PHYSADR      0xf5000000
-#define IE_ALLIE        0x01
+#define INTS_ALL_ENAB   0x01
 
-/* This crap should go elsewhere */
+#define WRITE_PAUSE     nop; nop; nop;
 
-#define PSR_IMPL        0xf0000000      /* implementation */
-#define PSR_VER         0x0f000000      /* version */
-#define PSR_ICC         0x00f00000      /* integer condition codes */
-#define PSR_N           0x00800000      /* negative */
-#define PSR_Z           0x00400000      /* zero */
-#define PSR_O           0x00200000      /* overflow */
-#define PSR_C           0x00100000      /* carry */
-#define PSR_EC          0x00002000      /* coprocessor enable */
-#define PSR_EF          0x00001000      /* FP enable */
-#define PSR_PIL         0x00000f00      /* interrupt level */
-#define PSR_S           0x00000080      /* supervisor (kernel) mode */
-#define PSR_PS          0x00000040      /* previous supervisor mode (traps) */
-#define PSR_ET          0x00000020      /* trap enable */
-#define PSR_CWP         0x0000001f      /* current window pointer */
+/* Here are some trap goodies */
 
-#define PCB_WIM         20
 
-#define HZ              100
+/* Generic trap entry. */
 
-/* Offsets into the proc structure for window info, etc. Just dummies
-   for now.
+#define TRAP_ENTRY(type, label) \
+	mov (type), %l3; b label; mov %psr, %l0; nop;
+
+/* This is for hard interrupts from level 1-14, 15 is non-maskable (nmi) and
+ * gets handled with another macro.
+ */
+
+#define TRAP_ENTRY_INTERRUPT(int_level) \
+        mov int_level, %l4; b trap_entry; mov %psr, %l0; nop;
+
+/* Here is the macro for soft interrupts (ie. not as urgent as hard ones)
+   which need to jump to a different handler.
 */
 
-#define TASK_WIM      0x8
-#define TASK_UW       0x16
-#define TASK_SIZE     8192
-#define TASK_RW       0x32
-#define TASK_NSAVED   0x40
-#define PG_VSHIFT     0x16
-#define PG_PROTSHIFT  0x6
-#define PG_PROTUWRITE 0x4
+#define TRAP_ENTRY_INTERRUPT_SOFT(int_level, ident) \
+        mov int_level, %l4; mov %psr, %l0; b trap_entry; mov ident, %l3;
+
+/* Non-maskable interrupt entry macro. You have to turn off all interrupts
+   to not receive this. This is usually due to a asynchronous memory error.
+   All we can really do is stop the show. :-(
+*/
+#define TRAP_ENTRY_INTERRUPT_NMI(t_type, jmp_to) \
+        mov t_type, %l3; b jmp_to; mov %psr, %l0; nop;
+
+
+#endif __SPARC_HEAD_H

@@ -2096,7 +2096,7 @@ static void copy_buffer(int ssize, int max_sector, int max_sector_2)
 		    floppy_track_buffer + (max_buffer_sectors << 10) ||
 		    dma_buffer < floppy_track_buffer ){
 			DPRINT1("buffer overrun in copy buffer %d\n",
-				(floppy_track_buffer - dma_buffer) >>9);
+				(int) ((floppy_track_buffer - dma_buffer) >>9));
 			printk("sector_t=%d buffer_min=%d\n",
 			       sector_t, buffer_min);
 			printk("current_count_sectors=%ld\n",
@@ -2107,7 +2107,7 @@ static void copy_buffer(int ssize, int max_sector, int max_sector_2)
 				printk("write\n");
 			break;
 		}
-		if ( ((int)buffer) % 512 )
+		if ( ((unsigned long)buffer) % 512 )
 			DPRINT1("%p buffer not aligned\n", buffer);
 #endif
 		if ( CT(COMMAND) == FD_READ )
@@ -2328,7 +2328,7 @@ static int make_raw_rw_request(void)
 			raw_cmd.length, current_count_sectors);
 		if ( current_addr != CURRENT->buffer )
 			printk("addr=%d, length=%ld\n",
-			       (current_addr - floppy_track_buffer ) >> 9,
+			       (int) ((current_addr - floppy_track_buffer ) >> 9),
 			       current_count_sectors);
 		printk("st=%d ast=%d mse=%d msi=%d\n",
 		       sector_t, aligned_sector_t, max_sector, max_size);

@@ -27,7 +27,6 @@
  *		2 of the License, or(at your option) any later version.
  */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/signal.h>
@@ -496,7 +495,7 @@ static int unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 		return(-EINVAL);
 	}
 	
-	if ((i = sock_awaitconn(sock, serv_upd->socket)) < 0) 
+	if ((i = sock_awaitconn(sock, serv_upd->socket, flags)) < 0) 
 	{
 		return(i);
 	}
@@ -546,13 +545,14 @@ static int unix_proto_accept(struct socket *sock, struct socket *newsock, int fl
 	{
 		if (flags & O_NONBLOCK) 
 			return(-EAGAIN);
+		sock->flags |= SO_WAITDATA;
 		interruptible_sleep_on(sock->wait);
+		sock->flags &= ~SO_WAITDATA;
 		if (current->signal & ~current->blocked) 
 		{
 			return(-ERESTARTSYS);
 		}
 	}
-
 /*
  * Great. Finish the connection relative to server and client,
  * wake up the client and return the new fd to the server.
@@ -569,6 +569,7 @@ static int unix_proto_accept(struct socket *sock, struct socket *newsock, int fl
 	UN_DATA(newsock)->sockaddr_un        = UN_DATA(sock)->sockaddr_un;
 	UN_DATA(newsock)->sockaddr_len       = UN_DATA(sock)->sockaddr_len;
 	wake_up_interruptible(clientsock->wait);
+	sock_wake_async(clientsock, 0);
 	return(0);
 }
 
@@ -622,7 +623,9 @@ static int unix_proto_read(struct socket *sock, char *ubuf, int size, int nonblo
 		}
 		if (nonblock) 
 			return(-EAGAIN);
+		sock->flags |= SO_WAITDATA;
 		interruptible_sleep_on(sock->wait);
+		sock->flags &= ~SO_WAITDATA;
 		if (current->signal & ~current->blocked) 
 		{
 			return(-ERESTARTSYS);
@@ -655,7 +658,10 @@ static int unix_proto_read(struct socket *sock, char *ubuf, int size, int nonblo
 		ubuf += cando;
 		todo -= cando;
 		if (sock->state == SS_CONNECTED)
+		{
 			wake_up_interruptible(sock->conn->wait);
+			sock_wake_async(sock->conn, 2);
+		}
 		avail = UN_BUF_AVAIL(upd);
 	} 
 	while(todo && avail);
@@ -690,8 +696,10 @@ static int unix_proto_write(struct socket *sock, char *ubuf, int size, int nonbl
 
 	while(!(space = UN_BUF_SPACE(pupd))) 
 	{
+		sock->flags |= SO_NOSPACE;
 		if (nonblock) 
 			return(-EAGAIN);
+		sock->flags &= ~SO_NOSPACE;
 		interruptible_sleep_on(sock->wait);
 		if (current->signal & ~current->blocked) 
 		{
@@ -745,7 +753,10 @@ static int unix_proto_write(struct socket *sock, char *ubuf, int size, int nonbl
 		ubuf += cando;
 		todo -= cando;
 		if (sock->state == SS_CONNECTED)
+		{
 			wake_up_interruptible(sock->conn->wait);
+			sock_wake_async(sock->conn, 1);
+		}
 		space = UN_BUF_SPACE(pupd);
 	}
 	while(todo && space);

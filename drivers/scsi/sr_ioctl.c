@@ -384,7 +384,52 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 			return -EINVAL;
 		case CDROMREADMODE1:
 			return -EINVAL;
+			
+		/* block-copy from ../block/sbpcd.c with some adjustments... */
+		case CDROMMULTISESSION: /* tell start-of-last-session to user */
+			{
+			  struct cdrom_multisession  ms_info;
+			  long                       lba;
+			  
+			  err = verify_area(VERIFY_READ, (void *) arg,
+					    sizeof(struct cdrom_multisession));
+			  if (err) return (err);
+			
+			  memcpy_fromfs(&ms_info, (void *) arg, sizeof(struct cdrom_multisession));
 
+			  if (ms_info.addr_format==CDROM_MSF) { /* MSF-bin requested */
+			    lba = scsi_CDs[target].mpcd_sector+CD_BLOCK_OFFSET;
+			    ms_info.addr.msf.minute = lba / (CD_SECS*CD_FRAMES);
+			    lba %= CD_SECS*CD_FRAMES;
+			    ms_info.addr.msf.second = lba / CD_FRAMES;
+			    ms_info.addr.msf.frame  = lba % CD_FRAMES;
+			  } else if (ms_info.addr_format==CDROM_LBA) /* lba requested */
+			    ms_info.addr.lba=scsi_CDs[target].mpcd_sector;
+			  else return (-EINVAL);
+			
+			  if (scsi_CDs[target].mpcd_sector)
+			    ms_info.xa_flag=1; /* valid redirection address */
+			  else
+			    ms_info.xa_flag=0; /* invalid redirection address */
+			  
+			  err=verify_area(VERIFY_WRITE,(void *) arg,
+					  sizeof(struct cdrom_multisession));
+			  if (err) return (err);
+
+			  memcpy_tofs((void *) arg, &ms_info, sizeof(struct cdrom_multisession));
+			  return (0);
+			}
+
+		case CDROMMULTISESSION_SYS: /* tell start-of-last-session to kernel */
+			{
+			  long *p_lba;
+			  
+			  if(!suser()) return -EACCES;
+			  p_lba =(long*)arg;
+			  *p_lba=scsi_CDs[target].mpcd_sector;
+			  return (0);
+			}
+			
 		case BLKRASET:
 			if(!suser())  return -EACCES;
 			if(!inode->i_rdev) return -EINVAL;

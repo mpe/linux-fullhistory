@@ -42,6 +42,12 @@ OBJS	:= $(OBJS) ipx.o pe2.o p8022.o p8023.o
 
 endif
 
+ifdef CONFIG_APPLETALK
+
+OBJS	:= $(OBJS) atalk_ddp.o atalk_arp.o
+
+endif
+
 ifdef CONFIG_NET
 
 inet.o:		$(OBJS)

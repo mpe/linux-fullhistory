@@ -64,7 +64,7 @@ extern unsigned short video_port_reg, video_port_val;
 Patch (based on Linux Kernel revision 1.0) for handling the Power Saving
 feature of the new monitor generation. The code works on all these monitors
 (mine is a Smile 1506) and should run on *all* video adapter cards (change
-some i/o-adresses), although tested only on two different VGA-cards: a  
+some i/o-addresses), although tested only on two different VGA-cards: a  
 cheap Cirrus Logic (5428) and a miro Crystal 8S (S3-805).
 
 You can choose from two options:

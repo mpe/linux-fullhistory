@@ -23,7 +23,6 @@
 static char *version =
     "ne.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -260,7 +259,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
 
     dev->base_addr = ioaddr;
 
-    snarf_region(ioaddr, NE_IO_EXTENT);
+    register_iomem(ioaddr, NE_IO_EXTENT,"ne2000");
 
     for(i = 0; i < ETHER_ADDR_LEN; i++)
 	dev->dev_addr[i] = SA_prom[i];

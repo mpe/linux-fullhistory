@@ -16,7 +16,7 @@ if [ "$CONFIG_ST506" = "y" ]; then
     bool '   Use new IDE driver for primary/secondary i/f' CONFIG_BLK_DEV_IDE y
   fi
   if [ "$CONFIG_BLK_DEV_IDE" = "y" ]; then
-    bool '   Include support for IDE CDROM (ATAPI)' CONFIG_BLK_DEV_IDECD n
+    bool '   Include support for IDE/ATAPI CDROMs' CONFIG_BLK_DEV_IDECD n
   fi
 fi
 
@@ -169,10 +169,10 @@ fi
 fi
 fi
 
-comment 'CD-ROM drivers'
+comment 'CD-ROM drivers (not for SCSI or IDE/ATAPI drives)'
 
 bool 'Sony CDU31A/CDU33A CDROM driver support' CONFIG_CDU31A n
-bool 'Mitsumi CDROM driver support' CONFIG_MCD n
+bool 'Mitsumi (not IDE/ATAPI) CDROM driver support' CONFIG_MCD n
 bool 'Matsushita/Panasonic CDROM driver support' CONFIG_SBPCD n
 if [ "$CONFIG_SBPCD" = "y" ]; then
   bool 'Matsushita/Panasonic second CDROM controller support' CONFIG_SBPCD2 n

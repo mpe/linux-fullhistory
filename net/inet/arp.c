@@ -31,10 +31,12 @@
  *		Alan Cox	:	Use init_timer().
  *		Alan Cox	:	Double lock fixes.
  *		Martin Seine	:	Move the arphdr structure
- *					to if_arp.h for compatibility
+ *					to if_arp.h for compatibility.
  *					with BSD based programs.
  *              Andrew Tridgell :       Added ARP netmask code and
- *                                      re-arranged proxy handling
+ *                                      re-arranged proxy handling.
+ *		Alan Cox	:	Changed to use notifiers.
+ *		Niibe Yutaka	:	Reply for this device or proxies only.
  */
 
 #include <linux/types.h>
@@ -246,15 +248,19 @@ static void arp_release_entry(struct arp_table *entry)
 /*
  *	Purge a device from the ARP queue
  */
-
-void arp_device_down(struct device *dev)
+ 
+int arp_device_event(unsigned long event, void *ptr)
 {
+	struct device *dev=ptr;
 	int i;
 	unsigned long flags;
 	
+	if(event!=NETDEV_DOWN)
+		return NOTIFY_DONE;
 	/*
 	 *	This is a bit OTT - maybe we need some arp semaphores instead.
 	 */
+	 
 	save_flags(flags);
 	cli();
 	for (i = 0; i < FULL_ARP_TABLE_SIZE; i++)
@@ -275,6 +281,7 @@ void arp_device_down(struct device *dev)
 		}
 	}
 	restore_flags(flags);
+	return NOTIFY_DONE;
 }
 
 
@@ -694,7 +701,8 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 /*
  * 	To get here, it must be an arp request for us.  We need to reply.
  */
-			arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,dev->dev_addr);
+ 			if(tip==dev->pa_addr)	/* Only reply for the real device address */
+				arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,dev->dev_addr);
 		}
 	}
 
@@ -1235,10 +1243,16 @@ int arp_ioctl(unsigned int cmd, void *arg)
 static struct packet_type arp_packet_type =
 {
 	0,	/* Should be: __constant_htons(ETH_P_ARP) - but this _doesn't_ come out constant! */
-	0,		/* copy */
+	NULL,		/* All devices */
 	arp_rcv,
 	NULL,
 	NULL
+};
+
+static struct notifier_block arp_dev_notifier={
+	arp_device_event,
+	NULL,
+	0
 };
 
 void arp_init (void)
@@ -1248,5 +1262,7 @@ void arp_init (void)
 	dev_add_pack(&arp_packet_type);
 	/* Start with the regular checks for expired arp entries. */
 	add_timer(&arp_timer);
+	/* Register for device down reports */
+	register_netdevice_notifier(&arp_dev_notifier);
 }
 

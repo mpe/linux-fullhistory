@@ -16,7 +16,6 @@
 #include <unistd.h>	/* contains read/write */
 #include <fcntl.h>
 #include <a.out.h>
-#include <linux/config.h>
 
 #define N_MAGIC_OFFSET 1024
 

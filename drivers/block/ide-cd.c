@@ -870,7 +870,7 @@ cdrom_read_subchannel (ide_dev_t *dev,
 }
 
 
-/* modeflag: 0 = current, 1 = changable mask, 2 = default, 3 = saved */
+/* modeflag: 0 = current, 1 = changeable mask, 2 = default, 3 = saved */
 static int
 cdrom_mode_sense (ide_dev_t *dev, int pageno, int modeflag,
                   char *buf, int buflen)

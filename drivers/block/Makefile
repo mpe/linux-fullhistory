@@ -79,6 +79,7 @@ block.a: $(OBJS)
 dep:
 	$(CPP) -M $(SRCS) > .depend
 
+modules:
 dummy:
 
 #

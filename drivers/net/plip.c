@@ -34,8 +34,6 @@ static char *version =
 #endif    
     "PLIP $Revision: 1.7 $ gniibe@mri.co.jp\n";
 
-#include <linux/config.h>
-
 /*
   Sources:
 	Ideas and protocols came from Russ Nelson's <nelson@crynwr.com>
@@ -227,7 +225,7 @@ plip_init(struct device *dev)
 	}
     }
 
-    snarf_region(PAR_DATA(dev), 3);
+    register_iomem(PAR_DATA(dev), 3,"plip");
 
     /* Fill in the generic fields of the device structure. */
     ether_setup(dev);

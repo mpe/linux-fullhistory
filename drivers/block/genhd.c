@@ -10,7 +10,6 @@
  *  in the early extended-partition checks and added DM partitions
  */
 
-#include <linux/config.h>
 #include <linux/fs.h>
 #include <linux/genhd.h>
 #include <linux/kernel.h>

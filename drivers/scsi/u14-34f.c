@@ -352,7 +352,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
    if (sh[j]->base == 0) outb(CMD_ENA_INTR, sh[j]->io_port + REG_SYS_MASK);
 
    /* Register the I/O space that we use */
-   snarf_region(sh[j]->io_port, REG_REGION);
+   register_iomem(sh[j]->io_port, REG_REGION,"u14-34f");
 
    memset(HD(j), 0, sizeof(struct hostdata));
    HD(j)->heads = mapping_table[config_2.mapping_mode].heads;

@@ -56,7 +56,6 @@ static char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
  *        - (Try to make it slightly faster.) 
  */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/ptrace.h>
@@ -330,7 +329,7 @@ static char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
 #ifndef HAVE_PORTRESERVE
 
 #define check_region(ioaddr, size)              0
-#define snarf_region(ioaddr, size);             do ; while (0)
+#define register_iomem(ioaddr, size,name);             do ; while (0)
 
 #endif
 
@@ -783,7 +782,7 @@ int SK_probe(struct device *dev, short ioaddr)
 	    dev->dev_addr[5]);
 
     /* Grab the I/O Port region */
-    snarf_region(ioaddr, ETHERCARD_TOTAL_SIZE);
+    register_iomem(ioaddr, ETHERCARD_TOTAL_SIZE,"sk_g16");
 
     /* Initialize device structure */
 

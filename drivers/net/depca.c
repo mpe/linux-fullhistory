@@ -137,6 +137,11 @@
 
     To unload a module, turn off the associated interface 
     'ifconfig eth?? down' then 'rmmod depca'.
+    
+    [Alan Cox: Changed to split off the module values as ints for insmod
+     
+     you can now do insmod depca.c irq=7 io=0x200 ]
+     
 
     TO DO:
     ------
@@ -172,7 +177,6 @@
 static char *version = "depca.c:v0.381 12/12/94 davies@wanton.lkg.dec.com\n";
 
 #include <stdarg.h>
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -476,7 +480,7 @@ depca_probe1(struct device *dev, short ioaddr)
 	}
 
 #ifdef HAVE_PORTRESERVE
-	snarf_region(ioaddr, DEPCA_TOTAL_SIZE);
+	register_iomem(ioaddr, DEPCA_TOTAL_SIZE,"depca");
 #endif
 
 	/*
@@ -578,7 +582,7 @@ depca_probe1(struct device *dev, short ioaddr)
 	memset(lp->tx_ring, 0, sizeof(struct depca_tx_head)*j);
 
 	/* This should never happen. */
-	if ((int)(lp->rx_ring) & 0x07) {
+	if ((long)(lp->rx_ring) & 0x07) {
 	  printk("\n **ERROR** DEPCA Rx and Tx descriptor rings not on a quadword boundary.\n");
 	  return -ENXIO;
 	}
@@ -1546,12 +1550,22 @@ char kernel_version[] = UTS_RELEASE;
 static struct device thisDepca = {
   "        ",  /* device name inserted by /linux/drivers/net/net_init.c */
   0, 0, 0, 0,
-  0x200, 7,   /* I/O address, IRQ <--- EDIT THIS LINE FOR YOUR CONFIGURATION */
+  0x200, 7,   /* I/O address, IRQ */
   0, 0, 0, NULL, depca_probe };
+
+/*
+ *	This is a tweak to keep the insmod program happy. It can only
+ *	set int values with var=value so we split these out.
+ */
+ 
+int irq=7;	/* EDIT THESE LINE FOR YOUR CONFIGURATION */
+int io=0x200;   /* Or use the irq= io= options to insmod */
 	
 int
 init_module(void)
 {
+  thisDepca.irq=irq;
+  thisDepca.base_addr=io;
   if (register_netdev(&thisDepca) != 0)
     return -EIO;
   return 0;

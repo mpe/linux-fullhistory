@@ -4,7 +4,6 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -33,26 +32,6 @@ extern void adjust_clock(void);
 asmlinkage int sys_ni_syscall(void)
 {
 	return -ENOSYS;
-}
-
-asmlinkage int sys_idle(void)
-{
-	int i;
-
-	if (current->pid != 0)
-		return -EPERM;
-
-	/* Map out the low memory: it's no longer needed */
-	for (i = 0 ; i < 768 ; i++)
-		swapper_pg_dir[i] = 0;
-
-	/* endless idle loop with no priority at all */
-	current->counter = -100;
-	for (;;) {
-		if (hlt_works_ok && !need_resched)
-			__asm__("hlt");
-		schedule();
-	}
 }
 
 static int proc_sel(struct task_struct *p, int which, int who)

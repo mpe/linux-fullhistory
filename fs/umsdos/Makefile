@@ -24,6 +24,8 @@ OBJS=	dir.o emd.o file.o inode.o ioctl.o mangle.o namei.o\
 umsdos.o: $(OBJS)
 	$(LD) -r -o umsdos.o $(OBJS)
 
+modules: umsdos.o
+
 clean:
 	rm -f core *.o *.a *.s
 

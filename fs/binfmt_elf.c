@@ -58,19 +58,19 @@ struct linux_binfmt elf_format = {
    be in memory */
 
 
-static void padzero(int elf_bss){
-  unsigned int fpnt, nbyte;
+static void padzero(unsigned long elf_bss)
+{
+	unsigned long fpnt, nbyte;
   
-  if(elf_bss & 0xfff) {
-    
-    nbyte = (PAGE_SIZE - (elf_bss & 0xfff)) & 0xfff;
-    if(nbyte){
-      verify_area(VERIFY_WRITE, (void *) elf_bss, nbyte);
-      
-      fpnt = elf_bss;
-      while(fpnt & 0xfff) put_fs_byte(0, fpnt++);
-    };
-  };
+	nbyte = elf_bss & (PAGE_SIZE-1);
+	if (nbyte) {
+		nbyte = PAGE_SIZE - nbyte;
+		verify_area(VERIFY_WRITE, (void *) elf_bss, nbyte);
+		fpnt = elf_bss;
+		do {
+			put_fs_byte(0, fpnt++);
+		} while (--nbyte);
+	}
 }
 
 unsigned long * create_elf_tables(char * p,int argc,int envc,struct elfhdr * exec, unsigned int load_addr, int ibcs)
@@ -501,7 +501,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	/* Do this so that we can load the interpreter, if need be.  We will
 	   change some of these later */
 	current->mm->rss = 0;
-	bprm->p += change_ldt(0, bprm->page);
+	bprm->p += setup_arg_pages(0, bprm->page);
 	current->mm->start_stack = bprm->p;
 	
 	/* Now we do a little grungy work by mmaping the ELF image into
@@ -637,8 +637,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	error = do_mmap(NULL, 0, 4096, PROT_READ | PROT_EXEC,
 			MAP_FIXED | MAP_PRIVATE, 0);
 
-	regs->eip = elf_entry;		/* eip, magic happens :-) */
-	regs->esp = bprm->p;			/* stack pointer */
+	start_thread(regs, elf_entry, bprm->p);
 	if (current->flags & PF_PTRACED)
 		send_sig(SIGTRAP, current, 0);
 #ifndef CONFIG_BINFMT_ELF

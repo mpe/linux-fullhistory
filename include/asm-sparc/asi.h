@@ -1,7 +1,7 @@
 #ifndef _SPARC_ASI_H
 #define _SPARC_ASI_H
 
-/* asi.h:  Address Space Indentifier values for the sparc.
+/* asi.h:  Address Space Identifier values for the sparc.
 
    Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
 */

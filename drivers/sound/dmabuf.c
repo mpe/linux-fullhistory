@@ -38,7 +38,7 @@
 DEFINE_WAIT_QUEUES (dev_sleeper[MAX_AUDIO_DEV], dev_sleep_flag[MAX_AUDIO_DEV]);
 
 static struct dma_buffparms dmaps[MAX_AUDIO_DEV] =
-{0};				/*
+{{0}};		/*
 		 * Primitive way to allocate
 		 * such a large array.
 		 * Needs dynamic run-time allocation.

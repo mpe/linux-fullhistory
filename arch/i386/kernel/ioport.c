@@ -12,6 +12,13 @@
 #include <linux/ioport.h>
 
 static unsigned long ioport_registrar[IO_BITMAP_SIZE] = {0, /* ... */};
+#define IOPORTNAMES_NUM 32
+#define IOPORTNAMES_LEN 26
+struct { int from;
+	 int num;	
+	 int flags;
+	 char name[IOPORTNAMES_LEN];
+	} ioportnames[IOPORTNAMES_NUM];
 
 #define _IODEBUG
 
@@ -44,8 +51,7 @@ static void dump_io_bitmap(void)
 #endif
 
 /* Set EXTENT bits starting at BASE in BITMAP to value TURN_ON. */
-asmlinkage void set_bitmap(unsigned long *bitmap,
-						   short base, short extent, int new_value)
+asmlinkage void set_bitmap(unsigned long *bitmap, short base, short extent, int new_value)
 {
 	int mask;
 	unsigned long *bitmap_base = bitmap + (base >> 5);
@@ -108,23 +114,21 @@ asmlinkage int check_bitmap(unsigned long *bitmap, short base, short extent)
 	return 0;
 }
 
+/*
+ * This generates the report for /proc/ioports
+ */
 int get_ioport_list(char *buf)
-{       int len=0,num,from;
-        for(num=0;num<IO_BITMAP_SIZE*32;num++)
-         if(check_bitmap(ioport_registrar,num,1)) {
-	   from=num;
-	   while(check_bitmap(ioport_registrar,num+1,1) 
-			&& num+1<IO_BITMAP_SIZE*32 )
-		num++;
-	   if(from==num) 
-            len+=sprintf(buf+len,"%04x\n",num);
-	   else
-	    len+=sprintf(buf+len,"%04x-%04x\n",from,num);
-           if(len>4000) {
-                len+=sprintf((buf+len),"4k-Limit reached!\n");
-                return len;
-           }
-         }
+{       int i=0,len=0;
+	while(i<IOPORTNAMES_LEN && len<4000)
+	{	if(ioportnames[i].flags)
+			len+=sprintf(buf+len,"%04x-%04x : %s\n",
+				ioportnames[i].from,
+				ioportnames[i].from+ioportnames[i].num-1,
+				ioportnames[i].name);
+		i++;
+	}
+        if(len>=4000) 
+		len+=sprintf(buf+len,"4k-Limit reached!\n");
         return len;
 }
 
@@ -174,27 +178,77 @@ asmlinkage int sys_iopl(long ebx,long ecx,long edx,
 	return 0;
 }
 
+/*
+ * This is the 'old' snarfing worker function
+ */
+void do_snarf_region(unsigned int from, unsigned int num)
+{
+        if (from > IO_BITMAP_SIZE*32)
+                return;
+        if (from + num > IO_BITMAP_SIZE*32)
+                num = IO_BITMAP_SIZE*32 - from;
+        set_bitmap(ioport_registrar, from, num, 1);
+        return;
+}
 
+/*
+ * Call this from the device driver to register the ioport region.
+ */
+void register_iomem(unsigned int from, unsigned int num, char *name)
+{	
+	int i=0;
+	while(ioportnames[i].flags && i<IOPORTNAMES_NUM)
+	 i++;
+	if(i==IOPORTNAMES_NUM)
+		printk("warning:ioportname-table is full");
+	else
+	{	
+	 	strncpy(ioportnames[i].name,name,IOPORTNAMES_LEN);
+		ioportnames[i].name[IOPORTNAMES_LEN-1]=(char)0;
+		ioportnames[i].from=from;
+		ioportnames[i].num=num;
+		ioportnames[i].flags=1;
+	}
+	do_snarf_region(from,num);
+}
+
+/*
+ * This is for compatibilty with older drivers.
+ * It can be removed when all driver call the new function.
+ */
 void snarf_region(unsigned int from, unsigned int num)
-{
-	if (from > IO_BITMAP_SIZE*32)
-		return;
-	if (from + num > IO_BITMAP_SIZE*32)
-		num = IO_BITMAP_SIZE*32 - from;
-	set_bitmap(ioport_registrar, from, num, 1);
-	return;
+{	register_iomem(from,num,"No name given.");
 }
 
+/*
+ * The worker for releasing
+ */
+void do_release_region(unsigned int from, unsigned int num)
+{
+        if (from > IO_BITMAP_SIZE*32)
+                return;
+        if (from + num > IO_BITMAP_SIZE*32)
+                num = IO_BITMAP_SIZE*32 - from;
+        set_bitmap(ioport_registrar, from, num, 0);
+        return;
+}
+
+/* 
+ * Call this when the device driver is unloaded
+ */
 void release_region(unsigned int from, unsigned int num)
-{
-	if (from > IO_BITMAP_SIZE*32)
-		return;
-	if (from + num > IO_BITMAP_SIZE*32)
-		num = IO_BITMAP_SIZE*32 - from;
-	set_bitmap(ioport_registrar, from, num, 0);
-	return;
+{	int i=0;
+	while(i<IOPORTNAMES_NUM)
+	{	if(ioportnames[i].from==from && ioportnames[i].num==num)
+			ioportnames[i].flags=0;	
+		i++;
+	}
+	do_release_region(from,num);
 }
 
+/*
+ * Call this to check the ioport region before probing
+ */
 int check_region(unsigned int from, unsigned int num)
 {
 	if (from > IO_BITMAP_SIZE*32)
@@ -210,5 +264,5 @@ void reserve_setup(char *str, int *ints)
 	int i;
 
 	for (i = 1; i < ints[0]; i += 2)
-		snarf_region(ints[i], ints[i+1]);
+		register_iomem(ints[i], ints[i+1],"reserved");
 }

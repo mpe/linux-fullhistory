@@ -261,7 +261,7 @@ struct ext2_inode {
 	} osd2;				/* OS dependent 2 */
 };
 
-#ifdef	__linux__
+#if defined(__KERNEL__) || defined(__linux__)
 #define i_reserved1	osd1.linux1.l_i_reserved1
 #define i_frag		osd2.linux2.l_i_frag
 #define i_fsize		osd2.linux2.l_i_fsize

@@ -45,9 +45,12 @@ extern int read_exec(struct inode *inode, unsigned long offset,
 extern int open_inode(struct inode * inode, int mode);
 
 extern void flush_old_exec(struct linux_binprm * bprm);
-extern unsigned long change_ldt(unsigned long text_size,unsigned long * page);
+extern unsigned long setup_arg_pages(unsigned long text_size,unsigned long * page);
 extern unsigned long * create_tables(char * p,int argc,int envc,int ibcs);
 extern unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 		unsigned long p, int from_kmem);
+
+/* this eventually goes away */
+#define change_ldt(a,b) setup_arg_pages(a,b)
 
 #endif

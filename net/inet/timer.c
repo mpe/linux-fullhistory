@@ -154,6 +154,7 @@ void net_timer (unsigned long data)
 			reset_timer (sk, TIME_DESTROY, TCP_DONE_TIME);
 			release_sock (sk);
 			break;
+#if 0
 		case TIME_PROBE0:
 			tcp_send_probe0(sk);
 			release_sock (sk);
@@ -253,8 +254,9 @@ void net_timer (unsigned long data)
 			}
 			release_sock (sk);
 			break;
+#endif
 		default:
-			printk ("net_timer: timer expired - reason unknown\n");
+			printk ("net_timer: timer expired - reason %d is unknown\n", why);
 			release_sock (sk);
 			break;
 	}

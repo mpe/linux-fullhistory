@@ -73,15 +73,30 @@ OBJS := $(OBJS) mouse.o
 SRCS := $(SRCS) mouse.c
 endif
 
-all: char.a
+MODULES := lp.o
+
+all: char.a modules
 
 char.a: $(OBJS)
 	$(AR) rcs char.a $(OBJS)
 	sync	
 
+ifdef MODULES
+
+modules:
+	$(MAKE) CFLAGS="$(CFLAGS) -DMODULE" $(MODULES)
+	(cd ../../modules;for i in $(MODULES); do ln -sf ../drivers/char/$$i .; done)
+
+else
+
+modules:
+
+endif
+
 dep:
 	$(CPP) -M $(SRCS) > .depend
 
+modules:
 dummy:
 
 #

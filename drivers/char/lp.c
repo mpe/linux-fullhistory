@@ -5,6 +5,7 @@
  *   checking ought to be.
  * Copyright (C) 1993 by Nigel Gamble (added interrupt code)
  * Copyright (C) 1994 by Alan Cox (Modularised it)
+ * LPCAREFUL, LPABORT, LPGETSTATUS added by Chris Metcalf, metcalf@lcs.mit.edu
  */
 
 #include <linux/errno.h>
@@ -37,6 +38,15 @@ struct lp_struct lp_table[] = {
 #include <linux/module.h>
 #include <linux/version.h>
 #endif
+
+/* Test if printer is ready (and optionally has no error conditions) */
+#define LP_READY(minor, status) \
+  ((LP_F(minor) & LP_CAREFUL) ? _LP_CAREFUL_READY(status) : (status & LP_PBUSY))
+#define LP_CAREFUL_READY(minor, status) \
+  ((LP_F(minor) & LP_CAREFUL) ? _LP_CAREFUL_READY(status) : 1)
+#define _LP_CAREFUL_READY(status) \
+   (status & (LP_PBUSY|LP_POUTPA|LP_PSELECD|LP_PERRORP)) == \
+      (LP_PBUSY|LP_PSELECD|LP_PERRORP) 
 
 /* 
  * All my debugging code assumes that you debug with only one printer at
@@ -74,11 +84,7 @@ static int lp_char_polled(char lpchar, int minor)
 		count ++;
 		if(need_resched)
 			schedule();
-		if ((LP_F(minor) & LP_CAREFUL) &&
-		    (status & (LP_POUTPA|LP_PSELECD|LP_PERRORP)) != 
-		    (LP_PSELECD|LP_PERRORP))
-			continue;
-	} while(!(status & LP_PBUSY) && count < LP_CHAR(minor));
+	} while(!LP_READY(minor,status) && count < LP_CHAR(minor));
 
 	if (count == LP_CHAR(minor)) {
 		return 0;
@@ -113,9 +119,7 @@ static int lp_char_interrupt(char lpchar, int minor)
 	|| !((status = LP_S(minor)) & LP_PACK) || (status & LP_PBUSY)
 	|| !((status = LP_S(minor)) & LP_PACK) || (status & LP_PBUSY)) {
 
-		if ((LP_F(minor) & LP_CAREFUL) &&
-		    (status & (LP_POUTPA|LP_PSELECD|LP_PERRORP)) != 
-		    (LP_PSELECD|LP_PERRORP))
+		if (!LP_CAREFUL_READY(minor, status))
 			return 0;
 		outb_p(lpchar, LP_B(minor));
 		/* must wait before taking strobe high, and after taking strobe
@@ -172,15 +176,15 @@ static int lp_write_interrupt(struct inode * inode, struct file * file, char * b
 				int rc = total_bytes_written + bytes_written;
 				status = LP_S(minor);
 				if ((status & LP_POUTPA)) {
-					printk("lp%d out of paper\n", minor);
+					printk(KERN_INFO "lp%d out of paper\n", minor);
 					if (LP_F(minor) & LP_ABORT)
 						return rc?rc:-ENOSPC;
 				} else if (!(status & LP_PSELECD)) {
-					printk("lp%d off-line\n", minor);
+					printk(KERN_INFO "lp%d off-line\n", minor);
 					if (LP_F(minor) & LP_ABORT)
 						return rc?rc:-EIO;
 				} else if (!(status & LP_PERRORP)) {
-					printk("lp%d printer error\n", minor);
+					printk(KERN_ERR "lp%d printer error\n", minor);
 					if (LP_F(minor) & LP_ABORT)
 						return rc?rc:-EIO;
 				}
@@ -188,9 +192,7 @@ static int lp_write_interrupt(struct inode * inode, struct file * file, char * b
 				outb_p((LP_PSELECP|LP_PINITP|LP_PINTEN), (LP_C(minor)));
 				status = LP_S(minor);
 				if ((!(status & LP_PACK) || (status & LP_PBUSY))
-				  && (!(LP_F(minor) & LP_CAREFUL) ||
-				  (status & (LP_POUTPA|LP_PSELECD|LP_PERRORP))
-				  == (LP_PSELECD|LP_PERRORP))) {
+				  && LP_CAREFUL_READY(minor, status)) {
 					outb_p((LP_PSELECP|LP_PINITP), (LP_C(minor)));
 					sti();
 					continue;
@@ -246,7 +248,7 @@ static int lp_write_polled(struct inode * inode, struct file * file,
 			int status = LP_S(minor);
 
 			if (status & LP_POUTPA) {
-				printk("lp%d out of paper\n", minor);
+				printk(KERN_INFO "lp%d out of paper\n", minor);
 				if(LP_F(minor) & LP_ABORT)
 					return temp-buf?temp-buf:-ENOSPC;
 				current->state = TASK_INTERRUPTIBLE;
@@ -254,7 +256,7 @@ static int lp_write_polled(struct inode * inode, struct file * file,
 				schedule();
 			} else
 			if (!(status & LP_PSELECD)) {
-				printk("lp%d off-line\n", minor);
+				printk(KERN_INFO "lp%d off-line\n", minor);
 				if(LP_F(minor) & LP_ABORT)
 					return temp-buf?temp-buf:-EIO;
 				current->state = TASK_INTERRUPTIBLE;
@@ -263,7 +265,7 @@ static int lp_write_polled(struct inode * inode, struct file * file,
 			} else
 	                /* not offline or out of paper. on fire? */
 			if (!(status & LP_PERRORP)) {
-				printk("lp%d reported invalid error status (on fire, eh?)\n", minor);
+				printk(KERN_ERR "lp%d reported invalid error status (on fire, eh?)\n", minor);
 				if(LP_F(minor) & LP_ABORT)
 					return temp-buf?temp-buf:-EIO;
 				current->state = TASK_INTERRUPTIBLE;
@@ -326,13 +328,13 @@ static int lp_open(struct inode * inode, struct file * file)
         if ((LP_F(minor) & LP_ABORTOPEN) && !(file->f_flags & O_NONBLOCK)) {
 		int status = LP_S(minor);
 		if (status & LP_POUTPA) {
-			printk("lp%d out of paper\n", minor);
+			printk(KERN_INFO "lp%d out of paper\n", minor);
 			return -ENOSPC;
 		} else if (!(status & LP_PSELECD)) {
-			printk("lp%d off-line\n", minor);
+			printk(KERN_INFO "lp%d off-line\n", minor);
 			return -EIO;
 		} else if (!(status & LP_PERRORP)) {
-			printk("lp%d printer error\n", minor);
+			printk(KERN_ERR "lp%d printer error\n", minor);
 			return -EIO;
 		}
 	}
@@ -492,6 +494,7 @@ long lp_init(long kmem_start)
 	int offset = 0;
 	unsigned int testvalue = 0;
 	int count = 0;
+	char buf[5];
 
 	if (register_chrdev(LP_MAJOR,"lp",&lp_fops)) {
 		printk("unable to get major %d for line printer\n", LP_MAJOR);
@@ -510,7 +513,8 @@ long lp_init(long kmem_start)
 			LP_F(offset) |= LP_EXIST;
 			lp_reset(offset);
 			printk("lp%d at 0x%04x, ", offset,LP_B(offset));
-			snarf_region(LP_B(offset), 3);
+			sprintf(buf,"lp%d",offset);
+			register_iomem(LP_B(offset), 3,buf);
 			if (LP_IRQ(offset))
 				printk("using IRQ%d\n", LP_IRQ(offset));
 			else
@@ -532,6 +536,7 @@ int init_module(void)
 	int offset = 0;
 	unsigned int testvalue = 0;
 	int count = 0;
+	char buf[5];
 
 	if (register_chrdev(LP_MAJOR,"lp",&lp_fops)) {
 		printk("unable to get major %d for line printer\n", LP_MAJOR);
@@ -548,7 +553,8 @@ int init_module(void)
 			LP_F(offset) |= LP_EXIST;
 			lp_reset(offset);
 			printk("lp%d at 0x%04x, ", offset,LP_B(offset));
-			snarf_region(LP_B(offset),3);
+			sprintf(buf,"lp%d",offset);
+			register_iomem(LP_B(offset),3,buf);
 			if (LP_IRQ(offset))
 				printk("using IRQ%d\n", LP_IRQ(offset));
 			else

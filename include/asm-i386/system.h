@@ -165,7 +165,7 @@ extern inline unsigned long xchg_u16(short * m, unsigned long val)
 	return val;
 }
 
-extern inline unsigned long xchg_u32(long * m, unsigned long val)
+extern inline unsigned long xchg_u32(int * m, unsigned long val)
 {
 	__asm__("xchgl %0,%1":"=r" (val),"=m" (*m):"0" (val):"memory");
 	return val;

@@ -82,6 +82,7 @@
 #include <linux/types.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
+#include <linux/config.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
@@ -1335,8 +1336,8 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
 	    }
 #endif
 
-	    snarf_region(bases[indx], 4);	/* Register the IO ports that
-						   we use */
+	    register_iomem(bases[indx], 4,"buslogic");
+	    /* Register the IO ports that we use */
 	    count++;
 	    continue;
 	  unregister:

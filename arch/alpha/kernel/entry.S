@@ -4,7 +4,6 @@
  * kernel entry-points
  */
 
-#define __ASSEMBLY__
 #include <asm/system.h>
 
 #define halt	.long PAL_halt

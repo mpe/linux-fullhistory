@@ -20,6 +20,7 @@ lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)
 	sync
 
+modules:
 dep:
 	$(CPP) -M *.c > .depend
 

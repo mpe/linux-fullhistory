@@ -13,6 +13,8 @@ extern unsigned long bh_active;
 extern unsigned long bh_mask;
 extern struct bh_struct bh_base[32];
 
+asmlinkage void do_bottom_half(void);
+
 /* Who gets which entry in bh_base.  Things which will occur most often
    should come first - in which case NET should be up the top with SERIAL/TQUEUE! */
    
@@ -65,9 +67,9 @@ extern inline void enable_bh(int nr)
  * probe_irq_on() returns a mask of snarfed irq's.
  *
  * probe_irq_off() takes the mask as a parameter,
- * and returns the irq number which occured,
- * or zero if none occured, or a negative irq number
- * if more than one irq occured.
+ * and returns the irq number which occurred,
+ * or zero if none occurred, or a negative irq number
+ * if more than one irq occurred.
  */
 extern unsigned int probe_irq_on(void);	/* returns 0 on failure */
 extern int probe_irq_off(unsigned int); /* returns 0 or negative on failure */

@@ -371,17 +371,6 @@ static void exit_mm(void)
 		mpnt = next;
 	}
 
-	/* forget local segments */
-	__asm__ __volatile__("mov %w0,%%fs ; mov %w0,%%gs ; lldt %w0"
-		: /* no outputs */
-		: "r" (0));
-	current->tss.ldt = 0;
-	if (current->ldt) {
-		void * ldt = current->ldt;
-		current->ldt = NULL;
-		vfree(ldt);
-	}
-
 	free_page_tables(current);
 }
 
@@ -416,6 +405,7 @@ fake_volatile:
 	exit_mm();
 	exit_files();
 	exit_fs();
+	exit_thread();
 	forget_original_parent(current);
 	/* 
 	 * Check to see if any process groups have become orphaned

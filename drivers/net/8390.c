@@ -19,7 +19,6 @@
 
 static char *version =
     "8390.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
-#include <linux/config.h>
 
 /*
   Braindamage remaining:
@@ -30,7 +29,6 @@ static char *version =
   The National Semiconductor LAN Databook, and the 3Com 3c503 databook.
   */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
@@ -139,6 +137,10 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 			return 1;
 		}
 		isr = inb(e8390_base+EN0_ISR);
+		if (dev->start == 0) {
+			printk("%s: xmit on stopped card\n", dev->name);
+			return 1;
+		}
 		printk(KERN_DEBUG "%s: transmit timed out, TX status %#2x, ISR %#2x.\n",
 			   dev->name, txsr, isr);
 		/* Does the 8390 thinks it has posted an interrupt? */
@@ -273,6 +275,11 @@ void ei_interrupt(int reg_ptr)
     /* !!Assumption!! -- we stay in page 0.	 Don't break this. */
     while ((interrupts = inb_p(e8390_base + EN0_ISR)) != 0
 		   && ++boguscount < 9) {
+		if (dev->start == 0) {
+			printk("%s: interrupt from stopped card\n", dev->name);
+			interrupts = 0;
+			break;
+		}
 		if (interrupts & ENISR_RDC) {
 			/* Ack meaningless DMA complete. */
 			outb_p(ENISR_RDC, e8390_base + EN0_ISR);

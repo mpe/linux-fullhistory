@@ -90,7 +90,6 @@ static char *version =
 #endif
 unsigned int de600_debug = DE600_DEBUG;
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>

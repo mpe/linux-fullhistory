@@ -5,7 +5,6 @@
  *
  *  Rock Ridge Extensions to iso9660
  */
-#include <linux/config.h>
 #include <linux/stat.h>
 #include <linux/sched.h>
 #include <linux/iso_fs.h>

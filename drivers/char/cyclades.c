@@ -176,7 +176,6 @@ static char rcsid[] =
 #include <linux/tty.h>
 #include <linux/serial.h>
 #include <linux/interrupt.h>
-#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/fcntl.h>
 #include <linux/ptrace.h>

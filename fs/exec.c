@@ -43,12 +43,16 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 
+#include <linux/config.h>
+
 asmlinkage int sys_exit(int exit_code);
 asmlinkage int sys_brk(unsigned long);
 
 static int load_aout_binary(struct linux_binprm *, struct pt_regs * regs);
 static int load_aout_library(int fd);
 static int aout_core_dump(long signr, struct pt_regs * regs);
+
+extern void dump_thread(struct pt_regs *, struct user *);
 
 /*
  * Here are the actual binaries that will be accepted:
@@ -164,8 +168,7 @@ static int aout_core_dump(long signr, struct pt_regs * regs)
 	unsigned short fs;
 	int has_dumped = 0;
 	char corefile[6+sizeof(current->comm)];
-	int i;
-	register int dump_start, dump_size;
+	unsigned long dump_start, dump_size;
 	struct user dump;
 
 	if (!current->dumpable)
@@ -206,44 +209,22 @@ static int aout_core_dump(long signr, struct pt_regs * regs)
 	if (!file.f_op->write)
 		goto close_coredump;
 	has_dumped = 1;
-/* changed the size calculations - should hopefully work better. lbt */
-	dump.magic = CMAGIC;
-	dump.start_code = 0;
-	dump.start_stack = regs->esp & ~(PAGE_SIZE - 1);
-	dump.u_tsize = ((unsigned long) current->mm->end_code) >> 12;
-	dump.u_dsize = ((unsigned long) (current->mm->brk + (PAGE_SIZE-1))) >> 12;
-	dump.u_dsize -= dump.u_tsize;
-	dump.u_ssize = 0;
-	for(i=0; i<8; i++) dump.u_debugreg[i] = current->debugreg[i];  
-	if (dump.start_stack < TASK_SIZE)
-		dump.u_ssize = ((unsigned long) (TASK_SIZE - dump.start_stack)) >> 12;
+       	strncpy(dump.u_comm, current->comm, sizeof(current->comm));
+	dump.u_ar0 = (struct pt_regs *)(((unsigned long)(&dump.regs)) - ((unsigned long)(&dump)));
+	dump.signal = signr;
+	dump_thread(regs, &dump);
+
 /* If the size of the dump file exceeds the rlimit, then see what would happen
    if we wrote the stack, but not the data area.  */
 	if ((dump.u_dsize+dump.u_ssize+1) * PAGE_SIZE >
 	    current->rlim[RLIMIT_CORE].rlim_cur)
 		dump.u_dsize = 0;
+
 /* Make sure we have enough room to write the stack and data areas. */
 	if ((dump.u_ssize+1) * PAGE_SIZE >
 	    current->rlim[RLIMIT_CORE].rlim_cur)
 		dump.u_ssize = 0;
-       	strncpy(dump.u_comm, current->comm, sizeof(current->comm));
-	dump.u_ar0 = (struct pt_regs *)(((int)(&dump.regs)) -((int)(&dump)));
-	dump.signal = signr;
-	dump.regs = *regs;
-/* Flag indicating the math stuff is valid. We don't support this for the
-   soft-float routines yet */
-	if (hard_math) {
-		if ((dump.u_fpvalid = current->used_math) != 0) {
-			if (last_task_used_math == current)
-				__asm__("clts ; fnsave %0": :"m" (dump.i387));
-			else
-				memcpy(&dump.i387,&current->tss.i387.hard,sizeof(dump.i387));
-		}
-	} else {
-		/* we should dump the emulator state here, but we need to
-		   convert it into standard 387 format first.. */
-		dump.u_fpvalid = 0;
-	}
+
 	set_fs(KERNEL_DS);
 /* struct user */
 	DUMP_WRITE(&dump,sizeof(dump));
@@ -450,7 +431,7 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 	return p;
 }
 
-unsigned long change_ldt(unsigned long text_size,unsigned long * page)
+unsigned long setup_arg_pages(unsigned long text_size,unsigned long * page)
 {
 	unsigned long code_limit,data_limit,code_base,data_base;
 	int i;
@@ -551,20 +532,7 @@ void flush_old_exec(struct linux_binprm * bprm)
 		mpnt = mpnt1;
 	}
 
-	/* Flush the old ldt stuff... */
-	if (current->ldt) {
-		free_page((unsigned long) current->ldt);
-		current->ldt = NULL;
-		for (i=1 ; i<NR_TASKS ; i++) {
-			if (task[i] == current)  {
-				set_ldt_desc(gdt+(i<<1)+
-					     FIRST_LDT_ENTRY,&default_ldt, 1);
-				load_ldt(i);
-			}
-		}	
-	}
-
-	for (i=0 ; i<8 ; i++) current->debugreg[i] = 0;
+	flush_thread();
 
 	if (bprm->e_uid != current->euid || bprm->e_gid != current->egid || 
 	    !permission(bprm->inode,MAY_READ))
@@ -598,8 +566,6 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	int retval;
 	int sh_bang = 0;
 
-	if (regs->cs != USER_CS)
-		return -EINVAL;
 	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-4;
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)	/* clear page-table */
 		bprm.page[i] = 0;
@@ -760,22 +726,6 @@ exec_error1:
 	return(retval);
 }
 
-/*
- * sys_execve() executes a new program.
- */
-asmlinkage int sys_execve(struct pt_regs regs)
-{
-	int error;
-	char * filename;
-
-	error = getname((char *) regs.ebx, &filename);
-	if (error)
-		return error;
-	error = do_execve(filename, (char **) regs.ecx, (char **) regs.edx, &regs);
-	putname(filename);
-	return error;
-}
-
 static void set_brk(unsigned long start, unsigned long end)
 {
 	start = PAGE_ALIGN(start);
@@ -892,14 +842,13 @@ beyond_if:
 
 	set_brk(current->mm->start_brk, current->mm->brk);
 	
-	p += change_ldt(ex.a_text,bprm->page);
+	p += setup_arg_pages(ex.a_text,bprm->page);
 	p -= MAX_ARG_PAGES*PAGE_SIZE;
 	p = (unsigned long)create_tables((char *)p,
 					bprm->argc, bprm->envc,
 					current->personality != PER_LINUX);
 	current->mm->start_stack = p;
-	regs->eip = ex.a_entry;		/* eip, magic happens :-) */
-	regs->esp = p;			/* stack pointer */
+	start_thread(regs, ex.a_entry, p);
 	if (current->flags & PF_PTRACED)
 		send_sig(SIGTRAP, current, 0);
 	return 0;

@@ -17,7 +17,7 @@ CPP := $(CPP) -I../../net/inet
 
 
 # The point of the makefile...
-all: net.a modules
+all: net.a
 
 Space.o: Space.c ../../include/linux/autoconf.h
 	$(CC) $(CFLAGS) $(OPTS) -c $<

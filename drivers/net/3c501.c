@@ -14,6 +14,53 @@
     The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
     Center of Excellence in Space Data and Information Sciences
        Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
+       
+    Fixed (again!) the missing interrupt locking on TX/RX shifting.
+    		Alan Cox <Alan.Cox@linux.org>
+    		
+    Some notes on this thing if you have to hack it.  [Alan]
+    
+    1]	Some documentation is available from 3Com. Due to the boards age
+    	standard responses when you ask for this will range from 'be serious'
+    	to 'give it to a museum'. The documentation is incomplete and mostly
+    	of historical interest anyway.
+    	
+    2]  The basic system is a single buffer which can be used to receive or
+    	transmit a packet. A third command mode exists when you are setting
+    	things up.
+    	
+    3]	If its transmitting its not receiving and vice versa. In fact the 
+    	time to get the board back into useful state after an operation is
+    	quite large.
+    	
+    4]	The driver works by keeping the board in receive mode waiting for a
+    	packet to arrive. When one arrives it is copied out of the buffer
+    	and delivered to the kernel. The card is reloaded and off we go.
+    	
+    5]	When transmitting dev->tbusy is set and the card is reset (from
+    	receive mode) [possibly losing a packet just received] to command
+    	mode. A packet is loaded and transmit mode triggered. The interrupt
+    	handler runs different code for transmit interrupts and can handle
+    	returning to receive mode or retransmissions (yes you have to help
+    	out with those too).
+    	
+    Problems:
+    	There are a wide variety of undocumented error returns from the card
+    and you basically have to kick the board and pray if they turn up. Most 
+    only occur under extreme load or if you do something the board doesn't
+    like (eg touching a register at the wrong time).
+    
+    	The driver is less efficient than it could be. It switches through
+    recieve mode even if more transmits are queued. If this worries you buy
+    a real ethernet card.
+    
+    	The combination of slow receive restart and no real multicast
+    filter makes the board unusable with a kernel compiled for IP
+    multicasting in a real multicast environment. Thats down to the board, 
+    but even with no multicast programs running a multicast IP kernel is
+    in group 224.0.0.1 and you will therefore be listening to all multicasts.
+    One nv conference running over that ethernet and you can give up.
+    
 */
 
 static char *version =
@@ -24,7 +71,6 @@ static char *version =
   The 3c501 board.
   */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/ptrace.h>
@@ -183,7 +229,7 @@ el1_probe1(struct device *dev, int ioaddr)
 	return ENODEV;
 
     /* Grab the region so we can find the another board if autoIRQ fails. */
-    snarf_region(ioaddr, EL1_IO_EXTENT);
+    register_iomem(ioaddr, EL1_IO_EXTENT,"3c501");
 
     if (dev == NULL)
 	dev = init_etherdev(0, sizeof(struct net_local), 0);
@@ -218,9 +264,13 @@ el1_probe1(struct device *dev, int ioaddr)
     if (autoirq)
 	dev->irq = autoirq;
 
-    printk("%s: %s EtherLink at %#x, using %sIRQ %d, melting ethernet.\n",
+    printk("%s: %s EtherLink at %#x, using %sIRQ %d.\n",
 	   dev->name, mname, dev->base_addr,
 	   autoirq ? "auto":"assigned ", dev->irq);
+	   
+#ifdef CONFIG_IP_MULTICAST
+    printk("WARNING: Use of the 3c501 in a multicast kernel is NOT recommended.\n");
+#endif    
 
     if (el_debug)
 	printk("%s", version);
@@ -272,6 +322,7 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 {
     struct net_local *lp = (struct net_local *)dev->priv;
     int ioaddr = dev->base_addr;
+    unsigned long flags;
 
     if (dev->tbusy) {
 	if (jiffies - dev->trans_start < 20) {
@@ -296,9 +347,17 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 	return 0;
     }
 
+    save_flags(flags);
+    /* Avoid incoming interrupts between us flipping tbusy and flipping
+       mode as the driver assumes tbusy is a faithful indicator of card
+       state */
+    cli();
     /* Avoid timer-based retransmission conflicts. */
     if (set_bit(0, (void*)&dev->tbusy) != 0)
+    {
+    	restore_flags(flags);
 	printk("%s: Transmitter access conflict.\n", dev->name);
+    }
     else {
 	int gp_start = 0x800 - (ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN);
 	unsigned char *buf = skb->data;
@@ -306,14 +365,23 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 	lp->tx_pkt_start = gp_start;
     	lp->collisions = 0;
 
+	/*
+	 *	Command mode with status cleared should [in theory]
+	 *	mean no more interrupts can be pending on the card.
+	 */
 	outb(AX_SYS, AX_CMD);
 	inb(RX_STATUS);
 	inb(TX_STATUS);
-	outw(0x00, RX_BUF_CLR);	/* Set rx packet area to 0. */
-	outw(gp_start, GP_LOW);
-	outsb(DATAPORT,buf,skb->len);
-	outw(gp_start, GP_LOW);
-	outb(AX_XMIT, AX_CMD);		/* Trigger xmit.  */
+	/* 
+	 *	Turn interrupts back on while we spend a pleasant afternoon
+	 *	loading bytes into the board 
+	 */
+	restore_flags(flags);
+	outw(0x00, RX_BUF_CLR);		/* Set rx packet area to 0. */
+	outw(gp_start, GP_LOW);		/* aim - packet will be loaded into buffer start */
+	outsb(DATAPORT,buf,skb->len);	/* load buffer (usual thing each byte increments the pointer) */
+	outw(gp_start, GP_LOW);		/* the board reuses the same register */
+	outb(AX_XMIT, AX_CMD);		/* fire ... Trigger xmit.  */
 	dev->trans_start = jiffies;
     }
 
@@ -351,6 +419,11 @@ el_interrupt(int reg_ptr)
     dev->interrupt = 1;
 
     if (dev->tbusy) {
+    
+    	/*
+    	 *	Board in transmit mode.
+    	 */
+    	 
 	int txsr = inb(TX_STATUS);
 
 	if (el_debug > 6)
@@ -358,12 +431,19 @@ el_interrupt(int reg_ptr)
 		   inw(RX_LOW));
 
 	if ((axsr & 0x80) && (txsr & TX_READY) == 0) {
+	/*
+	 *	FIXME: is there a logic to whether to keep on trying or
+	 *	reset immediately ?
+	 */
 	    printk("%s: Unusual interrupt during Tx, txsr=%02x axsr=%02x"
 		   " gp=%03x rp=%03x.\n", dev->name, txsr, axsr,
 		   inw(ioaddr + EL1_DATAPTR), inw(ioaddr + EL1_RXPTR));
 	    dev->tbusy = 0;
 	    mark_bh(NET_BH);
 	} else if (txsr & TX_16COLLISIONS) {
+	/*
+	 *	Timed out
+	 */
 	    if (el_debug)
 		printk("%s: Transmit failed 16 times, ethernet jammed?\n",
 		       dev->name);
@@ -372,6 +452,9 @@ el_interrupt(int reg_ptr)
 	} else if (txsr & TX_COLLISION) {	/* Retrigger xmit. */
 	    if (el_debug > 6)
 		printk(" retransmitting after a collision.\n");
+	/*
+	 *	Poor little chip can't reset its own start pointer
+	 */
 	    outb(AX_SYS, AX_CMD);
 	    outw(lp->tx_pkt_start, GP_LOW);
 	    outb(AX_XMIT, AX_CMD);
@@ -379,26 +462,42 @@ el_interrupt(int reg_ptr)
 	    dev->interrupt = 0;
 	    return;
 	} else {
+	/*
+	 *	It worked.. we will now fall through and receive
+	 */
 	    lp->stats.tx_packets++;
 	    if (el_debug > 6)
 		printk(" Tx succeeded %s\n",
 		       (txsr & TX_RDY) ? "." : "but tx is busy!");
+	/*
+	 *	This is safe the interrupt is atomic WRT itself.
+	 */
 	    dev->tbusy = 0;
-	    mark_bh(NET_BH);
+	    mark_bh(NET_BH);	/* In case more to transmit */
 	}
     } else {
+    
+    	/*
+    	 *	In receive mode.
+    	 */
+    	 
 	int rxsr = inb(RX_STATUS);
 	if (el_debug > 5)
 	    printk(" rxsr=%02x txsr=%02x rp=%04x", rxsr, inb(TX_STATUS),
 		   inw(RX_LOW));
 
-	/* Just reading rx_status fixes most errors. */
+	/*
+	 *	Just reading rx_status fixes most errors. 
+	 */
 	if (rxsr & RX_MISSED)
 	    lp->stats.rx_missed_errors++;
 	if (rxsr & RX_RUNT) {	/* Handled to avoid board lock-up. */
 	    lp->stats.rx_length_errors++;
 	    if (el_debug > 5) printk(" runt.\n");
 	} else if (rxsr & RX_GOOD) {
+	/*
+	 *	Receive worked.
+	 */
 	    el_receive(dev);
 	} else {			/* Nothing?  Something is broken! */
 	    if (el_debug > 2)
@@ -410,6 +509,9 @@ el_interrupt(int reg_ptr)
 	    printk(".\n");
     }
 
+    /*
+     *	Move into receive mode 
+     */
     outb(AX_RX, AX_CMD);
     outw(0x00, RX_BUF_CLR);
     inb(RX_STATUS);		/* Be certain that interrupts are cleared. */
@@ -440,9 +542,17 @@ el_receive(struct device *dev)
 	lp->stats.rx_over_errors++;
 	return;
     }
+    
+    /*
+     *	Command mode so we can empty the buffer
+     */
+     
     outb(AX_SYS, AX_CMD);
 
     skb = alloc_skb(pkt_len, GFP_ATOMIC);
+    /*
+     *	Start of frame
+     */
     outw(0x00, GP_LOW);
     if (skb == NULL) {
 	printk("%s: Memory squeeze, dropping packet.\n", dev->name);
@@ -452,6 +562,12 @@ el_receive(struct device *dev)
 	skb->len = pkt_len;
 	skb->dev = dev;
 
+	/*
+	 *	The read incrememts through the bytes. The interrupt
+	 *	handler will fix the pointer when it returns to 
+	 *	receive mode.
+	 */
+	 
 	insb(DATAPORT, skb->data, pkt_len);
 
 	netif_rx(skb);
@@ -544,10 +660,15 @@ static struct device dev_3c501 = {
 		0, 0, 0, 0,
 	 	0x280, 5,
 	 	0, 0, 0, NULL, el1_probe };
+
+int io=0x280;
+int irq=5;
 	
 int
 init_module(void)
 {
+	dev_3c501.irq=irq;
+	dev_3c501.base_addr=io;
 	if (register_netdev(&dev_3c501) != 0)
 		return -EIO;
 	return 0;

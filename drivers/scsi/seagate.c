@@ -52,6 +52,8 @@
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/string.h>
+#include <linux/config.h>
+
 #include "../block/blk.h"
 #include "scsi.h"
 #include "hosts.h"

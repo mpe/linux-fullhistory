@@ -630,7 +630,7 @@ int in2000_detect(Scsi_Host_Template * tpnt)
     shpnt->io_port = base;
     shpnt->n_io_port = 12;
     shpnt->irq = irq_level;
-    snarf_region(base, 12);  /* Prevent other drivers from using this space */
+    register_iomem(base, 12,"in2000");  /* Prevent other drivers from using this space */
     return 1;
 }
 

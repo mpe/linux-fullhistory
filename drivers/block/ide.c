@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 3.5  December 30, 1994
+ *  linux/drivers/block/ide.c	Version 3.6  January 5, 1994
  *
  *  Copyright (C) 1994  Linus Torvalds & authors (see below)
  */
@@ -28,7 +28,7 @@
  *  | IRQ-unmask, drive-id, multiple-mode, support for ">16 heads",
  *  | and general streamlining by Mark Lord (mlord@bnr.ca).
  *
- *  October, 1994 -- Complete line-by-line overhaul for linux 1.3.x, by:
+ *  October, 1994 -- Complete line-by-line overhaul for linux 1.1.x, by:
  *
  *	Mark Lord	(mlord@bnr.ca)			(IDE Perf.Pkg)
  *	Delman Lee	(delman@mipg.upenn.edu)		("Mr. atdisk2")
@@ -45,7 +45,7 @@
  *  Version 1.3 BETA	dual i/f on shared irq tested & working!
  *  Version 1.4 BETA	added auto probing for irq(s)
  *  Version 1.5 BETA	added ALPHA (untested) support for IDE cd-roms,
- *			fixed hd.c coexistance bug, other minor stuff
+ *			fixed hd.c coexistence bug, other minor stuff
  *  Version 1.6 BETA	fix link error when cd-rom not configured
  *  Version 2.0 BETA	lots of minor fixes; remove annoying messages; ...
  *  Version 2.2 BETA	fixed reset_drives; major overhaul of autoprobing
@@ -82,9 +82,17 @@
  *  Version 3.4 BETA	removed "444" debug message
  *  (sent to Linus)
  *  Version 3.5		correct the bios_cyl field if it's too small
- *			 (to help fdisk with brain-dead BIOSs)
+ *  (linux 1.1.76!)	 (to help fdisk with brain-dead BIOSs)
+ *  Version 3.6		cosmetic corrections to comments and stuff
+ *			reorganise probing code to make it understandable
+ *			added halfway retry to probing for drive identification
+ *			added "hdx=noprobe" command line option
+ *			allow setting multmode even when identification fails
  *
- *  In progress:  special 32-bit controller-type detection & support
+ *  To do:
+ *	- special 32-bit controller-type detection & support
+ *	- figure out why two WD drives on one i/f sometimes don't identify
+ *	- figure out how to support oddball "intelligent" caching cards
  */
 
 #include <linux/errno.h>
@@ -104,7 +112,6 @@
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <asm/bitops.h>
-#include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -112,8 +119,9 @@
 /*****************************************************************************
  * IDE driver configuration options (play with these as desired):
  */
+#define REALLY_SLOW_IO			/* most systems can safely undef this */
+#include <asm/io.h>
 
-#undef	REALLY_SLOW_IO			/* define if ide ports are very slow */
 #undef	REALLY_FAST_IO			/* define if ide ports are perfect */
 #undef	INITIAL_MULT_COUNT		/* define to override status quo */
 
@@ -123,7 +131,7 @@
 #ifndef DISK_RECOVERY_TIME		/* min. delay between IO for hardware */
 #define DISK_RECOVERY_TIME	0	/*  that needs it. */
 #endif
-#ifndef OK_TO_RESET_CONTROLLER		/* needed for good error recovery */
+#ifndef OK_TO_RESET_CONTROLLER		/* 1 needed for good error recovery */
 #define OK_TO_RESET_CONTROLLER	1	/* 0 for use with AH2372A/B interface */
 #endif
 #ifndef SUPPORT_TWO_INTERFACES		/* 1 to support one/two interfaces */
@@ -141,6 +149,10 @@
 #define PROBE_FOR_IRQS		1	/* 0 to force use of defaults below */
 #define DEFAULT_IDE0_IRQ	14	/* in case irq-probe fails */
 #define DEFAULT_IDE1_IRQ	15	/* in case irq-probe fails */
+
+/* IDE_DRIVE_CMD is used to implement many features of the hdparm utility */
+#define IDE_DRIVE_CMD		99	/* (magic) undef to reduce kernel size*/
+
 /*
  *  "No user-serviceable parts" beyond this point  :)
  ******************************************************************************
@@ -150,11 +162,9 @@
  * Need to change these elsewhere in the kernel (someday)
  */
 #ifndef IDE0_TIMER
-#define	IDE0_TIMER		HD_TIMER
+#define IDE0_TIMER		HD_TIMER
 #define IDE1_TIMER		HD_TIMER2
 #endif
-
-#define IDE_DRIVE_CMD		99	/* some local magic */
 
 /*
  * Ensure that various configuration flags have compatible settings
@@ -171,9 +181,9 @@
 #define DEV_HWIF		(dev->hwif)
 #else
 #undef	OPTIMIZE_IRQS
-#define	OPTIMIZE_IRQS		0
+#define OPTIMIZE_IRQS		0
 #undef	SUPPORT_SHARING_IRQ
-#define	SUPPORT_SHARING_IRQ	0
+#define SUPPORT_SHARING_IRQ	0
 #ifdef CONFIG_BLK_DEV_HD
 #define HWIF			1
 #else
@@ -224,11 +234,11 @@ typedef unsigned char		byte;	/* used everywhere */
 /*
  * Timeouts for various operations:
  */
-#define	WAIT_DRQ	3	/* 30msec - spec allows up to 20ms */
+#define WAIT_DRQ	3	/* 30msec - spec allows up to 20ms */
 #define WAIT_READY	3	/* 30msec - should be instantaneous */
-#define	WAIT_PIDENTIFY	50	/* 500msec - should be less than 3ms (?) */
-#define	WAIT_WORSTCASE	3000	/* 30sec  - worst case when spinning up */
-#define	WAIT_CMD	1000	/* 10sec  - maximum wait for an IRQ to happen */
+#define WAIT_PIDENTIFY	100	/* 1sec   - should be less than 3ms (?) */
+#define WAIT_WORSTCASE	3000	/* 30sec  - worst case when spinning up */
+#define WAIT_CMD	1000	/* 10sec  - maximum wait for an IRQ to happen */
 
 /*
  * Now for the data we need to maintain per-device:  ide_dev_t
@@ -265,9 +275,10 @@ typedef struct {
 	byte     unmask;		/* pretty quick access to this also */
 	dev_type type		: 1;	/* disk or cdrom (or tape, floppy..) */
 	unsigned present	: 1;	/* drive is physically present */
+	unsigned dont_probe 	: 1;	/* from:  hdx=noprobe */
 	unsigned keep_settings  : 1;	/* restore settings after drive reset */
 	unsigned busy		: 1;	/* mutex for ide_open, revalidate_.. */
-	unsigned reserved0	: 4;	/* unused */
+	unsigned reserved0	: 3;	/* unused */
 	special_t special;		/* special action flags */
 	select_t  select;		/* basic drive/head select reg value */
 	byte mult_count, reserved1, reserved2;
@@ -339,7 +350,7 @@ static struct gendisk	ide_gendisk  [2] =
 /*
  * One final include file, which references some of the data/defns from above
  */
-#define	IDE_DRIVER	/* "parameter" for blk.h */
+#define IDE_DRIVER	/* "parameter" for blk.h */
 #include "blk.h"
 
 /*
@@ -376,7 +387,7 @@ static void do_request (byte hwif);
  * This is a macro rather than an inline to permit better gcc code.
  * Caller MUST do sti() before invoking WAIT_STAT() (for jiffies to work).
  *
- * This route should get fixed to not hog the cpu during extra long waits..
+ * This routine should get fixed to not hog the cpu during extra long waits..
  * That could be done by busy-waiting for the first jiffy or two, and then
  * setting a timer to wake up at half second intervals thereafter,
  * until WAIT_WORSTCASE is achieved, before timing out.
@@ -580,10 +591,12 @@ static void ide_error (ide_dev_t *dev, const char *msg, byte stat)
 	err = dump_status(DEV_HWIF, msg, stat);
 	if ((rq = ide_cur_rq[DEV_HWIF]) == NULL || dev == NULL)
 		return;
+#ifdef IDE_DRIVE_CMD
 	if (rq->cmd == IDE_DRIVE_CMD) {	/* never retry an explicit DRIVE_CMD */
 		end_drive_cmd(dev, stat, err);
 		return;
 	}
+#endif	/* IDE_DRIVE_CMD */
 	if (dev->type == disk && (stat & ERR_STAT)) {
 		/* err has different meaning on cdrom */
 		if (err & BBD_ERR)		/* retries won't help this! */
@@ -874,8 +887,8 @@ static int do_special (ide_dev_t *dev)
 		if (dev->type == disk)
 			ide_cmd(dev,WIN_RESTORE,dev->sect,&recal_intr);
 	} else if (s->b.set_multmode) {
-		if (dev->id && dev->id->max_multsect && dev->type == disk) {
-			if (dev->mult_req > dev->id->max_multsect)
+		if (dev->type == disk) {
+			if (dev->id && dev->mult_req > dev->id->max_multsect)
 				dev->mult_req = dev->id->max_multsect;
 			if (dev->mult_req != dev->mult_count)
 				ide_cmd(dev,WIN_SETMULT,dev->mult_req,&set_multmode_intr);
@@ -1308,6 +1321,7 @@ static int revalidate_disk(int i_rdev)
 	return 0;
 }
 
+#ifdef IDE_DRIVE_CMD
 /*
  * This function issues a specific IDE drive command onto the
  * tail of the request queue, and waits for it to be completed.
@@ -1352,6 +1366,7 @@ static int do_drive_cmd(int dev, char *args)
 	restore_flags(flags);
 	return rq.errors ? -EIO : 0;		/* return -EIO if errors */
 }
+#endif	/* IDE_DRIVE_CMD */
 
 static int write_fs_long (unsigned long useraddr, long value)
 {
@@ -1455,7 +1470,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			if (!suser()) return -EACCES;
 			if (MINOR(inode->i_rdev) & PARTN_MASK)
 				return -EINVAL;
-			if ((dev->id == NULL) || (arg > dev->id->max_multsect))
+			if ((dev->id != NULL) && (arg > dev->id->max_multsect))
 				return -EINVAL;
 			save_flags(flags);
 			cli();
@@ -1466,8 +1481,12 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			dev->mult_req = arg;
 			dev->special.b.set_multmode = 1;
 			restore_flags(flags);
+#ifdef IDE_DRIVE_CMD
 			do_drive_cmd (inode->i_rdev, NULL);
 			return (dev->mult_count == arg) ? 0 : -EIO;
+#else
+			return 0;
+#endif	/* IDE_DRIVE_CMD */
 
 #ifdef IDE_DRIVE_CMD
 		case HDIO_DRIVE_CMD:
@@ -1545,15 +1564,15 @@ static unsigned long fix_lba_capacity (struct hd_driveid *id)
 {
 	unsigned long lba_sects   = id->lba_capacity;
 	unsigned long chs_sects   = id->cyls * id->heads * id->sectors;
-	unsigned long _15_percent = chs_sects / 10;
+	unsigned long _10_percent = chs_sects / 10;
 
-	/* perform a rough sanity check on lba_sects:  within 15% is "okay" */
-	if ((lba_sects - chs_sects) < _15_percent)
+	/* perform a rough sanity check on lba_sects:  within 10% is "okay" */
+	if ((lba_sects - chs_sects) < _10_percent)
 		return lba_sects;
 
 	/* some drives have the word order reversed */
 	lba_sects = (lba_sects << 16) | (lba_sects >> 16);
-	if ((lba_sects - chs_sects) < _15_percent)
+	if ((lba_sects - chs_sects) < _10_percent)
 		return (id->lba_capacity = lba_sects);
 
 	/* play it safe and assume lba capacity is the same as chs capacity */
@@ -1695,55 +1714,16 @@ static void delay_10ms (void)
 	while (timer > jiffies);
 }
 
-/*
- * This routine has the difficult job of finding a drive if it exists,
- * without getting hung up if it doesn't exist, and without leaving any IRQs
- * dangling to haunt us later.  The last point actually occured in v2.3, and
- * is the reason for the slightly complex exit sequence.  If a drive is "known"
- * to exist (from CMOS or kernel parameters), but does not respond right away,
- * the probe will "hang in there" for the maximum wait time (about 30 seconds).
- * Otherwise, it will exit much more quickly.
- *
- * Returns 1 if device present but not identified.  Returns 0 otherwise.
- */
-static int do_probe (ide_dev_t *dev, byte probe_cmd)
+
+static int try_to_identify (ide_dev_t *dev, byte cmd)
 {
-	unsigned int rc = 0;
+	int rc;
 	unsigned long timer, timeout;
 #if PROBE_FOR_IRQS
-	unsigned int irqs = 0;
-	static byte okstat, irq_probed[2] = {0,0};
+	int irqs = 0;
+	static byte irq_probed[2] = {0,0};
 #endif	/* PROBE_FOR_IRQS */
 
-#ifdef CONFIG_BLK_DEV_IDECD
-	if (dev->present) {
-		if ((dev->type == disk) ^ (probe_cmd == WIN_IDENTIFY))
-			return 1;		/* pointless to probe */
-	}
-#endif	/* CONFIG_BLK_DEV_IDECD */
-#if DEBUG
-	printk("probing for %s: present=%d, type=%s, probetype=%s\n",
-		dev->name, dev->present, dev->type ? "cdrom":"disk",
-		(probe_cmd == WIN_IDENTIFY) ? "ATA" : "ATAPI");
-#endif
-	OUT_BYTE(dev->select.all,HD_CURRENT);	/* select target drive */
-	delay_10ms();				/* wait for BUSY_STAT */
-	if (IN_BYTE(HD_CURRENT,DEV_HWIF) != dev->select.all && !dev->present)
-		return 0;     /* no i/f present: avoid killing ethernet cards */
-	timeout = WAIT_WORSTCASE;
-	okstat  = READY_STAT;
-#ifdef CONFIG_BLK_DEV_IDECD
-	if (probe_cmd == WIN_PIDENTIFY) {
-		timeout = WAIT_PIDENTIFY;
-		okstat  = 0;
-	}
-#endif	/* CONFIG_BLK_DEV_IDECD */
-	if (!OK_STAT(GET_STAT(DEV_HWIF),okstat,BUSY_STAT) && !dev->present) {
-#ifdef CONFIG_BLK_DEV_IDECD
-		if (probe_cmd == WIN_IDENTIFY)	/* get rid of this line? */
-#endif	/* CONFIG_BLK_DEV_IDECD */
-			goto done_probe;        /* no drive present */ 
-	}
 	OUT_BYTE(dev->ctl|2,HD_CMD);		/* disable device irq */
 #if PROBE_FOR_IRQS
 	if (!irq_probed[DEV_HWIF]) {		/* already probed for IRQ? */
@@ -1751,14 +1731,17 @@ static int do_probe (ide_dev_t *dev, byte probe_cmd)
 		OUT_BYTE(dev->ctl,HD_CMD);	/* enable device irq */
 	}
 #endif	/* PROBE_FOR_IRQS */
-	OUT_BYTE(probe_cmd,HD_COMMAND);		/* ask drive for ID */
+	delay_10ms();				/* take a deep breath */
+	OUT_BYTE(cmd,HD_COMMAND);		/* ask drive for ID */
 	delay_10ms();				/* wait for BUSY_STAT */
-	for (timer = jiffies + timeout; timer > jiffies;) {
+	timeout = (cmd == WIN_IDENTIFY) ? WAIT_WORSTCASE : WAIT_PIDENTIFY;
+	for (timer = jiffies + (timeout / 2); timer > jiffies;) {
 		if ((IN_BYTE(HD_ALTSTATUS,DEV_HWIF) & BUSY_STAT) == 0) {
 			delay_10ms();		/* wait for IRQ & DATA_READY */
 			if (OK_STAT(GET_STAT(DEV_HWIF),DATA_READY,BAD_RW_STAT)){
 				cli();			/* some sys need this */
 				do_identify(dev);	/* drive returned ID */
+				rc = 0;
 			} else
 				rc = 1;			/* drive refused ID */
 #if PROBE_FOR_IRQS
@@ -1771,18 +1754,63 @@ static int do_probe (ide_dev_t *dev, byte probe_cmd)
 					printk("%s: IRQ probe failed (%d)\n", dev->name, irqs);
 			}
 #endif	/* PROBE_FOR_IRQS */
-			goto done_probe;
+			goto done_try;
 		}
 	}
-	/* dev->present = 0; */			/* it ain't there */
+	rc = 2;					/* it ain't responding */
 #if PROBE_FOR_IRQS
 	if (!irq_probed[DEV_HWIF])
-		(void) probe_irq_off(irqs);  	/* stop probing */
+		(void) probe_irq_off(irqs);  	/* end probing */
 #endif	/* PROBE_FOR_IRQS */
-done_probe:
+done_try:
 	OUT_BYTE(dev->ctl|2,HD_CMD);		/* disable device irq */
-	delay_10ms();
-	(void) GET_STAT(DEV_HWIF);		/* ensure drive irq is clear */
+	return rc;
+}
+
+/*
+ * This routine has the difficult job of finding a drive if it exists,
+ * without getting hung up if it doesn't exist, and without leaving any IRQs
+ * dangling to haunt us later.  The last point actually occured in v2.3, and
+ * is the reason for the slightly complex exit sequence.  If a drive is "known"
+ * to exist (from CMOS or kernel parameters), but does not respond right away,
+ * the probe will "hang in there" for the maximum wait time (about 30 seconds).
+ * Otherwise, it will exit much more quickly.
+ *
+ * Returns 1 if device present but not identified.  Returns 0 otherwise.
+ */
+static int do_probe (ide_dev_t *dev, byte cmd)
+{
+	int rc;
+
+#ifdef CONFIG_BLK_DEV_IDECD
+	if (dev->present) {	/* avoid waiting for inappropriate probes */
+		if ((dev->type == disk) ^ (cmd == WIN_IDENTIFY))
+			return 1;
+	}
+#endif	/* CONFIG_BLK_DEV_IDECD */
+#if DEBUG
+	printk("probing for %s: present=%d, type=%s, probetype=%s\n",
+		dev->name, dev->present, dev->type ? "cdrom":"disk",
+		(cmd == WIN_IDENTIFY) ? "ATA" : "ATAPI");
+#endif
+	OUT_BYTE(dev->select.all,HD_CURRENT);	/* select target drive */
+	delay_10ms();				/* wait for BUSY_STAT */
+	if (IN_BYTE(HD_CURRENT,DEV_HWIF) != dev->select.all && !dev->present)
+		return 0;     /* no i/f present: avoid killing ethernet cards */
+
+	if (OK_STAT(GET_STAT(DEV_HWIF),READY_STAT,BUSY_STAT)
+	 || dev->present || cmd == WIN_PIDENTIFY)
+	{
+		if ((rc = try_to_identify(dev, cmd)))	/* send cmd and wait */
+			rc = try_to_identify(dev, cmd);		/* try again */
+		if (rc)
+			printk("%s: identification %s\n", dev->name,
+				(rc == 1) ? "refused" : "timed-out");
+		delay_10ms();
+		(void) GET_STAT(DEV_HWIF);	/* ensure drive irq is clear */
+	} else {
+		rc = 2;				/* drive not present */
+	}
 	if (dev->select.b.drive == 1) {
 		OUT_BYTE(0xa0,HD_CURRENT);	/* exit with drive0 selected */
 		delay_10ms();
@@ -1793,29 +1821,32 @@ done_probe:
 	return rc;
 }
 
-static byte probe_drive (ide_dev_t *dev)
+static byte probe_for_drive (ide_dev_t *dev)
 {
-	if (do_probe(dev, WIN_IDENTIFY)) {
+	if (dev->dont_probe)			/* skip probing? */
+		return dev->present;
+	if (do_probe(dev, WIN_IDENTIFY) == 1) {	/* 1 = drive aborted the cmd */
 #ifdef CONFIG_BLK_DEV_IDECD
-		if (do_probe(dev, WIN_PIDENTIFY))
+		(void) do_probe(dev, WIN_PIDENTIFY);
 #endif	/* CONFIG_BLK_DEV_IDECD */
-		if (dev->present) {
-			if (dev->type == disk) {
-				printk ("%s: non-IDE device, CHS=%d/%d/%d\n",
-				 dev->name, dev->cyl, dev->head, dev->sect);
-			}
-#ifdef CONFIG_BLK_DEV_IDECD
-			else if (dev->type == cdrom) {
-				printk("%s: ATAPI cdrom (?)\n", dev->name);
-			}
-#endif	/* CONFIG_BLK_DEV_IDECD */
-			else {
-				dev->present = 0;	/* nuke it */
-			}
-		}
 	}
 	if (!dev->present)
-		return 0;	/* drive not found */
+		return 0;			/* drive not present */
+	if (dev->id == NULL) {			/* identification failed? */
+		if (dev->type == disk) {
+			printk ("%s: non-IDE device, CHS=%d/%d/%d\n",
+			 dev->name, dev->cyl, dev->head, dev->sect);
+		}
+#ifdef CONFIG_BLK_DEV_IDECD
+		else if (dev->type == cdrom) {
+			printk("%s: ATAPI cdrom (?)\n", dev->name);
+		}
+#endif	/* CONFIG_BLK_DEV_IDECD */
+		else {
+			dev->present = 0;	/* nuke it */
+			return 0;		/* drive not present */
+		}
+	}
 #ifdef CONFIG_BLK_DEV_IDECD
 	if (dev->type == cdrom)
 		cdrom_setup(dev);
@@ -1827,10 +1858,10 @@ static byte probe_drive (ide_dev_t *dev)
 			dev->present = 0;
 		}
 	}
-	return 1;	/* drive found */
+	return 1;	/* drive present */
 }
 
-static void probe_hw_for_drives (byte hwif)
+static void probe_for_drives (byte hwif)
 {
 	ide_dev_t *devs = &ide_dev[HWIF][0];	/* for convenience */
 
@@ -1848,14 +1879,14 @@ static void probe_hw_for_drives (byte hwif)
 		sti();	/* needed for jiffies and irq probing */
 
 		/* second drive can only exist if first drive was present */
-		if (probe_drive(&devs[0]) || devs[1].present)
-			(void) probe_drive(&devs[1]);
+		if (probe_for_drive(&devs[0]) || devs[1].present)
+			(void) probe_for_drive(&devs[1]);
 #if PROBE_FOR_IRQS
 		(void) probe_irq_off(probe_irq_on()); /* clear dangling irqs */
 #endif	/* PROBE_FOR_IRQS */
 		if (devs[0].present || devs[1].present) {
-			snarf_region(IDE_PORT(HD_DATA,HWIF),8);
-			snarf_region(IDE_PORT(HD_CMD,HWIF),1);
+			register_iomem(IDE_PORT(HD_DATA,HWIF),8,"ide");
+			register_iomem(IDE_PORT(HD_CMD,HWIF),1,"ide");
 		}
 		restore_flags(flags);
 	}
@@ -1891,16 +1922,21 @@ void ide_setup(char *str, int *ints)
 	dev = &ide_dev[hwif][drive];
 	if (dev->present)
 		printk("(redefined) ");
-#ifdef CONFIG_BLK_DEV_IDECD
 	if (ints[0] == 0) {
+		if (!strcmp(str,"noprobe")) {
+			printk("noprobe\n");
+			dev->dont_probe = 1;	/* don't probe for this drive */
+			return;
+		}
+#ifdef CONFIG_BLK_DEV_IDECD
 		if (!strcmp(str,"cdrom")) {
 			printk("cdrom\n");
 			dev->present = 1;	/* force autoprobe to find it */
 			dev->type = cdrom;
 			return;
 		}
-	}
 #endif	/* CONFIG_BLK_DEV_IDECD */
+	}
 	if (ints[0] < 3 || ints[0] > 5) {
 		printk("bad parms, expected: cyls,heads,sects[,wpcom[,irq]]\n");
 	} else {
@@ -2106,7 +2142,7 @@ unsigned long ide_init (unsigned long mem_start, unsigned long mem_end)
 				probe_cmos_for_drives ();
 #endif /* CONFIG_BLJ_DEV_HD */
 			probe_mem_start = (mem_start + 3uL) & ~3uL;
-			probe_hw_for_drives (hwif);
+			probe_for_drives (hwif);
 			mem_start = probe_mem_start;
 		}
 	}

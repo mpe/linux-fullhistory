@@ -104,6 +104,9 @@ struct ip_fw
  */
 
 #ifdef __KERNEL__
+
+#include <linux/config.h>
+
 #ifdef CONFIG_IP_FIREWALL
 extern struct ip_fw *ip_fw_blk_chain;
 extern struct ip_fw *ip_fw_fwd_chain;

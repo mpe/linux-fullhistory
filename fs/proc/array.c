@@ -33,6 +33,7 @@
 #include <linux/mman.h>
 #include <linux/proc_fs.h>
 #include <linux/ioport.h>
+#include <linux/config.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>

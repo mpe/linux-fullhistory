@@ -53,6 +53,8 @@ typedef enum {
 } socket_state;
 
 #define SO_ACCEPTCON	(1<<16)		/* performed a listen		*/
+#define SO_WAITDATA	(1<<17)		/* wait data to read		*/
+#define SO_NOSPACE	(1<<18)		/* no space to write		*/
 
 #ifdef __KERNEL__
 /*
@@ -128,8 +130,8 @@ struct net_proto {
 	void (*init_func)(struct net_proto *);	/* Bootstrap */
 };
 
-extern int	sock_awaitconn(struct socket *mysock, struct socket *servsock);
-extern int	sock_wake_async(struct socket *sock);
+extern int	sock_awaitconn(struct socket *mysock, struct socket *servsock, int flags);
+extern int	sock_wake_async(struct socket *sock, int how);
 extern int	sock_register(int family, struct proto_ops *ops);
 extern int	sock_unregister(int family);
 

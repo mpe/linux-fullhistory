@@ -12,7 +12,6 @@
 #include <linux/termios.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/tty.h>

@@ -8,4 +8,7 @@ MODULES = \
 	plip.o \
 	8390.o \
 	slip.o \
-	slhc.o
+	slhc.o \
+	dummy.o \
+	ewrk3.o \
+	depca.o

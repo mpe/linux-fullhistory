@@ -24,8 +24,6 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
-asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
-
 /* These should maybe be in <linux/tasks.h> */
 
 #define MAX_TASKS_PER_USER (NR_TASKS/2)
@@ -162,8 +160,6 @@ static void copy_fs(unsigned long clone_flags, struct task_struct * p)
 		current->fs->root->i_count++;
 }
 
-#define IS_CLONE (regs.orig_eax == __NR_clone)
-
 /*
  *  Ok, this is the main fork-routine. It copies the system process
  * information (task[nr]) and sets up the necessary registers. It
@@ -171,9 +167,8 @@ static void copy_fs(unsigned long clone_flags, struct task_struct * p)
  */
 asmlinkage int sys_fork(struct pt_regs regs)
 {
-	struct pt_regs * childregs;
+	int nr;
 	struct task_struct *p;
-	int i,nr;
 	unsigned long clone_flags = COPYVM | SIGCHLD;
 
 	if(!(p = (struct task_struct*)__get_free_page(GFP_KERNEL)))
@@ -181,7 +176,6 @@ asmlinkage int sys_fork(struct pt_regs regs)
 	nr = find_empty_process();
 	if (nr < 0)
 		goto bad_fork_free;
-	task[nr] = p;
 	*p = *current;
 
 	if (p->exec_domain && p->exec_domain->use_count)
@@ -205,58 +199,23 @@ asmlinkage int sys_fork(struct pt_regs regs)
 	p->utime = p->stime = 0;
 	p->cutime = p->cstime = 0;
 	p->start_time = jiffies;
-/*
- * set up new TSS and kernel stack
- */
+	task[nr] = p;
+
+	/* build new kernel stack */
 	if (!(p->kernel_stack_page = get_free_page(GFP_KERNEL)))
 		goto bad_fork_cleanup;
 	*(unsigned long *)p->kernel_stack_page = STACK_MAGIC;
-	p->tss.es = KERNEL_DS;
-	p->tss.cs = KERNEL_CS;
-	p->tss.ss = KERNEL_DS;
-	p->tss.ds = KERNEL_DS;
-	p->tss.fs = USER_DS;
-	p->tss.gs = KERNEL_DS;
-	p->tss.ss0 = KERNEL_DS;
-	p->tss.esp0 = p->kernel_stack_page + PAGE_SIZE;
-	p->tss.tr = _TSS(nr);
-	childregs = ((struct pt_regs *) (p->kernel_stack_page + PAGE_SIZE)) - 1;
-	p->tss.esp = (unsigned long) childregs;
-	p->tss.eip = (unsigned long) ret_from_sys_call;
-	*childregs = regs;
-	childregs->eax = 0;
-	p->tss.back_link = 0;
-	p->tss.eflags = regs.eflags & 0xffffcfff;	/* iopl is always 0 for a new process */
-	if (IS_CLONE) {
-		if (regs.ebx)
-			childregs->esp = regs.ebx;
-		clone_flags = regs.ecx;
-		if (childregs->esp == regs.esp)
-			clone_flags |= COPYVM;
-	}
-	p->exit_signal = clone_flags & CSIGNAL;
-	p->tss.ldt = _LDT(nr);
-	if (p->ldt) {
-		p->ldt = (struct desc_struct*) vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
-		if (p->ldt != NULL)
-			memcpy(p->ldt, current->ldt, LDT_ENTRIES*LDT_ENTRY_SIZE);
-	}
-	p->tss.bitmap = offsetof(struct thread_struct,io_bitmap);
-	for (i = 0; i < IO_BITMAP_SIZE+1 ; i++) /* IO bitmap is actually SIZE+1 */
-		p->tss.io_bitmap[i] = ~0;
-	if (last_task_used_math == current)
-		__asm__("clts ; fnsave %0 ; frstor %0":"=m" (p->tss.i387));
+
+	/* copy all the process information */
+	clone_flags = copy_thread(nr, COPYVM | SIGCHLD, p, &regs);
 	if (copy_mm(clone_flags, p))
 		goto bad_fork_cleanup;
 	p->semundo = NULL;
 	copy_files(clone_flags, p);
 	copy_fs(clone_flags, p);
-	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));
-	if (p->ldt)
-		set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,p->ldt, 512);
-	else
-		set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,&default_ldt, 1);
 
+	/* ok, now we should be set up.. */
+	p->exit_signal = clone_flags & CSIGNAL;
 	p->counter = current->counter >> 1;
 	p->state = TASK_RUNNING;	/* do this last, just in case */
 	return p->pid;

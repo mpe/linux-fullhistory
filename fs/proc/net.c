@@ -30,6 +30,7 @@
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/config.h>
 
 /* forward references */
 static int proc_readnet(struct inode * inode, struct file * file,

@@ -1,4 +1,4 @@
-This README belongs to release 2.9 or newer of the SoundBlaster Pro
+This README belongs to release 3.0 or newer of the SoundBlaster Pro
 (Matsushita, Kotobuki, Panasonic, CreativeLabs, Longshine and soon TEAC, too)
 CD-ROM driver for Linux.
 
@@ -17,11 +17,20 @@ an internal drive, and you can use it as an internal, too - f.e. plug it into
 a soundcard).
 
 The quad-speed TEAC CD-55A drive uses the same interface types, but has a
-totally different command and flow control scheme. It is not supported yet,
-but I plan to add it.
+totally different command and flow control scheme. Support is under
+construction.
 
-CreativeLabs has a new drive "CD-200". This drive is not supported yet, but
-I plan to add it.
+CreativeLabs has a new drive "CD-200". Support is under construction.
+Detection should already work.
+
+Regarding CD200 and CD-55A support:
+    Please, don't mail me about it if you are not a competent BETA tester 
+            (if you are: mail!; I do not have such drives).
+    Please, don't drop simple questions about the new drives in the
+            newsgroups. Full support needs more or less time.
+If you are able to set the appropriate DBG-xxx switches, you can mail me
+the "SBPCD:..." messages, regarding the new drives. But I mostly will
+not answer (just use) it.
 
 This driver is NOT for Mitsumi or Sony or Aztech or Philips or XXX drives.
 For Aztech CDA-268 drives (and for some Wearnes, Okano and Orchid drives),

@@ -25,6 +25,7 @@
  *					to close when you look carefully. With
  *					this fixed and the accept bug fixed 
  *					some RPC stuff seems happier.
+ *		Niibe Yutaka	:	4.4BSD style write async I/O
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -259,7 +260,9 @@ void destroy_sock(struct sock *sk)
   
   	/* Now we can no longer get new packets. */
   	delete_timer(sk);
-
+  	/* Nor send them */
+	del_timer(&sk->retransmit_timer);
+	
 	while ((skb = tcp_dequeue_partial(sk)) != NULL) {
 		IS_SKB(skb);
 		kfree_skb(skb, FREE_WRITE);
@@ -480,10 +483,18 @@ static void def_callback2(struct sock *sk,int len)
 	if(!sk->dead)
 	{
 		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket);
+		sock_wake_async(sk->socket, 1);
 	}
 }
 
+static void def_callback3(struct sock *sk)
+{
+	if(!sk->dead)
+	{
+		wake_up_interruptible(sk->sleep);
+		sock_wake_async(sk->socket, 2);
+	}
+}
 
 /*
  *	Create an inet socket.
@@ -645,6 +656,7 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->broadcast = 0;
 	sk->localroute = 0;
 	init_timer(&sk->timer);
+	init_timer(&sk->retransmit_timer);
 	sk->timer.data = (unsigned long)sk;
 	sk->timer.function = &net_timer;
 	skb_queue_head_init(&sk->back_log);
@@ -672,7 +684,7 @@ static int inet_create(struct socket *sock, int protocol)
   	
 	sk->state_change = def_callback1;
 	sk->data_ready = def_callback2;
-	sk->write_space = def_callback1;
+	sk->write_space = def_callback3;
 	sk->error_report = def_callback1;
 
 	if (sk->num) 
@@ -865,7 +877,7 @@ static int inet_error(struct sock *sk)
 	cli();	
 	err=sk->err;
 	sk->err=0;
-	sti();
+	restore_flags(flags);
 	return -err;
 }
 
@@ -1466,7 +1478,7 @@ void inet_proto_init(struct net_proto *pro)
 	int i;
 
 
-	printk("Swansea University Computer Society TCP/IP for NET3.018\n");
+	printk("Swansea University Computer Society TCP/IP for NET3.019\n");
 
 	/*
 	 *	Tell SOCKET that we are alive... 

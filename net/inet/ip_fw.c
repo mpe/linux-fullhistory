@@ -32,6 +32,8 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/errno.h>
+#include <linux/config.h>
+
 #include <linux/socket.h>
 #include <linux/sockios.h>
 #include <linux/in.h>

@@ -1,9 +1,6 @@
 #ifndef _MSDOS_FS_I
 #define _MSDOS_FS_I
 
-#ifndef _LINUX_CONFIG_H
-#include <linux/config.h>
-#endif
 #ifndef _LINUX_PIPE_FS_I_H
 #include <linux/pipe_fs_i.h>
 #endif

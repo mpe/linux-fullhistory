@@ -21,6 +21,7 @@
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/interrupt.h>
 #include <linux/fs.h>
 #include <linux/types.h>
 #include <linux/string.h>
@@ -70,20 +71,11 @@ loopback_xmit(struct sk_buff *skb, struct device *dev)
 
   dev->tbusy = 0;
 
-#if 1
-	__asm__("cmpl $0,_intr_count\n\t"
-		"jne 1f\n\t"
-		"movl _bh_active,%%eax\n\t"
-		"testl _bh_mask,%%eax\n\t"
-		"je 1f\n\t"
-		"incl _intr_count\n\t"
-		"call _do_bottom_half\n\t"
-		"decl _intr_count\n"
-		"1:"
-		:
-		:
-		: "ax", "dx", "cx");
-#endif
+  if (!intr_count && (bh_active & bh_mask)) {
+	start_bh_atomic();
+	do_bottom_half();
+	end_bh_atomic();
+  }
 
   return(0);
 }

@@ -10,21 +10,34 @@
  *       however this won't be for a while.
  */
 
-typedef __signed__ char __s8;
+#ifndef _SIZE_T
+#define _SIZE_T
+typedef long unsigned int size_t;
+#endif
+
+#ifndef _SSIZE_T
+#define _SSIZE_T
+typedef int ssize_t;
+#endif
+
+#ifndef _PTRDIFF_T
+#define _PTRDIFF_T
+typedef int ptrdiff_t;
+#endif
+
+typedef signed char __s8;
 typedef unsigned char __u8;
 
-typedef __signed__ short __s16;
+typedef signed short __s16;
 typedef unsigned short __u16;
 
-typedef __signed__ int __s32;
+typedef signed int __s32;
 typedef unsigned int __u32;
 
 /* Only 32-bit sparcs for now so.... */
 
-#if defined(__GNUC__) && !defined(__STRICT_ANSI__)
-typedef __signed__ long long __s64;
-typedef unsigned long long __s64;
-#endif
+typedef signed long long __s64;
+typedef unsigned long long __u64;
 
 #ifdef __KERNEL__
 

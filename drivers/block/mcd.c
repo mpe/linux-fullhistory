@@ -1168,7 +1168,7 @@ mcd_init(unsigned long mem_start, unsigned long mem_end)
 		printk("Unable to get IRQ%d for Mitsumi CD-ROM\n", mcd_irq);
 		return mem_start;
 	}
-	snarf_region(mcd_port, 4);
+	register_iomem(mcd_port, 4,"mcd");
 
 	outb(MCMD_CONFIG_DRIVE, MCDPORT(0));
 	outb(0x02,MCDPORT(0));

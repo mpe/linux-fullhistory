@@ -16,6 +16,7 @@
 #include <linux/malloc.h>
 #include <linux/wait.h>
 #include <linux/time.h>
+#include <linux/config.h>
 
 #undef CONFIG_SKB_CHECK
 

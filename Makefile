@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 76
+SUBLEVEL = 77
 
 ARCH = i386
 
@@ -83,16 +83,13 @@ endif
 # Include the make variables (CC, etc...)
 #
 
-include arch/$(ARCH)/Makefile
-
 ARCHIVES	=kernel/kernel.o mm/mm.o fs/fs.o net/net.o ipc/ipc.o
 FILESYSTEMS	=fs/filesystems.a
 DRIVERS		=drivers/block/block.a \
 		 drivers/char/char.a \
-		 drivers/net/net.a \
-		 ibcs/ibcs.o
+		 drivers/net/net.a
 LIBS		=lib/lib.a
-SUBDIRS		=kernel drivers mm fs net ipc ibcs lib
+SUBDIRS		=kernel drivers mm fs net ipc lib
 
 ifdef CONFIG_SCSI
 DRIVERS := $(DRIVERS) drivers/scsi/scsi.a
@@ -102,9 +99,7 @@ ifdef CONFIG_SOUND
 DRIVERS := $(DRIVERS) drivers/sound/sound.a
 endif
 
-ifdef CONFIG_MATH_EMULATION
-DRIVERS := $(DRIVERS) drivers/FPU-emu/math.a
-endif
+include arch/$(ARCH)/Makefile
 
 .c.s:
 	$(CC) $(CFLAGS) -S -o $*.s $<
@@ -112,6 +107,10 @@ endif
 	$(AS) -o $*.o $<
 .c.o:
 	$(CC) $(CFLAGS) -c -o $*.o $<
+.S.s:
+	$(CC) -D__ASSEMBLY__ -traditional -E -o $*.o $<
+.S.o:
+	$(CC) -D__ASSEMBLY__ -traditional -c -o $*.o $<
 
 Version: dummy
 	rm -f include/linux/version.h
@@ -119,8 +118,8 @@ Version: dummy
 boot: vmlinux
 	@$(MAKE) -C arch/$(ARCH)/boot
 
-vmlinux: $(CONFIGURATION) kernel/head.o init/main.o init/version.o linuxsubdirs
-	$(LD) $(LINKFLAGS) kernel/head.o init/main.o init/version.o \
+vmlinux: $(CONFIGURATION) init/main.o init/version.o linuxsubdirs
+	$(LD) $(LINKFLAGS) $(HEAD) init/main.o init/version.o \
 		$(ARCHIVES) \
 		$(FILESYSTEMS) \
 		$(DRIVERS) \
@@ -130,9 +129,6 @@ vmlinux: $(CONFIGURATION) kernel/head.o init/main.o init/version.o linuxsubdirs
 symlinks:
 	rm -f include/asm
 	( cd include ; ln -sf asm-$(ARCH) asm)
-	ln -sf ../arch/$(ARCH)/traps.c kernel/traps.c
-	ln -sf ../arch/$(ARCH)/entry.S kernel/entry.S
-	ln -sf ../arch/$(ARCH)/head.S kernel/head.S
 
 oldconfig: symlinks
 	$(CONFIG_SHELL) Configure -d arch/$(ARCH)/config.in
@@ -169,11 +165,6 @@ include/linux/version.h: $(CONFIGURATION) Makefile newversion
 	 fi >> include/linux/version.h
 	@echo \#define LINUX_COMPILER \"`$(HOSTCC) -v 2>&1 | tail -1`\" >> include/linux/version.h
 
-kernel/head.o: kernel/head.s
-
-kernel/head.s: kernel/head.S include/linux/tasks.h
-	$(CPP) -traditional -o $*.s $<
-
 init/version.o: init/version.c include/linux/version.h
 	$(CC) $(CFLAGS) -DUTS_MACHINE='"$(ARCH)"' -c -o init/version.o init/version.c
 
@@ -201,6 +192,10 @@ drivers: dummy
 net: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=net
 
+modules: dummy
+	@set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i modules; done
+	
+
 clean:	archclean
 	rm -f kernel/ksyms.lst
 	rm -f core `find . -name '*.[oas]' -print`
@@ -212,7 +207,7 @@ mrproper: clean
 	rm -f include/linux/autoconf.h include/linux/version.h
 	rm -f drivers/sound/local.h
 	rm -f .version .config* config.in config.old
-	rm -f include/asm kernel/entry.S kernel/head.S kernel/traps.c
+	rm -f include/asm
 	rm -f .depend `find . -name .depend -print`
 
 distclean: mrproper

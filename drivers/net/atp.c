@@ -74,7 +74,6 @@ static char *version =
 	interpretations of the device registers.
 */
 
-#include <linux/config.h>		/* Used only to override default values. */
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -114,7 +113,7 @@ extern struct device *irq2dev_map[16];
 
 #ifndef HAVE_PORTRESERVE
 #define check_region(ioaddr, size)		0
-#define snarf_region(ioaddr, size);		do ; while (0)
+#define register_iomem(ioaddr, size,name);		do ; while (0)
 #endif
 
 /* use 0 for production, 1 for verification, >2 for debug */

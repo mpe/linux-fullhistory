@@ -3,6 +3,7 @@
 
 #include <linux/blkdev.h>
 #include <linux/locks.h>
+#include <linux/config.h>
 
 /*
  * NR_REQUEST is the number of entries in the request-queue.

@@ -30,7 +30,6 @@
  * known BUGS: 16MB limit
  */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -55,7 +54,7 @@
 
 #ifndef HAVE_PORTRESERVE
 #define check_region(ioaddr, size)              0
-#define snarf_region(ioaddr, size);             do ; while (0)
+#define register_iomem(ioaddr, size,name);             do ; while (0)
 #endif
 
 #ifndef NET_DEBUG
@@ -244,7 +243,7 @@ static int ni65_probe1(struct device *dev,int ioaddr)
   irq2dev_map[dev->irq] = dev;
 
   /* Grab the region so we can find another board if autoIRQ fails. */
-        snarf_region(ioaddr,NI65_TOTAL_SIZE);
+        register_iomem(ioaddr,NI65_TOTAL_SIZE,"ni65");
 
   p = dev->priv = (void *) kmalloc(sizeof(struct priv),GFP_KERNEL);
   memset((char *) dev->priv,0,sizeof(struct priv));

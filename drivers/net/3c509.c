@@ -224,7 +224,7 @@ int el3_probe(struct device *dev)
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
 	dev->if_port = if_port;
-	snarf_region(dev->base_addr, 16);
+	register_iomem(dev->base_addr, 16,"3c509");
 
 	{
 		char *if_names[] = {"10baseT", "AUI", "undefined", "BNC"};

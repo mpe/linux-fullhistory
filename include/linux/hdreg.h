@@ -1,6 +1,8 @@
 #ifndef _LINUX_HDREG_H
 #define _LINUX_HDREG_H
 
+#include <linux/config.h>
+
 /*
  * This file contains some defines for the AT-hd-controller.
  * Various sources. Check out some definitions (see comments with

@@ -24,6 +24,8 @@ OBJS=	bitmap.o truncate.o namei.o inode.o \
 xiafs.o: $(OBJS)
 	$(LD) -r -o xiafs.o $(OBJS)
 
+modules: xiafs.o
+
 dep:
 	$(CPP) -M *.c > .depend
 

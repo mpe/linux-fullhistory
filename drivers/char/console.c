@@ -2152,8 +2152,6 @@ int do_screendump(unsigned long arg, int mode)
 	char *sptr, *buf = (char *)arg;
 	int currcons, l, chcount;
 
-	if (!suser())
-		return -EPERM;
 	l = verify_area(VERIFY_READ, buf, 2);
 	if (l)
 		return l;

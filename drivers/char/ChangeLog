@@ -1,3 +1,8 @@
+Thu Jan  5 21:21:57 1995  <dhinds@allegro.stanford.edu>
+
+	* serial.c: (receive_char): Added counter to prevent infinite loop
+		when a PCMCIA serial device is ejected.
+
 Thu Dec 29 17:53:48 1994    <tytso@rsx-11.mit.edu>
 
 	* tty_io.c (check_tty_count): New procedure which checks

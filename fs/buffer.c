@@ -16,7 +16,6 @@
  * invalidate changed floppy-disk-caches.
  */
  
-#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
@@ -1451,7 +1450,7 @@ static inline int try_to_reassign(struct buffer_head * bh, struct buffer_head **
 	} while (tmp != bh);
 	tmp = bh;
 	
-	while((unsigned int) tmp->b_data & (PAGE_SIZE - 1)) 
+	while((unsigned long) tmp->b_data & (PAGE_SIZE - 1)) 
 		 tmp = tmp->b_this_page;
 	
 	/* This is the buffer at the head of the page */
@@ -1740,7 +1739,7 @@ asmlinkage int sync_old_buffers(void)
  * the tuning parameters.  We would want to verify each parameter, however,
  * to make sure that it is reasonable. */
 
-asmlinkage int sys_bdflush(int func, int data)
+asmlinkage int sys_bdflush(int func, long data)
 {
 	int i, error;
 	int ndirty;

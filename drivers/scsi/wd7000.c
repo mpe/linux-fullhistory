@@ -606,7 +606,7 @@ static inline Scb *alloc_scbs(int needed)
     save_flags(flags);
     cli();
     while (busy)  { /* someone else is allocating */
-        sti();
+        sti();	/* Yes this is really needed here */
 	now = jiffies;  while (jiffies == now)  /* wait a jiffy */;
 	cli();
     }
@@ -615,7 +615,7 @@ static inline Scb *alloc_scbs(int needed)
     while (freescbs < needed)  {
         timeout = jiffies + WAITnexttimeout;
 	do {
-	    sti();
+	    sti();	/* Yes this is really needed here */
 	    now = jiffies;   while (jiffies == now) /* wait a jiffy */;
 	    cli();
 	}  while (freescbs < needed && jiffies <= timeout);
@@ -1162,7 +1162,7 @@ int wd7000_detect(Scsi_Host_Template * tpnt)
                 printk("using IO %xh IRQ %d DMA %d.\n",
 		       host->iobase, host->irq, host->dma);
 
-		snarf_region(host->iobase, 4); /* Register our ports */
+		register_iomem(host->iobase, 4,"wd7000"); /* Register our ports */
 		/*
 		 *  For boards before rev 6.0, scatter/gather isn't supported.
 		 */
