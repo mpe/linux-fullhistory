@@ -49,6 +49,12 @@ enum {
 #include <asm/softirq.h>
 
 /*
+ * Are we in an interrupt context? Either doing bottom half
+ * or hardware interrupt processing?
+ */
+#define in_interrupt() (local_irq_count[smp_processor_id()] + local_bh_count[smp_processor_id()] != 0)
+
+/*
  * Autoprobing for irqs:
  *
  * probe_irq_on() and probe_irq_off() provide robust primitives

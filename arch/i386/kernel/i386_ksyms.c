@@ -74,6 +74,7 @@ EXPORT_SYMBOL(lk_lockmsg);
 /* Global SMP irq stuff */
 EXPORT_SYMBOL(synchronize_irq);
 EXPORT_SYMBOL(synchronize_bh);
+EXPORT_SYMBOL(global_bh_count);
 EXPORT_SYMBOL(global_bh_lock);
 EXPORT_SYMBOL(global_irq_holder);
 EXPORT_SYMBOL(__global_cli);

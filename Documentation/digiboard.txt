@@ -254,3 +254,35 @@ sh /dev/MAKEDEV digi
  		;;
  	par[0-2])
 ----- End Makedev patch
+
+-----------------------------------------------------------------------------
+
+Changes v1.5.5:
+
+The ability to use the kernel's command line to pass in the configuration for 
+boards.  Using LILO's APPEND command, a string of comma separated identifiers 
+or integers can be used.  The 6 values in order are:
+
+   Enable/Disable this card,
+   Type of card: PC/Xi(0), PC/Xe(1), PC/Xeve(2), PC/Xem(3)
+   Enable/Disable alternate pin arrangement,
+   Number of ports on this card,
+   I/O Port where card is configured (in HEX if using string identifiers),
+   Base of memory window (in HEX if using string identifiers), 
+
+Samples:
+   append="digi=E,PC/Xi,D,16,200,D0000"
+   append="digi=1,0,0,16,512,(whatever D0000 is in base 10 :)
+
+Driver's minor device numbers are conserved. This means that instead of
+each board getting a block of 16 minors pre-assigned, it gets however
+many it should, with the next card following directly behind it.  A
+system with 4 2-port PC/Xi boards will use minor numbers 0-7.
+This conserves some memory, and removes a few hard coded constants.
+
+NOTE!! NOTE!! NOTE!!
+The definition of PC/Xem as a valid board type is the BEGINNING of support
+for this device.  The driver does not currently recognise the board, nor
+does it want to initialize it.  At least not the EISA version.
+
+Mike McLagan <mike.mclagan@linux.org> 5, April 1996.

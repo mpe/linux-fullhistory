@@ -117,35 +117,32 @@ static void close_dmap(int dev, struct dma_buffparms *dmap, int chan)
 static unsigned int default_set_bits(int dev, unsigned int bits)
 {
 	mm_segment_t fs = get_fs();
-	unsigned int r;
 
 	set_fs(get_ds());
-	r = audio_devs[dev]->d->ioctl(dev, SNDCTL_DSP_SETFMT, (caddr_t)&bits);
+	audio_devs[dev]->d->ioctl(dev, SNDCTL_DSP_SETFMT, (caddr_t)&bits);
 	set_fs(fs);
-	return r;
+	return bits;
 }
 
 static int default_set_speed(int dev, int speed)
 {
 	mm_segment_t fs = get_fs();
-	int r;
 
 	set_fs(get_ds());
-	r = audio_devs[dev]->d->ioctl(dev, SNDCTL_DSP_SPEED, (caddr_t)&speed);
+	audio_devs[dev]->d->ioctl(dev, SNDCTL_DSP_SPEED, (caddr_t)&speed);
 	set_fs(fs);
-	return r;
+	return speed;
 }
 
 static short default_set_channels(int dev, short channels)
 {
 	int c = channels;
 	mm_segment_t fs = get_fs();
-	short r;
 
 	set_fs(get_ds());
-	r = audio_devs[dev]->d->ioctl(dev, SNDCTL_DSP_CHANNELS, (caddr_t)&c);
+	audio_devs[dev]->d->ioctl(dev, SNDCTL_DSP_CHANNELS, (caddr_t)&c);
 	set_fs(fs);
-	return r;
+	return c;
 }
 
 static void check_driver(struct audio_driver *d)

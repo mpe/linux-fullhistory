@@ -2790,6 +2790,7 @@ EXPORT_SYMBOL(ide_geninit);
 EXPORT_SYMBOL(ide_fops);
 EXPORT_SYMBOL(ide_get_queue);
 EXPORT_SYMBOL(do_ide0_request);
+EXPORT_SYMBOL(ide_add_generic_settings);
 #if MAX_HWIFS > 1
 EXPORT_SYMBOL(do_ide1_request);
 #endif /* MAX_HWIFS > 1 */

@@ -208,7 +208,7 @@ unsigned int csum_partial_copy_generic (const char *src, char *dst,
 # Exception handler:
 ################################################
 						#
-.section .fixup, \"a\"				#
+.section .fixup, \"ax\"				#
 						#
 6000:						#
 						#

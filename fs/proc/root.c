@@ -499,7 +499,7 @@ static struct proc_dir_entry proc_root_version = {
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_array_inode_operations
 };
-#ifdef CONFIG_PCI
+#ifdef CONFIG_PCI_OLD_PROC
 static struct proc_dir_entry proc_root_pci = {
 	PROC_PCI, 3, "pci",
 	S_IFREG | S_IRUGO, 1, 0, 0,
@@ -647,7 +647,7 @@ void proc_root_init(void)
 	proc_register(&proc_root, &proc_root_meminfo);
 	proc_register(&proc_root, &proc_root_kmsg);
 	proc_register(&proc_root, &proc_root_version);
-#ifdef CONFIG_PCI
+#ifdef CONFIG_PCI_OLD_PROC
 	proc_register(&proc_root, &proc_root_pci);
 #endif
 #ifdef CONFIG_ZORRO

@@ -421,7 +421,19 @@ static inline void wait_on_irq(int cpu)
 {
 	int count = MAXCOUNT;
 
-	while (atomic_read(&global_irq_count)) {
+	for (;;) {
+
+		/*
+		 * Wait until all interrupts are gone. Wait
+		 * for bottom half handlers unless we're
+		 * already executing in one..
+		 */
+		if (!atomic_read(&global_irq_count)) {
+			if (local_bh_count[cpu] || !atomic_read(&global_bh_count))
+				break;
+		}
+
+		/* Duh, we have to loop. Release the lock to avoid deadlocks */
 		clear_bit(0,&global_irq_lock);
 
 		for (;;) {
@@ -436,6 +448,8 @@ static inline void wait_on_irq(int cpu)
 			if (atomic_read(&global_irq_count))
 				continue;
 			if (global_irq_lock)
+				continue;
+			if (!local_bh_count[cpu] && atomic_read(&global_bh_count))
 				continue;
 			if (!test_and_set_bit(0,&global_irq_lock))
 				break;
@@ -470,9 +484,11 @@ void synchronize_bh(void)
  */
 void synchronize_irq(void)
 {
-	/* Stupid approach */
-	cli();
-	sti();
+	if (atomic_read(&global_irq_count)) {
+		/* Stupid approach */
+		cli();
+		sti();
+	}
 }
 
 static inline void get_irqlock(int cpu)

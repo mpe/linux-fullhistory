@@ -4,7 +4,6 @@
 #include <linux/tasks.h>
 
 extern unsigned int local_irq_count[NR_CPUS];
-#define in_interrupt()	(local_irq_count[smp_processor_id()] != 0)
 
 #ifndef __SMP__
 
@@ -47,26 +46,10 @@ static inline void hardirq_exit(int cpu)
 
 static inline int hardirq_trylock(int cpu)
 {
-	unsigned long flags;
-
-	__save_flags(flags);
-	__cli();
-	atomic_inc(&global_irq_count);
-	if (atomic_read(&global_irq_count) != 1 || test_bit(0,&global_irq_lock)) {
-		atomic_dec(&global_irq_count);
-		__restore_flags(flags);
-		return 0;
-	}
-	++local_irq_count[cpu];
-	return 1;
+	return !atomic_read(&global_irq_count) && !test_bit(0,&global_irq_lock);
 }
 
-static inline void hardirq_endlock(int cpu)
-{
-	__cli();
-	hardirq_exit(cpu);
-	__sti();
-}
+#define hardirq_endlock(cpu)	do { } while (0)
 
 extern void synchronize_irq(void);
 

@@ -34,7 +34,7 @@ else
   ifeq ($(CONFIG_ISDN),m)
     ifeq ($(CONFIG_ISDN_PPP),y)
       CONFIG_SLHC_MODULE = y
-      CONFIG_PPPDEF_BUILTIN = y
+      CONFIG_PPPDEF_MODULE = y
     endif
   endif
 endif
@@ -185,8 +185,11 @@ else
   endif
 endif
 
+# bsd_comp.o is *always* a module, for some undocumented reason
+# (perhaps licensing).
 ifeq ($(CONFIG_PPP),y)
 LX_OBJS += ppp.o
+M_OBJS += bsd_comp.o
 CONFIG_SLHC_BUILTIN = y
 CONFIG_PPPDEF_BUILTIN = y
 else
@@ -194,11 +197,8 @@ else
   CONFIG_SLHC_MODULE = y
   CONFIG_PPPDEF_MODULE = y
   MX_OBJS += ppp.o
+  M_OBJS += bsd_comp.o
   endif
-endif
-
-ifdef CONFIG_PPP
-  M_OBJS += bsd_comp.o ppp_deflate.o
 endif
 
 ifeq ($(CONFIG_SLIP),y)
@@ -563,9 +563,11 @@ else
 endif
 
 # if anything built-in uses ppp_deflate, then build it into the kernel also.
-# If not, but a module uses it, build as a module:
+# If not, but a module uses it, build as a module.
+# ... NO!!!  ppp_deflate.o does not work as resident;
+# it works only as a module!
 ifdef CONFIG_PPPDEF_BUILTIN
-LX_OBJS += ppp_deflate.o
+MX_OBJS += ppp_deflate.o
 else
   ifdef CONFIG_PPPDEF_MODULE
   MX_OBJS += ppp_deflate.o
