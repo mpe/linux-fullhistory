@@ -44,7 +44,7 @@ static const char *group_1_commands[] = {
 /* 29-2d */ unknown, "Write (10)", "Seek (10)", unknown, unknown, 
 /* 2e-31 */ "Write Verify","Verify", "Search High", "Search Equal", 
 /* 32-34 */ "Search Low", "Set Limits", "Prefetch or Read Position", 
-/* 35-37 */ "Synchronize Cache","Lock/Unlock Cache", "Read Deffect Data", 
+/* 35-37 */ "Synchronize Cache","Lock/Unlock Cache", "Read Defect Data", 
 /* 38-3c */ unknown, "Compare","Copy Verify", "Write Buffer", "Read Buffer", 
 /* 3d-39 */ unknown, "Read Long",  unknown,
 };
@@ -110,7 +110,7 @@ void print_command (unsigned char *command) {
 static const char * statuses[] = {
 /* 0-4 */ "Good", "Check Condition", "Condition Good", unknown, "Busy", 
 /* 5-9 */ unknown, unknown, unknown, "Intermediate Good", unknown, 
-/* a-d */ "Interemediate Good", unknown, "Reservation Conflict", unknown,
+/* a-d */ "Intermediate Good", unknown, "Reservation Conflict", unknown,
 /* e-f */ unknown, unknown,
 };
 #endif
@@ -206,7 +206,7 @@ static struct error_info additional[] =
   {0x11,0x04,D|W|O,"Unrecovered read error - auto reallocate failed"},
   {0x11,0x05,W|R|O,"L-ec uncorrectable error"},
   {0x11,0x06,W|R|O,"Circ unrecovered error"},
-  {0x11,0x07,W|O,"Data resychronization error"},
+  {0x11,0x07,W|O,"Data resynchronization error"},
   {0x11,0x08,T,"Incomplete block read"},
   {0x11,0x09,T,"No gap found"},
   {0x11,0x0A,D|T|O,"Miscorrected error"},
@@ -468,7 +468,7 @@ static const char *two_byte_msgs[] = {
 
 static const char *extended_msgs[] = {
 /* 0x00 */ "Modify Data Pointer", "Synchronous Data Transfer Request",
-/* 0x02 */ "SCSI-I Extended Identify", "Wide Data Transfer Reqeust"
+/* 0x02 */ "SCSI-I Extended Identify", "Wide Data Transfer Request"
 };
 
 #define NO_EXTENDED_MSGS (sizeof(two_byte_msgs)  / sizeof (const char *))

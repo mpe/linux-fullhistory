@@ -776,7 +776,7 @@ int reg_store_single(float *single, FPU_REG *st0_ptr)
 		return 0;
 
 	      /* This is a special case: see sec 16.2.5.1 of the 80486 book. */
-	      /* Masked respose is overflow to infinity. */
+	      /* Masked response is overflow to infinity. */
 	      templ = 0x7f800000;
 	    }
 	  else
@@ -1085,7 +1085,7 @@ int reg_store_bcd(char *d, FPU_REG *st0_ptr)
    a non-zero value is returned */
 /* Overflow is signalled by a non-zero return value (in eax).
    In the case of overflow, the returned significand always has the
-   the largest possible value */
+   largest possible value */
 int round_to_int(FPU_REG *r)
 {
   char     very_big;
@@ -1374,7 +1374,7 @@ void fsave(fpu_addr_modes addr_modes, char *data_address)
 /*===========================================================================*/
 
 /*
-  A call to this function must be preceeded by a call to
+  A call to this function must be preceded by a call to
   FPU_verify_area() to verify access to the 10 bytes at d
   */
 static void write_to_extended(FPU_REG *rp, char *d)

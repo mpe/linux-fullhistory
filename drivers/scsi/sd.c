@@ -262,7 +262,7 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 */
 
         if (driver_byte(result) != 0) {
-	  if (sugestion(result) == SUGGEST_REMAP) {
+	  if (suggestion(result) == SUGGEST_REMAP) {
 #ifdef REMAP
 /*
 	Not yet implemented.  A read will fail after being remapped,
@@ -294,8 +294,8 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 
 /* 	If we had an ILLEGAL REQUEST returned, then we may have
 performed an unsupported command.  The only thing this should be would
-be a ten byte read where only a six byte read was supportted.  Also,
-on a system where READ CAPACITY failed, we mave have read past the end
+be a ten byte read where only a six byte read was supported.  Also,
+on a system where READ CAPACITY failed, we have have read past the end
 of the 	disk. 
 */
 
@@ -365,7 +365,7 @@ static void do_sd_request (void)
    accept another command.  If we find one, then we queue it. This can
    make a big difference on systems with more than one disk drive.  We want
    to have the interrupts off when monkeying with the request list, because
-   otherwise the kernel might try and slip in a request inbetween somewhere. */
+   otherwise the kernel might try and slip in a request in between somewhere. */
 
     if (!SCpnt && sd_template.nr_dev > 1){
       struct request *req1;
@@ -911,7 +911,7 @@ static int sd_init_onedisk(int i)
   /* Wake up a process waiting for device*/
 
   /*
-   *	The SCSI standard says "READ CAPACITY is necessary for self confuring software"
+   *	The SCSI standard says "READ CAPACITY is necessary for self configuring software"
    *	While not mandatory, support of READ CAPACITY is strongly encouraged.
    *	We used to die if we couldn't successfully do a READ CAPACITY.
    *	But, now we go on about our way.  The side effects of this are

@@ -20,6 +20,7 @@
  *		Alan Cox	:	device private ioctl copies fields back.
  *		Alan Cox	:	Transmit queue code does relevant stunts to
  *					keep the queue safe.
+ *		Alan Cox	:	Fixed double lock.
  *
  *	Cleaned up and recommented by Alan Cox 2nd April 1994. I hope to have
  *	the rest as well commented in the end.
@@ -401,7 +402,6 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	 */
 	 
 	if (!skb->arp && dev->rebuild_header(skb->data, dev, skb->raddr, skb)) {
-		skb_device_unlock(skb);	/* It's now safely on the arp queue */
 		return;
 	}
 
@@ -1429,7 +1429,7 @@ int dev_ioctl(unsigned int cmd, void *arg)
  *	unhooks any devices that fail to initialise (normally hardware not 
  *	present) and leaves us with a valid list of present and active devices.
  *
- *	The PCMICA code may need to change this a little, and add a pair
+ *	The PCMCIA code may need to change this a little, and add a pair
  *	of register_inet_device() unregister_inet_device() calls. This will be
  *	needed for ethernet as modules support.
  */

@@ -47,8 +47,8 @@
 /*
  * The second extended file system version
  */
-#define EXT2FS_DATE		"94/03/10"
-#define EXT2FS_VERSION		"0.5"
+#define EXT2FS_DATE		"94/08/12"
+#define EXT2FS_VERSION		"0.5a"
 
 /*
  * Debug code
@@ -190,10 +190,13 @@ struct ext2_group_desc
 /*
  * Inode flags
  */
-#define	EXT2_SECRM_FL			0x0001	/* Secure deletion */
-#define	EXT2_UNRM_FL			0x0002	/* Undelete */
-#define	EXT2_COMPR_FL			0x0004	/* Compress file */
-#define EXT2_SYNC_FL			0x0008	/* Synchronous updates */
+#define	EXT2_SECRM_FL			0x00000001 /* Secure deletion */
+#define	EXT2_UNRM_FL			0x00000002 /* Undelete */
+#define	EXT2_COMPR_FL			0x00000004 /* Compress file */
+#define EXT2_SYNC_FL			0x00000008 /* Synchronous updates */
+#define EXT2_IMMUTABLE_FL		0x00000010 /* Immutable file */
+#define EXT2_APPEND_FL			0x00000020 /* writes to file may only append */
+#define EXT2_NODUMP_FL			0x00000040 /* do not dump file */
 
 /*
  * ioctl commands
@@ -218,17 +221,68 @@ struct ext2_inode {
 	unsigned short i_links_count;	/* Links count */
 	unsigned long  i_blocks;	/* Blocks count */
 	unsigned long  i_flags;		/* File flags */
-	unsigned long  i_reserved1;
+	union {
+		struct {
+			unsigned long  l_i_reserved1;
+		} linux1;
+		struct {
+			unsigned long  h_i_translator;
+		} hurd1;
+		struct {
+			unsigned long  m_i_reserved1;
+		} masix1;
+	} osd1;				/* OS dependent 1 */
 	unsigned long  i_block[EXT2_N_BLOCKS];/* Pointers to blocks */
 	unsigned long  i_version;	/* File version (for NFS) */
 	unsigned long  i_file_acl;	/* File ACL */
 	unsigned long  i_dir_acl;	/* Directory ACL */
 	unsigned long  i_faddr;		/* Fragment address */
-	unsigned char  i_frag;		/* Fragment number */
-	unsigned char  i_fsize;		/* Fragment size */
-	unsigned short i_pad1;
-	unsigned long  i_reserved2[2];
+	union {
+		struct {
+			unsigned char  l_i_frag;	/* Fragment number */
+			unsigned char  l_i_fsize;	/* Fragment size */
+			unsigned short i_pad1;
+			unsigned long  l_i_reserved2[2];
+		} linux2;
+		struct {
+			unsigned char  h_i_frag;	/* Fragment number */
+			unsigned char  h_i_fsize;	/* Fragment size */
+			unsigned short h_i_mode_high;
+			unsigned short h_i_uid_high;
+			unsigned short h_i_gid_high;
+			unsigned long  h_i_author;
+		} hurd2;
+		struct {
+			unsigned char  m_i_frag;	/* Fragment number */
+			unsigned char  m_i_fsize;	/* Fragment size */
+			unsigned short m_pad1;
+			unsigned long  m_i_reserved2[2];
+		} masix2;
+	} osd2;				/* OS dependent 2 */
 };
+
+#ifdef	__linux__
+#define i_reserved1	osd1.linux1.l_i_reserved1
+#define i_frag		osd2.linux2.l_i_frag
+#define i_fsize		osd2.linux2.l_i_fsize
+#define i_reserved2	osd2.linux2.l_i_reserved2
+#endif
+
+#ifdef	__hurd__
+#define i_translator	osd1.hurd1.h_i_translator
+#define i_frag		osd2.hurd2.h_i_frag;
+#define i_fsize		osd2.hurd2.h_i_fsize;
+#define i_uid_high	osd2.hurd2.h_i_uid_high
+#define i_gid_high	osd2.hurd2.h_i_gid_high
+#define i_author	osd2.hurd2.h_i_author
+#endif
+
+#ifdef	__masix__
+#define i_reserved1	osd1.masix1.m_i_reserved1
+#define i_frag		osd2.masix2.m_i_frag
+#define i_fsize		osd2.masix2.m_i_fsize
+#define i_reserved2	osd2.masix2.m_i_reserved2
+#endif
 
 /*
  * File system states
@@ -248,6 +302,7 @@ struct ext2_inode {
 #define EXT2_MOUNT_ERRORS_CONT		0x0010	/* Continue on errors */
 #define EXT2_MOUNT_ERRORS_RO		0x0020	/* Remount fs ro on errors */
 #define EXT2_MOUNT_ERRORS_PANIC		0x0040	/* Panic on errors */
+#define EXT2_MOUNT_MINIX_DF		0x0080	/* Mimics the Minix statfs */
 
 #define clear_opt(o, opt)		o &= ~EXT2_MOUNT_##opt
 #define set_opt(o, opt)			o |= EXT2_MOUNT_##opt
@@ -292,8 +347,13 @@ struct ext2_super_block {
 	unsigned short s_pad;
 	unsigned long  s_lastcheck;	/* time of last check */
 	unsigned long  s_checkinterval;	/* max. time between checks */
-	unsigned long  s_reserved[238];	/* Padding to the end of the block */
+	unsigned long  s_creator_os;	/* OS */
+	unsigned long  s_reserved[237];	/* Padding to the end of the block */
 };
+
+#define EXT2_OS_LINUX		0
+#define EXT2_OS_HURD		1
+#define EXT2_OS_MASIX		2
 
 /*
  * Structure of a directory entry
@@ -386,7 +446,6 @@ extern int ext2_ioctl (struct inode *, struct file *, unsigned int,
 		       unsigned long);
 
 /* namei.c */
-extern int ext2_open (struct inode *, struct file *);
 extern void ext2_release (struct inode *, struct file *);
 extern int ext2_lookup (struct inode *,const char *, int, struct inode **);
 extern int ext2_create (struct inode *,const char *, int, int,

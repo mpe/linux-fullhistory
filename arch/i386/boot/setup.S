@@ -45,6 +45,11 @@ begbss:
 
 entry start
 start:
+! Bootlin depends on this being done early
+	mov	ax,#0x01500
+	mov	dl,#0x81
+	int	0x13
+
 ! Check signature at end of setup
 	mov	ax,#SETUPSEG
 	mov	ds,ax

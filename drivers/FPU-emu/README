@@ -346,7 +346,7 @@ f2xm1     (-1,1)      538847      4    481    6488   63.79  0.167709
 
 Tests performed on an 80486 FPU showed results of lower accuracy. The
 following table gives the results which were obtained with an AMD
-486DX2/66 (other tests indictate that an Intel 486DX produces
+486DX2/66 (other tests indicate that an Intel 486DX produces
 identical results).  The tests were basically the same as those used
 to measure the emulator (the values, being random, were in general not
 the same).  The total number of tests for each instruction are given

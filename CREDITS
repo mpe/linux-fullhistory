@@ -201,6 +201,14 @@ S: 301 Norwood Terrace, Apartment N226
 S: Boca Raton, Florida 33431-6588
 S: USA
 
+N: David Gentzel
+E: gentzel@nova.enet.dec.com
+D: BusLogic driver and original UltraStor driver
+S: Whitfield Software Services
+S: 631 Idlewood Avenue
+S: Carnegie, Pennsylvania   15106-1126
+S: USA
+
 N: Philip Gladstone
 E: philipg@onsett.com
 D: Kernel / timekeeping stuff

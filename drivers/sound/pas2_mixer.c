@@ -124,7 +124,7 @@ mixer_output (int right_vol, int left_vol, int div, int bits,
 
   if (bits == P_M_MV508_BASS || bits == P_M_MV508_TREBLE)
     {				/*
-				 * Bass and trebble are mono devices
+				 * Bass and treble are mono devices
 				 */
       pas_write (P_M_MV508_ADDRESS | bits, PARALLEL_MIXER);
       pas_write (left, PARALLEL_MIXER);

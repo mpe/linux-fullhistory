@@ -113,7 +113,7 @@ static int sib(int mod, unsigned long *fpu_eip)
     }
   else if (mod == 2 || base == 5) /* The second condition also has mod==0 */
     {
-      /* 32 bit displacment */
+      /* 32 bit displacement */
       RE_ENTRANT_CHECK_OFF;
       FPU_code_verify_area(4);
       offset += (signed) get_fs_long((unsigned long *) (*fpu_eip));

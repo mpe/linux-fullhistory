@@ -9,7 +9,7 @@
  |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | This code has four possible entry points.                                 |
- | The following must be entered by a jmp intruction:                        |
+ | The following must be entered by a jmp instruction:                       |
  |   fpu_reg_round, fpu_reg_round_sqrt, and fpu_Arith_exit.                  |
  |                                                                           |
  | The _round_reg entry point is intended to be used by C code.              |

@@ -13,6 +13,9 @@
 #ifndef _LINUX_TQUEUE_H
 #define _LINUX_TQUEUE_H
 
+#include <asm/bitops.h>
+#include <asm/system.h>
+
 #ifdef INCLUDE_INLINE_FUNCS
 #define _INLINE_ extern
 #else
@@ -92,16 +95,10 @@ struct tq_struct tq_last = {
 _INLINE_ void queue_task_irq(struct tq_struct *bh_pointer,
 			       task_queue *bh_list)
 {
-	int l1;
-
-	__asm__ __volatile__ (
-	"btsl $0,%1\n\t"	/* bottom half already marked? */
-	"jc 1f\n\t"
-	"leal %2,%3\n\t"	/* address of the "next" field of bh_struct */
-	"xchgl %3,%0\n\t"	/* link bottom half into list */
-	"movl %3,%2\n1:"	/* save the pointer to next bottom half */
-	: "=m" (*bh_list), "=m" (bh_pointer -> sync), "=m" (bh_pointer -> next),
-	  "=r" (l1) );
+	if (!set_bit(0,&bh_pointer->sync)) {
+		bh_pointer->next = *bh_list;
+		*bh_list = bh_pointer;
+	}
 }
 
 /*
@@ -111,17 +108,11 @@ _INLINE_ void queue_task_irq(struct tq_struct *bh_pointer,
 _INLINE_ void queue_task_irq_off(struct tq_struct *bh_pointer,
 				 task_queue *bh_list)
 {
-	int l1;
-
-	__asm__ __volatile__ (
-	"testl $1,%1\n\t"	/* bottom half already marked? */
-	"jne 1f\n\t"
-	"movl $1,%1\n\t"			      
-	"leal %2,%3\n\t"	/* address of the "next" field of bh_struct */
-	"xchgl %3,%0\n\t"	/* link bottom half into list */
-	"movl %3,%2\n1:"	/* save the pointer to next bottom half */
-	: "=m" (*bh_list), "=m" (bh_pointer -> sync), "=m" (bh_pointer -> next),
-	  "=r" (l1) );
+	if (!(bh_pointer->sync & 1)) {
+		bh_pointer->sync = 1;
+		bh_pointer->next = *bh_list;
+		*bh_list = bh_pointer;
+	}
 }
 
 
@@ -131,19 +122,14 @@ _INLINE_ void queue_task_irq_off(struct tq_struct *bh_pointer,
 _INLINE_ void queue_task(struct tq_struct *bh_pointer,
 			   task_queue *bh_list)
 {
-	int l1;
-
-	__asm__ __volatile__ (
-	"btsl $0,%1\n\t"
-	"jc 1f\n\t"
-	"leal %2,%3\n\t"
-	"pushfl\n\t"		/* save interrupt flag */
-	"cli\n\t"		/* turn off interrupts */
-	"xchgl %3,%0\n\t"
-	"movl %3,%2\n\t"	/* now the linking step is really atomic! */
-	"popfl\n1:"		/* restore interrupt flag */
-	: "=m" (*bh_list), "=m" (bh_pointer -> sync), "=m" (bh_pointer -> next),
-	  "=r" (l1) );
+	if (!set_bit(0,&bh_pointer->sync)) {
+		unsigned long flags;
+		save_flags(flags);
+		cli();
+		bh_pointer->next = *bh_list;
+		*bh_list = bh_pointer;
+		restore_flags(flags);
+	}
 }
 
 /*

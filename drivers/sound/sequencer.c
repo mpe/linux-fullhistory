@@ -49,7 +49,7 @@ static int      max_synthdev = 0;
 /*
  * The seq_mode gives the operating mode of the sequencer:
  *      1 = level1 (the default)
- *      2 = level2 (extended capabilites)
+ *      2 = level2 (extended capabilities)
  */
 
 #define SEQ_1	1
@@ -483,19 +483,21 @@ seq_chn_voice_event (unsigned char *event)
     return;
 
   if (seq_mode == SEQ_2)
-    if (synth_devs[dev]->alloc_voice)
-      voice = find_voice (dev, chn, note);
-
-  if (cmd == MIDI_NOTEON && parm == 0)
     {
-      cmd = MIDI_NOTEOFF;
-      parm = 64;
+      if (synth_devs[dev]->alloc_voice)
+        voice = find_voice (dev, chn, note);
+
+      if (cmd == MIDI_NOTEON && parm == 0)
+        {
+          cmd = MIDI_NOTEOFF;
+          parm = 64;
+        }
     }
 
   switch (cmd)
     {
     case MIDI_NOTEON:
-      if (note > 127)
+      if (note > 127 && note != 255)
 	return;
 
       if (voice == -1 && seq_mode == SEQ_2 && synth_devs[dev]->alloc_voice)

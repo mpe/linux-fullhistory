@@ -229,6 +229,8 @@ struct mm_struct {
 	struct vm_area_struct * mmap;
 };
 
+#define INIT_MMAP { &init_task, 0, 0x40000000, PAGE_SHARED, }
+
 #define INIT_MM { \
 		0, \
 		0, 0, 0, \
@@ -238,7 +240,7 @@ struct mm_struct {
 /* ?_flt */	0, 0, 0, 0, \
 		0, \
 /* swap */	0, 0, 0, 0, \
-		NULL }
+		&init_mmap }
 
 struct task_struct {
 /* these are hardcoded - don't touch */

@@ -383,7 +383,7 @@ static int count(char ** argv)
  *    2          kernel space  kernel space
  * 
  * We do this by playing games with the fs segment register.  Since it
- * it is expensive to load a segment register, we try to avoid calling
+ * is expensive to load a segment register, we try to avoid calling
  * set_fs() unless we absolutely have to.
  */
 unsigned long copy_strings(int argc,char ** argv,unsigned long *page,

@@ -242,7 +242,7 @@ static secno bplus_lookup(struct inode *inode, struct bplus_header *b,
 static struct hpfs_dirent *map_dirent(struct inode *inode, dnode_secno dno,
 				    const unsigned char *name, unsigned len,
 				      struct quad_buffer_head *qbh);
-static struct hpfs_dirent *map_pos_dirent(struct inode *inode, off_t *posp,
+static struct hpfs_dirent *map_pos_dirent(struct inode *inode, loff_t *posp,
 					  struct quad_buffer_head *qbh);
 static void write_one_dirent(struct dirent *dirent, const unsigned char *name,
 			     unsigned namelen, ino_t ino, int lowercase);
@@ -874,7 +874,7 @@ static int hpfs_file_read(struct inode *inode, struct file *filp,
 	/*
 	 * truncate count at EOF
 	 */
-	if (count > inode->i_size - filp->f_pos)
+	if (count > inode->i_size - (off_t) filp->f_pos)
 		count = inode->i_size - filp->f_pos;
 
 	start = buf;
@@ -920,7 +920,7 @@ static int hpfs_file_read(struct inode *inode, struct file *filp,
 			 * squeeze out \r, output length varies
 			 */
 			n0 = convcpy_tofs(buf, block + r, n);
-			if (count > inode->i_size - filp->f_pos - n + n0)
+			if (count > inode->i_size - (off_t) filp->f_pos - n + n0)
 				count = inode->i_size - filp->f_pos - n + n0;
 		}
 
@@ -1341,7 +1341,7 @@ static int hpfs_readdir(struct inode *inode, struct file *filp,
 
 	lc = inode->i_sb->s_hpfs_lowercase;
 
-	switch (filp->f_pos) {
+	switch ((off_t) filp->f_pos) {
 	case 0:
 		write_one_dirent(dirent, ".", 1, inode->i_ino, lc);
 		filp->f_pos = -1;
@@ -1409,7 +1409,7 @@ static void write_one_dirent(struct dirent *dirent, const unsigned char *name,
  * increment *posp to point to the following dir entry. 
  */
 
-static struct hpfs_dirent *map_pos_dirent(struct inode *inode, off_t *posp,
+static struct hpfs_dirent *map_pos_dirent(struct inode *inode, loff_t *posp,
 					  struct quad_buffer_head *qbh)
 {
 	unsigned pos, q, r;

@@ -12,7 +12,7 @@
 #define _ASM_MIPS_MIPSREGS_H_
 
 /*
- * The following macros are espacially usefull for __asm__
+ * The following macros are especially useful for __asm__
  * inline assembler.
  */
 
@@ -24,7 +24,7 @@
 #endif
 
 /*
- * Coprozessor 0 register names
+ * Coprocessor 0 register names
  */
 #define CP0_INDEX $0
 #define CP0_RANDOM $1

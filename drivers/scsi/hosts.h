@@ -14,7 +14,7 @@
  */
 
 #ifndef _HOSTS_H
-	#define _HOSTS_H
+#define _HOSTS_H
 
 /*
 	$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/hosts.h,v 1.3 1993/09/24 12:21:00 drew Exp drew $
@@ -40,7 +40,7 @@
 
 /*
 	The Scsi_Host_Template type has all that is needed to interface with a SCSI
-	host in a device independant matter.  There is one entry for each different
+	host in a device independent matter.  There is one entry for each different
 	type of host adapter that is supported on the system.
 */
 
@@ -71,7 +71,7 @@ typedef struct  SHT
 		functions to queue commands because things are not guaranteed
 		to be set up yet.  The detect routine can send commands to
 		the host adapter as long as the program control will not be
-		passed to scsi.c in the processesing of the command.  Note
+		passed to scsi.c in the processing of the command.  Note
 		especially that scsi_malloc/scsi_free must not be called.
 	*/
 
@@ -159,7 +159,7 @@ typedef struct  SHT
 	/*
 		This determines if we will use a non-interrupt driven
 		or an interrupt driven scheme,  It is set to the maximum number
-		of simulataneous commands a given host adapter will accept.
+		of simultaneous commands a given host adapter will accept.
 	*/
 	int can_queue;
 
@@ -167,7 +167,7 @@ typedef struct  SHT
 		In many instances, especially where disconnect / reconnect are 
 		supported, our host also has an ID on the SCSI bus.  If this is 
 		the case, then it must be reserved.  Please set this_id to -1 if
- 		your settup is in single initiator mode, and the host lacks an 
+ 		your setup is in single initiator mode, and the host lacks an 
 		ID.
 	*/
 	
@@ -278,7 +278,6 @@ extern struct Scsi_Host * scsi_register(Scsi_Host_Template *, int j);
 extern void scsi_unregister(struct Scsi_Host * i);
 
 #define BLANK_HOST {"", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#endif
 
 struct Scsi_Device_Template
 {
@@ -304,3 +303,5 @@ extern struct Scsi_Device_Template sr_template;
 extern struct Scsi_Device_Template sg_template;
 
 int scsi_register_device(struct Scsi_Device_Template * sdpnt);
+
+#endif

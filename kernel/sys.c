@@ -350,7 +350,7 @@ asmlinkage int sys_setuid(uid_t uid)
 
 /*
  * "setfsuid()" sets the fsuid - the uid used for filesystem checks. This
- * is used for "access()" and for the NFS deamon (letting nfsd stay at
+ * is used for "access()" and for the NFS daemon (letting nfsd stay at
  * whatever uid it wants to). It normally shadows "euid", except when
  * explicitly set by setfsuid() or for access..
  */

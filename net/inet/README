@@ -129,7 +129,7 @@ o	AX.25 builds fine without SLIP driver (just PI)
 o	MTU recognized in routing table (but only by TCP currently)
 o	AX.25 PI driver merged into AX.25 code and kernel stubs
 o	UNIX /proc trap hopefully fixed
-o	DDI removed totally ready to use the PCMICA people's stuff
+o	DDI removed totally ready to use the PCMCIA people's stuff
 o	Unix domain lock/unlock now static (needlessly visible before)
 o	Split net/inet/sock.c into generic and IP components
 o	NFS client works correctly with 8K NFS
@@ -142,7 +142,7 @@ o	Loopback maintains IFF_LOOPBACK flag
 o	Johnathon Naylor(G4KLX) AX.25 changes
 o	Out of sync bug in lance driver fixed.
 o	First cut at ethernet loadable modules
-o	PCMICA people have ifmap stuff. Will extend this to other drivers.
+o	PCMCIA people have ifmap stuff. Will extend this to other drivers.
 o	New de600.c
 o	Clean up of IP layer - sorted a lot of redundant and duplicated code
 	out.

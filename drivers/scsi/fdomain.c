@@ -126,7 +126,7 @@
 
  NOTES ON USER DEFINABLE OPTIONS:
 
- DEBUG: This turns on the printing of various debug informaiton.
+ DEBUG: This turns on the printing of various debug information.
 
  ENABLE_PARITY: This turns on SCSI parity checking.  With the current
  driver, all attached devices must support SCSI parity.  If none of your
@@ -143,7 +143,7 @@
  values.
 
  DO_DETECT: This activates some old scan code which was needed before the
- high level drivers got fixed.  If you are having toruble with the driver,
+ high level drivers got fixed.  If you are having trouble with the driver,
  turning this on should not hurt, and might help.  Please let me know if
  this is the case, since this code will be removed from future drivers.
 
@@ -344,7 +344,7 @@ struct signature {
    { "Future Domain Corp. V1.0008/18/93",                  26, 33,  3,  4, 1 },
    { "FUTURE DOMAIN TMC-18XX",                              5, 22, -1, -1, 0 },
 
-   /* READ NOTICE ABOVE *BEFORE* YOU WASTE YOUR TIME ADDING A SIGANTURE
+   /* READ NOTICE ABOVE *BEFORE* YOU WASTE YOUR TIME ADDING A SIGNATURE
     Also, fix the disk geometry code for your signature and send your
     changes for faith@cs.unc.edu.  Above all, do *NOT* change any old
     signatures!

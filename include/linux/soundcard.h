@@ -37,7 +37,7 @@
   * hannu@voxware.pp.fi
   */
 
-#define SOUND_VERSION	203
+#define SOUND_VERSION	300
 #define VOXWARE
 
 #include <sys/ioctl.h>

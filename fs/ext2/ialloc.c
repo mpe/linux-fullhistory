@@ -33,32 +33,6 @@
 
 #include <asm/bitops.h>
 
-static inline int find_first_zero_bit (unsigned long * addr, unsigned size)
-{
-	int res;
-
-	if (!size)
-		return 0;
-	__asm__("
-		cld
-		movl $-1,%%eax
-		repe; scasl
-		je 1f
-		subl $4,%%edi
-		movl (%%edi),%%eax
-		notl %%eax
-		bsfl %%eax,%%edx
-		jmp 2f
-1:		xorl %%edx,%%edx
-2:		subl %%ebx,%%edi
-		shll $3,%%edi
-		addl %%edi,%%edx"
-		: "=d" (res)
-		: "c" ((size + 31) >> 5), "D" (addr), "b" (addr)
-		: "ax", "bx", "cx", "di");
-	return res;
-}
-
 static struct ext2_group_desc * get_group_desc (struct super_block * sb,
 						unsigned int block_group,
 						struct buffer_head ** bh)
@@ -491,8 +465,8 @@ repeat:
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->u.ext2_i.i_flags = dir->u.ext2_i.i_flags;
 	inode->u.ext2_i.i_faddr = 0;
-	inode->u.ext2_i.i_frag = 0;
-	inode->u.ext2_i.i_fsize = 0;
+	inode->u.ext2_i.i_frag_no = 0;
+	inode->u.ext2_i.i_frag_size = 0;
 	inode->u.ext2_i.i_file_acl = 0;
 	inode->u.ext2_i.i_dir_acl = 0;
 	inode->u.ext2_i.i_dtime = 0;

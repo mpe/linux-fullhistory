@@ -360,7 +360,7 @@ el2_block_output(struct device *dev, int count,
 	   | ECNTRL_START, E33G_CNTRL);
 
     /* This is the byte copy loop: it should probably be tuned for
-       for speed once everything is working.  I think it is possible
+       speed once everything is working.  I think it is possible
        to output 8 bytes between each check of the status bit. */
     for(i = 0; i < count; i++) {
 	if (i % 8 == 0)
@@ -405,7 +405,7 @@ el2_block_input(struct device *dev, int count, char *buf, int ring_offset)
 	   | ECNTRL_START, E33G_CNTRL);
 
     /* This is the byte copy loop: it should probably be tuned for
-       for speed once everything is working. */
+       speed once everything is working. */
     for(i = 0; i < count; i++) {
 	if (i % 8 == 0)
 	    while ((inb(E33G_STATUS) & ESTAT_DPRDY) == 0)

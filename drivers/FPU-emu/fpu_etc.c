@@ -57,7 +57,7 @@ static void ftst_(FPU_REG *st0_ptr)
       if ( (st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
 	{
 #ifdef PECULIAR_486
-	  /* This is wierd! */
+	  /* This is weird! */
 	  if (st0_ptr->sign == SIGN_POS)
 	    setcc(SW_C3);
 #endif PECULIAR_486

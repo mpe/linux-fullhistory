@@ -39,7 +39,6 @@ zlilo: $(CONFIGURE) zImage
 	if [ -f $(INSTALL_PATH)/vmlinuz ]; then mv $(INSTALL_PATH)/vmlinuz $(INSTALL_PATH)/vmlinuz.old; fi
 	if [ -f $(INSTALL_PATH)/zSystem.map ]; then mv $(INSTALL_PATH)/zSystem.map $(INSTALL_PATH)/zSystem.old; fi
 	cat zImage > $(INSTALL_PATH)/vmlinuz
-	cat zImage > $(INSTALL_PATH)/vmlinuz
 	cp zSystem.map $(INSTALL_PATH)/
 	if [ -x /sbin/lilo ]; then /sbin/lilo; else /etc/lilo/install; fi
 

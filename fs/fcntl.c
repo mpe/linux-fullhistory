@@ -83,6 +83,12 @@ asmlinkage int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 		case F_GETFL:
 			return filp->f_flags;
 		case F_SETFL:
+			/*
+			 * In the case of an append-only file, O_APPEND
+			 * cannot be cleared
+			 */
+			if (IS_APPEND(filp->f_inode) && !(arg & O_APPEND))
+				return -EPERM;
 			if ((arg & FASYNC) && !(filp->f_flags & FASYNC) &&
 			    filp->f_op->fasync)
 				filp->f_op->fasync(filp->f_inode, filp, 1);

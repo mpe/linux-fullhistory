@@ -17,7 +17,7 @@
 /*
  * Configuration : 
  * To use without BIOS -DOVERRIDE=base_address -DCONTROLLER=FD or SEAGATE
- * -DIRQ will overide the default of 5.
+ * -DIRQ will override the default of 5.
  * Note: You can now set these options from the kernel's "command line".
  * The syntax is:
  *
@@ -33,12 +33,12 @@
  * -DFAST or -DFAST32 will use blind transfers where possible
  *
  * -DARBITRATE will cause the host adapter to arbitrate for the 
- *	bus for better SCSI-II compatability, rather than just 
+ *	bus for better SCSI-II compatibility, rather than just 
  *	waiting for BUS FREE and then doing its thing.  Should
  *	let us do one command per Lun when I integrate my 
  *	reorganization changes into the distribution sources.
  *
- * -DSLOW_HANDSHAKE will allow compatability with broken devices that don't 
+ * -DSLOW_HANDSHAKE will allow compatibility with broken devices that don't 
  *	handshake fast enough (ie, some CD ROM's) for the Seagate
  * 	code.
  *
@@ -167,7 +167,7 @@ static const Signature signatures[] = {
 {"SEAGATE SCSI BIOS ",17, 17, SEAGATE},
 
 /*
- * However, future domain makes several incompatable SCSI boards, so specific
+ * However, future domain makes several incompatible SCSI boards, so specific
  * signatures must be used.
  */
 
@@ -224,7 +224,7 @@ static int fast = 1;
  * Wait for a low->high transition before continuing with that 
  * transfer.  If we timeout, continue anyways.  We don't need 
  * a long timeout, because REQ should only be asserted until the 
- * corresponding ACK is recieved and processed.
+ * corresponding ACK is received and processed.
  *
  * Note that we can't use the system timer for this, because of 
  * resolution, and we *really* can't use the timer chip since 
@@ -243,7 +243,7 @@ static void borken_init (void) {
 
 /* 
  * Ok, we now have a count for .25 seconds.  Convert to a 
- * count per second and divide by transer rate in K.
+ * count per second and divide by transfer rate in K.
  */
 
   borken_calibration =  (count * 4) / (SLOW_RATE*1024);
@@ -307,11 +307,11 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 	printk("Base address overridden to %x, controller type is %s\n",
 		base_address,controller_type == SEAGATE ? "SEAGATE" : "FD");
 #endif 
-#else /* OVERIDE */	
+#else /* OVERRIDE */	
 /*
  *	To detect this card, we simply look for the signature
  *	from the BIOS version notice in all the possible locations
- *	of the ROM's.  This has a nice sideeffect of not trashing
+ *	of the ROM's.  This has a nice side effect of not trashing
  * 	any register locations that might be used by something else.
  *
  * XXX - note that we probably should be probing the address
@@ -326,7 +326,7 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 			base_address = (void *) seagate_bases[i];
 			controller_type = signatures[j].type;
 		}
-#endif /* OVERIDE */
+#endif /* OVERRIDE */
 	} /* (! controller_type) */
  
 	tpnt->this_id = (controller_type == SEAGATE) ? 7 : 6;
@@ -646,7 +646,7 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 
 /*
  *	We work it differently depending on if this is is "the first time,"
- *	or a reconnect.  If this is a reselct phase, then SEL will 
+ *	or a reconnect.  If this is a reselect phase, then SEL will 
  *	be asserted, and we must skip selection / arbitration phases.
  */
 
@@ -661,7 +661,7 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
  *	target's ID on the BUS, with BSY, SEL, and I/O signals asserted.
  *
  *	After ARBITRATION phase is completed, only SEL, BSY, and the 
- *	target ID are asserted.  A valid initator ID is not on the bus
+ *	target ID are asserted.  A valid initiator ID is not on the bus
  *	until IO is asserted, so we must wait for that.
  */
 		clock = jiffies + 10;
@@ -830,7 +830,7 @@ connect_loop :
  *
  * 	Note : the Seagate ST-01/02 product manual says that we should 
  * 	twiddle the DATA register before the control register.  However,
- *	this does not work reliably so we do it the other way arround.
+ *	this does not work reliably so we do it the other way around.
  *
  *	Probably could be a problem with arbitration too, we really should
  *	try this with a SCSI protocol or logic analyzer to see what is 
@@ -1318,7 +1318,7 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 
 			CONTROL = BASE_CMD | CMD_DRVR_ENABLE;
 /*
- * 	If we are reconecting, then we must send an IDENTIFY message in 
+ * 	If we are reconnecting, then we must send an IDENTIFY message in 
  *	 response  to MSGOUT.
  */
 			switch (reselect) {
@@ -1336,7 +1336,7 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 				reselect = CAN_RECONNECT;
 				goto connect_loop;
 #if (DEBUG & (PHASE_MSGOUT | DEBUG_LINKED))
-				printk("scsi%d : sent ABORT message to cancle incorrect I_T_L nexus.\n", hostno);
+				printk("scsi%d : sent ABORT message to cancel incorrect I_T_L nexus.\n", hostno);
 #endif
 #endif /* LINKED */
 #if (DEBUG & DEBUG_LINKED) 
@@ -1505,7 +1505,7 @@ else {
 				hostno);
 #endif
 /*
- * We also will need to adjust status to accomodate intermediate conditions.
+ * We also will need to adjust status to accommodate intermediate conditions.
  */
 			if ((status == INTERMEDIATE_GOOD) ||
 				(status == INTERMEDIATE_C_GOOD))
@@ -1614,7 +1614,7 @@ int seagate_st0x_biosparam(Disk * disk, int dev, int* ip) {
   cmd[5] = 0;
 
 /*
- * We are transfering 0 bytes in the out direction, and expect to get back
+ * We are transferring 0 bytes in the out direction, and expect to get back
  * 24 bytes for each mode page.
  */
 
@@ -1669,7 +1669,7 @@ printk("scsi%d : heads = %d cylinders = %d sectors = %d total = %d formatted = %
 
 /*
  * Now, we need to do a sanity check on the geometry to see if it is 
- * BIOS compatable.  The maximum BIOS geometry is 1024 cylinders * 
+ * BIOS compatible.  The maximum BIOS geometry is 1024 cylinders * 
  * 256 heads * 64 sectors. 
  */
 

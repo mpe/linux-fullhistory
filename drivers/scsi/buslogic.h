@@ -65,7 +65,7 @@ int buslogic_biosparam(Disk *, int, int *);
 /* READ */
 #define STATUS(base) (base)
 #define DACT 0x80		/* Diagnostic Active */
-#define DFAIL 0x40		/* Diagonostic Failure */
+#define DFAIL 0x40		/* Diagnostic Failure */
 #define INREQ 0x20		/* Initialization Required */
 #define HARDY 0x10		/* Host Adapter Ready */
 #define CPRBSY 0x08		/* Command/Parameter Register Busy */
@@ -114,9 +114,9 @@ int buslogic_biosparam(Disk *, int, int *);
 #define CMD_HA_OPTIONS 0x21	/* Host Adapter Options */
 #define CMD_INITEXTMB 0x81	/* Initialize Extended Mailbox */
 #define CMD_INQEXTSETUP 0x8D	/* Inquire Extended Set-up Information */
-#define CMD_WRITE_INQ_BUF 0x9A	/* Write Inquery Data Buffer
+#define CMD_WRITE_INQ_BUF 0x9A	/* Write Inquiry Data Buffer
 				   (Target Mode Only) */
-#define CMD_READ_INQ_BUF 0x9B	/* Read Inquery Data Buffer
+#define CMD_READ_INQ_BUF 0x9B	/* Read Inquiry Data Buffer
 				   (Target Mode Only) */
 
 #define MBX_NOT_IN_USE 0x00

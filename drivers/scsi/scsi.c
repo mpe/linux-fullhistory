@@ -64,7 +64,7 @@ const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE] =
 
 /*
 	global variables : 
-	scsi_devices an array of these specifing the address for each 
+	scsi_devices an array of these specifying the address for each 
 	(host, id, LUN)
 */
 
@@ -79,7 +79,7 @@ static unsigned char generic_sense[6] = {REQUEST_SENSE, 0,0,0, 255, 0};
 Scsi_Cmnd * last_cmnd = NULL;
 
 /*
- *	As the scsi do command functions are inteligent, and may need to 
+ *	As the scsi do command functions are intelligent, and may need to 
  *	redo a command, we need to keep track of the last command 
  *	executed on each one.
  */
@@ -409,7 +409,7 @@ static void scan_scsis (struct Scsi_Host * shpnt)
 		  }
 		  
 /*
- * Accomodate drivers that want to sleep when they should be in a polling
+ * Accommodate drivers that want to sleep when they should be in a polling
  * loop.
  */
 
@@ -757,7 +757,7 @@ update_timeout(SCpnt, SCpnt->timeout_per_command);
 
 /*
 	We will use a queued command if possible, otherwise we will emulate the
-	queing and calling of completion function ourselves. 
+	queuing and calling of completion function ourselves. 
 */
 #ifdef DEBUG
 	printk("internal_cmnd (host = %d, target = %d, command = %08x, buffer =  %08x, \n"
@@ -832,7 +832,7 @@ static void scsi_request_sense (Scsi_Cmnd * SCpnt)
 /*
 	scsi_do_cmd sends all the commands out to the low-level driver.  It 
 	handles the specifics required for each low level driver - ie queued 
-	or non queud.  It also prevents conflicts when different high level 
+	or non queued.  It also prevents conflicts when different high level 
 	drivers go for the same host at the same time.
 */
 
@@ -865,7 +865,7 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 /*
 	We must prevent reentrancy to the lowlevel host driver.  This prevents 
 	it - we enter a loop until the host we want to talk to is not busy.   
-	Race conditions are prevented, as interrupts are disabled inbetween the
+	Race conditions are prevented, as interrupts are disabled in between the
 	time we check for the host being not busy, and the time we mark it busy
 	ourselves.
 */
@@ -1197,7 +1197,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 			}
 			break;
 			default:
-				panic("scsi: unsupported message byte %d recieved\n", msg_byte(result)); 
+				panic("scsi: unsupported message byte %d received\n", msg_byte(result)); 
 			}
 			break;
 	case DID_TIME_OUT:	
@@ -1352,7 +1352,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 	caller should deal with any error messages or status returned on the 
 	next call.
 	
-	This will not be called rentrantly for a given host.
+	This will not be called reentrantly for a given host.
 */
 	
 /*
@@ -1718,7 +1718,7 @@ void * scsi_init_malloc(unsigned int size)
 
 
 void scsi_init_free(char * ptr, unsigned int size)
-{ /* FIXME - not right.  We need to comare addresses to see whether this was
+{ /* FIXME - not right.  We need to compare addresses to see whether this was
      kmalloc'd or not */
   if((unsigned int) ptr < scsi_loadable_module_flag) {
     kfree(ptr);
@@ -1729,7 +1729,7 @@ void scsi_init_free(char * ptr, unsigned int size)
 }
 
 /*
-	scsi_dev_init() is our initialization routine, which inturn calls host 
+	scsi_dev_init() is our initialization routine, which in turn calls host 
 	initialization, bus scanning, and sd/st initialization routines.  It 
 	should be called from main().
 */

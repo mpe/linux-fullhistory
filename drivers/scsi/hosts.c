@@ -91,8 +91,8 @@ static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/hos
  *	The scsi host entries should be in the order you wish the 
  *	cards to be detected.  A driver may appear more than once IFF
  *	it can deal with being detected (and therefore initialized) 
- *	with more than one simulatenous host number, can handle being
- *	rentrant, etc.
+ *	with more than one simultaneous host number, can handle being
+ *	reentrant, etc.
  *
  *	They may appear in any order, as each SCSI host  is told which host number it is
  *	during detection.
@@ -210,7 +210,7 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
 	retval->hostt = tpnt;	
 	retval->next = NULL;
 #ifdef DEBUG
-	printk("Register %x %x: %d %d\n", retval, retval->hostt, i, j);
+	printk("Register %x %x: %d\n", retval, retval->hostt, j);
 #endif
 
 	/* The next three are the default values which can be overridden

@@ -32,89 +32,7 @@
 
 #include <asm/bitops.h>
 
-#define clear_block(addr,size) \
-	__asm__("cld\n\t" \
-		"rep\n\t" \
-		"stosl" \
-		: \
-		:"a" (0), "c" (size / 4), "D" ((long) (addr)) \
-		:"cx", "di")
-
 #define in_range(b, first, len)		((b) >= (first) && (b) <= (first) + (len) - 1)
-
-static inline int find_first_zero_bit (unsigned long * addr, unsigned size)
-{
-	int res;
-
-	if (!size)
-		return 0;
-	__asm__("
-		cld
-		movl $-1,%%eax
-		repe; scasl
-		je 1f
-		subl $4,%%edi
-		movl (%%edi),%%eax
-		notl %%eax
-		bsfl %%eax,%%edx
-		jmp 2f
-1:		xorl %%edx,%%edx
-2:		subl %%ebx,%%edi
-		shll $3,%%edi
-		addl %%edi,%%edx"
-		:"=d" (res)
-		:"c" ((size + 31) >> 5), "D" (addr), "b" (addr)
-		:"ax", "bx", "cx", "di");
-	return res;
-}
-
-static inline int find_next_zero_bit (unsigned long * addr, int size,
-				      int offset)
-{
-	unsigned long * p = ((unsigned long *) addr) + (offset >> 5);
-	int set = 0, bit = offset & 31, res;
-	
-	if (bit) {
-		/*
-		 * Look for zero in first byte
-		 */
-		__asm__("
-			bsfl %1,%0
-			jne 1f
-			movl $32, %0
-1:			"
-			: "=r" (set)
-			: "r" (~(*p >> bit)));
-		if (set < (32 - bit))
-			return set + offset;
-		set = 32 - bit;
-		p++;
-	}
-	/*
-	 * No zero yet, search remaining full bytes for a zero
-	 */
-	res = find_first_zero_bit (p, size - 32 * (p - addr));
-	return (offset + set + res);
-}
-
-static inline char * find_first_zero_byte (char * addr, int size)
-{
-	char *res;
-
-	if (!size)
-		return 0;
-	__asm__("
-		cld
-		mov $0,%%eax
-		repnz; scasb
-		jnz 1f
-		dec %%edi
-1:		"
-		: "=D" (res)
-		: "0" (addr), "c" (size)
-		: "ax");
-	return res;
-}
 
 static struct ext2_group_desc * get_group_desc (struct super_block * sb,
 						unsigned int block_group,
@@ -421,8 +339,7 @@ repeat:
 		 * cyclicly search through the rest of the groups.
 		 */
 		p = ((char *) bh->b_data) + (j >> 3);
-		r = find_first_zero_byte (p, 
-					  (EXT2_BLOCKS_PER_GROUP(sb) - j + 7) >> 3);
+		r = memscan(p, 0, (EXT2_BLOCKS_PER_GROUP(sb) - j + 7) >> 3);
 		k = (r - ((char *) bh->b_data)) << 3;
 		if (k < EXT2_BLOCKS_PER_GROUP(sb)) {
 			j = k;
@@ -457,8 +374,7 @@ repeat:
 	}
 	bitmap_nr = load_block_bitmap (sb, i);
 	bh = sb->u.ext2_sb.s_block_bitmap[bitmap_nr];
-	r = find_first_zero_byte (bh->b_data, 
-				  EXT2_BLOCKS_PER_GROUP(sb) >> 3);
+	r = memscan(bh->b_data, 0, EXT2_BLOCKS_PER_GROUP(sb) >> 3);
 	j = (r - bh->b_data) << 3;
 	if (j < EXT2_BLOCKS_PER_GROUP(sb))
 		goto search_back;
@@ -542,7 +458,7 @@ got_block:
 		unlock_super (sb);
 		return 0;
 	}
-	clear_block (bh->b_data, sb->s_blocksize);
+	memset(bh->b_data, 0, sb->s_blocksize);
 	bh->b_uptodate = 1;
 	mark_buffer_dirty(bh, 1);
 	brelse (bh);

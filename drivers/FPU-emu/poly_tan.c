@@ -135,7 +135,7 @@ void	poly_tan(FPU_REG const *arg, FPU_REG *result)
     {
       /* accumulatoro must contain 1.0 here, (actually, 0) but it
 	 really doesn't matter what value we use because it will
-	 have neglibible effect in later calculations
+	 have negligible effect in later calculations
 	 */
       XSIG_LL(accum) = 0x8000000000000000LL;
       accum.lsw = 0;

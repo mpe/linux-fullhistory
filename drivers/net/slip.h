@@ -9,6 +9,7 @@
  * Fixes:
  *		Alan Cox	: 	Added slip mtu field.
  *		Matt Dillon	:	Printable slip (borrowed from net2e)
+ *		Alan Cox	:	Added SL_SLIP_LOTS
  *
  * Author:	Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
  */
@@ -16,7 +17,11 @@
 #define _LINUX_SLIP_H
 
 /* SLIP configuration. */
+#ifndef SL_SLIP_LOTS
 #define SL_NRUNIT	4		/* number of SLIP channels	*/
+#else
+#define SL_NRUNIT	16
+#endif
 #define SL_MTU		296		/* 296; I am used to 600- FvK	*/
 
 /* SLIP protocol characters. */

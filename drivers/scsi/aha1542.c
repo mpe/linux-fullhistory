@@ -194,7 +194,7 @@ static int makecode(unsigned hosterr, unsigned scsierr)
 	break;
 
       case 0x12: /* Data overrun/underrun-The target attempted to transfer more data
-		    thean was allocated by the Data Length field or the sum of the
+		    than was allocated by the Data Length field or the sum of the
 		    Scatter / Gather Data Length fields. */
 
       case 0x13: /* Unexpected bus free-The target dropped the SCSI BSY at an unexpected time. */
@@ -247,7 +247,7 @@ static int aha1542_test_port(int bse, struct Scsi_Host * shpnt)
     /* Quick and dirty test for presence of the card. */
     if(inb(STATUS(bse)) == 0xff) return 0;
 
-    /* Reset the adapter. I ought to make a hard reset, but it's not really nessesary */
+    /* Reset the adapter. I ought to make a hard reset, but it's not really necessary */
     
     /*  DEB(printk("aha1542_test_port called \n")); */
 

@@ -446,6 +446,7 @@ static void read_intr(void)
 		printk("hd%c: read_intr: error = 0x%02x\n",dev+'a',hd_error);
 	}
 	bad_rw_intr();
+	cli();
 	hd_request();
 	return;
 ok_to_read:
@@ -538,6 +539,7 @@ static void multwrite_intr(void)
 		printk("hd:%c multwrite_intr: error = 0x%02x\n",dev+'a',hd_error);
 	}
 	bad_rw_intr();
+	cli();
 	hd_request();
 }
 
@@ -564,6 +566,7 @@ static void write_intr(void)
 		printk("HD: write_intr: error = 0x%02x\n",hd_error);
 	}
 	bad_rw_intr();
+	cli();
 	hd_request();
 	return;
 ok_to_write:

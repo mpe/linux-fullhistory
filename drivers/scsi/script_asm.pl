@@ -67,7 +67,7 @@ $prefix = '';		# define all arrays having this prefix so we
 # XXX - replace references to the *_810 constants with general constants
 # assigned at compile time based on chip type.
 
-# Table of operatoor encodings
+# Table of operator encodings
 # XXX - NCR53c710 only implements 
 # 	move (nop) = 0x00_00_00_00
 #	or = 0x02_00_00_00
@@ -147,7 +147,7 @@ $operator = '\||OR|AND|XOR|\&|\+';
 					# the index is the symbol name, 
 					# and the contents a white space 
 					# delimited list of address,size
-					# tupples where size is in bytes.
+					# tuples where size is in bytes.
 
 @code = ();				# Array of 32 bit words for SIOP 
 
@@ -274,7 +274,7 @@ sub parse_conditional {
     $need_data = 0;
     if ($conditional =~ /^ATN\s*(.*)/i) {#
 	die "$0 : syntax error in line $lineno : $_
-	WHEN conditional is incompatable with ATN 
+	WHEN conditional is incompatible with ATN 
 " if (!$allow_atn);
 	$code[$address] |= 0x00_02_00_00;
 	$conditional = $1;
@@ -539,7 +539,7 @@ print STDERR "data8 source\n" if ($debug);
 		} else {
 		    die
 "$0 : syntax error in $lineno : $_
-	WITH CARRY option is incompatable with the $op operator.
+	WITH CARRY option is incompatible with the $op operator.
 ";
 		}
 	    }
@@ -909,7 +909,7 @@ foreach $i (sort @entry) {
 }
 
 #
-# NCR assembler outputs label patches in the form of indecies into 
+# NCR assembler outputs label patches in the form of indices into 
 # the code.
 #
 printf OUTPUT "unsigned long ".$prefix."LABELPATCHES[] = {\n";

@@ -4,7 +4,7 @@ Last modified: Wed Jun 22 23:38:47 1994 by root@kai.home
 BASICS
 
 The driver is generic. The state of a drive is not modified when the
-driver is initalized or a device is opened. The mode parameters of the
+driver is initialized or a device is opened. The mode parameters of the
 drive can be modified with ioctls. The driver supports fixed and
 variable block size (within buffer limits). Both the auto-rewind
 (minor equals device number) and non-rewind devices (minor is 128 +

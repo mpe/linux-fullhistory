@@ -254,7 +254,7 @@ static int
 set_speed (ad1848_info * devc, int arg)
 {
   /*
- * The sampling speed is encoded in the least significant nible of I8. The
+ * The sampling speed is encoded in the least significant nibble of I8. The
  * LSB selects the clock source (0=24.576 MHz, 1=16.9344 Mhz) and other
  * three bits select the divisor (indirectly):
  *
@@ -602,7 +602,7 @@ ad1848_prepare_for_IO (int dev, int bsize, int bcount)
 
   ad_write (devc, 8, fs);
   /*
-   * Write to I8 starts resyncronization. Wait until it completes.
+   * Write to I8 starts resynchronization. Wait until it completes.
    */
   timeout = 10000;
   while (timeout > 0 && INB (devc->base) == 0x80)
@@ -624,7 +624,7 @@ ad1848_prepare_for_IO (int dev, int bsize, int bcount)
       ad_write (devc, 28, fs);
 
       /*
-   * Write to I28 starts resyncronization. Wait until it completes.
+   * Write to I28 starts resynchronization. Wait until it completes.
    */
       timeout = 10000;
       while (timeout > 0 && INB (devc->base) == 0x80)

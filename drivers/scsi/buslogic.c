@@ -49,12 +49,13 @@
  *	BT-747D - 747S + differential termination.
  *	BT-757S - 747S + WIDE SCSI.
  *	BT-757D - 747D + WIDE SCSI.
+ *	BT-946C - PCI bus-master FAST SCSI. (??? Nothing else known.)
  *
  *    Should you require further information on any of these boards, BusLogic
  *    can be reached at (408)492-9090.
  *
  *    This driver SHOULD support all of these boards.  It has only been tested
- *    with a 747S.  An earlier version was tested with a 445S.
+ *    with a 747S and 445S.
  *
  *    Places flagged with a triple question-mark are things which are either
  *    unfinished, questionable, or wrong.
@@ -124,8 +125,8 @@ static const unsigned int bases[] = {
 #endif
 };
 
-#define BIOS_TRANSLATION_6432 0		/* Default case */
-#define BIOS_TRANSLATION_25563 1	/* Big disk case */
+#define BIOS_TRANSLATION_DEFAULT 0	/* Default case */
+#define BIOS_TRANSLATION_BIG 1		/* Big disk (> 1G) case */
 
 struct hostdata {
     unsigned char bus_type;
@@ -421,7 +422,7 @@ const char *buslogic_info(void)
 static void buslogic_interrupt(int junk)
 {
     void (*my_done)(Scsi_Cmnd *) = NULL;
-    int errstatus, mbistatus = 0, number_serviced, found;
+    int errstatus, mbistatus = MBX_NOT_IN_USE, number_serviced, found;
     size_t mbi, mbo = 0;
     struct Scsi_Host *shpnt;
     Scsi_Cmnd *sctmp;
@@ -528,7 +529,7 @@ static void buslogic_interrupt(int junk)
 			    mb[mbi].status);
 #endif
 
-	if (mbistatus == 0x03)	/* ??? 0x03 == Aborted CCB not found. */
+	if (mbistatus == MBX_COMPLETION_NOT_FOUND)
 	    continue;
 
 #if BUSLOGIC_DEBUG
@@ -559,7 +560,7 @@ static void buslogic_interrupt(int junk)
 #endif
 
 	/* ??? more error checking left out here */
-	if (mbistatus != 1)
+	if (mbistatus != MBX_COMPLETION_OK)
 	    /* ??? This is surely wrong, but I don't know what's right. */
 	    errstatus = makecode(ccb[mbo].hastat, ccb[mbo].tarstat);
 	else
@@ -915,7 +916,7 @@ static int getconfig(unsigned int base, unsigned char *irq,
 
     /* We only need a DMA channel for ISA boards.  Some other types of boards
        (such as the 747S) have an option to report a DMA channel even though
-       none is used (for compatability with Adaptec drivers which require a
+       none is used (for compatibility with Adaptec drivers which require a
        DMA channel).  We ignore this. */
     if (*bus_type == 'A')
 	switch (*dma) {
@@ -950,10 +951,13 @@ static int getconfig(unsigned int base, unsigned char *irq,
 
 static int get_translation(unsigned int base)
 {
-    /* ??? This is wrong if disk is configured for > 1G mapping.
-       Unfortunately, unlike UltraStor, I see know way of determining whether
-       > 1G mapping has been enabled. */
-    return BIOS_TRANSLATION_6432;
+    /* ??? Unlike UltraStor, I see no way of determining whether > 1G mapping
+       has been enabled.  However, it appears that BusLogic uses a mapping
+       scheme which varies with the disk size when > 1G mapping is enabled.
+       For disks <= 1G, this mapping is the same regardless of the setting of
+       > 1G mapping.  Therefore, we should be safe in always assuming that > 1G
+       mapping has been enabled. */
+    return BIOS_TRANSLATION_BIG;
 }
 
 /* Query the board to find out the model. */
@@ -971,7 +975,7 @@ static int buslogic_query(unsigned int base, int *trans)
     WAIT_UNTIL(INTERRUPT(base), CMDC);
     INTR_RESET(base);
 
-#if 1 /* ??? Temporary */
+#if 1	/* ??? Temporary */
     buslogic_printk("Inquiry Bytes: %02X %02X %02X %02X\n",
 		    inquiry_result[0], inquiry_result[1],
 		    inquiry_result[2], inquiry_result[3]);
@@ -1108,12 +1112,14 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
 	    /* ??? If we can dynamically allocate the mailbox arrays, I'll
 	       probably bump up this number. */
 	    shpnt->hostt->can_queue = BUSLOGIC_MAILBOXES;
-	    /*shpnt->base = ???;*/
+	    /* No known way to determine BIOS base address, but we don't
+	       care since we don't use it anyway. */
+	    shpnt->base = NULL;
 	    shpnt->io_port = base;
 	    shpnt->dma_channel = dma;
 	    shpnt->irq = irq;
 	    HOSTDATA(shpnt)->bios_translation = trans;
-	    if (trans == BIOS_TRANSLATION_25563)
+	    if (trans == BIOS_TRANSLATION_BIG)
 		buslogic_printk("Using extended bios translation.\n");
 	    HOSTDATA(shpnt)->last_mbi_used = 2 * BUSLOGIC_MAILBOXES - 1;
 	    HOSTDATA(shpnt)->last_mbo_used = BUSLOGIC_MAILBOXES - 1;
@@ -1179,8 +1185,8 @@ static int restart(struct Scsi_Host *shpnt)
 	if (HOSTDATA(shpnt)->sc[i]
 	    && !HOSTDATA(shpnt)->sc[i]->device->soft_reset) {
 #if 0
-	    HOSTDATA(shpnt)->mb[i].status = 1;	/* Indicate ready to
-						   restart... */
+	    HOSTDATA(shpnt)->mb[i].status
+		= MBX_ACTION_START;	/* Indicate ready to restart... */
 #endif
 	    count++;
 	}
@@ -1342,23 +1348,33 @@ int buslogic_reset(Scsi_Cmnd *scpnt)
 
 int buslogic_biosparam(Disk *disk, int dev, int *ip)
 {
-    int size = disk->capacity;
-    int translation_algorithm;
+    /* ??? This truncates.  Should we round up to next MB? */
+    unsigned int mb = disk->capacity >> 11;
 
-    translation_algorithm = HOSTDATA(disk->device->host)->bios_translation;
-    /* ??? Should this be > 1024, or >= 1024?  Enquiring minds want to know. */
-    if ((size >> 11) > 1024
-	&& translation_algorithm == BIOS_TRANSLATION_25563) {
-	/* Please verify that this is the same as what DOS returns */
-	ip[0] = 255;
-	ip[1] = 63;
-	ip[2] = size / 255 / 63;
+    /* ip[0] == heads, ip[1] == sectors, ip[2] == cylinders */
+    if (HOSTDATA(disk->device->host)->bios_translation == BIOS_TRANSLATION_BIG
+	&& mb > 1024) {
+	if (mb > 4096) {
+	    ip[0] = 256;
+	    ip[1] = 64;
+	    ip[2] = mb >> 3;
+/*	    if (ip[2] > 1024)
+		ip[2] = 1024; */
+	} else if (mb > 2048) {
+	    ip[0] = 256;
+	    ip[1] = 32;
+	    ip[2] = mb >> 2;
+	} else {
+	    ip[0] = 128;
+	    ip[1] = 32;
+	    ip[2] = mb >> 1;
+	}
     } else {
 	ip[0] = 64;
 	ip[1] = 32;
-	ip[2] = size >> 11;
+	ip[2] = mb;
+/*	if (ip[2] > 1024)
+	    ip[2] = 1024; */
     }
-/*    if (ip[2] > 1024)
-      ip[2] = 1024; */
     return 0;
 }

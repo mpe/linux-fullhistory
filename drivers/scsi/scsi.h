@@ -62,7 +62,7 @@
 #define SET_LIMITS		0x33
 #define PRE_FETCH		0x34
 #define READ_POSITION		0x34
-#define SYNCRONIZE_CACHE	0x35
+#define SYNCHRONIZE_CACHE	0x35
 #define LOCK_UNLOCK_CACHE	0x36
 #define READ_DEFECT_DATA	0x37
 #define COMPARE			0x39
@@ -144,7 +144,7 @@ extern const unsigned char scsi_command_size[8];
 	lsb		msb
 	status	msg	host code	
 
-        Our errors returned by OUR driver, NOT SCSI message.  Orr'd with
+        Our errors returned by OUR driver, NOT SCSI message.  Or'd with
         SCSI message passed back to driver <IF any>.
 */
 
@@ -284,8 +284,8 @@ typedef struct scsi_device {
 	unsigned lockable:1;    /* Able to prevent media removal */
 	unsigned borken:1;	/* Tell the Seagate driver to be 
 				   painfully slow on this device */ 
-	unsigned tagged_supported:1; /* Supports SCSI-II tagged queing */
-	unsigned tagged_queue:1;   /*SCSI-II tagged queing enabled */
+	unsigned tagged_supported:1; /* Supports SCSI-II tagged queuing */
+	unsigned tagged_queue:1;   /*SCSI-II tagged queuing enabled */
 	unsigned disconnect:1;     /* can disconnect */
 	unsigned soft_reset:1;		/* Uses soft reset option */
 	unsigned char current_tag; /* current tag */
@@ -301,7 +301,7 @@ typedef struct scsi_device {
 #define msg_byte(result) (((result) >> 8) & 0xff)
 #define host_byte(result) (((result) >> 16) & 0xff)
 #define driver_byte(result) (((result) >> 24) & 0xff)
-#define sugestion(result) (driver_byte(result) & SUGGEST_MASK)
+#define suggestion(result) (driver_byte(result) & SUGGEST_MASK)
 
 #define sense_class(sense) (((sense) >> 4) & 0x7)
 #define sense_error(sense) ((sense) & 0xf)
@@ -442,7 +442,7 @@ typedef struct scsi_cmnd {
 	unsigned underflow;	/* Return error if less than this amount is 
 				   transfered */
 
-	unsigned transfersize;	/* How much we are guranteed to transfer with
+	unsigned transfersize;	/* How much we are guaranteed to transfer with
 				   each SCSI transfer (ie, between disconnect /
 				   reconnects.   Probably == sector size */
 	

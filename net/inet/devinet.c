@@ -120,9 +120,11 @@ int ip_chk_addr(unsigned long addr)
 	 *	(Support old BSD in other words). This old BSD 
 	 *	support will go very soon as it messes other things
 	 *	up.
+	 *	Also accept `loopback broadcast' as BROADCAST.
 	 */
 
-	if (addr == INADDR_ANY || addr == INADDR_BROADCAST)
+	if (addr == INADDR_ANY || addr == INADDR_BROADCAST ||
+	    addr == htonl(0x7FFFFFFFL))
 		return IS_BROADCAST;
 
 	mask = ip_get_mask(addr);

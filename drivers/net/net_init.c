@@ -94,7 +94,7 @@ init_etherdev(struct device *dev, int sizeof_private, unsigned long *mem_startp)
 	int i;
 
 	if (dev == NULL) {
-		int alloc_size = sizeof(struct device) + sizeof("eth%d ")
+		int alloc_size = sizeof(struct device) + sizeof("eth%d   ")
 			+ sizeof_private;
 		if (mem_startp && *mem_startp ) {
 			dev = (struct device *)*mem_startp;
@@ -102,9 +102,9 @@ init_etherdev(struct device *dev, int sizeof_private, unsigned long *mem_startp)
 		} else
 			dev = (struct device *)kmalloc(alloc_size, GFP_KERNEL);
 		memset(dev, 0, sizeof(alloc_size));
-		dev->name = (char *)(dev + 1);
 		if (sizeof_private)
-			dev->priv = dev->name + sizeof("eth%d ");
+			dev->priv = (void *) (dev + 1);
+		dev->name = sizeof_private + (char *)(dev + 1);
 		new_device = 1;
 	}
 

@@ -81,6 +81,10 @@ asmlinkage int sys_truncate(const char * path, unsigned int length)
 		iput(inode);
 		return -EROFS;
 	}
+	if (IS_IMMUTABLE(inode) || IS_APPEND(inode)) {
+		iput(inode);
+		return -EPERM;
+	}
 	inode->i_size = length;
 	if (inode->i_op && inode->i_op->truncate)
 		inode->i_op->truncate(inode);
@@ -102,6 +106,8 @@ asmlinkage int sys_ftruncate(unsigned int fd, unsigned int length)
 		return -ENOENT;
 	if (S_ISDIR(inode->i_mode) || !(file->f_mode & 2))
 		return -EACCES;
+	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
+		return -EPERM;
 	inode->i_size = length;
 	if (inode->i_op && inode->i_op->truncate)
 		inode->i_op->truncate(inode);
@@ -294,6 +300,9 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 {
 	struct inode * inode;
 	struct file * file;
+	uid_t old_user;
+	gid_t old_group;
+	int notify_flag = 0;
 
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		return -EBADF;
@@ -301,6 +310,8 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 		return -ENOENT;
 	if (IS_RDONLY(inode))
 		return -EROFS;
+	old_user = inode->i_uid;
+	old_group = inode->i_gid;
 	if (user == (uid_t) -1)
 		user = inode->i_uid;
 	if (group == (gid_t) -1)
@@ -310,9 +321,23 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 	    fsuser()) {
 		inode->i_uid = user;
 		inode->i_gid = group;
+		/*
+		 * If the owner has been changed, remove the setuid bit
+		 */
+		if (old_user != inode->i_uid && inode->i_mode & S_ISUID) {
+			inode->i_mode &= ~S_ISUID;
+			notify_flag = NOTIFY_MODE;
+		}
+		/*
+		 * If the group has been changed, remove the setgid bit
+		 */
+		if (old_group != inode->i_gid && inode->i_mode & S_ISGID) {
+			inode->i_mode &= ~S_ISGID;
+			notify_flag = NOTIFY_MODE;
+		}
 		inode->i_ctime = CURRENT_TIME;
 		inode->i_dirt = 1;
-		return notify_change(NOTIFY_UIDGID, inode);
+		return notify_change(notify_flag | NOTIFY_UIDGID, inode);
 	}
 	return -EPERM;
 }
@@ -321,6 +346,9 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 {
 	struct inode * inode;
 	int error;
+	uid_t old_user;
+	gid_t old_group;
+	int notify_flag = 0;
 
 	error = lnamei(filename,&inode);
 	if (error)
@@ -329,6 +357,8 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 		iput(inode);
 		return -EROFS;
 	}
+	old_user = inode->i_uid;
+	old_group = inode->i_uid;
 	if (user == (uid_t) -1)
 		user = inode->i_uid;
 	if (group == (gid_t) -1)
@@ -338,9 +368,23 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 	    fsuser()) {
 		inode->i_uid = user;
 		inode->i_gid = group;
+		/*
+		 * If the owner has been changed, remove the setuid bit
+		 */
+		if (old_user != inode->i_uid && inode->i_mode & S_ISUID) {
+			inode->i_mode &= ~S_ISUID;
+			notify_flag = NOTIFY_MODE;
+		}
+		/*
+		 * If the group has been changed, remove the setgid bit
+		 */
+		if (old_group != inode->i_gid && inode->i_mode & S_ISGID) {
+			inode->i_mode &= ~S_ISGID;
+			notify_flag = NOTIFY_MODE;
+		}
 		inode->i_ctime = CURRENT_TIME;
 		inode->i_dirt = 1;
-		error = notify_change(NOTIFY_UIDGID, inode);
+		error = notify_change(notify_flag | NOTIFY_UIDGID, inode);
 		iput(inode);
 		return error;
 	}

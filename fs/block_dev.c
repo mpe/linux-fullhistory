@@ -20,7 +20,7 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	int blocksize, blocksize_bits, i, j;
 	int block, blocks;
-	int offset;
+	loff_t offset;
 	int chars;
 	int written = 0;
 	int cluster_list[4];
@@ -51,7 +51,7 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 	offset = filp->f_pos & (blocksize-1);
 
 	if (blk_size[MAJOR(dev)])
-		size = (blk_size[MAJOR(dev)][MINOR(dev)] << BLOCK_SIZE_BITS) >> blocksize_bits;
+		size = ((loff_t) blk_size[MAJOR(dev)][MINOR(dev)] << BLOCK_SIZE_BITS) >> blocksize_bits;
 	else
 		size = INT_MAX;
 	while (count>0) {
@@ -126,7 +126,7 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	unsigned int block;
-	unsigned int offset;
+	loff_t offset;
 	int blocksize;
 	int blocksize_bits, i;
 	unsigned int blocks, rblocks, left;
@@ -137,7 +137,7 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 	struct buffer_head * buflist[NBUF];
 	struct buffer_head * bhreq[NBUF];
 	unsigned int chars;
-	unsigned int size;
+	loff_t size;
 	unsigned int dev;
 	int read;
 
@@ -154,7 +154,7 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 
 	offset = filp->f_pos;
 	if (blk_size[MAJOR(dev)])
-		size = blk_size[MAJOR(dev)][MINOR(dev)] << BLOCK_SIZE_BITS;
+		size = (loff_t) blk_size[MAJOR(dev)][MINOR(dev)] << BLOCK_SIZE_BITS;
 	else
 		size = INT_MAX;
 

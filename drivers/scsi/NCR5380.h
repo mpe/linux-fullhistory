@@ -58,7 +58,7 @@
  * The contents of the OUTPUT DATA register are asserted on the bus when
  * either arbitration is occuring or the phase-indicating signals (
  * IO, CD, MSG) in the TARGET COMMAND register and the ASSERT DATA
- * bit in the INTITIATOR COMMAND register is set.
+ * bit in the INITIATOR COMMAND register is set.
  */
 
 #define OUTPUT_DATA_REG         0       /* wo DATA lines on SCSI bus */
@@ -92,7 +92,7 @@
 #define MR_TARGET		0x40	/* rw target mode */
 #define MR_ENABLE_PAR_CHECK   0x20	/* rw enable parity checking */
 #define MR_ENABLE_PAR_INTR	0x10	/* rw enable bad parity interrupt */
-#define MR_ENABLE_EOP_INTR	0x08	/* rw enabble eop interrupt */
+#define MR_ENABLE_EOP_INTR	0x08	/* rw enable eop interrupt */
 #define MR_MONITOR_BSY	0x04	/* rw enable int on unexpected bsy fail */
 #define MR_DMA_MODE		0x02	/* rw DMA / pseudo DMA mode */
 #define MR_ARBITRATE		0x01	/* rw start arbitration */
@@ -149,14 +149,14 @@
  */
 #define INPUT_DATA_REG			6	/* ro */
 
-/* Write any value to this register to start a DMA recieve */
-#define START_DMA_TARGET_RECIEVE_REG	6	/* wo */
+/* Write any value to this register to start a DMA receive */
+#define START_DMA_TARGET_RECEIVE_REG	6	/* wo */
 
 /* Read this register to clear interrupt conditions */
 #define RESET_PARITY_INTERRUPT_REG	7	/* ro */
 
-/* Write any value to this register to start an ini mode DMA recieve */
-#define START_DMA_INITIATOR_RECIEVE_REG 7	/* wo */
+/* Write any value to this register to start an ini mode DMA receive */
+#define START_DMA_INITIATOR_RECEIVE_REG 7	/* wo */
 
 #ifdef NCR53C400
 #define C400_CONTROL_STATUS_REG                -8      /* rw */
@@ -165,8 +165,8 @@
 #define CSR_53C80_REG          0x80    /* ro  5380 registers busy */
 #define CSR_TRANS_DIR          0x40    /* rw  Data transfer direction */
 #define CSR_SCSI_BUFF_INTR     0x20    /* rw  Enable int on transfer ready */
-#define CSR_53C80_INTR         0x10    /* rw  Enable 53c80 interupts */
-#define CSR_SHARED_INTR                0x08    /* rw  Interupt sharing */
+#define CSR_53C80_INTR         0x10    /* rw  Enable 53c80 interrupts */
+#define CSR_SHARED_INTR                0x08    /* rw  Interrupt sharing */
 #define CSR_HOST_BUF_NOT_RDY   0x04    /* ro  Is Host buffer ready */
 #define CSR_SCSI_BUF_RDY       0x02    /* ro  SCSI buffer read */
 #define CSR_GATED_53C80_IRQ    0x01    /* ro  Last block xferred */
@@ -240,7 +240,7 @@
 
 #ifndef ASM
 struct NCR5380_hostdata {
-    NCR5380_implementation_fields;		/* implmenentation specific */
+    NCR5380_implementation_fields;		/* implementation specific */
     unsigned char id_mask, id_higher_mask;	/* 1 << id, all bits greater */
     unsigned char targets_present;		/* targets we have connected
 						   to, so we can call a select
@@ -316,7 +316,7 @@ static __inline__ int NCR5380_i386_dma_setup (struct Scsi_Host *instance,
     if (count > limit) count = limit;
 
     if ((count & 1) || (((unsigned) ptr) & 1))
-	panic ("scsi%d : attmpted unaligned DMA transfer\n", instance->host_no);
+	panic ("scsi%d : attempted unaligned DMA transfer\n", instance->host_no);
     cli();
     disable_dma(instance->dma_channel);
     clear_dma_ff(instance->dma_channel);

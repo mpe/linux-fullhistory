@@ -24,14 +24,7 @@
 #include <linux/sched.h>
 #include <linux/stat.h>
 #include <linux/locks.h>
-
-#define clear_block(addr,size,value) \
-	__asm__("cld\n\t" \
-		"rep\n\t" \
-		"stosl" \
-		: \
-		:"a" (value), "c" (size / 4), "D" ((long) (addr)) \
-		:"cx", "di")
+#include <linux/string.h>
 
 static int ext2_secrm_seed = 152;	/* Random generator base */
 
@@ -88,8 +81,7 @@ repeat:
 		inode->i_blocks -= blocks;
 		inode->i_dirt = 1;
 		if (inode->u.ext2_i.i_flags & EXT2_SECRM_FL) {
-			clear_block (bh->b_data, inode->i_sb->s_blocksize,
-				     RANDOM_INT);
+			memset(bh->b_data, RANDOM_INT, inode->i_sb->s_blocksize);
 			mark_buffer_dirty(bh, 1);
 		}
 		brelse (bh);
@@ -164,8 +156,7 @@ repeat:
 		*ind = 0;
 		mark_buffer_dirty(ind_bh, 1);
 		if (inode->u.ext2_i.i_flags & EXT2_SECRM_FL) {
-			clear_block (bh->b_data, inode->i_sb->s_blocksize,
-				     RANDOM_INT);
+			memset(bh->b_data, RANDOM_INT, inode->i_sb->s_blocksize);
 			mark_buffer_dirty(bh, 1);
 		}
 		brelse (bh);
@@ -332,6 +323,8 @@ void ext2_truncate (struct inode * inode)
 
 	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
 	    S_ISLNK(inode->i_mode)))
+		return;
+	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
 		return;
 	ext2_discard_prealloc(inode);
 	while (1) {

@@ -103,7 +103,7 @@ static int read_kmem(struct inode *inode, struct file *file, char *buf, int coun
 	read1 = read_mem(inode, file, buf, count);
 	if (read1 < 0)
 		return read1;
-	read2 = vread(buf + read1, (char *) file->f_pos, count - read1);
+	read2 = vread(buf + read1, (char *) ((unsigned long) file->f_pos), count - read1);
 	if (read2 < 0)
 		return read2;
 	file->f_pos += read2;

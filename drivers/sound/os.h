@@ -102,7 +102,7 @@ struct snd_wait {
 
 /* DISABLE_INTR is used to disable interrupts.
    These macros store the current flags to the (unsigned long) variable given
-   as a parameter. RESTORE_INTR returns the interrupt ebable bit to state
+   as a parameter. RESTORE_INTR returns the interrupt enable bit to state
    before DISABLE_INTR or ENABLE_INTR */
 
 #define DISABLE_INTR(flags)	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));

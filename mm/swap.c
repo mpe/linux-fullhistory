@@ -280,9 +280,9 @@ unsigned long swap_in(unsigned long entry)
 	}
 	read_swap_page(entry, (char *) page);
 	if (add_to_swap_cache(page, entry))
-		return page | PAGE_PRIVATE;
+		return page | PAGE_PRESENT;
   	swap_free(entry);
-	return page | PAGE_DIRTY | PAGE_PRIVATE;
+	return page | PAGE_DIRTY | PAGE_PRESENT;
 }
 
 static inline int try_to_swap_out(unsigned long * table_ptr)

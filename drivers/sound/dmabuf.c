@@ -41,7 +41,7 @@ static struct dma_buffparms dmaps[MAX_AUDIO_DEV] =
 {0};				/*
 		 * Primitive way to allocate
 		 * such a large array.
-		 * Needs dynamic run-time alloction.
+		 * Needs dynamic run-time allocation.
 		 */
 
 static void
@@ -78,7 +78,7 @@ reorganize_buffers (int dev)
       sz = sr * nc * sz;
 
       /*
-   * Compute a buffer size for time not exeeding 1 second.
+   * Compute a buffer size for time not exceeding 1 second.
    * Usually this algorithm gives a buffer size for 0.5 to 1.0 seconds
    * of sound (using the current speed, sample size and #channels).
    */
@@ -106,8 +106,8 @@ reorganize_buffers (int dev)
   else
     {
       /*
- * The process has specified the buffer sice with SNDCTL_DSP_SETFRAGMENT or
- * the buffer sice computation has already been done.
+ * The process has specified the buffer size with SNDCTL_DSP_SETFRAGMENT or
+ * the buffer size computation has already been done.
  */
       if (dmap->fragment_size > audio_devs[dev]->buffsize)
 	dmap->fragment_size = audio_devs[dev]->buffsize;
@@ -425,7 +425,7 @@ DMAbuf_ioctl (int dev, unsigned int cmd, unsigned int arg, int local)
 	  }
 
 	if (dmap->subdivision != 0 ||
-	    dmap->fragment_size)/* Loo late to change */
+	    dmap->fragment_size)/* Too late to change */
 	  return RET_ERROR (EINVAL);
 
 	if (fact > MAX_REALTIME_FACTOR)
@@ -448,7 +448,7 @@ DMAbuf_ioctl (int dev, unsigned int cmd, unsigned int arg, int local)
 	  return RET_ERROR (EIO);
 
 	if (dmap->subdivision != 0 ||
-	    dmap->fragment_size)/* Loo late to change */
+	    dmap->fragment_size)/* Too late to change */
 	  return RET_ERROR (EINVAL);
 
 	bytes = fact & 0xffff;

@@ -71,6 +71,9 @@ extern unsigned long name_cache_init(unsigned long start, unsigned long end);
 #define MS_SYNC     16 /* writes are synced at once */
 #define	MS_REMOUNT  32 /* alter flags of a mounted FS */
 
+#define S_APPEND    256 /* append-only file */
+#define S_IMMUTABLE 512 /* immutable file */
+
 /*
  * Flags that can be altered by MS_REMOUNT
  */
@@ -95,6 +98,9 @@ extern unsigned long name_cache_init(unsigned long start, unsigned long end);
 #define IS_NODEV(inode) ((inode)->i_flags & MS_NODEV)
 #define IS_NOEXEC(inode) ((inode)->i_flags & MS_NOEXEC)
 #define IS_SYNC(inode) ((inode)->i_flags & MS_SYNC)
+
+#define IS_APPEND(inode) ((inode)->i_flags & S_APPEND)
+#define IS_IMMUTABLE(inode) ((inode)->i_flags & S_IMMUTABLE)
 
 /* the read-only stuff doesn't really belong here, but any other place is
    probably as bad and I don't want to create yet another include file. */
@@ -219,7 +225,7 @@ struct inode {
 
 struct file {
 	mode_t f_mode;
-	off_t f_pos;
+	loff_t f_pos;
 	unsigned short f_flags;
 	unsigned short f_count;
 	off_t f_reada;

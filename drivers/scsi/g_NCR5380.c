@@ -43,12 +43,12 @@
  *     used on the LILO command line to override the defaults.
  *
  * 2.  With the GENERIC_NCR5380_OVERRIDE compile time define.  This is 
- *     specified as an array of address, irq tupples.  Ie, for
+ *     specified as an array of address, irq tuples.  Ie, for
  *     one board at the default 0xcc000 address, IRQ5, no dma, I could 
  *     say  -DGENERIC_NCR5380_OVERRIDE={{0xcc000, 5, DMA_NONE}}
  * 
  * -1 should be specified for no or DMA interrupt, -2 to autoprobe for an 
- * 	IRQ line if overriden on the command line.
+ * 	IRQ line if overridden on the command line.
  */
  
 /*
@@ -86,7 +86,7 @@ static struct override {
  *
  * Purpose : LILO command line initialization of the overrides array,
  * 
- * Inputs : str - unused, ints - array of integer paramters with ints[0]
+ * Inputs : str - unused, ints - array of integer parameters with ints[0]
  *	equal to the number of ints.
  *
  */
@@ -105,7 +105,7 @@ void generic_NCR5380_setup(char *str, int *ints) {
 }
 
 /* 
- * Function : int generic_NCR5380_detect(Scsi_Host_Templace * tpnt)
+ * Function : int generic_NCR5380_detect(Scsi_Host_Template * tpnt)
  *
  * Purpose : initializes generic NCR5380 driver based on the 
  *	command line / compile time port and irq definitions.

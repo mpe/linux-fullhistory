@@ -25,14 +25,6 @@
 #include <linux/string.h>
 #include <linux/locks.h>
 
-#define clear_block(addr,size) \
-	__asm__("cld\n\t" \
-		"rep\n\t" \
-		"stosl" \
-		: \
-		:"a" (0), "c" (size / 4), "D" ((long) (addr)) \
-		:"cx", "di")
-
 void ext2_put_inode (struct inode * inode)
 {
 	ext2_discard_prealloc (inode);
@@ -107,7 +99,7 @@ static int ext2_alloc_block (struct inode * inode, unsigned long goal)
 				    "cannot get block %lu", result);
 			return 0;
 		}
-		clear_block (bh->b_data, inode->i_sb->s_blocksize);
+		memset(bh->b_data, 0, inode->i_sb->s_blocksize);
 		bh->b_uptodate = 1;
 		mark_buffer_dirty(bh, 1);
 		brelse (bh);
@@ -541,8 +533,8 @@ void ext2_read_inode (struct inode * inode)
 	inode->i_version = ++event;
 	inode->u.ext2_i.i_flags = raw_inode->i_flags;
 	inode->u.ext2_i.i_faddr = raw_inode->i_faddr;
-	inode->u.ext2_i.i_frag = raw_inode->i_frag;
-	inode->u.ext2_i.i_fsize = raw_inode->i_fsize;
+	inode->u.ext2_i.i_frag_no = raw_inode->i_frag;
+	inode->u.ext2_i.i_frag_size = raw_inode->i_fsize;
 	inode->u.ext2_i.i_file_acl = raw_inode->i_file_acl;
 	inode->u.ext2_i.i_dir_acl = raw_inode->i_dir_acl;
 	inode->u.ext2_i.i_version = raw_inode->i_version;
@@ -575,6 +567,10 @@ void ext2_read_inode (struct inode * inode)
 		init_fifo(inode);
 	if (inode->u.ext2_i.i_flags & EXT2_SYNC_FL)
 		inode->i_flags |= MS_SYNC;
+	if (inode->u.ext2_i.i_flags & EXT2_APPEND_FL)
+		inode->i_flags |= S_APPEND;
+	if (inode->u.ext2_i.i_flags & EXT2_IMMUTABLE_FL)
+		inode->i_flags |= S_IMMUTABLE;
 }
 
 static struct buffer_head * ext2_update_inode (struct inode * inode)
@@ -625,8 +621,8 @@ static struct buffer_head * ext2_update_inode (struct inode * inode)
 	raw_inode->i_dtime = inode->u.ext2_i.i_dtime;
 	raw_inode->i_flags = inode->u.ext2_i.i_flags;
 	raw_inode->i_faddr = inode->u.ext2_i.i_faddr;
-	raw_inode->i_frag = inode->u.ext2_i.i_frag;
-	raw_inode->i_fsize = inode->u.ext2_i.i_fsize;
+	raw_inode->i_frag = inode->u.ext2_i.i_frag_no;
+	raw_inode->i_fsize = inode->u.ext2_i.i_frag_size;
 	raw_inode->i_file_acl = inode->u.ext2_i.i_file_acl;
 	raw_inode->i_dir_acl = inode->u.ext2_i.i_dir_acl;
 	raw_inode->i_version = inode->u.ext2_i.i_version;

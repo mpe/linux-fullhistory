@@ -90,6 +90,7 @@ extern int timer_interrupt(void);
 asmlinkage int system_call(void);
 
 static unsigned long init_kernel_stack[1024] = { STACK_MAGIC, };
+static struct vm_area_struct init_mmap = INIT_MMAP;
 struct task_struct init_task = INIT_TASK;
 
 unsigned long volatile jiffies=0;

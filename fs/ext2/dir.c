@@ -40,7 +40,10 @@ static struct file_operations ext2_dir_operations = {
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
 	NULL,			/* no special release code */
-	file_fsync		/* fsync */
+	file_fsync,		/* fsync */
+	NULL,			/* fasync */
+	NULL,			/* check_media_change */
+	NULL			/* revalidate */
 };
 
 /*
@@ -61,7 +64,8 @@ struct inode_operations ext2_dir_inode_operations = {
 	NULL,			/* follow_link */
 	NULL,			/* bmap */
 	ext2_truncate,		/* truncate */
-	ext2_permission		/* permission */
+	ext2_permission,	/* permission */
+	NULL			/* smap */
 };
 
 int ext2_check_dir_entry (char * function, struct inode * dir,
@@ -79,6 +83,8 @@ int ext2_check_dir_entry (char * function, struct inode * dir,
 	else if (dir && ((char *) de - bh->b_data) + de->rec_len >
 		 dir->i_sb->s_blocksize)
 		error_msg = "directory entry across blocks";
+	else if (dir && de->inode > dir->i_sb->u.ext2_sb.s_es->s_inodes_count)
+		error_msg = "inode out of bounds";
 
 	if (error_msg != NULL)
 		ext2_error (dir->i_sb, function, "bad directory entry: %s\n"

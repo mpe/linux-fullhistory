@@ -192,6 +192,25 @@ static struct device eth0_dev = {
 
 #if defined(SLIP) || defined(CONFIG_SLIP)
     extern int slip_init(struct device *);
+    
+#ifdef SL_SLIP_LOTS
+
+    static struct device slip15_dev={"sl15",0,0,0,0,15,0,0,0,0,NEXT_DEV,slip_init};
+    static struct device slip14_dev={"sl14",0,0,0,0,14,0,0,0,0,&slip15_dev,slip_init};
+    static struct device slip13_dev={"sl13",0,0,0,0,13,0,0,0,0,&slip14_dev,slip_init};
+    static struct device slip12_dev={"sl12",0,0,0,0,12,0,0,0,0,&slip13_dev,slip_init};
+    static struct device slip11_dev={"sl11",0,0,0,0,11,0,0,0,0,&slip12_dev,slip_init};
+    static struct device slip10_dev={"sl10",0,0,0,0,10,0,0,0,0,&slip11_dev,slip_init};
+    static struct device slip9_dev={"sl9",0,0,0,0,9,0,0,0,0,&slip10_dev,slip_init};
+    static struct device slip8_dev={"sl8",0,0,0,0,8,0,0,0,0,&slip9_dev,slip_init};
+    static struct device slip7_dev={"sl7",0,0,0,0,7,0,0,0,0,&slip8_dev,slip_init};
+    static struct device slip6_dev={"sl6",0,0,0,0,6,0,0,0,0,&slip7_dev,slip_init};
+    static struct device slip5_dev={"sl5",0,0,0,0,5,0,0,0,0,&slip6_dev,slip_init};
+    static struct device slip4_dev={"sl4",0,0,0,0,4,0,0,0,0,&slip5_dev,slip_init};
+#   undef	NEXT_DEV
+#   define	NEXT_DEV	(&slip4_dev)
+#endif	/* SL_SLIP_LOTS */
+    
     static struct device slip3_dev = {
 	"sl3",			/* Internal SLIP driver, channel 3	*/
 	0x0,			/* recv memory end			*/

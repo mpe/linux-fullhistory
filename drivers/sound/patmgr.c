@@ -1,7 +1,7 @@
 /*
  * sound/patmgr.c
  *
- * The patch maneger interface for the /dev/sequencer
+ * The patch manager interface for the /dev/sequencer
  *
  * Copyright by Hannu Savolainen 1993
  *

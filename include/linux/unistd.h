@@ -145,6 +145,7 @@
 #define __NR_afs_syscall	137 /* Syscall for Andrew File System */
 #define __NR_setfsuid		138
 #define __NR_setfsgid		139
+#define __NR__llseek		140
 
 extern int errno;
 

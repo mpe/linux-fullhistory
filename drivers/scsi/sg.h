@@ -6,7 +6,7 @@
 */
 
 /* 
- An SG device is accessed by writting "packets" to it, the replies
+ An SG device is accessed by writing "packets" to it, the replies
  are then read using the read call. The same header is used for 
  reply, just ignore reply_len field.
 */

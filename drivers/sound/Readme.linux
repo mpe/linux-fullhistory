@@ -5,7 +5,7 @@ Installation
   let's skip this step. To be serious, the sound driver belongs
   to linux/drivers/sound. 
 
-- To build the device files you need to run the enclosed shell scrip 
+- To build the device files you need to run the enclosed shell script 
   (see below).
 
 - If you are installing a separately distributed version, copy the
@@ -68,7 +68,7 @@ These are the configuration templates for various soundcards:
 
 		sound=0x2220Id,0x138800	  (remember to set the IRQ and DMA)
 	or if you have SB16 or SB16ASP, you have to use the following:
-	        (use the same IRQ (the I colums) in all three places. The
+	        (use the same IRQ (the I columns) in all three places. The
 	         the D is the 16 bit DMA channel (5 to 7) and the d is 
 	         the 8 bit one (1 or 3). The X is the 2nd digit of the
 	         midi IO address (3 or 0)).
@@ -134,7 +134,7 @@ command:
 
 	cat /dev/sndstat 
 
-and look at the output. It should display some usefull info about the
+and look at the output. It should display some useful info about the
 driver configuration. If there is no /dev/sndstat 
 (/dev/sndstat: No such file or directory), ensure that you have executed the
 soundinstall script (at the end of this file). The message: 
@@ -147,7 +147,7 @@ Run the script at the end of this file.
 
 - /dev/???????: No such device.
 You have not booted with a kernel containing the driver or the I/O address
-configuration doesn't match your hardaware. 
+configuration doesn't match your hardware. 
 
 - The module player (str) plays just a second and then stops completely.
 You have incorrect IRQ settings (usual with SB cards).
@@ -159,7 +159,7 @@ You should use lower speed (-s speed), buy a faster computer or a Gravis
 UltraSound card. (If you already have GUS, you should use gmod and not the
 str). If the DSP_BUFFSIZE in the sound/local.h is less than (nr_channels*
 speed_in_Hz * (bits/8))/2, it could explain the pausing problem. Also check
-that the turbo swich is on and don't run applications like weather forecasting
+that the turbo switch is on and don't run applications like weather forecasting
 on background. Sometimes (very rarely) an IRQ conflict can cause similar
 problems with SB cards.
 If you want to play modules on a 386sx while recompiling the world, buy a GUS.
@@ -171,7 +171,7 @@ hannu@voxware.pp.fi
 ----------------- cut here ------------------------------
 #!/bin/sh
 #
-#	soudinstall		
+#	soundinstall		
 #
 #
 # Create the devices

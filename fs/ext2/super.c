@@ -20,6 +20,7 @@
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
+#include <linux/malloc.h>
 #include <linux/sched.h>
 #include <linux/stat.h>
 #include <linux/string.h>
@@ -89,6 +90,7 @@ void ext2_warning (struct super_block * sb, const char * function,
 
 void ext2_put_super (struct super_block * sb)
 {
+	int db_count;
 	int i;
 
 	lock_super (sb);
@@ -97,9 +99,12 @@ void ext2_put_super (struct super_block * sb)
 		mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
 	}
 	sb->s_dev = 0;
-	for (i = 0; i < EXT2_MAX_GROUP_DESC; i++)
+	db_count = sb->u.ext2_sb.s_db_per_group;
+	for (i = 0; i < db_count; i++)
 		if (sb->u.ext2_sb.s_group_desc[i])
 			brelse (sb->u.ext2_sb.s_group_desc[i]);
+	kfree_s (sb->u.ext2_sb.s_group_desc,
+		 db_count * sizeof (struct buffer_head *));
 	for (i = 0; i < EXT2_MAX_GROUP_LOADED; i++)
 		if (sb->u.ext2_sb.s_inode_bitmap[i])
 			brelse (sb->u.ext2_sb.s_inode_bitmap[i]);
@@ -180,7 +185,9 @@ static int parse_options (char * options, unsigned long * sb_block,
 	     this_char = strtok (NULL, ",")) {
 		if ((value = strchr (this_char, '=')) != NULL)
 			*value++ = 0;
-		if (!strcmp (this_char, "check")) {
+		if (!strcmp (this_char, "bsddf"))
+			clear_opt (*mount_options, MINIX_DF);
+		else if (!strcmp (this_char, "check")) {
 			if (!value || !*value)
 				set_opt (*mount_options, CHECK_NORMAL);
 			else if (!strcmp (value, "none")) {
@@ -231,6 +238,8 @@ static int parse_options (char * options, unsigned long * sb_block,
 		else if (!strcmp (this_char, "grpid") ||
 			 !strcmp (this_char, "bsdgroups"))
 			set_opt (*mount_options, GRPID);
+		else if (!strcmp (this_char, "minixdf"))
+			set_opt (*mount_options, MINIX_DF);
 		else if (!strcmp (this_char, "nocheck")) {
 			clear_opt (*mount_options, CHECK_NORMAL);
 			clear_opt (*mount_options, CHECK_STRICT);
@@ -355,7 +364,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	unsigned long sb_block = 1;
 	unsigned long logic_sb_block = 1;
 	int dev = sb->s_dev;
-	int bh_count;
+	int db_count;
 	int i, j;
 #ifdef EXT2FS_PRE_02B_COMPAT
 	int fs_converted = 0;
@@ -506,18 +515,17 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 				        es->s_first_data_block +
 				       EXT2_BLOCKS_PER_GROUP(sb) - 1) /
 				       EXT2_BLOCKS_PER_GROUP(sb);
-	for (i = 0; i < EXT2_MAX_GROUP_DESC; i++)
-		sb->u.ext2_sb.s_group_desc[i] = NULL;
-	bh_count = (sb->u.ext2_sb.s_groups_count + EXT2_DESC_PER_BLOCK(sb) - 1) /
+	db_count = (sb->u.ext2_sb.s_groups_count + EXT2_DESC_PER_BLOCK(sb) - 1) /
 		   EXT2_DESC_PER_BLOCK(sb);
-	if (bh_count > EXT2_MAX_GROUP_DESC) {
+	sb->u.ext2_sb.s_group_desc = kmalloc (db_count * sizeof (struct buffer_head *), GFP_KERNEL);
+	if (sb->u.ext2_sb.s_group_desc == NULL) {
 		sb->s_dev = 0;
 		unlock_super (sb);
 		brelse (bh);
-		printk ("EXT2-fs: file system is too big\n");
+		printk ("EXT2-fs: not enough memory\n");
 		return NULL;
 	}
-	for (i = 0; i < bh_count; i++) {
+	for (i = 0; i < db_count; i++) {
 		sb->u.ext2_sb.s_group_desc[i] = bread (dev, logic_sb_block + i + 1,
 						       sb->s_blocksize);
 		if (!sb->u.ext2_sb.s_group_desc[i]) {
@@ -525,6 +533,8 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 			unlock_super (sb);
 			for (j = 0; j < i; j++)
 				brelse (sb->u.ext2_sb.s_group_desc[j]);
+			kfree_s (sb->u.ext2_sb.s_group_desc,
+				 db_count * sizeof (struct buffer_head *));
 			brelse (bh);
 			printk ("EXT2-fs: unable to read group descriptors\n");
 			return NULL;
@@ -533,8 +543,10 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	if (!ext2_check_descriptors (sb)) {
 		sb->s_dev = 0;
 		unlock_super (sb);
-		for (j = 0; j < i; j++)
+		for (j = 0; j < db_count; j++)
 			brelse (sb->u.ext2_sb.s_group_desc[j]);
+		kfree_s (sb->u.ext2_sb.s_group_desc,
+			 db_count * sizeof (struct buffer_head *));
 		brelse (bh);
 		printk ("EXT2-fs: group descriptors corrupted !\n");
 		return NULL;
@@ -547,6 +559,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	}
 	sb->u.ext2_sb.s_loaded_inode_bitmaps = 0;
 	sb->u.ext2_sb.s_loaded_block_bitmaps = 0;
+	sb->u.ext2_sb.s_db_per_group = db_count;
 	unlock_super (sb);
 	/*
 	 * set up enough so that it can read an inode
@@ -555,16 +568,18 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	sb->s_op = &ext2_sops;
 	if (!(sb->s_mounted = iget (sb, EXT2_ROOT_INO))) {
 		sb->s_dev = 0;
-		for (i = 0; i < EXT2_MAX_GROUP_DESC; i++)
+		for (i = 0; i < db_count; i++)
 			if (sb->u.ext2_sb.s_group_desc[i])
 				brelse (sb->u.ext2_sb.s_group_desc[i]);
+		kfree_s (sb->u.ext2_sb.s_group_desc,
+			 db_count * sizeof (struct buffer_head *));
 		brelse (bh);
 		printk ("EXT2-fs: get root inode failed\n");
 		return NULL;
 	}
 #ifdef EXT2FS_PRE_02B_COMPAT
 	if (fs_converted) {
-		for (i = 0; i < bh_count; i++)
+		for (i = 0; i < db_count; i++)
 			mark_buffer_dirty(sb->u.ext2_sb.s_group_desc[i], 1);
 		sb->s_dirt = 1;
 	}
@@ -654,10 +669,28 @@ int ext2_remount (struct super_block * sb, int * flags, char * data)
 void ext2_statfs (struct super_block * sb, struct statfs * buf)
 {
 	long tmp;
+	unsigned long overhead;
+	unsigned long overhead_per_group;
+
+	if (test_opt (sb, MINIX_DF))
+		overhead = 0;
+	else {
+		/*
+		 * Compute the overhead (FS structures)
+		 */
+		overhead_per_group = 1 /* super block */ +
+				     sb->u.ext2_sb.s_db_per_group /* descriptors */ +
+				     1 /* block bitmap */ +
+				     1 /* inode bitmap */ +
+				     sb->u.ext2_sb.s_itb_per_group /* inode table */;
+		overhead = sb->u.ext2_sb.s_es->s_first_data_block +
+			   sb->u.ext2_sb.s_groups_count * overhead_per_group;
+	}
 
 	put_fs_long (EXT2_SUPER_MAGIC, &buf->f_type);
 	put_fs_long (sb->s_blocksize, &buf->f_bsize);
-	put_fs_long (sb->u.ext2_sb.s_es->s_blocks_count, &buf->f_blocks);
+	put_fs_long (sb->u.ext2_sb.s_es->s_blocks_count - overhead,
+		     &buf->f_blocks);
 	tmp = ext2_count_free_blocks (sb);
 	put_fs_long (tmp, &buf->f_bfree);
 	if (tmp >= sb->u.ext2_sb.s_es->s_r_blocks_count)

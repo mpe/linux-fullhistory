@@ -301,7 +301,7 @@ mkdir_error:
 
 static int msdos_empty(struct inode *dir)
 {
-	off_t pos;
+	loff_t pos;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
 

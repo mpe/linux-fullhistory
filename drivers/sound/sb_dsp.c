@@ -105,7 +105,7 @@ sb_dsp_command (unsigned char val)
   unsigned long   limit;
 
   limit = GET_TIME () + HZ / 10;/*
-					   * The timeout is 0.1 secods
+					   * The timeout is 0.1 seconds
 					 */
 
   /*
@@ -160,7 +160,7 @@ sbintr (int unit)
 
       if (!(src & 1))
 	return;			/*
-				 * Not a DSP interupt
+				 * Not a DSP interrupt
 				 */
     }
 #endif

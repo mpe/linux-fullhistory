@@ -95,7 +95,7 @@ static int sysv_readdir(struct inode * inode, struct file * filp,
 				if (i) {
 					if (de->inode > inode->i_sb->sv_ninodes)
 						printk("sysv_readdir: Bad inode number on dev 0x%04x, ino %ld, offset 0x%04lx: %d is out of range\n",
-				                        inode->i_dev, inode->i_ino, filp->f_pos - SYSV_DIRSIZE, de->inode);
+				                        inode->i_dev, inode->i_ino, (off_t) filp->f_pos - SYSV_DIRSIZE, de->inode);
 					put_fs_long(de->inode,&dirent->d_ino);
 					put_fs_byte(0,i+dirent->d_name);
 					put_fs_word(i,&dirent->d_reclen);

@@ -190,7 +190,7 @@ If your card has nonstandard I/O address or IRQ number, change defines
 #define SND_DEV_DSP16	5	/* Like /dev/dsp but 16 bits/sample */
 #define SND_DEV_STATUS	6	/* /dev/sndstat */
 /* #7 not in use now. Was in 2.4. Free for use after v3.0. */
-#define SND_DEV_SEQ2	8	/* /dev/sequecer, level 2 interface */
+#define SND_DEV_SEQ2	8	/* /dev/sequencer, level 2 interface */
 #define SND_DEV_SNDPROC 9	/* /dev/sndproc for programmable devices */
 #define SND_DEV_PSS	SND_DEV_SNDPROC
 

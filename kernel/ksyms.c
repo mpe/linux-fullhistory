@@ -174,7 +174,6 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(dev_rint),
 	X(dev_tint),
 	X(irq2dev_map),
-	X(dev_kfree_skb),
 #endif
 
 	/********************************************************

@@ -85,7 +85,7 @@ sense[0],sense[1],sense[2],sense[3]);
     {
 	if ( (status[1]&0x18) || status_word.sc ) /*Additional info available*/
 	{
-	    /* Use the supplied info for futher diagnostics */
+	    /* Use the supplied info for further diagnostics */
 	    switch ( status[2] )
 	    {
 	    case 0x12:
@@ -362,7 +362,7 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	  I when I wrote it, but the Adaptec Spec says the card is so fast,
 	  that this problem virtually never occurs so I've kept it.  We
           do printk a warning first, so that you'll know if it happens.
-	  In practive the only time we've seen this message is when some-
+	  In practice the only time we've seen this message is when some-
 	  thing else is in the driver was broken, like _makecode(), or
 	  when a scsi device hung the scsi bus.  Even under these conditions,
 	  The loop actually only cycled < 3 times (we instrumented it). */

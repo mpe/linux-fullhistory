@@ -314,7 +314,7 @@ static void *addresses[] =
 };
 #define ADDRESS_COUNT (sizeof( addresses ) / sizeof( unsigned ))
 
-/* possible i/o adresses for the AIC-6260 */
+/* possible i/o addresses for the AIC-6260 */
 static unsigned short ports[] =
 {
   0x340,      /* default first */
@@ -1094,7 +1094,7 @@ void aha152x_intr( int irqno )
 
   /* disconnected target is trying to reconnect.
      Only possible, if we have disconnected nexuses and
-     nothing is occuping the bus.
+     nothing is occupying the bus.
   */
   if( TESTHI( SSTAT0, SELDI ) &&
       disconnected_SC &&
@@ -1210,7 +1210,7 @@ void aha152x_intr( int irqno )
           sti();
 
 #if defined(DEBUG_INTR) || defined(DEBUG_SELECTION) || defined(DEBUG_PHASES)
-          printk("issueing command, ");
+          printk("issuing command, ");
 #endif
           current_SC->SCp.phase = in_selection;
 

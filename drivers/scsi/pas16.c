@@ -69,7 +69,7 @@
  *     used on the LILO command line to override the defaults.
  *
  * 3.  With the PAS16_OVERRIDE compile time define.  This is 
- *     specified as an array of address, irq tupples.  Ie, for
+ *     specified as an array of address, irq tuples.  Ie, for
  *     one board at the default 0x388 address, IRQ10, I could say 
  *     -DPAS16_OVERRIDE={{0x388, 10}}
  *     NOTE:  Untested.
@@ -154,10 +154,10 @@ unsigned short  pas16_offset[ 8 ] =
         0x3c00,    /* STATUS_REG ro, SELECT_ENABLE_REG wo */
         0x3c01,    /* BUS_AND_STATUS_REG ro, START_DMA_SEND_REG wo */
         0x3c02,    /* INPUT_DATA_REGISTER ro, (N/A on PAS16 ?)
-                    * START_DMA_TARGET_RECIEVE_REG wo
+                    * START_DMA_TARGET_RECEIVE_REG wo
                     */
         0x3c03,    /* RESET_PARITY_INTERRUPT_REG ro,
-                    * START_DMA_INITIATOR_RECIEVE_REG wo
+                    * START_DMA_INITIATOR_RECEIVE_REG wo
                     */
     };
 
@@ -214,7 +214,7 @@ void	init_board( unsigned short io_port, int irq, int force_irq )
 	    && !force_irq )
 	{
 	    printk( "pas16: WARNING: Can't use same irq as sound "
-		    "driver -- interrupts diabled\n" );
+		    "driver -- interrupts disabled\n" );
 	    /* Set up the drive parameters, disable 5380 interrupts */
 	    outb( 0x4d, io_port + SYS_CONFIG_4 );
 	}
@@ -280,7 +280,7 @@ int     pas16_hw_detect( unsigned short  board_num )
  *
  * Purpose : LILO command line initialization of the overrides array,
  * 
- * Inputs : str - unused, ints - array of integer paramters with ints[0]
+ * Inputs : str - unused, ints - array of integer parameters with ints[0]
  *	equal to the number of ints.
  *
  */
@@ -307,7 +307,7 @@ void pas16_setup(char *str, int *ints) {
  * Function : int pas16_detect(Scsi_Host_Template * tpnt)
  *
  * Purpose : detects and initializes PAS16 controllers
- *	that were autoprobed, overriden on the LILO command line, 
+ *	that were autoprobed, overridden on the LILO command line, 
  *	or specified at compile time.
  *
  * Inputs : tpnt - template for this SCSI adapter.
@@ -377,6 +377,7 @@ int pas16_detect(Scsi_Host_Template * tpnt) {
 	    printk("scsi%d : please jumper the board for a free IRQ.\n", instance->host_no);
             /* Disable 5380 interrupts, leave drive params the same */
             outb( 0x4d, io_port + SYS_CONFIG_4 );
+	    outb( (inb(io_port + IO_CONFIG_3) & 0x0f), io_port + IO_CONFIG_3 );
 	}
 
 #if defined(PDEBUG) && (PDEBUG & PDEBUG_INIT)
@@ -403,13 +404,13 @@ int pas16_detect(Scsi_Host_Template * tpnt) {
 /*
  * Function : int pas16_biosparam(Disk *disk, int dev, int *ip)
  *
- * Purpose : Generates a BIOS / DOS compatable H-C-S mapping for 
+ * Purpose : Generates a BIOS / DOS compatible H-C-S mapping for 
  *	the specified device / size.
  * 
  * Inputs : size = size of device in sectors (512 bytes), dev = block device
  *	major / minor, ip[] = {heads, sectors, cylinders}  
  *
- * Returns : allways 0 (success), initializes ip
+ * Returns : always 0 (success), initializes ip
  *	
  */
 
@@ -449,14 +450,13 @@ static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
         P_DATA_REG_OFFSET);
     register i = len;
 
-    while ( inb(instance->io_port + P_STATUS_REG_OFFSET) & P_ST_RDY );
+    while ( !(inb(instance->io_port + P_STATUS_REG_OFFSET) & P_ST_RDY) );
 
-    for (; i; --i) 
-	*d++ = (unsigned char) inb(reg);
+    insb( reg, d, i );
 
     if ( inb(instance->io_port + P_TIMEOUT_STATUS_REG_OFFSET) & P_TS_TIM) {
         outb( P_TS_CT, instance->io_port + P_TIMEOUT_STATUS_REG_OFFSET);
-	printk("scsi%d : watchdog timer fired in NCR5480_pread()\n",
+	printk("scsi%d : watchdog timer fired in NCR5380_pread()\n",
 	    instance->host_no);
 	return -1;
     } else
@@ -482,13 +482,13 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src
     register unsigned short reg = (instance->io_port + P_DATA_REG_OFFSET);
     register i = len;
 
-    while ( ( inb( instance->io_port + P_STATUS_REG_OFFSET ) ) & P_ST_RDY );
-    for (; i; --i)
-        outb( *s++, reg );
+    while ( !((inb(instance->io_port + P_STATUS_REG_OFFSET)) & P_ST_RDY) );
+ 
+    outsb( reg, s, i );
 
     if (inb(instance->io_port + P_TIMEOUT_STATUS_REG_OFFSET) & P_TS_TIM) {
         outb( P_TS_CT, instance->io_port + P_TIMEOUT_STATUS_REG_OFFSET);
-	printk("scsi%d : watchdog timer fired in NCR5480_pwrite()\n",
+	printk("scsi%d : watchdog timer fired in NCR5380_pwrite()\n",
 	    instance->host_no);
 	return -1;
     } else 
@@ -498,7 +498,7 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src
 /*
  * Function : const char *pas16_info(void)
  *
- * Purpose : provide furthur information about this driver.
+ * Purpose : provide further information about this driver.
  *
  * Returns : an empty string.
  */

@@ -20,6 +20,35 @@
 #define ACC_MODE(x) ("\000\004\002\006"[(x)&O_ACCMODE])
 
 /*
+ * How long a filename can we get from user space?
+ *  -EFAULT if invalid area
+ *  0 if ok (ENAMETOOLONG before EFAULT)
+ *  >0 EFAULT after xx bytes
+ */
+static inline int get_max_filename(unsigned long address)
+{
+	struct vm_area_struct * vma;
+
+	if (get_fs() == KERNEL_DS)
+		return 0;
+	for (vma = current->mm->mmap ; ; vma = vma->vm_next) {
+		if (!vma)
+			return -EFAULT;
+		if (vma->vm_end > address)
+			break;
+	}
+	if (vma->vm_start > address || !(vma->vm_page_prot & PAGE_USER))
+		return -EFAULT;
+	address = vma->vm_end - address;
+	if (address > PAGE_SIZE)
+		return 0;
+	if (vma->vm_next && vma->vm_next->vm_start == vma->vm_end &&
+	   (vma->vm_next->vm_page_prot & PAGE_USER))
+		return 0;
+	return address;
+}
+
+/*
  * In order to reduce some races, while at the same time doing additional
  * checking and hopefully speeding things up, we copy filenames to the
  * kernel data space before using them..
@@ -28,18 +57,17 @@
  */
 int getname(const char * filename, char **result)
 {
-	int error;
-	unsigned long i, page;
+	int i, error;
+	unsigned long page;
 	char * tmp, c;
 
-	i = (unsigned long) filename;
-	if (!i || i >= TASK_SIZE)
-		return -EFAULT;
-	i = TASK_SIZE - i;
+	i = get_max_filename((unsigned long) filename);
+	if (i < 0)
+		return i;
 	error = -EFAULT;
-	if (i > PAGE_SIZE) {
-		i = PAGE_SIZE;
+	if (!i) {
 		error = -ENAMETOOLONG;
+		i = PAGE_SIZE;
 	}
 	c = get_fs_byte(filename++);
 	if (!c)
@@ -69,8 +97,8 @@ void putname(char * name)
  *
  * is used to check for read/write/execute permissions on a file.
  * We use "fsuid" for this, letting us set arbitrary permissions
- * permissions for filesystem access without changing the "normal"
- * uids which are used for other things..
+ * for filesystem access without changing the "normal" uids which
+ * are used for other things..
  */
 int permission(struct inode * inode,int mask)
 {
@@ -78,6 +106,8 @@ int permission(struct inode * inode,int mask)
 
 	if (inode->i_op && inode->i_op->permission)
 		return inode->i_op->permission(inode, mask);
+	else if ((mask & S_IWOTH) && IS_IMMUTABLE(inode))
+		return 0; /* Nobody gets write access to an immutable file */
 	else if (current->fsuid == inode->i_uid)
 		mode >>= 6;
 	else if (in_group_p(inode->i_gid))
@@ -366,6 +396,13 @@ int open_namei(const char * pathname, int flag, int mode,
 			}
  		}
  	}
+	/*
+	 * An append-only file must be opened in append mode for writing
+	 */
+	if (IS_APPEND(inode) && ((flag & 2) && !(flag & O_APPEND))) {
+		iput(inode);
+		return -EPERM;
+	}
 	if (flag & O_TRUNC) {
 	      inode->i_size = 0;
 	      if (inode->i_op && inode->i_op->truncate)
@@ -505,6 +542,13 @@ static int do_rmdir(const char * name)
 		iput(dir);
 		return -EACCES;
 	}
+	/*
+	 * A subdirectory cannot be removed from an append-only directory
+	 */
+	if (IS_APPEND(dir)) {
+		iput(dir);
+		return -EPERM;
+	}
 	if (!dir->i_op || !dir->i_op->rmdir) {
 		iput(dir);
 		return -EPERM;
@@ -545,6 +589,13 @@ static int do_unlink(const char * name)
 	if (!permission(dir,MAY_WRITE | MAY_EXEC)) {
 		iput(dir);
 		return -EACCES;
+	}
+	/*
+	 * A file cannot be removed from an append-only directory
+	 */
+	if (IS_APPEND(dir)) {
+		iput(dir);
+		return -EPERM;
 	}
 	if (!dir->i_op || !dir->i_op->unlink) {
 		iput(dir);
@@ -647,6 +698,14 @@ static int do_link(struct inode * oldinode, const char * newname)
 		iput(oldinode);
 		return -EACCES;
 	}
+	/*
+	 * A link to an append-only or immutable file cannot be created
+	 */
+	if (IS_APPEND(oldinode) || IS_IMMUTABLE(oldinode)) {
+		iput(dir);
+		iput(oldinode);
+		return -EPERM;
+	}
 	if (!dir->i_op || !dir->i_op->link) {
 		iput(dir);
 		iput(oldinode);
@@ -724,6 +783,14 @@ static int do_rename(const char * oldname, const char * newname)
 		iput(old_dir);
 		iput(new_dir);
 		return -EROFS;
+	}
+	/*
+	 * A file cannot be removed from an append-only directory
+	 */
+	if (IS_APPEND(old_dir)) {
+		iput(old_dir);
+		iput(new_dir);
+		return -EPERM;
 	}
 	if (!old_dir->i_op || !old_dir->i_op->rename) {
 		iput(old_dir);

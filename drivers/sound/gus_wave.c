@@ -2538,7 +2538,7 @@ guswave_patchmgr (int dev, struct patmgr_info *rec)
 					 */
 
 	offs += sample_ptrs[sample];	/*
-					 * Begin offsess + offset to DRAM
+					 * Begin offset + offset to DRAM
 					 */
 
 	for (n = 0; n < l; n++)
@@ -2583,7 +2583,7 @@ guswave_patchmgr (int dev, struct patmgr_info *rec)
 					 */
 
 	offs += sample_ptrs[sample];	/*
-					 * Begin offsess + offset to DRAM
+					 * Begin offset + offset to DRAM
 					 */
 
 	for (n = 0; n < l; n++)

@@ -6,7 +6,7 @@
  *	( as close as different hardware allows on a lowlevel-driver :-) )
  *
  *  Revised (and renamed) by John Boyd <boyd@cis.ohio-state.edu> to
- *  accomodate Eric Youngdale's modifications to scsi.c.  Nov 1992.
+ *  accommodate Eric Youngdale's modifications to scsi.c.  Nov 1992.
  *
  *  Additional changes to support scatter/gather.  Dec. 1992.  tw/jb
  *
@@ -234,7 +234,7 @@ static const Signature signatures[] = {
  *  Unfortunately, I have no idea how to properly use some of these commands,
  *  as the OEM manual does not make it clear.  I have not been able to use
  *  enable/disable unsolicited interrupts or the reset commands with any
- *  discernable effect whatsoever.  I think they may be related to certain
+ *  discernible effect whatsoever.  I think they may be related to certain
  *  ICB commands, but again, the OEM manual doesn't make that clear.
  */
 #define NO_OP             0     /* NO-OP toggles CMD_RDY bit in ASC_STAT */

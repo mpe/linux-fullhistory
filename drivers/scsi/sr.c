@@ -327,7 +327,7 @@ static void do_sr_request (void)
    accept another command.  If we find one, then we queue it. This can
    make a big difference on systems with more than one disk drive.  We want
    to have the interrupts off when monkeying with the request list, because
-   otherwise the kernel might try and slip in a request inbetween somewhere. */
+   otherwise the kernel might try and slip in a request in between somewhere. */
 
     if (!SCpnt && sr_template.nr_dev > 1){
       struct request *req1;

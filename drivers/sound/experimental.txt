@@ -95,7 +95,7 @@ bytes each time (this is really important).
 
 
 	2a) If the fragment gets played before the application writes a new
-	one, the device will be stoppen and restarted which causes a click.
+	one, the device will be stopped and restarted which causes a click.
 	When the process calls write next time, it will be processes as 
 	in step 1.
 
@@ -121,8 +121,8 @@ bytes each time (this is really important).
 	the process blocks for at most the time required to play a
 	buffer fragment.
 
-This method syncronizes the process and the audio device together 
-automaticly. The process will block at most the 'fragment_time'. Usually 
+This method synchronizes the process and the audio device together 
+automatically. The process will block at most the 'fragment_time'. Usually 
 less, depending on how much it needs time to do other things. The maximum
 delay between writing a byte and the time when it finally plays is
 at most 3 times the 'fragment_time'. 
@@ -142,7 +142,7 @@ ioctl(fd, SNDCTL_DSP_SETFRAGMENT, &frag);
 ioctl(NDCTL_DSP_SPEED); /* And #channels & #bits if required */
 
 /*
- * Query the actual fragment sice since the driver may refuse
+ * Query the actual fragment size since the driver may refuse
  * the requested one (unlikely but possible?)
  */
 

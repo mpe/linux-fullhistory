@@ -53,6 +53,7 @@
  *		Alan Cox	:	Always defrag, moved IP_FORWARD to the config.in file
  *		Alan Cox	: 	IP options adjust sk->priority.
  *		Pedro Roque	:	Fix mtu/length error in ip_forward.
+ *		Alan Cox	:	Avoid ip_chk_addr when possible.
  *
  * To Fix:
  *		IP option processing is mostly not needed. ip_forward needs to know about routing rules
@@ -1434,7 +1435,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	struct inet_protocol *ipprot;
 	static struct options opt; /* since we don't use these yet, and they
 				take up stack space. */
-	int brd;
+	int brd=IS_MYADDR;
 	int is_frag=0;
 
 
@@ -1502,9 +1503,13 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 *	This is inefficient. While finding out if it is for us we could also compute
 	 *	the routing table entry. This is where the great unified cache theory comes
 	 *	in as and when someone implements it
+	 *
+	 *	For most hosts over 99% of packets match the first conditional
+	 *	and don't go via ip_chk_addr. Note: brd is set to IS_MYADDR at
+	 *	function entry.
 	 */
 
-	if ((brd = ip_chk_addr(iph->daddr)) == 0)
+	if ( iph->daddr != skb->dev->pa_addr && (brd = ip_chk_addr(iph->daddr)) == 0)
 	{
 		/*
 		 *	Don't forward multicast or broadcast frames.

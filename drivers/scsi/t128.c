@@ -68,7 +68,7 @@
  *     used on the LILO command line to override the defaults.
  *
  * 3.  With the T128_OVERRIDE compile time define.  This is 
- *     specified as an array of address, irq tupples.  Ie, for
+ *     specified as an array of address, irq tuples.  Ie, for
  *     one board at the default 0xcc000 address, IRQ5, I could say 
  *     -DT128_OVERRIDE={{0xcc000, 5}}
  *	
@@ -155,7 +155,7 @@ static const struct signature {
  *
  * Purpose : LILO command line initialization of the overrides array,
  * 
- * Inputs : str - unused, ints - array of integer paramters with ints[0]
+ * Inputs : str - unused, ints - array of integer parameters with ints[0]
  *	equal to the number of ints.
  *
  */
@@ -182,7 +182,7 @@ void t128_setup(char *str, int *ints) {
  * Function : int t128_detect(Scsi_Host_Template * tpnt)
  *
  * Purpose : detects and initializes T128,T128F, or T228 controllers
- *	that were autoprobed, overriden on the LILO command line, 
+ *	that were autoprobed, overridden on the LILO command line, 
  *	or specified at compile time.
  *
  * Inputs : tpnt - template for this SCSI adapter.
@@ -272,13 +272,13 @@ int t128_detect(Scsi_Host_Template * tpnt) {
 /*
  * Function : int t128_biosparam(Disk * disk, int dev, int *ip)
  *
- * Purpose : Generates a BIOS / DOS compatable H-C-S mapping for 
+ * Purpose : Generates a BIOS / DOS compatible H-C-S mapping for 
  *	the specified device / size.
  * 
  * Inputs : size = size of device in sectors (512 bytes), dev = block device
  *	major / minor, ip[] = {heads, sectors, cylinders}  
  *
- * Returns : allways 0 (success), initializes ip
+ * Returns : always 0 (success), initializes ip
  *	
  */
 
@@ -388,7 +388,7 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src
 /*
  * Function : const char *t128_info(void)
  *
- * Purpose : provide furthur information about this driver.
+ * Purpose : provide further information about this driver.
  *
  * Returns : an empty string.
  */

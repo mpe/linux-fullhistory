@@ -265,7 +265,7 @@ void date_unix2dos(int unix_date,unsigned short *time,
    non-NULL, it is brelse'd before. Pos is incremented. The buffer header is
    returned in bh. */
 
-int msdos_get_entry(struct inode *dir, off_t *pos,struct buffer_head **bh,
+int msdos_get_entry(struct inode *dir, loff_t *pos,struct buffer_head **bh,
     struct msdos_dir_entry **de)
 {
 	int sector,offset;

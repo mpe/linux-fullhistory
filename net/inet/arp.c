@@ -28,7 +28,8 @@
  *              Ross Martin     :       Rewrote arp_rcv() and arp_get_info()
  *		Stephen Henson	:	Add AX25 support to arp_get_info()
  *		Alan Cox	:	Drop data when a device is downed.
- *		Alan Cox	:	Use init_timer()
+ *		Alan Cox	:	Use init_timer().
+ *		Alan Cox	:	Double lock fixes.
  */
 
 #include <linux/types.h>
@@ -808,7 +809,10 @@ int arp_find(unsigned char *haddr, unsigned long paddr, struct device *dev,
 			 */
 			
 			if (skb != NULL)
+			{
 				skb_queue_tail(&entry->skb, skb);
+				skb_device_unlock(skb);
+			}
 			sti();
 			return 1;
 		}
@@ -850,7 +854,10 @@ int arp_find(unsigned char *haddr, unsigned long paddr, struct device *dev,
 		entry->retries = ARP_MAX_TRIES;
 		skb_queue_head_init(&entry->skb);
 		if (skb != NULL)
+		{
 			skb_queue_tail(&entry->skb, skb);
+			skb_device_unlock(skb);
+		}
 	}
 	else
 	{

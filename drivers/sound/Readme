@@ -38,14 +38,14 @@ Compatibility with the earlier versions
 This version is backward compatible with the version 2.X. All programs
 compiled with sys/soundcard.h of v2.X should work without problems.
 PROGRAMS COMPILED WITH THE sys/soundcard.h OF THIS VERSION WILL NOT
-WORK WITH v2.X DRIVER. BE CAREFULL WHEN DISTRIBUTING BINARIES COMPILED 
+WORK WITH v2.X DRIVER. BE CAREFUL WHEN DISTRIBUTING BINARIES COMPILED 
 FOR THIS VERSION.
 
 Contributors
 ------------
 
 This driver contains code by several contributors. In addition several other
-persons have given usefull suggestions. The following is a list of major
+persons have given useful suggestions. The following is a list of major
 contributors. (I could have forgotten some names.)
 
 	Craig Metz	1/2 of the PAS16 Mixer and PCM support

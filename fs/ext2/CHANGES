@@ -1,3 +1,29 @@
+Changes from version 0.5 to version 0.5a
+========================================
+	- New mount options: `bsddf' and `minixdf'.  `bsddf' causes ext2fs
+	  to remove the blocks used for FS structures from the total block
+	  count in statfs.  With `minixdf', ext2fs mimics Minix behavior
+	  in statfs (i.e. it returns the total number of blocks on the
+	  partition).  This is intended to make bde happy :-)
+	- New file attributes:
+	  - Immutable files cannot be modified.  Data cannot be written to
+	    these files.  They cannot be removed, renamed and new links cannot
+	    be created.  Even root cannot modify the files.  He has to remove
+	    the immutable attribute first.
+	  - Append-only files: can only be written in append-mode when writing.
+	    They cannot be removed, renamed and new links cannot be created.
+	    Note: files may only be added to an append-only directory.
+	  - No-dump files: the attribute is not used by the kernel.  My port
+	    of dump uses it to avoid backing up files which are not important.
+	- New check in ext2_check_dir_entry: the inode number is checked.
+	- Support for big file systems: the copy of the FS descriptor is now
+	  dynamically allocated (previous versions used a fixed size array).
+	  This allows to mount 2GB+ FS.
+	- Reorganization of the ext2_inode structure to allow other operating
+	  systems to create specific fields if they use ext2fs as their native
+	  file system.  Currently, ext2fs is only implemented in Linux but
+	  will soon be part of Gnu Hurd and of Masix.
+
 Changes from version 0.4b to version 0.5
 ========================================
 	- New superblock fields: s_lastcheck and s_checkinterval added

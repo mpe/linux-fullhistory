@@ -1551,7 +1551,7 @@ int tty_register_driver(struct tty_driver *driver)
 /*
  * Initialize the console device. This is called *early*, so
  * we can't necessarily depend on lots of kernel help here.
- * Jus do some early initializations, and do the complex setup
+ * Just do some early initializations, and do the complex setup
  * later.
  */
 long console_init(long kmem_start, long kmem_end)

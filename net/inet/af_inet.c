@@ -260,21 +260,30 @@ void destroy_sock(struct sock *sk)
 		IS_SKB(skb);
 		kfree_skb(skb, FREE_WRITE);
   	}
+  	
+  	/*
+  	 *	Don't discard received data until the user side kills its
+  	 *	half of the socket.
+  	 */
 
-  	while((skb=skb_dequeue(&sk->receive_queue))!=NULL) {
-	/*
-	 * This will take care of closing sockets that were
-	 * listening and didn't accept everything.
-	 */
-		if (skb->sk != NULL && skb->sk != sk) 
-		{
+	if (sk->dead) 
+	{
+  		while((skb=skb_dequeue(&sk->receive_queue))!=NULL) 
+  		{
+		/*
+		 * This will take care of closing sockets that were
+		 * listening and didn't accept everything.
+		 */
+			if (skb->sk != NULL && skb->sk != sk) 
+			{
+				IS_SKB(skb);
+				skb->sk->dead = 1;
+				skb->sk->prot->close(skb->sk, 0);
+			}
 			IS_SKB(skb);
-			skb->sk->dead = 1;
-			skb->sk->prot->close(skb->sk, 0);
+			kfree_skb(skb, FREE_READ);
 		}
-		IS_SKB(skb);
-		kfree_skb(skb, FREE_READ);
-	}
+	}	
 
 	/* Now we need to clean up the send head. */
 	cli();

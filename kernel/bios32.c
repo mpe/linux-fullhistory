@@ -395,8 +395,8 @@ char *pcibios_strerror (int error)
 	static char buf[80];
 
 	switch (error) {
-		case PCIBIOS_SUCCESFUL:
-			return "SUCCESFUL";
+		case PCIBIOS_SUCCESSFUL:
+			return "SUCCESSFUL";
 
 		case PCIBIOS_FUNC_NOT_SUPPORTED:
 			return "FUNC_NOT_SUPPORTED";

@@ -51,7 +51,10 @@ static struct file_operations ext2_file_operations = {
 	generic_mmap,  		/* mmap */
 	NULL,			/* no special open is needed */
 	ext2_release_file,	/* release */
-	ext2_sync_file		/* fsync */
+	ext2_sync_file,		/* fsync */
+	NULL,			/* fasync */
+	NULL,			/* check_media_change */
+	NULL			/* revalidate */
 };
 
 struct inode_operations ext2_file_inode_operations = {
@@ -69,7 +72,8 @@ struct inode_operations ext2_file_inode_operations = {
 	NULL,			/* follow_link */
 	ext2_bmap,		/* bmap */
 	ext2_truncate,		/* truncate */
-	ext2_permission		/* permission */
+	ext2_permission,	/* permission */
+	NULL			/* smap */
 };
 
 static int ext2_file_read (struct inode * inode, struct file * filp,

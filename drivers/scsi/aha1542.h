@@ -37,7 +37,7 @@
 /* READ */
 #define STATUS(base) base
 #define STST	0x80		/* Self Test in Progress */
-#define DIAGF	0x40		/* Internal Diagonostic Failure */
+#define DIAGF	0x40		/* Internal Diagnostic Failure */
 #define INIT	0x20		/* Mailbox Initialization Required */
 #define IDLE	0x10		/* SCSI Host Adapter Idle */
 #define CDF	0x08		/* Command/Data Out Port Full */

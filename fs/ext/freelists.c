@@ -270,7 +270,7 @@ printk("ext_free_inode: inode empty, skipping to %d\n", efi->next);
 #endif
 		j = sb->u.ext_sb.s_firstfreeinodenumber;
 		if (efi->next > sb->u.ext_sb.s_ninodes) {
-			printk ("efi->next = %d\n", efi->next);
+			printk ("efi->next = %ld\n", efi->next);
 			panic ("ext_new_inode: bad inode number in free list\n");
 		}
 		sb->u.ext_sb.s_firstfreeinodenumber = efi->next;
