@@ -1,6 +1,9 @@
-/* $Id: isdnl2.c,v 1.1 1996/04/13 10:24:16 fritz Exp $
+/* $Id: isdnl2.c,v 1.2 1996/05/17 03:46:15 fritz Exp $
  *
  * $Log: isdnl2.c,v $
+ * Revision 1.2  1996/05/17 03:46:15  fritz
+ * General cleanup.
+ *
  * Revision 1.1  1996/04/13 10:24:16  fritz
  * Initial revision
  *
@@ -15,43 +18,6 @@ static void     l2m_debug(struct FsmInst *fi, char *s);
 
 struct Fsm      l2fsm =
 {NULL, 0, 0};
-
-#if 0
-
-
-enum {
-	ST_PH_NULL,
-	ST_PH_ACTIVATED,
-	ST_PH_ACTIVE,
-};
-
-#define PH_STATE_COUNT (ST_PH_ACTIVE+1)
-
-static char    *strPhState[] =
-{
-	"ST_PH_NULL",
-	"ST_PH_ACTIVATED",
-	"ST_PH_ACTIVE",
-};
-
-enum {
-	EV_PH_ACTIVATE_REQ,
-	EV_PH_ACTIVATE,
-	EV_PH_DEACTIVATE_REQ,
-	EV_PH_DEACTIVATE,
-};
-
-#define PH_EVENT_COUNT (EV_PH_DEACTIVATE+1)
-
-static char    *strPhEvent[] =
-{
-	"EV_PH_ACTIVATE_REQ",
-	"EV_PH_ACTIVATE",
-	"EV_PH_DEACTIVATE_REQ",
-	"EV_PH_DEACTIVATE",
-};
-
-#endif
 
 enum {
 	ST_L2_1,
@@ -121,54 +87,6 @@ static char    *strL2Event[] =
 	"EV_L2_RNR",
 };
 
-#if 0
-static void
-ph_r1(struct FsmInst *fi, int event, void *arg)
-{
-	struct PStack  *st = fi->userdata;
-
-	FsmChangeState(fi, ST_PH_ACTIVATED);
-	st->l1.service_down(st, PH_ACTIVATE, NULL);
-}
-
-static void
-ph_r2(struct FsmInst *fi, int event, void *arg)
-{
-	struct PStack  *st = fi->userdata;
-
-	FsmChangeState(fi, ST_PH_ACTIVE);
-	st->l3.service_up(st, DL_ACTIVATE_CNF, NULL);
-}
-
-static void
-ph_r3(struct FsmInst *fi, int event, void *arg)
-{
-	struct PStack  *st = fi->userdata;
-
-	FsmChangeState(fi, ST_PH_NULL);
-	st->l1.service_down(st, PH_DEACTIVATE, NULL);
-}
-
-static void
-ph_r4(struct FsmInst *fi, int event, void *arg)
-{
-	struct PStack  *st = fi->userdata;
-
-	FsmChangeState(fi, ST_PH_NULL);
-	st->l3.service_up(st, DL_DEACTIVATE_IND, NULL);
-}
-
-static struct FsmNode PhFnList[] =
-{
-	{ST_PH_NULL, EV_PH_ACTIVATE_REQ, ph_r1},
-	{ST_PH_ACTIVATED, EV_PH_ACTIVATE, ph_r2},
-	{ST_PH_ACTIVATED, EV_PH_DEACTIVATE, ph_r4},
-	{ST_PH_ACTIVE, EV_PH_DEACTIVATE_REQ, ph_r3},
-};
-
-#define PH_FN_COUNT (sizeof(PhFnList)/sizeof(struct FsmNode))
-#endif
-
 int             errcount = 0;
 
 static int      l2addrsize(struct Layer2 *tsp);
@@ -190,27 +108,6 @@ discard_i_queue(struct PStack *st)
 	while (!BufQueueUnlink(&ibh, &st->l2.i_queue))
 		BufPoolRelease(ibh);
 }
-
-#ifdef DEFINED_BUT_NOT_USED
-static void
-discard_window(struct PStack *st)
-{
-	struct BufHeader *ibh;
-	struct Layer2  *l2;
-	int             i, p1, p2;
-
-	l2 = &st->l2;
-	p1 = l2->vs - l2->va;
-	if (p1 < 0)
-		p1 += l2->extended ? 128 : 8;
-
-	for (i = 0; i < p1; i++) {
-		p2 = (i + l2->sow) % l2->window;
-		ibh = l2->windowar[p2];
-		BufPoolRelease(ibh);
-	}
-}
-#endif
 
 int
 l2headersize(struct Layer2 *tsp, int UI)
@@ -254,12 +151,6 @@ static void
 enqueue_ui(struct PStack *st,
 	   struct BufHeader *ibh)
 {
-#ifdef FRITZDEBUG
-	static char     tmp[100];
-
-	sprintf(tmp, "enqueue_ui: %d bytes\n", ibh->datasize);
-	teles_putstatus(tmp);
-#endif
 	st->l2.l2l1(st, PH_DATA, ibh);
 }
 
@@ -267,12 +158,6 @@ static void
 enqueue_super(struct PStack *st,
 	      struct BufHeader *ibh)
 {
-#ifdef FRITZDEBUG
-	static char     tmp[100];
-
-	sprintf(tmp, "enqueue_super: %d bytes\n", ibh->datasize);
-	teles_putstatus(tmp);
-#endif
 	st->l2.l2l1(st, PH_DATA, ibh);
 }
 
@@ -1405,36 +1290,9 @@ setstack_isdnl2(struct PStack *st, char *debug_id)
 	st->l2.t200_running = 0;
 }
 
-#ifdef DEFINED_BUT_NOT_USED
-static void
-trans_acceptph(struct PStack *st, struct BufHeader *ibh)
-{
-#if 0
-	st->l3.service_up(st, DL_DATA, ibh);
-#endif
-}
-
-
-static void
-transdown(struct PStack *st, int pr,
-	  struct BufHeader *ibh)
-{
-	if (pr == DL_DATA) {
-		ibh->primitive = !0;
-		st->l2.l2l1(st, PH_DATA, ibh);
-	}
-}
-#endif
-
 void
 setstack_transl2(struct PStack *st)
 {
-#if 0
-	st->l2.phdata_up = trans_acceptph;
-	st->l2.service_down = (void *) transdown;
-	st->l2.ihsize = 0;
-	st->l2.debug = 0;
-#endif
 }
 
 void

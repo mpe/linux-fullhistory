@@ -1,7 +1,7 @@
 /*
  *  linux/fs/affs/amigaffs.c
  *
- *  (c) 1996  Hans-Joachim Widmaier - rewritten
+ *  (c) 1996  Hans-Joachim Widmaier - Rewritten
  *
  *  (C) 1993  Ray Burr - Amiga FFS filesystem.
  *
@@ -29,10 +29,10 @@ extern struct timezone sys_tz;
    is returned. */
 
 int
-affs_find_next_hash_entry(int hsize, void *dir_data, ULONG *hash_pos)
+affs_find_next_hash_entry(int hsize, void *dir_data, int *hash_pos)
 {
 	struct dir_front *dir_front = dir_data;
-	ULONG i;
+	int i;
 
 	for (i = *hash_pos; i < hsize; i++)
 		if (dir_front->hashtable[i] != 0)
@@ -67,11 +67,11 @@ affs_get_file_name(int bsize, void *fh_data, char **name)
 /* Find the predecessor in the hash chain */
 
 int
-affs_fix_hash_pred(struct inode *startino, int startoffset, LONG key, LONG newkey)
+affs_fix_hash_pred(struct inode *startino, int startoffset, int key, int newkey)
 {
 	struct buffer_head	*bh = NULL;
-	ULONG			 nextkey;
-	LONG			 ptype, stype;
+	int			 nextkey;
+	int			 ptype, stype;
 	int			 retval;
 
 	nextkey = startino->i_ino;
@@ -92,9 +92,9 @@ affs_fix_hash_pred(struct inode *startino, int startoffset, LONG key, LONG newke
 			affs_brelse(bh);
 			break;
 		}
-		nextkey = htonl(((ULONG *)bh->b_data)[startoffset]);
+		nextkey = htonl(((__u32 *)bh->b_data)[startoffset]);
 		if (nextkey == key) {
-			((ULONG *)bh->b_data)[startoffset] = newkey;
+			((__u32 *)bh->b_data)[startoffset] = newkey;
 			affs_fix_checksum(AFFS_I2BSIZE(startino),bh->b_data,5);
 			mark_buffer_dirty(bh,1);
 			affs_brelse(bh);
@@ -112,13 +112,13 @@ affs_fix_hash_pred(struct inode *startino, int startoffset, LONG key, LONG newke
 /* Remove inode from link chain */
 
 int
-affs_fix_link_pred(struct inode *startino, LONG key, LONG newkey)
+affs_fix_link_pred(struct inode *startino, int key, int newkey)
 {
 	struct buffer_head	*bh = NULL;
-	ULONG			 nextkey;
-	ULONG			 offset;
-	LONG			 etype = 0;
-	LONG			 ptype, stype;
+	int			 nextkey;
+	int			 offset;
+	int			 etype = 0;
+	int			 ptype, stype;
 	int			 retval;
 
 	offset  = AFFS_I2BSIZE(startino) / 4 - 10;
@@ -150,7 +150,7 @@ affs_fix_link_pred(struct inode *startino, LONG key, LONG newkey)
 			retval = -EPERM;
 			break;
 		}
-		nextkey = htonl(((ULONG *)bh->b_data)[offset]);
+		nextkey = htonl(((__u32 *)bh->b_data)[offset]);
 		if (nextkey == key) {
 			FILE_END(bh->b_data,startino)->link_chain = newkey;
 			affs_fix_checksum(AFFS_I2BSIZE(startino),bh->b_data,5);
@@ -172,17 +172,17 @@ affs_fix_link_pred(struct inode *startino, LONG key, LONG newkey)
    (which lets us calculate the block size).
    Returns non-zero if the block is not consistent. */
 
-ULONG
-affs_checksum_block(int bsize, void *data, LONG *ptype, LONG *stype)
+__u32
+affs_checksum_block(int bsize, void *data, int *ptype, int *stype)
 {
-	ULONG sum;
-	ULONG *p;
+	__u32	 sum;
+	__u32	*p;
 
 	bsize /= 4;
 	if (ptype)
-		*ptype = htonl(((LONG *)data)[0]);
+		*ptype = htonl(((__s32 *)data)[0]);
 	if (stype)
-		*stype = htonl(((LONG *)data)[bsize - 1]);
+		*stype = htonl(((__s32 *)data)[bsize - 1]);
 
 	sum    = 0;
 	p      = data;
@@ -194,20 +194,20 @@ affs_checksum_block(int bsize, void *data, LONG *ptype, LONG *stype)
 void
 affs_fix_checksum(int bsize, void *data, int cspos)
 {
-	ULONG	 ocs;
-	ULONG	 cs;
+	__u32	 ocs;
+	__u32	 cs;
 
 	cs   = affs_checksum_block(bsize,data,NULL,NULL);
-	ocs  = htonl (((ULONG *)data)[cspos]);
+	ocs  = htonl (((__u32 *)data)[cspos]);
 	ocs -= cs;
-	((ULONG *)data)[cspos] = htonl(ocs);
+	((__u32 *)data)[cspos] = htonl(ocs);
 }
 
 void
 secs_to_datestamp(int secs, struct DateStamp *ds)
 {
-	ULONG	 days;
-	ULONG	 minute;
+	__u32	 days;
+	__u32	 minute;
 
 	secs -= sys_tz.tz_minuteswest * 60 +((8 * 365 + 2) * 24 * 60 * 60);
 	if (secs < 0)
@@ -223,7 +223,7 @@ secs_to_datestamp(int secs, struct DateStamp *ds)
 }
 
 int
-prot_to_mode(ULONG prot)
+prot_to_mode(__u32 prot)
 {
 	int	 mode = 0;
 
@@ -249,10 +249,10 @@ prot_to_mode(ULONG prot)
 	return mode;
 }
 
-ULONG
+unsigned int
 mode_to_prot(int mode)
 {
-	ULONG	 prot = 0;
+	unsigned int	 prot = 0;
 
 	if (mode & S_IXUSR)
 		prot |= FIBF_SCRIPT;

@@ -18,7 +18,7 @@
    Reference Qlogic FAS408 Technical Manual, 53408-510-00A, May 10, 1994
    (you can reference it, but it is incomplete and inaccurate in places)
 
-   Version 0.43 4/6/95 - kernel 1.2.0+, pcmcia 2.5.4+
+   Version 0.44 5/7/96 - kernel 1.2.0+, pcmcia 2.5.4+
 
    Functions as standalone, loadable, and PCMCIA driver, the latter from
    Dave Hind's PCMCIA package.
@@ -127,11 +127,11 @@
 #include <asm/irq.h>
 #include "sd.h"
 #include "hosts.h"
-#include "qlogic.h"
+#include "qlogicfas.h"
 #include<linux/stat.h>
 
-struct proc_dir_entry proc_scsi_qlogic = {
-    PROC_SCSI_QLOGIC, 6, "qlogic",
+struct proc_dir_entry proc_scsi_qlogicfas = {
+    PROC_SCSI_QLOGICFAS, 6, "qlogicfas",
     S_IFDIR | S_IRUGO | S_IXUGO, 2
 };
 
@@ -475,12 +475,12 @@ static void	qlidone(Scsi_Cmnd * cmd) {};		/* null function */
 #endif
 
 /* command process */
-int	qlogic_command(Scsi_Cmnd * cmd)
+int	qlogicfas_command(Scsi_Cmnd * cmd)
 {
 int	k;
 #if QL_USE_IRQ
 	if (qlirq >= 0) {
-		qlogic_queuecommand(cmd, qlidone);
+		qlogicfas_queuecommand(cmd, qlidone);
 		while (qlcmd != NULL);
 		return cmd->result;
 	}
@@ -498,7 +498,7 @@ int	k;
 #if QL_USE_IRQ
 /*----------------------------------------------------------------*/
 /* queued command */
-int	qlogic_queuecommand(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
+int	qlogicfas_queuecommand(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
 {
 	if(cmd->target == qinitid) {
 		cmd->result = DID_BAD_TARGET << 16;
@@ -514,7 +514,7 @@ int	qlogic_queuecommand(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
 	return 0;
 }
 #else
-int	qlogic_queuecommand(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
+int	qlogicfas_queuecommand(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
 {
 	return 1;
 }
@@ -524,7 +524,7 @@ int	qlogic_queuecommand(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
 /*----------------------------------------------------------------*/
 /* allow PCMCIA code to preset the port */
 /* port should be 0 and irq to -1 respectively for autoprobing */
-void	qlogic_preset(int port, int irq)
+void	qlogicfas_preset(int port, int irq)
 {
 	qbase=port;
 	qlirq=irq;
@@ -533,14 +533,14 @@ void	qlogic_preset(int port, int irq)
 
 /*----------------------------------------------------------------*/
 /* look for qlogic card and init if found */
-int	qlogic_detect(Scsi_Host_Template * host)
+int	qlogicfas_detect(Scsi_Host_Template * host)
 {
 int	i, j;			/* these are only used by IRQ detect */
 int	qltyp;			/* type of chip */
 struct	Scsi_Host	*hreg;	/* registered host structure */
 unsigned long	flags;
 
-host->proc_dir =  &proc_scsi_qlogic;
+host->proc_dir =  &proc_scsi_qlogicfas;
 
 /* Qlogic Cards only exist at 0x230 or 0x330 (the chip itself decodes the
    address - I check 230 first since MIDI cards are typically at 330
@@ -609,7 +609,7 @@ host->proc_dir =  &proc_scsi_qlogic;
 	else
 		printk( "Ql: Using preset IRQ %d\n", qlirq );
 
-	if (qlirq >= 0 && !request_irq(qlirq, ql_ihandl, 0, "qlogic", NULL))
+	if (qlirq >= 0 && !request_irq(qlirq, ql_ihandl, 0, "qlogicfas", NULL))
 		host->can_queue = 1;
 #endif
 	request_region( qbase , 0x10 ,"qlogic");
@@ -620,7 +620,7 @@ host->proc_dir =  &proc_scsi_qlogic;
 	if( qlirq != -1 )
 		hreg->irq = qlirq;
 
-	sprintf(qinfo, "Qlogic Driver version 0.43, chip %02X at %03X, IRQ %d, TPdma:%d",
+	sprintf(qinfo, "Qlogicfas Driver version 0.44, chip %02X at %03X, IRQ %d, TPdma:%d",
 	    qltyp, qbase, qlirq, QL_TURBO_PDMA );
 	host->name = qinfo;
 
@@ -629,7 +629,7 @@ host->proc_dir =  &proc_scsi_qlogic;
 
 /*----------------------------------------------------------------*/
 /* return bios parameters */
-int	qlogic_biosparam(Disk * disk, kdev_t dev, int ip[])
+int	qlogicfas_biosparam(Disk * disk, kdev_t dev, int ip[])
 {
 /* This should mimic the DOS Qlogic driver's behavior exactly */
 	ip[0] = 0x40;
@@ -647,7 +647,7 @@ int	qlogic_biosparam(Disk * disk, kdev_t dev, int ip[])
 
 /*----------------------------------------------------------------*/
 /* abort command in progress */
-int	qlogic_abort(Scsi_Cmnd * cmd)
+int	qlogicfas_abort(Scsi_Cmnd * cmd)
 {
 	qabort = 1;
 	ql_zap();
@@ -656,7 +656,7 @@ int	qlogic_abort(Scsi_Cmnd * cmd)
 
 /*----------------------------------------------------------------*/
 /* reset SCSI bus */
-int	qlogic_reset(Scsi_Cmnd * cmd)
+int	qlogicfas_reset(Scsi_Cmnd * cmd)
 {
 	qabort = 2;
 	ql_zap();
@@ -665,14 +665,15 @@ int	qlogic_reset(Scsi_Cmnd * cmd)
 
 /*----------------------------------------------------------------*/
 /* return info string */
-const char	*qlogic_info(struct Scsi_Host * host)
+const char	*qlogicfas_info(struct Scsi_Host * host)
 {
 	return qinfo;
 }
 
 #ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = QLOGIC;
+Scsi_Host_Template driver_template = QLOGICFAS;
 
 #include "scsi_module.c"
 #endif
+

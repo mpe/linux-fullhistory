@@ -1,6 +1,12 @@
-/* $Id: llglue.c,v 1.1 1996/04/13 10:26:29 fritz Exp $
+/* $Id: llglue.c,v 1.3 1996/05/01 14:19:57 fritz Exp $
  *
  * $Log: llglue.c,v $
+ * Revision 1.3  1996/05/01 14:19:57  fritz
+ * Added ISDN_FEADTURE_L2_TRANS
+ *
+ * Revision 1.2  1996/04/29 23:01:46  fritz
+ * Added driverId and channel to readstatus().
+ *
  * Revision 1.1  1996/04/13 10:26:29  fritz
  * Initial revision
  *
@@ -25,7 +31,7 @@ static byte    *teles_status_write = NULL;
 static byte    *teles_status_end = NULL;
 
 int
-teles_readstatus(byte * buf, int len, int user)
+teles_readstatus(byte * buf, int len, int user, int id, int channel)
 {
 	int             count;
 	byte           *p;
@@ -90,6 +96,7 @@ ll_init(void)
 	iif.features =
 	    ISDN_FEATURE_L2_X75I |
 	    ISDN_FEATURE_L2_HDLC |
+	    ISDN_FEATURE_L2_TRANS |
 	    ISDN_FEATURE_L3_TRANS |
 	    ISDN_FEATURE_P_1TR6 |
 	    ISDN_FEATURE_P_EURO;

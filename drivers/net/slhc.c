@@ -79,10 +79,7 @@
 #include <linux/mm.h>
 #include <net/checksum.h>
 #include <net/slhc_vj.h>
-
-#ifdef __alpha__
-# include <asm/unaligned.h>
-#endif
+#include <asm/unaligned.h>
 
 int last_retran;
 
@@ -619,11 +616,8 @@ slhc_uncompress(struct slcompress *comp, unsigned char *icp, int isize)
 	  cp += (ip->ihl - 5) * 4;
 	}
 
-#ifdef __alpha__
-	stw_u(ip_fast_csum(icp, ip->ihl), &((struct iphdr *)icp)->check);
-#else
-	((struct iphdr *)icp)->check = ip_fast_csum(icp, ((struct iphdr*)icp)->ihl);
-#endif
+	put_unaligned(ip_fast_csum(icp, ip->ihl),
+		      &((struct iphdr *)icp)->check);
 
 	memcpy(cp, thp, 20);
 	cp += 20;

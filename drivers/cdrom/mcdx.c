@@ -27,7 +27,7 @@
  *  Daniel v. Mosnenck (he sent me the Technical and Programming Reference)
  *  Gerd Knorr (he lent me his PhotoCD)
  *  Nils Faerber and Roger E. Wolff (extensively tested the LU portion)
- *  Andreas Kies (testing the mysterious hang up's)
+ *  Andreas Kies (testing the mysterious hangups)
  *  ... somebody forgotten?
  * 
  * 2.1  1996/04/29 Marcin Dalecki <dalecki@namu03.gwdg.de>
@@ -38,8 +38,8 @@
  * 2.3  1996/05/15 Marcin Dalecki <dalecki@namu03.gwdg.de>
  *	Fixed stereo support. 
  * NOTE:
- *	There will be propably a 3.0 adhering to the new generic non ATAPI
- *	cdrom interface in the unforseen future.
+ *	There will be probably a 3.0 adhering to the new generic non ATAPI
+ *	cdrom interface in the unforeseen future.
  */
 #define VERSION "2.3"
 
@@ -261,8 +261,8 @@ static inline int irq(int *ip)
  * Return drives status in case of success, -1 otherwise.
  *
  * First we try to get the status information quickly.
- * Then we sleep repeatedly for about 10 usecs, befor we finally reach the 
- * timeout. For this reason this command must be called with the drive beeing 
+ * Then we sleep repeatedly for about 10 usecs, before we finally reach the 
+ * timeout. For this reason this command must be called with the drive being 
  * locked!
  */
 static int get_status(struct s_drive_stuff *stuffp,
@@ -462,7 +462,7 @@ int read_toc(struct s_drive_stuff *stuffp)
 		set_drive_mode(stuffp, DATA);
 		return -EIO;
 	}
-	/* now read actually the index tarcks */
+	/* now read actually the index tracks */
 	for (trk = 0;
 	     trk < (stuffp->n_last - stuffp->n_first + 1);
 	     trk++)
@@ -563,8 +563,8 @@ static int mcdx_ioctl(struct inode *ip, struct file *fp,
 	/*
 	 * Update disk information, when necessary.
 	 * This part will only work, when the new disk is of the same type as 
-	 * the one which was previousley there, esp. also for audio diks.
-	 * This doesn't hurt us, since otherwise the mouting/unmounting scheme 
+	 * the one which was previously there, esp. also for audio disks.
+	 * This doesn't hurt us, since otherwise the mounting/unmounting scheme 
 	 * will ensure correct operation.
 	 */
 	if (stuffp->xxx) {	/* disk changed */
@@ -797,7 +797,7 @@ static int mcdx_ioctl(struct inode *ip, struct file *fp,
 			return ans;
 
 		memcpy_fromfs(&volctrl, (char *) arg, sizeof(volctrl));
-		/* Adjust for the wiredness of workman. */
+		/* Adjust for the weirdness of workman. */
 		volctrl.channel2 = volctrl.channel1;
 		volctrl.channel1 = volctrl.channel3 = 0x00;
 		return talk(stuffp, MCDX_CMD_SET_ATTENATOR,
@@ -815,7 +815,7 @@ static int mcdx_ioctl(struct inode *ip, struct file *fp,
  * This does actually the transfer from the drive.
  * Return:      -1 on timeout or other error
  * else status byte (as in stuff->st) 
- * FIXME: the excessive jumping throught wait queues degrades the
+ * FIXME: the excessive jumping through wait queues degrades the
  * performance significantly.
  */
 static int transfer_data(struct s_drive_stuff *stuffp,
@@ -1179,7 +1179,7 @@ static int mcdx_media_change(kdev_t full_dev)
 	MCDX_TRACE(("mcdx_media_change()\n"));
 
 	/*
-	 * FIXME: propably this is unneded or should be simplified!
+	 * FIXME: probably this is unneeded or should be simplified!
 	 */
 	issue_command(stuffp = mcdx_stuffp[MINOR(full_dev)],
 		      MCDX_CMD_GET_STATUS, 5 * HZ);
@@ -1197,7 +1197,7 @@ static void mcdx_intr(int irq, void *dev_id, struct pt_regs *regs)
 	u_char b;
 
 	if (!(stuffp = mcdx_irq_map[irq])) {
-		return;		/* hugh? */
+		return;		/* huh? */
 	}
 	
 	/* NOTE: We only should get interrupts if data were requested.
@@ -1225,7 +1225,7 @@ static void mcdx_intr(int irq, void *dev_id, struct pt_regs *regs)
 
 /*
  * FIXME!
- * This seems to hang badly, when the driver is loaded with inappriopriate
+ * This seems to hang badly, when the driver is loaded with inappropriate
  * port/irq settings!
  */
 int mcdx_init(void)

@@ -434,6 +434,15 @@ N: Philip Gladstone
 E: philipg@onsett.com
 D: Kernel / timekeeping stuff
 
+N: Michael A. Griffith
+E: grif@cs.ucr.edu
+W: http://www.cs.ucr.edu/~grif
+D: Loopback speedup, qlogic scsi hacking, VT_LOCKSWITCH
+S: Department of Computer Science
+S: University of California, Riverside
+S: Riverside, CA  92521-0304
+S: USA
+
 N: Dmitry S. Gorodchanin
 E: begemot@bgm.rosprint.net
 D: RISCom/8 driver, misc kernel fixes.
@@ -1270,8 +1279,10 @@ S: USA
 
 N: Stephen Tweedie
 E: sct@dcs.ed.ac.uk
+P: 1024/E7A417AD E2 FE A4 20 34 EC ED FC 7D 7E 67 8D E0 31 D1 69
 D: Second extended file system developer
 D: General filesystem hacker
+D: kswap vm management code
 S: Dept. of Computer Science
 S: University of Edinburgh
 S: JCMB, The King's Buildings
@@ -1349,6 +1360,13 @@ S: Oncology Research Division Computing Facility
 S: Roger Maris Cancer Center
 S: 820 4th St. N.
 S: Fargo, ND  58122
+
+N: Hans-Joachim Widmaier
+E: jbhr@sofal.tynet.sub.org
+D: AFFS rewrite
+S: Eichenweg 16
+S: 73650 Winterbach
+S: Germany
 
 N: Marco van Wieringen
 E: mvw@mercury.mcs.nl.mugnet.org

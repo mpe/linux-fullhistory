@@ -1,7 +1,7 @@
 /*
  *  linux/fs/affs/dir.c
  *
- *  (c) 1996  Hans-Joachim Widmaier - rewritten
+ *  (c) 1996  Hans-Joachim Widmaier - Rewritten
  *
  *  (C) 1993  Ray Burr - Modified for Amiga FFS filesystem.
  *
@@ -58,7 +58,7 @@ struct inode_operations affs_dir_inode_operations = {
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
-	affs_dir_truncate,	/* truncate */
+	NULL,			/* truncate */
 	NULL			/* permissions */
 };
 
@@ -72,11 +72,11 @@ static int
 affs_readdir(struct inode *inode, struct file *filp, void *dirent, filldir_t filldir)
 {
 	int			 j, namelen;
-	LONG			 i;
-	ULONG			 hash_pos;
-	ULONG			 chain_pos;
+	int			 i;
+	int			 hash_pos;
+	int			 chain_pos;
 	unsigned long		 ino;
-	unsigned long			 old;
+	unsigned long		 old;
 	int stored;
 	char *name;
 	struct buffer_head *dir_bh;
@@ -142,9 +142,9 @@ affs_readdir(struct inode *inode, struct file *filp, void *dirent, filldir_t fil
 		 * we can jump directly to where we left off.
 		 */
 		if (filp->private_data && filp->f_version == dir->i_version) {
-			i = (ULONG)filp->private_data;
+			i = (int)filp->private_data;
 			j = 0;
-			pr_debug("AFFS: readdir() left off=%lu\n",i);
+			pr_debug("AFFS: readdir() left off=%d\n",i);
 		}
 		filp->f_version = dir->i_version;
 		pr_debug("AFFS: hash_pos=%lu chain_pos=%lu\n", hash_pos, chain_pos);
@@ -163,7 +163,8 @@ affs_readdir(struct inode *inode, struct file *filp, void *dirent, filldir_t fil
 		}
 		if (fh_bh) {
 			namelen = affs_get_file_name(AFFS_I2BSIZE(inode),fh_bh->b_data,&name);
-			pr_debug("AFFS: readdir(): filldir(..,\"%.*s\",ino=%lu), i=%lu\n",namelen,name,ino,i);
+			pr_debug("AFFS: readdir(): filldir(..,\"%.*s\",ino=%lu), i=%lu\n",
+				 namelen,name,ino,i);
 			filp->private_data = (void *)ino;
 			if (filldir(dirent,name,namelen,filp->f_pos,ino) < 0)
 				goto readdir_done;
@@ -187,10 +188,4 @@ readdir_done:
 	iput(dir);
 	pr_debug("AFFS: readdir()=%d\n",stored);
 	return stored;
-}
-
-void
-affs_dir_truncate(struct inode *inode)
-{
-	printk("AFFS: dir_truncate()\n");
 }

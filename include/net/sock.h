@@ -195,8 +195,8 @@ struct sock
 	struct sock		*next;
 	struct sock		*prev; /* Doubly linked chain.. */
 	struct sock		*pair;
-	struct sk_buff		* send_head;
-	struct sk_buff		* send_tail;
+	struct sk_buff		* volatile send_head;
+	struct sk_buff		* volatile send_tail;
 	struct sk_buff_head	back_log;
 	struct sk_buff		*partial;
 	struct timer_list	partial_timer;
@@ -212,33 +212,33 @@ struct sock
 	unsigned short		window;
 	__u32                   lastwin_seq;    /* sequence number when we last updated the window we offer */
 	__u32			high_seq;	/* sequence number when we did current fast retransmit */
-	unsigned long		ato;            /* ack timeout */
-	unsigned long		lrcvtime;       /* jiffies at last rcv */
+	volatile unsigned long  ato;            /* ack timeout */
+	volatile unsigned long  lrcvtime;       /* jiffies at last rcv */
 	unsigned short		bytes_rcv;
 /*
  *	mss is min(mtu, max_window) 
  */
 	unsigned short		mtu;       /* mss negotiated in the syn's */
-	unsigned short		mss;       /* current eff. mss - can change */
-	unsigned short		user_mss;  /* mss requested by user in ioctl */
-	unsigned short		max_window;
+	volatile unsigned short	mss;       /* current eff. mss - can change */
+	volatile unsigned short	user_mss;  /* mss requested by user in ioctl */
+	volatile unsigned short	max_window;
 	unsigned long 		window_clamp;
 	unsigned int		ssthresh;
 	unsigned short		num;
-	unsigned short		cong_window;
-	unsigned short		cong_count;
-	unsigned short		packets_out;
-	unsigned short		shutdown;
-	unsigned long		rtt;
-	unsigned long		mdev;
-	unsigned long		rto;
+	volatile unsigned short	cong_window;
+	volatile unsigned short	cong_count;
+	volatile unsigned short	packets_out;
+	volatile unsigned short	shutdown;
+	volatile unsigned long	rtt;
+	volatile unsigned long	mdev;
+	volatile unsigned long	rto;
 
 /*
  *	currently backoff isn't used, but I'm maintaining it in case
  *	we want to go back to a backoff formula that needs it
  */
  
-	unsigned short		backoff;
+	volatile unsigned short	backoff;
 	int			err, err_soft;	/* Soft holds errors that don't
 						   cause failure but are the cause
 						   of a persistent failure not just

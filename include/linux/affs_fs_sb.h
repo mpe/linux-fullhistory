@@ -8,24 +8,30 @@
  *
  */
 
-#include <linux/amigaffs.h>
-
 #define MAX_ZONES		8
-#define AFFS_DATA_MIN_FREE	30	/* Percentage of free blocks needed for a data zone */
-#define AFFS_HDR_MIN_FREE	10	/* Same for header blocks */
+#define AFFS_DATA_MIN_FREE	512	/* Number of free blocks in zone for data blocks */
+#define AFFS_HDR_MIN_FREE	128	/* Same for header blocks */
+#define AFFS_ZONE_SIZE		1024	/* Blocks per alloc zone, must be multiple of 32 */
 
 struct affs_bm_info {
-	struct buffer_head *bm_bh;	/* Buffer for bitmap. */
-	int bm_free;			/* Free blocks. */
-	int bm_size;			/* Size in bits, rounded to multiple of 32. */
+	struct buffer_head *bm_bh;	/* Buffer head if loaded (bm_count > 0) */
 	int bm_firstblk;		/* Block number of first bit in this map */
+	int bm_key;			/* Disk block number */
+	int bm_count;			/* Usage counter */
+};
+
+struct affs_alloc_zone {
+	short az_size;			/* Size of this allocation zone in double words */
+	short az_count;			/* Number of users */
+	int az_free;			/* Free blocks in here (no. of bits) */
 };
 
 struct affs_zone {
 	unsigned long z_ino;		/* Associated inode number */
 	struct affs_bm_info *z_bm;	/* Zone lies in this bitmap */
 	int z_start;			/* Index of first word in bitmap */
-	int z_zone_no;			/* Zone number */
+	int z_end;			/* Index of last word in zone + 1 */
+	int z_az_no;			/* Zone number */
 	unsigned long z_lru_time;	/* Time of last usage */
 };
 
@@ -42,10 +48,11 @@ struct affs_sb_info {
 	struct affs_bm_info *s_bitmap;	/* Bitmap infos. */
 	int s_bm_count;			/* Number of bitmap blocks. */
 	int s_nextzone;			/* Next zone to look for free blocks. */
-	int s_num_zones;		/* Total number of zones. */
-	struct affs_zone *s_zones;	/* The zones themselves. */
-	char *s_zonemap;		/* Bitmap for zones. */
-	char *s_prefix;			/* Prefix for volumes and assigns. */
+	int s_num_az;			/* Total number of alloc zones. */
+	struct affs_zone *s_zones;	/* The zones themselfes. */
+	struct affs_alloc_zone *s_alloc;/* The allocation zones. */
+	char *s_zonemap;		/* Bitmap for allocation zones. */
+	char *s_prefix;			/* Prefix for volumes and assignes. */
 	int s_prefix_len;		/* Length of prefix. */
 	char s_volume[32];		/* Volume prefix for absolute symlinks. */
 };

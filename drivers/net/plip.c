@@ -271,6 +271,7 @@ plip_init(struct device *dev)
 	dev->get_stats 		= plip_get_stats;
 	dev->set_config		= plip_config;
 	dev->do_ioctl		= plip_ioctl;
+	dev->tx_queue_len	= 10;
 	dev->flags	        = IFF_POINTOPOINT|IFF_NOARP;
 
 	/* Set the private structure */

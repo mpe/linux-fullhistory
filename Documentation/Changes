@@ -324,8 +324,8 @@ throughout 1.3.x. A warning will be printed in 2.0.x when the old
 numbers are used, and their use will be discontinued entirely in 2.1.x
 
    In order to avoid trouble, you need to recompile any programs that
-emit floppy ioctls. These include mtools and fdutils. You can get
-mtools at:
+emit floppy ioctls. These include mtools, fdutils and dosemu. You can
+get mtools at:
 
 ftp://ftp.imag.fr/pub/Linux/ZLIBC/mtools/mtools-3.0.src.tar.gz
 ftp://sunsite.unc.edu/pub/Linux/utils/disk-management/mtools-3.0.src.tar.gz
@@ -336,6 +336,8 @@ You can get fdutils at:
 ftp://ftp.imag.fr/pub/Linux/ZLIBC/fdutils/fdutils-4.3.src.tar.gz
 ftp://sunsite.unc.edu/pub/Linux/system/Misc/fdutils-4.3.src.tar.gz
 ftp://tsx-11.mit.edu/pub/linux/sources/sbin/fdutils-4.3.src.tar.gz
+
+   For dosemu, see above.
 
    In the future, the ioctl used by fdformat might be discontinued
 altogether. Please use superformat (included in fdutils) instead.

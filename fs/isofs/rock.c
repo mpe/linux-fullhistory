@@ -367,7 +367,7 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 	   }
 
 	   /*
-	    * If this component record isnt continued, then append a '/'.
+	    * If this component record isn't continued, then append a '/'.
 	    */
 	   if(   (!rootflag)
 		 && ((oldslp->flags & 1) == 0) ) inode->i_size += 1;
@@ -529,7 +529,7 @@ char * get_rock_ridge_symlink(struct inode * inode)
 	 }
 
 	 /*
-	  * If this component record isnt continued, then append a '/'.
+	  * If this component record isn't continued, then append a '/'.
 	  */
 	 if(   (!rootflag)
 	    && ((oldslp->flags & 1) == 0) ) strcat(rpnt,"/");

@@ -1,8 +1,7 @@
 # Maintained by Axel Boldt (boldt@math.ucsb.edu) 
 #
 # This version of the Linux kernel configuration help texts
-# corresponds to the kernel versions 1.3.x. Be aware that these
-# are development kernels.
+# corresponds to the kernel versions 2.0.x.
 #
 # Information about what a kernel is, what it does, how to patch and
 # compile it and much more is contained in the Kernel-HOWTO, available
@@ -45,7 +44,6 @@ CONFIG_EXPERIMENTAL
   may not meet the normal level of reliability or it may fail to work
   in some special cases. Detailed bug reports from people familiar with
   the kernel internals are usually welcomed by the developers. 
-
   Unless you intend to help test and develop a feature or driver that
   falls into this category, or you have a situation that requires using 
   these features you should probably say N here, which will cause this 
@@ -128,7 +126,7 @@ CONFIG_BLK_DEV_IDE
   interfaces, for a combination of up to eight IDE disk/cdrom/tape
   drives.  Useful information about large (>540MB) IDE disks,
   soundcard IDE ports, and other topics, is all contained in
-  drivers/block/README.ide.  If you have one or more IDE drives, say Y
+  Documentation/ide.txt.  If you have one or more IDE drives, say Y
   here.  If your system has no IDE drives, or if memory requirements
   are really tight, you could say N here, and select the Old harddisk
   driver instead to save about 13kB of memory in the kernel.  To
@@ -156,11 +154,13 @@ CONFIG_BLK_DEV_HD_IDE
   the new enhanced driver by itself.  This option installs the old
   harddisk driver to control the primary IDE/disk interface in the
   system, leaving the new enhanced IDE driver take care of only the
-  2nd/3rd/4th IDE interfaces.  Choosing this option may be useful for
-  older systems which have MFM/RLL/ESDI controller+drives at the
-  primary port address (0x1f0), along with IDE drives at the
-  secondary/3rd/4th port addresses.  Normally, just say N here; you
-  will then use the new driver for all 4 interfaces.
+  2nd/3rd/4th IDE interfaces. Doing this will prevent you from having
+  an IDE/ATAPI CDROM or tape drive connected to the primary IDE
+  interface. Choosing this option may be useful for older systems
+  which have MFM/RLL/ESDI controller+drives at the primary port
+  address (0x1f0), along with IDE drives at the secondary/3rd/4th port
+  addresses.  Normally, just say N here; you will then use the new
+  driver for all 4 interfaces.
   
 Include IDE/ATAPI CDROM support
 CONFIG_BLK_DEV_IDECD
@@ -174,9 +174,10 @@ CONFIG_BLK_DEV_IDECD
   If this is your only CDROM drive, you can say N to all other CDROM
   options, but be sure to say Y to the ISO9660 filesystem.  Read the
   CDROM-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  Note that older versions of
-  lilo (the linux boot loader) cannot properly deal with IDE/ATAPI
-  CDROMs, so install lilo-16 or higher, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO and the file
+  Documentation/cdrom/ide-cd.  Note that older versions of lilo (the
+  linux boot loader) cannot properly deal with IDE/ATAPI CDROMs, so
+  install lilo-16 or higher, available from
   sunsite.unc.edu:/pub/Linux/system/Linux-boot/lilo.
 
 Include IDE/ATAPI TAPE support
@@ -186,7 +187,7 @@ CONFIG_BLK_DEV_IDETAPE
   similar to the SCSI protocol.  At boot time, the TAPE drive will
   be identified along with other IDE devices, as "hdb" or "hdc",
   or something similar.  Be sure to consult the drivers/block/ide-tape.c
-  and README.ide files for usage information.
+  and Documentation/ide.txt files for usage information.
 
 Support removable IDE interfaces (PCMCIA)
 CONFIG_BLK_DEV_IDE_PCMCIA
@@ -278,8 +279,12 @@ CONFIG_BLK_DEV_PROMISE
 
 XT harddisk support
 CONFIG_BLK_DEV_XD
-  Very old 8 bit hard disk controllers used in the IBM XT
-  computer. Pretty unlikely that you have this: say N.
+  Very old 8 bit hard disk controllers used in the IBM XT computer. To
+  include a driver for these, say Y. If you want to compile the driver
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt. It's pretty unlikely that you have one of
+  these: say N.
 
 Multiple devices driver support
 CONFIG_BLK_DEV_MD
@@ -390,15 +395,15 @@ CONFIG_NET
 
 Network aliasing
 CONFIG_NET_ALIAS
-  This is for setting several network addresses on the same low-level
+  This is for setting multiple IP addresses on the same low-level
   network device driver. Typically used for services that act
-  differently based on the address they listen on (e.g. Apache httpd)
-  or for connecting to different logical networks through the same
-  physical interface.  This is the generic part, later when
-  configuring network protocol options you will be asked for
-  protocol-specific aliasing support.  See
+  differently based on the address they listen on (e.g. "multihosting"
+  on Apache httpd) or for connecting to different logical networks
+  through the same physical interface.  This is the generic part,
+  later when configuring network protocol options you will be asked
+  for protocol-specific aliasing support.  See
   Documentation/networking/alias.txt for more info.  If you need this
-  features (for any protocol, like IP) say Y; if unsure, say N.
+  feature (for any protocol, like IP) say Y; if unsure, say N.
 
 Network firewalls
 CONFIG_FIREWALL
@@ -407,8 +412,16 @@ CONFIG_FIREWALL
   net is inspected by the firewall first. If you want to configure
   your Linux box as a firewall for a local network, say Y here. If
   your local network is TCP/IP based, you will have to say Y to "IP:
-  firewalling", below. Chances are that you should use this on any
-  machine being run as a router and not on a host.
+  firewalling", below.  You also need to say Y here and enable "IP
+  firewalling" below in order to be able to use IP masquerading
+  (i.e. local computers can chat with an outside host, but that
+  outside host is made to think that it is talking to the firewall
+  box. Makes the local network completely invisible and avoids the
+  need to allocate valid IP host addresses for the machines on the
+  local net) or to use the ip packet accounting to see what is using
+  all your network bandwidth. Chances are that you should use this on
+  any machine being run as a router and not on a host. If unsure, say
+  N.
 
 Sun floppy controller support
 CONFIG_BLK_DEV_SUNFD
@@ -512,8 +525,9 @@ CONFIG_PCI
   Find out whether you have a PCI motherboard. PCI is the name of a
   bus system, i.e. the way the CPU talks to the other stuff inside
   your box. Other bus systems are ISA, EISA, Microchannel (MCA) or
-  VESA. If you have PCI, say Y, otherwise N. Note1: MCA systems are
-  not supported by the standard kernels, but patches exist at
+  VESA. If you have PCI, say Y, otherwise N. Note1: MCA systems
+  (notably some IBM PS/2's) are not supported by the standard kernels,
+  but patches exist at
   http://www.undergrad.math.uwaterloo.ca/~cpbeaure/mca-linux.html on
   the WWW. Note2: some old PCI motherboards have BIOS bugs and may
   crash if "PCI bios support" is enabled (but they run fine without
@@ -615,19 +629,26 @@ CONFIG_BINFMT_AOUT
 
 Kernel support for JAVA binaries
 CONFIG_BINFMT_JAVA
-  JAVA binaries are becoming a universal executable format. This
-  option allows Java binaries and Java Applets to be handled invisibly
-  to the OS. As more and more Java programs become available, the use
-  for this will gradually increase. If you want to use this, read the
-  Java on Linux HOWTO, available via ftp (user: anonymous) at
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. In order to execute Java binaries,
-  you will also need to install the Java Developers Kit. If you disable
-  this option it will reduce your kernel by about one page. This is not
-  much and by itself does not warrant removing support. However its
-  removal is a good idea if you do not have the JDK installed. If you
-  don't know what to answer at this point then answer Y. You may answer
-  M for module support and later load the module when you install the
-  JDK or find a interesting Java program that you can't live without.
+  JAVA is an object oriented programming language developed by SUN;
+  JAVA programs are compiled into "JAVA bytecode" which can then be
+  interpreted by run time systems on many different operating systems.
+  These JAVA binaries are becoming a universal executable format. This
+  option allows you to run a Java binary just like any other Linux
+  program: by typing in its name. As more and more Java programs
+  become available, the use for this will gradually increase. You can
+  even execute HTML files containing JAVA applets (= JAVA binaries) if
+  those files start with the string "<!--applet-->". If you want to
+  use this, read Documentation/java.txt and the Java on Linux HOWTO,
+  available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. You will then need to install
+  the run time system contained in the Java Developers Kit (JDK) as
+  described in the HOWTO. If you disable this option it will reduce
+  your kernel by about 4kB. This is not much and by itself does not
+  warrant removing support. However its removal is a good idea if you
+  do not have the JDK installed. If you don't know what to answer at
+  this point then answer Y. You may answer M for module support and
+  later load the module when you install the JDK or find a interesting
+  Java program that you can't live without.
 
 Processor type
 CONFIG_M386
@@ -704,25 +725,23 @@ CONFIG_KERNELD
   available via ftp (user: anonymous) from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If unsure, say Y.
 
-ARP daemon support
+ARP daemon support (EXPERIMENTAL)
 CONFIG_ARPD
   Normally, the kernel maintains an internal cache which maps IP 
   addresses to hardware addresses on the local network, so that
-  Ethernet/Token Ring/ etc. frames are sent to the proper address
-  on the physical networking layer.  For small networks having
-  a few hundred directly connected hosts or less, keeping  this
-  address resolution cache (ARP) inside the kernel works well.
-  However, maintaining an internal ARP cache does not work well for
-  very large switched networks, and will use a lot of kernel memory
-  if TCP/IP connections are made to many machines on the network.
-  By enabling this option, the kernel's internal ARP cache will
-  never grow to more than 256 entries (the oldest entries are 
-  expired in a LIFO manner) and communication will be attempted
-  with an external ARP daemon, arpd, via the kerneld message
-  queue.  This code is still experimental.  If you do enable
-  arpd support, you should obtain a copy of arpd from
-  http://www.loran.com/~layes/arpd/index.html.  If unsure,
-  say N.  
+  Ethernet/Token Ring/ etc. frames are sent to the proper address on
+  the physical networking layer.  For small networks having a few
+  hundred directly connected hosts or less, keeping this address
+  resolution (ARP) cache inside the kernel works well.  However,
+  maintaining an internal ARP cache does not work well for very large
+  switched networks, and will use a lot of kernel memory if TCP/IP
+  connections are made to many machines on the network.  By enabling
+  this option, the kernel's internal ARP cache will never grow to more
+  than 256 entries (the oldest entries are expired in a LIFO manner)
+  and communication will be attempted with an external ARP daemon,
+  arpd.  This code is still experimental.  If you do enable arpd
+  support, you should obtain a copy of arpd from
+  http://www.loran.com/~layes/arpd/index.html.  If unsure, say N.
 
 TCP/IP networking
 CONFIG_INET
@@ -778,9 +797,9 @@ IP: multicasting
 CONFIG_IP_MULTICAST
   This is code for addressing several networked computers at once,
   enlarging your kernel by about 2 kB. If you are using gated, the
-  to update your computer's routing tables and are using RIP2 or OSPF
-  you will need to have this option compiled in. You also need
-  multicasting if you intend to participate in the MBONE, a high
+  daemon that updates your computer's routing tables, and are using
+  RIP2 or OSPF you will need to have this option compiled in. You also
+  need multicasting if you intend to participate in the MBONE, a high
   bandwidth network on top of the internet which carries audio and
   video broadcasts. More information about the MBONE is on the WWW at
   http://www.best.com/~prince/techinfo/mbone.html (to browse the WWW,
@@ -799,17 +818,19 @@ CONFIG_IP_ROUTER
 
 IP: firewalling
 CONFIG_IP_FIREWALL
-  If you want to configure your Linux box as a firewall for a local 
+  If you want to configure your Linux box as a firewall for a local
   TCP/IP based network, say Y here. This will enlarge your kernel by
   about 2kB. You may need to read the FIREWALL-HOWTO, available via
-  ftp (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also,
-  you will need the ipfwadm tool to allow selective blocking of internet
-  traffic based on type, origin and destination.  You need to enable IP
-  firewalling in order to be able to use IP masquerading (i.e. local 
-  computers can chat with an outside host, but that outside host is 
-  made to think that it is talking to the firewall box. Makes the local
-  network completely invisible) or to use the ip packet accounting to see
-  what is using all your network bandwidth.
+  ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also, you will need the
+  ipfwadm tool to allow selective blocking of internet traffic based
+  on type, origin and destination.  You need to enable IP firewalling
+  in order to be able to use IP masquerading (i.e. local computers can
+  chat with an outside host, but that outside host is made to think
+  that it is talking to the firewall box. Makes the local network
+  completely invisible and avoids the need to allocate valid IP host
+  addresses for the machines on the local net) or to use the ip packet
+  accounting to see what is using all your network bandwidth.
 
 IP: accounting
 CONFIG_IP_ACCT
@@ -882,7 +903,7 @@ CONFIG_IP_ALIAS
   syntax explained in Documentation/networking/alias.txt. If you want
   this, say Y. Most people don't need it and say N.
 
-IP: multicast routing(in progress)
+IP: multicast routing (EXPERIMENTAL)
 CONFIG_IP_MROUTE
   This is used if you want your machine to act as a router for IP
   packets that have several destination addresses. It is needed on the
@@ -1041,11 +1062,11 @@ CONFIG_AX25
   use a low speed TNC (a Terminal Node Controller acts as a kind of
   modem connecting your computer's serial port to your radio's
   microphone input and speaker output) supporting the KISS protocol or
-  the  various SCC cards that are supported by the Ottowa PI, the
+  the  various SCC cards that are supported by the Ottawa PI, the
   Gracilis Packetwin and the generic Z8530 driver. 
   At the moment there is no driver for the Baycom modem serial and parallel
   port hacks although one is being written (see the HAM-HOWTO). The other
-  baycom cards (SCC) are supported by the Z8530 driver.
+  Baycom cards (SCC) are supported by the Z8530 driver.
   In order to use AX.25, you need to get a set of all the software for 
   Linux amateur radio users as well as information about how to 
   configure an AX.25 port is contained in the HAM-HOWTO, available via
@@ -1083,19 +1104,21 @@ CONFIG_BPQETHER
 
 Bridging (EXPERIMENTAL)
 CONFIG_BRIDGE
-  If you enable this, your Linux box will be able to act as an
+  If you say Y here, then your Linux box will be able to act as an
   ethernet bridge, which means that the different ethernet segments it
   is connected to will appear as one ethernet to the
   participants. Several such bridges can work together to create even
   larger networks of ethernets using the IEEE802.1 spanning tree
-  algorithm. As this is a standard Linux bridges will interwork properly
-  with other third party bridge products. Note that if your box acts as 
-  a bridge, it probably contains several ethernet devices, but the kernel
-  is not able to recognize more than one at boot time without help; for 
-  details read the Multiple-Ethernet-mini-HOWTO, available via ftp (user:
-  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. The
-  Bridging code is still in test. If unsure, say N.
-  The bridge configuration tools are available via ftp from shadow.cabi.net.
+  algorithm. As this is a standard, Linux bridges will interwork
+  properly with other third party bridge products. In order to use
+  this, you'll need the bridge configuration tools available via ftp
+  (user: anonymous) from shadow.cabi.net. Note that if your box acts
+  as a bridge, it probably contains several ethernet devices, but the
+  kernel is not able to recognize more than one at boot time without
+  help; for details read the Multiple-Ethernet-mini-HOWTO, available
+  via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. The Bridging code is
+  still in test. If unsure, say N.
 
 Kernel/User network link driver(ALPHA)
 CONFIG_NETLINK
@@ -1107,6 +1130,10 @@ CONFIG_NETLINK
   messages", below. Say Y if you want to experiment with it; this is
   ALPHA code, which means that it need not be completely stable; it
   has nothing to do with the computer architecture of the same name.
+  You need to include this if you want to use arpd, a daemon that
+  helps keep the internal ARP cache (a mapping between IP addresses
+  and hardware addresses on the local network) small. If unsure, say
+  N.
 
 Routing messages
 CONFIG_RTNETLINK
@@ -1375,9 +1402,14 @@ CONFIG_SCSI_NCR53C7xx_FAST
  
 allow DISCONNECT
 CONFIG_SCSI_NCR53C7xx_DISCONNECT
-###
-### Dunno
-###
+  This enables the disconnect/reconnect feature of the NCR SCSI controller.
+  When this is enabled, a slow SCSI device will not lock the SCSI bus
+  while processing a request, allowing simultaneous use of e.g. a SCSI
+  hard disk and SCSI tape or CD-ROM drive, and providing much better 
+  performance when using slow and fast SCSI devices at the same time. Some 
+  devices, however, do not operate properly with this option enabled, and 
+  will cause your SCSI system to hang, which might cause a system crash. 
+  The safe answer therefore is to say N.
 
 Always IN2000 SCSI support
 CONFIG_SCSI_IN2000
@@ -1523,22 +1555,33 @@ CONFIG_NETDEVICES
   read Olaf Kirch's excellent book "Network Administrator's Guide", to
   be found in sunsite.unc.edu:/pub/Linux/docs/LDP.  If unsure, say Y.
 
+CONFIG_NET_ETHERNET
+  Ethernet is the most common protocol used on Local Area Networks
+  (LANs) in universities or companies. 10-base-2 and 10-base-T and
+  100-base-<whatever> are common types of ethernet. If your Linux
+  machine will be connected to an Ethernet and you have an ethernet
+  network card installed in your computer, say Y here and read the
+  Ethernet-HOWTO, available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  Note that the answer to this
+  question won't directly affect the kernel: saying N will just cause
+  this configure script to skip all the questions about Ethernet
+  network cards. If unsure, say N.
+
 Dummy net driver support
 CONFIG_DUMMY
-  This is essentially a bit-bucket device (i.e. traffic you send to 
+  This is essentially a bit-bucket device (i.e. traffic you send to
   this device is consigned into oblivion) with a configurable IP
-  address different from the usual 127.0.0.1. It is most commonly used
-  in order to make your currently inactive SLIP address seem like a
-  real address for local programs. If you use SLIP or PPP, you might
-  want to enable it. Read about it in the Network Administrator's
-  Guide, available via ftp (user: anonymous) from
-  sunsite.unc.edu:/pub/Linux/docs/LDP. Since this thing comes often
-  handy, the default is Y. It won't enlarge your kernel either. What a
-  deal.  If you want to compile this as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want),
-  say M here and read Documentation/modules.txt. If you want to use
-  more than one dummy device at a time, you need to compile it as a
-  module. 
+  address. It is most commonly used in order to make your currently
+  inactive SLIP address seem like a real address for local
+  programs. If you use SLIP or PPP, you might want to enable it. Read
+  about it in the Network Administrator's Guide, available via ftp
+  (user: anonymous) from sunsite.unc.edu:/pub/Linux/docs/LDP. Since
+  this thing comes often handy, the default is Y. It won't enlarge
+  your kernel either. What a deal.  If you want to compile this as a
+  module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt. If you want to use more than one dummy
+  device at a time, you need to compile it as a module.
   
 SLIP (serial line) support
 CONFIG_SLIP
@@ -1588,17 +1631,23 @@ CONFIG_SLIP_SMART
 
 Six bit SLIP encapsulation
 CONFIG_SLIP_MODE_SLIP6
-  Just occasionally you may need to run IP over hostile serial networks that
-  don't pass all control characters or are only seven bit. This adds an
-  extra mode you can use with SLIP "slip6" which contains only the normal
-  ascii symbols. Its good enough, for example, to run IP over the async
-  ports of a Camtec JNT Pad.
+  Just occasionally you may need to run IP over hostile serial
+  networks that don't pass all control characters or are only seven
+  bit. Saying Y here adds an extra mode you can use with SLIP:
+  "slip6". In this mode, SLIP will only send normal ascii symbols over
+  the serial device. Naturally, this has to be supported at the other
+  end of the link as well. It's good enough, for example, to run IP
+  over the async ports of a Camtec JNT Pad. If unsure, say N.
 
 Radio network interfaces
 CONFIG_NET_RADIO
-  Radio based interfaces for Linux. Both amateur radio (AX.25) and other
-  systems. In addition shadow.cabi.net carries user mode drivers for the
-  Scarab devices. These need no kernel support.
+  Radio based interfaces for Linux. This includes amateur radio
+  (AX.25), support for wireless ethernet and other systems. Note that
+  the answer to this question won't directly affect the kernel:
+  saying N will just cause this configure script to skip all the
+  questions about radio interfaces. Some user-level drivers for scarab
+  devices which don't require special kernel support are available via
+  ftp (user: anonymous) from shadow.cabi.net. If unsure, say N.
 
 PPP (point-to-point) support
 CONFIG_PPP
@@ -1654,17 +1703,20 @@ CONFIG_STRIP
 WIC (Radio IP bridge)
 CONFIG_WIC
   Support for the WIC parallel port radio bridge. You'll probably want
-  to say N.
+  to say N.  If you want to compile this driver as a module though ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want), say M here and read Documentation/modules.txt.
 
 Z8530 SCC kiss emulation driver for AX.25
 CONFIG_SCC
   These cards are used to connect your Linux box to an amateur radio
-  and communicate with other computers.  If you want to use this, read
-  Documentation/networking/z8530drv.txt and the HAM-HOWTO, available
-  via ftp (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO.
-  If you want to compile this as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want),
-  say M here and read Documentation/modules.txt.
+  in order to communicate with other computers.  If you want to use
+  this, read Documentation/networking/z8530drv.txt and the HAM-HOWTO,
+  available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt.
 
 BAYCOM ser12 and par96 kiss emulation driver for AX.25
 CONFIG_BAYCOM
@@ -1688,11 +1740,11 @@ CONFIG_PLIP
   on bidirectional parallel ports only, which can transmit 8 bits at a
   time (you can find the wiring of these cables in
   drivers/net/README?.plip). The cables can be up to 15m long. This
-  works also if one of the machines runs DOS and has some PLIP
+  works also if one of the machines runs DOS/Windows and has some PLIP
   software installed, e.g. the Crynwr PLIP packet driver
   (http://sunsite.cnam.fr/packages/Telnet/PC/msdos/misc/pktdrvr.txt)
-  and NCSA's telnet.  If you want to use this, say Y and read the PLIP
-  mini-HOWTO, available via ftp (user: anonymous) in
+  and winsock or NCSA's telnet.  If you want to use this, say Y and
+  read the PLIP mini-HOWTO, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini as well as the
   NET-2-HOWTO in sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that the
   PLIP protocol was changed and this PLIP driver won't work together
@@ -1775,10 +1827,6 @@ CONFIG_SDLA
   available as a module ( = code which can be inserted in and removed
   from the running kernel whenever you want). If you want to compile
   it as a module, say M here and read Documentation/modules.txt.
-
-Ethernet (10 or 100Mbit)
-CONFIG_NET_ETHERNET
-  Say yes if you want to select support for ethernet cards.
 
 Sun LANCE Ethernet support
 CONFIG_SUN_LANCE
@@ -2577,15 +2625,7 @@ CONFIG_QUOTA
   use it. Probably this is only useful for multi user systems. If
   unsure, say N.
 
-Mandatory lock support
-CONFIG_LOCK_MANDATORY
-  Mandatory locking is used by some System 5 style database applications.
-  To use this option safely you must have newer NFS daemons, new samba,
-  new netatalk, new mars-nwe and other file servers. At the time of 
-  writing none of these are available. Unless you need this feature say
-  N.
-  
-Standard (minix) fs support
+Minix fs support
 CONFIG_MINIX_FS
   Minix is a simple operating system used in many classes about
   OS's. The minix filesystem (= method to organize files on a harddisk
@@ -2916,23 +2956,23 @@ CONFIG_NCP_FS
   removed from the running kernel whenever you want), say M here and
   read Documentation/modules.txt.
 
-Amiga FFS filesystem support (read only)
+Amiga FFS filesystem support (EXPERIMENTAL)
 CONFIG_AFFS_FS
   The Fast File System (FFS) is the common filesystem used on harddisks
   by Amiga (tm) Systems since AmigaOS Version 1.3 (34.20). It's also
   possible to mount diskfiles used by the Un*X Amiga Emulator by Bernd
   Schmidt (http://www-users.informatik.rwth-aachen.de/~crux/uae.html)
   If you want to do the latter, you will also need the loop device
-  support. Because it's in an early development state, the AFFS is 
-  read only. Say Y if you want to be able to read files from an Amiga
-  FFS partition of your harddrive. Amiga floppies however cannot be
-  read with this driver due to an incompatibility of the floppy
-  controller used in an Amiga and the standard floppy controller in
-  PCs and workstations. Read Documentation/filesystems/affs.txt. This
-  filesystem is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you
-  want). If you want to compile it as a module, say M here and read
-  Documentation/modules.txt. If unsure, say N.
+  support. Say Y if you want to be able to read and write files from
+  and to an Amiga FFS partition of your harddrive. Amiga floppies
+  however cannot be read with this driver due to an incompatibility of
+  the floppy controller used in an Amiga and the standard floppy
+  controller in PCs and workstations. Read
+  Documentation/filesystems/affs.txt. This filesystem is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+  If unsure, say N.
 
 Standard/generic serial support
 CONFIG_SERIAL
@@ -3216,11 +3256,14 @@ CONFIG_WATCHDOG
   result in rebooting the machine. This could be useful for a
   networked machine that needs to come back online as fast as possible
   after a lock-up. There's a watchdog implementation entirely in
-  software (which can sometimes fail to reboot the machine) and a driver
-  for hardware watchdog boards, which are more robust and can also
-  keep track of the temperature inside your computer. For details,
-  read Documentation/watchdog.txt in the kernel source. If unsure, say
-  N.
+  software (which can sometimes fail to reboot the machine) and a
+  driver for hardware watchdog boards, which are more robust and can
+  also keep track of the temperature inside your computer. For
+  details, read Documentation/watchdog.txt in the kernel source. If
+  unsure, say N. This driver is also available as a module ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
 
 Disable watchdog shutdown on close
 CONFIG_WATCHDOG_NOWAYOUT
@@ -3257,7 +3300,10 @@ Software Watchdog
 CONFIG_SOFT_WATCHDOG
   A software monitoring watchdog. This will fail to reboot your system
   from some situations that the hardware watchdog will recover
-  from. Equally it's a lot cheaper to install.
+  from. Equally it's a lot cheaper to install. This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile
+  it as a module, say M here and read Documentation/modules.txt.
 
 Enhanced Real Time Clock Support
 CONFIG_RTC
@@ -3317,20 +3363,30 @@ CONFIG_PROFILE_SHIFT
 
 ISDN subsystem
 CONFIG_ISDN
-  This allows you to use an ISDN-card for networking connections and
-  as dialin/out device. The isdn-tty's have a built in AT-compatible
-  modem emulator. Network devices support autodial, channel-bundling,
+  ISDN ("Integrated Services Digital Networks", called RNIS in
+  France) is a special type of fully digital telephone line; it's
+  mostly used to connect to your Internet service provider (with SLIP
+  or PPP). The main advantage is that the speed is higher than
+  ordinary modem/telephone connections. It only works if your computer
+  is equipped with an ISDN card and both you and your service provider
+  purchased an ISDN line from your phone company.  For details, read
+  http://alumni.caltech.edu/~dank/isdn/ on the WWW. (To browse the
+  WWW, you need to have access to a machine on the Internet that has
+  one of the programs lynx, netscape or Mosaic.)  This driver allows
+  you to use an ISDN-card for networking connections and as dialin/out
+  device. The isdn-tty's have a built in AT-compatible modem
+  emulator. Network devices support autodial, channel-bundling,
   callback and caller-authentication without having a daemon
   running. A reduced T.70 protocol is supported with tty's suitable
-  for German BTX. Currently cards by Teles and compatibles and ICN are
-  supported. On D-Channel, the protocols EDSS1 and 1TR6 are
+  for German BTX. On D-Channel, the protocols EDSS1 and 1TR6 are
   supported. See Documentation/isdn/README for more information.
 
 Support synchronous PPP
 CONFIG_ISDN_PPP
   This enables synchronous PPP via ISDN. This protocol is used by
-  Cisco or Sun for example. You will need a special version of pppd
-  (called ipppd) for using this feature. See
+  Cisco or Sun for example. So you want say Y here if the other end of
+  your ISDN connection supports it. You will need a special version of
+  pppd (called ipppd) for using this feature. See
   Documentation/isdn/README.syncppp and Documentation/isdn/syncPPP.FAQ
   for more information.
 
@@ -3344,11 +3400,21 @@ Use VJ-compression with synchronous PPP
 CONFIG_ISDN_PPP_VJ
   This enables Van Jacobson header compression for synchronous PPP.
 
-ICN B1 and B2 support
+Support audio via ISDN
+CONFIG_ISDN_AUDIO
+  With this option enabled, the modem-emulator supports a subset
+  of the EIA Class 8 Voice commands. Using a getty with voice-support
+  (mgetty+sendfax by gert@greenie.muc.de with an extension, available
+  with the ISDN utily package for example), you will be able
+  to use your Linux box as an ISDN-answering machine. Of course, this
+  must be supported by the lowlevel driver also. Currently, the Teles
+  driver is the only voice-supporting one.
+
+ICN 2B and 4B support
 CONFIG_ISDN_DRV_ICN
   This enables support for two kinds of ISDN-cards made by a German
-  company called ICN. 1B is the standard version for a single ISDN
-  line with two B-channels, 2B supports two ISDN lines. For running
+  company called ICN. 2B is the standard version for a single ISDN
+  line with two B-channels, 4B supports two ISDN lines. For running
   this card, additional firmware is necessary, which has to be
   downloaded into the card using a utility which is distributed
   separately.  See Documentation/isdn/README and README.icn for more
@@ -3452,4 +3518,8 @@ CONFIG_AP1000
 # LocalWords:  Solaris RISCom riscom syncPPP PCBIT pcbit sparc anu au artoo ufs
 # LocalWords:  hitchcock Crynwr cnam pktdrvr NCSA's CyDROM CyCDROM FreeBSD NeXT
 # LocalWords:  NeXTstep disklabel disklabels SMD FFS tm AmigaOS diskfiles Un
-# LocalWords:  Bernd informatik rwth aachen uae affs
+# LocalWords:  Bernd informatik rwth aachen uae affs multihosting bytecode java
+# LocalWords:  applets applet JDK ncsa cabi SNI Alphatronix readme LANs scarab
+# LocalWords:  winsock RNIS caltech OSPF honour Honouring Mbit Localtalk Ottowa
+# LocalWords:  localtalk download Packetwin Baycom baycom interwork ascii JNT
+# LocalWords:  Camtec

@@ -107,7 +107,7 @@ int atari_scsi_release (struct Scsi_Host *);
  *  MAIN -> NCR5380_main() control flow
  *  NDAT -> no data-out phase
  *  NWR  -> no write commands
- *  PIO  -> PIO tansfers
+ *  PIO  -> PIO transfers
  *  PDMA -> pseudo DMA (unused on Atari)
  *  QU   -> queues
  *  RSL  -> reselections

@@ -1,6 +1,24 @@
-/* $Id: callc.c,v 1.2 1996/04/20 16:42:29 fritz Exp fritz $
+/* $Id: callc.c,v 1.7 1996/05/17 03:40:37 fritz Exp $
  *
  * $Log: callc.c,v $
+ * Revision 1.7  1996/05/17 03:40:37  fritz
+ * General cleanup.
+ *
+ * Revision 1.6  1996/05/10 22:42:07  fritz
+ * Added entry for EV_RELEASE_CNF in ST_OUT (if no D-Channel avail.)
+ *
+ * Revision 1.5  1996/05/06 10:16:15  fritz
+ * Added voice stuff.
+ *
+ * Revision 1.4  1996/04/30 22:04:05  isdn4dev
+ *   improved callback  Karsten Keil
+ *
+ * Revision 1.3  1996/04/30 10:04:19  fritz
+ * Started voice support.
+ * Added printk() to debug-switcher for easier
+ * synchronization between printk()'s and output
+ * of /dev/isdnctrl.
+ *
  * Revision 1.2  1996/04/20 16:42:29  fritz
  * Changed statemachine to allow reject of incoming calls.
  *
@@ -42,17 +60,6 @@ stat_debug(struct Channel *chanp, char *s)
 	sprintf(tmp, "%s Channel %d HL->LL %s\n", tm, chanp->chan, s);
 	teles_putstatus(tmp);
 }
-
-#ifdef DEFINED_BUT_NOT_USED
-static void
-stat_error(struct Channel *chanp, char *s)
-{
-        char            tmp[100];
-
-        sprintf(tmp, "Channel %d: %s\n", chanp->chan, s);
-        teles_putstatus(tmp);
-}
-#endif
 
 enum {
         ST_NULL,           /*  0 inactive                                               */
@@ -237,6 +244,7 @@ r1(struct FsmInst *fi, int event, void *arg)
                   chanp->lc_b.l2_establish = !0;
                   break;
           case (ISDN_PROTO_L2_HDLC):
+          case (ISDN_PROTO_L2_TRANS):
                   chanp->lc_b.l2_establish = 0;
                   break;
           default:
@@ -419,6 +427,7 @@ r9(struct FsmInst *fi, int event, void *arg)
                   chanp->lc_b.l2_establish = !0;
                   break;
           case (ISDN_PROTO_L2_HDLC):
+          case (ISDN_PROTO_L2_TRANS):
                   chanp->lc_b.l2_establish = 0;
                   break;
           default:
@@ -466,16 +475,6 @@ r12(struct FsmInst *fi, int event, void *arg)
         ic.arg = chanp->chan;
         iif.statcallb(&ic);
 }
-
-#ifdef DEFINED_BUT_NOT_USED
-static void
-prp(byte * p, int size)
-{
-        while (size--)
-                printk("%2x ", *p++);
-        printk("\n");
-}
-#endif
 
 static void
 r15(struct FsmInst *fi, int event, void *arg)
@@ -664,6 +663,7 @@ static struct FsmNode fnlist[] =
         {ST_OUT,              EV_SETUP_CNF,           r10},
         {ST_OUT,              EV_HANGUP,              r2_1},
         {ST_OUT,              EV_RELEASE_IND,         r20},
+        {ST_OUT,              EV_RELEASE_CNF,         r20},
         {ST_OUT,              EV_DLRL,                r2_2},
         {ST_OUT_W_HANGUP,     EV_RELEASE_IND,         r2_2},
         {ST_OUT_W_HANGUP,     EV_DLRL,                r20},
@@ -674,7 +674,7 @@ static struct FsmNode fnlist[] =
         {ST_IN_W,             EV_DLEST,               r7},
         {ST_IN_W,             EV_DLRL,                r3_1},
         {ST_IN,               EV_DLRL,                r3_1},
-        {ST_IN,               EV_HANGUP,              r3_1},
+        {ST_IN,               EV_HANGUP,              r2_1},
         {ST_IN,               EV_RELEASE_IND,         r2_2},
         {ST_IN,               EV_RELEASE_CNF,         r2_2},
         {ST_IN,               EV_ACCEPTD,             r8},
@@ -830,6 +830,7 @@ release_ds(int chan)
                   releasestack_isdnl2(st);
                   break;
           case (ISDN_PROTO_L2_HDLC):
+          case (ISDN_PROTO_L2_TRANS):
                   releasestack_transl2(st);
                   break;
         }
@@ -1121,22 +1122,13 @@ release_is(int chan)
         BufQueueRelease(&st->l2.i_queue);
 }
 
-static void
-release_chan(int chan)
-{
-#if 0
-        release_ds(chan);
-#endif
-        release_is(chan);
-}
-
 void
 CallcFreeChan(void)
 {
         int             i;
 
         for (i = 0; i < chancount; i++)
-                release_chan(i);
+                release_is(i);
         Sfree((void *) chanlist);
 }
 
@@ -1248,6 +1240,14 @@ init_ds(int chan, int incoming)
                   st->l1.hscxmode = 2;
                   st->l1.hscxchannel = chanlist[chan].para.bchannel - 1;
                   break;
+          case (ISDN_PROTO_L2_TRANS):
+                  st->l1.l1l2 = lltrans_handler;
+                  st->l1.l1man = dcc_l1man;
+                  st->l4.userdata = chanlist + chan;
+                  st->l4.l1writewakeup = ll_writewakeup;
+                  st->l1.hscxmode = 1;
+                  st->l1.hscxchannel = chanlist[chan].para.bchannel - 1;
+                  break;
         }
 
         return (0);
@@ -1345,6 +1345,7 @@ teles_command(isdn_ctrl * ic)
                             distr_debug();
                             sprintf(tmp, "debugging flags set to %x\n", debugflags);
                             teles_putstatus(tmp);
+			    printk(KERN_DEBUG "%s", tmp);
                             break;
                     case (2):
                             num = *(unsigned int *) ic->num;

@@ -61,15 +61,7 @@ extern __inline__ void tcp_delack_estimator(struct sock *sk)
 		if (m <= 0)
 			m = 1;
 
-		/* Yikes. This used to test if m was larger than rtt/8.
-		 * Maybe on a long delay high speed link this would be
-	         * good initial guess, but over a slow link where the
-	         * delay is dominated by transmission time this will
-	         * be very bad, since ato will almost always be something
-		 * more like rtt/2. Better to discard data points that
-		 * are larger than the rtt estimate.
-	         */
-		if (m > sk->rtt)
+		if (m > (sk->rtt >> 3))
 		{
 			sk->ato = sk->rtt >> 3;
 			/*
@@ -741,7 +733,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	 * (2) it has the same window as the last ACK,
 	 * (3) we have outstanding data that has not been ACKed
 	 * (4) The packet was not carrying any data.
-	 * (5) [From Floyds paper on fast retransmit wars]
+	 * (5) [From Floyd's paper on fast retransmit wars]
 	 *     The packet acked data after high_seq;
 	 * I've tried to order these in occurrence of most likely to fail
 	 * to least likely to fail.

@@ -12,7 +12,7 @@ To compile isdn4linux with the sync PPP part, you have
 to answer the appropriate question when doing a "make config"
 Don't forget to load the slhc.o
 module before the isdn.o module, if VJ-compression support
-is not compiled into your kernel. (e.g if you have PPP or
+is not compiled into your kernel. (e.g if you have no PPP or
 CSLIP in the kernel)
 
 Using isdn4linux with sync PPP:
@@ -20,11 +20,13 @@ Using isdn4linux with sync PPP:
 Sync PPP is just another encapsulation for isdn4linux. The
 name to enable sync PPP encapsulation is 'syncppp' .. e.g:
 
-  isdn/isdnctrl encap ippp0 syncppp
+  /sbin/isdnctrl encap ippp0 syncppp
 
 The name of the interface is here 'ippp0'. You need 
 one interface with the name 'ippp0' to saturate the
 ipppd, which checks the ppp version via this interface.
+Currently, all devices must have the name ipppX where
+'X' is a decimal value.
 
 To set up a PPP connection you need the ipppd .. You must start 
 the ipppd once after installing the modules. The ipppd 
@@ -46,7 +48,8 @@ for an example setup script.
 To use the MPPP stuff, you must configure a slave device
 with isdn4linux. Now call the ipppd with the '+mp' option.
 To increase the number of links, you must use the
-'addlink' option of the isdnctrl tool.
+'addlink' option of the isdnctrl tool. (rc.isdn.syncppp.MPPP is
+an example script)
 
 enjoy it,
     michael

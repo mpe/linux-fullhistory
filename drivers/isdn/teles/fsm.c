@@ -1,6 +1,9 @@
-/* $Id: fsm.c,v 1.1 1996/04/13 10:23:41 fritz Exp $
+/* $Id: fsm.c,v 1.2 1996/04/29 22:49:57 fritz Exp $
  *
  * $Log: fsm.c,v $
+ * Revision 1.2  1996/04/29 22:49:57  fritz
+ * Removed compatibility-macros.
+ *
  * Revision 1.1  1996/04/13 10:23:41  fritz
  * Initial revision
  *

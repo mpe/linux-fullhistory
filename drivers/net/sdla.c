@@ -367,7 +367,7 @@ static void sdla_errors(struct device *dev, int cmd, int dlci, int ret, int len,
                      state = "active";
                   else
                   {
-                     sprintf(line, "uknown status: %02X", pstatus->flags);
+                     sprintf(line, "unknown status: %02X", pstatus->flags);
                      state = line;
                   }
             printk(KERN_INFO "%s: DLCI %i: %s.\n", dev->name, pstatus->dlci, state);

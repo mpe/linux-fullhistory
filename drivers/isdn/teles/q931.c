@@ -1,4 +1,4 @@
-/* $Id: q931.c,v 1.2 1996/04/20 16:48:19 fritz Exp $
+/* $Id: q931.c,v 1.4 1996/05/17 03:46:17 fritz Exp $
  *
  * q931.c               code to decode ITU Q.931 call control messages
  * 
@@ -10,7 +10,16 @@
  * 
  * Beat Doebeli         cause texts, display information element
  * 
+ * Karsten Keil         cause texts, display information element for 1TR6 
+ *
+ * 
  * $Log: q931.c,v $
+ * Revision 1.4  1996/05/17 03:46:17  fritz
+ * General cleanup.
+ *
+ * Revision 1.3  1996/04/30 22:06:50  isdn4dev
+ *   logging 1TR6 messages correctly   Karsten Keil
+ *
  * Revision 1.2  1996/04/20 16:48:19  fritz
  * Misc. typos
  *
@@ -23,6 +32,7 @@
 
 #define __NO_VERSION__
 #include "teles.h"
+#include "l3_1TR6.h"
 
 byte           *
 findie(byte * p, int size, byte ie, int wanted_set)
@@ -174,9 +184,87 @@ struct MessageType {
 
 #define MTSIZE sizeof(mtlist)/sizeof(struct MessageType)
 
+static
+struct MessageType mt_n0[] =
+{
+	{MT_N0_REG_IND, "REGister INDication"},
+	{MT_N0_CANC_IND, "CANCel INDication"},
+	{MT_N0_FAC_STA, "FACility STAtus"},
+	{MT_N0_STA_ACK, "STAtus ACKnowledge"},
+	{MT_N0_STA_REJ, "STAtus REJect"},
+	{MT_N0_FAC_INF, "FACility INFormation"},
+	{MT_N0_INF_ACK, "INFormation ACKnowledge"},
+	{MT_N0_INF_REJ, "INFormation REJect"},
+	{MT_N0_CLOSE, "CLOSE"},
+	{MT_N0_CLO_ACK, "CLOse ACKnowledge"}
+};
+
+int mt_n0_len = (sizeof(mt_n0) / sizeof(struct MessageType));
 
 static
-int
+struct MessageType mt_n1[] =
+{
+	{MT_N1_ESC, "ESCape"},
+	{MT_N1_ALERT, "ALERT"},
+	{MT_N1_CALL_SENT, "CALL SENT"},
+	{MT_N1_CONN, "CONNect"},
+	{MT_N1_CONN_ACK, "CONNect ACKnowledge"},
+	{MT_N1_SETUP, "SETUP"},
+	{MT_N1_SETUP_ACK, "SETUP ACKnowledge"},
+	{MT_N1_RES, "RESume"},
+	{MT_N1_RES_ACK, "RESume ACKnowledge"},
+	{MT_N1_RES_REJ, "RESume REJect"},
+	{MT_N1_SUSP, "SUSPend"},
+	{MT_N1_SUSP_ACK, "SUSPend ACKnowledge"},
+	{MT_N1_SUSP_REJ, "SUSPend REJect"},
+	{MT_N1_USER_INFO, "USER INFO"},
+	{MT_N1_DET, "DETach"},
+	{MT_N1_DISC, "DISConnect"},
+	{MT_N1_REL, "RELease"},
+	{MT_N1_REL_ACK, "RELease ACKnowledge"},
+	{MT_N1_CANC_ACK, "CANCel ACKnowledge"},
+	{MT_N1_CANC_REJ, "CANCel REJect"},
+	{MT_N1_CON_CON, "CONgestion CONtrol"},
+	{MT_N1_FAC, "FACility"},
+	{MT_N1_FAC_ACK, "FACility ACKnowledge"},
+	{MT_N1_FAC_CAN, "FACility CANcel"},
+	{MT_N1_FAC_REG, "FACility REGister"},
+	{MT_N1_FAC_REJ, "FACility REJect"},
+	{MT_N1_INFO, "INFOmation"},
+	{MT_N1_REG_ACK, "REGister ACKnowledge"},
+	{MT_N1_REG_REJ, "REGister REJect"},
+	{MT_N1_STAT, "STATus"}
+};
+
+int mt_n1_len = (sizeof(mt_n1) / sizeof(struct MessageType));
+
+static struct MessageType fac_1tr6[] =
+{
+	{FAC_Sperre, "Sperre"},
+	{FAC_Forward1, "Forward 1"},
+	{FAC_Forward2, "Forward 2"},
+	{FAC_Konferenz, "Konferenz"},
+	{FAC_GrabBchan, "Grab Bchannel"},
+	{FAC_Reactivate, "Reactivate"},
+	{FAC_Konferenz3, "Dreier Konferenz"},
+	{FAC_Dienstwechsel1, "Einseitiger Dienstwechsel"},
+	{FAC_Dienstwechsel2, "Zweiseitiger Dienstwechsel"},
+	{FAC_NummernIdent, "Rufnummer-Identifizierung"},
+	{FAC_GBG, "GBG"},
+	{FAC_DisplayUebergeben, "Display Uebergeben"},
+	{FAC_DisplayUmgeleitet, "Display Umgeleitet"},
+	{FAC_Unterdruecke, "Unterdruecke Rufnummer"},
+	{FAC_Deactivate, "Deactivate"},
+	{FAC_Activate, "Activate"},
+	{FAC_SPV, "SPV"},
+	{FAC_Rueckwechsel, "Rueckwechsel"},
+	{FAC_Umleitung, "Umleitung"}
+};
+int fac_1tr6_len = (sizeof(fac_1tr6) / sizeof(struct MessageType));
+
+
+
+static int 
 prbits(char *dest, byte b, int start, int len)
 {
 	char           *dp = dest;
@@ -449,12 +537,6 @@ prcause(char *dest, byte * p)
 	else
 		dp += sprintf(dp, "  cause value %x : %s \n", cause, cvlist[i].edescr);
 
-
-#if 0
-	dp += sprintf(dp,"    cause value ");
-        dp += prbits(dp,*p++,7,7);
-        *dp++ = '\n';
-#endif
 	while (!0) {
 		if (p > end)
 			break;
@@ -471,10 +553,76 @@ prcause(char *dest, byte * p)
 }
 
 static
-int
-prchident(char *dest, byte * p)
+struct MessageType cause_1tr6[] =
+{
+	{CAUSE_InvCRef, "Invalid Call Reference"},
+	{CAUSE_BearerNotImpl, "Bearer Service Not Implemented"},
+	{CAUSE_CIDunknown, "Caller Identity unknown"},
+	{CAUSE_CIDinUse, "Caller Identity in Use"},
+	{CAUSE_NoChans, "No Channels available"},
+	{CAUSE_FacNotImpl, "Facility Not Implemented"},
+	{CAUSE_FacNotSubscr, "Facility Not Subscribed"},
+	{CAUSE_OutgoingBarred, "Outgoing calls barred"},
+	{CAUSE_UserAccessBusy, "User Access Busy"},
+	{CAUSE_NegativeGBG, "Negative GBG"},
+	{CAUSE_UnknownGBG, "Unknown  GBG"},
+	{CAUSE_NoSPVknown, "No SPV known"},
+	{CAUSE_DestNotObtain, "Destination not obtainable"},
+	{CAUSE_NumberChanged, "Number changed"},
+	{CAUSE_OutOfOrder, "Out Of Order"},
+	{CAUSE_NoUserResponse, "No User Response"},
+	{CAUSE_UserBusy, "User Busy"},
+	{CAUSE_IncomingBarred, "Incoming Barred"},
+	{CAUSE_CallRejected, "Call Rejected"},
+	{CAUSE_NetworkCongestion, "Network Congestion"},
+	{CAUSE_RemoteUser, "Remote User initiated"},
+	{CAUSE_LocalProcErr, "Local Procedure Error"},
+	{CAUSE_RemoteProcErr, "Remote Procedure Error"},
+	{CAUSE_RemoteUserSuspend, "Remote User Suspend"},
+	{CAUSE_RemoteUserResumed, "Remote User Resumed"},
+	{CAUSE_UserInfoDiscarded, "User Info Discarded"}
+};
+
+int cause_1tr6_len = (sizeof(cause_1tr6) / sizeof(struct MessageType));
+
+static int
+prcause_1tr6(char *dest, byte * p) 
 {
 	char           *dp = dest;
+	int i, cause;
+
+	p++;
+	if (0 == *p) {
+		dp += sprintf(dp, "   OK (cause length=0)\n");
+		return (dp - dest);
+	} else if (*p > 1) {
+		dp += sprintf(dp, "    coding ");
+		dp += prbits(dp, p[2], 7, 2);
+		dp += sprintf(dp, " location ");
+		dp += prbits(dp, p[2], 4, 4);
+		*dp++ = '\n';
+	}
+	p++;
+	cause = 0x7f & *p;
+
+	/* locate cause value */
+	for (i = 0; i < cause_1tr6_len; i++)
+		if (cause_1tr6[i].nr == cause)
+			break;
+
+	/* display cause value if it exists */
+	if (i == cause_1tr6_len)
+		dp += sprintf(dp, "Unknown cause type %x!\n", cause);
+	else
+		dp += sprintf(dp, "  cause value %x : %s \n", cause, cause_1tr6[i].descr);
+
+	return (dp - dest);
+
+}
+
+static int
+prchident(char *dest, byte * p) {
+	char *dp = dest;
 
 	p += 2;
 	dp += sprintf(dp, "    octet 3 ");
@@ -482,10 +630,9 @@ prchident(char *dest, byte * p)
 	*dp++ = '\n';
 	return (dp - dest);
 }
-static
-int
-prcalled(char *dest, byte * p)
-{
+
+static int
+prcalled(char *dest, byte * p) {
 	int             l;
 	char           *dp = dest;
 
@@ -500,10 +647,8 @@ prcalled(char *dest, byte * p)
 	*dp++ = '\n';
 	return (dp - dest);
 }
-static
-int
-prcalling(char *dest, byte * p)
-{
+static int
+prcalling(char *dest, byte * p) {
 	int             l;
 	char           *dp = dest;
 
@@ -518,7 +663,6 @@ prcalling(char *dest, byte * p)
 		*dp++ = '\n';
 		l--;
 	};
-
 	p++;
 
 	dp += sprintf(dp, "    number digits ");
@@ -575,10 +719,8 @@ prbearer(char *dest, byte * p)
 	return (dp - dest);
 }
 
-static
-int
-general(char *dest, byte * p)
-{
+static int
+general(char *dest, byte * p) {
 	char           *dp = dest;
 	char            ch = ' ';
 	int             l, octet = 3;
@@ -597,17 +739,44 @@ general(char *dest, byte * p)
 			ch = ' ';
 		} else if (ch == ' ')
 			ch = 'a';
-
 		else
 			ch++;
 	}
 	return (dp - dest);
 }
 
-static
-int
-display(char *dest, byte * p)
-{
+static int
+prcharge(char *dest, byte * p) {
+	char *dp = dest;
+	int l;
+
+	p++;
+	l = *p++ - 1;
+	dp += sprintf(dp, "    GEA ");
+	dp += prbits(dp, *p++, 8, 8);
+	dp += sprintf(dp, "  Anzahl: ");
+	/* Iterate over all octets in the * information element */
+	while (l--)
+		*dp++ = *p++;
+	*dp++ = '\n';
+	return (dp - dest);
+} 
+static int
+prtext(char *dest, byte * p) {
+	char *dp = dest;
+	int l;
+
+	p++;
+	l = *p++;
+	dp += sprintf(dp, "    ");
+	/* Iterate over all octets in the * information element */
+	while (l--)
+		*dp++ = *p++;
+	*dp++ = '\n';
+	return (dp - dest);
+}
+static int
+display(char *dest, byte * p) {
 	char           *dp = dest;
 	char            ch = ' ';
 	int             l, octet = 3;
@@ -772,107 +941,206 @@ struct InformationElement {
 	},
 };
 
+
 #define IESIZE sizeof(ielist)/sizeof(struct InformationElement)
 
-#ifdef FRITZDEBUG
-void
-hexdump(byte * buf, int len, char *comment)
+static struct InformationElement we_0[] =
 {
-	static char     dbuf[1024];
-	char           *p = dbuf;
+	{WE0_cause, "Cause", prcause_1tr6},
+	{WE0_connAddr, "Connecting Address", prcalled},
+	{WE0_callID, "Call IDentity", general},
+	{WE0_chanID, "Channel IDentity", general},
+	{WE0_netSpecFac, "Network Specific Facility", general},
+	{WE0_display, "Display", general},
+	{WE0_keypad, "Keypad", general},
+	{WE0_origAddr, "Origination Address", prcalled},
+	{WE0_destAddr, "Destination Address", prcalled},
+	{WE0_userInfo, "User Info", general}
+};
 
-	p += sprintf(p, "%s: ", comment);
-	while (len) {
-		p += sprintf(p, "%02x ", *p++);
-		len--;
-	}
-	p += sprintf(p, "\n");
+static int we_0_len = (sizeof(we_0) / sizeof(struct InformationElement));
 
-	teles_putstatus(dbuf);
-}
-#endif
+static struct InformationElement we_6[] =
+{
+	{WE6_serviceInd, "Service Indicator", general},
+	{WE6_chargingInfo, "Charging Information", prcharge},
+	{WE6_date, "Date", prtext},
+	{WE6_facSelect, "Facility Select", general},
+	{WE6_facStatus, "Facility Status", general},
+	{WE6_statusCalled, "Status Called", general},
+	{WE6_addTransAttr, "Additional Transmission Attributes", general}
+};
+static int we_6_len = (sizeof(we_6) / sizeof(struct InformationElement));
 
 void
-dlogframe(struct IsdnCardState *sp, byte * buf, int size, char *comment)
-{
+dlogframe(struct IsdnCardState *sp, byte * buf, int size, char *comment) {
 	byte           *bend = buf + size;
 	char           *dp;
-	int             i;
+	int i, cs = 0, cs_old = 0, cs_fest = 0;
 
 	/* display header */
 	dp = sp->dlogspace;
 	dp += sprintf(dp, "%s\n", comment);
 
 	{
-		byte           *p = buf;
-
+		byte *p = buf;
 		dp += sprintf(dp, "hex: ");
 		while (p < bend)
-			dp += sprintf(dp, "%02x ", *p++);
+		dp += sprintf(dp, "%02x ", *p++);
 		dp += sprintf(dp, "\n");
 		teles_putstatus(sp->dlogspace);
 		dp = sp->dlogspace;
-	}
-	/* locate message type */
-	for (i = 0; i < MTSIZE; i++)
-		if (mtlist[i].nr == buf[3])
-			break;
-
-	/* display message type iff it exists */
-	if (i == MTSIZE)
-		dp += sprintf(dp, "Unknown message type %x!\n", buf[3]);
-	else
-		dp += sprintf(dp, "call reference %d size %d message type %s\n",
-			      buf[2], size, mtlist[i].descr);
-
-	/* display each information element */
-	buf += 4;
-	while (buf < bend) {
-		/* Is it a single octet information element? */
-		if (*buf & 0x80) {
-			switch ((*buf >> 4) & 7) {
-			  case 1:
-				  dp += sprintf(dp, "  Shift %x\n", *buf & 0xf);
-				  break;
-			  case 3:
-				  dp += sprintf(dp, "  Congestion level %x\n", *buf & 0xf);
-				  break;
-			  case 5:
-				  dp += sprintf(dp, "  Repeat indicator %x\n", *buf & 0xf);
-				  break;
-			  case 2:
-				  if (*buf == 0xa0) {
-					  dp += sprintf(dp, "  More data\n");
-					  break;
-				  }
-				  if (*buf == 0xa1) {
-					  dp += sprintf(dp, "  Sending complete\n");
-				  }
-				  break;
-				  /* fall through */
-			  default:
-				  dp += sprintf(dp, "  Reserved %x\n", *buf);
-				  break;
-			}
-			buf++;
-			continue;
+	} 
+	if ((0xfe & buf[0]) == PROTO_DIS_N0) {	/* 1TR6 */
+		/* locate message type */
+		if (buf[0] == PROTO_DIS_N0) {	/* N0 */
+			for (i = 0; i < mt_n0_len; i++)
+				if (mt_n0[i].nr == buf[3])
+					break;
+			/* display message type iff it exists */
+			if (i == mt_n0_len)
+				dp += sprintf(dp, "Unknown message type N0 %x!\n", buf[3]);
+			else
+				dp += sprintf(dp, "call reference %d size %d message type %s\n",
+					      buf[2], size, mt_n0[i].descr);
+		} else {	/* N1 */
+			for (i = 0; i < mt_n1_len; i++)
+				if (mt_n1[i].nr == buf[3])
+					break;
+			/* display message type iff it exists */
+			if (i == mt_n1_len)
+				dp += sprintf(dp, "Unknown message type N1 %x!\n", buf[3]);
+			else
+				dp += sprintf(dp, "call reference %d size %d message type %s\n",
+					      buf[2], size, mt_n1[i].descr);
 		}
-		/* No, locate it in the table */
-		for (i = 0; i < IESIZE; i++)
-			if (*buf == ielist[i].nr)
+
+		/* display each information element */
+		buf += 4;
+		while (buf < bend) {
+			/* Is it a single octet information element? */
+			if (*buf & 0x80) {
+				switch ((*buf >> 4) & 7) {
+				  case 1:
+					dp += sprintf(dp, "  Shift %x\n", *buf & 0xf);
+					cs_old = cs;
+					cs = *buf & 7;
+					cs_fest = *buf & 8;
+					break;
+				  case 3:
+					dp += sprintf(dp, "  Congestion level %x\n", *buf & 0xf);
+					break;
+				  case 2:
+					if (*buf == 0xa0) {
+						dp += sprintf(dp, "  More data\n");
+						break;
+					}
+					if (*buf == 0xa1) {
+						dp += sprintf(dp, "  Sending complete\n");
+					}
+					break;
+				  /* fall through */
+				  default:
+					dp += sprintf(dp, "  Reserved %x\n", *buf);
+					break;
+				}
+				buf++;
+				continue;
+			}
+			/* No, locate it in the table */
+			if (cs == 0) {
+				for (i = 0; i < we_0_len; i++)
+					if (*buf == we_0[i].nr)
+						break;
+
+				/* When found, give appropriate msg */
+				if (i != we_0_len) {
+					dp += sprintf(dp, "  %s\n", we_0[i].descr);
+					dp += we_0[i].f(dp, buf);
+				} else
+					dp += sprintf(dp, "  Codeset %d attribute %x attribute size %d\n", cs, *buf, buf[1]);
+			} else if (cs == 6) {
+				for (i = 0; i < we_6_len; i++)
+					if (*buf == we_6[i].nr)
+						break;
+
+				/* When found, give appropriate msg */
+				if (i != we_6_len) {
+					dp += sprintf(dp, "  %s\n", we_6[i].descr);
+					dp += we_6[i].f(dp, buf);
+				} else
+					dp += sprintf(dp, "  Codeset %d attribute %x attribute size %d\n", cs, *buf, buf[1]);
+			} else
+				dp += sprintf(dp, "  Unknown Codeset %d attribute %x attribute size %d\n", cs, *buf, buf[1]);
+			/* Skip to next element */
+			if (cs_fest == 8) {
+				cs = cs_old;
+				cs_old = 0;
+				cs_fest = 0;
+			}
+			buf += buf[1] + 2;
+		}
+	} else {	/* EURO */
+		/* locate message type */
+		for (i = 0; i < MTSIZE; i++)
+			if (mtlist[i].nr == buf[3])
 				break;
 
-		/* When not found, give appropriate msg */
-		if (i != IESIZE) {
-			dp += sprintf(dp, "  %s\n", ielist[i].descr);
-			dp += ielist[i].f(dp, buf);
-		} else
-			dp += sprintf(dp, "  attribute %x attribute size %d\n", *buf, buf[1]);
+		/* display message type iff it exists */
+		if (i == MTSIZE)
+			dp += sprintf(dp, "Unknown message type %x!\n", buf[3]);
+		else
+			dp += sprintf(dp, "call reference %d size %d message type %s\n",
+		buf[2], size, mtlist[i].descr);
 
-		/* Skip to next element */
-		buf += buf[1] + 2;
+		/* display each information element */
+		buf += 4;
+		while (buf < bend) {
+			/* Is it a single octet information element? */
+			if (*buf & 0x80) {
+				switch ((*buf >> 4) & 7) {
+				  case 1:
+					dp += sprintf(dp, "  Shift %x\n", *buf & 0xf);
+					break;
+				  case 3:
+					dp += sprintf(dp, "  Congestion level %x\n", *buf & 0xf);
+					break;
+				  case 5:
+					dp += sprintf(dp, "  Repeat indicator %x\n", *buf & 0xf);
+					break;
+				  case 2:
+					if (*buf == 0xa0) {
+						dp += sprintf(dp, "  More data\n");
+						break;
+					}
+					if (*buf == 0xa1) {
+						dp += sprintf(dp, "  Sending complete\n");
+					}
+					break;
+				  /* fall through */
+				  default:
+					dp += sprintf(dp, "  Reserved %x\n", *buf);
+					break;
+				}
+				buf++;
+				continue;
+			}
+			/* No, locate it in the table */
+			for (i = 0; i < IESIZE; i++)
+				if (*buf == ielist[i].nr)
+					break;
+
+			/* When not found, give appropriate msg */
+			if (i != IESIZE) {
+				dp += sprintf(dp, "  %s\n", ielist[i].descr);
+				dp += ielist[i].f(dp, buf);
+			} else
+				dp += sprintf(dp, "  attribute %x attribute size %d\n", *buf, buf[1]);
+
+			/* Skip to next element */
+			buf += buf[1] + 2;
+		}
 	}
-
 	dp += sprintf(dp, "\n");
 	teles_putstatus(sp->dlogspace);
 }

@@ -106,28 +106,23 @@ static int sd_open(struct inode * inode, struct file * filp)
      */
     
     while (rscsi_disks[target].device->busy)
-    barrier();   
+        barrier();   
     if(rscsi_disks[target].device->removable) {
 	check_disk_change(inode->i_rdev);
 	
 	/*
 	 * If the drive is empty, just let the open fail.
 	 */
-	if ( !rscsi_disks[target].ready ) {
+	if ( !rscsi_disks[target].ready )
 	    return -ENXIO;
-	}
 
 	/*
 	 * Similarly, if the device has the write protect tab set,
 	 * have the open fail if the user expects to be able to write
 	 * to the thing.
 	 */
-	if ( (rscsi_disks[target].write_prot) && (filp->f_mode & 2) ) { 
+	if ( (rscsi_disks[target].write_prot) && (filp->f_mode & 2) )
 	    return -EROFS;
-	}
-
-	if(!rscsi_disks[target].device->access_count)
-	    sd_ioctl(inode, NULL, SCSI_IOCTL_DOORLOCK, 0);
     }
 
     /*
@@ -137,6 +132,10 @@ static int sd_open(struct inode * inode, struct file * filp)
     if(sd_sizes[MINOR(inode->i_rdev)] == 0)
 	return -ENXIO;
     
+    if(rscsi_disks[target].device->removable)
+	if(!rscsi_disks[target].device->access_count)
+	    sd_ioctl(inode, NULL, SCSI_IOCTL_DOORLOCK, 0);
+
     rscsi_disks[target].device->access_count++;
     if (rscsi_disks[target].device->host->hostt->usage_count)
 	(*rscsi_disks[target].device->host->hostt->usage_count)++;
@@ -208,9 +207,9 @@ static void sd_geninit (struct gendisk *ignored)
 }
 
 /*
- * rw_intr is the interrupt routine for the device driver.  It will
- * be notified on the end of a SCSI read / write, and
- * will take on of several actions based on success or failure.
+ * rw_intr is the interrupt routine for the device driver.
+ * It will be notified on the end of a SCSI read / write, and
+ * will take one of several actions based on success or failure.
  */
 
 static void rw_intr (Scsi_Cmnd *SCpnt)

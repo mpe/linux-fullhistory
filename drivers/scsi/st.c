@@ -11,7 +11,7 @@
   Copyright 1992 - 1996 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Thu May  2 19:41:34 1996 by makisara@kai.makisara.fi
+  Last modified: Tue May 14 17:58:12 1996 by makisara@kai.makisara.fi
   Some small formal changes - aeb, 950809
 */
 
@@ -530,8 +530,6 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	printk(ST_DEB_MSG "st%d: Mode change from %d to %d.\n",
 	       dev, STp->current_mode, mode);
 #endif
-      /*      if (!STp->modes[mode].defined)
-	return (-ENXIO); */
       new_session = TRUE;
       STp->current_mode = mode;
     }
@@ -570,12 +568,20 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     STp->nbr_waits = STp->nbr_finished = 0;
 #endif
 
+    if (scsi_tapes[dev].device->host->hostt->usage_count)
+	(*scsi_tapes[dev].device->host->hostt->usage_count)++;
+    if(st_template.usage_count) (*st_template.usage_count)++;
+
     memset ((void *) &cmd[0], 0, 10);
     cmd[0] = TEST_UNIT_READY;
 
     SCpnt = st_do_scsi(NULL, STp, cmd, 0, ST_LONG_TIMEOUT, MAX_READY_RETRIES);
-    if (!SCpnt)
+    if (!SCpnt) {
+      if (scsi_tapes[dev].device->host->hostt->usage_count)
+	  (*scsi_tapes[dev].device->host->hostt->usage_count)--;
+      if(st_template.usage_count) (*st_template.usage_count)--;
       return (-EBUSY);
+    }
 
     if ((SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
 	(SCpnt->sense_buffer[2] & 0x0f) == UNIT_ATTENTION) { /* New media? */
@@ -619,9 +625,6 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       STp->partition = STp->new_partition = 0;
       STp->door_locked = ST_UNLOCKED;
       STp->in_use = 1;
-      if (scsi_tapes[dev].device->host->hostt->usage_count)
-	(*scsi_tapes[dev].device->host->hostt->usage_count)++;
-      if(st_template.usage_count) (*st_template.usage_count)++;
       return 0;
     }
 
@@ -698,6 +701,9 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	       STp->block_size);
 	(STp->buffer)->in_use = 0;
 	STp->buffer = NULL;
+	if (scsi_tapes[dev].device->host->hostt->usage_count)
+	    (*scsi_tapes[dev].device->host->hostt->usage_count)--;
+	if(st_template.usage_count) (*st_template.usage_count)--;
 	return (-EIO);
       }
       STp->drv_write_prot = ((STp->buffer)->b_data[2] & 0x80) != 0;
@@ -726,6 +732,9 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       if ((flags & O_ACCMODE) == O_WRONLY || (flags & O_ACCMODE) == O_RDWR) {
 	(STp->buffer)->in_use = 0;
 	STp->buffer = NULL;
+	if (scsi_tapes[dev].device->host->hostt->usage_count)
+	    (*scsi_tapes[dev].device->host->hostt->usage_count)--;
+	if(st_template.usage_count) (*st_template.usage_count)--;
 	return (-EROFS);
       }
     }
@@ -741,6 +750,9 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       if ((STp->partition = find_partition(inode)) < 0) {
 	(STp->buffer)->in_use = 0;
 	STp->buffer = NULL;
+	if (scsi_tapes[dev].device->host->hostt->usage_count)
+	    (*scsi_tapes[dev].device->host->hostt->usage_count)--;
+	if(st_template.usage_count) (*st_template.usage_count)--;
 	return STp->partition;
       }
       STp->new_partition = STp->partition;
@@ -754,6 +766,9 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	  (i = set_mode_densblk(inode, STp, STm)) < 0) {
 	(STp->buffer)->in_use = 0;
 	STp->buffer = NULL;
+	if (scsi_tapes[dev].device->host->hostt->usage_count)
+	    (*scsi_tapes[dev].device->host->hostt->usage_count)--;
+	if(st_template.usage_count) (*st_template.usage_count)--;
 	return i;
       }
       if (STp->default_drvbuffer != 0xff) {
@@ -764,9 +779,6 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     }
 
     STp->in_use = 1;
-    if (scsi_tapes[dev].device->host->hostt->usage_count)
-      (*scsi_tapes[dev].device->host->hostt->usage_count)++;
-    if(st_template.usage_count) (*st_template.usage_count)++;
 
     return 0;
 }
@@ -3050,5 +3062,6 @@ void cleanup_module( void)
     }
   }
   st_template.dev_max = 0;
+  printk(KERN_INFO "st: Unloaded.\n");
 }
 #endif /* MODULE */

@@ -79,7 +79,7 @@ or leave this task to kerneld (if installed). Add the following line to
 
 Configuring the driver
 
-Everytime the driver is inserted into the kernel, it has to know which
+Every time the driver is inserted into the kernel, it has to know which
 modems it should access at which ports. This can be done with the setbaycom
 utility. If you are only using one modem, you can also configure the
 driver from the insmod command line (or by means of an option line in

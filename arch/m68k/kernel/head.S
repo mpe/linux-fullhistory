@@ -375,7 +375,7 @@ ENTRY(_start)
 	movel	%d1,%a2@+
 	/*
 	 * %a2 points now to the page table entry for available pages at %a6,
-	 * hence caching modes for new pages can easiely set unless increasing
+	 * hence caching modes for new pages can easily set unless increasing
 	 * of %a2 are forgotten.
 	 */
 Lnot040:

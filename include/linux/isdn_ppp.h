@@ -1,4 +1,8 @@
+#ifndef _LINUX_ISDN_PPP_H
+#define _LINUX_ISDN_PPP_H
+
 extern int isdn_ppp_dial_slave(char *);
+extern int isdn_ppp_hangup_slave(char *);
 
 struct pppinfo
 {
@@ -28,3 +32,4 @@ struct pppinfo
 #define MP_END_FRAG    0x40
 #define MP_BEGIN_FRAG  0x80
 
+#endif

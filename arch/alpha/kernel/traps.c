@@ -70,9 +70,9 @@ asmlinkage void do_entArith(unsigned long summary, unsigned long write_mask,
 	force_sig(SIGFPE, current);
 }
 
-asmlinkage void do_entIF(unsigned long type, unsigned long a1, unsigned long a2,
-			 unsigned long a3, unsigned long a4, unsigned long a5,
-			 struct pt_regs regs)
+asmlinkage void do_entIF(unsigned long type, unsigned long a1,
+			 unsigned long a2, unsigned long a3, unsigned long a4,
+			 unsigned long a5, struct pt_regs regs)
 {
 	extern int ptrace_cancel_bpt (struct task_struct *who);
 
@@ -201,18 +201,18 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 	if (reg >= 16 && reg <= 18)
 		reg += 19;
 	switch (opcode) {
-		case 0x28: /* ldl */
-			*(reg+regs.regs) = (int) ldl_u(va);
-			return;
-		case 0x29: /* ldq */
-			*(reg+regs.regs) = ldq_u(va);
-			return;
-		case 0x2c: /* stl */
-			stl_u(*(reg+regs.regs), va);
-			return;
-		case 0x2d: /* stq */
-			stq_u(*(reg+regs.regs), va);
-			return;
+	      case 0x28: /* ldl */
+		*(reg+regs.regs) = get_unaligned((int *)va);
+		return;
+	      case 0x29: /* ldq */
+		*(reg+regs.regs) = get_unaligned((long *)va);
+		return;
+	      case 0x2c: /* stl */
+		put_unaligned(*(reg+regs.regs), (int *)va);
+		return;
+	      case 0x2d: /* stq */
+		put_unaligned(*(reg+regs.regs), (long *)va);
+		return;
 	}
 	printk("Bad unaligned kernel access at %016lx: %p %lx %ld\n",
 		regs.pc, va, opcode, reg);
@@ -321,45 +321,79 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg
 	reg_addr = frame;
 	if (opcode >= 0x28) {
 		/* it's an integer load/store */
-		if (reg < 9) {
-			reg_addr += 7 + reg;			/* v0-t7 in SAVE_ALL frame */
-		} else if (reg < 16) {
-			reg_addr += (reg - 9);			/* s0-s6 in entUna frame */
-		} else if (reg < 19) {
-			reg_addr += 7 + 20 + 3 + (reg - 16);	/* a0-a2 in PAL frame */
-		} else if (reg < 29) {
-			reg_addr += 7 + 9 + (reg - 19);		/* a3-at in SAVE_ALL frame */
-		} else {
-			switch (reg) {
-			      case 29:				/* gp in PAL frame */
-				reg_addr += 7 + 20 + 2;
-				break;
-			      case 30:				/* usp in PAL regs */
-				usp = rdusp();
-				reg_addr = &usp;
-				break;
-			      case 31:				/* zero "register" */
-				reg_addr = &zero;
-				break;
-			}
+		switch (reg) {
+		      case 0: case 1: case 2: case 3: case 4:
+		      case 5: case 6: case 7: case 8:
+			/* v0-t7 in SAVE_ALL frame */
+			reg_addr += 7 + reg;
+			break;
+
+		      case 9: case 10: case 11: case 12:
+		      case 13: case 14: case 15:
+			/* s0-s6 in entUna frame */
+			reg_addr += (reg - 9);
+			break;
+
+		      case 16: case 17: case 18: 
+			/* a0-a2 in PAL frame */
+			reg_addr += 7 + 20 + 3 + (reg - 16);
+			break;
+
+		      case 19: case 20: case 21: case 22: case 23: 
+		      case 24: case 25: case 26: case 27: case 28:
+			/* a3-at in SAVE_ALL frame */
+			reg_addr += 7 + 9 + (reg - 19);
+			break;
+
+		      case 29:
+			/* gp in PAL frame */
+			reg_addr += 7 + 20 + 2;
+			break;
+
+		      case 30:
+			/* usp in PAL regs */
+			usp = rdusp();
+			reg_addr = &usp;
+			break;
+
+		      case 31:
+			/* zero "register" */
+			reg_addr = &zero;
+			break;
 		}
 	}
 
 	switch (opcode) {
-	      case 0x22:						/* lds */
-		alpha_write_fp_reg(reg, s_mem_to_reg(ldl_u(va)));
+	      case 0x22: /* lds */
+		alpha_write_fp_reg(reg, s_mem_to_reg(
+			get_unaligned((unsigned int *)va)));
 		break;
-	      case 0x26:						/* lds */
-		alpha_write_fp_reg(reg, s_reg_to_mem(ldl_u(va)));
+	      case 0x26: /* sts */
+		put_unaligned(s_reg_to_mem(alpha_read_fp_reg(reg)),
+			      (unsigned int *)va);
 		break;
 
-	      case 0x23: alpha_write_fp_reg(reg, ldq_u(va)); break;	/* ldt */
-	      case 0x27: stq_u(alpha_read_fp_reg(reg), va);  break;	/* stt */
+	      case 0x23: /* ldt */
+		alpha_write_fp_reg(reg, get_unaligned((unsigned long *)va));
+		break;	
+	      case 0x27: /* stt */
+		put_unaligned(alpha_read_fp_reg(reg), (unsigned long *)va);
+		break;
 
-	      case 0x28: *reg_addr = (int) ldl_u(va);	     break;	/* ldl */
-	      case 0x29: *reg_addr = ldq_u(va);		     break;	/* ldq */
-	      case 0x2c: stl_u(*reg_addr, va);		     break;	/* stl */
-	      case 0x2d: stq_u(*reg_addr, va);		     break;	/* stq */
+	      case 0x28: /* ldl */
+		*reg_addr = get_unaligned((int *)va);
+		break;
+	      case 0x2c: /* stl */
+		put_unaligned(*reg_addr, (int *)va);
+		break;
+
+	      case 0x29: /* ldq */
+		*reg_addr = get_unaligned((long *)va);
+		break;
+	      case 0x2d: /* stq */
+		put_unaligned(*reg_addr, (long *)va);
+		break;
+
 	      default:
 		*pc_addr -= 4;	/* make pc point to faulting insn */
 		force_sig(SIGBUS, current);
@@ -383,10 +417,11 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg
  * got terminally tainted by VMS at some point.
  */
 asmlinkage long do_entSys(unsigned long a0, unsigned long a1, unsigned long a2,
-	unsigned long a3, unsigned long a4, unsigned long a5, struct pt_regs regs)
+			  unsigned long a3, unsigned long a4, unsigned long a5,
+			  struct pt_regs regs)
 {
 	if (regs.r0 != 112)
-	  printk("<sc %ld(%lx,%lx,%lx)>", regs.r0, a0, a1, a2);
+		printk("<sc %ld(%lx,%lx,%lx)>", regs.r0, a0, a1, a2);
 	return -1;
 }
 

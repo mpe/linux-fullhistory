@@ -1868,6 +1868,9 @@ static int pcxe_ioctl(struct tty_struct *tty, struct file * file,
 			return 0;
 
 		case TIOCSSOFTCAR:
+			error = verify_area(VERIFY_READ, (void *) arg,sizeof(long));
+			if(error)
+				return error;
 			arg = get_fs_long((unsigned long *) arg);
 			tty->termios->c_cflag =	((tty->termios->c_cflag & ~CLOCAL) | (arg ? CLOCAL : 0));
 			return 0;
@@ -1905,6 +1908,9 @@ static int pcxe_ioctl(struct tty_struct *tty, struct file * file,
 		case TIOCMBIC:
 		case TIOCMODS:
 		case TIOCMSET:
+			error = verify_area(VERIFY_READ, (void *) arg,sizeof(long));
+			if(error)
+				return error;
 			mstat = get_fs_long((unsigned long *) arg);
 
 			mflag = 0;

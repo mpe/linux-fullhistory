@@ -38,7 +38,6 @@
 #undef  ISDN_DEBUG_AT
 #undef  ISDN_DEBUG_NET_DUMP
 #undef  ISDN_DEBUG_NET_DIAL
-#undef  ISDN_DEBUG_NET_BUILDHDR
 #undef  ISDN_DEBUG_NET_ICALL
 
 /* Prototypes */

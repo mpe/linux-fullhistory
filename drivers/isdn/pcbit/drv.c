@@ -52,9 +52,9 @@ static char* pcbit_devname[MAX_PCBIT_CARDS] = {
  */
 
 int pcbit_command(isdn_ctrl* ctl);
-int pcbit_stat(u_char* buf, int len, int user);
+int pcbit_stat(u_char* buf, int len, int user, int, int);
 int pcbit_xmit(int driver, int chan, struct sk_buff *skb);
-int pcbit_writecmd(const u_char*, int, int);
+int pcbit_writecmd(const u_char*, int, int, int, int);
 
 static int set_protocol_running(struct pcbit_dev * dev);
 
@@ -390,19 +390,16 @@ int pcbit_xmit(int driver, int chnum, struct sk_buff *skb)
 }
 
 
-int pcbit_writecmd(const u_char* buf, int len, int user)
+int pcbit_writecmd(const u_char* buf, int len, int user, int driver, int channel)
 {
 	struct pcbit_dev * dev;
-	int board, i, j;
+	int i, j;
 	const u_char * loadbuf;
 	u_char * ptr = NULL;
 
 	int errstat;
 
-	/* we should have the driver id as input here too - let's say it's 0 */
-	board = 0;
-
-	dev = dev_pcbit[board];
+	dev = finddev(driver);
 
 	if (!dev)
 	{
@@ -760,7 +757,7 @@ static int stat_end = 0;
 (flag ? memcpy_tofs(d, s, len) : memcpy(d, s, len))
 
 
-int pcbit_stat(u_char* buf, int len, int user)
+int pcbit_stat(u_char* buf, int len, int user, int driver, int channel)
 {
 	int stat_count;
 	stat_count = stat_end - stat_st;

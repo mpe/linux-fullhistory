@@ -1,4 +1,4 @@
-/* $Id: isdn_tty.h,v 1.1 1996/01/10 21:39:22 fritz Exp fritz $
+/* $Id: isdn_tty.h,v 1.5 1996/05/17 03:52:31 fritz Exp $
  *
  * header for Linux ISDN subsystem, tty related functions (linklevel).
  *
@@ -20,6 +20,18 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_tty.h,v $
+ * Revision 1.5  1996/05/17 03:52:31  fritz
+ * Changed DLE handling for audio receive.
+ *
+ * Revision 1.4  1996/05/11 21:52:34  fritz
+ * Changed queue management to use sk_buffs.
+ *
+ * Revision 1.3  1996/05/07 09:16:34  fritz
+ * Changed isdn_try_read parameter.
+ *
+ * Revision 1.2  1996/04/30 21:05:27  fritz
+ * Test commit
+ *
  * Revision 1.1  1996/01/10 21:39:22  fritz
  * Initial revision
  *
@@ -32,8 +44,8 @@ extern void  isdn_tty_modem_xmit(void);
 extern void  isdn_tty_modem_hup(modem_info *);
 extern int   isdn_tty_modem_init(void);
 extern void  isdn_tty_readmodem(void);
-extern int   isdn_tty_try_read(int, u_char *, int);
+extern int   isdn_tty_try_read(modem_info *, struct sk_buff *);
 extern int   isdn_tty_find_icall(int, int, char *);
-#if FUTURE
+extern int   isdn_tty_countDLE(unsigned char *, int);
 extern void  isdn_tty_bsent(int, int);
-#endif
+extern void  isdn_tty_cleanup_xmit(modem_info *);

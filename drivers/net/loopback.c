@@ -17,6 +17,9 @@
  *		Larry McVoy	:	Tiny tweak to double performance
  *		Alan Cox	:	Backed out LMV's tweak - the linux mm
  *					can't take it...
+ *              Michael Griffith:       Don't bother computing the checksums
+ *                                      on packets received on the loopback
+ *                                      interface.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License

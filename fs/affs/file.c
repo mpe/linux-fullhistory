@@ -1,7 +1,7 @@
 /*
  *  linux/fs/affs/file.c
  *
- *  (c) 1996  Hans-Joachim Widmaier - rewritten
+ *  (c) 1996  Hans-Joachim Widmaier - Rewritten
  *
  *  (C) 1993  Ray Burr - Modified for Amiga FFS filesystem.
  *
@@ -104,11 +104,11 @@ struct inode_operations affs_file_inode_operations_ofs = {
 };
 
 int
-affs_bmap(struct inode *inode, LONG block)
+affs_bmap(struct inode *inode, int block)
 {
 	struct buffer_head	*bh;
-	LONG			 ext, key;
-	LONG			 ptype, stype;
+	int			 ext, key;
+	int			 ptype, stype;
 
 	pr_debug("AFFS: bmap(%lu,%d)\n",inode->i_ino,block);
 
@@ -155,13 +155,13 @@ affs_bmap(struct inode *inode, LONG block)
 }
 
 struct buffer_head *
-affs_getblock(struct inode *inode, LONG block)
+affs_getblock(struct inode *inode, int block)
 {
 	struct buffer_head	*bh;
 	struct buffer_head	*ebh;
-	LONG			 key;
-	LONG			 ext;
-	LONG			 cnt, j, pt;
+	int			 key;
+	int			 ext;
+	int			 cnt, j, pt;
 
 	pr_debug("AFFS: getblock(%lu,%d)\n",inode->i_ino,block);
 
@@ -258,28 +258,28 @@ affs_getblock(struct inode *inode, LONG block)
 	affs_brelse(bh);
 	if (!key)
 		return NULL;
-
+	
 	return affs_bread(inode->i_dev,key,AFFS_I2BSIZE(inode));
 }
 
 struct buffer_head *
-affs_getblock_ofs(struct inode *inode, LONG block, LONG *blk_key)
+affs_getblock_ofs(struct inode *inode, int block, int *blk_key)
 {
 	struct buffer_head	*bh;
 	struct buffer_head	*pbh;
 	struct buffer_head	*ebh;
-	LONG			 key;
-	LONG			 ext;
-	LONG			 cnt, j, pt;
+	int			 key;
+	int			 ext;
+	int			 cnt, j, pt;
 
-	pr_debug("AFFS: getblock(%lu,%d)\n",inode->i_ino,block);
+	pr_debug("AFFS: getblock_ofs(%lu,%d)\n",inode->i_ino,block);
 
 	if (block < 0)
 		return NULL;
 	key = inode->i_ino;
 	pt  = T_SHORT;
 
-	ext = block / (AFFS_I2HSIZE(inode) - 24);
+	ext = block / AFFS_I2HSIZE(inode);
 	if (ext) {
 		if (ext > inode->u.affs_i.i_max_ext)
 			ext = inode->u.affs_i.i_max_ext;
@@ -305,7 +305,11 @@ affs_getblock_ofs(struct inode *inode, LONG block, LONG *blk_key)
 		j = htonl(((struct file_front *)bh->b_data)->block_count);
 		while (j < AFFS_I2HSIZE(inode) && j <= block) {
 			if (!pbh && inode->u.affs_i.i_lastblock >= 0) {
-				pbh = affs_getblock_ofs(inode,inode->u.affs_i.i_lastblock,&key);
+				if (j > 0)
+					pbh = affs_bread(inode->i_dev,ntohl(AFFS_BLOCK(bh->b_data,inode,j - 1)),
+							 AFFS_I2BSIZE(inode));
+				else
+					pbh = affs_getblock_ofs(inode,inode->u.affs_i.i_lastblock,&key);
 				if (!pbh) {
 					printk("AFFS: getblock(): cannot get last block in file\n");
 					break;
@@ -335,12 +339,14 @@ affs_getblock_ofs(struct inode *inode, LONG block, LONG *blk_key)
 			DATA_FRONT(ebh)->primary_type    = ntohl(T_DATA);
 			DATA_FRONT(ebh)->header_key      = ntohl(inode->i_ino);
 			DATA_FRONT(ebh)->sequence_number = ntohl(inode->u.affs_i.i_lastblock + 1);
-			DATA_FRONT(pbh)->data_size       = ntohl(AFFS_I2HSIZE(inode) - 24);
-			DATA_FRONT(pbh)->next_data       = ntohl(key);
-			affs_fix_checksum(AFFS_I2HSIZE(inode),pbh->b_data,5);
-			mark_buffer_dirty(pbh,0);
-			mark_buffer_dirty(ebh,0);
-			affs_brelse(pbh);
+			if (pbh) {
+				DATA_FRONT(pbh)->data_size = ntohl(AFFS_I2BSIZE(inode) - 24);
+				DATA_FRONT(pbh)->next_data = ntohl(key);
+				affs_fix_checksum(AFFS_I2BSIZE(inode),pbh->b_data,5);
+				mark_buffer_dirty(pbh,0);
+				mark_buffer_dirty(ebh,0);
+				affs_brelse(pbh);
+			}
 			pbh = ebh;
 			j++;
 		}
@@ -433,10 +439,10 @@ affs_file_read_ofs(struct inode *inode, struct file *filp, char *buf, int count)
 		left = MIN (inode->i_size - filp->f_pos,count - (buf - start));
 		if (!left)
 			break;
-		sector = affs_bmap(inode,(ULONG)filp->f_pos / blocksize);
+		sector = affs_bmap(inode,(__u32)filp->f_pos / blocksize);
 		if (!sector)
 			break;
-		offset = (ULONG)filp->f_pos % blocksize;
+		offset = (__u32)filp->f_pos % blocksize;
 		bh = affs_bread(inode->i_dev,sector,AFFS_I2BSIZE(inode));
 		if (!bh)
 			break;
@@ -537,6 +543,7 @@ affs_file_write_ofs(struct inode *inode, struct file *filp, const char *buf, int
 	off_t			 pos;
 	int			 written;
 	int			 c;
+	int			 key;
 	int			 blocksize;
 	struct buffer_head	*bh;
 	struct inode		*ino;
@@ -546,7 +553,7 @@ affs_file_write_ofs(struct inode *inode, struct file *filp, const char *buf, int
 		(unsigned long)filp->f_pos,count);
 
 	if (!inode) {
-		printk("AFFS: file_write(): inode=NULL\n");
+		printk("AFFS: file_write_ofs(): inode=NULL\n");
 		return -EINVAL;
 	}
 	ino = NULL;
@@ -560,7 +567,7 @@ affs_file_write_ofs(struct inode *inode, struct file *filp, const char *buf, int
 		inode = ino;
 	}
 	if (!S_ISREG(inode->i_mode)) {
-		printk("AFFS: file_write(): mode=%07o\n",inode->i_mode);
+		printk("AFFS: file_write_ofs(): mode=%07o\n",inode->i_mode);
 		iput(inode);
 		return -EINVAL;
 	}
@@ -573,7 +580,7 @@ affs_file_write_ofs(struct inode *inode, struct file *filp, const char *buf, int
 	blocksize = AFFS_I2BSIZE(inode) - 24;
 	written   = 0;
 	while (written < count) {
-		bh = affs_getblock(inode,pos / blocksize);
+		bh = affs_getblock_ofs(inode,pos / blocksize,&key);
 		if (!bh) {
 			if (!written)
 				written = -ENOSPC;
@@ -620,12 +627,13 @@ affs_truncate(struct inode *inode)
 	struct buffer_head	*bh;
 	struct buffer_head	*ebh;
 	struct inode		*ino;
-	LONG	 first;
-	LONG	 block;
-	LONG	 key;
-	LONG	*keyp;
-	LONG	 ekey;
-	LONG	 ptype, stype;
+	struct affs_zone	*zone;
+	int	 first;
+	int	 block;
+	int	 key;
+	int	*keyp;
+	int	 ekey;
+	int	 ptype, stype;
 	int	 freethis;
 	int	 blocksize;
 	int	 rem;
@@ -646,7 +654,24 @@ affs_truncate(struct inode *inode)
 	blocksize = AFFS_I2BSIZE(inode) - ((inode->i_sb->u.affs_sb.s_flags & SF_OFS) ? 24 : 0);
 	first = (inode->i_size + blocksize - 1) / blocksize;
 	if (inode->u.affs_i.i_lastblock < first - 1) {
-		bh = affs_getblock(inode,first - 1);
+		if (inode->i_sb->u.affs_sb.s_flags & SF_OFS)
+			bh = affs_getblock_ofs(inode,first - 1,&ekey);
+		else
+			bh = affs_getblock(inode,first - 1);
+
+		while (inode->u.affs_i.i_pa_cnt) {		/* Free any preallocated blocks */
+			affs_free_block(inode->i_sb,
+					inode->u.affs_i.i_data[inode->u.affs_i.i_pa_next++]);
+			inode->u.affs_i.i_pa_next &= MAX_PREALLOC - 1;
+			inode->u.affs_i.i_pa_cnt--;
+		}
+		if (inode->u.affs_i.i_zone) {
+			lock_super(inode->i_sb);
+			zone = &inode->i_sb->u.affs_sb.s_zones[inode->u.affs_i.i_zone];
+			if (zone->z_ino == inode->i_ino)
+				zone->z_ino = 0;
+			unlock_super(inode->i_sb);
+		}
 		if (!bh) {
 			printk("AFFS: truncate(): Cannot extend file\n");
 			inode->i_size = blocksize * (inode->u.affs_i.i_lastblock + 1);

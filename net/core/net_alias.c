@@ -235,6 +235,18 @@ net_alias_hard_start_xmit(struct sk_buff *skb, struct device *dev)
 }
 
 
+static int
+net_alias_open(struct device * dev)
+{
+  return 0;
+}
+
+static int
+net_alias_close(struct device * dev)
+{
+  return 0;
+}
+
 /*
  * setups a new (alias) device 
  */
@@ -264,6 +276,8 @@ net_alias_devsetup(struct net_alias *alias, struct net_alias_type *nat,
   dev->my_alias = alias;	/* point to alias */
   dev->name = alias->name;
   dev->type = main_dev->type;
+  dev->open = net_alias_open;
+  dev->stop = net_alias_close;
   dev->hard_header_len = main_dev->hard_header_len;
   memcpy(dev->broadcast, main_dev->broadcast, MAX_ADDR_LEN);
   memcpy(dev->dev_addr, main_dev->dev_addr, MAX_ADDR_LEN);

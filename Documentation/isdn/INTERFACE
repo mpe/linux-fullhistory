@@ -1,3 +1,4 @@
+$Id: INTERFACE,v 1.2 1996/05/18 15:58:53 fritz Exp $
 
 Description of the Interface between Linklevel and Hardwarelevel
   of isdn4linux:
@@ -12,9 +13,29 @@ Description of the Interface between Linklevel and Hardwarelevel
   the fields. All further communication is done via callbacks using
   the function-pointers defined in isdn_if.
 
-  ATTENTION, CHANGES since version 0.6 are marked with   "***CHANGE0.6"!
-  ATTENTION, CHANGES since version 0.7 are marked with   "***CHANGE0.7"!
-  ATTENTION, CHANGES since version 0.71 are marked with  "***CHANGE0.7.1"!
+  Changes/Version numbering:
+
+  During development of the ISDN subsystem, several changes have been
+  made to the interface. Before it went into kernel, the package
+  had a unique version number. The last version, distributed separately
+  was 0.7.4. When the subsystem went into kernel, every functional unit
+  got a separate version number. These numbers are shown at initialization,
+  separated by slashes:
+
+     c.c/t.t/n.n/p.p/a.a
+
+  where
+
+   c.c is the revision of the common code.
+   t.t is the revision of the tty related code.
+   n.n is the revision of the network related code.
+   p.p is the revision of the ppp related code.
+   a.a is the revision of the audio related code.
+
+  Changes in this document are marked with '***CHANGEx' where x representing
+  the version number. If that number starts with 0, it refers to the old,
+  separately distributed package. If it starts with one of the letters
+  above, it refers to the revision of the corresponding module. 
 
 1. Description of the fields of isdn_if:
 
@@ -52,6 +73,11 @@ Description of the Interface between Linklevel and Hardwarelevel
     initialize this field to 0.
 
   void (*rcvcallb)(int, int, u_char*, int);
+
+    ***CHANGEc1.14: Declared obsolete. Do NOT use this field/function
+                    anymore, since it will be removed when all current
+                    LL drivers have been changed accordingly. Use
+                    rcvcallb_skb instead.
 
     This field will be set by LL. The HL-driver delivers received data-
     packets by calling this function.
@@ -114,6 +140,11 @@ Description of the Interface between Linklevel and Hardwarelevel
 
   int (*writebuf)(int, int, u_char*, int, int);
 
+    ***CHANGEc1.14: Declared obsolete. Do NOT use this field/function
+                    anymore, since it will be removed when all current
+                    LL drivers have been changed accordingly. Set this
+                    field to NULL and use writebuf_skb instead.
+
     This field has to be preset by the HL-driver. The given function will
     be called by the LL for delivering data to be send via B-Channel.
 
@@ -149,11 +180,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       Length of data accepted on success, else error-code (-EINVAL on
       oversized packets etc.)
 
-NOTE on writebuf and writebuf_skb:
-    The HL-driver may initialize one of the fields to NULL, in which case
-    the LL will call the non-NULL function only.
-
-  int (*writecmd)(u_char*, int, int);
+  int (*writecmd)(u_char*, int, int, int, int);
 
     This field has to be preset by the HL-driver. The given function will be
     called to perform write-requests on /dev/isdnctrl (i.e. sending commands
@@ -169,11 +196,15 @@ NOTE on writebuf and writebuf_skb:
                         memcpy, may NOT use schedule())
                     1 = call from user-space. (HL-driver must use
                         memcpy_fromfs, use of schedule() allowed)
+      int     driver-Id.
+      int     channel-number locally to the HL-driver. (starts with 0)
+
+***CHANGEc1.14: The driver-Id and channel-number are new since this revision.
 
     Returnvalue:
       Length of data accepted on success, else error-code (-EINVAL etc.)
 
-  int (*readstat)(u_char*, int, int);
+  int (*readstat)(u_char*, int, int, int, int);
 
     This field has to be preset by the HL-driver. The given function will be
     called to perform read-requests on /dev/isdnctrl (i.e. reading replies
@@ -189,6 +220,10 @@ NOTE on writebuf and writebuf_skb:
                         memcpy, may NOT use schedule())
                     1 = call from user-space. (HL-driver must use
                         memcpy_fromfs, use of schedule() allowed)
+      int     driver-Id.
+      int     channel-number locally to the HL-driver. (starts with 0)
+
+***CHANGEc1.14: The driver-Id and channel-number are new since this revision.
 
     Returnvalue:
       Length of data on success, else error-code (-EINVAL etc.)

@@ -30,21 +30,16 @@
 
 #include <asm/system.h>
 
-#ifdef __alpha__
 /*
- * On the Alpha, we get unaligned access exceptions on
- *  p->nr_sects and p->start_sect, when the partition table
- *  is not on a 4-byte boundary, which is frequently the case.
- * This code uses unaligned load instructions to prevent
- *  such exceptions.
+ * Many architectures don't like unaligned accesses, which is
+ * frequently the case with the nr_sects and start_sect partition
+ * table entries.
  */
 #include <asm/unaligned.h>
-#define NR_SECTS(p)	ldl_u(&p->nr_sects)
-#define START_SECT(p)	ldl_u(&p->start_sect)
-#else /* __alpha__ */
-#define NR_SECTS(p)	p->nr_sects
-#define START_SECT(p)	p->start_sect
-#endif /* __alpha__ */
+
+#define NR_SECTS(p)	get_unaligned(&p->nr_sects)
+#define START_SECT(p)	get_unaligned(&p->start_sect)
+
 
 struct gendisk *gendisk_head = NULL;
 

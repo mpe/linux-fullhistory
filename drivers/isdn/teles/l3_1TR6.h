@@ -1,6 +1,9 @@
-/* $Id: l3_1TR6.h,v 1.1 1996/04/13 10:25:42 fritz Exp $
+/* $Id: l3_1TR6.h,v 1.3 1996/04/30 21:53:48 isdn4dev Exp $
  *
  * $Log: l3_1TR6.h,v $
+ * Revision 1.3  1996/04/30 21:53:48  isdn4dev
+ * Bugs, SPV, Logging in q931.c  Karsten Keil
+ *
  * Revision 1.1  1996/04/13 10:25:42  fritz
  * Initial revision
  *
@@ -15,16 +18,16 @@
 /*
  * MsgType N0
  */
-#define MT_N0_REG_IND 61
-#define MT_N0_CANC_IND 62
-#define MT_N0_FAC_STA 63
-#define MT_N0_STA_ACK 64
-#define MT_N0_STA_REJ 65
-#define MT_N0_FAC_INF 66
-#define MT_N0_INF_ACK 67
-#define MT_N0_INF_REJ 68
-#define MT_N0_CLOSE 75
-#define MT_N0_CLO_ACK 77
+#define MT_N0_REG_IND 0x61
+#define MT_N0_CANC_IND 0x62
+#define MT_N0_FAC_STA 0x63
+#define MT_N0_STA_ACK 0x64
+#define MT_N0_STA_REJ 0x65
+#define MT_N0_FAC_INF 0x66
+#define MT_N0_INF_ACK 0x67
+#define MT_N0_INF_REJ 0x68
+#define MT_N0_CLOSE   0x75
+#define MT_N0_CLO_ACK 0x77
 
 
 /*
@@ -62,59 +65,6 @@
 #define MT_N1_REG_REJ 0x6F
 #define MT_N1_STAT 0x63
 
-
-struct MTypeDesc {
-	byte            mt;
-	char           *descr;
-};
-
-static struct MTypeDesc mtdesc_n0[] =
-{
-	{MT_N0_REG_IND, "MT_N0_REG_IND"},
-	{MT_N0_CANC_IND, "MT_N0_CANC_IND"},
-	{MT_N0_FAC_STA, "MT_N0_FAC_STA"},
-	{MT_N0_STA_ACK, "MT_N0_STA_ACK"},
-	{MT_N0_STA_REJ, "MT_N0_STA_REJ"},
-	{MT_N0_FAC_INF, "MT_N0_FAC_INF"},
-	{MT_N0_INF_ACK, "MT_N0_INF_ACK"},
-	{MT_N0_INF_REJ, "MT_N0_INF_REJ"},
-	{MT_N0_CLOSE, "MT_N0_CLOSE"},
-	{MT_N0_CLO_ACK, "MT_N0_CLO_ACK"}
-};
-
-static struct MTypeDesc mtdesc_n1[] =
-{
-	{MT_N1_ESC, "MT_N1_ESC"},
-	{MT_N1_ALERT, "MT_N1_ALERT"},
-	{MT_N1_CALL_SENT, "MT_N1_CALL_SENT"},
-	{MT_N1_CONN, "MT_N1_CONN"},
-	{MT_N1_CONN_ACK, "MT_N1_CONN_ACK"},
-	{MT_N1_SETUP, "MT_N1_SETUP"},
-	{MT_N1_SETUP_ACK, "MT_N1_SETUP_ACK"},
-	{MT_N1_RES, "MT_N1_RES"},
-	{MT_N1_RES_ACK, "MT_N1_RES_ACK"},
-	{MT_N1_RES_REJ, "MT_N1_RES_REJ"},
-	{MT_N1_SUSP, "MT_N1_SUSP"},
-	{MT_N1_SUSP_ACK, "MT_N1_SUSP_ACK"},
-	{MT_N1_SUSP_REJ, "MT_N1_SUSP_REJ"},
-	{MT_N1_USER_INFO, "MT_N1_USER_INFO"},
-	{MT_N1_DET, "MT_N1_DET"},
-	{MT_N1_DISC, "MT_N1_DISC"},
-	{MT_N1_REL, "MT_N1_REL"},
-	{MT_N1_REL_ACK, "MT_N1_REL_ACK"},
-	{MT_N1_CANC_ACK, "MT_N1_CANC_ACK"},
-	{MT_N1_CANC_REJ, "MT_N1_CANC_REJ"},
-	{MT_N1_CON_CON, "MT_N1_CON_CON"},
-	{MT_N1_FAC, "MT_N1_FAC"},
-	{MT_N1_FAC_ACK, "MT_N1_FAC_ACK"},
-	{MT_N1_FAC_CAN, "MT_N1_FAC_CAN"},
-	{MT_N1_FAC_REG, "MT_N1_FAC_REG"},
-	{MT_N1_FAC_REJ, "MT_N1_FAC_REJ"},
-	{MT_N1_INFO, "MT_N1_INFO"},
-	{MT_N1_REG_ACK, "MT_N1_REG_ACK"},
-	{MT_N1_REG_REJ, "MT_N1_REG_REJ"},
-	{MT_N1_STAT, "MT_N1_STAT"}
-};
 
 
 /*
@@ -172,7 +122,7 @@ static struct MTypeDesc mtdesc_n1[] =
 #define FAC_Unterdruecke 0x1B
 #define FAC_Deactivate 0x1E
 #define FAC_Activate 0x1D
-#define FAC_SVC 0x1F
+#define FAC_SPV 0x1F
 #define FAC_Rueckwechsel 0x23
 #define FAC_Umleitung 0x24
 
@@ -187,7 +137,7 @@ static struct MTypeDesc mtdesc_n1[] =
 #define CAUSE_FacNotImpl 0x10
 #define CAUSE_FacNotSubscr 0x11
 #define CAUSE_OutgoingBarred 0x20
-#define CAUSE_UserAssessBusy 0x21
+#define CAUSE_UserAccessBusy 0x21
 #define CAUSE_NegativeGBG 0x22
 #define CAUSE_UnknownGBG 0x23
 #define CAUSE_NoSPVknown 0x25

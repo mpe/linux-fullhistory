@@ -631,7 +631,7 @@ static void NCR5380_print_phase(struct Scsi_Host *instance)
 
 #else /* !NDEBUG */
 
-/* dummys... */
+/* dummies... */
 __inline__ void NCR5380_print(struct Scsi_Host *instance) { };
 __inline__ void NCR5380_print_phase(struct Scsi_Host *instance) { };
 

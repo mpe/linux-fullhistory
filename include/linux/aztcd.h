@@ -1,4 +1,4 @@
-/* $Id: aztcd.h,v 2.30 1996/04/26 05:33:56 root Exp root $
+/* $Id: aztcd.h,v 2.50 1996/05/17 16:15:43 root Exp root $
  *
  * Definitions for a AztechCD268 CD-ROM interface
  *	Copyright (C) 1994, 1995  Werner Zimmermann
@@ -32,7 +32,7 @@
 */
 
 #ifdef AZT_SW32 
-#define AZT_SW32_BASE_ADDR       0x220  /*I/O port base address of your soundcard*/
+#define AZT_SW32_BASE_ADDR      0x220  /*I/O port base address of your soundcard*/
 #endif
 
 /* Set this to 1, if you want your tray to be locked, set to 0 to prevent tray 
@@ -74,9 +74,9 @@
 #define STATUS_PORT		azt_port+1
 #define MODE_PORT		azt_port+2
 #ifdef  AZT_SW32                
- #define AZT_SW32_INIT           (unsigned int) (0xFF00 & (AZT_BASE_ADDR*16))
- #define AZT_SW32_CONFIG_REG     AZT_SW32_BASE_ADDR+0x16  /*Soundwave32 Config. Register*/
- #define AZT_SW32_ID_REG         AZT_SW32_BASE_ADDR+0x04  /*Soundwave32 ID Version Register*/
+ #define AZT_SW32_INIT          (unsigned int) (0xFF00 & (AZT_BASE_ADDR*16))
+ #define AZT_SW32_CONFIG_REG    AZT_SW32_BASE_ADDR+0x16  /*Soundwave32 Config. Register*/
+ #define AZT_SW32_ID_REG        AZT_SW32_BASE_ADDR+0x04  /*Soundwave32 ID Version Register*/
 #endif
 
 /* status bits */

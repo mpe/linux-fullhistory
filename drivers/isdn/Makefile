@@ -18,6 +18,9 @@ ifeq ($(CONFIG_ISDN),y)
   ifdef CONFIG_ISDN_PPP
     L_OBJS += isdn_ppp.o
   endif
+  ifdef CONFIG_ISDN_AUDIO
+    L_OBJS += isdn_audio.o
+  endif
 else
   ifeq ($(CONFIG_ISDN),m)
     M_OBJS += isdn.o
@@ -26,6 +29,9 @@ else
     OX_OBJS += isdn_common.o
     ifdef CONFIG_ISDN_PPP
       O_OBJS += isdn_ppp.o
+    endif
+    ifdef CONFIG_ISDN_AUDIO
+      O_OBJS += isdn_audio.o
     endif
   endif
 endif

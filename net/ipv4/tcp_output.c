@@ -837,7 +837,7 @@ void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb
  *	  sending every two full sized packets will never need to be
  *	  invoked, the delayed ack will be sent before the ATO timeout
  *	  every time. Of course, the relies on our having a good estimate
- *	  for packet interarrival times.
+ *	  for packet interarrival times.)
  */
 void tcp_send_delayed_ack(struct sock * sk, int max_timeout, unsigned long timeout)
 {

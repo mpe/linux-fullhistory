@@ -1,11 +1,19 @@
 
-RANDOM NOTES ON THE QLOGIC SCSI DRIVER
+RANDOM NOTES ON THE QLOGICFAS SCSI DRIVER
 
-This driver does NOT support the PCI version.  It is a different chip.
+This driver supports the Qlogic FASXXX family of chips.  This driver
+only works with the ISA, VLB, and PCMCIA versions of the Qlogic
+FastSCSI!  cards as well as any other card based on the FASXX chip
+(including the Control Concepts SCSI/IDE/SIO/PIO/FDC cards).
 
-It DOES support the ISA, VLB, and PCMCIA versions of the Qlogic FastSCSI!
-cards as well as any other card based on the chip (including the Control
-Concepts SCSI/IDE/SIO/PIO/FDC cards).
+This driver does NOT support the PCI version.  Support for these PCI
+Qlogic boards:
+
+	IQ-PCI
+	IQ-PCI-10
+	IQ-PCI-D
+
+is provided by the qlogicisp.c driver.   Check README.qlogicisp for details.
 
 PCMCIA SUPPORT
 
@@ -62,4 +70,4 @@ detected).  This can be caused by bad termination (the ACK can be reflected),
 or by noise when the chips work less well because of the heat, or when cables
 get too long for the speed.
 
-If it doesn't work under DOS, it won't work under Linux.
+Remember, if it doesn't work under DOS, it probably won't work under Linux.

@@ -400,6 +400,7 @@ ppp_init_dev (struct device *dev)
 	dev->get_stats	      = ppp_dev_stats;
 	dev->do_ioctl	      = ppp_dev_ioctl;
 	dev->addr_len	      = 0;
+	dev->tx_queue_len     = 10;
 	dev->type	      = ARPHRD_PPP;
 
 	for (indx = 0; indx < DEV_NUMBUFFS; indx++)

@@ -3,10 +3,6 @@
 
 /* Just the needed definitions for the RDB of an Amiga HD. */
 
-#ifndef AMIGAFFS_H
-#include <linux/amigaffs.h>
-#endif
-
 struct RigidDiskBlock {
 	__u32	rdb_ID;
 	__u32	rdb_SummedLongs;

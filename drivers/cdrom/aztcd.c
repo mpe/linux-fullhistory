@@ -1,5 +1,5 @@
-#define AZT_VERSION "2.40"
-/*      $Id: aztcd.c,v 2.40 1996/05/01 11:09:35 root Exp root $
+#define AZT_VERSION "2.50"
+/*      $Id: aztcd.c,v 2.50 1996/05/17 16:19:03 root Exp root $
 	linux/drivers/block/aztcd.c - Aztech CD268 CDROM driver
 
 	Copyright (C) 1994,95,96 Werner Zimmermann(zimmerma@rz.fht-esslingen.de)
@@ -151,6 +151,9 @@
         V2.40   Reorganized the placement of functions in the source code file
                 to reflect the layered approach; did not actually change code
                 Werner Zimmermann, May 1, 96
+        V2.50   Heiko Eissfeld suggested to remove some VERIFY_READs in 
+                aztcd_ioctl; check_aztcd_media_change modified 
+                Werner Zimmermann, May 16, 96       
 */
 #include <linux/module.h>
 #include <linux/errno.h>
@@ -1053,10 +1056,15 @@ void aztcd_setup(char *str, int *ints)
 }
 
 /* 
- * Checking if the media has been changed not yet implemented
+ * Checking if the media has been changed
 */
 static int check_aztcd_media_change(kdev_t full_dev)
-{ return 0;
+{ if (aztDiskChanged)          /* disk changed */
+     { aztDiskChanged=0;
+       return 1;
+     }
+  else
+       return 0;               /* no change */
 }
 
 /*
@@ -1127,7 +1135,7 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 #ifdef AZT_DEBUG
    		  printk("aztcd ioctl MULTISESSION\n");
 #endif
-		  st = verify_area(VERIFY_READ, (void*) arg, sizeof(struct cdrom_multisession));
+		  st = verify_area(VERIFY_WRITE, (void*) arg, sizeof(struct cdrom_multisession));
 		  if (st) return st;
 		  memcpy_fromfs(&ms, (void*) arg, sizeof(struct cdrom_multisession));
 		  if (ms.addr_format == CDROM_MSF) 
@@ -1140,8 +1148,6 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 		  else
 		       return -EINVAL;
 		  ms.xa_flag = DiskInfo.xa;
- 		  st = verify_area(VERIFY_WRITE, (void*) arg, sizeof(struct cdrom_multisession));
-		  if (st) return st;
 	  	  memcpy_tofs((void*) arg, &ms, sizeof(struct cdrom_multisession));
 #ifdef AZT_DEBUG 
  		  if (ms.addr_format == CDROM_MSF) 
@@ -1225,8 +1231,6 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		memcpy_tofs((void *) arg, &tocHdr, sizeof tocHdr);
 		break;
 	case CDROMREADTOCENTRY:      /* Read an entry in the table of contents */
-		st = verify_area(VERIFY_READ, (void *) arg, sizeof entry);
-		if (st) return st;
 		st = verify_area(VERIFY_WRITE, (void *) arg, sizeof entry);
 		if (st) return st;
 		memcpy_fromfs(&entry, (void *) arg, sizeof entry);
@@ -1254,17 +1258,10 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		memcpy_tofs((void *) arg, &entry, sizeof entry);
 		break;
 	case CDROMSUBCHNL:   /* Get subchannel info */
-		st = verify_area(VERIFY_READ, (void *) arg, sizeof(struct cdrom_subchnl));
-		if (st) { 
-#ifdef AZT_DEBUG
-		          printk("aztcd: exiting aztcd_ioctl - Error 1 - Command:%x\n",cmd);
-#endif
-		          return st;
-		        }  
 		st = verify_area(VERIFY_WRITE, (void *) arg, sizeof(struct cdrom_subchnl));
 		if (st) { 
 #ifdef AZT_DEBUG
-		          printk("aztcd: exiting aztcd_ioctl - Error 2 - Command:%x\n",cmd);
+		          printk("aztcd: exiting aztcd_ioctl - Error 1 - Command:%x\n",cmd);
 #endif
 		          return st;
 		        }  
@@ -1340,9 +1337,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 #if AZT_PRIVATE_IOCTLS 
 	case CDROMREADCOOKED: /*read data in mode 1 (2048 Bytes)*/
 	case CDROMREADRAW:    /*read data in mode 2 (2336 Bytes)*/
-		{ st = verify_area(VERIFY_READ,  (void *) arg, sizeof msf);
-		  if (st) return st;
-		  st = verify_area(VERIFY_WRITE, (void *) arg, sizeof buf);
+		{ st = verify_area(VERIFY_WRITE, (void *) arg, sizeof buf);
 		  if (st) return st;
 		  memcpy_fromfs(&msf, (void *) arg, sizeof msf);
 		  /* convert to bcd */

@@ -1270,6 +1270,8 @@ void unlock_buffer(struct buffer_head * bh)
            deemed complete once all buffers have been visited
            (b_count==0) and are now unlocked. */
 	bh->b_count--;
+	if (!test_bit(BH_Uptodate, &bh->b_state))
+		set_bit(PG_error, &page->flags);
 	for (tmp = bh; tmp=tmp->b_this_page, tmp!=bh; ) {
 		if (test_bit(BH_Lock, &tmp->b_state) || tmp->b_count)
 			return;

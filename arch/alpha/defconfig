@@ -24,6 +24,7 @@ CONFIG_NATIVE=y
 # CONFIG_ALPHA_EB66P is not set
 # CONFIG_ALPHA_EB64P is not set
 CONFIG_ALPHA_EB164=y
+# CONFIG_ALPHA_PC164 is not set
 # CONFIG_ALPHA_JENSEN is not set
 # CONFIG_ALPHA_NONAME is not set
 # CONFIG_ALPHA_P2K is not set
@@ -47,11 +48,15 @@ CONFIG_BLK_DEV_FD=y
 # Please see drivers/block/README.ide for help/info on IDE drives
 #
 # CONFIG_BLK_DEV_HD_ONLY is not set
+
+#
+# Additional Block Devices
+#
+# CONFIG_BLK_DEV_LOOP is not set
+# CONFIG_BLK_DEV_MD is not set
 CONFIG_BLK_DEV_RAM=y
 # CONFIG_BLK_DEV_INITRD is not set
-# CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_XD is not set
-# CONFIG_BLK_DEV_MD is not set
 
 #
 # Networking options
@@ -120,7 +125,7 @@ CONFIG_SCSI_NCR53C7xx_FAST=y
 # CONFIG_SCSI_NCR53C7xx_DISCONNECT is not set
 # CONFIG_SCSI_IN2000 is not set
 # CONFIG_SCSI_PAS16 is not set
-# CONFIG_SCSI_QLOGIC is not set
+# CONFIG_SCSI_QLOGIC_FAS is not set
 # CONFIG_SCSI_SEAGATE is not set
 # CONFIG_SCSI_T128 is not set
 # CONFIG_SCSI_ULTRASTOR is not set

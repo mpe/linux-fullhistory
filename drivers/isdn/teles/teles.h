@@ -1,6 +1,9 @@
-/* $Id: teles.h,v 1.1 1996/04/13 10:29:00 fritz Exp $
+/* $Id: teles.h,v 1.2 1996/04/30 21:52:04 isdn4dev Exp $
  *
  * $Log: teles.h,v $
+ * Revision 1.2  1996/04/30 21:52:04  isdn4dev
+ * SPV for 1TR6 - Karsten
+ *
  * Revision 1.1  1996/04/13 10:29:00  fritz
  * Initial revision
  *
@@ -288,6 +291,7 @@ struct Param {
 	int             chargeinfo;  /* Charge Info - only for 1tr6 in
 				      * the moment 
 				      */
+	int		spv;	     /* SPV Flag */
 };
 
 struct PStack {

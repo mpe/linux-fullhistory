@@ -119,6 +119,8 @@ README for the ISDN-subsystem
                AT&X0	BTX-mode off (default)
 	       AT&X1    BTX-mode on. (S13.1=1, S14=0, S16=7, S18=7, S19=0)
 
+           For voice-mode commands refer to README.audio
+
 	   1.3.2 Escape sequence:
                During a connection, the emulation reacts just like
                a normal modem to the escape sequence <DELAY>+++<DELAY>.
@@ -168,18 +170,34 @@ README for the ISDN-subsystem
                                       1 = Direct tty-send.
                             Bit 1:    0 = T.70 protocol (Only for BTX!) off
                                       1 = T.70 protocol (Only for BTX!) on
-	     14   0         Layer-2 protocol: (with the ICN-driver 
-                                                currently always 0)
+	     14   0         Layer-2 protocol:
 				      0 = X75/LAPB with I-frames
 				      1 = X75/LAPB with UI-frames
                                       2 = X75/LAPB with BUI-frames
                                       3 = HDLC
+                                      4 = Transparent (audio)
              15   0         Layer-3 protocol: (at the moment always 0)
                                       0 = transparent
 	     16   250       Send-Packet-size/16
              17   8         Window-size for Teles-driver (not yet implemented)
-             18   7         Service-Octet-1
+             18   4         Bit coded register, Service-Octet-1 to accept,
+                            or to be used on dialout:
+                            Bit 0:    Service 1 (audio) when set.
+                            Bit 1:    Service 5 (BTX) when set.
+                            Bit 2:    Service 7 (data) when set.
+                            Note: It is possible to set more than one
+                                  bit. In this case, on incoming calls
+                                  the selected services are accepted,
+                                  and if the service is "audio", the
+                                  Layer-2-protocol is automatically
+                                  changed to 4 regardless of the setting
+                                  of register 14. On outgoing calls,
+                                  the most significant 1-bit is choosen to
+                                  select the outgoing service octet.
              19   0         Service-Octet-2
+             20   0         Bit coded register (readonly)
+                            Service-Octet-1 of last call.
+                            Bit mapping is the same like register 18
 
   Last but not least a (at the moment fairly primitive) device to request
   the line-status (/dev/isdninfo) is made available.
@@ -272,9 +290,8 @@ README for the ISDN-subsystem
        Due to limited hardware-capabilities, there is no way to check the
        existence of a card. Therefore you need to be sure your card's setup
        is correct. Also there are bugs in the printed manual of some newer
-       16.3 cards. The manual tells the port has to be 0x180. THIS IS WRONG!!
-       0xd80 is the correct value! Have a look to the kernel-syslog. With
-       most of the cards, you should see a line "HSCX version A:5 B:5" there.
+       16.3 cards. Have a look to the kernel-syslog. With most of the cards,
+       you should see a line "HSCX version A:5 B:5" there.
        
      3.1.2 ICN driver.
 
@@ -292,9 +309,10 @@ README for the ISDN-subsystem
        When using the ICN double card, you MUST define TWO idstrings.
        idstring must start with a character!
 
-       The ICN driver supports only one card at the moment. If you like to
-       use more than one card, build the modularized version, loading it
-       more than one time, each module driving a single card.
+       If you like to use more than one card, you can use the program
+       "icnctrl" from the utility-package to configure additional cards.
+       You need to configure shared memory only once, since the icn-driver
+       maps all cards into the same address-space.
 
        Using the "icnctrl"-utility, portbase and shared memory can also be
        changed during runtime.
@@ -335,12 +353,8 @@ README for the ISDN-subsystem
        When using the ICN double card, you MUST define TWO idstrings.
        idstring must start with a character!
 
-       The ICN driver supports only one card at the moment. If you like to
-       use more than one card, build the modularized version, loading it
-       more than one time, each module driving a single card.
-
-       Using the "icnctrl"-utility, portbase and shared memory can also be
-       changed during runtime.
+       Using the "icnctrl"-utility, the same features apply to the modularized
+       version like to the kernel-builtin one.
 
        The D-channel protocol is configured by loading different firmware
        into the card's memory using the "icnctrl"-utility.
@@ -365,12 +379,15 @@ README for the ISDN-subsystem
      For Euro-ISDN:
        icnctrl [-d IDstring] load download/loadpg.bin download/pc_eu_ca.bin
 
-     When using the ICN-2B, the protocol-software for the second half of
+     When using the ICN-4B, the protocol-software for the second half of
      the card must be appended to the command line.
 
-     -> The two LEDs at the back cover of the card (ICN-2B: 4 LEDs) must be
+     -> The two LEDs at the back cover of the card (ICN-4B: 4 LEDs) must be
         blinking intermittently now. If a connection is up, the corresponding
         led is lit continuously.
+
+     For loading pcbit-firmware, refer to Documentation/isdn/README.pcbit
+     and the pcbit manpage, included in the utility-package.
 
    b) If you only intend to use ttys, you are nearly ready now.
 

@@ -27,7 +27,7 @@
  *  Daniel v. Mosnenck (he sent me the Technical and Programming Reference)
  *  Gerd Knorr (he lent me his PhotoCD)
  *  Nils Faerber and Roger E. Wolff (extensively tested the LU portion)
- *  Andreas Kies (testing the mysterious hang up's)
+ *  Andreas Kies (testing the mysterious hangups)
  *  ... somebody forgotten?
  *  
  */
@@ -35,14 +35,14 @@
 #ifndef __MCDX_H
 #define __MCDX_H
 /*
- * 	PLEASE CONFIGURE THIS ACCORIDNG TO YOURS HARDWARE/JUMPER SETTINGS.
+ * 	PLEASE CONFIGURE THIS ACCORDING TO YOUR HARDWARE/JUMPER SETTINGS.
  *
  *      o       MCDX_NDRIVES  :  number of used entries of the following table
  *      o       MCDX_DRIVEMAP :  table of {i/o base, irq} per controller
  *
  *      NOTE: Don't even think about connecting the drive to IRQ 9(2).
  *	In the AT architecture this interrupt is used to cascade the two
- *	interrupt controllers and isn't therefore usable for enything else!
+ *	interrupt controllers and isn't therefore usable for anything else!
  */
  /* #define I_WAS_IN_MCDX_H */
 #define MCDX_NDRIVES 1
@@ -55,11 +55,11 @@
 	  	
 /* 
  * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!NO USER INTERVENTION NEEDED BELOW
- * If You are shure that all configuration is done, please uncomment the
+ * If You are sure that all configuration is done, please uncomment the
  * line below. 
  */
 
-#undef MCDX_DEBUG	/* This is *REALLY* only for developement! */
+#undef MCDX_DEBUG	/* This is *REALLY* only for development! */
 
 #ifdef MCDX_DEBUG
 #define MCDX_TRACE(x) printk x

@@ -298,7 +298,7 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 
 /*
  * the scsi_ioctl() function differs from most ioctls in that it does
- * not take a major/minor number as the dev filed.  Rather, it takes
+ * not take a major/minor number as the dev field.  Rather, it takes
  * a pointer to a scsi_devices[] element, a structure. 
  */
 int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)

@@ -293,7 +293,7 @@ sys_delete_module(char *module_name)
 	else {
 		for (mp = module_list; mp != &kernel_module; mp = mp->next) {
 			if ((mp->ref == NULL) && (mp->state == MOD_RUNNING) &&
-			    ((GET_USE_COUNT(mp) & ~(MOD_AUTOCLEAN | MOD_VISITED)) == 0)) {
+			    ((GET_USE_COUNT(mp) & ~MOD_VISITED) == MOD_AUTOCLEAN)) {
 			    	if ((GET_USE_COUNT(mp) & MOD_VISITED)) {
 					/* Don't reap until one "cycle" after last _use_ */
 			   		GET_USE_COUNT(mp) &= ~MOD_VISITED;

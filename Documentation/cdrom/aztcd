@@ -1,10 +1,10 @@
-$Id: README.aztcd,v 2.30 1996/04/26 05:32:23 root Exp root $
+$Id: README.aztcd,v 2.50 1996/05/16 18:31:22 root Exp root $
           Readme-File /usr/src/Documentation/cdrom/aztcd
            			for 
 	     AZTECH CD-ROM CDA268-01A, ORCHID CD-3110,
       OKANO/WEARNES CDD110, CONRAD TXC, CyCDROM CR520, CR540
                            CD-ROM Drives 
-                       Version 2.3 and newer
+                       Version 2.5 and newer
                    (for other drives see 6.-8.)
 
 NOTE: THIS DRIVER WILL WORK WITH THE CD-ROM DRIVES LISTED, WHICH HAVE

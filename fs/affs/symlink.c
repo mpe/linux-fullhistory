@@ -1,7 +1,7 @@
 /*
  *  linux/fs/affs/symlink.c
  *
- *  1995  Hans-Joachim Widmaier - modified for affs.
+ *  1995  Hans-Joachim Widmaier - Modified for affs.
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *

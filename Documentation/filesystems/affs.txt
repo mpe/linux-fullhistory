@@ -6,14 +6,12 @@ currently knows 6 different filesystems:
 
 DOS\0		The old or original filesystem, not really suited for
 		hard disks and normally not used on them, either.
-		Not supported.
 
 DOS\1		The original Fast File System. Supported.
 
 DOS\2		The old "international" filesystem. International means that
 		a bug has been fixed so that accented ("international") letters
 		in file names are case-insensitive, as they ought to be.
-		Not supported.
 
 DOS\3		The "international" Fast File System.  Supported.
 
@@ -29,7 +27,10 @@ Supported block sizes are: 512, 1024, 2048 and 4096 bytes. Larger blocks
 speed up almost everything with the expense of wasted disk space. The speed
 gain above 4K seems not really worth the price, so you don't lose too
 much here, either.
-  
+
+The muFS (multi user File System) equivalents of the above file systems
+are supported, too.
+
 Mount options for the AFFS
 ==========================
 
@@ -68,6 +69,9 @@ bs=blksize	Sets the blocksize to blksize. Valid block sizes are 512,
 quiet		The file system will not return an error for disallowed
 		mode changes.
 
+verbose		The volume name, file system type and block size will
+		be written to the syslog.
+
 Handling of the Users/Groups and protection flags
 =================================================
 
@@ -104,22 +108,47 @@ The Linux rwxrwxrwx file mode is handled as follows:
     
 Newly created files and directories will get the user and group id
 of the current user and a mode according to the umask.
-Linux can read, but not write, Amiga FFS partitions.
-
-Mount options are
-    size	has the size in 512 byte blocks of the mounted medium. 
-
-Case is significant in filename matching, different to real AFFS.
-
 
 Command line example
+====================
     mount  Archive/Amiga/Workbench3.1.adf /mnt -t affs -o loop,size=1760
     mount  /dev/sda3 /Amiga -t affs
 
 /etc/fstab example
     /dev/sdb5	/d/f    affs    ro
 
-This file system will probably be writeable in future releases.
+Bugs, Restrictions, Caveats
+===========================
+
+Quite a few things may not work as advertised. Not everything is
+tested, though several hundred MB have been read and written using
+this fs.
+
+Filenames are truncated to 30 characters without warning.
+
+Currently there are no checks against invalid characters (':')
+in filenames.
+
+Case is ignored by the affs in filename matching, but Linux shells
+do care about the case. Example (with /mnt being an affs mounted fs):
+    rm /mnt/WRONGCASE
+will remove /mnt/wrongcase, but
+    rm /mnt/WR*
+will not since the names are matched by the shell.
+
+The block allocation is designed for hard disk partitions. If more
+than 1 process writes to a (small) diskette, the blocks are allocated
+in an ugly way (but the real AFFS doesn't do much better). This
+is also true when space gets tight.
+
+The bitmap valid flag in the root block may not be accurate when the
+system crashes while an affs partition is mounted. There's currently
+no way to fix this without an Amiga (disk validator) or manually
+(who would do this?). Maybe later.
+
+A fsck.affs and mkfs.affs will probably be available in the future.
+Until then, you should do
+    ln -s /bin/true /etc/fs/mkfs.affs
 
 It's not possible to read floppy disks with a normal PC or workstation
 due to an incompatibility to the Amiga floppy controller.

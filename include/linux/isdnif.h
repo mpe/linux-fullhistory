@@ -1,4 +1,4 @@
-/* $Id: isdnif.h,v 1.2 1996/04/20 17:02:40 fritz Exp $
+/* $Id: isdnif.h,v 1.8 1996/05/18 01:45:37 fritz Exp $
  *
  * Linux ISDN subsystem
  *
@@ -22,6 +22,27 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdnif.h,v $
+ * Revision 1.8  1996/05/18 01:45:37  fritz
+ * More spelling corrections.
+ *
+ * Revision 1.7  1996/05/18 01:37:19  fritz
+ * Added spelling corrections and some minor changes
+ * to stay in sync with kernel.
+ *
+ * Revision 1.6  1996/05/17 03:59:28  fritz
+ * Marked rcvcallb and writebuf obsolete.
+ *
+ * Revision 1.5  1996/05/01 11:43:54  fritz
+ * Removed STANDALONE
+ *
+ * Revision 1.4  1996/05/01 11:38:40  fritz
+ * Added ISDN_FEATURE_L2_TRANS
+ *
+ * Revision 1.3  1996/04/29 22:57:54  fritz
+ * Added driverId and channel parameters to
+ * writecmd() and readstat().
+ * Added constant for voice-support.
+ *
  * Revision 1.2  1996/04/20 17:02:40  fritz
  * Changes to support skbuffs for Lowlevel-Drivers.
  * Misc. typos
@@ -33,10 +54,6 @@
 
 #ifndef isdnif_h
 #define isdnif_h
-
-#ifdef STANDALONE
-#include <linux/k_compat.h>
-#endif
 
 /*
  * Values for general protocol-selection
@@ -52,6 +69,7 @@
 #define ISDN_PROTO_L2_X75UI  1   /* X75/LAPB with UI-Frames     */
 #define ISDN_PROTO_L2_X75BUI 2   /* X75/LAPB with UI-Frames     */
 #define ISDN_PROTO_L2_HDLC   3   /* HDLC                        */
+#define ISDN_PROTO_L2_TRANS  4   /* Transparent (Voice)         */
 
 /*
  * Values for Layer-3-protocol-selection
@@ -112,6 +130,7 @@
 #define ISDN_FEATURE_L2_X75UI   (0x0001 << ISDN_PROTO_L2_X75UI)
 #define ISDN_FEATURE_L2_X75BUI  (0x0001 << ISDN_PROTO_L2_X75BUI)
 #define ISDN_FEATURE_L2_HDLC    (0x0001 << ISDN_PROTO_L2_HDLC)
+#define ISDN_FEATURE_L2_TRANS   (0x0001 << ISDN_PROTO_L2_TRANS)
 
 /* Layer 3 */
 #define ISDN_FEATURE_L3_TRANS   (0x0100 << ISDN_PROTO_L3_TRANS)
@@ -167,6 +186,10 @@ typedef struct {
    *             int    local channel-number (0 ...)
    *             u_char pointer to received data (in Kernel-Space, volatile)
    *             int    length of data
+   *
+   * NOTE: This callback is obsolete, and will be removed when all
+   *       current LL-drivers support rcvcall_skb. Do NOT use for new
+   *       drivers.
    */
   void (*rcvcallb)(int, int, u_char*, int);
 
@@ -207,6 +230,10 @@ typedef struct {
    *                              no schedule allowed) 
    *                          1 = Data is in User-Space (use memcpy_fromfs,
    *                              may schedule)
+   *
+   * NOTE: This call is obsolete, and will be removed when all
+   *       current LL-drivers support writebuf_skb. Do NOT use for new
+   *       drivers.
    */
   int (*writebuf)(int, int, const u_char*, int, int);
 
@@ -227,8 +254,10 @@ typedef struct {
    *                              no schedule allowed) 
    *                          1 = Data is in User-Space (use memcpy_fromfs,
    *                              may schedule)
+   *             int    driverId
+   *             int    local channel-number (0 ...)
    */
-  int (*writecmd)(const u_char*, int, int);
+  int (*writecmd)(const u_char*, int, int, int, int);
   /* Read raw Status replies
    *             u_char pointer data (volatile)
    *             int    length of buffer
@@ -236,8 +265,10 @@ typedef struct {
    *                              no schedule allowed) 
    *                          1 = Data is in User-Space (use memcpy_fromfs,
    *                              may schedule)
+   *             int    driverId
+   *             int    local channel-number (0 ...)
    */
-  int (*readstat)(u_char*, int, int);
+  int (*readstat)(u_char*, int, int, int, int);
   char id[20];
 } isdn_if;
 
@@ -250,7 +281,7 @@ typedef struct {
  *              supporting sk_buff's should set this to 0.
  * command      Address of Command-Handler.
  * features     Bitwise coded Features of this driver. (use ISDN_FEATURE_...)
- * writebuf     Address of Send-Command-Handler.
+ * writebuf     Address of Send-Command-Handler. OBSOLETE do NOT use anymore.
  * writebuf_skb Address of Skbuff-Send-Handler. (NULL if not supported)
  * writecmd        "    "  D-Channel  " which accepts raw D-Ch-Commands.
  * readstat        "    "  D-Channel  " which delivers raw Status-Data.
@@ -259,7 +290,7 @@ typedef struct {
  *
  * channels      Driver-ID assigned to this driver. (Must be used on all
  *               subsequent callbacks.
- * rcvcallb      Address of handler for received data.
+ * rcvcallb      Address of handler for received data. OBSOLETE, do NOT use anymore.
  * rcvcallb_skb  Address of handler for received Skbuff's. (NULL if not supp.)
  * statcallb        "    "     "    for status-changes.
  *

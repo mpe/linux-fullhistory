@@ -44,13 +44,17 @@ CONFIG_BLK_DEV_IDECD=y
 # CONFIG_BLK_DEV_IDETAPE is not set
 # CONFIG_BLK_DEV_IDE_PCMCIA is not set
 CONFIG_BLK_DEV_CMD640=y
-CONFIG_BLK_DEV_RZ1000=y
 # CONFIG_BLK_DEV_TRITON is not set
+CONFIG_BLK_DEV_RZ1000=y
 # CONFIG_IDE_CHIPSETS is not set
-# CONFIG_BLK_DEV_RAM is not set
+
+#
+# Additional Block Devices
+#
 # CONFIG_BLK_DEV_LOOP is not set
-# CONFIG_BLK_DEV_XD is not set
 # CONFIG_BLK_DEV_MD is not set
+# CONFIG_BLK_DEV_RAM is not set
+# CONFIG_BLK_DEV_XD is not set
 
 #
 # Networking options

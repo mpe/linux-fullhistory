@@ -1,10 +1,26 @@
 #ifndef __ALPHA_UNALIGNED_H
 #define __ALPHA_UNALIGNED_H
 
-/*
- * inline functions to do unaligned accesses.. See entUna in traps.c
+/* 
+ * The main single-value unaligned transfer routines.
  */
-extern inline unsigned long ldq_u(unsigned long * r11)
+#define get_unaligned(ptr) \
+	((__typeof__(*(ptr)))__get_unaligned((ptr), sizeof(*(ptr))))
+#define put_unaligned(x,ptr) \
+	__put_unaligned((unsigned long)(x), (ptr), sizeof(*(ptr)))
+
+/*
+ * This is a silly but good way to make sure that
+ * the get/put functions are indeed always optimized,
+ * and that we use the correct sizes.
+ */
+extern void bad_unaligned_access_length(void);
+
+/*
+ * Elemental unaligned loads 
+ */
+
+extern inline unsigned long __uldq(const unsigned long * r11)
 {
 	unsigned long r1,r2;
 	__asm__("ldq_u %0,%3\n\t"
@@ -15,11 +31,11 @@ extern inline unsigned long ldq_u(unsigned long * r11)
 		:"=&r" (r1), "=&r" (r2)
 		:"r" (r11),
 		 "m" (*r11),
-		 "m" (*(unsigned long *)(7+(char *) r11)));
+		 "m" (*(const unsigned long *)(7+(char *) r11)));
 	return r1;
 }
 
-extern inline unsigned long ldl_u(unsigned int * r11)
+extern inline unsigned long __uldl(const unsigned int * r11)
 {
 	unsigned long r1,r2;
 	__asm__("ldq_u %0,%3\n\t"
@@ -30,11 +46,11 @@ extern inline unsigned long ldl_u(unsigned int * r11)
 		:"=&r" (r1), "=&r" (r2)
 		:"r" (r11),
 		 "m" (*r11),
-		 "m" (*(unsigned long *)(3+(char *) r11)));
+		 "m" (*(const unsigned long *)(3+(char *) r11)));
 	return r1;
 }
 
-extern inline unsigned long ldw_u(unsigned short * r11)
+extern inline unsigned long __uldw(const unsigned short * r11)
 {
 	unsigned long r1,r2;
 	__asm__("ldq_u %0,%3\n\t"
@@ -45,11 +61,15 @@ extern inline unsigned long ldw_u(unsigned short * r11)
 		:"=&r" (r1), "=&r" (r2)
 		:"r" (r11),
 		 "m" (*r11),
-		 "m" (*(unsigned long *)(1+(char *) r11)));
+		 "m" (*(const unsigned long *)(1+(char *) r11)));
 	return r1;
 }
 
-extern inline void stq_u(unsigned long r5, unsigned long * r11)
+/*
+ * Elemental unaligned stores 
+ */
+
+extern inline void __ustq(unsigned long r5, unsigned long * r11)
 {
 	unsigned long r1,r2,r3,r4;
 
@@ -69,7 +89,7 @@ extern inline void stq_u(unsigned long r5, unsigned long * r11)
 		:"r" (r5), "r" (r11));
 }
 
-extern inline void stl_u(unsigned long r5, unsigned int * r11)
+extern inline void __ustl(unsigned long r5, unsigned int * r11)
 {
 	unsigned long r1,r2,r3,r4;
 
@@ -89,7 +109,7 @@ extern inline void stl_u(unsigned long r5, unsigned int * r11)
 		:"r" (r5), "r" (r11));
 }
 
-extern inline void stw_u(unsigned long r5, unsigned short * r11)
+extern inline void __ustw(unsigned long r5, unsigned short * r11)
 {
 	unsigned long r1,r2,r3,r4;
 
@@ -107,6 +127,48 @@ extern inline void stw_u(unsigned long r5, unsigned short * r11)
 		 "=m" (*(unsigned long *)(1+(char *) r11)),
 		 "=&r" (r1), "=&r" (r2), "=&r" (r3), "=&r" (r4)
 		:"r" (r5), "r" (r11));
+}
+
+extern inline unsigned long __get_unaligned(const void *ptr, size_t size)
+{
+	unsigned long val;
+	switch (size) {
+	      case 1:
+		val = *(const unsigned char *)ptr;
+		break;
+	      case 2:
+		val = __uldw((const unsigned short *)ptr);
+		break;
+	      case 4:
+		val = __uldl((const unsigned int *)ptr);
+		break;
+	      case 8:
+		val = __uldq((const unsigned long *)ptr);
+		break;
+	      default:
+		bad_unaligned_access_length();
+	}
+	return val;
+}
+
+extern inline void __put_unaligned(unsigned long val, void *ptr, size_t size)
+{
+	switch (size) {
+	      case 1:
+		*(unsigned char *)ptr = (val);
+	        break;
+	      case 2:
+		__ustw(val, (unsigned short *)ptr);
+		break;
+	      case 4:
+		__ustl(val, (unsigned int *)ptr);
+		break;
+	      case 8:
+		__ustq(val, (unsigned long *)ptr);
+		break;
+	      default:
+	    	bad_unaligned_access_length();
+	}
 }
 
 #endif

@@ -286,9 +286,17 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 
 	count = bh->b_size >> 9;
 	sector = bh->b_rsector;
+
+	/* Uhhuh.. Nasty dead-lock possible here.. */
+	if (buffer_locked(bh))
+		return;
+	/* Maybe the above fixes it, and maybe it doesn't boot. Life is interesting */
+
+	lock_buffer(bh);
+
 	if (blk_size[major])
 		if (blk_size[major][MINOR(bh->b_rdev)] < (sector + count)>>1) {
-			bh->b_state = 0;
+			bh->b_state &= (1 << BH_Lock) | (1 << BH_FreeOnIO);
                         /* This may well happen - the kernel calls bread()
                            without checking the size of the device, e.g.,
                            when mounting a device. */
@@ -298,13 +306,9 @@ static void make_request(int major,int rw, struct buffer_head * bh)
                                kdevname(bh->b_rdev), rw,
                                (sector + count)>>1,
                                blk_size[major][MINOR(bh->b_rdev)]);
+			unlock_buffer(bh);
 			return;
 		}
-	/* Uhhuh.. Nasty dead-lock possible here.. */
-	if (buffer_locked(bh))
-		return;
-	/* Maybe the above fixes it, and maybe it doesn't boot. Life is interesting */
-	lock_buffer(bh);
 
 	rw_ahead = 0;	/* normal case; gets changed below for READA/WRITEA */
 	switch (rw) {

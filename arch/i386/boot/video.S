@@ -880,7 +880,7 @@ vesa1:	seg	gs		! Get next mode in the list
 	cmp	ax,#0x0080	! Check validity of mode ID
 	jc	vesa2
 	or	ah,ah		! Valid ID's are 0x0000-0x007f and 0x0100-0x07ff
-	jz	vesan		! [Certain BIOSes errorneously report 0x80-0xff]
+	jz	vesan		! [Certain BIOSes erroneously report 0x80-0xff]
 	cmp	ax,#0x0800
 	jnc	vesae
 vesa2:	push	cx

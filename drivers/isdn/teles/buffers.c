@@ -1,6 +1,9 @@
-/* $Id: buffers.c,v 1.1 1996/04/13 10:19:28 fritz Exp $
+/* $Id: buffers.c,v 1.2 1996/04/29 22:48:14 fritz Exp $
  *
  * $Log: buffers.c,v $
+ * Revision 1.2  1996/04/29 22:48:14  fritz
+ * Removed compatibility-macros. No longer needed.
+ *
  * Revision 1.1  1996/04/13 10:19:28  fritz
  * Initial revision
  *
@@ -47,7 +50,7 @@ BufPoolAdd(struct BufPool *bp, int priority)
 	printk(KERN_DEBUG "BufPoolAdd bp %x\n", bp);
 #endif
 
-	ptr = (struct Pages *) __get_free_pages(priority,bp->pageorder,0);
+	ptr = (struct Pages *) __get_free_pages(priority, bp->pageorder, 0);
 	if (!ptr) {
 		printk(KERN_WARNING "BufPoolAdd couldn't get pages!\n");
 		return (-1);
