@@ -342,7 +342,6 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 		return 0;
 	}
 
-	port = pp_table[portnum][dev].pdev->port;
 	if (cmd == PPEXCL) {
 		if (pp_table[portnum][dev].pdev) {
 			printk (KERN_DEBUG CHRDEV "%02x: too late for PPEXCL; "
@@ -368,6 +367,7 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 		return -EPERM;
 	}
 
+	port = pp_table[portnum][dev].pdev->port;
 	switch (cmd) {
 		unsigned char reg;
 		unsigned char mask;
@@ -535,6 +535,7 @@ int pp_init (void)
 		return -EIO;
 	}
 
+	memset (pp_table, 0, sizeof (pp_table));
 	printk (KERN_INFO PP_VERSION "\n");
 	return 0;
 }

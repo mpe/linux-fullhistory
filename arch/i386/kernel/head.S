@@ -8,11 +8,12 @@
  */
 
 .text
-#include <linux/tasks.h>
+#include <linux/threads.h>
 #include <linux/linkage.h>
 #include <asm/segment.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
+#include <asm/desc.h>
 
 
 #define CL_MAGIC_ADDR	0x90020
@@ -330,7 +331,7 @@ ignore_int:
  * of tasks we can have..
  */
 #define IDT_ENTRIES	256
-#define GDT_ENTRIES	(12+2*NR_TASKS)
+#define GDT_ENTRIES	(__TSS(NR_CPUS))
 
 
 .globl SYMBOL_NAME(idt)
@@ -519,8 +520,7 @@ ENTRY(empty_zero_page)
 
 ALIGN
 /*
- * This contains up to 8192 quadwords depending on NR_TASKS - 64kB of
- * gdt entries.  Ugh. 
+ * This contains typically 140 quadwords, depending on NR_CPUS.
  *
  * NOTE! Make sure the gdt descriptor in head.S matches this if you
  * change anything.
@@ -542,7 +542,7 @@ ENTRY(gdt_table)
 	.quad 0x00409a0000000000	/* 0x48 APM CS    code */
 	.quad 0x00009a0000000000	/* 0x50 APM CS 16 code (16 bit) */
 	.quad 0x0040920000000000	/* 0x58 APM DS    data */
-	.fill 2*NR_TASKS,8,0		/* space for LDT's and TSS's etc */
+	.fill NR_CPUS*4,8,0		/* space for TSS's and LDT's */
 
 /*
  * This is to aid debugging, the various locking macros will be putting

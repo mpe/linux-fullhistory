@@ -34,6 +34,7 @@ extern int panic_timeout;
 extern int console_loglevel, C_A_D;
 extern int bdf_prm[], bdflush_min[], bdflush_max[];
 extern int sysctl_overcommit_memory;
+extern int max_threads;
 extern int nr_queued_signals, max_queued_signals;
 
 #ifdef CONFIG_KMOD
@@ -207,6 +208,8 @@ static ctl_table kern_table[] = {
 	{KERN_SHMMAX, "shmmax", &shmmax, sizeof (int),
 	 0644, NULL, &proc_dointvec},
 #endif
+	{KERN_MAX_THREADS, "threads-max", &max_threads, sizeof(int),
+	 0644, NULL, &proc_dointvec},
 	{0}
 };
 

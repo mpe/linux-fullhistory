@@ -27,29 +27,15 @@ static void release(struct task_struct * p)
 	if (p != current) {
 #ifdef __SMP__
 		/*
-		 * Wait to make sure the process isn't active on any
-		 * other CPU
+		 * Wait to make sure the process isn't on the
+		 * runqueue (active on some other CPU still)
 		 */
-		for (;;)  {
-			int has_cpu;
-			spin_lock_irq(&runqueue_lock);
-			has_cpu = p->has_cpu;
-			spin_unlock_irq(&runqueue_lock);
-			if (!has_cpu)
-				break;
-			do {
-				barrier();
-			} while (p->has_cpu);
-		}
+		do {
+			barrier();
+		} while (p->has_cpu);
 #endif
 		free_uid(p);
-		nr_tasks--;
-		add_free_taskslot(p->tarray_ptr);
-
-		write_lock_irq(&tasklist_lock);
-		unhash_pid(p);
-		REMOVE_LINKS(p);
-		write_unlock_irq(&tasklist_lock);
+		unhash_process(p);
 
 		release_thread(p);
 		current->cmin_flt += p->min_flt + p->cmin_flt;

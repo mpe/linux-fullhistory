@@ -100,7 +100,8 @@ enum
 	KERN_SHMMAX=34,         /* int: Maximum shared memory segment */
 	KERN_MSGMAX=35,         /* int: Maximum size of a messege */
 	KERN_MSGMNB=36,         /* int: Maximum message queue size */
-	KERN_MSGPOOL=37         /* int: Maximum system message pool size */
+	KERN_MSGPOOL=37,        /* int: Maximum system message pool size */
+	KERN_MAX_THREADS=38     /* int: Maximum nr of threads in the system */
 };
 
 

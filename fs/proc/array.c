@@ -223,7 +223,7 @@ static int get_loadavg(char * buffer)
 		LOAD_INT(a), LOAD_FRAC(a),
 		LOAD_INT(b), LOAD_FRAC(b),
 		LOAD_INT(c), LOAD_FRAC(c),
-		nr_running, nr_tasks, last_pid);
+		nr_running, nr_threads, last_pid);
 }
 
 static int get_kstat(char * buffer)
@@ -312,7 +312,7 @@ static int get_uptime(char * buffer)
 	unsigned long idle;
 
 	uptime = jiffies;
-	idle = task[0]->times.tms_utime + task[0]->times.tms_stime;
+	idle = init_tasks[0]->times.tms_utime + init_tasks[0]->times.tms_stime;
 
 	/* The formula for the fraction parts really is ((t * 100) / HZ) % 100, but
 	   that would overflow about every five days at HZ == 100.
@@ -495,7 +495,7 @@ static unsigned long get_wchan(struct task_struct *p)
 		int count = 0;
 
 		stack_page = (unsigned long)p;
-		esp = p->tss.esp;
+		esp = p->thread.esp;
 		if (!stack_page || esp < stack_page || esp >= 8188+stack_page)
 			return 0;
 		/* include/asm-i386/system.h:switch_to() pushes ebp last. */

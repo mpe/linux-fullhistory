@@ -28,7 +28,7 @@
 	{ _STK_LIM, LONG_MAX },				\
 	{        0, LONG_MAX },				\
 	{ LONG_MAX, LONG_MAX },				\
-	{ MAX_TASKS_PER_USER, MAX_TASKS_PER_USER },	\
+	{ 0, 0 },					\
 	{ NR_OPEN, NR_OPEN },				\
 	{ LONG_MAX, LONG_MAX },				\
 	{ LONG_MAX, LONG_MAX },				\

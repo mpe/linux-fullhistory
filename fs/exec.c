@@ -366,7 +366,7 @@ end_readexec:
 static int exec_mmap(void)
 {
 	struct mm_struct * mm, * old_mm;
-	int retval, nr;
+	int retval;
 
 	if (atomic_read(&current->mm->count) == 1) {
 		flush_cache_mm(current->mm);
@@ -386,10 +386,9 @@ static int exec_mmap(void)
 	mm->total_vm = 0;
 	mm->rss = 0;
 	/*
-	 * Make sure we have a private ldt if needed ...
+	 * Make sure we have a private LDT if needed ...
 	 */
-	nr = current->tarray_ptr - &task[0]; 
-	copy_segments(nr, current, mm);
+	copy_segments(current, mm);
 
 	old_mm = current->mm;
 	current->mm = mm;
@@ -408,7 +407,7 @@ static int exec_mmap(void)
 fail_restore:
 	current->mm = old_mm;
 	/* restore the ldt for this task */
-	copy_segments(nr, current, NULL);
+	copy_segments(current, NULL);
 	release_segments(mm);
 	kmem_cache_free(mm_cachep, mm);
 

@@ -67,6 +67,7 @@
  *                     other than i386
  *    15.06.99   0.12  Fix bad allocation bug.
  *                     Thanks to Deti Fliegl <fliegl@in.tum.de>
+ *    28.06.99   0.13  Add pci_set_master
  *
  */
 
@@ -2735,7 +2736,7 @@ int __init init_es1371(void)
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1371: version v0.12 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1371: version v0.13 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1371, pcidev))) {
 		if (pcidev->base_address[0] == 0 || 
@@ -2792,6 +2793,7 @@ int __init init_es1371(void)
 		outl(s->ctrl, s->io+ES1371_REG_CONTROL);
 		outl(s->sctrl, s->io+ES1371_REG_SERIAL_CONTROL);
 		outl(0, s->io+ES1371_REG_LEGACY);
+		pci_set_master(pcidev);  /* enable bus mastering */
 		/* AC97 warm reset to start the bitclk */
 		outl(s->ctrl | CTRL_SYNCRES, s->io+ES1371_REG_CONTROL);
 		udelay(2);

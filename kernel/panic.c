@@ -40,7 +40,7 @@ NORET_TYPE void panic(const char * fmt, ...)
 	vsprintf(buf, fmt, args);
 	va_end(args);
 	printk(KERN_EMERG "Kernel panic: %s\n",buf);
-	if (current == task[0])
+	if (current == init_tasks[0])
 		printk(KERN_EMERG "In swapper task - not syncing\n");
 	else if (in_interrupt())
 		printk(KERN_EMERG "In interrupt handler - not syncing\n");

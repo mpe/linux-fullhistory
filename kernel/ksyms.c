@@ -313,6 +313,8 @@ EXPORT_SYMBOL(release_resource);
 EXPORT_SYMBOL(__request_region);
 EXPORT_SYMBOL(__check_region);
 EXPORT_SYMBOL(__release_region);
+EXPORT_SYMBOL(pci_io_resource);
+EXPORT_SYMBOL(pci_mem_resource);
 
 /* process management */
 EXPORT_SYMBOL(__wake_up);

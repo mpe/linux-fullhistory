@@ -104,7 +104,7 @@ int smp_found_config=0;					/* Have we found an SMP box 				*/
 
 unsigned long cpu_present_map = 0;			/* Bitmask of physically existing CPUs 				*/
 unsigned long cpu_online_map = 0;			/* Bitmask of currently online CPUs 				*/
-int smp_num_cpus = 1;					/* Total count of live CPUs 				*/
+int smp_num_cpus = 0;					/* Total count of live CPUs 				*/
 int smp_threads_ready=0;				/* Set when the idlers are all forked 			*/
 volatile int cpu_number_map[NR_CPUS];			/* which CPU maps to which logical number		*/
 volatile int __cpu_logical_map[NR_CPUS];			/* which logical number maps to which CPU		*/
@@ -224,6 +224,7 @@ static char *mpc_family(int family,int model)
 	sprintf(n,"Unknown CPU [%d:%d]",family, model);
 	return n;
 }
+
 
 /*
  *	Read the MPC
@@ -637,6 +638,8 @@ void __init init_smp_config (void)
 #endif
 }
 
+
+
 /*
  *	Trampoline 80x86 program as an array.
  */
@@ -882,6 +885,7 @@ int __init start_secondary(void *unused)
 	 * booting is too fragile that we want to limit the
 	 * things done here to the most necessary things.
 	 */
+	cpu_init();
 	smp_callin();
 	while (!atomic_read(&smp_commenced))
 		/* nothing */ ;
@@ -896,15 +900,6 @@ int __init start_secondary(void *unused)
  */
 void __init initialize_secondary(void)
 {
-	struct thread_struct * p = &current->tss;
-
-	/*
-	 * Load up the LDT and the task register.
-	 */
-	asm volatile("lldt %%ax": :"a" (p->ldt));
-	asm volatile("ltr %%ax": :"a" (p->tr));
-	stts();
-
 	/*
 	 * We don't actually need to load the full TSS,
 	 * basically just the stack pointer and the eip.
@@ -914,7 +909,7 @@ void __init initialize_secondary(void)
 		"movl %0,%%esp\n\t"
 		"jmp *%1"
 		:
-		:"r" (p->esp),"r" (p->eip));
+		:"r" (current->thread.esp),"r" (current->thread.eip));
 }
 
 extern struct {
@@ -937,7 +932,13 @@ static void __init do_boot_cpu(int i)
 	kernel_thread(start_secondary, NULL, CLONE_PID);
 	cpucount++;
 
-	idle = task[cpucount];
+	/*
+	 * We remove it from the pidhash and the runqueue
+	 * once we got the process:
+	 */
+	idle = init_task.prev_task;
+
+	init_tasks[cpucount] = idle;
 	if (!idle)
 		panic("No idle process for CPU %d", i);
 
@@ -945,7 +946,10 @@ static void __init do_boot_cpu(int i)
 	__cpu_logical_map[cpucount] = i;
 	cpu_number_map[i] = cpucount;
 	idle->has_cpu = 1; /* we schedule the first task manually */
-	idle->tss.eip = (unsigned long) start_secondary;
+	idle->thread.eip = (unsigned long) start_secondary;
+
+	del_from_runqueue(idle);
+	unhash_process(idle);
 
 	/* start_eip had better be page-aligned! */
 	start_eip = setup_trampoline();
@@ -1179,7 +1183,6 @@ void __init smp_boot_cpus(void)
 	/*  Must be done before other processors booted  */
 	mtrr_init_boot_cpu ();
 #endif
-	init_idle();
 	/*
 	 *	Initialize the logical to physical CPU number mapping
 	 *	and the per-CPU profiling counter/multiplier
@@ -1209,6 +1212,8 @@ void __init smp_boot_cpus(void)
 	cpu_present_map |= (1 << hard_smp_processor_id());
 
 	cpu_number_map[boot_cpu_id] = 0;
+
+	init_idle();
 
 	/*
 	 * If we couldnt find an SMP configuration at boot time,
@@ -1356,30 +1361,32 @@ void __init smp_boot_cpus(void)
 	 */
 
 	SMP_PRINTK(("Before bogomips.\n"));
-	if (cpucount==0)
-	{
+	if (!cpucount) {
 		printk(KERN_ERR "Error: only one processor found.\n");
 		cpu_online_map = (1<<hard_smp_processor_id());
-	}
-	else
-	{
-		unsigned long bogosum=0;
-		for(i=0;i<32;i++)
-		{
+	} else {
+		unsigned long bogosum = 0;
+		for(i = 0; i < 32; i++)
 			if (cpu_online_map&(1<<i))
 				bogosum+=cpu_data[i].loops_per_sec;
-		}
 		printk(KERN_INFO "Total of %d processors activated (%lu.%02lu BogoMIPS).\n",
 			cpucount+1,
 			(bogosum+2500)/500000,
 			((bogosum+2500)/5000)%100);
 		SMP_PRINTK(("Before bogocount - setting activated=1.\n"));
-		smp_activated=1;
-		smp_num_cpus=cpucount+1;
+		smp_activated = 1;
 	}
+	smp_num_cpus = cpucount + 1;
+
 	if (smp_b_stepping)
 		printk(KERN_WARNING "WARNING: SMP operation may be unreliable with B stepping processors.\n");
 	SMP_PRINTK(("Boot done.\n"));
+
+	/*
+	 * now we know the other CPUs have fired off and we know our
+	 * APIC ID, so we can go init the TSS and stuff:
+	 */
+	cpu_init();
 
 	cache_APIC_registers();
 #ifndef CONFIG_VISWS

@@ -22,9 +22,9 @@ extern void FASTCALL(__switch_to(struct task_struct *prev, struct task_struct *n
 		     "popl %%ebp\n\t"					\
 		     "popl %%edi\n\t"					\
 		     "popl %%esi\n\t"					\
-		     :"=m" (prev->tss.esp),"=m" (prev->tss.eip),	\
+		     :"=m" (prev->thread.esp),"=m" (prev->thread.eip),	\
 		      "=b" (last)					\
-		     :"m" (next->tss.esp),"m" (next->tss.eip),		\
+		     :"m" (next->thread.esp),"m" (next->thread.eip),	\
 		      "a" (prev), "d" (next),				\
 		      "b" (prev));					\
 } while (0)

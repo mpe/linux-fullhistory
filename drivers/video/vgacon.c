@@ -186,18 +186,21 @@ __initfunc(static const char *vgacon_startup(void))
 		vga_video_port_val = 0x3b5;
 		if ((ORIG_VIDEO_EGA_BX & 0xff) != 0x10)
 		{
+			static struct resource ega_console_resource = { "ega", 0x3B0, 0x3BF };
 			vga_video_type = VIDEO_TYPE_EGAM;
 			vga_vram_end = 0xb8000;
 			display_desc = "EGA+";
-			request_region(0x3b0,16,"ega");
+			request_resource(&pci_io_resource, &ega_console_resource);
 		}
 		else
 		{
+			static struct resource mda1_console_resource = { "mda", 0x3B0, 0x3BB };
+			static struct resource mda2_console_resource = { "mda", 0x3BF, 0x3BF };
 			vga_video_type = VIDEO_TYPE_MDA;
 			vga_vram_end = 0xb2000;
 			display_desc = "*MDA";
-			request_region(0x3b0,12,"mda");
-			request_region(0x3bf, 1,"mda");
+			request_resource(&pci_io_resource, &mda1_console_resource);
+			request_resource(&pci_io_resource, &mda2_console_resource);
 			vga_video_font_height = 14;
 		}
 	}
@@ -214,13 +217,15 @@ __initfunc(static const char *vgacon_startup(void))
 			vga_vram_end = 0xc0000;
 
 			if (!ORIG_VIDEO_ISVGA) {
+				static struct resource ega_console_resource = { "ega", 0x3C0, 0x3DF };
 				vga_video_type = VIDEO_TYPE_EGAC;
 				display_desc = "EGA";
-				request_region(0x3c0,32,"ega");
+				request_resource(&pci_io_resource, &ega_console_resource);
 			} else {
+				static struct resource vga_console_resource = { "vga+", 0x3C0, 0x3DF };
 				vga_video_type = VIDEO_TYPE_VGAC;
 				display_desc = "VGA+";
-				request_region(0x3c0,32,"vga+");
+				request_resource(&pci_io_resource, &vga_console_resource);
 
 #ifdef VGA_CAN_DO_64KB
 				/*
@@ -261,10 +266,11 @@ __initfunc(static const char *vgacon_startup(void))
 		}
 		else
 		{
+			static struct resource cga_console_resource = { "cga", 0x3D4, 0x3D5 };
 			vga_video_type = VIDEO_TYPE_CGA;
 			vga_vram_end = 0xba000;
 			display_desc = "*CGA";
-			request_region(0x3d4,2,"cga");
+			request_resource(&pci_io_resource, &cga_console_resource);
 			vga_video_font_height = 8;
 		}
 	}

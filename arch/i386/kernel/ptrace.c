@@ -45,7 +45,7 @@ static inline int get_stack_long(struct task_struct *task, int offset)
 {
 	unsigned char *stack;
 
-	stack = (unsigned char *)task->tss.esp0;
+	stack = (unsigned char *)task->thread.esp0;
 	stack += offset;
 	return (*((int *)stack));
 }
@@ -61,7 +61,7 @@ static inline int put_stack_long(struct task_struct *task, int offset,
 {
 	unsigned char * stack;
 
-	stack = (unsigned char *) task->tss.esp0;
+	stack = (unsigned char *) task->thread.esp0;
 	stack += offset;
 	*(unsigned long *) stack = data;
 	return 0;
@@ -76,12 +76,12 @@ static int putreg(struct task_struct *child,
 		case FS:
 			if (value && (value & 3) != 3)
 				return -EIO;
-			child->tss.fs = value;
+			child->thread.fs = value;
 			return 0;
 		case GS:
 			if (value && (value & 3) != 3)
 				return -EIO;
-			child->tss.gs = value;
+			child->thread.gs = value;
 			return 0;
 		case DS:
 		case ES:
@@ -112,10 +112,10 @@ static unsigned long getreg(struct task_struct *child,
 
 	switch (regno >> 2) {
 		case FS:
-			retval = child->tss.fs;
+			retval = child->thread.fs;
 			break;
 		case GS:
-			retval = child->tss.gs;
+			retval = child->thread.gs;
 			break;
 		case DS:
 		case ES:
@@ -229,7 +229,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			   addr <= (long) &dummy->u_debugreg[7]){
 				addr -= (long) &dummy->u_debugreg[0];
 				addr = addr >> 2;
-				tmp = child->tss.debugreg[addr];
+				tmp = child->thread.debugreg[addr];
 			};
 			ret = put_user(tmp,(unsigned long *) data);
 			goto out;
@@ -278,7 +278,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 
 			  addr -= (long) &dummy->u_debugreg;
 			  addr = addr >> 2;
-			  child->tss.debugreg[addr] = data;
+			  child->thread.debugreg[addr] = data;
 			  ret = 0;
 			  goto out;
 		  };
@@ -409,18 +409,18 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			ret = 0;
 			if ( !child->used_math ) {
 			  /* Simulate an empty FPU. */
-			  child->tss.i387.hard.cwd = 0xffff037f;
-			  child->tss.i387.hard.swd = 0xffff0000;
-			  child->tss.i387.hard.twd = 0xffffffff;
+			  child->thread.i387.hard.cwd = 0xffff037f;
+			  child->thread.i387.hard.swd = 0xffff0000;
+			  child->thread.i387.hard.twd = 0xffffffff;
 			}
 #ifdef CONFIG_MATH_EMULATION
 			if ( boot_cpu_data.hard_math ) {
 #endif
-				__copy_to_user((void *)data, &child->tss.i387.hard,
+				__copy_to_user((void *)data, &child->thread.i387.hard,
 						sizeof(struct user_i387_struct));
 #ifdef CONFIG_MATH_EMULATION
 			} else {
-			  save_i387_soft(&child->tss.i387.soft,
+			  save_i387_soft(&child->thread.i387.soft,
 					 (struct _fpstate *)data);
 			}
 #endif
@@ -438,11 +438,11 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 #ifdef CONFIG_MATH_EMULATION
 			if ( boot_cpu_data.hard_math ) {
 #endif
-			  __copy_from_user(&child->tss.i387.hard, (void *)data,
+			  __copy_from_user(&child->thread.i387.hard, (void *)data,
 					   sizeof(struct user_i387_struct));
 #ifdef CONFIG_MATH_EMULATION
 			} else {
-			  restore_i387_soft(&child->tss.i387.soft,
+			  restore_i387_soft(&child->thread.i387.soft,
 					    (struct _fpstate *)data);
 			}
 #endif

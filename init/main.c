@@ -75,7 +75,7 @@ extern void init_IRQ(void);
 extern void init_modules(void);
 extern long console_init(long, long);
 extern void sock_init(void);
-extern void uidcache_init(void);
+extern void fork_init(unsigned long);
 extern void mca_init(void);
 extern void sbus_init(void);
 extern void ppc_init(void);
@@ -1187,7 +1187,7 @@ asmlinkage void __init start_kernel(void)
 #ifdef CONFIG_PROC_FS
 	proc_root_init();
 #endif
-	uidcache_init();
+	fork_init(memory_end-memory_start);
 	filescache_init();
 	dcache_init();
 	vma_init();

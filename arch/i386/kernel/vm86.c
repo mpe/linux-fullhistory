@@ -48,8 +48,8 @@
 /*
  * virtual flags (16 and 32-bit versions)
  */
-#define VFLAGS	(*(unsigned short *)&(current->tss.v86flags))
-#define VEFLAGS	(current->tss.v86flags)
+#define VFLAGS	(*(unsigned short *)&(current->thread.v86flags))
+#define VEFLAGS	(current->thread.v86flags)
 
 #define set_flags(X,new,mask) \
 ((X) = ((X) & ~(mask)) | ((new) & (mask)))
@@ -65,25 +65,27 @@
 asmlinkage struct pt_regs * FASTCALL(save_v86_state(struct kernel_vm86_regs * regs));
 struct pt_regs * save_v86_state(struct kernel_vm86_regs * regs)
 {
+	struct hard_thread_struct *tss;
 	struct pt_regs *ret;
 	unsigned long tmp;
 
 	lock_kernel();
-	if (!current->tss.vm86_info) {
+	if (!current->thread.vm86_info) {
 		printk("no vm86_info: BAD\n");
 		do_exit(SIGSEGV);
 	}
-	set_flags(regs->eflags, VEFLAGS, VIF_MASK | current->tss.v86mask);
-	tmp = copy_to_user(&current->tss.vm86_info->regs,regs, VM86_REGS_SIZE1);
-	tmp += copy_to_user(&current->tss.vm86_info->regs.VM86_REGS_PART2,
+	set_flags(regs->eflags, VEFLAGS, VIF_MASK | current->thread.v86mask);
+	tmp = copy_to_user(&current->thread.vm86_info->regs,regs, VM86_REGS_SIZE1);
+	tmp += copy_to_user(&current->thread.vm86_info->regs.VM86_REGS_PART2,
 		&regs->VM86_REGS_PART2, VM86_REGS_SIZE2);
-	tmp += put_user(current->tss.screen_bitmap,&current->tss.vm86_info->screen_bitmap);
+	tmp += put_user(current->thread.screen_bitmap,&current->thread.vm86_info->screen_bitmap);
 	if (tmp) {
 		printk("vm86: could not access userspace vm86_info\n");
 		do_exit(SIGSEGV);
 	}
-	current->tss.esp0 = current->tss.saved_esp0;
-	current->tss.saved_esp0 = 0;
+	tss = init_tss + smp_processor_id();
+	tss->esp0 = current->thread.esp0 = current->thread.saved_esp0;
+	current->thread.saved_esp0 = 0;
 	ret = KVM86->regs32;
 	unlock_kernel();
 	return ret;
@@ -138,7 +140,7 @@ asmlinkage int sys_vm86old(struct vm86_struct * v86)
 
 	lock_kernel();
 	tsk = current;
-	if (tsk->tss.saved_esp0)
+	if (tsk->thread.saved_esp0)
 		goto out;
 	tmp  = copy_from_user(&info, v86, VM86_REGS_SIZE1);
 	tmp += copy_from_user(&info.regs.VM86_REGS_PART2, &v86->regs.VM86_REGS_PART2,
@@ -148,7 +150,7 @@ asmlinkage int sys_vm86old(struct vm86_struct * v86)
 		goto out;
 	memset(&info.vm86plus, 0, (int)&info.regs32 - (int)&info.vm86plus);
 	info.regs32 = (struct pt_regs *) &v86;
-	tsk->tss.vm86_info = v86;
+	tsk->thread.vm86_info = v86;
 	do_sys_vm86(&info, tsk);
 	ret = 0;	/* we never return here */
 out:
@@ -188,7 +190,7 @@ asmlinkage int sys_vm86(unsigned long subfunction, struct vm86plus_struct * v86)
 
 	/* we come here only for functions VM86_ENTER, VM86_ENTER_NO_BYPASS */
 	ret = -EPERM;
-	if (tsk->tss.saved_esp0)
+	if (tsk->thread.saved_esp0)
 		goto out;
 	tmp  = copy_from_user(&info, v86, VM86_REGS_SIZE1);
 	tmp += copy_from_user(&info.regs.VM86_REGS_PART2, &v86->regs.VM86_REGS_PART2,
@@ -198,7 +200,7 @@ asmlinkage int sys_vm86(unsigned long subfunction, struct vm86plus_struct * v86)
 		goto out;
 	info.regs32 = (struct pt_regs *) &subfunction;
 	info.vm86plus.is_vm86pus = 1;
-	tsk->tss.vm86_info = (struct vm86_struct *)v86;
+	tsk->thread.vm86_info = (struct vm86_struct *)v86;
 	do_sys_vm86(&info, tsk);
 	ret = 0;	/* we never return here */
 out:
@@ -209,6 +211,7 @@ out:
 
 static void do_sys_vm86(struct kernel_vm86_struct *info, struct task_struct *tsk)
 {
+	struct hard_thread_struct *tss;
 /*
  * make sure the vm86() system call doesn't try to do anything silly
  */
@@ -231,16 +234,16 @@ static void do_sys_vm86(struct kernel_vm86_struct *info, struct task_struct *tsk
 
 	switch (info->cpu_type) {
 		case CPU_286:
-			tsk->tss.v86mask = 0;
+			tsk->thread.v86mask = 0;
 			break;
 		case CPU_386:
-			tsk->tss.v86mask = NT_MASK | IOPL_MASK;
+			tsk->thread.v86mask = NT_MASK | IOPL_MASK;
 			break;
 		case CPU_486:
-			tsk->tss.v86mask = AC_MASK | NT_MASK | IOPL_MASK;
+			tsk->thread.v86mask = AC_MASK | NT_MASK | IOPL_MASK;
 			break;
 		default:
-			tsk->tss.v86mask = ID_MASK | AC_MASK | NT_MASK | IOPL_MASK;
+			tsk->thread.v86mask = ID_MASK | AC_MASK | NT_MASK | IOPL_MASK;
 			break;
 	}
 
@@ -248,10 +251,11 @@ static void do_sys_vm86(struct kernel_vm86_struct *info, struct task_struct *tsk
  * Save old state, set default return value (%eax) to 0
  */
 	info->regs32->eax = 0;
-	tsk->tss.saved_esp0 = tsk->tss.esp0;
-	tsk->tss.esp0 = (unsigned long) &info->VM86_TSS_ESP0;
+	tsk->thread.saved_esp0 = tsk->thread.esp0;
+	tss = init_tss + smp_processor_id();
+	tss->esp0 = tsk->thread.esp0 = (unsigned long) &info->VM86_TSS_ESP0;
 
-	tsk->tss.screen_bitmap = info->screen_bitmap;
+	tsk->thread.screen_bitmap = info->screen_bitmap;
 	if (info->flags & VM86_SCREEN_BITMAP)
 		mark_screen_rdonly(tsk);
 	unlock_kernel();
@@ -295,7 +299,7 @@ static inline void clear_TF(struct kernel_vm86_regs * regs)
 
 static inline void set_vflags_long(unsigned long eflags, struct kernel_vm86_regs * regs)
 {
-	set_flags(VEFLAGS, eflags, current->tss.v86mask);
+	set_flags(VEFLAGS, eflags, current->thread.v86mask);
 	set_flags(regs->eflags, eflags, SAFE_MASK);
 	if (eflags & IF_MASK)
 		set_IF(regs);
@@ -303,7 +307,7 @@ static inline void set_vflags_long(unsigned long eflags, struct kernel_vm86_regs
 
 static inline void set_vflags_short(unsigned short flags, struct kernel_vm86_regs * regs)
 {
-	set_flags(VFLAGS, flags, current->tss.v86mask);
+	set_flags(VFLAGS, flags, current->thread.v86mask);
 	set_flags(regs->eflags, flags, SAFE_MASK);
 	if (flags & IF_MASK)
 		set_IF(regs);
@@ -315,7 +319,7 @@ static inline unsigned long get_vflags(struct kernel_vm86_regs * regs)
 
 	if (VEFLAGS & VIF_MASK)
 		flags |= IF_MASK;
-	return flags | (VEFLAGS & current->tss.v86mask);
+	return flags | (VEFLAGS & current->thread.v86mask);
 }
 
 static inline int is_revectored(int nr, struct revectored_struct * bitmap)
@@ -447,8 +451,8 @@ int handle_vm86_trap(struct kernel_vm86_regs * regs, long error_code, int trapno
 		spin_unlock_irqrestore(&current->sigmask_lock, flags);
 	}
 	send_sig(SIGTRAP, current, 1);
-	current->tss.trap_no = trapno;
-	current->tss.error_code = error_code;
+	current->thread.trap_no = trapno;
+	current->thread.error_code = error_code;
 	return 0;
 }
 

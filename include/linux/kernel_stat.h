@@ -3,7 +3,7 @@
 
 #include <asm/irq.h>
 #include <linux/smp.h>
-#include <linux/tasks.h>
+#include <linux/threads.h>
 
 /*
  * 'kernel_stat.h' contains the definitions needed for doing

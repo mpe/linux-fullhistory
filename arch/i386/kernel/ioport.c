@@ -54,7 +54,8 @@ static void set_bitmap(unsigned long *bitmap, short base, short extent, int new_
  */
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int turn_on)
 {
-	struct thread_struct * t = &current->tss;
+	struct soft_thread_struct * t = &current->thread;
+	struct hard_thread_struct * tss = init_tss + smp_processor_id();
 
 	if ((from + num <= from) || (from + num > IO_BITMAP_SIZE*32))
 		return -EINVAL;
@@ -65,14 +66,24 @@ asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int turn_on)
 	 * IO bitmap up. ioperm() is much less timing critical than clone(),
 	 * this is why we delay this operation until now:
 	 */
-#define IO_BITMAP_OFFSET offsetof(struct thread_struct,io_bitmap)
-
-	if (t->bitmap != IO_BITMAP_OFFSET) {
-		t->bitmap = IO_BITMAP_OFFSET;
+	if (!t->ioperm) {
+		/*
+		 * just in case ...
+		 */
 		memset(t->io_bitmap,0xff,(IO_BITMAP_SIZE+1)*4);
+		t->ioperm = 1;
+		/*
+		 * this activates it in the TSS
+		 */
+		tss->bitmap = IO_BITMAP_OFFSET;
 	}
-		
-	set_bitmap((unsigned long *)t->io_bitmap, from, num, !turn_on);
+
+	/*
+	 * do it in the per-thread copy and in the TSS ...
+	 */
+	set_bitmap(t->io_bitmap, from, num, !turn_on);
+	set_bitmap(tss->io_bitmap, from, num, !turn_on);
+
 	return 0;
 }
 

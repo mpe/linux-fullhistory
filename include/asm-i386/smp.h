@@ -16,7 +16,7 @@
 #ifdef __SMP__
 #ifndef ASSEMBLY
 
-#include <linux/tasks.h>
+#include <linux/threads.h>
 #include <linux/ptrace.h>
 
 /*

@@ -845,7 +845,7 @@ register CRCCONTROL1 {
 	bit	CRCENDCHKEN	0x20 /* CRC End Check Enable */
 	bit	CRCREQCHKEN	0x10
 	bit	TARGCRCENDEN	0x08 /* Enable End CRC transfer when target */
-	bit	TARGCRCCNTEN	0x04 /* Enable CRC transfer when target */
+	bit	TARGCRCCNTEN	0x40 /* Enable CRC transfer when target */
 }
 
 /*

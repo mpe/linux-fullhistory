@@ -70,6 +70,7 @@
  *                     Note: dmaio hack might still be wrong on archs other than i386
  *    15.06.99   0.15  Fix bad allocation bug.
  *                     Thanks to Deti Fliegl <fliegl@in.tum.de>
+ *    28.06.99   0.16  Add pci_set_master
  *
  */
 
@@ -2324,7 +2325,7 @@ int __init init_sonicvibes(void)
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "sv: version v0.15 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "sv: version v0.16 time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");
@@ -2450,6 +2451,7 @@ int __init init_sonicvibes(void)
 			goto err_dev3;
 		if ((s->dev_dmfm = register_sound_special(&sv_dmfm_fops, 15 /* ?? */)) < 0)
 			goto err_dev4;
+		pci_set_master(pcidev);  /* enable bus mastering */
 		/* initialize the chips */
 		fs = get_fs();
 		set_fs(KERNEL_DS);

@@ -13,7 +13,7 @@
 #include <linux/malloc.h>
 
 struct resource pci_io_resource = { "PCI IO", 0x0000, 0xFFFF };
-struct resource pci_mem_resource = { "PCI mem",	0x00000000, 0xFFFFFFFF };
+struct resource pci_mem_resource = { "PCI mem", 0x00000000, 0xFFFFFFFF };
 
 /*
  * This generates reports for /proc/ioports and /proc/memory
@@ -135,6 +135,7 @@ int __check_region(struct resource *parent, unsigned long start, unsigned long n
 		return -EBUSY;
 
 	release_resource(res);
+	kfree(res);
 	return 0;
 }
 
@@ -147,15 +148,16 @@ void __release_region(struct resource *parent, unsigned long start, unsigned lon
 	end = start + n - 1;
 
 	for (;;) {
-		struct resource *tmp = *p;
+		struct resource *res = *p;
 
-		if (!tmp)
+		if (!res)
 			break;
-		if (tmp->start == start && tmp->end == end) {
-			*p = tmp->sibling;
+		if (res->start == start && res->end == end) {
+			*p = res->sibling;
+			kfree(res);
 			break;
 		}
-		p = &tmp->sibling;
+		p = &res->sibling;
 	}
 }
 

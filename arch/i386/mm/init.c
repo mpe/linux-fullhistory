@@ -181,34 +181,6 @@ extern unsigned long free_area_init(unsigned long, unsigned long);
 extern char _text, _etext, _edata, __bss_start, _end;
 extern char __init_begin, __init_end;
 
-#define X86_CR4_VME		0x0001		/* enable vm86 extensions */
-#define X86_CR4_PVI		0x0002		/* virtual interrupts flag enable */
-#define X86_CR4_TSD		0x0004		/* disable time stamp at ipl 3 */
-#define X86_CR4_DE		0x0008		/* enable debugging extensions */
-#define X86_CR4_PSE		0x0010		/* enable page size extensions */
-#define X86_CR4_PAE		0x0020		/* enable physical address extensions */
-#define X86_CR4_MCE		0x0040		/* Machine check enable */
-#define X86_CR4_PGE		0x0080		/* enable global pages */
-#define X86_CR4_PCE		0x0100		/* enable performance counters at ipl 3 */
-
-/*
- * Save the cr4 feature set we're using (ie
- * Pentium 4MB enable and PPro Global page
- * enable), so that any CPU's that boot up
- * after us can get the correct flags.
- */
-unsigned long mmu_cr4_features __initdata = 0;
-
-static inline void set_in_cr4(unsigned long mask)
-{
-	mmu_cr4_features |= mask;
-	__asm__("movl %%cr4,%%eax\n\t"
-		"orl %0,%%eax\n\t"
-		"movl %%eax,%%cr4\n"
-		: : "irg" (mask)
-		:"ax");
-}
-
 /*
  * allocate page table(s) for compile-time fixed mappings
  */

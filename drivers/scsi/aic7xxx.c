@@ -242,7 +242,6 @@
 #include <linux/proc_fs.h>
 #include <linux/blk.h>
 #include <linux/tqueue.h>
-#include <linux/tasks.h>
 #include "sd.h"
 #include "scsi.h"
 #include "hosts.h"
@@ -270,7 +269,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
     0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-#define AIC7XXX_C_VERSION  "5.1.18"
+#define AIC7XXX_C_VERSION  "5.1.17"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
@@ -7186,7 +7185,7 @@ read_284x_seeprom(struct aic7xxx_host *p, struct seeprom_config *sc)
 static int
 acquire_seeprom(struct aic7xxx_host *p)
 {
-  int count=0;
+  int wait;
 
   /*
    * Request access of the memory port.  When access is
@@ -7196,10 +7195,11 @@ acquire_seeprom(struct aic7xxx_host *p)
    * should be no contention.
    */
   aic_outb(p, SEEMS, SEECTL);
-  while( ((aic_inb(p, SEECTL) & SEERDY) == 0) && count < 1000) {
-    mb();
-    udelay(1);
-    count++;
+  wait = 1000;  /* 1000 msec = 1 second */
+  while ((wait > 0) && ((aic_inb(p, SEECTL) & SEERDY) == 0))
+  {
+    wait--;
+    mdelay(1);  /* 1 msec */
   }
   if ((aic_inb(p, SEECTL) & SEERDY) == 0)
   {
@@ -7411,33 +7411,6 @@ read_seeprom(struct aic7xxx_host *p, int offset,
 
 /*+F*************************************************************************
  * Function:
- *   read_brdctl
- *
- * Description:
- *   Reads the BRDCTL register.
- *-F*************************************************************************/
-static unsigned char
-read_brdctl(struct aic7xxx_host *p)
-{
-  unsigned char brdctl;
-
-  if ((p->chip & AHC_CHIPID_MASK) == AHC_AIC7895)
-  {
-    brdctl = BRDRW;
-    if (p->flags & AHC_CHNLB)
-      brdctl |= BRDCS;
-  }
-  else if (p->features & AHC_ULTRA2)
-    brdctl = BRDRW_ULTRA2;
-  else
-    brdctl = BRDRW | BRDCS;
-  aic_outb(p, brdctl, BRDCTL);
-  udelay(10);
-  return (aic_inb(p, BRDCTL));
-}
-
-/*+F*************************************************************************
- * Function:
  *   write_brdctl
  *
  * Description:
@@ -7453,36 +7426,58 @@ write_brdctl(struct aic7xxx_host *p, unsigned char value)
     brdctl = BRDSTB;
     if (p->flags & AHC_CHNLB)
       brdctl |= BRDCS;
-    aic_outb(p, brdctl, BRDCTL);
-    udelay(4);
-    brdctl |= value;
   }
   else if (p->features & AHC_ULTRA2)
-  {
-    brdctl = value;
-  }
+    brdctl = 0;
   else
-  {
     brdctl = BRDSTB | BRDCS;
-    aic_outb(p, brdctl, BRDCTL);
-    udelay(4);
-    brdctl |= value;
-  }
   aic_outb(p, brdctl, BRDCTL);
-  udelay(4);
+  udelay(1);
+  brdctl |= value;
+  aic_outb(p, brdctl, BRDCTL);
+  udelay(1);
   if (p->features & AHC_ULTRA2)
     brdctl |= BRDSTB_ULTRA2;
   else
     brdctl &= ~BRDSTB;
   aic_outb(p, brdctl, BRDCTL);
-  udelay(4);
+  udelay(1);
   if (p->features & AHC_ULTRA2)
-    brdctl &= ~BRDSTB_ULTRA2;
+    brdctl = 0;
   else
     brdctl &= ~BRDCS;
   aic_outb(p, brdctl, BRDCTL);
-  udelay(4);
-  read_brdctl(p);
+  udelay(1);
+}
+
+/*+F*************************************************************************
+ * Function:
+ *   read_brdctl
+ *
+ * Description:
+ *   Reads the BRDCTL register.
+ *-F*************************************************************************/
+static unsigned char
+read_brdctl(struct aic7xxx_host *p)
+{
+  unsigned char brdctl, value;
+
+  if ((p->chip & AHC_CHIPID_MASK) == AHC_AIC7895)
+  {
+    brdctl = BRDRW;
+    if (p->flags & AHC_CHNLB)
+      brdctl |= BRDCS;
+  }
+  else if (p->features & AHC_ULTRA2)
+    brdctl = BRDRW_ULTRA2;
+  else
+    brdctl = BRDRW | BRDCS;
+  aic_outb(p, brdctl, BRDCTL);
+  udelay(1);
+  value = aic_inb(p, BRDCTL);
+  aic_outb(p, 0, BRDCTL);
+  udelay(1);
+  return (value);
 }
 
 /*+F*************************************************************************
@@ -7499,10 +7494,11 @@ aic785x_cable_detect(struct aic7xxx_host *p, int *int_50,
   unsigned char brdctl;
 
   aic_outb(p, BRDRW | BRDCS, BRDCTL);
-  udelay(4);
+  udelay(1);
   aic_outb(p, 0, BRDCTL);
-  udelay(4);
+  udelay(1);
   brdctl = aic_inb(p, BRDCTL);
+  udelay(1);
   *int_50 = !(brdctl & BRDDAT5);
   *ext_present = !(brdctl & BRDDAT6);
   *eeprom = (aic_inb(p, SPIOCAP) & EEPROM);
@@ -7611,7 +7607,6 @@ configure_termination(struct aic7xxx_host *p)
     else
       max_target = 8;
     aic_outb(p, SEEMS | SEECS, SEECTL);
-    udelay(4);
     sxfrctl1 &= ~STPWEN;
     if ( (p->adapter_control & CFAUTOTERM) ||
          (p->features & AHC_ULTRA2) )
@@ -7736,14 +7731,6 @@ configure_termination(struct aic7xxx_host *p)
                  p->host_no);
       }
 
-      if (enableLVD_high != 0)
-      {
-        brddat |= BRDDAT4;
-        if (aic7xxx_verbose & VERBOSE_PROBE2)
-          printk(KERN_INFO "(scsi%d) LVD High byte termination Enabled\n",
-                 p->host_no);
-      }
-          
       if (enableLVD_low != 0)
       {
         sxfrctl1 |= STPWEN;
@@ -7752,17 +7739,17 @@ configure_termination(struct aic7xxx_host *p)
           printk(KERN_INFO "(scsi%d) LVD Low byte termination Enabled\n",
                  p->host_no);
       }
+          
+      if (enableLVD_high != 0)
+      {
+        brddat |= BRDDAT4;
+        if (aic7xxx_verbose & VERBOSE_PROBE2)
+          printk(KERN_INFO "(scsi%d) LVD High byte termination Enabled\n",
+                 p->host_no);
+      }
     }
     else
     {
-      if (p->adapter_control & CFWSTERM)
-      {
-        brddat |= BRDDAT6;
-        if (aic7xxx_verbose & VERBOSE_PROBE2)
-          printk(KERN_INFO "(scsi%d) SE High byte termination Enabled\n",
-                 p->host_no);
-      }
-
       if (p->adapter_control & CFSTERM)
       {
         if (p->features & AHC_ULTRA2)
@@ -7773,10 +7760,18 @@ configure_termination(struct aic7xxx_host *p)
           printk(KERN_INFO "(scsi%d) SE Low byte termination Enabled\n",
                  p->host_no);
       }
+
+      if (p->adapter_control & CFWSTERM)
+      {
+        brddat |= BRDDAT6;
+        if (aic7xxx_verbose & VERBOSE_PROBE2)
+          printk(KERN_INFO "(scsi%d) SE High byte termination Enabled\n",
+                 p->host_no);
+      }
     }
-    aic_outb(p, sxfrctl1, SXFRCTL1);
     write_brdctl(p, brddat);
     release_seeprom(p);
+    aic_outb(p, sxfrctl1, SXFRCTL1);
   }
 }
 
@@ -8090,7 +8085,7 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
     /* Select channel B */
     aic_outb(p, aic_inb(p, SBLKCTL) | SELBUSB, SBLKCTL);
 
-    term = (aic_inb(p, SXFRCTL1) & STPWEN);
+    term = ((p->flags & AHC_TERM_ENB_B) != 0) ? STPWEN : 0;
     aic_outb(p, p->scsi_id_b, SCSIID);
     scsi_conf = aic_inb(p, SCSICONF + 1);
     aic_outb(p, DFON | SPIOEN, SXFRCTL0);
@@ -8104,15 +8099,11 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
     aic_outb(p, aic_inb(p, SBLKCTL) & ~SELBUSB, SBLKCTL);
   }
 
+  term = ((p->flags & AHC_TERM_ENB_SE_LOW) != 0) ? STPWEN : 0;
   if (p->features & AHC_ULTRA2)
-  {
     aic_outb(p, p->scsi_id, SCSIID_ULTRA2);
-  }
   else
-  {
     aic_outb(p, p->scsi_id, SCSIID);
-  }
-  term = (aic_inb(p, SXFRCTL1) & STPWEN);
   scsi_conf = aic_inb(p, SCSICONF);
   aic_outb(p, DFON | SPIOEN, SXFRCTL0);
   aic_outb(p, (scsi_conf & ENSPCHK) | STIMESEL | term | 
@@ -8802,33 +8793,27 @@ aic7xxx_load_seeprom(struct aic7xxx_host *p, unsigned char *sxfrctl1)
     }
     if (p->flags & AHC_NEWEEPROM_FMT)
     {
-      if ( !(p->features & AHC_ULTRA2) )
+      if ( (sc->device_flags[i] & CFNEWULTRAFORMAT) &&
+          !(p->features & AHC_ULTRA2) )
       {
         /*
          * I know of two different Ultra BIOSes that do this differently.
          * One on the Gigabyte 6BXU mb that wants flags[i] & CFXFER to
-         * be == to 0x03 and SYNCHISULTRA to be true to mean 40MByte/s
+         * be == to 0x03 and SYNCISULTRA to be true to mean 40MByte/s
          * while on the IBM Netfinity 5000 they want the same thing
          * to be something else, while flags[i] & CFXFER == 0x03 and
-         * SYNCHISULTRA false should be 40MByte/s.  So, we set both to
+         * SYNCISULTRA false should be 40MByte/s.  So, we set both to
          * 40MByte/s and the lower speeds be damned.  People will have
          * to select around the conversely mapped lower speeds in order
          * to select lower speeds on these boards.
          */
-        if ( (sc->device_flags[i] & CFNEWULTRAFORMAT) &&
-            ((sc->device_flags[i] & CFXFER) == 0x03) )
+        if ((sc->device_flags[i] & (CFXFER)) == 0x03)
         {
           sc->device_flags[i] &= ~CFXFER;
           sc->device_flags[i] |= CFSYNCHISULTRA;
         }
-        if (sc->device_flags[i] & CFSYNCHISULTRA)
-        {
-          p->ultraenb |= mask;
-        }
       }
-      else if ( !(sc->device_flags[i] & CFNEWULTRAFORMAT) &&
-                 (p->features & AHC_ULTRA2) &&
-		 (sc->device_flags[i] & CFSYNCHISULTRA) )
+      if (sc->device_flags[i] & CFSYNCHISULTRA)
       {
         p->ultraenb |= mask;
       }

@@ -338,11 +338,11 @@ static int swap_out(unsigned int priority, int gfp_mask)
 	 * Think of swap_cnt as a "shadow rss" - it tells us which process
 	 * we want to page out (always try largest first).
 	 */
-	counter = nr_tasks / (priority+1);
+	counter = nr_threads / (priority+1);
 	if (counter < 1)
 		counter = 1;
-	if (counter > nr_tasks)
-		counter = nr_tasks;
+	if (counter > nr_threads)
+		counter = nr_threads;
 
 	for (; counter >= 0; counter--) {
 		assign = 0;

@@ -17,8 +17,10 @@ struct list_head {
 	struct list_head *next, *prev;
 };
 
+#define LIST_HEAD_INIT(name) { &(name), &(name) }
+
 #define LIST_HEAD(name) \
-	struct list_head name = { &name, &name }
+	struct list_head name = LIST_HEAD_INIT(name)
 
 #define INIT_LIST_HEAD(ptr) do { \
 	(ptr)->next = (ptr); (ptr)->prev = (ptr); \
@@ -46,6 +48,14 @@ static __inline__ void __list_add(struct list_head * new,
 static __inline__ void list_add(struct list_head *new, struct list_head *head)
 {
 	__list_add(new, head, head->next);
+}
+
+/*
+ * Insert a new entry before the specified head..
+ */
+static __inline__ void list_add_tail(struct list_head *new, struct list_head *head)
+{
+	__list_add(new, head->prev, head);
 }
 
 /*

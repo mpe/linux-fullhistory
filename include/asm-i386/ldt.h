@@ -11,6 +11,7 @@
 /* The size of each LDT entry. */
 #define LDT_ENTRY_SIZE	8
 
+#ifndef __ASSEMBLY__
 struct modify_ldt_ldt_s {
 	unsigned int  entry_number;
 	unsigned long base_addr;
@@ -27,4 +28,5 @@ struct modify_ldt_ldt_s {
 #define MODIFY_LDT_CONTENTS_STACK	1
 #define MODIFY_LDT_CONTENTS_CODE	2
 
+#endif /* !__ASSEMBLY__ */
 #endif

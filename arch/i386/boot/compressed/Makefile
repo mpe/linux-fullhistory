@@ -30,7 +30,7 @@ vmlinux: piggy.o $(OBJECTS)
 bvmlinux: piggy.o $(OBJECTS)
 	$(LD) $(BZLINKFLAGS) -o bvmlinux $(OBJECTS) piggy.o
 
-head.o: head.S $(TOPDIR)/include/linux/tasks.h
+head.o: head.S
 	$(CC) $(AFLAGS) -traditional -c head.S
 
 piggy.o:	$(SYSTEM)

@@ -15,7 +15,7 @@
 #ifndef __ASSEMBLY__
 #include <asm/processor.h>
 #include <asm/fixmap.h>
-#include <linux/tasks.h>
+#include <linux/threads.h>
 
 /* Caches aren't brain-dead on the intel. */
 #define flush_cache_all()			do { } while (0)
@@ -306,7 +306,7 @@ extern pte_t * __bad_pagetable(void);
 #define SET_PAGE_DIR(tsk,pgdir) \
 do { \
 	unsigned long __pgdir = __pa(pgdir); \
-	(tsk)->tss.cr3 = __pgdir; \
+	(tsk)->thread.cr3 = __pgdir; \
 	if ((tsk) == current) \
 		__asm__ __volatile__("movl %0,%%cr3": :"r" (__pgdir)); \
 } while (0)
@@ -481,9 +481,9 @@ extern __inline__ void free_pmd_slow(pmd_t *pmd)
 extern void __bad_pte(pmd_t *pmd);
 extern void __bad_pte_kernel(pmd_t *pmd);
 
-#define pte_free_kernel(pte)    free_pte_fast(pte)
-#define pte_free(pte)           free_pte_fast(pte)
-#define pgd_free(pgd)           free_pgd_fast(pgd)
+#define pte_free_kernel(pte)    free_pte_slow(pte)
+#define pte_free(pte)           free_pte_slow(pte)
+#define pgd_free(pgd)           free_pgd_slow(pgd)
 #define pgd_alloc()             get_pgd_fast()
 
 extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)

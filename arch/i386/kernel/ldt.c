@@ -2,6 +2,7 @@
  * linux/kernel/ldt.c
  *
  * Copyright (C) 1992 Krishna Balasubramanian and Linus Torvalds
+ * Copyright (C) 1998 Ingo Molnar
  */
 
 #include <linux/errno.h>
@@ -17,19 +18,31 @@
 #include <asm/ldt.h>
 #include <asm/desc.h>
 
+/*
+ * read_ldt() is not really atomic - this is not a problem since
+ * synchronization of reads and writes done to the LDT has to be
+ * assured by user-space anyway. Writes are atomic, to protect
+ * the security checks done on new descriptors.
+ */
 static int read_ldt(void * ptr, unsigned long bytecount)
 {
-	void * address = current->mm->segments;
+	int err;
 	unsigned long size;
+	struct mm_struct * mm = current->mm;
 
-	if (!ptr)
-		return -EINVAL;
-	if (!address)
-		return 0;
+	err = 0;
+	if (!mm->segments)
+		goto out;
+
 	size = LDT_ENTRIES*LDT_ENTRY_SIZE;
 	if (size > bytecount)
 		size = bytecount;
-	return copy_to_user(ptr, address, size) ? -EFAULT : size;
+
+	err = size;
+	if (copy_to_user(ptr, mm->segments, size))
+		err = -EFAULT;
+out:
+	return err;
 }
 
 static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
@@ -64,31 +77,29 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 	 * you get strange behaviour (the kernel is safe, it's just user
 	 * space strangeness).
 	 *
-	 * For no good reason except historical, the GDT index of the LDT
-	 * is chosen to follow the index number in the task[] array.
+	 * we have two choices: either we preallocate the LDT descriptor
+	 * and can do a shared modify_ldt(), or we postallocate it and do
+	 * an smp message pass to update it. Currently we are a bit
+	 * un-nice to user-space and reload the LDT only on the next
+	 * schedule. (only an issue on SMP)
+	 *
+	 * the GDT index of the LDT is allocated dynamically, and is
+	 * limited by MAX_LDT_DESCRIPTORS.
 	 */
+	down(&mm->mmap_sem);
 	if (!mm->segments) {
-		void * ldt;
+		
 		error = -ENOMEM;
-		ldt = vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
-		if (!ldt)
-			goto out;
-		memset(ldt, 0, LDT_ENTRIES*LDT_ENTRY_SIZE);
+		mm->segments = vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
+		if (!mm->segments)
+			goto out_unlock;
+		
+		if (atomic_read(&mm->count) > 1)
+			printk(KERN_WARNING "LDT allocated for cloned task!\n");
 		/*
-		 * Make sure someone else hasn't allocated it for us ...
+		 * Possibly do an SMP cross-call to other CPUs to reload
+		 * their LDTs
 		 */
-		if (!mm->segments) {
-			int i = current->tarray_ptr - &task[0];
-			mm->segments = ldt;
-			set_ldt_desc(i, ldt, LDT_ENTRIES);
-			current->tss.ldt = _LDT(i);
-			load_ldt(i);
-			if (atomic_read(&mm->count) > 1)
-				printk(KERN_WARNING
-					"LDT allocated for cloned task!\n");
-		} else {
-			vfree(ldt);
-		}
 	}
 
 	lp = (__u32 *) ((ldt_info.entry_number << 3) + (char *) mm->segments);
@@ -127,6 +138,9 @@ install:
 	*lp	= entry_1;
 	*(lp+1)	= entry_2;
 	error = 0;
+
+out_unlock:
+	up(&mm->mmap_sem);
 out:
 	return error;
 }
@@ -135,7 +149,6 @@ asmlinkage int sys_modify_ldt(int func, void *ptr, unsigned long bytecount)
 {
 	int ret = -ENOSYS;
 
-	lock_kernel();
 	switch (func) {
 	case 0:
 		ret = read_ldt(ptr, bytecount);
@@ -147,6 +160,5 @@ asmlinkage int sys_modify_ldt(int func, void *ptr, unsigned long bytecount)
 		ret = write_ldt(ptr, bytecount, 0);
 		break;
 	}
-	unlock_kernel();
 	return ret;
 }

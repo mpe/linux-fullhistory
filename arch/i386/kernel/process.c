@@ -405,6 +405,7 @@ void show_regs(struct pt_regs * regs)
 		regs->esi, regs->edi, regs->ebp);
 	printk(" DS: %04x ES: %04x\n",
 		0xffff & regs->xds,0xffff & regs->xes);
+
 	__asm__("movl %%cr0, %0": "=r" (cr0));
 	__asm__("movl %%cr2, %0": "=r" (cr2));
 	__asm__("movl %%cr3, %0": "=r" (cr3));
@@ -475,11 +476,28 @@ void free_task_struct(struct task_struct *p)
 		free_pages((unsigned long) p, 1);
 }
 
+/*
+ * No need to lock the MM as we are the last user
+ */
 void release_segments(struct mm_struct *mm)
 {
-	if (mm->segments) {
-		void * ldt = mm->segments;
+	void * ldt = mm->segments;
+
+	/*
+	 * free the LDT
+	 */
+	if (ldt) {
 		mm->segments = NULL;
+		/*
+		 * special case, when we release the LDT from under
+		 * the running CPU. Other CPUs cannot possibly use
+		 * this LDT as we were getting here through mmput() ...
+		 */
+		if (mm == current->mm)
+			load_LDT(mm);
+		/*
+		 * Nobody anymore uses the LDT, we can free it:
+		 */
 		vfree(ldt);
 	}
 }
@@ -492,10 +510,9 @@ void forget_segments(void)
 		: "r" (0));
 
 	/*
-	 * Get the LDT entry from init_task.
+	 * Load the LDT entry of init_task.
 	 */
-	current->tss.ldt = _LDT(0);
-	load_ldt(0);
+	load_LDT(init_task.mm);
 }
 
 /*
@@ -537,12 +554,9 @@ void exit_thread(void)
 
 void flush_thread(void)
 {
-	int i;
 	struct task_struct *tsk = current;
 
-	for (i=0 ; i<8 ; i++)
-		tsk->tss.debugreg[i] = 0;
-
+	memset(tsk->thread.debugreg, 0, sizeof(unsigned long)*8);
 	/*
 	 * Forget coprocessor state..
 	 */
@@ -552,33 +566,50 @@ void flush_thread(void)
 
 void release_thread(struct task_struct *dead_task)
 {
+	void * ldt = dead_task->mm->segments;
+
+	// temporary debugging check
+	if (ldt) {
+		printk("WARNING: dead process %8s still has LDT? <%p>\n",
+				dead_task->comm, ldt);
+		BUG();
+	}
 }
 
 /*
- * If new_mm is NULL, we're being called to set up the LDT descriptor
- * for a clone task. Each clone must have a separate entry in the GDT.
+ * If new_mm is NULL, we're being called to set up the LDT for
+ * a clone task: this is easy since the clone is not running yet.
+ * otherwise we copy the old segment into a new segment.
+ *
+ * we do not have to muck with descriptors here, that is
+ * done in __switch_to() and get_mmu_context().
  */
-void copy_segments(int nr, struct task_struct *p, struct mm_struct *new_mm)
+void copy_segments(struct task_struct *p, struct mm_struct *new_mm)
 {
 	struct mm_struct * old_mm = current->mm;
 	void * old_ldt = old_mm->segments, * ldt = old_ldt;
 
-	/* default LDT - use the one from init_task */
-	p->tss.ldt = _LDT(0);
-	if (old_ldt) {
-		if (new_mm) {
-			ldt = vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
-			new_mm->segments = ldt;
-			if (!ldt) {
-				printk(KERN_WARNING "ldt allocation failed\n");
-				return;
-			}
-			memcpy(ldt, old_ldt, LDT_ENTRIES*LDT_ENTRY_SIZE);
-		}
-		p->tss.ldt = _LDT(nr);
-		set_ldt_desc(nr, ldt, LDT_ENTRIES);
+	if (!old_mm->segments) {
+		/*
+		 * default LDT - use the one from init_task
+		 */
+		if (new_mm)
+			new_mm->segments = NULL;
 		return;
 	}
+
+	if (new_mm) {
+		/*
+		 * Completely new LDT, we initialize it from the parent:
+		 */
+		ldt = vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
+		if (!ldt)
+			printk(KERN_WARNING "ldt allocation failed\n");
+		else
+			memcpy(ldt, old_ldt, LDT_ENTRIES*LDT_ENTRY_SIZE);
+		new_mm->segments = ldt;
+	}
+	return;
 }
 
 /*
@@ -592,31 +623,21 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 {
 	struct pt_regs * childregs;
 
-	childregs = ((struct pt_regs *) (2*PAGE_SIZE + (unsigned long) p)) - 1;
+	childregs = ((struct pt_regs *) (THREAD_SIZE + (unsigned long) p)) - 1;
 	*childregs = *regs;
 	childregs->eax = 0;
 	childregs->esp = esp;
 
-	p->tss.esp = (unsigned long) childregs;
-	p->tss.esp0 = (unsigned long) (childregs+1);
-	p->tss.ss0 = __KERNEL_DS;
+	p->thread.esp = (unsigned long) childregs;
+	p->thread.esp0 = (unsigned long) (childregs+1);
 
-	p->tss.tr = _TSS(nr);
-	set_tss_desc(nr,&(p->tss));
-	p->tss.eip = (unsigned long) ret_from_fork;
+	p->thread.eip = (unsigned long) ret_from_fork;
 
-	savesegment(fs,p->tss.fs);
-	savesegment(gs,p->tss.gs);
-
-	/*
-	 * a bitmap offset pointing outside of the TSS limit causes a nicely
-	 * controllable SIGSEGV. The first sys_ioperm() call sets up the
-	 * bitmap properly.
-	 */
-	p->tss.bitmap = sizeof(struct thread_struct);
+	savesegment(fs,p->thread.fs);
+	savesegment(gs,p->thread.gs);
 
 	unlazy_fpu(current);
-	p->tss.i387 = current->tss.i387;
+	p->thread.i387 = current->thread.i387;
 
 	return 0;
 }
@@ -632,7 +653,7 @@ int dump_fpu (struct pt_regs * regs, struct user_i387_struct* fpu)
 	fpvalid = tsk->used_math;
 	if (fpvalid) {
 		unlazy_fpu(tsk);
-		memcpy(fpu,&tsk->tss.i387.hard,sizeof(*fpu));
+		memcpy(fpu,&tsk->thread.i387.hard,sizeof(*fpu));
 	}
 
 	return fpvalid;
@@ -654,7 +675,7 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->u_dsize -= dump->u_tsize;
 	dump->u_ssize = 0;
 	for (i = 0; i < 8; i++)
-		dump->u_debugreg[i] = current->tss.debugreg[i];  
+		dump->u_debugreg[i] = current->thread.debugreg[i];  
 
 	if (dump->start_stack < TASK_SIZE)
 		dump->u_ssize = ((unsigned long) (TASK_SIZE - dump->start_stack)) >> PAGE_SHIFT;
@@ -683,11 +704,10 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 /*
  * This special macro can be used to load a debugging register
  */
-#define loaddebug(tsk,register) \
+#define loaddebug(thread,register) \
 		__asm__("movl %0,%%db" #register  \
 			: /* no output */ \
-			:"r" (tsk->tss.debugreg[register]))
-
+			:"r" (thread->debugreg[register]))
 
 /*
  *	switch_to(x,yn) should switch tasks from x to y.
@@ -712,60 +732,80 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
  * More important, however, is the fact that this allows us much
  * more flexibility.
  */
-void __switch_to(struct task_struct *prev, struct task_struct *next)
+extern int cpus_initialized;
+void __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 {
-	/* Do the FPU save and set TS if it wasn't set before.. */
-	unlazy_fpu(prev);
+	struct soft_thread_struct *prev = &prev_p->thread,
+				 *next = &next_p->thread;
+	struct hard_thread_struct *tss = init_tss + smp_processor_id();
+
+	unlazy_fpu(prev_p);
 
 	/*
-	 * Reload TR, LDT and the page table pointers..
-	 *
-	 * We need TR for the IO permission bitmask (and
-	 * the vm86 bitmasks in case we ever use enhanced
-	 * v86 mode properly).
-	 *
-	 * We may want to get rid of the TR register some
-	 * day, and copy the bitmaps around by hand. Oh,
-	 * well. In the meantime we have to clear the busy
-	 * bit in the TSS entry, ugh.
+	 * Reload esp0, LDT and the page table pointer:
 	 */
-	gdt_table[next->tss.tr >> 3].b &= 0xfffffdff;
-	asm volatile("ltr %0": :"g" (*(unsigned short *)&next->tss.tr));
+	tss->esp0 = next->esp0;
 
 	/*
 	 * Save away %fs and %gs. No need to save %es and %ds, as
 	 * those are always kernel segments while inside the kernel.
 	 */
-	asm volatile("movl %%fs,%0":"=m" (*(int *)&prev->tss.fs));
-	asm volatile("movl %%gs,%0":"=m" (*(int *)&prev->tss.gs));
+	asm volatile("movl %%fs,%0":"=m" (*(int *)&prev->fs));
+	asm volatile("movl %%gs,%0":"=m" (*(int *)&prev->gs));
 
 	/* Re-load LDT if necessary */
-	if (next->mm->segments != prev->mm->segments)
-		asm volatile("lldt %0": :"g" (*(unsigned short *)&next->tss.ldt));
+	if (prev_p->mm->segments != next_p->mm->segments)
+		load_LDT(next_p->mm);
 
 	/* Re-load page tables */
 	{
-		unsigned long new_cr3 = next->tss.cr3;
-		if (new_cr3 != prev->tss.cr3) 
+		unsigned long new_cr3 = next->cr3;
+
+		tss->cr3 = new_cr3;
+		if (new_cr3 != prev->cr3) 
 			asm volatile("movl %0,%%cr3": :"r" (new_cr3));
 	}
 
 	/*
 	 * Restore %fs and %gs.
 	 */
-	loadsegment(fs,next->tss.fs);
-	loadsegment(gs,next->tss.gs);
+	loadsegment(fs, next->fs);
+	loadsegment(gs, next->gs);
 
 	/*
 	 * Now maybe reload the debug registers
 	 */
-	if (next->tss.debugreg[7]){
-		loaddebug(next,0);
-		loaddebug(next,1);
-		loaddebug(next,2);
-		loaddebug(next,3);
-		loaddebug(next,6);
-		loaddebug(next,7);
+	if (next->debugreg[7]){
+		loaddebug(next, 0);
+		loaddebug(next, 1);
+		loaddebug(next, 2);
+		loaddebug(next, 3);
+		/* no 4 and 5 */
+		loaddebug(next, 6);
+		loaddebug(next, 7);
+	}
+
+	if (prev->ioperm || next->ioperm) {
+		if (next->ioperm) {
+			/*
+			 * 4 cachelines copy ... not good, but not that
+			 * bad either. Anyone got something better?
+			 * This only affects processes which use ioperm().
+			 * [Putting the TSSs into 4k-tlb mapped regions
+			 * and playing VM tricks to switch the IO bitmap
+			 * is not really acceptable.]
+			 */
+			memcpy(tss->io_bitmap, next->io_bitmap,
+				 IO_BITMAP_SIZE*sizeof(unsigned long));
+			tss->bitmap = IO_BITMAP_OFFSET;
+		} else
+			/*
+			 * a bitmap offset pointing outside of the TSS limit
+			 * causes a nicely controllable SIGSEGV if a process
+			 * tries to use a port IO instruction. The first
+			 * sys_ioperm() call sets up the bitmap properly.
+			 */
+			tss->bitmap = INVALID_IO_BITMAP_OFFSET;
 	}
 }
 

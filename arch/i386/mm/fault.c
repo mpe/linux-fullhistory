@@ -177,7 +177,7 @@ good_area:
 	if (regs->eflags & VM_MASK) {
 		unsigned long bit = (address - 0xA0000) >> PAGE_SHIFT;
 		if (bit < 32)
-			tsk->tss.screen_bitmap |= 1 << bit;
+			tsk->thread.screen_bitmap |= 1 << bit;
 	}
 	up(&mm->mmap_sem);
 	return;
@@ -191,9 +191,9 @@ bad_area:
 
 	/* User mode accesses just cause a SIGSEGV */
 	if (error_code & 4) {
-		tsk->tss.cr2 = address;
-		tsk->tss.error_code = error_code;
-		tsk->tss.trap_no = 14;
+		tsk->thread.cr2 = address;
+		tsk->thread.error_code = error_code;
+		tsk->thread.trap_no = 14;
 		force_sig(SIGSEGV, tsk);
 		return;
 	}
@@ -243,9 +243,11 @@ no_context:
 	else
 		printk(KERN_ALERT "Unable to handle kernel paging request");
 	printk(" at virtual address %08lx\n",address);
+	printk(" printing eip:\n");
+	printk("%08lx\n", regs->eip);
 	__asm__("movl %%cr3,%0" : "=r" (page));
-	printk(KERN_ALERT "current->tss.cr3 = %08lx, %%cr3 = %08lx\n",
-		tsk->tss.cr3, page);
+	printk(KERN_ALERT "current->thread.cr3 = %08lx, %%cr3 = %08lx\n",
+		tsk->thread.cr3, page);
 	page = ((unsigned long *) __va(page))[address >> 22];
 	printk(KERN_ALERT "*pde = %08lx\n", page);
 	if (page & 1) {
@@ -275,9 +277,9 @@ do_sigbus:
 	 * Send a sigbus, regardless of whether we were in kernel
 	 * or user mode.
 	 */
-	tsk->tss.cr2 = address;
-	tsk->tss.error_code = error_code;
-	tsk->tss.trap_no = 14;
+	tsk->thread.cr2 = address;
+	tsk->thread.error_code = error_code;
+	tsk->thread.trap_no = 14;
 	force_sig(SIGBUS, tsk);
 
 	/* Kernel mode? Handle exceptions or die */
