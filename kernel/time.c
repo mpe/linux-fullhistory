@@ -34,6 +34,24 @@
  */
 struct timezone sys_tz = { 0, 0};
 
+static void do_normal_gettime(struct timeval * tm)
+{
+        *tm=xtime;
+}
+
+void (*do_get_fast_time)(struct timeval *) = do_normal_gettime;
+
+/*
+ * Generic way to access 'xtime' (the current time of day).
+ * This can be changed if the platform provides a more accurate (and fast!) 
+ * version.
+ */
+
+void get_fast_time(struct timeval * t)
+{
+	do_get_fast_time(t);
+}
+
 #ifndef __alpha__
 
 /*

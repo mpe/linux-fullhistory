@@ -44,6 +44,8 @@
 #define ARPHRD_CSLIP6	259
 #define ARPHRD_RSRVD	260		/* Notional KISS type 		*/
 #define ARPHRD_ADAPT	264
+#define ARPHRD_ROSE	270
+#define ARPHRD_X25	271		/* CCITT X.25			*/
 #define ARPHRD_PPP	512
 
 #define ARPHRD_TUNNEL	768		/* IPIP tunnel			*/
@@ -52,7 +54,7 @@
 #define ARPHRD_SKIP	771		/* SKIP vif			*/
 #define ARPHRD_LOOPBACK	772		/* Loopback device		*/
 #define ARPHRD_LOCALTLK 773		/* Localtalk device		*/
-#define ARPHRD_SIT	774		/* sit0 device - IPv6-in-IPv4	*/
+#define ARPHRD_SIT	776		/* sit0 device - IPv6-in-IPv4	*/
 
 /* ARP protocol opcodes. */
 #define	ARPOP_REQUEST	1		/* ARP request			*/

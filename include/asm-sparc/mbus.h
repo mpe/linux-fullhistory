@@ -1,4 +1,4 @@
-/* $Id: mbus.h,v 1.7 1996/04/25 06:13:12 davem Exp $
+/* $Id: mbus.h,v 1.8 1996/08/29 09:48:21 davem Exp $
  * mbus.h:  Various defines for MBUS modules.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -81,7 +81,7 @@ extern unsigned int hwbug_bitmask;
  */
 #define TBR_ID_SHIFT            20
 
-extern inline int get_cpuid(void)
+extern __inline__ int get_cpuid(void)
 {
 	register int retval;
 	__asm__ __volatile__("rd %%tbr, %0\n\t"
@@ -91,7 +91,7 @@ extern inline int get_cpuid(void)
 	return (retval & 3);
 }
 
-extern inline int get_modid(void)
+extern __inline__ int get_modid(void)
 {
 	return (get_cpuid() | 0x8);
 }

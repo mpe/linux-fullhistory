@@ -28,14 +28,14 @@
 #define DCF_INVALID	RTF_INVALID
 
 struct in6_rtmsg {
-	__u32			rtmsg_type;
 	struct in6_addr		rtmsg_dst;
 	struct in6_addr		rtmsg_gateway;
+	__u32			rtmsg_type;
 	__u16			rtmsg_prefixlen;
 	__u16			rtmsg_metric;
-	char			rtmsg_device[16];
-        __u16			rtmsg_flags;
 	unsigned long		rtmsg_info;
+        __u32			rtmsg_flags;
+	char			rtmsg_device[16];
 };
 
 #endif

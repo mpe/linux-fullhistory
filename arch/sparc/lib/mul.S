@@ -1,4 +1,4 @@
-/* $Id: mul.S,v 1.2 1995/11/25 00:59:00 davem Exp $
+/* $Id: mul.S,v 1.4 1996/09/30 02:22:32 davem Exp $
  * mul.S:       This routine was taken from glibc-1.09 and is covered
  *              by the GNU Library General Public License Version 2.
  */
@@ -20,7 +20,7 @@
 	mov	%o0, %y		! multiplier -> Y
 	andncc	%o0, 0xfff, %g0	! test bits 12..31
 	be	Lmul_shortway	! if zero, can do it the short way
-	andcc	%g0, %g0, %o4	! zero the partial product and clear N and V
+	 andcc	%g0, %g0, %o4	! zero the partial product and clear N and V
 
 	/*
 	 * Long multiply.  32 steps, followed by a final shift step.
@@ -66,23 +66,23 @@
 #if 0
 	tst	%o0
 	bge	1f
-	rd	%y, %o0
+	 rd	%y, %o0
 
 	! %o0 was indeed negative; fix upper 32 bits of result by subtracting 
 	! %o1 (i.e., return %o4 - %o1 in %o1).
 	retl
-	sub	%o4, %o1, %o1
+	 sub	%o4, %o1, %o1
 
 1:
 	retl
-	mov	%o4, %o1
+	 mov	%o4, %o1
 #else
 	/* Faster code adapted from tege@sics.se's code for umul.S.  */
 	sra	%o0, 31, %o2	! make mask from sign bit
 	and	%o1, %o2, %o2	! %o2 = 0 or %o1, depending on sign of %o0
 	rd	%y, %o0		! get lower half of product
 	retl
-	sub	%o4, %o2, %o1	! subtract compensation 
+	 sub	%o4, %o2, %o1	! subtract compensation 
 				!  and put upper half in place
 #endif
 
@@ -125,4 +125,11 @@ Lmul_shortway:
 	srl	%o5, 20, %o5	! shift low bits right 20, zero fill at left
 	or	%o5, %o0, %o0	! construct low part of result
 	retl
-	sra	%o4, 20, %o1	! ... and extract high part of result
+	 sra	%o4, 20, %o1	! ... and extract high part of result
+
+	.globl	.mul_patch
+.mul_patch:
+	smul	%o0, %o1, %o0
+	retl
+	 rd	%y, %o1
+	nop

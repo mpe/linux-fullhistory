@@ -1,4 +1,4 @@
-/* $Id: sbus.h,v 1.9 1996/02/15 09:13:03 davem Exp $
+/* $Id: sbus.h,v 1.11 1996/10/31 06:29:12 davem Exp $
  * sbus.h:  Defines for the Sun SBus.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -24,17 +24,17 @@
  * numbers + offsets, and vice versa.
  */
 
-extern inline unsigned long sbus_devaddr(int slotnum, unsigned long offset)
+extern __inline__ unsigned long sbus_devaddr(int slotnum, unsigned long offset)
 {
   return (unsigned long) (SUN_SBUS_BVADDR+((slotnum)<<25)+(offset));
 }
 
-extern inline int sbus_dev_slot(unsigned long dev_addr)
+extern __inline__ int sbus_dev_slot(unsigned long dev_addr)
 {
   return (int) (((dev_addr)-SUN_SBUS_BVADDR)>>25);
 }
 
-extern inline unsigned long sbus_dev_offset(unsigned long dev_addr)
+extern __inline__ unsigned long sbus_dev_offset(unsigned long dev_addr)
 {
   return (unsigned long) (((dev_addr)-SUN_SBUS_BVADDR)&SBUS_OFF_MASK);
 }
@@ -69,13 +69,15 @@ struct linux_sbus {
 	struct linux_sbus_device *devices;   /* Link to devices on this SBus */
 	struct iommu_struct *iommu;          /* IOMMU for this sbus if applicable */
 	int prom_node;                       /* PROM device tree node for this SBus */
-	char prom_name[64];                  /* Usually "sbus" */
+	char prom_name[64];                  /* Usually "sbus" or "sbi" */
 	int clock_freq;
+	struct linux_prom_ranges sbus_ranges[PROMREG_MAX];
+	int num_sbus_ranges;
 };
 
 extern struct linux_sbus *SBus_chain;
 
-extern inline int
+extern __inline__ int
 sbus_is_slave(struct linux_sbus_device *dev)
 {
 	/* Have to write this for sun4c's */
@@ -88,5 +90,12 @@ sbus_is_slave(struct linux_sbus_device *dev)
 
 #define for_each_sbusdev(device, bus) \
         for((device) = (bus)->devices; (device); (device)=(device)->next)
+        
+#define for_all_sbusdev(device, bus) \
+	for((bus) = SBus_chain, (device) = (bus)->devices; (bus); (device)=((device)->next ? (device)->next : ((bus) = (bus)->next, (bus) ? (bus)->devices : 0)))
+
+/* Apply promlib probed SBUS ranges to registers. */
+extern void prom_apply_sbus_ranges(struct linux_sbus *sbus, 
+				   struct linux_prom_registers *sbusregs, int nregs);
 
 #endif /* !(_SPARC_SBUS_H) */

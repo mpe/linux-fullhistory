@@ -1,4 +1,4 @@
-/* $Id: ptrace.h,v 1.20 1996/04/24 09:10:02 davem Exp $ */
+/* $Id: ptrace.h,v 1.22 1996/10/27 08:55:38 davem Exp $ */
 #ifndef _SPARC_PTRACE_H
 #define _SPARC_PTRACE_H
 
@@ -45,7 +45,6 @@ struct reg_window {
 	unsigned long ins[8];
 };
 
-
 /* A Sparc stack frame */
 struct sparc_stackf {
 	unsigned long locals[8];
@@ -74,7 +73,7 @@ extern void show_regs(struct pt_regs *);
 #define REGWIN_SZ         0x40
 #endif
 
-/* First generic task_struct offsets. sizeof(task_struct)=1576 */
+/* First generic task_struct offsets. sizeof(task_struct)=1616 */
 #define TASK_STATE        0x000
 #define TASK_PRIORITY     0x008
 #define TASK_SIGNAL       0x00c
@@ -99,7 +98,13 @@ extern void show_regs(struct pt_regs *);
 #define THREAD_FLOAT_REGS 0x460
 #define THREAD_FSR        0x560
 #define THREAD_SIGSTK     0x5e8
-#define THREAD_MM     0x620
+#define THREAD_FLAGS      0x5f0
+#define THREAD_EX_COUNT   0x5f8
+#define THREAD_EX_PC      0x5fc
+#define THREAD_EX_EXPC    0x600
+#define THREAD_EX_ADDR    0x604
+#define THREAD_DS         0x608
+#define THREAD_MM         0x638
 #define THREAD_MM_CTX     0x008
 
 /* These are for pt_regs. */

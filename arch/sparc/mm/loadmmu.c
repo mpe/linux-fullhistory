@@ -1,4 +1,4 @@
-/* $Id: loadmmu.c,v 1.33 1996/04/21 10:32:26 davem Exp $
+/* $Id: loadmmu.c,v 1.36 1996/10/27 08:36:46 davem Exp $
  * loadmmu.c:  This code loads up all the mm function pointers once the
  *             machine type has been determined.  It also sets the static
  *             mmu values such as PAGE_NONE, etc.
@@ -12,6 +12,8 @@
 #include <asm/system.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
+
+unsigned long page_offset = 0xf0000000;
 
 struct ctx_list *ctx_list_pool;
 struct ctx_list ctx_free;
@@ -38,6 +40,8 @@ char *(*mmu_get_scsi_one)(char *, unsigned long, struct linux_sbus *sbus);
 void  (*mmu_get_scsi_sgl)(struct mmu_sglist *, int, struct linux_sbus *sbus);
 void  (*mmu_release_scsi_one)(char *, unsigned long, struct linux_sbus *sbus);
 void  (*mmu_release_scsi_sgl)(struct mmu_sglist *, int, struct linux_sbus *sbus);
+
+void  (*mmu_map_dma_area)(unsigned long addr, int len);
 
 void (*update_mmu_cache)(struct vm_area_struct *vma, unsigned long address, pte_t pte);
 
@@ -104,6 +108,7 @@ int (*pgd_present)(pgd_t);
 void (*pgd_clear)(pgd_t *);
 
 pte_t (*mk_pte)(unsigned long, pgprot_t);
+pte_t (*mk_pte_phys)(unsigned long, pgprot_t);
 pte_t (*mk_pte_io)(unsigned long, pgprot_t, int);
 void (*pgd_set)(pgd_t *, pmd_t *);
 pte_t (*pte_modify)(pte_t, pgprot_t);
@@ -149,7 +154,6 @@ load_mmu(void)
 		break;
 	case sun4m:
 	case sun4d:
-	case sun4e:
 		ld_mmu_srmmu();
 		break;
 	default:

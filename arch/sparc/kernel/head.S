@@ -1,8 +1,9 @@
-/* $Id: head.S,v 1.57 1996/04/25 06:08:38 davem Exp $
+/* $Id: head.S,v 1.70 1996/10/31 06:28:29 davem Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1995 Peter Zaitcev   (Zaitcev@ipmce.su)
+ * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
  */
 
 #include <linux/version.h>
@@ -58,10 +59,6 @@ C_LABEL(cputypvar_sun4m):
 	.align 4
 sun4_notsup:
 	.asciz  "Sparc-Linux sun4 support not implemented yet\n\n"
-	.align 4
-
-sun4d_notsup:
-        .asciz  "Sparc-Linux sun4d support does not exist\n\n"
 	.align 4
 
 sun4e_notsup:
@@ -147,7 +144,7 @@ t_bad74:BAD_TRAP(0x74) BAD_TRAP(0x75) BAD_TRAP(0x76) BAD_TRAP(0x77) BAD_TRAP(0x7
 t_bad79:BAD_TRAP(0x79) BAD_TRAP(0x7a) BAD_TRAP(0x7b) BAD_TRAP(0x7c) BAD_TRAP(0x7d)
 t_bad7e:BAD_TRAP(0x7e) BAD_TRAP(0x7f)
 t_sunos:SUNOS_SYSCALL_TRAP                  /* SunOS System Call             */
-t_sbkpt:BAD_TRAP(0x81)                      /* Software Breakpoint/KGDB      */
+t_sbkpt:BREAKPOINT_TRAP                     /* Software Breakpoint/KGDB      */
 t_divz:	BAD_TRAP(0x82)                      /* Divide by zero trap           */
 t_flwin:TRAP_ENTRY(0x83, do_flush_windows)  /* Flush Windows Trap            */
 t_clwin:BAD_TRAP(0x84)                      /* Clean Windows Trap            */
@@ -165,7 +162,8 @@ t_bad9b:BAD_TRAP(0x9b) BAD_TRAP(0x9c) BAD_TRAP(0x9d) BAD_TRAP(0x9e) BAD_TRAP(0x9
 t_getcc:GETCC_TRAP                          /* Get Condition Codes           */
 t_setcc:SETCC_TRAP                          /* Set Condition Codes           */
 t_bada2:BAD_TRAP(0xa2) BAD_TRAP(0xa3) BAD_TRAP(0xa4) BAD_TRAP(0xa5) BAD_TRAP(0xa6)
-t_bada7:BAD_TRAP(0xa7) BAD_TRAP(0xa8) BAD_TRAP(0xa9) BAD_TRAP(0xaa) BAD_TRAP(0xab)
+t_bada7:INDIRECT_SOLARIS_SYSCALL(156)
+t_bada8:BAD_TRAP(0xa8) BAD_TRAP(0xa9) BAD_TRAP(0xaa) BAD_TRAP(0xab)
 t_badac:BAD_TRAP(0xac) BAD_TRAP(0xad) BAD_TRAP(0xae) BAD_TRAP(0xaf) BAD_TRAP(0xb0)
 t_badb1:BAD_TRAP(0xb1) BAD_TRAP(0xb2) BAD_TRAP(0xb3) BAD_TRAP(0xb4) BAD_TRAP(0xb5)
 t_badb6:BAD_TRAP(0xb6) BAD_TRAP(0xb7) BAD_TRAP(0xb8) BAD_TRAP(0xb9) BAD_TRAP(0xba)
@@ -229,7 +227,9 @@ C_LABEL(trapbase_cpu1):
 	BAD_TRAP(0x74) BAD_TRAP(0x75) BAD_TRAP(0x76) BAD_TRAP(0x77) BAD_TRAP(0x78)
 	BAD_TRAP(0x79) BAD_TRAP(0x7a) BAD_TRAP(0x7b) BAD_TRAP(0x7c) BAD_TRAP(0x7d)
 	BAD_TRAP(0x7e) BAD_TRAP(0x7f)
-	SUNOS_SYSCALL_TRAP BAD_TRAP(0x81) BAD_TRAP(0x82)
+	SUNOS_SYSCALL_TRAP 
+	BREAKPOINT_TRAP
+	BAD_TRAP(0x82)
 	TRAP_ENTRY(0x83, do_flush_windows) BAD_TRAP(0x84) BAD_TRAP(0x85)
 	BAD_TRAP(0x86) BAD_TRAP(0x87) SOLARIS_SYSCALL_TRAP
 	NETBSD_SYSCALL_TRAP BAD_TRAP(0x8a) BAD_TRAP(0x8b) BAD_TRAP(0x8c)
@@ -239,7 +239,7 @@ C_LABEL(trapbase_cpu1):
 	BAD_TRAP(0x9a) BAD_TRAP(0x9b) BAD_TRAP(0x9c) BAD_TRAP(0x9d) BAD_TRAP(0x9e)
 	BAD_TRAP(0x9f) GETCC_TRAP SETCC_TRAP
 	BAD_TRAP(0xa2) BAD_TRAP(0xa3) BAD_TRAP(0xa4) BAD_TRAP(0xa5) BAD_TRAP(0xa6)
-	BAD_TRAP(0xa7) BAD_TRAP(0xa8) BAD_TRAP(0xa9) BAD_TRAP(0xaa) BAD_TRAP(0xab)
+	INDIRECT_SOLARIS_SYSCALL(156) BAD_TRAP(0xa8) BAD_TRAP(0xa9) BAD_TRAP(0xaa) BAD_TRAP(0xab)
 	BAD_TRAP(0xac) BAD_TRAP(0xad) BAD_TRAP(0xae) BAD_TRAP(0xaf) BAD_TRAP(0xb0)
 	BAD_TRAP(0xb1) BAD_TRAP(0xb2) BAD_TRAP(0xb3) BAD_TRAP(0xb4) BAD_TRAP(0xb5)
 	BAD_TRAP(0xb6) BAD_TRAP(0xb7) BAD_TRAP(0xb8) BAD_TRAP(0xb9) BAD_TRAP(0xba)
@@ -295,7 +295,9 @@ C_LABEL(trapbase_cpu2):
 	BAD_TRAP(0x74) BAD_TRAP(0x75) BAD_TRAP(0x76) BAD_TRAP(0x77) BAD_TRAP(0x78)
 	BAD_TRAP(0x79) BAD_TRAP(0x7a) BAD_TRAP(0x7b) BAD_TRAP(0x7c) BAD_TRAP(0x7d)
 	BAD_TRAP(0x7e) BAD_TRAP(0x7f)
-	SUNOS_SYSCALL_TRAP BAD_TRAP(0x81) BAD_TRAP(0x82)
+	SUNOS_SYSCALL_TRAP 
+	BREAKPOINT_TRAP
+	BAD_TRAP(0x82)
 	TRAP_ENTRY(0x83, do_flush_windows) BAD_TRAP(0x84) BAD_TRAP(0x85)
 	BAD_TRAP(0x86) BAD_TRAP(0x87) SOLARIS_SYSCALL_TRAP
 	NETBSD_SYSCALL_TRAP BAD_TRAP(0x8a) BAD_TRAP(0x8b) BAD_TRAP(0x8c)
@@ -305,7 +307,7 @@ C_LABEL(trapbase_cpu2):
 	BAD_TRAP(0x9a) BAD_TRAP(0x9b) BAD_TRAP(0x9c) BAD_TRAP(0x9d) BAD_TRAP(0x9e)
 	BAD_TRAP(0x9f) GETCC_TRAP SETCC_TRAP
 	BAD_TRAP(0xa2) BAD_TRAP(0xa3) BAD_TRAP(0xa4) BAD_TRAP(0xa5) BAD_TRAP(0xa6)
-	BAD_TRAP(0xa7) BAD_TRAP(0xa8) BAD_TRAP(0xa9) BAD_TRAP(0xaa) BAD_TRAP(0xab)
+	INDIRECT_SOLARIS_SYSCALL(156) BAD_TRAP(0xa8) BAD_TRAP(0xa9) BAD_TRAP(0xaa) BAD_TRAP(0xab)
 	BAD_TRAP(0xac) BAD_TRAP(0xad) BAD_TRAP(0xae) BAD_TRAP(0xaf) BAD_TRAP(0xb0)
 	BAD_TRAP(0xb1) BAD_TRAP(0xb2) BAD_TRAP(0xb3) BAD_TRAP(0xb4) BAD_TRAP(0xb5)
 	BAD_TRAP(0xb6) BAD_TRAP(0xb7) BAD_TRAP(0xb8) BAD_TRAP(0xb9) BAD_TRAP(0xba)
@@ -361,7 +363,9 @@ C_LABEL(trapbase_cpu3):
 	BAD_TRAP(0x74) BAD_TRAP(0x75) BAD_TRAP(0x76) BAD_TRAP(0x77) BAD_TRAP(0x78)
 	BAD_TRAP(0x79) BAD_TRAP(0x7a) BAD_TRAP(0x7b) BAD_TRAP(0x7c) BAD_TRAP(0x7d)
 	BAD_TRAP(0x7e) BAD_TRAP(0x7f)
-	SUNOS_SYSCALL_TRAP BAD_TRAP(0x81) BAD_TRAP(0x82)
+	SUNOS_SYSCALL_TRAP  
+	BREAKPOINT_TRAP
+	BAD_TRAP(0x82)
 	TRAP_ENTRY(0x83, do_flush_windows) BAD_TRAP(0x84) BAD_TRAP(0x85)
 	BAD_TRAP(0x86) BAD_TRAP(0x87) SOLARIS_SYSCALL_TRAP
 	NETBSD_SYSCALL_TRAP BAD_TRAP(0x8a) BAD_TRAP(0x8b) BAD_TRAP(0x8c)
@@ -371,7 +375,7 @@ C_LABEL(trapbase_cpu3):
 	BAD_TRAP(0x9a) BAD_TRAP(0x9b) BAD_TRAP(0x9c) BAD_TRAP(0x9d) BAD_TRAP(0x9e)
 	BAD_TRAP(0x9f) GETCC_TRAP SETCC_TRAP
 	BAD_TRAP(0xa2) BAD_TRAP(0xa3) BAD_TRAP(0xa4) BAD_TRAP(0xa5) BAD_TRAP(0xa6)
-	BAD_TRAP(0xa7) BAD_TRAP(0xa8) BAD_TRAP(0xa9) BAD_TRAP(0xaa) BAD_TRAP(0xab)
+	INDIRECT_SOLARIS_SYSCALL(156) BAD_TRAP(0xa8) BAD_TRAP(0xa9) BAD_TRAP(0xaa) BAD_TRAP(0xab)
 	BAD_TRAP(0xac) BAD_TRAP(0xad) BAD_TRAP(0xae) BAD_TRAP(0xaf) BAD_TRAP(0xb0)
 	BAD_TRAP(0xb1) BAD_TRAP(0xb2) BAD_TRAP(0xb3) BAD_TRAP(0xb4) BAD_TRAP(0xb5)
 	BAD_TRAP(0xb6) BAD_TRAP(0xb7) BAD_TRAP(0xb8) BAD_TRAP(0xb9) BAD_TRAP(0xba)
@@ -417,6 +421,30 @@ C_LABEL(empty_bad_page):		.skip 0x1000
 C_LABEL(empty_bad_page_table):		.skip 0x1000
 C_LABEL(empty_zero_page):		.skip 0x1000
 
+	.global C_LABEL(root_flags)
+	.global C_LABEL(ram_flags)
+	.global C_LABEL(root_dev)
+	.global C_LABEL(ramdisk_image)
+	.global C_LABEL(ramdisk_size)
+
+/* This stuff has to be in sync with SILO and other potential boot loaders
+ * Fields should be kept upward compatible and whenever any change is made,
+ * HdrS version should be incremented.
+ */
+	.ascii	"HdrS"
+	.word	LINUX_VERSION_CODE
+	.half	0x0201		/* HdrS version */
+C_LABEL(root_flags):
+	.half	1
+C_LABEL(root_dev):
+	.half	0
+C_LABEL(ram_flags):
+	.half	0
+C_LABEL(ramdisk_image):
+	.word	0
+C_LABEL(ramdisk_size):
+	.word	0
+	.word	C_LABEL(reboot_command)
 
 /* Cool, here we go. Pick up the romvec pointer in %o0 and stash it in
  * %g7 and at prom_vector_p. And also quickly check whether we are on
@@ -460,10 +488,9 @@ got_pc:
 		/* %l6 will hold the offset we have to subtract
 		 * from absolute symbols in order to access areas
 		 * in our own image.  If already mapped this is
-		 * just plain zero, else it is PAGE_OFFSET which is
-		 * also KERNBASE.
+		 * just plain zero, else it is KERNBASE.
 		 */
-		set	PAGE_OFFSET, %l6
+		set	KERNBASE, %l6
 		b	copy_prom_lvl14
 		 nop
 
@@ -517,6 +544,9 @@ copy_prom_done:
 		lduba	[%g1] ASI_CONTROL, %g1	! Only safe to try on Sun4.
 		subcc	%g1, 0x24, %g0		! Is this a mutant Sun4/400???
 		be	sun4_mutant_remap	! Ugh, it is...
+		 nop
+
+		b	sun4_normal_remap	! regular sun4, 2 level mmu
 		 nop
 
 remap_not_a_sun4:
@@ -669,7 +699,24 @@ sun4_mutant_loop:
 		b	go_to_highmem		! Jump to high memory.
 		 nop
 
-/* The following works for normal (ie. non Sun4/400) Sun4 MMU's */
+		/* The following is for non-4/4xx sun4 MMU's. */
+sun4_normal_remap:
+		mov	0, %g3			! source base
+		set	KERNBASE, %g4		! destination base
+		set	0x300000, %g5		! upper bound 3MB
+		mov	1, %l6
+		sll	%l6, 18, %l6		! sun4 mmu segmap size
+sun4_normal_loop:
+		lduha	[%g3] ASI_SEGMAP, %g6	! load phys_seg
+		stha	%g6, [%g4] ASI_SEGMAP	! stort new virt mapping
+		add	%g3, %l6, %g3		! increment source pointer
+		subcc	%g3, %g5, %g0		! reached limit?
+		blu	sun4_normal_loop	! nope, loop again
+		 add	%g4, %l6, %g4		! delay, increment dest ptr
+		b	go_to_highmem
+		 nop
+
+		/* The following works for Sun4c MMU's */
 sun4c_remap:
 		mov	0, %g3			! source base
 		set	KERNBASE, %g4		! destination base
@@ -780,10 +827,6 @@ got_prop:
 		be	1f
 		 nop
 
-		cmp	%l1, 'd'
-		be	no_sun4d_here		! God bless the person who
-		 nop				! tried to run this on sun4d.
-	
 		cmp	%l1, 'e'
 		be	no_sun4e_here		! Could be a sun4e.
 		 nop
@@ -797,6 +840,8 @@ got_prop:
 		ldub	[%l1 + 0x4], %l1
 		cmp	%l1, 'm'		! Test for sun4d, sun4e ?
 		be	sun4m_init
+		 cmp	%l1, 'd'		! Let us see how the beast will die
+		be	sun4m_init
 		 nop
 
 		/* Jump into mmu context zero. */
@@ -807,6 +852,50 @@ got_prop:
 		 nop
 
 sun4m_init:
+	/* All sun4m processors can do hw mul/div/rem, patch 'em. */
+#define PATCH_IT(dst, src)	\
+	set	(dst), %g5;	\
+	set	(src), %g4;	\
+	ld	[%g4], %g3;	\
+	st	%g3, [%g5];	\
+	ld	[%g4+0x4], %g3;	\
+	st	%g3, [%g5+0x4];
+
+	/* Signed multiply. */
+	PATCH_IT(.mul, .mul_patch)
+	PATCH_IT(.mul+0x08, .mul_patch+0x08)
+
+	/* Signed remainder. */
+	PATCH_IT(.rem, .rem_patch)
+	PATCH_IT(.rem+0x08, .rem_patch+0x08)
+	PATCH_IT(.rem+0x10, .rem_patch+0x10)
+	PATCH_IT(.rem+0x18, .rem_patch+0x18)
+	PATCH_IT(.rem+0x20, .rem_patch+0x20)
+	PATCH_IT(.rem+0x28, .rem_patch+0x28)
+
+	/* Signed division. */
+	PATCH_IT(.div, .div_patch)
+	PATCH_IT(.div+0x08, .div_patch+0x08)
+	PATCH_IT(.div+0x10, .div_patch+0x10)
+	PATCH_IT(.div+0x18, .div_patch+0x18)
+	PATCH_IT(.div+0x20, .div_patch+0x20)
+
+	/* Unsigned multiply. */
+	PATCH_IT(.umul, .umul_patch)
+	PATCH_IT(.umul+0x08, .umul_patch+0x08)
+
+	/* Unsigned remainder. */
+	PATCH_IT(.urem, .urem_patch)
+	PATCH_IT(.urem+0x08, .urem_patch+0x08)
+	PATCH_IT(.urem+0x10, .urem_patch+0x10)
+	PATCH_IT(.urem+0x18, .urem_patch+0x18)
+
+	/* Unsigned division. */
+	PATCH_IT(.udiv, .udiv_patch)
+	PATCH_IT(.udiv+0x08, .udiv_patch+0x08)
+	PATCH_IT(.udiv+0x10, .udiv_patch+0x10)
+
+#undef PATCH_IT
 
 /* Ok, the PROM could have done funny things and apple cider could still
  * be sitting in the fault status/address registers.  Read them all to
@@ -873,13 +962,13 @@ sun4c_continue_boot:
 		/* Initialize the umask value for init_task just in case.
 		 * But first make current_set[0] point to something useful.
 		 */
-		set	C_LABEL(init_task), %g4
+		set	C_LABEL(init_task), %g6
 		set	C_LABEL(current_set), %g2
-		st	%g4, [%g2]
+		st	%g6, [%g2]
 
 		set	C_LABEL(bootup_kernel_stack), %g3
-		st	%g3, [%g4 + TASK_KSTACK_PG]
-		st	%g0, [%g4 + THREAD_UMASK]
+		st	%g3, [%g6 + TASK_KSTACK_PG]
+		st	%g0, [%g6 + THREAD_UMASK]
 
 /* Compute NWINDOWS and stash it away. Now uses %wim trick explained
  * in the V8 manual. Ok, this method seems to work, Sparc is cool...
@@ -912,9 +1001,9 @@ sun4c_continue_boot:
 
 #define		PATCH_INSN(src, dest) \
 		set	src, %g5; \
-		set	dest, %g6; \
+		set	dest, %g2; \
 		ld	[%g5], %g4; \
-		st	%g4, [%g6];
+		st	%g4, [%g2];
 	
 		/* Patch for window spills... */
 		PATCH_INSN(spnwin_patch1_7win, spnwin_patch1)
@@ -950,6 +1039,25 @@ sun4c_continue_boot:
 		PATCH_INSN(rirq_7win_patch5, rirq_patch5)
 
 #endif
+		/* Now patch the kernel window flush sequences.
+		 * This saves 2 traps on every switch and fork.
+		 */
+		set	0x01000000, %g4
+		set	flush_patch_one, %g5
+		st	%g4, [%g5 + 0x18]
+		st	%g4, [%g5 + 0x1c]
+		set	flush_patch_two, %g5
+		st	%g4, [%g5 + 0x18]
+		st	%g4, [%g5 + 0x1c]
+		set	flush_patch_three, %g5
+		st	%g4, [%g5 + 0x18]
+		st	%g4, [%g5 + 0x1c]
+		set	flush_patch_exception, %g5
+		st	%g4, [%g5 + 0x18]
+		st	%g4, [%g5 + 0x1c]
+		set	flush_patch_switch, %g5
+		st	%g4, [%g5 + 0x18]
+		st	%g4, [%g5 + 0x1c]
 
 2:		
 		sethi	%hi( C_LABEL(nwindows) ), %g4
@@ -998,14 +1106,6 @@ no_sun4_here:
 		 nop
 1:
 		ba	1b			! Cannot exit into KMON
-		 nop
-
-no_sun4d_here:
-		ld	[%g7 + 0x68], %o1
-		set	sun4d_notsup, %o0
-		call	%o1
-		 nop
-		b	halt_me
 		 nop
 
 no_sun4e_here:

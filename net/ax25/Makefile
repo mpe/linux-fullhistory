@@ -1,5 +1,5 @@
 #
-# Makefile for the Linux TCP/IP (INET) layer.
+# Makefile for the Linux AX.25 layer.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
 # removes any old dependencies. DON'T put your own dependencies here
@@ -9,11 +9,10 @@
 
 
 O_TARGET := ax25.o
-O_OBJS	 := af_ax25.o sysctl_net_ax25.o
+O_OBJS	 := sysctl_net_ax25.o ax25_in.o ax25_out.o ax25_route.o ax25_subr.o ax25_timer.o
+M_OBJS   := $(O_TARGET)
 
-ifdef CONFIG_AX25
-O_OBJS	+= ax25_in.o ax25_out.o ax25_route.o ax25_subr.o ax25_timer.o
-endif
+OX_OBJS  += af_ax25.o
 
 include $(TOPDIR)/Rules.make
 

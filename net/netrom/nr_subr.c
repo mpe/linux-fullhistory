@@ -1,5 +1,5 @@
 /*
- *	NET/ROM release 003
+ *	NET/ROM release 004
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -18,7 +18,7 @@
  */
  
 #include <linux/config.h>
-#ifdef CONFIG_NETROM
+#if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -54,17 +54,17 @@ void nr_clear_queues(struct sock *sk)
 		kfree_skb(skb, FREE_WRITE);
 	}
 
-	while ((skb = skb_dequeue(&sk->nr->ack_queue)) != NULL) {
+	while ((skb = skb_dequeue(&sk->protinfo.nr->ack_queue)) != NULL) {
 		skb->sk   = sk;
 		skb->free = 1;
 		kfree_skb(skb, FREE_WRITE);
 	}
 
-	while ((skb = skb_dequeue(&sk->nr->reseq_queue)) != NULL) {
+	while ((skb = skb_dequeue(&sk->protinfo.nr->reseq_queue)) != NULL) {
 		kfree_skb(skb, FREE_READ);
 	}
 
-	while ((skb = skb_dequeue(&sk->nr->frag_queue)) != NULL) {
+	while ((skb = skb_dequeue(&sk->protinfo.nr->frag_queue)) != NULL) {
 		kfree_skb(skb, FREE_READ);
 	}
 }
@@ -81,13 +81,13 @@ void nr_frames_acked(struct sock *sk, unsigned short nr)
 	/*
 	 * Remove all the ack-ed frames from the ack queue.
 	 */
-	if (sk->nr->va != nr) {
-		while (skb_peek(&sk->nr->ack_queue) != NULL && sk->nr->va != nr) {
-		        skb = skb_dequeue(&sk->nr->ack_queue);
+	if (sk->protinfo.nr->va != nr) {
+		while (skb_peek(&sk->protinfo.nr->ack_queue) != NULL && sk->protinfo.nr->va != nr) {
+		        skb = skb_dequeue(&sk->protinfo.nr->ack_queue);
 		        skb->sk   = sk;
 			skb->free = 1;
 			kfree_skb(skb, FREE_WRITE);
-			sk->nr->va = (sk->nr->va + 1) % NR_MODULUS;
+			sk->protinfo.nr->va = (sk->protinfo.nr->va + 1) % NR_MODULUS;
 		}
 	}
 }
@@ -101,7 +101,7 @@ void nr_requeue_frames(struct sock *sk)
 {
 	struct sk_buff *skb, *skb_prev = NULL;
 
-	while ((skb = skb_dequeue(&sk->nr->ack_queue)) != NULL) {
+	while ((skb = skb_dequeue(&sk->protinfo.nr->ack_queue)) != NULL) {
 		if (skb_prev == NULL)
 			skb_queue_head(&sk->write_queue, skb);
 		else
@@ -116,14 +116,14 @@ void nr_requeue_frames(struct sock *sk)
  */
 int nr_validate_nr(struct sock *sk, unsigned short nr)
 {
-	unsigned short vc = sk->nr->va;
+	unsigned short vc = sk->protinfo.nr->va;
 
-	while (vc != sk->nr->vs) {
+	while (vc != sk->protinfo.nr->vs) {
 		if (nr == vc) return 1;
 		vc = (vc + 1) % NR_MODULUS;
 	}
 	
-	if (nr == sk->nr->vs) return 1;
+	if (nr == sk->protinfo.nr->vs) return 1;
 
 	return 0;
 }
@@ -133,8 +133,8 @@ int nr_validate_nr(struct sock *sk, unsigned short nr)
  */
 int nr_in_rx_window(struct sock *sk, unsigned short ns)
 {
-	unsigned short vc = sk->nr->vr;
-	unsigned short vt = (sk->nr->vl + sk->window) % NR_MODULUS;
+	unsigned short vc = sk->protinfo.nr->vr;
+	unsigned short vt = (sk->protinfo.nr->vl + sk->window) % NR_MODULUS;
 
 	while (vc != vt) {
 		if (ns == vc) return 1;
@@ -161,7 +161,7 @@ void nr_write_internal(struct sock *sk, int frametype)
 			len += 17;
 			break;
 		case NR_CONNACK:
-			len += (sk->nr->bpqext) ? 2 : 1;
+			len += (sk->protinfo.nr->bpqext) ? 2 : 1;
 			break;
 		case NR_DISCREQ:
 		case NR_DISCACK:
@@ -185,19 +185,19 @@ void nr_write_internal(struct sock *sk, int frametype)
 	switch (frametype & 0x0F) {
 
 		case NR_CONNREQ:
-			timeout  = (sk->nr->rtt / PR_SLOWHZ) * 2;
-			*dptr++  = sk->nr->my_index;
-			*dptr++  = sk->nr->my_id;
+			timeout  = (sk->protinfo.nr->rtt / PR_SLOWHZ) * 2;
+			*dptr++  = sk->protinfo.nr->my_index;
+			*dptr++  = sk->protinfo.nr->my_id;
 			*dptr++  = 0;
 			*dptr++  = 0;
 			*dptr++  = frametype;
 			*dptr++  = sk->window;
-			memcpy(dptr, &sk->nr->user_addr, AX25_ADDR_LEN);
+			memcpy(dptr, &sk->protinfo.nr->user_addr, AX25_ADDR_LEN);
 			dptr[6] &= ~LAPB_C;
 			dptr[6] &= ~LAPB_E;
 			dptr[6] |= SSSID_SPARE;
 			dptr    += AX25_ADDR_LEN;
-			memcpy(dptr, &sk->nr->source_addr, AX25_ADDR_LEN);
+			memcpy(dptr, &sk->protinfo.nr->source_addr, AX25_ADDR_LEN);
 			dptr[6] &= ~LAPB_C;
 			dptr[6] &= ~LAPB_E;
 			dptr[6] |= SSSID_SPARE;
@@ -207,29 +207,29 @@ void nr_write_internal(struct sock *sk, int frametype)
 			break;
 
 		case NR_CONNACK:
-			*dptr++ = sk->nr->your_index;
-			*dptr++ = sk->nr->your_id;
-			*dptr++ = sk->nr->my_index;
-			*dptr++ = sk->nr->my_id;
+			*dptr++ = sk->protinfo.nr->your_index;
+			*dptr++ = sk->protinfo.nr->your_id;
+			*dptr++ = sk->protinfo.nr->my_index;
+			*dptr++ = sk->protinfo.nr->my_id;
 			*dptr++ = frametype;
 			*dptr++ = sk->window;
-			if (sk->nr->bpqext) *dptr++ = nr_default.ttl;
+			if (sk->protinfo.nr->bpqext) *dptr++ = sysctl_netrom_network_ttl_initialiser;
 			break;
 
 		case NR_DISCREQ:
 		case NR_DISCACK:
-			*dptr++ = sk->nr->your_index;
-			*dptr++ = sk->nr->your_id;
+			*dptr++ = sk->protinfo.nr->your_index;
+			*dptr++ = sk->protinfo.nr->your_id;
 			*dptr++ = 0;
 			*dptr++ = 0;
 			*dptr++ = frametype;
 			break;
 
 		case NR_INFOACK:
-			*dptr++ = sk->nr->your_index;
-			*dptr++ = sk->nr->your_id;
+			*dptr++ = sk->protinfo.nr->your_index;
+			*dptr++ = sk->protinfo.nr->your_id;
 			*dptr++ = 0;
-			*dptr++ = sk->nr->vr;
+			*dptr++ = sk->protinfo.nr->vr;
 			*dptr++ = frametype;
 			break;
 	}
@@ -270,7 +270,7 @@ void nr_transmit_dm(struct sk_buff *skb)
 	dptr[6] |= SSSID_SPARE;
 	dptr += AX25_ADDR_LEN;
 
-	*dptr++ = nr_default.ttl;
+	*dptr++ = sysctl_netrom_network_ttl_initialiser;
 
 	*dptr++ = skb->data[15];
 	*dptr++ = skb->data[16];
@@ -293,12 +293,12 @@ unsigned short nr_calculate_t1(struct sock *sk)
 {
 	int n, t;
 	
-	for (t = 2, n = 0; n < sk->nr->n2count; n++)
+	for (t = 2, n = 0; n < sk->protinfo.nr->n2count; n++)
 		t *= 2;
 
 	if (t > 8) t = 8;
 
-	return t * sk->nr->rtt;
+	return t * sk->protinfo.nr->rtt;
 }
 
 /*
@@ -306,21 +306,21 @@ unsigned short nr_calculate_t1(struct sock *sk)
  */
 void nr_calculate_rtt(struct sock *sk)
 {
-	if (sk->nr->t1timer > 0 && sk->nr->n2count == 0)
-		sk->nr->rtt = (9 * sk->nr->rtt + sk->nr->t1 - sk->nr->t1timer) / 10;
+	if (sk->protinfo.nr->t1timer > 0 && sk->protinfo.nr->n2count == 0)
+		sk->protinfo.nr->rtt = (9 * sk->protinfo.nr->rtt + sk->protinfo.nr->t1 - sk->protinfo.nr->t1timer) / 10;
 
 #ifdef	NR_T1CLAMPLO
 	/* Don't go below one tenth of a second */
-	if (sk->nr->rtt < (NR_T1CLAMPLO))
-		sk->nr->rtt = (NR_T1CLAMPLO);
+	if (sk->protinfo.nr->rtt < (NR_T1CLAMPLO))
+		sk->protinfo.nr->rtt = (NR_T1CLAMPLO);
 #else   /* Failsafe - some people might have sub 1/10th RTTs :-) **/
-        if (sk->nr->rtt == 0)
-                sk->nr->rtt = PR_SLOWHZ;
+        if (sk->protinfo.nr->rtt == 0)
+                sk->protinfo.nr->rtt = PR_SLOWHZ;
 #endif
 #ifdef  NR_T1CLAMPHI
         /* OR above clamped seconds **/
-        if (sk->nr->rtt > (NR_T1CLAMPHI))
-                sk->nr->rtt = (NR_T1CLAMPHI);
+        if (sk->protinfo.nr->rtt > (NR_T1CLAMPHI))
+                sk->protinfo.nr->rtt = (NR_T1CLAMPHI);
 #endif
 }
 

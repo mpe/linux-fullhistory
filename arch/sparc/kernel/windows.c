@@ -9,11 +9,29 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 
+#include <asm/uaccess.h>
+
 /* Do save's until all user register windows are out of the cpu. */
 void flush_user_windows(void)
 {
-	if(current->tss.uwinmask)
-		flush_user_windows();
+	register int ctr asm("g5");
+
+	ctr = 0;
+	__asm__ __volatile__("
+1:
+	ld	[%%g6 + %2], %%g4
+	orcc	%%g0, %%g4, %%g0
+	add	%0, 1, %0
+	bne	1b
+	 save	%%sp, -64, %%sp
+2:
+	subcc	%0, 1, %0
+	bne	2b
+	 restore %%g0, %%g0, %%g0"
+	: "=&r" (ctr)
+	: "0" (ctr),
+	  "i" ((const unsigned long)(&(((struct task_struct *)0)->tss.uwinmask)))
+	: "g4");
 }
 
 static inline void shift_window_buffer(int first_win, int last_win, struct thread_struct *tp)
@@ -37,11 +55,11 @@ static inline void shift_window_buffer(int first_win, int last_win, struct threa
  */
 void synchronize_user_stack(void)
 {
-	struct thread_struct *tp = &current->tss;
+	struct thread_struct *tp;
 	int window;
 
 	flush_user_windows();
-
+	tp = &current->tss;
 	if(!tp->w_saved)
 		return;
 
@@ -49,17 +67,17 @@ void synchronize_user_stack(void)
 	for(window = tp->w_saved - 1; window >= 0; window--) {
 		unsigned long sp = tp->rwbuf_stkptrs[window];
 
-		/* See if %sp is reasonable at all. */
-		if(verify_area(VERIFY_WRITE, (char *) sp, sizeof(struct reg_window)))
+		/* Ok, let it rip. */
+		if(copy_to_user((char *) sp, &tp->reg_window[window],
+				sizeof(struct reg_window)))
 			continue;
 
-		/* Ok, let it rip. */
-		memcpy((char *) sp, &tp->reg_window[window], sizeof(struct reg_window));
 		shift_window_buffer(window, tp->w_saved - 1, tp);
 		tp->w_saved--;
 	}
 }
 
+#if 0
 /* An optimization. */
 static inline void copy_aligned_window(void *dest, const void *src)
 {
@@ -82,27 +100,25 @@ static inline void copy_aligned_window(void *dest, const void *src)
 			     "r" (dest), "r" (src) :
 			     "g2", "g3", "g4", "g5");
 }
+#endif
 
 /* Try to push the windows in a threads window buffer to the
  * user stack.  Unaligned %sp's are not allowed here.
  */
 
-#define stack_is_bad(sp, rw) \
-  (((sp) & 7) || verify_area(rw, (char *) (sp), sizeof(struct reg_window)))
-
 void try_to_clear_window_buffer(struct pt_regs *regs, int who)
 {
-	struct thread_struct *tp = &current->tss;
+	struct thread_struct *tp;
 	int window;
 
 	flush_user_windows();
+	tp = &current->tss;
 	for(window = 0; window < tp->w_saved; window++) {
 		unsigned long sp = tp->rwbuf_stkptrs[window];
 
-		if(stack_is_bad(sp, VERIFY_WRITE))
+		if((sp & 7) ||
+		   copy_to_user((char *) sp, &tp->reg_window[window], REGWIN_SZ))
 			do_exit(SIGILL);
-		else
-			copy_aligned_window((char *) sp, &tp->reg_window[window]);
 	}
 	tp->w_saved = 0;
 }

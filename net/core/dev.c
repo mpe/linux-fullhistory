@@ -45,7 +45,6 @@
  *		Alan Cox	:	Cleaned up the backlog initialise.
  *		Craig Metz	:	SIOCGIFCONF fix if space for under
  *					1 device.
- *		Molnar Ingo	:	skb->stamp hack for the Pentium
  *	    Thomas Bogendoerfer :	Return ENODEV for dev_open, if there
  *					is no device open function.
  *
@@ -411,11 +410,9 @@ static void do_dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 		/* copy outgoing packets to any sniffer packet handlers */
 		if (dev_nit) {
 			struct packet_type *ptype;
-#ifdef CONFIG_M586
-                        struct timeval dummy_tv;
-			do_gettimeofday( &dummy_tv );
-#endif
-			skb->stamp=xtime;
+
+			get_fast_time(&skb->stamp);
+
 			for (ptype = ptype_all; ptype!=NULL; ptype = ptype->next) 
 			{
 				/* Never send packets back to the socket
@@ -486,13 +483,7 @@ void netif_rx(struct sk_buff *skb)
 	skb->sk = NULL;
 	skb->free = 1;
 	if(skb->stamp.tv_sec==0)
-	{
-#ifdef CONFIG_M586
-                        struct timeval dummy_tv;
-			do_gettimeofday( &dummy_tv );
-#endif
-		skb->stamp = xtime;
-	}
+		get_fast_time(&skb->stamp);
 
 	/*
 	 *	Check that we aren't overdoing things.
@@ -1369,6 +1360,7 @@ int dev_ioctl(unsigned int cmd, void *arg)
 extern int lance_init(void);
 extern int ni65_init(void);
 extern int pi_init(void);
+extern int bpq_init(void);
 extern int scc_init(void);
 extern void sdla_setup(void);
 extern void dlci_setup(void);
@@ -1419,6 +1411,9 @@ int net_dev_init(void)
 #endif
 #if defined(CONFIG_PT)
 	pt_init();
+#endif
+#if defined(CONFIG_BPQETHER)
+	bpq_init();
 #endif
 #if defined(CONFIG_DLCI)
 	dlci_setup();

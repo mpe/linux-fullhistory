@@ -71,6 +71,7 @@ struct termio {
 #define N_SLIP		1
 #define N_MOUSE		2
 #define N_PPP		3
+#define N_AX25		5
 
 #ifdef __KERNEL__
 /*	eof=^D		eol=\0		eol2=\0		erase=del

@@ -50,7 +50,7 @@ class KSym
     friend class NameList;
 
   private:
-    long address_;
+    unsigned long address_;
     char* name_;
     long offset_;
     long extent_;
@@ -107,7 +107,7 @@ class NameList
   public:
     int valid() { return (cardinality_ > 0); }
 	
-    KSym* find(long address);
+    KSym* find(unsigned long address);
     void decode(unsigned char* code, long eip_addr);
     
   public:
@@ -115,7 +115,7 @@ class NameList
 };
 
 KSym*
-NameList::find(long address)
+NameList::find(unsigned long address)
 {
     if (!valid())
 	return 0;
@@ -292,7 +292,7 @@ main(int argc, char** argv)
 	    if (ksym)
 		cout << ">>EIP: " << *ksym << endl;
 	} else if (strequ(buffer, "Trace:") && names.valid()) {
-	    long address;
+	    unsigned long address;
 	    while ((cin >> buffer) && 
 		   (sscanf(buffer, " [<%x>]", &address) == 1) &&
 		   address > 0xc) {

@@ -9,13 +9,13 @@
 
 MOD_SUB_DIRS := ipv4
 ALL_SUB_DIRS := 802 ax25 bridge core ethernet ipv4 ipv6 ipx unix appletalk \
-		netrom #decnet
+		netrom rose #decnet
 SUB_DIRS     := core ethernet unix
 MOD_LIST_NAME := NET_MISC_MODULES
 
 ifeq ($(CONFIG_NET),y)
 SUB_DIRS += 802
-endif 
+endif
 
 ifeq ($(CONFIG_INET),y)
 SUB_DIRS += ipv4
@@ -51,10 +51,26 @@ endif
 
 ifeq ($(CONFIG_NETROM),y)
 SUB_DIRS += netrom
+else
+  ifeq ($(CONFIG_NETROM),m)
+  MOD_SUB_DIRS += netrom
+  endif
+endif
+
+ifeq ($(CONFIG_ROSE),y)
+SUB_DIRS += rose
+else
+  ifeq ($(CONFIG_ROSE),m)
+  MOD_SUB_DIRS += rose
+  endif
 endif
 
 ifeq ($(CONFIG_AX25),y)
 SUB_DIRS += ax25
+else
+  ifeq ($(CONFIG_AX25),m)
+  MOD_SUB_DIRS += ax25
+  endif
 endif
 
 L_TARGET     := network.a

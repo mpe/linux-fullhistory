@@ -1,10 +1,10 @@
-/* $Id: stat.h,v 1.6 1995/11/25 02:32:53 davem Exp $ */
+/* $Id: stat.h,v 1.7 1996/10/27 08:55:48 davem Exp $ */
 #ifndef _SPARC_STAT_H
 #define _SPARC_STAT_H
 
 #include <linux/types.h>
 
-struct old_stat {
+struct __old_kernel_stat {
 	unsigned short st_dev;
 	unsigned short st_ino;
 	unsigned short st_mode;
@@ -18,7 +18,7 @@ struct old_stat {
 	unsigned long  st_ctime;
 };
 
-struct new_stat {
+struct stat {
 	dev_t   st_dev;
 	ino_t   st_ino;
 	mode_t  st_mode;

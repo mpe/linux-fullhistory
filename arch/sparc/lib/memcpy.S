@@ -1,520 +1,364 @@
-! Fast memmove/memcpy/bcopy
-! Copyright Australian National University, 1995
-! This file may be used under the terms of the GNU Public License
-! Author: Paul Mackerras, September 95
-! Minor beautifications David S. Miller
+/* memcpy.S: Sparc optimized memcpy code.
+ *
+ *  Copyright(C) 1995 Linus Torvalds
+ *  Copyright(C) 1996 David S. Miller
+ *  Copyright(C) 1996 Eddie C. Dost
+ *  Copyright(C) 1996 Jakub Jelinek
+ *
+ * derived from:
+ *	e-mail between David and Eddie.
+ */
 
 #include <asm/cprefix.h>
+#include <asm/ptrace.h>
 
-	.globl	C_LABEL(bcopy)
+/* Both these macros have to start with exactly the same insn */
+#define MOVE_BIGCHUNK(src, dst, offset, t0, t1, t2, t3, t4, t5, t6, t7) \
+	ldd	[%src + offset + 0x00], %t0; \
+	ldd	[%src + offset + 0x08], %t2; \
+	ldd	[%src + offset + 0x10], %t4; \
+	ldd	[%src + offset + 0x18], %t6; \
+	st	%t0, [%dst + offset + 0x00]; \
+	st	%t1, [%dst + offset + 0x04]; \
+	st	%t2, [%dst + offset + 0x08]; \
+	st	%t3, [%dst + offset + 0x0c]; \
+	st	%t4, [%dst + offset + 0x10]; \
+	st	%t5, [%dst + offset + 0x14]; \
+	st	%t6, [%dst + offset + 0x18]; \
+	st	%t7, [%dst + offset + 0x1c];
+
+#define MOVE_BIGALIGNCHUNK(src, dst, offset, t0, t1, t2, t3, t4, t5, t6, t7) \
+	ldd	[%src + offset + 0x00], %t0; \
+	ldd	[%src + offset + 0x08], %t2; \
+	ldd	[%src + offset + 0x10], %t4; \
+	ldd	[%src + offset + 0x18], %t6; \
+	std	%t0, [%dst + offset + 0x00]; \
+	std	%t2, [%dst + offset + 0x08]; \
+	std	%t4, [%dst + offset + 0x10]; \
+	std	%t6, [%dst + offset + 0x18];
+
+#define MOVE_LASTCHUNK(src, dst, offset, t0, t1, t2, t3) \
+	ldd	[%src - offset - 0x10], %t0; \
+	ldd	[%src - offset - 0x08], %t2; \
+	st	%t0, [%dst - offset - 0x10]; \
+	st	%t1, [%dst - offset - 0x0c]; \
+	st	%t2, [%dst - offset - 0x08]; \
+	st	%t3, [%dst - offset - 0x04];
+
+#define MOVE_HALFCHUNK(src, dst, offset, t0, t1, t2, t3) \
+	lduh	[%src + offset + 0x00], %t0; \
+	lduh	[%src + offset + 0x02], %t1; \
+	lduh	[%src + offset + 0x04], %t2; \
+	lduh	[%src + offset + 0x06], %t3; \
+	sth	%t0, [%dst + offset + 0x00]; \
+	sth	%t1, [%dst + offset + 0x02]; \
+	sth	%t2, [%dst + offset + 0x04]; \
+	sth	%t3, [%dst + offset + 0x06];
+
+#define MOVE_SHORTCHUNK(src, dst, offset, t0, t1) \
+	ldub	[%src - offset - 0x02], %t0; \
+	ldub	[%src - offset - 0x01], %t1; \
+	stb	%t0, [%dst - offset - 0x02]; \
+	stb	%t1, [%dst - offset - 0x01];
+
+	.text
+	.align	4
+
+	.globl	C_LABEL(__memcpy), C_LABEL(memcpy), C_LABEL(bcopy)
+	.globl	C_LABEL(amemmove), C_LABEL(memmove)
 C_LABEL(bcopy):
-	mov	%o0,%o3
-	mov	%o1,%o0
-	mov	%o3,%o1
-
-	.globl	C_LABEL(amemmove)
+	mov	%o0, %o3
+	mov	%o1, %o0
+	mov	%o3, %o1
 C_LABEL(amemmove):
-	.globl	C_LABEL(memmove)
-	.globl	C_LABEL(memcpy)
 C_LABEL(memmove):
-C_LABEL(memcpy):
-	save	%sp,-96,%sp
-	mov	%i0,%l7
+/* This should be kept as optimized as possible */
+	cmp	%o0, %o1
+	bleu	1f
+	 xor	%o0, %o1, %o4
 
-	cmp	%i0,%i1		! check for dest within source area
-	bleu,a	1f
-	andcc	%i0,3,%l1
-	add	%i1,%i2,%l0
-	cmp	%i0,%l0
-	blu,a	Lback
-	mov	%l0,%i1
+	add	%o1, %o2, %o3
+	cmp	%o3, %o0
+	bleu	2f
+	 andcc	%o4, 3, %g0
 
-	! copying forwards
-	! first get dest to be word-aligned
-	andcc	%i0,3,%l1
-1:
-	be,a	Lwalign		! if dest already word-aligned
-	cmp	%i2,4
-	mov	4,%l2
-	sub	%l2,%l1,%l2	! #bytes until word-aligned
-	subcc	%i2,%l2,%i2
-	ble,a	Lend		! not copying enough to get past word bdry
-	addcc	%i2,%l2,%i2
+/* But I think from now on, we can hold on. Or tell me, is memmoving
+ * overlapping regions such a nice game? */
 
-1:
-	ldub	[%i1],%o0	! copy single bytes until word-aligned
-	add	%i1,1,%i1
-	subcc	%l2,1,%l2
-	stb	%o0,[%i0]
-	bgt	1b
-	add	%i0,1,%i0
-	cmp	%i2,4
+	mov	%o0, %g1
+	add	%o1, %o2, %o1
+	add	%o0, %o2, %o0
+	sub	%o1, 1, %o1
+	sub	%o0, 1, %o0
+	
+reverse_bytes:
+	ldub	[%o1], %o4
+	subcc	%o2, 1, %o2
+	stb	%o4, [%o0]
+	sub	%o1, 1, %o1
+	bne	reverse_bytes
+	 sub	%o0, 1, %o0
 
-Lwalign:			! dest now word aligned
-	blt,a	Lend
-	orcc	%i2,%g0,%g0
+	retl
+	 mov	%g1, %o0
 
-	andcc	%i1,3,%l0
-	be,a	Ldoword		! if dest word aligned wrt src
-	andcc	%i0,4,%g0
+/* And here start optimizing again... */
 
-	! yucky cases where we have to shift
+dword_align:
+	andcc	%o1, 1, %g0
+	be	4f
+	 andcc	%o1, 2, %g0
 
-	mov	4,%l2
-	sub	%l2,%l0,%l2	! address adjustment, used at Lendn
-	sll	%l0,3,%l0	! bit offset = shift left count
-	sll	%l2,3,%l1	! shift right count
-	add	%i1,%l2,%i1	! round up to next word
-	ld	[%i1-4],%o0	! get first word
+	ldub	[%o1], %g2
+	add	%o1, 1, %o1
+	stb	%g2, [%o0]
+	sub	%o2, 1, %o2
+	bne	3f
+	 add	%o0, 1, %o0
 
-	andcc	%i0,4,%g0	! get destination double-word aligned
-	be,a	1f
-	andcc	%i1,4,%g0
-	ld	[%i1],%o1	! by constructing and storing one word
-	add	%i0,4,%i0
-	add	%i1,4,%i1
-	sub	%i2,4,%i2
-	sll	%o0,%l0,%o0
-	srl	%o1,%l1,%l6
-	or	%o0,%l6,%o0
-	st	%o0,[%i0-4]
-	mov	%o1,%o0
-
-	andcc	%i1,4,%g0	! now construct & store pairs of double-words
-1:
-	bne,a	3f		! if source now not double-word aligned
-	subcc	%i2,4,%i2
-	subcc	%i2,16,%i2
-	blt	2f
-	mov	%o0,%o1
+	lduh	[%o1], %g2
+	add	%o1, 2, %o1
+	sth	%g2, [%o0]
+	sub	%o2, 2, %o2
+	b	3f
+	 add	%o0, 2, %o0
 4:
-	ldd	[%i1],%o2
-	sll	%o1,%l0,%o4
-	ldd	[%i1+8],%o0
-	add	%i0,16,%i0
-	add	%i1,16,%i1
-	subcc	%i2,16,%i2
-	srl	%o2,%l1,%l6
-	or	%l6,%o4,%o4
-	sll	%o2,%l0,%o5
-	srl	%o3,%l1,%l6
-	or	%l6,%o5,%o5
-	std	%o4,[%i0-16]
-	sll	%o3,%l0,%o4
-	srl	%o0,%l1,%l6
-	or	%l6,%o4,%o4
-	sll	%o0,%l0,%o5
-	srl	%o1,%l1,%l6
-	or	%l6,%o5,%o5
-	bge	4b
-	std	%o4,[%i0-8]
+	lduh	[%o1], %g2
+	add	%o1, 2, %o1
+	sth	%g2, [%o0]
+	sub	%o2, 2, %o2
+	b	3f
+	 add	%o0, 2, %o0
+
+C_LABEL(__memcpy):
+C_LABEL(memcpy):	/* %o0=dst %o1=src %o2=len */
+	xor	%o0, %o1, %o4
+1:
+	andcc	%o4, 3, %o5
 2:
-	addcc	%i2,12,%i2
-	blt,a	Lendn
-	addcc	%i2,4,%i2
+	bne	cannot_optimize
+	 cmp	%o2, 15
+
+	bleu	short_aligned_end
+	 andcc	%o1, 3, %g0
+
+	bne	dword_align
+3:
+	 andcc	%o1, 4, %g0
+
+	be	2f
+	 mov	%o2, %g1
+
+	ld	[%o1], %o4
+	sub	%g1, 4, %g1
+	st	%o4, [%o0]
+	add	%o1, 4, %o1
+	add	%o0, 4, %o0
+2:
+	andcc	%g1, 0xffffff80, %g7
+	be	3f
+	 andcc	%o0, 4, %g0
+
+	be	ldd_std + 4
 5:
-	ld	[%i1],%o2
-	add	%i0,4,%i0
-	add	%i1,4,%i1
-	subcc	%i2,4,%i2
-	sll	%o1,%l0,%o0
-	srl	%o2,%l1,%o1
-	or	%o1,%o0,%o0
-	st	%o0,[%i0-4]
-	bge	5b
-	mov	%o2,%o1
-	ba	Lendn
-	addcc	%i2,4,%i2
-
+	MOVE_BIGCHUNK(o1, o0, 0x00, o2, o3, o4, o5, g2, g3, g4, g5)
+	MOVE_BIGCHUNK(o1, o0, 0x20, o2, o3, o4, o5, g2, g3, g4, g5)
+	MOVE_BIGCHUNK(o1, o0, 0x40, o2, o3, o4, o5, g2, g3, g4, g5)
+	MOVE_BIGCHUNK(o1, o0, 0x60, o2, o3, o4, o5, g2, g3, g4, g5)
+	subcc	%g7, 128, %g7
+	add	%o1, 128, %o1
+	bne	5b
+	 add	%o0, 128, %o0
 3:
-	blt,a	Lendn
-	addcc	%i2,4,%i2
-	ld	[%i1],%o1
-	add	%i1,4,%i1
-	subcc	%i2,16,%i2
-	blt,a	8f
-	addcc	%i2,16,%i2
-7:
-	ldd	[%i1],%o2
-	sll	%o0,%l0,%o4
-	srl	%o1,%l1,%l6
-	or	%l6,%o4,%o4
-	sll	%o1,%l0,%o5
-	ldd	[%i1+8],%o0
-	add	%i0,16,%i0
-	add	%i1,16,%i1
-	subcc	%i2,16,%i2
-	srl	%o2,%l1,%l6
-	or	%l6,%o5,%o5
-	std	%o4,[%i0-16]
-	sll	%o2,%l0,%o4
-	srl	%o3,%l1,%l6
-	or	%l6,%o4,%o4
-	sll	%o3,%l0,%o5
-	srl	%o0,%l1,%l6
-	or	%l6,%o5,%o5
-	bge	7b
-	std	%o4,[%i0-8]
-	addcc	%i2,16,%i2
-8:
-	sll	%o0,%l0,%o4
-	srl	%o1,%l1,%l6
-	or	%l6,%o4,%o4
-	st	%o4,[%i0]
-	add	%i0,4,%i0
-	subcc	%i2,4,%i2
-	blt,a	Lendn
-	addcc	%i2,4,%i2
-	mov	%o1,%o0
-	ld	[%i1],%o1
-	ba	8b
-	add	%i1,4,%i1
+	andcc	%g1, 0x70, %g7
+	be	memcpy_table_end
+	 andcc	%g1, 8, %g0
 
+	sethi	%hi(memcpy_table_end), %o5
+	srl	%g7, 1, %o4
+	add	%g7, %o4, %o4
+	add	%o1, %g7, %o1
+	sub	%o5, %o4, %o5
+	jmpl	%o5 + %lo(memcpy_table_end), %g0
+	 add	%o0, %g7, %o0
 
-Ldoword:
-	! here both dest and src are word-aligned
-	! make dest double-word aligned
-	be,a	1f
-	andcc	%i1,4,%g0
-	ld	[%i1],%o0
-	add	%i0,4,%i0
-	add	%i1,4,%i1
-	sub	%i2,4,%i2
-	st	%o0,[%i0-4]
-	cmp	%i2,4
-	blt,a	Lend
-	orcc	%i2,%g0,%g0
-	andcc	%i1,4,%g0
+memcpy_table:
+	MOVE_LASTCHUNK(o1, o0, 0x60, g2, g3, g4, g5)
+	MOVE_LASTCHUNK(o1, o0, 0x50, g2, g3, g4, g5)
+	MOVE_LASTCHUNK(o1, o0, 0x40, g2, g3, g4, g5)
+	MOVE_LASTCHUNK(o1, o0, 0x30, g2, g3, g4, g5)
+	MOVE_LASTCHUNK(o1, o0, 0x20, g2, g3, g4, g5)
+	MOVE_LASTCHUNK(o1, o0, 0x10, g2, g3, g4, g5)
+	MOVE_LASTCHUNK(o1, o0, 0x00, g2, g3, g4, g5)
 
+memcpy_table_end:
+	be	memcpy_last7
+	 andcc	%g1, 4, %g0
+
+	ldd	[%o1], %g2
+	add	%o0, 8, %o0
+	add	%o1, 8, %o1
+	st	%g2, [%o0 - 0x08]
+	st	%g3, [%o0 - 0x04]
+memcpy_last7:
+	be	1f
+	 andcc	%g1, 2, %g0
+
+	ld	[%o1], %g2
+	add	%o1, 4, %o1
+	st	%g2, [%o0]
+	add	%o0, 4, %o0
 1:
-	be,a	Ldodble		! if source double-word aligned now
-	subcc	%i2,32,%i2
-	ld	[%i1],%o5
-	add	%i1,4,%i1
-	subcc	%i2,36,%i2
-	blt,a	3f
-	add	%i2,32,%i2
+	be	1f
+	 andcc	%g1, 1, %g0
+
+	lduh	[%o1], %g2
+	add	%o1, 2, %o1
+	sth	%g2, [%o0]
+	add	%o0, 2, %o0
+1:
+	be	1f
+	 nop
+
+	ldub	[%o1], %g2
+	stb	%g2, [%o0]
+1:
+	retl
+ 	 nop
+
+	/* Placed here for cache reasons. */
+	.globl	C_LABEL(__copy_to_user), C_LABEL(__copy_from_user)
+C_LABEL(__copy_to_user):
+	b	copy_user_common
+	 st	%o0, [%g6 + THREAD_EX_ADDR]
+
+C_LABEL(__copy_from_user):
+	st	%o1, [%g6 + THREAD_EX_ADDR]
+
+copy_user_common:
+	ld	[%g6 + THREAD_EX_COUNT], %g1
+	set	copy_user_failure, %g2
+	add	%g1, 1, %g1
+	st	%o7, [%g6 + THREAD_EX_PC]
+	st	%g1, [%g6 + THREAD_EX_COUNT]
+	call	C_LABEL(__memcpy)
+	 st	%g2, [%g6 + THREAD_EX_EXPC]
+
+copy_user_success:
+	ldd	[%g6 + THREAD_EX_COUNT], %g2
+	mov	0, %o0
+	sub	%g2, 1, %g1
+	jmpl	%g3 + 0x8, %g0
+	 st	%g1, [%g6 + THREAD_EX_COUNT]
+
+copy_user_failure:
+	jmpl	%g3 + 0x8, %g0
+	 mov	%g2, %o0
+
+ldd_std:
+	MOVE_BIGALIGNCHUNK(o1, o0, 0x00, o2, o3, o4, o5, g2, g3, g4, g5)
+	MOVE_BIGALIGNCHUNK(o1, o0, 0x20, o2, o3, o4, o5, g2, g3, g4, g5)
+	MOVE_BIGALIGNCHUNK(o1, o0, 0x40, o2, o3, o4, o5, g2, g3, g4, g5)
+	MOVE_BIGALIGNCHUNK(o1, o0, 0x60, o2, o3, o4, o5, g2, g3, g4, g5)
+	subcc	%g7, 128, %g7
+	add	%o1, 128, %o1
+	bne	ldd_std
+	 add	%o0, 128, %o0
+
+	andcc	%g1, 0x70, %g7
+	be	memcpy_table_end
+	 andcc	%g1, 8, %g0
+
+	sethi	%hi(memcpy_table_end), %o5
+	srl	%g7, 1, %o4
+	add	%g7, %o4, %o4
+	add	%o1, %g7, %o1
+	sub	%o5, %o4, %o5
+	jmpl	%o5 + %lo(memcpy_table_end), %g0
+	 add	%o0, %g7, %o0
+
+cannot_optimize:
+	bleu	short_end
+	 cmp	%o5, 2
+
+	bne	byte_chunk
+	 and	%o2, 0xfffffff0, %o3
+	 
+	andcc	%o1, 1, %g0
+	be	1f
+	 nop
+
+	ldub	[%o1], %g2
+	add	%o1, 1, %o1
+	sub	%o2, 1, %o2
+	stb	%g2, [%o0]
+	andcc	%o2, 0xfffffff0, %o3
+	be	short_end
+	 add	%o0, 1, %o0
+1:
+	MOVE_HALFCHUNK(o1, o0, 0x00, g2, g3, g4, g5)
+	MOVE_HALFCHUNK(o1, o0, 0x08, g2, g3, g4, g5)
+	subcc	%o3, 0x10, %o3
+	add	%o1, 0x10, %o1
+	bne	1b
+	 add	%o0, 0x10, %o0
+	b	2f
+	 and	%o2, 0xe, %o3
+	
+byte_chunk:
+	MOVE_SHORTCHUNK(o1, o0, -0x02, g2, g3)
+	MOVE_SHORTCHUNK(o1, o0, -0x04, g2, g3)
+	MOVE_SHORTCHUNK(o1, o0, -0x06, g2, g3)
+	MOVE_SHORTCHUNK(o1, o0, -0x08, g2, g3)
+	MOVE_SHORTCHUNK(o1, o0, -0x0a, g2, g3)
+	MOVE_SHORTCHUNK(o1, o0, -0x0c, g2, g3)
+	MOVE_SHORTCHUNK(o1, o0, -0x0e, g2, g3)
+	MOVE_SHORTCHUNK(o1, o0, -0x10, g2, g3)
+	subcc	%o3, 0x10, %o3
+	add	%o1, 0x10, %o1
+	bne	byte_chunk
+	 add	%o0, 0x10, %o0
+
+short_end:
+	and	%o2, 0xe, %o3
 2:
-	ldd	[%i1],%o2
-	add	%i1,32,%i1
-	subcc	%i2,32,%i2
-	mov	%o5,%o0
-	ldd	[%i1-24],%o4
-	mov	%o2,%o1
-	std	%o0,[%i0]
-	mov	%o3,%o2
-	ldd	[%i1-16],%o0
-	mov	%o4,%o3
-	std	%o2,[%i0+8]
-	mov	%o5,%o2
-	ldd	[%i1-8],%o4
-	mov	%o0,%o3
-	std	%o2,[%i0+16]
-	mov	%o1,%o0
-	mov	%o4,%o1
-	std	%o0,[%i0+24]
-	bge	2b
-	add	%i0,32,%i0
-	add	%i2,32,%i2
-3:
-	st	%o5,[%i0]
-	add	%i0,4,%i0
-	subcc	%i2,4,%i2
-	blt,a	Lend
-	addcc	%i2,4,%i2
-	ld	[%i1],%o5
-	ba	3b
-	add	%i1,4,%i1
+	sethi	%hi(short_table_end), %o5
+	sll	%o3, 3, %o4
+	add	%o0, %o3, %o0
+	sub	%o5, %o4, %o5
+	add	%o1, %o3, %o1
+	jmpl	%o5 + %lo(short_table_end), %g0
+	 andcc	%o2, 1, %g0
 
-Ldodble:
-	! dest and source are both double-word aligned
-	blt,a	2f
-	addcc	%i2,28,%i2
+	MOVE_SHORTCHUNK(o1, o0, 0x0c, g2, g3)
+	MOVE_SHORTCHUNK(o1, o0, 0x0a, g2, g3)
+	MOVE_SHORTCHUNK(o1, o0, 0x08, g2, g3)
+	MOVE_SHORTCHUNK(o1, o0, 0x06, g2, g3)
+	MOVE_SHORTCHUNK(o1, o0, 0x04, g2, g3)
+	MOVE_SHORTCHUNK(o1, o0, 0x02, g2, g3)
+	MOVE_SHORTCHUNK(o1, o0, 0x00, g2, g3)
+short_table_end:
+	be	1f
+	 nop
+	ldub	[%o1], %g2
+	stb	%g2, [%o0]
 1:
-	ldd	[%i1],%o0	! copy sets of 4 double-words
-	subcc	%i2,32,%i2
-	ldd	[%i1+8],%o2
-	add	%i1,32,%i1
-	ldd	[%i1-16],%o4
-	add	%i0,32,%i0
-	std	%o0,[%i0-32]
-	ldd	[%i1-8],%o0
-	std	%o2,[%i0-24]
-	std	%o4,[%i0-16]
-	bge	1b
-	std	%o0,[%i0-8]
-	addcc	%i2,28,%i2
-2:
-	blt,a	Lend
-	addcc	%i2,4,%i2
-3:
-	ld	[%i1],%o0	! copy words
-	add	%i1,4,%i1
-	add	%i0,4,%i0
-	subcc	%i2,4,%i2
-	bge	3b
-	st	%o0,[%i0-4]
-	ba	Lend
-	addcc	%i2,4,%i2
+	retl
+ 	 nop
 
-Lendn:
-	sub	%i1,%l2,%i1
-Lend:
-	ble	Lout
-	nop
+short_aligned_end:
+	bne	short_end
+	 andcc	%o2, 8, %g0
+
+	be	1f
+	 andcc	%o2, 4, %g0
+
+	ld	[%o1 + 0x00], %g2
+	ld	[%o1 + 0x04], %g3
+	add	%o1, 8, %o1
+	st	%g2, [%o0 + 0x00]
+	st	%g3, [%o0 + 0x04]
+	add	%o0, 8, %o0
 1:
-	ldub	[%i1],%o0
-	add	%i1,1,%i1
-	subcc	%i2,1,%i2
-	stb	%o0,[%i0]
-	bgt	1b
-	add	%i0,1,%i0
-
-	ba	Lout
-	nop
-
-Lback:	! Here we have to copy backwards
-	add	%i0,%i2,%i0
-	! first get dest to be word-aligned
-	andcc	%i0,3,%l2	! #bytes until word-aligned
-	be,a	Lbwal		! if dest already word-aligned
-	cmp	%i2,4
-	subcc	%i2,%l2,%i2
-	ble,a	Lbend		! not copying enough to get past word bdry
-	addcc	%i2,%l2,%i2
-
-1:
-	ldub	[%i1-1],%o0	! copy single bytes until word-aligned
-	sub	%i1,1,%i1
-	subcc	%l2,1,%l2
-	stb	%o0,[%i0-1]
-	bgt	1b
-	sub	%i0,1,%i0
-	cmp	%i2,4
-
-Lbwal:				! dest now word aligned
-	blt,a	Lbend
-	orcc	%i2,%g0,%g0
-
-	andcc	%i1,3,%l2
-	be,a	Lbword		! if dest word aligned wrt src
-	andcc	%i0,4,%g0
-
-	! yucky cases where we have to shift
-	! note %l2 used below at Lbendn
-
-	mov	4,%l0
-	sub	%l0,%l2,%l0	! # bytes to right of src in word
-	sll	%l0,3,%l0	! bit offset = shift right count
-	sll	%l2,3,%l1	! shift left count
-	sub	%i1,%l2,%i1	! round down to word boundary
-	ld	[%i1],%o1	! get first word
-
-	andcc	%i0,4,%g0	! get destination double-word aligned
-	be,a	1f
-	andcc	%i1,4,%g0
-	ld	[%i1-4],%o0	! by constructing and storing one word
-	sub	%i0,4,%i0
-	sub	%i1,4,%i1
-	sub	%i2,4,%i2
-	srl	%o1,%l0,%o1
-	sll	%o0,%l1,%l6
-	or	%o1,%l6,%o1
-	st	%o1,[%i0]
-	mov	%o0,%o1
-
-	andcc	%i1,4,%g0	! now construct & store pairs of double-words
-1:
-	bne,a	3f		! if source now not double-word aligned
-	subcc	%i2,4,%i2
-	subcc	%i2,16,%i2
-	blt	2f
-	mov	%o1,%o0
-4:
-	ldd	[%i1-8],%o2
-	srl	%o0,%l0,%o5
-	ldd	[%i1-16],%o0
-	sub	%i0,16,%i0
-	sub	%i1,16,%i1
-	subcc	%i2,16,%i2
-	sll	%o3,%l1,%l6
-	or	%l6,%o5,%o5
-	srl	%o3,%l0,%o4
-	sll	%o2,%l1,%l6
-	or	%l6,%o4,%o4
-	std	%o4,[%i0+8]
-	srl	%o2,%l0,%o5
-	sll	%o1,%l1,%l6
-	or	%l6,%o5,%o5
-	srl	%o1,%l0,%o4
-	sll	%o0,%l1,%l6
-	or	%l6,%o4,%o4
-	bge	4b
-	std	%o4,[%i0]
-2:
-	addcc	%i2,12,%i2
-	blt,a	Lbendn
-	addcc	%i2,4,%i2
-5:
-	ld	[%i1-4],%o2
-	sub	%i0,4,%i0
-	sub	%i1,4,%i1
-	subcc	%i2,4,%i2
-	srl	%o0,%l0,%o0
-	sll	%o2,%l1,%o1
-	or	%o1,%o0,%o0
-	st	%o0,[%i0]
-	bge	5b
-	mov	%o2,%o0
-	ba	Lbendn
-	addcc	%i2,4,%i2
-
-3:
-	blt,a	Lbendn
-	addcc	%i2,4,%i2
-	ld	[%i1-4],%o0
-	sub	%i1,4,%i1
-	subcc	%i2,16,%i2
-	blt,a	8f
-	addcc	%i2,16,%i2
-7:
-	ldd	[%i1-8],%o2
-	srl	%o1,%l0,%o5
-	sll	%o0,%l1,%l6
-	or	%l6,%o5,%o5
-	srl	%o0,%l0,%o4
-	ldd	[%i1-16],%o0
-	sub	%i0,16,%i0
-	sub	%i1,16,%i1
-	subcc	%i2,16,%i2
-	sll	%o3,%l1,%l6
-	or	%l6,%o4,%o4
-	std	%o4,[%i0+8]
-	srl	%o3,%l0,%o5
-	sll	%o2,%l1,%l6
-	or	%l6,%o5,%o5
-	srl	%o2,%l0,%o4
-	sll	%o1,%l1,%l6
-	or	%l6,%o4,%o4
-	bge	7b
-	std	%o4,[%i0]
-	addcc	%i2,16,%i2
-8:
-	srl	%o1,%l0,%o5
-	sll	%o0,%l1,%l6
-	or	%l6,%o5,%o5
-	st	%o5,[%i0-4]
-	sub	%i0,4,%i0
-	subcc	%i2,4,%i2
-	blt,a	Lbendn
-	addcc	%i2,4,%i2
-	mov	%o0,%o1
-	ld	[%i1-4],%o0
-	ba	8b
-	sub	%i1,4,%i1
-
-
-Lbword:
-	! here both dest and src are word-aligned
-	! make dest double-word aligned
-	be,a	1f
-	andcc	%i1,4,%g0
-	ld	[%i1-4],%o0
-	sub	%i0,4,%i0
-	sub	%i1,4,%i1
-	sub	%i2,4,%i2
-	st	%o0,[%i0]
-	cmp	%i2,4
-	blt,a	Lbend
-	orcc	%i2,%g0,%g0
-	andcc	%i1,4,%g0
-
-1:
-	be,a	Lbdble		! if source double-word aligned now
-	subcc	%i2,32,%i2
-	ld	[%i1-4],%o4
-	sub	%i1,4,%i1
-	subcc	%i2,36,%i2
-	blt,a	3f
-	add	%i2,32,%i2
-2:
-	ldd	[%i1-8],%o2
-	sub	%i1,32,%i1
-	subcc	%i2,32,%i2
-	mov	%o4,%o1
-	ldd	[%i1+16],%o4
-	mov	%o3,%o0
-	std	%o0,[%i0-8]
-	mov	%o2,%o3
-	ldd	[%i1+8],%o0
-	mov	%o5,%o2
-	std	%o2,[%i0-16]
-	mov	%o4,%o3
-	ldd	[%i1],%o4
-	mov	%o1,%o2
-	std	%o2,[%i0-24]
-	mov	%o0,%o1
-	mov	%o5,%o0
-	std	%o0,[%i0-32]
-	bge	2b
-	sub	%i0,32,%i0
-	add	%i2,32,%i2
-3:
-	st	%o4,[%i0-4]
-	sub	%i0,4,%i0
-	subcc	%i2,4,%i2
-	blt,a	Lbend
-	addcc	%i2,4,%i2
-	ld	[%i1-4],%o4
-	ba	3b
-	sub	%i1,4,%i1
-
-Lbdble:
-	! dest and source are both double-word aligned
-	blt,a	2f
-	addcc	%i2,28,%i2
-1:
-	ldd	[%i1-8],%o0	! copy sets of 4 double-words
-	subcc	%i2,32,%i2
-	ldd	[%i1-16],%o2
-	sub	%i1,32,%i1
-	ldd	[%i1+8],%o4
-	sub	%i0,32,%i0
-	std	%o0,[%i0+24]
-	ldd	[%i1],%o0
-	std	%o2,[%i0+16]
-	std	%o4,[%i0+8]
-	bge	1b
-	std	%o0,[%i0]
-	addcc	%i2,28,%i2
-2:
-	blt,a	Lbend
-	addcc	%i2,4,%i2
-3:
-	ld	[%i1-4],%o0	! copy words
-	sub	%i1,4,%i1
-	sub	%i0,4,%i0
-	subcc	%i2,4,%i2
-	bge	3b
-	st	%o0,[%i0]
-	ba	Lbend
-	addcc	%i2,4,%i2
-
-Lbendn:
-	add	%i1,%l2,%i1
-Lbend:
-	ble	Lout
-	nop
-1:
-	ldub	[%i1-1],%o0
-	sub	%i1,1,%i1
-	subcc	%i2,1,%i2
-	stb	%o0,[%i0-1]
-	bgt	1b
-	sub	%i0,1,%i0
-
-Lout:
-	ret
-	restore	%l7,0,%o0
-
-
+	b	memcpy_last7
+	 mov	%o2, %g1

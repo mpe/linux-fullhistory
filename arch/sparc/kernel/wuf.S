@@ -1,4 +1,4 @@
-/* $Id: wuf.S,v 1.23 1996/04/25 06:09:18 davem Exp $
+/* $Id: wuf.S,v 1.27 1996/10/11 01:00:06 davem Exp $
  * wuf.S: Window underflow trap handler for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller
@@ -26,6 +26,8 @@
 /* Now macros for the available scratch registers in this routine. */
 #define twin_tmp1    l4
 #define twin_tmp2    l5
+
+#define curptr       g6
 
 	.text
 	.align	4
@@ -88,7 +90,6 @@ fnwin_patch1:	srl	%t_wim, 7, %twin_tmp2
 fnwin_patch2:	and	%twin_tmp1, 0xff, %twin_tmp1
 
 	wr	%twin_tmp1, 0x0, %wim	/* Make window 'I' invalid */
-	WRITE_PAUSE
 
 	andcc	%t_psr, PSR_PS, %g0
 	be	fwin_from_user
@@ -135,7 +136,7 @@ fwin_from_user:
 	 */
 				.globl	C_LABEL(fwin_mmu_patchme)
 C_LABEL(fwin_mmu_patchme):	b	C_LABEL(sun4c_fwin_stackchk)
-				andcc	%sp, 0x7, %g0
+				 andcc	%sp, 0x7, %g0
 
 fwin_user_stack_is_bolixed:
 	/* LOCATION: Window 'W' */
@@ -152,13 +153,14 @@ fwin_user_stack_is_bolixed:
 
 	/* Save kernel %sp in global while we change windows. */
 	mov	%l5, %g2
+	mov	%l4, %curptr
 
 	save	%g0, %g0, %g0
 
 	/* LOCATION: Window 'O' */
 
 	rd	%psr, %g3		/* Read %psr in live user window */
-	mov	%fp, %g6		/* Save bogus frame pointer. */
+	mov	%fp, %g4		/* Save bogus frame pointer. */
 
 	save	%g0, %g0, %g0
 
@@ -176,9 +178,8 @@ fwin_user_stack_is_bolixed:
 	/* Fix users window mask and buffer save count. */
 	mov	0x1, %g5
 	sll	%g5, %g3, %g5
-	LOAD_CURRENT(twin_tmp1, g1)
-	st	%g5, [%twin_tmp1 + THREAD_UMASK]	! one live user window still
-	st	%g0, [%twin_tmp1 + THREAD_W_SAVED]	! no windows in the buffer
+	st	%g5, [%curptr + THREAD_UMASK]		! one live user window still
+	st	%g0, [%curptr + THREAD_W_SAVED]		! no windows in the buffer
 
 	ENTER_SYSCALL
 
@@ -186,10 +187,10 @@ fwin_user_stack_is_bolixed:
 	WRITE_PAUSE
 
 	call	C_LABEL(window_underflow_fault)
-	 mov	%g6, %o0
+	 mov	%g4, %o0
 
 	b	ret_trap_entry
-	 nop
+	 clr	%l6
 
 fwin_user_stack_is_ok:
 	/* LOCATION: Window 'W' */
@@ -247,8 +248,7 @@ C_LABEL(sun4c_fwin_stackchk):
 	be	1f
 	 and	%sp, 0xfff, %l0		! delay slot
 
-	b	fwin_user_stack_is_bolixed
-	 nop
+	b,a	fwin_user_stack_is_bolixed
 
 	/* See if we have to check the sanity of one page or two */
 1:
@@ -259,8 +259,7 @@ C_LABEL(sun4c_fwin_stackchk):
 	be	1f
 	 andncc	%l0, 0xff8, %g0
 
-	b	fwin_user_stack_is_bolixed	/* %sp is in vma hole, yuck */
-	 nop
+	b,a	fwin_user_stack_is_bolixed	/* %sp is in vma hole, yuck */
 
 1:
 	be	sun4c_fwin_onepage	/* Only one page to check */
@@ -273,8 +272,7 @@ sun4c_fwin_twopages:
 	be	1f
 	 lda	[%l0] ASI_PTE, %l1
 
-	b	fwin_user_stack_is_bolixed	/* Second page in vma hole */
-	 nop
+	b,a	fwin_user_stack_is_bolixed	/* Second page in vma hole */
 
 1:
 	srl	%l1, 29, %l1
@@ -282,8 +280,7 @@ sun4c_fwin_twopages:
 	bne	sun4c_fwin_onepage
 	 lda	[%sp] ASI_PTE, %l1	
 
-	b	fwin_user_stack_is_bolixed	/* Second page has bad perms */
-	 nop
+	b,a	fwin_user_stack_is_bolixed	/* Second page has bad perms */
 
 sun4c_fwin_onepage:
 	srl	%l1, 29, %l1
@@ -292,22 +289,21 @@ sun4c_fwin_onepage:
 	 nop
 
 	/* A page had bad page permissions, losing... */
-	b	fwin_user_stack_is_bolixed
-	 nop
+	b,a	fwin_user_stack_is_bolixed
 
 	.globl	C_LABEL(srmmu_fwin_stackchk)
 C_LABEL(srmmu_fwin_stackchk):
 	/* LOCATION: Window 'W' */
 
 	/* Caller did 'andcc %sp, 0x7, %g0' */
+	sethi	%hi(C_LABEL(page_offset)), %l5
 	bne	fwin_user_stack_is_bolixed
-	 nop
+	 ld	[%l5 + %lo(C_LABEL(page_offset))], %l5
 
 	/* Check if the users stack is in kernel vma, then our
 	 * trial and error technique below would succeed for
 	 * the 'wrong' reason.
 	 */
-	sethi	%hi(KERNBASE), %l5		! delay slot for above
 	mov	AC_M_SFSR, %l4
 	cmp	%l5, %sp
 	bleu	fwin_user_stack_is_bolixed
@@ -342,8 +338,8 @@ C_LABEL(srmmu_fwin_stackchk):
 	mov	AC_M_SFSR, %twin_tmp2
 	lda	[%twin_tmp2] ASI_M_MMUREGS, %twin_tmp2	! read fault status
 	andcc	%twin_tmp2, 0x2, %g0			! did fault occur?
-	be	fwin_user_finish_up
-	 nop
+	be,a	fwin_user_finish_up + 0x4
+	 wr	%t_psr, 0x0, %psr
 
 	/* Did I ever tell you about my window lobotomy?
 	 * anyways... fwin_user_stack_is_bolixed expects

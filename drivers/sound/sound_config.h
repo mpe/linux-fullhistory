@@ -32,7 +32,7 @@
  * Use always 64k buffer size. There is no reason to use shorter.
  */
 #undef DSP_BUFFSIZE
-#define DSP_BUFFSIZE		(16*1024)
+#define DSP_BUFFSIZE		(64*1024)
 
 #ifndef DSP_BUFFCOUNT
 #define DSP_BUFFCOUNT		1	/* 1 is recommended. */

@@ -32,10 +32,10 @@
 #define DEV_NUMBUFFS	3
 #define MAX_ADDR_LEN	7
 
-#if !defined(CONFIG_AX25) && !defined(CONFIG_TR)
+#if !defined(CONFIG_AX25) && !defined(CONFIG_AX25_MODULE) && !defined(CONFIG_TR)
 #define LL_MAX_HEADER	32
 #else
-#if defined(CONFIG_AX25)
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #define LL_MAX_HEADER	96
 #else
 #define LL_MAX_HEADER	48

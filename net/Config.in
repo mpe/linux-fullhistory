@@ -20,10 +20,10 @@ if [ "$CONFIG_IPX" != "n" ]; then
   bool 'Full internal IPX network' CONFIG_IPX_INTERN
 fi
 tristate 'Appletalk DDP' CONFIG_ATALK
-bool 'Amateur Radio AX.25 Level 2' CONFIG_AX25
-if [ "$CONFIG_AX25" = "y" ]; then
-  bool 'AX.25 over Ethernet' CONFIG_BPQETHER
-  bool 'Amateur Radio NET/ROM' CONFIG_NETROM
+tristate 'Amateur Radio AX.25 Level 2' CONFIG_AX25
+if [ "$CONFIG_AX25" != "n" ]; then
+  dep_tristate 'Amateur Radio NET/ROM' CONFIG_NETROM $CONFIG_AX25
+  dep_tristate 'Amateur Radio X.25 PLP (Rose)' CONFIG_ROSE $CONFIG_AX25
 fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   bool 'Bridging (EXPERIMENTAL)' CONFIG_BRIDGE

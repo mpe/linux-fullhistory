@@ -67,7 +67,7 @@
 #include <linux/proc_fs.h>
 #include <linux/firewall.h>
 
-#ifdef CONFIG_KERNELD
+#if defined(CONFIG_KERNELD) && defined(CONFIG_NET)
 #include <linux/kerneld.h>
 #endif
 
@@ -536,8 +536,13 @@ asmlinkage int sys_socket(int family, int type, int protocol)
 	/* Locate the correct protocol family. */
 	i = find_protocol_family(family);
 
-#ifdef CONFIG_KERNELD
-	/* Attempt to load a protocol module if the find failed. */
+#if defined(CONFIG_KERNELD) && defined(CONFIG_NET)
+	/* Attempt to load a protocol module if the find failed. 
+	 * 
+	 * 12/09/1996 Marcin: But! this makes REALLY only sense, if the user 
+	 * requested real, full-featured networking support upon configuration.
+	 * Otherwise module support will break!
+	 */
 	if (i < 0)
 	{
 		char module_name[30];

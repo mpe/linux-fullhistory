@@ -564,7 +564,7 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen,
 	}
 	
 	udh.uh.source = sk->dummy_th.source;
-	udh.uh.len = htons(ulen);
+	udh.uh.len = htons(len);
 	udh.uh.check = 0;
 	udh.iov = msg->msg_iov;
 	udh.wcheck = 0;

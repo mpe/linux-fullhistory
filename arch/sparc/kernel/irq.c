@@ -1,4 +1,4 @@
-/*  $Id: irq.c,v 1.44 1996/04/25 06:08:46 davem Exp $
+/*  $Id: irq.c,v 1.53 1996/10/16 12:30:18 zaitcev Exp $
  *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
@@ -19,6 +19,7 @@
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/malloc.h>
+#include <linux/random.h>
 
 #include <asm/ptrace.h>
 #include <asm/processor.h>
@@ -32,6 +33,7 @@
 #include <asm/traps.h>
 #include <asm/irq.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
 
 /*
  * Dave Redman (djhr@tadpole.co.uk)
@@ -158,7 +160,7 @@ void free_irq(unsigned int irq, void *dev_id)
 	    return;
 	}
 	
-        save_flags(flags); cli();
+        save_and_cli(flags);
 	if (action && tmp)
 		tmp->next = action->next;
 	else
@@ -184,11 +186,13 @@ void unexpected_irq(int irq, void *dev_id, struct pt_regs * regs)
         printk("IO device interrupt, irq = %d\n", irq);
         printk("PC = %08lx NPC = %08lx FP=%08lx\n", regs->pc, 
 		    regs->npc, regs->u_regs[14]);
-        printk("Expecting: ");
-        for (i = 0; i < 16; i++)
-                if (action->handler)
-                        prom_printf("[%s:%d:0x%x] ", action->name, (int) i,
-				    (unsigned int) action->handler);
+	if (action) {
+		printk("Expecting: ");
+        	for (i = 0; i < 16; i++)
+                	if (action->handler)
+                        	prom_printf("[%s:%d:0x%x] ", action->name,
+				    (int) i, (unsigned int) action->handler);
+	}
         printk("AIEEE\n");
 	panic("bogus interrupt received");
 }
@@ -204,46 +208,12 @@ void handler_irq(int irq, struct pt_regs * regs)
 #if 0
 	printk("I<%d,%d,%d>", smp_processor_id(), irq, smp_proc_in_lock[smp_processor_id()]);
 #endif
-	while (action) {
-		if (!action->handler)
-			unexpected_irq(irq, action->dev_id, regs);
-		else
-			action->handler(irq, action->dev_id, regs);
-		action = action->next;
-	}
-}
-
-/*
- * do_IRQ handles IRQ's that have been installed without the
- * SA_INTERRUPT flag: it uses the full signal-handling return
- * and runs with other interrupts enabled. All relatively slow
- * IRQ's should use this format: notably the keyboard/timer
- * routines.
- */
-asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
-{
-	struct irqaction * action;
-	unsigned int cpu_irq;
-	
-	cpu_irq = irq & NR_IRQS;
-	action = *(cpu_irq + irq_action);
-	kstat.interrupts[cpu_irq]++;
-	while (action) {
+	do {
+		if (!action || !action->handler)
+			unexpected_irq(irq, 0, regs);
 		action->handler(irq, action->dev_id, regs);
 		action = action->next;
-	}
-}
-
-/*
- * do_fast_IRQ handles IRQ's that don't need the fancy interrupt return
- * stuff - the handler is also running with interrupts disabled unless
- * it explicitly enables them later.
- */
-asmlinkage void do_fast_IRQ(int irq)
-{
-	kstat.interrupts[irq&NR_IRQS]++;
-	printk("Got FAST_IRQ number %04lx\n", (long unsigned int) irq);
-	return;
+	} while (action);
 }
 
 /* Fast IRQ's on the Sparc can only have one routine attached to them,
@@ -256,6 +226,10 @@ int request_fast_irq(unsigned int irq,
 	struct irqaction *action;
 	unsigned long flags;
 	unsigned int cpu_irq;
+#ifdef __SMP__
+	struct tt_entry *trap_table;
+	extern struct tt_entry trapbase_cpu1, trapbase_cpu2, trapbase_cpu3;
+#endif
 	
 	cpu_irq = irq & NR_IRQS;
 	if(cpu_irq > 14)
@@ -273,7 +247,7 @@ int request_fast_irq(unsigned int irq,
 		return -EBUSY;
 	}
 
-	save_flags(flags); cli();
+	save_and_cli(flags);
 
 	/* If this is flagged as statically allocated then we use our
 	 * private struct which is never freed.
@@ -295,12 +269,27 @@ int request_fast_irq(unsigned int irq,
 	}
 
 	/* Dork with trap table if we get this far. */
-	sparc_ttable[SP_TRAP_IRQ1+(cpu_irq-1)].inst_one =
-		SPARC_BRANCH((unsigned long) handler,
-			     (unsigned long) &sparc_ttable[SP_TRAP_IRQ1+(irq-1)].inst_one);
-	sparc_ttable[SP_TRAP_IRQ1+(cpu_irq-1)].inst_two = SPARC_RD_PSR_L0;
-	sparc_ttable[SP_TRAP_IRQ1+(cpu_irq-1)].inst_three = SPARC_NOP;
-	sparc_ttable[SP_TRAP_IRQ1+(cpu_irq-1)].inst_four = SPARC_NOP;
+#define INSTANTIATE(table) \
+	table[SP_TRAP_IRQ1+(cpu_irq-1)].inst_one = SPARC_RD_PSR_L0; \
+	table[SP_TRAP_IRQ1+(cpu_irq-1)].inst_two = \
+		SPARC_BRANCH((unsigned long) handler, \
+			     (unsigned long) &table[SP_TRAP_IRQ1+(cpu_irq-1)].inst_two);\
+	table[SP_TRAP_IRQ1+(cpu_irq-1)].inst_three = SPARC_RD_WIM_L3; \
+	table[SP_TRAP_IRQ1+(cpu_irq-1)].inst_four = SPARC_NOP;
+
+	INSTANTIATE(sparc_ttable)
+#ifdef __SMP__
+	trap_table = &trapbase_cpu1; INSTANTIATE(trap_table)
+	trap_table = &trapbase_cpu2; INSTANTIATE(trap_table)
+	trap_table = &trapbase_cpu3; INSTANTIATE(trap_table)
+#endif
+#undef INSTANTIATE
+	/*
+	 * XXX Correct thing whould be to flush only I- and D-cache lines
+	 * which contain the handler in question. But as of time of the
+	 * writing we have no CPU-neutral interface to fine-grained flushes.
+	 */
+	flush_cache_all();
 
 	action->handler = handler;
 	action->flags = irqflags;
@@ -342,7 +331,7 @@ int request_irq(unsigned int irq,
 		}   
 	}
 
-	save_flags(flags); cli();
+	save_and_cli(flags);
 
 	/* If this is flagged as statically allocated then we use our
 	 * private struct which is never freed.

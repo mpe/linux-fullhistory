@@ -838,7 +838,7 @@ static void fib6_flush_1(struct fib6_node *fn, void *p_arg)
 
 void fib6_flush(void)
 {
-	rt6_walk_tree(fib6_flush_1, NULL, 0);
+	rt6_walk_tree(fib6_flush_1, NULL, RT6_FILTER_NONE);
 }
 
 int ipv6_route_add(struct in6_rtmsg *rtmsg)
@@ -958,10 +958,12 @@ struct rt6_info * fibv6_lookup(struct in6_addr *addr, struct device *src_dev,
 	{
 		if (src_dev)
 		{
-			for (; rt; rt=rt->next)
+			struct rt6_info *sprt;
+
+			for (sprt=rt; sprt; sprt=sprt->next)
 			{
-				if (rt->rt_dev == src_dev)
-					return rt;
+				if (sprt->rt_dev == src_dev)
+					return sprt;
 			}
 			
 			if (flags & RTI_DEVRT)
@@ -980,7 +982,7 @@ struct rt6_info * fibv6_lookup(struct in6_addr *addr, struct device *src_dev,
 			return rt;
 		}
 
-		return last_resort_rt;		
+		return last_resort_rt;
 	}
 
 	return NULL;
@@ -1535,7 +1537,7 @@ static void __rt6_run_bh(void)
 				args.timeout = DC_LONG_TIMEOUT;
 
 			args.more = 0;
-			rt6_walk_tree(dc_garbage_collect, &args, 0);
+			rt6_walk_tree(dc_garbage_collect, &args, RT6_FILTER_NONE);
 
 			last_gc_run = jiffies;
 			
@@ -1570,7 +1572,7 @@ void rt6_timer_handler(unsigned long data)
 		 *	route expiry
 		 */
 		
-		rt6_walk_tree(rt6_rt_timeout, NULL, 1);
+		rt6_walk_tree(rt6_rt_timeout, NULL, RT6_FILTER_RTNODES);
 	}
 
 	restore_flags(flags);
@@ -1629,6 +1631,31 @@ int ipv6_route_ioctl(unsigned int cmd, void *arg)
 	}
 
 	return -EINVAL;
+}
+
+static void rt6_ifdown_scan(struct fib6_node *fn, void *arg)
+{
+	struct rt6_info *rt;
+	struct device *dev = (struct device *) arg;
+
+	for (rt = fn->leaf; rt; rt=rt->next)
+	{
+		if (((rt->rt_flags & RTI_DCACHE) == 0) && rt->rt_dev == dev)
+		{
+			struct rt6_req *req;
+
+			req = kmalloc(sizeof(struct rt6_req), GFP_ATOMIC);
+			req->operation = RT_OPER_DEL;
+			req->ptr  = rt;
+			req->next = req->prev = NULL;
+			rt6_bh_mask |= RT_BH_REQUEST;
+		}
+	}
+}
+
+void rt6_ifdown(struct device *dev)
+{
+	rt6_walk_tree(rt6_ifdown_scan, (void *) dev, RT6_FILTER_RTNODES);
 }
 
 static void rt6_walk_tree(f_pnode func, void * arg, int filter)
@@ -1751,7 +1778,7 @@ static int rt6_proc_info(char *buffer, char **start, off_t offset, int length,
 	arg.skip = 0;
 	arg.len = 0;
 
-	rt6_walk_tree(rt6_info_node, &arg, 1);
+	rt6_walk_tree(rt6_info_node, &arg, RT6_FILTER_RTNODES);
 	
 	sfn.leaf = default_rt_list;
 	rt6_info_node(&sfn, &arg);
@@ -1794,6 +1821,11 @@ static int rt6_proc_stats(char *buffer, char **start, off_t offset, int length,
 }
 
 #endif			/* CONFIG_PROC_FS */
+
+/*
+ *	init/cleanup code
+ *
+ */
 
 void ipv6_route_init(void)
 {
@@ -1875,6 +1907,11 @@ void rt6_sndmsg(__u32 type, struct in6_addr *dst, struct in6_addr *gw,
 	struct in6_rtmsg *msg;
 	
 	skb = alloc_skb(sizeof(struct in6_rtmsg), GFP_ATOMIC);
+	if (skb == NULL)
+		return;
+
+	skb->free = 1;
+
 	msg = (struct in6_rtmsg *) skb_put(skb, sizeof(struct in6_rtmsg));
 	
 	msg->rtmsg_type = type;

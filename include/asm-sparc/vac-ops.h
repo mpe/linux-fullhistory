@@ -1,4 +1,4 @@
-/* $Id: vac-ops.h,v 1.11 1996/04/25 06:13:38 davem Exp $ */
+/* $Id: vac-ops.h,v 1.12 1996/07/08 15:12:30 ecd Exp $ */
 #ifndef _SPARC_VAC_OPS_H
 #define _SPARC_VAC_OPS_H
 
@@ -79,7 +79,7 @@
  * a 'bad alias'.
  */
 #define S4CVAC_BADALIAS(vaddr1, vaddr2) \
-        (((unsigned long) (vaddr1)) ^ ((unsigned long) (vaddr2)) & \
+        ((((unsigned long) (vaddr1)) ^ ((unsigned long) (vaddr2))) & \
 	 (S4CVAC_BADBITS))
 
 /* The following structure describes the characteristics of a sun4c

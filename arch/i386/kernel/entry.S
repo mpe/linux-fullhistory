@@ -317,6 +317,7 @@ v86_signal_return:
 	RESTORE_ALL
 	ALIGN
 tracesys:
+	movl $-ENOSYS,EAX(%esp)
 	call SYMBOL_NAME(syscall_trace)
 	movl ORIG_EAX(%esp),%eax
 	call SYMBOL_NAME(sys_call_table)(,%eax,4)

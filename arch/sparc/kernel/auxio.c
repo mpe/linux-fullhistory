@@ -5,6 +5,7 @@
 
 #include <asm/oplib.h>
 #include <asm/io.h>
+#include <asm/auxio.h>
 
 /* Probe and map in the Auxiliary I/O register */
 unsigned char *auxio_register;
@@ -15,6 +16,10 @@ auxio_probe(void)
 	int node, auxio_nd;
 	struct linux_prom_registers auxregs[1];
 
+	if (sparc_cpu_model == sun4d) {
+		auxio_register = 0;
+		return;
+	}
 	node = prom_getchild(prom_root_node);
 	auxio_nd = prom_searchsiblings(node, "auxiliary-io");
 	if(!auxio_nd) {
@@ -37,4 +42,6 @@ auxio_probe(void)
 	if((((unsigned long) auxregs[0].phys_addr) & 3) == 3 ||
 	   sparc_cpu_model == sun4c)
 		auxio_register = (unsigned char *) ((int)auxio_register | 3);
+
+	TURN_ON_LED;
 }

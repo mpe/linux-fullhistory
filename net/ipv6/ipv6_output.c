@@ -430,6 +430,7 @@ int ipv6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 		    int noblock)
 {
 	rt6_output_method_t output_method = default_output_method;
+	int	hlimit;
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 	struct dest_entry *dc = NULL;
 	struct in6_addr *daddr = dest;
@@ -448,11 +449,17 @@ int ipv6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 	}
 
 	addr_type = ipv6_addr_type(daddr);
-	if (addr_type & IPV6_ADDR_MULTICAST && dev == NULL)
+	if (addr_type & IPV6_ADDR_MULTICAST)
 	{
-		dev = np->mc_if;
+		hlimit = np->mcast_hops;
+		if (dev == NULL)
+		{
+			dev = np->mc_if;
+		}
 	}
-
+	else
+		hlimit = np->hop_limit;
+	
 	if (addr_type & (IPV6_ADDR_LINKLOCAL | IPV6_ADDR_SITELOCAL |
 			 IPV6_ADDR_MULTICAST))
 	{
@@ -601,7 +608,7 @@ int ipv6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 			hdr->payload_len = htons(pktlength - 
 						 sizeof(struct ipv6hdr));
 			
-			hdr->hop_limit = np->hop_limit;
+			hdr->hop_limit = hlimit;
 
 			memcpy(&hdr->saddr, saddr, sizeof(struct in6_addr));
 			memcpy(&hdr->daddr, daddr, sizeof(struct in6_addr));
@@ -732,7 +739,7 @@ int ipv6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 		hdr->payload_len = htons(unfrag_len + frag_len - 
 					 sizeof(struct ipv6hdr));
 		
-		hdr->hop_limit = np->hop_limit;
+		hdr->hop_limit = hlimit;
 
 		hdr->nexthdr = NEXTHDR_FRAGMENT;
 

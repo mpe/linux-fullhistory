@@ -1,5 +1,5 @@
 /*
- *	NET/ROM release 003
+ *	NET/ROM release 004
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -17,15 +17,19 @@
  *	NET/ROM 002	Steve Whitehouse(GW7RRM) fixed the set_mac_address
  *	NET/ROM 003	Jonathan(G4KLX)	Put nr_rebuild_header into line with
  *					ax25_rebuild_header
+ *	NET/ROM 004	Jonathan(G4KLX)	Callsign registration with AX.25.
  */
 
 #include <linux/config.h>
-#ifdef CONFIG_NETROM
+#if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
+#include <linux/module.h>
+#include <linux/proc_fs.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/fs.h>
 #include <linux/types.h>
+#include <linux/sysctl.h>
 #include <linux/string.h>
 #include <linux/socket.h>
 #include <linux/errno.h>
@@ -92,7 +96,7 @@ static int nr_header(struct sk_buff *skb, struct device *dev, unsigned short typ
 	buff[6] |= SSSID_SPARE;
 	buff    += AX25_ADDR_LEN;
 
-	*buff++ = nr_default.ttl;
+	*buff++ = sysctl_netrom_network_ttl_initialiser;
 
 	*buff++ = NR_PROTO_IP;
 	*buff++ = NR_PROTO_IP;
@@ -151,8 +155,13 @@ static int nr_rebuild_header(void *buff, struct device *dev,
 
 static int nr_set_mac_address(struct device *dev, void *addr)
 {
-	struct sockaddr *sa=addr;
+	struct sockaddr *sa = addr;
+
+	ax25_listen_release((ax25_address *)dev->dev_addr, NULL);
+
 	memcpy(dev->dev_addr, sa->sa_data, dev->addr_len);
+	
+	ax25_listen_register((ax25_address *)dev->dev_addr, NULL);
 
 	return 0;
 }
@@ -162,6 +171,10 @@ static int nr_open(struct device *dev)
 	dev->tbusy = 0;
 	dev->start = 1;
 
+	MOD_INC_USE_COUNT;
+
+	ax25_listen_register((ax25_address *)dev->dev_addr, NULL);
+
 	return 0;
 }
 
@@ -169,6 +182,10 @@ static int nr_close(struct device *dev)
 {
 	dev->tbusy = 1;
 	dev->start = 0;
+
+	ax25_listen_release((ax25_address *)dev->dev_addr, NULL);
+
+	MOD_DEC_USE_COUNT;
 
 	return 0;
 }
@@ -239,8 +256,7 @@ int nr_init(struct device *dev)
 	dev->pa_mask		= 0;
 	dev->pa_alen		= sizeof(unsigned long);
 
-	dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL);
-	if (dev->priv == NULL)
+	if ((dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL)) == NULL)
 		return -ENOMEM;
 
 	memset(dev->priv, 0, sizeof(struct enet_statistics));
@@ -253,5 +269,61 @@ int nr_init(struct device *dev)
 
 	return 0;
 };
+
+#ifdef MODULE
+extern struct proto_ops nr_proto_ops;
+extern struct notifier_block nr_dev_notifier;
+
+static struct device dev_nr[] = {
+	{"nr0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, nr_init},
+	{"nr1", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, nr_init},
+	{"nr2", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, nr_init},
+	{"nr3", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, nr_init}
+};
+
+int init_module(void)
+{
+	int i;
+
+	for (i = 0; i < 4; i++)
+		register_netdev(&dev_nr[i]);
+
+	register_symtab(NULL);
+
+	nr_proto_init(NULL);
+	
+	return 0;
+}
+
+void cleanup_module(void)
+{
+	int i;
+
+#ifdef CONFIG_PROC_FS
+	proc_net_unregister(PROC_NET_NR);
+	proc_net_unregister(PROC_NET_NR_NEIGH);
+	proc_net_unregister(PROC_NET_NR_NODES);
+#endif
+	nr_rt_free();
+
+	ax25_protocol_release(AX25_P_NETROM);
+	ax25_linkfail_release(nr_link_failed);
+
+	unregister_netdevice_notifier(&nr_dev_notifier);
+
+	nr_unregister_sysctl();
+
+	sock_unregister(nr_proto_ops.family);
+	
+	for (i = 0; i < 4; i++) {
+		if (dev_nr[i].priv != NULL) {
+			kfree(dev_nr[i].priv);
+			dev_nr[i].priv = NULL;
+			unregister_netdev(&dev_nr[i]);
+		}
+	}
+}
+
+#endif
 
 #endif

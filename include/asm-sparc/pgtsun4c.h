@@ -1,10 +1,12 @@
-/* $Id: pgtsun4c.h,v 1.24 1996/03/26 06:51:56 miguel Exp $
+/* $Id: pgtsun4c.h,v 1.27 1996/10/30 06:01:32 davem Exp $
  * pgtsun4c.h:  Sun4c specific pgtable.h defines and code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 #ifndef _SPARC_PGTSUN4C_H
 #define _SPARC_PGTSUN4C_H
+
+#include <asm/contregs.h>
 
 /* PMD_SHIFT determines the size of the area a second-level page table can map */
 #define SUN4C_PMD_SHIFT       22
@@ -37,7 +39,7 @@
  * translations at KERNBASE + 128MB for 1MB, then we begin the VMALLOC
  * area, makes sense.  This works out to the value below.
  */
-#define SUN4C_VMALLOC_START   (0xfe200000)
+#define SUN4C_VMALLOC_START   (0xfe300000)
 
 /*
  * Sparc SUN4C pte fields.
@@ -50,6 +52,7 @@
 #define _SUN4C_PAGE_IO        0x04000000   /* I/O page */
 #define _SUN4C_PAGE_REF       0x02000000   /* Page has been accessed/referenced */
 #define _SUN4C_PAGE_DIRTY     0x01000000   /* Page has been modified, is dirty */
+#define _SUN4C_PAGE_PRESENT   0x00400000   /* present (known) page */
 
 #define _SUN4C_PAGE_CHG_MASK  (0xffff | _SUN4C_PAGE_REF | _SUN4C_PAGE_DIRTY)
 

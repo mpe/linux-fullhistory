@@ -28,14 +28,6 @@ extern ctl_table ipx_table[];
 extern ctl_table atalk_table[];
 #endif
 
-#ifdef CONFIG_NETROM
-extern ctl_table netrom_table[];
-#endif
-
-#ifdef CONFIG_AX25
-extern ctl_table ax25_table[];
-#endif
-
 extern ctl_table core_table[], unix_table[];
 
 #ifdef CONFIG_NET
@@ -65,12 +57,6 @@ ctl_table net_table[] = {
 #endif
 #ifdef CONFIG_ATALK
         {NET_ATALK,  "appletalk", NULL, 0, 0555, atalk_table},
-#endif
-#ifdef CONFIG_NETROM
-	{NET_NETROM, "netrom",    NULL, 0, 0555, netrom_table},
-#endif
-#ifdef CONFIG_AX25
-	{NET_AX25,   "ax25",      NULL, 0, 0555, ax25_table},
 #endif
 #ifdef CONFIG_BRIDGE
         {NET_BRIDGE, "bridge",    NULL, 0, 0555, bridge_table},

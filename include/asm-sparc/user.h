@@ -1,11 +1,14 @@
-/* $Id: user.h,v 1.3 1995/12/29 21:48:03 davem Exp $
+/* $Id: user.h,v 1.4 1996/07/24 23:17:14 miguel Exp $
  * asm-sparc/user.h: Core file definitions for the Sparc.
  *
+ * Keep in sync with reg.h.  Actually, we could get rid of this
+ * one, since we won't a.out core dump that much anyways - miguel.
  * Copyright (C) 1995 (davem@caip.rutgers.edu)
  */
 #ifndef _SPARC_USER_H
 #define _SPARC_USER_H
 
+#include <asm/a.out.h>
 struct sunos_regs {
 	unsigned long psr, pc, npc, y;
 	unsigned long regs[15];

@@ -107,12 +107,12 @@ struct iommu_struct {
 	unsigned long end;   /* Last managed virtual address */
 };
 
-extern inline void iommu_invalidate(struct iommu_regs *regs)
+extern __inline__ void iommu_invalidate(struct iommu_regs *regs)
 {
 	regs->tlbflush = 0;
 }
 
-extern inline void iommu_invalidate_page(struct iommu_regs *regs, unsigned long page)
+extern __inline__ void iommu_invalidate_page(struct iommu_regs *regs, unsigned long page)
 {
 	regs->pageflush = (page & PAGE_MASK);
 }

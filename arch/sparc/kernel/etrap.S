@@ -1,4 +1,4 @@
-/* $Id: etrap.S,v 1.18 1996/04/25 06:08:35 davem Exp $
+/* $Id: etrap.S,v 1.21 1996/10/11 00:59:40 davem Exp $
  * etrap.S: Sparc trap window preparation for entry into the
  *          Linux kernel.
  *
@@ -23,7 +23,7 @@
 #define t_kstack     l5 /* Set right before pt_regs frame is built */
 #define t_retpc      l6 /* If you change this, change winmacro.h header file */
 #define t_systable   l7 /* Never touch this, could be the syscall table ptr. */
-#define curptr       g4 /* Set after pt_regs frame is built */
+#define curptr       g6 /* Set after pt_regs frame is built */
 
 	.text
 	.align 4
@@ -78,10 +78,9 @@ trap_setup:
 	 * or kernel and branch conditionally.
 	 */
 	mov	1, %t_twinmask
-	sll	%t_twinmask, %t_psr, %t_twinmask ! t_twinmask = (1 << psr)
 	andcc	%t_psr, PSR_PS, %g0		 ! fromsupv_p = (psr & PSR_PS)
 	be	trap_setup_from_user		 ! nope, from user mode
-	 nop
+	 sll	%t_twinmask, %t_psr, %t_twinmask ! t_twinmask = (1 << psr)
 
 	/* From kernel, allocate more kernel stack and
 	 * build a pt_regs trap frame.
@@ -94,8 +93,7 @@ trap_setup:
 	be	1f
 	 nop
 
-	b	trap_setup_kernel_spill		! in trap window, clean up
-	 nop
+	b,a	trap_setup_kernel_spill		! in trap window, clean up
 
 	/* Trap from kernel with a window available.
 	 * Just do it...
@@ -105,7 +103,6 @@ trap_setup:
 	 mov	%t_kstack, %sp		! jump onto new stack
 
 trap_setup_kernel_spill:
-	LOAD_CURRENT(curptr, g1)
 	ld	[%curptr + THREAD_UMASK], %g1
 	orcc	%g0, %g1, %g0
 	bne	trap_setup_user_spill	! there are some user windows, yuck
@@ -123,7 +120,6 @@ tsetup_patch2:	and	%g2, 0xff, %g2		! patched on 7 window Sparcs
 
 	/* Set new %wim value */
 	wr	%g2, 0x0, %wim
-	WRITE_PAUSE
 
 	/* Save the kernel window onto the corresponding stack. */
 	STORE_WINDOW(sp)
@@ -198,7 +194,6 @@ tsetup_patch6:	and	%g2, 0xff, %g2		! patched on 7win Sparcs
 	save	%g0, %g0, %g0
 
 	wr	%g2, 0x0, %wim
-	WRITE_PAUSE
 
 	/* Call MMU-architecture dependent stack checking
 	 * routine.
@@ -239,8 +234,7 @@ C_LABEL(tsetup_sun4c_stackchk):
 	be	1f
 	 sra	%sp, 29, %glob_tmp
 
-	b	trap_setup_user_stack_is_bolixed
-	 nop
+	b,a	trap_setup_user_stack_is_bolixed
 
 1:
 	add	%glob_tmp, 0x1, %glob_tmp
@@ -248,8 +242,7 @@ C_LABEL(tsetup_sun4c_stackchk):
 	be	1f
 	 and	%sp, 0xfff, %glob_tmp		! delay slot
 
-	b	trap_setup_user_stack_is_bolixed
-	 nop
+	b,a	trap_setup_user_stack_is_bolixed
 
 	/* See if our dump area will be on more than one
 	 * page.
@@ -267,8 +260,7 @@ tsetup_sun4c_twopages:
 	be	1f
 	 add	%sp, 0x38, %glob_tmp		/* Is second page in vma hole? */
 
-	b	trap_setup_user_stack_is_bolixed
-	 nop
+	b,a	trap_setup_user_stack_is_bolixed
 
 1:
 	sra	%glob_tmp, 29, %glob_tmp
@@ -277,8 +269,7 @@ tsetup_sun4c_twopages:
 	be	1f
 	 add	%sp, 0x38, %glob_tmp
 
-	b	trap_setup_user_stack_is_bolixed
-	 nop
+	b,a	trap_setup_user_stack_is_bolixed
 
 1:
 	lda	[%glob_tmp] ASI_PTE, %glob_tmp
@@ -289,20 +280,25 @@ tsetup_sun4c_onepage:
 	be	trap_setup_good_ustack			! success
 	 nop
 
-	b	trap_setup_user_stack_is_bolixed
-	 nop
+	b,a	trap_setup_user_stack_is_bolixed
 
 	.globl	C_LABEL(tsetup_srmmu_stackchk)
 C_LABEL(tsetup_srmmu_stackchk):
 	/* Check results of callers andcc %sp, 0x7, %g0 */
-	bne	trap_setup_user_stack_is_bolixed
-	 sethi	%hi(KERNBASE), %glob_tmp
-	cmp	%glob_tmp, %sp
-	bleu	trap_setup_user_stack_is_bolixed
-	 nop
+	sethi	%hi(C_LABEL(page_offset)), %glob_tmp
+	be	1f
+	 ld	[%glob_tmp + %lo(C_LABEL(page_offset))], %glob_tmp
 
+	b,a	trap_setup_user_stack_is_bolixed
+1:
+	cmp	%glob_tmp, %sp
+	bgu,a	1f
+	 lda	[%g0] ASI_M_MMUREGS, %glob_tmp		! read MMU control
+
+	b,a	trap_setup_user_stack_is_bolixed
+
+1:
 	/* Clear the fault status and turn on the no_fault bit. */
-	lda	[%g0] ASI_M_MMUREGS, %glob_tmp		! read MMU control
 	or	%glob_tmp, 0x2, %glob_tmp		! or in no_fault bit
 	sta	%glob_tmp, [%g0] ASI_M_MMUREGS		! set it
 
@@ -317,9 +313,7 @@ C_LABEL(tsetup_srmmu_stackchk):
 	mov	AC_M_SFSR, %glob_tmp
 	lda	[%glob_tmp] ASI_M_MMUREGS, %glob_tmp	! save away status of winstore
 	andcc	%glob_tmp, 0x2, %g0			! did we fault?
-	be	trap_setup_finish_up			! cool beans, success
-	 nop
+	be,a	trap_setup_finish_up + 0x4		! cool beans, success
+	 restore %g0, %g0, %g0
 
-	b	trap_setup_user_stack_is_bolixed	! we faulted, ugh
-	 nop
-
+	b,a	trap_setup_user_stack_is_bolixed	! we faulted, ugh

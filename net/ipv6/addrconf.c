@@ -492,6 +492,7 @@ static void sit_route_add(struct device *dev)
 	else
 	{
 		rtmsg.rtmsg_prefixlen = 128;
+		rtmsg.rtmsg_dst.s6_addr32[0] = __constant_htonl(0xfe800000);
 		rtmsg.rtmsg_dst.s6_addr32[3] = dev->pa_dstaddr;
 		rtmsg.rtmsg_metric = 1;
 		rtmsg.rtmsg_flags = RTF_HOST|RTF_UP;
@@ -773,6 +774,62 @@ void addrconf_prefix_rcv(struct device *dev, u8 *opt, int len)
 
 }
 
+static void addrconf_ifdown(struct device *dev)
+{
+	struct inet6_dev *idev, **bidev;
+	struct inet6_ifaddr *ifa, **bifa;
+	int i;
+
+	start_bh_atomic();
+
+	bidev = &inet6_dev_lst;
+
+	for (idev = inet6_dev_lst; idev; idev = idev->next)
+	{
+		if (idev->dev == dev)
+		{
+			*bidev = idev->next;
+			break;
+		}
+		bidev = &idev;
+	}
+
+	if (idev == NULL)
+	{
+		printk(KERN_DEBUG "addrconf_ifdown: device not found\n"); 
+		return;
+	}
+	
+	/*
+	 *	FIXME: clear multicast group membership
+	 */
+
+	/*
+	 *	clean addr_list
+	 */
+
+	for (i=0; i<16; i++)
+	{
+		bifa = &inet6_addr_lst[i];
+		
+		for (ifa=inet6_addr_lst[i]; ifa; )
+		{
+			if (ifa->idev == idev)
+			{
+				*bifa = ifa->lst_next;
+				kfree(ifa);
+				ifa = *bifa;
+				continue;
+			}
+			bifa = &ifa;
+			ifa = ifa->lst_next;
+		}
+	}
+
+	kfree(idev);
+	end_bh_atomic();
+}
+
 /*
  *	Set destination address.
  *	Special case for SIT interfaces where we create a new "virtual"
@@ -848,6 +905,8 @@ int addrconf_add_ifaddr(void *arg)
 	if (ifp == NULL)
 		return -ENOMEM;
 
+	ifp->prefix_len = 128;
+
 	if (dev->flags & IFF_MULTICAST)
 	{
 		struct in6_addr maddr;
@@ -874,24 +933,26 @@ static void sit_add_v4_addrs(struct inet6_dev *idev)
 	struct inet6_ifaddr * ifp;
 	struct in6_addr addr;
 	struct device *dev;
-	int flag;
+	int scope;
 
 	memset(&addr, 0, sizeof(struct in6_addr));
 
 	if (idev->dev->pa_dstaddr)
 	{
 		addr.s6_addr32[0] = __constant_htonl(0xfe800000);
-		flag = IFA_LINK;
+		scope = IFA_LINK;
 	}
 	else
 	{
-		flag = IFA_GLOBAL | IPV6_ADDR_COMPATv4;
+		scope = IPV6_ADDR_COMPATv4;
 	}
 
         for (dev = dev_base; dev != NULL; dev = dev->next) 
         {
 		if (dev->family == AF_INET && (dev->flags & IFF_UP))
 		{
+			int flag = scope;
+			
 			addr.s6_addr32[3] = dev->pa_addr;
 
 			if (dev->flags & IFF_LOOPBACK)
@@ -899,7 +960,7 @@ static void sit_add_v4_addrs(struct inet6_dev *idev)
 				if (idev->dev->pa_dstaddr)
 					continue;
 				
-				flag = IFA_HOST | IPV6_ADDR_COMPATv4;
+				flag |= IFA_HOST;
 			}
 
 			ifp = ipv6_add_addr(idev, &addr, flag);
@@ -963,6 +1024,8 @@ int addrconf_notify(struct notifier_block *this, unsigned long event,
 		 *	Remove all addresses from this interface
 		 *	and take the interface out of the list.
 		 */
+		addrconf_ifdown(dev);
+		rt6_ifdown(dev);
 		rt6_sndmsg(RTMSG_NEWDEVICE, NULL, NULL, 0, 0, dev->name, 0);
 
 		break;

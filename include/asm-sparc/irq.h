@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.13 1996/04/25 06:13:09 davem Exp $
+/* $Id: irq.h,v 1.14 1996/08/29 09:48:18 davem Exp $
  * irq.h: IRQ registers on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -34,7 +34,7 @@ extern void (*clear_cpu_int)(int, int);
 extern void (*set_irq_udt)(int);
 #endif
 
-extern int request_fast_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *), unsigned long flags, const char *devname);
+extern int request_fast_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *), unsigned long flags, __const__ char *devname);
 
 /* On the sun4m, just like the timers, we have both per-cpu and master
  * interrupt registers.

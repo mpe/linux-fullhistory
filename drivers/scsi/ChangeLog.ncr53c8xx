@@ -1,3 +1,20 @@
+Mon Nov 4 21:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c ncr53c8xx.h - revision 1.14c
+	Severall control command improvements:
+
+	- Allow to specify "all" to commands that apply to #target.
+	  For example: "setsync all 255" sets asynchronous data 
+	               transfers for all targets on a bus.
+
+	- Allow to control disconnection privilege per device, as follow:
+	  "setflag #target no_sync" disables disconnection for #target.
+	  "setflag #target" with no flag specified reenables it.
+
+	  Obviously #target may be specified as "all" in order to control 
+	  disconnection for all targets with a single control command.
+
+	- README file updated and some hints about SCSI problems solving added.
+
 Sun Oct 27 22:00 1996 Gerard Roudier (groudier@club-internet.fr)
 	* ncr53c8xx.c ncr53c8xx.h - revision 1.14b
 	Add the following config parameters:

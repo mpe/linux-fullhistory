@@ -15,14 +15,13 @@
 #define NETROM_N2	3
 #define	NETROM_HDRINCL	4
 #define	NETROM_PACLEN	5
+#define	NETROM_T4	6
+#define	NETROM_IDLE	7
 
 #define	NETROM_KILL	99
 
-#define	SIOCNRGETPARMS		(SIOCPROTOPRIVATE+0)
-#define	SIOCNRSETPARMS		(SIOCPROTOPRIVATE+1)
-#define	SIOCNRDECOBS		(SIOCPROTOPRIVATE+2)
-#define	SIOCNRRTCTL		(SIOCPROTOPRIVATE+3)
-#define	SIOCNRCTLCON		(SIOCPROTOPRIVATE+4)
+#define	SIOCNRDECOBS		(SIOCPROTOPRIVATE+0)
+#define	SIOCNRCTLCON		(SIOCPROTOPRIVATE+1)
 
 struct nr_route_struct {
 #define	NETROM_NEIGH	0
@@ -34,18 +33,6 @@ struct nr_route_struct {
 	char mnemonic[7];
 	ax25_address neighbour;
 	unsigned int obs_count;
-};
-
-struct nr_parms_struct {
-	unsigned int quality;
-	unsigned int obs_count;
-	unsigned int ttl;
-	unsigned int timeout;
-	unsigned int ack_delay;
-	unsigned int busy_delay;
-	unsigned int tries;
-	unsigned int window;
-	unsigned int paclen;
 };
 
 struct nr_ctl_struct {

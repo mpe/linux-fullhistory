@@ -36,6 +36,7 @@
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
 
+static long long ext2_file_lseek(struct inode *, struct file *, long long, int);
 static long ext2_file_write (struct inode *, struct file *, const char *, unsigned long);
 static void ext2_release_file (struct inode *, struct file *);
 
@@ -44,7 +45,7 @@ static void ext2_release_file (struct inode *, struct file *);
  * the ext2 filesystem.
  */
 static struct file_operations ext2_file_operations = {
-	NULL,			/* lseek - default */
+	ext2_file_lseek,	/* lseek */
 	generic_file_read,	/* read */
 	ext2_file_write,	/* write */
 	NULL,			/* readdir - bad */
@@ -80,6 +81,36 @@ struct inode_operations ext2_file_inode_operations = {
 	NULL			/* smap */
 };
 
+/*
+ * Make sure the offset never goes beyond the 32-bit mark..
+ */
+static long long ext2_file_lseek(struct inode *inode,
+	struct file *file,
+	long long offset,
+	int origin)
+{
+	long long retval;
+
+	switch (origin) {
+		case 2:
+			offset += inode->i_size;
+			break;
+		case 1:
+			offset += file->f_pos;
+	}
+	retval = -EINVAL;
+	/* make sure the offset fits in 32 bits */
+	if (((unsigned long long) offset >> 32) == 0) {
+		if (offset != file->f_pos) {
+			file->f_pos = offset;
+			file->f_reada = 0;
+			file->f_version = ++event;
+		}
+		retval = offset;
+	}
+	return retval;
+}
+
 static inline void remove_suid(struct inode *inode)
 {
 	unsigned int mode;
@@ -98,9 +129,7 @@ static inline void remove_suid(struct inode *inode)
 static long ext2_file_write (struct inode * inode, struct file * filp,
 			    const char * buf, unsigned long count)
 {
-	const loff_t two_gb = 2147483647;
-	loff_t pos;
-	off_t pos2;
+	__u32 pos;
 	long block;
 	int offset;
 	int written, c;
@@ -109,6 +138,9 @@ static long ext2_file_write (struct inode * inode, struct file * filp,
 	int err;
 	int i,buffercount,write_error;
 
+	/* POSIX: mtime/ctime may not change for 0 count */
+	if (!count)
+		return 0;
 	write_error = buffercount = 0;
 	if (!inode) {
 		printk("ext2_file_write: inode = NULL\n");
@@ -127,11 +159,18 @@ static long ext2_file_write (struct inode * inode, struct file * filp,
 		return -EINVAL;
 	}
 	remove_suid(inode);
+
 	if (filp->f_flags & O_APPEND)
 		pos = inode->i_size;
 	else
 		pos = filp->f_pos;
-	pos2 = (off_t) pos;
+	/* Check for overflow.. */
+	if (pos > (__u32) (pos + count)) {
+		count = ~pos; /* == 0xFFFFFFFF - pos */
+		if (!count)
+			return -EFBIG;
+	}
+
 	/*
 	 * If a file has been opened in synchronous mode, we have to ensure
 	 * that meta-data will also be written synchronously.  Thus, we
@@ -140,16 +179,11 @@ static long ext2_file_write (struct inode * inode, struct file * filp,
 	 */
 	if (filp->f_flags & O_SYNC)
 		inode->u.ext2_i.i_osync++;
-	block = pos2 >> EXT2_BLOCK_SIZE_BITS(sb);
-	offset = pos2 & (sb->s_blocksize - 1);
+	block = pos >> EXT2_BLOCK_SIZE_BITS(sb);
+	offset = pos & (sb->s_blocksize - 1);
 	c = sb->s_blocksize - offset;
 	written = 0;
-	while (count > 0) {
-		if (pos > two_gb) {
-			if (!written)
-				written = -EFBIG;
-			break;
-		}
+	do {
 		bh = ext2_getblk (inode, block, 1, &err);
 		if (!bh) {
 			if (!written)
@@ -158,7 +192,6 @@ static long ext2_file_write (struct inode * inode, struct file * filp,
 		}
 		if (c > count)
 			c = count;
-		count -= c;
 		if (c != sb->s_blocksize && !buffer_uptodate(bh)) {
 			ll_rw_block (READ, 1, &bh);
 			wait_on_buffer (bh);
@@ -177,10 +210,10 @@ static long ext2_file_write (struct inode * inode, struct file * filp,
 			break;
 		}
 		update_vm_cache(inode, pos, bh->b_data + offset, c);
-		pos2 += c;
 		pos += c;
 		written += c;
 		buf += c;
+		count -= c;
 		mark_buffer_uptodate(bh, 1);
 		mark_buffer_dirty(bh, 0);
 		if (filp->f_flags & O_SYNC)
@@ -202,7 +235,7 @@ static long ext2_file_write (struct inode * inode, struct file * filp,
 		block++;
 		offset = 0;
 		c = sb->s_blocksize;
-	}
+	} while (count);
 	if ( buffercount ){
 		ll_rw_block(WRITE, buffercount, bufferlist);
 		for(i=0; i<buffercount; i++){

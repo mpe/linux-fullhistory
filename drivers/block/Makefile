@@ -20,6 +20,7 @@ L_OBJS   := ll_rw_blk.o genhd.o
 M_OBJS   :=
 MOD_LIST_NAME := BLOCK_MODULES
 LX_OBJS :=
+MX_OBJS :=
 
 ifeq ($(CONFIG_BLK_DEV_FD),y)
 L_OBJS += floppy.o
@@ -50,10 +51,12 @@ L_OBJS += hd.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_IDE),y)
-L_OBJS += ide.o ide-probe.o
+LX_OBJS += ide.o
+L_OBJS += ide-probe.o
 else
   ifeq ($(CONFIG_BLK_DEV_IDE),m)
-  M_OBJS += ide.o ide-probe.o
+  MX_OBJS += ide.o
+  M_OBJS += ide-probe.o
   endif
 endif
 

@@ -25,6 +25,10 @@ struct termios {
 	tcflag_t c_lflag;		/* local mode flags */
 	cc_t c_line;			/* line discipline */
 	cc_t c_cc[NCCS];		/* control characters */
+#ifdef __KERNEL__
+#define SIZEOF_USER_TERMIOS sizeof (struct termios) - (2*sizeof (cc_t))
+	cc_t _x_cc[2];                  /* We need them to hold vmin/vtime */
+#endif
 };
 
 /* c_cc characters */
@@ -38,14 +42,26 @@ struct termios {
 #define VSWTC    7
 #define VSTART   8
 #define VSTOP    9
+
+
+
 #define VSUSP    10
 #define VDSUSP   11  /* SunOS POSIX nicety I do believe... */
 #define VREPRINT 12
 #define VDISCARD 13
 #define VWERASE  14
 #define VLNEXT   15
+
+/* Kernel keeps vmin/vtime separated, user apps assume vmin/vtime is
+ * shared with eof/eol
+ */
+#ifdef __KERNEL__
+#define VMIN     16
+#define VTIME    17
+#else
 #define VMIN     VEOF
 #define VTIME    VEOL
+#endif
 
 /* c_iflag bits */
 #define IGNBRK	0x00000001

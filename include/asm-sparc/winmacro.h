@@ -1,4 +1,4 @@
-/* $Id: winmacro.h,v 1.16 1996/03/27 02:43:18 davem Exp $
+/* $Id: winmacro.h,v 1.17 1996/09/19 20:27:44 davem Exp $
  * winmacro.h: Window loading-unloading macros.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -118,12 +118,12 @@
 	and      %idreg, 0xc, %idreg; \
 	sethi    %hi(C_LABEL(current_set)), %dest_reg; \
 	or       %dest_reg, %lo(C_LABEL(current_set)), %dest_reg; \
-	add      %dest_reg, %idreg, %dest_reg; \
-	ld       [%dest_reg], %dest_reg;
+	add      %dest_reg, %idreg, %idreg; \
+	ld       [%idreg], %dest_reg;
 #else
 #define LOAD_CURRENT(dest_reg, idreg) \
-        sethi    %hi(C_LABEL(current_set)), %dest_reg; \
-        ld       [%dest_reg + %lo(C_LABEL(current_set))], %dest_reg;
+        sethi    %hi(C_LABEL(current_set)), %idreg; \
+        ld       [%idreg + %lo(C_LABEL(current_set))], %dest_reg;
 #endif
 
 #endif /* !(_SPARC_WINMACRO_H) */

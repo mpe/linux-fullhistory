@@ -197,7 +197,6 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 	case IPV6_DROP_MEMBERSHIP:
 	{
 		struct ipv6_mreq mreq;
-		struct inet6_ifaddr *ifp;
 		struct device *dev = NULL;
 		int err;
 
@@ -205,18 +204,28 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 		if(err)
 			return -EFAULT;
 		
-		if (ipv6_addr_any(&mreq.ipv6mr_interface))
+		if (mreq.ipv6mr_ifindex == 0)
 		{
-			/* 
-			 *	FIXME
-			 *	default multicast rule.
-			 */
+			struct in6_addr mcast;
+			struct dest_entry *dc;
+
+			ipv6_addr_set(&mcast, __constant_htonl(0xff000000),
+				      0, 0, 0);
+			dc = ipv6_dst_route(&mcast, NULL, 0);
+
+			if (dc)
+			{
+				dev = dc->rt.rt_dev;
+				ipv6_dst_unlock(dc);
+			}
 		}
 		else
 		{
-			if ((ifp = ipv6_chk_addr(&mreq.ipv6mr_interface)))
+			struct inet6_dev *idev;
+			
+			if ((idev = ipv6_dev_by_index(mreq.ipv6mr_ifindex)))
 			{
-				dev = ifp->idev->dev;
+				dev = idev->dev;
 			}
 		}
 

@@ -1,3 +1,5 @@
+#ifndef _IDE_H
+#define _IDE_H
 /*
  *  linux/drivers/block/ide.h
  *
@@ -594,3 +596,5 @@ int ideprobe_init (void);
 #else
 #define IS_PROMISE_DRIVE (0)	/* auto-NULLs out Promise code */
 #endif /* CONFIG_BLK_DEV_PROMISE */
+
+#endif /* _IDE_H */

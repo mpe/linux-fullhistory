@@ -1,18 +1,40 @@
-# $Id: Makefile,v 1.9 1996/03/23 01:37:15 davem Exp $
+# $Id: Makefile,v 1.12 1996/10/27 08:36:26 davem Exp $
 # Makefile for Sparc library files..
 #
 
 CFLAGS := $(CFLAGS) -ansi
 
 OBJS  = mul.o rem.o sdiv.o udiv.o umul.o urem.o ashrdi3.o memcpy.o memset.o \
-        strlen.o
+        strlen.o checksum.o blockops.o memscan.o memcmp.o strncmp.o \
+	strncpy_from_user.o
 
 lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)
 	sync
 
+checksum.o: checksum.S
+	$(CC) -ansi -c -o checksum.o checksum.S
+
 memcpy.o: memcpy.S
-	$(CC) -ansi -c -o memcpy.o memcpy.S
+	$(CC) -D__ASSEMBLY__ -ansi -c -o memcpy.o memcpy.S
+
+memcmp.o: memcmp.S
+	$(CC) -ansi -c -o memcmp.o memcmp.S
+
+memscan.o: memscan.S
+	$(CC) -ansi -c -o memscan.o memscan.S
+
+strncmp.o: strncmp.S
+	$(CC) -ansi -c -o strncmp.o strncmp.S
+
+strncpy_from_user.o: strncpy_from_user.S
+	$(CC) -D__ASSEMBLY__ -ansi -c -o strncpy_from_user.o strncpy_from_user.S
+
+blockops.o: blockops.S
+	$(CC) -ansi -c -o blockops.o blockops.S
+
+memset.o: memset.S
+	$(CC) -D__ASSEMBLY__ -ansi -c -o memset.o memset.S
 
 strlen.o: strlen.S
 	$(CC) -ansi -c -o strlen.o strlen.S

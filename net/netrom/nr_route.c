@@ -1,5 +1,5 @@
 /*
- *	NET/ROM release 003
+ *	NET/ROM release 004
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -23,7 +23,7 @@
  */
  
 #include <linux/config.h>
-#ifdef CONFIG_NETROM
+#if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -52,7 +52,6 @@
 #include <net/netrom.h>
 
 static unsigned int nr_neigh_no = 1;
-static int nr_route_on = 1;
 
 static struct nr_node  *nr_node_list  = NULL;
 static struct nr_neigh *nr_neigh_list = NULL;
@@ -96,7 +95,7 @@ static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax2
 		if (ax25cmp(nr, ax25) == 0)
 			nr_neigh->quality = quality;
 		else
-			nr_neigh->quality = nr_default.quality;
+			nr_neigh->quality = sysctl_netrom_default_path_quality;
 		nr_neigh->locked   = 0;
 		nr_neigh->count    = 0;
 		nr_neigh->number   = nr_neigh_no++;
@@ -525,12 +524,6 @@ static struct device *nr_ax25_dev_get(char *devname)
 	if ((dev->flags & IFF_UP) && dev->type == ARPHRD_AX25)
 		return dev;
 
-#ifdef CONFIG_BPQETHER
-	if ((dev->flags & IFF_UP) && dev->type == ARPHRD_ETHER)
-		if (ax25_bpq_get_addr(dev) != NULL)
-			return dev;
-#endif
-	
 	return NULL;
 }
 
@@ -571,7 +564,6 @@ int nr_rt_ioctl(unsigned int cmd, void *arg)
 	struct nr_route_struct nr_route;
 	struct device *dev;
 	int err;
-	long opt = 0;
 
 	switch (cmd) {
 
@@ -614,13 +606,6 @@ int nr_rt_ioctl(unsigned int cmd, void *arg)
 
 		case SIOCNRDECOBS:
 			return nr_dec_obs();
-
-		case SIOCNRRTCTL:
-			if ((err = verify_area(VERIFY_READ, arg, sizeof(int))) != 0)
-				return err;
-			opt = get_fs_long((void *)arg);
-			nr_route_on = opt ? 1 : 0;
-			return 0;
 
 		default:
 			return -EINVAL;
@@ -672,12 +657,13 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	nr_dest = (ax25_address *)(skb->data + 7);
 
 	if (ax25 != NULL)
-		nr_add_node(nr_src, "", &ax25->dest_addr, ax25->digipeat, ax25->device, 0, nr_default.obs_count);
+		nr_add_node(nr_src, "", &ax25->dest_addr, ax25->digipeat,
+		            ax25->device, 0, sysctl_netrom_network_ttl_initialiser);
 
 	if ((dev = nr_dev_get(nr_dest)) != NULL)	/* Its for me */
 		return nr_rx_frame(skb, dev);
 
-	if (!nr_route_on && ax25 != NULL)
+	if (!sysctl_netrom_routing_control && ax25 != NULL)
 		return 0;
 
 	/* Its Time-To-Live has expired */
@@ -798,5 +784,32 @@ int nr_neigh_get_info(char *buffer, char **start, off_t offset,
 
 	return len;
 } 
+
+#ifdef MODULE
+
+/*
+ *	Free all memory associated with the nodes and routes lists.
+ */
+void nr_rt_free(void)
+{
+	struct nr_neigh *s, *nr_neigh = nr_neigh_list;
+	struct nr_node  *t, *nr_node  = nr_node_list;
+
+	while (nr_node != NULL) {
+		t       = nr_node;
+		nr_node = nr_node->next;
+
+		nr_remove_node(t);
+	}
+
+	while (nr_neigh != NULL) {
+		s        = nr_neigh;
+		nr_neigh = nr_neigh->next;
+
+		nr_remove_neigh(s);
+	}
+}
+
+#endif
 
 #endif

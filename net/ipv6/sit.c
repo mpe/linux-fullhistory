@@ -286,6 +286,9 @@ struct device *sit_add_tunnel(__u32 dstaddr)
 {
 	struct sit_vif *vif;
 	struct device *dev;
+
+	if ((sit_device.flags & IFF_UP) == 0)
+		return NULL;
 	
 	vif = kmalloc(sizeof(struct sit_vif), GFP_KERNEL);
 	if (vif == NULL)
@@ -448,14 +451,30 @@ static int sit_xmit(struct sk_buff *skb, struct device *dev)
 	daddr = dev->pa_dstaddr;
 	if (daddr == 0)
 	{
-		addr6 = &skb->ipv6_hdr->daddr;
+		struct neighbour *neigh;
+
+		neigh = skb->nexthop;
+		if (neigh == NULL)
+		{
+			printk(KERN_DEBUG "sit: nexthop == NULL\n");
+			goto on_error;
+		}
+		
+		addr6 = &neigh->addr;
 		addr_type = ipv6_addr_type(addr6);
+
+		if (addr_type == IPV6_ADDR_ANY)
+		{
+			addr6 = &skb->ipv6_hdr->daddr;
+			addr_type = ipv6_addr_type(addr6);
+		}
 
 		if ((addr_type & IPV6_ADDR_COMPATv4) == 0)
 		{
 			printk(KERN_DEBUG "sit_xmit: non v4 address\n");
 			goto on_error;
 		}
+		daddr = addr6->s6_addr32[3];
 	}
 
 	len = skb->tail - (skb->data + sizeof(struct ipv6hdr));

@@ -1,4 +1,4 @@
-/* $Id: pgtsrmmu.h,v 1.17 1996/04/25 06:13:26 davem Exp $
+/* $Id: pgtsrmmu.h,v 1.24 1996/10/07 03:03:06 davem Exp $
  * pgtsrmmu.h:  SRMMU page table defines and code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -9,6 +9,10 @@
 
 #include <linux/config.h>
 #include <asm/page.h>
+
+#if CONFIG_AP1000
+#include <asm/ap1000/apreg.h>
+#endif
 
 /* PMD_SHIFT determines the size of the area a second-level page table can map */
 #define SRMMU_PMD_SHIFT         18
@@ -30,7 +34,7 @@
 #define SRMMU_PMD_TABLE_SIZE    0x100 /* 64 entries, 4 bytes a piece */
 #define SRMMU_PGD_TABLE_SIZE    0x400 /* 256 entries, 4 bytes a piece */
 
-#define SRMMU_VMALLOC_START   (0xfe200000)
+#define SRMMU_VMALLOC_START   (0xfe300000)
 
 /* Definition of the values in the ET field of PTD's and PTE's */
 #define SRMMU_ET_MASK         0x3
@@ -61,7 +65,7 @@
 #define SRMMU_PRIV         0x1c
 #define SRMMU_PRIV_RDONLY  0x18
 
-#define SRMMU_CHG_MASK    (SRMMU_REF | SRMMU_DIRTY | SRMMU_ET_PTE)
+#define SRMMU_CHG_MASK    (0xffffff00 | SRMMU_REF | SRMMU_DIRTY)
 
 /* Some day I will implement true fine grained access bits for
  * user pages because the SRMMU gives us the capabilities to
@@ -76,7 +80,8 @@
 				    SRMMU_EXEC | SRMMU_REF)
 #define SRMMU_PAGE_RDONLY  __pgprot(SRMMU_VALID | SRMMU_CACHE | \
 				    SRMMU_EXEC | SRMMU_REF)
-#define SRMMU_PAGE_KERNEL  __pgprot(SRMMU_VALID | SRMMU_CACHE | SRMMU_PRIV)
+#define SRMMU_PAGE_KERNEL  __pgprot(SRMMU_VALID | SRMMU_CACHE | SRMMU_PRIV | \
+				    SRMMU_DIRTY | SRMMU_REF)
 
 /* SRMMU Register addresses in ASI 0x4.  These are valid for all
  * current SRMMU implementations that exist.
@@ -87,8 +92,22 @@
 #define SRMMU_FAULT_STATUS       0x00000300
 #define SRMMU_FAULT_ADDR         0x00000400
 
+/*
+ * "normal" sun systems have their memory on bus 0. This means the top
+ * 4 bits of 36 bit physical addresses are 0. We use this define to
+ * determine if a piece of memory might be normal memory, or if its
+ * definately some sort of device memory.  
+ *
+ * On the AP+ normal memory is on bus 8. Why? Ask Fujitsu :-)
+*/
+#if CONFIG_AP1000
+#define MEM_BUS_SPACE 8
+#else
+#define MEM_BUS_SPACE 0
+#endif
+
 /* Accessing the MMU control register. */
-extern inline unsigned int srmmu_get_mmureg(void)
+extern __inline__ unsigned int srmmu_get_mmureg(void)
 {
         unsigned int retval;
 	__asm__ __volatile__("lda [%%g0] %1, %0\n\t" :
@@ -97,19 +116,18 @@ extern inline unsigned int srmmu_get_mmureg(void)
 	return retval;
 }
 
-extern inline void srmmu_set_mmureg(unsigned long regval)
+extern __inline__ void srmmu_set_mmureg(unsigned long regval)
 {
 	__asm__ __volatile__("sta %0, [%%g0] %1\n\t" : :
 			     "r" (regval), "i" (ASI_M_MMUREGS) : "memory");
 
 }
 
-extern inline void srmmu_set_ctable_ptr(unsigned long paddr)
+extern __inline__ void srmmu_set_ctable_ptr(unsigned long paddr)
 {
 	paddr = ((paddr >> 4) & SRMMU_CTX_PMASK);
-#if CONFIG_AP1000
-	/* weird memory system on the AP1000 */
-        paddr |= (0x8<<28);
+#if MEM_BUS_SPACE
+        paddr |= (MEM_BUS_SPACE<<28);
 #endif
 	__asm__ __volatile__("sta %0, [%1] %2\n\t" : :
 			     "r" (paddr), "r" (SRMMU_CTXTBL_PTR),
@@ -117,7 +135,7 @@ extern inline void srmmu_set_ctable_ptr(unsigned long paddr)
 			     "memory");
 }
 
-extern inline unsigned long srmmu_get_ctable_ptr(void)
+extern __inline__ unsigned long srmmu_get_ctable_ptr(void)
 {
 	unsigned int retval;
 
@@ -128,14 +146,19 @@ extern inline unsigned long srmmu_get_ctable_ptr(void)
 	return (retval & SRMMU_CTX_PMASK) << 4;
 }
 
-extern inline void srmmu_set_context(int context)
+extern __inline__ void srmmu_set_context(int context)
 {
 	__asm__ __volatile__("sta %0, [%1] %2\n\t" : :
 			     "r" (context), "r" (SRMMU_CTX_REG),
 			     "i" (ASI_M_MMUREGS) : "memory");
+#if CONFIG_AP1000
+	/* The AP1000+ message controller also needs to know
+	   the current task's context. */
+	MSC_OUT(MSC_PID, context);
+#endif
 }
 
-extern inline int srmmu_get_context(void)
+extern __inline__ int srmmu_get_context(void)
 {
 	register int retval;
 	__asm__ __volatile__("lda [%1] %2, %0\n\t" :
@@ -145,7 +168,7 @@ extern inline int srmmu_get_context(void)
 	return retval;
 }
 
-extern inline unsigned int srmmu_get_fstatus(void)
+extern __inline__ unsigned int srmmu_get_fstatus(void)
 {
 	unsigned int retval;
 
@@ -155,7 +178,7 @@ extern inline unsigned int srmmu_get_fstatus(void)
 	return retval;
 }
 
-extern inline unsigned int srmmu_get_faddr(void)
+extern __inline__ unsigned int srmmu_get_faddr(void)
 {
 	unsigned int retval;
 
@@ -166,8 +189,12 @@ extern inline unsigned int srmmu_get_faddr(void)
 }
 
 /* This is guaranteed on all SRMMU's. */
-extern inline void srmmu_flush_whole_tlb(void)
+extern __inline__ void srmmu_flush_whole_tlb(void)
 {
+#if CONFIG_AP1000
+	extern void mc_tlb_flush_all(void);
+	mc_tlb_flush_all();
+#endif
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t": :
 			     "r" (0x400),        /* Flush entire TLB!! */
 			     "i" (ASI_M_FLUSH_PROBE) : "memory");
@@ -175,16 +202,22 @@ extern inline void srmmu_flush_whole_tlb(void)
 }
 
 /* These flush types are not available on all chips... */
-extern inline void srmmu_flush_tlb_ctx(void)
+extern __inline__ void srmmu_flush_tlb_ctx(void)
 {
+#if CONFIG_AP1000
+	mc_tlb_flush_ctx();
+#endif
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t": :
 			     "r" (0x300),        /* Flush TLB ctx.. */
 			     "i" (ASI_M_FLUSH_PROBE) : "memory");
 
 }
 
-extern inline void srmmu_flush_tlb_region(unsigned long addr)
+extern __inline__ void srmmu_flush_tlb_region(unsigned long addr)
 {
+#if CONFIG_AP1000
+	mc_tlb_flush_region();
+#endif
 	addr &= SRMMU_PGDIR_MASK;
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t": :
 			     "r" (addr | 0x200), /* Flush TLB region.. */
@@ -193,8 +226,11 @@ extern inline void srmmu_flush_tlb_region(unsigned long addr)
 }
 
 
-extern inline void srmmu_flush_tlb_segment(unsigned long addr)
+extern __inline__ void srmmu_flush_tlb_segment(unsigned long addr)
 {
+#if CONFIG_AP1000
+	mc_tlb_flush_segment();
+#endif
 	addr &= SRMMU_PMD_MASK;
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t": :
 			     "r" (addr | 0x100), /* Flush TLB segment.. */
@@ -202,8 +238,11 @@ extern inline void srmmu_flush_tlb_segment(unsigned long addr)
 
 }
 
-extern inline void srmmu_flush_tlb_page(unsigned long page)
+extern __inline__ void srmmu_flush_tlb_page(unsigned long page)
 {
+#if CONFIG_AP1000
+	mc_tlb_flush_page(page);
+#endif
 	page &= PAGE_MASK;
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t": :
 			     "r" (page),        /* Flush TLB page.. */
@@ -211,7 +250,7 @@ extern inline void srmmu_flush_tlb_page(unsigned long page)
 
 }
 
-extern inline unsigned long srmmu_hwprobe(unsigned long vaddr)
+extern __inline__ unsigned long srmmu_hwprobe(unsigned long vaddr)
 {
 	unsigned long retval;
 

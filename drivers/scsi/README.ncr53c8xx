@@ -4,7 +4,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 21 Rue Carnot
 95170 DEUIL LA BARRE - FRANCE
 
-28 October 1996
+05 November 1996
 ===============================================================================
 
 1.  Introduction
@@ -21,14 +21,15 @@ Written by Gerard Roudier <groudier@club-internet.fr>
       8.4  Set order type for tagged command
       8.5  Set debug mode
       8.6  Clear profile counters
+      8.7  Set flag (no_sync)
 9.  Configuration parameters
 10. Some constants and flags of the ncr53c8xx.h header files
 11. Provided files
-12. Installation procedure for Linux version 1
-13. Installation procedure for Linux version 2
-14. Control commands under linux-1.2.13
-15. Known problems
-      15.1 Tagged commands with Iomega Jaz device
+12. Installation procedure
+13. Control commands under linux-1.2.13
+14. Known problems
+      14.1 Tagged commands with Iomega Jaz device
+15. SCSI problems solving
 
 ===============================================================================
 
@@ -274,6 +275,9 @@ proc SCSI file system. The generic command syntax is the following:
       echo "<verb> <parameters>" >/proc/scsi/ncr53c8xx/0
       (assumes controller number is 0)
 
+Using "all" for "<target>" parameter with the commands below will apply to 
+all targets of the scsi chain (except the controller).
+
 Available commands:
 
 8.1 Set minimum synchronous period
@@ -328,6 +332,8 @@ Available commands:
 	nego:    print information about SCSI negotiations
 	phase:   print information on script interruptions
 
+    Use "setdebug" with no argument to reset debug flags.
+
 
 8.6 Clear profile counters
 
@@ -337,6 +343,21 @@ Available commands:
     transfered reaches 1000 GB in order to avoid overflow.
     The "clearprof" command allows you to clear these counters at any time.
 
+
+8.7 Set flag (no_sync)
+ 
+    setflag <target> <flag>
+
+    target:    target number
+
+    For the moment, only one flag is available:
+        no_sync:   not allow target to disconnect.
+
+    Do not specify any flag in order to reset the flag. For example:
+    - setflag 4
+      will reset no_sync flag for target 4, so will allow it disconnections.
+    - setflag all
+      will allow disconnection for all devices on the scsi bus.
 
 9. Configuration parameters
 
@@ -469,80 +490,38 @@ Driver and common files:
 
 	README.ncr53c8xx	: this file
 	ChangeLog.ncr53c8xx	: change log
+	ConfigHelp.ncr53c8xx	: Part of Configure.help about the driver
 	ncr53c8xx.h		: definitions
 	ncr53c8xx.c		: the driver code
 	scsitag.c		: command tool to enable tagged queue
 	conf.modules		: sample of /etc/conf.modules
 
-Installation procedure 1 replacing the NCR53c7,8xx driver:
-
-	Install1.ncr53c8xx	: installation script
-	Uninstall1.ncr53c8xx	: uninstallation script
-	53c7,8xx.h		: included by hosts.c, override the standard driver
+	Install.ncr53c8xx	: installation script
 
 	Patch-1.2.13.ncr53c8xx     : patch for linux-1.2.13
-	Patch-1.3.45-49.ncr53c8xx  : patch for linux-1.3.45 to linux-1.3.49
-	Patch-1.3.50-100.ncr53c8xx : patch for linux-1.3.50 to linux-1.3.100
-
-Installation procedure 2 replacing the previous version of the driver:
-
-	Install2.ncr53c8xx	   : installation script
+	Patch-2.0.22-25.ncr53c8xx  : patch for linux-2.0.22 to linux-2.0.25
 
 Prior to installing the driver, you must untar the distribution, as follow:
 
 	mkdir ncrB2L
 	cd ncrB2L
-	tar zxvf ncrBsd2Linux-1.14b-src.tar.gz
+	tar zxvf ncrBsd2Linux-1.14c-src.tar.gz
 
 
-12. Installation procedure for Linux version 1
+12. Installation procedure
 
-This install script only supports linux-1.2.13 and linux-1.3.45 to 1.3.100.
+This install script has been tested with linux-1.2.13 and linux-2.0.22 to 
+2.0.25. It will probably work with linux 2.0.X (X>25).
 
-This procedure just moves the standard driver files to SAVE_53 sub-directory 
-of linux/drivers/scsi, copies the drivers file to that directory and patches 
-the SCSI Makefile.
-The standard driver can be restored with Uninstall.ncr53c8xx
-
-	If your linux directory is at the standard location
-	"/usr/src/linux", just enter:
-		Install1.ncr53c8xx
-
-	Else enter:
-		Install1.ncr53c8xx <your_linux_directory>
-
-	Make the kernel:
-		Change to linux source directory
-		Configure with 53c7,8xx support (Y or m)  for Install.ncr53c8xx
-		Make dependancies
-		Make the kernel (use make zdisk first)
-		Make and install modules if you have configured with 'm'
-
-	Notes:
-		Since release 1.3.90, additionnal configuation parameters 
-		have been added for the standard NCR driver.
-		Just reply Y or N as you want to these questions;
-		The NCR53C8XX driver ignores those parameters.
-
-	If you prefer the standard NCR driver of Linux:
-	just enter:
-		Uninstall1.ncr53c8xx
-	or
-		Uninstall1.ncr53c8xx <your_linux_directory>
-	if your linux root is not /usr/src/linux.
-
-
-13. Installation procedure for Linux version 2
-
-This install script only supports linux-2.0.3 and above.
-This procedure copy the new driver files to the kernel tree.
+This procedure copies the new driver files to the kernel tree and applies 
+a patch to some files of the kernel tree.
 
 	If your linux directory is at the standard location
 	"/usr/src/linux", just enter:
-		Install2.ncr53c8xx
+		Install.ncr53c8xx
 
 	Else enter:
-		Install2.ncr53c8xx <your_linux_directory>
+		Install.ncr53c8xx <your_linux_directory>
 
 	Make the kernel:
 		Change to linux source directory
@@ -553,7 +532,7 @@ This procedure copy the new driver files to the kernel tree.
 		Make and install modules if you have configured with 'm'
 
 
-14. Control commands under linux-1.2.13
+13. Control commands under linux-1.2.13
 
 Profiling data and control commands using the proc SCSI file system are not 
 available for linux-1.2.13.
@@ -568,9 +547,9 @@ You can enable tagged queue per device with the following command:
 Use "cc -o scsitag scsitag.c" to create the "scsitag" executable.
 
 
-15. Known problems
+14. Known problems
 
-15.1 Tagged commands with Iomega Jaz device
+14.1 Tagged commands with Iomega Jaz device
 
 I have not tried this device, however it has been reported to me the following:
 This device is capable of Tagged command queuing. However while spinning up,
@@ -581,6 +560,54 @@ to spin down.
 The other problem that may appear is timeouts. The only way to avoid timeouts 
 seems to edit linux/drivers/scsi/sd.c and to increase the current timeout 
 values.
+
+
+15. SCSI problems solving
+
+Most scsi problems are due to a non conformant scsi bus or to buggy devices.
+If infortunately you have scsi problems, you can check the following things:
+
+- scsi bus cables
+- terminations at both end of the scsi chain
+- linux syslog messages (some of them may help you)
+
+If you donnot find the source of problems, you can configure the driver with 
+no feature enabled.
+
+- only asynchronous data transfers
+- tagged commands disabled
+- disconnections not allowed
+
+Now, if your scsi bus is ok, your system have every chance to work with this 
+safe configuration but performances will not be optimal.
+
+If it still fails, then you can send your problem description to appropriate 
+mailing lists or news-groups.
+Send me a copy in order to be sure I will receive it.
+Obviously, a bug in the driver code is possible.
+
+     My email address: Gerard Roudier <groudier@club-internet.fr>
+
+Allowing disconnections is important if you use severall devices on your 
+scsi bus but often causes problems with buggy devices.
+Synchronous data transfers increases throughput of fast devices as hard disks.
+Good scsi hard disks with a large cache gain advantage of tagged commands 
+queuing.
+
+Try to enable one feature at a time with control commands. For example:
+
+- echo "setsync all 25" >/proc/scsi/ncr53c8xx/0
+  Will enable fast synchronous data transfer negotiation for all targets.
+
+- echo "setflag 3" >/proc/scsi/ncr53c8xx/0
+  Will reset flags (no_sync) for target 3, and so will allow it to disconnect 
+  the scsi bus.
+
+- echo "settags 3 4" >/proc/scsi/ncr53c8xx/0
+  Will enable tagged command queuing for target 3 if that device supports it.
+
+Once you have found the device and the feature that cause problems, just 
+donnot enable the feature for that device only.
 
 ===============================================================================
 End of NCR53C8XX driver README file

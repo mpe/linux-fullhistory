@@ -279,14 +279,6 @@ struct cdrom_multisession
 
 
 /*
- * For controlling a changer.  (Used by ATAPI driver.)
- * This ioctl is depreciated in favor of CDROM_SELECT_DISC from
- * ucdrom.h.  It will probably be deleted during the 2.1 kernel series.
- */
-#define CDROMLOADFROMSLOT	0x531a	/* LOAD disk from slot*/
-
-
-/*
  * CD-ROM-specific SCSI command opcodes
  */
 

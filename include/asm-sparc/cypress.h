@@ -1,4 +1,4 @@
-/* $Id: cypress.h,v 1.5 1996/04/25 06:12:51 davem Exp $
+/* $Id: cypress.h,v 1.6 1996/08/29 09:48:09 davem Exp $
  * cypress.h: Cypress module specific definitions and defines.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -48,25 +48,25 @@
 #define CYPRESS_NFAULT    0x00000002
 #define CYPRESS_MENABLE   0x00000001
 
-extern inline void cypress_flush_page(unsigned long page)
+extern __inline__ void cypress_flush_page(unsigned long page)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (page), "i" (ASI_M_FLUSH_PAGE));
 }
 
-extern inline void cypress_flush_segment(unsigned long addr)
+extern __inline__ void cypress_flush_segment(unsigned long addr)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (addr), "i" (ASI_M_FLUSH_SEG));
 }
 
-extern inline void cypress_flush_region(unsigned long addr)
+extern __inline__ void cypress_flush_region(unsigned long addr)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (addr), "i" (ASI_M_FLUSH_REGION));
 }
 
-extern inline void cypress_flush_context(void)
+extern __inline__ void cypress_flush_context(void)
 {
 	__asm__ __volatile__("sta %%g0, [%%g0] %0\n\t" : :
 			     "i" (ASI_M_FLUSH_CTX));

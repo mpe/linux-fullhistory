@@ -18,9 +18,7 @@
     card and benchmarked with 'ttcp': it transferred 16M  of data at 975kB/s
     (7.8Mb/s) to a DECstation 5000/200.
 
-    The     author  may  be    reached    at  davies@wanton.lkg.dec.com   or
-    davies@maniac.ultranet.com or  Digital  Equipment Corporation,  550 King
-    Street, Littleton MA 01460.
+    The author may be reached at davies@maniac.ultranet.com.
 
     =========================================================================
     This driver has been written  substantially  from scratch, although  its
@@ -138,7 +136,7 @@
     =========================================================================
 */
 
-static const char *version = "ewrk3.c:v0.43 96/8/16 davies@wanton.lkg.dec.com\n";
+static const char *version = "ewrk3.c:v0.43 96/8/16 davies@maniac.ultranet.com\n";
 
 #include <linux/module.h>
 
@@ -590,7 +588,7 @@ ewrk3_hw_init(struct device *dev, u_long iobase)
     }
 
     if (!status) {
-      if (ewrk3_debug > 0) {
+      if (ewrk3_debug > 1) {
 	printk(version);
       }
       

@@ -46,7 +46,7 @@ static void sun4c_disable_irq(unsigned int irq_nr)
 	unsigned long flags;
 	unsigned char current_mask, new_mask;
     
-	save_flags(flags); cli();
+	save_and_cli(flags);
 	irq_nr &= NR_IRQS;
 	current_mask = *interrupt_enable;
 	switch(irq_nr) {
@@ -75,7 +75,7 @@ static void sun4c_enable_irq(unsigned int irq_nr)
 	unsigned long flags;
 	unsigned char current_mask, new_mask;
     
-	save_flags(flags); cli();
+	save_and_cli(flags);
 	irq_nr &= NR_IRQS;
 	current_mask = *interrupt_enable;
 	switch(irq_nr) {
@@ -110,7 +110,7 @@ static void sun4c_clear_clock_irq(void)
 	clear_intr = sun4c_timers->timer_limit10;
 }
 
-static void sun4c_clear_profile_irq(void )
+static void sun4c_clear_profile_irq(void)
 {
 	/* Errm.. not sure how to do this.. */
 }
@@ -136,6 +136,8 @@ static void sun4c_init_timers(void (*counter_fn)(int, void *, struct pt_regs *))
 	 * them until we have a real console driver so L1-A works.
 	 */
 	sun4c_timers->timer_limit10 = (((1000000/HZ) + 1) << 10);
+	master_l10_counter = &sun4c_timers->cur_count10;
+	master_l10_limit = &sun4c_timers->timer_limit10;
 
 	irq = request_irq(TIMER_IRQ,
 			  counter_fn,
@@ -149,9 +151,9 @@ static void sun4c_init_timers(void (*counter_fn)(int, void *, struct pt_regs *))
 	claim_ticker14(NULL, PROFILE_IRQ, 0);
 }
 
-static void sun4c_nop(void)
-{
-}
+#ifdef __SMP__
+static void sun4c_nop(void) {}
+#endif
 
 void sun4c_init_IRQ(void)
 {
@@ -176,9 +178,9 @@ void sun4c_init_IRQ(void)
 	load_profile_irq = sun4c_load_profile_irq;
 	init_timers = sun4c_init_timers;
 #ifdef __SMP__
-	set_cpu_int = sun4c_nop;
-	clear_cpu_int = sun4c_nop;
-	set_irq_udt = sun4c_nop;
+	set_cpu_int = (void (*) (int, int))sun4c_nop;
+	clear_cpu_int = (void (*) (int, int))sun4c_nop;
+	set_irq_udt = (void (*) (int))sun4c_nop;
 #endif
 	*interrupt_enable = (SUN4C_INT_ENABLE);
 	sti();

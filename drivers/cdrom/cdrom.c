@@ -15,6 +15,7 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <asm/fcntl.h>
+#include <asm/segment.h>
 #include <asm/uaccess.h>
 
 #include <linux/cdrom.h>
@@ -22,14 +23,14 @@
 
 #define FM_WRITE	0x2                 /* file mode write bit */
 
-#define VERSION "$Id: cdrom.c,v 0.8 1996/08/10 10:52:11 david Exp $"
+#define VERSION "Generic CD-ROM driver, v 1.21 1996/11/08 03:24:49"
 
 /* Not-exported routines. */
-int cdrom_open(struct inode *ip, struct file *fp);
-void cdrom_release(struct inode *ip, struct file *fp);
-int cdrom_ioctl(struct inode *ip, struct file *fp,
+static int cdrom_open(struct inode *ip, struct file *fp);
+static void cdrom_release(struct inode *ip, struct file *fp);
+static int cdrom_ioctl(struct inode *ip, struct file *fp,
 				unsigned int cmd, unsigned long arg);
-int cdrom_media_changed(kdev_t dev);
+static int cdrom_media_changed(kdev_t dev);
 
 struct file_operations cdrom_fops =
 {
@@ -48,7 +49,7 @@ struct file_operations cdrom_fops =
         NULL                            /* revalidate */
 };
 
-static struct cdrom_device_ops *cdromdevs[MAX_BLKDEV] = {
+static struct cdrom_device_info *cdromdevs[MAX_BLKDEV] = {
 	NULL,
 };
 
@@ -63,14 +64,15 @@ static struct cdrom_device_ops *cdromdevs[MAX_BLKDEV] = {
 /* We don't use $name$ yet, but it could be used for the /proc
  * filesystem in the future, or for other purposes.  
  */
-int register_cdrom(int major, char *name, struct cdrom_device_ops *cdo)
+int register_cdrom(struct cdrom_device_info *cdi, char *name)
 {
-        int *change_capability = &cdo->capability; /* hack, gcc complains OK */
-	
+        int major = MAJOR (cdi->dev);
+        struct cdrom_device_ops *cdo = cdi->ops;
+        int *change_capability = (int *)&cdo->capability; /* hack */
+
         if (major < 0 || major >= MAX_BLKDEV)
                 return -1;
-        if (cdo->open_files == NULL || cdo->open == NULL || 
-            cdo->release == NULL)
+        if (cdo->open == NULL || cdo->release == NULL)
                 return -2;
         ENSURE(tray_move, CDC_CLOSE_TRAY | CDC_OPEN_TRAY);
         ENSURE(lock_door, CDC_LOCK);
@@ -79,26 +81,50 @@ int register_cdrom(int major, char *name, struct cdrom_device_ops *cdo)
         ENSURE(get_last_session, CDC_MULTI_SESSION);
         ENSURE(audio_ioctl, CDC_PLAY_AUDIO);
         ENSURE(media_changed, CDC_MEDIA_CHANGED);
-        cdromdevs[major] = cdo;
-        cdo->options = CDO_AUTO_CLOSE | CDO_USE_FFLAGS | CDO_LOCK;
-        cdo->mc_flags = 0;
+        if (cdromdevs[major]==NULL) cdo->n_minors = 0;
+        else cdo->n_minors++; 
+        cdi->next = cdromdevs[major];
+        cdromdevs[major] = cdi;
+        cdi->options = CDO_AUTO_CLOSE | CDO_USE_FFLAGS | CDO_LOCK;
+        cdi->mc_flags = 0;
         return 0;
 }
 #undef ENSURE
 
-int unregister_cdrom(int major, char *name)
+int unregister_cdrom(struct cdrom_device_info *unreg)
 {
+        struct cdrom_device_info *cdi, *prev;
+        int major = MAJOR (unreg->dev);
+
         if (major < 0 || major >= MAX_BLKDEV)
                 return -1;
-        if (cdromdevs[major] == NULL)
+
+        prev = NULL;
+        cdi = cdromdevs[major];
+        while (cdi != NULL && cdi->dev != unreg->dev) {
+                prev = cdi;
+                cdi = cdi->next;
+        }
+
+        if (cdi == NULL)
                 return -2;
-        cdromdevs[major] = NULL;
+        if (prev)
+                prev->next = cdi->next;
+        else
+                cdromdevs[major] = cdi->next;
+        cdi->ops->n_minors--;
         return 0;
 }
 
-/* We need our own cdrom error types! This is a temporary solution. */
+static
+struct cdrom_device_info *cdrom_find_device (kdev_t dev)
+{
+        struct cdrom_device_info *cdi = cdromdevs[MAJOR (dev)];
 
-#define ENOMEDIUM EAGAIN				/* no medium in removable device */
+        while (cdi != NULL && cdi->dev != dev)
+                cdi = cdi->next;
+        return cdi;
+}
 
 /* We use the open-option O_NONBLOCK to indicate that the
  * purpose of opening is only for subsequent ioctl() calls; no device
@@ -108,78 +134,89 @@ int unregister_cdrom(int major, char *name)
  * is in their own interest: device control becomes a lot easier
  * this way.
  */
-int open_for_data(struct cdrom_device_ops *, kdev_t);
+static
+int open_for_data(struct cdrom_device_info * cdi);
 
+static
 int cdrom_open(struct inode *ip, struct file *fp)
 {
 	kdev_t dev = ip->i_rdev;
-        struct cdrom_device_ops *cdo = cdromdevs[MAJOR(dev)];
+        struct cdrom_device_info *cdi = cdrom_find_device(dev);
         int purpose = !!(fp->f_flags & O_NONBLOCK);
+        int ret=0;
 
-        if (cdo == NULL || MINOR(dev) >= cdo->minors)
+        if (cdi == NULL)
                 return -ENODEV;
         if (fp->f_mode & FM_WRITE)
                 return -EROFS;				
-        purpose = purpose || !(cdo->options & CDO_USE_FFLAGS);
-        if (cdo->open_files(dev) || purpose) 
-                return cdo->open(dev, purpose); 
+        purpose = purpose || !(cdi->options & CDO_USE_FFLAGS);
+        if (cdi->use_count || purpose) 
+                ret = cdi->ops->open(cdi, purpose); 
         else 
-                return open_for_data(cdo, dev);
+                ret = open_for_data(cdi);
+        if (!ret) cdi->use_count++;
+        return ret;
 }
 
-int open_for_data(struct cdrom_device_ops * cdo, kdev_t dev)
+static
+int open_for_data(struct cdrom_device_info * cdi)
 {
         int ret;
+        struct cdrom_device_ops *cdo = cdi->ops;
         if (cdo->drive_status != NULL) {
-                int ds = cdo->drive_status(dev);
+                int ds = cdo->drive_status(cdi, CDSL_CURRENT);
                 if (ds == CDS_TRAY_OPEN) {
                         /* can/may i close it? */
-                        if (cdo->capability & ~cdo->mask & CDC_CLOSE_TRAY &&
-                            cdo->options & CDO_AUTO_CLOSE) {
-                                if (cdo->tray_move(dev, 0))
+                        if (cdo->capability & ~cdi->mask & CDC_CLOSE_TRAY &&
+                            cdi->options & CDO_AUTO_CLOSE) {
+                                if (cdo->tray_move(cdi,0))
                                         return -EIO;
                         } else
-                                return -ENOMEDIUM; /* can't close: too bad */
-                        ds = cdo->drive_status(dev);
+                                return -ENXIO; /* can't close: too bad */
+                        ds = cdo->drive_status(cdi, CDSL_CURRENT);
                         if (ds == CDS_NO_DISC)
-                                return -ENOMEDIUM;
+                                return -ENXIO;
                 }
         }
         if (cdo->disc_status != NULL) {
-                int ds = cdo->disc_status(dev);
+                int ds = cdo->disc_status(cdi);
                 if (ds == CDS_NO_DISC)
-                        return -ENOMEDIUM;
-                if (cdo->options & CDO_CHECK_TYPE &&
+                        return -ENXIO;
+                if (cdi->options & CDO_CHECK_TYPE &&
                     ds != CDS_DATA_1)
                         return -ENODATA;
         }
         /* all is well, we can open the device */
-        ret = cdo->open(dev, 0); /* open for data */
-        if (cdo->capability & ~cdo->mask & CDC_LOCK &&
-            cdo->options & CDO_LOCK)
-                cdo->lock_door(dev, 1);
+        ret = cdo->open(cdi, 0); /* open for data */
+        if (cdo->capability & ~cdi->mask & CDC_LOCK &&
+            cdi->options & CDO_LOCK)
+                cdo->lock_door(cdi, 1);
         return ret;
 }
 
 /* Admittedly, the logic below could be performed in a nicer way. */
+static
 void cdrom_release(struct inode *ip, struct file *fp)
 {
         kdev_t dev = ip->i_rdev;
-        struct cdrom_device_ops *cdo = cdromdevs[MAJOR(dev)];
+        struct cdrom_device_info *cdi = cdrom_find_device (dev);
+        struct cdrom_device_ops *cdo;
 	
-        if (cdo == NULL || MINOR(dev) >= cdo->minors)
+        if (cdi == NULL)
                 return;
-        if (cdo->open_files(dev) == 1 && /* last process that closes dev */
-            cdo->options & CDO_LOCK &&  
-            cdo->capability & ~cdo->mask & CDC_LOCK) 
-                cdo->lock_door(dev, 0);
-        cdo->release(dev);
-        if (cdo->open_files(dev) == 0) { /* last process that closes dev */
+        cdo = cdi->ops;        
+        if (cdi->use_count == 1 &&      /* last process that closes dev*/
+            cdi->options & CDO_LOCK &&  
+            cdo->capability & ~cdi->mask & CDC_LOCK) 
+                cdo->lock_door(cdi, 0);
+        cdo->release(cdi);
+        if (cdi->use_count > 0) cdi->use_count--;
+        if (cdi->use_count == 0) {      /* last process that closes dev*/
                 sync_dev(dev);
                 invalidate_buffers(dev);
-                if (cdo->options & CDO_AUTO_EJECT &&
-                    cdo->capability & ~cdo->mask & CDC_OPEN_TRAY)
-                        cdo->tray_move(dev, 1);
+                if (cdi->options & CDO_AUTO_EJECT &&
+                    cdo->capability & ~cdi->mask & CDC_OPEN_TRAY)
+                        cdo->tray_move(cdi, 1);
         }
 }
 
@@ -187,40 +224,32 @@ void cdrom_release(struct inode *ip, struct file *fp)
  * ioctl. The main problem now is that we must double-buffer the
  * low-level implementation, to assure that the VFS and the user both
  * see a medium change once.
- *
- * For now, i've implemented only 16 minor devs (half a long), i have to
- * think of a better solution... $Queue$ is either 0 or 1. Queue 0 is
- * in the lower 16 bits, queue 1 in the higher 16 bits.
  */
 
-int media_changed(kdev_t dev, int queue)
+static
+int media_changed(struct cdrom_device_info *cdi, int queue)
 {
-        unsigned int major = MAJOR(dev);
-        unsigned int minor = MINOR(dev);
-        struct cdrom_device_ops *cdo = cdromdevs[major];
-        int ret;
-        unsigned long mask = 1 << (16 * queue + minor);
+        unsigned int mask = (1 << (queue & 1));
+        int ret = !!(cdi->mc_flags & mask);
 
-        queue &= 1;
-        if (cdo == NULL || minor >= 16)
-                return -1;
-        ret = !!(cdo->mc_flags & mask); /* changed since last call? */
-        if (cdo->media_changed(dev)) {
-                cdo->mc_flags |= 0x10001 << minor; /* set bit on both queues */
+        /* changed since last call? */
+        if (cdi->ops->media_changed(cdi, CDSL_CURRENT)) {
+                cdi->mc_flags = 0x3;    /* set bit on both queues */
                 ret |= 1;
         }
-        cdo->mc_flags &= ~mask;         /* clear bit */
+        cdi->mc_flags &= ~mask;         /* clear bit */
         return ret;
 }
 
+static
 int cdrom_media_changed(kdev_t dev)
 {
-        struct cdrom_device_ops *cdo = cdromdevs[MAJOR(dev)];
-        if (cdo == NULL || MINOR(dev) >= cdo->minors)
+        struct cdrom_device_info *cdi = cdrom_find_device (dev);
+        if (cdi == NULL)
                 return -ENODEV;
-        if (cdo->media_changed == NULL)
+        if (cdi->ops->media_changed == NULL)
                 return -EINVAL;
-        return media_changed(dev, 0);
+        return media_changed(cdi, 0);
 }
 
 /* Requests to the low-level drivers will /always/ be done in the
@@ -239,8 +268,9 @@ int cdrom_media_changed(kdev_t dev)
    meaningful format indicated above.
  */
 
-#undef current							/* set in sched.h */
+#undef current                          /* set in sched.h */
 
+static
 void sanitize_format(union cdrom_addr *addr,
                      u_char * current, u_char requested)
 {
@@ -288,14 +318,17 @@ void sanitize_format(union cdrom_addr *addr,
  * cdo->dev_ioctl. Note that as a result of this, no
  * memory-verification is performed for these ioctls.
  */
+static
 int cdrom_ioctl(struct inode *ip, struct file *fp,
                 unsigned int cmd, unsigned long arg)
 {
         kdev_t dev = ip->i_rdev;
-        struct cdrom_device_ops *cdo = cdromdevs[MAJOR(dev)];
+        struct cdrom_device_info *cdi = cdrom_find_device (dev);
+        struct cdrom_device_ops *cdo;
 
-        if (cdo == NULL || MINOR(dev) >= cdo->minors)
+        if (cdi == NULL)
                 return -ENODEV;
+        cdo = cdi->ops;
         /* the first few commands do not deal with audio capabilities, but
            only with routines in cdrom device operations. */
         switch (cmd) {
@@ -310,7 +343,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
                 GETARG(struct cdrom_multisession, ms_info);
                 requested_format = ms_info.addr_format;
                 ms_info.addr_format = CDROM_LBA;
-                cdo->get_last_session(dev, &ms_info);
+                cdo->get_last_session(cdi, &ms_info);
                 sanitize_format(&ms_info.addr, &ms_info.addr_format, 
                                 requested_format);
                 PUTARG(struct cdrom_multisession, ms_info);
@@ -318,52 +351,63 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
         }
                 
         case CDROMEJECT:
-                if (cdo->open_files(dev) == 1 && 
-                    cdo->capability & ~cdo->mask & CDC_OPEN_TRAY)
-                        return cdo->tray_move(dev, 1);
-                else
+                if (cdo->capability & ~cdi->mask & CDC_OPEN_TRAY) {
+			if (cdi->use_count == 1)
+				return cdo->tray_move(cdi, 1);
+			else
+				return -EBUSY;
+		} else
                         return -EINVAL;
 		
         case CDROMCLOSETRAY:
-                if (cdo->open_files(dev) == 1 && 
-                    cdo->capability & ~cdo->mask & CDC_CLOSE_TRAY)
-                        return cdo->tray_move(dev, 0);
+                if (cdo->capability & ~cdi->mask & CDC_CLOSE_TRAY)
+			return cdo->tray_move(cdi, 0);
                 else
                         return -EINVAL;
                 
         case CDROMEJECT_SW:
-                cdo->options &= ~(CDO_AUTO_CLOSE | CDO_AUTO_EJECT);
+                cdi->options &= ~(CDO_AUTO_CLOSE | CDO_AUTO_EJECT);
                 if (arg)
-                        cdo->options |= CDO_AUTO_CLOSE | CDO_AUTO_EJECT;
+                        cdi->options |= CDO_AUTO_CLOSE | CDO_AUTO_EJECT;
                 return 0;
 
         case CDROM_MEDIA_CHANGED:
-                if (cdo->capability & ~cdo->mask & CDC_MEDIA_CHANGED)
-                        return media_changed(dev, 1);
+        	if (cdo->capability & ~cdi->mask & CDC_MEDIA_CHANGED) {
+                	if (arg == CDSL_CURRENT)
+                        	return media_changed(cdi, 1);
+                	else if ((int)arg < cdi->capacity &&
+                                 cdo->capability & ~cdi->mask
+                                 &CDC_SELECT_DISC)
+                        	return cdo->media_changed (cdi, arg);
+                        else
+                        	return -EINVAL;
+                }
                 else
                         return -EINVAL;
                 
         case CDROM_SET_OPTIONS:
-                cdo->options |= (int) arg;
-                return cdo->options;
+                cdi->options |= (int) arg;
+                return cdi->options;
 		
         case CDROM_CLEAR_OPTIONS:
-                cdo->options &= ~(int) arg;
-                return cdo->options;
+                cdi->options &= ~(int) arg;
+                return cdi->options;
                 
         case CDROM_SELECT_SPEED:
-                if (0 <= arg && arg <= cdo->speed &&
-                    cdo->capability & ~cdo->mask & CDC_SELECT_SPEED)
-                        return cdo->select_speed(dev, arg);
+                if ((int)arg <= cdi->speed &&
+                    cdo->capability & ~cdi->mask & CDC_SELECT_SPEED)
+                        return cdo->select_speed(cdi, arg);
                 else
                         return -EINVAL;
-                
+
         case CDROM_SELECT_DISC:
-                if (0 <= arg && arg <= cdo->capacity &&
-                    cdo->capability & ~cdo->mask & CDC_SELECT_DISC)
-                        return cdo->select_disc(dev, arg);
+                if ((arg == CDSL_CURRENT) || (arg == CDSL_NONE))
+                	return cdo->select_disc(cdi, arg);
+                if ((int)arg < cdi->capacity &&
+                    cdo->capability & ~cdi->mask & CDC_SELECT_DISC)
+			return cdo->select_disc(cdi, arg);
                 else
-                        return -EINVAL;
+			return -EINVAL;
 		
 /* The following function is implemented, although very few audio
  * discs give Universal Product Code information, which should just be
@@ -374,7 +418,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
                 struct cdrom_mcn mcn;
                 if (!(cdo->capability & CDC_MCN))
                         return -EINVAL;
-                if (!cdo->get_mcn(dev, &mcn)) {
+                if (!cdo->get_mcn(cdi, &mcn)) {
                         PUTARG(struct cdrom_mcn, mcn);
                         return 0;
                 }
@@ -382,17 +426,24 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
         }
                 
         case CDROM_DRIVE_STATUS:
-                if (cdo->drive_status == NULL)
-			return -EINVAL;
-		else
-			return cdo->drive_status(dev);
+                if ((arg == CDSL_CURRENT) || (arg == CDSL_NONE))
+                	return cdo->drive_status(cdi, arg);
+                if (cdo->drive_status == NULL ||
+                            ! (cdo->capability & ~cdi->mask & CDC_SELECT_DISC
+                            && (int)arg < cdi->capacity)) 
+                	return -EINVAL;
+                else
+			return cdo->drive_status(cdi, arg);
 		
         case CDROM_DISC_STATUS:
 		if (cdo->disc_status == NULL)
 			return -EINVAL;
 		else
-			return cdo->disc_status(dev);
-		
+			return cdo->disc_status(cdi);
+
+        case CDROM_CHANGER_NSLOTS:
+        	return cdi->capacity;
+
 /* The following is not implemented, because there are too many
  * different data type. We could support /1/ raw mode, that is large
  * enough to hold everything.
@@ -403,7 +454,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
                 struct cdrom_msf msf;
                 char buf[CD_FRAMESIZE];
                 GETARG(struct cdrom_msf, msf);
-                if (!cdo->read_audio(dev, cmd, &msf, &buf)) {
+                if (!cdo->read_audio(dev, cmd, &msf, &buf, cdi)) {
                         PUTARG(char *, buf);
                         return 0;
                 }
@@ -424,10 +475,12 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
                         GETARG(struct cdrom_subchnl, q);
                         requested = q.cdsc_format;
                         q.cdsc_format = CDROM_MSF;
-                        if (!cdo->audio_ioctl(dev, cmd, &q)) {
+                        if (!cdo->audio_ioctl(cdi, cmd, &q)) {
                                 back = q.cdsc_format; /* local copy */
-                                sanitize_format(&q.cdsc_absaddr, &back, requested);
-                                sanitize_format(&q.cdsc_reladdr, &q.cdsc_format, requested);
+                                sanitize_format(&q.cdsc_absaddr, &back,
+                                requested);
+                                sanitize_format(&q.cdsc_reladdr,
+                                &q.cdsc_format, requested);
                                 PUTARG(struct cdrom_subchnl, q);
                                 return 0;
                         } else
@@ -436,7 +489,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
                 case CDROMREADTOCHDR: {
                         struct cdrom_tochdr header;
                         GETARG(struct cdrom_tochdr, header);
-                        if (!cdo->audio_ioctl(dev, cmd, &header)) {
+                        if (!cdo->audio_ioctl(cdi, cmd, &header)) {
                                 PUTARG(struct cdrom_tochdr, header);
                                 return 0;
                         } else
@@ -449,8 +502,9 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
                         requested_format = entry.cdte_format;
                         /* make interface to low-level uniform */
                         entry.cdte_format = CDROM_MSF; 
-                        if (!(cdo->audio_ioctl(dev, cmd, &entry))) {
-                                sanitize_format(&entry.cdte_addr, &entry.cdte_format, requested_format);
+                        if (!(cdo->audio_ioctl(cdi, cmd, &entry))) {
+                                sanitize_format(&entry.cdte_addr,
+                                &entry.cdte_format, requested_format);
                                 PUTARG(struct cdrom_tocentry, entry);
                                 return 0;
                         } else
@@ -459,21 +513,21 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
                 case CDROMPLAYMSF: {
                         struct cdrom_msf msf;
                         GETARG(struct cdrom_msf, msf);
-                        return cdo->audio_ioctl(dev, cmd, &msf);
+                        return cdo->audio_ioctl(cdi, cmd, &msf);
                 }
                 case CDROMPLAYTRKIND: {
                         struct cdrom_ti track_index;
                         GETARG(struct cdrom_ti, track_index);
-                        return cdo->audio_ioctl(dev, cmd, &track_index);
+                        return cdo->audio_ioctl(cdi, cmd, &track_index);
                 }
                 case CDROMVOLCTRL: {
                         struct cdrom_volctrl volume;
                         GETARG(struct cdrom_volctrl, volume);
-                        return cdo->audio_ioctl(dev, cmd, &volume);
+                        return cdo->audio_ioctl(cdi, cmd, &volume);
                 }
                 case CDROMVOLREAD: {
                         struct cdrom_volctrl volume;
-                        if (!cdo->audio_ioctl(dev, cmd, &volume)) {
+                        if (!cdo->audio_ioctl(cdi, cmd, &volume)) {
                                 PUTARG(struct cdrom_volctrl, volume);
                                 return 0;
                         }
@@ -483,30 +537,32 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
                 case CDROMSTOP:
                 case CDROMPAUSE:
                 case CDROMRESUME:
-			return cdo->audio_ioctl(dev, cmd, NULL);
+			return cdo->audio_ioctl(cdi, cmd, NULL);
 		} /* switch */
 
 	if (cdo->dev_ioctl != NULL)     /* device specific ioctls? */
-		return cdo->dev_ioctl(dev, cmd, arg);
+		return cdo->dev_ioctl(cdi, cmd, arg);
 	return -EINVAL;
 }
 
 #ifdef MODULE
 int init_module(void)
 {
-	printk(KERN_INFO "Module inserted " VERSION "\n");
+	printk(KERN_INFO "Module inserted: " VERSION "\n");
 	return 0;
 }
 
 void cleanup_module(void)
 {
+	/*
 	printk(KERN_INFO "Module cdrom removed\n");
+	*/
 }
 
 #endif
 /*
  * Local variables:
  * comment-column: 40
- * compile-command: "gcc -DMODULE -D__KERNEL__ -I/usr/src/linux-obj/include -Wall -Wstrict-prototypes -O2 -m486 -c cdrom.c -o cdrom.o"
+ * compile-command: "gcc -DMODULE -D__KERNEL__ -I. -I/usr/src/linux-obj/include -Wall -Wstrict-prototypes -O2 -m486 -c cdrom.c -o cdrom.o"
  * End:
  */

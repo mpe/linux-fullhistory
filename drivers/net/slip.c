@@ -66,10 +66,6 @@
 #include <linux/tty.h>
 #include <linux/errno.h>
 #include <linux/netdevice.h>
-#ifdef CONFIG_AX25
-#include <linux/timer.h>
-#include <net/ax25.h>
-#endif
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/if_arp.h>
@@ -294,11 +290,8 @@ static void sl_changedmtu(struct slip *sl)
 			set_bit(SLF_ERROR, &sl->flags);
 		}
 	}
-#ifdef CONFIG_AX25
-	sl->mtu      = dev->mtu + 73;
-#else
 	sl->mtu      = dev->mtu;
-#endif
+	
 	sl->buffsize = len;
 
 	restore_flags(flags);
@@ -386,10 +379,7 @@ sl_bump(struct slip *sl)
 	skb->dev = sl->dev;
 	memcpy(skb_put(skb,count), sl->rbuff, count);
 	skb->mac.raw=skb->data;
-	if(sl->mode & SL_MODE_AX25)
-		skb->protocol=htons(ETH_P_AX25);
-	else
-		skb->protocol=htons(ETH_P_IP);
+	skb->protocol=htons(ETH_P_IP);
 	netif_rx(skb);
 	sl->rx_packets++;
 }
@@ -402,11 +392,8 @@ sl_encaps(struct slip *sl, unsigned char *icp, int len)
 	int actual, count;
 
 
-#ifdef CONFIG_AX25
-	if (sl->mtu != sl->dev->mtu + 73) {	/* Someone has been ifconfigging */
-#else
 	if (sl->mtu != sl->dev->mtu) {	/* Someone has been ifconfigging */
-#endif
+
 		sl_changedmtu(sl);
 	}
 
@@ -535,15 +522,6 @@ static int
 sl_header(struct sk_buff *skb, struct device *dev, unsigned short type,
 	  void *daddr, void *saddr, unsigned len)
 {
-#ifdef CONFIG_AX25
-#ifdef CONFIG_INET
-	struct slip *sl = (struct slip*)(dev->priv);
-
-	if (sl->mode & SL_MODE_AX25 && type != htons(ETH_P_AX25))  {
-		return ax25_encapsulate(skb, dev, type, daddr, saddr, len);
-	}
-#endif
-#endif
 	return 0;
 }
 
@@ -553,15 +531,6 @@ static int
 sl_rebuild_header(void *buff, struct device *dev, unsigned long raddr,
 		  struct sk_buff *skb)
 {
-#ifdef CONFIG_AX25
-#ifdef CONFIG_INET
-	struct slip *sl = (struct slip*)(dev->priv);
-
-	if (sl->mode & SL_MODE_AX25) {
-		return ax25_rebuild_header(buff, dev, raddr, skb);
-	}
-#endif
-#endif
 	return 0;
 }
 
@@ -611,12 +580,7 @@ sl_open(struct device *dev)
 		goto noslcomp;
 	}
 #endif
-
-#ifdef CONFIG_AX25
-	sl->mtu	     = dev->mtu + 73;
-#else
 	sl->mtu	     = dev->mtu;
-#endif
 	sl->buffsize = len;
 	sl->rcount   = 0;
 	sl->xleft    = 0;
@@ -701,11 +665,8 @@ slip_receive_buf(struct tty_struct *tty, const unsigned char *cp, char *fp, int 
 	 * Argh! mtu change time! - costs us the packet part received
 	 * at the change
 	 */
-#ifdef CONFIG_AX25
-	if (sl->mtu != sl->dev->mtu + 73)  {
-#else
 	if (sl->mtu != sl->dev->mtu)  {
-#endif
+
 		sl_changedmtu(sl);
 	}
 
@@ -762,11 +723,6 @@ slip_open(struct tty_struct *tty)
 	/* Restore default settings */
 	sl->mode      = SL_MODE_DEFAULT;
 	sl->dev->type = ARPHRD_SLIP + sl->mode;
-#ifdef CONFIG_AX25	
-	if (sl->dev->type == 260) {		/* KISS */
-		sl->dev->type = ARPHRD_AX25;
-	}
-#endif	
 	/* Perform the low-level SLIP initialization. */
 	if ((err = sl_open(sl->dev)))  {
 		return err;
@@ -1008,32 +964,6 @@ slip_unesc6(struct slip *sl, unsigned char s)
 }
 #endif /* CONFIG_SLIP_MODE_SLIP6 */
 
-#ifdef CONFIG_AX25
-int
-sl_set_mac_address(struct device *dev, void *addr)
-{
-	int err;
-
-	err = verify_area(VERIFY_READ, addr, AX25_ADDR_LEN);
-	if (err)  {
-		return err;
-	}
-
-	copy_from_user(dev->dev_addr, addr, AX25_ADDR_LEN);	/* addr is an AX.25 shifted ASCII mac address */
-
-	return 0;
-}
-
-static int
-sl_set_dev_mac_address(struct device *dev, void *addr)
-{
-	struct sockaddr *sa=addr;
-	memcpy(dev->dev_addr, sa->sa_data, AX25_ADDR_LEN);
-	return 0;
-}
-#endif /* CONFIG_AX25 */
-
-
 /* Perform I/O control on an active SLIP channel. */
 static int
 slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
@@ -1086,34 +1016,12 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 			return -EINVAL;
 		}
 #endif
-#ifndef CONFIG_AX25
-		if (tmp & SL_MODE_AX25) {
-			return -EINVAL;
-		}
-#else
-		if (tmp & SL_MODE_AX25) {
-			sl->dev->addr_len=AX25_ADDR_LEN;	  /* sizeof an AX.25 addr */
-			sl->dev->hard_header_len=AX25_KISS_HEADER_LEN + AX25_MAX_HEADER_LEN + 3;
-		} else	{
-			sl->dev->addr_len=0;	/* No mac addr in slip mode */
-			sl->dev->hard_header_len=0;
-		}
-#endif
 		sl->mode = tmp;
 		sl->dev->type = ARPHRD_SLIP+sl->mode;
-#ifdef CONFIG_AX25		
-		if (sl->dev->type == 260)  {
-			sl->dev->type = ARPHRD_AX25;
-		}
-#endif		
 		return 0;
 
 	 case SIOCSIFHWADDR:
-#ifdef CONFIG_AX25
-		return sl_set_mac_address(sl->dev, arg);
-#else
 		return -EINVAL;
-#endif
 
 #ifdef CONFIG_SLIP_SMART
 	/* VSV changes start here */
@@ -1207,9 +1115,6 @@ int slip_init_ctrl_dev(struct device *dummy)
 #if defined(SL_INCLUDE_CSLIP) && !defined(MODULE)
 	printk("CSLIP: code copyright 1989 Regents of the University of California.\n");
 #endif
-#ifdef CONFIG_AX25
-	printk(KERN_INFO "AX25: KISS encapsulation enabled.\n");
-#endif
 #ifdef CONFIG_SLIP_SMART
 	printk(KERN_INFO "SLIP linefill/keepalive option.\n");
 #endif	
@@ -1260,12 +1165,6 @@ slip_init(struct device *dev)
 {
 	struct slip *sl = (struct slip*)(dev->priv);
 	int i;
-#ifdef CONFIG_AX25
-	static char ax25_bcast[AX25_ADDR_LEN] =
-		{'Q'<<1,'S'<<1,'T'<<1,' '<<1,' '<<1,' '<<1,'0'<<1};
-	static char ax25_test[AX25_ADDR_LEN] =
-		{'L'<<1,'I'<<1,'N'<<1,'U'<<1,'X'<<1,' '<<1,'1'<<1};
-#endif
 
 	if (sl == NULL)		/* Allocation failed ?? */
 	  return -ENODEV;
@@ -1283,22 +1182,10 @@ slip_init(struct device *dev)
 	dev->stop		= sl_close;
 	dev->hard_header	= sl_header;
 	dev->get_stats	        = sl_get_stats;
-#ifdef HAVE_SET_MAC_ADDR
-#ifdef CONFIG_AX25
-	dev->set_mac_address    = sl_set_dev_mac_address;
-#endif
-#endif
 	dev->hard_header_len	= 0;
 	dev->addr_len		= 0;
 	dev->type		= ARPHRD_SLIP + SL_MODE_DEFAULT;
 	dev->tx_queue_len	= 10;
-#ifdef CONFIG_AX25
-	if (sl->dev->type == 260) {
-		sl->dev->type = ARPHRD_AX25;
-	}
-	memcpy(dev->broadcast, ax25_bcast, AX25_ADDR_LEN);	/* Only activated in AX.25 mode */
-	memcpy(dev->dev_addr, ax25_test, AX25_ADDR_LEN);	/*    ""      ""       ""    "" */
-#endif
 	dev->rebuild_header	= sl_rebuild_header;
 
 	for (i = 0; i < DEV_NUMBUFFS; i++)  {

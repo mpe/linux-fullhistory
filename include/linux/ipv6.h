@@ -42,8 +42,8 @@ struct in6_ifreq {
 
 
 struct in6_pktinfo {
-	int		ipi6_ifindex;
 	struct in6_addr	ipi6_addr;
+	int		ipi6_ifindex;
 };
 
 #define IPV6_SRCRT_STRICT	0x01	/* this hop must be a neighbor	*/

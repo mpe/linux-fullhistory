@@ -1,4 +1,4 @@
-/* $Id: timer.h,v 1.12 1996/03/24 20:21:29 davem Exp $
+/* $Id: timer.h,v 1.13 1996/08/29 09:48:59 davem Exp $
  * timer.h:  Definitions for the timer chips on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -24,10 +24,10 @@
  */
 
 struct sun4c_timer_info {
-  volatile unsigned int cur_count10;
-  volatile unsigned int timer_limit10;
-  volatile unsigned int cur_count14;
-  volatile unsigned int timer_limit14;
+  __volatile__ unsigned int cur_count10;
+  __volatile__ unsigned int timer_limit10;
+  __volatile__ unsigned int cur_count14;
+  __volatile__ unsigned int timer_limit14;
 };
 
 #define SUN4C_TIMER_PHYSADDR   0xf3000000
@@ -47,16 +47,16 @@ struct sun4c_timer_info {
 #define SUN4M_PRM_CNT_LVALUE  0x7FFFFC00
 
 struct sun4m_timer_percpu_info {
-  volatile unsigned int l14_timer_limit;    /* Initial value is 0x009c4000 */
-  volatile unsigned int l14_cur_count;
+  __volatile__ unsigned int l14_timer_limit;    /* Initial value is 0x009c4000 */
+  __volatile__ unsigned int l14_cur_count;
 
   /* This register appears to be write only and/or inaccessible
    * on Uni-Processor sun4m machines.
    */
-  volatile unsigned int l14_limit_noclear;  /* Data access error is here */
+  __volatile__ unsigned int l14_limit_noclear;  /* Data access error is here */
 
-  volatile unsigned int cntrl;            /* =1 after POST on Aurora */
-  volatile unsigned char space[PAGE_SIZE - 16];
+  __volatile__ unsigned int cntrl;            /* =1 after POST on Aurora */
+  __volatile__ unsigned char space[PAGE_SIZE - 16];
 };
 
 struct sun4m_timer_regs {
@@ -76,7 +76,7 @@ struct sun4m_timer_regs {
 };
 
 extern struct sun4m_timer_regs *sun4m_timers;
-extern volatile unsigned int *master_l10_counter;
-extern volatile unsigned int *master_l10_limit;
+extern __volatile__ unsigned int *master_l10_counter;
+extern __volatile__ unsigned int *master_l10_limit;
 
 #endif /* !(_SPARC_TIMER_H) */

@@ -1,8 +1,14 @@
-/* $Id: signal.h,v 1.21 1996/04/25 06:13:28 davem Exp $ */
+/* $Id: signal.h,v 1.29 1996/10/27 08:55:45 davem Exp $ */
 #ifndef _ASMSPARC_SIGNAL_H
 #define _ASMSPARC_SIGNAL_H
 
 #include <asm/sigcontext.h>
+
+#ifdef __KERNEL__
+#ifndef __ASSEMBLY__
+#include <linux/personality.h>
+#endif
+#endif
 
 /* On the Sparc the signal handlers get passed a 'sub-signal' code
  * for certain signal types, which we document here.
@@ -49,7 +55,8 @@
 #define    SUBSIG_PROTECTION    4
 #define    SUBSIG_SEGERROR      5
 
-#define SIGSYS          12
+#define SIGSYS		12
+
 #define SIGPIPE		13
 #define SIGALRM		14
 #define SIGTERM		15
@@ -138,7 +145,7 @@ struct sigstack {
 
 /* Type of a signal handler.  */
 #ifdef __KERNEL__
-typedef void (*__sighandler_t)(int, int, struct sigcontext_struct *, char *);
+typedef void (*__sighandler_t)(int, int, struct sigcontext *, char *);
 #else
 typedef void (*__sighandler_t)(int);
 #endif
@@ -151,7 +158,19 @@ struct sigaction {
 	__sighandler_t  sa_handler;
 	sigset_t        sa_mask;
 	unsigned long   sa_flags;
+	void (*sa_restorer) (void);     /* not used by Linux/SPARC yet */
 };
+
+#ifdef __KERNEL__
+
+/* use the following macro to get the size of a sigaction struct
+   when copying to/from userland */
+#define SIGACTION_SIZE(personality) (((personality) & PER_BSD)?\
+				     sizeof(struct sigaction)-sizeof(void *):\
+				     sizeof(struct sigaction))
+
+#endif /* __KERNEL__ */
+
 
 #endif /* !(__ASSEMBLY__) */
 

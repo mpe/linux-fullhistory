@@ -1,4 +1,4 @@
-/* $Id: cache.h,v 1.4 1996/04/25 06:12:49 davem Exp $
+/* $Id: cache.h,v 1.5 1996/08/29 09:48:06 davem Exp $
  * cache.h:  Cache specific code for the Sparc.  These include flushing
  *           and direct tag/data line access.
  *
@@ -20,7 +20,7 @@
  */
 
 /* First, cache-tag access. */
-extern inline unsigned int get_icache_tag(int setnum, int tagnum)
+extern __inline__ unsigned int get_icache_tag(int setnum, int tagnum)
 {
 	unsigned int vaddr, retval;
 
@@ -31,7 +31,7 @@ extern inline unsigned int get_icache_tag(int setnum, int tagnum)
 	return retval;
 }
 
-extern inline void put_icache_tag(int setnum, int tagnum, unsigned int entry)
+extern __inline__ void put_icache_tag(int setnum, int tagnum, unsigned int entry)
 {
 	unsigned int vaddr;
 
@@ -44,8 +44,8 @@ extern inline void put_icache_tag(int setnum, int tagnum, unsigned int entry)
 /* Second cache-data access.  The data is returned two-32bit quantities
  * at a time.
  */
-extern inline void get_icache_data(int setnum, int tagnum, int subblock,
-			      unsigned int *data)
+extern __inline__ void get_icache_data(int setnum, int tagnum, int subblock,
+				       unsigned int *data)
 {
 	unsigned int value1, value2, vaddr;
 
@@ -60,8 +60,8 @@ extern inline void get_icache_data(int setnum, int tagnum, int subblock,
 	data[0] = value1; data[1] = value2;
 }
 
-extern inline void put_icache_data(int setnum, int tagnum, int subblock,
-			      unsigned int *data)
+extern __inline__ void put_icache_data(int setnum, int tagnum, int subblock,
+				       unsigned int *data)
 {
 	unsigned int value1, value2, vaddr;
 
@@ -85,35 +85,35 @@ extern inline void put_icache_data(int setnum, int tagnum, int subblock,
  */
 
 /* Flushes which clear out both the on-chip and external caches */
-extern inline void flush_ei_page(unsigned int addr)
+extern __inline__ void flush_ei_page(unsigned int addr)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (addr), "i" (ASI_M_FLUSH_PAGE) :
 			     "memory");
 }
 
-extern inline void flush_ei_seg(unsigned int addr)
+extern __inline__ void flush_ei_seg(unsigned int addr)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (addr), "i" (ASI_M_FLUSH_SEG) :
 			     "memory");
 }
 
-extern inline void flush_ei_region(unsigned int addr)
+extern __inline__ void flush_ei_region(unsigned int addr)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (addr), "i" (ASI_M_FLUSH_REGION) :
 			     "memory");
 }
 
-extern inline void flush_ei_ctx(unsigned int addr)
+extern __inline__ void flush_ei_ctx(unsigned int addr)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (addr), "i" (ASI_M_FLUSH_CTX) :
 			     "memory");
 }
 
-extern inline void flush_ei_user(unsigned int addr)
+extern __inline__ void flush_ei_user(unsigned int addr)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (addr), "i" (ASI_M_FLUSH_USER) :

@@ -934,6 +934,86 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	return newsk;
 }
 
+struct sock *tcp_v4_check_req(struct sock *sk, struct sk_buff *skb)
+{
+	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	struct open_request *req;
+
+
+	/*
+	 *	assumption: the socket is not in use.
+	 *	as we checked the user count on tcp_rcv and we're
+	 *	running from a soft interrupt.
+	 */
+		
+	req = tp->syn_wait_queue;
+	
+
+	if (!req)
+	{
+		return sk;
+	}
+	
+	do {
+		struct tcp_v4_open_req *af_req;
+
+		af_req = (struct tcp_v4_open_req *) req;
+
+		if (af_req->rmt_addr == skb->saddr &&
+		    af_req->loc_addr == skb->daddr &&
+		    req->rmt_port == skb->h.th->source)
+		{
+			u32 flg;
+				
+			if (req->sk)
+			{
+				printk(KERN_DEBUG "BUG: syn_recv:"
+				       "socket exists\n");
+				break;
+			}
+
+			/* match */
+
+			/*
+			 *	Check for syn retransmission
+			 */
+			flg = *(((u32 *)skb->h.th) + 3);
+			flg &= __constant_htonl(0x002f0000);
+				
+			if ((flg == __constant_htonl(0x00020000)) &&
+			    (!after(skb->seq, req->rcv_isn)))
+			{
+				/*
+				 *	retransmited syn
+				 *	FIXME: must send an ack
+				 */
+				return NULL;
+			}
+
+			atomic_sub(skb->truesize, &sk->rmem_alloc);
+			sk = tp->af_specific->syn_recv_sock(sk, skb, req);
+
+			tcp_dec_slow_timer(TCP_SLT_SYNACK);
+
+			if (sk == NULL)
+			{
+				return NULL;
+			}
+
+			atomic_add(skb->truesize, &sk->rmem_alloc);
+			req->expires = 0UL;
+			req->sk = sk;
+			skb->sk = sk;
+			break;
+		}
+
+		req = req->dl_next;
+	} while (req != tp->syn_wait_queue);
+	
+
+	return sk;
+}
+
 /*
  *	From tcp_input.c
  */
@@ -1027,53 +1107,14 @@ int tcp_v4_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
 	if (sk->state == TCP_LISTEN)
 	{
-		struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-		struct open_request *req;
-		struct tcp_v4_open_req *af_req;
-
 		/*
-		 *	assumption: the socket is not in use.
-		 *	as we checked the user count above and we're
-		 *	running from a soft interrupt.
+		 *	find possible connection requests
 		 */
-		
-		req = tp->syn_wait_queue;
-		af_req = (struct tcp_v4_open_req *) req;
-		
-		if (req)
+		sk = tcp_v4_check_req(sk, skb);
+
+		if (sk == NULL)
 		{
-			do {
-				if (af_req->rmt_addr == saddr &&
-				    af_req->loc_addr == daddr &&
-				    req->rmt_port == th->source)
-				{
-					if (req->sk)
-					{
-						printk(KERN_DEBUG "bug: syn_recv socket "
-						       "exists\n");
-						break;
-					}
-
-					/* match */
-
-					atomic_sub(skb->truesize, &sk->rmem_alloc);
-					sk = tp->af_specific->syn_recv_sock(sk, skb, req);
-
-					tcp_dec_slow_timer(TCP_SLT_SYNACK);
-
-					if (sk == NULL)
-					{
-						goto no_tcp_socket;
-					}
-					
-					atomic_add(skb->truesize, &sk->rmem_alloc);
-					req->sk = sk;
-					skb->sk = sk;
-					break;
-				}
-
-				req = req->dl_next;
-			} while (req != tp->syn_wait_queue);
+			goto discard_it;
 		}
 	}
 	
@@ -1257,7 +1298,7 @@ static int tcp_v4_init_sock(struct sock *sk)
 	 */
 	sk->cong_window = 1;
 	sk->ssthresh = 0x7fffffff;
-
+	
 	sk->priority = 1;
 	sk->state = TCP_CLOSE;
 

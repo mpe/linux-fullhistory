@@ -7,7 +7,7 @@
 
 #ifdef __SMP__
 
-extern __inline volatile unsigned char ldstub(volatile unsigned char *lock)
+extern __inline__ __volatile__ unsigned char ldstub(volatile unsigned char *lock)
 {
 	volatile unsigned char retval;
 

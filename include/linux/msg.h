@@ -3,6 +3,10 @@
 
 #include <linux/ipc.h>
 
+/* ipcs ctl commands */
+#define MSG_STAT 11
+#define MSG_INFO 12
+
 /* msgrcv options */
 #define MSG_NOERROR     010000  /* no error if message is too big */
 #define MSG_EXCEPT      020000  /* recv any msg except of specified type.*/
@@ -64,10 +68,6 @@ struct msg {
 	time_t msg_stime;       /* msgsnd time */
 	short msg_ts;           /* message text size */
 };
-
-/* ipcs ctl commands */
-#define MSG_STAT 11
-#define MSG_INFO 12
 
 asmlinkage int sys_msgget (key_t key, int msgflg);
 asmlinkage int sys_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg);

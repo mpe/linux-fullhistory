@@ -24,18 +24,20 @@ if [ "$CONFIG_SLIP" != "n" ]; then
 fi
 bool 'Radio network interfaces' CONFIG_NET_RADIO
 if [ "$CONFIG_NET_RADIO" != "n" ]; then
-  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    tristate 'BAYCOM ser12 and par96 driver for AX.25' CONFIG_BAYCOM
-    tristate 'Soundcard modem driver for AX.25' CONFIG_SOUNDMODEM
+  if [ "$CONFIG_AX25" != "n" ]; then
+    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      tristate 'BAYCOM ser12 and par96 driver for AX.25' CONFIG_BAYCOM
+      tristate 'Soundcard modem driver for AX.25' CONFIG_SOUNDMODEM
+    fi
+    dep_tristate 'Serial port KISS driver for AX.25' CONFIG_MKISS $CONFIG_AX25
+    dep_tristate 'BPQ Ethernet driver for AX.25' CONFIG_BPQETHER $CONFIG_AX25
+    dep_tristate 'Gracilis PackeTwin support' CONFIG_PT $CONFIG_AX25
+    dep_tristate 'Ottawa PI and PI/2 support' CONFIG_PI $CONFIG_AX25
   fi
-  if [ "$CONFIG_AX25" = "y" ]; then
-    bool 'Gracilis PackeTwin support' CONFIG_PT
-    bool 'Ottawa PI and PI/2 support' CONFIG_PI
-  fi
+  tristate 'Z8530 SCC KISS emulation driver for AX.25' CONFIG_SCC
   tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
   tristate 'WaveLAN support' CONFIG_WAVELAN
   tristate 'WIC Radio IP bridge (EXPERIMENTAL)' CONFIG_WIC
-  tristate 'Z8530 SCC kiss emulation driver for AX.25' CONFIG_SCC
 fi
 #
 #	Ethernet

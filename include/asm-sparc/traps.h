@@ -1,4 +1,4 @@
-/* $Id: traps.h,v 1.6 1996/04/25 06:13:33 davem Exp $
+/* $Id: traps.h,v 1.8 1996/05/17 10:38:53 davem Exp $
  * traps.h:  Format of entries for the Sparc trap table.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -8,6 +8,8 @@
 #define _SPARC_TRAPS_H
 
 #define NUM_SPARC_TRAPS  255
+
+#ifndef __ASSEMBLY__
 
 /* This is for V8 and V9 compliant Sparc CPUS */
 struct tt_entry {
@@ -47,6 +49,8 @@ extern __inline__ unsigned long get_tbr(void)
 	return tbr;
 }
 
+#endif /* !(__ASSEMBLY__) */
+
 /* For patching the trap table at boot time, we need to know how to
  * form various common Sparc instructions.  Thus these macros...
  */
@@ -61,6 +65,7 @@ extern __inline__ unsigned long get_tbr(void)
           (0x10800000 | (((dest_addr-inst_addr)>>2)&0x3fffff))
 
 #define SPARC_RD_PSR_L0  (0xa1480000)
+#define SPARC_RD_WIM_L3  (0xa7500000)
 #define SPARC_NOP (0x01000000)
 
 /* Various interesting trap levels. */

@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.43 1996/04/24 09:09:42 davem Exp $
+/* $Id: traps.c,v 1.47 1996/10/27 08:36:17 davem Exp $
  * arch/sparc/kernel/traps.c
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -62,11 +62,20 @@ void sun4m_nmi(struct pt_regs *regs)
 	prom_halt();
 }
 
+void instruction_dump (unsigned long *pc)
+{
+	int i;
+	
+	if((((unsigned long) pc) & 3))
+                return;
+
+	for(i = -3; i < 6; i++)
+		printk("%c%08lx%c",i?' ':'<',pc[i],i?' ':'>');
+	printk("\n");
+}
+
 void die_if_kernel(char *str, struct pt_regs *regs)
 {
-	unsigned long i;
-	unsigned long *pc;
-
 	/* Amuse the user. */
 	printk(
 "              \\|/ ____ \\|/\n"
@@ -80,10 +89,7 @@ void die_if_kernel(char *str, struct pt_regs *regs)
 	ap_panic();
 #endif
 	printk("Instruction DUMP:");
-	pc = (unsigned long *) regs->pc;
-	for(i = -3; i < 6; i++)
-		printk("%c%08lx%c",i?' ':'<',pc[i],i?' ':'>');
-	printk("\n");
+	instruction_dump ((unsigned long *) regs->pc);
 	if(regs->psr & PSR_PS)
 		do_exit(SIGKILL);
 	do_exit(SIGSEGV);
@@ -96,10 +102,15 @@ void do_hw_interrupt(unsigned long type, unsigned long psr, unsigned long pc)
 		printk("Unimplemented Sparc TRAP, type = %02lx\n", type);
 		die_if_kernel("Whee... Hello Mr. Penguin", current->tss.kregs);
 	}	
+
 	if(type == SP_TRAP_SBPT) {
 		send_sig(SIGTRAP, current, 1);
 		return;
 	}
+
+	if(psr & PSR_PS)
+		die_if_kernel("Kernel bad trap", current->tss.kregs);
+
 	current->tss.sig_desc = SUBSIG_BADTRAP(type - 0x80);
 	current->tss.sig_address = pc;
 	send_sig(SIGILL, current, 1);
@@ -142,6 +153,11 @@ void do_memaccess_unaligned(struct pt_regs *regs, unsigned long pc, unsigned lon
 	}
 	current->tss.sig_address = pc;
 	current->tss.sig_desc = SUBSIG_PRIVINST;
+#if 0
+	show_regs (regs);
+	instruction_dump ((unsigned long *) regs->pc);
+	printk ("do_MNA!\n");
+#endif
 	send_sig(SIGBUS, current, 1);
 }
 

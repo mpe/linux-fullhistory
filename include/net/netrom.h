@@ -37,15 +37,16 @@
 
 #define NR_DEFAULT_T1		(120 * PR_SLOWHZ)	/* Outstanding frames - 120 seconds */
 #define NR_DEFAULT_T2		(5   * PR_SLOWHZ)	/* Response delay     - 5 seconds */
-#define NR_DEFAULT_N2		3			/* Number of Retries */
-#define	NR_DEFAULT_T4		(180 * PR_SLOWHZ)	/* Transport Busy Delay */
-#define	NR_DEFAULT_WINDOW	4			/* Default Window Size	*/
-#define	NR_DEFAULT_OBS		6			/* Default Obsolescence Count */
-#define	NR_DEFAULT_QUAL		10			/* Default Neighbour Quality */
-#define	NR_DEFAULT_TTL		16			/* Default Time To Live */
+#define NR_DEFAULT_N2		3			/* Number of Retries - 3 */
+#define	NR_DEFAULT_T4		(180 * PR_SLOWHZ)	/* Busy Delay - 180 seconds */
+#define	NR_DEFAULT_IDLE		(20* 60 * PR_SLOWHZ)	/* No Activuty Timeout - 900 seconds*/
+#define	NR_DEFAULT_WINDOW	4			/* Default Window Size - 4 */
+#define	NR_DEFAULT_OBS		6			/* Default Obsolescence Count - 6 */
+#define	NR_DEFAULT_QUAL		10			/* Default Neighbour Quality - 10 */
+#define	NR_DEFAULT_TTL		16			/* Default Time To Live - 16 */
 #define NR_MODULUS 		256
-#define NR_MAX_WINDOW_SIZE	127			/* Maximum Window Allowable */
-#define	NR_DEFAULT_PACLEN	236			/* Default Packet Length */
+#define NR_MAX_WINDOW_SIZE	127			/* Maximum Window Allowable - 127 */
+#define	NR_DEFAULT_PACLEN	236			/* Default Packet Length - 236 */
 
 typedef struct {
 	ax25_address		user_addr, source_addr, dest_addr;
@@ -55,8 +56,8 @@ typedef struct {
 	unsigned char		state, condition, bpqext, hdrincl;
 	unsigned short		vs, vr, va, vl;
 	unsigned char		n2, n2count;
-	unsigned short		t1, t2, rtt;
-	unsigned short		t1timer, t2timer, t4timer;
+	unsigned short		t1, t2, t4, idle, rtt;
+	unsigned short		t1timer, t2timer, t4timer, idletimer;
 	unsigned short		fraglen, paclen;
 	struct sk_buff_head	ack_queue;
 	struct sk_buff_head	reseq_queue;
@@ -91,7 +92,17 @@ struct nr_node {
 };
 
 /* af_netrom.c */
-extern struct nr_parms_struct nr_default;
+extern int  sysctl_netrom_default_path_quality;
+extern int  sysctl_netrom_obsolescence_count_initialiser;
+extern int  sysctl_netrom_network_ttl_initialiser;
+extern int  sysctl_netrom_transport_timeout;
+extern int  sysctl_netrom_transport_maximum_tries;
+extern int  sysctl_netrom_transport_acknowledge_delay;
+extern int  sysctl_netrom_transport_busy_delay;
+extern int  sysctl_netrom_transport_requested_window_size;
+extern int  sysctl_netrom_transport_no_activity_timeout;
+extern int  sysctl_netrom_transport_packet_length;
+extern int  sysctl_netrom_routing_control;
 extern int  nr_rx_frame(struct sk_buff *, struct device *);
 extern void nr_destroy_socket(struct sock *);
 
@@ -122,6 +133,7 @@ extern void nr_link_failed(ax25_address *, struct device *);
 extern int  nr_route_frame(struct sk_buff *, ax25_cb *);
 extern int  nr_nodes_get_info(char *, char **, off_t, int, int);
 extern int  nr_neigh_get_info(char *, char **, off_t, int, int);
+extern void nr_rt_free(void);
 
 /* nr_subr.c */
 extern void nr_clear_queues(struct sock *);
@@ -134,7 +146,11 @@ extern void nr_transmit_dm(struct sk_buff *);
 extern unsigned short nr_calculate_t1(struct sock *);
 extern void nr_calculate_rtt(struct sock *);
 
-/* ax25_timer */
+/* nr_timer.c */
 extern void nr_set_timer(struct sock *);
+
+/* sysctl_net_netrom.c */
+extern void nr_register_sysctl(void);
+extern void nr_unregister_sysctl(void);
 
 #endif

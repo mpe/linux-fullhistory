@@ -371,33 +371,18 @@ struct tcp_sl_timer {
 
 extern struct tcp_sl_timer tcp_slt_array[TCP_SLT_MAX];
  
-/*
- *      This function returns the amount that we can raise the
- *      usable window based on the following constraints
- *  
- *	1. The window can never be shrunk once it is offered (RFC 793)
- *	2. We limit memory per socket
- */
-
 static __inline__ unsigned short tcp_raise_window(struct sock *sk)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
-	long free_space = sock_rspace(sk);
-	long window;
-
-	if (free_space > 1024)
-		free_space &= ~0x3FF; 
-
-	if(sk->window_clamp)
-		free_space = min(sk->window_clamp, free_space);
- 
+	long cur_win;
+	int res = 0;
+	
 	/* 
          * compute the actual window i.e. 
-         * old_window - received_bytes_on_that_win 
+         * old_window - received_bytes_on_that_win
 	 */
 
-
-	window = tp->rcv_wnd - (tp->rcv_nxt - tp->rcv_wup);
+	cur_win = tp->rcv_wup + tp->rcv_wnd - tp->rcv_nxt;
 
 
 	/*
@@ -406,32 +391,42 @@ static __inline__ unsigned short tcp_raise_window(struct sock *sk)
 	 *	we have more free space to offer.
 	 */
 
-	if (window < (sk->mss << 1) && free_space > window)
-		return 1;
-
-	return 0;
+	if (cur_win < (sk->mss << 1))
+		res = 1;
+	return res;
 }
+
+/*
+ *      This function returns the amount that we can raise the
+ *      usable window based on the following constraints
+ *  
+ *	1. The window can never be shrunk once it is offered (RFC 793)
+ *	2. We limit memory per socket
+ */
+
 
 static __inline__ unsigned short tcp_select_window(struct sock *sk)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 	long free_space = sock_rspace(sk);
 	long window;
+	long cur_win;
+	long usable;
 	
 	if (sk->window_clamp)
 		free_space = min(sk->window_clamp, free_space);
 	
-
 	/*
 	 * compute the actual window i.e.
 	 * old_window - received_bytes_on_that_win
 	 */
 
-	window = tp->rcv_wnd - (tp->rcv_nxt - tp->rcv_wup);
-
-	if ( window < 0 )
+	cur_win = tp->rcv_wup + tp->rcv_wnd - tp->rcv_nxt;
+	window  = tp->rcv_wnd;
+	
+	if ( cur_win < 0 )
 	{
-		window = 0;
+		cur_win = 0;
 		printk(KERN_DEBUG "TSW: win < 0 w=%d 1=%u 2=%u\n",
 		       tp->rcv_wnd, tp->rcv_nxt, tp->rcv_wup);
 	}
@@ -450,43 +445,32 @@ static __inline__ unsigned short tcp_select_window(struct sock *sk)
 	 * It would be a good idea if it didn't break header prediction.
 	 * and BSD made the header predition standard...
 	 * It expects the same value in the header i.e. th->window to be
-	 * constant [in fact it's a good idea but they could document it
-	 * couldn't they ?] [PR].
+	 * constant
 	 */
-	
-	/*
-	 *  If the actual window is blocking the sender then try
-	 *  to raise it.
-	 */
-	
-	if (window < (sk->mss << 1))
+
+	if (tp->rcv_wnd >= free_space)
 	{
-		long usable;
-
-		usable = free_space - window;
-
-		if (usable < 0)
-		{
-			/* shouldn't happen */
-			usable = 0;
-		}
-
-		tp->rcv_wnd += (min(usable, sk->mss) + 0x3FF) & ~0x3FF;
+		if (cur_win > (sk->mss << 1))
+			goto out;
 	}
 
-#if 0
-	if (tp->rcv_wnd > free_space)
+	usable = free_space - cur_win;
+
+#define WROUND(X, Y) ((X + (Y-1)) & (Y-1))
+		
+	window += WROUND(min(usable, sk->mss), 1024);
+
+#undef WROUND
+
+	if (window < cur_win)
 	{
-		tp->rcv_wnd = free_space & ~0x3FF;
-	}
-#endif
-	if (tp->rcv_wnd < window)
-	{
-		tp->rcv_wnd = (window + 0x3FF) & ~0x3FF;
+		window = cur_win;
 	}
 
+  out:	
+	tp->rcv_wnd = window;
 	tp->rcv_wup = tp->rcv_nxt;
-	return tp->rcv_wnd;
+	return window;
 }
 
 /*
@@ -594,28 +578,14 @@ extern __inline__ void tcp_synq_queue(struct tcp_opt *tp, struct open_request *r
 
 }
 
+extern void __tcp_inc_slow_timer(struct tcp_sl_timer *slt);
 extern __inline__ void tcp_inc_slow_timer(int timer)
 {
 	struct tcp_sl_timer *slt = &tcp_slt_array[timer];
 	
 	if (slt->count == 0)
 	{
-		unsigned long now = jiffies;
-		unsigned long when;
-		unsigned long next;
-
-		slt->last = now;
-		
-		when = now + slt->period;
-		next = del_timer(&tcp_slow_timer);
-
-		if (next && ((long)(next - when) < 0))
-		{
-			when = next;
-		}
-		
-		tcp_slow_timer.expires = when;
-		add_timer(&tcp_slow_timer);
+		__tcp_inc_slow_timer(slt);
 	}
 
 	atomic_inc(&slt->count);

@@ -99,9 +99,9 @@
 #include <net/tcp.h>
 #include <net/sock.h>
 #include <net/arp.h>
-#ifdef CONFIG_AX25
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <net/ax25.h>
-#ifdef CONFIG_NETROM
+#if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
 #include <net/netrom.h>
 #endif
 #endif
@@ -1707,8 +1707,8 @@ void arp_send(int type, int ptype, u32 dest_ip,
 
 	/* Fill out the arp protocol part. */
 	arp->ar_hrd = htons(dev->type);
-#ifdef CONFIG_AX25
-#ifdef CONFIG_NETROM
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
+#if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
 	arp->ar_pro = (dev->type == ARPHRD_AX25 || dev->type == ARPHRD_NETROM) ? htons(AX25_P_IP) : htons(ETH_P_IP);
 #else
 	arp->ar_pro = (dev->type != ARPHRD_AX25) ? htons(ETH_P_IP) : htons(AX25_P_IP);
@@ -1780,7 +1780,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
   	switch (dev->type)
   	{
-#ifdef CONFIG_AX25
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 		case ARPHRD_AX25:
 			if(arp->ar_pro != htons(AX25_P_IP))
 			{
@@ -1789,7 +1789,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			}
 			break;
 #endif
-#ifdef CONFIG_NETROM
+#if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
 		case ARPHRD_NETROM:
 			if(arp->ar_pro != htons(AX25_P_IP))
 			{
@@ -2306,8 +2306,8 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 /*
  *	Convert hardware address to XX:XX:XX:XX ... form.
  */
-#ifdef CONFIG_AX25
-#ifdef CONFIG_NETROM
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
+#if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
 			if (entry->dev->type == ARPHRD_AX25 || entry->dev->type == ARPHRD_NETROM)
 			     strcpy(hbuffer,ax2asc((ax25_address *)entry->ha));
 			else {
@@ -2326,7 +2326,7 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 			}
 			hbuffer[--k]=0;
 	
-#ifdef CONFIG_AX25
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 			}
 #endif
 			size = sprintf(buffer+len,
@@ -2416,3 +2416,39 @@ void arp_init (void)
 	netlink_attach(NETLINK_ARPD, arpd_callback);
 #endif
 }
+
+#ifdef CONFIG_AX25_MODULE
+
+/*
+ *	ax25 -> ascii conversion
+ */
+char *ax2asc(ax25_address *a)
+{
+	static char buf[11];
+	char c, *s;
+	int n;
+
+	for (n = 0, s = buf; n < 6; n++) {
+		c = (a->ax25_call[n] >> 1) & 0x7F;
+
+		if (c != ' ') *s++ = c;
+	}
+	
+	*s++ = '-';
+
+	if ((n = ((a->ax25_call[6] >> 1) & 0x0F)) > 9) {
+		*s++ = '1';
+		n -= 10;
+	}
+	
+	*s++ = n + '0';
+	*s++ = '\0';
+
+	if (*buf == '\0' || *buf == '-')
+	   return "*";
+
+	return buf;
+
+}
+
+#endif

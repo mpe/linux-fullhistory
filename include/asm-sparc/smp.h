@@ -31,7 +31,7 @@ struct cpuinfo_sparc {
 
 extern struct cpuinfo_sparc cpu_data[NR_CPUS];
 
-typedef volatile unsigned char klock_t;
+typedef __volatile__ unsigned char klock_t;
 extern klock_t kernel_flag;
 
 #define KLOCK_HELD       0xff
@@ -44,13 +44,13 @@ extern klock_t kernel_flag;
 extern int smp_found_cpus;
 extern unsigned char boot_cpu_id;
 extern unsigned long cpu_present_map;
-extern volatile unsigned long smp_invalidate_needed[NR_CPUS];
-extern volatile unsigned long kernel_counter;
-extern volatile unsigned char active_kernel_processor;
+extern __volatile__ unsigned long smp_invalidate_needed[NR_CPUS];
+extern __volatile__ unsigned long kernel_counter;
+extern __volatile__ unsigned char active_kernel_processor;
 extern void smp_message_irq(void);
 extern unsigned long ipi_count;
-extern volatile unsigned long kernel_counter;
-extern volatile unsigned long syscall_count;
+extern __volatile__ unsigned long kernel_counter;
+extern __volatile__ unsigned long syscall_count;
 
 extern void print_lock_state(void);
 
@@ -69,25 +69,25 @@ extern void smp_cross_call(smpfunc_t func, unsigned long arg1, unsigned long arg
 extern void smp_capture(void);
 extern void smp_release(void);
 
-extern inline void xc0(smpfunc_t func) { smp_cross_call(func, 0, 0, 0, 0, 0); }
-extern inline void xc1(smpfunc_t func, unsigned long arg1)
+extern __inline__ void xc0(smpfunc_t func) { smp_cross_call(func, 0, 0, 0, 0, 0); }
+extern __inline__ void xc1(smpfunc_t func, unsigned long arg1)
 { smp_cross_call(func, arg1, 0, 0, 0, 0); }
-extern inline void xc2(smpfunc_t func, unsigned long arg1, unsigned long arg2)
+extern __inline__ void xc2(smpfunc_t func, unsigned long arg1, unsigned long arg2)
 { smp_cross_call(func, arg1, arg2, 0, 0, 0); }
-extern inline void xc3(smpfunc_t func, unsigned long arg1, unsigned long arg2,
-		       unsigned long arg3)
+extern __inline__ void xc3(smpfunc_t func, unsigned long arg1, unsigned long arg2,
+			   unsigned long arg3)
 { smp_cross_call(func, arg1, arg2, arg3, 0, 0); }
-extern inline void xc4(smpfunc_t func, unsigned long arg1, unsigned long arg2,
-		       unsigned long arg3, unsigned long arg4)
+extern __inline__ void xc4(smpfunc_t func, unsigned long arg1, unsigned long arg2,
+			   unsigned long arg3, unsigned long arg4)
 { smp_cross_call(func, arg1, arg2, arg3, arg4, 0); }
-extern inline void xc5(smpfunc_t func, unsigned long arg1, unsigned long arg2,
-		       unsigned long arg3, unsigned long arg4, unsigned long arg5)
+extern __inline__ void xc5(smpfunc_t func, unsigned long arg1, unsigned long arg2,
+			   unsigned long arg3, unsigned long arg4, unsigned long arg5)
 { smp_cross_call(func, arg1, arg2, arg3, arg4, arg5); }
 
-extern volatile int cpu_number_map[NR_CPUS];
-extern volatile int cpu_logical_map[NR_CPUS];
+extern __volatile__ int cpu_number_map[NR_CPUS];
+extern __volatile__ int cpu_logical_map[NR_CPUS];
 
-extern __inline int smp_processor_id(void)
+extern __inline__ int smp_processor_id(void)
 {
 	int cpuid;
 
@@ -99,10 +99,10 @@ extern __inline int smp_processor_id(void)
 }
 
 
-extern volatile unsigned long smp_proc_in_lock[NR_CPUS]; /* for computing process time */
-extern volatile int smp_process_available;
+extern __volatile__ unsigned long smp_proc_in_lock[NR_CPUS]; /* for computing process time */
+extern __volatile__ int smp_process_available;
 
-extern inline int smp_swap(volatile int *addr, int value)
+extern __inline__ int smp_swap(volatile int *addr, int value)
 {
 	__asm__ __volatile__("swap [%2], %0\n\t" :
 			     "=&r" (value) :
@@ -110,30 +110,35 @@ extern inline int smp_swap(volatile int *addr, int value)
 	return value;
 }
 
-extern inline volatile void inc_smp_counter(volatile int *ctr)
+extern __inline__ __volatile__ void inc_smp_counter(volatile int *ctr)
 {
 	int tmp;
 
 	while((tmp = smp_swap(ctr, -1)) == -1)
-		;
-	smp_swap(ctr, (tmp + 1));
+		while(*ctr == -1)
+			;
+
+	*ctr = (tmp + 1);
 }
 
-extern inline volatile void dec_smp_counter(volatile int *ctr)
+extern __inline__ __volatile__ void dec_smp_counter(volatile int *ctr)
 {
 	int tmp;
 
 	while((tmp = smp_swap(ctr, -1)) == -1)
-		;
-	smp_swap(ctr, (tmp - 1));
+		while(*ctr == -1)
+			;
+
+	*ctr = (tmp - 1);
 }
 
-extern inline volatile int read_smp_counter(volatile int *ctr)
+extern __inline__ __volatile__ int read_smp_counter(volatile int *ctr)
 {
 	int value;
 
 	while((value = *ctr) == -1)
 		;
+
 	return value;
 }
 

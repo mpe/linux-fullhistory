@@ -21,6 +21,7 @@
 #define twin_tmp1 l4
 #define twin_tmp2 l5
 #define twin_tmp3 l6
+#define curptr    g6
 
 	/* 7 WINDOW SPARC PATCH INSTRUCTIONS */
 	.globl	rirq_7win_patch1, rirq_7win_patch2, rirq_7win_patch3
@@ -44,8 +45,7 @@ ret_irq_user:
 	wr	%t_psr, 0x0, %psr
 	WRITE_PAUSE
 
-	LOAD_CURRENT(twin_tmp2, twin_tmp1)
-	ld	[%twin_tmp2 + THREAD_W_SAVED], %twin_tmp1
+	ld	[%curptr + THREAD_W_SAVED], %twin_tmp1
 	orcc	%g0, %twin_tmp1, %g0
 	be	ret_irq_nobufwins
 	 nop
@@ -62,7 +62,7 @@ ret_irq_user:
 
 	/* We have klock, so we must return just like a normal trap. */
 	b	ret_trap_entry
-	 nop
+	 clr	%l5
 
 ret_irq_nobufwins:
 	/* Load up the user's out registers so we can pull
@@ -73,7 +73,7 @@ ret_irq_nobufwins:
 	/* If there are already live user windows in the
 	 * set we can return from trap safely.
 	 */
-	ld	[%twin_tmp2 + THREAD_UMASK], %twin_tmp1
+	ld	[%curptr + THREAD_UMASK], %twin_tmp1
 	orcc	%g0, %twin_tmp1, %g0
 	bne	ret_irq_userwins_ok
 	 nop
@@ -135,7 +135,7 @@ ret_irq_unaligned_pc:
 
 	/* We have klock, so we must return just like a normal trap. */
 	b	ret_trap_entry
-	 nop
+	 clr	%l5
 
 ret_irq_kernel:
 	wr	%t_psr, 0x0, %psr
@@ -191,15 +191,14 @@ ret_irq_user_stack_is_bolixed:
 
 	/* We have klock, so we must return just like a normal trap. */
 	b	ret_trap_entry
-	 nop
+	 clr	%l5
 
 	.globl	C_LABEL(sun4c_reti_stackchk)
 C_LABEL(sun4c_reti_stackchk):
 	be	1f
 	 and	%fp, 0xfff, %g1		! delay slot
 
-	b	ret_irq_user_stack_is_bolixed
-	 nop
+	b,a	ret_irq_user_stack_is_bolixed
 
 	/* See if we have to check the sanity of one page or two */
 1:
@@ -211,8 +210,7 @@ C_LABEL(sun4c_reti_stackchk):
 	 andncc	%g1, 0xff8, %g0
 
 	/* %sp is in vma hole, yuck */
-	b	ret_irq_user_stack_is_bolixed
-	 nop
+	b,a	ret_irq_user_stack_is_bolixed
 
 1:
 	be	sun4c_reti_onepage	/* Only one page to check */
@@ -227,8 +225,7 @@ sun4c_reti_twopages:
 	 lda	[%g1] ASI_PTE, %g2
 
 	/* Second page is in vma hole */
-	b	ret_irq_user_stack_is_bolixed
-	 nop
+	b,a	ret_irq_user_stack_is_bolixed
 
 1:
 	srl	%g2, 29, %g2
@@ -237,8 +234,7 @@ sun4c_reti_twopages:
 	 lda	[%fp] ASI_PTE, %g2
 
 	/* Second page has bad perms */
-	b	ret_irq_user_stack_is_bolixed
-	 nop
+	b,a	ret_irq_user_stack_is_bolixed
 
 sun4c_reti_onepage:
 	srl	%g2, 29, %g2
@@ -247,8 +243,7 @@ sun4c_reti_onepage:
 	 nop
 
 	/* A page had bad page permissions, losing... */
-	b	ret_irq_user_stack_is_bolixed
-	 nop
+	b,a	ret_irq_user_stack_is_bolixed
 
 	/* Whee, things are ok, load the window and continue. */
 1:
@@ -257,13 +252,13 @@ sun4c_reti_onepage:
 	LOAD_WINDOW(sp)
 
 	save	%g0, %g0, %g0
-	b	ret_irq_userwins_ok
-	 nop
+	b,a	ret_irq_userwins_ok
 
 	.globl	C_LABEL(srmmu_reti_stackchk)
 C_LABEL(srmmu_reti_stackchk):
+	sethi	%hi(C_LABEL(page_offset)), %g1
 	bne	ret_irq_user_stack_is_bolixed
-	 sethi	%hi(KERNBASE), %g1
+	 ld	[%g1 + %lo(C_LABEL(page_offset))], %g1
 	cmp	%g1, %fp
 	bleu	ret_irq_user_stack_is_bolixed
 	 mov	AC_M_SFSR, %g1
@@ -291,5 +286,4 @@ C_LABEL(srmmu_reti_stackchk):
 	bne	ret_irq_user_stack_is_bolixed
 	 nop
 
-	b	ret_irq_userwins_ok
-	 nop
+	b,a	ret_irq_userwins_ok

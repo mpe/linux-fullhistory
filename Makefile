@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 8
+SUBLEVEL = 9
 
 ARCH = i386
 
@@ -126,12 +126,12 @@ endif
 
 DRIVERS := $(DRIVERS) drivers/net/net.a
 
-ifdef CONFIG_CD_NO_IDESCSI
-DRIVERS := $(DRIVERS) drivers/cdrom/cdrom.a
-endif
-
 ifeq ($(CONFIG_SCSI),y)
 DRIVERS := $(DRIVERS) drivers/scsi/scsi.a
+endif
+
+ifneq ($(CONFIG_CD_NO_IDESCSI)$(CONFIG_BLK_DEV_IDECD)$(CONFIG_BLK_DEV_SR),)
+DRIVERS := $(DRIVERS) drivers/cdrom/cdrom.a
 endif
 
 ifeq ($(CONFIG_SOUND),y)

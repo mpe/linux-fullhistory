@@ -211,12 +211,12 @@ char *pdma_base = 0;
 unsigned long pdma_areasize;
 
 /* Common routines to all controller types on the Sparc. */
-static inline void virtual_dma_init(void)
+static __inline__ void virtual_dma_init(void)
 {
 	/* nothing... */
 }
 
-static inline void sun_fd_disable_dma(void)
+static __inline__ void sun_fd_disable_dma(void)
 {
 	doing_pdma = 0;
 	if (pdma_base) {
@@ -225,7 +225,7 @@ static inline void sun_fd_disable_dma(void)
 	}
 }
 
-static inline void sun_fd_set_dma_mode(int mode)
+static __inline__ void sun_fd_set_dma_mode(int mode)
 {
 	switch(mode) {
 	case DMA_MODE_READ:
@@ -240,17 +240,17 @@ static inline void sun_fd_set_dma_mode(int mode)
 	}
 }
 
-static inline void sun_fd_set_dma_addr(char *buffer)
+static __inline__ void sun_fd_set_dma_addr(char *buffer)
 {
 	pdma_vaddr = buffer;
 }
 
-static inline void sun_fd_set_dma_count(int length)
+static __inline__ void sun_fd_set_dma_count(int length)
 {
 	pdma_size = length;
 }
 
-static inline void sun_fd_enable_dma(void)
+static __inline__ void sun_fd_enable_dma(void)
 {
 	pdma_vaddr = mmu_lockarea(pdma_vaddr, pdma_size);
 	pdma_base = pdma_vaddr;
@@ -347,9 +347,9 @@ no_sun_fdc:
 
 static int sparc_eject(void)
 {
-	set_dor(0, ~0, 0x90);
+	set_dor(0x00, 0xff, 0x90);
 	udelay(500);
-	set_dor(0, ~0x90, 0);
+	set_dor(0x00, 0x6f, 0x00);
 	udelay(500);
 	return 0;
 }

@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 032
+ *	AX.25 release 033
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -32,12 +32,13 @@
  *			Joerg(DL1BKE)   Renamed it to "IDLE" with a slightly
  *					different behaviour. Fixed defrag
  *					routine (I hope)
- *	AX.25 032	Jonathan(G4KLX)	Remove auto-router.
- *			Darryl(G7LED)	AX.25 segmentation fixed.
+ *	AX.25 032	Darryl(G7LED)	AX.25 segmentation fixed.
+ *	AX.25 033	Jonathan(G4KLX)	Remove auto-router.
+ *					Modularisation changes.
  */
 
 #include <linux/config.h>
-#ifdef CONFIG_AX25
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -59,9 +60,6 @@
 #include <linux/fcntl.h>
 #include <linux/mm.h>
 #include <linux/interrupt.h>
-#ifdef CONFIG_NETROM
-#include <net/netrom.h>
-#endif
 
 static int ax25_rx_iframe(ax25_cb *, struct sk_buff *);
 
@@ -153,6 +151,7 @@ static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
  */
 static int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 {
+	int (*func)(struct sk_buff *, ax25_cb *);
 	volatile int queued = 0;
 	unsigned char pid;
 	
@@ -162,37 +161,29 @@ static int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 	
 	pid = *skb->data;
 
-	switch (pid) {
-#ifdef CONFIG_NETROM
-		case AX25_P_NETROM:
-			if (ax25_dev_get_value(ax25->device, AX25_VALUES_NETROM)) {
-				skb_pull(skb, 1);	/* Remove PID */
-				queued = nr_route_frame(skb, ax25);
-			}
-			break;
-#endif
 #ifdef CONFIG_INET
-		case AX25_P_IP:
-			skb_pull(skb, 1);	/* Remove PID */
-			skb->h.raw = skb->data;
-			ip_rcv(skb, ax25->device, NULL);	/* Wrong ptype */
-			queued = 1;
-			break;
+	if (pid == AX25_P_IP) {
+		skb_pull(skb, 1);	/* Remove PID */
+		skb->h.raw = skb->data;
+		ip_rcv(skb, ax25->device, NULL);	/* Wrong ptype */
+		return 1;
+	}
 #endif
-		case AX25_P_SEGMENT:
-			skb_pull(skb, 1);	/* Remove PID */
-			queued = ax25_rx_fragment(ax25, skb);
-			break;
+	if (pid == AX25_P_SEGMENT) {
+		skb_pull(skb, 1);	/* Remove PID */
+		return ax25_rx_fragment(ax25, skb);
+	}
 
-		default:
-			if (ax25->sk != NULL && ax25_dev_get_value(ax25->device, AX25_VALUES_TEXT) && ax25->sk->protocol == pid) {
-				if (sock_queue_rcv_skb(ax25->sk, skb) == 0) {
-					queued = 1;
-				} else {
-					ax25->condition |= OWN_RX_BUSY_CONDITION;
-				}
-			}
-			break;
+	if ((func = ax25_protocol_function(pid)) != NULL) {
+		skb_pull(skb, 1);	/* Remove PID */
+		return (*func)(skb, ax25);
+	}
+	
+	if (ax25->sk != NULL && ax25_dev_get_value(ax25->device, AX25_VALUES_TEXT) && ax25->sk->protocol == pid) {
+		if (sock_queue_rcv_skb(ax25->sk, skb) == 0)
+			queued = 1;
+		else
+			ax25->condition |= OWN_RX_BUSY_CONDITION;
 	}
 
 	return queued;

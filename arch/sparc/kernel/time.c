@@ -1,7 +1,8 @@
-/* $Id: time.c,v 1.12 1996/04/04 16:30:30 tridge Exp $
+/* $Id: time.c,v 1.19 1996/10/31 06:28:26 davem Exp $
  * linux/arch/sparc/kernel/time.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1996 Thomas K. Dyas (tdyas@eden.rutgers.edu)
  *
  * This file handles the Sparc specific time handling details.
  */
@@ -12,6 +13,7 @@
 #include <linux/param.h>
 #include <linux/string.h>
 #include <linux/mm.h>
+#include <linux/interrupt.h>
 #include <linux/timex.h>
 
 #include <asm/oplib.h>
@@ -22,10 +24,18 @@
 #include <asm/irq.h>
 #include <asm/io.h>
 
+#ifdef CONFIG_AP1000
+#include <asm/ap1000/apservice.h>
+#endif
+
+
 enum sparc_clock_type sp_clock_typ;
 struct mostek48t02 *mstk48t02_regs = 0;
 struct mostek48t08 *mstk48t08_regs = 0;
 static int set_rtc_mmss(unsigned long);
+
+__volatile__ unsigned int *master_l10_counter;
+__volatile__ unsigned int *master_l10_limit;
 
 /*
  * timer_interrupt() needs to keep up the real-time clock,
@@ -40,7 +50,7 @@ void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 	do_timer(regs);
 
-	/* XXX I don't know if this is right for the Sparc yet. XXX */
+	/* Determine when to update the Mostek clock. */
 	if (time_state != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
 	    xtime.tv_usec > 500000 - (tick >> 1) &&
 	    xtime.tv_usec < 500000 + (tick >> 1))
@@ -81,81 +91,150 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 	  )*60 + sec; /* finally seconds */
 }
 
-/* Clock probing, we probe the timers here also. */
-volatile unsigned int foo_limit;
-
-static void clock_probe(void)
+/* Kick start a stopped clock (procedure from the Sun NVRAM/hostid FAQ). */
+static void kick_start_clock(void)
 {
-	char node_str[128];
-	register int node, type;
-	struct linux_prom_registers clk_reg[2];
+	register struct mostek48t02 *regs = mstk48t02_regs;
+	unsigned char sec;
+	int i, count;
 
-	/* This will basically traverse the node-tree of the prom to see
-	 * which timer chip is on this machine.
-	 */
-	node = 0;
-	if(sparc_cpu_model == sun4) {
-		printk("clock_probe: No SUN4 Clock/Timer support yet...\n");
-		return;
+	prom_printf("CLOCK: Clock was stopped. Kick start ");
+
+	/* Turn on the kick start bit to start the oscillator. */
+	regs->creg |= MSTK_CREG_WRITE;
+	regs->sec &= ~MSTK_STOP;
+	regs->hour |= MSTK_KICK_START;
+	regs->creg &= ~MSTK_CREG_WRITE;
+
+	/* Delay to allow the clock oscillator to start. */
+	sec = MSTK_REG_SEC(regs);
+	for (i = 0; i < 3; i++) {
+		while (sec == MSTK_REG_SEC(regs))
+			for (count = 0; count < 100000; count++)
+				/* nothing */ ;
+		prom_printf(".");
+		sec = regs->sec;
 	}
-	if(sparc_cpu_model == sun4c)
-		node = prom_getchild(prom_root_node);
-	else
-		if(sparc_cpu_model == sun4m)
-			node=prom_getchild(prom_searchsiblings(prom_getchild(prom_root_node), "obio"));
-	type = 0;
-	sp_clock_typ = MSTK_INVALID;
-	for(;;) {
-		prom_getstring(node, "model", node_str, sizeof(node_str));
-		if(strcmp(node_str, "mk48t02") == 0) {
-			sp_clock_typ = MSTK48T02;
-			if(prom_getproperty(node, "reg", (char *) clk_reg, sizeof(clk_reg)) == -1) {
-				printk("clock_probe: FAILED!\n");
-				halt();
-			}
-			prom_apply_obio_ranges(clk_reg, 1);
-			/* Map the clock register io area read-only */
-			mstk48t02_regs = (struct mostek48t02 *) 
-				sparc_alloc_io((void *) clk_reg[0].phys_addr,
-					       (void *) 0, sizeof(*mstk48t02_regs),
-					       "clock", clk_reg[0].which_io, 0x0);
-			mstk48t08_regs = 0;  /* To catch weirdness */
-			break;
-		}
+	prom_printf("\n");
 
-		if(strcmp(node_str, "mk48t08") == 0) {
-			sp_clock_typ = MSTK48T08;
-			if(prom_getproperty(node, "reg", (char *) clk_reg,
-					    sizeof(clk_reg)) == -1) {
-				printk("clock_probe: FAILED!\n");
-				halt();
-			}
-			prom_apply_obio_ranges(clk_reg, 1);
-			/* Map the clock register io area read-only */
-			mstk48t08_regs = (struct mostek48t08 *)
-				sparc_alloc_io((void *) clk_reg[0].phys_addr,
-					       (void *) 0, sizeof(*mstk48t08_regs),
-					       "clock", clk_reg[0].which_io, 0x0);
+	/* Turn off kick start and set a "valid" time and date. */
+	regs->creg |= MSTK_CREG_WRITE;
+	regs->hour &= ~MSTK_KICK_START;
+	MSTK_SET_REG_SEC(regs,0);
+	MSTK_SET_REG_MIN(regs,0);
+	MSTK_SET_REG_HOUR(regs,0);
+	MSTK_SET_REG_DOW(regs,5);
+	MSTK_SET_REG_DOM(regs,1);
+	MSTK_SET_REG_MONTH(regs,8);
+	MSTK_SET_REG_YEAR(regs,1996 - MSTK_YEAR_ZERO);
+	regs->creg &= ~MSTK_CREG_WRITE;
 
-			mstk48t02_regs = &mstk48t08_regs->regs;
-			break;
-		}
-
-		node = prom_getsibling(node);
-		if(node == 0) {
-			printk("Aieee, could not find timer chip type\n");
-			return;
-		}
+	/* Ensure the kick start bit is off. If it isn't, turn it off. */
+	while (regs->hour & MSTK_KICK_START) {
+		prom_printf("CLOCK: Kick start still on!\n");
+		regs->creg |= MSTK_CREG_WRITE;
+		regs->hour &= ~MSTK_KICK_START;
+		regs->creg &= ~MSTK_CREG_WRITE;
 	}
+
+	prom_printf("CLOCK: Kick start procedure successful.\n");
 }
 
-#ifndef BCD_TO_BIN
-#define BCD_TO_BIN(val) (((val)&15) + ((val)>>4)*10)
-#endif
+/* Return nonzero if the clock chip battery is low. */
+static int has_low_battery(void)
+{
+	register struct mostek48t02 *regs = mstk48t02_regs;
+	unsigned char data1, data2;
 
-#ifndef BIN_TO_BCD
-#define BIN_TO_BCD(val) ((((val)/10)<<4) + (val)%10)
-#endif
+	data1 = regs->eeprom[0];	/* Read some data. */
+	regs->eeprom[0] = ~data1;	/* Write back the complement. */
+	data2 = regs->eeprom[0];	/* Read back the complement. */
+	regs->eeprom[0] = data1;	/* Restore the original value. */
+
+	return (data1 == data2);	/* Was the write blocked? */
+}
+
+/* Probe for the real time clock chip. */
+static void clock_probe(void)
+{
+	struct linux_prom_registers clk_reg[2];
+	char model[128];
+	register int node, cpuunit, bootbus;
+
+	/* Determine the correct starting PROM node for the probe. */
+	node = prom_getchild(prom_root_node);
+	switch (sparc_cpu_model) {
+	case sun4c:
+		break;
+	case sun4m:
+		node = prom_getchild(prom_searchsiblings(node, "obio"));
+		break;
+	case sun4d:
+		node = prom_getchild(bootbus = prom_searchsiblings(prom_getchild(cpuunit = prom_searchsiblings(node, "cpu-unit")), "bootbus"));
+		break;
+	default:
+		prom_printf("CLOCK: Unsupported architecture!\n");
+		prom_halt();
+	}
+
+	/* Find the PROM node describing the real time clock. */
+	sp_clock_typ = MSTK_INVALID;
+	node = prom_searchsiblings(node,"eeprom");
+	if (!node) {
+		prom_printf("CLOCK: No clock found!\n");
+		prom_halt();
+	}
+
+	/* Get the model name and setup everything up. */
+	model[0] = '\0';
+	prom_getstring(node, "model", model, sizeof(model));
+	if (strcmp(model, "mk48t02") == 0) {
+		sp_clock_typ = MSTK48T02;
+		if (prom_getproperty(node, "reg", (char *) clk_reg, sizeof(clk_reg)) == -1) {
+			prom_printf("clock_probe: FAILED!\n");
+			prom_halt();
+		}
+		if (sparc_cpu_model == sun4d)
+			prom_apply_generic_ranges (bootbus, cpuunit, clk_reg, 1);
+		else
+			prom_apply_obio_ranges(clk_reg, 1);
+		/* Map the clock register io area read-only */
+		mstk48t02_regs = (struct mostek48t02 *) 
+			sparc_alloc_io((void *) clk_reg[0].phys_addr,
+				       (void *) 0, sizeof(*mstk48t02_regs),
+				       "clock", clk_reg[0].which_io, 0x0);
+		mstk48t08_regs = 0;  /* To catch weirdness */
+	} else if (strcmp(model, "mk48t08") == 0) {
+		sp_clock_typ = MSTK48T08;
+		if(prom_getproperty(node, "reg", (char *) clk_reg,
+				    sizeof(clk_reg)) == -1) {
+			prom_printf("clock_probe: FAILED!\n");
+			prom_halt();
+		}
+		if (sparc_cpu_model == sun4d)
+			prom_apply_generic_ranges (bootbus, cpuunit, clk_reg, 1);
+		else
+			prom_apply_obio_ranges(clk_reg, 1);
+		/* Map the clock register io area read-only */
+		mstk48t08_regs = (struct mostek48t08 *)
+			sparc_alloc_io((void *) clk_reg[0].phys_addr,
+				       (void *) 0, sizeof(*mstk48t08_regs),
+				       "clock", clk_reg[0].which_io, 0x0);
+
+		mstk48t02_regs = &mstk48t08_regs->regs;
+	} else {
+		prom_printf("CLOCK: Unknown model name '%s'\n",model);
+		prom_halt();
+	}
+
+	/* Report a low battery voltage condition. */
+	if (has_low_battery())
+		printk(KERN_CRIT "NVRAM: Low battery voltage!\n");
+
+	/* Kick start the clock if it is completely stopped. */
+	if (mstk48t02_regs->sec & MSTK_STOP)
+		kick_start_clock();
+}
 
 void time_init(void)
 {
@@ -164,6 +243,11 @@ void time_init(void)
 
 #if CONFIG_AP1000
 	init_timers(timer_interrupt);
+	{
+	  extern struct cap_init cap_init;
+	  xtime.tv_sec = cap_init.init_time;
+	  xtime.tv_usec = 0;
+	}
         return;
 #endif
 
@@ -176,35 +260,62 @@ void time_init(void)
 		prom_halt();
 	}		
 	mregs->creg |= MSTK_CREG_READ;
-	sec = BCD_TO_BIN(mregs->sec);
-	min = BCD_TO_BIN(mregs->min);
-	hour = BCD_TO_BIN(mregs->hour);
-	day = BCD_TO_BIN(mregs->dom);
-	mon = BCD_TO_BIN(mregs->mnth);
-	year = (BCD_TO_BIN(mregs->yr) + MSTK_YR_ZERO);
+	sec = MSTK_REG_SEC(mregs);
+	min = MSTK_REG_MIN(mregs);
+	hour = MSTK_REG_HOUR(mregs);
+	day = MSTK_REG_DOM(mregs);
+	mon = MSTK_REG_MONTH(mregs);
+	year = MSTK_CVT_YEAR( MSTK_REG_YEAR(mregs) );
 	xtime.tv_sec = mktime(year, mon, day, hour, min, sec);
 	xtime.tv_usec = 0;
 	mregs->creg &= ~MSTK_CREG_READ;
 	return;
 }
 
-/* Nothing fancy on the Sparc yet. */
+#if !CONFIG_AP1000
+static __inline__ unsigned long do_gettimeoffset(void)
+{
+	unsigned long offset = 0;
+	unsigned int count;
+
+	count = (*master_l10_counter >> 10) & 0x1fffff;
+
+	if(test_bit(TIMER_BH, &bh_active))
+		offset = 1000000;
+
+	return offset + count;
+}
+#endif
+
 void do_gettimeofday(struct timeval *tv)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	save_and_cli(flags);
 #if CONFIG_AP1000
 	ap_gettimeofday(&xtime);
 #endif
 	*tv = xtime;
+#if !CONFIG_AP1000
+	tv->tv_usec += do_gettimeoffset();
+	if(tv->tv_usec >= 1000000) {
+		tv->tv_usec -= 1000000;
+		tv->tv_sec++;
+	}
+#endif
 	restore_flags(flags);
 }
 
 void do_settimeofday(struct timeval *tv)
 {
 	cli();
+#if !CONFIG_AP1000
+	tv->tv_usec -= do_gettimeoffset();
+	if(tv->tv_usec < 0) {
+		tv->tv_usec += 1000000;
+		tv->tv_sec--;
+	}
+#endif
 	xtime = *tv;
 	time_state = TIME_BAD;
 	time_maxerror = 0x70000000;
@@ -214,30 +325,37 @@ void do_settimeofday(struct timeval *tv)
 
 static int set_rtc_mmss(unsigned long nowtime)
 {
-	int retval = 0;
 	int real_seconds, real_minutes, mostek_minutes;
-	struct mostek48t02 *mregs = mstk48t02_regs;
+	struct mostek48t02 *regs = mstk48t02_regs;
 
-	if(!mregs)
-		retval = -1;
-	else {
-		mregs->creg |= MSTK_CREG_READ;
-		mostek_minutes = BCD_TO_BIN(mregs->min);
-		mregs->creg &= ~MSTK_CREG_READ;
+	/* Not having a register set can lead to trouble. */
+	if (!regs) 
+		return -1;
 
-		real_seconds = nowtime % 60;
-		real_minutes = nowtime / 60;
-		if (((abs(real_minutes - mostek_minutes) + 15)/30) & 1)
-			real_minutes += 30;
-		real_minutes %= 60;
-		if (abs(real_minutes - mostek_minutes) < 30) {
-			mregs->creg |= MSTK_CREG_WRITE;
-			mregs->sec = real_seconds;
-			mregs->min = real_minutes;
-			mregs->creg &= ~MSTK_CREG_WRITE;
-		} else
-			retval = -1;
-	}
+	/* Read the current RTC minutes. */
+	regs->creg |= MSTK_CREG_READ;
+	mostek_minutes = MSTK_REG_MIN(regs);
+	regs->creg &= ~MSTK_CREG_READ;
 
-	return retval;
+	/*
+	 * since we're only adjusting minutes and seconds,
+	 * don't interfere with hour overflow. This avoids
+	 * messing with unknown time zones but requires your
+	 * RTC not to be off by more than 15 minutes
+	 */
+	real_seconds = nowtime % 60;
+	real_minutes = nowtime / 60;
+	if (((abs(real_minutes - mostek_minutes) + 15)/30) & 1)
+		real_minutes += 30;	/* correct for half hour time zone */
+	real_minutes %= 60;
+
+	if (abs(real_minutes - mostek_minutes) < 30) {
+		regs->creg |= MSTK_CREG_WRITE;
+		MSTK_SET_REG_SEC(regs,real_seconds);
+		MSTK_SET_REG_MIN(regs,real_minutes);
+		regs->creg &= ~MSTK_CREG_WRITE;
+	} else
+		return -1;
+
+	return 0;
 }

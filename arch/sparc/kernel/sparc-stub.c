@@ -1,4 +1,4 @@
-/* $Id: sparc-stub.c,v 1.16 1996/04/25 06:09:01 davem Exp $
+/* $Id: sparc-stub.c,v 1.19 1996/09/30 02:21:48 davem Exp $
  * sparc-stub.c:  KGDB support for the Linux kernel.
  *
  * Modifications to run under Linux
@@ -185,7 +185,7 @@ static void eh_init(void)
 {
 	int i, flags;
 
-	save_flags(flags); cli();
+	save_and_cli(flags);
 	for(i=0; i < 256; i++)
 		copy_ttentry(&sparc_ttable[i], &kgdb_savettable[i]);
 	restore_flags(flags);
@@ -198,7 +198,7 @@ static void exceptionHandler(int tnum, trapfunc_t trap_entry)
 	int flags;
 
 	/* We are dorking with a live trap table, all irqs off */
-	save_flags(flags); cli();
+	save_and_cli(flags);
 
 	/* Make new vector */
 	sparc_ttable[tnum].inst_one =
@@ -370,7 +370,7 @@ set_debug_traps(void)
 	unsigned long flags;
 	unsigned char c;
 
-	save_flags(flags); cli();
+	save_and_cli(flags);
 	flush_cache_all = flush_cache_all_nop;
 
 	/* Initialize our copy of the Linux Sparc trap table */
@@ -673,16 +673,16 @@ breakpoint(void)
 	if (!initialized)
 		return;
 
-	/* Again, watch those c-prefixes for solaris/elf kernels */
-#ifndef __svr4__
-	asm("	.globl _breakinst
-
-	     _breakinst: ta 1
-            ");
-#else
+	/* Again, watch those c-prefixes for ELF kernels */
+#if defined(__svr4__) || defined(__ELF__)
 	asm("	.globl breakinst
 
 	     breakinst: ta 1
+            ");
+#else
+	asm("	.globl _breakinst
+
+	     _breakinst: ta 1
             ");
 #endif
 }

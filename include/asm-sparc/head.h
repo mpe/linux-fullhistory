@@ -1,4 +1,4 @@
-/* $Id: head.h,v 1.27 1996/04/25 06:13:06 davem Exp $ */
+/* $Id: head.h,v 1.30 1996/07/29 21:00:28 miguel Exp $ */
 #ifndef __SPARC_HEAD_H
 #define __SPARC_HEAD_H
 
@@ -58,6 +58,18 @@
         or %l7, %lo(C_LABEL(sys_call_table)), %l7; \
         b solaris_syscall; \
         rd %psr, %l0;
+
+#define INDIRECT_SOLARIS_SYSCALL(x) \
+        sethi %hi(C_LABEL(sys_call_table)), %l7; \
+	or %g0,%lo(x),%g1; \
+	b solaris_indirect_syscall; \
+        rd %psr, %l0; 
+
+#define BREAKPOINT_TRAP \
+	b breakpoint_trap; \
+	rd %psr,%l0; \
+	nop; \
+	nop;
 
 /* Software trap for Sparc-netbsd system calls. */
 #define NETBSD_SYSCALL_TRAP \

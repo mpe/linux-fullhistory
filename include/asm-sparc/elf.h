@@ -1,4 +1,4 @@
-/* $Id: elf.h,v 1.3 1996/04/22 15:48:48 miguel Exp $ */
+/* $Id: elf.h,v 1.5 1996/08/08 00:06:13 ecd Exp $ */
 #ifndef __ASMSPARC_ELF_H
 #define __ASMSPARC_ELF_H
 
@@ -23,11 +23,12 @@ typedef unsigned long elf_fpregset_t;
 /*
  * These are used to set parameters in the core dumps.
  */
-#define ELF_ARCH EM_SPARC
+#define ELF_ARCH	EM_SPARC
 #define ELF_CLASS	ELFCLASS32
 #define ELF_DATA	ELFDATA2MSB;
 
 #define USE_ELF_CORE_DUMP
 #define ELF_EXEC_PAGESIZE	4096
 
-#endif
+
+#endif /* !(__ASMSPARC_ELF_H) */

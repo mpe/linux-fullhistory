@@ -1,4 +1,4 @@
-/* $Id: trampoline.S,v 1.3 1996/04/03 02:15:05 davem Exp $
+/* $Id: trampoline.S,v 1.5 1996/09/22 06:43:10 davem Exp $
  * mp.S:  Multiprocessor low-level routines on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -24,26 +24,26 @@
 	.globl C_LABEL(sparc_cpu_startup)
 C_LABEL(sparc_cpu_startup):
 cpu1_startup:
-	sethi	%hi(C_LABEL(trapbase_cpu1)), %g7
-	or	%g7, %lo(C_LABEL(trapbase_cpu1)), %g7
-	sethi	%hi(C_LABEL(cpu1_stack)), %g6
-	or	%g6, %lo(C_LABEL(cpu1_stack)), %g6
+	sethi	%hi(C_LABEL(trapbase_cpu1)), %g3
+	or	%g3, %lo(C_LABEL(trapbase_cpu1)), %g3
+	sethi	%hi(C_LABEL(cpu1_stack)), %g2
+	or	%g2, %lo(C_LABEL(cpu1_stack)), %g2
 	b	1f
 	 nop	
 
 cpu2_startup:
-	sethi	%hi(C_LABEL(trapbase_cpu2)), %g7
-	or	%g7, %lo(C_LABEL(trapbase_cpu2)), %g7
-	sethi	%hi(C_LABEL(cpu2_stack)), %g6
-	or	%g6, %lo(C_LABEL(cpu2_stack)), %g6
+	sethi	%hi(C_LABEL(trapbase_cpu2)), %g3
+	or	%g3, %lo(C_LABEL(trapbase_cpu2)), %g3
+	sethi	%hi(C_LABEL(cpu2_stack)), %g2
+	or	%g2, %lo(C_LABEL(cpu2_stack)), %g2
 	b	1f
 	 nop	
 
 cpu3_startup:
-	sethi	%hi(C_LABEL(trapbase_cpu3)), %g7
-	or	%g7, %lo(C_LABEL(trapbase_cpu3)), %g7
-	sethi	%hi(C_LABEL(cpu3_stack)), %g6
-	or	%g6, %lo(C_LABEL(cpu3_stack)), %g6
+	sethi	%hi(C_LABEL(trapbase_cpu3)), %g3
+	or	%g3, %lo(C_LABEL(trapbase_cpu3)), %g3
+	sethi	%hi(C_LABEL(cpu3_stack)), %g2
+	or	%g2, %lo(C_LABEL(cpu3_stack)), %g2
 	b	1f
 	 nop	
 
@@ -59,14 +59,17 @@ cpu3_startup:
 	WRITE_PAUSE
 
 	/* This identifies "this cpu". */
-	wr	%g7, 0x0, %tbr
+	wr	%g3, 0x0, %tbr
 	WRITE_PAUSE
 
 	/* Give ourselves a stack. */
 	set	0x2000, %g5
-	add	%g6, %g5, %g6		! end of stack
-	sub	%g6, REGWIN_SZ, %sp
+	add	%g2, %g5, %g2		! end of stack
+	sub	%g2, REGWIN_SZ, %sp
 	mov	0, %fp
+
+	/* Set up curptr. */
+	set	C_LABEL(init_task), %g6
 
 	/* Turn on traps (PSR_ET). */
 	rd	%psr, %g1

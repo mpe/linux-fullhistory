@@ -149,7 +149,7 @@ found:
 	/* prealloc as much as possible within this word, but not in header zone */
 
 	if (zone_no) {
-		while (inode->u.affs_i.i_pa_cnt < MAX_PREALLOC && ++fb < 32) {
+		while (inode->u.affs_i.i_pa_cnt < AFFS_MAX_PREALLOC && ++fb < 32) {
 			fb = find_next_zero_bit(&w,32,fb);
 			if (fb > 31)
 				break;
@@ -158,7 +158,7 @@ found:
 				break;
 			}
 			inode->u.affs_i.i_data[inode->u.affs_i.i_pa_last++] = fwb + fb;
-			inode->u.affs_i.i_pa_last &= MAX_PREALLOC - 1;
+			inode->u.affs_i.i_pa_last &= AFFS_MAX_PREALLOC - 1;
 			inode->u.affs_i.i_pa_cnt++;
 			az->az_free--;
 		}
@@ -309,7 +309,7 @@ affs_new_data(struct inode *inode)
 		inode->u.affs_i.i_pa_cnt--;
 		unlock_super(sb);
 		block = inode->u.affs_i.i_data[inode->u.affs_i.i_pa_next++];
-		inode->u.affs_i.i_pa_next &= MAX_PREALLOC - 1;
+		inode->u.affs_i.i_pa_next &= AFFS_MAX_PREALLOC - 1;
 		goto init_block;
 	}
 	unlock_super(sb);

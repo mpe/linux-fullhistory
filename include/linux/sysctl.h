@@ -81,6 +81,8 @@ struct __sysctl_args {
 #define NET_AX25        9
 #define NET_BRIDGE	10
 #define NET_IPV6	11
+#define NET_ROSE	12
+#define NET_X25		13
 
 /* /proc/sys/net/core */
 
@@ -108,8 +110,30 @@ struct __sysctl_args {
 /* /proc/sys/net/appletalk */
 
 /* /proc/sys/net/netrom */
+#define	NET_NETROM_DEFAULT_PATH_QUALITY			1
+#define	NET_NETROM_OBSOLESCENCE_COUNT_INITIALISER	2
+#define	NET_NETROM_NETWORK_TTL_INITIALISER		3
+#define	NET_NETROM_TRANSPORT_TIMEOUT			4
+#define	NET_NETROM_TRANSPORT_MAXIMUM_TRIES		5
+#define	NET_NETROM_TRANSPORT_ACKNOWLEDGE_DELAY		6
+#define	NET_NETROM_TRANSPORT_BUSY_DELAY			7
+#define	NET_NETROM_TRANSPORT_REQUESTED_WINDOW_SIZE	8
+#define	NET_NETROM_TRANSPORT_NO_ACTIVITY_TIMEOUT	9
+#define	NET_NETROM_TRANSPORT_PACKET_LENGTH		10
+#define	NET_NETROM_ROUTING_CONTROL			11
 
 /* /proc/sys/net/ax25 */
+/* Values are generated dynamically */
+
+/* /proc/sys/net/rose */
+#define	NET_ROSE_RESTART_REQUEST_TIMEOUT		1
+#define	NET_ROSE_CALL_REQUEST_TIMEOUT			2
+#define	NET_ROSE_RESET_REQUEST_TIMEOUT			3
+#define	NET_ROSE_CLEAR_REQUEST_TIMEOUT			4
+#define	NET_ROSE_NO_ACTIVITY_TIMEOUT			5
+#define	NET_ROSE_ROUTING_CONTROL			6
+
+/* /proc/sys/net/x25 */
 
 /* CTL_PROC names: */
 

@@ -1,4 +1,4 @@
-/* $Id: viking.h,v 1.13 1996/04/25 06:13:43 davem Exp $
+/* $Id: viking.h,v 1.16 1996/08/29 09:49:10 davem Exp $
  * viking.h:  Defines specific to the GNU/Viking MBUS module.
  *            This is SRMMU stuff.
  *
@@ -7,6 +7,7 @@
 #ifndef _SPARC_VIKING_H
 #define _SPARC_VIKING_H
 
+#include <asm/asi.h>
 #include <asm/mxcc.h>
 
 /* Bits in the SRMMU control register for GNU/Viking modules.
@@ -92,6 +93,7 @@
 #define VIKING_SPENABLE     0x00004000   /* Enable bus cache snooping */
 #define VIKING_ACENABLE     0x00008000   /* Enable alternate caching */
 #define VIKING_TCENABLE     0x00010000   /* Enable table-walks to be cached */
+#define VIKING_DPENABLE     0x00040000   /* Enable the data prefetcher */
 
 /*
  * GNU/Viking Breakpoint Action Register fields.
@@ -105,38 +107,38 @@
 #define VIKING_PTAG_DIRTY   0x00010000   /* Block has been modified */
 #define VIKING_PTAG_SHARED  0x00000100   /* Shared with some other cache */
 
-extern inline void viking_flush_icache(void)
+extern __inline__ void viking_flush_icache(void)
 {
 	__asm__ __volatile__("sta %%g0, [%%g0] %0\n\t" : :
 			     "i" (ASI_M_IC_FLCLEAR));
 }
 
-extern inline void viking_flush_dcache(void)
+extern __inline__ void viking_flush_dcache(void)
 {
 	__asm__ __volatile__("sta %%g0, [%%g0] %0\n\t" : :
 			     "i" (ASI_M_DC_FLCLEAR));
 }
 
-extern inline void viking_unlock_icache(void)
+extern __inline__ void viking_unlock_icache(void)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (0x80000000), "i" (ASI_M_IC_FLCLEAR));
 }
 
-extern inline void viking_unlock_dcache(void)
+extern __inline__ void viking_unlock_dcache(void)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (0x80000000), "i" (ASI_M_DC_FLCLEAR));
 }
 
-extern inline void viking_set_bpreg(unsigned long regval)
+extern __inline__ void viking_set_bpreg(unsigned long regval)
 {
 	__asm__ __volatile__("sta %0, [%%g0] %1\n\t" : :
 			     "r" (regval),
 			     "i" (ASI_M_ACTION));
 }
 
-extern inline unsigned long viking_get_bpreg(void)
+extern __inline__ unsigned long viking_get_bpreg(void)
 {
 	unsigned long regval;
 
@@ -146,8 +148,8 @@ extern inline unsigned long viking_get_bpreg(void)
 	return regval;
 }
 
-extern inline void viking_get_dcache_ptag(int set, int block,
-					  unsigned long *data)
+extern __inline__ void viking_get_dcache_ptag(int set, int block,
+					      unsigned long *data)
 {
 	unsigned long ptag = ((set & 0x7f) << 5) | ((block & 0x3) << 26) |
 			     0x80000000;
@@ -161,6 +163,36 @@ extern inline void viking_get_dcache_ptag(int set, int block,
 			      "g2", "g3");
 	data[0] = info;
 	data[1] = page;
+}
+
+extern __inline__ void viking_mxcc_turn_off_parity(unsigned long *mregp,
+						   unsigned long *mxcc_cregp)
+{
+	unsigned long mreg = *mregp;
+	unsigned long mxcc_creg = *mxcc_cregp;
+
+	mreg &= ~(VIKING_PCENABLE);
+	mxcc_creg &= ~(MXCC_CTL_PARE);
+
+	__asm__ __volatile__ ("set 1f, %%g2\n\t"
+			      "andcc %%g2, 4, %%g0\n\t"
+			      "bne 2f\n\t"
+			      " nop\n"
+			      "1:\n\t"
+			      "sta %0, [%%g0] %3\n\t"
+			      "sta %1, [%2] %4\n\t"
+			      "b 1f\n\t"
+			      " nop\n\t"
+			      "nop\n"
+			      "2:\n\t"
+			      "sta %0, [%%g0] %3\n\t"
+			      "sta %1, [%2] %4\n"
+			      "1:\n\t" : :
+			      "r" (mreg), "r" (mxcc_creg),
+			      "r" (MXCC_CREG), "i" (ASI_M_MMUREGS),
+			      "i" (ASI_M_MXCC) : "g2");
+	*mregp = mreg;
+	*mxcc_cregp = mxcc_creg;
 }
 
 #endif /* !(_SPARC_VIKING_H) */

@@ -15,6 +15,8 @@
 #include <linux/smp.h>
 #include <linux/fs.h>
 #include <linux/blkdev.h>
+#include <linux/cdrom.h>
+#include <linux/ucdrom.h>
 #include <linux/sched.h>
 #include <linux/kernel_stat.h>
 #include <linux/mm.h>
@@ -171,6 +173,14 @@ struct symbol_table symbol_table = {
 	X(tty_unregister_driver),
 	X(tty_std_termios),
 
+#if defined(CONFIG_BLK_DEV_IDECD) || \
+    defined(CONFIG_BLK_DEV_SR) || \
+    defined(CONFIG_CM206)
+       X(register_cdrom),
+       X(unregister_cdrom),
+       X(cdrom_fops),
+#endif
+ 
 	/* block device driver support */
 	X(block_read),
 	X(block_write),

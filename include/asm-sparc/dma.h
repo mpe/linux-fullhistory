@@ -1,4 +1,4 @@
-/* $Id: dma.h,v 1.16 1996/04/25 06:12:54 davem Exp $
+/* $Id: dma.h,v 1.22 1996/10/17 05:29:01 davem Exp $
  * include/asm-sparc/dma.h
  *
  * Copyright 1995 (C) David S. Miller (davem@caip.rutgers.edu)
@@ -28,10 +28,10 @@
 
 /* Structure to describe the current status of DMA registers on the Sparc */
 struct sparc_dma_registers {
-  volatile unsigned long cond_reg;   /* DMA condition register */
-  volatile char * st_addr;           /* Start address of this transfer */
-  volatile unsigned long cnt;        /* How many bytes to transfer */
-  volatile unsigned long dma_test;   /* DMA test register */
+  __volatile__ unsigned long cond_reg;   /* DMA condition register */
+  __volatile__ char * st_addr;           /* Start address of this transfer */
+  __volatile__ unsigned long cnt;        /* How many bytes to transfer */
+  __volatile__ unsigned long dma_test;   /* DMA test register */
 };
 
 /* DVMA chip revisions */
@@ -41,7 +41,8 @@ enum dvma_rev {
 	dvmarev1,
 	dvmarev2,
 	dvmarev3,
-	dvmarevplus
+	dvmarevplus,
+	dvmahme
 };
 
 #define DMA_HASCOUNT(rev)  ((rev)==dvmaesc1)
@@ -83,6 +84,7 @@ extern unsigned long dvma_init(struct linux_sbus *, unsigned long);
 #define DMA_ESCV1        0x40000000        /* DMA ESC Version 1 */
 #define DMA_VERS1        0x80000000        /* DMA rev 1 */
 #define DMA_VERS2        0xa0000000        /* DMA rev 2 */
+#define DMA_VERHME       0xb0000000        /* DMA hme gate array */
 #define DMA_VERSPLUS     0x90000000        /* DMA rev 1 PLUS */
 
 #define DMA_HNDL_INTR    0x00000001        /* An IRQ needs to be handled */
@@ -97,6 +99,8 @@ extern unsigned long dvma_init(struct linux_sbus *, unsigned long);
 #define DMA_ST_WRITE     0x00000100        /* write from device to memory */
 #define DMA_ENABLE       0x00000200        /* Fire up DMA, handle requests */
 #define DMA_PEND_READ    0x00000400        /* DMA_VERS1/0/PLUS Pending Read */
+#define DMA_ESC_BURST    0x00000800        /* 1=16byte 0=32byte */
+#define DMA_READ_AHEAD   0x00001800        /* DMA read ahead partial longword */
 #define DMA_DSBL_RD_DRN  0x00001000        /* No EC drain on slave reads */
 #define DMA_BCNT_ENAB    0x00002000        /* If on, use the byte counter */
 #define DMA_TERM_CNTR    0x00004000        /* Terminal counter */
@@ -106,6 +110,10 @@ extern unsigned long dvma_init(struct linux_sbus *, unsigned long);
 #define DMA_ADD_ENABLE   0x00040000        /* Special ESC DVMA optimization */
 #define DMA_E_BURST8	 0x00040000	   /* ENET: SBUS r/w burst size */
 #define DMA_BRST_SZ      0x000c0000        /* SCSI: SBUS r/w burst size */
+#define DMA_BRST64       0x00080000        /* SCSI: 64byte bursts (HME on UltraSparc only) */
+#define DMA_BRST32       0x00040000        /* SCSI: 32byte bursts */
+#define DMA_BRST16       0x00000000        /* SCSI: 16byte bursts */
+#define DMA_BRST0        0x00080000        /* SCSI: no bursts (non-HME gate arrays) */
 #define DMA_ADDR_DISAB   0x00100000        /* No FIFO drains during addr */
 #define DMA_2CLKS        0x00200000        /* Each transfer = 2 clock ticks */
 #define DMA_3CLKS        0x00400000        /* Each transfer = 3 clock ticks */
@@ -113,6 +121,7 @@ extern unsigned long dvma_init(struct linux_sbus *, unsigned long);
 #define DMA_CNTR_DISAB   0x00800000        /* No IRQ when DMA_TERM_CNTR set */
 #define DMA_AUTO_NADDR   0x01000000        /* Use "auto nxt addr" feature */
 #define DMA_SCSI_ON      0x02000000        /* Enable SCSI dma */
+#define DMA_PARITY_OFF   0x02000000        /* HME: disable parity checking */
 #define DMA_LOADED_ADDR  0x04000000        /* Address has been loaded */
 #define DMA_LOADED_NADDR 0x08000000        /* Next address has been loaded */
 
@@ -131,7 +140,7 @@ extern unsigned long dvma_init(struct linux_sbus *, unsigned long);
 
 /* Yes, I hack a lot of elisp in my spare time... */
 #define DMA_ERROR_P(regs)  ((((regs)->cond_reg) & DMA_HNDL_ERROR))
-#define DMA_IRQ_P(regs)    ((((regs)->cond_reg) & DMA_HNDL_INTR))
+#define DMA_IRQ_P(regs)    ((((regs)->cond_reg) & (DMA_HNDL_INTR | DMA_HNDL_ERROR)))
 #define DMA_WRITE_P(regs)  ((((regs)->cond_reg) & DMA_ST_WRITE))
 #define DMA_OFF(regs)      ((((regs)->cond_reg) &= (~DMA_ENABLE)))
 #define DMA_INTSOFF(regs)  ((((regs)->cond_reg) &= (~DMA_INT_ENAB)))
@@ -159,8 +168,8 @@ extern unsigned long dvma_init(struct linux_sbus *, unsigned long);
 /* Pause until counter runs out or BIT isn't set in the DMA condition
  * register.
  */
-extern inline void sparc_dma_pause(struct sparc_dma_registers *regs,
-				   unsigned long bit)
+extern __inline__ void sparc_dma_pause(struct sparc_dma_registers *regs,
+				       unsigned long bit)
 {
 	int ctr = 50000;   /* Let's find some bugs ;) */
 
@@ -194,7 +203,7 @@ extern inline void sparc_dma_pause(struct sparc_dma_registers *regs,
         for((dma) = dma_chain; (dma); (dma) = (dma)->next)
 
 extern int get_dma_list(char *);
-extern int request_dma(unsigned int, const char *);
+extern int request_dma(unsigned int, __const__ char *);
 extern void free_dma(unsigned int);
 
 #endif /* !(_ASM_SPARC_DMA_H) */

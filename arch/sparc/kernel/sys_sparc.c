@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.11 1996/04/25 06:09:10 davem Exp $
+/* $Id: sys_sparc.c,v 1.25 1996/11/03 20:58:07 davem Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -7,7 +7,9 @@
  */
 
 #include <linux/errno.h>
+#include <linux/types.h>
 #include <linux/sched.h>
+#include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/sem.h>
 #include <linux/msg.h>
@@ -15,7 +17,7 @@
 #include <linux/stat.h>
 #include <linux/mman.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 /* XXX Make this per-binary type, this way we can detect the type of
  * XXX a binary.  Every Sparc executable calls this very early on.
@@ -23,6 +25,17 @@
 asmlinkage unsigned long sys_getpagesize(void)
 {
 	return PAGE_SIZE; /* Possibly older binaries want 8192 on sun4's? */
+}
+
+extern asmlinkage unsigned long sys_brk(unsigned long brk);
+
+asmlinkage unsigned long sparc_brk(unsigned long brk)
+{
+	if(sparc_cpu_model == sun4c) {
+		if(brk >= 0x20000000 && brk < 0xe0000000)
+			return current->mm->brk;
+	}
+	return sys_brk(brk);
 }
 
 /*
@@ -43,43 +56,29 @@ asmlinkage int sparc_pipe(struct pt_regs *regs)
 	}
 }
 
-/* Note most sanity checking already done in sclow.S code. */
-asmlinkage int quick_sys_write(unsigned int fd, char *buf, unsigned int count)
-{
-	struct file *file = current->files->fd[fd];
-	struct inode *inode = file->f_inode;
-	int error;
-
-	error = verify_area(VERIFY_READ, buf, count);
-	if(error)
-		return error;
-	/*
-	 * If data has been written to the file, remove the setuid and
-	 * the setgid bits. We do it anyway otherwise there is an
-	 * extremely exploitable race - does your OS get it right |->
-	 *
-	 * Set ATTR_FORCE so it will always be changed.
-	 */
-	if (!suser() && (inode->i_mode & (S_ISUID | S_ISGID))) {
-		struct iattr newattrs;
-		newattrs.ia_mode = inode->i_mode & ~(S_ISUID | S_ISGID);
-		newattrs.ia_valid = ATTR_CTIME | ATTR_MODE | ATTR_FORCE;
-		notify_change(inode, &newattrs);
-	}
-
-	down(&inode->i_sem);
-	error = file->f_op->write(inode,file,buf,count);
-	up(&inode->i_sem);
-	return error;
-}
-
-/* XXX do we need this crap? XXX */
-
 /*
  * sys_ipc() is the de-multiplexer for the SysV IPC calls..
  *
  * This is really horribly ugly.
  */
+
+struct ipc_kludge {
+    struct msgbuf *msgp;
+    long msgtyp;
+};
+
+#define SEMOP	 	1
+#define SEMGET 		2
+#define SEMCTL 		3
+#define MSGSND 		11
+#define MSGRCV 		12
+#define MSGGET 		13
+#define MSGCTL 		14
+#define SHMAT 		21
+#define SHMDT 		22
+#define SHMGET 		23
+#define SHMCTL 		24
+
 asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, long fifth)
 {
 	int version;
@@ -95,12 +94,10 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 			return sys_semget (first, second, third);
 		case SEMCTL: {
 			union semun fourth;
-			int err;
 			if (!ptr)
 				return -EINVAL;
-			if ((err = verify_area (VERIFY_READ, ptr, sizeof(long))))
-				return err;
-			fourth.__pad = (void *) get_fs_long(ptr);
+			if(get_user(fourth.__pad, (void **)ptr))
+				return -EFAULT;
 			return sys_semctl (first, second, third, fourth);
 			}
 		default:
@@ -115,13 +112,10 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 			switch (version) {
 			case 0: {
 				struct ipc_kludge tmp;
-				int err;
 				if (!ptr)
 					return -EINVAL;
-				if ((err = verify_area (VERIFY_READ, ptr, sizeof(tmp))))
-					return err;
-				memcpy_fromfs (&tmp,(struct ipc_kludge *) ptr,
-					       sizeof (tmp));
+				if(copy_from_user(&tmp,(struct ipc_kludge *) ptr, sizeof (tmp)))
+					return -EFAULT;
 				return sys_msgrcv (first, tmp.msgp, second, tmp.msgtyp, third);
 				}
 			case 1: default:
@@ -141,17 +135,15 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 			case 0: default: {
 				ulong raddr;
 				int err;
-				if ((err = verify_area(VERIFY_WRITE, (ulong*) third, sizeof(ulong))))
-					return err;
+
 				err = sys_shmat (first, (char *) ptr, second, &raddr);
 				if (err)
 					return err;
-				put_fs_long (raddr, (ulong *) third);
+				if(put_user (raddr, (ulong *) third))
+					return -EFAULT;
 				return 0;
 				}
 			case 1:	/* iBCS2 emulator entry point */
-				if (get_fs() != get_ds())
-					return -EINVAL;
 				return sys_shmat (first, (char *) ptr, second, (ulong *) third);
 			}
 		case SHMDT: 
@@ -166,22 +158,7 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 	return -EINVAL;
 }
 
-unsigned long get_sparc_unmapped_area(unsigned long len)
-{
-	unsigned long addr = 0xE8000000UL;
-	struct vm_area_struct * vmm;
-
-	if (len > TASK_SIZE)
-		return 0;
-	for (vmm = find_vma(current, addr); ; vmm = vmm->vm_next) {
-		/* At this point:  (!vmm || addr < vmm->vm_end). */
-		if (TASK_SIZE - len < addr)
-			return 0;
-		if (!vmm || addr + len <= vmm->vm_start)
-			return addr;
-		addr = vmm->vm_end;
-	}
-}
+extern unsigned long get_unmapped_area(unsigned long addr, unsigned long len);
 
 /* Linux version of mmap */
 asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
@@ -197,7 +174,7 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 	    }
 	}
 	if(!(flags & MAP_FIXED) && !addr) {
-		addr = get_sparc_unmapped_area(len);
+		addr = get_unmapped_area(addr, len);
 		if(!addr){
 			return -ENOMEM;
 		}
@@ -205,3 +182,56 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 	retval = do_mmap(file, addr, len, prot, flags, off);
 	return retval;
 }
+
+extern int do_open_namei(const char * pathname, int flag, int mode,
+               struct inode ** res_inode, struct inode * base);
+
+#define BSD_EMUL "/usr/gnemul/sunos"
+#define SOL_EMUL "/usr/gnemul/solaris"
+
+int
+open_namei(const char * pathname, int flag, int mode,
+               struct inode ** res_inode, struct inode * base)
+{
+	if (!base && (current->personality & (PER_BSD|PER_SVR4)) && *pathname == '/'){
+		struct inode *emul_ino;
+		const char   *p = pathname;
+		char *emul_path = current->personality & PER_BSD ? BSD_EMUL : SOL_EMUL;
+		int v;
+
+		while (*p == '/')
+			p++;
+		
+		if (do_open_namei (emul_path, flag, mode, &emul_ino, NULL) >= 0 && emul_ino){
+			v = do_open_namei (p, flag, mode, res_inode, emul_ino);
+			if (v >= 0)
+				return v;
+		}
+	}
+	return do_open_namei (pathname, flag, mode, res_inode, base);
+}
+
+
+/* we come to here via sys_nis_syscall so it can setup the regs argument */
+asmlinkage unsigned long
+c_sys_nis_syscall (struct pt_regs *regs)
+{
+	printk ("Unimplemented SPARC system call %d\n",(int)regs->u_regs[1]);
+	show_regs (regs);
+	return -ENOSYS;
+}
+
+/* #define DEBUG_SPARC_BREAKPOINT */
+
+asmlinkage void
+sparc_breakpoint (struct pt_regs *regs)
+{
+#ifdef DEBUG_SPARC_BREAKPOINT
+        printk ("TRAP: Entering kernel PC=%x, nPC=%x\n", regs->pc, regs->npc);
+#endif
+	force_sig(SIGTRAP, current);
+#ifdef DEBUG_SPARC_BREAKPOINT
+	printk ("TRAP: Returning to space: PC=%x nPC=%x\n", regs->pc, regs->npc);
+#endif
+}
+

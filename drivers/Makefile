@@ -38,7 +38,7 @@ else
   endif
 endif
 
-ifdef CONFIG_CD_NO_IDESCSI
+ifneq ($(CONFIG_CD_NO_IDESCSI)$(CONFIG_BLK_DEV_IDECD)$(CONFIG_BLK_DEV_SR),)
 SUB_DIRS += cdrom
 MOD_SUB_DIRS += cdrom
 endif

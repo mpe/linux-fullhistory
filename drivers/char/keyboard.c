@@ -1,8 +1,6 @@
 /*
  * linux/drivers/char/keyboard.c
  *
- * Keyboard driver for Linux v0.99 using Latin-1.
- *
  * Written for linux by Johan Myreen as a translation from
  * the assembly version by Linus (with diacriticals added)
  *
@@ -14,7 +12,7 @@
  * Added decr/incr_console, dynamic keymaps, Unicode support,
  * dynamic function/string keys, led setting,  Sept 1994
  * `Sticky' modifier keys, 951006.
- * 
+ * 11-11-96: SAK should now work in the raw mode (Martin Mares)
  */
 
 #define KEYBOARD_IRQ 1
@@ -128,6 +126,10 @@ static k_hand key_handler[16] = {
 	do_ignore, do_ignore, do_ignore
 };
 
+/* Key types processed even in raw modes */
+
+#define TYPES_ALLOWED_IN_RAW_MODE ((1 << KT_SPEC) | (1 << KT_SHIFT))
+
 typedef void (*void_fnp)(void);
 typedef void (void_fn)(void);
 
@@ -142,6 +144,8 @@ static void_fnp spec_fn_table[] = {
 	boot_it,	caps_on,	compose,	SAK,
 	decr_console,	incr_console,	spawn_console,	bare_num
 };
+
+#define SPECIALS_ALLOWED_IN_RAW_MODE (1 << KVAL(K_SAK))
 
 /* maximum values each key_handler can handle */
 const int max_vals[] = {
@@ -501,13 +505,10 @@ static void handle_scancode(unsigned char scancode)
 	} else
  		rep = set_bit(keycode, key_down);
 
-	if (raw_mode)
-		return;
-
 	if (kbd->kbdmode == VC_MEDIUMRAW) {
 		/* soon keycodes will require more than one byte */
  		put_queue(keycode + up_flag);
-		return;
+		raw_mode = 1;	/* Most key classes will be ignored */
  	}
 
  	/*
@@ -539,6 +540,8 @@ static void handle_scancode(unsigned char scancode)
 
 			if (type >= 0xf0) {
 			    type -= 0xf0;
+			    if (raw_mode && ! (TYPES_ALLOWED_IN_RAW_MODE & (1 << type)))
+				return;
 			    if (type == KT_LETTER) {
 				type = KT_LATIN;
 				if (vc_kbd_led(kbd, VC_CAPSLOCK)) {
@@ -552,7 +555,7 @@ static void handle_scancode(unsigned char scancode)
 			      kbd->slockstate = 0;
 			} else {
 			    /* maybe only if (kbd->kbdmode == VC_UNICODE) ? */
-			    if (!up_flag)
+			    if (!up_flag && !raw_mode)
 			      to_utf8(keysym);
 			}
 		} else {
@@ -761,18 +764,14 @@ static void spawn_console(void)
 
 static void SAK(void)
 {
-	do_SAK(tty);
-#if 0
 	/*
-	 * Need to fix SAK handling to fix up RAW/MEDIUM_RAW and
-	 * vt_cons modes before we can enable RAW/MEDIUM_RAW SAK
-	 * handling.
-	 * 
-	 * We should do this some day --- the whole point of a secure
-	 * attention key is that it should be guaranteed to always
-	 * work.
+	 * SAK should also work in all raw modes and reset
+	 * them properly.
 	 */
+
+	do_SAK(tty);
 	reset_vc(fg_console);
+#if 0
 	do_unblank_screen();	/* not in interrupt routine? */
 #endif
 }
@@ -791,6 +790,9 @@ static void do_spec(unsigned char value, char up_flag)
 	if (up_flag)
 		return;
 	if (value >= SIZE(spec_fn_table))
+		return;
+	if ((kbd->kbdmode == VC_RAW || kbd->kbdmode == VC_MEDIUMRAW) &&
+	    !(SPECIALS_ALLOWED_IN_RAW_MODE & (1 << value)))
 		return;
 	spec_fn_table[value]();
 }

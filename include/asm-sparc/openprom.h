@@ -1,4 +1,4 @@
-/* $Id: openprom.h,v 1.16 1996/04/23 01:54:46 davem Exp $ */
+/* $Id: openprom.h,v 1.19 1996/09/25 03:51:08 davem Exp $ */
 #ifndef __SPARC_OPENPROM_H
 #define __SPARC_OPENPROM_H
 
@@ -42,7 +42,7 @@ struct linux_dev_v2_funcs {
 	void (*v2_dev_close)(int d);
 	int (*v2_dev_read)(int d, char *buf, int nbytes);
 	int (*v2_dev_write)(int d, char *buf, int nbytes);
-	void (*v2_dev_seek)(int d, int hi, int lo);
+	int (*v2_dev_seek)(int d, int hi, int lo);
 
 	/* Never issued (multistage load support) */
 	void (*v2_wheee2)(void);
@@ -117,9 +117,9 @@ struct linux_romvec {
 
 	/* Miscellany. */
 	void (*pv_reboot)(char *bootstr);
-	void (*pv_printf)(const char *fmt, ...);
+	void (*pv_printf)(__const__ char *fmt, ...);
 	void (*pv_abort)(void);
-	int *pv_ticks;
+	__volatile__ int *pv_ticks;
 	void (*pv_halt)(void);
 	void (**pv_synchook)(void);
 

@@ -27,11 +27,15 @@ struct in6_addr
 {
 	union 
 	{
-		unsigned char	u6_addr8[16];
+		__u8		u6_addr8[16];
 		__u32		u6_addr32[4];
+#if (~0UL) > 0xffffffff
+		__u64		u6_addr64[2];
+#endif
 	} in6_u;
-#define s6_addr32		in6_u.u6_addr32
 #define s6_addr			in6_u.u6_addr8
+#define s6_addr32		in6_u.u6_addr32
+#define s6_addr64		in6_u.u6_addr64
 };
 
 struct sockaddr_in6 {
@@ -47,7 +51,7 @@ struct ipv6_mreq {
 	struct in6_addr ipv6mr_multiaddr;
 
 	/* local IPv6 address of interface */
-	struct in6_addr ipv6mr_interface;
+	int		ipv6mr_ifindex;
 };
 
 /*

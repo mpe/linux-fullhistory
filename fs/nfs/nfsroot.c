@@ -79,7 +79,7 @@
 #include <linux/net.h>
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
-#ifdef CONFIG_AX25
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <net/ax25.h>	/* For AX25_P_IP */
 #endif
 #include <linux/skbuff.h>
@@ -306,7 +306,7 @@ static int root_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet
 
 	/* If it's not ethernet or AX25, delete it. */
 	if ((rarp->ar_pro != htons(ETH_P_IP) && dev->type != ARPHRD_AX25) ||
-#ifdef CONFIG_AX25
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 	   (rarp->ar_pro != htons(AX25_P_IP) && dev->type == ARPHRD_AX25) ||
 #endif
 	    rarp->ar_pln != 4) {

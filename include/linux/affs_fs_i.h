@@ -1,24 +1,45 @@
 #ifndef _AFFS_FS_I
 #define _AFFS_FS_I
 
-#define EXT_CACHE_SIZE	12
-#define MAX_PREALLOC	8	/* MUST be a power of 2 */
+#include <linux/a.out.h>
+#include <linux/time.h>
+
+#define AFFS_MAX_PREALLOC	16	/* MUST be a power of 2 */
+#define AFFS_KCSIZE		73	/* Allows for 1 extension block at 512 byte-blocks */
+
+struct key_cache {
+	struct timeval	 kc_lru_time;	/* Last time this cache was used */
+	int	 kc_first;		/* First cached key */
+	int	 kc_last;		/* Last cached key */
+	int	 kc_this_key;		/* Key of extension block this data block keys are from */
+	int	 kc_this_seq;		/* Sequence number of this extension block */
+	int	 kc_next_key;		/* Key of next extension block */
+	int	 kc_keys[AFFS_KCSIZE];	/* Key cache */
+};
+
+#define EC_SIZE	(PAGE_SIZE - 4 * sizeof(struct key_cache) - 4) / 4
+
+struct ext_cache {
+	struct key_cache  kc[4];	/* The 4 key caches */
+	__s32	 ec[EC_SIZE];		/* Keys of assorted extension blocks */
+	int	 max_ext;		/* Index of last known extension block */
+};
 
 /*
  * affs fs inode data in memory
  */
 struct affs_inode_info {
-	__u32	i_protect;		/* unused attribute bits */
-	__s32	i_parent;		/* parent ino */
-	__s32	i_original;		/* if != 0, this is the key of the original */
-	__s32	i_ext[EXT_CACHE_SIZE];	/* extension block numbers */
-	__s32	i_data[MAX_PREALLOC];	/* preallocated blocks */
-	int	i_lastblock;		/* last allocated block */
-	short	i_max_ext;		/* last known extension block */
-	short	i_pa_cnt;		/* number of preallocated blocks */
-	short	i_pa_next;		/* Index of next block in i_data[] */
-	short	i_pa_last;		/* Index of next free slot in i_data[] */
-	short	i_zone;			/* write zone */
+	__u32	 i_protect;		/* unused attribute bits */
+	__s32	 i_parent;		/* parent ino */
+	__s32	 i_original;		/* if != 0, this is the key of the original */
+	__s32	 i_data[AFFS_MAX_PREALLOC];	/* preallocated blocks */
+	struct ext_cache *i_ec;		/* Cache gets allocated dynamically */
+	int	 i_cache_users;		/* Cache cannot be freed while > 0 */
+	int	 i_lastblock;		/* last allocated block */
+	short	 i_pa_cnt;		/* number of preallocated blocks */
+	short	 i_pa_next;		/* Index of next block in i_data[] */
+	short	 i_pa_last;		/* Index of next free slot in i_data[] */
+	short	 i_zone;		/* write zone */
 	unsigned char i_hlink;		/* This is a fake */
 	unsigned char i_pad;
 };

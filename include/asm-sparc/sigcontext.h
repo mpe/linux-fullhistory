@@ -1,4 +1,4 @@
-/* $Id: sigcontext.h,v 1.8 1996/03/01 07:20:59 davem Exp $ */
+/* $Id: sigcontext.h,v 1.9 1996/10/27 08:55:42 davem Exp $ */
 #ifndef _ASMsparc_SIGCONTEXT_H
 #define _ASMsparc_SIGCONTEXT_H
 
@@ -15,7 +15,7 @@ struct sunos_sigstack {
 };
 
 /* This is what SunOS does, so shall I. */
-struct sigcontext_struct {
+struct sigcontext {
 	int sigc_onstack;      /* state to restore */
 	int sigc_mask;         /* sigmask to restore */
 	int sigc_sp;           /* stack pointer */

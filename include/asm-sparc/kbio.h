@@ -26,6 +26,12 @@ enum {
 /* Set routing of keystrokes to /dev/kbd */
 #define KIOCSDIRECT _IOW('k', 10, int)
 
+/* Set keyboard leds */
+#define KIOCSLED    _IOW('k', 14, unsigned char)
+
+/* Get keyboard leds */
+#define KIOCGLED    _IOR('k', 15, unsigned char)
+
 /* Top bit records if the key is up or down */
 #define KBD_UP      0x80
 
@@ -34,4 +40,5 @@ enum {
 
 /* All keys up */
 #define KBD_IDLE    0x75
+
 #endif /* __LINUX_KBIO_H */

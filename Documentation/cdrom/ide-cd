@@ -32,10 +32,11 @@ This driver provides the following features:
    function; the only ones which i've heard of successes with are Sony
    and Toshiba drives.
 
- - There is now rudimentary support for cdrom changers which comply
-   with the ATAPI 2.6 draft standard (such as the NEC CDR-251).  This
-   merely adds a function to switch between the slots of the changer
-   under control of an external program.  A sample such program is
+ - There is now support for cdrom changers which comply with the 
+   ATAPI 2.6 draft standard (such as the NEC CDR-251).  This additional
+   functionality includes a function call to query which slot is the
+   currently selected slot, a function call to query which slots contain
+   CDs, etc. A sample program which demonstrates this functionality is
    appended to the end of this file.  The Sanyo 3-disc changer
    (which does not conform to the standard) is also now supported.
    Please note the driver refers to the first CD as slot # 0.
@@ -150,11 +151,11 @@ such as cdda2wav.  The only types of drive which i've heard support
 this are Sony and Toshiba drives.  You will get errors if you try to
 use this function on a drive which does not support it.
 
-For supported changers, you can use the `cdload' program (appended to
+For supported changers, you can use the `cdchange' program (appended to
 the end of this file) to switch between changer slots.  Note that the
 drive should be unmounted before attempting this.  The program takes
-two arguments: the cdrom device, and the slot number to which to change.
-If the slot number is -1, the drive is unloaded.
+two arguments: the cdrom device, and the slot number to which you wish
+to change.  If the slot number is -1, the drive is unloaded.
 
 
 4. Compilation options
@@ -360,16 +361,22 @@ f. Data corruption.
     expense of low system performance.
 
 
-6. cdload.c
------------
+6. cdchange.c
+-------------
 
 /*
- * cdload.c  <device>  <slot>
+ * cdchange.c  [-v]  <device>  [<slot>]
  *
- * Load a cdrom from a specified slot in a changer.  The drive should be
- * unmounted before executing this.
+ * This load a cdrom from a specified slot in a changer, and displays 
+ * information about the changer status.  The drive should be unmounted before 
+ * using this program.
+ *
+ * Changer information is displayed if either the -v flag is specified
+ * or no slot was specified.
  *
  * Based on code originally from Gerhard Zuber <zuber@berlin.snafu.de>.
+ * Changer status information, and rewrite for the new common cdrom driver
+ * interface by Erik Andersen <andersee@et.byu.edu>.
  */
 
 #include <stdlib.h>
@@ -377,7 +384,6 @@ f. Data corruption.
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
-#include <linux/cdrom.h>
 #include <linux/ucdrom.h>
 
 
@@ -386,19 +392,34 @@ main (int argc, char **argv)
 {
 	char *program;
 	char *device;
-	int x_slot;
 	int fd;           /* file descriptor for CD-ROM device */
 	int status;       /* return status for system calls */
+	int verbose = 0;
+	int x_slot = -1;
+	int total_slots_available;
 
 	program = argv[0];
 
-	if (argc != 3) {
-		fprintf (stderr, "usage: %s <device> <slot>\n", program);
+	++argv;
+	--argc;
+
+	if (argc < 1 || argc > 3) {
+		fprintf (stderr, "usage: %s [-v] <device> [<slot>]\n",
+			 program);
+		fprintf (stderr, "       Slots are numbered 1 -- n.\n");
 		exit (1);
 	}
-
-	device = argv[1];
-	x_slot = atoi (argv[2]);
+ 
+       if (strcmp (argv[0], "-v") == 0) {
+                verbose = 1;
+                ++argv;
+                --argc;
+        }
+ 
+	device = argv[0];
+ 
+	if (argc == 2)
+		x_slot = atoi (argv[1]) - 1;
 
 	/* open device */ 
 	fd = open (device, 0);
@@ -408,15 +429,77 @@ main (int argc, char **argv)
 		exit (1);
 	}
 
-	/* load */ 
-	status = ioctl (fd, CDROM_SELECT_DISC, x_slot);
-	if (status != 0) {
-		fprintf (stderr,
-			 "%s: CDROM_SELECT_DISC ioctl failed for `%s': %s\n",
-			 program, device, strerror (errno));
+	/* Check CD player status */ 
+	total_slots_available = ioctl (fd, CDROM_CHANGER_NSLOTS);
+	if (total_slots_available <= 1 ) {
+		fprintf (stderr, "%s: Device `%s' is not an ATAPI "
+			"compliant CD changer.\n", program, device);
 		exit (1);
 	}
- 
+
+	if (x_slot >= 0) {
+		if (x_slot >= total_slots_available) {
+			fprintf (stderr, "Bad slot number.  "
+				 "Should be 1 -- %d.\n",
+				 total_slots_available);
+			exit (1);
+		}
+
+		/* load */ 
+		status = ioctl (fd, CDROM_SELECT_DISC, x_slot);
+	}
+
+	if (x_slot < 0 || verbose) {
+
+		status = ioctl (fd, CDROM_SELECT_DISC, CDSL_CURRENT);
+
+		printf ("Current slot: %d\n", status+1);
+		printf ("Total slots available: %d\n",
+			total_slots_available);
+
+		printf ("Drive status: ");
+		switch (ioctl (fd, CDROM_DRIVE_STATUS, CDSL_CURRENT)) {
+		case CDS_DISC_OK:
+			printf ("Ready.\n");
+			break;
+		case CDS_TRAY_OPEN:
+			printf ("Tray Open.\n");
+			break;
+		case CDS_DRIVE_NOT_READY:
+			printf ("Drive Not Ready.\n");
+			break;
+		default:
+			printf ("This Should not happen!\n");
+			break;
+		}
+
+		for (x_slot=0; x_slot<total_slots_available; x_slot++) {
+			printf ("Slot %2d: ", x_slot+1);
+			switch (ioctl (fd, CDROM_DRIVE_STATUS, x_slot)) {
+			case CDS_DISC_OK:
+				printf ("Disc present.");
+				break;
+			case CDS_NO_DISC: 
+				printf ("Empty slot.");
+				break;
+			case CDS_NO_INFO:
+				printf ("No Information.");
+				break;
+			default:
+				printf ("This Should not happen!\n");
+				break;
+			}
+			switch (ioctl (fd, CDROM_MEDIA_CHANGED, x_slot)) {
+			case 1:
+				printf ("\t\tChanged.\n");
+				break;
+			default:
+				printf ("\n");
+				break;
+			}
+		}
+	}
+
 	/* close device */
 	status = close (fd);
 	if (status != 0) {

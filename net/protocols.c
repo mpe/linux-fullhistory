@@ -33,6 +33,9 @@ extern void inet6_proto_init(struct net_proto *pro);
 #ifdef CONFIG_NETROM
 #include <net/nrcall.h>
 #endif
+#ifdef CONFIG_ROSE
+#include <net/rosecall.h>
+#endif
 #endif
 #if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE)
 #if ! ( defined(CONFIG_IPX) || defined(CONFIG_IPX_MODULE) )
@@ -65,9 +68,12 @@ struct net_proto protocols[] = {
   { "RIF",	rif_init },				/* RIF for Token ring		*/
 #endif  
 #ifdef CONFIG_AX25  
-  { "AX.25",	ax25_proto_init },
+  { "AX.25",	ax25_proto_init },			/* Amateur Radio AX.25 */
 #ifdef CONFIG_NETROM
-  { "NET/ROM",	nr_proto_init },
+  { "NET/ROM",	nr_proto_init },			/* Amateur Radio NET/ROM */
+#endif
+#ifdef CONFIG_ROSE
+  { "Rose",	rose_proto_init },			/* Amateur Radio X.25 PLP */
 #endif
 #endif  
 #ifdef	CONFIG_INET
@@ -81,6 +87,9 @@ struct net_proto protocols[] = {
 #endif
 #ifdef CONFIG_ATALK
   { "DDP",	atalk_proto_init },			/* Netatalk Appletalk driver	*/
+#endif
+#ifdef CONFIG_X25
+  { "X.25",	x25_proto_init },			/* CCITT X.25 Packet Layer */
 #endif
   { NULL,	NULL		}			/* End marker			*/
 };

@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.46 1996/04/21 11:01:53 davem Exp $ */
+/* $Id: pgtable.h,v 1.51 1996/10/27 08:55:32 davem Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -22,6 +22,10 @@ extern int io_remap_page_range(unsigned long from, unsigned long to,
 
 extern void (*quick_kernel_fault)(unsigned long);
 
+/* Allocate a block of RAM which is aligned to its size.
+   This procedure can be used until the call to mem_init(). */
+extern void *sparc_init_alloc(unsigned long *kbrk, unsigned long size);
+
 /* mmu-specific process creation/cloning/etc hooks. */
 extern void (*mmu_exit_hook)(void);
 extern void (*mmu_flush_hook)(void);
@@ -36,15 +40,17 @@ extern void  (*mmu_unlockarea)(char *, unsigned long);
 
 /* Routines for getting a dvma scsi buffer. */
 struct mmu_sglist {
-	/* ick, I know... */
 	char *addr;
-	char *alt_addr;
+	char *__dont_touch;
 	unsigned int len;
+	char *dvma_addr;
 };
 extern char *(*mmu_get_scsi_one)(char *, unsigned long, struct linux_sbus *sbus);
 extern void  (*mmu_get_scsi_sgl)(struct mmu_sglist *, int, struct linux_sbus *sbus);
 extern void  (*mmu_release_scsi_one)(char *, unsigned long, struct linux_sbus *sbus);
 extern void  (*mmu_release_scsi_sgl)(struct mmu_sglist *, int, struct linux_sbus *sbus);
+
+extern void  (*mmu_map_dma_area)(unsigned long addr, int len);
 
 extern unsigned int pmd_shift;
 extern unsigned int pmd_size;
@@ -166,8 +172,6 @@ extern void (*sparc_update_rootmmu_dir)(struct task_struct *, pgd_t *pgdir);
 #define PAGE_PTR(address) \
 ((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)&PTR_MASK&~PAGE_MASK)
 
-extern unsigned long high_memory;
-
 extern int (*pte_none)(pte_t);
 extern int (*pte_present)(pte_t);
 extern void (*pte_clear)(pte_t *);
@@ -202,6 +206,7 @@ extern pte_t (*pte_mkyoung)(pte_t);
  * and a page entry and page directory to the page they refer to.
  */
 extern pte_t (*mk_pte)(unsigned long, pgprot_t);
+extern pte_t (*mk_pte_phys)(unsigned long, pgprot_t);
 extern pte_t (*mk_pte_io)(unsigned long, pgprot_t, int);
 
 extern void (*pgd_set)(pgd_t *, pmd_t *);
@@ -341,13 +346,13 @@ extern struct ctx_list ctx_used;        /* Head of used contexts list */
 
 #define NO_CONTEXT     -1
 
-extern inline void remove_from_ctx_list(struct ctx_list *entry)
+extern __inline__ void remove_from_ctx_list(struct ctx_list *entry)
 {
 	entry->next->prev = entry->prev;
 	entry->prev->next = entry->next;
 }
 
-extern inline void add_to_ctx_list(struct ctx_list *head, struct ctx_list *entry)
+extern __inline__ void add_to_ctx_list(struct ctx_list *head, struct ctx_list *entry)
 {
 	entry->next = head;
 	(entry->prev = head->prev)->next = entry;

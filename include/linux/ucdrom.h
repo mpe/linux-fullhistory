@@ -6,32 +6,46 @@
 #define LINUX_UCDROM_H
 
 #ifdef __KERNEL__
-struct cdrom_device_ops {
-/* routines */
-	int (*open) (kdev_t, int);
-	void (*release) (kdev_t);
-	int (*open_files) (kdev_t);      /* number of open files */
-	int (*drive_status) (kdev_t);
-	int (*disc_status) (kdev_t);
-	int (*media_changed) (kdev_t);
-	int (*tray_move) (kdev_t, int);
-	int (*lock_door) (kdev_t, int);
-	int (*select_speed) (kdev_t, int);
-	int (*select_disc) (kdev_t, int);
-	int (*get_last_session) (kdev_t, struct cdrom_multisession *);
-	int (*get_mcn) (kdev_t, struct cdrom_mcn *);
-	int (*reset) (kdev_t dev);       /* hard reset device */
-	int (*audio_ioctl) (kdev_t, unsigned int, void *); /* play stuff */
-	int (*dev_ioctl) (kdev_t, unsigned int, unsigned long); /* dev-specific */
+struct cdrom_device_info {
+	struct cdrom_device_ops  *ops;  /* link to device_ops */
+	struct cdrom_device_info *next; /* next device_info for this major */
+	void *handle;		        /* driver-dependent data */
 /* specifications */
-	const int capability;           /* capability flags */
+        kdev_t dev;	                /* device number */
 	int mask;                       /* mask of capability: disables them */
 	const int speed;                /* maximum speed for reading data */
-	const int minors;               /* number of minor devs supported */
 	const int capacity;             /* number of discs in jukebox */
 /* device-related storage */
-	int options;                    /* options flags */
-	long mc_flags;                  /* media change buffer flags (2*16) */
+	int options : 30;               /* options flags */
+	unsigned mc_flags : 2;          /* media change buffer flags */
+    	int use_count;                  /* number of times device opened */
+};
+
+struct cdrom_device_ops {
+/* routines */
+	int (*open) (struct cdrom_device_info *, int);
+	void (*release) (struct cdrom_device_info *);
+	int (*drive_status) (struct cdrom_device_info *, int);
+	int (*disc_status) (struct cdrom_device_info *);
+	int (*media_changed) (struct cdrom_device_info *, int);
+	int (*tray_move) (struct cdrom_device_info *, int);
+	int (*lock_door) (struct cdrom_device_info *, int);
+	int (*select_speed) (struct cdrom_device_info *, int);
+	int (*select_disc) (struct cdrom_device_info *, int);
+	int (*get_last_session) (struct cdrom_device_info *,
+				 struct cdrom_multisession *);
+	int (*get_mcn) (struct cdrom_device_info *,
+			struct cdrom_mcn *);
+	/* hard reset device */
+	int (*reset) (struct cdrom_device_info *);
+	/* play stuff */
+	int (*audio_ioctl) (struct cdrom_device_info *,unsigned int, void *);
+	/* dev-specific */
+ 	int (*dev_ioctl) (struct cdrom_device_info *,
+			  unsigned int, unsigned long);
+/* driver specifications */
+	const int capability;   /* capability flags */
+	int n_minors;           /* number of active minor devices */
 };
 #endif
 
@@ -67,6 +81,11 @@ struct cdrom_device_ops {
 #define CDO_LOCK	0x8             /* lock tray on open files */
 #define CDO_CHECK_TYPE	0x10            /* check type on open for data */
 
+/* Special codes for specifying changer slots. */
+#include <limits.h>
+#define CDSL_NONE       INT_MAX-1
+#define CDSL_CURRENT    INT_MAX
+
 /* Some more ioctls to control these options */
 #define CDROM_SET_OPTIONS	0x5320
 #define CDROM_CLEAR_OPTIONS	0x5321
@@ -75,6 +94,7 @@ struct cdrom_device_ops {
 #define CDROM_MEDIA_CHANGED	0x5325
 #define CDROM_DRIVE_STATUS	0x5326  /* tray position, etc. */
 #define CDROM_DISC_STATUS	0x5327  /* disc type etc. */
+#define CDROM_CHANGER_NSLOTS    0x5328
 
 /* Rename an old ioctl */
 #define CDROM_GET_MCN	CDROM_GET_UPC	/* medium catalog number */
@@ -83,9 +103,8 @@ struct cdrom_device_ops {
 /* the general file operations structure: */
 extern struct file_operations cdrom_fops;
 
-extern int register_cdrom(int major, char *name,
-                          struct cdrom_device_ops *cdo);
-extern int unregister_cdrom(int major, char *name);
+extern int register_cdrom(struct cdrom_device_info *cdi, char *name);
+extern int unregister_cdrom(struct cdrom_device_info *cdi);
 #endif
 
 #endif	/* LINUX_UCDROM_H */

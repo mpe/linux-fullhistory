@@ -1,7 +1,8 @@
-/* $Id: fault.c,v 1.62 1996/04/25 06:09:26 davem Exp $
+/* $Id: fault.c,v 1.77 1996/10/28 00:56:02 davem Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1996 Eddie C. Dost (ecd@skynet.be)
  */
 
 #include <asm/head.h>
@@ -17,8 +18,6 @@
 
 #include <asm/system.h>
 #include <asm/segment.h>
-#include <asm/openprom.h>
-#include <asm/idprom.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/memreg.h>
@@ -122,6 +121,8 @@ asmlinkage void sparc_lvl15_nmi(struct pt_regs *regs, unsigned long serr,
 	printk("       Synchronous Vaddr %08lx\n", svaddr);
 	printk("      Asynchronous Error %08lx\n", aerr);
 	printk("      Asynchronous Vaddr %08lx\n", avaddr);
+	if (sun4c_memerr_reg)
+		printk("     Memory Parity Error %08lx\n", *sun4c_memerr_reg);
 	printk("REGISTER DUMP:\n");
 	show_regs(regs);
 	prom_halt();
@@ -131,36 +132,47 @@ asmlinkage void do_sparc_fault(struct pt_regs *regs, int text_fault, int write,
 			       unsigned long address)
 {
 	struct vm_area_struct *vma;
+	struct task_struct *tsk = current;
+	struct mm_struct *mm = tsk->mm;
 	int from_user = !(regs->psr & PSR_PS);
-
 #if 0
-	printk("CPU[%d]: f<pid=%d,tf=%d,wr=%d,addr=%08lx",
-	       smp_processor_id(), current->pid, text_fault,
-	       write, address);
-	printk(",pc=%08lx> ", regs->pc);
+	static unsigned long last_one;
 #endif
 
+	down(&mm->mmap_sem);
 	if(text_fault)
 		address = regs->pc;
 
+#if 0
+	if(current->tss.ex.count) {
+		printk("f<pid=%d,tf=%d,wr=%d,addr=%08lx,pc=%08lx>\n",
+		       tsk->pid, text_fault, write, address, regs->pc);
+		printk("EX: count<%d> pc<%08lx> expc<%08lx> address<%08lx>\n",
+		       (int) current->tss.ex.count, current->tss.ex.pc,
+		       current->tss.ex.expc, current->tss.ex.address);
+#if 0
+		if(last_one == address) {
+			printk("Twice in a row, AIEEE.  Spinning so you can see the dump.\n");
+			show_regs(regs);
+			sti();
+			while(1)
+				barrier();
+		}
+		last_one = address;
+#endif
+	}
+#endif
 	/* Now actually handle the fault.  Do kernel faults special,
 	 * because on the sun4c we could have faulted trying to read
 	 * the vma area of the task and without the following code
 	 * we'd fault recursively until all our stack is gone. ;-(
 	 */
-	if(!from_user && address >= KERNBASE) {
-#ifdef __SMP__
-		printk("CPU[%d]: Kernel faults at addr=%08lx\n",
-		       smp_processor_id(), address);
-		while(1)
-			;
-#else
+	if(!from_user && address >= PAGE_OFFSET) {
 		quick_kernel_fault(address);
 		return;
-#endif
 	}
 
-	vma = find_vma(current, address);
+	vma = find_vma(mm, address);
 	if(!vma)
 		goto bad_area;
 	if(vma->vm_start <= address)
@@ -183,40 +195,98 @@ good_area:
 			goto bad_area;
 	}
 	handle_mm_fault(vma, address, write);
+	up(&mm->mmap_sem);
 	return;
 	/*
 	 * Something tried to access memory that isn't in our memory map..
 	 * Fix it, but check if it's kernel or user first..
 	 */
 bad_area:
+	up(&mm->mmap_sem);
+	/* Did we have an exception handler installed? */
+	if(current->tss.ex.count == 1) {
+		if(from_user) {
+			printk("Yieee, exception signalled from user mode.\n");
+		} else {
+			/* Set pc to %g1, set %g1 to -EFAULT and %g2 to
+			 * the faulting address so we can cleanup.
+			 */
+			printk("Exception: PC<%08lx> faddr<%08lx>\n", regs->pc, address);
+			printk("EX: count<%d> pc<%08lx> expc<%08lx> address<%08lx>\n",
+			       (int) current->tss.ex.count, current->tss.ex.pc,
+			       current->tss.ex.expc, current->tss.ex.address);
+			current->tss.ex.count = 0;
+			regs->pc = current->tss.ex.expc;
+			regs->npc = regs->pc + 4;
+			regs->u_regs[UREG_G1] = -EFAULT;
+			regs->u_regs[UREG_G2] = address - current->tss.ex.address;
+			regs->u_regs[UREG_G3] = current->tss.ex.pc;
+			return;
+		}
+	}
 	if(from_user) {
 #if 0
-		printk("%s [%d]: segfaults at %08lx pc=%08lx\n",
-		       current->comm, current->pid, address, regs->pc);
+		printk("Fault whee %s [%d]: segfaults at %08lx pc=%08lx\n",
+		       tsk->comm, tsk->pid, address, regs->pc);
 #endif
-		current->tss.sig_address = address;
-		current->tss.sig_desc = SUBSIG_NOMAPPING;
-		send_sig(SIGSEGV, current, 1);
+		tsk->tss.sig_address = address;
+		tsk->tss.sig_desc = SUBSIG_NOMAPPING;
+		send_sig(SIGSEGV, tsk, 1);
 		return;
 	}
 	if((unsigned long) address < PAGE_SIZE) {
 		printk(KERN_ALERT "Unable to handle kernel NULL pointer dereference");
 	} else
 		printk(KERN_ALERT "Unable to handle kernel paging request");
-	printk(" at virtual address %08lx\n",address);
-	printk(KERN_ALERT "current->mm->context = %08lx\n",
-	       (unsigned long) current->mm->context);
-	printk(KERN_ALERT "current->mm->pgd = %08lx\n",
-	       (unsigned long) current->mm->pgd);
+	printk(KERN_ALERT " at virtual address %08lx\n",address);
+	printk(KERN_ALERT "tsk->mm->context = %08lx\n",
+	       (unsigned long) tsk->mm->context);
+	printk(KERN_ALERT "tsk->mm->pgd = %08lx\n",
+	       (unsigned long) tsk->mm->pgd);
 	die_if_kernel("Oops", regs);
+}
+
+asmlinkage void do_sun4c_fault(struct pt_regs *regs, int text_fault, int write,
+			       unsigned long address)
+{
+	extern void sun4c_update_mmu_cache(struct vm_area_struct *,unsigned long,pte_t);
+	extern pgd_t *sun4c_pgd_offset(struct mm_struct *,unsigned long);
+	extern pte_t *sun4c_pte_offset(pmd_t *,unsigned long);
+	struct task_struct *tsk = current;
+	struct mm_struct *mm = tsk->mm;
+	pgd_t *pgd;
+	pte_t *pte;
+
+	if(text_fault)
+		address = regs->pc;
+
+	pgd = sun4c_pgd_offset(mm, address);
+	pte = sun4c_pte_offset((pmd_t *) pgd, address);
+
+	/* This conditional is 'interesting'. */
+	if(pgd_val(*pgd) && !(write && !(pte_val(*pte) & _SUN4C_PAGE_WRITE))
+	   && (pte_val(*pte) & _SUN4C_PAGE_VALID))
+		/* XXX Very bad, can't do this optimization when VMA arg is actually
+		 * XXX used by update_mmu_cache()!
+		 */
+		sun4c_update_mmu_cache((struct vm_area_struct *) 0, address, *pte);
+	else
+		do_sparc_fault(regs, text_fault, write, address);
 }
 
 /* This always deals with user addresses. */
 inline void force_user_fault(unsigned long address, int write)
 {
 	struct vm_area_struct *vma;
+	struct task_struct *tsk = current;
+	struct mm_struct *mm = tsk->mm;
 
-	vma = find_vma(current, address);
+#if 0
+	printk("wf<pid=%d,wr=%d,addr=%08lx>\n",
+	       tsk->pid, write, address);
+#endif
+	down(&mm->mmap_sem);
+	vma = find_vma(mm, address);
 	if(!vma)
 		goto bad_area;
 	if(vma->vm_start <= address)
@@ -233,18 +303,25 @@ good_area:
 		if(!(vma->vm_flags & (VM_READ | VM_EXEC)))
 			goto bad_area;
 	handle_mm_fault(vma, address, write);
+	up(&mm->mmap_sem);
 	return;
 bad_area:
-	current->tss.sig_address = address;
-	current->tss.sig_desc = SUBSIG_NOMAPPING;
-	send_sig(SIGSEGV, current, 1);
+	up(&mm->mmap_sem);
+#if 0
+	printk("Window whee %s [%d]: segfaults at %08lx\n",
+	       tsk->comm, tsk->pid, address);
+#endif
+	tsk->tss.sig_address = address;
+	tsk->tss.sig_desc = SUBSIG_NOMAPPING;
+	send_sig(SIGSEGV, tsk, 1);
 	return;
 }
 
 void window_overflow_fault(void)
 {
-	unsigned long sp = current->tss.rwbuf_stkptrs[0];
+	unsigned long sp;
 
+	sp = current->tss.rwbuf_stkptrs[0];
 	if(((sp + 0x38) & PAGE_MASK) != (sp & PAGE_MASK))
 		force_user_fault(sp + 0x38, 1);
 	force_user_fault(sp, 1);
@@ -259,8 +336,9 @@ void window_underflow_fault(unsigned long sp)
 
 void window_ret_fault(struct pt_regs *regs)
 {
-	unsigned long sp = regs->u_regs[UREG_FP];
+	unsigned long sp;
 
+	sp = regs->u_regs[UREG_FP];
 	if(((sp + 0x38) & PAGE_MASK) != (sp & PAGE_MASK))
 		force_user_fault(sp + 0x38, 0);
 	force_user_fault(sp, 0);

@@ -68,9 +68,7 @@
  * have to appropriate code to actually release the kernel
  * entry lock.
  */
-#define RESTORE_ALL \
-	b	ret_trap_entry; \
-	 nop;
+#define RESTORE_ALL b ret_trap_entry; clr %l6;
 
 #ifndef __SMP__
 
@@ -96,10 +94,6 @@
 	/* This is so complicated I suggest you don't look at it. */
 #define ENTER_MASK(mask) \
 	GET_PROCESSOR_OFFSET(l4) \
-	set	C_LABEL(smp_spinning), %l6; \
-	add	%l6, %l4, %l6; \
-	mov	1, %l5; \
-	st	%l5, [%l6]; \
 	set	C_LABEL(smp_proc_in_lock), %l5; \
 	ld	[%l5 + %l4], %l6; \
 	or	%l6, mask, %l6; \
@@ -157,9 +151,6 @@
 	ld	[%l5], %l5; \
 	st	%l4, [%l5]; \
 4: \
-	GET_PROCESSOR_OFFSET(l4) \
-	set	C_LABEL(smp_spinning), %l6; \
-	st	%g0, [%l6 + %l4];
 
 #define ENTER_SYSCALL \
 	ENTER_MASK(SMP_FROM_SYSCALL) \
@@ -198,9 +189,7 @@
 	INCREMENT_COUNTER(syscall_count, l6, l5)
 
 
-#define RESTORE_ALL_FASTIRQ \
-	b	ret_irq_entry; \
-	 nop;
+#define RESTORE_ALL_FASTIRQ b,a	ret_irq_entry;
 
 #endif /* !(__SMP__) */
 

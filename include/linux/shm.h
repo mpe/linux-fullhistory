@@ -33,6 +33,10 @@ struct shmid_ds {
 #define SHM_LOCK 	11
 #define SHM_UNLOCK 	12
 
+/* ipcs ctl commands */
+#define SHM_STAT 	13
+#define SHM_INFO 	14
+
 struct	shminfo {
 	int shmmax;
 	int shmmin;
@@ -40,16 +44,6 @@ struct	shminfo {
 	int shmseg;
 	int shmall;
 };
-
-#ifdef __KERNEL__
-
-/* shm_mode upper byte flags */
-#define	SHM_DEST	01000	/* segment will be destroyed on last detach */
-#define SHM_LOCKED      02000   /* segment will not be swapped */
-
-/* ipcs ctl commands */
-#define SHM_STAT 	13
-#define SHM_INFO 	14
 
 struct shm_info {
 	int used_ids;
@@ -59,6 +53,12 @@ struct shm_info {
 	unsigned long swap_attempts;
 	unsigned long swap_successes;
 };
+
+#ifdef __KERNEL__
+
+/* shm_mode upper byte flags */
+#define	SHM_DEST	01000	/* segment will be destroyed on last detach */
+#define SHM_LOCKED      02000   /* segment will not be swapped */
 
 asmlinkage int sys_shmget (key_t key, int size, int flag);
 asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, unsigned long *addr);

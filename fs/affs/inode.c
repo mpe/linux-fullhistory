@@ -333,35 +333,53 @@ affs_read_super(struct super_block *s,void *data, int silent)
 
 	s->u.affs_sb.s_hashsize = 0;
 	if (blocksize > 0) {
-		chksum = blocksize;
-		num_bm = blocksize;
+		i = blocksize;
+		j = blocksize;
 	} else {
-		chksum = 512;
-		num_bm = 4096;
+		i = 512;
+		j = 4096;
 	}
-	for (blocksize = chksum; blocksize <= num_bm; blocksize <<= 1, size >>= 1) {
+	for (blocksize = i, key = 0; blocksize <= j; blocksize <<= 1, size >>= 1) {
 		if (root_block < 0)
 			s->u.affs_sb.s_root_block = (reserved + size - 1) / 2;
 		else
 			s->u.affs_sb.s_root_block = root_block;
-		pr_debug("Trying bs=%d bytes, root at %d, size=%d blocks (%d reserved)\n",
-			 blocksize,s->u.affs_sb.s_root_block,size,reserved);
 		set_blocksize(dev,blocksize);
-		bh = affs_bread(dev,s->u.affs_sb.s_root_block,blocksize);
-		if (!bh) {
-			printk("AFFS: unable to read root block\n");
-			goto out;
+
+		/* The root block location that was calculated above is not
+		 * correct if the partition size is an odd number of 512-
+		 * byte blocks, which will be rounded down to a number of
+		 * 1024-byte blocks, and if there were an even number of
+		 * reserved blocks. Ideally, all partition checkers should
+		 * report the real number of blocks of the real blocksize,
+		 * but since this just cannot be done, we have to try to
+		 * find the root block anyways. In the above case, it is one
+		 * block behind the calculated one. So we check this one, too.
+		 */
+		for (num_bm = 0; num_bm < 2; num_bm++) {
+			pr_debug("AFFS: Dev %s - trying bs=%d bytes, root at %d, "
+				 "size=%d blocks, %d reserved\n",kdevname(dev),blocksize,
+				 s->u.affs_sb.s_root_block + num_bm,size,reserved);
+			bh = affs_bread(dev,s->u.affs_sb.s_root_block + num_bm,blocksize);
+			if (!bh) {
+				printk("AFFS: unable to read root block\n");
+				goto out;
+			}
+			if (!affs_checksum_block(blocksize,bh->b_data,&ptype,&stype) &&
+			    ptype == T_SHORT && stype == ST_ROOT) {
+				s->s_blocksize             = blocksize;
+				s->u.affs_sb.s_hashsize    = blocksize / 4 - 56;
+				s->u.affs_sb.s_root_block += num_bm;
+				key                        = 1;
+				break;
+			}
 		}
-		if (!affs_checksum_block(blocksize,bh->b_data,&ptype,&stype) &&
-		    ptype == T_SHORT && stype == ST_ROOT) {
-			s->s_blocksize          = blocksize;
-			s->u.affs_sb.s_hashsize = blocksize / 4 - 56;
+		if (key)
 			break;
-		}
 		affs_brelse(bh);
 		bh = NULL;
 	}
-	if (!s->u.affs_sb.s_hashsize) {
+	if (!key) {
 		affs_brelse(bh);
 		if (!silent)
 			printk("AFFS: Can't find a valid root block on device %s\n",kdevname(dev));
@@ -512,8 +530,7 @@ affs_read_super(struct super_block *s,void *data, int silent)
 					}
 					ptype = (size + 31) & ~0x1F;
 					size  = 0;
-					if (!(s->s_flags & MS_RDONLY))
-						s->u.affs_sb.s_flags |= SF_BM_VALID;
+					s->u.affs_sb.s_flags |= SF_BM_VALID;
 				} else {
 					ptype = s->s_blocksize * 8 - 32;
 					size -= ptype;
@@ -629,6 +646,7 @@ affs_read_inode(struct inode *inode)
 	unsigned short		 id;
 
 	pr_debug("AFFS: read_inode(%lu)\n",inode->i_ino);
+
 	lbh   = NULL;
 	block = inode->i_ino;
 	if (!(bh = affs_bread(inode->i_dev,block,AFFS_I2BSIZE(inode)))) {
@@ -646,19 +664,19 @@ affs_read_inode(struct inode *inode)
 	file_end   = GET_END_PTR(struct file_end, bh->b_data,AFFS_I2BSIZE(inode));
 	prot       = (htonl(file_end->protect) & ~0x10) ^ FIBF_OWNER;
 
-	inode->u.affs_i.i_protect   = prot;
-	inode->u.affs_i.i_parent    = htonl(file_end->parent);
-	inode->u.affs_i.i_original  = 0;	
-	inode->u.affs_i.i_zone      = 0;
-	inode->u.affs_i.i_hlink     = 0;
-	inode->u.affs_i.i_pa_cnt    = 0;
-	inode->u.affs_i.i_pa_next   = 0;
-	inode->u.affs_i.i_pa_last   = 0;
-	inode->u.affs_i.i_ext[0]    = 0;
-	inode->u.affs_i.i_max_ext   = 0;
-	inode->u.affs_i.i_lastblock = -1;
-	inode->i_nlink              = 1;
-	inode->i_mode               = 0;
+	inode->u.affs_i.i_protect      = prot;
+	inode->u.affs_i.i_parent       = htonl(file_end->parent);
+	inode->u.affs_i.i_original     = 0;	
+	inode->u.affs_i.i_zone         = 0;
+	inode->u.affs_i.i_hlink        = 0;
+	inode->u.affs_i.i_pa_cnt       = 0;
+	inode->u.affs_i.i_pa_next      = 0;
+	inode->u.affs_i.i_pa_last      = 0;
+	inode->u.affs_i.i_ec           = NULL;
+	inode->u.affs_i.i_cache_users  = 0;
+	inode->u.affs_i.i_lastblock    = -1;
+	inode->i_nlink                 = 1;
+	inode->i_mode                  = 0;
 
 	if (inode->i_sb->u.affs_sb.s_flags & SF_SETMODE)
 		inode->i_mode = inode->i_sb->u.affs_sb.s_mode;
@@ -876,16 +894,16 @@ affs_new_inode(const struct inode *dir)
 	inode->i_blksize = 0;
 	inode->i_mtime   = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 
-	inode->u.affs_i.i_original  = 0;
-	inode->u.affs_i.i_parent    = dir->i_ino;
-	inode->u.affs_i.i_zone      = 0;
-	inode->u.affs_i.i_hlink     = 0;
-	inode->u.affs_i.i_pa_cnt    = 0;
-	inode->u.affs_i.i_pa_next   = 0;
-	inode->u.affs_i.i_pa_last   = 0;
-	inode->u.affs_i.i_ext[0]    = 0;
-	inode->u.affs_i.i_max_ext   = 0;
-	inode->u.affs_i.i_lastblock = -1;
+	inode->u.affs_i.i_original     = 0;
+	inode->u.affs_i.i_parent       = dir->i_ino;
+	inode->u.affs_i.i_zone         = 0;
+	inode->u.affs_i.i_hlink        = 0;
+	inode->u.affs_i.i_pa_cnt       = 0;
+	inode->u.affs_i.i_pa_next      = 0;
+	inode->u.affs_i.i_pa_last      = 0;
+	inode->u.affs_i.i_ec           = NULL;
+	inode->u.affs_i.i_cache_users  = 0;
+	inode->u.affs_i.i_lastblock    = -1;
 
 	insert_inode_hash(inode);
 

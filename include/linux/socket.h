@@ -58,17 +58,17 @@ struct cmsghdr {
 extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 					       struct cmsghdr *cmsg)
 {
-	void * ptr;
+	unsigned char * ptr;
 
 	if (cmsg->cmsg_len < sizeof(struct cmsghdr))
 	{
 		return NULL;
 	}
 	ptr = ((unsigned char *) cmsg) +  cmsg->cmsg_len;
-	if (ptr >= mhdr->msg_control + mhdr->msg_controllen)
+	if (ptr >= (unsigned char *) mhdr->msg_control + mhdr->msg_controllen)
 		return NULL;
 
-	return ptr;
+	return (struct cmsghdr *) ptr;
 }
 
 /* Control Messages */
@@ -94,12 +94,13 @@ extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 #define AF_AX25		3	/* Amateur Radio AX.25 		*/
 #define AF_IPX		4	/* Novell IPX 			*/
 #define AF_APPLETALK	5	/* Appletalk DDP 		*/
-#define	AF_NETROM	6	/* Amateur radio NetROM 	*/
+#define AF_NETROM	6	/* Amateur Radio NET/ROM 	*/
 #define AF_BRIDGE	7	/* Multiprotocol bridge 	*/
 #define AF_AAL5		8	/* Reserved for Werner's ATM 	*/
 #define AF_X25		9	/* Reserved for X.25 project 	*/
 #define AF_INET6	10	/* IP version 6			*/
-#define AF_MAX		12	/* For now.. */
+#define AF_ROSE		11	/* Amateur Radio X.25 PLP	*/
+#define AF_MAX		13	/* For now.. */
 
 /* Protocol families, same as address families. */
 #define PF_UNSPEC	AF_UNSPEC
@@ -113,6 +114,7 @@ extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 #define PF_AAL5		AF_AAL5
 #define PF_X25		AF_X25
 #define PF_INET6	AF_INET6
+#define PR_ROSE		AF_ROSE
 
 #define PF_MAX		AF_MAX
 
@@ -134,7 +136,8 @@ extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 #define SOL_IPX		256
 #define SOL_AX25	257
 #define SOL_ATALK	258
-#define	SOL_NETROM	259
+#define SOL_NETROM	259
+#define SOL_ROSE	260
 #define SOL_TCP		6
 #define SOL_UDP		17
 

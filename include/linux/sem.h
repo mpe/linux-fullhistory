@@ -15,6 +15,10 @@
 #define SETVAL  16       /* set semval */
 #define SETALL  17       /* set all semval's */
 
+/* ipcs ctl cmds */
+#define SEM_STAT 18
+#define SEM_INFO 19
+
 /* One semid data structure for each set of semaphores in the system. */
 struct semid_ds {
 	struct ipc_perm	sem_perm;		/* permissions .. see ipc.h */
@@ -76,10 +80,6 @@ struct sem {
 	int	semval;		/* current value */
 	int	sempid;		/* pid of last operation */
 };
-
-/* ipcs ctl cmds */
-#define SEM_STAT 18
-#define SEM_INFO 19
 
 /* One queue for each semaphore set in the system. */
 struct sem_queue {

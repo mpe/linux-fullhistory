@@ -23,6 +23,7 @@
 #define	AX25_DIGI_HEADER_LEN	(AX25_MAX_DIGIS * AX25_ADDR_LEN)
 #define	AX25_MAX_HEADER_LEN	(AX25_HEADER_LEN + AX25_DIGI_HEADER_LEN)
  
+#define AX25_P_ROSE	0x01
 #define AX25_P_IP	0xCC
 #define AX25_P_ARP	0xCD
 #define AX25_P_TEXT 	0xF0
@@ -109,25 +110,46 @@
 #define AX25_STATE_3	3
 #define AX25_STATE_4	4
 
-#define MODULUS 	8			/*  Standard AX.25 modulus */
-#define	EMODULUS	128			/*  Extended AX.25 modulus */
+#define	AX25_MAX_DEVICES	20	/* Max No of AX.25 devices */
 
-#define	AX25_DEF_IPDEFMODE	'D'
-#define	AX25_DEF_AXDEFMODE	8
-#define	AX25_DEF_NETROM		1
-#define	AX25_DEF_TEXT		1
-#define	AX25_DEF_BACKOFF	'E'
-#define	AX25_DEF_CONMODE	1
-#define	AX25_DEF_WINDOW		2
-#define	AX25_DEF_EWINDOW	32
-#define	AX25_DEF_T1		10
-#define	AX25_DEF_T2		3
-#define	AX25_DEF_T3		300
-#define	AX25_DEF_N2		10
-#define AX25_DEF_IDLE		20
-#define AX25_DEF_PACLEN		256
-#define AX25_DEF_IPMAXQUEUE	2		/* 1 * ax25->window */
-#define	AX25_DEF_DIGI		(AX25_DIGI_INBAND|AX25_DIGI_XBAND)
+#define MODULUS 		8	/*  Standard AX.25 modulus */
+#define	EMODULUS		128	/*  Extended AX.25 modulus */
+
+#define	AX25_DIGI_INBAND	0x01	/* Allow digipeating within port **/
+#define	AX25_DIGI_XBAND		0x02	/* Allow digipeating across ports **/
+
+#define	AX25_VALUES_IPDEFMODE	0	/* 0=DG 1=VC */
+#define	AX25_VALUES_AXDEFMODE	1	/* 0=Normal 1=Extended Seq Nos */
+#define	AX25_VALUES_TEXT	2	/* Allow PID=Text - 0=No 1=Yes */
+#define	AX25_VALUES_BACKOFF	3	/* 0=Linear 1=Exponential */
+#define	AX25_VALUES_CONMODE	4	/* Allow connected modes - 0=No 1=Yes */
+#define	AX25_VALUES_WINDOW	5	/* Default window size for standard AX.25 */
+#define	AX25_VALUES_EWINDOW	6	/* Default window size for extended AX.25 */
+#define	AX25_VALUES_T1		7	/* Default T1 timeout value */
+#define	AX25_VALUES_T2		8	/* Default T2 timeout value */
+#define	AX25_VALUES_T3		9	/* Default T3 timeout value */
+#define	AX25_VALUES_N2		10	/* Default N2 value */
+#define AX25_VALUES_IDLE	11	/* mode vc idle timer */
+#define AX25_VALUES_PACLEN	12	/* AX.25 MTU */
+#define AX25_VALUES_MAXQUEUE	13	/* Maximum number of buffers enqueued */
+#define	AX25_VALUES_DIGI	14	/* Digipeat mode */
+#define	AX25_MAX_VALUES		15
+
+#define	AX25_DEF_IPDEFMODE	0			/* Datagram */
+#define	AX25_DEF_AXDEFMODE	0			/* Normal */
+#define	AX25_DEF_TEXT		1			/* PID=Text allowed */
+#define	AX25_DEF_BACKOFF	1			/* Exponential backoff */
+#define	AX25_DEF_CONMODE	1			/* Connected mode allowed */
+#define	AX25_DEF_WINDOW		2			/* Window=2 */
+#define	AX25_DEF_EWINDOW	32			/* Module-128 Window=32 */
+#define	AX25_DEF_T1		(10 * PR_SLOWHZ)	/* T1=10s */
+#define	AX25_DEF_T2		(3 * PR_SLOWHZ)		/* T2=3s  */
+#define	AX25_DEF_T3		(300 * PR_SLOWHZ)	/* T3=300s */
+#define	AX25_DEF_N2		10			/* N2=10 */
+#define AX25_DEF_IDLE		(20 * 60 * PR_SLOWHZ)	/* Idle=20 mins */		
+#define AX25_DEF_PACLEN		256			/* Paclen=256 */
+#define AX25_DEF_MAXQUEUE	2			/* 1 * ax25->window */
+#define	AX25_DEF_DIGI		0x03			/* All digis alowed */
 
 typedef struct ax25_uid_assoc {
 	struct ax25_uid_assoc *next;
@@ -166,11 +188,19 @@ typedef struct ax25_cb {
 	struct sock		*sk;		/* Backlink to socket */
 } ax25_cb;
 
+struct ax25_dev {
+	char name[20];
+	struct device *dev;
+	int values[AX25_MAX_VALUES];
+};
+
 /* af_ax25.c */
 extern ax25_address null_ax25_address;
 extern char *ax2asc(ax25_address *);
+extern ax25_address *asc2ax(char *);
 extern int  ax25cmp(ax25_address *, ax25_address *);
 extern int  ax25_send_frame(struct sk_buff *, ax25_address *, ax25_address *, ax25_digi *, struct device *);
+extern int  ax25_link_up(ax25_address *, ax25_address *, struct device *);
 extern void ax25_destroy_socket(ax25_cb *);
 extern struct device *ax25rtr_get_dev(ax25_address *);
 extern int  ax25_encapsulate(struct sk_buff *, struct device *, unsigned short,
@@ -203,6 +233,7 @@ extern void dama_check_need_response(ax25_cb *, int, int);	/* dl1bke 960114 */
 extern void dama_establish_data_link(ax25_cb *);
 
 /* ax25_route.c */
+extern struct ax25_dev ax25_device[];
 extern int  ax25_rt_get_info(char *, char **, off_t, int, int);
 extern int  ax25_cs_get_info(char *, char **, off_t, int, int);
 extern int  ax25_rt_autobind(ax25_cb *, ax25_address *);
@@ -211,13 +242,10 @@ extern void ax25_dg_build_path(struct sk_buff *, ax25_address *, struct device *
 extern void ax25_rt_device_down(struct device *);
 extern int  ax25_rt_ioctl(unsigned int, void *);
 extern char ax25_ip_mode_get(ax25_address *, struct device *);
-extern unsigned short ax25_dev_get_value(struct device *, int);
+extern int  ax25_dev_get_value(struct device *, int);
 extern void ax25_dev_device_up(struct device *);
 extern void ax25_dev_device_down(struct device *);
-extern int  ax25_dev_ioctl(unsigned int, void *);
-extern int  ax25_bpq_get_info(char *, char **, off_t, int, int);
-extern ax25_address *ax25_bpq_get_addr(struct device *);
-extern int  ax25_bpq_ioctl(unsigned int, void *);
+extern void ax25_rt_free(void);
 
 /* ax25_subr.c */
 extern void ax25_clear_queues(ax25_cb *);
@@ -239,12 +267,27 @@ extern int  ax25_queue_length(ax25_cb *, struct sk_buff *); /* dl1bke 960327 */
 extern void ax25_dama_on(ax25_cb *);	/* dl1bke 951121 */
 extern void ax25_dama_off(ax25_cb *);	/* dl1bke 951121 */
 
-/* ax25_timer */
+/* ax25_timer.c */
 extern void ax25_set_timer(ax25_cb *);
 extern void ax25_t1_timeout(ax25_cb *);
+extern void ax25_link_failed(ax25_address *, struct device *);
+extern int  (*ax25_protocol_function(unsigned int))(struct sk_buff *, ax25_cb *);
+extern int  ax25_listen_mine(ax25_address *, struct device *);
+
+/* sysctl_net_ax25.c */
+extern void ax25_register_sysctl(void);
+extern void ax25_unregister_sysctl(void);
 
 /* ... */
 
-extern ax25_cb * volatile ax25_list;
+extern ax25_cb *volatile ax25_list;
+
+/* support routines for modules that use AX.25, in ax25_timer.c */
+extern int  ax25_protocol_register(unsigned int, int (*)(struct sk_buff *, ax25_cb *));
+extern void ax25_protocol_release(unsigned int);
+extern int  ax25_linkfail_register(void (*)(ax25_address *, struct device *));
+extern void ax25_linkfail_release(void (*)(ax25_address *, struct device *));
+extern int  ax25_listen_register(ax25_address *, struct device *);
+extern void ax25_listen_release(ax25_address *, struct device *);
 
 #endif

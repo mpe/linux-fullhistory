@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 032
+ *	AX.25 release 033
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -32,7 +32,7 @@
  */
 
 #include <linux/config.h>
-#ifdef CONFIG_AX25
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>

@@ -1,5 +1,5 @@
 \documentclass{article}
-\def\version{$Id: cdrom-standard.tex,v 0.8 1996/08/10 10:57:16 david Exp $}
+\def\version{$Id: cdrom-standard.tex,v 1.2 1996/09/22 20:18:00 david Exp $}
 
 \evensidemargin=0pt
 \oddsidemargin=0pt
@@ -138,7 +138,7 @@ $ioctl$s, and the way the drivers should implement this.
 \section{Standardizing through another software level}
 \label{cdrom.c}
 
-At the time this document is written, all drivers directly implement
+At the time this document was conceived, all drivers directly implement
 the $ioctl()$ calls through their own routines, with the danger of
 forgetting calls to $verify_area()$ and the risk of divergence in
 implementation. 
@@ -160,7 +160,8 @@ classical block-device file operations $<block-device>_fops$.
 
 The extra interfacing level routines are implemented in a file
 \cdromc, and a low-level \cdrom\ driver hands over the interfacing to
-the kernel by registering the following general $struct\ file_operations$:
+the kernel by registering the following general $struct\ 
+file_operations$:
 $$
 \halign{$#$\ \hfil&$#$\ \hfil&$/*$ \rm# $*/$\hfil\cr
 struct& file_operations\ cdrom_fops = \{\hidewidth\cr
@@ -189,97 +190,150 @@ but these routines only implement certain {\em capabilities\/} that
 are typical to \cdrom\ (removable-media) devices.
 
 Registration of the \cdrom\ device driver should now be to the general
-routines in \cdromc, not to the VFS any more. This is done though the
-call
-$$register_cdrom(int\ major, char * name, 
-  struct\ cdrom_device_ops\ device_options)
-$$
+routines in \cdromc, not to the VFS any more. The interfacing with
+\cdromc\ is implemented trough two general structures, that contain
+information about the capabilities of the driver, and the specific
+drives on which the driver operates. The structures are seperated to
+contain information about
+\begin{description}
+\item[the low-level driver] It lists the routines that actually
+  implement cdrom operations, and hence the structure is called
+  $cdrom_device_ops$. The structure is conceptually connected to the
+  major number of the device (although some drivers may have have
+  different major numbers, as is the case for the IDE driver).
+\item[the specific drive] It lists the variables informative of the
+  drive that is driven, and hence the structure is called
+  $cdrom_device_info$. The structure is conceptually connected to the
+  minor number of the device.
+\end{description}
 
-The device operations structure lists the implemented routines for
-interfacing to the hardware, and some specifications of capabilities
-of the device, such as the maximum head-transfer rate.  [It is
-impossible to come up with a complete list of all capabilities of
-(future) \cdrom\ drives, as the developments in technology follow-up
-at an incredible rate. Maybe write-operation (WORM devices) will
-become very popular in the future.]  The list now is:
+The registration is done for each drive found by the driver (and hence
+for each minor number) though the call
+$$register_cdrom(kdev_t\ dev, char * name, 
+  struct\ cdrom_device_info\ <device>_info)
+$$
+This device information structure (described shortly) contains all
+information needed for the kernel to interface with the low-level
+cdrom device driver. One of the main entries of this structure is a
+pointer to the $cdrom_device_ops$ structure of the driver.
+
+This device operations structure lists the implemented routines for
+interfacing to the hardware. [It is impossible to come up with a
+complete list of all capabilities of (future) \cdrom\ drives, as the
+developments in technology follow-up at an incredible rate. Maybe
+write-operation (WORM devices) will become very popular in the
+future.]  The list now is:
 $$
 \halign{$#$\ \hfil&$#$\ \hfil&\hbox to 10em{$#$\hss}&
   $/*$ \rm# $*/$\hfil\cr
 struct& cdrom_device_ops\ \{ \hidewidth\cr
-  &int& (* open)(kdev_t, int)\cr
-  &void& (* release)(kdev_t);\cr 
-  &int& (* open_files)(kdev_t);  \cr
-  &int& (* drive_status)(kdev_t);\cr     
-  &int& (* disc_status)(kdev_t);\cr      
-  &int& (* media_changed)(kdev_t);\cr 
-  &int& (* tray_move)(kdev_t, int);\cr
-  &int& (* lock_door)(kdev_t, int);\cr
-  &int& (* select_speed)(kdev_t, int);\cr
-  &int& (* select_disc)(kdev_t, int);\cr
-  &int& (* get_last_session) (kdev_t, struct\ cdrom_multisession *{});\cr
-  &int& (* get_mcn)(kdev_t, struct\ cdrom_mcn *{});\cr
-  &int& (* reset)(kdev_t);\cr
-  &int& (* audio_ioctl)(kdev_t, unsigned\ int, void *{});\cr 
-  &int& (* dev_ioctl)(kdev_t, unsigned\ int, unsigned\ long);\cr
+  &int& (* open)(struct\ cdrom_device_info *, int)\cr
+  &void& (* release)(struct\ cdrom_device_info *);\cr 
+  &int& (* drive_status)(struct\ cdrom_device_info *);\cr     
+  &int& (* disc_status)(struct\ cdrom_device_info *);\cr      
+  &int& (* media_changed)(struct\ cdrom_device_info *, int);\cr 
+  &int& (* tray_move)(struct\ cdrom_device_info *, int);\cr
+  &int& (* lock_door)(struct\ cdrom_device_info *, int);\cr
+  &int& (* select_speed)(struct\ cdrom_device_info *, int);\cr
+  &int& (* select_disc)(struct\ cdrom_device_info *, int);\cr
+  &int& (* get_last_session) (struct\ cdrom_device_info *, struct\ cdrom_multisession *{});\cr
+  &int& (* get_mcn)(struct\ cdrom_device_info *, struct\ cdrom_mcn *{});\cr
+  &int& (* reset)(struct\ cdrom_device_info *);\cr
+  &int& (* audio_ioctl)(struct\ cdrom_device_info *, unsigned\ int, void *{});\cr 
+  &int& (* dev_ioctl)(struct\ cdrom_device_info *, unsigned\ int, unsigned\ long);\cr
 \noalign{\medskip}
   &\llap{const\ }int& capability;&  capability flags \cr
-  &int& mask;& mask of capability: disables them \cr
-  &\llap{$const\ $}int& speed;&  maximum speed for reading data \cr
-  &\llap{$const\ $}int& minors;& number of supported minor devices \cr
-  &\llap{$const\ $}int& capacity;& number of discs in jukebox \cr
-\noalign{\medskip}
-  &int& options;& options flags \cr
-  &long& mc_flags;& media-change buffer flags ($2\times16$) \cr
-\}\cr
+  &int& n_minors;& number of supported minor devices \cr
 }
-$$ The \cdrom-driver should simply implement (some of) these
+$$
+The \cdrom-driver should simply implement (some of) these
 functions, and register the functions to the global \cdrom\ driver,
 which performs interfacing with the Virtual File System and system
 $ioctl$s. The flags $capability$ specify the hardware-capabilities on
-registration of the device, the flags $mask$ can be used to mask some
-of those capabilities (for one reason or another). The value $minors$
-should be a positive value indicating the number of minor devices that
-are supported by the driver, normally~1.  (They are supposed to be
-numbered from 0 upwards). The value $capacity$ should be the number of
-discs the drive can hold simultaneously, if it is designed as a
-juke-box, or otherwise~1.
-
-Two registers contain variables local to the \cdrom\ device. The flags
-$options$ are used to specify how the general \cdrom\ routines
-should behave. These various flags registers should provide enough
-flexibility to adapt to the different user's wishes (and {\em not\/}
-the `arbitrary' wishes of the author of the low-level device driver,
-as is the case in the old scheme). The register $mc_flags$ is used to
-buffer the information from $media_changed()$ to two separate queues. 
+registration of the device. The value $n_minors$ should be a positive
+value indicating the number of minor devices that are supported by the
+driver, normally~1. Although these two variables are `informative'
+rather than `operational,' they are included in $cdrom_device_ops$
+because they describe the cabability of the {\em driver\/} rather than
+the {\em drive}. Nomenclature has always been difficult in computer
+programming. 
 
 Note that most functions have fewer parameters than their
 $blkdev_fops$ counterparts. This is because very little of the
 information in the structures $inode$ and $file$ are used, the main
 parameter is the device $dev$, from which the minor-number can be
 extracted. (Most low-level \cdrom\ drivers don't even look at that value
-as only one device is supported.)
+as only one device is supported.) This will be available through $dev$
+in $cdrom_device_info$ described below. 
+
+The drive-specific, minor-like information that is registered to
+\cdromc, contains the following fields:
+$$
+\halign{$#$\ \hfil&$#$\ \hfil&\hbox to 10em{$#$\hss}&
+  $/*$ \rm# $*/$\hfil\cr
+struct& cdrom_device_info\ \{ \hidewidth\cr
+  & \llap{$const\ $}struct\ cdrom_device_ops *& ops;& device operations for this major\cr
+  & struct\ cdrom_device_info *& next;& next device_info for this major\cr
+  & void *&  handle;& driver-dependent data\cr
+\noalign{\medskip}
+  & \llap{$const\ $}kdev_t&  dev;& device number (incorporates minor)/\cr
+  & int& mask;& mask of capability: disables them \cr
+  &\llap{$const\ $}int& speed;&  maximum speed for reading data \cr
+  &\llap{$const\ $}int& n_discs;& number of discs in jukebox \cr
+\noalign{\medskip}
+  &int& options : 30;& options flags \cr
+  &long& mc_flags : 2;& media-change buffer flags \cr
+  & int& use_count;& number of times devices is opened\cr
+\}\cr
+}$$
+
+With this $struct$, a linked list of minor devices registrered with
+the same low-level driver is built, though the field $next$.  The
+device number, the device operations struct and specifications of
+properties of the drive are stored in this structure.
+
+The flags $mask$ can be used to mask out some of the capabilities
+listed in $ops\to capability$, if a specific drive doesn't support a
+feature of the driver. The value $speed$ specifies the maximum
+head-rate of the drive, measured in units of normal audio speed
+(176\,kB/sec raw data or 150\,kB/sec filesystem data).  The value
+$n_discs$ should reflect the number of discs the drive can hold
+simultaneously, if it is designed as a juke-box, or otherwise~1.
+The parameters are declared $const$ because they describe properties
+of the drive, which don't change after registration. 
+
+A few registers contain variables local to the \cdrom\ drive. The
+flags $options$ are used to specify how the general \cdrom\ routines
+should behave. These various flags registers should provide enough
+flexibility to adapt to the different user's wishes (and {\em not\/}
+the `arbitrary' wishes of the author of the low-level device driver,
+as is the case in the old scheme). The register $mc_flags$ is used to
+buffer the information from $media_changed()$ to two separate queues.
+Other data that is specific to minor drive, can be accessed through
+$handle$, which can point to a data structure specific to the
+low-level driver. The fields $use_count$, $next$, $options$ and
+$mc_flags$ need not be initialized.
 
 The intermediate software layer that \cdromc\ forms will performs some
-additional bookkeeping. The minor number of the device is checked
-against the maximum registered in $<device>_dops$. The function
-$cdrom_ioctl()$ will verify the appropriate user-memory regions for
-read and write, and in case a location on the CD is transferred, it
-will `sanitize' the format by making requests to the low-level drivers
-in a standard format, and translating all formats between the
-user-software and low level drivers. This relieves much of the drivers
-memory checking and format checking and translation. Also, the
-necessary structures will be declared on the program stack.
+additional bookkeeping. The use count of the device (the number of
+processes that have the device opened) is registered in $use_count$.
+The function $cdrom_ioctl()$ will verify the appropriate user-memory
+regions for read and write, and in case a location on the CD is
+transferred, it will `sanitize' the format by making requests to the
+low-level drivers in a standard format, and translating all formats
+between the user-software and low level drivers. This relieves much of
+the drivers memory checking and format checking and translation. Also,
+the necessary structures will be declared on the program stack.
 
 The implementation of the functions should be as defined in the
-following sections. Three functions {\em must\/} be implemented,
-namely $open()$, $release()$ and $open_files()$. Other functions may
-be omitted, their corresponding capability flags will be cleared upon
-registration. Generally, a function returns zero on success and
-negative on error. A function call should return only after the
-command has completed, but of course waiting for the device should not
-use processor time.
+following sections. Two functions {\em must\/} be implemented, namely
+$open()$ and $release()$. Other functions may be omitted, their
+corresponding capability flags will be cleared upon registration.
+Generally, a function returns zero on success and negative on error. A
+function call should return only after the command has completed, but
+of course waiting for the device should not use processor time.
 
-\subsection{$Open(kdev_t\ dev, int\ purpose)$}
+\subsection{$Open(struct\ cdrom_device_info * cdi, int\ purpose)$}
 
 $Open()$ should try to open the device for a specific $purpose$, which
 can be either:
@@ -289,36 +343,27 @@ user commands {\tt dd} or {\tt cat}.
 \item[1] Open for $ioctl$ commanding, as is used for audio-CD playing
 programs mostly. 
 \end{itemize}
-In this routine, a static counter should be updated, reflecting the
-number of times the specific device is successfully opened (and in
-case the driver supports modules, the call $MOD_INC_USE_COUNT$
-should be performed exactly once, if successful). The return value is
-negative on error, and zero on success. The open-for-ioctl call can
-only fail if there is no hardware.
+In case the driver supports modules, the call $MOD_INC_USE_COUNT$
+should be performed exactly once, if the $open()$ was successful. The
+return value is negative on error, and zero on success. The
+open-for-ioctl call can only fail if there is no hardware.
 
 Notice that any strategic code (closing tray upon $open()$, etc.)\ is
 done by the calling routine in \cdromc, so the low-level routine
 should only be concerned with proper initialization and device-use
 count.
 
-\subsection{$Release(kdev_t\ dev)$}
+\subsection{$Release(struct\ cdrom_device_info * cdi)$}
 
-The use-count of the device $dev$ should be decreased by 1, and a
-single call $MOD_DEC_USE_COUNT$ should be coded here.  Possibly other
-device-specific actions should be taken such as spinning down the
-device. However, strategic actions such as ejection of the tray, or
-unlocking the door, should be left over to the general routine
-$cdrom_release()$. Also, the invalidation of the allocated buffers in
-the VFS is taken care of by the routine in \cdromc.
+In case of module support, a single call $MOD_DEC_USE_COUNT$ should be
+coded here.  Possibly other device-specific actions should be taken
+such as spinning down the device. However, strategic actions such as
+ejection of the tray, or unlocking the door, should be left over to
+the general routine $cdrom_release()$. Also, the invalidation of the
+allocated buffers in the VFS is taken care of by the routine in
+\cdromc.
 
-\subsection{$Open_files(kdev_t\ dev)$}
-
-This function should return the internal variable use-count of the
-device $dev$. The use-count is not implemented in the routines in
-\cdromc\ itself, because there may be many minor devices connected to
-a single low-level driver.
-
-\subsection{$Drive_status(kdev_t\ dev)$}
+\subsection{$Drive_status(struct\ cdrom_device_info * cdi)$}
 \label{drive status}
 
 The function $drive_status$, if implemented, should provide
@@ -334,15 +379,19 @@ CDS_DRIVE_NOT_READY& something is wrong, tray is moving?\cr
 CDS_DISC_OK& a disc is loaded and everything is fine\cr
 }
 $$
+%For a juke-box, the second argument $drive_nr$ specifies information
+%is requested for another than the default disc ($drive_nr=0$),
+%possibly only a subset of the return values can be returned.
 
-\subsection{$Disc_status(kdev_t\ dev)$}
+\subsection{$Disc_status(struct\ cdrom_device_info * cdi)$}
 \label{disc status}
 
 As a complement to $drive_status()$, this function can provide the
-general \cdrom-routines with information about the current disc that is
-inserted in the drive represented by $dev$. The history of development
-of the CD's use as a carrier medium for various digital information
-has lead to many different disc types, hence this function can return:
+general \cdrom-routines with information about the current disc that
+is inserted in the drive represented by $cdi\to dev$. The history of
+development of the CD's use as a carrier medium for various digital
+information has lead to many different disc types, hence this function
+can return:
 $$
 \halign{$#$\ \hfil&$/*$ \rm# $*/$\hfil\cr
 CDS_NO_INFO& no information available\cr
@@ -358,16 +407,18 @@ As far as I know, \cdrom s are always of type $CDS_DATA_1$. For
 some information concerning frame layout of the various disc types, see
 a recent version of {\tt cdrom.h}. 
 
-\subsection{$Media_changed(dev\_t\ dev)$}
+\subsection{$Media_changed(struct\ cdrom_device_info * cdi, int disc_nr)$}
 
-This function is very similar to the original function in $struct\
-file_operations$. It returns 1 if the medium of the device $dev$ has
-changed since the last call, and 0 otherwise. Note that by `re-routing'
-this function through $cdrom_media_changed()$, we can implement
-separate queues for the VFS and a new $ioctl()$ function that can
-report device changes to software (e.g., an auto-mounting daemon). 
+This function is very similar to the original function in $struct\ 
+file_operations$. It returns 1 if the medium of the device $cdi\to
+dev$ has changed since the last call, and 0 otherwise. The parameter
+$disc_nr$ identifies a specific slot in a juke-box, it should be
+ignored for single-disc drives.  Note that by `re-routing' this
+function through $cdrom_media_changed()$, we can implement separate
+queues for the VFS and a new $ioctl()$ function that can report device
+changes to software (e.g., an auto-mounting daemon).
 
-\subsection{$Tray_move(kdev_t\ dev, int\ position)$}
+\subsection{$Tray_move(struct\ cdrom_device_info * cdi, int\ position)$}
 
 This function, if implemented, should control the tray movement. (No
 other function should control this.) The parameter $position$ controls
@@ -380,7 +431,7 @@ This function returns 0 upon success, and a non-zero value upon
 error. Note that if the tray is already in the desired position, no
 action need be taken, and the return value should be 0. 
 
-\subsection{$Lock_door(kdev_t\ dev, int\ lock)$}
+\subsection{$Lock_door(struct\ cdrom_device_info * cdi, int\ lock)$}
 
 This function (and no other code) controls locking of the door, if the
 drive allows this. The value of $lock$ controls the desired locking
@@ -391,7 +442,7 @@ state:
 \end{itemize}
 Return values are as for $tray_move()$.
 
-\subsection{$Select_speed(kdev_t\ dev, int\ speed)$}
+\subsection{$Select_speed(struct\ cdrom_device_info * cdi, int\ speed)$}
 
 Although none of the drivers has implemented this function so far,
 some drives are capable of head-speed selection, and hence this is a
@@ -407,48 +458,48 @@ for it, more than real-time playback of audio might be used for
 high-speed copying of audio tracks). Badly pressed \cdrom s may
 benefit from less-than-maximum head rate.
 
-\subsection{$Select_disc(kdev_t\ dev, int\ number)$}
+\subsection{$Select_disc(struct\ cdrom_device_info * cdi, int\ number)$}
 
-If the drive can store multiple discs (a juke-box), it is likely that
-a disc selection can be made by software. This function should perform
-disc selection. It should return the number of the selected disc on
-success, a negative value on error. Currently, none of the \linux\ 
-\cdrom\ drivers appears to support such functionality, but it is defined
-here for future purposes.
+If the drive can store multiple discs (a juke-box) this function
+should perform disc selection. It should return the number of the
+selected disc on success, a negative value on error. Currently, only
+the IDE-cd driver supports such functionality.
 
-\subsection{$Get_last_session(kdev_t\ dev, struct\ cdrom_multisession *
-ms_info)$}
+\subsection{$Get_last_session(struct\ cdrom_device_info * cdi, struct\
+  cdrom_multisession * ms_info)$}
 
 This function should implement the old corresponding $ioctl()$. For
-device $dev$, the start of the last session of the current disc should
-be returned in the pointer argument $ms_info$. Note that routines in \cdromc\ have sanitized this argument: its
-requested format will {\em always\/} be of the type $CDROM_LBA$
-(linear block addressing mode), whatever the calling software
-requested. But sanitization goes even further: the low-level
-implementation may return the requested information in $CDROM_MSF$
-format if it wishes so (setting the $ms_info\rightarrow addr_format$
-field appropriately, of course) and the routines in \cdromc\ will make
-the transform if necessary. The return value is 0 upon success.
+device $cdi->dev$, the start of the last session of the current disc
+should be returned in the pointer argument $ms_info$. Note that
+routines in \cdromc\ have sanitized this argument: its requested
+format will {\em always\/} be of the type $CDROM_LBA$ (linear block
+addressing mode), whatever the calling software requested. But
+sanitization goes even further: the low-level implementation may
+return the requested information in $CDROM_MSF$ format if it wishes so
+(setting the $ms_info\rightarrow addr_format$ field appropriately, of
+course) and the routines in \cdromc\ will make the transform if
+necessary. The return value is 0 upon success.
 
-\subsection{$Get_mcn(kdev_t\ dev, struct\ cdrom_mcn * mcn)$}
+\subsection{$Get_mcn(struct\ cdrom_device_info * cdi, struct\
+  cdrom_mcn * mcn)$}
 
 Some discs carry a `Media Catalog Number' (MCN), also called
-`Universal Product Code' (UPC). This number should reflect the number that
-is generally found in the bar-code on the product. Unfortunately, the
-few discs that carry such a number on the disc don't even use the same
-format. The return argument to this function is a pointer to a
+`Universal Product Code' (UPC). This number should reflect the number
+that is generally found in the bar-code on the product. Unfortunately,
+the few discs that carry such a number on the disc don't even use the
+same format. The return argument to this function is a pointer to a
 pre-declared memory region of type $struct\ cdrom_mcn$. The MCN is
 expected as a 13-character string, terminated by a null-character.
 
-\subsection{$Reset(kdev_t dev)$}
+\subsection{$Reset(struct\ cdrom_device_info * cdi)$}
 
 This call should implement hard-resetting the drive (although in
 circumstances that a hard-reset is necessary, a drive may very well
 not listen to commands anymore). Preferably, control is returned to the
 caller only after the drive has finished resetting.
 
-\subsection{$Audio_ioctl(kdev_t\ dev, unsigned\ int\ cmd, void *
-arg)$}
+\subsection{$Audio_ioctl(struct\ cdrom_device_info * cdi, unsigned\
+  int\ cmd, void * arg)$}
 
 Some of the \cdrom-$ioctl$s defined in {\tt cdrom.h} can be
 implemented by the routines described above, and hence the function
@@ -471,8 +522,8 @@ errors should be according to the standards, whatever they are. (We
 may decide to sanitize the return value in $cdrom_ioctl()$, in order
 to guarantee a uniform interface to the audio-player software.)
 
-\subsection{$Dev_ioctl(kdev_t\ dev, unsigned\ int\ cmd, unsigned\ long\
-arg)$}
+\subsection{$Dev_ioctl(struct\ cdrom_device_info * cdi, unsigned\ int\
+  cmd, unsigned\ long\ arg)$}
 
 Some $ioctl$s seem to be specific to certain \cdrom\ drives. That is,
 they are introduced to service some capabilities of certain drives. In
@@ -485,17 +536,18 @@ problem here could be the fact that audio-frames are 2352 bytes long,
 so either the audio-file-system should ask for 75264 bytes at once
 (the least common multiple of 512 and 2352), or the drivers should
 bend their backs to cope with this incoherence (to which I would be
-opposed). Once this question is resolved, this code should be standardized in 
-\cdromc.
+opposed). Once this question is resolved, this code should be
+standardized in \cdromc.
 
 Because there are so many $ioctl$s that seem to be introduced to
-satisfy certain drivers,\footnote{Is there software around that actually uses
-these? I'd be interested!} any `non-standard' $ioctl$s are routed through
-the call $dev_ioctl()$. In principle, `private' $ioctl$s should be
-numbered after the device's major number, and not the general \cdrom\
-$ioctl$ number, {\tt 0x53}. Currently the non-supported $ioctl$s are:
-{\it CDROMREADMODE1, CDROMREADMODE2, CDROMREADAUDIO, CDROMREADRAW,
-CDROMREADCOOKED, CDROMSEEK, CDROMPLAY\-BLK and CDROMREADALL}. 
+satisfy certain drivers,\footnote{Is there software around that
+  actually uses these? I'd be interested!} any `non-standard' $ioctl$s
+are routed through the call $dev_ioctl()$. In principle, `private'
+$ioctl$s should be numbered after the device's major number, and not
+the general \cdrom\ $ioctl$ number, {\tt 0x53}. Currently the
+non-supported $ioctl$s are: {\it CDROMREADMODE1, CDROMREADMODE2,
+  CDROMREADAUDIO, CDROMREADRAW, CDROMREADCOOKED, CDROMSEEK,
+  CDROMPLAY\-BLK and CDROMREADALL}.
 
 \subsection{\cdrom\ capabilities}
 
@@ -518,24 +570,24 @@ CDC_PLAY_AUDIO& can perform audio-functions (play, pause, etc)\cr
 }
 $$
 The capability flag is declared $const$, to prevent drivers from
-accidentally tampering with the contents. However, upon registration,
-some (claimed) capability flags may be cleared if the supporting
-function has not been implemented (see $register_cdrom()$ in
-\cdromc). 
+accidentally tampering with the contents. The capability fags actually
+inform \cdromc\ on what the driver is capable of. If the drive found
+by the driver does not have the capability, is can be masked out by
+the $cdrom_device_info$ variable $mask$. For instance, the SCSI cdrom
+driver has implemeted the code for loading and ejecting cdrom's, and
+hence its corresponding flags in $capability$ will be set. But a SCSI
+cdrom drive might be a caddy system, which can't load the tray, and
+hence for this drive the $cdrom_device_info$ struct will have set
+the $CDC_CLOSE_TRAY$ bit in $mask$.
 
-If you want to disable any of the capabilities, there is a special
-flag register $<device>_dops.mask$ that may (temporarily) disable
-certain capabilities. In the file \cdromc\ you will encounter many
-constructions of the type 
+In the file \cdromc\ you will encounter many constructions of the type
 $$\it
-if\ (cdo\rightarrow capability \mathrel\& \mathord{\sim} cdo\rightarrow mask 
+if\ (cdo\rightarrow capability \mathrel\& \mathord{\sim} cdi\rightarrow mask 
    \mathrel{\&} CDC_<capability>) \ldots
 $$
-The $mask$ could be set in the low-level driver code to disable
-certain capabilities for special brands of the device that can't
-perform the actions.  However, there is not (yet) an $ioctl$ to set
-the mask\dots The reason is that I think it is better to control the
-{\em behavior\/} rather than the {\em capabilities}.
+There is no $ioctl$ to set the mask\dots The reason is that
+I think it is better to control the {\em behavior\/} rather than the
+{\em capabilities}.
 
 \subsection{Options}
 
@@ -707,22 +759,37 @@ $$
 register_blkdev(major, <name>, \&cdrom_fops);
 $$
 
-\subsection{$Int\ register_cdrom(int\ major, char * name, struct\
-cdrom_device_ops\ * cdo)$}
+\subsection{$Int\ register_cdrom(kdev_t\ dev, char * name, struct\
+cdrom_device_info\ * cdi)$}
 
 Similar to registering $cdrom_fops$ to the kernel, the device
-operations structure, as described in section~\ref{cdrom.c}, should be
-registered to the general \cdrom\ interface:
+operations and information structures, as described in
+section~\ref{cdrom.c}, should be registered to the general \cdrom\ 
+interface:
 $$
-register_cdrom(major, <name>, \&<device>_dops);
+register_cdrom(dev, <name>, \&<device>_info);
 $$
-This function returns zero upon success, and non-zero upon failure. 
+This function returns zero upon success, and non-zero upon
+failure. The structure $<device>_info$ should have a pointer the
+driver's $<device>_dops$, as in 
+$$
+\vbox{\halign{&$#$\hfil\cr
+struct\ &cdrom_device_info\ <device>_info = \{\cr
+& <device>_dops;\cr
+&\ldots\cr
+\}\cr
+}}$$
+Note that a drivers has one static structure, $<device>_dops$, while
+it has as many structures $<device>_info$ as there are minor devices
+active. $Register_cdrom()$ builds a linked list from these. 
 
-\subsection{$Int\ unregister_cdrom(int\ major, char * name)$}
+\subsection{$Int\ unregister_cdrom(struct\ cdrom_device_info * cdi)$}
 
-Unregistering device $name$ with major number $major$ disconnects the
-registered device-operation routines from the \cdrom\ interface.
-This function returns zero upon success, and non-zero upon failure. 
+Unregistering device $cdi$ with minor number $MINOR(cdi\to dev)$
+removes the minor device from the list. If it was the last minor for
+the driver, this disconnects the registered device-operation routines
+from the \cdrom\ interface. This function returns zero upon success,
+and non-zero upon failure.
 
 \subsection{$Int\ cdrom_open(struct\ inode * ip, struct\ file * fp)$}
 
@@ -786,7 +853,7 @@ specified by $arg$ of type $struct\ cdrom_tocentry *{}$.
 \item[CDROMPLAYMSF] Play audio fragment specified in Minute, Second,
 Frame format, delimited by $arg$ of type $struct\ cdrom_msf *{}$.
 \item[CDROMPLAYTRKIND] Play audio fragment in track-index format
-delimited by $arg$ of type $struct cdrom_ti *{}$.
+delimited by $arg$ of type $struct\ cdrom_ti *{}$.
 \item[CDROMVOLCTRL] Set volume specified by $arg$ of type $struct\
 cdrom_volctrl *{}$.
 \item[CDROMVOLREAD] Read volume into by $arg$ of type $struct\
@@ -887,12 +954,18 @@ way.
 
 \section{Thanks}
 
-Thanks to all the people involved. Thanks to Thomas Quinot, Jon Tombs,
-Ken Pizzini, Eberhard M\"onkeberg and Andrew Kroll, the \linux\ 
-\cdrom\ device driver developers who were kind enough to give
+Thanks to all the people involved. Thanks to Scott Snyder and Gerd
+Knorr, who were the first to implement this interface for SCSI and
+IDE-CD drivers and added many ideas for extension of the data
+structures relative to kernel~2.0. Further thanks to Thomas Quinot,
+Jon Tombs, Ken Pizzini, Eberhard M\"onkeberg and Andrew Kroll, the
+\linux\ \cdrom\ device driver developers who were kind enough to give
 suggestions and criticisms during the writing. Finally of course, I
 want to thank Linus Torvalds for making this possible in the first
 place.
 
+\vfill
+$\version$
+\eject
 \end{document}
 

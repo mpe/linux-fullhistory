@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.27 1996/04/18 01:33:42 davem Exp $
+/* $Id: page.h,v 1.30 1996/10/27 08:55:30 davem Exp $
  * page.h:  Various defines and such for MMU operations on the Sparc for
  *          the Linux kernel.
  *
@@ -11,12 +11,25 @@
 #include <asm/head.h>       /* for KERNBASE */
 
 #define PAGE_SHIFT   12
-#define PAGE_OFFSET  KERNBASE
 #define PAGE_SIZE    (1 << PAGE_SHIFT)
 #define PAGE_MASK    (~(PAGE_SIZE-1))
 
 #ifdef __KERNEL__
 #ifndef __ASSEMBLY__
+
+#define clear_page(page)	memset((void *)(page), 0, PAGE_SIZE)
+#define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
+
+extern unsigned long page_offset;
+
+#define PAGE_OFFSET  (page_offset)
+
+/* translate between physical and virtual addresses */
+extern unsigned long (*mmu_v2p)(unsigned long);
+extern unsigned long (*mmu_p2v)(unsigned long);
+
+#define __pa(x)    mmu_v2p(x)
+#define __va(x)    mmu_p2v(x)
 
 /* The following structure is used to hold the physical
  * memory configuration of the machine.  This is filled in
@@ -105,11 +118,15 @@ typedef unsigned long iopgprot_t;
 
 #endif
 
+extern unsigned long sparc_unmapped_base;
+
+#define TASK_UNMAPPED_BASE	(sparc_unmapped_base)
+
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)  (((addr)+PAGE_SIZE-1)&PAGE_MASK)
 
-/* We now put the free page pool mapped contiguously in high memory above
- * the kernel.
+/* Now, to allow for very large physical memory configurations we
+ * place the page pool both above the kernel and below the kernel.
  */
 #define MAP_NR(addr) ((((unsigned long) (addr)) - PAGE_OFFSET) >> PAGE_SHIFT)
 

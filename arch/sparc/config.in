@@ -1,15 +1,35 @@
-# $Id: config.in,v 1.12 1996/04/24 03:15:38 davem Exp $
+# $Id: config.in,v 1.23 1996/10/28 01:24:40 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
-mainmenu_name "Kernel configuration of Linux for SparcStations"
+mainmenu_name "Linux/SPARC Kernel Configuration"
+
+mainmenu_option next_comment
+comment 'Code maturity level options'
+bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
+endmenu
+
+mainmenu_option next_comment
+comment 'Loadable module support'
+bool 'Enable loadable module support' CONFIG_MODULES
+if [ "$CONFIG_MODULES" = "y" ]; then
+  bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
+  bool 'Kernel daemon support (e.g. autoload of modules)' CONFIG_KERNELD
+fi
+endmenu
 
 mainmenu_option next_comment
 comment 'General setup'
 
 bool 'Support for AP1000 multicomputer' CONFIG_AP1000
 
-if [ "$CONFIG_AP1000" = "n" ]; then
+if [ "$CONFIG_AP1000" = "y" ]; then
+	define_bool CONFIG_NO_KEYBOARD y
+	define_bool CONFIG_APFDDI y
+	define_bool CONFIG_APBLOCK y
+	define_bool CONFIG_APBIF y
+	define_bool CONFIG_DDV y
+else
 	# Global things across all Sun machines.
 	define_bool CONFIG_SBUS y
 	define_bool CONFIG_SBUSCHAR y
@@ -20,21 +40,23 @@ if [ "$CONFIG_AP1000" = "n" ]; then
 	define_bool CONFIG_SUN_CONSOLE y
 	define_bool CONFIG_SUN_AUXIO y
 	define_bool CONFIG_SUN_IO y
+	source drivers/sbus/char/Config.in
 fi
 
-define_bool CONFIG_NET_ALIAS n
-define_bool CONFIG_BINFMT_AOUT y
-
-
+tristate 'Openprom tree appears in /proc/openprom (EXPERIMENTAL)' CONFIG_SUN_OPENPROMFS
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
+tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'Kernel support for JAVA binaries' CONFIG_BINFMT_JAVA
+fi
 endmenu
 
 mainmenu_option next_comment
 comment 'Floppy, IDE, and other block devices'
 
-tristate 'Normal floppy disk support' CONFIG_BLK_DEV_FD
+bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD
 
 bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD
 if [ "$CONFIG_BLK_DEV_MD" = "y" ]; then
@@ -48,6 +70,8 @@ if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
 fi
 
 tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
+
+endmenu
 
 if [ "$CONFIG_NET" = "y" ]; then
 	source net/Config.in
@@ -75,7 +99,8 @@ if [ "$CONFIG_SCSI" != "n" ]; then
 	mainmenu_option next_comment
 	comment 'SCSI low-level drivers'
 
-	dep_tristate 'Sparc ESP Scsi Driver' CONFIG_SCSI_SUNESP $CONFIG_SCSI
+	bool 'Sparc ESP Scsi Driver' CONFIG_SCSI_SUNESP $CONFIG_SCSI
+	endmenu
 fi
 endmenu
 
@@ -86,16 +111,21 @@ if [ "$CONFIG_NET" = "y" ]; then
 	bool 'Network device support' CONFIG_NETDEVICES
 	if [ "$CONFIG_NETDEVICES" = "y" ]; then
 		tristate 'Dummy net driver support' CONFIG_DUMMY
+		tristate 'PPP (point-to-point) support' CONFIG_PPP
+		if [ ! "$CONFIG_PPP" = "n" ]; then
+		   comment 'CCP compressors for PPP are only built as modules.'
+		fi
 		tristate 'SLIP (serial line) support' CONFIG_SLIP
 		if [ "$CONFIG_SLIP" != "n" ]; then
 		  bool ' CSLIP compressed headers' CONFIG_SLIP_COMPRESSED
 		  bool ' Keepalive and linefill' CONFIG_SLIP_SMART
-		fi
-		tristate 'PPP (point-to-point) support' CONFIG_PPP
-		if [ ! "$CONFIG_PPP" = "n" ]; then
-		  comment 'CCP compressors for PPP are only built as modules.'
+		  bool ' Six bit SLIP encapsulation' CONFIG_SLIP_MODE_SLIP6
 		fi
 		bool 'Sun LANCE support' CONFIG_SUNLANCE
+		bool 'Sun Happy Meal 10/100baseT support' CONFIG_HAPPYMEAL
+#		bool 'FDDI driver support' CONFIG_FDDI
+#		if [ "$CONFIG_FDDI" = "y" ]; then
+#		fi
 	fi
 	endmenu
 fi
@@ -109,3 +139,4 @@ bool 'Kernel profiling support' CONFIG_PROFILE
 if [ "$CONFIG_PROFILE" = "y" ]; then
 	int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 fi
+endmenu

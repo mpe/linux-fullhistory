@@ -20,16 +20,6 @@ L_OBJS   :=
 M_OBJS   :=
 MOD_LIST_NAME := CDROM_MODULES
 
-# The following if's should be generalized (ORed) for all drivers that 
-# use the generic interface of cdrom.c 
-ifeq ($(CONFIG_CM206),y)
-L_OBJS += cdrom.o
-else
-  ifeq ($(CONFIG_CM206),m)
-  M_OBJS += cdrom.o
-  endif
-endif 
-
 ifeq ($(CONFIG_AZTCD),y)
 L_OBJS += aztcd.o
 else
@@ -100,9 +90,11 @@ endif #CONFIG_GSCD
 
 ifeq ($(CONFIG_CM206),y)
 L_OBJS += cm206.o
+C = 1 
 else
   ifeq ($(CONFIG_CM206),m)
   M_OBJS += cm206.o
+  CM = 1
   endif
 endif #CONFIG_CM206
 
@@ -136,4 +128,20 @@ else
   endif
 endif #CONFIG_ISP16_CDI
 
+ifeq ($(CONFIG_BLK_DEV_IDECD),y)
+USE_GENERIC_CD=1
+else
+  ifeq ($(CONFIG_BLK_DEV_IDECD),m)
+    USE_MODULAR_GENERIC_CD=1
+  endif
+endif #CONFIG_BLK_DEV_IDECD
+
+ifdef USE_GENERIC_CD
+L_OBJS += cdrom.o
+else
+  ifdef USE_MODULAR_GENERIC_CD
+  M_OBJS += cdrom.o
+  endif
+endif #The Makefile configuration for the generic cdrom interface
+  
 include $(TOPDIR)/Rules.make

@@ -1,8 +1,11 @@
-/* $Id: devops.c,v 1.4 1996/04/04 16:30:58 tridge Exp $
+/* $Id: devops.c,v 1.6 1996/10/12 12:37:38 davem Exp $
  * devops.c:  Device operations using the PROM.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
+#include <linux/types.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
@@ -15,42 +18,54 @@ int
 prom_devopen(char *dstr)
 {
 	int handle;
+	unsigned long flags;
+	save_flags(flags); cli();
 	switch(prom_vers) {
 	case PROM_V0:
 		handle = (*(romvec->pv_v0devops.v0_devopen))(dstr);
-		if(handle == 0) return -1;
-		return handle;
+		if(handle == 0) handle = -1;
 		break;
 	case PROM_V2:
 	case PROM_V3:
 	case PROM_P1275:
 		handle = (*(romvec->pv_v2devops.v2_dev_open))(dstr);
-		return handle;
 		break;
         case PROM_AP1000:
+	default:
+		handle = -1;
 		break;
 	};
+	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
+			     "r" (&current_set[smp_processor_id()]) :
+			     "memory");
+	restore_flags(flags);
 
-	return -1;
+	return handle;
 }
 
 /* Close the device described by device handle 'dhandle'. */
-void
-prom_close(int dhandle)
+int
+prom_devclose(int dhandle)
 {
+	unsigned long flags;
+	save_flags(flags); cli();
 	switch(prom_vers) {
 	case PROM_V0:
 		(*(romvec->pv_v0devops.v0_devclose))(dhandle);
-		return;
+		break;
 	case PROM_V2:
 	case PROM_V3:
 	case PROM_P1275:
 		(*(romvec->pv_v2devops.v2_dev_close))(dhandle);
-		return;
+		break;
         case PROM_AP1000:
-		return;
+		break;
 	};
-	return;
+	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
+			     "r" (&current_set[smp_processor_id()]) :
+			     "memory");
+	restore_flags(flags);
+	return 0;
 }
 
 /* Seek to specified location described by 'seekhi' and 'seeklo'
@@ -59,6 +74,8 @@ prom_close(int dhandle)
 void
 prom_seek(int dhandle, unsigned int seekhi, unsigned int seeklo)
 {
+	unsigned long flags;
+	save_flags(flags); cli();
 	switch(prom_vers) {
 	case PROM_V0:
 		(*(romvec->pv_v0devops.v0_seekdev))(dhandle, seekhi, seeklo);
@@ -71,6 +88,10 @@ prom_seek(int dhandle, unsigned int seekhi, unsigned int seeklo)
         case PROM_AP1000:
 		break;
 	};
+	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
+			     "r" (&current_set[smp_processor_id()]) :
+			     "memory");
+	restore_flags(flags);
 
 	return;
 }

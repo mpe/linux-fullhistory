@@ -1047,6 +1047,17 @@ N: Greg Page
 E: greg@caldera.com
 D: IPX development and support
 
+N: Barak A. Pearlmutter
+E: bap@cs.unm.edu
+W: http://www.cs.unm.edu/~bap/
+P: 512/602D785D 9B A1 83 CD EE CB AD 93  20 C6 4C B7 F5 E9 60 D4
+D: Author of mark-and-sweep GC integrated by Alan Cox
+S: Computer Science Department
+S: FEC 313
+S: University of New Mexico
+S: Albuquerque, NM  87131
+S: USA
+
 N: Avery Pennarun
 E: apenwarr@foxnet.net
 D: ARCnet driver

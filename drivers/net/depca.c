@@ -37,9 +37,7 @@
     I have benchmarked the driver with a  DE100 at 595kB/s to (542kB/s from)
     a DECstation 5000/200.
 
-    The   author   may    be   reached  at    davies@wanton.lkg.dec.com   or
-    davies@maniac.ultranet.com  or Digital  Equipment Corporation, 550  King
-    Street, Littleton MA 01460.
+    The author may be reached at davies@maniac.ultranet.com
 
     =========================================================================
 
@@ -208,7 +206,7 @@
     =========================================================================
 */
 
-static const char *version = "depca.c:v0.43 96/8/16 davies@wanton.lkg.dec.com\n";
+static const char *version = "depca.c:v0.43 96/8/16 davies@maniac.ultranet.com\n";
 
 #include <linux/module.h>
 
@@ -650,7 +648,7 @@ depca_hw_init(struct device *dev, u_long ioaddr)
       status = -ENXIO;
     }
     if (!status) {
-      if (depca_debug > 0) {
+      if (depca_debug > 1) {
 	printk(version);
       }
 

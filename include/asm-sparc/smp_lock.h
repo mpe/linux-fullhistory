@@ -18,7 +18,7 @@
  */
 
 /* Knock knock... */
-extern __inline void lock_kernel(void)
+extern __inline__ void lock_kernel(void)
 {
 	unsigned long flags;
 	int proc = smp_processor_id();
@@ -40,7 +40,7 @@ extern __inline void lock_kernel(void)
 }
 
 /* I want out... */
-extern __inline void unlock_kernel(void)
+extern __inline__ void unlock_kernel(void)
 {
 	unsigned long flags;
 

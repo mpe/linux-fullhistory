@@ -213,6 +213,12 @@ M:	mlord@pobox.com
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+IDE/ATAPI CDROM DRIVER 
+P:	Erik Andersen
+M:	andersee@debian.org
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
 ISDN SUBSYSTEM
 P:	Fritz Elfert
 M:	fritz@wuemaus.franken.de
@@ -289,7 +295,7 @@ S:	Maintained
 SVGA HANDLING:
 P:	Martin Mares
 M:	mj@k332.feld.cvut.cz
-L:	linux-kernel@vger.rutgers.edu
+L:	linux-video@atrey.karlin.mff.cuni.cz
 S:	Maintained
 
 VFAT FILESYSTEM:

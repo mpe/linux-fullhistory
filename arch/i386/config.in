@@ -42,6 +42,7 @@ choice 'Processor type' \
 	 486		CONFIG_M486	\
 	 Pentium	CONFIG_M586	\
 	 PPro		CONFIG_M686" Pentium
+bool 'Video mode selection support' CONFIG_VIDEO_SELECT
 endmenu
 
 source drivers/block/Config.in

@@ -1,4 +1,4 @@
-/* $Id: mxcc.h,v 1.4 1996/04/25 06:13:21 davem Exp $
+/* $Id: mxcc.h,v 1.6 1996/08/29 09:48:27 davem Exp $
  * mxcc.h:  Definitions of the Viking MXCC registers
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -83,7 +83,7 @@
  * MID: The moduleID of the cpu your read this from.
  */
 
-extern inline void mxcc_set_stream_src(unsigned long *paddr)
+extern __inline__ void mxcc_set_stream_src(unsigned long *paddr)
 {
 	unsigned long data0 = paddr[0];
 	unsigned long data1 = paddr[1];
@@ -96,7 +96,7 @@ extern inline void mxcc_set_stream_src(unsigned long *paddr)
 			      "i" (ASI_M_MXCC) : "g2", "g3");
 }
 
-extern inline void mxcc_set_stream_dst(unsigned long *paddr)
+extern __inline__ void mxcc_set_stream_dst(unsigned long *paddr)
 {
 	unsigned long data0 = paddr[0];
 	unsigned long data1 = paddr[1];
@@ -107,6 +107,27 @@ extern inline void mxcc_set_stream_dst(unsigned long *paddr)
 			      "r" (data0), "r" (data1),
 			      "r" (MXCC_DESSTREAM),
 			      "i" (ASI_M_MXCC) : "g2", "g3");
+}
+
+extern __inline__ unsigned long mxcc_get_creg(void)
+{
+	unsigned long mxcc_control;
+
+	__asm__ __volatile__("set -1, %%g2\n\t"
+			     "set -1, %%g3\n\t"
+			     "stda %%g2, [%1] %2\n\t"
+			     "lda [%3] %2, %0\n\t" :
+			     "=r" (mxcc_control) :
+			     "r" (MXCC_EREG), "i" (ASI_M_MXCC),
+			     "r" (MXCC_CREG) : "g2", "g3");
+	return mxcc_control;
+}
+
+extern __inline__ void mxcc_set_creg(unsigned long mxcc_control)
+{
+	__asm__ __volatile__("sta %0, [%1] %2\n\t" : :
+			     "r" (mxcc_control), "r" (MXCC_CREG),
+			     "i" (ASI_M_MXCC));
 }
 
 #endif /* !(_SPARC_MXCC_H) */

@@ -61,7 +61,7 @@ static void tsu_clockstop(void)
 	if (!clk_ctrl)
 		return;
 	if (!(clk_state & CLOCK_INIT_DONE)) {
-		save_flags(flags); cli();
+		save_and_cli(flags);
 		clk_init();
 		clk_state |= CLOCK_INIT_DONE;       /* all done */
 		restore_flags(flags);
@@ -70,7 +70,7 @@ static void tsu_clockstop(void)
 	if (!(clk_ctrl[2] & 1))
 		return;               /* no speed up yet */
 
-	save_flags(flags); cli();
+	save_and_cli(flags);
 
 	/* if SCSI DMA in progress, don't slow clock */
 	mcsr = ldphys(MACIO_SCSI_CSR_ADDR);

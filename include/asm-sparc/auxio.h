@@ -1,4 +1,4 @@
-/* $Id: auxio.h,v 1.11 1996/04/25 06:12:45 davem Exp $
+/* $Id: auxio.h,v 1.14 1996/10/31 06:29:10 davem Exp $
  * auxio.h:  Definitions and code for the Auxiliary I/O register.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -22,6 +22,7 @@ extern unsigned char *auxio_register;
 #define AUXIO_FLPY_DCHG   0x10    /* A disk change occurred.  Read only. */
 #define AUXIO_EDGE_ON     0x10    /* sun4m - On means Jumper block is in. */
 #define AUXIO_FLPY_DSEL   0x08    /* Drive select/start-motor. Write only. */
+#define AUXIO_LINK_TEST   0x08    /* sun4m - On means TPE Carrier detect. */
 
 /* Set the following to one, then zero, after doing a pseudo DMA transfer. */
 #define AUXIO_FLPY_TCNT   0x04    /* Floppy terminal count. Write only. */
@@ -32,16 +33,17 @@ extern unsigned char *auxio_register;
 
 #define AUXREG   ((volatile unsigned char *)(auxio_register))
 
-#define TURN_ON_LED   *AUXREG = (*AUXREG | AUXIO_ORMEIN | AUXIO_LED)
-#define TURN_OFF_LED  *AUXREG = ((*AUXREG | AUXIO_ORMEIN) & (~AUXIO_LED))
-#define FLIP_LED      *AUXREG = ((*AUXREG | AUXIO_ORMEIN) ^ AUXIO_LED)
-#define FLPY_MOTORON  *AUXREG = ((*AUXREG | AUXIO_ORMEIN) | AUXIO_FLPY_DSEL)
-#define FLPY_MOTOROFF *AUXREG = ((*AUXREG | AUXIO_ORMEIN) & (~AUXIO_FLPY_DSEL))
-#define FLPY_TCNTON   *AUXREG = ((*AUXREG | AUXIO_ORMEIN) | AUXIO_FLPY_TCNT)
-#define FLPY_TCNTOFF  *AUXREG = ((*AUXREG | AUXIO_ORMEIN) & (~AUXIO_FLPY_TCNT))
+/* These are available on sun4c */
+#define TURN_ON_LED   if (AUXREG) *AUXREG = (*AUXREG | AUXIO_ORMEIN | AUXIO_LED)
+#define TURN_OFF_LED  if (AUXREG) *AUXREG = ((*AUXREG | AUXIO_ORMEIN) & (~AUXIO_LED))
+#define FLIP_LED      if (AUXREG) *AUXREG = ((*AUXREG | AUXIO_ORMEIN) ^ AUXIO_LED)
+#define FLPY_MOTORON  if (AUXREG) *AUXREG = ((*AUXREG | AUXIO_ORMEIN) | AUXIO_FLPY_DSEL)
+#define FLPY_MOTOROFF if (AUXREG) *AUXREG = ((*AUXREG | AUXIO_ORMEIN) & (~AUXIO_FLPY_DSEL))
+#define FLPY_TCNTON   if (AUXREG) *AUXREG = ((*AUXREG | AUXIO_ORMEIN) | AUXIO_FLPY_TCNT)
+#define FLPY_TCNTOFF  if (AUXREG) *AUXREG = ((*AUXREG | AUXIO_ORMEIN) & (~AUXIO_FLPY_TCNT))
 
 #ifndef __ASSEMBLY__
-extern inline void set_auxio(unsigned char bits_on, unsigned char bits_off)
+extern __inline__ void set_auxio(unsigned char bits_on, unsigned char bits_off)
 {
 	unsigned char regval;
 	unsigned long flags;

@@ -1,4 +1,4 @@
-/* $Id: umul.S,v 1.2 1995/11/25 00:59:08 davem Exp $
+/* $Id: umul.S,v 1.4 1996/09/30 02:22:39 davem Exp $
  * umul.S:      This routine was taken from glibc-1.09 and is covered
  *              by the GNU Library General Public License Version 2.
  */
@@ -24,9 +24,10 @@
 .umul:
 	or	%o0, %o1, %o4
 	mov	%o0, %y		! multiplier -> Y
+
 	andncc	%o4, 0xfff, %g0	! test bits 12..31 of *both* args
 	be	Lmul_shortway	! if zero, can do it the short way
-	andcc	%g0, %g0, %o4	! zero the partial product and clear N and V
+	 andcc	%g0, %g0, %o4	! zero the partial product and clear N and V
 
 	/*
 	 * Long multiply.  32 steps, followed by a final shift step.
@@ -103,17 +104,19 @@
 #if 0
 	tst	%o1
 	bl,a	1f		! if %o1 < 0 (high order bit = 1),
-	add	%o4, %o0, %o4	! %o4 += %o0 (add y to upper half)
-1:	rd	%y, %o0		! get lower half of product
+	 add	%o4, %o0, %o4	! %o4 += %o0 (add y to upper half)
+
+1:
+	rd	%y, %o0		! get lower half of product
 	retl
-	addcc	%o4, %g0, %o1	! put upper half in place and set Z for %o1==0
+	 addcc	%o4, %g0, %o1	! put upper half in place and set Z for %o1==0
 #else
 	/* Faster code from tege@sics.se.  */
 	sra	%o1, 31, %o2	! make mask from sign bit
 	and	%o0, %o2, %o2	! %o2 = 0 or %o0, depending on sign of %o1
 	rd	%y, %o0		! get lower half of product
 	retl
-	addcc	%o4, %o2, %o1	! add compensation and put upper half in place
+	 addcc	%o4, %o2, %o1	! add compensation and put upper half in place
 #endif
 
 Lmul_shortway:
@@ -156,4 +159,11 @@ Lmul_shortway:
 	srl	%o5, 20, %o5	! shift low bits right 20
 	or	%o5, %o0, %o0
 	retl
-	addcc	%g0, %g0, %o1	! %o1 = zero, and set Z
+	 addcc	%g0, %g0, %o1	! %o1 = zero, and set Z
+
+	.globl	.umul_patch
+.umul_patch:
+	umul	%o0, %o1, %o0
+	retl
+	 rd	%y, %o1
+	nop

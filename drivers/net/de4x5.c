@@ -29,8 +29,7 @@
     measurement. Their error is +/-20k on a quiet (private) network and also
     depend on what load the CPU has.
 
-    The author may    be reached  at  davies@wanton.lkg.dec.com  or  Digital
-    Equipment Corporation, 550 King Street, Littleton MA 01460.
+    The author may be reached at davies@maniac.ultranet.com.
 
     =========================================================================
     This driver has been written  substantially  from scratch, although  its
@@ -212,11 +211,13 @@
 			  and <michael@compurex.com>
       0.441   9-Sep-96    Change dc21041_autoconf() to probe quiet BNC media
                            with a loopback packet.
+      0.442   9-Sep-96    Include AUI in dc21041 media printout. Bug reported
+                           by <bhat@mundook.cs.mu.OZ.AU>
 
     =========================================================================
 */
 
-static const char *version = "de4x5.c:v0.441 96/9/9 davies@wanton.lkg.dec.com\n";
+static const char *version = "de4x5.c:v0.442 96/11/7 davies@maniac.ultranet.com\n";
 
 #include <linux/module.h>
 
@@ -915,7 +916,7 @@ de4x5_hw_init(struct device *dev, u_long iobase)
 
     }
     
-    if (de4x5_debug > 0) {
+    if (de4x5_debug > 1) {
 	printk(version);
     }
     
@@ -3760,10 +3761,11 @@ de4x5_dbg_media(struct device *dev)
 			(lp->media == TP  ? "TP." :
 			 (lp->media == ANS ? "TP/Nway." :
 			  (lp->media == BNC ? "BNC." : 
-			   (lp->media == BNC_AUI ? "BNC/AUI." : 
-			    (lp->media == EXT_SIA ? "EXT SIA." : 
-			     "???."
-			     )))))));
+			   (lp->media == AUI ? "AUI." : 
+			    (lp->media == BNC_AUI ? "BNC/AUI." : 
+			     (lp->media == EXT_SIA ? "EXT SIA." : 
+			      "???."
+			      ))))))));
 	    } else {
 		printk("%s: mode is %s\n", dev->name,
 		    (lp->media == NC ? "link down or incompatible connection.":

@@ -62,13 +62,13 @@ static unsigned long irq_mask[] = {
 	SUN4M_INT_FLOPPY,				  /*  5 irq 11 */
 	(SUN4M_INT_SERIAL | SUN4M_INT_KBDMS),	  	  /*  6 irq 12 */
 	SUN4M_INT_MODULE_ERR,			  	  /*  7 irq 15 */
-	SUN4M_INT_SBUS(1),				  /*  8 irq 2 */
-	SUN4M_INT_SBUS(2),				  /*  9 irq 3 */
-	SUN4M_INT_SBUS(3),				  /* 10 irq 5 */
-	SUN4M_INT_SBUS(4),				  /* 11 irq 7 */
-	SUN4M_INT_SBUS(5),				  /* 12 irq 9 */
-	SUN4M_INT_SBUS(6),				  /* 13 irq 11 */
-	SUN4M_INT_SBUS(7)				  /* 14 irq 13 */
+	SUN4M_INT_SBUS(0),				  /*  8 irq 2 */
+	SUN4M_INT_SBUS(1),				  /*  9 irq 3 */
+	SUN4M_INT_SBUS(2),				  /* 10 irq 5 */
+	SUN4M_INT_SBUS(3),				  /* 11 irq 7 */
+	SUN4M_INT_SBUS(4),				  /* 12 irq 9 */
+	SUN4M_INT_SBUS(5),				  /* 13 irq 11 */
+	SUN4M_INT_SBUS(6)				  /* 14 irq 13 */
 };
 
 inline unsigned long sun4m_get_irqmask(unsigned int irq)
@@ -98,7 +98,7 @@ static void sun4m_disable_irq(unsigned int irq_nr)
 	int cpu = smp_processor_id();
 
 	mask = sun4m_get_irqmask(irq_nr);
-	save_flags(flags); cli();
+	save_and_cli(flags);
 	if (irq_nr > 15)
 		sun4m_interrupts->set = mask;
 	else
@@ -117,14 +117,14 @@ static void sun4m_enable_irq(unsigned int irq_nr)
          */
         if (irq_nr != 0x0b) {
 		mask = sun4m_get_irqmask(irq_nr);
-		save_flags(flags); cli();
+		save_and_cli(flags);
 		if (irq_nr > 15)
 			sun4m_interrupts->clear = mask;
 		else
 			sun4m_interrupts->cpu_intregs[cpu].clear = mask;
 		restore_flags(flags);    
 	} else {
-		save_flags(flags); cli();
+		save_and_cli(flags);
 		sun4m_interrupts->clear = SUN4M_INT_FLOPPY;
 		restore_flags(flags);
 	}
@@ -176,6 +176,7 @@ static void sun4m_load_profile_irq(unsigned int limit)
 	sun4m_timers->cpu_timers[0].l14_timer_limit = limit;
 }
 
+#if HANDLE_LVL14_IRQ
 static void sun4m_lvl14_handler(int irq, void *dev_id, struct pt_regs * regs)
 {
 	volatile unsigned int clear;
@@ -192,6 +193,7 @@ static void sun4m_lvl14_handler(int irq, void *dev_id, struct pt_regs * regs)
 	 */
 	sun4m_timers->cpu_timers[0].l14_timer_limit = lvl14_resolution;
 }
+#endif /* HANDLE_LVL14_IRQ */
 
 static void sun4m_init_timers(void (*counter_fn)(int, void *, struct pt_regs *))
 {
@@ -236,6 +238,8 @@ static void sun4m_init_timers(void (*counter_fn)(int, void *, struct pt_regs *))
 		       cnt_regs[4].which_io, 0x0);
     
 	sun4m_timers->l10_timer_limit =  (((1000000/HZ) + 1) << 10);
+	master_l10_counter = &sun4m_timers->l10_cur_count;
+	master_l10_limit = &sun4m_timers->l10_timer_limit;
 
 	irq = request_irq(TIMER_IRQ,
 			  counter_fn,
@@ -247,12 +251,12 @@ static void sun4m_init_timers(void (*counter_fn)(int, void *, struct pt_regs *))
 	}
     
 	/* Can't cope with multiple CPUS yet so no level14 tick events */
-#if 0
+#if HANDLE_LVL14_IRQ
 	if (linux_num_cpus > 1)
 		claim_ticker14(NULL, PROFILE_IRQ, 0);
 	else
 		claim_ticker14(sun4m_lvl14_handler, PROFILE_IRQ, lvl14_resolution);
-#endif
+#endif /* HANDLE_LVL14_IRQ */
 	if(linux_num_cpus > 1) {
 		for(cpu = 0; cpu < 4; cpu++)
 			sun4m_timers->cpu_timers[cpu].l14_timer_limit = 0;
@@ -317,7 +321,8 @@ void sun4m_init_IRQ(void)
 		printk("Warning:"
 		       "sun4m multiple CPU interrupt code requires work\n");
 #endif
-		irq_rcvreg = &sun4m_interrupts->undirected_target;
+		irq_rcvreg = (unsigned long *)
+				&sun4m_interrupts->undirected_target;
 		sun4m_interrupts->undirected_target = 0;
 	}
 	enable_irq = sun4m_enable_irq;
@@ -327,9 +332,9 @@ void sun4m_init_IRQ(void)
 	load_profile_irq = sun4m_load_profile_irq;
 	init_timers = sun4m_init_timers;
 #ifdef __SMP__
-	set_cpu_int = sun4m_send_ipi;
-	clear_cpu_int = sun4m_clear_ipi;
-	set_irq_udt = sun4m_set_udt;
+	set_cpu_int = (void (*) (int, int))sun4m_send_ipi;
+	clear_cpu_int = (void (*) (int, int))sun4m_clear_ipi;
+	set_irq_udt = (void (*) (int))sun4m_set_udt;
 #endif
 	sti();
 }

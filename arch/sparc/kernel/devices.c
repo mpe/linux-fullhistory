@@ -18,6 +18,7 @@ int linux_num_cpus;
 
 extern void cpu_probe(void);
 extern void clock_stop_probe(void); /* tadpole.c */
+extern void sun4c_probe_memerr_reg(void);
 
 unsigned long
 device_scan(unsigned long mem_start)
@@ -30,7 +31,7 @@ device_scan(unsigned long mem_start)
 #if CONFIG_AP1000
         printk("Not scanning device list for CPUs\n");
 	linux_num_cpus = 1;
-	return;
+	return mem_start;
 #endif
 
 	prom_getstring(prom_root_node, "device_type", node_str, sizeof(node_str));
@@ -75,6 +76,9 @@ device_scan(unsigned long mem_start)
 	}
 #endif
 	clock_stop_probe();
+
+	if (sparc_cpu_model == sun4c)
+		sun4c_probe_memerr_reg();
 
 	return mem_start;
 }

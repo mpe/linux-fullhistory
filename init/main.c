@@ -220,9 +220,6 @@ static char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
 static char * argv_rc[] = { "/bin/sh", NULL };
 static char * envp_rc[] = { "HOME=/", "TERM=linux", NULL };
 
-static char * argv[] = { "-/bin/sh",NULL };
-static char * envp[] = { "HOME=/usr/root", "TERM=linux", NULL };
-
 char *get_options(char *str, int *ints)
 {
 	char *cur = str;
@@ -882,12 +879,16 @@ static int do_rc(void * rc)
 
 static int do_shell(void * shell)
 {
+	char *argv[2];
+
 	close(0);close(1);close(2);
 	setsid();
 	(void) open("/dev/tty1",O_RDWR,0);
 	(void) dup(0);
 	(void) dup(0);
-	return execve(shell, argv, envp);
+	argv[0] = shell;
+	argv[1] = NULL;
+	return execve(shell, argv, envp_rc);
 }
 
 #ifdef CONFIG_BLK_DEV_INITRD

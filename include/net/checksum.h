@@ -81,8 +81,8 @@ static __inline__ unsigned short int csum_ipv6_magic(struct in6_addr *saddr,
 	csum += carry;
 
 	uproto = htonl(proto);
-	csum += proto;
-	carry = (csum < proto);
+	csum += uproto;
+	carry = (csum < uproto);
 	csum += carry;
 
 	return csum_fold(csum);

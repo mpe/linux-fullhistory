@@ -1,7 +1,8 @@
-/*  $Id: process.c,v 1.51 1996/04/25 06:08:49 davem Exp $
+/*  $Id: process.c,v 1.77 1996/11/03 08:25:43 davem Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ *  Copyright (C) 1996 Eddie C. Dost   (ecd@skynet.be)
  */
 
 /*
@@ -19,13 +20,13 @@
 #include <linux/unistd.h>
 #include <linux/ptrace.h>
 #include <linux/malloc.h>
-#include <linux/ldt.h>
 #include <linux/user.h>
 #include <linux/a.out.h>
+#include <linux/config.h>
 
 #include <asm/auxio.h>
 #include <asm/oplib.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
@@ -33,10 +34,9 @@
 #include <asm/processor.h>
 #include <asm/psr.h>
 #include <asm/system.h>
+#include <asm/elf.h>
 
 extern void fpsave(unsigned long *, unsigned long *, void *, unsigned long *);
-
-int active_ds = USER_DS;
 
 #ifndef __SMP__
 
@@ -79,20 +79,21 @@ int cpu_idle(void *unused)
 	volatile int cval;
 
 	while(1) {
-                if(0==read_smp_counter(spap))
-                	continue;
+		if(0==*spap)
+			continue;
 		cli();
 		/* Acquire exclusive access. */
 		while((cval = smp_swap(spap, -1)) == -1)
-			;
+			while(*spap == -1)
+				;
                 if (0==cval) {
 			/* ho hum, release it. */
-			smp_process_available = 0;
+			*spap = 0;
 			sti();
                         continue;
                 }
 		/* Something interesting happened, whee... */
-		smp_swap(spap, (cval - 1));
+		*spap = (cval - 1);
 		sti();
 		idle();
 	}
@@ -100,43 +101,143 @@ int cpu_idle(void *unused)
 
 #endif
 
-extern char saved_command_line[];
+extern char reboot_command [];
 
-void hard_reset_now(void)
+#ifdef CONFIG_SUN_CONSOLE
+extern void console_restore_palette (void);
+extern int serial_console;
+#endif
+
+void halt_now(void)
 {
 	sti();
 	udelay(8000);
 	cli();
-	prom_feval("reset");
+#ifdef CONFIG_SUN_CONSOLE
+	if (!serial_console)
+		console_restore_palette ();
+#endif
+	prom_halt();
+	panic("Halt failed!");
+}
+
+void hard_reset_now(void)
+{
+	char *p;
+	
+	sti();
+	udelay(8000);
+	cli();
+
+	p = strchr (reboot_command, '\n');
+	if (p) *p = 0;
+#ifdef CONFIG_SUN_CONSOLE
+	if (!serial_console)
+		console_restore_palette ();
+#endif
+	if (*reboot_command)
+		prom_reboot (reboot_command);
+	prom_feval ("reset");
 	panic("Reboot failed!");
 }
 
 void show_regwindow(struct reg_window *rw)
 {
-	printk("l0:%08lx l1:%08lx l2:%08lx l3:%08lx l4:%08lx l5:%08lx l6:%08lx l7:%08lx\n",
+	printk("l0: %08lx l1: %08lx l2: %08lx l3: %08lx\n"
+	       "l4: %08lx l5: %08lx l6: %08lx l7: %08lx\n",
 	       rw->locals[0], rw->locals[1], rw->locals[2], rw->locals[3],
 	       rw->locals[4], rw->locals[5], rw->locals[6], rw->locals[7]);
-	printk("i0:%08lx i1:%08lx i2:%08lx i3:%08lx i4:%08lx i5:%08lx i6:%08lx i7:%08lx\n",
+	printk("i0: %08lx i1: %08lx i2: %08lx i3: %08lx\n"
+	       "i4: %08lx i5: %08lx i6: %08lx i7: %08lx\n",
 	       rw->ins[0], rw->ins[1], rw->ins[2], rw->ins[3],
 	       rw->ins[4], rw->ins[5], rw->ins[6], rw->ins[7]);
+}
+
+void show_stackframe(struct sparc_stackf *sf)
+{
+	unsigned long size;
+	unsigned long *stk;
+	int i;
+
+	printk("l0: %08lx l1: %08lx l2: %08lx l3: %08lx\n"
+	       "l4: %08lx l5: %08lx l6: %08lx l7: %08lx\n",
+	       sf->locals[0], sf->locals[1], sf->locals[2], sf->locals[3],
+	       sf->locals[4], sf->locals[5], sf->locals[6], sf->locals[7]);
+	printk("i0: %08lx i1: %08lx i2: %08lx i3: %08lx\n"
+	       "i4: %08lx i5: %08lx fp: %08lx ret_pc: %08lx\n",
+	       sf->ins[0], sf->ins[1], sf->ins[2], sf->ins[3],
+	       sf->ins[4], sf->ins[5], (unsigned long)sf->fp, sf->callers_pc);
+	printk("sp: %08lx x0: %08lx x1: %08lx x2: %08lx\n"
+	       "x3: %08lx x4: %08lx x5: %08lx xx: %08lx\n",
+	       (unsigned long)sf->structptr, sf->xargs[0], sf->xargs[1],
+	       sf->xargs[2], sf->xargs[3], sf->xargs[4], sf->xargs[5],
+	       sf->xxargs[0]);
+	size = ((unsigned long)sf->fp) - ((unsigned long)sf);
+	size -= STACKFRAME_SZ;
+	stk = (unsigned long *)((unsigned long)sf + STACKFRAME_SZ);
+	i = 0;
+	do {
+		printk("s%d: %08lx\n", i++, *stk++);
+	} while ((size -= sizeof(unsigned long)));
 }
 
 void show_regs(struct pt_regs * regs)
 {
         printk("PSR: %08lx PC: %08lx NPC: %08lx Y: %08lx\n", regs->psr,
 	       regs->pc, regs->npc, regs->y);
-	printk("%%g0: %08lx %%g1: %08lx %%g2: %08lx %%g3: %08lx\n",
+	printk("g0: %08lx g1: %08lx g2: %08lx g3: %08lx\n",
 	       regs->u_regs[0], regs->u_regs[1], regs->u_regs[2],
 	       regs->u_regs[3]);
-	printk("%%g4: %08lx %%g5: %08lx %%g6: %08lx %%g7: %08lx\n",
+	printk("g4: %08lx g5: %08lx g6: %08lx g7: %08lx\n",
 	       regs->u_regs[4], regs->u_regs[5], regs->u_regs[6],
 	       regs->u_regs[7]);
-	printk("%%o0: %08lx %%o1: %08lx %%o2: %08lx %%o3: %08lx\n",
+	printk("o0: %08lx o1: %08lx o2: %08lx o3: %08lx\n",
 	       regs->u_regs[8], regs->u_regs[9], regs->u_regs[10],
 	       regs->u_regs[11]);
-	printk("%%o4: %08lx %%o5: %08lx %%sp: %08lx %%ret_pc: %08lx\n",
+	printk("o4: %08lx o5: %08lx sp: %08lx ret_pc: %08lx\n",
 	       regs->u_regs[12], regs->u_regs[13], regs->u_regs[14],
 	       regs->u_regs[15]);
+	show_regwindow((struct reg_window *)regs->u_regs[14]);
+}
+
+void show_thread(struct thread_struct *tss)
+{
+	int i;
+
+	printk("uwinmask:          0x%08lx\n", tss->uwinmask);
+	printk("kregs:             0x%08lx\n", (unsigned long)tss->kregs);
+	show_regs(tss->kregs);
+	printk("sig_address:       0x%08lx\n", tss->sig_address);
+	printk("sig_desc:          0x%08lx\n", tss->sig_desc);
+	printk("ksp:               0x%08lx\n", tss->ksp);
+	printk("kpc:               0x%08lx\n", tss->kpc);
+	printk("kpsr:              0x%08lx\n", tss->kpsr);
+	printk("kwim:              0x%08lx\n", tss->kwim);
+	printk("fork_kpsr:         0x%08lx\n", tss->fork_kpsr);
+	printk("fork_kwim:         0x%08lx\n", tss->fork_kwim);
+
+	for (i = 0; i < NSWINS; i++) {
+		if (!tss->rwbuf_stkptrs[i])
+			continue;
+		printk("reg_window[%d]:\n", i);
+		printk("stack ptr:         0x%08lx\n", tss->rwbuf_stkptrs[i]);
+		show_regwindow(&tss->reg_window[i]);
+	}
+	printk("w_saved:           0x%08lx\n", tss->w_saved);
+
+	/* XXX missing: float_regs */
+	printk("fsr:               0x%08lx\n", tss->fsr);
+	printk("fpqdepth:          0x%08lx\n", tss->fpqdepth);
+	/* XXX missing: fpqueue */
+
+	printk("sstk_info.stack:   0x%08lx\n",
+	        (unsigned long)tss->sstk_info.the_stack);
+	printk("sstk_info.status:  0x%08lx\n",
+	        (unsigned long)tss->sstk_info.cur_status);
+	printk("flags:             0x%08lx\n", tss->flags);
+	printk("current_ds:        0x%08x\n", tss->current_ds);
+
+	/* XXX missing: core_exec */
 }
 
 /*
@@ -163,21 +264,12 @@ void exit_thread(void)
 	mmu_exit_hook();
 }
 
-/*
- * Free old dead task when we know it can never be on the cpu again.
- */
-void release_thread(struct task_struct *dead_task)
-{
-}
-
 void flush_thread(void)
 {
 	/* Make sure old user windows don't get in the way. */
 	flush_user_windows();
 	current->tss.w_saved = 0;
 	current->tss.uwinmask = 0;
-	current->tss.sig_address = 0;
-	current->tss.sig_desc = 0;
 	current->tss.sstk_info.cur_status = 0;
 	current->tss.sstk_info.the_stack = 0;
 
@@ -197,17 +289,77 @@ void flush_thread(void)
 #endif
 	}
 
-	memset(&current->tss.reg_window[0], 0,
-	       (sizeof(struct reg_window) * NSWINS));
-	memset(&current->tss.rwbuf_stkptrs[0], 0,
-	       (sizeof(unsigned long) * NSWINS));
 	mmu_flush_hook();
 	/* Now, this task is no longer a kernel thread. */
 	current->tss.flags &= ~SPARC_FLAG_KTHREAD;
 }
 
-/*
- * Copy a Sparc thread.  The fork() return value conventions
+static __inline__ void copy_regs(struct pt_regs *dst, struct pt_regs *src)
+{
+	__asm__ __volatile__("ldd\t[%1 + 0x00], %%g2\n\t"
+			     "ldd\t[%1 + 0x08], %%g4\n\t"
+			     "ldd\t[%1 + 0x10], %%o4\n\t"
+			     "std\t%%g2, [%0 + 0x00]\n\t"
+			     "std\t%%g4, [%0 + 0x08]\n\t"
+			     "std\t%%o4, [%0 + 0x10]\n\t"
+			     "ldd\t[%1 + 0x18], %%g2\n\t"
+			     "ldd\t[%1 + 0x20], %%g4\n\t"
+			     "ldd\t[%1 + 0x28], %%o4\n\t"
+			     "std\t%%g2, [%0 + 0x18]\n\t"
+			     "std\t%%g4, [%0 + 0x20]\n\t"
+			     "std\t%%o4, [%0 + 0x28]\n\t"
+			     "ldd\t[%1 + 0x30], %%g2\n\t"
+			     "ldd\t[%1 + 0x38], %%g4\n\t"
+			     "ldd\t[%1 + 0x40], %%o4\n\t"
+			     "std\t%%g2, [%0 + 0x30]\n\t"
+			     "std\t%%g4, [%0 + 0x38]\n\t"
+			     "ldd\t[%1 + 0x48], %%g2\n\t"
+			     "std\t%%o4, [%0 + 0x40]\n\t"
+			     "std\t%%g2, [%0 + 0x48]\n\t" : :
+			     "r" (dst), "r" (src) :
+			     "g2", "g3", "g4", "g5", "o4", "o5");
+}
+
+static __inline__ void copy_regwin(struct reg_window *dst, struct reg_window *src)
+{
+	__asm__ __volatile__("ldd\t[%1 + 0x00], %%g2\n\t"
+			     "ldd\t[%1 + 0x08], %%g4\n\t"
+			     "ldd\t[%1 + 0x10], %%o4\n\t"
+			     "std\t%%g2, [%0 + 0x00]\n\t"
+			     "std\t%%g4, [%0 + 0x08]\n\t"
+			     "std\t%%o4, [%0 + 0x10]\n\t"
+			     "ldd\t[%1 + 0x18], %%g2\n\t"
+			     "ldd\t[%1 + 0x20], %%g4\n\t"
+			     "ldd\t[%1 + 0x28], %%o4\n\t"
+			     "std\t%%g2, [%0 + 0x18]\n\t"
+			     "std\t%%g4, [%0 + 0x20]\n\t"
+			     "std\t%%o4, [%0 + 0x28]\n\t"
+			     "ldd\t[%1 + 0x30], %%g2\n\t"
+			     "ldd\t[%1 + 0x38], %%g4\n\t"
+			     "std\t%%g2, [%0 + 0x30]\n\t"
+			     "std\t%%g4, [%0 + 0x38]\n\t" : :
+			     "r" (dst), "r" (src) :
+			     "g2", "g3", "g4", "g5", "o4", "o5");
+}
+
+static __inline__ struct sparc_stackf *
+clone_stackframe(struct sparc_stackf *dst, struct sparc_stackf *src)
+{
+	unsigned long size;
+	struct sparc_stackf *sp;
+
+	size = ((unsigned long)src->fp) - ((unsigned long)src);
+	sp = (struct sparc_stackf *)(((unsigned long)dst) - size); 
+
+	if (copy_to_user(sp, src, size))
+		return 0;
+	if (put_user(dst, &sp->fp))
+		return 0;
+	return sp;
+}
+
+
+/* Copy a Sparc thread.  The fork() return value conventions
  * under SunOS are nothing short of bletcherous:
  * Parent -->  %o0 == childs  pid, %o1 == 0
  * Child  -->  %o0 == parents pid, %o1 == 1
@@ -221,11 +373,11 @@ void flush_thread(void)
  */
 extern void ret_sys_call(void);
 
-void copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
-		 struct task_struct *p, struct pt_regs *regs)
+int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
+		struct task_struct *p, struct pt_regs *regs)
 {
 	struct pt_regs *childregs;
-	struct reg_window *old_stack, *new_stack;
+	struct reg_window *new_stack;
 	unsigned long stack_offset;
 
 #ifndef __SMP__
@@ -242,31 +394,60 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	}
 
 	/* Calculate offset to stack_frame & pt_regs */
-	if(sparc_cpu_model == sun4c)
-		stack_offset = ((PAGE_SIZE*3) - TRACEREG_SZ);
-	else
-		stack_offset = ((PAGE_SIZE<<2) - TRACEREG_SZ);
+	stack_offset = ((PAGE_SIZE<<1) - TRACEREG_SZ);
 
 	if(regs->psr & PSR_PS)
 		stack_offset -= REGWIN_SZ;
 	childregs = ((struct pt_regs *) (p->kernel_stack_page + stack_offset));
-	*childregs = *regs;
+	copy_regs(childregs, regs);
 	new_stack = (((struct reg_window *) childregs) - 1);
-	old_stack = (((struct reg_window *) regs) - 1);
-	*new_stack = *old_stack;
+	copy_regwin(new_stack, (((struct reg_window *) regs) - 1));
+
 	p->tss.ksp = p->saved_kernel_stack = (unsigned long) new_stack;
 	p->tss.kpc = (((unsigned long) ret_sys_call) - 0x8);
 	p->tss.kpsr = current->tss.fork_kpsr;
 	p->tss.kwim = current->tss.fork_kwim;
 	p->tss.kregs = childregs;
-	childregs->u_regs[UREG_FP] = sp;
 
 	if(regs->psr & PSR_PS) {
-		stack_offset += TRACEREG_SZ;
-		childregs->u_regs[UREG_FP] = p->kernel_stack_page + stack_offset;
+		childregs->u_regs[UREG_FP] = p->tss.ksp;
 		p->tss.flags |= SPARC_FLAG_KTHREAD;
-	} else
+		p->tss.current_ds = KERNEL_DS;
+		childregs->u_regs[UREG_G6] = (unsigned long) p;
+	} else {
+		childregs->u_regs[UREG_FP] = sp;
 		p->tss.flags &= ~SPARC_FLAG_KTHREAD;
+		p->tss.current_ds = USER_DS;
+
+		if (sp != current->tss.kregs->u_regs[UREG_FP]) {
+			struct sparc_stackf *childstack;
+			struct sparc_stackf *parentstack;
+
+			/*
+			 * This is a clone() call with supplied user stack.
+			 * Set some valid stack frames to give to the child.
+			 */
+			childstack = (struct sparc_stackf *)sp;
+			parentstack = (struct sparc_stackf *)
+					current->tss.kregs->u_regs[UREG_FP];
+
+#if 0
+			printk("clone: parent stack:\n");
+			show_stackframe(parentstack);
+#endif
+
+			childstack = clone_stackframe(childstack, parentstack);
+			if (!childstack)
+				return -EFAULT;
+
+#if 0
+			printk("clone: child stack:\n");
+			show_stackframe(childstack);
+#endif
+
+			childregs->u_regs[UREG_FP] = (unsigned long)childstack;
+		}
+	}
 
 	/* Set the return value for the child. */
 	childregs->u_regs[UREG_I0] = current->pid;
@@ -274,6 +455,8 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 
 	/* Set the return value for the parent. */
 	regs->u_regs[UREG_I1] = 0;
+
+	return 0;
 }
 
 /*
@@ -311,7 +494,7 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 /*
  * fill in the fpu structure for a core dump.
  */
-int dump_fpu (void *fpu_structure)
+int dump_fpu (struct pt_regs * regs, elf_fpregset_t * fpregs)
 {
 	/* Currently we report that we couldn't dump the fpu structure */
 	return 0;
@@ -323,15 +506,18 @@ int dump_fpu (void *fpu_structure)
  */
 asmlinkage int sparc_execve(struct pt_regs *regs)
 {
-	int error;
+	int error, base = 0;
 	char *filename;
 
-	flush_user_windows();
-	error = getname((char *) regs->u_regs[UREG_I0], &filename);
+	/* Check for indirect call. */
+	if(regs->u_regs[UREG_G1] == 0)
+		base = 1;
+
+	error = getname((char *) regs->u_regs[base + UREG_I0], &filename);
 	if(error)
 		return error;
-	error = do_execve(filename, (char **) regs->u_regs[UREG_I1],
-			  (char **) regs->u_regs[UREG_I2], regs);
+	error = do_execve(filename, (char **) regs->u_regs[base + UREG_I1],
+			  (char **) regs->u_regs[base + UREG_I2], regs);
 	putname(filename);
 	return error;
 }

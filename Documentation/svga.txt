@@ -1,4 +1,4 @@
-			Video Mode Selection Support 2.9
+		       Video Mode Selection Support 2.10
 	      (c) 1995, 1996 Martin Mares, <mj@k332.feld.cvut.cz>
 --------------------------------------------------------------------------------
 
@@ -118,6 +118,7 @@ can be divided to three regions:
 	0x0f05	VGA 80x30 (480 scans, 16-point font)
 	0x0f06	VGA 80x34 (480 scans, 14-point font)
 	0x0f07	VGA 80x60 (480 scans, 8-point font)
+	0x0f08	Graphics hack (see the CONFIG_VIDEO_HACK paragraph below)
 
    0x1000 to 0x7fff - modes specified by resolution. The code has a "0xRRCC"
 	form where RR is a number of rows and CC is a number of columns.
@@ -163,6 +164,19 @@ the "local_mode_table:" line. The comment before this line describes the format
 of the table (which also includes a video card name to be displayed on the
 top of the menu).
 
+   CONFIG_VIDEO_400_HACK - force setting of 400 scan lines for standard VGA
+modes. This option is intended to be used on certain buggy BIOS'es which draw
+some useless logo using font download and then fail to reset the correct mode.
+Don't use unless needed as it forces resetting the video card.
+
+   CONFIG_VIDEO_GFX_HACK - includes special hack for setting of graphics modes
+to be used later by special drivers (e.g., 800x600 on IBM ThinkPad -- see
+ftp://ftp.phys.keio.ac.jp/pub/XFree86/800x600/XF86Configs/XF86Config.IBM_TP560).
+Allows to set _any_ BIOS mode including graphic ones and forcing specific
+text screen resolution instead of peeking it from BIOS variables. Don't use
+unless you think you know what you're doing. To activate this setup, use
+mode number 0x0f08 (see section 3).
+
 5. Adding more cards
 ~~~~~~~~~~~~~~~~~~~~
    If you have a card not detected by the driver and you are a good programmer,
@@ -201,6 +215,10 @@ bottom of the display containing already scrolled-out lines, your VGA BIOS
 contains the most common video BIOS bug called "incorrect vertical display
 end setting". Adding 0x8000 to the mode ID might fix the problem. Unfortunately,
 this must be done manually -- no autodetection mechanisms are available.
+
+   If you have a VGA card and your display still looks as on EGA, your BIOS
+is probably broken and you need to set the CONFIG_VIDEO_400_HACK switch to
+force setting of the correct mode.
 
 7. History
 ~~~~~~~~~~
@@ -244,3 +262,7 @@ this must be done manually -- no autodetection mechanisms are available.
 2.8 (14-Apr-96)	- Previous release was not compilable without CONFIG_VIDEO_SVGA.
 		- Better recognition of text modes during mode scan.
 2.9 (12-May-96)	- Ignored VESA modes 0x80 - 0xff (more VESA BIOS bugs!)
+2.10 (11-Nov-96)- The whole thing made optional.
+		- Added the CONFIG_VIDEO_400_HACK switch.
+		- Added the CONFIG_VIDEO_GFX_HACK switch.
+		- Code cleanup.

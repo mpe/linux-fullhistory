@@ -468,7 +468,7 @@ static int tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb)
 	if (th1->urg)
 		return -1;
 
-	avail = skb->end - skb->tail;
+	avail = skb_tailroom(skb);
 
 	/*
 	 *  size of tcp payload

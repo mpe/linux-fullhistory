@@ -1,4 +1,4 @@
-/* $Id: ioctl.h,v 1.4 1995/11/25 02:31:52 davem Exp $ */
+/* $Id: ioctl.h,v 1.5 1996/05/17 03:31:09 davem Exp $ */
 #ifndef _SPARC_IOCTL_H
 #define _SPARC_IOCTL_H
 
@@ -33,7 +33,7 @@
 #define _IO(type,nr)        _IOC(_IOC_NONE,(type),(nr),0)
 #define _IOR(type,nr,size)  _IOC(_IOC_READ,(type),(nr),sizeof(size))
 #define _IOW(type,nr,size)  _IOC(_IOC_WRITE,(type),(nr),sizeof(size))
-#define _IORW(type,nr,size) _IOC(_IOC_READ|_IOC_WRITE,(type),(nr),sizeof(size))
+#define _IOWR(type,nr,size) _IOC(_IOC_READ|_IOC_WRITE,(type),(nr),sizeof(size))
 
 #define _IOC_DIR(nr)        (((nr) >> _IOC_DIRSHIFT) & _IOC_DIRMASK)
 #define _IOC_TYPE(nr)       (((nr) >> _IOC_TYPESHIFT) & _IOC_TYPEMASK)

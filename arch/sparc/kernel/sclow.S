@@ -99,6 +99,7 @@ LABEL(umask):
 	sth	%l4, [%l5 + 4]
 	CC_AND_RETT
 
+#if 0
 	.globl	LABEL(write)
 LABEL(write):
 	cmp	%i0, 255		/* fd >= NR_OPEN */
@@ -175,6 +176,7 @@ write_is_too_hard:
 
 write_error_return:
 	SC_AND_RETT
+#endif
 
 	/* XXX sys_nice() XXX */
 	/* XXX sys_setpriority() XXX */

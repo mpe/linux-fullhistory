@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.29 1996/04/03 02:17:52 davem Exp $ */
+/* $Id: system.h,v 1.42 1996/09/30 02:23:21 davem Exp $ */
 #ifndef __SPARC_SYSTEM_H
 #define __SPARC_SYSTEM_H
 
@@ -46,105 +46,183 @@ extern struct linux_romvec *romvec;
  */
 extern void flush_user_windows(void);
 extern void synchronize_user_stack(void);
-extern void sparc_switch_to(void *new_task);
-#ifndef __SMP__
-#define switch_to(prev, next) do { \
-			  flush_user_windows(); \
-		          switch_to_context(next); \
-			  prev->tss.current_ds = active_ds; \
-                          active_ds = next->tss.current_ds; \
-			  if(last_task_used_math != next) \
-				  next->tss.kregs->psr &= ~PSR_EF; \
-                          sparc_switch_to(next); \
-                     } while(0)
-#else
-
 extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 		   void *fpqueue, unsigned long *fpqdepth);
 
-#define switch_to(prev, next) do { \
-			  cli(); \
-			  if(prev->flags & PF_USEDFPU) { \
-                          	fpsave(&prev->tss.float_regs[0], &prev->tss.fsr, \
-                          	       &prev->tss.fpqueue[0], &prev->tss.fpqdepth); \
-                          	prev->flags &= ~PF_USEDFPU; \
-                          	prev->tss.kregs->psr &= ~PSR_EF; \
-                          } \
-			  prev->lock_depth = syscall_count; \
-			  kernel_counter += (next->lock_depth - prev->lock_depth); \
-			  syscall_count = next->lock_depth; \
-			  flush_user_windows(); \
-		          switch_to_context(next); \
-			  prev->tss.current_ds = active_ds; \
-                          active_ds = next->tss.current_ds; \
-                          sparc_switch_to(next); \
-			  sti(); \
-                     } while(0)
+#ifdef __SMP__
+#define SWITCH_ENTER \
+	cli(); \
+	if(prev->flags & PF_USEDFPU) { \
+		fpsave(&prev->tss.float_regs[0], &prev->tss.fsr, \
+		       &prev->tss.fpqueue[0], &prev->tss.fpqdepth); \
+		prev->flags &= ~PF_USEDFPU; \
+		prev->tss.kregs->psr &= ~PSR_EF; \
+	} \
+	prev->lock_depth = syscall_count; \
+	kernel_counter += (next->lock_depth - prev->lock_depth); \
+	syscall_count = next->lock_depth;
+
+#define SWITCH_EXIT sti();
+#define SWITCH_DO_LAZY_FPU
+#else
+#define SWITCH_ENTER
+#define SWITCH_EXIT
+#define SWITCH_DO_LAZY_FPU if(last_task_used_math != next) next->tss.kregs->psr&=~PSR_EF;
 #endif
 
-/* Changing the IRQ level on the Sparc. */
-extern inline void setipl(int __new_ipl)
+	/* Much care has gone into this code, do not touch it. */
+#define switch_to(prev, next) do {							\
+	__label__ here;									\
+	register unsigned long task_pc asm("o7");					\
+	SWITCH_ENTER									\
+	SWITCH_DO_LAZY_FPU								\
+	__asm__ __volatile__(								\
+	".globl\tflush_patch_switch\nflush_patch_switch:\n\t"				\
+	"save %sp, -0x40, %sp; save %sp, -0x40, %sp; save %sp, -0x40, %sp\n\t"		\
+	"save %sp, -0x40, %sp; save %sp, -0x40, %sp; save %sp, -0x40, %sp\n\t"		\
+	"save %sp, -0x40, %sp\n\t"							\
+	"restore; restore; restore; restore; restore; restore; restore");		\
+	if(!(next->tss.flags & SPARC_FLAG_KTHREAD) &&					\
+	   !(next->flags & PF_EXITING))							\
+		switch_to_context(next);						\
+	task_pc = ((unsigned long) &&here) - 0x8;					\
+	__asm__ __volatile__(								\
+	"rd\t%%psr, %%g4\n\t"								\
+	"std\t%%sp, [%%g6 + %3]\n\t"							\
+	"rd\t%%wim, %%g5\n\t"								\
+	"wr\t%%g4, 0x20, %%psr\n\t"							\
+	"std\t%%g4, [%%g6 + %2]\n\t"							\
+	"mov\t%1, %%g6\n\t"								\
+	"ldd\t[%%g6 + %2], %%g4\n\t"							\
+	"st\t%1, [%0]\n\t"								\
+	"wr\t%%g4, 0x20, %%psr\n\t"							\
+	"ldd\t[%%g6 + %3], %%sp\n\t"							\
+	"wr\t%%g5, 0x0, %%wim\n\t"							\
+	"ldd\t[%%sp + 0x00], %%l0\n\t"							\
+	"ldd\t[%%sp + 0x08], %%l2\n\t"							\
+	"ldd\t[%%sp + 0x10], %%l4\n\t"							\
+	"ldd\t[%%sp + 0x18], %%l6\n\t"							\
+	"ldd\t[%%sp + 0x20], %%i0\n\t"							\
+	"ldd\t[%%sp + 0x28], %%i2\n\t"							\
+	"ldd\t[%%sp + 0x30], %%i4\n\t"							\
+	"ldd\t[%%sp + 0x38], %%i6\n\t"							\
+	"wr\t%%g4, 0x0, %%psr\n\t"							\
+	"nop\n\t"									\
+	"jmpl\t%%o7 + 0x8, %%g0\n\t"							\
+	" nop\n\t" : : "r" (&(current_set[smp_processor_id()])), "r" (next),		\
+	"i" ((const unsigned long)(&((struct task_struct *)0)->tss.kpsr)),		\
+	"i" ((const unsigned long)(&((struct task_struct *)0)->tss.ksp)),		\
+	"r" (task_pc) : "g4", "g5");							\
+here: SWITCH_EXIT } while(0)
+
+/* Changing the IRQ level on the Sparc.   We now avoid writing the psr
+ * whenever possible.
+ */
+extern __inline__ void setipl(unsigned long __orig_psr)
 {
-	__asm__ __volatile__("rd %%psr, %%g1\n\t"
-			     "andn %%g1, %1, %%g1\n\t"
-			     "sll %0, 8, %%g2\n\t"
-			     "and %%g2, %1, %%g2\n\t"
-			     "or %%g1, %%g2, %%g1\n\t"
-			     "wr %%g1, 0x0, %%psr\n\t"
-			     "nop; nop; nop\n\t" : :
-			     "r" (__new_ipl), "i" (PSR_PIL) :
-			     "g1", "g2");
+	__asm__ __volatile__("wr\t%0, 0x0, %%psr\n\t"
+			     "nop; nop; nop;" : : "r" (__orig_psr) : "memory");
 }
 
-extern inline int getipl(void)
+extern __inline__ void cli(void)
 {
-	int retval;
+	unsigned long tmp;
 
-	__asm__ __volatile__("rd %%psr, %0\n\t"
-			     "and %0, %1, %0\n\t"
-			     "srl %0, 8, %0\n\t" :
-			     "=r" (retval) :
-			     "i" (PSR_PIL));
+	__asm__ __volatile__("rd\t%%psr, %0\n\t"
+			     "andcc\t%0, %1, %%g0\n\t"
+			     "be,a\t1f\n\t"
+			     " wr\t%0, %1, %%psr\n"
+			     "1:\tnop; nop"
+			     : "=r" (tmp)
+			     : "i" (PSR_PIL)
+			     : "memory");
+}
+
+extern __inline__ void sti(void)
+{
+	unsigned long tmp;
+
+	__asm__ __volatile__("rd\t%%psr, %0\n\t"
+			     "andcc\t%0, %1, %%g0\n\t"
+			     "bne,a\t1f\n\t"
+			     " wr\t%0, %1, %%psr\n"
+			     "1:\tnop; nop"
+			     : "=r" (tmp)
+			     : "i" (PSR_PIL)
+			     : "memory");
+}
+
+extern __inline__ unsigned long getipl(void)
+{
+	unsigned long retval;
+
+	__asm__ __volatile__("rd\t%%psr, %0" : "=r" (retval));
 	return retval;
 }
 
-extern inline int swpipl(int __new_ipl)
+extern __inline__ unsigned long swap_pil(unsigned long __new_psr)
 {
-	int retval;
+	unsigned long retval, tmp1, tmp2;
 
-	__asm__ __volatile__("rd %%psr, %%g1\n\t"
-			     "srl %%g1, 8, %0\n\t"
-			     "and %0, 15, %0\n\t"
-			     "andn %%g1, %2, %%g1\n\t"
-			     "and %1, 15, %%g2\n\t"
-			     "sll %%g2, 8, %%g2\n\t"
-			     "or %%g1, %%g2, %%g1\n\t"
-			     "wr %%g1, 0x0, %%psr\n\t"
-			     "nop; nop; nop\n\t" :
-			     "=r" (retval) :
-			     "r" (__new_ipl), "i" (PSR_PIL) :
-			     "g1", "g2");
+	__asm__ __volatile__("rd\t%%psr, %0\n\t"
+			     "and\t%0, %4, %1\n\t"
+			     "and\t%3, %4, %2\n\t"
+			     "xorcc\t%1, %2, %%g0\n\t"
+			     "bne,a\t1f\n\t"
+			     " wr %0, %4, %%psr\n"
+			     "1:\tnop; nop"
+			     : "=r" (retval), "=r" (tmp1), "=r" (tmp2)
+			     : "r" (__new_psr), "i" (PSR_PIL)
+			     : "memory");
+	return retval;
+}
+
+extern __inline__ unsigned long read_psr_and_cli(void)
+{
+	unsigned long retval;
+
+	__asm__ __volatile__("rd\t%%psr, %0\n\t"
+			     "andcc\t%0, %1, %%g0\n\t"
+			     "be,a\t1f\n\t"
+			     " wr\t%0, %1, %%psr\n"
+			     "1:\tnop; nop"
+			     : "=r" (retval)
+			     : "i" (PSR_PIL)
+			     : "memory");
 	return retval;
 }
 
 extern char spdeb_buf[256];
 
-#define cli()			setipl(15)  /* 15 = no int's except nmi's */
-#define sti()			setipl(0)   /* I'm scared */
-#define save_flags(flags)	do { flags = getipl(); } while (0)
-#define restore_flags(flags)	setipl(flags)
+#define save_flags(flags)	((flags) = getipl())
+#define save_and_cli(flags)	((flags) = read_psr_and_cli())
+#define restore_flags(flags)	setipl((flags))
+
+/* XXX Change this if we ever use a PSO mode kernel. */
+#define mb()  __asm__ __volatile__ ("" : : : "memory")
 
 #define nop() __asm__ __volatile__ ("nop");
 
-extern inline unsigned long xchg_u32(volatile unsigned long *m, unsigned long val)
+extern __inline__ unsigned long xchg_u32(__volatile__ unsigned long *m, unsigned long val)
 {
-	unsigned long flags, retval;
+	__asm__ __volatile__("
+	rd	%%psr, %%g3
+	andcc	%%g3, %3, %%g0
+	be,a	1f
+	 wr	%%g3, %3, %%psr
+1:	ld	[%1], %%g2
+	andcc	%%g3, %3, %%g0
+	st	%2, [%1]
+	be,a	1f
+	 wr	%%g3, 0x0, %%psr
+1:	nop
+	mov	%%g2, %0
+	"
+        : "=&r" (val)
+        : "r" (m), "0" (val), "i" (PSR_PIL)
+        : "g2", "g3");
 
-	save_flags(flags); cli();
-	retval = *m;
-	*m = val;
-	restore_flags(flags);
-	return retval;
+	return val;
 }
 
 #define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
@@ -152,7 +230,7 @@ extern inline unsigned long xchg_u32(volatile unsigned long *m, unsigned long va
 
 extern void __xchg_called_with_bad_pointer(void);
 
-static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int size)
+static __inline__ unsigned long __xchg(unsigned long x, __volatile__ void * ptr, int size)
 {
 	switch (size) {
 	case 4:

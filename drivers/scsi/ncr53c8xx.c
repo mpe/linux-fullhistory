@@ -742,6 +742,7 @@ struct	usrcmd {
 #define UC_CLEARPROF	16
 
 #define	UF_TRACE	(0x01)
+#define	UF_NODISC	(0x02)
 
 /*---------------------------------------
 **
@@ -3667,6 +3668,18 @@ printf("%s: cache misconfigured, retrying with IO mapped at 0x%lx\n",
 	np->irq = irq;
 
 	/*
+	**	Not allow disconnections for all targets if asked by config
+	*/
+
+#ifdef	SCSI_NCR_NO_DISCONNECT
+	{
+		int i;
+		for (i = 0 ; i < MAX_TARGET ; i++)
+			np->target[i].usrflag |= UF_NODISC;
+	}
+#endif
+
+	/*
 	**	After SCSI devices have been opened, we cannot
 	**	reset the bus safely, so we do it here.
 	**	Interrupt handler does the real work.
@@ -3684,9 +3697,7 @@ printf("%s: cache misconfigured, retrying with IO mapped at 0x%lx\n",
 	ncr_exception (np);
 	restore_flags(flags);
 
-#ifndef SCSI_NCR_NO_DISCONNECT
 	np->disc = 1;
-#endif
 
 	/*
 	**	The middle-level SCSI driver does not
@@ -3993,7 +4004,7 @@ int ncr_queue_command (Scsi_Cmnd *cmd, void (* done)(Scsi_Cmnd *))
 
 	idmsg = M_IDENTIFY | cmd->lun;
 
-	if ((cp!=&np->ccb) && (np->disc))
+	if (cp != &np->ccb && ((np->disc && !(tp->usrflag & UF_NODISC)) || cp->tag))
 		idmsg |= 0x40;
 
 	msgptr = cp->scsi_smsg;
@@ -4276,9 +4287,7 @@ int ncr_reset_bus (Scsi_Cmnd *cmd)
 	DELAY (1000);
 	ncr_init(np, "scsi bus reset", HS_RESET);
 
-#ifndef SCSI_NCR_NO_DISCONNECT
 	np->disc = 1;
-#endif
 
 	restore_flags(flags);
 
@@ -5344,7 +5353,6 @@ static void ncr_usercmd (ncb_p np)
 			if (!((np->user.target>>t)&1)) continue;
 			ncr_setmaxtags (np, &np->target[t], np->user.data);
 		};
-		np->disc = 1;
 		break;
 
 	case UC_SETDEBUG:
@@ -5482,9 +5490,7 @@ static void ncr_timeout (ncb_p np)
 				OUTB (nc_scntl1, CRST);
 			DELAY (1000);
 			ncr_init (np, "ncr dead ?", HS_TIMEOUT);
-#ifndef SCSI_NCR_NO_DISCONNECT
 			np->disc = 1;
-#endif
 			np->heartbeat = thistime;
 		}
 #endif /* undef */
@@ -5907,9 +5913,7 @@ void ncr_exception (ncb_p np)
 	*/
 
 	ncr_init (np, "fatal error", HS_FAIL);
-#ifndef SCSI_NCR_NO_DISCONNECT
 	np->disc = 1;
-#endif
 }
 
 /*==========================================================
@@ -5963,9 +5967,7 @@ void ncr_int_sto (ncb_p np)
 		return;
 	};
 	ncr_init (np, "selection timeout", HS_FAIL);
-#ifndef SCSI_NCR_NO_DISCONNECT
 	np->disc = 1;
-#endif
 }
 
 /*==========================================================
@@ -8335,13 +8337,16 @@ printf("ncr_user_command: arg_len=%d, cmd=%ld\n", arg_len, uc->cmd);
 	case UC_SETWIDE:
 	case UC_SETFLAG:
 		SKIP_SPACES(1);
-		GET_INT_ARG(target);
+		if ((arg_len = is_keyword(ptr, len, "all")) != 0) {
+			ptr += arg_len; len -= arg_len;
+			uc->target = ~0;
+		} else {
+			GET_INT_ARG(target);
+			uc->target = (1<<target);
 #ifdef DEBUG_PROC_INFO
 printf("ncr_user_command: target=%ld\n", target);
 #endif
-		if (target > MAX_TARGET)
-			return -EINVAL;
-		uc->target = (1<<target);
+		}
 		break;
 	}
 
@@ -8404,6 +8409,8 @@ printf("ncr_user_command: data=%ld\n", uc->data);
 			SKIP_SPACES(1);
 			if	((arg_len = is_keyword(ptr, len, "trace")))
 				uc->data |= UF_TRACE;
+			else if	((arg_len = is_keyword(ptr, len, "no_disc")))
+				uc->data |= UF_NODISC;
 			else
 				return -EINVAL;
 			ptr += arg_len; len -= arg_len;

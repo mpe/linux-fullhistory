@@ -751,12 +751,12 @@ page_read_error:
 	filp->f_reada = 1;
 	if (page_cache)
 		free_page(page_cache);
-	if (!read)
-		return error;
 	if (!IS_RDONLY(inode)) {
 		inode->i_atime = CURRENT_TIME;
 		inode->i_dirt = 1;
 	}
+	if (!read)
+		read = error;
 	return read;
 }
 

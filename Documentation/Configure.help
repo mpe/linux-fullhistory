@@ -3813,6 +3813,16 @@ CONFIG_AP1000
   machine see http://cap.anu.edu.au/cap/projects/linux or mail to
   hackers@cafe.anu.edu.au
 
+Video mode selection support
+CONFIG_VIDEO_SELECT
+  This enables support for text mode selection on kernel startup. If you
+  want to take advantage of some high-resolution text mode your card's
+  BIOS offers, but the traditional Linux utilities like SVGATextMode
+  don't, you can enable this and set the mode using the "vga=" option
+  from your boot loader (LILO or LOADLIN) or set "vga=ask" which brings
+  up a video mode menu on kernel startup. Read Documentation/svga.txt
+  for more information. If unsure, say "n".
+
 # need an empty line after last entry, for sed script in Configure.
 
 #

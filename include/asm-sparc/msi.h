@@ -1,8 +1,8 @@
-/* $Id: msi.h,v 1.1 1996/04/20 10:14:32 davem Exp $
+/* $Id: msi.h,v 1.3 1996/08/29 09:48:25 davem Exp $
  * msi.h:  Defines specific to the MBus - Sbus - Interface.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1996 Eddie C. Dost   (ecd@pool.informatik.rwth-aachen.de)
+ * Copyright (C) 1996 Eddie C. Dost   (ecd@skynet.be)
  */
 
 #ifndef _SPARC_MSI_H
@@ -19,7 +19,7 @@
 #define MSI_ASYNC_MODE  0x80000000	/* Operate the MSI asynchronously */
 
 
-extern inline void msi_set_sync(void)
+extern __inline__ void msi_set_sync(void)
 {
 	__asm__ __volatile__ ("lda [%0] %1, %%g3\n\t"
 			      "andn %%g3, %2, %%g3\n\t"

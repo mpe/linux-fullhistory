@@ -114,6 +114,8 @@ struct rt6_statistics {
 #define DC_TIME_RUN		(5*HZ)
 #define DC_TIME_RETRY		HZ
 
+#define RT6_FILTER_NONE		0
+#define RT6_FILTER_RTNODES	1
 /*
  *	Prototypes
  */
@@ -145,6 +147,8 @@ extern int			ipv6_route_ioctl(unsigned int cmd, void *arg);
 
 extern void			ipv6_route_init(void);
 extern void			ipv6_route_cleanup(void);
+
+extern void			rt6_ifdown(struct device *dev);
 
 extern int			ipv6_route_add(struct in6_rtmsg *rt);
 

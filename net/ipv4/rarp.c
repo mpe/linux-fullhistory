@@ -59,7 +59,7 @@
 #include <net/sock.h>
 #include <net/arp.h>
 #include <net/rarp.h>
-#ifdef CONFIG_AX25
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <net/ax25.h>
 #endif
 #include <linux/proc_fs.h>
@@ -226,7 +226,7 @@ static int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
  */
 
 	if (
-#ifdef CONFIG_AX25
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 		(rarp->ar_pro != htons(AX25_P_IP) && dev->type == ARPHRD_AX25) ||
 #endif
 		(rarp->ar_pro != htons(ETH_P_IP) && dev->type != ARPHRD_AX25)
@@ -305,7 +305,7 @@ static int rarp_req_set(struct arpreq *req)
 			htype = ARPHRD_ETHER;
 			hlen = ETH_ALEN;
 			break;
-#ifdef CONFIG_AX25
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 		case ARPHRD_AX25:
 			htype = ARPHRD_AX25;
 			hlen = 7;

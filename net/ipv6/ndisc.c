@@ -29,6 +29,7 @@
 
 #define __NO_VERSION__
 #include <linux/module.h>
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -40,7 +41,6 @@
 #include <linux/if_arp.h>
 #include <linux/ipv6.h>
 #include <linux/icmpv6.h>
-#include <linux/config.h>
 
 #include <net/sock.h>
 #include <net/snmp.h>

@@ -1,11 +1,11 @@
-/* $Id: sunos_ioctl.c,v 1.20 1996/04/25 06:09:08 davem Exp $
+/* $Id: sunos_ioctl.c,v 1.26 1996/10/31 00:59:06 davem Exp $
  * sunos_ioctl.c: The Linux Operating system: SunOS ioctl compatibility.
  * 
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -32,24 +32,25 @@ extern asmlinkage int sys_setsid(void);
 asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 {
 	struct file *filp;
-	int foo;
+	int ret;
 
 	if (fd >= NR_OPEN || !(filp = current->files->fd [fd]))
 		return -EBADF;
 
 	/* First handle an easy compat. case for tty ldisc. */
 	if(cmd == TIOCSETD) {
-		int *p, ntty = N_TTY, old_fs;
+		int *p, ntty = N_TTY;
+		int tmp, oldfs;
 
 		p = (int *) arg;
-		foo = verify_area(VERIFY_WRITE, p, sizeof(int));
-		if(foo) return foo;
-		if(*p == 2) {
-			old_fs = get_fs();
+		if(get_user(tmp, p))
+			return -EFAULT;
+		if(tmp == 2) {
+			oldfs = get_fs();
 			set_fs(KERNEL_DS);
-			foo = sys_ioctl(fd, cmd, (int) &ntty);
-			set_fs(old_fs);
-			return (foo == -EINVAL ? -EOPNOTSUPP : foo);
+			ret = sys_ioctl(fd, cmd, (int) &ntty);
+			set_fs(oldfs);
+			return (ret == -EINVAL ? -EOPNOTSUPP : ret);
 		}
 	}
 
@@ -65,46 +66,46 @@ asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 		return sys_ioctl(fd, SIOCDELRT, arg);
 	case _IOW('i', 12, struct ifreq):
 		return sys_ioctl(fd, SIOCSIFADDR, arg);
-	case _IORW('i', 13, struct ifreq):
+	case _IOWR('i', 13, struct ifreq):
 		return sys_ioctl(fd, SIOCGIFADDR, arg);
 	case _IOW('i', 14, struct ifreq):
 		return sys_ioctl(fd, SIOCSIFDSTADDR, arg);
-	case _IORW('i', 15, struct ifreq):
+	case _IOWR('i', 15, struct ifreq):
 		return sys_ioctl(fd, SIOCGIFDSTADDR, arg);
 	case _IOW('i', 16, struct ifreq):
 		return sys_ioctl(fd, SIOCSIFFLAGS, arg);
-	case _IORW('i', 17, struct ifreq):
+	case _IOWR('i', 17, struct ifreq):
 		return sys_ioctl(fd, SIOCGIFFLAGS, arg);
 	case _IOW('i', 18, struct ifreq):
 		return sys_ioctl(fd, SIOCSIFMEM, arg);
-	case _IORW('i', 19, struct ifreq):
+	case _IOWR('i', 19, struct ifreq):
 		return sys_ioctl(fd, SIOCGIFMEM, arg);
-	case _IORW('i', 20, struct ifconf):
+	case _IOWR('i', 20, struct ifconf):
 		return sys_ioctl(fd, SIOCGIFCONF, arg);
 	case _IOW('i', 21, struct ifreq): /* SIOCSIFMTU */
 		return sys_ioctl(fd, SIOCSIFMTU, arg);
-	case _IORW('i', 22, struct ifreq): /* SIOCGIFMTU */
+	case _IOWR('i', 22, struct ifreq): /* SIOCGIFMTU */
 		return sys_ioctl(fd, SIOCGIFMTU, arg);
 
-	case _IORW('i', 23, struct ifreq):
+	case _IOWR('i', 23, struct ifreq):
 		return sys_ioctl(fd, SIOCGIFBRDADDR, arg);
 	case _IOW('i', 24, struct ifreq):
 		return sys_ioctl(fd, SIOCGIFBRDADDR, arg);
-	case _IORW('i', 25, struct ifreq):
+	case _IOWR('i', 25, struct ifreq):
 		return sys_ioctl(fd, SIOCGIFNETMASK, arg);
 	case _IOW('i', 26, struct ifreq):
 		return sys_ioctl(fd, SIOCSIFNETMASK, arg);
-	case _IORW('i', 27, struct ifreq):
+	case _IOWR('i', 27, struct ifreq):
 		return sys_ioctl(fd, SIOCGIFMETRIC, arg);
 	case _IOW('i', 28, struct ifreq):
 		return sys_ioctl(fd, SIOCSIFMETRIC, arg);
 
 	case _IOW('i', 30, struct arpreq):
 		return sys_ioctl(fd, SIOCSARP, arg);
-	case _IOW('i', 31, struct arpreq):
+	case _IOWR('i', 31, struct arpreq):
 		return sys_ioctl(fd, SIOCGARP, arg);
 	case _IOW('i', 32, struct arpreq):
-		return sys_ioctl(fd, SIOCGARP, arg);
+		return sys_ioctl(fd, SIOCDARP, arg);
 
 	case _IOW('i', 40, struct ifreq): /* SIOCUPPER */
 	case _IOW('i', 41, struct ifreq): /* SIOCLOWER */
@@ -140,41 +141,39 @@ asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 		return 0;
 	/* Non posix grp */
 	case _IOW('t', 118, int): {
-		int oldval, *ptr;
+		int oldval, newval, *ptr;
 
 		cmd = TIOCSPGRP;
 		ptr = (int *) arg;
-		oldval = verify_area(VERIFY_WRITE, ptr, sizeof(int));
-		if(oldval)
-			return oldval;
-		oldval = *ptr;
-		foo = sys_ioctl(fd, cmd, arg);
-		if(*ptr == -1) {
-			*ptr = oldval;
-			foo = -EIO;
+		if(get_user(oldval, ptr))
+			return -EFAULT;
+		ret = sys_ioctl(fd, cmd, arg);
+		__get_user(newval, ptr);
+		if(newval == -1) {
+			__put_user(oldval, ptr);
+			ret = -EIO;
 		}
-		if(foo == -ENOTTY)
-			foo = -EIO;
-		return foo;
+		if(ret == -ENOTTY)
+			ret = -EIO;
+		return ret;
 	}
 
 	case _IOR('t', 119, int): {
-		int oldval, *ptr;
+		int oldval, newval, *ptr;
 
 		cmd = TIOCGPGRP;
 		ptr = (int *) arg;
-		oldval = verify_area(VERIFY_WRITE, ptr, sizeof(int));
-		if(oldval)
-			return oldval;
-		oldval = *ptr;
-		foo = sys_ioctl(fd, cmd, arg);
-		if(*ptr == -1) {
-			*ptr = oldval;
-			foo = -EIO;
+		if(get_user(oldval, ptr))
+			return -EFAULT;
+		ret = sys_ioctl(fd, cmd, arg);
+		__get_user(newval, ptr);
+		if(newval == -1) {
+			__put_user(oldval, ptr);
+			ret = -EIO;
 		}
-		if(foo == -ENOTTY)
-			foo = -EIO;
-		return foo;
+		if(ret == -ENOTTY)
+			ret = -EIO;
+		return ret;
 	}
 	}
 
@@ -184,9 +183,9 @@ asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 	}
 #endif
 
-	foo = sys_ioctl(fd, cmd, arg);
+	ret = sys_ioctl(fd, cmd, arg);
 	/* so stupid... */
-	return (foo == -EINVAL ? -EOPNOTSUPP : foo);
+	return (ret == -EINVAL ? -EOPNOTSUPP : ret);
 }
 
 

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.30 1996/04/22 10:37:53 davem Exp $
+# $Id: Makefile,v 1.34 1996/09/21 04:07:31 davem Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -31,11 +31,14 @@ all: kernel.o head.o
 
 O_TARGET := kernel.o
 IRQ_OBJS := irq.o sun4m_irq.o sun4c_irq.o
-O_OBJS   := entry.o wof.o wuf.o etrap.o rtrap.o switch.o traps.o ${IRQ_OBJS} \
+O_OBJS   := entry.o wof.o wuf.o etrap.o rtrap.o traps.o ${IRQ_OBJS} \
 	    process.o signal.o ioport.o setup.o idprom.o \
 	    sys_sparc.o sunos_asm.o sparc-stub.o systbls.o sys_sunos.o  \
-	    sunos_ioctl.o time.o windows.o cpu.o devices.o ksyms.o \
-	    sclow.o solaris.o tadpole.o tick14.o ptrace.o
+	    sunos_ioctl.o time.o windows.o cpu.o devices.o \
+	    sclow.o solaris.o tadpole.o tick14.o ptrace.o sys_solaris.o \
+	    unaligned.o
+
+OX_OBJS  := sparc_ksyms.o
 
 ifdef SMP
 O_OBJS += trampoline.o smp.o rirq.o

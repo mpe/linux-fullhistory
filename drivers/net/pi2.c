@@ -53,6 +53,7 @@
    Oct  29, 1995 (ac)  A couple of minor fixes before this, and this release changes
    		       to the proper set_mac_address semantics which will break 
    		       a few programs I suspect.
+   Aug  18, 1996 (jsn) Converted to be used as a module.
 */
 
 /* The following #define invokes a hack that will improve performance (baud)
@@ -81,19 +82,11 @@
 #define DEF_B_SQUELDELAY 3	/* 30 mS */
 #define DEF_B_CLOCKMODE 0	/* Normal clock mode */
 
-static const char *version =
-"PI: V0.8 ALPHA April 23 1995 David Perry (dp@hydra.carleton.ca)\n";
-
 /* The following #define is only really required for the PI card, not
    the PI2 - but it's safer to leave it in. */
 #define REALLY_SLOW_IO 1
 
-#define PI2_MODULE 0
-
-#if PI2_MODULE > 0
 #include <linux/module.h>
-#endif
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -119,7 +112,6 @@ static const char *version =
 #include "pi2.h"
 #include "z8530.h"
 #include <net/ax25.h>
-
 
 struct mbuf {
     struct mbuf *next;
@@ -553,7 +545,7 @@ static void a_rxint(struct device *dev, struct pi_local *lp)
 
 	    skb = dev_alloc_skb(sksize);
 	    if (skb == NULL) {
-		printk("PI: %s: Memory squeeze, dropping packet.\n", dev->name);
+		printk(KERN_ERR "PI: %s: Memory squeeze, dropping packet.\n", dev->name);
 		lp->stats.rx_dropped++;
 		restore_flags(flags);
 		return;
@@ -642,7 +634,7 @@ static void b_rxint(struct device *dev, struct pi_local *lp)
 		sksize = pkt_len;
 		skb = dev_alloc_skb(sksize);
 		if (skb == NULL) {
-		    printk("PI: %s: Memory squeeze, dropping packet.\n", dev->name);
+		    printk(KERN_ERR "PI: %s: Memory squeeze, dropping packet.\n", dev->name);
 		    lp->stats.rx_dropped++;
 		    restore_flags(flags);
 		    return;
@@ -1214,27 +1206,27 @@ int pi_init(void)
     int ports[] =
     {0x380, 0x300, 0x320, 0x340, 0x360, 0x3a0, 0};
 
-    printk(version);
+    printk(KERN_INFO "PI: V0.8 ALPHA April 23 1995 David Perry (dp@hydra.carleton.ca)\n");
 
     /* Only one card supported for now */
     for (port = &ports[0]; *port && !card_type; port++) {
 	ioaddr = *port;
 
 	if (check_region(ioaddr, PI_TOTAL_SIZE) == 0) {
-	    printk("PI: Probing for card at address %#3x\n",ioaddr);
+	    printk(KERN_INFO "PI: Probing for card at address %#3x\n",ioaddr);
 	    card_type = hw_probe(ioaddr);
 	}
     }
 
     switch (card_type) {
     case 1:
-	printk("PI: Found a PI card at address %#3x\n", ioaddr);
+	printk(KERN_INFO "PI: Found a PI card at address %#3x\n", ioaddr);
 	break;
     case 2:
-	printk("PI: Found a PI2 card at address %#3x\n", ioaddr);
+	printk(KERN_INFO "PI: Found a PI2 card at address %#3x\n", ioaddr);
 	break;
     default:
-	printk("PI: ERROR: No card found\n");
+	printk(KERN_ERR "PI: ERROR: No card found\n");
 	return -EIO;
     }
 
@@ -1256,6 +1248,7 @@ int pi_init(void)
     register_netdev(&pi0b);
     pi0b.base_addr = ioaddr;
     pi0b.irq = 0;
+
     pi0b.priv = kmalloc(sizeof(struct pi_local) + (DMA_BUFF_SIZE + sizeof(struct mbuf)) * 4, GFP_KERNEL | GFP_DMA);
 
     /* Now initialize them */
@@ -1275,8 +1268,9 @@ static int valid_dma_page(unsigned long addr, unsigned long dev_buffsize)
 	return 0;
 }
 
-static int pi_set_mac_address(struct device *dev, struct sockaddr *sa)
+static int pi_set_mac_address(struct device *dev, void *addr)
 {
+    struct sockaddr *sa = (struct sockaddr *)addr;
     memcpy(dev->dev_addr, sa->sa_data, dev->addr_len);	/* addr is an AX.25 shifted ASCII */
     return 0;						/* mac address */
 }
@@ -1364,7 +1358,7 @@ static int pi_probe(struct device *dev, int card_type)
 
 	lp->dmachan = dev->dma;
 	if (lp->dmachan < 1 || lp->dmachan > 3)
-	    printk("PI: DMA channel %d out of range\n", lp->dmachan);
+	    printk(KERN_ERR "PI: DMA channel %d out of range\n", lp->dmachan);
 
 	/* chipset_init() was already called */
 
@@ -1381,7 +1375,7 @@ static int pi_probe(struct device *dev, int card_type)
 	    /* 20 "jiffies" should be plenty of time... */
 	    dev->irq = autoirq_report(20);
 	    if (!dev->irq) {
-		printk(". Failed to detect IRQ line.\n");
+		printk(KERN_ERR "PI: Failed to detect IRQ line.\n");
 	    }
 	    save_flags(flags);
 	    cli();
@@ -1391,7 +1385,7 @@ static int pi_probe(struct device *dev, int card_type)
 	    restore_flags(flags);
 	}
 
-	printk("PI: Autodetected IRQ %d, assuming DMA %d.\n",
+	printk(KERN_INFO "PI: Autodetected IRQ %d, assuming DMA %d.\n",
 	       dev->irq, dev->dma);
 
 	/* This board has jumpered interrupts. Snarf the interrupt vector
@@ -1400,7 +1394,7 @@ static int pi_probe(struct device *dev, int card_type)
 	{
 	    int irqval = request_irq(dev->irq, &pi_interrupt,0, "pi2", NULL);
 	    if (irqval) {
-		printk("PI: unable to get IRQ %d (irqval=%d).\n",
+		printk(KERN_ERR "PI: unable to get IRQ %d (irqval=%d).\n",
 		       dev->irq, irqval);
 		return EAGAIN;
 	    }
@@ -1487,6 +1481,9 @@ static int pi_open(struct device *dev)
     dev->interrupt = 0;
     dev->start = 1;
     first_time = 0;
+
+    MOD_INC_USE_COUNT;
+
     return 0;
 }
 
@@ -1520,7 +1517,7 @@ static void pi_interrupt(int reg_ptr, void *dev_id, struct pt_regs *regs)
 
 #if 0
     if (dev_a == NULL) {
-	printk("PI: pi_interrupt(): irq %d for unknown device.\n", irq);
+	printk(KERN_ERR "PI: pi_interrupt(): irq %d for unknown device.\n", irq);
 	return;
     }
 #endif    
@@ -1589,6 +1586,9 @@ static int pi_close(struct device *dev)
 	free_p(ptr);
 
     restore_flags(flags);
+
+    MOD_DEC_USE_COUNT;
+
     return 0;
 }
 
@@ -1681,6 +1681,28 @@ static struct netstats *
     return &lp->stats;
 }
 
+#ifdef MODULE
+int init_module(void)
+{
+    register_symtab(NULL);
+    return pi_init();
+}
+
+void cleanup_module(void)
+{
+    free_irq(pi0a.irq, NULL);	/* IRQs and IO Ports are shared */
+    release_region(pi0a.base_addr & 0x3f0, PI_TOTAL_SIZE);
+    irq2dev_map[pi0a.irq] = NULL;
+
+    kfree(pi0a.priv);
+    pi0a.priv = NULL;
+    unregister_netdev(&pi0a);
+
+    kfree(pi0b.priv);
+    pi0b.priv = NULL;
+    unregister_netdev(&pi0b);
+}
+#endif
 
 /*
  * Local variables:

@@ -140,12 +140,6 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 					goto exit_f;
 				}
 
-				if (in6_dev && ifp->scope == IFA_LINK &&
-				    in6_dev != ifp->idev)
-				{
-					goto exit_f;
-				}
-
 				*src_addr = &src_info->ipi6_addr;
 				err = 0;
 			}

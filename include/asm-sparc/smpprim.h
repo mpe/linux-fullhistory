@@ -1,4 +1,4 @@
-/*  $Id: smpprim.h,v 1.4 1995/11/25 02:32:47 davem Exp $
+/*  $Id: smpprim.h,v 1.5 1996/08/29 09:48:49 davem Exp $
  *  smpprim.h:  SMP locking primitives on the Sparc
  *
  *  God knows we won't be actually using this code for some time
@@ -15,7 +15,7 @@
  * atomic.
  */
 
-extern inline volatile char test_and_set(void *addr)
+extern __inline__ __volatile__ char test_and_set(void *addr)
 {
 	char state = 0;
 
@@ -27,7 +27,7 @@ extern inline volatile char test_and_set(void *addr)
 }
 
 /* Initialize a spin-lock. */
-extern inline volatile smp_initlock(void *spinlock)
+extern __inline__ __volatile__ smp_initlock(void *spinlock)
 {
 	/* Unset the lock. */
 	*((unsigned char *) spinlock) = 0;
@@ -36,7 +36,7 @@ extern inline volatile smp_initlock(void *spinlock)
 }
 
 /* This routine spins until it acquires the lock at ADDR. */
-extern inline volatile smp_lock(void *addr)
+extern __inline__ __volatile__ smp_lock(void *addr)
 {
 	while(test_and_set(addr) == 0xff)
 		;
@@ -46,7 +46,7 @@ extern inline volatile smp_lock(void *addr)
 }
 
 /* This routine releases the lock at ADDR. */
-extern inline volatile smp_unlock(void *addr)
+extern __inline__ __volatile__ smp_unlock(void *addr)
 {
 	*((unsigned char *) addr) = 0;
 }

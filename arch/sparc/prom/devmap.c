@@ -1,8 +1,12 @@
-/* $Id: devmap.c,v 1.2 1995/11/25 00:59:56 davem Exp $
+/* $Id: devmap.c,v 1.3 1996/09/19 20:27:19 davem Exp $
  * promdevmap.c:  Map device/IO areas to virtual addresses.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
+
+#include <linux/types.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
@@ -20,16 +24,33 @@
 char *
 prom_mapio(char *vhint, int ios, unsigned int paddr, unsigned int num_bytes)
 {
-	if((num_bytes == 0) || (paddr == 0)) return (char *) 0x0;
-	return (*(romvec->pv_v2devops.v2_dumb_mmap))(vhint, ios, paddr,
-						     num_bytes);
+	unsigned long flags;
+	char *ret;
+
+	save_flags(flags); cli();
+	if((num_bytes == 0) || (paddr == 0)) ret = (char *) 0x0;
+	else
+	ret = (*(romvec->pv_v2devops.v2_dumb_mmap))(vhint, ios, paddr,
+						    num_bytes);
+	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
+			     "r" (&current_set[smp_processor_id()]) :
+			     "memory");
+	restore_flags(flags);
+	return ret;
 }
 
 /* Unmap an IO/device area that was mapped using the above routine. */
 void
 prom_unmapio(char *vaddr, unsigned int num_bytes)
 {
+	unsigned long flags;
+
 	if(num_bytes == 0x0) return;
+	save_flags(flags); cli();
 	(*(romvec->pv_v2devops.v2_dumb_munmap))(vaddr, num_bytes);
+	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
+			     "r" (&current_set[smp_processor_id()]) :
+			     "memory");
+	restore_flags(flags);
 	return;
 }

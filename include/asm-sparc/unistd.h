@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.21 1996/04/25 06:13:35 davem Exp $ */
+/* $Id: unistd.h,v 1.24 1996/08/29 09:49:06 davem Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -270,20 +270,21 @@
 #define __NR__sysctl            251
 #define __NR_getsid             252
 #define __NR_fdatasync          253
+#define __NR_nfsctl             254
 
 #define _syscall0(type,name) \
 type name(void) \
 { \
 long __res; \
-__asm__ volatile ("or %%g0, %0, %%g1\n\t" \
-		  "t 0x10\n\t" \
-		  "bcc 1f\n\t" \
-		  "or %%g0, %%o0, %0\n\t" \
-		  "sub %%g0, %%o0, %0\n\t" \
-		  "1:\n\t" \
-		  : "=r" (__res)\
-		  : "0" (__NR_##name) \
-		  : "g1", "o0"); \
+__asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
+		      "t 0x10\n\t" \
+		      "bcc 1f\n\t" \
+		      "or %%g0, %%o0, %0\n\t" \
+		      "sub %%g0, %%o0, %0\n\t" \
+		      "1:\n\t" \
+		      : "=r" (__res)\
+		      : "0" (__NR_##name) \
+		      : "g1", "o0"); \
 if (__res >= 0) \
     return (type) __res; \
 errno = -__res; \
@@ -294,16 +295,16 @@ return -1; \
 type name(type1 arg1) \
 { \
 long __res; \
-__asm__ volatile ("or %%g0, %0, %%g1\n\t" \
-		  "or %%g0, %1, %%o0\n\t" \
-		  "t 0x10\n\t" \
-		  "bcc 1f\n\t" \
-		  "or %%g0, %%o0, %0\n\t" \
-		  "sub %%g0, %%o0, %0\n\t" \
-		  "1:\n\t" \
-		  : "=r" (__res), "=r" ((long)(arg1)) \
-		  : "0" (__NR_##name),"1" ((long)(arg1)) \
-		  : "g1", "o0"); \
+__asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
+		      "or %%g0, %1, %%o0\n\t" \
+		      "t 0x10\n\t" \
+		      "bcc 1f\n\t" \
+		      "or %%g0, %%o0, %0\n\t" \
+		      "sub %%g0, %%o0, %0\n\t" \
+		      "1:\n\t" \
+		      : "=r" (__res), "=r" ((long)(arg1)) \
+		      : "0" (__NR_##name),"1" ((long)(arg1)) \
+		      : "g1", "o0"); \
 if (__res >= 0) \
 	return (type) __res; \
 errno = -__res; \
@@ -314,17 +315,17 @@ return -1; \
 type name(type1 arg1,type2 arg2) \
 { \
 long __res; \
-__asm__ volatile ("or %%g0, %0, %%g1\n\t" \
-		  "or %%g0, %1, %%o0\n\t" \
-		  "or %%g0, %2, %%o1\n\t" \
-		  "t 0x10\n\t" \
-		  "bcc 1f\n\t" \
-		  "or %%g0, %%o0, %0\n\t" \
-		  "sub %%g0,%%o0,%0\n\t" \
-		  "1:\n\t" \
-		  : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)) \
-		  : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)) \
-		  : "g1", "o0", "o1"); \
+__asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
+		      "or %%g0, %1, %%o0\n\t" \
+		      "or %%g0, %2, %%o1\n\t" \
+		      "t 0x10\n\t" \
+		      "bcc 1f\n\t" \
+		      "or %%g0, %%o0, %0\n\t" \
+		      "sub %%g0, %%o0, %0\n\t" \
+		      "1:\n\t" \
+		      : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)) \
+		      : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)) \
+		      : "g1", "o0", "o1"); \
 if (__res >= 0) \
 	return (type) __res; \
 errno = -__res; \
@@ -335,20 +336,20 @@ return -1; \
 type name(type1 arg1,type2 arg2,type3 arg3) \
 { \
 long __res; \
-__asm__ volatile ("or %%g0, %0, %%g1\n\t" \
-		  "or %%g0, %1, %%o0\n\t" \
-		  "or %%g0, %2, %%o1\n\t" \
-		  "or %%g0, %3, %%o2\n\t" \
-		  "t 0x10\n\t" \
-		  "bcc 1f\n\t" \
-		  "or %%g0, %%o0, %0\n\t" \
-		  "sub %%g0, %%o0, %0\n\t" \
-		  "1:\n\t" \
-		  : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)), \
-		    "=r" ((long)(arg3)) \
-		  : "0" (__NR_##name), "1" ((long)(arg1)), "2" ((long)(arg2)), \
-		    "3" ((long)(arg3)) \
-		  : "g1", "o0", "o1", "o2"); \
+__asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
+		      "or %%g0, %1, %%o0\n\t" \
+		      "or %%g0, %2, %%o1\n\t" \
+		      "or %%g0, %3, %%o2\n\t" \
+		      "t 0x10\n\t" \
+		      "bcc 1f\n\t" \
+		      "or %%g0, %%o0, %0\n\t" \
+		      "sub %%g0, %%o0, %0\n\t" \
+		      "1:\n\t" \
+		      : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)), \
+		        "=r" ((long)(arg3)) \
+		      : "0" (__NR_##name), "1" ((long)(arg1)), "2" ((long)(arg2)), \
+		        "3" ((long)(arg3)) \
+		      : "g1", "o0", "o1", "o2"); \
 if (__res>=0) \
 	return (type) __res; \
 errno = -__res; \
@@ -359,49 +360,49 @@ return -1; \
 type name (type1 arg1, type2 arg2, type3 arg3, type4 arg4) \
 { \
 long __res; \
-__asm__ volatile ("or %%g0, %0, %%g1\n\t" \
-		  "or %%g0, %1, %%o0\n\t" \
-		  "or %%g0, %2, %%o1\n\t" \
-		  "or %%g0, %3, %%o2\n\t" \
-		  "or %%g0, %4, %%o3\n\t" \
-		  "t 0x10\n\t" \
-		  "bcc 1f\n\t" \
-		  "or %%g0, %%o0, %0\n\t" \
-		  "sub %%g0,%%o0, %0\n\t" \
-		  "1:\n\t" \
-		  : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)), \
-		    "=r" ((long)(arg3)), "=r" ((long)(arg4)) \
-		  : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)), \
-		    "3" ((long)(arg3)),"4" ((long)(arg4)) \
-		  : "g1", "o0", "o1", "o2", "o3"); \
+__asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
+		      "or %%g0, %1, %%o0\n\t" \
+		      "or %%g0, %2, %%o1\n\t" \
+		      "or %%g0, %3, %%o2\n\t" \
+		      "or %%g0, %4, %%o3\n\t" \
+		      "t 0x10\n\t" \
+		      "bcc 1f\n\t" \
+		      "or %%g0, %%o0, %0\n\t" \
+		      "sub %%g0,%%o0, %0\n\t" \
+		      "1:\n\t" \
+		      : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)), \
+		        "=r" ((long)(arg3)), "=r" ((long)(arg4)) \
+		      : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)), \
+		        "3" ((long)(arg3)),"4" ((long)(arg4)) \
+		      : "g1", "o0", "o1", "o2", "o3"); \
 if (__res>=0) \
 	return (type) __res; \
 errno = -__res; \
 return -1; \
 } 
-#
+
 #define _syscall5(type,name,type1,arg1,type2,arg2,type3,arg3,type4,arg4, \
 	  type5,arg5) \
 type name (type1 arg1,type2 arg2,type3 arg3,type4 arg4,type5 arg5) \
 { \
       long __res; \
 \
-__asm__ volatile ("or %%g0, %1, %%o0\n\t" \
-		  "or %%g0, %2, %%o1\n\t" \
-		  "or %%g0, %3, %%o2\n\t" \
-		  "or %%g0, %4, %%o3\n\t" \
-		  "or %%g0, %5, %%o4\n\t" \
-		  "or %%g0, %6, %%g1\n\t" \
-		  "t 0x10\n\t" \
-		  "bcc 1f\n\t" \
-		  "or %%g0, %%o0, %0\n\t" \
-		  "sub %%g0, %%o0, %0\n\t" \
-		  "1:\n\t" \
-		  : "=r" (__res) \
-		  : "0" ((long)(arg1)),"1" ((long)(arg2)), \
-		    "2" ((long)(arg3)),"3" ((long)(arg4)),"4" ((long)(arg5)), \
-		    "i" (__NR_##name)  \
-		  : "g1", "o0", "o1", "o2", "o3", "o4"); \
+__asm__ __volatile__ ("or %%g0, %1, %%o0\n\t" \
+		      "or %%g0, %2, %%o1\n\t" \
+		      "or %%g0, %3, %%o2\n\t" \
+		      "or %%g0, %4, %%o3\n\t" \
+		      "or %%g0, %5, %%o4\n\t" \
+		      "or %%g0, %6, %%g1\n\t" \
+		      "t 0x10\n\t" \
+		      "bcc 1f\n\t" \
+		      "or %%g0, %%o0, %0\n\t" \
+		      "sub %%g0, %%o0, %0\n\t" \
+		      "1:\n\t" \
+		      : "=r" (__res) \
+		      : "r" ((long)(arg1)),"r" ((long)(arg2)), \
+		        "r" ((long)(arg3)),"r" ((long)(arg4)),"r" ((long)(arg5)), \
+		        "i" (__NR_##name)  \
+		      : "g1", "o0", "o1", "o2", "o3", "o4"); \
 if (__res>=0) \
 	return (type) __res; \
 errno = -__res; \
@@ -422,22 +423,22 @@ return -1; \
  * some others too.
  */
 #define __NR__exit __NR_exit
-static inline _syscall0(int,idle)
-static inline _syscall0(int,fork)
-static inline _syscall2(int,clone,unsigned long,flags,char *,ksp)
-static inline _syscall0(int,pause)
-static inline _syscall0(int,setup)
-static inline _syscall0(int,sync)
-static inline _syscall0(pid_t,setsid)
-static inline _syscall3(int,write,int,fd,const char *,buf,off_t,count)
-static inline _syscall1(int,dup,int,fd)
-static inline _syscall3(int,execve,const char *,file,char **,argv,char **,envp)
-static inline _syscall3(int,open,const char *,file,int,flag,int,mode)
-static inline _syscall1(int,close,int,fd)
-static inline _syscall1(int,_exit,int,exitcode)
-static inline _syscall3(pid_t,waitpid,pid_t,pid,int *,wait_stat,int,options)
+static __inline__ _syscall0(int,idle)
+static __inline__ _syscall0(int,fork)
+static __inline__ _syscall2(int,clone,unsigned long,flags,char *,ksp)
+static __inline__ _syscall0(int,pause)
+static __inline__ _syscall0(int,setup)
+static __inline__ _syscall0(int,sync)
+static __inline__ _syscall0(pid_t,setsid)
+static __inline__ _syscall3(int,write,int,fd,__const__ char *,buf,off_t,count)
+static __inline__ _syscall1(int,dup,int,fd)
+static __inline__ _syscall3(int,execve,__const__ char *,file,char **,argv,char **,envp)
+static __inline__ _syscall3(int,open,__const__ char *,file,int,flag,int,mode)
+static __inline__ _syscall1(int,close,int,fd)
+static __inline__ _syscall1(int,_exit,int,exitcode)
+static __inline__ _syscall3(pid_t,waitpid,pid_t,pid,int *,wait_stat,int,options)
 
-static inline pid_t wait(int * wait_stat)
+static __inline__ pid_t wait(int * wait_stat)
 {
 	return waitpid(-1,wait_stat,0);
 }
@@ -450,7 +451,7 @@ static inline pid_t wait(int * wait_stat)
  * a system call from a "real" process, but the process memory space will
  * not be free'd until both the parent and the child have exited.
  */
-static inline pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
+static __inline__ pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 {
 	long retval;
 

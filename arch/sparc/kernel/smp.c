@@ -9,6 +9,7 @@
 #include <linux/kernel.h>
 #include <linux/tasks.h>
 #include <linux/smp.h>
+#include <linux/interrupt.h>
 
 #include <asm/delay.h>
 #include <asm/irq.h>
@@ -91,18 +92,12 @@ static char smp_buf[512];
 char *smp_info(void)
 {
 	sprintf(smp_buf,
-"\n        CPU0\t\tCPU1\t\tCPU2\t\tCPU3\n"
-"State: %s\t\t%s\t\t%s\t\t%s\n"
-"Lock:  %08lx\t\t%08lx\t%08lx\t%08lx\n"
-"\n"
-"klock: %x\n",
-		(cpu_present_map & 1) ? ((active_kernel_processor == 0) ? "akp" : "online") : "offline",
-		(cpu_present_map & 2) ? ((active_kernel_processor == 1) ? "akp" : "online") : "offline",
-		(cpu_present_map & 4) ? ((active_kernel_processor == 2) ? "akp" : "online") : "offline",
-		(cpu_present_map & 8) ? ((active_kernel_processor == 3) ? "akp" : "online") : "offline",
-		smp_proc_in_lock[0], smp_proc_in_lock[1], smp_proc_in_lock[2],
-		smp_proc_in_lock[3], 
-		kernel_flag);
+"        CPU0\t\tCPU1\t\tCPU2\t\tCPU3\n"
+"State:  %s\t\t%s\t\t%s\t\t%s\n",
+(cpu_present_map & 1) ? ((active_kernel_processor == 0) ? "akp" : "online") : "offline",
+(cpu_present_map & 2) ? ((active_kernel_processor == 1) ? "akp" : "online") : "offline",
+(cpu_present_map & 4) ? ((active_kernel_processor == 2) ? "akp" : "online") : "offline",
+(cpu_present_map & 8) ? ((active_kernel_processor == 3) ? "akp" : "online") : "offline");
 	return smp_buf;
 }
 
@@ -169,8 +164,11 @@ void smp_callin(void)
 	local_flush_tlb_all();
 
 	/* Fix idle thread fields. */
+	__asm__ __volatile__("ld [%0], %%g6\n\t"
+			     : : "r" (&current_set[smp_processor_id()])
+			     : "memory" /* paranoid */);
 	current->mm->mmap->vm_page_prot = PAGE_SHARED;
-	current->mm->mmap->vm_start = KERNBASE;
+	current->mm->mmap->vm_start = PAGE_OFFSET;
 	current->mm->mmap->vm_end = init_task.mm->mmap->vm_end;
 
 	local_flush_cache_all();
@@ -197,7 +195,7 @@ void smp_boot_cpus(void)
 	int cpucount = 0;
 	int i = 0;
 
-	printk("Entering SparclinuxMultiPenguin(SMP) Mode...\n");
+	printk("Entering SMP Mode...\n");
 
 	penguin_ctable.which_io = 0;
 	penguin_ctable.phys_addr = (char *) srmmu_ctx_table_phys;
@@ -252,7 +250,7 @@ void smp_boot_cpus(void)
 				cpu_number_map[i] = i;
 				cpu_logical_map[i] = i;
 			} else {
-				printk("Penguin %d is stuck in the bottle.\n", i);
+				printk("Processor %d is stuck.\n", i);
 			}
 		}
 		if(!(cpu_callin_map[i])) {
@@ -262,7 +260,7 @@ void smp_boot_cpus(void)
 	}
 	local_flush_cache_all();
 	if(cpucount == 0) {
-		printk("Error: only one Penguin found.\n");
+		printk("Error: only one Processor found.\n");
 		cpu_present_map = (1 << smp_processor_id());
 	} else {
 		unsigned long bogosum = 0;
@@ -270,7 +268,7 @@ void smp_boot_cpus(void)
 			if(cpu_present_map & (1 << i))
 				bogosum += cpu_data[i].udelay_val;
 		}
-		printk("Total of %d Penguins activated (%lu.%02lu PenguinMIPS).\n",
+		printk("Total of %d Processors activated (%lu.%02lu BogoMIPS).\n",
 		       cpucount + 1,
 		       (bogosum + 2500)/500000,
 		       ((bogosum + 2500)/5000)%100);
@@ -299,10 +297,7 @@ static inline void send_ipi(unsigned long target_map, int irq)
  * A processor may get stuck with irq's off waiting to send a message and
  * thus not replying to the person spinning for a reply....
  *
- * In the end invalidate ought to be the NMI and a very very short
- * function (to avoid the old IDE disk problems), and other messages sent
- * with IRQ's enabled in a civilised fashion. That will also boost
- * performance.
+ * On the Sparc we use NMI's for all messages except reschedule.
  */
 
 static volatile int message_cpu = NO_PROC_ID;
@@ -404,7 +399,7 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 		return;
 	}
 	smp_cpu_in_msg[p]--;
-	smp_swap(&message_cpu, NO_PROC_ID);
+	message_cpu = NO_PROC_ID;
 }
 
 struct smp_funcall {
@@ -444,7 +439,7 @@ void smp_cross_call(smpfunc_t func, unsigned long arg1, unsigned long arg2,
 	printk("xc%d<", me);
 #endif
 	if(smp_processors_ready) {
-		save_flags(flags); cli();
+		save_and_cli(flags);
 		if(me != active_kernel_processor)
 			goto cross_call_not_master;
 
@@ -497,7 +492,7 @@ void smp_cross_call(smpfunc_t func, unsigned long arg1, unsigned long arg2,
 #endif
 		/* See wait case 3 in smp_message_pass()... */
 		smp_cpu_in_msg[me]--;
-		smp_swap(&message_cpu, NO_PROC_ID); /* store buffers... */
+		message_cpu = NO_PROC_ID;
 		restore_flags(flags);
 		return; /* made it... */
 
@@ -589,7 +584,7 @@ void smp_capture(void)
 #ifdef DEBUG_CAPTURE
 	printk("C<%d>", smp_processor_id());
 #endif
-	save_flags(flags); cli();
+	save_and_cli(flags);
 	if(!capture_level) {
 		release = 0;
 		smp_message_pass(MSG_ALL_BUT_SELF, MSG_CAPTURE, 0, 1);
@@ -608,7 +603,7 @@ void smp_release(void)
 #ifdef DEBUG_CAPTURE
 	printk("R<%d>", smp_processor_id());
 #endif
-	save_flags(flags); cli();
+	save_and_cli(flags);
 	if(!(capture_level - 1)) {
 		release = 1;
 		for(i = 0; i < smp_num_cpus; i++)

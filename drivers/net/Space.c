@@ -227,16 +227,23 @@ ethif_probe(struct device *dev)
 #   define NEXT_DEV	(&sdla0_dev)
 #endif
 
+#ifdef CONFIG_AX25
 #ifdef CONFIG_NETROM
 	extern int nr_init(struct device *);
-	
 	static struct device nr3_dev = { "nr3", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, nr_init, };
 	static struct device nr2_dev = { "nr2", 0, 0, 0, 0, 0, 0, 0, 0, 0, &nr3_dev, nr_init, };
 	static struct device nr1_dev = { "nr1", 0, 0, 0, 0, 0, 0, 0, 0, 0, &nr2_dev, nr_init, };
 	static struct device nr0_dev = { "nr0", 0, 0, 0, 0, 0, 0, 0, 0, 0, &nr1_dev, nr_init, };
-
 #   undef NEXT_DEV
 #   define	NEXT_DEV	(&nr0_dev)
+#endif
+#ifdef CONFIG_ROSE
+	extern int rose_init(struct device *);
+	static struct device rose1_dev = { "rose1", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV,   rose_init, };
+	static struct device rose0_dev = { "rose0", 0, 0, 0, 0, 0, 0, 0, 0, 0, &rose1_dev, rose_init, };
+#   undef NEXT_DEV
+#   define	NEXT_DEV	(&rose0_dev)
+#endif
 #endif
 
 /* Run-time ATtachable (Pocket) devices have a different (not "eth#") name. */
@@ -308,6 +315,16 @@ static struct device slip_bootstrap = {
 #undef NEXT_DEV
 #define NEXT_DEV (&slip_bootstrap)
 #endif	/* SLIP */
+  
+#if defined(CONFIG_MKISS)
+	/* To be exact, this node just hooks the initialization
+	   routines to the device structures.			*/
+extern int mkiss_init_ctrl_dev(struct device *);
+static struct device mkiss_bootstrap = {
+  "mkiss_proto", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, mkiss_init_ctrl_dev, };
+#undef NEXT_DEV
+#define NEXT_DEV (&mkiss_bootstrap)
+#endif	/* MKISS */
   
 #if defined(CONFIG_STRIP)
 extern int strip_init_ctrl_dev(struct device *);

@@ -1,4 +1,4 @@
-/* $Id: oplib.h,v 1.8 1996/04/25 06:13:23 davem Exp $
+/* $Id: oplib.h,v 1.12 1996/10/31 06:29:13 davem Exp $
  * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *
@@ -103,12 +103,12 @@ extern void prom_feval(char *forth_string);
 /* Enter the prom, with possibility of continuation with the 'go'
  * command in newer proms.
  */
-extern void prom_halt(void);
+extern void prom_cmdline(void);
 
 /* Enter the prom, with no chance of continuation for the stand-alone
  * which calls this.
  */
-extern void prom_die(void);
+extern void prom_halt(void);
 
 /* Set the PROM 'sync' callback function to the passed function pointer.
  * When the user gives the 'sync' command at the prom prompt while the
@@ -123,7 +123,7 @@ extern void prom_setsync(sync_func_t func_ptr);
  * gets passed a buffer where you would like it stuffed.  The return value
  * is the format type of this idprom or 0xff on error.
  */
-extern unsigned char prom_getidp(char *idp_buffer, int idpbuf_size);
+extern unsigned char prom_get_idprom(char *idp_buffer, int idpbuf_size);
 
 /* Get the prom major version. */
 extern int prom_version(void);
@@ -244,6 +244,11 @@ extern void prom_getstring(int node, char *prop, char *buf, int bufsize);
 /* Does the passed node have the given "name"? YES=1 NO=0 */
 extern int prom_nodematch(int thisnode, char *name);
 
+/* Puts in buffer a prom name in the form name@x,y or name (x for which_io 
+ * and y for first regs phys address
+ */
+extern int prom_getname(int node, char *buf, int buflen);
+
 /* Search all siblings starting at the passed node for "name" matching
  * the given string.  Returns the node on success, zero on failure.
  */
@@ -267,6 +272,9 @@ extern int prom_node_has_property(int node, char *property);
  */
 extern int prom_setprop(int node, char *prop_name, char *prop_value,
 			int value_size);
+			
+extern int prom_pathtoinode(char *path);
+extern int prom_inst2pkg(int);
 
 /* Dorking with Bus ranges... */
 
@@ -281,7 +289,9 @@ extern void prom_adjust_ranges(struct linux_prom_ranges *cranges, int ncranges,
 /* Apply promlib probed OBIO ranges to registers. */
 extern void prom_apply_obio_ranges(struct linux_prom_registers *obioregs, int nregs);
 
-/* Apply promlib probed SBUS ranges to registers. */
-extern void prom_apply_sbus_ranges(struct linux_prom_registers *sbusregs, int nregs);
+/* Apply ranges of any prom node (and optionally parent node as well) to registers. */
+extern void prom_apply_generic_ranges(int node, int parent, 
+				      struct linux_prom_registers *sbusregs, int nregs);
+				   
 
 #endif /* !(__SPARC_OPLIB_H) */

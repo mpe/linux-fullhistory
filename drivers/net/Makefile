@@ -426,12 +426,36 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_MKISS),y)
+L_OBJS += mkiss.o
+else
+  ifeq ($(CONFIG_MKISS),m)
+  M_OBJS += mkiss.o
+  endif
+endif
+
 ifeq ($(CONFIG_PI),y)
 L_OBJS += pi2.o
+else
+  ifeq ($(CONFIG_PI),m)
+  M_OBJS += pi2.o
+  endif
 endif
 
 ifeq ($(CONFIG_PT),y)
 L_OBJS += pt.o
+else
+  ifeq ($(CONFIG_PT),m)
+  M_OBJS += pt.o
+  endif
+endif
+
+ifeq ($(CONFIG_BPQETHER),y)
+L_OBJS += bpqether.o
+else
+  ifeq ($(CONFIG_BPQETHER),m)
+  M_OBJS += bpqether.o
+  endif
 endif
 
 # If anything built-in uses slhc, then build it into the kernel also.

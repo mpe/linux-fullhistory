@@ -1,10 +1,11 @@
-/* $Id: memory.c,v 1.7 1996/04/25 06:09:46 davem Exp $
+/* $Id: memory.c,v 1.8 1996/07/12 05:14:56 tridge Exp $
  * memory.c: Prom routine for acquiring various bits of information
  *           about RAM on the machine, both virtual and physical.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 
 #include <asm/openprom.h>
@@ -178,21 +179,22 @@ prom_meminit(void)
 		break;
 
         case PROM_AP1000:
-          /* really simple memory map */
-          prom_phys_total[0].start_adr = 0x00000000;
-          prom_phys_total[0].num_bytes = 0x01000000; /* 16MB */
-          prom_phys_total[0].theres_more = 0x0;
-          prom_prom_taken[0].start_adr = 0x00000000; 
-          prom_prom_taken[0].num_bytes = 0x00000000;
-          prom_prom_taken[0].theres_more = 0x0;
-          prom_phys_avail[0].start_adr = 0x00000000;
-          prom_phys_avail[0].num_bytes = 0x01000000; /* 16MB */
-          prom_phys_avail[0].theres_more = 0x0;
-          prom_sortmemlist(prom_phys_total);
-          prom_sortmemlist(prom_prom_taken);
-          prom_sortmemlist(prom_phys_avail);
-          printk("Initialised AP1000 memory lists (forced 16MB)\n");
-          break;
+#if CONFIG_AP1000
+		/* really simple memory map */
+		prom_phys_total[0].start_adr = 0x00000000;
+		prom_phys_total[0].num_bytes = ap_memory_size();
+		prom_phys_total[0].theres_more = 0x0;
+		prom_prom_taken[0].start_adr = 0x00000000; 
+		prom_prom_taken[0].num_bytes = 0x00000000;
+		prom_prom_taken[0].theres_more = 0x0;
+		prom_phys_avail[0].start_adr = 0x00000000;
+		prom_phys_avail[0].num_bytes = prom_phys_total[0].num_bytes;
+		prom_phys_avail[0].theres_more = 0x0;
+		prom_sortmemlist(prom_phys_total);
+		prom_sortmemlist(prom_prom_taken);
+		prom_sortmemlist(prom_phys_avail);
+#endif
+		break;
 	};
 
 	/* Link all the lists into the top-level descriptor. */

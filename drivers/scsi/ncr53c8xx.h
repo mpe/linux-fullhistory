@@ -45,7 +45,7 @@
 /*
 **	Name and revision of the driver
 */
-#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 1.14b"
+#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 1.14c"
  
 /*
 **	If SCSI_NCR_SPECIAL_FEATURES is defined,

@@ -20,18 +20,20 @@ loaded.
 
 In accordance with the Unicode standard/ISO 10646 the range U+F000 to
 U+F8FF has been reserved for OS-wide allocation (the Unicode Standard
-refers to this as a "Corporate Zone").  U+F000 was picked as the
-starting point since it lets the direct-mapping area start on a large
-power of two (in case 1024- or 2048-character fonts ever become
-necessary).  This leaves U+E000 to U+EFFF as End User Zone.
+refers to this as a "Corporate Zone", since this is inaccurate for
+Linux we call it the "Linux Zone").  U+F000 was picked as the starting
+point since it lets the direct-mapping area start on a large power of
+two (in case 1024- or 2048-character fonts ever become necessary).
+This leaves U+E000 to U+EFFF as End User Zone.
 
 The Unicodes in the range U+F000 to U+F1FF have been hard-coded to map
 directly to the loaded font, bypassing the translation table.  The
 user-defined map now defaults to U+F000 to U+F1FF, emulating the
-previous behaviour.
+previous behaviour.  This range may expand in the future should it be
+warranted.
 
-Actual characters assigned in the Corporate Zone
-------------------------------------------------
+Actual characters assigned in the Linux Zone
+--------------------------------------------
 
 In addition, the following characters not present in Unicode 1.1.4 (at
 least, I have not found them!) have been defined; these are used by
@@ -58,7 +60,7 @@ also political reasons (the Japanese, for example, are not too happy
 about the whole 16-bit concept to begin with.)  However, with Linux
 being a hacker-driven OS it seems this is a brilliant linguistic hack
 worth supporting.  Hence I have chosen to add it to the list in the
-Linux "Corporate" Zone.
+Linux Zone.
 
 Several glyph forms for the Klingon alphabet has been proposed.
 However, since the set of symbols appear to be consistent throughout,
@@ -122,5 +124,16 @@ U+F8F7	KLINGON DIGIT SEVEN
 U+F8F8	KLINGON DIGIT EIGHT
 U+F8F9	KLINGON DIGIT NINE
 
+Other Fictional and Artificial Scripts
+--------------------------------------
 
-	H. Peter Anvin <hpa@storm.net>
+Since the assignment of the Klingon Linux Unicode block, a registry of
+fictional and artificial scripts has been established by John Cowan,
+<cowan@ccil.org>.  The ConScript Unicode Registry is accessible at
+http://locke.ccil.org/~cowan/csur/; the ranges used fall at the bottom
+of the End User Zone and can hence not be normatively assigned, but it
+is recommended that people who wish to encode fictional scripts use
+these codes, in the interest of interoperability.  For Klingon, CSUR
+has adopted the Linux encoding.
+
+	H. Peter Anvin <hpa@zytor.com>

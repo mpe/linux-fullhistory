@@ -35,7 +35,7 @@ void install_linux_ticker(void)
 
 	if (!linux_lvl14)
 		return;
-	save_flags(flags); cli();
+	save_and_cli(flags);
 	linux_lvl14[0] =  lvl14_save[0];
 	linux_lvl14[1] =  lvl14_save[1];
 	linux_lvl14[2] =  lvl14_save[2];
@@ -49,7 +49,7 @@ void install_obp_ticker(void)
     
 	if (!linux_lvl14)
 		return;
-	save_flags(flags); cli();
+	save_and_cli(flags);
 	linux_lvl14[0] =  obp_lvl14[0];
 	linux_lvl14[1] =  obp_lvl14[1];
 	linux_lvl14[2] =  obp_lvl14[2];

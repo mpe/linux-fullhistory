@@ -472,20 +472,26 @@ static void tcp_syn_recv_timer(unsigned long data)
 			    tp->syn_wait_queue)
 			{
 				struct open_request *req;
-				
+
 				req = tp->syn_wait_queue;
 
-				while (tp->syn_wait_queue &&
-				       (((long)(req->expires - now)) <= 0))
+				while (req && tp->syn_wait_queue)
 				{
 					struct open_request *conn;
 
 					conn = req;
 					req = req->dl_next;
 
-					if (conn->sk && conn->sk->state > TCP_SYN_RECV)
+					if (conn->sk)
+					{
+						if (req == tp->syn_wait_queue)
+							break;
 						continue;
+					}
 					
+					if ((long)(now - conn->expires) <= 0)
+						break;
+
 					tcp_synq_unlink(tp, conn);
 					
 					if (conn->retrans >= TCP_RETR1)
@@ -548,4 +554,26 @@ void tcp_sltimer_handler(unsigned long data)
 		tcp_slow_timer.expires = now + next;
 		add_timer(&tcp_slow_timer);
 	}
+}
+
+void __tcp_inc_slow_timer(struct tcp_sl_timer *slt)
+{
+	unsigned long now = jiffies;
+	unsigned long next = 0;
+	unsigned long when;
+
+	slt->last = now;
+		
+	when = now + slt->period;
+	if (del_timer(&tcp_slow_timer))
+	{
+		next = tcp_slow_timer.expires;
+	}
+	if (next && ((long)(next - when) < 0))
+	{
+		when = next;
+	}
+		
+	tcp_slow_timer.expires = when;
+	add_timer(&tcp_slow_timer);
 }

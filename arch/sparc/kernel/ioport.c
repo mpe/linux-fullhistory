@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.18 1996/04/25 06:08:44 davem Exp $
+/* $Id: ioport.c,v 1.22 1996/10/11 00:59:46 davem Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -9,8 +9,6 @@
  * are administered by a general purpose allocator, and then you call
  * that allocator with your handle and the block size instead of this
  * weak stuff.
- *
- * XXX No joke, this needs to be rewritten badly. XXX
  */
 
 #include <linux/sched.h>
@@ -27,8 +25,8 @@
 #include <asm/pgtable.h>
 
 /* This points to the next to use virtual memory for io mappings */
-static long next_free_region = IOBASE_VADDR;
-static long dvma_next_free   = DVMA_VADDR;
+static unsigned long dvma_next_free   = DVMA_VADDR;
+unsigned long sparc_iobase_vaddr = IOBASE_VADDR;
 
 /*
  * sparc_alloc_io:
@@ -54,23 +52,30 @@ void *sparc_alloc_io (void *address, void *virtual, int len, char *name,
 	unsigned long addr = (unsigned long) address;
 	unsigned long offset = (addr & (~PAGE_MASK));
 
-	if (virtual)
+	if (virtual) {
 		vaddr = (unsigned long) virtual;
-	else
-		vaddr = next_free_region;
-		
-	len += offset;
-	if(((unsigned long) virtual + len) > (IOBASE_VADDR + IOBASE_LEN)) {
-		prom_printf("alloc_io: Mapping outside IOBASE area\n");
-		prom_halt();
-	}
-	if(check_region ((vaddr | offset), len)) {
-		prom_printf("alloc_io: 0x%lx is already in use\n", vaddr);
-		prom_halt();
-	}
 
-	/* Tell Linux resource manager about the mapping */
-	request_region ((vaddr | offset), len, name);
+		len += offset;
+		if(((unsigned long) virtual + len) > (IOBASE_VADDR + IOBASE_LEN)) {
+			prom_printf("alloc_io: Mapping outside IOBASE area\n");
+			prom_halt();
+		}
+		if(check_region ((vaddr | offset), len)) {
+			prom_printf("alloc_io: 0x%lx is already in use\n", vaddr);
+			prom_halt();
+		}
+
+		/* Tell Linux resource manager about the mapping */
+		request_region ((vaddr | offset), len, name);
+	} else {
+		vaddr = occupy_region(sparc_iobase_vaddr, IOBASE_END,
+				(offset + len + PAGE_SIZE-1) & PAGE_MASK, PAGE_SIZE, name);
+		if (vaddr == 0) {
+			/* Usually we cannot see printks in this case. */
+			prom_printf("alloc_io: cannot occupy %d region\n", len);
+			prom_halt();
+		}
+	}
 
 	base_address = vaddr;
 	/* Do the actual mapping */
@@ -78,10 +83,22 @@ void *sparc_alloc_io (void *address, void *virtual, int len, char *name,
 		mapioaddr(addr, vaddr, bus_type, rdonly);
 		vaddr += PAGE_SIZE;
 		addr += PAGE_SIZE;
-		if (!virtual)
-			next_free_region += PAGE_SIZE;
 	}
+
 	return (void *) (base_address | offset);
+}
+
+void sparc_free_io (void *virtual, int len)
+{
+	unsigned long vaddr = (unsigned long) virtual & PAGE_MASK;
+	unsigned long plen = (((unsigned long)virtual & ~PAGE_MASK) + len + PAGE_SIZE-1) & PAGE_MASK;
+
+	release_region(vaddr, plen);
+
+	for (; plen != 0;) {
+		plen -= PAGE_SIZE;
+		unmapioaddr(vaddr + plen);
+	}
 }
 
 /* Does DVMA allocations with PAGE_SIZE granularity.  How this basically
@@ -109,9 +126,10 @@ void *sparc_dvma_malloc (int len, char *name)
 
 	/* Basically these can be mapped just like any old
 	 * IO pages, cacheable bit off, etc.  The physical
-	 * pages are pre-mapped in paging_init()
+	 * pages are now mapped dynamically to save space.
 	 */
 	base_address = vaddr;
+	mmu_map_dma_area(base_address, len);
 	/* Assign the memory area. */
 	dvma_next_free = PAGE_ALIGN(dvma_next_free+len);
 

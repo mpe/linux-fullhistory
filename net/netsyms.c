@@ -14,10 +14,6 @@
 #include <linux/trdevice.h>
 #include <linux/ioport.h>
 
-#ifdef CONFIG_AX25
-#include <net/ax25.h>
-#endif
-
 #ifdef CONFIG_INET
 #include <linux/ip.h>
 #include <linux/etherdevice.h>
@@ -164,7 +160,7 @@ static struct symbol_table net_syms = {
 	X(tcp_init_xmit_timers),
 	X(tcp_clear_xmit_timers),
 	X(tcp_slt_array),
-	X(tcp_slow_timer),
+	X(__tcp_inc_slow_timer),
 	X(tcp_statistics),
 	X(tcp_rcv_state_process),
 	X(tcp_do_sendmsg),
@@ -217,10 +213,6 @@ static struct symbol_table net_syms = {
 #endif
 
         /* support for loadable net drivers */
-#ifdef CONFIG_AX25
-	X(ax25_encapsulate),
-	X(ax25_rebuild_header),
-#endif
 #ifdef CONFIG_INET
 	X(register_netdev),
 	X(unregister_netdev),
@@ -234,6 +226,7 @@ static struct symbol_table net_syms = {
 	X(dev_alloc_skb),
 	X(dev_kfree_skb),
 	X(skb_device_unlock),
+	X(skb_device_locked),
 	X(netif_rx),
 	X(dev_tint),
 	X(irq2dev_map),
@@ -250,6 +243,8 @@ static struct symbol_table net_syms = {
 	X(tty_register_ldisc),
 	X(kill_fasync),
 	X(arp_query),
+	X(ip_rcv),
+	X(arp_rcv),
 #endif  /* CONFIG_INET */
 
 #ifdef CONFIG_NETLINK

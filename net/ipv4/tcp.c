@@ -790,7 +790,7 @@ static int tcp_append_tail(struct sock *sk, struct sk_buff *skb, u8 *from,
 	 * of the skb
 	 */
 
-	copy = min(sk->mss - tcp_size, skb->end - skb->tail);
+	copy = min(sk->mss - tcp_size, skb_tailroom(skb));
 	copy = min(copy, seglen);
 	
 	tcp_size += copy;
@@ -959,7 +959,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 			actual_win = tp->snd_wnd - (tp->snd_nxt - tp->snd_una);
 
 			if (copy > actual_win && 
-			    actual_win >= (sk->max_window >> 1))
+			    (((long) actual_win) >= (sk->max_window >> 1)))
 			{
 				copy = actual_win;
 			}
@@ -1063,7 +1063,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 			sk->write_seq += copy;
 		
 			tcp_send_skb(sk, skb);
-	
+
 			release_sock(sk);
 			lock_sock(sk);
 		}

@@ -66,6 +66,7 @@ struct cpu_fp_info linux_sparc_fpu[] = {
   { 5, 5, "reserved"},
   { 5, 6, "reserved"},
   { 5, 7, "No FPU"},
+  { 9, 3, "Weitek on-chip FPU"},
 };
 
 #define NSPARCFPU  (sizeof(linux_sparc_fpu)/sizeof(struct cpu_fp_info))
@@ -100,7 +101,10 @@ struct cpu_iu_info linux_sparc_chips[] = {
   { 7, 0, "Harvest VLSI Design Center, Inc. - unknown"},
   /* Gallium arsenide 200MHz, BOOOOGOOOOMIPS!!! */
   { 8, 0, "Systems and Processes Engineering Corporation (SPEC)"},
-  { 9, 0, "Fujitsu #3"},
+  { 9, 0, "Weitek Power-UP"},
+  { 9, 1, "Weitek Power-UP"},
+  { 9, 2, "Weitek Power-UP"},
+  { 9, 3, "Weitek Power-UP"},
   { 0xa, 0, "UNKNOWN CPU-VENDOR/TYPE"},
   { 0xb, 0, "UNKNOWN CPU-VENDOR/TYPE"},
   { 0xc, 0, "UNKNOWN CPU-VENDOR/TYPE"},

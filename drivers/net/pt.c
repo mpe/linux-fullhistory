@@ -32,6 +32,8 @@
  * 07/10/95 cs  Fixed for 1.3.30 (hopefully)
  * 26/11/95 cs  Fixed for 1.3.43, ala 29/10 for pi2.c by ac
  * 21/12/95 cs  Got rid of those nasty warnings when compiling, for 1.3.48
+ * 08/08/96 jsn Convert to use as a module. Removed send_kiss, empty_scc and
+ *		pt_loopback functions - they were unused.
  */
  
 /* 
@@ -65,6 +67,7 @@
 #define	PARAM_RETURN	255
 
 #include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/types.h>
 #include <linux/fcntl.h>
@@ -89,10 +92,6 @@
 #include "pt.h"
 #include "z8530.h"
 #include <net/ax25.h>
-
-static char *version =
-"PT: 0.41 ALPHA 07 October 1995 Craig Small (vk2xlz@vk2xlz.ampr.org)\n";
-
 
 struct mbuf {
     struct mbuf *next;
@@ -133,9 +132,7 @@ static char *get_dma_buffer(unsigned long *mem_ptr);
 static int valid_dma_page(unsigned long addr, unsigned long dev_buffsize);
 static int hw_probe(int ioaddr);
 static void tdelay(struct pt_local *lp, int time);
-static void empty_scc(struct pt_local *lp);
 static void chipset_init(struct device *dev);
-static void send_kiss(struct device *dev, unsigned char arg, unsigned char val);
 
 static char ax25_bcast[7] =
 {'Q' << 1, 'S' << 1, 'T' << 1, ' ' << 1, ' ' << 1, ' ' << 1, '0' << 1};
@@ -185,7 +182,9 @@ static void hardware_send_packet(struct pt_local *lp, struct sk_buff *skb)
 	ptr = skb->data;
 	if (ptr[0] != 0 && skb->len >= 2)
 	{
-		printk("Rx KISS... Control = %d, value = %d.\n", ptr[0], (skb->len > 1? ptr[1] : -1));
+#ifdef PT_DEBUG
+		printk(KERN_DEBUG "PT: Rx KISS... Control = %d, value = %d.\n", ptr[0], (skb->len > 1? ptr[1] : -1));
+#endif
 		/* Kludge to get device */
 		if ((struct pt_local*)(&pt0b.priv) == lp)
 			dev = &pt0b;
@@ -197,21 +196,17 @@ static void hardware_send_packet(struct pt_local *lp, struct sk_buff *skb)
 			case PARAM_TXDELAY:
 				/*TxDelay is in 10mS increments */
 				lp->txdelay = ptr[1] * 10;
-				send_kiss(dev, PARAM_TXDELAY, (u_char)(lp->txdelay/10));
 				break;
 			case PARAM_PERSIST:
 				lp->persist = ptr[1];
-				send_kiss(dev, PARAM_PERSIST, (u_char)(lp->persist));
 				break;
 			case PARAM_SLOTTIME:
 				lp->slotime = ptr[1];
-				send_kiss(dev, PARAM_SLOTTIME, (u_char)(lp->slotime/10));
 				break;
 			case PARAM_FULLDUP:
 				/* Yeah right, you wish!  Fullduplex is a little while to
 				 * go folks, but this is how you fire it up
 				 */
-				send_kiss(dev, PARAM_FULLDUP, 0);
 				break;
 			/* Perhaps we should have txtail here?? */
 		} /*switch */
@@ -226,7 +221,7 @@ static void hardware_send_packet(struct pt_local *lp, struct sk_buff *skb)
     restore_flags(flags);
 
 #ifdef PT_DEBUG
-	printk("PTd hardware_send_packet(): kickflag = %d (%d).\n", kickflag, lp->base & CHANA);
+	printk(KERN_DEBUG "PT: hardware_send_packet(): kickflag = %d (%d).\n", kickflag, lp->base & CHANA);
 #endif	
     skb_queue_tail(&lp->sndq, skb);
     if (kickflag) {
@@ -320,21 +315,6 @@ static void free_p(struct sk_buff *skb)
     dev_kfree_skb(skb, FREE_WRITE);
 }
 
-static void pt_loopback(struct pt_local *lp, int onoff)
-{
-    if (lp->base & CHANA) {
-        if (onoff == ON)
-            outb_p(pt_sercfg |= PT_LOOPA_ON, lp->cardbase + SERIAL_CFG);
-        else
-            outb_p(pt_sercfg &= ~PT_LOOPA_ON, lp->cardbase + SERIAL_CFG);
-    } else {    /* it's channel B */
-        if (onoff == ON)
-            outb_p(pt_sercfg |= PT_LOOPB_ON, lp->cardbase + SERIAL_CFG);
-        else
-            outb_p(pt_sercfg &= ~PT_LOOPB_ON, lp->cardbase + SERIAL_CFG);
-    }
-} /*pt_loopback */
-
 /* Fill in the MAC-level header */
 static int pt_header (struct sk_buff *skb, struct device *dev, unsigned short type,
 		void *daddr, void *saddr, unsigned len)
@@ -366,7 +346,7 @@ static void scc_init(struct device *dev)
     int tc, br;
 
 #ifdef PT_DEBUG
-	printk("PTd scc_init(): (%d).\n", lp->base & CHANA);
+	printk(KERN_DEBUG "PT: scc_init(): (%d).\n", lp->base & CHANA);
 #endif	
     save_flags(flags);
     cli();
@@ -486,8 +466,8 @@ static void chipset_init(struct device *dev)
 
 	struct pt_local *lp = (struct pt_local*) dev->priv;
 #ifdef PT_DEBUG
-	printk("PTd chipset_init(): pt0a tstate = %d.\n", ((struct pt_local*)pt0a.priv)->tstate);
-	printk("PTd chipset_init(): pt0b tstate = %d.\n", ((struct pt_local*)pt0b.priv)->tstate);	
+	printk(KERN_DEBUG "PT: chipset_init(): pt0a tstate = %d.\n", ((struct pt_local*)pt0a.priv)->tstate);
+	printk(KERN_DEBUG "PT: chipset_init(): pt0b tstate = %d.\n", ((struct pt_local*)pt0b.priv)->tstate);	
 #endif
 	/* Reset SCC if both channels are to be canned */
 	if ( ((lp->base & CHANA) && !(pt_sercfg & PT_DTRB_ON)) ||
@@ -498,7 +478,7 @@ static void chipset_init(struct device *dev)
 	        outb_p((pt_sercfg = 0), lp->cardbase + SERIAL_CFG);
 	        outb_p((pt_dmacfg = 0), lp->cardbase + DMA_CFG);
 #ifdef PT_DEBUG
-		printk("PTd chipset_init() Resetting SCC, called by ch (%d).\n", lp->base & CHANA);
+		printk(KERN_DEBUG "PT: chipset_init() Resetting SCC, called by ch (%d).\n", lp->base & CHANA);
 #endif			        
 	}
 	/* Reset individual channel */
@@ -522,20 +502,20 @@ int pt_init(void)
     { 0x230, 0x240, 0x250, 0x260, 0x270, 0x280, 0x290, 0x2a0,
       0x2b0, 0x300, 0x330, 0x3f0,  0};
 
-    printk(version);
+    printk(KERN_INFO "PT: 0.41 ALPHA 07 October 1995 Craig Small (vk2xlz@vk2xlz.ampr.org)\n");
 
     for (port = &ports[0]; *port && !card_type; port++) {
         ioaddr = *port;
 
         if (check_region(ioaddr, PT_TOTAL_SIZE) == 0) {
-            printk("PT: Probing for card at address %#3x\n", ioaddr);
+            printk(KERN_INFO "PT: Probing for card at address %#3x\n", ioaddr);
             card_type = hw_probe(ioaddr);
         }
     }
     if (card_type) {
-        printk("PT: Found a PT at address %#3x\n",ioaddr);
+        printk(KERN_INFO "PT: Found a PT at address %#3x\n",ioaddr);
     } else {
-        printk("PT: ERROR: No card found.\n");
+        printk(KERN_ERR "PT: ERROR: No card found.\n");
         return -EIO;
     }
 
@@ -641,7 +621,7 @@ static void pt_rts(struct pt_local *lp, int x)
 	long br;
 	int cmd = lp->base + CTL;
 #ifdef PT_DEBUG
-	printk("PTd pt_rts(): Transmitter status will be %d (%d).\n", x, lp->base & CHANA);
+	printk(KERN_DEBUG "PT: pt_rts(): Transmitter status will be %d (%d).\n", x, lp->base & CHANA);
 #endif			
 	if (x == ON) {
 	    /* Ex ints off to avoid int */
@@ -738,8 +718,9 @@ static int valid_dma_page(unsigned long addr, unsigned long dev_bufsize)
         return 0;
 }
 
-static int pt_set_mac_address(struct device *dev, struct sockaddr *sa)
+static int pt_set_mac_address(struct device *dev, void *addr)
 {
+	struct sockaddr *sa = (struct sockaddr *)addr;
 	memcpy(dev->dev_addr, sa->sa_data, dev->addr_len);		/* addr is an AX.25 shifted ASCII */
 	return 0;		/* mac address */
 }
@@ -857,11 +838,11 @@ static int pt_probe(struct device *dev)
             restore_flags(flags);
 
             if (!dev->irq) {
-                printk("PT: ERROR: Failed to detect IRQ line, assuming IRQ7.\n");
+                printk(KERN_ERR "PT: ERROR: Failed to detect IRQ line, assuming IRQ7.\n");
             }
         }
 
-        printk("PT: Autodetected IRQ %d, assuming DMA %d\n", dev->irq, dev->dma);
+        printk(KERN_INFO "PT: Autodetected IRQ %d, assuming DMA %d\n", dev->irq, dev->dma);
 
         /* This board has jumpered interrupts. Snarf the interrupt vector
          * now.  There is no point in waiting since no other device can use
@@ -870,7 +851,7 @@ static int pt_probe(struct device *dev)
         {
             int irqval = request_irq(dev->irq, &pt_interrupt,0, "pt", NULL);
             if (irqval) {
-                printk("PT: ERROR: Unable to get IRQ %d (irqval = %d).\n",
+                printk(KERN_ERR "PT: ERROR: Unable to get IRQ %d (irqval = %d).\n",
                     dev->irq, irqval);
                 return EAGAIN;
             }
@@ -965,6 +946,8 @@ static int pt_open(struct device *dev)
     dev->interrupt = 0;
     dev->start = 1;
     first_time = 0;
+
+    MOD_INC_USE_COUNT;
 	
     return 0;
 } /* pt_open() */
@@ -974,7 +957,7 @@ static int pt_send_packet(struct sk_buff *skb, struct device *dev)
 	struct pt_local *lp = (struct pt_local *) dev->priv;
 
 #ifdef PT_DEBUG
-	printk("PTd pt_send_packet(): (%d)\n", lp->base & CHANA);
+	printk(KERN_DEBUG "PT: pt_send_packet(): (%d)\n", lp->base & CHANA);
 #endif			
 	/* If some higher layer thinks we've missed an tx-done interrupt
 	   we are passed NULL. Caution: dev_tint() handles the cli()/sti()
@@ -1019,8 +1002,10 @@ static int pt_close(struct device *dev)
 	restore_flags(flags);
 	
 #ifdef PT_DEBUG
-	printk("PTd pt_close(): Closing down channel (%d).\n", lp->base & CHANA);	
+	printk(KERN_DEBUG "PT: pt_close(): Closing down channel (%d).\n", lp->base & CHANA);	
 #endif	
+
+	MOD_DEC_USE_COUNT;
 	
 	return 0;
 } /* pt_close() */
@@ -1153,7 +1138,7 @@ static void pt_txisr(struct pt_local *lp)
 	cmd = lp->base + CTL;
 
 #ifdef PT_DEBUG
-	printk("PTd pt_txisr(): tstate = %d (%d).\n", lp->tstate, lp->base & CHANA);
+	printk(KERN_DEBUG "PT: pt_txisr(): tstate = %d (%d).\n", lp->tstate, lp->base & CHANA);
 #endif	
 	
 	switch (lp->tstate) 
@@ -1253,7 +1238,7 @@ static void pt_txisr(struct pt_local *lp)
 	   restore_flags(flags);
 	   return;
 	default:
-		printk("PT: pt_txisr(): Invalid tstate (%d) for chan %s.\n", lp->tstate, (cmd & CHANA? "A": "B") );
+		printk(KERN_ERR "PT: pt_txisr(): Invalid tstate (%d) for chan %s.\n", lp->tstate, (cmd & CHANA? "A": "B") );
 		pt_rts(lp, OFF);
 		lp->tstate = IDLE;
 		break;		
@@ -1270,7 +1255,7 @@ static void pt_rxisr(struct device *dev)
     char rse;
     struct sk_buff *skb;
     int sksize, pkt_len;
-    struct mbuf *cur_buf;
+    struct mbuf *cur_buf = NULL;
     unsigned char *cfix;
 
     save_flags(flags);
@@ -1280,7 +1265,7 @@ static void pt_rxisr(struct device *dev)
     rse = rdscc(lp->cardbase, cmd, R1);
     
 #ifdef PT_DEBUG
-    printk("PTd pt_rxisr(): R1 = %#3x. (%d)\n", rse, lp->base & CHANA);
+    printk(KERN_DEBUG "PT: pt_rxisr(): R1 = %#3x. (%d)\n", rse, lp->base & CHANA);
 #endif        
 
 	if (lp->dmachan && (rse & Rx_OVR))
@@ -1333,7 +1318,7 @@ static void pt_rxisr(struct device *dev)
      if (rse & END_FR)
      {
 #ifdef PT_DEBUG
-	printk("PTd pt_rxisr() Got end of a %u byte frame.\n", lp->rcvbuf->cnt);
+	printk(KERN_DEBUG "PT: pt_rxisr() Got end of a %u byte frame.\n", lp->rcvbuf->cnt);
 #endif	     
 		if (lp->dmachan)
 		{
@@ -1371,7 +1356,7 @@ static void pt_rxisr(struct device *dev)
         	         
         	     }
 #ifdef PT_DEBUG
-	printk("PTd pt_rxisr() %s error.\n", (rse & CRC_ERR)? "CRC" : "state");
+	printk(KERN_DEBUG "PT: pt_rxisr() %s error.\n", (rse & CRC_ERR)? "CRC" : "state");
 #endif                 
              } else {
                  /* We have a valid frame */
@@ -1392,7 +1377,7 @@ static void pt_rxisr(struct device *dev)
                  skb = dev_alloc_skb(sksize);
                  if (skb == NULL)
                  {
-                     printk("PT: %s: Memory squeeze, dropping packet.\n", dev->name);
+                     printk(KERN_ERR "PT: %s: Memory squeeze, dropping packet.\n", dev->name);
                      lp->stats.rx_dropped++;
                      restore_flags(flags);
                      return;
@@ -1428,15 +1413,6 @@ static void pt_rxisr(struct device *dev)
      restore_flags(flags);
 } /* pt_rxisr() */
 
-/* Read the SCC channel till no more data in receiver */
-static void empty_scc(struct pt_local *lp)
-{
-    while( rdscc(lp->cardbase, lp->base + CTL, R0) & Rx_CH_AV) {
-        /* Get data from Rx buffer and toss it */
-        (void) inb_p(lp->base + DATA);
-    }
-} /* empty_scc()*/
-
 /*
  * This handles the two timer interrupts.
  * This is a real bugger, cause you have to rip it out of the pi's
@@ -1447,7 +1423,7 @@ static void pt_tmrisr(struct pt_local *lp)
     unsigned long flags;
 
 #ifdef PT_DEBUG
-	printk("PTd pt_tmrisr(): tstate = %d (%d).\n", lp->tstate, lp->base & CHANA);
+	printk(KERN_DEBUG "PT: pt_tmrisr(): tstate = %d (%d).\n", lp->tstate, lp->base & CHANA);
 #endif		
 	
     save_flags(flags);
@@ -1467,9 +1443,9 @@ static void pt_tmrisr(struct pt_local *lp)
       
     default:
 	if (lp->base & CHANA)
- 	    printk("PT: pt_tmrisr(): Invalid tstate %d for Channel A\n", lp->tstate);
+ 	    printk(KERN_ERR "PT: pt_tmrisr(): Invalid tstate %d for Channel A\n", lp->tstate);
 	else
-	    printk("PT: pt_tmrisr(): Invalid tstate %d for Channel B\n", lp->tstate);
+	    printk(KERN_ERR "PT: pt_tmrisr(): Invalid tstate %d for Channel B\n", lp->tstate);
 	break;		
     } /* end switch */
     restore_flags(flags);
@@ -1498,11 +1474,11 @@ static void pt_interrupt(int irq, void *dev_id, struct pt_regs *regs)
         {
         	/* Read interrupt vector from R2, channel B */
 #ifdef PT_DEBUG
-		printk("PTd pt_interrupt(): R3 = %#3x", st);
+		printk(KERN_DEBUG "PT: pt_interrupt(): R3 = %#3x", st);
 #endif		        
 /*        	st = rdscc(lp->cardbase, cbase + CHANB + CTL, R2) & 0x0e;*/
 #ifdef PT_DEBUG
-		printk(" R2 = %#3x.\n", st);
+		printk(KERN_DEBUG "PI: R2 = %#3x.\n", st);
 #endif	
 			if (st & CHARxIP) {
 			    /* Channel A Rx */
@@ -1573,7 +1549,7 @@ static void pt_exisr(struct pt_local *lp)
     st = rdscc(lp->cardbase, cmd, R0);
 
 #ifdef PT_DEBUG
-	printk("PTd exisr(): R0 = %#3x tstate = %d (%d).\n", st, lp->tstate, lp->base & CHANA);
+	printk(KERN_DEBUG "PT: exisr(): R0 = %#3x tstate = %d (%d).\n", st, lp->tstate, lp->base & CHANA);
 #endif	
     /* Reset external status latch */
     wrtscc(lp->cardbase, cmd, R0, RES_EXT_INT);
@@ -1588,7 +1564,7 @@ static void pt_exisr(struct pt_local *lp)
     {
     case ACTIVE:		/* Unexpected underrun */
 #ifdef PT_DEBUG
-	printk("PTd exisr(): unexpected underrun detected.\n");
+	printk(KERN_DEBUG "PT: exisr(): unexpected underrun detected.\n");
 #endif	    
         free_p(lp->sndbuf);
         lp->sndbuf = NULL;
@@ -1746,7 +1722,7 @@ static void pt_exisr(struct pt_local *lp)
     if ((lp->rstate == ACTIVE) && (st & BRK_ABRT) )
     {
 #ifdef PT_DEBUG
-	printk("PTd exisr(): abort detected.\n");
+	printk(KERN_DEBUG "PT: exisr(): abort detected.\n");
 #endif        
   		/* read and dump all of SCC Rx FIFO */
         (void) rdscc(lp->cardbase, cmd, R8);
@@ -1765,7 +1741,7 @@ static void pt_exisr(struct pt_local *lp)
     if ( (st & DCD) != (lp->saved_RR0 & DCD))
     {
 #ifdef PT_DEBUG    
-        printk("PTd: pt_exisr(): DCD is now %s.\n", (st & DCD)? "ON" : "OFF" );
+        printk(KERN_DEBUG "PT: pt_exisr(): DCD is now %s.\n", (st & DCD)? "ON" : "OFF" );
 #endif
 		if (st & DCD)
 		{
@@ -1773,7 +1749,7 @@ static void pt_exisr(struct pt_local *lp)
 			if (lp->rcvbuf->cnt > 0)
 			{
 #ifdef PT_DEBUG
-				printk("PTd pt_exisr() dumping %u bytes from buffer.\n", lp->rcvbuf->cnt);
+				printk(KERN_DEBUG "PT: pt_exisr() dumping %u bytes from buffer.\n", lp->rcvbuf->cnt);
 #endif					
 				/* wind back buffers */
 				lp->rcp = lp->rcvbuf->data;
@@ -1801,30 +1777,25 @@ static void pt_exisr(struct pt_local *lp)
 
 } /* pt_exisr() */
 
-/* This function is used to send the KISS params back to the kernel itself,
- * just like the TNCs do (I think)
- * It's a (bit of a) kludge
- */
-static void send_kiss(struct device *dev, unsigned char arg, unsigned char val)
+#ifdef MODULE
+int init_module(void)
 {
-	struct sk_buff *skb;
-	unsigned char *cfix;
-/*	struct pt_local *lp = (struct pt_local*)dev->priv;*/
-	
-	
-	skb = dev_alloc_skb(2);
-	if (skb == NULL)
-	{
-		printk("PT: send_kiss(): Memory squeeze, dropping KISS reply.\n");
-		return;
-	}
-	skb->dev = dev;
-	cfix = skb_put(skb, 2);
-	cfix[0]=arg;
-	cfix[1]=val;
-	skb->protocol=htons(ETH_P_AX25);
-	skb->mac.raw=skb->data;
-	IS_SKB(skb);
-	netif_rx(skb);
+    register_symtab(NULL);
+    return pt_init();
 }
-	
+
+void cleanup_module(void)
+{
+    free_irq(pt0a.irq, NULL);	/* IRQs and IO Ports are shared */
+    release_region(pt0a.base_addr & 0x3f0, PT_TOTAL_SIZE);
+    irq2dev_map[pt0a.irq] = NULL;
+
+    kfree(pt0a.priv);
+    pt0a.priv = NULL;
+    unregister_netdev(&pt0a);
+    
+    kfree(pt0b.priv);
+    pt0b.priv = NULL;
+    unregister_netdev(&pt0b);
+}
+#endif
