@@ -966,6 +966,7 @@ static int tg3_setup_phy(struct tg3 *, int);
 #define RESET_KIND_SUSPEND	2
 
 static void tg3_write_sig_post_reset(struct tg3 *, int);
+static int tg3_halt_cpu(struct tg3 *, u32);
 
 static int tg3_set_power_state(struct tg3 *tp, int state)
 {
@@ -1123,6 +1124,17 @@ static int tg3_set_power_state(struct tg3 *tp, int state)
 	}
 
 	tg3_frob_aux_power(tp);
+
+	/* Workaround for unstable PLL clock */
+	if ((GET_CHIP_REV(tp->pci_chip_rev_id) == CHIPREV_5750_AX) ||
+	    (GET_CHIP_REV(tp->pci_chip_rev_id) == CHIPREV_5750_BX)) {
+		u32 val = tr32(0x7d00);
+
+		val &= ~((1 << 16) | (1 << 4) | (1 << 2) | (1 << 1) | 1);
+		tw32(0x7d00, val);
+		if (!(tp->tg3_flags & TG3_FLAG_ENABLE_ASF))
+			tg3_halt_cpu(tp, RX_CPU_BASE);
+	}
 
 	/* Finally, set the new power state. */
 	pci_write_config_word(tp->pdev, pm + PCI_PM_CTRL, power_control);
