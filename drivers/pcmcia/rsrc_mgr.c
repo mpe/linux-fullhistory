@@ -100,16 +100,6 @@ static irq_info_t irq_table[NR_IRQS] = { { 0, 0, 0 }, /* etc */ };
 
 /*======================================================================
 
-    Linux resource management extensions
-    
-======================================================================*/
-
-static spinlock_t rsrc_lock = SPIN_LOCK_UNLOCKED;
-
-#define check_io_region(b,n) (0)
-
-/*======================================================================
-
     These manage the internal databases of available resources.
     
 ======================================================================*/
@@ -190,7 +180,7 @@ static void do_io_probe(ioaddr_t base, ioaddr_t num)
     b = kmalloc(256, GFP_KERNEL);
     memset(b, 0, 256);
     for (i = base, most = 0; i < base+num; i += 8) {
-	if (check_region(i, 8) || check_io_region(i, 8))
+	if (check_region(i, 8))
 	    continue;
 	hole = inb(i);
 	for (j = 1; j < 8; j++)
@@ -203,7 +193,7 @@ static void do_io_probe(ioaddr_t base, ioaddr_t num)
 
     bad = any = 0;
     for (i = base; i < base+num; i += 8) {
-	if (check_region(i, 8) || check_io_region(i, 8))
+	if (check_region(i, 8))
 	    continue;
 	for (j = 0; j < 8; j++)
 	    if (inb(i+j) != most) break;
@@ -365,8 +355,7 @@ int find_io_region(ioaddr_t *base, ioaddr_t num, char *name)
     if (*base != 0) {
 	for (m = io_db.next; m != &io_db; m = m->next) {
 	    if ((*base >= m->base) && (*base+num <= m->base+m->num)) {
-		if (check_region(*base, num) ||
-		    check_io_region(*base, num)) {
+		if (check_region(*base, num)) {
 		    return -1;
 		} else {
 		    request_region(*base, num, name);
@@ -382,8 +371,7 @@ int find_io_region(ioaddr_t *base, ioaddr_t num, char *name)
 	for (*base = (m->base + align - 1) & (~(align-1));
 	     *base+align <= m->base + m->num;
 	     *base += align)
-	    if ((check_region(*base, num) == 0) &&
-		(check_io_region(*base, num) == 0)) {
+	    if (check_region(*base, num) == 0) {
 		request_region(*base, num, name);
 		return 0;
 	    }

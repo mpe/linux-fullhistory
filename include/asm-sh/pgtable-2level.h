@@ -1,15 +1,15 @@
-#ifndef _I386_PGTABLE_2LEVEL_H
-#define _I386_PGTABLE_2LEVEL_H
+#ifndef __ASM_SH_PGTABLE_2LEVEL_H
+#define __ASM_SH_PGTABLE_2LEVEL_H
 
 /*
- * traditional i386 two-level paging structure:
+ * traditional two-level paging structure:
  */
 
 #define PGDIR_SHIFT	22
 #define PTRS_PER_PGD	1024
 
 /*
- * the i386 is two-level, so we don't really have any
+ * this is two-level, so we don't really have any
  * PMD directory physically.
  */
 #define PMD_SHIFT	22
@@ -32,7 +32,7 @@
 extern inline int pgd_none(pgd_t pgd)		{ return 0; }
 extern inline int pgd_bad(pgd_t pgd)		{ return 0; }
 extern inline int pgd_present(pgd_t pgd)	{ return 1; }
-#define pgd_clear(xp)				do { } while (0)
+#define pgd_clear(xp)	do { pgd_val(*(xp)) = 0; } while (0)
 
 #define pgd_page(pgd) \
 ((unsigned long) __va(pgd_val(pgd) & PAGE_MASK))
@@ -59,4 +59,4 @@ extern inline pmd_t * pmd_alloc(pgd_t *pgd, unsigned long address)
 
 #define SWP_ENTRY(type,offset) __pte((((type) << 1) | ((offset) << 8)))
 
-#endif /* _I386_PGTABLE_2LEVEL_H */
+#endif /* __ASM_SH_PGTABLE_2LEVEL_H */

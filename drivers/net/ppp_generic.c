@@ -561,6 +561,7 @@ ppp_init(struct net_device *dev)
 #ifndef MODULE
 	extern struct compressor ppp_deflate, ppp_deflate_draft;
 	extern int ppp_async_init(void);
+	extern int ppp_sync_init(void);
 #endif
 
 	printk(KERN_INFO "PPP generic driver version " PPP_VERSION "\n");
@@ -570,6 +571,9 @@ ppp_init(struct net_device *dev)
 #ifndef MODULE
 #ifdef CONFIG_PPP_ASYNC
 	ppp_async_init();
+#endif
+#ifdef CONFIG_PPP_SYNC_TTY
+	ppp_sync_init();
 #endif
 #ifdef CONFIG_PPP_DEFLATE
 	if (ppp_register_compressor(&ppp_deflate) == 0)

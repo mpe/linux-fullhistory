@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.15 1999/10/17 01:32:52 gniibe Exp $
+/* $Id: entry.S,v 1.16 1999/10/21 14:00:27 gniibe Exp $
  *
  *  linux/arch/sh/entry.S
  *
@@ -149,7 +149,7 @@ initial_page_write:
 	/* Unwind the stack and jmp to the debug entry */
 debug:
 	add	#4,r15		! skip syscall number
-	ldc.l	@r15+,ssr
+	mov.l	@r15+,r11	! SSR
 	mov.l	@r15+,r10	! original stack
 	mov.l	@r15+,r0
 	mov.l	@r15+,r1
@@ -164,6 +164,7 @@ debug:
 	or	r9,r14
 	ldc	r14,sr			! here, change the register bank
 	mov	r10,k0
+	mov	r11,k1
 	mov.l	@r15+,r8
 	mov.l	@r15+,r9
 	mov.l	@r15+,r10
@@ -180,7 +181,7 @@ debug:
 	!
 	mov.l	9f,k0
 	jmp	@k0
-	 nop
+	 ldc	k1,ssr
 	.balign	4
 8:	.long	0x300000f0
 9:	.long	0xa0000100
@@ -371,7 +372,7 @@ ret_with_reschedule:
 	!
 restore_all:
 	add	#4,r15		! skip syscall number
-	ldc.l	@r15+,ssr
+	mov.l	@r15+,r11	! SSR
 	mov.l	@r15+,r10	! original stack
 	mov.l	@r15+,r0
 	mov.l	@r15+,r1
@@ -386,6 +387,7 @@ restore_all:
 	or	r9,r14
 	ldc	r14,sr			! here, change the register bank
 	mov	r10,k0
+	mov	r11,k1
 	mov.l	@r15+,r8
 	mov.l	@r15+,r9
 	mov.l	@r15+,r10
@@ -399,6 +401,7 @@ restore_all:
 	lds.l	@r15+,pr
 	ldc.l	@r15+,spc
 	mov	k0,r15
+	ldc	k1,ssr
 	rte
 	 nop
 
@@ -515,7 +518,7 @@ none:
 
 .data
 ENTRY(exception_handling_table)
-	.long	none /* XXX: Avoid spurious interrupt */
+	.long	error
 	.long	error
 	.long	tlb_miss_load
 	.long	tlb_miss_store

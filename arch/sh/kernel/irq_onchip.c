@@ -1,4 +1,4 @@
-/* $Id: irq_onchip.c,v 1.3 1999/10/11 13:12:19 gniibe Exp $
+/* $Id: irq_onchip.c,v 1.4 1999/10/19 12:22:05 gniibe Exp $
  *
  * linux/arch/sh/kernel/irq_onchip.c
  *
@@ -89,29 +89,33 @@ static struct hw_interrupt_type onChip_irq_type = {
 
 void disable_onChip_irq(unsigned int irq)
 {
+	unsigned long val, flags;
 	/* Set priority in IPR to 0 */
 	int offset = ipr_data[irq-TIMER_IRQ].offset;
 	unsigned long intc_ipr_address = INTC_IPR + (offset/16*INTC_SIZE);
 	unsigned short mask = 0xffff ^ (0xf << (offset%16));
-	unsigned long val;
 
+	save_and_cli(flags);
 	val = ctrl_inw(intc_ipr_address);
 	val &= mask;
 	ctrl_outw(val, intc_ipr_address);
+	restore_flags(flags);
 }
 
 static void enable_onChip_irq(unsigned int irq)
 {
+	unsigned long val, flags;
 	/* Set priority in IPR back to original value */
 	int offset = ipr_data[irq-TIMER_IRQ].offset;
 	int priority = ipr_data[irq-TIMER_IRQ].priority;
 	unsigned long intc_ipr_address = INTC_IPR + (offset/16*INTC_SIZE);
 	unsigned short value = (priority << (offset%16));
-	unsigned long val;
 
+	save_and_cli(flags);
 	val = ctrl_inw(intc_ipr_address);
 	val |= value;
 	ctrl_outw(val, intc_ipr_address);
+	restore_flags(flags);
 }
 
 void make_onChip_irq(unsigned int irq)

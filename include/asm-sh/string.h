@@ -18,9 +18,9 @@ extern __inline__ char *strcpy(char *__dest, const char *__src)
 			     "cmp/eq	#0,%2\n\t"
 			     "bf/s	1b\n\t"
 			     " add	#1,%0\n\t"
-			     :"=&r" (__dest), "=&r" (__src), "=&z" (__dummy)
-			     :"0" (__dest), "1" (__src)
-			     :"memory");
+			     : "=r" (__dest), "=r" (__src), "=&z" (__dummy)
+			     : "0" (__dest), "1" (__src)
+			     : "memory");
 
 	return __xdest;
 }
@@ -37,12 +37,12 @@ extern __inline__ char *strncpy(char *__dest, const char *__src, size_t __n)
 	__asm__ __volatile__(
 		"1:\n"
 		"mov.b	@%1+,%2\n\t"
-		"mov.b  %2,@%0\n\t"
-		"cmp/eq #0,%2\n\t"
-		"bt/s   2f\n\t"
-		" cmp/eq %5,%1\n\t"
-		"bf/s   1b\n\t"
-		" add    #1,%0\n"
+		"mov.b	%2,@%0\n\t"
+		"cmp/eq	#0,%2\n\t"
+		"bt/s	2f\n\t"
+		" cmp/eq	%5,%1\n\t"
+		"bf/s	1b\n\t"
+		" add	#1,%0\n"
 		"2:"
 		: "=r" (__dest), "=r" (__src), "=&z" (__dummy)
 		: "0" (__dest), "1" (__src), "r" (__src+__n)
@@ -112,6 +112,9 @@ extern void *memcpy(void *__to, __const__ void *__from, size_t __n);
 
 #define __HAVE_ARCH_MEMMOVE
 extern void *memmove(void *__dest, __const__ void *__src, size_t __n);
+
+#define __HAVE_ARCH_MEMCHR
+extern void *memchr(const void *__s, int __c, size_t __n);
 
 /* Don't build bcopy at all ...  */
 #define __HAVE_ARCH_BCOPY

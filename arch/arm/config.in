@@ -123,7 +123,7 @@ fi
 
 endmenu
 
-if [ "$CONFIG_CPU_32" = "y" -a "$CONFIG_ARCH_EBSA110" != "y" -a "$CONFIG_EXPERIMENTAL" ]; then
+if [ "$CONFIG_CPU_32" = "y" -a "$CONFIG_ARCH_EBSA110" != "y" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
    bool 'Enable kernel-mode alignment trap handler (EXPERIMENTAL)' CONFIG_ALIGNMENT_TRAP
 fi
 #bool 'Split text into discardable sections' CONFIG_TEXT_SECTIONS

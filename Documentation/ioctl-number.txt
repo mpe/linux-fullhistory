@@ -1,5 +1,5 @@
 Ioctl Numbers
-10 October 1999
+19 October 1999
 Michael Elizabeth Chastain
 <mec@shout.net>
 
@@ -162,6 +162,8 @@ Code	Seq#	Include File		Comments
 					<mailto:buk@buks.ipn.de>
 0xA0	all	linux/sdp/sdp.h		Industrial Device Project
 					<mailto:kenji@bitgate.com>
+0xA2    00-0F   DVD decoder driver      in development:
+                                        <http://linuxtv.org/dvd/api/>
 0xA3	00-1F	Philips SAA7146 dirver	in development:
 					<mailto:Andreas.Beckmann@hamburg.sc.philips.com>
 0xA3	80-8F	Port ACL		in development:
@@ -173,3 +175,5 @@ Code	Seq#	Include File		Comments
 					<mailto:rusty@rustcorp.com.au>	
 0xB0	all	RATIO devices		in development:
 					<mailto:vgo@ratio.de>
+0xCB	00-1F	CBM serial IEC bus	in development:
+					<mailto:michael.klein@puffin.lb.shuttle.de>

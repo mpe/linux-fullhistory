@@ -1,27 +1,37 @@
-/* Audio driver for the NeoMagic 256AV and 256ZX chipsets in native
-   mode, with AC97 mixer support.
-
-   Overall design and parts of this code stolen from vidc_*.c and
-   skeleton.c.
-
-   Yeah, there are a lot of magic constants in here.  You tell ME what
-   they are.  I just get this stuff psychically, remember? 
-
-   This driver was written by someone who wishes to remain anonymous. 
-   It is in the public domain, so share and enjoy.  Try to make a profit
-   off of it; go on, I dare you.  */
+/* 
+ * Audio driver for the NeoMagic 256AV and 256ZX chipsets in native
+ * mode, with AC97 mixer support.
+ *
+ * Overall design and parts of this code stolen from vidc_*.c and
+ * skeleton.c.
+ *
+ * Yeah, there are a lot of magic constants in here.  You tell ME what
+ * they are.  I just get this stuff psychically, remember? 
+ *
+ * This driver was written by someone who wishes to remain anonymous. 
+ * It is in the public domain, so share and enjoy.  Try to make a profit
+ * off of it; go on, I dare you.  
+ */
 
 #include <linux/config.h>
 #include <linux/pci.h>
 #include <linux/module.h>
+#ifdef CONFIG_APM
+#include <linux/apm_bios.h>
+#endif
 #include "sound_config.h"
 #include "soundmodule.h"
 #include "nm256.h"
 #include "nm256_coeff.h"
 
 int nm256_debug = 0;
+static int force_load = 0;
 
-/* The size of the playback reserve. */
+/* 
+ * The size of the playback reserve.  When the playback buffer has less
+ * than NM256_PLAY_WMARK_SIZE bytes to output, we request a new
+ * buffer.
+ */
 #define NM256_PLAY_WMARK_SIZE 512
 
 static struct audio_driver nm256_audio_driver;
@@ -29,15 +39,73 @@ static struct audio_driver nm256_audio_driver;
 static int nm256_grabInterrupt (struct nm256_info *card);
 static int nm256_releaseInterrupt (struct nm256_info *card);
 static void nm256_interrupt (int irq, void *dev_id, struct pt_regs *dummy);
-static void nm256_interrupt_zx (int irq, void *dev_id, 
-				  struct pt_regs *dummy);
+static void nm256_interrupt_zx (int irq, void *dev_id, struct pt_regs *dummy);
 
 /* These belong in linux/pci.h. */
 #define PCI_DEVICE_ID_NEOMAGIC_NM256AV_AUDIO 0x8005
 #define PCI_DEVICE_ID_NEOMAGIC_NM256ZX_AUDIO 0x8006
 
+/* eeeew. */
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,0)
+#define RSRCADDRESS(dev,num) ((dev)->resource[(num)].start)
+#else
+#define RSRCADDRESS(dev,num) ((dev)->base_address[(num)] \
+			      & PCI_BASE_ADDRESS_MEM_MASK)
+
+#endif
+
 /* List of cards.  */
 static struct nm256_info *nmcard_list;
+
+/* Release the mapped-in memory for CARD.  */
+static void
+nm256_release_ports (struct nm256_info *card)
+{
+    int x;
+
+    for (x = 0; x < 2; x++) {
+	if (card->port[x].ptr != NULL) {
+	    u32 size = 
+		card->port[x].end_offset - card->port[x].start_offset;
+	    release_region ((unsigned long) card->port[x].ptr, size);
+	    card->port[x].ptr = NULL;
+	}
+    }
+}
+
+/* 
+ * Map in the memory ports for CARD, if they aren't already mapped in
+ * and have been configured.  If successful, a zero value is returned;
+ * otherwise any previously mapped-in areas are released and a non-zero
+ * value is returned.
+ *
+ * This is invoked twice, once for each port.  Ideally it would only be
+ * called once, but we now need to map in the second port in order to
+ * check how much memory the card has on the 256ZX.
+ */
+static int
+nm256_remap_ports (struct nm256_info *card)
+{
+    int x;
+
+    for (x = 0; x < 2; x++) {
+	if (card->port[x].ptr == NULL && card->port[x].end_offset > 0) {
+	    u32 physaddr 
+		= card->port[x].physaddr + card->port[x].start_offset;
+	    u32 size 
+		= card->port[x].end_offset - card->port[x].start_offset;
+
+	    card->port[x].ptr = ioremap_nocache (physaddr, size);
+						  
+	    if (card->port[x].ptr == NULL) {
+		printk (KERN_ERR "NM256: Unable to remap port %d\n", x + 1);
+		nm256_release_ports (card);
+		return -1;
+	    }
+	}
+    }
+    return 0;
+}
 
 /* Locate the card in our list. */
 static struct nm256_info *
@@ -52,8 +120,10 @@ nm256_find_card (int dev)
     return NULL;
 }
 
-/* Ditto, but find the card struct corresponding to the mixer device DEV 
-   instead. */
+/*
+ * Ditto, but find the card struct corresponding to the mixer device DEV 
+ * instead. 
+ */
 static struct nm256_info *
 nm256_find_card_for_mixer (int dev)
 {
@@ -81,11 +151,13 @@ static int samplerates[9] = {
     8000, 11025, 16000, 22050, 24000, 32000, 44100, 48000, 99999999
 };
 
-/* Set the card samplerate, word size and stereo mode to correspond to
-   the settings in the CARD struct for the specified device in DEV.
-   We keep two separate sets of information, one for each device; the
-   hardware is not actually configured until a read or write is
-   attempted. */
+/*
+ * Set the card samplerate, word size and stereo mode to correspond to
+ * the settings in the CARD struct for the specified device in DEV.
+ * We keep two separate sets of information, one for each device; the
+ * hardware is not actually configured until a read or write is
+ * attempted.
+ */
 
 int
 nm256_setInfo (int dev, struct nm256_info *card)
@@ -113,24 +185,33 @@ nm256_setInfo (int dev, struct nm256_info *card)
 	    break;
 
     if (x < 8) {
-	u8 speedbits = ((x << 4) & NM_RATE_MASK)
-	    | (card->sinfo[w].bits == 16 ? NM_RATE_BITS_16: 0) 
-	    | (card->sinfo[w].stereo ? NM_RATE_STEREO : 0);
+	u8 ratebits = ((x << 4) & NM_RATE_MASK);
+	if (card->sinfo[w].bits == 16)
+	    ratebits |= NM_RATE_BITS_16;
+	if (card->sinfo[w].stereo)
+	    ratebits |= NM_RATE_STEREO;
 
 	card->sinfo[w].samplerate = samplerates[x];
 
+
 	if (card->dev_for_play == dev && card->playing) {
+	    if (nm256_debug)
+		printk (KERN_DEBUG "Setting play ratebits to 0x%x\n",
+			ratebits);
 	    nm256_loadCoefficient (card, 0, x);
 	    nm256_writePort8 (card, 2,
-				NM_PLAYBACK_REG_OFFSET + NM_RATE_REG_OFFSET,
-				speedbits);
+			      NM_PLAYBACK_REG_OFFSET + NM_RATE_REG_OFFSET,
+			      ratebits);
 	}
 
 	if (card->dev_for_record == dev && card->recording) {
+	    if (nm256_debug)
+		printk (KERN_DEBUG "Setting record ratebits to 0x%x\n",
+			ratebits);
 	    nm256_loadCoefficient (card, 1, x);
-	    nm256_writePort8 (card, 2, 
-				NM_RECORD_REG_OFFSET + NM_RATE_REG_OFFSET,
-				speedbits);
+	    nm256_writePort8 (card, 2,
+			      NM_RECORD_REG_OFFSET + NM_RATE_REG_OFFSET,
+			      ratebits);
 	}
 	return 0;
     }
@@ -149,7 +230,7 @@ startPlay (struct nm256_info *card)
 
 	    /* Enable playback engine and interrupts. */
 	    nm256_writePort8 (card, 2, NM_PLAYBACK_ENABLE_REG,
-				NM_PLAYBACK_ENABLE_FLAG | NM_PLAYBACK_FREERUN);
+			      NM_PLAYBACK_ENABLE_FLAG | NM_PLAYBACK_FREERUN);
 
 	    /* Enable both channels. */
 	    nm256_writePort16 (card, 2, NM_AUDIO_MUTE_REG, 0x0);
@@ -157,9 +238,11 @@ startPlay (struct nm256_info *card)
     }
 }
 
-/* Request one chunk of AMT bytes from the recording device.  When the
-   operation is complete, the data will be copied into BUFFER and the
-   function DMAbuf_inputintr will be invoked. */
+/* 
+ * Request one chunk of AMT bytes from the recording device.  When the
+ * operation is complete, the data will be copied into BUFFER and the
+ * function DMAbuf_inputintr will be invoked.
+ */
 
 static void
 nm256_startRecording (struct nm256_info *card, char *buffer, u32 amt)
@@ -167,11 +250,14 @@ nm256_startRecording (struct nm256_info *card, char *buffer, u32 amt)
     u32 endpos;
     int enableEngine = 0;
     u32 ringsize = card->recordBufferSize;
+    unsigned long flags;
 
     if (amt > (ringsize / 2)) {
-	/* Of course this won't actually work right, because the
-	   caller is going to assume we will give what we got asked
-	   for. */
+	/*
+	 * Of course this won't actually work right, because the
+	 * caller is going to assume we will give what we got asked
+	 * for.
+	 */
 	printk (KERN_ERR "NM256: Read request too large: %d\n", amt);
 	amt = ringsize / 2;
     }
@@ -181,8 +267,12 @@ nm256_startRecording (struct nm256_info *card, char *buffer, u32 amt)
 	return;
     }
 
-    /* If we're not currently recording, set up the start and end registers
-       for the recording engine. */
+    save_flags (flags);
+    cli ();
+    /*
+     * If we're not currently recording, set up the start and end registers
+     * for the recording engine.
+     */
     if (! card->recording) {
 	card->recording = 1;
 	if (nm256_grabInterrupt (card) == 0) {
@@ -198,10 +288,16 @@ nm256_startRecording (struct nm256_info *card, char *buffer, u32 amt)
 	}
 	else {
 	    /* Not sure what else to do here.  */
+	    restore_flags (flags);
 	    return;
 	}
     }
 
+    /* 
+     * If we happen to go past the end of the buffer a bit (due to a
+     * delayed interrupt) it's OK.  So might as well set the watermark
+     * right at the end of the data we want.
+     */
     endpos = card->abuf2 + ((card->curRecPos + amt) % ringsize);
 
     card->recBuf = buffer;
@@ -211,6 +307,8 @@ nm256_startRecording (struct nm256_info *card, char *buffer, u32 amt)
     if (enableEngine)
 	nm256_writePort8 (card, 2, NM_RECORD_ENABLE_REG,
 			    NM_RECORD_ENABLE_FLAG | NM_RECORD_FREERUN);
+
+    restore_flags (flags);
 }
 
 /* Stop the play engine. */
@@ -219,7 +317,7 @@ stopPlay (struct nm256_info *card)
 {
     /* Shut off sound from both channels. */
     nm256_writePort16 (card, 2, NM_AUDIO_MUTE_REG,
-			 NM_AUDIO_MUTE_LEFT | NM_AUDIO_MUTE_RIGHT);
+		       NM_AUDIO_MUTE_LEFT | NM_AUDIO_MUTE_RIGHT);
     /* Disable play engine. */
     nm256_writePort8 (card, 2, NM_PLAYBACK_ENABLE_REG, 0);
     if (card->playing) {
@@ -246,18 +344,22 @@ stopRecord (struct nm256_info *card)
     }
 }
 
-/* Ring buffers, man.  That's where the hip-hop, wild-n-wooly action's at.
-   1972?
-
-   Write AMT bytes of BUFFER to the playback ring buffer, and start the
-   playback engine running.  It will only accept up to 1/2 of the total
-   size of the ring buffer.  */
+/*
+ * Ring buffers, man.  That's where the hip-hop, wild-n-wooly action's at.
+ * 1972?  (Well, I suppose it was cheep-n-easy to implement.)
+ *
+ * Write AMT bytes of BUFFER to the playback ring buffer, and start the
+ * playback engine running.  It will only accept up to 1/2 of the total
+ * size of the ring buffer.  No check is made that we're about to overwrite
+ * the currently-playing sample.
+ */
 
 static void
 nm256_write_block (struct nm256_info *card, char *buffer, u32 amt)
 {
     u32 ringsize = card->playbackBufferSize;
     u32 endstop;
+    unsigned long flags;
 
     if (amt > (ringsize / 2)) {
 	printk (KERN_ERR "NM256: Write request too large: %d\n", amt);
@@ -272,6 +374,9 @@ nm256_write_block (struct nm256_info *card, char *buffer, u32 amt)
     card->curPlayPos %= ringsize;
 
     card->requested_amt = amt;
+
+    save_flags (flags);
+    cli ();
 
     if ((card->curPlayPos + amt) >= ringsize) {
 	u32 rem = ringsize - card->curPlayPos;
@@ -288,33 +393,40 @@ nm256_write_block (struct nm256_info *card, char *buffer, u32 amt)
 			      card->abuf1 + card->curPlayPos,
 			      amt);
 
-    /* Setup the start-n-stop-n-limit registers, and start that engine
-       goin'. 
-
-       Normally we just let it wrap around to avoid the click-click
-       action scene. */
+    /*
+     * Setup the start-n-stop-n-limit registers, and start that engine
+     * goin'. 
+     *
+     * Normally we just let it wrap around to avoid the click-click
+     * action scene.
+     */
     if (! card->playing) {
-	/* The PBUFFER_END register in this case points to one "word"
+	/* The PBUFFER_END register in this case points to one sample
 	   before the end of the buffer. */
 	int w = (card->dev_for_play == card->dev[0] ? 0 : 1);
-	int wordsize = (card->sinfo[w].bits == 16 ? 2 : 1)
-	    * (card->sinfo[w].stereo ? 2 : 1);
+	int sampsize = (card->sinfo[w].bits == 16 ? 2 : 1);
+
+	if (card->sinfo[w].stereo)
+	    sampsize *= 2;
 
 	/* Need to set the not-normally-changing-registers up. */
 	nm256_writePort32 (card, 2, NM_PBUFFER_START,
 			     card->abuf1 + card->curPlayPos);
 	nm256_writePort32 (card, 2, NM_PBUFFER_END,
-			     card->abuf1 + ringsize - wordsize);
+			     card->abuf1 + ringsize - sampsize);
 	nm256_writePort32 (card, 2, NM_PBUFFER_CURRP,
 			     card->abuf1 + card->curPlayPos);
     }
     endstop = (card->curPlayPos + amt - NM256_PLAY_WMARK_SIZE) % ringsize;
     nm256_writePort32 (card, 2, NM_PBUFFER_WMARK, card->abuf1 + endstop);
+
     if (! card->playing)
 	startPlay (card);
+
+    restore_flags (flags);
 }
 
-/* We just got a card playback interrupt; process it. */
+/*  We just got a card playback interrupt; process it.  */
 static void
 nm256_get_new_block (struct nm256_info *card)
 {
@@ -332,13 +444,14 @@ nm256_get_new_block (struct nm256_info *card)
 	amt -= card->curPlayPos;
 
     if (card->requested_amt > (amt + NM256_PLAY_WMARK_SIZE)) {
-	u32 endstop = 
+	u32 endstop =
 	    card->curPlayPos + card->requested_amt - NM256_PLAY_WMARK_SIZE;
 	nm256_writePort32 (card, 2, NM_PBUFFER_WMARK, card->abuf1 + endstop);
-    } else {
+    } 
+    else {
 	card->curPlayPos += card->requested_amt;
 	/* Get a new block to write.  This will eventually invoke
-	   nm256_write_block ().  */
+	   nm256_write_block () or stopPlay ().  */
 	DMAbuf_outputintr (card->dev_for_play, 1);
     }
 }
@@ -346,9 +459,11 @@ nm256_get_new_block (struct nm256_info *card)
 /* Ultra cheez-whiz.  But I'm too lazy to grep headers. */
 #define MIN(X,Y) ((X) < (Y) ? (X) : (Y))
 
-/* Read the last-recorded block from the ring buffer, copy it into the
-   saved buffer pointer, and invoke DMAuf_inputintr() with the recording
-   device. */
+/* 
+ * Read the last-recorded block from the ring buffer, copy it into the
+ * saved buffer pointer, and invoke DMAuf_inputintr() with the recording
+ * device. 
+ */
 
 static void
 nm256_read_block (struct nm256_info *card)
@@ -363,8 +478,10 @@ nm256_read_block (struct nm256_info *card)
         currptr = 0;
     }
 
-    /* This test is probably redundant; we shouldn't be here unless
-       it's true.  */
+    /*
+     * This test is probably redundant; we shouldn't be here unless
+     * it's true.
+     */
     if (card->recording) {
 	/* If we wrapped around, copy everything from the start of our
 	   recording buffer to the end of the buffer. */
@@ -394,52 +511,28 @@ nm256_read_block (struct nm256_info *card)
 }
 #undef MIN
 
-/* Initialize the hardware and various other card data we'll need
-   later. */
+/* 
+ * Initialize the hardware. 
+ */
 static void
 nm256_initHw (struct nm256_info *card)
 {
-    int x;
-
-    card->playbackBufferSize = 16384;
-    card->recordBufferSize = 16384;
-
-    card->coeffBuf = card->bufend - NM_MAX_COEFFICIENT;
-    card->abuf2 = card->coeffBuf - card->recordBufferSize;
-    card->abuf1 = card->abuf2 - card->playbackBufferSize;
-    card->allCoeffBuf = card->abuf2 - (NM_TOTAL_COEFF_COUNT * 4);
-
-    /* Fixed setting. */
-    card->mixer = NM_MIXER_BASE;
-
-    card->playing = 0;
-    card->is_open_play = 0;
-    card->curPlayPos = 0;
-
-    card->recording = 0;
-    card->is_open_record = 0;
-    card->curRecPos = 0;
-
-    card->coeffsCurrent = 0;
-
-    card->opencnt[0] = 0; card->opencnt[1] = 0;
-
     /* Reset everything. */
-    nm256_writePort8 (card, 2, 0, 0x11);
-
-    /* Disable recording. */
-    nm256_writePort8 (card, 2, NM_RECORD_ENABLE_REG, 0);
+    nm256_writePort8 (card, 2, 0x0, 0x11);
     nm256_writePort16 (card, 2, 0x214, 0);
 
-    /* Reasonable default settings, but largely unnecessary. */
-    for (x = 0; x < 2; x++) {
-	card->sinfo[x].bits = 8;
-	card->sinfo[x].stereo = 0;
-	card->sinfo[x].samplerate = 8000;
-    }
+    stopRecord (card);
+    stopPlay (card);
 }
 
-/* Handle a potential interrupt for the device referred to by DEV_ID. */
+/* 
+ * Handle a potential interrupt for the device referred to by DEV_ID. 
+ *
+ * I don't like the cut-n-paste job here either between the two routines,
+ * but there are sufficient differences between the two interrupt handlers
+ * that parameterizing it isn't all that great either.  (Could use a macro,
+ * I suppose...yucky bleah.)
+ */
 
 static void
 nm256_interrupt (int irq, void *dev_id, struct pt_regs *dummy)
@@ -458,13 +551,31 @@ nm256_interrupt (int irq, void *dev_id, struct pt_regs *dummy)
     /* Not ours. */
     if (status == 0) {
 	if (badintrcount++ > 1000) {
-	    printk (KERN_ERR "NM256: Releasing interrupt, over 1000 invalid interrupts\n");
-	    nm256_releaseInterrupt (card);
+	    /*
+	     * I'm not sure if the best thing is to stop the card from
+	     * playing or just release the interrupt (after all, we're in
+	     * a bad situation, so doing fancy stuff may not be such a good
+	     * idea).
+	     *
+	     * I worry about the card engine continuing to play noise
+	     * over and over, however--that could become a very
+	     * obnoxious problem.  And we know that when this usually
+	     * happens things are fairly safe, it just means the user's
+	     * inserted a PCMCIA card and someone's spamming us with IRQ 9s.
+	     */
+
+	    if (card->playing)
+		stopPlay (card);
+	    if (card->recording)
+		stopRecord (card);
+	    badintrcount = 0;
 	}
 	return;
     }
 
     badintrcount = 0;
+
+    /* Rather boring; check for individual interrupts and process them. */
 
     if (status & NM_PLAYBACK_INT) {
 	status &= ~NM_PLAYBACK_INT;
@@ -503,6 +614,7 @@ nm256_interrupt (int irq, void *dev_id, struct pt_regs *dummy)
 	nm256_writePort8 (card, 2, 0x400, cbyte & ~2);
     }
 
+    /* Unknown interrupt. */
     if (status) {
 	printk (KERN_ERR "NM256: Fire in the hole! Unknown status 0x%x\n",
 		status);
@@ -511,8 +623,11 @@ nm256_interrupt (int irq, void *dev_id, struct pt_regs *dummy)
     }
 }
 
-/* Handle a potential interrupt for the device referred to by DEV_ID.
-   This handler is for the 256ZX.  */
+/*
+ * Handle a potential interrupt for the device referred to by DEV_ID.
+ * This handler is for the 256ZX, and is very similar to the non-ZX
+ * routine.
+ */
 
 static void
 nm256_interrupt_zx (int irq, void *dev_id, struct pt_regs *dummy)
@@ -532,12 +647,32 @@ nm256_interrupt_zx (int irq, void *dev_id, struct pt_regs *dummy)
     if (status == 0) {
 	if (badintrcount++ > 1000) {
 	    printk (KERN_ERR "NM256: Releasing interrupt, over 1000 invalid interrupts\n");
-	    nm256_releaseInterrupt (card);
+	    /*
+	     * I'm not sure if the best thing is to stop the card from
+	     * playing or just release the interrupt (after all, we're in
+	     * a bad situation, so doing fancy stuff may not be such a good
+	     * idea).
+	     *
+	     * I worry about the card engine continuing to play noise
+	     * over and over, however--that could become a very
+	     * obnoxious problem.  And we know that when this usually
+	     * happens things are fairly safe, it just means the user's
+	     * inserted a PCMCIA card and someone's spamming us with 
+	     * IRQ 9s.
+	     */
+
+	    if (card->playing)
+		stopPlay (card);
+	    if (card->recording)
+		stopRecord (card);
+	    badintrcount = 0;
 	}
 	return;
     }
 
     badintrcount = 0;
+
+    /* Rather boring; check for individual interrupts and process them. */
 
     if (status & NM2_PLAYBACK_INT) {
 	status &= ~NM2_PLAYBACK_INT;
@@ -575,6 +710,7 @@ nm256_interrupt_zx (int irq, void *dev_id, struct pt_regs *dummy)
 	nm256_writePort8 (card, 2, 0x400, cbyte & ~2);
     }
 
+    /* Unknown interrupt. */
     if (status) {
 	printk (KERN_ERR "NM256: Fire in the hole! Unknown status 0x%x\n",
 		status);
@@ -583,7 +719,9 @@ nm256_interrupt_zx (int irq, void *dev_id, struct pt_regs *dummy)
     }
 }
 
-/* Request our interrupt. */
+/* 
+ * Request our interrupt.
+ */
 static int
 nm256_grabInterrupt (struct nm256_info *card)
 {
@@ -597,7 +735,9 @@ nm256_grabInterrupt (struct nm256_info *card)
     return 0;
 }
 
-/* Release our interrupt. */
+/* 
+ * Release our interrupt. 
+ */
 static int
 nm256_releaseInterrupt (struct nm256_info *card)
 {
@@ -611,6 +751,11 @@ nm256_releaseInterrupt (struct nm256_info *card)
     }
     return 0;
 }
+
+/*
+ * Waits for the mixer to become ready to be written; returns a zero value
+ * if it timed out.
+ */
 
 static int
 nm256_isReady (struct ac97_hwint *dev)
@@ -626,26 +771,25 @@ nm256_isReady (struct ac97_hwint *dev)
 	return 0;
     }
 
-    if (card->rev == REV_NM256AV) {
-	testaddr = 0xa06;
-	testb = 0x0100;
-    } else if (card->rev == REV_NM256ZX) {
-	testaddr = 0xa08;
-	testb = 0x0800;
-    } else {
-	return -1;
-    }
+    testaddr = card->mixer_status_offset;
+    testb = card->mixer_status_mask;
 
-    while (t2-- > 0) {
-	if ((nm256_readPort16 (card, 2, testaddr) & testb) == 0) {
+    /* 
+     * Loop around waiting for the mixer to become ready. 
+     */
+    while (! done && t2-- > 0) {
+	if ((nm256_readPort16 (card, 2, testaddr) & testb) == 0)
 	    done = 1;
-	    break;
-	}
-	udelay (100);
+	else
+	    udelay (100);
     }
     return done;
 }
 
+/*
+ * Return the contents of the AC97 mixer register REG.  Returns a positive
+ * value if successful, or a negative error code.
+ */
 static int
 nm256_readAC97Reg (struct ac97_hwint *dev, u8 reg)
 {
@@ -661,6 +805,7 @@ nm256_readAC97Reg (struct ac97_hwint *dev, u8 reg)
 
 	nm256_isReady (dev);
 	res = nm256_readPort16 (card, 2, card->mixer + reg);
+	/* Magic delay.  Bleah yucky.  */
         udelay (1000);
 	return res;
     }
@@ -668,6 +813,10 @@ nm256_readAC97Reg (struct ac97_hwint *dev, u8 reg)
 	return -EINVAL;
 }
 
+/* 
+ * Writes VALUE to AC97 mixer register REG.  Returns 0 if successful, or
+ * a negative error code. 
+ */
 static int
 nm256_writeAC97Reg (struct ac97_hwint *dev, u8 reg, u16 value)
 {
@@ -706,6 +855,13 @@ nm256_writeAC97Reg (struct ac97_hwint *dev, u8 reg, u16 value)
     return ! done;
 }
 
+/* 
+ * Initial register values to be written to the AC97 mixer.
+ * While most of these are identical to the reset values, we do this
+ * so that we have most of the register contents cached--this avoids
+ * reading from the mixer directly (which seems to be problematic,
+ * probably due to ignorance).
+ */
 struct initialValues 
 {
     unsigned short port;
@@ -714,23 +870,24 @@ struct initialValues
 
 static struct initialValues nm256_ac97_initial_values[] = 
 {
-    { 0x0002, 0x8000 },
-    { 0x0004, 0x0000 },
-    { 0x0006, 0x0000 },
-    { 0x000A, 0x0000 },
-    { 0x000C, 0x0008 },
-    { 0x000E, 0x8008 },
-    { 0x0010, 0x8808 },
-    { 0x0012, 0x8808 },
-    { 0x0014, 0x8808 },
-    { 0x0016, 0x8808 },
-    { 0x0018, 0x0808 },
-    { 0x001A, 0x0000 },
-    { 0x001C, 0x0B0B },
-    { 0x0020, 0x0000 },
+    { AC97_MASTER_VOL_STEREO, 0x8000 },
+    { AC97_HEADPHONE_VOL,     0x8000 },
+    { AC97_MASTER_VOL_MONO,   0x0000 },
+    { AC97_PCBEEP_VOL,        0x0000 },
+    { AC97_PHONE_VOL,         0x0008 },
+    { AC97_MIC_VOL,           0x8000 },
+    { AC97_LINEIN_VOL,        0x8808 },
+    { AC97_CD_VOL,            0x8808 },
+    { AC97_VIDEO_VOL,         0x8808 },
+    { AC97_AUX_VOL,           0x8808 },
+    { AC97_PCMOUT_VOL,        0x0808 },
+    { AC97_RECORD_SELECT,     0x0000 },
+    { AC97_RECORD_GAIN,       0x0B0B },
+    { AC97_GENERAL_PURPOSE,   0x0000 },
     { 0xffff, 0xffff }
 };
 
+/* Initialize the AC97 into a known state.  */
 static int
 nm256_resetAC97 (struct ac97_hwint *dev)
 {
@@ -742,22 +899,28 @@ nm256_resetAC97 (struct ac97_hwint *dev)
 	return -EINVAL;
     }
 
-    /* Reset the card.  'Tis magic!  */
+    /* Reset the mixer.  'Tis magic!  */
     nm256_writePort8 (card, 2, 0x6c0, 1);
     nm256_writePort8 (card, 2, 0x6cc, 0x87);
     nm256_writePort8 (card, 2, 0x6cc, 0x80);
     nm256_writePort8 (card, 2, 0x6cc, 0x0);
 
-    for (x = 0; nm256_ac97_initial_values[x].port != 0xffff; x++) {
-	ac97_put_register (dev,
-			   nm256_ac97_initial_values[x].port, 
-			   nm256_ac97_initial_values[x].value);
+    if (! card->mixer_values_init) {
+	for (x = 0; nm256_ac97_initial_values[x].port != 0xffff; x++) {
+	    ac97_put_register (dev,
+			       nm256_ac97_initial_values[x].port,
+			       nm256_ac97_initial_values[x].value);
+	    card->mixer_values_init = 1;
+	}
     }
 
     return 0;
 }
 
-/* We don't do anything special here.  */
+/*
+ * We don't do anything particularly special here; it just passes the
+ * mixer ioctl to the AC97 driver.
+ */
 static int
 nm256_default_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 {
@@ -774,7 +937,12 @@ static struct mixer_operations nm256_mixer_operations = {
     nm256_default_mixer_ioctl
 };
 
-/* I "love" C sometimes.  Got braces?  */
+/*
+ * Default settings for the OSS mixer.  These are set last, after the
+ * mixer is initialized.
+ *
+ * I "love" C sometimes.  Got braces?
+ */
 static struct ac97_mixer_value_list mixer_defaults[] = {
     { SOUND_MIXER_VOLUME,  { { 85, 85 } } },
     { SOUND_MIXER_SPEAKER, { { 100 } } },
@@ -783,6 +951,8 @@ static struct ac97_mixer_value_list mixer_defaults[] = {
     { -1,                  {  { 0,  0 } } }
 };
 
+
+/* Installs the AC97 mixer into CARD.  */
 static int
 nm256_install_mixer (struct nm256_info *card)
 {
@@ -812,36 +982,67 @@ nm256_install_mixer (struct nm256_info *card)
     return 0;
 }
 
-/* See if the signature left by the NM256 BIOS is intact; if so, we use
-   the associated address as the end of our buffer. */
+/* Perform a full reset on the hardware; this is invoked when an APM
+   resume event occurs.  */
 static void
-nm256_peek_for_sig (struct nm256_info *card, u32 port1addr)
+nm256_full_reset (struct nm256_info *card)
 {
-    char *temp = ioremap_nocache (port1addr + card->port1_end - 0x0400, 16);
+    nm256_initHw (card);
+    ac97_reset (&(card->mdev));
+}
+
+/* 
+ * See if the signature left by the NM256 BIOS is intact; if so, we use
+ * the associated address as the end of our audio buffer in the video
+ * RAM.
+ */
+
+static void
+nm256_peek_for_sig (struct nm256_info *card)
+{
+    u32 port1offset 
+	= card->port[0].physaddr + card->port[0].end_offset - 0x0400;
+    /* The signature is located 1K below the end of video RAM.  */
+    char *temp = ioremap_nocache (port1offset, 16);
+    /* Default buffer end is 5120 bytes below the top of RAM.  */
+    u32 default_value = card->port[0].end_offset - 0x1400;
     u32 sig;
+
+    /* Install the default value first, so we don't have to repeatedly
+       do it if there is a problem.  */
+    card->port[0].end_offset = default_value;
 
     if (temp == NULL) {
 	printk (KERN_ERR "NM256: Unable to scan for card signature in video RAM\n");
 	return;
     }
-    memcpy_fromio (&sig, temp, sizeof (u32));
-    if ((sig & 0xffff0000) == 0x4e4d0000) {
-	memcpy_fromio (&(card->bufend), temp + 4, sizeof (u32));
+    sig = readl (temp);
+    if ((sig & NM_SIG_MASK) == NM_SIGNATURE) {
+	u32 pointer = readl (temp + 4);
+
+	/*
+	 * If it's obviously invalid, don't use it (the port already has a
+	 * suitable default value set).
+	 */
+	if (pointer != 0xffffffff)
+	    card->port[0].end_offset = pointer;
+
 	printk (KERN_INFO "NM256: Found card signature in video RAM: 0x%x\n",
-		card->bufend);
+		pointer);
     }
 
     release_region ((unsigned long) temp, 16);
 }
 
-/* Install a driver for the soundcard referenced by PCIDEV. */
+/* 
+ * Install a driver for the PCI device referenced by PCIDEV.
+ * VERSTR is a human-readable version string.
+ */
 
 static int
 nm256_install(struct pci_dev *pcidev, enum nm256rev rev, char *verstr)
 {
     struct nm256_info *card;
-    u32 port1addr = pcidev->resource[0].start;
-    u32 port2addr = pcidev->resource[1].start;
     int x;
 
     card = kmalloc (sizeof (struct nm256_info), GFP_KERNEL);
@@ -855,52 +1056,85 @@ nm256_install(struct pci_dev *pcidev, enum nm256rev rev, char *verstr)
     card->recording = 0;
     card->rev = rev;
 
-    /* The NM256 has two memory ports.  The first port is nothing
-       more than a chunk of video RAM, which is used as the I/O ring
-       buffer.  The second port has the actual juicy stuff (like the
-       mixer and the playback engine control registers). */
+    /* Init the memory port info.  */
+    for (x = 0; x < 2; x++) {
+	card->port[x].physaddr = RSRCADDRESS (pcidev, x);
+	card->port[x].ptr = NULL;
+	card->port[x].start_offset = 0;
+	card->port[x].end_offset = 0;
+    }
 
-    card->ports[1] = ioremap_nocache (port2addr, NM_PORT2_SIZE);
+    /* Port 2 is easy.  */
+    card->port[1].start_offset = 0;
+    card->port[1].end_offset = NM_PORT2_SIZE;
 
-    if (card->ports[1] == NULL) {
-	printk (KERN_ERR "NM256: Unable to remap port 2\n");
+    /* Yuck.  But we have to map in port 2 so we can check how much RAM the
+       card has.  */
+    if (nm256_remap_ports (card)) {
 	kfree_s (card, sizeof (struct nm256_info));
 	return 0;
     }
 
+    /* 
+     * The NM256 has two memory ports.  The first port is nothing
+     * more than a chunk of video RAM, which is used as the I/O ring
+     * buffer.  The second port has the actual juicy stuff (like the
+     * mixer and the playback engine control registers).
+     */
+
     if (card->rev == REV_NM256AV) {
-	card->port1_end = 2560 * 1024;
+	/* Ok, try to see if this is a non-AC97 version of the hardware. */
+	int pval = nm256_readPort16 (card, 2, NM_MIXER_PRESENCE);
+	if ((pval & NM_PRESENCE_MASK) != NM_PRESENCE_VALUE) {
+	    if (! force_load) {
+		printk (KERN_ERR "NM256: This doesn't look to me like the AC97-compatible version.\n");
+		printk (KERN_ERR "       You can force the driver to load by passing in the module\n");
+		printk (KERN_ERR "       parameter:\n");
+		printk (KERN_ERR "              force_ac97 = 1\n");
+		printk (KERN_ERR "\n");
+		printk (KERN_ERR "       More likely, you should be using the appropriate SB-16 or\n");
+		printk (KERN_ERR "       CS4232 driver instead.  (If your BIOS has settings for\n");
+		printk (KERN_ERR "       IRQ and/or DMA for the sound card, this is *not* the correct\n");
+		printk (KERN_ERR "       driver to use.)\n");
+		nm256_release_ports (card);
+		kfree_s (card, sizeof (struct nm256_info));
+		return 0;
+	    }
+	    else {
+		printk (KERN_INFO "NM256: Forcing driver load as per user request.\n");
+	    }
+	}
+	else {
+	 /*   printk (KERN_INFO "NM256: Congratulations. You're not running Eunice.\n")*/;
+	}
+	card->port[0].end_offset = 2560 * 1024;
 	card->introutine = nm256_interrupt;
+	card->mixer_status_offset = NM_MIXER_STATUS_OFFSET;
+	card->mixer_status_mask = NM_MIXER_READY_MASK;
     } 
     else {
+	/* Not sure if there is any relevant detect for the ZX or not.  */
 	if (nm256_readPort8 (card, 2, 0xa0b) != 0)
-	    card->port1_end = 6144 * 1024;
+	    card->port[0].end_offset = 6144 * 1024;
 	else
-	    card->port1_end = 4096 * 1024;
+	    card->port[0].end_offset = 4096 * 1024;
 
 	card->introutine = nm256_interrupt_zx;
+	card->mixer_status_offset = NM2_MIXER_STATUS_OFFSET;
+	card->mixer_status_mask = NM2_MIXER_READY_MASK;
     }
 
-    /* Default value. */
-    card->bufend = card->port1_end - 0x1400;
-
-    if (buffertop >= 98304 && buffertop < card->port1_end)
-	card->bufend = buffertop;
+    if (buffertop >= 98304 && buffertop < card->port[0].end_offset)
+	card->port[0].end_offset = buffertop;
     else
-	nm256_peek_for_sig (card, port1addr);
+	nm256_peek_for_sig (card);
 
-    card->port1_start = card->bufend - 98304;
+    card->port[0].start_offset = card->port[0].end_offset - 98304;
 
     printk (KERN_INFO "NM256: Mapping port 1 from 0x%x - 0x%x\n",
-	    card->port1_start, card->port1_end);
+	    card->port[0].start_offset, card->port[0].end_offset);
 
-    card->ports[0] =
-	ioremap_nocache (port1addr + card->port1_start,
-			 card->port1_end - card->port1_start);
-
-    if (card->ports[0] == NULL) {
-	printk (KERN_ERR "NM256: Unable to remap port 1\n");
-	release_region ((unsigned long) card->ports[1], NM_PORT2_SIZE);
+    if (nm256_remap_ports (card)) {
 	kfree_s (card, sizeof (struct nm256_info));
 	return 0;
     }
@@ -911,9 +1145,7 @@ nm256_install(struct pci_dev *pcidev, enum nm256rev rev, char *verstr)
     card->has_irq = 0;
 
     if (nm256_grabInterrupt (card) != 0) {
-	release_region ((unsigned long) card->ports[0], 
-			card->port1_end - card->port1_start);
-	release_region ((unsigned long) card->ports[1], NM_PORT2_SIZE);
+	nm256_release_ports (card);
 	kfree_s (card, sizeof (struct nm256_info));
 	return 0;
     }
@@ -924,10 +1156,36 @@ nm256_install(struct pci_dev *pcidev, enum nm256rev rev, char *verstr)
      *	Init the board.
      */
 
+    card->playbackBufferSize = 16384;
+    card->recordBufferSize = 16384;
+
+    card->coeffBuf = card->port[0].end_offset - NM_MAX_COEFFICIENT;
+    card->abuf2 = card->coeffBuf - card->recordBufferSize;
+    card->abuf1 = card->abuf2 - card->playbackBufferSize;
+    card->allCoeffBuf = card->abuf2 - (NM_TOTAL_COEFF_COUNT * 4);
+
+    /* Fixed setting. */
+    card->mixer = NM_MIXER_OFFSET;
+    card->mixer_values_init = 0;
+
+    card->is_open_play = 0;
+    card->is_open_record = 0;
+
+    card->coeffsCurrent = 0;
+
+    card->opencnt[0] = 0; card->opencnt[1] = 0;
+
+    /* Reasonable default settings, but largely unnecessary. */
+    for (x = 0; x < 2; x++) {
+	card->sinfo[x].bits = 8;
+	card->sinfo[x].stereo = 0;
+	card->sinfo[x].samplerate = 8000;
+    }
+
     nm256_initHw (card);
 
     for (x = 0; x < 2; x++) {
-	if ((card->dev[x] = 
+	if ((card->dev[x] =
 	     sound_install_audiodrv(AUDIO_DRIVER_VERSION,
 				    "NM256", &nm256_audio_driver,
 				    sizeof(struct audio_driver),
@@ -940,9 +1198,7 @@ nm256_install(struct pci_dev *pcidev, enum nm256rev rev, char *verstr)
 	}
 	else {
 	    printk(KERN_ERR "NM256: Too many PCM devices available\n");
-	    release_region ((unsigned long) card->ports[0], 
-			    card->port1_end - card->port1_start);
-	    release_region ((unsigned long) card->ports[1], NM_PORT2_SIZE);
+	    nm256_release_ports (card);
 	    kfree_s (card, sizeof (struct nm256_info));
 	    return 0;
 	}
@@ -963,6 +1219,48 @@ nm256_install(struct pci_dev *pcidev, enum nm256rev rev, char *verstr)
 
     return 1;
 }
+
+
+#ifdef CONFIG_APM
+/*
+ * APM event handler, so the card is properly reinitialized after a power
+ * event.
+ */
+static int
+handle_apm_event (apm_event_t event)
+{
+    static int down = 0;
+
+    switch (event)
+	{
+	case APM_SYS_SUSPEND:
+	case APM_USER_SUSPEND:
+	    down++;
+	    break;
+	case APM_NORMAL_RESUME:
+	case APM_CRITICAL_RESUME:
+	    if (down)
+		{
+		    struct nm256_info *crd;
+
+		    down = 0;
+		    for (crd = nmcard_list;  crd != NULL; crd = crd->next_card)
+			{
+			    int playing = crd->playing;
+			    nm256_full_reset (crd);
+			    /*
+			     * A little ugly, but that's ok; pretend the
+			     * block we were playing is done. 
+			     */
+			    if (playing)
+				DMAbuf_outputintr (crd->dev_for_play, 1);
+			}
+		}
+	    break;
+	}
+    return 0;
+}
+#endif
 
 /*
  * 	This loop walks the PCI configuration database and finds where
@@ -992,6 +1290,10 @@ init_nm256(void)
 
     if (count == 0)
 	return -ENODEV;
+
+#ifdef CONFIG_APM
+    apm_register_callback (&handle_apm_event);
+#endif
 
     printk (KERN_INFO "Done installing NM256 audio driver.\n");
     return 0;
@@ -1028,10 +1330,13 @@ nm256_audio_open(int dev, int mode)
     if (! ((mode & OPEN_READ) || (mode & OPEN_WRITE)))
 	return -EIO;
 
-    /* If it's open for both read and write, and the card's currently
-       being read or written to, then do the opposite of what has
-       already been done.  Otherwise, don't specify any mode until the
-       user actually tries to do I/O. */
+    /*
+     * If it's open for both read and write, and the card's currently
+     * being read or written to, then do the opposite of what has
+     * already been done.  Otherwise, don't specify any mode until the
+     * user actually tries to do I/O.  (Some programs open the device
+     * for both read and write, but only actually do reading or writing.)
+     */
 
     if ((mode & OPEN_WRITE) && (mode & OPEN_READ)) {
 	if (card->is_open_play)
@@ -1105,6 +1410,7 @@ nm256_audio_close(int dev)
     }
 }
 
+/* Standard ioctl handler. */
 static int
 nm256_audio_ioctl(int dev, unsigned int cmd, caddr_t arg)
 {
@@ -1122,6 +1428,11 @@ nm256_audio_ioctl(int dev, unsigned int cmd, caddr_t arg)
     else
 	w = 1;
 
+    /* 
+     * The code here is messy.  There are probably better ways to do
+     * it.  (It should be possible to handle it the same way the AC97 mixer 
+     * is done.)
+     */
     switch (cmd)
 	{
 	case SOUND_PCM_WRITE_RATE:
@@ -1193,8 +1504,12 @@ nm256_audio_ioctl(int dev, unsigned int cmd, caddr_t arg)
     return put_user(ret, (int *) arg);
 }
 
-/* Given the dev DEV and an associated physical buffer PHYSBUF, return
-   a pointer to the actual buffer in kernel space. */
+/*
+ * Given the sound device DEV and an associated physical buffer PHYSBUF, 
+ * return a pointer to the actual buffer in kernel space. 
+ *
+ * This routine should exist as part of the soundcore routines.
+ */
 
 static char *
 nm256_getDMAbuffer (int dev, unsigned long physbuf)
@@ -1238,9 +1553,10 @@ nm256_audio_output_block(int dev, unsigned long physbuf,
     }
 }
 
+/* Ditto, but do recording instead.  */
 static void
 nm256_audio_start_input(int dev, unsigned long physbuf, int count,
-			  int intrflag)
+			int intrflag)
 {
     struct nm256_info *card = nm256_find_card (dev);
 
@@ -1251,6 +1567,12 @@ nm256_audio_start_input(int dev, unsigned long physbuf, int count,
 	nm256_startRecording (card, dma_buf, count);
     }
 }
+
+/* 
+ * Prepare for inputting samples to DEV. 
+ * Each requested buffer will be BSIZE byes long, with a total of
+ * BCOUNT buffers. 
+ */
 
 static int
 nm256_audio_prepare_for_input(int dev, int bsize, int bcount)
@@ -1278,6 +1600,7 @@ nm256_audio_prepare_for_input(int dev, int bsize, int bcount)
  *  2. We get a write buffer without dma_mode setup     (dmabuf.c:1152)
  *  3. We restart a transfer                            (dmabuf.c:1324)
  */
+
 static int
 nm256_audio_prepare_for_output(int dev, int bsize, int bcount)
 {
@@ -1342,12 +1665,13 @@ static int loaded = 0;
 MODULE_PARM (usecache, "i");
 MODULE_PARM (buffertop, "i");
 MODULE_PARM (nm256_debug, "i");
+MODULE_PARM (force_load, "i");
 
 int
 init_module (void)
 {
     nmcard_list = NULL;
-    printk (KERN_INFO "NeoMagic 256AV/256ZX audio driver, version 1.0\n");
+    printk (KERN_INFO "NeoMagic 256AV/256ZX audio driver, version 1.1\n");
 
     if (init_nm256 () == 0) {
 	SOUND_LOCK;
@@ -1372,9 +1696,7 @@ cleanup_module (void)
 	    stopRecord (card);
 	    if (card->has_irq)
 		free_irq (card->irq, card);
-	    release_region ((unsigned long) card->ports[0], 
-			    card->port1_end - card->port1_start);
-	    release_region ((unsigned long) card->ports[1], NM_PORT2_SIZE);
+	    nm256_release_ports (card);
 	    sound_unload_mixerdev (card->mixer_oss_dev);
 	    sound_unload_audiodev (card->dev[0]);
 	    sound_unload_audiodev (card->dev[1]);
@@ -1383,6 +1705,9 @@ cleanup_module (void)
 	}
 	nmcard_list = NULL;
     }
+#ifdef CONFIG_APM
+    apm_unregister_callback (&handle_apm_event);
+#endif
 }
 #endif
 

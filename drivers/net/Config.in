@@ -46,6 +46,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
    if [ "$CONFIG_PPC" = "y" ]; then
       tristate '  MACE (Power Mac ethernet) support' CONFIG_MACE
       tristate '  BMAC (G3 ethernet) support' CONFIG_BMAC
+      tristate '  Symbios 53c885 (Synergy ethernet) support' CONFIG_NCR885E
    fi
    if [ "$CONFIG_ZORRO" = "y" ]; then
       tristate '  Ariadne support' CONFIG_ARIADNE
@@ -214,6 +215,7 @@ fi
 tristate 'PPP (point-to-point protocol) support' CONFIG_PPP
 if [ ! "$CONFIG_PPP" = "n" ]; then
    dep_tristate '  PPP support for async serial ports' CONFIG_PPP_ASYNC $CONFIG_PPP
+   dep_tristate '  PPP support for sync tty ports' CONFIG_PPP_SYNC_TTY $CONFIG_PPP
    dep_tristate '  PPP Deflate compression' CONFIG_PPP_DEFLATE $CONFIG_PPP
    dep_tristate '  PPP BSD-Compress compression' CONFIG_PPP_BSDCOMP m
 fi

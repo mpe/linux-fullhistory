@@ -1,5 +1,5 @@
 /*
- * $Id: time.c,v 1.55 1999/08/31 06:54:09 davem Exp $
+ * $Id: time.c,v 1.57 1999/10/21 03:08:16 cort Exp $
  * Common time routines among all ppc machines.
  *
  * Written by Cort Dougan (cort@cs.nmt.edu) to merge
@@ -95,37 +95,48 @@ void timer_interrupt(struct pt_regs * regs)
 	}
 #endif /* __SMP__ */			
 	
-	while ((dval = get_dec()) < 0) {
+	dval = get_dec();
+	/*
+	 * Wait for the decrementer to change, then jump
+	 * in and add decrementer_count to its value
+	 * (quickly, before it changes again!)
+	 */
+	while ((d = get_dec()) == dval)
+		;
+	/*
+	 * Don't play catchup between the call to time_init()
+	 * and sti() in init/main.c.
+	 *
+	 * This also means if we're delayed for > HZ
+	 * we lose those ticks.  If we're delayed for > HZ
+	 * then we have something wrong anyway, though.
+	 *
+	 * -- Cort
+	 */
+	if ( d < (-1*decrementer_count) )
+		d = 0;
+	set_dec(d + decrementer_count);
+	if ( !smp_processor_id() )
+	{
+		do_timer(regs);
 		/*
-		 * Wait for the decrementer to change, then jump
-		 * in and add decrementer_count to its value
-		 * (quickly, before it changes again!)
+		 * update the rtc when needed
 		 */
-		while ((d = get_dec()) == dval)
-			;
-		set_dec(d + decrementer_count);
-		if ( !smp_processor_id() )
+		if ( (time_status & STA_UNSYNC) &&
+		     ((xtime.tv_sec > last_rtc_update + 60) ||
+		      (xtime.tv_sec < last_rtc_update)) )
 		{
-			do_timer(regs);
-			/*
-			 * update the rtc when needed
-			 */
-			if ( (time_status & STA_UNSYNC) &&
-			     ((xtime.tv_sec > last_rtc_update + 60) ||
-			      (xtime.tv_sec < last_rtc_update)) )
-			{
-				if (ppc_md.set_rtc_time(xtime.tv_sec) == 0)
-					last_rtc_update = xtime.tv_sec;
-				else
-					/* do it again in 60 s */
-					last_rtc_update = xtime.tv_sec;
-			}
+			if (ppc_md.set_rtc_time(xtime.tv_sec) == 0)
+				last_rtc_update = xtime.tv_sec;
+			else
+				/* do it again in 60 s */
+				last_rtc_update = xtime.tv_sec;
 		}
 	}
 #ifdef __SMP__
 	smp_local_timer_interrupt(regs);
 #endif		
-
+	
 	if ( ppc_md.heartbeat && !ppc_md.heartbeat_count--)
 		ppc_md.heartbeat();
 	

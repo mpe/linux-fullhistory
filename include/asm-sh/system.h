@@ -98,7 +98,7 @@ extern __inline__ void __sti(void)
 	__asm__ __volatile__("stc	sr,%0\n\t"
 			     "and	%1,%0\n\t"
 			     "ldc	%0,sr"
-			     : "=&z" (__dummy)
+			     : "=&r" (__dummy)
 			     : "r" (0xefffffff)
 			     : "memory");
 }
@@ -109,24 +109,24 @@ extern __inline__ void __cli(void)
 	__asm__ __volatile__("stc	sr,%0\n\t"
 			     "or	%1,%0\n\t"
 			     "ldc	%0,sr"
-			     : "=&z" (__dummy)
+			     : "=&r" (__dummy)
 			     : "r" (0x10000000)
 			     : "memory");
 }
 
 #define __save_flags(x) \
-__asm__ __volatile__("stc	sr,%0\n\tnop\n\tnop\n\tnop\n\tnop\n\tnop":"=r" (x): /* no inputs */ :"memory")
+__asm__ __volatile__("stc	sr,%0":"=r" (x): /* no inputs */ :"memory")
 
-#define __save_and_cli(x)               \
-({	unsigned long __dummy;		\
-__asm__ __volatile__(                   \
-	"stc	sr,%0\n\t" \
-	"mov	%0,%1\n\t" \
-	"or	%2,%1\n\t" \
-	"ldc	%1,sr"     \
-	: "=&r" (x), "=&z" (__dummy) \
-	: "r" (0x10000000) \
-	: "memory"); })
+#define __save_and_cli(x)    				\
+x = (__extension__ ({	unsigned long __dummy,__sr;	\
+	__asm__ __volatile__(                   	\
+		"stc	sr,%1\n\t" 			\
+		"or	%0,%1\n\t" 			\
+		"stc	sr,%0\n\t" 			\
+		"ldc	%1,sr"     			\
+		: "=r" (__sr), "=&r" (__dummy) 		\
+		: "0" (0x10000000) 			\
+		: "memory"); __sr; }))
 
 #define __restore_flags(x) \
 __asm__ __volatile__("ldc	%0,sr": /* no output */: "r" (x):"memory")

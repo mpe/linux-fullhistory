@@ -33,7 +33,6 @@ struct sh_cpuinfo {
 
 	char	hard_math;
 
-	/* Not yet used */
 	unsigned long *pgd_quick;
 	unsigned long *pte_quick;
 	unsigned long pgtable_cache_sz;

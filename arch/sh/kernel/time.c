@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.2 1999/10/11 13:12:02 gniibe Exp $
+/* $Id: time.c,v 1.3 1999/10/17 10:30:15 gniibe Exp $
  *
  *  linux/arch/sh/kernel/time.c
  *

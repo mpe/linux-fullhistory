@@ -39,7 +39,6 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 
-extern void nfsd_fh_init(void);
 extern long sys_call_table[];
 
 static int	nfsctl_svc(struct nfsctl_svc *data);
@@ -79,7 +78,6 @@ nfsd_init(void)
 	nfsd_cache_init();	/* RPC reply cache */
 	nfsd_export_init();	/* Exports table */
 	nfsd_lockd_init();	/* lockd->nfsd callbacks */
-	nfsd_fh_init();		/* FH table */
 	proc_export_init();
 	initialized = 1;
 }

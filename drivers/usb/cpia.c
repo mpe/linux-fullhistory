@@ -52,7 +52,7 @@ static inline unsigned long uvirt_to_kva(pgd_t *pgd, unsigned long adr)
 			ptep = pte_offset(pmd, adr);
 			pte = *ptep;
 			if (pte_present(pte))
-				ret = (pte_page(pte) | (adr & (PAGE_SIZE-1)));
+				ret = page_address(pte_page(pte)) | (adr & (PAGE_SIZE-1));
 		}
 	}
 	MDEBUG(printk("uv2kva(%lx-->%lx)", adr, ret));

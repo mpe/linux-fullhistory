@@ -92,6 +92,7 @@ EXPORT_SYMBOL(exit_sighand);
 
 /* internal kernel memory management */
 EXPORT_SYMBOL(__get_free_pages);
+EXPORT_SYMBOL(__get_pages);
 EXPORT_SYMBOL(free_pages);
 EXPORT_SYMBOL(__free_page);
 EXPORT_SYMBOL(kmem_find_general_cachep);
@@ -257,6 +258,7 @@ EXPORT_SYMBOL(tty_flip_buffer_push);
 EXPORT_SYMBOL(tty_get_baud_rate);
 EXPORT_SYMBOL(do_SAK);
 EXPORT_SYMBOL(console_print);
+EXPORT_SYMBOL(console_loglevel);
 
 /* filesystem registration */
 EXPORT_SYMBOL(register_filesystem);

@@ -34,8 +34,9 @@
 #define NFSEXP_UIDMAP		0x0040
 #define NFSEXP_KERBEROS		0x0080		/* not available */
 #define NFSEXP_SUNSECURE	0x0100
-#define NFSEXP_CROSSMNT		0x0200		/* not available */
-#define NFSEXP_ALLFLAGS		0x03FF
+#define NFSEXP_CROSSMNT		0x0200
+#define NFSEXP_NOSUBTREECHECK	0x0400
+#define NFSEXP_ALLFLAGS		0x07FF
 
 
 #ifdef __KERNEL__

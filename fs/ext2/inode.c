@@ -668,6 +668,16 @@ void ext2_read_inode (struct inode * inode)
 	inode->i_ctime = le32_to_cpu(raw_inode->i_ctime);
 	inode->i_mtime = le32_to_cpu(raw_inode->i_mtime);
 	inode->u.ext2_i.i_dtime = le32_to_cpu(raw_inode->i_dtime);
+	/* We now have enough fields to check if the inode was active or not.
+	 * This is needed because nfsd might try to access dead inodes
+	 * the test is that same one that e2fsck uses
+	 * NeilBrown 1999oct15
+	 */
+	if (inode->i_nlink == 0 && (inode->i_mode == 0 || inode->u.ext2_i.i_dtime)) {
+		/* this inode is deleted */
+		brelse (bh);
+		goto bad_inode;
+	}
 	inode->i_blksize = PAGE_SIZE;	/* This is the optimal IO size (for stat), not the fs block size */
 	inode->i_blocks = le32_to_cpu(raw_inode->i_blocks);
 	inode->i_version = ++event;

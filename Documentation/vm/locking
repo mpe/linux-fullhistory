@@ -14,13 +14,12 @@ Page stealers hold kernel_lock to protect against a bunch of races.
 The vma list of the victim mm is also scanned by the stealer, 
 and the vmlist_lock is used to preserve list sanity against the
 process adding/deleting to the list. This also gurantees existance
-of the vma. Vma existance gurantee while invoking the driver
-swapout() method in try_to_swap_out() also relies on the fact
-that do_munmap() temporarily gets lock_kernel before decimating
-the vma, thus the swapout() method must snapshot all the vma 
-fields it needs before going to sleep (which will release the
-lock_kernel held by the page stealer). Currently, filemap_swapout
-is the only method that depends on this shaky interlocking.
+of the vma. Vma existance is not guranteed once try_to_swap_out() 
+drops the vmlist lock. To gurantee the existance of the underlying 
+file structure, a get_file is done before the swapout() method is 
+invoked. The page passed into swapout() is guaranteed not to be reused
+for a different purpose because the page reference count due to being
+present in the user's pte is not released till after swapout() returns.
 
 Any code that modifies the vmlist, or the vm_start/vm_end/
 vm_flags:VM_LOCKED/vm_next of any vma *in the list* must prevent 

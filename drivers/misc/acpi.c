@@ -29,8 +29,10 @@
 #include <linux/sched.h>
 #include <linux/wait.h>
 #include <linux/spinlock.h>
+#include <linux/slab.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
+#include <linux/sysctl.h>
 #include <linux/acpi.h>
 
 /*
@@ -217,7 +219,7 @@ static struct acpi_table *__init acpi_map_table(u32 addr)
 			ioremap_nocache((unsigned long) addr,
 					sizeof(struct acpi_table));
 		if (table) {
-			unsigned long table_size = table->length;
+			unsigned long table_size = readl(&table->length);
 			iounmap(table);
 			// remap entire table
 			table = (struct acpi_table *)
@@ -276,7 +278,7 @@ static int __init acpi_map_tables(void)
 	}
 	// fetch RSDT from RSDP
 	rsdt = acpi_map_table(rsdp->rsdt);
-	if (!rsdt || rsdt->signature != ACPI_RSDT_SIG) {
+	if (!rsdt || readl(&rsdt->signature) != ACPI_RSDT_SIG) {
 		printk(KERN_ERR "ACPI: no RSDT found\n");
 		acpi_unmap_table(rsdt);
 		return -ENODEV;
@@ -284,17 +286,24 @@ static int __init acpi_map_tables(void)
 	// search RSDT for FACP
 	acpi_facp = NULL;
 	rsdt_entry = (u32 *) (rsdt + 1);
-	rsdt_entry_count = (int) ((rsdt->length - sizeof(*rsdt)) >> 2);
+	rsdt_entry_count = (int) ((readl(&rsdt->length) - sizeof(*rsdt)) >> 2);
 	while (rsdt_entry_count) {
-		struct acpi_table *dt = acpi_map_table(*rsdt_entry);
-		if (dt && dt->signature == ACPI_FACP_SIG) {
-			acpi_facp = (struct acpi_facp *) dt;
-			acpi_facp_addr = *rsdt_entry;
-			acpi_dsdt_addr = acpi_facp->dsdt;
-			break;
-		} else {
-			acpi_unmap_table(dt);
+		struct acpi_table *dt = acpi_map_table(readl(rsdt_entry));
+		if (dt && readl(&dt->signature) == ACPI_FACP_SIG) {
+			acpi_facp_addr = readl(rsdt_entry);
+			acpi_dsdt_addr
+				= readl(&((struct acpi_facp*) dt)->dsdt);
+
+			acpi_facp = kmalloc(sizeof(struct acpi_facp),
+					    GFP_KERNEL);
+			if (acpi_facp)
+			{
+				memcpy_fromio(acpi_facp,
+					      dt,
+					      sizeof(*acpi_facp));
+			}
 		}
+		acpi_unmap_table(dt);
 		rsdt_entry++;
 		rsdt_entry_count--;
 	}
@@ -302,7 +311,7 @@ static int __init acpi_map_tables(void)
 	acpi_unmap_table(rsdt);
 
 	if (!acpi_facp) {
-		printk(KERN_ERR "ACPI: no FACP found\n");
+		printk(KERN_ERR "ACPI: no FACP\n");
 		return -ENODEV;
 	}
 	return 0;
@@ -316,8 +325,11 @@ static void acpi_unmap_tables(void)
 	acpi_idle = NULL;
 	acpi_dsdt_addr = 0;
 	acpi_facp_addr = 0;
-	acpi_unmap_table((struct acpi_table *) acpi_facp);
-	acpi_facp = NULL;
+	if (acpi_facp)
+	{
+		kfree(acpi_facp);
+		acpi_facp = NULL;
+	}
 }
 
 /*

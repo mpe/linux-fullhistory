@@ -198,23 +198,28 @@ static void __init sio_fixup_irq(const char *name, u8 device, u8 level,
 				     u8 type)
 {
 	u8 level0, type0, active;
+	struct device_node *root;
 
-	/* select logical device */
-	sio_write(device, 0x07);
-	active = sio_read(0x30);
-	level0 = sio_read(0x70);
-	type0 = sio_read(0x71);
-	printk("sio: %s irq level %d, type %d, %sactive: ", name, level0, type0,
-	       !active ? "in" : "");
-	if (level0 == level && type0 == type && active)
-		printk("OK\n");
-	else {
-		printk("remapping to level %d, type %d, active\n", level, type);
-		sio_write(0x01, 0x30);
-		sio_write(level, 0x70);
-		sio_write(type, 0x71);
+	root = find_path_device("/");
+	if (root &&
+	    !strcmp(get_property(root, "model", NULL), "IBM,LongTrail" ) )
+	{
+		/* select logical device */
+		sio_write(device, 0x07);
+		active = sio_read(0x30);
+		level0 = sio_read(0x70);
+		type0 = sio_read(0x71);
+		printk("sio: %s irq level %d, type %d, %sactive: ", name, level0, type0,
+		       !active ? "in" : "");
+		if (level0 == level && type0 == type && active)
+			printk("OK\n");
+		else {
+			printk("remapping to level %d, type %d, active\n", level, type);
+			sio_write(0x01, 0x30);
+			sio_write(level, 0x70);
+			sio_write(type, 0x71);
+		}
 	}
-
 }
 
 static void __init sio_init(void)

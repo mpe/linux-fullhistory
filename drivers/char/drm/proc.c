@@ -393,7 +393,7 @@ static int _drm_vma_info(char *buf, char **start, off_t offset, int len,
 			       pgprot & _PAGE_PCD      ? 'u' : 'c',
 			       pgprot & _PAGE_ACCESSED ? 'a' : '-',
 			       pgprot & _PAGE_DIRTY    ? 'd' : '-',
-			       pgprot & _PAGE_4M       ? 'm' : 'k',
+			       pgprot & _PAGE_PSE      ? 'm' : 'k',
 			       pgprot & _PAGE_GLOBAL   ? 'g' : 'l' );
 #endif		
 		DRM_PROC_PRINT("\n");

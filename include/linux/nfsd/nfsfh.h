@@ -109,9 +109,6 @@ void	nfsd_fh_flush(kdev_t);
 void	nfsd_fh_init(void);
 void	nfsd_fh_free(void);
 
-void	expire_all(void);
-void	expire_by_dentry(struct dentry *);
-
 static __inline__ struct svc_fh *
 fh_copy(struct svc_fh *dst, struct svc_fh *src)
 {

@@ -93,6 +93,13 @@ M:	p_gortmaker@yahoo.com
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
+ACPI
+P:	Andrew Henroid
+M:	andy_henroid@yahoo.com
+L:	acpi@phobos.fs.tum.de
+W:	http://phobos.fs.tum.de/acpi/index.html
+S:	Maintained
+
 AD1816 SOUND DRIVER
 P:	Thorsten Knabe
 M:	Thorsten Knabe <tek@rbg.informatik.tu-darmstadt.de>

@@ -1,5 +1,5 @@
 Config Language Specification
-28 September 1999
+18 October 1999
 Michael Elizabeth Chastain, <mailto:mec@shout.net>
 
 
@@ -568,15 +568,31 @@ substitute a newline for the semicolon if you choose.
 /expr/ may contain the following atoms and operators.  Note that, unlike
 shell, you must use double quotes around every atom.
 
-    "..."		a literal
-    "$..."		a variable
+    /atom/:
+	"..."			a literal
+	"$..."			a variable
 
-    /atom/  = /atom/	true if atoms have identical value
-    /atom/ != /atom/	true if atoms have different value
+    /expr/:
+	/atom/  = /atom/	true if atoms have identical value
+	/atom/ != /atom/	true if atoms have different value
 
-    /expr/ -o /expr/	true if either expression is true
-    /expr/ -a /expr/	true if both expressions are true
-    ! /expr/		true if expression is not true
+    /expr/:
+	/expr/ -o /expr/	true if either expression is true
+	/expr/ -a /expr/	true if both expressions are true
+	! /expr/		true if expression is not true
+
+Note that a naked /atom/ is not a valid /expr/.  If you try to use it
+as such:
+
+    # Do not do this.
+    if [ "$CONFIG_EXPERIMENTAL" ]; then
+	bool 'Bogus experimental feature' CONFIG_BOGUS
+    fi
+
+... then you will be surprised, because CONFIG_EXPERIMENTAL never has a
+value of the empty string!  It is always "y" or "n", and both of these
+are treated as true (non-empty) by the bash-based interpreters Configure
+and Menuconfig.
 
 Configure:  implemented
 Menuconfig: implemented

@@ -154,7 +154,10 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 			actlength = uhci_actual_length(tmp->status);
 			if (rval)
 				*rval += actlength;
-			if (explength != actlength) {
+			/* This check is bogus, at least for acm. It
+                           always expects 64, but gets as many bytes
+                           as available (typically 1) -- pavel */
+			if (0 && (explength != actlength)) {
 				/* Reset the data toggle on error. */
 				if (debug || uhci_debug)
 					printk(KERN_DEBUG "Set toggle from %p rval %ld%c for status=%x to %d, exp=%d, act=%d\n",

@@ -299,6 +299,13 @@ CONFIG_SLHC_BUILTIN = y
     MX_OBJS += ppp_async.o
     endif
   endif
+  ifeq ($(CONFIG_PPP_SYNC_TTY),y)
+  LX_OBJS += ppp_synctty.o
+  else
+    ifeq ($(CONFIG_PPP_SYNC_TTY),m)
+    MX_OBJS += ppp_synctty.o
+    endif
+  endif
   ifeq ($(CONFIG_PPP_DEFLATE),y)
   CONFIG_PPPDEF_BUILTIN = y
   else
@@ -315,6 +322,9 @@ else
   CONFIG_SLHC_MODULE = y
     ifeq ($(CONFIG_PPP_ASYNC),m)
     MX_OBJS += ppp_async.o
+    endif
+    ifeq ($(CONFIG_PPP_SYNC_TTY),m)
+    MX_OBJS += ppp_synctty.o
     endif
     ifeq ($(CONFIG_PPP_DEFLATE),m)
     CONFIG_PPPDEF_MODULE = y
@@ -1024,6 +1034,14 @@ L_OBJS += bmac.o
 else
   ifeq ($(CONFIG_BMAC),m)
   M_OBJS += bmac.o
+  endif
+endif
+
+ifeq ($(CONFIG_NCR885E),y)
+L_OBJS += ncr885e.o
+else
+  ifeq ($(CONFIG_NCR885E),m)
+  M_OBJS += ncr885e.o
   endif
 endif
 

@@ -106,7 +106,7 @@ struct vm_operations_struct {
 	void (*advise)(struct vm_area_struct *area, unsigned long, size_t, unsigned int advise);
 	struct page * (*nopage)(struct vm_area_struct * area, unsigned long address, int write_access);
 	struct page * (*wppage)(struct vm_area_struct * area, unsigned long address, struct page * page);
-	int (*swapout)(struct vm_area_struct *, struct page *);
+	int (*swapout)(struct page *, struct file *);
 };
 
 /*
@@ -405,10 +405,8 @@ static inline int expand_stack(struct vm_area_struct * vma, unsigned long addres
 
 	address &= PAGE_MASK;
 	grow = vma->vm_start - address;
-	if (vma->vm_end - address
-	    > (unsigned long) current->rlim[RLIMIT_STACK].rlim_cur ||
-	    (vma->vm_mm->total_vm << PAGE_SHIFT) + grow
-	    > (unsigned long) current->rlim[RLIMIT_AS].rlim_cur)
+	if (vma->vm_end - address > current->rlim[RLIMIT_STACK].rlim_cur ||
+	    (vma->vm_mm->total_vm << PAGE_SHIFT) + grow > current->rlim[RLIMIT_AS].rlim_cur)
 		return -ENOMEM;
 	vma->vm_start = address;
 	vma->vm_offset -= grow;

@@ -1,7 +1,7 @@
 /*
  * misc.c
  *
- * $Id: misc.c,v 1.67 1999/08/10 22:53:57 cort Exp $
+ * $Id: misc.c,v 1.68 1999/10/20 22:08:08 cort Exp $
  * 
  * Adapted for PowerPC by Gary Thomas
  *
@@ -462,6 +462,7 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 		puts(" ");
 		puthex((unsigned long)zimage_size+(unsigned long)zimage_start);
 		puts("\n");
+		avail_ram += zimage_size;
 	}
 
 	/* relocate initrd */
@@ -469,15 +470,19 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 	{
 		puts("initrd at:     "); puthex(initrd_start);
 		puts(" "); puthex(initrd_end); puts("\n");
-#ifdef OMIT
-		avail_ram = (char *)PAGE_ALIGN(
-			(unsigned long)zimage_size+(unsigned long)zimage_start);
-		memcpy ((void *)avail_ram, (void *)initrd_start, INITRD_SIZE );
-		initrd_start = (unsigned long)avail_ram;
-		initrd_end = initrd_start + INITRD_SIZE;
-		puts("relocated to:  "); puthex(initrd_start);
-		puts(" "); puthex(initrd_end); puts("\n");
-#endif
+		if ( (unsigned long)initrd_start <= 0x00800000 )
+		{
+			memcpy( (void *)avail_ram,
+				(void *)initrd_start, initrd_end-initrd_start );
+			puts("relocated to:  ");
+			initrd_end = (unsigned long) avail_ram + (initrd_end-initrd_start);
+			initrd_start = (unsigned long)avail_ram;
+			puthex((unsigned long)initrd_start);
+			puts(" ");
+			puthex((unsigned long)initrd_end);
+			puts("\n");
+		}
+		avail_ram = (char *)PAGE_ALIGN((unsigned long)initrd_end);
 	}
 
 	avail_ram = (char *)0x00400000;

@@ -1509,10 +1509,10 @@ static void __init hash_init(void)
 	       ramsize >> 20, Hash_size >> 10, Hash);
 	if ( Hash_size )
 	{
+		if ( ppc_md.progress ) ppc_md.progress("hash:patch", 0x345);
 		Hash_end = (PTE *) ((unsigned long)Hash + Hash_size);
 		__clear_user(Hash, Hash_size);
-		
-		if ( ppc_md.progress ) ppc_md.progress("hash:patch", 0x345);
+
 		/*
 		 * Patch up the instructions in head.S:hash_page
 		 */

@@ -1157,7 +1157,6 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 		goto out;
 	}
 
-	expire_by_dentry(rdentry);
 
 	if (type != S_IFDIR) {
 		/* It's UNLINK */

@@ -37,11 +37,16 @@ struct	rusage {
 	long	ru_nivcsw;		/* involuntary " */
 };
 
-#define RLIM_INFINITY	((long)(~0UL>>1))
+/*
+ * SuS says limits have to be unsigned.
+ *
+ * Which makes a ton more sense anyway.
+ */
+#define RLIM_INFINITY	(~0UL)
 
 struct rlimit {
-	long	rlim_cur;
-	long	rlim_max;
+	unsigned long	rlim_cur;
+	unsigned long	rlim_max;
 };
 
 #define	PRIO_MIN	(-20)

@@ -1073,11 +1073,8 @@ void ezusb_cleanup(void)
 
 #ifdef MODULE
 
-int minor = 192;
-
 int init_module(void)
 {
-	ezusb_misc.minor = minor;
 	return ezusb_init();
 }
 

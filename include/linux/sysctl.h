@@ -103,7 +103,8 @@ enum
 	KERN_MSGPOOL=37,        /* int: Maximum system message pool size */
 	KERN_SYSRQ=38,		/* int: Sysreq enable */
 	KERN_MAX_THREADS=39,    /* int: Maximum nr of threads in the system */
- 	KERN_RANDOM=40		/* Random driver */
+ 	KERN_RANDOM=40,		/* Random driver */
+ 	KERN_SHMALL=41		/* int: Maximum size of shared memory */
 };
 
 

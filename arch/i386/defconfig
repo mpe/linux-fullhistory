@@ -70,16 +70,6 @@ CONFIG_BINFMT_MISC=y
 # CONFIG_APM is not set
 
 #
-# I2O device support
-#
-# CONFIG_I2O is not set
-# CONFIG_I2O_PCI is not set
-# CONFIG_I2O_BLOCK is not set
-# CONFIG_I2O_LAN is not set
-# CONFIG_I2O_SCSI is not set
-# CONFIG_I2O_PROC is not set
-
-#
 # Plug and Play configuration
 #
 CONFIG_PNP=y
@@ -228,6 +218,16 @@ CONFIG_SCSI_NCR53C8XX_SYNC=20
 # CONFIG_SCSI_T128 is not set
 # CONFIG_SCSI_U14_34F is not set
 # CONFIG_SCSI_ULTRASTOR is not set
+
+#
+# I2O device support
+#
+# CONFIG_I2O is not set
+# CONFIG_I2O_PCI is not set
+# CONFIG_I2O_BLOCK is not set
+# CONFIG_I2O_LAN is not set
+# CONFIG_I2O_SCSI is not set
+# CONFIG_I2O_PROC is not set
 
 #
 # Network device support

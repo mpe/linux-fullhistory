@@ -4622,7 +4622,8 @@ nm256_getStartOffset (u8 which)
 }
 
 static void
-nm256_loadOneCoefficient (struct nm256_info *card, u32 port, u16 which)
+nm256_loadOneCoefficient (struct nm256_info *card, int devnum, u32 port, 
+			  u16 which)
 {
     u32 coeffBuf = (which < 8) ? card->coeffBuf : card->allCoeffBuf;
     u16 offset = nm256_getStartOffset (which);
@@ -4631,11 +4632,14 @@ nm256_loadOneCoefficient (struct nm256_info *card, u32 port, u16 which)
     card->coeffsCurrent = 0;
 
     if (nm256_debug)
-	printk (KERN_INFO "NM256: Loading coefficient buffer 0x%x-0x%x with coefficient %d\n",
-		coeffBuf, coeffBuf + size - 1, which);
+	printk (KERN_INFO "NM256: Loading coefficient buffer 0x%x-0x%x with coefficient %d, size %d, port 0x%x\n",
+		coeffBuf, coeffBuf + size - 1, which, size, port);
     nm256_writeBuffer8 (card, coefficients + offset, 1, coeffBuf, size);
     nm256_writePort32 (card, 2, port + 0, coeffBuf);
-    nm256_writePort32 (card, 2, port + 4, coeffBuf + size - 1);
+    /* ???  Record seems to behave differently than playback.  */
+    if (devnum == 0)
+	size--;
+    nm256_writePort32 (card, 2, port + 4, coeffBuf + size);
 }
 
 static void
@@ -4663,7 +4667,7 @@ nm256_loadCoefficient (struct nm256_info *card, int which, int number)
 	number += 8;
 
     if (! nm256_cachedCoefficients (card))
-	nm256_loadOneCoefficient (card, addrs[which], number);
+	nm256_loadOneCoefficient (card, which, addrs[which], number);
     else {
 	u32 base = card->allCoeffBuf;
 	u32 offset = nm256_getStartOffset (number);

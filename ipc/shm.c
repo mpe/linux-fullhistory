@@ -33,7 +33,7 @@ static void killseg (int id);
 static void shm_open (struct vm_area_struct *shmd);
 static void shm_close (struct vm_area_struct *shmd);
 static struct page * shm_nopage(struct vm_area_struct *, unsigned long, int);
-static int shm_swapout(struct vm_area_struct *, struct page *);
+static int shm_swapout(struct page *, struct file *);
 #ifdef CONFIG_PROC_FS
 static int sysvipc_shm_read_proc(char *buffer, char **start, off_t offset, int length, int *eof, void *data);
 #endif
@@ -646,7 +646,7 @@ asmlinkage long sys_shmdt (char *shmaddr)
  * data structures already, and shm_swap_out() will just
  * work off them..
  */
-static int shm_swapout(struct vm_area_struct * vma, struct page * page)
+static int shm_swapout(struct page * page, struct file *file)
 {
 	return 0;
 }

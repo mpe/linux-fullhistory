@@ -18,6 +18,7 @@
 #include <linux/pagemap.h>
 #include <linux/init.h>
 #include <linux/highmem.h>
+#include <linux/file.h>
 
 #include <asm/pgtable.h>
 
@@ -36,6 +37,7 @@ static int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pt
 {
 	pte_t pte, entry;
 	struct page * page;
+	int (*swapout)(struct page *, struct file *);
 
 	pte = *page_table;
 	if (!pte_present(pte))
@@ -126,13 +128,16 @@ drop_pte:
 	 * That would get rid of a lot of problems.
 	 */
 	flush_cache_page(vma, address);
-	if (vma->vm_ops && vma->vm_ops->swapout) {
+	if (vma->vm_ops && (swapout = vma->vm_ops->swapout)) {
 		int error;
+		struct file *file = vma->vm_file;
+		if (file) get_file(file);
 		pte_clear(page_table);
 		vma->vm_mm->rss--;
 		flush_tlb_page(vma, address);
 		vmlist_access_unlock(vma->vm_mm);
-		error = vma->vm_ops->swapout(vma, page);
+		error = swapout(page, file);
+		if (file) fput(file);
 		if (!error)
 			goto out_free_success;
 		__free_page(page);

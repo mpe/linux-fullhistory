@@ -486,8 +486,8 @@ static void acm_disconnect(struct usb_device *dev)
 	if (!acm->present)
 		return;
 
-	printk("disconnecting\n");
-	
+	acm->active=0;
+	acm->present=0;
 	if (acm->writing){
 		usb_terminate_bulk(acm->dev, acm->writetransfer);
 		acm->writing=0;
@@ -498,8 +498,6 @@ static void acm_disconnect(struct usb_device *dev)
 	}
 	usb_release_irq(acm->dev,acm->ctrltransfer, acm->ctrlpipe);
 	//BUG: What to do if a device is open?? Notify process or not allow cleanup?
-	acm->active=0;
-	acm->present=0;
 	kfree(acm->writebuffer);
 	kfree(acm->readbuffer);
 

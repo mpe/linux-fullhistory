@@ -2,10 +2,10 @@
 Documentation for the NeoMagic 256AV/256ZX sound driver
 =======================================================
 
-You're looking at version 1.0 of the driver.  (Woohoo!) It has been
+You're looking at version 1.1 of the driver.  (Woohoo!) It has been
 successfully tested against the following laptop models:
 
-	Sony Z505S/Z505SX/Z505DX
+	Sony Z505S/Z505SX/Z505DX/Z505RX
 	Sony F150, F160, F180, F250, F270, F280, PCG-F26
 	Dell Latitude CPi, CPt (various submodels)
 
@@ -16,8 +16,13 @@ This driver was developed without any support or assistance from
 NeoMagic.  There is no warranty, expressed, implied, or otherwise.  It
 is free software in the public domain; feel free to use it, sell it,
 give it to your best friends, even claim that you wrote it (but why?!)
-but don't come whining to me, NeoMagic, Sony, Dell, or anyone else
+but don't go whining to me, NeoMagic, Sony, Dell, or anyone else
 when it blows up your computer.
+
+Version 1.1 contains a change to try and detect non-AC97 versions of
+the hardware, and not install itself appropriately.  It should also
+reinitialize the hardware on an APM resume event, assuming that APM
+was configured into your kernel.
 
 ============
 Installation
@@ -42,16 +47,19 @@ hurting themselves.  It works correctly if it shares an IRQ with
 another device (it normally shares IRQ 9 with the builtin eepro100
 ethernet on the Sony Z505 laptops). 
 
-It does not run the card in any sort of compatibility mode. Thus it
-almost certainly will not work on laptops that have the
-SB16-compatible codec/mixer; you will want to use the standard SB16
-OSS driver with these chipsets.  I cannot provide any assistance with
-machines using the SB-16 compatible version.
+It does not run the card in any sort of compatibility mode. It will
+not work on laptops that have the SB16-compatible, AD1848-compatible
+or CS4232-compatible codec/mixer; you will want to use the appropriate
+compatible OSS driver with these chipsets.  I cannot provide any
+assistance with machines using the SB16, AD1848 or CS4232 compatible
+versions.  (The driver now attempts to detect the mixer version, and
+will refuse to load if it believes the hardware is not not
+AC97-compatible.)
 
 The sound support is very basic, but it does include simultaneous
 playback and record capability.  The mixer support is also quite
 simple, although this is in keeping with the rather limited
-functionality of the chipset.  
+functionality of the chipset.
 
 There is no hardware synthesizer available, as the Losedows OPL-3 and
 MIDI support is done via hardware emulation.
@@ -62,8 +70,6 @@ to the stereo output).  (Other devices may be available on other
 models of laptops.)  The Z505 series does not have a builtin CD-ROM,
 so of course the CD-ROM input doesn't work.  It does work on laptops
 with a builtin CD-ROM drive.
-
-Recording is mono 8-bit only.
 
 The mixer device does not appear to have any tone controls, at least
 on the Z505 series.  The mixer module checks for tone controls in the
@@ -93,10 +99,11 @@ Known problems
     limitation.  It may be possible to support other speeds in the future.
 
   * There is no support for the telephone mixer/codec.  There is support
-    for a phonein/phoneout device if your mixer program supports it;
-    whether or not it does anything is anyone's guess.  (Reports on this
-    would be appreciated.)
-  
+    for a phonein/phoneout device in the mixer driver;  whether or not 
+    it does anything is anyone's guess.  (Reports on this would be
+    appreciated.  You'll have to figure out how to get the phone to
+    go off-hook before it'll work, tho.)
+
   * This driver was not written with any cooperation or support from
     NeoMagic.  If you have any questions about this, see their website
     for their official stance on supporting open source drivers.
@@ -118,8 +125,8 @@ This implies a few things:
 
   * Sometimes the NM256 driver has to guess at where the buffer 
     should be placed, especially if the module is loaded after the
-    X server is started.  It's usually correct, but it will fail on
-    the Sony F250.
+    X server is started.  It's usually correct, but it will consistently
+    fail on the Sony F250.
 
   * Virtual screens greater than 1024x768x16 under XFree86 are
     problematic on laptops with only 2.5MB of screen RAM. This
@@ -139,9 +146,15 @@ screen), the best fix is to
 On the F250, it is possible to force the driver to load properly even
 after the XFree86 server is started by doing:
 
-	insmod nm256.o buffertop=0x25a800
+	insmod nm256 buffertop=0x25a800
 
 This forces the audio buffers to the correct offset in screen RAM.
+
+One user has reported a similar problem on the Sony F270, although
+others apparently aren't seeing any problems.  His suggested command
+is
+
+	insmod nm256 buffertop=0x272800
 
 =================
 Official WWW site
@@ -153,6 +166,17 @@ The official site for the NM256 driver is:
 
 You should always be able to get the latest version of the driver there,
 and the driver will be supported for the foreseeable future.
+
+==============
+Z505RX and IDE
+==============
+
+There appears to be a problem with the IDE chipset on the Z505RX; one
+of the symptoms is that sound playback periodically hangs (when the
+disk is accessed).  The user reporting the problem also reported that
+enabling all of the IDE chipset workarounds in the kernel solved the
+problem, tho obviously only one of them should be needed--if someone
+can give me more details I would appreciate it.
 
 ==============================
 Z505S/Z505SX on-board Ethernet
@@ -176,11 +200,30 @@ PCMCIA and the Z505S/Z505SX/Z505DX
 ==================================
 
 There is also a known problem with the Sony Z505S and Z505SX hanging
-if a PCMCIA card is inserted while the ethernet driver is loaded.
-This is caused by tons of spurious IRQ 9s, probably generated from the
-PCMCIA or ACPI bridges.  There is currently no fix for the problem,
-and the only known workaround is to disable the ethernet interface
-before inserting or removing a PCMCIA card.
+if a PCMCIA card is inserted while the ethernet driver is loaded, or
+in some cases if the laptop is suspended.  This is caused by tons of
+spurious IRQ 9s, probably generated from the PCMCIA or ACPI bridges.
+
+There is currently no fix for the problem that works in every case.
+The only known workarounds are to disable the ethernet interface
+before inserting or removing a PCMCIA card, or with some cards
+disabling the PCMCIA card before ejecting it will also help the
+problem with the laptop hanging when the card is ejected.
+
+One user has reported that setting the tcic's cs_irq to some value
+other than 9 (like 11) fixed the problem.  This doesn't work on my
+Z505S, however--changing the value causes the cardmgr to stop seeing
+card insertions and removals, cards don't seem to work correctly, and
+I still get hangs if a card is inserted when the kernel is booted.
+
+Using the latest ethernet driver and pcmcia package allows me to
+insert an Adaptec 1480A SlimScsi card without the laptop hanging,
+although I still have to shut down the card before ejecting or
+powering down the laptop.  However, similar experiments with a DE-660
+ethernet card still result in hangs when the card is inserted.  I am
+beginning to think that the interrupts are CardBus-related, since the
+Adaptec card is a CardBus card, and the DE-660 is not; however, I
+don't have any other CardBus cards to test with.
 
 ======
 Thanks
@@ -208,6 +251,11 @@ I will be rather unfair and single out a few people, however:
 	Jeff Garzik, for various helpful suggestions on the AC97
 	interface
 
+	"Mr. Bumpy" for feedback on the Z505RX
+
+	Bill Nottingham, for generous assistance in getting the mixer ID
+	code working
+
 =================
 Previous versions
 =================
@@ -227,3 +275,6 @@ mixer module.
 
 Version 0.75 renamed all the functions and files with slightly more
 generic names.
+
+Note that previous versions of this document claimed that recording was
+8-bit only; it actually has been working for 16-bits all along.

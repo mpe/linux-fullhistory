@@ -695,14 +695,18 @@ void __init setup_arch(char **cmdline_p)
 #endif
 
 #ifdef CONFIG_BLK_DEV_INITRD
-// FIXME needs to do the new bootmem alloc stuff
 	if (LOADER_TYPE) {
-		initrd_start = INITRD_START ? INITRD_START + PAGE_OFFSET : 0;
-		initrd_end = initrd_start+INITRD_SIZE;
-		if (initrd_end > (max_low_pfn << PAGE_SHIFT)) {
+		if (INITRD_START + INITRD_SIZE < (max_low_pfn << PAGE_SHIFT)) {
+			reserve_bootmem(INITRD_START, INITRD_SIZE);
+			initrd_start =
+				INITRD_START ? INITRD_START + PAGE_OFFSET : 0;
+			initrd_end = initrd_start+INITRD_SIZE;
+		}
+		else {
 			printk("initrd extends beyond end of memory "
 			    "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
-			    initrd_end,memory_end);
+			    INITRD_START + INITRD_SIZE,
+			    max_low_pfn << PAGE_SHIFT);
 			initrd_start = 0;
 		}
 	}

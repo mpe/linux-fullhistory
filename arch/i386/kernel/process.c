@@ -47,8 +47,6 @@
 
 #include <linux/irq.h>
 
-spinlock_t semaphore_wake_lock = SPIN_LOCK_UNLOCKED;
-
 asmlinkage void ret_from_fork(void) __asm__("ret_from_fork");
 
 int hlt_counter=0;

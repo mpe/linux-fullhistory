@@ -365,16 +365,6 @@ exp_do_unexport(svc_export *unexp)
 				exp->ex_parent = unexp->ex_parent;
 	}
 
-	/*
-	 * Check whether this is the last export for this device,
-	 * and if so flush any cached dentries.
-	 */
-	if (!exp_device_in_use(unexp->ex_dev)) {
-printk("exp_do_unexport: %s last use, flushing cache\n",
-	kdevname(unexp->ex_dev));
-		nfsd_fh_flush(unexp->ex_dev);
-	}
-
 	dentry = unexp->ex_dentry;
 	inode = dentry->d_inode;
 	if (unexp->ex_dev != inode->i_dev || unexp->ex_ino != inode->i_ino)
@@ -628,6 +618,7 @@ struct flags {
 	{ NFSEXP_KERBEROS, { "kerberos", ""}},
 	{ NFSEXP_SUNSECURE, { "sunsecure", ""}},
 	{ NFSEXP_CROSSMNT, {"nohide", ""}},
+	{ NFSEXP_NOSUBTREECHECK, {"no_subtree_check", ""}},
 	{ 0, {"", ""}}
 };
 

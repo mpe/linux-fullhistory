@@ -2200,7 +2200,7 @@ CONFIG_FB_S3TRIO
   If you have a S3 Trio say Y. Say N for S3 Virge. 
 
 ATI Mach64 display support
-CONFIG_FB_ATY
+CONFIG_FB_ATY (EXPERIMENTAL)
   This driver supports graphics boards with the ATI Mach64 chips.
   Say Y if you have such a graphics board.
 
@@ -2268,7 +2268,7 @@ CONFIG_FB_COMPAT_XPMAC
   includes a server that supports the frame buffer device directly
   (XF68_FBDev).
 
-Matrox unified accelerated driver
+Matrox unified accelerated driver (EXPERIMENTAL)
 CONFIG_FB_MATROX
   Say Y here if you have Matrox Millennium, Matrox Millennium II,
   Matrox Mystique, Matrox Mystique 220, Matrox Productiva G100, Matrox
@@ -3107,7 +3107,7 @@ CONFIG_SPX
   The module will be called af_spx.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-DECnet networking
+DECnet networking (EXPERIMENTAL)
 CONFIG_DECNET
   The DECnet networking protocol was used in many products made by
   Digital (now Compaq). It provides reliable stream and sequenced
@@ -3138,7 +3138,7 @@ CONFIG_DECNET_SIOCGIFCONF
    
    If unsure, say N.
 
-DECnet Router Support
+DECnet Router Support (EXPERIMENTAL)
 CONFIG_DECNET_ROUTER
    Add support for turning your DECnet Endnode into a level 1 or 2
    router. This is an unfinished option for developers only. If you do
@@ -3613,7 +3613,7 @@ CONFIG_SOUNDMODEM_FSK9600
   can only use one protocol at a time, depending on what the other end
   can understand).
 
-CCITT X.25 Packet Layer
+CCITT X.25 Packet Layer (EXPERIMENTAL)
 CONFIG_X25
   X.25 is a set of standardized network protocols, similar in scope to
   frame relay; the one physical line from your box to the X.25 network
@@ -3663,7 +3663,7 @@ CONFIG_LAPB
   want), say M here and read Documentation/modules.txt. The module
   will be called lapb.o. If unsure, say N.
 
-802.2 LLC (VERY EXPERIMENTAL)
+802.2 LLC (EXPERIMENTAL)
 CONFIG_LLC
   This is a Logical Link Layer protocol used for X.25 connections over
   Ethernet, using ordinary Ethernet cards. 
@@ -4603,7 +4603,7 @@ CONFIG_SCSI_NCR53C8XX_MAX_TAGS
 
   There is no safe option and the default answer is recommended.
 
-assume boards are SYMBIOS compatible
+assume boards are SYMBIOS compatible (EXPERIMENTAL)
 CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT
   This option allows you to enable some features depending on GPIO
   wiring. These General Purpose Input/Output pins can be used for
@@ -5132,7 +5132,7 @@ CONFIG_SCSI_IZIP_SLOW_CTR
 
   Generally, saying N is fine.
 
-SCSI Debug host simulator.
+SCSI Debug host simulator. (EXPERIMENTAL)
 CONFIG_SCSI_DEBUG
   This is a host adapter simulator that can be programmed to simulate
   a large number of conditions that could occur on a real bus. The
@@ -5194,7 +5194,7 @@ CONFIG_SCSI_CUMANA_1
   This enables support for the Cumana SCSI I card. If you have an
   Acorn system with one of these, say Y. If unsure, say N.
 
-Cumana SCSI II support
+Cumana SCSI II support (EXPERIMENTAL)
 CONFIG_SCSI_CUMANA_2
   This enables support for the Cumana SCSI II card. If you have an
   Acorn system with one of these, say Y. If unsure, say N.
@@ -5205,12 +5205,12 @@ CONFIG_SCSI_ECOSCSI
   in the Econet socket. If you have an Acorn system with one of these,
   say Y. If unsure, say N.
 
-EESOX SCSI support
+EESOX SCSI support (EXPERIMENTAL)
 CONFIG_SCSI_EESOXSCSI
   This enables support for the EESOX SCSI card. If you have an Acorn
   system with one of these, say Y, otherwise say N.
 
-Powertec SCSI support
+Powertec SCSI support (EXPERIMENTAL)
 CONFIG_SCSI_POWERTECSCSI
   This enables support for the Powertec SCSI card on Acorn systems. If
   you have one of these, say Y. If unsure, say N.

@@ -687,11 +687,6 @@ int do_munmap(unsigned long addr, size_t len)
 		end = end > mpnt->vm_end ? mpnt->vm_end : end;
 		size = end - st;
 
-		/*
-		 * The lock_kernel interlocks with kswapd try_to_swap_out
-		 * invoking a driver swapout() method, and being able to
-		 * guarantee vma existance.
-		 */
 		lock_kernel();
 		if (mpnt->vm_ops && mpnt->vm_ops->unmap)
 			mpnt->vm_ops->unmap(mpnt, st, size);

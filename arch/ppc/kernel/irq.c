@@ -241,6 +241,8 @@ int get_irq_list(char *buf)
 #endif /* __SMP__ */
 		if ( irq_desc[i].ctl )		
 			len += sprintf(buf+len, " %s ", irq_desc[i].ctl->typename );
+		else
+			len += sprintf(buf+len, "  None      ");
 		len += sprintf(buf+len, "    %s",action->name);
 		for (action=action->next; action; action = action->next) {
 			len += sprintf(buf+len, ", %s", action->name);
@@ -297,7 +299,8 @@ asmlinkage void do_IRQ(struct pt_regs *regs, int isfake)
 	if ( irq < 0 )
 	{
 		/* -2 means ignore, already handled */
-		if (irq != -2) {
+		if (irq != -2)
+		{
 			printk(KERN_DEBUG "Bogus interrupt %d from PC = %lx\n",
 			       irq, regs->nip);
 			ppc_spurious_interrupts++;

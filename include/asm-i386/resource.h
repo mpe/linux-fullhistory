@@ -22,16 +22,16 @@
 
 #define INIT_RLIMITS					\
 {							\
-	{ LONG_MAX, LONG_MAX },				\
-	{ LONG_MAX, LONG_MAX },				\
-	{ LONG_MAX, LONG_MAX },				\
-	{ _STK_LIM, LONG_MAX },				\
-	{        0, LONG_MAX },				\
-	{ LONG_MAX, LONG_MAX },				\
-	{ 0, 0 },					\
-	{ INR_OPEN, INR_OPEN },				\
-	{ LONG_MAX, LONG_MAX },				\
-	{ LONG_MAX, LONG_MAX },				\
+	{ RLIM_INFINITY, RLIM_INFINITY },		\
+	{ RLIM_INFINITY, RLIM_INFINITY },		\
+	{ RLIM_INFINITY, RLIM_INFINITY },		\
+	{      _STK_LIM, RLIM_INFINITY },		\
+	{             0, RLIM_INFINITY },		\
+	{ RLIM_INFINITY, RLIM_INFINITY },		\
+	{             0,             0 },		\
+	{      INR_OPEN,     INR_OPEN  },		\
+	{ RLIM_INFINITY, RLIM_INFINITY },		\
+	{ RLIM_INFINITY, RLIM_INFINITY },		\
 }
 
 #endif /* __KERNEL__ */

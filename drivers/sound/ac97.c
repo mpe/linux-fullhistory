@@ -5,6 +5,10 @@
 /* And for stereo. */
 #define ST 1
 
+/* Whether or not the bits in the channel are inverted. */
+#define INV 1
+#define NINV 0
+
 static struct ac97_chn_desc {
     int ac97_regnum;
     int oss_channel;
@@ -13,21 +17,22 @@ static struct ac97_chn_desc {
     int oss_mask;
     int recordNum;
     u16 regmask;
+    int is_inverted;
 } mixerRegs[] = {
-    { AC97_MASTER_VOL_STEREO, SOUND_MIXER_VOLUME,   0x3f, ST, SOUND_MASK_VOLUME,   5, 0x0000 },
-    { AC97_MASTER_VOL_MONO,   SOUND_MIXER_PHONEOUT, 0x3f, MO, SOUND_MASK_PHONEOUT, 6, 0x0000 },
-    { AC97_MASTER_TONE,       SOUND_MIXER_TREBLE,   0x0f, MO, SOUND_MASK_TREBLE,  -1, 0x00ff },
-    { AC97_MASTER_TONE,       SOUND_MIXER_BASS,     0x0f, MO, SOUND_MASK_BASS,    -1, 0xff00 },
-    { AC97_PCBEEP_VOL,        SOUND_MIXER_SPEAKER,  0x0f, MO, SOUND_MASK_SPEAKER, -1, 0x001e },
-    { AC97_PHONE_VOL,         SOUND_MIXER_PHONEIN,  0x1f, MO, SOUND_MASK_PHONEIN,  7, 0x0000 },
-    { AC97_MIC_VOL,           SOUND_MIXER_MIC,      0x1f, MO, SOUND_MASK_MIC,      0, 0x0000 },
-    { AC97_LINEIN_VOL,        SOUND_MIXER_LINE,     0x1f, ST, SOUND_MASK_LINE,     4, 0x0000 },
-    { AC97_CD_VOL,            SOUND_MIXER_CD,       0x1f, ST, SOUND_MASK_CD,       1, 0x0000 },
-    { AC97_VIDEO_VOL,         SOUND_MIXER_VIDEO,    0x1f, ST, SOUND_MASK_VIDEO,    2, 0x0000 },
-    { AC97_AUX_VOL,           SOUND_MIXER_LINE1,    0x1f, ST, SOUND_MASK_LINE1,	   3, 0x0000 },
-    { AC97_PCMOUT_VOL,        SOUND_MIXER_PCM,      0x1f, ST, SOUND_MASK_PCM,     -1, 0x0000 },
-    { AC97_RECORD_GAIN,       SOUND_MIXER_IGAIN,    0x0f, ST, SOUND_MASK_IGAIN,   -1, 0x0000 },
-    { -1,   -1,                   0xff, 0, 0,                   -1, 0x0000 },
+    { AC97_MASTER_VOL_STEREO, SOUND_MIXER_VOLUME,   0x3f, ST, SOUND_MASK_VOLUME,   5, 0x0000, INV  },
+    { AC97_MASTER_VOL_MONO,   SOUND_MIXER_PHONEOUT, 0x3f, MO, SOUND_MASK_PHONEOUT, 6, 0x0000, INV  },
+    { AC97_MASTER_TONE,       SOUND_MIXER_TREBLE,   0x0f, MO, SOUND_MASK_TREBLE,  -1, 0x00ff, INV  },
+    { AC97_MASTER_TONE,       SOUND_MIXER_BASS,     0x0f, MO, SOUND_MASK_BASS,    -1, 0xff00, INV  },
+    { AC97_PCBEEP_VOL,        SOUND_MIXER_SPEAKER,  0x0f, MO, SOUND_MASK_SPEAKER, -1, 0x001e, INV  },
+    { AC97_PHONE_VOL,         SOUND_MIXER_PHONEIN,  0x1f, MO, SOUND_MASK_PHONEIN,  7, 0x0000, INV  },
+    { AC97_MIC_VOL,           SOUND_MIXER_MIC,      0x1f, MO, SOUND_MASK_MIC,      0, 0x0000, INV  },
+    { AC97_LINEIN_VOL,        SOUND_MIXER_LINE,     0x1f, ST, SOUND_MASK_LINE,     4, 0x0000, INV  },
+    { AC97_CD_VOL,            SOUND_MIXER_CD,       0x1f, ST, SOUND_MASK_CD,       1, 0x0000, INV  },
+    { AC97_VIDEO_VOL,         SOUND_MIXER_VIDEO,    0x1f, ST, SOUND_MASK_VIDEO,    2, 0x0000, INV  },
+    { AC97_AUX_VOL,           SOUND_MIXER_LINE1,    0x1f, ST, SOUND_MASK_LINE1,	   3, 0x0000, INV  },
+    { AC97_PCMOUT_VOL,        SOUND_MIXER_PCM,      0x1f, ST, SOUND_MASK_PCM,     -1, 0x0000, INV  },
+    { AC97_RECORD_GAIN,       SOUND_MIXER_IGAIN,    0x0f, ST, SOUND_MASK_IGAIN,   -1, 0x0000, NINV },
+    { -1,		      -1,		    0xff, 0,  0,                  -1, 0x0000, 0    },
 };
 
 static struct ac97_chn_desc *
@@ -104,6 +109,25 @@ ac97_init (struct ac97_hwint *dev)
     return 0;
 }
 
+/* Reset the mixer to the currently saved settings.  */
+int
+ac97_reset (struct ac97_hwint *dev)
+{
+    int x;
+
+    if (dev->reset_device (dev))
+	return -1;
+
+    /* Now set the registers back to their last-written values. */
+    for (x = 0; mixerRegs[x].ac97_regnum != -1; x++) {
+	int regnum = mixerRegs[x].ac97_regnum;
+	int value = dev->last_written_mixer_values [regnum / 2];
+	if (value >= 0)
+	    ac97_put_register (dev, regnum, value);
+    }
+    return 0;
+}
+
 /* Return the contents of register REG; use the cache if the value in it
    is valid.  Returns a negative error code on failure. */
 int
@@ -156,38 +180,45 @@ ac97_put_register (struct ac97_hwint *dev, u8 reg, u16 value)
    scaled value on success.  */
 
 static int
-ac97_scale_to_oss_val (int value, int maxval, int is_stereo)
+ac97_scale_to_oss_val (int value, int maxval, int is_stereo, int inv)
 {
     /* Muted?  */
     if (value & AC97_MUTE)
 	return 0;
 
     if (is_stereo)
-	return (ac97_scale_to_oss_val (value & 255, maxval, 0) << 8)
-	| (ac97_scale_to_oss_val ((value >> 8) & 255, maxval, 0) << 0);
+	return (ac97_scale_to_oss_val (value & 255, maxval, 0, inv) << 8)
+	| (ac97_scale_to_oss_val ((value >> 8) & 255, maxval, 0, inv) << 0);
     else {
 	int i;
 	
 	/* Inverted. */
-	value = maxval - value;
+	if (inv)
+	    value = maxval - value;
 
 	i = (value * 100 + (maxval / 2)) / maxval;
 	if (i > 100)
 	     i = 100;
+	if (i < 0)
+	    i = 0;
 	return i;
     }
 }
 
 static int
-ac97_scale_from_oss_val (int value, int maxval, int is_stereo)
+ac97_scale_from_oss_val (int value, int maxval, int is_stereo, int inv)
 {
     if (is_stereo)
-	return (ac97_scale_from_oss_val (value & 255, maxval, 0) << 8)
-	| (ac97_scale_from_oss_val ((value >> 8) & 255, maxval, 0) << 0);
+	return (ac97_scale_from_oss_val (value & 255, maxval, 0, inv) << 8)
+	| (ac97_scale_from_oss_val ((value >> 8) & 255, maxval, 0, inv) << 0);
     else {
-	int i = maxval - ((value & 255) * maxval + 50) / 100;
+	int i = ((value & 255) * maxval + 50) / 100;
+	if (inv)
+	    i = maxval - i;
 	if (i < 0)
 	    i = 0;
+	if (i > maxval)
+	    i = maxval;
 	return i;
     }
 }
@@ -204,7 +235,8 @@ ac97_set_mixer (struct ac97_hwint *dev, int oss_channel, u16 oss_value)
     if (! ac97_is_valid_channel (dev, channel))
 	return -ENODEV;
     scaled_value = ac97_scale_from_oss_val (oss_value, channel->maxval,
-					    channel->is_stereo);
+					    channel->is_stereo, 
+					    channel->is_inverted);
     if (scaled_value < 0)
 	return scaled_value;
 
@@ -253,7 +285,8 @@ ac97_get_mixer_scaled (struct ac97_hwint *dev, int oss_channel)
 	    regval >>= 1;
     }
     return ac97_scale_to_oss_val (regval, channel->maxval,
-				  channel->is_stereo);
+				  channel->is_stereo, 
+				  channel->is_inverted);
 }
 
 int
@@ -383,8 +416,9 @@ ac97_mixer_ioctl (struct ac97_hwint *dev, unsigned int cmd, caddr_t arg)
 		    else
 			ret = -EFAULT;
 		}
-		if (ret >= 0) {
-		    if (dev->last_written_OSS_values[channel] == AC97_REGVAL_UNKNOWN)
+		if (ret >= 0 && (dir & _IOC_READ)) {
+		    if (dev->last_written_OSS_values[channel]
+			== AC97_REGVAL_UNKNOWN)
 			dev->last_written_OSS_values[channel]
 			    = ac97_get_mixer_scaled (dev, channel);
 		    ret = dev->last_written_OSS_values[channel];

@@ -141,7 +141,7 @@ extern __inline__ void switch_mm(struct mm_struct *prev,
 				 struct task_struct *tsk, unsigned int cpu)
 {
 	if (prev != next) {
-		unsigned long __pgdir = __pa(next->pgd);
+		unsigned long __pgdir = (unsigned long)next->pgd;
 
 		__asm__ __volatile__("mov.l	%0,%1": \
 				     :"r" (__pgdir), "m" (__m(MMU_TTB)));

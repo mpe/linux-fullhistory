@@ -37,6 +37,7 @@ EXPORT_SYMBOL(dump_thread);
 EXPORT_SYMBOL(dump_fpu);
 EXPORT_SYMBOL(__ioremap);
 EXPORT_SYMBOL(iounmap);
+EXPORT_SYMBOL(__io_virt_debug);
 EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL(enable_irq);

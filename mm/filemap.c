@@ -99,7 +99,6 @@ void invalidate_inode_pages(struct inode * inode)
 	struct page * page;
 
 	head = &inode->i_pages;
-repeat:
 	spin_lock(&pagecache_lock);
 	curr = head->next;
 
@@ -1441,27 +1440,25 @@ static inline int do_write_page(struct inode * inode, struct file * file,
 	return retval;
 }
 
-static int filemap_write_page(struct vm_area_struct * vma,
+static int filemap_write_page(struct file *file,
 			      unsigned long offset,
 			      struct page * page,
 			      int wait)
 {
 	int result;
-	struct file * file;
 	struct dentry * dentry;
 	struct inode * inode;
 
-	file = vma->vm_file;
 	dentry = file->f_dentry;
 	inode = dentry->d_inode;
 
 	/*
 	 * If a task terminates while we're swapping the page, the vma and
-	 * and file could be released ... increment the count to be safe.
+	 * and file could be released: try_to_swap_out has done a get_file.
+	 * vma/file is guaranteed to exist in the unmap/sync cases because
+	 * mmap_sem is held.
 	 */
-	get_file(file);
 	result = do_write_page(inode, file, page, offset);
-	fput(file);
 	return result;
 }
 
@@ -1472,9 +1469,9 @@ static int filemap_write_page(struct vm_area_struct * vma,
  * at the same time..
  */
 extern void wakeup_bdflush(int);
-int filemap_swapout(struct vm_area_struct * vma, struct page * page)
+int filemap_swapout(struct page * page, struct file * file)
 {
-	int retval = filemap_write_page(vma, page->offset, page, 0);
+	int retval = filemap_write_page(file, page->offset, page, 0);
 	wakeup_bdflush(0);
 	return retval;
 }
@@ -1515,7 +1512,7 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 	}
 	if (PageHighMem(page))
 		BUG();
-	error = filemap_write_page(vma, address - vma->vm_start + vma->vm_offset, page, 1);
+	error = filemap_write_page(vma->vm_file, address - vma->vm_start + vma->vm_offset, page, 1);
 	page_cache_free(page);
 	return error;
 }

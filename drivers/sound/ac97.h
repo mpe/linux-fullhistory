@@ -10,7 +10,7 @@
 #include "sound_config.h"
 #include "sound_calls.h"
 
-#define  AC97_RESET              0x0000      //  */
+#define  AC97_RESET              0x0000      //
 #define  AC97_MASTER_VOL_STEREO  0x0002      // Line Out
 #define  AC97_HEADPHONE_VOL      0x0004      // 
 #define  AC97_MASTER_VOL_MONO    0x0006      // TAD Output
@@ -207,6 +207,10 @@ extern int ac97_get_mixer_scaled (struct ac97_hwint *dev, int oss_channel);
 /* Default ioctl. */
 extern int ac97_mixer_ioctl (struct ac97_hwint *dev, unsigned int cmd,
 			     caddr_t arg);
+
+/* Do a complete reset on the AC97 mixer, restoring all mixer registers to
+   the current values.  Normally used after an APM resume event.  */
+extern int ac97_reset (struct ac97_hwint *dev);
 #endif
 
 /*

@@ -23,12 +23,9 @@
 #ifdef __KERNEL__
 #ifndef __ASSEMBLY__
 
-#define STRICT_MM_TYPECHECKS
-
 #define clear_page(page)	memset((void *)(page), 0, PAGE_SIZE)
 #define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
 
-#ifdef STRICT_MM_TYPECHECKS
 /*
  * These are used to make use of C type-checking..
  */
@@ -47,26 +44,6 @@ typedef struct { unsigned long pgprot; } pgprot_t;
 #define __pgd(x)	((pgd_t) { (x) } )
 #define __pgprot(x)	((pgprot_t) { (x) } )
 
-#else
-/*
- * .. while these make it easier on the compiler
- */
-typedef unsigned long pte_t;
-typedef unsigned long pmd_t;
-typedef unsigned long pgd_t;
-typedef unsigned long pgprot_t;
-
-#define pte_val(x)	(x)
-#define pmd_val(x)	(x)
-#define pgd_val(x)	(x)
-#define pgprot_val(x)	(x)
-
-#define __pte(x)	(x)
-#define __pmd(x)	(x)
-#define __pgd(x)	(x)
-#define __pgprot(x)	(x)
-
-#endif
 #endif /* !__ASSEMBLY__ */
 
 /* to align the pointer to the (next) page boundary */
@@ -75,7 +52,7 @@ typedef unsigned long pgprot_t;
 /*
  * IF YOU CHANGE THIS, PLEASE ALSO CHANGE
  *
- *	arch/sh/vmlinux.lds
+ *	arch/sh/vmlinux.lds.S
  *
  * which has the same constant encoded..
  */
@@ -89,8 +66,15 @@ typedef unsigned long pgprot_t;
 #define MAP_NR(addr)		((__pa(addr)-__MEMORY_START) >> PAGE_SHIFT)
 
 #ifndef __ASSEMBLY__
+
+extern int console_loglevel;
+
+/*
+ * Tell the user there is some problem.
+ */
 #define BUG() do { \
 	printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); \
+	console_loglevel = 0; \
 	asm volatile("nop"); \
 } while (0)
 

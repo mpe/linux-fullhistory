@@ -101,7 +101,7 @@ static void
 nfsd(struct svc_rqst *rqstp)
 {
 	struct svc_serv	*serv = rqstp->rq_server;
-	int		oldumask, err, first = 0;
+	int		oldumask, err;
 
 	/* Lock module and set up kernel thread */
 	MOD_INC_USE_COUNT;
@@ -117,7 +117,6 @@ nfsd(struct svc_rqst *rqstp)
 	current->fs->umask = 0;
 	if (!nfsd_active++) {
 		nfssvc_boot = xtime;		/* record boot time */
-		first = 1;
 	}
 	lockd_up();				/* start lockd */
 
@@ -136,13 +135,8 @@ nfsd(struct svc_rqst *rqstp)
 		 * recvfrom routine.
 		 */
 		while ((err = svc_recv(serv, rqstp,
-		        first?5*HZ:MAX_SCHEDULE_TIMEOUT)) == -EAGAIN) {
-			if (first && 1) {
-				exp_readlock();
-				expire_all();
-				exp_unlock();
-			}
-		}
+				       MAX_SCHEDULE_TIMEOUT)) == -EAGAIN)
+		    ;
 		if (err < 0)
 			break;
 

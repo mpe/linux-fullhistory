@@ -1,4 +1,4 @@
-/* $Id: setup.c,v 1.4 1999/10/17 02:49:24 gniibe Exp $
+/* $Id: setup.c,v 1.7 1999/10/23 01:34:50 gniibe Exp $
  *
  *  linux/arch/sh/kernel/setup.c
  *
@@ -28,13 +28,16 @@
 #ifdef CONFIG_BLK_DEV_RAM
 #include <linux/blk.h>
 #endif
-#include <asm/processor.h>
+#include <linux/bootmem.h>
 #include <linux/console.h>
+#include <asm/processor.h>
+#include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/smp.h>
+
 
 /*
  * Machine setup..
@@ -62,7 +65,6 @@ extern int _text, _etext, _edata, _end;
 #define LOADER_TYPE (*(unsigned long *) (PARAM+0x00c))
 #define INITRD_START (*(unsigned long *) (PARAM+0x010))
 #define INITRD_SIZE (*(unsigned long *) (PARAM+0x014))
-#define MEMORY_END (*(unsigned long *) (PARAM+0x018))
 /* ... */
 #define COMMAND_LINE ((char *) (PARAM+0x100))
 #define COMMAND_LINE_SIZE 256
@@ -105,11 +107,67 @@ static struct resource rom_resources[MAXROMS] = {
 	{ "Video ROM", 0xc0000, 0xc7fff }
 };
 
-void __init setup_arch(char **cmdline_p,
-		       unsigned long * memory_start_p,
-		       unsigned long * memory_end_p)
+static unsigned long memory_start, memory_end;
+
+unsigned long __init memparse(char *ptr, char **retptr)
 {
-	unsigned long memory_start, memory_end;
+	unsigned long ret;
+
+	ret = simple_strtoul(ptr, retptr, 0);
+
+	if (**retptr == 'K' || **retptr == 'k') {
+		ret <<= 10;
+		(*retptr)++;
+	}
+	else if (**retptr == 'M' || **retptr == 'm') {
+		ret <<= 20;
+		(*retptr)++;
+	}
+	return ret;
+} /* memparse */
+
+static inline void parse_mem_cmdline (char ** cmdline_p)
+{
+	char c = ' ', *to = command_line, *from = COMMAND_LINE;
+	int len = 0;
+
+	/* Save unparsed command line copy for /proc/cmdline */
+	memcpy(saved_command_line, COMMAND_LINE, COMMAND_LINE_SIZE);
+	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
+
+	memory_start = (unsigned long)__va(0)+__MEMORY_START;
+	/* Default is 4Mbyte. */
+	memory_end = (unsigned long)__va(0x00400000)+__MEMORY_START;
+
+	for (;;) {
+		/*
+		 * "mem=XXX[kKmM]" defines a size of memory.
+		 */
+		if (c == ' ' && !memcmp(from, "mem=", 4)) {
+			if (to != command_line)
+				to--;
+			{
+				unsigned long mem_size;
+
+				mem_size = memparse(from+4, &from);
+				memory_end = memory_start + mem_size;
+			}
+		}
+		c = *(from++);
+		if (!c)
+			break;
+		if (COMMAND_LINE_SIZE <= ++len)
+			break;
+		*(to++) = c;
+	}
+	*to = '\0';
+	*cmdline_p = command_line;
+}
+
+void __init setup_arch(char **cmdline_p)
+{
+	unsigned long bootmap_size;
+	unsigned long start_pfn, max_pfn, max_low_pfn;
 
 	ROOT_DEV = to_kdev_t(ORIG_ROOT_DEV);
 
@@ -118,12 +176,9 @@ void __init setup_arch(char **cmdline_p,
 	rd_prompt = ((RAMDISK_FLAGS & RAMDISK_PROMPT_FLAG) != 0);
 	rd_doload = ((RAMDISK_FLAGS & RAMDISK_LOAD_FLAG) != 0);
 #endif
+
 	if (!MOUNT_ROOT_RDONLY)
 		root_mountflags &= ~MS_RDONLY;
-
-	memory_start = (unsigned long) &_end;
-	memory_end = MEMORY_END;
-
 	init_mm.start_code = (unsigned long)&_text;
 	init_mm.end_code = (unsigned long) &_etext;
 	init_mm.end_data = (unsigned long) &_edata;
@@ -134,21 +189,73 @@ void __init setup_arch(char **cmdline_p,
 	data_resource.start = virt_to_bus(&_etext);
 	data_resource.end = virt_to_bus(&_edata)-1;
 
-	/* Save unparsed command line copy for /proc/cmdline */
-	memcpy(saved_command_line, COMMAND_LINE, COMMAND_LINE_SIZE);
-	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
+	parse_mem_cmdline(cmdline_p);
 
-	memcpy(command_line, COMMAND_LINE, COMMAND_LINE_SIZE);
-	command_line[COMMAND_LINE_SIZE-1] = '\0';
+#define PFN_UP(x)	(((x) + PAGE_SIZE-1) >> PAGE_SHIFT)
+#define PFN_DOWN(x)	((x) >> PAGE_SHIFT)
+#define PFN_PHYS(x)	((x) << PAGE_SHIFT)
 
-	/* Not support "mem=XXX[kKmM]" command line option. */
-	*cmdline_p = command_line;
+	/*
+	 * partially used pages are not usable - thus
+	 * we are rounding upwards:
+	 */
+	start_pfn = PFN_UP(__pa(&_end)-__MEMORY_START);
 
-	memory_end &= PAGE_MASK;
-	ram_resources[1].end = memory_end-1;
+	/*
+	 * Find the highest page frame number we have available
+	 */
+	max_pfn = PFN_DOWN(__pa(memory_end)-__MEMORY_START);
 
-	*memory_start_p = memory_start;
-	*memory_end_p = memory_end;
+	/*
+	 * Determine low and high memory ranges:
+	 */
+	max_low_pfn = max_pfn;
+
+	/*
+	 * Initialize the boot-time allocator (with low memory only):
+	 */
+	bootmap_size = init_bootmem(start_pfn, max_low_pfn);
+
+	/*
+	 * FIXME: what about high memory?
+	 */
+	ram_resources[1].end = PFN_PHYS(max_low_pfn) + __MEMORY_START;
+
+	/*
+	 * Register fully available low RAM pages with the bootmem allocator.
+	 */
+	{
+		unsigned long curr_pfn, last_pfn, size;
+
+		/*
+		 * We are rounding up the start address of usable memory:
+		 */
+		curr_pfn = PFN_UP(0);
+		/*
+		 * ... and at the end of the usable range downwards:
+		 */
+		last_pfn = PFN_DOWN(memory_end-__MEMORY_START);
+
+		if (last_pfn > max_low_pfn)
+			last_pfn = max_low_pfn;
+
+		size = last_pfn - curr_pfn;
+		free_bootmem(PFN_PHYS(curr_pfn), PFN_PHYS(size));
+	}
+	/*
+	 * Reserve the kernel text and
+	 * Reserve the bootmem bitmap itself as well. We do this in two
+	 * steps (first step was init_bootmem()) because this catches
+	 * the (very unlikely) case of us accidentally initializing the
+	 * bootmem allocator with an invalid RAM area.
+	 */
+	reserve_bootmem(PAGE_SIZE, PFN_PHYS(start_pfn) + bootmap_size);
+
+	/*
+	 * reserve physical page 0 - it's a special BIOS page on many boxes,
+	 * enabling clean reboots, SMP operation, laptop functions.
+	 */
+	reserve_bootmem(0, PAGE_SIZE);
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (LOADER_TYPE) {
@@ -156,10 +263,12 @@ void __init setup_arch(char **cmdline_p,
 		initrd_end = initrd_start+INITRD_SIZE;
 		if (initrd_end > memory_end) {
 			printk("initrd extends beyond end of memory "
-			    "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
-			    initrd_end,memory_end);
+			       "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
+			       initrd_end,memory_end);
 			initrd_start = 0;
-		}
+		} else
+			reserve_bootmem(__pa(initrd_start)-__MEMORY_START,
+					INITRD_SIZE);
 	}
 #endif
 

@@ -98,8 +98,6 @@ asmlinkage int  __down_interruptible(struct semaphore * sem);
 asmlinkage int  __down_trylock(struct semaphore * sem);
 asmlinkage void __up(struct semaphore * sem);
 
-extern spinlock_t semaphore_wake_lock;
-
 /*
  * This is ugly, but we want the default case to fall through.
  * "down_failed" is a special asm handler that calls the C

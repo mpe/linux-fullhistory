@@ -276,12 +276,9 @@ static ssize_t initrd_read(struct file *file, char *buf,
 
 static int initrd_release(struct inode *inode,struct file *file)
 {
-	unsigned long i;
-
-	if (--initrd_users) return 0;
-	for (i = initrd_start; i < initrd_end; i += PAGE_SIZE)
-		free_page(i);
 	initrd_start = 0;
+	/* No need to actually release the pages, because that is
+	   done later by free_all_bootmem. */
 	return 0;
 }
 
