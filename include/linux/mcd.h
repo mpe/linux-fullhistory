@@ -28,7 +28,7 @@
 #define MCD_INTR_NR		10
 
 /* Increase this if you get lots of timeouts */
-#define MCD_STATUS_DELAY	100
+#define MCD_STATUS_DELAY	200
 
 /* number of times to retry a command before giving up */
 #define MCD_RETRY_ATTEMPTS      5

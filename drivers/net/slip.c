@@ -23,6 +23,8 @@
  *		Alan Cox	:	Corrected non-IP cases of the above.
  *		Alan Cox	:	Now uses hardware type as per FvK.
  *		Alan Cox	:	Default to 192.168.0.0 (RFC 1597)
+ *		A.N.Kuznetsov	:	dev_tint() recursion fix.
+ *	Dmitry Gorodchanin	:	SLIP memory leaks
  *
  *
  *	FIXME:	This driver still makes some IP'ish assumptions. It should build cleanly KISS TNC only without
@@ -379,7 +381,7 @@ sl_encaps(struct slip *sl, unsigned char *icp, int len)
   actual = sl->tty->driver.write(sl->tty, 0, sl->xbuff, count);
   if (actual == count) {
 	  sl_unlock(sl);
-	  dev_tint(sl->dev);
+	  mark_bh(NET_BH);
   } else {
 	  sl->xhead = sl->xbuff + count;
 	  sl->xtail = sl->xbuff + actual;
@@ -420,7 +422,7 @@ static void slip_write_wakeup(struct tty_struct *tty)
 		tty->flags &= ~TTY_DO_WRITE_WAKEUP;
 
 		sl_unlock(sl);
-		dev_tint(sl->dev);
+		mark_bh(NET_BH);
 	} else {
 		sl->xtail += answer;
 	}
@@ -566,7 +568,7 @@ sl_open(struct device *dev)
 
   p = (unsigned char *) kmalloc(l + 4, GFP_KERNEL);
   if (p == NULL) {
-	kfree_s((void *)sl->dev->mem_start,l+4);
+	kfree((unsigned char *)sl->dev->mem_start);
 	return(-ENOMEM);
   }
   sl->dev->rmem_start	= (unsigned long) p;
@@ -584,6 +586,7 @@ sl_open(struct device *dev)
   p = (unsigned char *) kmalloc(l + 4, GFP_KERNEL);
   if (p == NULL) {
   	kfree((unsigned char *)sl->dev->mem_start);
+  	kfree((unsigned char *)sl->dev->rmem_start);
 	return(-ENOMEM);
   }
   sl->cbuff		= p;
@@ -592,7 +595,7 @@ sl_open(struct device *dev)
   if (sl->slcomp == NULL) {
   	kfree((unsigned char *)sl->dev->mem_start);
   	kfree((unsigned char *)sl->dev->rmem_start);
-  	kfree(sl->cbuff);
+  	kfree((unsigned char *)sl->cbuff);
 	return(-ENOMEM);
   }
 #endif

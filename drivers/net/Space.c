@@ -42,6 +42,7 @@ extern int wd_probe(struct device *dev);
 extern int el2_probe(struct device *dev);
 extern int ne_probe(struct device *dev);
 extern int hp_probe(struct device *dev);
+extern int hp_plus_probe(struct device *dev);
 extern int znet_probe(struct device *);
 extern int express_probe(struct device *);
 extern int el3_probe(struct device *);
@@ -53,6 +54,7 @@ extern int el16_probe(struct device *);
 extern int elplus_probe(struct device *);
 extern int ac3200_probe(struct device *);
 extern int e2100_probe(struct device *);
+extern int SK_init(struct device *dev);
 
 /* Detachable devices ("pocket adaptors" and special PCMCIA drivers). */
 extern int atp_init(struct device *);
@@ -82,6 +84,9 @@ ethif_probe(struct device *dev)
 #endif
 #if defined(CONFIG_HPLAN) || defined(HPLAN)
 	&& hp_probe(dev)
+#endif
+#if defined(CONFIG_HPLAN_PLUS)
+	&& hp_plus_probe(dev)
 #endif
 #ifdef CONFIG_AT1500
 	&& at1500_probe(dev)
@@ -121,6 +126,9 @@ ethif_probe(struct device *dev)
 #endif
 #ifdef CONFIG_DE620		/* D-Link DE-620 adapter */
 	&& de620_probe(dev)
+#endif
+#if defined(CONFIG_SK_G16)
+	&& SK_init(dev)
 #endif
 	&& 1 ) {
 	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */

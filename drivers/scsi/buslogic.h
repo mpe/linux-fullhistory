@@ -17,7 +17,7 @@ int buslogic_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int buslogic_abort(Scsi_Cmnd *);
 const char *buslogic_info(void);
 int buslogic_reset(Scsi_Cmnd *);
-int buslogic_biosparam(int, int, int *);
+int buslogic_biosparam(Disk *, int, int *);
 
 #define BUSLOGIC_CMDLUN 1	/* ??? */
 

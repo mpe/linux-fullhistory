@@ -200,8 +200,6 @@ static int copy_flock(struct file *filp, struct file_lock *fl, struct flock *l,
 
 	if (!filp->f_inode)	/* just in case */
 		return 0;
-	if (!S_ISREG(filp->f_inode->i_mode))
-		return 0;
 	if (l->l_type != F_UNLCK && l->l_type != F_RDLCK && l->l_type != F_WRLCK
 	 && l->l_type != F_SHLCK && l->l_type != F_EXLCK)
 		return 0;
@@ -378,7 +376,7 @@ next_lock:
 
 	if (! added) {
 		if (caller->fl_type == F_UNLCK)
-			return -EINVAL;
+			return 0;
 		if (! (caller = alloc_lock(before, caller, fd)))
 			return -ENOLCK;
 	}

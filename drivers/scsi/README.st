@@ -1,5 +1,5 @@
 This file contains brief information about the SCSI tape driver.
-Last modified: Thu May  5 00:13:24 1994 by root@kai.home
+Last modified: Wed Jun 22 23:38:47 1994 by root@kai.home
 
 BASICS
 
@@ -10,6 +10,9 @@ variable block size (within buffer limits). Both the auto-rewind
 (minor equals device number) and non-rewind devices (minor is 128 +
 device number) are implemented.
 
+By default the driver writes one filemark when the device is closed after
+writing. Two filemarks can be optionally written. In both cases end
+of data is signified by returning zero bytes for two consecutive reads.
 
 BUFFERING
 
@@ -78,12 +81,13 @@ MTBSR   Space backward over count records.
 MTWEOF  Write count filemarks.
 MTREW   Rewind tape.
 MTOFFL  Set device off line (often rewind plus eject).
-MTNOP   Do nothing.
+MTNOP   Do nothing except flush the buffers.
 MTRETEN Retension tape.
 MTEOM   Space to end of recorded data.
 MTERASE Erase tape.
 MTSEEK	Seek to tape block count. Uses Tandberg-compatible seek (QFA)
-        for SCSI-1 drives and SCSI-2 seek for SCSI-2 drives.
+        for SCSI-1 drives and SCSI-2 seek for SCSI-2 drives. The file and
+	block numbers in the status are not valid after a seek.
 MTSETBLK Set the drive block size. Setting to zero sets the drive into
         variable block mode (if applicable).
 MTSETDENSITY Sets the drive density code to arg. See drive
@@ -99,8 +103,9 @@ MTSETDRVBUFFER
            Sets the buffering options. The bits are the new states
            (enabled/disabled) of the write buffering (MT_ST_BUFFER_WRITES),
            asynchronous writes (MT_ST_ASYNC_WRITES), read ahead
-           (MT_ST_READ_AHEAD) and debugging (MT_ST_DEBUGGING;
-           (debugging must be compiled into the driver).
+           (MT_ST_READ_AHEAD), writing of two filemark (ST_TWO_FM), and
+	   debugging (MT_ST_DEBUGGING ; debugging must be compiled into the
+	   driver).
         MT_ST_WRITE_THRESHOLD
            Sets the write threshold for this device to kilobytes
            specified by the lowest bits.
@@ -120,6 +125,8 @@ MTIOCGET Returns some status information.
         The current block size and the density code are stored in the field
         mt_dsreg (shifts for the subfields are MT_ST_BLKSIZE_SHIFT and
         MT_ST_DENSITY_SHIFT).
+	The write protect bit in mt_gstat is set if the tape is write
+	protected.
         The other fields are empty.
 
 

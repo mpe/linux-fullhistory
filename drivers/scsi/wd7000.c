@@ -115,6 +115,7 @@
 #include "../block/blk.h"
 #include "scsi.h"
 #include "hosts.h"
+#include "sd.h"
 
 #define ANY2SCSI_INLINE    /* undef this to use old macros */
 #undef DEBUG
@@ -1225,8 +1226,9 @@ const char *wd7000_info(void)
  *  this way, so I think it will work OK.  Someone who is ambitious can
  *  borrow a newer or more complete version from another driver.
  */
-int wd7000_biosparam(int size, int dev, int* ip)
+int wd7000_biosparam(Disk * disk, int dev, int* ip)
 {
+  int size = disk->capacity;
   ip[0] = 64;
   ip[1] = 32;
   ip[2] = size >> 11;

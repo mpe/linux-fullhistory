@@ -91,7 +91,7 @@
 #define AUTOPROBE_IRQ
 #include "NCR5380.h"
 #include "constants.h"
-
+#include "sd.h"
 
 
 int scsi_irq_translate[] =
@@ -374,7 +374,7 @@ int pas16_detect(int hostno) {
 }
 
 /*
- * Function : int pas16_biosparam(int size, int dev, int *ip)
+ * Function : int pas16_biosparam(Disk *disk, int dev, int *ip)
  *
  * Purpose : Generates a BIOS / DOS compatable H-C-S mapping for 
  *	the specified device / size.
@@ -393,8 +393,9 @@ int pas16_detect(int hostno) {
  * and matching the H_C_S coordinates to what DOS uses.
  */
 
-int pas16_biosparam(int size, int dev, int * ip)
+int pas16_biosparam(Disk * disk, int dev, int * ip)
 {
+  int size = disk->capacity;
   ip[0] = 64;
   ip[1] = 32;
   ip[2] = size >> 11;

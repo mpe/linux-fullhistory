@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 24
+SUBLEVEL = 25
 
 all:	Version zImage
 
@@ -37,6 +37,12 @@ endif
 #
 
 ROOT_DEV = CURRENT
+
+#
+# INSTALL_PATH specifies where to place the updated kernel and system map
+# images.  Uncomment if you want to place them anywhere other than root.
+
+#INSTALL_PATH=/boot
 
 #
 # If you want to preset the SVGA mode, uncomment the next line and
@@ -188,10 +194,10 @@ zdisk: zImage
 	dd bs=8192 if=zImage of=/dev/fd0
 
 zlilo: $(CONFIGURE) zImage
-	if [ -f /vmlinuz ]; then mv /vmlinuz /vmlinuz.old; fi
-	if [ -f /zSystem.map ]; then mv /zSystem.map /zSystem.old; fi
-	cat zImage > /vmlinuz
-	cp zSystem.map /
+	if [ -f $(INSTALL_PATH)/vmlinuz ]; then mv $(INSTALL_PATH)/vmlinuz $(INSTALL_PATH)/vmlinuz.old; fi
+	if [ -f $(INSTALL_PATH)/zSystem.map ]; then mv $(INSTALL_PATH)/zSystem.map $(INSTALL_PATH)/zSystem.old; fi
+	cat zImage > $(INSTALL_PATH)/vmlinuz
+	cp zSystem.map $(INSTALL_PATH)/
 	if [ -x /sbin/lilo ]; then /sbin/lilo; else /etc/lilo/install; fi
 
 tools/zSystem:	boot/head.o init/main.o tools/version.o linuxsubdirs

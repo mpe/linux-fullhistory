@@ -94,12 +94,7 @@ long rd_init(long mem_start, int length)
 	return(length);
 }
 
-/*
- * If the root device is the RAM disk, try to load it.
- * In order to do this, the root device is originally set to the
- * floppy, and we later change it to be RAM disk.
- */
-void rd_load(void)
+static void do_load(void)
 {
 	struct buffer_head *bh;
 	struct minix_super_block s;
@@ -107,14 +102,6 @@ void rd_load(void)
 	int		i = 1;
 	int		nblocks;
 	char		*cp;
-
-	/* If no RAM disk specified, give up early. */
-	if (!rd_length) return;
-	printk("RAMDISK: %d bytes, starting at 0x%x\n",
-					rd_length, (int) rd_start);
-
-	/* If we are doing a diskette boot, we might have to pre-load it. */
-	if (MAJOR(ROOT_DEV) != FLOPPY_MAJOR) return;
 
 	/*
 	 * Check for a super block on the diskette.
@@ -175,4 +162,33 @@ void rd_load(void)
 		ROOT_DEV = ((MEM_MAJOR << 8) | RAMDISK_MINOR);
 		return;
 	}
+}
+
+int floppy_grab_irq_and_dma(void);
+void floppy_release_irq_and_dma(void);
+
+/*
+ * If the root device is the RAM disk, try to load it.
+ * In order to do this, the root device is originally set to the
+ * floppy, and we later change it to be RAM disk.
+ */
+void rd_load(void)
+{
+	/* If no RAM disk specified, give up early. */
+	if (!rd_length)
+		return;
+	printk("RAMDISK: %d bytes, starting at 0x%x\n",
+			rd_length, (int) rd_start);
+
+	/* If we are doing a diskette boot, we might have to pre-load it. */
+	if (MAJOR(ROOT_DEV) != FLOPPY_MAJOR)
+		return;
+
+/* ugly, ugly */
+	if (floppy_grab_irq_and_dma()) {
+		printk("Unable to gram floppy IRQ/DMA for loading ramdisk image\n");
+		return;
+	}
+	do_load();
+	floppy_release_irq_and_dma();
 }

@@ -31,6 +31,7 @@
 #include "../block/blk.h"
 #include "scsi.h"
 #include "hosts.h"
+#include "sd.h"
 
 #include "aha1740.h"
 
@@ -489,8 +490,9 @@ int aha1740_reset(Scsi_Cmnd * SCpnt)
     return SCSI_RESET_PUNT;
 }
 
-int aha1740_biosparam(int size, int dev, int* ip)
+int aha1740_biosparam(Disk * disk, int dev, int* ip)
 {
+  int size = disk->capacity;
 DEB(printk("aha1740_biosparam\n"));
   ip[0] = 64;
   ip[1] = 32;

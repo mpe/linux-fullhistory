@@ -370,7 +370,7 @@ static void icmp_echo(struct icmphdr *icmph, struct sk_buff *skb, struct device 
 	skb2->free = 1;
 
 	/* Build Layer 2-3 headers for message back to source */
-	offset = ip_build_header(skb2, daddr, saddr, &ndev,
+	offset = ip_build_header(skb2, daddr, dev->pa_addr, &ndev,
 	 	IPPROTO_ICMP, opt, len, skb->ip_hdr->tos,255);
 	if (offset < 0) 
 	{
@@ -586,12 +586,6 @@ int icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	
 	icmp_statistics.IcmpInMsgs++;
 	 
-	if (ip_chk_addr(daddr) == IS_BROADCAST) 
-	{
-		icmp_statistics.IcmpInErrors++;
-		kfree_skb(skb1, FREE_READ);
-		return(0);
-  	}
   	
   	/*
   	 *	Grab the packet as an icmp object
@@ -616,6 +610,13 @@ int icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	/*
 	 *	Parse the ICMP message 
 	 */
+
+	if (ip_chk_addr(daddr) == IS_BROADCAST && icmph->type != ICMP_ECHO) 
+	{
+		icmp_statistics.IcmpInErrors++;
+		kfree_skb(skb1, FREE_READ);
+		return(0);
+  	}
 
 	switch(icmph->type) 
 	{

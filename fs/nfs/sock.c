@@ -4,6 +4,13 @@
  *  Copyright (C) 1992, 1993  Rick Sladkey
  *
  *  low-level nfs remote procedure call interface
+ *
+ * FIXES
+ *
+ * 2/7/94 James Bottomley and Jon Peatfield DAMTP, Cambridge University
+ *
+ * An xid mismatch no longer causes the request to be trashed.
+ *
  */
 
 #include <linux/config.h>
@@ -15,6 +22,12 @@
 #include <asm/segment.h>
 #include <linux/in.h>
 #include <linux/net.h>
+#include <linux/mm.h>
+
+/* JEJB/JSP 2/7/94
+ * this must match the value of NFS_SLACK_SPACE in linux/fs/nfs/proc.c 
+ * ***FIXME*** should probably put this in nfs_fs.h */
+#define NFS_SLACK_SPACE 1024
 
 
 extern struct socket *socki_lookup(struct inode *inode);
@@ -51,6 +64,9 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 	int n;
 	int addrlen;
 	unsigned long old_mask;
+	/* JEJB/JSP 2/7/94
+	 * This is for a 4 byte recv of the xid only */
+	int recv_xid;
 
 	xid = start[0];
 	len = ((char *) end) - ((char *) start);
@@ -92,8 +108,14 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 		current->state = TASK_INTERRUPTIBLE;
 		if (!select(inode, file, SEL_IN, &wait_table)
 		    && !select(inode, file, SEL_IN, NULL)) {
-			if (timeout > max_timeout)
-				timeout = max_timeout;
+			if (timeout > max_timeout) {
+			  /* JEJB/JSP 2/7/94
+			   * This is useful to see if the system is
+			   * hanging */
+			  printk("NFS max timeout reached on %s\n",
+				 server_name);
+			  timeout = max_timeout;
+			}
 			current->timeout = jiffies + timeout;
 			schedule();
 			remove_wait_queue(entry.wait_address, &entry.wait);
@@ -116,8 +138,8 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 				timeout = init_timeout;
 				init_timeout <<= 1;
 				if (!major_timeout_seen) {
-					printk("NFS server %s not responding, "
-						"still trying\n", server_name);
+				  printk("NFS server %s not responding, "
+					 "still trying\n", server_name);
 				}
 				major_timeout_seen = 1;
 				continue;
@@ -129,8 +151,13 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 			remove_wait_queue(entry.wait_address, &entry.wait);
 		current->state = TASK_RUNNING;
 		addrlen = 0;
-		result = sock->ops->recvfrom(sock, (void *) start, PAGE_SIZE, 1, 0,
-			NULL, &addrlen);
+		/* JEJB/JSP 2/7/94
+		 * Get the xid from the next packet using a peek, so keep it
+		 * on the recv queue.  If it is wrong, it will be some reply
+		 * we don't now need, so discard it */
+		result = sock->ops->recvfrom(sock, (void *)&recv_xid,
+					     sizeof(recv_xid), 1, MSG_PEEK,
+					     NULL, &addrlen);
 		if (result < 0) {
 			if (result == -EAGAIN) {
 #if 0
@@ -150,15 +177,41 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 			}
 			break;
 		}
-		if (*start == xid) {
+		if (recv_xid == xid) {
 			if (major_timeout_seen)
 				printk("NFS server %s OK\n", server_name);
 			break;
 		}
+		/* JEJB/JSP 2/7/94
+		 * we have xid mismatch, so discard the packet and start
+		 * again.  What a hack! but I can't call recvfrom with
+		 * a null buffer yet. */
+		(void)sock->ops->recvfrom(sock, (void *)&recv_xid,
+					  sizeof(recv_xid), 1, 0, NULL,
+					  &addrlen);
 #if 0
 		printk("nfs_rpc_call: XID mismatch\n");
 #endif
 	}
+	/* JEJB/JSP 2/7/94
+	 *
+	 * we have the correct xid, so read into the correct place and
+	 * return it
+	 *
+	 * Here we need to know the size given to alloc, server->wsize for
+	 * writes or server->rsize for reads.  In practice these are the
+	 * same. 
+	 *
+	 * If they are not the same then a reply to a write request will be
+	 * a small acknowledgement, so even if wsize < rsize we should never
+	 * cause data to be written past the end of the buffer (unless some
+	 * brain damaged implementation sends out a large write acknowledge).
+	 *
+	 * FIXME:  I should really know how big a packet was alloc'd --
+	 *         should pass it to do_nfs_rpc. */
+	result=sock->ops->recvfrom(sock, (void *)start, 
+				  server->rsize + NFS_SLACK_SPACE, 1, 0, NULL,
+				  &addrlen);
 	current->blocked = old_mask;
 	set_fs(fs);
 	return result;

@@ -45,6 +45,7 @@ static void get_sectorsize(int);
 extern int sr_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 
 void requeue_sr_request (Scsi_Cmnd * SCpnt);
+static int check_cdrom_media_change(dev_t);
 
 static void sr_release(struct inode * inode, struct file * file)
 {
@@ -62,9 +63,12 @@ static struct file_operations sr_fops =
 	NULL,			/* select */
 	sr_ioctl,		/* ioctl */
 	NULL,			/* mmap */
-	sr_open,       		/* no special open code */
+	sr_open,       		/* special open code */
 	sr_release,		/* release */
-	NULL			/* fsync */
+	NULL,			/* fsync */
+	NULL,			/* fasync */
+	check_cdrom_media_change,  /* Disk change */
+	NULL			/* revalidate */
 };
 
 /*
@@ -77,9 +81,10 @@ static struct file_operations sr_fops =
  * an inode for that to work, and we do not always have one.
  */
 
-int check_cdrom_media_change(int full_dev, int flag){
+int check_cdrom_media_change(dev_t full_dev){
 	int retval, target;
 	struct inode inode;
+	int flag = 0;
 
 	target =  MINOR(full_dev);
 

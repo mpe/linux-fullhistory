@@ -20,6 +20,10 @@ Space.o: Space.c ../../include/linux/autoconf.h
 
 net_init.o: ../../include/linux/autoconf.h
 
+ifdef CONFIG_SK_G16
+NETDRV_OBJS := $(NETDRV_OBJS) net.a(sk_g16.o)
+endif
+
 ifdef CONFIG_WD80x3
 NETDRV_OBJS := $(NETDRV_OBJS) net.a(wd.o)
 CONFIG_8390 = CONFIG_8390
@@ -46,6 +50,11 @@ NETDRV_OBJS := $(NETDRV_OBJS) net.a(hp.o)
 CONFIG_8390 = CONFIG_8390
 hp.o:	hp.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(HP_OPTS) -c $<
+endif
+
+ifdef CONFIG_HPLAN_PLUS
+NETDRV_OBJS := $(NETDRV_OBJS) net.a(hp-plus.o)
+CONFIG_8390 = CONFIG_8390
 endif
 
 ifdef CONFIG_ULTRA

@@ -18,7 +18,7 @@ int wd7000_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int wd7000_abort(Scsi_Cmnd *);
 const char *wd7000_info(void);
 int wd7000_reset(Scsi_Cmnd *);
-int wd7000_biosparam(int, int, int*);
+int wd7000_biosparam(Disk *, int, int*);
 
 #ifndef NULL
 #define NULL 0L

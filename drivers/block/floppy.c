@@ -74,6 +74,8 @@
 #define FLOPPY_DMA 2
 #define FDC_FIFO_UNTESTED           /* -bb */
 
+#define FDC_FIFO_BUG
+
 #include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
@@ -287,8 +289,8 @@ static void redo_fd_request(void);
 static void floppy_ready(void);
 static void recalibrate_floppy(void);
 
-static int floppy_grab_irq_and_dma(void);
-static void floppy_release_irq_and_dma(void);
+int floppy_grab_irq_and_dma(void);
+void floppy_release_irq_and_dma(void);
 
 /*
  * These are global variables, as that's the easiest way to give
@@ -506,6 +508,32 @@ static void output_byte(char byte)
 	printk("Unable to send byte to FDC\n");
 }
 
+#ifdef FDC_FIFO_BUG
+
+static void output_byte_force(char byte)
+{
+	int counter;
+	unsigned char status;
+
+	if (reset)
+		return;
+	for (counter = 0 ; counter < 10000 ; counter++) {
+		status = inb_p(FD_STATUS);
+		if ((status & (STATUS_READY | STATUS_DIR)) == STATUS_READY) {
+			outb(byte,FD_DATA);
+			return;
+		}
+		if ((status & (STATUS_READY | STATUS_BUSY)) == (STATUS_READY | STATUS_BUSY)) {
+			outb(byte,FD_DATA);
+			return;
+		}
+	}
+	current_track = NO_TRACK;
+	reset = 1;
+	printk("Unable to send byte to FDC\n");
+}
+#endif		/* FDC_FIFO_BUG */
+
 static int result(void)
 {
 	int i = 0, counter, status;
@@ -565,15 +593,27 @@ static inline void perpendicular_mode(unsigned char rate)
 		if (rate & 0x40) {
 			unsigned char r = rate & 0x03;
 			if (r == 0)
+#ifndef FDC_FIFO_BUG
 				output_byte(2);	/* perpendicular, 500 kbps */
+#else
+				output_byte_force(2);	/* perpendicular, 500 kbps */
+#endif
 			else if (r == 3)
+#ifndef FDC_FIFO_BUG
 				output_byte(3);	/* perpendicular, 1Mbps */
+#else
+				output_byte_force(3);	/* perpendicular, 1Mbps */
+#endif
 			else {
 				printk(DEVICE_NAME ": Invalid data rate for perpendicular mode!\n");
 				reset = 1;
 			}
 		} else
+#ifndef FDC_FIFO_BUG
 			output_byte(0);		/* conventional mode */
+#else
+			output_byte_force(0);		/* conventional mode */
+#endif
 	} else {
 		if (rate & 0x40) {
 			printk(DEVICE_NAME ": perpendicular mode not supported by this FDC.\n");
@@ -594,9 +634,17 @@ static void configure_fdc_mode(void)
 	if (need_configure && (fdc_version == FDC_TYPE_82077)) {
 		/* Enhanced version with FIFO & vertical recording. */
 		output_byte(FD_CONFIGURE);
+#ifndef FDC_FIFO_BUG
 		output_byte(0);
+#else
+		output_byte_force(0);
+#endif
 		output_byte(0x1A);	/* FIFO on, polling off, 10 byte threshold */
+#ifndef FDC_FIFO_BUG
 		output_byte(0);		/* precompensation from track 0 upwards */
+#else
+		output_byte_force(0);		/* precompensation from track 0 upwards */
+#endif
 		need_configure = 0;
 		printk(DEVICE_NAME ": FIFO enabled\n");
 	}
@@ -1403,7 +1451,7 @@ void floppy_init(void)
 
 static int usage_count = 0;
 
-static int floppy_grab_irq_and_dma(void)
+int floppy_grab_irq_and_dma(void)
 {
 	if (usage_count++)
 		return 0;
@@ -1420,7 +1468,7 @@ static int floppy_grab_irq_and_dma(void)
 	return 0;
 }
 
-static void floppy_release_irq_and_dma(void)
+void floppy_release_irq_and_dma(void)
 {
 	if (--usage_count)
 		return;

@@ -305,35 +305,8 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 		printk("get root inode failed\n");
 		return NULL;
 	}
-#if defined(CONFIG_BLK_DEV_SR) && defined(CONFIG_SCSI)
-	if (MAJOR(s->s_dev) == SCSI_CDROM_MAJOR) {
-		/* Check this one more time. */
-		if(check_cdrom_media_change(s->s_dev, 0))
-		  goto out;
-	}
-#endif
-#if defined(CONFIG_CDU31A)
-	if (MAJOR(s->s_dev) == CDU31A_CDROM_MAJOR) {
-		/* Check this one more time. */
-		if(check_cdu31a_media_change(s->s_dev, 0))
-		  goto out;
-	}
-#endif
-#if defined(CONFIG_MCD)
-	if (MAJOR(s->s_dev) == MITSUMI_CDROM_MAJOR) {
-		/* Check this one more time. */
-		if(check_mcd_media_change(s->s_dev, 0))
-		  goto out;
-	}
-#endif
-#if defined(CONFIG_SBPCD)
-	if (MAJOR(s->s_dev) == MATSUSHITA_CDROM_MAJOR) {
-		if (check_sbpcd_media_change(s->s_dev,0))
-		  goto out;
-	};
-#endif CONFIG_SBPCD
 
-	return s;
+	if(!check_disk_change(s->s_dev)) return s;
  out: /* Kick out for various error conditions */
 	brelse(bh);
 	s->s_dev = 0;

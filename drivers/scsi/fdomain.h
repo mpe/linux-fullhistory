@@ -32,11 +32,7 @@ const char *fdomain_16x0_info( void );
 int        fdomain_16x0_reset( Scsi_Cmnd * ); 
 int        fdomain_16x0_queue( Scsi_Cmnd *, void (*done)(Scsi_Cmnd *) );
 
-#ifdef CONFIG_BLK_DEV_SD
-int        fdomain_16x0_biosparam( int, int, int * );
-#else
-#define    fdomain_16x0_biosparam NULL
-#endif
+int        fdomain_16x0_biosparam(Disk *, int, int * );
 
 #define FDOMAIN_16X0 { "Future Domain TMC-16x0",          \
 			fdomain_16x0_detect,              \

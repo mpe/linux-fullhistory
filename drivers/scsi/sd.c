@@ -54,6 +54,9 @@ static int * sd_blocksizes;
 
 extern int sd_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 
+static int check_scsidisk_media_change(dev_t);
+static int fop_revalidate_scsidisk(dev_t);
+
 static sd_init_onedisk(int);
 
 static void requeue_sd_request (Scsi_Cmnd * SCpnt);
@@ -108,7 +111,10 @@ static struct file_operations sd_fops = {
 	NULL,			/* mmap */
 	sd_open,		/* open code */
 	sd_release,		/* release */
-	block_fsync		/* fsync */
+	block_fsync,		/* fsync */
+	NULL,			/* fasync */
+	check_scsidisk_media_change,  /* Disk change */
+	fop_revalidate_scsidisk     /* revalidate */
 };
 
 static struct gendisk sd_gendisk = {
@@ -733,10 +739,11 @@ repeat:
 		     MAX_RETRIES);
 }
 
-int check_scsidisk_media_change(int full_dev, int flag){
+static int check_scsidisk_media_change(dev_t full_dev){
         int retval;
 	int target;
 	struct inode inode;
+	int flag = 0;
 
 	target =  DEVICE_NR(MINOR(full_dev));
 
@@ -1089,5 +1096,9 @@ int revalidate_scsidisk(int dev, int maxusage){
 
 	  DEVICE_BUSY = 0;
 	  return 0;
+}
+
+static int fop_revalidate_scsidisk(dev_t dev){
+  return revalidate_scsidisk(dev, 0);
 }
 

@@ -134,7 +134,7 @@ int aha1542_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int aha1542_abort(Scsi_Cmnd *);
 const char *aha1542_info(void);
 int aha1542_reset(Scsi_Cmnd *);
-int aha1542_biosparam(int, int, int*);
+int aha1542_biosparam(Disk *, int, int*);
 
 #define AHA1542_MAILBOXES 8
 #define AHA1542_SCATTER 16

@@ -64,6 +64,58 @@
  *
  */
 
+/*
+ *
+ * Setting up the Sony CDU31A/CDU33A drive interface card.  If
+ * You have another card, you are on your own.
+ * 
+ *      +----------+-----------------+----------------------+
+ *      |  JP1     |  34 Pin Conn    |     		    |
+ *      |  JP2     +-----------------+     		    |
+ *      |  JP3     	        			    |
+ *      |  JP4     	        			    |
+ *      |			        		    +--+
+ *      |			                            |  +-+
+ *      |			        		    |  | |  External
+ *      |			        		    |  | |  Connector
+ *      |						    |  | |
+ *      |						    |  +-+
+ *      |						    +--+
+ *      |						    |
+ *      |					   +--------+
+ *      |					   |
+ *      +------------------------------------------+
+ * 
+ *    JP1 sets the Base Address, using the following settings:
+ * 
+ * 	Address		Pin 1		Pin 2
+ * 	-------		-----		-----
+ * 	0x320		Short		Short
+ * 	0x330		Short		Open
+ * 	0x340		Open		Short
+ * 	0x360		Open		Open
+ * 
+ *    JP2 and JP3 configure the DMA channel; they must be set the same.
+ * 
+ * 	DMA		Pin 1		Pin 2		Pin 3
+ * 	---		-----		-----		-----
+ * 	1		On		Off		On
+ * 	2		Off		On		Off
+ * 	3		Off		Off		On
+ * 
+ *    JP4 Configures the IRQ:
+ * 
+ * 	IRQ	Pin 1		Pin 2		Pin 3		Pin 4
+ * 	---	-----		-----		-----		-----
+ * 	3	Off		Off		On		Off
+ * 	4	Off		Off*		Off		On
+ * 	5	On		Off		Off		Off
+ * 	6	Off		On		Off		Off
+ * 
+ * 		* The documentation states to set this for interrupt
+ * 		  4, but I think that is a mistake.
+ */
+
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -110,6 +162,8 @@ static struct
    { 0x360,	-1,	0 },	/* Secondary standard Sony Interface */
    { 0x320,	-1,	0 },	/* Secondary standard Sony Interface */
    { 0x330,	-1,	0 },	/* Secondary standard Sony Interface */
+   { 0x634,	-1,	0 },	/* Sound FX SC400 */
+   { 0x654,	-1,	0 },	/* Sound FX SC400 */
    { 0 }
 };
 
@@ -201,6 +255,8 @@ static struct wait_queue *cdu31a_irq_wait = NULL;
 static int curr_control_reg = 0; /* Current value of the control register */
 
 
+#if 1 /* This will go away as soon as the isofs code is fixed
+         to use the fops struct. */
 /*
  * This routine returns 1 if the disk has been changed since the last
  * check or 0 if it hasn't.  Setting flag to 0 resets the changed flag.
@@ -223,6 +279,30 @@ check_cdu31a_media_change(int full_dev, int flag)
    {
       sony_disc_changed = 0;
    }
+
+   return retval;
+}
+#endif
+
+/*
+ * This routine returns 1 if the disk has been changed since the last
+ * check or 0 if it hasn't.  Setting flag to 0 resets the changed flag.
+ */
+static int
+scd_disk_change(dev_t full_dev)
+{
+   int retval, target;
+
+
+   target = MINOR(full_dev);
+
+   if (target > 0) {
+      printk("Sony CD-ROM request error: invalid device.\n");
+      return 0;
+   }
+
+   retval = sony_disc_changed;
+   sony_disc_changed = 0;
 
    return retval;
 }
@@ -1823,7 +1903,10 @@ static struct file_operations scd_fops = {
    NULL,                   /* mmap */
    scd_open,               /* open */
    scd_release,            /* release */
-   NULL                    /* fsync */
+   NULL,                   /* fsync */
+   NULL,		   /* fasync */
+   scd_disk_change,	   /* media_change */
+   NULL			   /* revalidate */
 };
 
 

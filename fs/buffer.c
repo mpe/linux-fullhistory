@@ -479,7 +479,7 @@ void set_blocksize(dev_t dev, int size)
 			
 			wait_on_buffer(bh);
 			if (bh->b_dev == dev && bh->b_size != size) {
-				bh->b_uptodate = bh->b_dirt = 
+				bh->b_uptodate = bh->b_dirt = bh->b_req =
 					 bh->b_flushtime = 0;
 			};
 			remove_from_hash_queue(bh);

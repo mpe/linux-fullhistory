@@ -158,7 +158,7 @@ int aha1740_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int aha1740_abort(Scsi_Cmnd *);
 const char *aha1740_info(void);
 int aha1740_reset(Scsi_Cmnd *);
-int aha1740_biosparam(int, int, int*);
+int aha1740_biosparam(Disk *, int, int*);
 
 #define AHA1740_ECBS 32
 #define AHA1740_SCATTER 16

@@ -25,16 +25,18 @@ typedef struct {
   unsigned capacity;
   struct wait_queue * waiting;
   Scsi_Device* device;
-  unsigned dirty:1;
-  unsigned rw:2;
-  unsigned eof:2;
-  unsigned write_prot:1;
-  unsigned in_use:1;
-  unsigned eof_hit:1;
-  unsigned drv_buffer:3;
-  unsigned do_buffer_writes:1;
-  unsigned do_async_writes:1;
-  unsigned do_read_ahead:1;
+  unsigned char dirty;
+  unsigned char rw;
+  unsigned char eof;
+  unsigned char write_prot;
+  unsigned char drv_write_prot;
+  unsigned char in_use;
+  unsigned char eof_hit;
+  unsigned char drv_buffer;
+  unsigned char do_buffer_writes;
+  unsigned char do_async_writes;
+  unsigned char do_read_ahead;
+  unsigned char two_fm;
   unsigned char density;
   ST_buffer * buffer;
   int block_size;
@@ -43,6 +45,7 @@ typedef struct {
   int write_threshold;
   int recover_count;
   int drv_block;	/* The block where the drive head is */
+  unsigned char moves_after_eof;
   struct mtget * mt_status;
   Scsi_Cmnd SCpnt;
 } Scsi_Tape;

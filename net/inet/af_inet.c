@@ -12,6 +12,10 @@
  *		Florian La Roche, <flla@stud.uni-sb.de>
  *		Alan Cox, <A.Cox@swansea.ac.uk>
  *
+ * Changes (see also sock.c)
+ *
+ *		A.N.Kuznetsov	:	Socket death error in accept().
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -975,6 +979,7 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 	{
 		err = -sk2->err;
 		sk2->err=0;
+		sk2->dead=1;	/* ANK */
 		destroy_sock(sk2);
 		newsock->data = NULL;
 		return(err);

@@ -413,7 +413,7 @@ extern inline void mark_buffer_dirty(struct buffer_head * bh, int flag)
 }
 
 
-extern void check_disk_change(dev_t dev);
+extern int check_disk_change(dev_t dev);
 extern void invalidate_inodes(dev_t dev);
 extern void invalidate_buffers(dev_t dev);
 extern void sync_inodes(dev_t dev);

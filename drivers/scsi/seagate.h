@@ -24,11 +24,7 @@ int seagate_st0x_reset(Scsi_Cmnd *);
 	#define NULL 0
 #endif
 
-#ifdef CONFIG_BLK_DEV_SD
-int seagate_st0x_biosparam(int, int, int*);
-#else
-#define seagate_st0x_biosparam NULL
-#endif
+int seagate_st0x_biosparam(Disk *, int, int*);
 
 #define SEAGATE_ST0X  {"Seagate ST-01/ST-02", seagate_st0x_detect, 	\
 			 seagate_st0x_info, seagate_st0x_command,  	\

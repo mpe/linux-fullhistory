@@ -6,7 +6,7 @@ int scsi_debug_detect(int);
 int scsi_debug_command(Scsi_Cmnd *);
 int scsi_debug_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int scsi_debug_abort(Scsi_Cmnd *, int);
-int scsi_debug_biosparam(int, int, int[]);
+int scsi_debug_biosparam(Disk *, int, int[]);
 const char *scsi_debug_info(void);
 int scsi_debug_reset(Scsi_Cmnd *);
 

@@ -72,7 +72,7 @@
  *
  *****************************************************************/
 
-#define	TIMEOUT	10000
+#define	TIMEOUT	300
 
 /*****************************************************************
  *
@@ -101,6 +101,7 @@ enum {
   CMD_SELF_TEST			= 0x0f,
   CMD_SET_STATION_ADDRESS	= 0x10,
   CMD_ADAPTER_INFO		= 0x11,
+  NUM_TRANSMIT_CMDS,
 
   /*
    * adapter PCB commands

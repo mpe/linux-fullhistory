@@ -33,7 +33,7 @@ int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 			diskinfo[1] = 0;
 			diskinfo[2] = 0;
 			if(host->hostt->bios_param != NULL)
-			      host->hostt->bios_param(rscsi_disks[MINOR(dev) >> 4].capacity,
+			      host->hostt->bios_param(&rscsi_disks[MINOR(dev) >> 4],
 							  dev,
 							  &diskinfo[0]);
 			put_fs_byte(diskinfo[0],

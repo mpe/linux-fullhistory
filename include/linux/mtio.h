@@ -203,6 +203,7 @@ struct	mtpos {
 #define MT_ST_ASYNC_WRITES	0x2
 #define MT_ST_READ_AHEAD	0x4
 #define MT_ST_DEBUGGING		0x8
+#define MT_ST_TWO_FM		0x10
 
 #endif /* _LINUX_MTIO_H */
 

@@ -36,6 +36,8 @@
  *			allow zero or one slots
  *			separate routines
  *			status display
+ *	- Jul 1994	Dmitry Gorodchanin
+ *			Fixes for memory leaks.
  *
  *
  *	This module is a difficult issue. Its clearly inet code but its also clearly
@@ -101,7 +103,10 @@ slhc_init(int rslots, int tslots)
 		  (struct cstate *)kmalloc(rslots * sizeof(struct cstate),
 					   GFP_KERNEL);
 		if (! comp->rstate)
+		{
+			kfree((unsigned char *)comp);
 			return NULL;
+		}
 		memset(comp->rstate, 0, rslots * sizeof(struct cstate));
 		comp->rslot_limit = rslots - 1;
 	}
@@ -111,7 +116,11 @@ slhc_init(int rslots, int tslots)
 		  (struct cstate *)kmalloc(tslots * sizeof(struct cstate),
 					   GFP_KERNEL);
 		if (! comp->tstate)
+		{
+			kfree((unsigned char *)comp->rstate);
+			kfree((unsigned char *)comp);
 			return NULL;
+		}
 		memset(comp->tstate, 0, rslots * sizeof(struct cstate));
 		comp->tslot_limit = tslots - 1;
 	}

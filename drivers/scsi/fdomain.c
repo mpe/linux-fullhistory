@@ -156,7 +156,6 @@
 
  **************************************************************************/
 
-#include <linux/config.h>
 #include <linux/sched.h>
 #include <asm/io.h>
 #include "../block/blk.h"
@@ -1456,20 +1455,18 @@ int fdomain_16x0_reset( Scsi_Cmnd *SCpnt )
    return SCSI_RESET_WAKEUP;
 }
 
-#ifdef CONFIG_BLK_DEV_SD
-
 #include "sd.h"
 #include "scsi_ioctl.h"
 
-int fdomain_16x0_biosparam( int size, int dev, int *info_array )
+int fdomain_16x0_biosparam(Scsi_Disk * disk, int dev, int *info_array )
 {
    int              drive;
+   int		    size = disk->capacity;
    unsigned char    buf[512 + sizeof( int ) * 2];
    int              *sizes    = (int *)buf;
    unsigned char    *data     = (unsigned char *)(sizes + 2);
    unsigned char    do_read[] = { READ_6, 0, 0, 0, 1, 0 };
    int              retcode;
-   Scsi_Device      *disk;
    struct drive_info {
       unsigned short cylinders;
       unsigned char  heads;
@@ -1509,7 +1506,6 @@ int fdomain_16x0_biosparam( int size, int dev, int *info_array )
     */
 
    drive = MINOR(dev) / 16;
-   disk  = rscsi_disks[ drive ].device;
 
    if (bios_major == 2) {
       i = (struct drive_info *)( (char *)bios_base + 0x1f31 + drive * 25 );
@@ -1527,7 +1523,7 @@ int fdomain_16x0_biosparam( int size, int dev, int *info_array )
       sizes[0] = 0;		/* zero bytes out */
       sizes[1] = 512;		/* one sector in */
       memcpy( data, do_read, sizeof( do_read ) );
-      retcode = kernel_scsi_ioctl( disk,
+      retcode = kernel_scsi_ioctl( disk->device,
 				   SCSI_IOCTL_SEND_COMMAND,
 				   (void *)buf );
       if (!retcode		                    /* SCSI command ok */
@@ -1588,5 +1584,3 @@ int fdomain_16x0_biosparam( int size, int dev, int *info_array )
    
    return 0;
 }
-
-#endif /* CONFIG_BLK_DEV_SD */

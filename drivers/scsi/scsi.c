@@ -142,7 +142,6 @@ static struct blist blacklist[] =
    {"MAXTOR","XT-4380S","B3C"},   /* Locks-up when LUN>0 polled. */
    {"MAXTOR","MXT-1240S","I1.2"}, /* Locks up when LUN > 0 polled */
    {"MAXTOR","XT-4170S","B5A"},   /* Locks-up sometimes when LUN>0 polled. */
-   {"MAXTOR","XT-8760S","B6B"},   /* Locks-up when LUN > 0 is polled */
    {"MAXTOR","XT-8760S","B7B"},   /* guess what? */
    {"NEC","CD-ROM DRIVE:841","1.0"},  /* Locks-up when LUN>0 polled. */
    {"RODIME","RO3000S","2.33"},  /* Locks up if polled for lun != 0 */
@@ -1493,6 +1492,9 @@ int scsi_reset (Scsi_Cmnd * SCpnt)
 				host->host_busy--;
 				}
 
+#ifdef DEBUG
+			printk("scsi reset function returned %d\n", temp);
+#endif
 			switch(temp) {
 			case SCSI_RESET_SUCCESS:
 			  cli();

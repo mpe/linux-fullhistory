@@ -1,0 +1,35 @@
+The address and IRQ used by the 3c505 driver can be configured at boot
+time by typing 'ether=eth0,15,0x300' (replace IRQ and base address with
+ones that tell how your adapter is jumpered).
+
+If no base address is given at the boot time, the driver will look for
+a 3c505 adapter at addresses 0x300, 0x280 and 0x310 in this order,
+possibly messing up any other hardware residing in these addresses.
+If a base address is given, it will be verified.
+
+There's two #defines one may need to change in the 3c505 driver:
+ELP_KERNEL_TYPE
+ this exists just to adapt the driver with pretty wide range of kernels.
+ See 3c505.c for exact information.
+
+ELP_NEED_HARD_RESET
+ some DOS drivers seem to get the adapter to some irrecoverable state
+ if the machine is "warm booted" from DOS to Linux. If you experience
+ problems when warm booting, but "cold boot" works, #defining this
+ to 1 may help.
+
+
+Known problems:
+ when 'ifconfig up' is run for the first time after bootup, the driver
+ complains:
+elp_interrupt(): irq 15 for unknown device.
+                     ^^
+ There should be the IRQ the ELPlus adapter is using. IF the IRQ doesn't
+ match, something is seriously wrong.
+
+Authors:
+ The driver is mainly written by Craig Southeren, email c/o
+ <geoffw@extro.ucc.su.OZ.AU>.
+ Parts of the driver (adapting the driver to 1.1.4+ kernels,
+ IRQ/address detection, minor changes) and this (lousy) 'readme'
+ by Juha Laiho <jlaiho@ichaos.nullnet.fi>.

@@ -31,7 +31,7 @@
 
 extern struct hd_struct * sd;
 
-typedef struct {
+typedef struct scsi_disk {
 		unsigned capacity;		/* size in blocks */
 		unsigned sector_size;		/* size in bytes */
 		Scsi_Device  *device;		

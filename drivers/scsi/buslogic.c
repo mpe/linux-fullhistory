@@ -59,7 +59,6 @@
  *    unfinished, questionable, or wrong.
  */
 
-#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -74,9 +73,7 @@
 #include "../block/blk.h"
 #include "scsi.h"
 #include "hosts.h"
-#ifdef CONFIG_BLK_DEV_SD
 # include "sd.h"
-#endif
 #define BUSLOGIC_PRIVATE_H	/* Get the "private" stuff */
 #include "buslogic.h"
 
@@ -1181,17 +1178,17 @@ int buslogic_reset(Scsi_Cmnd *SCpnt)
     return SCSI_RESET_PUNT;
 }
 
-int buslogic_biosparam(int size, int dev, int *ip)
+int buslogic_biosparam(Disk * disk, int dev, int *ip)
 {
-    /* ??? This is wrong if disk is configured for > 1G mapping.
-       Unfortunately, unlike UltraStor, I see know way of determining whether
-       > 1G mapping has been enabled. */
-#ifdef CONFIG_BLK_DEV_SD
-    int translation_algorithm;
-    Scsi_Device *disk;
+  int size = disk->capacity;
+  int translation_algorithm;
 
-    disk = rscsi_disks[MINOR(dev) >> 4].device;
-    translation_algorithm = HOSTDATA(disk->host)->bios_translation;
+  /* ??? This is wrong if disk is configured for > 1G mapping.
+     Unfortunately, unlike UltraStor, I see know way of determining whether
+     > 1G mapping has been enabled. */
+
+
+    translation_algorithm = HOSTDATA(disk->device->host)->bios_translation;
     /* ??? Should this be > 1024, or >= 1024?  Enquiring minds want to know. */
     if ((size >> 11) > 1024
 	&& translation_algorithm == BIOS_TRANSLATION_25563) {
@@ -1206,6 +1203,5 @@ int buslogic_biosparam(int size, int dev, int *ip)
     }
 /*    if (ip[2] > 1024)
       ip[2] = 1024; */
-#endif
     return 0;
 }

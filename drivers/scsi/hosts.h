@@ -21,8 +21,10 @@
 */
 
 
+/* It is senseless to set SG_ALL any higher than this - the performance
+   does not get any better, and it wastes memory */
 #define SG_NONE 0
-#define SG_ALL 0x7fff
+#define SG_ALL 0xff
 
 #define DISABLE_CLUSTERING 0
 #define ENABLE_CLUSTERING 1
@@ -41,6 +43,8 @@
 	host in a device independant matter.  There is one entry for each different
 	type of host adapter that is supported on the system.
 */
+
+typedef struct scsi_disk Disk;
 
 typedef struct     
 	{
@@ -144,7 +148,7 @@ typedef struct
 		size, device number, list (heads, sectors, cylinders)
 	*/ 
 
-	int (* bios_param)(int, int, int []);
+	int (* bios_param)(Disk *, int, int []);
 	
 	/*
 		This determines if we will use a non-interrupt driven

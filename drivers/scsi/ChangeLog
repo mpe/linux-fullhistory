@@ -1,4 +1,45 @@
+Wed Jul  6 05:45:02 1994  Eric Youngdale  (eric@esp22)
+
+	* Linux 1.1.25 released.
+
+	* sd.c, sr.c: Use new check_media_change and revalidate
+	file_operations fields.
+
+	* st.c, st.h: Add changes from Kai Makisara, dated Jun 22.
+
+	* hosts.h: Change SG_ALL back to 0xff.  Apparently soft error
+	in /dev/brain resulted in having this bumped up.
+	Change first parameter in bios_param function to be Disk * instead
+	of index into rscsi_disks.
+
+	* sd_ioctl.c: Pass pointer to rscsi_disks element instead of index
+	to array.
+
+	* sd.h: Add struct name "scsi_disk" to typedef for Scsi_Disk.
+
+	* scsi.c: Remove redundant Maxtor XT8760S from blacklist.
+	In scsi_reset, add printk when DEBUG defined.
+
+	* All low level drivers: Modify definitions of bios_param in
+	appropriate way.
+
+Thu Jun 16 10:31:59 1994  Eric Youngdale  (eric@esp22)
+
+	* Linux 1.1.20 released.
+
+	* scsi_ioctl.c: Only pass down the actual number of characters
+	required to scsi_do_cmd, not the one rounded up to a even number
+	of sectors.
+
+	* ultrastor.c: Changes from Caleb Epstein for 24f cards.  Support
+	larger SG lists.
+
+	* ultrastor.c: Changes from me - use scsi_register to register
+	host.  Add some consistency checking, 
+
 Wed Jun  1 21:12:13 1994  Eric Youngdale  (eric@esp22)
+
+	* Linux 1.1.19 released.
 
 	* scsi.h: Add new return code for reset() function:
 	SCSI_RESET_PUNT.

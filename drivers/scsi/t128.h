@@ -92,7 +92,7 @@
 
 #ifndef ASM
 int t128_abort(Scsi_Cmnd *);
-int t128_biosparam(int, int, int*);
+int t128_biosparam(Disk *, int, int*);
 int t128_detect(int);
 const char *t128_info(void);
 int t128_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));

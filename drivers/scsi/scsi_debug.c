@@ -22,6 +22,8 @@
 #include "scsi.h"
 #include "hosts.h"
 
+#include "sd.h"
+
 /* A few options that we want selected */
 
 /* Do not attempt to use a timer to simulate a real disk with latency */
@@ -541,7 +543,8 @@ int scsi_debug_abort(Scsi_Cmnd * SCpnt)
     return 0;
 }
 
-int scsi_debug_biosparam(int size, int dev, int* info){
+int scsi_debug_biosparam(Disk * disk, int dev, int* info){
+  int size = disk->capacity;
   info[0] = 32;
   info[1] = 64;
   info[2] = (size + 2047) >> 11;

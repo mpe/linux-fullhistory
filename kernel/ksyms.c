@@ -17,6 +17,7 @@
 #include <linux/sys.h>
 #include <linux/utsname.h>
 #include <linux/interrupt.h>
+#include <linux/timer.h>
 #include <linux/binfmts.h>
 #include <linux/personality.h>
 #include <linux/module.h>
@@ -122,6 +123,8 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(disable_irq),
 	X(bh_active),
 	X(bh_mask),
+	X(add_timer),
+	X(del_timer),
 
 	/* dma handling */
 	X(request_dma),
@@ -136,6 +139,7 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(xtime),
 
 	/* misc */
+	X(panic),
 	X(printk),
 	X(sprintf),
 	X(vsprintf),
