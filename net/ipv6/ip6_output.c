@@ -851,7 +851,7 @@ int ip6_append_data(struct sock *sk, int getfrag(void *from, char *to, int offse
 		inet->cork.fl = *fl;
 		np->cork.hop_limit = hlimit;
 		inet->cork.fragsize = mtu = dst_mtu(rt->u.dst.path);
-		if (dst_allfrag(&rt->u.dst))
+		if (dst_allfrag(rt->u.dst.path))
 			inet->cork.flags |= IPCORK_ALLFRAG;
 		inet->cork.length = 0;
 		sk->sk_sndmsg_page = NULL;
