@@ -1133,7 +1133,7 @@ static void __init psycho_base_address_update(struct pci_dev *pdev, int resource
 	       (((u32)(res->start - root->start)) & ~size));
 	if (resource == PCI_ROM_RESOURCE) {
 		reg |= PCI_ROM_ADDRESS_ENABLE;
-		res->flags |= PCI_ROM_ADDRESS_ENABLE;
+		res->flags |= IORESOURCE_ROM_ENABLE;
 	}
 	pci_write_config_dword(pdev, where, reg);
 

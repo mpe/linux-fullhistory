@@ -152,6 +152,8 @@ struct hotplug_slot_info {
  * @ops: pointer to the &struct hotplug_slot_ops to be used for this slot
  * @info: pointer to the &struct hotplug_slot_info for the inital values for
  * this slot.
+ * @release: called during pci_hp_deregister to free memory allocated in a
+ * hotplug_slot structure.
  * @private: used by the hotplug pci controller driver to store whatever it
  * needs.
  */

@@ -1,5 +1,5 @@
 /*
- * arch/ppc/kernel/head_e500.S
+ * arch/ppc/kernel/head_fsl_booke.S
  *
  * Kernel execution entry point code.
  *

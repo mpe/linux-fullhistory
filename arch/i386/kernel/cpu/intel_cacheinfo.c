@@ -311,8 +311,10 @@ static void __devinit cache_shared_cpu_map_setup(unsigned int cpu, int index)
 
 	if (num_threads_sharing == 1)
 		cpu_set(cpu, this_leaf->shared_cpu_map);
+#ifdef CONFIG_X86_HT
 	else if (num_threads_sharing == smp_num_siblings)
 		this_leaf->shared_cpu_map = cpu_sibling_map[cpu];
+#endif
 	else
 		printk(KERN_INFO "Number of CPUs sharing cache didn't match "
 				"any known set of CPUs\n");

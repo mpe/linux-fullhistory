@@ -46,7 +46,7 @@ pci_config_attr(irq, "%u\n");
 
 static ssize_t local_cpus_show(struct device *dev, char *buf)
 {		
-	cpumask_t mask = pcibus_to_cpumask(to_pci_dev(dev)->bus->number);
+	cpumask_t mask = pcibus_to_cpumask(to_pci_dev(dev)->bus);
 	int len = cpumask_scnprintf(buf, PAGE_SIZE-2, mask);
 	strcat(buf,"\n"); 
 	return 1+len;
@@ -481,7 +481,7 @@ static int __init pci_sysfs_init(void)
 	struct pci_dev *pdev = NULL;
 	
 	sysfs_initialized = 1;
-	while ((pdev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, pdev)) != NULL)
+	for_each_pci_dev(pdev)
 		pci_create_sysfs_dev_files(pdev);
 
 	return 0;

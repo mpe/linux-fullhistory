@@ -862,6 +862,13 @@ static void probe_hwif(ide_hwif_t *hwif)
 				drive->autotune == IDE_TUNE_AUTO)
 				/* auto-tune PIO mode */
 				hwif->tuneproc(drive, 255);
+
+			if (drive->autotune != IDE_TUNE_DEFAULT &&
+			    drive->autotune != IDE_TUNE_AUTO)
+				continue;
+
+			drive->nice1 = 1;
+
 			/*
 			 * MAJOR HACK BARF :-/
 			 *
@@ -871,9 +878,7 @@ static void probe_hwif(ide_hwif_t *hwif)
 			 * Move here to prevent module loading clashing.
 			 */
 	//		drive->autodma = hwif->autodma;
-			if ((hwif->ide_dma_check) &&
-				((drive->autotune == IDE_TUNE_DEFAULT) ||
-				(drive->autotune == IDE_TUNE_AUTO))) {
+			if (hwif->ide_dma_check) {
 				/*
 				 * Force DMAing for the beginning of the check.
 				 * Some chipsets appear to do interesting
@@ -1006,10 +1011,8 @@ static int ide_init_queue(ide_drive_t *drive)
 	blk_queue_max_hw_segments(q, max_sg_entries);
 	blk_queue_max_phys_segments(q, max_sg_entries);
 
-	/* assign drive and gendisk queue */
+	/* assign drive queue */
 	drive->queue = q;
-	if (drive->disk)
-		drive->disk->queue = drive->queue;
 
 	/* needs drive->queue to be set */
 	ide_toggle_bounce(drive, 1);
@@ -1209,8 +1212,6 @@ static int ata_lock(dev_t dev, void *data)
 	return 0;
 }
 
-extern ide_driver_t idedefault_driver;
-
 static struct kobject *ata_probe(dev_t dev, int *part, void *data)
 {
 	ide_hwif_t *hwif = data;
@@ -1218,51 +1219,65 @@ static struct kobject *ata_probe(dev_t dev, int *part, void *data)
 	ide_drive_t *drive = &hwif->drives[unit];
 	if (!drive->present)
 		return NULL;
-	if (drive->driver == &idedefault_driver) {
-		if (drive->media == ide_disk)
-			(void) request_module("ide-disk");
-		if (drive->scsi)
-			(void) request_module("ide-scsi");
-		if (drive->media == ide_cdrom || drive->media == ide_optical)
-			(void) request_module("ide-cd");
-		if (drive->media == ide_tape)
-			(void) request_module("ide-tape");
-		if (drive->media == ide_floppy)
-			(void) request_module("ide-floppy");
-	}
-	if (drive->driver == &idedefault_driver)
-		return NULL;
-	*part &= (1 << PARTN_BITS) - 1;
-	return get_disk(drive->disk);
+
+	if (drive->media == ide_disk)
+		request_module("ide-disk");
+	if (drive->scsi)
+		request_module("ide-scsi");
+	if (drive->media == ide_cdrom || drive->media == ide_optical)
+		request_module("ide-cd");
+	if (drive->media == ide_tape)
+		request_module("ide-tape");
+	if (drive->media == ide_floppy)
+		request_module("ide-floppy");
+
+	return NULL;
 }
 
-static int alloc_disks(ide_hwif_t *hwif)
+static struct kobject *exact_match(dev_t dev, int *part, void *data)
 {
-	unsigned int unit;
-	struct gendisk *disks[MAX_DRIVES];
-
-	for (unit = 0; unit < MAX_DRIVES; unit++) {
-		disks[unit] = alloc_disk(1 << PARTN_BITS);
-		if (!disks[unit])
-			goto Enomem;
-	}
-	for (unit = 0; unit < MAX_DRIVES; ++unit) {
-		ide_drive_t *drive = &hwif->drives[unit];
-		struct gendisk *disk = disks[unit];
-		disk->major  = hwif->major;
-		disk->first_minor = unit << PARTN_BITS;
-		sprintf(disk->disk_name,"hd%c",'a'+hwif->index*MAX_DRIVES+unit);
-		disk->fops = ide_fops;
-		disk->private_data = drive;
-		drive->disk = disk;
-	}
-	return 0;
-Enomem:
-	printk(KERN_WARNING "(ide::init_gendisk) Out of memory\n");
-	while (unit--)
-		put_disk(disks[unit]);
-	return -ENOMEM;
+	struct gendisk *p = data;
+	*part &= (1 << PARTN_BITS) - 1;
+	return &p->kobj;
 }
+
+static int exact_lock(dev_t dev, void *data)
+{
+	struct gendisk *p = data;
+
+	if (!get_disk(p))
+		return -1;
+	return 0;
+}
+
+void ide_register_region(struct gendisk *disk)
+{
+	blk_register_region(MKDEV(disk->major, disk->first_minor),
+			    disk->minors, NULL, exact_match, exact_lock, disk);
+}
+
+EXPORT_SYMBOL_GPL(ide_register_region);
+
+void ide_unregister_region(struct gendisk *disk)
+{
+	blk_unregister_region(MKDEV(disk->major, disk->first_minor),
+			      disk->minors);
+}
+
+EXPORT_SYMBOL_GPL(ide_unregister_region);
+
+void ide_init_disk(struct gendisk *disk, ide_drive_t *drive)
+{
+	ide_hwif_t *hwif = drive->hwif;
+	unsigned int unit = (drive->select.all >> 4) & 1;
+
+	disk->major = hwif->major;
+	disk->first_minor = unit << PARTN_BITS;
+	sprintf(disk->disk_name, "hd%c", 'a' + hwif->index * MAX_DRIVES + unit);
+	disk->queue = drive->queue;
+}
+
+EXPORT_SYMBOL_GPL(ide_init_disk);
 
 static void drive_release_dev (struct device *dev)
 {
@@ -1304,7 +1319,7 @@ static void init_gendisk (ide_hwif_t *hwif)
 
 static int hwif_init(ide_hwif_t *hwif)
 {
-	int old_irq, unit;
+	int old_irq;
 
 	/* Return success if no device is connected */
 	if (!hwif->present)
@@ -1340,9 +1355,6 @@ static int hwif_init(ide_hwif_t *hwif)
 		printk(KERN_ERR "%s: unable to allocate SG table.\n", hwif->name);
 		goto out;
 	}
-
-	if (alloc_disks(hwif) < 0)
-		goto out;
 	
 	if (init_irq(hwif) == 0)
 		goto done;
@@ -1355,12 +1367,12 @@ static int hwif_init(ide_hwif_t *hwif)
 	if (!(hwif->irq = ide_default_irq(hwif->io_ports[IDE_DATA_OFFSET]))) {
 		printk("%s: Disabled unable to get IRQ %d.\n",
 			hwif->name, old_irq);
-		goto out_disks;
+		goto out;
 	}
 	if (init_irq(hwif)) {
 		printk("%s: probed IRQ %d and default IRQ %d failed.\n",
 			hwif->name, old_irq, hwif->irq);
-		goto out_disks;
+		goto out;
 	}
 	printk("%s: probed IRQ %d failed, using default.\n",
 		hwif->name, hwif->irq);
@@ -1370,12 +1382,6 @@ done:
 	hwif->present = 1;	/* success */
 	return 1;
 
-out_disks:
-	for (unit = 0; unit < MAX_DRIVES; unit++) {
-		struct gendisk *disk = hwif->drives[unit].disk;
-		hwif->drives[unit].disk = NULL;
-		put_disk(disk);
-	}
 out:
 	unregister_blkdev(hwif->major, hwif->name);
 	return 0;

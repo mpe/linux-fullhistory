@@ -158,7 +158,7 @@ static int rtc_remove(struct amba_device *dev)
 
 static struct timespec rtc_delta;
 
-static int rtc_suspend(struct amba_device *dev, u32 state)
+static int rtc_suspend(struct amba_device *dev, pm_message_t state)
 {
 	struct timespec rtc;
 

@@ -756,7 +756,6 @@ typedef struct ide_drive_s {
 	struct list_head list;
 	struct device	gendev;
 	struct semaphore gendev_rel_sem;	/* to deal with device release() */
-	struct gendisk *disk;
 } ide_drive_t;
 
 #define IDE_CHIPSET_PCI_MASK	\
@@ -1327,7 +1326,7 @@ extern irqreturn_t ide_intr(int irq, void *dev_id, struct pt_regs *regs);
 extern void do_ide_request(request_queue_t *);
 extern void ide_init_subdrivers(void);
 
-extern struct block_device_operations ide_fops[];
+void ide_init_disk(struct gendisk *, ide_drive_t *);
 
 extern int ata_attach(ide_drive_t *);
 
@@ -1441,6 +1440,9 @@ static inline void ide_release_dma(ide_hwif_t *drive) {;}
 extern int ide_hwif_request_regions(ide_hwif_t *hwif);
 extern void ide_hwif_release_regions(ide_hwif_t* hwif);
 extern void ide_unregister (unsigned int index);
+
+void ide_register_region(struct gendisk *);
+void ide_unregister_region(struct gendisk *);
 
 void ide_undecoded_slave(ide_hwif_t *);
 

@@ -410,6 +410,17 @@ static void try_to_flush_leftover_data (ide_drive_t *drive)
 	}
 }
 
+static void ide_kill_rq(ide_drive_t *drive, struct request *rq)
+{
+	if (rq->rq_disk) {
+		ide_driver_t *drv;
+
+		drv = *(ide_driver_t **)rq->rq_disk->private_data;
+		drv->end_request(drive, 0, 0);
+	} else
+		ide_end_request(drive, 0, 0);
+}
+
 static ide_startstop_t ide_ata_error(ide_drive_t *drive, struct request *rq, u8 stat, u8 err)
 {
 	ide_hwif_t *hwif = drive->hwif;
@@ -444,7 +455,7 @@ static ide_startstop_t ide_ata_error(ide_drive_t *drive, struct request *rq, u8 
 		hwif->OUTB(WIN_IDLEIMMEDIATE, IDE_COMMAND_REG);
 
 	if (rq->errors >= ERROR_MAX || blk_noretry_request(rq))
-		drive->driver->end_request(drive, 0, 0);
+		ide_kill_rq(drive, rq);
 	else {
 		if ((rq->errors & ERROR_RESET) == ERROR_RESET) {
 			++rq->errors;
@@ -473,7 +484,7 @@ static ide_startstop_t ide_atapi_error(ide_drive_t *drive, struct request *rq, u
 		hwif->OUTB(WIN_IDLEIMMEDIATE, IDE_COMMAND_REG);
 
 	if (rq->errors >= ERROR_MAX) {
-		drive->driver->end_request(drive, 0, 0);
+		ide_kill_rq(drive, rq);
 	} else {
 		if ((rq->errors & ERROR_RESET) == ERROR_RESET) {
 			++rq->errors;
@@ -525,7 +536,13 @@ ide_startstop_t ide_error (ide_drive_t *drive, const char *msg, u8 stat)
 		return ide_stopped;
 	}
 
-	return drive->driver->error(drive, rq, stat, err);
+	if (rq->rq_disk) {
+		ide_driver_t *drv;
+
+		drv = *(ide_driver_t **)rq->rq_disk->private_data;
+		return drv->error(drive, rq, stat, err);
+	} else
+		return __ide_error(drive, rq, stat, err);
 }
 
 EXPORT_SYMBOL_GPL(ide_error);
@@ -535,7 +552,8 @@ ide_startstop_t __ide_abort(ide_drive_t *drive, struct request *rq)
 	if (drive->media != ide_disk)
 		rq->errors |= ERROR_RESET;
 
-	DRIVER(drive)->end_request(drive, 0, 0);
+	ide_kill_rq(drive, rq);
+
 	return ide_stopped;
 }
 
@@ -569,7 +587,13 @@ ide_startstop_t ide_abort(ide_drive_t *drive, const char *msg)
 		return ide_stopped;
 	}
 
-	return drive->driver->abort(drive, rq);
+	if (rq->rq_disk) {
+		ide_driver_t *drv;
+
+		drv = *(ide_driver_t **)rq->rq_disk->private_data;
+		return drv->abort(drive, rq);
+	} else
+		return __ide_abort(drive, rq);
 }
 
 /**
@@ -622,7 +646,7 @@ static ide_startstop_t drive_cmd_intr (ide_drive_t *drive)
 			udelay(100);
 	}
 
-	if (!OK_STAT(stat, READY_STAT, BAD_STAT) && DRIVER(drive) != NULL)
+	if (!OK_STAT(stat, READY_STAT, BAD_STAT))
 		return ide_error(drive, "drive_cmd", stat);
 		/* calls ide_end_drive_cmd */
 	ide_end_drive_cmd(drive, stat, hwif->INB(IDE_ERROR_REG));
@@ -922,6 +946,8 @@ static ide_startstop_t start_request (ide_drive_t *drive, struct request *rq)
 		return startstop;
 	}
 	if (!drive->special.all) {
+		ide_driver_t *drv;
+
 		if (rq->flags & (REQ_DRIVE_CMD | REQ_DRIVE_TASK))
 			return execute_drive_cmd(drive, rq);
 		else if (rq->flags & REQ_DRIVE_TASKFILE)
@@ -937,11 +963,13 @@ static ide_startstop_t start_request (ide_drive_t *drive, struct request *rq)
 				ide_complete_pm_request(drive, rq);
 			return startstop;
 		}
-		return (DRIVER(drive)->do_request(drive, rq, block));
+
+		drv = *(ide_driver_t **)rq->rq_disk->private_data;
+		return drv->do_request(drive, rq, block);
 	}
 	return do_special(drive);
 kill_rq:
-	DRIVER(drive)->end_request(drive, 0, 0);
+	ide_kill_rq(drive, rq);
 	return ide_stopped;
 }
 
@@ -1615,8 +1643,6 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 
 	rq->errors = 0;
 	rq->rq_status = RQ_ACTIVE;
-
-	rq->rq_disk = drive->disk;
 
 	/*
 	 * we need to hold an extra reference to request for safe inspection

@@ -120,6 +120,9 @@
 			       _PAGE_WRENABLE | _PAGE_NO_CACHE | _PAGE_GUARDED)
 #define PAGE_KERNEL_EXEC __pgprot(_PAGE_BASE | _PAGE_WRENABLE | _PAGE_EXEC)
 
+#define PAGE_AGP	__pgprot(_PAGE_BASE | _PAGE_WRENABLE | _PAGE_NO_CACHE)
+#define HAVE_PAGE_AGP
+
 /*
  * This bit in a hardware PTE indicates that the page is *not* executable.
  */

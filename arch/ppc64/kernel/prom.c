@@ -601,8 +601,19 @@ void __init finish_device_tree(void)
 	/* Initialize virtual IRQ map */
 	virt_irq_init();
 
-	/* Finish device-tree (pre-parsing some properties etc...) */
+	/*
+	 * Finish device-tree (pre-parsing some properties etc...)
+	 * We do this in 2 passes. One with "measure_only" set, which
+	 * will only measure the amount of memory needed, then we can
+	 * allocate that memory, and call finish_node again. However,
+	 * we must be careful as most routines will fail nowadays when
+	 * prom_alloc() returns 0, so we must make sure our first pass
+	 * doesn't start at 0. We pre-initialize size to 16 for that
+	 * reason and then remove those additional 16 bytes
+	 */
+	size = 16;
 	finish_node(allnodes, &size, NULL, 0, 0, 1);
+	size -= 16;
 	end = start = (unsigned long)abs_to_virt(lmb_alloc(size, 128));
 	finish_node(allnodes, &end, NULL, 0, 0, 0);
 	BUG_ON(end != start + size);

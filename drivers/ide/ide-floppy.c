@@ -276,6 +276,8 @@ typedef struct {
  */
 typedef struct ide_floppy_obj {
 	ide_drive_t	*drive;
+	ide_driver_t	*driver;
+	struct gendisk	*disk;
 	struct kref	kref;
 
 	/* Current packet command */
@@ -519,7 +521,8 @@ static DECLARE_MUTEX(idefloppy_ref_sem);
 
 #define to_ide_floppy(obj) container_of(obj, struct ide_floppy_obj, kref)
 
-#define ide_floppy_g(disk)	((disk)->private_data)
+#define ide_floppy_g(disk) \
+	container_of((disk)->private_data, struct ide_floppy_obj, driver)
 
 static struct ide_floppy_obj *ide_floppy_get(struct gendisk *disk)
 {
@@ -680,9 +683,12 @@ static void idefloppy_update_buffers (ide_drive_t *drive, idefloppy_pc_t *pc)
  */
 static void idefloppy_queue_pc_head (ide_drive_t *drive,idefloppy_pc_t *pc,struct request *rq)
 {
+	struct ide_floppy_obj *floppy = drive->driver_data;
+
 	ide_init_drive_cmd(rq);
 	rq->buffer = (char *) pc;
 	rq->flags = REQ_SPECIAL;	//rq->cmd = IDEFLOPPY_PC_RQ;
+	rq->rq_disk = floppy->disk;
 	(void) ide_do_drive_cmd(drive, rq, ide_preempt);
 }
 
@@ -1274,7 +1280,8 @@ static ide_startstop_t idefloppy_do_request (ide_drive_t *drive, struct request 
 	unsigned long block = (unsigned long)block_s;
 
 	debug_log(KERN_INFO "rq_status: %d, dev: %s, flags: %lx, errors: %d\n",
-			rq->rq_status, rq->rq_disk->disk_name,
+			rq->rq_status,
+			rq->rq_disk ? rq->rq_disk->disk_name ? "?",
 			rq->flags, rq->errors);
 	debug_log(KERN_INFO "sector: %ld, nr_sectors: %ld, "
 			"current_nr_sectors: %d\n", (long)rq->sector,
@@ -1329,11 +1336,13 @@ static ide_startstop_t idefloppy_do_request (ide_drive_t *drive, struct request 
  */
 static int idefloppy_queue_pc_tail (ide_drive_t *drive,idefloppy_pc_t *pc)
 {
+	struct ide_floppy_obj *floppy = drive->driver_data;
 	struct request rq;
 
 	ide_init_drive_cmd (&rq);
 	rq.buffer = (char *) pc;
 	rq.flags = REQ_SPECIAL;		//	rq.cmd = IDEFLOPPY_PC_RQ;
+	rq.rq_disk = floppy->disk;
 
 	return ide_do_drive_cmd(drive, &rq, ide_wait);
 }
@@ -1358,7 +1367,7 @@ static int idefloppy_get_flexible_disk_page (ide_drive_t *drive)
 	}
 	header = (idefloppy_mode_parameter_header_t *) pc.buffer;
 	floppy->wp = header->wp;
-	set_disk_ro(drive->disk, floppy->wp);
+	set_disk_ro(floppy->disk, floppy->wp);
 	page = (idefloppy_flexible_disk_page_t *) (header + 1);
 
 	page->transfer_rate = ntohs(page->transfer_rate);
@@ -1424,7 +1433,7 @@ static int idefloppy_get_capacity (ide_drive_t *drive)
 	drive->bios_cyl = 0;
 	drive->bios_head = drive->bios_sect = 0;
 	floppy->blocks = floppy->bs_factor = 0;
-	set_capacity(drive->disk, 0);
+	set_capacity(floppy->disk, 0);
 
 	idefloppy_create_read_capacity_cmd(&pc);
 	if (idefloppy_queue_pc_tail(drive, &pc)) {
@@ -1498,7 +1507,7 @@ static int idefloppy_get_capacity (ide_drive_t *drive)
 		(void) idefloppy_get_flexible_disk_page(drive);
 	}
 
-	set_capacity(drive->disk, floppy->blocks * floppy->bs_factor);
+	set_capacity(floppy->disk, floppy->blocks * floppy->bs_factor);
 	return rc;
 }
 
@@ -1859,7 +1868,7 @@ static void idefloppy_setup (ide_drive_t *drive, idefloppy_floppy_t *floppy)
 static int idefloppy_cleanup (ide_drive_t *drive)
 {
 	idefloppy_floppy_t *floppy = drive->driver_data;
-	struct gendisk *g = drive->disk;
+	struct gendisk *g = floppy->disk;
 
 	if (ide_unregister_subdriver(drive))
 		return 1;
@@ -1875,11 +1884,11 @@ static void ide_floppy_release(struct kref *kref)
 {
 	struct ide_floppy_obj *floppy = to_ide_floppy(kref);
 	ide_drive_t *drive = floppy->drive;
-	struct gendisk *g = drive->disk;
+	struct gendisk *g = floppy->disk;
 
 	drive->driver_data = NULL;
 	g->private_data = NULL;
-	g->fops = ide_fops;
+	put_disk(g);
 	kfree(floppy);
 }
 
@@ -2116,7 +2125,8 @@ static struct block_device_operations idefloppy_ops = {
 static int idefloppy_attach (ide_drive_t *drive)
 {
 	idefloppy_floppy_t *floppy;
-	struct gendisk *g = drive->disk;
+	struct gendisk *g;
+
 	if (!strstr("ide-floppy", drive->driver_req))
 		goto failed;
 	if (!drive->present)
@@ -2135,10 +2145,16 @@ static int idefloppy_attach (ide_drive_t *drive)
 		printk (KERN_ERR "ide-floppy: %s: Can't allocate a floppy structure\n", drive->name);
 		goto failed;
 	}
+
+	g = alloc_disk(1 << PARTN_BITS);
+	if (!g)
+		goto out_free_floppy;
+
+	ide_init_disk(g, drive);
+
 	if (ide_register_subdriver(drive, &idefloppy_driver)) {
 		printk (KERN_ERR "ide-floppy: %s: Failed to register the driver with ide.c\n", drive->name);
-		kfree (floppy);
-		goto failed;
+		goto out_put_disk;
 	}
 
 	memset(floppy, 0, sizeof(*floppy));
@@ -2146,6 +2162,10 @@ static int idefloppy_attach (ide_drive_t *drive)
 	kref_init(&floppy->kref);
 
 	floppy->drive = drive;
+	floppy->driver = &idefloppy_driver;
+	floppy->disk = g;
+
+	g->private_data = &floppy->driver;
 
 	drive->driver_data = floppy;
 
@@ -2157,10 +2177,14 @@ static int idefloppy_attach (ide_drive_t *drive)
 	strcpy(g->devfs_name, drive->devfs_name);
 	g->flags = drive->removable ? GENHD_FL_REMOVABLE : 0;
 	g->fops = &idefloppy_ops;
-	g->private_data = floppy;
 	drive->attach = 1;
 	add_disk(g);
 	return 0;
+
+out_put_disk:
+	put_disk(g);
+out_free_floppy:
+	kfree(floppy);
 failed:
 	return 1;
 }

@@ -67,45 +67,4 @@
 #define POODLE_SCOOP_IO_DIR	( POODLE_SCOOP_VPEN | POODLE_SCOOP_HS_OUT )
 #define POODLE_SCOOP_IO_OUT	( 0 )
 
-/*
- * Flash Memory mappings
- *
- * We have the following mapping:
- *                      phys            virt
- *      boot ROM        00000000        ef800000
- */
-#define FLASH_MEM_BASE	0xa0000a00
-#define	FLASH_DATA(adr) (*(volatile unsigned int*)(FLASH_MEM_BASE+(adr)))
-#define	FLASH_DATA_F(adr) (*(volatile float32 *)(FLASH_MEM_BASE+(adr)))
-#define FLASH_MAGIC_CHG(a,b,c,d) ( ( d << 24 ) | ( c << 16 )  | ( b << 8 ) | a )
-
-/* COMADJ */
-#define FLASH_COMADJ_MAJIC	FLASH_MAGIC_CHG('C','M','A','D')
-#define	FLASH_COMADJ_MAGIC_ADR	0x00
-#define	FLASH_COMADJ_DATA_ADR	0x04
-
-/* UUID */
-#define FLASH_UUID_MAJIC	FLASH_MAGIC_CHG('U','U','I','D')
-#define	FLASH_UUID_MAGIC_ADR	0x08
-#define	FLASH_UUID_DATA_ADR	0x0C
-
-/* TOUCH PANEL */
-#define FLASH_TOUCH_MAJIC	FLASH_MAGIC_CHG('T','U','C','H')
-#define	FLASH_TOUCH_MAGIC_ADR	0x1C
-#define	FLASH_TOUCH_XP_DATA_ADR	0x20
-#define	FLASH_TOUCH_YP_DATA_ADR	0x24
-#define	FLASH_TOUCH_XD_DATA_ADR	0x28
-#define	FLASH_TOUCH_YD_DATA_ADR	0x2C
-
-/* AD */
-#define FLASH_AD_MAJIC	FLASH_MAGIC_CHG('B','V','A','D')
-#define	FLASH_AD_MAGIC_ADR	0x30
-#define	FLASH_AD_DATA_ADR	0x34
-
-/* PHAD */
-#define FLASH_PHAD_MAJIC	FLASH_MAGIC_CHG('P','H','A','D')
-#define	FLASH_PHAD_MAGIC_ADR	0x38
-#define	FLASH_PHAD_DATA_ADR	0x3C
-
-
 #endif /* __ASM_ARCH_POODLE_H  */

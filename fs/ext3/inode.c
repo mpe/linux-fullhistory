@@ -462,26 +462,22 @@ static unsigned long ext3_find_near(struct inode *inode, Indirect *ind)
 static int ext3_find_goal(struct inode *inode, long block, Indirect chain[4],
 			  Indirect *partial, unsigned long *goal)
 {
-	struct ext3_inode_info *ei = EXT3_I(inode);
-	/* Writer: ->i_next_alloc* */
-	if ((block == ei->i_next_alloc_block + 1)&& ei->i_next_alloc_goal) {
-		ei->i_next_alloc_block++;
-		ei->i_next_alloc_goal++;
-	}
-	/* Writer: end */
-	/* Reader: pointers, ->i_next_alloc* */
-	if (verify_chain(chain, partial)) {
-		/*
-		 * try the heuristic for sequential allocation,
-		 * failing that at least try to get decent locality.
-		 */
-		if (block == ei->i_next_alloc_block)
-			*goal = ei->i_next_alloc_goal;
-		if (!*goal)
-			*goal = ext3_find_near(inode, partial);
+	struct ext3_block_alloc_info *block_i =  EXT3_I(inode)->i_block_alloc_info;
+
+	/*
+	 * try the heuristic for sequential allocation,
+	 * failing that at least try to get decent locality.
+	 */
+	if (block_i && (block == block_i->last_alloc_logical_block + 1)
+		&& (block_i->last_alloc_physical_block != 0)) {
+		*goal = block_i->last_alloc_physical_block + 1;
 		return 0;
 	}
-	/* Reader: end */
+
+	if (verify_chain(chain, partial)) {
+		*goal = ext3_find_near(inode, partial);
+		return 0;
+	}
 	return -EAGAIN;
 }
 
@@ -599,7 +595,7 @@ static int ext3_splice_branch(handle_t *handle, struct inode *inode, long block,
 {
 	int i;
 	int err = 0;
-	struct ext3_inode_info *ei = EXT3_I(inode);
+	struct ext3_block_alloc_info *block_i = EXT3_I(inode)->i_block_alloc_info;
 
 	/*
 	 * If we're splicing into a [td]indirect block (as opposed to the
@@ -614,7 +610,6 @@ static int ext3_splice_branch(handle_t *handle, struct inode *inode, long block,
 	}
 	/* Verify that place we are splicing to is still there and vacant */
 
-	/* Writer: pointers, ->i_next_alloc* */
 	if (!verify_chain(chain, where-1) || *where->p)
 		/* Writer: end */
 		goto changed;
@@ -622,9 +617,16 @@ static int ext3_splice_branch(handle_t *handle, struct inode *inode, long block,
 	/* That's it */
 
 	*where->p = where->key;
-	ei->i_next_alloc_block = block;
-	ei->i_next_alloc_goal = le32_to_cpu(where[num-1].key);
-	/* Writer: end */
+
+	/*
+	 * update the most recently allocated logical & physical block
+	 * in i_block_alloc_info, to assist find the proper goal block for next
+	 * allocation
+	 */
+	if (block_i) {
+		block_i->last_alloc_logical_block = block;
+		block_i->last_alloc_physical_block = le32_to_cpu(where[num-1].key);
+	}
 
 	/* We are done with atomic stuff, now do the rest of housekeeping */
 
@@ -752,6 +754,12 @@ out:
 
 	goal = 0;
 	down(&ei->truncate_sem);
+
+	/* lazy initialize the block allocation info here if necessary */
+	if (S_ISREG(inode->i_mode) && (!ei->i_block_alloc_info)) {
+		ext3_init_block_alloc_info(inode);
+	}
+
 	if (ext3_find_goal(inode, iblock, chain, partial, &goal) < 0) {
 		up(&ei->truncate_sem);
 		goto changed;
@@ -2149,8 +2157,6 @@ void ext3_truncate(struct inode * inode)
 	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
 		return;
 
-	ext3_discard_reservation(inode);
-
 	/*
 	 * We have to lock the EOF page here, because lock_page() nests
 	 * outside journal_start().
@@ -2275,6 +2281,9 @@ do_indirects:
 		case EXT3_TIND_BLOCK:
 			;
 	}
+
+	ext3_discard_reservation(inode);
+
 	up(&ei->truncate_sem);
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME_SEC;
 	ext3_mark_inode_dirty(handle, inode);
@@ -2494,7 +2503,7 @@ void ext3_read_inode(struct inode * inode)
 	ei->i_acl = EXT3_ACL_NOT_CACHED;
 	ei->i_default_acl = EXT3_ACL_NOT_CACHED;
 #endif
-	ei->i_rsv_window.rsv_end = EXT3_RESERVE_WINDOW_NOT_ALLOCATED;
+	ei->i_block_alloc_info = NULL;
 
 	if (__ext3_get_inode_loc(inode, &iloc, 0))
 		goto bad_inode;
@@ -2515,8 +2524,6 @@ void ext3_read_inode(struct inode * inode)
 	inode->i_atime.tv_nsec = inode->i_ctime.tv_nsec = inode->i_mtime.tv_nsec = 0;
 
 	ei->i_state = 0;
-	ei->i_next_alloc_block = 0;
-	ei->i_next_alloc_goal = 0;
 	ei->i_dir_start_lookup = 0;
 	ei->i_dtime = le32_to_cpu(raw_inode->i_dtime);
 	/* We now have enough fields to check if the inode was active or not.
@@ -2556,10 +2563,6 @@ void ext3_read_inode(struct inode * inode)
 	ei->i_disksize = inode->i_size;
 	inode->i_generation = le32_to_cpu(raw_inode->i_generation);
 	ei->i_block_group = iloc.block_group;
-	ei->i_rsv_window.rsv_start = 0;
-	ei->i_rsv_window.rsv_end= 0;
-	atomic_set(&ei->i_rsv_window.rsv_goal_size, EXT3_DEFAULT_RESERVE_BLOCKS);
-	seqlock_init(&ei->i_rsv_window.rsv_seqlock);
 	/*
 	 * NOTE! The in-memory inode i_data array is in little-endian order
 	 * even on big-endian machines: we do NOT byteswap the block numbers!

@@ -395,10 +395,8 @@ static void ext3_put_super (struct super_block * sb)
 	percpu_counter_destroy(&sbi->s_dirs_counter);
 	brelse(sbi->s_sbh);
 #ifdef CONFIG_QUOTA
-	for (i = 0; i < MAXQUOTAS; i++) {
-		if (sbi->s_qf_names[i])
-			kfree(sbi->s_qf_names[i]);
-	}
+	for (i = 0; i < MAXQUOTAS; i++)
+		kfree(sbi->s_qf_names[i]);
 #endif
 
 	/* Debugging code just in case the in-memory inode orphan list
@@ -441,7 +439,7 @@ static struct inode *ext3_alloc_inode(struct super_block *sb)
 	ei->i_acl = EXT3_ACL_NOT_CACHED;
 	ei->i_default_acl = EXT3_ACL_NOT_CACHED;
 #endif
-	ei->i_rsv_window.rsv_end = EXT3_RESERVE_WINDOW_NOT_ALLOCATED;
+	ei->i_block_alloc_info = NULL;
 	ei->vfs_inode.i_version = 1;
 	return &ei->vfs_inode;
 }
@@ -485,6 +483,7 @@ static void destroy_inodecache(void)
 
 static void ext3_clear_inode(struct inode *inode)
 {
+	struct ext3_block_alloc_info *rsv = EXT3_I(inode)->i_block_alloc_info;
 #ifdef CONFIG_EXT3_FS_POSIX_ACL
        if (EXT3_I(inode)->i_acl &&
            EXT3_I(inode)->i_acl != EXT3_ACL_NOT_CACHED) {
@@ -498,6 +497,8 @@ static void ext3_clear_inode(struct inode *inode)
        }
 #endif
 	ext3_discard_reservation(inode);
+	EXT3_I(inode)->i_block_alloc_info = NULL;
+	kfree(rsv);
 }
 
 #ifdef CONFIG_QUOTA
@@ -880,10 +881,8 @@ clear_qf_name:
 					"quota turned on.\n");
 				return 0;
 			}
-			if (sbi->s_qf_names[qtype]) {
-				kfree(sbi->s_qf_names[qtype]);
-				sbi->s_qf_names[qtype] = NULL;
-			}
+			kfree(sbi->s_qf_names[qtype]);
+			sbi->s_qf_names[qtype] = NULL;
 			break;
 		case Opt_jqfmt_vfsold:
 			sbi->s_jquota_fmt = QFMT_VFS_OLD;
@@ -1506,8 +1505,8 @@ static int ext3_fill_super (struct super_block *sb, void *data, int silent)
 	 * _much_ simpler. */
 	sbi->s_rsv_window_head.rsv_start = EXT3_RESERVE_WINDOW_NOT_ALLOCATED;
 	sbi->s_rsv_window_head.rsv_end = EXT3_RESERVE_WINDOW_NOT_ALLOCATED;
-	atomic_set(&sbi->s_rsv_window_head.rsv_alloc_hit, 0);
-	atomic_set(&sbi->s_rsv_window_head.rsv_goal_size, 0);
+	sbi->s_rsv_window_head.rsv_alloc_hit = 0;
+	sbi->s_rsv_window_head.rsv_goal_size = 0;
 	ext3_rsv_window_add(sb, &sbi->s_rsv_window_head);
 
 	/*

@@ -98,17 +98,6 @@ static void rpaphp_release_slot(struct hotplug_slot *hotplug_slot)
 
 void dealloc_slot_struct(struct slot *slot)
 {
-	struct list_head *ln, *n;
-
-	if (slot->dev_type == PCI_DEV) {
-		list_for_each_safe (ln, n, &slot->dev.pci_funcs) {
-			struct rpaphp_pci_func *func;
-
-			func = list_entry(ln, struct rpaphp_pci_func, sibling);
-			kfree(func);
-		}
-	}
-
 	kfree(slot->hotplug_slot->info);
 	kfree(slot->hotplug_slot->name);
 	kfree(slot->hotplug_slot);

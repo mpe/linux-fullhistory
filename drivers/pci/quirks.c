@@ -19,8 +19,6 @@
 #include <linux/init.h>
 #include <linux/delay.h>
 
-#undef DEBUG
-
 /* Deal with broken BIOS'es that neglect to enable passive release,
    which can cause problems in combination with the 82441FX/PPro MTRRs */
 static void __devinit quirk_passive_release(struct pci_dev *dev)
@@ -541,7 +539,7 @@ static void __devinit quirk_cardbus_legacy(struct pci_dev *dev)
 		return;
 	pci_write_config_dword(dev, PCI_CB_LEGACY_MODE_BASE, 0);
 }
-DECLARE_PCI_FIXUP_FINAL(PCI_ANY_ID,		PCI_ANY_ID,			quirk_cardbus_legacy );
+DECLARE_PCI_FIXUP_FINAL(PCI_ANY_ID, PCI_ANY_ID, quirk_cardbus_legacy);
 
 /*
  * Following the PCI ordering rules is optional on the AMD762. I'm not
@@ -659,7 +657,7 @@ static void __devinit quirk_ide_bases(struct pci_dev *dev)
        printk(KERN_INFO "PCI: Ignoring BAR%d-%d of IDE controller %s\n",
               first_bar, last_bar, pci_name(dev));
 }
-DECLARE_PCI_FIXUP_HEADER(PCI_ANY_ID,             PCI_ANY_ID,                     quirk_ide_bases );
+DECLARE_PCI_FIXUP_HEADER(PCI_ANY_ID, PCI_ANY_ID, quirk_ide_bases);
 
 /*
  *	Ensure C0 rev restreaming is off. This is normally done by
@@ -700,7 +698,7 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA,	PCI_ANY_ID,                     quir
 /*
  *	Serverworks CSB5 IDE does not fully support native mode
  */
-static void __init quirk_svwks_csb5ide(struct pci_dev *pdev)
+static void __devinit quirk_svwks_csb5ide(struct pci_dev *pdev)
 {
 	u8 prog;
 	pci_read_config_byte(pdev, PCI_CLASS_PROG, &prog);
@@ -787,6 +785,7 @@ static void __init asus_hides_smbus_hostbridge(struct pci_dev *dev)
 		if (dev->device == PCI_DEVICE_ID_INTEL_82855GM_HB)
 			switch (dev->subsystem_device) {
 			case 0x1751: /* M2N notebook */
+			case 0x1821: /* M5N notebook */
 				asus_hides_smbus = 1;
 			}
 		if (dev->device == PCI_DEVICE_ID_INTEL_82855PM_HB)
