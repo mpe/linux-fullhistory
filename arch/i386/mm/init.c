@@ -26,13 +26,6 @@
 #include <asm/pgtable.h>
 #include <asm/dma.h>
 
-/*
- * The SMP kernel can't handle the 4MB page table optimizations yet
- */
-#ifdef __SMP__
-#undef USE_PENTIUM_MM
-#endif
-
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
 
@@ -154,7 +147,12 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	/* unmap the original low memory mappings */
 	pgd_val(pg_dir[0]) = 0;
 	while (address < end_mem) {
-#ifdef USE_PENTIUM_MM
+		/*
+		 * The following code enabled 4MB page tables for the
+		 * Intel Pentium cpu, unfortunately the SMP kernel can't
+		 * handle the 4MB page table optimizations yet
+		 */
+#ifndef __SMP__
 		/*
 		 * This will create page tables that
 		 * span up to the next 4MB virtual

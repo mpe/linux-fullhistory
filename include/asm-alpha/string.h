@@ -27,6 +27,12 @@ extern void * __memcpy(void *, const void *, size_t);
  __constant_c_memset((s),(0x0101010101010101UL*(unsigned char)c),(count)) : \
  __memset((s),(c),(count)))
 
+#define __HAVE_ARCH_STRCPY
+#define __HAVE_ARCH_STRNCPY
+#define __HAVE_ARCH_STRCAT
+#define __HAVE_ARCH_STRNCAT
+#define __HAVE_ARCH_STRCHR
+#define __HAVE_ARCH_STRRCHR
 #define __HAVE_ARCH_STRLEN
 
 #endif /* __KERNEL__ */

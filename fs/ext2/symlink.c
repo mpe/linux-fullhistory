@@ -21,6 +21,7 @@
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
 #include <linux/sched.h>
+#include <linux/mm.h>
 #include <linux/stat.h>
 
 static int ext2_readlink (struct inode *, char *, int);

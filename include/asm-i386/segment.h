@@ -36,7 +36,7 @@ extern int __verify_write(const void *, unsigned long);
 #else
 #define __access_ok(type,addr,size) \
 (__kernel_ok || (__user_ok(addr,size) && \
-  ((type) == VERIFY_READ || __verify_write((void *)(addr),(size)))))
+  ((type) == VERIFY_READ || wp_works_ok || __verify_write((void *)(addr),(size)))))
 #endif /* CPU */
 
 #define access_ok(type,addr,size) \
@@ -140,7 +140,7 @@ __asm__ __volatile__( \
 	"decl %2\n" \
 	"3:\tlea 0(%3,%1,4),%0" \
 	:"=d" (size) \
-	:"c" (size >> 2), "m" (current->tss.ex), "r" (size & 3), \
+	:"c" (size >> 2), "m" (current->tss.ex), "q" (size & 3), \
 	 "D" (to), "S" (from), "0" (size) \
 	:"cx","di","si","memory");
 
@@ -157,6 +157,66 @@ unsigned long __cu_size = (unsigned long) (n); \
 if (__cu_size && __access_ok(VERIFY_READ, __cu_from, __cu_size)) \
 __copy_user(to,__cu_from,__cu_size); \
 __cu_size; })
+
+#define __clear_user(addr,size) \
+__asm__ __volatile__( \
+	"movl $3f,%0\n\t" \
+	"incl %2\n\t" \
+	"rep; stosl\n\t" \
+	"testl $2,%3\n\t" \
+	"je 1f\n\t" \
+	"stosw\n\t" \
+	"subl $2,%3\n" \
+	"1:\t" \
+	"testl $1,%3\n\t" \
+	"je 2f\n\t" \
+	"stosb\n\t" \
+	"decl %3\n" \
+	"2:\t" \
+	"decl %2\n" \
+	"3:\tlea 0(%3,%1,4),%0" \
+	:"=d" (size) \
+	:"c" (size >> 2), "m" (current->tss.ex), "r" (size & 3), \
+	 "D" (addr), "0" (size), "a" (0) \
+	:"cx","di","memory");
+
+#define clear_user(addr,n) ({ \
+void * __cl_addr = (addr); \
+unsigned long __cl_size = (n); \
+if (__cl_size && __access_ok(VERIFY_WRITE, ((unsigned long)(__cl_addr)), __cl_size)) \
+__clear_user(__cl_addr, __cl_size); \
+__cl_size; })
+
+#define __strncpy_from_user(dst,src,count,res) \
+__asm__ __volatile__( \
+	"cld\n\t" \
+	"movl $3f,%0\n\t" \
+	"incl %2\n" \
+	"1:\tdecl %1\n\t" \
+	"js 2f\n\t" \
+	"lodsb\n\t" \
+	"stosb\n\t" \
+	"testb %%al,%%al\n\t" \
+	"jne 1b\n" \
+	"2:\t" \
+	"incl %1\n\t" \
+	"xorl %0,%0\n\t" \
+	"decl %2\n" \
+	"3:" \
+	:"=d" (res), "=r" (count) \
+	:"m" (current->tss.ex), "1" (count), "S" (src),"D" (dst),"0" (res) \
+	:"si","di","ax","cx","memory")
+
+#define strncpy_from_user(dest,src,count) ({ \
+const void * __sc_src = (src); \
+unsigned long __sc_count = (count); \
+long __sc_res = -EFAULT; \
+if (__access_ok(VERIFY_READ, ((unsigned long)(__sc_src)), __sc_count)) { \
+	unsigned long __sc_residue = __sc_count; \
+	__strncpy_from_user(dest,__sc_src,__sc_count,__sc_res); \
+	if (!__sc_res) __sc_res = __sc_residue - __sc_count; \
+} __sc_res; })
+
 
 #endif /* __ASSEMBLY__ */
 

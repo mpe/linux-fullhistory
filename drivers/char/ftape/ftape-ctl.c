@@ -670,7 +670,7 @@ int _ftape_ioctl(unsigned int command, void *arg)
 			TRACE_EXIT;
 			return error;
 		}
-		memcpy_fromfs(&krnl_arg.mtop, arg, arg_size);
+		copy_from_user(&krnl_arg.mtop, arg, arg_size);
 	}
 	TRACEx1(5, "called with ioctl command: 0x%08x", command);
 	switch (command) {
@@ -830,7 +830,7 @@ int _ftape_ioctl(unsigned int command, void *arg)
 			TRACE_EXIT;
 			return error;
 		}
-		memcpy_tofs(arg, &krnl_arg, arg_size);
+		copy_to_user(arg, &krnl_arg, arg_size);
 	}
 	TRACE_EXIT;
 	return result;

@@ -726,7 +726,10 @@ void init_IRQ(void)
 	dma_outb(0, DMA1_CLR_MASK_REG);
 	dma_outb(0, DMA2_CLR_MASK_REG);
 #if NR_IRQS == 48
-	*(unsigned int *)GRU_INT_MASK = ~(irq_mask >> 16); mb();/* invert */
+	*(unsigned int *)GRU_INT_MASK  = ~(irq_mask >> 16); mb();/* invert */
+	*(unsigned int *)GRU_INT_EDGE  = 0UL; mb();/* all are level */
+	*(unsigned int *)GRU_INT_HILO  = 0x80000000UL; mb();/* ISA only HI */
+	*(unsigned int *)GRU_INT_CLEAR = 0UL; mb();/* all clear */
 	enable_irq(16 + 31);	/* enable (E)ISA PIC cascade */
 #elif NR_IRQS == 33
 	outl(irq_mask >> 16, 0x804);

@@ -656,7 +656,7 @@ int _ftape_read(char *buff, int req_len)
 				TRACE_EXIT;
 				return -EIO;
 			}
-			memcpy_tofs(buff, deblock_buffer + buf_pos_rd, cnt);
+			copy_to_user(buff, deblock_buffer + buf_pos_rd, cnt);
 			buff += cnt;
 			to_do -= cnt;	/* what's left from req_len */
 			remaining -= cnt;	/* what remains on this tape */

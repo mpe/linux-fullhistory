@@ -130,7 +130,7 @@ static int allowed_drive_mask = 0x33;
 
 
 #include <linux/fd.h>
-
+#include <linux/hdreg.h>
 
 #define OLDFDRAWCMD 0x020d /* send a raw command to the FDC */
 
@@ -918,6 +918,13 @@ static void empty(void)
 static struct tq_struct floppy_tq =
 { 0, 0, 0, 0 };
 
+static void schedule_bh( void (*handler)(void*) )
+{
+	floppy_tq.routine = (void *)(void *) handler;
+	queue_task_irq(&floppy_tq, &tq_immediate);
+	mark_bh(IMMEDIATE_BH);
+}
+
 static struct timer_list fd_timer ={ NULL, NULL, 0, 0, 0 };
 
 static void cancel_activity(void)
@@ -1685,12 +1692,9 @@ void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		} while ((ST0 & 0x83) != UNIT(current_drive) && inr == 2);
 	}
 	if (handler) {
-		if(intr_count >= 2) {
-			/* expected interrupt */
-			floppy_tq.routine = (void *)(void *) handler;
-			queue_task_irq(&floppy_tq, &tq_immediate);
-			mark_bh(IMMEDIATE_BH);
-		} else
+		if(intr_count >= 2)
+			schedule_bh( (void *)(void *) handler);
+		else
 			handler();
 	} else
 		FDCS->reset = 1;
@@ -1928,9 +1932,7 @@ static int wait_til_done(void (*handler)(void), int interruptible)
 	int ret;
 	unsigned long flags;
 
-	floppy_tq.routine = (void *)(void *) handler;
-	queue_task(&floppy_tq, &tq_immediate);
- 	mark_bh(IMMEDIATE_BH);
+	schedule_bh((void *)(void *)handler);
 	INT_OFF;
 	while(command_status < 2 && NO_SIGNAL){
 		is_alive("wait_til_done");
@@ -2737,9 +2739,7 @@ static void redo_fd_request(void)
 
 		if (TESTF(FD_NEED_TWADDLE))
 			twaddle();
-		floppy_tq.routine = (void *)(void *) floppy_start;
-		queue_task(&floppy_tq, &tq_immediate);
-		mark_bh(IMMEDIATE_BH);
+		schedule_bh( (void *)(void *) floppy_start);
 #ifdef DEBUGT
 		debugt("queue fd request");
 #endif
@@ -2754,18 +2754,19 @@ static struct cont_t rw_cont={
 	bad_flp_intr,
 	request_done };
 
-static struct tq_struct request_tq =
-{ 0, 0, (void *) (void *) redo_fd_request, 0 };
-
 static void process_fd_request(void)
 {
 	cont = &rw_cont;
-	queue_task(&request_tq, &tq_immediate);
-	mark_bh(IMMEDIATE_BH);
+	schedule_bh( (void *)(void *) redo_fd_request);
 }
 
 static void do_fd_request(void)
 {
+	if(usage_count == 0) {
+		printk("warning: usage count=0, CURRENT=%p exiting\n", CURRENT);
+		printk("sect=%ld cmd=%d\n", CURRENT->sector, CURRENT->cmd);
+		return;
+	}
 	sti();
 	if (fdc_busy){
 		/* fdc busy, this new request will be treated when the
@@ -2839,22 +2840,19 @@ static int user_reset_fdc(int drive, int arg, int interruptible)
  * Misc Ioctl's and support
  * ========================
  */
-static int fd_copyout(void *param, const void *address, int size)
+static inline int fd_copyout(void *param, const void *address, int size)
 {
-	int ret;
-
-	ECALL(verify_area(VERIFY_WRITE,param,size));
-	copy_to_user(param,(void *) address, size);
-	return 0;
+	return copy_to_user(param,address, size) ? -EFAULT : 0;
 }
 
-static int fd_copyin(void *param, void *address, int size)
+static inline int fd_copyin(void *param, void *address, int size)
 {
-	int ret;
+	return copy_from_user(address, param, size) ? -EFAULT : 0;
+}
 
-	ECALL(verify_area(VERIFY_READ,param,size));
-	copy_from_user((void *) address, param, size);
-	return 0;
+static inline int write_user_long(unsigned long useraddr, unsigned long value)
+{
+	return put_user(value, (unsigned long *)useraddr) ? -EFAULT : 0;
 }
 
 #define COPYOUT(x) ECALL(fd_copyout((void *)param, &(x), sizeof(x)))
@@ -3259,6 +3257,21 @@ static inline int xlate_0x00xx_ioctl(int *cmd, int *size)
 	return -EINVAL;
 }
 
+static int get_floppy_geometry(int drive, int type, struct floppy_struct **g)
+{
+	if (type)
+		*g = &floppy_type[type];
+	else {
+		LOCK_FDC(drive,0);
+		CALL(poll_drive(0,0));
+		process_fd_request();		
+		*g = current_type[drive];
+	}
+	if(!*g)
+		return -ENODEV;
+	return 0;
+}
+
 static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		    unsigned long param)
 {
@@ -3295,6 +3308,43 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		DPRINT("obsolete eject ioctl\n");
 		DPRINT("please use floppycontrol --eject\n");
 		cmd = FDEJECT;
+	}
+
+	/* generic block device ioctls */
+	switch(cmd) {
+		/* the following have been inspired by the corresponding
+		 * code for other block devices. */
+		struct floppy_struct *g;
+		struct hd_geometry *loc;
+
+		case HDIO_GETGEO:
+			loc = (struct hd_geometry *) param;
+			ECALL(get_floppy_geometry(drive, type, &g));
+			ECALL(verify_area(VERIFY_WRITE, loc, sizeof(*loc)));
+			put_user(g->head, &loc->heads);
+			put_user(g->sect, &loc->sectors);
+			put_user(g->track, &loc->cylinders);
+			put_user(0,&loc->start);
+			return 0;
+		case BLKRASET:
+			if(!suser()) return -EACCES;
+			if(param > 0xff) return -EINVAL;
+			read_ahead[MAJOR(inode->i_rdev)] = param;
+			return 0;
+                case BLKRAGET:
+			return write_user_long(param, 
+					       read_ahead[MAJOR(inode->i_rdev)]);
+		case BLKFLSBUF:
+			if(!suser()) return -EACCES;
+			fsync_dev(inode->i_rdev);
+			invalidate_buffers(inode->i_rdev);
+			return 0;
+
+		case BLKGETSIZE:
+			ECALL(get_floppy_geometry(drive, type, &g));
+			return write_user_long(param, g->size);
+		/* BLKRRPART is not defined as floppies don't have
+		 * partition tables */
 	}
 
 	/* convert the old style command into a new style command */
@@ -3345,15 +3395,9 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 			return set_geometry(cmd, & inparam.g,
 					    drive, type, device);
 		case FDGETPRM:
-			LOCK_FDC(drive,1);
-			CALL(poll_drive(1,0));
-			process_fd_request();
-			if (type)
-				outparam = (char *) &floppy_type[type];
-			else 
-				outparam = (char *) current_type[drive];
-			if(!outparam)
-				return -ENODEV;
+			ECALL(get_floppy_geometry(drive, type, 
+						  (struct floppy_struct**)
+						  &outparam));
 			break;
 
 		case FDMSGON:
@@ -4174,7 +4218,7 @@ static void mod_setup(char *pattern, void (*setup)(char *, int *))
 	j=1;
 
 	for (i=current->mm->env_start; i< current->mm->env_end; i ++){
-		c= get_fs_byte(i);
+		get_user(c, (char *)i);
 		if (match){
 			if (j==99)
 				c='\0';

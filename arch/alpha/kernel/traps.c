@@ -201,19 +201,37 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 	/* $16-$18 are PAL-saved, and are offset by 19 entries */
 	if (reg >= 16 && reg <= 18)
 		reg += 19;
-	switch (opcode) {
-	      case 0x28: /* ldl */
-		*(reg+regs.regs) = get_unaligned((int *)va);
-		return;
-	      case 0x29: /* ldq */
-		*(reg+regs.regs) = get_unaligned((long *)va);
-		return;
-	      case 0x2c: /* stl */
-		put_unaligned(*(reg+regs.regs), (int *)va);
-		return;
-	      case 0x2d: /* stq */
-		put_unaligned(*(reg+regs.regs), (long *)va);
-		return;
+
+	{
+		/* Set up an exception handler address just in case we are
+		   handling an unaligned fixup within get_user().  Notice
+		   that we do *not* change the exception count because we
+		   only want to bounce possible exceptions on through.  */
+
+		__label__ handle_ex;
+		register void *ex_vector __asm__("$28");
+		__asm__ __volatile__ ("" : "=r"(ex_vector) : "0"(&&handle_ex));
+
+		switch (opcode) {
+		case 0x28: /* ldl */
+			*(reg+regs.regs) = get_unaligned((int *)va);
+			return;
+		case 0x29: /* ldq */
+			*(reg+regs.regs) = get_unaligned((long *)va);
+			return;
+		case 0x2c: /* stl */
+			put_unaligned(*(reg+regs.regs), (int *)va);
+			return;
+		case 0x2d: /* stq */
+			put_unaligned(*(reg+regs.regs), (long *)va);
+			return;
+
+		/* We'll only get back here if we are handling a
+		   valid exception.  */
+		handle_ex:
+			(&regs)->pc = *(28+regs.regs);
+			return;
+		}
 	}
 	printk("Bad unaligned kernel access at %016lx: %p %lx %ld\n",
 		regs.pc, va, opcode, reg);
@@ -335,12 +353,12 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg
 			reg_addr += (reg - 9);
 			break;
 
-		      case 16: case 17: case 18: 
+		      case 16: case 17: case 18:
 			/* a0-a2 in PAL frame */
 			reg_addr += 7 + 20 + 3 + (reg - 16);
 			break;
 
-		      case 19: case 20: case 21: case 22: case 23: 
+		      case 19: case 20: case 21: case 22: case 23:
 		      case 24: case 25: case 26: case 27: case 28:
 			/* a3-at in SAVE_ALL frame */
 			reg_addr += 7 + 9 + (reg - 19);
@@ -376,7 +394,7 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg
 
 	      case 0x23: /* ldt */
 		alpha_write_fp_reg(reg, get_unaligned((unsigned long *)va));
-		break;	
+		break;
 	      case 0x27: /* stt */
 		put_unaligned(alpha_read_fp_reg(reg), (unsigned long *)va);
 		break;
@@ -403,7 +421,7 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg
 
 	if (opcode >= 0x28 && reg == 30 && dir == VERIFY_WRITE) {
 		wrusp(usp);
-	} 
+	}
 }
 
 /*

@@ -2039,7 +2039,7 @@ static long qic02_tape_read(struct inode * inode, struct file * filp,
 			}
 			/* copy buffer to user-space in one go */
 			if (bytes_done>0)
-				copy_to_user( (void *) buf, (void *) buffaddr, bytes_done);
+				copy_to_user( (void *) buf, (void *) bus_to_virt(buffaddr), bytes_done);
 #if 1
 			/* Checks Ton's patch below */
 			if ((return_read_eof == NO) && (status_eof_detected == YES)) {
@@ -2167,7 +2167,7 @@ static long qic02_tape_write(struct inode * inode, struct file * filp,
 
 		/* copy from user to DMA buffer and initiate transfer. */
 		if (bytes_todo>0) {
-			copy_from_user( (void *) buffaddr, (const void *) buf, bytes_todo);
+			copy_from_user( (void *) bus_to_virt(buffaddr), (const void *) buf, bytes_todo);
 
 /****************** similar problem with read() at FM could happen here at EOT.
  ******************/
@@ -2590,7 +2590,7 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 			return -EPERM;
 		error = verify_area(VERIFY_READ, (int *) ioarg, sizeof(int));
 		if (error) return error;
-		c = get_user((int *) ioarg);
+		c = get_user(sizeof(int), (int *) ioarg);
 		if (c==0) {
 			QIC02_TAPE_DEBUG = 0;
 			return 0;
@@ -2648,8 +2648,7 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 		/* copy struct from user space to kernel space */
 		stp = (char *) &qic02_tape_dynconf;
 		argp = (char *) ioarg;
-		for (i=0; i<sizeof(qic02_tape_dynconf); i++)
-			*stp++ = get_user(argp++);
+		copy_from_user(stp, argp, sizeof(qic02_tape_dynconf));
 		if (status_zombie==NO)
 			qic02_release_resources();	/* and go zombie */
 		if (update_ifc_masks(qic02_tape_dynconf.ifc_type))
@@ -2680,8 +2679,7 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 		/* copy mtop struct from user space to kernel space */
 		stp = (char *) &operation;
 		argp = (char *) ioarg;
-		for (i=0; i<sizeof(operation); i++)
-			*stp++ = get_user(argp++);
+		copy_from_user(stp, argp, sizeof(operation));
 
 		/* ---note: mt_count is signed, negative seeks must be
 		 * ---	    translated to seeks in opposite direction!
@@ -2920,7 +2918,7 @@ int qic02_tape_init(void)
 	 * This assumes a one-to-one identity mapping between
 	 * kernel addresses and physical memory.
 	 */
-	buffaddr = align_buffer((unsigned long) &qic02_tape_buf, TAPE_BLKSIZE);
+	buffaddr = align_buffer(virt_to_bus(qic02_tape_buf), TAPE_BLKSIZE);
 	printk(", at address 0x%lx (0x%lx)\n", buffaddr, (unsigned long) &qic02_tape_buf);
 
 #ifndef CONFIG_MAX_16M

@@ -455,14 +455,11 @@ static int lo_ioctl(struct inode * inode, struct file * file,
 	case BLKGETSIZE:   /* Return device size */
 		if (!lo->lo_inode)
 			return -ENXIO;
-		if (!arg)  return -EINVAL;
-		err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
-		if (err)
-			return err;
-		put_fs_long(loop_sizes[lo->lo_number] << 1, (long *) arg);
-		return 0;
-		default:
+		if (!arg)
 			return -EINVAL;
+		return put_user(loop_sizes[lo->lo_number] << 1, (int *) arg);
+	default:
+		return -EINVAL;
 	}
 	return 0;
 }

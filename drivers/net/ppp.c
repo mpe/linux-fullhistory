@@ -2250,7 +2250,7 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 		error = verify_area (VERIFY_READ, (void *) param3,
 				     sizeof (temp_i));
 		if (error == 0) {
-			temp_i = get_user ((int *) param3);
+			get_user (temp_i, (int *) param3);
 			if (ppp->flags & SC_DEBUG)
 				printk (KERN_INFO
 				 "ppp_tty_ioctl: set mru to %x\n", temp_i);
@@ -2285,7 +2285,8 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 		error = verify_area (VERIFY_READ, (void *) param3,
 				     sizeof (temp_i));
 		if (error == 0) {
-			temp_i	= get_user ((int *) param3) & SC_MASK;
+			get_user (temp_i, (int *) param3);
+			temp_i &= SC_MASK;
 			temp_i |= (ppp->flags & ~SC_MASK);
 
 			if ((ppp->flags & SC_CCP_OPEN) &&
@@ -2328,7 +2329,7 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 		error = verify_area (VERIFY_READ, (void *) param3,
 				     sizeof (temp_i));
 		if (error == 0) {
-			ppp->xmit_async_map[0] = get_user ((int *) param3);
+			get_user (ppp->xmit_async_map[0],(int *) param3);
 			if (ppp->flags & SC_DEBUG)
 				printk (KERN_INFO
 				     "ppp_tty_ioctl: set xmit asyncmap %x\n",
@@ -2342,7 +2343,7 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 		error = verify_area (VERIFY_READ, (void *) param3,
 				     sizeof (temp_i));
 		if (error == 0) {
-			ppp->recv_async_map = get_user ((int *) param3);
+			get_user (ppp->recv_async_map,(int *) param3);
 			if (ppp->flags & SC_DEBUG)
 				printk (KERN_INFO
 				     "ppp_tty_ioctl: set rcv asyncmap %x\n",
@@ -2370,7 +2371,8 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 		error = verify_area (VERIFY_READ, (void *) param3,
 				     sizeof (temp_i));
 		if (error == 0) {
-			temp_i	= (get_user ((int *) param3) & 0x1F) << 16;
+			get_user (temp_i, (int *) param3);
+			temp_i	= (temp_i & 0x1F) << 16;
 			temp_i |= (ppp->flags & ~0x1F0000);
 
 			if ((ppp->flags | temp_i) & SC_DEBUG)
@@ -2469,7 +2471,8 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 		error = verify_area (VERIFY_READ, (void *) param3,
 				     sizeof (temp_i));
 		if (error == 0) {
-			temp_i = get_user ((int *) param3) + 1;
+			get_user (temp_i, (int *) param3);
+			++temp_i;
 			if (ppp->flags & SC_DEBUG)
 				printk (KERN_INFO
 				     "ppp_tty_ioctl: set maxcid to %d\n",

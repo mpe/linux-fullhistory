@@ -1069,7 +1069,7 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		if (err)  {
 			return err;
 		}
-		tmp = get_user((int *)arg);
+		get_user(tmp,(int *)arg);
 #ifndef SL_INCLUDE_CSLIP
 		if (tmp & (SL_MODE_CSLIP|SL_MODE_ADAPTIVE))  {
 			return -EINVAL;
@@ -1124,7 +1124,7 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		if (err)  {
 			return -err;
 		}
-		tmp = get_user((int *)arg);
+		get_user(tmp,(int *)arg);
                 if (tmp > 255) /* max for unchar */
 			return -EINVAL; 
 		if ((sl->keepalive = (unchar) tmp) != 0) {
@@ -1149,9 +1149,9 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		if (err)  {
 			return -err;
 		}
-		tmp = get_user((int *)arg);
+		get_user(tmp,(int *)arg);
                 if (tmp > 255) /* max for unchar */
-			return -EINVAL; 
+			return -EINVAL;
                 if ((sl->outfill = (unchar) tmp) != 0){
 			sl->outfill_timer.expires=jiffies+sl->outfill*HZ;
 			add_timer(&sl->outfill_timer);

@@ -64,8 +64,6 @@ struct vm86_regs {
 	long eax;
 	long __null_ds;
 	long __null_es;
-	long __null_fs;
-	long __null_gs;
 	long orig_eax;
 	long eip;
 	unsigned short cs, __csh;

@@ -573,8 +573,10 @@ long generic_file_read(struct inode * inode, struct file * filp,
 	unsigned long pos, ppos, page_cache;
 	int reada_ok;
 
-	if (!access_ok(VERIFY_WRITE, buf,count))
+	if (!access_ok(VERIFY_WRITE, buf, count))
 		return -EFAULT;
+	if (!count)
+		return 0;
 	error = 0;
 	read = 0;
 	page_cache = 0;

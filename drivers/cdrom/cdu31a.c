@@ -106,6 +106,10 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
+ *
+ * Credits:
+ *    Heiko Eissfeldt <heiko@colossus.escape.de>
+ *         For finding abug in the return of the track numbers.
  */
 
 /*
@@ -2482,8 +2486,8 @@ static int scd_ioctl(struct inode *inode,
          i=verify_area(VERIFY_WRITE, hdr, sizeof(*hdr));
          if(i<0)
          	return i;
-         loc_hdr.cdth_trk0 = bcd_to_int(sony_toc.first_track_num);
-         loc_hdr.cdth_trk1 = bcd_to_int(sony_toc.last_track_num);
+         loc_hdr.cdth_trk0 = sony_toc.first_track_num;
+         loc_hdr.cdth_trk1 = sony_toc.last_track_num;
          copy_to_user(hdr, &loc_hdr, sizeof(*hdr));
       }
       return 0;
@@ -2583,7 +2587,7 @@ static int scd_ioctl(struct inode *inode,
           * If we want to stop after the last track, use the lead-out
           * MSF to do that.
           */
-         if (ti.cdti_trk1 >= bcd_to_int(sony_toc.last_track_num))
+         if (ti.cdti_trk1 >= sony_toc.last_track_num)
          {
             log_to_msf(msf_to_log(sony_toc.lead_out_start_msf)-1,
                        &(params[4]));

@@ -639,7 +639,7 @@ int _ftape_write(const char *buff, int req_len)
 				TRACE_EXIT;
 				return result;
 			}
-			memcpy_fromfs(deblock_buffer + buf_pos_wr, buff, cnt);
+			copy_from_user(deblock_buffer + buf_pos_wr, buff, cnt);
 			buff += cnt;
 			req_len -= cnt;
 			buf_pos_wr += cnt;

@@ -673,6 +673,7 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->rcvbuf = SK_RMEM_MAX;
 	sk->rto = TCP_TIMEOUT_INIT;		/*TCP_WRITE_TIME*/
 	sk->cong_window = 1; /* start with only sending one packet at a time. */
+	sk->ssthresh = 0x7fffffff;
 	sk->priority = 1;
 	sk->state = TCP_CLOSE;
 

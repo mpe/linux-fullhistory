@@ -21,6 +21,7 @@
 #include <linux/errno.h>
 #include <linux/tty.h>
 #include <linux/sched.h>
+#include <linux/mm.h>
 #include <asm/segment.h>
 #include "vt_kern.h"
 #include "selection.h"

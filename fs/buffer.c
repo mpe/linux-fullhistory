@@ -210,7 +210,31 @@ repeat:
 			next->b_count--;
 			retry = 1;
 		}
-	
+
+    repeat2:
+		bh = lru_list[BUF_LOCKED];
+		if (!bh)
+			break;
+		for (i = nr_buffers_type[BUF_LOCKED]*2 ; i-- > 0 ; bh = next) {
+			if (bh->b_list != BUF_LOCKED)
+				goto repeat2;
+			next = bh->b_next_free;
+			if (!lru_list[BUF_LOCKED])
+				break;
+			if (dev && bh->b_dev != dev)
+				continue;
+			if (buffer_locked(bh)) {
+				/* Buffer is locked; skip it unless wait is
+				   requested AND pass > 0. */
+				if (!wait || !pass) {
+					retry = 1;
+					continue;
+				}
+				wait_on_buffer (bh);
+				goto repeat2;
+			}
+		}
+
 	/* If we are waiting for the sync to succeed, and if any dirty
 	   blocks were written, then repeat; on the second pass, only
 	   wait for buffers being written (do not pass to write any

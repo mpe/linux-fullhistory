@@ -59,8 +59,12 @@ asmlinkage struct pt_regs * save_v86_state(struct vm86_regs * regs)
 		do_exit(SIGSEGV);
 	}
 	set_flags(regs->eflags, VEFLAGS, VIF_MASK | current->tss.v86mask);
-	copy_to_user(&current->tss.vm86_info->regs,regs,sizeof(*regs));
-	put_user(current->tss.screen_bitmap,&current->tss.vm86_info->screen_bitmap);
+	tmp = copy_to_user(&current->tss.vm86_info->regs,regs,sizeof(*regs));
+	tmp += put_user(current->tss.screen_bitmap,&current->tss.vm86_info->screen_bitmap);
+	if (tmp) {
+		printk("vm86: could not access userspace vm86_info\n");
+		do_exit(SIGSEGV);
+	}
 	tmp = current->tss.esp0;
 	current->tss.esp0 = current->saved_kernel_stack;
 	current->saved_kernel_stack = 0;
@@ -104,22 +108,21 @@ asmlinkage int sys_vm86(struct vm86_struct * v86)
 	struct vm86_struct info;
 	struct task_struct *tsk = current;
 	struct pt_regs * pt_regs = (struct pt_regs *) &v86;
-	int error;
 
 	if (tsk->saved_kernel_stack)
 		return -EPERM;
-	/* v86 must be readable (now) and writable (for save_v86_state) */
-	error = verify_area(VERIFY_WRITE,v86,sizeof(*v86));
-	if (error)
-		return error;
-	copy_from_user(&info,v86,sizeof(info));
+	if (copy_from_user(&info,v86,sizeof(info)))
+		return -EFAULT;
 /*
  * make sure the vm86() system call doesn't try to do anything silly
  */
 	info.regs.__null_ds = 0;
 	info.regs.__null_es = 0;
-	info.regs.__null_fs = 0;
-	info.regs.__null_gs = 0;
+
+/* we are clearing fs,gs later just before "jmp ret_from_sys_call",
+ * because starting with Linux 2.1.x they aren't no longer saved/restored
+ */
+	
 /*
  * The eflags register is also special: we cannot trust that the user
  * has set it up safely, so this makes sure interrupt etc flags are
@@ -156,10 +159,12 @@ asmlinkage int sys_vm86(struct vm86_struct * v86)
 	tsk->tss.screen_bitmap = info.screen_bitmap;
 	if (info.flags & VM86_SCREEN_BITMAP)
 		mark_screen_rdonly(tsk);
-	__asm__ __volatile__("movl %0,%%esp\n\t"
+	__asm__ __volatile__(
+		"xorl %%eax,%%eax; mov %%ax,%%fs; mov %%ax,%%gs\n\t"
+		"movl %0,%%esp\n\t"
 		"jmp ret_from_sys_call"
 		: /* no outputs */
-		:"r" (&info.regs), "b" (tsk));
+		:"r" (&info.regs), "b" (tsk) : "ax");
 	return 0;
 }
 
@@ -218,9 +223,10 @@ static inline unsigned long get_vflags(struct vm86_regs * regs)
 
 static inline int is_revectored(int nr, struct revectored_struct * bitmap)
 {
-	if (verify_area(VERIFY_READ, bitmap, 256/8) < 0)
+	unsigned long map;
+	if (get_user(map, bitmap->__map + (nr >> 5)))
 		return 1;
-	return test_bit(nr, bitmap);
+	return test_bit(nr & ((1 << 5)-1), &map);
 }
 
 /*
@@ -298,26 +304,25 @@ __res; })
 
 static void do_int(struct vm86_regs *regs, int i, unsigned char * ssp, unsigned long sp)
 {
-	unsigned short *intr_ptr, seg;
-
+	unsigned long *intr_ptr, segoffs;
+	
 	if (regs->cs == BIOSSEG)
 		goto cannot_handle;
 	if (is_revectored(i, &current->tss.vm86_info->int_revectored))
 		goto cannot_handle;
 	if (i==0x21 && is_revectored(AH(regs),&current->tss.vm86_info->int21_revectored))
 		goto cannot_handle;
-	intr_ptr = (unsigned short *) (i << 2);
-	if (verify_area(VERIFY_READ, intr_ptr, 4) < 0)
+	intr_ptr = (unsigned long *) (i << 2);
+	if (get_user(segoffs, intr_ptr))
 		goto cannot_handle;
-	get_user(seg, intr_ptr+1);
-	if (seg == BIOSSEG)
+	if ((segoffs >> 16) == BIOSSEG)
 		goto cannot_handle;
 	pushw(ssp, sp, get_vflags(regs));
 	pushw(ssp, sp, regs->cs);
 	pushw(ssp, sp, IP(regs));
-	regs->cs = seg;
+	regs->cs = segoffs >> 16;
 	SP(regs) -= 6;
-	get_user(IP(regs), intr_ptr+0);
+	IP(regs) = segoffs & 0xffff;
 	clear_TF(regs);
 	clear_IF(regs);
 	return;
