@@ -501,9 +501,8 @@ static int lp_open(struct inode * inode, struct file * file)
 static int lp_release(struct inode * inode, struct file * file)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
-	unsigned int irq;
 
-	if ((irq = LP_IRQ(minor))) {
+	if (LP_IRQ(minor) > 0) {
 		kfree_s(lp_table[minor].lp_buffer, LP_BUFFER_SIZE);
 		lp_table[minor].lp_buffer = NULL;
 	}
@@ -707,7 +706,7 @@ __initfunc(int lp_init(void))
 				lp_table[count].flags |= LP_EXIST;
 				printk(KERN_INFO "lp%d: using %s at 0x%x, ", 
 				       count, pb->name, pb->base);
-				if (pb->irq == -1)
+				if (pb->irq == PARPORT_IRQ_NONE)
 					printk("polling.\n");
 				else
 					printk("irq %d.\n", pb->irq);

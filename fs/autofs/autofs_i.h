@@ -12,8 +12,6 @@
 
 /* Internal header file for autofs */
 
-/* #define DEBUG_WAITLIST 1 */
-
 #include <linux/auto_fs.h>
 
 /* This is the range of ioctl() numbers we claim as ours */

@@ -145,7 +145,7 @@ hw_entry        hw_table[] =
 char           *questions[] =
 {
   "ProAudioSpectrum 16 support",
-  "100% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support",
+  "100%% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support",
   "Generic OPL2/OPL3 FM synthesizer support",
   "Gravis Ultrasound support",
   "MPU-401 support (NOT for SB16)",
