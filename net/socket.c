@@ -85,7 +85,7 @@
 #include <linux/netfilter.h>
 
 static int sock_no_open(struct inode *irrelevant, struct file *dontcare);
-static long long sock_lseek(struct file *file, long long offset, int whence);
+static loff_t sock_lseek(struct file *file, loff_t offset, int whence);
 static ssize_t sock_read(struct file *file, char *buf,
 			 size_t size, loff_t *ppos);
 static ssize_t sock_write(struct file *file, const char *buf,
@@ -419,7 +419,7 @@ int sock_recvmsg(struct socket *sock, struct msghdr *msg, int size, int flags)
  *	Sockets are not seekable.
  */
 
-static long long sock_lseek(struct file *file,long long offset, int whence)
+static loff_t sock_lseek(struct file *file, loff_t offset, int whence)
 {
 	return -ESPIPE;
 }

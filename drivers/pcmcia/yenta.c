@@ -15,7 +15,6 @@
 
 #include "yenta.h"
 #include "i82365.h"
-#include "ricoh.h"
 
 /* Don't ask.. */
 #define to_cycles(ns)	((ns)/120)
@@ -66,12 +65,6 @@ static void exca_writew(pci_socket_t *socket, unsigned reg, u16 val)
 {
 	exca_writeb(socket, reg, val);
 	exca_writeb(socket, reg+1, val >> 8);
-}
-
-static int yenta_inquire(pci_socket_t *socket, socket_cap_t *cap)
-{
-	*cap = socket->cap;
-	return 0;
 }
 
 /*
@@ -190,13 +183,13 @@ static int yenta_set_socket(pci_socket_t *socket, socket_state_t *state)
 	u16 bridge;
 
 	yenta_set_power(socket, state);
+	socket->io_irq = state->io_irq;
 	bridge = config_readw(socket, CB_BRIDGE_CONTROL) & ~CB_BRIDGE_CRST;
 	if (cb_readl(socket, CB_SOCKET_STATE) & CB_CBCARD) {
 		bridge |= (state->flags & SS_RESET) ? CB_BRIDGE_CRST : 0;
-		bridge |= CB_BRIDGE_PREFETCH0 | CB_BRIDGE_POSTEN;
 
 		/* ISA interrupt control? */
-		if (bridge & CB_BRIDGE_INTR) {
+		if (!socket->cb_irq) {
 			u8 intr = exca_readb(socket, I365_INTCTL);
 			intr = (intr & ~0xf) | state->io_irq;
 			exca_writeb(socket, I365_INTCTL, intr);
@@ -207,7 +200,8 @@ static int yenta_set_socket(pci_socket_t *socket, socket_state_t *state)
 		reg = exca_readb(socket, I365_INTCTL) & (I365_RING_ENA | I365_INTR_ENA);
 		reg |= (state->flags & SS_RESET) ? 0 : I365_PC_RESET;
 		reg |= (state->flags & SS_IOCARD) ? I365_PC_IOCARD : 0;
-		reg |= state->io_irq;
+		if (!socket->cb_irq)
+			reg |= state->io_irq;
 		exca_writeb(socket, I365_INTCTL, reg);
 
 		reg = exca_readb(socket, I365_POWER) & (I365_VCC_MASK|I365_VPP1_MASK);
@@ -426,7 +420,7 @@ static void yenta_interrupt(int irq, void *dev_id, struct pt_regs *regs)
  * more timely manner if the state change interrupt
  * works..)
  */
-static int socket_thread(void * data)
+static int yenta_socket_thread(void * data)
 {
 	pci_socket_t * socket = (pci_socket_t *) data;
 	DECLARE_WAITQUEUE(wait, current);
@@ -516,6 +510,7 @@ static void yenta_clear_maps(pci_socket_t *socket)
 /* Called at resume and initialization events */
 static int yenta_init(pci_socket_t *socket)
 {
+	u16 bridge;
 	struct pci_dev *dev = socket->dev;
 
 	pci_set_power_state(socket->dev, 0);
@@ -536,35 +531,25 @@ static int yenta_init(pci_socket_t *socket)
 	config_writeb(socket, PCI_SECONDARY_BUS, dev->subordinate->number);
 	config_writeb(socket, PCI_SUBORDINATE_BUS, dev->subordinate->number);
 
+	/*
+	 * Set up the bridging state:
+	 *  - enable write posting.
+	 *  - memory window 0 prefetchable, window 1 non-prefetchable
+	 *  - PCI interrupts enabled if a PCI interrupt exists..
+	 */
+	bridge = config_readw(socket, CB_BRIDGE_CONTROL);
+	bridge &= ~(CB_BRIDGE_CRST | CB_BRIDGE_PREFETCH1 | CB_BRIDGE_INTR | CB_BRIDGE_ISAEN | CB_BRIDGE_VGAEN);
+	bridge |= CB_BRIDGE_PREFETCH0 | CB_BRIDGE_POSTEN;
+	if (!socket->cb_irq)
+		bridge |= CB_BRIDGE_INTR;
+	config_writew(socket, CB_BRIDGE_CONTROL, bridge);
+
 	exca_writeb(socket, I365_GBLCTL, 0x00);
 	exca_writeb(socket, I365_GENCTL, 0x00);
 
 	yenta_clear_maps(socket);
 	return 0;
 }
-
-/*
- * More of an example than anything else... The standard
- * yenta init code works well enough - but this is how
- * you'd do it if you wanted to have a special init sequence.
- */
-static int ricoh_init(pci_socket_t *socket)
-{
-	u16 misc = config_readw(socket, RL5C4XX_MISC);
-	u16 ctl = config_readw(socket, RL5C4XX_16BIT_CTL);
-	u16 io = config_readw(socket, RL5C4XX_16BIT_IO_0);
-	u16 mem = config_readw(socket, RL5C4XX_16BIT_MEM_0);
-
-	ctl = RL5C4XX_16CTL_IO_TIMING | RL5C4XX_16CTL_MEM_TIMING;
-
-	config_writew(socket, RL5C4XX_MISC, misc);
-	config_writew(socket, RL5C4XX_16BIT_CTL, ctl);
-	config_writew(socket, RL5C4XX_16BIT_IO_0, io);
-	config_writew(socket, RL5C4XX_16BIT_MEM_0, mem);
-
-	return yenta_init(socket);
-}
-
 
 static int yenta_suspend(pci_socket_t *socket)
 {
@@ -644,12 +629,50 @@ static void yenta_allocate_resources(pci_socket_t *socket)
 }
 
 /*
+ * Close it down - release our resources and go home..
+ */
+static void yenta_close(pci_socket_t *sock)
+{
+	if (sock->cb_irq)
+		free_irq(sock->cb_irq, sock);
+	if (sock->base)
+		iounmap(sock->base);
+}
+
+#include "ti113x.h"
+#include "ricoh.h"
+
+/*
+ * Different cardbus controllers have slightly different
+ * initialization sequences etc details. List them here..
+ */
+#define PD(x,y) PCI_VENDOR_ID_##x, PCI_DEVICE_ID_##x##_##y
+static struct cardbus_override_struct {
+	unsigned short vendor;
+	unsigned short device;
+	struct pci_socket_ops *op;
+} cardbus_override[] = {
+	{ PD(TI,1130),	&ti113x_ops },
+	{ PD(TI,1131),	&ti113x_ops },
+	{ PD(TI,1250),	&ti1250_ops },
+
+	{ PD(RICOH,RL5C465), &ricoh_ops },
+	{ PD(RICOH,RL5C466), &ricoh_ops },
+	{ PD(RICOH,RL5C475), &ricoh_ops },
+	{ PD(RICOH,RL5C476), &ricoh_ops },
+	{ PD(RICOH,RL5C478), &ricoh_ops }
+};
+
+#define NR_OVERRIDES (sizeof(cardbus_override)/sizeof(struct cardbus_override_struct))
+
+/*
  * Initialize a cardbus controller. Make sure we have a usable
  * interrupt, and that we can map the cardbus area. Fill in the
  * socket information structure..
  */
 static int yenta_open(pci_socket_t *socket)
 {
+	int i;
 	struct pci_dev *dev = socket->dev;
 
 	/*
@@ -684,20 +707,22 @@ static int yenta_open(pci_socket_t *socket)
 	/* And figure out what the dang thing can do for the PCMCIA layer... */
 	yenta_get_socket_capabilities(socket);
 
-	kernel_thread(socket_thread, socket, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+	/* Do we have special options for the device? */
+	for (i = 0; i < NR_OVERRIDES; i++) {
+		struct cardbus_override_struct *d = cardbus_override+i;
+		if (dev->vendor == d->vendor && dev->device == d->device) {
+			socket->op = d->op;
+			if (d->op->open) {
+				int retval = d->op->open(socket);
+				if (retval < 0)
+					return retval;
+			}
+		}
+	}
+
+	kernel_thread(yenta_socket_thread, socket, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	printk("Socket status: %08x\n", cb_readl(socket, CB_SOCKET_STATE));
 	return 0;
-}
-
-/*
- * Close it down - release our resources and go home..
- */
-static void yenta_close(pci_socket_t *sock)
-{
-	if (sock->cb_irq)
-		free_irq(sock->cb_irq, sock);
-	if (sock->base)
-		iounmap(sock->base);
 }
 
 /*
@@ -708,7 +733,6 @@ struct pci_socket_ops yenta_operations = {
 	yenta_close,
 	yenta_init,
 	yenta_suspend,
-	yenta_inquire,
 	yenta_get_status,
 	yenta_get_socket,
 	yenta_set_socket,
@@ -728,7 +752,6 @@ struct pci_socket_ops ricoh_operations = {
 	yenta_close,
 	ricoh_init,
 	yenta_suspend,
-	yenta_inquire,
 	yenta_get_status,
 	yenta_get_socket,
 	yenta_set_socket,

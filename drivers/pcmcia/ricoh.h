@@ -70,25 +70,6 @@
 
 /* Register definitions for Ricoh PCI-to-CardBus bridges */
 
-#ifndef PCI_VENDOR_ID_RICOH
-#define PCI_VENDOR_ID_RICOH		0x1180
-#endif
-#ifndef PCI_DEVICE_ID_RICOH_RL5C465
-#define PCI_DEVICE_ID_RICOH_RL5C465	0x0465
-#endif
-#ifndef PCI_DEVICE_ID_RICOH_RL5C466
-#define PCI_DEVICE_ID_RICOH_RL5C466	0x0466
-#endif
-#ifndef PCI_DEVICE_ID_RICOH_RL5C475
-#define PCI_DEVICE_ID_RICOH_RL5C475	0x0475
-#endif
-#ifndef PCI_DEVICE_ID_RICOH_RL5C476
-#define PCI_DEVICE_ID_RICOH_RL5C476	0x0476
-#endif
-#ifndef PCI_DEVICE_ID_RICOH_RL5C478
-#define PCI_DEVICE_ID_RICOH_RL5C478	0x0478
-#endif
-
 /* Extra bits in CB_BRIDGE_CONTROL */
 #define RL5C46X_BCR_3E0_ENA		0x0800
 #define RL5C46X_BCR_3E2_ENA		0x1000
@@ -128,5 +109,56 @@
 #define  RL5C4XX_CMD_SHIFT		4
 #define  RL5C4XX_HOLD_MASK		0x1c00
 #define  RL5C4XX_HOLD_SHIFT		10
+
+#ifdef CONFIG_CARDBUS
+
+#define rl_misc(socket)		((socket)->private[0])
+#define rl_ctl(socket)		((socket)->private[1])
+#define rl_io(socket)		((socket)->private[2])
+#define rl_mem(socket)		((socket)->private[3])
+
+/*
+ * Magic Ricoh initialization code.. Save state at
+ * beginning, re-initialize it after suspend.
+ */
+static int ricoh_open(pci_socket_t *socket)
+{
+	rl_misc(socket) = config_readw(socket, RL5C4XX_MISC);
+	rl_ctl(socket) = config_readw(socket, RL5C4XX_16BIT_CTL);
+	rl_io(socket) = config_readw(socket, RL5C4XX_16BIT_IO_0);
+	rl_mem(socket) = config_readw(socket, RL5C4XX_16BIT_MEM_0);
+
+	/* Set the default timings, don't trust the original values */
+	rl_ctl(socket) = RL5C4XX_16CTL_IO_TIMING | RL5C4XX_16CTL_MEM_TIMING;
+	return 0;
+}
+
+static int ricoh_init(pci_socket_t *socket)
+{
+	yenta_init(socket);
+
+	config_writew(socket, RL5C4XX_MISC, rl_misc(socket));
+	config_writew(socket, RL5C4XX_16BIT_CTL, rl_ctl(socket));
+	config_writew(socket, RL5C4XX_16BIT_IO_0, rl_io(socket));
+	config_writew(socket, RL5C4XX_16BIT_MEM_0, rl_mem(socket));
+	return 0;
+}
+
+static struct pci_socket_ops ricoh_ops = {
+	ricoh_open,
+	yenta_close,
+	ricoh_init,
+	yenta_suspend,
+	yenta_get_status,
+	yenta_get_socket,
+	yenta_set_socket,
+	yenta_get_io_map,
+	yenta_set_io_map,
+	yenta_get_mem_map,
+	yenta_set_mem_map,
+	yenta_proc_setup
+};
+
+#endif /* CONFIG_CARDBUS */
 
 #endif /* _LINUX_RICOH_H */

@@ -188,6 +188,10 @@ const char __module_parm_desc_##var[]		\
 __attribute__((section(".modinfo"))) =		\
 "parm_desc_" __MODULE_STRING(var) "=" desc
 
+#define MODULE_DEVICE_TABLE(type,name)	\
+const struct type##_device_id * __module_##type##_device_table = name
+/* not put to .modinfo section to avoid section type conflicts */
+
 /* The attributes of a section are set the first time the section is
    seen; we want .modinfo to not be allocated.  */
 
@@ -218,6 +222,7 @@ const char __module_using_checksums[] __attribute__((section(".modinfo"))) =
 #define MODULE_SUPPORTED_DEVICE(name)
 #define MODULE_PARM(var,type)
 #define MODULE_PARM_DESC(var,desc)
+#define MODULE_DEVICE_TABLE(type,name)
 
 #ifndef __GENKSYMS__
 

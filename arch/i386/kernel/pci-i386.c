@@ -94,58 +94,55 @@
 
 #include "pci-i386.h"
 
-/*
- * Assign new address to PCI resource.  We hope our resource information
- * is complete.  On the PC, we don't re-assign resources unless we are
- * forced to do so.
- *
- * Expects start=0, end=size-1, flags=resource type.
- */
-
-int pci_assign_resource(struct pci_dev *dev, int i)
+void
+pcibios_update_resource(struct pci_dev *dev, struct resource *root,
+			struct resource *res, int resource)
 {
-	struct resource *r = &dev->resource[i];
-	struct resource *pr = pci_find_parent_resource(dev, r);
-	unsigned long size = r->end + 1;
 	u32 new, check;
+	int reg;
 
-	if (!pr) {
-		printk(KERN_ERR "PCI: Cannot find parent resource for device %s\n", dev->slot_name);
-		return -EINVAL;
-	}
-	if (r->flags & IORESOURCE_IO) {
-		/*
-		 * We need to avoid collisions with `mirrored' VGA ports and other strange
-		 * ISA hardware, so we always want the addresses kilobyte aligned.
-		 */
-		if (size > 0x100) {
-			printk(KERN_ERR "PCI: I/O Region %s/%d too large (%ld bytes)\n", dev->slot_name, i, size);
-			return -EFBIG;
-		}
-		if (allocate_resource(pr, r, size, 0x1000, ~0, 1024, NULL, NULL)) {
-			printk(KERN_ERR "PCI: Allocation of I/O region %s/%d (%ld bytes) failed\n", dev->slot_name, i, size);
-			return -EBUSY;
-		}
+	new = res->start | (res->flags & PCI_REGION_FLAG_MASK);
+	if (resource < 6) {
+		reg = PCI_BASE_ADDRESS_0 + 4*resource;
+	} else if (resource == PCI_ROM_RESOURCE) {
+		res->flags |= PCI_ROM_ADDRESS_ENABLE;
+		reg = dev->rom_base_reg;
 	} else {
-		if (allocate_resource(pr, r, size, 0x10000000, ~0, size, NULL, NULL)) {
-			printk(KERN_ERR "PCI: Allocation of memory region %s/%d (%ld bytes) failed\n", dev->slot_name, i, size);
-			return -EBUSY;
-		}
+		/* Bug?  */
+		return;
 	}
-	if (i < 6) {
-		int reg = PCI_BASE_ADDRESS_0 + 4*i;
-		new = r->start | (r->flags & PCI_REGION_FLAG_MASK);
-		pci_write_config_dword(dev, reg, new);
-		pci_read_config_dword(dev, reg, &check);
-		if (new != check)
-			printk(KERN_ERR "PCI: Error while updating region %s/%d (%08x != %08x)\n", dev->slot_name, i, new, check);
-	} else if (i == PCI_ROM_RESOURCE) {
-		r->flags |= PCI_ROM_ADDRESS_ENABLE;
-		pci_write_config_dword(dev, dev->rom_base_reg, r->start | (r->flags & PCI_REGION_FLAG_MASK));
+	
+	pci_write_config_dword(dev, reg, new);
+	pci_read_config_dword(dev, reg, &check);
+	if (new != check) {
+		printk(KERN_ERR "PCI: Error while updating region "
+		       "%s/%d (%08x != %08x)\n", dev->slot_name, resource,
+		       new, check);
 	}
-	printk("PCI: Assigned addresses %08lx-%08lx to region %s/%d\n", r->start, r->end, dev->slot_name, i);
-	return 0;
 }
+
+void
+pcibios_align_resource(void *data, struct resource *res, unsigned long size)
+{
+	struct pci_dev *dev = data;
+
+	if (res->flags & IORESOURCE_IO) {
+		unsigned long start = res->start;
+
+		/* We need to avoid collisions with `mirrored' VGA ports
+		   and other strange ISA hardware, so we always want the
+		   addresses kilobyte aligned.  */
+		if (size >= 0x100) {
+			printk(KERN_ERR "PCI: I/O Region %s/%d too large"
+			       " (%ld bytes)\n", dev->slot_name,
+			       dev->resource - res, size);
+		}
+
+		start = (start + 1024 - 1) & ~(1024 - 1);
+		res->start = start;
+	}
+}
+
 
 /*
  *  Handle resources of PCI devices.  If the world were perfect, we could

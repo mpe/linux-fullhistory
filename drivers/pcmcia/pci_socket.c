@@ -70,9 +70,8 @@ static int pci_inquire_socket(unsigned int sock, socket_cap_t *cap)
 {
 	pci_socket_t *socket = pci_socket_array + sock;
 
-	if (socket->op && socket->op->inquire)
-		return socket->op->inquire(socket, cap);
-	return -EINVAL;
+	*cap = socket->cap;
+	return 0;
 }
 
 static int pci_get_status(unsigned int sock, unsigned int *value)

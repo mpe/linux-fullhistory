@@ -452,8 +452,14 @@ struct super_block * ufs_read_super (struct super_block * sb, void * data,
 	MOD_INC_USE_COUNT;
 	lock_super (sb);
 
+	UFSD(("flag %u\n", (int)(sb->s_flags & MS_RDONLY)))
+	
 #ifndef CONFIG_UFS_FS_WRITE
-	sb->s_flags |= MS_RDONLY;
+	if (!(sb->s_flags & MS_RDONLY)) {
+		printk("ufs was compiled with read-only support, "
+		"can't be mounted as read-write\n");
+		goto failed;
+	}
 #endif
 	/*
 	 * Set default mount options
@@ -632,12 +638,14 @@ magic_found:
 	uspi->s_fmask = SWAB32(usb1->fs_fmask);
 	uspi->s_fshift = SWAB32(usb1->fs_fshift);
 
-	if (uspi->s_bsize != 4096 && uspi->s_bsize != 8192) {
-		printk("ufs_read_super: fs_bsize %u != {4096, 8192}\n", uspi->s_bsize);
+	if (uspi->s_bsize != 4096 && uspi->s_bsize != 8192 
+	  && uspi->s_bsize != 32768) {
+		printk("ufs_read_super: fs_bsize %u != {4096, 8192, 32768}\n", uspi->s_bsize);
 		goto failed;
 	}
-	if (uspi->s_fsize != 512 && uspi->s_fsize != 1024 && uspi->s_fsize != 2048) {
-		printk("ufs_read_super: fs_fsize %u != {512, 1024, 2048}\n", uspi->s_fsize);
+	if (uspi->s_fsize != 512 && uspi->s_fsize != 1024 
+	  && uspi->s_fsize != 2048 && uspi->s_fsize != 4096) {
+		printk("ufs_read_super: fs_fsize %u != {512, 1024, 2048. 4096}\n", uspi->s_fsize);
 		goto failed;
 	}
 	if (uspi->s_fsize != block_size || uspi->s_sbsize != super_block_size) {
@@ -869,10 +877,15 @@ int ufs_remount (struct super_block * sb, int * mount_flags, char * data)
 		printk("ufstype can't be changed during remount\n");
 		return -EINVAL;
 	}
-	sb->u.ufs_sb.s_mount_opt = new_mount_opt;
 
-	if ((*mount_flags & MS_RDONLY) == (sb->s_flags & MS_RDONLY))
+	if ((*mount_flags & MS_RDONLY) == (sb->s_flags & MS_RDONLY)) {
+		sb->u.ufs_sb.s_mount_opt = new_mount_opt;
 		return 0;
+	}
+	
+	/*
+	 * fs was mouted as rw, remounting ro
+	 */
 	if (*mount_flags & MS_RDONLY) {
 		ufs_put_cylinder_structures(sb);
 		usb1->fs_time = SWAB32(CURRENT_TIME);
@@ -883,18 +896,29 @@ int ufs_remount (struct super_block * sb, int * mount_flags, char * data)
 		sb->s_dirt = 0;
 		sb->s_flags |= MS_RDONLY;
 	}
+	/*
+	 * fs was mounted as ro, remounting rw
+	 */
 	else {
+#ifndef CONFIG_UFS_FS_WRITE
+		printk("ufs was compiled with read-only support, "
+		"can't be mounted as read-write\n");
+		return -EINVAL;
+#else
 		if (ufstype != UFS_MOUNT_UFSTYPE_SUN && 
-		    ufstype != UFS_MOUNT_UFSTYPE_44BSD) {
+		    ufstype != UFS_MOUNT_UFSTYPE_44BSD &&
+		    ufstype != UFS_MOUNT_UFSTYPE_SUNx86) {
 			printk("this ufstype is read-only supported\n");
-			return 0;
+			return -EINVAL;
 		}
 		if (!ufs_read_cylinder_structures (sb)) {
 			printk("failed during remounting\n");
-			return 0;
+			return -EPERM;
 		}
 		sb->s_flags &= ~MS_RDONLY;
+#endif
 	}
+	sb->u.ufs_sb.s_mount_opt = new_mount_opt;
 	return 0;
 }
 

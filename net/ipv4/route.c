@@ -2261,8 +2261,9 @@ void __init ip_rt_init(void)
 	if (!rt_hash_table)
 		panic("Failed to allocate IP route cache hash table\n");
 
-	printk("IP: routing cache hash table of %u buckets, %dKbytes\n",
-	       rt_hash_mask, (rt_hash_mask*sizeof(struct rt_hash_bucket))/1024);
+	printk("IP: routing cache hash table of %u buckets, %ldKbytes\n",
+	       rt_hash_mask,
+	       (long) (rt_hash_mask*sizeof(struct rt_hash_bucket))/1024);
 
 	for (rt_hash_log=0; (1<<rt_hash_log) != rt_hash_mask; rt_hash_log++)
 		/* NOTHING */;

@@ -851,13 +851,13 @@ static int sysvipc_msg_read_proc(char *buffer, char **start, off_t offset, int l
 	int i, len = 0;
 
 	down(&msg_ids.sem);
-	len += sprintf(buffer, "       key      msqid perms cbytes  qnum lspid lrpid   uid   gid  cuid  cgid      stime      rtime      ctime\n");
+	len += sprintf(buffer, "       key      msqid perms      cbytes       qnum lspid lrpid   uid   gid  cuid  cgid      stime      rtime      ctime\n");
 
 	for(i = 0; i <= msg_ids.max_id; i++) {
 		struct msg_queue * msq;
 		msq = msg_lock(i);
 		if(msq != NULL) {
-			len += sprintf(buffer + len, "%10d %10d  %4o  %5u %5u %5u %5u %5u %5u %5u %5u %10lu %10lu %10lu\n",
+			len += sprintf(buffer + len, "%10d %10d  %4o  %10lu %10lu %5u %5u %5u %5u %5u %5u %10lu %10lu %10lu\n",
 				msq->q_perm.key,
 				msg_buildid(i,msq->q_perm.seq),
 				msq->q_perm.mode,

@@ -773,7 +773,6 @@ extern int unregister_blkdev(unsigned int, const char *);
 extern struct block_device *bdget(dev_t);
 extern void bdput(struct block_device *);
 extern int blkdev_open(struct inode *, struct file *);
-extern int blkdev_close(struct inode *, struct file *);
 extern struct file_operations def_blk_fops;
 extern int ioctl_by_bdev(struct block_device *, unsigned, unsigned long);
 extern int blkdev_get(struct block_device *, mode_t, unsigned, int);
@@ -1025,7 +1024,6 @@ extern int change_root(kdev_t, const char *);
 
 extern ssize_t char_read(struct file *, char *, size_t, loff_t *);
 extern ssize_t block_read(struct file *, char *, size_t, loff_t *);
-extern int block_fsync(struct file *, struct dentry *);
 extern int read_ahead[];
 
 extern ssize_t char_write(struct file *, const char *, size_t, loff_t *);

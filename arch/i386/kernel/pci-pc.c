@@ -23,6 +23,7 @@
 unsigned int pci_probe = PCI_PROBE_BIOS | PCI_PROBE_CONF1 | PCI_PROBE_CONF2;
 
 static struct pci_bus *pci_root_bus;
+static struct pci_ops *pci_root_ops;
 
 /*
  * IRQ routing table provided by the BIOS
@@ -876,9 +877,9 @@ static void __init pci_fixup_i450nx(struct pci_dev *d)
 		pci_read_config_byte(d, reg++, &subb);
 		DBG("i450NX PXB %d: %02x/%02x/%02x\n", pxb, busno, suba, subb);
 		if (busno)
-			pci_scan_bus(busno, pci_root_bus->ops, NULL);	/* Bus A */
+			pci_scan_bus(busno, pci_root_ops, NULL);	/* Bus A */
 		if (suba < subb)
-			pci_scan_bus(suba+1, pci_root_bus->ops, NULL);	/* Bus B */
+			pci_scan_bus(suba+1, pci_root_ops, NULL);	/* Bus B */
 	}
 }
 
@@ -891,7 +892,7 @@ static void __init pci_fixup_rcc(struct pci_dev *d)
 	u8 busno;
 	pci_read_config_byte(d, 0x44, &busno);
 	printk("PCI: RCC host bridge: secondary bus %02x\n", busno);
-	pci_scan_bus(busno, pci_root_bus->ops, NULL);
+	pci_scan_bus(busno, pci_root_ops, NULL);
 }
 
 static void __init pci_fixup_compaq(struct pci_dev *d)
@@ -903,7 +904,7 @@ static void __init pci_fixup_compaq(struct pci_dev *d)
 	u8 busno;
 	pci_read_config_byte(d, 0xc8, &busno);
 	printk("PCI: Compaq host bridge: secondary bus %02x\n", busno);
-	pci_scan_bus(busno, pci_root_bus->ops, NULL);
+	pci_scan_bus(busno, pci_root_ops, NULL);
 }
 
 static void __init pci_fixup_umc_ide(struct pci_dev *d)
@@ -1189,7 +1190,6 @@ void __init pcibios_init(void)
 {
 	struct pci_ops *bios = NULL;
 	struct pci_ops *dir = NULL;
-	struct pci_ops *ops;
 
 #ifdef CONFIG_PCI_BIOS
 	if ((pci_probe & PCI_PROBE_BIOS) && ((bios = pci_find_bios()))) {
@@ -1202,16 +1202,16 @@ void __init pcibios_init(void)
 		dir = pci_check_direct();
 #endif
 	if (dir)
-		ops = dir;
+		pci_root_ops = dir;
 	else if (bios)
-		ops = bios;
+		pci_root_ops = bios;
 	else {
 		printk("PCI: No PCI bus detected\n");
 		return;
 	}
 
 	printk("PCI: Probing PCI hardware\n");
-	pci_root_bus = pci_scan_bus(0, ops, NULL);
+	pci_root_bus = pci_scan_bus(0, pci_root_ops, NULL);
 
 	pcibios_fixup_irqs();
 	if (pci_probe & PCI_PEER_FIXUP)

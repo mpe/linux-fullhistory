@@ -106,38 +106,11 @@ typedef struct cb_config_t {
 /*=====================================================================
 
     Expansion ROM's have a special layout, and pointers specify an
-    image number and an offset within that image.  check_rom()
-    verifies that the expansion ROM exists and has the standard
-    layout.  xlate_rom_addr() converts an image/offset address to an
-    absolute offset from the ROM's base address.
+    image number and an offset within that image.  xlate_rom_addr()
+    converts an image/offset address to an absolute offset from the
+    ROM's base address.
     
 =====================================================================*/
-
-static int check_rom(u_char * b, u_long len)
-{
-	u_int img = 0, ofs = 0, sz;
-	u_short data;
-	DEBUG(0, "ROM image dump:\n");
-	while ((readb(b) == 0x55) && (readb(b + 1) == 0xaa)) {
-		data = readb(b + ROM_DATA_PTR) +
-		    (readb(b + ROM_DATA_PTR + 1) << 8);
-		sz = 512 * (readb(b + data + PCDATA_IMAGE_SZ) +
-			    (readb(b + data + PCDATA_IMAGE_SZ + 1) << 8));
-		DEBUG(0, "  image %d: 0x%06x-0x%06x, signature %c%c%c%c\n",
-		      img, ofs, ofs + sz - 1,
-		      readb(b + data + PCDATA_SIGNATURE),
-		      readb(b + data + PCDATA_SIGNATURE + 1),
-		      readb(b + data + PCDATA_SIGNATURE + 2),
-		      readb(b + data + PCDATA_SIGNATURE + 3));
-		ofs += sz;
-		img++;
-		if ((readb(b + data + PCDATA_INDICATOR) & 0x80) ||
-		    (sz == 0) || (ofs >= len))
-			break;
-		b += sz;
-	}
-	return img;
-}
 
 static u_int xlate_rom_addr(u_char * b, u_int addr)
 {
@@ -326,12 +299,8 @@ int cb_alloc(socket_info_t * s)
 		/* FIXME: Do we need to enable the expansion ROM? */
 		for (r = 0; r < 7; r++) {
 			struct resource *res = dev->resource + r;
-			if (res->flags) {
-				/* Unset resource address, assign new one! */
-				res->end -= res->start;
-				res->start = 0;
+			if (res->flags)
 				pci_assign_resource(dev, r);
-			}
 		}
 		pci_enable_device(dev);
 

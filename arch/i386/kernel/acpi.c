@@ -501,21 +501,14 @@ static void acpi_destroy_tables(void)
 }
 
 /*
- * Locate PIIX4 device and create a fake FACP
+ * Init PIIX4 device and create a fake FACP
  */
-static int __init acpi_find_piix4(void)
+static int __init acpi_init_piix4(struct pci_dev *dev)
 {
-	struct pci_dev *dev;
 	u32 base;
 	u16 cmd;
 	u8 pmregmisc;
 
-	dev = pci_find_device(PCI_VENDOR_ID_INTEL,
-			      PCI_DEVICE_ID_INTEL_82371AB_3,
-			      NULL);
-	if (!dev)
-		return -ENODEV;
-	
 	pci_read_config_word(dev, PCI_COMMAND, &cmd);
 	if (!(cmd & PCI_COMMAND_IO))
 		return -ENODEV;
@@ -565,6 +558,97 @@ static int __init acpi_find_piix4(void)
 	acpi_p_blk = base + ACPI_PIIX4_P_BLK;
 
 	return 0;
+}
+
+/*
+ * Init VIA ACPI device and create a fake FACP
+ */
+static int __init acpi_init_via(struct pci_dev *dev)
+{
+	u32 base;
+	u8 tmp, irq;
+	
+	pci_read_config_byte(dev, 0x41, &tmp);
+	if (!(tmp & 0x80))
+		return -ENODEV;
+	
+	pci_read_config_byte(dev, 8, &tmp);
+	tmp = (tmp & 0x10 ? 0x48 : 0x20);
+	
+	pci_read_config_dword(dev, tmp, &base);
+	if (!(base & PCI_BASE_ADDRESS_SPACE_IO))
+		return -ENODEV;
+	
+	base &= PCI_BASE_ADDRESS_IO_MASK;
+	if (!base)
+		return -ENODEV;
+
+	pci_read_config_byte(dev, 0x42, &irq);
+
+	printk(KERN_INFO "ACPI: found %s at 0x%04x\n", dev->name, base);
+
+	acpi_facp = kmalloc(sizeof(struct acpi_facp), GFP_KERNEL);
+	if (!acpi_facp)
+		return -ENOMEM;
+
+	acpi_fake_facp = 1;
+	memset(acpi_facp, 0, sizeof(struct acpi_facp));
+
+	acpi_facp->int_model = ACPI_VIA_INT_MODEL;
+	acpi_facp->sci_int = irq;
+	acpi_facp->smi_cmd = base + ACPI_VIA_SMI_CMD;
+	acpi_facp->acpi_enable = ACPI_VIA_ACPI_ENABLE;
+	acpi_facp->acpi_disable = ACPI_VIA_ACPI_DISABLE;
+	acpi_facp->pm1a_evt = base + ACPI_PIIX4_PM1_EVT;
+	acpi_facp->pm1a_cnt = base + ACPI_PIIX4_PM1_CNT;
+	acpi_facp->pm_tmr = base + ACPI_VIA_PM_TMR;
+	acpi_facp->gpe0 = base + ACPI_VIA_GPE0;
+
+	acpi_facp->pm1_evt_len = ACPI_VIA_PM1_EVT_LEN;
+	acpi_facp->pm1_cnt_len = ACPI_VIA_PM1_CNT_LEN;
+	acpi_facp->pm_tm_len = ACPI_VIA_PM_TM_LEN;
+	acpi_facp->gpe0_len = ACPI_VIA_GPE0_LEN;
+	acpi_facp->p_lvl2_lat = (__u16) ACPI_INFINITE_LAT;
+	acpi_facp->p_lvl3_lat = (__u16) ACPI_INFINITE_LAT;
+
+	acpi_facp->duty_offset = ACPI_VIA_DUTY_OFFSET;
+	acpi_facp->duty_width = ACPI_VIA_DUTY_WIDTH;
+
+	acpi_facp->day_alarm = ACPI_VIA_DAY_ALARM;
+	acpi_facp->mon_alarm = ACPI_VIA_MON_ALARM;
+	acpi_facp->century = ACPI_VIA_CENTURY;
+
+	acpi_facp_addr = virt_to_phys(acpi_facp);
+	acpi_dsdt_addr = 0;
+
+	acpi_p_blk = base + ACPI_VIA_P_BLK;
+
+	return 0;
+}
+
+static struct pci_simple_probe_entry acpi_devices[] __initdata =
+{
+	{PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB_3, 0, 0,
+	 acpi_init_piix4},
+	{PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C586_3, 0, 0,
+	 acpi_init_via},
+	{0,}
+};
+
+/*
+ * Probe for matching PCI device
+ */
+static int __init acpi_probe(struct pci_dev *dev,
+			     int match,
+			     const struct pci_simple_probe_entry *entry,
+			     void *data)
+{
+	if(entry->dev_data) {
+		typedef int (*init_fn)(struct pci_dev*);
+		init_fn init = (init_fn) entry->dev_data;
+		return (*init)(dev);
+	}
+	return -ENODEV;
 }
 
 /*
@@ -692,7 +776,7 @@ static void acpi_idle_handler(void)
 sleep3:
 	sleep_level = 3;
 	if (!acpi_p_lvl3_tested) {
-		printk("ACPI C3 works\n");
+		printk(KERN_INFO "ACPI C3 works\n");
 		acpi_p_lvl3_tested = 1;
 	}
 	wake_on_busmaster();
@@ -732,7 +816,7 @@ sleep3_with_arbiter:
 sleep2:
 	sleep_level = 2;
 	if (!acpi_p_lvl2_tested) {
-		printk("ACPI C2 works\n");
+		printk(KERN_INFO "ACPI C2 works\n");
 		acpi_p_lvl2_tested = 1;
 	}
 	wake_on_busmaster();	/* Required to track BM activity.. */
@@ -1170,17 +1254,18 @@ static int __init acpi_init(void)
 	if (acpi_disabled)
 		return -ENODEV;
 
-	if (acpi_find_tables() && acpi_find_piix4()) {
-		// no ACPI tables and not PIIX4
+	if (acpi_find_tables()
+	    && pci_simple_probe(acpi_devices, 0, acpi_probe, NULL) <= 0) {
+		// no ACPI tables and not a recognized ACPI chipset
 		return -ENODEV;
 	}
 
-    	/*
-    	 * Internally we always keep latencies in timer
-    	 * ticks, which is simpler and more consistent (what is
-    	 * an uS to us?). Besides, that gives people more
-    	 * control in the /proc interfaces.
-    	 */
+	/*
+	 * Internally we always keep latencies in timer
+	 * ticks, which is simpler and more consistent (what is
+	 * an uS to us?). Besides, that gives people more
+	 * control in the /proc interfaces.
+	 */
 	if (acpi_facp->p_lvl2_lat
 	    && acpi_facp->p_lvl2_lat <= ACPI_MAX_P_LVL2_LAT) {
 		acpi_p_lvl2_lat = ACPI_uS_TO_TMR_TICKS(acpi_facp->p_lvl2_lat);

@@ -1129,11 +1129,11 @@ int pcmcia_get_window(window_handle_t *handle, int idx, win_req_t *req)
     return CS_SUCCESS;
 } /* get_window */
 
-int pcmcia_get_first_window(client_handle_t *handle, win_req_t *req)
+int pcmcia_get_first_window(window_handle_t *win, win_req_t *req)
 {
-    if ((handle == NULL) || CHECK_HANDLE(*handle))
+    if ((win == NULL) || ((*win)->magic != WINDOW_MAGIC))
 	return CS_BAD_HANDLE;
-    return pcmcia_get_window((window_handle_t *)handle, 0, req);
+    return pcmcia_get_window(win, 0, req);
 }
 
 int pcmcia_get_next_window(window_handle_t *win, win_req_t *req)

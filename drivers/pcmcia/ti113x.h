@@ -30,49 +30,6 @@
 #ifndef _LINUX_TI113X_H
 #define _LINUX_TI113X_H
 
-#ifndef PCI_VENDOR_ID_TI
-#define PCI_VENDOR_ID_TI		0x104c
-#endif
-
-#ifndef PCI_DEVICE_ID_TI_1130
-#define PCI_DEVICE_ID_TI_1130		0xac12
-#endif
-#ifndef PCI_DEVICE_ID_TI_1131
-#define PCI_DEVICE_ID_TI_1131		0xac15
-#endif
-#ifndef PCI_DEVICE_ID_TI_1031
-#define PCI_DEVICE_ID_TI_1031		0xac13
-#endif
-#ifndef PCI_DEVICE_ID_TI_1250A
-#define PCI_DEVICE_ID_TI_1250A		0xac16
-#endif
-#ifndef PCI_DEVICE_ID_TI_1220
-#define PCI_DEVICE_ID_TI_1220		0xac17
-#endif
-#ifndef PCI_DEVICE_ID_TI_1221
-#define PCI_DEVICE_ID_TI_1221		0xac19
-#endif
-#ifndef PCI_DEVICE_ID_TI_1210
-#define PCI_DEVICE_ID_TI_1210		0xac1a
-#endif
-#ifndef PCI_DEVICE_ID_TI_1450
-#define PCI_DEVICE_ID_TI_1450		0xac1b
-#endif
-#ifndef PCI_DEVICE_ID_TI_1225
-#define PCI_DEVICE_ID_TI_1225		0xac1c
-#endif
-#ifndef PCI_DEVICE_ID_TI_1251A
-#define PCI_DEVICE_ID_TI_1251A		0xac1d
-#endif
-#ifndef PCI_DEVICE_ID_TI_1211
-#define PCI_DEVICE_ID_TI_1211		0xac1e
-#endif
-#ifndef PCI_DEVICE_ID_TI_1251B
-#define PCI_DEVICE_ID_TI_1251B		0xac1f
-#endif
-#ifndef PCI_DEVICE_ID_TI_1420
-#define PCI_DEVICE_ID_TI_1420		0xac51
-#endif
 
 /* Register definitions for TI 113X PCI-to-CardBus bridges */
 
@@ -175,6 +132,87 @@
 
 /* ExCA IO offset registers */
 #define TI113X_IO_OFFSET(map)		(0x36+((map)<<1))
+
+#ifdef CONFIG_CARDBUS
+
+#define ti_sysctl(socket)	((socket)->private[0])
+#define ti_cardctl(socket)	((socket)->private[1])
+#define ti_devctl(socket)	((socket)->private[2])
+
+static int ti113x_open(pci_socket_t *socket)
+{
+	ti_sysctl(socket) = config_readl(socket, TI113X_SYSTEM_CONTROL);
+	ti_cardctl(socket) = config_readb(socket, TI113X_CARD_CONTROL);
+	ti_devctl(socket) = config_readb(socket, TI113X_DEVICE_CONTROL);
+
+	ti_cardctl(socket) &= ~(TI113X_CCR_PCI_IRQ_ENA | TI113X_CCR_PCI_IREQ | TI113X_CCR_PCI_CSC);
+	if (socket->cb_irq)
+		ti_cardctl(socket) |= TI113X_CCR_PCI_IRQ_ENA | TI113X_CCR_PCI_CSC | TI113X_CCR_PCI_IREQ;
+	return 0;
+}
+
+static int ti113x_init(pci_socket_t *socket)
+{
+	yenta_init(socket);
+
+	config_writel(socket, TI113X_SYSTEM_CONTROL, ti_sysctl(socket));
+	config_writeb(socket, TI113X_CARD_CONTROL, ti_cardctl(socket));
+	config_writeb(socket, TI113X_DEVICE_CONTROL, ti_devctl(socket));
+
+	return 0;
+}
+
+static struct pci_socket_ops ti113x_ops = {
+	ti113x_open,
+	yenta_close,
+	ti113x_init,
+	yenta_suspend,
+	yenta_get_status,
+	yenta_get_socket,
+	yenta_set_socket,
+	yenta_get_io_map,
+	yenta_set_io_map,
+	yenta_get_mem_map,
+	yenta_set_mem_map,
+	yenta_proc_setup
+};
+
+#define ti_diag(socket)		((socket)->private[0])
+
+static int ti1250_open(pci_socket_t *socket)
+{
+	ti_diag(socket) = config_readb(socket, TI1250_DIAGNOSTIC);
+
+	ti_diag(socket) &= ~(TI1250_DIAG_PCI_CSC | TI1250_DIAG_PCI_IREQ);
+	if (socket->cb_irq)
+		ti_diag(socket) |= TI1250_DIAG_PCI_CSC | TI1250_DIAG_PCI_IREQ;
+	return 0;
+}
+
+static int ti1250_init(pci_socket_t *socket)
+{
+	yenta_init(socket);
+
+	config_writeb(socket, TI1250_DIAGNOSTIC, ti_diag(socket));
+	return 0;
+}
+
+static struct pci_socket_ops ti1250_ops = {
+	ti1250_open,
+	yenta_close,
+	ti1250_init,
+	yenta_suspend,
+	yenta_get_status,
+	yenta_get_socket,
+	yenta_set_socket,
+	yenta_get_io_map,
+	yenta_set_io_map,
+	yenta_get_mem_map,
+	yenta_set_mem_map,
+	yenta_proc_setup
+};
+
+#endif /* CONFIG_CARDBUS */
 
 #endif /* _LINUX_TI113X_H */
 

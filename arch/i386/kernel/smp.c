@@ -448,7 +448,6 @@ int smp_call_function (void (*func) (void *info), void *info, int nonatomic,
 	struct call_data_struct data;
 	int ret, cpus = smp_num_cpus-1;
 	static spinlock_t lock = SPIN_LOCK_UNLOCKED;
-	unsigned long timeout;
 
 	if(cpus == 0)
 		return 0;

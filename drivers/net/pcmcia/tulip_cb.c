@@ -256,58 +256,6 @@ them.  The MII transceiver status is polled using an kernel timer.
 
 */
 
-static struct net_device *
-tulip_probe1(int pci_bus, int pci_devfn, struct net_device *dev, long ioaddr,
-			 int irq, int chip_idx, int board_idx);
-
-/* This table drives the PCI probe routines.  It's mostly boilerplate in all
-   of the drivers, and will likely be provided by some future kernel.
-   Note the matching code -- the first table entry matchs all 56** cards but
-   second only the 1234 card.
-*/
-enum pci_flags_bit {
-	PCI_USES_IO=1, PCI_USES_MEM=2, PCI_USES_MASTER=4,
-	PCI_ADDR0=0x10<<0, PCI_ADDR1=0x10<<1, PCI_ADDR2=0x10<<2, PCI_ADDR3=0x10<<3,
-};
-#define PCI_ADDR0_IO (PCI_USES_IO|PCI_ADDR0)
-
-struct pci_id_info {
-	const char *name;
-	u16	vendor_id, device_id, device_id_mask, flags;
-	int io_size, min_latency;
-	struct net_device *(*probe1)(int pci_bus, int pci_devfn, struct net_device *dev,
-							 long ioaddr, int irq, int chip_idx, int fnd_cnt);
-};
-static struct pci_id_info pci_tbl[] = {
-  { "Digital DC21040 Tulip",
-	0x1011, 0x0002, 0xffff, PCI_ADDR0_IO, 128, 32, tulip_probe1 },
-  { "Digital DC21041 Tulip",
-	0x1011, 0x0014, 0xffff, PCI_ADDR0_IO, 128, 32, tulip_probe1 },
-  { "Digital DS21140 Tulip",
-	0x1011, 0x0009, 0xffff, PCI_ADDR0_IO, 128, 32, tulip_probe1 },
-  { "Digital DS21143 Tulip",
-	0x1011, 0x0019, 0xffff, PCI_ADDR0_IO, 128, 32, tulip_probe1 },
-  { "Lite-On 82c168 PNIC",
-	0x11AD, 0x0002, 0xffff, PCI_ADDR0_IO, 256, 32, tulip_probe1 },
-  { "Macronix 98713 PMAC",
-	0x10d9, 0x0512, 0xffff, PCI_ADDR0_IO, 256, 32, tulip_probe1 },
-  { "Macronix 98715 PMAC",
-	0x10d9, 0x0531, 0xffff, PCI_ADDR0_IO, 256, 32, tulip_probe1 },
-  { "Macronix 98725 PMAC",
-	0x10d9, 0x0531, 0xffff, PCI_ADDR0_IO, 256, 32, tulip_probe1 },
-  { "ASIX AX88140",
-	0x125B, 0x1400, 0xffff, PCI_ADDR0_IO, 128, 32, tulip_probe1 },
-  { "Lite-On LC82C115 PNIC-II",
-	0x11AD, 0xc115, 0xffff, PCI_ADDR0_IO, 256, 32, tulip_probe1 },
-  { "ADMtek AN981 Comet",
-	0x1317, 0x0981, 0xffff, PCI_ADDR0_IO, 256, 32, tulip_probe1 },
-  { "Compex RL100-TX",
-	0x11F6, 0x9881, 0xffff, PCI_ADDR0_IO, 128, 32, tulip_probe1 },
-  { "Xircom Cardbus Adapter (DEC 21143 compatible mode)",
-	0x115D, 0x0003, 0xffff, PCI_ADDR0_IO, 128, 32, tulip_probe1 },
-  {0},
-};
-
 /* This table use during operation for capabilities and media timer. */
 
 static void tulip_timer(unsigned long data);
@@ -3140,29 +3088,38 @@ static void set_rx_mode(struct net_device *dev)
 	outl_CSR6(csr6 | 0x0000, ioaddr, tp->chip_id);
 }
 
-static int tulip_probe(struct pci_dev *pdev)
+static struct pci_device_id tulip_pci_table[] = {
+  { 0x1011, 0x0002, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DC21040 },
+  { 0x1011, 0x0014, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DC21041 },
+  { 0x1011, 0x0009, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DC21140 },
+  { 0x1011, 0x0019, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DC21142 },
+  { 0x11AD, 0x0002, PCI_ANY_ID, PCI_ANY_ID, 0, 0, LC82C168 },
+  { 0x10d9, 0x0512, PCI_ANY_ID, PCI_ANY_ID, 0, 0, MX98713 },
+  { 0x10d9, 0x0531, PCI_ANY_ID, PCI_ANY_ID, 0, 0, MX98715 },
+  { 0x10d9, 0x0531, PCI_ANY_ID, PCI_ANY_ID, 0, 0, MX98725 },
+  { 0x125B, 0x1400, PCI_ANY_ID, PCI_ANY_ID, 0, 0, AX88140 },
+  { 0x11AD, 0xc115, PCI_ANY_ID, PCI_ANY_ID, 0, 0, PNIC2 },
+  { 0x1317, 0x0981, PCI_ANY_ID, PCI_ANY_ID, 0, 0, COMET },
+  { 0x11F6, 0x9881, PCI_ANY_ID, PCI_ANY_ID, 0, 0, COMPEX9881 },
+  { 0x115D, 0x0003, PCI_ANY_ID, PCI_ANY_ID, 0, 0, X3201_3 },
+  {0},
+};
+
+MODULE_DEVICE_TABLE(pci, tulip_pci_table);
+
+static int __devinit tulip_pci_probe(struct pci_dev *pdev, struct pci_device_id *id)
 {
 	struct net_device *dev;
-	int chip_idx;
 	static int board_idx = 0;
 
 	printk(KERN_INFO "tulip_attach(%s)\n", pdev->slot_name);
 
-	for (chip_idx = 0; pci_tbl[chip_idx].vendor_id; chip_idx++)
-		if (pdev->vendor == pci_tbl[chip_idx].vendor_id
-		    && (pdev->device & pci_tbl[chip_idx].device_id_mask) ==
-		    pci_tbl[chip_idx].device_id)
-			break;
-	if (pci_tbl[chip_idx].vendor_id == 0)
-		return 0;
-
 	pci_set_master(pdev);
-	dev = pci_tbl[chip_idx].probe1(pdev->bus->number, pdev->devfn, NULL,
+	dev = tulip_probe1(pdev->bus->number, pdev->devfn, NULL,
 				       pdev->resource[0].start, pdev->irq,
-				       chip_idx, board_idx++);
+				       id->driver_data, board_idx++);
 	if (dev) {
 		pdev->driver_data = dev;
-		MOD_INC_USE_COUNT;
 		return 1;
 	}
 	return 0;
@@ -3184,7 +3141,7 @@ static void tulip_resume(struct pci_dev *pdev)
 	if (tp->open) tulip_up(dev);
 }
 
-static void tulip_remove(struct pci_dev *pdev)
+static void __devexit tulip_remove(struct pci_dev *pdev)
 {
 	struct net_device *dev = pdev->driver_data;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
@@ -3197,25 +3154,34 @@ static void tulip_remove(struct pci_dev *pdev)
 
 struct pci_driver tulip_ops = {
 	name:		"tulip_cb",
-	probe:		tulip_probe,
+	id_table:	tulip_pci_table,
+	probe:		tulip_pci_probe,
 	remove:		tulip_remove,
 	suspend:	tulip_suspend,
 	resume:		tulip_resume
 };
 
-int __init tulip_init(void)
+#ifdef MODULE
+
+int module_init(void)
 {
 	pci_register_driver(&tulip_ops);
 	return 0;
 }
 
-void __exit tulip_cleanup(void)
+void module_cleanup(void)
 {
 	pci_unregister_driver(&tulip_ops);
 }
 
-module_init(tulip_init);
-module_exit(tulip_cleanup);
+#else
+
+void tulip_probe(void)
+{
+	pci_register_driver(&tulip_ops);
+}
+
+#endif
 
 /*
  * Local variables:

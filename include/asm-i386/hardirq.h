@@ -25,6 +25,7 @@ extern unsigned int local_irq_count[NR_CPUS];
 #else
 
 #include <asm/atomic.h>
+#include <asm/smp.h>
 
 extern unsigned char global_irq_holder;
 extern unsigned volatile int global_irq_lock;

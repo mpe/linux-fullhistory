@@ -401,4 +401,32 @@ enum
 #define ACPI_PIIX4_PMREGMISC	0x80
 #define	  ACPI_PIIX4_PMIOSE	0x01
 
+/*
+ * VIA-specific ACPI info (for systems with VT82C586B but no ACPI tables)
+ */
+
+#define ACPI_VIA_INT_MODEL     0x00
+
+#define ACPI_VIA_SMI_CMD       0x002f
+#define ACPI_VIA_ACPI_ENABLE   0xa1
+#define ACPI_VIA_ACPI_DISABLE  0xa0
+
+#define ACPI_VIA_PM1_EVT       0x0000
+#define ACPI_VIA_PM1_CNT       0x0004
+#define ACPI_VIA_PM_TMR	       0x0008
+#define ACPI_VIA_GPE0	       0x0020
+#define ACPI_VIA_P_BLK	       0x0010
+
+#define ACPI_VIA_PM1_EVT_LEN   0x04
+#define ACPI_VIA_PM1_CNT_LEN   0x02
+#define ACPI_VIA_PM_TM_LEN     0x04
+#define ACPI_VIA_GPE0_LEN      0x04
+
+#define ACPI_VIA_DUTY_OFFSET   1
+#define ACPI_VIA_DUTY_WIDTH    3
+
+#define ACPI_VIA_DAY_ALARM     0x7d
+#define ACPI_VIA_MON_ALARM     0x7e
+#define ACPI_VIA_CENTURY       0x7f
+
 #endif /* _LINUX_ACPI_H */

@@ -1,6 +1,8 @@
 #ifndef __ALPHA_PCI_H
 #define __ALPHA_PCI_H
 
+#include <asm/machvec.h>
+
 /*
  * The following structure is used to manage multiple PCI busses.
  */
@@ -26,6 +28,9 @@ struct pci_controler {
    bus numbers.  */
 
 #define pcibios_assign_all_busses()	1
+
+#define PCIBIOS_MIN_IO		alpha_mv.min_io_address
+#define PCIBIOS_MIN_MEM		alpha_mv.min_mem_address
 
 #endif /* __ALPHA_PCI_H */
 

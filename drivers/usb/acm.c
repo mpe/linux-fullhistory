@@ -1,5 +1,5 @@
 /*
- * acm.c  Version 0.12
+ * acm.c  Version 0.13
  *
  * Copyright (c) 1999 Armin Fuerst	<fuerst@in.tum.de>
  * Copyright (c) 1999 Pavel Machek	<pavel@suse.cz>
@@ -496,11 +496,14 @@ static void *acm_probe(struct usb_device *dev, unsigned int ifnum)
 
 		for (minor = 0; minor < ACM_TTY_MINORS && acm_table[minor]; minor++);
 		if (acm_table[minor]) {
-			dbg("no more free acm devices");
+			err("no more free acm devices");
 			return NULL;
 		}
 
-		if (!(acm = kmalloc(sizeof(struct acm), GFP_KERNEL))) return NULL;
+		if (!(acm = kmalloc(sizeof(struct acm), GFP_KERNEL))) {
+			err("out of memory");
+			return NULL;
+		}
 		memset(acm, 0, sizeof(struct acm));
 
 		ctrlsize = epctrl->wMaxPacketSize;
@@ -512,6 +515,7 @@ static void *acm_probe(struct usb_device *dev, unsigned int ifnum)
 		acm->dev = dev;
 
 		if (!(buf = kmalloc(ctrlsize + readsize + acm->writesize, GFP_KERNEL))) {
+			err("out of memory");
 			kfree(acm);
 			return NULL;
 		}
@@ -523,15 +527,15 @@ static void *acm_probe(struct usb_device *dev, unsigned int ifnum)
 			buf += ctrlsize, readsize, acm_read_bulk, acm);
 
 		FILL_BULK_URB(&acm->writeurb, dev, usb_sndbulkpipe(dev, epwrite->bEndpointAddress),
-			buf += readsize , acm->writesize, acm_write_bulk, acm);
+			buf += readsize, acm->writesize, acm_write_bulk, acm);
 	
 		printk(KERN_INFO "ttyACM%d: USB ACM device\n", minor);
 
 		acm_set_control(acm, acm->ctrlout);
 
-		acm->linecoding.speed = 115200;
-		acm->linecoding.databits = 8;
-		acm_set_coding(acm, &acm->linecoding);
+		acm->line.speed = cpu_to_le32(9600);
+		acm->line.databits = 8;
+		acm_set_line(acm, &acm->line);
 
 		usb_driver_claim_interface(&acm_driver, acm->iface + 0, acm);
 		usb_driver_claim_interface(&acm_driver, acm->iface + 1, acm);

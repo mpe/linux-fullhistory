@@ -138,7 +138,7 @@ static void show_registers(struct pt_regs *regs)
 	unsigned short ss;
 	unsigned long *stack, addr, module_start, module_end;
 
-	esp = (unsigned long) (1+regs);
+	esp = (unsigned long) (&regs->esp);
 	ss = __KERNEL_DS;
 	if (regs->xcs & 3) {
 		in_kernel = 0;

@@ -20,7 +20,7 @@ static ssize_t proc_file_read(struct file * file, char * buf,
 			      size_t nbytes, loff_t *ppos);
 static ssize_t proc_file_write(struct file * file, const char * buffer,
 			       size_t count, loff_t *ppos);
-static long long proc_file_lseek(struct file *, long long, int);
+static loff_t proc_file_lseek(struct file *, loff_t, int);
 
 int proc_match(int len, const char *name,struct proc_dir_entry * de)
 {
@@ -139,8 +139,8 @@ proc_file_write(struct file * file, const char * buffer,
 }
 
 
-static long long
-proc_file_lseek(struct file * file, long long offset, int orig)
+static loff_t
+proc_file_lseek(struct file * file, loff_t offset, int orig)
 {
     switch (orig) {
     case 0:

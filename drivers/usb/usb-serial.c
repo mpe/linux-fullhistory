@@ -1,7 +1,7 @@
 /*
  * USB Serial Converter driver
  *
- *	(C) Copyright (C) 1999
+ *	(C) Copyright (C) 1999, 2000
  *	    Greg Kroah-Hartman (greg@kroah.com)
  *
  *	This program is free software; you can redistribute it and/or modify
@@ -12,8 +12,16 @@
  * This driver was originally based on the ACM driver by Armin Fuerst (which was 
  * based on a driver by Brad Keryan)
  *
- * See README.serial for more information on using this driver.
+ * See Documentation/usb-serial.txt for more information on using this driver.
  * 
+ * version 0.4.0 (01/10/2000) gkh
+ *	Added whiteheat.h containing the firmware for the ConnectTech WhiteHEAT
+ *	device. Added startup function to allow firmware to be downloaded to
+ *	a device if it needs to be.
+ *	Added firmware download logic to the WhiteHEAT device.
+ *	Started to add #defines to split up the different drivers for potential
+ *	configuration option.
+ *	
  * version 0.3.1 (12/30/99) gkh
  *      Fixed problems with urb for bulk out.
  *      Added initial support for multiple sets of endpoints. This enables
@@ -77,9 +85,18 @@
 #include <linux/module.h>
 #include <linux/spinlock.h>
 
-#undef DEBUG
+#include "whiteheat.h"
+
+#define DEBUG
 
 #include "usb.h"
+
+/* different configuration options to cut down on code size if you wish */
+#define CONFIG_BELKIN_SERIAL
+#define CONFIG_PERACOM_SERIAL
+#define CONFIG_VISOR_SERIAL
+#define CONFIG_WHITEHEAT_SERIAL
+#define CONFIG_GENERIC_SERIAL
 
 /* Module information */
 MODULE_AUTHOR("Greg Kroah-Hartman, greg@kroah.com, http://www.kroah.com/linux-usb/");
@@ -112,214 +129,6 @@ MODULE_PARM_DESC(product, "User specified USB idProduct");
 
 static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum);
 static void usb_serial_disconnect(struct usb_device *dev, void *ptr);
-
-
-#define MUST_HAVE_NOT	0x01
-#define MUST_HAVE	0x02
-#define DONT_CARE	0x03
-
-#define	HAS		0x02
-#define HAS_NOT		0x01
-
-#define NUM_DONT_CARE	(-1)
-
-/* local function prototypes */
-static int serial_open (struct tty_struct *tty, struct file * filp);
-static void serial_close (struct tty_struct *tty, struct file * filp);
-static int serial_write (struct tty_struct * tty, int from_user, const unsigned char *buf, int count);
-static void serial_put_char (struct tty_struct *tty, unsigned char ch);
-static int serial_write_room (struct tty_struct *tty);
-static int serial_chars_in_buffer (struct tty_struct *tty);
-static void serial_throttle (struct tty_struct * tty);
-static void serial_unthrottle (struct tty_struct * tty);
-
-
-/* This structure defines the individual serial converter. */
-struct usb_serial_device_type {
-	char	*name;
-	__u16	*idVendor;
-	__u16	*idProduct;
-	char	needs_interrupt_in;
-	char	needs_bulk_in;
-	char	needs_bulk_out;
-	char	num_interrupt_in;
-	char	num_bulk_in;
-	char	num_bulk_out;
-
-	/* function call to make before accepting driver */
-	void (*startup) (void);
-	
-	/* serial function calls */
-	int  (*open)(struct tty_struct * tty, struct file * filp);
-	void (*close)(struct tty_struct * tty, struct file * filp);
-	int  (*write)(struct tty_struct * tty, int from_user,const unsigned char *buf, int count);
-	void (*put_char)(struct tty_struct *tty, unsigned char ch);
-	int  (*write_room)(struct tty_struct *tty);
-	int  (*chars_in_buffer)(struct tty_struct *tty);
-	void (*throttle)(struct tty_struct * tty);
-	void (*unthrottle)(struct tty_struct * tty);
-};
-
-
-/* function prototypes for a "generic" type serial converter (no flow control, not all endpoints needed) */
-static int  generic_serial_open		(struct tty_struct *tty, struct file *filp);
-static void generic_serial_close	(struct tty_struct *tty, struct file *filp);
-static int  generic_serial_write	(struct tty_struct *tty, int from_user, const unsigned char *buf, int count);
-static void generic_serial_put_char	(struct tty_struct *tty, unsigned char ch);
-static int  generic_write_room		(struct tty_struct *tty);
-static int  generic_chars_in_buffer	(struct tty_struct *tty);
-
-/* All of the device info needed for the Generic Serial Converter */
-static struct usb_serial_device_type generic_device = {
-	name:			"Generic",
-	idVendor:		&vendor,		/* use the user specified vendor id */
-	idProduct:		&product,		/* use the user specified product id */
-	needs_interrupt_in:	DONT_CARE,		/* don't have to have an interrupt in endpoint */
-	needs_bulk_in:		DONT_CARE,		/* don't have to have a bulk in endpoint */
-	needs_bulk_out:		DONT_CARE,		/* don't have to have a bulk out endpoint */
-	num_interrupt_in:	NUM_DONT_CARE,
-	num_bulk_in:		NUM_DONT_CARE,
-	num_bulk_out:		NUM_DONT_CARE,
-	open:			generic_serial_open,
-	close:			generic_serial_close,
-	write:			generic_serial_write,
-	put_char:		generic_serial_put_char,
-	write_room:		generic_write_room,
-	chars_in_buffer:	generic_chars_in_buffer,
-};
-
-
-/* function prototypes for the eTek type converters (this includes Belkin and Peracom) */
-static int  etek_serial_open		(struct tty_struct *tty, struct file *filp);
-static void etek_serial_close		(struct tty_struct *tty, struct file *filp);
-
-/* All of the device info needed for the Belkin Serial Converter */
-static __u16	belkin_vendor_id	= BELKIN_VENDOR_ID;
-static __u16	belkin_product_id	= BELKIN_SERIAL_CONVERTER;
-static struct usb_serial_device_type belkin_device = {
-	name:			"Belkin",
-	idVendor:		&belkin_vendor_id,	/* the Belkin vendor id */
-	idProduct:		&belkin_product_id,	/* the Belkin serial converter product id */
-	needs_interrupt_in:	MUST_HAVE,		/* this device must have an interrupt in endpoint */
-	needs_bulk_in:		MUST_HAVE,		/* this device must have a bulk in endpoint */
-	needs_bulk_out:		MUST_HAVE,		/* this device must have a bulk out endpoint */
-	num_interrupt_in:	1,
-	num_bulk_in:		1,
-	num_bulk_out:		1,
-	open:			etek_serial_open,
-	close:			etek_serial_close,
-	write:			generic_serial_write,
-	put_char:		generic_serial_put_char,
-	write_room:		generic_write_room,
-	chars_in_buffer:	generic_chars_in_buffer,
-};
-
-/* All of the device info needed for the Peracom Serial Converter */
-static __u16	peracom_vendor_id	= PERACOM_VENDOR_ID;
-static __u16	peracom_product_id	= PERACOM_SERIAL_CONVERTER;
-static struct usb_serial_device_type peracom_device = {
-	name:			"Peracom",
-	idVendor:		&peracom_vendor_id,	/* the Peracom vendor id */
-	idProduct:		&peracom_product_id,	/* the Peracom serial converter product id */
-	needs_interrupt_in:	MUST_HAVE,		/* this device must have an interrupt in endpoint */
-	needs_bulk_in:		MUST_HAVE,		/* this device must have a bulk in endpoint */
-	needs_bulk_out:		MUST_HAVE,		/* this device must have a bulk out endpoint */
-	num_interrupt_in:	1,
-	num_bulk_in:		1,
-	num_bulk_out:		1,
-	open:			etek_serial_open,
-	close:			etek_serial_close,
-	write:			generic_serial_write,
-	put_char:		generic_serial_put_char,
-	write_room:		generic_write_room,
-	chars_in_buffer:	generic_chars_in_buffer,
-};
-
-
-/* function prototypes for the Connect Tech WhiteHEAT serial converter */
-static int  whiteheat_serial_open	(struct tty_struct *tty, struct file *filp);
-static void whiteheat_serial_close	(struct tty_struct *tty, struct file *filp);
-static void whiteheat_throttle		(struct tty_struct *tty);
-static void whiteheat_unthrottle	(struct tty_struct *tty);
-
-/* All of the device info needed for the Connect Tech WhiteHEAT */
-static __u16	connecttech_vendor_id			= CONNECT_TECH_VENDOR_ID;
-static __u16	connecttech_whiteheat_fake_product_id	= CONNECT_TECH_FAKE_WHITE_HEAT_ID;
-static __u16	connecttech_whiteheat_product_id	= CONNECT_TECH_WHITE_HEAT_ID;
-static struct usb_serial_device_type whiteheat_fake_device = {
-	name:			"Connect Tech - WhiteHEAT - (prerenumeration)",
-	idVendor:		&connecttech_vendor_id,			/* the Connect Tech vendor id */
-	idProduct:		&connecttech_whiteheat_fake_product_id,	/* the White Heat initial product id */
-	needs_interrupt_in:	DONT_CARE,				/* don't have to have an interrupt in endpoint */
-	needs_bulk_in:		DONT_CARE,				/* don't have to have a bulk in endpoint */
-	needs_bulk_out:		DONT_CARE,				/* don't have to have a bulk out endpoint */
-	num_interrupt_in:	NUM_DONT_CARE,
-	num_bulk_in:		NUM_DONT_CARE,
-	num_bulk_out:		NUM_DONT_CARE,
-};
-static struct usb_serial_device_type whiteheat_device = {
-	name:			"Connect Tech - WhiteHEAT",
-	idVendor:		&connecttech_vendor_id,			/* the Connect Tech vendor id */
-	idProduct:		&connecttech_whiteheat_product_id,	/* the White Heat real product id */
-	needs_interrupt_in:	DONT_CARE,				/* don't have to have an interrupt in endpoint */
-	needs_bulk_in:		DONT_CARE,				/* don't have to have a bulk in endpoint */
-	needs_bulk_out:		DONT_CARE,				/* don't have to have a bulk out endpoint */
-	num_interrupt_in:	NUM_DONT_CARE,
-	num_bulk_in:		NUM_DONT_CARE,
-	num_bulk_out:		NUM_DONT_CARE,
-	open:			whiteheat_serial_open,
-	close:			whiteheat_serial_close,
-	write:			generic_serial_write,
-	put_char:		generic_serial_put_char,
-	write_room:		generic_write_room,
-	chars_in_buffer:	generic_chars_in_buffer,
-	throttle:		whiteheat_throttle,
-	unthrottle:		whiteheat_unthrottle
-};
-
-
-/* function prototypes for a handspring visor */
-static int  visor_serial_open		(struct tty_struct *tty, struct file *filp);
-static void visor_serial_close		(struct tty_struct *tty, struct file *filp);
-static void visor_throttle		(struct tty_struct *tty);
-static void visor_unthrottle		(struct tty_struct *tty);
-
-/* All of the device info needed for the Handspring Visor */
-static __u16	handspring_vendor_id	= HANDSPRING_VENDOR_ID;
-static __u16	handspring_product_id	= HANDSPRING_VISOR_ID;
-static struct usb_serial_device_type handspring_device = {
-	name:			"Handspring Visor",
-	idVendor:		&handspring_vendor_id,	/* the Handspring vendor ID */
-	idProduct:		&handspring_product_id,	/* the Handspring Visor product id */
-	needs_interrupt_in:	MUST_HAVE_NOT,		/* this device must not have an interrupt in endpoint */
-	needs_bulk_in:		MUST_HAVE,		/* this device must have a bulk in endpoint */
-	needs_bulk_out:		MUST_HAVE,		/* this device must have a bulk out endpoint */
-	num_interrupt_in:	0,
-	num_bulk_in:		2,
-	num_bulk_out:		2,
-	open:			visor_serial_open,
-	close:			visor_serial_close,
-	write:			generic_serial_write,
-	put_char:		generic_serial_put_char,
-	write_room:		generic_write_room,
-	chars_in_buffer:	generic_chars_in_buffer,
-	throttle:		visor_throttle,
-	unthrottle:		visor_unthrottle
-};
-
-
-/* To add support for another serial converter, create a usb_serial_device_type
-   structure for that device, and add it to this list, making sure that the last
-   entry is NULL. */
-static struct usb_serial_device_type *usb_serial_devices[] = {
-	&generic_device,
-	&whiteheat_fake_device,
-	&whiteheat_device,
-	&belkin_device,
-	&peracom_device,
-	&handspring_device,
-	NULL
-};
 
 
 #define MAX_ENDPOINTS	8
@@ -362,6 +171,235 @@ struct usb_serial_state {
 	void *			bulk_out_transfer[MAX_ENDPOINTS];
 	struct urb		write_urb;
 };
+
+
+#define MUST_HAVE_NOT	0x01
+#define MUST_HAVE	0x02
+#define DONT_CARE	0x03
+
+#define	HAS		0x02
+#define HAS_NOT		0x01
+
+#define NUM_DONT_CARE	(-1)
+
+/* local function prototypes */
+static int serial_open (struct tty_struct *tty, struct file * filp);
+static void serial_close (struct tty_struct *tty, struct file * filp);
+static int serial_write (struct tty_struct * tty, int from_user, const unsigned char *buf, int count);
+static void serial_put_char (struct tty_struct *tty, unsigned char ch);
+static int serial_write_room (struct tty_struct *tty);
+static int serial_chars_in_buffer (struct tty_struct *tty);
+static void serial_throttle (struct tty_struct * tty);
+static void serial_unthrottle (struct tty_struct * tty);
+
+
+/* This structure defines the individual serial converter. */
+struct usb_serial_device_type {
+	char	*name;
+	__u16	*idVendor;
+	__u16	*idProduct;
+	char	needs_interrupt_in;
+	char	needs_bulk_in;
+	char	needs_bulk_out;
+	char	num_interrupt_in;
+	char	num_bulk_in;
+	char	num_bulk_out;
+
+	/* function call to make before accepting driver */
+	int (*startup) (struct usb_serial_state *serial);	/* return 0 to continue initialization, anything else to abort */
+	
+	/* serial function calls */
+	int  (*open)(struct tty_struct * tty, struct file * filp);
+	void (*close)(struct tty_struct * tty, struct file * filp);
+	int  (*write)(struct tty_struct * tty, int from_user,const unsigned char *buf, int count);
+	void (*put_char)(struct tty_struct *tty, unsigned char ch);
+	int  (*write_room)(struct tty_struct *tty);
+	int  (*chars_in_buffer)(struct tty_struct *tty);
+	void (*throttle)(struct tty_struct * tty);
+	void (*unthrottle)(struct tty_struct * tty);
+};
+
+
+/* function prototypes for a "generic" type serial converter (no flow control, not all endpoints needed) */
+static int  generic_serial_open		(struct tty_struct *tty, struct file *filp);
+static void generic_serial_close	(struct tty_struct *tty, struct file *filp);
+static int  generic_serial_write	(struct tty_struct *tty, int from_user, const unsigned char *buf, int count);
+static void generic_serial_put_char	(struct tty_struct *tty, unsigned char ch);
+static int  generic_write_room		(struct tty_struct *tty);
+static int  generic_chars_in_buffer	(struct tty_struct *tty);
+
+/* All of the device info needed for the Generic Serial Converter */
+static struct usb_serial_device_type generic_device = {
+	name:			"Generic",
+	idVendor:		&vendor,		/* use the user specified vendor id */
+	idProduct:		&product,		/* use the user specified product id */
+	needs_interrupt_in:	DONT_CARE,		/* don't have to have an interrupt in endpoint */
+	needs_bulk_in:		DONT_CARE,		/* don't have to have a bulk in endpoint */
+	needs_bulk_out:		DONT_CARE,		/* don't have to have a bulk out endpoint */
+	num_interrupt_in:	NUM_DONT_CARE,
+	num_bulk_in:		NUM_DONT_CARE,
+	num_bulk_out:		NUM_DONT_CARE,
+	open:			generic_serial_open,
+	close:			generic_serial_close,
+	write:			generic_serial_write,
+	put_char:		generic_serial_put_char,
+	write_room:		generic_write_room,
+	chars_in_buffer:	generic_chars_in_buffer,
+};
+
+
+#if defined(CONFIG_BELKIN_SERIAL) || defined(CONFIG_PERACOM_SERIAL)
+/* function prototypes for the eTek type converters (this includes Belkin and Peracom) */
+static int  etek_serial_open		(struct tty_struct *tty, struct file *filp);
+static void etek_serial_close		(struct tty_struct *tty, struct file *filp);
+#endif
+
+#ifdef CONFIG_BELKIN_SERIAL
+/* All of the device info needed for the Belkin Serial Converter */
+static __u16	belkin_vendor_id	= BELKIN_VENDOR_ID;
+static __u16	belkin_product_id	= BELKIN_SERIAL_CONVERTER;
+static struct usb_serial_device_type belkin_device = {
+	name:			"Belkin",
+	idVendor:		&belkin_vendor_id,	/* the Belkin vendor id */
+	idProduct:		&belkin_product_id,	/* the Belkin serial converter product id */
+	needs_interrupt_in:	MUST_HAVE,		/* this device must have an interrupt in endpoint */
+	needs_bulk_in:		MUST_HAVE,		/* this device must have a bulk in endpoint */
+	needs_bulk_out:		MUST_HAVE,		/* this device must have a bulk out endpoint */
+	num_interrupt_in:	1,
+	num_bulk_in:		1,
+	num_bulk_out:		1,
+	open:			etek_serial_open,
+	close:			etek_serial_close,
+	write:			generic_serial_write,
+	put_char:		generic_serial_put_char,
+	write_room:		generic_write_room,
+	chars_in_buffer:	generic_chars_in_buffer,
+};
+#endif
+
+
+#ifdef CONFIG_PERACOM_SERIAL
+/* All of the device info needed for the Peracom Serial Converter */
+static __u16	peracom_vendor_id	= PERACOM_VENDOR_ID;
+static __u16	peracom_product_id	= PERACOM_SERIAL_CONVERTER;
+static struct usb_serial_device_type peracom_device = {
+	name:			"Peracom",
+	idVendor:		&peracom_vendor_id,	/* the Peracom vendor id */
+	idProduct:		&peracom_product_id,	/* the Peracom serial converter product id */
+	needs_interrupt_in:	MUST_HAVE,		/* this device must have an interrupt in endpoint */
+	needs_bulk_in:		MUST_HAVE,		/* this device must have a bulk in endpoint */
+	needs_bulk_out:		MUST_HAVE,		/* this device must have a bulk out endpoint */
+	num_interrupt_in:	1,
+	num_bulk_in:		1,
+	num_bulk_out:		1,
+	open:			etek_serial_open,
+	close:			etek_serial_close,
+	write:			generic_serial_write,
+	put_char:		generic_serial_put_char,
+	write_room:		generic_write_room,
+	chars_in_buffer:	generic_chars_in_buffer,
+};
+#endif
+
+
+#ifdef CONFIG_WHITEHEAT_SERIAL
+/* function prototypes for the Connect Tech WhiteHEAT serial converter */
+static int  whiteheat_serial_open	(struct tty_struct *tty, struct file *filp);
+static void whiteheat_serial_close	(struct tty_struct *tty, struct file *filp);
+static void whiteheat_throttle		(struct tty_struct *tty);
+static void whiteheat_unthrottle	(struct tty_struct *tty);
+static int  whiteheat_startup		(struct usb_serial_state *serial);
+
+/* All of the device info needed for the Connect Tech WhiteHEAT */
+static __u16	connecttech_vendor_id			= CONNECT_TECH_VENDOR_ID;
+static __u16	connecttech_whiteheat_fake_product_id	= CONNECT_TECH_FAKE_WHITE_HEAT_ID;
+static __u16	connecttech_whiteheat_product_id	= CONNECT_TECH_WHITE_HEAT_ID;
+static struct usb_serial_device_type whiteheat_fake_device = {
+	name:			"Connect Tech - WhiteHEAT - (prerenumeration)",
+	idVendor:		&connecttech_vendor_id,			/* the Connect Tech vendor id */
+	idProduct:		&connecttech_whiteheat_fake_product_id,	/* the White Heat initial product id */
+	needs_interrupt_in:	DONT_CARE,				/* don't have to have an interrupt in endpoint */
+	needs_bulk_in:		DONT_CARE,				/* don't have to have a bulk in endpoint */
+	needs_bulk_out:		DONT_CARE,				/* don't have to have a bulk out endpoint */
+	num_interrupt_in:	NUM_DONT_CARE,
+	num_bulk_in:		NUM_DONT_CARE,
+	num_bulk_out:		NUM_DONT_CARE,
+	startup:		whiteheat_startup	
+};
+static struct usb_serial_device_type whiteheat_device = {
+	name:			"Connect Tech - WhiteHEAT",
+	idVendor:		&connecttech_vendor_id,			/* the Connect Tech vendor id */
+	idProduct:		&connecttech_whiteheat_product_id,	/* the White Heat real product id */
+	needs_interrupt_in:	DONT_CARE,				/* don't have to have an interrupt in endpoint */
+	needs_bulk_in:		DONT_CARE,				/* don't have to have a bulk in endpoint */
+	needs_bulk_out:		DONT_CARE,				/* don't have to have a bulk out endpoint */
+	num_interrupt_in:	NUM_DONT_CARE,
+	num_bulk_in:		NUM_DONT_CARE,
+	num_bulk_out:		NUM_DONT_CARE,
+	open:			whiteheat_serial_open,
+	close:			whiteheat_serial_close,
+	write:			generic_serial_write,
+	put_char:		generic_serial_put_char,
+	write_room:		generic_write_room,
+	chars_in_buffer:	generic_chars_in_buffer,
+	throttle:		whiteheat_throttle,
+	unthrottle:		whiteheat_unthrottle
+};
+#endif
+
+
+#ifdef CONFIG_VISOR_SERIAL
+/* function prototypes for a handspring visor */
+static int  visor_serial_open		(struct tty_struct *tty, struct file *filp);
+static void visor_serial_close		(struct tty_struct *tty, struct file *filp);
+static void visor_throttle		(struct tty_struct *tty);
+static void visor_unthrottle		(struct tty_struct *tty);
+
+/* All of the device info needed for the Handspring Visor */
+static __u16	handspring_vendor_id	= HANDSPRING_VENDOR_ID;
+static __u16	handspring_product_id	= HANDSPRING_VISOR_ID;
+static struct usb_serial_device_type handspring_device = {
+	name:			"Handspring Visor",
+	idVendor:		&handspring_vendor_id,	/* the Handspring vendor ID */
+	idProduct:		&handspring_product_id,	/* the Handspring Visor product id */
+	needs_interrupt_in:	MUST_HAVE_NOT,		/* this device must not have an interrupt in endpoint */
+	needs_bulk_in:		MUST_HAVE,		/* this device must have a bulk in endpoint */
+	needs_bulk_out:		MUST_HAVE,		/* this device must have a bulk out endpoint */
+	num_interrupt_in:	0,
+	num_bulk_in:		2,
+	num_bulk_out:		2,
+	open:			visor_serial_open,
+	close:			visor_serial_close,
+	write:			generic_serial_write,
+	put_char:		generic_serial_put_char,
+	write_room:		generic_write_room,
+	chars_in_buffer:	generic_chars_in_buffer,
+	throttle:		visor_throttle,
+	unthrottle:		visor_unthrottle
+};
+#endif
+
+/* To add support for another serial converter, create a usb_serial_device_type
+   structure for that device, and add it to this list, making sure that the last
+   entry is NULL. */
+static struct usb_serial_device_type *usb_serial_devices[] = {
+	&generic_device,
+#ifdef CONFIG_WHITEHEAT_SERIAL
+	&whiteheat_fake_device,
+	&whiteheat_device,
+#endif
+#ifdef CONFIG_BELKIN_SERIAL
+	&belkin_device,
+#endif
+#ifdef CONFIG_PERACOM_SERIAL
+	&peracom_device,
+#endif
+#ifdef CONFIG_VISOR_SERIAL
+	&handspring_device,
+#endif
+	NULL
+};
+
 
 static struct usb_driver usb_serial_driver = {
 	"serial",
@@ -697,6 +735,7 @@ static void serial_unthrottle (struct tty_struct * tty)
 }
 
 
+#if defined(CONFIG_BELKIN_SERIAL) || defined(CONFIG_PERACOM_SERIAL)
 /*****************************************************************************
  * eTek specific driver functions
  *****************************************************************************/
@@ -741,8 +780,11 @@ static void etek_serial_close(struct tty_struct *tty, struct file * filp)
 	usb_unlink_urb (&serial->read_urb);
 	serial->active = 0;
 }
+#endif	/* defined(CONFIG_BELKIN_SERIAL) || defined(CONFIG_PERACOM_SERIAL) */
 
 
+
+#ifdef CONFIG_WHITEHEAT_SERIAL
 /*****************************************************************************
  * Connect Tech's White Heat specific driver functions
  *****************************************************************************/
@@ -792,7 +834,7 @@ static void whiteheat_serial_close(struct tty_struct *tty, struct file * filp)
 static void whiteheat_throttle (struct tty_struct * tty)
 {
 	dbg("whiteheat_throttle");
-	
+
 	/* Change the control signals */
 	/* FIXME!!! */
 
@@ -803,7 +845,7 @@ static void whiteheat_throttle (struct tty_struct * tty)
 static void whiteheat_unthrottle (struct tty_struct * tty)
 {
 	dbg("whiteheat_unthrottle");
-	
+
 	/* Change the control signals */
 	/* FIXME!!! */
 
@@ -811,6 +853,104 @@ static void whiteheat_unthrottle (struct tty_struct * tty)
 }
 
 
+static int whiteheat_writememory (struct usb_serial_state *serial, int address, unsigned char *data, int length, __u8 bRequest)
+{
+	int result;
+	unsigned char *transfer_buffer =  kmalloc (length, GFP_KERNEL);
+	if (!transfer_buffer) {
+		err("whiteheat_writememory: kmalloc(%d) failed.\n", length);
+		return -ENOMEM;
+	}
+	memcpy (transfer_buffer, data, length);
+	result = usb_control_msg (serial->dev, usb_sndctrlpipe(serial->dev, 0), bRequest, 0x40, address, 0, transfer_buffer, length, 300);
+	kfree (transfer_buffer);
+	return result;
+}
+
+/* EZ-USB Control and Status Register.  Bit 0 controls 8051 reset */
+#define CPUCS_REG    0x7F92
+
+static int whiteheat_set_reset (struct usb_serial_state *serial, unsigned char reset_bit)
+{
+	dbg("whiteheat_set_reset: %d", reset_bit);
+	return (whiteheat_writememory (serial, CPUCS_REG, &reset_bit, 1, 0xa0));
+}
+
+
+/* steps to download the firmware to the WhiteHEAT device:
+ - hold the reset (by writing to the reset bit of the CPUCS register)
+ - download the VEND_AX.HEX file to the chip using VENDOR_REQUEST-ANCHOR_LOAD
+ - release the reset (by writing to the CPUCS register)
+ - download the WH.HEX file for all addresses greater than 0x1b3f using
+   VENDOR_REQUEST-ANCHOR_EXTERNAL_RAM_LOAD
+ - hold the reset
+ - download the WH.HEX file for all addresses less than 0x1b40 using
+   VENDOR_REQUEST_ANCHOR_LOAD
+ - release the reset
+ - device renumerated itself and comes up as new device id with all
+   firmware download completed.
+*/
+static int  whiteheat_startup (struct usb_serial_state *serial)
+{
+	int response;
+	const struct whiteheat_hex_record *record;
+	
+	dbg("whiteheat_startup\n");
+	
+	response = whiteheat_set_reset (serial, 1);
+
+	record = &whiteheat_loader[0];
+	while (record->address != 0xffff) {
+		response = whiteheat_writememory (serial, record->address, 
+				(unsigned char *)record->data, record->data_size, 0xa0);
+		if (response < 0) {
+			err("whiteheat_writememory failed for loader (%d %04X %p %d)", 
+				response, record->address, record->data, record->data_size);
+			break;
+		}
+		++record;
+	}
+
+	response = whiteheat_set_reset (serial, 0);
+
+	record = &whiteheat_firmware[0];
+	while (record->address < 0x8000) {
+		++record;
+	}
+	while (record->address != 0xffff) {
+		response = whiteheat_writememory (serial, record->address, 
+				(unsigned char *)record->data, record->data_size, 0xa3);
+		if (response < 0) {
+			err("whiteheat_writememory failed for first firmware step (%d %04X %p %d)", 
+				response, record->address, record->data, record->data_size);
+			break;
+		}
+		++record;
+	}
+	
+	response = whiteheat_set_reset (serial, 1);
+
+	record = &whiteheat_firmware[0];
+	while (record->address < 0x8000) {
+		response = whiteheat_writememory (serial, record->address, 
+				(unsigned char *)record->data, record->data_size, 0xa0);
+		if (response < 0) {
+			err("whiteheat_writememory failed for first firmware step (%d %04X %p %d)\n", 
+				response, record->address, record->data, record->data_size);
+			break;
+		}
+		++record;
+	}
+
+	response = whiteheat_set_reset (serial, 0);
+
+	/* we want this device to fail to have a driver assigned to it. */
+	return (1);
+}
+#endif	/* CONFIG_WHITEHEAT_SERIAL */
+
+
+#ifdef CONFIG_VISOR_SERIAL
 /******************************************************************************
  * Handspring Visor specific driver functions
  ******************************************************************************/
@@ -874,6 +1014,7 @@ static void visor_unthrottle (struct tty_struct * tty)
 
 	return;
 }
+#endif	/* CONFIG_VISOR_SERIAL*/
 
 
 /*****************************************************************************
@@ -1123,6 +1264,12 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 				serial->num_bulk_in = num_bulk_in;
 				serial->num_bulk_out = num_bulk_out;
 				serial->num_interrupt_in = num_interrupt_in;
+
+				/* if this device type has a startup function, call it */
+				if (type->startup) {
+					if (type->startup (serial))
+						return NULL;
+				}
 
 				/* set up the endpoint information */
 				for (i = 0; i < num_bulk_in; ++i) {

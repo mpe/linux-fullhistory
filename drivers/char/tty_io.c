@@ -344,7 +344,7 @@ static int hung_up_tty_ioctl(struct inode * inode, struct file * file,
 	return cmd == TIOCSPGRP ? -ENOTTY : -EIO;
 }
 
-static long long tty_lseek(struct file * file,	long long offset, int orig)
+static loff_t tty_lseek(struct file * file, loff_t offset, int orig)
 {
 	return -ESPIPE;
 }

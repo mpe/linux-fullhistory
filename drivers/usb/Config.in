@@ -21,7 +21,7 @@ comment 'USB Devices'
    dep_tristate '  USB Printer support' CONFIG_USB_PRINTER $CONFIG_USB
    dep_tristate '  USB Scanner support' CONFIG_USB_SCANNER $CONFIG_USB
    dep_tristate '  USB Audio support' CONFIG_USB_AUDIO $CONFIG_USB
-   dep_tristate '  USB Communications Device Class (ACM) support' CONFIG_USB_ACM $CONFIG_USB
+   dep_tristate '  USB Modem (CDC ACM) support' CONFIG_USB_ACM $CONFIG_USB
    dep_tristate '  USB Serial Converter support' CONFIG_USB_SERIAL $CONFIG_USB
    dep_tristate '  USB CPiA Camera support' CONFIG_USB_CPIA $CONFIG_USB
    dep_tristate '  USB OV511 Camera support' CONFIG_USB_OV511 $CONFIG_USB

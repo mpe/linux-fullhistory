@@ -274,7 +274,8 @@ srm_paging_stop (void)
 }
 #endif
 
-static void __init printk_memory_info(void)
+static void __init
+printk_memory_info(void)
 {
 	unsigned long codesize, reservedpages, datasize, initsize, tmp;
 	extern int page_is_ram(unsigned long) __init;

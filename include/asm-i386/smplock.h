@@ -5,6 +5,8 @@
  */
 #include <linux/interrupt.h>
 #include <linux/spinlock.h>
+#include <linux/sched.h>
+#include <asm/current.h>
 
 extern spinlock_t kernel_flag;
 

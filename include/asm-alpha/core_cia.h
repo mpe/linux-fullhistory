@@ -218,32 +218,12 @@
  * Data structure for handling CIA machine checks.
  */
 
-/* EV5-specific info.  */
-struct el_CIA_procdata {
-	unsigned long shadow[8];	/* PALmode shadow registers */
-	unsigned long paltemp[24];	/* PAL temporary registers */
-	/* EV5-specific fields */
-	unsigned long exc_addr;		/* Address of excepting instruction. */
-	unsigned long exc_sum;		/* Summary of arithmetic traps. */
-	unsigned long exc_mask;		/* Exception mask (from exc_sum). */
-	unsigned long exc_base;		/* PALbase at time of exception. */
-	unsigned long isr;		/* Interrupt summary register. */
-	unsigned long icsr;		/* Ibox control register. */
-	unsigned long ic_perr_stat;
-	unsigned long dc_perr_stat;
-	unsigned long va;		/* Effective VA of fault or miss. */
-	unsigned long mm_stat;
-	unsigned long sc_addr;
-	unsigned long sc_stat;
-	unsigned long bc_tag_addr;
-	unsigned long ei_addr;
-	unsigned long fill_syn;
-	unsigned long ei_stat;
-	unsigned long ld_lock;
-};
-
 /* System-specific info.  */
 struct el_CIA_sysdata_mcheck {
+#if 0
+	/* ??? Where did this come from.  It appears to bear no
+	   relation to the cia logout written in the milo sources.
+	   Who knows what happens in the srm console... */
 	unsigned long      coma_gcr;
 	unsigned long      coma_edsr;
 	unsigned long      coma_ter;
@@ -285,6 +265,19 @@ struct el_CIA_sysdata_mcheck {
 	unsigned long      epic_data5;
 	unsigned long      epic_data6;
 	unsigned long      epic_data7;
+#else
+	unsigned long	cpu_err0;
+	unsigned long	cpu_err1;
+	unsigned long	cia_err;
+	unsigned long	cia_stat;
+	unsigned long	err_mask;
+	unsigned long	cia_syn;
+	unsigned long	mem_err0;
+	unsigned long	mem_err1;
+	unsigned long	pci_err0;
+	unsigned long	pci_err1;
+	unsigned long	pci_err2;
+#endif
 };
 
 

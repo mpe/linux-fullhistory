@@ -547,24 +547,22 @@ static inline int page_cache_read(struct file * file, unsigned long offset)
 
 /*
  * Read in an entire cluster at once.  A cluster is usually a 64k-
- * aligned block that includes the address requested in "offset."
+ * aligned block that includes the page requested in "offset."
  */
-static int read_cluster_nonblocking(struct file * file, unsigned long offset)
+static int read_cluster_nonblocking(struct file * file, unsigned long offset,
+	unsigned long filesize)
 {
-	int error = 0;
-	unsigned long filesize = (file->f_dentry->d_inode->i_size + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
 	unsigned long pages = CLUSTER_PAGES;
 
 	offset = CLUSTER_OFFSET(offset);
 	while ((pages-- > 0) && (offset < filesize)) {
-		error = page_cache_read(file, offset);
-		if (error >= 0)
-			offset ++;
-		else
-			break;
+		int error = page_cache_read(file, offset);
+		if (error < 0)
+			return error;
+		offset ++;
 	}
 
-	return error;
+	return 0;
 }
 
 /* 
@@ -1364,7 +1362,7 @@ no_cached_page:
 	 * so we need to map a zero page.
 	 */
 	if (pgoff < size)
-		error = read_cluster_nonblocking(file, pgoff);
+		error = read_cluster_nonblocking(file, pgoff, size);
 	else
 		error = page_cache_read(file, pgoff);
 

@@ -16,6 +16,9 @@ typedef struct pci_socket {
 	socket_cap_t cap;
 	wait_queue_head_t wait;
 	unsigned int events;
+
+	/* A few words of private data for the low-level driver.. */
+	unsigned int private[8];
 } pci_socket_t;
 
 struct pci_socket_ops {
@@ -24,7 +27,6 @@ struct pci_socket_ops {
 
 	int (*init)(struct pci_socket *);
 	int (*suspend)(struct pci_socket *);
-	int (*inquire)(struct pci_socket *, socket_cap_t *cap);
 	int (*get_status)(struct pci_socket *, unsigned int *);
 	int (*get_socket)(struct pci_socket *, socket_state_t *);
 	int (*set_socket)(struct pci_socket *, socket_state_t *);

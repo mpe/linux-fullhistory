@@ -614,7 +614,7 @@ fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct dentry *dentry)
 	struct dentry *parent = dentry->d_parent;
 
 	dprintk("nfsd: fh_compose(exp %x/%ld %s/%s, ino=%ld)\n",
-		exp->ex_dev, exp->ex_ino,
+		exp->ex_dev, (long) exp->ex_ino,
 		parent->d_name.name, dentry->d_name.name,
 		(inode ? inode->i_ino : 0));
 

@@ -1,5 +1,5 @@
 /*
- *	drivers/pci/setup.c
+ *	drivers/pci/setup-bus.c
  *
  * Extruded from code written by
  *      Dave Rusling (david.rusling@reo.mts.dec.com)
@@ -8,8 +8,6 @@
  *
  * Support routines for initializing a PCI subsystem.
  */
-
-/* fixed for multiple pci buses, 1999 Andrea Arcangeli <andrea@suse.de> */
 
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -26,129 +24,6 @@
 # define DBGC(args)
 #endif
 
-int __init
-pci_claim_resource(struct pci_dev *dev, int resource)
-{
-        struct resource *res = &dev->resource[resource];
-	struct resource *root = pci_find_parent_resource(dev, res);
-	int err;
-
-	err = -EINVAL;
-	if (root != NULL) {
-		err = request_resource(root, res);
-		if (err) {
-			printk(KERN_ERR "PCI: Address space collision on "
-			       "region %d of device %s [%lx:%lx]\n",
-			       resource, dev->name, res->start, res->end);
-		}
-	} else {
-		printk(KERN_ERR "PCI: No parent found for region %d "
-		       "of device %s\n", resource, dev->name);
-	}
-
-	return err;
-}
-
-static void
-pdev_assign_unassigned_resources(struct pci_dev *dev, u32 min_io, u32 min_mem)
-{
-	u32 reg;
-	u16 cmd;
-	int i;
-
-	DBGC(("PCI assign unassigned: (%s)\n", dev->name));
-
-	pci_read_config_word(dev, PCI_COMMAND, &cmd);
-
-	for (i = 0; i < PCI_NUM_RESOURCES; i++) {
-		struct resource *root, *res;
-		unsigned long size, min;
-
-		res = &dev->resource[i];
-
-		if (res->flags & IORESOURCE_IO)
-			cmd |= PCI_COMMAND_IO;
-		else if (res->flags & IORESOURCE_MEM)
-			cmd |= PCI_COMMAND_MEMORY;
-
-		/* If it is already assigned or the resource does
-		   not exist, there is nothing to do.  */
-		if (res->parent != NULL || res->flags == 0)
-			continue;
-
-		/* Determine the root we allocate from.  */
-		res->end -= res->start;
-		res->start = 0;
-		root = pci_find_parent_resource(dev, res);
-		if (root == NULL)
-			continue;
-
-		min = (res->flags & IORESOURCE_IO ? min_io : min_mem);
-		min += root->start;
-		size = res->end + 1;
-		DBGC(("  for root[%lx:%lx] min[%lx] size[%lx]\n",
-		      root->start, root->end, min, size));
-
-		if (allocate_resource(root, res, size, min, -1, size, pcibios_align_resource, dev) < 0) {
-			printk(KERN_ERR
-			       "PCI: Failed to allocate resource %d for %s\n",
-			       i, dev->name);
-			continue;
-		}
-
-		DBGC(("  got res[%lx:%lx] for resource %d\n",
-		      res->start, res->end, i));
-
-		/* Update PCI config space.  */
-		pcibios_update_resource(dev, root, res, i);
-	}
-
-	/* Special case, disable the ROM.  Several devices act funny
-	   (ie. do not respond to memory space writes) when it is left
-	   enabled.  A good example are QlogicISP adapters.  */
-
-	if (dev->rom_base_reg) {
-		pci_read_config_dword(dev, dev->rom_base_reg, &reg);
-		reg &= ~PCI_ROM_ADDRESS_ENABLE;
-		pci_write_config_dword(dev, dev->rom_base_reg, reg);
-		dev->resource[PCI_ROM_RESOURCE].flags &= ~PCI_ROM_ADDRESS_ENABLE;
-	}
-
-	/* All of these (may) have I/O scattered all around and may not
-	   use I/O base address registers at all.  So we just have to
-	   always enable IO to these devices.  */
-	if ((dev->class >> 8) == PCI_CLASS_NOT_DEFINED
-	    || (dev->class >> 8) == PCI_CLASS_NOT_DEFINED_VGA
-	    || (dev->class >> 8) == PCI_CLASS_STORAGE_IDE
-	    || (dev->class >> 16) == PCI_BASE_CLASS_DISPLAY) {
-		cmd |= PCI_COMMAND_IO;
-	}
-
-	/* ??? Always turn on bus mastering.  If the device doesn't support
-	   it, the bit will go into the bucket. */
-	cmd |= PCI_COMMAND_MASTER;
-
-	/* Enable the appropriate bits in the PCI command register.  */
-	pci_write_config_word(dev, PCI_COMMAND, cmd);
-
-	DBGC(("  cmd reg 0x%x\n", cmd));
-
-	/* If this is a PCI bridge, set the cache line correctly.  */
-	if ((dev->class >> 8) == PCI_CLASS_BRIDGE_PCI) {
-		pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE,
-				      (L1_CACHE_BYTES / sizeof(u32)));
-	}
-}
-
-void __init
-pci_assign_unassigned_resources(u32 min_io, u32 min_mem)
-{
-	struct pci_dev *dev;
-
-	pci_for_each_dev(dev) {
-		pdev_assign_unassigned_resources(dev, min_io, min_mem);
-	}
-}
 
 #define ROUND_UP(x, a)		(((x) + (a) - 1) & ~((a) - 1))
 #define ROUND_DOWN(x, a)	((x) & ~((a) - 1))
@@ -278,54 +153,4 @@ pci_set_bus_ranges(void)
 
 	for(ln=pci_root_buses.next; ln != &pci_root_buses; ln=ln->next)
 		pbus_set_ranges(pci_bus_b(ln), NULL);
-}
-
-static void __init
-pdev_fixup_irq(struct pci_dev *dev,
-	       u8 (*swizzle)(struct pci_dev *, u8 *),
-	       int (*map_irq)(struct pci_dev *, u8, u8))
-{
-	u8 pin, slot;
-	int irq;
-
-	/* If this device is not on the primary bus, we need to figure out
-	   which interrupt pin it will come in on.   We know which slot it
-	   will come in on 'cos that slot is where the bridge is.   Each
-	   time the interrupt line passes through a PCI-PCI bridge we must
-	   apply the swizzle function.  */
-
-	pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
-	/* Cope with 0 and illegal. */
-	if (pin == 0 || pin > 4)
-		pin = 1;
-
-	/* Follow the chain of bridges, swizzling as we go.  */
-	slot = (*swizzle)(dev, &pin);
-
-	irq = (*map_irq)(dev, slot, pin);
-	if (irq == -1)
-		irq = 0;
-	dev->irq = irq;
-
-	DBGC(("PCI fixup irq: (%s) got %d\n", dev->name, dev->irq));
-
-	/* Always tell the device, so the driver knows what is
-	   the real IRQ to use; the device does not use it. */
-	pcibios_update_irq(dev, irq);
-}
-
-void __init
-pci_fixup_irqs(u8 (*swizzle)(struct pci_dev *, u8 *),
-	       int (*map_irq)(struct pci_dev *, u8, u8))
-{
-	struct pci_dev *dev;
-	pci_for_each_dev(dev) {
-		pdev_fixup_irq(dev, swizzle, map_irq);
-	}
-}
-
-int
-pcibios_enable_device(struct pci_dev *dev)
-{
-	return 0;
 }

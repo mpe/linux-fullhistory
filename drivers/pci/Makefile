@@ -24,10 +24,10 @@ ifdef CONFIG_PROC_FS
 O_OBJS   += proc.o
 endif
 
-L_OBJS   += compat.o names.o helper.o
+L_OBJS   += compat.o names.o helper.o setup-res.o setup-bus.o setup-irq.o
 
 ifndef CONFIG_X86
-L_OBJS   += syscall.o setup.o
+L_OBJS   += syscall.o
 endif
 
 include $(TOPDIR)/Rules.make

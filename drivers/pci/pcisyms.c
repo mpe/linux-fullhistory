@@ -26,11 +26,14 @@ EXPORT_SYMBOL(pci_set_master);
 EXPORT_SYMBOL(pci_simple_probe);
 EXPORT_SYMBOL(pci_set_power_state);
 EXPORT_SYMBOL(pci_assign_resource);
+EXPORT_SYMBOL(pci_register_driver);
+EXPORT_SYMBOL(pci_unregister_driver);
+
+#ifdef CONFIG_HOTPLUG
 EXPORT_SYMBOL(pci_setup_device);
 EXPORT_SYMBOL(pci_insert_device);
 EXPORT_SYMBOL(pci_remove_device);
-EXPORT_SYMBOL(pci_register_driver);
-EXPORT_SYMBOL(pci_unregister_driver);
+#endif
 
 /* Obsolete functions */
 

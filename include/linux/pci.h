@@ -495,17 +495,27 @@ int pci_assign_resource(struct pci_dev *dev, int i);
 /* Helper functions for low-level code (drivers/pci/setup.c) */
 
 int pci_claim_resource(struct pci_dev *, int);
-void pci_assign_unassigned_resources(u32 min_io, u32 min_mem);
+void pci_assign_unassigned_resources(void);
 void pci_set_bus_ranges(void);
 void pci_fixup_irqs(u8 (*)(struct pci_dev *, u8 *),
 		    int (*)(struct pci_dev *, u8, u8));
 
 /* New-style probing supporting hot-pluggable devices */
 
+struct pci_device_id {
+	unsigned int vendor, device;		/* Vendor and device ID or PCI_ANY_ID */
+	unsigned int subvendor, subdevice;	/* Subsystem ID's or PCI_ANY_ID */
+	unsigned int class, class_mask;		/* (class,subclass,prog-if) triplet */
+	unsigned long driver_data;		/* Data private to the driver */
+};
+
+#define PCI_ID(vendor,device) (((vendor)<<16) | (device))
+
 struct pci_driver {
 	struct list_head node;
 	char *name;
-	int (*probe)(struct pci_dev *dev);	/* New device inserted, check if known */
+	struct pci_device_id *id_table;		/* NULL if wants all devices */
+	int (*probe)(struct pci_dev *dev, struct pci_device_id *id);	/* New device inserted */
 	void (*remove)(struct pci_dev *dev);	/* Device removed */
 	void (*suspend)(struct pci_dev *dev);	/* Device suspended */
 	void (*resume)(struct pci_dev *dev);	/* Device woken up */

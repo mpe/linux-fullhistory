@@ -203,6 +203,10 @@
  * Data structure for handling PYXIS machine checks:
  */
 struct el_PYXIS_sysdata_mcheck {
+#if 0
+	/* ??? Where did this come from.  It appears to bear no
+	   relation to the pyxis logout written in the milo sources.
+	   Who knows what happens in the srm console... */
     u_long      coma_gcr;
     u_long      coma_edsr;
     u_long      coma_ter;
@@ -244,6 +248,19 @@ struct el_PYXIS_sysdata_mcheck {
     u_long      epic_data5;
     u_long      epic_data6;
     u_long      epic_data7;
+#else
+	unsigned long	cpu_err0;
+	unsigned long	cpu_err1;
+	unsigned long	cia_err;
+	unsigned long	cia_stat;
+	unsigned long	err_mask;
+	unsigned long	cia_syn;
+	unsigned long	mem_err0;
+	unsigned long	mem_err1;
+	unsigned long	pci_err0;
+	unsigned long	pci_err1;
+	unsigned long	pci_err2;
+#endif
 };
 
 

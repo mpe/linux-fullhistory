@@ -59,7 +59,7 @@ vcs_size(struct inode *inode)
 	return size;
 }
 
-static long long vcs_lseek(struct file *file, long long offset, int orig)
+static loff_t vcs_lseek(struct file *file, loff_t offset, int orig)
 {
 	int size = vcs_size(file->f_dentry->d_inode);
 

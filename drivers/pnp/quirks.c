@@ -16,6 +16,8 @@
 #include <linux/pci.h>
 #include <linux/init.h>
 #include <linux/isapnp.h>
+#include <linux/string.h>
+
 
 static void __init quirk_awe32_resources(struct pci_dev *dev)
 {

@@ -441,7 +441,7 @@ int pcmcia_get_card_services_info(servinfo_t *info);
 int pcmcia_get_first_client(client_handle_t *handle, client_req_t *req);
 int pcmcia_get_next_client(client_handle_t *handle, client_req_t *req);
 int pcmcia_get_window(window_handle_t *handle, int idx, win_req_t *req);
-int pcmcia_get_first_window(client_handle_t *handle, win_req_t *req);
+int pcmcia_get_first_window(window_handle_t *win, win_req_t *req);
 int pcmcia_get_next_window(window_handle_t *win, win_req_t *req);
 int pcmcia_get_status(client_handle_t handle, cs_status_t *status);
 int pcmcia_get_mem_page(window_handle_t win, memreq_t *req);
@@ -464,6 +464,7 @@ int pcmcia_eject_card(client_handle_t handle, client_req_t *req);
 int pcmcia_insert_card(client_handle_t handle, client_req_t *req);
 int pcmcia_set_event_mask(client_handle_t handle, eventmask_t *mask);
 int pcmcia_report_error(client_handle_t handle, error_info_t *err);
+struct pci_bus *pcmcia_lookup_bus(client_handle_t handle);
 
 /* rsrc_mgr.c */
 int pcmcia_adjust_resource_info(client_handle_t handle, adjust_t *adj);

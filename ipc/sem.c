@@ -1047,14 +1047,14 @@ static int sysvipc_sem_read_proc(char *buffer, char **start, off_t offset, int l
 	off_t begin = 0;
 	int i, len = 0;
 
-	len += sprintf(buffer, "       key      semid perms nsems   uid   gid  cuid  cgid      otime      ctime\n");
+	len += sprintf(buffer, "       key      semid perms      nsems   uid   gid  cuid  cgid      otime      ctime\n");
 	down(&sem_ids.sem);
 
 	for(i = 0; i <= sem_ids.max_id; i++) {
 		struct sem_array *sma;
 		sma = sem_lock(i);
 		if(sma) {
-			len += sprintf(buffer + len, "%10d %10d  %4o %5u %5u %5u %5u %5u %10lu %10lu\n",
+			len += sprintf(buffer + len, "%10d %10d  %4o %10lu %5u %5u %5u %5u %10lu %10lu\n",
 				sma->sem_perm.key,
 				sem_buildid(i,sma->sem_perm.seq),
 				sma->sem_perm.mode,

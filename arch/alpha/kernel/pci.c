@@ -251,11 +251,13 @@ pcibios_fixup_bus(struct pci_bus *bus)
 	/* Propogate hose info into the subordinate devices.  */
 
 	struct pci_controler *hose = (struct pci_controler *) bus->sysdata;
-	struct pci_dev *dev;
+	struct list_head *ln;
 
 	bus->resource[0] = hose->io_space;
 	bus->resource[1] = hose->mem_space;
-	for (dev = bus->devices; dev; dev = dev->sibling) {
+
+	for (ln = bus->devices.next; ln != &bus->devices; ln = ln->next) {
+		struct pci_dev *dev = pci_dev_b(ln);
 		if ((dev->class >> 8) != PCI_CLASS_BRIDGE_PCI)
 			pcibios_fixup_device_resources(dev, bus);
 	}
@@ -322,6 +324,13 @@ pcibios_fixup_pbus_ranges(struct pci_bus * bus,
 	ranges->mem_end -= bus->resource[1]->start;
 }
 
+int __init
+pcibios_enable_device(struct pci_dev *dev)
+{
+	/* Not needed, since we enable all devices at startup.  */
+	return 0;
+}
+
 void __init
 common_init_pci(void)
 {
@@ -339,8 +348,7 @@ common_init_pci(void)
 		next_busno += 1;
 	}
 
-	pci_assign_unassigned_resources(alpha_mv.min_io_address,
-				        alpha_mv.min_mem_address);
+	pci_assign_unassigned_resources();
 	pci_fixup_irqs(alpha_mv.pci_swizzle, alpha_mv.pci_map_irq);
 	pci_set_bus_ranges();
 }

@@ -29,7 +29,7 @@
 #
 # Information about what a kernel is, what it does, how to patch and
 # compile it and much more is contained in the Kernel-HOWTO, available
-# at http://metalab.unc.edu/mdw/linux.html#howto . Before you start
+# at http://www.linuxdoc.org/docs.html#howto . Before you start
 # compiling, make sure that you have the necessary versions of all
 # programs and libraries required to compile and run this kernel; they
 # are listed in the file Documentation/Changes. Make sure to read the
@@ -134,7 +134,7 @@ CONFIG_MATH_EMULATION
   is broken. Try "man bootparam" or see the documentation of your boot
   loader (lilo or loadlin) about how to pass options to the kernel at
   boot time. The lilo procedure is also explained in the SCSI-HOWTO,
-  available from http://metalab.unc.edu/mdw/linux.html#howto .) This
+  available from http://www.linuxdoc.org/docs.html#howto .) This
   means that it is a good idea to say Y here if you intend to use this
   kernel on different machines.
 
@@ -326,7 +326,7 @@ CONFIG_BLK_DEV_IDE
   detected, sound card IDE ports, module support, and other topics, is
   contained in Documentation/ide.txt. For detailed information about
   hard drives, consult the Disk-HOWTO and the Multi-Disk-HOWTO,
-  available from http://metalab.unc.edu/mdw/linux.html#howto .
+  available from http://www.linuxdoc.org/docs.html#howto .
 
   To fine-tune IDE drive/interface parameters for improved
   performance, look for the hdparm package at
@@ -359,7 +359,7 @@ CONFIG_BLK_DEV_HD_ONLY
   If you are unsure, then just choose the Enhanced IDE/MFM/RLL driver
   instead of this one. For more detailed information, read the
   Disk-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   People with SCSI-only systems can say N here.
 
@@ -420,7 +420,7 @@ CONFIG_BLK_DEV_IDECD
   to say Y or M to "ISO 9660 CDROM filesystem support".
 
   Read the CDROM-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto and the file
+  http://www.linuxdoc.org/docs.html#howto and the file
   Documentation/cdrom/ide-cd. Note that older versions of lilo (the
   Linux boot loader) cannot properly deal with IDE/ATAPI CDROMs, so
   install lilo-16 or higher, available from
@@ -521,7 +521,7 @@ CONFIG_BLK_DEV_CMD640
   bootparam" or see the documentation of your boot loader about how to
   pass options to the kernel. The lilo procedure is also explained in
   the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .)
+  http://www.linuxdoc.org/docs.html#howto .)
 
   The CMD640 chip is also used on add-in cards by Acculogic, and on
   the "CSA-6400E PCI to IDE controller" that some people have. For
@@ -603,7 +603,7 @@ CONFIG_BLK_DEV_OFFBOARD
   documentation of your boot loader (lilo or loadlin) about how to
   pass options to the kernel at boot time. The lilo procedure is also
   explained in the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .)
+  http://www.linuxdoc.org/docs.html#howto .)
 
   Note that, if you do this, the order of the hd* devices will be
   rearranged which may require modification of fstab and other files.
@@ -1237,7 +1237,7 @@ CONFIG_BLK_DEV_MD
 
   More information about Software RAID on Linux is contained in the
   Software-RAID mini-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . There you will also
+  http://www.linuxdoc.org/docs.html#howto . There you will also
   learn where to get the supporting user space utilities raidtools.
 
   If unsure, say N.
@@ -1265,7 +1265,7 @@ CONFIG_MD_STRIPED
 
   Information about Software RAID on Linux is contained in the
   Software-RAID mini-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . There you will also
+  http://www.linuxdoc.org/docs.html#howto . There you will also
   learn where to get the supporting user space utilities raidtools.
 
   If you want to compile this as a module ( = code which can be
@@ -1287,7 +1287,7 @@ CONFIG_MD_MIRRORING
 
   Information about Software RAID on Linux is contained in the
   Software-RAID mini-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . There you will also
+  http://www.linuxdoc.org/docs.html#howto . There you will also
   learn where to get the supporting user space utilities raidtools.
 
   If you want to use such a RAID-1 set, say Y. This code is also
@@ -1310,7 +1310,7 @@ CONFIG_MD_RAID5
 
   Information about Software RAID on Linux is contained in the
   Software-RAID mini-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . There you will also
+  http://www.linuxdoc.org/docs.html#howto . There you will also
   learn where to get the supporting user space utilities raidtools.
 
   If you want to use such a RAID-4/RAID-5 set, say Y. This code is
@@ -1416,7 +1416,7 @@ CONFIG_NET
 
   For a general introduction to Linux networking, it is highly
   recommended to read the NET-3-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
 Socket filtering
 CONFIG_FILTER
@@ -1623,7 +1623,7 @@ CONFIG_SERIAL_MANY_PORTS
   Say Y here if you have dumb serial boards other than the four
   standard COM 1/2/3/4 ports. This may happen if you have an AST
   FourPort, Accent Async, Boca (read the Boca mini-HOWTO, available
-  from http://metalab.unc.edu/mdw/linux.html#howto ), or other custom
+  from http://www.linuxdoc.org/docs.html#howto ), or other custom
   serial port hardware which acts similar to standard serial port
   hardware. If you only use the standard COM 1/2/3/4 ports, you can
   say N here to save some memory. You can also say Y if you have an
@@ -1700,7 +1700,7 @@ CONFIG_PCI
   VESA. If you have PCI, say Y, otherwise N. 
 
   The PCI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto , contains valuable
+  http://www.linuxdoc.org/docs.html#howto , contains valuable
   information about which PCI hardware does work under Linux and which
   doesn't.
 
@@ -1901,12 +1901,12 @@ CONFIG_SYSVIPC
   and some programs won't run unless you say Y here. In particular, if
   you want to run the DOS emulator dosemu under Linux (read the
   DOSEMU-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto ), you'll need to say Y
+  http://www.linuxdoc.org/docs.html#howto ), you'll need to say Y
   here.
   
   You can find documentation about IPC with "info ipc" and also in
   section 6.4 of the Linux Programmer's Guide, available from
-  http://metalab.unc.edu/mdw/linux.html#guide .
+  http://www.linuxdoc.org/docs.html#guide .
 
   Saying Y here enlarges your kernel by about 18 KB. Just say Y.
 
@@ -1968,7 +1968,7 @@ CONFIG_BINFMT_ELF
   want to say Y here.
 
   Information about ELF is contained in the ELF HOWTO available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   If you find that after upgrading from Linux kernel 1.2 and saying Y
   here, you still can't run any ELF binaries (they just crash), then
@@ -2023,7 +2023,7 @@ CONFIG_BINFMT_MISC
   programs that need an interpreter to run like Java, Python or
   Emacs-Lisp. It's also useful if you often run DOS executables under
   the Linux DOS emulator DOSEMU (read the DOSEMU-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto ). Once you have
+  http://www.linuxdoc.org/docs.html#howto ). Once you have
   registered such a binary class with the kernel, you can start one of
   those programs simply by typing in its name at a shell prompt; Linux
   will automatically feed it to the correct interpreter.
@@ -2101,7 +2101,7 @@ CONFIG_VIDEO_SELECT
   "man bootparam" or see the documentation of your boot loader about
   how to pass options to the kernel. The lilo procedure is also
   explained in the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .)
+  http://www.linuxdoc.org/docs.html#howto .)
 
   Read the file Documentation/svga.txt for more information about the
   Video mode selection support. If unsure, say N.
@@ -2686,7 +2686,7 @@ CONFIG_INET
 
   For an excellent introduction to Linux networking, please read the
   NET-3-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This option is also necessary if you want to use the full power of
   term (term is a program which gives you almost full Internet
@@ -2914,7 +2914,7 @@ CONFIG_IP_ALIAS
   connect to you. This is called "multihosting" or "virtual domains"
   or "virtual hosting services" and is explained in the
   Virtual-Services-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   Another scenario would be that there are two logical networks living
   on your local Ethernet and you want to access them both with the
@@ -3088,7 +3088,7 @@ CONFIG_IPX
   Novell client ncpfs (available from
   ftp://metalab.unc.edu/pub/Linux/system/filesystems/ ) or from within
   the Linux DOS emulator DOSEMU (read the DOSEMU-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto ). In order to do the
+  http://www.linuxdoc.org/docs.html#howto ). In order to do the
   former, you'll also have to say Y to "NCP filesystem support",
   below.
 
@@ -3101,7 +3101,7 @@ CONFIG_IPX
   ftp://metalab.unc.edu/pub/Linux/system/network/daemons/ or mars_nwe
   from ftp://ftp.gwdg.de/pub/linux/misc/ncpfs . For more information,
   read the IPX-HOWTO available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   General information about how to connect Linux, Windows machines and
   Macs is on the WWW at http://www.eats.com/linux_mac_win.html .
@@ -3122,7 +3122,7 @@ CONFIG_IPX_INTERN
   same address). The way this is done is to create a virtual internal
   "network" inside your box and to assign an IPX address to this
   network. Say Y here if you want to do this; read the IPX-HOWTO at
-  http://metalab.unc.edu/mdw/linux.html#howto for details.
+  http://www.linuxdoc.org/docs.html#howto for details.
 
   The full internal IPX network enables you to allocate sockets on
   different virtual nodes of the internal network. This is done by
@@ -3152,7 +3152,7 @@ CONFIG_SPX
   space programs lwared or mars_nwe for the server side).
 
   Say Y here if you have use for SPX; read the IPX-HOWTO at
-  http://metalab.unc.edu/mdw/linux.html#howto for details.
+  http://www.linuxdoc.org/docs.html#howto for details.
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -3221,7 +3221,7 @@ CONFIG_ATALK
   General information about how to connect Linux, Windows machines and
   Macs is on the WWW at http://www.eats.com/linux_mac_win.html The
   NET-3-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto , contains valuable
+  http://www.linuxdoc.org/docs.html#howto , contains valuable
   information as well.
 
   This driver is also available as a module ( = code which can be
@@ -3309,7 +3309,7 @@ CONFIG_HAMRADIO
   If you want to connect your Linux box to an amateur radio, answer Y
   here. You want to read http://www.tapr.org/tapr/html/pkthome.html
   and the HAM-HOWTO and the AX25-HOWTO, both available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   Note that the answer to this question won't directly affect the
   kernel: saying N will just cause this configure script to skip all
@@ -3333,7 +3333,7 @@ CONFIG_AX25
   Information about where to get supporting software for Linux amateur
   radio as well as information about how to configure an AX.25 port is
   contained in the AX25-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . You might also want to
+  http://www.linuxdoc.org/docs.html#howto . You might also want to
   check out the file Documentation/networking/ax25.txt in the kernel
   source. More information about digital amateur radio in general is
   on the WWW at http://www.tapr.org/tapr/html/pkthome.html .
@@ -3369,7 +3369,7 @@ CONFIG_NETROM
   A comprehensive listing of all the software for Linux amateur radio
   users as well as information about how to configure an AX.25 port is
   contained in the AX25-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . You also might want to
+  http://www.linuxdoc.org/docs.html#howto . You also might want to
   check out the file Documentation/networking/ax25.txt. More
   information about digital amateur radio in general is on the WWW at
   http://www.tapr.org/tapr/html/pkthome.html .
@@ -3388,7 +3388,7 @@ CONFIG_ROSE
   A comprehensive listing of all the software for Linux amateur radio
   users as well as information about how to configure an AX.25 port is
   contained in the AX25-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . You also might want to
+  http://www.linuxdoc.org/docs.html#howto . You also might want to
   check out the file Documentation/networking/ax25.txt. More
   information about digital amateur radio in general is on the WWW at
   http://www.tapr.org/tapr/html/pkthome.html .
@@ -3454,7 +3454,7 @@ CONFIG_DMASCC
   (http://www.paccomm.com/gracilis.html ) boards. They are detected
   automatically. If you have one of these cards, say Y here and read
   the AX25-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver can operate multiple boards simultaneously. If you
   compile it as a module (by saying M instead of Y), it will be called
@@ -3477,7 +3477,7 @@ CONFIG_SCC
   These cards are used to connect your Linux box to an amateur radio
   in order to communicate with other computers. If you want to use
   this, read Documentation/networking/z8530drv.txt and the AX25-HOWTO,
-  available from http://metalab.unc.edu/mdw/linux.html#howto . Also
+  available from http://www.linuxdoc.org/docs.html#howto . Also
   make sure to say Y to "Amateur Radio AX.25 Level 2" support.
 
   If you want to compile this as a module ( = code which can be
@@ -3736,7 +3736,7 @@ CONFIG_BRIDGE
   as a bridge, it probably contains several Ethernet devices, but the
   kernel is not able to recognize more than one at boot time without
   help; for details read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   The Bridging code is still in test. If unsure, say N.
 
@@ -4008,7 +4008,7 @@ CONFIG_SCSI
   port version of the 100 MB IOMEGA ZIP drive.
 
   Please read the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . The
+  http://www.linuxdoc.org/docs.html#howto . The
   SCSI-Programming-HOWTO contains information about how to add or
   remove an SCSI device from a running Linux machine without
   rebooting.
@@ -4026,7 +4026,7 @@ CONFIG_BLK_DEV_SD
   If you want to use a SCSI hard disk or the SCSI or parallel port
   version of the IOMEGA ZIP drive under Linux, say Y and read the
   SCSI-HOWTO, the Disk-HOWTO and the Multi-Disk-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . This is NOT for SCSI
+  http://www.linuxdoc.org/docs.html#howto . This is NOT for SCSI
   CDROMs.
 
   This driver is also available as a module ( = code which can be
@@ -4042,7 +4042,7 @@ SCSI tape support
 CONFIG_CHR_DEV_ST
   If you want to use a SCSI tape drive under Linux, say Y and read the
   SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto , and
+  http://www.linuxdoc.org/docs.html#howto , and
   drivers/scsi/README.st in the kernel source. This is NOT for SCSI
   CDROMs.
 
@@ -4056,7 +4056,7 @@ SCSI CDROM support
 CONFIG_BLK_DEV_SR
   If you want to use a SCSI CDROM under Linux, say Y and read the
   SCSI-HOWTO and the CDROM-HOWTO at
-  http://metalab.unc.edu/mdw/linux.html#howto . Also make sure to say Y
+  http://www.linuxdoc.org/docs.html#howto . Also make sure to say Y
   or M to "ISO 9660 CDROM filesystem support" later.
 
   This driver is also available as a module ( = code which can be
@@ -4084,7 +4084,7 @@ CONFIG_CHR_DEV_SG
   devices, it's possible that you'll have to write the driver software
   yourself, so have a look at the SCSI-HOWTO and at the
   SCSI-Programming-HOWTO, both available from
-  http://metalab.unc.edu/mdw/linux.html#howto . Please read the file
+  http://www.linuxdoc.org/docs.html#howto . Please read the file
   Documentation/scsi-generic.txt for more information.
 
   If you want to compile this as a module ( = code which can be
@@ -4160,7 +4160,7 @@ CONFIG_SCSI_AHA152X
   must be manually specified in this case.
 
   It is explained in section 3.3 of the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . You might also want to
+  http://www.linuxdoc.org/docs.html#howto . You might also want to
   read the comments at the top of drivers/scsi/aha152x.c.
 
   This driver is also available as a module ( = code which can be
@@ -4172,7 +4172,7 @@ Adaptec AHA1542 support
 CONFIG_SCSI_AHA1542
   This is support for a SCSI host adapter. It is explained in section
   3.4 of the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . Note that Trantor was
+  http://www.linuxdoc.org/docs.html#howto . Note that Trantor was
   purchased by Adaptec, and some former Trantor products are being
   sold under the Adaptec name. If it doesn't work out of the box, you
   may have to change some settings in drivers/scsi/aha1542.h.
@@ -4186,7 +4186,7 @@ Adaptec AHA1740 support
 CONFIG_SCSI_AHA1740
   This is support for a SCSI host adapter. It is explained in section
   3.5 of the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . If it doesn't work out
+  http://www.linuxdoc.org/docs.html#howto . If it doesn't work out
   of the box, you may have to change some settings in
   drivers/scsi/aha1740.h.
 
@@ -4221,7 +4221,7 @@ CONFIG_SCSI_AIC7XXX
   configuration options. You should read drivers/scsi/README.aic7xxx
   at a minimum before contacting the maintainer with any questions.
   The SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto , can also be of great
+  http://www.linuxdoc.org/docs.html#howto , can also be of great
   help.
 
   If you want to compile this driver as a module ( = code which can be
@@ -4334,7 +4334,7 @@ BusLogic SCSI support
 CONFIG_SCSI_BUSLOGIC
   This is support for BusLogic MultiMaster and FlashPoint SCSI Host
   Adapters. Consult the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto , and the files
+  http://www.linuxdoc.org/docs.html#howto , and the files
   README.BusLogic and README.FlashPoint in drivers/scsi for more
   information. If this driver does not work correctly without
   modification, please contact the author, Leonard N. Zubkoff, by
@@ -4357,7 +4357,7 @@ DTC3180/3280 SCSI support
 CONFIG_SCSI_DTC3280
   This is support for DTC 3180/3280 SCSI Host Adapters. Please read
   the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto , and the file
+  http://www.linuxdoc.org/docs.html#howto , and the file
   drivers/scsi/README.dtc3x80.
 
   This driver is also available as a module ( = code which can be
@@ -4374,7 +4374,7 @@ CONFIG_SCSI_EATA_DMA
   Note that this driver is obsolete; if you have one of the above SCSI
   Host Adapters, you should normally say N here and Y to "EATA
   ISA/EISA/PCI support", below. Please read the SCSI-HOWTO, available
-  from http://metalab.unc.edu/mdw/linux.html#howto .
+  from http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -4388,7 +4388,7 @@ CONFIG_SCSI_EATA_PIO
   host adapters could also use this driver but are discouraged from
   doing so, since this driver only supports hard disks and lacks
   numerous features. You might want to have a look at the SCSI-HOWTO,
-  available from http://metalab.unc.edu/mdw/linux.html#howto . 
+  available from http://www.linuxdoc.org/docs.html#howto . 
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -4402,7 +4402,7 @@ CONFIG_SCSI_U14_34F
   this hardware. If the driver doesn't work out of the box, you may
   have to change some settings in drivers/scsi/u14-34f.c. Read the
   SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . Note that there is also
+  http://www.linuxdoc.org/docs.html#howto . Note that there is also
   another driver for the same hardware: "UltraStor SCSI support",
   below. You should say Y to both only if you want 24F support as
   well.
@@ -4437,7 +4437,7 @@ CONFIG_SCSI_FUTURE_DOMAIN
   other adapters based on the Future Domain chipsets (Quantum
   ISA-200S, ISA-250MG; Adaptec AHA-2920A; and at least one IBM board).
   It is explained in section 3.7 of the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   NOTE: Newer Adaptec AHA-2920C boards use the Adaptec AIC-7850 chip
   and should use the aic7xxx driver ("Adaptec AIC7xxx chipset SCSI
@@ -4467,7 +4467,7 @@ CONFIG_SCSI_GENERIC_NCR5380
   This is the generic NCR family of SCSI controllers, not to be
   confused with the NCR 53c7 or 8xx controllers. It is explained in
   section 3.8 of the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . If it doesn't work out
+  http://www.linuxdoc.org/docs.html#howto . If it doesn't work out
   of the box, you may have to change some settings in
   drivers/scsi/g_NCR5380.h.
 
@@ -4496,7 +4496,7 @@ CONFIG_SCSI_NCR53C7xx
   This is a driver for the 53c7 and 8xx NCR family of SCSI
   controllers, not to be confused with the NCR 5380 controllers. It is
   explained in section 3.8 of the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . If it doesn't work out
+  http://www.linuxdoc.org/docs.html#howto . If it doesn't work out
   of the box, you may have to change some settings in
   drivers/scsi/53c7,8xx.h. Please read drivers/scsi/README.ncr53c7xx
   for the available boot time command line options.
@@ -4718,7 +4718,7 @@ CONFIG_SCSI_IBMMCA
   bootparam" or see the documentation of your boot loader about how to
   pass options to the kernel. The lilo procedure is also explained in
   the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   If you want to compile this driver as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -4796,7 +4796,7 @@ Initio 91XXU(W) SCSI support
 CONFIG_SCSI_INITIO
   This is support for the Initio 91XXU(W) SCSI host adapter. Please
   read the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -4807,7 +4807,7 @@ PAS16 SCSI support
 CONFIG_SCSI_PAS16
   This is support for a SCSI host adapter. It is explained in section
   3.10 of the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . If it doesn't work out
+  http://www.linuxdoc.org/docs.html#howto . If it doesn't work out
   of the box, you may have to change some settings in
   drivers/scsi/pas16.h.
   
@@ -4820,7 +4820,7 @@ Initio INI-A100U2W SCSI support
 CONFIG_SCSI_INIA100
   This is support for the Initio INI-A100U2W SCSI host adapter. Please
   read the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   If you want to compile this as a module ( = code which can be 
   inserted in and removed from the running kernel whenever you want),
@@ -4831,7 +4831,7 @@ PCI2000 support
 CONFIG_SCSI_PCI2000
   This is support for the PCI2000I EIDE interface card which acts as a
   SCSI host adapter. Please read the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module called pci2000.o ( = code
   which can be inserted in and removed from the running kernel
@@ -4842,7 +4842,7 @@ PCI2220i support
 CONFIG_SCSI_PCI2220I
   This is support for the PCI2220i EIDE interface card which acts as a
   SCSI host adapter. Please read the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module called pci2220i.o ( = code
   which can be inserted in and removed from the running kernel
@@ -4853,7 +4853,7 @@ PSI240i support
 CONFIG_SCSI_PSI240I
   This is support for the PSI240i EIDE interface card which acts as a
   SCSI host adapter. Please read the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module called psi240i.o ( = code
   which can be inserted in and removed from the running kernel
@@ -4872,7 +4872,7 @@ CONFIG_SCSI_QLOGIC_FAS
 
   Information about this driver is contained in
   drivers/scsi/README.qlogicfas. You should also read the SCSI-HOWTO,
-  available from http://metalab.unc.edu/mdw/linux.html#howto .
+  available from http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -4890,7 +4890,7 @@ CONFIG_SCSI_QLOGIC_ISP
 
   Please read the file drivers/scsi/README.qlogicisp. You should also
   read the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -4910,7 +4910,7 @@ Seagate ST-02 and Future Domain TMC-8xx SCSI support
 CONFIG_SCSI_SEAGATE
   These are 8-bit SCSI controllers; the ST-01 is also supported by
   this driver. It is explained in section 3.9 of the SCSI-HOWTO,
-  available from http://metalab.unc.edu/mdw/linux.html#howto . If it
+  available from http://www.linuxdoc.org/docs.html#howto . If it
   doesn't work out of the box, you may have to change some settings in
   drivers/scsi/seagate.h.
 
@@ -4923,7 +4923,7 @@ Trantor T128/T128F/T228 SCSI support
 CONFIG_SCSI_T128
   This is support for a SCSI host adapter. It is explained in section
   3.11 of the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . If it doesn't work out
+  http://www.linuxdoc.org/docs.html#howto . If it doesn't work out
   of the box, you may have to change some settings in
   drivers/scsi/t128.h. Note that Trantor was purchased by Adaptec, and
   some former Trantor products are being sold under the Adaptec name.
@@ -4938,7 +4938,7 @@ CONFIG_SCSI_ULTRASTOR
   This is support for the UltraStor 14F, 24F and 34F SCSI-2 host
   adapter family. This driver is explained in section 3.12 of the
   SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . If it doesn't work out
+  http://www.linuxdoc.org/docs.html#howto . If it doesn't work out
   of the box, you may have to change some settings in
   drivers/scsi/ultrastor.h.
   
@@ -4979,7 +4979,7 @@ CONFIG_SCSI_EATA
 
   You want to read the start of drivers/scsi/eata.c and the
   SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   Note that there is also another driver for the same hardware
   available: "EATA-DMA support". You should say Y to only one of them.
@@ -5019,7 +5019,7 @@ CONFIG_SCSI_NCR53C406A
   This is support for the NCR53c406a SCSI host adapter. For user
   configurable parameters, check out drivers/scsi/NCR53c406.c in the
   kernel source. Also read the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   If you want to compile this driver as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -5082,7 +5082,7 @@ AM53/79C974 PCI SCSI support
 CONFIG_SCSI_AM53C974
   This is support for the AM53/79C974 SCSI host adapters. Please read
   drivers/scsi/README.AM53C974 for details. Also, the SCSI-HOWTO,
-  available from http://metalab.unc.edu/mdw/linux.html#howto , is for
+  available from http://www.linuxdoc.org/docs.html#howto , is for
   you.
 
   Note that there is another driver for AM53C974 based adapters:
@@ -5132,7 +5132,7 @@ CONFIG_SCSI_PPA
   For more information about this driver and how to use it you should
   read the file drivers/scsi/README.ppa. You should also read the
   SCSI-HOWTO, which is available from
-  http://metalab.unc.edu/mdw/linux.html#howto . If you use this driver,
+  http://www.linuxdoc.org/docs.html#howto . If you use this driver,
   you will still be able to use the parallel port for other tasks,
   such as a printer; it is safe to compile both drivers into the
   kernel.
@@ -5159,7 +5159,7 @@ CONFIG_SCSI_IMM
   For more information about this driver and how to use it you should
   read the file drivers/scsi/README.ppa. You should also read the
   SCSI-HOWTO, which is available from
-  http://metalab.unc.edu/mdw/linux.html#howto . If you use this driver,
+  http://www.linuxdoc.org/docs.html#howto . If you use this driver,
   you will still be able to use the parallel port for other tasks,
   such as a printer; it is safe to compile both drivers into the
   kernel.
@@ -5284,7 +5284,7 @@ CONFIG_NETDEVICES
   telephone line with a modem either via UUCP (UUCP is a protocol to
   forward mail and news between unix hosts over telephone lines; read
   the UUCP-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto ) or dialing up a shell
+  http://www.linuxdoc.org/docs.html#howto ) or dialing up a shell
   account or a BBS, even using term (term is a program which gives you
   almost full Internet connectivity if you have a regular dial up
   shell account on some Internet connected Unix computer. Read
@@ -5344,7 +5344,7 @@ CONFIG_SLIP
   allows you to use SLIP over a regular dial up shell connection. If
   you plan to use SLiRP, make sure to say Y to CSLIP, below. The
   NET-3-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto , explains how to
+  http://www.linuxdoc.org/docs.html#howto , explains how to
   configure SLIP. Note that you don't need this option if you just
   want to run term (term is a program which gives you almost full
   Internet connectivity if you have a regular dial up shell account on
@@ -5368,7 +5368,7 @@ CONFIG_SLIP_COMPRESSED
   ftp://metalab.unc.edu/pub/Linux/system/network/serial/ ) which allows
   you to use SLIP over a regular dial up shell connection, you
   definitely want to say Y here. The NET-3-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto , explains how to
+  http://www.linuxdoc.org/docs.html#howto , explains how to
   configure CSLIP. This won't enlarge your kernel.
 
 Keepalive and linefill
@@ -5397,7 +5397,7 @@ CONFIG_PPP
 
   To use PPP, you need an additional program called pppd as described
   in Documentation/networking/ppp.txt and in the PPP-HOWTO, available
-  at http://metalab.unc.edu/mdw/linux.html#howto . If you upgrade
+  at http://www.linuxdoc.org/docs.html#howto . If you upgrade
   from an older kernel, you might need to upgrade pppd as well. The
   PPP option enlarges your kernel by about 16 KB.
 
@@ -5517,7 +5517,7 @@ CONFIG_WAVELAN
 
   If you want to use an ISA WaveLAN card under Linux, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . Some more specific
+  http://www.linuxdoc.org/docs.html#howto . Some more specific
   information is contained in Documentation/networking/wavelan.txt and
   in the source code drivers/net/wavelan.p.h.
 
@@ -5821,7 +5821,7 @@ CONFIG_PLIP
 
   If you want to use PLIP, say Y and read the PLIP mini-HOWTO as well
   as the NET-3-HOWTO, both available from
-  http://metalab.unc.edu/mdw/linux.html#howto . Note that the PLIP
+  http://www.linuxdoc.org/docs.html#howto . Note that the PLIP
   protocol has been changed and this PLIP driver won't work together
   with the PLIP support in Linux versions 1.0.x. This option enlarges
   your kernel by about 8 KB.
@@ -5844,7 +5844,7 @@ CONFIG_EQUALIZER
 
   Say Y if you want this and read Documentation/networking/eql.txt.
   You may also want to read section 6.2 of the NET-3-HOWTO, available
-  from http://metalab.unc.edu/mdw/linux.html#howto .
+  from http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -6419,7 +6419,7 @@ CONFIG_NET_ETHERNET
   If your Linux machine will be connected to an Ethernet and you have
   an Ethernet network interface card (NIC) installed in your computer,
   say Y here and read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . You will then also have
+  http://www.linuxdoc.org/docs.html#howto . You will then also have
   to say Y to the driver for your particular NIC.
 
   Note that the answer to this question won't directly affect the
@@ -6446,7 +6446,7 @@ Western Digital/SMC cards
 CONFIG_NET_VENDOR_SMC
   If you have a network (Ethernet) card belonging to this class, say Y
   and read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   Note that the answer to this question doesn't directly affect the
   kernel: saying N will just cause this configure script to skip all
@@ -6457,7 +6457,7 @@ WD80*3 support
 CONFIG_WD80x3
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -6469,7 +6469,7 @@ SMC Ultra MCA support
 CONFIG_ULTRAMCA
   If you have a network (Ethernet) card of this type and are running
   an MCA based system (PS/2), say Y and read the Ethernet-HOWTO,
-  available from http://metalab.unc.edu/mdw/linux.html#howto .
+  available from http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -6481,7 +6481,7 @@ SMC Ultra support
 CONFIG_ULTRA
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
   
   Important: There have been many reports that, with some motherboards
   mixing an SMC Ultra and an Adaptec AHA154x SCSI card (or compatible,
@@ -6500,7 +6500,7 @@ SMC Ultra32 EISA support
 CONFIG_ULTRA32
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -6515,7 +6515,7 @@ CONFIG_SMC9194
   another SMC9192/9194 based chipset. Say Y if you want it compiled
   into the kernel, and read the file
   Documentation/networking/smc9.txt and the Ethernet-HOWTO, available
-  from http://metalab.unc.edu/mdw/linux.html#howto .
+  from http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you
@@ -6529,7 +6529,7 @@ CONFIG_NE2K_PCI
   with ISA NE2000 cards (they have their own driver, "NE2000/NE1000
   support" below). If you have a PCI NE2000 network (Ethernet) card,
   say Y and read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -6553,7 +6553,7 @@ Racal-Interlan (Micom) NI cards
 CONFIG_NET_VENDOR_RACAL
   If you have a network (Ethernet) card belonging to this class, such
   as the NI5010, NI5210 or NI6210, say Y and read the Ethernet-HOWTO,
-  available from http://metalab.unc.edu/mdw/linux.html#howto .
+  available from http://www.linuxdoc.org/docs.html#howto .
 
   Note that the answer to this question doesn't directly affect the
   kernel: saying N will just cause this configure script to skip all
@@ -6564,7 +6564,7 @@ NI5010 support (EXPERIMENTAL)
 CONFIG_NI5010
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . Note that this is still
+  http://www.linuxdoc.org/docs.html#howto . Note that this is still
   experimental code.
 
   This driver is also available as a module ( = code which can be
@@ -6577,7 +6577,7 @@ NI5210 support
 CONFIG_NI52
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -6589,7 +6589,7 @@ NI6510 support
 CONFIG_NI65
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -6602,7 +6602,7 @@ CONFIG_RTL8139
   This is a driver for the Fast Ethernet PCI network cards based on
   the RTL8129 and RTL8139 chips. If you have one of those, say Y and
   read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   If you want to compile this driver as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -6712,7 +6712,7 @@ AMD LANCE and PCnet (AT1500 and NE2100) support
 CONFIG_LANCE
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . Some LinkSys cards are
+  http://www.linuxdoc.org/docs.html#howto . Some LinkSys cards are
   of this type.
 
   If you want to compile this driver as a module ( = code which can be
@@ -6724,7 +6724,7 @@ CONFIG_LANCE
 CONFIG_NET_VENDOR_3COM
   If you have a network (Ethernet) card belonging to this class, say Y
   and read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   Note that the answer to this question doesn't directly affect the
   kernel: saying N will just cause this configure script to skip all
@@ -6735,7 +6735,7 @@ CONFIG_NET_VENDOR_3COM
 CONFIG_EL1
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . Also, consider buying a
+  http://www.linuxdoc.org/docs.html#howto . Also, consider buying a
   new card, since the 3c501 is slow, broken, and obsolete: you will
   have problems. Some people suggest to ping ("man ping") a nearby
   machine every minute ("man cron") when using this card.
@@ -6750,7 +6750,7 @@ CONFIG_EL1
 CONFIG_EL2
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -6763,7 +6763,7 @@ CONFIG_ELPLUS
   Information about this network (Ethernet) card can be found in
   Documentation/networking/3c505.txt. If you have a card of this type,
   say Y and read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -6775,7 +6775,7 @@ CONFIG_ELPLUS
 CONFIG_EL16
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -6787,7 +6787,7 @@ CONFIG_EL16
 CONFIG_ELMC
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -6799,7 +6799,7 @@ CONFIG_ELMC
 CONFIG_ELMC_II
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -6811,7 +6811,7 @@ CONFIG_ELMC_II
 CONFIG_EL3
   If you have a network (Ethernet) card belonging to the 3Com
   EtherLinkIII series, say Y and read the Ethernet-HOWTO, available
-  from http://metalab.unc.edu/mdw/linux.html#howto .
+  from http://www.linuxdoc.org/docs.html#howto .
 
   If your card is not working you may need to use the DOS
   setup disk to disable Plug & Play mode, and to select the default
@@ -6828,7 +6828,7 @@ CONFIG_VORTEX
   If you have a 3Com "Vortex" (Fast EtherLink 3c590/3c592/3c595/3c597)
   or "Boomerang" series (EtherLink XL 3c900 or 3c905) network
   (Ethernet) card, say Y and read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . More specific
+  http://www.linuxdoc.org/docs.html#howto . More specific
   information is in Documentation/networking/vortex.txt and in the
   comments at the beginning of drivers/net/3c59x.c.
 
@@ -6843,7 +6843,7 @@ CONFIG_NET_ISA
   bus system (that's the way the cards talks to the other components
   of your computer) is ISA (as opposed to EISA, VLB or PCI), say Y.
   Make sure you know the name of your card. Read the Ethernet-HOWTO,
-  available from http://metalab.unc.edu/mdw/linux.html#howto . 
+  available from http://www.linuxdoc.org/docs.html#howto . 
 
   If unsure, say Y.
 
@@ -6863,7 +6863,7 @@ CONFIG_ARCNET
   support" below.
 
   You might also want to have a look at the Ethernet-HOWTO, available
-  from http://metalab.unc.edu/mdw/linux.html#howto (even though ARCnet
+  from http://www.linuxdoc.org/docs.html#howto (even though ARCnet
   is not really Ethernet).
 
   This driver is also available as a module ( = code which can be
@@ -6951,7 +6951,7 @@ Cabletron E21xx support
 CONFIG_E2100
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -6964,7 +6964,7 @@ CONFIG_CS89x0
   Support for CS89x0 chipset based Ethernet cards. If you have a
   network (Ethernet) card of this type, say Y and read the
   Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto as well as
+  http://www.linuxdoc.org/docs.html#howto as well as
   Documentation/networking/cs89x0.txt.
 
   If you want to compile this as a module ( = code which can be
@@ -6977,7 +6977,7 @@ DEPCA support
 CONFIG_DEPCA
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto as well as
+  http://www.linuxdoc.org/docs.html#howto as well as
   drivers/net/depca.c.
 
   If you want to compile this as a module ( = code which can be
@@ -6992,7 +6992,7 @@ CONFIG_EWRK3
   cards. If this is for you, say Y and read
   Documentation/networking/ewrk3.txt in the kernel source as well as
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -7004,7 +7004,7 @@ SEEQ8005 support
 CONFIG_SEEQ8005
   This is a driver for the SEEQ 8005 network (Ethernet) card. If this
   is for you, read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -7016,7 +7016,7 @@ AT1700/1720 support
 CONFIG_AT1700
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -7029,7 +7029,7 @@ FMV-181/182/183/184 support
 CONFIG_FMV18X
   If you have a Fujitsu FMV-181/182/183/184 network (Ethernet) card,
   say Y and read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   If you use an FMV-183 or FMV-184 and it is not working, you may need
   to disable Plug & Play mode of the card.
@@ -7045,7 +7045,7 @@ CONFIG_EEXPRESS_PRO
   If you have a network (Ethernet) card of this type, say Y. Note
   however that the EtherExpress PRO/100 Ethernet card has its own
   separate driver. Please read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -7057,7 +7057,7 @@ EtherExpress support
 CONFIG_EEXPRESS
   If you have an EtherExpress16 network (Ethernet) card, say Y and
   read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . Note that the Intel
+  http://www.linuxdoc.org/docs.html#howto . Note that the Intel
   EtherExpress16 card used to be regarded as a very poor choice
   because the driver was very unreliable. We now have a new driver
   that should do better.
@@ -7072,7 +7072,7 @@ HP PCLAN+ (27247B and 27252A) support
 CONFIG_HPLAN_PLUS
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -7084,7 +7084,7 @@ HP PCLAN (27245 and other 27xxx series) support
 CONFIG_HPLAN
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -7096,7 +7096,7 @@ HP 10/100VG PCLAN (ISA, EISA, PCI) support
 CONFIG_HP100
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -7108,7 +7108,7 @@ NE2000/NE1000 support
 CONFIG_NE2000
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . Many Ethernet cards
+  http://www.linuxdoc.org/docs.html#howto . Many Ethernet cards
   without a specific driver are compatible with NE2000.
 
   If you have a PCI NE2000 card however, say N here and Y to "PCI
@@ -7127,13 +7127,13 @@ SK_G16 support
 CONFIG_SK_G16
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
 NE/2 (ne2000 MCA version) support
 CONFIG_NE2_MCA
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -7160,7 +7160,7 @@ EISA, VLB, PCI and on board controllers
 CONFIG_NET_EISA
   This is another class of network cards which attach directly to the
   bus. If you have one of those, say Y and read the Ethernet-HOWTO,
-  available from http://metalab.unc.edu/mdw/linux.html#howto .
+  available from http://www.linuxdoc.org/docs.html#howto .
 
   Note that the answer to this question doesn't directly affect the
   kernel: saying N will just cause this configure script to skip all
@@ -7172,7 +7172,7 @@ AMD PCnet32 (VLB and PCI) support
 CONFIG_PCNET32
   If you have a PCnet32 or PCnetPCI based network (Ethernet) card,
   answer Y here and read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -7184,7 +7184,7 @@ Ansel Communications EISA 3200 support
 CONFIG_AC3200
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -7196,7 +7196,7 @@ Mylex EISA LNE390A/LNE390B support (EXPERIMENTAL)
 CONFIG_LNE390
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -7208,7 +7208,7 @@ Novell/Eagle/Microdyne NE3210 EISA support (EXPERIMENTAL)
 CONFIG_NE3210
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . Note that this driver
+  http://www.linuxdoc.org/docs.html#howto . Note that this driver
   will NOT WORK for NE3200 cards as they are completely different.
 
   This driver is also available as a module ( = code which can be
@@ -7221,7 +7221,7 @@ Apricot Xen-II on board Ethernet
 CONFIG_APRICOT
   If you have a network (Ethernet) controller of this type, say Y and
   read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -7235,7 +7235,7 @@ CONFIG_DE4X5
   These include the DE425, DE434, DE435, DE450 and DE500 models. If
   you have a network card of this type, say Y and read the
   Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . More specific
+  http://www.linuxdoc.org/docs.html#howto . More specific
   information is contained in Documentation/networking/de4x5.txt.
 
   This driver is also available as a module ( = code which can be
@@ -7253,7 +7253,7 @@ CONFIG_DEC_ELCP
   (smc9332dst), you can also try the driver for "Generic DECchip"
   cards, above. However, most people with a network card of this type
   will say Y here.) Do read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . More specific
+  http://www.linuxdoc.org/docs.html#howto . More specific
   information is contained in Documentation/networking/tulip.txt.
 
   This driver is also available as a module ( = code which can be
@@ -7268,7 +7268,7 @@ CONFIG_DGRS
   PCI/EISA Ethernet switch cards. These include the SE-4 and the SE-6
   models. If you have a network card of this type, say Y and read the
   Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . More specific
+  http://www.linuxdoc.org/docs.html#howto . More specific
   information is contained in Documentation/networking/dgrs.txt.
 
   This driver is also available as a module ( = code which can be
@@ -7281,7 +7281,7 @@ EtherExpress PRO/100 support
 CONFIG_EEXPRESS_PRO100
   If you have an Intel EtherExpress PRO/100 PCI network (Ethernet)
   card, say Y and read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -7293,7 +7293,7 @@ ICL EtherTeam 16i/32 support (EXPERIMENTAL)
 CONFIG_ETH16I
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -7306,7 +7306,7 @@ CONFIG_TLAN
   If you have a PCI Ethernet network card based on the ThunderLAN chip
   which is supported by this driver, say Y and read the
   Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   Devices currently supported by this driver are Compaq Netelligent,
   Compaq NetFlex and Olicom cards. Please read the file
@@ -7335,7 +7335,7 @@ Racal-Interlan EISA ES3210 support (EXPERIMENTAL)
 CONFIG_ES3210
   If you have a network (Ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -7347,7 +7347,7 @@ SMC EtherPower II (EXPERIMENTAL)
 CONFIG_EPIC100
   If you have an SMC EtherPower II 9432 PCI Ethernet network card
   which is based on the SMC83c170, say Y and read the Ethernet-HOWTO,
-  available from http://metalab.unc.edu/mdw/linux.html#howto .
+  available from http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -7366,13 +7366,13 @@ CONFIG_ZNET
   (Ethernet) card, and this is the Linux driver for it. Note that the
   IBM Thinkpad 300 is compatible with the Z-Note and is also supported
   by this driver. Read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
 Adaptec Starfire support
 CONFIG_ADAPTEC_STARFIRE
   If you have an Ethernet network card like this, say Y and read the
   Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -7385,7 +7385,7 @@ CONFIG_NET_POCKET
   Cute little network (Ethernet) devices which attach to the parallel
   port ("pocket adapters"), commonly used with laptops. If you have
   one of those, say Y and read the Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   If you want to plug a network (or some other) card into the PCMCIA
   (or PC-card) slot of your laptop instead (PCMCIA is the standard for
@@ -7405,7 +7405,7 @@ AT-LAN-TEC/RealTek pocket adapter support
 CONFIG_ATP
   This is a network (Ethernet) device which attaches to your parallel
   port. Read drivers/net/atp.c as well as the Ethernet-HOWTO,
-  available from http://metalab.unc.edu/mdw/linux.html#howto , if you
+  available from http://www.linuxdoc.org/docs.html#howto , if you
   want to use this. If you intend to use this driver, you should have
   said N to the Parallel Printer support, because the two drivers
   don't like each other.
@@ -7415,7 +7415,7 @@ CONFIG_DE600
   This is a network (Ethernet) device which attaches to your parallel
   port. Read Documentation/networking/DLINK.txt as well as the
   Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto , if you want to use
+  http://www.linuxdoc.org/docs.html#howto , if you want to use
   this. It is possible to have several devices share a single parallel
   port and it is safe to compile the corresponding drivers into the
   kernel.
@@ -7430,7 +7430,7 @@ CONFIG_DE620
   This is a network (Ethernet) device which attaches to your parallel
   port. Read Documentation/networking/DLINK.txt as well as the
   Ethernet-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto , if you want to use
+  http://www.linuxdoc.org/docs.html#howto , if you want to use
   this. It is possible to have several devices share a single parallel
   port and it is safe to compile the corresponding drivers into the
   kernel.
@@ -7448,14 +7448,14 @@ CONFIG_TR
   connected to such a Token Ring network and want to use your Token
   Ring card under Linux, say Y here and to the driver for your
   particular card below and read the Token-Ring mini-HOWTO, available
-  from http://metalab.unc.edu/mdw/linux.html#howto . Most people can
+  from http://www.linuxdoc.org/docs.html#howto . Most people can
   say N here.
 
 IBM Tropic chipset based adapter support
 CONFIG_IBMTR
   This is support for all IBM Token Ring cards that don't use DMA. If
   you have such a beast, say Y and read the Token-Ring mini-HOWTO,
-  available from http://metalab.unc.edu/mdw/linux.html#howto .
+  available from http://www.linuxdoc.org/docs.html#howto .
 
   Warning: this driver will almost definitely fail if more than one
   active Token Ring card is present. 
@@ -7473,7 +7473,7 @@ CONFIG_IBMOL
 
   If you have such an adapter, say Y and read the Token-Ring
   mini-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -7495,7 +7495,7 @@ CONFIG_TMS380TR
 
   If you have such an adapter and would like to use it, say Y or M and
   read the Token-Ring mini-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   Also read the file linux/Documentation/networking/tms380tr.txt or check
   http://www.auk.cx/tms380tr/
@@ -7507,7 +7507,7 @@ CONFIG_SMCTR
 
   If you have such an adapter and would like to use it, say Y or M and
   read the Token-Ring mini-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
 Traffic Shaper (EXPERIMENTAL)
 CONFIG_SHAPER
@@ -7598,7 +7598,7 @@ Support CDROM drives that are not SCSI or IDE/ATAPI
 CONFIG_CD_NO_IDESCSI
   If you have a CDROM drive that is neither SCSI nor IDE/ATAPI, say Y
   here, otherwise N. Read the CDROM-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   Note that the answer to this question doesn't directly affect the
   kernel: saying N will just cause this configure script to skip all
@@ -7865,10 +7865,10 @@ CONFIG_QUOTA
   usage (also called disk quotas). Currently, it works only for the
   ext2 filesystem. You need additional software in order to use quota
   support; for details, read the Quota mini-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . Probably the quota
+  http://www.linuxdoc.org/docs.html#howto . Probably the quota
   support is only useful for multi user systems. If unsure, say N.
 
-Support for USB (EXPERIMENTAL)
+Support for USB
 CONFIG_USB
   Universal Serial Bus (USB) is a specification for a serial bus
   subsystem which offers higher speeds and more features than the
@@ -7892,7 +7892,7 @@ CONFIG_USB
   The module will be called usbcore.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-UHCI (intel PIIX4, VIA, and others) support?
+UHCI (intel PIIX4, VIA, ...) support?
 CONFIG_USB_UHCI
   The Universal Host Controller Interface is a standard by Intel for
   accessing the USB hardware in the PC (which is also called the USB
@@ -7908,17 +7908,17 @@ CONFIG_USB_UHCI
   The module will be called usb-uhci.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
   
-OHCI-HCD (Compaq, iMacs, OPTi, SiS, ALi, and others) support?
+OHCI-HCD (Compaq, iMacs, OPTi, SiS, ALi, ...) support?
 CONFIG_USB_OHCI_HCD
   The Open Host Controller Interface is a standard by
   Compaq/Microsoft/National for accessing the USB PC hardware (also
   called USB host controller). If your USB host controller conforms
   to this standard, say Y. The USB host controllers on most
-  non-Intel architectures and on several x86 compatibles  with non-Intel
-  chipsets - like SiS (aktual 610, 610 and so on) or ALi (ALi IV, ALi V,
-  Aladin Pro..) - conform to this standard.
+  non-Intel architectures and on several x86 compatibles with non-Intel
+  chipsets - like SiS (actual 610, 610 and so on) or ALi (ALi IV, ALi V,
+  Aladdin Pro..) - conform to this standard.
 
-  You may want to read the file drivers/usb/README.ohci_hcd.
+  You may want to read the file Documentation/usb/ohci-hcd.txt.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -7971,29 +7971,18 @@ CONFIG_INPUT_EVDEV
   under /dev/inputX (misc 64+) in a generic way.
   This is the future ...
 
-USB HID debug output
-CONFIG_USB_HID_DEBUG
-  Say Y here if you want to see what the HID driver is doing,
-  perhaps it's doing something wrong with your device.
-
-USB HID lots of debug output
-CONFIG_USB_HID_DEBUG_LOTS
-  Say Y here if you don't fear to read all the HID dumps the
-  HID driver will generate when you switch this on. Really LOTS
-  of debug output.
-
-USB scanner support
+USB Scanner support
 CONFIG_USB_SCANNER
   Say Y here if you want to connect a USB scanner to your
-  computer's USB port. Please read drivers/usb/README.scanner
-  and drivers/usb/README.scanner_hp_sane for more information.
+  computer's USB port. Please read Documentation/usb/scanner.txt
+  and Documentation/usb/scanner-hp-sane.txt for more information.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called hp_scanner.o. If you want to compile it as
   a module, say M here and read Documentation/modules.txt.
 
-USB audio parsing support
+USB Audio support
 CONFIG_USB_AUDIO
   Say Y here if you want to connect USB audio equipment such as
   speakers to your computer's USB port.
@@ -8003,11 +7992,10 @@ CONFIG_USB_AUDIO
   The module will be called audio.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-USB Communications Device Class (ACM) support (Preliminary)
+USB Modem (CDC ACM) support
 CONFIG_USB_ACM
-  This driver allows for devices which support the Abstract Control
-  Model, including many USB-based modems, ISDN adapters, and network
-  adapters.
+  This driver supports USB modems and ISDN adapters which support the
+  Communication Device Class Abstract Control Model interface.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -8019,6 +8007,7 @@ CONFIG_USB_SERIAL
   Say Y here if you want to connect a Connect Tech WhiteHEAT 
   multi-port USB to serial converter; a Belkin, Peracom, or eTek
   single port USB to serial converter; or a Handspring Visor.
+  Please read Documentation/usb/usb-serial.txt for more information.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -8059,7 +8048,7 @@ CONFIG_USB_OV511
 USB Kodak DC-2xx Camera support
 CONFIG_USB_DC2XX
   Say Y here if you want to connect this type of still camera to
-  your computer's USB port.  See drivers/usb/README.dc2xx for more
+  your computer's USB port.  See Documentation/usb/dc2xx.txt for more
   information; some non-Kodak cameras may also work with this
   driver, given application support (such as www.gPhoto.org).
 
@@ -8068,7 +8057,7 @@ CONFIG_USB_DC2XX
   The module will be called dc2xx.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-USB SCSI Support
+USB SCSI (mass storage) support
 CONFIG_USB_SCSI
   Say Y here if you want to connect USB mass storage devices to your
   computer's USB port.
@@ -8082,9 +8071,6 @@ USB SCSI verbose debug
 CONFIG_USB_SCSI_DEBUG
   Say Y here in order to have the USB SCSI code generate verbose
   debugging messages.
-
-#EZUSB Firmware downloader
-#CONFIG_USB_EZUSB
 
 USS720 parport driver
 CONFIG_USB_USS720
@@ -8113,7 +8099,7 @@ CONFIG_USB_USS720
   The module will be called uss720.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
   
-USB /proc filesystem support
+/proc/bus/usb support
 CONFIG_USB_PROC
   This reports USB drivers and devices in the /proc filesystem.
   Entries are located in /proc/bus/usb. The entries are described in
@@ -8122,7 +8108,7 @@ CONFIG_USB_PROC
   Note that you must say Y to global "/proc filesystem support" under
   Filesystems for this to work.
 
-USB device file system
+USB device filesystem
 CONFIG_USB_DEVICEFS
   This file system implements a "devices" file, that lists
   the currently connected to your USB busses, a "drivers" file
@@ -8144,7 +8130,7 @@ CONFIG_USB_DABUSB
   inserted in and removed from the running kernel whenever you want).
   The module will be called dabusb.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
-  
+ 
 ACPI support
 CONFIG_ACPI
   Advanced Configuration and Power Interface (ACPI) is an interface
@@ -8189,7 +8175,7 @@ CONFIG_EXT2_FS
   by about 44 kB.
 
   The Ext2fs-Undeletion mini-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto , gives information about
+  http://www.linuxdoc.org/docs.html#howto , gives information about
   how to retrieve deleted files on ext2fs filesystems.
 
   To change the behavior of ext2 filesystems, you can use the tune2fs
@@ -8239,7 +8225,7 @@ CONFIG_ISO9660_FS
   If you have a CDROM drive and want to do more with it than just
   listen to audio CDs and watch its LEDs, say Y (and read
   Documentation/filesystems/isofs.txt and the CDROM-HOWTO, available
-  from http://metalab.unc.edu/mdw/linux.html#howto ), thereby
+  from http://www.linuxdoc.org/docs.html#howto ), thereby
   enlarging your kernel by about 27 KB; otherwise say N.
 
   If you want to compile this as a module ( = code which can be
@@ -8318,7 +8304,7 @@ CONFIG_MSDOS_FS
   they are compressed; to access compressed MSDOS partitions under
   Linux, you can either use the DOS emulator DOSEMU, described in the
   DOSEMU-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto , or try dmsdosfs in
+  http://www.linuxdoc.org/docs.html#howto , or try dmsdosfs in
   ftp://metalab.unc.edu/pub/Linux/system/filesystems/dosfs . If you
   intend to use dosemu with a non-compressed MSDOS partition, say Y
   here) and MSDOS floppies. This means that file access becomes
@@ -8833,7 +8819,7 @@ CONFIG_SMB_FS
   works only if the Windows machines use TCP/IP as the underlying
   transport protocol, and not NetBEUI. For details, read
   Documentation/filesystems/smbfs.txt and the SMB-HOWTO, available
-  from http://metalab.unc.edu/mdw/linux.html#howto .
+  from http://www.linuxdoc.org/docs.html#howto .
 
   Note: if you just want your box to act as an SMB *server* and make
   files and printing services available to Windows clients (which need
@@ -8878,7 +8864,7 @@ CONFIG_NCP_FS
   mount NetWare file server volumes and to access them just like any
   other Unix directory. For details, please read the file
   Documentation/filesystems/ncpfs.txt in the kernel source and the
-  IPX-HOWTO from http://metalab.unc.edu/mdw/linux.html#howto .
+  IPX-HOWTO from http://www.linuxdoc.org/docs.html#howto .
 
   You do not have to say Y here if you want your Linux box to act as a
   file *server* for Novell NetWare clients.
@@ -9319,7 +9305,7 @@ CONFIG_VT_CONSOLE
   bootparam" or see the documentation of your boot loader (lilo or
   loadlin) about how to pass options to the kernel at boot time. The
   lilo procedure is also explained in the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .)
+  http://www.linuxdoc.org/docs.html#howto .)
 
   If unsure, say Y.
 
@@ -9383,7 +9369,7 @@ CONFIG_SERIAL_CONSOLE
   your boot loader (lilo or loadlin) about how to pass options to the
   kernel at boot time. The lilo procedure is also explained in the
   SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .)
+  http://www.linuxdoc.org/docs.html#howto .)
 
   If you don't have a VGA card installed and you say Y here, the
   kernel will automatically use the first serial line, /dev/ttyS0, as
@@ -9634,7 +9620,7 @@ CONFIG_PRINTER
   box (as opposed to using a serial printer; if the connector at the
   printer has 9 or 25 holes ["female"], then it's serial), say Y. Also
   read the Printing-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   It is possible to share one parallel port among several devices
   (e.g. printer and ZIP drive) and it is safe to compile the
@@ -9649,7 +9635,7 @@ CONFIG_PRINTER
   or see the documentation of your boot loader (lilo or loadlin) about
   how to pass options to the kernel at boot time. The lilo procedure
   is also explained in the SCSI-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .) The syntax of the "lp"
+  http://www.linuxdoc.org/docs.html#howto .) The syntax of the "lp"
   command line option can be found in drivers/char/lp.c.
 
   If you have more than 3 printers, you need to increase the LP_NO
@@ -9675,7 +9661,7 @@ CONFIG_BUSMOUSE
   Microsoft mouse (made by Logitech) that plugs into a COM port
   (rectangular with 9 or 25 pins). These people say N here. If you
   have something else, read the Busmouse-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto , and say Y here.
+  http://www.linuxdoc.org/docs.html#howto , and say Y here.
 
   If you have a laptop, you either have to check the documentation or
   experiment a bit to find out whether the trackball is a serial mouse
@@ -9698,7 +9684,7 @@ CONFIG_MOUSE
   MouseSystem or Microsoft mouse (made by Logitech) that plugs into a
   COM port (rectangular with 9 or 25 pins). These people say N here.
   If you have something else, read the Busmouse-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . This HOWTO contains
+  http://www.linuxdoc.org/docs.html#howto . This HOWTO contains
   information about all non-serial mice, not just bus mice.
 
   If you have a laptop, you either have to check the documentation or
@@ -9715,7 +9701,7 @@ CONFIG_LOGIBUSMOUSE
   generally a round connector with 9 pins. Note that the newer mice
   made by Logitech don't use the Logitech protocol anymore; for those,
   you don't need this option. You want to read the Busmouse-HOWTO ,
-  available from http://metalab.unc.edu/mdw/linux.html#howto .
+  available from http://www.linuxdoc.org/docs.html#howto .
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -9735,7 +9721,7 @@ CONFIG_PSMOUSE
 
   Although PS/2 mice are not technically bus mice, they are explained
   in detail in the Busmouse-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   When using a PS/2 mouse, you can get problems if you want to use the
   mouse both on the Linux console and under X. Using the "-R" option
@@ -9748,7 +9734,7 @@ CONFIG_82C710_MOUSE
   This is a certain kind of PS/2 mouse used on the TI Travelmate. If
   you are unsure, try first to say N here and come back if the mouse
   doesn't work. Read the Busmouse-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
 PC110 digitizer pad support
 CONFIG_PC110_PAD
@@ -9766,7 +9752,7 @@ CONFIG_MS_BUSMOUSE
   These animals (also called Inport mice) are connected to an
   expansion board using a round connector with 9 pins. If this is what
   you have, say Y and read the Busmouse-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   If you are unsure, say N and read the HOWTO nevertheless: it will
   tell you what you have. Also be aware that several vendors talk
@@ -9782,7 +9768,7 @@ Apple Desktop Bus mouse support
 CONFIG_ADBMOUSE
   Say Y here if you have this type of bus mouse (4 pin connector) as
   is common on Macintoshes. You may want to read the Busmouse-HOWTO,
-  available from http://metalab.unc.edu/mdw/linux.html#howto .
+  available from http://www.linuxdoc.org/docs.html#howto .
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -9796,7 +9782,7 @@ CONFIG_ATIXL_BUSMOUSE
   most mice by ATI are actually Microsoft busmice; you should say Y to
   "Microsoft busmouse support" above if you have one of those. Read
   the Busmouse-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -10228,7 +10214,7 @@ CONFIG_APM
 
   Supporting software is available; for more information, read the
   Battery Powered Linux mini-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver does not spin down disk drives (see the hdparm(8)
   manpage ("man 8 hdparm") for that), and it doesn't turn off
@@ -10691,7 +10677,7 @@ CONFIG_SOUND
   interrupt and DMA channel), because you will be asked for it. 
 
   You want to read the Sound-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto . General information
+  http://www.linuxdoc.org/docs.html#howto . General information
   about the modular sound system is contained in the files
   Documentation/sound/Introduction. The file
   Documentation/sound/README.OSS contains some slightly outdated but
@@ -11102,7 +11088,7 @@ CONFIG_AWE32_SYNTH
   Say Y here if you have a Sound Blaster SB32, AWE32-PnP, SB AWE64 or
   similar sound card. See Documentation/sound/README.awe,
   Documentation/sound/AWE32 and the Soundblaster-AWE mini-HOWTO,
-  available from http://metalab.unc.edu/mdw/linux.html#howto for more
+  available from http://www.linuxdoc.org/docs.html#howto for more
   info.
 
 Gallant's Audio Excel DSP 16 support (SC-6000 and SC-6600)
@@ -12792,7 +12778,7 @@ CONFIG_1GB
   such as "mem=256M". (Try "man bootparam" or see the documentation of
   your boot loader (lilo or loadlin) about how to pass options to the
   kernel at boot time. The lilo procedure is also explained in the
-  SCSI-HOWTO, available from http://metalab.unc.edu/mdw/linux.html#howto .)
+  SCSI-HOWTO, available from http://www.linuxdoc.org/docs.html#howto .)
 
 Math emulation
 CONFIG_NWFPE
@@ -12950,7 +12936,7 @@ CONFIG_IRDA
   some user-space utilities like the irmanager and probably irattach
   as well. For more information, see the file
   Documentation/networking/irda.txt. You also want to read the
-  IR-HOWTO, available at http://metalab.unc.edu/mdw/linux.html#howto .
+  IR-HOWTO, available at http://www.linuxdoc.org/docs.html#howto .
 
   This support is also available as a module. If you want to compile
   it as a module, say M here and read Documentation/modules.txt.

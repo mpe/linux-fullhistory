@@ -739,6 +739,7 @@ sys_rt_sigtimedwait(const sigset_t *uthese, siginfo_t *uinfo,
 	 * Invert the set of allowed signals to get those we
 	 * want to block.
 	 */
+	sigdelsetmask(&these, sigmask(SIGKILL)|sigmask(SIGSTOP));
 	signotset(&these);
 
 	if (uts) {
@@ -922,10 +923,18 @@ do_sigaltstack (const stack_t *uss, stack_t *uoss, unsigned long sp)
 			goto out;
 
 		error = -EINVAL;
-		if (ss_flags & ~SS_DISABLE)
+		/*
+		 *
+		 * Note - this code used to test ss_flags incorrectly
+		 *  	  old code may have been written using ss_flags==0
+		 *	  to mean ss_flags==SS_ONSTACK (as this was the only
+		 *	  way that worked) - this fix preserves that older
+		 *	  mechanism
+		 */
+		if (ss_flags != SS_DISABLE && ss_flags != SS_ONSTACK && ss_flags != 0)
 			goto out;
 
-		if (ss_flags & SS_DISABLE) {
+		if (ss_flags == SS_DISABLE) {
 			ss_size = 0;
 			ss_sp = NULL;
 		} else {

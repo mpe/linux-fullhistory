@@ -29,9 +29,9 @@ By convention, the following device nodes are used (numbers indicate the device
 minor numbers):
 
       0 = /dev/fb0	First frame buffer
-     32 = /dev/fb1	Second frame buffer
+      1 = /dev/fb1	Second frame buffer
 	  ...
-    224 = /dev/fb7	8th frame buffer
+     31 = /dev/fb31	32nd frame buffer
 
 For backwards compatibility, you may want to create the following symbolic
 links:

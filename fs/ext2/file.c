@@ -28,7 +28,7 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-static long long ext2_file_lseek(struct file *, long long, int);
+static loff_t ext2_file_lseek(struct file *, loff_t, int);
 static int ext2_open_file (struct inode *, struct file *);
 
 #define EXT2_MAX_SIZE(bits)							\
@@ -45,9 +45,9 @@ EXT2_MAX_SIZE(10), EXT2_MAX_SIZE(11), EXT2_MAX_SIZE(12), EXT2_MAX_SIZE(13)
 /*
  * Make sure the offset never goes beyond the 32-bit mark..
  */
-static long long ext2_file_lseek(
+static loff_t ext2_file_lseek(
 	struct file *file,
-	long long offset,
+	loff_t offset,
 	int origin)
 {
 	struct inode *inode = file->f_dentry->d_inode;

@@ -10,41 +10,41 @@ The text in square brackets at the beginning of the description state the
 restrictions on the kernel for the said kernel parameter to be valid. The
 restrictions referred to are that the relevant option is valid if:
 
-    APIC	APIC support is enabled.
-    APM 	Advanced Power Management support is enabled.
-    AX25	Appropriate AX.25 support is enabled.
-    CD		Appropriate CD support is enabled.
-    EIDE	EIDE/ATAPI support is enabled.
-    FB		The frame buffer device is enabled.
-    HW		Appropriate hardware is enabled.
-    ISDN	Appropriate ISDN support is enabled.
-    JOY 	Appropriate joystick support is enabled.
-    LP		Printer support is enabled.
-    LOOP	Loopback device support is enabled.
-    MCA 	MCA bus support is enabled.
-    MDA 	The MDA console is enabled.
-    MOUSE	Appropriate mouse support is enabled.
-    NET 	Appropriate network support is enabled.
-    NFS 	Appropriate NFS support is enabled.
-    PARIDE	The ParIDE subsystem is enabled.
-    PCI 	PCI bus support is enabled.
-    PCMCIA	The PCMCIA subsystem is enabled.
-    PNP 	Plug & Play support is enabled.
-    PPT		Parallel port support is enabled.
-    PS2 	Appropriate PS/2 support is enabled.
-    RAM 	RAMdisc support is enabled.
-    SCSI	Appropriate SCSI support is enabled.
-    SERIAL	Serial support is enabled.
-    SMP 	The kernel is an SMP kernel.
-    SOUND	Appropriate sound system support is enabled.
-    VGA 	The VGA console has been enabled.
-    VT		Virtual terminal support is enabled.
-    XT		IBM PC/XT MFM hard disk support is enabled.
+	APIC	APIC support is enabled.
+	APM 	Advanced Power Management support is enabled.
+	AX25	Appropriate AX.25 support is enabled.
+	CD	Appropriate CD support is enabled.
+	EIDE	EIDE/ATAPI support is enabled.
+	FB	The frame buffer device is enabled.
+	HW	Appropriate hardware is enabled.
+	ISDN	Appropriate ISDN support is enabled.
+	JOY 	Appropriate joystick support is enabled.
+	LP	Printer support is enabled.
+	LOOP	Loopback device support is enabled.
+	MCA 	MCA bus support is enabled.
+	MDA 	MDA console support is enabled.
+	MOUSE	Appropriate mouse support is enabled.
+	NET 	Appropriate network support is enabled.
+	NFS 	Appropriate NFS support is enabled.
+	PARIDE	The ParIDE subsystem is enabled.
+	PCI 	PCI bus support is enabled.
+	PCMCIA	The PCMCIA subsystem is enabled.
+	PNP 	Plug & Play support is enabled.
+	PPT	Parallel port support is enabled.
+	PS2 	Appropriate PS/2 support is enabled.
+	RAM 	RAM disk support is enabled.
+	SCSI	Appropriate SCSI support is enabled.
+	SERIAL	Serial support is enabled.
+	SMP 	The kernel is an SMP kernel.
+	SOUND	Appropriate sound system support is enabled.
+	VGA 	The VGA console has been enabled.
+	VT	Virtual terminal support is enabled.
+	XT	IBM PC/XT MFM hard disk support is enabled.
 
 In addition, the following text indicates that the option:
 
-    BUGS=	Relates to possible processor bugs on the said processor.
-    KNL 	Is a kernel start-up parameter.
+	BUGS=	Relates to possible processor bugs on the said processor.
+	KNL 	Is a kernel start-up parameter.
 
 Note that ALL kernel parameters listed below are CASE SENSITIVE, and that
 a trailing = on the name of any parameter states that that parameter will
@@ -52,353 +52,353 @@ be entered as an environment variable, whereas its absence indicates that
 it will appear as a kernel argument readable via /proc/cmdline by programs
 running once the system is up.
 
-    53c7xx=		[HW,SCSI] Amiga SCSI controllers
+	53c7xx=		[HW,SCSI] Amiga SCSI controllers.
 
-    adb_buttons=	[HW,MOUSE]
+	adb_buttons=	[HW,MOUSE]
 
-    advansys=		[HW,SCSI]
+	advansys=	[HW,SCSI]
 
-    aha152x=		[HW,SCSI]
+	aha152x=	[HW,SCSI]
 
-    aha1542=		[HW,SCSI]
+	aha1542=	[HW,SCSI]
 
-    aic7xxx=		[HW,SCSI]
+	aic7xxx=	[HW,SCSI]
 
-    AM53C974=		[HW,SCSI]
+	AM53C974=	[HW,SCSI]
 
-    apm=		[APM] Advanced Power Management.
+	apm=		[APM] Advanced Power Management.
 
-    arcrimi=		[HW,NET]
+	arcrimi=	[HW,NET]
 
-	ataflop=		[HW, M68k]
+	ataflop=	[HW, M68k]
 
-    atamouse=		[HW,MOUSE] Atari Mouse.
+	atamouse=	[HW,MOUSE] Atari Mouse.
 
-    atascsi=		[HW,SCSI] Atari SCSI.
+	atascsi=	[HW,SCSI] Atari SCSI.
 
-    aztcd=		[HW,CD] Aztec CD driver.
+	aztcd=		[HW,CD] Aztec CD driver.
 
-    baycom_par= 	[HW,AX25] BayCom Parallel Port AX.25 Modem.
+	baycom_par= 	[HW,AX25] BayCom Parallel Port AX.25 Modem.
 
-    baycom_ser_fdx=	[HW,AX25] BayCom Serial Port AX.25 Modem in Full
+	baycom_ser_fdx=	[HW,AX25] BayCom Serial Port AX.25 Modem in Full
 			Duplex Mode.
 
-    baycom_ser_hdx=	[HW,AX25] BayCom Serial Port AX.25 Modem in Half
+	baycom_ser_hdx=	[HW,AX25] BayCom Serial Port AX.25 Modem in Half
 			Duplex Mode.
 
-    bmouse=		[HW,MOUSE,PS2] Bus mouse.
+	bmouse=		[HW,MOUSE,PS2] Bus mouse.
 
-    BusLogic=		[HW,SCSI]
+	BusLogic=	[HW,SCSI]
 
-    cdu31a=		[HW,CD]
+	cdu31a=		[HW,CD]
 
-    cm206=		[HW,CD]
+	cm206=		[HW,CD]
 
-    com20020=		[HW,NET]
+	com20020=	[HW,NET]
 
-    com90io=		[HW,NET]
+	com90io=	[HW,NET]
 
-    com90xx=		[HW,NET]
+	com90xx=	[HW,NET]
 
-    console=		[KNL] output console + comm spec (speed, control, parity)
+	console=	[KNL] output console + comm spec (speed, control,
+			parity).
 
-    cyclades=		[HW,SERIAL] Cyclades multi-serial port adapter.
+	cyclades=	[HW,SERIAL] Cyclades multi-serial port adapter.
 
-    debug		[KNL] Enable kernel debugging (events log level).
+	debug		[KNL] Enable kernel debugging (events log level).
 
-    decnet=		[HW,NET]
+	decnet=		[HW,NET]
 
-    digi=		[HW,SERIAL] io parameters + enable/disable command
+	digi=		[HW,SERIAL] io parameters + enable/disable command.
 
-    digiepca=		[HW,SERIAL]
+	digiepca=	[HW,SERIAL]
 
-    dmascc=		[HW,AX25,SERIAL] AX.25 Z80SCC driver with DMA
+	dmascc=		[HW,AX25,SERIAL] AX.25 Z80SCC driver with DMA
 			support available.
 
-    dmasound=		[HW,SOUND] (sound subsystem buffers)
+	dmasound=	[HW,SOUND] (sound subsystem buffers).
 
-    dtc3181e=		[HW,SCSI]
+	dtc3181e=	[HW,SCSI]
 
-    eata=		[HW,SCSI]
+	eata=		[HW,SCSI]
 
-    eda=		[HW,PS2]
+	eda=		[HW,PS2]
 
-    edb=		[HW,PS2]
+	edb=		[HW,PS2]
 
-    ether=		[HW,NET] Ethernet cards parameters (iomem,irq,dev_name).
+	ether=		[HW,NET] Ethernet cards parameters (iomem, irq,
+			dev_name).
 
-    fd_mcs=		[HW,SCSI]
+	fd_mcs=		[HW,SCSI]
 
-    fdomain=		[HW,SCSI]
+	fdomain=	[HW,SCSI]
 
-    floppy=		[HW]
+	floppy=		[HW]
 
-    ftape=		[HW] Floppy Tape subsystem debugging options.
+	ftape=		[HW] Floppy Tape subsystem debugging options.
 
-    gdth=		[HW,SCSI]
+	gdth=		[HW,SCSI]
 
-    gscd=		[HW,CD]
+	gscd=		[HW,CD]
 
-    gvp11=		[HW,SCSI]
+	gvp11=		[HW,SCSI]
 
-    hd= 		[EIDE] (E)IDE hard drive subsystem
-                geometry (Cyl/heads/sectors) or tune parameters.
+	hd= 		[EIDE] (E)IDE hard drive subsystem geometry
+			(Cyl/heads/sectors) or tune parameters.
 
-    hfmodem=		[HW,AX25]
+	hfmodem=	[HW,AX25]
 
-    HiSax=		[HW,ISDN]
+	HiSax=		[HW,ISDN]
 
-    hisax=		[HW,ISDN]
+	hisax=		[HW,ISDN]
 
-      in2000=       [HW,SCSI]
+	in2000=		[HW,SCSI]
 
-      init=     [KNL]
+	init=		[KNL]
 
+	ibmmcascsi=	[HW,MCA,SCSI] IBM MicroChannel SCSI adapter.
 
-
-    ibmmcascsi= 	[HW,MCA,SCSI] IBM MicroChannel SCSI adapter.
-
-    icn=		[HW,ISDN]
+	icn=		[HW,ISDN]
 
 	ide?=		[HW] (E)IDE subsystem : config (iomem/irq), tuning or
-				debugging (serialize,reset,no{dma,tune,probe}) or
-				chipset specific parameters
+			debugging (serialize,reset,no{dma,tune,probe}) or
+			chipset specific parameters.
 	
-	idebus=		[HW] (E)IDE subsystem : VLB/PCI bus speed
+	idebus=		[HW] (E)IDE subsystem : VLB/PCI bus speed.
 
-    in2000=		[HW,SCSI]
+	in2000=		[HW,SCSI]
 
-    init=		[KNL] default init level
+	init=		[KNL] Default init level.
 
-	initrd=		[KNL] initial ramdisk path
+	ip=		[PNP]
 
-    ip= 		[PNP]
+	isp16=		[HW,CD]
 
-    isp16=		[HW,CD]
+	js_14=		[HW,JOY]
 
-    js_14=		[HW,JOY]
+	js_am=		[HW,JOY]
 
-    js_am=		[HW,JOY]
+	js_an=		[HW,JOY]
 
-    js_an=		[HW,JOY]
+	js_as=		[HW.JOY]
 
-    js_as=		[HW.JOY]
+	js_console=	[HW,JOY]
 
-    js_console= 	[HW,JOY]
+	js_console2=	[HW,JOY]
 
-    js_console2=	[HW,JOY]
+	js_console3=	[HW,JOY]
 
-    js_console3=	[HW,JOY]
+	js_db9=		[HW,JOY]
 
-    js_db9=		[HW,JOY]
+	js_db9_2=	[HW,JOY]
 
-    js_db9_2=		[HW,JOY]
+	js_db9_3=	[HW,JOY]
 
-    js_db9_3=		[HW,JOY]
+	js_tg=		[HW,JOY]
 
-    js_tg=		[HW,JOY]
+	js_tg_2=	[HW,JOY]
 
-    js_tg_2=		[HW,JOY]
+	js_tg_3=	[HW,JOY]
 
-    js_tg_3=		[HW,JOY]
+	kbd-reset	[VT]
 
-    kbd-reset		[VT]
+	load_ramdisk=	[RAM] List of ramdisks to load from floppy.
 
-    load_ramdisk=	[RAM] initrd loading boolean
+	lp=0		[LP]	Specify parallel ports to use, e.g,
+	lp=port[,port...]	lp=none,parport0 (lp0 not configured, lp1 uses
+	lp=reset		first parallel port). 'lp=0' disables the
+	lp=auto			printer driver. 'lp=reset' (which can be
+				specified in addition to the ports) causes
+				attached printers to be reset. Using
+				lp=port1,port2,... specifies the parallel ports
+				to associate lp devices with, starting with
+				lp0. A port specification may be 'none' to skip
+				that lp device, or a parport name such as
+				'parport0'. Specifying 'lp=auto' instead of a
+				port specification list means that device IDs
+				from each port should be examined, to see if
+				an IEEE 1284-compliant printer is attached; if
+				so, the driver will manage that printer.
 
-    lp=0 		[LP] Specify parallel ports to use, e.g,
-or  lp=port[,port...]	lp=none,parport0 (lp0 not configured, lp1 uses
-or  lp=reset		first parallel port).  'lp=0' disables the printer
-or  lp=auto		driver.  'lp=reset' (which can be specified in
-			addition to the ports) causes attached
-			printers to be reset.  Using
-			lp=port1,port2,... specifies the parallel
-			ports to associate lp devices with, starting
-			with lp0.  A port specification may be 'none'
-			to skip that lp device, or a parport name such
-			as 'parport0'.  Specifying 'lp=auto' instead
-			of a port specification list means that device
-			IDs from each port should be examined, to see
-			if an IEEE 1284-compliant printer is attached;
-			if so, the driver will manage that printer.
+	ltpc=		[HW]
 
-    ltpc=		[HW]
+	mac5380=	[HW,SCSI]
 
-    mac5380=		[HW,SCSI]
+	max_loop=[0-255] [LOOP] Set the maximum number of loopback devices
+				that can be mounted.
 
-    max_loop=[0-255]	[LOOP] States the maximum number of loopback devices
-    			that can be mounted.
-
-    maxcpus=		[SMP] States the maximum number of processors that
+	maxcpus=	[SMP] States the maximum number of processors that
 			an SMP kernel should make use of.
 
-    max_scsi_luns=	[SCSI]
+	max_scsi_luns=	[SCSI]
 
-    mca-pentium 	[BUGS=ix86]
+	mca-pentium	[BUGS=ix86]
 
-    mcd=		[HW,CD]
+	mcd=		[HW,CD]
 
-    mcdx=		[HW,CD]
+	mcdx=		[HW,CD]
 
-    md= 		[HW] RAID subsystems devices and level
+	md=		[HW] RAID subsystems devices and level.
 
-    mdacon=		[MDA]
+	mdacon=		[MDA]
 
-    mem=		[KNL] force use XX Mb of memory when the kernel is not able
-                      to see the whole system memory or for test
+	mem=		[KNL] force use XX Mb of memory when the kernel is not
+			able to see the whole system memory or for test.
 
-    msmouse=		[HW,MOUSE] Microsoft Mouse.
+	msmouse=	[HW,MOUSE] Microsoft Mouse.
 
-    ncr5380=		[HW,SCSI]
+	ncr5380=	[HW,SCSI]
 
-    ncr53c400=		[HW,SCSI]
+	ncr53c400=	[HW,SCSI]
 
-    ncr53c400a= 	[HW,SCSI]
+	ncr53c400a=	[HW,SCSI]
 
-    ncr53c406a= 	[HW,SCSI]
+	ncr53c406a=	[HW,SCSI]
 
-    ncr53c8xx=		[HW,SCSI]
+	ncr53c8xx=	[HW,SCSI]
 
-    nfsaddrs=		[NFS]
+	nfsaddrs=	[NFS]
 
-    nfsroot=		[NFS] nfs root filesystem for disk-less boxes
+	nfsroot=	[NFS] nfs root filesystem for disk-less boxes.
 
-	nmi_watchdog=	[KNL, BUGS=ix86] debugging features for SMP kernels
+	nmi_watchdog=	[KNL, BUGS=ix86] debugging features for SMP kernels.
 
-    no387		[BUGS=ix86] Tells the kernel to use the 387 maths
+	no387		[BUGS=ix86] Tells the kernel to use the 387 maths
 			emulation library even if a 387 maths coprocessor
 			is present.
 
-    noapic		[SMP,APIC] Tells the kernel not to make use of any
+	noapic		[SMP,APIC] Tells the kernel not to make use of any
 			APIC that may be present on the system.
 
-    noasync		[HW, M68K] Disables async and sync negotiation for all devices.
+	noasync		[HW, M68K] Disables async and sync negotiation for
+			all devices.
 
-    nodisconnect	[HW,SCSI, M68K] Disables SCSI disconnects.
+	nodisconnect	[HW,SCSI, M68K] Disables SCSI disconnects.
 
-    no-halt		[BUGS=ix86]
+	no-halt		[BUGS=ix86]
 
-    noinitrd		[RAM] Tells the kernel not to load any configured
-			initial ramdisc.
+	noinitrd	[RAM] Tells the kernel not to load any configured
+			initial RAM disk.
 
-    no-scroll		[VGA]
+	no-scroll	[VGA]
 
-    nosmp		[SMP] Tells an SMP kernel to act as a UP kernel.
+	nosmp		[SMP] Tells an SMP kernel to act as a UP kernel.
 
-    nosync		[HW, M68K] Disables sync negotiation for all devices.
+	nosync		[HW, M68K] Disables sync negotiation for all devices.
 
-    optcd=		[HW,CD]
+	optcd=		[HW,CD]
 
-    panic=		[KNL] kernel behaviour on panic
+	panic=		[KNL] kernel behaviour on panic.
 
-    parport=0			[HW,PPT] Specify parallel ports.  0
-or  parport=auto		disables.  Use 'auto' to force the driver
-or  parport=0xBBB[,IRQ[,DMA]]	to use any IRQ/DMA settings detected
-				(the default is to ignore detected
-				IRQ/DMA settings because of possible
-				conflicts).  You can specify the base
-				address, IRQ, and DMA settings; IRQ
-				and DMA should be numbers, or 'auto'
-				(for using detected settings on that
-				particular port), or 'nofifo' (to
-				avoid using a FIFO even if it is
-				detected).  Parallel ports are
-				assigned in the order they are
-				specified on the command line,
-				starting with parport0.
+	parport=0	[HW,PPT]	Specify parallel ports. 0 disables.
+	parport=auto			Use 'auto' to force the driver to use
+	parport=0xBBB[,IRQ[,DMA]]	any IRQ/DMA settings detected (the
+					default is to ignore detected IRQ/DMA
+					settings because of possible
+					conflicts). You can specify the base
+					address, IRQ, and DMA settings; IRQ and
+					DMA should be numbers, or 'auto' (for
+					using detected settings on that
+					particular port), or 'nofifo' (to avoid
+					using a FIFO even if it is detected).
+					Parallel ports are assigned in the
+					order they are specified on the command
+					line, starting with parport0.
 
-    pas16=		[HW,SCSI]
+	pas16=		[HW,SCSI]
 
-    pcbit=		[HW,ISDN]
+	pcbit=		[HW,ISDN]
 
-    pcd.		[PARIDE]
+	pcd.		[PARIDE]
 
-    pci=		[PCI]
+	pci=		[PCI]
 
-    pd. 		[PARIDE]
+	pd.		[PARIDE]
 
-    pf. 		[PARIDE]
+	pf.		[PARIDE]
 
-    pg. 		[PARIDE]
+	pg.		[PARIDE]
 
-    pirq=		[SMP,APIC] mp-table
+	pirq=		[SMP,APIC] mp-table.
 
-    plip=		[PPT,NET] Parallel port network link.
+	plip=		[PPT,NET] Parallel port network link.
 
-    profile=	[KNL] enable kernel profiling via /proc/profile (param:log level)
+	profile=	[KNL] enable kernel profiling via /proc/profile
+			(param:log level).
 
-    prompt_ramdisk=	[RAM] Whether to prompt for ramdisk before loading
-			its contents into memory.
+	prompt_ramdisk=	[RAM] List of RAM disks to prompt for floppy disk
+			before loading.
 
-    pt. 		[PARIDE]
+	pt.		[PARIDE]
 
-    ramdisk=		[RAM]
+	ramdisk=	[RAM] Sizes of RAM disks in kilobytes [deprecated].
 
-    ramdisk_size=	[RAM]
+	ramdisk_size=	[RAM] New name for the ramdisk parameter.
 
-    ramdisk_start=	[RAM]
+	ramdisk_start=	[RAM] Starting block of RAM disk image (so you can
+			place it after the kernel image on a boot floppy).
 
-    reboot=		[BUGS=ix86]
+	reboot=		[BUGS=ix86]
 
-    reserve=	[KNL,BUGS] force the kernel to ignore some iomem area
+	reserve=	[KNL,BUGS] force the kernel to ignore some iomem area.
 
-    riscom8=		[HW,SERIAL]
+	riscom8=	[HW,SERIAL]
 
-    ro			[KNL] Mount root device read-only on boot.
+	ro		[KNL] Mount root device read-only on boot.
 
-    root=		[KNL] root filesystem
+	root=		[KNL] root filesystem.
 
-    rw			[KNL] Mount root device read-write on boot.
+	rw		[KNL] Mount root device read-write on boot.
 
-    S			[KNL] run init in single mode
+	S		[KNL] run init in single mode.
 
-    sbpcd=		[HW,CD] Soundblaster CD adapter.
+	sbpcd=		[HW,CD] Soundblaster CD adapter.
 
-    scsi_logging=	[SCSI]
+	scsi_logging=	[SCSI]
 
-    sjcd=		[HW,CD]
+	sjcd=		[HW,CD]
 
-    sonycd535=		[HW,CD]
+	sonycd535=	[HW,CD]
 
-    sound=		[SOUND]
+	sound=		[SOUND]
 
-    soundmodem= 	[HW,AX25,SOUND] Sound cards used as AX.25 modems.
+	soundmodem=	[HW,AX25,SOUND] Use sound card as packet radio modem.
 
-    specialix=		[HW,SERIAL] Specialix multi-serial port adapter.
+	specialix=	[HW,SERIAL] Specialix multi-serial port adapter.
 
-    st= 		[HW] SCSI tape parameters (buffers, ..)
+	st=		[HW] SCSI tape parameters (buffers, etc.).
 
-    st0x=		[HW,SCSI]
+	st0x=		[HW,SCSI]
 
-    stram_swap= 	[HW]
+	stram_swap=	[HW]
 
-    switches=		[HW, M68K]
+	switches=	[HW, M68K]
 
-    sym53c416=		[HW,SCSI]
+	sym53c416=	[HW,SCSI]
 
-    sym53c8xx=		[HW,SCSI]
+	sym53c8xx=	[HW,SCSI]
 
-    t128=		[HW,SCSI]
+	t128=		[HW,SCSI]
 
-    tmc8xx=		[HW,SCSI]
+	tmc8xx=		[HW,SCSI]
 
-    tmscsim=		[HW,SCSI]
+	tmscsim=	[HW,SCSI]
 
-    tp720=		[HW,PS2]
+	tp720=		[HW,PS2]
 
-    u14-34f=		[HW,SCSI]
+	u14-34f=	[HW,SCSI]
 
-    video=		[FB]  frame buffer configuration
+	video=		[FB] frame buffer configuration.
 
-    vga=		[KNL]  on ix386, enable to choose a peculiar video mode
-                       vga=ask
+	vga=		[KNL] on ix386, enable to choose a peculiar video mode
+			(use vga=ask for menu).
 
-    wd33c93=		[HW,SCSI]
+	wd33c93=	[HW,SCSI]
 
-    wd7000=		[HW,SCSI]
+	wd7000=		[HW,SCSI]
 
-    wdt=		[HW]
+	wdt=		[HW]
 
-    xd= 		[HW,XT] Original XT pre-IDE (RLL encoded) disks
+	xd=		[HW,XT] Original XT pre-IDE (RLL encoded) disks.
 
-    xd_geo=		[HW,XT]
+	xd_geo=		[HW,XT]

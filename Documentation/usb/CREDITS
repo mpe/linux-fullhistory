@@ -10,6 +10,7 @@ difficult to maintain, add yourself with a patch if desired.
   Deti Fliegl <deti@fliegl.de>
   ham <ham@unsuave.com>
   Bradley M Keryan <keryan@andrew.cmu.edu>
+  Greg Kroah-Hartman <greg@kroah.com>
   Paul Mackerras <paulus@cs.anu.edu.au>
   David E. Nelson <dnelson@jump.net>
   Vojtech Pavlik <vojtech@suse.cz>
@@ -104,6 +105,9 @@ THANKS file in Inaky's driver):
         - Thanks to Entrega for providing PCI to USB cards, hubs and
           converter products for development. 
 
+	- Thanks to ConnectTech for providing a WhiteHEAT usb to
+	  serial converter, and the documentation for the device to
+	  allow a driver to be written.
 
         And thanks go to (hey! in no particular order :)
 

@@ -439,7 +439,7 @@ static int osf_ufs_mount(char *dirname, struct ufs_args *args, int flags)
 
 	dentry = getdev(tmp.devname, 0);
 	retval = PTR_ERR(dentry);
-	if (IS_ERR(dentry)
+	if (IS_ERR(dentry))
 		goto out;
 	retval = do_mount(dentry->d_inode->i_bdev, tmp.devname, dirname, 
 				"ext2", flags, NULL);
@@ -471,7 +471,6 @@ out:
 
 static int osf_procfs_mount(char *dirname, struct procfs_args *args, int flags)
 {
-	int retval;
 	struct procfs_args tmp;
 
 	if (copy_from_user(&tmp, args, sizeof(tmp)))

@@ -653,8 +653,6 @@ int usb_bulk_msg(struct usb_device *usb_dev, unsigned int pipe,
 void *usb_request_bulk(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, void *data, int len, void *dev_id)
 {
 	urb_t *urb;
-	DECLARE_WAITQUEUE(wait, current);
-	DECLARE_WAIT_QUEUE_HEAD(wqh);
 	api_wrapper_data *awd;
 
 	if (!(urb=usb_alloc_urb(0)))
