@@ -4,11 +4,13 @@
  |                                                                           |
  | Divide one FPU_REG by another and put the result in a destination FPU_REG.|
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | Call from C as:                                                           |
- |   void reg_div(FPU_REG *a, FPU_REG *b, FPU_REG *dest)                     |
+ |   void reg_div(FPU_REG *a, FPU_REG *b, FPU_REG *dest,                     |
+ |                                    unsigned int control_word)             |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
@@ -34,7 +36,7 @@ _reg_div:
 	movb	TAG(%esi),%al
 	orb	TAG(%ebx),%al
 
-	jne	xL_div_special		// Not (both numbers TW_Valid)
+	jne	L_div_special		// Not (both numbers TW_Valid)
 
 
 // Both arguments are TW_Valid
@@ -50,72 +52,72 @@ _reg_div:
 	cmpb	%cl,SIGN(%ebx)
 	setne	(%edi)	      // Set the sign, requires SIGN_NEG=1, SIGN_POS=0
 
-	add	$SIGL_OFFSET,%ebx
-	add	$SIGL_OFFSET,%esi
+//	add	$SIGL_OFFSET,%ebx
+//	add	$SIGL_OFFSET,%esi
 
 	jmp	_divide_kernel
 
 
 /*-----------------------------------------------------------------------*/
-xL_div_special:
+L_div_special:
 	cmpb	TW_NaN,TAG(%esi)	// A NaN with anything to give NaN
-	je	xL_arg1_NaN
+	je	L_arg1_NaN
 
 	cmpb	TW_NaN,TAG(%ebx)	// A NaN with anything to give NaN
-	jne	xL_no_NaN_arg
+	jne	L_no_NaN_arg
 
 // Operations on NaNs
-xL_arg1_NaN:
-xL_arg2_NaN:
+L_arg1_NaN:
+L_arg2_NaN:
 	pushl	%edi
 	pushl	%ebx
 	pushl	%esi
 	call	_real_2op_NaN
-	jmp	xL78
+	jmp	LDiv_exit
 
 // Invalid operations
-xL_zero_zero:
-xL_inf_inf:
+L_zero_zero:
+L_inf_inf:
 	pushl	%esi
 	call	_arith_invalid
-	jmp	xL78
+	jmp	LDiv_exit
 
-xL_no_NaN_arg:
+L_no_NaN_arg:
 	cmpb	TW_Infinity,TAG(%esi)
-	jne	xL_arg1_not_inf
+	jne	L_arg1_not_inf
 
 	cmpb	TW_Infinity,TAG(%ebx)
-	je	xL_inf_inf	// invalid operation
+	je	L_inf_inf		// invalid operation
 
 	// Note that p16-9 says that infinity/0 returns infinity
-	jmp	xL_copy_arg1		// Answer is Inf
+	jmp	L_copy_arg1		// Answer is Inf
 
-xL_arg1_not_inf:
-	cmpb	TW_Zero,TAG(%ebx)		// Priority to div-by-zero error
-	jne	xL_arg2_not_zero
+L_arg1_not_inf:
+	cmpb	TW_Zero,TAG(%ebx)	// Priority to div-by-zero error
+	jne	L_arg2_not_zero
 
 	cmpb	TW_Zero,TAG(%esi)
-	je	xL_zero_zero	// invalid operation
+	je	L_zero_zero		// invalid operation
 
 // Division by zero error
 	pushl	%esi
 	movb	SIGN(%esi),%al
 	xorb	SIGN(%ebx),%al
-	pushl	%eax		// lower 8 bits have the sign
+	pushl	%eax			// lower 8 bits have the sign
 	call	_divide_by_zero
-	jmp	xL78
+	jmp	LDiv_exit
 
-xL_arg2_not_zero:
+L_arg2_not_zero:
 	cmpb	TW_Infinity,TAG(%ebx)
-	jne	xL_arg2_not_inf
+	jne	L_arg2_not_inf
 
-	jmp	xL_return_zero		// Answer is zero
+	jmp	L_return_zero		// Answer is zero
 
-xL_arg2_not_inf:
+L_arg2_not_inf:
 	cmpb	TW_Zero,TAG(%esi)
-	jne	xL_unknown_tags
+	jne	L_unknown_tags
 
-xL_copy_arg1:
+L_copy_arg1:
 	movb	TAG(%esi),%ax
 	movb	%ax,TAG(%edi)
 	movl	EXP(%esi),%eax
@@ -127,24 +129,24 @@ xL_copy_arg1:
 
 	movb	SIGN(%esi),%cl
 	cmpb	%cl,SIGN(%ebx)
-	jne	xL76
+	jne	LDiv_negative_result
 
 	movb	SIGN_POS,SIGN(%edi)
-	jmp	xL78
+	jmp	LDiv_exit
 
-xL71:
+LDiv_set_result_sign:
 	movb	SIGN(%esi),%cl
 	cmpb	%cl,SIGN(%edi)
-	jne	xL76
+	jne	LDiv_negative_result
 
 	movb	SIGN_POS,SIGN(%ebx)
-	jmp	xL78
+	jmp	LDiv_exit
 
 	.align 2,0x90
-xL76:
+LDiv_negative_result:
 	movb	SIGN_NEG,SIGN(%edi)
 
-xL78:
+LDiv_exit:
 	leal	-12(%ebp),%esp
 
 	popl	%ebx
@@ -154,11 +156,11 @@ xL78:
 	ret
 
 
-xL_return_zero:
+L_return_zero:
 	movb	TW_Zero,TAG(%edi)
-	jmp	xL71
+	jmp	LDiv_set_result_sign
 
-xL_unknown_tags:
+L_unknown_tags:
 	push	EX_INTERNAL | 0x208
 	call	EXCEPTION
 
@@ -169,4 +171,4 @@ xL_unknown_tags:
 	movl	%eax,SIGL(%edi)
 	movl	_CONST_QNaN+8,%eax
 	movl	%eax,SIGH(%edi)
-	jmp	xL78
+	jmp	LDiv_exit

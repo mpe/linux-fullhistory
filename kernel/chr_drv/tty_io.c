@@ -182,7 +182,7 @@ static int hung_up_tty_select(struct inode * inode, struct file * filp, int sel_
 }
 
 static int hung_up_tty_ioctl(struct inode * inode, struct file * file,
-			     unsigned int cmd, unsigned int arg)
+			     unsigned int cmd, unsigned long arg)
 {
 	return -EIO;
 }
@@ -545,12 +545,24 @@ void copy_to_cooked(struct tty_struct * tty)
 		if (c == __DISABLED_CHAR)
 			tty->lnext = 1;
 		if (L_CANON(tty) && !tty->lnext) {
-			if (c == KILL_CHAR(tty)) {
+			if (c == KILL_CHAR(tty) || c == WERASE_CHAR(tty)) {
+				int seen_alnums =
+				  (c == WERASE_CHAR(tty)) ? 0 : -1;
+
 				/* deal with killing the input line */
 				while(!(EMPTY(&tty->secondary) ||
 					(c=LAST(&tty->secondary))==10 ||
 					((EOF_CHAR(tty) != __DISABLED_CHAR) &&
 					 (c==EOF_CHAR(tty))))) {
+					/* if killing just a word, kill all
+					   non-alnum chars, then all alnum
+					   chars.  */
+					if (seen_alnums >= 0) {
+						if (isalnum(c))
+							seen_alnums++;
+						else if (seen_alnums)
+							break;
+					}
 					if (L_ECHO(tty)) {
 						if (c<32) {
 							put_tty_queue(8, &tty->write_q);
@@ -598,6 +610,10 @@ void copy_to_cooked(struct tty_struct * tty)
 			        tty->status_changed = 1;
 				tty->ctrl_status |= TIOCPKT_STOP;
 				tty->stopped=1;
+				if (IS_A_CONSOLE(tty->line)) {
+					set_vc_kbd_flag(kbd_table + fg_console, VC_SCROLLOCK);
+					set_leds();
+				}
 				continue;
 			}
 			if (((I_IXANY(tty)) && tty->stopped) ||
@@ -605,6 +621,10 @@ void copy_to_cooked(struct tty_struct * tty)
 			        tty->status_changed = 1;
 				tty->ctrl_status |= TIOCPKT_START;
 				tty->stopped=0;
+				if (IS_A_CONSOLE(tty->line)) {
+					clr_vc_kbd_flag(kbd_table + fg_console, VC_SCROLLOCK);
+					set_leds();
+				}
 				continue;
 			}
 		}
@@ -620,8 +640,10 @@ void copy_to_cooked(struct tty_struct * tty)
 				continue;
 			}
 			if (c == SUSPEND_CHAR(tty)) {
-				if (!is_orphaned_pgrp(tty->pgrp))
+				if (!is_orphaned_pgrp(tty->pgrp)) {
 					kill_pg(tty->pgrp, SIGTSTP, 1);
+					flush_input(tty);
+				}
 				continue;
 			}
 		}
@@ -1045,7 +1067,7 @@ end_init:
 	if (tty)
 		free_page((unsigned long) tty);
 	if (o_tty)
-		free_page((unsigned long) tty);
+		free_page((unsigned long) o_tty);
 	if (tp)
 		kfree_s(tp, sizeof(struct termios));
 	if (o_tp)

@@ -65,6 +65,7 @@ extern struct kbd_struct kbd_table[];
 #define VC_RAW		7	/* raw (scancode) mode */
 #define VC_CRLF		8	/* 0 - enter sends CR, 1 - enter sends CRLF */
 #define VC_META		9	/* 0 - meta, 1 - meta=prefix with ESC */
+#define VC_PAUSE	10	/* pause key pressed */
 
 #define LED_MASK	7
 

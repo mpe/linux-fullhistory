@@ -301,7 +301,7 @@ static int lp_open(struct inode * inode, struct file * file)
 		if (ret) {
 			kfree_s(lp_table[minor].lp_buffer, LP_BUFFER_SIZE);
 			lp_table[minor].lp_buffer = NULL;
-			printk("lp%d unable to use interrupt %d, error %d\n", irq, ret);
+			printk("lp%d unable to use interrupt %d, error %d\n", minor, irq, ret);
 			return ret;
 		}
 	}
@@ -327,7 +327,7 @@ static void lp_release(struct inode * inode, struct file * file)
 
 
 static int lp_ioctl(struct inode *inode, struct file *file,
-		    unsigned int cmd, unsigned int arg)
+		    unsigned int cmd, unsigned long arg)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
 

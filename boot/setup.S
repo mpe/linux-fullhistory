@@ -14,6 +14,9 @@
 ! Move PS/2 aux init code to psaux.c
 ! (troyer@saifr00.cfsat.Honeywell.COM) 03Oct92
 !
+! some changes and additional features by Christoph Niemann, March 1993
+! (niemann@rubdv15.ETDV.Ruhr-Uni-Bochum.De)
+!
 
 ! NOTE! These had better be the same as in bootsect.s!
 #include <linux/config.h>
@@ -53,7 +56,7 @@ start:
 ! set the keyboard repeat rate to the max
 
 	mov	ax,#0x0305
-	mov	bx,#0x0000
+	xor	bx,bx		! clear bx
 	int	0x16
 
 ! check for EGA/VGA and some config parameters
@@ -76,7 +79,7 @@ start:
 	call	chsvga
 novga:	mov	[14],ax
 	mov	ah,#0x03	! read cursor pos
-	xor	bh,bh
+	xor	bh,bh		! clear bh
 	int	0x10		! save it in known place, con_init fetches
 	mov	[0],dx		! it from 0x90000.
 	
@@ -89,7 +92,7 @@ novga:	mov	[14],ax
 
 ! Get hd0 data
 
-	mov	ax,#0x0000
+	xor	ax,ax		! clear ax
 	mov	ds,ax
 	lds	si,[4*0x41]
 	mov	ax,#INITSEG
@@ -102,7 +105,7 @@ novga:	mov	[14],ax
 
 ! Get hd1 data
 
-	mov	ax,#0x0000
+	xor	ax,ax		! clear ax
 	mov	ds,ax
 	lds	si,[4*0x46]
 	mov	ax,#INITSEG
@@ -126,7 +129,7 @@ no_disk1:
 	mov	es,ax
 	mov	di,#0x0090
 	mov	cx,#0x10
-	mov	ax,#0x00
+	xor	ax,ax		! clear ax
 	cld
 	rep
 	stosb
@@ -142,7 +145,6 @@ is_disk1:
 	jz	no_psmouse
 	mov	[0x1ff],#0xaa	! device present
 no_psmouse:
-
 ! now we want to move to protected mode ...
 
 	cli			! no interrupts allowed !
@@ -151,7 +153,7 @@ no_psmouse:
 
 ! first we move the system to it's rightful place
 
-	mov	ax,#0x0000
+	xor	ax,ax		! clear ax
 	cld			! 'direction'=0, movs moves forward
 do_move:
 	mov	es,ax		! destination segment
@@ -184,6 +186,14 @@ end_move:
 	out	#0x60,al
 	call	empty_8042
 
+! make sure any possible coprocessor is properly reset..
+
+	xor	ax,ax
+	out	#0xf0,al
+	call	delay
+	out	#0xf1,al
+	call	delay
+
 ! well, that went ok, I hope. Now we have to reprogram the interrupts :-(
 ! we put them right after the intel-reserved hardware interrupts, at
 ! int 0x20-0x2F. There they won't mess up anything. Sadly IBM really
@@ -194,29 +204,29 @@ end_move:
 
 	mov	al,#0x11		! initialization sequence
 	out	#0x20,al		! send it to 8259A-1
-	.word	0x00eb,0x00eb		! jmp $+2, jmp $+2
+	call	delay
 	out	#0xA0,al		! and to 8259A-2
-	.word	0x00eb,0x00eb
+	call	delay
 	mov	al,#0x20		! start of hardware int's (0x20)
 	out	#0x21,al
-	.word	0x00eb,0x00eb
+	call	delay
 	mov	al,#0x28		! start of hardware int's 2 (0x28)
 	out	#0xA1,al
-	.word	0x00eb,0x00eb
+	call	delay
 	mov	al,#0x04		! 8259-1 is master
 	out	#0x21,al
-	.word	0x00eb,0x00eb
+	call	delay
 	mov	al,#0x02		! 8259-2 is slave
 	out	#0xA1,al
-	.word	0x00eb,0x00eb
+	call	delay
 	mov	al,#0x01		! 8086 mode for both
 	out	#0x21,al
-	.word	0x00eb,0x00eb
+	call	delay
 	out	#0xA1,al
-	.word	0x00eb,0x00eb
+	call	delay
 	mov	al,#0xFF		! mask off all interrupts for now
 	out	#0xA1,al
-	.word	0x00eb,0x00eb
+	call	delay
 	mov	al,#0xFB		! mask all irq's but irq2 which
 	out	#0x21,al		! is cascaded
 
@@ -245,29 +255,78 @@ flush_instr:
 ! No timeout is used - if this hangs there is something wrong with
 ! the machine, and we probably couldn't proceed anyway.
 empty_8042:
-	.word	0x00eb,0x00eb
+	call	delay
 	in	al,#0x64	! 8042 status port
 	test	al,#1		! output buffer?
 	jz	no_output
-	.word	0x00eb,0x00eb
+	call	delay
 	in	al,#0x60	! read it
 	jmp	empty_8042
 no_output:
 	test	al,#2		! is input buffer full?
 	jnz	empty_8042	! yes - loop
 	ret
-
+!
+! Read a key and return the (US-)ascii code in al, scan code in ah
+!
 getkey:
-	in	al,#0x60		! Quick and dirty...
-	.word	0x00eb,0x00eb		! jmp $+2, jmp $+2
+	xor	ah,ah
+	int	0x16
+	ret
+
+!
+! Read a key with a timeout of 30 seconds. The cmos clock is used to get
+! the time.
+!
+getkt:
+	call	gettime
+	add	al,#30		! wait 30 seconds
+	cmp	al,#60
+	jl	lminute
+	sub	al,#60
+lminute:
+	mov	cl,al
+again:	mov	ah,#0x01
+	int	0x16
+	jnz	getkey		! key pressed, so get it
+	call	gettime
+	cmp	al,cl
+	jne	again
+	mov	al,#0x20	! timeout, return default char `space'
 	ret
 
 !
 ! Flush the keyboard buffer
 !
-flush:	call getkey
-	cmp	al,#0x82
-	jae	flush
+flush:	mov	ah,#0x01
+	int	0x16
+	jz	empty
+	xor	ah,ah
+	int	0x16
+	jmp	flush
+empty:	ret
+
+!
+! Read the cmos clock. Return the seconds in al
+!
+gettime:
+	push	cx
+	mov	ah,#0x02
+	int	0x1a
+	mov	al,dh			! dh contains the seconds
+	and	al,#0x0f
+	mov	ah,dh
+	mov	cl,#0x04
+	shr	ah,cl
+	aad
+	pop	cx
+	ret
+
+!
+! Delay is needed after doing i/o
+!
+delay:
+	.word	0x00eb			! jmp $+2
 	ret
 
 ! Routine trying to recognize type of SVGA-board present (if any)
@@ -286,24 +345,26 @@ chsvga:	cld
 	cmp	ax,#NORMAL_VGA
 	je	defvga
 	cmp	ax,#EXTENDED_VGA
-	je	extvga
+	je	vga50
 	cmp	ax,#ASK_VGA
 	jne	svga
 	lea	si,msg1
 	call	prtstr
 	call	flush
-nokey:	call	getkey
-	cmp	al,#0x9c		! enter ?
+nokey:	call	getkt
+	cmp	al,#0x0d		! enter ?
 	je	svga			! yes - svga selection
-	cmp	al,#0xb9		! space ?
-	jne	nokey			! no - repeat
+	cmp	al,#0x20		! space ?
+	je	defvga			! no - repeat
+	call 	beep
+	jmp	nokey
 defvga:	mov	ax,#0x5019
 	pop	ds
 	ret
 /* extended vga mode: 80x50 */
-extvga:
+vga50:
 	mov	ax,#0x1112
-	mov	bl,#0
+	xor	bl,bl
 	int	0x10		! use 8x8 font set (50 lines on VGA)
 	mov	ax,#0x1200
 	mov	bl,#0x20
@@ -317,6 +378,18 @@ extvga:
 	pop	ds
 	mov	ax,#0x5032	! return 80x50
 	ret
+/* extended vga mode: 80x28 */
+vga28:
+	pop	ax		! clean the stack
+	mov	ax,#0x1111
+	xor	bl,bl
+	int	0x10		! use 9x14 fontset (28 lines on VGA)
+	mov	ah, #0x01
+	mov	cx,#0x0b0c
+	int	0x10		! turn on cursor (scan lines 11 to 12)
+	pop	ds
+	mov	ax,#0x501c	! return 80x28
+	ret
 /* svga modes */
 svga:	cld	
 	lea	si,idf1280	! Check for Orchid F1280 (dingbat@diku.dk)
@@ -325,10 +398,16 @@ svga:	cld
 	repe
 	cmpsb
 	jne	nf1280	
-	lea	si,dscf1280
+isVRAM:	lea	si,dscf1280
 	lea	di,mof1280
 	br	selmod
-nf1280:	cld
+nf1280:	lea	si,idVRAM
+	mov	di,#0x10a
+	mov	cx,#0x0c
+	repe
+	cmpsb
+	je	isVRAM
+	cld
 	lea 	si,idati		! Check ATI 'clues'
 	mov	di,#0x31
 	mov 	cx,#0x09
@@ -474,7 +553,7 @@ nopara:	mov	dx,#0x3c4		! Check Trident 'clues'
 	inc	dx
 	in	al,dx
 	xchg	ah,al
-	mov	al,#0x00
+	xor	al,al
 	out	dx,al
 	in	al,dx
 	xchg	al,ah
@@ -537,11 +616,25 @@ even7:	mov	al,#0x0c
 	jne	novid7
 	lea	si,dscvideo7
 	lea	di,movideo7
-selmod:	push	si
+	jmp	selmod
+novid7:	lea	si,dsunknown
+	lea	di,mounknown
+selmod:	xor	cx,cx
+	mov	cl,(di)
+	mov	ax,modesave
+	cmp	ax,#ASK_VGA
+	je	askmod
+	cmp	ax,#NORMAL_VGA
+	je	askmod
+	cmp	al,cl
+	jl	gotmode
+	push	si
+	lea	si,msg4
+	call	prtstr
+	pop	si
+askmod:	push	si
 	lea	si,msg2
 	call	prtstr
-	xor	cx,cx
-	mov	cl,(di)
 	pop	si
 	push	si
 	push	cx
@@ -549,8 +642,7 @@ tbl:	pop	bx
 	push	bx
 	mov	al,bl
 	sub	al,cl
-	call	dprnt
-	call	spcing
+	call	modepr
 	lodsw
 	xchg	al,ah
 	call	dprnt
@@ -560,34 +652,42 @@ tbl:	pop	bx
 	call	prnt1
 	pop	ax
 	call	dprnt
-	call	docr
+	push	si
+	lea	si,crlf		! print CR+LF
+	call	prtstr
+	pop	si
 	loop	tbl
 	pop	cx
-	call	docr
 	lea	si,msg3
 	call	prtstr
 	pop	si
-	add	cl,#0x80
-	mov	ax,modesave
-	cmp	ax,#ASK_VGA
-	je	nonum
-	cmp	ax,#NORMAL_VGA
-	jne	gotmode
+	add	cl,#0x30
+	jmp	nonum
+nonumb:	call	beep
 nonum:	call	getkey
-	cmp	al,#0x82
-	jb	nonum
-	cmp	al,#0x8b
-	je	zero
+	cmp	al,#0x30	! ascii `0'
+	jb	nonumb
+	cmp	al,#0x3a	! ascii `9'
+	jbe	number
+	cmp	al,#0x61	! ascii `a'
+	jb	nonumb
+	cmp	al,#0x7a	! ascii `z'
+	ja	nonumb
+	sub	al,#0x27
 	cmp	al,cl
-	ja	nonum
-	jmp	nozero
-zero:	sub	al,#0x0a
-nozero:	sub	al,#0x80
-	dec	al
+	jae	nonumb
+	sub	al,#0x30
+	jmp	gotmode
+number: cmp	al,cl
+	jae	nonumb
+	sub	al,#0x30
 gotmode:	xor	ah,ah
-	add	di,ax
-	inc	di
+	or	al,al
+	beq	vga50
 	push	ax
+	dec	ax
+	beq	vga28
+	add	di,ax
 	mov	al,(di)
 	int 	0x10
 	pop	ax
@@ -596,22 +696,6 @@ gotmode:	xor	ah,ah
 	lodsw
 	pop	ds
 	ret
-novid7:
-	br extvga
-
-! Routine that 'tabs' to next col.
-
-spcing:	mov	al,#0x2e
-	call	prnt1
-	mov	al,#0x20
-	call	prnt1	
-	mov	al,#0x20
-	call	prnt1	
-	mov	al,#0x20
-	call	prnt1	
-	mov	al,#0x20
-	call	prnt1
-	ret	
 
 ! Routine to print asciiz-string at DS:SI
 
@@ -627,7 +711,7 @@ fin:	ret
 
 dprnt:	push	ax
 	push	cx
-	mov	ah,#0x00		
+	xor	ah,ah		! Clear ah
 	mov	cl,#0x0a
 	idiv	cl
 	cmp	al,#0x09
@@ -643,11 +727,31 @@ skip10:	mov	al,ah
 	pop	ax
 	ret
 
+!
+! Routine to print the mode number key on screen. Mode numbers
+! 0-9 print the ascii values `0' to '9', 10-35 are represented by
+! the letters `a' to `z'. This routine prints some spaces around the
+! mode no.
+!
+
+modepr:	push	ax
+	cmp	al,#0x0a
+	jb	digit		! Here is no check for number > 35
+	add	al,#0x27
+digit:	add	al,#0x30
+	mov	modenr, al
+	push 	si
+	lea	si, modestring
+	call	prtstr
+	pop	si
+	pop	ax
+	ret
+
 ! Part of above routine, this one just prints ascii al
 
 prnt1:	push	ax
 	push	cx
-	mov	bh,#0x00
+	xor	bh,bh
 	mov	cx,#0x01
 	mov	ah,#0x0e
 	int	0x10
@@ -655,20 +759,8 @@ prnt1:	push	ax
 	pop	ax
 	ret
 
-! Prints <CR> + <LF>
-
-docr:	push	ax
-	push	cx
-	mov	bh,#0x00
-	mov	ah,#0x0e
-	mov	al,#0x0a
-	mov	cx,#0x01
-	int	0x10
-	mov	al,#0x0d
-	int	0x10
-	pop	cx
-	pop	ax
-	ret	
+beep:	mov	al,#0x07
+	jmp	prnt1
 	
 gdt:
 	.word	0,0,0,0		! dummy
@@ -691,12 +783,19 @@ gdt_48:
 	.word	0x800		! gdt limit=2048, 256 GDT entries
 	.word	512+gdt,0x9	! gdt base = 0X9xxxx
 
-msg1:		.ascii	"Press <RETURN> to see SVGA-modes available or <SPACE> to continue."
+msg1:		.ascii	"Press <RETURN> to see SVGA-modes available, <SPACE> to continue or wait 30 secs."
 		db	0x0d, 0x0a, 0x0a, 0x00
 msg2:		.ascii	"Mode:  COLSxROWS:"
 		db	0x0d, 0x0a, 0x0a, 0x00
-msg3:		.ascii	"Choose mode by pressing the corresponding number."
-		db	0x0d, 0x0a, 0x00
+msg3:		db	0x0d, 0x0a
+		.ascii	"Choose mode by pressing the corresponding number or letter."
+crlf:		db	0x0d, 0x0a, 0x00
+msg4:		.ascii	"You passed an undefined mode number to setup. Please choose a new mode."
+		db	0x0d, 0x0a, 0x0a, 0x07, 0x00
+modestring:	.ascii	"   "
+modenr:		db	0x00	! mode number
+		.ascii	":    "
+		db	0x00
 		
 idati:		.ascii	"761295520"
 idcandt:	.byte	0xa5
@@ -704,37 +803,45 @@ idgenoa:	.byte	0x77, 0x00, 0x99, 0x66
 idparadise:	.ascii	"VGA="
 idoakvga:	.ascii  "OAK VGA "
 idf1280:	.ascii	"Orchid Technology Fahrenheit 1280"
+idVRAM:		.ascii	"Stealth VRAM"
 
-! Manufacturer:	  Numofmodes:	Mode:
+! Manufacturer:	  Numofmodes+2:	Mode:
+! Number of modes is the number of chip-specific svga modes plus the extended
+! modes available on any vga (currently 2)
 
-moati:		.byte	0x02,	0x23, 0x33 
-moahead:	.byte	0x05,	0x22, 0x23, 0x24, 0x2f, 0x34
-mocandt:	.byte	0x02,	0x60, 0x61
-mocirrus:	.byte	0x04,	0x1f, 0x20, 0x22, 0x31
-moeverex:	.byte	0x0a,	0x03, 0x04, 0x07, 0x08, 0x0a, 0x0b, 0x16, 0x18, 0x21, 0x40
-mogenoa:	.byte	0x0a,	0x58, 0x5a, 0x60, 0x61, 0x62, 0x63, 0x64, 0x72, 0x74, 0x78
-moparadise:	.byte	0x02,	0x55, 0x54
-motrident:	.byte	0x07,	0x50, 0x51, 0x52, 0x57, 0x58, 0x59, 0x5a
-motseng:	.byte	0x05,	0x26, 0x2a, 0x23, 0x24, 0x22
-movideo7:	.byte	0x06,	0x40, 0x43, 0x44, 0x41, 0x42, 0x45
-mooakvga:	.byte	0x05,	0x00, 0x07, 0x4f, 0x50, 0x51
-mof1280:	.byte	0x02,	0x54, 0x55
+moati:		.byte	0x04,	0x23, 0x33 
+moahead:	.byte	0x07,	0x22, 0x23, 0x24, 0x2f, 0x34
+mocandt:	.byte	0x04,	0x60, 0x61
+mocirrus:	.byte	0x06,	0x1f, 0x20, 0x22, 0x31
+moeverex:	.byte	0x0c,	0x03, 0x04, 0x07, 0x08, 0x0a, 0x0b, 0x16, 0x18, 0x21, 0x40
+mogenoa:	.byte	0x0c,	0x58, 0x5a, 0x60, 0x61, 0x62, 0x63, 0x64, 0x72, 0x74, 0x78
+moparadise:	.byte	0x04,	0x55, 0x54
+motrident:	.byte	0x09,	0x50, 0x51, 0x52, 0x57, 0x58, 0x59, 0x5a
+motseng:	.byte	0x07,	0x26, 0x2a, 0x23, 0x24, 0x22
+movideo7:	.byte	0x08,	0x40, 0x43, 0x44, 0x41, 0x42, 0x45
+mooakvga:	.byte	0x07,	0x00, 0x07, 0x4f, 0x50, 0x51
+mof1280:	.byte	0x04,	0x54, 0x55
+mounknown:	.byte	0x02
 
 !			msb = Cols lsb = Rows:
+! The first two modes are standard vga modes available on any vga.
+! mode 0 is 80x50 and mode 1 is 80x28
 
-dscati:		.word	0x8419, 0x842c
-dscahead:	.word	0x842c, 0x8419, 0x841c, 0xa032, 0x5042
-dsccandt:	.word	0x8419, 0x8432
-dsccirrus:	.word	0x8419, 0x842c, 0x841e, 0x6425
-dsceverex:	.word	0x5022, 0x503c, 0x642b, 0x644b, 0x8419, 0x842c, 0x501e, 0x641b, 0xa040, 0x841e
-dscgenoa:	.word	0x5020, 0x642a, 0x8419, 0x841d, 0x8420, 0x842c, 0x843c, 0x503c, 0x5042, 0x644b
-dscparadise:	.word	0x8419, 0x842b
-dsctrident:	.word 	0x501e, 0x502b, 0x503c, 0x8419, 0x841e, 0x842b, 0x843c
-dsctseng:	.word	0x503c, 0x6428, 0x8419, 0x841c, 0x842c
-dscvideo7:	.word	0x502b, 0x503c, 0x643c, 0x8419, 0x842c, 0x841c
-dscoakvga:	.word	0x2819, 0x5019, 0x843c, 0x8419, 0x842C
-dscf1280:	.word	0x842b, 0x8419
+dscati:		.word	0x5032, 0x501c, 0x8419, 0x842c
+dscahead:	.word	0x5032, 0x501c, 0x842c, 0x8419, 0x841c, 0xa032, 0x5042
+dsccandt:	.word	0x5032, 0x501c, 0x8419, 0x8432
+dsccirrus:	.word	0x5032, 0x501c, 0x8419, 0x842c, 0x841e, 0x6425
+dsceverex:	.word	0x5032, 0x501c, 0x5022, 0x503c, 0x642b, 0x644b, 0x8419, 0x842c, 0x501e, 0x641b, 0xa040, 0x841e
+dscgenoa:	.word	0x5032, 0x501c, 0x5020, 0x642a, 0x8419, 0x841d, 0x8420, 0x842c, 0x843c, 0x503c, 0x5042, 0x644b
+dscparadise:	.word	0x5032, 0x501c, 0x8419, 0x842b
+dsctrident:	.word 	0x5032, 0x501c, 0x501e, 0x502b, 0x503c, 0x8419, 0x841e, 0x842b, 0x843c
+dsctseng:	.word	0x5032, 0x501c, 0x503c, 0x6428, 0x8419, 0x841c, 0x842c
+dscvideo7:	.word	0x5032, 0x501c, 0x502b, 0x503c, 0x643c, 0x8419, 0x842c, 0x841c
+dscoakvga:	.word	0x5032, 0x501c, 0x2819, 0x5019, 0x843c, 0x8419, 0x842C
+dscf1280:	.word	0x5032, 0x501c, 0x842b, 0x8419
+dsunknown:	.word	0x5032, 0x501c
 modesave:	.word	SVGA_MODE
+
 	
 .text
 endtext:

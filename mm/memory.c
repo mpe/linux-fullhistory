@@ -152,11 +152,31 @@ void free_page_tables(struct task_struct * tsk)
 	tsk->tss.cr3 = (unsigned long) swapper_pg_dir;
 	if (tsk == current)
 		__asm__ __volatile__("movl %0,%%cr3"::"a" (tsk->tss.cr3));
+	if (mem_map[MAP_NR(pg_dir)] > 1) {
+		free_page(pg_dir);
+		return;
+	}
 	page_dir = (unsigned long *) pg_dir;
 	for (i = 0 ; i < 1024 ; i++,page_dir++)
 		free_one_table(page_dir);
 	free_page(pg_dir);
 	invalidate();
+}
+
+/*
+ * clone_page_tables() clones the page table for a process - both
+ * processes will have the exact same pages in memory. There are
+ * probably races in the memory management with cloning, but we'll
+ * see..
+ */
+int clone_page_tables(struct task_struct * tsk)
+{
+	unsigned long pg_dir;
+
+	pg_dir = current->tss.cr3;
+	mem_map[MAP_NR(pg_dir)]++;
+	tsk->tss.cr3 = pg_dir;
+	return 0;
 }
 
 /*
@@ -170,10 +190,10 @@ int copy_page_tables(struct task_struct * tsk)
 	unsigned long old_pg_dir, *old_page_dir;
 	unsigned long new_pg_dir, *new_page_dir;
 
-	old_pg_dir = current->tss.cr3;
 	new_pg_dir = get_free_page(GFP_KERNEL);
 	if (!new_pg_dir)
 		return -ENOMEM;
+	old_pg_dir = current->tss.cr3;
 	tsk->tss.cr3 = new_pg_dir;
 	old_page_dir = (unsigned long *) old_pg_dir;
 	new_page_dir = (unsigned long *) new_pg_dir;
@@ -200,7 +220,6 @@ int copy_page_tables(struct task_struct * tsk)
 			free_page_tables(tsk);
 			return -ENOMEM;
 		}
-		*new_page_dir = new_pg_table | PAGE_TABLE;
 		old_page_table = (unsigned long *) (0xfffff000 & old_pg_table);
 		new_page_table = (unsigned long *) (0xfffff000 & new_pg_table);
 		for (j = 0 ; j < 1024 ; j++,old_page_table++,new_page_table++) {
@@ -220,6 +239,7 @@ int copy_page_tables(struct task_struct * tsk)
 			*old_page_table = pg;
 			mem_map[MAP_NR(pg)]++;
 		}
+		*new_page_dir = new_pg_table | PAGE_TABLE;
 	}
 	invalidate();
 	return 0;
@@ -416,14 +436,11 @@ int remap_page_range(unsigned long from, unsigned long to, unsigned long size, i
  * It returns the physical address of the page gotten, 0 if
  * out of memory (either when trying to access page-table or
  * page.)
- * if wp = 1 the page will be write protected
  */
 static unsigned long put_page(struct task_struct * tsk,unsigned long page,
 	unsigned long address,int prot)
 {
 	unsigned long tmp, *page_table;
-
-/* NOTE !!! This uses the fact that _pg_dir=0 */
 
 	if ((prot & 0xfffff001) != PAGE_PRESENT)
 		printk("put_page: prot = %08x\n",prot);
@@ -445,7 +462,7 @@ static unsigned long put_page(struct task_struct * tsk,unsigned long page,
 		*page_table = BAD_PAGETABLE | PAGE_TABLE;
 		return 0;
 	}
-	page_table += (address >> PAGE_SHIFT) & 0x3ff;
+	page_table += ((address & 0x003ff000) >> PAGE_SHIFT);
 	if (*page_table) {
 		printk("put_page: page already exists\n");
 		*page_table = 0;
@@ -471,13 +488,18 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 	if (mem_map[MAP_NR(page)] != 1)
 		printk("mem_map disagrees with %p at %p\n",page,address);
 	page_table = (unsigned long *) (tsk->tss.cr3 + ((address>>20) & 0xffc));
-	if ((*page_table)&PAGE_PRESENT)
+	if (PAGE_PRESENT & *page_table)
 		page_table = (unsigned long *) (0xfffff000 & *page_table);
 	else {
 		if (!(tmp=get_free_page(GFP_KERNEL)))
 			return 0;
-		*page_table = tmp | PAGE_TABLE;
-		page_table = (unsigned long *) tmp;
+		if (PAGE_PRESENT & *page_table) {
+			free_page(tmp);
+			page_table = (unsigned long *) (0xfffff000 & *page_table);
+		} else {
+			*page_table = tmp | PAGE_TABLE;
+			page_table = (unsigned long *) tmp;
+		}
 	}
 	page_table += (address >> PAGE_SHIFT) & 0x3ff;
 	if (*page_table) {
@@ -494,8 +516,14 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
  * This routine handles present pages, when users try to write
  * to a shared page. It is done by copying the page to a new address
  * and decrementing the shared-page counter for the old page.
+ *
+ * Note that we do many checks twice (look at do_wp_page()), as
+ * we have to be careful about race-conditions.
+ *
+ * Goto-purists beware: the only reason for goto's here is that it results
+ * in better assembly code.. The "default" path will see no jumps at all.
  */
-void do_wp_page(unsigned long error_code, unsigned long address,
+static void __do_wp_page(unsigned long error_code, unsigned long address,
 	struct task_struct * tsk, unsigned long user_esp)
 {
 	unsigned long pde, pte, old_page, prot;
@@ -504,63 +532,90 @@ void do_wp_page(unsigned long error_code, unsigned long address,
 	new_page = __get_free_page(GFP_KERNEL);
 	pde = tsk->tss.cr3 + ((address>>20) & 0xffc);
 	pte = *(unsigned long *) pde;
-	if (!(pte & PAGE_PRESENT)) {
-		if (new_page)
-			free_page(new_page);
-		return;
-	}
-	if ((pte & PAGE_TABLE) != PAGE_TABLE || pte >= high_memory) {
-		printk("do_wp_page: bogus page-table at address %08x (%08x)\n",address,pte);
-		*(unsigned long *) pde = BAD_PAGETABLE | PAGE_TABLE;
-		send_sig(SIGKILL, tsk, 1);
-		if (new_page)
-			free_page(new_page);
-		return;
-	}
+	if (!(pte & PAGE_PRESENT))
+		goto end_wp_page;
+	if ((pte & PAGE_TABLE) != PAGE_TABLE || pte >= high_memory)
+		goto bad_wp_pagetable;
 	pte &= 0xfffff000;
 	pte += (address>>10) & 0xffc;
 	old_page = *(unsigned long *) pte;
-	if (!(old_page & PAGE_PRESENT)) {
-		if (new_page)
-			free_page(new_page);
-		return;
-	}
-	if (old_page >= high_memory) {
-		printk("do_wp_page: bogus page at address %08x (%08x)\n",address,old_page);
-		*(unsigned long *) pte = BAD_PAGE | PAGE_SHARED;
-		send_sig(SIGKILL, tsk, 1);
-		if (new_page)
-			free_page(new_page);
-		return;
-	}
-	if (old_page & PAGE_RW) {
-		if (new_page)
-			free_page(new_page);
-		return;
-	}
-	if (!(old_page & PAGE_COW)) {
-		if (user_esp && tsk == current)
-			send_sig(SIGSEGV, tsk, 1);
-	}
+	if (!(old_page & PAGE_PRESENT))
+		goto end_wp_page;
+	if (old_page >= high_memory)
+		goto bad_wp_page;
+	if (old_page & PAGE_RW)
+		goto end_wp_page;
 	tsk->min_flt++;
 	prot = (old_page & 0x00000fff) | PAGE_RW;
 	old_page &= 0xfffff000;
-	if (mem_map[MAP_NR(old_page)]==1) {
-		*(unsigned long *) pte |= 2;
+	if (mem_map[MAP_NR(old_page)] != 1) {
+		if (new_page) {
+			copy_page(old_page,new_page);
+			*(unsigned long *) pte = new_page | prot;
+			free_page(old_page);
+			invalidate();
+			return;
+		}
+		free_page(old_page);
+		oom(tsk);
+		*(unsigned long *) pte = BAD_PAGE | prot;
 		invalidate();
-		if (new_page)
-			free_page(new_page);
 		return;
 	}
-	if (new_page)
-		copy_page(old_page,new_page);
-	else {
-		new_page = BAD_PAGE;
-		oom(tsk);
-	}
-	*(unsigned long *) pte = new_page | prot;
-	free_page(old_page);
+	*(unsigned long *) pte |= PAGE_RW;
 	invalidate();
+	if (new_page)
+		free_page(new_page);
+	return;
+bad_wp_page:
+	printk("do_wp_page: bogus page at address %08x (%08x)\n",address,old_page);
+	*(unsigned long *) pte = BAD_PAGE | PAGE_SHARED;
+	send_sig(SIGKILL, tsk, 1);
+	goto end_wp_page;
+bad_wp_pagetable:
+	printk("do_wp_page: bogus page-table at address %08x (%08x)\n",address,pte);
+	*(unsigned long *) pde = BAD_PAGETABLE | PAGE_TABLE;
+	send_sig(SIGKILL, tsk, 1);
+end_wp_page:
+	if (new_page)
+		free_page(new_page);
+	return;
+}
+
+/*
+ * check that a page table change is actually needed, and call
+ * the low-level function only in that case..
+ */
+void do_wp_page(unsigned long error_code, unsigned long address,
+	struct task_struct * tsk, unsigned long user_esp)
+{
+	unsigned long page;
+	unsigned long * pg_table;
+
+	pg_table = (unsigned long *) (tsk->tss.cr3 + ((address>>20) & 0xffc));
+	page = *pg_table;
+	if (!page)
+		return;
+	if ((page & PAGE_PRESENT) && page < high_memory) {
+		pg_table = (unsigned long *) ((page & 0xfffff000) + ((address>>10) & 0xffc));
+		page = *pg_table;
+		if (!(page & PAGE_PRESENT))
+			return;
+		if (page & PAGE_RW)
+			return;
+		if (!(page & PAGE_COW))
+			if (user_esp && tsk == current)
+				send_sig(SIGSEGV, tsk, 1);
+		if (mem_map[MAP_NR(page)] == 1) {
+			*pg_table |= PAGE_RW;
+			invalidate();
+			return;
+		}
+		__do_wp_page(error_code, address, tsk, user_esp);
+		return;
+	}
+	printk("bad page directory entry %08x\n",page);
+	*pg_table = 0;
 }
 
 int verify_area(int type, void * addr, unsigned long size)
@@ -691,13 +746,21 @@ static int share_page(struct task_struct * tsk, struct inode * inode,
 }
 
 /*
- * fill in an empty page-table if none exists
+ * fill in an empty page-table if none exists.
  */
-static unsigned long get_empty_pgtable(struct task_struct * tsk,unsigned long address)
+static inline unsigned long get_empty_pgtable(struct task_struct * tsk,unsigned long address)
 {
-	unsigned long page = 0;
+	unsigned long page;
 	unsigned long *p;
-repeat:
+
+	p = (unsigned long *) (tsk->tss.cr3 + ((address >> 20) & 0xffc));
+	if (PAGE_PRESENT & *p)
+		return *p;
+	if (*p) {
+		printk("get_empty_pgtable: bad page-directory entry \n");
+		*p = 0;
+	}
+	page = get_free_page(GFP_KERNEL);
 	p = (unsigned long *) (tsk->tss.cr3 + ((address >> 20) & 0xffc));
 	if (PAGE_PRESENT & *p) {
 		free_page(page);
@@ -711,8 +774,6 @@ repeat:
 		*p = page | PAGE_TABLE;
 		return *p;
 	}
-	if ((page = get_free_page(GFP_KERNEL)) != 0)
-		goto repeat;
 	oom(current);
 	*p = BAD_PAGETABLE | PAGE_TABLE;
 	return 0;

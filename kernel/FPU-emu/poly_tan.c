@@ -3,7 +3,8 @@
  |                                                                           |
  | Compute the tan of a FPU_REG, using a polynomial approximation.           |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
@@ -12,6 +13,7 @@
 #include "exception.h"
 #include "reg_constant.h"
 #include "fpu_emu.h"
+#include "control_w.h"
 
 
 #define	HIPOWERop	3	/* odd poly, positive terms */
@@ -131,8 +133,8 @@ void	poly_tan(FPU_REG *arg, FPU_REG *y_reg)
   reg_move(&pos_poly, &odd_poly);
   normalize(&odd_poly);
   
-  reg_mul(&odd_poly, arg, &odd_poly);
-  reg_u_add(&odd_poly, arg, &odd_poly);	/* This is just the odd polynomial */
+  reg_mul(&odd_poly, arg, &odd_poly, FULL_PRECISION);
+  reg_u_add(&odd_poly, arg, &odd_poly, FULL_PRECISION);	/* This is just the odd polynomial */
 
 
   /* will be a valid positive nr with expon = 0 */
@@ -166,14 +168,14 @@ void	poly_tan(FPU_REG *arg, FPU_REG *y_reg)
   reg_move(&neg_poly, &even_poly);
   normalize(&even_poly);
 
-  reg_mul(&even_poly, &argSq, &even_poly);
-  reg_add(&even_poly, &argSq, &even_poly);
-  reg_sub(&CONST_1, &even_poly, &even_poly);  /* This is just the even polynomial */
+  reg_mul(&even_poly, &argSq, &even_poly, FULL_PRECISION);
+  reg_add(&even_poly, &argSq, &even_poly, FULL_PRECISION);
+  reg_sub(&CONST_1, &even_poly, &even_poly, FULL_PRECISION);  /* This is just the even polynomial */
 
   /* Now ready to copy the results */
   if ( invert )
-    { reg_div(&even_poly, &odd_poly, y_reg); }
+    { reg_div(&even_poly, &odd_poly, y_reg, FULL_PRECISION); }
   else
-    { reg_div(&odd_poly, &even_poly, y_reg); }
+    { reg_div(&odd_poly, &even_poly, y_reg, FULL_PRECISION); }
 
 }

@@ -149,6 +149,7 @@ struct task_struct {
 	unsigned long signal;
 	unsigned long blocked;	/* bitmap of masked signals */
 	unsigned long flags;	/* per process flags, defined below */
+	int errno;
 /* various fields */
 	struct sigaction sigaction[32];
 	unsigned long saved_kernel_stack;
@@ -220,7 +221,7 @@ struct task_struct {
  * your own risk!. Base=0, limit=0x1fffff (=2MB)
  */
 #define INIT_TASK \
-/* state etc */	{ 0,15,15,0,0,0, \
+/* state etc */	{ 0,15,15,0,0,0,0, \
 /* signals */	{{ 0, },}, \
 /* stack */	0,0, \
 /* ec,brk... */	0,0,0,0,0,0,0,0, \

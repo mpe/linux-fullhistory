@@ -92,12 +92,17 @@ extern void poly_div16(long long *x);
 extern void polynomial(unsigned accum[], unsigned x[],
 		       unsigned short terms[][4], int n);
 extern void normalize(FPU_REG *x);
-extern void reg_div(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ);
-extern void reg_u_sub(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ);
-extern void reg_u_mul(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ);
-extern void reg_u_div(long long *arg1, long long *arg2, FPU_REG *answ);
-extern void reg_u_add(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ);
-extern void wm_sqrt(FPU_REG *n);
+extern void reg_div(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
+		    unsigned int control_w);
+extern void reg_u_sub(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
+		      unsigned int control_w);
+extern void reg_u_mul(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
+		      unsigned int control_w);
+extern void reg_u_div(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
+		      unsigned int control_w);
+extern void reg_u_add(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
+		      unsigned int control_w);
+extern void wm_sqrt(FPU_REG *n, unsigned int control_w);
 extern unsigned	shrx(void *l, unsigned x);
 extern unsigned	shrxs(void *v, unsigned x);
 extern unsigned long div_small(unsigned long long *x, unsigned long y);

@@ -4,11 +4,13 @@
  |                                                                           |
  | Core floating point subtraction routine.                                  |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | Call from C as:                                                           |
- |   void reg_u_sub(reg *arg1, reg *arg2, reg *answ)                         |
+ |   void reg_u_sub(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,             |
+ |                                                int control_w)             |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
@@ -25,6 +27,7 @@
 
 #include "exception.h"
 #include "fpu_asm.h"
+#include "control_w.h"
 
 
 .text
@@ -66,6 +69,8 @@ _reg_u_sub:
 	movl	PARAM3,%edi	/* destination */
 	movl	EXP(%esi),%edx
 	movl	%edx,EXP(%edi)	/* Copy exponent to destination */
+	movb	SIGN(%esi),%dl
+	movb	%dl,SIGN(%edi)	/* Copy the sign from the first arg */
 
 	xorl	%edx,%edx	// register extension
 
@@ -89,34 +94,63 @@ L_more_than_31:
 	jnc	L_more_than_63
 
 	subb	$32,%cl
+	jz	L_exactly_32
+
 	shrd	%cl,%eax,%edx
+	shr	%cl,%eax
+	orl	%ebx,%ebx
+	jz	L_more_31_no_low	// none of the lowest bits is set
+
+	orl	$1,%edx			// record the fact in the extension
+
+L_more_31_no_low:
 	movl	%eax,%ebx
-	shr	%cl,%ebx
+	xorl	%eax,%eax
+	jmp	L_shift_done
+
+L_exactly_32:
+	movl	%ebx,%edx
+	movl	%eax,%ebx
 	xorl	%eax,%eax
 	jmp	L_shift_done
 
 L_more_than_63:
-	cmpl	$66,%ecx
-	jnc	L_more_than_65
+	cmpw	$65,%cx
+	jnc	L_more_than_64
 
-	subb	$64,%cl
+	// Shift right by 64 bits
 	movl	%eax,%edx
-	shr	%cl,%edx
-	xorl	%ebx,%ebx
-	xorl	%eax,%eax
-	jmp	L_shift_done
+	orl	%ebx,%ebx
+	jz	L_more_63_no_low
+
+	orl	$1,%edx
+	jmp	L_more_63_no_low
+
+L_more_than_64:
+	jne	L_more_than_65
+
+	// Shift right by 65 bits
+	// Carry is clear if we get here
+	movl	%eax,%edx
+	rcrl	%edx
+	jnc	L_shift_65_nc
+
+	orl	$1,%edx
+	jmp	L_more_63_no_low
+
+L_shift_65_nc:
+	orl	%ebx,%ebx
+	jz	L_more_63_no_low
+
+	orl	$1,%edx
+	jmp	L_more_63_no_low
 
 L_more_than_65:
-	/* just copy the larger reg to dest */
-	movw	SIGN(%esi),%ax
-	movw	%ax,SIGN(%edi)
-	movl	EXP(%esi),%eax
-	movl	%eax,EXP(%edi)
-	movl	SIGL(%esi),%eax
-	movl	%eax,SIGL(%edi)
-	movl	SIGH(%esi),%eax
-	movl	%eax,SIGH(%edi)
-	jmp	L_exit		// Does not underflow
+	movl	$1,%edx		// The shifted nr always at least one '1'
+
+L_more_63_no_low:
+	xorl	%ebx,%ebx
+	xorl	%eax,%eax
 
 L_shift_done:
 L_subtr:
@@ -194,54 +228,7 @@ L_shift_1:
 	subl	%ecx,EXP(%edi)	/* Can get underflow here */
 
 L_round:
-/*------------------------------+
- |	Round the result	|
- +------------------------------*/
-	cmpl	$0x80000000,%edx
-	jc	L_store
-
-	jne	L_round_up
-
-	testb	$1,%dl
-	jz	L_store
-
-L_round_up:
-	addl	$1,%ebx
-	adcl	$0,%eax
-	jnc	L_store
-
-	/* We just rounded up to (1) 00 00 */
-	/* This *is* possible, if the subtraction is of the
-	   form (1. + x) - (x + y) where x is small and y is
-	   very small. */
-	incl	EXP(%edi)
-	movl	$0x80000000,%eax
-
-L_store:
-/*------------------------------+
- |	Store the result	|
- +------------------------------*/
-	movl	%eax,SIGH(%edi)
-	movl	%ebx,SIGL(%edi)
-
-	movb	TW_Valid,TAG(%edi)		/* Set the tags to TW_Valid */
-
-	cmpl	EXP_UNDER,EXP(%edi)
-	jle	L_underflow
-
-L_exit:
-	popl	%ebx
-	popl	%edi
-	popl	%esi
-	leave
-	ret
-
-
-L_underflow:
-	push	%edi
-	call	_arith_underflow
-	pop	%ebx
-	jmp	L_exit
+	jmp	FPU_round	// Round the result
 
 
 #ifdef PARANOID
@@ -275,3 +262,31 @@ L_bugged:
 	pop	%ebx
 	jmp	L_exit
 #endif PARANOID
+
+
+L_store:
+/*------------------------------+
+ |	Store the result	|
+ +------------------------------*/
+	movl	%eax,SIGH(%edi)
+	movl	%ebx,SIGL(%edi)
+
+	movb	TW_Valid,TAG(%edi)		/* Set the tags to TW_Valid */
+
+	cmpl	EXP_UNDER,EXP(%edi)
+	jle	L_underflow
+
+L_exit:
+	popl	%ebx
+	popl	%edi
+	popl	%esi
+	leave
+	ret
+
+
+L_underflow:
+	push	%edi
+	call	_arith_underflow
+	pop	%ebx
+	jmp	L_exit
+

@@ -143,9 +143,17 @@ int sys_sigaction(int signum, const struct sigaction * action,
 
 extern int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options);
 
-void sys_sigreturn(int signr, unsigned long oldmask, unsigned long unused)
+/*
+ * This sets regs->esp even though we don't actually use sigstacks yet..
+ */
+int sys_sigreturn(int signr, unsigned long oldmask, unsigned long esp)
 {
+	struct pt_regs * regs;
+
+	regs = (struct pt_regs *) &signr;
 	current->blocked = oldmask & _BLOCKABLE;
+	regs->esp = esp;
+	return 0;
 }
 
 /*
@@ -165,7 +173,7 @@ static unsigned long * setup_first(struct pt_regs * regs,
 /* set up the "normal" stack seen by the signal handler */
 	put_fs_long(regs->esp+15*4,tmp_esp);	/* points to the stack.. */
 	put_fs_long(signr,tmp_esp+1);		/* parameter to handler and sigreturn */
-	put_fs_long(0,tmp_esp+2);		/* third parameter to sigreturn */
+	put_fs_long((unsigned long) (tmp_esp+5),tmp_esp+2);
 	put_fs_long(oldmask,tmp_esp+3);		/* second .. */
 	put_fs_long(__NR_sigreturn,tmp_esp+4);	/* sigreturn number.. */
 /* save this frame so that we later can fill in the saved registers */
@@ -188,7 +196,7 @@ static void setup_other(unsigned long eip, struct pt_regs * regs, int signr,
 /* set up the "normal" stack seen by the signal handler */
 	put_fs_long(regs->esp+6*4,tmp_esp);	/* points to the stack.. */
 	put_fs_long(signr,tmp_esp+1);		/* parameter to handler and sigreturn */
-	put_fs_long(0,tmp_esp+2);		/* third parameter to sigreturn */
+	put_fs_long((unsigned long) (tmp_esp+5),tmp_esp+2);
 	put_fs_long(oldmask,tmp_esp+3);		/* second .. */
 	put_fs_long(__NR_sigreturn,tmp_esp+4);	/* sigreturn number.. */
 	put_fs_long(eip,tmp_esp+5);		/* return address */

@@ -503,22 +503,73 @@ int reg_store_double(void)
   double *dfloat = (double *)FPU_data_address;
   unsigned long l[2];
 
-
   if (FPU_st0_tag == TW_Valid)
     {
       int exp;
       FPU_REG tmp;
 
       reg_move(FPU_st0_ptr, &tmp);
-      if (round_to_53_bits(&tmp)) goto overflow;
+
+      if ( tmp.sigl & 0x000007ff )
+	{
+	  unsigned long increment = 0;	/* avoid gcc warnings */
+	  
+	  switch (control_word & CW_RC)
+	    {
+	    case RC_RND:
+	      /* Rounding can get a little messy.. */
+	      increment = ((tmp.sigl & 0x7ff) > 0x400) |      /* nearest */
+		((tmp.sigl & 0xc00) == 0xc00);                /* odd -> even */
+	      break;
+	    case RC_DOWN:   /* towards -infinity */
+	      increment = (tmp.sign == SIGN_POS) ? 0 : tmp.sigl & 0x7ff;
+	      break;
+	    case RC_UP:     /* towards +infinity */
+	      increment = (tmp.sign == SIGN_POS) ? tmp.sigl & 0x7ff : 0;
+	      break;
+	    case RC_CHOP:
+	      increment = 0;
+	      break;
+	    }
+	  
+	  /* Truncate the mantissa */
+	  tmp.sigl &= 0xfffff800;
+
+	  if ( increment )
+	    {
+	      if ( tmp.sigl >= 0xfffff800 )
+		{
+		  /* the sigl part overflows */
+		  if ( tmp.sigh == 0xffffffff )
+		    {
+		      /* The sigh part overflows */
+		      tmp.sigh = 0x80000000;
+		      tmp.exp++;
+		      if (tmp.exp >= EXP_OVER)
+			goto overflow;
+		    }
+		  else
+		    {
+		      tmp.sigh ++;
+		    }
+		  tmp.sigl = 0x00000000;
+		}
+	      else
+		{
+		  /* We only need to increment sigl */
+		  tmp.sigl += 0x00000800;
+		}
+	    }
+	}
+
       l[0] = (tmp.sigl >> 11) | (tmp.sigh << 21);
       l[1] = ((tmp.sigh >> 11) & 0xfffff);
       exp = tmp.exp - EXP_BIAS;
 
       if ( exp > DOUBLE_Emax )
 	{
-	  EXCEPTION(EX_Overflow);
 	overflow:
+	  EXCEPTION(EX_Overflow);
 	  /* This is a special case: see sec 16.2.5.1 of the 80486 book */
 	  if ( control_word & EX_Overflow )
 	    {
@@ -635,14 +686,61 @@ int reg_store_single(void)
       FPU_REG tmp;
 
       reg_move(FPU_st0_ptr, &tmp);
-      if (round_to_24_bits(&tmp)) goto overflow;
+
+      if ( tmp.sigl | (tmp.sigh & 0x000000ff) )
+	{
+	  unsigned long increment = 0;		/* avoid gcc warnings */
+	  unsigned long sigh = tmp.sigh;
+	  unsigned long sigl = tmp.sigl;
+	  
+	  switch (control_word & CW_RC)
+	    {
+	    case RC_RND:
+	      increment = ((sigh & 0xff) > 0x80)           /* more than half */
+		|| (((sigh & 0xff) == 0x80) && sigl)       /* more than half */
+		  || ((sigh & 0x180) == 0x180);            /* round to even */
+	      break;
+	    case RC_DOWN:   /* towards -infinity */
+	      increment = (tmp.sign == SIGN_POS) ? 0 : (sigl | (sigh & 0xff));
+	      break;
+	    case RC_UP:     /* towards +infinity */
+	      increment = (tmp.sign == SIGN_POS) ? (sigl | (sigh & 0xff)) : 0;
+	      break;
+	    case RC_CHOP:
+	      increment = 0;
+	      break;
+	    }
+	  
+	  /* Truncate part of the mantissa */
+	  tmp.sigl = 0;
+	  
+	  if (increment)
+	    {
+	      if ( sigh >= 0xffffff00 )
+		{
+		  /* The sigh part overflows */
+		  tmp.sigh = 0x80000000;
+		  tmp.exp++;
+		  if (tmp.exp >= EXP_OVER)
+		    goto overflow;
+		}
+	      else
+		{
+		  tmp.sigh &= 0xffffff00;
+		  tmp.sigh += 0x100;
+		}
+	    }
+	  else
+	    tmp.sigh &= 0xffffff00;  /* Finish the truncation */
+	}
+
       templ = (tmp.sigh >> 8) & 0x007fffff;
       exp = tmp.exp - EXP_BIAS;
 
       if ( exp > SINGLE_Emax )
 	{
-	  EXCEPTION(EX_Overflow);
 	overflow:
+	  EXCEPTION(EX_Overflow);
 	  /* This is a special case: see sec 16.2.5.1 of the 80486 book */
 	  if ( control_word & EX_Overflow )
 	    {

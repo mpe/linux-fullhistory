@@ -1350,8 +1350,8 @@ void kbdsave(int new_console)
 
 static void get_scrmem(int currcons)
 {
-	memcpy((void *)vc_scrbuf[fg_console],(void *)origin, screen_size);
-	video_mem_start = (unsigned long)vc_scrbuf[fg_console];
+	memcpy((void *)vc_scrbuf[currcons],(void *)origin, screen_size);
+	video_mem_start = (unsigned long)vc_scrbuf[currcons];
 	origin 	= video_mem_start;
 	scr_end = video_mem_end = video_mem_start+screen_size;
 	pos = origin + y*video_size_row + (x<<1);

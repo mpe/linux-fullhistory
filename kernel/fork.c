@@ -16,6 +16,7 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/stddef.h>
+#include <linux/unistd.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -55,6 +56,9 @@ repeat:
 		return task_nr;
 	return -EAGAIN;
 }
+
+#define IS_CLONE (orig_eax == __NR_clone)
+#define copy_vm(p) (IS_CLONE?clone_page_tables:copy_page_tables)(p)	
 
 /*
  *  Ok, this is the main fork-routine. It copies the system process
@@ -107,6 +111,8 @@ int sys_fork(long ebx,long ecx,long edx,
 	p->tss.edx = edx;
 	p->tss.ebx = ebx;
 	p->tss.esp = esp;
+	if (IS_CLONE)				/* clone() gets the new stack value */
+		p->tss.esp = ebx;
 	p->tss.ebp = ebp;
 	p->tss.esi = esi;
 	p->tss.edi = edi;
@@ -123,7 +129,7 @@ int sys_fork(long ebx,long ecx,long edx,
 	if (last_task_used_math == current)
 		__asm__("clts ; fnsave %0 ; frstor %0"::"m" (p->tss.i387));
 	p->kernel_stack_page = get_free_page(GFP_KERNEL);
-	if (!p->kernel_stack_page || copy_page_tables(p)) {
+	if (!p->kernel_stack_page || copy_vm(p)) {
 		task[nr] = NULL;
 		REMOVE_LINKS(p);
 		free_page(p->kernel_stack_page);
@@ -145,6 +151,7 @@ int sys_fork(long ebx,long ecx,long edx,
 			current->libraries[i].library->i_count++;
 	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));
 	set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,&(p->ldt));
+	p->counter = current->counter >> 1;
 	p->state = TASK_RUNNING;	/* do this last, just in case */
 	return p->pid;
 }

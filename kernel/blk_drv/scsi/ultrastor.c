@@ -464,7 +464,9 @@ int ultrastor_abort(Scsi_Cmnd *SCpnt, int code)
 
 int ultrastor_reset(void)
 {
+#if 0
     unsigned char in_byte;
+#endif
 
 #if (ULTRASTOR_DEBUG & UD_RESET)
     printk("US14F: reset: called\n");

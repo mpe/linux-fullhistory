@@ -1031,7 +1031,7 @@ void do_fd_request(void)
 }
 
 static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
-    unsigned int param)
+    unsigned long param)
 {
 	int i,drive,cnt,okay;
 	struct floppy_struct *this;

@@ -28,13 +28,15 @@
 static int ioctl_probe(int dev, void *buffer)
 {
 	int temp;
-	int len;
-	char * string;
+	unsigned int len,slen;
+	const char * string;
 	
 	if ((temp = scsi_hosts[dev].present) && buffer) {
 		len = get_fs_long ((int *) buffer);
 		string = scsi_hosts[dev].info();
-		if (len > strlen(string)) len = strlen(string)+1;
+		slen = strlen(string);
+		if (len > slen)
+			len = slen + 1;
 		verify_area(VERIFY_WRITE, buffer, len);
 		memcpy_tofs (buffer, string, len);
 	}

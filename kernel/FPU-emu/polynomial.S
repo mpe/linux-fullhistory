@@ -3,7 +3,8 @@
  |                                                                           |
  | Fixed point arithmetic polynomial evaluation.                             |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | Call from C as:                                                           |
@@ -54,9 +55,9 @@ _polynomial:
 	movl	%eax,-28(%ebp)
 
 	subl	TERM_SIZE,%ecx
-	js	xL_accum_done
+	js	L_accum_done
 
-xL_accum_loop:
+L_accum_loop:
 	xor	%eax,%eax
 	movl	%eax,-4(%ebp)
 	movl	%eax,-8(%ebp)
@@ -107,27 +108,27 @@ xL_accum_loop:
 	movl	%eax,-28(%ebp)
 #else
 	testb	$128,-25(%ebp)
-	je	xL_no_poly_round
+	je	L_no_poly_round
 
 	addl	$1,-24(%ebp)
 	adcl	$0,-20(%ebp)
-xL_no_poly_round:
+L_no_poly_round:
 #endif EXTRA_PRECISE
 
 	subl	TERM_SIZE,%ecx
-	jns	xL_accum_loop
+	jns	L_accum_loop
 
-xL_accum_done:
+L_accum_done:
 #ifdef EXTRA_PRECISE
 /* And round the result */
 	testb	$128,-25(%ebp)
-	je	xL_poly_done
+	je	L_poly_done
 
 	addl	$1,-24(%ebp)
 	adcl	$0,-20(%ebp)
 #endif EXTRA_PRECISE
 
-xL_poly_done:
+L_poly_done:
 	movl	-24(%ebp),%eax
 	movl	%eax,(%esi)
 	movl	-20(%ebp),%eax

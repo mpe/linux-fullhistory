@@ -247,9 +247,11 @@ static __inline__ int get_dma_residue(unsigned int dmanr)
 					 : ((dmanr&3)<<2) + 2 + IO_DMA2_BASE;
 
 	/* using short to get 16-bit wrap around */
-	short count = 1 + inb(io_port) + 
-			( inb(io_port) << 8 );
+	unsigned short count;
 
+	count = 1 + inb(io_port);
+	count += inb(io_port) << 8;
+	
 	return (dmanr<=3)? count : (count<<1);
 }
 

@@ -12,6 +12,7 @@
 	$Header
 */
 #ifndef ASM
+int seagate_st0x_biosparam(int, int, int*);
 int seagate_st0x_detect(int);
 int seagate_st0x_command(Scsi_Cmnd *);
 int seagate_st0x_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
@@ -27,8 +28,8 @@ int seagate_st0x_reset(void);
 #define SEAGATE_ST0X  {"Seagate ST-01/ST-02", seagate_st0x_detect, 	\
 			 seagate_st0x_info, seagate_st0x_command,  	\
 			 seagate_st0x_queue_command, seagate_st0x_abort, \
-			 seagate_st0x_reset, NULL, NULL,		\
-			 1, 7, SG_NONE, 1, 0, 0}
+			 seagate_st0x_reset, NULL, seagate_st0x_biosparam,		\
+			 1, 7, SG_ALL, 1, 0, 0}
 #endif
 
 
@@ -115,13 +116,16 @@ extern volatile int seagate_st0x_timeout;
 #define PRINT_COMMAND 0x200
 #define PHASE_EXIT 0x400
 #define PHASE_RESELECT 0x800
+#define DEBUG_FAST 0x1000
+#define DEBUG_SG   0x2000
+#define DEBUG_LINKED	0x4000
 
 /* 
  *	Control options - these are timeouts specified in .01 seconds.
  */
 
 #define ST0X_BUS_FREE_DELAY 25
-#define ST0X_SELECTION_DELAY 3
+#define ST0X_SELECTION_DELAY 15
 
 #define eoi() __asm__("push %%eax\nmovb $0x20, %%al\noutb %%al, $0x20\npop %%eax"::)
 	

@@ -81,11 +81,11 @@ u_long xd_init (u_long mem_start,u_long mem_end)
 {
 	u_char i,controller,*address;
 	
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	if (register_blkdev(MAJOR_NR,"xd",&xd_fops)) {
 		printk("xd_init: unable to get major number %d\n",MAJOR_NR);
 		return (mem_start);
 	}
+	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	read_ahead[MAJOR_NR] = 8;	/* 8 sector (4kB) read ahead */
 	xd_gendisk.next = gendisk_head;
 	gendisk_head = &xd_gendisk;
@@ -149,14 +149,18 @@ static void xd_geninit (void)
 /* xd_open: open a device */
 static int xd_open (struct inode *inode,struct file *file)
 {
-	int target = DEVICE_NR(MINOR(inode->i_rdev));
+	int dev = DEVICE_NR(MINOR(inode->i_rdev));
 
-	while (!xd_valid[target])
-		sleep_on(&xd_wait_open);
+	if (dev < xd_drives) {
+		while (!xd_valid[dev])
+			sleep_on(&xd_wait_open);
 
-	xd_access[target]++;
+		xd_access[dev]++;
 
-	return (0);
+		return (0);
+	}
+	else
+		return (-ENODEV);
 }
 
 /* do_xd_request: handle an incoming request */
@@ -186,7 +190,7 @@ static void do_xd_request (void)
 }
 
 /* xd_ioctl: handle device ioctl's */
-static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_int arg)
+static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_long arg)
 {
 	XD_GEOMETRY *geometry = (XD_GEOMETRY *) arg;
 	int dev = DEVICE_NR(MINOR(inode->i_rdev)),err;
@@ -221,8 +225,12 @@ static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_int arg)
 /* xd_release: release the device */
 static void xd_release (struct inode *inode, struct file *file)
 {
-	sync_dev(inode->i_rdev);
-	xd_access[DEVICE_NR(MINOR(inode->i_rdev))]--;
+	int dev = DEVICE_NR(MINOR(inode->i_rdev));
+
+	if (dev < xd_drives) {
+		sync_dev(dev);
+		xd_access[dev]--;
+	}
 }
 
 /* xd_reread_partitions: rereads the partition table from a drive */

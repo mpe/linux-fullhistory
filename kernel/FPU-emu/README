@@ -83,7 +83,7 @@ is confined to five files:
 ----------------------- Limitations of wm-FPU-emu -----------------------
 
 There are a number of differences between the current wm-FPU-emu
-(version beta 1.2) and the 80486 FPU (apart from bugs). Some of the
+(version beta 1.3) and the 80486 FPU (apart from bugs). Some of the
 more important differences are listed below:
 
 Internal computations do not use de-normal numbers (but External
@@ -91,12 +91,11 @@ de-normals ARE recognised and generated). The design of wm-FPU-emu
 allows a larger exponent range than the 80486 FPU for internal
 computations.
 
-All computations are performed at full 64 bit precision with `round to
-nearest or even' performed for the basic functions. The results of the
-basic arithmetic functions and sqrt are then rounded to lower
-precision if required by the PC bits of the FPU control word. Under
-the crt0 version for Linux current at March 1993, the FPU PC bits
-specify 53 bits precision.
+All internal computations are performed at 64 bit or higher precision.
+The results of the basic arithmetic functions and sqrt are then
+rounded to the precision required by the PC bits of the FPU control
+word. Under the crt0 version for Linux current at March 1993, the FPU
+PC bits specify 53 bits precision.
 
 The precision flag (PE of the FPU status word) is not implemented.
 Does anyone write code which uses this feature?
@@ -193,3 +192,12 @@ tan(x)        1e-10 .. pi/2-(1e-10)     62.4 (x <= pi/4)             62.1
 exp(x)        0 .. 1                    63.1                         62.9
 log(x)        1+1e-6 .. 2               62.4                         62.1
 
+
+As of version 1.3 of the emulator, the accuracy of the basic
+arithmetic has been improved (by a small fraction of a bit). Care has
+been taken to ensure full accuracy of the rounding of the basic
+arithmetic functions (+,-,*,/,and fsqrt), and they all now produce
+results which are exact to the 64th bit (unless there are any bugs
+left). To ensure this, it was necessary to effectively get information
+of up to about 128 bits precision. The emulator now passes the
+"paranoia" tests.

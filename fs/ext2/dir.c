@@ -37,7 +37,7 @@ static struct file_operations ext2_dir_operations = {
 	NULL,			/* write - bad */
 	ext2_readdir,		/* readdir */
 	NULL,			/* select - default */
-	NULL,			/* ioctl - default */
+	ext2_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
 	NULL,			/* no special release code */
@@ -61,8 +61,8 @@ struct inode_operations ext2_dir_inode_operations = {
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
 	NULL,			/* bmap */
-	ext2_truncate,	/* truncate */
-	NULL			/* permission */
+	ext2_truncate,		/* truncate */
+	ext2_permission		/* permission */
 };
 
 int ext2_check_dir_entry (char * function, struct inode * dir,
@@ -93,17 +93,17 @@ int ext2_check_dir_entry (char * function, struct inode * dir,
 static int ext2_readdir (struct inode * inode, struct file * filp,
 			 struct dirent * dirent, int count)
 {
-	unsigned int offset, i;
+	unsigned int offset, i, err;
 	struct buffer_head * bh;
 	struct ext2_dir_entry * de;
 	struct super_block * sb;
-
+	
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;
 	sb = inode->i_sb;
 	while (filp->f_pos < inode->i_size) {
 		offset = filp->f_pos & (sb->s_blocksize - 1);
-		bh = ext2_bread (inode, (filp->f_pos) >> EXT2_BLOCK_SIZE_BITS(sb), 0);
+		bh = ext2_bread (inode, (filp->f_pos) >> EXT2_BLOCK_SIZE_BITS(sb), 0, &err);
 		if (!bh) {
 			filp->f_pos += sb->s_blocksize - offset;
 			continue;

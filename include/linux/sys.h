@@ -2,6 +2,8 @@
  * Why isn't this a .c file?  Enquiring minds....
  */
 
+#define sys_clone sys_fork
+
 extern int sys_setup();
 extern int sys_exit();
 extern int sys_fork();
@@ -144,7 +146,8 @@ sys_ftruncate, sys_fchmod, sys_fchown, sys_getpriority, sys_setpriority,
 sys_profil, sys_statfs, sys_fstatfs, sys_ioperm, sys_socketcall,
 sys_syslog, sys_setitimer, sys_getitimer, sys_newstat, sys_newlstat,
 sys_newfstat, sys_newuname, sys_iopl, sys_vhangup, sys_idle, sys_vm86,
-sys_wait4, sys_swapoff, sys_sysinfo, sys_ipc, sys_fsync, sys_sigreturn };
+sys_wait4, sys_swapoff, sys_sysinfo, sys_ipc, sys_fsync, sys_sigreturn,
+sys_clone };
 
 /* So we don't have to do any more manual updating.... */
 int NR_syscalls = sizeof(sys_call_table)/sizeof(fn_ptr);

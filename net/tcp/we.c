@@ -222,6 +222,7 @@ wd8003_start_xmit(struct sk_buff *skb, struct device *dev)
        /* put in a time out. */
        if (jiffies - dev->trans_start < 30)
 	 {
+	   sti();
 	   return (1);
 	 }
 

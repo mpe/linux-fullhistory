@@ -351,11 +351,20 @@ typedef struct scsi_cmnd {
 	void * request_buffer;  /* Actual requested buffer */
 
 /* These elements define the operation we ultimately want to perform */
-	unsigned char data_cmnd[10];
+	unsigned char data_cmnd[12];
 	unsigned short use_sg;  /* Number of pieces of scatter-gather */
 	unsigned short sglist_len;  /* size of malloc'd scatter-gather list */
 	unsigned bufflen;     /* Size of data buffer */
 	void *buffer;   /* Data buffer */
+
+	unsigned underflow;	/* Return error if less than this amount is 
+				   transfered */
+
+	unsigned transfersize;	/* How much we are guranteed to transfer with
+				   each SCSI transfer (ie, between disconnect /
+				   reconnects.   Probably == sector size */
+	
+	
 	
 	struct request request;  /* A copy of the command we are working on*/
 

@@ -1,5 +1,8 @@
 /* unzip.c -- decompress files in gzip or pkzip format.
  * Copyright (C) 1992-1993 Jean-loup Gailly
+ *
+ * Adapted for Linux booting by Hannu Savolainen 1993
+ *
  * This is free software; you can redistribute it and/or modify it under the
  * terms of the GNU General Public License, see the file COPYING.
  *
@@ -17,7 +20,6 @@
 static char rcsid[] = "$Id: unzip.c,v 0.9 1993/02/10 16:07:22 jloup Exp $";
 #endif
 
-/* #include "tailor.h" */
 #include "gzip.h"
 #include "crypt.h"
 
@@ -61,7 +63,7 @@ int check_zipfile(in)
     inptr += LOCHDR + SH(h + LOCFIL) + SH(h + LOCEXT);
 
     if (inptr > insize || LG(h) != LOCSIG) {
-	error("input not a zip file or empty");
+	error("input not a zip");
     }
     method = h[LOCHOW];
     if (method != STORED && method != DEFLATED) {
@@ -70,7 +72,7 @@ int check_zipfile(in)
 
     /* If entry encrypted, decrypt and validate encryption header */
     if ((decrypt = h[LOCFLG] & CRPFLG) != 0) {
-	error("encrypted file, not yet supported.\n");
+	error("encrypted file\n");
 	exit_code = ERROR;
 	return -1;
     }
@@ -116,7 +118,7 @@ void unzip(in, out)
 	if (res == 3) {
 	    error("out of memory");
 	} else if (res != 0) {
-	    error("invalid compressed data--format violated");
+	    error("invalid compressed format");
 	}
 
     } else if (pkzip && method == STORED) {
@@ -125,7 +127,7 @@ void unzip(in, out)
 
 	if (n != LG(inbuf + LOCSIZ) - (decrypt ? RAND_HEAD_LEN : 0)) {
 
-	    error("invalid compressed data--length mismatch");
+	    error("length mismatch");
 	}
 	while (n--) {
 	    uch c = (uch)get_byte();
@@ -164,10 +166,10 @@ void unzip(in, out)
 
     /* Validate decompression */
     if (orig_crc != updcrc(outbuf, 0)) {
-	error("invalid compressed data--crc error");
+	error("crc error");
     }
     if (orig_len != bytes_out) {
-	error("invalid compressed data--length error");
+	error("length error");
     }
 
     /* Check if there are more entries in a pkzip file */

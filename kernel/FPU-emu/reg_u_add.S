@@ -5,11 +5,13 @@
  | Add two valid (TW_Valid) FPU_REG numbers, of the same sign, and put the   |
  |   result in a destination FPU_REG.                                        |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | Call from C as:                                                           |
- |   void reg_u_add(reg *arg1, reg *arg2, reg *answ)                         |
+ |   void reg_u_add(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,             |
+ |                                                int control_w)             |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
@@ -24,6 +26,7 @@
 
 #include "exception.h"
 #include "fpu_asm.h"
+#include "control_w.h"
 
 .text
 	.align 2,144
@@ -59,7 +62,10 @@ L_arg1_larger:
 	movl	SIGH(%edi),%eax
 
 L_accum_loaded:
-	movl	16(%ebp),%edi	/* destination */
+	movl	PARAM3,%edi		/* destination */
+	movb	SIGN(%esi),%dl
+	movb	%dl,SIGN(%edi)		/* Copy the sign from the first arg */
+
 
 	movl	EXP(%esi),%edx
 	movl	%edx,EXP(%edi)	/* Copy exponent to destination */
@@ -74,6 +80,7 @@ L_accum_loaded:
 	je	L_bugged
 #endif PARANOID
 
+// The number to be shifted is in %eax:%ebx:%edx
 	cmpw	$32,%cx		/* shrd only works for 0..31 bits */
 	jnc	L_more_than_31
 
@@ -88,32 +95,43 @@ L_more_than_31:
 	jnc	L_more_than_63
 
 	subb	$32,%cl
+	jz	L_exactly_32
+
 	shrd	%cl,%eax,%edx
 	shr	%cl,%eax
+	orl	%ebx,%ebx
+	jz	L_more_31_no_low	// none of the lowest bits is set
+
+	orl	$1,%edx			// record the fact in the extension
+
+L_more_31_no_low:
+	movl	%eax,%ebx
+	xorl	%eax,%eax
+	jmp	L_shift_done
+
+L_exactly_32:
+	movl	%ebx,%edx
 	movl	%eax,%ebx
 	xorl	%eax,%eax
 	jmp	L_shift_done
 
 L_more_than_63:
-	cmpw	$66,%cx
-	jnc	L_more_than_65
+	cmpw	$65,%cx
+	jnc	L_more_than_64
 
-	subb	$64,%cl
 	movl	%eax,%edx
-	shr	%cl,%edx
+	orl	%ebx,%ebx
+	jz	L_more_63_no_low
+
+	orl	$1,%edx
+	jmp	L_more_63_no_low
+
+L_more_than_64:
+	movl	$1,%edx		// The shifted nr always at least one '1'
+
+L_more_63_no_low:
 	xorl	%ebx,%ebx
 	xorl	%eax,%eax
-	jmp	L_shift_done
-
-L_more_than_65:
-	/* just copy the larger reg to dest */
-	movw	SIGN(%esi),%ax
-	movw	%ax,SIGN(%edi)
-	movl	SIGL(%esi),%eax
-	movl	%eax,SIGL(%edi)
-	movl	SIGH(%esi),%eax
-	movl	%eax,SIGH(%edi)
-	jmp	L_exit		// Does not overflow
 
 L_shift_done:
 	/* Now do the addition */
@@ -125,56 +143,16 @@ L_shift_done:
 	rcrl	$1,%eax
 	rcrl	$1,%ebx
 	rcrl	$1,%edx
+	jnc	L_no_bit_lost
 
+	orl	$1,%edx
+
+L_no_bit_lost:
 	incl	EXP(%edi)
-	
+
 L_round_the_result:
-	/* Round the result */
-	cmpl	$0x80000000,%edx
-	jc	L_no_round_up
+	jmp	FPU_round	// Round the result
 
-	jne	L_do_round_up
-
-	/* Now test for round-to-even */
-	testb	$1,%ebx
-	jz	L_no_round_up
-
-L_do_round_up:
-	addl	$1,%ebx
-	adcl	$0,%eax
-	jnc	L_no_round_up		/* Rounding done, no overflow */
-
-	/* Overflow, adjust the result */
-	rcrl	$1,%eax
-	rcrl	$1,%ebx
-	incl	EXP(%edi)
-
-L_no_round_up:
-	/* store the result */
-	movl	%eax,SIGH(%edi)
-	movl	%ebx,SIGL(%edi)
-
-	movb	TW_Valid,TAG(%edi)		/* Set the tags to TW_Valid */
-	movb	SIGN(%esi),%al
-	movb	%al,SIGN(%edi)		/* Copy the sign from the first arg */
-
-	// The number may have overflowed
-	cmpl	EXP_OVER,EXP(%edi)
-	jge	L_overflow
-
-L_exit:
-	popl	%ebx
-	popl	%edi
-	popl	%esi
-	leave
-	ret
-
-/* The addition resulted in a number too large to represent */
-L_overflow:
-	push	%edi
-	call	_arith_overflow
-	pop	%ebx
-	jmp	L_exit
 
 
 #ifdef PARANOID
@@ -185,3 +163,11 @@ L_bugged:
 	pop	%ebx
 	jmp	L_exit
 #endif PARANOID
+
+
+L_exit:
+	popl	%ebx
+	popl	%edi
+	popl	%esi
+	leave
+	ret

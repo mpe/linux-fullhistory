@@ -56,7 +56,7 @@ static int sock_readdir(struct inode *inode, struct file *file,
 static void sock_close(struct inode *inode, struct file *file);
 static int sock_select(struct inode *inode, struct file *file, int which, select_table *seltable);
 static int sock_ioctl(struct inode *inode, struct file *file,
-		      unsigned int cmd, unsigned int arg);
+		      unsigned int cmd, unsigned long arg);
 
 static struct file_operations socket_file_ops = {
 	sock_lseek,
@@ -281,7 +281,7 @@ sock_readdir(struct inode *inode, struct file *file, struct dirent *dirent,
 
 int
 sock_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
-	   unsigned int arg)
+	   unsigned long arg)
 {
 	struct socket *sock;
 
@@ -335,7 +335,7 @@ sock_close(struct inode *inode, struct file *file)
 int
 sock_awaitconn(struct socket *mysock, struct socket *servsock)
 {
-	struct socket *last;
+	struct socket **last;
 
 	PRINTK(("sock_awaitconn: trying to connect socket 0x%x to 0x%x\n",
 	       mysock, servsock));
@@ -349,13 +349,10 @@ sock_awaitconn(struct socket *mysock, struct socket *servsock)
 	 */
 	mysock->next = NULL;
 	cli();
-	if (!(last = servsock->iconn))
-		servsock->iconn = mysock;
-	else {
-		while (last->next)
-			last = last->next;
-		last->next = mysock;
-	}
+	last = &servsock->iconn;
+	while (*last)
+		last = &(*last)->next;
+	*last = mysock;
 	mysock->state = SS_CONNECTING;
 	mysock->conn = servsock;
 	sti();
@@ -367,7 +364,20 @@ sock_awaitconn(struct socket *mysock, struct socket *servsock)
 	wake_up(servsock->wait);
 	if (mysock->state != SS_CONNECTED) {
 		interruptible_sleep_on(mysock->wait);
-		if (mysock->state != SS_CONNECTED) {
+		if (mysock->state != SS_CONNECTED &&
+                    mysock->state != SS_DISCONNECTING) 
+                  /* SS_DISCONNECTING means the server accepted
+                   * the connection, maybe wrote some data, and then
+                   * closed it again, all before we got to run.
+                   * The only way a socket can get to SS_DISCONNECTING
+                   * is through sock_release or sock_release_peer.
+                   * The former is only called in case of various setup
+                   * failures or sock_close (which obviously isn't the
+                   * case as we still have it open); the latter is
+                   * called when the server (to which we obviously
+                   * must have been connected) closes its end.
+                   */
+                    {
 			/*
 			 * if we're not connected we could have been
 			 * 1) interrupted, so we need to remove ourselves
@@ -377,12 +387,13 @@ sock_awaitconn(struct socket *mysock, struct socket *servsock)
 			 */
 			if (mysock->conn == servsock) {
 				cli();
-				if ((last = servsock->iconn) == mysock)
-					servsock->iconn = mysock->next;
-				else {
-					while (last->next != mysock)
-						last = last->next;
-					last->next = mysock->next;
+				last = &servsock->iconn;
+				while (*last) {
+					if (*last == mysock) {
+						*last = mysock->next;
+						break;
+					}
+					last = &(*last)->next;
 				}
 				sti();
 			}

@@ -33,20 +33,9 @@
 
 /* p 15-5: Precision control bits affect only the following:
    ADD, SUB(R), MUL, DIV(R), and SQRT */
-#define PRECISION_ADJUST_CONTROL (control_word & 0x300)
-#define PR_24_BITS      0x000
-#define PR_53_BITS      0x200
-/* By doing this as a macro, we allow easy modification */
-#define PRECISION_ADJUST(x) \
-	      switch (PRECISION_ADJUST_CONTROL) \
-		{ \
-		case PR_24_BITS: \
-		  round_to_24_bits(x); \
-		  break; \
-		case PR_53_BITS: \
-		  round_to_53_bits(x); \
-		  break; \
-		}
-
+#define FULL_PRECISION  (CW_PC | RC_RND)
+#define PR_24_BITS      _Const_(0x000)
+#define PR_53_BITS      _Const_(0x200)
+#define PR_64_BITS      _Const_(0x300)
 
 #endif _CONTROLW_H_

@@ -11,6 +11,11 @@
 #undef EXT2FS_DEBUG
 
 /*
+ * Define EXT2FS_PRE_02B_COMPAT to convert ext 2 fs prior to 0.2b
+ */
+#undef EXT2FS_PRE_02B_COMPAT
+
+/*
  * Define DONT_USE_DCACHE to inhibit the directory cache
  */
 #undef DONT_USE_DCACHE
@@ -23,7 +28,7 @@
 /*
  * The second extended file system version
  */
-#define EXT2FS_VERSION	"0.2d, 93/03/30"
+#define EXT2FS_VERSION	"0.3, 93/04/22"
 
 /*
  * Special inodes numbers
@@ -40,6 +45,11 @@
 #define EXT2_SUPER_MAGIC	0xEF53
 
 /*
+ * Maximal count of links to a file
+ */
+#define EXT2_LINK_MAX		32000
+
+/*
  * Macro-instructions used to manage several block sizes
  */
 #define EXT2_MIN_BLOCK_SIZE		1024
@@ -50,6 +60,7 @@
 #else
 # define EXT2_BLOCK_SIZE(s)		(EXT2_MIN_BLOCK_SIZE << (s)->s_log_block_size)
 #endif
+#define EXT2_ACLE_PER_BLOCK(s)		(EXT2_BLOCK_SIZE(s) / sizeof (struct ext2_acl_entry))
 #define	EXT2_ADDR_PER_BLOCK(s)		(EXT2_BLOCK_SIZE(s) / sizeof (unsigned long))
 #ifdef KERNEL
 # define EXT2_BLOCK_SIZE_BITS(s)	((s)->u.ext2_sb.s_log_block_size + 10)
@@ -71,6 +82,29 @@
 # define EXT2_FRAG_SIZE(s)		(EXT2_MIN_FRAG_SIZE << (s)->s_log_frag_size)
 # define EXT2_FRAGS_PER_BLOCK(s)	(EXT2_BLOCK_SIZE(s) / EXT2_FRAG_SIZE(s))
 #endif
+
+/*
+ * ACL structures
+ */
+
+struct ext2_acl_header	/* Header of Access Control Lists */
+{
+	unsigned long aclh_file_count;
+	unsigned long aclh_acle_count;
+	unsigned long aclh_first_acle;
+	unsigned long aclh_reserved;
+};
+
+struct ext2_acl_entry	/* Access Control List Entry */
+{
+	unsigned short acle_perms;	/* Access permissions */
+	unsigned short acle_type;	/* Type of entry */
+	unsigned short acle_tag;	/* User or group identity */
+	unsigned short acle_pad1;
+	unsigned long acle_reserved;
+	unsigned long acle_next;	/* Pointer on next entry for the */
+					/* same inode or on next free entry */
+};
 
 /*
  * Structure of a blocks group descriptor
@@ -196,6 +230,9 @@ struct ext2_dir_entry {
  * Function prototypes
  */
 
+/* acl.c */
+extern int ext2_permission (struct inode *, int);
+
 /* balloc.c */
 extern int ext2_new_block (struct super_block *, unsigned long);
 extern void ext2_free_block (struct super_block *, unsigned long);
@@ -230,10 +267,9 @@ extern unsigned long ext2_count_free_inodes (struct super_block *);
 /* inode.c */
 extern int ext2_bmap (struct inode *, int);
 
-extern struct buffer_head * ext2_getblk (struct inode *, int, int);
-extern struct buffer_head * ext2_bread (struct inode *, int, int);
+extern struct buffer_head * ext2_getblk (struct inode *, int, int, int *);
+extern struct buffer_head * ext2_bread (struct inode *, int, int, int *);
 
-extern void ext2_truncate (struct inode *);
 extern void ext2_put_super (struct super_block *);
 extern void ext2_write_super (struct super_block *);
 extern struct super_block * ext2_read_super (struct super_block *,void *,int);
@@ -241,6 +277,10 @@ extern void ext2_read_inode (struct inode *);
 extern void ext2_write_inode (struct inode *);
 extern void ext2_put_inode (struct inode *);
 extern void ext2_statfs (struct super_block *, struct statfs *);
+
+/* ioctl.c */
+extern int ext2_ioctl (struct inode *, struct file *, unsigned int,
+		       unsigned long);
 
 /* namei.c */
 extern int ext2_open (struct inode *, struct file *);
@@ -256,6 +296,9 @@ extern int ext2_link (struct inode *, struct inode *, const char *, int);
 extern int ext2_mknod (struct inode *, const char *, int, int, int);
 extern int ext2_rename (struct inode *, const char *, int,
 			struct inode *, const char *, int);
+
+/* truncate.c */
+extern void ext2_truncate (struct inode *);
 
 /*
  * Inodes and files operations

@@ -3,7 +3,8 @@
  |                                                                           |
  | Compute the tan of a FPU_REG, using a polynomial approximation.           |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
@@ -12,6 +13,7 @@
 #include "exception.h"
 #include "reg_constant.h"
 #include "fpu_emu.h"
+#include "control_w.h"
 
 
 #define	HIPOWERon	6	/* odd poly, negative terms */
@@ -111,8 +113,7 @@ void	poly_atan(FPU_REG *arg)
 	  denom.sigh |= 0x80000000;                    /* 1 + arg */
 
 	  arg->exp = numerator.exp;
-	  reg_u_div((long long *)&(numerator.sigl),
-		    (long long *)&(denom.sigl), arg);
+	  reg_u_div(&numerator, &denom, arg, FULL_PRECISION);
 
 	  exponent = arg->exp - EXP_BIAS;
 	}
@@ -161,7 +162,8 @@ void	poly_atan(FPU_REG *arg)
   reg_move(&pos_poly, &odd_poly);
   poly_add_1(&odd_poly);
 
-  reg_u_mul(&odd_poly, arg, &odd_poly);	/* The complete odd polynomial */
+  /* The complete odd polynomial */
+  reg_u_mul(&odd_poly, arg, &odd_poly, FULL_PRECISION);
   odd_poly.exp -= EXP_BIAS - 1;
 
   /* will be a valid positive nr with expon = 0 */
@@ -172,10 +174,10 @@ void	poly_atan(FPU_REG *arg)
 
   poly_add_1(&even_poly);
 
-  reg_div(&odd_poly, &even_poly, arg);
+  reg_div(&odd_poly, &even_poly, arg, FULL_PRECISION);
 
   if ( recursions )
-    reg_sub(&CONST_PI4, arg, arg);
+    reg_sub(&CONST_PI4, arg, arg, FULL_PRECISION);
 }
 
 

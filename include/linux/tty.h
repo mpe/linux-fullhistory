@@ -138,6 +138,7 @@ extern int get_tty_queue(struct tty_queue * queue);
 #define QUIT_CHAR(tty) ((tty)->termios->c_cc[VQUIT])
 #define ERASE_CHAR(tty) ((tty)->termios->c_cc[VERASE])
 #define KILL_CHAR(tty) ((tty)->termios->c_cc[VKILL])
+#define WERASE_CHAR(tty) ((tty)->termios->c_cc[VWERASE])
 #define EOF_CHAR(tty) ((tty)->termios->c_cc[VEOF])
 #define START_CHAR(tty) ((tty)->termios->c_cc[VSTART])
 #define STOP_CHAR(tty) ((tty)->termios->c_cc[VSTOP])
@@ -213,7 +214,7 @@ struct tty_struct {
 	void (*close)(struct tty_struct * tty, struct file * filp);
 	void (*write)(struct tty_struct * tty);
 	int  (*ioctl)(struct tty_struct *tty, struct file * file,
-		    unsigned int cmd, unsigned int arg);
+		    unsigned int cmd, unsigned long arg);
 	void (*throttle)(struct tty_struct * tty, int status);
 	void (*set_termios)(struct tty_struct *tty, struct termios * old);
 	struct tty_struct *link;
@@ -239,7 +240,7 @@ struct tty_ldisc {
 	int	(*write)(struct tty_struct * tty, struct file * file,
 			 char * buf, int nr);	
 	int	(*ioctl)(struct tty_struct * tty, struct file * file,
-			 unsigned int cmd, unsigned int arg);
+			 unsigned int cmd, unsigned long arg);
 	/*
 	 * The following routines are called from below.
 	 */
@@ -340,7 +341,7 @@ extern void wait_until_sent(struct tty_struct * tty);
 extern void copy_to_cooked(struct tty_struct * tty);
 extern int tty_register_ldisc(int disc, struct tty_ldisc *new);
 
-extern int tty_ioctl(struct inode *, struct file *, unsigned int, unsigned int);
+extern int tty_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 extern int is_orphaned_pgrp(int pgrp);
 extern int is_ignored(int sig);
 extern int tty_signal(int sig, struct tty_struct *tty);
@@ -375,6 +376,6 @@ extern void unblank_screen(void);
 /* vt.c */
 
 extern int vt_ioctl(struct tty_struct *tty, struct file * file,
-		    unsigned int cmd, unsigned int arg);
+		    unsigned int cmd, unsigned long arg);
 
 #endif

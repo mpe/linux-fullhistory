@@ -21,10 +21,10 @@
  * recompiled to take full advantage of the new limits..
  */
 #undef NR_OPEN
-#define NR_OPEN 256
+#define NR_OPEN 256	/* don't change - fd_set etc depend on this */
 
-#define NR_INODE 256
-#define NR_FILE 128
+#define NR_INODE 256	/* this should be bigger than NR_FILE */
+#define NR_FILE 128	/* this can well be larger on a larger system */
 #define NR_SUPER 16
 #define NR_HASH 997
 #define NR_FILE_LOCKS 32
@@ -67,6 +67,7 @@
 
 extern void buffer_init(void);
 extern unsigned long inode_init(unsigned long start, unsigned long end);
+extern unsigned long file_table_init(unsigned long start, unsigned long end);
 
 #define MAJOR(a) (((unsigned)(a))>>8)
 #define MINOR(a) ((a)&0xff)
@@ -264,7 +265,7 @@ struct file_operations {
 	int (*write) (struct inode *, struct file *, char *, int);
 	int (*readdir) (struct inode *, struct file *, struct dirent *, int);
 	int (*select) (struct inode *, struct file *, int, select_table *);
-	int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned int);
+	int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned long);
 	int (*mmap) (struct inode *, struct file *, unsigned long, size_t, int, unsigned long);
 	int (*open) (struct inode *, struct file *);
 	void (*release) (struct inode *, struct file *);

@@ -225,36 +225,37 @@ do_another:
 	      switch ( (FPU_modrm >> 3) & 7 )
 		{
 		case 0:         /* fadd */
-		  reg_add(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr);
+		  reg_add(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr,
+			  control_word);
 		  break;
 		case 1:         /* fmul */
-		  reg_mul(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr);
+		  reg_mul(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr,
+			  control_word);
 		  break;
 		case 2:         /* fcom */
 		  compare_st_data();
-		  goto no_precision_adjust;
 		  break;
 		case 3:         /* fcomp */
 		  compare_st_data();
 		  pop();
-		  goto no_precision_adjust;
 		  break;
 		case 4:         /* fsub */
-		  reg_sub(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr);
+		  reg_sub(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr,
+			  control_word);
 		  break;
 		case 5:         /* fsubr */
-		  reg_sub(&FPU_loaded_data, FPU_st0_ptr, FPU_st0_ptr);
+		  reg_sub(&FPU_loaded_data, FPU_st0_ptr, FPU_st0_ptr,
+			  control_word);
 		  break;
 		case 6:         /* fdiv */
-		  reg_div(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr);
+		  reg_div(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr,
+			  control_word);
 		  break;
 		case 7:         /* fdivr */
-		  reg_div(&FPU_loaded_data, FPU_st0_ptr, FPU_st0_ptr);
+		  reg_div(&FPU_loaded_data, FPU_st0_ptr, FPU_st0_ptr,
+			  control_word);
 		  break;
 		}
-	      PRECISION_ADJUST(FPU_st0_ptr);
-no_precision_adjust:
-		;
 	    }
 	  else
 	    stack_underflow();
@@ -338,7 +339,6 @@ test_for_fp:
 
 void __math_abort(struct info * info, unsigned int signal)
 {
-	RE_ENTRANT_CHECK_OFF
 	FPU_EIP = FPU_ORIG_EIP;
 	send_sig(signal,current,1);
 	RE_ENTRANT_CHECK_OFF

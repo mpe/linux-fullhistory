@@ -167,11 +167,11 @@ int sys_access(const char * filename,int mode)
 		return res;
 	i_mode = inode->i_mode;
 	res = i_mode & 0777;
-	iput(inode);
 	if (current->uid == inode->i_uid)
 		res >>= 6;
 	else if (in_group_p(inode->i_gid))
 		res >>= 3;
+	iput(inode);
 	if ((res & mode) == mode)
 		return 0;
 	/*

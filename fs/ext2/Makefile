@@ -14,8 +14,8 @@
 .s.o:
 	$(AS) -o $*.o $<
 
-OBJS=	balloc.o bitmap.o dcache.o dir.o file.o ialloc.o inode.o \
-	namei.o symlink.o truncate.o
+OBJS=	acl.o balloc.o bitmap.o dcache.o dir.o file.o ialloc.o inode.o \
+	ioctl.o namei.o symlink.o truncate.o
 
 ext2.o: $(OBJS)
 	$(LD) -r -o ext2.o $(OBJS)

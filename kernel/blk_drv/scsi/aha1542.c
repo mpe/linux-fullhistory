@@ -66,8 +66,7 @@ static int aha1542_last_mbo_used  = (AHA1542_MAILBOXES - 1);
 static long WAITnexttimeout = 3000000;
 
 static int aha1542_host = 0;
-static void setup_mailboxes();
-extern void aha1542_interrupt();
+static void setup_mailboxes(void);
 
 #define aha1542_intr_reset()  outb(IRST, CONTROL)
 
@@ -530,7 +529,7 @@ int aha1542_command(Scsi_Cmnd * SCpnt)
 }
 
 /* Initialize mailboxes */
-static void setup_mailboxes()
+static void setup_mailboxes(void)
 {
     int i;
     static unchar cmd[5] = {CMD_MBINIT, AHA1542_MAILBOXES};

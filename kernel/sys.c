@@ -18,6 +18,7 @@
 #include <linux/ptrace.h>
 
 #include <asm/segment.h>
+#include <asm/io.h>
 
 /*
  * this indicates wether you can reboot with ctrl-alt-del: the default is yes
@@ -695,19 +696,58 @@ int sys_getrusage(int who, struct rusage *ru)
 	return getrusage(current, who, ru);
 }
 
+#define LATCH ((1193180 + HZ/2)/HZ)
+
+/*
+ * This version of gettimeofday has near nanosecond resolution.
+ * It was inspired by Steve McCanne's microtime-i386 for BSD.  -- jrs
+ */
+static inline void do_gettimeofday(struct timeval *tv)
+{
+	unsigned long nowtime;
+	long count;
+
+#ifdef __i386__
+	cli();
+	/* timer count may underflow right here */
+	outb_p(0x00, 0x43);	/* latch the count ASAP */
+	nowtime = jiffies;	/* must be saved inside cli/sti */
+	count = inb_p(0x40);	/* read the latched count */
+	count |= inb_p(0x40) << 8;
+	/* we know probability of underflow is always MUCH less than 1% */
+	if (count < (LATCH - LATCH/100))
+		sti();
+	else {
+		/* check for pending timer interrupt */
+		outb_p(0x0a, 0x20);
+		if (inb(0x20) & 1)
+			nowtime++;
+		sti();
+	}
+	nowtime += jiffies_offset;
+	tv->tv_sec = startup_time + CT_TO_SECS(nowtime);
+	/* the correction term is always in the range [0, 1 clocktick) */
+	tv->tv_usec = CT_TO_USECS(nowtime)
+		+ ((LATCH - 1) - count)*(1000000/HZ)/LATCH;
+#else /* not __i386__ */
+	nowtime = jiffies + jiffes_offset;
+	tv->tv_sec = startup_time + CT_TO_SECS(nowtime);
+	tv->tv_usec = CT_TO_USECS(nowtime);
+#endif /* not __i386__ */
+}
+
 int sys_gettimeofday(struct timeval *tv, struct timezone *tz)
 {
 	int error;
 
 	if (tv) {
-		unsigned long nowtime = jiffies+jiffies_offset;
+		struct timeval ktv;
 		error = verify_area(VERIFY_WRITE, tv, sizeof *tv);
 		if (error)
 			return error;
-		put_fs_long(startup_time + CT_TO_SECS(nowtime),
-			    (unsigned long *) tv);
-		put_fs_long(CT_TO_USECS(nowtime), 
-			    ((unsigned long *) tv)+1);
+		do_gettimeofday(&ktv);
+		put_fs_long(ktv.tv_sec, &tv->tv_sec);
+		put_fs_long(ktv.tv_usec, &tv->tv_usec);
 	}
 	if (tz) {
 		error = verify_area(VERIFY_WRITE, tz, sizeof *tz);

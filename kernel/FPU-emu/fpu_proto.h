@@ -68,8 +68,8 @@ extern void poly_tan(FPU_REG *arg, FPU_REG *y_reg);
 extern int round_to_53_bits(FPU_REG *reg);
 extern int round_to_24_bits(FPU_REG *reg);
 /* reg_add_sub.c */
-extern void reg_add(FPU_REG *a, FPU_REG *b, FPU_REG *dest);
-extern void reg_sub(FPU_REG *a, FPU_REG *b, FPU_REG *dest);
+extern void reg_add(FPU_REG *a, FPU_REG *b, FPU_REG *dest, int control_w);
+extern void reg_sub(FPU_REG *a, FPU_REG *b, FPU_REG *dest, int control_w);
 /* reg_compare.c */
 extern int compare(FPU_REG *b);
 extern void compare_st_data(void);
@@ -102,4 +102,4 @@ extern void frstor(void);
 extern char *fstenv(void);
 extern void fsave(void);
 /* reg_mul.c */
-extern void reg_mul(FPU_REG *a, FPU_REG *b, FPU_REG *dest);
+extern void reg_mul(FPU_REG *a, FPU_REG *b, FPU_REG *dest, unsigned int control_w);

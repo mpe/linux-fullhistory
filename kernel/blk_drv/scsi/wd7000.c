@@ -80,14 +80,14 @@ static unchar rev_1 = 0, rev_2 = 0;  /* filled in by wd7000_revision */
 #define WAITnexttimeout 3000000
 
 
-static inline void wd7000_enable_intr()
+static inline void wd7000_enable_intr(void)
 {
     controlstat |= INT_EN;
     outb(controlstat,CONTROL);
 }
 
 
-static inline void wd7000_enable_dma()
+static inline void wd7000_enable_dma(void)
 {
     controlstat |= DMA_EN;
     outb(controlstat,CONTROL);

@@ -15,7 +15,6 @@ CFLAGS = -O6 -DSTDC_HEADERS $(TEST)
 .c.o:
 	$(CC) $(CFLAGS) -c -o $*.o $<
 
-
 all:	zSystem
 
 zSystem:	piggy.o $(zOBJECTS)
@@ -26,8 +25,8 @@ head.o:	head.s
 head.s: head.S ../include/linux/tasks.h
 	$(CPP) -traditional head.S -o head.s
 
-piggy.s:	$(SYSTEM) xtract piggyback
-		./xtract $(SYSTEM) | gzip -9 | ./piggyback > piggy.s
+piggy.o:	$(SYSTEM) xtract piggyback
+		./xtract $(SYSTEM) | gzip -9 | ./piggyback > piggy.o
 
 $(SYSTEM):
 		cd ..;make tools/zSystem

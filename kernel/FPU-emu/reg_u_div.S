@@ -4,7 +4,8 @@
  |                                                                           |
  | Core division routines                                                    |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
@@ -13,18 +14,19 @@
 /*---------------------------------------------------------------------------+
  |  Kernel for the division routines.                                        |
  |                                                                           |
- |  void reg_u_div(unsigned long long *a, unsigned long long *a,             |
- |                 FPU_REG *dest)                                            |
+ |  void reg_u_div(FPU_REG *a, FPU_REG *a,                                   |
+ |                 FPU_REG *dest, unsigned int control_word)                 |
  |                                                                           |
  |  Does not compute the destination exponent, but does adjust it.           |
  +---------------------------------------------------------------------------*/
 
 #include "exception.h"
 #include "fpu_asm.h"
+#include "control_w.h"
 
 
-#define	dSIGL(x)	(x)
-#define	dSIGH(x)	4(x)
+// #define	dSIGL(x)	(x)
+// #define	dSIGH(x)	4(x)
 
 
 .data
@@ -71,43 +73,43 @@ _reg_u_div:
 
 _divide_kernel:
 #ifdef PARANOID
-//	testl	$0x80000000, dSIGH(%esi)
-//	je	xL_bugged
-	testl	$0x80000000, dSIGH(%ebx)
-	je	xL_bugged
+//	testl	$0x80000000, SIGH(%esi)	// Dividend
+//	je	L_bugged
+	testl	$0x80000000, SIGH(%ebx)	// Divisor
+	je	L_bugged
 #endif PARANOID
 
-/* Check if the denominator can be treated as having just 32 bits */
-	cmpl	$0,dSIGL(%ebx)
+/* Check if the divisor can be treated as having just 32 bits */
+	cmpl	$0,SIGL(%ebx)
 	jnz	L_Full_Division	/* Can't do a quick divide */
 
 /* We should be able to zip through the division here */
-	movl	dSIGH(%ebx),%ecx	/* The denominator */
-	movl	dSIGH(%esi),%edx	/* Get the current num */
-	movl	dSIGL(%esi),%eax	/* Get the current num */
+	movl	SIGH(%ebx),%ecx	/* The divisor */
+	movl	SIGH(%esi),%edx	/* Dividend */
+	movl	SIGL(%esi),%eax	/* Dividend */
 
 	cmpl	%ecx,%edx
 	setaeb	ovfl_flag	/* Keep a record */
-	jb	xL_no_adjust
+	jb	L_no_adjust
 
 	subl	%ecx,%edx	/* Prevent the overflow */
 
-xL_no_adjust:
+L_no_adjust:
 	/* Divide the 64 bit number by the 32 bit denominator */
 	divl	%ecx
-	movl	%eax,SIGH(%edi)	/* Put the result in the answer */
+	movl	%eax,result_2
 
 	/* Work on the remainder of the first division */
 	xorl	%eax,%eax
 	divl	%ecx
-	movl	%eax,SIGL(%edi)	/* Put the result in the answer */
+	movl	%eax,result_1
 
 	/* Work on the remainder of the 64 bit division */
 	xorl	%eax,%eax
 	divl	%ecx
 
 	testb	$255,ovfl_flag	/* was the num > denom ? */
-	je	xL_no_overflow
+	je	L_no_overflow
 
 	/* Do the shifting here */
 	/* increase the exponent */
@@ -115,44 +117,12 @@ xL_no_adjust:
 
 	/* shift the mantissa right one bit */
 	stc			/* To set the ms bit */
-	rcrl	SIGH(%edi)
-	rcrl	SIGL(%edi)
+	rcrl	result_2
+	rcrl	result_1
 	rcrl	%eax
 
-xL_no_overflow:
-	cmpl	$0x80000000,%eax
-	jc	xL_no_round
-	jnz	xL_round_up
-
-	/* "round to even" used */
-	testb	$1,SIGL(%edi)
-	jz	xL_no_round
-
-xL_round_up:
-	addl	$1,SIGL(%edi)
-	adcl	$0,SIGH(%edi)
-
-#ifdef PARANOID
-	jc	xL_bugged2
-#endif PARANOID
-
-xL_no_round:
-	jmp	xL_done
-
-
-#ifdef PARANOID
-xL_bugged:
-	pushl	EX_INTERNAL|0x203
-	call	EXCEPTION
-	pop	%ebx
-	jmp	xL_exit
-
-xL_bugged2:
-	pushl	EX_INTERNAL|0x204
-	call	EXCEPTION
-	pop	%ebx
-	jmp	xL_exit
-#endif PARANOID
+L_no_overflow:
+	jmp	LRound_precision	// Do the rounding as required
 
 
 /*---------------------------------------------------------------------------+
@@ -174,234 +144,248 @@ xL_bugged2:
 
 
 L_Full_Division:
-	movl	dSIGL(%esi),%eax	/* Save extended num in local register */
+	// Save extended dividend in local register
+	movl	SIGL(%esi),%eax
 	movl	%eax,accum_2
-	movl	dSIGH(%esi),%eax
+	movl	SIGH(%esi),%eax
 	movl	%eax,accum_3
 	xorl	%eax,%eax
 	movl	%eax,accum_1	/* zero the extension */
 	movl	%eax,accum_0	/* zero the extension */
 
-	movl	dSIGL(%esi),%eax	/* Get the current num */
-	movl	dSIGH(%esi),%edx
+	movl	SIGL(%esi),%eax	/* Get the current num */
+	movl	SIGH(%esi),%edx
 
 /*----------------------------------------------------------------------*/
 /* Initialization done */
 /* Do the first 32 bits */
 
 	movb	$0,ovfl_flag
-	cmpl	dSIGH(%ebx),%edx	/* Test for imminent overflow */
-	jb	L02
-	ja	L01
+	cmpl	SIGH(%ebx),%edx	/* Test for imminent overflow */
+	jb	LLess_than_1
+	ja	LGreater_than_1
 
-	cmpl	dSIGL(%ebx),%eax
-	jb	L02
+	cmpl	SIGL(%ebx),%eax
+	jb	LLess_than_1
 
-L01:
-/* The numerator is greater or equal, would cause overflow */
+LGreater_than_1:
+/* The dividend is greater or equal, would cause overflow */
 	setaeb	ovfl_flag		/* Keep a record */
 
-	subl	dSIGL(%ebx),%eax
-	sbbl	dSIGH(%ebx),%edx	/* Prevent the overflow */
+	subl	SIGL(%ebx),%eax
+	sbbl	SIGH(%ebx),%edx	/* Prevent the overflow */
 	movl	%eax,accum_2
 	movl	%edx,accum_3
 
-L02:
-/* At this point, we have a num < denom, with a record of
+LLess_than_1:
+/* At this point, we have a dividend < divisor, with a record of
    adjustment in ovfl_flag */
 
 	/* We will divide by a number which is too large */
-	movl	dSIGH(%ebx),%ecx
+	movl	SIGH(%ebx),%ecx
 	addl	$1,%ecx
-	jnc	L04
+	jnc	LFirst_div_not_1
 
 	/* here we need to divide by 100000000h,
 	   i.e., no division at all.. */
-
 	mov	%edx,%eax
-	jmp	L05
+	jmp	LFirst_div_done
 
-L04:
+LFirst_div_not_1:
 	divl	%ecx		/* Divide the numerator by the augmented
 				   denom ms dw */
 
-L05:
+LFirst_div_done:
 	movl	%eax,result_2	/* Put the result in the answer */
 
-	mull	dSIGH(%ebx)		/* mul by the ms dw of the denom */
+	mull	SIGH(%ebx)	/* mul by the ms dw of the denom */
 
 	subl	%eax,accum_2	/* Subtract from the num local reg */
 	sbbl	%edx,accum_3
 
 	movl	result_2,%eax	/* Get the result back */
-	mull	dSIGL(%ebx)		/* now mul the ls dw of the denom */
+	mull	SIGL(%ebx)	/* now mul the ls dw of the denom */
 
 	subl	%eax,accum_1	/* Subtract from the num local reg */
 	sbbl	%edx,accum_2
 	sbbl	$0,accum_3
-	je	L10		/* Must check for non-zero result here */
+	je	LDo_2nd_32_bits		/* Must check for non-zero result here */
 
 #ifdef PARANOID
-	jb	L_bugged
+	jb	L_bugged_1
 #endif PARANOID
 
 	/* need to subtract another once of the denom */
-	incl	result_2		/* Correct the answer */
+	incl	result_2	/* Correct the answer */
 
-	movl	dSIGL(%ebx),%eax
-	movl	dSIGH(%ebx),%edx
+	movl	SIGL(%ebx),%eax
+	movl	SIGH(%ebx),%edx
 	subl	%eax,accum_1	/* Subtract from the num local reg */
 	sbbl	%edx,accum_2
 
 #ifdef PARANOID
 	sbbl	$0,accum_3
-	jne	L_bugged	/* Must check for non-zero result here */
+	jne	L_bugged_1	/* Must check for non-zero result here */
 #endif PARANOID
 
 /*----------------------------------------------------------------------*/
 /* Half of the main problem is done, there is just a reduced numerator
    to handle now */
 /* Work with the second 32 bits, accum_0 not used from now on */
-L10:
+LDo_2nd_32_bits:
 	movl	accum_2,%edx	/* get the reduced num */
 	movl	accum_1,%eax
 
 	/* need to check for possible subsequent overflow */
-	cmpl	dSIGH(%ebx),%edx
-	jb	L22
-	ja	L21
+	cmpl	SIGH(%ebx),%edx
+	jb	LDo_2nd_div
+	ja	LPrevent_2nd_overflow
 
-	cmpl	dSIGL(%ebx),%eax
-	jb	L22
+	cmpl	SIGL(%ebx),%eax
+	jb	LDo_2nd_div
 
-L21:
+LPrevent_2nd_overflow:
 /* The numerator is greater or equal, would cause overflow */
 	/* prevent overflow */
-	subl	dSIGL(%ebx),%eax
-	sbbl	dSIGH(%ebx),%edx
+	subl	SIGL(%ebx),%eax
+	sbbl	SIGH(%ebx),%edx
 	movl	%edx,accum_2
 	movl	%eax,accum_1
 
-	incl	result_2		/* Reflect the subtraction in the answer */
+	incl	result_2	/* Reflect the subtraction in the answer */
 
 #ifdef PARANOID
-	je	L_bugged
+	je	L_bugged_2	/* Can't bump the result to 1.0 */
 #endif PARANOID
 
-L22:
-	cmpl	$0,%ecx
-	jnz	L24
+LDo_2nd_div:
+	cmpl	$0,%ecx		// augmented denom msw
+	jnz	LSecond_div_not_1
 
 	/* %ecx == 0, we are dividing by 1.0 */
 	mov	%edx,%eax
-	jmp	L25
+	jmp	LSecond_div_done
 
-L24:
+LSecond_div_not_1:
 	divl	%ecx		/* Divide the numerator by the denom ms dw */
 
-L25:
+LSecond_div_done:
 	movl	%eax,result_1	/* Put the result in the answer */
 
-	mull	dSIGH(%ebx)		/* mul by the ms dw of the denom */
+	mull	SIGH(%ebx)	/* mul by the ms dw of the denom */
 
 	subl	%eax,accum_1	/* Subtract from the num local reg */
 	sbbl	%edx,accum_2
 
 #ifdef PARANOID
-	jc	L_bugged
+	jc	L_bugged_2
 #endif PARANOID
 
 	movl	result_1,%eax	/* Get the result back */
-	mull	dSIGL(%ebx)		/* now mul the ls dw of the denom */
+	mull	SIGL(%ebx)	/* now mul the ls dw of the denom */
 
-	/* Here we are throwing away some ls bits */
 	subl	%eax,accum_0	/* Subtract from the num local reg */
 	sbbl	%edx,accum_1	/* Subtract from the num local reg */
 	sbbl	$0,accum_2
 
 #ifdef PARANOID
-	jc	L_bugged
+	jc	L_bugged_2
 #endif PARANOID
 
-	jz	L35		/* Just deal with rounding now */
+	jz	LDo_3rd_32_bits
 
 #ifdef PARANOID
 	cmpl	$1,accum_2
-	jne	L_bugged
+	jne	L_bugged_2
 #endif PARANOID
 
-L32:
 	/* need to subtract another once of the denom */
-	movl	dSIGL(%ebx),%eax
-	movl	dSIGH(%ebx),%edx
+	movl	SIGL(%ebx),%eax
+	movl	SIGH(%ebx),%edx
 	subl	%eax,accum_0	/* Subtract from the num local reg */
 	sbbl	%edx,accum_1
 	sbbl	$0,accum_2
 
 #ifdef PARANOID
-	jc	L_bugged
-	jne	L_bugged
+	jc	L_bugged_2
+	jne	L_bugged_2
 #endif PARANOID
 
 	addl	$1,result_1	/* Correct the answer */
 	adcl	$0,result_2
 
 #ifdef PARANOID
-	/* Do we ever really need this check? ***** */
-	jc	L_bugged	/* Must check for non-zero result here */
+	jc	L_bugged_2	/* Must check for non-zero result here */
 #endif PARANOID
 
 /*----------------------------------------------------------------------*/
 /* The division is essentially finished here, we just need to perform
    tidying operations. */
 /* deal with the 3rd 32 bits */
-L35:
-	movl	accum_1,%edx	/* get the reduced num */
+LDo_3rd_32_bits:
+	movl	accum_1,%edx		/* get the reduced num */
 	movl	accum_0,%eax
 
 	/* need to check for possible subsequent overflow */
-	cmpl	dSIGH(%ebx),%edx
-	jb	L42
-	ja	L41
+	cmpl	SIGH(%ebx),%edx	// denom
+	jb	LRound_prep
+	ja	LPrevent_3rd_overflow
 
-	cmpl	dSIGL(%ebx),%eax
-	jb	L42
+	cmpl	SIGL(%ebx),%eax	// denom
+	jb	LRound_prep
 
-L41:
+LPrevent_3rd_overflow:
 	/* prevent overflow */
-	subl	dSIGL(%ebx),%eax
-	sbbl	dSIGH(%ebx),%edx
+	subl	SIGL(%ebx),%eax
+	sbbl	SIGH(%ebx),%edx
 	movl	%edx,accum_1
-	movl	%eax,accum_0	/* ***** not needed unless extended rounding */
+	movl	%eax,accum_0
 
 	addl	$1,result_1	/* Reflect the subtraction in the answer */
 	adcl	$0,result_2
-	jne	L42
-	jnc	L42
+	jne	LRound_prep
+	jnc	LRound_prep
 
 	/* This is a tricky spot, there is an overflow of the answer */
 	movb	$255,ovfl_flag		/* Overflow -> 1.000 */
-	
-L42:
-	/* Now test for rounding */
-	movl	accum_1,%edx	/* ms byte of accum extension */
 
-L44:
-	cmpl	$0,%ecx
-	jnz	L241
+LRound_prep:
+// Prepare for rounding.
+// To test for rounding, we just need to compare 2*accum with the
+// denom.
+	movl	accum_0,%ecx
+	movl	accum_1,%edx
+	movl	%ecx,%eax
+	orl	%edx,%eax
+	jz	LRound_ovfl		// The accumulator contains zero.
 
-	/* %ecx == 0, we are dividing by 1.0 */
-	mov	%edx,%eax
-	jmp	L251
+	// Multiply by 2
+	clc
+	rcll	$1,%ecx
+	rcll	$1,%edx
+	jc	LRound_large		// No need to compare, denom smaller
 
-L241:
-	divl	%ecx		/* Divide the numerator by the denom ms dw */
+	subl	SIGL(%ebx),%ecx
+	sbbl	SIGH(%ebx),%edx
+	jnc	LRound_not_small
 
-L251:
+	movl	$0x70000000,%eax	// Denom was larger
+	jmp	LRound_ovfl
+
+LRound_not_small:
+	jnz	LRound_large
+
+	movl	$0x80000000,%eax	// Remainder was exactly 1/2 denom
+	jmp	LRound_ovfl
+
+LRound_large:
+	movl	$0xff000000,%eax	// Denom was smaller
+
+LRound_ovfl:
 /* We are now ready to deal with rounding, but first we must get
    the bits properly aligned */
 	testb	$255,ovfl_flag	/* was the num > denom ? */
-	je	L45
+	je	LRound_precision
 
 	incl	EXP(%edi)
 
@@ -411,59 +395,14 @@ L251:
 	rcrl	result_1
 	rcrl	%eax
 
-L45:
-	cmpl	$0x80000000,%eax
-	jc	xL_no_round_2		// No round up
-	jnz	xL_round_up_2
-
-	/* "round to even" used here for now... */
-	testb	$1,result_1
-	jz	xL_no_round_2		// No round up
-
-xL_round_up_2:
-	addl	$1,result_1
-	adcl	$0,result_2
-
-#ifdef PARANOID
-	jc	L_bugged
-#endif PARANOID
-
-xL_no_round_2:
-	movl	result_1,%eax
-	movl	%eax,SIGL(%edi)
-	movl	result_2,%eax
-	movl	%eax,SIGH(%edi)
-
-xL_done:
+// Round the result as required
+LRound_precision:
 	decl	EXP(%edi)	/* binary point between 1st & 2nd bits */
 
-xL_check_exponent:
-	cmpl	EXP_OVER,EXP(%edi)
-	jge	xL_overflow
-
-	cmpl	EXP_UNDER,EXP(%edi)
-	jle	xL_underflow
-
-xL_exit:
-	popl	%ebx
-	popl	%edi
-	popl	%esi
-
-	leave
-	ret
-
-
-xL_overflow:
-	pushl	%edi
-	call	_arith_overflow
-	popl	%ebx
-	jmp	xL_exit
-
-xL_underflow:
-	pushl	%edi
-	call	_arith_underflow
-	popl	%ebx
-	jmp	xL_exit
+	movl	%eax,%edx
+	movl	result_1,%ebx
+	movl	result_2,%eax
+	jmp	FPU_round
 
 
 #ifdef PARANOID
@@ -472,5 +411,25 @@ L_bugged:
 	pushl	EX_INTERNAL|0x202
 	call	EXCEPTION
 	pop	%ebx
-	jmp	xL_exit
+	jmp	L_exit
+
+L_bugged_1:
+	pushl	EX_INTERNAL|0x203
+	call	EXCEPTION
+	pop	%ebx
+	jmp	L_exit
+
+L_bugged_2:
+	pushl	EX_INTERNAL|0x204
+	call	EXCEPTION
+	pop	%ebx
+	jmp	L_exit
+
+L_exit:
+	popl	%ebx
+	popl	%edi
+	popl	%esi
+
+	leave
+	ret
 #endif PARANOID

@@ -102,7 +102,7 @@ kd_mksound(unsigned int count, unsigned int ticks)
  * capability to modify any console, not just the fg_console. 
  */
 int vt_ioctl(struct tty_struct *tty, struct file * file,
-	     unsigned int cmd, unsigned int arg)
+	     unsigned int cmd, unsigned long arg)
 {
 	int console, i;
 	unsigned char ucval;

@@ -81,23 +81,30 @@ int do_select(int n, fd_set *in, fd_set *out, fd_set *ex,
 	int count;
 	select_table wait_table, *wait;
 	struct select_table_entry *entry;
-	int i;
-	int max;
+	unsigned long set;
+	int i,j;
+	int max = -1;
 
-	max = -1;
-	for (i = 0 ; i < n ; i++) {
-		if (!FD_ISSET(i, in) &&
-		    !FD_ISSET(i, out) &&
-		    !FD_ISSET(i, ex))
-			continue;
-		if (!current->filp[i])
-			return -EBADF;
-		if (!current->filp[i]->f_inode)
-			return -EBADF;
-		max = i;
+	for (j = 0 ; j < __FDSET_LONGS ; j++) {
+		i = j << 5;
+		if (i >= n)
+			break;
+		set = in->fds_bits[j] | out->fds_bits[j] | ex->fds_bits[j];
+		for ( ; set ; i++,set >>= 1) {
+			if (i >= n)
+				goto end_check;
+			if (!(set & 1))
+				continue;
+			if (!current->filp[i])
+				return -EBADF;
+			if (!current->filp[i]->f_inode)
+				return -EBADF;
+			max = i;
+		}
 	}
+end_check:
 	n = max + 1;
-	entry = (struct select_table_entry *) get_free_page(GFP_KERNEL);
+	entry = (struct select_table_entry *) __get_free_page(GFP_KERNEL);
 	if (!entry)
 		return -ENOMEM;
 	FD_ZERO(res_in);
@@ -182,6 +189,9 @@ __set_fd_set(nr, (unsigned long *) (fsp), (unsigned long *) (fdp))
  * We can actually return ERESTARTSYS insetad of EINTR, but I'd
  * like to be certain this leads to no problems. So I return
  * EINTR just for safety.
+ *
+ * Update: ERESTARTSYS breaks at least the xview clock binary, so
+ * I'm trying ERESTARTNOHAND which restart only when you want to.
  */
 int sys_select( unsigned long *buffer )
 {
@@ -236,7 +246,7 @@ int sys_select( unsigned long *buffer )
 	if (i < 0)
 		return i;
 	if (!i && (current->signal & ~current->blocked))
-		return -EINTR;
+		return -ERESTARTNOHAND;
 	set_fd_set(n, inp, &res_in);
 	set_fd_set(n, outp, &res_out);
 	set_fd_set(n, exp, &res_ex);

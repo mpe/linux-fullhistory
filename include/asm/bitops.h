@@ -20,7 +20,7 @@ struct __dummy { unsigned long a[100]; };
 
 extern inline int set_bit(int nr, void * addr)
 {
-	char ok;
+	unsigned char ok;
 
 	__asm__ __volatile__("btsl %2,%1\n\tsetb %0"
 		:"=q" (ok),"=m" (ADDR)
@@ -30,7 +30,7 @@ extern inline int set_bit(int nr, void * addr)
 
 extern inline int clear_bit(int nr, void * addr)
 {
-	char ok;
+	unsigned char ok;
 
 	__asm__ __volatile__("btrl %2,%1\n\tsetnb %0"
 		:"=q" (ok),"=m" (ADDR)
@@ -44,7 +44,7 @@ extern inline int clear_bit(int nr, void * addr)
  */
 extern inline int test_bit(int nr, void * addr)
 {
-	char ok;
+	unsigned char ok;
 
 	__asm__ __volatile__("btl %2,%1\n\tsetb %0"
 		:"=q" (ok)

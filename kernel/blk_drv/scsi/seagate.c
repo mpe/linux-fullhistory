@@ -6,6 +6,15 @@
  *	<drew@colorado.edu>
  */
 
+/*
+ * Configuration : 
+ * To use without BIOS -DOVERRIDE=base_address -DCONTROLLER=FD or SEAGATE
+ * -DIRQ will overide the default of 5.
+ * 
+ * -DFAST or -DFAST32 will use blind transfers where possible
+ *
+ */
+
 #include <linux/config.h>
 
 #if defined(CONFIG_SCSI_SEAGATE) || defined(CONFIG_SCSI_FD_88x) 
@@ -18,6 +27,17 @@
 #include "hosts.h"
 #include "seagate.h"
 
+#ifndef IRQ
+#define IRQ 5
+#endif
+
+#if (defined(FAST32) && !defined(FAST))
+#define FAST
+#endif
+
+#if defined(LINKED)
+#undef LINKED		/* Linked commands are currently broken ! */
+#endif
 
 static int internal_command(unsigned char target, unsigned char lun,
 			    const void *cmnd,
@@ -102,11 +122,13 @@ static const Signature signatures[] = {
 */
 
 {"FUTURE DOMAIN CORP. (C) 1986-1988 V4.0I 03/16/88",5,48, FD},
+{"FUTURE DOMAIN CORP. (C) 1986-1989 V5.0C2/14/89", 5, 46, FD},
 {"FUTURE DOMAIN CORP. (C) 1986-1989 V6.0A7/28/89", 5, 46, FD},
 {"FUTURE DOMAIN CORP. (C) 1986-1990 V6.0105/31/90",5, 47, FD},
+{"FUTURE DOMAIN CORP. (C) 1986-1990 V6.0209/18/90",5, 47, FD},
 {"FUTURE DOMAIN CORP. (C) 1986-1990 V7.009/18/90", 5, 46, FD},
 {"FUTURE DOMAIN CORP. (C) 1992 V8.00.004/02/92",   5, 44, FD},
-#endif
+#endif /* CONFIG_SCSI_SEAGATE */
 }
 ;
 /*
@@ -119,7 +141,7 @@ SEAGATE SCSI BIOS REVISION 3.2
 */
 
 #define NUM_SIGNATURES (sizeof(signatures) / sizeof(Signature))
-#endif
+#endif /* n OVERRIDE */
 
 /*
  * hostno stores the hostnumber, as told to us by the init routine.
@@ -128,11 +150,21 @@ SEAGATE SCSI BIOS REVISION 3.2
 static int hostno = -1;
 static void seagate_reconnect_intr(int);
 
+/* 
+ * We try to autodetect the 0ws jumper.  If we get an over / under run,
+ * then we assume that the the handshaking done by 0ws to synchronize the 
+ * SCSI and ISA busses failed, and disable fast transfers.  
+ */
+
+#ifdef FAST
+static int fast = 1;
+#endif 
+
 int seagate_st0x_detect (int hostnum)
 	{
 #ifndef OVERRIDE
 	int i,j;
-#endif
+#endif 
 static struct sigaction seagate_sigaction = {
 	&seagate_reconnect_intr,
 	0,
@@ -162,12 +194,12 @@ static struct sigaction seagate_sigaction = {
 	controller_type = CONTROLLER;
 #else
 #error Please use -DCONTROLLER=SEAGATE or -DCONTROLLER=FD to override controller type
-#endif
+#endif /* CONTROLLER */
 #ifdef DEBUG
 	printk("Base address overridden to %x, controller type is %s\n",
 		base_address,controller_type == SEAGATE ? "SEAGATE" : "FD");
-#endif
-#else	
+#endif 
+#else /* OVERIDE */	
 /*
  *	To detect this card, we simply look for the signature
  *	from the BIOS version notice in all the possible locations
@@ -183,8 +215,10 @@ static struct sigaction seagate_sigaction = {
 			base_address = (void *) seagate_bases[i];
 			controller_type = signatures[j].type;
 		}
- #endif
+#endif /* OVERIDE */
  
+	scsi_hosts[hostnum].this_id = (controller_type == SEAGATE) ? 7 : 6;
+
 	if (base_address)
 		{
 		st0x_cr_sr =(void *) (((unsigned char *) base_address) + (controller_type == SEAGATE ? 0x1a00 : 0x1c00)); 
@@ -193,11 +227,13 @@ static struct sigaction seagate_sigaction = {
 		printk("ST0x detected. Base address = %x, cr = %x, dr = %x\n", base_address, st0x_cr_sr, st0x_dr);
 #endif
 /*
- *	At all times, we will use IRQ 5.  
+ *	At all times, we will use IRQ 5.  Should also check for IRQ3 if we 
+ * 	loose our first interrupt.
  */
 		hostno = hostnum;
-		if (irqaction(5, &seagate_sigaction)) {
-			printk("Unable to allocate IRQ5 for ST0x driver\n");
+		if (irqaction(IRQ, &seagate_sigaction)) {
+			printk("scsi%d : unable to allocate IRQ%d\n",
+				hostno, IRQ);
 			return 0;
 		}
 		return -1;
@@ -211,11 +247,23 @@ static struct sigaction seagate_sigaction = {
 		}
 	}
 	 
-const char *seagate_st0x_info(void)
-{
-	static char buffer[] = "Seagate ST-0X SCSI driver by Drew Eckhardt \n"
-"$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/seagate.c,v 1.1 1992/07/24 06:27:38 root Exp root $\n";
-	return buffer;
+const char *seagate_st0x_info(void) {
+      static char buffer[256];
+        sprintf(buffer, "scsi%d : %s at irq %d address %p options :"
+#ifdef FAST
+#ifdef FAST32
+" FAST32"
+#else
+" FAST"
+#endif
+#endif
+ 
+#ifdef LINKED
+" LINKED"
+#endif
+              "\n", hostno, (controller_type == SEAGATE) ? "seagate" : 
+              "FD TMC-950", IRQ, base_address);
+        return buffer;
 }
 
 /*
@@ -225,7 +273,23 @@ const char *seagate_st0x_info(void)
 
 static unsigned char current_target, current_lun;
 static unsigned char *current_cmnd, *current_data;
+static int current_nobuffs;
+static struct scatterlist *current_buffer;
 static int current_bufflen;
+
+#ifdef LINKED
+
+/* 
+ * linked_connected indicates weather or not we are currently connected to 
+ * linked_target, linked_lun and in an INFORMATION TRANSFER phase,
+ * using linked commands.
+ */
+
+static int linked_connected = 0;
+static unsigned char linked_target, linked_lun;
+#endif
+
+
 static void (*done_fn)(Scsi_Cmnd *) = NULL;
 static Scsi_Cmnd * SCint = NULL;
 
@@ -237,6 +301,18 @@ static Scsi_Cmnd * SCint = NULL;
 #define NO_RECONNECT 	0
 #define RECONNECT_NOW 	1
 #define CAN_RECONNECT	2
+
+#ifdef LINKED
+
+/*
+ * LINKED_RIGHT indicates that we are currently connected to the correct target
+ * for this command, LINKED_WRONG indicates that we are connected to the wrong 
+ * target.  Note that these imply CAN_RECONNECT.
+ */
+
+#define LINKED_RIGHT 	3
+#define LINKED_WRONG	4
+#endif
 
 /*
  * This determines if we are expecting to reconnect or not.
@@ -263,9 +339,8 @@ static void seagate_reconnect_intr (int unused)
 
 	if (!should_reconnect)
 	    printk("scsi%d: unexpected interrupt.\n", hostno);
-	else
-		{
-		should_reconnect = 0;
+	else {
+		 should_reconnect = 0;
 
 #if (DEBUG & PHASE_RESELECT)
 		printk("scsi%d : internal_command("
@@ -277,10 +352,8 @@ static void seagate_reconnect_intr (int unused)
 			current_cmnd, current_data, current_bufflen,
 			RECONNECT_NOW);
 
-		if (msg_byte(temp) != DISCONNECT)
-			{
-			if (done_fn)
-				{
+		if (msg_byte(temp) != DISCONNECT) {
+			if (done_fn) {
 #if (DEBUG & PHASE_RESELECT)
 				printk("scsi%d : done_fn(%d,%08x)", hostno, 
 				hostno, temp);
@@ -290,8 +363,7 @@ static void seagate_reconnect_intr (int unused)
 				SCint = NULL;
 				SCtmp->result = temp;
 				done_fn (SCtmp);
-				}
-			else
+			} else
 				printk("done_fn() not defined.\n");
 			}
 		}
@@ -312,7 +384,7 @@ static int recursion_depth = 0;
 
 int seagate_st0x_queue_command (Scsi_Cmnd * SCpnt,  void (*done)(Scsi_Cmnd *))
 	{
-	int result;
+	int result, reconnect;
 	Scsi_Cmnd * SCtmp;
 
 	done_fn = done;
@@ -327,10 +399,40 @@ int seagate_st0x_queue_command (Scsi_Cmnd * SCpnt,  void (*done)(Scsi_Cmnd *))
 	};
 	recursion_depth++;
 	do{
-	  
+#ifdef LINKED
+/*
+ * Set linked command bit in control field of SCSI command.
+ */
+
+	  current_cmnd[COMMAND_SIZE(current_cmnd[0])] |= 0x01;
+	  if (linked_connected) {
+#if (DEBUG & DEBUG_LINKED) 
+	    printk("scsi%d : using linked commands, current I_T_L nexus is ",
+	      hostno);
+#endif
+	    if ((linked_target == current_target) && 
+	      (linked_lun == current_lun)) {
+#if (DEBUG & DEBUG_LINKED) 
+	    printk("correct\n");
+#endif
+	      reconnect = LINKED_RIGHT;
+	    } else {
+#if (DEBUG & DEBUG_LINKED) 
+	    printk("incorrect\n");
+#endif
+	      reconnect = LINKED_WRONG;
+	    }
+	  } else 
+#endif /* LINKED */
+	    reconnect = CAN_RECONNECT;
+
+
+
+
+
 	  result = internal_command (SCint->target, SCint->lun, SCint->cmnd, SCint->request_buffer,
 				     SCint->request_bufflen, 
-				     CAN_RECONNECT);
+				     reconnect);
 	  if (msg_byte(result) == DISCONNECT)  break;
 	  SCtmp = SCint;
 	  SCint = NULL;
@@ -341,18 +443,18 @@ int seagate_st0x_queue_command (Scsi_Cmnd * SCpnt,  void (*done)(Scsi_Cmnd *))
 	return 0;
       }
 
-int seagate_st0x_command (Scsi_Cmnd * SCpnt)
-	{
+int seagate_st0x_command (Scsi_Cmnd * SCpnt) {
 	return internal_command (SCpnt->target, SCpnt->lun, SCpnt->cmnd, SCpnt->request_buffer,
 				 SCpnt->request_bufflen, 
 				 (int) NO_RECONNECT);
-	}
+}
 	
 static int internal_command(unsigned char target, unsigned char lun, const void *cmnd,
-			 void *buff, int bufflen, int reselect)
-	{
-	int len;			
+			 void *buff, int bufflen, int reselect) {
+	int len;
 	unsigned char *data;	
+	struct scatterlist *buffer;
+	int nobuffs;
 	int clock;			
 	int temp;
 
@@ -370,8 +472,7 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 	unsigned char message = 0;
 	register unsigned char status_read;
 
-	len=bufflen;
-	data=(unsigned char *) buff;
+	unsigned transfersize = 0, underflow = 0;
 
 	incommand = 0;
 	st0x_aborted = 0;
@@ -384,11 +485,19 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 #endif
 
 #if (DEBUG & PHASE_RESELECT)
-	switch (reselect)
-	{
+	switch (reselect) {
 	case RECONNECT_NOW :
 		printk("scsi%d : reconnecting\n", hostno);
 		break;
+#ifdef LINKED
+	case LINKED_RIGHT : 
+		printk("scsi%d : connected, can reconnect\n", hostno);
+		break;
+	case LINKED_WRONG :
+		printk("scsi%d : connected to wrong target, can reconnect\n",
+			hostno);
+		break;		
+#endif
 	case CAN_RECONNECT :
 		printk("scsi%d : allowed to reconnect\n", hostno);
 		break;
@@ -407,8 +516,8 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
  *	be asserted, and we must skip selection / arbitration phases.
  */
 
-	if (reselect == RECONNECT_NOW) 
-		{
+	switch (reselect) {
+	case RECONNECT_NOW:
 #if (DEBUG & PHASE_RESELECT)
 		printk("scsi%d : phase RESELECT \n", hostno);
 #endif
@@ -454,9 +563,12 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 				hostno, temp);
 			return (DID_BAD_INTR << 16);
 			}
-                data=current_data;      /* WDE add */
+
+		buffer=current_buffer;	
                 cmnd=current_cmnd;      /* WDE add */
+                data=current_data;      /* WDE add */
                 len=current_bufflen;    /* WDE add */
+		nobuffs=current_nobuffs;
 
 /*
  * 	We have determined that we have been selected.  At this point, 
@@ -488,9 +600,21 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
  *	At this point, we have connected with the target and can get 
  *	on with our lives.
  */	 
-		}  	
-	else
- 		{	
+		break;
+	case CAN_RECONNECT:
+
+#ifdef LINKED
+/*
+ * This is a bletcherous hack, just as bad as the Unix #! interpreter stuff.
+ * If it turns out we are using the wrong I_T_L nexus, the easiest way to deal
+ * with it is to go into our INFORMATION TRANSFER PHASE code, send a ABORT 
+ * message on MESSAGE OUT phase, and then loop back to here.
+ */
+  
+connect_loop :
+
+#endif
+
 #if (DEBUG & PHASE_BUS_FREE)
 		printk ("scsi%d : phase = BUS FREE \n", hostno);
 #endif
@@ -595,20 +719,66 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
  * 	notify the midlevel driver to expect sense.
  */
 
-		if (st0x_aborted)
-			{
+		if (st0x_aborted) {
 			CONTROL = BASE_CMD;
-			if (STATUS & STAT_BSY)
-				{
+			if (STATUS & STAT_BSY) {
 				seagate_st0x_reset();
 				return retcode(DID_RESET);
-				}
+			}
 			return retcode(st0x_aborted);
-			}	
-		}
+		}	
 
+/* Establish current pointers.  Take into account scatter / gather */
+
+        if ((nobuffs = SCint->use_sg)) {
+#if (DEBUG & DEBUG_SG)
+	{
+	int i;
+	printk("scsi%d : scatter gather requested, using %d buffers.\n",
+		hostno, nobuffs);
+	for (i = 0; i < nobuffs; ++i)
+		printk("scsi%d : buffer %d address = %08x length = %d\n",
+			hostno, i, buffer[i].address, buffer[i].length);
+	}
+#endif
+		
+                buffer = (struct scatterlist *) SCint->buffer;
+                len = buffer->length;
+                data = (unsigned char *) buffer->address;
+        } else {
+#if (DEBUG & DEBUG_SG)
+	printk("scsi%d : scatter gather not requested.\n", hostno);
+#endif
+                buffer = NULL;
+                len = SCint->request_bufflen;
+                data = (unsigned char *) SCint->request_buffer;
+        }
+
+		break;
+#ifdef LINKED
+	case LINKED_RIGHT:
+	    	break;
+	case LINKED_WRONG:
+		break;
+#endif
+	}
+
+/*
+ * 	There are several conditions under which we wish to send a message : 
+ *	1.  When we are allowing disconnect / reconnect, and need to establish
+ *	    the I_T_L nexus via an IDENTIFY with the DiscPriv bit set.
+ *
+ *	2.  When we are doing linked commands, are have the wrong I_T_L nexus
+ *	    established and want to send an ABORT message.
+ */
+
+	
 	CONTROL = BASE_CMD | CMD_DRVR_ENABLE | 
-		((reselect == CAN_RECONNECT) ? CMD_ATTN : 0) ;
+		(((reselect == CAN_RECONNECT)
+#ifdef LINKED 
+		|| (reselect == LINKED_WRONG)
+#endif 
+		)  ? CMD_ATTN : 0) ;
 	
 /*
  * 	INFORMATION TRANSFER PHASE
@@ -624,6 +794,8 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 #endif  
 
 	incommand = 1;
+	transfersize = SCint->transfersize;
+	underflow = SCint->underflow;
 
 
 /*
@@ -684,11 +856,69 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 				}	
 				}
 #endif
-
 		switch (status_read & REQ_MASK)
 		{			
 		case REQ_DATAOUT : 
+/*
+ * If we are in fast mode, then we simply splat the data out
+ * in word-sized chunks as fast as we can.
+ */
 
+#ifdef FAST 
+if (!len) {
+#if 0 
+        printk("scsi%d: underflow to target %d lun %d \n", 
+                hostno, target, lun);
+        st0x_aborted = DID_ERROR;
+        fast = 0;
+#endif
+        break;
+}
+
+if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
+#ifdef FAST32
+	&& !(transfersize % 4)
+#endif
+	) {
+#if (DEBUG & DEBUG_FAST) 
+        printk("scsi%d : FAST transfer, underflow = %d, transfersize = %d\n"
+               "         len = %d, data = %08x\n", hostno, SCint->underflow, 
+               SCint->transfersize, len, data);
+#endif
+
+        __asm__("
+	cld;
+        movl %0, %%edi;
+"
+#ifdef FAST32
+"	shr $2, %%ecx;
+1:	lodsl;
+	movl %%eax, (%%edi);
+"
+#else
+"1:	lodsb;
+        movb %%al, (%%edi);
+"
+#endif
+"	loop 1b;" ::
+        /* input */
+        "r" (st0x_dr), "S" (data), "c" (SCint->transfersize) :
+        /* clobbered */
+        "eax", "esi", "ecx", "edi");
+
+	len -= transfersize;
+	data += transfersize;
+
+#if (DEBUG & DEBUG_FAST)
+	printk("scsi%d : FAST transfer complete len = %d data = %08x\n", 
+		hostno, len, data);
+#endif
+
+
+} else 
+#endif
+
+{
 /*
  * 	We loop as long as we are in a data out phase, there is data to send, 
  *	and BSY is still active.
@@ -746,10 +976,74 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 "0" (data), "1" (len) :
 /* clobbered */
 "ebx", "ecx", "edi", "esi"); 
+}
 
+                        if (!len && nobuffs) {
+                                --nobuffs;
+                                ++buffer;
+                                len = buffer->length;
+                                data = (unsigned char *) buffer->address;
+#if (DEBUG & DEBUG_SG)
+	printk("scsi%d : next scatter-gather buffer len = %d address = %08x\n",
+		hostno, len, data);
+#endif
+                        }
 			break;
 
 		case REQ_DATAIN : 
+#ifdef FAST
+if (!len) {
+#if 0
+        printk("scsi%d: overflow from target %d lun %d \n", 
+                hostno, target, lun);
+        st0x_aborted = DID_ERROR;
+        fast = 0;
+#endif
+        break;
+}
+
+if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
+#ifdef FAST32
+	&& !(transfersize % 4)
+#endif
+	) {
+#if (DEBUG & DEBUG_FAST) 
+        printk("scsi%d : FAST transfer, underflow = %d, transfersize = %d\n"
+               "         len = %d, data = %08x\n", hostno, SCint->underflow, 
+               SCint->transfersize, len, data);
+#endif
+        __asm__("
+	cld;
+	movl %0, %%esi;
+"
+#ifdef FAST32
+"	shr $2, %%ecx;
+1:	movl (%%esi), %%eax;
+	stosl;
+"
+#else
+"1:	movb (%%esi), %%al;
+        stosb;
+"
+#endif
+
+"	loop 1b;" ::
+        /* input */
+        "r" (st0x_dr), "D" (data), "c" (SCint->transfersize) :
+        /* clobbered */
+        "eax", "ecx", "edi", "esi");
+
+	len -= transfersize;
+	data += transfersize;
+
+#if (DEBUG & DEBUG_FAST)
+	printk("scsi%d : FAST transfer complete len = %d data = %08x\n", 
+		hostno, len, data);
+#endif
+
+} else
+#endif
+{
 /*
  * 	We loop as long as we are in a data in phase, there is room to read, 
  * 	and BSY is still active
@@ -810,6 +1104,18 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 "0" (data), "1" (len) :
 /* clobbered */
 "ebx", "ecx", "edi", "esi"); 
+}
+                        if (!len && nobuffs) {
+                                --nobuffs;
+                                ++buffer;
+                                len = buffer->length;
+                                data = (unsigned char *) buffer->address;
+#if (DEBUG & DEBUG_SG)
+	printk("scsi%d : next scatter-gather buffer len = %d address = %08x\n",
+		hostno, len, data);
+#endif
+                        }
+
 			break;
 
 		case REQ_CMDOUT : 
@@ -834,41 +1140,64 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
  * 	If we are reconecting, then we must send an IDENTIFY message in 
  *	 response  to MSGOUT.
  */
-			if (reselect)
-				{
+			switch (reselect) {
+			case CAN_RECONNECT:
 				DATA = IDENTIFY(1, lun);
 #if (DEBUG & (PHASE_RESELECT | PHASE_MSGOUT)) 
 				printk("scsi%d : sent IDENTIFY message.\n", hostno);
 #endif
-				}
-			else  
-				{
-				DATA = MESSAGE_REJECT;
-				
-#if (DEBUG & PHASE_MSGOUT)
-				printk("scsi%d : sent MESSAGE REJECT message.\n", hostno);
+				break;
+#ifdef LINKED
+			case LINKED_WRONG:
+				DATA = ABORT;
+				linked_connected = 0;
+				reselect = CAN_RECONNECT;
+				goto connect_loop;
+#if (DEBUG & (PHASE_MSGOUT | DEBUG_LINKED))
+				printk("scsi%d : sent ABORT message to cancle incorrect I_T_L nexus.\n", hostno);
 #endif
-				}
+#endif /* LINKED */
+#if (DEBUG & DEBUG_LINKED) 
+	    printk("correct\n");
+#endif
+			default:
+				DATA = NOP;
+#if (DEBUG & PHASE_MSGOUT)
+				printk("scsi%d : sent NOP message.\n", hostno);
+#endif
+			}
 			break;
 					
 		case REQ_MSGIN : 
-			switch (message = DATA)
-			{
+			switch (message = DATA) {
 			case DISCONNECT :
 				should_reconnect = 1;
                                 current_data = data;    /* WDE add */
+				current_buffer = buffer;
                                 current_bufflen = len;  /* WDE add */
+				current_nobuffs = nobuffs;
+#ifdef LINKED
+				linked_connected = 0;
+#endif
+				done=1;
 #if (DEBUG & (PHASE_RESELECT | PHASE_MSGIN))
 				printk("scsi%d : disconnected.\n", hostno);
-				done=1;
+#endif
 				break;
+
+#ifdef LINKED
+			case LINKED_CMD_COMPLETE:
+			case LINKED_FLG_CMD_COMPLETE:
 #endif
 			case COMMAND_COMPLETE :
+/*
+ * Note : we should check for underflow here.   
+ */
 #if (DEBUG & PHASE_MSGIN)	
 				printk("scsi%d : command complete.\n", hostno);
-				done=1;
-				break;
 #endif
+				done = 1;
+				break;
 			case ABORT :
 #if (DEBUG & PHASE_MSGIN)
 				printk("scsi%d : abort message.\n", hostno);
@@ -876,15 +1205,20 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 				done=1;
 				break;
 			case SAVE_POINTERS :
-				current_data = data;	/* WDE mod */
+				current_buffer = buffer;
                                 current_bufflen = len;  /* WDE add */
+				current_data = data;	/* WDE mod */
+				current_nobuffs = nobuffs;
 #if (DEBUG & PHASE_MSGIN)
 				printk("scsi%d : pointers saved.\n", hostno);
 #endif 
 				break;
 			case RESTORE_POINTERS:
-				data=current_data;	/* WDE mod */
+				buffer=current_buffer;
 				cmnd=current_cmnd;
+				data=current_data;	/* WDE mod */
+				len=current_bufflen;
+				nobuffs=current_nobuffs;
 #if (DEBUG & PHASE_MSGIN)
 				printk("scsi%d : pointers restored.\n", hostno);
 #endif
@@ -894,23 +1228,30 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 /*
  * 	IDENTIFY distinguishes itself from the other messages by setting the
  *	high byte.
+ * 	
+ *	Note : we need to handle at least one outstanding command per LUN,
+ *	and need to hash the SCSI command for that I_T_L nexus based on the 
+ *	known ID (at this point) and LUN.
  */
 
-				if (message & 0x80)
-					{
+				if (message & 0x80) {
 #if (DEBUG & PHASE_MSGIN)
 					printk("scsi%d : IDENTIFY message received from id %d, lun %d.\n",
 						hostno, target, message & 7);
 #endif
-					}	
-				else
-					{
-			
+				} else {
+
+/*
+ *      We should go into a MESSAGE OUT phase, and send  a MESSAGE_REJECT 
+ * 	if we run into a message that we don't like.  The seagate driver 
+ * 	needs some serious restructuring first though.
+ */
+
 #if (DEBUG & PHASE_MSGIN)
 					printk("scsi%d : unknown message %d from target %d.\n",
 						hostno,  message,   target);
 #endif	
-					}
+				}
 			}
 			break;
 
@@ -933,26 +1274,69 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 	printk("Status = %02x, message = %02x\n", status, message);
 #endif
 
-	
-	if (st0x_aborted)
-		{
-		if (STATUS & STAT_BSY)
-			{
+	if (st0x_aborted) {
+		if (STATUS & STAT_BSY) {	
 			seagate_st0x_reset();
 			st0x_aborted = DID_RESET;
-			}
+		} 
 		abort_confirm = 1;
-		}		
+	} 
+#ifdef LINKED
+else {
+/*
+ * Fix the message byte so that unsuspecting high level drivers don't 
+ * puke when they see a LINKED COMMAND message in place of the COMMAND 
+ * COMPLETE they may be expecting.  Shouldn't be necessary, but it's 
+ * better to be on the safe side. 
+ *
+ * A non LINKED* message byte will indicate that the command completed, 
+ * and we are now disconnected.
+ */
 
-	if (should_reconnect)
-		{
+		switch (message) {
+		case LINKED_CMD_COMPLETE :
+		case LINKED_FLG_CMD_COMPLETE : 
+			message = COMMAND_COMPLETE;
+			linked_target = current_target;
+			linked_lun = current_lun;
+			linked_connected = 1;
+#if (DEBUG & DEBUG_LINKED)
+			printk("scsi%d : keeping I_T_L nexus established for linked command.\n", 
+				hostno);
+#endif
+/*
+ * We also will need to adjust status to accomodate intermediate conditions.
+ */
+			if ((status == INTERMEDIATE_GOOD) ||
+				(status == INTERMEDIATE_C_GOOD))
+				status = GOOD;
+			
+			break;
+/*
+ * We should also handle what are "normal" termination messages 
+ * here (ABORT, BUS_DEVICE_RESET?, and COMMAND_COMPLETE individually, 
+ * and flake if things aren't right.
+ */
+
+		default :
+#if (DEBUG & DEBUG_LINKED)
+			printk("scsi%d : closing I_T_L nexus.\n", hostno);
+#endif
+			linked_connected = 0;
+		}
+	}
+#endif /* LINKED */
+
+
+
+
+	if (should_reconnect) {
 #if (DEBUG & PHASE_RESELECT)
 		printk("scsi%d : exiting seagate_st0x_queue_command() with reconnect enabled.\n",
 			hostno);
 #endif
 		CONTROL = BASE_CMD | CMD_INTR ;
-		}
-	else
+	} else 
 		CONTROL = BASE_CMD;
 
 	return retcode (st0x_aborted);
@@ -1005,5 +1389,127 @@ int seagate_st0x_reset (void)
 	return 0;
 	}
 
-#endif	
+#ifdef CONFIG_BLK_DEV_SD
+
+#include <asm/segment.h>
+#include "sd.h"
+#include "scsi_ioctl.h"
+
+extern int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
+
+int seagate_st0x_biosparam(int size, int dev, int* info) {
+  unsigned char buf[256 + sizeof(int) * 2], cmd[6], *data, *page;
+  int *sizes, result, formatted_sectors, total_sectors;
+  int cylinders, heads, sectors;
+
+  unsigned long oldfs;
+  Scsi_Device *disk;
+
+  disk = rscsi_disks[MINOR(dev) >> 4].device;
+
+/*
+ * Only SCSI-I CCS drives and later implement the necessary mode sense 
+ * pages.  
+ */
+
+  if (disk->scsi_level < 2) 
+	return -1;
+
+  sizes = (int *) buf;
+  data = (unsigned char *) (sizes + 2);
+
+/*
+ * Point fs, which normally points to user space, at kernel space so that 
+ * we can do a syscall with the data coming from kernel space.  
+ */
+
+  oldfs = get_fs();
+  set_fs(get_ds());
+
+  cmd[0] = MODE_SENSE;
+  cmd[1] = (disk->lun << 5) & 0xe5;
+  cmd[2] = 0x04; /* Read page 4, rigid disk geometry page current values */
+  cmd[3] = 0;
+  cmd[4] = 255;
+  cmd[5] = 0;
+
+/*
+ * We are transfering 0 bytes in the out direction, and expect to get back
+ * 24 bytes for each mode page.
+ */
+
+  sizes[0] = 0;
+  sizes[1] = 256;
+
+  memcpy (data, cmd, 6);
+
+  if (!(result = scsi_ioctl (disk, SCSI_IOCTL_SEND_COMMAND, (void *) buf))) {
+/*
+ * The mode page lies beyond the MODE SENSE header, with length 4, and 
+ * the BLOCK DESCRIPTOR, with length header[3].
+ */
+
+    page = data + 4 + data[3];
+    heads = (int) page[5];
+    cylinders = (page[2] << 16) | (page[3] << 8) | page[4];
+
+    cmd[2] = 0x03; /* Read page 3, format page current values */
+    memcpy (data, cmd, 6);
+
+    if (!(result = scsi_ioctl (disk, SCSI_IOCTL_SEND_COMMAND, (void *) buf))) {
+      page = data + 4 + data[3];
+      sectors = (page[10] << 8) | page[11];	
+
+	
+/*
+ * Get the total number of formatted sectors from the block descriptor, 
+ * so we can tell how many are being used for alternates.  
+ */
+
+      formatted_sectors = (data[4 + 1] << 16) | (data[4 + 2] << 8) |
+	data[4 + 3] ;
+
+      total_sectors = (heads * cylinders * sectors);
+
+/*
+ * Adjust the real geometry by subtracting 
+ * (spare sectors / (heads * tracks)) cylinders from the number of cylinders.
+ *
+ * It appears that the CE cylinder CAN be a partial cylinder.
+ */
+
+     
+printk("scsi%d : heads = %d cylinders = %d sectors = %d total = %d formatted = %d\n",
+    hostno, heads, cylinders, sectors, total_sectors, formatted_sectors);
+
+      cylinders -= ((total_sectors - formatted_sectors) / (heads * sectors));
+
+/*
+ * Now, we need to do a sanity check on the geometry to see if it is 
+ * BIOS compatable.  The maximum BIOS geometry is 1024 cylinders * 
+ * 256 heads * 64 sectors. 
+ */
+
+      if ((cylinders > 1024) || (sectors > 64)) 
+	result = -1;
+      else {
+	info[0] = heads;
+	info[1] = sectors;
+	info[2] = cylinders;
+      }
+
+/* 
+ * There should be an alternate mapping for things the seagate doesn't
+ * understand, but I couldn't say what it is with reasonable certainty.
+ */
+
+      }
+    }
+    
+  set_fs(oldfs);
+  return result;
+}
+#endif /* CONFIG_BLK_DEV_SD */
+
+#endif	/* defined(CONFIG_SCSI_SEGATE) */
 

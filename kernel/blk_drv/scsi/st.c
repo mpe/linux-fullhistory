@@ -83,7 +83,7 @@ int NR_ST=0;
 int MAX_ST=0;
 
 static int st_int_ioctl(struct inode * inode,struct file * file,
-	     unsigned int cmd_in, unsigned int arg);
+	     unsigned int cmd_in, unsigned long arg);
 
 
 
@@ -845,7 +845,7 @@ int st_read(struct inode * inode, struct file * filp, char * buf, int count)
 
 /* Internal ioctl function */
 static int st_int_ioctl(struct inode * inode,struct file * file,
-	     unsigned int cmd_in, unsigned int arg)
+	     unsigned int cmd_in, unsigned long arg)
 {
    int dev = inode->i_rdev;
    int timeout = ST_LONG_TIMEOUT;
@@ -1086,7 +1086,7 @@ static int st_int_ioctl(struct inode * inode,struct file * file,
 
 /* The ioctl command */
 static int st_ioctl(struct inode * inode,struct file * file,
-	     unsigned int cmd_in, unsigned int arg)
+	     unsigned int cmd_in, unsigned long arg)
 {
    int dev = inode->i_rdev;
    int i, cmd, result;

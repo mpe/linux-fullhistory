@@ -3,7 +3,8 @@
  |                                                                           |
  | Compute the base 2 log of a FPU_REG, using a polynomial approximation.    |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
@@ -13,6 +14,7 @@
 #include "exception.h"
 #include "reg_constant.h"
 #include "fpu_emu.h"
+#include "control_w.h"
 
 
 
@@ -60,7 +62,7 @@ void	poly_l2(FPU_REG *arg, FPU_REG *result)
       exponent++;
       accum.sign = 1;	/* sign to negative */
       num.exp = EXP_BIAS;  /* needed to prevent errors in div routine */
-      reg_u_div((long long *)&(CONST_1.sigl), (long long *)&(arg->sigl), &num);
+      reg_u_div(&CONST_1, arg, &num, FULL_PRECISION);
     }
   else
     {
@@ -79,7 +81,7 @@ void	poly_l2(FPU_REG *arg, FPU_REG *result)
   poly_div4((long long *)&(denom.sigl));
   denom.sigh += 0x80000000;			/* set the msb */
   Xx.exp = EXP_BIAS;  /* needed to prevent errors in div routine */
-  reg_u_div((long long *)&num.sigl, (long long *)&(denom.sigl), &Xx);
+  reg_u_div(&num, &denom, &Xx, FULL_PRECISION);
 
   zero = !(Xx.sigh | Xx.sigl);
   
@@ -122,7 +124,7 @@ void	poly_l2(FPU_REG *arg, FPU_REG *result)
 	      /* Use  1-1/(1-x) = x/(1-x) */
 	      *((long long *)&num.sigl) = - *((long long *)&(arg->sigl));
 	      normalize(&num);
-	      reg_div(&num, arg, &num);
+	      reg_div(&num, arg, &num, FULL_PRECISION);
 	    }
 	  else
 	    {
@@ -133,12 +135,12 @@ void	poly_l2(FPU_REG *arg, FPU_REG *result)
 	  denom.sign = SIGN_POS;	/* set the sign to positive */
 	  denom.exp = EXP_BIAS;
 	  
-	  reg_div(&num, &denom, &lXx);
+	  reg_div(&num, &denom, &lXx, FULL_PRECISION);
 
-	  reg_u_mul(&lXx, &accum, &accum);
+	  reg_u_mul(&lXx, &accum, &accum, FULL_PRECISION);
 	  accum.exp += - EXP_BIAS + 1;
 
-	  reg_u_add(&lXx, &accum, result);
+	  reg_u_add(&lXx, &accum, result, FULL_PRECISION);
 	  
 	  normalize(result);
 	}
@@ -230,15 +232,15 @@ int	poly_l2p1(FPU_REG *arg, FPU_REG *result)
 
   sign = arg->sign;
 
-  reg_add(arg, &CONST_1, &arg_pl1);
+  reg_add(arg, &CONST_1, &arg_pl1, FULL_PRECISION);
 
   if ( (arg_pl1.sign) | (arg_pl1.tag) )
     {			/* We need a valid positive number! */
       return 1;
     }
 
-  reg_add(&CONST_1, &arg_pl1, &denom);
-  reg_div(arg, &denom, &local_arg);
+  reg_add(&CONST_1, &arg_pl1, &denom, FULL_PRECISION);
+  reg_div(arg, &denom, &local_arg, FULL_PRECISION);
   local_arg.sign = 0;	/* Make the sign positive */
 
   /* Now we need to check that  |local_arg| is less than
@@ -273,10 +275,10 @@ int	poly_l2p1(FPU_REG *arg, FPU_REG *result)
   accum.exp = EXP_BIAS - 1;
   normalize(&accum);
 
-  reg_u_mul(&local_arg, &accum, &accum);
+  reg_u_mul(&local_arg, &accum, &accum, FULL_PRECISION);
   accum.exp -= EXP_BIAS - 1;
 
-  reg_u_add(&local_arg, &accum, result);
+  reg_u_add(&local_arg, &accum, result, FULL_PRECISION);
 
   /* Multiply the result by 2 */
   result->exp++;

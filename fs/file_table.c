@@ -9,6 +9,12 @@
 
 struct file file_table[NR_FILE];
 
+unsigned long file_table_init(unsigned long start, unsigned long end)
+{
+	memset(file_table,0,sizeof(file_table));
+	return start;
+}
+
 struct file * get_empty_filp(void)
 {
 	int i;

@@ -38,7 +38,7 @@ static int * sr_sizes;
 
 static int sr_open(struct inode *, struct file *);
 
-extern int sr_ioctl(struct inode *, struct file *, unsigned int, unsigned int);
+extern int sr_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 
 void requeue_sr_request (Scsi_Cmnd * SCpnt);
 

@@ -3,7 +3,8 @@
  |                                                                           |
  |  Computation of an approximation of the sin function by a polynomial      |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
@@ -13,6 +14,7 @@
 #include "exception.h"
 #include "reg_constant.h"
 #include "fpu_emu.h"
+#include "control_w.h"
 
 
 #define	HIPOWER	5
@@ -117,8 +119,8 @@ void	poly_sine(FPU_REG *arg, FPU_REG *result)
   
   normalize(result);
 
-  reg_mul(result, arg, result);
-  reg_u_add(result, arg, result);
+  reg_mul(result, arg, result, FULL_PRECISION);
+  reg_u_add(result, arg, result, FULL_PRECISION);
   
   /* A small overflow may be possible... but an illegal result. */
   if ( result->exp >= EXP_BIAS )

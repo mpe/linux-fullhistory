@@ -198,7 +198,15 @@ static void parse_options(char *line)
 		if (!strcmp(line,"rw")) {
 			root_mountflags &= ~MS_RDONLY;
 			continue;
-		}		
+		}
+		if (!strcmp(line,"no387")) {
+			hard_math = 0;
+			__asm__("movl %%cr0,%%eax\n\t"
+				"andl $0xFFFFFFF9,%%eax\n\t"
+				"orl $0x4,%%eax\n\t"
+				"movl %%eax,%%cr0\n\t" ::: "ax");
+			continue;
+		}
 		/*
 		 * Then check if it's an environment variable or
 		 * an option.
@@ -275,6 +283,7 @@ void start_kernel(void)
 	memory_start = scsi_dev_init(memory_start,memory_end);
 #endif
 	memory_start = inode_init(memory_start,memory_end);
+	memory_start = file_table_init(memory_start,memory_end);
 	mem_init(low_memory_start,memory_start,memory_end);
 	buffer_init();
 	time_init();

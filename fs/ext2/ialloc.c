@@ -32,27 +32,28 @@
 
 #include <asm/bitops.h>
 
-static inline int find_first_zero_bit(unsigned *addr, unsigned size)
+static inline int find_first_zero_bit(unsigned * addr, unsigned size)
 {
 	int res;
 	if (!size)
 		return 0;
 	__asm__("
-	cld
-	movl $-1,%%eax
-	repe; scasl
-	je 1f
-	subl $4,%%edi
-	movl (%%edi),%%eax
-	notl %%eax
-	bsfl %%eax,%%edx
-	jmp 2f
-1:	xorl %%edx,%%edx
-2:	subl %%ebx,%%edi
-	shll $3,%%edi
-	addl %%edi,%%edx"
-	:"=d" (res):"c" ((size+31)>>5), "D" (addr), "b" (addr)
-	:"ax", "bx", "cx", "di");
+		cld
+		movl $-1,%%eax
+		repe; scasl
+		je 1f
+		subl $4,%%edi
+		movl (%%edi),%%eax
+		notl %%eax
+		bsfl %%eax,%%edx
+		jmp 2f
+1:		xorl %%edx,%%edx
+2:		subl %%ebx,%%edi
+		shll $3,%%edi
+		addl %%edi,%%edx"
+		: "=d" (res)
+		:"c" ((size + 31) >> 5), "D" (addr), "b" (addr)
+		: "ax", "bx", "cx", "di");
 	return res;
 }
 
@@ -289,17 +290,16 @@ static void inc_inode_version (struct inode * inode,
 			EXT2_INODES_PER_GROUP(inode->i_sb)) %
 			EXT2_INODES_PER_BLOCK(inode->i_sb));
 	raw_inode->i_version++;
-	if (!S_ISFIFO(mode))
-		inode->u.ext2_i.i_version = raw_inode->i_version;
+	inode->u.ext2_i.i_version = raw_inode->i_version;
 	bh->b_dirt = 1;
 	brelse (bh);
 }
 
-static struct ext2_group_desc * 
-get_group_desc(struct super_block *sb, int group)
+static struct ext2_group_desc * get_group_desc(struct super_block * sb,
+					       int group)
 {
 	struct ext2_group_desc * gdp;
-	if (group >=  sb->u.ext2_sb.s_groups_count || group < 0 )
+	if (group >= sb->u.ext2_sb.s_groups_count || group < 0 )
 		panic ("ext2: get_group_desc: Invalid group\n");
 	if (!sb->u.ext2_sb.s_group_desc[group / EXT2_DESC_PER_BLOCK(sb)])
 		panic ("ext2: get_group_desc: Descriptor not loaded");
@@ -340,7 +340,7 @@ repeat:
 	gdp = NULL; i=0;
 	
 	if (S_ISDIR(mode)) {
-		avefreei = es->s_free_inodes_count / 
+		avefreei = es->s_free_inodes_count /
 			sb->u.ext2_sb.s_groups_count;
 /* I am not yet convinced that this next bit is necessary.
 		i = dir->u.ext2_i.i_block_group;
@@ -377,11 +377,11 @@ repeat:
 			gdp = tmp;
 		else
 		{ /* Use a quadratic hash to find a group with a free inode */
-			for (j=1; j<sb->u.ext2_sb.s_groups_count; j<<=1) {
-				i+=j;
-				if (i>=sb->u.ext2_sb.s_groups_count)
-					i-=sb->u.ext2_sb.s_groups_count;
-				tmp = get_group_desc(sb,i);
+			for (j = 1; j < sb->u.ext2_sb.s_groups_count; j <<= 1) {
+				i += j;
+				if (i >= sb->u.ext2_sb.s_groups_count)
+					i -= sb->u.ext2_sb.s_groups_count;
+				tmp = get_group_desc(sb, i);
 				if (tmp->bg_free_inodes_count) {
 					gdp = tmp;
 					break;
@@ -391,9 +391,9 @@ repeat:
 		if (!gdp) {
 			/* That failed: try linear search for a free inode */
 			i = dir->u.ext2_i.i_block_group + 2;
-			for (j=2; j<sb->u.ext2_sb.s_groups_count; j++) {
-				if (++i > sb->u.ext2_sb.s_groups_count)
-					i=0;
+			for (j = 2; j < sb->u.ext2_sb.s_groups_count; j++) {
+				if (++i >= sb->u.ext2_sb.s_groups_count)
+					i = 0;
 				tmp = get_group_desc(sb,i);
 				if (tmp->bg_free_inodes_count) {
 					gdp = tmp;
@@ -454,8 +454,7 @@ repeat:
 	inode->u.ext2_i.i_file_acl = 0;
 	inode->u.ext2_i.i_dir_acl = 0;
 	inode->u.ext2_i.i_dtime = 0;
- 	if (!S_ISFIFO(mode))
- 		inode->u.ext2_i.i_block_group = i;
+	inode->u.ext2_i.i_block_group = i;
 	inode->i_op = NULL;
 	inc_inode_version (inode, gdp, mode);
 #ifdef EXT2FS_DEBUG

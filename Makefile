@@ -68,7 +68,7 @@ KEYBOARD = -DKBD_FINNISH -DKBDFLAGS=0
 # The number is the same as you would ordinarily press at bootup.
 #
 
-SVGA_MODE=	-DSVGA_MODE=1
+SVGA_MODE=	-DSVGA_MODE=3
 
 #
 # standard CFLAGS
@@ -139,7 +139,7 @@ tools/./version.h: tools/version.h
 
 tools/version.h: $(CONFIGURE) Makefile
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.99.pl8-`cat .version`\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.99.pl9-`cat .version`\" > tools/version.h
 	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h

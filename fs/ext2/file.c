@@ -44,7 +44,7 @@ static struct file_operations ext2_file_operations = {
 	ext2_file_write,	/* write */
 	NULL,			/* readdir - bad */
 	NULL,			/* select - default */
-	NULL,			/* ioctl - default */
+	ext2_ioctl,		/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open is needed */
 	NULL,			/* release */
@@ -66,7 +66,7 @@ struct inode_operations ext2_file_inode_operations = {
 	NULL,			/* follow_link */
 	ext2_bmap,		/* bmap */
 	ext2_truncate,		/* truncate */
-	NULL			/* permission */
+	ext2_permission		/* permission */
 };
 
 /* static */ int ext2_file_read (struct inode * inode, struct file * filp,
@@ -79,7 +79,7 @@ struct inode_operations ext2_file_inode_operations = {
 	struct buffer_head * bhreq[NBUF];
 	struct buffer_head * buflist[NBUF];
 	struct super_block * sb;
-	unsigned int size;
+	unsigned int size, err;
 
 	if (!inode) {
 		printk ("ext2_file_read: inode = NULL\n");
@@ -127,7 +127,7 @@ struct inode_operations ext2_file_inode_operations = {
 		uptodate = 1;
 		while (blocks) {
 			--blocks;
-			*bhb = ext2_getblk (inode, block++, 0);
+			*bhb = ext2_getblk (inode, block++, 0, &err);
 			if (*bhb && !(*bhb)->b_uptodate) {
 				uptodate = 0;
 				bhreq[bhrequest++] = *bhb;
@@ -203,6 +203,7 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 	struct buffer_head * bh;
 	char * p;
 	struct super_block * sb;
+	int err;
 
 	if (!inode) {
 		printk("ext2_file_write: inode = NULL\n");
@@ -223,13 +224,13 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 		pos = filp->f_pos;
 	written = 0;
 	while (written < count) {
-		bh = ext2_getblk (inode, pos / sb->s_blocksize, 1);
+		bh = ext2_getblk (inode, pos / sb->s_blocksize, 1, &err);
 		if (!bh) {
 #ifdef EXT2FS_DEBUG
 			printk ("ext2_file_write: ext2_getblk returned NULL\n");
 #endif
 			if (!written)
-				written = -ENOSPC;
+				written = err;
 			break;
 		}
 		c = sb->s_blocksize - (pos % sb->s_blocksize);

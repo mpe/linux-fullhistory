@@ -5,6 +5,7 @@
  * second extended file system inode data in memory
  */
 struct ext2_inode_info {
+	unsigned long i_data[15];
 	unsigned long i_flags;
 	unsigned long i_faddr;
 	unsigned char i_frag;
@@ -17,7 +18,6 @@ struct ext2_inode_info {
 	unsigned long i_block_group;
 	unsigned long i_next_alloc_block;
 	unsigned long i_next_alloc_goal;
-	unsigned long i_data[15];
 };
 
 #endif

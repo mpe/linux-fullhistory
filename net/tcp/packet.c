@@ -158,7 +158,7 @@ packet_sendto (volatile struct sock *sk, unsigned char *from, int len,
    /* this shouldn't happen, but it could. */
    if (skb == NULL)
      {
-	PRINTK ("packet_sendto: write buffer full?\n");
+	PRINTK (("packet_sendto: write buffer full?\n"));
 	return (-EAGAIN);
      }
    skb->lock = 0;
@@ -259,6 +259,7 @@ packet_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 		  interruptible_sleep_on (sk->sleep);
 		  if (current->signal & ~current->blocked)
 		    {
+		       sti();
 		       return (-ERESTARTSYS);
 		    }
 	       }

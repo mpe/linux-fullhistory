@@ -92,6 +92,7 @@ extern unsigned long put_dirty_page(struct task_struct * tsk,unsigned long page,
 extern void free_page_tables(struct task_struct * tsk);
 extern void clear_page_tables(struct task_struct * tsk);
 extern int copy_page_tables(struct task_struct * new);
+extern int clone_page_tables(struct task_struct * new);
 extern int unmap_page_range(unsigned long from, unsigned long size);
 extern int remap_page_range(unsigned long from, unsigned long to, unsigned long size, int mask);
 extern int zeromap_page_range(unsigned long from, unsigned long size, int mask);

@@ -38,31 +38,32 @@
 		:"a" (0), "c" (size/4), "D" ((long) (addr)) \
 		:"cx", "di")
 
-static inline int find_first_zero_bit(unsigned *addr, unsigned size)
+static inline int find_first_zero_bit (unsigned *addr, unsigned size)
 {
 	int res;
 	if (!size)
 		return 0;
 	__asm__("
-	cld
-	movl $-1,%%eax
-	repe; scasl
-	je 1f
-	subl $4,%%edi
-	movl (%%edi),%%eax
-	notl %%eax
-	bsfl %%eax,%%edx
-	jmp 2f
-1:	xorl %%edx,%%edx
-2:	subl %%ebx,%%edi
-	shll $3,%%edi
-	addl %%edi,%%edx"
-	:"=d" (res):"c" ((size+31)>>5), "D" (addr), "b" (addr)
-	:"ax", "bx", "cx", "di");
+		cld
+		movl $-1,%%eax
+		repe; scasl
+		je 1f
+		subl $4,%%edi
+		movl (%%edi),%%eax
+		notl %%eax
+		bsfl %%eax,%%edx
+		jmp 2f
+1:		xorl %%edx,%%edx
+2:		subl %%ebx,%%edi
+		shll $3,%%edi
+		addl %%edi,%%edx"
+		:"=d" (res)
+		:"c" ((size+31)>>5), "D" (addr), "b" (addr)
+		:"ax", "bx", "cx", "di");
 	return res;
 }
 
-static inline int find_next_zero_bit(unsigned *addr, int size, int offset)
+static inline int find_next_zero_bit (unsigned * addr, int size, int offset)
 {
 	unsigned *p = ((unsigned *) addr) + (offset >> 5);
 	int set = 0, bit = offset & 31, res;
@@ -70,32 +71,37 @@ static inline int find_next_zero_bit(unsigned *addr, int size, int offset)
 	if (bit) {
 		/* Look for zero in first byte */
 		__asm__("
-		bsfl %1,%0
-		jne 1f
-		movl $32, %0
-1:		" : "=r" (set) : "r" (~(*p >> bit)));
-		if (set < (32-bit))
+			bsfl %1,%0
+			jne 1f
+			movl $32, %0
+1:			"
+			: "=r" (set)
+			: "r" (~(*p >> bit)));
+		if (set < (32 - bit))
 			return set + offset;
-		set = 32-bit;
+		set = 32 - bit;
 		p++;
 	}
 	/* No zero yet, search remaining full bytes for a zero */
-	res = find_first_zero_bit(p, size-32*(p-addr));
+	res = find_first_zero_bit (p, size - 32 * (p - addr));
 	return (offset + set + res);
 }
 
-static inline char * find_first_zero_byte(char *addr,int size)
+static inline char * find_first_zero_byte (char * addr, int size)
 {
 	char *res;
 	if (!size)
 		return 0;
 	__asm__("
-	cld
-	mov $0,%%eax
-	repnz; scasb
-	jnz 1f
-	dec %%edi
-1:	" : "=D" (res) : "0" (addr), "c" (size) : "ax");
+		cld
+		mov $0,%%eax
+		repnz; scasb
+		jnz 1f
+		dec %%edi
+1:		"
+		: "=D" (res)
+		: "0" (addr), "c" (size)
+		: "ax");
 	return res;
 }
 
@@ -155,8 +161,8 @@ static int load__block_bitmap (struct super_block * sb,
 
 	if (sb->u.ext2_sb.s_groups_count <= EXT2_MAX_GROUP_LOADED) {
 		if (sb->u.ext2_sb.s_block_bitmap[block_group]) {
-			if (sb->u.ext2_sb.s_block_bitmap_number[block_group] 
-			    != block_group)
+			if (sb->u.ext2_sb.s_block_bitmap_number[block_group] !=
+			    block_group)
 				panic ("load_block_bitmap: "
 				       "block_group != block_bitmap_number");
 			else
@@ -189,7 +195,7 @@ static int load__block_bitmap (struct super_block * sb,
 		else
 			brelse (sb->u.ext2_sb.s_block_bitmap
 				[EXT2_MAX_GROUP_LOADED - 1]);
-		for (j = sb->u.ext2_sb.s_loaded_block_bitmaps-1; j>0;  j--) {
+		for (j = sb->u.ext2_sb.s_loaded_block_bitmaps - 1; j > 0;  j--) {
 			sb->u.ext2_sb.s_block_bitmap_number[j] =
 				sb->u.ext2_sb.s_block_bitmap_number[j - 1];
 			sb->u.ext2_sb.s_block_bitmap[j] =
@@ -337,14 +343,12 @@ repeat:
 		bitmap_nr = load_block_bitmap (sb, i);
 		bh = sb->u.ext2_sb.s_block_bitmap[bitmap_nr];
 		if (!bh) {
-			printk ("Cannot load bitmap_nr %d.\n",
-				bitmap_nr);
+			printk ("Cannot load bitmap_nr %d.\n", bitmap_nr);
 			unlock_super (sb);
 			return 0;
 		}
 #ifdef EXT2FS_DEBUG
-		printk ("goal is at %d[%d,%d]:%d.\n", 
-			i, group_desc, desc, j);
+		printk ("goal is at %d[%d,%d]:%d.\n", i, group_desc, desc, j);
 #endif
 		if (!test_bit(j, bh->b_data)) {
 #ifdef EXT2FS_DEBUG
@@ -356,14 +360,18 @@ repeat:
 		if (j) {
 			/* The goal was occupied; search forward for a free 
 			   block within the next 32 blocks */
-			lmap = (((((unsigned long *) bh->b_data)[j >> 5]) 
-				 >> ((j&31)+1)) |
-				((((unsigned long *) bh->b_data)[(j>>5)+1])
-				 <<(31-(j&31))));
+			lmap = ((((unsigned long *) bh->b_data)[j >> 5]) >>
+				((j & 31) + 1));
+			if (j < EXT2_BLOCKS_PER_GROUP(sb) - 32)
+				lmap |= (((unsigned long *) bh->b_data)[(j >> 5) + 1]) <<
+				 (31 - (j & 31));
+			else
+				lmap |= 0xffffffff << (31 - (j & 31));
 			if (lmap != 0xffffffffl) {
-				__asm__ ("bsfl %1,%0" :
-					 "=r" (k) :
-					 "r" (~lmap)); k++;
+				__asm__ ("bsfl %1,%0"
+					 : "=r" (k)
+					 : "r" (~lmap));
+				k++;
 				if ((j + k) < EXT2_BLOCKS_PER_GROUP(sb)) {
 					j += k;
 					goto got_block;
@@ -381,9 +389,9 @@ repeat:
 		   
 		   Search first in the remainder of the current group; then,
 		   cyclicly search throught the rest of the groups. */
-		p = ((char *) bh->b_data) + (j>>3);
+		p = ((char *) bh->b_data) + (j >> 3);
 		r = find_first_zero_byte (p, 
-					  (EXT2_BLOCKS_PER_GROUP(sb)-j+7)>>3);
+					  (EXT2_BLOCKS_PER_GROUP(sb) - j + 7) >> 3);
 		k = (r - ((char *) bh->b_data)) << 3;
 		if (k < EXT2_BLOCKS_PER_GROUP(sb)) {
 			j = k;
@@ -440,7 +448,7 @@ repeat:
 	}
 	r = find_first_zero_byte (bh->b_data, 
 				  EXT2_BLOCKS_PER_GROUP(sb) >> 3);
-	j = (r-bh->b_data) << 3;
+	j = (r - bh->b_data) << 3;
 	if (j >= EXT2_BLOCKS_PER_GROUP(sb))
 		j = find_first_zero_bit ((unsigned long *) bh->b_data,
 					 EXT2_BLOCKS_PER_GROUP(sb));
@@ -466,8 +474,7 @@ got_block:
 #ifdef EXT2FS_DEBUG
 	printk ("ext2_new_block: found bit %d\n", j);
 #endif
-	j += i * EXT2_BLOCKS_PER_GROUP(sb) +
-		sb->u.ext2_sb.s_first_data_block;
+	j += i * EXT2_BLOCKS_PER_GROUP(sb) + sb->u.ext2_sb.s_first_data_block;
 	if (j >= sb->u.ext2_sb.s_blocks_count) {
 		printk ("block_group = %d,block=%d\n", i, j);
 		printk ("ext2_new_block: block >= blocks count");

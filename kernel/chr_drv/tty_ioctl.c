@@ -301,7 +301,7 @@ static int tty_set_ldisc(struct tty_struct *tty, int ldisc)
 
 
 int tty_ioctl(struct inode * inode, struct file * file,
-	unsigned int cmd, unsigned int arg)
+	unsigned int cmd, unsigned long arg)
 {
 	struct tty_struct * tty;
 	struct tty_struct * other_tty;

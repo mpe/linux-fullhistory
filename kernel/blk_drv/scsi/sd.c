@@ -50,7 +50,7 @@ static int * sd_sizes;
 /* used to re-read partitions. */
 extern void resetup_one_dev(struct gendisk *, unsigned int);
 
-extern int sd_ioctl(struct inode *, struct file *, unsigned int, unsigned int);
+extern int sd_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 
 static sd_init_onedisk(int);
 
@@ -604,6 +604,15 @@ repeat:
 		cmd[4] = (unsigned char) this_count;
 		cmd[5] = 0;
 		}
+
+/*
+ * We shouldn't disconnect in the middle of a sector, so with a dumb 
+ * host adapter, it's safe to assume that we can at least transfer 
+ * this many bytes between each connect / disconnect.  
+ */
+
+        SCpnt->transfersize = rscsi_disks[dev].sector_size;
+        SCpnt->underflow = this_count << 9; 
 
 	scsi_do_cmd (SCpnt, (void *) cmd, buff, 
 		     this_count * rscsi_disks[dev].sector_size,

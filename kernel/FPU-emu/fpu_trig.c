@@ -30,7 +30,7 @@ static int trig_arg(FPU_REG *X)
   control_word |= RC_CHOP;
   
   reg_move(X, &quot);
-  reg_div(&quot, &CONST_PI2, &quot);
+  reg_div(&quot, &CONST_PI2, &quot, FULL_PRECISION);
 
   reg_move(&quot, &tmp);
   round_to_int(&tmp);
@@ -40,7 +40,7 @@ static int trig_arg(FPU_REG *X)
   q = *(long long *)&(tmp.sigl);
   normalize(&tmp);
 
-  reg_sub(&quot, &tmp, X);
+  reg_sub(&quot, &tmp, X, FULL_PRECISION);
   rv = q & 7;
   
   control_word = old_cw;
@@ -107,17 +107,17 @@ static void f2xm1(void)
 	    /* poly_2xm1(x) requires 0 < x < 1. */
 	    if ( poly_2xm1(FPU_st0_ptr, &rv) )
 	      return;                  /* error */
-	    reg_mul(&rv, FPU_st0_ptr, FPU_st0_ptr);
+	    reg_mul(&rv, FPU_st0_ptr, FPU_st0_ptr, FULL_PRECISION);
 	  }
 	else
 	  {
 /* **** Should change poly_2xm1() to at least handle numbers near 0 */
 	    /* poly_2xm1(x) doesn't handle negative numbers. */
 	    /* So we compute (poly_2xm1(x+1)-1)/2, for -1 < x < 0 */
-	    reg_add(FPU_st0_ptr, &CONST_1, &tmp);
+	    reg_add(FPU_st0_ptr, &CONST_1, &tmp, FULL_PRECISION);
 	    poly_2xm1(&tmp, &rv);
-	    reg_mul(&rv, &tmp, &tmp);
-	    reg_sub(&tmp, &CONST_1, FPU_st0_ptr);
+	    reg_mul(&rv, &tmp, &tmp, FULL_PRECISION);
+	    reg_sub(&tmp, &CONST_1, FPU_st0_ptr, FULL_PRECISION);
 	    FPU_st0_ptr->exp--;
 	    if ( FPU_st0_ptr->exp <= EXP_UNDER )
 	      arith_underflow(FPU_st0_ptr);
@@ -155,7 +155,7 @@ static void fptan(void)
       if ( (q = trig_arg(FPU_st0_ptr)) != -1 )
 	{
 	  if (q & 1)
-	    reg_sub(&CONST_1, FPU_st0_ptr, FPU_st0_ptr);
+	    reg_sub(&CONST_1, FPU_st0_ptr, FPU_st0_ptr, FULL_PRECISION);
 	  
 	  poly_tan(FPU_st0_ptr, FPU_st0_ptr);
 
@@ -286,10 +286,9 @@ static void fsqrt_(void)
       expon = FPU_st0_ptr->exp - EXP_BIAS;
       FPU_st0_ptr->exp = EXP_BIAS + (expon & 1);  /* make st(0) in  [1.0 .. 4.0) */
       
-      wm_sqrt(FPU_st0_ptr);	/* Do the computation */
+      wm_sqrt(FPU_st0_ptr, control_word);	/* Do the computation */
       
       FPU_st0_ptr->exp += expon >> 1;
-      FPU_st0_ptr->tag = TW_Valid;
       FPU_st0_ptr->sign = SIGN_POS;
     }
   else if ( FPU_st0_tag == TW_Zero )
@@ -303,7 +302,6 @@ static void fsqrt_(void)
   else
     { single_arg_error(); return; }
 
-  PRECISION_ADJUST(FPU_st0_ptr);
 }
 
 
@@ -338,7 +336,7 @@ static void fsin(void)
 	  FPU_REG rv;
 	  
 	  if (q & 1)
-	    reg_sub(&CONST_1, FPU_st0_ptr, FPU_st0_ptr);
+	    reg_sub(&CONST_1, FPU_st0_ptr, FPU_st0_ptr, FULL_PRECISION);
 	  
 	  poly_sine(FPU_st0_ptr, &rv);
 	  
@@ -390,7 +388,7 @@ static int f_cos(FPU_REG *arg)
 	  FPU_REG rv;
 	  
 	  if ( !(q & 1) )
-	    reg_sub(&CONST_1, arg, arg);
+	    reg_sub(&CONST_1, arg, arg, FULL_PRECISION);
 	  
 	  poly_sine(arg, &rv);
 	  
@@ -479,15 +477,15 @@ static void fprem_kernel(int round)
 	  /* This should be the most common case */
 	  long long q;
 	  int c = 0;
-	  reg_div(FPU_st0_ptr, st1_ptr, &tmp);
+	  reg_div(FPU_st0_ptr, st1_ptr, &tmp, FULL_PRECISION);
 	  
 	  round_to_int(&tmp);  /* Fortunately, this can't overflow to 2^64 */
 	  tmp.exp = EXP_BIAS + 63;
 	  q = *(long long *)&(tmp.sigl);
 	  normalize(&tmp);
 	  
-	  reg_mul(st1_ptr, &tmp, &tmp);
-	  reg_sub(FPU_st0_ptr, &tmp, FPU_st0_ptr);
+	  reg_mul(st1_ptr, &tmp, &tmp, FULL_PRECISION);
+	  reg_sub(FPU_st0_ptr, &tmp, FPU_st0_ptr, FULL_PRECISION);
 	  
 	  if (q&4) c |= SW_C3;
 	  if (q&2) c |= SW_C1;
@@ -500,7 +498,7 @@ static void fprem_kernel(int round)
 	  /* There is a large exponent difference ( >= 64 ) */
 	  int N_exp;
 	  
-	  reg_div(FPU_st0_ptr, st1_ptr, &tmp);
+	  reg_div(FPU_st0_ptr, st1_ptr, &tmp, FULL_PRECISION);
 	  /* N is 'a number between 32 and 63' (p26-113) */
 	  N_exp = (tmp.exp & 31) + 32;
 	  tmp.exp = EXP_BIAS + N_exp;
@@ -511,8 +509,8 @@ static void fprem_kernel(int round)
 	  
 	  tmp.exp = EXP_BIAS + expdif - N_exp;
 	  
-	  reg_mul(st1_ptr, &tmp, &tmp);
-	  reg_sub(FPU_st0_ptr, &tmp, FPU_st0_ptr);
+	  reg_mul(st1_ptr, &tmp, &tmp, FULL_PRECISION);
+	  reg_sub(FPU_st0_ptr, &tmp, FPU_st0_ptr, FULL_PRECISION);
 	  
 	  setcc(SW_C2);
 	}
@@ -556,7 +554,7 @@ static void fyl2x(void)
 	{
 	  poly_l2(FPU_st0_ptr, FPU_st0_ptr);
 	  
-	  reg_mul(FPU_st0_ptr, st1_ptr, st1_ptr);
+	  reg_mul(FPU_st0_ptr, st1_ptr, st1_ptr, FULL_PRECISION);
 	  pop(); FPU_st0_ptr = &st(0);
 	  if ( FPU_st0_ptr->exp <= EXP_UNDER )
 	    { arith_underflow(FPU_st0_ptr); return; }
@@ -667,20 +665,20 @@ static void fpatan(void)
       if (compare(st1_ptr) == COMP_A_LT_B)
 	{
 	  quadrant |= 4;
-	  reg_div(FPU_st0_ptr, st1_ptr, &sum);
+	  reg_div(FPU_st0_ptr, st1_ptr, &sum, FULL_PRECISION);
 	}
       else
-	reg_div(st1_ptr, FPU_st0_ptr, &sum);
+	reg_div(st1_ptr, FPU_st0_ptr, &sum, FULL_PRECISION);
       
       poly_atan(&sum);
       
       if (quadrant & 4)
 	{
-	  reg_sub(&CONST_PI2, &sum, &sum);
+	  reg_sub(&CONST_PI2, &sum, &sum, FULL_PRECISION);
 	}
       if (quadrant & 2)
 	{
-	  reg_sub(&CONST_PI, &sum, &sum);
+	  reg_sub(&CONST_PI, &sum, &sum, FULL_PRECISION);
 	}
       if (quadrant & 1)
 	sum.sign ^= SIGN_POS^SIGN_NEG;
@@ -708,7 +706,7 @@ static void fpatan(void)
 	      if ( FPU_st0_ptr->sign == SIGN_POS )
 		{ reg_move(&CONST_PI4, st1_ptr); }
 	      else
-		reg_add(&CONST_PI4, &CONST_PI2, st1_ptr);
+		reg_add(&CONST_PI4, &CONST_PI2, st1_ptr, FULL_PRECISION);
 	    }
 	  else
 	    {
@@ -775,7 +773,7 @@ static void fyl2xp1(void)
 	  arith_invalid(st1_ptr); pop(); return;
 	}
       
-      reg_mul(FPU_st0_ptr, st1_ptr, st1_ptr);
+      reg_mul(FPU_st0_ptr, st1_ptr, st1_ptr, FULL_PRECISION);
       pop();
     }
   else if ( (FPU_st0_tag == TW_Empty) | (st1_tag == TW_Empty) )

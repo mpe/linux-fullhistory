@@ -37,7 +37,7 @@ struct wait_queue * log_wait = NULL;
  * Commands to sys_syslog:
  *
  * 	0 -- Close the log.  Currently a NOP.
- * 	1 -- Open and reset log.
+ * 	1 -- Open the log. Currently a NOP.
  * 	2 -- Read from the log.
  * 	3 -- Read up to the last 4k of messages in the ring buffer.
  * 	4 -- Read and clear last 4k of messages in the ring buffer
@@ -56,9 +56,7 @@ int sys_syslog(int type, char * buf, int len)
 	switch (type) {
 		case 0:		/* Close log */
 			return 0;
-		case 1:		/* Open and reset log */
-			log_start += log_size;
-			log_size = 0;
+		case 1:		/* Open log */
 			return 0;
 		case 2:		/* Read from log */
 			if (!buf || len < 0)

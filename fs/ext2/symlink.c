@@ -72,7 +72,7 @@ static int ext2_follow_link(struct inode * dir, struct inode * inode,
 		return -ELOOP;
 	}
 	if (inode->i_blocks) {
-		if (!(bh = ext2_bread (inode, 0, 0))) {
+		if (!(bh = ext2_bread (inode, 0, 0, &error))) {
 			iput (dir);
 			iput (inode);
 			return -EIO;
@@ -93,7 +93,7 @@ static int ext2_readlink (struct inode * inode, char * buffer, int buflen)
 {
 	struct buffer_head * bh = NULL;
 	char * link;
-	int i;
+	int i, err;
 	char c;
 
 	if (!S_ISLNK(inode->i_mode)) {
@@ -103,7 +103,7 @@ static int ext2_readlink (struct inode * inode, char * buffer, int buflen)
 	if (buflen > inode->i_sb->s_blocksize - 1)
 		buflen = inode->i_sb->s_blocksize - 1;
 	if (inode->i_blocks) {
-		bh = ext2_bread (inode, 0, 0);
+		bh = ext2_bread (inode, 0, 0, &err);
 		if (!bh) {
 			iput (inode);
 			return 0;

@@ -5,6 +5,8 @@
  *
  * Written for linux by Johan Myreen as a translation from
  * the assembly version by Linus (with diacriticals added)
+ *
+ * Some additional features added by Christoph Niemann (ChN), March 1993
  */
 
 #define KEYBOARD_IRQ 1
@@ -17,6 +19,7 @@
 #include <linux/keyboard.h>
 #include <linux/interrupt.h>
 #include <linux/config.h>
+#include <linux/signal.h>
 
 #ifndef KBD_DEFFLAGS
 #ifdef CONFIG_KBD_META
@@ -49,6 +52,8 @@ unsigned long kbd_dead_keys = 0;
 unsigned long kbd_prev_dead_keys = 0;
 
 static int want_console = -1;
+static int last_console = 0;		/* last used VC */
+static unsigned char rep = 0xff;	/* last pressed key */
 struct kbd_struct kbd_table[NR_CONSOLES];
 static struct kbd_struct * kbd = kbd_table;
 static struct tty_struct * tty = NULL;
@@ -80,7 +85,6 @@ static inline void kb_wait(void)
 
 static void keyboard_interrupt(int int_pt_regs)
 {
-	static unsigned char rep = 0xff;
 	unsigned char scancode;
 
 	pt_regs = (struct pt_regs *) int_pt_regs;
@@ -261,21 +265,36 @@ static void show_ptregs(void)
 
 static void scroll(int sc)
 {
-	if (kbd_flag(KG_LSHIFT) || kbd_flag(KG_RSHIFT))
-		show_mem();
-	else if (kbd_flag(KG_ALT) || kbd_flag(KG_ALTGR))
-		show_ptregs();
-	else if (kbd_flag(KG_LCTRL) || kbd_flag(KG_RCTRL))
-		show_state();
-	else
-		chg_vc_kbd_flag(kbd,VC_SCROLLOCK);
+	if (kbd_dead(KGD_E0))
+		put_queue(INTR_CHAR(tty));
+	else if ( sc != rep ) 	/* no autorepeat for scroll lock, ChN */
+		if (kbd_flag(KG_LSHIFT) || kbd_flag(KG_RSHIFT))
+			show_mem();
+		else if (kbd_flag(KG_ALT) || kbd_flag(KG_ALTGR))
+			show_ptregs();
+		else if (kbd_flag(KG_LCTRL) || kbd_flag(KG_RCTRL))
+			show_state();
+		else {
+			if (vc_kbd_flag(kbd, VC_SCROLLOCK))
+				/* pressing srcoll lock 2nd time sends ^Q, ChN */
+				put_queue(START_CHAR(tty));
+			else
+
+				/* pressing srcoll lock 1st time sends ^S, ChN */
+				put_queue(STOP_CHAR(tty));
+			chg_vc_kbd_flag(kbd,VC_SCROLLOCK);
+		}
+	
 }
 
 static void num(int sc)
 {
-	if (vc_kbd_flag(kbd,VC_APPLIC))
+	if (kbd_flag(KG_LCTRL))
+		/* pause key pressed, sends E1 1D 45, ChN */
+		chg_vc_kbd_flag(kbd,VC_PAUSE);
+	else if (vc_kbd_flag(kbd,VC_APPLIC))
 		applkey(0x50);
-	else
+	else if ( rep != sc )	/* no autorepeat for numlock, ChN */
 		chg_vc_kbd_flag(kbd,VC_NUMLOCK);
 }
 
@@ -285,6 +304,13 @@ static void applkey(int key)
 
 	buf[2] = key;
 	puts_queue(buf);
+}
+
+static void sysreq(int sc)
+{
+	/* pressing alt-printscreen switches to the last used console, ChN */
+	if ( sc != rep)
+		want_console = last_console;
 }
 
 #if defined KBD_FINNISH
@@ -1262,7 +1288,11 @@ static void slash(int sc)
 
 static void star(int sc)
 {
-	if (vc_kbd_flag(kbd,VC_APPLIC))
+	if (kbd_dead(KGD_E0))
+		/* Print screen key sends E0 2A E0 37 and puts
+		   the VT100-ESC sequence ESC [ i into the queue, ChN */
+		puts_queue("\033\133\151");
+	else if (vc_kbd_flag(kbd,VC_APPLIC))
 		applkey('R');
 	else
 		do_self(sc);
@@ -1351,7 +1381,10 @@ static void kbd_bh(void * unused)
 			send_data(0xf4);	/* re-enable kbd if any errors */
 	}
 	if (want_console >= 0) {
-		change_console(want_console);
+		if (want_console != fg_console) {
+			last_console = fg_console;
+			change_console(want_console);
+		}
 		want_console = -1;
 	}
 	do_keyboard_interrupt();
@@ -1410,7 +1443,7 @@ static fptr key_table[] = {
 	cursor,cursor,minus,cursor,		/* 48-4B up pgup - left */
 	cursor,cursor,plus,cursor,		/* 4C-4F n5 right + end */
 	cursor,cursor,cursor,cursor,		/* 50-53 dn pgdn ins del */
-	none,none,do_self,func,			/* 54-57 sysreq ? < f11 */
+	sysreq,none,do_self,func,			/* 54-57 sysreq ? < f11 */
 	func,none,none,none,			/* 58-5B f12 ? ? ? */
 	none,none,none,none,			/* 5C-5F ? ? ? ? */
 	none,none,none,none,			/* 60-63 ? ? ? ? */

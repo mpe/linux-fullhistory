@@ -559,6 +559,7 @@ udp_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 		  interruptible_sleep_on (sk->sleep);
 		  if (current->signal & ~current->blocked)
 		    {
+		       sti();
 		       return (-ERESTARTSYS);
 		    }
 	       }

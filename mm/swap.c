@@ -16,7 +16,9 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/stat.h>
+
 #include <asm/system.h> /* for cli()/sti() */
+#include <asm/bitops.h>
 
 #define MAX_SWAPFILES 8
 
@@ -51,20 +53,6 @@ static unsigned long last_free_pages[NR_LAST_FREE_PAGES] = {0,};
 
 #define SWAP_BITS 4096
 
-#define bitop(name,op) \
-static inline int name(char * addr,unsigned int nr) \
-{ \
-int __res; \
-__asm__ __volatile__("bt" op " %1,%2; adcl $0,%0" \
-:"=g" (__res) \
-:"r" (nr),"m" (*(addr)),"0" (0)); \
-return __res; \
-}
-
-bitop(bit,"")
-bitop(setbit,"s")
-bitop(clrbit,"r")
-
 void rw_swap_page(int rw, unsigned long entry, char * buf)
 {
 	unsigned long type, offset;
@@ -85,7 +73,7 @@ void rw_swap_page(int rw, unsigned long entry, char * buf)
 		printk("Trying to swap to unused swap-device\n");
 		return;
 	}
-	while (setbit(p->swap_lockmap,offset))
+	while (set_bit(offset,p->swap_lockmap))
 		sleep_on(&lock_queue);
 	if (p->swap_device) {
 		ll_rw_page(rw,p->swap_device,offset,buf);
@@ -102,7 +90,7 @@ void rw_swap_page(int rw, unsigned long entry, char * buf)
 		ll_rw_swap_file(rw,p->swap_file->i_dev, zones,4,buf);
 	} else
 		printk("re_swap_page: no swap file or device\n");
-	if (!clrbit(p->swap_lockmap,offset))
+	if (clear_bit(offset,p->swap_lockmap))
 		printk("rw_swap_page: lock already cleared\n");
 	wake_up(&lock_queue);
 }
@@ -177,7 +165,7 @@ void swap_free(unsigned long entry)
 		printk("Trying to free swap from unused swap-device\n");
 		return;
 	}
-	while (setbit(p->swap_lockmap,offset))
+	while (set_bit(offset,p->swap_lockmap))
 		sleep_on(&lock_queue);
 	if (offset < p->lowest_bit)
 		p->lowest_bit = offset;
@@ -187,7 +175,7 @@ void swap_free(unsigned long entry)
 		printk("swap_free: swap-space map bad (entry %08x)\n",entry);
 	else
 		p->swap_map[offset]--;
-	if (!clrbit(p->swap_lockmap,offset))
+	if (clear_bit(offset,p->swap_lockmap))
 		printk("swap_free: lock already cleared\n");
 	wake_up(&lock_queue);
 }
@@ -399,6 +387,7 @@ void free_page(unsigned long addr)
 			return;
 		}
 		printk("Trying to free free memory (%08x): memory probabably corrupted\n",addr);
+		printk("PC = %08x\n",*(((unsigned long *)&addr)-1));
 		return;
 	}
 	printk("Trying to free nonexistent page %08x\n",addr);
@@ -680,7 +669,7 @@ int sys_swapon(const char * specialfile)
 	p->lowest_bit = 0;
 	p->highest_bit = 0;
 	for (i = 1 ; i < SWAP_BITS ; i++)
-		if (bit(tmp,i)) {
+		if (test_bit(i,tmp)) {
 			if (!p->lowest_bit)
 				p->lowest_bit = i;
 			p->highest_bit = i;
@@ -700,7 +689,7 @@ int sys_swapon(const char * specialfile)
 	}
 	i = SWAP_BITS;
 	while (i--)
-		if (bit(tmp,i))
+		if (test_bit(i,tmp))
 			tmp[i] = 0;
 		else
 			tmp[i] = 128;

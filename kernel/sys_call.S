@@ -58,6 +58,7 @@ EFLAGS		= 0x38
 OLDESP		= 0x3C
 OLDSS		= 0x40
 
+CF_MASK		= 0x00000001
 IF_MASK		= 0x00000200
 NT_MASK		= 0x00004000
 VM_MASK		= 0x00020000
@@ -71,6 +72,7 @@ priority	=  8
 signal		= 12
 blocked		= 16
 flags		= 20
+errno		= 24
 
 ENOSYS = 38
 
@@ -129,6 +131,8 @@ _system_call:
 	cmpl _NR_syscalls,%eax
 	jae ret_from_sys_call
 	movl _current,%ebx
+	movl $0,errno(%ebx)
+	andl $~CF_MASK,EFLAGS(%esp)	# clear carry - assume no errors
 	testl $0x20,flags(%ebx)		# PF_TRACESYS
 	je 1f
 	pushl $0
@@ -141,7 +145,12 @@ _system_call:
 1:	call _sys_call_table(,%eax,4)
 	movl %eax,EAX(%esp)		# save the return value
 	movl _current,%eax
-	testl $0x20,flags(%eax)		# PF_TRACESYS
+	movl errno(%eax),%edx
+	negl %edx
+	je 2f
+	movl %edx,EAX(%esp)
+	orl $CF_MASK,EFLAGS(%esp)	# set carry to indicate error
+2:	testl $0x20,flags(%eax)		# PF_TRACESYS
 	je ret_from_sys_call
 	cmpl $0,signal(%eax)
 	jne ret_from_sys_call		# ptrace would clear signal
@@ -174,17 +183,18 @@ ret_from_sys_call:
 	cmpl $0,counter(%eax)		# counter
 	je reschedule
 	movl blocked(%eax),%ecx
+	movl %ecx,%ebx			# save blocked in %ebx for signal handling
 	notl %ecx
 	andl signal(%eax),%ecx
 	jne signal_return
 2:	RESTORE_ALL
 .align 4
 signal_return:
-	movl %esp,%ebx
-	pushl %ebx
-	testl $VM_MASK,EFLAGS(%ebx)
+	movl %esp,%ecx
+	pushl %ecx
+	testl $VM_MASK,EFLAGS(%ecx)
 	jne v86_signal_return
-	pushl blocked(%eax)
+	pushl %ebx
 	call _do_signal
 	popl %ebx
 	popl %ebx
@@ -194,7 +204,7 @@ v86_signal_return:
 	call _save_v86_state
 	movl %eax,%esp
 	pushl %eax
-	pushl blocked(%eax)
+	pushl %ebx
 	call _do_signal
 	popl %ebx
 	popl %ebx

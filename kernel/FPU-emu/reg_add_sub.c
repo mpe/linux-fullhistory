@@ -22,7 +22,7 @@
 #include "fpu_system.h"
 
 
-void reg_add(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
+void reg_add(FPU_REG *a, FPU_REG *b, FPU_REG *dest, int control_w)
 {
   int diff;
   
@@ -32,7 +32,7 @@ void reg_add(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
       if (!(a->sign ^ b->sign))
 	{
 	  /* signs are the same */
-	  reg_u_add(a, b, dest);
+	  reg_u_add(a, b, dest, control_w);
 	  dest->sign = a->sign;
 	  return;
 	}
@@ -52,19 +52,19 @@ void reg_add(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
       
       if (diff > 0)
 	{
-	  reg_u_sub(a, b, dest);
+	  reg_u_sub(a, b, dest, control_w);
 	  dest->sign = a->sign;
 	}
       else if ( diff == 0 )
 	{
 	  reg_move(&CONST_Z, dest);
 	  /* sign depends upon rounding mode */
-	  dest->sign = ((control_word & CW_RC) != RC_DOWN)
+	  dest->sign = ((control_w & CW_RC) != RC_DOWN)
 	    ? SIGN_POS : SIGN_NEG;
 	}
       else
 	{
-	  reg_u_sub(b, a, dest);
+	  reg_u_sub(b, a, dest, control_w);
 	  dest->sign = b->sign;
 	}
       return;
@@ -84,7 +84,7 @@ void reg_add(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 		{
 		  /* Signs are different. */
 		  /* Sign of answer depends upon rounding mode. */
-		  dest->sign = ((control_word & CW_RC) != RC_DOWN)
+		  dest->sign = ((control_w & CW_RC) != RC_DOWN)
 		    ? SIGN_POS : SIGN_NEG;
 		}
 	    }
@@ -114,7 +114,7 @@ void reg_add(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 
 
 /* Subtract b from a.  (a-b) -> dest */
-void reg_sub(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
+void reg_sub(FPU_REG *a, FPU_REG *b, FPU_REG *dest, int control_w)
 {
   int diff;
 
@@ -139,28 +139,28 @@ void reg_sub(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 	case 3: /* N - N */
 	  if (diff > 0)
 	    {
-	      reg_u_sub(a, b, dest);
+	      reg_u_sub(a, b, dest, control_w);
 	      dest->sign = a->sign;
 	    }
 	  else if ( diff == 0 )
 	    {
 	      reg_move(&CONST_Z, dest);
 	      /* sign depends upon rounding mode */
-	      dest->sign = ((control_word & CW_RC) != RC_DOWN)
+	      dest->sign = ((control_w & CW_RC) != RC_DOWN)
 		? SIGN_POS : SIGN_NEG;
 	    }
 	  else
 	    {
-	      reg_u_sub(b, a, dest);
+	      reg_u_sub(b, a, dest, control_w);
 	      dest->sign = a->sign ^ SIGN_POS^SIGN_NEG;
 	    }
 	  return;
 	case 1: /* P - N */
-	  reg_u_add(a, b, dest);
+	  reg_u_add(a, b, dest, control_w);
 	  dest->sign = SIGN_POS;
 	  return;
 	case 2: /* N - P */
-	  reg_u_add(a, b, dest);
+	  reg_u_add(a, b, dest, control_w);
 	  dest->sign = SIGN_NEG;
 	  return;
 	}
@@ -179,7 +179,7 @@ void reg_sub(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 	      if (same_signs)
 		{
 		  /* Sign depends upon rounding mode */
-		  dest->sign = ((control_word & CW_RC) != RC_DOWN)
+		  dest->sign = ((control_w & CW_RC) != RC_DOWN)
 		    ? SIGN_POS : SIGN_NEG;
 		}
 	    }

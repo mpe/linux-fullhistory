@@ -4,7 +4,8 @@
  |                                                                           |
  | Core multiplication routine                                               |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
@@ -14,17 +15,22 @@
  |   Basic multiplication routine.                                           |
  |   Does not check the resulting exponent for overflow/underflow            |
  |                                                                           |
- |   Internal working is at approx 96 bits.                                  |
- |   Result is rounded to nearest 64 bits, using "nearest or even".          |
+ |   reg_u_mul(FPU_REG *a, FPU_REG *b, FPU_REG *c, unsigned int cw);         |
+ |                                                                           |
+ |   Internal working is at approx 128 bits.                                 |
+ |   Result is rounded to nearest 53 or 64 bits, using "nearest or even".    |
  +---------------------------------------------------------------------------*/
 
 #include "exception.h"
 #include "fpu_asm.h"
+#include "control_w.h"
 
 
 
 .data
 	.align 2,0
+accum_0:
+	.long	0
 accum_1:
 	.long	0
 
@@ -41,97 +47,82 @@ _reg_u_mul:
 	pushl	%ebx
 
 	movl	PARAM1,%esi
-	movl	PARAM2,%ecx
+	movl	PARAM2,%edi
 
 #ifdef PARANOID
 	testl	$0x80000000,SIGH(%esi)
-	jz	xL_bugged
-	testl	$0x80000000,SIGH(%ecx)
-	jz	xL_bugged
+	jz	L_bugged
+	testl	$0x80000000,SIGH(%edi)
+	jz	L_bugged
 #endif PARANOID
 
-	xorl	%edi,%edi
+	xorl	%ecx,%ecx
 	xorl	%ebx,%ebx
 
 	movl	SIGL(%esi),%eax
-	mull	SIGL(%ecx)
-//	movl	%eax,accum_0
+	mull	SIGL(%edi)
+	movl	%eax,accum_0
 	movl	%edx,accum_1
 
 	movl	SIGL(%esi),%eax
-	mull	SIGH(%ecx)
+	mull	SIGH(%edi)
 	addl	%eax,accum_1
 	adcl	%edx,%ebx
-//	adcl	$0,%edi	// overflow here is not possible
+//	adcl	$0,%ecx		// overflow here is not possible
 
 	movl	SIGH(%esi),%eax
-	mull	SIGL(%ecx)
+	mull	SIGL(%edi)
 	addl	%eax,accum_1
 	adcl	%edx,%ebx
-	adcl	$0,%edi
+	adcl	$0,%ecx
 
 	movl	SIGH(%esi),%eax
-	mull	SIGH(%ecx)
+	mull	SIGH(%edi)
 	addl	%eax,%ebx
-	adcl	%edx,%edi
+	adcl	%edx,%ecx
 
 	movl	EXP(%esi),%eax	/* Compute the exponent */
-	addl	EXP(%ecx),%eax
+	addl	EXP(%edi),%eax
 //  Have now finished with the sources
-	movl	PARAM3,%esi	// Point to the destination
-	movl	%eax,EXP(%esi)
+	movl	PARAM3,%edi	// Point to the destination
+	movl	%eax,EXP(%edi)
 
 //  Now make sure that the result is normalized
-	testl	$0x80000000,%edi
-	jnz	L20
+	testl	$0x80000000,%ecx
+	jnz	LResult_Normalised
 
 	/* Normalize by shifting left one bit */
-//	shll	$1,accum_0	// If using this, change next to rcll
-	shll	$1,accum_1
+	shll	$1,accum_0
+	rcll	$1,accum_1
 	rcll	$1,%ebx
-	rcll	$1,%edi
-	decl	EXP(%esi)
+	rcll	$1,%ecx
+	decl	EXP(%edi)
 
-L20:
-	/* Do the rounding */
-	cmpl	$0x80000000,accum_1
-	jc	L40
+LResult_Normalised:
+	movl	accum_0,%eax
+	movl	accum_1,%edx
+	orl	%eax,%eax
+	jz	L_extent_zero
 
-	jne	L30
+	orl	$1,%edx
 
-	/* 0x80000000, round up only if previous bit is 1 */
-	testl	$1,%ebx
-	jz L40
+L_extent_zero:
+	movl	%ecx,%eax
+	jmp	FPU_round
 
-L30:
-	addl	$1,%ebx
-	adcl	$0,%edi
 
-	/* An overflow can occur here (rare!) */
-	jc	xL_overflow_adjust
+#ifdef PARANOID
+L_bugged:
+	pushl	EX_INTERNAL|0x205
+	call	EXCEPTION
+	pop	%ebx
+	jmp	L_exit
 
-L40:
-	/* Copy the result to the destination register */
-	movl	%ebx,SIGL(%esi)
-	movl	%edi,SIGH(%esi)
-
-xL_exit:
+L_exit:
 	popl	%ebx
 	popl	%edi
 	popl	%esi
 	leave
 	ret
-
-
-xL_overflow_adjust:
-	rcrl	%edi
-	incl	EXP(%esi)
-	jmp	L40
-
-#ifdef PARANOID
-xL_bugged:
-	pushl	EX_INTERNAL|0x205
-	call	EXCEPTION
-	pop	%ebx
-	jmp	xL_exit
 #endif PARANOID
+

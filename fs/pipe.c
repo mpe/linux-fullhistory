@@ -108,7 +108,7 @@ static int bad_pipe_rw(struct inode * inode, struct file * filp, char * buf, int
 }
 
 static int pipe_ioctl(struct inode *pino, struct file * filp,
-	unsigned int cmd, unsigned int arg)
+	unsigned int cmd, unsigned long arg)
 {
 	int error;
 

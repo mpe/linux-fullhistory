@@ -560,10 +560,6 @@ unix_proto_read(struct socket *sock, char *ubuf, int size, int nonblock)
 			PRINTK(("unix_proto_read: interrupted\n"));
 			return -ERESTARTSYS;
 		}
-		if (sock->state == SS_DISCONNECTING) {
-			PRINTK(("unix_proto_read: disconnected\n"));
-			return 0;
-		}
 	}
 
 	/*

@@ -283,11 +283,12 @@ static void nfs_lookup_cache_refresh(struct inode *file,
 	}
 }
 
-static int nfs_lookup(struct inode *dir, const char *name, int len,
+static int nfs_lookup(struct inode *dir, const char *__name, int len,
 		      struct inode **result)
 {
 	struct nfs_fh fhandle;
 	struct nfs_fattr fattr;
+	char name[len > NFS_MAXNAMLEN? 1 : len+1];
 	int error;
 
 	*result = NULL;
@@ -300,6 +301,8 @@ static int nfs_lookup(struct inode *dir, const char *name, int len,
 		iput(dir);
 		return -ENAMETOOLONG;
 	}
+	memcpy(name,__name,len);
+	name[len] = '\0';
 	if (len == 1 && name[0] == '.') { /* cheat for "." */
 		*result = dir;
 		return 0;

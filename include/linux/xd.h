@@ -114,7 +114,7 @@ static void xd_geninit (void);
 
 static int xd_open (struct inode *inode,struct file *file);
 static void do_xd_request (void);
-static int xd_ioctl (struct inode *inode,struct file *file,unsigned int cmd,unsigned int arg);
+static int xd_ioctl (struct inode *inode,struct file *file,unsigned int cmd,unsigned long arg);
 static void xd_release (struct inode *inode,struct file *file);
 static int xd_reread_partitions (int dev);
 static int xd_readwrite (u_char operation,u_char drive,u_char *buffer,u_int block,u_int count);

@@ -193,6 +193,8 @@ static void scan_scsis (void)
 
 		SCmd.request.dev = 0xffff; /* Mark not busy */
 		SCmd.use_sg  = 0;
+		SCmd.transfersize = 0;
+		SCmd.underflow = 0;
 
 		scsi_do_cmd (&SCmd,
 			     (void *)  scsi_cmd, (void *) 
@@ -445,6 +447,8 @@ Scsi_Cmnd * request_queueable (struct request * req, int index)
   };
 
   SCpnt->use_sg = 0;  /* Reset the scatter-gather flag */
+  SCpnt->transfersize = 0;
+  SCpnt->underflow = 0;
   return SCpnt;
 }
 
@@ -516,6 +520,8 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, int index, int wait)
   };
 
   SCpnt->use_sg = 0;  /* Reset the scatter-gather flag */
+  SCpnt->transfersize = 0;      /* No default transfer size */
+  SCpnt->underflow = 0;         /* Do not flag underflow conditions */
   return SCpnt;
 }
 
@@ -929,7 +935,8 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 			}
 			break;
 			default:
-				panic ("unsupported message byte recieved.");
+				printk("scsi: unsupported message byte %d recieved\n", msg_byte(result)); 
+				panic ("");
 			}
 			break;
 	case DID_TIME_OUT:	
@@ -1387,6 +1394,8 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	      SCpnt->index = i;
 	      SCpnt->request.dev = -1; /* Mark not busy */
 	      SCpnt->use_sg = 0;
+              SCpnt->underflow = 0;
+              SCpnt->transfersize = 0;
 	      host = scsi_devices[i].host_no;
 	      if(host_queue[host])
 		host_queue[host]->prev = SCpnt;

@@ -3,106 +3,15 @@
 /* inflate.c -- Not copyrighted 1992 by Mark Adler
    version c10p1, 10 January 1993 */
 
-/* You can do whatever you like with this source file, though I would
-   prefer that if you modify it and redistribute it that you include
-   comments to that effect with your name and the date.  Thank you.
-   [The history has been moved to the file ChangeLog.]
- */
-
-/*
-   Inflate deflated (PKZIP's method 8 compressed) data.  The compression
-   method searches for as much of the current string of bytes (up to a
-   length of 258) in the previous 32K bytes.  If it doesn't find any
-   matches (of at least length 3), it codes the next byte.  Otherwise, it
-   codes the length of the matched string and its distance backwards from
-   the current position.  There is a single Huffman code that codes both
-   single bytes (called "literals") and match lengths.  A second Huffman
-   code codes the distance information, which follows a length code.  Each
-   length or distance code actually represents a base value and a number
-   of "extra" (sometimes zero) bits to get to add to the base value.  At
-   the end of each deflated block is a special end-of-block (EOB) literal/
-   length code.  The decoding process is basically: get a literal/length
-   code; if EOB then done; if a literal, emit the decoded byte; if a
-   length then get the distance and emit the referred-to bytes from the
-   sliding window of previously emitted data.
-
-   There are (currently) three kinds of inflate blocks: stored, fixed, and
-   dynamic.  The compressor deals with some chunk of data at a time, and
-   decides which method to use on a chunk-by-chunk basis.  A chunk might
-   typically be 32K or 64K.  If the chunk is uncompressible, then the
-   "stored" method is used.  In this case, the bytes are simply stored as
-   is, eight bits per byte, with none of the above coding.  The bytes are
-   preceded by a count, since there is no longer an EOB code.
-
-   If the data is compressible, then either the fixed or dynamic methods
-   are used.  In the dynamic method, the compressed data is preceded by
-   an encoding of the literal/length and distance Huffman codes that are
-   to be used to decode this block.  The representation is itself Huffman
-   coded, and so is preceded by a description of that code.  These code
-   descriptions take up a little space, and so for small blocks, there is
-   a predefined set of codes, called the fixed codes.  The fixed method is
-   used if the block codes up smaller that way (usually for quite small
-   chunks), otherwise the dynamic method is used.  In the latter case, the
-   codes are customized to the probabilities in the current block, and so
-   can code it much better than the pre-determined fixed codes.
- 
-   The Huffman codes themselves are decoded using a mutli-level table
-   lookup, in order to maximize the speed of decoding plus the speed of
-   building the decoding tables.  See the comments below that precede the
-   lbits and dbits tuning parameters.
- */
-
-
-/*
-   Notes beyond the 1.93a appnote.txt:
-
-   1. Distance pointers never point before the beginning of the output
-      stream.
-   2. Distance pointers can point back across blocks, up to 32k away.
-   3. There is an implied maximum of 7 bits for the bit length table and
-      15 bits for the actual data.
-   4. If only one code exists, then it is encoded using one bit.  (Zero
-      would be more efficient, but perhaps a little confusing.)  If two
-      codes exist, they are coded using one bit each (0 and 1).
-   5. There is no way of sending zero distance codes--a dummy must be
-      sent if there are none.  (History: a pre 2.0 version of PKZIP would
-      store blocks with no distance codes, but this was discovered to be
-      too harsh a criterion.)  Valid only for 1.93a.  2.04c does allow
-      zero distance codes, which is sent as one code of zero bits in
-      length.
-   6. There are up to 286 literal/length codes.  Code 256 represents the
-      end-of-block.  Note however that the static length tree defines
-      288 codes just to fill out the Huffman codes.  Codes 286 and 287
-      cannot be used though, since there is no length base or extra bits
-      defined for them.  Similarily, there are up to 30 distance codes.
-      However, static trees define 32 codes (all 5 bits) to fill out the
-      Huffman codes, but the last two had better not show up in the data.
-   7. Unzip can check dynamic Huffman blocks for complete code sets.
-      The exception is that a single code would not be complete (see #4).
-   8. The five bits following the block type is really the number of
-      literal codes sent minus 257.
-   9. Length codes 8,16,16 are interpreted as 13 length codes of 8 bits
-      (1+6+6).  Therefore, to output three times the length, you output
-      three codes (1+1+1), whereas to output four times the same length,
-      you only need two codes (1+3).  Hmm.
-  10. In the tree reconstruction algorithm, Code = Code + Increment
-      only if BitLength(i) is not zero.  (Pretty obvious.)
-  11. Correction: 4 Bits: # of Bit Length codes - 4     (4 - 19)
-  12. Note: length code 284 can represent 227-258, but length code 285
-      really is 258.  The last length deserves its own, short code
-      since it gets used a lot in very redundant files.  The length
-      258 is special since 258 - 3 (the min match length) is 255.
-  13. The literal/length and distance code bit lengths are read as a
-      single stream of lengths.  It is possible (and advantageous) for
-      a repeat code (16, 17, or 18) to go across the boundary between
-      the two sets of lengths.
+/* 
+ * Adapted for booting Linux by Hannu Savolainen 1993
+ * based on gzip-1.0.3 
  */
 
 #ifndef lint
 static char rcsid[] = "$Id: inflate.c,v 0.10 1993/02/04 13:21:06 jloup Exp $";
 #endif
 
-/* #include "tailor.h" */
 #include "gzip.h"
 #define slide window
 
@@ -111,13 +20,6 @@ static char rcsid[] = "$Id: inflate.c,v 0.10 1993/02/04 13:21:06 jloup Exp $";
 #  include <stdlib.h>
 #endif
 
-/* Huffman code lookup table entry--this entry is four bytes for machines
-   that have 16-bit pointers (e.g. PC's in the small or medium model).
-   Valid extra bits are 0..13.  e == 15 is EOB (end of block), e == 16
-   means that v is a literal, 16 < e < 32 means that v is a pointer to
-   the next table, which codes e - 16 bits, and lastly e == 99 indicates
-   an unused code.  If a code with e == 99 is looked up, this implies an
-   error in the data. */
 struct huft {
   uch e;                /* number of extra bits or operation */
   uch b;                /* number of bits in this code or subcode */
@@ -140,15 +42,6 @@ int inflate_block OF((int *));
 int inflate OF((void));
 
 
-/* The inflate algorithm uses a sliding 32K byte window on the uncompressed
-   stream to find repeated byte strings.  This is implemented here as a
-   circular buffer.  The index is updated simply by incrementing and then
-   and'ing with 0x7fff (32K-1). */
-/* It is left to other modules to supply the 32K area.  It is assumed
-   to be usable as if it were declared "uch slide[32768];" or as just
-   "uch *slide;" and then malloc'ed in the latter case.  The definition
-   must be in unzip.h, included above. */
-/* unsigned wp;             current position in slide */
 #define wp outcnt
 #define flush_output(w) (wp=(w),flush_window())
 
@@ -172,37 +65,6 @@ static ush cpdext[] = {         /* Extra bits for distance codes */
         12, 12, 13, 13};
 
 
-
-/* Macros for inflate() bit peeking and grabbing.
-   The usage is:
-   
-        NEEDBITS(j)
-        x = b & mask_bits[j];
-        DUMPBITS(j)
-
-   where NEEDBITS makes sure that b has at least j bits in it, and
-   DUMPBITS removes the bits from b.  The macros use the variable k
-   for the number of bits in b.  Normally, b and k are register
-   variables for speed, and are initialized at the begining of a
-   routine that uses these macros from a global bit buffer and count.
-
-   If we assume that EOB will be the longest code, then we will never
-   ask for bits with NEEDBITS that are beyond the end of the stream.
-   So, NEEDBITS should not read any more bytes than are needed to
-   meet the request.  Then no bytes need to be "returned" to the buffer
-   at the end of the last block.
-
-   However, this assumption is not true for fixed blocks--the EOB code
-   is 7 bits, but the other literal/length codes can be 8 or 9 bits.
-   (The EOB code is shorter than other codes becuase fixed blocks are
-   generally short.  So, while a block always has an EOB, many other
-   literal/length codes have a significantly lower probability of
-   showing up at all.)  However, by making the first table have a
-   lookup of seven bits, the EOB code will be found in that first
-   lookup, and so will not require that too many bits be pulled from
-   the stream.
- */
-
 ulg bb;                         /* bit buffer */
 unsigned bk;                    /* bits in bit buffer */
 
@@ -221,40 +83,6 @@ ush mask_bits[] = {
 #endif
 #define NEEDBITS(n) {while(k<(n)){b|=((ulg)NEXTBYTE())<<k;k+=8;}}
 #define DUMPBITS(n) {b>>=(n);k-=(n);}
-
-
-/*
-   Huffman code decoding is performed using a multi-level table lookup.
-   The fastest way to decode is to simply build a lookup table whose
-   size is determined by the longest code.  However, the time it takes
-   to build this table can also be a factor if the data being decoded
-   is not very long.  The most common codes are necessarily the
-   shortest codes, so those codes dominate the decoding time, and hence
-   the speed.  The idea is you can have a shorter table that decodes the
-   shorter, more probable codes, and then point to subsidiary tables for
-   the longer codes.  The time it costs to decode the longer codes is
-   then traded against the time it takes to make longer tables.
-
-   This results of this trade are in the variables lbits and dbits
-   below.  lbits is the number of bits the first level table for literal/
-   length codes can decode in one step, and dbits is the same thing for
-   the distance codes.  Subsequent tables are also less than or equal to
-   those sizes.  These values may be adjusted either when all of the
-   codes are shorter than that, in which case the longest code length in
-   bits is used, or when the shortest code is *longer* than the requested
-   table size, in which case the length of the shortest code in bits is
-   used.
-
-   There are two different values for the two tables, since they code a
-   different number of possibilities each.  The literal/length table
-   codes 286 possible values, or in a flat code, a little over eight
-   bits.  The distance table codes 30 possible values, or a little less
-   than five bits, flat.  The optimum values for speed end up being
-   about one bit more than those, so lbits is 8+1 and dbits is 5+1.
-   The optimum values may differ though from machine to machine, and
-   possibly even between compilers.  Your mileage may vary.
- */
-
 
 int lbits = 9;          /* bits in base literal/length lookup table */
 int dbits = 6;          /* bits in base distance lookup table */
@@ -308,8 +136,6 @@ DEBG("huft1 ");
   memzero(c, sizeof(c));
   p = b;  i = n;
   do {
-    Tracecv(*p, (stderr, (n-i >= ' ' && n-i <= '~' ? "%c %d\n" : "0x%x %d\n"), 
-	    n-i, *p));
     c[*p++]++;                  /* assume all entries <= BMAX */
   } while (--i);
   if (c[0] == n)                /* null input--all zero length codes */
@@ -545,7 +371,6 @@ int bl, bd;             /* number of bits decoded by tl[] and td[] */
     if (e == 16)                /* then it's a literal */
     {
       slide[w++] = (uch)t->v.n;
-      Tracevv((stderr, "%c", slide[w-1]));
       if (w == WSIZE)
       {
         flush_output(w);
@@ -577,7 +402,6 @@ int bl, bd;             /* number of bits decoded by tl[] and td[] */
       NEEDBITS(e)
       d = w - t->v.n - ((unsigned)b & mask_bits[e]);
       DUMPBITS(e)
-      Tracevv((stderr,"\\[%d,%d]", w-d, n));
 
       /* do the copy */
       do {
@@ -593,7 +417,6 @@ int bl, bd;             /* number of bits decoded by tl[] and td[] */
 #endif /* !NOMEMCPY */
           do {
             slide[w++] = slide[d++];
-	    Tracevv((stderr, "%c", slide[w-1]));
           } while (--e);
         if (w == WSIZE)
         {

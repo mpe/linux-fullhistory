@@ -1,23 +1,10 @@
 /*
- *  linux/tools/build.c
+ *  linux/zBoot/xtract.c
  *
- *  Copyright (C) 1991, 1992  Linus Torvalds
- */
-
-/*
- * This file builds a disk-image from three different files:
+ *  Copyright (C) 1993  Hannu Savolainen
  *
- * - bootsect: max 510 bytes of 8086 machine code, loads the rest
- * - setup: max 4 sectors of 8086 machine code, sets up system parm
- * - system: 80386 code for actual system
- *
- * It does some checking that all files are of the correct type, and
- * just writes the result to stdout, removing headers and padding to
- * the right amount. It also writes some system data to stderr.
- */
-
-/*
- * Changes by tytso to allow root device specification
+ *	Extracts the system image and writes it to the stdout.
+ *	based on tools/build.c by Linus Torvalds
  */
 
 #include <stdio.h>	/* fprintf */

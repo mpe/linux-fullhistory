@@ -573,15 +573,15 @@ static void startup(struct async_struct * info)
 	info->flags |= ASYNC_INITIALIZED;
 	if (info->tty)
 		clear_bit(TTY_IO_ERROR, &info->tty->flags);
-	restore_flags(flags);
 	/*
 	 * Set up parity check flag
 	 */
-	if (I_INPCK(info->tty))
+	if (info->tty && info->tty->termios && I_INPCK(info->tty))
 		info->read_status_mask = UART_LSR_BI | UART_LSR_FE |
 			UART_LSR_PE;
 	else
 		info->read_status_mask = UART_LSR_BI | UART_LSR_FE;
+	restore_flags(flags);
 }
 
 /*
@@ -970,7 +970,7 @@ static void send_break(	struct async_struct * info, int duration)
 }
 
 static int rs_ioctl(struct tty_struct *tty, struct file * file,
-		    unsigned int cmd, unsigned int arg)
+		    unsigned int cmd, unsigned long arg)
 {
 	int error, line;
 	struct async_struct * info;
@@ -988,7 +988,7 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			return 0;
 		case TCSBRKP:	/* support for POSIX tcsendbreak() */
 			wait_until_sent(tty);
-			send_break(info, arg ? HZ/4 : arg*(HZ/10));
+			send_break(info, arg ? arg*(HZ/10) : HZ/4);
 			return 0;
 		case TIOCGSOFTCAR:
 			error = verify_area(VERIFY_WRITE, (void *) arg,sizeof(unsigned int *));

@@ -379,9 +379,12 @@ int sys_mount(char * dev_name, char * dir_name, char * type,
 		return do_remount(dir_name,new_flags & ~MS_MGC_MSK & ~MS_REMOUNT);
 	}
 	if (type) {
-		for (i = 0 ; i < 100 ; i++)
+		for (i = 0 ; i < 100 ; i++) {
+			if (TASK_SIZE <= (unsigned long) type)
+				return -EFAULT;
 			if (!(tmp[i] = get_fs_byte(type++)))
 				break;
+		}
 		t = tmp;
 	} else
 		t = NULL;
@@ -446,7 +449,6 @@ void mount_root(void)
 	struct super_block * sb;
 	struct inode * inode;
 
-	memset(file_table, 0, sizeof(file_table));
 	memset(super_block, 0, sizeof(super_block));
 	fcntl_init_locks();
 	if (MAJOR(ROOT_DEV) == 2) {

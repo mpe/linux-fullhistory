@@ -123,13 +123,17 @@ void audit_ptree(void)
 			printk("Warning, pid %d's os link is bad\n",
 				task[i]->pid);
 		if (task[i]->p_pptr == task[i])
-			printk("Warning, pid %d parent link points to self\n");
+			printk("Warning, pid %d parent link points to self\n",
+				task[i]->pid);
 		if (task[i]->p_cptr == task[i])
-			printk("Warning, pid %d child link points to self\n");
+			printk("Warning, pid %d child link points to self\n",
+				task[i]->pid);
 		if (task[i]->p_ysptr == task[i])
-			printk("Warning, pid %d ys link points to self\n");
+			printk("Warning, pid %d ys link points to self\n",
+				task[i]->pid);
 		if (task[i]->p_osptr == task[i])
-			printk("Warning, pid %d os link points to self\n");
+			printk("Warning, pid %d os link points to self\n",
+				task[i]->pid);
 		if (task[i]->p_osptr) {
 			if (task[i]->p_pptr != task[i]->p_osptr->p_pptr)
 				printk(

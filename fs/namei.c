@@ -183,9 +183,7 @@ static int dir_namei(const char * pathname, int * namelen, const char ** name,
 		if (!c)
 			break;
 		base->i_count++;
-		((char *) thisname)[len] = '\0';	/* fake string.. */
 		error = lookup(base,thisname,len,&inode);
-		((char *) thisname)[len] = c;
 		if (error) {
 			iput(base);
 			return error;

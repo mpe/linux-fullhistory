@@ -37,7 +37,7 @@ unsigned long prof_len = 0;
 
 #define _S(nr) (1<<((nr)-1))
 
-#define LATCH (1193180/HZ)
+#define LATCH ((1193180 + HZ/2)/HZ)
 
 extern void mem_use(void);
 
@@ -567,7 +567,7 @@ void sched_init(void)
 	__asm__("pushfl ; andl $0xffffbfff,(%esp) ; popfl");
 	load_TR(0);
 	load_ldt(0);
-	outb_p(0x36,0x43);		/* binary, mode 3, LSB/MSB, ch 0 */
+	outb_p(0x34,0x43);		/* binary, mode 2, LSB/MSB, ch 0 */
 	outb_p(LATCH & 0xff , 0x40);	/* LSB */
 	outb(LATCH >> 8 , 0x40);	/* MSB */
 	request_irq(TIMER_IRQ,(void (*)(int)) do_timer);

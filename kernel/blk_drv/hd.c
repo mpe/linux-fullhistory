@@ -305,6 +305,8 @@ static void read_intr(void)
 
 	do {
 		i = (unsigned) inb_p(HD_STATUS);
+		if (i & BUSY_STAT)
+			continue;
 		if ((i & STAT_MASK) != STAT_OK)
 			break;
 		if (i & DRQ_STAT)
@@ -354,6 +356,8 @@ static void write_intr(void)
 
 	do {
 		i = (unsigned) inb_p(HD_STATUS);
+		if (i & BUSY_STAT)
+			continue;
 		if ((i & STAT_MASK) != STAT_OK)
 			break;
 		if ((CURRENT->nr_sectors <= 1) || (i & DRQ_STAT))
@@ -503,7 +507,7 @@ repeat:
 }
 
 static int hd_ioctl(struct inode * inode, struct file * file,
-	unsigned int cmd, unsigned int arg)
+	unsigned int cmd, unsigned long arg)
 {
 	struct hd_geometry *loc = (void *) arg;
 	int dev, err;
