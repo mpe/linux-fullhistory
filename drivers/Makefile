@@ -71,4 +71,14 @@ SUB_DIRS += ap1000
 ALL_SUB_DIRS += ap1000
 endif
 
+# make will try to add $(MOD_SUB_DIRS).o to modules/MOD_LIST_NAME 
+# when MOD_LIST_NAME is set. We don't have hamradio.o and Linus
+# sort-of insisted on making hamradio a subdirectory to drivers/net.
+#
+
+ifeq ($(CONFIG_HAMRADIO),y)
+  SUB_DIRS += net/hamradio
+  MOD_SUB_DIRS += net/hamradio
+endif
+
 include $(TOPDIR)/Rules.make

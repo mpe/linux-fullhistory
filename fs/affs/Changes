@@ -12,15 +12,95 @@ Known bugs:
   apparently not causing the failure, as directory
   reads basically work (but all files are of size 0).
   Alas, I've got no alpha to debug. :-(
-- If an affs mounted filesystem is exported via
-  nfs, it cannot be written to. 
-  As soon as I have my network up and running, I'll
-  try to fix this.
+
 - The partition checker (drivers/block/genhd.c)
   doesn't work with devices which have 256 byte
   blocks (some very old SCSI drives). 
 
+- The feature to automatically make the fs clean
+  might leave a trashed file system with the
+  bitmap flag set valid.
+
+- The blocks from deleted directories are 
+  sometimes reclaimed only at umount time.
+
 Please direct bug reports to: hjw@zvw.de
+
+Version 3.6
+-----------
+
+- dentry changes. (Thanks to Jes Sorensen for his help.)
+
+- Fixed bug in balloc(): Superblock was not set dirty after
+  the bitmap was changed, so the bitmap wasn't sync'd.
+
+- Fixed nasty bug in find_new_zone(): If the current
+  zone number was zero, the loop didn't terminate,
+  causing a solid lock-up.
+
+- Removed support for old-style directory reads.
+
+- Fixed bug in add_entry(): When doing a sorted insert,
+  the pointer to the next entry in the hash chain wasn't
+  correctly byte-swapped. Since most of the users of the
+  affs use it on a 68k, they didn't notice. But why did
+  I not find this during my tests?
+
+- Fixed some oversights (version wasn't updated on some
+  directory changes).
+
+- Handling of hard links rewritten. To the VFS
+  they appear now as normal unix links. They are
+  now resolved only once in lookup(). The backside
+  is that unlink(), rename() and rmdir() have to
+  be smart about them, but the result is worth the
+  effort. This also led to some code cleanup.
+
+- Changed name type to unsigned char; the test for
+  invalid filenames didn't work correctly.
+  (Thanks to Michael Krause for pointing at this.)
+
+- Changed mapping of executable flag.
+
+- Changed all network byte-order macros to the
+  recommended ones.
+
+- Added a remount function, so attempts to remount
+  a dircache filesystem or one with errors read/write
+  can be trapped. Previously, ro remounts didn't
+  flush the super block, and rw remounts didn't
+  create allocation zones ...
+
+- Call shrink_dcache_parent() in rmdir().
+  (Thanks to Bill Hawes.)
+
+- Permission checks in unlink().
+
+- Allow mounting of volumes with superfluous
+  bitmap pointers read only, also allows them
+  to be remounted read/write.
+
+- Owner/Group defaults now to the fs user (i.e.
+  the one that mounted it) instead of root. This
+  obsoletes the mount options uid and gid.
+
+- Argument to volume option could overflow the
+  name buffer. It is now silently truncated to
+  30 characters. (Damnit! This kind of bug
+  is too embarrassing.)
+
+- Split inode.c into 2 files, the superblock
+  routines desperately wanted their own file.
+
+- truncate() didn't allocate an extension block
+  cache. If a file was extended by means of
+  truncate(), this led to an Oops.
+
+- fsuser is now checked last.
+
+- rename() will not ignore changes in filename
+  casing any more (though mv(1) still won't allow
+  you to do "mv oldname OldName").
 
 Version 3.5
 -----------

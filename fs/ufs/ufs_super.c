@@ -8,8 +8,6 @@
  *
  * Copyright (C) 1996  Eddie C. Dost  (ecd@skynet.be)
  *
- * $Id: ufs_super.c,v 1.25 1997/07/17 02:24:15 davem Exp $
- *
  */
 
 /*
@@ -18,30 +16,31 @@
  *
  * Module usage counts added on 96/04/29 by
  * Gertjan van Wingerde <gertjan@cs.vu.nl>
+ *
+ * Clean swab support on 19970406 by
+ * Francois-Rene Rideau <rideau@ens.fr>
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/ufs_fs.h>
 #include <linux/locks.h>
-#include <linux/init.h>
-
 #include <asm/uaccess.h>
 
-int ufs_need_swab = 0;
+#include "ufs_swab.h"
 
 struct super_block * ufs_read_super(struct super_block * sb, void * data, int silent);
 void ufs_put_super (struct super_block * sb);
-void ufs_statfs(struct super_block * sb, struct statfs * buf, int bufsize);
+int ufs_statfs(struct super_block * sb, struct statfs * buf, int bufsize);
 
 static struct super_operations ufs_super_ops = {
 	ufs_read_inode,
-	NULL,			/* notify_change() */
 	NULL,			/* XXX - ufs_write_inode() */
 	ufs_put_inode,
+	NULL,			/* XXX - ufs_delete_inode() */
+	NULL,			/* notify_change() */
 	ufs_put_super,
 	NULL,			/* XXX - ufs_write_super() */
 	ufs_statfs,
@@ -55,7 +54,8 @@ static struct file_system_type ufs_fs_type = {
 	NULL
 };
 
-__initfunc(int init_ufs_fs(void))
+int
+init_ufs_fs(void)
 {
 	return(register_filesystem(&ufs_fs_type));
 }
@@ -113,8 +113,9 @@ ufs_print_super_stuff(struct super_block * sb, struct ufs_superblock * usb)
 struct super_block *
 ufs_read_super(struct super_block * sb, void * data, int silent)
 {
-	struct ufs_superblock * usb;
+	struct ufs_superblock * usb;	/* normalized to local byteorder */
 	struct buffer_head * bh1, *bh2;
+	__u32 bytesex = 0;
 
 	/* sb->s_dev and sb->s_flags are set by our caller
 	 * data is the mystery argument to sys_mount()
@@ -132,9 +133,7 @@ ufs_read_super(struct super_block * sb, void * data, int silent)
 	if (!(bh1 = bread(sb->s_dev, UFS_SBLOCK/BLOCK_SIZE, BLOCK_SIZE)) ||
 	    !(bh2 = bread(sb->s_dev, (UFS_SBLOCK + BLOCK_SIZE)/BLOCK_SIZE,
 	                  BLOCK_SIZE))) {
-	        if (bh1) {
-	                brelse(bh1);
-	        }
+		brelse(bh1);
 	        printk ("ufs_read_super: unable to read superblock\n");
 
 		goto ufs_read_super_lose;
@@ -156,32 +155,35 @@ ufs_read_super(struct super_block * sb, void * data, int silent)
 	brelse(bh1);
 	brelse(bh2);
 
-	ufs_need_swab = 0;
-	sb->s_magic = ufs_swab32(usb->fs_magic);
-	if (sb->s_magic != UFS_MAGIC) {
-		ufs_need_swab = 1;
-		sb->s_magic = ufs_swab32(usb->fs_magic);
-		if (sb->s_magic != UFS_MAGIC) {
-	                printk ("ufs_read_super: bad magic number 0x%8.8lx "
-				"on dev %d/%d\n", sb->s_magic,
+	switch (le32_to_cpup(&usb->fs_magic)) {
+		case UFS_MAGIC:
+			bytesex = UFS_LITTLE_ENDIAN;
+			ufs_superblock_le_to_cpus(usb);
+			break;
+		case UFS_CIGAM:
+			bytesex = UFS_BIG_ENDIAN;
+			ufs_superblock_be_to_cpus(usb);
+			break;
+			/* usb is now normalized to local byteorder */
+		default:
+	                printk ("ufs_read_super: bad magic number 0x%8.8x "
+				"on dev %d/%d\n", usb->fs_magic,
 				MAJOR(sb->s_dev), MINOR(sb->s_dev));
-
 			goto ufs_read_super_lose;
-		}
 	}
 
 	/* We found a UFS filesystem on this device. */
 
 	/* XXX - parse args */
 
-	if (ufs_swab32(usb->fs_bsize) != UFS_BSIZE) {
-	        printk("ufs_read_super: fs_bsize %d != %d\n", ufs_swab32(usb->fs_bsize),
+	if (usb->fs_bsize != UFS_BSIZE) {
+	        printk("ufs_read_super: fs_bsize %d != %d\n", usb->fs_bsize,
 	               UFS_BSIZE);
 	        goto ufs_read_super_lose;
 	}
 
-	if (ufs_swab32(usb->fs_fsize) != UFS_FSIZE) {
-	        printk("ufs_read_super: fs_fsize %d != %d\n", ufs_swab32(usb->fs_fsize),
+	if (usb->fs_fsize != UFS_FSIZE) {
+	        printk("ufs_read_super: fs_fsize %d != %d\n", usb->fs_fsize,
 	               UFS_FSIZE);
 	        goto ufs_read_super_lose;
 	}
@@ -190,7 +192,7 @@ ufs_read_super(struct super_block * sb, void * data, int silent)
 	printk("ufs_read_super: fs last mounted on \"%s\"\n", usb->fs_fsmnt);
 #endif
 
-	if (ufs_swab32(usb->fs_state) == UFS_FSOK - ufs_swab32(usb->fs_time)) {
+	if (usb->fs_state == UFS_FSOK - usb->fs_time) {
 	        switch(usb->fs_clean) {
 	                case UFS_FSCLEAN:
 #ifdef DEBUG_UFS_SUPER
@@ -225,35 +227,35 @@ ufs_read_super(struct super_block * sb, void * data, int silent)
 	/* XXX - sanity check sb fields */
 
 	/* KRR - Why are we not using fs_bsize for blocksize? */
-	sb->s_blocksize = ufs_swab32(usb->fs_fsize);
-	sb->s_blocksize_bits = ufs_swab32(usb->fs_fshift);
+	sb->s_blocksize = usb->fs_fsize;
+	sb->s_blocksize_bits = usb->fs_fshift;
 	/* XXX - sb->s_lock */
 	sb->s_op = &ufs_super_ops;
 	sb->dq_op = 0; /* XXX */
-	/* KRR - defined above - sb->s_magic = usb->fs_magic; */
+	sb->s_magic = usb->fs_magic;
 	/* sb->s_time */
 	/* sb->s_wait */
 	/* XXX - sb->u.ufs_sb */
 	sb->u.ufs_sb.s_raw_sb = usb; /* XXX - maybe move this to the top */
-	sb->u.ufs_sb.s_flags = 0;
-	sb->u.ufs_sb.s_ncg = ufs_swab32(usb->fs_ncg);
-	sb->u.ufs_sb.s_ipg = ufs_swab32(usb->fs_ipg);
-	sb->u.ufs_sb.s_fpg = ufs_swab32(usb->fs_fpg);
-	sb->u.ufs_sb.s_fsize = ufs_swab32(usb->fs_fsize);
-	sb->u.ufs_sb.s_fmask = ufs_swab32(usb->fs_fmask);
-	sb->u.ufs_sb.s_fshift = ufs_swab32(usb->fs_fshift);
-	sb->u.ufs_sb.s_bsize = ufs_swab32(usb->fs_bsize);
-	sb->u.ufs_sb.s_bmask = ufs_swab32(usb->fs_bmask);
-	sb->u.ufs_sb.s_bshift = ufs_swab32(usb->fs_bshift);
-	sb->u.ufs_sb.s_iblkno = ufs_swab32(usb->fs_iblkno);
-	sb->u.ufs_sb.s_dblkno = ufs_swab32(usb->fs_dblkno);
-	sb->u.ufs_sb.s_cgoffset = ufs_swab32(usb->fs_cgoffset);
-	sb->u.ufs_sb.s_cgmask = ufs_swab32(usb->fs_cgmask);
-	sb->u.ufs_sb.s_inopb = ufs_swab32(usb->fs_inopb);
-	sb->u.ufs_sb.s_lshift = ufs_swab32(usb->fs_bshift) - ufs_swab32(usb->fs_fshift);
-	sb->u.ufs_sb.s_lmask = ~((ufs_swab32(usb->fs_fmask) - ufs_swab32(usb->fs_bmask))
-					>> ufs_swab32(usb->fs_fshift));
-	sb->u.ufs_sb.s_fsfrag = ufs_swab32(usb->fs_frag); /* XXX - rename this later */
+	sb->u.ufs_sb.s_flags = bytesex | UFS_DEBUG_INITIAL ;
+	sb->u.ufs_sb.s_ncg = usb->fs_ncg;
+	sb->u.ufs_sb.s_ipg = usb->fs_ipg;
+	sb->u.ufs_sb.s_fpg = usb->fs_fpg;
+	sb->u.ufs_sb.s_fsize = usb->fs_fsize;
+	sb->u.ufs_sb.s_fmask = usb->fs_fmask;
+	sb->u.ufs_sb.s_fshift = usb->fs_fshift;
+	sb->u.ufs_sb.s_bsize = usb->fs_bsize;
+	sb->u.ufs_sb.s_bmask = usb->fs_bmask;
+	sb->u.ufs_sb.s_bshift = usb->fs_bshift;
+	sb->u.ufs_sb.s_iblkno = usb->fs_iblkno;
+	sb->u.ufs_sb.s_dblkno = usb->fs_dblkno;
+	sb->u.ufs_sb.s_cgoffset = usb->fs_cgoffset;
+	sb->u.ufs_sb.s_cgmask = usb->fs_cgmask;
+	sb->u.ufs_sb.s_inopb = usb->fs_inopb;
+	sb->u.ufs_sb.s_lshift = usb->fs_bshift - usb->fs_fshift;
+	sb->u.ufs_sb.s_lmask = ~((usb->fs_fmask - usb->fs_bmask)
+					>> usb->fs_fshift);
+	sb->u.ufs_sb.s_fsfrag = usb->fs_frag; /* XXX - rename this later */
 	sb->s_root = d_alloc_root(iget(sb, UFS_ROOTINO), NULL);
 
 #ifdef DEBUG_UFS_SUPER
@@ -285,6 +287,7 @@ void ufs_put_super (struct super_block * sb)
 	sb->s_dev = 0;
 
 	/* XXX - free allocated kernel memory */
+	/* includes freeing usb page */
 
 	unlock_super (sb);
 	MOD_DEC_USE_COUNT;
@@ -292,11 +295,12 @@ void ufs_put_super (struct super_block * sb)
 	return;
 }
 
-void ufs_statfs(struct super_block * sb, struct statfs * buf, int bufsiz)
+int ufs_statfs(struct super_block * sb, struct statfs * buf, int bufsiz)
 {
 	struct statfs tmp;
 	struct statfs *sp = &tmp;
 	struct ufs_superblock *fsb = sb->u.ufs_sb.s_raw_sb;
+	/* fsb was already normalized during mounting */
 	unsigned long used, avail;
 
         if (sb->u.ufs_sb.s_flags & UFS_DEBUG) {
@@ -305,13 +309,13 @@ void ufs_statfs(struct super_block * sb, struct statfs * buf, int bufsiz)
 
 	sp->f_type = sb->s_magic;
 	sp->f_bsize = sb->s_blocksize;
-	sp->f_blocks = ufs_swab32(fsb->fs_dsize);
-	sp->f_bfree = ufs_swab32(fsb->fs_cstotal.cs_nbfree) *
-			ufs_swab32(fsb->fs_frag) +
-			ufs_swab32(fsb->fs_cstotal.cs_nffree);
+	sp->f_blocks = fsb->fs_dsize;
+	sp->f_bfree = fsb->fs_cstotal.cs_nbfree *
+			fsb->fs_frag +
+			fsb->fs_cstotal.cs_nffree;
 
 	avail = sp->f_blocks - (sp->f_blocks / 100) *
-			ufs_swab32(fsb->fs_minfree);
+			fsb->fs_minfree;
 	used = sp->f_blocks - sp->f_bfree;
 	if (avail > used)
 		sp->f_bavail = avail - used;
@@ -319,11 +323,10 @@ void ufs_statfs(struct super_block * sb, struct statfs * buf, int bufsiz)
 		sp->f_bavail = 0;
 
 	sp->f_files = sb->u.ufs_sb.s_ncg * sb->u.ufs_sb.s_ipg;
-	sp->f_ffree = ufs_swab32(fsb->fs_cstotal.cs_nifree);
-	sp->f_fsid.val[0] = ufs_swab32(fsb->fs_id[0]);
-	sp->f_fsid.val[1] = ufs_swab32(fsb->fs_id[1]);
+	sp->f_ffree = fsb->fs_cstotal.cs_nifree;
+	sp->f_fsid.val[0] = fsb->fs_id[0];
+	sp->f_fsid.val[1] = fsb->fs_id[1];
 	sp->f_namelen = UFS_MAXNAMLEN;
 
-	copy_to_user(buf, sp, bufsiz);
-	return;
+	return copy_to_user(buf, sp, bufsiz) ? -EFAULT : 0;
 }

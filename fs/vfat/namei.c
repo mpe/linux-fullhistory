@@ -5,7 +5,7 @@
  *
  *  Windows95/Windows NT compatible extended MSDOS filesystem
  *    by Gordon Chaffee Copyright (C) 1995.  Send bug reports for the
- *    VFAT filesystem to <chaffee@plateau.cs.berkeley.edu>.  Specify
+ *    VFAT filesystem to <chaffee@cs.berkeley.edu>.  Specify
  *    what file operation caused you trouble and if you can duplicate
  *    the problem, send a script that demonstrates it.
  */
@@ -20,6 +20,7 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/string.h>
+#include <linux/ctype.h>
 #include <linux/stat.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
@@ -37,12 +38,6 @@
 #else
 # define CHECK_STACK check_stack(__FILE__, __LINE__)
 #endif
-
-/*
- * XXX: It would be better to use the tolower from linux/ctype.h,
- * but _ctype is needed and it is not exported.
- */
-#define tolower(c) (((c) >= 'A' && (c) <= 'Z') ? (c)-('A'-'a') : (c))
 
 struct vfat_find_info {
 	const char *name;
@@ -229,10 +224,15 @@ static void dump_de(struct msdos_dir_entry *de)
 
 /* MS-DOS "device special files" */
 
-static const char *reserved_names[] = {
-	"CON     ","PRN     ","NUL     ","AUX     ",
-	"LPT1    ","LPT2    ","LPT3    ","LPT4    ",
-	"COM1    ","COM2    ","COM3    ","COM4    ",
+static const char *reserved3_names[] = {
+	"con     ", "prn     ", "nul     ", "aux     ", NULL
+};
+
+static const char *reserved4_names[] = {
+	"com1    ", "com2    ", "com3    ", "com4    ", "com5    ",
+	"com6    ", "com7    ", "com8    ", "com9    ",
+	"lpt1    ", "lpt2    ", "lpt3    ", "lpt4    ", "lpt5    ",
+	"lpt6    ", "lpt7    ", "lpt8    ", "lpt9    ",
 	NULL };
 
 
@@ -245,16 +245,32 @@ static int vfat_find(struct inode *dir,struct qstr* name,
 		      int find_long,int new_filename,int is_dir,
 		      struct slot_info *sinfo_out);
 
-/* Checks the validity of an long MS-DOS filename */
+static int strnicmp(const char *s1, const char *s2, int len)
+{
+	int n = 0;
+	while (*s1 && *s2 && (tolower(*s1) == tolower(*s2))) {
+		s1++; s2++; n++;
+		if (n == len) return 0;
+	}
+	if (*s1 == 0 && *s2 == 0) return 0;
+	if (*s1 && *s2) {
+		if (*s1 > *s2) return 1;
+		return -1;
+	}
+	if (*s1) return 1;
+	return -1;
+}
+
+/* Checks the validity of a long MS-DOS filename */
 /* Returns negative number on error, 0 for a normal
  * return, and 1 for . or .. */
 
 static int vfat_valid_longname(const char *name, int len, int dot_dirs,
 			       int xlate)
 {
-	const char **reserved;
+	const char **reserved, *walk;
 	unsigned char c;
-	int i;
+	int i, baselen;
 
 	if (IS_FREE(name)) return -EINVAL;
 	if (name[0] == '.' && (len == 1 || (len == 2 && name[1] == '.'))) {
@@ -271,9 +287,21 @@ static int vfat_valid_longname(const char *name, int len, int dot_dirs,
 			return -EINVAL;
 		}
 	}
- 	if (len == 3 || len == 4) {
-		for (reserved = reserved_names; *reserved; reserved++)
-			if (!strncmp(name,*reserved,8)) return -EINVAL;
+ 	if (len < 3) return 0;
+
+	for (walk = name; *walk != 0 && *walk != '.'; walk++);
+	baselen = walk - name;
+
+	if (baselen == 3) {
+		for (reserved = reserved3_names; *reserved; reserved++) {
+			if (!strnicmp(name,*reserved,baselen))
+				return -EINVAL;
+		}
+	} else if (baselen == 4) {
+		for (reserved = reserved4_names; *reserved; reserved++) {
+			if (!strnicmp(name,*reserved,baselen))
+				return -EINVAL;
+		}
 	}
 	return 0;
 }
@@ -284,6 +312,7 @@ static int vfat_valid_shortname(const char *name,int len,
 	const char *walk, **reserved;
 	unsigned char c;
 	int space;
+	int baselen;
 
 	if (IS_FREE(name)) return -EINVAL;
 	if (name[0] == '.' && (len == 1 || (len == 2 && name[1] == '.'))) {
@@ -312,7 +341,9 @@ static int vfat_valid_shortname(const char *name,int len,
 		if (c != '.') return -EINVAL;
 	}
 	while (c != '.' && len--) c = *walk++;
+	baselen = walk - name;
 	if (c == '.') {
+		baselen--;
 		if (len >= 4) return -EINVAL;
 		while (len > 0 && walk-name < (MSDOS_NAME+1)) {
 			c = *walk++;
@@ -329,8 +360,13 @@ static int vfat_valid_shortname(const char *name,int len,
 		if (space) return -EINVAL;
 		if (len) return -EINVAL;
 	}
-	for (reserved = reserved_names; *reserved; reserved++)
-		if (!strncmp(name,*reserved,8)) return -EINVAL;
+	if (baselen == 3) {
+		for (reserved = reserved3_names; *reserved; reserved++)
+			if (!strnicmp(name,*reserved,baselen)) return -EINVAL;
+	} else if (baselen == 4) {
+		for (reserved = reserved4_names; *reserved; reserved++)
+			if (!strnicmp(name,*reserved,baselen)) return -EINVAL;
+	}
 
 	return 0;
 }
@@ -341,7 +377,7 @@ static int vfat_valid_shortname(const char *name,int len,
  */
 
 static int vfat_format_name(const char *name,int len,char *res,
-  int dot_dirs,int utf8)
+			    int dot_dirs,int utf8)
 {
 	char *walk;
 	const char **reserved;
@@ -396,8 +432,10 @@ static int vfat_format_name(const char *name,int len,char *res,
 		if (len) return -EINVAL;
 	}
 	while (walk-res < MSDOS_NAME) *walk++ = ' ';
-	for (reserved = reserved_names; *reserved; reserved++)
-		if (!strncmp(res,*reserved,8)) return -EINVAL;
+	for (reserved = reserved3_names; *reserved; reserved++)
+		if (!strnicmp(res,*reserved,8)) return -EINVAL;
+	for (reserved = reserved4_names; *reserved; reserved++)
+		if (!strnicmp(res,*reserved,8)) return -EINVAL;
 
 	return 0;
 }
@@ -605,8 +643,8 @@ static loff_t vfat_find_free_slots(struct inode *dir,int slots)
 					/* Directory slots of busy deleted files aren't available yet. */
 					done = !MSDOS_I(inode)->i_busy;
 					/* PRINTK(("inode %d still busy\n", ino)); */
+					iput(inode);
 				}
-				iput(inode);
 			}
 			if (done) {
 				row++;
@@ -995,7 +1033,6 @@ cleanup:
 int vfat_lookup(struct inode *dir,struct dentry *dentry)
 {
 	int res;
-	struct inode *next;
 	struct slot_info sinfo;
 	struct inode *result;
 	
@@ -1014,7 +1051,7 @@ int vfat_lookup(struct inode *dir,struct dentry *dentry)
 	if (!result->i_sb ||
 	    (result->i_sb->s_magic != MSDOS_SUPER_MAGIC)) {
 		/* crossed a mount point into a non-msdos fs */
-		d_add(dentry,result);
+		d_add(dentry,NULL);
 		return 0;
 	}
 	if (MSDOS_I(result)->i_busy) { /* mkdir in progress */
@@ -1023,18 +1060,7 @@ int vfat_lookup(struct inode *dir,struct dentry *dentry)
 		return 0;
 	}
 	PRINTK (("vfat_lookup 6\n"));
-	while (MSDOS_I(result)->i_old) {
-		next = MSDOS_I(result)->i_old;
-		iput(result);
-		if (!(result = iget(next->i_sb,next->i_ino))) {
-			fat_fs_panic(dir->i_sb,"vfat_lookup: Can't happen");
-			iput(dir);
-			return -ENOENT;
-		}
-	}
-	PRINTK (("vfat_lookup 7\n"));
 	d_add(dentry,result);
-	PRINTK (("vfat_lookup 8\n"));	
 	return 0;
 }
 
@@ -1091,10 +1117,12 @@ int vfat_create(struct inode *dir,struct dentry* dentry,int mode)
 	result=NULL;
 	fat_lock_creation();
 	res = vfat_create_entry(dir,&dentry->d_name,0,&result);
-	if (res < 0) PRINTK(("vfat_create: unable to get new entry\n"));
-
 	fat_unlock_creation();
-	d_instantiate(dentry,result);
+	if (res < 0) {
+		PRINTK(("vfat_create: unable to get new entry\n"));
+	} else {
+		d_instantiate(dentry,result);
+	}
 	return res;
 }
 
@@ -1123,9 +1151,10 @@ static int vfat_create_a_dotdir(struct inode *dir,struct inode *parent,
 	de->adate = de->cdate = de->date;
 	de->size = 0;
 	fat_mark_buffer_dirty(sb, bh, 1);
-	if ((dot = iget(dir->i_sb,ino)) != NULL)
-		vfat_read_inode(dot);
-	if (!dot) return -EIO;
+	dot = iget(dir->i_sb,ino);
+	if (!dot)
+		return -EIO;
+	vfat_read_inode(dot);
 	dot->i_mtime = dot->i_atime = CURRENT_TIME;
 	mark_inode_dirty(dot);
 	if (isdot) {
@@ -1192,8 +1221,15 @@ static int vfat_empty(struct inode *dir)
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
 
-	if (dir->i_count > 1)
+	/*
+	 * Prune any child dentries, then verify that
+	 * the directory is empty and not in use.
+	 */
+	shrink_dcache_sb(sb); /* should be child prune */
+
+	if (dir->i_count > 1) {
 		return -EBUSY;
+	}
 	if (MSDOS_I(dir)->i_start) { /* may be zero in mkdir */
 		pos = 0;
 		bh = NULL;
@@ -1288,7 +1324,6 @@ static int vfat_remove_entry(struct inode *dir,struct slot_info *sinfo,
 	for (i = sinfo->long_slots; i > 0; --i) {
 		res = fat_get_entry(dir, &offset, bh, &de);
 		if (res < 0) {
-			printk("vfat_remove_entry: problem 1\n");
 			continue;
 		}
 		de->name[0] = DELETED_FLAG;
@@ -1306,24 +1341,17 @@ static int vfat_rmdirx(struct inode *dir,struct dentry* dentry)
 	struct buffer_head *bh;
 	struct slot_info sinfo;
 
-	bh = NULL;
-	res = -EPERM;
-	if (dentry->d_name.name[0] == '.' && 
-	    (dentry->d_name.len == 1 || (dentry->d_name.len == 2 && 
-					 dentry->d_name.name[1] == '.')))
-		goto rmdir_done;
 	res = vfat_find(dir,&dentry->d_name,1,0,0,&sinfo);
 
 	if (res >= 0 && sinfo.total_slots > 0) {
+		bh = NULL;
 		res = vfat_remove_entry(dir,&sinfo,&bh,dentry,1,0);
 		if (res > 0) {
 			res = 0;
 		}
 		dir->i_version = ++event;
+		if (bh) fat_brelse(sb, bh);
 	}
-
-rmdir_done:
-	fat_brelse(sb, bh);
 	return res;
 }
 
@@ -1331,9 +1359,10 @@ rmdir_done:
 int vfat_rmdir(struct inode *dir,struct dentry* dentry)
 {
 	int res;
-
 	res = vfat_rmdirx(dir, dentry);
-	d_delete(dentry);
+	if (res >= 0) {
+		d_delete(dentry);
+	}
 	return res;
 }
 
@@ -1357,7 +1386,7 @@ static int vfat_unlinkx(
 		}
 	}
 
-	fat_brelse(sb, bh);
+	if (bh) fat_brelse(sb, bh);
 	return res;
 }
 
@@ -1394,7 +1423,9 @@ int vfat_unlink(struct inode *dir,struct dentry* dentry)
 	int res;
 
 	res = vfat_unlinkx (dir,dentry,1);
-	d_delete(dentry);
+	if (res >= 0) {
+		d_delete(dentry);
+	}
 	return res;
 }
 
@@ -1633,22 +1664,3 @@ void cleanup_module(void)
 }
 
 #endif /* ifdef MODULE */
-
-
-
-/*
- * Overrides for Emacs so that we follow Linus's tabbing style.
- * Emacs will notice this stuff at the end of the file and automatically
- * adjust the settings for this buffer only.  This must remain at the end
- * of the file.
- * ---------------------------------------------------------------------------
- * Local variables:
- * c-indent-level: 8
- * c-brace-imaginary-offset: 0
- * c-brace-offset: -8
- * c-argdecl-indent: 8
- * c-label-offset: -8
- * c-continued-statement-offset: 8
- * c-continued-brace-offset: 0
- * End:
- */

@@ -75,6 +75,7 @@
 #define TIOCSPGRP	_IOW('t', 130, int)
 #define TIOCGPGRP	_IOR('t', 131, int)
 #define TIOCSCTTY	_IO('t', 132)
+#define TIOCGSID	_IOR('t', 133, int)
 
 /* Little f */
 #define FIOCLEX		_IO('f', 1)

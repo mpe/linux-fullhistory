@@ -158,6 +158,7 @@ extern void vesa_powerdown(void);
 extern void compute_shiftstate(void);
 extern void reset_palette(int currcons);
 extern void set_palette(void);
+extern int con_is_present(void);
 extern unsigned long con_type_init(unsigned long, const char **);
 extern void con_type_init_finish(void);
 extern int set_get_cmap(unsigned char *, int);
@@ -1836,7 +1837,7 @@ void poke_blanked_console(void)
 }
 
 #ifdef CONFIG_VT_CONSOLE
-void vt_console_print(const char * b, unsigned count)
+void vt_console_print(struct console *co, const char * b, unsigned count)
 {
 	int currcons = fg_console;
 	unsigned char c;
@@ -1885,16 +1886,25 @@ void vt_console_print(const char * b, unsigned count)
 	printing = 0;
 }
 
-static int vt_console_device(void)
+static kdev_t vt_console_device(struct console *c)
 {
-	return MKDEV(TTY_MAJOR, fg_console + 1);
+	return MKDEV(TTY_MAJOR, c->index ? c->index : fg_console + 1);
 }
 
-extern void keyboard_wait_for_keypress(void);
+extern int keyboard_wait_for_keypress(struct console *);
 
 struct console vt_console_driver = {
-	vt_console_print, do_unblank_screen,
-        keyboard_wait_for_keypress, vt_console_device
+	"tty",
+	vt_console_print,
+	NULL,
+	vt_console_device,
+	keyboard_wait_for_keypress,
+	do_unblank_screen,
+	NULL,
+	CON_PRINTBUFFER,
+	-1,
+	0,
+	NULL
 };
 #endif
 
@@ -1983,6 +1993,9 @@ static void console_bh(void)
  *
  * Reads the information preserved by setup.s to determine the current display
  * type and sets everything accordingly.
+ *
+ * FIXME: return early if we don't _have_ a video card installed.
+ *
  */
 __initfunc(unsigned long con_init(unsigned long kmem_start))
 {
@@ -2117,7 +2130,7 @@ __initfunc(unsigned long con_init(unsigned long kmem_start))
 	 * within the bus probing code... :-(
 	 */
 #ifdef CONFIG_VT_CONSOLE
-	if (video_type != VIDEO_TYPE_TGAC)
+	if (video_type != VIDEO_TYPE_TGAC && con_is_present())
 		register_console(&vt_console_driver);
 #endif
 

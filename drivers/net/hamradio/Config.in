@@ -1,0 +1,62 @@
+#
+# Amateur Radio protocols and AX.25 device configuration
+#
+# 19971130	Now in an own category to make correct compilation of the 
+#		AX.25 stuff easier...
+#		Joerg Reuter DL1BKE <jreuter@poboxes.com>
+
+mainmenu_option next_comment
+comment 'Amateur Radio support'
+bool 'Amateur Radio support' CONFIG_HAMRADIO
+
+if [ "$CONFIG_HAMRADIO" != "n" ] ; then
+  if [ "$CONFIG_NET" != "n" ] ; then
+    comment 'Packet Radio protocols'
+    tristate 'Amateur Radio AX.25 Level 2 protocol' CONFIG_AX25
+    if [ "$CONFIG_AX25" != "n" ]; then
+      bool '   AX.25 DAMA Slave support' CONFIG_AX25_DAMA_SLAVE
+#     bool '   AX.25 DAMA Master support' CONFIG_AX25_DAMA_MASTER
+      dep_tristate '   Amateur Radio NET/ROM protocol' CONFIG_NETROM $CONFIG_AX25
+      dep_tristate '   Amateur Radio X.25 PLP (Rose)' CONFIG_ROSE $CONFIG_AX25
+    fi
+    
+    if [ "$CONFIG_AX25" != "n" ]; then
+      comment 'AX.25 network device drivers'
+      tristate 'Serial port KISS driver' CONFIG_MKISS
+#     tristate 'Serial port 6PACK driver' CONFIG_6PACK
+      tristate 'BPQ Ethernet driver' CONFIG_BPQETHER
+      tristate 'Gracilis PackeTwin driver' CONFIG_PT
+      tristate 'Ottawa PI and PI2 driver' CONFIG_PI
+    
+      tristate 'Z8530 SCC driver' CONFIG_SCC
+      if [ "$CONFIG_SCC" != "n" ]; then
+        bool '   additional delay for PA0HZP OptoSCC compatible boards' CONFIG_SCC_DELAY
+        bool '   support for TRX that feedback the tx signal to rx' CONFIG_SCC_TRXECHO
+      fi
+    
+      tristate 'BAYCOM ser12 fullduplex driver for AX.25' CONFIG_BAYCOM_SER_FDX
+      tristate 'BAYCOM ser12 halfduplex driver for AX.25' CONFIG_BAYCOM_SER_HDX
+      tristate 'BAYCOM picpar and par96 driver for AX.25' CONFIG_BAYCOM_PAR
+    
+      tristate 'Soundcard modem driver' CONFIG_SOUNDMODEM
+      if [ "$CONFIG_SOUNDMODEM" != "n" ]; then
+        bool '   soundmodem support for Soundblaster and compatible cards' CONFIG_SOUNDMODEM_SBC
+        bool '   soundmodem support for WSS and Crystal cards' CONFIG_SOUNDMODEM_WSS
+        bool '   soundmodem support for 1200 baud AFSK modulation' CONFIG_SOUNDMODEM_AFSK1200
+        bool '   soundmodem support for 2400 baud AFSK modulation (7.3728MHz crystal)' CONFIG_SOUNDMODEM_AFSK2400_7
+        bool '   soundmodem support for 2400 baud AFSK modulation (8MHz crystal)' CONFIG_SOUNDMODEM_AFSK2400_8
+        bool '   soundmodem support for 4800 baud HAPN-1 modulation' CONFIG_SOUNDMODEM_HAPN4800
+        bool '   soundmodem support for 9600 baud FSK G3RUH modulation' CONFIG_SOUNDMODEM_FSK9600
+      fi
+    fi
+  fi
+   
+  comment 'Misc. hamradio protocols'
+  tristate 'Shortwave radio modem driver' CONFIG_HFMODEM
+  if [ "$CONFIG_HFMODEM" != "n" ]; then
+    bool '   HFmodem support for Soundblaster and compatible cards' CONFIG_HFMODEM_SBC
+    bool '   HFmodem support for WSS and Crystal cards' CONFIG_HFMODEM_WSS
+  fi
+fi
+
+endmenu

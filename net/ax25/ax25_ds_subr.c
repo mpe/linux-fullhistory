@@ -115,7 +115,10 @@ void ax25_ds_enquiry_response(ax25_cb *ax25)
 		if (ax25o->state == AX25_STATE_1 || ax25o->state == AX25_STATE_2 || skb_peek(&ax25o->ack_queue) != NULL)
 			ax25_ds_t1_timeout(ax25o);
 
-		ax25_start_t3timer(ax25o);
+		/* do not start T3 for listening sockets (tnx DD8NE) */
+
+		if (ax25o->state != AX25_STATE_0)
+			ax25_start_t3timer(ax25o);
 	}
 }
 
@@ -210,8 +213,8 @@ void ax25_dama_on(ax25_cb *ax25)
 
 void ax25_dama_off(ax25_cb *ax25)
 {
-	ax25_dev_dama_off(ax25->ax25_dev);
 	ax25->condition &= ~AX25_COND_DAMA_MODE;
+	ax25_dev_dama_off(ax25->ax25_dev);
 }
 
 #endif

@@ -1079,10 +1079,26 @@ scratch_ram {
 	CUR_SCBID {
 		size		1
 	}
+	ARG_1 {
+		size		1
+		mask	SEND_MSG	0x80
+		mask	SEND_SENSE	0x40
+		mask	SEND_REJ	0x20
+		alias	RETURN_1
+	}
 	/*
 	 * Running count of commands placed in
 	 * the QOUTFIFO.  This is cleared by the
 	 * kernel driver every FIFODEPTH commands.
+	 *
+	 * NOTE: These scratch RAM registers are overlaying SCSICONF
+	 *       and SCSICONF2 and are only used on cards that are
+	 *       capable of SCB paging.   Currently, only the PCI
+	 *       controllers can do this, which is good because the
+	 *       AIC-7770 based controllers use the SCSICONF register
+	 *       to control termination.  In other words, do not
+	 *       destroy the contents of SCSICONF and SCSICONF2 for
+	 *       AIC-7770 based controllers.
 	 */
 	CMDOUTCNT {
 		size		1
@@ -1094,13 +1110,6 @@ scratch_ram {
 	FIFODEPTH {
 		size		1
 	}
-	ARG_1 {
-		size		1
-		mask	SEND_MSG	0x80
-		mask	SEND_SENSE	0x40
-		mask	SEND_REJ	0x20
-		alias	RETURN_1
-	}
 	/*
 	 * These are reserved registers in the card's scratch ram.  Some of
 	 * the values are specified in the AHA2742 technical reference manual
@@ -1108,6 +1117,11 @@ scratch_ram {
 	 */
 	SCSICONF {
 		address		0x05a
+		size		1
+		bit	RESET_SCSI	0x40
+	}
+        SCSICONF2 {
+		address		0x05b
 		size		1
 		bit	RESET_SCSI	0x40
 	}

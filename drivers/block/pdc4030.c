@@ -169,8 +169,10 @@ int init_pdc4030 (void)
             default:   hwif->irq = 15; break;
 	}
 	printk("on IRQ %d\n",hwif->irq);
-	hwif->chipset    = second_hwif->chipset    = ide_pdc4030;
-	hwif->selectproc = second_hwif->selectproc = &promise_selectproc;
+	hwif->chipset     = second_hwif->chipset    = ide_pdc4030;
+	hwif->mate        = second_hwif;
+	second_hwif->mate = hwif;
+	hwif->selectproc  = second_hwif->selectproc = &promise_selectproc;
 /* Shift the remaining interfaces down by one */
 	for (i=MAX_HWIFS-1 ; i > hwif->index+1 ; i--) {
 		ide_hwif_t *h = &ide_hwifs[i];

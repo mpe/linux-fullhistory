@@ -63,10 +63,12 @@ extern void scrollback(int);
 extern void scrollfront(int);
 
 struct wait_queue * keypress_wait = NULL;
+struct console;
 
-void keyboard_wait_for_keypress(void)
+int keyboard_wait_for_keypress(struct console *co)
 {
 	sleep_on(&keypress_wait);
+	return 0;
 }
 
 /*

@@ -91,7 +91,7 @@ affs_free_block(struct super_block *sb, s32 block)
 				block);
 	else {
 		sb->u.affs_sb.s_alloc[zone_no].az_free++;
-		((u32 *)bm->bm_bh->b_data)[0] = ntohl(htonl(((u32 *)bm->bm_bh->b_data)[0]) - blk);
+		((u32 *)bm->bm_bh->b_data)[0] = cpu_to_be32(be32_to_cpu(((u32 *)bm->bm_bh->b_data)[0]) - blk);
 		mark_buffer_dirty(bm->bm_bh,1);
 		sb->s_dirt = 1;
 	}
@@ -136,7 +136,7 @@ found:
 	fwb = zone->z_bm->bm_firstblk + (i - 1) * 32;
 	lock_super(sb);
 	zone->z_start = i;
-	w   = ~htonl(bm[i]);
+	w   = ~be32_to_cpu(bm[i]);
 	fb  = find_first_zero_bit(&w,32);
 	if (fb > 31 || !test_and_clear_bit(fb ^ BO_EXBITS,&bm[i])) {
 		unlock_super(sb);
@@ -163,10 +163,11 @@ found:
 			az->az_free--;
 		}
 	}
-	w     = ~w - htonl(bm[i]);
-	bm[0] = ntohl(htonl(bm[0]) + w);
+	w     = ~w - be32_to_cpu(bm[i]);
+	bm[0] = cpu_to_be32(be32_to_cpu(bm[0]) + w);
 	unlock_super(sb);
 	mark_buffer_dirty(zone->z_bm->bm_bh,1);
+	sb->s_dirt = 1;
 	zone->z_lru_time = jiffies;
 
 	return block;
@@ -208,8 +209,6 @@ affs_find_new_zone(struct super_block *sb, int zone_no)
 
 	}
 	while (1) {
-		if (i >= sb->u.affs_sb.s_num_az)
-			i = 0;
 		az = &sb->u.affs_sb.s_alloc[i];
 		if (!az->az_count) {
 			if (az->az_free > min) {
@@ -223,7 +222,9 @@ affs_find_new_zone(struct super_block *sb, int zone_no)
 			lusers   = az->az_count;
 			bestused = i;
 		}
-		if (++i == zone->z_az_no) {		/* Seen all */
+		if (++i >= sb->u.affs_sb.s_num_az)
+			i = 0;
+		if (i == zone->z_az_no) {		/* Seen all */
 			if (bestno >= 0) {
 				i = bestno;
 			} else {
@@ -279,7 +280,7 @@ affs_new_header(struct inode *inode)
 	}
 init_block:
 	if (!(bh = getblk(inode->i_dev,block,AFFS_I2BSIZE(inode)))) {
-		affs_error(inode->i_sb,"new_header","Cannot read block %d",block);
+		affs_error(inode->i_sb,"new_header","Cannot get block %d",block);
 		return 0;
 	}
 	memset(bh->b_data,0,AFFS_I2BSIZE(inode));
@@ -357,7 +358,7 @@ found:
 
 init_block:
 	if (!(bh = getblk(inode->i_dev,block,sb->s_blocksize))) {
-		affs_error(inode->i_sb,"new_data","Cannot read block %d",block);
+		affs_error(inode->i_sb,"new_data","Cannot get block %d",block);
 		return 0;
 	}
 	memset(bh->b_data,0,sb->s_blocksize);

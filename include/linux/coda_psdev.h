@@ -4,8 +4,6 @@
 #define CODA_PSDEV_MAJOR 67
 #define MAX_CODADEVS  5	   /* how many do we allow */
 
-#include <linux/config.h>
-
 extern struct vcomm psdev_vcomm[];
 
 #define CODA_SUPER_MAGIC	0x73757245

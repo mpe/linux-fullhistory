@@ -443,6 +443,19 @@ void set_vesa_blanking(const unsigned long arg)
 {
 }
 
+
+/*
+ *	See if we have a TGA card.
+ */
+__initfunc(int con_is_present())
+{
+	int status;
+
+	status = pcibios_find_device (PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TGA,
+				      0, &pci_bus, &pci_devfn);
+	return (status == PCIBIOS_DEVICE_NOT_FOUND) ? 0 : 1;
+}
+
 /*
  * video init code, called from within the PCI bus probing code;
  * when TGA console is configured, at the end of the probing code,

@@ -211,6 +211,8 @@ void init_ali14xx (void)
 	ide_hwifs[1].chipset = ide_ali14xx;
 	ide_hwifs[0].tuneproc = &ali14xx_tune_drive;
 	ide_hwifs[1].tuneproc = &ali14xx_tune_drive;
+	ide_hwifs[0].mate = &ide_hwifs[1];
+	ide_hwifs[1].mate = &ide_hwifs[0];
 
 	/* initialize controller registers */
 	if (!initRegisters()) {

@@ -40,6 +40,7 @@
 #include <asm/bitops.h>
 
 #define CONSOLE_DEV MKDEV(TTY_MAJOR,0)
+#define SYSCONS_DEV  MKDEV(TTYAUX_MAJOR,1)
 
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
@@ -854,6 +855,7 @@ do_it_again:
 	   check of the logic of this change. -- jlc */
 	/* don't stop on /dev/console */
 	if (file->f_dentry->d_inode->i_rdev != CONSOLE_DEV &&
+	    file->f_dentry->d_inode->i_rdev != SYSCONS_DEV &&
 	    current->tty == tty) {
 		if (tty->pgrp <= 0)
 			printk("read_chan: tty->pgrp <= 0!\n");
@@ -1012,7 +1014,8 @@ static ssize_t write_chan(struct tty_struct * tty, struct file * file,
 	ssize_t retval = 0, num;
 
 	/* Job control check -- must be done at start (POSIX.1 7.1.1.4). */
-	if (L_TOSTOP(tty) && file->f_dentry->d_inode->i_rdev != CONSOLE_DEV) {
+	if (L_TOSTOP(tty) && file->f_dentry->d_inode->i_rdev != CONSOLE_DEV &&
+	    file->f_dentry->d_inode->i_rdev != SYSCONS_DEV) {
 		retval = tty_check_change(tty);
 		if (retval)
 			return retval;

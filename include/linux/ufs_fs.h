@@ -6,12 +6,16 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_fs.h,v 1.8 1997/07/17 02:17:54 davem Exp $
- *
+ * Clean swab support by Fare <rideau@ens.fr>
+ * just hope no one is using NNUUXXI on __?64 structure elements
  */
 
 #ifndef __LINUX_UFS_FS_H
 #define __LINUX_UFS_FS_H
+
+#undef UFS_HEAVY_DEBUG
+/*#define UFS_HEAVY_DEBUG 1*/
+/* Uncomment the line above when hacking ufs code */
 
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -24,6 +28,7 @@
 #define UFS_SBSIZE 8192
 
 #define UFS_MAGIC 0x00011954
+#define UFS_CIGAM 0x54190100 /* byteswapped MAGIC */
 
 #define UFS_FSIZE 1024
 #define UFS_BSIZE 8192
@@ -50,6 +55,17 @@
 #define UFS_DEBUG_INODE 0x00000002
 #define UFS_DEBUG_NAMEI 0x00000004
 #define UFS_DEBUG_LINKS 0x00000008
+
+#ifdef UFS_HEAVY_DEBUG
+#  define UFS_DEBUG_INITIAL UFS_DEBUG
+#else
+#  define UFS_DEBUG_INITIAL 0
+#endif
+
+/* (!) HERE WE ASSUME EITHER BIG OR LITTLE ENDIAN UFSes */
+#define UFS_LITTLE_ENDIAN 0x00000000	/* 0x00010000 */
+#define UFS_BIG_ENDIAN    0x00010000	/* 0x00020000 */
+#define UFS_BYTESEX	  0x00010000	/* 0x00030000 */
 
 #define UFS_ADDR_PER_BLOCK(sb)		((sb)->u.ufs_sb.s_bsize >> 2)
 #define UFS_ADDR_PER_BLOCK_BITS(sb)	((sb)->u.ufs_sb.s_bshift - 2)
@@ -93,10 +109,6 @@ struct ufs_csum {
 	__u32	cs_nffree;	/* number of free frags */
 };
 
-typedef struct _ufsquad {
-	__u32 val[2];
-} ufsquad;
-
 /*
  * This is the actual superblock, as it is laid out on the disk.
  */
@@ -109,7 +121,7 @@ struct ufs_superblock {
 	__u32	fs_dblkno;	/* offset of first data after cg */
 	__u32	fs_cgoffset;	/* cylinder group offset in cylinder */
 	__u32	fs_cgmask;	/* used to calc mod fs_ntrak */
-	time_t	fs_time;	/* last time written */
+	__u32	fs_time;	/* last time written -- time_t */
 	__u32	fs_size;	/* number of blocks in fs */
 	__u32	fs_dsize;	/* number of data blocks in fs */
 	__u32	fs_ncg;		/* number of cylinder groups */
@@ -177,15 +189,14 @@ struct ufs_superblock {
 	__u16	fs_opostbl[16][8];	/* old rotation block list head */	
 	__s32	fs_sparecon[55];	/* reserved for future constants */
 	__s32	fs_state;		/* file system state time stamp */
-	ufsquad	fs_qbmask;		/* ~usb_bmask - for use with __s64 size */
-	ufsquad	fs_qfmask;		/* ~usb_fmask - for use with __s64 size */
+	__s64	fs_qbmask;		/* ~usb_bmask */
+	__s64	fs_qfmask;		/* ~usb_fmask */
 	__s32	fs_postblformat;	/* format of positional layout tables */
 	__s32	fs_nrpos;		/* number of rotational positions */
 	__s32	fs_postbloff;		/* (__s16) rotation block list head */
 	__s32	fs_rotbloff;		/* (__u8) blocks for each rotation */
 	__s32	fs_magic;		/* magic number */
 	__u8	fs_space[1];		/* list of blocks for each rotation */
-
 };
 
 /*
@@ -196,13 +207,13 @@ struct ufs_inode {
 	__u16	ui_nlink;		/*  0x2 */
 	__u16	ui_suid;		/*  0x4 */
 	__u16	ui_sgid;		/*  0x6 */
-	ufsquad	ui_size;		/*  0x8 */  /* XXX - should be __u64 */
-	struct timeval ui_atime;	/* 0x10 */
-	struct timeval ui_mtime;	/* 0x18 */
-	struct timeval ui_ctime;	/* 0x20 */
-	__u32	ui_db[UFS_NDADDR];		/* 0x28 data blocks */
-	__u32	ui_ib[UFS_NINDIR];		/* 0x58 indirect blocks */
-	__u32	ui_flags;		/* 0x64 unused */
+	__u64	ui_size;		/*  0x8 */
+	struct timeval ui_atime;	/* 0x10 access */
+	struct timeval ui_mtime;	/* 0x18 modification */
+	struct timeval ui_ctime;	/* 0x20 creation */
+	__u32	ui_db[UFS_NDADDR];	/* 0x28 data blocks */
+	__u32	ui_ib[UFS_NINDIR];	/* 0x58 indirect blocks */
+	__u32	ui_flags;		/* 0x64 unused -- "status flags (chflags)" ??? */
 	__u32	ui_blocks;		/* 0x68 blocks in use */
 	__u32	ui_gen;			/* 0x6c generation number XXX - what is this? */
 	__u32	ui_shadow;		/* 0x70 shadow inode XXX - what is this?*/
@@ -225,7 +236,7 @@ extern void ufs_put_inode(struct inode * inode);
 extern void ufs_print_inode (struct inode *);
 
 /* ufs_namei.c */
-extern int ufs_lookup (struct inode *, struct qstr *, struct inode **);
+extern int ufs_lookup (struct inode *, struct dentry *);
 
 /* ufs_super.c */
 extern void ufs_warning (struct super_block *, const char *, const char *, ...)
@@ -247,23 +258,6 @@ extern struct file_operations ufs_file_operations;
 /* ufs_symlink.c */
 extern struct inode_operations ufs_symlink_inode_operations;
 extern struct file_operations ufs_symlink_operations;
-
-/* Byte swapping 32/16-bit quantities into little endian format. */
-extern int ufs_need_swab;
-
-extern __inline__ __u32 ufs_swab32(__u32 value)
-{
-	return (ufs_need_swab ? ((value >> 24) |
-				((value >> 8) & 0xff00) |
-				((value << 8) & 0xff0000) |
-				 (value << 24)) : value);
-}
-
-extern __inline__ __u16 ufs_swab16(__u16 value)
-{
-	return (ufs_need_swab ? ((value >> 8) |
-				 (value << 8)) : value);
-}
 
 #endif	/* __KERNEL__ */
 

@@ -149,49 +149,15 @@ if [ ! "$CONFIG_PPP" = "n" ]; then
   comment 'CCP compressors for PPP are only built as modules.'
 fi
 
-bool 'Radio network interfaces' CONFIG_NET_RADIO
-if [ "$CONFIG_NET_RADIO" != "n" ]; then
-  if [ "$CONFIG_AX25" != "n" ]; then
-    tristate 'Serial port KISS driver for AX.25' CONFIG_MKISS
-    tristate 'BPQ Ethernet driver for AX.25' CONFIG_BPQETHER
-    tristate 'Gracilis PackeTwin driver for AX.25' CONFIG_PT
-    tristate 'Ottawa PI and PI2 driver for AX.25' CONFIG_PI
-    tristate 'Z8530 SCC driver for AX.25' CONFIG_SCC
-    if [ "$CONFIG_SCC" != "n" ]; then
-      bool '  additional delay for PA0HZP OptoSCC compatible boards' CONFIG_SCC_DELAY
-      bool '  support for TRX that feedback the tx signal to rx' CONFIG_SCC_TRXECHO
-    fi
-  fi
-  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    tristate 'BAYCOM ser12 fullduplex driver for AX.25' CONFIG_BAYCOM_SER_FDX
-    tristate 'BAYCOM ser12 halfduplex driver for AX.25' CONFIG_BAYCOM_SER_HDX
-    tristate 'BAYCOM picpar and par96 driver for AX.25' CONFIG_BAYCOM_PAR
-    tristate 'Soundcard modem driver for AX.25' CONFIG_SOUNDMODEM
-    if [ "$CONFIG_SOUNDMODEM" != "n" ]; then
-      bool 'Soundmodem support for Soundblaster and compatible cards' CONFIG_SOUNDMODEM_SBC
-      bool 'Soundmodem support for WSS and Crystal cards' CONFIG_SOUNDMODEM_WSS
-      bool 'Soundmodem support for 1200 baud AFSK modulation' CONFIG_SOUNDMODEM_AFSK1200
-      bool 'Soundmodem support for 2400 baud AFSK modulation (7.3728MHz crystal)' CONFIG_SOUNDMODEM_AFSK2400_7
-      bool 'Soundmodem support for 2400 baud AFSK modulation (8MHz crystal)' CONFIG_SOUNDMODEM_AFSK2400_8
-      bool 'Soundmodem support for 4800 baud HAPN-1 modulation' CONFIG_SOUNDMODEM_HAPN4800
-      bool 'Soundmodem support for 9600 baud FSK G3RUH modulation' CONFIG_SOUNDMODEM_FSK9600
-    fi
-    tristate 'Shortwave radio modem driver' CONFIG_HFMODEM
-    if [ "$CONFIG_HFMODEM" != "n" ]; then
-      bool 'HFmodem support for Soundblaster and compatible cards' CONFIG_HFMODEM_SBC
-      bool 'HFmodem support for WSS and Crystal cards' CONFIG_HFMODEM_WSS
-    fi
-  fi
-  tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
-  tristate 'AT&T WaveLAN & DEC RoamAbout DS support' CONFIG_WAVELAN
-fi
-
 tristate 'SLIP (serial line) support' CONFIG_SLIP
 if [ "$CONFIG_SLIP" != "n" ]; then
   bool ' CSLIP compressed headers' CONFIG_SLIP_COMPRESSED
   bool ' Keepalive and linefill' CONFIG_SLIP_SMART
   bool ' Six bit SLIP encapsulation' CONFIG_SLIP_MODE_SLIP6
 fi
+
+tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
+tristate 'AT&T WaveLAN & DEC RoamAbout DS support' CONFIG_WAVELAN
 
 bool 'Token Ring driver support' CONFIG_TR
 if [ "$CONFIG_TR" = "y" ]; then

@@ -577,7 +577,7 @@ do_signal(sigset_t *oldset, struct pt_regs * regs, struct switch_stack * sw,
 
 	single_stepping = ptrace_cancel_bpt(current);
 
-	spin_lock_irq(current->sigmask_lock);
+	spin_lock_irq(&current->sigmask_lock);
 	if (!oldset) {
 		_oldset = current->blocked;
 		oldset = &_oldset;

@@ -23,7 +23,7 @@ if [ "$CONFIG_INET" = "y" ]; then
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     tristate 'The IPv6 protocol (EXPERIMENTAL)' CONFIG_IPV6
     if [ "$CONFIG_IPV6" != "n" ]; then
-	    source net/ipv6/Config.in	
+	    source net/ipv6/Config.in
     fi
   fi
 fi
@@ -34,13 +34,6 @@ if [ "$CONFIG_IPX" != "n" ]; then
   bool 'Full internal IPX network' CONFIG_IPX_INTERN
 fi
 tristate 'Appletalk DDP' CONFIG_ATALK
-tristate 'Amateur Radio AX.25 Level 2' CONFIG_AX25
-if [ "$CONFIG_AX25" != "n" ]; then
-  bool 'AX.25 DAMA Slave support' CONFIG_AX25_DAMA_SLAVE
-# bool 'AX.25 DAMA Master support' CONFIG_AX25_DAMA_MASTER
-  dep_tristate 'Amateur Radio NET/ROM' CONFIG_NETROM $CONFIG_AX25
-  dep_tristate 'Amateur Radio X.25 PLP (Rose)' CONFIG_ROSE $CONFIG_AX25
-fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 #  tristate 'DECnet Support (NOT YET FUNCTIONAL)' CONFIG_DECNET
 #  if [ "$CONFIG_DECNET" != "n" ]; then

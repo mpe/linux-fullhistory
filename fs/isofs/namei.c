@@ -66,7 +66,7 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 	unsigned char bufbits = ISOFS_BUFFER_BITS(dir);
 	unsigned int block, i, f_pos, offset, 
 		inode_number = 0; /* shut gcc up */
-	struct buffer_head * bh;
+	struct buffer_head * bh , * retval = NULL;
 	unsigned int old_offset;
 	int dlen, match;
 	char * dpnt;
@@ -86,7 +86,7 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 	block = isofs_bmap(dir,f_pos >> bufbits);
 
 	if (!block || !(bh = bread(dir->i_dev,block,bufsize))) return NULL;
-  
+
 	while (f_pos < dir->i_size) {
 
 		/* if de is in kmalloc'd memory, do not point to the
@@ -118,13 +118,14 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 					 + ISOFS_BLOCK_SIZE);
 			}
 			brelse(bh);
+			bh = NULL;
 
 			if (f_pos >= dir->i_size) 
-				return 0;
+				break;
 
 			block = isofs_bmap(dir,f_pos>>bufbits);
 			if (!block || !(bh = bread(dir->i_dev,block,bufsize)))
-				return NULL;
+				break;
 
 			continue; /* Will kick out if past end of directory */
 		}
@@ -145,7 +146,7 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 			block = isofs_bmap(dir,f_pos>>bufbits);
 			if (!block || 
 			    !(bh_next = bread(dir->i_dev,block,bufsize)))
-				return NULL;
+				break;
 			
 			de = (struct iso_directory_record *)
 				kmalloc(offset - old_offset, GFP_KERNEL);
@@ -162,14 +163,14 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 
 		if (dir->i_sb->u.isofs_sb.s_rock ||
 		    dir->i_sb->u.isofs_sb.s_joliet_level) {
-			page = (unsigned char *)
-				__get_free_page(GFP_KERNEL);
-			if (!page) return NULL;
+			if (! page) {
+				page = (unsigned char *)
+					__get_free_page(GFP_KERNEL);
+				if (!page) break;
+			}
 		}
 		if (dir->i_sb->u.isofs_sb.s_rock &&
 		    ((i = get_rock_ridge_filename(de, page, dir)))) {
-			if (i == -1)
-				goto out;/* Relocated deep directory */
 			dlen = i;
 			dpnt = page;
 #ifdef CONFIG_JOLIET
@@ -203,8 +204,6 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 		{
 			match = isofs_match(namelen,name,dpnt,dlen);
 		}
-
-		if (page) free_page((unsigned long) page);
 		if (match) {
 			if(inode_number == -1) {
 				/* Should only happen for the '..' entry */
@@ -213,16 +212,16 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 					   find_rock_ridge_relocation(de,dir));
 			}
 			*ino = inode_number;
-			if(de_not_in_buf) 
-				kfree(de);
-			return bh;
+			retval = bh;
+			bh = NULL;
+			break;
 		}
 	}
- out:
-	brelse(bh);
+	if (page) free_page((unsigned long) page);
+	if (bh) brelse(bh);
 	if(de_not_in_buf) 
 		kfree(de);
-	return NULL;
+	return retval;
 }
 
 int isofs_lookup(struct inode * dir, struct dentry * dentry)

@@ -7,7 +7,6 @@
 #ifndef	NETROM_KERNEL_H
 #define	NETROM_KERNEL_H
 
-#define PF_NETROM	AF_NETROM
 #define NETROM_MTU	236
 
 #define NETROM_T1	1

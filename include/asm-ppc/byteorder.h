@@ -3,31 +3,8 @@
 
 #include <asm/types.h>
 
-#ifndef __BIG_ENDIAN
-#define __BIG_ENDIAN	4321
-#endif
+#ifdef __GNUC__
 
-#ifndef __BIG_ENDIAN_BITFIELD
-#define __BIG_ENDIAN_BITFIELD
-#endif
-
-#define ntohl(x) ((unsigned long)(x))
-#define ntohs(x) ((unsigned short)(x))
-#define htonl(x) ((unsigned long)(x))
-#define htons(x) ((unsigned short)(x))
-
-#define __htonl(x) ntohl(x)
-#define __htons(x) ntohs(x)
-
-#define __constant_ntohs(x) ntohs(x)
-#define __constant_ntohl(x) ntohl(x)
-#define __constant_htonl(x) ntohl(x)
-#define __constant_htons(x) ntohs(x)
-
-#ifdef __KERNEL__
-/*
- * 16 and 32 bit little-endian loads and stores.
- */
 extern inline unsigned ld_le16(volatile unsigned short *addr)
 {
 	unsigned val;
@@ -55,16 +32,10 @@ extern inline void st_le32(volatile unsigned *addr, unsigned val)
 }
 
 #if 0
-extern __inline__ __u16 cpu_to_le16(__u16 value)
-{
-	return ld_le16(&value);
-}
-extern __inline__ __u32 cpu_to_le32(__u32 value)
-{
-	return ld_le32(&value);
-}
+#  define __arch_swab16(x) ld_le16(&x)
+#  define __arch_swab32(x) ld_le32(&x)
 #else
-extern __inline__ __u16 cpu_to_le16(__u16 value)
+static __inline__ __const__ __u16 ___arch__swab16(__u16 value)
 {
 	__u16 result;
 
@@ -73,7 +44,8 @@ extern __inline__ __u16 cpu_to_le16(__u16 value)
 	    : "r" (value), "0" (value >> 8));
 	return result;
 }
-extern __inline__ __u32 cpu_to_le32(__u32 value)
+
+static __inline__ __const__ __u32 ___arch__swab32(__u32 value)
 {
 	__u32 result;
 
@@ -84,68 +56,20 @@ extern __inline__ __u32 cpu_to_le32(__u32 value)
 	    : "r" (value), "0" (value >> 24));
 	return result;
 }
+#define __arch__swab32(x) ___arch__swab32(x)
+#define __arch__swab16(x) ___arch__swab16(x)
 #endif /* 0 */
 
-#define cpu_to_be16(x)  (x)
-#define cpu_to_be32(x)  (x)
-
 /* The same, but returns converted value from the location pointer by addr. */
-extern __inline__ __u16 cpu_to_le16p(__u16 *addr)
-{
-	return ld_le16(addr);
-}
-
-extern __inline__ __u32 cpu_to_le32p(__u32 *addr)
-{
-	return ld_le32(addr);
-}
-
-extern __inline__ __u16 cpu_to_be16p(__u16 *addr)
-{
-	return *addr;
-}
-
-extern __inline__ __u32 cpu_to_be32p(__u32 *addr)
-{
-	return *addr;
-}
+#define __arch_swab16p(addr) ld_le16(addr)
+#define __arch_swab32p(addr) ld_le32(addr)
 
 /* The same, but do the conversion in situ, ie. put the value back to addr. */
-extern __inline__ void cpu_to_le16s(__u16 *addr)
-{
-	st_le16(addr,*addr);
-}
+#define __arch_swab16s(addr) st_le16(addr,*addr)
+#define __arch_swab32s(addr) st_le32(addr,*addr)
 
-extern __inline__ void cpu_to_le32s(__u32 *addr)
-{
-	st_le32(addr,*addr);
-}
+#endif /* __GNUC__ */
 
-#define cpu_to_be16s(x) do { } while (0)
-#define cpu_to_be32s(x) do { } while (0)
+#include <linux/byteorder_big_endian.h>
 
-/* Convert from specified byte order, to CPU byte order. */
-#define le16_to_cpu(x)  cpu_to_le16(x)
-#define le32_to_cpu(x)  cpu_to_le32(x)
-#define be16_to_cpu(x)  cpu_to_be16(x)
-#define be32_to_cpu(x)  cpu_to_be32(x)
-
-#define le16_to_cpup(x) cpu_to_le16p(x)
-#define le32_to_cpup(x) cpu_to_le32p(x)
-#define be16_to_cpup(x) cpu_to_be16p(x)
-#define be32_to_cpup(x) cpu_to_be32p(x)
-
-#define le16_to_cpus(x) cpu_to_le16s(x)
-#define le32_to_cpus(x) cpu_to_le32s(x)
-#define be16_to_cpus(x) cpu_to_be16s(x)
-#define be32_to_cpus(x) cpu_to_be32s(x)
-
-
-#endif /* __KERNEL__ */
-#endif /* !(_PPC_BYTEORDER_H) */
-
-
-
-
-
-
+#endif /* _PPC_BYTEORDER_H */

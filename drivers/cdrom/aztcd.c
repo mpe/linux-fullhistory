@@ -160,6 +160,8 @@
 		Werner Zimmermann, Nov 29, 97
 */
 
+#include <linux/version.h>
+
 #define MAJOR_NR AZTECH_CDROM_MAJOR 
 
 #include <linux/blk.h>

@@ -62,36 +62,40 @@ extern struct consw *conswitchp;
 struct tty_struct;
 int tioclinux(struct tty_struct *tty, unsigned long arg);
 
-/* The interface for /dev/console(s) and printk output */
+/*
+ *	Array of consoles built from command line options (console=)
+ */
+struct console_cmdline
+{
+	char	name[8];			/* Name of the driver	    */
+	int	index;				/* Minor dev. to use	    */
+	char	*options;			/* Options for the driver   */
+};
+#define MAX_CMDLINECONSOLES 8
+extern struct console_cmdline console_list[MAX_CMDLINECONSOLES];
+
+/*
+ *	The interface for a console, or any other device that
+ *	wants to capture console messages (printer driver?)
+ */
+
+#define CON_PRINTBUFFER	(1)
+#define CON_FIRST	(2)
+#define CON_ENABLED	(4)
 
 struct console
 {
-	/*
-	 * This function should not return before the string is written.
-	 */
-	void (*write)(const char*, unsigned);
-
-        /* To unblank the console in case of panic */
-        void (*unblank)(void);
-
-	/*
-         * Only the console that was registered last with wait_key !=
-	 * NULL will be used. This blocks until there is a character
-	 * to give back, it does not schedule.
-         */
-	void (*wait_key)(void);
-
-	/*
-	 * Return the device to use when opening /dev/console. Only the
-	 * last registered console will do.
-	 */
-	int (*device)(void);
-
-	/* 
-	 * For a linked list of consoles for multiple output. Any console
-         * not at the head of the list is used only for output.
-	 */
-	struct console *next;
+	char	name[8];
+	void	(*write)(struct console *, const char *, unsigned);
+	int	(*read)(struct console *, const char *, unsigned);
+	kdev_t	(*device)(struct console *);
+	int	(*wait_key)(struct console *);
+        void	(*unblank)(void);
+	void	(*setup)(struct console *, char *);
+	short	flags;
+	short	index;
+	int	cflag;
+	struct	 console *next;
 };
 
 extern void register_console(struct console *);

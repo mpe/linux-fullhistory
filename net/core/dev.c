@@ -1291,7 +1291,6 @@ static int dev_ifsioc(struct ifreq *ifr, unsigned int cmd)
 			if(dev->set_multicast_list==NULL ||
 			   ifr->ifr_hwaddr.sa_family!=AF_UNSPEC)
 				return -EINVAL;
-			printk(KERN_DEBUG "SIOCADDMULTI ioctl is deprecated\n");
 			dev_mc_add(dev,ifr->ifr_hwaddr.sa_data, dev->addr_len, 1);
 			return 0;
 
@@ -1299,7 +1298,6 @@ static int dev_ifsioc(struct ifreq *ifr, unsigned int cmd)
 			if(dev->set_multicast_list==NULL ||
 			   ifr->ifr_hwaddr.sa_family!=AF_UNSPEC)
 				return -EINVAL;
-			printk(KERN_DEBUG "SIOCDELMULTI ioctl is deprecated\n");
 			dev_mc_delete(dev,ifr->ifr_hwaddr.sa_data,dev->addr_len, 1);
 			return 0;
 

@@ -4,10 +4,18 @@
 #include <asm/byteorder.h>
 #include <linux/types.h>
 
+/* AmigaOS allows file names with up to 30 characters length.
+ * Names longer than that will be silently truncated. If you
+ * want to disallow this, comment out the following #define.
+ * Creating filesystem objects with longer names will then
+ * result in an error (ENAMETOOLONG).
+ */
+/*#define AFFS_NO_TRUNCATE */
+
 /* Ugly macros make the code more pretty. */
 
 #define GET_END_PTR(st,p,sz)		 ((st *)((char *)(p)+((sz)-sizeof(st))))
-#define AFFS_GET_HASHENTRY(data,hashkey) htonl(((struct dir_front *)data)->hashtable[hashkey])
+#define AFFS_GET_HASHENTRY(data,hashkey) be32_to_cpu(((struct dir_front *)data)->hashtable[hashkey])
 #define AFFS_BLOCK(data,ino,blk)	 ((struct file_front *)data)->blocks[AFFS_I2HSIZE(ino)-1-(blk)]
 
 #define FILE_END(p,i)	GET_END_PTR(struct file_end,p,AFFS_I2BSIZE(i))
@@ -16,6 +24,7 @@
 #define LINK_END(p,i)	GET_END_PTR(struct hlink_end,p,AFFS_I2BSIZE(i))
 #define ROOT_END_S(p,s)	GET_END_PTR(struct root_end,p,(s)->s_blocksize)
 #define DATA_FRONT(bh)	((struct data_front *)(bh)->b_data)
+#define DIR_FRONT(bh)	((struct dir_front *)(bh)->b_data)
 
 /* Only for easier debugging if need be */
 #define affs_bread	bread
@@ -206,14 +215,14 @@ struct data_front
 
 #define AFFS_UMAYWRITE(prot)	(((prot) & (FIBF_WRITE|FIBF_DELETE)) == (FIBF_WRITE|FIBF_DELETE))
 #define AFFS_UMAYREAD(prot)	((prot) & FIBF_READ)
-#define AFFS_UMAYEXECUTE(prot)	(((prot) & (FIBF_SCRIPT|FIBF_READ)) == (FIBF_SCRIPT|FIBF_READ))
+#define AFFS_UMAYEXECUTE(prot)	((prot) & FIBF_EXECUTE)
 #define AFFS_GMAYWRITE(prot)	(((prot)&(FIBF_GRP_WRITE|FIBF_GRP_DELETE))==\
 							(FIBF_GRP_WRITE|FIBF_GRP_DELETE))
 #define AFFS_GMAYREAD(prot)	((prot) & FIBF_GRP_READ)
-#define AFFS_GMAYEXECUTE(prot)	(((prot)&(FIBF_SCRIPT|FIBF_GRP_READ))==(FIBF_SCRIPT|FIBF_GRP_READ))
+#define AFFS_GMAYEXECUTE(prot)	((prot) & FIBF_EXECUTE)
 #define AFFS_OMAYWRITE(prot)	(((prot)&(FIBF_OTR_WRITE|FIBF_OTR_DELETE))==\
 							(FIBF_OTR_WRITE|FIBF_OTR_DELETE))
 #define AFFS_OMAYREAD(prot)	((prot) & FIBF_OTR_READ)
-#define AFFS_OMAYEXECUTE(prot)	(((prot)&(FIBF_SCRIPT|FIBF_OTR_READ))==(FIBF_SCRIPT|FIBF_OTR_READ))
+#define AFFS_OMAYEXECUTE(prot)	((prot) & FIBF_EXECUTE)
 
 #endif

@@ -651,7 +651,6 @@ sys_rt_sigtimedwait(const sigset_t *uthese, siginfo_t *uinfo,
 {
 	sigset_t these;
 	struct timespec ts;
-	unsigned long expire;
 	siginfo_t info;
 	int ret, sig;
 
@@ -680,17 +679,19 @@ sys_rt_sigtimedwait(const sigset_t *uthese, siginfo_t *uinfo,
 	if (!sig) {
 		/* None ready -- temporarily unblock those we're interested
 		   in so that we'll be awakened when they arrive.  */
+		unsigned long expire;
 		sigset_t oldblocked = current->blocked;
 		sigandsets(&current->blocked, &current->blocked, &these);
 		recalc_sigpending(current);
 		spin_unlock_irq(&current->sigmask_lock);
 
+		expire = ~0UL;
 		if (uts) {
 			expire = (timespec_to_jiffies(&ts)
 				  + (ts.tv_sec || ts.tv_nsec));
 			expire += jiffies;
-			current->timeout = expire;
 		}
+		current->timeout = expire;
 
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
@@ -709,7 +710,11 @@ sys_rt_sigtimedwait(const sigset_t *uthese, siginfo_t *uinfo,
 				ret = -EFAULT;
 		}
 	} else {
-		ret = !uts || expire > jiffies ? -EINTR : -EAGAIN;
+		ret = -EAGAIN;
+		if (current->timeout != 0) {
+			current->timeout = 0;
+			ret = -EINTR;
+		}
 	}
 
 	return ret;

@@ -49,6 +49,9 @@
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <linux/init.h>
+#ifdef CONFIG_SERIAL_CONSOLE
+#include <linux/console.h>
+#endif
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -152,6 +155,9 @@ static int IRQ_timeout[16];
 static volatile int rs_irq_triggered;
 static volatile int rs_triggered;
 static int rs_wild_int_mask;
+#ifdef CONFIG_SERIAL_CONSOLE
+static struct console sercons;
+#endif
 
 static void autoconfig(struct serial_state * info);
 static void change_speed(struct async_struct *info);
@@ -2752,7 +2758,13 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 			*tty->termios = info->state->callout_termios;
 		change_speed(info);
 	}
-
+#ifdef CONFIG_SERIAL_CONSOLE
+	if (sercons.cflag && sercons.index == line) {
+		tty->termios->c_cflag = sercons.cflag;
+		sercons.cflag = 0;
+		change_speed(info);
+	}
+#endif
 	info->session = current->session;
 	info->pgrp = current->pgrp;
 
@@ -3195,7 +3207,18 @@ __initfunc(int rs_init(void))
 		       sizeof(struct rs_multiport_struct));
 #endif
 	}
-	
+#ifdef CONFIG_SERIAL_CONSOLE
+	/*
+	 *	The interrupt of the serial console port
+	 *	can't be shared.
+	 */
+	if (sercons.flags & CON_FIRST) {
+		for(i = 0; i < NR_PORTS; i++)
+			if (i != sercons.index &&
+			    rs_table[i].irq == rs_table[sercons.index].irq)
+				rs_table[i].irq = 0;
+	}
+#endif
 	show_serial_version();
 
 	/* Initialize the tty_driver structure */
@@ -3398,53 +3421,51 @@ void cleanup_module(void)
  */
 #ifdef CONFIG_SERIAL_CONSOLE
 
-#include <linux/console.h>
-
-/*
- * this defines the index into rs_table for the port to use
- */
-#ifndef CONFIG_SERIAL_CONSOLE_PORT
-#define CONFIG_SERIAL_CONSOLE_PORT	0
-#endif
-
 #define BOTH_EMPTY (UART_LSR_TEMT | UART_LSR_THRE)
 
-/* Wait for transmitter & holding register to empty */
+/*
+ *	Wait for transmitter & holding register to empty
+ */
 static inline void wait_for_xmitr(struct serial_state *ser)
 {
 	int lsr;
+	unsigned int tmout = 1000000;
+
 	do {
 		lsr = inb(ser->port + UART_LSR);
+		if (--tmout == 0) break;
 	} while ((lsr & BOTH_EMPTY) != BOTH_EMPTY);
 }
 
 /*
- * Print a string to the serial port trying not to disturb any possible
- * real use of the port...
+ *	Print a string to the serial port trying not to disturb
+ *	any possible real use of the port...
  */
-static void serial_console_write(const char *s, unsigned count)
+static void serial_console_write(struct console *co, const char *s,
+				unsigned count)
 {
 	struct serial_state *ser;
 	int ier;
 	unsigned i;
 
-	ser = rs_table + CONFIG_SERIAL_CONSOLE_PORT;
+	ser = rs_table + co->index;
 	/*
-	 * First save the IER then disable the interrupts
+	 *	First save the IER then disable the interrupts
 	 */
 	ier = inb(ser->port + UART_IER);
 	outb(0x00, ser->port + UART_IER);
 
 	/*
-	 * Now, do each character
+	 *	Now, do each character
 	 */
 	for (i = 0; i < count; i++, s++) {
 		wait_for_xmitr(ser);
 
-		/* Send the character out. */
+		/*
+		 *	Send the character out.
+		 *	If a LF, also do CR...
+		 */
 		outb(*s, ser->port + UART_TX);
-
-		/* if a LF, also do CR... */
 		if (*s == 10) {
 			wait_for_xmitr(ser);
 			outb(13, ser->port + UART_TX);
@@ -3452,29 +3473,29 @@ static void serial_console_write(const char *s, unsigned count)
 	}
 
 	/*
-	 * Finally, Wait for transmitter & holding register to empty
-	 *  and restore the IER
+	 *	Finally, Wait for transmitter & holding register to empty
+	 * 	and restore the IER
 	 */
 	wait_for_xmitr(ser);
 	outb(ier, ser->port + UART_IER);
 }
 
 /*
- * Receive character from the serial port
+ *	Receive character from the serial port
  */
-static void serial_console_wait_key(void)
+static int serial_console_wait_key(struct console *co)
 {
 	struct serial_state *ser;
 	int ier;
 	int lsr;
 	int c;
 
-	ser = rs_table + CONFIG_SERIAL_CONSOLE_PORT;
+	ser = rs_table + co->index;
 
 	/*
-	 * First save the IER then disable the interrupts so
-	 * that the real driver for the port does not get the
-	 * character.
+	 *	First save the IER then disable the interrupts so
+	 *	that the real driver for the port does not get the
+	 *	character.
 	 */
 	ier = inb(ser->port + UART_IER);
 	outb(0x00, ser->port + UART_IER);
@@ -3484,39 +3505,142 @@ static void serial_console_wait_key(void)
 	} while (!(lsr & UART_LSR_DR));
 	c = inb(ser->port + UART_RX);
 
-	/* Restore the interrupts */
+	/*
+	 *	Restore the interrupts
+	 */
 	outb(ier, ser->port + UART_IER);
+
+	return c;
 }
 
-static int serial_console_device(void)
+static kdev_t serial_console_device(struct console *c)
 {
-	return MKDEV(TTYAUX_MAJOR, 64 + CONFIG_SERIAL_CONSOLE_PORT);
+	return MKDEV(TTY_MAJOR, 64 + c->index);
 }
 
-long serial_console_init(long kmem_start, long kmem_end)
+/*
+ *	Setup initial baud/bits/parity. We do two things here:
+ *	- construct a cflag setting for the first rs_open()
+ *	- initialize the serial port
+ */
+__initfunc(static void serial_console_setup(struct console *co, char *options))
 {
-	static struct console console = {
-		serial_console_write, 0,
-                serial_console_wait_key, serial_console_device
-	};
 	struct serial_state *ser;
+	unsigned cval;
+	int	baud = 9600;
+	int	bits = 8;
+	int	parity = 'n';
+	int	cflag = CREAD | HUPCL | CLOCAL;
+	int	quot = 0;
+	char	*s;
 
-	ser = rs_table + CONFIG_SERIAL_CONSOLE_PORT;
-
-	/* Disable all interrupts, it works in polled mode */
-	outb(0x00, ser->port + UART_IER); 
+	if (options) {
+		baud = simple_strtoul(options, NULL, 10);
+		s = options;
+		while(*s >= '0' && *s <= '9')
+			s++;
+		if (*s) parity = *s++;
+		if (*s) bits   = *s - '0';
+	}
 
 	/*
-	 * now do hardwired init
+	 *	Now construct a cflag setting.
 	 */
-	outb(0x03, ser->port + UART_LCR); /* No parity, 8 data bits, 1 stop */
-	outb(0x83, ser->port + UART_LCR); /* Access divisor latch */
-	outb(0x00, ser->port + UART_DLM); /* 9600 baud */
-	outb(0x0c, ser->port + UART_DLL);
-	outb(0x03, ser->port + UART_LCR); /* Done with divisor */
+	switch(baud) {
+		case 1200:
+			cflag |= B1200;
+			break;
+		case 2400:
+			cflag |= B2400;
+			break;
+		case 4800:
+			cflag |= B4800;
+			break;
+		case 19200:
+			cflag |= B19200;
+			break;
+		case 38400:
+			cflag |= B38400;
+			break;
+		case 57600:
+			cflag |= B57600;
+			break;
+		case 115200:
+			cflag |= B115200;
+			break;
+		case 9600:
+		default:
+			cflag |= B9600;
+			break;
+	}
+	switch(bits) {
+		case 7:
+			cflag |= CS7;
+			break;
+		default:
+		case 8:
+			cflag |= CS8;
+			break;
+	}
+	switch(parity) {
+		case 'o': case 'O':
+			cflag |= PARODD;
+			break;
+		case 'e': case 'E':
+			cflag |= PARENB;
+			break;
+	}
+	co->cflag = cflag;
 
-	register_console(&console);
-	return kmem_start;
+	/*
+	 *	Divisor, bytesize and parity
+	 */
+	ser = rs_table + co->index;
+	quot = BASE_BAUD / baud;
+	cval = cflag & (CSIZE | CSTOPB);
+#if defined(__powerpc__) || defined(__alpha__)
+	cval >>= 8;
+#else /* !__powerpc__ && !__alpha__ */
+	cval >>= 4;
+#endif /* !__powerpc__ && !__alpha__ */
+	if (cflag & PARENB)
+		cval |= UART_LCR_PARITY;
+	if (!(cflag & PARODD))
+		cval |= UART_LCR_EPAR;
+
+	/*
+	 *	Disable UART interrupts, set DTR and RTS high
+	 *	and set speed.
+	 */
+	outb(0, ser->port + UART_IER);
+	outb(UART_MCR_DTR | UART_MCR_RTS, ser->port + UART_MCR);
+	outb(cval | UART_LCR_DLAB, ser->port + UART_LCR);	/* set DLAB */
+	outb(quot & 0xff, ser->port + UART_DLL);	/* LS of divisor */
+	outb(quot >> 8, ser->port + UART_DLM);		/* MS of divisor */
+	outb(cval, ser->port + UART_LCR);		/* reset DLAB */
+
 }
 
+static struct console sercons = {
+	"ttyS",
+	serial_console_write,
+	NULL,
+	serial_console_device,
+	serial_console_wait_key,
+	NULL,
+	serial_console_setup,
+	CON_PRINTBUFFER,
+	-1,
+	0,
+	NULL
+};
+
+/*
+ *	Register console.
+ */
+__initfunc (long serial_console_init(long kmem_start, long kmem_end))
+{
+	register_console(&sercons);
+	return kmem_start;
+}
 #endif

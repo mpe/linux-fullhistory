@@ -954,6 +954,7 @@ static int ax25_release(struct socket *sock, struct socket *peer)
 #ifdef AX25_CONFIG_DAMA_SLAVE
 					case AX25_PROTO_DAMA_SLAVE:
 						ax25_stop_t3timer(sk->protinfo.ax25);
+						ax25_stop_idletimer(sk->protinfo.ax25);
 						break;
 #endif
 				}

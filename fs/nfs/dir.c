@@ -1144,7 +1144,7 @@ do_rename:
 	 */
 	if (!list_empty(&new_dentry->d_hash)) {
 		d_drop(new_dentry);
-		rehash = 1;
+		rehash = update;
 	}
 	error = nfs_proc_rename(NFS_SERVER(old_dir),
 				NFS_FH(old_dir), old_dentry->d_name.name,

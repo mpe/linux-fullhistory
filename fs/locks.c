@@ -402,11 +402,11 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	
 	switch (flock.l_type) {
 	case F_RDLCK:
-		if (!(filp->f_mode & 1))
+		if (!(filp->f_mode & FMODE_READ))
 			return (-EBADF);
 		break;
 	case F_WRLCK:
-		if (!(filp->f_mode & 2))
+		if (!(filp->f_mode & FMODE_WRITE))
 			return (-EBADF);
 		break;
 	case F_UNLCK:

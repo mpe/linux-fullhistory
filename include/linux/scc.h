@@ -3,6 +3,8 @@
 #ifndef	_SCC_H
 #define	_SCC_H
 
+#include <linux/config.h>
+
 /* selection of hardware types */
 
 #define PA0HZP		0x00	/* hardware type for PA0HZP SCC card and compatible */

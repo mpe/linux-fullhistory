@@ -7,7 +7,6 @@
 #ifndef	ROSE_KERNEL_H
 #define	ROSE_KERNEL_H
 
-#define PF_ROSE		AF_ROSE
 #define ROSE_MTU	251
 
 #define	ROSE_DEFER	1

@@ -1,6 +1,6 @@
 #define BLOCKMOVE
 static char rcsid[] =
-"$Revision: 2.1 $$Date: 1997/11/01 17:42:41 $";
+"$Revision: 2.1.1.1 $$Date: 1997/12/03 17:31:19 $";
 
 /*
  *  linux/drivers/char/cyclades.c
@@ -30,6 +30,12 @@ static char rcsid[] =
  *   void cleanup_module(void);
  *
  * $Log: cyclades.c,v $
+ * Revision 2.1.1.1  1997/12/03 17:31:19 ivan
+ * Code review for the module cleanup routine (fixed memory leak);
+ * fixed RTS and DTR status report for new CD1400's in get_modem_info;
+ * purged conditional code for older kernels;
+ * includes anonymous changes regarding signal_pending
+ * 
  * Revision 2.1  1997/11/01 17:42:41 ivan
  * Changes in the driver to support Alpha systems (except 8Zo V_1);
  * BREAK fix for the Cyclades-Z boards;
@@ -524,8 +530,6 @@ static char rcsid[] =
 
 #include <linux/version.h>
 
-#if (LINUX_VERSION_CODE >= 0x020100)
-
 #include <asm/uaccess.h>
 #include <linux/init.h>
 
@@ -539,17 +543,6 @@ static unsigned long cy_get_user(unsigned long *addr)
 		printk ("cyclades: cy_get_user: error == %d\n", error);
 	return result;
 }
-
-#else
-
-#define __initfunc(__arginit)	__arginit
-#define copy_from_user		memcpy_fromfs
-#define copy_to_user		memcpy_tofs
-#define cy_get_user		get_fs_long
-#define cy_put_user		put_fs_long
-#define ioremap			vremap
-
-#endif
 
 #ifndef MIN
 #define MIN(a,b)        ((a) < (b) ? (a) : (b))
@@ -875,7 +868,6 @@ do_softint(void *private_)
     if (!tty)
         return;
 
-#if (LINUX_VERSION_CODE >= 0x020125)
     if (test_and_clear_bit(Cy_EVENT_HANGUP, &info->event)) {
         tty_hangup(info->tty);
         wake_up_interruptible(&info->open_wait);
@@ -892,24 +884,6 @@ do_softint(void *private_)
         }
         wake_up_interruptible(&tty->write_wait);
     }
-#else
-    if (clear_bit(Cy_EVENT_HANGUP, &info->event)) {
-        tty_hangup(info->tty);
-        wake_up_interruptible(&info->open_wait);
-        info->flags &= ~(ASYNC_NORMAL_ACTIVE|
-                             ASYNC_CALLOUT_ACTIVE);
-    }
-    if (clear_bit(Cy_EVENT_OPEN_WAKEUP, &info->event)) {
-        wake_up_interruptible(&info->open_wait);
-    }
-    if (clear_bit(Cy_EVENT_WRITE_WAKEUP, &info->event)) {
-        if((tty->flags & (1<< TTY_DO_WRITE_WAKEUP))
-        && tty->ldisc.write_wakeup){
-            (tty->ldisc.write_wakeup)(tty);
-        }
-        wake_up_interruptible(&tty->write_wait);
-    }
-#endif
 } /* do_softint */
 
 
@@ -2339,7 +2313,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 			break;
 		}
 	    restore_flags(flags);
-	    if (signal_pending(current))  {
+	    if (signal_pending(current)) {
 		retval = -ERESTARTSYS;
 		break;
 	    }
@@ -3318,12 +3292,18 @@ get_modem_info(struct cyclades_port * info, unsigned int *value)
 	    status |= cy_readb(base_addr+(CyMSVR2<<index));
 	restore_flags(flags);
 
-	result =  ((status  & CyRTS) ? TIOCM_RTS : 0)
-		| ((status  & CyDTR) ? TIOCM_DTR : 0)
-		| ((status  & CyDCD) ? TIOCM_CAR : 0)
-		| ((status  & CyRI) ? TIOCM_RNG : 0)
-		| ((status  & CyDSR) ? TIOCM_DSR : 0)
-		| ((status  & CyCTS) ? TIOCM_CTS : 0);
+
+        if (info->rtsdtr_inv) {
+	    result =  ((status  & CyRTS) ? TIOCM_DTR : 0)
+		    | ((status  & CyDTR) ? TIOCM_RTS : 0);
+	} else {
+	    result =  ((status  & CyRTS) ? TIOCM_RTS : 0)
+		    | ((status  & CyDTR) ? TIOCM_DTR : 0);
+	}
+	result |=  ((status  & CyDCD) ? TIOCM_CAR : 0)
+		 | ((status  & CyRI) ? TIOCM_RNG : 0)
+		 | ((status  & CyDSR) ? TIOCM_DSR : 0)
+		 | ((status  & CyCTS) ? TIOCM_CTS : 0);
     } else {
 	base_addr = (unsigned char*) (cy_card[card].base_addr);
 
@@ -4329,7 +4309,7 @@ cy_detect_isa(void))
 
                 /* probe for CD1400... */
 
-#if !defined(__alpha__) && (LINUX_VERSION_CODE >= 0x020100)
+#if !defined(__alpha__) 
 		cy_isa_address = ioremap((unsigned int)cy_isa_address,
                                                        CyISA_Ywin);
 #endif
@@ -4483,9 +4463,6 @@ cy_detect_pci(void))
 	            continue;
                 }
 #else
-#if (LINUX_VERSION_CODE < 0x020100) 
-                if ((ulong)cy_pci_addr2 >= 0x100000)  /* above 1M? */
-#endif
                     cy_pci_addr2 = (ulong) ioremap(cy_pci_addr2, CyPCI_Ywin);
 #endif
 
@@ -5098,10 +5075,13 @@ cleanup_module(void)
     save_flags(flags);
     cli();
     remove_bh(CYCLADES_BH);
+
+    free_page((unsigned long)tmp_buf);
     if (tty_unregister_driver(&cy_callout_driver))
             printk("Couldn't unregister Cyclom callout driver\n");
     if (tty_unregister_driver(&cy_serial_driver))
             printk("Couldn't unregister Cyclom serial driver\n");
+
     restore_flags(flags);
 
     for (i = 0; i < NR_CARDS; i++) {

@@ -15,7 +15,7 @@ struct timespec {
  * change timeval to jiffies, trying to avoid the
  * most obvious overflows..
  */
-static inline unsigned long
+static __inline__ unsigned long
 timespec_to_jiffies(struct timespec *value)
 {
 	unsigned long sec = value->tv_sec;
@@ -28,7 +28,7 @@ timespec_to_jiffies(struct timespec *value)
 	return HZ * sec + nsec;
 }
 
-static inline void
+static __inline__ void
 jiffies_to_timespec(unsigned long jiffies, struct timespec *value)
 {
 	value->tv_nsec = (jiffies % HZ) * (1000000000L / HZ);

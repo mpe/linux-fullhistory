@@ -85,6 +85,7 @@
 #define TIOCTTYGSTRUCT	0x5426  /* For debugging only */
 #define TIOCSBRK	0x5427  /* BSD compatibility */
 #define TIOCCBRK	0x5428  /* BSD compatibility */
+#define TIOCGSID	0x5429  /* Return the session ID of FD */
 
 #define TIOCSERCONFIG	0x5453
 #define TIOCSERGWILD	0x5454

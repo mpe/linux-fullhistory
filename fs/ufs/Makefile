@@ -9,7 +9,7 @@
 
 O_TARGET := ufs.o
 O_OBJS   := ufs_dir.o ufs_file.o ufs_inode.o ufs_namei.o \
-		ufs_super.o ufs_symlink.o
+		ufs_super.o ufs_symlink.o ufs_swab.o
 M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

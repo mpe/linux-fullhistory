@@ -151,5 +151,6 @@ void init_umc8672 (void)	/* called from ide.c */
 	ide_hwifs[1].chipset = ide_umc8672;
 	ide_hwifs[0].tuneproc = &tune_umc;
 	ide_hwifs[1].tuneproc = &tune_umc;
-
+	ide_hwifs[0].mate = &ide_hwifs[1];
+	ide_hwifs[1].mate = &ide_hwifs[0];
 }

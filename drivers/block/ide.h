@@ -164,7 +164,7 @@ typedef unsigned char	byte;	/* used everywhere */
 #define WAIT_CMD	(10*HZ)	/* 10sec  - maximum wait for an IRQ to happen */
 #define WAIT_MIN_SLEEP	(2*HZ/100)	/* 20msec - minimum sleep time */
 
-#if defined(CONFIG_BLK_DEV_HT6560B) || defined(CONFIG_BLK_DEV_PDC4030)
+#if defined(CONFIG_BLK_DEV_HT6560B) || defined(CONFIG_BLK_DEV_PDC4030) || defined(CONFIG_BLK_DEV_TRM290)
 #define SELECT_DRIVE(hwif,drive)				\
 {								\
 	if (hwif->selectproc)					\
@@ -289,7 +289,7 @@ typedef int (ide_dmaproc_t)(ide_dma_action_t, ide_drive_t *);
 typedef void (ide_tuneproc_t)(ide_drive_t *, byte);
 
 /*
- * This is used to provide HT6560B & PDC4030 interface support.
+ * This is used to provide HT6560B & PDC4030 & TRM290 interface support.
  */
 typedef void (ide_selectproc_t) (ide_drive_t *);
 
@@ -300,7 +300,8 @@ typedef void (ide_selectproc_t) (ide_drive_t *);
 typedef enum {	ide_unknown,	ide_generic,	ide_pci,
 		ide_cmd640,	ide_dtc2278,	ide_ali14xx,
 		ide_qd6580,	ide_umc8672,	ide_ht6560b,
-		ide_pdc4030,	ide_rz1000 }
+		ide_pdc4030,	ide_rz1000,	ide_trm290,
+		ide_4drives }
 	hwif_chipset_t;
 
 typedef struct hwif_s {
@@ -310,11 +311,12 @@ typedef struct hwif_s {
 	ide_drive_t	drives[MAX_DRIVES];	/* drive info */
 	struct gendisk	*gd;		/* gendisk structure */
 	ide_tuneproc_t	*tuneproc;	/* routine to tune PIO mode for drives */
-#if defined(CONFIG_BLK_DEV_HT6560B) || defined(CONFIG_BLK_DEV_PDC4030)
+#if defined(CONFIG_BLK_DEV_HT6560B) || defined(CONFIG_BLK_DEV_PDC4030) || defined(CONFIG_BLK_DEV_TRM290)
 	ide_selectproc_t *selectproc;	/* tweaks hardware to select drive */
 #endif
 	ide_dmaproc_t	*dmaproc;	/* dma read/write/abort routine */
 	unsigned long	*dmatable;	/* dma physical region descriptor table */
+	struct hwif_s	*mate;		/* other hwif from same PCI chip */
 	unsigned short	dma_base;	/* base addr for dma ports (triton) */
 	int		irq;		/* our irq number */
 	byte		major;		/* our major number */
@@ -329,6 +331,7 @@ typedef struct hwif_s {
 	unsigned	is_pdc4030_2: 1;/* 2nd i/f on pdc4030 */
 #endif /* CONFIG_BLK_DEV_PDC4030 */
 	unsigned	reset      : 1; /* reset after probe */
+	unsigned	pci_port   : 1; /* for dual-port chips: 0=primary, 1=secondary */
 #if (DISK_RECOVERY_TIME > 0)
 	unsigned long	last_time;	/* time when previous rq was done */
 #endif
@@ -609,6 +612,12 @@ void ide_unregister_module (ide_module_t *module);
 ide_drive_t *ide_scan_devices (byte media, ide_driver_t *driver, int n);
 int ide_register_subdriver (ide_drive_t *drive, ide_driver_t *driver, int version);
 int ide_unregister_subdriver (ide_drive_t *drive);
+
+#ifdef CONFIG_BLK_DEV_IDEDMA
+int ide_build_dmatable (ide_drive_t *drive);
+int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive);
+void ide_setup_dma (ide_hwif_t *hwif, unsigned short dmabase, unsigned int num_ports);
+#endif
 
 #ifdef CONFIG_BLK_DEV_IDE
 int ideprobe_init (void);

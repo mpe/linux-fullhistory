@@ -111,8 +111,6 @@ static int cdrom_release(struct inode *ip, struct file *fp);
 static int cdrom_ioctl(struct inode *ip, struct file *fp,
 				unsigned int cmd, unsigned long arg);
 static int cdrom_media_changed(kdev_t dev);
-static int cdrom_sysctl_info(ctl_table *ctl, int write, struct file * filp,
-                           void *buffer, size_t *lenp);
 static int open_for_data(struct cdrom_device_info * cdi);
 static int check_for_audio_disc(struct cdrom_device_info * cdi,
 			 struct cdrom_device_ops * cdo);
@@ -307,11 +305,15 @@ int open_for_data(struct cdrom_device_info * cdi)
 		ret=-ENOMEDIUM;
 		goto clean_up_and_return;
 	}
+#if 0
+	/* this breaks CD-Players which don't use O_NONBLOCK, workman
+	 * for example, probably others too */
 	if (cdi->options & CDO_CHECK_TYPE && tracks.data==0) {
 		cdinfo(CD_OPEN, "bummer. wrong media type...\n"); 
 		ret=-EMEDIUMTYPE;
 		goto clean_up_and_return;
 	}
+#endif
 
 	cdinfo(CD_OPEN, "all seems well, opening the device...\n"); 
 
@@ -879,24 +881,85 @@ EXPORT_SYMBOL(unregister_cdrom);
 EXPORT_SYMBOL(cdrom_fops);
 
 #ifdef CONFIG_SYSCTL
+
 #define CDROM_STR_SIZE 1000
+
 static char cdrom_drive_info[CDROM_STR_SIZE]="info\n";
 
-#ifdef MODULE
-
-static struct ctl_table_header *cdrom_sysctl_header;
-
-static void cdrom_sysctl_register(void)
+int cdrom_sysctl_info(ctl_table *ctl, int write, struct file * filp,
+                           void *buffer, size_t *lenp)
 {
-	cdrom_sysctl_header = register_sysctl_table(cdrom_root_table, 0);
-}
+        int retv,pos;
+	struct cdrom_device_info *cdi;
 
-static void cdrom_sysctl_unregister(void)
-{
-	unregister_sysctl_table(cdrom_sysctl_header);
-}
+        pos = sprintf(cdrom_drive_info, "CD-ROM information\n");
+	
+	pos += sprintf(cdrom_drive_info+pos, "\ndrive name:\t");
+	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
+	    pos += sprintf(cdrom_drive_info+pos, "\t%s", cdi->name);
 
-#endif
+	pos += sprintf(cdrom_drive_info+pos, "\ndrive speed:\t");
+	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
+	    pos += sprintf(cdrom_drive_info+pos, "\t%d", cdi->speed);
+
+	pos += sprintf(cdrom_drive_info+pos, "\ndrive # of slots:");
+	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
+	    pos += sprintf(cdrom_drive_info+pos, "\t%d", cdi->capacity);
+
+	pos += sprintf(cdrom_drive_info+pos, "\nCan close tray:\t");
+	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
+	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
+			   ((cdi->ops->capability & CDC_CLOSE_TRAY)!=0));
+
+	pos += sprintf(cdrom_drive_info+pos, "\nCan open tray:\t");
+	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
+	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
+			   ((cdi->ops->capability & CDC_OPEN_TRAY)!=0));
+
+	pos += sprintf(cdrom_drive_info+pos, "\nCan lock tray:\t");
+	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
+	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
+			   ((cdi->ops->capability & CDC_LOCK)!=0));
+
+	pos += sprintf(cdrom_drive_info+pos, "\nCan change speed:");
+	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
+	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
+			   ((cdi->ops->capability & CDC_SELECT_SPEED)!=0));
+
+	pos += sprintf(cdrom_drive_info+pos, "\nCan select disk:");
+	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
+	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
+			   ((cdi->ops->capability & CDC_SELECT_DISC)!=0));
+
+	pos += sprintf(cdrom_drive_info+pos, "\nCan read multisession:");
+	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
+	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
+			   ((cdi->ops->capability & CDC_MULTI_SESSION)!=0));
+
+	pos += sprintf(cdrom_drive_info+pos, "\nCan read MCN:\t");
+	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
+	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
+			   ((cdi->ops->capability & CDC_MCN)!=0));
+
+	pos += sprintf(cdrom_drive_info+pos, "\nReports media changed:");
+	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
+	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
+			   ((cdi->ops->capability & CDC_MEDIA_CHANGED)!=0));
+
+	pos += sprintf(cdrom_drive_info+pos, "\nCan play audio:\t");
+	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
+	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
+			   ((cdi->ops->capability & CDC_PLAY_AUDIO)!=0));
+
+        strcpy(cdrom_drive_info+pos,"\n\n");
+	*lenp=pos+3;
+        if (!write) {
+        	retv = proc_dostring(ctl, write, filp, buffer, lenp);
+        }
+        else
+        	retv = proc_dostring(ctl, write, filp, buffer, lenp);
+        return retv;
+}
 
 /* Place files in /proc/sys/dev/cdrom */
 ctl_table cdrom_table[] = {
@@ -916,57 +979,26 @@ ctl_table cdrom_root_table[] = {
 	{0}
 	};
 
-
-int cdrom_sysctl_info(ctl_table *ctl, int write, struct file * filp,
-                           void *buffer, size_t *lenp)
-{
-        int retv;
-	char buf[40];
-	struct cdrom_device_info *cdi;
-
-        sprintf(cdrom_drive_info, "CD-ROM information\n\n");
-	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next){
-           sprintf(buf, "drive name:\t\t%s\n", cdi->name);
-           strcat(cdrom_drive_info, buf);
-           sprintf(buf, "drive speed:\t\t%d\n", cdi->speed);
-           strcat(cdrom_drive_info, buf);
-           sprintf(buf, "drive # of slots:\t%d\n", cdi->capacity);
-           strcat(cdrom_drive_info, buf);
-           sprintf(buf, "Can close tray:\t\t%d\n", ((cdi->ops->capability & CDC_CLOSE_TRAY)!=0));
-           strcat(cdrom_drive_info, buf);
-           sprintf(buf, "Can open tray:\t\t%d\n", ((cdi->ops->capability & CDC_OPEN_TRAY)!=0));
-           strcat(cdrom_drive_info, buf);
-           sprintf(buf, "Can lock tray:\t\t%d\n", ((cdi->ops->capability & CDC_LOCK)!=0));
-           strcat(cdrom_drive_info, buf);
-           sprintf(buf, "Can change speed:\t%d\n", ((cdi->ops->capability & CDC_SELECT_SPEED)!=0));
-           strcat(cdrom_drive_info, buf);
-           sprintf(buf, "Can select disk:\t%d\n", ((cdi->ops->capability & CDC_SELECT_DISC)!=0));
-           strcat(cdrom_drive_info, buf);
-           sprintf(buf, "Can read multisession:\t%d\n", ((cdi->ops->capability & CDC_MULTI_SESSION)!=0));
-           strcat(cdrom_drive_info, buf);
-           sprintf(buf, "Can read MCN:\t\t%d\n", ((cdi->ops->capability & CDC_MCN)!=0));
-           strcat(cdrom_drive_info, buf);
-           sprintf(buf, "Reports media changed:\t%d\n", ((cdi->ops->capability & CDC_MEDIA_CHANGED)!=0));
-           strcat(cdrom_drive_info, buf);
-           sprintf(buf, "Can play audio:\t\t%d\n", ((cdi->ops->capability & CDC_PLAY_AUDIO)!=0));
-           strcat(cdrom_drive_info, buf);
-           strcat(cdrom_drive_info, "\n\n");
-	}
-	*lenp=sizeof(cdrom_drive_info);
-
-        if (!write) {
-        	retv = proc_dostring(ctl, write, filp, buffer, lenp);
-        }
-        else
-        	retv = proc_dostring(ctl, write, filp, buffer, lenp);
-        return retv;
-}
-
-
 #endif /* endif CONFIG_SYSCTL */
 
 
 #ifdef MODULE
+
+#ifdef CONFIG_SYSCTL
+
+static struct ctl_table_header *cdrom_sysctl_header;
+
+static void cdrom_sysctl_register(void)
+{
+	cdrom_sysctl_header = register_sysctl_table(cdrom_root_table, 0);
+}
+
+static void cdrom_sysctl_unregister(void)
+{
+	unregister_sysctl_table(cdrom_sysctl_header);
+}
+#endif /* endif CONFIG_SYSCTL */
+
 int init_module(void)
 {
 	cdrom_init();

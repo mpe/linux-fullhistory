@@ -233,7 +233,7 @@ static void opti621_tune_drive (ide_drive_t *drive, byte pio)
 
 	drdy = 2; /* DRDY is default 2 (by OPTi Databook) */
 
-	cycle1 = ((first.data_time-1)<<4) | (first.recovery_time-2);
+	cycle1 = ((first.data_time-1)<<4)  | (first.recovery_time-2);
 	cycle2 = ((second.data_time-1)<<4) | (second.recovery_time-2);
 	misc = READ_PREFETCH | ((ax-1)<<4) | ((drdy-2)<<1);
 
@@ -276,11 +276,9 @@ static void opti621_tune_drive (ide_drive_t *drive, byte pio)
 /*
  * ide_init_opti621() is Called from idedma.c once for each hwif found at boot.
  */
-void ide_init_opti621 (byte bus, byte fn, ide_hwif_t *hwifs)
+void ide_init_opti621 (byte bus, byte fn, ide_hwif_t *hwif)
 {
-	if (hwif->io_ports[IDE_DATA_OFFSET]) {
-		hwif->drives[0].timing_data = PIO_DONT_KNOW;
-		hwif->drives[1].timing_data = PIO_DONT_KNOW;
-		hwif->tuneproc = &opti621_tune_drive;
-	}
+	hwif->drives[0].timing_data = PIO_DONT_KNOW;
+	hwif->drives[1].timing_data = PIO_DONT_KNOW;
+	hwif->tuneproc = &opti621_tune_drive;
 }

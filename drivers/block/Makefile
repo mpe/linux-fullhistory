@@ -129,6 +129,10 @@ ifeq ($(CONFIG_BLK_DEV_PDC4030),y)
 L_OBJS += pdc4030.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_TRM290),y)
+L_OBJS += trm290.o
+endif
+
 ifeq ($(CONFIG_BLK_DEV_OPTI621),y)
 L_OBJS += opti621.o
 endif

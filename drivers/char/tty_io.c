@@ -90,6 +90,7 @@
 
 #define CONSOLE_DEV MKDEV(TTY_MAJOR,0)
 #define TTY_DEV MKDEV(TTYAUX_MAJOR,0)
+#define SYSCONS_DEV MKDEV(TTYAUX_MAJOR,1)
 
 #undef TTY_DEBUG_HANGUP
 
@@ -386,7 +387,8 @@ void do_tty_hangup(void *data)
 			continue;
 		if (!filp->f_dentry->d_inode)
 			continue;
-		if (filp->f_dentry->d_inode->i_rdev == CONSOLE_DEV)
+		if (filp->f_dentry->d_inode->i_rdev == CONSOLE_DEV ||
+		    filp->f_dentry->d_inode->i_rdev == SYSCONS_DEV)
 			continue;
 		if (filp->f_op != &tty_fops)
 			continue;
@@ -517,9 +519,7 @@ void disassociate_ctty(int on_exit)
 void wait_for_keypress(void)
 {
         struct console *c = console_drivers;
-        while(c && !c->wait_key)
-                c = c->next;
-        if (c) c->wait_key();
+        if (c) c->wait_key(c);
 }
 
 void stop_tty(struct tty_struct *tty)
@@ -647,8 +647,13 @@ static ssize_t tty_write(struct file * file, const char * buf, size_t count,
 	if (ppos != &file->f_pos)
 		return -ESPIPE;
 
+	/*
+	 *      For now, we redirect writes from /dev/console as
+	 *      well as /dev/tty0.
+	 */
 	inode = file->f_dentry->d_inode;
-	is_console = (inode->i_rdev == CONSOLE_DEV);
+	is_console = (inode->i_rdev == SYSCONS_DEV ||
+		      inode->i_rdev == CONSOLE_DEV);
 
 	if (is_console && redirect)
 		tty = redirect;
@@ -1182,13 +1187,20 @@ retry_open:
 		filp->f_flags |= O_NONBLOCK; /* Don't let /dev/tty block */
 		/* noctty = 1; */
 	}
+#ifdef CONFIG_VT
 	if (device == CONSOLE_DEV) {
+		extern int fg_console;
+		device = MKDEV(TTY_MAJOR, fg_console + 1);
+		noctty = 1;
+	}
+#endif
+	if (device == SYSCONS_DEV) {
 		struct console *c = console_drivers;
 		while(c && !c->device)
 			c = c->next;
 		if (!c)
                         return -ENODEV;
-                device = c->device();
+                device = c->device(c);
 		noctty = 1;
 	}
 	minor = MINOR(device);
@@ -1369,7 +1381,8 @@ static int tiocswinsz(struct tty_struct *tty, struct tty_struct *real_tty,
 
 static int tioccons(struct tty_struct *tty, struct tty_struct *real_tty)
 {
-	if (tty->driver.type == TTY_DRIVER_TYPE_CONSOLE) {
+	if (tty->driver.type == TTY_DRIVER_TYPE_CONSOLE ||
+	    tty->driver.type == TTY_DRIVER_TYPE_SYSCONS) {
 		if (!suser())
 			return -EPERM;
 		redirect = NULL;
@@ -1464,6 +1477,19 @@ static int tiocspgrp(struct tty_struct *tty, struct tty_struct *real_tty, pid_t 
 		return -EPERM;
 	real_tty->pgrp = pgrp;
 	return 0;
+}
+
+static int tiocgsid(struct tty_struct *tty, struct tty_struct *real_tty, pid_t *arg)
+{
+	/*
+	 * (tty == real_tty) is a cheap way of
+	 * testing if the tty is NOT a master pty.
+	*/
+	if (tty == real_tty && current->tty != real_tty)
+		return -ENOTTY;
+	if (real_tty->session <= 0)
+		return -ENOTTY;
+	return put_user(real_tty->session, arg);
 }
 
 static int tiocttygstruct(struct tty_struct *tty, struct tty_struct *arg)
@@ -1585,6 +1611,8 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			return tiocgpgrp(tty, real_tty, (pid_t *) arg);
 		case TIOCSPGRP:
 			return tiocspgrp(tty, real_tty, (pid_t *) arg);
+		case TIOCGSID:
+			return tiocgsid(tty, real_tty, (pid_t *) arg);
 		case TIOCGETD:
 			return put_user(tty->ldisc.num, (int *) arg);
 		case TIOCSETD:
@@ -1890,16 +1918,17 @@ long console_init(long kmem_start, long kmem_end)
 	 * set up the console device so that later boot sequences can 
 	 * inform about problems etc..
 	 */
-#ifdef CONFIG_SERIAL_CONSOLE
-	kmem_start = serial_console_init(kmem_start, kmem_end);
-#endif
 #ifdef CONFIG_VT
 	kmem_start = con_init(kmem_start);
+#endif
+#ifdef CONFIG_SERIAL_CONSOLE
+	kmem_start = serial_console_init(kmem_start, kmem_end);
 #endif
 	return kmem_start;
 }
 
-static struct tty_driver dev_tty_driver, dev_console_driver;
+static struct tty_driver dev_tty_driver, dev_console_driver,
+	dev_syscons_driver;
 
 /*
  * Ok, now we can initialize the rest of the tty devices and can count
@@ -1930,17 +1959,28 @@ __initfunc(int tty_init(void))
 	if (tty_register_driver(&dev_tty_driver))
 		panic("Couldn't register /dev/tty driver\n");
 
+	dev_syscons_driver = dev_tty_driver;
+	dev_syscons_driver.driver_name = "/dev/console";
+	dev_syscons_driver.name = dev_syscons_driver.driver_name + 5;
+	dev_syscons_driver.major = TTYAUX_MAJOR;
+	dev_syscons_driver.minor_start = 1;
+	dev_syscons_driver.type = TTY_DRIVER_TYPE_SYSTEM;
+	dev_syscons_driver.subtype = SYSTEM_TYPE_SYSCONS;
+
+	if (tty_register_driver(&dev_syscons_driver))
+		panic("Couldn't register /dev/console driver\n");
+
+#ifdef CONFIG_VT
 	dev_console_driver = dev_tty_driver;
-	dev_console_driver.driver_name = "/dev/console";
+	dev_console_driver.driver_name = "/dev/tty0";
 	dev_console_driver.name = dev_console_driver.driver_name + 5;
 	dev_console_driver.major = TTY_MAJOR;
 	dev_console_driver.type = TTY_DRIVER_TYPE_SYSTEM;
 	dev_console_driver.subtype = SYSTEM_TYPE_CONSOLE;
 
 	if (tty_register_driver(&dev_console_driver))
-		panic("Couldn't register /dev/console driver\n");
+		panic("Couldn't register /dev/tty0 driver\n");
 
-#ifdef CONFIG_VT
 	kbd_init();
 #endif
 #ifdef CONFIG_ESPSERIAL  /* init ESP before rs, so rs doesn't see the port */

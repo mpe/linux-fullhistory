@@ -9,30 +9,32 @@ include CONFIG
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS)
+ALL_SUB_DIRS := $(SUB_DIRS) hamradio
 
 L_TARGET := net.a
 L_OBJS   := auto_irq.o
 M_OBJS   :=
 MOD_LIST_NAME := NET_MODULES
 
-# Need these to keep track of whether the 8390 and SLHC modules should
+# Need these to keep track of whether the 8390, PPP and SLHC modules should
 # really go in the kernel or a module.
 CONFIG_8390_BUILTIN :=
 CONFIG_8390_MODULE  :=
 CONFIG_SLHC_BUILTIN :=
 CONFIG_SLHC_MODULE  :=
-CONFIG_HDLCDRV_BUILTIN :=
-CONFIG_HDLCDRV_MODULE  :=
+CONFIG_PPPDEF_BUILTIN :=
+CONFIG_PPPDEF_MODULE  :=
 
 ifeq ($(CONFIG_ISDN),y)
   ifeq ($(CONFIG_ISDN_PPP),y)
     CONFIG_SLHC_BUILTIN = y
+    CONFIG_PPPDEF_BUILTIN = y
   endif
 else
   ifeq ($(CONFIG_ISDN),m)
     ifeq ($(CONFIG_ISDN_PPP),y)
       CONFIG_SLHC_MODULE = y
+      CONFIG_PPPDEF_BUILTIN = y
     endif
   endif
 endif
@@ -186,9 +188,11 @@ endif
 ifeq ($(CONFIG_PPP),y)
 LX_OBJS += ppp.o
 CONFIG_SLHC_BUILTIN = y
+CONFIG_PPPDEF_BUILTIN = y
 else
   ifeq ($(CONFIG_PPP),m)
   CONFIG_SLHC_MODULE = y
+  CONFIG_PPPDEF_MODULE = y
   MX_OBJS += ppp.o
   endif
 endif
@@ -201,11 +205,13 @@ ifeq ($(CONFIG_SLIP),y)
 L_OBJS += slip.o
   ifeq ($(CONFIG_SLIP_COMPRESSED),y)
   CONFIG_SLHC_BUILTIN = y
+  CONFIG_PPPDEF_BUILTIN = y
   endif
 else
   ifeq ($(CONFIG_SLIP),m)
     ifeq ($(CONFIG_SLIP_COMPRESSED),y)
     CONFIG_SLHC_MODULE = y
+    CONFIG_PPPDEF_MODULE = y
   endif
   M_OBJS += slip.o
   endif
@@ -538,46 +544,6 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_SCC),y)
-L_OBJS += scc.o
-else
-  ifeq ($(CONFIG_SCC),m)
-  M_OBJS += scc.o
-  endif
-endif
-
-ifeq ($(CONFIG_MKISS),y)
-L_OBJS += mkiss.o
-else
-  ifeq ($(CONFIG_MKISS),m)
-  M_OBJS += mkiss.o
-  endif
-endif
-
-ifeq ($(CONFIG_PI),y)
-L_OBJS += pi2.o
-else
-  ifeq ($(CONFIG_PI),m)
-  M_OBJS += pi2.o
-  endif
-endif
-
-ifeq ($(CONFIG_PT),y)
-L_OBJS += pt.o
-else
-  ifeq ($(CONFIG_PT),m)
-  M_OBJS += pt.o
-  endif
-endif
-
-ifeq ($(CONFIG_BPQETHER),y)
-L_OBJS += bpqether.o
-else
-  ifeq ($(CONFIG_BPQETHER),m)
-  M_OBJS += bpqether.o
-  endif
-endif
-
 ifeq ($(CONFIG_LAPBETHER),y)
 L_OBJS += lapbether.o
 else
@@ -596,6 +562,15 @@ else
   endif
 endif
 
+# if anything built-in uses ppp_deflate, then build it into the kernel also.
+# If not, but a module uses it, build as a module:
+ifdef CONFIG_PPPDEF_BUILTIN
+LX_OBJS += ppp_deflate.o
+else
+  ifdef CONFIG_PPPDEF_MODULE
+  MX_OBJS += ppp_deflate.o
+  endif
+endif
 
 # If anything built-in uses the 8390, then build it into the kernel also.
 # If not, but a module uses it, build as a module.
@@ -728,61 +703,8 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_BAYCOM_SER_FDX),y)
-L_OBJS += baycom_ser_fdx.o
-CONFIG_HDLCDRV_BUILTIN = y
-else
-  ifeq ($(CONFIG_BAYCOM_SER_FDX),m)
-  CONFIG_HDLCDRV_MODULE = y
-  M_OBJS += baycom_ser_fdx.o
-  endif
-endif
-
-ifeq ($(CONFIG_BAYCOM_SER_HDX),y)
-L_OBJS += baycom_ser_hdx.o
-CONFIG_HDLCDRV_BUILTIN = y
-else
-  ifeq ($(CONFIG_BAYCOM_SER_HDX),m)
-  CONFIG_HDLCDRV_MODULE = y
-  M_OBJS += baycom_ser_hdx.o
-  endif
-endif
-
-ifeq ($(CONFIG_BAYCOM_PAR),y)
-L_OBJS += baycom_par.o
-CONFIG_HDLCDRV_BUILTIN = y
-else
-  ifeq ($(CONFIG_BAYCOM_PAR),m)
-  CONFIG_HDLCDRV_MODULE = y
-  M_OBJS += baycom_par.o
-  endif
-endif
-
-ifeq ($(CONFIG_SOUNDMODEM),y)
-ALL_SUB_DIRS += soundmodem
-SUB_DIRS += soundmodem
-L_OBJS += soundmodem/soundmodem.o
-CONFIG_HDLCDRV_BUILTIN = y
-else
-  ifeq ($(CONFIG_SOUNDMODEM),m)
-  CONFIG_HDLCDRV_MODULE = y
-  ALL_SUB_DIRS += soundmodem
-  MOD_SUB_DIRS += soundmodem
-  endif
-endif
-
 ifeq ($(CONFIG_MACE),y)
 L_OBJS += mace.o
-endif
-
-# If anything built-in uses the hdlcdrv, then build it into the kernel also.
-# If not, but a module uses it, build as a module.
-ifdef CONFIG_HDLCDRV_BUILTIN
-LX_OBJS += hdlcdrv.o
-else
-  ifdef CONFIG_HDLCDRV_MODULE
-  MX_OBJS += hdlcdrv.o
-  endif
 endif
 
 ifeq ($(CONFIG_VENDOR_SANGOMA),y)
@@ -818,9 +740,6 @@ wd.o:	wd.c CONFIG
 
 3c503.o:	3c503.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(EL2_OPTS) -c $<
-
-pi2.o:  pi2.c CONFIG
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(PI_OPTS) -c $<
 
 3c505.o: 3c505.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(ELP_OPTS) -c $<

@@ -49,8 +49,10 @@ static int tty_drivers_read_proc(char *page, char **start, off_t off,
 		case TTY_DRIVER_TYPE_SYSTEM:
 			if (p->subtype == SYSTEM_TYPE_TTY)
 				type = "system:/dev/tty";
-			else if (p->subtype == SYSTEM_TYPE_CONSOLE)
+			else if (p->subtype == SYSTEM_TYPE_SYSCONS)
 				type = "system:console";
+			else if (p->subtype == SYSTEM_TYPE_CONSOLE)
+				type = "system:vtmaster";
 			else
 				type = "system";
 			break;

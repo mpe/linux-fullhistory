@@ -123,11 +123,13 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 #endif /* CONFIG_BLK_DEV_PDC4030 */
 		switch (type) {
 			case ide_floppy:
-				if (!strstr(id->model, "oppy") && !strstr(id->model, "poyp") && !strstr(id->model, "ZIP"))
-					printk("cdrom or floppy?, assuming ");
-				if (drive->media != ide_cdrom) {
-					printk ("FLOPPY");
-					break;
+				if (!strstr(id->model, "CD-ROM")) {
+					if (!strstr(id->model, "oppy") && !strstr(id->model, "poyp") && !strstr(id->model, "ZIP"))
+						printk("cdrom or floppy?, assuming ");
+					if (drive->media != ide_cdrom) {
+						printk ("FLOPPY");
+						break;
+					}
 				}
 				type = ide_cdrom;	/* Early cdrom models used zero */
 			case ide_cdrom:

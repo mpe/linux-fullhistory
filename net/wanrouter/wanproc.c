@@ -57,8 +57,7 @@ typedef struct wan_stat_entry
 
 /* Proc filesystem interface */
 static int router_proc_perms (struct inode*, int);
-static long router_proc_read(struct inode* inode, struct file* file, char* buf,
-				unsigned long count);
+static ssize_t router_proc_read(struct file* file, char* buf, size_t count, 					loff_t *ppos);
 
 /* Methods for preparing data for reading proc entries */
 
@@ -337,9 +336,10 @@ static int router_proc_perms (struct inode* inode, int op)
  *		<0	error
  */
 
-static long router_proc_read(struct inode* inode, struct file* file, 
-				char* buf, unsigned long count)
+static ssize_t router_proc_read(struct file* file, char* buf, size_t count,
+				loff_t *ppos)
 {
+	struct inode *inode;
 	struct proc_dir_entry* dent;
 	char* page;
 	int pos, offs, len;

@@ -18,7 +18,7 @@ static struct file_operations ufs_file_operations = {
 	generic_file_read,	/* read */
 	NULL,			/* write */
 	NULL,			/* readdir */
-	NULL,			/* poll */
+	NULL,			/* select */
 	NULL,			/* ioctl */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* open */

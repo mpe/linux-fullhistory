@@ -165,7 +165,7 @@ nfsd(struct svc_rqst *rqstp)
 
 		for (signo = 1; signo <= _NSIG; signo++)
 			if (sigismember(&current->signal, signo) &&
-			    !sigismember(&current->signal, signo))
+			    !sigismember(&current->blocked, signo))
 				break;
 		printk(KERN_WARNING "nfsd: terminating on signal %d\n", signo);
 	}

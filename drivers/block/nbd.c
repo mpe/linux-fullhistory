@@ -78,7 +78,7 @@ int nbd_xmit(int send, struct socket *sock, char *buf, int size)
 	oldfs = get_fs();
 	set_fs(get_ds());
 	do {
-		int save;
+		sigset_t oldset;
 
 		iov.iov_base = buf;
 		iov.iov_len = size;
@@ -91,13 +91,22 @@ int nbd_xmit(int send, struct socket *sock, char *buf, int size)
 		msg.msg_namelen = 0;
 		msg.msg_flags = 0;
 
-		save = current->blocked;
-		current->blocked = ~0UL;
+		spin_lock_irq(&current->sigmask_lock);
+		oldset = current->blocked;
+		sigfillset(&current->blocked);
+		recalc_sigpending(current);
+		spin_unlock_irq(&current->sigmask_lock);
+
 		if (send)
 			result = sock_sendmsg(sock, &msg, size);
 		else
 			result = sock_recvmsg(sock, &msg, size, 0);
-		current->blocked = save;
+
+		spin_lock_irq(&current->sigmask_lock);
+		current->blocked = oldset;
+		recalc_sigpending(current);
+		spin_unlock_irq(&current->sigmask_lock);
+
 		if (result <= 0) {
 #ifdef PARANOIA
 			printk(KERN_ERR "NBD: %s - sock=%d at buf=%d, size=%d returned %d.\n",

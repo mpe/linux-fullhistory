@@ -155,7 +155,7 @@ static void fat_prefetch (
 /*
 	Read a file into user space
 */
-ssize_t fat_file_read(
+static ssize_t fat_file_read_text(
 	struct file *filp,
 	char *buf,
 	size_t count,
@@ -270,6 +270,17 @@ ssize_t fat_file_read(
 	return buf-start;
 }
 
+ssize_t fat_file_read(
+	struct file *filp,
+	char *buf,
+	size_t count,
+	loff_t *ppos)
+{
+	struct inode *inode = filp->f_dentry->d_inode;
+	if (!MSDOS_I(inode)->i_binary)
+		return fat_file_read_text(filp, buf, count, ppos);
+	return generic_file_read(filp, buf, count, ppos);
+}
 /*
 	Write to a file either from user space
 */

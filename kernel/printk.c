@@ -53,6 +53,46 @@ struct console *console_drivers = NULL;
 static char log_buf[LOG_BUF_LEN];
 static unsigned long log_start = 0;
 static unsigned long logged_chars = 0;
+struct console_cmdline console_cmdline[MAX_CMDLINECONSOLES];
+static int selected_console = 0;
+
+/*
+ *	Setup a list of consoles. Called from init/main.c
+ */
+__initfunc(void console_setup(char *str, int *ints))
+{
+	char *s;
+	int i;
+	struct console_cmdline *c;
+
+	for(i = 0; i < MAX_CMDLINECONSOLES && console_cmdline[i].name[0]; i++)
+		;
+	if (i == MAX_CMDLINECONSOLES)
+		return;
+	c = &console_cmdline[i];
+	selected_console = 1;
+
+	if (str[0] >= '0' && str[0] <= '9') {
+		strcpy(c->name, "ttyS");
+		strncpy(c->name + 4, str, sizeof(c->name) - 5);
+	} else
+		strncpy(c->name, str, sizeof(c->name) - 1);
+	if ((c->options = strchr(str, ',')) != NULL)
+		*(c->options++) = 0;
+#ifdef __sparc__
+	if (strcmp(str, "ttya"))
+		strcpy(c->name, "ttyS0");
+	if (strcmp(str, "ttyb"))
+		strcpy(c->name, "ttyS1");
+#endif
+
+	for(s = c->name; *s; s++)
+		if (*s >= '0' && *s <= '9')
+			break;
+	c->index = simple_strtoul(s, NULL, 10);
+	*s = 0;
+}
+
 
 /*
  * Commands to sys_syslog:
@@ -222,8 +262,8 @@ asmlinkage int printk(const char *fmt, ...)
 		if (msg_level < console_loglevel && console_drivers) {
 			struct console *c = console_drivers;
 			while(c) {
-				if (c->write)
-					c->write(msg, p - msg + line_feed);
+				if ((c->flags & CON_ENABLED) && c->write)
+					c->write(c, msg, p - msg + line_feed);
 				c = c->next;
 			}
 		}
@@ -239,9 +279,10 @@ void console_print(const char *s)
 {
 	struct console *c = console_drivers;
 	int len = strlen(s);
+
 	while(c) {
-		if (c->write)
-			c->write(s, len);
+		if ((c->flags & CON_ENABLED) && c->write)
+			c->write(c, s, len);
 		c = c->next;
 	}
 }
@@ -250,7 +291,7 @@ void unblank_console(void)
 {
 	struct console *c = console_drivers;
 	while(c) {
-		if (c->unblank)
+		if ((c->flags & CON_ENABLED) && c->unblank)
 			c->unblank();
 		c = c->next;
 	}
@@ -262,7 +303,7 @@ void unblank_console(void)
  * print any messages that were printed by the kernel before the
  * console driver was initialized.
  */
-__initfunc(void register_console(struct console * console))
+void register_console(struct console * console)
 {
 	int	i,j,len;
 	int	p = log_start;
@@ -270,9 +311,52 @@ __initfunc(void register_console(struct console * console))
 	signed char msg_level = -1;
 	char	*q;
 
-	console->next = console_drivers;
-	console_drivers = console;
+	/*
+	 *	See if we want to use this console driver. If we
+	 *	didn't select a console we take the first one
+	 *	that registers here.
+	 */
+	if (selected_console == 0) {
+		console->flags |= CON_ENABLED | CON_FIRST;
+		selected_console = 1;
+		if (console->setup)
+			console->setup(console, NULL);
+	}
+	/*
+	 *	See if this console matches one we selected on
+	 *	the command line.
+	 */
+	for(i = 0; i < MAX_CMDLINECONSOLES && console_cmdline[i].name[0]; i++) {
+		if (strcmp(console_cmdline[i].name, console->name) != 0)
+			continue;
+		if (console->index >= 0 &&
+		    console->index != console_cmdline[i].index)
+			continue;
+		console->flags |= CON_ENABLED;
+		console->index = console_cmdline[i].index;
+		if (i == 0)
+			console->flags |= CON_FIRST;
+		if (console->setup)
+			console->setup(console, console_cmdline[i].options);
+		break;
+	}
 
+	/*
+	 *	Put this console in the list - keep the
+	 *	preferred driver at the head of the list.
+	 */
+	if ((console->flags & CON_FIRST) || console_drivers == NULL) {
+		console->next = console_drivers;
+		console_drivers = console;
+	} else {
+		console->next = console_drivers->next;
+		console_drivers->next = console;
+	}
+	if ((console->flags & CON_PRINTBUFFER) == 0) return;
+
+	/*
+	 *	Print out buffered log messages.
+	 */
 	for (i=0,j=0; i < log_size; i++) {
 		buf[j++] = log_buf[p];
 		p++; p &= LOG_BUF_LEN-1;
@@ -287,7 +371,7 @@ __initfunc(void register_console(struct console * console))
 			len -= 3;
 		}
 		if (msg_level < console_loglevel)
-			console->write(q, len);
+			console->write(console, q, len);
 		if (buf[j-1] == '\n')
 			msg_level = -1;
 		j = 0;

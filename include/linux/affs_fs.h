@@ -27,23 +27,26 @@ struct DateStamp
   u32 ds_Tick;
 };
 
-
 /* --- Prototypes -----------------------------------------------------------------------------	*/
 
 /* amigaffs.c */
 
 extern int	affs_get_key_entry(int bsize, void *data, int entry_pos);
-extern int	affs_get_file_name(int bsize, void *fh_data, char **name);
+extern int	affs_get_file_name(int bsize, void *fh_data, unsigned char **name);
 extern u32	affs_checksum_block(int bsize, void *data, s32 *ptype, s32 *stype);
 extern void	affs_fix_checksum(int bsize, void *data, int cspos);
 extern void	secs_to_datestamp(time_t secs, struct DateStamp *ds);
 extern int	prot_to_mode(unsigned int prot);
 extern u32	mode_to_prot(int mode);
-extern int	affs_fix_hash_pred(struct inode *startino, int startoffset,
-		     	      s32 key, s32 newkey);
-extern int	affs_fix_link_pred(struct inode *startino, s32 key, s32 newkey);
+extern int	affs_insert_hash(unsigned long dir_ino, struct buffer_head *header,
+			struct inode *inode);
+extern int	affs_remove_hash(struct buffer_head *bh, struct inode *inode);
+extern int	affs_remove_link(struct buffer_head *bh, struct inode *inode);
+extern int	affs_remove_header(struct buffer_head *bh, struct inode *inode);
 extern void	affs_error(struct super_block *sb, const char *function, const char *fmt, ...);
 extern void	affs_warning(struct super_block *sb, const char *function, const char *fmt, ...);
+extern int	affs_check_name(const unsigned char *name, int len);
+extern int	affs_copy_name(unsigned char *bstr, const unsigned char *name);
 
 /* bitmap. c */
 
@@ -56,39 +59,44 @@ extern void	affs_make_zones(struct super_block *sb);
 
 /* namei.c */
 
-extern int	affs_hash_name(const char *name, int len, int intl, int hashsize);
-extern int	affs_lookup(struct inode *dir,const char *name, int len,
-		            struct inode **result);
-extern int	affs_unlink(struct inode *dir, const char *name, int len);
-extern int	affs_create(struct inode *dir, const char *name, int len, int mode,
-		            struct inode **result);
-extern int	affs_mkdir(struct inode *dir, const char *name, int len, int mode);
-extern int	affs_rmdir(struct inode *dir, const char *name, int len);
+extern int	affs_hash_name(const unsigned char *name, int len, int intl, int hashsize);
+extern int	affs_lookup(struct inode *dir, struct dentry *dentry);
+extern int	affs_unlink(struct inode *dir, struct dentry *dentry);
+extern int	affs_create(struct inode *dir, struct dentry *dentry, int mode);
+extern int	affs_mkdir(struct inode *dir, struct dentry *dentry, int mode);
+extern int	affs_rmdir(struct inode *dir, struct dentry *dentry);
 extern int	affs_link(struct inode *oldinode, struct inode *dir,
-		          const char *name, int len);
-extern int	affs_symlink(struct inode *dir, const char *name, int len,
-		             const char *symname);
-extern int	affs_rename(struct inode *old_dir, const char *old_name, int old_len,
-			    struct inode *new_dir, const char *new_name, int new_len);
+			  struct dentry *dentry);
+extern int	affs_symlink(struct inode *dir, struct dentry *dentry,
+			     const char *symname);
+extern int	affs_rename(struct inode *old_dir, struct dentry *old_dentry,
+			    struct inode *new_dir, struct dentry *new_dentry);
 
 /* inode.c */
 
-extern struct buffer_head *affs_bread(kdev_t dev, int block, int size);
-extern void		   affs_brelse(struct buffer_head *buf);
-extern unsigned long	   affs_parent_ino(struct inode *dir);
-extern struct inode	  *affs_new_inode(const struct inode *dir);
-extern int		   affs_add_entry(struct inode *dir, struct inode *link,
-					  struct inode *inode, const char *name,
-					  int len, s32 type);
+extern struct buffer_head	*affs_bread(kdev_t dev, int block, int size);
+extern void			 affs_brelse(struct buffer_head *buf);
+extern unsigned long		 affs_parent_ino(struct inode *dir);
+extern struct inode		*affs_new_inode(const struct inode *dir);
+extern int			 affs_notify_change(struct inode *inode, struct iattr *attr);
+extern int			 affs_add_entry(struct inode *dir, struct inode *link,
+					  struct inode *inode, struct dentry *dentry, s32 type);
+extern void			 affs_put_inode(struct inode *inode);
+extern void			 affs_delete_inode(struct inode *inode);
+extern void			 affs_read_inode(struct inode *inode);
+extern void			 affs_write_inode(struct inode *inode);
+
+/* super.c */
+
+extern int			 affs_fs(void);
 
 /* file.c */
 
-extern void		   affs_truncate(struct inode *);
-extern void		   affs_truncate_ofs(struct inode *);
+extern void   affs_truncate(struct inode *);
 
 /* dir.c */
 
-extern void		   affs_dir_truncate(struct inode *);
+extern void   affs_dir_truncate(struct inode *);
 
 /* jump tables */
 
@@ -99,5 +107,4 @@ extern struct inode_operations	 affs_symlink_inode_operations;
 extern struct inode_operations	 affs_chrdev_inode_operations;
 extern struct inode_operations	 affs_blkdev_inode_operations;
 
-extern int init_affs_fs(void);
 #endif

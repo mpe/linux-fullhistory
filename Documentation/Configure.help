@@ -326,6 +326,13 @@ CONFIG_IDE_CHIPSETS
   chipsets.  Most of these also require special kernel boot parameters
   to actually turn on the support at runtime.
 
+Generic 4 drives/port support
+CONFIG_BLK_DEV_4DRIVES
+  Certain older chipsets, including the Tekram 690CD, use a
+  single set of I/O ports at 0x1f0 to control up to four drives,
+  instead of the customary two drives per port.  Support for this
+  is enabled at runtime using the "ide0=four" kernel boot parameter.
+  
 DTC-2278 support
 CONFIG_BLK_DEV_DTC2278
   This driver is enabled at runtime using the "ide0=dtc2278" kernel
@@ -351,7 +358,14 @@ CONFIG_BLK_DEV_PDC4030
   "ide0=dc4030" kernel boot parameter.  See the Documentation/ide.txt
   and drivers/block/pdc4030.c files for more info.
 
-OPTi 82C621     support (EXPERIMENTAL)
+Tekram TRM290 support (EXPERIMENTAL)
+CONFIG_BLK_DEV_TRM290
+  This driver adds support for bus master DMA transfers
+  using the Tekram TRM290 PCI IDE chip.  Volunteers are
+  needed for further tweaking and development.
+  Please read the comments at the top of drivers/block/trm290.c.
+
+OPTi 82C621 support (EXPERIMENTAL)
 CONFIG_BLK_DEV_OPTI621
   This driver allows use of hdparm to change the PIO timings
   for drives attached to an OPTi MIDE controller.
@@ -4873,11 +4887,11 @@ CONFIG_AFFS_FS
   floppies however cannot be read with this driver due to an
   incompatibility of the floppy controller used in an Amiga and the
   standard floppy controller in PCs and workstations. Read
-  Documentation/filesystems/affs.txt. This filesystem is also
-  available as a module ( = code which can be inserted in and removed
-  from the running kernel whenever you want). The module is called
-  affs.o. If you want to compile it as a module, say M here and read
-  Documentation/modules.txt.  If unsure, say N.
+  Documentation/filesystems/affs.txt and fs/affs/Changes. This
+  filesystem is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module is called affs.o. If you want to compile it as a module,
+  say M here and read Documentation/modules.txt.  If unsure, say N.
 
 ROM filesystem support
 CONFIG_ROMFS_FS
@@ -4899,11 +4913,10 @@ CONFIG_VT
 
 Console on virtual terminal
 CONFIG_VT_CONSOLE
-  If you enable this option, all kernel messages will be sent to the
-  device /dev/tty which corresponds to the virtual terminal you have
-  visible on your display. You should say N here only if you have some
-  other console device, in which case you probably want to say Y to
-  "Console on serial port", below. If unsure, say N.
+  If you enable this option, by default all kernel messages will be sent
+  to the device /dev/tty0 which corresponds to the virtual terminal you
+  have visible on your display. You should say Y here unless you only
+  want to have the kernel messages output on a serial port.
 
 Software generated cursor
 CONFIG_SOFTCURSOR
@@ -4932,15 +4945,12 @@ CONFIG_SERIAL
 
 Console on serial port
 CONFIG_SERIAL_CONSOLE
-  If you enable this option, all kernel messages will be sent to the
-  device /dev/ttyS0 which corresponds to a serial port; this could be
-  useful if you attached a terminal or printer to that port. (You can
-  change the number of the serial port used from 0 to something else
-  by setting the variable CONFIG_SERIAL_CONSOLE_PORT.) You can use
-  this option in combination with the option "Console on virtual
-  terminal" above, in which case you get the output on both the serial
-  port and on your display. Most people say N here so that they can
-  use the serial port for modem, mouse or some other device.
+  If you enable this option, it is possible to use a serial port as the
+  console. By default still the virtual console will be used at the
+  system console but you can alter that using a kernel command line
+  option. If you don't have a VGA card installed the kernel will
+  automatically use /dev/ttyS0 as system console if this option is
+  enabled.
 
 Comtrol Rocketport support
 CONFIG_ROCKETPORT

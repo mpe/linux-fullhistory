@@ -1475,8 +1475,10 @@ struct net_proto_family unix_family_ops = {
 };
 
 #ifdef MODULE
+#ifdef CONFIG_SYSCTL
 extern void unix_sysctl_register(void);
 extern void unix_sysctl_unregister(void);
+#endif
 
 int init_module(void)
 #else
@@ -1503,7 +1505,9 @@ __initfunc(void unix_proto_init(struct net_proto *pro))
 #endif
 
 #ifdef MODULE
+#ifdef CONFIG_SYSCTL
 	unix_sysctl_register();
+#endif
 
 	return 0;
 #endif
@@ -1513,7 +1517,9 @@ __initfunc(void unix_proto_init(struct net_proto *pro))
 void cleanup_module(void)
 {
 	sock_unregister(AF_UNIX);
+#ifdef CONFIG_SYSCTL
 	unix_sysctl_unregister();
+#endif
 }
 #endif
 

@@ -153,6 +153,32 @@ set_cursor(int currcons)
 		hide_cursor();
 }
 
+__initfunc(int con_is_present(void))
+{
+	unsigned short saved;
+	unsigned short *p;
+
+	/*
+	 *	Find out if there is a graphics card present.
+	 *	Are there smarter methods around?
+	 */
+	p = (unsigned short *)(((ORIG_VIDEO_MODE == 7) ? 0xb0000 : 0xb8000) +
+			       + VGA_OFFSET);
+	saved = scr_readw(p);
+	scr_writew(0xAA55, p);
+	if (scr_readw(p) != 0xAA55) {
+		scr_writew(saved, p);
+		return 0;
+	}
+	scr_writew(0x55AA, p);
+	if (scr_readw(p) != 0x55AA) {
+		scr_writew(saved, p);
+		return 0;
+	}
+	scr_writew(saved, p);
+	return 1;
+}
+
 __initfunc(unsigned long
 con_type_init(unsigned long kmem_start, const char **display_desc))
 {

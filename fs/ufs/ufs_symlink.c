@@ -6,7 +6,7 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_symlink.c,v 1.9 1997/06/05 01:29:11 davem Exp $
+ * Ported to 2.1.62 by Francois-Rene Rideau <rideau@issy.cnet.fr> 19971109
  *
  */
 
@@ -15,6 +15,8 @@
 #include <linux/sched.h>
 
 #include <asm/uaccess.h>
+
+extern int ufs_bmap (struct inode *, int);
 
 static int
 ufs_readlink(struct inode * inode, char * buffer, int buflen)
@@ -30,6 +32,10 @@ ufs_readlink(struct inode * inode, char * buffer, int buflen)
 	               inode->i_ino, MAJOR(inode->i_dev), MINOR(inode->i_dev));
 	}
 
+	if (!S_ISLNK(inode->i_mode)) {
+		return -EINVAL;
+	}
+   
 	if (buflen > inode->i_sb->s_blocksize - 1)
 		buflen = inode->i_sb->s_blocksize - 1;
 	if (inode->i_blocks) {
@@ -38,16 +44,16 @@ ufs_readlink(struct inode * inode, char * buffer, int buflen)
 	        if (inode->i_sb->u.ufs_sb.s_flags &(UFS_DEBUG|UFS_DEBUG_LINKS)) {
 	                printk("ufs_readlink: bmap got %lu for ino %lu\n",
 	                       block, inode->i_ino);
-		} 
+		}
 	        bh = bread(inode->i_dev, block, BLOCK_SIZE);
 		if (!bh) {
-			iput (inode);
 	                printk("ufs_readlink: can't read block 0 for ino %lu on dev %u/%u\n",
 	                       inode->i_ino, MAJOR(inode->i_dev),
 	                       MINOR(inode->i_dev));
 			return 0;
 		}
 		link = bh->b_data;
+		/* no need to bswap */
 	}
 	else {
 	        link = (char *)&(inode->u.ufs_i.i_data[0]);
@@ -57,18 +63,54 @@ ufs_readlink(struct inode * inode, char * buffer, int buflen)
 		i++;
 		put_user (c, buffer++);
 	}
-	iput (inode);
-	if (bh)
-		brelse (bh);
+	brelse (bh);
 	return i;
 }
+
+/*
+ * XXX - blatantly stolen from minix fs
+ */
+static struct dentry *
+ufs_follow_link(struct inode * inode, struct dentry * base)
+{
+	unsigned long int block;
+	struct buffer_head * bh = NULL;
+	char * link;
+
+	if (inode->i_sb->u.ufs_sb.s_flags & (UFS_DEBUG|UFS_DEBUG_LINKS)) {
+	        printk("ufs_follow_link: called on ino %lu dev %u/%u\n",
+	               inode->i_ino, MAJOR(inode->i_dev), MINOR(inode->i_dev));
+	}
+
+	if (inode->i_blocks) {
+	        /* read the link from disk */
+	        /* XXX - error checking */
+	        block = ufs_bmap(inode, 0);
+	        bh = bread(inode->i_dev, block, BLOCK_SIZE);
+	        if (bh == NULL) {
+	                printk("ufs_follow_link: can't read block 0 for ino %lu on dev %u/%u\n",
+	                       inode->i_ino, MAJOR(inode->i_dev),
+	                       MINOR(inode->i_dev));
+			dput(base);
+	                return ERR_PTR(-EIO);
+	        }
+	        link = bh->b_data;
+	} else {
+	        /* fast symlink */
+	        link = (char *)&(inode->u.ufs_i.i_data[0]);
+	}
+	base = lookup_dentry(link, base, 1);
+	brelse (bh);
+	return base;
+}
+
 
 static struct file_operations ufs_symlink_operations = {
 	NULL,			/* lseek */
 	NULL,			/* read */
 	NULL,			/* write */
 	NULL,			/* readdir */
-	NULL,			/* poll */
+	NULL,			/* select */
 	NULL,			/* ioctl */
 	NULL,			/* mmap */
 	NULL,			/* open */
@@ -90,12 +132,11 @@ struct inode_operations ufs_symlink_inode_operations = {
 	NULL,			/* rmdir */
 	NULL,			/* mknod */
 	NULL,			/* rename */
-	ufs_readlink,		/* readlink */
+	&ufs_readlink,		/* readlink */
+	&ufs_follow_link,	/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL,			/* permission */
-	NULL,			/* smap */
 };
-

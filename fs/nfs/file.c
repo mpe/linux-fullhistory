@@ -113,7 +113,8 @@ nfs_file_read(struct file * file, char * buf, size_t count, loff_t *ppos)
 	ssize_t result;
 
 	dfprintk(VFS, "nfs: read(%x/%ld, %lu@%lu)\n",
-			inode->i_dev, inode->i_ino, count,
+			inode->i_dev, inode->i_ino,
+			(unsigned long) count,
 			(unsigned long) *ppos);
 
 	result = nfs_revalidate_inode(NFS_SERVER(inode), inode);
@@ -167,7 +168,7 @@ nfs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 
 	dfprintk(VFS, "nfs: write(%x/%ld (%d), %lu@%lu)\n",
 			inode->i_dev, inode->i_ino, inode->i_count,
-			count, (unsigned long) *ppos);
+			(unsigned long) count, (unsigned long) *ppos);
 
 	if (!inode) {
 		printk("nfs_file_write: inode = NULL\n");

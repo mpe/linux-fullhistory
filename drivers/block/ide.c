@@ -2175,8 +2175,8 @@ __initfunc(void ide_setup (char *s))
 		/*
 		 * Be VERY CAREFUL changing this: note hardcoded indexes below
 		 */
-		const char *ide_words[] = {"noprobe", "serialize", "autotune", "noautotune",
-			"qd6580", "ht6560b", "cmd640_vlb", "dtc2278", "umc8672", "ali14xx", "dc4030", "reset", NULL};
+		const char *ide_words[] = {"noprobe", "serialize", "autotune", "noautotune", "qd6580",
+		 "ht6560b", "cmd640_vlb", "dtc2278", "umc8672", "ali14xx", "dc4030", "four", "reset", NULL};
 		hw = s[3] - '0';
 		hwif = &ide_hwifs[hw];
 		i = match_parm(&s[4], ide_words, vals, 3);
@@ -2184,7 +2184,7 @@ __initfunc(void ide_setup (char *s))
 		/*
 		 * Cryptic check to ensure chipset not already set for hwif:
 		 */
-		if (i > 0 || (i <= -5 && i != -12)) {
+		if (i > 0 || (i <= -5 && i != -13)) {
 			if (hwif->chipset != ide_unknown)
 				goto bad_option;
 			if (i <= -5) {
@@ -2200,9 +2200,24 @@ __initfunc(void ide_setup (char *s))
 		}
 
 		switch (i) {
-			case -12: /* "reset" */
+			case -13: /* "reset" */
 				hwif->reset = 1;
 				goto done;
+#ifdef CONFIG_BLK_DEV_4DRIVES
+			case -12: /* "four" drives on one set of ports */
+			{
+				ide_hwif_t *mate = &ide_hwifs[hw^1];
+				mate->mate = hwif;
+				hwif->mate = mate;
+				hwif->chipset = mate->chipset = ide_4drives;
+				hwif->serialized = mate->serialized = 1;
+				mate->drives[0].select.all ^= 0x20;
+				mate->drives[1].select.all ^= 0x20;
+				memcpy(mate->io_ports, hwif->io_ports, sizeof(hwif->io_ports));
+				mate->irq = hwif->irq;
+				goto done;
+			}
+#endif /* CONFIG_BLK_DEV_4DRIVES */
 #ifdef CONFIG_BLK_DEV_PDC4030
 			case -11: /* "dc4030" */
 			{

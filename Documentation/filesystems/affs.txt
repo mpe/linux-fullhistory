@@ -38,12 +38,6 @@ Mount options for the AFFS
 
 protect		If this option is set, the protection bits cannot be altered.
 
-uid[=uid]	This sets the uid of the root directory (i. e. the mount point
-		to uid or to the uid of the current user, if the =uid is
-		omitted.
-
-gid[=gid]	Same as above, but for gid.
-
 setuid[=uid]	This sets the owner of all files and directories in the file
 		system to uid or the uid of the current user, respectively.
 
@@ -69,7 +63,7 @@ quiet		The file system will not return an error for disallowed
 		mode changes.
 
 verbose		The volume name, file system type and block size will
-		be written to the syslog.
+		be written to the syslog when the filesystem is mounted.
 
 prefix=path	Path will be prefixed to every absolute path name of
 		symbolic links on an AFFS partition. Default = /
@@ -89,9 +83,9 @@ The Amiga protection flags RWEDRWEDHSPARWED are handled as follows:
 
   - If both W and D are allowed, w will be set.
 
-  - If both R and S are set, x will be set.
+  - E maps to x.
 
-  - H, P and E are always retained and ignored under Linux.
+  - H and P are always retained and ignored under Linux.
 
   - A is always reset when written.
 
@@ -107,7 +101,7 @@ The Linux rwxrwxrwx file mode is handled as follows:
 
   - w permission will set W and D for user, group and others.
 
-  - x permission of the user will set S for plain files.
+  - x permission of the user will set E for plain files.
 
   - All other flags (suid, sgid, ...) are ignored and will
     not be retained.
@@ -152,12 +146,12 @@ Bugs, Restrictions, Caveats
 
 Quite a few things may not work as advertised. Not everything is
 tested, though several hundred MB have been read and written using
-this fs.
+this fs. For a most up-to-date list of bugs please consult
+fs/affs/Changes.
 
-Filenames are truncated to 30 characters without warning.
-
-Currently there are no checks against invalid characters (':')
-in filenames.
+Filenames are truncated to 30 characters without warning (this
+can be changed by setting the compile-time option AFFS_NO_TRUNCATE
+ina include/linux/amigaffs.h).
 
 Case is ignored by the affs in filename matching, but Linux shells
 do care about the case. Example (with /mnt being an affs mounted fs):

@@ -36,13 +36,10 @@
 #endif
 
 static int affs_bmap(struct inode *inode, int block);
-static struct buffer_head * affs_getblock(struct inode *inode, s32 block);
-static ssize_t affs_file_read_ofs(struct file *filp, char *buf,
-				  size_t count, loff_t *ppos);
-static ssize_t affs_file_write(struct file *filp, const char *buf,
-			       size_t count, loff_t *ppos);
-static ssize_t affs_file_write_ofs(struct file *filp, const char *buf,
-				   size_t count, loff_t *ppos);
+static struct buffer_head *affs_getblock(struct inode *inode, s32 block);
+static ssize_t affs_file_read_ofs(struct file *filp, char *buf, size_t count, loff_t *ppos);
+static ssize_t affs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos);
+static ssize_t affs_file_write_ofs(struct file *filp, const char *buf, size_t cnt, loff_t *ppos);
 static int affs_release_file(struct inode *inode, struct file *filp);
 static int alloc_ext_cache(struct inode *inode);
 
@@ -56,7 +53,11 @@ static struct file_operations affs_file_operations = {
 	generic_file_mmap,	/* mmap */
 	NULL,			/* no special open */
 	affs_release_file,	/* release */
-	file_fsync		/* brute force, but works */
+	file_fsync,		/* brute force, but works */
+	NULL,			/* fasync */
+	NULL,			/* check_media_change */
+	NULL,			/* revalidate */
+	NULL			/* lock */
 };
 
 struct inode_operations affs_file_inode_operations = {
@@ -71,12 +72,15 @@ struct inode_operations affs_file_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
 	generic_readpage,	/* readpage */
 	NULL,			/* writepage */
 	affs_bmap,		/* bmap */
 	affs_truncate,		/* truncate */
 	NULL,			/* permission */
-	NULL			/* smap */
+	NULL,			/* smap */
+	NULL,			/* updatepage */
+	NULL			/* revalidate */
 };
 
 static struct file_operations affs_file_operations_ofs = {
@@ -89,7 +93,11 @@ static struct file_operations affs_file_operations_ofs = {
 	NULL,			/* mmap */
 	NULL,			/* no special open */
 	affs_release_file,	/* release */
-	file_fsync		/* brute force, but works */
+	file_fsync,		/* brute force, but works */
+	NULL,			/* fasync */
+	NULL,			/* check_media_change */
+	NULL,			/* revalidate */
+	NULL			/* lock */
 };
 
 struct inode_operations affs_file_inode_operations_ofs = {
@@ -104,12 +112,15 @@ struct inode_operations affs_file_inode_operations_ofs = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
 	affs_truncate,		/* truncate */
 	NULL,			/* permission */
-	NULL			/* smap */
+	NULL,			/* smap */
+	NULL,			/* updatepage */
+	NULL			/* revalidate */
 };
 
 #define AFFS_ISINDEX(x)	((x < 129) ||				\
@@ -255,7 +266,7 @@ affs_bmap(struct inode *inode, int block)
 
 	/* Try to find the requested key in the cache.
 	 * In order to speed this up as much as possible,
-	 * the cache line lookup is done in a seperate
+	 * the cache line lookup is done in a separate
 	 * step.
 	 */
 
@@ -306,7 +317,7 @@ affs_bmap(struct inode *inode, int block)
 			affs_brelse(bh);
 			return 0;
 		}
-		nkey = htonl(FILE_END(bh->b_data,inode)->extension);
+		nkey = be32_to_cpu(FILE_END(bh->b_data,inode)->extension);
 		if (block < AFFS_I2HSIZE(inode)) {
 			/* Fill cache as much as possible */
 			if (keycount) {
@@ -314,7 +325,7 @@ affs_bmap(struct inode *inode, int block)
 				keycount     = keycount < AFFS_I2HSIZE(inode) - block ? keycount :
 						AFFS_I2HSIZE(inode) - block;
 				for (i = 0; i < keycount; i++)
-					kc->kc_keys[i] = htonl(AFFS_BLOCK(bh->b_data,inode,block + i));
+					kc->kc_keys[i] = be32_to_cpu(AFFS_BLOCK(bh->b_data,inode,block + i));
 				kc->kc_last = kc->kc_first + i - 1;
 			}
 			break;
@@ -331,10 +342,19 @@ affs_bmap(struct inode *inode, int block)
 	kc->kc_this_key = key;
 	kc->kc_this_seq = ext;
 	kc->kc_next_key = nkey;
-	key = htonl(AFFS_BLOCK(bh->b_data,inode,block));
+	key = be32_to_cpu(AFFS_BLOCK(bh->b_data,inode,block));
 	affs_brelse(bh);
 	return key;
 }
+
+/* With the affs, getting a random block from a file is not
+ * a simple business. Since this fs does not allow holes,
+ * it may be neccessary to allocate all the missing blocks
+ * inbetween, as well as some new extension blocks. The OFS
+ * is even worse: All data blocks contain pointers to the
+ * next ones, so you have to fix [n-1] after allocating [n].
+ * What a mess.
+ */
 
 static struct buffer_head *
 affs_getblock(struct inode *inode, s32 block)
@@ -368,7 +388,7 @@ affs_getblock(struct inode *inode, s32 block)
 	pt     = ext ? T_LIST : T_SHORT;
 	pbh    = NULL;
 
-	for (;;) {
+	for (;;) {	/* Loop over header block and extension blocks */
 		bh = affs_bread(inode->i_dev,key,AFFS_I2BSIZE(inode));
 		if (!bh)
 			return NULL;
@@ -379,12 +399,12 @@ affs_getblock(struct inode *inode, s32 block)
 			affs_brelse(bh);
 			return NULL;
 		}
-		j  = htonl(((struct file_front *)bh->b_data)->block_count);
+		j  = be32_to_cpu(((struct file_front *)bh->b_data)->block_count);
 		cf = 0;
 		while (j < AFFS_I2HSIZE(inode) && j <= block) {
 			if (ofs && !pbh && inode->u.affs_i.i_lastblock >= 0) {
 				if (j > 0)
-					pbh = affs_bread(inode->i_dev,ntohl(AFFS_BLOCK(bh->b_data,inode,j - 1)),
+					pbh = affs_bread(inode->i_dev,cpu_to_be32(AFFS_BLOCK(bh->b_data,inode,j - 1)),
 							 AFFS_I2BSIZE(inode));
 				else
 					pbh = affs_getblock(inode,inode->u.affs_i.i_lastblock);
@@ -406,7 +426,7 @@ affs_getblock(struct inode *inode, s32 block)
 				continue;
 			}
 			unlock_super(inode->i_sb);
-			AFFS_BLOCK(bh->b_data,inode,j) = ntohl(nkey);
+			AFFS_BLOCK(bh->b_data,inode,j) = cpu_to_be32(nkey);
 			if (ofs) {
 				ebh = affs_bread(inode->i_dev,nkey,AFFS_I2BSIZE(inode));
 				if (!ebh) {
@@ -417,12 +437,12 @@ affs_getblock(struct inode *inode, s32 block)
 					break;
 				}
 				inode->u.affs_i.i_lastblock++;
-				DATA_FRONT(ebh)->primary_type    = ntohl(T_DATA);
-				DATA_FRONT(ebh)->header_key      = ntohl(inode->i_ino);
-				DATA_FRONT(ebh)->sequence_number = ntohl(inode->u.affs_i.i_lastblock + 1);
+				DATA_FRONT(ebh)->primary_type    = cpu_to_be32(T_DATA);
+				DATA_FRONT(ebh)->header_key      = cpu_to_be32(inode->i_ino);
+				DATA_FRONT(ebh)->sequence_number = cpu_to_be32(inode->u.affs_i.i_lastblock + 1);
 				if (pbh) {
-					DATA_FRONT(pbh)->data_size = ntohl(AFFS_I2BSIZE(inode) - 24);
-					DATA_FRONT(pbh)->next_data = ntohl(nkey);
+					DATA_FRONT(pbh)->data_size = cpu_to_be32(AFFS_I2BSIZE(inode) - 24);
+					DATA_FRONT(pbh)->next_data = cpu_to_be32(nkey);
 					affs_fix_checksum(AFFS_I2BSIZE(inode),pbh->b_data,5);
 					mark_buffer_dirty(pbh,0);
 					mark_buffer_dirty(ebh,0);
@@ -437,7 +457,7 @@ affs_getblock(struct inode *inode, s32 block)
 			if (pt == T_SHORT)
 				((struct file_front *)bh->b_data)->first_data =
 								AFFS_BLOCK(bh->b_data,inode,0);
-			((struct file_front *)bh->b_data)->block_count = ntohl(j);
+			((struct file_front *)bh->b_data)->block_count = cpu_to_be32(j);
 			affs_fix_checksum(AFFS_I2BSIZE(inode),bh->b_data,5);
 			mark_buffer_dirty(bh,1);
 		}
@@ -453,7 +473,7 @@ affs_getblock(struct inode *inode, s32 block)
 		}
 
 		block -= AFFS_I2HSIZE(inode);
-		key    = htonl(FILE_END(bh->b_data,inode)->extension);
+		key    = be32_to_cpu(FILE_END(bh->b_data,inode)->extension);
 		if (!key) {
 			key = affs_new_header(inode);
 			if (!key) {
@@ -465,12 +485,12 @@ affs_getblock(struct inode *inode, s32 block)
 				affs_free_block(inode->i_sb,key);
 				return NULL;
 			}
-			((struct file_front *)ebh->b_data)->primary_type = ntohl(T_LIST);
-			((struct file_front *)ebh->b_data)->own_key      = ntohl(key);
-			FILE_END(ebh->b_data,inode)->secondary_type      = ntohl(ST_FILE);
-			FILE_END(ebh->b_data,inode)->parent              = ntohl(inode->i_ino);
+			((struct file_front *)ebh->b_data)->primary_type = cpu_to_be32(T_LIST);
+			((struct file_front *)ebh->b_data)->own_key      = cpu_to_be32(key);
+			FILE_END(ebh->b_data,inode)->secondary_type      = cpu_to_be32(ST_FILE);
+			FILE_END(ebh->b_data,inode)->parent              = cpu_to_be32(inode->i_ino);
 			affs_fix_checksum(AFFS_I2BSIZE(inode),ebh->b_data,5);
-			FILE_END(bh->b_data,inode)->extension = ntohl(key);
+			FILE_END(bh->b_data,inode)->extension = cpu_to_be32(key);
 			affs_fix_checksum(AFFS_I2BSIZE(inode),bh->b_data,5);
 			mark_buffer_dirty(bh,1);
 			affs_brelse(bh);
@@ -487,8 +507,8 @@ affs_getblock(struct inode *inode, s32 block)
 	}
 	kc->kc_this_key = key;
 	kc->kc_this_seq = ext;
-	kc->kc_next_key = htonl(FILE_END(bh->b_data,inode)->extension);
-	key = htonl(AFFS_BLOCK(bh->b_data,inode,block));
+	kc->kc_next_key = be32_to_cpu(FILE_END(bh->b_data,inode)->extension);
+	key = be32_to_cpu(AFFS_BLOCK(bh->b_data,inode,block));
 	affs_brelse(bh);
 	if (!key)
 		return NULL;
@@ -499,14 +519,15 @@ affs_getblock(struct inode *inode, s32 block)
 static ssize_t
 affs_file_read_ofs(struct file *filp, char *buf, size_t count, loff_t *ppos)
 {
-	struct inode *inode = filp->f_dentry->d_inode;
-	char *start;
-	ssize_t left, offset, size, sector;
-	ssize_t blocksize;
-	struct buffer_head *bh;
-	void *data;
+	struct inode		*inode = filp->f_dentry->d_inode;
+	char			*start;
+	ssize_t			 left, offset, size, sector;
+	ssize_t			 blocksize;
+	struct buffer_head	*bh;
+	void			*data;
 
-	pr_debug("AFFS: file_read_ofs(ino=%lu,pos=%lu,%d)\n",inode->i_ino,(long)*ppos,count);
+	pr_debug("AFFS: file_read_ofs(ino=%lu,pos=%lu,%d)\n",inode->i_ino,
+		 (unsigned long)*ppos,count);
 
 	if (!inode) {
 		affs_error(inode->i_sb,"file_read_ofs","Inode = NULL");
@@ -553,40 +574,25 @@ affs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 	ssize_t			 c;
 	ssize_t			 blocksize;
 	struct buffer_head	*bh;
-	struct inode		*ino;
 	char			*p;
 
-	/* Not that I wanted to be POSIX compliant ... */
 	if (!count)
 		return 0;
 	pr_debug("AFFS: file_write(ino=%lu,pos=%lu,count=%d)\n",inode->i_ino,
-		(unsigned long)*ppos,count);
+		 (unsigned long)*ppos,count);
 
-	ino = NULL;
 	if (!inode) {
 		affs_error(inode->i_sb,"file_write","Inode = NULL");
 		return -EINVAL;
-	}
-	if (inode->u.affs_i.i_original) {
-		ino = iget(inode->i_sb,inode->u.affs_i.i_original);
-		if (!ino) {
-			affs_error(inode->i_sb,"file_write",
-				   "Could not follow link from inode %lu to %d",
-			           inode->i_ino,inode->u.affs_i.i_original);
-			return -EINVAL;
-		}
-		inode = ino;
 	}
 	if (!S_ISREG(inode->i_mode)) {
 		affs_error(inode->i_sb,"file_write",
 			   "Trying to write to non-regular file (mode=%07o)",
 			   inode->i_mode);
-		iput(inode);
 		return -EINVAL;
 	}
 	if (!inode->u.affs_i.i_ec) {
 		if (alloc_ext_cache(inode)) {
-			iput(inode);
 			return -ENOMEM;
 		}
 	}
@@ -617,8 +623,14 @@ affs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 				break;
 			}
 		}
-		p = (pos % blocksize) + bh->b_data;
-		copy_from_user(p,buf,c);
+		p  = (pos % blocksize) + bh->b_data;
+		c -= copy_from_user(p,buf,c);
+		if (!c) {
+			affs_brelse(bh);
+			if (!written)
+				written = -EFAULT;
+			break;
+		}
 		update_vm_cache(inode,pos,p,c);
 		mark_buffer_uptodate(bh,1);
 		mark_buffer_dirty(bh,0);
@@ -630,22 +642,20 @@ affs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 	if (pos > inode->i_size)
 		inode->i_size = pos;
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-	*ppos = pos;
+	*ppos          = pos;
 	mark_inode_dirty(inode);
-	iput(ino);
 	return written;
 }
 
 static ssize_t
 affs_file_write_ofs(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 {
-	struct inode		*inode = filp->f_dentry->d_inode; 
+	struct inode		*inode = filp->f_dentry->d_inode;
 	off_t			 pos;
 	ssize_t			 written;
 	ssize_t			 c;
 	ssize_t			 blocksize;
 	struct buffer_head	*bh;
-	struct inode		*ino;
 	char			*p;
 
 	pr_debug("AFFS: file_write_ofs(ino=%lu,pos=%lu,count=%d)\n",inode->i_ino,
@@ -657,23 +667,16 @@ affs_file_write_ofs(struct file *filp, const char *buf, size_t count, loff_t *pp
 		affs_error(inode->i_sb,"file_write_ofs","Inode = NULL");
 		return -EINVAL;
 	}
-	ino = NULL;
-	if (inode->u.affs_i.i_original) {
-		ino = iget(inode->i_sb,inode->u.affs_i.i_original);
-		if (!ino) {
-			affs_error(inode->i_sb,"file_write_ofs",
-				   "Could not follow link from inode %lu to %d",
-			           inode->i_ino,inode->u.affs_i.i_original);
-			return -EINVAL;
-		}
-		inode = ino;
-	}
 	if (!S_ISREG(inode->i_mode)) {
 		affs_error(inode->i_sb,"file_write_ofs",
 			   "Trying to write to non-regular file (mode=%07o)",
 			   inode->i_mode);
-		iput(inode);
 		return -EINVAL;
+	}
+	if (!inode->u.affs_i.i_ec) {
+		if (alloc_ext_cache(inode)) {
+			return -ENOMEM;
+		}
 	}
 	if (filp->f_flags & O_APPEND)
 		pos = inode->i_size;
@@ -703,14 +706,20 @@ affs_file_write_ofs(struct file *filp, const char *buf, size_t count, loff_t *pp
 				break;
 			}
 		}
-		p = (pos % blocksize) + bh->b_data + 24;
-		copy_from_user(p,buf,c);
+		p  = (pos % blocksize) + bh->b_data + 24;
+		c -= copy_from_user(p,buf,c);
+		if (!c) {
+			affs_brelse(bh);
+			if (!written)
+				written = -EFAULT;
+			break;
+		}
 		update_vm_cache(inode,pos,p,c);
 
 		pos     += c;
 		buf     += c;
 		written += c;
-		DATA_FRONT(bh)->data_size = ntohl(htonl(DATA_FRONT(bh)->data_size) + c);
+		DATA_FRONT(bh)->data_size = cpu_to_be32(be32_to_cpu(DATA_FRONT(bh)->data_size) + c);
 		affs_fix_checksum(AFFS_I2BSIZE(inode),bh->b_data,5);
 		mark_buffer_uptodate(bh,1);
 		mark_buffer_dirty(bh,0);
@@ -721,7 +730,6 @@ affs_file_write_ofs(struct file *filp, const char *buf, size_t count, loff_t *pp
 	*ppos = pos;
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	mark_inode_dirty(inode);
-	iput(ino);
 	return written;
 }
 
@@ -730,7 +738,6 @@ affs_truncate(struct inode *inode)
 {
 	struct buffer_head	*bh;
 	struct buffer_head	*ebh;
-	struct inode		*ino;
 	struct affs_zone	*zone;
 	int	 first;
 	int	 block;
@@ -745,20 +752,16 @@ affs_truncate(struct inode *inode)
 
 	pr_debug("AFFS: file_truncate(inode=%ld,size=%lu)\n",inode->i_ino,inode->i_size);
 
-	ino = NULL;
-	if (inode->u.affs_i.i_original) {
-		ino = iget(inode->i_sb,inode->u.affs_i.i_original);
-		if (!ino) {
-			affs_error(inode->i_sb,"truncate","Cannot follow link from %lu to %d",
-			           inode->i_ino,inode->u.affs_i.i_original);
-			return;
-		}
-		inode = ino;
-	}
 	blocksize = AFFS_I2BSIZE(inode) - ((inode->i_sb->u.affs_sb.s_flags & SF_OFS) ? 24 : 0);
 	first = (inode->i_size + blocksize - 1) / blocksize;
 	if (inode->u.affs_i.i_lastblock < first - 1) {
-			bh = affs_getblock(inode,first - 1);
+		if (!inode->u.affs_i.i_ec) {
+			if (alloc_ext_cache(inode)) {
+				/* Fine! No way to indicate an error. What can we do? */
+				return;
+			}
+		}
+		bh = affs_getblock(inode,first - 1);
 
 		while (inode->u.affs_i.i_pa_cnt) {		/* Free any preallocated blocks */
 			affs_free_block(inode->i_sb,
@@ -778,12 +781,11 @@ affs_truncate(struct inode *inode)
 			inode->i_size = blocksize * (inode->u.affs_i.i_lastblock + 1);
 		} else if (inode->i_sb->u.affs_sb.s_flags & SF_OFS) {
 			rem = inode->i_size % blocksize;
-			DATA_FRONT(bh)->data_size = ntohl(rem ? rem : blocksize);
+			DATA_FRONT(bh)->data_size = cpu_to_be32(rem ? rem : blocksize);
 			affs_fix_checksum(AFFS_I2BSIZE(inode),bh->b_data,5);
 			mark_buffer_dirty(bh,0);
 		}
 		affs_brelse(bh);
-		iput(ino);
 		return;
 	}
 	ekey  = inode->i_ino;
@@ -794,8 +796,8 @@ affs_truncate(struct inode *inode)
 			affs_error(inode->i_sb,"truncate","Cannot read block %d",ekey);
 			break;
 		}
-		ptype = htonl(((struct file_front *)bh->b_data)->primary_type);
-		stype = htonl(FILE_END(bh->b_data,inode)->secondary_type);
+		ptype = be32_to_cpu(((struct file_front *)bh->b_data)->primary_type);
+		stype = be32_to_cpu(FILE_END(bh->b_data,inode)->secondary_type);
 		if (ekey == inode->i_ino && ptype == T_SHORT && stype == ST_LINKFILE &&
 		    LINK_END(bh->b_data,inode)->original == 0) {
 			pr_debug("AFFS: truncate(): dumping link\n");
@@ -812,7 +814,7 @@ affs_truncate(struct inode *inode)
 		freethis = first == 0 && ekey != inode->i_ino;
 		for (block = first; block < AFFS_I2HSIZE(inode); block++) {
 			keyp = &AFFS_BLOCK(bh->b_data,inode,block);
-			key  = htonl(*keyp);
+			key  = be32_to_cpu(*keyp);
 			if (key) {
 				*keyp = 0;
 				affs_free_block(inode->i_sb,key);
@@ -822,18 +824,18 @@ affs_truncate(struct inode *inode)
 			}
 		}
 		keyp = &GET_END_PTR(struct file_end,bh->b_data,AFFS_I2BSIZE(inode))->extension;
-		key  = htonl(*keyp);
+		key  = be32_to_cpu(*keyp);
 		if (first <= AFFS_I2HSIZE(inode)) {
-			((struct file_front *)bh->b_data)->block_count = htonl(first);
+			((struct file_front *)bh->b_data)->block_count = be32_to_cpu(first);
 			first = 0;
 			*keyp = 0;
 			if ((inode->i_sb->u.affs_sb.s_flags & SF_OFS) && first > 0) {
-				block = htonl(AFFS_BLOCK(bh->b_data,inode,first - 1));
+				block = be32_to_cpu(AFFS_BLOCK(bh->b_data,inode,first - 1));
 				if ((ebh = affs_bread(inode->i_dev,block,AFFS_I2BSIZE(inode)))) {
 					if(!(affs_checksum_block(AFFS_I2BSIZE(inode),ebh->b_data,
 					     &ptype,NULL))) {
 						rem = inode->i_size % blocksize;
-						rem = ntohl(rem ? blocksize : rem);
+						rem = cpu_to_be32(rem ? blocksize : rem);
 						((struct data_front *)ebh->b_data)->data_size = rem;
 						((struct data_front *)ebh->b_data)->next_data = 0;
 						affs_fix_checksum(AFFS_I2BSIZE(inode),ebh->b_data,5);
@@ -866,7 +868,6 @@ affs_truncate(struct inode *inode)
 		}
 	}
 
-	iput(ino);
 }
 
 static int
@@ -899,6 +900,8 @@ alloc_ext_cache(struct inode *inode)
 {
 	s32	 key;
 	int	 i;
+
+	pr_debug("AFFS: alloc_ext_cache(ino=%lu)\n",inode->i_ino);
 
 	lock_super(inode->i_sb);
 	if (!inode->u.affs_i.i_ec) {

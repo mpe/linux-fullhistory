@@ -257,19 +257,7 @@ ext2_find_next_zero_bit (const void *vaddr, unsigned size, unsigned offset)
 	return (p - addr) * 32 + res;
 }
 
-/* Byte swapping. */
 
-extern __inline__ unsigned short
-swab16 (unsigned short val)
-{
-	return (val << 8) | (val >> 8);
-}
-
-extern __inline__ unsigned int
-swab32 (unsigned int val)
-{
-	__asm__ ("rolw #8,%0; swap %0; rolw #8,%0" : "=d" (val) : "0" (val));
-	return val;
-}
+/* Byte swapping (swab16 and swab32) is now in asm/byteorder.h . */
 
 #endif /* _M68K_BITOPS_H */

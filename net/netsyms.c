@@ -145,6 +145,7 @@ EXPORT_SYMBOL(scm_fp_dup);
 EXPORT_SYMBOL(max_files);
 EXPORT_SYMBOL(do_mknod);
 EXPORT_SYMBOL(memcpy_toiovec);
+EXPORT_SYMBOL(csum_partial);
 
 #ifdef CONFIG_IPX_MODULE
 EXPORT_SYMBOL(make_8023_client);
@@ -209,7 +210,6 @@ EXPORT_SYMBOL(udp_hash);
 
 EXPORT_SYMBOL(destroy_sock);
 EXPORT_SYMBOL(ip_queue_xmit);
-EXPORT_SYMBOL(csum_partial);
 EXPORT_SYMBOL(memcpy_fromiovecend);
 EXPORT_SYMBOL(csum_partial_copy_fromiovecend);
 EXPORT_SYMBOL(__release_sock);

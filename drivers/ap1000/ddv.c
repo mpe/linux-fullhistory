@@ -363,7 +363,10 @@ static int ddv_daemon(void *unused)
 	current->session = 1;
 	current->pgrp = 1;
 	sprintf(current->comm, "ddv_daemon");
-	current->blocked = ~0UL; /* block all signals */
+	spin_lock_irq(&current->sigmask_lock);
+	sigfillset(&current->blocked); /* block all signals */
+	recalc_sigpending(current);
+	spin_unlock_irq(&current->sigmask_lock);
   
 	/* Give it a realtime priority. */
 	current->policy = SCHED_FIFO;

@@ -6,13 +6,16 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_inode.c,v 1.9 1997/07/17 02:24:14 davem Exp $
+ * Clean swab support on 19970406
+ * by Francois-Rene Rideau <rideau@ens.fr>
  *
  */
 
 #include <linux/fs.h>
 #include <linux/ufs_fs.h>
 #include <linux/sched.h>
+
+#include "ufs_swab.h"
 
 void ufs_print_inode(struct inode * inode)
 {
@@ -41,14 +44,14 @@ static inline int block_bmap (struct inode *inode, int block, int nr)
 {
 	struct buffer_head *bh;
 	int tmp;
-
+	__u32 bytesex = inode->i_sb->u.ufs_sb.s_flags & UFS_BYTESEX;
 	/* XXX Split in fsize big blocks (Can't bread 8Kb). */ 
 	tmp = nr >> (inode->i_sb->u.ufs_sb.s_fshift - 2);
 	bh = bread (inode->i_dev, block + tmp, inode->i_sb->u.ufs_sb.s_fsize);
 	if (!bh)
 		return 0;
 	nr &= ~(inode->i_sb->u.ufs_sb.s_fmask) >> 2;
-	tmp = ufs_swab32(((__u32 *)bh->b_data)[nr]);
+	tmp = SWAB32(((__u32 *)bh->b_data)[nr]);
 	brelse (bh);
 	return tmp;
 }
@@ -113,6 +116,7 @@ void ufs_read_inode(struct inode * inode)
 	struct super_block * sb;
 	struct ufs_inode * ufsip;
 	struct buffer_head * bh;
+	__u32 bytesex = inode->i_sb->u.ufs_sb.s_flags & UFS_BYTESEX;
 
 	sb = inode->i_sb;
 
@@ -144,8 +148,8 @@ void ufs_read_inode(struct inode * inode)
 	/*
 	 * Copy data to the in-core inode.
 	 */
-	inode->i_mode = ufs_swab16(ufsip->ui_mode);
-	inode->i_nlink = ufs_swab16(ufsip->ui_nlink);
+	inode->i_mode = SWAB16(ufsip->ui_mode);
+	inode->i_nlink = SWAB16(ufsip->ui_nlink);
 	if (inode->i_nlink == 0) {
 	        /* XXX */
 	        printk("ufs_read_inode: zero nlink ino %lu  dev %u/%u\n",
@@ -158,7 +162,7 @@ void ufs_read_inode(struct inode * inode)
 	               MAJOR(inode->i_dev), MINOR(inode->i_dev));
 	}
 	/* XXX - debugging */
-	if (ufs_swab32(ufsip->ui_gen) == 0) {
+	if (SWAB32(ufsip->ui_gen) == 0) {
 	        printk("ufs_read_inode: zero gen ino %lu pblk %lu dev %u/%u\n",
 	               inode->i_ino,
 	               ufs_cgimin(inode->i_sb, ufs_ino2cg(inode)) +
@@ -172,33 +176,33 @@ void ufs_read_inode(struct inode * inode)
 	 * random users can't get at these files, since they get dynamically
 	 * "chown()ed" to root.
 	 */
-	if (ufs_swab16(ufsip->ui_suid) == UFS_USEEFT) {
+	if (SWAB16(ufsip->ui_suid) == UFS_USEEFT) {
 	        /* EFT */
 	        inode->i_uid = 0;
 	        printk("ufs_read_inode: EFT uid %u ino %lu dev %u/%u, using %u\n",
-	               ufs_swab32(ufsip->ui_uid), inode->i_ino, MAJOR(inode->i_dev), MINOR(inode->i_dev),
+	               SWAB32(ufsip->ui_uid), inode->i_ino, MAJOR(inode->i_dev), MINOR(inode->i_dev),
 	               inode->i_uid);
 	} else {
-	        inode->i_uid = ufs_swab16(ufsip->ui_suid);
+	        inode->i_uid = SWAB16(ufsip->ui_suid);
 	}
-	if (ufs_swab16(ufsip->ui_sgid) == UFS_USEEFT) {
+	if (SWAB16(ufsip->ui_sgid) == UFS_USEEFT) {
 	        /* EFT */
 	        inode->i_gid = 0;
 	        printk("ufs_read_inode: EFT gid %u ino %lu dev %u/%u, using %u\n",
-	               ufs_swab32(ufsip->ui_gid), inode->i_ino, MAJOR(inode->i_dev), MINOR(inode->i_dev),
+	               SWAB32(ufsip->ui_gid), inode->i_ino, MAJOR(inode->i_dev), MINOR(inode->i_dev),
 	               inode->i_gid);
 	} else {
-	        inode->i_gid = ufs_swab16(ufsip->ui_sgid);
+	        inode->i_gid = SWAB16(ufsip->ui_sgid);
 	}
 
 	/*
-	 * Linux i_size is 32 bits, so some files on a UFS filesystem may not
+	 * Linux i_size is 32 bits on most architectures,
+	 * so some files on a UFS filesystem may not
 	 * be readable.  I let people access the first 32 bits worth of them.
 	 * for the rw code, we may want to mark these inodes as read-only.
 	 * XXX - bug Linus to make i_size a __u64 instead of a __u32.
 	 */
-	inode->u.ufs_i.i_size = ((__u64)(ufs_swab32(ufsip->ui_size.val[0]))<<32) |
-				 (__u64)(ufs_swab32(ufsip->ui_size.val[1]));
+	inode->u.ufs_i.i_size = SWAB64(ufsip->ui_size);
 	/* KRR - Just type cast inode->u.ufs_i.i_size into off_t and
 	 * worry about overflow later
          */
@@ -210,11 +214,11 @@ void ufs_read_inode(struct inode * inode)
 	 * want to keep this data, but for the moment I think I'll just write
 	 * zeros for these fields when writing out inodes.
 	 */
-	inode->i_atime = ufsip->ui_atime.tv_sec;
-	inode->i_mtime = ufsip->ui_mtime.tv_sec;
-	inode->i_ctime = ufsip->ui_ctime.tv_sec;
+	inode->i_atime = SWAB32(ufsip->ui_atime.tv_sec);
+	inode->i_mtime = SWAB32(ufsip->ui_mtime.tv_sec);
+	inode->i_ctime = SWAB32(ufsip->ui_ctime.tv_sec);
 	inode->i_blksize = sb->u.ufs_sb.s_fsize;
-	inode->i_blocks = ufs_swab32(ufsip->ui_blocks);
+	inode->i_blocks = SWAB32(ufsip->ui_blocks);
 	inode->i_version = ++event; /* see linux/kernel/sched.c */
 
 	if (S_ISREG(inode->i_mode)) {
@@ -246,11 +250,11 @@ void ufs_read_inode(struct inode * inode)
 	        int i;
 
 	        for (i = 0; i < UFS_NDADDR; i++) {
-	                inode->u.ufs_i.i_data[i] = ufs_swab32(ufsip->ui_db[i]);
+	                inode->u.ufs_i.i_data[i] = SWAB32(ufsip->ui_db[i]);
 	        }
 	        for (i = 0; i < UFS_NINDIR; i++) {
 	                inode->u.ufs_i.i_data[UFS_IND_BLOCK + i] =
-							ufs_swab32(ufsip->ui_ib[i]);
+							SWAB32(ufsip->ui_ib[i]);
 	        }
 	}
 
@@ -261,18 +265,17 @@ void ufs_read_inode(struct inode * inode)
 	 * the code.
 	 */
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode)) {
-		inode->i_rdev = (kdev_t)((__u64)(ufs_swab32(ufsip->ui_db[0]))<<32) |
-				 (__u64)(ufs_swab32(ufsip->ui_db[1]));
+	  inode->i_rdev = (kdev_t)SWAB64(*(__u64*)&ufsip->ui_db);
 	}
 
 	/* XXX - implement fast and slow symlinks */
 
-	inode->u.ufs_i.i_flags = ufs_swab32(ufsip->ui_flags);
-	inode->u.ufs_i.i_gen = ufs_swab32(ufsip->ui_gen); /* XXX - is this i_version? */
-	inode->u.ufs_i.i_shadow = ufs_swab32(ufsip->ui_shadow); /* XXX */
-	inode->u.ufs_i.i_uid = ufs_swab32(ufsip->ui_uid);
-	inode->u.ufs_i.i_gid = ufs_swab32(ufsip->ui_gid);
-	inode->u.ufs_i.i_oeftflag = ufs_swab32(ufsip->ui_oeftflag);
+	inode->u.ufs_i.i_flags = SWAB32(ufsip->ui_flags);
+	inode->u.ufs_i.i_gen = SWAB32(ufsip->ui_gen); /* XXX - is this i_version? */
+	inode->u.ufs_i.i_shadow = SWAB32(ufsip->ui_shadow); /* XXX */
+	inode->u.ufs_i.i_uid = SWAB32(ufsip->ui_uid);
+	inode->u.ufs_i.i_gid = SWAB32(ufsip->ui_gid);
+	inode->u.ufs_i.i_oeftflag = SWAB32(ufsip->ui_oeftflag);
 
 	brelse(bh);
 
@@ -307,4 +310,3 @@ void ufs_put_inode (struct inode * inode)
 
 	return;
 }
-

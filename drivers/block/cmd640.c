@@ -795,6 +795,8 @@ int ide_probe_for_cmd640x (void)
 		cmd_hwif0->serialized = 1;
 		cmd_hwif1->serialized = 1;
 		cmd_hwif1->chipset = ide_cmd640;
+		cmd_hwif0->mate = cmd_hwif1;
+		cmd_hwif1->mate = cmd_hwif0;
 #ifdef CONFIG_BLK_DEV_CMD640_ENHANCED
 		cmd_hwif1->tuneproc = &cmd640_tune_drive;
 #endif /* CONFIG_BLK_DEV_CMD640_ENHANCED */

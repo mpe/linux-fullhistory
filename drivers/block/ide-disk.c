@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-disk.c	Version 1.02  Nov  29, 1997
+ *  linux/drivers/block/ide-disk.c	Version 1.03  Nov  30, 1997
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */
@@ -40,6 +40,7 @@
  *			support optional byte-swapping of all data
  * Version 1.01		fix previous byte-swapping code
  * Verions 1.02		remove ", LBA" from drive identification msgs
+ * Verions 1.03		fix display of id->buf_size for big-endian
  */
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
@@ -601,6 +602,8 @@ static void idedisk_setup (ide_drive_t *drive)
 		if (drive->cyl > drive->bios_cyl)
 			drive->bios_cyl = drive->cyl;
 	}
+	/* fix byte-ordering of buffer size field */
+	id->buf_size = le16_to_cpu(id->buf_size);
 
 	(void) idedisk_capacity (drive); /* initialize LBA selection */
 
