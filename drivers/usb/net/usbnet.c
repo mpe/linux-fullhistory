@@ -390,7 +390,7 @@ static int init_status (struct usbnet *dev, struct usb_interface *intf)
 	unsigned	period;
 
 	if (!dev->driver_info->status)
-		return -ENODEV;
+		return 0;
 
 	pipe = usb_rcvintpipe (dev->udev,
 			dev->status->desc.bEndpointAddress
@@ -3319,6 +3319,11 @@ static void tx_complete (struct urb *urb, struct pt_regs *regs)
 		switch (urb->status) {
 		case -EPIPE:
 			defer_kevent (dev, EVENT_TX_HALT);
+			break;
+
+		/* software-driven interface shutdown */
+		case -ECONNRESET:		// async unlink
+		case -ESHUTDOWN:		// hardware gone
 			break;
 
 		// like rx, tx gets controller i/o faults during khubd delays
