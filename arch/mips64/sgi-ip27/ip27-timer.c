@@ -120,7 +120,7 @@ again:
 		}
 
 		if (user) {
-			if (current->priority < DEF_PRIORITY) {
+			if (current->nice > 0) {
 				inc = &kstat.cpu_nice;
 				inc2 = &kstat.per_cpu_nice[cpu];
 			} else {

@@ -19,6 +19,9 @@ endif
 ifeq ($(CONFIG_USB_SERIAL_KEYSPAN_PDA),y)
 	O_OBJS += keyspan_pda.o
 endif
+ifeq ($(CONFIG_USB_SERIAL_KEYSPAN),y)
+	O_OBJS += keyspan.o
+endif
 ifeq ($(CONFIG_USB_SERIAL_OMNINET),y)
 	O_OBJS += omninet.o
 endif

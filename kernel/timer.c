@@ -629,7 +629,8 @@ static inline void calc_load(unsigned long ticks)
 	}
 }
 
-volatile unsigned long lost_ticks;
+/* jiffies at the most recent update of wall time */
+unsigned long wall_jiffies;
 
 /*
  * This spinlock protect us from races in SMP while playing with xtime. -arca
@@ -647,14 +648,13 @@ static inline void update_times(void)
 	 */
 	write_lock_irq(&xtime_lock);
 
-	ticks = lost_ticks;
-	lost_ticks = 0;
-
+	ticks = jiffies - wall_jiffies;
 	if (ticks) {
-		calc_load(ticks);
+		wall_jiffies += ticks;
 		update_wall_time(ticks);
 	}
 	write_unlock_irq(&xtime_lock);
+	calc_load(ticks);
 }
 
 void timer_bh(void)
@@ -666,7 +666,6 @@ void timer_bh(void)
 void do_timer(struct pt_regs *regs)
 {
 	(*(unsigned long *)&jiffies)++;
-	lost_ticks++;
 	update_process_times(user_mode(regs));
 	mark_bh(TIMER_BH);
 	if (tq_timer)

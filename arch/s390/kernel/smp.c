@@ -712,7 +712,7 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
                                 p->counter = 0;
                                 p->need_resched = 1;
                         }
-                        if (p->priority < DEF_PRIORITY) {
+                        if (p->nice > 0) {
                                 kstat.cpu_nice += user;
                                 kstat.per_cpu_nice[cpu] += user;
                         } else {

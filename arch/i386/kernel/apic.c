@@ -589,7 +589,7 @@ static inline void handle_smp_time (int user, int cpu)
 			p->counter = 0;
 			p->need_resched = 1;
 		}
-		if (p->priority < DEF_PRIORITY) {
+		if (p->nice > 0) {
 			kstat.cpu_nice += user;
 			kstat.per_cpu_nice[cpu] += user;
 		} else {

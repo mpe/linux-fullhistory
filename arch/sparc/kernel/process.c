@@ -60,7 +60,7 @@ int cpu_idle(void)
 		goto out;
 
 	/* endless idle loop with no priority at all */
-	current->priority = 0;
+	current->nice = 20;
 	current->counter = -100;
 	init_idle();
 

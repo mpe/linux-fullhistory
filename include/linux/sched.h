@@ -248,7 +248,9 @@ struct signal_struct {
 struct user_struct;
 
 struct task_struct {
-/* these are hardcoded - don't touch */
+	/*
+	 * offsets of these are hardcoded elsewhere - touch with care
+	 */
 	volatile long state;	/* -1 unrunnable, 0 runnable, >0 stopped */
 	unsigned long flags;	/* per process flags, defined below */
 	int sigpending;
@@ -258,20 +260,29 @@ struct task_struct {
 					 */
 	struct exec_domain *exec_domain;
 	volatile long need_resched;
+	unsigned long ptrace;
 
-	int lock_depth;		/* Lock depth. We can context switch in and out of holding a syscall kernel lock... */	
-/* begin intel cache line */
+	int lock_depth;		/* Lock depth */
+
+/*
+ * offset 32 begins here on 32-bit platforms. We keep
+ * all fields in a single cacheline that are needed for
+ * the goodness() loop in schedule().
+ */
 	long counter;
-	long priority;
+	long nice;
 	unsigned long policy;
-/* memory management info */
-	struct mm_struct *mm, *active_mm;
+	struct mm_struct *mm;
 	int has_cpu, processor;
 	unsigned long cpus_allowed;
-	unsigned long ptrace;
+	/*
+	 * (only the 'next' pointer fits into the cacheline, but
+	 * that's just fine.)
+	 */
 	struct list_head run_list;
+
 	struct task_struct *next_task, *prev_task;
-	int last_processor;
+	struct mm_struct *active_mm;
 
 /* task state */
 	struct linux_binfmt *binfmt;
@@ -379,7 +390,9 @@ struct task_struct {
  */
 #define _STK_LIM	(8*1024*1024)
 
-#define DEF_PRIORITY	(20*HZ/100)	/* 200 ms time slices */
+#define DEF_COUNTER	(10*HZ/100)	/* 100 ms time slice */
+#define MAX_COUNTER	(20*HZ/100)
+#define DEF_NICE	(0)
 
 /*
  *  INIT_TASK is used to set up the first task table, touch at
@@ -393,8 +406,8 @@ struct task_struct {
     addr_limit:		KERNEL_DS,					\
     exec_domain:	&default_exec_domain,				\
     lock_depth:		-1,						\
-    counter:		DEF_PRIORITY,					\
-    priority:		DEF_PRIORITY,					\
+    counter:		DEF_COUNTER,					\
+    nice:		DEF_NICE,					\
     policy:		SCHED_OTHER,					\
     mm:			NULL,						\
     active_mm:		&init_mm,					\

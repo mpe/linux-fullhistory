@@ -38,6 +38,14 @@ comment 'USB Devices'
          bool '    USB ConnectTech WhiteHEAT Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_WHITEHEAT
          bool '    USB FTDI Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_FTDI_SIO
          bool '    USB Keyspan PDA Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_KEYSPAN_PDA
+         bool '    USB Keyspan USA-xxx Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_KEYSPAN
+         if [ "$CONFIG_USB_SERIAL_KEYSPAN" != "n" ]; then
+            bool '      USB Keyspan USA-28 Firmware' CONFIG_USB_SERIAL_KEYSPAN_USA28
+            bool '      USB Keyspan USA-28X Firmware' CONFIG_USB_SERIAL_KEYSPAN_USA28X
+            bool '      USB Keyspan USA-19 Firmware' CONFIG_USB_SERIAL_KEYSPAN_USA19
+            bool '      USB Keyspan USA-18X Firmware' CONFIG_USB_SERIAL_KEYSPAN_USA18X
+            bool '      USB Keyspan USA-19W Firmware' CONFIG_USB_SERIAL_KEYSPAN_USA19W
+         fi
          bool '    USB Digi International AccelePort USB Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_DIGI_ACCELEPORT
          bool '    USB ZyXEL omni.net LCD Plus Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_OMNINET
       fi
@@ -48,10 +56,10 @@ comment 'USB Devices'
    dep_tristate '  USB Kodak DC-2xx Camera support' CONFIG_USB_DC2XX $CONFIG_USB
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	   dep_tristate '  USB Mustek MDC800 Digital Camera support (EXPERIMENTAL)' CONFIG_USB_MDC800 $CONFIG_USB
-   fi
-   dep_tristate '  USB Mass Storage support' CONFIG_USB_STORAGE $CONFIG_USB $CONFIG_SCSI
-   if [ "$CONFIG_USB_STORAGE" != "n" ]; then
-      bool '    USB Mass Storage verbose debug' CONFIG_USB_STORAGE_DEBUG
+      dep_tristate '  USB Mass Storage support (EXPERIMENTAL)' CONFIG_USB_STORAGE $CONFIG_USB $CONFIG_SCSI
+      if [ "$CONFIG_USB_STORAGE" != "n" ]; then
+         bool '    USB Mass Storage verbose debug' CONFIG_USB_STORAGE_DEBUG
+      fi
    fi
    dep_tristate '  USS720 parport driver' CONFIG_USB_USS720 $CONFIG_USB $CONFIG_PARPORT
    dep_tristate '  DABUSB driver' CONFIG_USB_DABUSB $CONFIG_USB
@@ -60,7 +68,8 @@ comment 'USB Devices'
       dep_tristate '  USB ADMtek Pegasus-based device support (EXPERIMENTAL)' CONFIG_USB_PEGASUS $CONFIG_USB $CONFIG_NET
       dep_tristate '  USB Diamond Rio500 support (EXPERIMENTAL)' CONFIG_USB_RIO500 $CONFIG_USB
       dep_tristate '  D-Link USB FM radio support (EXPERIMENTAL)' CONFIG_USB_DSBR $CONFIG_USB $CONFIG_VIDEO_DEV
-      dep_tristate '  Microtek X6USB scanner support (EXPERIMENTAL)' CONFIG_USB_MICROTEK $CONFIG_SCSI
+      dep_tristate '  Microtek X6USB scanner support (EXPERIMENTAL)' CONFIG_USB_MICROTEK $CONFIG_USB $CONFIG_SCSI
+      dep_tristate '  USB Bluetooth support (EXPERIMENTAL)' CONFIG_USB_BLUETOOTH $CONFIG_USB
    fi
 
 comment 'USB HID'

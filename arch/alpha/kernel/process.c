@@ -74,7 +74,7 @@ void
 cpu_idle(void)
 {
 	/* An endless idle loop with no priority at all.  */
-	current->priority = 0;
+	current->nice = 20;
 	current->counter = -100;
 
 	while (1) {

@@ -141,7 +141,7 @@ typedef struct user_regs_struct user_regs_struct;
 typedef struct pt_regs pt_regs;
 
 #ifdef __KERNEL__
-#define user_mode(regs) ((regs)->psw.mask & PSW_PROBLEM_STATE)
+#define user_mode(regs) (((regs)->psw.mask & PSW_PROBLEM_STATE) != 0)
 #define instruction_pointer(regs) ((regs)->psw.addr)
 
 struct thread_struct;

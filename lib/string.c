@@ -256,7 +256,7 @@ char * strsep(char **s, const char * ct)
 #endif
 
 #ifndef __HAVE_ARCH_MEMSET
-void * memset(void * s,char c,size_t count)
+void * memset(void * s,int c,size_t count)
 {
 	char *xs = (char *) s;
 

@@ -79,7 +79,7 @@ static unsigned long last_tsc_low; /* lsb 32 bits of Time Stamp Counter */
 unsigned long fast_gettimeoffset_quotient=0;
 
 extern rwlock_t xtime_lock;
-extern volatile unsigned long lost_ticks;
+extern unsigned long wall_jiffies;
 
 spinlock_t rtc_lock = SPIN_LOCK_UNLOCKED;
 
@@ -262,7 +262,7 @@ void do_gettimeofday(struct timeval *tv)
 	read_lock_irqsave(&xtime_lock, flags);
 	usec = do_gettimeoffset();
 	{
-		unsigned long lost = lost_ticks;
+		unsigned long lost = jiffies - wall_jiffies;
 		if (lost)
 			usec += lost * (1000000 / HZ);
 	}
@@ -282,14 +282,14 @@ void do_gettimeofday(struct timeval *tv)
 void do_settimeofday(struct timeval *tv)
 {
 	write_lock_irq(&xtime_lock);
-	/* This is revolting. We need to set the xtime.tv_usec
-	 * correctly. However, the value in this location is
-	 * is value at the last tick.
-	 * Discover what correction gettimeofday
-	 * would have done, and then undo it!
+	/*
+	 * This is revolting. We need to set "xtime" correctly. However, the
+	 * value in this location is the value at the most recent update of
+	 * wall time.  Discover what correction gettimeofday() would have
+	 * made, and then undo it!
 	 */
 	tv->tv_usec -= do_gettimeoffset();
-	tv->tv_usec -= lost_ticks * (1000000 / HZ);
+	tv->tv_usec -= (jiffies - wall_jiffies) * (1000000 / HZ);
 
 	while (tv->tv_usec < 0) {
 		tv->tv_usec += 1000000;

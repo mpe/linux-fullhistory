@@ -311,6 +311,18 @@ static struct usb_serial_device_type *usb_serial_devices[] = {
 #ifdef CONFIG_USB_SERIAL_DIGI_ACCELEPORT
 	&digi_acceleport_device,
 #endif
+#ifdef CONFIG_USB_SERIAL_KEYSPAN
+	&keyspan_usa18x_pre_device,
+	&keyspan_usa19_pre_device,
+	&keyspan_usa19w_pre_device,
+	&keyspan_usa28_pre_device,
+	&keyspan_usa28x_pre_device,
+	&keyspan_usa18x_device,
+	&keyspan_usa19_device,
+	&keyspan_usa19w_device,
+	&keyspan_usa28_device,
+	&keyspan_usa28x_device,
+#endif
 	NULL
 };
 

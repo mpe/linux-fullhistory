@@ -484,7 +484,7 @@ void smp4d_percpu_timer_interrupt(struct pt_regs *regs)
 			}
 
 			if(user) {
-				if(current->priority < DEF_PRIORITY) {
+				if(current->nice > 0) {
 					kstat.cpu_nice++;
 					kstat.per_cpu_nice[cpu]++;
 				} else {

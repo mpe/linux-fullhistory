@@ -124,12 +124,22 @@ extern struct usb_serial_device_type whiteheat_device;
 extern struct usb_serial_device_type ftdi_sio_device;
 extern struct usb_serial_device_type keyspan_pda_fake_device;
 extern struct usb_serial_device_type keyspan_pda_device;
+extern struct usb_serial_device_type keyspan_usa18x_pre_device;
+extern struct usb_serial_device_type keyspan_usa19_pre_device;
+extern struct usb_serial_device_type keyspan_usa19w_pre_device;
+extern struct usb_serial_device_type keyspan_usa28_pre_device;
+extern struct usb_serial_device_type keyspan_usa28x_pre_device;
+extern struct usb_serial_device_type keyspan_usa18x_device;
+extern struct usb_serial_device_type keyspan_usa19_device;
+extern struct usb_serial_device_type keyspan_usa19w_device;
+extern struct usb_serial_device_type keyspan_usa28_device;
+extern struct usb_serial_device_type keyspan_usa28x_device;
 extern struct usb_serial_device_type zyxel_omninet_device;
 extern struct usb_serial_device_type digi_acceleport_device;
 
 
 /* determine if we should include the EzUSB loader functions */
-#if defined(CONFIG_USB_SERIAL_KEYSPAN_PDA) || defined(CONFIG_USB_SERIAL_WHITEHEAT)
+#if defined(CONFIG_USB_SERIAL_KEYSPAN_PDA) || defined(CONFIG_USB_SERIAL_WHITEHEAT) || defined(CONFIG_USB_SERIAL_KEYSPAN)
 	#define	USES_EZUSB_FUNCTIONS
 	extern int ezusb_writememory (struct usb_serial *serial, int address, unsigned char *data, int length, __u8 bRequest);
 	extern int ezusb_set_reset (struct usb_serial *serial, unsigned char reset_bit);

@@ -114,7 +114,7 @@ cpu_idle (void *unused)
 {
 	/* endless idle loop with no priority at all */
 	init_idle();
-	current->priority = 0;
+	current->nice = 20;
 	current->counter = -100;
 
 #ifdef CONFIG_SMP

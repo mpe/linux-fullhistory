@@ -9840,7 +9840,38 @@ CONFIG_USB_SERIAL_FTDI_SIO
 USB Keyspan PDA Single Port Serial Driver
 CONFIG_USB_SERIAL_KEYSPAN_PDA
   Say Y here if you want to use a Keyspan PDA single port USB to
-  serial converter device.
+  serial converter device.  This driver makes use of firmware
+  developed from scratch by Brian Warner.
+
+USB Keyspan USA-xxx Serial Driver
+CONFIG_USB_SERIAL_KEYSPAN
+  Say Y here if you want to use Keyspan USB to serial converter
+  devices.  This driver makes use of Keyspan's official firmware
+  and was developed with their support.  You must also include
+  firmware to support your particular device(s). 
+
+  See http://www.linuxcare.com.au/hugh/keyspan.html for 
+  more information.
+ 
+USB Keyspan USA-28 Firmware
+CONFIG_USB_SERIAL_KEYSPAN_USA28
+  Say Y here to include firmware for the USA-28 converter.
+
+USB Keyspan USA-28X Firmware
+CONFIG_USB_SERIAL_KEYSPAN_USA28X
+  Say Y here to include firmware for the USA-28X converter.
+
+USB Keyspan USA-19 Firmware
+CONFIG_USB_SERIAL_KEYSPAN_USA19
+  Say Y here to include firmware for the USA-19 converter.
+
+USB Keyspan USA-18X Firmware
+CONFIG_USB_SERIAL_KEYSPAN_USA18X
+  Say Y here to include firmware for the USA-18X converter.
+
+USB Keyspan USA-19W Firmware
+CONFIG_USB_SERIAL_KEYSPAN_USA19W
+  Say Y here to include firmware for the USA-19W converter.
 
 USB ZyXEL omni.net LCD Plus Driver
 CONFIG_USB_SERIAL_OMNINET

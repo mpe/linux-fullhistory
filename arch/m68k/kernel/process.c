@@ -81,7 +81,7 @@ void cpu_idle(void)
 {
 	/* endless idle loop with no priority at all */
 	init_idle();
-	current->priority = 0;
+	current->nice = 20;
 	current->counter = -100;
 	idle();
 }

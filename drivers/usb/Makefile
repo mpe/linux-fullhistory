@@ -91,6 +91,7 @@ obj-$(CONFIG_USB_PEGASUS)	+= pegasus.o
 obj-$(CONFIG_USB_RIO500)	+= rio500.o
 obj-$(CONFIG_USB_DSBR)		+= dsbr100.o
 obj-$(CONFIG_USB_MICROTEK)	+= microtek.o
+obj-$(CONFIG_USB_BLUETOOTH)	+= bluetooth.o
 
 # Extract lists of the multi-part drivers.
 # The 'int-*' lists are the intermediate files used to build the multi's.

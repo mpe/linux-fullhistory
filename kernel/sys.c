@@ -199,26 +199,17 @@ static int proc_sel(struct task_struct *p, int which, int who)
 asmlinkage long sys_setpriority(int which, int who, int niceval)
 {
 	struct task_struct *p;
-	unsigned int priority;
 	int error;
 
 	if (which > 2 || which < 0)
 		return -EINVAL;
 
 	/* normalize: avoid signed division (rounding problems) */
-	error = ESRCH;
-	priority = niceval;
-	if (niceval < 0)
-		priority = -niceval;
-	if (priority > 20)
-		priority = 20;
-	priority = (priority * DEF_PRIORITY + 10) / 20 + DEF_PRIORITY;
-
-	if (niceval >= 0) {
-		priority = 2*DEF_PRIORITY - priority;
-		if (!priority)
-			priority = 1;
-	}
+	error = -ESRCH;
+	if (niceval < -20)
+		niceval = -20;
+	if (niceval > 19)
+		niceval = 19;
 
 	read_lock(&tasklist_lock);
 	for_each_task(p) {
@@ -226,47 +217,46 @@ asmlinkage long sys_setpriority(int which, int who, int niceval)
 			continue;
 		if (p->uid != current->euid &&
 			p->uid != current->uid && !capable(CAP_SYS_NICE)) {
-			error = EPERM;
+			error = -EPERM;
 			continue;
 		}
-		if (error == ESRCH)
+		if (error == -ESRCH)
 			error = 0;
-		if (priority > p->priority && !capable(CAP_SYS_NICE))
-			error = EACCES;
+		if (niceval < p->nice && !capable(CAP_SYS_NICE))
+			error = -EACCES;
 		else
-			p->priority = priority;
+			p->nice = niceval;
 	}
 	read_unlock(&tasklist_lock);
 
-	return -error;
+	return error;
 }
 
 /*
  * Ugh. To avoid negative return values, "getpriority()" will
  * not return the normal nice-value, but a value that has been
- * offset by 20 (ie it returns 0..40 instead of -20..20)
+ * offset by 20 (ie it returns 0..39 instead of -20..19)
  */
 asmlinkage long sys_getpriority(int which, int who)
 {
 	struct task_struct *p;
-	long max_prio = -ESRCH;
+	long retval = -ESRCH;
 
 	if (which > 2 || which < 0)
 		return -EINVAL;
 
 	read_lock(&tasklist_lock);
 	for_each_task (p) {
+		unsigned niceval;
 		if (!proc_sel(p, which, who))
 			continue;
-		if (p->priority > max_prio)
-			max_prio = p->priority;
+		niceval = p->nice + 20;
+		if (niceval < (unsigned)retval)
+			retval = niceval;
 	}
 	read_unlock(&tasklist_lock);
 
-	/* scale the priority from timeslice to 0..40 */
-	if (max_prio > 0)
-		max_prio = (max_prio * 20 + DEF_PRIORITY/2) / DEF_PRIORITY;
-	return max_prio;
+	return retval;
 }
 
 

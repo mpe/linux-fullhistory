@@ -544,7 +544,7 @@ int tdfx_lock(struct inode *inode, struct file *filp, unsigned int cmd,
 
 	if (lock.context != tdfx_res_ctx.handle) {
 		current->counter = 5;
-		current->priority = DEF_PRIORITY/4;
+		current->nice = 0;
 	}
 
         DRM_DEBUG("%d %s\n", lock.context, ret ? "interrupted" : "has lock");
@@ -589,7 +589,7 @@ int tdfx_unlock(struct inode *inode, struct file *filp, unsigned int cmd,
 	
 	if (lock.context != tdfx_res_ctx.handle) {
 		current->counter = 5;
-		current->priority = DEF_PRIORITY;
+		current->nice = 0;
 	}
 
 	return 0;

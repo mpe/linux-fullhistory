@@ -43,6 +43,31 @@ unsigned securebits = SECUREBITS_DEFAULT; /* systemwide security settings */
 extern void mem_use(void);
 
 /*
+ * Scheduling quanta.
+ *
+ * NOTE! The unix "nice" value influences how long a process
+ * gets. The nice value ranges from -20 to +19, where a -20
+ * is a "high-priority" task, and a "+10" is a low-priority
+ * task.
+ *
+ * We want the time-slice to be around 50ms or so, so this
+ * calculation depends on the value of HZ.
+ */
+#if HZ < 200
+#define LOG2_HZ 7
+#elif HZ < 400
+#define LOG2_HZ 8
+#elif HZ < 800
+#define LOG2_HZ 9
+#elif HZ < 1600
+#define LOG2_HZ 10
+#else
+#define LOG2_HZ 11
+#endif
+
+#define NICE_TO_TICKS(nice)	((((20)-(nice)) >> (LOG2_HZ-5))+1)
+
+/*
  *	Init task must be ok at boot for the ix86 as we will check its signals
  *	via the SMP irq return path.
  */
@@ -121,7 +146,7 @@ static inline int goodness(struct task_struct * p, int this_cpu, struct mm_struc
 	 * into account).
 	 */
 	if (p->policy != SCHED_OTHER) {
-		weight = 1000 + 2*DEF_PRIORITY + p->rt_priority;
+		weight = 1000 + p->rt_priority;
 		goto out;
 	}
 
@@ -146,7 +171,7 @@ static inline int goodness(struct task_struct * p, int this_cpu, struct mm_struc
 	/* .. and a slight advantage to the current MM */
 	if (p->mm == this_mm || !p->mm)
 		weight += 1;
-	weight += p->priority;
+	weight += 20 - p->nice;
 
 out:
 	return weight;
@@ -622,7 +647,7 @@ recalculate:
 		spin_unlock_irq(&runqueue_lock);
 		read_lock(&tasklist_lock);
 		for_each_task(p)
-			p->counter = (p->counter >> 1) + p->priority;
+			p->counter = (p->counter >> 1) + NICE_TO_TICKS(p->nice);
 		read_unlock(&tasklist_lock);
 		spin_lock_irq(&runqueue_lock);
 	}
@@ -648,7 +673,7 @@ handle_tq_scheduler:
 
 move_rr_last:
 	if (!prev->counter) {
-		prev->counter = prev->priority;
+		prev->counter = NICE_TO_TICKS(prev->nice);
 		move_last_runqueue(prev);
 	}
 	goto move_rr_back;
@@ -821,50 +846,28 @@ void scheduling_functions_end_here(void) { }
 
 asmlinkage long sys_nice(int increment)
 {
-	unsigned long newprio;
-	int increase = 0;
+	long newprio;
 
 	/*
 	 *	Setpriority might change our priority at the same moment.
 	 *	We don't have to worry. Conceptually one call occurs first
 	 *	and we have a single winner.
 	 */
-	 
-	newprio = increment;
 	if (increment < 0) {
 		if (!capable(CAP_SYS_NICE))
 			return -EPERM;
-		newprio = -increment;
-		increase = 1;
+		if (increment < -40)
+			increment = -40;
 	}
+	if (increment > 40)
+		increment = 40;
 
-	if (newprio > 40)
-		newprio = 40;
-	/*
-	 * do a "normalization" of the priority (traditionally
-	 * Unix nice values are -20 to 20; Linux doesn't really
-	 * use that kind of thing, but uses the length of the
-	 * timeslice instead (default 200 ms). The rounding is
-	 * why we want to avoid negative values.
-	 */
-	newprio = (newprio * DEF_PRIORITY + 10)/20;
-	increment = newprio;
-	if (increase)
-		increment = -increment;
-	/*
-	 *	Current->priority can change between this point
-	 *	and the assignment. We are assigning not doing add/subs
-	 *	so thats ok. Conceptually a process might just instantaneously
-	 *	read the value we stomp over. I don't think that is an issue
-	 *	unless posix makes it one. If so we can loop on changes
-	 *	to current->priority.
-	 */
-	newprio = current->priority - increment;
-	if ((signed) newprio < 1)
-		newprio = DEF_PRIORITY/20;
-	if (newprio > DEF_PRIORITY*2)
-		newprio = DEF_PRIORITY*2;
-	current->priority = newprio;
+	newprio = current->nice + increment;
+	if (newprio < -20)
+		newprio = -20;
+	if (newprio > 19)
+		newprio = 19;
+	current->nice = newprio;
 	return 0;
 }
 
@@ -1066,7 +1069,7 @@ asmlinkage long sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
 	read_lock(&tasklist_lock);
 	p = find_process_by_pid(pid);
 	if (p)
-		jiffies_to_timespec(p->policy & SCHED_FIFO ? 0 : p->priority,
+		jiffies_to_timespec(p->policy & SCHED_FIFO ? 0 : NICE_TO_TICKS(p->nice),
 				    &t);
 	read_unlock(&tasklist_lock);
 	if (p)

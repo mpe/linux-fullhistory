@@ -1082,8 +1082,8 @@ static int BusLogic_InitializeFlashPointProbeInfo(BusLogic_HostAdapter_T
 #else
       BusLogic_Error("BusLogic: FlashPoint Host Adapter detected at "
 		     "PCI Bus %d Device %d\n", NULL, Bus, Device);
-      BusLogic_Error("BusLogic: I/O Address 0x%X PCI Address 0x%X, "
-		     "but FlashPoint\n", NULL, IO_Address, PCI_Address);
+      BusLogic_Error("BusLogic: I/O Address 0x%X PCI Address 0x%X, irq %d, "
+		     "but FlashPoint\n", NULL, IO_Address, PCI_Address, IRQ_Channel);
       BusLogic_Error("BusLogic: support was omitted in this kernel "
 		     "configuration.\n", NULL);
 #endif
