@@ -1928,7 +1928,8 @@ static inline int
 access_permit_read(unsigned long access_bmap)
 {
 	return test_bit(NFS4_SHARE_ACCESS_READ, &access_bmap) ||
-		test_bit(NFS4_SHARE_ACCESS_BOTH, &access_bmap);
+		test_bit(NFS4_SHARE_ACCESS_BOTH, &access_bmap) ||
+		test_bit(NFS4_SHARE_ACCESS_WRITE, &access_bmap);
 }
 
 static inline int
