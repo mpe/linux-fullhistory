@@ -67,6 +67,7 @@
 #include <linux/hugetlb.h>
 #include <linux/personality.h>
 #include <linux/sysctl.h>
+#include <linux/audit.h>
 
 #include "avc.h"
 #include "objsec.h"
@@ -829,7 +830,9 @@ static int inode_doinit_with_dentry(struct inode *inode, struct dentry *opt_dent
 				       __FUNCTION__, context, -rc,
 				       inode->i_sb->s_id, inode->i_ino);
 				kfree(context);
-				goto out;
+				/* Leave with the unlabeled SID */
+				rc = 0;
+				break;
 			}
 		}
 		kfree(context);
@@ -921,9 +924,9 @@ static inline u32 signal_to_av(int sig)
 
 /* Check permission betweeen a pair of tasks, e.g. signal checks,
    fork check, ptrace check, etc. */
-int task_has_perm(struct task_struct *tsk1,
-		  struct task_struct *tsk2,
-		  u32 perms)
+static int task_has_perm(struct task_struct *tsk1,
+			 struct task_struct *tsk2,
+			 u32 perms)
 {
 	struct task_security_struct *tsec1, *tsec2;
 
@@ -934,8 +937,8 @@ int task_has_perm(struct task_struct *tsk1,
 }
 
 /* Check whether a task is allowed to use a capability. */
-int task_has_capability(struct task_struct *tsk,
-			int cap)
+static int task_has_capability(struct task_struct *tsk,
+			       int cap)
 {
 	struct task_security_struct *tsec;
 	struct avc_audit_data ad;
@@ -951,8 +954,8 @@ int task_has_capability(struct task_struct *tsk,
 }
 
 /* Check whether a task is allowed to use a system operation. */
-int task_has_system(struct task_struct *tsk,
-		    u32 perms)
+static int task_has_system(struct task_struct *tsk,
+			   u32 perms)
 {
 	struct task_security_struct *tsec;
 
@@ -965,10 +968,10 @@ int task_has_system(struct task_struct *tsk,
 /* Check whether a task has a particular permission to an inode.
    The 'adp' parameter is optional and allows other audit
    data to be passed (e.g. the dentry). */
-int inode_has_perm(struct task_struct *tsk,
-		   struct inode *inode,
-		   u32 perms,
-		   struct avc_audit_data *adp)
+static int inode_has_perm(struct task_struct *tsk,
+			  struct inode *inode,
+			  u32 perms,
+			  struct avc_audit_data *adp)
 {
 	struct task_security_struct *tsec;
 	struct inode_security_struct *isec;
@@ -1190,10 +1193,10 @@ static inline int may_rename(struct inode *old_dir,
 }
 
 /* Check whether a task can perform a filesystem operation. */
-int superblock_has_perm(struct task_struct *tsk,
-			struct super_block *sb,
-			u32 perms,
-			struct avc_audit_data *ad)
+static int superblock_has_perm(struct task_struct *tsk,
+			       struct super_block *sb,
+			       u32 perms,
+			       struct avc_audit_data *ad)
 {
 	struct task_security_struct *tsec;
 	struct superblock_security_struct *sbsec;
@@ -1250,7 +1253,7 @@ static inline u32 file_to_av(struct file *file)
 }
 
 /* Set an inode's SID to a specified value. */
-int inode_security_set_sid(struct inode *inode, u32 sid)
+static int inode_security_set_sid(struct inode *inode, u32 sid)
 {
 	struct inode_security_struct *isec = inode->i_security;
 	struct superblock_security_struct *sbsec = inode->i_sb->s_security;
@@ -3091,7 +3094,53 @@ out:
 
 static int selinux_socket_connect(struct socket *sock, struct sockaddr *address, int addrlen)
 {
-	return socket_has_perm(current, sock, SOCKET__CONNECT);
+	struct inode_security_struct *isec;
+	int err;
+
+	err = socket_has_perm(current, sock, SOCKET__CONNECT);
+	if (err)
+		return err;
+
+	/*
+	 * If a TCP socket, check name_connect permission for the port.
+	 */
+	isec = SOCK_INODE(sock)->i_security;
+	if (isec->sclass == SECCLASS_TCP_SOCKET) {
+		struct sock *sk = sock->sk;
+		struct avc_audit_data ad;
+		struct sockaddr_in *addr4 = NULL;
+		struct sockaddr_in6 *addr6 = NULL;
+		unsigned short snum;
+		u32 sid;
+
+		if (sk->sk_family == PF_INET) {
+			addr4 = (struct sockaddr_in *)address;
+			if (addrlen != sizeof(struct sockaddr_in))
+				return -EINVAL;
+			snum = ntohs(addr4->sin_port);
+		} else {
+			addr6 = (struct sockaddr_in6 *)address;
+			if (addrlen != sizeof(struct sockaddr_in6))
+				return -EINVAL;
+			snum = ntohs(addr6->sin6_port);
+		}
+
+		err = security_port_sid(sk->sk_family, sk->sk_type,
+					sk->sk_protocol, snum, &sid);
+		if (err)
+			goto out;
+
+		AVC_AUDIT_DATA_INIT(&ad,NET);
+		ad.u.net.dport = htons(snum);
+		ad.u.net.family = sk->sk_family;
+		err = avc_has_perm(isec->sid, sid, isec->sclass,
+				   TCP_SOCKET__NAME_CONNECT, &ad);
+		if (err)
+			goto out;
+	}
+
+out:
+	return err;
 }
 
 static int selinux_socket_listen(struct socket *sock, int backlog)
@@ -3383,6 +3432,15 @@ static int selinux_nlmsg_perm(struct sock *sk, struct sk_buff *skb)
 	
 	err = selinux_nlmsg_lookup(isec->sclass, nlh->nlmsg_type, &perm);
 	if (err) {
+		if (err == -EINVAL) {
+			audit_log(current->audit_context,
+				  "SELinux:  unrecognized netlink message"
+				  " type=%hu for sclass=%hu\n",
+				  nlh->nlmsg_type, isec->sclass);
+			if (!selinux_enforcing)
+				err = 0;
+		}
+
 		/* Ignore */
 		if (err == -ENOENT)
 			err = 0;
@@ -4019,7 +4077,7 @@ static int selinux_ipc_permission(struct kern_ipc_perm *ipcp, short flag)
 }
 
 /* module stacking operations */
-int selinux_register_security (const char *name, struct security_operations *ops)
+static int selinux_register_security (const char *name, struct security_operations *ops)
 {
 	if (secondary_ops != original_ops) {
 		printk(KERN_INFO "%s:  There is already a secondary security "
@@ -4036,7 +4094,7 @@ int selinux_register_security (const char *name, struct security_operations *ops
 	return 0;
 }
 
-int selinux_unregister_security (const char *name, struct security_operations *ops)
+static int selinux_unregister_security (const char *name, struct security_operations *ops)
 {
 	if (ops != secondary_ops) {
 		printk (KERN_INFO "%s:  trying to unregister a security module "
@@ -4203,7 +4261,7 @@ static int selinux_setprocattr(struct task_struct *p,
 	return size;
 }
 
-struct security_operations selinux_ops = {
+static struct security_operations selinux_ops = {
 	.ptrace =			selinux_ptrace,
 	.capget =			selinux_capget,
 	.capset_check =			selinux_capset_check,
@@ -4352,7 +4410,7 @@ struct security_operations selinux_ops = {
 #endif
 };
 
-__init int selinux_init(void)
+static __init int selinux_init(void)
 {
 	struct task_security_struct *tsec;
 

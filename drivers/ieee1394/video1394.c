@@ -710,6 +710,17 @@ static void initialize_dma_it_ctx(struct dma_iso_ctx *d, int sync_tag,
 	reg_write(ohci, OHCI1394_IsoXmitIntMaskSet, 1<<d->ctx);
 }
 
+static inline unsigned video1394_buffer_state(struct dma_iso_ctx *d,
+					      unsigned int buffer)
+{
+	unsigned long flags;
+	unsigned int ret;
+	spin_lock_irqsave(&d->lock, flags);
+	ret = d->buffer_status[buffer];
+	spin_unlock_irqrestore(&d->lock, flags);
+	return ret;
+}
+
 static int __video1394_ioctl(struct file *file,
 			     unsigned int cmd, unsigned long arg)
 {
@@ -970,24 +981,13 @@ static int __video1394_ioctl(struct file *file,
 			    return -EINTR;
 			}
 
-#if 1
-			while (d->buffer_status[v.buffer]!=
-			      VIDEO1394_BUFFER_READY) {
-				spin_unlock_irqrestore(&d->lock, flags);
-				interruptible_sleep_on(&d->waitq);
-				spin_lock_irqsave(&d->lock, flags);
-				if (signal_pending(current)) {
-					spin_unlock_irqrestore(&d->lock,flags);
-					return -EINTR;
-				}
-			}
-#else
-			if (wait_event_interruptible(d->waitq,
-						     d->buffer_status[v.buffer]
-						     == VIDEO1394_BUFFER_READY)
-			    == -ERESTARTSYS)
-				return -EINTR;
-#endif
+			spin_unlock_irqrestore(&d->lock, flags);
+			wait_event_interruptible(d->waitq,
+					video1394_buffer_state(d, v.buffer) ==
+					 VIDEO1394_BUFFER_READY);
+			if (signal_pending(current))
+                                return -EINTR;
+			spin_lock_irqsave(&d->lock, flags);
 			d->buffer_status[v.buffer]=VIDEO1394_BUFFER_FREE;
 			break;
 		default:
@@ -1144,19 +1144,10 @@ static int __video1394_ioctl(struct file *file,
 			d->buffer_status[v.buffer]=VIDEO1394_BUFFER_FREE;
 			return 0;
 		case VIDEO1394_BUFFER_QUEUED:
-#if 1
-			while (d->buffer_status[v.buffer]!=
-			      VIDEO1394_BUFFER_READY) {
-				interruptible_sleep_on(&d->waitq);
-				if (signal_pending(current)) return -EINTR;
-			}
-#else
-			if (wait_event_interruptible(d->waitq,
-						     d->buffer_status[v.buffer]
-						     == VIDEO1394_BUFFER_READY)
-			    == -ERESTARTSYS)
+			wait_event_interruptible(d->waitq,
+					(d->buffer_status[v.buffer] == VIDEO1394_BUFFER_READY));
+			if (signal_pending(current))
 				return -EINTR;
-#endif
 			d->buffer_status[v.buffer]=VIDEO1394_BUFFER_FREE;
 			return 0;
 		default:

@@ -516,13 +516,8 @@ retint_kernel:
 	bt  $TIF_NEED_RESCHED,threadinfo_flags(%rcx)
 	jnc  retint_restore_args
 	bt   $9,EFLAGS-ARGOFFSET(%rsp)	/* interrupts off? */
-	jc   retint_restore_args
-	movl $PREEMPT_ACTIVE,threadinfo_preempt_count(%rcx)
-	sti
-	call schedule
-	cli
-	GET_THREAD_INFO(%rcx)
-	movl $0,threadinfo_preempt_count(%rcx) 
+	jnc  retint_restore_args
+	call preempt_schedule_irq
 	jmp exit_intr
 #endif	
 	CFI_ENDPROC

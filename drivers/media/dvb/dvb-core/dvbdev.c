@@ -51,9 +51,10 @@ static const char * const dnames[] = {
 	"net", "osd"
 };
 
-#define DVB_MAX_IDS              6
-#define nums2minor(num,type,id)  ((num << 6) | (id << 4) | type)
-#define MAX_DVB_MINORS           (DVB_MAX_IDS*64)
+#define DVB_MAX_ADAPTERS	8
+#define DVB_MAX_IDS		4
+#define nums2minor(num,type,id)	((num << 6) | (id << 4) | type)
+#define MAX_DVB_MINORS		(DVB_MAX_ADAPTERS*64)
 
 struct class_simple *dvb_class;
 EXPORT_SYMBOL(dvb_class);
@@ -268,7 +269,7 @@ static int dvbdev_get_free_adapter_num (void)
 {
 	int num = 0;
 
-	while (1) {
+	while (num < DVB_MAX_ADAPTERS) {
 		struct list_head *entry;
 		list_for_each (entry, &dvb_adapter_list) {
 			struct dvb_adapter *adap;
@@ -396,9 +397,7 @@ int dvb_usercopy(struct inode *inode, struct file *file,
         }
 
 out:
-        if (mbuf)
-                kfree(mbuf);
-
+        kfree(mbuf);
         return err;
 }
 

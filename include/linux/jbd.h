@@ -822,6 +822,7 @@ struct journal_s
  */
 
 /* Filing buffers */
+extern void __journal_temp_unlink_buffer(struct journal_head *jh);
 extern void journal_unfile_buffer(journal_t *, struct journal_head *);
 extern void __journal_unfile_buffer(struct journal_head *);
 extern void __journal_refile_buffer(struct journal_head *);
@@ -934,7 +935,7 @@ void journal_put_journal_head(struct journal_head *jh);
  */
 extern kmem_cache_t *jbd_handle_cache;
 
-static inline handle_t *jbd_alloc_handle(int gfp_flags)
+static inline handle_t *jbd_alloc_handle(unsigned int __nocast gfp_flags)
 {
 	return kmem_cache_alloc(jbd_handle_cache, gfp_flags);
 }

@@ -836,7 +836,7 @@ static int sa1100fb_mmap(struct fb_info *info, struct file *file,
 	vma->vm_pgoff = off >> PAGE_SHIFT;
 	vma->vm_flags |= VM_IO;
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
-	return io_remap_page_range(vma, vma->vm_start, off,
+	return io_remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
 				   vma->vm_end - vma->vm_start,
 				   vma->vm_page_prot);
 }

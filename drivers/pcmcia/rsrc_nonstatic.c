@@ -474,8 +474,7 @@ static void validate_mem(struct pcmcia_socket *s, unsigned int probe_mask)
 
 
 /*
- * Locking note: this is the only place where we take
- * both rsrc_sem and skt_sem.
+ * Locking note: Must be called with skt_sem held!
  */
 static void pcmcia_nonstatic_validate_mem(struct pcmcia_socket *s)
 {
@@ -492,12 +491,8 @@ static void pcmcia_nonstatic_validate_mem(struct pcmcia_socket *s)
 		if (probe_mask & ~s_data->rsrc_mem_probe) {
 			s_data->rsrc_mem_probe |= probe_mask;
 
-			down(&s->skt_sem);
-
 			if (s->state & SOCKET_PRESENT)
 				validate_mem(s, probe_mask);
-
-			up(&s->skt_sem);
 		}
 
 		up(&rsrc_sem);
@@ -781,6 +776,7 @@ static int nonstatic_init(struct pcmcia_socket *s)
 	data = kmalloc(sizeof(struct socket_data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
+	memset(data, 0, sizeof(struct socket_data));
 
 	data->mem_db.next = &data->mem_db;
 	data->io_db.next = &data->io_db;

@@ -14,7 +14,7 @@
 
 #include <linux/usb.h>
 
-int dibusb_i2c_msg(struct usb_dibusb *dib, u8 addr,
+static int dibusb_i2c_msg(struct usb_dibusb *dib, u8 addr,
 			  u8 *wbuf, u16 wlen, u8 *rbuf, u16 rlen)
 {
 	u8 sndbuf[wlen+4]; /* lead(1) devaddr,direction(1) addr(2) data(wlen) (len(2) (when reading)) */
@@ -125,27 +125,6 @@ static int dibusb_tuner_quirk(struct usb_dibusb *dib)
 	return 0;
 }
 
-/* there is a ugly pid_filter in the firmware of the umt devices, it is accessible
- * by i2c address 0x8. Don't know how to deactivate it and how many rows it has.
- */
-static int dibusb_umt_pid_control(struct dvb_frontend *fe, int index, int pid, int onoff)
-{
-	struct usb_dibusb *dib = fe->dvb->priv;
-	u8 b[3];
-	b[0] = index;
-	if (onoff) {
-		b[1] = (pid >> 8) & 0xff;
-		b[2] = pid & 0xff;
-	} else {
-		b[1] = 0;
-		b[2] = 0;
-	}
-	dibusb_i2c_msg(dib, 0x8, b, 3, NULL,0);
-	dibusb_set_streaming_mode(dib,0);
-	dibusb_set_streaming_mode(dib,1);
-	return 0;
-}
-
 int dibusb_fe_init(struct usb_dibusb* dib)
 {
 	struct dib3000_config demod_cfg;
@@ -160,6 +139,8 @@ int dibusb_fe_init(struct usb_dibusb* dib)
 			demod_cfg.pll_set = dibusb_general_pll_set;
 			demod_cfg.pll_init = dibusb_general_pll_init;
 
+			deb_info("demod id: %d %d\n",dib->dibdev->dev_cl->demod->id,DTT200U_FE);
+
 			switch (dib->dibdev->dev_cl->demod->id) {
 				case DIBUSB_DIB3000MB:
 					dib->fe = dib3000mb_attach(&demod_cfg,&dib->i2c_adap,&dib->xfer_ops);
@@ -170,7 +151,9 @@ int dibusb_fe_init(struct usb_dibusb* dib)
 				case DIBUSB_MT352:
 					mt352_hanftek_umt_010_config.demod_address = dib->dibdev->dev_cl->demod->i2c_addrs[i];
 					dib->fe = mt352_attach(&mt352_hanftek_umt_010_config, &dib->i2c_adap);
-					dib->xfer_ops.pid_ctrl = dibusb_umt_pid_control;
+				break;
+				case DTT200U_FE:
+					dib->fe = dtt200u_fe_attach(dib,&dib->xfer_ops);
 				break;
 			}
 			if (dib->fe != NULL) {
@@ -178,6 +161,8 @@ int dibusb_fe_init(struct usb_dibusb* dib)
 				break;
 			}
 		}
+		/* if a frontend was found */
+		if (dib->fe != NULL) {
 			if (dib->fe->ops->sleep != NULL)
 				dib->fe_sleep = dib->fe->ops->sleep;
 			dib->fe->ops->sleep = dibusb_hw_sleep;
@@ -192,6 +177,7 @@ int dibusb_fe_init(struct usb_dibusb* dib)
 			/* check which tuner is mounted on this device, in case this is unsure */
 			dibusb_tuner_quirk(dib);
 		}
+	}
 	if (dib->fe == NULL) {
 		err("A frontend driver was not found for device '%s'.",
 		       dib->dibdev->name);
@@ -205,6 +191,7 @@ int dibusb_fe_init(struct usb_dibusb* dib)
 			return -ENODEV;
 		}
 	}
+
 	return 0;
 }
 
@@ -274,10 +261,10 @@ static int thomson_cable_eu_pll_set(struct dvb_frontend_parameters *fep, u8 pllb
 
 static int panasonic_cofdm_env57h1xd5_pll_set(struct dvb_frontend_parameters *fep, u8 pllbuf[4])
 {
-	u32 freq = fep->frequency;
-	u32 tfreq = ((freq + 36125000)*6 + 500000) / 1000000;
+	u32 freq_khz = fep->frequency / 1000;
+	u32 tfreq = ((freq_khz + 36125)*6 + 500) / 1000;
 	u8 TA, T210, R210, ctrl1, cp210, p4321;
-	if (freq > 858000000) {
+	if (freq_khz > 858000) {
 		err("frequency cannot be larger than 858 MHz.");
 		return -EINVAL;
 	}
@@ -289,17 +276,17 @@ static int panasonic_cofdm_env57h1xd5_pll_set(struct dvb_frontend_parameters *fe
 	ctrl1 = (1 << 7) | (TA << 6) | (T210 << 3) | R210;
 
 // ********    CHARGE PUMP CONFIG vs RF FREQUENCIES     *****************
-	if (freq < 470000000)
+	if (freq_khz < 470000)
 		cp210 = 2;  // VHF Low and High band ch E12 to E4 to E12
-	else if (freq < 526000000)
+	else if (freq_khz < 526000)
 		cp210 = 4;  // UHF band Ch E21 to E27
 	else // if (freq < 862000000)
 		cp210 = 5;  // UHF band ch E28 to E69
 
 //*********************    BW select  *******************************
-	if (freq < 153000000)
+	if (freq_khz < 153000)
 		p4321  = 1; // BW selected for VHF low
-	else if (freq < 470000000)
+	else if (freq_khz < 470000)
 		p4321  = 2; // BW selected for VHF high E5 to E12
 	else // if (freq < 862000000)
 		p4321  = 4; // BW selection for UHF E21 to E69
@@ -341,8 +328,6 @@ static int panasonic_cofdm_env57h1xd5_pll_set(struct dvb_frontend_parameters *fe
  *             BSn = 0 corresponding port is off, high-impedance state (at power-on)
  *             BSn = 1 corresponding port is on
  */
-
-
 static int panasonic_cofdm_env77h11d5_tda6650_init(struct dvb_frontend *fe, u8 pllbuf[4])
 {
 	pllbuf[0] = 0x0b;
@@ -437,55 +422,54 @@ static int panasonic_cofdm_env77h11d5_tda6650_set (struct dvb_frontend_parameter
  *          0	1	c2 (always valid)
  *          1	0	c4
  *          1	1	c6
- *
- *
- *
  */
-
 static int lg_tdtp_e102p_tua6034(struct dvb_frontend_parameters* fep, u8 pllbuf[4])
 {
 	u32 div;
-	u8 p3210, p4;
+	u8 p210, p3;
 
 #define TUNER_MUL 62500
 
 	div = (fep->frequency + 36125000 + TUNER_MUL / 2) / TUNER_MUL;
+//	div = ((fep->frequency/1000 + 36166) * 6) / 1000;
 
 	if (fep->frequency < 174500000)
-		p3210 = 1; // not supported by the tdtp_e102p
+		p210 = 1; // not supported by the tdtp_e102p
 	else if (fep->frequency < 230000000) // VHF
-		p3210 = 2;
+		p210 = 2;
 	else
-		p3210 = 4;
+		p210 = 4;
 
 	if (fep->u.ofdm.bandwidth == BANDWIDTH_7_MHZ)
-		p4 = 0;
+		p3 = 0;
 	else
-		p4 = 1;
+		p3 = 1;
 
 	pllbuf[0] = (div >> 8) & 0x7f;
 	pllbuf[1] = div & 0xff;
 	pllbuf[2] = 0xce;
-	pllbuf[3] = (p4 << 4) | p3210;
+//	pllbuf[2] = 0xcc;
+	pllbuf[3] = (p3 << 3) | p210;
 
 	return 0;
 }
 
 static int lg_tdtp_e102p_mt352_demod_init(struct dvb_frontend *fe)
 {
-	static u8 mt352_clock_config[] = { 0x89, 0xb0, 0x2d };
+	static u8 mt352_clock_config[] = { 0x89, 0xb8, 0x2d };
 	static u8 mt352_reset[] = { 0x50, 0x80 };
 	static u8 mt352_mclk_ratio[] = { 0x8b, 0x00 };
 	static u8 mt352_adc_ctl_1_cfg[] = { 0x8E, 0x40 };
-	static u8 mt352_agc_cfg[] = { 0x67, 0x14, 0x22 };
-	static u8 mt352_sec_agc_cfg[] = { 0x69, 0x00, 0xff, 0xff, 0x00, 0xff, 0x00, 0x40, 0x40 };
+	static u8 mt352_agc_cfg[] = { 0x67, 0x10, 0xa0 };
 
-	static u8 mt352_unk [] = { 0xb5, 0x7a };
+	static u8 mt352_sec_agc_cfg1[] = { 0x6a, 0xff };
+	static u8 mt352_sec_agc_cfg2[] = { 0x6d, 0xff };
+	static u8 mt352_sec_agc_cfg3[] = { 0x70, 0x40 };
+	static u8 mt352_sec_agc_cfg4[] = { 0x7b, 0x03 };
+	static u8 mt352_sec_agc_cfg5[] = { 0x7d, 0x0f };
 
-	static u8 mt352_acq_ctl[] = { 0x53, 0x5f };
-	static u8 mt352_input_freq_1[] = { 0x56, 0xf1, 0x05 };
-
-//	static u8 mt352_capt_range_cfg[] = { 0x75, 0x32 };
+	static u8 mt352_acq_ctl[] = { 0x53, 0x50 };
+	static u8 mt352_input_freq_1[] = { 0x56, 0x31, 0x06 };
 
 	mt352_write(fe, mt352_clock_config, sizeof(mt352_clock_config));
 	udelay(2000);
@@ -495,14 +479,14 @@ static int lg_tdtp_e102p_mt352_demod_init(struct dvb_frontend *fe)
 	mt352_write(fe, mt352_adc_ctl_1_cfg, sizeof(mt352_adc_ctl_1_cfg));
 	mt352_write(fe, mt352_agc_cfg, sizeof(mt352_agc_cfg));
 
-	mt352_write(fe, mt352_sec_agc_cfg, sizeof(mt352_sec_agc_cfg));
-
-	mt352_write(fe, mt352_unk, sizeof(mt352_unk));
+	mt352_write(fe, mt352_sec_agc_cfg1, sizeof(mt352_sec_agc_cfg1));
+	mt352_write(fe, mt352_sec_agc_cfg2, sizeof(mt352_sec_agc_cfg2));
+	mt352_write(fe, mt352_sec_agc_cfg3, sizeof(mt352_sec_agc_cfg3));
+	mt352_write(fe, mt352_sec_agc_cfg4, sizeof(mt352_sec_agc_cfg4));
+	mt352_write(fe, mt352_sec_agc_cfg5, sizeof(mt352_sec_agc_cfg5));
 
 	mt352_write(fe, mt352_acq_ctl, sizeof(mt352_acq_ctl));
 	mt352_write(fe, mt352_input_freq_1, sizeof(mt352_input_freq_1));
-
-//	mt352_write(fe, mt352_capt_range_cfg, sizeof(mt352_capt_range_cfg));
 
 	return 0;
 }

@@ -30,11 +30,13 @@ int dibusb_loadfirmware(struct usb_device *udev, struct dibusb_usb_device *dibde
 	int ret = 0,i;
 	
 	if ((ret = request_firmware(&fw, dibdev->dev_cl->firmware, &udev->dev)) != 0) {
-		err("did not find a valid firmware file. (%s) "
+		err("did not find the firmware file. (%s) "
 			"Please see linux/Documentation/dvb/ for more details on firmware-problems.",
 			dibdev->dev_cl->firmware);
 		return ret;
 	}
+
+	info("downloading firmware from file '%s'.",dibdev->dev_cl->firmware);
 	
 	p = kmalloc(fw->size,GFP_KERNEL);	
 	if (p != NULL) {

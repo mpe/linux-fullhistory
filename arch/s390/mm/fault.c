@@ -87,6 +87,7 @@ static int __check_access_register(struct pt_regs *regs, int error_code)
 	if (areg == 0)
 		/* Access via access register 0 -> kernel address */
 		return 0;
+	save_access_regs(current->thread.acrs);
 	if (regs && areg < NUM_ACRS && current->thread.acrs[areg] <= 1)
 		/*
 		 * access register contains 0 -> kernel address,
@@ -115,11 +116,11 @@ static inline int check_user_space(struct pt_regs *regs, int error_code)
 	 *   3: Home Segment Table Descriptor
 	 */
 	int descriptor = S390_lowcore.trans_exc_code & 3;
-	if (descriptor == 1) {
-		save_access_regs(current->thread.acrs);
+	if (unlikely(descriptor == 1))
 		return __check_access_register(regs, error_code);
-	}
-	return descriptor >> 1;
+	if (descriptor == 2)
+		return current->thread.mm_segment.ar4;
+	return descriptor != 0;
 }
 
 /*

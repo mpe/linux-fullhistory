@@ -76,14 +76,6 @@ static inline int uncached_access(struct file *file, unsigned long addr)
 	 * On ia64, we ignore O_SYNC because we cannot tolerate memory attribute aliases.
 	 */
 	return !(efi_mem_attributes(addr) & EFI_MEMORY_WB);
-#elif defined(CONFIG_PPC64)
-	/* On PPC64, we always do non-cacheable access to the IO hole and
-	 * cacheable elsewhere. Cache paradox can checkstop the CPU and
-	 * the high_memory heuristic below is wrong on machines with memory
-	 * above the IO hole... Ah, and of course, XFree86 doesn't pass
-	 * O_SYNC when mapping us to tap IO space. Surprised ?
-	 */
-	return !page_is_ram(addr >> PAGE_SHIFT);
 #else
 	/*
 	 * Accessing memory above the top the kernel knows about or through a file pointer
@@ -238,7 +230,13 @@ static ssize_t write_mem(struct file * file, const char __user * buf,
 
 static int mmap_mem(struct file * file, struct vm_area_struct * vma)
 {
-#ifdef pgprot_noncached
+#if defined(__HAVE_PHYS_MEM_ACCESS_PROT)
+	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
+
+	vma->vm_page_prot = phys_mem_access_prot(file, offset,
+						 vma->vm_end - vma->vm_start,
+						 vma->vm_page_prot);
+#elif defined(pgprot_noncached)
 	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
 	int uncached;
 
@@ -255,6 +253,23 @@ static int mmap_mem(struct file * file, struct vm_area_struct * vma)
 			    vma->vm_page_prot))
 		return -EAGAIN;
 	return 0;
+}
+
+static int mmap_kmem(struct file * file, struct vm_area_struct * vma)
+{
+        unsigned long long val;
+	/*
+	 * RED-PEN: on some architectures there is more mapped memory
+	 * than available in mem_map which pfn_valid checks
+	 * for. Perhaps should add a new macro here.
+	 *
+	 * RED-PEN: vmalloc is not supported right now.
+	 */
+	if (!pfn_valid(vma->vm_pgoff))
+		return -EIO;
+	val = (u64)vma->vm_pgoff << PAGE_SHIFT;
+	vma->vm_pgoff = __pa(val) >> PAGE_SHIFT;
+	return mmap_mem(file, vma);
 }
 
 extern long vread(char *buf, char *addr, unsigned long count);
@@ -698,7 +713,6 @@ static int open_port(struct inode * inode, struct file * filp)
 	return capable(CAP_SYS_RAWIO) ? 0 : -EPERM;
 }
 
-#define mmap_kmem	mmap_mem
 #define zero_lseek	null_lseek
 #define full_lseek      null_lseek
 #define write_zero	write_null

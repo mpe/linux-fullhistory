@@ -1,9 +1,8 @@
 /*
     driver for LSI L64781 COFDM demodulator
 
-    Copyright (C) 2001 Holger Waechtler <holger@convergence.de>
-                       for Convergence Integrated Media GmbH
-                       Marko Kohtala <marko.kohtala@nokia.com>
+    Copyright (C) 2001 Holger Waechtler for Convergence Integrated Media GmbH
+                       Marko Kohtala <marko.kohtala@luukku.com>
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -560,7 +559,7 @@ struct dvb_frontend* l64781_attach(const struct l64781_config* config,
 
 error:
 	if (reg0x3e >= 0) l64781_writereg (state, 0x3e, reg0x3e);  /* restore reg 0x3e */
-	if (state) kfree(state);
+	kfree(state);
 	return NULL;
 }
 

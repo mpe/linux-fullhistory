@@ -25,6 +25,7 @@
 #include <asm/pgalloc.h>
 #include <asm/tlbflush.h>
 #include <asm/mach_apic.h>
+#include <asm/mmu_context.h>
 #include <asm/proto.h>
 
 /*
@@ -41,7 +42,7 @@ static cpumask_t flush_cpumask;
 static struct mm_struct * flush_mm;
 static unsigned long flush_va;
 static DEFINE_SPINLOCK(tlbstate_lock);
-#define FLUSH_ALL	0xffffffff
+#define FLUSH_ALL	-1ULL
 
 /*
  * We cannot call mmdrop() because we are in interrupt context, 
@@ -52,7 +53,7 @@ static inline void leave_mm (unsigned long cpu)
 	if (read_pda(mmu_state) == TLBSTATE_OK)
 		BUG();
 	clear_bit(cpu, &read_pda(active_mm)->cpu_vm_mask);
-	__flush_tlb();
+	load_cr3(swapper_pg_dir);
 }
 
 /*

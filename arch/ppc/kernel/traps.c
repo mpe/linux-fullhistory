@@ -412,7 +412,7 @@ static int emulate_string_inst(struct pt_regs *regs, u32 instword)
 			return -EINVAL;
 
 	/* Early out if we are an invalid form of lswi */
-	if ((instword & INST_STRING_MASK) == INST_LSWX)
+	if ((instword & INST_STRING_MASK) == INST_LSWI)
 		if ((rA >= rT) || (rT == rA))
 			return -EINVAL;
 

@@ -908,8 +908,7 @@ int dvb_unregister_frontend(struct dvb_frontend* fe)
 	else
 		printk("dvb_frontend: Demodulator (%s) does not have a release callback!\n", fe->ops->info.name);
 	/* fe is invalid now */
-	if (fepriv)
-		kfree(fepriv);
+	kfree(fepriv);
 	up (&frontend_mutex);
 	return 0;
 }

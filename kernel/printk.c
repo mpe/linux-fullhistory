@@ -861,6 +861,11 @@ void register_console(struct console * console)
 	if (!(console->flags & CON_ENABLED))
 		return;
 
+	if (console_drivers && (console_drivers->flags & CON_BOOT)) {
+		unregister_console(console_drivers);
+		console->flags &= ~CON_PRINTBUFFER;
+	}
+
 	/*
 	 *	Put this console in the list - keep the
 	 *	preferred driver at the head of the list.

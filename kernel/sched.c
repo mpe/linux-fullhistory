@@ -3741,14 +3741,11 @@ EXPORT_SYMBOL(cond_resched);
  */
 int cond_resched_lock(spinlock_t * lock)
 {
-#if defined(CONFIG_SMP) && defined(CONFIG_PREEMPT)
-	if (lock->break_lock) {
-		lock->break_lock = 0;
+	if (need_lockbreak(lock)) {
 		spin_unlock(lock);
 		cpu_relax();
 		spin_lock(lock);
 	}
-#endif
 	if (need_resched()) {
 		_raw_spin_unlock(lock);
 		preempt_enable_no_resched();

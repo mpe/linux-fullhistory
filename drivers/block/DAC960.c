@@ -2700,10 +2700,8 @@ DAC960_DetectController(struct pci_dev *PCI_Device,
   Controller->PCIDevice = PCI_Device;
   strcpy(Controller->FullModelName, "DAC960");
 
-  if (pci_enable_device(PCI_Device))  {
-        kfree(Controller);
+  if (pci_enable_device(PCI_Device))
 	goto Failure;
-  }
 
   switch (Controller->HardwareType)
   {

@@ -646,7 +646,7 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 				  struct ib_smp *smp,
 				  struct ib_send_wr *send_wr)
 {
-	int ret, alloc_flags, solicited;
+	int ret, solicited;
 	unsigned long flags;
 	struct ib_mad_local_private *local;
 	struct ib_mad_private *mad_priv;
@@ -666,11 +666,7 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	if (!ret || !device->process_mad)
 		goto out;
 
-	if (in_atomic() || irqs_disabled())
-		alloc_flags = GFP_ATOMIC;
-	else
-		alloc_flags = GFP_KERNEL;
-	local = kmalloc(sizeof *local, alloc_flags);
+	local = kmalloc(sizeof *local, GFP_ATOMIC);
 	if (!local) {
 		ret = -ENOMEM;
 		printk(KERN_ERR PFX "No memory for ib_mad_local_private\n");
@@ -678,7 +674,7 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	}
 	local->mad_priv = NULL;
 	local->recv_mad_agent = NULL;
-	mad_priv = kmem_cache_alloc(ib_mad_cache, alloc_flags);
+	mad_priv = kmem_cache_alloc(ib_mad_cache, GFP_ATOMIC);
 	if (!mad_priv) {
 		ret = -ENOMEM;
 		printk(KERN_ERR PFX "No memory for local response MAD\n");
@@ -860,9 +856,7 @@ int ib_post_send_mad(struct ib_mad_agent *mad_agent,
 		}
 
 		/* Allocate MAD send WR tracking structure */
-		mad_send_wr = kmalloc(sizeof *mad_send_wr,
-				      (in_atomic() || irqs_disabled()) ?
-				      GFP_ATOMIC : GFP_KERNEL);
+		mad_send_wr = kmalloc(sizeof *mad_send_wr, GFP_ATOMIC);
 		if (!mad_send_wr) {
 			printk(KERN_ERR PFX "No memory for "
 			       "ib_mad_send_wr_private\n");

@@ -506,8 +506,6 @@ static int yenta_sock_suspend(struct pcmcia_socket *sock)
 {
 	struct yenta_socket *socket = container_of(sock, struct yenta_socket, socket);
 
-	yenta_set_socket(sock, &dead_socket);
-
 	/* Disable CSC interrupts */
 	cb_writel(socket, CB_SOCKET_MASK, 0x0);
 

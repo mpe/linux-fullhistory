@@ -669,6 +669,7 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.pcibios_fixup  = pmac_pcibios_fixup;
 	ppc_md.pcibios_enable_device_hook = pmac_pci_enable_device_hook;
 	ppc_md.pcibios_after_init = pmac_pcibios_after_init;
+	ppc_md.phys_mem_access_prot = pci_phys_mem_access_prot;
 
 	ppc_md.restart        = pmac_restart;
 	ppc_md.power_off      = pmac_power_off;

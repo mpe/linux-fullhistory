@@ -477,6 +477,7 @@ void reschedule_interrupt(void);
 void call_function_interrupt(void);
 void invalidate_interrupt(void);
 void thermal_interrupt(void);
+void i8254_timer_resume(void);
 
 static void setup_timer(void)
 {
@@ -491,6 +492,11 @@ static int timer_resume(struct sys_device *dev)
 {
 	setup_timer();
 	return 0;
+}
+
+void i8254_timer_resume(void)
+{
+	setup_timer();
 }
 
 static struct sysdev_class timer_sysclass = {

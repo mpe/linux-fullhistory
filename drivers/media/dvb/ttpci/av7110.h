@@ -31,6 +31,7 @@
 #include "tda8083.h"
 #include "sp8870.h"
 #include "stv0297.h"
+#include "l64781.h"
 
 #include <media/saa7146_vv.h>
 
@@ -231,8 +232,6 @@ struct av7110 {
 	u32		    ir_config;
 
 	/* firmware stuff */
-	unsigned int device_initialized;
-
 	unsigned char *bin_fw;
 	unsigned long size_fw;
 

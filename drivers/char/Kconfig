@@ -59,7 +59,7 @@ config VT_CONSOLE
 
 config HW_CONSOLE
 	bool
-	depends on VT && !S390 && !USERMODE
+	depends on VT && !S390 && !UML
 	default y
 
 config SERIAL_NONSTANDARD
@@ -247,7 +247,7 @@ config RISCOM8
 
 config SPECIALIX
 	tristate "Specialix IO8+ card support"
-	depends on SERIAL_NONSTANDARD && BROKEN_ON_SMP
+	depends on SERIAL_NONSTANDARD
 	help
 	  This is a driver for the Specialix IO8+ multiport card (both the
 	  ISA and the PCI version) which gives you many serial ports. You
@@ -764,6 +764,10 @@ config S3C2410_RTC
 	  RTC (Realtime Clock) driver for the clock inbuilt into the
 	  Samsung S3C2410. This can provide periodic interrupt rates
 	  from 1Hz to 64Hz for user programs, and wakeup from Alarm.
+
+config RTC_VR41XX
+	tristate "NEC VR4100 series Real Time Clock Support"
+	depends on CPU_VR41XX
 
 config COBALT_LCD
 	bool "Support for Cobalt LCD"

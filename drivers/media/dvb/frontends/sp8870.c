@@ -570,7 +570,7 @@ struct dvb_frontend* sp8870_attach(const struct sp8870_config* config,
 	return &state->frontend;
 
 error:
-	if (state) kfree(state);
+	kfree(state);
 	return NULL;
 }
 

@@ -7,7 +7,7 @@
  * Bugreports.to..: <Linux390@de.ibm.com>
  * (C) IBM Corporation, IBM Deutschland Entwicklung GmbH, 1999-2001
  *
- * $Revision: 1.156 $
+ * $Revision: 1.158 $
  */
 
 #include <linux/config.h>
@@ -757,6 +757,17 @@ dasd_start_IO(struct dasd_ccw_req * cqr)
 		DBF_DEV_EVENT(DBF_ERR, device, "%s",
 			      "start_IO: request timeout, retry later");
 		break;
+	case -EACCES:
+		/* -EACCES indicates that the request used only a
+		 * subset of the available pathes and all these
+		 * pathes are gone.
+		 * Do a retry with all available pathes.
+		 */
+		cqr->lpm = LPM_ANYPATH;
+		DBF_DEV_EVENT(DBF_ERR, device, "%s",
+			      "start_IO: selected pathes gone,"
+			      " retry on all pathes");
+		break;
 	case -ENODEV:
 	case -EIO:
 		DBF_DEV_EVENT(DBF_ERR, device, "%s",
@@ -1222,7 +1233,9 @@ __dasd_start_head(struct dasd_device * device)
 		rc = device->discipline->start_IO(cqr);
 		if (rc == 0)
 			dasd_set_timer(device, cqr->expires);
-		else
+		else if (rc == -EACCES) {
+			dasd_schedule_bh(device);
+		} else
 			/* Hmpf, try again in 1/2 sec */
 			dasd_set_timer(device, 50);
 	}
@@ -1813,8 +1826,8 @@ dasd_generic_set_online (struct ccw_device *cdev,
 	if (rc) {
 		printk (KERN_WARNING
 			"dasd_generic couldn't online device %s "
-			"with discipline %s\n", 
-			cdev->dev.bus_id, discipline->name);
+			"with discipline %s rc=%i\n",
+			cdev->dev.bus_id, discipline->name, rc);
 		dasd_delete_device(device);
 		return rc;
 	}

@@ -28,8 +28,8 @@
  *    0xffd00000-0xffd00004      - CPLD
  *    0xffc00000-0xffc0000f      - UART
  *    0xffb00000-0xffb07fff      - FRAM
- *    0xffa00000-0xffafffff      - *** HOLE ***
- *    0xff800000-0xff9fffff      - MV64460 Integrated SRAM
+ *    0xff840000-0xffafffff      - *** HOLE ***
+ *    0xff800000-0xff83ffff      - MV64460 Integrated SRAM
  *    0xfe000000-0xff8fffff      - *** HOLE ***
  *    0xfc000000-0xfdffffff      - 32bit Flash
  *    0xf1010000-0xfbffffff      - *** HOLE ***

@@ -59,7 +59,7 @@ struct budget_av {
 	struct dvb_ca_en50221 ca;
 };
 
-int enable_ci = 0;
+static int enable_ci = 0;
 
 
 /****************************************************************************
@@ -121,6 +121,8 @@ static int ciintf_read_attribute_mem(struct dvb_ca_en50221 *ca, int slot, int ad
 		return -EINVAL;
 
 	saa7146_setgpio(budget_av->budget.dev, 1, SAA7146_GPIO_OUTHI);
+	udelay(1);
+
 	result = ttpci_budget_debiread(&budget_av->budget, DEBICICAM, address & 0xfff, 1, 0, 0);
 
 	if (result == -ETIMEDOUT)
@@ -137,6 +139,8 @@ static int ciintf_write_attribute_mem(struct dvb_ca_en50221 *ca, int slot, int a
 		return -EINVAL;
 
 	saa7146_setgpio(budget_av->budget.dev, 1, SAA7146_GPIO_OUTHI);
+	udelay(1);
+
 	result = ttpci_budget_debiwrite(&budget_av->budget, DEBICICAM, address & 0xfff, 1, value, 0, 0);
 
 	if (result == -ETIMEDOUT)
@@ -153,6 +157,8 @@ static int ciintf_read_cam_control(struct dvb_ca_en50221 *ca, int slot, u8 addre
 		return -EINVAL;
 
 	saa7146_setgpio(budget_av->budget.dev, 1, SAA7146_GPIO_OUTLO);
+	udelay(1);
+
 	result = ttpci_budget_debiread(&budget_av->budget, DEBICICAM, address & 3, 1, 0, 0);
 
 	if (result == -ETIMEDOUT)
@@ -169,6 +175,8 @@ static int ciintf_write_cam_control(struct dvb_ca_en50221 *ca, int slot, u8 addr
 		return -EINVAL;
 
 	saa7146_setgpio(budget_av->budget.dev, 1, SAA7146_GPIO_OUTLO);
+	udelay(1);
+
 	result = ttpci_budget_debiwrite(&budget_av->budget, DEBICICAM, address & 3, 1, value, 0, 0);
 
 	if (result == -ETIMEDOUT)
@@ -180,6 +188,7 @@ static int ciintf_slot_reset(struct dvb_ca_en50221 *ca, int slot)
 {
 	struct budget_av *budget_av = (struct budget_av *) ca->data;
 	struct saa7146_dev *saa = budget_av->budget.dev;
+	int max = 20;
 
 	if (slot != 0)
 		return -EINVAL;
@@ -190,7 +199,9 @@ static int ciintf_slot_reset(struct dvb_ca_en50221 *ca, int slot)
 	saa7146_setgpio(saa, 0, SAA7146_GPIO_OUTHI);
 	msleep(100);
 	saa7146_setgpio(saa, 0, SAA7146_GPIO_OUTLO);
-	msleep(2000);		/* horrendous I know, but its the only way to be absolutely sure without an IRQ line! */
+
+	while (--max > 0 && ciintf_read_attribute_mem(ca, slot, 0) != 0x1d)
+		msleep(100);
 
 	ttpci_budget_set_video_port(saa, BUDGET_VIDEO_PORTB);
 	return 0;
@@ -658,7 +669,7 @@ static int philips_tu1216_request_firmware(struct dvb_frontend *fe,
 	return request_firmware(fw, name, &budget->dev->pci->dev);
 }
 
-struct tda1004x_config philips_tu1216_config = {
+static struct tda1004x_config philips_tu1216_config = {
 
 	.demod_address = 0x8,
 	.invert = 1,

@@ -298,8 +298,4 @@ struct dmx_demux {
 
 #define DMX_DIR_ENTRY(list) list_entry(list, struct dmx_demux, reg_list)
 
-int dmx_register_demux (struct dmx_demux* demux);
-int dmx_unregister_demux (struct dmx_demux* demux);
-struct list_head* dmx_get_demuxes (void);
-
 #endif /* #ifndef __DEMUX_H */

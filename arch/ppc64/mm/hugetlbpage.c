@@ -154,7 +154,7 @@ static void set_huge_pte(struct mm_struct *mm, struct vm_area_struct *vma,
 {
 	pte_t entry;
 
-	mm->rss += (HPAGE_SIZE / PAGE_SIZE);
+	add_mm_counter(mm, rss, HPAGE_SIZE / PAGE_SIZE);
 	if (write_access) {
 		entry =
 		    pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
@@ -316,7 +316,7 @@ int copy_hugetlb_page_range(struct mm_struct *dst, struct mm_struct *src,
 		
 		ptepage = pte_page(entry);
 		get_page(ptepage);
-		dst->rss += (HPAGE_SIZE / PAGE_SIZE);
+		add_mm_counter(dst, rss, HPAGE_SIZE / PAGE_SIZE);
 		set_pte_at(dst, addr, dst_pte, entry);
 
 		addr += HPAGE_SIZE;
@@ -426,7 +426,7 @@ void unmap_hugepage_range(struct vm_area_struct *vma,
 
 		put_page(page);
 	}
-	mm->rss -= (end - start) >> PAGE_SHIFT;
+	add_mm_counter(mm, rss, -((end - start) >> PAGE_SHIFT));
 	flush_tlb_pending();
 }
 
@@ -513,7 +513,7 @@ unsigned long arch_get_unmapped_area(struct file *filp, unsigned long addr,
 		vma = find_vma(mm, addr);
 		if (((TASK_SIZE - len) >= addr)
 		    && (!vma || (addr+len) <= vma->vm_start)
-		    && !is_hugepage_only_range(addr,len))
+		    && !is_hugepage_only_range(mm, addr,len))
 			return addr;
 	}
 	start_addr = addr = mm->free_area_cache;
@@ -523,7 +523,7 @@ full_search:
 	while (TASK_SIZE - len >= addr) {
 		BUG_ON(vma && (addr >= vma->vm_end));
 
-		if (touches_hugepage_low_range(addr, len)) {
+		if (touches_hugepage_low_range(mm, addr, len)) {
 			addr = ALIGN(addr+1, 1<<SID_SHIFT);
 			vma = find_vma(mm, addr);
 			continue;
@@ -584,7 +584,7 @@ arch_get_unmapped_area_topdown(struct file *filp, const unsigned long addr0,
 		vma = find_vma(mm, addr);
 		if (TASK_SIZE - len >= addr &&
 				(!vma || addr + len <= vma->vm_start)
-				&& !is_hugepage_only_range(addr,len))
+				&& !is_hugepage_only_range(mm, addr,len))
 			return addr;
 	}
 
@@ -597,7 +597,7 @@ try_again:
 	addr = (mm->free_area_cache - len) & PAGE_MASK;
 	do {
 hugepage_recheck:
-		if (touches_hugepage_low_range(addr, len)) {
+		if (touches_hugepage_low_range(mm, addr, len)) {
 			addr = (addr & ((~0) << SID_SHIFT)) - len;
 			goto hugepage_recheck;
 		} else if (touches_hugepage_high_range(addr, len)) {

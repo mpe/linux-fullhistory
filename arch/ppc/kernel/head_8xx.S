@@ -307,7 +307,7 @@ InstructionTLBMiss:
 	stw	r11, 4(r0)
 	mfspr	r10, SPRN_SRR0	/* Get effective address of fault */
 	DO_8xx_CPU6(0x3780, r3)
-	mtspr	SPRN_MD_EPN, r1	/* Have to use MD_EPN for walk, MI_EPN can't */
+	mtspr	SPRN_MD_EPN, r10	/* Have to use MD_EPN for walk, MI_EPN can't */
 	mfspr	r10, SPRN_M_TWB	/* Get level 1 table entry address */
 
 	/* If we are faulting a kernel address, we have to use the

@@ -67,7 +67,7 @@ module_param(cifs_min_rcv, int, 0);
 MODULE_PARM_DESC(cifs_min_rcv,"Network buffers in pool. Default: 4 Range: 1 to 64");
 unsigned int cifs_min_small = 30;
 module_param(cifs_min_small, int, 0);
-MODULE_PARM_DESC(cifs_small_rcv,"Small network buffers in pool. Default: 30 Range: 2 to 256");
+MODULE_PARM_DESC(cifs_min_small,"Small network buffers in pool. Default: 30 Range: 2 to 256");
 unsigned int cifs_max_pending = CIFS_MAX_REQ;
 module_param(cifs_max_pending, int, 0);
 MODULE_PARM_DESC(cifs_max_pending,"Simultaneous requests to server. Default: 50 Range: 2 to 256");

@@ -133,7 +133,7 @@ static int thomson_dtt7579_demod_init(struct dvb_frontend* fe)
 	static u8 mt352_reset [] = { 0x50, 0x80 };
 	static u8 mt352_adc_ctl_1_cfg [] = { 0x8E, 0x40 };
 	static u8 mt352_agc_cfg [] = { 0x67, 0x28, 0x20 };
-	static u8 mt352_gpp_ctl_cfg [] = { 0x75, 0x33 };
+	static u8 mt352_gpp_ctl_cfg [] = { 0x8C, 0x33 };
 	static u8 mt352_capt_range_cfg[] = { 0x75, 0x32 };
 
 	mt352_write(fe, mt352_clock_config, sizeof(mt352_clock_config));
@@ -369,6 +369,63 @@ static struct dst_config dst_config = {
 };
 
 
+static int or51211_request_firmware(struct dvb_frontend* fe, const struct firmware **fw, char* name)
+{
+	struct dvb_bt8xx_card* bt = (struct dvb_bt8xx_card*) fe->dvb->priv;
+
+	return request_firmware(fw, name, &bt->bt->dev->dev);
+}
+
+static void or51211_setmode(struct dvb_frontend * fe, int mode)
+{
+	struct dvb_bt8xx_card *bt = fe->dvb->priv;
+	bttv_write_gpio(bt->bttv_nr, 0x0002, mode);   /* Reset */
+	msleep(20);
+}
+
+static void or51211_reset(struct dvb_frontend * fe)
+{
+	struct dvb_bt8xx_card *bt = fe->dvb->priv;
+
+	/* RESET DEVICE
+	 * reset is controled by GPIO-0
+	 * when set to 0 causes reset and when to 1 for normal op
+	 * must remain reset for 128 clock cycles on a 50Mhz clock
+	 * also PRM1 PRM2 & PRM4 are controled by GPIO-1,GPIO-2 & GPIO-4
+	 * We assume that the reset has be held low long enough or we
+	 * have been reset by a power on.  When the driver is unloaded
+	 * reset set to 0 so if reloaded we have been reset.
+	 */
+	/* reset & PRM1,2&4 are outputs */
+	int ret = bttv_gpio_enable(bt->bttv_nr, 0x001F, 0x001F);
+	if (ret != 0) {
+		printk(KERN_WARNING "or51211: Init Error - Can't Reset DVR "
+		       "(%i)\n", ret);
+	}
+	bttv_write_gpio(bt->bttv_nr, 0x001F, 0x0000);   /* Reset */
+	msleep(20);
+	/* Now set for normal operation */
+	bttv_write_gpio(bt->bttv_nr, 0x0001F, 0x0001);
+	/* wait for operation to begin */
+	msleep(500);
+}
+
+static void or51211_sleep(struct dvb_frontend * fe)
+{
+	struct dvb_bt8xx_card *bt = fe->dvb->priv;
+	bttv_write_gpio(bt->bttv_nr, 0x0001, 0x0000);
+}
+
+static struct or51211_config or51211_config = {
+
+	.demod_address = 0x15,
+	.request_firmware = or51211_request_firmware,
+	.setmode = or51211_setmode,
+	.reset = or51211_reset,
+	.sleep = or51211_sleep,
+};
+
+
 static int vp3021_alps_tded4_pll_set(struct dvb_frontend* fe, struct dvb_frontend_parameters* params)
 {
 	struct dvb_bt8xx_card *card = (struct dvb_bt8xx_card *) fe->dvb->priv;
@@ -454,6 +511,13 @@ static void frontend_init(struct dvb_bt8xx_card *card, u32 type)
 
 	case BTTV_PINNACLESAT:
 		card->fe = cx24110_attach(&pctvsat_config, card->i2c_adapter);
+		if (card->fe != NULL) {
+			break;
+		}
+		break;
+
+	case BTTV_PC_HDTV:
+		card->fe = or51211_attach(&or51211_config, card->i2c_adapter);
 		if (card->fe != NULL) {
 			break;
 		}
@@ -635,6 +699,12 @@ static int dvb_bt8xx_probe(struct device *dev)
 		 * DA_APP = async data parallel port,
 		 * ACAP_EN = 1,
 		 * RISC+FIFO ENABLE */
+		break;
+
+	case BTTV_PC_HDTV:
+		card->gpio_mode = 0x0100EC7B;
+		card->op_sync_orin = 0;
+		card->irq_err_ignore = 0;
 		break;
 
 	default:

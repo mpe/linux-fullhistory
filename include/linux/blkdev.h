@@ -347,7 +347,7 @@ struct request_queue
 	 * queue needs bounce pages for pages above this limit
 	 */
 	unsigned long		bounce_pfn;
-	int			bounce_gfp;
+	unsigned int		bounce_gfp;
 
 	/*
 	 * various queue flags, see QUEUE_* below

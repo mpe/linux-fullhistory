@@ -135,6 +135,10 @@ static inline void ptep_set_wrprotect(struct mm_struct *mm, unsigned long addres
 #define pgd_offset_gate(mm, addr)	pgd_offset(mm, addr)
 #endif
 
+#ifndef __HAVE_ARCH_LAZY_MMU_PROT_UPDATE
+#define lazy_mmu_prot_update(pte)	do { } while (0)
+#endif
+
 /*
  * When walking page tables, get the address of the next boundary, or
  * the end address of the range if that comes earlier.  Although end might

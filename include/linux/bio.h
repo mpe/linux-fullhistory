@@ -263,8 +263,8 @@ extern void bio_pair_release(struct bio_pair *dbio);
 extern struct bio_set *bioset_create(int, int, int);
 extern void bioset_free(struct bio_set *);
 
-extern struct bio *bio_alloc(int, int);
-extern struct bio *bio_alloc_bioset(int, int, struct bio_set *);
+extern struct bio *bio_alloc(unsigned int __nocast, int);
+extern struct bio *bio_alloc_bioset(unsigned int __nocast, int, struct bio_set *);
 extern void bio_put(struct bio *);
 
 extern void bio_endio(struct bio *, unsigned int, int);
@@ -273,7 +273,7 @@ extern int bio_phys_segments(struct request_queue *, struct bio *);
 extern int bio_hw_segments(struct request_queue *, struct bio *);
 
 extern void __bio_clone(struct bio *, struct bio *);
-extern struct bio *bio_clone(struct bio *, int);
+extern struct bio *bio_clone(struct bio *, unsigned int __nocast);
 
 extern void bio_init(struct bio *);
 

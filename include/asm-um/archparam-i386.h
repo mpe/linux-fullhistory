@@ -8,7 +8,7 @@
 
 /********* Bits for asm-um/elf.h ************/
 
-#include "user.h"
+#include <asm/user.h>
 
 extern char * elf_aux_platform;
 #define ELF_PLATFORM (elf_aux_platform)

@@ -304,8 +304,7 @@ static int dvb_dmxdev_set_buffer_size(struct dmxdev_filter *dmxdevfilter, unsign
 	buf->size=size;
 	buf->pwrite=buf->pread=0;
 	spin_unlock_irq(&dmxdevfilter->dev->lock);
-	if (mem)
-		vfree(mem);
+	vfree(mem);
 
 	if (buf->size) {
 		mem=vmalloc(dmxdevfilter->buffer.size);
@@ -1129,15 +1128,10 @@ dvb_dmxdev_release(struct dmxdev *dmxdev)
 	dvb_unregister_device(dmxdev->dvbdev);
 	dvb_unregister_device(dmxdev->dvr_dvbdev);
 
-	if (dmxdev->filter) {
-		vfree(dmxdev->filter);
-		dmxdev->filter=NULL;
-	}
-
-	if (dmxdev->dvr) {
-		vfree(dmxdev->dvr);
-		dmxdev->dvr=NULL;
-	}
+	vfree(dmxdev->filter);
+	dmxdev->filter=NULL;
+	vfree(dmxdev->dvr);
+	dmxdev->dvr=NULL;
 	dmxdev->demux->close(dmxdev->demux);
 }
 EXPORT_SYMBOL(dvb_dmxdev_release);

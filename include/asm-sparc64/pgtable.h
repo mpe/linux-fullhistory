@@ -16,6 +16,7 @@
 
 #include <linux/config.h>
 #include <linux/compiler.h>
+#include <asm/types.h>
 #include <asm/spitfire.h>
 #include <asm/asi.h>
 #include <asm/system.h>
@@ -431,6 +432,17 @@ extern unsigned long *sparc64_valid_addr_bitmap;
 extern int io_remap_page_range(struct vm_area_struct *vma, unsigned long from,
 			       unsigned long offset,
 			       unsigned long size, pgprot_t prot, int space);
+extern int io_remap_pfn_range(struct vm_area_struct *vma, unsigned long from,
+			       unsigned long pfn,
+			       unsigned long size, pgprot_t prot);
+
+/*
+ * For sparc32&64, the pfn in io_remap_pfn_range() carries <iospace> in
+ * its high 4 bits.  These macros/functions put it there or get it from there.
+ */
+#define MK_IOSPACE_PFN(space, pfn)	(pfn | (space << (BITS_PER_LONG - 4)))
+#define GET_IOSPACE(pfn)		(pfn >> (BITS_PER_LONG - 4))
+#define GET_PFN(pfn)			(pfn & 0x0fffffffffffffffUL)
 
 /* Override for {pgd,pmd}_addr_end() to deal with the virtual address
  * space hole.  We simply sign extend bit 43.

@@ -46,7 +46,7 @@ EXPORT_SYMBOL(jiffies_64);
 #ifdef CONFIG_CPU_FREQ
 static void cpufreq_delayed_get(void);
 #endif
-
+extern void i8254_timer_resume(void);
 extern int using_apic_timer;
 
 DEFINE_SPINLOCK(rtc_lock);
@@ -551,11 +551,10 @@ unsigned long get_cmos_time(void)
 	    BCD_TO_BIN(year);
 
 /*
- * This will work up to Dec 31, 2069.
+ * x86-64 systems only exists since 2002.
+ * This will work up to Dec 31, 2100
  */
-
-	if ((year += 1900) < 1970)
-		year += 100;
+	year += 2000;
 
 	return mktime(year, mon, day, hour, min, sec);
 }
@@ -980,6 +979,8 @@ static int timer_resume(struct sys_device *dev)
 
 	if (vxtime.hpet_address)
 		hpet_reenable();
+	else
+		i8254_timer_resume();
 
 	sec = ctime + clock_cmos_diff;
 	write_seqlock_irqsave(&xtime_lock,flags);

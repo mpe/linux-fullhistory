@@ -27,6 +27,7 @@
 #include <asm/io.h>
 #include <asm/prom.h>
 #include <asm/pci-bridge.h>
+#include <asm/pSeries_reconfig.h>
 
 #include "pci.h"
 
@@ -161,6 +162,25 @@ struct device_node *fetch_dev_dn(struct pci_dev *dev)
 }
 EXPORT_SYMBOL(fetch_dev_dn);
 
+static int pci_dn_reconfig_notifier(struct notifier_block *nb, unsigned long action, void *node)
+{
+	struct device_node *np = node;
+	int err = NOTIFY_OK;
+
+	switch (action) {
+	case PSERIES_RECONFIG_ADD:
+		update_dn_pci_info(np, np->parent->phb);
+		break;
+	default:
+		err = NOTIFY_DONE;
+		break;
+	}
+	return err;
+}
+
+static struct notifier_block pci_dn_reconfig_nb = {
+	.notifier_call = pci_dn_reconfig_notifier,
+};
 
 /*
  * Actually initialize the phbs.
@@ -173,4 +193,6 @@ void __init pci_devs_phb_init(void)
 	/* This must be done first so the device nodes have valid pci info! */
 	list_for_each_entry_safe(phb, tmp, &hose_list, list_node)
 		pci_devs_phb_init_dynamic(phb);
+
+	pSeries_reconfig_notifier_register(&pci_dn_reconfig_nb);
 }

@@ -164,16 +164,6 @@ out_err:
 	return err;
 }
 
-/*
- * Prepare an OF node for removal from system
- * XXX move this to pSeries_iommu.c
- */
-static void of_cleanup_node(struct device_node *np)
-{
-	if (np->iommu_table && get_property(np, "ibm,dma-window", NULL))
-		iommu_free_table(np);
-}
-
 static int pSeries_reconfig_remove_node(struct device_node *np)
 {
 	struct device_node *parent, *child;
@@ -186,8 +176,6 @@ static int pSeries_reconfig_remove_node(struct device_node *np)
 		of_node_put(child);
 		return -EBUSY;
 	}
-
-	of_cleanup_node(np);
 
 	remove_node_proc_entries(np);
 

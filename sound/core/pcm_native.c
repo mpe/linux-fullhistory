@@ -3097,8 +3097,8 @@ int snd_pcm_lib_mmap_iomem(snd_pcm_substream_t *substream, struct vm_area_struct
 	area->vm_flags |= VM_IO;
 	size = area->vm_end - area->vm_start;
 	offset = area->vm_pgoff << PAGE_SHIFT;
-	if (io_remap_page_range(area, area->vm_start,
-				substream->runtime->dma_addr + offset,
+	if (io_remap_pfn_range(area, area->vm_start,
+				(substream->runtime->dma_addr + offset) >> PAGE_SHIFT,
 				size, area->vm_page_prot))
 		return -EAGAIN;
 	atomic_inc(&substream->runtime->mmap_count);

@@ -41,7 +41,7 @@
 
 int budget_debug;
 module_param_named(debug, budget_debug, int, 0644);
-MODULE_PARM_DESC(budget_debug, "Turn on/off budget debugging (default:off).");
+MODULE_PARM_DESC(debug, "Turn on/off budget debugging (default:off).");
 
 /****************************************************************************
  * TT budget / WinTV Nova
@@ -415,8 +415,7 @@ int ttpci_budget_init(struct budget *budget, struct saa7146_dev *dev,
 err:
 	i2c_del_adapter(&budget->i2c_adap);
 
-	if (budget->grabbing)
-		vfree(budget->grabbing);
+	vfree(budget->grabbing);
 
 	dvb_unregister_adapter(budget->dvb_adapter);
 

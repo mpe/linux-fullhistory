@@ -217,12 +217,12 @@ static unsigned short dvb_net_eth_type_trans(struct sk_buff *skb,
 #define ULE_TEST	0
 #define ULE_BRIDGED	1
 
-int ule_test_sndu( struct dvb_net_priv *p )
+static int ule_test_sndu( struct dvb_net_priv *p )
 {
 	return -1;
 }
 
-int ule_bridged_sndu( struct dvb_net_priv *p )
+static int ule_bridged_sndu( struct dvb_net_priv *p )
 {
 	/* BRIDGE SNDU handling sucks in draft-ietf-ipdvb-ule-03.txt.
 	 * This has to be the last extension header, otherwise it won't work.

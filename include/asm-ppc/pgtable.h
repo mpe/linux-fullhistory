@@ -623,6 +623,11 @@ static inline void __ptep_set_access_flags(pte_t *ptep, pte_t entry, int dirty)
  */
 #define pgprot_noncached(prot)	(__pgprot(pgprot_val(prot) | _PAGE_NO_CACHE | _PAGE_GUARDED))
 
+struct file;
+extern pgprot_t phys_mem_access_prot(struct file *file, unsigned long addr,
+				     unsigned long size, pgprot_t vma_prot);
+#define __HAVE_PHYS_MEM_ACCESS_PROT
+
 #define __HAVE_ARCH_PTE_SAME
 #define pte_same(A,B)	(((pte_val(A) ^ pte_val(B)) & ~_PAGE_HASHPTE) == 0)
 
@@ -735,10 +740,26 @@ static inline int io_remap_page_range(struct vm_area_struct *vma,
 	phys_addr_t paddr64 = fixup_bigphys_addr(paddr, size);
 	return remap_pfn_range(vma, vaddr, paddr64 >> PAGE_SHIFT, size, prot);
 }
+
+static inline int io_remap_pfn_range(struct vm_area_struct *vma,
+					unsigned long vaddr,
+					unsigned long pfn,
+					unsigned long size,
+					pgprot_t prot)
+{
+	phys_addr_t paddr64 = fixup_bigphys_addr(pfn << PAGE_SHIFT, size);
+	return remap_pfn_range(vma, vaddr, paddr64 >> PAGE_SHIFT, size, prot);
+}
 #else
 #define io_remap_page_range(vma, vaddr, paddr, size, prot)		\
 		remap_pfn_range(vma, vaddr, (paddr) >> PAGE_SHIFT, size, prot)
+#define io_remap_pfn_range(vma, vaddr, pfn, size, prot)		\
+		remap_pfn_range(vma, vaddr, pfn, size, prot)
 #endif
+
+#define MK_IOSPACE_PFN(space, pfn)	(pfn)
+#define GET_IOSPACE(pfn)		0
+#define GET_PFN(pfn)			(pfn)
 
 /*
  * No page table caches to initialise

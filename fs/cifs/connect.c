@@ -470,7 +470,7 @@ cifs_demultiplex_thread(struct TCP_Server_Info *server)
 }
 
 static void * 
-cifs_kcalloc(size_t size, int type)
+cifs_kcalloc(size_t size, unsigned int __nocast type)
 {
 	void *addr;
 	addr = kmalloc(size, type);
