@@ -2420,10 +2420,8 @@ static int radeonfb_pci_register (struct pci_dev *pdev,
 err_unmap_fb:
 	iounmap(rinfo->fb_base);
 err_unmap_rom:
-	if (rinfo->mon1_EDID)
-	    kfree(rinfo->mon1_EDID);
-	if (rinfo->mon2_EDID)
-	    kfree(rinfo->mon2_EDID);
+	kfree(rinfo->mon1_EDID);
+	kfree(rinfo->mon2_EDID);
 	if (rinfo->mon1_modedb)
 		fb_destroy_modedb(rinfo->mon1_modedb);
 	fb_dealloc_cmap(&info->cmap);
@@ -2479,10 +2477,8 @@ static void __devexit radeonfb_pci_unregister (struct pci_dev *pdev)
  
  	pci_release_regions(pdev);
 
-	if (rinfo->mon1_EDID)
-		kfree(rinfo->mon1_EDID);
-	if (rinfo->mon2_EDID)
-		kfree(rinfo->mon2_EDID);
+	kfree(rinfo->mon1_EDID);
+	kfree(rinfo->mon2_EDID);
 	if (rinfo->mon1_modedb)
 		fb_destroy_modedb(rinfo->mon1_modedb);
 #ifdef CONFIG_FB_RADEON_I2C

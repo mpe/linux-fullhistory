@@ -3435,8 +3435,7 @@ static int __devinit atyfb_pci_probe(struct pci_dev *pdev, const struct pci_devi
 
 err_release_io:
 #ifdef __sparc__
-	if (par->mmap_map)
-		kfree(par->mmap_map);
+	kfree(par->mmap_map);
 #else
 	if (par->ati_regbase)
 		iounmap(par->ati_regbase);
@@ -3444,7 +3443,7 @@ err_release_io:
 		iounmap(info->screen_base);
 #endif
 err_release_mem:
-	if(par->aux_start)
+	if (par->aux_start)
 		release_mem_region(par->aux_start, par->aux_size);
 
 	release_mem_region(par->res_start, par->res_size);
@@ -3551,8 +3550,7 @@ static void __devexit atyfb_remove(struct fb_info *info)
 #endif
 #endif
 #ifdef __sparc__
-	if (par->mmap_map)
-		kfree(par->mmap_map);
+	kfree(par->mmap_map);
 #endif
 	if (par->aux_start)
 		release_mem_region(par->aux_start, par->aux_size);

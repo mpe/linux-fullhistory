@@ -446,8 +446,7 @@ int fb_show_logo(struct fb_info *info)
 		logo_new = kmalloc(fb_logo.logo->width * fb_logo.logo->height, 
 				   GFP_KERNEL);
 		if (logo_new == NULL) {
-			if (palette)
-				kfree(palette);
+			kfree(palette);
 			if (saved_pseudo_palette)
 				info->pseudo_palette = saved_pseudo_palette;
 			return 0;
@@ -466,12 +465,10 @@ int fb_show_logo(struct fb_info *info)
 		info->fbops->fb_imageblit(info, &image);
 	}
 	
-	if (palette != NULL)
-		kfree(palette);
+	kfree(palette);
 	if (saved_pseudo_palette != NULL)
 		info->pseudo_palette = saved_pseudo_palette;
-	if (logo_new != NULL)
-		kfree(logo_new);
+	kfree(logo_new);
 	return fb_logo.logo->height;
 }
 #else

@@ -618,11 +618,9 @@ void __devinit radeon_probe_screens(struct radeonfb_info *rinfo,
 		}
 	}
 	if (ignore_edid) {
-		if (rinfo->mon1_EDID)
-			kfree(rinfo->mon1_EDID);
+		kfree(rinfo->mon1_EDID);
 		rinfo->mon1_EDID = NULL;
-		if (rinfo->mon2_EDID)
-			kfree(rinfo->mon2_EDID);
+		kfree(rinfo->mon2_EDID);
 		rinfo->mon2_EDID = NULL;
 	}
 

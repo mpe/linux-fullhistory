@@ -588,8 +588,7 @@ static struct fb_videomode *fb_create_modedb(unsigned char *edid, int *dbsize)
  */
 void fb_destroy_modedb(struct fb_videomode *modedb)
 {
-	if (modedb)
-		kfree(modedb);
+	kfree(modedb);
 }
 
 static int fb_get_monitor_limits(unsigned char *edid, struct fb_monspecs *specs)
