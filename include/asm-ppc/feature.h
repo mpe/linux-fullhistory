@@ -32,8 +32,8 @@ enum system_feature {
 	FEATURE_Mediabay_reset,
 	FEATURE_Mediabay_power,
 	FEATURE_Mediabay_PCI_enable,
-	FEATURE_Mediabay_IDE_enable,	/* Also IDE 1 */
-	FEATURE_Mediabay_IDE_reset,	/* Also IDE 1 */
+	FEATURE_IDE1_enable,		/* MediaBay IDE */
+	FEATURE_IDE1_reset,		/* MediaBay IDE */
 	FEATURE_Mediabay_floppy_enable,
 	FEATURE_BMac_reset,
 	FEATURE_BMac_IO_enable,
@@ -43,6 +43,8 @@ enum system_feature {
 	FEATURE_Sound_CLK_enable,
 	FEATURE_IDE2_enable,
 	FEATURE_IDE2_reset,
+	FEATURE_Mediabay_IDE_switch,	/* MB IDE bus switch */
+	FEATURE_Mediabay_content,	/* MB content indicator enable */
 	FEATURE_last,
 };
 

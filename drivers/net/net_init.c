@@ -74,7 +74,7 @@ static struct net_device *init_alloc_dev(int sizeof_priv)
 	int alloc_size;
 
 	/* ensure 32-byte alignment of the private area */
-	alloc_size = sizeof (*dev) + IFNAMSIZ + sizeof_priv + 31;
+	alloc_size = sizeof (*dev) + sizeof_priv + 31;
 
 	dev = (struct net_device *) kmalloc (alloc_size, GFP_KERNEL);
 	if (dev == NULL)
@@ -88,7 +88,6 @@ static struct net_device *init_alloc_dev(int sizeof_priv)
 	if (sizeof_priv)
 		dev->priv = (void *) (((long)(dev + 1) + 31) & ~31);
 
-	dev->name = sizeof_priv + 31 + (char *)(dev + 1);
 	return dev;
 }
 

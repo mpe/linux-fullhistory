@@ -1394,12 +1394,10 @@ static struct page * shm_nopage_core(struct shmid_kernel *shp, unsigned int idx,
 		(*rss)++;
 		pte = pte_mkdirty(mk_pte(page, PAGE_SHARED));
 		SHM_ENTRY(shp, idx) = pte;
-	} else
-		--current->maj_flt;  /* was incremented in do_no_page */
+	}
 
 	/* pte_val(pte) == SHM_ENTRY (shp, idx) */
 	get_page(pte_page(pte));
-	current->min_flt++;
 	return pte_page(pte);
 
 oom:

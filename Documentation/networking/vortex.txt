@@ -1,5 +1,10 @@
+Documentation/networking/vortex.txt
+Andrew Morton <andrewm@uow.edu.au>
+30 April 2000
+
+
 This document describes the usage and errata of the 3Com "Vortex" device
-driver for Linux.
+driver for Linux, 3c59x.c.
 
 The driver was written by Donald Becker <becker@cesdis.gsfc.nasa.gov>
 
@@ -8,7 +13,14 @@ Please report problems to one or more of:
 
   Andrew Morton <andrewm@uow.edu.au>
   Netdev mailing list <netdev@oss.sgi.com>
+  Linux kernel mailing list <linux-kernel@vger.rutgers.edu>
 
+Please note the 'Reporting and Diagnosing Problems' section at the end
+of this file.
+
+
+Since kernel 2.3.99-pre6, this driver incorporates the support for the
+3c575-series Cardbus cards which used to be handled by 3c575_cb.c.
 
 This driver supports the following hardware:
 
@@ -42,33 +54,112 @@ This driver supports the following hardware:
    3c450 Cyclone/unknown
    3Com Boomerang (unknown version)
 
-When loaded as a module the following variables may be set:
- name	 type	description
- debug	 int	The debug message level, 0 (no messages) to 6 (wordy).
- options int[]	The media type override and card operation settings
-		(See list below.)
 
-An example of loading the vortex module is
-	insmod 3c59x.o debug=1 options=0,,12
-This sets the debug message level to minimal messages, sets the first card to
-the 10baseT transceiver, the second to the EEPROM-set transceiver, and the
-third card to operate in full-duplex mode using its 100baseTx transceiver.
-(Note: card ordering is set by the PCI BIOS.)
+Module parameters
+=================
 
-Possible media type settings
+There are several parameters which may be provided to the driver when
+its module is loaded.  These are usually placed in /etc/modules.conf
+(used to be conf.modules).  Example:
+
+options 3c59x debug=3 rx_copybreak=300
+
+If you are using the PCMCIA tools (cardmgr) then theoptions may be
+placed in /etc/pcmcia/config.opts:
+
+module "3c59x" opts "debug=3 extra_reset=1"
+
+
+The supported parameters are:
+
+debug=N
+
+  Where N is a number from 0 to 7.  Anything above 3 produces a lot
+  of output in your system logs.  debug=1 is default.
+
+options=N1,N2,N3,...
+
+  Each number in the list provides an option to the corresponding
+  network card.  So if you have two 3c905's and you wish to provide
+  them with option 0x204 you would use:
+
+    options=0x204,0x204
+
+  The individual options are composed of a number of bitfields which
+  have the following meanings:
+
+  ssible media type settings
 	0	10baseT
 	1	10Mbs AUI
 	2	undefined
 	3	10base2 (BNC)
 	4	100base-TX
 	5	100base-FX
-	6	MII (not yet available)
-	7	<Use default setting>
-	
-	8	Full-duplex bit
-		8 10baseT full-duplex
-		12 100baseTx full-duplex 
-	16	Bus-master enable bit (experimental use only!)
+	6	MII (Media Independent Interface)
+	7	Use default setting from EEPROM
+	8       Autonegotiate
+	9       External MII
+	10      Use default setting from EEPROM
+
+  When generating a value for the 'options' setting, the above media
+  selection values may be OR'ed (or added to) the following:
+
+  512 (0x200)	Force full-duplex
+  16  (0x10)	Bus-master enable bit (Old Vortex cards only)
+
+  For example:
+
+    insmod 3c59x options=0x204
+
+  will force full-duplex 100base-TX, rather than allowing the usual
+  autonegotiation.
+
+full_duplex=N1,N2,N3...
+
+  Similar to bit 9 of 'options'.  Forces the corresponding card into
+  full-duplex mode.
+
+rx_copybreak=M
+
+  The driver preallocates 32 full-sized (1536 byte) network buffers
+  for receiving.  When a packet arrives, the driver has to decide
+  whether to leave the packet in its full-sized buffer, or to allocate
+  a smaller buffer and copy the packet across into it.
+
+  This is a speed/space tradeoff.
+
+  The value of rx_copybreak is used to decide when to make the copy. 
+  If the packet size is less than rx_copybreak, the packet is copied. 
+  The default value for rx_copybreak is 200 bytes.
+
+max_interrupt_work=N
+
+  The driver's interrupt service routine can handle many receive and
+  transmit packets in a single invokation.  It does this in a loop. 
+  The value of max_interrupt_work governs how mnay times the interrupt
+  service routine will loop.  The default value is 32 loops.  If this
+  is exceeded the interrupt service routine gives up and generates a
+  warning message "eth0: Too much work in interrupt".
+
+extra_reset=N
+
+  Where N is 0 or 1 (default 0).
+
+  Some network cards (notably 3CCFE575CT Cardbus) do not initialise
+  correctly and need an extra transmitter reset.  If you find that the
+  card comes up receiving but not transmitting, try giving the module
+  the 'extra_reset=1' option.
+
+compaq_ioaddr=N
+compaq_irq=N
+compaq_device_id=N
+
+  "Variables to work-around the Compaq PCI BIOS32 problem"....
+
+
+
+Additional resources
+--------------------
 
 Details of the device driver implementation are at the top of the source file.
 
@@ -76,21 +167,20 @@ Additional documentation is available at Don Becker's Linux Drivers site:
 
   http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html
 
-
-Additional resources
---------------------
-
 Donald Becker's driver development site:
 
+     http://www.scyld.com
      http://cesdis.gsfc.nasa.gov/linux/
 
 Don's vortex-diag program is useful for inspecting the NIC's state:
 
+     http://www.scyld.com/diag/#pci-diags
      http://cesdis.gsfc.nasa.gov/linux/diag/vortex-diag.c
 
 Don's mii-diag program may be used for inspecting and manipulating the
 NIC's Media Independent Interface subsystem:
 
+     http://www.scyld.com/diag/#mii-diag
      http://cesdis.gsfc.nasa.gov/linux/diag/#mii-diag
 
 3Com's documentation for many NICs, including the ones supported by
@@ -104,13 +194,50 @@ series kernel is available at
      http://www.uow.edu.au/~andrewm/linux/#3c59x-2.3
 
 
+Autonegotiation notes
+---------------------
 
-Cisco interoperability note from Walter Wong <wcw+@CMU.EDU>:
+  The driver uses a one-minute heartbeat for adapting to changes in
+  the external LAN environment.  This means that when, for example, a
+  machine is unplugged from a hubbed 10baseT LAN plugged into a
+  switched 100baseT LAN, the throughput will be quite dreadful for up
+  to sixty seconds.  Be patient.
+
+  Cisco interoperability note from Walter Wong <wcw+@CMU.EDU>:
 
   On a side note, adding HAS_NWAY seems to share a problem with the
   Cisco 6509 switch.  Specifically, you need to change the spanning
   tree parameter for the port the machine is plugged into to 'portfast'
   mode.  Otherwise, the negotiation fails.  This has been an issue
   we've noticed for a while but haven't had the time to track down.
+
+
+Reporting and diagnosing problems
+---------------------------------
+
+If the driver plays up, there are a number of things you can do analyse
+the problem and to help others do this:
+
+- Turn on debugging in the driver
+	Add 'debug=7' to /etc/modules.conf (/etc/conf.modules)
+	Change 'vortex_debug' to 7 in the source code.
+
+- Send all kernel logs, starting with the first probe of the card.
+
+- Run 'mii-diag -v' to show the state of the Media Independent
+  Interface.  If the card sometimes works and sometimes doesn't, run
+  'mii-diag -v' in both states.
+
+- Please run 'vortex-diag -aaee' in both good and bad states.  This
+  show the NIC's registers and EEPROM contents.
+
+- Describe your setup: 10baseT, 100baseT, full/half duplex, etc.
+
+- Note any additional module insertion commands you're using.
+
+- Try different media type settings (see above).
+
+- Try inserting the module with 'extra_reset=1' (or compile this into
+  the driver).
 
 

@@ -130,7 +130,6 @@ void
 abort(void)
 {
 #ifdef CONFIG_XMON
-	extern void xmon(void *);
 	xmon(0);
 #endif
 	machine_restart(NULL);

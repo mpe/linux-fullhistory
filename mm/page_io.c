@@ -132,6 +132,11 @@ void rw_swap_page_nolock(int rw, swp_entry_t entry, char *buf, int wait)
 		PAGE_BUG(page);
 	if (PageSwapCache(page))
 		PAGE_BUG(page);
+	if (page->mapping)
+		PAGE_BUG(page);
+	/* needs sync_page to wait I/O completation */
+	page->mapping = &swapper_space;
 	if (!rw_swap_page_base(rw, entry, page, wait))
 		UnlockPage(page);
+	page->mapping = NULL;
 }

@@ -57,8 +57,8 @@ static fbit feature_bits_ohare_pbook[] = {
 	{0x38,1,OH_BAY_RESET_N},	/* FEATURE_Mediabay_reset */
 	{0x38,1,OH_BAY_POWER_N},	/* FEATURE_Mediabay_power */
 	{0x38,0,OH_BAY_PCI_ENABLE},	/* FEATURE_Mediabay_PCI_enable */
-	{0x38,0,OH_BAY_IDE_ENABLE},	/* FEATURE_Mediabay_IDE_enable */
-	{0x38,1,OH_IDE1_RESET_N},	/* FEATURE_Mediabay_IDE_reset */
+	{0x38,0,OH_BAY_IDE_ENABLE},	/* FEATURE_IDE1_enable */
+	{0x38,1,OH_IDE1_RESET_N},	/* FEATURE_IDE1_reset */
 	{0x38,0,OH_BAY_FLOPPY_ENABLE},	/* FEATURE_Mediabay_floppy_enable */
 	{0x38,0,0},			/* FEATURE_BMac_reset */
 	{0x38,0,0},			/* FEATURE_BMac_IO_enable */
@@ -68,6 +68,8 @@ static fbit feature_bits_ohare_pbook[] = {
 	{0x38,0,0},			/* FEATURE_Sound_CLK_Enable */
 	{0x38,0,0},			/* FEATURE_IDE2_enable */
 	{0x38,0,0},			/* FEATURE_IDE2_reset */
+	{0x38,0,0},			/* FEATURE_Mediabay_IDE_switch */
+	{0x38,0,0},			/* FEATURE_Mediabay_content */
 };
 
 /* Those bits are from a PowerBook. It's possible that desktop machines
@@ -87,8 +89,8 @@ static fbit feature_bits_heathrow[] = {
 	{0x38,1,HRW_BAY_RESET_N},	/* FEATURE_Mediabay_reset */
 	{0x38,1,HRW_BAY_POWER_N},	/* FEATURE_Mediabay_power */
 	{0x38,0,HRW_BAY_PCI_ENABLE},	/* FEATURE_Mediabay_PCI_enable */
-	{0x38,0,HRW_BAY_IDE_ENABLE},	/* FEATURE_Mediabay_IDE_enable */
-	{0x38,1,HRW_IDE1_RESET_N},	/* FEATURE_Mediabay_IDE_reset */
+	{0x38,0,HRW_BAY_IDE_ENABLE},	/* FEATURE_IDE1_enable */
+	{0x38,1,HRW_IDE1_RESET_N},	/* FEATURE_IDE1_reset */
 	{0x38,0,HRW_BAY_FLOPPY_ENABLE},	/* FEATURE_Mediabay_floppy_enable */
 	{0x38,0,HRW_BMAC_RESET},	/* FEATURE_BMac_reset */
 	{0x38,0,HRW_BMAC_IO_ENABLE},	/* FEATURE_BMac_IO_enable */
@@ -98,9 +100,44 @@ static fbit feature_bits_heathrow[] = {
 	{0x38,0,HRW_SOUND_CLK_ENABLE},	/* FEATURE_Sound_CLK_Enable */
 	{0x38,0,0},			/* FEATURE_IDE2_enable */
 	{0x38,0,0},			/* FEATURE_IDE2_reset */
+	{0x38,0,0},			/* FEATURE_Mediabay_IDE_switch */
+	{0x38,0,0},			/* FEATURE_Mediabay_content */
 };
 
-/* Those bits are from an iBook.
+/*
+ * Those bits are from a 1999 G3 PowerBook, with a paddington chip.
+ * Mostly the same as the heathrow.
+ */
+static fbit feature_bits_paddington[] = {
+	{0x38,0,0},			/* FEATURE_null */
+	{0x38,0,0},			/* FEATURE_Serial_reset */
+	{0x38,0,HRW_SCC_ENABLE},	/* FEATURE_Serial_enable */
+	{0x38,0,HRW_SCCA_IO},		/* FEATURE_Serial_IO_A */
+	{0x38,0,HRW_SCCB_IO},		/* FEATURE_Serial_IO_B */
+	{0x38,0,HRW_SWIM_ENABLE},	/* FEATURE_SWIM3_enable */
+	{0x38,0,HRW_MESH_ENABLE},	/* FEATURE_MESH_enable */
+	{0x38,0,HRW_IDE0_ENABLE},	/* FEATURE_IDE0_enable */
+	{0x38,1,HRW_IDE0_RESET_N},	/* FEATURE_IDE0_reset */
+	{0x38,0,HRW_IOBUS_ENABLE},	/* FEATURE_IOBUS_enable */
+	{0x38,1,HRW_BAY_RESET_N},	/* FEATURE_Mediabay_reset */
+	{0x38,1,HRW_BAY_POWER_N},	/* FEATURE_Mediabay_power */
+	{0x38,0,HRW_BAY_PCI_ENABLE},	/* FEATURE_Mediabay_PCI_enable */
+	{0x38,0,HRW_BAY_IDE_ENABLE},	/* FEATURE_IDE1_enable */
+	{0x38,1,HRW_IDE1_RESET_N},	/* FEATURE_IDE1_reset */
+	{0x38,0,HRW_BAY_FLOPPY_ENABLE},	/* FEATURE_Mediabay_floppy_enable */
+	{0x38,0,HRW_BMAC_RESET},	/* FEATURE_BMac_reset */
+	{0x38,0,HRW_BMAC_IO_ENABLE},	/* FEATURE_BMac_IO_enable */
+	{0x38,1,PADD_MODEM_POWER_N},	/* FEATURE_Modem_power */
+	{0x38,0,HRW_SLOW_SCC_PCLK},	/* FEATURE_Slow_SCC_PCLK */
+	{0x38,1,HRW_SOUND_POWER_N},	/* FEATURE_Sound_Power */
+	{0x38,0,HRW_SOUND_CLK_ENABLE},	/* FEATURE_Sound_CLK_Enable */
+	{0x38,0,0},			/* FEATURE_IDE2_enable */
+	{0x38,0,0},			/* FEATURE_IDE2_reset */
+	{0x38,0,0},			/* FEATURE_Mediabay_IDE_switch */
+	{0x38,0,0},			/* FEATURE_Mediabay_content */
+};
+
+/* Those bits are for Core99 machines (iBook,G4,iMacSL/DV,Pismo,...).
  */
 static fbit feature_bits_keylargo[] = {
 	{0x38,0,0},			/* FEATURE_null */
@@ -110,14 +147,14 @@ static fbit feature_bits_keylargo[] = {
 	{0x38,0,0},			/* FEATURE_Serial_IO_B */
 	{0x38,0,0},			/* FEATURE_SWIM3_enable */
 	{0x38,0,0},			/* FEATURE_MESH_enable */
-	{0x38,0,0},			/* FEATURE_IDE0_enable */
-	{0x3c,1,0x01000000},		/* FEATURE_IDE0_reset */
+	{0x3c,0,0},			/* FEATURE_IDE0_enable */
+ 	{0x3c,1,0x01000000},		/* FEATURE_IDE0_reset */
 	{0x38,0,0},			/* FEATURE_IOBUS_enable */
-	{0x38,0,0},			/* FEATURE_Mediabay_reset */
-	{0x38,0,0},			/* FEATURE_Mediabay_power */
+	{0x34,1,0x00000200},		/* FEATURE_Mediabay_reset */
+	{0x34,1,0x00000400},		/* FEATURE_Mediabay_power */
 	{0x38,0,0},			/* FEATURE_Mediabay_PCI_enable */
-	{0x38,0,0},			/* FEATURE_Mediabay_IDE_enable */
-	{0x3c,1,0x08000000},		/* FEATURE_Mediabay_IDE_reset */
+	{0x3c,0,0x0},			/* FEATURE_IDE1_enable */
+	{0x3c,1,0x08000000},		/* FEATURE_IDE1_reset */
 	{0x38,0,0},			/* FEATURE_Mediabay_floppy_enable */
 	{0x38,0,0},			/* FEATURE_BMac_reset */
 	{0x38,0,0},			/* FEATURE_BMac_IO_enable */
@@ -127,6 +164,8 @@ static fbit feature_bits_keylargo[] = {
 	{0x38,0,0},			/* FEATURE_Sound_CLK_Enable */
 	{0x38,0,0},			/* FEATURE_IDE2_enable */
 	{0x3c,1,0x40000000},		/* FEATURE_IDE2_reset */
+	{0x34,0,0x00001000},		/* FEATURE_Mediabay_IDE_switch */
+	{0x34,0,0x00000100},		/* FEATURE_Mediabay_content */
 };
 
 /* definition of a feature controller object */
@@ -164,6 +203,8 @@ feature_init(void)
 		 */
 		if (device_is_compatible(np, "Keylargo")) {
 			feature_add_controller(np, feature_bits_keylargo);
+		} else if (device_is_compatible(np, "paddington")) {
+			feature_add_controller(np, feature_bits_paddington);
 		} else {
 			feature_add_controller(np, feature_bits_heathrow);
 		}
@@ -268,6 +309,8 @@ feature_set(struct device_node* device, enum system_feature f)
 	if (!controller)
 		return -ENODEV;
 	bit = &controller->bits[f];
+	if (!bit->mask)
+		return -EINVAL;
 	
 #ifdef DEBUG_FEATURE
 	printk("feature: <%s> setting feature %d in controller @0x%x\n",
@@ -299,6 +342,8 @@ feature_clear(struct device_node* device, enum system_feature f)
 	if (!controller)
 		return -ENODEV;
 	bit = &controller->bits[f];
+	if (!bit->mask)
+		return -EINVAL;
 	
 #ifdef DEBUG_FEATURE
 	printk("feature: <%s> clearing feature %d in controller @0x%x\n",
@@ -329,6 +374,8 @@ feature_test(struct device_node* device, enum system_feature f)
 	if (!controller)
 		return -ENODEV;
 	bit = &controller->bits[f];
+	if (!bit->mask)
+		return -EINVAL;
 	
 #ifdef DEBUG_FEATURE
 	printk("feature: <%s> clearing feature %d in controller @0x%x\n",

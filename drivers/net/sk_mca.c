@@ -1068,13 +1068,12 @@ int skmca_probe(struct net_device *dev)
 
 #define DEVMAX 5
 
-static char NameSpace[8 * DEVMAX];
 static struct net_device moddevs[DEVMAX] =
-    { {NameSpace + 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
-{NameSpace + 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
-{NameSpace + 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
-{NameSpace + 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
-{NameSpace + 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe}
+    { {"", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
+{"", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
+{"", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
+{"", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
+{"", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe}
 };
 
 int irq = 0;

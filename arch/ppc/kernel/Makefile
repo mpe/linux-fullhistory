@@ -31,7 +31,7 @@ CONFIG_CHRP=y
 endif
 
 O_OBJS := entry.o traps.o irq.o idle.o time.o process.o signal.o syscalls.o \
-	  misc.o bitops.o ptrace.o align.o ppc_htab.o semaphore.o
+	  misc.o ptrace.o align.o ppc_htab.o semaphore.o bitops.o
 
 ifndef CONFIG_8xx
 O_OBJS += hashtable.o
@@ -43,10 +43,6 @@ endif
 
 ifdef CONFIG_KGDB
 O_OBJS += ppc-stub.o
-endif
-
-ifdef CONFIG_TOTALMP
-O_OBJS += totalmp.o
 endif
 
 ifdef CONFIG_PMAC_PBOOK
@@ -99,6 +95,9 @@ ifeq ($(CONFIG_ALL_PPC),y)
 endif
 ifeq ($(CONFIG_GEMINI),y)
   O_OBJS += gemini_prom.o gemini_pci.o gemini_setup.o open_pic.o
+endif
+ifeq ($(CONFIG_8260),y)
+  O_OBJS += m8260_setup.o ppc8260_pic.o
 endif
 
 all: $(KHEAD) kernel.o

@@ -5904,13 +5904,12 @@ insert_device(struct net_device *dev, u_long iobase, int (*init)(struct net_devi
 {
     struct net_device *new;
 
-    new = (struct net_device *)kmalloc(sizeof(struct net_device)+8, GFP_KERNEL);
+    new = (struct net_device *)kmalloc(sizeof(struct net_device), GFP_KERNEL);
     if (new == NULL) {
 	printk("de4x5.c: Device not initialised, insufficient memory\n");
 	return NULL;
     } else {
-	memset((char *)new, 0, sizeof(struct net_device)+8);
-	new->name = (char *)(new + 1);
+	memset((char *)new, 0, sizeof(struct net_device));
 	new->base_addr = iobase;       /* assign the io address */
 	new->init = init;              /* initialisation routine */
     }

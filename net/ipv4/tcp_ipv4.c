@@ -2002,14 +2002,14 @@ static void get_tcp_sock(struct sock *sp, char *tmpbuf, int i)
 	srcp  = ntohs(sp->sport);
 	timer_active	= 0;
 	timer_expires	= (unsigned) -1;
-	if (tp->retransmit_timer.prev != NULL && tp->retransmit_timer.expires < timer_expires) {
+	if (timer_pending(&tp->retransmit_timer) && tp->retransmit_timer.expires < timer_expires) {
 		timer_active	= 1;
 		timer_expires	= tp->retransmit_timer.expires;
-	} else if (tp->probe_timer.prev != NULL && tp->probe_timer.expires < timer_expires) {
+	} else if (timer_pending(&tp->probe_timer) && tp->probe_timer.expires < timer_expires) {
 		timer_active	= 4;
 		timer_expires	= tp->probe_timer.expires;
 	}
-	if (sp->timer.prev != NULL && sp->timer.expires < timer_expires) {
+	if (timer_pending(&sp->timer) && sp->timer.expires < timer_expires) {
 		timer_active	= 2;
 		timer_expires	= sp->timer.expires;
 	}

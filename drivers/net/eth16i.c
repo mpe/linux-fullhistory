@@ -1390,12 +1390,10 @@ static ushort eth16i_parse_mediatype(const char* s)
 }
 
 #define MAX_ETH16I_CARDS 4  /* Max number of Eth16i cards per module */
-#define NAMELEN          8  /* number of chars for storing dev->name */
 
-static char namelist[NAMELEN * MAX_ETH16I_CARDS] = { 0, };
 static struct net_device dev_eth16i[MAX_ETH16I_CARDS] = {
 	{
-		NULL,
+		"",
 		0, 0, 0, 0,
 		0, 0,
 		0, 0, 0, NULL, NULL
@@ -1436,7 +1434,6 @@ int init_module(void)
 	{
 		struct net_device *dev = &dev_eth16i[this_dev];
 	
-		dev->name = namelist + (NAMELEN*this_dev);
 		dev->irq = 0; /* irq[this_dev]; */
 		dev->base_addr = io[this_dev];
 		dev->init = eth16i_probe;

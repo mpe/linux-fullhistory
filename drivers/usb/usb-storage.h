@@ -27,23 +27,23 @@ extern unsigned char us_direction[256/8];
 
 /* Sub Classes */
 
-#define US_SC_RBC	1		/* Typically, flash devices */
-#define US_SC_8020	2		/* CD-ROM */
-#define US_SC_QIC	3		/* QIC-157 Tapes */
-#define US_SC_UFI	4		/* Floppy */
-#define US_SC_8070	5		/* Removable media */
-#define US_SC_SCSI	6		/* Transparent */
+#define US_SC_RBC	0x01		/* Typically, flash devices */
+#define US_SC_8020	0x02		/* CD-ROM */
+#define US_SC_QIC	0x03		/* QIC-157 Tapes */
+#define US_SC_UFI	0x04		/* Floppy */
+#define US_SC_8070	0x05		/* Removable media */
+#define US_SC_SCSI	0x06		/* Transparent */
 #define US_SC_MIN	US_SC_RBC
 #define US_SC_MAX	US_SC_SCSI
 
 /* Protocols */
 
-#define US_PR_CB	1		/* Control/Bulk w/o interrupt */
-#define US_PR_CBI	0		/* Control/Bulk/Interrupt */
+#define US_PR_CBI	0x00		/* Control/Bulk/Interrupt */
+#define US_PR_CB	0x01		/* Control/Bulk w/o interrupt */
 #define US_PR_BULK	0x50		/* bulk only */
 
 /*
- * Bulk only data structures (Zip 100, for example)
+ * Bulk only data structures
  */
 
 /* command block wrapper */
@@ -57,8 +57,8 @@ struct bulk_cb_wrap {
 	__u8	CDB[16];		/* max command */
 };
 
-#define US_BULK_CB_WRAP_LEN 	31
-#define US_BULK_CB_SIGN		0x43425355
+#define US_BULK_CB_WRAP_LEN	31
+#define US_BULK_CB_SIGN		0x43425355	/*spells out USBC */
 #define US_BULK_FLAG_IN		1
 #define US_BULK_FLAG_OUT	0
 
@@ -72,7 +72,7 @@ struct bulk_cs_wrap {
 };
 
 #define US_BULK_CS_WRAP_LEN	13
-#define US_BULK_CS_SIGN		0x53425355
+#define US_BULK_CS_SIGN		0x53425355	/* spells out 'USBS' */
 #define US_BULK_STAT_OK		0
 #define US_BULK_STAT_FAIL	1
 #define US_BULK_STAT_PHASE	2
@@ -84,15 +84,15 @@ struct bulk_cs_wrap {
 /*
  * us_bulk_transfer() return codes
  */
-#define US_BULK_TRANSFER_GOOD   0
-#define US_BULK_TRANSFER_SHORT  1
+#define US_BULK_TRANSFER_GOOD	0
+#define US_BULK_TRANSFER_SHORT	1
 #define US_BULK_TRANSFER_FAILED 2
 
 /*
  * Transport return codes
  */
 
-#define USB_STOR_TRANSPORT_GOOD    0   /* Transport good, command good     */
+#define USB_STOR_TRANSPORT_GOOD	   0   /* Transport good, command good	   */
 #define USB_STOR_TRANSPORT_FAILED  1   /* Transport good, command failed   */
 #define USB_STOR_TRANSPORT_ERROR   2   /* Transport bad (i.e. device dead) */
 
@@ -147,9 +147,11 @@ struct us_unusual_dev {
 };
 
 /* Flag definitions */
-#define US_FL_SINGLE_LUN      0x00000001 /* allow access to only LUN 0 */
+#define US_FL_SINGLE_LUN      0x00000001 /* allow access to only LUN 0	    */
 #define US_FL_MODE_XLATE      0x00000002 /* translate _6 to _10 comands for
-					            Win/MacOS compatibility */
-#define US_FL_START_STOP      0x00000004 /* ignore START_STOP commands */
+						    Win/MacOS compatibility */
+#define US_FL_START_STOP      0x00000004 /* ignore START_STOP commands	    */
 #define US_FL_ALT_LENGTH      0x00000008 /* use the alternate algorithm for
-                                                    us_transfer_length() */
+						    us_transfer_length()    */
+#define US_FL_IGNORE_SER      0x00000010 /* Ignore the serial number given  */
+

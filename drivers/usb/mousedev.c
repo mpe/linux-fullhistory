@@ -418,10 +418,8 @@ static struct input_handle *mousedev_connect(struct input_handler *handler, stru
 
 	mousedev->devfs = input_register_minor("mouse%d", minor, MOUSEDEV_MINOR_BASE);
 
-	if (mousedev_mix.open) {
+	if (mousedev_mix.open)
 		input_open_device(&mousedev->handle);
-		mousedev_mix.open++;
-	}
 
 	printk("mouse%d: PS/2 mouse device for input%d\n", minor, dev->number);
 
@@ -432,10 +430,8 @@ static void mousedev_disconnect(struct input_handle *handle)
 {
 	struct mousedev *mousedev = handle->private;
 
-	if (mousedev->open || mousedev_mix.open) {
+	if (mousedev->open || mousedev_mix.open)
 		input_close_device(handle);
-		mousedev_mix.open--;
-	}
 
 	if (!--mousedev->used) {
 		input_unregister_minor(mousedev->devfs);

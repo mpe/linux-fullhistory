@@ -1,6 +1,7 @@
 /* Stand alone funtions for QSpan Tundra support.
  */
-#include <sys/types.h>
+#include <linux/types.h>
+#include <linux/kernel.h>
 #include <linux/pci.h>
 #include <asm/mpc8xx.h>
 

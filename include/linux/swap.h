@@ -121,7 +121,6 @@ extern void get_swaphandle_info(swp_entry_t, unsigned long *, kdev_t *,
 					struct inode **);
 extern int swap_duplicate(swp_entry_t);
 extern int swap_count(struct page *);
-extern swp_entry_t acquire_swap_entry(struct page *page);
 extern int valid_swaphandles(swp_entry_t, unsigned long *);
 #define get_swap_page() __get_swap_page(1)
 extern void __swap_free(swp_entry_t, unsigned short);

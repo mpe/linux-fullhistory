@@ -443,6 +443,7 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 			lo->lo_backing_file->f_flags = file->f_flags;
 			lo->lo_backing_file->f_owner = file->f_owner;
 			lo->lo_backing_file->f_dentry = file->f_dentry;
+			lo->lo_backing_file->f_vfsmnt = file->f_vfsmnt;
 			lo->lo_backing_file->f_op = file->f_op;
 			lo->lo_backing_file->private_data = file->private_data;
 			file_moveto(lo->lo_backing_file, file);

@@ -489,7 +489,7 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 {
 	int error;
 	char * filename;
-	lock_kernel();
+
 	filename = getname((char *) a0);
 	error = PTR_ERR(filename);
 	if (IS_ERR(filename))
@@ -503,8 +503,6 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 	error = do_execve(filename, (char **) a1, (char **) a2, regs);
 	putname(filename);
 out:
-	unlock_kernel();
-
 	return error;
 }
 

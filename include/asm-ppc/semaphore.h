@@ -12,6 +12,7 @@
 #ifdef __KERNEL__
 
 #include <asm/atomic.h>
+#include <asm/system.h>
 #include <linux/wait.h>
 
 struct semaphore {

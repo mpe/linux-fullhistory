@@ -188,8 +188,10 @@ static const struct monitor_map {
     { -1,    VMODE_640_480_60 },	/* catch-all, must be last */
 };
 
+#ifdef CONFIG_FB_COMPAT_XPMAC
 struct fb_info *console_fb_info = NULL;
 struct vc_mode display_info;
+
 static u16 palette_red[16];
 static u16 palette_green[16];
 static u16 palette_blue[16];
@@ -198,19 +200,11 @@ static struct fb_cmap palette_cmap = {
 };
 
 
-int console_getmode(struct vc_mode *);
-int console_setmode(struct vc_mode *, int);
-int console_setcmap(int, unsigned char *, unsigned char *, unsigned char *);
-int console_powermode(int);
-int mac_var_to_vmode(const struct fb_var_screeninfo *, int *, int *);
-
-
 int console_getmode(struct vc_mode *mode)
 {
     *mode = display_info;
     return 0;
 }
-
 
 int console_setmode(struct vc_mode *mode, int doit)
 {
@@ -258,7 +252,6 @@ int console_setmode(struct vc_mode *mode, int doit)
     return 0;
 }
 
-
 int console_setcmap(int n_entries, unsigned char *red, unsigned char *green,
                     unsigned char *blue)
 {
@@ -288,6 +281,17 @@ int console_setcmap(int n_entries, unsigned char *red, unsigned char *green,
 
     return 0;
 }
+
+int console_powermode(int mode)
+{
+    if (mode == VC_POWERMODE_INQUIRY)
+        return 0;
+    if (mode < VESA_NO_BLANKING || mode > VESA_POWERDOWN)
+        return -EINVAL;
+    /* Not Supported */
+    return -ENXIO;
+}
+#endif /* CONFIG_FB_COMPAT_XPMAC */
 
 
     /*
@@ -360,17 +364,6 @@ int mac_vmode_to_var(int vmode, int cmode, struct fb_var_screeninfo *var)
     var->sync = mode->sync;
     var->vmode = mode->vmode;
     return 0;
-}
-
-
-int console_powermode(int mode)
-{
-    if (mode == VC_POWERMODE_INQUIRY)
-        return 0;
-    if (mode < VESA_NO_BLANKING || mode > VESA_POWERDOWN)
-        return -EINVAL;
-    /* Not Supported */
-    return -ENXIO;
 }
 
 

@@ -594,7 +594,6 @@ int clip_create(int number)
 	if (!dev) return -ENOMEM;
 	memset(dev,0,sizeof(struct net_device)+sizeof(struct clip_priv));
 	clip_priv = PRIV(dev);
-	dev->name = clip_priv->name;
 	sprintf(dev->name,"atm%d",number);
 	dev->init = clip_init;
 	spin_lock_init(&clip_priv->xoff_lock);

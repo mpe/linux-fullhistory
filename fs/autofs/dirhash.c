@@ -34,7 +34,8 @@ void autofs_update_usage(struct autofs_dirhash *dh,
 }
 
 struct autofs_dir_ent *autofs_expire(struct super_block *sb,
-				     struct autofs_sb_info *sbi)
+				     struct autofs_sb_info *sbi,
+				     struct vfsmount *mnt)
 {
 	struct autofs_dirhash *dh = &sbi->dirhash;
 	struct autofs_dir_ent *ent;
@@ -79,12 +80,25 @@ struct autofs_dir_ent *autofs_expire(struct super_block *sb,
 			DPRINTK(("autofs: not expirable (not a mounted directory): %s\n", ent->name));
 			continue;
 		}
+		mntget(mnt);
+		dget(dentry);
+		if (!follow_down(&mnt, &dentry)) {
+			dput(dentry);
+			mntput(mnt);
+			DPRINTK(("autofs: not expirable (not a mounted directory): %s\n", ent->name));
+			continue;
+		}
+		while (d_mountpoint(dentry) && follow_down(&mnt, &dentry))
+			;
+		dput(dentry);
 
-		if ( may_umount(dentry->d_mounts->d_sb) == 0 ) {
+		if ( may_umount(mnt) == 0 ) {
+			mntput(mnt);
 			DPRINTK(("autofs: signaling expire on %s\n", ent->name));
 			return ent; /* Expirable! */
 		}
 		DPRINTK(("autofs: didn't expire due to may_umount: %s\n", ent->name));
+		mntput(mnt);
 	}
 	return NULL;		/* No expirable entries */
 }

@@ -15,13 +15,14 @@
 
 	Linux Kernel Additions:
 	
+ 	0.99H+lk0.9 - David S. Miller - softnet, PCI DMA updates
+ 	0.99H+lk1.0 - Jeff Garzik <jgarzik@mandrakesoft.com>
+		Remove compatibility defines for kernel versions < 2.2.x.
+		Update for new 2.3.x module interface
 	LK1.1.2 (March 19, 2000)
 	* New PCI interface (jgarzik)
 
-*/
-
-/*
-    22Apr00, Andrew Morton <andrewm@uow.edu.au>
+    LK1.1.3 25 April 2000, Andrew Morton <andrewm@uow.edu.au>
     - Merged with 3c575_cb.c
     - Don't set RxComplete in boomerang interrupt enable reg
     - spinlock in vortex_timer to protect mdio functions
@@ -43,7 +44,25 @@
     - Handle resource allocation failures.
     - Fix 3CCFE575CT LED polarity
     - Make tx_interrupt_mitigation the default
+
+    LK1.1.4 25 April 2000, Andrew Morton <andrewm@uow.edu.au>    
     - Add extra TxReset to vortex_up() to fix 575_cb hotplug initialisation probs.
+    - Put vortex_info_tbl into __devinitdata
+    - In the vortex_error StatsFull HACK, disable stats in vp->intr_enable as well
+      as in the hardware.
+    - Increased the loop counter in wait_for_completion from 2,000 to 4,000.
+
+    LK1.1.5 28 April 2000, andrewm
+    - Added powerpc defines
+    - Some extra diagnostics
+    - In vortex_error(), reset the Tx on maxCollisions.  Otherwise most
+      chips usually get a Tx timeout.
+    - Added extra_reset module parm
+    - Replaced some inline timer manip with mod_timer
+      (Franois romieu <Francois.Romieu@nic.fr>)
+    - In vortex_up(), don't make Wn3_config initialisation dependent upon has_nway
+      (this came across from 3c575_cb).
+
     - See http://www.uow.edu.au/~andrewm/linux/#3c59x-2.3 for more details.
 */
 
@@ -56,9 +75,6 @@
  * elimination of all the tests and reduced cache footprint.
  */
 
-static char *version =
-"3c59x.c:v0.99L+LK1.1.2+AKPM  24 Apr 2000  Donald Becker and others  http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
-
 /* "Knobs" that adjust features and parameters. */
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
    Setting to > 1512 effectively disables this feature. */
@@ -67,10 +83,15 @@ static const int rx_copybreak = 200;
 static const int mtu = 1500;
 /* Maximum events (Rx packets, etc.) to handle at each interrupt. */
 static int max_interrupt_work = 32;
+/* Give the NIC an extra reset at the end of vortex_up() */
+static int extra_reset = 0;
 
 /* Allow aggregation of Tx interrupts.  Saves CPU load at the cost
  * of possible Tx stalls if the system is blocking interrupts
  * somewhere else.  Undefine this to disable.
+ * AKPM 26 April 2000: enabling this still gets vestigial Tx timeouts
+ * in a heavily loaded (collision-prone) 10BaseT LAN.  Should be OK with
+ * switched Ethernet.
  */
 #define tx_interrupt_mitigation 1
 
@@ -96,8 +117,8 @@ static int rx_nocopy = 0, rx_copy = 0, queued_packet = 0, rx_csumhits;
 #define PKT_BUF_SZ		1536			/* Size of each temporary Rx buffer.*/
 
 #ifndef __OPTIMIZE__
-#warning  You must compile this file with the correct options!
-#warning  See the last lines of the source file.
+#error You must compile this file with the correct options!
+#error See the last lines of the source file.
 #error You must compile this driver with "-O".
 #endif
 
@@ -120,12 +141,21 @@ static int rx_nocopy = 0, rx_copy = 0, queued_packet = 0, rx_csumhits;
 #include <asm/bitops.h>
 #include <asm/io.h>
 
+/* John Daniel <jdaniel@etresoft.com> said these work... */
+#ifdef __powerpc__
+#define outsl outsl_ns
+#define insl insl_ns
+#endif
+
 /* Kernel compatibility defines, some common to David Hinds' PCMCIA package.
    This is only in the support-all-kernels source code. */
 
 #define RUN_AT(x) (jiffies + (x))
 
 #include <linux/delay.h>
+
+static char *version __devinitdata =
+"3c59x.c:v0.99L+LK1.1.5  30 Apr 2000  Donald Becker and others  http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html " "$Revision: 1.78 $\n";
 
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
 MODULE_DESCRIPTION("3Com 3c59x/3c90x/3c575 series Vortex/Boomerang/Cyclone driver");
@@ -134,6 +164,7 @@ MODULE_PARM(options, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(full_duplex, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(rx_copybreak, "i");
 MODULE_PARM(max_interrupt_work, "i");
+MODULE_PARM(extra_reset, "i");
 MODULE_PARM(compaq_ioaddr, "i");
 MODULE_PARM(compaq_irq, "i");
 MODULE_PARM(compaq_device_id, "i");
@@ -291,7 +322,7 @@ static struct vortex_chip_info {
 	int flags;
 	int drv_flags;
 	int io_size;
-} vortex_info_tbl[] = {
+} vortex_info_tbl[] __devinitdata = {
 	{"3c590 Vortex 10Mbps",
 	 PCI_USES_IO|PCI_USES_MASTER, IS_VORTEX, 32, },
 	{"3c592 EISA 10mbps Demon/Vortex",					/* AKPM: from Don's 3c59x_cb.c 0.49H */
@@ -551,8 +582,7 @@ struct vortex_private {
 
 	/* PCI configuration space information. */
 	struct pci_dev *pdev;
-	char *cb_fn_base;			/* CardBus function status addr space. */
-	int chip_id;
+	char *cb_fn_base;					/* CardBus function status addr space. */
 
 	/* The remainder are related to chip state, mostly media selection. */
 	struct timer_list timer;			/* Media selection timer. */
@@ -564,7 +594,9 @@ struct vortex_private {
 		full_bus_master_tx:1, full_bus_master_rx:2, /* Boomerang  */
 		hw_csums:1,						/* Has hardware checksums. */
 		tx_full:1,
+		has_nway:1,
 		open:1;
+	int tx_reset_resume;				/* Flag to retart timer after vortex_error handling */
 	u16 status_enable;
 	u16 intr_enable;
 	u16 available_media;				/* From Wn3_Options. */
@@ -573,6 +605,7 @@ struct vortex_private {
 	unsigned char phys[2];				/* MII device addresses. */
 	u16 deferred;						/* Resend these interrupts when we
 										 * bale from the ISR */
+	u16 io_size;						/* Size of PCI region (for release_region) */
 	spinlock_t lock;
 };
 
@@ -620,6 +653,7 @@ static int boomerang_rx(struct net_device *dev);
 static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void boomerang_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int vortex_close(struct net_device *dev);
+static void dump_tx_ring(struct net_device *dev);
 static void update_stats(long ioaddr, struct net_device *dev);
 static struct net_device_stats *vortex_get_stats(struct net_device *dev);
 static void set_rx_mode(struct net_device *dev);
@@ -775,13 +809,15 @@ static int __devinit vortex_probe1(struct pci_dev *pdev,
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
 	dev->mtu = mtu;
+	vp->has_nway = (vortex_info_tbl[chip_idx].drv_flags & HAS_NWAY) ? 1 : 0;
+	vp->io_size = vortex_info_tbl[chip_idx].io_size;
 
 	/* module list only for EISA devices */
 	if (pdev == NULL) {
 		vp->next_module = root_vortex_eisa_dev;
 		root_vortex_eisa_dev = dev;
 	}
-	
+
 	/* PCI-only startup logic */
 	if (pdev) {
 		/* EISA resources already marked, so only PCI needs to do this here */
@@ -794,9 +830,8 @@ static int __devinit vortex_probe1(struct pci_dev *pdev,
 		}
 
 		/* wake up and enable device */		
-		if (pci_enable_device (pdev)) {
+		if ((retval = pci_enable_device(pdev))) {
 			printk (KERN_ERR "%s: Cannot enable device, aborting\n", dev->name);
-			retval = -EIO;
 			goto free_region;
 		}
 
@@ -806,7 +841,6 @@ static int __devinit vortex_probe1(struct pci_dev *pdev,
 	}
 
 	vp->lock = SPIN_LOCK_UNLOCKED;
-	vp->chip_id = chip_idx;
 	vp->pdev = pdev;
 
 	/* Makes sure rings are at least 16 byte aligned. */
@@ -898,15 +932,15 @@ static int __devinit vortex_probe1(struct pci_dev *pdev,
 			   dev->irq);
 #endif
 
-	if (pdev && vortex_info_tbl[vp->chip_id].drv_flags & HAS_CB_FNS) {
+	if (pdev && vortex_info_tbl[chip_idx].drv_flags & HAS_CB_FNS) {
 		u32 fn_st_addr;			/* Cardbus function status space */
 		fn_st_addr = pci_resource_start (pdev, 2);
 		if (fn_st_addr)
 			vp->cb_fn_base = ioremap(fn_st_addr, 128);
 		printk(KERN_INFO "%s: CardBus functions mapped %8.8x->%p\n",
 			   dev->name, fn_st_addr, vp->cb_fn_base);
-#if 0 /* AKPM */
-		if (vortex_pci_tbl[vp->chip_id].device != 0x5257) {
+#if 1 /* AKPM: the 575_cb and 905B LEDs seem OK without this */
+		if (vortex_pci_tbl[chip_idx].device != 0x5257) {
 			EL3WINDOW(2);
 			outw(0x10 | inw(ioaddr + Wn2_ResetOptions), ioaddr + Wn2_ResetOptions);
 		}
@@ -925,7 +959,7 @@ static int __devinit vortex_probe1(struct pci_dev *pdev,
 	}
 
 	{
-		static char *ram_split[] = {"5:3", "3:1", "1:1", "3:5"};
+		static const char * ram_split[] = {"5:3", "3:1", "1:1", "3:5"};
 		union wn3_config config;
 		EL3WINDOW(3);
 		vp->available_media = inw(ioaddr + Wn3_Options);
@@ -1010,6 +1044,7 @@ static int __devinit vortex_probe1(struct pci_dev *pdev,
 free_region:
 	release_region (ioaddr, vortex_info_tbl[chip_idx].io_size);
 free_dev:
+	unregister_netdev(dev);
 	kfree (dev);
 	printk(KERN_ERR PFX "vortex_probe1 fails.  Returns %d\n", retval);
 out:
@@ -1018,7 +1053,7 @@ out:
 
 static void wait_for_completion(struct net_device *dev, int cmd)
 {
-	int i = 2000;
+	int i = 4000;
 
 	outw(cmd, dev->base_addr + EL3_CMD);
 	while (--i > 0)
@@ -1054,7 +1089,7 @@ vortex_up(struct net_device *dev)
 				   media_tbl[vp->media_override].name);
 		dev->if_port = vp->media_override;
 	} else if (vp->autoselect) {
-		if (vortex_info_tbl[vp->chip_id].drv_flags & HAS_NWAY) {
+		if (vp->has_nway) {
 			printk(KERN_INFO "%s: using NWAY autonegotiation\n", dev->name);
 			dev->if_port = XCVR_NWAY;
 		} else {
@@ -1062,7 +1097,7 @@ vortex_up(struct net_device *dev)
 			dev->if_port = XCVR_100baseTx;
 			while (! (vp->available_media & media_tbl[dev->if_port].mask))
 				dev->if_port = media_tbl[dev->if_port].next;
-			printk(KERN_INFO "%s: first avaialble mdeia type: %s\n",
+			printk(KERN_INFO "%s: first available media type: %s\n",
 					dev->name,
 					media_tbl[dev->if_port].name);
 		}
@@ -1084,7 +1119,7 @@ vortex_up(struct net_device *dev)
 
 	vp->full_duplex = vp->force_fd;
 	config.u.xcvr = dev->if_port;
-	if ( ! (vortex_info_tbl[vp->chip_id].drv_flags & HAS_NWAY))
+//AKPM	if (!vp->has_nway)
 	{
 		if (vortex_debug > 6)
 			printk(KERN_DEBUG "vortex_up(): writing 0x%x to InternalConfig\n",
@@ -1136,6 +1171,7 @@ vortex_up(struct net_device *dev)
 		outb(dev->dev_addr[i], ioaddr + i);
 	for (; i < 12; i+=2)
 		outw(0, ioaddr + i);
+
 	if (vp->cb_fn_base) {
 		u_short n = inw(ioaddr + Wn2_ResetOptions);
 #if 0	/* AKPM: This is done in vortex_probe1, and seems to be wrong anyway... */
@@ -1180,7 +1216,7 @@ vortex_up(struct net_device *dev)
 		/* Initialize the RxEarly register as recommended. */
 		outw(SetRxThreshold + (1536>>2), ioaddr + EL3_CMD);
 		outl(0x0020, ioaddr + PktStatus);
-		outl(virt_to_bus(&vp->rx_ring[0]), ioaddr + UpListPtr);
+		outl(vp->rx_ring_dma, ioaddr + UpListPtr);
 	}
 	if (vp->full_bus_master_tx) { 		/* Boomerang bus master Tx. */
 		dev->hard_start_xmit = &boomerang_start_xmit;
@@ -1218,9 +1254,16 @@ vortex_up(struct net_device *dev)
 	if (vp->cb_fn_base)			/* The PCMCIA people are idiots.  */
 		writel(0x8000, vp->cb_fn_base + 4);
 
-	/* AKPM: unjam the 3CCFE575CT */
-	wait_for_completion(dev, TxReset);
-	outw(TxEnable, ioaddr + EL3_CMD);
+	if (extra_reset)
+	{
+		/* AKPM: unjam the 3CCFE575CT */
+		wait_for_completion(dev, TxReset);
+		if (vp->full_bus_master_tx) {
+			outb(PKT_BUF_SZ>>8, ioaddr + TxFreeThreshold);
+			outw(DownUnstall, ioaddr + EL3_CMD);
+		}
+		outw(TxEnable, ioaddr + EL3_CMD);
+	}
 }
 
 static int
@@ -1244,7 +1287,7 @@ vortex_open(struct net_device *dev)
 			printk(KERN_DEBUG "%s:  Filling in the Rx ring.\n", dev->name);
 		for (i = 0; i < RX_RING_SIZE; i++) {
 			struct sk_buff *skb;
-			vp->rx_ring[i].next = cpu_to_le32(virt_to_bus(&vp->rx_ring[i+1]));
+			vp->rx_ring[i].next = cpu_to_le32(vp->rx_ring_dma + sizeof(struct boom_rx_desc) * (i+1));
 			vp->rx_ring[i].status = 0;	/* Clear complete bit. */
 			vp->rx_ring[i].length = cpu_to_le32(PKT_BUF_SZ | LAST_FRAG);
 			skb = dev_alloc_skb(PKT_BUF_SZ);
@@ -1253,10 +1296,10 @@ vortex_open(struct net_device *dev)
 				break;			/* Bad news!  */
 			skb->dev = dev;			/* Mark as being used by this device. */
 			skb_reserve(skb, 2);	/* Align IP on 16 byte boundaries */
-			vp->rx_ring[i].addr = cpu_to_le32(virt_to_bus(skb->tail));
+			vp->rx_ring[i].addr = cpu_to_le32(pci_map_single(vp->pdev, skb->tail, PKT_BUF_SZ, PCI_DMA_FROMDEVICE));
 		}
 		/* Wrap the ring. */
-		vp->rx_ring[i-1].next = cpu_to_le32(virt_to_bus(&vp->rx_ring[0]));
+		vp->rx_ring[i-1].next = cpu_to_le32(vp->rx_ring_dma);
 	}
 
 	vortex_up(dev);
@@ -1294,7 +1337,7 @@ static void vortex_timer(unsigned long data)
 				printk(KERN_DEBUG "%s: Media %s has link beat, %x.\n",
 					   dev->name, media_tbl[dev->if_port].name, media_status);
 		} else if (vortex_debug > 1)
-			printk(KERN_DEBUG "%s: Media %s is has no link beat, %x.\n",
+			printk(KERN_DEBUG "%s: Media %s has no link beat, %x.\n",
 				   dev->name, media_tbl[dev->if_port].name, media_status);
 		break;
 	case XCVR_MII: case XCVR_NWAY:
@@ -1323,6 +1366,9 @@ static void vortex_timer(unsigned long data)
 						outb((vp->full_duplex ? 0x20 : 0) |
 							(dev->mtu > 1500 ? 0x40 : 0),
 							ioaddr + Wn3_MAC_Ctrl);
+						if (vortex_debug > 1)
+							printk(KERN_DEBUG "Setting duplex in Wn3_MAC_Ctrl\n");
+						/* AKPM: bug: should reset Tx and Rx after setting Duplex.  Page 180 */
 					}
 					next_tick = 60*HZ;
 				}
@@ -1365,6 +1411,9 @@ static void vortex_timer(unsigned long data)
 
 		outw(dev->if_port == XCVR_10base2 ? StartCoax : StopCoax,
 			 ioaddr + EL3_CMD);
+		if (vortex_debug > 1)
+			printk(KERN_DEBUG "wrote 0x%08x to Wn3_Config\n", config.i);
+		/* AKPM: FIXME: Should reset Rx & Tx here.  P60 of 3c90xc.pdf */
 	}
 	EL3WINDOW(old_window);
 	enable_irq(dev->irq);
@@ -1411,23 +1460,8 @@ static void vortex_tx_timeout(struct net_device *dev)
 		}
 	}
 
-	if (vortex_debug > 0) {
-		if (vp->full_bus_master_tx) {
-			int i;
-			printk(KERN_DEBUG "  Flags; bus-master %d, full %d; dirty %d "
-				   "current %d.\n",
-				   vp->full_bus_master_tx, vp->tx_full, vp->dirty_tx, vp->cur_tx);
-			printk(KERN_DEBUG "  Transmit list %8.8x vs. %p.\n",
-				   inl(ioaddr + DownListPtr),
-				   &vp->tx_ring[vp->dirty_tx % TX_RING_SIZE]);
-			for (i = 0; i < TX_RING_SIZE; i++) {
-				printk(KERN_DEBUG "  %d: @%p  length %8.8x status %8.8x\n", i,
-					   &vp->tx_ring[i],
-					   le32_to_cpu(vp->tx_ring[i].length),
-					   le32_to_cpu(vp->tx_ring[i].status));
-			}
-		}
-	}
+	if (vortex_debug > 1)
+		dump_tx_ring(dev);
 
 	wait_for_completion(dev, TxReset);
 
@@ -1441,7 +1475,7 @@ static void vortex_tx_timeout(struct net_device *dev)
 				 ioaddr + DownListPtr);
 		if (vp->tx_full && (vp->cur_tx - vp->dirty_tx <= TX_RING_SIZE - 1)) {
 			vp->tx_full = 0;
-			netif_start_queue (dev);
+			netif_wake_queue (dev);
 		}
 		if (vp->tx_full)
 			netif_stop_queue (dev);
@@ -1468,25 +1502,30 @@ vortex_error(struct net_device *dev, int status)
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 	int do_tx_reset = 0;
+	unsigned char tx_status = 0;
 
-	if (vortex_debug > 2)
+	if (vortex_debug > 2) {
 		printk(KERN_DEBUG "%s: vortex_error(), status=0x%x\n", dev->name, status);
+	}
 
 	if (status & TxComplete) {			/* Really "TxError" for us. */
-		unsigned char tx_status = inb(ioaddr + TxStatus);
+		tx_status = inb(ioaddr + TxStatus);
 		/* Presumably a tx-timeout. We must merely re-enable. */
 		if (vortex_debug > 2
-			|| (tx_status != 0x88 && vortex_debug > 0))
+			|| (tx_status != 0x88 && vortex_debug > 0)) {
 			printk(KERN_DEBUG"%s: Transmit error, Tx status register %2.2x.\n",
 				   dev->name, tx_status);
+			dump_tx_ring(dev);
+		}
 		if (tx_status & 0x14)  vp->stats.tx_fifo_errors++;
 		if (tx_status & 0x38)  vp->stats.tx_aborted_errors++;
 		outb(0, ioaddr + TxStatus);
-		if (tx_status & 0x30)
+		if (tx_status & 0x38)	/* AKPM: tx reset after 16 collisions, despite what the manual says */
 			do_tx_reset = 1;
 		else					/* Merely re-enable the transmitter. */
 			outw(TxEnable, ioaddr + EL3_CMD);
 	}
+
 	if (status & RxEarly) {				/* Rx early is unused. */
 		vortex_rx(dev);
 		outw(AckIntr | RxEarly, ioaddr + EL3_CMD);
@@ -1504,6 +1543,7 @@ vortex_error(struct net_device *dev, int status)
 				   "stats as an interrupt source.\n", dev->name);
 			EL3WINDOW(5);
 			outw(SetIntrEnb | (inw(ioaddr + 10) & ~StatsFull), ioaddr + EL3_CMD);
+			vp->intr_enable &= ~StatsFull;
 			EL3WINDOW(7);
 			DoneDidThat++;
 		}
@@ -1534,11 +1574,41 @@ vortex_error(struct net_device *dev, int status)
 			outw(AckIntr | HostError, ioaddr + EL3_CMD);
 		}
 	}
-	if (do_tx_reset) {
-		wait_for_completion(dev, TxReset);
-		outw(TxEnable, ioaddr + EL3_CMD);
-	}
 
+	/*
+	 * Black magic.  If we're resetting the transmitter,  remember the current downlist
+	 * pointer and restore it afterwards.  We can't usr cur_tx because that could
+	 * lag the actual hardware index.
+	 */
+	if (do_tx_reset) {
+		if (vp->full_bus_master_tx) {
+			unsigned long old_down_list_ptr;
+
+			wait_for_completion(dev, DownStall);
+			old_down_list_ptr = inl(ioaddr + DownListPtr);
+			wait_for_completion(dev, TxReset);
+			outw(TxEnable, ioaddr + EL3_CMD);
+
+			/* Restart DMA if necessary */
+			outl(old_down_list_ptr, ioaddr + DownListPtr);
+			if (vortex_debug > 2)
+					printk(KERN_DEBUG "reset DMA to 0x%08x\n", inl(ioaddr + DownListPtr));
+			outw(DownUnstall, ioaddr + EL3_CMD);
+
+			/*
+			 * Here we make a single attempt to prevent a timeout by
+			 * restarting the timer if we think that the ISR has a good
+			 * chance of unjamming things.
+			 */
+			if (vp->tx_reset_resume == 0 && vp->tx_full) {
+				vp->tx_reset_resume = 1;
+				dev->trans_start = jiffies;
+			}
+		} else {
+			wait_for_completion(dev, TxReset);
+			outw(TxEnable, ioaddr + EL3_CMD);
+		}
+	}
 }
 
 static int
@@ -1547,8 +1617,6 @@ vortex_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 
-	netif_stop_queue (dev);
-	
 	/* Put out the doubleword header... */
 	outl(skb->len, ioaddr + TX_FIFO);
 	if (vp->bus_master) {
@@ -1559,16 +1627,18 @@ vortex_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		outw(len, ioaddr + Wn7_MasterLen);
 		vp->tx_skb = skb;
 		outw(StartDMADown, ioaddr + EL3_CMD);
-		/* dev->tbusy will be cleared at the DMADone interrupt. */
+		/* netif_wake_queue() will be called at the DMADone interrupt. */
 	} else {
 		/* ... and the packet rounded to a doubleword. */
 		outsl(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
 		dev_kfree_skb (skb);
 		if (inw(ioaddr + TxFree) > 1536) {
-			netif_start_queue (dev);
-		} else
+			netif_start_queue (dev);	/* AKPM: redundant? */
+		} else {
 			/* Interrupt us when the FIFO has room for max-sized packet. */
+			netif_stop_queue(dev);
 			outw(SetTxThreshold + (1536>>2), ioaddr + EL3_CMD);
+		}
 	}
 
 	dev->trans_start = jiffies;
@@ -1601,57 +1671,53 @@ boomerang_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	long ioaddr = dev->base_addr;
+	/* Calculate the next Tx descriptor entry. */
+	int entry = vp->cur_tx % TX_RING_SIZE;
+	struct boom_tx_desc *prev_entry = &vp->tx_ring[(vp->cur_tx-1) % TX_RING_SIZE];
+	unsigned long flags;
 
 	if (vortex_debug > 6)
 		printk(KERN_DEBUG "boomerang_start_xmit()\n");
 
-	netif_stop_queue (dev);
-	{
-		/* Calculate the next Tx descriptor entry. */
-		int entry = vp->cur_tx % TX_RING_SIZE;
-		struct boom_tx_desc *prev_entry =
-			&vp->tx_ring[(vp->cur_tx-1) % TX_RING_SIZE];
-		unsigned long flags;
-
-		if (vortex_debug > 3)
-			printk(KERN_DEBUG "%s: Trying to send a packet, Tx index %d.\n",
-				   dev->name, vp->cur_tx);
-		if (vp->tx_full) {
-			if (vortex_debug > 0)
-				printk(KERN_WARNING "%s: Tx Ring full, refusing to send buffer.\n",
-					   dev->name);
-			return 1;
-		}
-		vp->tx_skbuff[entry] = skb;
-		vp->tx_ring[entry].next = 0;
-		vp->tx_ring[entry].addr = cpu_to_le32(pci_map_single(vp->pdev, skb->data, skb->len, PCI_DMA_TODEVICE));
-		vp->tx_ring[entry].length = cpu_to_le32(skb->len | LAST_FRAG);
-		vp->tx_ring[entry].status = cpu_to_le32(skb->len | TxIntrUploaded);
-
-		spin_lock_irqsave(&vp->lock, flags);
-		/* Wait for the stall to complete. */
-		wait_for_completion(dev, DownStall);
-		prev_entry->next = cpu_to_le32(vp->tx_ring_dma + entry * sizeof(struct boom_tx_desc));
-		if (inl(ioaddr + DownListPtr) == 0) {
-			outl(vp->tx_ring_dma + entry * sizeof(struct boom_tx_desc), ioaddr + DownListPtr);
-			queued_packet++;
-		}
-
-		vp->cur_tx++;
-		if (vp->cur_tx - vp->dirty_tx > TX_RING_SIZE - 1) {
-			vp->tx_full = 1;
-			netif_stop_queue (dev);
-		} else {					/* Clear previous interrupt enable. */
-#if defined(tx_interrupt_mitigation)
-			prev_entry->status &= cpu_to_le32(~TxIntrUploaded);
-#endif
-			netif_start_queue (dev);
-		}
-		outw(DownUnstall, ioaddr + EL3_CMD);
-		spin_unlock_irqrestore(&vp->lock, flags);
-		dev->trans_start = jiffies;
-		return 0;
+	if (vortex_debug > 3)
+		printk(KERN_DEBUG "%s: Trying to send a packet, Tx index %d.\n",
+			   dev->name, vp->cur_tx);
+	if (vp->tx_full) {
+		if (vortex_debug > 0)
+			printk(KERN_WARNING "%s: Tx Ring full, refusing to send buffer.\n",
+				   dev->name);
+		return 1;
 	}
+	vp->tx_skbuff[entry] = skb;
+	vp->tx_ring[entry].next = 0;
+	vp->tx_ring[entry].addr = cpu_to_le32(pci_map_single(vp->pdev, skb->data, skb->len, PCI_DMA_TODEVICE));
+	vp->tx_ring[entry].length = cpu_to_le32(skb->len | LAST_FRAG);
+	vp->tx_ring[entry].status = cpu_to_le32(skb->len | TxIntrUploaded);
+
+	spin_lock_irqsave(&vp->lock, flags);
+	/* Wait for the stall to complete. */
+	wait_for_completion(dev, DownStall);
+	prev_entry->next = cpu_to_le32(vp->tx_ring_dma + entry * sizeof(struct boom_tx_desc));
+	if (inl(ioaddr + DownListPtr) == 0) {
+		outl(vp->tx_ring_dma + entry * sizeof(struct boom_tx_desc), ioaddr + DownListPtr);
+		queued_packet++;
+	}
+
+	vp->cur_tx++;
+	if (vp->cur_tx - vp->dirty_tx > TX_RING_SIZE - 1) {
+		vp->tx_full = 1;
+		netif_stop_queue (dev);
+	} else {					/* Clear previous interrupt enable. */
+#if defined(tx_interrupt_mitigation)
+		prev_entry->status &= cpu_to_le32(~TxIntrUploaded);
+#endif
+		/* netif_start_queue (dev); */		/* AKPM: redundant? */
+	}
+	outw(DownUnstall, ioaddr + EL3_CMD);
+	vp->tx_reset_resume = 0;
+	spin_unlock_irqrestore(&vp->lock, flags);
+	dev->trans_start = jiffies;
+	return 0;
 }
 
 /* The interrupt handler does all of the Rx thread work and cleans up
@@ -1667,17 +1733,16 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	struct net_device *dev = dev_id;
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	long ioaddr;
-	int latency, status;
+	int status;
 	int work_done = max_interrupt_work;
 
 	spin_lock(&vp->lock);
 	
 	ioaddr = dev->base_addr;
-	latency = inb(ioaddr + Timer);
 	status = inw(ioaddr + EL3_STATUS);
 
 	if (vortex_debug > 6)
-		printk("AKPM: vortex_interrupt. status=0x%4x\n", status);
+		printk("vortex_interrupt(). status=0x%4x\n", status);
 
 	if (status & IntReq) {
 		status |= vp->deferred;
@@ -1689,7 +1754,7 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	if (vortex_debug > 4)
 		printk(KERN_DEBUG "%s: interrupt, status %4.4x, latency %d ticks.\n",
-			   dev->name, status, latency);
+			   dev->name, status, inb(ioaddr + Timer));
 	do {
 		if (vortex_debug > 5)
 				printk(KERN_DEBUG "%s: In interrupt loop, status %4.4x.\n",
@@ -1709,12 +1774,17 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			if (inw(ioaddr + Wn7_MasterStatus) & 0x1000) {
 				outw(0x1000, ioaddr + Wn7_MasterStatus); /* Ack the event. */
 				pci_unmap_single(vp->pdev, vp->tx_skb_dma, (vp->tx_skb->len + 3) & ~3, PCI_DMA_TODEVICE);
-				dev_kfree_skb_irq(vp->tx_skb); /* Release the transfered buffer */
+				dev_kfree_skb_irq(vp->tx_skb); /* Release the transferred buffer */
 				if (inw(ioaddr + TxFree) > 1536) {
-					netif_wake_queue (dev);
+					/*
+					 * AKPM: FIXME: I don't think we need this.  If the queue was stopped due to
+					 * insufficient FIFO room, the TxAvailable test will succeed and call
+					 * netif_wake_queue()
+					 */
+					netif_wake_queue(dev);
 				} else { /* Interrupt when FIFO has room for max-sized packet. */
 					outw(SetTxThreshold + (1536>>2), ioaddr + EL3_CMD);
-					netif_stop_queue (dev);		/* AKPM: This is new */
+					netif_stop_queue(dev);		/* AKPM: This is new */
 				}
 			}
 		}
@@ -1736,7 +1806,7 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				outw(AckIntr | (vp->deferred & 0x7ff), ioaddr + EL3_CMD);
 			} while ((status = inw(ioaddr + EL3_CMD)) & IntLatch);
 			/* The timer will reenable interrupts. */
-			mod_timer(&vp->timer, jiffies+1*HZ);
+			mod_timer(&vp->timer, jiffies + 1*HZ);
 			break;
 		}
 		/* Acknowledge the IRQ. */
@@ -1763,33 +1833,31 @@ static void boomerang_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	struct net_device *dev = dev_id;
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	long ioaddr;
-	int latency, status;
+	int status;
 	int work_done = max_interrupt_work;
 
 	spin_lock(&vp->lock);
 	
 	ioaddr = dev->base_addr;
-	latency = inb(ioaddr + Timer);
 	status = inw(ioaddr + EL3_STATUS);
 
 	if (vortex_debug > 6)
 		printk(KERN_DEBUG "boomerang_interrupt. status=0x%4x\n", status);
+
+	if (status == 0xffff) {		/* AKPM: h/w no longer present (hotplug)? */
+		if (vortex_debug > 1)
+			printk(KERN_DEBUG "boomerang_interrupt(1): status = 0xffff\n");
+		goto handler_exit;
+	}
 
 	if (status & IntReq) {
 		status |= vp->deferred;
 		vp->deferred = 0;
 	}
 
-	if (status == 0xffff)		/* AKPM: h/w no longer present (hotplug)? */
-	{
-		if (vortex_debug > 1)
-			printk(KERN_DEBUG "boomerang_interrupt(1): status = 0xffff\n");
-		goto handler_exit;
-	}
-
 	if (vortex_debug > 4)
 		printk(KERN_DEBUG "%s: interrupt, status %4.4x, latency %d ticks.\n",
-			   dev->name, status, latency);
+			   dev->name, status, inb(ioaddr + Timer));
 	do {
 		if (vortex_debug > 5)
 				printk(KERN_DEBUG "%s: In interrupt loop, status %4.4x.\n",
@@ -1835,11 +1903,8 @@ static void boomerang_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			netif_stop_queue (dev);
 
 		/* Check for all uncommon interrupts at once. */
-		if (status & (HostError | RxEarly | StatsFull | TxComplete | IntReq)) {
-			if (status == 0xffff)
-				break;
+		if (status & (HostError | RxEarly | StatsFull | TxComplete | IntReq))
 			vortex_error(dev, status);
-		}
 
 		if (--work_done < 0) {
 			printk(KERN_WARNING "%s: Too much work in interrupt, status "
@@ -1852,7 +1917,7 @@ static void boomerang_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				outw(AckIntr | (vp->deferred & 0x7ff), ioaddr + EL3_CMD);
 			} while ((status = inw(ioaddr + EL3_CMD)) & IntLatch);
 			/* The timer will reenable interrupts. */
-			mod_timer(&vp->timer, jiffies+1*HZ);
+			mod_timer(&vp->timer, jiffies + 1*HZ);
 			break;
 		}
 		/* Acknowledge the IRQ. */
@@ -1948,9 +2013,8 @@ boomerang_rx(struct net_device *dev)
 	int rx_work_limit = vp->dirty_rx + RX_RING_SIZE - vp->cur_rx;
 
 	if (vortex_debug > 5)
-		printk(KERN_DEBUG "boomerang_rx(): status %4.4x, rx_status "
-			   "%4.4x.\n",
-			   inw(ioaddr+EL3_STATUS), inw(ioaddr+RxStatus));
+		printk(KERN_DEBUG "boomerang_rx(): status %4.4x\n", inw(ioaddr+EL3_STATUS));
+
 	while ((rx_status = le32_to_cpu(vp->rx_ring[entry].status)) & RxDComplete){
 		if (--rx_work_limit < 0)
 			break;
@@ -2106,6 +2170,38 @@ vortex_close(struct net_device *dev)
 	MOD_DEC_USE_COUNT;
 	vp->open = 0;
 	return 0;
+}
+
+static void
+dump_tx_ring(struct net_device *dev)
+{
+	if (vortex_debug > 0) {
+		struct vortex_private *vp = (struct vortex_private *)dev->priv;
+		long ioaddr = dev->base_addr;
+		
+		if (vp->full_bus_master_tx) {
+			int i;
+			int stalled = inl(ioaddr + PktStatus) & 0x04;	/* Possible racy. But it's only debug stuff */
+
+			wait_for_completion(dev, DownStall);
+			printk(KERN_DEBUG "  Flags; bus-master %d, full %d; dirty %d(%d) "
+					"current %d(%d).\n",
+					vp->full_bus_master_tx, vp->tx_full,
+					vp->dirty_tx, vp->dirty_tx % TX_RING_SIZE,
+					vp->cur_tx, vp->cur_tx % TX_RING_SIZE);
+			printk(KERN_DEBUG "  Transmit list %8.8x vs. %p.\n",
+				   inl(ioaddr + DownListPtr),
+				   &vp->tx_ring[vp->dirty_tx % TX_RING_SIZE]);
+			for (i = 0; i < TX_RING_SIZE; i++) {
+				printk(KERN_DEBUG "  %d: @%p  length %8.8x status %8.8x\n", i,
+					   &vp->tx_ring[i],
+					   le32_to_cpu(vp->tx_ring[i].length),
+					   le32_to_cpu(vp->tx_ring[i].status));
+			}
+			if (!stalled)
+				outw(DownUnstall, ioaddr + EL3_CMD);
+		}
+	}
 }
 
 static struct net_device_stats *vortex_get_stats(struct net_device *dev)
@@ -2344,15 +2440,21 @@ static void __devexit vortex_remove_one (struct pci_dev *pdev)
 	struct net_device *dev = pdev->driver_data;
 	struct vortex_private *vp;
 
-	if (!dev)
-		return;
+	if (!dev) {
+		printk("vortex_remove_one called for EISA device!\n");
+		BUG();
+	}
 
 	vp = (void *)(dev->priv);
 
 	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
+	/* AKPM: FIXME: we should have
+	 *	if (vp->cb_fn_base) iounmap(vp->cb_fn_base);
+	 * here
+	 */
 	unregister_netdev(dev);
 	outw(TotalReset, dev->base_addr + EL3_CMD);
-	release_region(dev->base_addr, vortex_info_tbl[vp->chip_id].io_size);
+	release_region(dev->base_addr, vp->io_size);
 	kfree(dev);
 }
 

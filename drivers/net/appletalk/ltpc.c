@@ -1272,10 +1272,8 @@ __setup("ltpc=", ltpc_setup);
 
 #ifdef MODULE
 
-static char dev_name[8];
-
 static struct net_device dev_ltpc = {
-		dev_name, 
+		"", 
 		0, 0, 0, 0,
 	 	0x0, 0,
 	 	0, 0, 0, NULL, ltpc_probe };

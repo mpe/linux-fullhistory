@@ -1929,9 +1929,10 @@ static int rh_unlink_urb(struct urb *urb)
 {
 	struct uhci *uhci = (struct uhci *)urb->dev->bus->hcpriv;
 
-	uhci->rh.send = 0;
-	del_timer(&uhci->rh.rh_int_timer);
-
+	if (uhci->rh.urb == urb) {
+		uhci->rh.send = 0;
+		del_timer(&uhci->rh.rh_int_timer);
+	}
 	return 0;
 }
 /*-------------------------------------------------------------------*/
@@ -2182,7 +2183,7 @@ static struct uhci *alloc_uhci(unsigned int io_addr, unsigned int io_size)
 	 * us a reasonable dynamic range for irq latencies.
 	 */
 	for (i = 0; i < 1024; i++) {
-		struct uhci_td *irq = &uhci->skel_int2_td;
+		struct uhci_td *irq = &uhci->skel_int1_td;
 
 		if (i & 1) {
 			irq++;

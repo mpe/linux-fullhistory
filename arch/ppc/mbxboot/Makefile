@@ -25,11 +25,20 @@ ZSZ = 0
 IOFF = 0
 ISZ = 0
 
-TFTPIMAGE=/tftpboot/zImage.mbx
-ZLINKFLAGS = -T ../vmlinux.lds -Ttext 0x00180000
+TFTPIMAGE=/tftpboot/zImage.embedded
 
+ifdef CONFIG_8xx
+ZLINKFLAGS = -T ../vmlinux.lds -Ttext 0x00180000
 OBJECTS := head.o misc.o ../coffboot/zlib.o m8xx_tty.o
 CFLAGS = $(CPPFLAGS) -O2 -DSTDC_HEADERS -fno-builtin -DCONFIG_8xx
+endif
+
+ifdef CONFIG_8260
+ZLINKFLAGS = -T ../vmlinux.lds -Ttext 0x00400000
+OBJECTS := head_8260.o misc.o ../coffboot/zlib.o m8260_tty.o embed_config.o
+CFLAGS = $(CPPFLAGS) -O2 -DSTDC_HEADERS -fno-builtin -DCONFIG_8260
+endif
+
 OBJCOPY_ARGS = -O elf32-powerpc
 
 ifeq ($(CONFIG_MBX),y)

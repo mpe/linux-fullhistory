@@ -18,7 +18,6 @@ if [ "$CONFIG_NET_PCMCIA" = "y" ]; then
    dep_tristate '  IBM PCMCIA tokenring adapter support' CONFIG_PCMCIA_IBMTR $CONFIG_PCMCIA_IBMTR $CONFIG_TR $CONFIG_PCMCIA
 
    if [ "$CONFIG_CARDBUS" = "y" ]; then
-      comment '  3Com 3c575 moved to Ethernet 10/100 menu'
       tristate '  Xircom Tulip-like CardBus support' CONFIG_PCMCIA_XIRTULIP
    fi
 

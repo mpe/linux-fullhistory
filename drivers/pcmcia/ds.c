@@ -897,7 +897,7 @@ int __init init_pcmcia_ds(void)
 	init_waitqueue_head(&s->queue);
 	init_waitqueue_head(&s->request);
 	s->handle = NULL;
-	s->removal.prev = s->removal.next = NULL;
+	init_timer(&s->removal);
 	s->removal.data = i;
 	s->removal.function = &handle_removal;
 	s->bind = NULL;

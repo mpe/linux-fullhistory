@@ -372,11 +372,9 @@ static int lne390_close(struct net_device *dev)
 
 #ifdef MODULE
 #define MAX_LNE_CARDS	4	/* Max number of LNE390 cards per module */
-#define NAMELEN		8	/* # of chars for storing dev->name */
-static char namelist[NAMELEN * MAX_LNE_CARDS] = { 0, };
 static struct net_device dev_lne[MAX_LNE_CARDS] = {
 	{
-		NULL,		/* assign a chunk of namelist[] below */
+		"",
 		0, 0, 0, 0,
 		0, 0,
 		0, 0, 0, NULL, NULL
@@ -397,7 +395,6 @@ int init_module(void)
 
 	for (this_dev = 0; this_dev < MAX_LNE_CARDS; this_dev++) {
 		struct net_device *dev = &dev_lne[this_dev];
-		dev->name = namelist+(NAMELEN*this_dev);
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
 		dev->mem_start = mem[this_dev];

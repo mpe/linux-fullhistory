@@ -1457,9 +1457,8 @@ static void mc32_reset_multicast_list(struct net_device *dev)
 
 #ifdef MODULE
 
-static char devicename[9] = { 0, };
 static struct net_device this_device = {
-	devicename, /* will be inserted by linux/drivers/net/mc32_init.c */
+	"", /* will be inserted by linux/drivers/net/mc32_init.c */
 	0, 0, 0, 0,
 	0, 0,  /* I/O address, IRQ */
 	0, 0, 0, NULL, mc32_probe };

@@ -43,6 +43,8 @@ void buf_access(void)
 		sccd[3] &= ~0x80;	/* reset DLAB */
 }
 
+extern int adb_init(void);
+
 void
 xmon_map_scc(void)
 {
@@ -59,11 +61,12 @@ xmon_map_scc(void)
 
 		/* needs to be hacked if xmon_printk is to be used
  		   from within find_via_pmu() */
+#ifdef CONFIG_ADB_PMU
 		if (!via_modem && disp_bi && find_via_pmu()) {
 			prom_drawstring("xmon uses screen and keyboard\n");
 			use_screen = 1;
-			return;
 		}
+#endif
 #endif
 
 #ifdef CHRP_ESCC
@@ -77,18 +80,11 @@ xmon_map_scc(void)
 		np = find_devices("mac-io");
 		if (np && np->n_addrs) {
 			macio_node = np;
-			addr = np->addrs[0].address + 0x13000;
-			/* use the B channel on the iMac */
-			if (!xmon_use_sccb)
-				addr += 0x20; /* use A channel */
+			addr = np->addrs[0].address + 0x13020;
 		}
 		base = (volatile unsigned char *) ioremap(addr & PAGE_MASK, PAGE_SIZE);
 		sccc = base + (addr & ~PAGE_MASK);
-#ifdef CHRP_ESCC
-		sccd = sccc + (0xc1013030 - 0xc1013020);
-#else
-		sccd = sccc + (0xf3013030 - 0xf3013020);
-#endif
+		sccd = sccc + 0x10;
 	}
 	else if ( _machine & _MACH_gemini )
 	{
@@ -133,10 +129,10 @@ xmon_write(void *handle, void *ptr, int nb)
 	ct = 0;
 	for (i = 0; i < nb; ++i) {
 		while ((*sccc & TXRDY) == 0) {
-#ifdef CONFIG_ADB	    
+#ifdef CONFIG_ADB_PMU
 			if (sys_ctrler == SYS_CTRLER_PMU)
 				pmu_poll();
-#endif /* CONFIG_ADB */
+#endif /* CONFIG_ADB_PMU */
 		}
 		c = p[i];
 		if (c == '\n' && !ct) {
@@ -144,7 +140,6 @@ xmon_write(void *handle, void *ptr, int nb)
 			ct = 1;
 			--i;
 		} else {
-			prom_drawchar(c);
 			if (console)
 				printk("%c", c);
 			ct = 0;
@@ -156,10 +151,10 @@ xmon_write(void *handle, void *ptr, int nb)
 }
 
 int xmon_wants_key;
-int xmon_pmu_keycode;
+int xmon_adb_keycode;
 
 #ifdef CONFIG_BOOTX_TEXT
-static int xmon_pmu_shiftstate;
+static int xmon_adb_shiftstate;
 
 static unsigned char xmon_keytab[128] =
 	"asdfhgzxcv\000bqwer"				/* 0x00 - 0x0f */
@@ -178,13 +173,13 @@ static unsigned char xmon_shift_keytab[128] =
 	"\0\0000123456789\0\0\0";			/* 0x50 - 0x5f */
 
 static int
-xmon_get_pmu_key(void)
+xmon_get_adb_key(void)
 {
 	int k, t, on;
 
 	xmon_wants_key = 1;
 	for (;;) {
-		xmon_pmu_keycode = -1;
+		xmon_adb_keycode = -1;
 		t = 0;
 		on = 0;
 		do {
@@ -194,20 +189,22 @@ xmon_get_pmu_key(void)
 				prom_drawchar('\b');
 				t = 200000;
 			}
+#ifdef CONFIG_ADB_PMU
 			pmu_poll();
-		} while (xmon_pmu_keycode == -1);
-		k = xmon_pmu_keycode;
+#endif /* CONFIG_ADB_PMU */
+		} while (xmon_adb_keycode == -1);
+		k = xmon_adb_keycode;
 		if (on)
 			prom_drawstring(" \b");
 
 		/* test for shift keys */
 		if ((k & 0x7f) == 0x38 || (k & 0x7f) == 0x7b) {
-			xmon_pmu_shiftstate = (k & 0x80) == 0;
+			xmon_adb_shiftstate = (k & 0x80) == 0;
 			continue;
 		}
 		if (k >= 0x80)
 			continue;	/* ignore up transitions */
-		k = (xmon_pmu_shiftstate? xmon_shift_keytab: xmon_keytab)[k];
+		k = (xmon_adb_shiftstate? xmon_shift_keytab: xmon_keytab)[k];
 		if (k != 0)
 			break;
 	}
@@ -225,7 +222,7 @@ xmon_read(void *handle, void *ptr, int nb)
 #ifdef CONFIG_BOOTX_TEXT
     if (use_screen) {
 	for (i = 0; i < nb; ++i)
-	    *p++ = xmon_get_pmu_key();
+	    *p++ = xmon_get_adb_key();
 	return i;
     }
 #endif
@@ -233,12 +230,12 @@ xmon_read(void *handle, void *ptr, int nb)
 	xmon_init_scc();
     for (i = 0; i < nb; ++i) {
 	while ((*sccc & RXRDY) == 0)
-#ifdef CONFIG_ADB	    
+#ifdef CONFIG_ADB_PMU
 	    if (sys_ctrler == SYS_CTRLER_PMU)
 		pmu_poll();
 #else
 		;
-#endif /* CONFIG_ADB */
+#endif /* CONFIG_ADB_PMU */
 	buf_access();
 		*p++ = *sccd;
     }
@@ -249,12 +246,10 @@ int
 xmon_read_poll(void)
 {
 	if ((*sccc & RXRDY) == 0) {
-#ifdef CONFIG_ADB	    
+#ifdef CONFIG_ADB_PMU
 		if (sys_ctrler == SYS_CTRLER_PMU)
 			pmu_poll();
-#else
-			;
-#endif			
+#endif /* CONFIG_ADB_PMU */
 		return -1;
 	}
 	buf_access();
@@ -296,6 +291,12 @@ xmon_init_scc()
 			t0 = readtb();
 			while (readtb() - t0 < 3*TB_SPEED)
 				eieio();
+		}
+		/* use the B channel if requested */
+		if (xmon_use_sccb) {
+			sccc = (volatile unsigned char *)
+				((unsigned long)sccc & ~0x20);
+			sccd = sccc + 0x10;
 		}
 		for (i = 20000; i != 0; --i) {
 			x = *sccc; eieio();

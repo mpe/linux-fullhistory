@@ -100,6 +100,8 @@ int has_l2cache = 0;
 
 extern char saved_command_line[];
 
+extern int pmac_newworld;
+
 #define DEFAULT_ROOT_DEVICE 0x0801	/* sda1 - slightly silly choice */
 
 extern void zs_kgdb_hook(int tty_num);
@@ -198,6 +200,11 @@ pmac_get_cpuinfo(char *buffer)
 		}
 	}
 	
+	/* Indicate newworld/oldworld */
+	len += sprintf(buffer+len, "pmac-generation\t: %s\n",
+		pmac_newworld ? "NewWorld" : "OldWorld");		
+	
+
 	return len;
 }
 
@@ -499,6 +506,8 @@ pmac_restart(char *cmd)
 	struct adb_request req;
 #endif /* CONFIG_ADB_CUDA */
 
+	pmac_nvram_update();
+	
 	switch (sys_ctrler) {
 #ifdef CONFIG_ADB_CUDA
 	case SYS_CTRLER_CUDA:
@@ -524,6 +533,8 @@ pmac_power_off(void)
 	struct adb_request req;
 #endif /* CONFIG_ADB_CUDA */
 
+	pmac_nvram_update();
+	
 	switch (sys_ctrler) {
 #ifdef CONFIG_ADB_CUDA
 	case SYS_CTRLER_CUDA:

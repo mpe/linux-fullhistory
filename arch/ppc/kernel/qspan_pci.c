@@ -84,7 +84,7 @@
 		"	.align 2\n"			\
 		"	.long 1b,3b\n"			\
 		".text"					\
-		: "=r"(x) : "r"(addr))
+		: "=r"(x) : "r"(addr) : " %0")
 
 #define QS_CONFIG_ADDR	((volatile uint *)(PCI_CSR_ADDR + 0x500))
 #define QS_CONFIG_DATA	((volatile uint *)(PCI_CSR_ADDR + 0x504))

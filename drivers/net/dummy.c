@@ -133,10 +133,8 @@ static int __init dummy_probe(struct net_device *dev)
 	return 0;
 }
 
-static char dummy_name[16];
-
 static struct net_device dev_dummy = {
-		dummy_name, 	/* Needs to be writeable */
+		"",
 		0, 0, 0, 0,
 	 	0x0, 0,
 	 	0, 0, 0, NULL, dummy_probe };

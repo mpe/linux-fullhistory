@@ -123,6 +123,7 @@ static char remcomOutBuffer[BUFMAX];
 
 static int initialized = 0;
 static int kgdb_active = 0;
+static int kgdb_started = 0;
 static u_int fault_jmp_buf[100];
 static int kdebug;
 
@@ -342,7 +343,7 @@ static void kgdb_flush_cache_all(void)
 	flush_instruction_cache();
 }
 
-static inline int get_msr()
+static inline int get_msr(void)
 {
 	int msr;
 	asm volatile("mfmsr %0" : "=r" (msr):);
@@ -460,6 +461,9 @@ static int computeSignal(unsigned int tt)
 	return SIGHUP;         /* default for things we don't know about */
 }
 
+#define PC_REGNUM 64
+#define SP_REGNUM 1
+
 /*
  * This function does all command processing for interfacing to gdb.
  */
@@ -481,6 +485,7 @@ handle_exception (struct pt_regs *regs)
 		return;
 	}
 	kgdb_active = 1;
+	kgdb_started = 1;
 
 #ifdef KGDB_DEBUG
 	printk("kgdb: entering handle_exception; trap [0x%x]\n",
@@ -501,9 +506,25 @@ handle_exception (struct pt_regs *regs)
 	sigval = computeSignal(regs->trap);
 	ptr = remcomOutBuffer;
 
+#if 0
 	*ptr++ = 'S';
 	*ptr++ = hexchars[sigval >> 4];
 	*ptr++ = hexchars[sigval & 0xf];
+#else
+	*ptr++ = 'T';
+	*ptr++ = hexchars[sigval >> 4];
+	*ptr++ = hexchars[sigval & 0xf];
+	*ptr++ = hexchars[PC_REGNUM >> 4];
+	*ptr++ = hexchars[PC_REGNUM & 0xf];
+	*ptr++ = ':';
+	ptr = mem2hex((char *)&regs->nip, ptr, 4);
+	*ptr++ = ';';
+	*ptr++ = hexchars[SP_REGNUM >> 4];
+	*ptr++ = hexchars[SP_REGNUM & 0xf];
+	*ptr++ = ':';
+	ptr = mem2hex(((char *)&regs) + SP_REGNUM*4, ptr, 4);
+	*ptr++ = ';';
+#endif
 
 	*ptr++ = 0;
 
@@ -639,6 +660,7 @@ handle_exception (struct pt_regs *regs)
 				} else {
 					strcpy(remcomOutBuffer, "E03");
 				}
+				flush_icache_range(addr, addr+length);
 			} else {
 				strcpy(remcomOutBuffer, "E02");
 			}
@@ -668,7 +690,9 @@ handle_exception (struct pt_regs *regs)
 		case 's':
 			kgdb_flush_cache_all();
 			regs->msr |= MSR_SE;
+#if 0
 			set_msr(msr | MSR_SE);
+#endif
 			unlock_kernel();
 			kgdb_active = 0;
 			return;
@@ -700,6 +724,37 @@ breakpoint(void)
 	}
 
 	asm("	.globl breakinst
-	     breakinst: trap
+	     breakinst: .long 0x7d821008
             ");
 }
+
+/* Output string in GDB O-packet format if GDB has connected. If nothing
+   output, returns 0 (caller must then handle output). */
+int
+kgdb_output_string (const char* s, unsigned int count)
+{
+	char buffer[512];
+
+        if (!kgdb_started)
+            return 0;
+
+	count = (count <= (sizeof(buffer) / 2 - 2)) 
+		? count : (sizeof(buffer) / 2 - 2);
+
+	buffer[0] = 'O';
+	mem2hex (s, &buffer[1], count);
+	putpacket(buffer);
+
+        return 1;
+ }
+
+#ifndef CONFIG_8xx
+
+/* I don't know why other platforms don't need this.  The function for
+ * the 8xx is found in arch/ppc/8xx_io/uart.c.  -- Dan
+ */
+void
+kgdb_map_scc(void)
+{
+}
+#endif

@@ -389,7 +389,7 @@ static int pci_read_proc(char *buf, char **start, off_t off,
 
 	*eof = 1;
 	pci_for_each_dev(dev) {
-		nprinted = sprint_dev_config(dev, buf + len, count - len);
+		nprinted = sprint_dev_config(dev, buf + len, PAGE_SIZE - len);
 		if (nprinted < 0) {
 			*eof = 0;
 			break;

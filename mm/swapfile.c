@@ -200,49 +200,6 @@ bad_count:
 	goto out;
 }
 
-/* needs the big kernel lock */
-swp_entry_t acquire_swap_entry(struct page *page)
-{
-	struct swap_info_struct * p;
-	unsigned long offset, type;
-	swp_entry_t entry;
-
-	if (!PageSwapEntry(page))
-		goto new_swap_entry;
-
-	/* We have the old entry in the page offset still */
-	if (!page->index)
-		goto new_swap_entry;
-	entry.val = page->index;
-	type = SWP_TYPE(entry);
-	if (type >= nr_swapfiles)
-		goto new_swap_entry;
-	p = type + swap_info;
-	if ((p->flags & SWP_WRITEOK) != SWP_WRITEOK)
-		goto new_swap_entry;
-	offset = SWP_OFFSET(entry);
-	if (offset >= p->max)
-		goto new_swap_entry;
-	/* Has it been re-used for something else? */
-	swap_list_lock();
-	swap_device_lock(p);
-	if (p->swap_map[offset])
-		goto unlock_new_swap_entry;
-
-	/* We're cool, we can just use the old one */
-	p->swap_map[offset] = 1;
-	swap_device_unlock(p);
-	nr_swap_pages--;
-	swap_list_unlock();
-	return entry;
-
-unlock_new_swap_entry:
-	swap_device_unlock(p);
-	swap_list_unlock();
-new_swap_entry:
-	return get_swap_page();
-}
-
 /*
  * The swap entry has been read in advance, and we return 1 to indicate
  * that the page has been used or is no longer needed.

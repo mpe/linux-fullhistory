@@ -280,6 +280,7 @@ static void rx(struct net_device *dev, int bufnum,
 			if (in->numpackets > 16) {
 				BUGMSG(D_EXTRA, "incoming packet more than 16 segments; dropping. (splitflag=%d)\n",
 				       soft->split_flag);
+				lp->rfc1201.aborted_seq = soft->sequence;
 				lp->stats.rx_errors++;
 				lp->stats.rx_length_errors++;
 				return;
@@ -288,6 +289,7 @@ static void rx(struct net_device *dev, int bufnum,
 						  GFP_ATOMIC);
 			if (skb == NULL) {
 				BUGMSG(D_NORMAL, "(split) memory squeeze, dropping packet.\n");
+				lp->rfc1201.aborted_seq = soft->sequence;
 				lp->stats.rx_dropped++;
 				return;
 			}
@@ -355,6 +357,10 @@ static void rx(struct net_device *dev, int bufnum,
 			in->skb = NULL;
 			in->lastpacket = in->numpackets = 0;
 
+	    BUGMSG(D_SKB_SIZE, "skb: received %d bytes from %02X (unsplit)\n",
+    		skb->len, pkt->hard.source);
+	    BUGMSG(D_SKB_SIZE, "skb: received %d bytes from %02X (split)\n",
+    		skb->len, pkt->hard.source);
 			BUGLVL(D_SKB) arcnet_dump_skb(dev, skb, "rx");
 
 			skb->protocol = type_trans(skb, dev);
@@ -442,8 +448,11 @@ static void load_pkt(struct net_device *dev, struct arc_hardware *hard,
 		hard->offset[0] = 0;
 		hard->offset[1] = ofs = 512 - softlen;
 	} else if (softlen > MTU) {	/* exception packet - add an extra header */
-		struct arc_rfc1201 excsoft =
-		{soft->proto, 0xFF, 0xFFFF};
+		struct arc_rfc1201 excsoft;
+
+		excsoft.proto = soft->proto;
+		excsoft.split_flag = 0xff;
+		excsoft.sequence = 0xffff;
 
 		hard->offset[0] = 0;
 		ofs = 512 - softlen;

@@ -14,11 +14,10 @@
  *		- monitor sensing (DDC)
  *              - virtual display
  *		- other platform support (only ppc/x86 supported)
- *		- PPLL_REF_DIV & XTALIN calculation    -done for x86
- *		- determine MCLK from previous setting -done for x86            
- *              - calculate XCLK, rather than probe BIOS
  *		- hardware cursor support
  *		- ioctl()'s
+ *
+ *    Please cc: your patches to brad@neruo.com.
  */
 
 /*
@@ -82,7 +81,7 @@
 #endif
 
 /* default mode */
-static struct fb_var_screeninfo default_var = {
+static struct fb_var_screeninfo default_var __initdata = {
     /* 640x480, 60 Hz, Non-Interlaced (25.175 MHz dotclock) */
     640, 480, 640, 480, 0, 0, 8, 0,
     {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
@@ -118,6 +117,7 @@ static const struct aty128_chip_info aty128_pci_probe_list[] __initdata =
 };
 
 /* packed BIOS settings */
+#ifndef CONFIG_PPC
 #pragma pack(1)
 typedef struct {
     u8 clock_chip_type;
@@ -144,6 +144,7 @@ typedef struct {
     u32 XCLK_max_freq;
 } PLL_BLOCK;
 #pragma pack()
+#endif /* !CONFIG_PPC */
 
 /* onboard memory information */
 struct aty128_meminfo {
@@ -1772,8 +1773,9 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
         info->palette[j].blue = default_blu[k];
     }
 
+    /* setup the DAC the way we like it */
     dac = aty_ld_le32(DAC_CNTL);
-    dac |= (DAC_8BIT_EN | DAC_RANGE_CNTL | DAC_BLANKING);
+    dac |= (DAC_8BIT_EN | DAC_RANGE_CNTL);
     dac |= DAC_MASK;
     aty_st_le32(DAC_CNTL, dac);
 

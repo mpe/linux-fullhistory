@@ -22,7 +22,7 @@ ASFLAGS		=
 LINKFLAGS	= -T arch/ppc/vmlinux.lds -Ttext $(KERNELLOAD) -Bstatic
 CPPFLAGS	:= $(CPPFLAGS) -D__powerpc__
 CFLAGS		:= $(CFLAGS) -D__powerpc__ -fsigned-char \
-		-msoft-float -pipe -fno-builtin -ffixed-r2 -Wno-uninitialized \
+		-msoft-float -pipe -ffixed-r2 -Wno-uninitialized \
 		-mmultiple -mstring
 CPP		= $(CC) -E $(CFLAGS)
 
@@ -75,6 +75,11 @@ SUBDIRS += arch/ppc/8xx_io
 DRIVERS += arch/ppc/8xx_io/8xx_io.a
 endif
 
+ifdef CONFIG_8260
+SUBDIRS += arch/ppc/8260_io
+DRIVERS += arch/ppc/8260_io/8260_io.a
+endif
+
 ifdef CONFIG_APUS
 SUBDIRS += arch/ppc/amiga
 ARCHIVES += arch/ppc/amiga/amiga.o
@@ -98,6 +103,7 @@ $(BOOT_TARGETS): $(CHECKS) vmlinux
 endif
 
 ifdef CONFIG_6xx
+ifndef CONFIG_8260
 $(BOOT_TARGETS): $(CHECKS) vmlinux
 	@$(MAKECOFFBOOT) $@
 	@$(MAKEBOOT) $@
@@ -114,6 +120,12 @@ endif
 	@$(MAKECOFFBOOT) $@
 	@$(MAKEBOOT) $@
 	@$(MAKECHRPBOOT) $@
+else
+# 8260 is custom 6xx
+$(BOOT_TARGETS): $(CHECKS) vmlinux
+	@$(MAKECOFFBOOT) $@
+	@$(MAKEMBXBOOT) $@
+endif
 endif
 
 ifdef CONFIG_PPC64

@@ -65,12 +65,11 @@ extern inline void flush_tlb_pgtables(struct mm_struct *mm,
 #define flush_cache_mm(mm)		do { } while (0)
 #define flush_cache_range(mm, a, b)	do { } while (0)
 #define flush_cache_page(vma, p)	do { } while (0)
+#define flush_icache_page(vma, page)	do { } while (0)
 
 extern void flush_icache_range(unsigned long, unsigned long);
 extern void __flush_page_to_ram(unsigned long page_va);
 #define flush_page_to_ram(page)	__flush_page_to_ram(page_address(page))
-extern void __flush_icache_page(unsigned long page_va);
-#define flush_icache_page(vma, page) __flush_icache_page(page_address(page))
 
 extern unsigned long va_to_phys(unsigned long address);
 extern pte_t *va_to_pte(struct task_struct *tsk, unsigned long address);
@@ -197,21 +196,17 @@ extern unsigned long ioremap_bot, ioremap_base;
 #define _PAGE_NO_CACHE	0x0002	/* I: cache inhibit */
 #define _PAGE_SHARED	0x0004	/* No ASID (context) compare */
 
-/* These four software bits must be masked out when the entry is loaded
+/* These five software bits must be masked out when the entry is loaded
  * into the TLB.
  */
+#define _PAGE_DIRTY	0x0008	/* software: page changed */
 #define _PAGE_GUARDED	0x0010	/* software: guarded access */
 #define _PAGE_WRITETHRU 0x0020	/* software: use writethrough cache */
 #define _PAGE_RW	0x0040	/* software: user write access allowed */
 #define _PAGE_ACCESSED	0x0080	/* software: page referenced */
 
-#define _PAGE_DIRTY	0x0100	/* C: page changed (write protect) */
+#define _PAGE_HWWRITE	0x0100	/* C: page changed (write protect) */
 #define _PAGE_USER	0x0800	/* One of the PP bits, the other must be 0 */
-
-/* This is used to enable or disable the actual hardware write
- * protection.
- */
-#define _PAGE_HWWRITE	_PAGE_DIRTY
 
 #else /* CONFIG_6xx */
 /* Definitions for 60x, 740/750, etc. */
@@ -432,6 +427,7 @@ extern inline pte_t * pte_offset(pmd_t * dir, unsigned long address)
 }
 
 extern pgd_t swapper_pg_dir[1024];
+extern void paging_init(void);
 
 /*
  * Page tables may have changed.  We don't need to do anything here

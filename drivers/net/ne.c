@@ -807,10 +807,9 @@ retry:
 #ifdef MODULE
 #define MAX_NE_CARDS	4	/* Max number of NE cards per module */
 #define NAMELEN		8	/* # of chars for storing dev->name */
-static char namelist[NAMELEN * MAX_NE_CARDS] = { 0, };
 static struct net_device dev_ne[MAX_NE_CARDS] = {
 	{
-		NULL,		/* assign a chunk of namelist[] below */
+		"",
 		0, 0, 0, 0,
 		0, 0,
 		0, 0, 0, NULL, NULL
@@ -840,7 +839,6 @@ int init_module(void)
 
 	for (this_dev = 0; this_dev < MAX_NE_CARDS; this_dev++) {
 		struct net_device *dev = &dev_ne[this_dev];
-		dev->name = namelist+(NAMELEN*this_dev);
 		dev->irq = irq[this_dev];
 		dev->mem_end = bad[this_dev];
 		dev->base_addr = io[this_dev];

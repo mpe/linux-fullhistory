@@ -368,11 +368,9 @@ static void ultra32_block_output(struct net_device *dev,
 
 #ifdef MODULE
 #define MAX_ULTRA32_CARDS   4	/* Max number of Ultra cards per module */
-#define NAMELEN		    8	/* # of chars for storing dev->name */
-static char namelist[NAMELEN * MAX_ULTRA32_CARDS] = { 0, };
 static struct net_device dev_ultra[MAX_ULTRA32_CARDS] = {
 	{
-		NULL,		/* assign a chunk of namelist[] below */
+		"",
 		0, 0, 0, 0,
 		0, 0,
 		0, 0, 0, NULL, NULL
@@ -385,7 +383,6 @@ int init_module(void)
 
 	for (this_dev = 0; this_dev < MAX_ULTRA32_CARDS; this_dev++) {
 		struct net_device *dev = &dev_ultra[this_dev];
-		dev->name = namelist+(NAMELEN*this_dev);
 		dev->init = ultra32_probe;
 		if (register_netdev(dev) != 0) {
 			if (found > 0) { /* Got at least one. */

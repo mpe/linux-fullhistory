@@ -120,8 +120,7 @@ void
 xmon(struct pt_regs *excp)
 {
 	struct pt_regs regs;
-	int msr, cmd, i;
-	unsigned *sp;
+	int msr, cmd;
 
 	if (excp == NULL) {
 		asm volatile ("stw	0,0(%0)\n\
@@ -137,29 +136,6 @@ xmon(struct pt_regs *excp)
 		excp = &regs;
 	}
 
-	prom_drawstring("xmon pc="); prom_drawhex(excp->nip);
-	prom_drawstring(" lr="); prom_drawhex(excp->link);
-	prom_drawstring(" msr="); prom_drawhex(excp->msr);
-	prom_drawstring(" trap="); prom_drawhex(excp->trap);
-	prom_drawstring(" sp="); prom_drawhex(excp->gpr[1]);
-	sp = (unsigned *)&excp->gpr[0];
-	for (i = 0; i < 32; ++i) {
-		if ((i & 7) == 0)
-			prom_drawstring("\n");
-		prom_drawstring(" ");
-		prom_drawhex(sp[i]);
-	}
-	sp = (unsigned *) excp->gpr[1];
-	for (i = 0; i < 64; ++i) {
-		if ((i & 7) == 0) {
-			prom_drawstring("\n");
-			prom_drawhex(sp);
-			prom_drawstring(" ");
-		}
-		prom_drawstring(" ");
-		prom_drawhex(sp[i]);
-	}
-	prom_drawstring("\n");
 	msr = get_msr();
 	set_msr(msr & ~0x8000);	/* disable interrupts */
 	remove_bpts();
@@ -284,10 +260,12 @@ insert_bpts()
 			bp->enabled = 0;
 		}
 	}
+#ifndef CONFIG_8xx
 	if (dabr.enabled)
 		set_dabr(dabr.address);
 	if (iabr.enabled)
 		set_iabr(iabr.address);
+#endif
 }
 
 static void
@@ -297,8 +275,10 @@ remove_bpts()
 	struct bpt *bp;
 	unsigned instr;
 
+#ifndef CONFIG_8xx
 	set_dabr(0);
 	set_iabr(0);
+#endif
 	bp = bpts;
 	for (i = 0; i < NBPTS; ++i, ++bp) {
 		if (!bp->enabled)
@@ -412,6 +392,7 @@ bpt_cmds(void)
 
 	cmd = inchar();
 	switch (cmd) {
+#ifndef CONFIG_8xx
 	case 'd':
 		mode = 7;
 		cmd = inchar();
@@ -436,6 +417,7 @@ bpt_cmds(void)
 			iabr.address |= 3;
 		scanhex(&iabr.count);
 		break;
+#endif
 	case 'c':
 		if (!scanhex(&a)) {
 			/* clear all breakpoints */
@@ -1406,6 +1388,7 @@ static char *lookup_name(unsigned long addr)
 return NULL;	
 #if 0
 	cmp = simple_strtoul(c, &c, 8);
+	/* XXX crap, we don't want the whole of the rest of the map - paulus */
 	strcpy( last, strsep( &c, "\n"));
 	while ( c < (sysmap+sysmap_size) )
 	{
@@ -1414,7 +1397,7 @@ return NULL;
 			break;
 		strcpy( last, strsep( &c, "\n"));
 	}
-	return NULLlast;
+	return last;
 #endif	
 }
 

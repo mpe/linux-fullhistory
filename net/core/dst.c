@@ -37,7 +37,7 @@ static unsigned long dst_gc_timer_inc = DST_GC_MAX;
 static void dst_run_gc(unsigned long);
 
 static struct timer_list dst_gc_timer =
-	{ NULL, NULL, DST_GC_MIN, 0L, dst_run_gc };
+	{ data: DST_GC_MIN, function: dst_run_gc };
 
 
 static void dst_run_gc(unsigned long dummy)

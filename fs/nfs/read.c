@@ -15,6 +15,7 @@
  * within the RPC code when root squashing is suspected.
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>

@@ -42,9 +42,9 @@
 #define VERSION "arcnet: COM20020 chipset support (by David Woodhouse et al.)\n"
 
 static char *clockrates[] =
-{"2.5 Mb/s", "1.25Mb/s", "625 Kb/s", "312.5 Kb/s",
- "156.25 Kb/s", "Reserved", "Reserved",
- "Reserved"};
+{"10 Mb/s", "Reserved", "5 Mb/s",
+ "2.5 Mb/s", "1.25Mb/s", "625 Kb/s", "312.5 Kb/s",
+ "156.25 Kb/s", "Reserved", "Reserved", "Reserved"};
 
 static void com20020_command(struct net_device *dev, int command);
 static int com20020_status(struct net_device *dev);
@@ -87,7 +87,7 @@ static void com20020_copy_to_card(struct net_device *dev, int bufnum,
 
 
 /* Reset the card and check some basic stuff during the detection stage. */
-int __init com20020_check(struct net_device *dev)
+int __devinit com20020_check(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr, status;
 	struct arcnet_local *lp = dev->priv;
@@ -95,15 +95,25 @@ int __init com20020_check(struct net_device *dev)
 	ARCRESET0;
 	mdelay(RESETtime);
 
-	lp->setup = lp->clock << 1;
+	lp->setup = lp->clockm ? 0 : (lp->clockp << 1);
+	lp->setup2 = (lp->clockm << 4) | 8;
 
-	REGSETUP;
-	SETCONF(lp->config);
-	outb(lp->setup, ioaddr + 7);
+	SET_SUBADR(SUB_SETUP1);
+	outb(lp->setup, _XREG);
+
+	if (lp->card_flags & ARC_CAN_10MBIT)
+	{
+		SET_SUBADR(SUB_SETUP2);
+		outb(lp->setup2, _XREG);
+	
+		/* must now write the magic "restart operation" command */
+		mdelay(1);
+		outb(0x18, _COMMAND);
+	}
 
 	lp->config = 0x21 | (lp->timeout << 3) | (lp->backplane << 2);
 	/* set node ID to 0x42 (but transmitter is disabled, so it's okay) */
-	SETCONF(lp->config);
+	SETCONF;
 	outb(0x42, ioaddr + 7);
 
 	status = ASTATUS();
@@ -139,7 +149,7 @@ int __init com20020_check(struct net_device *dev)
 /* Set up the struct net_device associated with this card.  Called after
  * probing succeeds.
  */
-int __init com20020_found(struct net_device *dev, int shared)
+int __devinit com20020_found(struct net_device *dev, int shared)
 {
 	struct arcnet_local *lp;
 	int ioaddr = dev->base_addr;
@@ -166,16 +176,24 @@ int __init com20020_found(struct net_device *dev, int shared)
 	if (!dev->dev_addr[0])
 		dev->dev_addr[0] = inb(ioaddr + 8);	/* FIXME: do this some other way! */
 
-	lp->setup = lp->clock << 1;
+	SET_SUBADR(SUB_SETUP1);
+	outb(lp->setup, _XREG);
 
-	REGSETUP;
-	SETCONF(lp->config);
-	outb(lp->setup, ioaddr + 7);
+	if (lp->card_flags & ARC_CAN_10MBIT)
+	{
+		SET_SUBADR(SUB_SETUP2);
+		outb(lp->setup2, _XREG);
+	
+		/* must now write the magic "restart operation" command */
+		mdelay(1);
+		outb(0x18, _COMMAND);
+	}
+
 
 	lp->config = 0x20 | (lp->timeout << 3) | (lp->backplane << 2) | 1;
 	/* Default 0x38 + register: Node ID */
-	SETCONF(lp->config);
-	outb(dev->dev_addr[0], ioaddr + 7);
+	SETCONF;
+	outb(dev->dev_addr[0], _XREG);
 
 	/* reserve the irq */
 	if (request_irq(dev->irq, &arcnet_interrupt, shared,
@@ -183,22 +201,26 @@ int __init com20020_found(struct net_device *dev, int shared)
 		BUGMSG(D_NORMAL, "Can't get IRQ %d!\n", dev->irq);
 		return -ENODEV;
 	}
-	/* reserve the I/O region - guaranteed to work by check_region */
-	request_region(ioaddr, ARCNET_TOTAL_SIZE, "arcnet (COM20020)");
+	/* reserve the I/O region */
+	if (request_region(ioaddr, ARCNET_TOTAL_SIZE, "arcnet (COM20020)")) {
+		free_irq(dev->irq, dev);
+		return -EBUSY;
+	}
 	dev->base_addr = ioaddr;
 
-	BUGMSG(D_NORMAL, "COM20020: station %02Xh found at %03lXh, IRQ %d.\n",
-	       dev->dev_addr[0], dev->base_addr, dev->irq);
+	BUGMSG(D_NORMAL, "%s: station %02Xh found at %03lXh, IRQ %d.\n",
+	       lp->card_name, dev->dev_addr[0], dev->base_addr, dev->irq);
 
 	if (lp->backplane)
 		BUGMSG(D_NORMAL, "Using backplane mode.\n");
 
 	if (lp->timeout != 3)
 		BUGMSG(D_NORMAL, "Using extended timeout value of %d.\n", lp->timeout);
-	if (lp->setup) {
-		BUGMSG(D_NORMAL, "Using CKP %d - data rate %s.\n",
-		       lp->setup >> 1, clockrates[lp->setup >> 1]);
-	}
+
+	BUGMSG(D_NORMAL, "Using CKP %d - data rate %s.\n",
+	       lp->setup >> 1, 
+	       clockrates[3 - ((lp->setup2 & 0xF0) >> 4) + ((lp->setup & 0x0F) >> 1)]);
+
 	if (!dev->init && register_netdev(dev)) {
 		free_irq(dev->irq, dev);
 		release_region(ioaddr, ARCNET_TOTAL_SIZE);
@@ -227,7 +249,7 @@ static int com20020_reset(struct net_device *dev, int really_reset)
 
 	lp->config = TXENcfg | (lp->timeout << 3) | (lp->backplane << 2);
 	/* power-up defaults */
-	SETCONF(lp->config);
+	SETCONF;
 
 	if (really_reset) {
 		/* reset the card */
@@ -283,7 +305,7 @@ static void com20020_openclose(struct net_device *dev, bool open)
 	else {
 		/* disable transmitter */
 		lp->config &= ~TXENcfg;
-		SETCONF(lp->config);
+		SETCONF;
 		MOD_DEC_USE_COUNT;
 	}
 	lp->hw.open_close_ll(dev, open);
@@ -305,39 +327,34 @@ static void com20020_set_mc_list(struct net_device *dev)
 	if ((dev->flags & IFF_PROMISC) && (dev->flags & IFF_UP)) {	/* Enable promiscuous mode */
 		if (!(lp->setup & PROMISCset))
 			BUGMSG(D_NORMAL, "Setting promiscuous flag...\n");
-		REGSETUP;
-		SETCONF(lp->config);
+		SET_SUBADR(SUB_SETUP1);
 		lp->setup |= PROMISCset;
-		outb(lp->setup, _SETUP);
+		outb(lp->setup, _XREG);
 	} else
 		/* Disable promiscuous mode, use normal mode */
 	{
 		if ((lp->setup & PROMISCset))
 			BUGMSG(D_NORMAL, "Resetting promiscuous flag...\n");
-		REGSETUP;
-		SETCONF(lp->config);
+		SET_SUBADR(SUB_SETUP1);
 		lp->setup &= ~PROMISCset;
-		outb(lp->setup, _SETUP);
+		outb(lp->setup, _XREG);
 	}
 }
 
-
-/*
- * FIXME: put this somewhere!
- * 
- if ((dstatus = inb(_DIAGSTAT)) & NEWNXTIDflag)
- {
- REGNXTID;
- SETCONF(lp->config);
- BUGMSG(D_EXTRA, "New NextID detected: %X\n", inb(ioaddr + 7));
- }
- */
-
+void __devexit com20020_remove(struct net_device *dev)
+{
+	unregister_netdev(dev);
+	free_irq(dev->irq, dev);
+	release_region(dev->base_addr, ARCNET_TOTAL_SIZE);
+	kfree(dev->priv);
+	kfree(dev);
+}
 
 #ifdef MODULE
 
 EXPORT_SYMBOL(com20020_check);
 EXPORT_SYMBOL(com20020_found);
+EXPORT_SYMBOL(com20020_remove);
 
 int init_module(void)
 {

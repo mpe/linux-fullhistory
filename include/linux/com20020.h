@@ -29,6 +29,7 @@
 
 int com20020_check(struct net_device *dev);
 int com20020_found(struct net_device *dev, int shared);
+void com20020_remove(struct net_device *dev);
 
 /* The number of low I/O ports used by the card. */
 #define ARCNET_TOTAL_SIZE 9
@@ -41,8 +42,10 @@ int com20020_found(struct net_device *dev, int shared);
 #define _ADDR_HI  (ioaddr+2)	/* control registers for IO-mapped memory */
 #define _ADDR_LO  (ioaddr+3)
 #define _MEMDATA  (ioaddr+4)	/* data port for IO-mapped memory */
+#define _SUBADR   (ioaddr+5)	/* the extended port _XREG refers to */
 #define _CONFIG   (ioaddr+6)	/* configuration register */
-#define _SETUP    (ioaddr+7)	/* setup register */
+#define _XREG     (ioaddr+7)	/* extra registers (indexed by _CONFIG 
+					or _SUBADR) */
 
 /* in the ADDR_HI register */
 #define RDDATAflag	0x80	/* next access is a read (not a write) */
@@ -57,10 +60,28 @@ int com20020_found(struct net_device *dev, int shared);
 /* in SETUP register */
 #define PROMISCset	0x10	/* enable RCV_ALL */
 
-#define REGTENTID (lp->config &= ~3);
-#define REGNID (lp->config = (lp->config&~2)|1);
-#define REGSETUP (lp->config = (lp->config&~1)|2);
-#define REGNXTID (lp->config |= 3);
+/* COM2002x */
+#define SUB_TENTATIVE	0	/* tentative node ID */
+#define SUB_NODE	1	/* node ID */
+#define SUB_SETUP1	2	/* various options */
+#define SUB_TEST	3	/* test/diag register */
+
+/* COM20022 only */
+#define SUB_SETUP2	4	/* sundry options */
+#define SUB_BUSCTL	5	/* bus control options */
+#define SUB_DMACOUNT	6	/* DMA count options */
+
+#define SET_SUBADR(x) do { \
+	if ((x) < 4) \
+	{ \
+		lp->config = (lp->config & ~0x03) | (x); \
+		SETCONF; \
+	} \
+	else \
+	{ \
+		outb(x, _SUBADR); \
+	} \
+} while (0)
 
 #undef ARCRESET
 #undef ASTATUS
@@ -80,6 +101,6 @@ int com20020_found(struct net_device *dev, int shared);
 #define ACOMMAND(cmd)	outb((cmd),_COMMAND)
 #define AINTMASK(msk)	outb((msk),_INTMASK)
 
-#define SETCONF(cfg)	outb(cfg, _CONFIG)
+#define SETCONF		outb(lp->config, _CONFIG)
 
 #endif /* __COM20020_H */

@@ -432,6 +432,7 @@ static inline int autofs_get_protover(int *p)
 /* Perform an expiry operation */
 static inline int autofs_expire_run(struct super_block *sb,
 				    struct autofs_sb_info *sbi,
+				    struct vfsmount *mnt,
 				    struct autofs_packet_expire *pkt_p)
 {
 	struct autofs_dir_ent *ent;
@@ -443,7 +444,7 @@ static inline int autofs_expire_run(struct super_block *sb,
 	pkt.hdr.type = autofs_ptype_expire;
 
 	if ( !sbi->exp_timeout ||
-	     !(ent = autofs_expire(sb,sbi)) )
+	     !(ent = autofs_expire(sb,sbi,mnt)) )
 		return -EAGAIN;
 
 	pkt.len = ent->len;
@@ -487,7 +488,7 @@ static int autofs_root_ioctl(struct inode *inode, struct file *filp,
 	case AUTOFS_IOC_SETTIMEOUT:
 		return autofs_get_set_timeout(sbi,(unsigned long *)arg);
 	case AUTOFS_IOC_EXPIRE:
-		return autofs_expire_run(inode->i_sb,sbi,
+		return autofs_expire_run(inode->i_sb, sbi, filp->f_vfsmnt,
 					 (struct autofs_packet_expire *)arg);
 	default:
 		return -ENOSYS;

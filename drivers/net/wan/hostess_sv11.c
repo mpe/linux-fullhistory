@@ -44,7 +44,6 @@ struct sv11_device
 	void *if_ptr;	/* General purpose pointer (used by SPPP) */
 	struct z8530_dev sync;
 	struct ppp_device netdev;
-	char name[16];
 };
 
 /*
@@ -279,7 +278,6 @@ static struct sv11_device *sv11_init(int iobase, int irq)
 	dev->chanA.netdevice=sv->netdev.dev;
 	dev->chanA.dev=dev;
 	dev->chanB.dev=dev;
-	dev->name=sv->name;
 	
 	if(dma)
 	{
@@ -323,55 +321,48 @@ static struct sv11_device *sv11_init(int iobase, int irq)
 	/*
 	 *	Now we can take the IRQ
 	 */
-	
-	for(i=0;i<999;i++)
+	if(dev_alloc_name(dev->chanA.netdevice,"hdlc%d")>=0)
 	{
-		sprintf(sv->name,"hdlc%d", i);
-		if(dev_get(sv->name)==0)
-		{
-			struct net_device *d=dev->chanA.netdevice;
-	
-			/* 
-			 *	Initialise the PPP components
-			 */
-			sppp_attach(&sv->netdev);
-			
-			/*
-			 *	Local fields
-			 */	
-			sprintf(sv->name,"hdlc%d", i);
-			
-			d->name = sv->name;
-			d->base_addr = iobase;
-			d->irq = irq;
-			d->priv = sv;
-			d->init = NULL;
-			
-			d->open = hostess_open;
-			d->stop = hostess_close;
-			d->hard_start_xmit = hostess_queue_xmit;
-			d->get_stats = hostess_get_stats;
-			d->set_multicast_list = NULL;
-			d->do_ioctl = hostess_ioctl;
-#ifdef LINUX_21			
-			d->neigh_setup = hostess_neigh_setup_dev;
-			dev_init_buffers(d);
-#else
-			d->init = return_0;
-#endif
-			d->set_mac_address = NULL;
-			
-			if(register_netdev(d)==-1)
-			{
-				printk(KERN_ERR "%s: unable to register device.\n",
-					sv->name);
-				goto fail;
-			}				
+		struct net_device *d=dev->chanA.netdevice;
 
-			z8530_describe(dev, "I/O", iobase);
-			dev->active=1;
-		 	return sv;	
-		}
+		/* 
+		 *	Initialise the PPP components
+		 */
+		sppp_attach(&sv->netdev);
+		
+		/*
+		 *	Local fields
+		 */	
+		
+		d->base_addr = iobase;
+		d->irq = irq;
+		d->priv = sv;
+		d->init = NULL;
+		
+		d->open = hostess_open;
+		d->stop = hostess_close;
+		d->hard_start_xmit = hostess_queue_xmit;
+		d->get_stats = hostess_get_stats;
+		d->set_multicast_list = NULL;
+		d->do_ioctl = hostess_ioctl;
+#ifdef LINUX_21			
+		d->neigh_setup = hostess_neigh_setup_dev;
+		dev_init_buffers(d);
+#else
+		d->init = return_0;
+#endif
+		d->set_mac_address = NULL;
+		
+		if(register_netdev(d)==-1)
+		{
+			printk(KERN_ERR "%s: unable to register device.\n",
+				d->name);
+			goto fail;
+		}				
+
+		z8530_describe(dev, "I/O", iobase);
+		dev->active=1;
+		return sv;	
 	}
 dmafail2:
 	if(dma==1)

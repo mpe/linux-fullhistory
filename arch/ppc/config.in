@@ -18,8 +18,13 @@ choice 'Processor Type'	\
 	"6xx/7xx/7400		CONFIG_6xx	\
 	 4xx			CONFIG_4xx	\
 	 630/Power3(64-Bit)	CONFIG_PPC64	\
-	 82xx			CONFIG_82xx	\
+	 8260			CONFIG_8260	\
 	 8xx			CONFIG_8xx"	6xx
+
+if [ "$CONFIG_8260" = "y" ]; then
+  define_bool CONFIG_6xx y
+  define_bool CONFIG_SERIAL_CONSOLE y
+fi
 
 if [ "$CONFIG_4xx" = "y" ]; then
     choice 'Machine Type'			\
@@ -49,11 +54,16 @@ if [ "$CONFIG_6xx" = "y" ]; then
   choice 'Machine Type'		\
 	"PowerMac/PReP/MTX/CHRP	CONFIG_ALL_PPC	\
 	 Gemini		CONFIG_GEMINI		\
+	 EST8260	CONFIG_EST8260		\
 	 APUS		CONFIG_APUS"		PowerMac/PReP/MTX/CHRP
 fi
 
 if [ "$CONFIG_PPC64" = "y" ]; then
   define_bool CONFIG_ALL_PPC y
+fi
+
+if [ "$CONFIG_8xx" = "y" -o "$CONFIG_8260" = "y" ]; then
+  define_bool CONFIG_ALL_PPC n
 fi
 
 bool 'Symmetric multi-processing support' CONFIG_SMP
@@ -86,7 +96,7 @@ define_bool CONFIG_ISA n
 define_bool CONFIG_SBUS n
 
 if [ "$CONFIG_APUS" = "y" -o "$CONFIG_4xx" = "y" -o \
-     "$CONFIG_82xx" = "y" ]; then
+     "$CONFIG_8260" = "y" ]; then
    define_bool CONFIG_PCI n
 else
    if [ "$CONFIG_6xx" = "y" -o "$CONFIG_PPC64" = "y" ]; then
@@ -144,7 +154,6 @@ if [ "$CONFIG_4xx" != "y" -a "$CONFIG_8xx" != "y" ]; then
      bool 'Support for ADB mouse' CONFIG_ADBMOUSE
   fi
   bool 'Support for Open Firmware device tree in /proc' CONFIG_PROC_DEVICETREE
-  bool 'Support for TotalImpact TotalMP' CONFIG_TOTALMP
   bool 'Support for early boot text console (BootX only)' CONFIG_BOOTX_TEXT
   bool 'Support for Motorola Hot Swap' CONFIG_MOTOROLA_HOTSWAP
 fi
@@ -226,6 +235,8 @@ fi
 
 source net/ax25/Config.in
 
+source net/irda/Config.in
+
 mainmenu_option next_comment
 comment 'ISDN subsystem'
 
@@ -264,6 +275,10 @@ endmenu
 
 if [ "$CONFIG_8xx" = "y" ]; then
 source arch/ppc/8xx_io/Config.in
+fi
+
+if [ "$CONFIG_8260" = "y" ]; then
+source arch/ppc/8260_io/Config.in
 fi
 
 source drivers/usb/Config.in

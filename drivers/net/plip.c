@@ -1395,14 +1395,6 @@ static int __init plip_init (void)
 				break;
 			}
 			memset(dev_plip[i], 0, sizeof(struct net_device));
-			dev_plip[i]->name = 
-				kmalloc(strlen("plipXXX"), GFP_KERNEL);
-			if (!dev_plip[i]->name) {
-				printk(KERN_ERR "plip: memory squeeze.\n");
-				kfree(dev_plip[i]);
-				dev_plip[i] = NULL;
-				break;
-			}
 			sprintf(dev_plip[i]->name, "plip%d", i);
 			dev_plip[i]->priv = pb;
 			if (plip_init_dev(dev_plip[i],pb) || register_netdev(dev_plip[i])) {

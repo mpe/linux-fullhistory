@@ -102,7 +102,7 @@ void coda_sysctl_clean(void);
   if (coda_debug & mask) {                                        \
     printk("(%s,l. %d): ",  __FUNCTION__, __LINE__);              \
     printk(format, ## a); }                                       \
-} while (0) ;                            
+} while (0)
 
 #define ENTRY    \
     if(coda_print_entry) printk("Process %d entered %s\n",current->pid,__FUNCTION__)

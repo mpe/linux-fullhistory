@@ -863,7 +863,7 @@ S:	Maintained
 RAGE128 FRAMEBUFFER DISPLAY DRIVER
 P:	Brad Douglas
 M:	brad@neruo.com
-L:	linux-fbdev@vuser.vc.union.edu
+L:	linux-fbdev@vuser.vu.union.edu
 S:	Maintained
 
 RAYLINK/WEBGEAR 802.11 WIRELESS LAN DRIVER

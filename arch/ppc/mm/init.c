@@ -48,8 +48,14 @@
 #include <asm/mmu.h>
 #include <asm/residual.h>
 #include <asm/uaccess.h>
+#ifdef CONFIG_8xx
 #include <asm/8xx_immap.h>
 #include <asm/mpc8xx.h>
+#endif
+#ifdef CONFIG_8260
+#include <asm/immap_8260.h>
+#include <asm/mpc8260.h>
+#endif
 #include <asm/smp.h>
 #include <asm/bootx.h>
 #include <asm/machdep.h>
@@ -104,6 +110,9 @@ unsigned long *m8xx_find_end_of_memory(void);
 #ifdef CONFIG_4xx
 unsigned long *oak_find_end_of_memory(void);
 #endif
+#ifdef CONFIG_8260
+unsigned long *m8260_find_end_of_memory(void);
+#endif /* CONFIG_8260 */
 static void mapin_ram(void);
 void map_page(unsigned long va, unsigned long pa, int flags);
 extern void die_if_kernel(char *,struct pt_regs *,long);
@@ -725,7 +734,7 @@ static void __init mapin_ram(void)
                          * don't get ASID compares on kernel space.
                          */
 			f = _PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_SHARED;
-#ifdef CONFIG_KGDB
+#if defined(CONFIG_KGDB) || defined(CONFIG_XMON)
  			/* Allows stub to set breakpoints everywhere */
  			f |= _PAGE_RW | _PAGE_DIRTY | _PAGE_HWWRITE;
 #else
@@ -896,6 +905,9 @@ MMU_init(void)
         mtspr(SPRN_ICCR, 0x80000000);	/* 128 MB of instr. space at 0x0. */
 }
 #else
+	/* How about ppc_md.md_find_end_of_memory instead of these
+	 * ifdefs?  -- Dan.
+	 */
 void __init MMU_init(void)
 {
 	if ( ppc_md.progress ) ppc_md.progress("MMU:enter", 0x111);
@@ -910,8 +922,13 @@ void __init MMU_init(void)
 	else if ( _machine == _MACH_gemini )
 		end_of_DRAM = gemini_find_end_of_memory();
 #endif /* CONFIG_GEMINI	*/
+#if defined(CONFIG_8260)
+	else
+		end_of_DRAM = m8260_find_end_of_memory();
+#else
 	else /* prep */
 		end_of_DRAM = prep_find_end_of_memory();
+#endif
 
 	if ( ppc_md.progress ) ppc_md.progress("MMU:hash init", 0x300);
         hash_init();
@@ -960,11 +977,6 @@ void __init MMU_init(void)
 			setbat(0, base, base, 0x100000, IO_PAGE);
 		}
 #endif
-#if 0
-// This is bogus, BAT must be aligned.
-//		setbat(0, disp_bi->dispDeviceBase, disp_bi->dispDeviceBase, 0x100000, IO_PAGE);
-//		disp_bi->logicalDisplayBase = disp_bi->dispDeviceBase;
-#endif		
 		ioremap_base = 0xf0000000;
 		break;
 	case _MACH_apus:
@@ -976,6 +988,16 @@ void __init MMU_init(void)
 	case _MACH_gemini:
 		setbat(0, 0xf0000000, 0xf0000000, 0x10000000, IO_PAGE);
 		setbat(1, 0x80000000, 0x80000000, 0x10000000, IO_PAGE);
+		break;
+	case _MACH_8260:
+		/* Map the IMMR, plus anything else we can cover
+		 * in that upper space according to the memory controller
+		 * chip select mapping.  Grab another bunch of space
+		 * below that for stuff we can't cover in the upper.
+		 */
+		setbat(0, 0xf0000000, 0xf0000000, 0x10000000, IO_PAGE);
+		setbat(1, 0xe0000000, 0xe0000000, 0x10000000, IO_PAGE);
+		ioremap_base = 0xe0000000;
 		break;
 	}
 	ioremap_bot = ioremap_base;
@@ -1295,6 +1317,28 @@ unsigned long __init *gemini_find_end_of_memory(void)
 }
 #endif /* defined(CONFIG_GEMINI) */
 
+#ifdef CONFIG_8260
+/*
+ * Same hack as 8xx.
+ */
+unsigned long __init *m8260_find_end_of_memory(void)
+{
+	bd_t	*binfo;
+	unsigned long *ret;
+	extern unsigned char __res[];
+	
+	binfo = (bd_t *)__res;
+
+	phys_mem.regions[0].address = 0;
+	phys_mem.regions[0].size = binfo->bi_memsize;	
+	phys_mem.n_regions = 1;
+	
+	ret = __va(phys_mem.regions[0].size);
+	set_phys_avail(&phys_mem);
+	return ret;
+}
+#endif /* CONFIG_8260 */
+
 #ifdef CONFIG_APUS
 #define HARDWARE_MAPPED_SIZE (512*1024)
 unsigned long __init *apus_find_end_of_memory(void)
@@ -1396,6 +1440,7 @@ static void __init hash_init(void)
 	case 3: /* 603 */
 	case 6: /* 603e */
 	case 7: /* 603ev */
+	case 0x0081: /* 82xx */
 		Hash_size = 0;
 		Hash_mask = 0;
 		break;

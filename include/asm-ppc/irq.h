@@ -57,21 +57,15 @@ irq_cannonicalize(int irq)
  * There are eight external interrupts (IRQs) that can be configured
  * as either level or edge sensitive. 
  *
- * The 82xx can have up to 64 interrupts on the internal controller.
- *
  * On some implementations, there is also the possibility of an 8259
  * through the PCI and PCI-ISA bridges.
  */
-#ifdef CONFIG_82xx
-#define NR_SIU_INTS	64
-#else
 #define NR_SIU_INTS	16
-#endif
 
 #define NR_IRQS	(NR_SIU_INTS + NR_8259_INTS)
 
 /* These values must be zero-based and map 1:1 with the SIU configuration.
- * They are used throughout the 8xx/82xx I/O subsystem to generate
+ * They are used throughout the 8xx I/O subsystem to generate
  * interrupt masks, flags, and other control patterns.  This is why the
  * current kernel assumption of the 8259 as the base controller is such
  * a pain in the butt.
@@ -166,10 +160,36 @@ extern irq_node_t *new_irq_node(void);
  */
 #define NR_IRQS			256
 
+#ifndef CONFIG_8260
+
 #define NUM_8259_INTERRUPTS	16
 #define IRQ_8259_CASCADE	16
 #define openpic_to_irq(n)	((n)+NUM_8259_INTERRUPTS)
 #define irq_to_openpic(n)	((n)-NUM_8259_INTERRUPTS)
+
+#else /* CONFIG_8260 */
+
+/* The 8260 has an internal interrupt controller with a maximum of
+ * 64 IRQs.  We will use NR_IRQs from above since it is large enough.
+ * Don't be confused by the 8260 documentation where they list an
+ * "interrupt number" and "interrupt vector".  We are only interested
+ * in the interrupt vector.  There are "reserved" holes where the
+ * vector number increases, but the interrupt number in the table does not.
+ * (Document errata updates have fixed this...make sure you have up to
+ * date processor documentation -- Dan).
+ */
+#define NR_SIU_INTS	64
+
+/* There are many more than these, we will add them as we need them.
+*/
+#define	SIU_INT_SMC1		((uint)0x04)
+#define	SIU_INT_SMC2		((uint)0x05)
+#define	SIU_INT_SCC1		((uint)0x28)
+#define	SIU_INT_SCC2		((uint)0x29)
+#define	SIU_INT_SCC3		((uint)0x2a)
+#define	SIU_INT_SCC4		((uint)0x2b)
+
+#endif /* CONFIG_8260 */
 
 /*
  * This gets called from serial.c, which is now used on

@@ -452,6 +452,7 @@ static int __init com90xx_found(struct net_device *dev0, int ioaddr, int airq,
 
 	/* Initialize the rest of the device structure. */
 	memset(lp, 0, sizeof(struct arcnet_local));
+	lp->card_name = "COM90xx";
 	lp->hw.command = com90xx_command;
 	lp->hw.status = com90xx_status;
 	lp->hw.intmask = com90xx_setmask;

@@ -2,6 +2,7 @@
 #define _LINUX_TIMER_H
 
 #include <linux/config.h>
+#include <linux/list.h>
 
 /*
  * Old-style timers. Please don't use for any new code.
@@ -47,8 +48,7 @@ extern struct timer_struct timer_table[32];
  * to distinguish between the different invocations.
  */
 struct timer_list {
-	struct timer_list *next; /* MUST be first element */
-	struct timer_list *prev;
+	struct list_head list;
 	unsigned long expires;
 	unsigned long data;
 	void (*function)(unsigned long);
@@ -56,7 +56,7 @@ struct timer_list {
 };
 
 extern void add_timer(struct timer_list * timer);
-extern int  del_timer(struct timer_list * timer);
+extern int del_timer(struct timer_list * timer);
 
 /*
  * mod_timer is a more efficient way to update the expire field of an
@@ -69,16 +69,15 @@ extern void it_real_fn(unsigned long);
 
 extern inline void init_timer(struct timer_list * timer)
 {
-	timer->next = NULL;
-	timer->prev = NULL;
+	timer->list.next = timer->list.prev = NULL;
 #ifdef CONFIG_SMP
 	timer->running = 0;
 #endif
 }
 
-extern inline int timer_pending(const struct timer_list * timer)
+extern inline int timer_pending (const struct timer_list * timer)
 {
-	return timer->prev != NULL;
+	return timer->list.next != NULL;
 }
 
 #ifdef CONFIG_SMP

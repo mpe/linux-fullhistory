@@ -3,7 +3,13 @@
  * not have boot monitor support for board information.
  */
 #include <sys/types.h>
-#include "asm/mpc8xx.h"
+#include <linux/autoconf.h>
+#ifdef CONFIG_8xx
+#include <asm/mpc8xx.h>
+#endif
+#ifdef CONFIG_8260
+#include <asm/mpc8260.h>
+#endif
 
 
 /* IIC functions.
@@ -12,6 +18,14 @@
  */
 extern void	iic_read(uint devaddr, u_char *buf, uint offset, uint count);
 extern u_char	aschex_to_byte(u_char *cp);
+
+/* Supply a default Ethernet address for those eval boards that don't
+ * ship with one.  This is an address from the MBX board I have, so
+ * it is unlikely you will find it on your network.
+ */
+static	ushort	def_enet_addr[] = { 0x0800, 0x3e26, 0x1559 };
+
+#if defined(CONFIG_RPXLITE) || defined(CONFIG_RPXCLASSIC)
 
 static void	rpx_eth(bd_t *bd, u_char *cp);
 static void	rpx_brate(bd_t *bd, u_char *cp);
@@ -89,8 +103,10 @@ rpx_cfg(bd_t *bd)
 	bd->bi_memstart = 0;
 
 #else
+	/* For boards without initialized EEPROM.
+	*/
 	bd->bi_memstart = 0;
-	bd->bi_memsize = (4 * 1024 * 1024);
+	bd->bi_memsize = (8 * 1024 * 1024);
 	bd->bi_intfreq = 48;
 	bd->bi_busfreq = 48;
 	bd->bi_baudrate = 9600;
@@ -174,7 +190,9 @@ rpx_cpuspeed(bd_t *bd, u_char *cp)
 	if (num > 50)
 		bd->bi_busfreq /= 2;
 }
+#endif /* RPXLITE || RPXCLASSIC */
 
+#ifdef CONFIG_BSEIP
 /* Build a board information structure for the BSE ip-Engine.
  * There is more to come since we will add some environment
  * variables and a function to read them.
@@ -204,4 +222,31 @@ bseip_cfg(bd_t *bd)
 	bd->bi_intfreq = 48;
 	bd->bi_busfreq = 48;
 }
+#endif /* BSEIP */
 
+#ifdef CONFIG_EST8260
+void
+embed_config(bd_t *bd)
+{
+	u_char	*cp;
+	int	i;
+
+#if 1
+	/* This is actually provided by my boot rom.  I have it
+	 * here for those people that may load the kernel with
+	 * a JTAG/COP tool and not the rom monitor.
+	 */
+	bd->bi_baudrate = 115200;
+	bd->bi_intfreq = 200;
+	bd->bi_busfreq = 66;
+	bd->bi_cpmfreq = 66;
+	bd->bi_brgfreq = 33;
+	bd->bi_memsize = 16 * 1024 * 1024;
+#endif
+
+	cp = (u_char *)def_enet_addr;
+	for (i=0; i<6; i++) {
+		bd->bi_enetaddr[i] = *cp++;
+	}
+}
+#endif /* EST8260 */

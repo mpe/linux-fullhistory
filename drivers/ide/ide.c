@@ -1256,7 +1256,7 @@ static void ide_do_request (ide_hwgroup_t *hwgroup, int masked_irq)
 				if (0 < (signed long)(jiffies + WAIT_MIN_SLEEP - sleep)) 
 					sleep = jiffies + WAIT_MIN_SLEEP;
 #if 1
-				if (hwgroup->timer.next || hwgroup->timer.prev)
+				if (timer_pending(&hwgroup->timer))
 					printk("ide_set_handler: timer already active\n");
 #endif
 				hwgroup->sleeping = 1;	/* so that ide_timer_expiry knows what to do */

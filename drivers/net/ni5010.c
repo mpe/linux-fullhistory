@@ -741,9 +741,8 @@ static void show_registers(struct net_device *dev)
 }
 
 #ifdef MODULE
-static char devicename[9] = { 0, };
 static struct net_device dev_ni5010 = {
-        devicename,
+        "",
         0, 0, 0, 0,
         0, 0,
         0, 0, 0, NULL, ni5010_probe };

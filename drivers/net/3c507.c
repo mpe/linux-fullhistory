@@ -860,9 +860,8 @@ static void el16_rx(struct net_device *dev)
 	lp->rx_tail = rx_tail;
 }
 #ifdef MODULE
-static char devicename[9] = { 0, };
 static struct net_device dev_3c507 = {
-	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	"", /* device name is inserted by linux/drivers/net/net_init.c */
 	0, 0, 0, 0,
 	0, 0,
 	0, 0, 0, NULL, el16_probe

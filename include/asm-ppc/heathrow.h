@@ -13,7 +13,7 @@
  * Bits in feature control register.
  * Bits postfixed with a _N are in inverse logic
  */
-#define HRW_RESET_SCC		1		/* Named in_use_led in OF ??? */
+#define HRW_MODEM_POWER_N	1		/* turns off modem power */
 #define HRW_BAY_POWER_N		2
 #define HRW_BAY_PCI_ENABLE	4
 #define HRW_BAY_IDE_ENABLE	8
@@ -38,8 +38,11 @@
 #define HRW_ARB_BYPASS		0x400000	/* ??? (0 on main, 1 on gatwick) */
 #define HRW_IDE1_RESET_N	0x800000	/* Media bay */
 #define HRW_SLOW_SCC_PCLK	0x1000000	/* ??? (0) */
-#define HRW_MODEM_POWER_N	0x2000000	/* Used by internal modem on wallstreet */
+#define HRW_RESET_SCC		0x2000000	/* perhaps? */
 #define HRW_MFDC_CELL_ENABLE	0x4000000	/* ??? (0) */
 #define HRW_USE_MFDC		0x8000000	/* ??? (0) */
 #define HRW_BMAC_IO_ENABLE	0x60000000	/* two bits, not documented in OF */
 #define HRW_BMAC_RESET		0x80000000	/* not documented in OF */
+
+
+#define PADD_MODEM_POWER_N	0x00000001	/* modem power on paddington */

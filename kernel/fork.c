@@ -6,9 +6,9 @@
 
 /*
  *  'fork.c' contains the help-routines for the 'fork' system call
- * (see also system_call.s).
+ * (see also entry.S and others).
  * Fork is rather simple, once you get the hang of it, but the memory
- * management can be a bitch. See 'mm/mm.c': 'copy_page_tables()'
+ * management can be a bitch. See 'mm/memory.c': 'copy_page_tables()'
  */
 
 #include <linux/config.h>

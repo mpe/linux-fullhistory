@@ -1494,11 +1494,9 @@ struct netdev_entry i596_drv =
 #endif
 
 #ifdef MODULE
-static char devicename[9] =
-{0,};
 static struct net_device dev_82596 =
 {
-	devicename,	/* device name inserted by drivers/net/net_init.c */
+	"",	/* device name inserted by drivers/net/net_init.c */
 	0, 0, 0, 0,
 	0, 0,		/* base, irq */
 	0, 0, 0, NULL, i82596_probe};

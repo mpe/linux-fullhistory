@@ -786,7 +786,7 @@ struct file_system_type var = { \
 
 extern int register_filesystem(struct file_system_type *);
 extern int unregister_filesystem(struct file_system_type *);
-extern int may_umount(struct super_block *);
+extern int may_umount(struct vfsmount *);
 
 static inline int vfs_statfs(struct super_block *sb, struct statfs *buf)
 {

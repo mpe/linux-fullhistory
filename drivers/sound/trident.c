@@ -284,7 +284,7 @@ struct trident_card {
 	/* Function support */
 	struct trident_channel *(*alloc_pcm_channel)(struct trident_card *);
 	struct trident_channel *(*alloc_rec_pcm_channel)(struct trident_card *);
-	void (*free_pcm_channel)(struct trident_card *, int chan);
+	void (*free_pcm_channel)(struct trident_card *, unsigned int chan);
 	void (*address_interrupt)(struct trident_card *);
 };
 
@@ -434,13 +434,19 @@ static void trident_stop_voice(struct trident_card * card, unsigned int channel)
 #endif
 }
 
-static int trident_check_channel_interrupt(struct trident_card * card, int channel)
+static u32 trident_get_interrupt_mask (struct trident_card * card,
+				       unsigned int b)
+{
+	struct trident_pcm_bank *bank = &card->banks[b];
+	u32 addr = bank->addresses->aint;
+	return inl(TRID_REG(card, addr));
+}
+
+static int trident_check_channel_interrupt(struct trident_card * card,
+					   unsigned int channel)
 {
 	unsigned int mask = 1 << (channel & 0x1f);
-	struct trident_pcm_bank *bank = &card->banks[channel >> 5];
-	u32 reg, addr = bank->addresses->aint;
-
-	reg = inl(TRID_REG(card, addr));
+	u32 reg = trident_get_interrupt_mask (card, channel >> 5);
 
 #ifdef DEBUG
 	if (reg & mask)
@@ -450,7 +456,8 @@ static int trident_check_channel_interrupt(struct trident_card * card, int chann
 	return (reg & mask) ? TRUE : FALSE;
 }
 
-static void trident_ack_channel_interrupt(struct trident_card * card, int channel)
+static void trident_ack_channel_interrupt(struct trident_card * card,
+					  unsigned int channel)
 {
 	unsigned int mask = 1 << (channel & 0x1f);
 	struct trident_pcm_bank *bank = &card->banks[channel >> 5];
@@ -473,11 +480,7 @@ static struct trident_channel * trident_alloc_pcm_channel(struct trident_card *c
 	int idx;
 
 	bank = &card->banks[BANK_B];
-	if (bank->bitmap == ~0UL) {
-		/* no more free channels avaliable */
-		printk(KERN_ERR "trident: no more channels available on Bank B.\n");
-		return NULL;
-	}
+
 	for (idx = 31; idx >= 0; idx--) {
 		if (!(bank->bitmap & (1 << idx))) {
 			struct trident_channel *channel = &bank->channels[idx];
@@ -486,6 +489,9 @@ static struct trident_channel * trident_alloc_pcm_channel(struct trident_card *c
 			return channel;
 		}
 	}
+
+	/* no more free channels avaliable */
+	printk(KERN_ERR "trident: no more channels available on Bank B.\n");
 	return NULL;
 }
 
@@ -496,12 +502,7 @@ static struct trident_channel *ali_alloc_pcm_channel(struct trident_card *card)
 
 	bank = &card->banks[BANK_A];
 
-	if (bank->bitmap == ~0UL) {
-		/* no more free channels avaliable */
-		printk(KERN_ERR "trident: no more channels available on Bank B.\n");
-		return NULL;
-	}
-	for (idx = 0; idx <= 31; idx++) {
+	for (idx = ALI_PCM_OUT_CHANNEL_FIRST; idx <= ALI_PCM_OUT_CHANNEL_LAST ; idx++) {
 		if (!(bank->bitmap & (1 << idx))) {
 			struct trident_channel *channel = &bank->channels[idx];
 			bank->bitmap |= 1 << idx;
@@ -509,6 +510,9 @@ static struct trident_channel *ali_alloc_pcm_channel(struct trident_card *card)
 			return channel;
 		}
 	}
+
+	/* no more free channels avaliable */
+	printk(KERN_ERR "trident: no more channels available on Bank B.\n");
 	return NULL;
 }
 
@@ -529,7 +533,8 @@ static struct trident_channel *ali_alloc_rec_pcm_channel(struct trident_card *ca
 }
 
 
-static void trident_free_pcm_channel(struct trident_card *card, int channel)
+static void trident_free_pcm_channel(struct trident_card *card,
+				     unsigned int channel)
 {
 	int bank;
 
@@ -539,12 +544,10 @@ static void trident_free_pcm_channel(struct trident_card *card, int channel)
 	bank = channel >> 5;
 	channel = channel & 0x1f;
 
-	if (card->banks[bank].bitmap & (1 << (channel))) {
-		card->banks[bank].bitmap &= ~(1 << (channel));
-	}
+	card->banks[bank].bitmap &= ~(1 << (channel));
 }
 
-static void ali_free_pcm_channel(struct trident_card *card, int channel)
+static void ali_free_pcm_channel(struct trident_card *card, unsigned int channel)
 {
 	int bank;
 
@@ -554,9 +557,7 @@ static void ali_free_pcm_channel(struct trident_card *card, int channel)
 	bank = channel >> 5;
 	channel = channel & 0x1f;
 
-	if (card->banks[bank].bitmap & (1 << (channel))) {
-		card->banks[bank].bitmap &= ~(1 << (channel));
-	}
+	card->banks[bank].bitmap &= ~(1 << (channel));
 }
 
 
@@ -569,14 +570,16 @@ static int trident_load_channel_registers(struct trident_card *card, u32 *data, 
 	if (channel > 63)
 		return FALSE;
 
-	/* select hardware channel to write */
+       /* select hardware channel to write */
 	outb(channel, TRID_REG(card, T4D_LFO_GC_CIR));
-	/* output the channel registers */
+
+	/* Output the channel registers, but don't write register
+	   three to an ALI chip. */
+
 	for (i = 0; i < CHANNEL_REGS; i++) {
+		if (i == 3 && card->pci_id == PCI_DEVICE_ID_ALI_5451)
+			continue;
 		outl(data[i], TRID_REG(card, CHANNEL_START + 4*i));
-		if (i == 2)
-			if (card->pci_id == PCI_DEVICE_ID_ALI_5451)
-				i++;	//skip i=3
 	}
 
 	return TRUE;
@@ -1229,21 +1232,50 @@ static void trident_address_interrupt(struct trident_card *card)
 static void ali_address_interrupt(struct trident_card *card)
 {
 	int i;
-	struct trident_state *state;
-	
+	u32 mask = trident_get_interrupt_mask (card, BANK_A);
+
+#ifdef DEBUG
+	/* Sanity check to make sure that every state has a channel
+	   and vice versa. */
+	u32 done = 0;
+	unsigned ns = 0;
+	unsigned nc = 0;
 	for (i = 0; i < NR_HW_CH; i++) {
-		if (trident_check_channel_interrupt(card, i)) {
-			trident_ack_channel_interrupt(card, i);
-			if ((state = card->states[i]) != NULL) {
-				state->dmabuf.update_flag |= ALI_ADDRESS_INT_UPDATE;
-				trident_update_ptr(state);
-			} else {
+		if (card->banks[BANK_A].bitmap & (1<<i))
+			nc ++;
+
+		if (card->states[i]) {
+			u32 bit = 1 << card->states[i]->dmabuf.channel->num;
+			if (bit & done) 
+				printk (KERN_ERR "trident: channel allocated to two states\n");
+			ns++;
+
+			done |= bit;
+		}
+	}
+	if (ns != nc) 
+		printk (KERN_ERR "trident: number of states != number of channels\n");
+#endif
+
+	for (i = 0; mask && i < NR_HW_CH; i++) {			
+		struct trident_state *state = card->states[i];
+		if (!state)
+			continue;
+
+		trident_ack_channel_interrupt(card, state->dmabuf.channel->num);
+		mask &= ~ (1<<state->dmabuf.channel->num);
+		state->dmabuf.update_flag |= ALI_ADDRESS_INT_UPDATE;
+		trident_update_ptr(state);
+	}
+
+	if (mask) 
+		for (i = 0; i < NR_HW_CH; i++)
+			if (mask & (1<<i)) {
 				printk("ali: spurious channel irq %d.\n", i);
 				trident_stop_voice(card, i);
 				trident_disable_voice_irq(card, i);
 			}
-		}
-	}
+
 }
 
 static void trident_interrupt(int irq, void *dev_id, struct pt_regs *regs)
@@ -1897,7 +1929,7 @@ static int trident_open(struct inode *inode, struct file *file)
 		
 	if (dmabuf->channel == NULL) {
 		kfree (card->states[i]);
-		card->states[i] = NULL;;
+		card->states[i] = NULL;
 		return -ENODEV;
 	}
 
@@ -1954,6 +1986,11 @@ static int trident_open(struct inode *inode, struct file *file)
 	state->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
 	up(&state->open_sem);
 
+#ifdef DEBUG
+	printk(KERN_ERR "trident: open virtual channel %d, hard channel %d\n", 
+	       state->virt,
+	       dmabuf->channel->num);
+#endif
 	MOD_INC_USE_COUNT;
 	return 0;
 }

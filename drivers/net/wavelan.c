@@ -4211,7 +4211,6 @@ int init_module(void)
 				break;
 			}
 			memset(dev, 0x00, sizeof(struct net_device));
-			dev->name = name[i];
 			dev->base_addr = io[i];
 			dev->irq = irq[i];
 			dev->init = &wavelan_config;

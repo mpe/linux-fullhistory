@@ -819,9 +819,8 @@ de600_rspace(struct sock *sk)
 #endif
 
 #ifdef MODULE
-static char nullname[8];
 static struct net_device de600_dev = {
-	nullname, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, de600_probe };
+	"", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, de600_probe };
 
 int
 init_module(void)

@@ -25,6 +25,8 @@ extern unsigned int pci_probe;
 
 /* pci-i386.c */
 
+extern unsigned int pcibios_max_latency;
+
 void pcibios_resource_survey(void);
 int pcibios_enable_resources(struct pci_dev *);
 
@@ -64,5 +66,6 @@ struct irq_routing_table {
 
 extern unsigned int pcibios_irq_mask;
 
+void pcibios_irq_init(void);
 void pcibios_fixup_irqs(void);
 int pcibios_lookup_irq(struct pci_dev *dev, int assign);

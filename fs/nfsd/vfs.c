@@ -141,7 +141,7 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 	} else {
 		dentry = lookup_one(name, dparent);
 		err = PTR_ERR(dentry);
-		if (err)
+		if (IS_ERR(dentry))
 			goto out_nfserr;
 		/*
 		 * check if we have crossed a mount point ...
@@ -955,7 +955,7 @@ nfsd_create_v3(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	 */
 	dchild = lookup_one(fname, dentry);
 	err = PTR_ERR(dchild);
-	if(IS_ERR(dchild))
+	if (IS_ERR(dchild))
 		goto out_nfserr;
 
 	err = fh_compose(resfhp, fhp->fh_export, dchild);

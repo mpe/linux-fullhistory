@@ -92,7 +92,6 @@ struct ppp_file {
  */
 struct ppp {
 	struct ppp_file	file;		/* stuff for read/write/poll */
-	char		name[16];	/* unit name */
 	struct list_head channels;	/* list of attached channels */
 	int		n_channels;	/* how many channels are attached */
 	spinlock_t	rlock;		/* lock for receive side */
@@ -2190,7 +2189,6 @@ ppp_create_interface(int unit, int *retp)
 	memset(dev, 0, sizeof(struct net_device));
 
 	ppp->file.index = unit;
-	sprintf(ppp->name, "ppp%d", unit);
 	ppp->mru = PPP_MRU;
 	init_ppp_file(&ppp->file, INTERFACE);
 	for (i = 0; i < NUM_NP; ++i)
@@ -2205,7 +2203,7 @@ ppp_create_interface(int unit, int *retp)
 
 	ppp->dev = dev;
 	dev->init = ppp_net_init;
-	dev->name = ppp->name;
+	sprintf(dev->name, "ppp%d", unit);
 	dev->priv = ppp;
 	dev->new_style = 1;
 

@@ -1157,6 +1157,8 @@ void __init init_idle(void)
 	sched_data->last_schedule = get_cycles();
 }
 
+extern void init_timervecs (void);
+
 void __init sched_init(void)
 {
 	/*
@@ -1170,6 +1172,8 @@ void __init sched_init(void)
 
 	for(nr = 0; nr < PIDHASH_SZ; nr++)
 		pidhash[nr] = NULL;
+
+	init_timervecs();
 
 	init_bh(TIMER_BH, timer_bh);
 	init_bh(TQUEUE_BH, tqueue_bh);

@@ -253,6 +253,7 @@ static int __init com90io_found(struct net_device *dev)
 	memset(dev->priv, 0, sizeof(struct arcnet_local));
 
 	lp = (struct arcnet_local *) (dev->priv);
+	lp->card_name = "COM90xx I/O";
 	lp->hw.command = com90io_command;
 	lp->hw.status = com90io_status;
 	lp->hw.intmask = com90io_setmask;

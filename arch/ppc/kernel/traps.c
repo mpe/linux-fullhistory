@@ -119,10 +119,10 @@ MachineCheckException(struct pt_regs *regs)
 			printk("Unknown values in msr\n");
 		}
 		show_regs(regs);
-		print_backtrace((unsigned long *)regs->gpr[1]);
 #if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
 		debugger(regs);
 #endif
+		print_backtrace((unsigned long *)regs->gpr[1]);
 		panic("machine check");
 	}
 	_exception(SIGSEGV, regs);	

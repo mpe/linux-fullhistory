@@ -583,8 +583,7 @@ static inline void debugt(const char *message)
 }
 
 typedef void (*timeout_fn)(unsigned long);
-static struct timer_list fd_timeout ={ NULL, NULL, 0, 0,
-				       (timeout_fn) floppy_shutdown };
+static struct timer_list fd_timeout ={ function: (timeout_fn) floppy_shutdown };
 
 static const char *timeout_message;
 
@@ -592,7 +591,7 @@ static const char *timeout_message;
 static void is_alive(const char *message)
 {
 	/* this routine checks whether the floppy driver is "alive" */
-	if (fdc_busy && command_status < 2 && !fd_timeout.prev){
+	if (fdc_busy && command_status < 2 && !timer_pending(&fd_timeout)){
 		DPRINT("timeout handler died: %s\n",message);
 	}
 }
@@ -903,14 +902,14 @@ static void motor_off_callback(unsigned long nr)
 }
 
 static struct timer_list motor_off_timer[N_DRIVE] = {
-	{ NULL, NULL, 0, 0, motor_off_callback },
-	{ NULL, NULL, 0, 1, motor_off_callback },
-	{ NULL, NULL, 0, 2, motor_off_callback },
-	{ NULL, NULL, 0, 3, motor_off_callback },
-	{ NULL, NULL, 0, 4, motor_off_callback },
-	{ NULL, NULL, 0, 5, motor_off_callback },
-	{ NULL, NULL, 0, 6, motor_off_callback },
-	{ NULL, NULL, 0, 7, motor_off_callback }
+	{ data: 0, function: motor_off_callback },
+	{ data: 1, function: motor_off_callback },
+	{ data: 2, function: motor_off_callback },
+	{ data: 3, function: motor_off_callback },
+	{ data: 4, function: motor_off_callback },
+	{ data: 5, function: motor_off_callback },
+	{ data: 6, function: motor_off_callback },
+	{ data: 7, function: motor_off_callback }
 };
 
 /* schedules motor off */
@@ -976,7 +975,7 @@ static void schedule_bh( void (*handler)(void*) )
 	mark_bh(IMMEDIATE_BH);
 }
 
-static struct timer_list fd_timer ={ NULL, NULL, 0, 0, 0 };
+static struct timer_list fd_timer;
 
 static void cancel_activity(void)
 {
@@ -1852,9 +1851,9 @@ static void show_floppy(void)
 		printk("DEVICE_INTR=%p\n", DEVICE_INTR);
 	if (floppy_tq.sync)
 		printk("floppy_tq.routine=%p\n", floppy_tq.routine);
-	if (fd_timer.prev)
+	if (timer_pending(&fd_timer))
 		printk("fd_timer.function=%p\n", fd_timer.function);
-	if (fd_timeout.prev){
+	if (timer_pending(&fd_timeout)){
 		printk("timer_table=%p\n",fd_timeout.function);
 		printk("expires=%lu\n",fd_timeout.expires-jiffies);
 		printk("now=%lu\n",jiffies);
@@ -4334,13 +4333,13 @@ static void floppy_release_irq_and_dma(void)
 #ifdef FLOPPY_SANITY_CHECK
 #ifndef __sparc__
 	for (drive=0; drive < N_FDC * 4; drive++)
-		if (motor_off_timer[drive].next)
+		if (timer_pending(motor_off_timer + drive))
 			printk("motor off timer %d still active\n", drive);
 #endif
 
-	if (fd_timeout.next)
+	if (timer_pending(&fd_timeout))
 		printk("floppy timer still active:%s\n", timeout_message);
-	if (fd_timer.next)
+	if (timer_pending(&fd_timer))
 		printk("auxiliary floppy timer still active\n");
 	if (floppy_tq.sync)
 		printk("task queue still active\n");

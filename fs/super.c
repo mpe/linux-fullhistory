@@ -74,7 +74,7 @@ LIST_HEAD(super_blocks);
  */
 
 static struct file_system_type *file_systems = NULL;
-static spinlock_t file_systems_lock = SPIN_LOCK_UNLOCKED;
+static rwlock_t file_systems_lock = RW_LOCK_UNLOCKED;
 
 /* WARNING: This can be used only if we _already_ own a reference */
 static void get_filesystem(struct file_system_type *fs)
@@ -120,13 +120,13 @@ int register_filesystem(struct file_system_type * fs)
 		return -EINVAL;
 	if (fs->next)
 		return -EBUSY;
-	spin_lock(&file_systems_lock);
+	write_lock(&file_systems_lock);
 	p = find_filesystem(fs->name);
 	if (*p)
 		res = -EBUSY;
 	else
 		*p = fs;
-	spin_unlock(&file_systems_lock);
+	write_unlock(&file_systems_lock);
 	return res;
 }
 
@@ -146,18 +146,18 @@ int unregister_filesystem(struct file_system_type * fs)
 {
 	struct file_system_type ** tmp;
 
-	spin_lock(&file_systems_lock);
+	write_lock(&file_systems_lock);
 	tmp = &file_systems;
 	while (*tmp) {
 		if (fs == *tmp) {
 			*tmp = fs->next;
 			fs->next = NULL;
-			spin_unlock(&file_systems_lock);
+			write_unlock(&file_systems_lock);
 			return 0;
 		}
 		tmp = &(*tmp)->next;
 	}
-	spin_unlock(&file_systems_lock);
+	write_unlock(&file_systems_lock);
 	return -EINVAL;
 }
 
@@ -173,14 +173,14 @@ static int fs_index(const char * __name)
 		return err;
 
 	err = -EINVAL;
-	spin_lock(&file_systems_lock);
+	read_lock(&file_systems_lock);
 	for (tmp=file_systems, index=0 ; tmp ; tmp=tmp->next, index++) {
 		if (strcmp(tmp->name,name) == 0) {
 			err = index;
 			break;
 		}
 	}
-	spin_unlock(&file_systems_lock);
+	read_unlock(&file_systems_lock);
 	putname(name);
 	return err;
 }
@@ -190,11 +190,11 @@ static int fs_name(unsigned int index, char * buf)
 	struct file_system_type * tmp;
 	int len, res;
 
-	spin_lock(&file_systems_lock);
+	read_lock(&file_systems_lock);
 	for (tmp = file_systems; tmp; tmp = tmp->next, index--)
 		if (index <= 0 && try_inc_mod_count(tmp->owner))
 				break;
-	spin_unlock(&file_systems_lock);
+	read_unlock(&file_systems_lock);
 	if (!tmp)
 		return -EINVAL;
 
@@ -210,10 +210,10 @@ static int fs_maxindex(void)
 	struct file_system_type * tmp;
 	int index;
 
-	spin_lock(&file_systems_lock);
+	read_lock(&file_systems_lock);
 	for (tmp = file_systems, index = 0 ; tmp ; tmp = tmp->next, index++)
 		;
-	spin_unlock(&file_systems_lock);
+	read_unlock(&file_systems_lock);
 	return index;
 }
 
@@ -245,7 +245,7 @@ int get_filesystem_list(char * buf)
 	int len = 0;
 	struct file_system_type * tmp;
 
-	spin_lock(&file_systems_lock);
+	read_lock(&file_systems_lock);
 	tmp = file_systems;
 	while (tmp && len < PAGE_SIZE - 80) {
 		len += sprintf(buf+len, "%s\t%s\n",
@@ -253,7 +253,7 @@ int get_filesystem_list(char * buf)
 			tmp->name);
 		tmp = tmp->next;
 	}
-	spin_unlock(&file_systems_lock);
+	read_unlock(&file_systems_lock);
 	return len;
 }
 
@@ -261,17 +261,17 @@ static struct file_system_type *get_fs_type(const char *name)
 {
 	struct file_system_type *fs;
 	
-	spin_lock(&file_systems_lock);
+	read_lock(&file_systems_lock);
 	fs = *(find_filesystem(name));
 	if (fs && !try_inc_mod_count(fs->owner))
 		fs = NULL;
-	spin_unlock(&file_systems_lock);
+	read_unlock(&file_systems_lock);
 	if (!fs && (request_module(name) == 0)) {
-		spin_lock(&file_systems_lock);
+		read_lock(&file_systems_lock);
 		fs = *(find_filesystem(name));
 		if (fs && !try_inc_mod_count(fs->owner))
 			fs = NULL;
-		spin_unlock(&file_systems_lock);
+		read_unlock(&file_systems_lock);
 	}
 	return fs;
 }
@@ -872,16 +872,30 @@ static int do_remount_sb(struct super_block *sb, int flags, char *data)
  * give false negatives. The main reason why it's here is that we need
  * a non-destructive way to look for easily umountable filesystems.
  */
- /* MOUNT_REWRITE: it should take vfsmount, not superblock */
-int may_umount(struct super_block *sb)
+int may_umount(struct vfsmount *mnt)
 {
+	struct super_block * sb = mnt->mnt_sb;
 	struct dentry * root;
 	int count;
+
+	if (atomic_read(&mnt->mnt_count) > 2)
+		return -EBUSY;
+
+	if (mnt->mnt_instances.next != mnt->mnt_instances.prev)
+		return 0;
+
+	/*
+	 * OK, at that point we have only one instance. We should have
+	 * one active reference from ->s_root, one active reference
+	 * from ->mnt_root (which may be different) and possibly one
+	 * active reference from ->mnt_mountpoint (if mnt->mnt_parent == mnt).
+	 * Anything above that means that tree is busy.
+	 */
 
 	root = sb->s_root;
 
 	count = d_active_refs(root);
-	if (root->d_covers == root)
+	if (mnt->mnt_parent == mnt)
 		count--;
 	if (count != 2)
 		return -EBUSY;
@@ -1369,22 +1383,21 @@ skip_nfs:
 		goto mount_it;
 	}
 
-	spin_lock(&file_systems_lock);
+	read_lock(&file_systems_lock);
 	for (fs_type = file_systems ; fs_type ; fs_type = fs_type->next) {
   		if (!(fs_type->fs_flags & FS_REQUIRES_DEV))
   			continue;
 		if (!try_inc_mod_count(fs_type->owner))
 			continue;
-		spin_unlock(&file_systems_lock);
+		read_unlock(&file_systems_lock);
   		sb = read_super(ROOT_DEV,bdev,fs_type,root_mountflags,NULL,1);
 		if (sb) 
 			goto mount_it;
-		spin_lock(&file_systems_lock);
+		read_lock(&file_systems_lock);
 		put_filesystem(fs_type);
 	}
-	spin_unlock(&file_systems_lock);
-	panic("VFS: Unable to mount root fs on %s",
-		kdevname(ROOT_DEV));
+	read_unlock(&file_systems_lock);
+	panic("VFS: Unable to mount root fs on %s", kdevname(ROOT_DEV));
 
 mount_it:
 	printk ("VFS: Mounted root (%s filesystem)%s.\n",
@@ -1564,7 +1577,8 @@ int __init change_root(kdev_t new_root_dev,const char *put_old)
 	mount_root();
 #if 1
 	shrink_dcache();
-	printk("change_root: old root has d_count=%d\n", old_root->d_count);
+	printk("change_root: old root has d_count=%d\n", 
+	       old_rootmnt->mnt_root->d_count);
 #endif
 	mount_devfs_fs ();
 	/*

@@ -551,7 +551,7 @@ static struct net_device *insert_device(struct net_device *dev,
 	int len;
 
 	PRINTK(KERN_INFO "entering insert_device\n");
-	len = sizeof(struct net_device) + 8 + sizeof(struct s_smc);
+	len = sizeof(struct net_device) + sizeof(struct s_smc);
 	new = (struct net_device *) kmalloc(len, GFP_KERNEL);
 	if (new == NULL) {
 		printk("fddi%d: Device not initialised, insufficient memory\n",
@@ -559,8 +559,7 @@ static struct net_device *insert_device(struct net_device *dev,
 		return NULL;
 	} else {
 		memset((char *) new, 0, len);
-		new->name = (char *) (new + 1);
-		new->priv = (struct s_smc *) (new->name + 8);
+		new->priv = (struct s_smc *) (new + 1);
 		new->init = init;	/* initialisation routine */
 		if (!loading_module) {
 			new->next = dev->next;

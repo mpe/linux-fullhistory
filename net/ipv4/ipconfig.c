@@ -227,20 +227,17 @@ static int __init ic_setup_if(void)
 	strcpy(ir.ifr_ifrn.ifrn_name, ic_dev->name);
 	set_sockaddr(sin, ic_myaddr, 0);
 	if ((err = ic_dev_ioctl(SIOCSIFADDR, &ir)) < 0) {
-		printk(KERN_ERR "IP-Config: Unable to set interface address (%u.%u.%u.%u).\n",
-			NIPQUAD(err));
+		printk(KERN_ERR "IP-Config: Unable to set interface address (%d).\n", err);
 		return -1;
 	}
 	set_sockaddr(sin, ic_netmask, 0);
 	if ((err = ic_dev_ioctl(SIOCSIFNETMASK, &ir)) < 0) {
-		printk(KERN_ERR "IP-Config: Unable to set interface netmask (%u.%u.%u.%u).\n",
-			NIPQUAD(err));
+		printk(KERN_ERR "IP-Config: Unable to set interface netmask (%d).\n", err);
 		return -1;
 	}
 	set_sockaddr(sin, ic_myaddr | ~ic_netmask, 0);
 	if ((err = ic_dev_ioctl(SIOCSIFBRDADDR, &ir)) < 0) {
-		printk(KERN_ERR "IP-Config: Unable to set interface broadcast address (%u.%u.%u.%u).\n",
-			NIPQUAD(err));
+		printk(KERN_ERR "IP-Config: Unable to set interface broadcast address (%d).\n", err);
 		return -1;
 	}
 	return 0;
@@ -264,8 +261,7 @@ static int __init ic_setup_routes(void)
 		set_sockaddr((struct sockaddr_in *) &rm.rt_gateway, ic_gateway, 0);
 		rm.rt_flags = RTF_UP | RTF_GATEWAY;
 		if ((err = ic_route_ioctl(SIOCADDRT, &rm)) < 0) {
-			printk(KERN_ERR "IP-Config: Cannot add default route (%u.%u.%u.%u).\n",
-				NIPQUAD(err));
+			printk(KERN_ERR "IP-Config: Cannot add default route (%d).\n", err);
 			return -1;
 		}
 	}

@@ -4,6 +4,7 @@
  *  Copyright (C) 1995-1997, 1999 Martin von Löwis
  *  Copyright (C) 1996-1997 Régis Duchesne
  *  Copyright (C) 1999 Steve Dodd
+ *  Copyright (C) 2000 Anton Altparmakov
  */
 
 #include "ntfstypes.h"
@@ -62,7 +63,10 @@ int ntfs_init_volume(ntfs_volume *vol,char *boot)
 	vol->at_standard_information=0x10;
 	vol->at_attribute_list=0x20;
 	vol->at_file_name=0x30;
+	vol->at_volume_version=0x40;
 	vol->at_security_descriptor=0x50;
+	vol->at_volume_name=0x60;
+	vol->at_volume_information=0x70;
 	vol->at_data=0x80;
 	vol->at_index_root=0x90;
 	vol->at_index_allocation=0xA0;
@@ -141,8 +145,18 @@ process_attrdef(ntfs_inode* attrdef,ntfs_u8* def)
 	}else if(ntfs_ua_strncmp(name,"$FILE_NAME",64)==0){
 		vol->at_file_name=type;
 		check_type=0x30;
+	}else if(ntfs_ua_strncmp(name,"$VOLUME_VERSION",64)==0){
+		vol->at_volume_version=type;
+		check_type=0x40;
 	}else if(ntfs_ua_strncmp(name,"$SECURITY_DESCRIPTOR",64)==0){
-		vol->at_file_name=type;
+		vol->at_security_descriptor=type;
+		check_type=0x50;
+	}else if(ntfs_ua_strncmp(name,"$VOLUME_NAME",64)==0){
+		vol->at_volume_name=type;
+		check_type=0x60;
+	}else if(ntfs_ua_strncmp(name,"$VOLUME_INFORMATION",64)==0){
+		vol->at_volume_information=type;
+		check_type=0x70;
 	}else if(ntfs_ua_strncmp(name,"$DATA",64)==0){
 		vol->at_data=type;
 		check_type=0x80;
@@ -158,6 +172,7 @@ process_attrdef(ntfs_inode* attrdef,ntfs_u8* def)
 	}else if(ntfs_ua_strncmp(name,"$SYMBOLIC_LINK",64)==0 ||
 		 ntfs_ua_strncmp(name,"$REPARSE_POINT",64)==0){
 		vol->at_symlink=type;
+		check_type=0xC0;
 	}
 	if(check_type && check_type!=type){
 		ntfs_error("Unexpected type %x for %x\n",type,check_type);
@@ -196,10 +211,32 @@ ntfs_init_attrdef(ntfs_inode* attrdef)
 	return error;
 }
 
+/* ntfs_get_version will determine the NTFS version of the 
+   volume and will return the version in a BCD format, with
+   the MSB being the major version number and the LSB the
+   minor one. Otherwise return <0 on error. 
+   Example: version 3.1 will be returned as 0x0301.
+   This has the obvious limitation of not coping with version
+   numbers above 0x80 but that shouldn't be a problem... */
+int ntfs_get_version(ntfs_inode* volume)
+{
+	ntfs_attribute *volinfo;
+	int i;
+
+	volinfo = ntfs_find_attr(volume, volume->vol->at_volume_information, 0);
+	if (!volinfo) 
+		return -EINVAL;
+	if (!volinfo->resident) {
+		ntfs_error("Volume information attribute is not resident!\n");
+		return -EINVAL;
+	}
+	return ((ntfs_u8*)volinfo->d.data)[8] << 8 | ((ntfs_u8*)volinfo->d.data)[9];
+}
+
 int ntfs_load_special_files(ntfs_volume *vol)
 {
 	int error;
-	ntfs_inode upcase,attrdef;
+	ntfs_inode upcase, attrdef, volume;
 
 	vol->mft_ino=(ntfs_inode*)ntfs_calloc(3*sizeof(ntfs_inode));
 	error=ENOMEM;
@@ -232,6 +269,21 @@ int ntfs_load_special_files(ntfs_volume *vol)
 	error=ntfs_init_attrdef(&attrdef);
 	ntfs_clear_inode(&attrdef);
 	if(error)return error;
+
+	/* Check for NTFS version and if Win2k version (ie. 3.0+)
+	   do not allow write access since the driver write support
+	   is broken, especially for Win2k. */
+	ntfs_debug(DEBUG_BSD,"Going to load VOLUME\n");
+	error = ntfs_init_inode(&volume,vol,FILE_VOLUME);
+	if (error) return error;
+	if ((error = ntfs_get_version(&volume)) >= 0x0300) {
+		NTFS_SB(vol)->s_flags |= MS_RDONLY;
+		ntfs_error("Warning! NTFS volume version is Win2k+: Mounting read-only\n");
+	}
+	ntfs_clear_inode(&volume);
+	if (error < 0) return error;
+	ntfs_debug(DEBUG_BSD, "NTFS volume is version %d.%d\n", error >> 8, error & 0xff);
+
 	return 0;
 }
 

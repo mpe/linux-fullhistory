@@ -52,6 +52,7 @@ static int __init com20020isa_probe(struct net_device *dev)
 {
 	int ioaddr;
 	unsigned long airqmask;
+	struct arcnet_local *lp = dev->priv;
 
 #ifndef MODULE
 	arcnet_init();
@@ -103,6 +104,8 @@ static int __init com20020isa_probe(struct net_device *dev)
 			}
 		}
 	}
+
+	lp->card_name = "ISA COM20020";
 	return com20020_found(dev, 0);
 }
 
@@ -119,7 +122,8 @@ static int irq = 0;		/* or use the insmod io= irq= shmem= options */
 static char *device;		/* use eg. device="arc1" to change name */
 static int timeout = 3;
 static int backplane = 0;
-static int clock = 0;
+static int clockp = 0;
+static int clockm = 0;
 
 MODULE_PARM(node, "i");
 MODULE_PARM(io, "i");
@@ -127,7 +131,8 @@ MODULE_PARM(irq, "i");
 MODULE_PARM(device, "s");
 MODULE_PARM(timeout, "i");
 MODULE_PARM(backplane, "i");
-MODULE_PARM(clock, "i");
+MODULE_PARM(clockp, "i");
+MODULE_PARM(clockm, "i");
 
 static void com20020isa_open_close(struct net_device *dev, bool open)
 {
@@ -155,7 +160,8 @@ int init_module(void)
 		dev->dev_addr[0] = node;
 
 	lp->backplane = backplane;
-	lp->clock = clock & 7;
+	lp->clockp = clockp & 7;
+	lp->clockm = clockm & 3;
 	lp->timeout = timeout & 3;
 	lp->hw.open_close_ll = com20020isa_open_close;
 
@@ -174,13 +180,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	struct net_device *dev = my_dev;
-
-	unregister_netdev(dev);
-	free_irq(dev->irq, dev);
-	release_region(dev->base_addr, ARCNET_TOTAL_SIZE);
-	kfree(dev->priv);
-	kfree(dev);
+	com20020_remove(my_dev);
 }
 
 #else

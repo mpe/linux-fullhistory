@@ -385,7 +385,7 @@ static dev_link_t *ray_attach(void)
 
     DEBUG(2,"ray_cs ray_attach calling ether_setup.)\n");
     ether_setup(dev);
-    dev->name = local->node.dev_name;
+    strcpy(dev->name, local->node.dev_name);
     dev->init = &ray_dev_init;
     dev->open = &ray_open;
     dev->stop = &ray_dev_close;

@@ -527,6 +527,8 @@ int do_pipe(int *fd)
 
 	error = -ENOMEM;
 	f1->f_dentry = f2->f_dentry = dget(d_alloc_root(inode));
+	/* MOUNT_REWRITE: set to pipefs internal vfsmnt */
+	f1->f_vfsmnt = f2->f_vfsmnt = NULL;
 	if (!f1->f_dentry)
 		goto close_f12_inode_i_j;
 

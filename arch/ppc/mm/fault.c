@@ -216,7 +216,7 @@ unsigned long va_to_phys(unsigned long address)
 	
 	pte = find_pte(current->mm, address);
 	if (pte)
-		return((unsigned long)(pte_page(*pte)) | (address & ~(PAGE_MASK-1)));
+		return(((unsigned long)(pte_val(*pte)) & PAGE_MASK) | (address & ~(PAGE_MASK-1)));
 	return (0);
 }
 
@@ -237,7 +237,7 @@ print_8xx_pte(struct mm_struct *mm, unsigned long addr)
                                 printk(" (0x%08lx)->(0x%08lx)->0x%08lx\n",
                                         (long)pgd, (long)pte, (long)pte_val(*pte));
 #define pp ((long)pte_val(*pte))				
-				printk(" RPN: %05x PP: %x SPS: %x SH: %lx "
+				printk(" RPN: %05lx PP: %lx SPS: %lx SH: %lx "
 				       "CI: %lx v: %lx\n",
 				       pp>>12,    /* rpn */
 				       (pp>>10)&3, /* pp */

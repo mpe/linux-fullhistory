@@ -2351,10 +2351,8 @@ int specialix_init(void)
 			                        pdev);
 			if (!pdev) break;
 
-			if (pci_enable_device(pdev)) {
-				i++;
+			if (pci_enable_device(pdev))
 				continue;
-			}
 
 			sx_board[i].irq = pdev->irq;
 

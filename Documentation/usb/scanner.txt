@@ -1,25 +1,26 @@
 Copyright (C) 1999, 2000 David E. Nelson
 
-Mar. 23, 2000
+April 26, 2000
 
 CHANGES
 
-- Amended for linux-2.3.40
+- Amended for linux-2.3.99-pre6-3
 - Appended hp_scan.c to end of this README
 - Removed most references to HP
 - Updated uhci/ohci host controller info
 - Updated support for multiple scanner support
 - Updated supported scanners list
-
+- Updated usbdevfs info
+- Spellcheck
 
 OVERVIEW
 
-This README will address issues regarding how to configure the kernel
+This README addresses issues regarding how to configure the kernel
 to access a USB scanner.  Although the driver was originally conceived
 for USB HP scanners, it's general enough so that it can be used with
 other scanners.  Also, one can now pass the USB Vendor and Product
 ID's using module parameters for unknown scanners.  Refer to the
-document scanner_hp_sane.txt for guidance on how to configure SANE to
+document scanner-hp-sane.txt for guidance on how to configure SANE to
 use a USB HP Scanner.
 
 
@@ -41,11 +42,11 @@ more information on accomplishing this.
 A Linux kernel with USB Scanner support enabled.
 
 'lspci' which is only needed to determine the type of USB hardware
-available in your machine.
+available/installed in your machine.
 
 CONFIGURATION
 
-Using `lspci -v`, determine the type of USB hardware available.
+Using `lspci -v`, determine the type of USB hardware available/installed.
 
   If you see something like:
 
@@ -68,7 +69,10 @@ kernel, select 'Support for USB', 'OHCI/UHCI' depending on your
 hardware (determined from the steps above), 'USB Scanner support', and
 'Preliminary USB device filesystem'.  Compile and install the modules
 (you may need to execute `depmod -a` to update the module
-dependencies).  Testing was performed only as modules, YMMV.
+dependencies). If any of the USB sections were compiled into the
+kernel, a reboot is necessary. NOTE: Updating the boot disk with
+'lilo' may also be required. Testing was performed only as modules,
+YMMV.
 
 Beginning with version 0.4 of the driver, up to 16 scanners can be
 connected/used simultaneously.  If you intend to use more than
@@ -82,14 +86,15 @@ one scanner at a time:
 	`mknod /dev/usb/scanner15 180 63`
 
 
-If you forsee using only one scanner:
+If you foresee using only one scanner it is best to:
 	`mknod /dev/usbscanner0 c 180 48`
 	`ln -s /dev/usbscanner0 /dev/usbscanner`
 
 
 Set appropriate permissions for /dev/usbscanner[0-15] (don't forget
 about group and world permissions).  Both read and write permissions
-are required for proper operation.
+are required for proper operation. For example:
+	`chmod 666 /dev/usbscanner0`
 
 Load the appropriate modules (if compiled as modules):
 
@@ -108,12 +113,23 @@ be used to test the scanner device if it's an HP scanner that supports
 SCL (Scanner Control Language).  Known HP scanner that support SCL are
 the 4100, 5200, 6200, the 6300 -- note that the 4200 is *not*
 supported since it does not understand SCL; it's also strongly
-suspected that the 3300 is not SCL compliant.  Hp_scan.c's purpose is
-to test the driver without having to retrieve/configure SANE.
-Hp_scan.c will scan the entire bed and put the output into a file
-called 'out.dat' in the current directory.  The data in the file is
-raw data so it's not very useful for imaging.
+suspected that the 3300 and the PhotoSmart S20 are not SCL compliant.
+Hp_scan.c's purpose is to test the driver without having to
+retrieve/configure SANE.  Hp_scan.c will scan the entire bed and put
+the output into a file called 'out.dat' in the current directory.  The
+data in the file is raw data so it's not very useful for imaging.
 
+MESSAGES
+
+On occassion the message 'usb_control/bulk_msg: timeout' or something
+similar will appear in '/var/adm/messages' or on the console or both,
+depending on how your system is configured.  This is a side effect
+that scanners are sometimes very slow at warming up and/or
+initialiazing.  In most cases, however, only several of these messages
+should appear and is generally considered to be normal.  If you see
+a message of the type 'excessive NAK's received' then this should
+be considered abnormal and generally indicates that the USB system is
+unable to communicate with the scanner for some particular reason.
 
 SUPPORTED SCANNERS
 
@@ -125,51 +141,61 @@ support the listed USB products.
 At the time of this writing, the following scanners were supported by
 scanner.c:
 
-  Acer
-
-    Prisa AcerScan 620U
-
-  Agfa
-
-    SnapScan 1212U, SnapScan Touch
-
-  Genius
-
-    ColorPage Vivid Pro
-
-  Hewlett Packard
-
-    3300, 4100, 4200, 5200, 6200, 6300, PhotoSmart S20
-
-  Microtek
-
-    ScanMaker X6-X6U, Phantom 336CX - C3, Phantom C6, ScanMaker V6USL,
-    ScanMaker V6UL - SpicyU
-
-  Mustek
-
-    1200 CU
-
-  Primax/Colorado
-
-    G2-300, G2-600, G2E-300, G2E-600, ReadyScan 636i, Colorado USB
-    19200, Colorado 600u, Colorado 1200u
-
-  Seiko/Epson
-
-    Perfection Perfection 610, Perfection 636U/636Photo, Perfection
-    1200U/1200Photo
-
-  Umax
-
-    Astra 1220U, 1236U, 2000U
-
-  Visioneer
-
-    OneTouch 5300, OneTouch 7600, 6100,
-
-
-  User Specified.  See MODULE PARAMETERS for details.
+ Acer
+	 Prisa Acerscan 620U & 640U (!)
+	 Prisa AcerScan 620U (!)
+ Agfa
+	 SnapScan 1212U
+	 Another SnapScan 1212U (?)
+	 SnapScan Touch
+ Colorado -- See Primax/Colorado below
+ Epson -- See Seiko/Epson below
+ Genius
+         ColorPage-Vivid Pro
+ Hewlett Packard
+	 3300C
+	 4100C
+	 4200C
+	 PhotoSmart S20
+	 5200C
+	 6200C
+	 6300C
+ Microtek
+	 ScanMaker X6 - X6U
+	 Phantom 336CX - C3
+	 Phantom 336CX - C3 #2
+	 Phantom C6
+	 ScanMaker V6USL
+	 ScanMaker V6USL #2
+	 ScanMaker V6UL - SpicyU
+ Mustek
+	 1200 CU
+ Primax/Colorado
+	 G2-300 #1
+	 G2-600 #1
+	 G2E-300 #1
+	 ReadyScan 636i
+	 G2-300 #2
+	 G2-600 #2
+	 G2E-300 #2
+	 G2E-600
+	 Colorado USB 9600
+	 Colorado USB 19200
+	 Colorado 600u
+	 Colorado 1200u
+ Seiko/Epson Corp.
+	 Perfection 636U and 636Photo
+	 Perfection 610
+	 Perfection 1200U and 1200Photo
+ Umax
+	 Astra 1220U
+	 Astra 1236U
+	 Astra 2000U
+	 Astra 2200U
+ Visioneer
+	 OneTouch 5300
+	 OneTouch 7600 duplicate ID (!)
+	 6100
 
 
 MODULE PARAMETERS
@@ -177,20 +203,35 @@ MODULE PARAMETERS
 If you have a device that you wish to experiment with or try using
 this driver with, but the Vendor and Product ID's are not coded in,
 don't despair.  If the driver was compiled as a module, you can pass
-options to the driver.  Simply add 'options scanner vendor=0x####
-product=0x****' to the conf.modules/modules.conf file replacing the
-#'s and the *'s with the correct ID's.  The ID's can be retrieved from
-the messages file or using `cat /proc/bus/usb/devices` if USB /proc
-support was selected during kernel configuration.  **NOTE**:In later
-kernels (2.3.38+), a new filesystem was introduced, usbdevfs.  To
-mount the filesystem, issue the command `mount -t usbdevfs
-/proc/bus/usb /proc/bus/usb`.  You can then issue ` cat
-/proc/bus/usb/devices` to extract USB device information.
+options to the driver.  Simply add 
+
+  options scanner vendor=0x#### product=0x****
+
+to the /etc/modules.conf file replacing the #'s and the *'s with the
+correct ID's.  The ID's can be retrieved from the messages file or
+using `cat /proc/bus/usb/devices`. Note that USB /proc support must be
+enabled during kernel configuration.  If the 'scanner' module is
+already loaded into memory, it must be reloaded for the module
+parameters to take effect.  In essence, `rmmod scanner; modprobe
+scanner` must be performed.
+
+**NOTE**: In later kernels (2.3.38+), a new filesystem was introduced,
+usbdevfs.  To mount the filesystem, issue the command (as root):
+
+  mount -t usbdevfs /proc/bus/usb /proc/bus/usb
+
+An alternative and more permanent method would be to add
+
+  none  /proc/bus/usb  usbdevfs  defaults  0  0
+
+to /etc/fstab.  This will mount usbdevfs at each reboot.  You can then
+issue `cat /proc/bus/usb/devices` to extract USB device information.
 
 
 BUGS
 
-If you encounter any problems feel free to drop me an email.
+Just look at the list of fixes in the source files.  So, if you
+encounter any problems feel free to drop me an email.
 
 David /\/elson
 dnelson@jump.net

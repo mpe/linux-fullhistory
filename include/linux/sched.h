@@ -203,7 +203,7 @@ struct mm_struct {
 	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long start_brk, brk, start_stack;
 	unsigned long arg_start, arg_end, env_start, env_end;
-	unsigned long min_flt, maj_flt, rss, total_vm, locked_vm;
+	unsigned long rss, total_vm, locked_vm;
 	unsigned long def_flags;
 	unsigned long cpu_vm_mask;
 	unsigned long swap_cnt;	/* number of pages to swap on next pass */
@@ -225,7 +225,7 @@ struct mm_struct {
 		0, 0, 0, 0,				\
 		0, 0, 0, 				\
 		0, 0, 0, 0,				\
-		0, 0, 0, 0, 0,				\
+		0, 0, 0,				\
 		0, 0, 0, 0, NULL }
 
 struct signal_struct {

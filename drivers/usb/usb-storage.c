@@ -66,59 +66,59 @@ typedef void (*proto_cmnd)(Scsi_Cmnd*, struct us_data*);
 
 /* we allocate one of these for every device that we remember */
 struct us_data {
-	struct us_data	        *next;	         /* next device */
+	struct us_data		*next;		 /* next device */
 
 	/* the device we're working with */
-	struct semaphore	dev_semaphore;   /* protect pusb_dev */
-	struct usb_device	*pusb_dev;       /* this usb_device */
+	struct semaphore	dev_semaphore;	 /* protect pusb_dev */
+	struct usb_device	*pusb_dev;	 /* this usb_device */
 
 	unsigned int		flags;		 /* from filter initially */
 
 	/* information about the device -- always good */
-	char                    vendor[32];
-	char                    product[32];
-	char                    serial[32];
-	char                    *transport_name;
-	char                    *protocol_name;
-	__u8			subclass;
-	__u8			protocol;
+	char			vendor[USB_STOR_STRING_LEN];
+	char			product[USB_STOR_STRING_LEN];
+	char			serial[USB_STOR_STRING_LEN];
+	char			*transport_name;
+	char			*protocol_name;
+	u8			subclass;
+	u8			protocol;
 
 	/* information about the device -- only good if device is attached */
-	__u8			ifnum;		 /* interface number   */
-	__u8			ep_in;		 /* bulk in endpoint   */
-	__u8			ep_out;		 /* bulk out endpoint  */
-	__u8			ep_int;		 /* interrupt endpoint */
-	__u8                    ep_interval;     /* interrupt interval */
+	u8			ifnum;		 /* interface number   */
+	u8			ep_in;		 /* bulk in endpoint   */
+	u8			ep_out;		 /* bulk out endpoint  */
+	struct usb_endpoint_descriptor *ep_int;	 /* interrupt endpoint */ 
 
 	/* function pointers for this device */
-	trans_cmnd              transport;	 /* transport function     */
-	trans_reset             transport_reset; /* transport device reset */
-	proto_cmnd              proto_handler;   /* protocol handler       */
+	trans_cmnd		transport;	 /* transport function	   */
+	trans_reset		transport_reset; /* transport device reset */
+	proto_cmnd		proto_handler;	 /* protocol handler	   */
 
 	/* SCSI interfaces */
-	GUID(guid);				 /* unique dev id       */
+	GUID(guid);				 /* unique dev id	*/
 	struct Scsi_Host	*host;		 /* our dummy host data */
-	Scsi_Host_Template	htmplt;  	 /* own host template   */
-	int			host_number;	 /* to find us          */
-	int			host_no;	 /* allocated by scsi   */
-	Scsi_Cmnd		*srb;		 /* current srb         */
+	Scsi_Host_Template	htmplt;		 /* own host template	*/
+	int			host_number;	 /* to find us		*/
+	int			host_no;	 /* allocated by scsi	*/
+	Scsi_Cmnd		*srb;		 /* current srb		*/
 	
 	/* thread information */
 	Scsi_Cmnd		*queue_srb;	 /* the single queue slot */
-	int			action;		 /* what to do            */
-	int			pid;		 /* control thread        */
+	int			action;		 /* what to do		  */
+	int			pid;		 /* control thread	  */
 
 	/* interrupt info for CBI devices -- only good if attached */
-	struct semaphore	ip_waitq;	 /* for CBI interrupts   */
-	__u16			ip_data;	 /* interrupt data       */
-	int			ip_wanted;	 /* is an IRQ expected?  */
-	void			*irq_handle;	 /* for USB int requests */
-	unsigned int		irqpipe;	 /* pipe for release_irq */
+	struct semaphore	ip_waitq;	 /* for CBI interrupts	 */
+	int			ip_wanted;	 /* is an IRQ expected?	 */
+
+	struct semaphore	irq_urb_sem;	 /* to protect irq_urb	 */
+	struct urb		*irq_urb;	 /* for USB int requests */
+	unsigned char		irqbuf[2];	 /* buffer for USB IRQ	 */
 
 	/* mutual exclusion structures */
-	struct semaphore	notify;          /* thread begin/end        */
-	struct semaphore        sleeper;         /* to sleep the thread on  */
-	struct semaphore        queue_exclusion; /* to protect data structs */
+	struct semaphore	notify;		 /* thread begin/end	    */
+	struct semaphore	sleeper;	 /* to sleep the thread on  */
+	struct semaphore	queue_exclusion; /* to protect data structs */
 };
 
 /*
@@ -151,7 +151,7 @@ static struct usb_driver storage_driver = {
  * Transfer one SCSI scatter-gather buffer via bulk transfer
  *
  * Note that this function is necessary because we want the ability to
- * use scatter-gather memory.  Good performance is achived by a combination
+ * use scatter-gather memory.  Good performance is achieved by a combination
  * of scatter-gather and clustering (which makes each chunk bigger).
  *
  * Note that the lower layer will always retry when a NAK occurs, up to the
@@ -166,7 +166,7 @@ static int us_transfer_partial(struct us_data *us, int pipe,
 
 	/* transfer the data */
 	US_DEBUGP("Bulk xfer 0x%x(%d)\n", (unsigned int)buf, length);
-	result = usb_bulk_msg(us->pusb_dev, pipe, buf, length, &partial, HZ);
+	result = usb_bulk_msg(us->pusb_dev, pipe, buf, length, &partial, 5*HZ);
 	US_DEBUGP("bulk_msg returned %d xferred %d/%d\n",
 		  result, partial, length);
 	
@@ -226,7 +226,7 @@ static void us_transfer(Scsi_Cmnd *srb, int dir_in)
 		 */
 		sg = (struct scatterlist *) srb->request_buffer;
 		for (i = 0; i < srb->use_sg; i++) {
-			result = us_transfer_partial(us, pipe, sg[i].address,
+			result = us_transfer_partial(us, pipe, sg[i].address, 
 						     sg[i].length);
 			if (result)
 				break;
@@ -234,7 +234,7 @@ static void us_transfer(Scsi_Cmnd *srb, int dir_in)
 	}
 	else
 		/* no scatter-gather, just make the request */
-		result = us_transfer_partial(us, pipe, srb->request_buffer,
+		result = us_transfer_partial(us, pipe, srb->request_buffer, 
 					     srb->request_bufflen);
 
 	/* return the result in the data structure itself */
@@ -251,7 +251,7 @@ static unsigned int us_transfer_length(Scsi_Cmnd *srb, struct us_data *us)
 	struct scatterlist *sg;
 
 	/* support those devices which need the length calculated
-	 * differently
+	 * differently 
 	 */
 	if (us->flags & US_FL_ALT_LENGTH) {
 		if (srb->cmnd[0] == INQUIRY) {
@@ -374,18 +374,18 @@ static void invoke_transport(Scsi_Cmnd *srb, struct us_data *us)
 		srb->cmnd[3] = 0;
 		srb->cmnd[4] = 18;
 		srb->cmnd[5] = 0;
-    
+
 		/* set the buffer length for transfer */
 		old_request_buffer = srb->request_buffer;
 		old_request_bufflen = srb->request_bufflen;
-	        old_sg = srb->use_sg;
+		old_sg = srb->use_sg;
 		srb->use_sg = 0;
 		srb->request_bufflen = 18;
 		srb->request_buffer = srb->sense_buffer;
 
 		/* issue the auto-sense command */
 		temp_result = us->transport(us->srb, us);
-		if (temp_result == USB_STOR_TRANSPORT_ERROR) {
+		if (temp_result != USB_STOR_TRANSPORT_GOOD) {
 			/* FIXME: we need to invoke a transport reset here */
 			US_DEBUGP("-- auto-sense failure\n");
 			srb->result = DID_ERROR << 16;
@@ -433,20 +433,22 @@ static void invoke_transport(Scsi_Cmnd *srb, struct us_data *us)
 /*
  * Control/Bulk/Interrupt transport
  */
-static int CBI_irq(int state, void *buffer, int len, void *dev_id)
+static void CBI_irq(struct urb *urb)
 {
-	struct us_data *us = (struct us_data *)dev_id;
+	struct us_data *us = (struct us_data *)urb->context;
 
 	US_DEBUGP("USB IRQ recieved for device on host %d\n", us->host_no);
-	US_DEBUGP("-- IRQ data length is %d\n", len);
-	US_DEBUGP("-- IRQ state is %d\n", state);
+	US_DEBUGP("-- IRQ data length is %d\n", urb->actual_length);
+	US_DEBUGP("-- IRQ state is %d\n", urb->status);
 
 	/* is the device removed? */
-	if (state != -ENOENT) {
+	if (urb->status != -ENOENT) {
 		/* save the data for interpretation later */
-		us->ip_data = le16_to_cpup((__u16 *)buffer);
-		US_DEBUGP("-- Interrupt Status 0x%x\n", us->ip_data);
-  
+		US_DEBUGP("-- Interrupt Status (0x%x, 0x%x)\n",
+			  ((unsigned char*)urb->transfer_buffer)[0], 
+			  ((unsigned char*)urb->transfer_buffer)[1]);
+
+
 		/* was this a wanted interrupt? */
 		if (us->ip_wanted) {
 			us->ip_wanted = 0;
@@ -455,12 +457,6 @@ static int CBI_irq(int state, void *buffer, int len, void *dev_id)
 			US_DEBUGP("ERROR: Unwanted interrupt received!\n");
 	} else
 		US_DEBUGP("-- device has been removed\n");
-
-	/* This return code is truly meaningless -- and I mean truly.  It gets
-	 * ignored by other layers.  It used to indicate if we wanted to get
-	 * another interrupt or disable the interrupt callback
-	 */
-	return 0;
 }
 
 static int CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
@@ -480,7 +476,7 @@ static int CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 		/* STALL must be cleared when they are detected */
 		if (result == -EPIPE) {
 			US_DEBUGP("-- Stall on control pipe. Clearing\n");
-			result = usb_clear_halt(us->pusb_dev, 	
+			result = usb_clear_halt(us->pusb_dev,	
 						usb_sndctrlpipe(us->pusb_dev,
 								0));
 			US_DEBUGP("-- usb_clear_halt() returns %d\n", result);
@@ -513,7 +509,9 @@ static int CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 		return USB_STOR_TRANSPORT_ERROR;
 	}
 	
-	US_DEBUGP("Got interrupt data 0x%x\n", us->ip_data);
+	US_DEBUGP("Got interrupt data (0x%x, 0x%x)\n", 
+		  ((unsigned char*)us->irq_urb->transfer_buffer)[0],
+		  ((unsigned char*)us->irq_urb->transfer_buffer)[1]);
 	
 	/* UFI gives us ASC and ASCQ, like a request sense
 	 *
@@ -527,7 +525,7 @@ static int CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 		    srb->cmnd[0] == INQUIRY)
 			return USB_STOR_TRANSPORT_GOOD;
 		else
-			if (us->ip_data)
+			if (((unsigned char*)us->irq_urb->transfer_buffer)[0])
 				return USB_STOR_TRANSPORT_FAILED;
 			else
 				return USB_STOR_TRANSPORT_GOOD;
@@ -537,10 +535,14 @@ static int CBI_transport(Scsi_Cmnd *srb, struct us_data *us)
 	 * The first byte should always be a 0x0
 	 * The second byte & 0x0F should be 0x0 for good, otherwise error 
 	 */
-	switch ((us->ip_data & 0xFF0F)) {
-	case 0x0000: 
+	if (((unsigned char*)us->irq_urb->transfer_buffer)[0]) {
+		US_DEBUGP("CBI IRQ data showed reserved bType\n");
+		return USB_STOR_TRANSPORT_ERROR;
+	}
+	switch (((unsigned char*)us->irq_urb->transfer_buffer)[1] & 0x0F) {
+	case 0x00: 
 		return USB_STOR_TRANSPORT_GOOD;
-	case 0x0001: 
+	case 0x01: 
 		return USB_STOR_TRANSPORT_FAILED;
 	default: 
 		return USB_STOR_TRANSPORT_ERROR;
@@ -609,8 +611,8 @@ static int Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	int partial;
 	
 	/* set up the command wrapper */
-	bcb.Signature = US_BULK_CB_SIGN;
-	bcb.DataTransferLength = us_transfer_length(srb, us);
+	bcb.Signature = cpu_to_le32(US_BULK_CB_SIGN);
+	bcb.DataTransferLength = cpu_to_le32(us_transfer_length(srb, us));
 	bcb.Flags = US_DIRECTION(srb->cmnd[0]) << 7;
 	bcb.Tag = srb->serial_number;
 	bcb.Lun = srb->cmnd[1] >> 5;
@@ -625,8 +627,8 @@ static int Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	
 	/* send it to out endpoint */
 	US_DEBUGP("Bulk command S 0x%x T 0x%x LUN %d L %d F %d CL %d\n",
-		  bcb.Signature, bcb.Tag, bcb.Lun, bcb.DataTransferLength,
-		  bcb.Flags, bcb.Length);
+		  le32_to_cpu(bcb.Signature), bcb.Tag, bcb.Lun, 
+		  bcb.DataTransferLength, bcb.Flags, bcb.Length);
 	result = usb_bulk_msg(us->pusb_dev, pipe, &bcb,
 			      US_BULK_CB_WRAP_LEN, &partial, HZ*5);
 	US_DEBUGP("Bulk command transfer result=%d\n", result);
@@ -657,17 +659,17 @@ static int Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	/* get CSW for device status */
 	US_DEBUGP("Attempting to get CSW...\n");
 	result = usb_bulk_msg(us->pusb_dev, pipe, &bcs,
-			      US_BULK_CS_WRAP_LEN, &partial, HZ);
+			      US_BULK_CS_WRAP_LEN, &partial, HZ*2);
 	
 	/* did the attempt to read the CSW fail? */
 	if (result == -EPIPE) {
 		US_DEBUGP("clearing endpoint halt for pipe 0x%x\n", pipe);
 		usb_clear_halt(us->pusb_dev, pipe);
-
+	       
 		/* get the status again */
 		US_DEBUGP("Attempting to get CSW (2nd try)...\n");
 		result = usb_bulk_msg(us->pusb_dev, pipe, &bcs,
-				      US_BULK_CS_WRAP_LEN, &partial, HZ);
+				      US_BULK_CS_WRAP_LEN, &partial, HZ*2);
 		
 		/* if it fails again, we need a reset and return an error*/
 		if (result == -EPIPE) {
@@ -685,8 +687,10 @@ static int Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	
 	/* check bulk status */
 	US_DEBUGP("Bulk status S 0x%x T 0x%x R %d V 0x%x\n",
-		  bcs.Signature, bcs.Tag, bcs.Residue, bcs.Status);
-	if (bcs.Signature != US_BULK_CS_SIGN || bcs.Tag != bcb.Tag ||
+		  le32_to_cpu(bcs.Signature), bcs.Tag, 
+		  bcs.Residue, bcs.Status);
+	if (bcs.Signature != cpu_to_le32(US_BULK_CS_SIGN) || 
+	    bcs.Tag != bcb.Tag || 
 	    bcs.Status > US_BULK_STAT_PHASE || partial != 13) {
 		US_DEBUGP("Bulk logical error\n");
 		return USB_STOR_TRANSPORT_ERROR;
@@ -718,7 +722,7 @@ static int Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 static void ATAPI_command(Scsi_Cmnd *srb, struct us_data *us)
 {
 	int old_cmnd = 0;
-  
+
 	/* Fix some commands -- this is a form of mode translation
 	 * ATAPI devices only accept 12 byte long commands 
 	 *
@@ -770,10 +774,10 @@ static void ATAPI_command(Scsi_Cmnd *srb, struct us_data *us)
 		srb->cmnd[0] = srb->cmnd[0] | 0x20;
 		break;
 	} /* end switch on cmnd[0] */
-  
+
 	/* send the command to the transport layer */
 	invoke_transport(srb, us);
-  
+
 	/* Fix the MODE_SENSE data if we translated the command
 	 */
 	if (old_cmnd == MODE_SENSE) {
@@ -802,7 +806,7 @@ static void ATAPI_command(Scsi_Cmnd *srb, struct us_data *us)
 static void ufi_command(Scsi_Cmnd *srb, struct us_data *us)
 {
 	int old_cmnd = 0;
-  
+
 	/* fix some commands -- this is a form of mode translation
 	 * UFI devices only accept 12 byte long commands 
 	 *
@@ -831,7 +835,7 @@ static void ufi_command(Scsi_Cmnd *srb, struct us_data *us)
 		srb->cmnd[10] = 0;
 		srb->cmnd[9] = 0;
 
-		/* if we're sending data, we send all.  If getting data, 
+		/* if we're sending data, we send all.	If getting data, 
 		 * get the minimum */
 		if (srb->cmnd[0] == MODE_SELECT)
 			srb->cmnd[8] = srb->cmnd[4];
@@ -853,7 +857,7 @@ static void ufi_command(Scsi_Cmnd *srb, struct us_data *us)
 		srb->cmnd[7] = 0;
 		srb->cmnd[8] = 8;
 		break;
- 
+
 		/* for REQUEST_SENSE, UFI devices only ever return 18 bytes */
 	case REQUEST_SENSE:
 		srb->cmnd[4] = 18;
@@ -912,48 +916,48 @@ static void transparent_scsi_command(Scsi_Cmnd *srb, struct us_data *us)
 	 * so some devices do not support them
 	 */
 	if (us->flags & US_FL_MODE_XLATE) {
-    
+
 		/* translate READ_6 to READ_10 */
 		if (srb->cmnd[0] == 0x08) {
-      
+
 			/* get the control */
 			srb->cmnd[9] = us->srb->cmnd[5];
-      
+
 			/* get the length */
 			srb->cmnd[8] = us->srb->cmnd[6];
 			srb->cmnd[7] = 0;
-      
+
 			/* set the reserved area to 0 */
 			srb->cmnd[6] = 0;	    
-      
+
 			/* get LBA */
 			srb->cmnd[5] = us->srb->cmnd[3];
 			srb->cmnd[4] = us->srb->cmnd[2];
 			srb->cmnd[3] = 0;
 			srb->cmnd[2] = 0;
-      
+
 			/* LUN and other info in cmnd[1] can stay */
-      
+
 			/* fix command code */
 			srb->cmnd[0] = 0x28;
-      
+
 			US_DEBUGP("Changing READ_6 to READ_10\n");
 			US_DEBUG(us_show_command(srb));
 		}
-    
+
 		/* translate WRITE_6 to WRITE_10 */
 		if (srb->cmnd[0] == 0x0A) {
-      
+
 			/* get the control */
 			srb->cmnd[9] = us->srb->cmnd[5];
-      
+
 			/* get the length */
 			srb->cmnd[8] = us->srb->cmnd[4];
 			srb->cmnd[7] = 0;
-      
+
 			/* set the reserved area to 0 */
 			srb->cmnd[6] = 0;	    
-      
+
 			/* get LBA */
 			srb->cmnd[5] = us->srb->cmnd[3];
 			srb->cmnd[4] = us->srb->cmnd[2];
@@ -961,7 +965,7 @@ static void transparent_scsi_command(Scsi_Cmnd *srb, struct us_data *us)
 			srb->cmnd[2] = 0;
 	    
 			/* LUN and other info in cmnd[1] can stay */
-      
+
 			/* fix command code */
 			srb->cmnd[0] = 0x2A;
 
@@ -1226,7 +1230,7 @@ int usb_stor_proc_info (char *buffer, char **start, off_t offset,
 	SPRINTF("   Host scsi%d: usb-storage\n", hostno);
 
 	/* print product, vendor, and serial number strings */
-	SPRINTF("       Vendor: %s\n", us->vendor);
+	SPRINTF("	Vendor: %s\n", us->vendor);
 	SPRINTF("      Product: %s\n", us->product);
 	SPRINTF("Serial Number: %s\n", us->serial);
 
@@ -1235,7 +1239,7 @@ int usb_stor_proc_info (char *buffer, char **start, off_t offset,
 	SPRINTF("    Transport: %s\n", us->transport_name);
 
 	/* show the GUID of the device */
-	SPRINTF("         GUID: " GUID_FORMAT "\n", GUID_ARGS(us->guid));
+	SPRINTF("	  GUID: " GUID_FORMAT "\n", GUID_ARGS(us->guid));
 
 	/* release our lock on the data structures */
 	up(&us_list_semaphore);
@@ -1334,7 +1338,7 @@ static int usb_stor_control_thread(void * __us)
 		action = us->action;
 		us->action = 0;
 		us->srb = us->queue_srb;
-     	
+	
 		/* release the queue lock as fast as possible */
 		up(&(us->queue_exclusion));
 
@@ -1380,8 +1384,8 @@ static int usb_stor_control_thread(void * __us)
 					       sizeof(sense_notready));
 					us->srb->result = GOOD;
 				} else {
-					memcpy(us->srb->sense_buffer,
-					       sense_notready,
+					memcpy(us->srb->sense_buffer, 
+					       sense_notready, 
 					       sizeof(sense_notready));
 					us->srb->result = CHECK_CONDITION;
 				}
@@ -1395,7 +1399,7 @@ static int usb_stor_control_thread(void * __us)
 			up(&(us->dev_semaphore));
 
 			/* indicate that the command is done */
-			US_DEBUGP("scsi cmd done, result=0x%x\n",
+			US_DEBUGP("scsi cmd done, result=0x%x\n", 
 				  us->srb->result);
 			us->srb->scsi_done(us->srb);
 			us->srb = NULL;
@@ -1428,15 +1432,22 @@ static int usb_stor_control_thread(void * __us)
 static struct us_unusual_dev us_unusual_dev_list[] = {
 	{ 0x057b, 0x0000, 0x0114,
 	  "Y-E Data Flashbuster-U", US_SC_UFI, US_PR_CB, US_FL_SINGLE_LUN },
+	{ 0x059b, 0x0030, 0x0100,
+	  "Iomega Zip 250", US_SC_SCSI, US_PR_BULK, US_FL_SINGLE_LUN },
 	{ 0x0781, 0x0001, 0x0200,
-	  "Sandisk ImageMate", US_SC_SCSI, US_PR_CB, 
+	  "Sandisk ImageMate (w/eject button)", US_SC_SCSI, US_PR_CB, 
 	  US_FL_SINGLE_LUN | US_FL_START_STOP },
 	{ 0x0781, 0x0002, 0x0009,
-	  "** SECRET DEVICE **", US_SC_SCSI, US_PR_BULK, US_FL_SINGLE_LUN },
-	{ 0x04e6, 0x0002, 0x0100,
-	  "Microtech USB-SCSI-HD50", US_SC_SCSI, US_PR_BULK, US_FL_ALT_LENGTH},
+	  "** SECRET DEVICE **", US_SC_SCSI, US_PR_BULK, 
+	  US_FL_SINGLE_LUN | US_FL_IGNORE_SER },
 	{ 0x07af, 0x0005, 0x0100,
-	  "Shuttle eUSCSI Bridge", US_SC_SCSI, US_PR_BULK, US_FL_ALT_LENGTH},
+	  "Microtech USB-SCSI-HD50", US_SC_SCSI, US_PR_BULK, US_FL_ALT_LENGTH}, 
+	{ 0x04e6, 0x0002, 0x0100,
+	  "Shuttle eUSCSI Bridge", US_SC_SCSI, US_PR_BULK, US_FL_ALT_LENGTH}, 
+	{ 0x04e6, 0x0006, 0x0100,
+	  "Shuttle eUSB MMC Adapter", US_SC_SCSI, US_PR_CB, US_FL_SINGLE_LUN}, 
+	{ 0x03f0, 0x0107, 0x0200,
+	  "HP USB CD-Writer Plus", US_SC_8070, US_PR_CB, 0}, 
 	{ 0x0000, 0x0000, 0x0,
 	  "", 0, 0, 0}
 };
@@ -1446,8 +1457,8 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
  * defining how we should support this device, or NULL if it's not in the
  * list
  */
-static struct us_unusual_dev* us_find_dev(__u16 idVendor, __u16 idProduct, 
-					  __u16 bcdDevice)
+static struct us_unusual_dev* us_find_dev(u16 idVendor, u16 idProduct, 
+					  u16 bcdDevice)
 {
 	struct us_unusual_dev* ptr;
 
@@ -1472,14 +1483,64 @@ static struct us_unusual_dev* us_find_dev(__u16 idVendor, __u16 idProduct,
 	return ptr;
 }
 
+/* Set up the IRQ pipe and handler
+ * Note that this function assumes that all the data in the us_data
+ * strucuture is current.  This includes the ep_int field, which gives us
+ * the endpoint for the interrupt.
+ * Returns non-zero on failure, zero on success
+ */ 
+static int usb_stor_allocate_irq(struct us_data *ss)
+{
+	unsigned int pipe;
+	int maxp;
+	int result;
+
+	US_DEBUGP("Allocating IRQ for CBI transport\n");
+	
+	/* lock access to the data structure */
+	down(&(ss->irq_urb_sem));
+
+	/* allocate the URB */
+	ss->irq_urb = usb_alloc_urb(0);
+	if (!ss->irq_urb) {
+		up(&(ss->irq_urb_sem));
+		US_DEBUGP("couldn't allocate interrupt URB");
+		return 1;
+	}
+	
+	/* calculate the pipe and max packet size */
+	pipe = usb_rcvintpipe(ss->pusb_dev, ss->ep_int->bEndpointAddress & 
+			      USB_ENDPOINT_NUMBER_MASK);
+	maxp = usb_maxpacket(ss->pusb_dev, pipe, usb_pipeout(pipe));
+	if (maxp > sizeof(ss->irqbuf))
+		maxp = sizeof(ss->irqbuf);
+	
+	/* fill in the URB with our data */
+	FILL_INT_URB(ss->irq_urb, ss->pusb_dev, pipe, ss->irqbuf, maxp, 
+		     CBI_irq, ss, ss->ep_int->bInterval); 
+	
+	/* submit the URB for processing */
+	result = usb_submit_urb(ss->irq_urb);
+	US_DEBUGP("usb_submit_urb() returns %d\n", result);
+	if (result) {
+		usb_free_urb(ss->irq_urb);
+		up(&(ss->irq_urb_sem));
+		return 2;
+	}
+
+	/* unlock the data structure and return success */
+	up(&(ss->irq_urb_sem));
+	return 0;
+}
+
 /* Probe to see if a new device is actually a SCSI device */
 static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	int i;
 	char mf[USB_STOR_STRING_LEN];		     /* manufacturer */
 	char prod[USB_STOR_STRING_LEN];		     /* product */
-	char serial[USB_STOR_STRING_LEN];      	     /* serial number */
-	GUID(guid);		           /* Global Unique Identifier */
+	char serial[USB_STOR_STRING_LEN];	     /* serial number */
+	GUID(guid);			   /* Global Unique Identifier */
 	unsigned int flags;
 	struct us_unusual_dev *unusual_dev;
 	struct us_data *ss = NULL;
@@ -1488,12 +1549,11 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 	/* these are temporary copies -- we test on these, then put them
 	 * in the us-data structure 
 	 */
-	__u8 ep_in = 0;
-	__u8 ep_out = 0;
-	__u8 ep_int = 0;
-	__u8 ep_interval = 0;
-	__u8 subclass = 0;
-	__u8 protocol = 0;
+	struct usb_endpoint_descriptor *ep_in = NULL;
+	struct usb_endpoint_descriptor *ep_out = NULL;
+	struct usb_endpoint_descriptor *ep_int = NULL;
+	u8 subclass = 0;
+	u8 protocol = 0;
 
 	/* the altsettting 0 on the interface we're probing */
 	struct usb_interface_descriptor *altsetting = 
@@ -1550,23 +1610,19 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			/* BULK in or out? */
 			if (altsetting->endpoint[i].bEndpointAddress & 
 			    USB_DIR_IN)
-				ep_in = altsetting->endpoint[i].bEndpointAddress &
-					USB_ENDPOINT_NUMBER_MASK;
+				ep_in = &altsetting->endpoint[i];
 			else
-				ep_out = altsetting->endpoint[i].bEndpointAddress &
-					USB_ENDPOINT_NUMBER_MASK;
+				ep_out = &altsetting->endpoint[i];
 		}
 
 		/* is it an interrupt endpoint? */
 		if ((altsetting->endpoint[i].bmAttributes & 
 		     USB_ENDPOINT_XFERTYPE_MASK) == USB_ENDPOINT_XFER_INT) {
-			ep_int = altsetting->endpoint[i].bEndpointAddress &
-				USB_ENDPOINT_NUMBER_MASK;
-			ep_interval = altsetting->endpoint[i].bInterval;
+			ep_int = &altsetting->endpoint[i];
 		}
 	}
-	US_DEBUGP("Endpoints: In %d Out %d Int %d (Period %d)\n",
-		  ep_in, ep_out, ep_int, ep_interval);
+	US_DEBUGP("Endpoints: In: 0x%p Out: 0x%p Int: 0x%p (Period %d)\n",
+		  ep_in, ep_out, ep_int, ep_int ? ep_int->bInterval : 0);
 
 	/* set the interface -- STALL is an acceptable response here */
 	result = usb_set_interface(dev, altsetting->bInterfaceNumber, 0);
@@ -1582,7 +1638,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 
 	/* Do some basic sanity checks, and bail if we find a problem */
 	if (!ep_in || !ep_out || (protocol == US_PR_CBI && !ep_int)) {
-		US_DEBUGP("Sanity check failed.  Rejecting device.\n");
+		US_DEBUGP("Sanity check failed.	 Rejecting device.\n");
 		return NULL;
 	}
 
@@ -1591,14 +1647,14 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 	/* clear the GUID and fetch the strings */
 	GUID_CLEAR(guid);
 	if (dev->descriptor.iManufacturer)
-		usb_string(dev, dev->descriptor.iManufacturer, mf, 
-			   sizeof(mf));
+		usb_string(dev, dev->descriptor.iManufacturer, 
+			   mf, sizeof(mf));
 	if (dev->descriptor.iProduct)
-		usb_string(dev, dev->descriptor.iProduct, prod, 
-			   sizeof(prod));
-	if (dev->descriptor.iSerialNumber)
-		usb_string(dev, dev->descriptor.iSerialNumber, serial, 
-			   sizeof(serial));
+		usb_string(dev, dev->descriptor.iProduct, 
+			   prod, sizeof(prod));
+	if (dev->descriptor.iSerialNumber && !(flags & US_FL_IGNORE_SER))
+		usb_string(dev, dev->descriptor.iSerialNumber, 
+			   serial, sizeof(serial));
 	
 	/* Create a GUID for this device */
 	if (dev->descriptor.iSerialNumber && serial[0]) {
@@ -1633,22 +1689,20 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		ss->ifnum = ifnum;
 		ss->pusb_dev = dev;
 	
-		/* hook up the IRQ handler again */
-		if (ss->protocol == US_PR_CBI) {
-			/* set up so we'll wait for notification */
-			init_MUTEX_LOCKED(&(ss->ip_waitq));
-			
-			/* set up the IRQ pipe and handler */
-			US_DEBUGP("Allocating IRQ for CBI transport\n");
-			ss->irqpipe = usb_rcvintpipe(ss->pusb_dev, ss->ep_int);
-			result = usb_request_irq(ss->pusb_dev, ss->irqpipe, 
-						 CBI_irq, ss->ep_interval,
-						 (void *)ss,
-						 &(ss->irq_handle));
-			US_DEBUGP("-- usb_request_irq returned %d\n", result);
-		}
+		/* copy over the endpoint data */
+		if (ep_in)
+			ss->ep_in = ep_in->bEndpointAddress & 
+				USB_ENDPOINT_NUMBER_MASK;
+		if (ep_out)
+			ss->ep_out = ep_out->bEndpointAddress & 
+				USB_ENDPOINT_NUMBER_MASK;
+		ss->ep_int = ep_int;
+
+		/* allocate an IRQ callback if one is needed */
+		if ((ss->protocol == US_PR_CBI) && usb_stor_allocate_irq(ss))
+			return NULL;
 	} else { 
-		/* New device -- Allocate memory and initialize */
+		/* New device -- allocate memory and initialize */
 		US_DEBUGP("New GUID " GUID_FORMAT "\n", GUID_ARGS(guid));
 	
 		if ((ss = (struct us_data *)kmalloc(sizeof(struct us_data), 
@@ -1662,7 +1716,9 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		/* Initialize the mutexes only when the struct is new */
 		init_MUTEX_LOCKED(&(ss->sleeper));
 		init_MUTEX_LOCKED(&(ss->notify));
+		init_MUTEX_LOCKED(&(ss->ip_waitq));
 		init_MUTEX(&(ss->queue_exclusion));
+		init_MUTEX(&(ss->irq_urb_sem));
 		init_MUTEX(&(ss->dev_semaphore));
 
 		/* copy over the subclass and protocol data */
@@ -1671,10 +1727,13 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		ss->flags = flags;
 
 		/* copy over the endpoint data */
-		ss->ep_in = ep_in;
-		ss->ep_out = ep_out;
+		if (ep_in)
+			ss->ep_in = ep_in->bEndpointAddress & 
+				USB_ENDPOINT_NUMBER_MASK;
+		if (ep_out)
+			ss->ep_out = ep_out->bEndpointAddress & 
+				USB_ENDPOINT_NUMBER_MASK;
 		ss->ep_int = ep_int;
-		ss->ep_interval = ep_interval;
 
 		/* establish the connection to the new device */
 		ss->ifnum = ifnum;
@@ -1739,7 +1798,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 
 		case US_SC_QIC:
 			ss->protocol_name = "QIC-157";
-			US_DEBUGP("Sorry, device not supported.  Please\n");
+			US_DEBUGP("Sorry, device not supported.	 Please\n");
 			US_DEBUGP("contact mdharm-usb@one-eyed-alien.net\n");
 			US_DEBUGP("if you see this message.\n");
 			up(&us_list_semaphore);
@@ -1771,19 +1830,9 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		}
 		US_DEBUGP("Protocol: %s\n", ss->protocol_name);
 
-		if (ss->protocol == US_PR_CBI) {
-			/* set up so we'll wait for notification */
-			init_MUTEX_LOCKED(&(ss->ip_waitq));
-			
-			/* set up the IRQ pipe and handler */
-			US_DEBUGP("Allocating IRQ for CBI transport\n");
-			ss->irqpipe = usb_rcvintpipe(ss->pusb_dev, ss->ep_int);
-			result = usb_request_irq(ss->pusb_dev, ss->irqpipe, 
-						 CBI_irq, ss->ep_interval,
-						 (void *)ss,
-						 &(ss->irq_handle));
-			US_DEBUGP("-- usb_request_irq returned %d\n", result);
-		}
+		/* allocate an IRQ callback if one is needed */
+		if ((ss->protocol == US_PR_CBI) && usb_stor_allocate_irq(ss))
+			return NULL;
 		
 		/*
 		 * Since this is a new device, we need to generate a scsi 
@@ -1803,7 +1852,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		 */
 		(struct us_data *)ss->htmplt.proc_dir = ss; 
 		
-		/* start up our thread */
+		/* start up our control thread */
 		ss->pid = kernel_thread(usb_stor_control_thread, ss,
 					CLONE_FS | CLONE_FILES |
 					CLONE_SIGHAND);
@@ -1814,10 +1863,10 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			return NULL;
 		}
 		
-		/* wait for it to start */
+		/* wait for the thread to start */
 		down(&(ss->notify));
 			
-		/* now register - our detect function will be called */
+		/* now register	 - our detect function will be called */
 		ss->htmplt.module = THIS_MODULE;
 		scsi_register_module(MODULE_SCSI_HA, &(ss->htmplt));
 		
@@ -1845,7 +1894,7 @@ static void storage_disconnect(struct usb_device *dev, void *ptr)
 	int result;
 
 	US_DEBUGP("storage_disconnect() called\n");
- 
+
 	/* this is the odd case -- we disconnected but weren't using it */
 	if (!ss) {
 		US_DEBUGP("-- device was not in use\n");
@@ -1856,13 +1905,15 @@ static void storage_disconnect(struct usb_device *dev, void *ptr)
 	down(&(ss->dev_semaphore));
 
 	/* release the IRQ, if we have one */
-	if (ss->irq_handle) {
+	down(&(ss->irq_urb_sem));
+	if (ss->irq_urb) {
 		US_DEBUGP("-- releasing irq handle\n");
-		result = usb_release_irq(ss->pusb_dev, ss->irq_handle, 
-					 ss->irqpipe);
-		US_DEBUGP("-- usb_release_irq() returned %d\n", result);
-		ss->irq_handle = NULL;
+		result = usb_unlink_urb(ss->irq_urb);
+		ss->irq_urb = NULL;
+		US_DEBUGP("-- usb_unlink_urb() returned %d\n", result);
+		usb_free_urb(ss->irq_urb);
 	}
+	up(&(ss->irq_urb_sem));
 
 	/* mark the device as gone */
 	ss->pusb_dev = NULL;

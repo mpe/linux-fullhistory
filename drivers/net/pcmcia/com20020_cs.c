@@ -102,12 +102,14 @@ static inline void regdump(struct net_device *dev) { }
 static int node = 0;
 static int timeout = 3;
 static int backplane = 0;
-static int clock = 0;
+static int clockp = 0;
+static int clockm = 0;
 
 MODULE_PARM(node, "i");
 MODULE_PARM(timeout, "i");
 MODULE_PARM(backplane, "i");
-MODULE_PARM(clock, "i");
+MODULE_PARM(clockp, "i");
+MODULE_PARM(clockm, "i");
 
 /* Bit map of interrupts to choose from */
 static u_int irq_mask = 0xdeb8;
@@ -231,7 +233,8 @@ static dev_link_t *com20020_attach(void)
     dev->dev_addr[0] = node;
     lp->timeout = timeout;
     lp->backplane = backplane;
-    lp->clock = clock;
+    lp->clockp = clockp;
+    lp->clockm = clockm & 3;
     lp->hw.open_close_ll = com20020cs_open_close;
 
     link->irq.Instance = info->dev = dev;
@@ -350,6 +353,7 @@ while ((last_ret=CardServices(last_fn=(fn), args))!=0) goto cs_failed
 
 static void com20020_config(dev_link_t *link)
 {
+    struct arcnet_local *lp;
     client_handle_t handle;
     tuple_t tuple;
     cisparse_t parse;
@@ -426,6 +430,11 @@ static void com20020_config(dev_link_t *link)
     }
     
     MOD_INC_USE_COUNT;
+
+    lp = dev->priv;
+    lp->card_name = "PCMCIA COM20020";
+    lp->card_flags = ARC_CAN_10MBIT; /* pretend all of them can 10Mbit */
+
     i = com20020_found(dev, 0);
     
     if (i != 0) {

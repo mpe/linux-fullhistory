@@ -588,7 +588,7 @@ static void sppp_channel_init(struct channel_data *chan)
 	memset(chan->pppdev.dev, 0, sizeof(struct net_device));
 	sppp_attach(&chan->pppdev);
 	d=chan->pppdev.dev;
-	d->name = chan->name;
+	strcpy(d->name, chan->name);
 	d->base_addr = chan->cosa->datareg;
 	d->irq = chan->cosa->irq;
 	d->dma = chan->cosa->dma;

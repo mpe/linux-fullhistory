@@ -20,6 +20,9 @@
 #ifdef CONFIG_8xx
 #include <asm/mpc8xx.h>
 #endif
+#ifdef CONFIG_8260
+#include <asm/mpc8260.h>
+#endif
 
 /*
  * Please send me load/board info and such data for hardware not
@@ -230,6 +233,13 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, b
 	char *cp, ch;
 	unsigned long i;
 	char	*dp;
+
+#ifdef CONFIG_8260
+	/* I don't know why I didn't do it this way on the 8xx.......
+	*/
+	embed_config(bp);
+	serial_init(bp);
+#endif
 
 	/* These values must be variables.  If not, the compiler optimizer
 	 * will remove some code, causing the size of the code to vary

@@ -1572,7 +1572,6 @@ eepro_transmit_interrupt(struct net_device *dev)
 }
 
 #define MAX_EEPRO 8
-static char devicename[MAX_EEPRO][9];
 static struct net_device dev_eepro[MAX_EEPRO];
 
 static int io[MAX_EEPRO] = {
@@ -1606,7 +1605,6 @@ init_module(void)
 
 	while (n_eepro < MAX_EEPRO && io[n_eepro] >= 0) {
 		struct net_device *d = &dev_eepro[n_eepro];
-		d->name		= devicename[n_eepro]; /* inserted by drivers/net/net_init.c */
 		d->mem_end	= mem[n_eepro];
 		d->base_addr	= io[n_eepro];
 		d->irq		= irq[n_eepro];

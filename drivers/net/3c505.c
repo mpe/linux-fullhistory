@@ -1607,11 +1607,9 @@ int __init elplus_probe(struct net_device *dev)
 }
 
 #ifdef MODULE
-#define NAMELEN 9
-static char devicename[ELP_MAX_CARDS][NAMELEN] = {{0,}};
 static struct net_device dev_3c505[ELP_MAX_CARDS] =
 {
-	{ NULL,		/* device name is inserted by net_init.c */
+	{ "",		/* device name is inserted by net_init.c */
 	0, 0, 0, 0,
 	0, 0,
 	0, 0, 0, NULL, elplus_probe},
@@ -1630,7 +1628,6 @@ int init_module(void)
 
 	for (this_dev = 0; this_dev < ELP_MAX_CARDS; this_dev++) {
 		struct net_device *dev = &dev_3c505[this_dev];
-		dev->name = devicename[this_dev];
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
 		if (dma[this_dev]) {

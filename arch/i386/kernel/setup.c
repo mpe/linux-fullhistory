@@ -32,9 +32,13 @@
  *	Added proper L2 cache detection for Coppermine
  *	Dragan Stancevic <visitor@valinux.com>, October 1999
  *
- *  Added the origninal array for capability flags but forgot to credit 
+ *  Added the original array for capability flags but forgot to credit 
  *  myself :) (~1998) Fixed/cleaned up some cpu_model_info and other stuff
  *  	Jauder Ho <jauderho@carumba.com>, January 2000
+ *
+ *  Detection for Celeron coppermine, identify_cpu() overhauled,
+ *  and a few other clean ups.
+ *  Dave Jones <dave@powertweak.com>, April 2000
  *  	
  */
 
@@ -794,7 +798,7 @@ void __init setup_arch(char **cmdline_p)
 
 static int __init get_model_name(struct cpuinfo_x86 *c)
 {
-	unsigned int n, dummy, *v, ecx, edx;
+	unsigned int n, dummy, *v;
 
 	/* Actually we must have cpuid or we could never have
 	 * figured out that this was AMD/Cyrix from the vendor info :-).
@@ -809,29 +813,6 @@ static int __init get_model_name(struct cpuinfo_x86 *c)
 	cpuid(0x80000003, &v[4], &v[5], &v[6], &v[7]);
 	cpuid(0x80000004, &v[8], &v[9], &v[10], &v[11]);
 	c->x86_model_id[48] = 0;
-	/*  Set MTRR capability flag if appropriate  */
-	
-	if(c->x86_vendor==X86_VENDOR_AMD)
-	{
-		if(boot_cpu_data.x86 == 5) {
-			if((boot_cpu_data.x86_model == 9) ||
-			   ((boot_cpu_data.x86_model == 8) && 
-			    (boot_cpu_data.x86_mask >= 8)))
-				c->x86_capability |= X86_FEATURE_MTRR;
-		}
-	
-		if (n >= 0x80000005){
-			cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
-			printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n",
-				ecx>>24, edx>>24);
-			c->x86_cache_size=(ecx>>24)+(edx>>24);	
-		}
-		if (n >= 0x80000006){
-			cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
-			printk("CPU: L2 Cache: %dK\n", ecx>>16);
-			c->x86_cache_size=(ecx>>16);
-		}
-	}
 	return 1;
 }
 
@@ -839,14 +820,24 @@ static int __init amd_model(struct cpuinfo_x86 *c)
 {
 	u32 l, h;
 	unsigned long flags;
+	unsigned int n, dummy, ecx, edx;
 	int mbytes = max_mapnr >> (20-PAGE_SHIFT);
-	
+
 	int r=get_model_name(c);
-	
+
 	/*
-	 *	Now do the cache operations. 
+	 * Set MTRR capability flag if appropriate
 	 */
-	 
+	if(boot_cpu_data.x86 == 5) {
+		if((boot_cpu_data.x86_model == 9) ||
+		   ((boot_cpu_data.x86_model == 8) && 
+		    (boot_cpu_data.x86_mask >= 8)))
+			c->x86_capability |= X86_FEATURE_MTRR;
+	}
+
+	/*
+	 * Now do the cache operations. 
+	 */
 	switch(c->x86)
 	{
 		case 5:
@@ -903,6 +894,20 @@ static int __init amd_model(struct cpuinfo_x86 *c)
 		case 6:	/* An Athlon. We can trust the BIOS probably */
 			break;		
 	}
+
+	cpuid(0x80000000, &n, &dummy, &dummy, &dummy);
+	if (n >= 0x80000005) {
+		cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
+		printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n",
+			ecx>>24, edx>>24);
+		c->x86_cache_size=(ecx>>24)+(edx>>24);	
+	}
+	if (n >= 0x80000006) {
+		cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
+		printk("CPU: L2 Cache: %dK\n", ecx>>16);
+		c->x86_cache_size=(ecx>>16);
+	}
+
 	return r;
 }
 			
@@ -1029,13 +1034,13 @@ static void __init cyrix_model(struct cpuinfo_x86 *c)
 		/* It isnt really a PCI quirk directly, but the cure is the
 		   same. The MediaGX has deep magic SMM stuff that handles the
 		   SB emulation. It thows away the fifo on disable_dma() which
-                   is wrong and ruins the audio. 
+		   is wrong and ruins the audio. 
                    
-                   Bug2: VSA1 has a wrap bug so that using maximum sized DMA 
-                   causes bad things. According to NatSemi VSA2 has another
-                   bug to do with 'hlt'. I've not seen any boards using VSA2
-                   and X doesn't seem to support it either so who cares 8).
-                   VSA1 we work around however.
+		   Bug2: VSA1 has a wrap bug so that using maximum sized DMA 
+		   causes bad things. According to NatSemi VSA2 has another
+		   bug to do with 'hlt'. I've not seen any boards using VSA2
+		   and X doesn't seem to support it either so who cares 8).
+		   VSA1 we work around however.
                    
 		*/
 		
@@ -1043,7 +1048,7 @@ static void __init cyrix_model(struct cpuinfo_x86 *c)
 		isa_dma_bridge_buggy = 2;
 #endif		
 		c->x86_cache_size=16;	/* Yep 16K integrated cache thats it */
-		
+
 		/* GXm supports extended cpuid levels 'ala' AMD */
 		if (c->cpuid_level == 2) {
 			get_model_name(c);  /* get CPU marketing name */
@@ -1256,7 +1261,7 @@ static struct cpu_model_info cpu_models[] __initdata = {
 
 void __init identify_cpu(struct cpuinfo_x86 *c)
 {
-	int i;
+	int i=0;
 	char *p = NULL;
 
 	c->loops_per_sec = loops_per_sec;
@@ -1264,99 +1269,117 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 
 	get_cpu_vendor(c);
 
-	if (c->x86_vendor == X86_VENDOR_UNKNOWN &&
-	    c->cpuid_level < 0)
-		return;
+	switch (c->x86_vendor) {
 
-	if (c->x86_vendor == X86_VENDOR_CYRIX) {
-		cyrix_model(c);
-		return;
+		case X86_VENDOR_UNKNOWN:
+			if (c->cpuid_level < 0)
+				return;
+			break;
+
+		case X86_VENDOR_CYRIX:
+			cyrix_model(c);
+			return;
+
+		case X86_VENDOR_AMD:
+			if (amd_model(c))
+				return;
+			break;
+
+		case X86_VENDOR_CENTAUR:
+			centaur_model(c);
+			return;
+
+		case X86_VENDOR_INTEL:
+			if(c->x86_capability&(1<<18)) {
+				/* Disable processor serial number on Intel Pentium III 
+				   from code by Phil Karn */
+				unsigned long lo,hi;
+				rdmsr(0x119,lo,hi);
+				lo |= 0x200000;
+				wrmsr(0x119,lo,hi);
+				printk(KERN_INFO "Pentium-III serial number disabled.\n");
+			}
+
+			if (c->cpuid_level > 1) {
+				/* supports eax=2  call */
+				int edx, dummy;
+
+				cpuid(2, &dummy, &dummy, &dummy, &edx);
+
+				/* We need only the LSB */
+				edx &= 0xff;
+
+				switch (edx) {
+				case 0x40:
+					c->x86_cache_size = 0;
+					break;
+
+				case 0x41:
+					c->x86_cache_size = 128;
+					break;
+
+				case 0x42:
+				case 0x82: /*Detect 256-Kbyte cache on Coppermine*/
+					c->x86_cache_size = 256;
+					break;
+
+				case 0x43:
+					c->x86_cache_size = 512;
+					break;
+
+				case 0x44:
+					c->x86_cache_size = 1024;
+					break;
+
+				case 0x45:
+					c->x86_cache_size = 2048;
+					break;
+
+				default:
+					c->x86_cache_size = 0;
+					break;
+				}
+			}
+
+			/* Names for the Pentium II/Celeron processors 
+			   detectable only by also checking the cache size.
+			   Dixon is NOT a Celeron. */
+			if (cpu_models[i].x86 == 6) {
+				switch (c->x86_model) {
+					case 5:
+						if (c->x86_cache_size == 0)
+							p = "Celeron (Covington)";
+						if (c->x86_cache_size == 256)
+							p = "Mobile Pentium II (Dixon)";
+						break;
+
+					case 6:
+						if (c->x86_cache_size == 128)
+							p = "Celeron (Mendocino)";
+						break;
+
+					case 8:
+						if (c->x86_cache_size == 128)
+							p = "Celeron (Coppermine)";
+						break;
+				}
+			}
+			if (p!=NULL)
+				goto name_decoded;
+
+			break;
 	}
-
-	if (c->x86_vendor == X86_VENDOR_AMD && amd_model(c))
-		return;
-
-	if (c->x86_vendor == X86_VENDOR_CENTAUR) {
-		centaur_model(c);
-		return;
-	}
-		
-	if (c->cpuid_level > 0 && c->x86_vendor == X86_VENDOR_INTEL)
-	{
-		if(c->x86_capability&(1<<18))
-		{
-			/* Disable processor serial number on Intel Pentium III 
-			   from code by Phil Karn */
-			unsigned long lo,hi;
-			rdmsr(0x119,lo,hi);
-			lo |= 0x200000;
-			wrmsr(0x119,lo,hi);
-			printk(KERN_INFO "Pentium-III serial number disabled.\n");
-		}
-	}
-
-	if (c->cpuid_level > 1) {
-		/* supports eax=2  call */
-		int edx, dummy;
-
-		cpuid(2, &dummy, &dummy, &dummy, &edx);
-
-		/* We need only the LSB */
-		edx &= 0xff;
-
-		switch (edx) {
-			case 0x40:
-				c->x86_cache_size = 0;
-				break;
-
-			case 0x41:
-				c->x86_cache_size = 128;
-				break;
-
-			case 0x42:
-			case 0x82: /*Detect 256-Kbyte cache on Coppermine*/
-				c->x86_cache_size = 256;
-				break;
-
-			case 0x43:
-				c->x86_cache_size = 512;
-				break;
-
-			case 0x44:
-				c->x86_cache_size = 1024;
-				break;
-
-			case 0x45:
-				c->x86_cache_size = 2048;
-				break;
-
-			default:
-				c->x86_cache_size = 0;
-				break;
-		}
-	}
-
+	
+	
 	for (i = 0; i < sizeof(cpu_models)/sizeof(struct cpu_model_info); i++) {
 		if (cpu_models[i].vendor == c->x86_vendor &&
 		    cpu_models[i].x86 == c->x86) {
 			if (c->x86_model <= 16)
 				p = cpu_models[i].model_names[c->x86_model];
-
-			/* Names for the Pentium II/Celeron processors 
-                           detectable only by also checking the cache size.
-			   Dixon is NOT a Celeron. */
-			if ((cpu_models[i].vendor == X86_VENDOR_INTEL)
-			    && (cpu_models[i].x86 == 6))
-			{
-			 	if(c->x86_model == 5 &&  c->x86_cache_size == 0)
-					p = "Celeron (Covington)";						
-				else if(c->x86_model == 6 && c->x86_cache_size == 128)
-                            		p = "Celeron (Mendocino)"; 
- 			  	else if(c->x86_model == 5 && c->x86_cache_size == 256)
-					p = "Mobile Pentium II (Dixon)";
-			}
 		}
 	}
+
+name_decoded:
 
 	if (p) {
 		strcpy(c->x86_model_id, p);
@@ -1373,11 +1396,10 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 void __init dodgy_tsc(void)
 {
 	get_cpu_vendor(&boot_cpu_data);
-	
+
 	if(boot_cpu_data.x86_vendor != X86_VENDOR_CYRIX)
-	{
 		return;
-	}
+
 	cyrix_model(&boot_cpu_data);
 }
 	
@@ -1442,15 +1464,15 @@ int get_cpuinfo(char * buffer)
 			continue;
 #endif
 		p += sprintf(p,"processor\t: %d\n"
-			       "vendor_id\t: %s\n"
-			       "cpu family\t: %c\n"
-			       "model\t\t: %d\n"
-			       "model name\t: %s\n",
-			       n,
-			       c->x86_vendor_id[0] ? c->x86_vendor_id : "unknown",
-			       c->x86 + '0',
-			       c->x86_model,
-			       c->x86_model_id[0] ? c->x86_model_id : "unknown");
+			"vendor_id\t: %s\n"
+			"cpu family\t: %c\n"
+			"model\t\t: %d\n"
+			"model name\t: %s\n",
+			n,
+			c->x86_vendor_id[0] ? c->x86_vendor_id : "unknown",
+			c->x86 + '0',
+			c->x86_model,
+			c->x86_model_id[0] ? c->x86_model_id : "unknown");
 
 		if (c->x86_mask || c->cpuid_level >= 0)
 			p += sprintf(p, "stepping\t: %d\n", c->x86_mask);
@@ -1470,32 +1492,32 @@ int get_cpuinfo(char * buffer)
 		switch (c->x86_vendor) {
 
 		    case X86_VENDOR_CYRIX:
-			x86_cap_flags[24] = "cxmmx";
-			break;
+				x86_cap_flags[24] = "cxmmx";
+				break;
 
 		    case X86_VENDOR_AMD:
-			if (c->x86 == 5 && c->x86_model == 6)
-				x86_cap_flags[10] = "sep";
-			if (c->x86 < 6)
-				x86_cap_flags[16] = "fcmov";
-			x86_cap_flags[22] = "mmxext";
-			x86_cap_flags[30] = "3dnowext";
-			x86_cap_flags[31] = "3dnow";
-			break;
+				if (c->x86 == 5 && c->x86_model == 6)
+					x86_cap_flags[10] = "sep";
+				if (c->x86 < 6)
+					x86_cap_flags[16] = "fcmov";
+				x86_cap_flags[22] = "mmxext";
+				x86_cap_flags[30] = "3dnowext";
+				x86_cap_flags[31] = "3dnow";
+				break;
 
 		    case X86_VENDOR_INTEL:
-			x86_cap_flags[16] = "pat";
-			x86_cap_flags[24] = "fxsr";
-			break;
+				x86_cap_flags[16] = "pat";
+				x86_cap_flags[24] = "fxsr";
+				break;
 
 		    case X86_VENDOR_CENTAUR:
-			if (c->x86_model >=8)	/* Only Winchip2 and above */
-			    x86_cap_flags[31] = "3dnow";
-			break;
+				if (c->x86_model >=8)	/* Only Winchip2 and above */
+				    x86_cap_flags[31] = "3dnow";
+				break;
 
 		    default:
-			/* Unknown CPU manufacturer. Transmeta ? :-) */
-			break;
+				/* Unknown CPU manufacturer. Transmeta ? :-) */
+				break;
 		}
 
 		sep_bug = c->x86_vendor == X86_VENDOR_INTEL &&
@@ -1528,9 +1550,10 @@ int get_cpuinfo(char * buffer)
 		for ( i = 0 ; i < 32 ; i++ )
 			if ( c->x86_capability & (1 << i) )
 				p += sprintf(p, " %s", x86_cap_flags[i]);
+
 		p += sprintf(p, "\nbogomips\t: %lu.%02lu\n\n",
-			     (c->loops_per_sec+2500)/500000,
-			     ((c->loops_per_sec+2500)/5000) % 100);
+			(c->loops_per_sec+2500)/500000,
+			((c->loops_per_sec+2500)/5000) % 100);
 	}
 	return p - buffer;
 }

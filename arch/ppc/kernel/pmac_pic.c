@@ -158,13 +158,13 @@ static void gatwick_action(int cpl, void *dev_id, struct pt_regs *regs)
 {
 	int irq, bits;
 	
-	for (irq = max_irqs - 1; irq > max_real_irqs; irq -= 32) {
+	for (irq = max_irqs; (irq -= 32) >= max_real_irqs; ) {
 		int i = irq >> 5;
 		bits = ld_le32(&pmac_irq_hw[i]->flag)
 			| ppc_lost_interrupts[i];
 		if (bits == 0)
 			continue;
-		irq -= cntlzw(bits);
+		irq += __ilog2(bits);
 		break;
 	}
 	/* The previous version of this code allowed for this case, we
@@ -213,13 +213,13 @@ pmac_get_irq(struct pt_regs *regs)
 	}
 	else
 	{
-		for (irq = max_real_irqs - 1; irq > 0; irq -= 32) {
+		for (irq = max_real_irqs; (irq -= 32) >= 0; ) {
 			int i = irq >> 5;
 			bits = ld_le32(&pmac_irq_hw[i]->flag)
 				| ppc_lost_interrupts[i];
 			if (bits == 0)
 				continue;
-			irq -= cntlzw(bits);
+			irq += __ilog2(bits);
 			break;
 		}
 	}
@@ -489,11 +489,9 @@ sleep_save_intrs(int viaint)
 	if (max_real_irqs > 32)
 		out_le32(&pmac_irq_hw[1]->enable, ppc_cached_irq_mask[1]);
 	(void)in_le32(&pmac_irq_hw[0]->flag);
-        do {
-                /* make sure mask gets to controller before we
-                   return to user */
-                mb();
-        } while(in_le32(&pmac_irq_hw[0]->enable) != ppc_cached_irq_mask[0]);
+	/* make sure mask gets to controller before we return to caller */
+	mb();
+        (void)in_le32(&pmac_irq_hw[0]->enable);
 }
 
 void

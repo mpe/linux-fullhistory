@@ -10,6 +10,7 @@
 #include <linux/sched.h>
 #include <linux/pci.h>
 #include <linux/init.h>
+#include <linux/ioport.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>
@@ -208,6 +209,7 @@ static struct pci_ops * __init pci_check_direct(void)
 			outl (tmp, 0xCF8);
 			__restore_flags(flags);
 			printk("PCI: Using configuration type 1\n");
+			request_region(0xCF8, 8, "PCI conf1");
 			return &pci_direct_conf1;
 		}
 		outl (tmp, 0xCF8);
@@ -224,6 +226,7 @@ static struct pci_ops * __init pci_check_direct(void)
 		    pci_sanity_check(&pci_direct_conf2)) {
 			__restore_flags(flags);
 			printk("PCI: Using configuration type 2\n");
+			request_region(0xCF8, 4, "PCI conf2");
 			return &pci_direct_conf2;
 		}
 	}
@@ -912,6 +915,16 @@ static void __init pci_fixup_ide_trash(struct pci_dev *d)
 		d->resource[i].start = d->resource[i].end = d->resource[i].flags = 0;
 }
 
+static void __init pci_fixup_latency(struct pci_dev *d)
+{
+	/*
+	 *  SiS 5597 and 5598 chipsets require latency timer set to
+	 *  at most 32 to avoid lockups.
+	 */
+	DBG("PCI: Setting max latency to 32\n");
+	pcibios_max_latency = 32;
+}
+
 struct pci_fixup pcibios_fixups[] = {
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82451NX,	pci_fixup_i450nx },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82454GX,	pci_fixup_i450gx },
@@ -921,6 +934,8 @@ struct pci_fixup pcibios_fixups[] = {
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_UMC,	PCI_DEVICE_ID_UMC_UM8886BF,	pci_fixup_umc_ide },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_5513,		pci_fixup_ide_trash },
 	{ PCI_FIXUP_HEADER,	PCI_ANY_ID,		PCI_ANY_ID,			pci_fixup_ide_bases },
+	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_5597,		pci_fixup_latency },
+	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_5598,		pci_fixup_latency },
 	{ 0 }
 };
 
@@ -969,8 +984,9 @@ void __init pcibios_init(void)
 	printk("PCI: Probing PCI hardware\n");
 	pci_root_bus = pci_scan_bus(0, pci_root_ops, NULL);
 
-	pcibios_fixup_irqs();
+	pcibios_irq_init();
 	pcibios_fixup_peer_bridges();
+	pcibios_fixup_irqs();
 	pcibios_resource_survey();
 
 #ifdef CONFIG_PCI_BIOS

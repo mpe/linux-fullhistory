@@ -35,7 +35,6 @@ struct slvl_device
 	void *if_ptr;	/* General purpose pointer (used by SPPP) */
 	struct z8530_channel *chan;
 	struct ppp_device netdev;
-	char name[16];
 	int channel;
 };
 
@@ -223,7 +222,6 @@ static struct slvl_board *slvl_init(int iobase, int irq, int txdma, int rxdma, i
 	struct slvl_device *sv;
 	struct slvl_board *b;
 	
-	int i;
 	unsigned long flags;
 	int u;
 	
@@ -306,7 +304,6 @@ static struct slvl_board *slvl_init(int iobase, int irq, int txdma, int rxdma, i
 	dev->chanB.netdevice=b->dev[1].netdev.dev;
 	dev->chanA.dev=dev;
 	dev->chanB.dev=dev;
-	dev->name=b->dev[0].name;
 
 	dev->chanA.txdma=3;
 	dev->chanA.rxdma=1;
@@ -350,52 +347,46 @@ static struct slvl_board *slvl_init(int iobase, int irq, int txdma, int rxdma, i
 		sv=&b->dev[u];
 		sv->channel = u;
 	
-		for(i=0;i<999;i++)
+		if(dev_alloc_name(sv->chan->netdevice,"hdlc%d")>=0)
 		{
-			sprintf(sv->name,"hdlc%d", i);
-			if(dev_get(sv->name)==0)
-			{
-				struct net_device *d=sv->chan->netdevice;
-	
-				/* 
-				 *	Initialise the PPP components
-				 */
-				sppp_attach(&sv->netdev);
-			
-				/*
-				 *	Local fields
-				 */	
-				sprintf(sv->name,"hdlc%d", i);
-				
-				d->name = sv->name;
-				d->base_addr = iobase;
-				d->irq = irq;
-				d->priv = sv;
-				d->init = NULL;
-			
-				d->open = sealevel_open;
-				d->stop = sealevel_close;
-				d->hard_start_xmit = sealevel_queue_xmit;
-				d->get_stats = sealevel_get_stats;
-				d->set_multicast_list = NULL;
-				d->do_ioctl = sealevel_ioctl;
-#ifdef LINUX_21			
-				d->neigh_setup = sealevel_neigh_setup_dev;
-				dev_init_buffers(d);
-#else
-				d->init = return_0;
-#endif
-				d->set_mac_address = NULL;
-			
-				if(register_netdev(d)==-1)
-				{
-					printk(KERN_ERR "%s: unable to register device.\n",
-						sv->name);
-					goto fail_unit;
-				}				
+			struct net_device *d=sv->chan->netdevice;
 
-				break;
-			}
+			/* 
+			 *	Initialise the PPP components
+			 */
+			sppp_attach(&sv->netdev);
+		
+			/*
+			 *	Local fields
+			 */	
+			
+			d->base_addr = iobase;
+			d->irq = irq;
+			d->priv = sv;
+			d->init = NULL;
+		
+			d->open = sealevel_open;
+			d->stop = sealevel_close;
+			d->hard_start_xmit = sealevel_queue_xmit;
+			d->get_stats = sealevel_get_stats;
+			d->set_multicast_list = NULL;
+			d->do_ioctl = sealevel_ioctl;
+#ifdef LINUX_21			
+			d->neigh_setup = sealevel_neigh_setup_dev;
+			dev_init_buffers(d);
+#else
+			d->init = return_0;
+#endif
+			d->set_mac_address = NULL;
+		
+			if(register_netdev(d)==-1)
+			{
+				printk(KERN_ERR "%s: unable to register device.\n",
+					d->name);
+				goto fail_unit;
+			}				
+
+			break;
 		}
 	}
 	z8530_describe(dev, "I/O", iobase);

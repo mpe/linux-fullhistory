@@ -311,7 +311,6 @@ struct strip
      */
 
     struct tty_struct *tty;			/* ptr to TTY structure		*/
-    char8              if_name;			/* Dynamically generated name	*/
     struct net_device      dev;			/* Our device structure		*/
 
     /*
@@ -1180,7 +1179,7 @@ sprintf_status_info(char *buffer, struct strip *strip_info)
     FirmwareVersion    firmware_version    = strip_info->firmware_version;
     SerialNumber       serial_number       = strip_info->serial_number;
     BatteryVoltage     battery_voltage     = strip_info->battery_voltage;
-    char8              if_name             = strip_info->if_name;
+    char*              if_name             = strip_info->dev.name;
     MetricomAddress    true_dev_addr       = strip_info->true_dev_addr;
     MetricomAddress    dev_dev_addr        = *(MetricomAddress*)strip_info->dev.dev_addr;
     int                manual_dev_addr     = strip_info->manual_dev_addr;
@@ -1196,7 +1195,7 @@ sprintf_status_info(char *buffer, struct strip *strip_info)
 #endif
     RestoreInterrupts(intstat);
 
-    p += sprintf(p, "\nInterface name\t\t%s\n", if_name.c);
+    p += sprintf(p, "\nInterface name\t\t%s\n", if_name);
     p += sprintf(p, " Radio working:\t\t%s\n", working ? "Yes" : "No");
     radio_address_to_string(&true_dev_addr, &addr_string);
     p += sprintf(p, " Radio address:\t\t%s\n", addr_string.c);
@@ -2664,8 +2663,7 @@ static struct strip *strip_alloc(void)
     strip_info->idle_timer.function = strip_IdleTask;
 
     /* Note: strip_info->if_name is currently 8 characters long */
-    sprintf(strip_info->if_name.c, "st%d", channel_id);
-    strip_info->dev.name         = strip_info->if_name.c;
+    sprintf(strip_info->dev.name, "st%d", channel_id);
     strip_info->dev.base_addr    = channel_id;
     strip_info->dev.priv         = (void*)strip_info;
     strip_info->dev.next         = NULL;
@@ -2736,7 +2734,7 @@ static int strip_open(struct tty_struct *tty)
     MOD_INC_USE_COUNT;
 #endif
 
-    printk(KERN_INFO "STRIP: device \"%s\" activated\n", strip_info->if_name.c);
+    printk(KERN_INFO "STRIP: device \"%s\" activated\n", strip_info->dev.name);
 
     /*
      * Done.  We have linked the TTY line to a channel.
@@ -2767,7 +2765,7 @@ static void strip_close(struct tty_struct *tty)
 
     tty->disc_data = 0;
     strip_info->tty = NULL;
-    printk(KERN_INFO "STRIP: device \"%s\" closed down\n", strip_info->if_name.c);
+    printk(KERN_INFO "STRIP: device \"%s\" closed down\n", strip_info->dev.name);
     strip_free(strip_info);
     tty->disc_data = NULL;
 #ifdef MODULE

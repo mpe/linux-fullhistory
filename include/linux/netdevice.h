@@ -210,7 +210,7 @@ struct net_device
 	 * (i.e. as seen by users in the "Space.c" file).  It is the name
 	 * the interface.
 	 */
-	char			*name;
+	char			name[IFNAMSIZ];
 
 	/*
 	 *	I/O specific fields

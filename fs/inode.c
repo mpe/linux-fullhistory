@@ -876,10 +876,11 @@ void __init inode_init(unsigned long mempages)
 			__get_free_pages(GFP_ATOMIC, order);
 	} while (inode_hashtable == NULL && --order >= 0);
 
+	printk("Inode-cache hash table entries: %d (order: %ld, %ld bytes)\n",
+			nr_hash, order, (PAGE_SIZE << order));
+
 	if (!inode_hashtable)
 		panic("Failed to allocate inode hash table\n");
-
-	printk("VFS: INODE hash table configured to %d entries\n", nr_hash);
 
 	head = inode_hashtable;
 	i = nr_hash;

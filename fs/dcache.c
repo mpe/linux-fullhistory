@@ -1098,10 +1098,11 @@ void __init dcache_init(unsigned long mempages)
 			__get_free_pages(GFP_ATOMIC, order);
 	} while (dentry_hashtable == NULL && --order >= 0);
 
+	printk("Dentry-cache hash table entries: %d (order: %ld, %ld bytes)\n",
+			nr_hash, order, (PAGE_SIZE << order));
+
 	if (!dentry_hashtable)
 		panic("Failed to allocate dcache hash table\n");
-
-	printk("VFS: DCACHE hash table configured to %d entries\n", nr_hash);
 
 	d = dentry_hashtable;
 	i = nr_hash;

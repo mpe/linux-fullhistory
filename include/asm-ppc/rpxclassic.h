@@ -62,6 +62,6 @@ extern bd_t m8xx_board_info;
 
 /* Machine type
 */
-#define _MACH_8xx (_MACH_rpxclassic)
+#define _MACH_8xx (_MACH_classic)
 
 #endif

@@ -877,7 +877,7 @@ static int comx_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		return -ENOMEM;
 	}
 	memset(dev, 0, sizeof(struct net_device));
-	dev->name = (char *)new_dir->name;
+	strcpy(dev->name, (char *)new_dir->name);
 	dev->init = comx_init_dev;
 
 	if (register_netdevice(dev)) {

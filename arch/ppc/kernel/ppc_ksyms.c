@@ -54,9 +54,10 @@ extern int sys_sigreturn(struct pt_regs *regs);
 extern void do_lost_interrupts(unsigned long);
 extern int do_signal(sigset_t *, struct pt_regs *);
 
-asmlinkage long long __ashrdi3(long long, int);
-asmlinkage long long __lshrdi3(long long, int);
-asmlinkage int abs(int);
+long long __ashrdi3(long long, int);
+long long __ashldi3(long long, int);
+long long __lshrdi3(long long, int);
+int abs(int);
 
 EXPORT_SYMBOL(clear_page);
 EXPORT_SYMBOL(do_signal);
@@ -95,25 +96,12 @@ EXPORT_SYMBOL(ucSystemType);
 #endif
 #endif
 
-EXPORT_SYMBOL(atomic_add);
-EXPORT_SYMBOL(atomic_sub);
-EXPORT_SYMBOL(atomic_inc);
-EXPORT_SYMBOL(atomic_inc_return);
-EXPORT_SYMBOL(atomic_dec);
-EXPORT_SYMBOL(atomic_dec_return);
-EXPORT_SYMBOL(atomic_dec_and_test);
-
 EXPORT_SYMBOL(set_bit);
 EXPORT_SYMBOL(clear_bit);
 EXPORT_SYMBOL(change_bit);
 EXPORT_SYMBOL(test_and_set_bit);
 EXPORT_SYMBOL(test_and_clear_bit);
 EXPORT_SYMBOL(test_and_change_bit);
-#if 0
-EXPORT_SYMBOL(ffz);
-EXPORT_SYMBOL(find_first_zero_bit);
-EXPORT_SYMBOL(find_next_zero_bit);
-#endif
 
 EXPORT_SYMBOL(strcpy);
 EXPORT_SYMBOL(strncpy);
@@ -254,6 +242,7 @@ EXPORT_SYMBOL(nvram_write_byte);
 #endif /* CONFIG_NVRAM */
 
 EXPORT_SYMBOL_NOVERS(__ashrdi3);
+EXPORT_SYMBOL_NOVERS(__ashldi3);
 EXPORT_SYMBOL_NOVERS(__lshrdi3);
 EXPORT_SYMBOL_NOVERS(memcpy);
 EXPORT_SYMBOL_NOVERS(memset);
@@ -281,3 +270,17 @@ EXPORT_SYMBOL(console_drivers);
 EXPORT_SYMBOL(xmon);
 #endif
 EXPORT_SYMBOL(down_read_failed);
+
+extern void (*debugger)(struct pt_regs *regs);
+extern int (*debugger_bpt)(struct pt_regs *regs);
+extern int (*debugger_sstep)(struct pt_regs *regs);
+extern int (*debugger_iabr_match)(struct pt_regs *regs);
+extern int (*debugger_dabr_match)(struct pt_regs *regs);
+extern void (*debugger_fault_handler)(struct pt_regs *regs);
+
+EXPORT_SYMBOL(debugger);
+EXPORT_SYMBOL(debugger_bpt);
+EXPORT_SYMBOL(debugger_sstep);
+EXPORT_SYMBOL(debugger_iabr_match);
+EXPORT_SYMBOL(debugger_dabr_match);
+EXPORT_SYMBOL(debugger_fault_handler);

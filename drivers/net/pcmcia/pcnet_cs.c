@@ -310,7 +310,7 @@ static dev_link_t *pcnet_attach(void)
     link->conf.IntType = INT_MEMORY_AND_IO;
 
     ethdev_init(dev);
-    dev->name = info->node.dev_name;
+    strcpy(dev->name, info->node.dev_name);
     dev->init = &pcnet_init;
     dev->open = &pcnet_open;
     dev->stop = &pcnet_close;

@@ -43,6 +43,15 @@ iic_init()
 	*/
 	while (cp->cp_cpcr & (CPM_CR_RST | CPM_CR_FLG));
 
+	/* Remove any microcode patches.  We will install our own
+	 * later.
+	 */
+	cp->cp_cpmcr1 = 0;
+	cp->cp_cpmcr2 = 0;
+	cp->cp_cpmcr3 = 0;
+	cp->cp_cpmcr4 = 0;
+	cp->cp_rccr = 0;
+
 	iip = (iic_t *)&cp->cp_dparam[PROFF_IIC];
 	i2c = (i2c8xx_t *)&(immap->im_i2c);
 

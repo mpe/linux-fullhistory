@@ -520,6 +520,9 @@ static int sohci_unlink_urb (urb_t * urb)
 	if (!urb) /* just to be sure */ 
 		return -EINVAL;
 		
+	if (!urb->dev || !urb->dev->bus)
+		return -ENODEV;
+
 	ohci = (ohci_t *) urb->dev->bus->hcpriv; 
 
 #ifdef DEBUG
@@ -530,12 +533,14 @@ static int sohci_unlink_urb (urb_t * urb)
 		return rh_unlink_urb (urb); /* a request to the virtual root hub */
 	
 	if (urb->hcpriv) { 
-		if (urb->status == USB_ST_URB_PENDING) { /* URB active? */
+		/* URB active? */
+		if (urb->status == USB_ST_URB_PENDING && !ohci->disabled) {
 			urb_priv_t  * urb_priv = urb->hcpriv;
 			urb_priv->state = URB_DEL; 
 
 			/* we want to delete the TDs of an URB from an ed 
-			 * request the deletion, it will be handled at the next USB-frame */
+			 * request the deletion, it will be handled at the
+			 * next USB-frame */
 			
 			spin_lock_irqsave (&usb_ed_lock, flags);
 			ep_rm_ed (urb->dev, urb_priv->ed);
@@ -549,6 +554,10 @@ static int sohci_unlink_urb (urb_t * urb)
 			remove_wait_queue (&op_wakeup, &wait); 
 		} else 
 			urb_rm_priv (urb);
+
+		urb->status = -ENOENT;	// mark urb as killed		
+		if (urb->complete)
+			urb->complete ((struct urb *) urb);
 		usb_dec_dev_use (urb->dev);		
 	}	
 	return 0;
@@ -1274,7 +1283,7 @@ static __u8 root_hub_dev_des[] =
 {
 	0x12,       /*  __u8  bLength; */
 	0x01,       /*  __u8  bDescriptorType; Device */
-	0x00,	    /*  __u16 bcdUSB; v1.0 */
+	0x10,	    /*  __u16 bcdUSB; v1.1 */
 	0x01,
 	0x09,	    /*  __u8  bDeviceClass; HUB_CLASSCODE */
 	0x00,	    /*  __u8  bDeviceSubClass; */
@@ -1323,7 +1332,7 @@ static __u8 root_hub_config_des[] =
 	0x05,       /*  __u8  ep_bDescriptorType; Endpoint */
 	0x81,       /*  __u8  ep_bEndpointAddress; IN Endpoint 1 */
  	0x03,       /*  __u8  ep_bmAttributes; Interrupt */
- 	0x08,       /*  __u16 ep_wMaxPacketSize; 8 Bytes */
+ 	0x02,       /*  __u16 ep_wMaxPacketSize; ((MAX_ROOT_PORTS + 1) / 8 */
  	0x00,
 	0xff        /*  __u8  ep_bInterval; 255 ms */
 };
@@ -1622,8 +1631,10 @@ static int rh_unlink_urb (urb_t * urb)
 {
 	ohci_t * ohci = urb->dev->bus->hcpriv;
  
-	ohci->rh.send = 0;
-	del_timer (&ohci->rh.rh_int_timer);
+	if (ohci->rh.urb == urb) {
+		ohci->rh.send = 0;
+		del_timer (&ohci->rh.rh_int_timer);
+	}
 	return 0;
 }
  
@@ -1782,11 +1793,29 @@ static void hc_interrupt (int irq, void * __ohci, struct pt_regs * r)
 
 /*-------------------------------------------------------------------------*/
 
+/* reinitialize after controller reset */
+
+static void hc_reinit_ohci (ohci_t *ohci)
+{
+	int i;
+
+	/* for load balancing of the interrupt branches */
+	for (i = 0; i < NUM_INTS; i++) ohci->ohci_int_load[i] = 0;
+	for (i = 0; i < NUM_INTS; i++) ohci->hcca.int_table[i] = 0;
+	
+	ohci->ed_rm_list [0] = NULL;
+	ohci->ed_rm_list [1] = NULL;
+
+	/* end of control and bulk lists */	 
+	ohci->ed_isotail     = NULL;
+	ohci->ed_controltail = NULL;
+	ohci->ed_bulktail    = NULL;
+} 
+
 /* allocate OHCI */
 
 static ohci_t * hc_alloc_ohci (void * mem_base)
 {
-	int i;
 	ohci_t * ohci;
 	struct usb_bus * bus;
 
@@ -1799,15 +1828,6 @@ static ohci_t * hc_alloc_ohci (void * mem_base)
 	ohci->irq = -1;
 	ohci->regs = mem_base;   
 
-	/* for load ballancing of the interrupt branches */
-	for (i = 0; i < NUM_INTS; i++) ohci->ohci_int_load[i] = 0;
-	for (i = 0; i < NUM_INTS; i++) ohci->hcca.int_table[i] = 0;
-	
-	/* end of control and bulk lists */	 
-	ohci->ed_isotail     = NULL;
-	ohci->ed_controltail = NULL;
-	ohci->ed_bulktail    = NULL;
-
 	bus = usb_alloc_bus (&sohci_device_operations);
 	if (!bus) {
 		free_pages ((unsigned long) ohci, 1);
@@ -1819,6 +1839,7 @@ static ohci_t * hc_alloc_ohci (void * mem_base)
  
 	return ohci;
 } 
+
 
 /*-------------------------------------------------------------------------*/
 
@@ -1977,15 +1998,47 @@ static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data)
 	if (ohci) {
 		switch (rqst) {
 		case PM_SUSPEND:
-			dbg("USB-Bus suspend: %p", ohci);
-			writel (ohci->hc_control = 0xFF, &ohci->regs->control);
+			/* act as if usb suspend can always be used */
+			dbg("USB suspend: %p", ohci->regs);
+			ohci->hc_control = OHCI_USB_SUSPEND;
+			writel (ohci->hc_control, &ohci->regs->control);
 			wait_ms (10);
 			break;
+
 		case PM_RESUME:
-			dbg("USB-Bus resume: %p", ohci);
-			writel (ohci->hc_control = 0x7F, &ohci->regs->control);
-			wait_ms (20);
-			writel (ohci->hc_control = 0xBF, &ohci->regs->control);
+			/* did we suspend, or were we powered off? */
+			ohci->hc_control = readl (&ohci->regs->control);
+			temp = ohci->hc_control & OHCI_CTRL_HCFS;
+			switch (temp) {
+
+			case OHCI_USB_RESET:	// lost power
+				dbg("USB reset: %p", ohci->regs);
+				ohci->disabled = 1;
+				if (ohci->bus->root_hub)
+					usb_disconnect (&ohci->bus->root_hub);
+				hc_reinit_ohci (ohci);
+				if ((temp = hc_reset (ohci)) < 0
+					|| (temp = hc_start (ohci)) < 0) {
+					ohci->disabled = 1;
+					err ("can't restart, %d", temp);
+				}
+				dbg ("reset done");
+				break;
+
+			case OHCI_USB_SUSPEND:	// host wakeup
+			case OHCI_USB_RESUME:	// remote wakeup
+				dbg("USB resume: %p", ohci->regs);
+				ohci->hc_control = OHCI_USB_RESUME;
+				writel (ohci->hc_control, &ohci->regs->control);
+				wait_ms (20);
+
+				ohci->hc_control = OHCI_CONTROL_INIT | OHCI_USB_OPER;
+				writel (ohci->hc_control, &ohci->regs->control);
+				break;
+
+			default:
+				warn ("odd PM_RESUME");
+			}
 			break;
 		}
 	}

@@ -3123,10 +3123,7 @@ int hp100_port[5] = { 0, -1, -1, -1, -1 };
 MODULE_PARM(hp100_port, "1-5i");
 #endif
 
-#ifdef LINUX_2_1
-char hp100_name[5][IFNAMSIZ] = { "", "", "", "", "" };
-MODULE_PARM(hp100_name, "1-5c" __MODULE_STRING(IFNAMSIZ));
-#else
+#ifndef LINUX_2_1
 static char devname[5][IFNAMSIZ] = { "", "", "", "", "" };
 static char *hp100_name[5] = { devname[0], devname[1],
                                devname[2], devname[3],
@@ -3162,7 +3159,9 @@ int init_module( void )
       /* Create device and set basics args */
       hp100_devlist[i] = kmalloc(sizeof(struct net_device), GFP_KERNEL);
       memset(hp100_devlist[i], 0x00, sizeof(struct net_device));
+#ifndef LINUX_2_1
       hp100_devlist[i]->name = hp100_name[i];
+#endif
       hp100_devlist[i]->base_addr = hp100_port[i];
       hp100_devlist[i]->init = &hp100_probe;
 

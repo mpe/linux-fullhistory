@@ -8,11 +8,16 @@
 #include <asm/processor.h>
 
 /* bytes per L1 cache line */
-#define        L1_CACHE_BYTES  32      
-#define        L1_CACHE_ALIGN(x)       (((x)+(L1_CACHE_BYTES-1))&~(L1_CACHE_BYTES-1))
-#define L1_CACHE_PAGES		8
+#if !defined(CONFIG_8xx) || defined(CONFIG_8260)
+#define	L1_CACHE_BYTES  32
+#else
+#define	L1_CACHE_BYTES	16
+#endif /* !8xx || 8260 */
 
-#define        SMP_CACHE_BYTES L1_CACHE_BYTES
+#define	L1_CACHE_ALIGN(x)       (((x)+(L1_CACHE_BYTES-1))&~(L1_CACHE_BYTES-1))
+#define	L1_CACHE_PAGES		8
+
+#define	SMP_CACHE_BYTES L1_CACHE_BYTES
 
 #ifdef MODULE
 #define __cacheline_aligned __attribute__((__aligned__(L1_CACHE_BYTES)))

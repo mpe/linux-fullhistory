@@ -1277,9 +1277,8 @@ static void set_multicast_list(struct net_device *dev)
 }
 
 #ifdef MODULE
-static char devicename[9] = { 0, };
 static struct net_device dev_ni52 = {
-	devicename,	/* "ni5210": device name inserted by net_init.c */
+	"",	/* device name inserted by net_init.c */
 	0, 0, 0, 0,
 	0x300, 9,	 /* I/O address, IRQ */
 	0, 0, 0, NULL, ni52_probe };

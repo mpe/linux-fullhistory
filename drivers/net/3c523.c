@@ -1207,15 +1207,11 @@ static void set_multicast_list(struct net_device *dev)
 
 /* Increase if needed ;) */
 #define MAX_3C523_CARDS 4
-/* I'm not sure where this magic 9 comes from */
-#define NAMELEN 9
-
-static char devicenames[NAMELEN * MAX_3C523_CARDS] = {0,};
 
 static struct net_device dev_elmc[MAX_3C523_CARDS] =
 {	
 	{
-	NULL /*"3c523" */ , 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, NULL
+	"", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, NULL
 	},
 };
 
@@ -1232,7 +1228,6 @@ int init_module(void)
 	for(this_dev=0; this_dev<MAX_3C523_CARDS; this_dev++) 
 		{
 		struct net_device *dev = &dev_elmc[this_dev];
-		dev->name=devicenames+(NAMELEN*this_dev);
 		dev->irq=irq[this_dev];
 		dev->base_addr=io[this_dev];
 		dev->init=elmc_probe;

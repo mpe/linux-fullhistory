@@ -41,7 +41,7 @@
  *     <jojo@repas.de>
  */
 
-#define VERSION "arcnet: v3.92 BETA 2000/02/13 - by Avery Pennarun et al.\n"
+#define VERSION "arcnet: v3.93 BETA 2000/04/29 - by Avery Pennarun et al.\n"
 
 #include <linux/module.h>
 #include <linux/config.h>
@@ -584,6 +584,8 @@ static int arcnet_send_packet(struct sk_buff *skb, struct net_device *dev)
 	soft = &pkt->soft.rfc1201;
 	proto = arc_proto_map[soft->proto];
 
+	BUGMSG(D_SKB_SIZE, "skb: transmitting %d bytes to %02X\n",
+		skb->len, pkt->hard.dest);
 	BUGLVL(D_SKB) arcnet_dump_skb(dev, skb, "tx");
 
 	/* fits in one packet? */

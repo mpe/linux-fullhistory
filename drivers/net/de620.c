@@ -985,9 +985,8 @@ static int __init read_eeprom(struct net_device *dev)
  *
  */
 #ifdef MODULE
-static char nullname[8] = "";
 static struct net_device de620_dev = {
-	nullname, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, de620_probe };
+	"", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, de620_probe };
 
 int init_module(void)
 {

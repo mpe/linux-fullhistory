@@ -621,12 +621,10 @@ el2_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring
 }
 #ifdef MODULE
 #define MAX_EL2_CARDS	4	/* Max number of EL2 cards per module */
-#define NAMELEN 	8	/* #of chars for storing dev->name */
 
-static char namelist[NAMELEN * MAX_EL2_CARDS] = { 0, };
 static struct net_device dev_el2[MAX_EL2_CARDS] = {
 	{
-		NULL,		/* assign a chunk of namelist[] below */
+		"",
 		0, 0, 0, 0,
 		0, 0,
 		0, 0, 0, NULL, NULL
@@ -649,7 +647,6 @@ init_module(void)
 
 	for (this_dev = 0; this_dev < MAX_EL2_CARDS; this_dev++) {
 		struct net_device *dev = &dev_el2[this_dev];
-		dev->name = namelist+(NAMELEN*this_dev);
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
 		dev->mem_end = xcvr[this_dev];	/* low 4bits = xcvr sel. */

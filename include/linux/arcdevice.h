@@ -72,7 +72,8 @@
 #define D_TX	        256	/* show tx packets                        */
 #define D_RX		512	/* show rx packets                        */
 #define D_SKB		1024	/* show skb's                             */
-#define D_TIMING	2048	/* show time needed to copy buffers to card */
+#define D_SKB_SIZE	2048	/* show skb sizes			  */
+#define D_TIMING	4096	/* show time needed to copy buffers to card */
 
 #ifndef ARCNET_DEBUG_MAX
 #define ARCNET_DEBUG_MAX (~0)	/* enable ALL debug messages       */
@@ -174,6 +175,13 @@ extern int arcnet_debug;
 #define NORMALconf      0x00	/* 1-249 byte packets */
 #define EXTconf         0x08	/* 250-504 byte packets */
 
+/* card feature flags, set during auto-detection.
+ * (currently only used by com20020pci)
+ */
+#define ARC_IS_5MBIT    1   /* card default speed is 5MBit */
+#define ARC_CAN_10MBIT  2   /* card uses COM20022, supporting 10MBit,
+				 but default is 2.5MBit. */
+
 
 /* information needed to define an encapsulation driver */
 struct ArcProto {
@@ -227,8 +235,10 @@ struct arcnet_local {
 	uint8_t config,		/* current value of CONFIG register */
 		timeout,	/* Extended timeout for COM20020 */
 		backplane,	/* Backplane flag for COM20020 */
-		clock,		/* COM20020 clock speed flag */
-		setup,		/* Contents of setup register */
+		clockp,		/* COM20020 clock divider */
+		clockm,		/* COM20020 clock multiplier flag */
+		setup,		/* Contents of setup1 register */
+		setup2,		/* Contents of setup2 register */
 		intmask;	/* current value of INTMASK register */
 	uint8_t default_proto[256];	/* default encap to use for each host */
 	int cur_tx,		/* buffer used by current transmit, or -1 */
@@ -236,7 +246,8 @@ struct arcnet_local {
 		cur_rx;		/* current receive buffer */
 	int lastload_dest,	/* can last loaded packet be acked? */
 		lasttrans_dest;	/* can last TX'd packet be acked? */
-	int basename_len;	/* name length without suffix ('arc0e' -> 4) */
+	char *card_name;	/* card ident string */
+	int card_flags;		/* special card features */
 
 	/*
 	 * Buffer management: an ARCnet card has 4 x 512-byte buffers, each of

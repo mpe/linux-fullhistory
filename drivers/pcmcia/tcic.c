@@ -450,7 +450,7 @@ static int __init init_tcic(void)
     /* Set up polling */
     poll_timer.function = &tcic_timer;
     poll_timer.data = 0;
-    poll_timer.prev = poll_timer.next = NULL;
+    init_timer(&poll_timer);
 
     /* Build interrupt mask */
     printk(", %d sockets\n" KERN_INFO "  irq list (", sockets);

@@ -106,7 +106,10 @@ unsigned int rtas_entry = 0;  /* physical pointer */
 unsigned int rtas_size = 0;
 unsigned int old_rtas = 0;
 
+/* Set for a newworld machine */
 int use_of_interrupt_tree = 0;
+int pmac_newworld = 0;
+
 static struct device_node *allnodes = 0;
 
 #ifdef CONFIG_BOOTX_TEXT
@@ -802,7 +805,6 @@ __init
 static void
 setup_disp_fake_bi(ihandle dp)
 {
-	unsigned int len;
 	int width = 640, height = 480, depth = 8, pitch;
 	unsigned address;
 	boot_infos_t* bi;
@@ -982,15 +984,17 @@ void
 finish_device_tree(void)
 {
 	unsigned long mem = (unsigned long) klimit;
-	char* model;
-	
-	/* Here, we decide if we'll use the interrupt-tree (new Core99 code) or not.
-	 * This code was only tested with Core99 machines so far, but should be easily
-	 * adapted to older newworld machines (iMac, B&W G3, Lombard).
-	 */
-	model = get_property(allnodes, "model", 0);
-	if ((boot_infos == 0) && model && (strcmp(model, "PowerBook2,1") == 0
-	    || strcmp(model, "PowerMac2,1") == 0 || strcmp(model, "PowerMac3,1") == 0))
+
+	/* All newworld machines now use the interrupt tree */
+	struct device_node *np = allnodes;
+	while(np) {
+		if (get_property(np, "interrupt-parent", 0)) {
+			pmac_newworld = 1;
+			break;
+		}
+		np = np->allnext;
+	}
+	if (boot_infos == 0 && pmac_newworld)
 		use_of_interrupt_tree = 1;
 
 	mem = finish_node(allnodes, mem, NULL);
@@ -1827,7 +1831,8 @@ abort()
 #ifdef CONFIG_XMON
 	xmon(NULL);
 #endif
-	prom_exit();
+	for (;;)
+		prom_exit();
 }
 
 #ifdef CONFIG_BOOTX_TEXT

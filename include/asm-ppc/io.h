@@ -23,6 +23,8 @@
 #include <asm/board.h>
 #elif defined(CONFIG_8xx)
 #include <asm/mpc8xx.h>
+#elif defined(CONFIG_8260)
+#include <asm/mpc8260.h>
 #else
 #ifdef CONFIG_APUS
 #define _IO_BASE 0
@@ -52,12 +54,18 @@ extern unsigned long pci_dram_offset;
 #define writel(b,addr) out_le32((volatile u32 *)(addr),(b))
 #endif
 
+/*
+ * The insw/outsw/insl/outsl macros don't do byte-swapping.
+ * They are only used in practice for transferring buffers which
+ * are arrays of bytes, and byte-swapping is not appropriate in
+ * that case.  - paulus
+ */
 #define insb(port, buf, ns)	_insb((u8 *)((port)+_IO_BASE), (buf), (ns))
 #define outsb(port, buf, ns)	_outsb((u8 *)((port)+_IO_BASE), (buf), (ns))
-#define insw(port, buf, ns)	_insw((u16 *)((port)+_IO_BASE), (buf), (ns))
-#define outsw(port, buf, ns)	_outsw((u16 *)((port)+_IO_BASE), (buf), (ns))
-#define insl(port, buf, nl)	_insl((u32 *)((port)+_IO_BASE), (buf), (nl))
-#define outsl(port, buf, nl)	_outsl((u32 *)((port)+_IO_BASE), (buf), (nl))
+#define insw(port, buf, ns)	_insw_ns((u16 *)((port)+_IO_BASE), (buf), (ns))
+#define outsw(port, buf, ns)	_outsw_ns((u16 *)((port)+_IO_BASE), (buf), (ns))
+#define insl(port, buf, nl)	_insl_ns((u32 *)((port)+_IO_BASE), (buf), (nl))
+#define outsl(port, buf, nl)	_outsl_ns((u32 *)((port)+_IO_BASE), (buf), (nl))
 
 #define inb(port)		in_8((u8 *)((port)+_IO_BASE))
 #define outb(val, port)		out_8((u8 *)((port)+_IO_BASE), (val))
@@ -86,19 +94,21 @@ extern void _insw(volatile u16 *port, void *buf, int ns);
 extern void _outsw(volatile u16 *port, const void *buf, int ns);
 extern void _insl(volatile u32 *port, void *buf, int nl);
 extern void _outsl(volatile u32 *port, const void *buf, int nl);
+extern void _insw_ns(volatile u16 *port, void *buf, int ns);
+extern void _outsw_ns(volatile u16 *port, const void *buf, int ns);
+extern void _insl_ns(volatile u32 *port, void *buf, int nl);
+extern void _outsl_ns(volatile u32 *port, const void *buf, int nl);
 
 /*
  * The *_ns versions below don't do byte-swapping.
+ * Neither do the standard versions now, these are just here
+ * for older code.
  */
 #define insw_ns(port, buf, ns)	_insw_ns((u16 *)((port)+_IO_BASE), (buf), (ns))
 #define outsw_ns(port, buf, ns)	_outsw_ns((u16 *)((port)+_IO_BASE), (buf), (ns))
 #define insl_ns(port, buf, nl)	_insl_ns((u32 *)((port)+_IO_BASE), (buf), (nl))
 #define outsl_ns(port, buf, nl)	_outsl_ns((u32 *)((port)+_IO_BASE), (buf), (nl))
 
-extern void _insw_ns(volatile u16 *port, void *buf, int ns);
-extern void _outsw_ns(volatile u16 *port, const void *buf, int ns);
-extern void _insl_ns(volatile u32 *port, void *buf, int nl);
-extern void _outsl_ns(volatile u32 *port, const void *buf, int nl);
 
 #define IO_SPACE_LIMIT ~0
 

@@ -37,6 +37,7 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#include <linux/spinlock.h>
 
 #include <asm/8xx_immap.h>
 #include <asm/pgtable.h>
@@ -108,6 +109,10 @@
  *	Port C,  9 (CTS2) - SCC Ethernet Collision
  */
 
+/* The transmitter timeout
+ */
+#define TX_TIMEOUT	(2*HZ)
+
 /* The number of Tx and Rx buffers.  These are allocated from the page
  * pool.  The code may assume these are power of two, so it is best
  * to keep them that size.
@@ -135,7 +140,7 @@
  * empty and completely full conditions.  The empty/ready indicator in
  * the buffer descriptor determines the actual condition.
  */
-struct cpm_enet_private {
+struct scc_enet_private {
 	/* The saved address of a sent-in-place packet/buffer, for skfree(). */
 	struct	sk_buff* tx_skbuff[TX_RING_SIZE];
 	ushort	skb_cur;
@@ -150,17 +155,15 @@ struct cpm_enet_private {
 	scc_t	*sccp;
 	struct	net_device_stats stats;
 	uint	tx_full;
-	uint	tx_busy;
-	unsigned long lock;
-	int	interrupt;
+	spinlock_t lock;
 };
 
-static int cpm_enet_open(struct net_device *dev);
-static int cpm_enet_start_xmit(struct sk_buff *skb, struct net_device *dev);
-static int cpm_enet_rx(struct net_device *dev);
-static void cpm_enet_interrupt(void *dev_id);
-static int cpm_enet_close(struct net_device *dev);
-static struct net_device_stats *cpm_enet_get_stats(struct net_device *dev);
+static int scc_enet_open(struct net_device *dev);
+static int scc_enet_start_xmit(struct sk_buff *skb, struct net_device *dev);
+static int scc_enet_rx(struct net_device *dev);
+static void scc_enet_interrupt(void *dev_id);
+static int scc_enet_close(struct net_device *dev);
+static struct net_device_stats *scc_enet_get_stats(struct net_device *dev);
 static void set_multicast_list(struct net_device *dev);
 
 /* Get this from various configuration locations (depends on board).
@@ -185,7 +188,7 @@ static void set_multicast_list(struct net_device *dev);
 #endif
 
 static int
-cpm_enet_open(struct net_device *dev)
+scc_enet_open(struct net_device *dev)
 {
 
 	/* I should reset the ring buffers here, but I don't yet know
@@ -197,60 +200,10 @@ cpm_enet_open(struct net_device *dev)
 }
 
 static int
-cpm_enet_start_xmit(struct sk_buff *skb, struct net_device *dev)
+scc_enet_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
-	struct cpm_enet_private *cep = (struct cpm_enet_private *)dev->priv;
+	struct scc_enet_private *cep = (struct scc_enet_private *)dev->priv;
 	volatile cbd_t	*bdp;
-	unsigned long flags;
-
-	/* Transmitter timeout, serious problems. */
-	if (cep->tx_busy) {
-		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 200)
-			return 1;
-		printk("%s: transmit timed out.\n", dev->name);
-		cep->stats.tx_errors++;
-#ifndef final_version
-		{
-			int	i;
-			cbd_t	*bdp;
-			printk(" Ring data dump: cur_tx %p%s cur_rx %p.\n",
-				   cep->cur_tx, cep->tx_full ? " (full)" : "",
-				   cep->cur_rx);
-			bdp = cep->tx_bd_base;
-			for (i = 0 ; i < TX_RING_SIZE; i++, bdp++)
-				printk("%04x %04x %08x\n",
-					bdp->cbd_sc,
-					bdp->cbd_datlen,
-					bdp->cbd_bufaddr);
-			bdp = cep->rx_bd_base;
-			for (i = 0 ; i < RX_RING_SIZE; i++, bdp++)
-				printk("%04x %04x %08x\n",
-					bdp->cbd_sc,
-					bdp->cbd_datlen,
-					bdp->cbd_bufaddr);
-		}
-#endif
-
-		cep->tx_busy=0;
-		dev->trans_start = jiffies;
-
-		return 0;
-	}
-
-	/* Block a timer-based transmit from overlapping.  This could better be
-	 * done with atomic_swap(1, cep->tx_busy), but set_bit() works as well.
-	 */
-	if (test_and_set_bit(0, (void*)&cep->tx_busy) != 0) {
-		printk("%s: Transmitter access conflict.\n", dev->name);
-		return 1;
-	}
-
-	if (test_and_set_bit(0, (void*)&cep->lock) != 0) {
-		printk("%s: tx queue lock!.\n", dev->name);
-		/* don't clear cep->tx_busy flag. */
-		return 1;
-	}
 
 	/* Fill in a Tx ring entry */
 	bdp = cep->cur_tx;
@@ -261,7 +214,6 @@ cpm_enet_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		 * This should not happen, since cep->tx_busy should be set.
 		 */
 		printk("%s: tx queue full!.\n", dev->name);
-		cep->lock = 0;
 		return 1;
 	}
 #endif
@@ -292,7 +244,10 @@ cpm_enet_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* Push the data cache so the CPM does not get stale memory
 	 * data.
 	 */
-	flush_dcache_range(skb->data, skb->data + skb->len);
+	flush_dcache_range((unsigned long)(skb->data),
+					(unsigned long)(skb->data + skb->len));
+
+	spin_lock_irq(&cep->lock);
 
 	/* Send it on its way.  Tell CPM its ready, interrupt when done,
 	 * its the last BD of the frame, and to put the CRC on the end.
@@ -308,37 +263,61 @@ cpm_enet_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	else
 		bdp++;
 
-	save_flags(flags);
-	cli();
-	cep->lock = 0;
 	if (bdp->cbd_sc & BD_ENET_TX_READY)
-		cep->tx_full = 1;
-	else
-		cep->tx_busy=0;
-	restore_flags(flags);
+		netif_stop_queue(dev);
 
 	cep->cur_tx = (cbd_t *)bdp;
 
+	spin_unlock_irq(&cep->lock);
+
 	return 0;
+}
+
+static void
+scc_enet_timeout(struct net_device *dev)
+{
+	struct scc_enet_private *cep = (struct scc_enet_private *)dev->priv;
+
+	printk("%s: transmit timed out.\n", dev->name);
+	cep->stats.tx_errors++;
+#ifndef final_version
+	{
+		int	i;
+		cbd_t	*bdp;
+		printk(" Ring data dump: cur_tx %p%s cur_rx %p.\n",
+		       cep->cur_tx, cep->tx_full ? " (full)" : "",
+		       cep->cur_rx);
+		bdp = cep->tx_bd_base;
+		for (i = 0 ; i < TX_RING_SIZE; i++, bdp++)
+			printk("%04x %04x %08x\n",
+			       bdp->cbd_sc,
+			       bdp->cbd_datlen,
+			       bdp->cbd_bufaddr);
+		bdp = cep->rx_bd_base;
+		for (i = 0 ; i < RX_RING_SIZE; i++, bdp++)
+			printk("%04x %04x %08x\n",
+			       bdp->cbd_sc,
+			       bdp->cbd_datlen,
+			       bdp->cbd_bufaddr);
+	}
+#endif
+	if (!cep->tx_full)
+		netif_wake_queue(dev);
 }
 
 /* The interrupt handler.
  * This is called from the CPM handler, not the MPC core interrupt.
  */
 static void
-cpm_enet_interrupt(void *dev_id)
+scc_enet_interrupt(void *dev_id)
 {
 	struct	net_device *dev = dev_id;
-	volatile struct	cpm_enet_private *cep;
+	volatile struct	scc_enet_private *cep;
 	volatile cbd_t	*bdp;
 	ushort	int_events;
 	int	must_restart;
 
-	cep = (struct cpm_enet_private *)dev->priv;
-	if (cep->interrupt)
-		printk("%s: Re-entering the interrupt handler.\n", dev->name);
-
-	cep->interrupt = 1;
+	cep = (struct scc_enet_private *)dev->priv;
 
 	/* Get the interrupt events that caused us to be here.
 	*/
@@ -349,7 +328,7 @@ cpm_enet_interrupt(void *dev_id)
 	/* Handle receive event in its own function.
 	*/
 	if (int_events & SCCE_ENET_RXF)
-		cpm_enet_rx(dev_id);
+		scc_enet_rx(dev_id);
 
 	/* Check for a transmit error.  The manual is a little unclear
 	 * about this, so the debug code until I get it figured out.  It
@@ -363,6 +342,7 @@ cpm_enet_interrupt(void *dev_id)
 	/* Transmit OK, or non-fatal error.  Update the buffer descriptors.
 	*/
 	if (int_events & (SCCE_ENET_TXE | SCCE_ENET_TXB)) {
+	    spin_lock(&cep->lock);
 	    bdp = cep->dirty_tx;
 	    while ((bdp->cbd_sc&BD_ENET_TX_READY)==0) {
 		if ((bdp==cep->cur_tx) && (cep->tx_full == 0))
@@ -421,10 +401,9 @@ cpm_enet_interrupt(void *dev_id)
 		/* Since we have freed up a buffer, the ring is no longer
 		 * full.
 		 */
-		if (cep->tx_full && cep->tx_busy) {
-			cep->tx_full = 0;
-			cep->tx_busy = 0;
-			netif_wake_queue(dev);
+		if (cep->tx_full) {
+			if (netif_queue_stopped(dev))
+				netif_wake_queue(dev);
 		}
 
 		cep->dirty_tx = (cbd_t *)bdp;
@@ -444,6 +423,7 @@ cpm_enet_interrupt(void *dev_id)
 		    mk_cr_cmd(CPM_CR_ENET, CPM_CR_RESTART_TX) | CPM_CR_FLG;
 		while (cp->cp_cpcr & CPM_CR_FLG);
 	    }
+	    spin_unlock(&cep->lock);
 	}
 
 	/* Check for receive busy, i.e. packets coming but no place to
@@ -455,8 +435,6 @@ cpm_enet_interrupt(void *dev_id)
 		printk("CPM ENET: BSY can't happen.\n");
 	}
 
-	cep->interrupt = 0;
-
 	return;
 }
 
@@ -466,14 +444,14 @@ cpm_enet_interrupt(void *dev_id)
  * effectively tossing the packet.
  */
 static int
-cpm_enet_rx(struct net_device *dev)
+scc_enet_rx(struct net_device *dev)
 {
-	struct	cpm_enet_private *cep;
+	struct	scc_enet_private *cep;
 	volatile cbd_t	*bdp;
 	struct	sk_buff *skb;
 	ushort	pkt_len;
 
-	cep = (struct cpm_enet_private *)dev->priv;
+	cep = (struct scc_enet_private *)dev->priv;
 
 	/* First, grab all of the stats for the incoming packet.
 	 * These get messed up if we get called due to a busy condition.
@@ -560,7 +538,7 @@ for (;;) {
 }
 
 static int
-cpm_enet_close(struct net_device *dev)
+scc_enet_close(struct net_device *dev)
 {
 	/* Don't know what to do yet.
 	*/
@@ -569,9 +547,9 @@ cpm_enet_close(struct net_device *dev)
 	return 0;
 }
 
-static struct net_device_stats *cpm_enet_get_stats(struct net_device *dev)
+static struct net_device_stats *scc_enet_get_stats(struct net_device *dev)
 {
-	struct cpm_enet_private *cep = (struct cpm_enet_private *)dev->priv;
+	struct scc_enet_private *cep = (struct scc_enet_private *)dev->priv;
 
 	return &cep->stats;
 }
@@ -588,12 +566,12 @@ static struct net_device_stats *cpm_enet_get_stats(struct net_device *dev)
 
 static void set_multicast_list(struct net_device *dev)
 {
-	struct	cpm_enet_private *cep;
+	struct	scc_enet_private *cep;
 	struct	dev_mc_list *dmi;
 	u_char	*mcptr, *tdptr;
 	volatile scc_enet_t *ep;
 	int	i, j;
-	cep = (struct cpm_enet_private *)dev->priv;
+	cep = (struct scc_enet_private *)dev->priv;
 
 	/* Get pointer to SCC area in parameter RAM.
 	*/
@@ -661,10 +639,10 @@ static void set_multicast_list(struct net_device *dev)
  * transmit and receive to make sure we don't catch the CPM with some
  * inconsistent control information.
  */
-int __init cpm_enet_init(void)
+int __init scc_enet_init(void)
 {
 	struct net_device *dev;
-	struct cpm_enet_private *cep;
+	struct scc_enet_private *cep;
 	int i, j;
 	unsigned char	*eap;
 	unsigned long	mem_addr;
@@ -684,9 +662,10 @@ int __init cpm_enet_init(void)
 
 	/* Allocate some private information.
 	*/
-	cep = (struct cpm_enet_private *)kmalloc(sizeof(*cep), GFP_KERNEL);
+	cep = (struct scc_enet_private *)kmalloc(sizeof(*cep), GFP_KERNEL);
 	/*memset(cep, 0, sizeof(*cep));*/
 	__clear_user(cep,sizeof(*cep));
+	spin_lock_init(&cep->lock);
 
 	/* Create an Ethernet device instance.
 	*/
@@ -858,7 +837,7 @@ int __init cpm_enet_init(void)
 		*/
 		pte = find_pte(&init_mm, mem_addr);
 		pte_val(*pte) |= _PAGE_NO_CACHE;
-		flush_tlb_page(current->mm->mmap, mem_addr);
+		flush_tlb_page(init_mm.mmap, mem_addr);
 
 		/* Initialize the BD for every fragment in the page.
 		*/
@@ -894,7 +873,7 @@ int __init cpm_enet_init(void)
 
 	/* Install our interrupt handler.
 	*/
-	cpm_install_handler(CPMVEC_ENET, cpm_enet_interrupt, dev);
+	cpm_install_handler(CPMVEC_ENET, scc_enet_interrupt, dev);
 
 	/* Set GSMR_H to enable all normal operating modes.
 	 * Set GSMR_L to enable Ethernet to MC68160.
@@ -953,10 +932,12 @@ int __init cpm_enet_init(void)
 #endif
 
 	/* The CPM Ethernet specific entries in the device structure. */
-	dev->open = cpm_enet_open;
-	dev->hard_start_xmit = cpm_enet_start_xmit;
-	dev->stop = cpm_enet_close;
-	dev->get_stats = cpm_enet_get_stats;
+	dev->open = scc_enet_open;
+	dev->hard_start_xmit = scc_enet_start_xmit;
+	dev->tx_timeout = scc_enet_timeout;
+	dev->watchdog_timeo = TX_TIMEOUT;
+	dev->stop = scc_enet_close;
+	dev->get_stats = scc_enet_get_stats;
 	dev->set_multicast_list = set_multicast_list;
 
 	/* And last, enable the transmit and receive processing.

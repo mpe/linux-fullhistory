@@ -1524,7 +1524,7 @@ insert_device(struct net_device *dev, u_long iobase, int (*init)(struct net_devi
 {
     struct net_device *new;
 
-    new = (struct net_device *)kmalloc(sizeof(struct net_device)+8, GFP_KERNEL);
+    new = (struct net_device *)kmalloc(sizeof(struct net_device), GFP_KERNEL);
     if (new == NULL) {
 	printk("eth%d: Device not initialised, insufficient memory\n",num_eth);
 	return NULL;
@@ -1532,7 +1532,6 @@ insert_device(struct net_device *dev, u_long iobase, int (*init)(struct net_devi
 	new->next = dev->next;
 	dev->next = new;
 	dev = dev->next;               /* point to the new device */
-	dev->name = (char *)(dev + 1);
 	if (num_eth > 9999) {
 	    sprintf(dev->name,"eth????");/* New device name */
 	} else {
@@ -2002,9 +2001,8 @@ static int depca_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 }
 
 #ifdef MODULE
-static char devicename[9] = {0,};
 static struct net_device thisDepca = {
-  devicename,  /* device name is inserted by /linux/drivers/net/net_init.c */
+  "",  /* device name is inserted by /linux/drivers/net/net_init.c */
   0, 0, 0, 0,
   0x200, 7,    /* I/O address, IRQ */
   0, 0, 0, NULL, depca_probe

@@ -103,6 +103,11 @@ enum ali_pcm_in_channel_num {
 	ALI_PCM_IN_CHANNEL	= 31
 };
 
+enum ali_pcm_out_channel_num {
+	ALI_PCM_OUT_CHANNEL_FIRST = 1,
+	ALI_PCM_OUT_CHANNEL_LAST = 30
+};
+
 enum ali_ac97_power_control_bit {
 	ALI_EAPD_POWER_DOWN	= 0x8000
 };

@@ -309,10 +309,8 @@ static struct net_device_stats *bond_get_stats(struct net_device *dev)
 
 #ifdef MODULE
 
-static char bond_name[16];
-
 static struct net_device dev_bond = {
-		bond_name, 	/* Needs to be writeable */
+		"",
 		0, 0, 0, 0,
 	 	0x0, 0,
 	 	0, 0, 0, NULL, bond_init };

@@ -173,7 +173,7 @@ typedef struct page {
 #define PG_slab			 8
 #define PG_swap_cache		 9
 #define PG_skip			10
-#define PG_swap_entry		11
+#define PG_unused_03		11
 #define PG_highmem		12
 				/* bits 21-30 unused */
 #define PG_reserved		31
@@ -210,9 +210,6 @@ typedef struct page {
 #define PageClearSwapCache(page)	clear_bit(PG_swap_cache, &(page)->flags)
 
 #define PageTestandClearSwapCache(page)	test_and_clear_bit(PG_swap_cache, &(page)->flags)
-#define PageSwapEntry(page)		test_bit(PG_swap_entry, &(page)->flags)
-#define SetPageSwapEntry(page)		set_bit(PG_swap_entry, &(page)->flags)
-#define ClearPageSwapEntry(page)	clear_bit(PG_swap_entry, &(page)->flags)
 
 #ifdef CONFIG_HIGHMEM
 #define PageHighMem(page)		test_bit(PG_highmem, &(page)->flags)

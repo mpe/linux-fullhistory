@@ -125,11 +125,22 @@ static void eisa_set_level_irq(unsigned int irq)
 	}
 }
 
+static int pirq_ali_get(struct pci_dev *router, struct pci_dev *dev, int pirq)
+{
+	static unsigned char irqmap[16] = { 0, 9, 3, 10, 4, 5, 7, 6, 1, 11, 0, 12, 0, 14, 0, 15 };
+	pirq--;
+	if (pirq < 8) {
+		u8 x;
+		unsigned reg = 0x48 + (pirq >> 1);
+		pci_read_config_byte(router, reg, &x);
+		return irqmap[(pirq & 1) ? (x >> 4) : (x & 0x0f)];
+	}
+	return 0;
+}
+
 static int pirq_ali_set(struct pci_dev *router, struct pci_dev *dev, int pirq, int irq)
 {
-	static unsigned char irqmap[16] = {
-		0, 8, 0, 2, 4, 5, 7, 6, 0, 1, 3, 9, 11, 0, 13, 15
-	};
+	static unsigned char irqmap[16] = { 0, 8, 0, 2, 4, 5, 7, 6, 0, 1, 3, 9, 11, 0, 13, 15 };
 	unsigned int val = irqmap[irq];
 	pirq--;
 	if (val && pirq < 8) {
@@ -211,7 +222,7 @@ static struct irq_router pirq_routers[] = {
 	{ "PIIX", PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371FB_0, pirq_piix_get, pirq_piix_set },
 	{ "PIIX", PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371SB_0, pirq_piix_get, pirq_piix_set },
 	{ "PIIX", PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB_0, pirq_piix_get, pirq_piix_set },
-	{ "ALI", PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M1533, NULL, pirq_ali_set },
+	{ "ALI", PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M1533, pirq_ali_get, pirq_ali_set },
 	{ "VIA", PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C586_0, pirq_via_get, pirq_via_set },
 	{ "VIA", PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C596, pirq_via_get, pirq_via_set },
 	{ "VIA", PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C686, pirq_via_get, pirq_via_set },
@@ -236,7 +247,9 @@ static void __init pirq_find_router(void)
 	}
 #endif
 	if (!(pirq_router_dev = pci_find_slot(rt->rtr_bus, rt->rtr_devfn))) {
-		DBG("PCI: Interrupt router not found\n");
+		DBG("PCI: Interrupt router not found at %02x:%02x\n", rt->rtr_bus, rt->rtr_devfn);
+		/* fall back to default router */
+		pirq_router = pirq_routers + sizeof(pirq_routers) / sizeof(pirq_routers[0]) - 1;
 		return;
 	}
 	if (rt->rtr_vendor) {
@@ -354,12 +367,9 @@ int pcibios_lookup_irq(struct pci_dev *dev, int assign)
 	return 1;
 }
 
-void __init pcibios_fixup_irqs(void)
+void __init pcibios_irq_init(void)
 {
-	struct pci_dev *dev;
-	u8 pin;
-
-	DBG("PCI: IRQ fixup\n");
+	DBG("PCI: IRQ init\n");
 	pirq_table = pirq_find_routing_table();
 #ifdef CONFIG_PCI_BIOS
 	if (!pirq_table && (pci_probe & PCI_BIOS_IRQ_SCAN))
@@ -369,7 +379,14 @@ void __init pcibios_fixup_irqs(void)
 		pirq_peer_trick();
 		pirq_find_router();
 	}
+}
 
+void __init pcibios_fixup_irqs(void)
+{
+	struct pci_dev *dev;
+	u8 pin;
+
+	DBG("PCI: IRQ fixup\n");
 	pci_for_each_dev(dev) {
 		/*
 		 * If the BIOS has set an out of range IRQ number, just ignore it.

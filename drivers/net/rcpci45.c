@@ -117,7 +117,6 @@ typedef struct
      */
     struct net_device *dev;            
      
-    char devname[8];                /* "ethN" string */
     U8     id;                        /* the AdapterID */
     U32    pci_addr;               /* the pci address of the adapter */
     U32    bus;
@@ -276,8 +275,6 @@ RCfound_device(int memaddr, int irq,
 #endif
 
     pDpa = dev->priv;
-    if (!dev->name)
-        dev->name = pDpa->devname;
 
     pDpa->dev = dev;            /* this is just for easy reference */
     pDpa->function = function;

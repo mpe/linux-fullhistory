@@ -192,7 +192,6 @@ typedef struct
 	/*
 	 *	Stuff for generic ethercard I/F
 	 */
-	char			devname[8];	/* "ethN" string */
 	struct net_device		*next_dev;
 	struct net_device_stats	stats;
 
@@ -1256,7 +1255,6 @@ dgrs_found_device(
 	dev->priv = ((void *)dev) + sizeof(struct net_device);
 	priv = (DGRS_PRIV *)dev->priv;
 
-	dev->name = priv->devname; /* An empty string. */
 	dev->base_addr = io;
 	dev->mem_start = mem;
 	dev->mem_end = mem + 2048 * 1024 - 1;
@@ -1294,9 +1292,6 @@ dgrs_found_device(
 		memcpy(devN, dev, dev_size);
 		devN->priv = ((void *)devN) + sizeof(struct net_device);
 		privN = (DGRS_PRIV *)devN->priv;
-			/* ... but seset devname to a NULL string */
-		privN->devname[0] = 0;
-		devN->name = privN->devname;
 			/* ... and zero out VM areas */
 		privN->vmem = 0;
 		privN->vplxdma = 0;

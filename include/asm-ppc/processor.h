@@ -483,6 +483,14 @@
 #define	PVR_8260	PVR_8240
 
 
+/* I am just adding a single entry for 8260 boards.  I think we may be
+ * able to combine mbx, fads, rpxlite, bseip, and classic into a single
+ * generic 8xx as well.  The boards containing these processors are either
+ * identical at the processor level (due to the high integration) or so
+ * wildly different that testing _machine at run time is best replaced by
+ * conditional compilation by board type (found in their respective .h file).
+ *	-- Dan
+ */
 #define _MACH_prep	0x00000001
 #define _MACH_Pmac	0x00000002	/* pmac or pmac clone (non-chrp) */
 #define _MACH_chrp	0x00000004	/* chrp machine */
@@ -496,6 +504,7 @@
 #define _MACH_classic	0x00000400	/* RPCG RPX-Classic 8xx board */
 #define _MACH_oak	0x00000800	/* IBM "Oak" 403 eval. board */
 #define _MACH_walnut	0x00001000	/* IBM "Walnut" 405GP eval. board */
+#define _MACH_8260	0x00002000	/* Generic 8260 */
 
 
 /* see residual.h for these */
@@ -706,6 +715,9 @@ void _nmask_and_or_msr(unsigned long nmask, unsigned long or_val);
 #define have_of 0
 #elif defined(CONFIG_GEMINI)
 #define _machine _MACH_gemini
+#define have_of 0
+#elif defined(CONFIG_8260)
+#define _machine _MACH_8260
 #define have_of 0
 #else
 #error "Machine not defined correctly"

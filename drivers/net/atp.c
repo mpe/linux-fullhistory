@@ -750,9 +750,8 @@ static void set_multicast_list(struct net_device *dev)
 #ifdef MODULE
 
 static int io = 0;
-static char nullname[8] = "";
 static struct net_device atp_dev = {
-	nullname, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, atp_probe };
+	"", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, atp_probe };
 	
 MODULE_PARM(io, "I/O port of the pocket adapter");
 

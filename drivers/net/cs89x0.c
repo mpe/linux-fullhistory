@@ -1491,9 +1491,8 @@ static int set_mac_address(struct net_device *dev, void *addr)
 
 #ifdef MODULE
 
-static char namespace[16] = "";
 static struct net_device dev_cs89x0 = {
-        NULL,
+        "",
         0, 0, 0, 0,
         0, 0,
         0, 0, 0, NULL, NULL };
@@ -1560,7 +1559,6 @@ init_module(void)
 #if DEBUGGING
 	net_debug = debug;
 #endif
-        dev_cs89x0.name = namespace;
 	dev_cs89x0.irq = irq;
 	dev_cs89x0.base_addr = io;
 

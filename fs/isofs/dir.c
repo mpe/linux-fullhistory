@@ -133,12 +133,28 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 		       block, offset, filp->f_pos);
 	        printk("inode->i_size = %x\n",inode->i_size);
 #endif
+		/* Next directory_record on next CDROM sector */
+		if (offset >= bufsize) {
+#ifdef DEBUG
+			printk("offset >= bufsize\n");
+#endif
+			brelse(bh);
+			offset = 0;
+			block = isofs_bmap(inode, (filp->f_pos) >> bufbits);
+			if (!block)
+				return 0;
+			bh = breada(inode->i_dev, block, bufsize, filp->f_pos, inode->i_size);
+			if (!bh)
+				return 0;
+			continue;
+		}
+
 		de = (struct iso_directory_record *) (bh->b_data + offset);
 		if(first_de) inode_number = (block << bufbits) + (offset & (bufsize - 1));
 
 		de_len = *(unsigned char *) de;
 #ifdef DEBUG
-		printk("de_len = %ld\n", de_len);
+		printk("de_len = %d\n", de_len);
 #endif
 	    
 
@@ -146,16 +162,11 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 		   CDROM sector.  If we are at the end of the directory, we
 		   kick out of the while loop. */
 
-		if ((de_len == 0) || (offset >= bufsize) ) {
+		if (de_len == 0) {
 			brelse(bh);
-			if (de_len == 0) {
-				filp->f_pos = ((filp->f_pos & ~(ISOFS_BLOCK_SIZE - 1))
-					       + ISOFS_BLOCK_SIZE);
-				offset = 0;
-			} else {
-				offset -= bufsize;
-				filp->f_pos += offset;
-			}
+			filp->f_pos = ((filp->f_pos & ~(ISOFS_BLOCK_SIZE - 1))
+				       + ISOFS_BLOCK_SIZE);
+			offset = 0;
 
 			if (filp->f_pos >= inode->i_size)
 				return 0;

@@ -83,13 +83,13 @@ unsigned long prof_shift = 0;
 #define TVR_MASK (TVR_SIZE - 1)
 
 struct timer_vec {
-        int index;
-        struct timer_list *vec[TVN_SIZE];
+	int index;
+	struct list_head vec[TVN_SIZE];
 };
 
 struct timer_vec_root {
-        int index;
-        struct timer_list *vec[TVR_SIZE];
+	int index;
+	struct list_head vec[TVR_SIZE];
 };
 
 static struct timer_vec tv5 = { 0 };
@@ -104,18 +104,21 @@ static struct timer_vec * const tvecs[] = {
 
 #define NOOF_TVECS (sizeof(tvecs) / sizeof(tvecs[0]))
 
-static unsigned long timer_jiffies = 0;
-
-static inline void insert_timer(struct timer_list *timer, struct timer_list **vec)
+void init_timervecs (void)
 {
-	struct timer_list *next = *vec;
+	int i;
 
-	timer->next = next;
-	if (next)
-		next->prev = timer;
-	*vec = timer;
-	timer->prev = (struct timer_list *)vec;
+	for (i = 0; i < TVN_SIZE; i++) {
+		INIT_LIST_HEAD(tv5.vec + i);
+		INIT_LIST_HEAD(tv4.vec + i);
+		INIT_LIST_HEAD(tv3.vec + i);
+		INIT_LIST_HEAD(tv2.vec + i);
+	}
+	for (i = 0; i < TVR_SIZE; i++)
+		INIT_LIST_HEAD(tv1.vec + i);
 }
+
+static unsigned long timer_jiffies = 0;
 
 static inline void internal_add_timer(struct timer_list *timer)
 {
@@ -124,7 +127,7 @@ static inline void internal_add_timer(struct timer_list *timer)
 	 */
 	unsigned long expires = timer->expires;
 	unsigned long idx = expires - timer_jiffies;
-	struct timer_list ** vec;
+	struct list_head * vec;
 
 	if (idx < TVR_SIZE) {
 		int i = expires & TVR_MASK;
@@ -148,10 +151,13 @@ static inline void internal_add_timer(struct timer_list *timer)
 		vec = tv5.vec + i;
 	} else {
 		/* Can only get here on architectures with 64-bit jiffies */
-		timer->next = timer->prev = timer;
+		INIT_LIST_HEAD(&timer->list);
 		return;
 	}
-	insert_timer(timer, vec);
+	/*
+	 * Timers are FIFO!
+	 */
+	list_add(&timer->list, vec->prev);
 }
 
 spinlock_t timerlist_lock = SPIN_LOCK_UNLOCKED;
@@ -161,7 +167,7 @@ void add_timer(struct timer_list *timer)
 	unsigned long flags;
 
 	spin_lock_irqsave(&timerlist_lock, flags);
-	if (timer->prev)
+	if (timer->list.next)
 		goto bug;
 	internal_add_timer(timer);
 out:
@@ -174,17 +180,12 @@ bug:
 	goto out;
 }
 
-static inline int detach_timer(struct timer_list *timer)
+static inline int detach_timer (struct timer_list *timer)
 {
-	struct timer_list *prev = timer->prev;
-	if (prev) {
-		struct timer_list *next = timer->next;
-		prev->next = next;
-		if (next)
-			next->prev = prev;
-		return 1;
-	}
-	return 0;
+	if (!timer_pending(timer))
+		return 0;
+	list_del(&timer->list);
+	return 1;
 }
 
 int mod_timer(struct timer_list *timer, unsigned long expires)
@@ -207,7 +208,7 @@ int del_timer(struct timer_list * timer)
 
 	spin_lock_irqsave(&timerlist_lock, flags);
 	ret = detach_timer(timer);
-	timer->next = timer->prev = 0;
+	timer->list.next = timer->list.prev = NULL;
 	spin_unlock_irqrestore(&timerlist_lock, flags);
 	return ret;
 }
@@ -231,7 +232,7 @@ int del_timer_sync(struct timer_list * timer)
 
 		spin_lock_irqsave(&timerlist_lock, flags);
 		ret += detach_timer(timer);
-		timer->next = timer->prev = 0;
+		timer->list.next = timer->list.prev = 0;
 		running = timer->running;
 		spin_unlock_irqrestore(&timerlist_lock, flags);
 
@@ -247,42 +248,58 @@ int del_timer_sync(struct timer_list * timer)
 
 static inline void cascade_timers(struct timer_vec *tv)
 {
-        /* cascade all the timers from tv up one level */
-        struct timer_list *timer;
-        timer = tv->vec[tv->index];
-        /*
-         * We are removing _all_ timers from the list, so we don't  have to
-         * detach them individually, just clear the list afterwards.
-         */
-        while (timer) {
-                struct timer_list *tmp = timer;
-                timer = timer->next;
-                internal_add_timer(tmp);
-        }
-        tv->vec[tv->index] = NULL;
-        tv->index = (tv->index + 1) & TVN_MASK;
+	/* cascade all the timers from tv up one level */
+	struct list_head *head, *curr, *next;
+
+	head = tv->vec + tv->index;
+	curr = head->next;
+	/*
+	 * We are removing _all_ timers from the list, so we don't  have to
+	 * detach them individually, just clear the list afterwards.
+	 */
+	while (curr != head) {
+		struct timer_list *tmp;
+
+		tmp = list_entry(curr, struct timer_list, list);
+		next = curr->next;
+		list_del(curr); // not needed
+		internal_add_timer(tmp);
+		curr = next;
+	}
+	INIT_LIST_HEAD(head);
+	tv->index = (tv->index + 1) & TVN_MASK;
 }
 
 static inline void run_timer_list(void)
 {
 	spin_lock_irq(&timerlist_lock);
 	while ((long)(jiffies - timer_jiffies) >= 0) {
-		struct timer_list *timer;
+		struct list_head *head, *curr;
 		if (!tv1.index) {
 			int n = 1;
 			do {
 				cascade_timers(tvecs[n]);
 			} while (tvecs[n]->index == 1 && ++n < NOOF_TVECS);
 		}
-		while ((timer = tv1.vec[tv1.index])) {
-			void (*fn)(unsigned long) = timer->function;
-			unsigned long data = timer->data;
+repeat:
+		head = tv1.vec + tv1.index;
+		curr = head->next;
+		if (curr != head) {
+			struct timer_list *timer;
+			void (*fn)(unsigned long);
+			unsigned long data;
+
+			timer = list_entry(curr, struct timer_list, list);
+ 			fn = timer->function;
+ 			data= timer->data;
+
 			detach_timer(timer);
-			timer->next = timer->prev = NULL;
+			timer->list.next = timer->list.prev = NULL;
 			timer_set_running(timer);
 			spin_unlock_irq(&timerlist_lock);
 			fn(data);
 			spin_lock_irq(&timerlist_lock);
+			goto repeat;
 		}
 		++timer_jiffies; 
 		tv1.index = (tv1.index + 1) & TVR_MASK;
@@ -340,7 +357,7 @@ static void second_overflow(void)
     /* Bump the maxerror field */
     time_maxerror += time_tolerance >> SHIFT_USEC;
     if ( time_maxerror > NTP_PHASE_LIMIT ) {
-        time_maxerror = NTP_PHASE_LIMIT;
+	time_maxerror = NTP_PHASE_LIMIT;
 	time_status |= STA_UNSYNC;
     }
 

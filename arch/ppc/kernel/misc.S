@@ -18,6 +18,7 @@
 #include <asm/errno.h>
 #include <asm/processor.h>
 #include <asm/page.h>
+#include <asm/cache.h>
 #include "ppc_asm.h"
 
 #if defined(CONFIG_4xx) || defined(CONFIG_8xx)
@@ -165,6 +166,11 @@ _GLOBAL(_tlbie)
  * This is a no-op on the 601.
  */
 _GLOBAL(flush_instruction_cache)
+#ifdef CONFIG_8xx
+	isync
+	lis	r5, IDC_INVALL@h
+	mtspr	IC_CST, r5
+#else
 	mfspr	r3,PVR
 	rlwinm	r3,r3,16,16,31
 	cmpi	0,r3,1
@@ -173,6 +179,7 @@ _GLOBAL(flush_instruction_cache)
 	mfspr	r3,HID0
 	ori	r3,r3,HID0_ICFI
 	mtspr	HID0,r3
+#endif /* CONFIG_8xx */
 	SYNC
 	blr
 
@@ -241,8 +248,7 @@ _GLOBAL(__flush_page_to_ram)
 	rlwinm	r5,r5,16,16,31
 	cmpi	0,r5,1
 	beqlr				/* for 601, do nothing */
-	li	r4,0x0FFF
-	andc	r3,r3,r4		/* Get page base address */
+	rlwinm	r3,r3,0,0,19		/* Get page base address */
 	li	r4,4096/CACHE_LINE_SIZE	/* Number of lines in a page */
 	mtctr	r4
 	mr	r6,r3
@@ -373,6 +379,7 @@ _GLOBAL(__spin_trylock)
  * void atomic_clear_mask(atomic_t mask, atomic_t *addr)
  * void atomic_set_mask(atomic_t mask, atomic_t *addr);
  */
+#if 0 /* now inline - paulus */
 _GLOBAL(atomic_add)
 10:	lwarx	r5,0,r4		/* Fetch old value & reserve */
 	add	r5,r5,r3	/* Perform 'add' operation */
@@ -423,11 +430,10 @@ _GLOBAL(atomic_dec_and_test)
 	subi	r5,r5,1		/* Perform 'add' operation */
 	stwcx.	r5,0,r3		/* Update with new value */
 	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
-	cmpi	0,r5,0		/* Return 'true' IFF 0 */
-	li	r3,1
-	beqlr
-	li	r3,0
+	cntlzw	r3,r5
+	srwi	r3,r3,5		
 	blr
+#endif /* 0 */
 _GLOBAL(atomic_clear_mask)
 10:	lwarx	r5,0,r4
 	andc	r5,r5,r3

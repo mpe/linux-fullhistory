@@ -9,7 +9,8 @@
  * I don't know what to do about interrupts (yet).
  */
 
-#include <sys/types.h>
+#include <linux/types.h>
+#include <linux/kernel.h>
 #include <linux/pci.h>
 #include <asm/mpc8xx.h>
 

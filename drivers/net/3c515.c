@@ -300,7 +300,6 @@ struct boom_tx_desc {
 };
 
 struct corkscrew_private {
-	char devname[8];	/* "ethN" string, also for kernel debug. */
 	const char *product_name;
 	struct net_device *next_module;
 	/* The Rx and Tx rings are here to keep them quad-word-aligned. */
@@ -564,7 +563,6 @@ static struct net_device *corkscrew_found_device(struct net_device *dev,
 	dev->priv =
 	    (void *) (((long) dev + sizeof(struct net_device) + 15) & ~15);
 	vp = (struct corkscrew_private *) dev->priv;
-	dev->name = vp->devname;	/* An empty string. */
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
 	dev->dma =

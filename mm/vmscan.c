@@ -151,7 +151,7 @@ drop_pte:
 	 * we have the swap cache set up to associate the
 	 * page with that swap entry.
 	 */
-	entry = acquire_swap_entry(page);
+	entry = get_swap_page();
 	if (!entry.val)
 		goto out_failed; /* No swap space left */
 		
@@ -387,8 +387,8 @@ int swap_out(unsigned int priority, int gfp_mask)
 				if (!p->swappable || !mm || mm->rss <= 0)
 					continue;
 				/* small processes are swapped out less */
-				while ((mm->swap_cnt << 2 * (i + 1) < max_cnt)
-						&& i++ < 10)
+				while ((mm->swap_cnt << 2 * (i + 1) < max_cnt) && i++ < 10)
+					/* nothing */;
 				mm->swap_cnt >>= i;
 				mm->swap_cnt += i; /* if swap_cnt reaches 0 */
 				/* we're big -> hog treatment */

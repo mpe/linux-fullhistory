@@ -1578,7 +1578,6 @@ int block_read_full_page(struct page *page, get_block_t *get_block)
 		nr++;
 	} while (i++, iblock++, (bh = bh->b_this_page) != head);
 
-	++current->maj_flt;
 	if (nr) {
 		if (Page_Uptodate(page))
 			BUG();
@@ -2002,8 +2001,6 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size)
 		}
 		bh = bh->b_this_page;
 	} while (bh != head);
-	if (rw == READ)
-		++current->maj_flt;
 	if ((rw == READ) && nr) {
 		if (Page_Uptodate(page))
 			BUG();
@@ -2277,7 +2274,7 @@ void __init buffer_init(unsigned long mempages)
 		    __get_free_pages(GFP_ATOMIC, order);
 	} while (hash_table == NULL && --order > 0);
 	printk("Buffer-cache hash table entries: %d (order: %d, %ld bytes)\n",
-	       nr_hash, order, (1UL<<order) * PAGE_SIZE);
+	       nr_hash, order, (PAGE_SIZE << order));
 
 	if (!hash_table)
 		panic("Failed to allocate buffer hash table\n");

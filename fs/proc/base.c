@@ -40,12 +40,18 @@ int proc_pid_statm(struct task_struct*,char*);
 int proc_pid_cpu(struct task_struct*,char*);
 
 /* MOUNT_REWRITE: make all files have non-NULL ->f_vfsmnt (pipefs, sockfs) */
+/* Until then... */
+#define NULL_VFSMNT	/* remove as soon as pipefs and sockfs will be there */
+
 static int proc_fd_link(struct inode *inode, struct dentry **dentry, struct vfsmount **mnt)
 {
 	if (inode->u.proc_i.file) {
-		if (inode->u.proc_i.file->f_vfsmnt) {
-			*mnt = mntget(inode->u.proc_i.file->f_vfsmnt);
-		}
+#ifdef NULL_VFSMNT
+		if (!inode->u.proc_i.file->f_vfsmnt)
+			mntget(*mnt);
+		else
+#endif
+		*mnt = mntget(inode->u.proc_i.file->f_vfsmnt);
 		*dentry = dget(inode->u.proc_i.file->f_dentry);
 		return 0;
 	}
@@ -174,7 +180,6 @@ static int standard_permission(struct inode *inode, int mask)
 static int proc_permission(struct inode *inode, int mask)
 {
 	struct dentry *de, *base, *root;
-	struct super_block *our_sb, *sb, *below;
 	struct vfsmount *our_vfsmnt, *vfsmnt, *mnt;
 
 	if (standard_permission(inode, mask) != 0)
@@ -187,14 +192,12 @@ static int proc_permission(struct inode *inode, int mask)
 
 	de = root;
 	mnt = vfsmnt;
-	our_sb = base->d_inode->i_sb;
-	sb = de->d_inode->i_sb;
-	while (sb != our_sb) {
-		de = sb->s_root->d_covers;
-		below = de->d_inode->i_sb;
-		if (sb == below)
+
+	while (vfsmnt != our_vfsmnt) {
+		if (vfsmnt == vfsmnt->mnt_parent)
 			goto out;
-		sb = below;
+		de = vfsmnt->mnt_mountpoint;
+		vfsmnt = vfsmnt->mnt_parent;
 	}
 
 	if (!is_subdir(de, base))
@@ -368,6 +371,9 @@ static int proc_pid_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
 	struct inode *inode = dentry->d_inode;
 	int error;
+#ifdef NULL_VFSMNT
+	struct vfsmount *dummy = mntget(nd->mnt);
+#endif
 
 	/* We don't need a base pointer in the /proc filesystem */
 	dput(nd->dentry);
@@ -379,6 +385,9 @@ static int proc_pid_follow_link(struct dentry *dentry, struct nameidata *nd)
 
 	error = inode->u.proc_i.op.proc_get_link(inode, &nd->dentry, &nd->mnt);
 out:
+#ifdef NULL_VFSMNT
+	mntput(dummy);
+#endif
 	return error;
 }
 

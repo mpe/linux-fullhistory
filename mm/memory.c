@@ -824,7 +824,6 @@ static int do_wp_page(struct mm_struct *mm, struct vm_area_struct * vma,
 	map_nr = pte_pagenr(pte);
 	if (map_nr >= max_mapnr)
 		goto bad_wp_page;
-	mm->min_flt++;
 	old_page = mem_map + map_nr;
 	
 	/*
@@ -855,7 +854,7 @@ static int do_wp_page(struct mm_struct *mm, struct vm_area_struct * vma,
 		flush_cache_page(vma, address);
 		establish_pte(vma, address, page_table, pte_mkyoung(pte_mkdirty(pte_mkwrite(pte))));
 		spin_unlock(&mm->page_table_lock);
-		return 1;
+		return 1;	/* Minor fault */
 	}
 
 	/*
@@ -880,7 +879,7 @@ static int do_wp_page(struct mm_struct *mm, struct vm_area_struct * vma,
 	}
 	spin_unlock(&mm->page_table_lock);
 	__free_page(new_page);
-	return 1;
+	return 1;	/* Minor fault */
 
 bad_wp_page:
 	spin_unlock(&mm->page_table_lock);
@@ -1049,11 +1048,8 @@ static int do_swap_page(struct mm_struct * mm,
 	}
 
 	mm->rss++;
-	mm->min_flt++;
 
 	pte = mk_pte(page, vma->vm_page_prot);
-
-	SetPageSwapEntry(page);
 
 	/*
 	 * Freeze the "shared"ness of the page, ie page_count + swap_count.
@@ -1074,7 +1070,7 @@ static int do_swap_page(struct mm_struct * mm,
 	set_pte(page_table, pte);
 	/* No need to invalidate - it was non-present before */
 	update_mmu_cache(vma, address, pte);
-	return 1;
+	return 1;	/* Minor fault */
 }
 
 /*
@@ -1094,13 +1090,12 @@ static int do_anonymous_page(struct mm_struct * mm, struct vm_area_struct * vma,
 		clear_user_highpage(page, addr);
 		entry = pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
 		mm->rss++;
-		mm->min_flt++;
 		flush_page_to_ram(page);
 	}
 	set_pte(page_table, entry);
 	/* No need to invalidate - it was non-present before */
 	update_mmu_cache(vma, addr, entry);
-	return 1;
+	return 1;	/* Minor fault */
 }
 
 /*
@@ -1133,7 +1128,6 @@ static int do_no_page(struct mm_struct * mm, struct vm_area_struct * vma,
 		return 0;
 	if (new_page == NOPAGE_OOM)
 		return -1;
-	++mm->maj_flt;
 	++mm->rss;
 	/*
 	 * This silly early PAGE_DIRTY setting removes a race
@@ -1156,7 +1150,7 @@ static int do_no_page(struct mm_struct * mm, struct vm_area_struct * vma,
 	set_pte(page_table, entry);
 	/* no need to invalidate: a not-present page shouldn't be cached */
 	update_mmu_cache(vma, address, entry);
-	return 1;
+	return 2;	/* Major fault */
 }
 
 /*

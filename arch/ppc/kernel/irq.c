@@ -117,9 +117,9 @@ void irq_kfree(void *ptr)
 	kfree(ptr);
 }
 
-#ifdef CONFIG_8xx
+#if (defined(CONFIG_8xx) || defined(CONFIG_8260))
 /* Name change so we can catch standard drivers that potentially mess up
- * the internal interrupt controller on 8xx and 82xx.  Just bear with me,
+ * the internal interrupt controller on 8xx and 8260.  Just bear with me,
  * I don't like this either and I am searching a better solution.  For
  * now, this is what I need. -- Dan
  */
@@ -194,10 +194,10 @@ void sys_free_irq(unsigned int irq, void *dev_id)
 #else
 void free_irq(unsigned int irq, void *dev_id)
 {
-#ifndef CONFIG_8xx
-	request_irq(irq, NULL, 0, NULL, dev_id);
-#else
+#if (defined(CONFIG_8xx) || defined(CONFIG_8260))
 	request_8xxirq(irq, NULL, 0, NULL, dev_id);
+#else
+	request_irq(irq, NULL, 0, NULL, dev_id);
 #endif
 }
 #endif

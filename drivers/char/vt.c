@@ -104,8 +104,7 @@ kd_nosound(unsigned long ignored)
 void
 _kd_mksound(unsigned int hz, unsigned int ticks)
 {
-	static struct timer_list sound_timer = { NULL, NULL, 0, 0,
-						 kd_nosound };
+	static struct timer_list sound_timer = { function: kd_nosound };
 	unsigned int count = 0;
 	unsigned long flags;
 

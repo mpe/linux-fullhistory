@@ -42,11 +42,21 @@
 
 #define VERSION "arcnet: COM20020 PCI support\n"
 
-#ifdef MODULE
-#define MAX_CARDS	16
-static struct net_device *cards[MAX_CARDS];
-static int numcards;
-#endif
+/* Module parameters */
+
+static int node = 0;
+static char *device;		/* use eg. device="arc1" to change name */
+static int timeout = 3;
+static int backplane = 0;
+static int clockp = 0;
+static int clockm = 0;
+
+MODULE_PARM(node, "i");
+MODULE_PARM(device, "s");
+MODULE_PARM(timeout, "i");
+MODULE_PARM(backplane, "i");
+MODULE_PARM(clockp, "i");
+MODULE_PARM(clockm, "i");
 
 static void com20020pci_open_close(struct net_device *dev, bool open)
 {
@@ -56,111 +66,99 @@ static void com20020pci_open_close(struct net_device *dev, bool open)
 		MOD_DEC_USE_COUNT;
 }
 
-/*
- * No need to probe for PCI cards - just ask the PCI layer and launch all the
- * ones we find.
- */
-static int __init com20020pci_probe(char *name_template, int node, int backplane, int clock, int timeout)
+static int __devinit com20020pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct net_device *dev;
 	struct arcnet_local *lp;
-	struct pci_dev *pdev = NULL;
-	int ioaddr, gotone = 0, err;
+	int ioaddr, err;
 
+	if (pci_enable_device(pdev))
+		return -EIO;
+	dev = dev_alloc(device ? : "arc%d", &err);
+	if (!dev)
+		return err;
+	lp = dev->priv = kmalloc(sizeof(struct arcnet_local), GFP_KERNEL);
+	if (!lp)
+		return -ENOMEM;
+	memset(lp, 0, sizeof(struct arcnet_local));
+	pdev->driver_data = dev;
+
+	ioaddr = pci_resource_start(pdev, 2);
+	dev->base_addr = ioaddr;
+	dev->irq = pdev->irq;
+	dev->dev_addr[0] = node;
+	lp->card_name = pdev->name;
+	lp->card_flags = id->driver_data;
+	lp->backplane = backplane;
+	lp->clockp = clockp & 7;
+	lp->clockm = clockm & 3;
+	lp->timeout = timeout;
+	lp->hw.open_close_ll = com20020pci_open_close;
+
+	if (check_region(ioaddr, ARCNET_TOTAL_SIZE)) {
+		BUGMSG(D_INIT, "IO region %xh-%xh already allocated.\n",
+		       ioaddr, ioaddr + ARCNET_TOTAL_SIZE - 1);
+		return -EBUSY;
+	}
+	if (ASTATUS() == 0xFF) {
+		BUGMSG(D_NORMAL, "IO address %Xh was reported by PCI BIOS, "
+		       "but seems empty!\n", ioaddr);
+		return -EIO;
+	}
+	if (com20020_check(dev))
+		return -EIO;
+
+	return com20020_found(dev, SA_SHIRQ);
+}
+
+static void __devexit com20020pci_remove(struct pci_dev *pdev)
+{
+	com20020_remove(pdev->driver_data);
+}
+
+static struct pci_device_id com20020pci_id_table[] __devinitdata = {
+	{ 0x1571, 0xa001, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{ 0x1571, 0xa002, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{ 0x1571, 0xa003, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{ 0x1571, 0xa004, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{ 0x1571, 0xa005, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{ 0x1571, 0xa006, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{ 0x1571, 0xa007, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{ 0x1571, 0xa008, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{ 0x1571, 0xa009, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ARC_IS_5MBIT },
+	{ 0x1571, 0xa00a, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ARC_IS_5MBIT },
+	{ 0x1571, 0xa00b, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ARC_IS_5MBIT },
+	{ 0x1571, 0xa00c, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ARC_IS_5MBIT },
+	{ 0x1571, 0xa00d, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ARC_IS_5MBIT },
+	{ 0x1571, 0xa201, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ARC_CAN_10MBIT },
+	{ 0x1571, 0xa202, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ARC_CAN_10MBIT },
+	{ 0x1571, 0xa203, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ARC_CAN_10MBIT },
+	{ 0x1571, 0xa204, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ARC_CAN_10MBIT },
+	{ 0x1571, 0xa205, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ARC_CAN_10MBIT },
+	{ 0x1571, 0xa206, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ARC_CAN_10MBIT },
+	{0,}
+};
+
+static struct pci_driver com20020pci_driver __devinitdata = {
+	name:		"com20020",
+	id_table:	com20020pci_id_table,
+	probe:		com20020pci_probe,
+	remove:		com20020pci_remove
+};
+
+int com20020pci_init(void)
+{
 	BUGLVL(D_NORMAL) printk(VERSION);
-
-	while ((pdev = pci_find_device(0x1571, 0xa004, pdev))) {
-		if (pci_enable_device(pdev))
-			continue;
-		dev = dev_alloc(name_template ? : "arc%d", &err);
-		if (!dev)
-			return err;
-		lp = dev->priv = kmalloc(sizeof(struct arcnet_local), GFP_KERNEL);
-		if (!lp)
-			return -ENOMEM;
-		memset(lp, 0, sizeof(struct arcnet_local));
-
-		ioaddr = pdev->resource[2].start;
-		dev->base_addr = ioaddr;
-		dev->irq = pdev->irq;
-		dev->dev_addr[0] = node;
-		lp->backplane = backplane;
-		lp->clock = clock;
-		lp->timeout = timeout;
-		lp->hw.open_close_ll = com20020pci_open_close;
-
-		BUGMSG(D_INIT, "PCI BIOS reports a device at %Xh, IRQ %d\n",
-		       ioaddr, dev->irq);
-
-		if (check_region(ioaddr, ARCNET_TOTAL_SIZE)) {
-			BUGMSG(D_INIT, "IO region %xh-%xh already allocated.\n",
-			       ioaddr, ioaddr + ARCNET_TOTAL_SIZE - 1);
-			continue;
-		}
-		if (ASTATUS() == 0xFF) {
-			BUGMSG(D_NORMAL, "IO address %Xh was reported by PCI BIOS, "
-			       "but seems empty!\n", ioaddr);
-			continue;
-		}
-		if (com20020_check(dev))
-			continue;
-
-		if (!com20020_found(dev, SA_SHIRQ)) {
-#ifdef MODULE
-			if(numcards==MAX_CARDS)
-				printk(KERN_WARNING "com20020pci: Too many cards. Ignoring.\n");
-			else
-				cards[numcards++] = dev;
+#ifndef MODULE
+	arcnet_init();
 #endif
-			gotone++;
-		}
-	}
-
-	return gotone ? 0 : -ENODEV;
+	return pci_module_init(&com20020pci_driver);
 }
 
-
-#ifdef MODULE
-
-/* Module parameters */
-
-static int node = 0;
-static char *device;		/* use eg. device="arc1" to change name */
-static int timeout = 3;
-static int backplane = 0;
-static int clock = 0;
-
-MODULE_PARM(node, "i");
-MODULE_PARM(device, "s");
-MODULE_PARM(timeout, "i");
-MODULE_PARM(backplane, "i");
-MODULE_PARM(clock, "i");
-
-int init_module(void)
+void com20020pci_cleanup(void)
 {
-	return com20020pci_probe(device, node, backplane, clock & 7, timeout & 3);
+	pci_unregister_driver(&com20020pci_driver);
 }
 
-void cleanup_module(void)
-{
-	struct net_device *dev;
-	int count;
-
-	for (count = 0; count < numcards; count++) {
-		dev = cards[count];
-		unregister_netdev(dev);
-		free_irq(dev->irq, dev);
-		release_region(dev->base_addr, ARCNET_TOTAL_SIZE);
-		kfree(dev->priv);
-		kfree(dev);
-	}
-}
-
-#else
-
-void __init com20020pci_probe_all(void)
-{
-	com20020pci_probe(NULL, 0, 0, 0, 3);
-}
-
-#endif				/* MODULE */
+module_init(com20020pci_init)
+module_exit(com20020pci_cleanup)

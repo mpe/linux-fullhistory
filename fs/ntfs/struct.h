@@ -3,6 +3,7 @@
  * Structure definitions
  *
  *  Copyright (C) 1997 Régis Duchesne
+ *  Copyright (C) 2000 Anton Altaparmakov
  */
 
 /* Necessary forward definition */
@@ -42,7 +43,10 @@ typedef struct _ntfs_volume{
 	ntfs_u32 at_standard_information;
 	ntfs_u32 at_attribute_list;
 	ntfs_u32 at_file_name;
+	ntfs_u32 at_volume_version;
 	ntfs_u32 at_security_descriptor;
+	ntfs_u32 at_volume_name;
+	ntfs_u32 at_volume_information;
 	ntfs_u32 at_data;
 	ntfs_u32 at_index_root;
 	ntfs_u32 at_index_allocation;

@@ -14,6 +14,7 @@
 #include <asm/processor.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
+#include <asm/cache.h>
 
 struct aligninfo {
 	unsigned char len;
@@ -37,6 +38,8 @@ struct aligninfo {
 #define M	0x20	/* multiple load/store */
 #define S	0x40	/* single-precision fp, or byte-swap value */
 #define HARD	0x80	/* string, stwcx. */
+
+#define DCBZ	0x5f	/* 8xx/82xx dcbz faults when cache not enabled */
 
 /*
  * The PowerPC stores certain bits of the instruction that caused the
@@ -220,9 +223,27 @@ fix_alignment(struct pt_regs *regs)
 	areg = regs->dsisr & 0x1f;		/* register to update */
 	instr = (regs->dsisr >> 10) & 0x7f;
 #endif
+
 	nb = aligninfo[instr].len;
-	if (nb == 0)
-		return 0;	/* too hard or invalid instruction bits */
+	if (nb == 0) {
+		long *p;
+		int i;
+
+		if (instr != DCBZ)
+			return 0;	/* too hard or invalid instruction */
+		/*
+		 * The dcbz (data cache block zero) instruction
+		 * gives an alignment fault if used on non-cacheable
+		 * memory.  We handle the fault mainly for the
+		 * case when we are running with the cache disabled
+		 * for debugging.
+		 */
+		p = (long *) (regs->dar & -L1_CACHE_BYTES);
+		for (i = 0; i < L1_CACHE_BYTES / sizeof(long); ++i)
+			p[i] = 0;
+		return 1;
+	}
+
 	flags = aligninfo[instr].flags;
 
 	/* For the 4xx-family processors, the 'dar' field of the

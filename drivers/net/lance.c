@@ -290,7 +290,6 @@ static void lance_tx_timeout (struct net_device *dev);
 
 #ifdef MODULE
 #define MAX_CARDS		8	/* Max number of interfaces (cards) per module */
-#define IF_NAMELEN		8	/* # of chars for storing dev->name */
 
 static int io[MAX_CARDS] = { 0, };
 static int dma[MAX_CARDS] = { 0, };
@@ -300,10 +299,9 @@ MODULE_PARM(io, "1-" __MODULE_STRING(MAX_CARDS) "i");
 MODULE_PARM(dma, "1-" __MODULE_STRING(MAX_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_CARDS) "i");
 
-static char ifnames[MAX_CARDS][IF_NAMELEN] = { {0, }, };
 static struct net_device dev_lance[MAX_CARDS] =
 {{
-    0, /* device name is inserted by linux/drivers/net/net_init.c */
+    "", /* device name is inserted by linux/drivers/net/net_init.c */
 	0, 0, 0, 0,
 	0, 0,
 	0, 0, 0, NULL, NULL}};
@@ -314,7 +312,6 @@ int init_module(void)
 
 	for (this_dev = 0; this_dev < MAX_CARDS; this_dev++) {
 		struct net_device *dev = &dev_lance[this_dev];
-		dev->name = ifnames[this_dev];
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
 		dev->dma = dma[this_dev];

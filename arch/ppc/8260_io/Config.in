@@ -1,0 +1,22 @@
+#
+# MPC8260 Communication options
+#
+if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
+  mainmenu_option next_comment
+  comment 'MPC8260 Communication Options'
+  bool 'CPM SCC Ethernet' CONFIG_SCC_ENET
+  if [ "$CONFIG_SCC_ENET" = "y" ]; then
+  bool 'Ethernet on SCC1' CONFIG_SCC1_ENET
+    if [ "$CONFIG_SCC1_ENET" != "y" ]; then
+      bool 'Ethernet on SCC2' CONFIG_SCC2_ENET
+    fi
+  fi
+  bool 'FCC Ethernet' CONFIG_FCC_ENET
+  if [ "$CONFIG_FCC_ENET" = "y" ]; then
+  bool 'Ethernet on FCC1' CONFIG_FCC1_ENET
+    if [ "$CONFIG_FCC1_ENET" != "y" ]; then
+      bool 'Ethernet on FCC2' CONFIG_FCC2_ENET
+    fi
+  fi
+  endmenu
+fi

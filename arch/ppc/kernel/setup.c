@@ -27,6 +27,10 @@
 #include <asm/mpc8xx.h>
 #include <asm/8xx_immap.h>
 #endif
+#ifdef CONFIG_8260
+#include <asm/mpc8260.h>
+#include <asm/immap_8260.h>
+#endif
 #include <asm/bootx.h>
 #include <asm/machdep.h>
 #include <asm/feature.h>
@@ -109,8 +113,10 @@ struct machdep_calls ppc_md;
  * on pmac as well so we don't need the ifdef's.
  * Until we get multiple-console support in here
  * that is.  -- Cort
+ * Maybe tie it to serial consoles, since this is really what
+ * these processors use on existing boards.  -- Dan
  */ 
-#if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
+#if !defined(CONFIG_4xx) && !defined(CONFIG_8xx) && !defined(CONFIG_8260)
 struct screen_info screen_info = {
 	0, 25,			/* orig-x, orig-y */
 	0,			/* unused */
@@ -283,10 +289,10 @@ int get_cpuinfo(char *buffer)
 			}
 			break;
 		case 0x0050:
-			len += sprintf(len+buffer, "821\n");
+			len += sprintf(len+buffer, "8xx\n");
 			break;
 		case 0x0081:
-			len += sprintf(len+buffer, "8240\n");
+			len += sprintf(len+buffer, "82xx\n");
 			break;
 		case 0x4011:
 			len += sprintf(len+buffer, "405GP\n");
@@ -300,7 +306,7 @@ int get_cpuinfo(char *buffer)
 		 * Assume here that all clock rates are the same in a
 		 * smp system.  -- Cort
 		 */
-#if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
+#if !defined(CONFIG_4xx) && !defined(CONFIG_8xx) && !defined(CONFIG_8260)
 		if ( have_of )
 		{
 			struct device_node *cpu_node;
@@ -418,10 +424,10 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		 unsigned long r6, unsigned long r7)
 {
 	parse_bootinfo();
-	
+
 	if ( ppc_md.progress ) ppc_md.progress("id mach(): start", 0x100);
 	
-#if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
+#if !defined(CONFIG_4xx) && !defined(CONFIG_8xx) && !defined(CONFIG_8260)
 #ifndef CONFIG_MACH_SPECIFIC
 	/* if we didn't get any bootinfo telling us what we are... */
 	if ( _machine == 0 )
@@ -540,6 +546,8 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 	oak_init(r3, r4, r5, r6, r7);
 #elif defined(CONFIG_8xx)
         m8xx_init(r3, r4, r5, r6, r7);
+#elif defined(CONFIG_8260)
+        m8260_init(r3, r4, r5, r6, r7);
 #else
 #error "No board type has been defined for identify_machine()!"
 #endif /* CONFIG_4xx */
@@ -659,13 +667,19 @@ void __init setup_arch(char **cmdline_p)
 	map_bootx_text();
 #endif
 
+#ifdef CONFIG_ALL_PPC
+	feature_init();
+#endif
+
 #ifdef CONFIG_XMON
 	xmon_map_scc();
 	if (strstr(cmd_line, "xmon"))
 		xmon(0);
 #endif /* CONFIG_XMON */
 	if ( ppc_md.progress ) ppc_md.progress("setup_arch: enter", 0x3eab);
+
 #if defined(CONFIG_KGDB)
+	kgdb_map_scc();
 	set_debug_traps();
 	breakpoint();
 #endif
@@ -688,6 +702,7 @@ void __init setup_arch(char **cmdline_p)
 
 	ppc_md.setup_arch();
 	if ( ppc_md.progress ) ppc_md.progress("arch: exit", 0x3eab);
+
 	paging_init();
 }
 
@@ -695,7 +710,6 @@ void ppc_generic_ide_fix_driveid(struct hd_driveid *id)
 {
         int i;
 	unsigned short *stringcast;
-
 
 	id->config         = __le16_to_cpu(id->config);
 	id->cyls           = __le16_to_cpu(id->cyls);
@@ -708,16 +722,16 @@ void ppc_generic_ide_fix_driveid(struct hd_driveid *id)
 	id->vendor1        = __le16_to_cpu(id->vendor1);
 	id->vendor2        = __le16_to_cpu(id->vendor2);
 	stringcast = (unsigned short *)&id->serial_no[0];
-	for (i=0; i<(20/2); i++)
+	for (i = 0; i < (20/2); i++)
 	        stringcast[i] = __le16_to_cpu(stringcast[i]);
 	id->buf_type       = __le16_to_cpu(id->buf_type);
 	id->buf_size       = __le16_to_cpu(id->buf_size);
 	id->ecc_bytes      = __le16_to_cpu(id->ecc_bytes);
 	stringcast = (unsigned short *)&id->fw_rev[0];
-	for (i=0; i<(8/2); i++)
+	for (i = 0; i < (8/2); i++)
 	        stringcast[i] = __le16_to_cpu(stringcast[i]);
 	stringcast = (unsigned short *)&id->model[0];
-	for (i=0; i<(40/2); i++)
+	for (i = 0; i < (40/2); i++)
 	        stringcast[i] = __le16_to_cpu(stringcast[i]);
 	id->dword_io       = __le16_to_cpu(id->dword_io);
 	id->reserved50     = __le16_to_cpu(id->reserved50);
@@ -735,12 +749,12 @@ void ppc_generic_ide_fix_driveid(struct hd_driveid *id)
 	id->eide_dma_time  = __le16_to_cpu(id->eide_dma_time);
 	id->eide_pio       = __le16_to_cpu(id->eide_pio);
 	id->eide_pio_iordy = __le16_to_cpu(id->eide_pio_iordy);
-	for (i=0; i<2; i++)
+	for (i = 0; i < 2; i++)
 		id->words69_70[i] = __le16_to_cpu(id->words69_70[i]);
-        for (i=0; i<4; i++)
+        for (i = 0; i < 4; i++)
                 id->words71_74[i] = __le16_to_cpu(id->words71_74[i]);
 	id->queue_depth	   = __le16_to_cpu(id->queue_depth);
-	for (i=0; i<4; i++)
+	for (i = 0; i < 4; i++)
 		id->words76_79[i] = __le16_to_cpu(id->words76_79[i]);
 	id->major_rev_num  = __le16_to_cpu(id->major_rev_num);
 	id->minor_rev_num  = __le16_to_cpu(id->minor_rev_num);
@@ -756,14 +770,14 @@ void ppc_generic_ide_fix_driveid(struct hd_driveid *id)
 	id->CurAPMvalues   = __le16_to_cpu(id->CurAPMvalues);
 	id->word92         = __le16_to_cpu(id->word92);
 	id->hw_config      = __le16_to_cpu(id->hw_config);
-	for (i=0; i<32; i++)
+	for (i = 0; i < 32; i++)
 		id->words94_125[i]  = __le16_to_cpu(id->words94_125[i]);
 	id->last_lun       = __le16_to_cpu(id->last_lun);
 	id->word127        = __le16_to_cpu(id->word127);
 	id->dlf            = __le16_to_cpu(id->dlf);
 	id->csfo           = __le16_to_cpu(id->csfo);
-	for (i=0; i<31; i++)
+	for (i = 0; i < 30; i++)
 		id->words130_159[i] = __le16_to_cpu(id->words130_159[i]);
-	for (i=0; i<97; i++)
+	for (i = 0; i < 96; i++)
 		id->words160_255[i] = __le16_to_cpu(id->words160_255[i]);
 }

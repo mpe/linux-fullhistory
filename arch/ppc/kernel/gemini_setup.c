@@ -35,15 +35,14 @@
 #include "open_pic.h"
 
 void gemini_setup_pci_ptrs(void);
+static int gemini_get_clock_speed(void);
+extern void gemini_pcibios_fixup(void);
 
-static unsigned char gemini_switch_map = 0;
 static char *gemini_board_families[] = {
-	"VGM", "VSS", "KGM", "VGR", "KSS"
+  "VGM", "VSS", "KGM", "VGR", "VCM", "VCS", "KCM", "VCR"
 };
-
-static char *gemini_memtypes[] = {
-	"EDO DRAM, 60nS", "SDRAM, 15nS, CL=2", "SDRAM, 15nS, CL=2 with ECC"
-};
+static int gemini_board_count = sizeof(gemini_board_families) /
+                                 sizeof(gemini_board_families[0]);
 
 static unsigned int cpu_7xx[16] = {
 	0, 15, 14, 0, 0, 13, 5, 9, 6, 11, 8, 10, 16, 12, 7, 0
@@ -66,14 +65,14 @@ static inline unsigned long _get_HID1(void)
 int
 gemini_get_cpuinfo(char *buffer)
 {
-	int i, len;
+	int len;
 	unsigned char reg, rev;
 	char *family;
 	unsigned int type;
 
 	reg = readb(GEMINI_FEAT);
 	family = gemini_board_families[((reg>>4) & 0xf)];
-	if (((reg>>4) & 0xf) > 2)
+	if (((reg>>4) & 0xf) > gemini_board_count)
 		printk(KERN_ERR "cpuinfo(): unable to determine board family\n");
 
 	reg = readb(GEMINI_BREV);
@@ -85,18 +84,17 @@ gemini_get_cpuinfo(char *buffer)
 	len = sprintf( buffer, "machine\t\t: Gemini %s%d, rev %c, eco %d\n", 
 		       family, type, (rev + 'A'), (reg & 0xf));
 
-	len += sprintf( buffer+len, "vendor\t\t: %s\n", 
-			(_get_PVR() & (1<<15)) ? "IBM" : "Motorola");
+	len = sprintf(buffer, "board\t\t: Gemini %s", family);
+	if (type > 9)
+		len += sprintf(buffer+len, "%c", (type - 10) + 'A');
+	else
+		len += sprintf(buffer+len, "%d", type);
 
-	reg = readb(GEMINI_MEMCFG);
-	len += sprintf( buffer+len, "memory type\t: %s\n", 
-			gemini_memtypes[(reg & 0xc0)>>6]);
-	len += sprintf( buffer+len, "switches on\t: ");
-	for( i=0; i < 8; i++ ) {
-		if ( gemini_switch_map & (1<<i))
-			len += sprintf(buffer+len, "%d ", i);
-	}
-	len += sprintf(buffer+len, "\n");
+	len += sprintf(buffer+len, ", rev %c, eco %d\n",
+		       (rev + 'A'), (reg & 0xf));
+
+	len += sprintf(buffer+len, "clock\t\t: %dMhz\n", 
+		       gemini_get_clock_speed());
 
 	return len;
 }
@@ -116,11 +114,16 @@ static u_char gemini_openpic_initsenses[] = {
 
 void __init gemini_openpic_init(void)
 {
+
+	OpenPIC = (volatile struct OpenPIC *)
+		grackle_read(0x80005800 + 0x10);
+#if 0	
 	grackle_write(GEMINI_MPIC_PCI_CFG + PCI_BASE_ADDRESS_0, 
 		      GEMINI_MPIC_ADDR);
 	grackle_write(GEMINI_MPIC_PCI_CFG + PCI_COMMAND, PCI_COMMAND_MEMORY);
 
 	OpenPIC = (volatile struct OpenPIC *) GEMINI_MPIC_ADDR;
+#endif
 	OpenPIC_InitSenses = gemini_openpic_initsenses;
 	OpenPIC_NumInitSenses = sizeof( gemini_openpic_initsenses );
 
@@ -148,7 +151,6 @@ gemini_heartbeat(void)
 
 void __init gemini_setup_arch(void)
 {
-	unsigned int cpu;
 	extern char cmd_line[];
 
 
@@ -165,28 +167,7 @@ void __init gemini_setup_arch(void)
 	/* nothing but serial consoles... */  
 	sprintf(cmd_line, "%s console=ttyS0", cmd_line);
 
-
-	/* The user switches on the front panel can be used as follows:
-
-	   Switch 0 - adds "debug" to the command line for verbose boot info,
-	   Switch 7 - boots in single-user mode 
-
-	*/
-
-	gemini_switch_map = readb( GEMINI_USWITCH );
-  
-	if ( gemini_switch_map & (1<<GEMINI_SWITCH_VERBOSE))
-		sprintf(cmd_line, "%s debug", cmd_line);
-
-	if ( gemini_switch_map & (1<<GEMINI_SWITCH_SINGLE_USER))
-		sprintf(cmd_line, "%s single", cmd_line);
-
 	printk("Boot arguments: %s\n", cmd_line);
-
-	/* mutter some kind words about who made the CPU */
-	cpu = _get_PVR();
-	printk("CPU manufacturer: %s [rev=%04x]\n", (cpu & (1<<15)) ? "IBM" :
-	       "Motorola", (cpu & 0xffff));
 
 	ppc_md.heartbeat = gemini_heartbeat;
 	ppc_md.heartbeat_reset = HZ/8;
@@ -202,19 +183,17 @@ void __init gemini_setup_arch(void)
 int
 gemini_get_clock_speed(void)
 {
-	unsigned long hid1;
+	unsigned long hid1, pvr = _get_PVR();
 	int clock;
-	unsigned char reg;
-  
-	hid1 = _get_HID1();
-	if ((_get_PVR()>>16) == 8)
+
+	hid1 = (_get_HID1() >> 28) & 0xf;
+	if (PVR_VER(pvr) == 8 ||
+	    PVR_VER(pvr) == 12)
 		hid1 = cpu_7xx[hid1];
 	else
 		hid1 = cpu_6xx[hid1];
 
-	reg = readb(GEMINI_BSTAT) & 0xc0;
-
-	switch( reg >> 2 ) {
+	switch((readb(GEMINI_BSTAT) & 0xc) >> 2) {
 
 	case 0:
 	default:
@@ -226,7 +205,7 @@ gemini_get_clock_speed(void)
 		break;
   
 	case 2:
-		clock = (hid1*50)/3;
+		clock = (hid1*50);
 		break;
 	}
 
@@ -242,83 +221,72 @@ gemini_get_clock_speed(void)
 
 void __init gemini_init_l2(void)
 {
-	unsigned char reg;
-	unsigned long cache;
-	int speed;
+        unsigned char reg, brev, fam, creg;
+        unsigned long cache;
+        unsigned long pvr = _get_PVR();
 
-	reg = readb(GEMINI_L2CFG);
+        reg = readb(GEMINI_L2CFG);
+        brev = readb(GEMINI_BREV);
+        fam = readb(GEMINI_FEAT);
 
-	/* 750's L2 initializes differently from a 604's.  Also note that a Grackle
-	   bug will hang a dual-604 board, so make sure that doesn't happen by not
-	   turning on the L2 */
-	if ( _get_PVR() >> 16 != 8 ) {
-     
-		/* check for dual cpus and cry sadly about the loss of an L2... */
-		if ((( readb(GEMINI_CPUSTAT) & 0x0c ) >> 2) != 1) 
-			printk("Sorry. Your dual-604 does not allow the L2 to be enabled due "
-			       "to a Grackle bug.\n");
-		else if ( reg & GEMINI_L2_SIZE_MASK ) {
-			printk("Enabling 604 L2 cache: %dKb\n", 
-			       (128<<((reg & GEMINI_L2_SIZE_MASK)>>6)));
-			writeb( 1, GEMINI_L2CFG );
-		}
-	}
+        switch(PVR_VER(pvr)) {
 
-	/* do a 750 */
-	else {
-		/* Synergy's first round of 750 boards had the L2 size stuff into the
-		   board register above.  If it's there, it's used; if not, the
-		   standard default is 1Mb.  The L2 type, I'm told, is "most likely
-		   probably always going to be late-write".  --Dan */
+        case 8:
+                if (reg & 0xc0)
+                        cache = (((reg >> 6) & 0x3) << 28);
+                else
+                        cache = 0x3 << 28;
 
-		if (reg & 0xc0) {
-			printk("Enabling 750 L2 cache: %dKb\n", 
-			       (128 << ((reg & 0xc0)>>6)));
-			/* take the size given */
-			cache = (((reg>>6) & 0x3)<<28);
-		}
-		else
-		{
-			printk("Enabling 750 L2 cache: 1M\n");
-			/* default of 1Mb */
-			cache = 0x3<<28;
-		}
- 
-		reg &= 0x3;
-
-		/* a cache ratio of 1:1 and CPU clock speeds in excess of 300Mhz are bad
-		   things.  If found, tune it down to 1:1.5.  -- Dan */
-		if (!reg) {
-
-printk("3\n");
-			speed = gemini_get_clock_speed();
-   
-			if (speed >= 300) {
-				printk("Warning:  L2 ratio is 1:1 on a %dMhz processor.  Dropping to 1:1.5.\n",
-				       speed );
-				printk("Contact Synergy Microsystems for an ECO to fix this problem\n");
-				reg = 0x1;
-			}
-		}
-
-		/* standard stuff */
-		cache |= ((1<<reg)<<25);
 #ifdef CONFIG_SMP
-		/* A couple errata for the 750's (both IBM and Motorola silicon)
-		   note that you can get missed cache lines on MP implementations.
-		   The workaround - if you call it that - is to make the L2
-		   write-through.  This is fixed in IBM's 3.1 rev (I'm told), but
-		   for now, always make 2.x versions use L2 write-through. --Dan */
-		if (((_get_PVR()>>8) & 0xf) <= 2)
-		{
-			cache |= L2CR_L2WT;
-			printk("L2 cache: Enabling Write-Through due to 750 Errata.\n");
-		}
-#endif
-		cache |= L2CR_PIPE_LATEWR|L2CR_L2CTL|L2CR_INST_DISABLE;
-		_set_L2CR(0);
-		_set_L2CR(cache|L2CR_L2I|L2CR_L2E);
+                /* Pre-3.0 processor revs had snooping errata.  Leave
+                   their L2's disabled with SMP. -- Dan */
+                if (PVR_CFG(pvr) < 3) {
+                        printk("Pre-3.0 750; L2 left disabled!\n");
+                        return;
+                }
+#endif /* CONFIG_SMP */
+
+                /* Special case: VGM5-B's came before L2 ratios were set on
+                   the board.  Processor speed shouldn't be too high, so
+                   set L2 ratio to 1:1.5.  */
+                if ((brev == 0x51) && ((fam & 0xa0) >> 4) == 0)
+                        reg |= 1;
+
+                /* determine best cache ratio based upon what the board
+                   tells us (which sometimes _may_ not be true) and
+                   the processor speed. */
+                else {
+                        if (gemini_get_clock_speed() > 250)
+                                reg = 2;
+                }
+                break;
+        case 12:
+	{
+		static unsigned long l2_size_val = 0;
+		
+		if (!l2_size_val)
+			l2_size_val = _get_L2CR();
+		cache = l2_size_val;
+                break;
 	}
+        case 4:
+        case 9:
+                creg = readb(GEMINI_CPUSTAT);
+                if (((creg & 0xc) >> 2) != 1)
+                        printk("Dual-604 boards don't support the use of L2\n");
+                else
+                        writeb(1, GEMINI_L2CFG);
+                return;
+        default:
+                printk("Unknown processor; L2 left disabled\n");
+                return;
+        }
+
+        cache |= ((1<<reg) << 25);
+        cache |= (L2CR_PIPE_LATEWR|L2CR_L2CTL|L2CR_INST_DISABLE);
+        _set_L2CR(0);
+        _set_L2CR(cache | L2CR_L2I | L2CR_L2E);
+
 }
 
 void
@@ -540,8 +508,11 @@ void gemini_post_irq(struct pt_regs* regs, int irq)
 void __init gemini_init(unsigned long r3, unsigned long r4, unsigned long r5,
 			unsigned long r6, unsigned long r7)
 {
+	int i;
 	int chrp_get_irq( struct pt_regs * );
-	void layout_bus( struct pci_bus * );
+
+	for(i = 0; i < GEMINI_LEDS; i++)
+		gemini_led_off(i);
  
 	gemini_setup_pci_ptrs();
 
@@ -585,5 +556,5 @@ void __init gemini_init(unsigned long r3, unsigned long r4, unsigned long r5,
 #ifdef CONFIG_MAGIC_SYSRQ
 	ppc_md.ppc_kbd_sysrq_xlate = NULL;
 #endif
-	ppc_md.pcibios_fixup_bus = layout_bus;
+	ppc_md.pcibios_fixup_bus = gemini_pcibios_fixup;
 }

@@ -1,6 +1,8 @@
 #ifndef _PPC_POSIX_TYPES_H
 #define _PPC_POSIX_TYPES_H
 
+#include <linux/config.h>	/* for CONFIG_PPC64 */
+
 /*
  * This file is generally used by user-level software, so you need to
  * be a little careful about namespace pollution etc.  Also, we cannot
@@ -15,8 +17,17 @@ typedef long		__kernel_off_t;
 typedef int		__kernel_pid_t;
 typedef unsigned int	__kernel_uid_t;
 typedef unsigned int	__kernel_gid_t;
+
+/* Grrr... gcc thinks size_t is unsigned int, so we either
+   have to have this nonsense or use -fno-builtin. - paulus */
+#ifdef CONFIG_PPC64
 typedef unsigned long	__kernel_size_t;
 typedef long		__kernel_ssize_t;
+#else
+typedef unsigned int	__kernel_size_t;
+typedef int		__kernel_ssize_t;
+#endif /* CONFIG_PPC64 */
+
 typedef long		__kernel_ptrdiff_t;
 typedef long		__kernel_time_t;
 typedef long		__kernel_suseconds_t;

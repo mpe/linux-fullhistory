@@ -269,6 +269,8 @@ static int sock_map_fd(struct socket *sock)
 		}
 
 		file->f_dentry = d_alloc_root(sock->inode);
+		/* MOUNT_REWRITE: set to sockfs internal vfsmnt */
+		file->f_vfsmnt = NULL;
 		if (!file->f_dentry) {
 			put_filp(file);
 			put_unused_fd(fd);

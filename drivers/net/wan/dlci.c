@@ -441,13 +441,6 @@ int dlci_add(struct dlci_add *dlci)
 		return(-ENOMEM);
 
 	memset(master, 0, sizeof(*master));
-	master->name = kmalloc(strlen(buf) + 1, GFP_KERNEL);
-
-	if (!master->name)
-	{
-		kfree(master);
-		return(-ENOMEM);
-	}
 
 	strcpy(master->name, buf);
 	master->init = dlci_init;
@@ -456,7 +449,6 @@ int dlci_add(struct dlci_add *dlci)
 	err = register_netdev(master);
 	if (err < 0)
 	{
-		kfree(master->name);
 		kfree(master);
 		return(err);
 	}
@@ -472,7 +464,6 @@ int dlci_add(struct dlci_add *dlci)
 	{
 		unregister_netdev(master);
 		kfree(master->priv);
-		kfree(master->name);
 		kfree(master);
 		return(err);
 	}
@@ -516,7 +507,6 @@ int dlci_del(struct dlci_add *dlci)
 		open_dev[i] = NULL;
 
 	kfree(master->priv);
-	kfree(master->name);
 	kfree(master);
 
 	MOD_DEC_USE_COUNT;

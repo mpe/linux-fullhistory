@@ -136,7 +136,7 @@ __start:
 	mtspr	DC_CST, r8
 	lis	r8, IDC_ENABLE@h
 	mtspr	IC_CST, r8
-#if 0
+#ifdef CONFIG_8xx_COPYBACK
 	mtspr	DC_CST, r8
 #else
 	/* For a debug option, I left this here to easily enable
@@ -356,15 +356,26 @@ SystemCall:
  * only perform the attribute functions.
  */
 InstructionTLBMiss:
+#ifdef CONFIG_8xx_CPU6
+	stw	r3, 8(r0)
+	li	r3, 0x3f80
+	stw	r3, 12(r0)
+	lwz	r3, 12(r0)
+#endif
 	mtspr	M_TW, r20	/* Save a couple of working registers */
 	mfcr	r20
 	stw	r20, 0(r0)
 	stw	r21, 4(r0)
 	mfspr	r20, SRR0	/* Get effective address of fault */
+#ifdef CONFIG_8xx_CPU6
+	li	r3, 0x3780
+	stw	r3, 12(r0)
+	lwz	r3, 12(r0)
+#endif
 	mtspr	MD_EPN, r20	/* Have to use MD_EPN for walk, MI_EPN can't */
 	mfspr	r20, M_TWB	/* Get level 1 table entry address */
 	lwz	r21, 0(r20)	/* Get the level 1 entry */
-	rlwinm.	r20, r21,0,0,20	/* Extract page descriptor page address */
+	rlwinm.	r20, r21,0,0,19	/* Extract page descriptor page address */
 	beq	2f		/* If zero, don't try to find a pte */
 
 	/* We have a pte table, so load the MI_TWC with the attributes
@@ -372,88 +383,131 @@ InstructionTLBMiss:
 	 */
 	tophys(r21,r21)
 	ori	r21,r21,1		/* Set valid bit */
+#ifdef CONFIG_8xx_CPU6
+	li	r3, 0x2b80
+	stw	r3, 12(r0)
+	lwz	r3, 12(r0)
+#endif
 	mtspr	MI_TWC, r21	/* Set page attributes */
+#ifdef CONFIG_8xx_CPU6
+	li	r3, 0x3b80
+	stw	r3, 12(r0)
+	lwz	r3, 12(r0)
+#endif
 	mtspr	MD_TWC, r21	/* Load pte table base address */
 	mfspr	r21, MD_TWC	/* ....and get the pte address */
-	lwz	r21, 0(r21)	/* Get the pte */
+	lwz	r20, 0(r21)	/* Get the pte */
+#if 0
+	ori	r20, r20, _PAGE_ACCESSED
+	stw	r20, 0(r21)
+#endif
 
 	/* Set four subpage valid bits (24, 25, 26, and 27).
-	 * Since we currently run MI_CTR.PPCS = 0, the manual says,
-	 *	"If the page size is larger than 4k byte, then all the
-	 *	 4 bits should have the same value."
-	 * I don't really know what to do if the page size is 4k Bytes,
-	 * but I know setting them all to 0 does not work, and setting them
-	 * all to 1 does, so that is the way it is right now.
-	 * BTW, these four bits map to the software only bits in the
-	 * linux page table.  I used to turn them all of, but now just
-	 * set them all for the hardware.
-	li	r20, 0x00f0
-	andc	r20, r21, r20
-	ori	r20, r20, 0x0080
+	 * Clear bit 28 (which should be in the PTE, but we do this anyway).
 	 */
-	ori	r20, r21, 0x00f0
-
+	li	r21, 0x00f0
+	rlwimi	r20, r21, 0, 24, 28
+#ifdef CONFIG_8xx_CPU6
+	li	r3, 0x2d80
+	stw	r3, 12(r0)
+	lwz	r3, 12(r0)
+#endif
 	mtspr	MI_RPN, r20	/* Update TLB entry */
 
 	mfspr	r20, M_TW	/* Restore registers */
 	lwz	r21, 0(r0)
 	mtcr	r21
 	lwz	r21, 4(r0)
+#ifdef CONFIG_8xx_CPU6
+	lwz	r3, 8(r0)
+#endif
 	rfi
 
 2:	mfspr	r20, M_TW	/* Restore registers */
 	lwz	r21, 0(r0)
 	mtcr	r21
 	lwz	r21, 4(r0)
+#ifdef CONFIG_8xx_CPU6
+	lwz	r3, 8(r0)
+#endif
 	b	InstructionAccess
 
 	. = 0x1200
 DataStoreTLBMiss:
+#ifdef CONFIG_8xx_CPU6
+	stw	r3, 8(r0)
+	li	r3, 0x3f80
+	stw	r3, 12(r0)
+	lwz	r3, 12(r0)
+#endif
 	mtspr	M_TW, r20	/* Save a couple of working registers */
 	mfcr	r20
 	stw	r20, 0(r0)
 	stw	r21, 4(r0)
 	mfspr	r20, M_TWB	/* Get level 1 table entry address */
 	lwz	r21, 0(r20)	/* Get the level 1 entry */
-	rlwinm.	r20, r21,0,0,20	/* Extract page descriptor page address */
+	rlwinm.	r20, r21,0,0,19	/* Extract page descriptor page address */
 	beq	2f		/* If zero, don't try to find a pte */
 
 	/* We have a pte table, so load fetch the pte from the table.
 	 */
 	tophys(r21, r21)
 	ori	r21, r21, 1	/* Set valid bit in physical L2 page */
+#ifdef CONFIG_8xx_CPU6
+	li	r3, 0x3b80
+	stw	r3, 12(r0)
+	lwz	r3, 12(r0)
+#endif
 	mtspr	MD_TWC, r21	/* Load pte table base address */
-	mfspr	r21, MD_TWC	/* ....and get the pte address */
-	lwz	r21, 0(r21)	/* Get the pte */
+	mfspr	r20, MD_TWC	/* ....and get the pte address */
+	lwz	r20, 0(r20)	/* Get the pte */
+
+	/* Insert the Guarded flag into the TWC from the Linux PTE.
+	 * It is bit 27 of both the Linux PTE and the TWC (at least
+	 * I got that right :-).  It will be better when we can put
+	 * this into the Linux pgd/pmd and load it in the operation
+	 * above.
+	 */
+	rlwimi	r21, r20, 0, 27, 27
+#ifdef CONFIG_8xx_CPU6
+	li	r3, 0x3b80
+	stw	r3, 12(r0)
+	lwz	r3, 12(r0)
+#endif
+	mtspr	MD_TWC, r21
 
 	/* Set four subpage valid bits (24, 25, 26, and 27).
-	 * Since we currently run MD_CTR.PPCS = 0, the manual says,
-	 *	"If the page size is larger than 4k byte, then all the
-	 *	 4 bits should have the same value."
-	 * I don't really know what to do if the page size is 4k Bytes,
-	 * but I know setting them all to 0 does not work, and setting them
-	 * all to 1 does, so that is the way it is right now.
-	 * BTW, these four bits map to the software only bits in the
-	 * linux page table.  I used to turn them all of, but now just
-	 * set them all for the hardware.
-	li	r20, 0x00f0
-	andc	r20, r21, r20
-	ori	r20, r20, 0x0080
+	 * Clear bit 28 (which should be in the PTE, but we do this anyway).
 	 */
-	ori	r20, r21, 0x00f0
-
+#if 0
+	ori	r20, r20, 0x00f0
+#else
+	li	r21, 0x00f0
+	rlwimi	r20, r21, 0, 24, 28
+#endif
+#ifdef CONFIG_8xx_CPU6
+	li	r3, 0x3d80
+	stw	r3, 12(r0)
+	lwz	r3, 12(r0)
+#endif
 	mtspr	MD_RPN, r20	/* Update TLB entry */
 
 	mfspr	r20, M_TW	/* Restore registers */
 	lwz	r21, 0(r0)
 	mtcr	r21
 	lwz	r21, 4(r0)
+#ifdef CONFIG_8xx_CPU6
+	lwz	r3, 8(r0)
+#endif
 	rfi
 
 2:	mfspr	r20, M_TW	/* Restore registers */
 	lwz	r21, 0(r0)
 	mtcr	r21
 	lwz	r21, 4(r0)
+#ifdef CONFIG_8xx_CPU6
+	lwz	r3, 8(r0)
+#endif
 	b	DataAccess
 
 /* This is an instruction TLB error on the MPC8xx.  This could be due
@@ -474,6 +528,12 @@ InstructionTLBError:
  */
 	. = 0x1400
 DataTLBError:
+#ifdef CONFIG_8xx_CPU6
+	stw	r3, 8(r0)
+	li	r3, 0x3f80
+	stw	r3, 12(r0)
+	lwz	r3, 12(r0)
+#endif
 	mtspr	M_TW, r20	/* Save a couple of working registers */
 	mfcr	r20
 	stw	r20, 0(r0)
@@ -487,52 +547,59 @@ DataTLBError:
 
 	mfspr	r20, M_TWB	/* Get level 1 table entry address */
 	lwz	r21, 0(r20)	/* Get the level 1 entry */
-	rlwinm.	r20, r21,0,0,20	/* Extract page descriptor page address */
+	rlwinm.	r20, r21,0,0,19	/* Extract page descriptor page address */
 	beq	2f		/* If zero, bail */
 
 	/* We have a pte table, so fetch the pte from the table.
 	 */
 	tophys(r21, r21)
 	ori	r21, r21, 1		/* Set valid bit in physical L2 page */
+#ifdef CONFIG_8xx_CPU6
+	li	r3, 0x3b80
+	stw	r3, 12(r0)
+	lwz	r3, 12(r0)
+#endif
 	mtspr	MD_TWC, r21		/* Load pte table base address */
 	mfspr	r21, MD_TWC		/* ....and get the pte address */
-	lwz	r21, 0(r21)		/* Get the pte */
+	lwz	r20, 0(r21)		/* Get the pte */
 
-	andi.	r20, r21, _PAGE_RW	/* Is it writeable? */
+	andi.	r21, r20, _PAGE_RW	/* Is it writeable? */
 	beq	2f			/* Bail out if not */
 
-	ori	r21, r21, _PAGE_DIRTY	/* Update changed bit */
-	mfspr	r20, MD_TWC		/* Get pte address again */
-	stw	r21, 0(r20)		/* and update pte in table */
+	/* Update 'changed', among others.
+	*/
+	ori	r20, r20, _PAGE_DIRTY|_PAGE_HWWRITE|_PAGE_ACCESSED
+	mfspr	r21, MD_TWC		/* Get pte address again */
+	stw	r20, 0(r21)		/* and update pte in table */
 
 	/* Set four subpage valid bits (24, 25, 26, and 27).
-	 * Since we currently run MD_CTR.PPCS = 0, the manual says,
-	 *	"If the page size is larger than 4k byte, then all the
-	 *	 4 bits should have the same value."
-	 * I don't really know what to do if the page size is 4k Bytes,
-	 * but I know setting them all to 0 does not work, and setting them
-	 * all to 1 does, so that is the way it is right now.
-	 * BTW, these four bits map to the software only bits in the
-	 * linux page table.  I used to turn them all of, but now just
-	 * set them all for the hardware.
-	li	r20, 0x00f0
-	andc	r20, r21, r20
-	ori	r20, r20, 0x0080
+	 * Clear bit 28 (which should be in the PTE, but we do this anyway).
 	 */
-	ori	r20, r21, 0x00f0
-
+	li	r21, 0x00f0
+	rlwimi	r20, r21, 0, 24, 28
+#ifdef CONFIG_8xx_CPU6
+	li	r3, 0x3d80
+	stw	r3, 12(r0)
+	lwz	r3, 12(r0)
+#endif
 	mtspr	MD_RPN, r20	/* Update TLB entry */
 
 	mfspr	r20, M_TW	/* Restore registers */
 	lwz	r21, 0(r0)
 	mtcr	r21
 	lwz	r21, 4(r0)
+#ifdef CONFIG_8xx_CPU6
+	lwz	r3, 8(r0)
+#endif
 	rfi
 2:
 	mfspr	r20, M_TW	/* Restore registers */
 	lwz	r21, 0(r0)
 	mtcr	r21
 	lwz	r21, 4(r0)
+#ifdef CONFIG_8xx_CPU6
+	lwz	r3, 8(r0)
+#endif
 	b	DataAccess
 
 	STD_EXCEPTION(0x1500, Trap_15, UnknownException)
@@ -542,6 +609,7 @@ DataTLBError:
 	STD_EXCEPTION(0x1900, Trap_19, UnknownException)
 	STD_EXCEPTION(0x1a00, Trap_1a, UnknownException)
 	STD_EXCEPTION(0x1b00, Trap_1b, UnknownException)
+
 /* On the MPC8xx, these next four traps are used for development
  * support of breakpoints and such.  Someday I will get around to
  * using them.

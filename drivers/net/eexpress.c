@@ -1623,13 +1623,10 @@ eexp_set_multicast(struct net_device *dev)
 #ifdef MODULE
 
 #define EEXP_MAX_CARDS     4    /* max number of cards to support */
-#define NAMELEN            8    /* max length of dev->name (inc null) */
-
-static char namelist[NAMELEN * EEXP_MAX_CARDS] = { 0, };
 
 static struct net_device dev_eexp[EEXP_MAX_CARDS] =
 {
-        { NULL,         /* will allocate dynamically */
+        { "",
 	  0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, express_probe },
 };
 
@@ -1649,7 +1646,6 @@ int init_module(void)
 
 	for (this_dev = 0; this_dev < EEXP_MAX_CARDS; this_dev++) {
 		struct net_device *dev = &dev_eexp[this_dev];
-		dev->name = namelist + (NAMELEN*this_dev);
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
 		if (io[this_dev] == 0) {

@@ -231,7 +231,7 @@ static void setup_erase_request(client_handle_t handle, eraseq_entry_t *erase)
 	    busy = kmalloc(sizeof(erase_busy_t), GFP_KERNEL);
 	    busy->erase = erase;
 	    busy->client = handle;
-	    busy->timeout.prev = busy->timeout.next = NULL;
+	    init_timer(&busy->timeout);
 	    busy->timeout.data = (u_long)busy;
 	    busy->timeout.function = &handle_erase_timeout;
 	    busy->prev = busy->next = NULL;

@@ -1205,9 +1205,8 @@ MODULE_DESCRIPTION("General Instruments SB1000 driver");
 MODULE_PARM(io, "1-2i");
 MODULE_PARM(irq, "i");
 
-static char devname[8] = {0, };
 static struct net_device dev_sb1000 = {
-        devname,
+        "",
         0, 0, 0, 0,
         0, 0,
         0, 0, 0, NULL, sb1000_probe };
@@ -1220,8 +1219,8 @@ init_module(void)
 {
 	int i;
 	for (i = 0; i < 100; i++) {
-		sprintf(devname, "cm%d", i);
-		if (dev_get(devname) == 0) break;
+		sprintf(dev_sb1000.name, "cm%d", i);
+		if (dev_get(dev_sb1000.name) == 0) break;
 	}
 	if (i == 100) {
 		printk(KERN_ERR "sb1000: can't register any device cm<n>\n");

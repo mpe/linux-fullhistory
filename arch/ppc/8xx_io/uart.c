@@ -41,6 +41,10 @@
 #include <asm/8xx_immap.h>
 #include <asm/mpc8xx.h>
 #include "commproc.h"
+ 
+#ifdef CONFIG_KGDB
+extern int  kgdb_output_string (const char* s, unsigned int count);
+#endif
 
 #ifdef CONFIG_SERIAL_CONSOLE
 #include <linux/console.h>
@@ -700,25 +704,18 @@ static int startup(ser_info_t *info)
 		 * are coming.
 		 */
 		up = (smc_uart_t *)&cpmp->cp_dparam[state->port];
-#if 0
-		up->smc_mrblr = 1;	/* receive buffer length */
-		up->smc_maxidl = 0;	/* wait forever for next char */
-#else
+
 		up->smc_mrblr = RX_BUF_SIZE;
 		up->smc_maxidl = RX_BUF_SIZE;
-#endif
+
 		up->smc_brkcr = 1;	/* number of break chars */
 	}
 	else {
 		sccp = &cpmp->cp_scc[idx - SCC_IDX_BASE];
 		scup = (scc_uart_t *)&cpmp->cp_dparam[state->port];
-#if 0
-		scup->scc_genscc.scc_mrblr = 1;	/* receive buffer length */
-		scup->scc_maxidl = 0;	/* wait forever for next char */
-#else
+
 		scup->scc_genscc.scc_mrblr = RX_BUF_SIZE;
 		scup->scc_maxidl = RX_BUF_SIZE;
-#endif
 
 		sccp->scc_sccm |= (UART_SCCM_TX | UART_SCCM_RX);
 		sccp->scc_gsmrl |= (SCC_GSMRL_ENR | SCC_GSMRL_ENT);
@@ -959,6 +956,12 @@ static int rs_8xx_write(struct tty_struct * tty, int from_user,
 	ser_info_t *info = (ser_info_t *)tty->driver_data;
 	volatile cbd_t *bdp;
 
+#ifdef CONFIG_KGDB
+	/* Try to let stub handle output. Returns true if it did. */ 
+	if (kgdb_output_string(buf, count))
+		return ret;
+#endif
+
 	if (serial_paranoia_check(info, tty->device, "rs_write"))
 		return 0;
 
@@ -979,8 +982,8 @@ static int rs_8xx_write(struct tty_struct * tty, int from_user,
 		}
 
 		if (from_user) {
-			if (c !=
-			    copy_from_user(__va(bdp->cbd_bufaddr), buf, c)) {
+			c -= copy_from_user(__va(bdp->cbd_bufaddr), buf, c);
+			if (!c) {
 				if (!ret)
 					ret = -EFAULT;
 				break;
@@ -2099,7 +2102,7 @@ static _INLINE_ void show_serial_version(void)
  * Print a string to the serial port trying not to disturb any possible
  * real use of the port...
  */
-static void serial_console_write(struct console *c, const char *s,
+static void my_console_write(int idx, const char *s,
 				unsigned count)
 {
 	struct		serial_state	*ser;
@@ -2109,7 +2112,7 @@ static void serial_console_write(struct console *c, const char *s,
 	volatile	smc_uart_t	*up;
 	volatile	u_char		*cp;
 
-	ser = rs_table + c->index;
+	ser = rs_table + idx;
 
 	/* If the port has been initialized for general use, we have
 	 * to use the buffer descriptors allocated there.  Otherwise,
@@ -2146,8 +2149,15 @@ static void serial_console_write(struct console *c, const char *s,
 		 * that, not that it is ready for us to send.
 		 */
 		while (bdp->cbd_sc & BD_SC_READY);
-		/* Send the character out. */
-		cp = __va(bdp->cbd_bufaddr);
+
+		/* Send the character out.
+		 * If the buffer address is in the CPM DPRAM, don't
+		 * convert it.
+		 */
+		if ((uint)(bdp->cbd_bufaddr) > (uint)IMAP_ADDR)
+			cp = (u_char *)(bdp->cbd_bufaddr);
+		else
+			cp = __va(bdp->cbd_bufaddr);
 		*cp = *s;
 		
 		bdp->cbd_datlen = 1;
@@ -2185,19 +2195,48 @@ static void serial_console_write(struct console *c, const char *s,
 		info->tx_cur = (cbd_t *)bdp;
 }
 
+static void serial_console_write(struct console *c, const char *s,
+				unsigned count)
+{
+#ifdef CONFIG_KGDB
+	/* Try to let stub handle output. Returns true if it did. */ 
+	if (kgdb_output_string(s, count))
+		return;
+#endif
+	my_console_write(c->index, s, count);
+}
+
+#ifdef CONFIG_XMON
+int
+xmon_8xx_write(const char *s, unsigned count)
+{
+	my_console_write(0, s, count);
+	return(count);
+}
+#endif
+
+#ifdef CONFIG_KGDB
+void
+putDebugChar(char ch)
+{
+	my_console_write(0, &ch, 1);
+}
+#endif
+
 /*
  * Receive character from the serial port.  This only works well
  * before the port is initialize for real use.
  */
-static int serial_console_wait_key(struct console *co)
+static int my_console_wait_key(int idx, int xmon, char *obuf)
 {
 	struct serial_state		*ser;
 	u_char				c, *cp;
 	ser_info_t			*info;
 	volatile	cbd_t		*bdp;
 	volatile	smc_uart_t	*up;
+	int				i;
 
-	ser = rs_table + co->index;
+	ser = rs_table + idx;
 
 	/* Pointer to UART in parameter ram.
 	*/
@@ -2215,9 +2254,34 @@ static int serial_console_wait_key(struct console *co)
 	/*
 	 * We need to gracefully shut down the receiver, disable
 	 * interrupts, then read the input.
+	 * XMON just wants a poll.  If no character, return -1, else
+	 * return the character.
 	 */
-	while (bdp->cbd_sc & BD_SC_EMPTY);	/* Wait for a character */
-	cp = __va(bdp->cbd_bufaddr);
+	if (!xmon) {
+		while (bdp->cbd_sc & BD_SC_EMPTY);
+	}
+	else {
+		if (bdp->cbd_sc & BD_SC_EMPTY)
+			return -1;
+	}
+
+	/* If the buffer address is in the CPM DPRAM, don't
+	 * convert it.
+	 */
+	if ((uint)(bdp->cbd_bufaddr) > (uint)IMAP_ADDR)
+		cp = (u_char *)(bdp->cbd_bufaddr);
+	else
+		cp = __va(bdp->cbd_bufaddr);
+
+	if (obuf) {
+		i = c = bdp->cbd_datlen;
+		while (i-- > 0)
+			*obuf++ = *cp++;
+	}
+	else {
+		c = *cp;
+	}
+	bdp->cbd_sc |= BD_SC_EMPTY;
 
 	if (info) {
 		if (bdp->cbd_sc & BD_SC_WRAP) {
@@ -2229,9 +2293,88 @@ static int serial_console_wait_key(struct console *co)
 		info->rx_cur = (cbd_t *)bdp;
 	}
 
-	c = *cp;
 	return((int)c);
 }
+
+static int serial_console_wait_key(struct console *co)
+{
+	return(my_console_wait_key(co->index, 0, NULL));
+}
+
+#ifdef CONFIG_XMON
+int
+xmon_8xx_read_poll(void)
+{
+	return(my_console_wait_key(0, 1, NULL));
+}
+
+int
+xmon_8xx_read_char(void)
+{
+	return(my_console_wait_key(0, 0, NULL));
+}
+#endif
+
+#ifdef CONFIG_KGDB
+static char kgdb_buf[RX_BUF_SIZE], *kgdp;
+static int kgdb_chars;
+
+unsigned char
+getDebugChar(void)
+{
+	if (kgdb_chars <= 0) {
+		kgdb_chars = my_console_wait_key(0, 0, kgdb_buf);
+		kgdp = kgdb_buf;
+	}
+	kgdb_chars--;
+
+	return(*kgdp++);
+}
+
+void kgdb_interruptible(int state)
+{
+}
+void kgdb_map_scc(void)
+{
+	struct		serial_state *ser;
+	uint		mem_addr;
+	volatile	cbd_t		*bdp;
+	volatile	smc_uart_t	*up;
+
+	cpmp = (cpm8xx_t *)&(((immap_t *)IMAP_ADDR)->im_cpm);
+
+	/* To avoid data cache CPM DMA coherency problems, allocate a
+	 * buffer in the CPM DPRAM.  This will work until the CPM and
+	 * serial ports are initialized.  At that time a memory buffer
+	 * will be allcoated.
+	 * The port is already initialized from the boot procedure, all
+	 * we do here is give it a different buffer and make it a FIFO.
+	 */
+
+	ser = rs_table;
+
+	/* Right now, assume we are using SMCs.
+	*/
+	up = (smc_uart_t *)&cpmp->cp_dparam[ser->port];
+
+	/* Allocate space for an input FIFO, plus a few bytes for output.
+	 * Allocate bytes to maintain word alignment.
+	 */
+	mem_addr = (uint)(&cpmp->cp_dpmem[0x1000]);
+
+	/* Set the physical address of the host memory buffers in
+	 * the buffer descriptors.
+	 */
+	bdp = (cbd_t *)&cpmp->cp_dpmem[up->smc_rbase];
+	bdp->cbd_bufaddr = mem_addr;
+
+	bdp = (cbd_t *)&cpmp->cp_dpmem[up->smc_tbase];
+	bdp->cbd_bufaddr = mem_addr+RX_BUF_SIZE;
+
+	up->smc_mrblr = RX_BUF_SIZE;		/* receive buffer length */
+	up->smc_maxidl = RX_BUF_SIZE;
+}
+#endif
 
 static kdev_t serial_console_device(struct console *c)
 {
@@ -2522,8 +2665,8 @@ int __init rs_8xx_init(void)
 				 * character interrupts.  Using idle charater
 				 * time requires some additional tuning.
 				 */
-				up->smc_mrblr = 1;
-				up->smc_maxidl = 0;
+				up->smc_mrblr = RX_BUF_SIZE;
+				up->smc_maxidl = RX_BUF_SIZE;
 				up->smc_brkcr = 1;
 
 				/* Send the CPM an initialize command.
@@ -2557,12 +2700,8 @@ int __init rs_8xx_init(void)
 				sup->scc_genscc.scc_rfcr = SMC_EB;
 				sup->scc_genscc.scc_tfcr = SMC_EB;
 
-				/* Set this to 1 for now, so we get single
-				 * character interrupts.  Using idle charater
-				 * time requires some additional tuning.
-				 */
-				sup->scc_genscc.scc_mrblr = 1;
-				sup->scc_maxidl = 0;
+				sup->scc_genscc.scc_mrblr = RX_BUF_SIZE;
+				sup->scc_maxidl = RX_BUF_SIZE;
 				sup->scc_brkcr = 1;
 				sup->scc_parec = 0;
 				sup->scc_frmec = 0;
@@ -2629,6 +2768,7 @@ int __init rs_8xx_init(void)
 #endif
 		}
 	}
+
 	return 0;
 }
 
@@ -2678,16 +2818,17 @@ static int __init serial_console_setup(struct console *co, char *options)
 	*/
 	dp_addr = m8xx_cpm_dpalloc(sizeof(cbd_t) * 2);
 
-	/* Allocate space for two 2 byte FIFOs in the host memory.
-	*/
-	mem_addr = m8xx_cpm_hostalloc(4);
+	/* Allocate space for an input FIFO, plus a few bytes for output.
+	 * Allocate bytes to maintain word alignment.
+	 */
+	mem_addr = m8xx_cpm_hostalloc(RX_BUF_SIZE + 4);
 
 	/* Set the physical address of the host memory buffers in
 	 * the buffer descriptors.
 	 */
 	bdp = (cbd_t *)&cp->cp_dpmem[dp_addr];
 	bdp->cbd_bufaddr = __pa(mem_addr);
-	(bdp+1)->cbd_bufaddr = __pa(mem_addr+2);
+	(bdp+1)->cbd_bufaddr = __pa(mem_addr+RX_BUF_SIZE);
 
 	/* For the receive, set empty and wrap.
 	 * For transmit, set wrap.
@@ -2702,10 +2843,8 @@ static int __init serial_console_setup(struct console *co, char *options)
 	up->smc_rfcr = SMC_EB;
 	up->smc_tfcr = SMC_EB;
 
-	/* Set this to 1 for now, so we get single character interrupts.
-	*/
-	up->smc_mrblr = 1;		/* receive buffer length */
-	up->smc_maxidl = 0;		/* wait forever for next char */
+	up->smc_mrblr = RX_BUF_SIZE;		/* receive buffer length */
+	up->smc_maxidl = RX_BUF_SIZE;
 
 	/* Send the CPM an initialize command.
 	*/

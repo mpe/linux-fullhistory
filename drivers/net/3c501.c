@@ -917,11 +917,9 @@ static void set_multicast_list(struct net_device *dev)
 
 #ifdef MODULE
 
-static char devicename[9] = { 0, };
-
 static struct net_device dev_3c501 =
 {
-	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	"", /* device name is inserted by linux/drivers/net/net_init.c */
 	0, 0, 0, 0,
 	0x280, 5,
 	0, 0, 0, NULL, el1_probe

@@ -591,7 +591,7 @@ static void get_raw_sock(struct sock *sp, char *tmpbuf, int i)
 	src   = sp->rcv_saddr;
 	destp = 0;
 	srcp  = sp->num;
-	timer_active = (sp->timer.prev != NULL) ? 2 : 0;
+	timer_active = (timer_pending(&sp->timer)) ? 2 : 0;
 	timer_expires = (timer_active == 2 ? sp->timer.expires : jiffies);
 	sprintf(tmpbuf, "%4d: %08X:%04X %08X:%04X"
 		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld %d %p",

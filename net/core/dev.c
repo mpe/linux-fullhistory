@@ -453,13 +453,12 @@ int dev_alloc_name(struct net_device *dev, const char *name)
 
 struct net_device *dev_alloc(const char *name, int *err)
 {
-	struct net_device *dev=kmalloc(sizeof(struct net_device)+16, GFP_KERNEL);
+	struct net_device *dev=kmalloc(sizeof(struct net_device), GFP_KERNEL);
 	if (dev == NULL) {
 		*err = -ENOBUFS;
 		return NULL;
 	}
 	memset(dev, 0, sizeof(struct net_device));
-	dev->name = (char *)(dev + 1);	/* Name string space */
 	*err = dev_alloc_name(dev, name);
 	if (*err < 0) {
 		kfree(dev);

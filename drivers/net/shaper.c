@@ -688,11 +688,9 @@ int __init shaper_probe(struct net_device *dev)
  
 #ifdef MODULE
 
-static char devicename[9];
-
 static struct net_device dev_shape = 
 {
-	devicename,
+	"",
 	0, 0, 0, 0,
 	0, 0,
 	0, 0, 0, NULL, shaper_probe 

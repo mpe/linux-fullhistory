@@ -1,7 +1,7 @@
 /* -*- linux-c -*- */
 
 /* 
- * Driver for USB Scanners (linux-2.3.99-pre3-7)
+ * Driver for USB Scanners (linux-2.3.99-pre6-3)
  *
  * Copyright (C) 1999, 2000 David E. Nelson
  *
@@ -54,7 +54,7 @@
  *    - Removed unnessesary #include's
  *    - Scanner model now reported via syslog INFO after being detected 
  *      *and* configured.
- *    - Added user specified verdor:product USB ID's which can be passed 
+ *    - Added user specified vendor:product USB ID's which can be passed 
  *      as module parameters.
  *
  *
@@ -168,6 +168,32 @@
  *      -EINTR.
  *
  *
+ * 0.4.3  4/30/2000
+ *
+ *    - Added Umax Astra 2200 ID.  Thanks to Flynn Marquardt 
+ *      <flynn@isr.uni-stuttgart.de>.
+ *    - Added iVina 1200U ID. Thanks to Dyson Lin <dyson@avision.com.tw>.
+ *    - Added access time update for the device file courtesy of Paul
+ *      Mackerras <paulus@linuxcare.com>.  This allows a user space daemon
+ *      to turn the lamp off for a Umax 1220U scanner after a prescribed
+ *      time.
+ *    - Fixed HP S20 ID's.  Thanks to Ruud Linders <rlinders@xs4all.nl>.
+ *    - Added Acer ScanPrisa 620U ID. Thanks to Oliver
+ *      Schwartz <Oliver.Schwartz@gmx.de> via sane-devel mail list.
+ *    - Fixed bug in read_scanner for copy_to_user() function.  The returned
+ *      value should be 'partial' not 'this_read'.
+ *    - Fixed bug in read_scanner. 'count' should be decremented 
+ *      by 'this_read' and not by 'partial'.  This resulted in twice as many
+ *      calls to read_scanner() for small amounts of data and possibly
+ *      unexpected returns of '0'.  Thanks to Karl Heinz 
+ *      Kremer <khk@khk.net> and Alain Knaff <Alain.Knaff@ltnb.lu>
+ *      for discovering this.
+ *    - Integrated Randy Dunlap's <randy.dunlap@intel.com> patch for a
+ *      scanner lookup/ident table. Thanks Randy.
+ *    - Documentation updates.
+ *    - Added wait queues to read_scanner().
+ *
+ *
  *  TODO
  *
  *    - Performance
@@ -186,7 +212,9 @@
  *    - Johannes Erdfelt for the loaning of a USB analyzer for tracking an
  *      issue with HP-4100 and uhci.
  *    - Adolfo Montero for his assistance.
- *    - And anybody else who chimed in with reports and suggestions.
+ *    - All the folks who chimed in with reports and suggestions.
+ *    - All the developers that are working on USB SANE backends or other
+ *      applications to use USB scanners.
  *
  *  Performance:
  *
@@ -196,8 +224,11 @@
  *       8 Bit Gray  ~ 17 secs - 4.2 Mbit/sec
  */
 
+/* 
+ * Scanner definitions, macros, module info, 
+ * debug/ioctl/data_dump enable, and other constants.
+ */ 
 #include "scanner.h"
-
 
 static void
 irq_scanner(struct urb *urb)
@@ -205,7 +236,7 @@ irq_scanner(struct urb *urb)
 
 /*
  * For the meantime, this is just a placeholder until I figure out what
- * all I want to do with it.
+ * all I want to do with it -- or somebody else for that matter.
  */
 
 	struct scn_usb_data *scn = urb->context;
@@ -234,7 +265,7 @@ open_scanner(struct inode * inode, struct file * file)
 	dbg("open_scanner: scn_minor:%d", scn_minor);
 
 	if (!p_scn_table[scn_minor]) {
-		err("open_scanner(%d): invalid scn_minor", scn_minor);
+		err("open_scanner(%d): Unable to access minor data", scn_minor);
 		return -ENODEV;
 	}
 
@@ -243,16 +274,21 @@ open_scanner(struct inode * inode, struct file * file)
 	dev = scn->scn_dev;
 
 	if (!dev) {
+		err("open_scanner(%d): Scanner device not present", scn_minor);
 		return -ENODEV;
 	}
 
 	if (!scn->present) {
+		err("open_scanner(%d): Scanner is not present", scn_minor);
 		return -ENODEV;
 	}
 
 	if (scn->isopen) {
+		err("open_scanner(%d): Scanner device is already open", scn_minor);
 		return -EBUSY;
 	}
+
+	init_waitqueue_head(&scn->rd_wait_q);
 
 	scn->isopen = 1;
 
@@ -316,6 +352,8 @@ write_scanner(struct file * file, const char * buffer,
 
 	dev = scn->scn_dev;
 
+	file->f_dentry->d_inode->i_atime = CURRENT_TIME;
+
 	while (count > 0) {
 
 		if (signal_pending(current)) {
@@ -365,7 +403,6 @@ write_scanner(struct file * file, const char * buffer,
 			bytes_written += partial;
 		} else { /* No data written */
 			ret = 0;
-			bytes_written = 0;
 			break;
 		}
 	}
@@ -388,6 +425,7 @@ read_scanner(struct file * file, char * buffer,
 	int partial;		/* Number of bytes successfully read */
 	int this_read;		/* Max number of bytes to read */
 	int result;
+	int rd_expire = RD_EXPIRE;
 
 	char *ibuf;
 
@@ -402,7 +440,12 @@ read_scanner(struct file * file, char * buffer,
 	bytes_read = 0;
 	ret = 0;
 
-	while (count) {
+	file->f_dentry->d_inode->i_atime = CURRENT_TIME; /* Update the
+                                                            atime of
+                                                            the device
+                                                            node */
+
+	while (count > 0) {
 		if (signal_pending(current)) {
 			ret = -EINTR;
 			break;
@@ -410,13 +453,34 @@ read_scanner(struct file * file, char * buffer,
 
 		this_read = (count >= IBUF_SIZE) ? IBUF_SIZE : count;
 		
-		result = usb_bulk_msg(dev, usb_rcvbulkpipe(dev, scn->bulk_in_ep), ibuf, this_read, &partial, 120*HZ);
-		dbg("read stats(%d): result:%d this_read:%d partial:%d", scn_minor, result, this_read, partial);
+		result = usb_bulk_msg(dev, usb_rcvbulkpipe(dev, scn->bulk_in_ep), ibuf, this_read, &partial, RD_NAK_TIMEOUT);
+		dbg("read stats(%d): result:%d this_read:%d partial:%d count:%d", scn_minor, result, this_read, partial, count);
 
-		if (result == USB_ST_TIMEOUT) { /* NAK -- shouldn't happen */
-			warn("read_scanner(%d): NAK received", scn_minor);
-			ret = -ETIME;
-			break;
+/* 
+ * Scanners are sometimes inheriently slow since they are mechanical
+ * in nature.  USB bulk reads tend to timeout while the scanner is
+ * positioning, resetting, warming up the lamp, etc if the timeout is
+ * set too low.  A very long timeout parameter for bulk reads was used
+ * to overcome this limitation, but this sometimes resulted in folks
+ * having to wait for the timeout to expire after pressing Ctrl-C from
+ * an application. The user was sometimes left with the impression
+ * that something had hung or crashed when in fact the USB read was
+ * just waiting on data.  So, the below code retains the same long
+ * timeout period, but splits it up into smaller parts so that
+ * Ctrl-C's are acted upon in a reasonable amount of time. 
+ */
+
+		if (result == USB_ST_TIMEOUT && !partial) { /* Timeout
+                                                               and no
+                                                               data */
+			if (--rd_expire <= 0) {
+				warn("read_scanner(%d): excessive NAK's received", scn_minor);
+				ret = -ETIME;
+				break;
+			} else {
+				interruptible_sleep_on_timeout(&scn->rd_wait_q, RD_NAK_TIMEOUT);
+				continue;
+			}
 		} else if ((result < 0) && (result != USB_ST_DATAUNDERRUN)) {
 			warn("read_scanner(%d): funky result:%d. Please notify the maintainer.", scn_minor, (int)result);
 			ret = -EIO;
@@ -436,19 +500,17 @@ read_scanner(struct file * file, char * buffer,
 #endif
 
 		if (partial) { /* Data returned */
-			if (copy_to_user(buffer, ibuf, this_read)) {
+			if (copy_to_user(buffer, ibuf, partial)) {
 				ret = -EFAULT;
 				break;
 			}
-			count -= partial;
-			bytes_read += partial;
+			count -= this_read; /* Compensate for short reads */
+			bytes_read += partial; /* Keep tally of what actually was read */
 			buffer += partial;
-			
 		} else {
 			ret = 0;
 			break;
 		}
-		
 	}
 	
 	return ret ? ret : bytes_read;
@@ -462,6 +524,7 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 	struct usb_endpoint_descriptor *endpoint;
 	
 	int ep_cnt;
+	int ix;
 
 	kdev_t scn_minor;
 
@@ -497,120 +560,20 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
  * Until we detect a device which is pleasing, we silently punt.
  */
 
-	do {
-		if (dev->descriptor.idVendor == 0x03f0) {          /* Hewlett Packard */
-			if (dev->descriptor.idProduct == 0x0205 || /* 3300C */
-			    dev->descriptor.idProduct == 0x0101 || /* 4100C */
-			    dev->descriptor.idProduct == 0x0105 || /* 4200C */
-			    dev->descriptor.idProduct == 0x0202 || /* PhotoSmart S20 */
-			    dev->descriptor.idProduct == 0x0401 || /* 5200C */
-			    dev->descriptor.idProduct == 0x0201 || /* 6200C */
-			    dev->descriptor.idProduct == 0x0601) { /* 6300C */
-				valid_device = 1;
-				break;
-			}
-		}
-		
-		if (dev->descriptor.idVendor == 0x06bd) {	   /* Agfa */
-		    	if (dev->descriptor.idProduct == 0x0001 || /* SnapScan 1212U */
-		    	    dev->descriptor.idProduct == 0x2061 || /* Another SnapScan 1212U (?) */
-		    	    dev->descriptor.idProduct == 0x0100) { /* SnapScan Touch */
-				valid_device = 1;
-				break;
-			}
-		}
-		
-		if (dev->descriptor.idVendor == 0x1606) {          /* Umax */
-			if (dev->descriptor.idProduct == 0x0010 || /* Astra 1220U */
-			    dev->descriptor.idProduct == 0x0030 || /* Astra 2000U */
-			    dev->descriptor.idProduct == 0x0002) { /* Astra 1236U */
-				valid_device = 1;
-				break;
-			}
-		}
-		
-		if (dev->descriptor.idVendor == 0x04b8)	{          /* Seiko/Epson Corp. */
-			if (dev->descriptor.idProduct == 0x0101 || /* Perfection 636U and 636Photo */
-			    dev->descriptor.idProduct == 0x0103 || /* Perfection 610 */
-			    dev->descriptor.idProduct == 0x0104) { /* Perfection 1200U and 1200Photo */
-				valid_device = 1;
-				break;
-			}
-		}
-
-		if (dev->descriptor.idVendor == 0x055f)	{          /* Mustek */
-			if (dev->descriptor.idProduct == 0x0001) { /* 1200 CU */
-				valid_device = 1;
-				break;
-			}
-		}
-
-		if (dev->descriptor.idVendor == 0x05da) {          /* Microtek */
-			if (dev->descriptor.idProduct == 0x0099 || /* ScanMaker X6 - X6U */
-			    dev->descriptor.idProduct == 0x0094 || /* Phantom 336CX - C3 */
-			    dev->descriptor.idProduct == 0x00a0 || /* Phantom 336CX - C3 #2 */
-			    dev->descriptor.idProduct == 0x009a || /* Phantom C6 */
-			    dev->descriptor.idProduct == 0x00a3 || /* ScanMaker V6USL */
-			    dev->descriptor.idProduct == 0x80a3 || /* ScanMaker V6USL #2 */
-			    dev->descriptor.idProduct == 0x80ac) { /* ScanMaker V6UL - SpicyU */
-				valid_device = 1;
-				break;
-			}
-		}
-
-		if (dev->descriptor.idVendor == 0x0461) {          /* Primax/Colorado */
-			if (dev->descriptor.idProduct == 0x0300 || /* G2-300 #1 */
-			    dev->descriptor.idProduct == 0x0380 || /* G2-600 #1 */
-			    dev->descriptor.idProduct == 0x0301 || /* G2E-300 */
-			    dev->descriptor.idProduct == 0x0381 || /* ReadyScan 636i */
-			    dev->descriptor.idProduct == 0x0302 || /* G2-300 #2 */
-			    dev->descriptor.idProduct == 0x0382 || /* G2-600 #2 */
-			    dev->descriptor.idProduct == 0x0303 || /* G2E-300 */
-			    dev->descriptor.idProduct == 0x0383 || /* G2E-600 */
-			    dev->descriptor.idProduct == 0x0340 || /* Colorado USB 9600 */
-			    dev->descriptor.idProduct == 0x0360 || /* Colorado USB 19200 */
-			    dev->descriptor.idProduct == 0x0341 || /* Colorado 600u */
-			    dev->descriptor.idProduct == 0x0361) { /* Colorado 1200u */
-				valid_device = 1;
-				break;
-			}
-		}
-		
-		if (dev->descriptor.idVendor == 0x04a7) {          /* Visioneer */
-			if (dev->descriptor.idProduct == 0x0221 || /* OneTouch 5300 */
-			    dev->descriptor.idProduct == 0x0221 || /* OneTouch 7600 */
-			    dev->descriptor.idProduct == 0x0231) { /* 6100 */
-				valid_device = 1;
-				break;
-			}
-		}
-		
-		if (dev->descriptor.idVendor == 0x0458) {          /* Genius */
-			if(dev->descriptor.idProduct == 0x2001) { /* ColorPage-Vivid Pro */
-				valid_device = 1;
-				break;
-			}
-		}
-		
-		if (dev->descriptor.idVendor == 0x04a5) {          /* Acer */
-			if(dev->descriptor.idProduct == 0x2060) { /* Prisa Acerscan 620U */
-				valid_device = 1;
-				break;
-			}
-		}
-		
-		if (dev->descriptor.idVendor == vendor &&   /* User specified */
-		    dev->descriptor.idProduct == product) { /* User specified */
+	for (ix = 0; ix < sizeof (scanner_device_ids) / sizeof (struct scanner_device); ix++) {
+		if ((dev->descriptor.idVendor == scanner_device_ids [ix].idVendor) &&
+		    (dev->descriptor.idProduct == scanner_device_ids [ix].idProduct)) {
 			valid_device = 1;
 			break;
-		}
-		
-		
-	} while (0);
+                }
+	}
+	if (dev->descriptor.idVendor == vendor &&   /* User specified */
+	    dev->descriptor.idProduct == product) { /* User specified */
+		valid_device = 1;
+	}
 	
-	if (!valid_device)	
-		return NULL;	/* We didn't find anything pleasing */
-
+        if (!valid_device)
+                return NULL;    /* We didn't find anything pleasing */
 
 /*
  * After this point we can be a little noisy about what we are trying to

@@ -502,7 +502,7 @@ int proc_dol2crvec(ctl_table *table, int write, struct file *filp,
 	#define TMPBUFLEN 256
 	char buf[TMPBUFLEN], *p;
 	static const char *sizestrings[4] = {
-		"unknown size", "256KB", "512KB", "1MB"
+		"2MB", "256KB", "512KB", "1MB"
 	};
 	static const char *clockstrings[8] = {
 		"clock disabled", "+1 clock", "+1.5 clock", "reserved(3)",

@@ -8,7 +8,7 @@
 #include <asm/mpc8xx.h>
 #include "ppc8xx_pic.h"
 
-/* The 8xx or 82xx internal interrupt controller.  It is usually
+/* The 8xx internal interrupt controller.  It is usually
  * the only interrupt controller.  Some boards, like the MBX and
  * Sandpoint have the 8259 as a secondary controller.  Depending
  * upon the processor type, the internal controller can have as
@@ -25,13 +25,8 @@ static void m8xx_mask_irq(unsigned int irq_nr)
 	word = irq_nr >> 5;
 
 	ppc_cached_irq_mask[word] &= ~(1 << (31-bit));
-#ifdef CONFIG_82xx
-	((immap_t *)IMAP_ADDR)->im_siu_conf.sc_simask[word] =
-						ppc_cached_irq_mask[word];
-#else
 	((immap_t *)IMAP_ADDR)->im_siu_conf.sc_simask =
 						ppc_cached_irq_mask[word];
-#endif
 }
 
 static void m8xx_unmask_irq(unsigned int irq_nr)
@@ -42,13 +37,8 @@ static void m8xx_unmask_irq(unsigned int irq_nr)
 	word = irq_nr >> 5;
 
 	ppc_cached_irq_mask[word] |= (1 << (31-bit));
-#ifdef CONFIG_82xx
-	((immap_t *)IMAP_ADDR)->im_siu_conf.sc_simask[word] =
-						ppc_cached_irq_mask[word];
-#else
 	((immap_t *)IMAP_ADDR)->im_siu_conf.sc_simask =
 						ppc_cached_irq_mask[word];
-#endif
 }
 
 static void m8xx_mask_and_ack(unsigned int irq_nr)
@@ -59,15 +49,9 @@ static void m8xx_mask_and_ack(unsigned int irq_nr)
 	word = irq_nr >> 5;
 
 	ppc_cached_irq_mask[word] &= ~(1 << (31-bit));
-#ifdef CONFIG_82xx
-	((immap_t *)IMAP_ADDR)->im_siu_conf.sc_simask[word] =
-						ppc_cached_irq_mask[word];
-	((immap_t *)IMAP_ADDR)->im_siu_conf.sc_sipend[word] = 1 << (31-bit);
-#else
 	((immap_t *)IMAP_ADDR)->im_siu_conf.sc_simask =
 						ppc_cached_irq_mask[word];
 	((immap_t *)IMAP_ADDR)->im_siu_conf.sc_sipend = 1 << (31-bit);
-#endif
 }
 
 struct hw_interrupt_type ppc8xx_pic = {
@@ -129,7 +113,7 @@ m8xx_get_irq(struct pt_regs *regs)
 
 /* The MBX is the only 8xx board that uses the 8259.
 */
-#ifdef CONFIG_MBX
+#if defined(CONFIG_MBX) && defined(CONFIG_PCI)
 void mbx_i8259_action(int cpl, void *dev_id, struct pt_regs *regs)
 {
 	int bits, irq;
@@ -165,7 +149,7 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 	unsigned long irqflags, const char * devname, void *dev_id)
 {
 
-#ifdef CONFIG_MBX
+#if defined(CONFIG_MBX) && defined(CONFIG_PCI)
 	irq += i8259_pic.irq_offset;
 	return (request_8xxirq(irq, handler, irqflags, devname, dev_id));
 #else

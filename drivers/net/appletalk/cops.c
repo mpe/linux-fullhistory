@@ -1008,11 +1008,9 @@ static struct net_device_stats *cops_get_stats(struct net_device *dev)
 }
 
 #ifdef MODULE
-static char lt_name[16];
-
 static struct net_device cops0_dev =
 {
-	lt_name,	/* device name */
+	"",	/* device name */
         0, 0, 0, 0,
         0x0, 0,  /* I/O address, IRQ */
         0, 0, 0, NULL, cops_probe

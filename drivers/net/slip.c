@@ -89,7 +89,6 @@
 
 
 typedef struct slip_ctrl {
-	char		if_name[16];	/* "sl0\0" .. "sl99999\0"	*/
 	struct slip	ctrl;		/* SLIP things			*/
 	struct net_device	dev;		/* the device			*/
 } slip_ctrl_t;
@@ -805,8 +804,7 @@ sl_alloc(kdev_t line)
 	sl->dev	      	= &slp->dev;
 	spin_lock_init(&sl->lock);
 	sl->mode        = SL_MODE_DEFAULT;
-	sprintf(slp->if_name, "sl%d", i);
-	slp->dev.name         = slp->if_name;
+	sprintf(slp->dev.name, "sl%d", i);
 	slp->dev.base_addr    = i;
 	slp->dev.priv         = (void*)sl;
 	slp->dev.init         = sl_init;

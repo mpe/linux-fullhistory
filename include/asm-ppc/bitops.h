@@ -16,15 +16,18 @@ extern int test_and_set_bit(int nr, volatile void *addr);
 extern int test_and_clear_bit(int nr, volatile void *addr);
 extern int test_and_change_bit(int nr, volatile void *addr);
 
-
-/* Returns the number of 0's to the left of the most significant 1 bit */
-extern __inline__  int cntlzw(int bits)
-{
-	int lz;
-
-	asm ("cntlzw %0,%1" : "=r" (lz) : "r" (bits));
-	return lz;
-}
+/*
+ * Arguably these bit operations don't imply any memory barrier or
+ * SMP ordering, but in fact a lot of drivers expect them to imply
+ * both, since they do on x86 cpus.
+ */
+#ifdef CONFIG_SMP
+#define SMP_WMB		"eieio\n"
+#define SMP_MB		"\nsync"
+#else
+#define SMP_WMB
+#define SMP_MB
+#endif /* CONFIG_SMP */
 
 /*
  * These are if'd out here because using : "cc" as a constraint
@@ -95,15 +98,20 @@ extern __inline__ int test_bit(int nr, __const__ volatile void *addr)
 	return ((p[nr >> 5] >> (nr & 0x1f)) & 1) != 0;
 }
 
+/* Return the bit position of the most significant 1 bit in a word */
+extern __inline__ int __ilog2(unsigned int x)
+{
+	int lz;
+
+	asm ("cntlzw %0,%1" : "=r" (lz) : "r" (x));
+	return 31 - lz;
+}
+
 extern __inline__ int ffz(unsigned int x)
 {
-	int n;
-
-	if (x == ~0)
+	if ((x = ~x) == 0)
 		return 32;
-	x = ~x & (x+1);		/* set LS zero to 1, other bits to 0 */
-	__asm__ ("cntlzw %0,%1" : "=r" (n) : "r" (x));
-	return 31 - n;
+	return __ilog2(x & -x);
 }
 
 #ifdef __KERNEL__
@@ -113,19 +121,10 @@ extern __inline__ int ffz(unsigned int x)
  * the libc and compiler builtin ffs routines, therefore
  * differs in spirit from the above ffz (man ffs).
  */
-
-#define ffs(x) generic_ffs(x)
-
-#if 0
-/* untested, someone with PPC knowledge? */
-/* From Alexander Kjeldaas <astor@guardian.no> */
 extern __inline__ int ffs(int x)
 {
-        int result;
-        asm ("cntlzw %0,%1" : "=r" (result) : "r" (x));
-        return 32 - result; /* IBM backwards ordering of bits */
+	return __ilog2(x & -x) + 1;
 }
-#endif
 
 /*
  * hweightN: returns the hamming weight (i.e. the number

@@ -1079,7 +1079,7 @@ static __inline__ int tcp_snd_test(struct tcp_opt *tp, struct sk_buff *skb,
 
 static __inline__ void tcp_check_probe_timer(struct sock *sk, struct tcp_opt *tp)
 {
-	if (!tp->packets_out && !tp->probe_timer.prev)
+	if (!tp->packets_out && !timer_pending(&tp->probe_timer))
 		tcp_reset_xmit_timer(sk, TCP_TIME_PROBE0, tp->rto);
 }
 
@@ -1505,13 +1505,13 @@ static inline int tcp_timer_is_set(struct sock *sk, int what)
 
 	switch (what) {
 	case TCP_TIME_RETRANS:
-		ret = tp->retransmit_timer.prev != NULL;
+		ret = timer_pending(&tp->retransmit_timer);
 		break;
 	case TCP_TIME_DACK:
-		ret = tp->delack_timer.prev != NULL;
+		ret = timer_pending(&tp->delack_timer);
 		break;
 	case TCP_TIME_PROBE0:
-		ret = tp->probe_timer.prev != NULL;
+		ret = timer_pending(&tp->probe_timer);
 		break;	
 	default:
 		ret = 0;

@@ -130,9 +130,6 @@ void free_page_and_swap_cache(struct page *page)
 		}
 		UnlockPage(page);
 	}
-
-	ClearPageSwapEntry(page);
-
 	__free_page(page);
 }
 

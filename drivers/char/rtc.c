@@ -38,9 +38,10 @@
  *	1.10    Paul Barton-Davis: add support for async I/O
  *	1.10a	Andrea Arcangeli: Alpha updates
  *	1.10b	Andrew Morton: SMP lock fix
+ *	1.10c	Cesar Barros: SMP locking fixes and cleanup
  */
 
-#define RTC_VERSION		"1.10b"
+#define RTC_VERSION		"1.10c"
 
 #define RTC_IRQ 	8	/* Can't see this changing soon.	*/
 #define RTC_IO_EXTENT	0x10	/* Only really two ports, but...	*/
@@ -124,7 +125,14 @@ static int rtc_read_proc(char *page, char **start, off_t off,
 #define RTC_IS_OPEN		0x01	/* means /dev/rtc is in use	*/
 #define RTC_TIMER_ON		0x02	/* missed irq timer active	*/
 
-static atomic_t rtc_status = ATOMIC_INIT(0); /* bitmapped status byte.	*/
+/*
+ * rtc_status is never changed by rtc_interrupt, and ioctl/open/close is
+ * protected by the big kernel lock. However, ioctl can still disable the timer
+ * in rtc_status and then with del_timer after the interrupt has read
+ * rtc_status but before mod_timer is called, which would then reenable the
+ * timer (but you would need to have an awful timing before you'd trip on it)
+ */
+static unsigned long rtc_status = 0;	/* bitmapped status byte.	*/
 static unsigned long rtc_freq = 0;	/* Current periodic IRQ rate	*/
 static unsigned long rtc_irq_data = 0;	/* our output to the world	*/
 
@@ -162,15 +170,17 @@ static void rtc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	rtc_irq_data += 0x100;
 	rtc_irq_data &= ~0xff;
 	rtc_irq_data |= (CMOS_READ(RTC_INTR_FLAGS) & 0xF0);
+
+	if (rtc_status & RTC_TIMER_ON)
+		mod_timer(&rtc_irq_timer, jiffies + HZ/rtc_freq + 2*HZ/100);
+
 	spin_unlock (&rtc_lock);
 
+	/* Now do the rest of the actions */
 	wake_up_interruptible(&rtc_wait);	
 
 	if (rtc_async_queue)
 		kill_fasync (rtc_async_queue, SIGIO, POLL_IN);
-
-	if (atomic_read(&rtc_status) & RTC_TIMER_ON)
-		mod_timer(&rtc_irq_timer, jiffies + HZ/rtc_freq + 2*HZ/100);
 }
 #endif
 
@@ -200,7 +210,18 @@ static ssize_t rtc_read(struct file *file, char *buf,
 
 	current->state = TASK_INTERRUPTIBLE;
 		
-	while ((data = xchg(&rtc_irq_data, 0)) == 0) {
+	do {
+		/* First make it right. Then make it fast. Putting this whole
+		 * block within the parentheses of a while would be too
+		 * confusing. And no, xchg() is not the answer. */
+		spin_lock_irq (&rtc_lock);
+		data = rtc_irq_data;
+		rtc_irq_data = 0;
+		spin_unlock_irq (&rtc_lock);
+
+		if (data != 0)
+			break;
+
 		if (file->f_flags & O_NONBLOCK) {
 			retval = -EAGAIN;
 			goto out;
@@ -210,7 +231,7 @@ static ssize_t rtc_read(struct file *file, char *buf,
 			goto out;
 		}
 		schedule();
-	}
+	} while (1);
 
 	retval = put_user(data, (unsigned long *)buf); 
 	if (!retval)
@@ -226,8 +247,6 @@ static ssize_t rtc_read(struct file *file, char *buf,
 static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		     unsigned long arg)
 {
-
-	unsigned long flags;
 	struct rtc_time wtime; 
 
 	switch (cmd) {
@@ -245,10 +264,11 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	case RTC_PIE_OFF:	/* Mask periodic int. enab. bit	*/
 	{
 		mask_rtc_irq_bit(RTC_PIE);
-		if (atomic_read(&rtc_status) & RTC_TIMER_ON) {
+		if (rtc_status & RTC_TIMER_ON) {
+			spin_lock_irq (&rtc_lock);
+			rtc_status &= ~RTC_TIMER_ON;
 			del_timer(&rtc_irq_timer);
-			atomic_set(&rtc_status,
-				   atomic_read(&rtc_status) & ~RTC_TIMER_ON);
+			spin_unlock_irq (&rtc_lock);
 		}
 		return 0;
 	}
@@ -262,11 +282,12 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		if ((rtc_freq > 64) && (!capable(CAP_SYS_RESOURCE)))
 			return -EACCES;
 
-		if (!(atomic_read(&rtc_status) & RTC_TIMER_ON)) {
-			atomic_set(&rtc_status,
-				   atomic_read(&rtc_status) | RTC_TIMER_ON);
+		if (!(rtc_status & RTC_TIMER_ON)) {
+			spin_lock_irq (&rtc_lock);
 			rtc_irq_timer.expires = jiffies + HZ/rtc_freq + 2*HZ/100;
 			add_timer(&rtc_irq_timer);
+			rtc_status |= RTC_TIMER_ON;
+			spin_unlock_irq (&rtc_lock);
 		}
 		set_rtc_irq_bit(RTC_PIE);
 		return 0;
@@ -320,7 +341,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		if (sec >= 60)
 			sec = 0xff;
 
-		spin_lock_irqsave(&rtc_lock, flags);
+		spin_lock_irq(&rtc_lock);
 		if (!(CMOS_READ(RTC_CONTROL) & RTC_DM_BINARY) ||
 		    RTC_ALWAYS_BCD)
 		{
@@ -331,7 +352,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		CMOS_WRITE(hrs, RTC_HOURS_ALARM);
 		CMOS_WRITE(min, RTC_MINUTES_ALARM);
 		CMOS_WRITE(sec, RTC_SECONDS_ALARM);
-		spin_unlock_irqrestore(&rtc_lock, flags);
+		spin_unlock_irq(&rtc_lock);
 
 		return 0;
 	}
@@ -346,8 +367,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		unsigned char mon, day, hrs, min, sec, leap_yr;
 		unsigned char save_control, save_freq_select;
 		unsigned int yrs;
-		unsigned long flags;
-			
+
 		if (!capable(CAP_SYS_TIME))
 			return -EACCES;
 
@@ -379,11 +399,11 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		if ((yrs -= epoch) > 255)    /* They are unsigned */
 			return -EINVAL;
 
-		spin_lock_irqsave(&rtc_lock, flags);
+		spin_lock_irq(&rtc_lock);
 		if (!(CMOS_READ(RTC_CONTROL) & RTC_DM_BINARY)
 		    || RTC_ALWAYS_BCD) {
 			if (yrs > 169) {
-				spin_unlock_irqrestore(&rtc_lock, flags);
+				spin_unlock_irq(&rtc_lock);
 				return -EINVAL;
 			}
 			if (yrs >= 100)
@@ -412,7 +432,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		CMOS_WRITE(save_control, RTC_CONTROL);
 		CMOS_WRITE(save_freq_select, RTC_FREQ_SELECT);
 
-		spin_unlock_irqrestore(&rtc_lock, flags);
+		spin_unlock_irq(&rtc_lock);
 		return 0;
 	}
 #ifndef __alpha__
@@ -446,13 +466,13 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		if (arg != (1<<tmp))
 			return -EINVAL;
 
+		spin_lock_irq(&rtc_lock);
 		rtc_freq = arg;
 
-		spin_lock_irqsave(&rtc_lock, flags);
 		val = CMOS_READ(RTC_FREQ_SELECT) & 0xf0;
 		val |= (16 - tmp);
 		CMOS_WRITE(val, RTC_FREQ_SELECT);
-		spin_unlock_irqrestore(&rtc_lock, flags);
+		spin_unlock_irq(&rtc_lock);
 		return 0;
 	}
 #else
@@ -489,18 +509,18 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 
 static int rtc_open(struct inode *inode, struct file *file)
 {
-	unsigned long flags;
-
-	if(atomic_read(&rtc_status) & RTC_IS_OPEN)
+	/* If someday somebody decides to remove the kernel_lock on open and
+	 * close and ioctl this is gonna get open to races */
+	if(rtc_status & RTC_IS_OPEN)
 		return -EBUSY;
 
 	MOD_INC_USE_COUNT;
 
-	atomic_set(&rtc_status, atomic_read(&rtc_status) | RTC_IS_OPEN);
+	rtc_status |= RTC_IS_OPEN;
 
-	spin_lock_irqsave (&rtc_lock, flags);
+	spin_lock_irq (&rtc_lock);
 	rtc_irq_data = 0;
-	spin_unlock_irqrestore (&rtc_lock, flags);
+	spin_unlock_irq (&rtc_lock);
 	return 0;
 }
 
@@ -512,7 +532,6 @@ static int rtc_fasync (int fd, struct file *filp, int on)
 
 static int rtc_release(struct inode *inode, struct file *file)
 {
-	unsigned long flags;
 #ifndef __alpha__
 	/*
 	 * Turn off all interrupts once the device is no longer
@@ -521,19 +540,19 @@ static int rtc_release(struct inode *inode, struct file *file)
 
 	unsigned char tmp;
 
-	spin_lock_irqsave(&rtc_lock, flags);
+	spin_lock_irq(&rtc_lock);
 	tmp = CMOS_READ(RTC_CONTROL);
 	tmp &=  ~RTC_PIE;
 	tmp &=  ~RTC_AIE;
 	tmp &=  ~RTC_UIE;
 	CMOS_WRITE(tmp, RTC_CONTROL);
 	CMOS_READ(RTC_INTR_FLAGS);
-	spin_unlock_irqrestore(&rtc_lock, flags);
 
-	if (atomic_read(&rtc_status) & RTC_TIMER_ON) {
-		atomic_set(&rtc_status, atomic_read(&rtc_status) & ~RTC_TIMER_ON);
+	if (rtc_status & RTC_TIMER_ON) {
+		rtc_status &= ~RTC_TIMER_ON;
 		del_timer(&rtc_irq_timer);
 	}
+	spin_unlock_irq(&rtc_lock);
 
 	if (file->f_flags & FASYNC) {
 		rtc_fasync (-1, file, 0);
@@ -542,10 +561,10 @@ static int rtc_release(struct inode *inode, struct file *file)
 #endif
 	MOD_DEC_USE_COUNT;
 
-	spin_lock_irqsave (&rtc_lock, flags);
+	spin_lock_irq (&rtc_lock);
 	rtc_irq_data = 0;
-	spin_unlock_irqrestore (&rtc_lock, flags);
-	atomic_set(&rtc_status, atomic_read(&rtc_status) & ~RTC_IS_OPEN);
+	spin_unlock_irq (&rtc_lock);
+	rtc_status = rtc_status & ~RTC_IS_OPEN;
 	return 0;
 }
 
@@ -553,13 +572,13 @@ static int rtc_release(struct inode *inode, struct file *file)
 /* Called without the kernel lock - fine */
 static unsigned int rtc_poll(struct file *file, poll_table *wait)
 {
-	unsigned long l, flags;
+	unsigned long l;
 
 	poll_wait(file, &rtc_wait, wait);
 
-	spin_lock_irqsave (&rtc_lock, flags);
+	spin_lock_irq (&rtc_lock);
 	l = rtc_irq_data;
-	spin_unlock_irqrestore (&rtc_lock, flags);
+	spin_unlock_irq (&rtc_lock);
 
 	if (l != 0)
 		return POLLIN | POLLRDNORM;
@@ -592,7 +611,6 @@ static struct miscdevice rtc_dev=
 
 static int __init rtc_init(void)
 {
-	unsigned long flags;
 #ifdef __alpha__
 	unsigned int year, ctrl;
 	unsigned long uip_watchdog;
@@ -663,10 +681,10 @@ found:
 		while (jiffies - uip_watchdog < 2*HZ/100)
 			barrier();
 	
-	spin_lock_irqsave(&rtc_lock, flags);
+	spin_lock_irq(&rtc_lock);
 	year = CMOS_READ(RTC_YEAR);
 	ctrl = CMOS_READ(RTC_CONTROL);
-	spin_unlock_irqrestore(&rtc_lock, flags);
+	spin_unlock_irq(&rtc_lock);
 	
 	if (!(ctrl & RTC_DM_BINARY) || RTC_ALWAYS_BCD)
 		BCD_TO_BIN(year);       /* This should never happen... */
@@ -684,12 +702,12 @@ found:
 #ifndef __alpha__
 	init_timer(&rtc_irq_timer);
 	rtc_irq_timer.function = rtc_dropped_irq;
-	spin_lock_irqsave(&rtc_lock, flags);
+	spin_lock_irq(&rtc_lock);
 	/* Initialize periodic freq. to CMOS reset default, which is 1024Hz */
 	CMOS_WRITE(((CMOS_READ(RTC_FREQ_SELECT) & 0xF0) | 0x06), RTC_FREQ_SELECT);
-	spin_unlock_irqrestore(&rtc_lock, flags);
-#endif
+	spin_unlock_irq(&rtc_lock);
 	rtc_freq = 1024;
+#endif
 
 	printk(KERN_INFO "Real Time Clock Driver v" RTC_VERSION "\n");
 
@@ -699,9 +717,16 @@ found:
 static void __exit rtc_exit (void)
 {
 	/* interrupts and maybe timer disabled at this point by rtc_release */
+	/* FIXME: Maybe??? */
 
-	if (atomic_read(&rtc_status) & RTC_TIMER_ON)
+	if (rtc_status & RTC_TIMER_ON) {
+		spin_lock_irq (&rtc_lock);
+		rtc_status &= ~RTC_TIMER_ON;
 		del_timer(&rtc_irq_timer);
+		spin_unlock_irq (&rtc_lock);
+
+		printk(KERN_WARNING "rtc_exit(), and timer still running.\n");
+	}
 
 	remove_proc_entry ("driver/rtc", NULL);
 	misc_deregister(&rtc_dev);
@@ -735,16 +760,24 @@ EXPORT_NO_SYMBOLS;
 
 static void rtc_dropped_irq(unsigned long data)
 {
-	unsigned long flags;
-
 	printk(KERN_INFO "rtc: lost some interrupts at %ldHz.\n", rtc_freq);
-	mod_timer(&rtc_irq_timer, jiffies + HZ/rtc_freq + 2*HZ/100);
 
-	spin_lock_irqsave(&rtc_lock, flags);
+	spin_lock_irq (&rtc_lock);
+
+	/* Just in case someone disabled the timer from behind our back... */
+	if (rtc_status & RTC_TIMER_ON)
+		mod_timer(&rtc_irq_timer, jiffies + HZ/rtc_freq + 2*HZ/100);
+
 	rtc_irq_data += ((rtc_freq/HZ)<<8);
 	rtc_irq_data &= ~0xff;
 	rtc_irq_data |= (CMOS_READ(RTC_INTR_FLAGS) & 0xF0);	/* restart */
-	spin_unlock_irqrestore(&rtc_lock, flags);
+	spin_unlock_irq(&rtc_lock);
+
+	/* Now we have new data */
+	wake_up_interruptible(&rtc_wait);
+
+	if (rtc_async_queue)
+		kill_fasync (rtc_async_queue, SIGIO, POLL_IN);
 }
 #endif
 
@@ -759,12 +792,13 @@ static int rtc_proc_output (char *buf)
 	char *p;
 	struct rtc_time tm;
 	unsigned char batt, ctrl;
-	unsigned long flags;
+	unsigned long freq;
 
-	spin_lock_irqsave(&rtc_lock, flags);
+	spin_lock_irq(&rtc_lock);
 	batt = CMOS_READ(RTC_VALID) & RTC_VRT;
 	ctrl = CMOS_READ(RTC_CONTROL);
-	spin_unlock_irqrestore(&rtc_lock, flags);
+	freq = rtc_freq;
+	spin_unlock_irq(&rtc_lock);
 
 	p = buf;
 
@@ -821,7 +855,7 @@ static int rtc_proc_output (char *buf)
 		     YN(RTC_AIE),
 		     YN(RTC_UIE),
 		     YN(RTC_PIE),
-		     rtc_freq,
+		     freq,
 		     batt ? "okay" : "dead");
 
 	return  p - buf;
@@ -844,21 +878,20 @@ static int rtc_read_proc(char *page, char **start, off_t off,
 /*
  * Returns true if a clock update is in progress
  */
+/* FIXME shouldn't this be above rtc_init to make it fully inlined? */
 static inline unsigned char rtc_is_updating(void)
 {
-	unsigned long flags;
 	unsigned char uip;
 
-	spin_lock_irqsave(&rtc_lock, flags);
+	spin_lock_irq(&rtc_lock);
 	uip = (CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP);
-	spin_unlock_irqrestore(&rtc_lock, flags);
+	spin_unlock_irq(&rtc_lock);
 	return uip;
 }
 
 static void get_rtc_time(struct rtc_time *rtc_tm)
 {
-
-	unsigned long flags, uip_watchdog = jiffies;
+	unsigned long uip_watchdog = jiffies;
 	unsigned char ctrl;
 
 	/*
@@ -881,7 +914,7 @@ static void get_rtc_time(struct rtc_time *rtc_tm)
 	 * RTC has RTC_DAY_OF_WEEK, we ignore it, as it is only updated
 	 * by the RTC when initially set to a non-zero value.
 	 */
-	spin_lock_irqsave(&rtc_lock, flags);
+	spin_lock_irq(&rtc_lock);
 	rtc_tm->tm_sec = CMOS_READ(RTC_SECONDS);
 	rtc_tm->tm_min = CMOS_READ(RTC_MINUTES);
 	rtc_tm->tm_hour = CMOS_READ(RTC_HOURS);
@@ -889,7 +922,7 @@ static void get_rtc_time(struct rtc_time *rtc_tm)
 	rtc_tm->tm_mon = CMOS_READ(RTC_MONTH);
 	rtc_tm->tm_year = CMOS_READ(RTC_YEAR);
 	ctrl = CMOS_READ(RTC_CONTROL);
-	spin_unlock_irqrestore(&rtc_lock, flags);
+	spin_unlock_irq(&rtc_lock);
 
 	if (!(ctrl & RTC_DM_BINARY) || RTC_ALWAYS_BCD)
 	{
@@ -913,19 +946,18 @@ static void get_rtc_time(struct rtc_time *rtc_tm)
 
 static void get_rtc_alm_time(struct rtc_time *alm_tm)
 {
-	unsigned long flags;
 	unsigned char ctrl;
 
 	/*
 	 * Only the values that we read from the RTC are set. That
 	 * means only tm_hour, tm_min, and tm_sec.
 	 */
-	spin_lock_irqsave(&rtc_lock, flags);
+	spin_lock_irq(&rtc_lock);
 	alm_tm->tm_sec = CMOS_READ(RTC_SECONDS_ALARM);
 	alm_tm->tm_min = CMOS_READ(RTC_MINUTES_ALARM);
 	alm_tm->tm_hour = CMOS_READ(RTC_HOURS_ALARM);
 	ctrl = CMOS_READ(RTC_CONTROL);
-	spin_unlock_irqrestore(&rtc_lock, flags);
+	spin_unlock_irq(&rtc_lock);
 
 	if (!(ctrl & RTC_DM_BINARY) || RTC_ALWAYS_BCD)
 	{
@@ -949,28 +981,28 @@ static void get_rtc_alm_time(struct rtc_time *alm_tm)
 static void mask_rtc_irq_bit(unsigned char bit)
 {
 	unsigned char val;
-	unsigned long flags;
 
-	spin_lock_irqsave(&rtc_lock, flags);
+	spin_lock_irq(&rtc_lock);
 	val = CMOS_READ(RTC_CONTROL);
 	val &=  ~bit;
 	CMOS_WRITE(val, RTC_CONTROL);
 	CMOS_READ(RTC_INTR_FLAGS);
+
 	rtc_irq_data = 0;
-	spin_unlock_irqrestore(&rtc_lock, flags);
+	spin_unlock_irq(&rtc_lock);
 }
 
 static void set_rtc_irq_bit(unsigned char bit)
 {
 	unsigned char val;
-	unsigned long flags;
 
-	spin_lock_irqsave(&rtc_lock, flags);
+	spin_lock_irq(&rtc_lock);
 	val = CMOS_READ(RTC_CONTROL);
 	val |= bit;
 	CMOS_WRITE(val, RTC_CONTROL);
 	CMOS_READ(RTC_INTR_FLAGS);
+
 	rtc_irq_data = 0;
-	spin_unlock_irqrestore(&rtc_lock, flags);
+	spin_unlock_irq(&rtc_lock);
 }
 #endif
