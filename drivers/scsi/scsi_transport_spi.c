@@ -293,9 +293,12 @@ static ssize_t show_spi_transport_period(struct class_device *cdev, char *buf)
 		picosec = tp->period * 4000;
 	}
 
-	if (picosec == -1)
-		return sprintf(buf, "reserved");
-	len = sprint_frac(buf, picosec, 1000);
+	if (picosec == -1) {
+		len = sprintf(buf, "reserved");
+	} else {
+		len = sprint_frac(buf, picosec, 1000);
+	}
+
 	buf[len++] = '\n';
 	buf[len] = '\0';
 	return len;
