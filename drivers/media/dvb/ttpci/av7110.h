@@ -231,8 +231,6 @@ struct av7110 {
 	u32		    ir_config;
 
 	/* firmware stuff */
-	unsigned int device_initialized;
-
 	unsigned char *bin_fw;
 	unsigned long size_fw;
 

@@ -188,6 +188,15 @@ static void arm_error(struct av7110 *av7110)
 	recover_arm(av7110);
 }
 
+static void av7110_arm_sync(struct av7110 *av7110)
+{
+	av7110->arm_rmmod = 1;
+	wake_up_interruptible(&av7110->arm_wait);
+
+	while (av7110->arm_thread)
+		msleep(1);
+}
+
 static int arm_thread(void *data)
 {
 	struct av7110 *av7110 = data;
@@ -1461,6 +1470,11 @@ static int check_firmware(struct av7110* av7110)
 
 #ifdef CONFIG_DVB_AV7110_FIRMWARE_FILE
 #include "av7110_firm.h"
+static void put_firmware(struct av7110* av7110)
+{
+	av7110->bin_fw = NULL;
+}
+
 static inline int get_firmware(struct av7110* av7110)
 {
 	av7110->bin_fw = dvb_ttpci_fw;
@@ -1468,6 +1482,11 @@ static inline int get_firmware(struct av7110* av7110)
 	return check_firmware(av7110);
 }
 #else
+static void put_firmware(struct av7110* av7110)
+{
+	vfree(av7110->bin_fw);
+}
+
 static int get_firmware(struct av7110* av7110)
 {
 	int ret;
@@ -1960,8 +1979,10 @@ static u8 read_pwm(struct av7110* av7110)
 	return pwm;
 }
 
-static void frontend_init(struct av7110 *av7110)
+static int frontend_init(struct av7110 *av7110)
 {
+	int ret;
+
 	if (av7110->dev->pci->subsystem_vendor == 0x110a) {
 		switch(av7110->dev->pci->subsystem_device) {
 		case 0x0000: // Fujitsu/Siemens DVB-Cable (ves1820/Philips CD1516(??))
@@ -2054,7 +2075,9 @@ static void frontend_init(struct av7110 *av7110)
 		}
 	}
 
-	if (av7110->fe == NULL) {
+	if (!av7110->fe) {
+		/* FIXME: propagate the failure code from the lower layers */
+		ret = -ENOMEM;
 		printk("dvb-ttpci: A frontend driver was not found for device %04x/%04x subsystem %04x/%04x\n",
 		       av7110->dev->pci->vendor,
 		       av7110->dev->pci->device,
@@ -2071,13 +2094,15 @@ static void frontend_init(struct av7110 *av7110)
 		FE_FUNC_OVERRIDE(av7110->fe->ops->dishnetwork_send_legacy_command, av7110->fe_dishnetwork_send_legacy_command, av7110_fe_dishnetwork_send_legacy_command);
 		FE_FUNC_OVERRIDE(av7110->fe->ops->set_frontend, av7110->fe_set_frontend, av7110_fe_set_frontend);
 
-		if (dvb_register_frontend(av7110->dvb_adapter, av7110->fe)) {
+		ret = dvb_register_frontend(av7110->dvb_adapter, av7110->fe);
+		if (ret < 0) {
 			printk("av7110: Frontend registration failed!\n");
 			if (av7110->fe->ops->release)
 				av7110->fe->ops->release(av7110->fe);
 			av7110->fe = NULL;
 		}
 	}
+	return ret;
 }
 
 /* Budgetpatch note:
@@ -2147,10 +2172,10 @@ static void frontend_init(struct av7110 *av7110)
  */
 static int av7110_attach(struct saa7146_dev* dev, struct saa7146_pci_extension_data *pci_ext)
 {
-	struct av7110 *av7110 = NULL;
-	int length = TS_WIDTH * TS_HEIGHT;
-	int ret = 0;
-	int count = 0;
+	const int length = TS_WIDTH * TS_HEIGHT;
+	struct pci_dev *pdev = dev->pci;
+	struct av7110 *av7110;
+	int ret, count = 0;
 
 	dprintk(4, "dev: %p\n", dev);
 
@@ -2244,7 +2269,8 @@ static int av7110_attach(struct saa7146_dev* dev, struct saa7146_pci_extension_d
 	}
 
 	/* prepare the av7110 device struct */
-	if (!(av7110 = kmalloc (sizeof (struct av7110), GFP_KERNEL))) {
+	av7110 = kmalloc(sizeof(struct av7110), GFP_KERNEL);
+	if (!av7110) {
 		dprintk(1, "out of memory\n");
 		return -ENOMEM;
 	}
@@ -2255,12 +2281,14 @@ static int av7110_attach(struct saa7146_dev* dev, struct saa7146_pci_extension_d
 	av7110->dev = dev;
 	dev->ext_priv = av7110;
 
-	if ((ret = get_firmware(av7110))) {
-		kfree(av7110);
-		return ret;
-	}
+	ret = get_firmware(av7110);
+	if (ret < 0)
+		goto err_kfree_0;
 
-	dvb_register_adapter(&av7110->dvb_adapter, av7110->card_name, THIS_MODULE);
+	ret = dvb_register_adapter(&av7110->dvb_adapter, av7110->card_name,
+				   THIS_MODULE);
+	if (ret < 0)
+		goto err_put_firmware_1;
 
 	/* the Siemens DVB needs this if you want to have the i2c chips
 	   get recognized before the main driver is fully loaded */
@@ -2275,21 +2303,21 @@ static int av7110_attach(struct saa7146_dev* dev, struct saa7146_pci_extension_d
 
 	saa7146_i2c_adapter_prepare(dev, &av7110->i2c_adap, SAA7146_I2C_BUS_BIT_RATE_120); /* 275 kHz */
 
-	if (i2c_add_adapter(&av7110->i2c_adap) < 0) {
-err_no_mem:
-		dvb_unregister_adapter (av7110->dvb_adapter);
-		kfree(av7110);
-		return -ENOMEM;
-	}
+	ret = i2c_add_adapter(&av7110->i2c_adap);
+	if (ret < 0)
+		goto err_dvb_unregister_adapter_2;
 
-	ttpci_eeprom_parse_mac(&av7110->i2c_adap, av7110->dvb_adapter->proposed_mac);
+	ttpci_eeprom_parse_mac(&av7110->i2c_adap,
+			       av7110->dvb_adapter->proposed_mac);
+	ret = -ENOMEM;
 
 	if (budgetpatch) {
 		spin_lock_init(&av7110->feedlock1);
-		av7110->grabbing = saa7146_vmalloc_build_pgtable(
-					 dev->pci, length, &av7110->pt);
+		av7110->grabbing = saa7146_vmalloc_build_pgtable(pdev, length,
+								 &av7110->pt);
 		if (!av7110->grabbing)
-			goto err_no_mem;
+			goto err_i2c_del_3;
+
 		saa7146_write(dev, PCI_BT_V1, 0x1c1f101f);
 		saa7146_write(dev, BCS_CTRL, 0x80400040);
 		/* set dd1 stream a & b */
@@ -2396,43 +2424,43 @@ err_no_mem:
 	av7110->arm_thread = NULL;
 
 	/* allocate and init buffers */
-        av7110->debi_virt = pci_alloc_consistent(dev->pci, 8192,
-						 &av7110->debi_bus);
-	if (!av7110->debi_virt) {
-		ret = -ENOMEM;
-                goto err;
-	}
+	av7110->debi_virt = pci_alloc_consistent(pdev, 8192, &av7110->debi_bus);
+	if (!av7110->debi_virt)
+		goto err_saa71466_vfree_4;
+
 
 	av7110->iobuf = vmalloc(AVOUTLEN+AOUTLEN+BMPLEN+4*IPACKS);
-	if (!av7110->iobuf) {
-		ret = -ENOMEM;
-                goto err;
-	}
+	if (!av7110->iobuf)
+		goto err_pci_free_5;
 
-	av7110_av_init(av7110);
+	ret = av7110_av_init(av7110);
+	if (ret < 0)
+		goto err_iobuf_vfree_6;
 
 	/* init BMP buffer */
 	av7110->bmpbuf = av7110->iobuf+AVOUTLEN+AOUTLEN;
 	init_waitqueue_head(&av7110->bmpq);
 
-	av7110_ca_init(av7110);
+	ret = av7110_ca_init(av7110);
+	if (ret < 0)
+		goto err_av7110_av_exit_7;
 
 	/* load firmware into AV7110 cards */
-	av7110_bootarm(av7110);
-	if (av7110_firmversion(av7110)) {
-		ret = -EIO;
-		goto err2;
-	}
+	ret = av7110_bootarm(av7110);
+	if (ret < 0)
+		goto err_av7110_ca_exit_8;
+
+	ret = av7110_firmversion(av7110);
+	if (ret < 0)
+		goto err_stop_arm_9;
 
 	if (FW_VERSION(av7110->arm_app)<0x2501)
 		printk ("dvb-ttpci: Warning, firmware version 0x%04x is too old. "
 			"System might be unstable!\n", FW_VERSION(av7110->arm_app));
 
-	if (kernel_thread(arm_thread, (void *) av7110, 0) < 0) {
-		printk("dvb-ttpci: failed to start arm_mon kernel thread @ card %d\n",
-		       av7110->dvb_adapter->num);
-		goto err2;
-	}
+	ret = kernel_thread(arm_thread, (void *) av7110, 0);
+	if (ret < 0)
+		goto err_stop_arm_9;
 
 	/* set initial volume in mixer struct */
 	av7110->mixer.volume_left  = volume;
@@ -2440,58 +2468,64 @@ err_no_mem:
 
 	init_av7110_av(av7110);
 
-	av7110_register(av7110);
+	ret = av7110_register(av7110);
+	if (ret < 0)
+		goto err_arm_thread_stop_10;
 
 	/* special case DVB-C: these cards have an analog tuner
 	   plus need some special handling, so we have separate
 	   saa7146_ext_vv data for these... */
 	ret = av7110_init_v4l(av7110);
-
-	if (ret)
-		goto err3;
+	if (ret < 0)
+		goto err_av7110_unregister_11;
 
 	av7110->dvb_adapter->priv = av7110;
-	frontend_init(av7110);
+	ret = frontend_init(av7110);
+	if (ret < 0)
+		goto err_av7110_exit_v4l_12;
 
 #if defined(CONFIG_INPUT_EVDEV) || defined(CONFIG_INPUT_EVDEV_MODULE)
 	av7110_ir_init();
 #endif
 	printk(KERN_INFO "dvb-ttpci: found av7110-%d.\n", av7110_num);
-	av7110->device_initialized = 1;
 	av7110_num++;
-        return 0;
-
-err3:
-	av7110->arm_rmmod = 1;
-	wake_up_interruptible(&av7110->arm_wait);
-	while (av7110->arm_thread)
-		msleep(1);
-err2:
-	av7110_ca_exit(av7110);
-	av7110_av_exit(av7110);
-err:
-	i2c_del_adapter(&av7110->i2c_adap);
-
-	dvb_unregister_adapter(av7110->dvb_adapter);
-
-	if (NULL != av7110->debi_virt)
-		pci_free_consistent(dev->pci, 8192, av7110->debi_virt, av7110->debi_bus);
-	if (NULL != av7110->iobuf)
-		vfree(av7110->iobuf);
-	if (NULL != av7110 ) {
-	kfree(av7110);
-	}
-
+out:
 	return ret;
+
+err_av7110_exit_v4l_12:
+	av7110_exit_v4l(av7110);
+err_av7110_unregister_11:
+	dvb_unregister(av7110);
+err_arm_thread_stop_10:
+	av7110_arm_sync(av7110);
+err_stop_arm_9:
+	/* Nothing to do. Rejoice. */
+err_av7110_ca_exit_8:
+	av7110_ca_exit(av7110);
+err_av7110_av_exit_7:
+	av7110_av_exit(av7110);
+err_iobuf_vfree_6:
+	vfree(av7110->iobuf);
+err_pci_free_5:
+	pci_free_consistent(pdev, 8192, av7110->debi_virt, av7110->debi_bus);
+err_saa71466_vfree_4:
+	if (!av7110->grabbing)
+		saa7146_pgtable_free(pdev, &av7110->pt);
+err_i2c_del_3:
+	i2c_del_adapter(&av7110->i2c_adap);
+err_dvb_unregister_adapter_2:
+	dvb_unregister_adapter(av7110->dvb_adapter);
+err_put_firmware_1:
+	put_firmware(av7110);
+err_kfree_0:
+	kfree(av7110);
+	goto out;
 }
 
 static int av7110_detach(struct saa7146_dev* saa)
 {
-	struct av7110 *av7110 = (struct av7110*)saa->ext_priv;
+	struct av7110 *av7110 = saa->ext_priv;
 	dprintk(4, "%p\n", av7110);
-
-	if (!av7110->device_initialized )
-		return 0;
 
 	if (budgetpatch) {
 		/* Disable RPS1 */
@@ -2507,11 +2541,7 @@ static int av7110_detach(struct saa7146_dev* saa)
 	}
 	av7110_exit_v4l(av7110);
 
-	av7110->arm_rmmod=1;
-	wake_up_interruptible(&av7110->arm_wait);
-
-	while (av7110->arm_thread)
-		msleep(1);
+	av7110_arm_sync(av7110);
 
 	tasklet_kill(&av7110->debi_tasklet);
 	tasklet_kill(&av7110->gpio_tasklet);
@@ -2533,11 +2563,11 @@ static int av7110_detach(struct saa7146_dev* saa)
 	dvb_unregister_adapter (av7110->dvb_adapter);
 
 	av7110_num--;
-#ifndef CONFIG_DVB_AV7110_FIRMWARE_FILE
-	if (av7110->bin_fw)
-		vfree(av7110->bin_fw);
-#endif
+
+	put_firmware(av7110);
+
 	kfree(av7110);
+
 	saa->ext_priv = NULL;
 
 	return 0;

@@ -37,7 +37,6 @@ int av7110_ipack_init(struct ipack *p, int size,
 
 void av7110_ipack_free(struct ipack *p)
 {
-	if (p->buf)
 	vfree(p->buf);
 }
 
