@@ -53,10 +53,10 @@ extern unsigned long autoirq_report(int waittime);
 #if defined(LOAD_8390_BY_KMOD) && defined(MODULE) && !defined(NS8390_CORE)
 
 /* Function pointers to be mapped onto the 8390 core support */
-static int (*S_ethdev_init)(struct device *dev);
-static void (*S_NS8390_init)(struct device *dev, int startp);
-static int (*S_ei_open)(struct device *dev);
-static int (*S_ei_close)(struct device *dev);
+static int (*S_ethdev_init)(struct net_device *dev);
+static void (*S_NS8390_init)(struct net_device *dev, int startp);
+static int (*S_ei_open)(struct net_device *dev);
+static int (*S_ei_close)(struct net_device *dev);
 static void (*S_ei_interrupt)(int irq, void *dev_id, struct pt_regs *regs);
 
 
@@ -143,23 +143,23 @@ extern __inline__  void unlock_8390_module(void)
 #define load_8390_module(driver)	0
 #define lock_8390_module()		do { } while (0)
 #define unlock_8390_module()		do { } while (0)
-extern int ethdev_init(struct device *dev);
-extern void NS8390_init(struct device *dev, int startp);
-extern int ei_open(struct device *dev);
-extern int ei_close(struct device *dev);
+extern int ethdev_init(struct net_device *dev);
+extern void NS8390_init(struct net_device *dev, int startp);
+extern int ei_open(struct net_device *dev);
+extern int ei_close(struct net_device *dev);
 extern void ei_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
 #endif
 
-/* Most of these entries should be in 'struct device' (or most of the
+/* Most of these entries should be in 'struct net_device' (or most of the
    things in there should be here!) */
 /* You have one of these per-board */
 struct ei_device {
 	const char *name;
-	void (*reset_8390)(struct device *);
-	void (*get_8390_hdr)(struct device *, struct e8390_pkt_hdr *, int);
-	void (*block_output)(struct device *, int, const unsigned char *, int);
-	void (*block_input)(struct device *, int, struct sk_buff *, int);
+	void (*reset_8390)(struct net_device *);
+	void (*get_8390_hdr)(struct net_device *, struct e8390_pkt_hdr *, int);
+	void (*block_output)(struct net_device *, int, const unsigned char *, int);
+	void (*block_input)(struct net_device *, int, struct sk_buff *, int);
 	unsigned char mcfilter[8];
 	unsigned open:1;
 	unsigned word16:1;  		/* We have the 16-bit (vs 8-bit) version of the card. */

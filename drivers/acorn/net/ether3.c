@@ -74,9 +74,9 @@ static const card_ids __init ether3_cids[] = {
 	{ 0xffff, 0xffff }
 };
 
-static void ether3_setmulticastlist(struct device *dev);
-static int  ether3_rx(struct device *dev, struct dev_priv *priv, unsigned int maxcnt);
-static void ether3_tx(struct device *dev, struct dev_priv *priv);
+static void ether3_setmulticastlist(struct net_device *dev);
+static int  ether3_rx(struct net_device *dev, struct dev_priv *priv, unsigned int maxcnt);
+static void ether3_tx(struct net_device *dev, struct dev_priv *priv);
 
 #define BUS_16		2
 #define BUS_8		1
@@ -115,7 +115,7 @@ static inline void ether3_outw(int v, const int r)
 #define ether3_inw(r)		({ unsigned int __v = inw((r)); udelay(1); __v; })
 
 static int
-ether3_setbuffer(struct device *dev, buffer_rw_t read, int start)
+ether3_setbuffer(struct net_device *dev, buffer_rw_t read, int start)
 {
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 	int timeout = 1000;
@@ -175,7 +175,7 @@ ether3_setbuffer(struct device *dev, buffer_rw_t read, int start)
 static void
 ether3_ledoff(unsigned long data)
 {
-	struct device *dev = (struct device *)data;
+	struct net_device *dev = (struct net_device *)data;
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 	ether3_outw(priv->regs.config2 |= CFG2_CTRLO, REG_CONFIG2);
 }
@@ -184,7 +184,7 @@ ether3_ledoff(unsigned long data)
  * switch LED on...
  */
 static inline void
-ether3_ledon(struct device *dev, struct dev_priv *priv)
+ether3_ledon(struct net_device *dev, struct dev_priv *priv)
 {
 	del_timer(&priv->timer);
 	priv->timer.expires = jiffies + HZ / 50; /* leave on for 1/50th second */
@@ -225,7 +225,7 @@ ether3_addr(char *addr, struct expansion_card *ec))
 /* --------------------------------------------------------------------------- */
 
 __initfunc(static int
-ether3_ramtest(struct device *dev, unsigned char byte))
+ether3_ramtest(struct net_device *dev, unsigned char byte))
 {
 	unsigned char *buffer = kmalloc(RX_END, GFP_KERNEL);
 	int i,ret = 0;
@@ -274,7 +274,7 @@ ether3_ramtest(struct device *dev, unsigned char byte))
 /* ------------------------------------------------------------------------------- */
 
 __initfunc(static int
-ether3_init_2(struct device *dev))
+ether3_init_2(struct net_device *dev))
 {
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 	int i;
@@ -324,7 +324,7 @@ ether3_init_2(struct device *dev))
 }
 
 static void
-ether3_init_for_open(struct device *dev)
+ether3_init_for_open(struct net_device *dev)
 {
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 	int i;
@@ -364,7 +364,7 @@ ether3_init_for_open(struct device *dev)
 }
 
 static inline int
-ether3_probe_bus_8(struct device *dev, int val)
+ether3_probe_bus_8(struct net_device *dev, int val)
 {
 	int write_low, write_high, read_low, read_high;
 
@@ -385,7 +385,7 @@ ether3_probe_bus_8(struct device *dev, int val)
 }
 
 static inline int
-ether3_probe_bus_16(struct device *dev, int val)
+ether3_probe_bus_16(struct net_device *dev, int val)
 {
 	int read_val;
 
@@ -401,7 +401,7 @@ ether3_probe_bus_16(struct device *dev, int val)
  * This is the real probe routine.
  */
 __initfunc(static int
-ether3_probe1(struct device *dev))
+ether3_probe1(struct net_device *dev))
 {
 	static unsigned version_printed = 0;
 	struct dev_priv *priv;
@@ -479,7 +479,7 @@ failed:
 }
 
 __initfunc(static void
-ether3_get_dev(struct device *dev, struct expansion_card *ec))
+ether3_get_dev(struct net_device *dev, struct expansion_card *ec))
 {
 	ecard_claim(ec);
 
@@ -499,7 +499,7 @@ ether3_get_dev(struct device *dev, struct expansion_card *ec))
 
 #ifndef MODULE
 __initfunc(int
-ether3_probe(struct device *dev))
+ether3_probe(struct net_device *dev))
 {
 	struct expansion_card *ec;
 
@@ -526,7 +526,7 @@ ether3_probe(struct device *dev))
  * there is non-reboot way to recover if something goes wrong.
  */
 static int
-ether3_open(struct device *dev)
+ether3_open(struct net_device *dev)
 {
 	MOD_INC_USE_COUNT;
 
@@ -548,7 +548,7 @@ ether3_open(struct device *dev)
  * The inverse routine to ether3_open().
  */
 static int
-ether3_close(struct device *dev)
+ether3_close(struct net_device *dev)
 {
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 
@@ -573,7 +573,7 @@ ether3_close(struct device *dev)
  * Get the current statistics.	This may be called with the card open or
  * closed.
  */
-static struct enet_statistics *ether3_getstats(struct device *dev)
+static struct enet_statistics *ether3_getstats(struct net_device *dev)
 {
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 	return &priv->stats;
@@ -585,7 +585,7 @@ static struct enet_statistics *ether3_getstats(struct device *dev)
  * We don't attempt any packet filtering.  The card may have a SEEQ 8004
  * in which does not have the other ethernet address registers present...
  */
-static void ether3_setmulticastlist(struct device *dev)
+static void ether3_setmulticastlist(struct net_device *dev)
 {
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 
@@ -606,7 +606,7 @@ static void ether3_setmulticastlist(struct device *dev)
  * Transmit a packet
  */
 static int
-ether3_sendpacket(struct sk_buff *skb, struct device *dev)
+ether3_sendpacket(struct sk_buff *skb, struct net_device *dev)
 {
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 retry:
@@ -710,7 +710,7 @@ retry:
 static void
 ether3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)dev_id;
+	struct net_device *dev = (struct net_device *)dev_id;
 	struct dev_priv *priv;
 	unsigned int status;
 
@@ -747,7 +747,7 @@ ether3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
  * If we have a good packet(s), get it/them out of the buffers.
  */
 static int
-ether3_rx(struct device *dev, struct dev_priv *priv, unsigned int maxcnt)
+ether3_rx(struct net_device *dev, struct dev_priv *priv, unsigned int maxcnt)
 {
 	unsigned int next_ptr = priv->rx_head, received = 0;
 	ether3_ledon(dev, priv);
@@ -867,7 +867,7 @@ dropping:{
  * Update stats for the transmitted packet(s)
  */
 static void
-ether3_tx(struct device *dev, struct dev_priv *priv)
+ether3_tx(struct net_device *dev, struct dev_priv *priv)
 {
 	unsigned int tx_tail = priv->tx_tail;
 	int max_work = 14;
@@ -914,7 +914,7 @@ ether3_tx(struct device *dev, struct dev_priv *priv)
 static struct ether_dev {
 	struct expansion_card	*ec;
 	char			name[9];
-	struct device		dev;
+	struct net_device		dev;
 } ether_devs[MAX_ECARDS];
 
 int

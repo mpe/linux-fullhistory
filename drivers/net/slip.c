@@ -91,7 +91,7 @@
 typedef struct slip_ctrl {
 	char		if_name[8];	/* "sl0\0" .. "sl99999\0"	*/
 	struct slip	ctrl;		/* SLIP things			*/
-	struct device	dev;		/* the device			*/
+	struct net_device	dev;		/* the device			*/
 } slip_ctrl_t;
 static slip_ctrl_t	**slip_ctrls = NULL;
 
@@ -109,7 +109,7 @@ static void slip_unesc6(struct slip *sl, unsigned char c);
 #ifdef CONFIG_SLIP_SMART
 static void sl_keepalive(unsigned long sls);
 static void sl_outfill(unsigned long sls);
-static int sl_ioctl(struct device *dev,struct ifreq *rq,int cmd);
+static int sl_ioctl(struct net_device *dev,struct ifreq *rq,int cmd);
 #endif
 
 /********************************
@@ -233,7 +233,7 @@ sl_free_bufs(struct slip *sl)
 static int sl_realloc_bufs(struct slip *sl, int mtu)
 {
 	int err = 0;
-	struct device *dev = sl->dev;
+	struct net_device *dev = sl->dev;
 	unsigned char *xbuff, *rbuff;
 #ifdef SL_INCLUDE_CSLIP
 	unsigned char *cbuff;
@@ -473,7 +473,7 @@ static void slip_write_wakeup(struct tty_struct *tty)
 
 /* Encapsulate an IP datagram and kick it into a TTY queue. */
 static int
-sl_xmit(struct sk_buff *skb, struct device *dev)
+sl_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct slip *sl = (struct slip*)(dev->priv);
 
@@ -536,7 +536,7 @@ sl_xmit(struct sk_buff *skb, struct device *dev)
 /* Netdevice UP -> DOWN routine */
 
 static int
-sl_close(struct device *dev)
+sl_close(struct net_device *dev)
 {
 	struct slip *sl = (struct slip*)(dev->priv);
 
@@ -557,7 +557,7 @@ sl_close(struct device *dev)
 
 /* Netdevice DOWN -> UP routine */
 
-static int sl_open(struct device *dev)
+static int sl_open(struct net_device *dev)
 {
 	struct slip *sl = (struct slip*)(dev->priv);
 
@@ -573,7 +573,7 @@ static int sl_open(struct device *dev)
 
 /* Netdevice change MTU request */
 
-static int sl_change_mtu(struct device *dev, int new_mtu)
+static int sl_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct slip *sl = (struct slip*)(dev->priv);
 
@@ -588,7 +588,7 @@ static int sl_change_mtu(struct device *dev, int new_mtu)
 /* Netdevice get statistics request */
 
 static struct net_device_stats *
-sl_get_stats(struct device *dev)
+sl_get_stats(struct net_device *dev)
 {
 	static struct net_device_stats stats;
 	struct slip *sl = (struct slip*)(dev->priv);
@@ -624,7 +624,7 @@ sl_get_stats(struct device *dev)
 
 /* Netdevice register callback */
 
-static int sl_init(struct device *dev)
+static int sl_init(struct net_device *dev)
 {
 	struct slip *sl = (struct slip*)(dev->priv);
 
@@ -1243,7 +1243,7 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
    to allow get/set outfill/keepalive parameter
    by ifconfig                                 */
 
-static int sl_ioctl(struct device *dev,struct ifreq *rq,int cmd)
+static int sl_ioctl(struct net_device *dev,struct ifreq *rq,int cmd)
 {
 	struct slip *sl = (struct slip*)(dev->priv);
 
@@ -1318,7 +1318,7 @@ static int sl_ioctl(struct device *dev,struct ifreq *rq,int cmd)
 #ifdef MODULE
 static int slip_init_ctrl_dev(void)
 #else	/* !MODULE */
-int __init slip_init_ctrl_dev(struct device *dummy)
+int __init slip_init_ctrl_dev(struct net_device *dummy)
 #endif	/* !MODULE */
 {
 	int status;

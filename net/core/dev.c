@@ -159,7 +159,7 @@ int netdev_fastroute_obstacles;
 struct net_fastroute_stats dev_fastroute_stat;
 #endif
 
-static void dev_clear_backlog(struct device *dev);
+static void dev_clear_backlog(struct net_device *dev);
 
 
 /******************************************************************************************
@@ -259,9 +259,9 @@ void dev_remove_pack(struct packet_type *pt)
  *	Find an interface by name.
  */
  
-struct device *dev_get(const char *name)
+struct net_device *dev_get(const char *name)
 {
-	struct device *dev;
+	struct net_device *dev;
 
 	read_lock(&dev_base_lock);
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
@@ -273,9 +273,9 @@ out:
 	return dev;
 }
 
-struct device * dev_get_by_index(int ifindex)
+struct net_device * dev_get_by_index(int ifindex)
 {
-	struct device *dev;
+	struct net_device *dev;
 
 	read_lock(&dev_base_lock);
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
@@ -287,9 +287,9 @@ out:
 	return dev;
 }
 
-struct device *dev_getbyhwaddr(unsigned short type, char *ha)
+struct net_device *dev_getbyhwaddr(unsigned short type, char *ha)
 {
-	struct device *dev;
+	struct net_device *dev;
 
 	read_lock(&dev_base_lock);
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
@@ -307,7 +307,7 @@ out:
  *	id. Not efficient for many devices, not called a lot..
  */
 
-int dev_alloc_name(struct device *dev, const char *name)
+int dev_alloc_name(struct net_device *dev, const char *name)
 {
 	int i;
 	/*
@@ -322,9 +322,9 @@ int dev_alloc_name(struct device *dev, const char *name)
 	return -ENFILE;	/* Over 100 of the things .. bail out! */
 }
 
-struct device *dev_alloc(const char *name, int *err)
+struct net_device *dev_alloc(const char *name, int *err)
 {
-	struct device *dev=kmalloc(sizeof(struct device)+16, GFP_KERNEL);
+	struct net_device *dev=kmalloc(sizeof(struct net_device)+16, GFP_KERNEL);
 	if(dev==NULL)
 	{
 		*err=-ENOBUFS;
@@ -340,7 +340,7 @@ struct device *dev_alloc(const char *name, int *err)
 	return dev;
 }
 
-void netdev_state_change(struct device *dev)
+void netdev_state_change(struct net_device *dev)
 {
 	if (dev->flags&IFF_UP)
 		notifier_call_chain(&netdev_chain, NETDEV_CHANGE, dev);
@@ -376,7 +376,7 @@ static int default_rebuild_header(struct sk_buff *skb)
  *	Prepare an interface for use. 
  */
  
-int dev_open(struct device *dev)
+int dev_open(struct net_device *dev)
 {
 	int ret = 0;
 
@@ -434,7 +434,7 @@ int dev_open(struct device *dev)
 
 #ifdef CONFIG_NET_FASTROUTE
 
-static __inline__ void dev_do_clear_fastroute(struct device *dev)
+static __inline__ void dev_do_clear_fastroute(struct net_device *dev)
 {
 	if (dev->accept_fastpath) {
 		int i;
@@ -444,7 +444,7 @@ static __inline__ void dev_do_clear_fastroute(struct device *dev)
 	}
 }
 
-void dev_clear_fastroute(struct device *dev)
+void dev_clear_fastroute(struct net_device *dev)
 {
 	if (dev) {
 		dev_do_clear_fastroute(dev);
@@ -461,7 +461,7 @@ void dev_clear_fastroute(struct device *dev)
  *	Completely shutdown an interface.
  */
  
-int dev_close(struct device *dev)
+int dev_close(struct net_device *dev)
 {
 	if (!(dev->flags&IFF_UP))
 		return 0;
@@ -520,7 +520,7 @@ int unregister_netdevice_notifier(struct notifier_block *nb)
  *	taps currently in use.
  */
 
-void dev_queue_xmit_nit(struct sk_buff *skb, struct device *dev)
+void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct packet_type *ptype;
 	get_fast_time(&skb->stamp);
@@ -590,7 +590,7 @@ void dev_loopback_xmit(struct sk_buff *skb)
 
 int dev_queue_xmit(struct sk_buff *skb)
 {
-	struct device *dev = skb->dev;
+	struct net_device *dev = skb->dev;
 	struct Qdisc  *q;
 
 	/* Grab device queue */
@@ -667,11 +667,11 @@ unsigned long netdev_fc_xoff = 0;
 
 static struct
 {
-	void (*stimul)(struct device *);
-	struct device *dev;
+	void (*stimul)(struct net_device *);
+	struct net_device *dev;
 } netdev_fc_slots[32];
 
-int netdev_register_fc(struct device *dev, void (*stimul)(struct device *dev))
+int netdev_register_fc(struct net_device *dev, void (*stimul)(struct net_device *dev))
 {
 	int bit = 0;
 	unsigned long flags;
@@ -722,7 +722,7 @@ static void netdev_wakeup(void)
 }
 #endif
 
-static void dev_clear_backlog(struct device *dev)
+static void dev_clear_backlog(struct net_device *dev)
 {
 	struct sk_buff *prev, *curr;
 
@@ -1041,7 +1041,7 @@ int register_gifconf(unsigned int family, gifconf_func_t * gifconf)
 
 static int dev_ifname(struct ifreq *arg)
 {
-	struct device *dev;
+	struct net_device *dev;
 	struct ifreq ifr;
 	int err;
 
@@ -1072,7 +1072,7 @@ static int dev_ifname(struct ifreq *arg)
 static int dev_ifconf(char *arg)
 {
 	struct ifconf ifc;
-	struct device *dev;
+	struct net_device *dev;
 	char *pos;
 	int len;
 	int total;
@@ -1142,7 +1142,7 @@ static int dev_ifconf(char *arg)
  */
 
 #ifdef CONFIG_PROC_FS
-static int sprintf_stats(char *buffer, struct device *dev)
+static int sprintf_stats(char *buffer, struct net_device *dev)
 {
 	struct net_device_stats *stats = (dev->get_stats ? dev->get_stats(dev): NULL);
 	int size;
@@ -1181,7 +1181,7 @@ int dev_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 	off_t pos=0;
 	int size;
 	
-	struct device *dev;
+	struct net_device *dev;
 
 
 	size = sprintf(buffer, 
@@ -1258,7 +1258,7 @@ static int dev_proc_stats(char *buffer, char **start, off_t offset,
  * Print one entry of /proc/net/wireless
  * This is a clone of /proc/net/dev (just above)
  */
-static int sprintf_wireless_stats(char *buffer, struct device *dev)
+static int sprintf_wireless_stats(char *buffer, struct net_device *dev)
 {
 	/* Get stats from the driver */
 	struct iw_statistics *stats = (dev->get_wireless_stats ?
@@ -1298,7 +1298,7 @@ int dev_get_wireless_info(char * buffer, char **start, off_t offset,
 	off_t		pos = 0;
 	int		size;
 	
-	struct device *	dev;
+	struct net_device *	dev;
 
 	size = sprintf(buffer,
 		       "Inter-|sta|  Quality       |  Discarded packets\n"
@@ -1332,7 +1332,7 @@ int dev_get_wireless_info(char * buffer, char **start, off_t offset,
 #endif	/* CONFIG_PROC_FS */
 #endif	/* CONFIG_NET_RADIO */
 
-void dev_set_promiscuity(struct device *dev, int inc)
+void dev_set_promiscuity(struct net_device *dev, int inc)
 {
 	unsigned short old_flags = dev->flags;
 
@@ -1353,7 +1353,7 @@ void dev_set_promiscuity(struct device *dev, int inc)
 	}
 }
 
-void dev_set_allmulti(struct device *dev, int inc)
+void dev_set_allmulti(struct net_device *dev, int inc)
 {
 	unsigned short old_flags = dev->flags;
 
@@ -1364,7 +1364,7 @@ void dev_set_allmulti(struct device *dev, int inc)
 		dev_mc_upload(dev);
 }
 
-int dev_change_flags(struct device *dev, unsigned flags)
+int dev_change_flags(struct net_device *dev, unsigned flags)
 {
 	int ret;
 	int old_flags = dev->flags;
@@ -1428,7 +1428,7 @@ int dev_change_flags(struct device *dev, unsigned flags)
  
 static int dev_ifsioc(struct ifreq *ifr, unsigned int cmd)
 {
-	struct device *dev;
+	struct net_device *dev;
 	int err;
 
 	if ((dev = dev_get(ifr->ifr_name)) == NULL)
@@ -1724,9 +1724,9 @@ int dev_new_index(void)
 static int dev_boot_phase = 1;
 
 
-int register_netdevice(struct device *dev)
+int register_netdevice(struct net_device *dev)
 {
-	struct device *d, **dp;
+	struct net_device *d, **dp;
 
 	spin_lock_init(&dev->queue_lock);
 	spin_lock_init(&dev->xmit_lock);
@@ -1787,9 +1787,9 @@ int register_netdevice(struct device *dev)
 	return 0;
 }
 
-int unregister_netdevice(struct device *dev)
+int unregister_netdevice(struct net_device *dev)
 {
-	struct device *d, **dp;
+	struct net_device *d, **dp;
 
 	/* If device is running, close it first. */
 	if (dev->flags & IFF_UP)
@@ -1886,7 +1886,7 @@ static struct proc_dir_entry proc_net_wireless = {
 
 __initfunc(int net_dev_init(void))
 {
-	struct device *dev, **dp;
+	struct net_device *dev, **dp;
 
 #ifdef CONFIG_NET_SCHED
 	pktsched_init();

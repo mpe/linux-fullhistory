@@ -50,7 +50,7 @@ static u32	ipv6_fragmentation_id = 1;
 int ip6_output(struct sk_buff *skb)
 {
 	struct dst_entry *dst = skb->dst;
-	struct device *dev = dst->dev;
+	struct net_device *dev = dst->dev;
 	struct hh_cache *hh = dst->hh;
 
 	skb->protocol = __constant_htons(ETH_P_IPV6);
@@ -168,7 +168,7 @@ int ip6_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
  *	is for us performace critical)
  */
 
-int ip6_nd_hdr(struct sock *sk, struct sk_buff *skb, struct device *dev,
+int ip6_nd_hdr(struct sock *sk, struct sk_buff *skb, struct net_device *dev,
 	       struct in6_addr *saddr, struct in6_addr *daddr,
 	       int proto, int len)
 {
@@ -528,7 +528,7 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 	if (pktlength <= mtu) {
 		struct sk_buff *skb;
 		struct ipv6hdr *hdr;
-		struct device *dev = dst->dev;
+		struct net_device *dev = dst->dev;
 
 		skb = sock_alloc_send_skb(sk, pktlength + 15 +
 					  dev->hard_header_len, 0,

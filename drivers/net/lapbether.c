@@ -45,7 +45,7 @@
 
 static char bcast_addr[6]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 
-static int lapbeth_rcv(struct sk_buff *, struct device *, struct packet_type *);
+static int lapbeth_rcv(struct sk_buff *, struct net_device *, struct packet_type *);
 static int lapbeth_device_event(struct notifier_block *, unsigned long, void *);
 
 static struct packet_type lapbeth_packet_type = {
@@ -67,8 +67,8 @@ static struct notifier_block lapbeth_dev_notifier = {
 static struct lapbethdev {
 	struct lapbethdev *next;
 	char   ethname[14];		/* ether device name */
-	struct device *ethdev;		/* link to ethernet device */
-	struct device axdev;		/* lapbeth device (lapb#) */
+	struct net_device *ethdev;		/* link to ethernet device */
+	struct net_device axdev;		/* lapbeth device (lapb#) */
 	struct net_device_stats stats;	/* some statistics */
 } *lapbeth_devices = NULL;
 
@@ -79,7 +79,7 @@ static struct lapbethdev {
 /*
  *	Get the ethernet device for a LAPB device
  */
-static __inline__ struct device *lapbeth_get_ether_dev(struct device *dev)
+static __inline__ struct net_device *lapbeth_get_ether_dev(struct net_device *dev)
 {
 	struct lapbethdev *lapbeth;
 	
@@ -91,7 +91,7 @@ static __inline__ struct device *lapbeth_get_ether_dev(struct device *dev)
 /*
  *	Get the LAPB device for the ethernet device
  */
-static __inline__ struct device *lapbeth_get_x25_dev(struct device *dev)
+static __inline__ struct net_device *lapbeth_get_x25_dev(struct net_device *dev)
 {
 	struct lapbethdev *lapbeth;
 
@@ -102,7 +102,7 @@ static __inline__ struct device *lapbeth_get_x25_dev(struct device *dev)
 	return NULL;
 }
 
-static __inline__ int dev_is_ethdev(struct device *dev)
+static __inline__ int dev_is_ethdev(struct net_device *dev)
 {
 	return (
 			dev->type == ARPHRD_ETHER
@@ -114,7 +114,7 @@ static __inline__ int dev_is_ethdev(struct device *dev)
  *	Sanity check: remove all devices that ceased to exists and
  *	return '1' if the given LAPB device was affected.
  */
-static int lapbeth_check_devices(struct device *dev)
+static int lapbeth_check_devices(struct net_device *dev)
 {
 	struct lapbethdev *lapbeth, *lapbeth_prev;
 	int result = 0;
@@ -154,7 +154,7 @@ static int lapbeth_check_devices(struct device *dev)
 /*
  *	Receive a LAPB frame via an ethernet interface.
  */
-static int lapbeth_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
+static int lapbeth_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *ptype)
 {
 	int len, err;
 	struct lapbethdev *lapbeth;
@@ -204,7 +204,7 @@ static void lapbeth_data_indication(void *token, struct sk_buff *skb)
 /*
  * 	Send a LAPB frame via an ethernet interface
  */
-static int lapbeth_xmit(struct sk_buff *skb, struct device *dev)
+static int lapbeth_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct lapbethdev *lapbeth;
 	int err;
@@ -254,7 +254,7 @@ static void lapbeth_data_transmit(void *token, struct sk_buff *skb)
 {
 	struct lapbethdev *lapbeth = (struct lapbethdev *)token;
 	unsigned char *ptr;
-	struct device *dev;
+	struct net_device *dev;
 	int size;
 
 	skb->protocol = htons(ETH_P_X25);
@@ -322,7 +322,7 @@ static void lapbeth_disconnected(void *token, int reason)
 /*
  *	Statistics
  */
-static struct net_device_stats *lapbeth_get_stats(struct device *dev)
+static struct net_device_stats *lapbeth_get_stats(struct net_device *dev)
 {
 	struct lapbethdev *lapbeth;
 
@@ -334,7 +334,7 @@ static struct net_device_stats *lapbeth_get_stats(struct device *dev)
 /*
  *	Set AX.25 callsign
  */
-static int lapbeth_set_mac_address(struct device *dev, void *addr)
+static int lapbeth_set_mac_address(struct net_device *dev, void *addr)
 {
     struct sockaddr *sa = (struct sockaddr *)addr;
 
@@ -343,7 +343,7 @@ static int lapbeth_set_mac_address(struct device *dev, void *addr)
     return 0;
 }
 
-static int lapbeth_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+static int lapbeth_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	return -EINVAL;
 }
@@ -351,7 +351,7 @@ static int lapbeth_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 /*
  * open/close a device
  */
-static int lapbeth_open(struct device *dev)
+static int lapbeth_open(struct net_device *dev)
 {
 	struct lapb_register_struct lapbeth_callbacks;
 	struct lapbethdev *lapbeth;
@@ -384,7 +384,7 @@ static int lapbeth_open(struct device *dev)
 	return 0;
 }
 
-static int lapbeth_close(struct device *dev)
+static int lapbeth_close(struct net_device *dev)
 {
 	struct lapbethdev *lapbeth;
 	int err;
@@ -402,7 +402,7 @@ static int lapbeth_close(struct device *dev)
 	return 0;
 }
 
-static int lapbeth_dev_init(struct device *dev)
+static int lapbeth_dev_init(struct net_device *dev)
 {
 	return 0;
 }
@@ -412,7 +412,7 @@ static int lapbeth_dev_init(struct device *dev)
 /*
  *	Setup a new device.
  */
-static int lapbeth_new_device(struct device *dev)
+static int lapbeth_new_device(struct net_device *dev)
 {
 	int k;
 	unsigned char *buf;
@@ -432,7 +432,7 @@ static int lapbeth_new_device(struct device *dev)
 	buf = kmalloc(14, GFP_KERNEL);
 
 	for (k = 0; k < MAXLAPBDEV; k++) {
-		struct device *odev;
+		struct net_device *odev;
 
 		sprintf(buf, "lapb%d", k);
 
@@ -490,7 +490,7 @@ static int lapbeth_new_device(struct device *dev)
  */
 static int lapbeth_device_event(struct notifier_block *this,unsigned long event, void *ptr)
 {
-	struct device *dev = (struct device *)ptr;
+	struct net_device *dev = (struct net_device *)ptr;
 	
 	if (!dev_is_ethdev(dev))
 		return NOTIFY_DONE;
@@ -524,7 +524,7 @@ static int lapbeth_device_event(struct notifier_block *this,unsigned long event,
  */
 int lapbeth_init(void)
 {
-	struct device *dev;
+	struct net_device *dev;
 
 	lapbeth_packet_type.type  = htons(ETH_P_DEC);
 	dev_add_pack(&lapbeth_packet_type);

@@ -94,7 +94,7 @@ KERN_INFO "baycom_ser_fdx: version 0.7 compiled " __TIME__ " " __DATE__ "\n";
 
 #define NR_PORTS 4
 
-static struct device baycom_device[NR_PORTS];
+static struct net_device baycom_device[NR_PORTS];
 
 /* --------------------------------------------------------------------- */
 
@@ -181,7 +181,7 @@ static void inline baycom_int_freq(struct baycom_state *bc)
 
 /* --------------------------------------------------------------------- */
 
-static inline void ser12_set_divisor(struct device *dev,
+static inline void ser12_set_divisor(struct net_device *dev,
                                      unsigned int divisor)
 {
         outb(0x81, LCR(dev->base_addr));        /* DLAB = 1 */
@@ -228,7 +228,7 @@ extern inline unsigned int hweight8(unsigned int w)
 
 /* --------------------------------------------------------------------- */
 
-static __inline__ void ser12_rx(struct device *dev, struct baycom_state *bc, struct timeval *tv, unsigned char curs)
+static __inline__ void ser12_rx(struct net_device *dev, struct baycom_state *bc, struct timeval *tv, unsigned char curs)
 {
 	int timediff;
 	int bdus8 = bc->baud_us >> 3;
@@ -285,7 +285,7 @@ static __inline__ void ser12_rx(struct device *dev, struct baycom_state *bc, str
 
 static void ser12_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)dev_id;
+	struct net_device *dev = (struct net_device *)dev_id;
 	struct baycom_state *bc = (struct baycom_state *)dev->priv;
 	struct timeval tv;
 	unsigned char iir, msr;
@@ -409,7 +409,7 @@ static enum uart ser12_check_uart(unsigned int iobase)
 
 /* --------------------------------------------------------------------- */
 
-static int ser12_open(struct device *dev)
+static int ser12_open(struct net_device *dev)
 {
 	struct baycom_state *bc = (struct baycom_state *)dev->priv;
 	enum uart u;
@@ -464,7 +464,7 @@ static int ser12_open(struct device *dev)
 
 /* --------------------------------------------------------------------- */
 
-static int ser12_close(struct device *dev)
+static int ser12_close(struct net_device *dev)
 {
 	struct baycom_state *bc = (struct baycom_state *)dev->priv;
 
@@ -490,7 +490,7 @@ static int ser12_close(struct device *dev)
 
 /* --------------------------------------------------------------------- */
 
-static int baycom_ioctl(struct device *dev, struct ifreq *ifr,
+static int baycom_ioctl(struct net_device *dev, struct ifreq *ifr,
 			struct hdlcdrv_ioctl *hi, int cmd);
 
 /* --------------------------------------------------------------------- */
@@ -520,7 +520,7 @@ static int baycom_setmode(struct baycom_state *bc, const char *modestr)
 
 /* --------------------------------------------------------------------- */
 
-static int baycom_ioctl(struct device *dev, struct ifreq *ifr,
+static int baycom_ioctl(struct net_device *dev, struct ifreq *ifr,
 			struct hdlcdrv_ioctl *hi, int cmd)
 {
 	struct baycom_state *bc;
@@ -616,7 +616,7 @@ int __init init_module(void)
 	 * register net devices
 	 */
 	for (i = 0; i < NR_PORTS; i++) {
-		struct device *dev = baycom_device+i;
+		struct net_device *dev = baycom_device+i;
 		sprintf(ifname, "bcsf%d", i);
 
 		if (!mode[i])
@@ -662,7 +662,7 @@ void cleanup_module(void)
 	int i;
 
 	for(i = 0; i < NR_PORTS; i++) {
-		struct device *dev = baycom_device+i;
+		struct net_device *dev = baycom_device+i;
 		struct baycom_state *bc = (struct baycom_state *)dev->priv;
 
 		if (bc) {

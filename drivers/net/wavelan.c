@@ -1876,7 +1876,7 @@ wl_his_gather(device *	dev,
  * It is here that the wireless extensions are treated (iwconfig).
  */
 static int
-wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
+wavelan_ioctl(struct net_device *	dev,	/* device on which the ioctl is applied */
 	      struct ifreq *	rq,	/* data passed */
 	      int		cmd)	/* ioctl number */
 {
@@ -4239,13 +4239,13 @@ init_module(void)
 	  device *	dev;
 
 	  /* Create device and set basic arguments. */
-	  dev = kmalloc(sizeof(struct device), GFP_KERNEL);
+	  dev = kmalloc(sizeof(struct net_device), GFP_KERNEL);
 	  if(dev==NULL)
 	  {
 	  	ret = -ENOMEM;
 	  	break;
 	  }
-	  memset(dev, 0x00, sizeof(struct device));
+	  memset(dev, 0x00, sizeof(struct net_device));
 	  dev->name = name[i];
 	  dev->base_addr = io[i];
 	  dev->irq = irq[i];
@@ -4257,7 +4257,7 @@ init_module(void)
 	    {
 	      /* Deallocate everything. */
 	      /* Note: if dev->priv is mallocated, there is no way to fail. */
-	      kfree_s(dev, sizeof(struct device));
+	      kfree_s(dev, sizeof(struct net_device));
 	    }
 	  else
 	    {
@@ -4310,7 +4310,7 @@ cleanup_module(void)
 
       /* Free pieces. */
       kfree_s(dev->priv, sizeof(struct net_local));
-      kfree_s(dev, sizeof(struct device));
+      kfree_s(dev, sizeof(struct net_device));
     }
 
 #ifdef DEBUG_MODULE_TRACE

@@ -237,7 +237,7 @@ static __inline__ int opt_unrec(struct sk_buff *skb, __u32 offset)
  */
 
 void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info, 
-		 struct device *dev)
+		 struct net_device *dev)
 {
 	struct ipv6hdr *hdr = skb->nh.ipv6h;
 	struct sock *sk = icmpv6_socket->sk;
@@ -458,7 +458,7 @@ static void icmpv6_notify(struct sk_buff *skb,
 
 int icmpv6_rcv(struct sk_buff *skb, unsigned long len)
 {
-	struct device *dev = skb->dev;
+	struct net_device *dev = skb->dev;
 	struct in6_addr *saddr = &skb->nh.ipv6h->saddr;
 	struct in6_addr *daddr = &skb->nh.ipv6h->daddr;
 	struct ipv6hdr *orig_hdr;

@@ -22,6 +22,8 @@
  *    routines in this file used to be inline!
  */
 
+#include <linux/module.h>
+
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/types.h>
@@ -38,6 +40,7 @@
 
 #include <linux/zorro.h>
 #include <asm/irq.h>
+#include <asm/io.h>
 #include <asm/amigaints.h>
 #include <asm/amigahw.h>
 
@@ -77,7 +80,7 @@ volatile unsigned char cmd_buffer[16];
 				 */
 
 /***************************************************************** Detection */
-int fastlane_esp_detect(Scsi_Host_Template *tpnt)
+int __init fastlane_esp_detect(Scsi_Host_Template *tpnt)
 {
 	struct NCR_ESP *esp;
 	const struct ConfigDev *esp_dev;
@@ -137,10 +140,8 @@ int fastlane_esp_detect(Scsi_Host_Template *tpnt)
 
 		/* Map the physical address space into virtual kernel space */
 		address = (unsigned long)
-			kernel_map((unsigned long)esp_dev->cd_BoardAddr,
-				   esp_dev->cd_BoardSize,
-				   KERNELMAP_NOCACHE_SER,
-				   NULL);
+			ioremap_nocache((unsigned long)esp_dev->cd_BoardAddr,
+					esp_dev->cd_BoardSize);
 
 		if(!address){
 			printk("Could not remap Fastlane controller memory!");
@@ -163,17 +164,17 @@ int fastlane_esp_detect(Scsi_Host_Template *tpnt)
 		
 		/* Set the command buffer */
 		esp->esp_command = (volatile unsigned char*) cmd_buffer;
-		esp->esp_command_dvma = virt_to_bus((unsigned long) cmd_buffer);
+		esp->esp_command_dvma = virt_to_bus(cmd_buffer);
 
 		esp->irq = IRQ_AMIGA_PORTS;
-		request_irq(IRQ_AMIGA_PORTS, esp_intr, 0, 
+		esp->slot = key;
+		request_irq(IRQ_AMIGA_PORTS, esp_intr, SA_SHIRQ,
 			    "Fastlane SCSI", esp_intr);
 
 		/* Controller ID */
 		esp->scsi_id = 7;
 		
-		/* Check for differential SCSI-bus */
-		/* What is this stuff? */
+		/* We don't have a differential SCSI-bus. */
 		esp->diff = 0;
 
 		dma_clear(esp);
@@ -181,7 +182,7 @@ int fastlane_esp_detect(Scsi_Host_Template *tpnt)
 
 		zorro_config_board(key, 0);
 
-		printk("\nESP: Total of %d ESP hosts found, %d actually in use.\n", nesps,esps_in_use);
+		printk("ESP: Total of %d ESP hosts found, %d actually in use.\n", nesps, esps_in_use);
 		esps_running = esps_in_use;
 		return esps_in_use;
 	}
@@ -312,7 +313,7 @@ static int dma_irq_p(struct NCR_ESP *esp)
 	   (dma_status & FASTLANE_DMA_CREQ) &&
 #endif
 	   (!(dma_status & FASTLANE_DMA_MINT)) &&
-	   ((((struct ESP_regs *) (esp->eregs))->esp_status) & ESP_STAT_INTR));
+	   (esp_read(((struct ESP_regs *) (esp->eregs))->esp_status) & ESP_STAT_INTR));
 }
 
 static void dma_led_off(struct NCR_ESP *esp)
@@ -342,4 +343,30 @@ static void dma_setup(struct NCR_ESP *esp, __u32 addr, int count, int write)
 	} else {
 		dma_init_write(esp, addr, count);
 	}
+}
+
+#ifdef MODULE
+
+#define HOSTS_C
+
+#include "fastlane.h"
+
+Scsi_Host_Template driver_template = SCSI_FASTLANE;
+
+#include "scsi_module.c"
+
+#endif
+
+int fastlane_esp_release(struct Scsi_Host *instance)
+{
+#ifdef MODULE
+	unsigned int key;
+
+	key = ((struct NCR_ESP *)instance->hostdata)->slot;
+	esp_deallocate((struct NCR_ESP *)instance->hostdata);
+	esp_release();
+	zorro_unconfig_board(key, 0);
+	free_irq(IRQ_AMIGA_PORTS, esp_intr);
+#endif
+	return 1;
 }

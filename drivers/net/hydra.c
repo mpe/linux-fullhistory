@@ -90,14 +90,14 @@ struct hydra_private
 	unsigned int key;
 };
 
-static int hydra_open(struct device *dev);
-static int hydra_start_xmit(struct sk_buff *skb, struct device *dev);
+static int hydra_open(struct net_device *dev);
+static int hydra_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static void hydra_interrupt(int irq, void *data, struct pt_regs *fp);
-static void __inline__ hydra_rx(struct device *dev, struct hydra_private *priv, volatile u8 *nicbase);
-static int hydra_close(struct device *dev);
-static struct net_device_stats *hydra_get_stats(struct device *dev);
+static void __inline__ hydra_rx(struct net_device *dev, struct hydra_private *priv, volatile u8 *nicbase);
+static int hydra_close(struct net_device *dev);
+static struct net_device_stats *hydra_get_stats(struct net_device *dev);
 #ifdef HAVE_MULTICAST
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
+static void set_multicast_list(struct net_device *dev, int num_addrs, void *addrs);
 #endif
 
 
@@ -157,7 +157,7 @@ static void memcpyw(u16 *dest, u16 *src, int len)
 
 #endif
 
-int __init hydra_probe(struct device *dev)
+int __init hydra_probe(struct net_device *dev)
 {
 	struct hydra_private *priv;
 	u32 board;
@@ -210,7 +210,7 @@ int __init hydra_probe(struct device *dev)
 }
 
 
-static int hydra_open(struct device *dev)
+static int hydra_open(struct net_device *dev)
 {
 	struct hydra_private *priv = (struct hydra_private *)dev->priv;
 	volatile u8 *nicbase = priv->hydra_nic_base;
@@ -292,7 +292,7 @@ static int hydra_open(struct device *dev)
 }
 
 
-static int hydra_close(struct device *dev)
+static int hydra_close(struct net_device *dev)
 {
 	struct hydra_private *priv = (struct hydra_private *)dev->priv;
 	volatile u8 *nicbase = priv->hydra_nic_base;
@@ -323,7 +323,7 @@ static void hydra_interrupt(int irq, void *data, struct pt_regs *fp)
 {
 	volatile u8 *nicbase;
   
-	struct device *dev = (struct device *) data;
+	struct net_device *dev = (struct net_device *) data;
 	struct hydra_private *priv;
 	u16 intbits;
 
@@ -434,7 +434,7 @@ static void hydra_interrupt(int irq, void *data, struct pt_regs *fp)
  * packet transmit routine
  */
 
-static int hydra_start_xmit(struct sk_buff *skb, struct device *dev)
+static int hydra_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct hydra_private *priv = (struct hydra_private *)dev->priv;
 	volatile u8 *nicbase = priv->hydra_nic_base;
@@ -525,7 +525,7 @@ static int hydra_start_xmit(struct sk_buff *skb, struct device *dev)
 }
 
 
-static void __inline__ hydra_rx(struct device *dev, struct hydra_private *priv, volatile u8 *nicbase)
+static void __inline__ hydra_rx(struct net_device *dev, struct hydra_private *priv, volatile u8 *nicbase)
 {
 	volatile u16 *board_ram_ptr;
 	struct sk_buff *skb;
@@ -634,7 +634,7 @@ note-for-v2.1: not really problem anymore. hasn't been for a long time.
 }
     
 
-static struct net_device_stats *hydra_get_stats(struct device *dev)
+static struct net_device_stats *hydra_get_stats(struct net_device *dev)
 {
 	struct hydra_private *priv = (struct hydra_private *)dev->priv;
 #if 0
@@ -648,7 +648,7 @@ static struct net_device_stats *hydra_get_stats(struct device *dev)
 }
 
 #ifdef HAVE_MULTICAST
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+static void set_multicast_list(struct net_device *dev, int num_addrs, void *addrs)
 {
 	struct hydra_private *priv = (struct hydra_private *)dev->priv;
 	u8 *board = priv->hydra_base;
@@ -663,7 +663,7 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 #ifdef MODULE
 static char devicename[9] = { 0, };
 
-static struct device hydra_dev =
+static struct net_device hydra_dev =
 {
 	devicename,			/* filled in by register_netdev() */
 	0, 0, 0, 0,			/* memory */

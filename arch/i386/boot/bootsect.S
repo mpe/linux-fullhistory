@@ -98,7 +98,7 @@ go:	mov	di,#0x4000-12	! 0x4000 is arbitrary value >= length of
  *		fs = 0, gs is unused.
  */
 
-! cx contains 0 from rep movsw above
+! cx contains 0 from rep movsd above
 
 	mov	fs,cx
 	mov	bx,#0x78		! fs:bx is parameter table address

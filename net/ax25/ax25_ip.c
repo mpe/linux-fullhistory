@@ -55,7 +55,7 @@
 
 #ifdef CONFIG_INET
 
-int ax25_encapsulate(struct sk_buff *skb, struct device *dev, unsigned short type, void *daddr, void *saddr, unsigned len)
+int ax25_encapsulate(struct sk_buff *skb, struct net_device *dev, unsigned short type, void *daddr, void *saddr, unsigned len)
 {
   	/* header is an AX.25 UI frame from us to them */
  	unsigned char *buff = skb_push(skb, AX25_HEADER_LEN);
@@ -106,7 +106,7 @@ int ax25_rebuild_header(struct sk_buff *skb)
 {
 	struct sk_buff *ourskb;
 	unsigned char *bp  = skb->data;
-	struct device *dev;
+	struct net_device *dev;
 	ax25_address *src, *dst;
 	ax25_route *route;
 	ax25_dev *ax25_dev;
@@ -197,7 +197,7 @@ int ax25_rebuild_header(struct sk_buff *skb)
 
 #else	/* INET */
 
-int ax25_encapsulate(struct sk_buff *skb, struct device *dev, unsigned short type, void *daddr, void *saddr, unsigned len)
+int ax25_encapsulate(struct sk_buff *skb, struct net_device *dev, unsigned short type, void *daddr, void *saddr, unsigned len)
 {
 	return -AX25_HEADER_LEN;
 }

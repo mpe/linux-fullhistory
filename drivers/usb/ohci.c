@@ -1011,7 +1011,7 @@ static void* ohci_request_irq(struct usb_device *usb, unsigned int pipe,
  *
  * This function can NOT be called from an interrupt.
  */
-int ohci_release_irq(void* handle)
+int ohci_release_irq(struct usb_device *usb, void* handle)
 {
 	struct ohci_device *dev;
 	struct ohci_td *int_td;

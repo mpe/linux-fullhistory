@@ -26,14 +26,14 @@
 
 #ifdef __KERNEL__
 extern int		fddi_header(struct sk_buff *skb,
-				    struct device *dev,
+				    struct net_device *dev,
 				    unsigned short type,
 				    void *daddr,
 				    void *saddr,
 				    unsigned len);
 extern int		fddi_rebuild_header(struct sk_buff *skb);
 extern unsigned short	fddi_type_trans(struct sk_buff *skb,
-				struct device *dev);
+				struct net_device *dev);
 #endif
 
 #endif	/* _LINUX_FDDIDEVICE_H */

@@ -96,7 +96,7 @@ static __inline__ void inet_free_ifa(struct in_ifaddr *ifa)
 	inet_ifa_count--;
 }
 
-struct in_device *inetdev_init(struct device *dev)
+struct in_device *inetdev_init(struct net_device *dev)
 {
 	struct in_device *in_dev;
 
@@ -254,7 +254,7 @@ inet_insert_ifa(struct in_device *in_dev, struct in_ifaddr *ifa)
 }
 
 static int
-inet_set_ifa(struct device *dev, struct in_ifaddr *ifa)
+inet_set_ifa(struct net_device *dev, struct in_ifaddr *ifa)
 {
 	struct in_device *in_dev = dev->ip_ptr;
 
@@ -273,7 +273,7 @@ inet_set_ifa(struct device *dev, struct in_ifaddr *ifa)
 
 struct in_device *inetdev_by_index(int ifindex)
 {
-	struct device *dev;
+	struct net_device *dev;
 	dev = dev_get_by_index(ifindex);
 	if (dev)
 		return dev->ip_ptr;
@@ -324,7 +324,7 @@ int
 inet_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg)
 {
 	struct rtattr **rta = arg;
-	struct device *dev;
+	struct net_device *dev;
 	struct in_device *in_dev;
 	struct ifaddrmsg *ifm = NLMSG_DATA(nlh);
 	struct in_ifaddr *ifa;
@@ -399,7 +399,7 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 	struct in_device *in_dev;
 	struct in_ifaddr **ifap = NULL;
 	struct in_ifaddr *ifa = NULL;
-	struct device *dev;
+	struct net_device *dev;
 #ifdef CONFIG_IP_ALIAS
 	char *colon;
 #endif
@@ -603,7 +603,7 @@ rarok:
 }
 
 static int
-inet_gifconf(struct device *dev, char *buf, int len)
+inet_gifconf(struct net_device *dev, char *buf, int len)
 {
 	struct in_device *in_dev = dev->ip_ptr;
 	struct in_ifaddr *ifa;
@@ -636,7 +636,7 @@ inet_gifconf(struct device *dev, char *buf, int len)
 	return done;
 }
 
-u32 inet_select_addr(const struct device *dev, u32 dst, int scope)
+u32 inet_select_addr(const struct net_device *dev, u32 dst, int scope)
 {
 	u32 addr = 0;
 	const struct in_device *in_dev = dev->ip_ptr;
@@ -692,7 +692,7 @@ int unregister_inetaddr_notifier(struct notifier_block *nb)
  
 static int inetdev_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
-	struct device *dev = ptr;
+	struct net_device *dev = ptr;
 	struct in_device *in_dev = dev->ip_ptr;
 
 	if (in_dev == NULL)
@@ -786,7 +786,7 @@ static int inet_dump_ifaddr(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	int idx, ip_idx;
 	int s_idx, s_ip_idx;
-	struct device *dev;
+	struct net_device *dev;
 	struct in_device *in_dev;
 	struct in_ifaddr *ifa;
 
@@ -879,7 +879,7 @@ static struct rtnetlink_link inet_rtnetlink_table[RTM_MAX-RTM_BASE+1] =
 
 void inet_forward_change()
 {
-	struct device *dev;
+	struct net_device *dev;
 	int on = ipv4_devconf.forwarding;
 
 	ipv4_devconf.accept_redirects = !on;
@@ -972,7 +972,7 @@ static struct devinet_sysctl_table
 static void devinet_sysctl_register(struct in_device *in_dev, struct ipv4_devconf *p)
 {
 	int i;
-	struct device *dev = in_dev ? in_dev->dev : NULL;
+	struct net_device *dev = in_dev ? in_dev->dev : NULL;
 	struct devinet_sysctl_table *t;
 
 	t = kmalloc(sizeof(*t), GFP_KERNEL);

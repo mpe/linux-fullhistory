@@ -37,7 +37,7 @@ endif
 
 ifeq ($(CONFIG_FB),y)
   L_OBJS += fonts.o
-  OX_OBJS += fbcon.o fbcmap.o fbmem.o
+  OX_OBJS += fbcon.o fbcmap.o fbmem.o modedb.o
   ifeq ($(CONFIG_FONT_8x8),y)
     L_OBJS += font_8x8.o
   endif

@@ -411,6 +411,7 @@ static char noaccel __initdata = 0;
 static u32 default_vram __initdata = 0;
 static int default_pll __initdata = 0;
 static int default_mclk __initdata = 0;
+static const char *mode_option __initdata = NULL;
 
 #if defined(CONFIG_PPC)
 static int default_vmode __initdata = VMODE_NVRAM;
@@ -2218,7 +2219,6 @@ struct atyclk {
 static int atyfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		       u_long arg, int con, struct fb_info *info2)
 {
-    struct fb_info_aty *info = (struct fb_info_aty *)info2;
 #ifdef __sparc__
     struct fbtype fbtyp;
     struct display *disp;
@@ -2734,32 +2734,55 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
 	    info->total_vram -= GUI_RESERVE;
 	}
 
-#if defined(CONFIG_PPC)
-    if (default_vmode == VMODE_NVRAM) {
-	default_vmode = nvram_read_byte(NV_VMODE);
-	if (default_vmode <= 0 || default_vmode > VMODE_MAX)
-	    default_vmode = VMODE_CHOOSE;
-    }
-    if (default_vmode == VMODE_CHOOSE) {
-	if (Gx == LG_CHIP_ID)
-	    /* G3 PowerBook with 1024x768 LCD */
-	    default_vmode = VMODE_1024_768_60;
-	else {
-	    sense = read_aty_sense(info);
-	    default_vmode = mac_map_monitor_sense(sense);
-	}
-    }
-    if (default_vmode <= 0 || default_vmode > VMODE_MAX)
-	default_vmode = VMODE_640_480_60;
-    if (default_cmode == CMODE_NVRAM)
-	default_cmode = nvram_read_byte(NV_CMODE);
-    if (default_cmode < CMODE_8 || default_cmode > CMODE_32)
-	default_cmode = CMODE_8;
-    if (mac_vmode_to_var(default_vmode, default_cmode, &var))
-	var = default_var;
-#else /* !CONFIG_PPC */
+    disp = &info->disp;
+
+    strcpy(info->fb_info.modename, atyfb_name);
+    info->fb_info.node = -1;
+    info->fb_info.fbops = &atyfb_ops;
+    info->fb_info.disp = disp;
+    strcpy(info->fb_info.fontname, fontname);
+    info->fb_info.changevar = NULL;
+    info->fb_info.switch_con = &atyfbcon_switch;
+    info->fb_info.updatevar = &atyfbcon_updatevar;
+    info->fb_info.blank = &atyfbcon_blank;
+    info->fb_info.flags = FBINFO_FLAG_DEFAULT;
+
+#ifdef MODULE
     var = default_var;
+#else /* !MODULE */
+#if defined(CONFIG_PPC)
+    if (mode_option) {
+	if (!mac_find_mode(&var, &info->fb_info, mode_option, 8))
+	    var = default_var;
+    } else {
+	if (default_vmode == VMODE_NVRAM) {
+	    default_vmode = nvram_read_byte(NV_VMODE);
+	    if (default_vmode <= 0 || default_vmode > VMODE_MAX)
+		default_vmode = VMODE_CHOOSE;
+	}
+	if (default_vmode == VMODE_CHOOSE) {
+	    if (Gx == LG_CHIP_ID)
+		/* G3 PowerBook with 1024x768 LCD */
+		default_vmode = VMODE_1024_768_60;
+	    else {
+		sense = read_aty_sense(info);
+		default_vmode = mac_map_monitor_sense(sense);
+	    }
+	}
+	if (default_vmode <= 0 || default_vmode > VMODE_MAX)
+	    default_vmode = VMODE_640_480_60;
+	if (default_cmode == CMODE_NVRAM)
+	    default_cmode = nvram_read_byte(NV_CMODE);
+	if (default_cmode < CMODE_8 || default_cmode > CMODE_32)
+	    default_cmode = CMODE_8;
+	if (mac_vmode_to_var(default_vmode, default_cmode, &var))
+	    var = default_var;
+    }
+#else /* !CONFIG_PPC */
+    if (!fb_find_mode(&var, &info->fb_info, mode_option, NULL, 0, NULL, 8))
+	var = default_var;
 #endif /* !CONFIG_PPC */
+#endif /* !MODULE */
     if (noaccel)
         var.accel_flags &= ~FB_ACCELF_TEXT;
     else
@@ -2776,19 +2799,6 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
 	printk("atyfb: can't set default video mode\n");
 	return 0;
     }
-
-    disp = &info->disp;
-
-    strcpy(info->fb_info.modename, atyfb_name);
-    info->fb_info.node = -1;
-    info->fb_info.fbops = &atyfb_ops;
-    info->fb_info.disp = disp;
-    strcpy(info->fb_info.fontname, fontname);
-    info->fb_info.changevar = NULL;
-    info->fb_info.switch_con = &atyfbcon_switch;
-    info->fb_info.updatevar = &atyfbcon_updatevar;
-    info->fb_info.blank = &atyfbcon_blank;
-    info->fb_info.flags = FBINFO_FLAG_DEFAULT;
 
 #ifdef __sparc__
     atyfb_save_palette(&info->fb_info, 0);

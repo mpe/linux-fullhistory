@@ -805,7 +805,7 @@ struct rr_private
 	struct rr_regs		*regs;		/* Register base */
 	struct ring_ctrl	*rx_ctrl;	/* Receive ring control */
 	struct rr_info		*info;		/* Shared info page */
-	struct device		*next;
+	struct net_device		*next;
 	spinlock_t		lock;
 	struct timer_list	timer;
 	u32			cur_rx, cur_cmd, cur_evt;
@@ -821,20 +821,20 @@ struct rr_private
 /*
  * Prototypes
  */
-static int rr_init(struct device *dev);
-static int rr_init1(struct device *dev);
+static int rr_init(struct net_device *dev);
+static int rr_init1(struct net_device *dev);
 static void rr_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
-static int rr_open(struct device *dev);
-static int rr_start_xmit(struct sk_buff *skb, struct device *dev);
-static int rr_close(struct device *dev);
-static struct net_device_stats *rr_get_stats(struct device *dev);
-static int rr_ioctl(struct device *dev, struct ifreq *rq, int cmd);
+static int rr_open(struct net_device *dev);
+static int rr_start_xmit(struct sk_buff *skb, struct net_device *dev);
+static int rr_close(struct net_device *dev);
+static struct net_device_stats *rr_get_stats(struct net_device *dev);
+static int rr_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 static unsigned int rr_read_eeprom(struct rr_private *rrpriv,
 				   unsigned long offset,
 				   unsigned char *buf,
 				   unsigned long length);
 static u32 rr_read_eeprom_word(struct rr_private *rrpriv, void * offset);
-static int rr_load_firmware(struct device *dev);
+static int rr_load_firmware(struct net_device *dev);
 
 #endif /* _RRUNNER_H_ */

@@ -19,7 +19,7 @@
 #include <linux/delay.h>
 #include <asm/io.h>
 
-#include "irq.h"
+#include <linux/irq.h>
 
 /*
  * volatile is justified in this case, IO-APIC register contents
@@ -957,24 +957,13 @@ static int __init timer_irq_works(void)
  * better to do it this way as thus we do not have to be aware of
  * 'pending' interrupts in the IRQ path, except at this point.
  */
-static inline void self_IPI(unsigned int irq)
-{
-	irq_desc_t *desc = irq_desc + irq;
-	unsigned int status = desc->status;
-
-	if ((status & (IRQ_PENDING | IRQ_REPLAY)) == IRQ_PENDING) {
-		desc->status = status | IRQ_REPLAY;
-		send_IPI_self(IO_APIC_VECTOR(irq));
-	}
-}
-
 /*
  * Edge triggered needs to resend any interrupt
- * that was delayed.
+ * that was delayed but this is now handled in the device
+ * independent code.
  */
 static void enable_edge_ioapic_irq(unsigned int irq)
 {
-	self_IPI(irq);
 	enable_IO_APIC_irq(irq);
 }
 
@@ -987,129 +976,52 @@ static void disable_edge_ioapic_irq(unsigned int irq)
  * Starting up a edge-triggered IO-APIC interrupt is
  * nasty - we need to make sure that we get the edge.
  * If it is already asserted for some reason, we need
- * to fake an edge by marking it IRQ_PENDING..
+ * return 1 to indicate that is was pending.
  *
  * This is not complete - we should be able to fake
  * an edge even if it isn't on the 8259A...
  */
 
-static void startup_edge_ioapic_irq(unsigned int irq)
+static unsigned int startup_edge_ioapic_irq(unsigned int irq)
 {
+	int was_pending = 0;
 	if (irq < 16) {
 		disable_8259A_irq(irq);
 		if (i8259A_irq_pending(irq))
-			irq_desc[irq].status |= IRQ_PENDING;
+			was_pending = 1;
 	}
 	enable_edge_ioapic_irq(irq);
+	return was_pending;
 }
 
 #define shutdown_edge_ioapic_irq	disable_edge_ioapic_irq
+void static ack_edge_ioapic_irq(unsigned int i)
+{
+	ack_APIC_irq();
+}
+void static end_edge_ioapic_irq(unsigned int i){}
+
 
 /*
  * Level triggered interrupts can just be masked,
  * and shutting down and starting up the interrupt
- * is the same as enabling and disabling them.
+ * is the same as enabling and disabling them -- except
+ * with a startup need to return a "was pending" value.
  */
-#define startup_level_ioapic_irq	unmask_IO_APIC_irq
+static unsigned int startup_level_ioapic_irq(unsigned int irq)
+{
+	unmask_IO_APIC_irq(irq);
+	return 0; /* don't check for pending */
+}
+
 #define shutdown_level_ioapic_irq	mask_IO_APIC_irq
 #define enable_level_ioapic_irq		unmask_IO_APIC_irq
 #define disable_level_ioapic_irq	mask_IO_APIC_irq
-
-static void do_edge_ioapic_IRQ(unsigned int irq, struct pt_regs * regs)
+#define end_level_ioapic_irq		unmask_IO_APIC_irq	
+void static mask_and_ack_level_ioapic_irq(unsigned int i)
 {
-	irq_desc_t *desc = irq_desc + irq;
-	struct irqaction * action;
-	unsigned int status;
-
-	spin_lock(&irq_controller_lock);
-
-	/*
-	 * Edge triggered IRQs can be acknowledged immediately
-	 * and do not need to be masked.
-	 */
+	mask_IO_APIC_irq(i);
 	ack_APIC_irq();
-	status = desc->status & ~(IRQ_REPLAY | IRQ_WAITING);
-	status |= IRQ_PENDING;
-
-	/*
-	 * If the IRQ is disabled for whatever reason, we cannot
-	 * use the action we have.
-	 */
-	action = NULL;
-	if (!(status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
-		action = desc->action;
-		status &= ~IRQ_PENDING;
-		status |= IRQ_INPROGRESS;
-	}
-	desc->status = status;
-	spin_unlock(&irq_controller_lock);
-
-	/*
-	 * If there is no IRQ handler or it was disabled, exit early.
-	 */
-	if (!action)
-		return;
-
-	/*
-	 * Edge triggered interrupts need to remember
-	 * pending events.
-	 */
-	for (;;) {
-		handle_IRQ_event(irq, regs, action);
-
-		spin_lock(&irq_controller_lock);
-		if (!(desc->status & IRQ_PENDING))
-			break;
-		desc->status &= ~IRQ_PENDING;
-		spin_unlock(&irq_controller_lock);
-	}
-	desc->status &= ~IRQ_INPROGRESS;
-	spin_unlock(&irq_controller_lock);
-}
-
-static void do_level_ioapic_IRQ(unsigned int irq, struct pt_regs * regs)
-{
-	irq_desc_t *desc = irq_desc + irq;
-	struct irqaction * action;
-	unsigned int status;
-
-	spin_lock(&irq_controller_lock);
-	/*
-	 * In the level triggered case we first disable the IRQ
-	 * in the IO-APIC, then we 'early ACK' the IRQ, then we
-	 * handle it and enable the IRQ when finished.
-	 *
-	 * disable has to happen before the ACK, to avoid IRQ storms.
-	 * So this all has to be within the spinlock.
-	 */
-	mask_IO_APIC_irq(irq);
-	status = desc->status & ~(IRQ_REPLAY | IRQ_WAITING);
-
-	/*
-	 * If the IRQ is disabled for whatever reason, we must
-	 * not enter the IRQ action.
-	 */
-	action = NULL;
-	if (!(status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
-		action = desc->action;
-		status |= IRQ_INPROGRESS;
-	}
-	desc->status = status;
-
-	ack_APIC_irq();
-	spin_unlock(&irq_controller_lock);
-
-	/* Exit early if we had no action or it was disabled */
-	if (!action)
-		return;
-
-	handle_IRQ_event(irq, regs, action);
-
-	spin_lock(&irq_controller_lock);
-	desc->status &= ~IRQ_INPROGRESS;
-	if (!(desc->status & IRQ_DISABLED))
-		unmask_IO_APIC_irq(irq);
-	spin_unlock(&irq_controller_lock);
 }
 
 /*
@@ -1125,18 +1037,20 @@ static struct hw_interrupt_type ioapic_edge_irq_type = {
 	"IO-APIC-edge",
 	startup_edge_ioapic_irq,
 	shutdown_edge_ioapic_irq,
-	do_edge_ioapic_IRQ,
 	enable_edge_ioapic_irq,
-	disable_edge_ioapic_irq
+	disable_edge_ioapic_irq,
+	ack_edge_ioapic_irq,
+	end_edge_ioapic_irq
 };
 
 static struct hw_interrupt_type ioapic_level_irq_type = {
 	"IO-APIC-level",
 	startup_level_ioapic_irq,
 	shutdown_level_ioapic_irq,
-	do_level_ioapic_IRQ,
 	enable_level_ioapic_irq,
-	disable_level_ioapic_irq
+	disable_level_ioapic_irq,
+	mask_and_ack_level_ioapic_irq,
+	end_level_ioapic_irq
 };
 
 static inline void init_IO_APIC_traps(void)

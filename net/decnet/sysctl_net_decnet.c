@@ -312,7 +312,7 @@ static int dn_def_dev_strategy(ctl_table *table, int *name, int nlen,
 				void **context)
 {
 	size_t len;
-	struct device *dev = decnet_default_device;
+	struct net_device *dev = decnet_default_device;
 	char devname[17];
 	size_t namel;
 
@@ -363,7 +363,7 @@ static int dn_def_dev_handler(ctl_table *table, int write,
 				void *buffer, size_t *lenp)
 {
 	int len;
-	struct device *dev = decnet_default_device;
+	struct net_device *dev = decnet_default_device;
 	char devname[17];
 
 	if (!*lenp || (filp->f_pos && !write)) {

@@ -56,7 +56,7 @@ int  irport_probe(int iobase);
 void irport_change_speed(struct irda_device *idev, int speed);
 void irport_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
-int  irport_hard_xmit(struct sk_buff *skb, struct device *dev);
+int  irport_hard_xmit(struct sk_buff *skb, struct net_device *dev);
 void irport_wait_until_sent(struct irda_device *idev);
 
 #endif

@@ -131,7 +131,7 @@ static inline void qe_clean_rings(struct sunqe *qep)
 static void qe_init_rings(struct sunqe *qep, int from_irq)
 {
 	struct qe_init_block *qb = qep->qe_block;
-	struct device *dev = qep->dev;
+	struct net_device *dev = qep->dev;
 	int i, gfp_flags = GFP_KERNEL;
 
 	if(from_irq || in_interrupt())
@@ -281,7 +281,7 @@ static int qe_init(struct sunqe *qep, int from_irq)
  */
 static int qe_is_bolixed(struct sunqe *qep, unsigned int qe_status)
 {
-	struct device *dev = qep->dev;
+	struct net_device *dev = qep->dev;
 	int mace_hwbug_workaround = 0;
 
 	if(qe_status & CREG_STAT_EDEFER) {
@@ -631,7 +631,7 @@ static void qec_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	while(channel < 4) {
 		if(qec_status & 0xf) {
 			struct sunqe *qep = qecp->qes[channel];
-			struct device *dev = qep->dev;
+			struct net_device *dev = qep->dev;
 			unsigned int qe_status;
 
 			dev->interrupt = 1;
@@ -671,7 +671,7 @@ static void sun4c_qec_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	while(channel < 4) {
 		if(qec_status & 0xf) {
 			struct sunqe *qep = qecp->qes[channel];
-			struct device *dev = qep->dev;
+			struct net_device *dev = qep->dev;
 			unsigned int qe_status;
 
 			dev->interrupt = 1;
@@ -700,7 +700,7 @@ static void sun4c_qec_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 }
 
-static int qe_open(struct device *dev)
+static int qe_open(struct net_device *dev)
 {
 	struct sunqe *qep = (struct sunqe *) dev->priv;
 	int res;
@@ -712,7 +712,7 @@ static int qe_open(struct device *dev)
 	return res;
 }
 
-static int qe_close(struct device *dev)
+static int qe_close(struct net_device *dev)
 {
 	struct sunqe *qep = (struct sunqe *) dev->priv;
 
@@ -723,7 +723,7 @@ static int qe_close(struct device *dev)
 }
 
 /* Get a packet queued to go onto the wire. */
-static int qe_start_xmit(struct sk_buff *skb, struct device *dev)
+static int qe_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct sunqe *qep = (struct sunqe *) dev->priv;
 	int len, entry;
@@ -774,7 +774,7 @@ static int qe_start_xmit(struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
-static int sun4c_qe_start_xmit(struct sk_buff *skb, struct device *dev)
+static int sun4c_qe_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct sunqe *qep = (struct sunqe *) dev->priv;
 	struct sunqe_buffers *qbufs = qep->sun4c_buffers;
@@ -823,7 +823,7 @@ static int sun4c_qe_start_xmit(struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
-static struct net_device_stats *qe_get_stats(struct device *dev)
+static struct net_device_stats *qe_get_stats(struct net_device *dev)
 {
 	struct sunqe *qep = (struct sunqe *) dev->priv;
 
@@ -833,7 +833,7 @@ static struct net_device_stats *qe_get_stats(struct device *dev)
 #define CRC_POLYNOMIAL_BE 0x04c11db7UL  /* Ethernet CRC, big endian */
 #define CRC_POLYNOMIAL_LE 0xedb88320UL  /* Ethernet CRC, little endian */
 
-static void qe_set_multicast(struct device *dev)
+static void qe_set_multicast(struct net_device *dev)
 {
 	struct sunqe *qep = (struct sunqe *) dev->priv;
 	struct dev_mc_list *dmi = dev->mc_list;
@@ -926,10 +926,10 @@ static inline void qec_init_once(struct sunqec *qecp, struct linux_sbus_device *
 }
 
 /* Four QE's per QEC card. */
-static inline int qec_ether_init(struct device *dev, struct linux_sbus_device *sdev)
+static inline int qec_ether_init(struct net_device *dev, struct linux_sbus_device *sdev)
 {
 	static unsigned version_printed = 0;
-	struct device *qe_devs[4];
+	struct net_device *qe_devs[4];
 	struct sunqe *qeps[4];
 	struct linux_sbus_device *qesdevs[4];
 	struct sunqec *qecp;
@@ -1173,7 +1173,7 @@ qec_free_devs:
 	return res;
 }
 
-int __init qec_probe(struct device *dev)
+int __init qec_probe(struct net_device *dev)
 {
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;

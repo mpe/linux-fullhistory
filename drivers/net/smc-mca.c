@@ -42,20 +42,20 @@
 #include "smc-mca.h"
 #include <linux/mca.h>
 
-int ultramca_probe(struct device *dev);
+int ultramca_probe(struct net_device *dev);
 
-static int ultramca_open(struct device *dev);
-static void ultramca_reset_8390(struct device *dev);
-static void ultramca_get_8390_hdr(struct device *dev,
+static int ultramca_open(struct net_device *dev);
+static void ultramca_reset_8390(struct net_device *dev);
+static void ultramca_get_8390_hdr(struct net_device *dev,
                                   struct e8390_pkt_hdr *hdr,
                                   int ring_page);
-static void ultramca_block_input(struct device *dev, int count,
+static void ultramca_block_input(struct net_device *dev, int count,
                                  struct sk_buff *skb,
                                  int ring_offset);
-static void ultramca_block_output(struct device *dev, int count,
+static void ultramca_block_output(struct net_device *dev, int count,
                                   const unsigned char *buf,
                                   const int start_page);
-static int ultramca_close_card(struct device *dev);
+static int ultramca_close_card(struct net_device *dev);
 
 #define START_PG        0x00    /* First page of TX buffer */
 
@@ -66,7 +66,7 @@ static int ultramca_close_card(struct device *dev);
 #define ULTRA_IO_EXTENT 32
 #define EN0_ERWCNT      0x08  /* Early receive warning count. */
 
-int __init ultramca_probe(struct device *dev)
+int __init ultramca_probe(struct net_device *dev)
 {
 	unsigned short ioaddr;
 	unsigned char reg4, num_pages;
@@ -190,7 +190,7 @@ int __init ultramca_probe(struct device *dev)
 	return 0;
 }
 
-static int ultramca_open(struct device *dev)
+static int ultramca_open(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
 
@@ -217,7 +217,7 @@ static int ultramca_open(struct device *dev)
 	return 0;
 }
 
-static void ultramca_reset_8390(struct device *dev)
+static void ultramca_reset_8390(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
 
@@ -237,7 +237,7 @@ static void ultramca_reset_8390(struct device *dev)
    we don't need to be concerned with ring wrap as the header will be at
    the start of a page, so we optimize accordingly. */
 
-static void ultramca_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+static void ultramca_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 	unsigned long hdr_start = dev->mem_start + ((ring_page - START_PG)<<8);
 
@@ -252,7 +252,7 @@ static void ultramca_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
 /* Block input and output are easy on shared memory ethercards, the only
    complication is when the ring buffer wraps. */
 
-static void ultramca_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+static void ultramca_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
 	unsigned long xfer_start = dev->mem_start + ring_offset - (START_PG<<8);
 
@@ -272,7 +272,7 @@ static void ultramca_block_input(struct device *dev, int count, struct sk_buff *
 
 }
 
-static void ultramca_block_output(struct device *dev, int count, const unsigned char *buf,
+static void ultramca_block_output(struct net_device *dev, int count, const unsigned char *buf,
                 int start_page)
 {
 	unsigned long shmem = dev->mem_start + ((start_page - START_PG)<<8);
@@ -280,7 +280,7 @@ static void ultramca_block_output(struct device *dev, int count, const unsigned 
 	memcpy_toio(shmem, buf, count);
 }
 
-static int ultramca_close_card(struct device *dev)
+static int ultramca_close_card(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
 
@@ -310,7 +310,7 @@ static int ultramca_close_card(struct device *dev)
 #define NAMELEN     8   /* # of chars for storing dev->name */
 static char namelist[NAMELEN * MAX_ULTRAMCA_CARDS] = { 0, };
 
-static struct device dev_ultra[MAX_ULTRAMCA_CARDS] =
+static struct net_device dev_ultra[MAX_ULTRAMCA_CARDS] =
 {
 	{
 		NULL,       /* assign a chunk of namelist[] below */
@@ -335,7 +335,7 @@ int init_module(void)
 
 	for (this_dev = 0; this_dev < MAX_ULTRAMCA_CARDS; this_dev++)
 	{
-		struct device *dev = &dev_ultra[this_dev];
+		struct net_device *dev = &dev_ultra[this_dev];
 		dev->name = namelist+(NAMELEN*this_dev);
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
@@ -367,7 +367,7 @@ void cleanup_module(void)
 
 	for (this_dev = 0; this_dev < MAX_ULTRAMCA_CARDS; this_dev++)
 	{
-		struct device *dev = &dev_ultra[this_dev];
+		struct net_device *dev = &dev_ultra[this_dev];
         	if (dev->priv != NULL)
         	{
 			void *priv = dev->priv;

@@ -236,29 +236,29 @@ static const char *version = "defxx.c:v1.04 09/16/96  Lawrence V. Stefani (stefa
 
 /* Define global routines */
 
-int	dfx_probe(struct device *dev);
+int	dfx_probe(struct net_device *dev);
 
 /* Define module-wide (static) routines */
 
-static struct	device *dfx_alloc_device(struct device *dev, u16 iobase);
+static struct net_device *dfx_alloc_device(struct net_device *dev, u16 iobase);
 
-static void		dfx_bus_init(struct device *dev);
+static void		dfx_bus_init(struct net_device *dev);
 static void		dfx_bus_config_check(DFX_board_t *bp);
 
-static int		dfx_driver_init(struct device *dev);
+static int		dfx_driver_init(struct net_device *dev);
 static int		dfx_adap_init(DFX_board_t *bp);
 
-static int		dfx_open(struct device *dev);
-static int		dfx_close(struct device *dev);
+static int		dfx_open(struct net_device *dev);
+static int		dfx_close(struct net_device *dev);
 
 static void		dfx_int_pr_halt_id(DFX_board_t *bp);
 static void		dfx_int_type_0_process(DFX_board_t *bp);
 static void		dfx_int_common(DFX_board_t *bp);
 static void		dfx_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
-static struct		net_device_stats *dfx_ctl_get_stats(struct device *dev);
-static void		dfx_ctl_set_multicast_list(struct device *dev);
-static int		dfx_ctl_set_mac_address(struct device *dev, void *addr);
+static struct		net_device_stats *dfx_ctl_get_stats(struct net_device *dev);
+static void		dfx_ctl_set_multicast_list(struct net_device *dev);
+static int		dfx_ctl_set_mac_address(struct net_device *dev, void *addr);
 static int		dfx_ctl_update_cam(DFX_board_t *bp);
 static int		dfx_ctl_update_filters(DFX_board_t *bp);
 
@@ -271,7 +271,7 @@ static int		dfx_hw_dma_uninit(DFX_board_t *bp, PI_UINT32 type);
 static void		dfx_rcv_init(DFX_board_t *bp);
 static void		dfx_rcv_queue_process(DFX_board_t *bp);
 
-static int		dfx_xmt_queue_pkt(struct sk_buff *skb, struct device *dev);
+static int		dfx_xmt_queue_pkt(struct sk_buff *skb, struct net_device *dev);
 static void		dfx_xmt_done(DFX_board_t *bp);
 static void		dfx_xmt_flush(DFX_board_t *bp);
 
@@ -446,7 +446,7 @@ static inline void dfx_port_read_long(
  *   the device structure.
  */
 
-int __init dfx_probe(struct device *dev)
+int __init dfx_probe(struct net_device *dev)
 {
 	int				i;				/* used in for loops */
 	int				version_disp;	/* was version info string already displayed? */
@@ -638,9 +638,9 @@ int __init dfx_probe(struct device *dev)
  *   None
  */
 
-struct device __init *dfx_alloc_device( struct device *dev, u16 iobase)
+struct net_device __init *dfx_alloc_device( struct net_device *dev, u16 iobase)
 {
-	struct device *tmp_dev;		/* pointer to a device structure */
+	struct net_device *tmp_dev;		/* pointer to a device structure */
 
 	DBG_printk("In dfx_alloc_device...\n");
 
@@ -729,7 +729,7 @@ struct device __init *dfx_alloc_device( struct device *dev, u16 iobase)
  *   enabled yet.
  */
 
-void __init dfx_bus_init(struct device *dev)
+void __init dfx_bus_init(struct net_device *dev)
 {
 	DFX_board_t *bp = (DFX_board_t *)dev->priv;
 	u8			val;	/* used for I/O read/writes */
@@ -962,7 +962,7 @@ void __init dfx_bus_config_check(DFX_board_t *bp)
  *   returning from this routine.
  */
 
-int __init dfx_driver_init(struct device *dev)
+int __init dfx_driver_init(struct net_device *dev)
 {
 	DFX_board_t *bp = (DFX_board_t *)dev->priv;
 	int			alloc_size;			/* total buffer size needed */
@@ -1370,7 +1370,7 @@ int dfx_adap_init(
  */
 
 int dfx_open(
-	struct device *dev
+	struct net_device *dev
 	)
 
 	{
@@ -1462,7 +1462,7 @@ int dfx_open(
  */
 
 int dfx_close(
-	struct device *dev
+	struct net_device *dev
 	)
 
 	{
@@ -1882,7 +1882,7 @@ void dfx_interrupt(
 	)
 
 	{
-	struct device	*dev = (struct device *) dev_id;
+	struct net_device	*dev = (struct net_device *) dev_id;
 	DFX_board_t		*bp;	/* private board structure pointer */
 	u8				tmp;	/* used for disabling/enabling ints */
 
@@ -1990,7 +1990,7 @@ void dfx_interrupt(
  */
 
 struct net_device_stats *dfx_ctl_get_stats(
-	struct device *dev
+	struct net_device *dev
 	)
 
 	{
@@ -2178,7 +2178,7 @@ struct net_device_stats *dfx_ctl_get_stats(
  */
 
 void dfx_ctl_set_multicast_list(
-	struct device *dev
+	struct net_device *dev
 	)
 
 	{
@@ -2296,7 +2296,7 @@ void dfx_ctl_set_multicast_list(
  */
 
 int dfx_ctl_set_mac_address(
-	struct device	*dev,
+	struct net_device	*dev,
 	void			*addr
 	)
 
@@ -3188,7 +3188,7 @@ void dfx_rcv_queue_process(
 
 int dfx_xmt_queue_pkt(
 	struct sk_buff	*skb,
-	struct device	*dev
+	struct net_device	*dev
 	)
 
 	{

@@ -83,12 +83,12 @@ struct rarp_table
 	unsigned char      ha[MAX_ADDR_LEN];  /* Hardware address            */
 	unsigned char      hlen;              /* Length of hardware address  */
 	unsigned char      htype;             /* Type of hardware in use     */
-	struct device      *dev;              /* Device the entry is tied to */
+	struct net_device      *dev;              /* Device the entry is tied to */
 };
 
 struct rarp_table *rarp_tables = NULL;
 
-static int rarp_rcv(struct sk_buff *, struct device *, struct packet_type *);
+static int rarp_rcv(struct sk_buff *, struct net_device *, struct packet_type *);
 
 static struct packet_type rarp_packet_type =
 {
@@ -142,7 +142,7 @@ static void rarp_destroy(unsigned long ip_addr)
  *	Flush a device.
  */
 
-static void rarp_destroy_dev(struct device *dev)
+static void rarp_destroy_dev(struct net_device *dev)
 {
 	struct rarp_table *entry;
 	struct rarp_table **pentry;
@@ -166,7 +166,7 @@ static int rarp_device_event(struct notifier_block *this, unsigned long event, v
 {
 	if(event!=NETDEV_DOWN)
 		return NOTIFY_DONE;
-	rarp_destroy_dev((struct device *)ptr);
+	rarp_destroy_dev((struct net_device *)ptr);
 	return NOTIFY_DONE;
 }
 
@@ -210,7 +210,7 @@ static void rarp_end_pkt(void)
  *	"overhead" time isn't that high...
  */
 
-static int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+static int rarp_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 {
 /*
  *	We shouldn't use this type conversion. Check later.
@@ -305,7 +305,7 @@ static int rarp_req_set(struct arpreq *req)
 	int htype, hlen;
 	unsigned long ip;
 	struct rtable *rt;
-	struct device * dev;
+	struct net_device * dev;
 	int err; 
   
 	err = copy_from_user(&r, req, sizeof(r));

@@ -58,7 +58,7 @@ static void masq_user_k2u(const struct ip_masq *ms, struct ip_masq_user *ums)
 
 static int ip_masq_user_maddr(struct ip_masq_user *ums)
 {
-	struct device *dev;
+	struct net_device *dev;
 	struct rtable *rt;
 	int ret = -EINVAL;
 	u32 rt_daddr, rt_saddr;

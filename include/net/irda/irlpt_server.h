@@ -35,7 +35,7 @@
 #include <linux/netdevice.h>
 #include <linux/miscdevice.h>
 
-/* int  server_init( struct device *dev); */
+/* int  server_init( struct net_device *dev); */
 
 extern struct irlpt_cb *irlpt_server;
 

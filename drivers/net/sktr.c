@@ -116,63 +116,63 @@ static unsigned int sktr_debug = SKTR_DEBUG;
  */
 
 /* "B" */
-static int      sktr_bringup_diags(struct device *dev);
+static int      sktr_bringup_diags(struct net_device *dev);
 /* "C" */
 static void	sktr_cancel_tx_queue(struct net_local* tp);
-static int 	sktr_chipset_init(struct device *dev);
-static void 	sktr_chk_irq(struct device *dev);
-static unsigned char sktr_chk_frame(struct device *dev, unsigned char *Addr);
-static void 	sktr_chk_outstanding_cmds(struct device *dev);
+static int 	sktr_chipset_init(struct net_device *dev);
+static void 	sktr_chk_irq(struct net_device *dev);
+static unsigned char sktr_chk_frame(struct net_device *dev, unsigned char *Addr);
+static void 	sktr_chk_outstanding_cmds(struct net_device *dev);
 static void 	sktr_chk_src_addr(unsigned char *frame, unsigned char *hw_addr);
 static unsigned char sktr_chk_ssb(struct net_local *tp, unsigned short IrqType);
-static int 	sktr_close(struct device *dev);
-static void 	sktr_cmd_status_irq(struct device *dev);
+static int 	sktr_close(struct net_device *dev);
+static void 	sktr_cmd_status_irq(struct net_device *dev);
 /* "D" */
-static void 	sktr_disable_interrupts(struct device *dev);
+static void 	sktr_disable_interrupts(struct net_device *dev);
 static void 	sktr_dump(unsigned char *Data, int length);
 /* "E" */
-static void 	sktr_enable_interrupts(struct device *dev);
-static void 	sktr_exec_cmd(struct device *dev, unsigned short Command);
-static void 	sktr_exec_sifcmd(struct device *dev, unsigned int WriteValue);
+static void 	sktr_enable_interrupts(struct net_device *dev);
+static void 	sktr_exec_cmd(struct net_device *dev, unsigned short Command);
+static void 	sktr_exec_sifcmd(struct net_device *dev, unsigned int WriteValue);
 /* "F" */
 static unsigned char *sktr_fix_srouting(unsigned char *buf, short *FrameLen);
 /* "G" */
-static struct enet_statistics *sktr_get_stats(struct device *dev);
+static struct enet_statistics *sktr_get_stats(struct net_device *dev);
 /* "H" */
-static void 	sktr_hardware_send_packet(struct device *dev,
+static void 	sktr_hardware_send_packet(struct net_device *dev,
 			struct net_local* tp);
 /* "I" */
-static int 	sktr_init_adapter(struct device *dev);
-static int 	sktr_init_card(struct device *dev);
+static int 	sktr_init_adapter(struct net_device *dev);
+static int 	sktr_init_card(struct net_device *dev);
 static void 	sktr_init_ipb(struct net_local *tp);
-static void 	sktr_init_net_local(struct device *dev);
+static void 	sktr_init_net_local(struct net_device *dev);
 static void 	sktr_init_opb(struct net_local *tp);
 static void 	sktr_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static int 	sktr_isa_chk_card(struct device *dev, int ioaddr);
+static int 	sktr_isa_chk_card(struct net_device *dev, int ioaddr);
 static int      sktr_isa_chk_ioaddr(int ioaddr);
 /* "O" */
-static int 	sktr_open(struct device *dev);
-static void	sktr_open_adapter(struct device *dev);
+static int 	sktr_open(struct net_device *dev);
+static void	sktr_open_adapter(struct net_device *dev);
 /* "P" */
-static int 	sktr_pci_chk_card(struct device *dev);
-int 		sktr_probe(struct device *dev);
-static int 	sktr_probe1(struct device *dev, int ioaddr);
+static int 	sktr_pci_chk_card(struct net_device *dev);
+int 		sktr_probe(struct net_device *dev);
+static int 	sktr_probe1(struct net_device *dev, int ioaddr);
 /* "R" */
-static void 	sktr_rcv_status_irq(struct device *dev);
-static void 	sktr_read_addr(struct device *dev, unsigned char *Address);
-static void 	sktr_read_ptr(struct device *dev);
-static void 	sktr_read_ram(struct device *dev, unsigned char *Data,
+static void 	sktr_rcv_status_irq(struct net_device *dev);
+static void 	sktr_read_addr(struct net_device *dev, unsigned char *Address);
+static void 	sktr_read_ptr(struct net_device *dev);
+static void 	sktr_read_ram(struct net_device *dev, unsigned char *Data,
 			unsigned short Address, int Length);
-static int 	sktr_reset_adapter(struct device *dev);
-static void 	sktr_reset_interrupt(struct device *dev);
-static void 	sktr_ring_status_irq(struct device *dev);
+static int 	sktr_reset_adapter(struct net_device *dev);
+static void 	sktr_reset_interrupt(struct net_device *dev);
+static void 	sktr_ring_status_irq(struct net_device *dev);
 /* "S" */
-static int 	sktr_send_packet(struct sk_buff *skb, struct device *dev);
-static void 	sktr_set_multicast_list(struct device *dev);
+static int 	sktr_send_packet(struct sk_buff *skb, struct net_device *dev);
+static void 	sktr_set_multicast_list(struct net_device *dev);
 /* "T" */
 static void 	sktr_timer_chk(unsigned long data);
 static void 	sktr_timer_end_wait(unsigned long data);
-static void 	sktr_tx_status_irq(struct device *dev);
+static void 	sktr_tx_status_irq(struct net_device *dev);
 /* "U" */
 static void 	sktr_update_rcv_stats(struct net_local *tp,
 			unsigned char DataPtr[], unsigned int Length);
@@ -186,7 +186,7 @@ static void 	sktr_write_tpl_status(TPL *tpl, unsigned int Status);
  * If dev->base_addr == 0, probe all likely locations.
  * If dev->base_addr == 1, always return failure.
  */
-int __init sktr_probe(struct device *dev)
+int __init sktr_probe(struct net_device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -217,7 +217,7 @@ int __init sktr_probe(struct device *dev)
 /*
  * Detect and setup the PCI SysKonnect TR cards in slot order.
  */
-static int __init sktr_pci_chk_card(struct device *dev)
+static int __init sktr_pci_chk_card(struct net_device *dev)
 {
 	static int pci_index = 0;
 	unsigned char pci_bus, pci_device_fn;
@@ -295,7 +295,7 @@ static int __init sktr_pci_chk_card(struct device *dev)
 /*
  * Detect and setup the ISA SysKonnect TR cards.
  */
-static int __init sktr_isa_chk_card(struct device *dev, int ioaddr)
+static int __init sktr_isa_chk_card(struct net_device *dev, int ioaddr)
 {
 	int i, err;
 	unsigned long flags;
@@ -386,7 +386,7 @@ static int __init sktr_isa_chk_card(struct device *dev, int ioaddr)
 	return (0);
 }
 
-static int __init sktr_probe1(struct device *dev, int ioaddr)
+static int __init sktr_probe1(struct net_device *dev, int ioaddr)
 {
 	static unsigned version_printed = 0;
 	struct net_local *tp;
@@ -428,7 +428,7 @@ static int __init sktr_probe1(struct device *dev, int ioaddr)
 }
 
 /* Dummy function */
-static int __init sktr_init_card(struct device *dev)
+static int __init sktr_init_card(struct net_device *dev)
 {
 	if(sktr_debug > 3)
 		printk("%s: sktr_init_card\n", dev->name);
@@ -480,7 +480,7 @@ static int __init sktr_isa_chk_ioaddr(int ioaddr)
  * registers that "should" only need to be set once at boot, so that
  * there is non-reboot way to recover if something goes wrong.
  */
-static int sktr_open(struct device *dev)
+static int sktr_open(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 	int err;
@@ -549,7 +549,7 @@ static int sktr_open(struct device *dev)
  */
 static void sktr_timer_end_wait(unsigned long data)
 {
-	struct device *dev = (struct device*)data;
+	struct net_device *dev = (struct net_device*)data;
 	struct net_local *tp = (struct net_local *)dev->priv;
 
 	if(tp->Sleeping)
@@ -564,7 +564,7 @@ static void sktr_timer_end_wait(unsigned long data)
 /*
  * Initialize the chipset
  */
-static int sktr_chipset_init(struct device *dev)
+static int sktr_chipset_init(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 	unsigned char PosReg, Tmp;
@@ -621,7 +621,7 @@ static int sktr_chipset_init(struct device *dev)
 /*
  * Initializes the net_local structure.
  */
-static void sktr_init_net_local(struct device *dev)
+static void sktr_init_net_local(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 	int i;
@@ -778,7 +778,7 @@ static void sktr_init_opb(struct net_local *tp)
 /*
  * Send OPEN command to adapter
  */
-static void sktr_open_adapter(struct device *dev)
+static void sktr_open_adapter(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 
@@ -795,7 +795,7 @@ static void sktr_open_adapter(struct device *dev)
  * Clear the adapter's interrupt flag. Clear system interrupt enable
  * (SINTEN): disable adapter to system interrupts.
  */
-static void sktr_disable_interrupts(struct device *dev)
+static void sktr_disable_interrupts(struct net_device *dev)
 {
 	outb(0, dev->base_addr + SIFACL);
 
@@ -806,7 +806,7 @@ static void sktr_disable_interrupts(struct device *dev)
  * Set the adapter's interrupt flag. Set system interrupt enable
  * (SINTEN): enable adapter to system interrupts.
  */
-static void sktr_enable_interrupts(struct device *dev)
+static void sktr_enable_interrupts(struct net_device *dev)
 {
 	outb(ACL_SINTEN, dev->base_addr + SIFACL);
 
@@ -816,7 +816,7 @@ static void sktr_enable_interrupts(struct device *dev)
 /*
  * Put command in command queue, try to execute it.
  */
-static void sktr_exec_cmd(struct device *dev, unsigned short Command)
+static void sktr_exec_cmd(struct net_device *dev, unsigned short Command)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 
@@ -855,7 +855,7 @@ static unsigned char *sktr_fix_srouting(unsigned char *buf, short *FrameLen)
 /*
  * Gets skb from system, queues it and checks if it can be sent
  */
-static int sktr_send_packet(struct sk_buff *skb, struct device *dev)
+static int sktr_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 
@@ -906,7 +906,7 @@ static int sktr_send_packet(struct sk_buff *skb, struct device *dev)
 /*
  * Move frames from internal skb queue into adapter tx queue
  */
-static void sktr_hardware_send_packet(struct device *dev, struct net_local* tp)
+static void sktr_hardware_send_packet(struct net_device *dev, struct net_local* tp)
 {
 	TPL *tpl;
 	short length;
@@ -1014,7 +1014,7 @@ static void sktr_chk_src_addr(unsigned char *frame, unsigned char *hw_addr)
  */
 static void sktr_timer_chk(unsigned long data)
 {
-	struct device *dev = (struct device*)data;
+	struct net_device *dev = (struct net_device*)data;
 	struct net_local *tp = (struct net_local*)dev->priv;
 
 	if(tp->HaltInProgress)
@@ -1045,7 +1045,7 @@ static void sktr_timer_chk(unsigned long data)
  */
 static void sktr_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct net_local *tp;
 	int ioaddr;
 	unsigned short irq_type;
@@ -1139,7 +1139,7 @@ static void sktr_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 /*
  *  Reset the INTERRUPT SYSTEM bit and issue SSB CLEAR command.
  */
-static void sktr_reset_interrupt(struct device *dev)
+static void sktr_reset_interrupt(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 	SSB *ssb = &tp->ssb;
@@ -1225,7 +1225,7 @@ static unsigned char sktr_chk_ssb(struct net_local *tp, unsigned short IrqType)
 /*
  * Evaluates the command results status in the SSB status field.
  */
-static void sktr_cmd_status_irq(struct device *dev)
+static void sktr_cmd_status_irq(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 	unsigned short ssb_cmd, ssb_parm_0;
@@ -1422,7 +1422,7 @@ static void sktr_cmd_status_irq(struct device *dev)
 /*
  * The inverse routine to sktr_open().
  */
-static int sktr_close(struct device *dev)
+static int sktr_close(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 
@@ -1473,7 +1473,7 @@ static int sktr_close(struct device *dev)
  * Get the current statistics. This may be called with the card open
  * or closed.
  */
-static struct enet_statistics *sktr_get_stats(struct device *dev)
+static struct enet_statistics *sktr_get_stats(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 
@@ -1483,7 +1483,7 @@ static struct enet_statistics *sktr_get_stats(struct device *dev)
 /*
  * Set or clear the multicast filter for this adapter.
  */
-static void sktr_set_multicast_list(struct device *dev)
+static void sktr_set_multicast_list(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 	unsigned int OpenOptions;
@@ -1539,7 +1539,7 @@ static void sktr_wait(unsigned long time)
 /*
  * Write a command value to the SIFCMD register
  */
-static void sktr_exec_sifcmd(struct device *dev, unsigned int WriteValue)
+static void sktr_exec_sifcmd(struct net_device *dev, unsigned int WriteValue)
 {
 	int ioaddr = dev->base_addr;
 	unsigned short cmd;
@@ -1561,7 +1561,7 @@ static void sktr_exec_sifcmd(struct device *dev, unsigned int WriteValue)
  * Processes adapter hardware reset, halts adapter and downloads firmware,
  * clears the halt bit.
  */
-static int sktr_reset_adapter(struct device *dev)
+static int sktr_reset_adapter(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 	unsigned short *fw_ptr = (unsigned short *)&sktr_code;
@@ -1630,7 +1630,7 @@ static int sktr_reset_adapter(struct device *dev)
  * Starts bring up diagnostics of token ring adapter and evaluates
  * diagnostic results.
  */
-static int sktr_bringup_diags(struct device *dev)
+static int sktr_bringup_diags(struct net_device *dev)
 {
 	int loop_cnt, retry_cnt;
 	unsigned short Status;
@@ -1685,7 +1685,7 @@ static int sktr_bringup_diags(struct device *dev)
  * Copy initialisation data to adapter memory, beginning at address
  * 1:0A00; Starting DMA test and evaluating result bits.
  */
-static int sktr_init_adapter(struct device *dev)
+static int sktr_init_adapter(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 
@@ -1787,7 +1787,7 @@ static int sktr_init_adapter(struct device *dev)
  * Check for outstanding commands in command queue and tries to execute
  * command immediately. Corresponding command flag in command queue is cleared.
  */
-static void sktr_chk_outstanding_cmds(struct device *dev)
+static void sktr_chk_outstanding_cmds(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 	unsigned long Addr = 0;
@@ -1967,7 +1967,7 @@ static void sktr_chk_outstanding_cmds(struct device *dev)
  * error counter overflow (255); opened adapter is the only station in ring.
  * After some of the IRQs the adapter is closed!
  */
-static void sktr_ring_status_irq(struct device *dev)
+static void sktr_ring_status_irq(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 
@@ -2037,7 +2037,7 @@ static void sktr_ring_status_irq(struct device *dev)
  * Issued if adapter has encountered an unrecoverable hardware
  * or software error.
  */
-static void sktr_chk_irq(struct device *dev)
+static void sktr_chk_irq(struct net_device *dev)
 {
 	int i;
 	unsigned short AdapterCheckBlock[4];
@@ -2196,7 +2196,7 @@ static void sktr_chk_irq(struct device *dev)
  * Internal adapter pointer to RAM data are copied from adapter into
  * host system.
  */
-static void sktr_read_ptr(struct device *dev)
+static void sktr_read_ptr(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 	unsigned short adapterram;
@@ -2215,7 +2215,7 @@ static void sktr_read_ptr(struct device *dev)
 /*
  * Reads a number of bytes from adapter to system memory.
  */
-static void sktr_read_ram(struct device *dev, unsigned char *Data,
+static void sktr_read_ram(struct net_device *dev, unsigned char *Data,
 				unsigned short Address, int Length)
 {
 	int i;
@@ -2256,7 +2256,7 @@ static void sktr_read_ram(struct device *dev, unsigned char *Data,
 /*
  * Reads MAC address from adapter ROM.
  */
-static void sktr_read_addr(struct device *dev, unsigned char *Address)
+static void sktr_read_addr(struct net_device *dev, unsigned char *Address)
 {
 	int i, In;
 	unsigned short ioaddr = dev->base_addr;
@@ -2322,7 +2322,7 @@ static void sktr_cancel_tx_queue(struct net_local* tp)
  * adapter. For a command complete interrupt, it is checked if we have to
  * issue a new transmit command or not.
  */
-static void sktr_tx_status_irq(struct device *dev)
+static void sktr_tx_status_irq(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 	unsigned char HighByte, HighAc, LowAc;
@@ -2396,7 +2396,7 @@ static void sktr_tx_status_irq(struct device *dev)
  * Called if a frame receive interrupt is generated by the adapter.
  * Check if the frame is valid and indicate it to system.
  */
-static void sktr_rcv_status_irq(struct device *dev)
+static void sktr_rcv_status_irq(struct net_device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
 	unsigned char *ReceiveDataPtr;
@@ -2599,7 +2599,7 @@ static void sktr_update_rcv_stats(struct net_local *tp, unsigned char DataPtr[],
  * Check if it is a frame of myself. Compare source address with my current
  * address in reverse direction, and mask out the TR_RII.
  */
-static unsigned char sktr_chk_frame(struct device *dev, unsigned char *Addr)
+static unsigned char sktr_chk_frame(struct net_device *dev, unsigned char *Addr)
 {
 	int i;
 
@@ -2635,7 +2635,7 @@ static void sktr_dump(unsigned char *Data, int length)
 
 #ifdef MODULE
 
-static struct device* dev_sktr[SKTR_MAX_ADAPTERS];
+static struct net_device* dev_sktr[SKTR_MAX_ADAPTERS];
 static int io[SKTR_MAX_ADAPTERS]	= { 0, 0 };
 static int irq[SKTR_MAX_ADAPTERS] 	= { 0, 0 };
 static int mem[SKTR_MAX_ADAPTERS] 	= { 0, 0 };
@@ -2664,7 +2664,7 @@ int init_module(void)
 
                 if(register_trdev(dev_sktr[i]) != 0)
 		{
-                        kfree_s(dev_sktr[i], sizeof(struct device));
+                        kfree_s(dev_sktr[i], sizeof(struct net_device));
                         dev_sktr[i] = NULL;
                         if(i == 0)
 			{
@@ -2695,7 +2695,7 @@ void cleanup_module(void)
 				free_dma(dev_sktr[i]->dma);
 			if(dev_sktr[i]->priv)
 				kfree_s(dev_sktr[i]->priv, sizeof(struct net_local));
-			kfree_s(dev_sktr[i], sizeof(struct device));
+			kfree_s(dev_sktr[i], sizeof(struct net_device));
 			dev_sktr[i] = NULL;
                 }
 	}

@@ -209,20 +209,20 @@ MODULE_PARM(de620_debug, "i");
  */
 
 /* Put in the device structure. */
-static int	de620_open(struct device *);
-static int	de620_close(struct device *);
-static struct	net_device_stats *get_stats(struct device *);
-static void	de620_set_multicast_list(struct device *);
-static int	de620_start_xmit(struct sk_buff *, struct device *);
+static int	de620_open(struct net_device *);
+static int	de620_close(struct net_device *);
+static struct	net_device_stats *get_stats(struct net_device *);
+static void	de620_set_multicast_list(struct net_device *);
+static int	de620_start_xmit(struct sk_buff *, struct net_device *);
 
 /* Dispatch from interrupts. */
 static void	de620_interrupt(int, void *, struct pt_regs *);
-static int	de620_rx_intr(struct device *);
+static int	de620_rx_intr(struct net_device *);
 
 /* Initialization */
-static int	adapter_init(struct device *);
-int		de620_probe(struct device *);
-static int	read_eeprom(struct device *);
+static int	adapter_init(struct net_device *);
+int		de620_probe(struct net_device *);
+static int	read_eeprom(struct net_device *);
 
 
 /*
@@ -260,7 +260,7 @@ static struct nic {
 static int tot_cnt;
 #endif
 static inline byte
-de620_ready(struct device *dev)
+de620_ready(struct net_device *dev)
 {
 	byte value;
 	register short int cnt = 0;
@@ -275,7 +275,7 @@ de620_ready(struct device *dev)
 }
 
 static inline void
-de620_send_command(struct device *dev, byte cmd)
+de620_send_command(struct net_device *dev, byte cmd)
 {
 	de620_ready(dev);
 	if (cmd == W_DUMMY)
@@ -289,7 +289,7 @@ de620_send_command(struct device *dev, byte cmd)
 }
 
 static inline void
-de620_put_byte(struct device *dev, byte value)
+de620_put_byte(struct net_device *dev, byte value)
 {
 	/* The de620_ready() makes 7 loops, on the average, on a DX2/66 */
 	de620_ready(dev);
@@ -298,7 +298,7 @@ de620_put_byte(struct device *dev, byte value)
 }
 
 static inline byte
-de620_read_byte(struct device *dev)
+de620_read_byte(struct net_device *dev)
 {
 	byte value;
 
@@ -310,7 +310,7 @@ de620_read_byte(struct device *dev)
 }
 
 static inline void
-de620_write_block(struct device *dev, byte *buffer, int count)
+de620_write_block(struct net_device *dev, byte *buffer, int count)
 {
 #ifndef LOWSPEED
 	byte uflip = NIC_Cmd ^ (DS0 | DS1);
@@ -346,7 +346,7 @@ de620_write_block(struct device *dev, byte *buffer, int count)
 }
 
 static inline void
-de620_read_block(struct device *dev, byte *data, int count)
+de620_read_block(struct net_device *dev, byte *data, int count)
 {
 #ifndef LOWSPEED
 	byte value;
@@ -381,7 +381,7 @@ de620_read_block(struct device *dev, byte *data, int count)
 }
 
 static inline void
-de620_set_delay(struct device *dev)
+de620_set_delay(struct net_device *dev)
 {
 	de620_ready(dev);
 	outb(W_DFR, DATA_PORT);
@@ -405,7 +405,7 @@ de620_set_delay(struct device *dev)
 }
 
 static inline void
-de620_set_register(struct device *dev, byte reg, byte value)
+de620_set_register(struct net_device *dev, byte reg, byte value)
 {
 	de620_ready(dev);
 	outb(reg, DATA_PORT);
@@ -415,7 +415,7 @@ de620_set_register(struct device *dev, byte reg, byte value)
 }
 
 static inline byte
-de620_get_register(struct device *dev, byte reg)
+de620_get_register(struct net_device *dev, byte reg)
 {
 	byte value;
 
@@ -436,7 +436,7 @@ de620_get_register(struct device *dev, byte reg)
  *
  */
 static int
-de620_open(struct device *dev)
+de620_open(struct net_device *dev)
 {
 	if (request_irq(dev->irq, de620_interrupt, 0, "de620", dev)) {
 		printk ("%s: unable to get IRQ %d\n", dev->name, dev->irq);
@@ -457,7 +457,7 @@ de620_open(struct device *dev)
  *
  */
 static int
-de620_close(struct device *dev)
+de620_close(struct net_device *dev)
 {
 	/* disable recv */
 	de620_set_register(dev, W_TCR, RXOFF);
@@ -474,7 +474,7 @@ de620_close(struct device *dev)
  * Return current statistics
  *
  */
-static struct net_device_stats *get_stats(struct device *dev)
+static struct net_device_stats *get_stats(struct net_device *dev)
 {
 	return (struct net_device_stats *)(dev->priv);
 }
@@ -486,7 +486,7 @@ static struct net_device_stats *get_stats(struct device *dev)
  *
  */
 
-static void de620_set_multicast_list(struct device *dev)
+static void de620_set_multicast_list(struct net_device *dev)
 {
 	if (dev->mc_count || dev->flags&(IFF_ALLMULTI|IFF_PROMISC))
 	{ /* Enable promiscuous mode */
@@ -511,7 +511,7 @@ static void de620_set_multicast_list(struct device *dev)
  * Start sending.
  */
 static int
-de620_start_xmit(struct sk_buff *skb, struct device *dev)
+de620_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	unsigned long flags;
 	int len;
@@ -592,7 +592,7 @@ de620_start_xmit(struct sk_buff *skb, struct device *dev)
 static void
 de620_interrupt(int irq_in, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	byte irq_status;
 	int bogus_count = 0;
 	int again = 0;
@@ -634,7 +634,7 @@ de620_interrupt(int irq_in, void *dev_id, struct pt_regs *regs)
  *
  */
 static int
-de620_rx_intr(struct device *dev)
+de620_rx_intr(struct net_device *dev)
 {
 	struct header_buf {
 		byte		status;
@@ -733,7 +733,7 @@ de620_rx_intr(struct device *dev)
  *
  */
 static int
-adapter_init(struct device *dev)
+adapter_init(struct net_device *dev)
 {
 	int i;
 	static int was_down = 0;
@@ -821,7 +821,7 @@ adapter_init(struct device *dev)
  * Check if there is a DE-620 connected
  */
 int __init 
-de620_probe(struct device *dev)
+de620_probe(struct net_device *dev)
 {
 	static struct net_device_stats de620_netstats;
 	int i;
@@ -914,7 +914,7 @@ de620_probe(struct device *dev)
 #define sendit(dev,data) de620_set_register(dev, W_EIP, data | EIPRegister);
 
 static unsigned short __init 
-ReadAWord(struct device *dev, int from)
+ReadAWord(struct net_device *dev, int from)
 {
 	unsigned short data;
 	int nbits;
@@ -957,7 +957,7 @@ ReadAWord(struct device *dev, int from)
 }
 
 static int __init 
-read_eeprom(struct device *dev)
+read_eeprom(struct net_device *dev)
 {
 	unsigned short wrd;
 
@@ -1000,7 +1000,7 @@ read_eeprom(struct device *dev)
  */
 #ifdef MODULE
 static char nullname[8] = "";
-static struct device de620_dev = {
+static struct net_device de620_dev = {
 	nullname, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, de620_probe };
 
 int

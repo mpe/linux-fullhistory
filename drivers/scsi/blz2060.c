@@ -14,6 +14,8 @@
  *    routines in this file used to be inline!
  */
 
+#include <linux/module.h>
+
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/types.h>
@@ -55,7 +57,7 @@ volatile unsigned char cmd_buffer[16];
 				 */
 
 /***************************************************************** Detection */
-int blz2060_esp_detect(Scsi_Host_Template *tpnt)
+int __init blz2060_esp_detect(Scsi_Host_Template *tpnt)
 {
 	struct NCR_ESP *esp;
 	const struct ConfigDev *esp_dev;
@@ -107,24 +109,24 @@ int blz2060_esp_detect(Scsi_Host_Template *tpnt)
 		
 		/* Set the command buffer */
 		esp->esp_command = (volatile unsigned char*) cmd_buffer;
-		esp->esp_command_dvma = virt_to_bus((unsigned long) cmd_buffer);
+		esp->esp_command_dvma = virt_to_bus(cmd_buffer);
 
 		esp->irq = IRQ_AMIGA_PORTS;
-		request_irq(IRQ_AMIGA_PORTS, esp_intr, 0, 
+		esp->slot = key;
+		request_irq(IRQ_AMIGA_PORTS, esp_intr, SA_SHIRQ,
 			    "Blizzard 2060 SCSI", esp_intr);
 
 		/* Figure out our scsi ID on the bus */
 		esp->scsi_id = 7;
 		
-		/* Check for differential SCSI-bus */
-		/* What is this stuff? */
+		/* We don't have a differential SCSI-bus. */
 		esp->diff = 0;
 
 		esp_initialize(esp);
 
 		zorro_config_board(key, 0);
 
-		printk("\nESP: Total of %d ESP hosts found, %d actually in use.\n", nesps,esps_in_use);
+		printk("ESP: Total of %d ESP hosts found, %d actually in use.\n", nesps, esps_in_use);
 		esps_running = esps_in_use;
 		return esps_in_use;
 	}
@@ -201,7 +203,7 @@ static void dma_ints_on(struct NCR_ESP *esp)
 
 static int dma_irq_p(struct NCR_ESP *esp)
 {
-	return (esp->eregs->esp_status & ESP_STAT_INTR);
+	return (esp_read(esp->eregs->esp_status) & ESP_STAT_INTR);
 }
 
 static void dma_led_off(struct NCR_ESP *esp)
@@ -230,4 +232,30 @@ static void dma_setup(struct NCR_ESP *esp, __u32 addr, int count, int write)
 	} else {
 		dma_init_write(esp, addr, count);
 	}
+}
+
+#ifdef MODULE
+
+#define HOSTS_C
+
+#include "blz2060.h"
+
+Scsi_Host_Template driver_template = SCSI_BLZ2060;
+
+#include "scsi_module.c"
+
+#endif
+
+int blz2060_esp_release(struct Scsi_Host *instance)
+{
+#ifdef MODULE
+	unsigned int key;
+
+	key = ((struct NCR_ESP *)instance->hostdata)->slot;
+	esp_deallocate((struct NCR_ESP *)instance->hostdata);
+	esp_release();
+	zorro_unconfig_board(key, 0);
+	free_irq(IRQ_AMIGA_PORTS, esp_intr);
+#endif
+	return 1;
 }

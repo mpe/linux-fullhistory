@@ -176,7 +176,7 @@ static inline int myri_do_handshake(struct myri_eth *mp)
 
 static inline int myri_load_lanai(struct myri_eth *mp)
 {
-	struct device		*dev = mp->dev;
+	struct net_device		*dev = mp->dev;
 	struct myri_shmem	*shmem = mp->shmem;
 	unsigned char		*rptr;
 	int 			i;
@@ -261,7 +261,7 @@ static void myri_init_rings(struct myri_eth *mp, int from_irq)
 {
 	struct recvq *rq = mp->rq;
 	struct myri_rxd *rxd = &rq->myri_rxd[0];
-	struct device *dev = mp->dev;
+	struct net_device *dev = mp->dev;
 	int gfp_flags = GFP_KERNEL;
 	int i;
 
@@ -323,7 +323,7 @@ static void dump_ehdr_and_myripad(unsigned char *stuff)
 }
 #endif
 
-static inline void myri_tx(struct myri_eth *mp, struct device *dev)
+static inline void myri_tx(struct myri_eth *mp, struct net_device *dev)
 {
 	struct sendq *sq	= mp->sq;
 	int entry		= mp->tx_old;
@@ -348,7 +348,7 @@ static inline void myri_tx(struct myri_eth *mp, struct device *dev)
  * assume 802.3 if the type field is short enough to be a length.
  * This is normal practice and works for any 'now in use' protocol.
  */
-static unsigned short myri_type_trans(struct sk_buff *skb, struct device *dev)
+static unsigned short myri_type_trans(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ethhdr *eth;
 	unsigned char *rawp;
@@ -388,7 +388,7 @@ static unsigned short myri_type_trans(struct sk_buff *skb, struct device *dev)
 	return htons(ETH_P_802_2);
 }
 
-static inline void myri_rx(struct myri_eth *mp, struct device *dev)
+static inline void myri_rx(struct myri_eth *mp, struct net_device *dev)
 {
 	struct recvq *rq	= mp->rq;
 	struct recvq *rqa	= mp->rqack;
@@ -506,7 +506,7 @@ static inline void myri_rx(struct myri_eth *mp, struct device *dev)
 
 static void myri_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev		= (struct device *) dev_id;
+	struct net_device *dev		= (struct net_device *) dev_id;
 	struct myri_eth *mp		= (struct myri_eth *) dev->priv;
 	struct lanai_regs *lregs	= mp->lregs;
 	struct myri_channel *chan	= &mp->shmem->channel;
@@ -537,14 +537,14 @@ static void myri_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	DIRQ(("\n"));
 }
 
-static int myri_open(struct device *dev)
+static int myri_open(struct net_device *dev)
 {
 	struct myri_eth *mp = (struct myri_eth *) dev->priv;
 
 	return myri_init(mp, in_interrupt());
 }
 
-static int myri_close(struct device *dev)
+static int myri_close(struct net_device *dev)
 {
 	struct myri_eth *mp = (struct myri_eth *) dev->priv;
 
@@ -552,7 +552,7 @@ static int myri_close(struct device *dev)
 	return 0;
 }
 
-static int myri_start_xmit(struct sk_buff *skb, struct device *dev)
+static int myri_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct myri_eth *mp = (struct myri_eth *) dev->priv;
 	struct sendq *sq = mp->sq;
@@ -656,7 +656,7 @@ static int myri_start_xmit(struct sk_buff *skb, struct device *dev)
  * saddr=NULL	means use device source address
  * daddr=NULL	means leave destination address (eg unresolved arp)
  */
-static int myri_header(struct sk_buff *skb, struct device *dev, unsigned short type,
+static int myri_header(struct sk_buff *skb, struct net_device *dev, unsigned short type,
 		       void *daddr, void *saddr, unsigned len)
 {
 	struct ethhdr *eth = (struct ethhdr *)skb_push(skb,ETH_HLEN);
@@ -708,7 +708,7 @@ static int myri_rebuild_header(struct sk_buff *skb)
 {
 	unsigned char *pad = (unsigned char *)skb->data;
 	struct ethhdr *eth = (struct ethhdr *)(pad + MYRI_PAD_LEN);
-	struct device *dev = skb->dev;
+	struct net_device *dev = skb->dev;
 
 #ifdef DEBUG_HEADER
 	DHDR(("myri_rebuild_header: pad[%02x,%02x] ", pad[0], pad[1]));
@@ -744,7 +744,7 @@ int myri_header_cache(struct neighbour *neigh, struct hh_cache *hh)
 	unsigned short type = hh->hh_type;
 	unsigned char *pad = (unsigned char *)hh->hh_data;
 	struct ethhdr *eth = (struct ethhdr *)(pad + MYRI_PAD_LEN);
-	struct device *dev = neigh->dev;
+	struct net_device *dev = neigh->dev;
 
 	if (type == __constant_htons(ETH_P_802_3))
 		return -1;
@@ -762,12 +762,12 @@ int myri_header_cache(struct neighbour *neigh, struct hh_cache *hh)
 
 
 /* Called by Address Resolution module to notify changes in address. */
-void myri_header_cache_update(struct hh_cache *hh, struct device *dev, unsigned char * haddr)
+void myri_header_cache_update(struct hh_cache *hh, struct net_device *dev, unsigned char * haddr)
 {
 	memcpy(((u8*)hh->hh_data) + 2, haddr, dev->addr_len);
 }
 
-static int myri_change_mtu(struct device *dev, int new_mtu)
+static int myri_change_mtu(struct net_device *dev, int new_mtu)
 {
 	if ((new_mtu < (ETH_HLEN + MYRI_PAD_LEN)) || (new_mtu > MYRINET_MTU))
 		return -EINVAL;
@@ -775,13 +775,13 @@ static int myri_change_mtu(struct device *dev, int new_mtu)
 	return 0;
 }
 
-static struct net_device_stats *myri_get_stats(struct device *dev)
+static struct net_device_stats *myri_get_stats(struct net_device *dev)
 { return &(((struct myri_eth *)dev->priv)->enet_stats); }
 
 #define CRC_POLYNOMIAL_BE 0x04c11db7UL  /* Ethernet CRC, big endian */
 #define CRC_POLYNOMIAL_LE 0xedb88320UL  /* Ethernet CRC, little endian */
 
-static void myri_set_multicast(struct device *dev)
+static void myri_set_multicast(struct net_device *dev)
 {
 	/* Do nothing, all MyriCOM nodes transmit multicast frames
 	 * as broadcast packets...
@@ -862,7 +862,7 @@ static void dump_eeprom(struct myri_eth *mp)
 }
 #endif
 
-static inline int myri_ether_init(struct device *dev, struct linux_sbus_device *sdev, int num)
+static inline int myri_ether_init(struct net_device *dev, struct linux_sbus_device *sdev, int num)
 {
 	static unsigned version_printed = 0;
 	struct myri_eth *mp;
@@ -1074,7 +1074,7 @@ static inline int myri_ether_init(struct device *dev, struct linux_sbus_device *
 	return 0;
 }
 
-int __init myri_sbus_probe(struct device *dev)
+int __init myri_sbus_probe(struct net_device *dev)
 {
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;

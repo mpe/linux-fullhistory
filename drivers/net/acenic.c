@@ -173,11 +173,11 @@ static int tx_ratio[8] = {0, };
 
 static const char __initdata *version = "acenic.c: v0.32 03/15/99  Jes Sorensen (Jes.Sorensen@cern.ch)\n";
 
-static struct device *root_dev = NULL;
+static struct net_device *root_dev = NULL;
 
 static int probed __initdata = 0;
 
-int __init acenic_probe (struct device *dev)
+int __init acenic_probe (struct net_device *dev)
 {
 	int boards_found = 0;
 	int version_disp;
@@ -363,7 +363,7 @@ void cleanup_module(void)
 {
 	struct ace_private *ap;
 	struct ace_regs *regs;
-	struct device *next;
+	struct net_device *next;
 	short i;
 	unsigned long flags;
 
@@ -423,7 +423,7 @@ static inline void ace_issue_cmd(struct ace_regs *regs, struct cmd *cmd)
 }
 
 
-static int __init ace_init(struct device *dev, int board_idx)
+static int __init ace_init(struct net_device *dev, int board_idx)
 {
 	struct ace_private *ap;
 	struct ace_regs *regs;
@@ -802,7 +802,7 @@ static int __init ace_init(struct device *dev, int board_idx)
  */
 static void ace_timer(unsigned long data)
 {
-	struct device *dev = (struct device *)data;
+	struct net_device *dev = (struct net_device *)data;
 	struct ace_private *ap = (struct ace_private *)dev->priv;
 	struct ace_regs *regs = ap->regs;
 
@@ -837,7 +837,7 @@ static void ace_dump_trace(struct ace_private *ap)
 /*
  * Load the standard rx ring.
  */
-static int ace_load_std_rx_ring(struct device *dev)
+static int ace_load_std_rx_ring(struct net_device *dev)
 {
 	struct ace_private *ap;
 	struct ace_regs *regs;
@@ -906,7 +906,7 @@ static int ace_load_std_rx_ring(struct device *dev)
  * Load the jumbo rx ring, this may happen at any time if the MTU
  * is changed to a value > 1500.
  */
-static int ace_load_jumbo_rx_ring(struct device *dev)
+static int ace_load_jumbo_rx_ring(struct net_device *dev)
 {
 	struct ace_private *ap;
 	struct ace_regs *regs;
@@ -962,7 +962,7 @@ static int ace_load_jumbo_rx_ring(struct device *dev)
  * Tell the firmware not to accept jumbos and flush the jumbo ring.
  * This function must be called with the spinlock held.
  */
-static int ace_flush_jumbo_rx_ring(struct device *dev)
+static int ace_flush_jumbo_rx_ring(struct net_device *dev)
 {
 	struct ace_private *ap;
 	struct ace_regs *regs;
@@ -998,7 +998,7 @@ static int ace_flush_jumbo_rx_ring(struct device *dev)
  * events) and are handled here, outside the main interrupt handler,
  * to reduce the size of the handler.
  */
-static u32 ace_handle_event(struct device *dev, u32 evtcsm, u32 evtprd)
+static u32 ace_handle_event(struct net_device *dev, u32 evtcsm, u32 evtprd)
 {
 	struct ace_private *ap;
 
@@ -1059,7 +1059,7 @@ static u32 ace_handle_event(struct device *dev, u32 evtcsm, u32 evtprd)
 }
 
 
-static int ace_rx_int(struct device *dev, u32 rxretprd, u32 rxretcsm)
+static int ace_rx_int(struct net_device *dev, u32 rxretprd, u32 rxretcsm)
 {
 	struct ace_private *ap = (struct ace_private *)dev->priv;
 	struct ace_regs *regs = ap->regs;
@@ -1210,7 +1210,7 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 {
 	struct ace_private *ap;
 	struct ace_regs *regs;
-	struct device *dev = (struct device *)dev_id;
+	struct net_device *dev = (struct net_device *)dev_id;
 	u32 txcsm, rxretcsm, rxretprd;
 	u32 evtcsm, evtprd;
 
@@ -1293,7 +1293,7 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 }
 
 
-static int ace_open(struct device *dev)
+static int ace_open(struct net_device *dev)
 {
 	struct ace_private *ap;
 	struct ace_regs *regs;
@@ -1355,7 +1355,7 @@ static int ace_open(struct device *dev)
 }
 
 
-static int ace_close(struct device *dev)
+static int ace_close(struct net_device *dev)
 {
 	struct ace_private *ap;
 	struct ace_regs *regs;
@@ -1405,7 +1405,7 @@ static int ace_close(struct device *dev)
 }
 
 
-static int ace_start_xmit(struct sk_buff *skb, struct device *dev)
+static int ace_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ace_private *ap = (struct ace_private *)dev->priv;
 	struct ace_regs *regs = ap->regs;
@@ -1450,7 +1450,7 @@ static int ace_start_xmit(struct sk_buff *skb, struct device *dev)
 }
 
 
-static int ace_change_mtu(struct device *dev, int new_mtu)
+static int ace_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct ace_private *ap = dev->priv;
 	struct ace_regs *regs = ap->regs;
@@ -1486,7 +1486,7 @@ static int ace_change_mtu(struct device *dev, int new_mtu)
 /*
  * Set the hardware MAC address.
  */
-static int ace_set_mac_addr(struct device *dev, void *p)
+static int ace_set_mac_addr(struct net_device *dev, void *p)
 {
 	struct sockaddr *addr=p;
 	struct ace_regs *regs;
@@ -1512,7 +1512,7 @@ static int ace_set_mac_addr(struct device *dev, void *p)
 }
 
 
-static void ace_set_multicast_list(struct device *dev)
+static void ace_set_multicast_list(struct net_device *dev)
 {
 	struct ace_private *ap = dev->priv;
 	struct ace_regs *regs = ap->regs;
@@ -1566,7 +1566,7 @@ static void ace_set_multicast_list(struct device *dev)
 }
 
 
-static struct net_device_stats *ace_get_stats(struct device *dev)
+static struct net_device_stats *ace_get_stats(struct net_device *dev)
 {
 	struct ace_private *ap = dev->priv;
 
@@ -1642,7 +1642,7 @@ void __init ace_clear(struct ace_regs *regs, u32 dest, int size)
  * This operation requires the NIC to be halted and is performed with
  * interrupts disabled and with the spinlock hold.
  */
-int __init ace_load_firmware(struct device *dev)
+int __init ace_load_firmware(struct net_device *dev)
 {
 	struct ace_private *ap;
 	struct ace_regs *regs;

@@ -158,7 +158,7 @@ static __inline__ void igmp_start_timer(struct ip_mc_list *im, int max_delay)
 
 #define IGMP_SIZE (sizeof(struct igmphdr)+sizeof(struct iphdr)+4)
 
-static int igmp_send_report(struct device *dev, u32 group, int type)
+static int igmp_send_report(struct net_device *dev, u32 group, int type)
 {
 	struct sk_buff *skb;
 	struct iphdr *iph;
@@ -359,7 +359,7 @@ int igmp_rcv(struct sk_buff *skb, unsigned short len)
 static void ip_mc_filter_add(struct in_device *in_dev, u32 addr)
 {
 	char buf[MAX_ADDR_LEN];
-	struct device *dev = in_dev->dev;
+	struct net_device *dev = in_dev->dev;
 
 	/* Checking for IFF_MULTICAST here is WRONG-WRONG-WRONG.
 	   We will get multicast token leakage, when IFF_MULTICAST
@@ -379,7 +379,7 @@ static void ip_mc_filter_add(struct in_device *in_dev, u32 addr)
 static void ip_mc_filter_del(struct in_device *in_dev, u32 addr)
 {
 	char buf[MAX_ADDR_LEN];
-	struct device *dev = in_dev->dev;
+	struct net_device *dev = in_dev->dev;
 
 	if (arp_mc_map(addr, buf, dev, 0) == 0)
 		dev_mc_delete(dev,buf,dev->addr_len,0);
@@ -547,7 +547,7 @@ void ip_mc_destroy_dev(struct in_device *in_dev)
 static struct in_device * ip_mc_find_dev(struct ip_mreqn *imr)
 {
 	struct rtable *rt;
-	struct device *dev = NULL;
+	struct net_device *dev = NULL;
 
 	if (imr->imr_address.s_addr) {
 		dev = ip_dev_find(imr->imr_address.s_addr);
@@ -684,7 +684,7 @@ void ip_mc_drop_socket(struct sock *sk)
 	up(&ip_sk_mc_sem);
 }
 
-int ip_check_mc(struct device *dev, u32 mc_addr)
+int ip_check_mc(struct net_device *dev, u32 mc_addr)
 {
 	struct in_device *in_dev = dev->ip_ptr;
 	struct ip_mc_list *im;
@@ -710,7 +710,7 @@ int ip_mc_procinfo(char *buffer, char **start, off_t offset, int length, int dum
 	off_t pos=0, begin=0;
 	struct ip_mc_list *im;
 	int len=0;
-	struct device *dev;
+	struct net_device *dev;
 
 	len=sprintf(buffer,"Idx\tDevice    : Count Querier\tGroup    Users Timer\tReporter\n");  
 

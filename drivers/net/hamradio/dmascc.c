@@ -71,12 +71,12 @@
 #define RXFIFOH 0x08
 #define TXFIFOE 0x20
 
-static int dmascc_dev_init(struct device *dev)
+static int dmascc_dev_init(struct net_device *dev)
 {
   return 0;
 }
 
-static void dev_init_buffers(struct device *dev)
+static void dev_init_buffers(struct net_device *dev)
 {
   int i;
 
@@ -239,7 +239,7 @@ struct scc_info {
   int scc_base;
   int tmr_base;
   int twin_serial_cfg;
-  struct device dev[2];
+  struct net_device dev[2];
   struct scc_priv priv[2];
   struct scc_info *next;
 };
@@ -252,21 +252,21 @@ static int setup_adapter(int io, int h, int n) __init;
 
 static inline void write_scc(int ctl, int reg, int val);
 static inline int read_scc(int ctl, int reg);
-static int scc_open(struct device *dev);
-static int scc_close(struct device *dev);
-static int scc_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
-static int scc_send_packet(struct sk_buff *skb, struct device *dev);
-static struct enet_statistics *scc_get_stats(struct device *dev);
-static int scc_set_mac_address(struct device *dev, void *sa);
+static int scc_open(struct net_device *dev);
+static int scc_close(struct net_device *dev);
+static int scc_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
+static int scc_send_packet(struct sk_buff *skb, struct net_device *dev);
+static struct enet_statistics *scc_get_stats(struct net_device *dev);
+static int scc_set_mac_address(struct net_device *dev, void *sa);
 static void scc_isr(int irq, void *dev_id, struct pt_regs * regs);
 static inline void z8530_isr(struct scc_info *info);
-static void rx_isr(struct device *dev);
-static void special_condition(struct device *dev, int rc);
+static void rx_isr(struct net_device *dev);
+static void special_condition(struct net_device *dev, int rc);
 static void rx_bh(void *arg);
-static void tx_isr(struct device *dev);
-static void es_isr(struct device *dev);
-static void tm_isr(struct device *dev);
-static inline void delay(struct device *dev, int t);
+static void tx_isr(struct net_device *dev);
+static void es_isr(struct net_device *dev);
+static void tm_isr(struct net_device *dev);
+static inline void delay(struct net_device *dev, int t);
 static inline unsigned char random(void);
 
 
@@ -457,7 +457,7 @@ int __init setup_adapter(int io, int h, int n)
 {
   int i, irq, chip;
   struct scc_info *info;
-  struct device *dev;
+  struct net_device *dev;
   struct scc_priv *priv;
   unsigned long time;
   unsigned int irqs;
@@ -623,7 +623,7 @@ static inline int read_scc(int ctl, int reg)
 }
 
 
-static int scc_open(struct device *dev)
+static int scc_open(struct net_device *dev)
 {
   struct scc_priv *priv = dev->priv;
   struct scc_info *info = priv->info;
@@ -740,7 +740,7 @@ static int scc_open(struct device *dev)
 }
 
 
-static int scc_close(struct device *dev)
+static int scc_close(struct net_device *dev)
 {
   struct scc_priv *priv = dev->priv;
   struct scc_info *info = priv->info;
@@ -772,7 +772,7 @@ static int scc_close(struct device *dev)
 }
 
 
-static int scc_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+static int scc_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
   int rc;
   struct scc_priv *priv = dev->priv;
@@ -797,7 +797,7 @@ static int scc_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 }
 
 
-static int scc_send_packet(struct sk_buff *skb, struct device *dev)
+static int scc_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
   struct scc_priv *priv = dev->priv;
   struct scc_info *info = priv->info;
@@ -851,7 +851,7 @@ static int scc_send_packet(struct sk_buff *skb, struct device *dev)
 }
 
 
-static struct enet_statistics *scc_get_stats(struct device *dev)
+static struct enet_statistics *scc_get_stats(struct net_device *dev)
 {
   struct scc_priv *priv = dev->priv;
 
@@ -859,7 +859,7 @@ static struct enet_statistics *scc_get_stats(struct device *dev)
 }
 
 
-static int scc_set_mac_address(struct device *dev, void *sa)
+static int scc_set_mac_address(struct net_device *dev, void *sa)
 {
   memcpy(dev->dev_addr, ((struct sockaddr *)sa)->sa_data, dev->addr_len);
   return 0;
@@ -934,7 +934,7 @@ static inline void z8530_isr(struct scc_info *info)
 }
 
 
-static void rx_isr(struct device *dev)
+static void rx_isr(struct net_device *dev)
 {
   struct scc_priv *priv = dev->priv;
   int cmd = priv->cmd;
@@ -961,7 +961,7 @@ static void rx_isr(struct device *dev)
 }
 
 
-static void special_condition(struct device *dev, int rc)
+static void special_condition(struct net_device *dev, int rc)
 {
   struct scc_priv *priv = dev->priv;
   int cb, cmd = priv->cmd;
@@ -1032,7 +1032,7 @@ static void special_condition(struct device *dev, int rc)
 
 static void rx_bh(void *arg)
 {
-  struct device *dev = arg;
+  struct net_device *dev = arg;
   struct scc_priv *priv = dev->priv;
   struct scc_info *info = priv->info;
   int cmd = priv->cmd;
@@ -1081,7 +1081,7 @@ static void rx_bh(void *arg)
 }
 
 
-static void tx_isr(struct device *dev)
+static void tx_isr(struct net_device *dev)
 {
   struct scc_priv *priv = dev->priv;
   int cmd = priv->cmd;
@@ -1103,7 +1103,7 @@ static void tx_isr(struct device *dev)
 }
 
 
-static void es_isr(struct device *dev)
+static void es_isr(struct net_device *dev)
 {
   struct scc_priv *priv = dev->priv;
   struct scc_info *info = priv->info;
@@ -1261,7 +1261,7 @@ static void es_isr(struct device *dev)
 }
 
 
-static void tm_isr(struct device *dev)
+static void tm_isr(struct net_device *dev)
 {
   struct scc_priv *priv = dev->priv;
   struct scc_info *info = priv->info;
@@ -1326,7 +1326,7 @@ static void tm_isr(struct device *dev)
 }
 
 
-static inline void delay(struct device *dev, int t)
+static inline void delay(struct net_device *dev, int t)
 {
   struct scc_priv *priv = dev->priv;
   int tmr = priv->tmr;

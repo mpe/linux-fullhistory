@@ -70,7 +70,7 @@ struct sixpack {
 
   /* Various fields. */
   struct tty_struct	*tty;		/* ptr to TTY structure		*/
-  struct device		*dev;		/* easy for intr handling	*/
+  struct net_device		*dev;		/* easy for intr handling	*/
 
   /* These are pointers to the malloc()ed frame buffers. */
   unsigned char		*rbuff;		/* receiver buffer		*/
@@ -128,7 +128,7 @@ struct sixpack {
 #define AX25_6PACK_HEADER_LEN 0
 #define SIXPACK_MAGIC 0x5304
 
-extern int sixpack_init(struct device *dev);
+extern int sixpack_init(struct net_device *dev);
 
 #endif
 

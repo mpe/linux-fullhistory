@@ -85,7 +85,6 @@ extern int try_to_free_pages(unsigned int gfp_mask);
 
 /* linux/mm/page_io.c */
 extern void rw_swap_page(int, struct page *, int);
-extern void rw_swap_page_nocache(int, unsigned long, char *);
 extern void rw_swap_page_nolock(int, unsigned long, char *, int);
 extern void swap_after_unlock_page (unsigned long entry);
 

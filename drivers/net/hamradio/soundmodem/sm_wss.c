@@ -102,7 +102,7 @@ struct sc_state_wss {
 
 /* --------------------------------------------------------------------- */
 
-static void write_codec(struct device *dev, unsigned char idx,
+static void write_codec(struct net_device *dev, unsigned char idx,
 			unsigned char data)
 {
 	int timeout = 900000;
@@ -117,7 +117,7 @@ static void write_codec(struct device *dev, unsigned char idx,
 
 /* --------------------------------------------------------------------- */
 
-static unsigned char read_codec(struct device *dev, unsigned char idx)
+static unsigned char read_codec(struct net_device *dev, unsigned char idx)
 {
 	int timeout = 900000;
 
@@ -130,7 +130,7 @@ static unsigned char read_codec(struct device *dev, unsigned char idx)
 
 /* --------------------------------------------------------------------- */
 
-extern void inline wss_ack_int(struct device *dev)
+extern void inline wss_ack_int(struct net_device *dev)
 {
 	outb(0, WSS_CODEC_STATUS(dev->base_addr));
 }
@@ -154,7 +154,7 @@ static int wss_srate_index(int srate)
 
 /* --------------------------------------------------------------------- */
 
-static int wss_set_codec_fmt(struct device *dev, struct sm_state *sm, unsigned char fmt, 
+static int wss_set_codec_fmt(struct net_device *dev, struct sm_state *sm, unsigned char fmt, 
 			     unsigned char fmt2, char fdx, char fullcalib)
 {
 	unsigned long time;
@@ -202,7 +202,7 @@ static int wss_set_codec_fmt(struct device *dev, struct sm_state *sm, unsigned c
 
 /* --------------------------------------------------------------------- */
 
-static int wss_init_codec(struct device *dev, struct sm_state *sm, char fdx, 
+static int wss_init_codec(struct net_device *dev, struct sm_state *sm, char fdx, 
 			  unsigned char src_l, unsigned char src_r, 
 			  int igain_l, int igain_r,
 			  int ogain_l, int ogain_r)
@@ -341,7 +341,7 @@ static int wss_init_codec(struct device *dev, struct sm_state *sm, char fdx,
 
 /* --------------------------------------------------------------------- */
 
-static void setup_dma_wss(struct device *dev, struct sm_state *sm, int send)
+static void setup_dma_wss(struct net_device *dev, struct sm_state *sm, int send)
 {
         unsigned long flags;
         static const unsigned char codecmode[2] = { 0x0e, 0x0d };
@@ -383,7 +383,7 @@ static void setup_dma_wss(struct device *dev, struct sm_state *sm, int send)
 
 static void wss_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)dev_id;
+	struct net_device *dev = (struct net_device *)dev_id;
 	struct sm_state *sm = (struct sm_state *)dev->priv;
 	unsigned int curfrag;
 	unsigned int nums;
@@ -426,7 +426,7 @@ static void wss_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 /* --------------------------------------------------------------------- */
 
-static int wss_open(struct device *dev, struct sm_state *sm) 
+static int wss_open(struct net_device *dev, struct sm_state *sm) 
 {
 	unsigned int dmasz, u;
 
@@ -484,7 +484,7 @@ static int wss_open(struct device *dev, struct sm_state *sm)
 
 /* --------------------------------------------------------------------- */
 
-static int wss_close(struct device *dev, struct sm_state *sm) 
+static int wss_close(struct net_device *dev, struct sm_state *sm) 
 {
 	if (!dev || !sm)
 		return -EINVAL;
@@ -502,7 +502,7 @@ static int wss_close(struct device *dev, struct sm_state *sm)
 
 /* --------------------------------------------------------------------- */
 
-static int wss_sethw(struct device *dev, struct sm_state *sm, char *mode)
+static int wss_sethw(struct net_device *dev, struct sm_state *sm, char *mode)
 {
 	char *cp = strchr(mode, '.');
 	const struct modem_tx_info **mtp = sm_modem_tx_table;
@@ -600,7 +600,7 @@ static int wss_sethw(struct device *dev, struct sm_state *sm, char *mode)
 
 /* --------------------------------------------------------------------- */
 
-static int wss_ioctl(struct device *dev, struct sm_state *sm, struct ifreq *ifr, 
+static int wss_ioctl(struct net_device *dev, struct sm_state *sm, struct ifreq *ifr, 
 		     struct hdlcdrv_ioctl *hi, int cmd)
 {
 	struct sm_ioctl bi;
@@ -665,7 +665,7 @@ const struct hardware_info sm_hw_wss = {
 
 /* --------------------------------------------------------------------- */
 
-static void setup_fdx_dma_wss(struct device *dev, struct sm_state *sm)
+static void setup_fdx_dma_wss(struct net_device *dev, struct sm_state *sm)
 {
         unsigned long flags;
 	unsigned char oldcodecmode, codecdma;
@@ -703,7 +703,7 @@ static void setup_fdx_dma_wss(struct device *dev, struct sm_state *sm)
 
 static void wssfdx_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)dev_id;
+	struct net_device *dev = (struct net_device *)dev_id;
 	struct sm_state *sm = (struct sm_state *)dev->priv;
 	unsigned long flags;
 	unsigned char cry_int_src;
@@ -781,7 +781,7 @@ static void wssfdx_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 /* --------------------------------------------------------------------- */
 
-static int wssfdx_open(struct device *dev, struct sm_state *sm) 
+static int wssfdx_open(struct net_device *dev, struct sm_state *sm) 
 {
 	if (!dev || !sm || !sm->mode_rx || !sm->mode_tx)
 		return -ENXIO;
@@ -840,7 +840,7 @@ static int wssfdx_open(struct device *dev, struct sm_state *sm)
 
 /* --------------------------------------------------------------------- */
 
-static int wssfdx_close(struct device *dev, struct sm_state *sm) 
+static int wssfdx_close(struct net_device *dev, struct sm_state *sm) 
 {
 	if (!dev || !sm)
 		return -EINVAL;
@@ -861,7 +861,7 @@ static int wssfdx_close(struct device *dev, struct sm_state *sm)
 
 /* --------------------------------------------------------------------- */
 
-static int wssfdx_sethw(struct device *dev, struct sm_state *sm, char *mode)
+static int wssfdx_sethw(struct net_device *dev, struct sm_state *sm, char *mode)
 {
 	char *cp = strchr(mode, '.');
 	const struct modem_tx_info **mtp = sm_modem_tx_table;
@@ -938,7 +938,7 @@ static int wssfdx_sethw(struct device *dev, struct sm_state *sm, char *mode)
 
 /* --------------------------------------------------------------------- */
 
-static int wssfdx_ioctl(struct device *dev, struct sm_state *sm, struct ifreq *ifr, 
+static int wssfdx_ioctl(struct net_device *dev, struct sm_state *sm, struct ifreq *ifr, 
 			struct hdlcdrv_ioctl *hi, int cmd)
 {
 	if (cmd != SIOCDEVPRIVATE)

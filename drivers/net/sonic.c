@@ -26,7 +26,7 @@
  *  registers that "should" only need to be set once at boot, so that
  *  there is non-reboot way to recover if something goes wrong.
  */
-static int sonic_open(struct device *dev)
+static int sonic_open(struct net_device *dev)
 {
     if (sonic_debug > 2)
       printk("sonic_open: initializing sonic driver.\n");
@@ -67,7 +67,7 @@ static int sonic_open(struct device *dev)
  * Close the SONIC device
  */
 static int
-sonic_close(struct device *dev)
+sonic_close(struct net_device *dev)
 {
     unsigned int base_addr = dev->base_addr;
     
@@ -93,7 +93,7 @@ sonic_close(struct device *dev)
 /*
  * transmit packet
  */
-static int sonic_send_packet(struct sk_buff *skb, struct device *dev)
+static int sonic_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
     struct sonic_local *lp = (struct sonic_local *)dev->priv;
     unsigned int base_addr = dev->base_addr;
@@ -183,7 +183,7 @@ static int sonic_send_packet(struct sk_buff *skb, struct device *dev)
 static void
 sonic_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-    struct device *dev = (struct device *)dev_id;
+    struct net_device *dev = (struct net_device *)dev_id;
     unsigned int base_addr = dev->base_addr;
     struct sonic_local *lp;
     int status;
@@ -301,7 +301,7 @@ sonic_interrupt(int irq, void *dev_id, struct pt_regs * regs)
  * We have a good packet(s), get it/them out of the buffers.
  */
 static void
-sonic_rx(struct device *dev)
+sonic_rx(struct net_device *dev)
 {
     unsigned int base_addr = dev->base_addr;
     struct sonic_local *lp = (struct sonic_local *)dev->priv;
@@ -378,7 +378,7 @@ sonic_rx(struct device *dev)
  * This may be called with the device open or closed.
  */
 static struct enet_statistics *
-sonic_get_stats(struct device *dev)
+sonic_get_stats(struct net_device *dev)
 {
     struct sonic_local *lp = (struct sonic_local *)dev->priv;
     unsigned int base_addr = dev->base_addr;
@@ -399,7 +399,7 @@ sonic_get_stats(struct device *dev)
  * Set or clear the multicast filter for this adaptor.
  */
 static void
-sonic_multicast_list(struct device *dev)
+sonic_multicast_list(struct net_device *dev)
 {
     struct sonic_local *lp = (struct sonic_local *)dev->priv;    
     unsigned int base_addr = dev->base_addr;    
@@ -445,7 +445,7 @@ sonic_multicast_list(struct device *dev)
 /*
  * Initialize the SONIC ethernet controller.
  */
-static int sonic_init(struct device *dev)
+static int sonic_init(struct net_device *dev)
 {
     unsigned int base_addr = dev->base_addr;
     unsigned int cmd;

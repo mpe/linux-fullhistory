@@ -232,7 +232,7 @@ extern __inline__ int ipv6_addr_any(struct in6_addr *a)
  */
 
 extern int			ipv6_rcv(struct sk_buff *skb, 
-					 struct device *dev, 
+					 struct net_device *dev, 
 					 struct packet_type *pt);
 
 /*
@@ -245,7 +245,7 @@ extern int			ip6_xmit(struct sock *sk,
 
 extern int			ip6_nd_hdr(struct sock *sk,
 					   struct sk_buff *skb,
-					   struct device *dev,
+					   struct net_device *dev,
 					   struct in6_addr *saddr,
 					   struct in6_addr *daddr,
 					   int proto, int len);

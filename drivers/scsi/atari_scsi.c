@@ -132,51 +132,51 @@ struct proc_dir_entry proc_scsi_atari = {
 	} while(0)
 
 #define	SCSI_DMA_READ_P(elt)					\
-	(((unsigned long)tt_scsi_dma.elt##_hi  << 24) |		\
-	 ((unsigned long)tt_scsi_dma.elt##_hmd << 16) |		\
-	 ((unsigned long)tt_scsi_dma.elt##_lmd << 8) |		\
-	  (unsigned long)tt_scsi_dma.elt##_lo)
+	(((((((unsigned long)tt_scsi_dma.elt##_hi << 8) |	\
+	     (unsigned long)tt_scsi_dma.elt##_hmd) << 8) |	\
+	   (unsigned long)tt_scsi_dma.elt##_lmd) << 8) |	\
+	 (unsigned long)tt_scsi_dma.elt##_lo)
 
 
-#define	SCSI_DMA_SETADR(adr)				\
-    do {						\
-	unsigned long __adr = (adr);			\
-	st_dma.dma_lo = (unsigned char)__adr;		\
-	MFPDELAY();					\
-	__adr >>= 8;					\
-	st_dma.dma_md = (unsigned char)__adr;		\
-	MFPDELAY();					\
-	__adr >>= 8;					\
-	st_dma.dma_hi = (unsigned char)__adr;		\
-	MFPDELAY();					\
-    } while(0)
+static inline void SCSI_DMA_SETADR(unsigned long adr)
+{
+	st_dma.dma_lo = (unsigned char)adr;
+	MFPDELAY();
+	adr >>= 8;
+	st_dma.dma_md = (unsigned char)adr;
+	MFPDELAY();
+	adr >>= 8;
+	st_dma.dma_hi = (unsigned char)adr;
+	MFPDELAY();
+}
 
-#define	SCSI_DMA_GETADR() ({				\
-    unsigned long	__adr;				\
-    __adr = st_dma.dma_lo;				\
-    MFPDELAY();						\
-    __adr |= (st_dma.dma_md & 0xff) << 8;		\
-    MFPDELAY();						\
-    __adr |= (st_dma.dma_hi & 0xff) << 16;		\
-    MFPDELAY();						\
-    __adr;						\
-})
+static inline unsigned long SCSI_DMA_GETADR(void)
+{
+	unsigned long adr;
+	adr = st_dma.dma_lo;
+	MFPDELAY();
+	adr |= (st_dma.dma_md & 0xff) << 8;
+	MFPDELAY();
+	adr |= (st_dma.dma_hi & 0xff) << 16;
+	MFPDELAY();
+	return adr;
+}
 
-#define	ENABLE_IRQ()					\
-	do {						\
-		if (IS_A_TT())				\
-			atari_enable_irq( IRQ_TT_MFP_SCSI );	\
-		else					\
-			atari_enable_irq( IRQ_MFP_FSCSI );	\
-	} while(0)
+static inline void ENABLE_IRQ(void)
+{
+	if (IS_A_TT())
+		atari_enable_irq(IRQ_TT_MFP_SCSI);
+	else
+		atari_enable_irq(IRQ_MFP_FSCSI);
+}
 
-#define	DISABLE_IRQ()					\
-	do {						\
-		if (IS_A_TT())				\
-			atari_disable_irq( IRQ_TT_MFP_SCSI );	\
-		else					\
-			atari_disable_irq( IRQ_MFP_FSCSI );	\
-	} while(0)
+static inline void DISABLE_IRQ(void)
+{
+	if (IS_A_TT())
+		atari_disable_irq(IRQ_TT_MFP_SCSI);
+	else
+		atari_disable_irq(IRQ_MFP_FSCSI);
+}
 
 
 #define HOSTDATA_DMALEN		(((struct NCR5380_hostdata *) \
@@ -461,8 +461,8 @@ static void scsi_falcon_intr (int irq, void *dummy, struct pt_regs *fp)
 		/* If the dribble buffer was used on a read operation, copy the DMA-ed
 		 * data to the original destination address.
 		 */
-		memcpy( atari_dma_orig_addr, (void *)PTOV(atari_dma_startaddr),
-		       HOSTDATA_DMALEN - atari_dma_residual );
+		memcpy(atari_dma_orig_addr, phys_to_virt(atari_dma_startaddr),
+		       HOSTDATA_DMALEN - atari_dma_residual);
 		atari_dma_orig_addr = NULL;
 	}
 
@@ -476,20 +476,22 @@ static void scsi_falcon_intr (int irq, void *dummy, struct pt_regs *fp)
 static void atari_scsi_fetch_restbytes( void )
 {
 	int nr;
-	char	*src, *dst;
+	char *src, *dst;
+	unsigned long phys_dst;
 
 	/* fetch rest bytes in the DMA register */
-	dst = (char *)SCSI_DMA_READ_P( dma_addr );
-	if ((nr = ((long)dst & 3))) {
-		/* there are 'nr' bytes left for the last long address before the
-		   DMA pointer */
-		dst = (char *)( (unsigned long)dst & ~3 );
+	phys_dst = SCSI_DMA_READ_P(dma_addr);
+	nr = phys_dst & 3;
+	if (nr) {
+		/* there are 'nr' bytes left for the last long address
+		   before the DMA pointer */
+		phys_dst ^= nr;
 		DMA_PRINTK("SCSI DMA: there are %d rest bytes for phys addr 0x%08lx",
-			   nr, (long)dst);
-		dst = (char *)PTOV(dst);  /* The content of the DMA pointer
-					   * is a physical address! */
-		DMA_PRINTK(" = virt addr 0x%08lx\n", (long)dst);
-		for( src = (char *)&tt_scsi_dma.dma_restdata; nr > 0; --nr )
+			   nr, phys_dst);
+		/* The content of the DMA pointer is a physical address!  */
+		dst = phys_to_virt(phys_dst);
+		DMA_PRINTK(" = virt addr %p\n", dst);
+		for (src = (char *)&tt_scsi_dma.dma_restdata; nr != 0; --nr)
 			*dst++ = *src++;
 	}
 }
@@ -665,7 +667,7 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 					"double buffer\n" );
 			return( 0 );
 		}
-		atari_dma_phys_buffer = VTOP( atari_dma_buffer );
+		atari_dma_phys_buffer = virt_to_phys( atari_dma_buffer );
 		atari_dma_orig_addr = 0;
 	}
 #endif
@@ -764,30 +766,13 @@ int atari_scsi_release (struct Scsi_Host *sh)
 }
 #endif
 
-__initfunc(void atari_scsi_setup( char *str, int *ints ))
+void __init atari_scsi_setup(char *str, int *ints)
 {
 	/* Format of atascsi parameter is:
 	 *   atascsi=<can_queue>,<cmd_per_lun>,<sg_tablesize>,<hostid>,<use_tags>
 	 * Defaults depend on TT or Falcon, hostid determined at run time.
 	 * Negative values mean don't change.
 	 */
-	
-	/* Grmbl... the standard parameter parsing can't handle negative numbers
-	 * :-( So let's do it ourselves!
-	 */
-
-	int i = ints[0]+1, fact;
-
-	while( str && (isdigit(*str) || *str == '-') && i <= 10) {
-		if (*str == '-')
-			fact = -1, ++str;
-		else
-			fact = 1;
-		ints[i++] = simple_strtoul( str, NULL, 0 ) * fact;
-		if ((str = strchr( str, ',' )) != NULL)
-			++str;
-	}
-	ints[0] = i-1;
 	
 	if (ints[0] < 1) {
 		printk( "atari_scsi_setup: no arguments!\n" );
@@ -869,7 +854,7 @@ int atari_scsi_reset( Scsi_Cmnd *cmd, unsigned int reset_flags)
 
 	
 #ifdef CONFIG_ATARI_SCSI_RESET_BOOT
-__initfunc(static void atari_scsi_reset_boot( void ))
+static void __init atari_scsi_reset_boot(void)
 {
 	unsigned long end;
 	
@@ -892,7 +877,8 @@ __initfunc(static void atari_scsi_reset_boot( void ))
 	NCR5380_write( INITIATOR_COMMAND_REG, ICR_BASE );
 	NCR5380_read( RESET_PARITY_INTERRUPT_REG );
 
-	for( end = jiffies + AFTER_RESET_DELAY; jiffies < end; )
+	end = jiffies + AFTER_RESET_DELAY;
+	while (time_before(jiffies, end))
 		barrier();
 
 	printk( " done\n" );
@@ -913,7 +899,7 @@ const char * atari_scsi_info (struct Scsi_Host *host)
 unsigned long atari_scsi_dma_setup( struct Scsi_Host *instance, void *data,
 				   unsigned long count, int dir )
 {
-	unsigned long addr = VTOP( data );
+	unsigned long addr = virt_to_phys( data );
 
 	DMA_PRINTK("scsi%d: setting up dma, data = %p, phys = %lx, count = %ld, "
 		   "dir = %d\n", instance->host_no, data, addr, count, dir);
@@ -1097,7 +1083,7 @@ static unsigned long atari_dma_xfer_len( unsigned long wanted_len,
 	}
 	
 	/* Last step: apply the hard limit on DMA transfers */
-	limit = (atari_dma_buffer && !STRAM_ADDR( VTOP(cmd->SCp.ptr) )) ?
+	limit = (atari_dma_buffer && !STRAM_ADDR( virt_to_phys(cmd->SCp.ptr) )) ?
 		    STRAM_BUFFER_SIZE : 255*512;
 	if (possible_len > limit)
 		possible_len = limit;

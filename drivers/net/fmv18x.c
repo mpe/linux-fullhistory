@@ -108,16 +108,16 @@ struct net_local {
 
 /* Index to functions, as function prototypes. */
 
-extern int fmv18x_probe(struct device *dev);
+extern int fmv18x_probe(struct net_device *dev);
 
-static int fmv18x_probe1(struct device *dev, short ioaddr);
-static int net_open(struct device *dev);
-static int	net_send_packet(struct sk_buff *skb, struct device *dev);
+static int fmv18x_probe1(struct net_device *dev, short ioaddr);
+static int net_open(struct net_device *dev);
+static int	net_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void net_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void net_rx(struct device *dev);
-static int net_close(struct device *dev);
-static struct net_device_stats *net_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev);
+static void net_rx(struct net_device *dev);
+static int net_close(struct net_device *dev);
+static struct net_device_stats *net_get_stats(struct net_device *dev);
+static void set_multicast_list(struct net_device *dev);
 
 
 /* Check for a network adaptor of this type, and return '0' iff one exists.
@@ -133,7 +133,7 @@ struct netdev_entry fmv18x_drv =
 {"fmv18x", fmv18x_probe1, FMV18X_IO_EXTENT, fmv18x_probe_list};
 #else
 int __init 
-fmv18x_probe(struct device *dev)
+fmv18x_probe(struct net_device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -163,7 +163,7 @@ fmv18x_probe(struct device *dev)
    that can be done is checking a few bits and then diving right into MAC
    address check. */
 
-int __init fmv18x_probe1(struct device *dev, short ioaddr)
+int __init fmv18x_probe1(struct net_device *dev, short ioaddr)
 {
 	char irqmap[4] = {3, 7, 10, 15};
 	char irqmap_pnp[8] = {3, 4, 5, 7, 9, 10, 11, 15};
@@ -287,7 +287,7 @@ int __init fmv18x_probe1(struct device *dev, short ioaddr)
 }
 
 
-static int net_open(struct device *dev)
+static int net_open(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -326,7 +326,7 @@ static int net_open(struct device *dev)
 }
 
 static int
-net_send_packet(struct sk_buff *skb, struct device *dev)
+net_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -420,7 +420,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 static void
 net_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct net_local *lp;
 	int ioaddr, status;
 
@@ -483,7 +483,7 @@ net_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 /* We have a good packet(s), get it/them out of the buffers. */
 static void
-net_rx(struct device *dev)
+net_rx(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -572,7 +572,7 @@ net_rx(struct device *dev)
 }
 
 /* The inverse routine to net_open(). */
-static int net_close(struct device *dev)
+static int net_close(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 
@@ -599,7 +599,7 @@ static int net_close(struct device *dev)
 
 /* Get the current statistics.	This may be called with the card open or
    closed. */
-static struct net_device_stats *net_get_stats(struct device *dev)
+static struct net_device_stats *net_get_stats(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 
@@ -617,7 +617,7 @@ static struct net_device_stats *net_get_stats(struct device *dev)
 			best-effort filtering.
  */
  
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
 	short ioaddr = dev->base_addr;
 	if (dev->mc_count || dev->flags&(IFF_PROMISC|IFF_ALLMULTI))
@@ -637,7 +637,7 @@ static void set_multicast_list(struct device *dev)
 
 #ifdef MODULE
 static char devicename[9] = { 0, };
-static struct device dev_fmv18x = {
+static struct net_device dev_fmv18x = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
 	0, 0, 0, 0,
 	0, 0,

@@ -303,21 +303,21 @@ struct eepro_local {
 
 /* Index to functions, as function prototypes. */
 
-extern int eepro_probe(struct device *dev);
+extern int eepro_probe(struct net_device *dev);
 
-static int	eepro_probe1(struct device *dev, short ioaddr);
-static int	eepro_open(struct device *dev);
-static int	eepro_send_packet(struct sk_buff *skb, struct device *dev);
+static int	eepro_probe1(struct net_device *dev, short ioaddr);
+static int	eepro_open(struct net_device *dev);
+static int	eepro_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void	eepro_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void 	eepro_rx(struct device *dev);
-static void 	eepro_transmit_interrupt(struct device *dev);
-static int	eepro_close(struct device *dev);
-static struct enet_statistics *eepro_get_stats(struct device *dev);
-static void     set_multicast_list(struct device *dev);
+static void 	eepro_rx(struct net_device *dev);
+static void 	eepro_transmit_interrupt(struct net_device *dev);
+static int	eepro_close(struct net_device *dev);
+static struct enet_statistics *eepro_get_stats(struct net_device *dev);
+static void     set_multicast_list(struct net_device *dev);
 
 static int read_eeprom(int ioaddr, int location);
-static void hardware_send_packet(struct device *dev, void *buf, short length);
-static int	eepro_grab_irq(struct device *dev);
+static void hardware_send_packet(struct net_device *dev, void *buf, short length);
+static int	eepro_grab_irq(struct net_device *dev);
 
 /*
 			Details of the i82595.
@@ -461,7 +461,7 @@ buffer (transmit-buffer = 32K - receive-buffer).
 struct netdev_entry netcard_drv =
 {"eepro", eepro_probe1, EEPRO_IO_EXTENT, eepro_portlist};
 #else
-compat_init_func(int eepro_probe(struct device *dev))
+compat_init_func(int eepro_probe(struct net_device *dev))
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -575,7 +575,7 @@ void printEEPROMInfo(short ioaddr)
    probes on the ISA bus.  A good device probe avoids doing writes, and
    verifies that the correct device exists and functions.  */
 
-int eepro_probe1(struct device *dev, short ioaddr)
+int eepro_probe1(struct net_device *dev, short ioaddr)
 {
 	unsigned short station_addr[6], id, counter;
 	int i,j, irqMask;
@@ -746,7 +746,7 @@ int eepro_probe1(struct device *dev, short ioaddr)
 
 static char irqrmap[] = {-1,-1,0,1,-1,2,-1,-1,-1,0,3,4,-1,-1,-1,-1};
 static char irqrmap2[] = {-1,-1,4,0,1,2,-1,3,-1,4,5,6,7,-1,-1,-1};
-static int	eepro_grab_irq(struct device *dev)
+static int	eepro_grab_irq(struct net_device *dev)
 {
 	int irqlist[] = { 3, 4, 5, 7, 9, 10, 11, 12 };
 	int *irqp = irqlist, temp_reg, ioaddr = dev->base_addr;
@@ -804,7 +804,7 @@ static int	eepro_grab_irq(struct device *dev)
 	return dev->irq;
 }
 
-static int eepro_open(struct device *dev)
+static int eepro_open(struct net_device *dev)
 {
 	unsigned short temp_reg, old8, old9;
 	int irqMask;
@@ -984,7 +984,7 @@ static int eepro_open(struct device *dev)
 	return 0;
 }
 
-static int eepro_send_packet(struct sk_buff *skb, struct device *dev)
+static int eepro_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -1087,8 +1087,8 @@ static int eepro_send_packet(struct sk_buff *skb, struct device *dev)
 static void
 eepro_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device *dev =  (struct device *)dev_id;
-	                      /* (struct device *)(irq2dev_map[irq]);*/
+	struct net_device *dev =  (struct net_device *)dev_id;
+	                      /* (struct net_device *)(irq2dev_map[irq]);*/
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
 	int ioaddr, status, boguscount = 20;
 
@@ -1155,7 +1155,7 @@ eepro_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	return;
 }
 
-static int eepro_close(struct device *dev)
+static int eepro_close(struct net_device *dev)
 {
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -1207,7 +1207,7 @@ static int eepro_close(struct device *dev)
 /* Get the current statistics.	This may be called with the card open or
    closed. */
 static struct enet_statistics *
-eepro_get_stats(struct device *dev)
+eepro_get_stats(struct net_device *dev)
 {
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
 
@@ -1217,7 +1217,7 @@ eepro_get_stats(struct device *dev)
 /* Set or clear the multicast filter for this adaptor.
  */
 static void
-set_multicast_list(struct device *dev)
+set_multicast_list(struct net_device *dev)
 {
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
 	short ioaddr = dev->base_addr;
@@ -1386,7 +1386,7 @@ read_eeprom(int ioaddr, int location)
 }
 
 static void
-hardware_send_packet(struct device *dev, void *buf, short length)
+hardware_send_packet(struct net_device *dev, void *buf, short length)
 {
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
 	short ioaddr = dev->base_addr;
@@ -1503,7 +1503,7 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 }
 
 static void
-eepro_rx(struct device *dev)
+eepro_rx(struct net_device *dev)
 {
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
 	short ioaddr = dev->base_addr, rcv_ram = dev->mem_end;
@@ -1597,7 +1597,7 @@ eepro_rx(struct device *dev)
 }
 
 static void
-eepro_transmit_interrupt(struct device *dev)
+eepro_transmit_interrupt(struct net_device *dev)
 {
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
 	short ioaddr = dev->base_addr;
@@ -1655,7 +1655,7 @@ eepro_transmit_interrupt(struct device *dev)
 
 #define MAX_EEPRO 8
 static char devicename[MAX_EEPRO][9];
-static struct device dev_eepro[MAX_EEPRO];
+static struct net_device dev_eepro[MAX_EEPRO];
 
 static int io[MAX_EEPRO] = {
 #ifdef PnPWakeup
@@ -1693,7 +1693,7 @@ init_module(void)
 		printk("eepro_init_module: You should not use auto-probing with insmod!\n");
 
 	while (n_eepro < MAX_EEPRO && io[n_eepro] >= 0) {
-		struct device *d = &dev_eepro[n_eepro];
+		struct net_device *d = &dev_eepro[n_eepro];
 		d->name		= devicename[n_eepro]; /* inserted by drivers/net/net_init.c */
 		d->mem_end	= mem[n_eepro];
 		d->base_addr	= io[n_eepro];
@@ -1713,7 +1713,7 @@ cleanup_module(void)
 	int i;
 	
 	for (i=0; i<n_eepro; i++) {
-		struct device *d = &dev_eepro[i];
+		struct net_device *d = &dev_eepro[i];
 		unregister_netdev(d);
 
 		kfree_s(d->priv,sizeof(struct eepro_local));

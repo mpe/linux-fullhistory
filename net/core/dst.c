@@ -164,7 +164,7 @@ void dst_destroy(struct dst_entry * dst)
 
 static int dst_dev_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
-	struct device *dev = ptr;
+	struct net_device *dev = ptr;
 	struct dst_entry *dst;
 
 	switch (event) {

@@ -3,11 +3,27 @@
  *
  * (C) Copyright 1999 Roman Weissgaerber (weissg@vienna.at)
  *
+ *	This program is free software; you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation; either version 2 of the License, or
+ *	(at your option) any later version.
+ *
+ *	This program is distributed in the hope that it will be useful,
+ *	but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *	GNU General Public License for more details.
+ *
+ *	You should have received a copy of the GNU General Public License
+ *	along with this program; if not, write to the Free Software
+ *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ * 
  * The Root Hub is build into the HC (UHCI or OHCI) hardware. 
  * This piece of code lets it look like it resides on the usb
  * like the other hubs.
  * (for anyone who wants to do a control operation on the root hub)
- *  
+ * 
+ * v4.0 1999/08/18 
  * v2.1 1999/05/09 
  * v2.0 1999/05/04
  * v1.0 1999/04/27
@@ -15,7 +31,6 @@
  *  
  */
  
-
 
 #include <linux/kernel.h>
 #include <linux/delay.h>
@@ -30,7 +45,6 @@
 #ifdef VROOTHUB 
 
 #include "ohci-root-hub.h"
-
 
 static __u8 root_hub_dev_des[] =
 {
@@ -85,7 +99,7 @@ static __u8 root_hub_config_des[] =
         0x05,       /*  __u8  ep_bDescriptorType; Endpoint */
         0x81,       /*  __u8  ep_bEndpointAddress; IN Endpoint 1 */
         0x03,       /*  __u8  ep_bmAttributes; Interrupt */
-        0x40,       /*  __u16 ep_wMaxPacketSize; 64 Bytes */
+        0x08,       /*  __u16 ep_wMaxPacketSize; 8 Bytes */
         0x00,
         0xff        /*  __u8  ep_bInterval; 255 ms */
 };
@@ -108,385 +122,128 @@ static __u8 root_hub_hub_des[] =
 };
 */
 
+#define OK(x) 			len = (x); req_reply = 0; break
+#define WR_RH_STAT(x) 		writel((x), &ohci->regs->roothub.status)
+#define WR_RH_PORTSTAT(x) 	writel((x), &ohci->regs->roothub.portstatus[wIndex-1])
+#define RD_RH_STAT			readl(&ohci->regs->roothub.status)
+#define RD_RH_PORTSTAT		readl(&ohci->regs->roothub.portstatus[wIndex-1])
 
-int root_hub_control_msg(struct ohci *ohci, int cmd_len, void *rh_cmd, void *rh_data, int leni, __OHCI_BAG lw0, __OHCI_BAG lw1, f_handler handler)
+int root_hub_control_msg(struct usb_device *usb_dev, unsigned int pipe, devrequest * cmd, void *data, int leni)
 { 
-
-  __u32 stat;
-  __u32 rep_handler;
-  int req_reply=0;
-  union ep_addr_ ep_addr;
-  union ep_addr_ ep_addr_ret;
-        __u8 * cmd = rh_cmd;
-	__u8 * data = rh_data;
-	int i;
+	struct ohci * ohci = usb_dev->bus->hcpriv;
+	__u8 data_buf[16];
+	int req_reply=4;
+ 
 	int len =leni;
 
-        __u8  bmRequestType = cmd[0];
-        __u8  bRequest      = cmd[1];
-        __u16 wValue        = cmd[3] << 8 | cmd [2];
-        __u16 wIndex        = cmd[5] << 8 | cmd [4];
-        __u16 wLength       = cmd[7] << 8 | cmd [6];
-printk("USB root hub: adr: %8x cmd(%8x): ", ohci->root_hub_funct_addr, 8);
-for(i=0;i<8;i++)
-	printk("%2x", ((char *)rh_cmd)[i]);
+	__u16 bmRType_bReq  = cmd->requesttype | (cmd->request << 8);
+	__u16 wValue        = cpu_to_le16(cmd->value);
+	__u16 wIndex        = cpu_to_le16(cmd->index);
+	__u16 wLength       = cpu_to_le16(cmd->length);
+
+	OHCI_DEBUG(printk("USB root hub: adr: %2x cmd(%1x): ", ohci->rh.devnum, 8);)
+	OHCI_DEBUG({ int i; for(i=0;i<8;i++) printk(" %02x", ((unsigned char *)cmd)[i]);})
+	OHCI_DEBUG(printk(" ; \n");)
  
-printk(" ; \n");
-
-	ep_addr_ret.iep = 0;
-	ep_addr_ret.bep.fa = ohci->root_hub_funct_addr;
-	ep_addr_ret.bep.ep =  (bmRequestType & 0x80) | 0x40;
-
-  switch (bmRequestType | bRequest << 8) {
-   /* Request Destination:
-      without flags: Device, 
-      RH_INTERFACE: interface, 
-      RH_ENDPOINT: endpoint,
-      RH_CLASS means HUB here, 
-      RH_OTHER | RH_CLASS  almost ever means HUB_PORT here 
-   */
+	switch (bmRType_bReq) {
+	/* Request Destination:
+	   without flags: Device, 
+	   RH_INTERFACE: interface, 
+	   RH_ENDPOINT: endpoint,
+	   RH_CLASS means HUB here, 
+	   RH_OTHER | RH_CLASS  almost ever means HUB_PORT here 
+	*/
   
-   case RH_GET_STATUS:
-     len = 2; 
-     data[0] = 0x01;
-     data[1] = 0x00;
-     req_reply = RH_ACK; 
-     break;
-   case RH_GET_STATUS | RH_INTERFACE:
-     len = 2; 
-     data[0] = 0x00;
-     data[1] = 0x00;     
-     req_reply = RH_ACK;
-     break;
-   case RH_GET_STATUS | RH_ENDPOINT:
-     len = 2; 
-     data[0] = 0x00;
-     data[1] = 0x00;     
-     req_reply = RH_ACK;
-     break;
-   case RH_GET_STATUS | RH_CLASS: /* HUB_STATUS */
-     stat = readl(&ohci->regs->roothub.status) & 0x7fff7fff; /* bit 31 u. 15 has other meaning */ 
-     data[0] = stat & 0xff;
-     data[1] = (stat >> 8) & 0xff;
-     data[2] = (stat >> 16) & 0xff;
-     data[3] = (stat >> 24) & 0xff;
-     len = 4;
-     req_reply = RH_ACK; 
-     break;
-   case RH_GET_STATUS | RH_OTHER | RH_CLASS: /* PORT_STATUS */
-     stat = readl(&ohci->regs->roothub.portstatus[wIndex-1]);
-     data[0] = stat & 0xff;
-     data[1] = (stat >> 8) & 0xff;
-     data[2] = (stat >> 16) & 0xff;
-     data[3] = (stat >> 24) & 0xff;
-     len = 4;
-     req_reply = RH_ACK; 
-     printk("rh: stat %4x wIndex %4x;\n", stat , wIndex);
-     break;
+		case RH_GET_STATUS: 				 		*(__u16 *)data = cpu_to_le16(1); OK(2);
+		case RH_GET_STATUS | RH_INTERFACE: 	 		*(__u16 *)data = cpu_to_le16(0); OK(2);
+		case RH_GET_STATUS | RH_ENDPOINT:	 		*(__u16 *)data = cpu_to_le16(0); OK(2);   
+		case RH_GET_STATUS | RH_CLASS: 				*(__u32 *)data = cpu_to_le32(RD_RH_STAT & 0x7fff7fff); OK(4);
+		case RH_GET_STATUS | RH_OTHER | RH_CLASS: 	*(__u32 *)data = cpu_to_le32(RD_RH_PORTSTAT); OK(4);
 
-   case RH_CLEAR_FEATURE:
-     switch (wValue) {
-       case (RH_DEVICE_REMOTE_WAKEUP):
-       default:
-     }
-     break;
+		case RH_CLEAR_FEATURE | RH_ENDPOINT:  
+			switch (wValue) {
+				case (RH_ENDPOINT_STALL): OK(0);
+			}
+			break;
 
-   case RH_CLEAR_FEATURE | RH_ENDPOINT:  
-     switch (wValue) {
-       case (RH_ENDPOINT_STALL): 
-         len=0;
-         req_reply = RH_ACK;
-         break;
-       default:
-     }
-     break;
+		case RH_CLEAR_FEATURE | RH_CLASS:
+			switch (wValue) {
+				case (RH_C_HUB_OVER_CURRENT): WR_RH_STAT(RH_PS_OCIC); OK(0);
+			}
+			break;
+		
+		case RH_CLEAR_FEATURE | RH_OTHER | RH_CLASS:
+			switch (wValue) {
+				case (RH_PORT_ENABLE): 			WR_RH_PORTSTAT(RH_PS_CCS ); OK(0);
+				case (RH_PORT_SUSPEND):			WR_RH_PORTSTAT(RH_PS_POCI); OK(0);
+				case (RH_PORT_POWER):			WR_RH_PORTSTAT(RH_PS_LSDA); OK(0);
+				case (RH_C_PORT_CONNECTION):	WR_RH_PORTSTAT(RH_PS_CSC ); OK(0);
+				case (RH_C_PORT_ENABLE):		WR_RH_PORTSTAT(RH_PS_PESC); OK(0);
+				case (RH_C_PORT_SUSPEND):		WR_RH_PORTSTAT(RH_PS_PSSC); OK(0);
+				case (RH_C_PORT_OVER_CURRENT):	WR_RH_PORTSTAT(RH_PS_OCIC); OK(0);
+				case (RH_C_PORT_RESET):			WR_RH_PORTSTAT(RH_PS_PRSC); OK(0); 
+			}
+			break;
+ 
+		case RH_SET_FEATURE | RH_OTHER | RH_CLASS:
+			switch (wValue) {
+				case (RH_PORT_SUSPEND):			WR_RH_PORTSTAT(RH_PS_PSS ); OK(0); 
+				case (RH_PORT_RESET): if((RD_RH_PORTSTAT &1) != 0)  WR_RH_PORTSTAT(RH_PS_PRS ); /* BUG IN HUP CODE *********/ OK(0);
+				case (RH_PORT_POWER):			WR_RH_PORTSTAT(RH_PS_PPS ); OK(0); 
+				case (RH_PORT_ENABLE):			WR_RH_PORTSTAT(RH_PS_PES ); OK(0);
+			}
+			break;
 
-   case RH_CLEAR_FEATURE | RH_CLASS:
-     switch (wValue) {
-       /*     case (RH_C_HUB_LOCAL_POWER):  OHCI says: no switching of this one */
-       case (RH_C_HUB_OVER_CURRENT):
-         writel(RH_PS_OCIC, &ohci->regs->roothub.status);
-         len=0;
-         req_reply = RH_ACK;
-         break;
-       default:
-     }
-     break;
-   case RH_CLEAR_FEATURE | RH_OTHER | RH_CLASS:
-     switch (wValue) {
-       case (RH_PORT_ENABLE):
-	     writel(RH_PS_CCS, &ohci->regs->roothub.portstatus[wIndex-1]);
-         len=0;
-         req_reply = RH_ACK;
-         break;
-       case (RH_PORT_SUSPEND):
-         writel(RH_PS_POCI, &ohci->regs->roothub.portstatus[wIndex-1]);
-         len=0;
-         req_reply = RH_ACK;
-         break;
-       case (RH_PORT_POWER):
-         writel(RH_PS_LSDA, &ohci->regs->roothub.portstatus[wIndex-1]);
-         len=0;
-         req_reply = RH_ACK;
-         break;
-       case (RH_C_PORT_CONNECTION):
-         writel(RH_PS_CSC, &ohci->regs->roothub.portstatus[wIndex-1]);
-         len=0;
-         req_reply = RH_ACK;
-         break;
-       case (RH_C_PORT_ENABLE):
-         writel(RH_PS_PESC, &ohci->regs->roothub.portstatus[wIndex-1]);
-         len=0;
-         req_reply = RH_ACK;
-         break;
-       case (RH_C_PORT_SUSPEND):
-         writel(RH_PS_PSSC, &ohci->regs->roothub.portstatus[wIndex-1]);
-         len=0;
-         req_reply = RH_ACK;
-         break;
-       case (RH_C_PORT_OVER_CURRENT):
-         writel(RH_PS_OCIC, &ohci->regs->roothub.portstatus[wIndex-1]);
-         len=0;
-         req_reply = RH_ACK;
-         break;
-       case (RH_C_PORT_RESET):
-         writel(RH_PS_PRSC, &ohci->regs->roothub.portstatus[wIndex-1]);
-         len=0;
-         req_reply = RH_ACK;
-         break;
-       /*
-       case (RH_PORT_CONNECTION):
-       case (RH_PORT_OVER_CURRENT):
-       case (RH_PORT_RESET):
-       case (RH_PORT_LOW_SPEED):
-       */
-       default:
-     }
-     break;
-   case RH_SET_FEATURE:  
-     switch (wValue) {
-       case (RH_DEVICE_REMOTE_WAKEUP):
-       default:
-     }
-     break;
+		case RH_SET_ADDRESS: ohci->rh.devnum = wValue; OK(0);
 
-   case RH_SET_FEATURE | RH_ENDPOINT:
-     switch (wValue) {
-       case (RH_ENDPOINT_STALL):
-       default:
-     }
-     break;
+		case RH_GET_DESCRIPTOR:
+			switch ((wValue & 0xff00) >> 8) {
+				case (0x01): /* device descriptor */
+					len = min(leni, min(sizeof(root_hub_dev_des), wLength));
+					memcpy(data, root_hub_dev_des, len); OK(len);
+				case (0x02): /* configuration descriptor */
+					len = min(leni, min(sizeof(root_hub_config_des), wLength));
+					memcpy(data, root_hub_config_des, len); OK(len);
+				case (0x03): /* string descriptors */
+				default:
+			}
+			break;
+		
+		case RH_GET_DESCRIPTOR | RH_CLASS:
+			*(__u8 *)(data_buf+1) = 0x29;
+			*(__u32 *)(data_buf+2) = cpu_to_le32(readl(&ohci->regs->roothub.a));  
+	 		*(__u8 *)data_buf = (*(__u8 *)(data_buf+2) / 8) * 2 + 9; /* length of descriptor */
+				 
+			len = min(leni, min(*(__u8 *)data_buf, wLength));
+			*(__u8 *)(data_buf+6) = 0; /* Root Hub needs no current from bus */
+			if(*(__u8 *)(data_buf+2) < 8) { /* less than 8 Ports */
+				*(__u8 *) (data_buf+7) = readl(&ohci->regs->roothub.b) & 0xff; 
+				*(__u8 *) (data_buf+8) = (readl(&ohci->regs->roothub.b) & 0xff0000) >> 16; 
+			}
+			else {
+				*(__u32 *) (data_buf+7) = cpu_to_le32(readl(&ohci->regs->roothub.b)); 
+			}
+			memcpy(data, data_buf, len);
+			OK(len); 
+ 
+		case RH_GET_CONFIGURATION: 	*(__u8 *)data = 0x01; OK(1);
 
-   case RH_SET_FEATURE | RH_CLASS: 
-     switch (wValue) {
-       /* case (RH_C_HUB_LOCAL_POWER): Root Hub has no local Power 
-       case (RH_C_HUB_OVER_CURRENT): */
-      default:
-     }
-     break;
-   case RH_SET_FEATURE | RH_OTHER | RH_CLASS:
-     switch (wValue) {
-       case (RH_PORT_SUSPEND):
-         writel(RH_PS_PSS, &ohci->regs->roothub.portstatus[wIndex-1]);
-         len=0;
-         req_reply = RH_ACK;
-         break;
-       case (RH_PORT_RESET):
-         if((readl(&ohci->regs->roothub.portstatus[wIndex-1]) &1) != 0)  /* BUG IN HUP CODE *********/
-         writel(RH_PS_PRS, &ohci->regs->roothub.portstatus[wIndex-1]);
-         len=0;
-         req_reply = RH_ACK;
-         break;
-       case (RH_PORT_POWER):
-         writel(RH_PS_PPS, &ohci->regs->roothub.portstatus[wIndex-1]);
-         len=0;
-         req_reply = RH_ACK;
-         break;
-       case (RH_PORT_ENABLE):
-         writel(RH_PS_PES, &ohci->regs->roothub.portstatus[wIndex-1]);
-         len=0;
-         req_reply = RH_ACK;
-         break;
-       /*
-       case (RH_PORT_CONNECTION):
-       case (RH_PORT_OVER_CURRENT):
-       case (RH_PORT_LOW_SPEED):
-       case (RH_C_PORT_CONNECTION):
-       case (RH_C_PORT_ENABLE):
-       case (RH_C_PORT_SUSPEND):
-       case (RH_C_PORT_OVER_CURRENT):
-       case (RH_C_PORT_RESET):
-       */
-       default:  
-     }
-     break;
-
-  case RH_SET_ADDRESS:
-     ohci->root_hub_funct_addr = wValue; 
-	/* ohci->ed_func_ep0[wValue] = &ohci->ed_rh_ep0;
-	 ohci->ed_func_ep0[wValue]->ep_addr.bep.fa = wValue; 
-	 ohci->ed_func_ep0[wValue]->ed_list = &ohci->ed_rh_epi; */
-	 ohci->ed_rh_epi.ed_list = NULL;
-	 ohci->ed_rh_epi.ep_addr.bep.fa = wValue;
-	 ohci->ed_rh_epi.ep_addr.bep.ep = 0xa1; /* Int in port 1 */
-     ohci->ed_func_ep0[0]= NULL;
-     len = 0;
-     req_reply = RH_ACK;
-     break;
-
-   case RH_GET_DESCRIPTOR:
-     switch ((wValue & 0xff00) >> 8) {
-     case (0x01): /* device descriptor */
-       len = min(sizeof(root_hub_dev_des), wLength);
-       memcpy(data, root_hub_dev_des, len);
-       req_reply = RH_ACK;
-       break;
-     case (0x02): /* configuration descriptor */
-       len = min(sizeof(root_hub_config_des), wLength);
-       memcpy(data, root_hub_config_des, len);
-       req_reply = RH_ACK;
-       break;
-     case (0x03): /* string descriptors */
-     default:
-     }
-     break;
-  case RH_GET_DESCRIPTOR | RH_CLASS:
-     data[1] = 0x29;
-     stat = readl(&ohci->regs->roothub.a);  
-     data[2] = stat & 0xff;        /* number of ports */
-     data[0] = (data[2] / 8) * 2 + 9; /* length of descriptor */
-     if(data[0] > wLength) {
-       req_reply =  RH_REQ_ERR;
-       break;
-     }
-     data[3] = (stat >> 8) & 0xff;
-     data[4] = (stat >> 16) & 0xff;
-     data[5] = (stat >> 24) & 0xff;
-     data[6] = 0; /* Root Hub needs no current from bus */
-     stat = readl(&ohci->regs->roothub.b); 
-     if(data[2] <= 8) { /* less than 8 Ports */
-       data[7] = stat & 0xff;
-       data[8] = (stat >> 16) & 0xff; /* 0xff for USB Rev. 1.1 ?, stat >> 16 for USB Rev. 1.0 */
-     }
-     else {
-       data[7] = stat & 0xff;
-       data[8] = (stat >> 8) & 0xff;
-       data[9] = (stat >> 16) & 0xff;  /* 0xff for USB Rev. 1.1?, stat >> 16 for USB Rev. 1.0 */
-       data[10] = (stat >> 24) & 0xff; /* 0xff for USB Rev. 1.1?, stat >> 24 for USB Rev. 1.0 */
-     }
-     len = data[0];
-     req_reply = RH_ACK;
-     break;
-
-   case RH_SET_DESCRIPTOR:
-     break;
-
-   case RH_GET_CONFIGURATION:
-     len = 1;
-     data[0] = 0x01;
-     req_reply = RH_ACK;
-     break;
-
-   case RH_SET_CONFIGURATION: /* start it up */
-     writel( 0x10000, &ohci->regs->roothub.status);
-     /*writel( OHCI_INTR_RHSC, &ohci->regs->intrenable);*/
-     len = 0;
-     req_reply = RH_ACK;
-     break;
-   /*  Optional or meaningless requests 
-     case RH_GET_STATE | RH_OTHER | RH_CLASS:
-     case RH_GET_INTERFACE | RH_INTERFACE:
-     case RH_SET_INTERFACE | RH_INTERFACE:
-     case RH_SYNC_FRAME | RH_ENDPOINT: 
-   */
-
-  /* Vendor Requests, we are the vendor!
-	Will the USB-Consortium give us a Vendor Id
-	for a virtual hub-device :-) ?
-     We could use these requests for configuration purposes on the HCD Driver, not used in the altenate usb !*/ 
-
-  case RH_SET_FEATURE | RH_VENDOR: /* remove all endpoints of device wIndex = Dev << 8  */
-    switch(wValue) {
-    case RH_REMOVE_EP:
-      ep_addr.iep = 0;
-      ep_addr.bep.ep = wIndex & 0xff;
-      ep_addr.bep.fa = (wIndex << 8) & 0xff00;
-      usb_ohci_rm_function(ohci, ep_addr.iep);
-      len=0;
-      req_reply = RH_ACK;
-      break;
-    }
-    break;
-  case RH_SET_FEATURE | RH_ENDPOINT | RH_VENDOR: /* remove endpoint wIndex = Dev << 8 | EP */
-    switch(wValue) {
-    case RH_REMOVE_EP: 
-      ep_addr.iep = 0;
-      ep_addr.bep.ep = wIndex & 0xff;
-      ep_addr.bep.fa = (wIndex << 8) & 0xff00;
-      usb_ohci_rm_ep(ohci, ohci_find_ep(ohci, ep_addr.iep));
-      len=0;
-      req_reply = RH_ACK;
-      break;
-    }
-    break;
-  case RH_SET_EP | RH_ENDPOINT | RH_VENDOR:   
-    ep_addr.bep.ep = data[0];
-    ep_addr.bep.fa = data[1];
-    ep_addr.bep.hc = data[2];
-    ep_addr.bep.host = data[3];  
-    rep_handler  = data[7] << 24 |data[6] << 16 | data[5] << 8 | data[4];
-    /*  struct usb_ohci_ed *usb_ohci_add_ep(union ep_addr_ ep_addr,
-	struct ohci * ohci, int interval, int load, int (*handler)(int, void*), int ep_size, int speed) */
-    usb_ohci_add_ep(ohci, ep_addr.iep, data[8], data[9], (f_handler) rep_handler, data[11] << 8 | data[10] , data[12]);
-    len=0;
-    req_reply = RH_ACK;
-    break;
-
-  default: 
-  }
- printk("USB HC roothubstat1: %x \n", readl( &(ohci->regs->roothub.portstatus[0]) ));
-  printk("USB HC roothubstat2: %x \n", readl( &(ohci->regs->roothub.portstatus[1]) ));
-
-  /* if (req_reply == RH_ACK) len; */
-  queue_reply(ohci, ep_addr_ret.iep, 8, rh_cmd, data, len, lw0, lw1, handler);
-  return 0;
+		case RH_SET_CONFIGURATION: 	WR_RH_STAT( 0x10000); OK(0);
+	}
+	
+	OHCI_DEBUG(printk("USB HC roothubstat1: %x \n", readl( &(ohci->regs->roothub.portstatus[0]) ));)
+	OHCI_DEBUG(printk("USB HC roothubstat2: %x \n", readl( &(ohci->regs->roothub.portstatus[1]) ));)
+  		
+	OHCI_DEBUG( { int i; printk("USB HC RH bh <<<: 1: ");)
+	OHCI_DEBUG( printk(" data(%d):", len);) 
+	OHCI_DEBUG( { for(i=0; i < len; i++ ) printk(" %02x", ((__u8 *) data)[i]);)
+	OHCI_DEBUG( printk(" ret_status: %x\n", req_reply); })
+	
+	return req_reply;
 }
 
-int root_hub_int_req(struct ohci * ohci, int cmd_len, void * ctrl, void *  data, int data_len, __OHCI_BAG lw0, __OHCI_BAG lw1, f_handler handler){
-
-	struct ohci_rep_td *td;
- 	struct ohci_rep_td *tmp;
- 	union ep_addr_ ep_addr;
- 	
- 	td = kmalloc(sizeof(td),GFP_KERNEL);
- 	tmp = ohci->td_rh_epi;
- 	td->next_td = NULL;
- 	if(tmp == NULL) { /* queue td */
- 		ohci->td_rh_epi = td;	
- 	}
- 	else {
- 		while(tmp->next_td != NULL) tmp = tmp->next_td;
- 		tmp->next_td = td;
- 	}
- 	ep_addr.iep = 0;
- 	ep_addr.bep.fa = ohci->root_hub_funct_addr;
- 	ep_addr.bep.ep = 0xA1; /* INT IN EP endpoint 1 */
-  	td->cmd_len = 0;
-  	td->cmd = NULL;
-  	td->data = data;
-  	td->data_len = data_len;
-  	td->handler = handler; 
-  	td->next_td = NULL;
-  	td->ep_addr = ep_addr.iep;
-	td->lw0 = lw0;
-	td->lw1 = lw1;
-	ohci_init_rh_int_timer(ohci, 255);
-	return 0;
-}
-
-
-/* prepare Interrupt pipe transaction data; HUP INTERRUPT ENDPOINT */ 
-int root_hub_send_irq(struct ohci * ohci, void * rh_data, int rh_len ) {
+/* prepare Interrupt pipe transaction data; HUB INTERRUPT ENDPOINT */ 
+static int root_hub_send_irq(struct ohci * ohci, void * rh_data, int rh_len ) {
 
   int num_ports;
   int i;
@@ -496,12 +253,12 @@ int root_hub_send_irq(struct ohci * ohci, void * rh_data, int rh_len ) {
   __u8 * data = rh_data;
 
   num_ports = readl(&ohci->regs->roothub.a) & 0xff; 
-  data[0] = (readl(&ohci->regs->roothub.status) & 0x00030000)>0?1:0;
-  ret = data[0];
+  *(__u8 *)data = (readl(&ohci->regs->roothub.status) & 0x00030000)>0?1:0;
+  ret = *(__u8 *)data;
 
   for(i=0; i < num_ports; i++) {
-    data[i/8] |= ((readl(&ohci->regs->roothub.portstatus[i]) & 0x001f0000)>0?1:0) << ((i+1) % 8);
-    ret += data[i/8];
+    *(__u8 *)(data+i/8) |= ((readl(&ohci->regs->roothub.portstatus[i]) & 0x001f0000)>0?1:0) << ((i+1) % 8);
+    ret += *(__u8 *)(data+i/8);
   }
   len = i/8 + 1;
   
@@ -510,95 +267,79 @@ int root_hub_send_irq(struct ohci * ohci, void * rh_data, int rh_len ) {
   return  RH_NACK;
 }
 
-
-
-
  
-static struct timer_list rh_int_timer;
+static int ohci_init_rh_int_timer(struct usb_device * usb_dev, int interval);
 
 /* Virtual Root Hub INTs are polled by this timer every "intervall" ms */
 static void rh_int_timer_do(unsigned long ptr) {
 	int len; 
 	int interval;
-	struct ohci * ohci = (struct ohci *) ptr;
-    struct ohci_rep_td *td = ohci->td_rh_epi;
+	int ret;
+	
+	struct usb_device * usb_dev = (struct usb_device *) ptr;
+    struct ohci * ohci = usb_dev->bus->hcpriv;
+	struct ohci_device * dev = usb_to_ohci(usb_dev);
 
-	if(td != NULL) { /* if ther is a TD handle the INT request */
-		
-		len = root_hub_send_irq(ohci, td->data, td->data_len );
-		if(len > 0) {
-			ohci->td_rh_epi = td->next_td;
-			td->next_td = ohci->repl_queue; 
-			ohci->repl_queue = td;
-			send_replies(ohci);
+
+	if(ohci->rh.send) { 
+		len = root_hub_send_irq(ohci, dev->data, 1 );
+
+		if(len > 0) { 
+			OHCI_DEBUG({ int i; printk("USB HC IRQ <<<: RH data(%d):", len);)
+			OHCI_DEBUG( for(i=0; i < len; i++ ) printk(" %02x", ((__u8 *) dev->data)[i]);)
+			OHCI_DEBUG( printk(" ret_status: %x\n", 0); })
+ 
+			ret = ohci->rh.handler(0, dev->data, len, ohci->rh.dev_id);
+			if(ret <= 0)ohci->rh.send = 0; /* 0 .. do not requeue  */
 		}
 	}	
-	interval = ohci->rh_int_interval;
-	init_timer(& rh_int_timer);
-	rh_int_timer.function = rh_int_timer_do;
-	rh_int_timer.data = (unsigned long) ohci;
-	rh_int_timer.expires = jiffies + (HZ * (interval<30?30: interval)) /1000;
-	add_timer(&rh_int_timer);
+	interval = ohci->rh.interval;
+	ohci_init_rh_int_timer(usb_dev, interval);
 }
 
 /* Root Hub INTs are polled by this timer */
-int ohci_init_rh_int_timer(struct ohci * ohci, int interval) {
+static int ohci_init_rh_int_timer(struct usb_device * usb_dev, int interval) {
+	struct ohci * ohci = usb_dev->bus->hcpriv;
 
-	if(!(ohci->rh_int_timer)) { 
-		ohci->rh_int_timer = 1;
-		ohci->rh_int_interval = interval;
-		init_timer(& rh_int_timer);
-		rh_int_timer.function = rh_int_timer_do;
-		rh_int_timer.data = (unsigned long) ohci;
-		rh_int_timer.expires = jiffies + (HZ * (interval<30?30: interval)) /1000;
-		add_timer(&rh_int_timer);
-	}
-	return 0;
-}
-
-int ohci_del_rh_int_timer(struct ohci * ohci) {
-	del_timer(&rh_int_timer);
-	return 0;
-}
-/* for root hub replies, queue the reply, (it will be sent immediately now) */
-
-int queue_reply(struct ohci * ohci, unsigned int ep_addr, int cmd_len,void * cmd, void * data,int  len, __OHCI_BAG lw0, __OHCI_BAG lw1, f_handler handler) {
-
- struct ohci_rep_td *td;
- int status = 0;
- 
-printk("queue_reply ep: %x len: %x\n", ep_addr, len);
-td = kmalloc(sizeof(td), GFP_KERNEL);
-
-  if (len < 0) { status = len; len = 0;}
-  td->cmd_len = cmd_len;
-  td->cmd = cmd;
-  td->data = data;
-  td->data_len = len;
-  td->handler = handler; 
-  td->next_td = ohci->repl_queue; ohci->repl_queue = td;
-  td->ep_addr = ep_addr;
-  td->lw0 = lw0;
-  td->lw1 = lw1;
-  td->status = status;
-  send_replies(ohci);
-return 0;
-}
-
-/* for root hub replies; send the reply */
-int send_replies(struct ohci * ohci) { 
-	struct ohci_rep_td *td;
-	struct ohci_rep_td *tmp;
-
-	td = ohci->repl_queue; ohci->repl_queue = NULL;
-	while ( td != NULL) {
-		td->handler((void *) ohci, td->ep_addr,td->cmd_len,td->cmd, td->data, td->data_len, td->status, td->lw0, td->lw1); 
-		tmp = td;
-		td = td->next_td;
+	ohci->rh.interval = interval;
+	init_timer(& ohci->rh.rh_int_timer);
+	ohci->rh.rh_int_timer.function = rh_int_timer_do;
+	ohci->rh.rh_int_timer.data = (unsigned long) usb_dev;
+	ohci->rh.rh_int_timer.expires = jiffies + (HZ * (interval<30?30: interval)) /1000;
+	add_timer(&ohci->rh.rh_int_timer);
 	
-		kfree(tmp);
-	}
 	return 0;
 }
+
+static int ohci_del_rh_int_timer(struct ohci * ohci) {
+	del_timer(&ohci->rh.rh_int_timer);
+	return 0;
+}
+ 
+void * root_hub_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id) 
+{
+	struct ohci * ohci = usb_dev->bus->hcpriv;
+	
+	OHCI_DEBUG( printk("USB HC-RH IRQ>>>: RH every %d ms\n", period);) 
+	ohci->rh.handler = handler;
+	ohci->rh.dev_id =  dev_id;
+	ohci->rh.send = 1;
+	ohci->rh.interval = period;
+	ohci_init_rh_int_timer(usb_dev, period);
+	return ohci->rh.int_addr = usb_to_ohci(usb_dev);
+}
+
+int root_hub_release_irq(struct usb_device *usb_dev, void * ed) 
+{
+	// struct usb_device *usb_dev = ((struct ohci_device *) ((unsigned int)ed & 0xfffff000))->usb;
+	struct ohci * ohci = usb_dev->bus->hcpriv;
+
+	OHCI_DEBUG( printk("USB HC-RH RM_IRQ>>>:\n");) 
+	ohci->rh.send = 0;
+	ohci_del_rh_int_timer(ohci);
+	return 0;
+}
+
+
  
 #endif

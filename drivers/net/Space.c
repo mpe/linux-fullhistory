@@ -39,107 +39,107 @@
    ethernet adaptor have the name "eth[0123...]".
    */
 
-extern int ne2_probe(struct device *dev);
-extern int tulip_probe(struct device *dev);
-extern int hp100_probe(struct device *dev);
-extern int ultra_probe(struct device *dev);
-extern int ultra32_probe(struct device *dev);
-extern int ultramca_probe(struct device *dev);
-extern int wd_probe(struct device *dev);
-extern int el2_probe(struct device *dev);
-extern int ne2k_pci_probe(struct device *dev);
-extern int ne_probe(struct device *dev);
-extern int hp_probe(struct device *dev);
-extern int hp_plus_probe(struct device *dev);
-extern int znet_probe(struct device *);
-extern int express_probe(struct device *);
-extern int eepro_probe(struct device *);
-extern int eepro100_probe(struct device *);
-extern int el3_probe(struct device *);
-extern int at1500_probe(struct device *);
-extern int pcnet32_probe(struct device *);
-extern int at1700_probe(struct device *);
-extern int fmv18x_probe(struct device *);
-extern int eth16i_probe(struct device *);
-extern int depca_probe(struct device *);
-extern int i82596_probe(struct device *);
-extern int ewrk3_probe(struct device *);
-extern int de4x5_probe(struct device *);
-extern int el1_probe(struct device *);
-extern int wavelan_probe(struct device *);
-extern int arlan_probe(struct device *);
-extern int el16_probe(struct device *);
-extern int elmc_probe(struct device *);
-extern int skmca_probe(struct device *);
-extern int elplus_probe(struct device *);
-extern int ac3200_probe(struct device *);
-extern int es_probe(struct device *);
-extern int lne390_probe(struct device *);
-extern int ne3210_probe(struct device *);
-extern int e2100_probe(struct device *);
-extern int ni5010_probe(struct device *);
-extern int ni52_probe(struct device *);
-extern int ni65_probe(struct device *);
-extern int sonic_probe(struct device *);
-extern int SK_init(struct device *);
-extern int seeq8005_probe(struct device *);
-extern int tc59x_probe(struct device *);
-extern int dgrs_probe(struct device *);
-extern int smc_init( struct device * );
-extern int sparc_lance_probe(struct device *);
-extern int happy_meal_probe(struct device *);
-extern int qec_probe(struct device *);
-extern int bigmac_probe(struct device *);
-extern int myri_sbus_probe(struct device *);
-extern int sgiseeq_probe(struct device *);
-extern int atarilance_probe(struct device *);
-extern int a2065_probe(struct device *);
-extern int ariadne_probe(struct device *);
-extern int ariadne2_probe(struct device *);
-extern int hydra_probe(struct device *);
-extern int apne_probe(struct device *);
-extern int bionet_probe(struct device *);
-extern int pamsnet_probe(struct device *);
-extern int tlan_probe(struct device *);
-extern int mace_probe(struct device *);
-extern int bmac_probe(struct device *);
-extern int cs89x0_probe(struct device *dev);
-extern int ethertap_probe(struct device *dev);
-extern int ether1_probe (struct device *dev);
-extern int ether3_probe (struct device *dev);
-extern int etherh_probe (struct device *dev);
-extern int am79c961_probe(struct device *dev);
-extern int epic100_probe(struct device *dev);
-extern int rtl8139_probe(struct device *dev);
-extern int hplance_probe(struct device *dev);
-extern int bagetlance_probe(struct device *);
-extern int dec_lance_probe(struct device *);
-extern int mvme147lance_probe(struct device *dev);
-extern int via_rhine_probe(struct device *dev);
-extern int tc515_probe(struct device *dev);
-extern int lance_probe(struct device *dev);
-extern int rcpci_probe(struct device *);
-extern int mac_onboard_sonic_probe(struct device *dev);
+extern int ne2_probe(struct net_device *dev);
+extern int tulip_probe(struct net_device *dev);
+extern int hp100_probe(struct net_device *dev);
+extern int ultra_probe(struct net_device *dev);
+extern int ultra32_probe(struct net_device *dev);
+extern int ultramca_probe(struct net_device *dev);
+extern int wd_probe(struct net_device *dev);
+extern int el2_probe(struct net_device *dev);
+extern int ne2k_pci_probe(struct net_device *dev);
+extern int ne_probe(struct net_device *dev);
+extern int hp_probe(struct net_device *dev);
+extern int hp_plus_probe(struct net_device *dev);
+extern int znet_probe(struct net_device *);
+extern int express_probe(struct net_device *);
+extern int eepro_probe(struct net_device *);
+extern int eepro100_probe(struct net_device *);
+extern int el3_probe(struct net_device *);
+extern int at1500_probe(struct net_device *);
+extern int pcnet32_probe(struct net_device *);
+extern int at1700_probe(struct net_device *);
+extern int fmv18x_probe(struct net_device *);
+extern int eth16i_probe(struct net_device *);
+extern int depca_probe(struct net_device *);
+extern int i82596_probe(struct net_device *);
+extern int ewrk3_probe(struct net_device *);
+extern int de4x5_probe(struct net_device *);
+extern int el1_probe(struct net_device *);
+extern int wavelan_probe(struct net_device *);
+extern int arlan_probe(struct net_device *);
+extern int el16_probe(struct net_device *);
+extern int elmc_probe(struct net_device *);
+extern int skmca_probe(struct net_device *);
+extern int elplus_probe(struct net_device *);
+extern int ac3200_probe(struct net_device *);
+extern int es_probe(struct net_device *);
+extern int lne390_probe(struct net_device *);
+extern int ne3210_probe(struct net_device *);
+extern int e2100_probe(struct net_device *);
+extern int ni5010_probe(struct net_device *);
+extern int ni52_probe(struct net_device *);
+extern int ni65_probe(struct net_device *);
+extern int sonic_probe(struct net_device *);
+extern int SK_init(struct net_device *);
+extern int seeq8005_probe(struct net_device *);
+extern int tc59x_probe(struct net_device *);
+extern int dgrs_probe(struct net_device *);
+extern int smc_init( struct net_device * );
+extern int sparc_lance_probe(struct net_device *);
+extern int happy_meal_probe(struct net_device *);
+extern int qec_probe(struct net_device *);
+extern int bigmac_probe(struct net_device *);
+extern int myri_sbus_probe(struct net_device *);
+extern int sgiseeq_probe(struct net_device *);
+extern int atarilance_probe(struct net_device *);
+extern int a2065_probe(struct net_device *);
+extern int ariadne_probe(struct net_device *);
+extern int ariadne2_probe(struct net_device *);
+extern int hydra_probe(struct net_device *);
+extern int apne_probe(struct net_device *);
+extern int bionet_probe(struct net_device *);
+extern int pamsnet_probe(struct net_device *);
+extern int tlan_probe(struct net_device *);
+extern int mace_probe(struct net_device *);
+extern int bmac_probe(struct net_device *);
+extern int cs89x0_probe(struct net_device *dev);
+extern int ethertap_probe(struct net_device *dev);
+extern int ether1_probe (struct net_device *dev);
+extern int ether3_probe (struct net_device *dev);
+extern int etherh_probe (struct net_device *dev);
+extern int am79c961_probe(struct net_device *dev);
+extern int epic100_probe(struct net_device *dev);
+extern int rtl8139_probe(struct net_device *dev);
+extern int hplance_probe(struct net_device *dev);
+extern int bagetlance_probe(struct net_device *);
+extern int dec_lance_probe(struct net_device *);
+extern int mvme147lance_probe(struct net_device *dev);
+extern int via_rhine_probe(struct net_device *dev);
+extern int tc515_probe(struct net_device *dev);
+extern int lance_probe(struct net_device *dev);
+extern int rcpci_probe(struct net_device *);
+extern int mac_onboard_sonic_probe(struct net_device *dev);
 
 /* Gigabit Ethernet adapters */
-extern int yellowfin_probe(struct device *dev);
-extern int acenic_probe(struct device *dev);
+extern int yellowfin_probe(struct net_device *dev);
+extern int acenic_probe(struct net_device *dev);
 
 /* Detachable devices ("pocket adaptors") */
-extern int atp_init(struct device *);
-extern int de600_probe(struct device *);
-extern int de620_probe(struct device *);
+extern int atp_init(struct net_device *);
+extern int de600_probe(struct net_device *);
+extern int de620_probe(struct net_device *);
 
 /* FDDI adapters */
-extern int dfx_probe(struct device *dev);
-extern int apfddi_init(struct device *dev);
+extern int dfx_probe(struct net_device *dev);
+extern int apfddi_init(struct net_device *dev);
 
 /* HIPPI boards */
-extern int rr_hippi_probe(struct device *);
+extern int rr_hippi_probe(struct net_device *);
 
 struct devprobe
 {
-	int (*probe)(struct device *dev);
+	int (*probe)(struct net_device *dev);
 	int status;	/* non-zero if autoprobe has failed */
 };
 
@@ -150,7 +150,7 @@ struct devprobe
  * autoprobe (i.e. a probe that fails to find a card when autoprobing
  * will not be asked to autoprobe again).  It exits when a card is found.
  */
-static int __init probe_list(struct device *dev, struct devprobe *plist)
+static int __init probe_list(struct net_device *dev, struct devprobe *plist)
 {
 	struct devprobe *p = plist;
 	unsigned long base_addr = dev->base_addr;
@@ -486,7 +486,7 @@ struct devprobe arm_probes[] __initdata = {
  * Unified ethernet device probe, segmented per architecture and
  * per bus interface.
  */
-static int __init ethif_probe(struct device *dev)
+static int __init ethif_probe(struct net_device *dev)
 {
 	unsigned long base_addr = dev->base_addr;
 
@@ -534,7 +534,7 @@ static int __init ethif_probe(struct device *dev)
 }
 
 #ifdef CONFIG_FDDI
-static int __init fddiif_probe(struct device *dev)
+static int __init fddiif_probe(struct net_device *dev)
 {
     unsigned long base_addr = dev->base_addr;
 
@@ -556,7 +556,7 @@ static int __init fddiif_probe(struct device *dev)
 #endif
 
 #ifdef CONFIG_HIPPI
-static int hippi_probe(struct device *dev)
+static int hippi_probe(struct net_device *dev)
 {
 	/*
 	 * Damn this is ugly.
@@ -579,22 +579,22 @@ static int hippi_probe(struct device *dev)
 #endif
 
 #ifdef CONFIG_ETHERTAP
-    static struct device tap0_dev = { "tap0", 0, 0, 0, 0, NETLINK_TAPBASE, 0, 0, 0, 0, NEXT_DEV, ethertap_probe, };
+    static struct net_device tap0_dev = { "tap0", 0, 0, 0, 0, NETLINK_TAPBASE, 0, 0, 0, 0, NEXT_DEV, ethertap_probe, };
 #   undef NEXT_DEV
 #   define NEXT_DEV	(&tap0_dev)
 #endif
 
 #ifdef CONFIG_SDLA
-    extern int sdla_init(struct device *);
-    static struct device sdla0_dev = { "sdla0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, sdla_init, };
+    extern int sdla_init(struct net_device *);
+    static struct net_device sdla0_dev = { "sdla0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, sdla_init, };
 
 #   undef NEXT_DEV
 #   define NEXT_DEV	(&sdla0_dev)
 #endif
 
 #if defined(CONFIG_LTPC)
-    extern int ltpc_probe(struct device *);
-    static struct device dev_ltpc = {
+    extern int ltpc_probe(struct net_device *);
+    static struct net_device dev_ltpc = {
         "lt0\0   ",
                 0, 0, 0, 0,
                 0x0, 0,
@@ -604,17 +604,17 @@ static int hippi_probe(struct device *dev)
 #endif  /* LTPC */
 
 #if defined(CONFIG_COPS)
-    extern int cops_probe(struct device *);
-    static struct device cops2_dev = { "lt2", 0, 0, 0, 0, 0x0, 0, 0, 0, 0, NEXT_DEV, cops_probe };
-    static struct device cops1_dev = { "lt1", 0, 0, 0, 0, 0x0, 0, 0, 0, 0, &cops2_dev, cops_probe };
-    static struct device cops0_dev = { "lt0", 0, 0, 0, 0, 0x0, 0, 0, 0, 0, &cops1_dev, cops_probe };
+    extern int cops_probe(struct net_device *);
+    static struct net_device cops2_dev = { "lt2", 0, 0, 0, 0, 0x0, 0, 0, 0, 0, NEXT_DEV, cops_probe };
+    static struct net_device cops1_dev = { "lt1", 0, 0, 0, 0, 0x0, 0, 0, 0, 0, &cops2_dev, cops_probe };
+    static struct net_device cops0_dev = { "lt0", 0, 0, 0, 0, 0x0, 0, 0, 0, 0, &cops1_dev, cops_probe };
 #   undef NEXT_DEV
 #   define NEXT_DEV     (&cops0_dev)
 #endif  /* COPS */
 
 #if defined(CONFIG_IPDDP)
-    extern int ipddp_init(struct device *dev);
-    static struct device dev_ipddp = {
+    extern int ipddp_init(struct net_device *dev);
+    static struct net_device dev_ipddp = {
         "ipddp0\0   ",
                 0, 0, 0, 0,
                 0x0, 0,
@@ -637,22 +637,22 @@ static int hippi_probe(struct device *dev)
 
 #define ETH_NOPROBE_ADDR 0xffe0
 
-static struct device eth7_dev = {
+static struct net_device eth7_dev = {
     "eth7", 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, NEXT_DEV, ethif_probe };
-static struct device eth6_dev = {
+static struct net_device eth6_dev = {
     "eth6", 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth7_dev, ethif_probe };
-static struct device eth5_dev = {
+static struct net_device eth5_dev = {
     "eth5", 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth6_dev, ethif_probe };
-static struct device eth4_dev = {
+static struct net_device eth4_dev = {
     "eth4", 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth5_dev, ethif_probe };
-static struct device eth3_dev = {
+static struct net_device eth3_dev = {
     "eth3", 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth4_dev, ethif_probe };
-static struct device eth2_dev = {
+static struct net_device eth2_dev = {
     "eth2", 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth3_dev, ethif_probe };
-static struct device eth1_dev = {
+static struct net_device eth1_dev = {
     "eth1", 0,0,0,0,ETH_NOPROBE_ADDR /* I/O base*/, 0,0,0,0, &eth2_dev, ethif_probe };
 
-static struct device eth0_dev = {
+static struct net_device eth0_dev = {
     "eth0", 0, 0, 0, 0, ETH0_ADDR, ETH0_IRQ, 0, 0, 0, &eth1_dev, ethif_probe };
 
 #   undef NEXT_DEV
@@ -661,8 +661,8 @@ static struct device eth0_dev = {
 #if defined(SLIP) || defined(CONFIG_SLIP)
 	/* To be exact, this node just hooks the initialization
 	   routines to the device structures.			*/
-extern int slip_init_ctrl_dev(struct device *);
-static struct device slip_bootstrap = {
+extern int slip_init_ctrl_dev(struct net_device *);
+static struct net_device slip_bootstrap = {
   "slip_proto", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, slip_init_ctrl_dev, };
 #undef NEXT_DEV
 #define NEXT_DEV (&slip_bootstrap)
@@ -671,8 +671,8 @@ static struct device slip_bootstrap = {
 #if defined(X25_ASY) || defined(CONFIG_X25_ASY)
 	/* To be exact, this node just hooks the initialization
 	   routines to the device structures.			*/
-extern int x25_asy_init_ctrl_dev(struct device *);
-static struct device x25_asy_bootstrap = {
+extern int x25_asy_init_ctrl_dev(struct net_device *);
+static struct net_device x25_asy_bootstrap = {
   "x25_proto", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, x25_asy_init_ctrl_dev, };
 #undef NEXT_DEV
 #define NEXT_DEV (&x25_asy_bootstrap)
@@ -681,48 +681,48 @@ static struct device x25_asy_bootstrap = {
 #if defined(CONFIG_MKISS)
 	/* To be exact, this node just hooks the initialization
 	   routines to the device structures.			*/
-extern int mkiss_init_ctrl_dev(struct device *);
-static struct device mkiss_bootstrap = {
+extern int mkiss_init_ctrl_dev(struct net_device *);
+static struct net_device mkiss_bootstrap = {
   "mkiss_proto", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, mkiss_init_ctrl_dev, };
 #undef NEXT_DEV
 #define NEXT_DEV (&mkiss_bootstrap)
 #endif	/* MKISS */
   
 #if defined(CONFIG_YAM)
-extern int yam_init(struct device *);
-static struct device yam_bootstrap = {
+extern int yam_init(struct net_device *);
+static struct net_device yam_bootstrap = {
   "yam", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, yam_init, };
 #undef NEXT_DEV
 #define NEXT_DEV (&yam_bootstrap)
 #endif	/* CONFIG_YAM */
   
 #if defined(CONFIG_STRIP)
-extern int strip_init_ctrl_dev(struct device *);
-static struct device strip_bootstrap = {
+extern int strip_init_ctrl_dev(struct net_device *);
+static struct net_device strip_bootstrap = {
     "strip_proto", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, strip_init_ctrl_dev, };
 #undef NEXT_DEV
 #define NEXT_DEV (&strip_bootstrap)
 #endif   /* STRIP */
 
 #if defined(CONFIG_PPP)
-extern int ppp_init(struct device *);
-static struct device ppp_bootstrap = {
+extern int ppp_init(struct net_device *);
+static struct net_device ppp_bootstrap = {
     "ppp_proto", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, ppp_init, };
 #undef NEXT_DEV
 #define NEXT_DEV (&ppp_bootstrap)
 #endif   /* PPP */
 
 #ifdef CONFIG_DUMMY
-    extern int dummy_init(struct device *dev);
-    static struct device dummy_dev = {
+    extern int dummy_init(struct net_device *dev);
+    static struct net_device dummy_dev = {
 	"dummy", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, dummy_init, };
 #   undef	NEXT_DEV
 #   define	NEXT_DEV	(&dummy_dev)
 #endif
 
 #ifdef CONFIG_EQUALIZER
-extern int eql_init(struct device *dev);
-struct device eql_dev = {
+extern int eql_init(struct net_device *dev);
+struct net_device eql_dev = {
   "eql",			/* Master device for IP traffic load 
 				   balancing */
   0x0, 0x0, 0x0, 0x0,		/* recv end/start; mem end/start */
@@ -738,11 +738,11 @@ struct device eql_dev = {
 
 #ifdef CONFIG_TR
 /* Token-ring device probe */
-extern int ibmtr_probe(struct device *);
-extern int olympic_probe(struct device *);
+extern int ibmtr_probe(struct net_device *);
+extern int olympic_probe(struct net_device *);
 
 static int
-trif_probe(struct device *dev)
+trif_probe(struct net_device *dev)
 {
     if (1
 #ifdef CONFIG_IBMTR
@@ -762,21 +762,21 @@ trif_probe(struct device *dev)
     }
     return 0;
 }
-static struct device tr7_dev = {
+static struct net_device tr7_dev = {
     "tr7",0,0,0,0,0,0,0,0,0, NEXT_DEV, trif_probe };
-static struct device tr6_dev = {
+static struct net_device tr6_dev = {
     "tr6",0,0,0,0,0,0,0,0,0, &tr7_dev, trif_probe };
-static struct device tr5_dev = {
+static struct net_device tr5_dev = {
     "tr5",0,0,0,0,0,0,0,0,0, &tr6_dev, trif_probe };
-static struct device tr4_dev = {
+static struct net_device tr4_dev = {
     "tr4",0,0,0,0,0,0,0,0,0, &tr5_dev, trif_probe };
-static struct device tr3_dev = {
+static struct net_device tr3_dev = {
     "tr3",0,0,0,0,0,0,0,0,0, &tr4_dev, trif_probe };
-static struct device tr2_dev = {
+static struct net_device tr2_dev = {
     "tr2",0,0,0,0,0,0,0,0,0, &tr3_dev, trif_probe };
-static struct device tr1_dev = {
+static struct net_device tr1_dev = {
     "tr1",0,0,0,0,0,0,0,0,0, &tr2_dev, trif_probe };
-static struct device tr0_dev = {
+static struct net_device tr0_dev = {
     "tr0",0,0,0,0,0,0,0,0,0, &tr1_dev, trif_probe };
 #   undef       NEXT_DEV
 #   define      NEXT_DEV        (&tr0_dev)
@@ -784,34 +784,34 @@ static struct device tr0_dev = {
 #endif 
 
 #ifdef CONFIG_FDDI
-	static struct device fddi7_dev =
+	static struct net_device fddi7_dev =
 		{"fddi7", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, fddiif_probe};
-	static struct device fddi6_dev =
+	static struct net_device fddi6_dev =
 		{"fddi6", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi7_dev, fddiif_probe};
-	static struct device fddi5_dev =
+	static struct net_device fddi5_dev =
 		{"fddi5", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi6_dev, fddiif_probe};
-	static struct device fddi4_dev =
+	static struct net_device fddi4_dev =
 		{"fddi4", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi5_dev, fddiif_probe};
-	static struct device fddi3_dev =
+	static struct net_device fddi3_dev =
 		{"fddi3", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi4_dev, fddiif_probe};
-	static struct device fddi2_dev =
+	static struct net_device fddi2_dev =
 		{"fddi2", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi3_dev, fddiif_probe};
-	static struct device fddi1_dev =
+	static struct net_device fddi1_dev =
 		{"fddi1", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi2_dev, fddiif_probe};
-	static struct device fddi0_dev =
+	static struct net_device fddi0_dev =
 		{"fddi0", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi1_dev, fddiif_probe};
 #undef	NEXT_DEV
 #define	NEXT_DEV	(&fddi0_dev)
 #endif 
 
 #ifdef CONFIG_HIPPI
-	static struct device hip3_dev =
+	static struct net_device hip3_dev =
 		{"hip3", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, hippi_probe};
-	static struct device hip2_dev =
+	static struct net_device hip2_dev =
 		{"hip2", 0, 0, 0, 0, 0, 0, 0, 0, 0, &hip3_dev, hippi_probe};
-	static struct device hip1_dev =
+	static struct net_device hip1_dev =
 		{"hip1", 0, 0, 0, 0, 0, 0, 0, 0, 0, &hip2_dev, hippi_probe};
-	static struct device hip0_dev =
+	static struct net_device hip0_dev =
 		{"hip0", 0, 0, 0, 0, 0, 0, 0, 0, 0, &hip1_dev, hippi_probe};
 
 #undef	NEXT_DEV
@@ -819,15 +819,15 @@ static struct device tr0_dev = {
 #endif 
 
 #ifdef CONFIG_APBIF
-    extern int bif_init(struct device *dev);
-    static struct device bif_dev = {
+    extern int bif_init(struct net_device *dev);
+    static struct net_device bif_dev = {
         "bif", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, bif_init };
 #   undef       NEXT_DEV
 #   define      NEXT_DEV        (&bif_dev)
 #endif
 	
-extern int loopback_init(struct device *dev);
-struct device loopback_dev = {
+extern int loopback_init(struct net_device *dev);
+struct net_device loopback_dev = {
 	"lo",			/* Software Loopback interface		*/
 	0x0,			/* recv memory end			*/
 	0x0,			/* recv memory start			*/
@@ -840,5 +840,5 @@ struct device loopback_dev = {
 	loopback_init		/* loopback_init should set up the rest	*/
 };
 
-struct device *dev_base = &loopback_dev;
+struct net_device *dev_base = &loopback_dev;
 rwlock_t dev_base_lock = RW_LOCK_UNLOCKED;

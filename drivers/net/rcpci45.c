@@ -127,7 +127,7 @@ typedef struct
      *    pointer to the device structure which is part
      * of the interface to the Linux kernel.
      */
-    struct device *dev;            
+    struct net_device *dev;            
      
     char devname[8];                /* "ethN" string */
     U8     id;                        /* the AdapterID */
@@ -136,7 +136,7 @@ typedef struct
     U32    function;
     struct timer_list timer;        /*  timer */
     struct enet_statistics  stats; /* the statistics structure */
-    struct device *next;            /* points to the next RC adapter */
+    struct net_device *next;            /* points to the next RC adapter */
     unsigned long numOutRcvBuffers;/* number of outstanding receive buffers*/
     unsigned char shutdown;
     unsigned char reboot;
@@ -157,31 +157,31 @@ static PDPA  PCIAdapters[MAX_ADAPTERS] =
 };
 
 
-static int RCinit(struct device *dev);
-static int RCscan(struct device *dev);
-static int RCfound_device(struct device *, int, int, int, int, int, int);
+static int RCinit(struct net_device *dev);
+static int RCscan(struct net_device *dev);
+static int RCfound_device(struct net_device *, int, int, int, int, int, int);
 
-static int RCopen(struct device *);
-static int RC_xmit_packet(struct sk_buff *, struct device *);
+static int RCopen(struct net_device *);
+static int RC_xmit_packet(struct sk_buff *, struct net_device *);
 static void RCinterrupt(int, void *, struct pt_regs *);
-static int RCclose(struct device *dev);
-static struct enet_statistics *RCget_stats(struct device *);
-static int RCioctl(struct device *, struct ifreq *, int);
-static int RCconfig(struct device *, struct ifmap *);
+static int RCclose(struct net_device *dev);
+static struct enet_statistics *RCget_stats(struct net_device *);
+static int RCioctl(struct net_device *, struct ifreq *, int);
+static int RCconfig(struct net_device *, struct ifmap *);
 static void RCxmit_callback(U32, U16, PU32, U16);
 static void RCrecv_callback(U32, U8, U32, PU32, U16);
 static void RCreset_callback(U32, U32, U32, U16);
 static void RCreboot_callback(U32, U32, U32, U16);
-static int RC_allocate_and_post_buffers(struct device *, int);
+static int RC_allocate_and_post_buffers(struct net_device *, int);
 
 
 /* A list of all installed RC devices, for removing the driver module. */
-static struct device *root_RCdev = NULL;
+static struct net_device *root_RCdev = NULL;
 
 #ifdef MODULE
 int init_module(void)
 #else
-int rcpci_probe(struct device *dev)
+int rcpci_probe(struct net_device *dev)
 #endif
 {
     int cards_found;
@@ -196,7 +196,7 @@ int rcpci_probe(struct device *dev)
     return cards_found ? 0 : -ENODEV;
 }
 
-static int RCscan(struct device *dev)
+static int RCscan(struct net_device *dev)
 {
     int cards_found = 0;
     static int pci_index = 0;
@@ -251,7 +251,7 @@ static int RCscan(struct device *dev)
     return cards_found;
 }
 
-static int RCinit(struct device *dev)
+static int RCinit(struct net_device *dev)
 {
     dev->open = &RCopen;
     dev->hard_start_xmit = &RC_xmit_packet;
@@ -263,7 +263,7 @@ static int RCinit(struct device *dev)
 }
 
 static int
-RCfound_device(struct device *dev, int memaddr, int irq, 
+RCfound_device(struct net_device *dev, int memaddr, int irq, 
                int bus, int function, int product_index, int card_idx)
 {
     int dev_size = 32768;        
@@ -273,15 +273,15 @@ RCfound_device(struct device *dev, int memaddr, int irq,
 
     /* 
      * Allocate and fill new device structure. 
-     * We need enough for struct device plus DPA plus the LAN API private
+     * We need enough for struct net_device plus DPA plus the LAN API private
      * area, which requires a minimum of 16KB.  The top of the allocated
-     * area will be assigned to struct device; the next chunk will be
+     * area will be assigned to struct net_device; the next chunk will be
      * assigned to DPA; and finally, the rest will be assigned to the
      * the LAN API layer.
      */
 
 #ifdef MODULE
-    dev = (struct device *) kmalloc(dev_size, GFP_DMA | GFP_KERNEL |GFP_ATOMIC);
+    dev = (struct net_device *) kmalloc(dev_size, GFP_DMA | GFP_KERNEL |GFP_ATOMIC);
     if (!dev)
     {
         printk("rc: unable to kmalloc dev\n");
@@ -291,10 +291,10 @@ RCfound_device(struct device *dev, int memaddr, int irq,
     /*
      * dev->priv will point to the start of DPA.
      */
-    dev->priv = (void *)(((long)dev + sizeof(struct device) + 15) & ~15);
+    dev->priv = (void *)(((long)dev + sizeof(struct net_device) + 15) & ~15);
 #else
     dev->priv = 0;
-    dev->priv = (struct device *) kmalloc(dev_size, GFP_DMA | GFP_KERNEL |GFP_ATOMIC);
+    dev->priv = (struct net_device *) kmalloc(dev_size, GFP_DMA | GFP_KERNEL |GFP_ATOMIC);
     if (!dev->priv)
     {
         printk("rc: unable to kmalloc private area\n");
@@ -405,7 +405,7 @@ RCfound_device(struct device *dev, int memaddr, int irq,
 }
 
 static int
-RCopen(struct device *dev)
+RCopen(struct net_device *dev)
 {
     int post_buffers = MAX_NMBR_RCV_BUFFERS;
     PDPA pDpa = (PDPA) dev->priv;
@@ -470,7 +470,7 @@ RCopen(struct device *dev)
 }
 
 static int
-RC_xmit_packet(struct sk_buff *skb, struct device *dev)
+RC_xmit_packet(struct sk_buff *skb, struct net_device *dev)
 {
 
     PDPA pDpa = (PDPA) dev->priv;
@@ -551,7 +551,7 @@ RCxmit_callback(U32 Status,
 {
     struct sk_buff *skb;
     PDPA pDpa;
-    struct device *dev;
+    struct net_device *dev;
 
         pDpa = PCIAdapters[AdapterID];
         if (!pDpa)
@@ -596,7 +596,7 @@ static void
 RCreset_callback(U32 Status, U32 p1, U32 p2, U16 AdapterID)
 {
     PDPA pDpa;
-    struct device *dev;
+    struct net_device *dev;
      
     pDpa = PCIAdapters[AdapterID];
     dev = pDpa->dev;
@@ -696,7 +696,7 @@ RCrecv_callback(U32  Status,
     U32 len, count;
     PDPA pDpa;
     struct sk_buff *skb;
-    struct device *dev;
+    struct net_device *dev;
     singleTCB tcb;
     psingleTCB ptcb = &tcb;
 
@@ -852,7 +852,7 @@ RCinterrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 
     PDPA pDpa;
-    struct device *dev = (struct device *)(dev_id);
+    struct net_device *dev = (struct net_device *)(dev_id);
 
     pDpa = (PDPA) (dev->priv);
      
@@ -878,7 +878,7 @@ RCinterrupt(int irq, void *dev_id, struct pt_regs *regs)
 #define REBOOT_REINIT_RETRY_LIMIT 4
 static void rc_timer(unsigned long data)
 {
-    struct device *dev = (struct device *)data;
+    struct net_device *dev = (struct net_device *)data;
     PDPA pDpa = (PDPA) (dev->priv);
     int init_status;
     static int retry = 0;
@@ -961,7 +961,7 @@ static void rc_timer(unsigned long data)
 }
 
 static int
-RCclose(struct device *dev)
+RCclose(struct net_device *dev)
 {
 
     PDPA pDpa = (PDPA) dev->priv;
@@ -1000,7 +1000,7 @@ RCclose(struct device *dev)
 }
 
 static struct enet_statistics *
-RCget_stats(struct device *dev)
+RCget_stats(struct net_device *dev)
 {
     RCLINKSTATS    RCstats;
    
@@ -1087,7 +1087,7 @@ RCget_stats(struct device *dev)
     return 0;
 }
 
-static int RCioctl(struct device *dev, struct ifreq *rq, int cmd)
+static int RCioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
     RCuser_struct RCuser;
     PDPA pDpa = dev->priv;
@@ -1244,7 +1244,7 @@ static int RCioctl(struct device *dev, struct ifreq *rq, int cmd)
     return 0;
 }
 
-static int RCconfig(struct device *dev, struct ifmap *map)
+static int RCconfig(struct net_device *dev, struct ifmap *map)
 {
     /*
      * To be completed ...
@@ -1268,7 +1268,7 @@ void
 cleanup_module(void)
 {
     PDPA pDpa;
-    struct device *next;
+    struct net_device *next;
 
 
 #ifdef RCDEBUG
@@ -1297,7 +1297,7 @@ cleanup_module(void)
 
 
 static int
-RC_allocate_and_post_buffers(struct device *dev, int numBuffers)
+RC_allocate_and_post_buffers(struct net_device *dev, int numBuffers)
 {
 
     int i;

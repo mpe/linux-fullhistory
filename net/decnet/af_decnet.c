@@ -1954,7 +1954,7 @@ out:
 static int dn_device_event(struct notifier_block *this, unsigned long event,
 			void *ptr)
 {
-	struct device *dev = (struct device *)ptr;
+	struct net_device *dev = (struct net_device *)ptr;
 
 	switch(event) {
 		case NETDEV_UP:
@@ -1975,7 +1975,7 @@ static struct notifier_block dn_dev_notifier = {
 	0
 };
 
-extern int dn_route_rcv(struct sk_buff *, struct device *, struct packet_type *);
+extern int dn_route_rcv(struct sk_buff *, struct net_device *, struct packet_type *);
 
 static struct packet_type dn_dix_packet_type = 
 {

@@ -14,240 +14,151 @@
 
 #include <video/macmodes.h>
 
-struct mac_mode {
-    int number;
-    u32 xres;
-    u32 yres;
-    u32 pixclock;
-    u32 left_margin;
-    u32 right_margin;
-    u32 upper_margin;
-    u32 lower_margin;
-    u32 hsync_len;
-    u32 vsync_len;
-    u32 sync;
-    u32 vmode;
-};
 
+    /*
+     *  MacOS video mode definitions
+     *
+     *  Order IS important! If you change these, don't forget to update
+     *  mac_modes[] below!
+     */
 
-    /* 512x384, 60Hz, Interlaced (NTSC) */
+#define DEFAULT_MODEDB_INDEX	0
 
-#if 0
-static const struct mac_mode mac_mode_1 = {
-    VMODE_512_384_60I, 512, 384,
-    pixclock, left, right, upper, lower, hslen, vslen,
-    sync, FB_VMODE_INTERLACED
-};
-#endif
-
-    /* 512x384, 60Hz, Non-Interlaced */
-
-#if 0
-static const struct mac_mode mac_mode_2 = {
-    VMODE_512_384_60, 512, 384,
-    pixclock, left, right, upper, lower, hslen, vslen,
-    sync, FB_VMODE_NONINTERLACED
-};
-#endif
-
-    /* 640x480, 50Hz, Interlaced (PAL) */
-
-#if 0
-static const struct mac_mode mac_mode_3 = {
-    VMODE_640_480_50I, 640, 480,
-    pixclock, left, right, upper, lower, hslen, vslen,
-    sync, FB_VMODE_INTERLACED
-};
-#endif
-
-    /* 640x480, 60Hz, Interlaced (NTSC) */
-
-#if 0
-static const struct mac_mode mac_mode_4 = {
-    VMODE_640_480_60I, 640, 480,
-    pixclock, left, right, upper, lower, hslen, vslen,
-    sync, FB_VMODE_INTERLACED
-};
-#endif
-
-    /* 640x480, 60 Hz, Non-Interlaced (25.175 MHz dotclock) */
-
-static const struct mac_mode mac_mode_5 = {
-    VMODE_640_480_60, 640, 480,
-    39722, 32, 32, 33, 10, 96, 2,
-    0, FB_VMODE_NONINTERLACED
-};
-
-    /* 640x480, 67Hz, Non-Interlaced (30.0 MHz dotclock) */
-
-static const struct mac_mode mac_mode_6 = {
-    VMODE_640_480_67, 640, 480,
-    33334, 80, 80, 39, 3, 64, 3,
-    0, FB_VMODE_NONINTERLACED
-};
-
-    /* 640x870, 75Hz (portrait), Non-Interlaced */
+static const struct fb_videomode mac_modedb[] = {
+    {
+	/* 640x480, 60 Hz, Non-Interlaced (25.175 MHz dotclock) */
+	"mac5", 60, 640, 480, 39722, 32, 32, 33, 10, 96, 2,
+	0, FB_VMODE_NONINTERLACED
+    }, {
+	/* 640x480, 67Hz, Non-Interlaced (30.0 MHz dotclock) */
+	"mac6", 67, 640, 480, 33334, 80, 80, 39, 3, 64, 3,
+	0, FB_VMODE_NONINTERLACED
+    }, {
+	/* 800x600, 56 Hz, Non-Interlaced (36.00 MHz dotclock) */
+	"mac9", 56, 800, 600, 27778, 112, 40, 22, 1, 72, 2,
+	FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+    }, {
+	/* 800x600, 60 Hz, Non-Interlaced (40.00 MHz dotclock) */
+	"mac10", 60, 800, 600, 25000, 72, 56, 23, 1, 128, 4,
+	FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+    }, {
+	/* 800x600, 72 Hz, Non-Interlaced (50.00 MHz dotclock) */
+	"mac11", 72, 800, 600, 20000, 48, 72, 23, 37, 120, 6,
+	FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+    }, {
+	/* 800x600, 75 Hz, Non-Interlaced (49.50 MHz dotclock) */
+	"mac12", 75, 800, 600, 20203, 144, 32, 21, 1, 80, 3,
+	FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+    }, {
+	/* 832x624, 75Hz, Non-Interlaced (57.6 MHz dotclock) */
+	"mac13", 75, 832, 624, 17362, 208, 48, 39, 1, 64, 3,
+	0, FB_VMODE_NONINTERLACED
+    }, {
+	/* 1024x768, 60 Hz, Non-Interlaced (65.00 MHz dotclock) */
+	"mac14", 60, 1024, 768, 15385, 144, 40, 29, 3, 136, 6,
+	0, FB_VMODE_NONINTERLACED
+    }, {
+	/* 1024x768, 72 Hz, Non-Interlaced (75.00 MHz dotclock) */
+	"mac15", 72, 1024, 768, 13334, 128, 40, 29, 3, 136, 6,
+	0, FB_VMODE_NONINTERLACED
+    }, {
+	/* 1024x768, 75 Hz, Non-Interlaced (78.75 MHz dotclock) */
+	"mac16", 75, 1024, 768, 12699, 176, 16, 28, 1, 96, 3,
+	FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+    }, {
+	/* 1024x768, 75 Hz, Non-Interlaced (78.75 MHz dotclock) */
+	"mac17", 75, 1024, 768, 12699, 160, 32, 28, 1, 96, 3,
+	FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+    }, {
+	/* 1152x870, 75 Hz, Non-Interlaced (100.0 MHz dotclock) */
+	"mac18", 75, 1152, 870, 10000, 128, 48, 39, 3, 128, 3,
+	FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+    }, {
+	/* 1280x960, 75 Hz, Non-Interlaced (126.00 MHz dotclock) */
+	"mac19", 75, 1280, 960, 7937, 224, 32, 36, 1, 144, 3,
+	0, FB_VMODE_NONINTERLACED
+    }, {
+	/* 1280x1024, 75 Hz, Non-Interlaced (135.00 MHz dotclock) */
+	"mac20", 75, 1280, 1024, 7408, 232, 64, 38, 1, 112, 3,
+	FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+    },
 
 #if 0
-static const struct mac_mode mac_mode_7 = {
-    VMODE_640_870_75P, 640, 870,
-    pixclock, left, right, upper, lower, hslen, vslen,
-    sync, FB_VMODE_NONINTERLACED
-};
+    /* Anyone who has timings for these? */
+    {
+	/* VMODE_512_384_60I: 512x384, 60Hz, Interlaced (NTSC) */
+	"mac1", 60, 512, 384, pixclock, left, right, upper, lower, hslen, vslen,
+	sync, FB_VMODE_INTERLACED
+    }, {
+	/* VMODE_512_384_60: 512x384, 60Hz, Non-Interlaced */
+    	"mac2", 60, 512, 384, pixclock, left, right, upper, lower, hslen, vslen,
+	sync, FB_VMODE_NONINTERLACED
+    }, {
+	/* VMODE_640_480_50I: 640x480, 50Hz, Interlaced (PAL) */
+	"mac3", 50, 640, 480, pixclock, left, right, upper, lower, hslen, vslen,
+	sync, FB_VMODE_INTERLACED
+    }, {
+	/* VMODE_640_480_60I: 640x480, 60Hz, Interlaced (NTSC) */
+	"mac4", 60, 640, 480, pixclock, left, right, upper, lower, hslen, vslen,
+	sync, FB_VMODE_INTERLACED
+    }, {
+	/* VMODE_640_870_75P: 640x870, 75Hz (portrait), Non-Interlaced */
+	"mac7", 75, 640, 870, pixclock, left, right, upper, lower, hslen, vslen,
+	sync, FB_VMODE_NONINTERLACED
+    }, {
+	/* VMODE_768_576_50I: 768x576, 50Hz (PAL full frame), Interlaced */
+	"mac8", 50, 768, 576, pixclock, left, right, upper, lower, hslen, vslen,
+	sync, FB_VMODE_INTERLACED
+    },
 #endif
-
-    /* 768x576, 50Hz (PAL full frame), Interlaced */
-
-#if 0
-static const struct mac_mode mac_mode_8 = {
-    VMODE_768_576_50I, 768, 576,
-    pixclock, left, right, upper, lower, hslen, vslen,
-    sync, FB_VMODE_INTERLACED
-};
-#endif
-
-    /* 800x600, 56 Hz, Non-Interlaced (36.00 MHz dotclock) */
-
-static const struct mac_mode mac_mode_9 = {
-    VMODE_800_600_56, 800, 600,
-    27778, 112, 40, 22, 1, 72, 2,
-    FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
-};
-
-    /* 800x600, 60 Hz, Non-Interlaced (40.00 MHz dotclock) */
-
-static const struct mac_mode mac_mode_10 = {
-    VMODE_800_600_60, 800, 600,
-    25000, 72, 56, 23, 1, 128, 4,
-    FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
-};
-
-    /* 800x600, 72 Hz, Non-Interlaced (50.00 MHz dotclock) */
-
-static const struct mac_mode mac_mode_11 = {
-    VMODE_800_600_72, 800, 600,
-    20000, 48, 72, 23, 37, 120, 6,
-    FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
-};
-
-    /* 800x600, 75 Hz, Non-Interlaced (49.50 MHz dotclock) */
-
-static const struct mac_mode mac_mode_12 = {
-    VMODE_800_600_75, 800, 600,
-    20203, 144, 32, 21, 1, 80, 3,
-    FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
-};
-
-    /* 832x624, 75Hz, Non-Interlaced (57.6 MHz */
-
-static const struct mac_mode mac_mode_13 = {
-    VMODE_832_624_75, 832, 624,
-    17362, 208, 48, 39, 1, 64, 3,
-    0, FB_VMODE_NONINTERLACED
-};
-
-    /* 1024x768, 60 Hz, Non-Interlaced (65.00 MHz dotclock) */
-
-static const struct mac_mode mac_mode_14 = {
-    VMODE_1024_768_60, 1024, 768,
-    15385, 144, 40, 29, 3, 136, 6,
-    0, FB_VMODE_NONINTERLACED
-};
-
-    /* 1024x768, 72 Hz, Non-Interlaced (75.00 MHz dotclock) */
-
-static const struct mac_mode mac_mode_15 = {
-    VMODE_1024_768_70, 1024, 768,
-    13334, 128, 40, 29, 3, 136, 6,
-    0, FB_VMODE_NONINTERLACED
-};
-
-    /* 1024x768, 75 Hz, Non-Interlaced (78.75 MHz dotclock) */
-
-static const struct mac_mode mac_mode_16 = {
-    VMODE_1024_768_75V, 1024, 768,
-    12699, 176, 16, 28, 1, 96, 3,
-    FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
-};
-
-    /* 1024x768, 75 Hz, Non-Interlaced (78.75 MHz dotclock) */
-
-static const struct mac_mode mac_mode_17 = {
-    VMODE_1024_768_75, 1024, 768,
-    12699, 160, 32, 28, 1, 96, 3,
-    FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
-};
-
-    /* 1152x870, 75 Hz, Non-Interlaced (100.0 MHz dotclock) */
-
-static const struct mac_mode mac_mode_18 = {
-    VMODE_1152_870_75, 1152, 870,
-    10000, 128, 48, 39, 3, 128, 3,
-    FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
-};
-
-    /* 1280x960, 75 Hz, Non-Interlaced (126.00 MHz dotclock) */
-
-static const struct mac_mode mac_mode_19 = {
-    VMODE_1280_960_75, 1280, 960,
-    7937, 224, 32, 36, 1, 144, 3,
-    0, FB_VMODE_NONINTERLACED
-};
-
-    /* 1280x1024, 75 Hz, Non-Interlaced (135.00 MHz dotclock) */
-
-static const struct mac_mode mac_mode_20 = {
-    VMODE_1280_1024_75, 1280, 1024,
-    7408, 232, 64, 38, 1, 112, 3,
-    FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 };
 
 
-static const struct mac_mode *mac_modes[20] = {
-    NULL,		/* 512x384, 60Hz interlaced (NTSC) */
-    NULL,		/* 512x384, 60Hz */
-    NULL,		/* 640x480, 50Hz interlaced (PAL) */
-    NULL,		/* 640x480, 60Hz interlaced (NTSC) */
-    &mac_mode_5,	/* 640x480, 60Hz (VGA) */
-    &mac_mode_6,	/* 640x480, 67Hz */
-    NULL,		/* 640x870, 75Hz (portrait) */
-    NULL,		/* 768x576, 50Hz (PAL full frame) */
-    &mac_mode_9,	/* 800x600, 56Hz */
-    &mac_mode_10,	/* 800x600, 60Hz */
-    &mac_mode_11,	/* 800x600, 72Hz */
-    &mac_mode_12,	/* 800x600, 75Hz */
-    &mac_mode_13,	/* 832x624, 75Hz */
-    &mac_mode_14,	/* 1024x768, 60Hz */
-    &mac_mode_15,	/* 1024x768, 70Hz (or 72Hz?) */
-    &mac_mode_16,	/* 1024x768, 75Hz (VESA) */
-    &mac_mode_17,	/* 1024x768, 75Hz */
-    &mac_mode_18,	/* 1152x870, 75Hz */
-    &mac_mode_19,	/* 1280x960, 75Hz */
-    &mac_mode_20,	/* 1280x1024, 75Hz */
-};
+    /*
+     *  Mapping between MacOS video mode numbers and video mode definitions
+     *
+     *  These MUST be ordered in
+     *    - increasing resolution
+     *    - decreasing refresh rate
+     */
 
-static const struct mac_mode *mac_modes_inv[] = {
-    &mac_mode_6,	/* 640x480, 67Hz */
-    &mac_mode_5,	/* 640x480, 60Hz (VGA) */
-    &mac_mode_12,	/* 800x600, 75Hz */
-    &mac_mode_11,	/* 800x600, 72Hz */
-    &mac_mode_10,	/* 800x600, 60Hz */
-    &mac_mode_9,	/* 800x600, 56Hz */
-    &mac_mode_13,	/* 832x624, 75Hz */
-    &mac_mode_17,	/* 1024x768, 75Hz */
-    &mac_mode_16,	/* 1024x768, 75Hz (VESA) */
-    &mac_mode_15,	/* 1024x768, 70Hz (or 72Hz?) */
-    &mac_mode_14,	/* 1024x768, 60Hz */
-    &mac_mode_18,	/* 1152x870, 75Hz */
-    &mac_mode_19,	/* 1280x960, 75Hz */
-    &mac_mode_20,	/* 1280x1024, 75Hz */
+static const struct mode_map {
+    int vmode;
+    const struct fb_videomode *mode;
+} mac_modes[] = {
+    /* 640x480 */
+    { VMODE_640_480_67, &mac_modedb[1] },
+    { VMODE_640_480_60, &mac_modedb[0] },
+    /* 800x600 */
+    { VMODE_800_600_75, &mac_modedb[5] },
+    { VMODE_800_600_72, &mac_modedb[4] },
+    { VMODE_800_600_60, &mac_modedb[3] },
+    { VMODE_800_600_56, &mac_modedb[2] },
+    /* 832x624 */
+    { VMODE_832_624_75, &mac_modedb[6] },
+    /* 1024x768 */
+    { VMODE_1024_768_75, &mac_modedb[10] },
+    { VMODE_1024_768_75V, &mac_modedb[9] },
+    { VMODE_1024_768_70, &mac_modedb[8] },
+    { VMODE_1024_768_60, &mac_modedb[7] },
+    /* 1152x870 */
+    { VMODE_1152_870_75, &mac_modedb[11] },
+    /* 1280x960 */
+    { VMODE_1280_960_75, &mac_modedb[12] },
+    /* 1280x1024 */
+    { VMODE_1280_1024_75, &mac_modedb[13] },
+    { -1, NULL }
 };
 
 
-static struct mon_map {
+    /*
+     *  Mapping between monitor sense values and MacOS video mode numbers
+     */
+
+static const struct monitor_map {
     int sense;
     int vmode;
-} monitor_map[] = {
+} mac_monitors[] = {
     { 0x000, VMODE_1280_1024_75 },	/* 21" RGB */
     { 0x114, VMODE_640_870_75P },	/* Portrait Monochrome */
     { 0x221, VMODE_512_384_60 },	/* 12" RGB*/
@@ -277,11 +188,14 @@ static struct mon_map {
 
 int mac_vmode_to_var(int vmode, int cmode, struct fb_var_screeninfo *var)
 {
-    const struct mac_mode *mode = NULL;
+    const struct fb_videomode *mode = NULL;
+    const struct mode_map *map;
 
-    if (vmode > 0 && vmode <= VMODE_MAX)
-	mode = mac_modes[vmode-1];
-
+    for (map = mac_modes; map->vmode != -1; map++)
+	if (map->vmode == vmode) {
+	    mode = map->mode;
+	    break;
+	}
     if (!mode)
 	return -EINVAL;
 
@@ -348,7 +262,8 @@ int mac_vmode_to_var(int vmode, int cmode, struct fb_var_screeninfo *var)
 int mac_var_to_vmode(const struct fb_var_screeninfo *var, int *vmode,
 		     int *cmode)
 {
-    unsigned int i;
+    const struct fb_videomode *mode = NULL;
+    const struct mode_map *map;
 
     if (var->bits_per_pixel <= 8)
 	*cmode = CMODE_8;
@@ -359,8 +274,8 @@ int mac_var_to_vmode(const struct fb_var_screeninfo *var, int *vmode,
     else
 	return -EINVAL;
 
-    for (i = 0; i < sizeof(mac_modes_inv)/sizeof(*mac_modes_inv); i++) {
-	const struct mac_mode *mode = mac_modes_inv[i];
+    for (map = mac_modes; map->vmode != -1; map++) {
+	mode = map->mode;
 	if (var->xres > mode->xres || var->yres > mode->yres)
 	    continue;
 	if (var->xres_virtual > mode->xres || var->yres_virtual > mode->yres)
@@ -369,7 +284,7 @@ int mac_var_to_vmode(const struct fb_var_screeninfo *var, int *vmode,
 	    continue;
 	if ((var->vmode & FB_VMODE_MASK) != mode->vmode)
 	    continue;
-	*vmode = mode->number;
+	*vmode = map->vmode;
 	return 0;
     }
     return -EINVAL;
@@ -382,10 +297,32 @@ int mac_var_to_vmode(const struct fb_var_screeninfo *var, int *vmode,
 
 int mac_map_monitor_sense(int sense)
 {
-    struct mon_map *map;
+    const struct monitor_map *map;
 
-    for (map = monitor_map; map->sense >= 0; ++map)
+    for (map = mac_monitors; map->sense != -1; map++)
 	if (map->sense == sense)
 	    break;
     return map->vmode;
+}
+
+
+    /*
+     *  Find a suitable video mode
+     *
+     *  If the name of the wanted mode begins with `mac', use the Mac video
+     *  mode database, else fall back to the standard video mode database.
+     */
+
+int __init mac_find_mode(struct fb_var_screeninfo *var, struct fb_info *info,
+			 const char *mode_option, unsigned int default_bpp)
+{
+    const struct fb_videomode *db = NULL;
+    unsigned int dbsize = 0;
+
+    if (mode_option && !strncmp(mode_option, "mac", 3)) {
+	db = mac_modedb;
+	dbsize = sizeof(mac_modedb)/sizeof(*mac_modedb);
+    }
+    return fb_find_mode(var, info, mode_option, db, dbsize,
+			&mac_modedb[DEFAULT_MODEDB_INDEX], default_bpp);
 }

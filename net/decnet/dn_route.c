@@ -310,7 +310,7 @@ drop_it:
         return 0;
 }
 
-int dn_route_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+int dn_route_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 {
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
 	unsigned char flags = 0;
@@ -459,7 +459,7 @@ static int dn_output(struct sk_buff *skb)
 {
 	struct dst_entry *dst = skb->dst;
 	struct dn_route *rt = (struct dn_route *)dst;
-	struct device *dev = dst->dev;
+	struct net_device *dev = dst->dev;
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
 	int err = -EINVAL;
 
@@ -629,7 +629,7 @@ static int dn_route_output_slow(struct sock *sk)
 	struct dn_scp *scp = &sk->protinfo.dn;
 	dn_address dest = dn_saddr2dn(&scp->peer);
 	struct dn_route *rt = NULL;
-	struct device *dev  = decnet_default_device;
+	struct net_device *dev  = decnet_default_device;
 	struct neighbour *neigh = NULL;
 	struct dn_dev *dn_db;
 	unsigned char addr[6];
@@ -729,7 +729,7 @@ static int dn_route_input_slow(struct sk_buff *skb)
 {
 	struct dn_route *rt = NULL;
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
-	struct device *dev = skb->dev;
+	struct net_device *dev = skb->dev;
 	struct neighbour *neigh = NULL;
 	unsigned char addr[6];
 
@@ -907,7 +907,7 @@ int dn_fib_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh, void *arg)
 		memcpy(&iif, RTA_DATA(rta[RTA_IIF-1]), sizeof(int));
 
 	if (iif) {
-		struct device *dev;
+		struct net_device *dev;
 		if ((dev = dev_get_by_index(iif)) == NULL)
 			return -ENODEV;
 		if (!dev->dn_ptr)

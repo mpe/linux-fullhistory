@@ -150,17 +150,17 @@ struct net_local {
 #define AT1700_IO_EXTENT	32
 /* Index to functions, as function prototypes. */
 
-extern int at1700_probe(struct device *dev);
+extern int at1700_probe(struct net_device *dev);
 
-static int at1700_probe1(struct device *dev, int ioaddr);
+static int at1700_probe1(struct net_device *dev, int ioaddr);
 static int read_eeprom(int ioaddr, int location);
-static int net_open(struct device *dev);
-static int	net_send_packet(struct sk_buff *skb, struct device *dev);
+static int net_open(struct net_device *dev);
+static int	net_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void net_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void net_rx(struct device *dev);
-static int net_close(struct device *dev);
-static struct enet_statistics *net_get_stats(struct device *dev);
-static void set_rx_mode(struct device *dev);
+static void net_rx(struct net_device *dev);
+static int net_close(struct net_device *dev);
+static struct enet_statistics *net_get_stats(struct net_device *dev);
+static void set_rx_mode(struct net_device *dev);
 
 
 #ifdef CONFIG_MCA
@@ -192,7 +192,7 @@ struct netdev_entry at1700_drv =
 {"at1700", at1700_probe1, AT1700_IO_EXTENT, at1700_probe_list};
 #else
 
-int at1700_probe(struct device *dev)
+int at1700_probe(struct net_device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -221,7 +221,7 @@ int at1700_probe(struct device *dev)
    that can be done is checking a few bits and then diving right into an
    EEPROM read. */
 
-int at1700_probe1(struct device *dev, int ioaddr)
+int at1700_probe1(struct net_device *dev, int ioaddr)
 {
 	char fmv_irqmap[4] = {3, 7, 10, 15};
 	char fmv_irqmap_pnp[8] = {3, 4, 5, 7, 9, 10, 11, 15};
@@ -498,7 +498,7 @@ static int read_eeprom(int ioaddr, int location)
 
 
 
-static int net_open(struct device *dev)
+static int net_open(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -535,7 +535,7 @@ static int net_open(struct device *dev)
 }
 
 static int
-net_send_packet(struct sk_buff *skb, struct device *dev)
+net_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -615,7 +615,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 static void
 net_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct net_local *lp;
 	int ioaddr, status;
 
@@ -681,7 +681,7 @@ net_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 /* We have a good packet(s), get it/them out of the buffers. */
 static void
-net_rx(struct device *dev)
+net_rx(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -762,7 +762,7 @@ net_rx(struct device *dev)
 }
 
 /* The inverse routine to net_open(). */
-static int net_close(struct device *dev)
+static int net_close(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -794,7 +794,7 @@ static int net_close(struct device *dev)
    There are no on-chip counters, so this function is trivial.
 */
 static struct enet_statistics *
-net_get_stats(struct device *dev)
+net_get_stats(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	return &lp->stats;
@@ -826,7 +826,7 @@ static inline unsigned ether_crc_le(int length, unsigned char *data)
 }
 
 static void
-set_rx_mode(struct device *dev)
+set_rx_mode(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	struct net_local *lp = (struct net_local *)dev->priv;
@@ -875,7 +875,7 @@ set_rx_mode(struct device *dev)
 
 #ifdef MODULE
 static char devicename[9] = { 0, };
-static struct device dev_at1700 = {
+static struct net_device dev_at1700 = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
 	0, 0, 0, 0,
 	0, 0,

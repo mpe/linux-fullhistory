@@ -137,6 +137,6 @@ void set_ring_op(int up);
 void rmt_event(int st);
 void set_cf_join(int on);
 
-extern struct device *apfddi_device;
+extern struct net_device *apfddi_device;
 extern struct net_device_stats *apfddi_stats;
 

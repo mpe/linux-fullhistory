@@ -70,7 +70,7 @@
 
 /****** Data Structures *****************************************************/
 
-/* This is an extention of the 'struct device' we create for each network
+/* This is an extention of the 'struct net_device' we create for each network
  * interface to keep the rest of X.25 channel-specific data.
  */
 typedef struct x25_channel
@@ -114,22 +114,22 @@ typedef struct x25_call_info
 
 /* WAN link driver entry points. These are called by the WAN router module. */
 static int update (wan_device_t* wandev);
-static int new_if (wan_device_t* wandev, struct device* dev,
+static int new_if (wan_device_t* wandev, struct net_device* dev,
 	wanif_conf_t* conf);
-static int del_if (wan_device_t* wandev, struct device* dev);
+static int del_if (wan_device_t* wandev, struct net_device* dev);
 
 /* WANPIPE-specific entry points */
 static int wpx_exec (struct sdla* card, void* u_cmd, void* u_data);
 
 /* Network device interface */
-static int if_init   (struct device* dev);
-static int if_open   (struct device* dev);
-static int if_close  (struct device* dev);
-static int if_header (struct sk_buff* skb, struct device* dev,
+static int if_init   (struct net_device* dev);
+static int if_open   (struct net_device* dev);
+static int if_close  (struct net_device* dev);
+static int if_header (struct sk_buff* skb, struct net_device* dev,
 	unsigned short type, void* daddr, void* saddr, unsigned len);
 static int if_rebuild_hdr (struct sk_buff* skb);
-static int if_send (struct sk_buff* skb, struct device* dev);
-static struct net_device_stats * if_stats (struct device* dev);
+static int if_send (struct sk_buff* skb, struct net_device* dev);
+static struct net_device_stats * if_stats (struct net_device* dev);
 
 /* Interrupt handlers */
 static void wpx_isr	(sdla_t* card);
@@ -173,11 +173,11 @@ static int restart_event (sdla_t* card, int cmd, int lcn, TX25Mbox* mb);
 /* Miscellaneous functions */
 static int connect (sdla_t* card);
 static int disconnect (sdla_t* card);
-static struct device* get_dev_by_lcn(wan_device_t* wandev, unsigned lcn);
-static int chan_connect (struct device* dev);
-static int chan_disc (struct device* dev);
-static void set_chan_state (struct device* dev, int state);
-static int chan_send (struct device* dev, struct sk_buff* skb);
+static struct net_device* get_dev_by_lcn(wan_device_t* wandev, unsigned lcn);
+static int chan_connect (struct net_device* dev);
+static int chan_disc (struct net_device* dev);
+static void set_chan_state (struct net_device* dev, int state);
+static int chan_send (struct net_device* dev, struct sk_buff* skb);
 static unsigned char bps_to_speed_code (unsigned long bps);
 static unsigned int dec_to_uint (unsigned char* str, int len);
 static unsigned int hex_to_uint (unsigned char* str, int len);
@@ -394,7 +394,7 @@ static int update (wan_device_t* wandev)
  * Return:	0	o.k.
  *		< 0	failure (channel will not be created)
  */
-static int new_if (wan_device_t* wandev, struct device* dev, wanif_conf_t* conf)
+static int new_if (wan_device_t* wandev, struct net_device* dev, wanif_conf_t* conf)
 {
 	sdla_t* card = wandev->private;
 	x25_channel_t* chan;
@@ -470,7 +470,7 @@ static int new_if (wan_device_t* wandev, struct device* dev, wanif_conf_t* conf)
 /*============================================================================
  * Delete logical channel.
  */
-static int del_if (wan_device_t* wandev, struct device* dev)
+static int del_if (wan_device_t* wandev, struct net_device* dev)
 {
 	if (dev->priv)
 	{
@@ -531,7 +531,7 @@ static int wpx_exec (struct sdla* card, void* u_cmd, void* u_data)
  * interface registration.  Returning anything but zero will fail interface
  * registration.
  */
-static int if_init (struct device* dev)
+static int if_init (struct net_device* dev)
 {
 	x25_channel_t* chan = dev->priv;
 	sdla_t* card = chan->card;
@@ -577,7 +577,7 @@ static int if_init (struct device* dev)
  *
  * Return 0 if O.k. or errno.
  */
-static int if_open (struct device* dev)
+static int if_open (struct net_device* dev)
 {
 	x25_channel_t* chan = dev->priv;
 	sdla_t* card = chan->card;
@@ -605,7 +605,7 @@ static int if_open (struct device* dev)
  * o reset flags.
  * o if there's no more open channels then disconnect physical link.
  */
-static int if_close (struct device* dev)
+static int if_close (struct net_device* dev)
 {
 	x25_channel_t* chan = dev->priv;
 	sdla_t* card = chan->card;
@@ -637,7 +637,7 @@ static int if_close (struct device* dev)
  *
  * Return:	media header length.
  */
-static int if_header (struct sk_buff* skb, struct device* dev,
+static int if_header (struct sk_buff* skb, struct net_device* dev,
 	unsigned short type, void* daddr, void* saddr, unsigned len)
 {
 	x25_channel_t* chan = dev->priv;
@@ -665,7 +665,7 @@ static int if_header (struct sk_buff* skb, struct device* dev,
  
 static int if_rebuild_hdr (struct sk_buff* skb)
 {
-	struct device *dev=skb->dev;
+	struct net_device *dev=skb->dev;
 	x25_channel_t* chan = dev->priv;
 	sdla_t* card = chan->card;
 
@@ -692,11 +692,11 @@ static int if_rebuild_hdr (struct sk_buff* skb)
  *    protocol stack and can be used for flow control with protocol layer.
  */
 
-static int if_send (struct sk_buff* skb, struct device* dev)
+static int if_send (struct sk_buff* skb, struct net_device* dev)
 {
 	x25_channel_t* chan = dev->priv;
 	sdla_t* card = chan->card;
-	struct device *dev2;
+	struct net_device *dev2;
 	TX25Status* status = card->flags;
 	unsigned long host_cpu_flags;
 
@@ -823,7 +823,7 @@ tx_done:
  * Return a pointer to struct net_device_stats
  */
  
-static struct net_device_stats* if_stats (struct device* dev)
+static struct net_device_stats* if_stats (struct net_device* dev)
 {
 	x25_channel_t* chan = dev->priv;
 	if(chan==NULL)
@@ -840,7 +840,7 @@ static struct net_device_stats* if_stats (struct device* dev)
 static void wpx_isr (sdla_t* card)
 {
 	TX25Status* status = card->flags;
-	struct device *dev;
+	struct net_device *dev;
 	unsigned long host_cpu_flags;
 
 	card->in_isr = 1;
@@ -933,7 +933,7 @@ static void rx_intr (sdla_t* card)
 	unsigned len = rxmb->cmd.length;	/* packet length */
 	unsigned qdm = rxmb->cmd.qdm;		/* Q,D and M bits */
 	wan_device_t* wandev = &card->wandev;
-	struct device* dev = get_dev_by_lcn(wandev, lcn);
+	struct net_device* dev = get_dev_by_lcn(wandev, lcn);
 	x25_channel_t* chan;
 	struct sk_buff* skb;
 	void* bufptr;
@@ -1041,7 +1041,7 @@ static void rx_intr (sdla_t* card)
 
 static void tx_intr (sdla_t* card)
 {
-	struct device *dev;
+	struct net_device *dev;
 
 	/* unbusy all devices and then dev_tint(); */
 	for(dev = card->wandev.dev; dev; dev = dev->slave)
@@ -1165,7 +1165,7 @@ static void poll_disconnected (sdla_t* card)
  */
 static void poll_active (sdla_t* card)
 {
-	struct device* dev;
+	struct net_device* dev;
 
 	/* Fetch X.25 asynchronous events */
 	x25_fetch_events(card);
@@ -1745,7 +1745,7 @@ static int incoming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 {
 	wan_device_t* wandev = &card->wandev;
 	int new_lcn = mb->cmd.lcn;
-	struct device* dev = get_dev_by_lcn(wandev, new_lcn);
+	struct net_device* dev = get_dev_by_lcn(wandev, new_lcn);
 	x25_channel_t* chan = NULL;
 	int accept = 0;		/* set to '1' if o.k. to accept call */
 	x25_call_info_t* info;
@@ -1855,7 +1855,7 @@ static int incoming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 static int call_accepted (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 {
 	unsigned new_lcn = mb->cmd.lcn;
-	struct device* dev = get_dev_by_lcn(&card->wandev, new_lcn);
+	struct net_device* dev = get_dev_by_lcn(&card->wandev, new_lcn);
 	x25_channel_t* chan;
 
 	printk(KERN_INFO "%s: X.25 call accepted on LCN %d!\n",
@@ -1887,7 +1887,7 @@ static int call_accepted (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 static int call_cleared (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 {
 	unsigned new_lcn = mb->cmd.lcn;
-	struct device* dev = get_dev_by_lcn(&card->wandev, new_lcn);
+	struct net_device* dev = get_dev_by_lcn(&card->wandev, new_lcn);
 
 	printk(KERN_INFO "%s: X.25 clear request on LCN %d! Cause:0x%02X "
 		"Diagn:0x%02X\n",
@@ -1905,7 +1905,7 @@ static int call_cleared (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 static int restart_event (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 {
 	wan_device_t* wandev = &card->wandev;
-	struct device* dev;
+	struct net_device* dev;
 
 	printk(KERN_INFO
 		"%s: X.25 restart request! Cause:0x%02X Diagn:0x%02X\n",
@@ -1926,7 +1926,7 @@ static int timeout_event (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 
 	if (mb->cmd.pktType == 0x05)	/* call request time out */
 	{
-		struct device* dev = get_dev_by_lcn(&card->wandev, new_lcn);
+		struct net_device* dev = get_dev_by_lcn(&card->wandev, new_lcn);
 
 		printk(KERN_INFO "%s: X.25 call timed timeout on LCN %d!\n",
 			card->devname, new_lcn);
@@ -1976,9 +1976,9 @@ static int disconnect (sdla_t* card)
 /*============================================================================
  * Find network device by its channel number.
  */
-static struct device* get_dev_by_lcn (wan_device_t* wandev, unsigned lcn)
+static struct net_device* get_dev_by_lcn (wan_device_t* wandev, unsigned lcn)
 {
-	struct device* dev;
+	struct net_device* dev;
 
 	for (dev = wandev->dev; dev; dev = dev->slave)
 		if (((x25_channel_t*)dev->priv)->lcn == lcn)
@@ -1995,7 +1995,7 @@ static struct device* get_dev_by_lcn (wan_device_t* wandev, unsigned lcn)
  *		>0	connection in progress
  *		<0	failure
  */
-static int chan_connect (struct device* dev)
+static int chan_connect (struct net_device* dev)
 {
 	x25_channel_t* chan = dev->priv;
 	sdla_t* card = chan->card;
@@ -2024,7 +2024,7 @@ static int chan_connect (struct device* dev)
  * Disconnect logical channel.
  * o if SVC then clear X.25 call
  */
-static int chan_disc (struct device* dev)
+static int chan_disc (struct net_device* dev)
 {
 	x25_channel_t* chan = dev->priv;
 
@@ -2037,7 +2037,7 @@ static int chan_disc (struct device* dev)
 /*============================================================================
  * Set logical channel state.
  */
-static void set_chan_state (struct device* dev, int state)
+static void set_chan_state (struct net_device* dev, int state)
 {
 	x25_channel_t* chan = dev->priv;
 	sdla_t* card = chan->card;
@@ -2092,7 +2092,7 @@ static void set_chan_state (struct device* dev, int state)
  * 2. When transmission is complete, an event notification should be issued
  *    to the router.
  */
-static int chan_send (struct device* dev, struct sk_buff* skb)
+static int chan_send (struct net_device* dev, struct sk_buff* skb)
 {
 	x25_channel_t* chan = dev->priv;
 	sdla_t* card = chan->card;

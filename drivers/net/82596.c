@@ -258,20 +258,20 @@ char init_setup[] =
 	0x00,
 	0x7f /*  *multi IA */ };
 
-static int i596_open(struct device *dev);
-static int i596_start_xmit(struct sk_buff *skb, struct device *dev);
+static int i596_open(struct net_device *dev);
+static int i596_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static void i596_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static int i596_close(struct device *dev);
-static struct net_device_stats *i596_get_stats(struct device *dev);
-static void i596_add_cmd(struct device *dev, struct i596_cmd *cmd);
+static int i596_close(struct net_device *dev);
+static struct net_device_stats *i596_get_stats(struct net_device *dev);
+static void i596_add_cmd(struct net_device *dev, struct i596_cmd *cmd);
 static void print_eth(char *);
-static void set_multicast_list(struct device *dev);
+static void set_multicast_list(struct net_device *dev);
 
 static int ticks_limit = 25;
 static int max_cmd_backlog = 16;
 
 
-static inline void CA(struct device *dev)
+static inline void CA(struct net_device *dev)
 {
 #ifdef CONFIG_MVME16x_NET
 	if (MACH_IS_MVME16x) {
@@ -291,7 +291,7 @@ static inline void CA(struct device *dev)
 }
 
 
-static inline void MPU_PORT(struct device *dev, int c, volatile void *x)
+static inline void MPU_PORT(struct net_device *dev, int c, volatile void *x)
 {
 #ifdef CONFIG_MVME16x_NET
 	if (MACH_IS_MVME16x) {
@@ -315,7 +315,7 @@ static inline void MPU_PORT(struct device *dev, int c, volatile void *x)
 #if defined(CONFIG_MVME16x_NET) || defined(CONFIG_BVME6000_NET)
 static void i596_error(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct i596_cmd *cmd;
 
 	struct i596_private *lp = (struct i596_private *) dev->priv;
@@ -338,7 +338,7 @@ static void i596_error(int irq, void *dev_id, struct pt_regs *regs)
 }
 #endif
 
-static inline int init_rx_bufs(struct device *dev, int num)
+static inline int init_rx_bufs(struct net_device *dev, int num)
 {
 	struct i596_private *lp = (struct i596_private *) dev->priv;
 	int i;
@@ -373,7 +373,7 @@ static inline int init_rx_bufs(struct device *dev, int num)
 	return (i);
 }
 
-static inline void remove_rx_bufs(struct device *dev)
+static inline void remove_rx_bufs(struct net_device *dev)
 {
 	struct i596_private *lp = (struct i596_private *) dev->priv;
 	struct i596_rfd *rfd = WSWAPrfd(lp->scb.rfd);
@@ -388,7 +388,7 @@ static inline void remove_rx_bufs(struct device *dev)
 	while (rfd != lp->rx_tail);
 }
 
-static inline void init_i596_mem(struct device *dev)
+static inline void init_i596_mem(struct net_device *dev)
 {
 	struct i596_private *lp = (struct i596_private *) dev->priv;
 #if !defined(CONFIG_MVME16x_NET) && !defined(CONFIG_BVME6000_NET)
@@ -528,7 +528,7 @@ static inline void init_i596_mem(struct device *dev)
 	return;
 }
 
-static inline int i596_rx(struct device *dev)
+static inline int i596_rx(struct net_device *dev)
 {
 	struct i596_private *lp = (struct i596_private *) dev->priv;
 	struct i596_rfd *rfd;
@@ -645,7 +645,7 @@ static inline void i596_cleanup_cmd(struct i596_private *lp)
 	lp->scb.cmd = WSWAPcmd(lp->cmd_head);
 }
 
-static inline void i596_reset(struct device *dev, struct i596_private *lp, int ioaddr)
+static inline void i596_reset(struct net_device *dev, struct i596_private *lp, int ioaddr)
 {
 	int boguscnt = 1000;
 	unsigned long flags;
@@ -688,7 +688,7 @@ static inline void i596_reset(struct device *dev, struct i596_private *lp, int i
 	init_i596_mem(dev);
 }
 
-static void i596_add_cmd(struct device *dev, struct i596_cmd *cmd)
+static void i596_add_cmd(struct net_device *dev, struct i596_cmd *cmd)
 {
 	struct i596_private *lp = (struct i596_private *) dev->priv;
 	int ioaddr = dev->base_addr;
@@ -746,7 +746,7 @@ static void i596_add_cmd(struct device *dev, struct i596_cmd *cmd)
 	}
 }
 
-static int i596_open(struct device *dev)
+static int i596_open(struct net_device *dev)
 {
 	int i;
 
@@ -779,7 +779,7 @@ static int i596_open(struct device *dev)
 	return 0;		/* Always succeed */
 }
 
-static int i596_start_xmit(struct sk_buff *skb, struct device *dev)
+static int i596_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct i596_private *lp = (struct i596_private *) dev->priv;
 	int ioaddr = dev->base_addr;
@@ -878,7 +878,7 @@ static void print_eth(char *add)
 	printk("type %2.2X%2.2X\n", (unsigned char) add[12], (unsigned char) add[13]);
 }
 
-int __init i82596_probe(struct device *dev)
+int __init i82596_probe(struct net_device *dev)
 {
 	int i;
 	struct i596_private *lp;
@@ -983,7 +983,7 @@ int __init i82596_probe(struct device *dev)
 
 static void i596_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct i596_private *lp;
 	short ioaddr;
 	int boguscnt = 2000;
@@ -1176,7 +1176,7 @@ static void i596_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	return;
 }
 
-static int i596_close(struct device *dev)
+static int i596_close(struct net_device *dev)
 {
 	struct i596_private *lp = (struct i596_private *) dev->priv;
 	int boguscnt = 2000;
@@ -1239,7 +1239,7 @@ static int i596_close(struct device *dev)
 }
 
 static struct net_device_stats *
- i596_get_stats(struct device *dev)
+ i596_get_stats(struct net_device *dev)
 {
 	struct i596_private *lp = (struct i596_private *) dev->priv;
 
@@ -1250,7 +1250,7 @@ static struct net_device_stats *
  *    Set or clear the multicast filter for this adaptor.
  */
 
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
 	struct i596_private *lp = (struct i596_private *) dev->priv;
 	struct i596_cmd *cmd;
@@ -1317,7 +1317,7 @@ struct netdev_entry i596_drv =
 #ifdef MODULE
 static char devicename[9] =
 {0,};
-static struct device dev_apricot =
+static struct net_device dev_apricot =
 {
 	devicename,		/* device name inserted by /linux/drivers/net/net_init.c */
 	0, 0, 0, 0,

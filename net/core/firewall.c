@@ -99,7 +99,7 @@ int unregister_firewall(int pf, struct firewall_ops *fw)
 	return -ENOENT;
 }
 
-int call_fw_firewall(int pf, struct device *dev, void *phdr, void *arg, struct sk_buff **skb)
+int call_fw_firewall(int pf, struct net_device *dev, void *phdr, void *arg, struct sk_buff **skb)
 {
 	struct firewall_ops *fw=firewall_chain[pf];
 
@@ -117,7 +117,7 @@ int call_fw_firewall(int pf, struct device *dev, void *phdr, void *arg, struct s
  *	Actual invocation of the chains
  */
 
-int call_in_firewall(int pf, struct device *dev, void *phdr, void *arg, struct sk_buff **skb)
+int call_in_firewall(int pf, struct net_device *dev, void *phdr, void *arg, struct sk_buff **skb)
 {
 	struct firewall_ops *fw=firewall_chain[pf];
 
@@ -131,7 +131,7 @@ int call_in_firewall(int pf, struct device *dev, void *phdr, void *arg, struct s
 	return firewall_policy[pf];
 }
 
-int call_out_firewall(int pf, struct device *dev, void *phdr, void *arg, struct sk_buff **skb)
+int call_out_firewall(int pf, struct net_device *dev, void *phdr, void *arg, struct sk_buff **skb)
 {
 	struct firewall_ops *fw=firewall_chain[pf];
 

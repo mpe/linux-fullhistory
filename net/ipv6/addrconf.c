@@ -114,7 +114,7 @@ static __inline__ void addrconf_unlock(void)
 	atomic_dec(&addr_list_lock);
 }
 
-static int addrconf_ifdown(struct device *dev, int how);
+static int addrconf_ifdown(struct net_device *dev, int how);
 
 static void addrconf_dad_start(struct inet6_ifaddr *ifp);
 static void addrconf_dad_timer(unsigned long data);
@@ -206,7 +206,7 @@ int ipv6_addr_type(struct in6_addr *addr)
 	return IPV6_ADDR_RESERVED;
 }
 
-static struct inet6_dev * ipv6_add_dev(struct device *dev)
+static struct inet6_dev * ipv6_add_dev(struct net_device *dev)
 {
 	struct inet6_dev *ndev, **bptr, *iter;
 	int hash;
@@ -245,7 +245,7 @@ static struct inet6_dev * ipv6_add_dev(struct device *dev)
 	return ndev;
 }
 
-static struct inet6_dev * ipv6_find_idev(struct device *dev)
+static struct inet6_dev * ipv6_find_idev(struct net_device *dev)
 {
 	struct inet6_dev *idev;
 
@@ -272,7 +272,7 @@ static void addrconf_forward_change(struct inet6_dev *idev)
 	}
 }
 
-struct inet6_dev * ipv6_get_idev(struct device *dev)
+struct inet6_dev * ipv6_get_idev(struct net_device *dev)
 {
 	struct inet6_dev *idev;
 	int hash;
@@ -380,7 +380,7 @@ int ipv6_get_saddr(struct dst_entry *dst,
 	int scope;
 	struct inet6_ifaddr *ifp = NULL;
 	struct inet6_ifaddr *match = NULL;
-	struct device *dev = NULL;
+	struct net_device *dev = NULL;
 	struct rt6_info *rt;
 	int err;
 	int i;
@@ -461,7 +461,7 @@ out:
 	return err;
 }
 
-int ipv6_get_lladdr(struct device *dev, struct in6_addr *addr)
+int ipv6_get_lladdr(struct net_device *dev, struct in6_addr *addr)
 {
 	struct inet6_ifaddr *ifp = NULL;
 	struct inet6_dev *idev;
@@ -486,7 +486,7 @@ int ipv6_get_lladdr(struct device *dev, struct in6_addr *addr)
  *	to the host.
  */
 
-struct inet6_ifaddr * ipv6_chk_addr(struct in6_addr *addr, struct device *dev, int nd)
+struct inet6_ifaddr * ipv6_chk_addr(struct in6_addr *addr, struct net_device *dev, int nd)
 {
 	struct inet6_ifaddr * ifp;
 	u8 hash;
@@ -520,7 +520,7 @@ void addrconf_dad_failure(struct inet6_ifaddr *ifp)
 
 /* Join to solicited addr multicast group. */
 
-static void addrconf_join_solict(struct device *dev, struct in6_addr *addr)
+static void addrconf_join_solict(struct net_device *dev, struct in6_addr *addr)
 {
 	struct in6_addr maddr;
 
@@ -537,7 +537,7 @@ static void addrconf_join_solict(struct device *dev, struct in6_addr *addr)
 #endif
 }
 
-static void addrconf_leave_solict(struct device *dev, struct in6_addr *addr)
+static void addrconf_leave_solict(struct net_device *dev, struct in6_addr *addr)
 {
 	struct in6_addr maddr;
 
@@ -556,7 +556,7 @@ static void addrconf_leave_solict(struct device *dev, struct in6_addr *addr)
 
 
 #ifdef CONFIG_IPV6_EUI64
-static int ipv6_generate_eui64(u8 *eui, struct device *dev)
+static int ipv6_generate_eui64(u8 *eui, struct net_device *dev)
 {
 	switch (dev->type) {
 	case ARPHRD_ETHER:
@@ -578,7 +578,7 @@ static int ipv6_generate_eui64(u8 *eui, struct device *dev)
  */
 
 static void
-addrconf_prefix_route(struct in6_addr *pfx, int plen, struct device *dev,
+addrconf_prefix_route(struct in6_addr *pfx, int plen, struct net_device *dev,
 		      unsigned long expires, unsigned flags)
 {
 	struct in6_rtmsg rtmsg;
@@ -604,7 +604,7 @@ addrconf_prefix_route(struct in6_addr *pfx, int plen, struct device *dev,
 
 /* Create "default" multicast route to the interface */
 
-static void addrconf_add_mroute(struct device *dev)
+static void addrconf_add_mroute(struct net_device *dev)
 {
 	struct in6_rtmsg rtmsg;
 
@@ -619,7 +619,7 @@ static void addrconf_add_mroute(struct device *dev)
 	ip6_route_add(&rtmsg);
 }
 
-static void sit_route_add(struct device *dev)
+static void sit_route_add(struct net_device *dev)
 {
 	struct in6_rtmsg rtmsg;
 
@@ -636,7 +636,7 @@ static void sit_route_add(struct device *dev)
 	ip6_route_add(&rtmsg);
 }
 
-static void addrconf_add_lroute(struct device *dev)
+static void addrconf_add_lroute(struct net_device *dev)
 {
 	struct in6_addr addr;
 
@@ -644,7 +644,7 @@ static void addrconf_add_lroute(struct device *dev)
 	addrconf_prefix_route(&addr, 10, dev, 0, RTF_ADDRCONF);
 }
 
-static struct inet6_dev *addrconf_add_dev(struct device *dev)
+static struct inet6_dev *addrconf_add_dev(struct net_device *dev)
 {
 	struct inet6_dev *idev;
 
@@ -659,7 +659,7 @@ static struct inet6_dev *addrconf_add_dev(struct device *dev)
 	return idev;
 }
 
-void addrconf_prefix_rcv(struct device *dev, u8 *opt, int len)
+void addrconf_prefix_rcv(struct net_device *dev, u8 *opt, int len)
 {
 	struct prefix_info *pinfo;
 	struct rt6_info *rt;
@@ -801,7 +801,7 @@ ok:
 int addrconf_set_dstaddr(void *arg)
 {
 	struct in6_ifreq ireq;
-	struct device *dev;
+	struct net_device *dev;
 	int err = -EINVAL;
 
 	rtnl_lock();
@@ -858,7 +858,7 @@ static int inet6_addr_add(int ifindex, struct in6_addr *pfx, int plen)
 {
 	struct inet6_ifaddr *ifp;
 	struct inet6_dev *idev;
-	struct device *dev;
+	struct net_device *dev;
 	int scope;
 	
 	if ((dev = dev_get_by_index(ifindex)) == NULL)
@@ -889,7 +889,7 @@ static int inet6_addr_del(int ifindex, struct in6_addr *pfx, int plen)
 {
 	struct inet6_ifaddr *ifp;
 	struct inet6_dev *idev;
-	struct device *dev;
+	struct net_device *dev;
 	int scope;
 	
 	if ((dev = dev_get_by_index(ifindex)) == NULL)
@@ -958,7 +958,7 @@ static void sit_add_v4_addrs(struct inet6_dev *idev)
 {
 	struct inet6_ifaddr * ifp;
 	struct in6_addr addr;
-	struct device *dev;
+	struct net_device *dev;
 	int scope;
 
 	memset(&addr, 0, sizeof(struct in6_addr));
@@ -1019,7 +1019,7 @@ static void sit_add_v4_addrs(struct inet6_dev *idev)
 	read_unlock(&dev_base_lock);
 }
 
-static void init_loopback(struct device *dev)
+static void init_loopback(struct net_device *dev)
 {
 	struct in6_addr addr;
 	struct inet6_dev  *idev;
@@ -1060,7 +1060,7 @@ static void addrconf_add_linklocal(struct inet6_dev *idev, struct in6_addr *addr
 	addrconf_unlock();
 }
 
-static void addrconf_dev_config(struct device *dev)
+static void addrconf_dev_config(struct net_device *dev)
 {
 	struct in6_addr addr;
 	struct inet6_dev    * idev;
@@ -1096,7 +1096,7 @@ static void addrconf_dev_config(struct device *dev)
 #endif
 }
 
-static void addrconf_sit_config(struct device *dev)
+static void addrconf_sit_config(struct net_device *dev)
 {
 	struct inet6_dev *idev;
 
@@ -1124,9 +1124,9 @@ static void addrconf_sit_config(struct device *dev)
 int addrconf_notify(struct notifier_block *this, unsigned long event, 
 		    void * data)
 {
-	struct device *dev;
+	struct net_device *dev;
 
-	dev = (struct device *) data;
+	dev = (struct net_device *) data;
 
 	switch(event) {
 	case NETDEV_UP:
@@ -1181,7 +1181,7 @@ int addrconf_notify(struct notifier_block *this, unsigned long event,
 	return NOTIFY_OK;
 }
 
-static int addrconf_ifdown(struct device *dev, int how)
+static int addrconf_ifdown(struct net_device *dev, int how)
 {
 	struct inet6_dev *idev, **bidev;
 	struct inet6_ifaddr *ifa, **bifa;
@@ -1299,7 +1299,7 @@ static void addrconf_rs_timer(unsigned long data)
  */
 static void addrconf_dad_start(struct inet6_ifaddr *ifp)
 {
-	struct device *dev;
+	struct net_device *dev;
 	unsigned long rand_num;
 
 	dev = ifp->idev->dev;
@@ -1367,7 +1367,7 @@ static void addrconf_dad_timer(unsigned long data)
 
 static void addrconf_dad_completed(struct inet6_ifaddr *ifp)
 {
-	struct device *	dev = ifp->idev->dev;
+	struct net_device *	dev = ifp->idev->dev;
 
 	/*
 	 *	Configure the address for reception. Now it is valid.
@@ -1707,7 +1707,7 @@ int addrconf_sysctl_forward(ctl_table *ctl, int write, struct file * filp,
 		struct inet6_dev *idev = NULL;
 
 		if (valp != &ipv6_devconf.forwarding) {
-			struct device *dev = dev_get_by_index(ctl->ctl_name);
+			struct net_device *dev = dev_get_by_index(ctl->ctl_name);
 			if (dev)
 				idev = ipv6_get_idev(dev);
 			if (idev == NULL)
@@ -1788,7 +1788,7 @@ static struct addrconf_sysctl_table
 static void addrconf_sysctl_register(struct inet6_dev *idev, struct ipv6_devconf *p)
 {
 	int i;
-	struct device *dev = idev ? idev->dev : NULL;
+	struct net_device *dev = idev ? idev->dev : NULL;
 	struct addrconf_sysctl_table *t;
 
 	t = kmalloc(sizeof(*t), GFP_KERNEL);
@@ -1842,7 +1842,7 @@ static void addrconf_sysctl_unregister(struct ipv6_devconf *p)
 __initfunc(void addrconf_init(void))
 {
 #ifdef MODULE
-	struct device *dev;
+	struct net_device *dev;
 
 	/* This takes sense only during module load. */
 	read_lock(&dev_base_lock);

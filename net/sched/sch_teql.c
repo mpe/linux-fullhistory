@@ -67,7 +67,7 @@
 struct teql_master
 {
 	struct Qdisc_ops qops;
-	struct device dev;
+	struct net_device dev;
 	struct Qdisc *slaves;
 	struct net_device_stats stats;
 	char name[IFNAMSIZ];
@@ -90,7 +90,7 @@ struct teql_sched_data
 static int
 teql_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 {
-	struct device *dev = sch->dev;
+	struct net_device *dev = sch->dev;
 	struct teql_sched_data *q = (struct teql_sched_data *)sch->data;
 
 	__skb_queue_tail(&q->q, skb);
@@ -123,7 +123,7 @@ teql_dequeue(struct Qdisc* sch)
 
 	skb = __skb_dequeue(&dat->q);
 	if (skb == NULL) {
-		struct device *m = dat->m->dev.qdisc->dev;
+		struct net_device *m = dat->m->dev.qdisc->dev;
 		if (m) {
 			dat->m->slaves = sch;
 			spin_lock(&m->queue_lock);
@@ -187,7 +187,7 @@ teql_destroy(struct Qdisc* sch)
 
 static int teql_qdisc_init(struct Qdisc *sch, struct rtattr *opt)
 {
-	struct device *dev = sch->dev;
+	struct net_device *dev = sch->dev;
 	struct teql_master *m = (struct teql_master*)sch->ops;
 	struct teql_sched_data *q = (struct teql_sched_data *)sch->data;
 
@@ -234,7 +234,7 @@ static int teql_qdisc_init(struct Qdisc *sch, struct rtattr *opt)
 /* "teql*" netdevice routines */
 
 static int
-__teql_resolve(struct sk_buff *skb, struct sk_buff *skb_res, struct device *dev)
+__teql_resolve(struct sk_buff *skb, struct sk_buff *skb_res, struct net_device *dev)
 {
 	struct teql_sched_data *q = (void*)dev->qdisc->data;
 	struct neighbour *mn = skb->dst->neighbour;
@@ -267,7 +267,7 @@ __teql_resolve(struct sk_buff *skb, struct sk_buff *skb_res, struct device *dev)
 }
 
 static __inline__ int
-teql_resolve(struct sk_buff *skb, struct sk_buff *skb_res, struct device *dev)
+teql_resolve(struct sk_buff *skb, struct sk_buff *skb_res, struct net_device *dev)
 {
 	if (dev->hard_header == NULL ||
 	    skb->dst == NULL ||
@@ -276,7 +276,7 @@ teql_resolve(struct sk_buff *skb, struct sk_buff *skb_res, struct device *dev)
 	return __teql_resolve(skb, skb_res, dev);
 }
 
-static int teql_master_xmit(struct sk_buff *skb, struct device *dev)
+static int teql_master_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct teql_master *master = (void*)dev->priv;
 	struct Qdisc *start, *q;
@@ -297,7 +297,7 @@ restart:
 		goto drop;
 
 	do {
-		struct device *slave = q->dev;
+		struct net_device *slave = q->dev;
 		
 		if (slave->qdisc_sleeping != q)
 			continue;
@@ -355,7 +355,7 @@ drop:
 	return 0;
 }
 
-static int teql_master_open(struct device *dev)
+static int teql_master_open(struct net_device *dev)
 {
 	struct Qdisc * q;
 	struct teql_master *m = (void*)dev->priv;
@@ -369,7 +369,7 @@ static int teql_master_open(struct device *dev)
 
 	q = m->slaves;
 	do {
-		struct device *slave = q->dev;
+		struct net_device *slave = q->dev;
 
 		if (slave == NULL)
 			return -EUNATCH;
@@ -398,19 +398,19 @@ static int teql_master_open(struct device *dev)
 	return 0;
 }
 
-static int teql_master_close(struct device *dev)
+static int teql_master_close(struct net_device *dev)
 {
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
-static struct net_device_stats *teql_master_stats(struct device *dev)
+static struct net_device_stats *teql_master_stats(struct net_device *dev)
 {
 	struct teql_master *m = (void*)dev->priv;
 	return &m->stats;
 }
 
-static int teql_master_mtu(struct device *dev, int new_mtu)
+static int teql_master_mtu(struct net_device *dev, int new_mtu)
 {
 	struct teql_master *m = (void*)dev->priv;
 	struct Qdisc *q;
@@ -430,7 +430,7 @@ static int teql_master_mtu(struct device *dev, int new_mtu)
 	return 0;
 }
 
-static int teql_master_init(struct device *dev)
+static int teql_master_init(struct net_device *dev)
 {
 	dev->open		= teql_master_open;
 	dev->hard_start_xmit	= teql_master_xmit;

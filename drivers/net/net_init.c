@@ -62,7 +62,7 @@
 
 /* The list of used and available "eth" slots (for "eth0", "eth1", etc.) */
 #define MAX_ETH_CARDS 16
-static struct device *ethdev_index[MAX_ETH_CARDS];
+static struct net_device *ethdev_index[MAX_ETH_CARDS];
 
 
 /* Fill in the fields of the device structure with ethernet-generic values.
@@ -75,17 +75,17 @@ static struct device *ethdev_index[MAX_ETH_CARDS];
    long.
  */
 
-struct device *
-init_etherdev(struct device *dev, int sizeof_priv)
+struct net_device *
+init_etherdev(struct net_device *dev, int sizeof_priv)
 {
 	int new_device = 0;
 	int i;
 
 	/* Use an existing correctly named device in Space.c:dev_base. */
 	if (dev == NULL) {
-		int alloc_size = sizeof(struct device) + sizeof("eth%d  ")
+		int alloc_size = sizeof(struct net_device) + sizeof("eth%d  ")
 			+ sizeof_priv + 3;
-		struct device *cur_dev;
+		struct net_device *cur_dev;
 		char pname[8];		/* Putative name for the device.  */
 
 		for (i = 0; i < MAX_ETH_CARDS; ++i)
@@ -110,7 +110,7 @@ init_etherdev(struct device *dev, int sizeof_priv)
 
 		alloc_size &= ~3;		/* Round to dword boundary. */
 
-		dev = (struct device *)kmalloc(alloc_size, GFP_KERNEL);
+		dev = (struct net_device *)kmalloc(alloc_size, GFP_KERNEL);
 		if(dev==NULL)
 			return NULL;
 		memset(dev, 0, alloc_size);
@@ -141,7 +141,7 @@ found:						/* From the double loop above. */
 }
 
 
-static int eth_mac_addr(struct device *dev, void *p)
+static int eth_mac_addr(struct net_device *dev, void *p)
 {
 	struct sockaddr *addr=p;
 	if(dev->start)
@@ -150,7 +150,7 @@ static int eth_mac_addr(struct device *dev, void *p)
 	return 0;
 }
 
-static int eth_change_mtu(struct device *dev, int new_mtu)
+static int eth_change_mtu(struct net_device *dev, int new_mtu)
 {
 	if ((new_mtu < 68) || (new_mtu > 1500))
 		return -EINVAL;
@@ -160,7 +160,7 @@ static int eth_change_mtu(struct device *dev, int new_mtu)
 
 #ifdef CONFIG_FDDI
 
-static int fddi_change_mtu(struct device *dev, int new_mtu)
+static int fddi_change_mtu(struct net_device *dev, int new_mtu)
 {
 	if ((new_mtu < FDDI_K_SNAP_HLEN) || (new_mtu > FDDI_K_SNAP_DLEN))
 		return(-EINVAL);
@@ -172,9 +172,9 @@ static int fddi_change_mtu(struct device *dev, int new_mtu)
 
 #ifdef CONFIG_HIPPI
 #define MAX_HIP_CARDS	4
-static struct device *hipdev_index[MAX_HIP_CARDS];
+static struct net_device *hipdev_index[MAX_HIP_CARDS];
 
-static int hippi_change_mtu(struct device *dev, int new_mtu)
+static int hippi_change_mtu(struct net_device *dev, int new_mtu)
 {
 	/*
 	 * HIPPI's got these nice large MTUs.
@@ -190,7 +190,7 @@ static int hippi_change_mtu(struct device *dev, int new_mtu)
  * For HIPPI we will actually use the lower 4 bytes of the hardware
  * address as the I-FIELD rather than the actual hardware address.
  */
-static int hippi_mac_addr(struct device *dev, void *p)
+static int hippi_mac_addr(struct net_device *dev, void *p)
 {
 	struct sockaddr *addr = p;
 	if(dev->start)
@@ -200,16 +200,16 @@ static int hippi_mac_addr(struct device *dev, void *p)
 }
 
 
-struct device *init_hippi_dev(struct device *dev, int sizeof_priv)
+struct net_device *init_hippi_dev(struct net_device *dev, int sizeof_priv)
 {
 	int new_device = 0;
 	int i;
 
 	/* Use an existing correctly named device in Space.c:dev_base. */
 	if (dev == NULL) {
-		int alloc_size = sizeof(struct device) + sizeof("hip%d  ")
+		int alloc_size = sizeof(struct net_device) + sizeof("hip%d  ")
 			+ sizeof_priv + 3;
-		struct device *cur_dev;
+		struct net_device *cur_dev;
 		char pname[8];
 
 		for (i = 0; i < MAX_HIP_CARDS; ++i)
@@ -234,7 +234,7 @@ struct device *init_hippi_dev(struct device *dev, int sizeof_priv)
 
 		alloc_size &= ~3;		/* Round to dword boundary. */
 
-		dev = (struct device *)kmalloc(alloc_size, GFP_KERNEL);
+		dev = (struct net_device *)kmalloc(alloc_size, GFP_KERNEL);
 		if(dev==NULL)
 			return NULL;
 		memset(dev, 0, alloc_size);
@@ -265,7 +265,7 @@ hipfound:				/* From the double loop above. */
 }
 
 
-void unregister_hipdev(struct device *dev)
+void unregister_hipdev(struct net_device *dev)
 {
 	int i;
 	rtnl_lock();
@@ -280,7 +280,7 @@ void unregister_hipdev(struct device *dev)
 }
 
 
-static int hippi_neigh_setup_dev(struct device *dev, struct neigh_parms *p)
+static int hippi_neigh_setup_dev(struct net_device *dev, struct neigh_parms *p)
 {
 	/* Never send broadcast/multicast ARP messages */
 	p->mcast_probes = 0;
@@ -296,7 +296,7 @@ static int hippi_neigh_setup_dev(struct device *dev, struct neigh_parms *p)
 
 #endif
 
-void ether_setup(struct device *dev)
+void ether_setup(struct net_device *dev)
 {
 	int i;
 	/* Fill in the fields of the device structure with ethernet-generic values.
@@ -339,7 +339,7 @@ void ether_setup(struct device *dev)
 
 #ifdef CONFIG_FDDI
 
-void fddi_setup(struct device *dev)
+void fddi_setup(struct net_device *dev)
 {
 	/*
 	 * Fill in the fields of the device structure with FDDI-generic values.
@@ -369,7 +369,7 @@ void fddi_setup(struct device *dev)
 #endif
 
 #ifdef CONFIG_HIPPI
-void hippi_setup(struct device *dev)
+void hippi_setup(struct net_device *dev)
 {
 	int i;
 
@@ -419,18 +419,18 @@ void hippi_setup(struct device *dev)
 
 #if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE)
 
-static int ltalk_change_mtu(struct device *dev, int mtu)
+static int ltalk_change_mtu(struct net_device *dev, int mtu)
 {
 	return -EINVAL;
 }
 
-static int ltalk_mac_addr(struct device *dev, void *addr)
+static int ltalk_mac_addr(struct net_device *dev, void *addr)
 {	
 	return -EINVAL;
 }
 
 
-void ltalk_setup(struct device *dev)
+void ltalk_setup(struct net_device *dev)
 {
 	/* Fill in the fields of the device structure with localtalk-generic values. */
 	
@@ -456,7 +456,7 @@ void ltalk_setup(struct device *dev)
 
 #endif
 
-int ether_config(struct device *dev, struct ifmap *map)
+int ether_config(struct net_device *dev, struct ifmap *map)
 {
 	if (map->mem_start != (u_long)(-1))
 		dev->mem_start = map->mem_start;
@@ -473,7 +473,7 @@ int ether_config(struct device *dev, struct ifmap *map)
 	return 0;
 }
 
-static int etherdev_get_index(struct device *dev)
+static int etherdev_get_index(struct net_device *dev)
 {
 	int i=MAX_ETH_CARDS;
 
@@ -488,7 +488,7 @@ static int etherdev_get_index(struct device *dev)
 	return -1;
 }
 
-static void etherdev_put_index(struct device *dev)
+static void etherdev_put_index(struct net_device *dev)
 {
 	int i;
 	for (i = 0; i < MAX_ETH_CARDS; ++i) {
@@ -499,7 +499,7 @@ static void etherdev_put_index(struct device *dev)
 	}
 }
 
-int register_netdev(struct device *dev)
+int register_netdev(struct net_device *dev)
 {
 	int i=-1;
 
@@ -519,7 +519,7 @@ int register_netdev(struct device *dev)
 	return 0;
 }
 
-void unregister_netdev(struct device *dev)
+void unregister_netdev(struct net_device *dev)
 {
 	rtnl_lock();
 	unregister_netdevice(dev);
@@ -531,18 +531,18 @@ void unregister_netdev(struct device *dev)
 #ifdef CONFIG_TR
 /* The list of used and available "tr" slots */
 #define MAX_TR_CARDS 16
-static struct device *trdev_index[MAX_TR_CARDS];
+static struct net_device *trdev_index[MAX_TR_CARDS];
 
-struct device *init_trdev(struct device *dev, int sizeof_priv)
+struct net_device *init_trdev(struct net_device *dev, int sizeof_priv)
 {
 	int new_device = 0;
 	int i;
 
 	/* Use an existing correctly named device in Space.c:dev_base. */
 	if (dev == NULL) {
-		int alloc_size = sizeof(struct device) + sizeof("tr%d  ")
+		int alloc_size = sizeof(struct net_device) + sizeof("tr%d  ")
 			+ sizeof_priv + 3;
-		struct device *cur_dev;
+		struct net_device *cur_dev;
 		char pname[8];		/* Putative name for the device.  */
 
 		for (i = 0; i < MAX_TR_CARDS; ++i)
@@ -566,7 +566,7 @@ struct device *init_trdev(struct device *dev, int sizeof_priv)
 			}
 
 		alloc_size &= ~3;		/* Round to dword boundary. */
-		dev = (struct device *)kmalloc(alloc_size, GFP_KERNEL);
+		dev = (struct net_device *)kmalloc(alloc_size, GFP_KERNEL);
 		if(dev==NULL)
 			return NULL;
 		memset(dev, 0, alloc_size);
@@ -606,7 +606,7 @@ trfound:						/* From the double loop above. */
 	return dev;
 }
 
-void tr_setup(struct device *dev)
+void tr_setup(struct net_device *dev)
 {
 	int i;
 
@@ -624,7 +624,7 @@ void tr_setup(struct device *dev)
 	}
 }
 
-void tr_freedev(struct device *dev)
+void tr_freedev(struct net_device *dev)
 {
 	int i;
 	for (i = 0; i < MAX_TR_CARDS; ++i) 
@@ -637,7 +637,7 @@ void tr_freedev(struct device *dev)
 	}
 }
 
-int register_trdev(struct device *dev)
+int register_trdev(struct net_device *dev)
 {
 	dev_init_buffers(dev);
 	
@@ -648,7 +648,7 @@ int register_trdev(struct device *dev)
 	return 0;
 }
 
-void unregister_trdev(struct device *dev)
+void unregister_trdev(struct net_device *dev)
 {
 	rtnl_lock();
 	unregister_netdevice(dev);

@@ -59,9 +59,14 @@ static int  dma_ports_p(struct NCR_ESP *esp);
 static void dma_setup(struct NCR_ESP * esp, __u32 addr, int count, int write);
 static void dma_setup_quick(struct NCR_ESP * esp, __u32 addr, int count, int write);
 
-
 static int esp_dafb_dma_irq_p(struct NCR_ESP * espdev);
 static int esp_iosb_dma_irq_p(struct NCR_ESP * espdev);
+
+volatile unsigned char cmd_buffer[16];
+				/* This is where all commands are put
+				 * before they are transfered to the ESP chip
+				 * via PIO.
+				 */
 
 static int esp_initialized = 0;
 
@@ -287,6 +292,9 @@ int mac_esp_detect(Scsi_Host_Template * tpnt)
 	unsigned long timeout;
 #endif
 
+	if (esp_initialized > 0)
+		return -ENODEV;
+
 	/* what do we have in this machine... */
 	if (MACHW_PRESENT(MAC_SCSI_96)) {
 		chipspresent ++;
@@ -358,9 +366,12 @@ int mac_esp_detect(Scsi_Host_Template * tpnt)
 
 		} /* chipnum == 0 */
 
-
 		/* use pio for command bytes; pio for message/data: TBI */
 		esp->do_pio_cmds = 1;
+
+		/* Set the command buffer */
+		esp->esp_command = (volatile unsigned char*) cmd_buffer;
+		esp->esp_command_dvma = (volatile unsigned char*) cmd_buffer;
 
 		/* various functions */
 		esp->dma_bytes_sent = &dma_bytes_sent;
@@ -469,7 +480,7 @@ int mac_esp_detect(Scsi_Host_Template * tpnt)
 static int esp_dafb_dma_irq_p(struct NCR_ESP * esp)
 {
 	unsigned int ret;
-	int sreg = esp->eregs->esp_status;
+	int sreg = esp_read(esp->eregs->esp_status);
 
 #ifdef DEBUG_MAC_ESP
 	printk("mac_esp: esp_dafb_dma_irq_p dafb %d irq %d\n", 
@@ -510,7 +521,7 @@ static int esp_dafb_dma_irq_p(struct NCR_ESP * esp)
 static int esp_iosb_dma_irq_p(struct NCR_ESP * esp)
 {
 	int ret  = mac_irq_pending(IRQ_MAC_SCSI) || mac_irq_pending(IRQ_MAC_SCSIDRQ);
-	int sreg = esp->eregs->esp_status;
+	int sreg = esp_read(esp->eregs->esp_status);
 
 #ifdef DEBUG_MAC_ESP
 	printk("mac_esp: dma_irq_p drq %d irq %d sreg %x curr %p disc %p\n", 
@@ -614,7 +625,7 @@ static void dma_ints_on(struct NCR_ESP * esp)
 
 static int dma_irq_p(struct NCR_ESP * esp)
 {
-	int i = esp->eregs->esp_status;
+	int i = esp_read(esp->eregs->esp_status);
 
 #ifdef DEBUG_MAC_ESP
 	printk("mac_esp: dma_irq_p status %d\n", i);
@@ -629,7 +640,7 @@ static int dma_irq_p_quick(struct NCR_ESP * esp)
 	 * Copied from iosb_dma_irq_p()
 	 */
 	int ret  = mac_irq_pending(IRQ_MAC_SCSI) || mac_irq_pending(IRQ_MAC_SCSIDRQ);
-	int sreg = esp->eregs->esp_status;
+	int sreg = esp_read(esp->eregs->esp_status);
 
 #ifdef DEBUG_MAC_ESP
 	printk("mac_esp: dma_irq_p drq %d irq %d sreg %x curr %p disc %p\n", 

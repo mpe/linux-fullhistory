@@ -147,7 +147,7 @@ static void nr_remove_socket(struct sock *sk)
 /*
  *	Kill all bound sockets on a dropped device.
  */
-static void nr_kill_by_device(struct device *dev)
+static void nr_kill_by_device(struct net_device *dev)
 {
 	struct sock *s;
 
@@ -162,7 +162,7 @@ static void nr_kill_by_device(struct device *dev)
  */
 static int nr_device_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
-	struct device *dev = (struct device *)ptr;
+	struct net_device *dev = (struct net_device *)ptr;
 
 	if (event != NETDEV_DOWN)
 		return NOTIFY_DONE;
@@ -591,7 +591,7 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
 	struct sock *sk = sock->sk;
 	struct full_sockaddr_ax25 *addr = (struct full_sockaddr_ax25 *)uaddr;
-	struct device *dev;
+	struct net_device *dev;
 	ax25_address *user, *source;
 
 	if (sk->zapped == 0)
@@ -647,7 +647,7 @@ static int nr_connect(struct socket *sock, struct sockaddr *uaddr,
 	struct sock *sk = sock->sk;
 	struct sockaddr_ax25 *addr = (struct sockaddr_ax25 *)uaddr;
 	ax25_address *user, *source = NULL;
-	struct device *dev;
+	struct net_device *dev;
 
 	if (sk->state == TCP_ESTABLISHED && sock->state == SS_CONNECTING) {
 		sock->state = SS_CONNECTED;
@@ -818,7 +818,7 @@ static int nr_getname(struct socket *sock, struct sockaddr *uaddr,
 	return 0;
 }
 
-int nr_rx_frame(struct sk_buff *skb, struct device *dev)
+int nr_rx_frame(struct sk_buff *skb, struct net_device *dev)
 {
 	struct sock *sk;
 	struct sock *make;	
@@ -1175,7 +1175,7 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 static int nr_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	struct sock *s;
-	struct device *dev;
+	struct net_device *dev;
 	const char *devname;
 	int len = 0;
 	off_t pos = 0;
@@ -1295,18 +1295,18 @@ static struct proc_dir_entry proc_net_nr_nodes = {
 };
 #endif	
 
-static struct device *dev_nr;
+static struct net_device *dev_nr;
 
 __initfunc(void nr_proto_init(struct net_proto *pro))
 {
 	int i;
 
-	if ((dev_nr = kmalloc(nr_ndevs * sizeof(struct device), GFP_KERNEL)) == NULL) {
+	if ((dev_nr = kmalloc(nr_ndevs * sizeof(struct net_device), GFP_KERNEL)) == NULL) {
 		printk(KERN_ERR "NET/ROM: nr_proto_init - unable to allocate device structure\n");
 		return;
 	}
 
-	memset(dev_nr, 0x00, nr_ndevs * sizeof(struct device));
+	memset(dev_nr, 0x00, nr_ndevs * sizeof(struct net_device));
 
 	for (i = 0; i < nr_ndevs; i++) {
 		dev_nr[i].name = kmalloc(20, GFP_KERNEL);

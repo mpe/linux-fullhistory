@@ -50,7 +50,7 @@ static struct x25_route *x25_route_list = NULL;
 /*
  *	Add a new route.
  */
-static int x25_add_route(x25_address *address, unsigned int sigdigits, struct device *dev)
+static int x25_add_route(x25_address *address, unsigned int sigdigits, struct net_device *dev)
 {
 	struct x25_route *x25_route;
 	unsigned long flags;
@@ -105,7 +105,7 @@ static void x25_remove_route(struct x25_route *x25_route)
 	restore_flags(flags);
 }
 
-static int x25_del_route(x25_address *address, unsigned int sigdigits, struct device *dev)
+static int x25_del_route(x25_address *address, unsigned int sigdigits, struct net_device *dev)
 {
 	struct x25_route *x25_route;
 
@@ -122,7 +122,7 @@ static int x25_del_route(x25_address *address, unsigned int sigdigits, struct de
 /*
  *	A device has been removed, remove its routes.
  */
-void x25_route_device_down(struct device *dev)
+void x25_route_device_down(struct net_device *dev)
 {
 	struct x25_route *route, *x25_route = x25_route_list;
 
@@ -138,9 +138,9 @@ void x25_route_device_down(struct device *dev)
 /*
  *	Check that the device given is a valid X.25 interface that is "up".
  */
-struct device *x25_dev_get(char *devname)
+struct net_device *x25_dev_get(char *devname)
 {
-	struct device *dev;
+	struct net_device *dev;
 
 	if ((dev = dev_get(devname)) == NULL)
 		return NULL;
@@ -158,7 +158,7 @@ struct device *x25_dev_get(char *devname)
 /*
  *	Find a device given an X.25 address.
  */
-struct device *x25_get_route(x25_address *addr)
+struct net_device *x25_get_route(x25_address *addr)
 {
 	struct x25_route *route, *use = NULL;
 
@@ -182,7 +182,7 @@ struct device *x25_get_route(x25_address *addr)
 int x25_route_ioctl(unsigned int cmd, void *arg)
 {
 	struct x25_route_struct x25_route;
-	struct device *dev;
+	struct net_device *dev;
 
 	switch (cmd) {
 

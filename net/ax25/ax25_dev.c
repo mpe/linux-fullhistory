@@ -42,7 +42,7 @@
 
 ax25_dev *ax25_dev_list = NULL;
 
-ax25_dev *ax25_dev_ax25dev(struct device *dev)
+ax25_dev *ax25_dev_ax25dev(struct net_device *dev)
 {
 	ax25_dev *ax25_dev;
 
@@ -68,7 +68,7 @@ ax25_dev *ax25_addr_ax25dev(ax25_address *addr)
  *	This is called when an interface is brought up. These are
  *	reasonable defaults.
  */
-void ax25_dev_device_up(struct device *dev)
+void ax25_dev_device_up(struct net_device *dev)
 {
 	ax25_dev *ax25_dev;
 	unsigned long flags;
@@ -112,7 +112,7 @@ void ax25_dev_device_up(struct device *dev)
 #endif
 }
 
-void ax25_dev_device_down(struct device *dev)
+void ax25_dev_device_down(struct net_device *dev)
 {
 	ax25_dev *s, *ax25_dev;
 	unsigned long flags;
@@ -196,7 +196,7 @@ int ax25_fwd_ioctl(unsigned int cmd, struct ax25_fwd_struct *fwd)
 	return 0;
 }
 
-struct device *ax25_fwd_dev(struct device *dev)
+struct net_device *ax25_fwd_dev(struct net_device *dev)
 {
 	ax25_dev *ax25_dev;
 

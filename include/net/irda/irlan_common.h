@@ -163,7 +163,7 @@ struct irlan_cb {
 
 	int    magic;
 	char   ifname[9];
-	struct device dev;        /* Ethernet device structure*/
+	struct net_device dev;        /* Ethernet device structure*/
 	struct enet_statistics stats;
 
 	__u32 saddr;              /* Source device address */

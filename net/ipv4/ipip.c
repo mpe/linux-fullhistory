@@ -116,10 +116,10 @@
 #define HASH_SIZE  16
 #define HASH(addr) ((addr^(addr>>4))&0xF)
 
-static int ipip_fb_tunnel_init(struct device *dev);
-static int ipip_tunnel_init(struct device *dev);
+static int ipip_fb_tunnel_init(struct net_device *dev);
+static int ipip_tunnel_init(struct net_device *dev);
 
-static struct device ipip_fb_tunnel_dev = {
+static struct net_device ipip_fb_tunnel_dev = {
 	NULL, 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, ipip_fb_tunnel_init,
 };
 
@@ -203,7 +203,7 @@ struct ip_tunnel * ipip_tunnel_locate(struct ip_tunnel_parm *parms, int create)
 	u32 remote = parms->iph.daddr;
 	u32 local = parms->iph.saddr;
 	struct ip_tunnel *t, **tp, *nt;
-	struct device *dev;
+	struct net_device *dev;
 	unsigned h = 0;
 	int prio = 0;
 
@@ -260,7 +260,7 @@ failed:
 }
 
 
-static void ipip_tunnel_destroy(struct device *dev)
+static void ipip_tunnel_destroy(struct net_device *dev)
 {
 	if (dev == &ipip_fb_tunnel_dev) {
 		tunnels_wc[0] = NULL;
@@ -480,7 +480,7 @@ int ipip_rcv(struct sk_buff *skb, unsigned short len)
  *	and that skb is filled properly by that function.
  */
 
-static int ipip_tunnel_xmit(struct sk_buff *skb, struct device *dev)
+static int ipip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ip_tunnel *tunnel = (struct ip_tunnel*)dev->priv;
 	struct net_device_stats *stats = &tunnel->stat;
@@ -488,7 +488,7 @@ static int ipip_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 	u8     tos = tunnel->parms.iph.tos;
 	u16    df = tiph->frag_off;
 	struct rtable *rt;     			/* Route to the other host */
-	struct device *tdev;			/* Device to other host */
+	struct net_device *tdev;			/* Device to other host */
 	struct iphdr  *old_iph = skb->nh.iph;
 	struct iphdr  *iph;			/* Our new IP header */
 	int    max_headroom;			/* The extra header space needed */
@@ -616,7 +616,7 @@ tx_error:
 }
 
 static int
-ipip_tunnel_ioctl (struct device *dev, struct ifreq *ifr, int cmd)
+ipip_tunnel_ioctl (struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	int err = 0;
 	struct ip_tunnel_parm p;
@@ -727,12 +727,12 @@ done:
 	return err;
 }
 
-static struct net_device_stats *ipip_tunnel_get_stats(struct device *dev)
+static struct net_device_stats *ipip_tunnel_get_stats(struct net_device *dev)
 {
 	return &(((struct ip_tunnel*)dev->priv)->stat);
 }
 
-static int ipip_tunnel_change_mtu(struct device *dev, int new_mtu)
+static int ipip_tunnel_change_mtu(struct net_device *dev, int new_mtu)
 {
 	if (new_mtu < 68 || new_mtu > 0xFFF8 - sizeof(struct iphdr))
 		return -EINVAL;
@@ -740,7 +740,7 @@ static int ipip_tunnel_change_mtu(struct device *dev, int new_mtu)
 	return 0;
 }
 
-static void ipip_tunnel_init_gen(struct device *dev)
+static void ipip_tunnel_init_gen(struct net_device *dev)
 {
 	struct ip_tunnel *t = (struct ip_tunnel*)dev->priv;
 
@@ -762,9 +762,9 @@ static void ipip_tunnel_init_gen(struct device *dev)
 	memcpy(dev->broadcast, &t->parms.iph.daddr, 4);
 }
 
-static int ipip_tunnel_init(struct device *dev)
+static int ipip_tunnel_init(struct net_device *dev)
 {
-	struct device *tdev = NULL;
+	struct net_device *tdev = NULL;
 	struct ip_tunnel *tunnel;
 	struct iphdr *iph;
 
@@ -795,20 +795,20 @@ static int ipip_tunnel_init(struct device *dev)
 }
 
 #ifdef MODULE
-static int ipip_fb_tunnel_open(struct device *dev)
+static int ipip_fb_tunnel_open(struct net_device *dev)
 {
 	MOD_INC_USE_COUNT;
 	return 0;
 }
 
-static int ipip_fb_tunnel_close(struct device *dev)
+static int ipip_fb_tunnel_close(struct net_device *dev)
 {
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
 #endif
 
-__initfunc(int ipip_fb_tunnel_init(struct device *dev))
+__initfunc(int ipip_fb_tunnel_init(struct net_device *dev))
 {
 	struct iphdr *iph;
 

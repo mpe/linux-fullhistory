@@ -89,7 +89,7 @@ struct ec_cb
 
 struct ec_device
 {
-	struct device *dev;		/* Real device structure */
+	struct net_device *dev;		/* Real device structure */
 	unsigned char station, net;	/* Econet protocol address */
 	struct ec_device *prev, *next;	/* Linked list */
 };
@@ -102,7 +102,7 @@ static spinlock_t edevlist_lock;
  *	Faster version of edev_get - call with IRQs off
  */
 
-static __inline__ struct ec_device *__edev_get(struct device *dev)
+static __inline__ struct ec_device *__edev_get(struct net_device *dev)
 {
 	struct ec_device *edev;
 	for (edev = edevlist; edev; edev = edev->next)
@@ -117,7 +117,7 @@ static __inline__ struct ec_device *__edev_get(struct device *dev)
  *	Find an Econet device given its `dev' pointer.  This is IRQ safe.
  */
 
-static struct ec_device *edev_get(struct device *dev)
+static struct ec_device *edev_get(struct net_device *dev)
 {
 	struct ec_device *edev;
 	unsigned long flags;
@@ -270,7 +270,7 @@ static int econet_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 {
 	struct sock *sk = sock->sk;
 	struct sockaddr_ec *saddr=(struct sockaddr_ec *)msg->msg_name;
-	struct device *dev;
+	struct net_device *dev;
 	struct ec_addr addr;
 	struct ec_device *edev;
 	int err;
@@ -591,7 +591,7 @@ static int ec_dev_ioctl(struct socket *sock, unsigned int cmd, void *arg)
 {
 	struct ifreq ifr;
 	struct ec_device *edev;
-	struct device *dev;
+	struct net_device *dev;
 	unsigned long flags;
 	struct sockaddr_ec *sec;
 
@@ -1030,7 +1030,7 @@ release:
 
 static int econet_notifier(struct notifier_block *this, unsigned long msg, void *data)
 {
-	struct device *dev = (struct device *)data;
+	struct net_device *dev = (struct net_device *)data;
 	struct ec_device *edev;
 	unsigned long flags;
 

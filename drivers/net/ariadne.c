@@ -123,15 +123,15 @@ struct lancedata {
 };
 
 
-static int ariadne_open(struct device *dev);
-static void ariadne_init_ring(struct device *dev);
-static int ariadne_start_xmit(struct sk_buff *skb, struct device *dev);
-static int ariadne_rx(struct device *dev);
+static int ariadne_open(struct net_device *dev);
+static void ariadne_init_ring(struct net_device *dev);
+static int ariadne_start_xmit(struct sk_buff *skb, struct net_device *dev);
+static int ariadne_rx(struct net_device *dev);
 static void ariadne_interrupt(int irq, void *data, struct pt_regs *fp);
-static int ariadne_close(struct device *dev);
-static struct net_device_stats *ariadne_get_stats(struct device *dev);
+static int ariadne_close(struct net_device *dev);
+static struct net_device_stats *ariadne_get_stats(struct net_device *dev);
 #ifdef HAVE_MULTICAST
-static void set_multicast_list(struct device *dev);
+static void set_multicast_list(struct net_device *dev);
 #endif
 
 
@@ -146,7 +146,7 @@ static void memcpyw(u_short *dest, u_short *src, int len)
 }
 
 
-int __init ariadne_probe(struct device *dev)
+int __init ariadne_probe(struct net_device *dev)
 {
     unsigned int key;
     const struct ConfigDev *cd;
@@ -193,7 +193,7 @@ int __init ariadne_probe(struct device *dev)
 }
 
 
-static int ariadne_open(struct device *dev)
+static int ariadne_open(struct net_device *dev)
 {
     struct ariadne_private *priv = (struct ariadne_private *)dev->priv;
     struct AriadneBoard *board = priv->board;
@@ -306,7 +306,7 @@ static int ariadne_open(struct device *dev)
 }
 
 
-static void ariadne_init_ring(struct device *dev)
+static void ariadne_init_ring(struct net_device *dev)
 {
     struct ariadne_private *priv = (struct ariadne_private *)dev->priv;
     struct AriadneBoard *board = priv->board;
@@ -353,7 +353,7 @@ static void ariadne_init_ring(struct device *dev)
 }
 
 
-static int ariadne_close(struct device *dev)
+static int ariadne_close(struct net_device *dev)
 {
     struct ariadne_private *priv = (struct ariadne_private *)dev->priv;
     struct AriadneBoard *board = priv->board;
@@ -385,7 +385,7 @@ static int ariadne_close(struct device *dev)
 
 static void ariadne_interrupt(int irq, void *data, struct pt_regs *fp)
 {
-    struct device *dev = (struct device *)data;
+    struct net_device *dev = (struct net_device *)data;
     struct ariadne_private *priv;
     struct AriadneBoard *board;
     int csr0, boguscnt = 10;
@@ -542,7 +542,7 @@ static void ariadne_interrupt(int irq, void *data, struct pt_regs *fp)
 }
 
 
-static int ariadne_start_xmit(struct sk_buff *skb, struct device *dev)
+static int ariadne_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
     struct ariadne_private *priv = (struct ariadne_private *)dev->priv;
     struct AriadneBoard *board = priv->board;
@@ -692,7 +692,7 @@ static int ariadne_start_xmit(struct sk_buff *skb, struct device *dev)
 }
 
 
-static int ariadne_rx(struct device *dev)
+static int ariadne_rx(struct net_device *dev)
 {
     struct ariadne_private *priv = (struct ariadne_private *)dev->priv;
     int entry = priv->cur_rx % RX_RING_SIZE;
@@ -780,7 +780,7 @@ static int ariadne_rx(struct device *dev)
 }
 
 
-static struct net_device_stats *ariadne_get_stats(struct device *dev)
+static struct net_device_stats *ariadne_get_stats(struct net_device *dev)
 {
     struct ariadne_private *priv = (struct ariadne_private *)dev->priv;
     struct AriadneBoard *board = priv->board;
@@ -805,7 +805,7 @@ static struct net_device_stats *ariadne_get_stats(struct device *dev)
     num_addrs > 0	Multicast mode, receive normal and MC packets, and do
 			best-effort filtering.
  */
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
     struct ariadne_private *priv = (struct ariadne_private *)dev->priv;
     struct AriadneBoard *board = priv->board;
@@ -842,7 +842,7 @@ static void set_multicast_list(struct device *dev)
 #ifdef MODULE
 static char devicename[9] = { 0, };
 
-static struct device ariadne_dev =
+static struct net_device ariadne_dev =
 {
     devicename,				/* filled in by register_netdev() */
     0, 0, 0, 0,				/* memory */

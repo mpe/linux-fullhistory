@@ -166,11 +166,11 @@ struct hh_cache
  *	data with strictly "high-level" data, and it has to know about
  *	almost every data structure used in the INET module.
  *
- *	FIXME: cleanup struct device such that network protocol info
+ *	FIXME: cleanup struct net_device such that network protocol info
  *	moves out.
  */
 
-struct device
+struct net_device
 {
 
 	/*
@@ -202,11 +202,11 @@ struct device
 	unsigned long		interrupt;	/* bitops.. */
 	unsigned long		tbusy;		/* transmitter busy */
 	
-	struct device		*next;
+	struct net_device		*next;
 	
 	/* The device initialization function. Called only once. */
-	int			(*init)(struct device *dev);
-	void			(*destructor)(struct device *dev);
+	int			(*init)(struct net_device *dev);
+	void			(*destructor)(struct net_device *dev);
 
 	/* Interface index. Unique device identifier	*/
 	int			ifindex;
@@ -220,8 +220,8 @@ struct device
 	unsigned char		if_port;	/* Selectable AUI, TP,..*/
 	unsigned char		dma;		/* DMA channel		*/
 
-	struct net_device_stats* (*get_stats)(struct device *dev);
-	struct iw_statistics*	(*get_wireless_stats)(struct device *dev);
+	struct net_device_stats* (*get_stats)(struct net_device *dev);
+	struct iw_statistics*	(*get_wireless_stats)(struct net_device *dev);
 
 	/*
 	 * This marks the end of the "visible" part of the structure. All
@@ -254,7 +254,7 @@ struct device
 	/* For load balancing driver pair support */
   
 	unsigned long		pkt_queue;	/* Packets queued	*/
-	struct device		*slave;		/* Slave device		*/
+	struct net_device		*slave;		/* Slave device		*/
 
 	/* Protocol specific pointers */
 	
@@ -279,41 +279,41 @@ struct device
 	atomic_t		refcnt;
 
 	/* Pointers to interface service routines.	*/
-	int			(*open)(struct device *dev);
-	int			(*stop)(struct device *dev);
+	int			(*open)(struct net_device *dev);
+	int			(*stop)(struct net_device *dev);
 	int			(*hard_start_xmit) (struct sk_buff *skb,
-						    struct device *dev);
+						    struct net_device *dev);
 	int			(*hard_header) (struct sk_buff *skb,
-						struct device *dev,
+						struct net_device *dev,
 						unsigned short type,
 						void *daddr,
 						void *saddr,
 						unsigned len);
 	int			(*rebuild_header)(struct sk_buff *skb);
 #define HAVE_MULTICAST			 
-	void			(*set_multicast_list)(struct device *dev);
+	void			(*set_multicast_list)(struct net_device *dev);
 #define HAVE_SET_MAC_ADDR  		 
-	int			(*set_mac_address)(struct device *dev,
+	int			(*set_mac_address)(struct net_device *dev,
 						   void *addr);
 #define HAVE_PRIVATE_IOCTL
-	int			(*do_ioctl)(struct device *dev,
+	int			(*do_ioctl)(struct net_device *dev,
 					    struct ifreq *ifr, int cmd);
 #define HAVE_SET_CONFIG
-	int			(*set_config)(struct device *dev,
+	int			(*set_config)(struct net_device *dev,
 					      struct ifmap *map);
 #define HAVE_HEADER_CACHE
 	int			(*hard_header_cache)(struct neighbour *neigh,
 						     struct hh_cache *hh);
 	void			(*header_cache_update)(struct hh_cache *hh,
-						       struct device *dev,
+						       struct net_device *dev,
 						       unsigned char *  haddr);
 #define HAVE_CHANGE_MTU
-	int			(*change_mtu)(struct device *dev, int new_mtu);
+	int			(*change_mtu)(struct net_device *dev, int new_mtu);
 
 	int			(*hard_header_parse)(struct sk_buff *skb,
 						     unsigned char *haddr);
-	int			(*neigh_setup)(struct device *dev, struct neigh_parms *);
-	int			(*accept_fastpath)(struct device *, struct dst_entry*);
+	int			(*neigh_setup)(struct net_device *dev, struct neigh_parms *);
+	int			(*accept_fastpath)(struct net_device *, struct dst_entry*);
 
 #ifdef CONFIG_NET_FASTROUTE
 	/* Really, this semaphore may be necessary and for not fastroute code;
@@ -330,8 +330,8 @@ struct device
 struct packet_type 
 {
 	unsigned short		type;	/* This is really htons(ether_type).	*/
-	struct device		*dev;	/* NULL is wildcarded here		*/
-	int			(*func) (struct sk_buff *, struct device *,
+	struct net_device		*dev;	/* NULL is wildcarded here		*/
+	int			(*func) (struct sk_buff *, struct net_device *,
 					 struct packet_type *);
 	void			*data;	/* Private to the packet type		*/
 	struct packet_type	*next;
@@ -341,31 +341,31 @@ struct packet_type
 #include <linux/interrupt.h>
 #include <linux/notifier.h>
 
-extern struct device		loopback_dev;		/* The loopback */
-extern struct device		*dev_base;		/* All devices */
+extern struct net_device		loopback_dev;		/* The loopback */
+extern struct net_device		*dev_base;		/* All devices */
 extern rwlock_t			dev_base_lock;		/* Device list lock */
 extern int			netdev_dropping;
 extern int			net_cpu_congestion;
 
-extern struct device    *dev_getbyhwaddr(unsigned short type, char *hwaddr);
+extern struct net_device    *dev_getbyhwaddr(unsigned short type, char *hwaddr);
 extern void		dev_add_pack(struct packet_type *pt);
 extern void		dev_remove_pack(struct packet_type *pt);
-extern struct device	*dev_get(const char *name);
-extern struct device	*dev_alloc(const char *name, int *err);
-extern int		dev_alloc_name(struct device *dev, const char *name);
-extern int		dev_open(struct device *dev);
-extern int		dev_close(struct device *dev);
+extern struct net_device	*dev_get(const char *name);
+extern struct net_device	*dev_alloc(const char *name, int *err);
+extern int		dev_alloc_name(struct net_device *dev, const char *name);
+extern int		dev_open(struct net_device *dev);
+extern int		dev_close(struct net_device *dev);
 extern int		dev_queue_xmit(struct sk_buff *skb);
 extern void		dev_loopback_xmit(struct sk_buff *skb);
-extern int		register_netdevice(struct device *dev);
-extern int		unregister_netdevice(struct device *dev);
+extern int		register_netdevice(struct net_device *dev);
+extern int		unregister_netdevice(struct net_device *dev);
 extern int 		register_netdevice_notifier(struct notifier_block *nb);
 extern int		unregister_netdevice_notifier(struct notifier_block *nb);
 extern int		dev_new_index(void);
-extern struct device	*dev_get_by_index(int ifindex);
-extern int		dev_restart(struct device *dev);
+extern struct net_device	*dev_get_by_index(int ifindex);
+extern int		dev_restart(struct net_device *dev);
 
-typedef int gifconf_func_t(struct device * dev, char * bufptr, int len);
+typedef int gifconf_func_t(struct net_device * dev, char * bufptr, int len);
 extern int		register_gifconf(unsigned int family, gifconf_func_t * gifconf);
 extern __inline__ int unregister_gifconf(unsigned int family)
 {
@@ -377,8 +377,8 @@ extern void		netif_rx(struct sk_buff *skb);
 extern void		net_bh(void);
 extern int		dev_get_info(char *buffer, char **start, off_t offset, int length, int dummy);
 extern int		dev_ioctl(unsigned int cmd, void *);
-extern int		dev_change_flags(struct device *, unsigned);
-extern void		dev_queue_xmit_nit(struct sk_buff *skb, struct device *dev);
+extern int		dev_change_flags(struct net_device *, unsigned);
+extern void		dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev);
 
 extern void		dev_init(void);
 
@@ -422,35 +422,35 @@ extern __inline__ void dev_lock_wait(void)
 	}
 }
 
-extern __inline__ void dev_init_buffers(struct device *dev)
+extern __inline__ void dev_init_buffers(struct net_device *dev)
 {
 	/* DO NOTHING */
 }
 
 /* These functions live elsewhere (drivers/net/net_init.c, but related) */
 
-extern void		ether_setup(struct device *dev);
-extern void		fddi_setup(struct device *dev);
-extern void		tr_setup(struct device *dev);
-extern void		tr_freedev(struct device *dev);
-extern int		ether_config(struct device *dev, struct ifmap *map);
+extern void		ether_setup(struct net_device *dev);
+extern void		fddi_setup(struct net_device *dev);
+extern void		tr_setup(struct net_device *dev);
+extern void		tr_freedev(struct net_device *dev);
+extern int		ether_config(struct net_device *dev, struct ifmap *map);
 /* Support for loadable net-drivers */
-extern int		register_netdev(struct device *dev);
-extern void		unregister_netdev(struct device *dev);
-extern int		register_trdev(struct device *dev);
-extern void		unregister_trdev(struct device *dev);
+extern int		register_netdev(struct net_device *dev);
+extern void		unregister_netdev(struct net_device *dev);
+extern int		register_trdev(struct net_device *dev);
+extern void		unregister_trdev(struct net_device *dev);
 /* Functions used for multicast support */
-extern void		dev_mc_upload(struct device *dev);
-extern int 		dev_mc_delete(struct device *dev, void *addr, int alen, int all);
-extern int		dev_mc_add(struct device *dev, void *addr, int alen, int newonly);
-extern void		dev_mc_discard(struct device *dev);
-extern void		dev_set_promiscuity(struct device *dev, int inc);
-extern void		dev_set_allmulti(struct device *dev, int inc);
-extern void		netdev_state_change(struct device *dev);
+extern void		dev_mc_upload(struct net_device *dev);
+extern int 		dev_mc_delete(struct net_device *dev, void *addr, int alen, int all);
+extern int		dev_mc_add(struct net_device *dev, void *addr, int alen, int newonly);
+extern void		dev_mc_discard(struct net_device *dev);
+extern void		dev_set_promiscuity(struct net_device *dev, int inc);
+extern void		dev_set_allmulti(struct net_device *dev, int inc);
+extern void		netdev_state_change(struct net_device *dev);
 /* Load a device via the kmod */
 extern void		dev_load(const char *name);
 extern void		dev_mcast_init(void);
-extern int		netdev_register_fc(struct device *dev, void (*stimul)(struct device *dev));
+extern int		netdev_register_fc(struct net_device *dev, void (*stimul)(struct net_device *dev));
 extern void		netdev_unregister_fc(int bit);
 extern int		netdev_dropping;
 extern int		netdev_max_backlog;
@@ -459,7 +459,7 @@ extern unsigned long	netdev_fc_xoff;
 #ifdef CONFIG_NET_FASTROUTE
 extern int		netdev_fastroute;
 extern int		netdev_fastroute_obstacles;
-extern void		dev_clear_fastroute(struct device *dev);
+extern void		dev_clear_fastroute(struct net_device *dev);
 extern struct net_fastroute_stats dev_fastroute_stat;
 #endif
 

@@ -17,12 +17,12 @@
 #ifndef __linux_video_vga_h__
 #define __linux_video_vga_h__
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <asm/io.h>
 #ifndef CONFIG_AMIGA
 #include <asm/vga.h>
 #endif
+#include <asm/byteorder.h>
 
 
 /* Some of the code below is taken from SVGAlib.  The original,
@@ -65,11 +65,11 @@
 #define VGA_PEL_IR  	0x3C7	/* PEL Read Index */
 
 /* standard VGA indexes max counts */
-#define VGA_CRT_C   	24	/* 24 CRT Controller Registers */
-#define VGA_ATT_C   	21	/* 21 Attribute Controller Registers */
-#define VGA_GFX_C   	9	/* 9  Graphics Controller Registers */
-#define VGA_SEQ_C   	5	/* 5  Sequencer Registers */
-#define VGA_MIS_C   	1	/* 1  Misc Output Register */
+#define VGA_CRT_C   	0x19	/* Number of CRT Controller Registers */
+#define VGA_ATT_C   	0x15	/* Number of Attribute Controller Registers */
+#define VGA_GFX_C   	0x09	/* Number of Graphics Controller Registers */
+#define VGA_SEQ_C   	0x05	/* Number of Sequencer Registers */
+#define VGA_MIS_C   	0x01	/* Number of Misc Output Register */
 
 /* VGA misc register bit masks */
 #define VGA_MIS_COLOR		0x01
@@ -104,7 +104,11 @@
 #define VGA_CRTC_V_BLANK_END	0x16
 #define VGA_CRTC_MODE		0x17
 #define VGA_CRTC_LINE_COMPARE	0x18
-#define VGA_CRTC_REGS		0x19
+#define VGA_CRTC_REGS		VGA_CRT_C
+
+/* VGA CRT controller bit masks */
+#define VGA_CR11_LOCK_CR0_CR7	0x80 /* lock writes to CR0 - CR7 */
+#define VGA_CR17_H_V_SIGNALS_ENABLED 0x80
 
 /* VGA attribute controller register indices */
 #define VGA_ATC_PALETTE0	0x00
@@ -157,6 +161,18 @@
 #define VGA_GFX_COMPARE_MASK	0x07
 #define VGA_GFX_BIT_MASK	0x08
 
+/* VGA graphics controller bit masks */
+#define VGA_GR06_GRAPHICS_MODE	0x01
+
+/* macro for composing an 8-bit VGA register index and value
+ * into a single 16-bit quantity */
+#define VGA_OUT16VAL(v, r)       (((v) << 8) | (r))
+
+/* decide whether we should enable the faster 16-bit VGA register writes */
+#ifdef __LITTLE_ENDIAN
+#define VGA_OUTW_WRITE
+#endif
+
 
 /*
  * generic VGA port read/write
@@ -172,6 +188,12 @@ extern inline void vga_io_w (unsigned short port, unsigned char val)
 	outb (val, port);
 }
 
+extern inline void vga_io_w_fast (unsigned short port, unsigned char reg,
+				  unsigned char val)
+{
+	outw (VGA_OUT16VAL (val, reg), port);
+}
+
 extern inline unsigned char vga_mm_r (caddr_t regbase, unsigned short port)
 {
 	return readb (regbase + port);
@@ -180,6 +202,12 @@ extern inline unsigned char vga_mm_r (caddr_t regbase, unsigned short port)
 extern inline void vga_mm_w (caddr_t regbase, unsigned short port, unsigned char val)
 {
 	writeb (val, regbase + port);
+}
+
+extern inline void vga_mm_w_fast (caddr_t regbase, unsigned short port,
+				  unsigned char reg, unsigned char val)
+{
+	writew (VGA_OUT16VAL (val, reg), regbase + port);
 }
 
 extern inline unsigned char vga_r (caddr_t regbase, unsigned short port)
@@ -199,6 +227,16 @@ extern inline void vga_w (caddr_t regbase, unsigned short port, unsigned char va
 }
 
 
+extern inline void vga_w_fast (caddr_t regbase, unsigned short port,
+			       unsigned char reg, unsigned char val)
+{
+	if (regbase)
+		vga_mm_w_fast (regbase, port, reg, val);
+	else
+		vga_io_w_fast (port, reg, val);
+}
+
+
 /*
  * VGA CRTC register read/write
  */
@@ -211,8 +249,12 @@ extern inline unsigned char vga_rcrt (caddr_t regbase, unsigned char reg)
 
 extern inline void vga_wcrt (caddr_t regbase, unsigned char reg, unsigned char val)
 {
+#ifdef VGA_OUTW_WRITE
+	vga_w_fast (regbase, VGA_CRT_IC, reg, val);
+#else
         vga_w (regbase, VGA_CRT_IC, reg);
         vga_w (regbase, VGA_CRT_DC, val);
+#endif /* VGA_OUTW_WRITE */
 }
 
 extern inline unsigned char vga_io_rcrt (unsigned char reg)
@@ -223,8 +265,12 @@ extern inline unsigned char vga_io_rcrt (unsigned char reg)
 
 extern inline void vga_io_wcrt (unsigned char reg, unsigned char val)
 {
+#ifdef VGA_OUTW_WRITE
+	vga_io_w_fast (VGA_CRT_IC, reg, val);
+#else
         vga_io_w (VGA_CRT_IC, reg);
         vga_io_w (VGA_CRT_DC, val);
+#endif /* VGA_OUTW_WRITE */
 }
 
 extern inline unsigned char vga_mm_rcrt (caddr_t regbase, unsigned char reg)
@@ -235,8 +281,12 @@ extern inline unsigned char vga_mm_rcrt (caddr_t regbase, unsigned char reg)
 
 extern inline void vga_mm_wcrt (caddr_t regbase, unsigned char reg, unsigned char val)
 {
+#ifdef VGA_OUTW_WRITE
+	vga_mm_w_fast (regbase, VGA_CRT_IC, reg, val);
+#else
         vga_mm_w (regbase, VGA_CRT_IC, reg);
         vga_mm_w (regbase, VGA_CRT_DC, val);
+#endif /* VGA_OUTW_WRITE */
 }
 
 
@@ -252,8 +302,12 @@ extern inline unsigned char vga_rseq (caddr_t regbase, unsigned char reg)
 
 extern inline void vga_wseq (caddr_t regbase, unsigned char reg, unsigned char val)
 {
+#ifdef VGA_OUTW_WRITE
+	vga_w_fast (regbase, VGA_SEQ_I, reg, val);
+#else
         vga_w (regbase, VGA_SEQ_I, reg);
         vga_w (regbase, VGA_SEQ_D, val);
+#endif /* VGA_OUTW_WRITE */
 }
 
 extern inline unsigned char vga_io_rseq (unsigned char reg)
@@ -264,8 +318,12 @@ extern inline unsigned char vga_io_rseq (unsigned char reg)
 
 extern inline void vga_io_wseq (unsigned char reg, unsigned char val)
 {
+#ifdef VGA_OUTW_WRITE
+	vga_io_w_fast (VGA_SEQ_I, reg, val);
+#else
         vga_io_w (VGA_SEQ_I, reg);
         vga_io_w (VGA_SEQ_D, val);
+#endif /* VGA_OUTW_WRITE */
 }
 
 extern inline unsigned char vga_mm_rseq (caddr_t regbase, unsigned char reg)
@@ -276,8 +334,12 @@ extern inline unsigned char vga_mm_rseq (caddr_t regbase, unsigned char reg)
 
 extern inline void vga_mm_wseq (caddr_t regbase, unsigned char reg, unsigned char val)
 {
+#ifdef VGA_OUTW_WRITE
+	vga_mm_w_fast (regbase, VGA_SEQ_I, reg, val);
+#else
         vga_mm_w (regbase, VGA_SEQ_I, reg);
         vga_mm_w (regbase, VGA_SEQ_D, val);
+#endif /* VGA_OUTW_WRITE */
 }
 
 
@@ -294,8 +356,12 @@ extern inline unsigned char vga_rgfx (caddr_t regbase, unsigned char reg)
 
 extern inline void vga_wgfx (caddr_t regbase, unsigned char reg, unsigned char val)
 {
+#ifdef VGA_OUTW_WRITE
+	vga_w_fast (regbase, VGA_GFX_I, reg, val);
+#else
         vga_w (regbase, VGA_GFX_I, reg);
         vga_w (regbase, VGA_GFX_D, val);
+#endif /* VGA_OUTW_WRITE */
 }
 
 extern inline unsigned char vga_io_rgfx (unsigned char reg)
@@ -306,8 +372,12 @@ extern inline unsigned char vga_io_rgfx (unsigned char reg)
 
 extern inline void vga_io_wgfx (unsigned char reg, unsigned char val)
 {
+#ifdef VGA_OUTW_WRITE
+	vga_io_w_fast (VGA_GFX_I, reg, val);
+#else
         vga_io_w (VGA_GFX_I, reg);
         vga_io_w (VGA_GFX_D, val);
+#endif /* VGA_OUTW_WRITE */
 }
 
 extern inline unsigned char vga_mm_rgfx (caddr_t regbase, unsigned char reg)
@@ -318,8 +388,12 @@ extern inline unsigned char vga_mm_rgfx (caddr_t regbase, unsigned char reg)
 
 extern inline void vga_mm_wgfx (caddr_t regbase, unsigned char reg, unsigned char val)
 {
+#ifdef VGA_OUTW_WRITE
+	vga_mm_w_fast (regbase, VGA_GFX_I, reg, val);
+#else
         vga_mm_w (regbase, VGA_GFX_I, reg);
         vga_mm_w (regbase, VGA_GFX_D, val);
+#endif /* VGA_OUTW_WRITE */
 }
 
 

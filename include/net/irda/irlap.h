@@ -90,7 +90,7 @@ struct irlap_cb {
 	int magic;
 
 	struct irda_device *irdev;
-	struct device      *netdev;
+	struct net_device      *netdev;
 
 	/* Connection state */
 	volatile IRLAP_STATE state;       /* Current state */

@@ -221,7 +221,7 @@ struct scc_channel {
 	
 	int init;			/* channel exists? */
 
-	struct device *dev;		/* link to device control structure */
+	struct net_device *dev;		/* link to device control structure */
 	struct net_device_stats dev_stat;/* device statistics */
 
 	char brand;			/* manufacturer of the board */

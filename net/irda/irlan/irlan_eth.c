@@ -45,7 +45,7 @@
  *    The network device initialization function.
  *
  */
-int irlan_eth_init(struct device *dev)
+int irlan_eth_init(struct net_device *dev)
 {
 	struct irmanager_event mgr_event;
 	struct irlan_cb *self;
@@ -111,7 +111,7 @@ int irlan_eth_init(struct device *dev)
  *    Network device has been opened by user
  *
  */
-int irlan_eth_open(struct device *dev)
+int irlan_eth_open(struct net_device *dev)
 {
 	struct irlan_cb *self;
 	
@@ -146,7 +146,7 @@ int irlan_eth_open(struct device *dev)
  *    close timer, so that the instance will be removed if we are unable
  *    to discover the remote device after the disconnect.
  */
-int irlan_eth_close(struct device *dev)
+int irlan_eth_close(struct net_device *dev)
 {
 	struct irlan_cb *self = (struct irlan_cb *) dev->priv;
 
@@ -182,7 +182,7 @@ int irlan_eth_close(struct device *dev)
  *    Transmits ethernet frames over IrDA link.
  *
  */
-int irlan_eth_xmit(struct sk_buff *skb, struct device *dev)
+int irlan_eth_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct irlan_cb *self;
 	int ret;
@@ -287,7 +287,7 @@ int irlan_eth_receive(void *instance, void *sap, struct sk_buff *skb)
 void irlan_eth_flow_indication(void *instance, void *sap, LOCAL_FLOW flow)
 {
 	struct irlan_cb *self;
-	struct device *dev;
+	struct net_device *dev;
 
 	self = (struct irlan_cb *) instance;
 
@@ -319,7 +319,7 @@ void irlan_eth_flow_indication(void *instance, void *sap, LOCAL_FLOW flow)
  *    If we don't want to use ARP. Currently not used!!
  *
  */
-void irlan_eth_rebuild_header(void *buff, struct device *dev, 
+void irlan_eth_rebuild_header(void *buff, struct net_device *dev, 
 			      unsigned long dest, struct sk_buff *skb)
 {
 	struct ethhdr *eth = (struct ethhdr *) buff;
@@ -336,7 +336,7 @@ void irlan_eth_rebuild_header(void *buff, struct device *dev,
  *    Send gratuitous ARP to announce that we have changed
  *    hardware address, so that all peers updates their ARP tables
  */
-void irlan_eth_send_gratuitous_arp(struct device *dev)
+void irlan_eth_send_gratuitous_arp(struct net_device *dev)
 {
 	struct in_device *in_dev;
 
@@ -361,7 +361,7 @@ void irlan_eth_send_gratuitous_arp(struct device *dev)
  *
  */
 #define HW_MAX_ADDRS 4 /* Must query to get it! */
-void irlan_eth_set_multicast_list(struct device *dev) 
+void irlan_eth_set_multicast_list(struct net_device *dev) 
 {
  	struct irlan_cb *self;
 
@@ -413,7 +413,7 @@ void irlan_eth_set_multicast_list(struct device *dev)
  *    Get the current statistics for this device
  *
  */
-struct enet_statistics *irlan_eth_get_stats(struct device *dev) 
+struct enet_statistics *irlan_eth_get_stats(struct net_device *dev) 
 {
 	struct irlan_cb *self = (struct irlan_cb *) dev->priv;
 

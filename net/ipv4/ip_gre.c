@@ -111,13 +111,13 @@
    Alexey Kuznetsov.
  */
 
-static int ipgre_tunnel_init(struct device *dev);
+static int ipgre_tunnel_init(struct net_device *dev);
 
 /* Fallback tunnel: no source, no destination, no key, no options */
 
-static int ipgre_fb_tunnel_init(struct device *dev);
+static int ipgre_fb_tunnel_init(struct net_device *dev);
 
-static struct device ipgre_fb_tunnel_dev = {
+static struct net_device ipgre_fb_tunnel_dev = {
 	NULL, 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, ipgre_fb_tunnel_init,
 };
 
@@ -235,7 +235,7 @@ static struct ip_tunnel * ipgre_tunnel_locate(struct ip_tunnel_parm *parms, int 
 	u32 local = parms->iph.saddr;
 	u32 key = parms->i_key;
 	struct ip_tunnel *t, **tp, *nt;
-	struct device *dev;
+	struct net_device *dev;
 	unsigned h = HASH(key);
 	int prio = 0;
 
@@ -291,7 +291,7 @@ failed:
 	return NULL;
 }
 
-static void ipgre_tunnel_destroy(struct device *dev)
+static void ipgre_tunnel_destroy(struct net_device *dev)
 {
 	ipgre_tunnel_unlink((struct ip_tunnel*)dev->priv);
 
@@ -596,7 +596,7 @@ drop:
 	return(0);
 }
 
-static int ipgre_tunnel_xmit(struct sk_buff *skb, struct device *dev)
+static int ipgre_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ip_tunnel *tunnel = (struct ip_tunnel*)dev->priv;
 	struct net_device_stats *stats = &tunnel->stat;
@@ -605,7 +605,7 @@ static int ipgre_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 	u8     tos;
 	u16    df;
 	struct rtable *rt;     			/* Route to the other host */
-	struct device *tdev;			/* Device to other host */
+	struct net_device *tdev;			/* Device to other host */
 	struct iphdr  *iph;			/* Our new IP header */
 	int    max_headroom;			/* The extra header space needed */
 	int    gre_hlen;
@@ -819,7 +819,7 @@ tx_error:
 }
 
 static int
-ipgre_tunnel_ioctl (struct device *dev, struct ifreq *ifr, int cmd)
+ipgre_tunnel_ioctl (struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	int err = 0;
 	struct ip_tunnel_parm p;
@@ -945,12 +945,12 @@ done:
 	return err;
 }
 
-static struct net_device_stats *ipgre_tunnel_get_stats(struct device *dev)
+static struct net_device_stats *ipgre_tunnel_get_stats(struct net_device *dev)
 {
 	return &(((struct ip_tunnel*)dev->priv)->stat);
 }
 
-static int ipgre_tunnel_change_mtu(struct device *dev, int new_mtu)
+static int ipgre_tunnel_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct ip_tunnel *tunnel = (struct ip_tunnel*)dev->priv;
 	if (new_mtu < 68 || new_mtu > 0xFFF8 - tunnel->hlen)
@@ -989,7 +989,7 @@ static int ipgre_tunnel_change_mtu(struct device *dev, int new_mtu)
 
  */
 
-static int ipgre_header(struct sk_buff *skb, struct device *dev, unsigned short type,
+static int ipgre_header(struct sk_buff *skb, struct net_device *dev, unsigned short type,
 			void *daddr, void *saddr, unsigned len)
 {
 	struct ip_tunnel *t = (struct ip_tunnel*)dev->priv;
@@ -1017,7 +1017,7 @@ static int ipgre_header(struct sk_buff *skb, struct device *dev, unsigned short 
 	return -t->hlen;
 }
 
-static int ipgre_open(struct device *dev)
+static int ipgre_open(struct net_device *dev)
 {
 	struct ip_tunnel *t = (struct ip_tunnel*)dev->priv;
 
@@ -1042,7 +1042,7 @@ static int ipgre_open(struct device *dev)
 	return 0;
 }
 
-static int ipgre_close(struct device *dev)
+static int ipgre_close(struct net_device *dev)
 {
 	struct ip_tunnel *t = (struct ip_tunnel*)dev->priv;
 	if (MULTICAST(t->parms.iph.daddr) && t->mlink) {
@@ -1056,7 +1056,7 @@ static int ipgre_close(struct device *dev)
 
 #endif
 
-static void ipgre_tunnel_init_gen(struct device *dev)
+static void ipgre_tunnel_init_gen(struct net_device *dev)
 {
 	struct ip_tunnel *t = (struct ip_tunnel*)dev->priv;
 
@@ -1078,9 +1078,9 @@ static void ipgre_tunnel_init_gen(struct device *dev)
 	memcpy(dev->broadcast, &t->parms.iph.daddr, 4);
 }
 
-static int ipgre_tunnel_init(struct device *dev)
+static int ipgre_tunnel_init(struct net_device *dev)
 {
-	struct device *tdev = NULL;
+	struct net_device *tdev = NULL;
 	struct ip_tunnel *tunnel;
 	struct iphdr *iph;
 	int hlen = LL_MAX_HEADER;
@@ -1140,20 +1140,20 @@ static int ipgre_tunnel_init(struct device *dev)
 }
 
 #ifdef MODULE
-static int ipgre_fb_tunnel_open(struct device *dev)
+static int ipgre_fb_tunnel_open(struct net_device *dev)
 {
 	MOD_INC_USE_COUNT;
 	return 0;
 }
 
-static int ipgre_fb_tunnel_close(struct device *dev)
+static int ipgre_fb_tunnel_close(struct net_device *dev)
 {
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
 #endif
 
-__initfunc(int ipgre_fb_tunnel_init(struct device *dev))
+__initfunc(int ipgre_fb_tunnel_init(struct net_device *dev))
 {
 	struct ip_tunnel *tunnel = (struct ip_tunnel*)dev->priv;
 	struct iphdr *iph;

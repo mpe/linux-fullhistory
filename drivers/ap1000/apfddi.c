@@ -124,7 +124,7 @@ u_char fddi_bitrev[256] = {
 /* XXX our hardware address, canonical bit order */
 static u_char apfddi_saddr[6] = { 0x42, 0x9a, 0x08, 0x6e, 0x11, 0x41 };
 
-struct device *apfddi_device = NULL;
+struct net_device *apfddi_device = NULL;
 struct net_device_stats *apfddi_stats = NULL;
 
 volatile struct apfddi_queue *apfddi_queue_top = NULL;
@@ -249,11 +249,11 @@ void rmt_event(int st)
 }
 
 
-int apfddi_init(struct device *dev);
+int apfddi_init(struct net_device *dev);
 static void apfddi_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static int apfddi_xmit(struct sk_buff *skb, struct device *dev);
+static int apfddi_xmit(struct sk_buff *skb, struct net_device *dev);
 int apfddi_rx(struct mac_buf *mbuf);
-static struct net_device_stats *apfddi_get_stats(struct device *dev);
+static struct net_device_stats *apfddi_get_stats(struct net_device *dev);
 #if APFDDI_DEBUG
 void dump_packet(char *action, char *buf, int len, int seq);
 #endif
@@ -264,7 +264,7 @@ void dump_packet(char *action, char *buf, int len, int seq);
  * saddr=NULL means use device source address (always will anyway)
  * daddr=NULL means leave destination address (eg unresolved arp)
  */
-static int apfddi_hard_header(struct sk_buff *skb, struct device *dev,
+static int apfddi_hard_header(struct sk_buff *skb, struct net_device *dev,
 			      unsigned short type, void *daddr,
 			      void *saddr, unsigned len)
 {
@@ -366,7 +366,7 @@ static int apfddi_hard_header(struct sk_buff *skb, struct device *dev,
  * other address resolution) has completed on this sk_buff. We now let
  * ARP fill in the other fields.  
  */
-static int apfddi_rebuild_header(void *buff, struct device *dev,
+static int apfddi_rebuild_header(void *buff, struct net_device *dev,
 				 unsigned long raddr, struct sk_buff *skb)
 {
     int i, status;
@@ -399,7 +399,7 @@ static int apfddi_rebuild_header(void *buff, struct device *dev,
     return(status);
 }
 
-static int apfddi_set_mac_address(struct device *dev, void *addr)
+static int apfddi_set_mac_address(struct net_device *dev, void *addr)
 {
 #if APFDDI_DEBUG
     printk("In apfddi_set_mac_address\n");
@@ -407,14 +407,14 @@ static int apfddi_set_mac_address(struct device *dev, void *addr)
     return (0);
 }
 
-static void apfddi_set_multicast_list(struct device *dev)
+static void apfddi_set_multicast_list(struct net_device *dev)
 {
 #if APFDDI_DEBUG
     printk("In apfddi_set_multicast_list\n");
 #endif
 }
 
-static int apfddi_do_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+static int apfddi_do_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 #if APFDDI_DEBUG
     printk("In apfddi_do_ioctl\n");
@@ -422,7 +422,7 @@ static int apfddi_do_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
     return (0);
 }
 
-static int apfddi_set_config(struct device *dev, struct ifmap *map)
+static int apfddi_set_config(struct net_device *dev, struct ifmap *map)
 {
 #if APFDDI_DEBUG
     printk("In apfddi_set_config\n");
@@ -433,7 +433,7 @@ static int apfddi_set_config(struct device *dev, struct ifmap *map)
 /*
  * Opening the fddi device through ifconfig.
  */
-int apfddi_open(struct device *dev)
+int apfddi_open(struct net_device *dev)
 {
     static int already_run = 0;
     unsigned flags;
@@ -473,7 +473,7 @@ int apfddi_open(struct device *dev)
 /*
  * Stop the fddi device through ifconfig.
  */
-int apfddi_stop(struct device *dev)
+int apfddi_stop(struct net_device *dev)
 {
     *csr0 &= ~CS0_INT_ENABLE;
     apfddi_sleep();
@@ -484,7 +484,7 @@ int apfddi_stop(struct device *dev)
 /*
  * Initialise fddi network interface.
  */
-int apfddi_init(struct device *dev)
+int apfddi_init(struct net_device *dev)
 {
     int i;
 
@@ -625,7 +625,7 @@ static void apfddi_print_frame(struct sk_buff *skb)
 /*
  * Transmitting packet over FDDI.
  */
-static int apfddi_xmit(struct sk_buff *skb, struct device *dev)
+static int apfddi_xmit(struct sk_buff *skb, struct net_device *dev)
 {
     unsigned long flags;
     
@@ -692,7 +692,7 @@ void print_mbuf(struct mac_buf *mbuf)
 /*
  * Return statistics of fddi driver.
  */
-static struct net_device_stats *apfddi_get_stats(struct device *dev)
+static struct net_device_stats *apfddi_get_stats(struct net_device *dev)
 {
     return((struct net_device_stats *)dev->priv);
 }

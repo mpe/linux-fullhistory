@@ -68,8 +68,8 @@ static const char *version = "lance.c:v1.14ac 1998/11/20 dplatt@3do.com, becker@
 #include <linux/skbuff.h>
 
 static unsigned int lance_portlist[] __initdata = { 0x300, 0x320, 0x340, 0x360, 0};
-int lance_probe(struct device *dev);
-int lance_probe1(struct device *dev, int ioaddr, int irq, int options);
+int lance_probe(struct net_device *dev);
+int lance_probe1(struct net_device *dev, int ioaddr, int irq, int options);
 
 #ifdef LANCE_DEBUG
 int lance_debug = LANCE_DEBUG;
@@ -283,15 +283,15 @@ static unsigned int pci_irq_line = 0;
    Assume yes until we know the memory size. */
 static unsigned char lance_need_isa_bounce_buffers = 1;
 
-static int lance_open(struct device *dev);
-static int lance_open_fail(struct device *dev);
-static void lance_init_ring(struct device *dev, int mode);
-static int lance_start_xmit(struct sk_buff *skb, struct device *dev);
-static int lance_rx(struct device *dev);
+static int lance_open(struct net_device *dev);
+static int lance_open_fail(struct net_device *dev);
+static void lance_init_ring(struct net_device *dev, int mode);
+static int lance_start_xmit(struct sk_buff *skb, struct net_device *dev);
+static int lance_rx(struct net_device *dev);
 static void lance_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static int lance_close(struct device *dev);
-static struct net_device_stats *lance_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev);
+static int lance_close(struct net_device *dev);
+static struct net_device_stats *lance_get_stats(struct net_device *dev);
+static void set_multicast_list(struct net_device *dev);
 
 
 
@@ -308,7 +308,7 @@ MODULE_PARM(dma, "1-" __MODULE_STRING(MAX_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_CARDS) "i");
 
 static char ifnames[MAX_CARDS][IF_NAMELEN] = { {0, }, };
-static struct device dev_lance[MAX_CARDS] =
+static struct net_device dev_lance[MAX_CARDS] =
 {{
     0, /* device name is inserted by linux/drivers/net/net_init.c */
 	0, 0, 0, 0,
@@ -320,7 +320,7 @@ int init_module(void)
 	int this_dev, found = 0;
 
 	for (this_dev = 0; this_dev < MAX_CARDS; this_dev++) {
-		struct device *dev = &dev_lance[this_dev];
+		struct net_device *dev = &dev_lance[this_dev];
 		dev->name = ifnames[this_dev];
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
@@ -347,7 +347,7 @@ void cleanup_module(void)
 	int this_dev;
 
 	for (this_dev = 0; this_dev < MAX_CARDS; this_dev++) {
-		struct device *dev = &dev_lance[this_dev];
+		struct net_device *dev = &dev_lance[this_dev];
 		if (dev->priv != NULL) {
 			kfree(dev->priv);
 			dev->priv = NULL;
@@ -363,7 +363,7 @@ void cleanup_module(void)
    board probes now that kmalloc() can allocate ISA DMA-able regions.
    This also allows the LANCE driver to be used as a module.
    */
-int lance_probe(struct device *dev)
+int lance_probe(struct net_device *dev)
 {
 	int *port, result;
 
@@ -420,7 +420,7 @@ int lance_probe(struct device *dev)
 	return -ENODEV;
 }
 
-int __init lance_probe1(struct device *dev, int ioaddr, int irq, int options)
+int __init lance_probe1(struct net_device *dev, int ioaddr, int irq, int options)
 {
 	struct lance_private *lp;
 	short dma_channels;					/* Mark spuriously-busy DMA channels */
@@ -677,7 +677,7 @@ int __init lance_probe1(struct device *dev, int ioaddr, int irq, int options)
 }
 
 static int
-lance_open_fail(struct device *dev)
+lance_open_fail(struct net_device *dev)
 {
 	return -ENODEV;
 }
@@ -685,7 +685,7 @@ lance_open_fail(struct device *dev)
 
 
 static int
-lance_open(struct device *dev)
+lance_open(struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -776,7 +776,7 @@ lance_open(struct device *dev)
 */
 
 static void 
-lance_purge_tx_ring(struct device *dev)
+lance_purge_tx_ring(struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	int i;
@@ -792,7 +792,7 @@ lance_purge_tx_ring(struct device *dev)
 
 /* Initialize the LANCE Rx and Tx rings. */
 static void
-lance_init_ring(struct device *dev, int gfp)
+lance_init_ring(struct net_device *dev, int gfp)
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	int i;
@@ -835,7 +835,7 @@ lance_init_ring(struct device *dev, int gfp)
 }
 
 static void
-lance_restart(struct device *dev, unsigned int csr0_bits, int must_reinit)
+lance_restart(struct net_device *dev, unsigned int csr0_bits, int must_reinit)
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 
@@ -848,7 +848,7 @@ lance_restart(struct device *dev, unsigned int csr0_bits, int must_reinit)
 	outw(csr0_bits, dev->base_addr + LANCE_DATA);
 }
 
-static int lance_start_xmit(struct sk_buff *skb, struct device *dev)
+static int lance_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -967,7 +967,7 @@ static int lance_start_xmit(struct sk_buff *skb, struct device *dev)
 static void
 lance_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct lance_private *lp;
 	int csr0, ioaddr, boguscnt=10;
 	int must_restart;
@@ -1093,7 +1093,7 @@ lance_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 }
 
 static int
-lance_rx(struct device *dev)
+lance_rx(struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	int entry = lp->cur_rx & RX_RING_MOD_MASK;
@@ -1171,7 +1171,7 @@ lance_rx(struct device *dev)
 }
 
 static int
-lance_close(struct device *dev)
+lance_close(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	struct lance_private *lp = (struct lance_private *)dev->priv;
@@ -1220,7 +1220,7 @@ lance_close(struct device *dev)
 	return 0;
 }
 
-static struct net_device_stats *lance_get_stats(struct device *dev)
+static struct net_device_stats *lance_get_stats(struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	short ioaddr = dev->base_addr;
@@ -1243,7 +1243,7 @@ static struct net_device_stats *lance_get_stats(struct device *dev)
 /* Set or clear the multicast filter for this adaptor.
  */
 
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
 	short ioaddr = dev->base_addr;
 

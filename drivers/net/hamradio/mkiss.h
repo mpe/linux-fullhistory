@@ -18,7 +18,7 @@ struct ax_disp {
 
 	/* Various fields. */
 	struct tty_struct  *tty;		/* ptr to TTY structure		*/
-	struct device      *dev;		/* easy for intr handling	*/
+	struct net_device      *dev;		/* easy for intr handling	*/
 	struct ax_disp     *mkiss;		/* mkiss txport if mkiss channel*/
 
 	/* These are pointers to the malloc()ed frame buffers. */

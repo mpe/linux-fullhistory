@@ -242,16 +242,16 @@ void arcnet_init(void);
 static int init_module(void);
 #ifdef CONFIG_ARCNET_COM90xx
 extern char com90xx_explicit;
-extern int arc90xx_probe(struct device *dev);
+extern int arc90xx_probe(struct net_device *dev);
 #endif
 #endif
 
-void arcnet_tx_done(struct device *dev, struct arcnet_local *lp);
+void arcnet_tx_done(struct net_device *dev, struct arcnet_local *lp);
 void arcnet_use_count (int open);
-void arcnet_setup(struct device *dev);
+void arcnet_setup(struct net_device *dev);
 void arcnet_makename(char *device);
-void arcnetA_continue_tx(struct device *dev);
-int arcnet_go_tx(struct device *dev,int enable_irq);
+void arcnetA_continue_tx(struct net_device *dev);
+int arcnet_go_tx(struct net_device *dev,int enable_irq);
 void arcnet_interrupt(int irq,void *dev_id,struct pt_regs *regs);
 void arcnet_rx(struct arcnet_local *lp, u_char *arcsoft, short length, int saddr, int daddr);
 
@@ -266,7 +266,7 @@ EXPORT_SYMBOL(arcnet_interrupt);
 EXPORT_SYMBOL(arcnet_rx);
 
 #if ARCNET_DEBUG_MAX & D_SKB
-void arcnet_dump_skb(struct device *dev,struct sk_buff *skb,
+void arcnet_dump_skb(struct net_device *dev,struct sk_buff *skb,
 	char *desc);
 EXPORT_SYMBOL(arcnet_dump_skb);
 #else
@@ -274,7 +274,7 @@ EXPORT_SYMBOL(arcnet_dump_skb);
 #endif
 
 #if (ARCNET_DEBUG_MAX & D_RX) || (ARCNET_DEBUG_MAX & D_TX)
-void arcnet_dump_packet(struct device *dev,u_char *buffer,int ext,
+void arcnet_dump_packet(struct net_device *dev,u_char *buffer,int ext,
 	char *desc);
 EXPORT_SYMBOL(arcnet_dump_packet);
 #else
@@ -283,41 +283,41 @@ EXPORT_SYMBOL(arcnet_dump_packet);
 
 /* Internal function prototypes */
 
-static int arcnet_open(struct device *dev);
-static int arcnet_close(struct device *dev);
-static int arcnetA_header(struct sk_buff *skb,struct device *dev,
+static int arcnet_open(struct net_device *dev);
+static int arcnet_close(struct net_device *dev);
+static int arcnetA_header(struct sk_buff *skb,struct net_device *dev,
 		unsigned short type,void *daddr,void *saddr,unsigned len);
 static int arcnetA_rebuild_header(struct sk_buff *skb);
-static int arcnet_send_packet_bad(struct sk_buff *skb,struct device *dev);
-static int arcnetA_send_packet(struct sk_buff *skb, struct device *dev);
-static void arcnetA_rx(struct device *dev,u_char *buf,
+static int arcnet_send_packet_bad(struct sk_buff *skb,struct net_device *dev);
+static int arcnetA_send_packet(struct sk_buff *skb, struct net_device *dev);
+static void arcnetA_rx(struct net_device *dev,u_char *buf,
 	int length,u_char saddr, u_char daddr);
-static struct net_device_stats *arcnet_get_stats(struct device *dev);
+static struct net_device_stats *arcnet_get_stats(struct net_device *dev);
 static unsigned short arcnetA_type_trans(struct sk_buff *skb,
-					 struct device *dev);
+					 struct net_device *dev);
 
 
 #ifdef CONFIG_ARCNET_ETH
 	/* functions specific to Ethernet-Encap */
-static int arcnetE_init(struct device *dev);
-static int arcnetE_open_close(struct device *dev);
-static int arcnetE_send_packet(struct sk_buff *skb, struct device *dev);
-static void arcnetE_rx(struct device *dev,u_char *arcsoft,
+static int arcnetE_init(struct net_device *dev);
+static int arcnetE_open_close(struct net_device *dev);
+static int arcnetE_send_packet(struct sk_buff *skb, struct net_device *dev);
+static void arcnetE_rx(struct net_device *dev,u_char *arcsoft,
 	int length,u_char saddr, u_char daddr);
 #endif
 
 
 #ifdef CONFIG_ARCNET_1051
 	/* functions specific to RFC1051 */
-static int arcnetS_init(struct device *dev);
-static int arcnetS_open_close(struct device *dev);
-static int arcnetS_send_packet(struct sk_buff *skb, struct device *dev);
-static void arcnetS_rx(struct device *dev,u_char *buf,
+static int arcnetS_init(struct net_device *dev);
+static int arcnetS_open_close(struct net_device *dev);
+static int arcnetS_send_packet(struct sk_buff *skb, struct net_device *dev);
+static void arcnetS_rx(struct net_device *dev,u_char *buf,
 	int length,u_char saddr, u_char daddr);
-static int arcnetS_header(struct sk_buff *skb,struct device *dev,
+static int arcnetS_header(struct sk_buff *skb,struct net_device *dev,
 		unsigned short type,void *daddr,void *saddr,unsigned len);
 static int arcnetS_rebuild_header(struct sk_buff *skb);
-static unsigned short arcnetS_type_trans(struct sk_buff *skb,struct device *dev);
+static unsigned short arcnetS_type_trans(struct sk_buff *skb,struct net_device *dev);
 #endif
 
 
@@ -330,7 +330,7 @@ static unsigned short arcnetS_type_trans(struct sk_buff *skb,struct device *dev)
 /* Dump the contents of an sk_buff
  */
 #if ARCNET_DEBUG_MAX & D_SKB
-void arcnet_dump_skb(struct device *dev,struct sk_buff *skb,char *desc)
+void arcnet_dump_skb(struct net_device *dev,struct sk_buff *skb,char *desc)
 {
 	int i;
 	long flags;
@@ -353,7 +353,7 @@ void arcnet_dump_skb(struct device *dev,struct sk_buff *skb,char *desc)
 /* Dump the contents of an ARCnet buffer
  */
 #if (ARCNET_DEBUG_MAX & D_RX) || (ARCNET_DEBUG_MAX & D_TX)
-void arcnet_dump_packet(struct device *dev,u_char *buffer,int ext,char *desc)
+void arcnet_dump_packet(struct net_device *dev,u_char *buffer,int ext,char *desc)
 {
 	int i;
 	long flags;
@@ -373,7 +373,7 @@ void arcnet_dump_packet(struct device *dev,u_char *buffer,int ext,char *desc)
 #endif
 
 
-/* Setup a struct device for ARCnet.  This should really be in net_init.c
+/* Setup a struct net_device for ARCnet.  This should really be in net_init.c
  * but since there are three different ARCnet devices ANYWAY... <gargle>
  *
  * Actually, the whole idea of having all this kernel-dependent stuff (ie.
@@ -382,7 +382,7 @@ void arcnet_dump_packet(struct device *dev,u_char *buffer,int ext,char *desc)
  * Intelligent defaults?!  Nah.
  */
 
-void arcnet_setup(struct device *dev)
+void arcnet_setup(struct net_device *dev)
 {
 	dev_init_buffers(dev);
 
@@ -421,7 +421,7 @@ void arcnet_setup(struct device *dev)
  * there is non-reboot way to recover if something goes wrong.
  */
 static int
-arcnet_open(struct device *dev)
+arcnet_open(struct net_device *dev)
 {
   struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
 
@@ -453,10 +453,10 @@ arcnet_open(struct device *dev)
 
 #ifdef CONFIG_ARCNET_ETH
   /* Initialize the ethernet-encap protocol driver */
-  lp->edev=(struct device *)kmalloc(sizeof(struct device),GFP_KERNEL);
+  lp->edev=(struct net_device *)kmalloc(sizeof(struct net_device),GFP_KERNEL);
   if (lp->edev == NULL)
     return -ENOMEM;
-  memcpy(lp->edev,dev,sizeof(struct device));
+  memcpy(lp->edev,dev,sizeof(struct net_device));
   lp->edev->type=ARPHRD_ETHER;
   lp->edev->name=(char *)kmalloc(10,GFP_KERNEL);
   if (lp->edev->name == NULL) {
@@ -471,7 +471,7 @@ arcnet_open(struct device *dev)
 
 #ifdef CONFIG_ARCNET_1051
   /* Initialize the RFC1051-encap protocol driver */
-  lp->sdev=(struct device *)kmalloc(sizeof(struct device)+10,GFP_KERNEL);
+  lp->sdev=(struct net_device *)kmalloc(sizeof(struct net_device)+10,GFP_KERNEL);
   if(lp->sdev = NULL)
   {
   	if(lp->edev)
@@ -479,7 +479,7 @@ arcnet_open(struct device *dev)
   	lp->edev=NULL;
   	return -ENOMEM;
   }
-  memcpy(lp->sdev,dev,sizeof(struct device));
+  memcpy(lp->sdev,dev,sizeof(struct net_device));
   lp->sdev->name=(char *)(lp+1);
   sprintf(lp->sdev->name,"%ss",dev->name);
   lp->sdev->init=arcnetS_init;
@@ -513,7 +513,7 @@ arcnet_open(struct device *dev)
 /* The inverse routine to arcnet_open - shuts down the card.
  */
 static int
-arcnet_close(struct device *dev)
+arcnet_close(struct net_device *dev)
 {
   struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
 
@@ -591,7 +591,7 @@ arcnet_close(struct device *dev)
 /* Generic error checking routine for arcnet??_send_packet
  */
 static int
-arcnet_send_packet_bad(struct sk_buff *skb, struct device *dev)
+arcnet_send_packet_bad(struct sk_buff *skb, struct net_device *dev)
 {
   struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
 
@@ -709,7 +709,7 @@ arcnet_send_packet_bad(struct sk_buff *skb, struct device *dev)
 /* Called by the kernel in order to transmit a packet.
  */
 static int
-arcnetA_send_packet(struct sk_buff *skb, struct device *dev)
+arcnetA_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
   struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
   int bad,oldmask=0;
@@ -832,7 +832,7 @@ arcnetA_send_packet(struct sk_buff *skb, struct device *dev)
  * arcnetAS_prepare_tx to load the next segment into the card.  This function
  * does NOT automatically call arcnet_go_tx.
  */
-void arcnetA_continue_tx(struct device *dev)
+void arcnetA_continue_tx(struct net_device *dev)
 {
   struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
   int maxsegsize=XMTU-4;
@@ -885,7 +885,7 @@ void arcnetA_continue_tx(struct device *dev)
  * to the card; TXFREEflag is always OR'ed into the memory variable either
  * way.
  */
-int arcnet_go_tx(struct device *dev,int enable_irq)
+int arcnet_go_tx(struct net_device *dev,int enable_irq)
 {
 	struct arcnet_local *lp=(struct arcnet_local *)dev->priv;
 
@@ -934,7 +934,7 @@ int arcnet_go_tx(struct device *dev,int enable_irq)
 void
 arcnet_interrupt(int irq,void *dev_id,struct pt_regs *regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct arcnet_local *lp;
 
 	if (dev==NULL)
@@ -994,7 +994,7 @@ arcnet_interrupt(int irq,void *dev_id,struct pt_regs *regs)
 
 }
 
-void arcnet_tx_done(struct device *dev, struct arcnet_local *lp)
+void arcnet_tx_done(struct net_device *dev, struct arcnet_local *lp)
 {
   if (dev->tbusy)
     {
@@ -1026,7 +1026,7 @@ void arcnet_tx_done(struct device *dev, struct arcnet_local *lp)
 
 void arcnet_rx(struct arcnet_local *lp, u_char *arcsoft, short length, int saddr, int daddr)
 {
-  struct device *dev=lp->adev;
+  struct net_device *dev=lp->adev;
 
   BUGMSG(D_DURING,"received packet from %02Xh to %02Xh (%d bytes)\n",
 	 saddr,daddr,length);
@@ -1080,7 +1080,7 @@ void arcnet_rx(struct arcnet_local *lp, u_char *arcsoft, short length, int saddr
 /* Packet receiver for "standard" RFC1201-style packets
  */
 static void
-arcnetA_rx(struct device *dev,u_char *buf,
+arcnetA_rx(struct net_device *dev,u_char *buf,
 	   int length, u_char saddr, u_char daddr)
 {
   struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
@@ -1361,7 +1361,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
  * closed.
  */
 
-static struct net_device_stats *arcnet_get_stats(struct device *dev)
+static struct net_device_stats *arcnet_get_stats(struct net_device *dev)
 {
   struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
 
@@ -1374,7 +1374,7 @@ static struct net_device_stats *arcnet_get_stats(struct device *dev)
  * saddr=NULL	means use device source address (always will anyway)
  * daddr=NULL	means leave destination address (eg unresolved arp)
  */
-static int arcnetA_header(struct sk_buff *skb,struct device *dev,
+static int arcnetA_header(struct sk_buff *skb,struct net_device *dev,
 			  unsigned short type,void *daddr,void *saddr,unsigned len)
 {
   struct ClientData *head = (struct ClientData *)
@@ -1450,7 +1450,7 @@ static int arcnetA_header(struct sk_buff *skb,struct device *dev,
 static int arcnetA_rebuild_header(struct sk_buff *skb)
 {
   struct ClientData *head = (struct ClientData *)skb->data;
-  struct device *dev=skb->dev;
+  struct net_device *dev=skb->dev;
   struct arcnet_local *lp=(struct arcnet_local *)(dev->priv);
 #ifdef CONFIG_INET
   int status;
@@ -1493,7 +1493,7 @@ static int arcnetA_rebuild_header(struct sk_buff *skb)
  *
  * With ARCnet we have to convert everything to Ethernet-style stuff.
  */
-static unsigned short arcnetA_type_trans(struct sk_buff *skb,struct device *dev)
+static unsigned short arcnetA_type_trans(struct sk_buff *skb,struct net_device *dev)
 {
   struct ClientData *head;
   struct arcnet_local *lp=(struct arcnet_local *) (dev->priv);
@@ -1541,7 +1541,7 @@ static unsigned short arcnetA_type_trans(struct sk_buff *skb,struct device *dev)
 
 /* Initialize the arc0e device.
  */
-static int arcnetE_init(struct device *dev)
+static int arcnetE_init(struct net_device *dev)
 {
   struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
 
@@ -1560,7 +1560,7 @@ static int arcnetE_init(struct device *dev)
 /* Bring up/down the arc0e device - we don't actually have to do anything,
  * since our parent arc0 handles the card I/O itself.
  */
-static int arcnetE_open_close(struct device *dev)
+static int arcnetE_open_close(struct net_device *dev)
 {
   return 0;
 }
@@ -1569,7 +1569,7 @@ static int arcnetE_open_close(struct device *dev)
 /* Called by the kernel in order to transmit an ethernet-type packet.
  */
 static int
-arcnetE_send_packet(struct sk_buff *skb, struct device *dev)
+arcnetE_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
   struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
   int bad,oldmask=0;
@@ -1655,7 +1655,7 @@ arcnetE_send_packet(struct sk_buff *skb, struct device *dev)
 /* Packet receiver for ethernet-encap packets.
  */
 static void
-arcnetE_rx(struct device *dev,u_char *arcsoft,
+arcnetE_rx(struct net_device *dev,u_char *arcsoft,
 	int length,u_char saddr, u_char daddr)
 {
 	struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
@@ -1695,7 +1695,7 @@ arcnetE_rx(struct device *dev,u_char *arcsoft,
 
 /* Initialize the arc0s device.
  */
-static int arcnetS_init(struct device *dev)
+static int arcnetS_init(struct net_device *dev)
 {
   struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
 
@@ -1719,7 +1719,7 @@ static int arcnetS_init(struct device *dev)
 /* Bring up/down the arc0s device - we don't actually have to do anything,
  * since our parent arc0 handles the card I/O itself.
  */
-static int arcnetS_open_close(struct device *dev)
+static int arcnetS_open_close(struct net_device *dev)
 {
   return 0;
 }
@@ -1728,7 +1728,7 @@ static int arcnetS_open_close(struct device *dev)
 /* Called by the kernel in order to transmit an RFC1051-type packet.
  */
 static int
-arcnetS_send_packet(struct sk_buff *skb, struct device *dev)
+arcnetS_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
   struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
   int bad,length;
@@ -1791,7 +1791,7 @@ arcnetS_send_packet(struct sk_buff *skb, struct device *dev)
 /* Packet receiver for RFC1051 packets;
  */
 static void
-arcnetS_rx(struct device *dev,u_char *buf,
+arcnetS_rx(struct net_device *dev,u_char *buf,
 	   int length,u_char saddr, u_char daddr)
 {
   struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
@@ -1837,7 +1837,7 @@ arcnetS_rx(struct device *dev,u_char *buf,
  * saddr=NULL	means use device source address (always will anyway)
  * daddr=NULL	means leave destination address (eg unresolved arp)
  */
-static int arcnetS_header(struct sk_buff *skb,struct device *dev,
+static int arcnetS_header(struct sk_buff *skb,struct net_device *dev,
 			  unsigned short type,void *daddr,void *saddr,unsigned len)
 {
   struct S_ClientData *head = (struct S_ClientData *)
@@ -1895,7 +1895,7 @@ static int arcnetS_header(struct sk_buff *skb,struct device *dev,
  */
 static int arcnetS_rebuild_header(struct sk_buff *skb)
 {
-  struct device *dev=skb->dev;
+  struct net_device *dev=skb->dev;
   struct S_ClientData *head = (struct S_ClientData *)skb->data;
   struct arcnet_local *lp=(struct arcnet_local *)(dev->priv);
 
@@ -1929,7 +1929,7 @@ static int arcnetS_rebuild_header(struct sk_buff *skb)
  *
  * With ARCnet we have to convert everything to Ethernet-style stuff.
  */
-unsigned short arcnetS_type_trans(struct sk_buff *skb,struct device *dev)
+unsigned short arcnetS_type_trans(struct sk_buff *skb,struct net_device *dev)
 {
   struct S_ClientData *head;
   struct arcnet_local *lp=(struct arcnet_local *) (dev->priv);
@@ -1993,7 +1993,7 @@ void arcnet_use_count(int open)
 {
 }
 
-struct device arcnet_devs[MAX_ARCNET_DEVS];
+struct net_device arcnet_devs[MAX_ARCNET_DEVS];
 int arcnet_num_devs=0;
 char arcnet_dev_names[MAX_ARCNET_DEVS][10];
 
@@ -2079,7 +2079,7 @@ static int __init init_module(void)
 
 void arcnet_makename(char *device)
 {
-  struct device *dev;
+  struct net_device *dev;
   int arcnum;
 
   arcnum = 0;

@@ -29,7 +29,7 @@ struct dst_entry
 	struct dst_entry        *next;
 	atomic_t		refcnt;		/* tree/hash references	*/
 	atomic_t		use;		/* client references	*/
-	struct device	        *dev;
+	struct net_device	        *dev;
 	int			obsolete;
 	unsigned long		lastuse;
 	unsigned long		expires;

@@ -320,7 +320,7 @@ struct z8530_channel
 	 */
 
 	void		*private;	/* For our owner */
-	struct device	*netdevice;	/* Network layer device */
+	struct net_device	*netdevice;	/* Network layer device */
 	struct net_device_stats stats;	/* Network layer statistics */
 
 	/*
@@ -397,12 +397,12 @@ extern void z8530_interrupt(int, void *, struct pt_regs *);
 extern void z8530_describe(struct z8530_dev *, char *mapping,int io);
 extern int z8530_init(struct z8530_dev *);
 extern int z8530_shutdown(struct z8530_dev *);
-extern int z8530_sync_open(struct device *, struct z8530_channel *);
-extern int z8530_sync_close(struct device *, struct z8530_channel *);
-extern int z8530_sync_dma_open(struct device *, struct z8530_channel *);
-extern int z8530_sync_dma_close(struct device *, struct z8530_channel *);
-extern int z8530_sync_txdma_open(struct device *, struct z8530_channel *);
-extern int z8530_sync_txdma_close(struct device *, struct z8530_channel *);
+extern int z8530_sync_open(struct net_device *, struct z8530_channel *);
+extern int z8530_sync_close(struct net_device *, struct z8530_channel *);
+extern int z8530_sync_dma_open(struct net_device *, struct z8530_channel *);
+extern int z8530_sync_dma_close(struct net_device *, struct z8530_channel *);
+extern int z8530_sync_txdma_open(struct net_device *, struct z8530_channel *);
+extern int z8530_sync_txdma_close(struct net_device *, struct z8530_channel *);
 extern int z8530_channel_load(struct z8530_channel *, u8 *);
 extern int z8530_queue_xmit(struct z8530_channel *c, struct sk_buff *skb);
 extern struct net_device_stats *z8530_get_stats(struct z8530_channel *c);

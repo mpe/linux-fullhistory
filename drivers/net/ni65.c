@@ -220,19 +220,19 @@ struct priv
 	int features;
 };
 
-static int  ni65_probe1(struct device *dev,int);
+static int  ni65_probe1(struct net_device *dev,int);
 static void ni65_interrupt(int irq, void * dev_id, struct pt_regs *regs);
-static void ni65_recv_intr(struct device *dev,int);
-static void ni65_xmit_intr(struct device *dev,int);
-static int  ni65_open(struct device *dev);
-static int  ni65_lance_reinit(struct device *dev);
+static void ni65_recv_intr(struct net_device *dev,int);
+static void ni65_xmit_intr(struct net_device *dev,int);
+static int  ni65_open(struct net_device *dev);
+static int  ni65_lance_reinit(struct net_device *dev);
 static void ni65_init_lance(struct priv *p,unsigned char*,int,int);
-static int  ni65_send_packet(struct sk_buff *skb, struct device *dev);
-static int  ni65_close(struct device *dev);
-static int  ni65_alloc_buffer(struct device *dev);
+static int  ni65_send_packet(struct sk_buff *skb, struct net_device *dev);
+static int  ni65_close(struct net_device *dev);
+static int  ni65_alloc_buffer(struct net_device *dev);
 static void ni65_free_buffer(struct priv *p);
-static struct net_device_stats *ni65_get_stats(struct device *);
-static void set_multicast_list(struct device *dev);
+static struct net_device_stats *ni65_get_stats(struct net_device *);
+static void set_multicast_list(struct net_device *dev);
 
 static int irqtab[] __initdata = { 9,12,15,5 }; /* irq config-translate */
 static int dmatab[] __initdata = { 0,3,5,6,7 }; /* dma config-translate and autodetect */
@@ -265,7 +265,7 @@ static void ni65_set_performance(struct priv *p)
 /*
  * open interface (up)
  */
-static int ni65_open(struct device *dev)
+static int ni65_open(struct net_device *dev)
 {
 	struct priv *p = (struct priv *) dev->priv;
 	int irqval = request_irq(dev->irq, &ni65_interrupt,0,
@@ -295,7 +295,7 @@ static int ni65_open(struct device *dev)
 /*
  * close interface (down)
  */
-static int ni65_close(struct device *dev)
+static int ni65_close(struct net_device *dev)
 {
 	struct priv *p = (struct priv *) dev->priv;
 
@@ -326,7 +326,7 @@ static int ni65_close(struct device *dev)
 #ifdef MODULE
 static
 #endif
-int __init ni65_probe(struct device *dev)
+int __init ni65_probe(struct net_device *dev)
 {
 	int *port;
 	static int ports[] = {0x360,0x300,0x320,0x340, 0};
@@ -348,7 +348,7 @@ int __init ni65_probe(struct device *dev)
 /*
  * this is the real card probe ..
  */
-static int __init ni65_probe1(struct device *dev,int ioaddr)
+static int __init ni65_probe1(struct net_device *dev,int ioaddr)
 {
 	int i,j;
 	struct priv *p;
@@ -531,7 +531,7 @@ static void ni65_init_lance(struct priv *p,unsigned char *daddr,int filter,int m
 /*
  * allocate memory area and check the 16MB border
  */
-static void *ni65_alloc_mem(struct device *dev,char *what,int size,int type)
+static void *ni65_alloc_mem(struct net_device *dev,char *what,int size,int type)
 {
 	struct sk_buff *skb=NULL;
 	unsigned char *ptr;
@@ -569,7 +569,7 @@ static void *ni65_alloc_mem(struct device *dev,char *what,int size,int type)
 /*
  * allocate all memory structures .. send/recv buffers etc ...
  */
-static int ni65_alloc_buffer(struct device *dev)
+static int ni65_alloc_buffer(struct net_device *dev)
 {
 	unsigned char *ptr;
 	struct priv *p;
@@ -655,7 +655,7 @@ static void ni65_free_buffer(struct priv *p)
 /*
  * stop and (re)start lance .. e.g after an error
  */
-static void ni65_stop_start(struct device *dev,struct priv *p)
+static void ni65_stop_start(struct net_device *dev,struct priv *p)
 {
 	int csr0 = CSR0_INEA;
 
@@ -724,7 +724,7 @@ static void ni65_stop_start(struct device *dev,struct priv *p)
 /*
  * init lance (write init-values .. init-buffers) (open-helper)
  */
-static int ni65_lance_reinit(struct device *dev)
+static int ni65_lance_reinit(struct net_device *dev)
 {
 	 int i;
 	 struct priv *p = (struct priv *) dev->priv;
@@ -809,7 +809,7 @@ static int ni65_lance_reinit(struct device *dev)
 static void ni65_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 {
 	int csr0;
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct priv *p;
 	int bcnt = 32;
 
@@ -925,7 +925,7 @@ static void ni65_interrupt(int irq, void * dev_id, struct pt_regs * regs)
  * We have received an Xmit-Interrupt ..
  * send a new packet if necessary
  */
-static void ni65_xmit_intr(struct device *dev,int csr0)
+static void ni65_xmit_intr(struct net_device *dev,int csr0)
 {
 	struct priv *p = (struct priv *) dev->priv;
 
@@ -990,7 +990,7 @@ static void ni65_xmit_intr(struct device *dev,int csr0)
 /*
  * We have received a packet
  */
-static void ni65_recv_intr(struct device *dev,int csr0)
+static void ni65_recv_intr(struct net_device *dev,int csr0)
 {
 	struct rmd *rmdp;
 	int rmdstat,len;
@@ -1082,7 +1082,7 @@ static void ni65_recv_intr(struct device *dev,int csr0)
 /*
  * kick xmitter ..
  */
-static int ni65_send_packet(struct sk_buff *skb, struct device *dev)
+static int ni65_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct priv *p = (struct priv *) dev->priv;
 
@@ -1162,7 +1162,7 @@ static int ni65_send_packet(struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
-static struct net_device_stats *ni65_get_stats(struct device *dev)
+static struct net_device_stats *ni65_get_stats(struct net_device *dev)
 {
 
 #if 0
@@ -1179,7 +1179,7 @@ static struct net_device_stats *ni65_get_stats(struct device *dev)
 	return &((struct priv *) dev->priv)->stats;
 }
 
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
 	if(!ni65_lance_reinit(dev))
 		printk(KERN_ERR "%s: Can't switch card into MC mode!\n",dev->name);
@@ -1189,7 +1189,7 @@ static void set_multicast_list(struct device *dev)
 #ifdef MODULE
 static char devicename[9] = { 0, };
 
-static struct device dev_ni65 = {
+static struct net_device dev_ni65 = {
 	devicename,	/* "ni6510": device name inserted by net_init.c */
 	0, 0, 0, 0,
 	0x360, 9,	 /* I/O address, IRQ */

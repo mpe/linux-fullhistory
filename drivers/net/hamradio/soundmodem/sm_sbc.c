@@ -140,7 +140,7 @@ struct sc_state_sbc {
 
 /* --------------------------------------------------------------------- */
 
-static int inline reset_dsp(struct device *dev)
+static int inline reset_dsp(struct net_device *dev)
 {
 	int i;
 
@@ -156,7 +156,7 @@ static int inline reset_dsp(struct device *dev)
 
 /* --------------------------------------------------------------------- */
 
-static void inline write_dsp(struct device *dev, unsigned char data)
+static void inline write_dsp(struct net_device *dev, unsigned char data)
 {
 	int i;
 	
@@ -169,7 +169,7 @@ static void inline write_dsp(struct device *dev, unsigned char data)
 
 /* --------------------------------------------------------------------- */
 
-static int inline read_dsp(struct device *dev, unsigned char *data)
+static int inline read_dsp(struct net_device *dev, unsigned char *data)
 {
 	int i;
 
@@ -185,7 +185,7 @@ static int inline read_dsp(struct device *dev, unsigned char *data)
 
 /* --------------------------------------------------------------------- */
 
-static int config_resources(struct device *dev, struct sm_state *sm, int fdx)
+static int config_resources(struct net_device *dev, struct sm_state *sm, int fdx)
 {
 	unsigned char irqreg = 0, dmareg = 0, realirq, realdma;
 	unsigned long flags;
@@ -266,21 +266,21 @@ static int config_resources(struct device *dev, struct sm_state *sm, int fdx)
 
 /* --------------------------------------------------------------------- */
 
-static void inline sbc_int_ack_8bit(struct device *dev)
+static void inline sbc_int_ack_8bit(struct net_device *dev)
 {
 	inb(DSP_DATA_AVAIL(dev->base_addr));
 }
 
 /* --------------------------------------------------------------------- */
 
-static void inline sbc_int_ack_16bit(struct device *dev)
+static void inline sbc_int_ack_16bit(struct net_device *dev)
 {
 	inb(DSP_INTACK_16BIT(dev->base_addr));
 }
 
 /* --------------------------------------------------------------------- */
 
-static void setup_dma_dsp(struct device *dev, struct sm_state *sm, int send)
+static void setup_dma_dsp(struct net_device *dev, struct sm_state *sm, int send)
 {
         unsigned long flags;
         static const unsigned char sbcmode[2][2] = {
@@ -323,7 +323,7 @@ static void setup_dma_dsp(struct device *dev, struct sm_state *sm, int send)
 
 static void sbc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)dev_id;
+	struct net_device *dev = (struct net_device *)dev_id;
 	struct sm_state *sm = (struct sm_state *)dev->priv;
 	unsigned int curfrag;
 
@@ -364,7 +364,7 @@ static void sbc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 /* --------------------------------------------------------------------- */
 
-static int sbc_open(struct device *dev, struct sm_state *sm) 
+static int sbc_open(struct net_device *dev, struct sm_state *sm) 
 {
 	int err;
 	unsigned int dmasz, u;
@@ -449,7 +449,7 @@ static int sbc_open(struct device *dev, struct sm_state *sm)
 
 /* --------------------------------------------------------------------- */
 
-static int sbc_close(struct device *dev, struct sm_state *sm) 
+static int sbc_close(struct net_device *dev, struct sm_state *sm) 
 {
 	if (!dev || !sm)
 		return -EINVAL;
@@ -467,7 +467,7 @@ static int sbc_close(struct device *dev, struct sm_state *sm)
 
 /* --------------------------------------------------------------------- */
 
-static int sbc_sethw(struct device *dev, struct sm_state *sm, char *mode)
+static int sbc_sethw(struct net_device *dev, struct sm_state *sm, char *mode)
 {
 	char *cp = strchr(mode, '.');
 	const struct modem_tx_info **mtp = sm_modem_tx_table;
@@ -524,7 +524,7 @@ static int sbc_sethw(struct device *dev, struct sm_state *sm, char *mode)
 
 /* --------------------------------------------------------------------- */
 
-static int sbc_ioctl(struct device *dev, struct sm_state *sm, struct ifreq *ifr, 
+static int sbc_ioctl(struct net_device *dev, struct sm_state *sm, struct ifreq *ifr, 
 		     struct hdlcdrv_ioctl *hi, int cmd)
 {
 	struct sm_ioctl bi;
@@ -619,7 +619,7 @@ const struct hardware_info sm_hw_sbc = {
 
 /* --------------------------------------------------------------------- */
 
-static void setup_dma_fdx_dsp(struct device *dev, struct sm_state *sm)
+static void setup_dma_fdx_dsp(struct net_device *dev, struct sm_state *sm)
 {
         unsigned long flags;
 	unsigned int isamps, osamps;
@@ -684,7 +684,7 @@ static void setup_dma_fdx_dsp(struct device *dev, struct sm_state *sm)
 
 static void sbcfdx_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)dev_id;
+	struct net_device *dev = (struct net_device *)dev_id;
 	struct sm_state *sm = (struct sm_state *)dev->priv;
 	unsigned char intsrc, pbint = 0, captint = 0;
 	unsigned int ocfrag, icfrag;
@@ -747,7 +747,7 @@ static void sbcfdx_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 /* --------------------------------------------------------------------- */
 
-static int sbcfdx_open(struct device *dev, struct sm_state *sm) 
+static int sbcfdx_open(struct net_device *dev, struct sm_state *sm) 
 {
 	int err;
 
@@ -830,7 +830,7 @@ static int sbcfdx_open(struct device *dev, struct sm_state *sm)
 
 /* --------------------------------------------------------------------- */
 
-static int sbcfdx_close(struct device *dev, struct sm_state *sm) 
+static int sbcfdx_close(struct net_device *dev, struct sm_state *sm) 
 {
 	if (!dev || !sm)
 		return -EINVAL;
@@ -851,7 +851,7 @@ static int sbcfdx_close(struct device *dev, struct sm_state *sm)
 
 /* --------------------------------------------------------------------- */
 
-static int sbcfdx_sethw(struct device *dev, struct sm_state *sm, char *mode)
+static int sbcfdx_sethw(struct net_device *dev, struct sm_state *sm, char *mode)
 {
 	char *cp = strchr(mode, '.');
 	const struct modem_tx_info **mtp = sm_modem_tx_table;
@@ -917,7 +917,7 @@ static int sbcfdx_sethw(struct device *dev, struct sm_state *sm, char *mode)
 
 /* --------------------------------------------------------------------- */
 
-static int sbcfdx_ioctl(struct device *dev, struct sm_state *sm, struct ifreq *ifr, 
+static int sbcfdx_ioctl(struct net_device *dev, struct sm_state *sm, struct ifreq *ifr, 
 			struct hdlcdrv_ioctl *hi, int cmd)
 {
 	if (cmd != SIOCDEVPRIVATE)

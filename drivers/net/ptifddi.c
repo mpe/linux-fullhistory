@@ -108,48 +108,48 @@ static void pti_is_not_so_happy(struct ptifddi *pp)
 {
 }
 
-static inline void pti_tx(struct ptifddi *pp, struct device *dev)
+static inline void pti_tx(struct ptifddi *pp, struct net_device *dev)
 {
 }
 
-static inline void myri_rx(struct ptifddi *pp, struct device *dev)
+static inline void myri_rx(struct ptifddi *pp, struct net_device *dev)
 {
 }
 
 static void pti_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev		= (struct device *) dev_id;
+	struct net_device *dev		= (struct net_device *) dev_id;
 	struct ptifddi *pp		= (struct ptifddi *) dev->priv;
 
 }
 
-static int pti_open(struct device *dev)
+static int pti_open(struct net_device *dev)
 {
 	struct ptifddi *pp = (struct ptifddi *) dev->priv;
 
 	return pti_init(pp, in_interrupt());
 }
 
-static int pti_close(struct device *dev)
+static int pti_close(struct net_device *dev)
 {
 	struct ptifddi *pp = (struct ptifddi *) dev->priv;
 
 	return 0;
 }
 
-static int pti_start_xmit(struct sk_buff *skb, struct device *dev)
+static int pti_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ptifddi *pp = (struct ptifddi *) dev->priv;
 }
 
-static struct enet_statistics *pti_get_stats(struct device *dev)
+static struct enet_statistics *pti_get_stats(struct net_device *dev)
 { return &(((struct ptifddi *)dev->priv)->enet_stats); }
 
-static void pti_set_multicast(struct device *dev)
+static void pti_set_multicast(struct net_device *dev)
 {
 }
 
-static inline int pti_fddi_init(struct device *dev, struct linux_sbus_device *sdev, int num)
+static inline int pti_fddi_init(struct net_device *dev, struct linux_sbus_device *sdev, int num)
 {
 	static unsigned version_printed = 0;
 	struct ptifddi *pp;
@@ -213,7 +213,7 @@ static inline int pti_fddi_init(struct device *dev, struct linux_sbus_device *sd
 	pti_load_main_firmware(pp);
 }
 
-int __init ptifddi_sbus_probe(struct device *dev)
+int __init ptifddi_sbus_probe(struct net_device *dev)
 {
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;

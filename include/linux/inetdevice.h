@@ -23,7 +23,7 @@ extern struct ipv4_devconf ipv4_devconf;
 
 struct in_device
 {
-	struct device		*dev;
+	struct net_device		*dev;
 	struct in_ifaddr	*ifa_list;	/* IP ifaddr chain		*/
 	struct ip_mc_list	*mc_list;	/* IP multicast filter chain    */
 	unsigned long		mr_v1_seen;
@@ -68,13 +68,13 @@ struct in_ifaddr
 extern int register_inetaddr_notifier(struct notifier_block *nb);
 extern int unregister_inetaddr_notifier(struct notifier_block *nb);
 
-extern struct device 	*ip_dev_find(u32 addr);
+extern struct net_device 	*ip_dev_find(u32 addr);
 extern struct in_ifaddr	*inet_addr_onlink(struct in_device *in_dev, u32 a, u32 b);
 extern int		devinet_ioctl(unsigned int cmd, void *);
 extern void		devinet_init(void);
-extern struct in_device *inetdev_init(struct device *dev);
+extern struct in_device *inetdev_init(struct net_device *dev);
 extern struct in_device	*inetdev_by_index(int);
-extern u32		inet_select_addr(const struct device *dev, u32 dst, int scope);
+extern u32		inet_select_addr(const struct net_device *dev, u32 dst, int scope);
 extern struct in_ifaddr *inet_ifa_byprefix(struct in_device *in_dev, u32 prefix, u32 mask);
 extern void		inet_forward_change(void);
 

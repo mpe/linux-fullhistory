@@ -27,7 +27,7 @@
 
 #ifdef __KERNEL__
 extern int hippi_header(struct sk_buff *skb,
-			struct device *dev,
+			struct net_device *dev,
 			unsigned short type,
 			void *daddr,
 			void *saddr,
@@ -36,23 +36,23 @@ extern int hippi_header(struct sk_buff *skb,
 extern int hippi_rebuild_header(struct sk_buff *skb);
 
 extern unsigned short hippi_type_trans(struct sk_buff *skb,
-				       struct device *dev);
+				       struct net_device *dev);
 
 extern void hippi_header_cache_bind(struct hh_cache ** hhp,
-				    struct device *dev,
+				    struct net_device *dev,
 				    unsigned short htype,
 				    __u32 daddr);
 
 extern void hippi_header_cache_update(struct hh_cache *hh,
-				      struct device *dev,
+				      struct net_device *dev,
 				      unsigned char * haddr);
 extern int hippi_header_parse(struct sk_buff *skb, unsigned char *haddr);
 
 extern void hippi_net_init(void);
-void hippi_setup(struct device *dev);
+void hippi_setup(struct net_device *dev);
 
-extern struct device *init_hippi_dev(struct device *, int);
-extern void unregister_hipdev(struct device *dev);
+extern struct net_device *init_hippi_dev(struct net_device *, int);
+extern void unregister_hipdev(struct net_device *dev);
 #endif
 
 #endif	/* _LINUX_HIPPIDEVICE_H */

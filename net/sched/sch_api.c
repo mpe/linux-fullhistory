@@ -186,7 +186,7 @@ int unregister_qdisc(struct Qdisc_ops *qops)
    (root qdisc, all its children, children of children etc.)
  */
 
-struct Qdisc *qdisc_lookup(struct device *dev, u32 handle)
+struct Qdisc *qdisc_lookup(struct net_device *dev, u32 handle)
 {
 	struct Qdisc *q;
 
@@ -276,7 +276,7 @@ void qdisc_put_rtab(struct qdisc_rate_table *tab)
 
 /* Allocate an unique handle from space managed by kernel */
 
-u32 qdisc_alloc_handle(struct device *dev)
+u32 qdisc_alloc_handle(struct net_device *dev)
 {
 	int i = 0x10000;
 	static u32 autohandle = TC_H_MAKE(0x80000000U, 0);
@@ -293,7 +293,7 @@ u32 qdisc_alloc_handle(struct device *dev)
 /* Attach toplevel qdisc to device dev */
 
 static struct Qdisc *
-dev_graft_qdisc(struct device *dev, struct Qdisc *qdisc)
+dev_graft_qdisc(struct net_device *dev, struct Qdisc *qdisc)
 {
 	struct Qdisc *oqdisc;
 
@@ -329,7 +329,7 @@ dev_graft_qdisc(struct device *dev, struct Qdisc *qdisc)
    Old qdisc is not destroyed but returned in *old.
  */
 
-int qdisc_graft(struct device *dev, struct Qdisc *parent, u32 classid,
+int qdisc_graft(struct net_device *dev, struct Qdisc *parent, u32 classid,
 		struct Qdisc *new, struct Qdisc **old)
 {
 	int err = 0;
@@ -361,7 +361,7 @@ int qdisc_graft(struct device *dev, struct Qdisc *parent, u32 classid,
  */
 
 static struct Qdisc *
-qdisc_create(struct device *dev, u32 handle, struct rtattr **tca, int *errp)
+qdisc_create(struct net_device *dev, u32 handle, struct rtattr **tca, int *errp)
 {
 	int err;
 	struct rtattr *kind = tca[TCA_KIND-1];
@@ -503,7 +503,7 @@ static int tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 {
 	struct tcmsg *tcm = NLMSG_DATA(n);
 	struct rtattr **tca = arg;
-	struct device *dev;
+	struct net_device *dev;
 	u32 clid = tcm->tcm_parent;
 	struct Qdisc *q = NULL;
 	struct Qdisc *p = NULL;
@@ -560,7 +560,7 @@ static int tc_modify_qdisc(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 {
 	struct tcmsg *tcm = NLMSG_DATA(n);
 	struct rtattr **tca = arg;
-	struct device *dev;
+	struct net_device *dev;
 	u32 clid = tcm->tcm_parent;
 	struct Qdisc *q = NULL;
 	struct Qdisc *p = NULL;
@@ -751,7 +751,7 @@ static int tc_dump_qdisc(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	int idx, q_idx;
 	int s_idx, s_q_idx;
-	struct device *dev;
+	struct net_device *dev;
 	struct Qdisc *q;
 
 	s_idx = cb->args[0];
@@ -797,7 +797,7 @@ static int tc_ctl_tclass(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 {
 	struct tcmsg *tcm = NLMSG_DATA(n);
 	struct rtattr **tca = arg;
-	struct device *dev;
+	struct net_device *dev;
 	struct Qdisc *q = NULL;
 	struct Qdisc_class_ops *cops;
 	unsigned long cl = 0;
@@ -971,7 +971,7 @@ static int tc_dump_tclass(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	int t;
 	int s_t;
-	struct device *dev;
+	struct net_device *dev;
 	struct Qdisc *q;
 	struct tcmsg *tcm = (struct tcmsg*)NLMSG_DATA(cb->nlh);
 	struct qdisc_dump_args arg;

@@ -130,9 +130,9 @@ struct mbuf {
  *	PI device declarations.
  */
 
-static int pi0_preprobe(struct device *dev){return 0;}	/* Dummy probe function */
-static struct device pi0a = { "pi0a", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, pi0_preprobe };
-static struct device pi0b = { "pi0b", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, pi0_preprobe };
+static int pi0_preprobe(struct net_device *dev){return 0;}	/* Dummy probe function */
+static struct net_device pi0a = { "pi0a", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, pi0_preprobe };
+static struct net_device pi0b = { "pi0b", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, pi0_preprobe };
 
 
 /* The number of low I/O ports used by the card. */
@@ -141,18 +141,18 @@ static struct device pi0b = { "pi0b", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, pi0_prepr
 
 /* Index to functions, as function prototypes. */
 
-static int pi_probe(struct device *dev, int card_type);
-static int pi_open(struct device *dev);
-static int pi_send_packet(struct sk_buff *skb, struct device *dev);
+static int pi_probe(struct net_device *dev, int card_type);
+static int pi_open(struct net_device *dev);
+static int pi_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void pi_interrupt(int reg_ptr, void *dev_id, struct pt_regs *regs);
-static int pi_close(struct device *dev);
-static int pi_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
-static struct net_device_stats *pi_get_stats(struct device *dev);
+static int pi_close(struct net_device *dev);
+static int pi_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
+static struct net_device_stats *pi_get_stats(struct net_device *dev);
 static void rts(struct pi_local *lp, int x);
-static void b_rxint(struct device *dev, struct pi_local *lp);
+static void b_rxint(struct net_device *dev, struct pi_local *lp);
 static void b_txint(struct pi_local *lp);
 static void b_exint(struct pi_local *lp);
-static void a_rxint(struct device *dev, struct pi_local *lp);
+static void a_rxint(struct net_device *dev, struct pi_local *lp);
 static void a_txint(struct pi_local *lp);
 static void a_exint(struct pi_local *lp);
 static char *get_dma_buffer(unsigned long *mem_ptr);
@@ -493,7 +493,7 @@ static void a_exint(struct pi_local *lp)
 
 /* Receive interrupt handler for the A channel
  */
-static void a_rxint(struct device *dev, struct pi_local *lp)
+static void a_rxint(struct net_device *dev, struct pi_local *lp)
 {
     unsigned long flags;
     int cmd;
@@ -568,7 +568,7 @@ static void a_rxint(struct device *dev, struct pi_local *lp)
     restore_flags(flags);
 }
 
-static void b_rxint(struct device *dev, struct pi_local *lp)
+static void b_rxint(struct net_device *dev, struct pi_local *lp)
 {
     unsigned long flags;
     int cmd;
@@ -1063,7 +1063,7 @@ static void rts(struct pi_local *lp, int x)
     }
 }
 
-static void scc_init(struct device *dev)
+static void scc_init(struct net_device *dev)
 {
     unsigned long flags;
     struct pi_local *lp = (struct pi_local *) dev->priv;
@@ -1165,7 +1165,7 @@ static void scc_init(struct device *dev)
     restore_flags(flags);
 }
 
-static void chipset_init(struct device *dev)
+static void chipset_init(struct net_device *dev)
 {
     int cardbase;
     unsigned long flags;
@@ -1251,7 +1251,7 @@ static int valid_dma_page(unsigned long addr, unsigned long dev_buffsize)
 	return 0;
 }
 
-static int pi_set_mac_address(struct device *dev, void *addr)
+static int pi_set_mac_address(struct net_device *dev, void *addr)
 {
     struct sockaddr *sa = (struct sockaddr *)addr;
     memcpy(dev->dev_addr, sa->sa_data, dev->addr_len);	/* addr is an AX.25 shifted ASCII */
@@ -1274,7 +1274,7 @@ get_dma_buffer(unsigned long *mem_ptr)
     return (ret);
 }
 
-static int pi_probe(struct device *dev, int card_type)
+static int pi_probe(struct net_device *dev, int card_type)
 {
     short ioaddr;
     struct pi_local *lp;
@@ -1423,7 +1423,7 @@ static int pi_probe(struct device *dev, int card_type)
    registers that "should" only need to be set once at boot, so that
    there is non-reboot way to recover if something goes wrong.
    */
-static int pi_open(struct device *dev)
+static int pi_open(struct net_device *dev)
 {
     unsigned long flags;
     static first_time = 1;
@@ -1464,7 +1464,7 @@ static int pi_open(struct device *dev)
     return 0;
 }
 
-static int pi_send_packet(struct sk_buff *skb, struct device *dev)
+static int pi_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
     struct pi_local *lp = (struct pi_local *) dev->priv;
 
@@ -1531,7 +1531,7 @@ static void pi_interrupt(int reg_ptr, void *dev_id, struct pt_regs *regs)
 }
 
 /* The inverse routine to pi_open(). */
-static int pi_close(struct device *dev)
+static int pi_close(struct net_device *dev)
 {
     unsigned long flags;
     struct pi_local *lp;
@@ -1562,7 +1562,7 @@ static int pi_close(struct device *dev)
     return 0;
 }
 
-static int pi_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+static int pi_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
     unsigned long flags;
     struct pi_req rq;
@@ -1643,7 +1643,7 @@ static int pi_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 
 /* Get the current statistics.	This may be called with the card open or
    closed. */
-static struct net_device_stats *pi_get_stats(struct device *dev)
+static struct net_device_stats *pi_get_stats(struct net_device *dev)
 {
 	struct pi_local *lp = (struct pi_local *) dev->priv;
 

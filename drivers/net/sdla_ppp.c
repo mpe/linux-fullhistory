@@ -147,20 +147,20 @@ extern void enable_irq(unsigned int);
 
 /* WAN link driver entry points. These are called by the WAN router module. */
 static int update(wan_device_t * wandev);
-static int new_if(wan_device_t * wandev, struct device *dev,
+static int new_if(wan_device_t * wandev, struct net_device *dev,
 		  wanif_conf_t * conf);
-static int del_if(wan_device_t * wandev, struct device *dev);
+static int del_if(wan_device_t * wandev, struct net_device *dev);
 /* WANPIPE-specific entry points */
 static int wpp_exec(struct sdla *card, void *u_cmd, void *u_data);
 /* Network device interface */
-static int if_init(struct device *dev);
-static int if_open(struct device *dev);
-static int if_close(struct device *dev);
-static int if_header(struct sk_buff *skb, struct device *dev,
+static int if_init(struct net_device *dev);
+static int if_open(struct net_device *dev);
+static int if_close(struct net_device *dev);
+static int if_header(struct sk_buff *skb, struct net_device *dev,
 	    unsigned short type, void *daddr, void *saddr, unsigned len);
 static int if_rebuild_hdr(struct sk_buff *skb);
-static int if_send(struct sk_buff *skb, struct device *dev);
-static struct enet_statistics *if_stats(struct device *dev);
+static int if_send(struct sk_buff *skb, struct net_device *dev);
+static struct enet_statistics *if_stats(struct net_device *dev);
 /* PPP firmware interface functions */
 static int ppp_read_version(sdla_t * card, char *str);
 static int ppp_configure(sdla_t * card, void *data);
@@ -185,8 +185,8 @@ static int config508(sdla_t * card);
 static void show_disc_cause(sdla_t * card, unsigned cause);
 static unsigned char bps_to_speed_code(unsigned long bps);
 static int reply_udp(unsigned char *data, unsigned int mbox_len);
-static int process_udp_mgmt_pkt(char udp_pkt_src, sdla_t * card, struct sk_buff *skb, struct device *dev, ppp_private_area_t * ppp_priv_area);
-static int process_udp_driver_call(char udp_pkt_src, sdla_t * card, struct sk_buff *skb, struct device *dev, ppp_private_area_t * ppp_priv_area);
+static int process_udp_mgmt_pkt(char udp_pkt_src, sdla_t * card, struct sk_buff *skb, struct net_device *dev, ppp_private_area_t * ppp_priv_area);
+static int process_udp_driver_call(char udp_pkt_src, sdla_t * card, struct sk_buff *skb, struct net_device *dev, ppp_private_area_t * ppp_priv_area);
 static void init_ppp_tx_rx_buff(sdla_t * card);
 static int intr_test(sdla_t * card);
 static int udp_pkt_type(struct sk_buff *skb, sdla_t * card);
@@ -310,7 +310,7 @@ static int update(wan_device_t * wandev)
  *		< 0	failure (channel will not be created)
  */
 
-static int new_if(wan_device_t * wandev, struct device *dev, wanif_conf_t * conf)
+static int new_if(wan_device_t * wandev, struct net_device *dev, wanif_conf_t * conf)
 {
 	sdla_t *card = wandev->private;
 	ppp_private_area_t *ppp_priv_area;
@@ -343,7 +343,7 @@ static int new_if(wan_device_t * wandev, struct device *dev, wanif_conf_t * conf
  * Delete logical channel.
  */
 
-static int del_if(wan_device_t * wandev, struct device *dev)
+static int del_if(wan_device_t * wandev, struct net_device *dev)
 {
 	if (dev->priv) {
 		kfree(dev->priv);
@@ -391,7 +391,7 @@ static int wpp_exec(struct sdla *card, void *u_cmd, void *u_data)
  * registration.
  */
 
-static int if_init(struct device *dev)
+static int if_init(struct net_device *dev)
 {
 	ppp_private_area_t *ppp_priv_area = dev->priv;
 	sdla_t *card = ppp_priv_area->card;
@@ -429,7 +429,7 @@ static int if_init(struct device *dev)
  * Return 0 if O.k. or errno.
  */
 
-static int if_open(struct device *dev)
+static int if_open(struct net_device *dev)
 {
 	ppp_private_area_t *ppp_priv_area = dev->priv;
 	sdla_t *card = ppp_priv_area->card;
@@ -487,7 +487,7 @@ static int if_open(struct device *dev)
  * o reset flags.
  */
 
-static int if_close(struct device *dev)
+static int if_close(struct net_device *dev)
 {
 	ppp_private_area_t *ppp_priv_area = dev->priv;
 	sdla_t *card = ppp_priv_area->card;
@@ -512,7 +512,7 @@ static int if_close(struct device *dev)
  * Return:	media header length.
  */
 
-static int if_header(struct sk_buff *skb, struct device *dev,
+static int if_header(struct sk_buff *skb, struct net_device *dev,
 	     unsigned short type, void *daddr, void *saddr, unsigned len)
 {
 	switch (type) 
@@ -536,7 +536,7 @@ static int if_header(struct sk_buff *skb, struct device *dev,
 
 static int if_rebuild_hdr(struct sk_buff *skb)
 {
-	struct device *dev=skb->dev;
+	struct net_device *dev=skb->dev;
 	ppp_private_area_t *ppp_priv_area = dev->priv;
 	sdla_t *card = ppp_priv_area->card;
 	printk(KERN_INFO "%s: rebuild_header() called for interface %s!\n",
@@ -562,7 +562,7 @@ static int if_rebuild_hdr(struct sk_buff *skb)
  *    protocol stack and can be used for flow control with protocol layer.
  */
 
-static int if_send(struct sk_buff *skb, struct device *dev)
+static int if_send(struct sk_buff *skb, struct net_device *dev)
 {
 	ppp_private_area_t *ppp_priv_area = dev->priv;
 	sdla_t *card = ppp_priv_area->card;
@@ -846,7 +846,7 @@ static void switch_net_numbers(unsigned char *sendpacket, unsigned long network_
  * Return a pointer to struct enet_statistics.
  */
 
-static struct enet_statistics *if_stats(struct device *dev)
+static struct enet_statistics *if_stats(struct net_device *dev)
 {
 	ppp_private_area_t *ppp_priv_area = dev->priv;
 	sdla_t *card;
@@ -1052,7 +1052,7 @@ STATIC void wpp_isr(sdla_t * card)
 	ppp_flags_t *flags = card->flags;
 	char *ptr = &flags->iflag;
 	unsigned long host_cpu_flags;
-	struct device *dev = card->wandev.dev;
+	struct net_device *dev = card->wandev.dev;
 	int i;
 	card->in_isr = 1;
 	++card->statistics.isr_entry;
@@ -1123,7 +1123,7 @@ STATIC void wpp_isr(sdla_t * card)
 static void rx_intr(sdla_t * card)
 {
 	ppp_buf_ctl_t *rxbuf = card->rxmb;
-	struct device *dev = card->wandev.dev;
+	struct net_device *dev = card->wandev.dev;
 	ppp_private_area_t *ppp_priv_area;
 	struct sk_buff *skb;
 	unsigned len;
@@ -1227,7 +1227,7 @@ static void rx_intr(sdla_t * card)
 
 static void tx_intr(sdla_t * card)
 {
-	struct device *dev = card->wandev.dev;
+	struct net_device *dev = card->wandev.dev;
 	if (!dev || !dev->start) {
 		++card->statistics.tx_intr_dev_not_started;
 		return;
@@ -1332,7 +1332,7 @@ static int handle_IPXWAN(unsigned char *sendpacket, char *devname, unsigned char
 
 static void wpp_poll(sdla_t * card)
 {
-	struct device *dev = card->wandev.dev;
+	struct net_device *dev = card->wandev.dev;
 	ppp_flags_t *adptr_flags = card->flags;
 	unsigned long host_cpu_flags;
 	++card->statistics.poll_entry;
@@ -1430,7 +1430,7 @@ static void poll_connecting(sdla_t * card)
 
 static void poll_disconnected(sdla_t * card)
 {
-	struct device *dev = card->wandev.dev;
+	struct net_device *dev = card->wandev.dev;
 	if (dev && dev->start &&
 	    ((jiffies - card->state_tick) > HOLD_DOWN_TIME)) {
 		wanpipe_set_state(card, WAN_CONNECTING);
@@ -1591,7 +1591,7 @@ static unsigned char bps_to_speed_code(unsigned long bps)
  * Process UDP call of type DRVSTATS.  
  */
 
-static int process_udp_driver_call(char udp_pkt_src, sdla_t * card, struct sk_buff *skb, struct device *dev, ppp_private_area_t * ppp_priv_area)
+static int process_udp_driver_call(char udp_pkt_src, sdla_t * card, struct sk_buff *skb, struct net_device *dev, ppp_private_area_t * ppp_priv_area)
 {
 	unsigned char *sendpacket;
 	unsigned char buf2[5];
@@ -1776,7 +1776,7 @@ static int process_udp_driver_call(char udp_pkt_src, sdla_t * card, struct sk_bu
  */
 
 static int process_udp_mgmt_pkt(char udp_pkt_src, sdla_t * card,
-				struct sk_buff *skb, struct device *dev,
+				struct sk_buff *skb, struct net_device *dev,
 				ppp_private_area_t * ppp_priv_area)
 {
 	unsigned char *sendpacket;

@@ -144,7 +144,7 @@ done:
 struct iphdr whitehole_iph;
 int whitehole_count;
 
-static int whitehole_xmit(struct sk_buff *skb, struct device *dev)
+static int whitehole_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_device_stats *stats;
 	dev_kfree_skb(skb);
@@ -156,15 +156,15 @@ static int whitehole_xmit(struct sk_buff *skb, struct device *dev)
 }
 
 static void whitehole_inject(unsigned long);
-int whitehole_init(struct device *dev);
+int whitehole_init(struct net_device *dev);
 
 static struct timer_list whitehole_timer =
 	{ NULL, NULL, 0, 0L, whitehole_inject };
 
-static struct device whitehole_dev = {
+static struct net_device whitehole_dev = {
 	"whitehole", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, whitehole_init, };
 
-static int whitehole_open(struct device *dev)
+static int whitehole_open(struct net_device *dev)
 {
 	whitehole_count = 100000;
 	whitehole_timer.expires = jiffies + 5*HZ;
@@ -172,7 +172,7 @@ static int whitehole_open(struct device *dev)
 	return 0;
 }
 
-static int whitehole_close(struct device *dev)
+static int whitehole_close(struct net_device *dev)
 {
 	del_timer(&whitehole_timer);
 	return 0;
@@ -206,13 +206,13 @@ static void whitehole_inject(unsigned long dummy)
 	}
 }
 
-static struct net_device_stats *whitehole_get_stats(struct device *dev)
+static struct net_device_stats *whitehole_get_stats(struct net_device *dev)
 {
 	struct net_device_stats *stats = (struct net_device_stats *) dev->priv;
 	return stats;
 }
 
-__initfunc(int whitehole_init(struct device *dev))
+__initfunc(int whitehole_init(struct net_device *dev))
 {
 	dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL);
 	if (dev->priv == NULL)

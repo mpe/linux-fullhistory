@@ -74,7 +74,7 @@ struct frag_queue {
 	struct in6_addr		daddr;
 	struct timer_list	timer;		/* expire timer		*/
 	struct ipv6_frag	*fragments;
-	struct device		*dev;
+	struct net_device		*dev;
 	int			iif;
 	__u8			last_in;	/* has first/last segment arrived? */
 #define FIRST_IN		2
@@ -228,7 +228,7 @@ static void frag_expire(unsigned long data)
 	   (fixed --ANK (980728))
 	 */
 	if (fq->last_in&FIRST_IN) {
-		struct device *dev = dev_get_by_index(fq->iif);
+		struct net_device *dev = dev_get_by_index(fq->iif);
 
 		/*
 		   But use as source device on which LAST ARRIVED

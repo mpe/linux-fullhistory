@@ -30,6 +30,7 @@
 #include "sgi.h"
 #include "sun.h"
 
+extern void device_init(void);
 extern void md_setup_drive(void);
 extern int *blk_size[];
 extern void rd_load(void);

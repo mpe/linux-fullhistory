@@ -356,7 +356,7 @@ struct bigmac {
 	struct enet_statistics		enet_stats;
 	struct linux_sbus_device	*qec_sbus_dev;
 	struct linux_sbus_device	*bigmac_sbus_dev;
-	struct device			*dev;
+	struct net_device			*dev;
 	struct bigmac			*next_module;
 };
 

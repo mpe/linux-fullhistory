@@ -416,39 +416,39 @@ struct depca_private {
 /*
 ** Public Functions
 */
-static int    depca_open(struct device *dev);
-static int    depca_start_xmit(struct sk_buff *skb, struct device *dev);
+static int    depca_open(struct net_device *dev);
+static int    depca_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static void   depca_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static int    depca_close(struct device *dev);
-static int    depca_ioctl(struct device *dev, struct ifreq *rq, int cmd);
-static struct net_device_stats *depca_get_stats(struct device *dev);
-static void   set_multicast_list(struct device *dev);
+static int    depca_close(struct net_device *dev);
+static int    depca_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
+static struct net_device_stats *depca_get_stats(struct net_device *dev);
+static void   set_multicast_list(struct net_device *dev);
 
 /*
 ** Private functions
 */
-static int    depca_hw_init(struct device *dev, u_long ioaddr, int mca_slot);
-static void   depca_init_ring(struct device *dev);
-static int    depca_rx(struct device *dev);
-static int    depca_tx(struct device *dev);
+static int    depca_hw_init(struct net_device *dev, u_long ioaddr, int mca_slot);
+static void   depca_init_ring(struct net_device *dev);
+static int    depca_rx(struct net_device *dev);
+static int    depca_tx(struct net_device *dev);
 
-static void   LoadCSRs(struct device *dev);
-static int    InitRestartDepca(struct device *dev);
+static void   LoadCSRs(struct net_device *dev);
+static int    InitRestartDepca(struct net_device *dev);
 static void   DepcaSignature(char *name, u_long paddr);
 static int    DevicePresent(u_long ioaddr);
-static int    get_hw_addr(struct device *dev);
+static int    get_hw_addr(struct net_device *dev);
 static int    EISA_signature(char *name, s32 eisa_id);
-static void   SetMulticastFilter(struct device *dev);
-static void   isa_probe(struct device *dev, u_long iobase);
-static void   eisa_probe(struct device *dev, u_long iobase);
+static void   SetMulticastFilter(struct net_device *dev);
+static void   isa_probe(struct net_device *dev, u_long iobase);
+static void   eisa_probe(struct net_device *dev, u_long iobase);
 #ifdef CONFIG_MCA      
-static void   mca_probe(struct device *dev, u_long iobase);
+static void   mca_probe(struct net_device *dev, u_long iobase);
 #endif
-static struct device *alloc_device(struct device *dev, u_long iobase);
+static struct net_device *alloc_device(struct net_device *dev, u_long iobase);
 static int    depca_dev_index(char *s);
-static struct device *insert_device(struct device *dev, u_long iobase, int (*init)(struct device *));
-static int    load_packet(struct device *dev, struct sk_buff *skb);
-static void   depca_dbg_open(struct device *dev);
+static struct net_device *insert_device(struct net_device *dev, u_long iobase, int (*init)(struct net_device *));
+static int    load_packet(struct net_device *dev, struct sk_buff *skb);
+static void   depca_dbg_open(struct net_device *dev);
 
 #ifdef MODULE
 int           init_module(void);
@@ -477,7 +477,7 @@ static char   *adapter_name = '\0';        /* If no PROM when loadable module
     outw(STOP, DEPCA_DATA)
 
 int __init 
-depca_probe(struct device *dev)
+depca_probe(struct net_device *dev)
 {
   int tmp = num_depcas, status = -ENODEV;
   u_long iobase = dev->base_addr;
@@ -511,7 +511,7 @@ depca_probe(struct device *dev)
 }
 
 static int __init 
-depca_hw_init(struct device *dev, u_long ioaddr, int mca_slot)
+depca_hw_init(struct net_device *dev, u_long ioaddr, int mca_slot)
 {
   struct depca_private *lp;
   int i, j, offset, netRAM, mem_len, status=0;
@@ -723,7 +723,7 @@ depca_hw_init(struct device *dev, u_long ioaddr, int mca_slot)
 
 
 static int
-depca_open(struct device *dev)
+depca_open(struct net_device *dev)
 {
   struct depca_private *lp = (struct depca_private *)dev->priv;
   u_long ioaddr = dev->base_addr;
@@ -774,7 +774,7 @@ depca_open(struct device *dev)
 
 /* Initialize the lance Rx and Tx descriptor rings. */
 static void
-depca_init_ring(struct device *dev)
+depca_init_ring(struct net_device *dev)
 {
   struct depca_private *lp = (struct depca_private *)dev->priv;
   u_int i;
@@ -817,7 +817,7 @@ depca_init_ring(struct device *dev)
 ** Writes a socket buffer to TX descriptor ring and starts transmission 
 */
 static int
-depca_start_xmit(struct sk_buff *skb, struct device *dev)
+depca_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
   struct depca_private *lp = (struct depca_private *)dev->priv;
   u_long ioaddr = dev->base_addr;
@@ -877,7 +877,7 @@ depca_start_xmit(struct sk_buff *skb, struct device *dev)
 static void
 depca_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-  struct device *dev = dev_id;
+  struct net_device *dev = dev_id;
   struct depca_private *lp;
   s16 csr0, nicsr;
   u_long ioaddr;
@@ -926,7 +926,7 @@ depca_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 static int
-depca_rx(struct device *dev)
+depca_rx(struct net_device *dev)
 {
   struct depca_private *lp = (struct depca_private *)dev->priv;
   int i, entry;
@@ -1026,7 +1026,7 @@ depca_rx(struct device *dev)
 ** Buffer sent - check for buffer errors.
 */
 static int
-depca_tx(struct device *dev)
+depca_tx(struct net_device *dev)
 {
   struct depca_private *lp = (struct depca_private *)dev->priv;
   int entry;
@@ -1064,7 +1064,7 @@ depca_tx(struct device *dev)
 }
 
 static int
-depca_close(struct device *dev)
+depca_close(struct net_device *dev)
 {
   struct depca_private *lp = (struct depca_private *)dev->priv;
   s16 nicsr;
@@ -1105,7 +1105,7 @@ depca_close(struct device *dev)
   return 0;
 }
 
-static void LoadCSRs(struct device *dev)
+static void LoadCSRs(struct net_device *dev)
 {
   struct depca_private *lp = (struct depca_private *)dev->priv;
   u_long ioaddr = dev->base_addr;
@@ -1122,7 +1122,7 @@ static void LoadCSRs(struct device *dev)
   return;
 }
 
-static int InitRestartDepca(struct device *dev)
+static int InitRestartDepca(struct net_device *dev)
 {
   struct depca_private *lp = (struct depca_private *)dev->priv;
   u_long ioaddr = dev->base_addr;
@@ -1154,7 +1154,7 @@ static int InitRestartDepca(struct device *dev)
 }
 
 static struct net_device_stats *
-depca_get_stats(struct device *dev)
+depca_get_stats(struct net_device *dev)
 {
     struct depca_private *lp = (struct depca_private *)dev->priv;
 
@@ -1167,7 +1167,7 @@ depca_get_stats(struct device *dev)
 ** Set or clear the multicast filter for this adaptor.
 */
 static void
-set_multicast_list(struct device *dev)
+set_multicast_list(struct net_device *dev)
 {
   struct depca_private *lp = (struct depca_private *)dev->priv;
   u_long ioaddr = dev->base_addr;
@@ -1199,7 +1199,7 @@ set_multicast_list(struct device *dev)
 ** Big endian crc one liner is mine, all mine, ha ha ha ha!
 ** LANCE calculates its hash codes big endian.
 */
-static void SetMulticastFilter(struct device *dev)
+static void SetMulticastFilter(struct net_device *dev)
 {
   struct depca_private *lp = (struct depca_private *)dev->priv;
   struct dev_mc_list *dmi=dev->mc_list;
@@ -1249,7 +1249,7 @@ static void SetMulticastFilter(struct device *dev)
 ** Microchannel bus I/O device probe
 */
 static void __init 
-mca_probe(struct device *dev, u_long ioaddr)
+mca_probe(struct net_device *dev, u_long ioaddr)
 {
     unsigned char pos[2];
     unsigned char where;
@@ -1398,7 +1398,7 @@ responding.\n", dev->name, iobase);
 ** ISA bus I/O device probe
 */
 static void __init 
-isa_probe(struct device *dev, u_long ioaddr)
+isa_probe(struct net_device *dev, u_long ioaddr)
 {
   int i = num_depcas, maxSlots;
   s32 ports[] = DEPCA_IO_PORTS;
@@ -1437,7 +1437,7 @@ isa_probe(struct device *dev, u_long ioaddr)
 ** the motherboard. Upto 15 EISA devices are supported.
 */
 static void __init 
-eisa_probe(struct device *dev, u_long ioaddr)
+eisa_probe(struct net_device *dev, u_long ioaddr)
 {
   int i, maxSlots;
   u_long iobase;
@@ -1483,10 +1483,10 @@ eisa_probe(struct device *dev, u_long ioaddr)
 ** are not available then insert a new device structure at the end of
 ** the current list.
 */
-static struct device * __init 
-alloc_device(struct device *dev, u_long iobase)
+static struct net_device * __init 
+alloc_device(struct net_device *dev, u_long iobase)
 {
-    struct device *adev = NULL;
+    struct net_device *adev = NULL;
     int fixed = 0, new_dev = 0;
 
     num_eth = depca_dev_index(dev->name);
@@ -1528,12 +1528,12 @@ alloc_device(struct device *dev, u_long iobase)
 ** If at end of eth device list and can't use current entry, malloc
 ** one up. If memory could not be allocated, print an error message.
 */
-static struct device * __init 
-insert_device(struct device *dev, u_long iobase, int (*init)(struct device *))
+static struct net_device * __init 
+insert_device(struct net_device *dev, u_long iobase, int (*init)(struct net_device *))
 {
-    struct device *new;
+    struct net_device *new;
 
-    new = (struct device *)kmalloc(sizeof(struct device)+8, GFP_KERNEL);
+    new = (struct net_device *)kmalloc(sizeof(struct net_device)+8, GFP_KERNEL);
     if (new == NULL) {
 	printk("eth%d: Device not initialised, insufficient memory\n",num_eth);
 	return NULL;
@@ -1681,7 +1681,7 @@ DevicePresent(u_long ioaddr)
 ** with x=1.
 */
 static int __init 
-get_hw_addr(struct device *dev)
+get_hw_addr(struct net_device *dev)
 {
   u_long ioaddr = dev->base_addr;
   int i, k, tmp, status = 0;
@@ -1712,7 +1712,7 @@ get_hw_addr(struct device *dev)
 /*
 ** Load a packet into the shared memory
 */
-static int load_packet(struct device *dev, struct sk_buff *skb)
+static int load_packet(struct net_device *dev, struct sk_buff *skb)
 {
   struct depca_private *lp = (struct depca_private *)dev->priv;
   int i, entry, end, len, status = 0;
@@ -1801,7 +1801,7 @@ EISA_signature(char *name, s32 eisa_id)
   return status;
 }
 
-static void depca_dbg_open(struct device *dev)
+static void depca_dbg_open(struct net_device *dev)
 {
   struct depca_private *lp = (struct depca_private *)dev->priv;
   u_long ioaddr = dev->base_addr;
@@ -1880,7 +1880,7 @@ static void depca_dbg_open(struct device *dev)
 ** effective uid is checked in those cases.
 ** All multicast IOCTLs will not work here and are for testing purposes only.
 */
-static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
+static int depca_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
   struct depca_private *lp = (struct depca_private *)dev->priv;
   struct depca_ioctl *ioc = (struct depca_ioctl *) &rq->ifr_data;
@@ -2015,7 +2015,7 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 #ifdef MODULE
 static char devicename[9] = {0,};
-static struct device thisDepca = {
+static struct net_device thisDepca = {
   devicename,  /* device name is inserted by /linux/drivers/net/net_init.c */
   0, 0, 0, 0,
   0x200, 7,    /* I/O address, IRQ */

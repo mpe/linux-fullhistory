@@ -227,7 +227,7 @@ void ax25_send_control(ax25_cb *ax25, int frametype, int poll_bit, int type)
  *
  *	Note: src here is the sender, thus it's the target of the DM
  */
-void ax25_return_dm(struct device *dev, ax25_address *src, ax25_address *dest, ax25_digi *digi)
+void ax25_return_dm(struct net_device *dev, ax25_address *src, ax25_address *dest, ax25_digi *digi)
 {
 	struct sk_buff *skb;
 	char *dptr;

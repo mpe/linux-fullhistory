@@ -1652,14 +1652,14 @@ static int ip_chain_name_procinfo(char *buffer, char **start,
 /*
  *	Interface to the generic firewall chains.
  */
-int ipfw_input_check(struct firewall_ops *this, int pf, struct device *dev, 
+int ipfw_input_check(struct firewall_ops *this, int pf, struct net_device *dev, 
 		     void *phdr, void *arg, struct sk_buff **pskb)
 {
 	return ip_fw_check(phdr, dev->name,
 			   arg, IP_FW_INPUT_CHAIN, *pskb, SLOT_NUMBER(), 0);
 }
 
-int ipfw_output_check(struct firewall_ops *this, int pf, struct device *dev, 
+int ipfw_output_check(struct firewall_ops *this, int pf, struct net_device *dev, 
 		      void *phdr, void *arg, struct sk_buff **pskb)
 {
 	/* Locally generated bogus packets by root. <SIGH>. */
@@ -1670,7 +1670,7 @@ int ipfw_output_check(struct firewall_ops *this, int pf, struct device *dev,
 			   arg, IP_FW_OUTPUT_CHAIN, *pskb, SLOT_NUMBER(), 0);
 }
 
-int ipfw_forward_check(struct firewall_ops *this, int pf, struct device *dev, 
+int ipfw_forward_check(struct firewall_ops *this, int pf, struct net_device *dev, 
 		       void *phdr, void *arg, struct sk_buff **pskb)
 {
 	return ip_fw_check(phdr, dev->name,

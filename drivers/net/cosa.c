@@ -274,14 +274,14 @@ static int cosa_dma_able(struct channel_data *chan, char *buf, int data);
 /* SPPP/HDLC stuff */
 static void sppp_channel_init(struct channel_data *chan);
 static void sppp_channel_delete(struct channel_data *chan);
-static int cosa_sppp_open(struct device *d);
-static int cosa_sppp_close(struct device *d);
-static int cosa_sppp_tx(struct sk_buff *skb, struct device *d);
+static int cosa_sppp_open(struct net_device *d);
+static int cosa_sppp_close(struct net_device *d);
+static int cosa_sppp_tx(struct sk_buff *skb, struct net_device *d);
 static char *sppp_setup_rx(struct channel_data *channel, int size);
 static int sppp_rx_done(struct channel_data *channel);
 static int sppp_tx_done(struct channel_data *channel, int size);
-static int cosa_sppp_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
-static struct net_device_stats *cosa_net_stats(struct device *dev);
+static int cosa_sppp_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
+static struct net_device_stats *cosa_net_stats(struct net_device *dev);
 
 /* Character device */
 static void chardev_channel_init(struct channel_data *chan);
@@ -568,7 +568,7 @@ bad1:		release_region(cosa->datareg,is_8bit(cosa)?2:4);
 
 static void sppp_channel_init(struct channel_data *chan)
 {
-	struct device *d;
+	struct net_device *d;
 	sppp_attach(&chan->pppdev);
 	d=&chan->pppdev.dev;
 	d->name = chan->name;
@@ -597,7 +597,7 @@ static void sppp_channel_delete(struct channel_data *chan)
 }
 
 
-static int cosa_sppp_open(struct device *d)
+static int cosa_sppp_open(struct net_device *d)
 {
 	struct channel_data *chan = d->priv;
 	int err, flags;
@@ -633,7 +633,7 @@ static int cosa_sppp_open(struct device *d)
 	return 0;
 }
 
-static int cosa_sppp_tx(struct sk_buff *skb, struct device *dev)
+static int cosa_sppp_tx(struct sk_buff *skb, struct net_device *dev)
 {
 	struct channel_data *chan = dev->priv;
 
@@ -665,7 +665,7 @@ static int cosa_sppp_tx(struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
-static int cosa_sppp_close(struct device *d)
+static int cosa_sppp_close(struct net_device *d)
 {
 	struct channel_data *chan = d->priv;
 	int flags;
@@ -747,7 +747,7 @@ static int sppp_tx_done(struct channel_data *chan, int size)
 	return 1;
 }
 
-static struct net_device_stats *cosa_net_stats(struct device *dev)
+static struct net_device_stats *cosa_net_stats(struct net_device *dev)
 {
 	struct channel_data *chan = dev->priv;
 	return &chan->stats;
@@ -1166,7 +1166,7 @@ static int cosa_ioctl_common(struct cosa_data *cosa,
 	return -ENOIOCTLCMD;
 }
 
-static int cosa_sppp_ioctl(struct device *dev, struct ifreq *ifr,
+static int cosa_sppp_ioctl(struct net_device *dev, struct ifreq *ifr,
 	int cmd)
 {
 	int rv;

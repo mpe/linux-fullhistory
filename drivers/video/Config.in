@@ -6,7 +6,7 @@ if [ "$CONFIG_FB" = "y" ]; then
   define_bool CONFIG_DUMMY_CONSOLE y
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     if [ "$CONFIG_AMIGA" = "y" -o "$CONFIG_PCI" = "y" ]; then
-      tristate 'Cirrus Logic suport' CONFIG_FB_CLGEN
+      tristate 'Cirrus Logic suport (experimental)' CONFIG_FB_CLGEN
       bool 'Permedia2 support (experimental)' CONFIG_FB_PM2
       if [ "$CONFIG_FB_PM2" = "y" ]; then
         if [ "$CONFIG_PCI" = "y" ]; then

@@ -84,7 +84,7 @@ struct rose_neigh {
 	ax25_address		callsign;
 	ax25_digi		*digipeat;
 	ax25_cb			*ax25;
-	struct device		*dev;
+	struct net_device		*dev;
 	unsigned short		count;
 	unsigned short		use;
 	unsigned int		number;
@@ -121,7 +121,7 @@ typedef struct {
 	ax25_address		source_digis[ROSE_MAX_DIGIS];
 	ax25_address		dest_digis[ROSE_MAX_DIGIS];
 	struct rose_neigh	*neighbour;
-	struct device		*device;
+	struct net_device		*device;
 	unsigned int		lci, rand;
 	unsigned char		state, condition, qbitincl, defer;
 	unsigned char		cause, diagnostic;
@@ -156,12 +156,12 @@ extern char *rose2asc(rose_address *);
 extern struct sock *rose_find_socket(unsigned int, struct rose_neigh *);
 extern void rose_kill_by_neigh(struct rose_neigh *);
 extern unsigned int rose_new_lci(struct rose_neigh *);
-extern int  rose_rx_call_request(struct sk_buff *, struct device *, struct rose_neigh *, unsigned int);
+extern int  rose_rx_call_request(struct sk_buff *, struct net_device *, struct rose_neigh *, unsigned int);
 extern void rose_destroy_socket(struct sock *);
 
 /* rose_dev.c */
-extern int  rose_rx_ip(struct sk_buff *, struct device *);
-extern int  rose_init(struct device *);
+extern int  rose_rx_ip(struct sk_buff *, struct net_device *);
+extern int  rose_init(struct net_device *);
 
 #include <net/rosecall.h>
 
@@ -197,12 +197,12 @@ extern struct rose_neigh *rose_loopback_neigh;
 extern int  rose_add_loopback_neigh(void);
 extern int  rose_add_loopback_node(rose_address *);
 extern void rose_del_loopback_node(rose_address *);
-extern void rose_rt_device_down(struct device *);
-extern void rose_link_device_down(struct device *);
-extern struct device *rose_dev_first(void);
-extern struct device *rose_dev_get(rose_address *);
+extern void rose_rt_device_down(struct net_device *);
+extern void rose_link_device_down(struct net_device *);
+extern struct net_device *rose_dev_first(void);
+extern struct net_device *rose_dev_get(rose_address *);
 extern struct rose_route *rose_route_free_lci(unsigned int, struct rose_neigh *);
-extern struct device *rose_ax25_dev_get(char *);
+extern struct net_device *rose_ax25_dev_get(char *);
 extern struct rose_neigh *rose_get_neigh(rose_address *, unsigned char *, unsigned char *);
 extern int  rose_rt_ioctl(unsigned int, void *);
 extern void rose_link_failed(ax25_cb *, int);

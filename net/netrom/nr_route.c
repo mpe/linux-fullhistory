@@ -62,7 +62,7 @@ static void nr_remove_neigh(struct nr_neigh *);
  *	neighbour if it is new.
  */
 static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax25,
-	ax25_digi *ax25_digi, struct device *dev, int quality, int obs_count)
+	ax25_digi *ax25_digi, struct net_device *dev, int quality, int obs_count)
 {
 	struct nr_node  *nr_node;
 	struct nr_neigh *nr_neigh;
@@ -321,7 +321,7 @@ static void nr_remove_neigh(struct nr_neigh *nr_neigh)
  *	"Delete" a node. Strictly speaking remove a route to a node. The node
  *	is only deleted if no routes are left to it.
  */
-static int nr_del_node(ax25_address *callsign, ax25_address *neighbour, struct device *dev)
+static int nr_del_node(ax25_address *callsign, ax25_address *neighbour, struct net_device *dev)
 {
 	struct nr_node  *nr_node;
 	struct nr_neigh *nr_neigh;
@@ -371,7 +371,7 @@ static int nr_del_node(ax25_address *callsign, ax25_address *neighbour, struct d
 /*
  *	Lock a neighbour with a quality.
  */
-static int nr_add_neigh(ax25_address *callsign, ax25_digi *ax25_digi, struct device *dev, unsigned int quality)
+static int nr_add_neigh(ax25_address *callsign, ax25_digi *ax25_digi, struct net_device *dev, unsigned int quality)
 {
 	struct nr_neigh *nr_neigh;
 	unsigned long flags;
@@ -420,7 +420,7 @@ static int nr_add_neigh(ax25_address *callsign, ax25_digi *ax25_digi, struct dev
  *	"Delete" a neighbour. The neighbour is only removed if the number
  *	of nodes that may use it is zero.
  */
-static int nr_del_neigh(ax25_address *callsign, struct device *dev, unsigned int quality)
+static int nr_del_neigh(ax25_address *callsign, struct net_device *dev, unsigned int quality)
 {
 	struct nr_neigh *nr_neigh;
 
@@ -499,7 +499,7 @@ static int nr_dec_obs(void)
 /*
  *	A device has been removed. Remove its routes and neighbours.
  */
-void nr_rt_device_down(struct device *dev)
+void nr_rt_device_down(struct net_device *dev)
 {
 	struct nr_neigh *s, *nr_neigh = nr_neigh_list;
 	struct nr_node  *t, *nr_node;
@@ -544,9 +544,9 @@ void nr_rt_device_down(struct device *dev)
  *	Check that the device given is a valid AX.25 interface that is "up".
  *	Or a valid ethernet interface with an AX.25 callsign binding.
  */
-static struct device *nr_ax25_dev_get(char *devname)
+static struct net_device *nr_ax25_dev_get(char *devname)
 {
-	struct device *dev;
+	struct net_device *dev;
 
 	if ((dev = dev_get(devname)) == NULL)
 		return NULL;
@@ -560,9 +560,9 @@ static struct device *nr_ax25_dev_get(char *devname)
 /*
  *	Find the first active NET/ROM device, usually "nr0".
  */
-struct device *nr_dev_first(void)
+struct net_device *nr_dev_first(void)
 {
-	struct device *dev, *first = NULL;
+	struct net_device *dev, *first = NULL;
 
 	read_lock(&dev_base_lock);
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
@@ -578,9 +578,9 @@ struct device *nr_dev_first(void)
 /*
  *	Find the NET/ROM device for the given callsign.
  */
-struct device *nr_dev_get(ax25_address *addr)
+struct net_device *nr_dev_get(ax25_address *addr)
 {
-	struct device *dev;
+	struct net_device *dev;
 
 	read_lock(&dev_base_lock);
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
@@ -617,7 +617,7 @@ static ax25_digi *nr_call_to_digi(int ndigis, ax25_address *digipeaters)
 int nr_rt_ioctl(unsigned int cmd, void *arg)
 {
 	struct nr_route_struct nr_route;
-	struct device *dev;
+	struct net_device *dev;
 
 	switch (cmd) {
 
@@ -703,7 +703,7 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	ax25_address *nr_src, *nr_dest;
 	struct nr_neigh *nr_neigh;
 	struct nr_node  *nr_node;
-	struct device *dev;
+	struct net_device *dev;
 	unsigned char *dptr;
 
 	if (ax25 != NULL && call_in_firewall(PF_NETROM, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT)

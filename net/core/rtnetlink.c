@@ -136,7 +136,7 @@ int rtnetlink_send(struct sk_buff *skb, u32 pid, unsigned group, int echo)
 	return err;
 }
 
-static int rtnetlink_fill_ifinfo(struct sk_buff *skb, struct device *dev,
+static int rtnetlink_fill_ifinfo(struct sk_buff *skb, struct net_device *dev,
 				 int type, u32 pid, u32 seq)
 {
 	struct ifinfomsg *r;
@@ -185,7 +185,7 @@ int rtnetlink_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	int idx;
 	int s_idx = cb->args[0];
-	struct device *dev;
+	struct net_device *dev;
 
 	read_lock(&dev_base_lock);
 	for (dev=dev_base, idx=0; dev; dev = dev->next, idx++) {
@@ -224,7 +224,7 @@ int rtnetlink_dump_all(struct sk_buff *skb, struct netlink_callback *cb)
 	return skb->len;
 }
 
-void rtmsg_ifinfo(int type, struct device *dev)
+void rtmsg_ifinfo(int type, struct net_device *dev)
 {
 	struct sk_buff *skb;
 	int size = NLMSG_GOODSIZE;
@@ -464,7 +464,7 @@ static struct rtnetlink_link link_rtnetlink_table[RTM_MAX-RTM_BASE+1] =
 
 static int rtnetlink_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
-	struct device *dev = ptr;
+	struct net_device *dev = ptr;
 	switch (event) {
 	case NETDEV_UNREGISTER:
 		rtmsg_ifinfo(RTM_DELLINK, dev);

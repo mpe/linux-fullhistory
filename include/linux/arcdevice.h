@@ -298,28 +298,28 @@ struct arcnet_local {
   int card_type;
   char *card_type_str;
   
-  void (*inthandler) (struct device *dev);
-  int (*arcnet_reset) (struct device *dev, int reset_delay);
-  void (*asetmask) (struct device *dev, u_char mask);
-  void (*acommand) (struct device *dev, u_char command);
-  u_char (*astatus) (struct device *dev);
-  void (*en_dis_able_TX) (struct device *dev, int enable); 
-  void (*prepare_tx)(struct device *dev,u_char *hdr,int hdrlen,
+  void (*inthandler) (struct net_device *dev);
+  int (*arcnet_reset) (struct net_device *dev, int reset_delay);
+  void (*asetmask) (struct net_device *dev, u_char mask);
+  void (*acommand) (struct net_device *dev, u_char command);
+  u_char (*astatus) (struct net_device *dev);
+  void (*en_dis_able_TX) (struct net_device *dev, int enable); 
+  void (*prepare_tx)(struct net_device *dev,u_char *hdr,int hdrlen,
 		     char *data,int length,int daddr,int exceptA, int offset);
   void (*openclose_device)(int open);  
   
-  struct device *adev;	/* RFC1201 protocol device */
+  struct net_device *adev;	/* RFC1201 protocol device */
   
   /* These are last to ensure that the chipset drivers don't depend on the
    * CONFIG_ARCNET_ETH and CONFIG_ARCNET_1051 options. 
    */
   
 #ifdef CONFIG_ARCNET_ETH
-  struct device *edev;	/* Ethernet-Encap device */
+  struct net_device *edev;	/* Ethernet-Encap device */
 #endif
   
 #ifdef CONFIG_ARCNET_1051
-  struct device *sdev;	/* RFC1051 protocol device */
+  struct net_device *sdev;	/* RFC1051 protocol device */
 #endif
 };
 
@@ -327,25 +327,25 @@ struct arcnet_local {
  */
 
 #if ARCNET_DEBUG_MAX & D_SKB
-extern void arcnet_dump_skb(struct device *dev,struct sk_buff *skb,
+extern void arcnet_dump_skb(struct net_device *dev,struct sk_buff *skb,
 			    char *desc);
 #else
 #define arcnet_dump_skb(dev,skb,desc) ;
 #endif
 
 #if (ARCNET_DEBUG_MAX & D_RX) || (ARCNET_DEBUG_MAX & D_TX)
-extern void arcnet_dump_packet(struct device *dev,u_char *buffer,int ext,
+extern void arcnet_dump_packet(struct net_device *dev,u_char *buffer,int ext,
 			       char *desc);
 #else
 #define arcnet_dump_packet(dev,buffer,ext,desc) ;
 #endif
 
-extern void arcnet_tx_done(struct device *dev, struct arcnet_local *lp);
+extern void arcnet_tx_done(struct net_device *dev, struct arcnet_local *lp);
 extern void arcnet_makename(char *device);
 extern void arcnet_interrupt(int irq,void *dev_id,struct pt_regs *regs);
-extern void arcnet_setup(struct device *dev);
-extern int arcnet_go_tx(struct device *dev,int enable_irq);
-extern void arcnetA_continue_tx(struct device *dev);
+extern void arcnet_setup(struct net_device *dev);
+extern int arcnet_go_tx(struct net_device *dev,int enable_irq);
+extern void arcnetA_continue_tx(struct net_device *dev);
 extern void arcnet_rx(struct arcnet_local *lp, u_char *arcsoft, short length, int saddr, int daddr);
 extern void arcnet_use_count(int open);
 

@@ -50,7 +50,7 @@ static struct linkfail_struct {
 static struct listen_struct {
 	struct listen_struct *next;
 	ax25_address  callsign;
-	struct device *dev;
+	struct net_device *dev;
 } *listen_list = NULL;
 
 int ax25_protocol_register(unsigned int pid, int (*func)(struct sk_buff *, ax25_cb *))
@@ -168,7 +168,7 @@ void ax25_linkfail_release(void (*func)(ax25_cb *, int))
 	restore_flags(flags);
 }
 
-int ax25_listen_register(ax25_address *callsign, struct device *dev)
+int ax25_listen_register(ax25_address *callsign, struct net_device *dev)
 {
 	struct listen_struct *listen;
 	unsigned long flags;
@@ -193,7 +193,7 @@ int ax25_listen_register(ax25_address *callsign, struct device *dev)
 	return 1;
 }
 
-void ax25_listen_release(ax25_address *callsign, struct device *dev)
+void ax25_listen_release(ax25_address *callsign, struct net_device *dev)
 {
 	struct listen_struct *s, *listen = listen_list;
 	unsigned long flags;
@@ -237,7 +237,7 @@ int (*ax25_protocol_function(unsigned int pid))(struct sk_buff *, ax25_cb *)
 	return NULL;
 }
 
-int ax25_listen_mine(ax25_address *callsign, struct device *dev)
+int ax25_listen_mine(ax25_address *callsign, struct net_device *dev)
 {
 	struct listen_struct *listen;
 

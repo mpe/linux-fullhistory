@@ -64,12 +64,12 @@ static hashbin_t *dongles = NULL;
 /* Netdevice functions */
 static int irda_device_net_rebuild_header(struct sk_buff *skb);
 static int irda_device_net_hard_header(struct sk_buff *skb, 
-				       struct device *dev,
+				       struct net_device *dev,
 				       unsigned short type, void *daddr, 
 				       void *saddr, unsigned len);
-static int irda_device_net_set_config(struct device *dev, struct ifmap *map);
-static int irda_device_net_change_mtu(struct device *dev, int new_mtu);
-static int irda_device_net_ioctl(struct device *dev, struct ifreq *rq,int cmd);
+static int irda_device_net_set_config(struct net_device *dev, struct ifmap *map);
+static int irda_device_net_change_mtu(struct net_device *dev, int new_mtu);
+static int irda_device_net_ioctl(struct net_device *dev, struct ifreq *rq,int cmd);
 #ifdef CONFIG_PROC_FS
 int irda_device_proc_read( char *buf, char **start, off_t offset, int len, 
 			   int unused);
@@ -404,7 +404,7 @@ inline struct qos_info *irda_device_get_qos(struct irda_device *self)
 	return &self->qos;
 }
 
-static struct enet_statistics *irda_device_get_stats( struct device *dev)
+static struct enet_statistics *irda_device_get_stats( struct net_device *dev)
 {
 	struct irda_device *priv = (struct irda_device *) dev->priv;
 
@@ -417,7 +417,7 @@ static struct enet_statistics *irda_device_get_stats( struct device *dev)
  *    This function should be used by low level device drivers in a similar way
  *    as ether_setup() is used by normal network device drivers
  */
-int irda_device_setup(struct device *dev) 
+int irda_device_setup(struct net_device *dev) 
 {
 	struct irda_device *self;
 
@@ -465,7 +465,7 @@ static int irda_device_net_rebuild_header( struct sk_buff *skb)
 	return 0;
 }
 
-static int irda_device_net_hard_header(struct sk_buff *skb, struct device *dev,
+static int irda_device_net_hard_header(struct sk_buff *skb, struct net_device *dev,
 				       unsigned short type, void *daddr, 
 				       void *saddr, unsigned len)
 {
@@ -478,14 +478,14 @@ static int irda_device_net_hard_header(struct sk_buff *skb, struct device *dev,
 	return 0;
 }
 
-static int irda_device_net_set_config( struct device *dev, struct ifmap *map)
+static int irda_device_net_set_config( struct net_device *dev, struct ifmap *map)
 {
 	DEBUG( 0, __FUNCTION__ "()\n");
 
 	return 0;
 }
 
-static int irda_device_net_change_mtu( struct device *dev, int new_mtu)
+static int irda_device_net_change_mtu( struct net_device *dev, int new_mtu)
 {
      DEBUG( 0, __FUNCTION__ "()\n");
      
@@ -494,7 +494,7 @@ static int irda_device_net_change_mtu( struct device *dev, int new_mtu)
 
 
 #define SIOCSDONGLE     SIOCDEVPRIVATE
-static int irda_device_net_ioctl(struct device *dev, /* ioctl device */
+static int irda_device_net_ioctl(struct net_device *dev, /* ioctl device */
 				 struct ifreq *rq,   /* Data passed */
 				 int	cmd)	     /* Ioctl number */
 {

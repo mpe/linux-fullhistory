@@ -19,7 +19,7 @@ this.  The typical probe code looks like the following:
 	#include <linux/mca.h>
 
 	unsigned char pos2, pos3, pos4, pos5;
-	struct device* dev;
+	struct net_device* dev;
 	int slot;
 
 	if( MCA_bus ) {
@@ -114,7 +114,7 @@ Your typical proc function will look something like this:
 
 	static int
 	dev_getinfo( char* buf, int slot, void* d ) {
-		struct device* dev = (struct device*) d;
+		struct net_device* dev = (struct net_device*) d;
 		int len = 0;
 
 		len += sprintf( buf+len, "Device: %s\n", dev->name );

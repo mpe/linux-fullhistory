@@ -148,7 +148,7 @@ static int debug = 0;
  *	Interface down stub
  */	
 
-static void if_down(struct device *dev)
+static void if_down(struct net_device *dev)
 {
 	;
 }
@@ -183,7 +183,7 @@ static void sppp_clear_timeout(struct sppp *p)
  * Process the received packet.
  */
  
-void sppp_input (struct device *dev, struct sk_buff *skb)
+void sppp_input (struct net_device *dev, struct sk_buff *skb)
 {
 	struct ppp_header *h;
 	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
@@ -312,7 +312,7 @@ EXPORT_SYMBOL(sppp_input);
  *	Handle transmit packets.
  */
  
-static int sppp_hard_header(struct sk_buff *skb, struct device *dev, __u16 type,
+static int sppp_hard_header(struct sk_buff *skb, struct net_device *dev, __u16 type,
 		void *daddr, void *saddr, unsigned int len)
 {
 	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
@@ -363,7 +363,7 @@ static void sppp_keepalive (unsigned long dummy)
 
 	for (sp=spppq; sp; sp=sp->pp_next) 
 	{
-		struct device *dev = sp->pp_if;
+		struct net_device *dev = sp->pp_if;
 
 		/* Keepalive mode disabled or channel down? */
 		if (! (sp->pp_flags & PP_KEEPALIVE) ||
@@ -413,7 +413,7 @@ static void sppp_keepalive (unsigned long dummy)
 static void sppp_lcp_input (struct sppp *sp, struct sk_buff *skb)
 {
 	struct lcp_header *h;
-	struct device *dev = sp->pp_if;
+	struct net_device *dev = sp->pp_if;
 	int len = skb->len;
 	u8 *p, opt[6];
 	u32 rmagic;
@@ -648,7 +648,7 @@ badreq:
 static void sppp_cisco_input (struct sppp *sp, struct sk_buff *skb)
 {
 	struct cisco_packet *h;
-	struct device *dev = sp->pp_if;
+	struct net_device *dev = sp->pp_if;
 
 	if (skb->len != CISCO_PACKET_LEN && skb->len != CISCO_BIG_PACKET_LEN) {
 		if (sp->pp_flags & PP_DEBUG)
@@ -736,7 +736,7 @@ static void sppp_cp_send (struct sppp *sp, u16 proto, u8 type,
 	struct ppp_header *h;
 	struct lcp_header *lh;
 	struct sk_buff *skb;
-	struct device *dev = sp->pp_if;
+	struct net_device *dev = sp->pp_if;
 
 	skb=alloc_skb(dev->hard_header_len+PPP_HEADER_LEN+LCP_HEADER_LEN+len,
 		GFP_ATOMIC);
@@ -785,7 +785,7 @@ static void sppp_cisco_send (struct sppp *sp, int type, long par1, long par2)
 	struct ppp_header *h;
 	struct cisco_packet *ch;
 	struct sk_buff *skb;
-	struct device *dev = sp->pp_if;
+	struct net_device *dev = sp->pp_if;
 	u32 t = jiffies * 1000/HZ;
 
 	skb=alloc_skb(dev->hard_header_len+PPP_HEADER_LEN+CISCO_PACKET_LEN,
@@ -819,7 +819,7 @@ static void sppp_cisco_send (struct sppp *sp, int type, long par1, long par2)
 }
 
 
-int sppp_close (struct device *dev)
+int sppp_close (struct net_device *dev)
 {
 	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
 	dev->flags &= ~IFF_RUNNING;
@@ -832,7 +832,7 @@ int sppp_close (struct device *dev)
 EXPORT_SYMBOL(sppp_close);
 
 
-int sppp_open (struct device *dev)
+int sppp_open (struct net_device *dev)
 {
 	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
 	sppp_close(dev);
@@ -844,7 +844,7 @@ int sppp_open (struct device *dev)
 
 EXPORT_SYMBOL(sppp_open);
 
-int sppp_reopen (struct device *dev)
+int sppp_reopen (struct net_device *dev)
 {
 	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
 	sppp_close(dev);
@@ -863,7 +863,7 @@ int sppp_reopen (struct device *dev)
 
 EXPORT_SYMBOL(sppp_reopen);
 
-int sppp_change_mtu(struct device *dev, int new_mtu)
+int sppp_change_mtu(struct net_device *dev, int new_mtu)
 {
 	if(new_mtu<128||new_mtu>PPP_MTU||(dev->flags&IFF_UP))
 		return -EINVAL;
@@ -873,7 +873,7 @@ int sppp_change_mtu(struct device *dev, int new_mtu)
 
 EXPORT_SYMBOL(sppp_change_mtu);
 
-int sppp_do_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+int sppp_do_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
 
@@ -908,7 +908,7 @@ EXPORT_SYMBOL(sppp_do_ioctl);
 
 void sppp_attach(struct ppp_device *pd)
 {
-	struct device *dev=&pd->dev;
+	struct net_device *dev=&pd->dev;
 	struct sppp *sp = &pd->sppp;
 	
 	/* Initialize keepalive handler. */
@@ -963,7 +963,7 @@ void sppp_attach(struct ppp_device *pd)
 
 EXPORT_SYMBOL(sppp_attach);
 
-void sppp_detach (struct device *dev)
+void sppp_detach (struct net_device *dev)
 {
 	struct sppp **q, *p, *sp = &((struct ppp_device *)dev)->sppp;
 
@@ -1039,7 +1039,7 @@ sppp_lcp_conf_parse_options (struct sppp *sp, struct lcp_header *h,
 static void sppp_ipcp_input (struct sppp *sp, struct sk_buff *skb)
 {
 	struct lcp_header *h;
-	struct device *dev = sp->pp_if;
+	struct net_device *dev = sp->pp_if;
 	int len = skb->len;
 
 	if (len < 4) 
@@ -1266,7 +1266,7 @@ static void sppp_print_bytes (u_char *p, u16 len)
  *	cards use.
  */
 
-int sppp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *p)
+int sppp_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *p)
 {
 	sppp_input(dev,skb);
 	return 0;

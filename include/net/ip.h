@@ -76,7 +76,7 @@ extern struct ip_ra_chain *ip_ra_chain;
 #define IP_FRAG_TIME	(30 * HZ)		/* fragment lifetime	*/
 
 extern void		ip_mc_dropsocket(struct sock *);
-extern void		ip_mc_dropdevice(struct device *dev);
+extern void		ip_mc_dropdevice(struct net_device *dev);
 extern int		ip_mc_procinfo(char *, char **, off_t, int, int);
 
 /*
@@ -86,7 +86,7 @@ extern int		ip_mc_procinfo(char *, char **, off_t, int, int);
 extern void		ip_build_and_send_pkt(struct sk_buff *skb, struct sock *sk,
 					      u32 saddr, u32 daddr,
 					      struct ip_options *opt);
-extern int		ip_rcv(struct sk_buff *skb, struct device *dev,
+extern int		ip_rcv(struct sk_buff *skb, struct net_device *dev,
 			       struct packet_type *pt);
 extern int		ip_local_deliver(struct sk_buff *skb);
 extern int		ip_mr_input(struct sk_buff *skb);
@@ -139,7 +139,7 @@ extern int sysctl_local_port_range[2];
 extern __inline__ int ip_finish_output(struct sk_buff *skb)
 {
 	struct dst_entry *dst = skb->dst;
-	struct device *dev = dst->dev;
+	struct net_device *dev = dst->dev;
 	struct hh_cache *hh = dst->hh;
 
 	skb->dev = dev;

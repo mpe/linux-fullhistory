@@ -156,6 +156,8 @@ int mca_esp_detect(Scsi_Host_Template *tpnt)
 			 "NCR 53c9x SCSI", esp_intr))
 			{
 				printk("Unable to request IRQ %d.\n", esp->irq);
+				esp_deallocate(esp);
+				unregister_scsi(esp->ehost);
 				return 0;
 			}
 
@@ -163,6 +165,8 @@ int mca_esp_detect(Scsi_Host_Template *tpnt)
 				printk("Unable to request DMA channel %d.\n",
 				 esp->dma);
 				free_irq(esp->irq, esp_intr);
+				esp_deallocate(esp);
+				unregister_scsi(esp->ehost);
 				return 0;
 			}
 
@@ -259,7 +263,7 @@ int mca_esp_release(struct Scsi_Host *host)
 	struct NCR_ESP *esp = (struct NCR_ESP *)host->hostdata;
 	unsigned char tmp_byte;
 
-
+	esp_deallocate(esp);
 	/*
 	 * Tell the 86C01 to stop sending interrupts
 	 */

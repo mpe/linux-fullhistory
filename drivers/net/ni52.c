@@ -192,26 +192,26 @@ sizeof(nop_cmd) = 8;
 #define NI52_ADDR1 0x07
 #define NI52_ADDR2 0x01
 
-static int     ni52_probe1(struct device *dev,int ioaddr);
+static int     ni52_probe1(struct net_device *dev,int ioaddr);
 static void    ni52_interrupt(int irq,void *dev_id,struct pt_regs *reg_ptr);
-static int     ni52_open(struct device *dev);
-static int     ni52_close(struct device *dev);
-static int     ni52_send_packet(struct sk_buff *,struct device *);
-static struct  net_device_stats *ni52_get_stats(struct device *dev);
-static void    set_multicast_list(struct device *dev);
+static int     ni52_open(struct net_device *dev);
+static int     ni52_close(struct net_device *dev);
+static int     ni52_send_packet(struct sk_buff *,struct net_device *);
+static struct  net_device_stats *ni52_get_stats(struct net_device *dev);
+static void    set_multicast_list(struct net_device *dev);
 #if 0
-static void    ni52_dump(struct device *,void *);
+static void    ni52_dump(struct net_device *,void *);
 #endif
 
 /* helper-functions */
-static int     init586(struct device *dev);
-static int     check586(struct device *dev,char *where,unsigned size);
-static void    alloc586(struct device *dev);
-static void    startrecv586(struct device *dev);
-static void   *alloc_rfa(struct device *dev,void *ptr);
-static void    ni52_rcv_int(struct device *dev);
-static void    ni52_xmt_int(struct device *dev);
-static void    ni52_rnr_int(struct device *dev);
+static int     init586(struct net_device *dev);
+static int     check586(struct net_device *dev,char *where,unsigned size);
+static void    alloc586(struct net_device *dev);
+static void    startrecv586(struct net_device *dev);
+static void   *alloc_rfa(struct net_device *dev,void *ptr);
+static void    ni52_rcv_int(struct net_device *dev);
+static void    ni52_xmt_int(struct net_device *dev);
+static void    ni52_rnr_int(struct net_device *dev);
 
 struct priv
 {
@@ -238,7 +238,7 @@ struct priv
 /**********************************************
  * close device
  */
-static int ni52_close(struct device *dev)
+static int ni52_close(struct net_device *dev)
 {
 	free_irq(dev->irq, dev);
 
@@ -255,7 +255,7 @@ static int ni52_close(struct device *dev)
 /**********************************************
  * open device
  */
-static int ni52_open(struct device *dev)
+static int ni52_open(struct net_device *dev)
 {
 	ni_disint();
 	alloc586(dev);
@@ -281,7 +281,7 @@ static int ni52_open(struct device *dev)
 /**********************************************
  * Check to see if there's an 82586 out there.
  */
-static int check586(struct device *dev,char *where,unsigned size)
+static int check586(struct net_device *dev,char *where,unsigned size)
 {
 	struct priv pb;
 	struct priv *p = /* (struct priv *) dev->priv*/ &pb;
@@ -323,7 +323,7 @@ static int check586(struct device *dev,char *where,unsigned size)
 /******************************************************************
  * set iscp at the right place, called by ni52_probe1 and open586.
  */
-void alloc586(struct device *dev)
+void alloc586(struct net_device *dev)
 {
 	struct priv *p =	(struct priv *) dev->priv;
 
@@ -358,7 +358,7 @@ void alloc586(struct device *dev)
 /**********************************************
  * probe the ni5210-card
  */
-int __init ni52_probe(struct device *dev)
+int __init ni52_probe(struct net_device *dev)
 {
 #ifndef MODULE
 	int *port;
@@ -409,7 +409,7 @@ int __init ni52_probe(struct device *dev)
 	return ENODEV;
 }
 
-static int __init ni52_probe1(struct device *dev,int ioaddr)
+static int __init ni52_probe1(struct net_device *dev,int ioaddr)
 {
 	int i,size;
 
@@ -534,7 +534,7 @@ static int __init ni52_probe1(struct device *dev,int ioaddr)
  * needs a correct 'allocated' memory
  */
 
-static int init586(struct device *dev)
+static int init586(struct net_device *dev)
 {
 	void *ptr;
 	int i,result=0;
@@ -769,7 +769,7 @@ static int init586(struct device *dev)
  * It sets up the Receive Frame Area (RFA).
  */
 
-static void *alloc_rfa(struct device *dev,void *ptr)
+static void *alloc_rfa(struct net_device *dev,void *ptr)
 {
 	volatile struct rfd_struct *rfd = (struct rfd_struct *)ptr;
 	volatile struct rbd_struct *rbd;
@@ -817,7 +817,7 @@ static void *alloc_rfa(struct device *dev,void *ptr)
 
 static void ni52_interrupt(int irq,void *dev_id,struct pt_regs *reg_ptr)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	unsigned short stat;
 	int cnt=0;
 	struct priv *p;
@@ -893,7 +893,7 @@ static void ni52_interrupt(int irq,void *dev_id,struct pt_regs *reg_ptr)
  * receive-interrupt
  */
 
-static void ni52_rcv_int(struct device *dev)
+static void ni52_rcv_int(struct net_device *dev)
 {
 	int status,cnt=0;
 	unsigned short totlen;
@@ -1016,7 +1016,7 @@ static void ni52_rcv_int(struct device *dev)
  * handle 'Receiver went not ready'.
  */
 
-static void ni52_rnr_int(struct device *dev)
+static void ni52_rnr_int(struct net_device *dev)
 {
 	struct priv *p = (struct priv *) dev->priv;
 
@@ -1039,7 +1039,7 @@ static void ni52_rnr_int(struct device *dev)
  * handle xmit - interrupt
  */
 
-static void ni52_xmt_int(struct device *dev)
+static void ni52_xmt_int(struct net_device *dev)
 {
 	int status;
 	struct priv *p = (struct priv *) dev->priv;
@@ -1092,7 +1092,7 @@ static void ni52_xmt_int(struct device *dev)
  * (re)start the receiver
  */
 
-static void startrecv586(struct device *dev)
+static void startrecv586(struct net_device *dev)
 {
 	struct priv *p = (struct priv *) dev->priv;
 
@@ -1108,7 +1108,7 @@ static void startrecv586(struct device *dev)
  * send frame
  */
 
-static int ni52_send_packet(struct sk_buff *skb, struct device *dev)
+static int ni52_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	int len,i;
 #ifndef NO_NOPCOMMANDS
@@ -1258,7 +1258,7 @@ static int ni52_send_packet(struct sk_buff *skb, struct device *dev)
  * Someone wanna have the statistics
  */
 
-static struct net_device_stats *ni52_get_stats(struct device *dev)
+static struct net_device_stats *ni52_get_stats(struct net_device *dev)
 {
 	struct priv *p = (struct priv *) dev->priv;
 	unsigned short crc,aln,rsc,ovrn;
@@ -1283,7 +1283,7 @@ static struct net_device_stats *ni52_get_stats(struct device *dev)
 /********************************************************
  * Set MC list ..
  */
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
 	if(!dev->start)
 	{
@@ -1304,7 +1304,7 @@ static void set_multicast_list(struct device *dev)
 
 #ifdef MODULE
 static char devicename[9] = { 0, };
-static struct device dev_ni52 = {
+static struct net_device dev_ni52 = {
 	devicename,	/* "ni5210": device name inserted by net_init.c */
 	0, 0, 0, 0,
 	0x300, 9,	 /* I/O address, IRQ */
@@ -1349,7 +1349,7 @@ void cleanup_module(void)
 /*
  * DUMP .. we expect a not running CMD unit and enough space
  */
-void ni52_dump(struct device *dev,void *ptr)
+void ni52_dump(struct net_device *dev,void *ptr)
 {
 	struct priv *p = (struct priv *) dev->priv;
 	struct dump_cmd_struct *dump_cmd = (struct dump_cmd_struct *) ptr;

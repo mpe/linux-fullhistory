@@ -293,7 +293,7 @@ __inline__ struct sock *udp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport
 
 static struct sock *udp_v4_proxy_lookup(unsigned short num, unsigned long raddr,
 					unsigned short rnum, unsigned long laddr,
-					struct device *dev, unsigned short pnum,
+					struct net_device *dev, unsigned short pnum,
 					int dif)
 {
 	struct sock *s, *result = NULL;

@@ -48,6 +48,7 @@ struct blz1230II_dma_registers {
 #define BLZ1230_DMA_WRITE 0x80000000
 
 extern int blz1230_esp_detect(struct SHT *);
+extern int blz1230_esp_release(struct Scsi_Host *);
 extern const char *esp_info(struct Scsi_Host *);
 extern int esp_queue(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 extern int esp_command(Scsi_Cmnd *);
@@ -57,9 +58,11 @@ extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 			 int hostno, int inout);
 
 #define SCSI_BLZ1230      { proc_dir:		&proc_scsi_esp, \
+			    proc_info:		esp_proc_info, \
 			    name:		"Blizzard1230 SCSI IV", \
 			    detect:		blz1230_esp_detect, \
-			    release:		NULL, \
+			    release:		blz1230_esp_release, \
+			    command:		esp_command, \
 			    queuecommand:	esp_queue, \
 			    abort:		esp_abort, \
 			    reset:		esp_reset, \
@@ -67,6 +70,6 @@ extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 			    this_id:		7, \
 			    sg_tablesize:	SG_ALL, \
 			    cmd_per_lun:	1, \
-			    use_clustering:	DISABLE_CLUSTERING }
+			    use_clustering:	ENABLE_CLUSTERING }
 
 #endif /* BLZ1230_H */

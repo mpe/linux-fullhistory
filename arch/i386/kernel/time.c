@@ -59,7 +59,7 @@
 /*
  * for x86_do_profile()
  */
-#include "irq.h"
+#include <linux/irq.h>
 
 
 unsigned long cpu_hz;	/* Detected as we calibrate the TSC */
@@ -547,7 +547,7 @@ static struct irqaction irq0  = { timer_interrupt, SA_INTERRUPT, 0, "timer", NUL
 #define CALIBRATE_LATCH	(5 * LATCH)
 #define CALIBRATE_TIME	(5 * 1000020/HZ)
 
-__initfunc(static unsigned long calibrate_tsc(void))
+static unsigned long __init calibrate_tsc(void)
 {
        /* Set the Gate high, disable speaker */
 	outb((inb(0x61) & ~0x02) | 0x01, 0x61);
@@ -612,7 +612,7 @@ bad_ctc:
 	return 0;
 }
 
-__initfunc(void time_init(void))
+void __init time_init(void)
 {
 	xtime.tv_sec = get_cmos_time();
 	xtime.tv_usec = 0;
@@ -681,8 +681,8 @@ __initfunc(void time_init(void))
 	co_cpu_write(CO_CPU_CTRL, co_cpu_read(CO_CPU_CTRL) & ~CO_CTRL_TIMEMASK);
 
 	/* Wire cpu IDT entry to s/w handler (and Cobalt APIC to IDT) */
-	setup_x86_irq(CO_IRQ_TIMER, &irq0);
+	setup_irq(CO_IRQ_TIMER, &irq0);
 #else
-	setup_x86_irq(0, &irq0);
+	setup_irq(0, &irq0);
 #endif
 }

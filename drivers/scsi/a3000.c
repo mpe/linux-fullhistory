@@ -32,34 +32,25 @@ static struct Scsi_Host *a3000_host = NULL;
 
 static void a3000_intr (int irq, void *dummy, struct pt_regs *fp)
 {
-    unsigned int status = DMA(a3000_host)->ISTR;
+	unsigned long flags;
+	unsigned int status = DMA(a3000_host)->ISTR;
 
-    if (!(status & ISTR_INT_P))
-	return;
-    if (status & ISTR_INTS)
-    {
-	/* disable PORTS interrupt */
-	custom.intena = IF_PORTS;
-	wd33c93_intr (a3000_host);
-	/* enable PORTS interrupt */
-	custom.intena = IF_SETCLR | IF_PORTS;
-    } else {
-      printk("Non-serviced A3000 SCSI-interrupt? ISTR = %02x\n", status);
-    }
+	if (!(status & ISTR_INT_P))
+		return;
+	if (status & ISTR_INTS)
+	{
+		spin_lock_irqsave(&io_request_lock, flags);
+		wd33c93_intr (a3000_host);
+		spin_unlock_irqrestore(&io_request_lock, flags);
+	} else
+		printk("Non-serviced A3000 SCSI-interrupt? ISTR = %02x\n",
+		       status);
 }
 
-static void do_a3000_intr (int irq, void *dummy, struct pt_regs *fp)
-{
-    unsigned long flags;
-
-    spin_lock_irqsave(&io_request_lock, flags);
-    a3000_intr(irq, dummy, fp);
-    spin_unlock_irqrestore(&io_request_lock, flags);
-}
 static int dma_setup (Scsi_Cmnd *cmd, int dir_in)
 {
     unsigned short cntr = CNTR_PDMD | CNTR_INTEN;
-    unsigned long addr = VTOP(cmd->SCp.ptr);
+    unsigned long addr = virt_to_bus(cmd->SCp.ptr);
 
     /*
      * if the physical address has the wrong alignment, or if
@@ -91,7 +82,7 @@ static int dma_setup (Scsi_Cmnd *cmd, int dir_in)
 			cmd->request_buffer, cmd->request_bufflen);
 	}
 
-	addr = VTOP(HDATA(a3000_host)->dma_bounce_buffer);
+	addr = virt_to_bus(HDATA(a3000_host)->dma_bounce_buffer);
     }
 
     /* setup dma direction */
@@ -175,7 +166,7 @@ static void dma_stop (struct Scsi_Host *instance, Scsi_Cmnd *SCpnt,
     }
 }
 
-__initfunc(int a3000_detect(Scsi_Host_Template *tpnt))
+int __init a3000_detect(Scsi_Host_Template *tpnt)
 {
     static unsigned char called = 0;
 
@@ -194,7 +185,8 @@ __initfunc(int a3000_detect(Scsi_Host_Template *tpnt))
     DMA(a3000_host)->DAWR = DAWR_A3000;
     wd33c93_init(a3000_host, (wd33c93_regs *)&(DMA(a3000_host)->SASR),
 		 dma_setup, dma_stop, WD33C93_FS_12_15);
-    request_irq(IRQ_AMIGA_PORTS, do_a3000_intr, 0, "A3000 SCSI", a3000_intr);
+    request_irq(IRQ_AMIGA_PORTS, a3000_intr, SA_SHIRQ, "A3000 SCSI",
+		a3000_intr);
     DMA(a3000_host)->CNTR = CNTR_PDMD | CNTR_INTEN;
     called = 1;
 

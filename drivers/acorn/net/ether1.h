@@ -43,12 +43,12 @@ struct ether1_priv {
 	unsigned char restart      : 1;
 };
 
-static int ether1_open (struct device *dev);
-static int ether1_sendpacket (struct sk_buff *skb, struct device *dev);
+static int ether1_open (struct net_device *dev);
+static int ether1_sendpacket (struct sk_buff *skb, struct net_device *dev);
 static void ether1_interrupt (int irq, void *dev_id, struct pt_regs *regs);
-static int ether1_close (struct device *dev);
-static struct enet_statistics *ether1_getstats (struct device *dev);
-static void ether1_setmulticastlist (struct device *dev);
+static int ether1_close (struct net_device *dev);
+static struct enet_statistics *ether1_getstats (struct net_device *dev);
+static void ether1_setmulticastlist (struct net_device *dev);
 
 #define I82586_NULL (-1)
 

@@ -120,28 +120,28 @@ static unsigned int net_debug = NET_DEBUG;
 #ifdef TIMED_CHECKER
 #include <linux/timer.h>
 static void atp_timed_checker(unsigned long ignored);
-static struct device *atp_timed_dev;
+static struct net_device *atp_timed_dev;
 static struct timer_list atp_timer = {NULL, NULL, 0, 0, atp_timed_checker};
 #endif
 
 /* Index to functions, as function prototypes. */
 
-extern int atp_probe(struct device *dev);
+extern int atp_probe(struct net_device *dev);
 
-static int atp_probe1(struct device *dev, short ioaddr);
-static void get_node_ID(struct device *dev);
+static int atp_probe1(struct net_device *dev, short ioaddr);
+static void get_node_ID(struct net_device *dev);
 static unsigned short eeprom_op(short ioaddr, unsigned int cmd);
-static int net_open(struct device *dev);
-static void hardware_init(struct device *dev);
+static int net_open(struct net_device *dev);
+static void hardware_init(struct net_device *dev);
 static void write_packet(short ioaddr, int length, unsigned char *packet, int mode);
 static void trigger_send(short ioaddr, int length);
-static int	net_send_packet(struct sk_buff *skb, struct device *dev);
+static int	net_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void net_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void net_rx(struct device *dev);
+static void net_rx(struct net_device *dev);
 static void read_block(short ioaddr, int length, unsigned char *buffer, int data_mode);
-static int net_close(struct device *dev);
-static struct net_device_stats *net_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev);
+static int net_close(struct net_device *dev);
+static struct net_device_stats *net_get_stats(struct net_device *dev);
+static void set_multicast_list(struct net_device *dev);
 
 
 /* Check for a network adapter of this type, and return '0' iff one exists.
@@ -151,7 +151,7 @@ static void set_multicast_list(struct device *dev);
    (detachable devices only).
    */
 int __init 
-atp_init(struct device *dev)
+atp_init(struct net_device *dev)
 {
 	int *port, ports[] = {0x378, 0x278, 0x3bc, 0};
 	int base_addr = dev->base_addr;
@@ -173,7 +173,7 @@ atp_init(struct device *dev)
 	return ENODEV;
 }
 
-static int __init atp_probe1(struct device *dev, short ioaddr)
+static int __init atp_probe1(struct net_device *dev, short ioaddr)
 {
 	int saved_ctrl_reg, status;
 
@@ -259,7 +259,7 @@ static int __init atp_probe1(struct device *dev, short ioaddr)
 }
 
 /* Read the station address PROM, usually a word-wide EEPROM. */
-static void __init get_node_ID(struct device *dev)
+static void __init get_node_ID(struct net_device *dev)
 {
 	short ioaddr = dev->base_addr;
 	int sa_offset = 0;
@@ -321,7 +321,7 @@ static unsigned short __init eeprom_op(short ioaddr, unsigned int cmd)
    This is an attachable device: if there is no dev->priv entry then it wasn't
    probed for at boot-time, and we need to probe for it again.
    */
-static int net_open(struct device *dev)
+static int net_open(struct net_device *dev)
 {
 
 	/* The interrupt line is turned off (tri-stated) when the device isn't in
@@ -338,7 +338,7 @@ static int net_open(struct device *dev)
 
 /* This routine resets the hardware.  We initialize everything, assuming that
    the hardware may have been temporarily detached. */
-static void hardware_init(struct device *dev)
+static void hardware_init(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -412,7 +412,7 @@ static void write_packet(short ioaddr, int length, unsigned char *packet, int da
 }
 
 static int
-net_send_packet(struct sk_buff *skb, struct device *dev)
+net_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -477,7 +477,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 static void
 net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct net_local *lp;
 	int ioaddr, status, boguscount = 20;
 	static int num_tx_since_rx = 0;
@@ -634,7 +634,7 @@ static void atp_timed_checker(unsigned long ignored)
 #endif
 
 /* We have a good packet(s), get it/them out of the buffers. */
-static void net_rx(struct device *dev)
+static void net_rx(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -713,7 +713,7 @@ static void read_block(short ioaddr, int length, unsigned char *p, int data_mode
 
 /* The inverse routine to net_open(). */
 static int
-net_close(struct device *dev)
+net_close(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -737,7 +737,7 @@ net_close(struct device *dev)
 
 /* Get the current statistics.	This may be called with the card open or
    closed. */
-static struct net_device_stats *net_get_stats(struct device *dev)
+static struct net_device_stats *net_get_stats(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	return &lp->stats;
@@ -747,7 +747,7 @@ static struct net_device_stats *net_get_stats(struct device *dev)
  *	Set or clear the multicast filter for this adapter.
  */
  
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	short ioaddr = dev->base_addr;

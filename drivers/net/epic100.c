@@ -151,8 +151,8 @@ IVc. Errata
 
 /* The rest of these values should never change. */
 
-static struct device *epic_probe1(int pci_bus, int pci_devfn,
-								  struct device *dev, long ioaddr, int irq,
+static struct net_device *epic_probe1(int pci_bus, int pci_devfn,
+								  struct net_device *dev, long ioaddr, int irq,
 								  int chip_id, int card_idx);
 
 enum pci_flags_bit {
@@ -164,7 +164,7 @@ struct chip_info {
 	const char *name;
 	u16	vendor_id, device_id, device_id_mask, pci_flags;
 	int io_size, min_latency;
-	struct device *(*probe1)(int pci_bus, int pci_devfn, struct device *dev,
+	struct net_device *(*probe1)(int pci_bus, int pci_devfn, struct net_device *dev,
 							 long ioaddr, int irq, int chip_idx, int fnd_cnt);
 } chip_tbl[] = {
 	{"SMSC EPIC/100 83c170", 0x10B8, 0x0005, 0x7fff,
@@ -217,7 +217,7 @@ struct epic_rx_desc {
 struct epic_private {
 	char devname[8];			/* Used only for kernel debugging. */
 	const char *product_name;
-	struct device *next_module;
+	struct net_device *next_module;
 
 	/* Tx and Rx rings here so that they remain paragraph aligned. */
 	struct epic_rx_desc rx_ring[RX_RING_SIZE];
@@ -253,28 +253,28 @@ struct epic_private {
 static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 static int options[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 
-static int epic_open(struct device *dev);
+static int epic_open(struct net_device *dev);
 static int read_eeprom(long ioaddr, int location);
 static int mdio_read(long ioaddr, int phy_id, int location);
 static void mdio_write(long ioaddr, int phy_id, int location, int value);
-static void epic_restart(struct device *dev);
+static void epic_restart(struct net_device *dev);
 static void epic_timer(unsigned long data);
-static void epic_tx_timeout(struct device *dev);
-static void epic_init_ring(struct device *dev);
-static int epic_start_xmit(struct sk_buff *skb, struct device *dev);
-static int epic_rx(struct device *dev);
+static void epic_tx_timeout(struct net_device *dev);
+static void epic_init_ring(struct net_device *dev);
+static int epic_start_xmit(struct sk_buff *skb, struct net_device *dev);
+static int epic_rx(struct net_device *dev);
 static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
-static int mii_ioctl(struct device *dev, struct ifreq *rq, int cmd);
-static int epic_close(struct device *dev);
-static struct net_device_stats *epic_get_stats(struct device *dev);
-static void set_rx_mode(struct device *dev);
+static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
+static int epic_close(struct net_device *dev);
+static struct net_device_stats *epic_get_stats(struct net_device *dev);
+static void set_rx_mode(struct net_device *dev);
 
 
 /* A list of all installed EPIC devices, for removing the driver module. */
-static struct device *root_epic_dev = NULL;
+static struct net_device *root_epic_dev = NULL;
 
 #ifndef CARDBUS
-int epic100_probe(struct device *dev)
+int epic100_probe(struct net_device *dev)
 {
 	int cards_found = 0;
 	int chip_idx, irq;
@@ -381,8 +381,8 @@ int epic100_probe(struct device *dev)
 }
 #endif  /* not CARDBUS */
 
-static struct device *epic_probe1(int pci_bus, int pci_devfn,
-								  struct device *dev, long ioaddr, int irq,
+static struct net_device *epic_probe1(int pci_bus, int pci_devfn,
+								  struct net_device *dev, long ioaddr, int irq,
 								  int chip_idx, int card_idx)
 {
 	struct epic_private *ep;
@@ -589,7 +589,7 @@ static void mdio_write(long ioaddr, int phy_id, int location, int value)
 
 
 static int
-epic_open(struct device *dev)
+epic_open(struct net_device *dev)
 {
 	struct epic_private *ep = (struct epic_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -680,7 +680,7 @@ epic_open(struct device *dev)
 
 /* Reset the chip to recover from a PCI transaction error.
    This may occur at interrupt time. */
-static void epic_pause(struct device *dev)
+static void epic_pause(struct net_device *dev)
 {
 	long ioaddr = dev->base_addr;
 	struct epic_private *ep = (struct epic_private *)dev->priv;
@@ -701,7 +701,7 @@ static void epic_pause(struct device *dev)
 	epic_rx(dev);
 }
 
-static void epic_restart(struct device *dev)
+static void epic_restart(struct net_device *dev)
 {
 	long ioaddr = dev->base_addr;
 	struct epic_private *ep = (struct epic_private *)dev->priv;
@@ -752,7 +752,7 @@ static void epic_restart(struct device *dev)
 
 static void epic_timer(unsigned long data)
 {
-	struct device *dev = (struct device *)data;
+	struct net_device *dev = (struct net_device *)data;
 	struct epic_private *ep = (struct epic_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 	int next_tick = 0;
@@ -784,7 +784,7 @@ static void epic_timer(unsigned long data)
 	}
 }
 
-static void epic_tx_timeout(struct device *dev)
+static void epic_tx_timeout(struct net_device *dev)
 {
 	struct epic_private *ep = (struct epic_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -815,7 +815,7 @@ static void epic_tx_timeout(struct device *dev)
 
 /* Initialize the Rx and Tx rings, along with various 'dev' bits. */
 static void
-epic_init_ring(struct device *dev)
+epic_init_ring(struct net_device *dev)
 {
 	struct epic_private *ep = (struct epic_private *)dev->priv;
 	int i;
@@ -856,7 +856,7 @@ epic_init_ring(struct device *dev)
 }
 
 static int
-epic_start_xmit(struct sk_buff *skb, struct device *dev)
+epic_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct epic_private *ep = (struct epic_private *)dev->priv;
 	int entry;
@@ -920,7 +920,7 @@ epic_start_xmit(struct sk_buff *skb, struct device *dev)
    after the Tx thread. */
 static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)dev_instance;
+	struct net_device *dev = (struct net_device *)dev_instance;
 	struct epic_private *ep = (struct epic_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 	int status, boguscnt = max_interrupt_work;
@@ -1063,7 +1063,7 @@ static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 	return;
 }
 
-static int epic_rx(struct device *dev)
+static int epic_rx(struct net_device *dev)
 {
 	struct epic_private *ep = (struct epic_private *)dev->priv;
 	int entry = ep->cur_rx % RX_RING_SIZE;
@@ -1139,7 +1139,7 @@ static int epic_rx(struct device *dev)
 	return work_done;
 }
 
-static int epic_close(struct device *dev)
+static int epic_close(struct net_device *dev)
 {
 	long ioaddr = dev->base_addr;
 	struct epic_private *ep = (struct epic_private *)dev->priv;
@@ -1195,7 +1195,7 @@ static int epic_close(struct device *dev)
 	return 0;
 }
 
-static struct net_device_stats *epic_get_stats(struct device *dev)
+static struct net_device_stats *epic_get_stats(struct net_device *dev)
 {
 	struct epic_private *ep = (struct epic_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -1237,7 +1237,7 @@ static inline unsigned ether_crc_le(int length, unsigned char *data)
 }
 
 
-static void set_rx_mode(struct device *dev)
+static void set_rx_mode(struct net_device *dev)
 {
 	long ioaddr = dev->base_addr;
 	struct epic_private *ep = (struct epic_private *)dev->priv;
@@ -1276,7 +1276,7 @@ static void set_rx_mode(struct device *dev)
 	return;
 }
 
-static int mii_ioctl(struct device *dev, struct ifreq *rq, int cmd)
+static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
 	long ioaddr = dev->base_addr;
 	u16 *data = (u16 *)&rq->ifr_data;
@@ -1325,7 +1325,7 @@ static int mii_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
 static dev_node_t *epic_attach(dev_locator_t *loc)
 {
-	struct device *dev;
+	struct net_device *dev;
 	u16 dev_id;
 	u32 io;
 	u8 bus, devfn, irq;
@@ -1357,7 +1357,7 @@ static dev_node_t *epic_attach(dev_locator_t *loc)
 
 static void epic_suspend(dev_node_t *node)
 {
-	struct device **devp, **next;
+	struct net_device **devp, **next;
 	printk(KERN_INFO "epic_suspend(%s)\n", node->dev_name);
 	for (devp = &root_epic_dev; *devp; devp = next) {
 		next = &((struct epic_private *)(*devp)->priv)->next_module;
@@ -1372,7 +1372,7 @@ static void epic_suspend(dev_node_t *node)
 }
 static void epic_resume(dev_node_t *node)
 {
-	struct device **devp, **next;
+	struct net_device **devp, **next;
 	printk(KERN_INFO "epic_resume(%s)\n", node->dev_name);
 	for (devp = &root_epic_dev; *devp; devp = next) {
 		next = &((struct epic_private *)(*devp)->priv)->next_module;
@@ -1384,7 +1384,7 @@ static void epic_resume(dev_node_t *node)
 }
 static void epic_detach(dev_node_t *node)
 {
-	struct device **devp, **next;
+	struct net_device **devp, **next;
 	printk(KERN_INFO "epic_detach(%s)\n", node->dev_name);
 	for (devp = &root_epic_dev; *devp; devp = next) {
 		next = &((struct epic_private *)(*devp)->priv)->next_module;
@@ -1423,7 +1423,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	struct device *next_dev;
+	struct net_device *next_dev;
 
 #ifdef CARDBUS
 	unregister_driver(&epic_ops);

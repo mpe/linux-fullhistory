@@ -156,7 +156,7 @@ extern __inline__ struct fib_info * fib_find_info(const struct fib_info *nfi)
    Used only by redirect accept routine.
  */
 
-int ip_fib_check_default(u32 gw, struct device *dev)
+int ip_fib_check_default(u32 gw, struct net_device *dev)
 {
 	for_fib_info() {
 		if (fi->fib_flags & RTNH_F_DEAD)
@@ -331,7 +331,7 @@ static int fib_check_nh(const struct rtmsg *r, struct fib_info *fi, struct fib_n
 			return 0;
 #endif
 		if (nh->nh_flags&RTNH_F_ONLINK) {
-			struct device *dev;
+			struct net_device *dev;
 
 			if (r->rtm_scope >= RT_SCOPE_LINK)
 				return -EINVAL;
@@ -731,7 +731,7 @@ fib_convert_rtentry(int cmd, struct nlmsghdr *nl, struct rtmsg *rtm,
 #ifdef CONFIG_IP_ALIAS
 		char *colon;
 #endif
-		struct device *dev;
+		struct net_device *dev;
 		char   devname[IFNAMSIZ];
 
 		if (copy_from_user(devname, r->rt_dev, IFNAMSIZ-1))
@@ -821,7 +821,7 @@ fib_convert_rtentry(int cmd, struct nlmsghdr *nl, struct rtmsg *rtm,
    - device went down -> we must shutdown all nexthops going via it.
  */
 
-int fib_sync_down(u32 local, struct device *dev, int force)
+int fib_sync_down(u32 local, struct net_device *dev, int force)
 {
 	int ret = 0;
 	int scope = RT_SCOPE_NOWHERE;
@@ -865,7 +865,7 @@ int fib_sync_down(u32 local, struct device *dev, int force)
    It takes sense only on multipath routes.
  */
 
-int fib_sync_up(struct device *dev)
+int fib_sync_up(struct net_device *dev)
 {
 	int ret = 0;
 

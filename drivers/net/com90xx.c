@@ -91,15 +91,15 @@
 #ifdef MODULE
 static
 #endif
-int arc90xx_probe(struct device *dev);
-static void arc90xx_rx(struct device *dev, int recbuf);
-static int arc90xx_found(struct device *dev, int ioaddr, int airq, u_long shmem, int more);
-static void arc90xx_inthandler(struct device *dev);
-static int arc90xx_reset(struct device *dev, int reset_delay);
-static void arc90xx_setmask(struct device *dev, u_char mask);
-static void arc90xx_command(struct device *dev, u_char command);
-static u_char arc90xx_status(struct device *dev);
-static void arc90xx_prepare_tx(struct device *dev, u_char * hdr, int hdrlen,
+int arc90xx_probe(struct net_device *dev);
+static void arc90xx_rx(struct net_device *dev, int recbuf);
+static int arc90xx_found(struct net_device *dev, int ioaddr, int airq, u_long shmem, int more);
+static void arc90xx_inthandler(struct net_device *dev);
+static int arc90xx_reset(struct net_device *dev, int reset_delay);
+static void arc90xx_setmask(struct net_device *dev, u_char mask);
+static void arc90xx_command(struct net_device *dev, u_char command);
+static u_char arc90xx_status(struct net_device *dev);
+static void arc90xx_prepare_tx(struct net_device *dev, u_char * hdr, int hdrlen,
 	     char *data, int length, int daddr, int exceptA, int offset);
 static void arc90xx_openclose(int open);
 
@@ -120,7 +120,7 @@ MODULE_PARM(device, "s");
 void __init com90xx_setup(char *str, int *ints);
 char __initdata com90xx_explicit = 0;
 
-extern struct device arcnet_devs[];
+extern struct net_device arcnet_devs[];
 extern char arcnet_dev_names[][10];
 extern int arcnet_num_devs;
 #endif
@@ -179,7 +179,7 @@ static u_long shmems[(0xFF800 - 0xA0000) / 2048 + 1] __initdata = {
 	0
 };
 
-int __init arc90xx_probe(struct device *dev)
+int __init arc90xx_probe(struct net_device *dev)
 {
 	static int init_once = 0;
 	static int numports = sizeof(ports) / sizeof(ports[0]), numshmems = sizeof(shmems) / sizeof(shmems[0]);
@@ -490,10 +490,10 @@ int __init arc90xx_probe(struct device *dev)
 	return retval;
 }
 
-/* Set up the struct device associated with this card.  Called after
+/* Set up the struct net_device associated with this card.  Called after
  * probing succeeds.
  */
-static int __init arc90xx_found(struct device *dev, int ioaddr, int airq, u_long shmem, int more)
+static int __init arc90xx_found(struct net_device *dev, int ioaddr, int airq, u_long shmem, int more)
 {
 	struct arcnet_local *lp;
 	u_long first_mirror, last_mirror;
@@ -623,7 +623,7 @@ static int __init arc90xx_found(struct device *dev, int ioaddr, int airq, u_long
  *
  * However, it does make sure the card is in a defined state.
  */
-int arc90xx_reset(struct device *dev, int reset_delay)
+int arc90xx_reset(struct net_device *dev, int reset_delay)
 {
 	struct arcnet_local *lp = (struct arcnet_local *) dev->priv;
 	short ioaddr = dev->base_addr;
@@ -690,7 +690,7 @@ static void arc90xx_openclose(int open)
 }
 
 
-static void arc90xx_setmask(struct device *dev, u_char mask)
+static void arc90xx_setmask(struct net_device *dev, u_char mask)
 {
 	short ioaddr = dev->base_addr;
 
@@ -698,7 +698,7 @@ static void arc90xx_setmask(struct device *dev, u_char mask)
 }
 
 
-static u_char arc90xx_status(struct device *dev)
+static u_char arc90xx_status(struct net_device *dev)
 {
 	short ioaddr = dev->base_addr;
 
@@ -706,7 +706,7 @@ static u_char arc90xx_status(struct device *dev)
 }
 
 
-static void arc90xx_command(struct device *dev, u_char cmd)
+static void arc90xx_command(struct net_device *dev, u_char cmd)
 {
 	short ioaddr = dev->base_addr;
 
@@ -717,7 +717,7 @@ static void arc90xx_command(struct device *dev, u_char cmd)
 /* The actual interrupt handler routine - handle various IRQ's generated
  * by the card.
  */
-static void arc90xx_inthandler(struct device *dev)
+static void arc90xx_inthandler(struct net_device *dev)
 {
 	struct arcnet_local *lp = (struct arcnet_local *) dev->priv;
 	int ioaddr = dev->base_addr, status, boguscount = 3, didsomething;
@@ -909,7 +909,7 @@ static void arc90xx_inthandler(struct device *dev)
  * arcnet_rx routing to deal with it.
  */
 
-static void arc90xx_rx(struct device *dev, int recbuf)
+static void arc90xx_rx(struct net_device *dev, int recbuf)
 {
 	struct arcnet_local *lp = (struct arcnet_local *) dev->priv;
 	int ioaddr = dev->base_addr;
@@ -962,7 +962,7 @@ static void arc90xx_rx(struct device *dev, int recbuf)
 /* Given an skb, copy a packet into the ARCnet buffers for later transmission
  * by arcnet_go_tx.
  */
-static void arc90xx_prepare_tx(struct device *dev, u_char * hdr, int hdrlen,
+static void arc90xx_prepare_tx(struct net_device *dev, u_char * hdr, int hdrlen,
 	      char *data, int length, int daddr, int exceptA, int offset)
 {
 	struct arcnet_local *lp = (struct arcnet_local *) dev->priv;
@@ -1053,7 +1053,7 @@ static void arc90xx_prepare_tx(struct device *dev, u_char * hdr, int hdrlen,
 #ifdef MODULE
 
 static char devicename[9] = "";
-static struct device thiscard =
+static struct net_device thiscard =
 {
 	devicename,		/* device name is inserted by linux/drivers/net/net_init.c */
 	0, 0, 0, 0,
@@ -1064,7 +1064,7 @@ static struct device thiscard =
 
 int init_module(void)
 {
-	struct device *dev = &thiscard;
+	struct net_device *dev = &thiscard;
 	if (device)
 		strcpy(dev->name, device);
 	else
@@ -1090,7 +1090,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	struct device *dev = &thiscard;
+	struct net_device *dev = &thiscard;
 	int ioaddr = dev->mem_start;
 
 	if (dev->start)
@@ -1123,7 +1123,7 @@ void cleanup_module(void)
 
 void __init com90xx_setup(char *str, int *ints)
 {
-	struct device *dev;
+	struct net_device *dev;
 
 	if (arcnet_num_devs == MAX_ARCNET_DEVS) {
 		printk("com90xx: Too many ARCnet devices registered (max %d).\n",

@@ -70,7 +70,7 @@ struct llc_struct
 	unsigned char local_sap;
 	unsigned char remote_sap ;
 	char remote_mac[MAX_ADDR_LEN];  /* MAC address of remote session partner */ 
-	struct device *dev;		/* Device we are attached to */
+	struct net_device *dev;		/* Device we are attached to */
 		     
 	unsigned char llc_mode;		/* See doc 7.1 on p70 */
 #define MODE_ADM 1

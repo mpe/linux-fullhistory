@@ -188,28 +188,28 @@ struct cops_local
 };
 
 /* Index to functions, as function prototypes. */
-extern int  cops_probe (struct device *dev);
-static int  cops_probe1 (struct device *dev, int ioaddr);
+extern int  cops_probe (struct net_device *dev);
+static int  cops_probe1 (struct net_device *dev, int ioaddr);
 static int  cops_irq (int ioaddr, int board);
 
-static int  cops_open (struct device *dev);
-static int  cops_jumpstart (struct device *dev);
-static void cops_reset (struct device *dev, int sleep);
-static void cops_load (struct device *dev);
-static int  cops_nodeid (struct device *dev, int nodeid);
+static int  cops_open (struct net_device *dev);
+static int  cops_jumpstart (struct net_device *dev);
+static void cops_reset (struct net_device *dev, int sleep);
+static void cops_load (struct net_device *dev);
+static int  cops_nodeid (struct net_device *dev, int nodeid);
 
 static void cops_interrupt (int irq, void *dev_id, struct pt_regs *regs);
 static void cops_poll (unsigned long ltdev);
-static void cops_rx (struct device *dev);
-static int  cops_send_packet (struct sk_buff *skb, struct device *dev);
-static void set_multicast_list (struct device *dev);
-static int  cops_hard_header (struct sk_buff *skb, struct device *dev,
+static void cops_rx (struct net_device *dev);
+static int  cops_send_packet (struct sk_buff *skb, struct net_device *dev);
+static void set_multicast_list (struct net_device *dev);
+static int  cops_hard_header (struct sk_buff *skb, struct net_device *dev,
 			      unsigned short type, void *daddr, void *saddr, 
 			      unsigned len);
 
-static int  cops_ioctl (struct device *dev, struct ifreq *rq, int cmd);
-static int  cops_close (struct device *dev);
-static struct enet_statistics *cops_get_stats (struct device *dev);
+static int  cops_ioctl (struct net_device *dev, struct ifreq *rq, int cmd);
+static int  cops_close (struct net_device *dev);
+static struct enet_statistics *cops_get_stats (struct net_device *dev);
 
 
 /*
@@ -218,7 +218,7 @@ static struct enet_statistics *cops_get_stats (struct device *dev);
  *      If dev->base_addr in [1..0x1ff], always return failure.
  *        otherwise go with what we pass in.
  */
-int __init cops_probe(struct device *dev)
+int __init cops_probe(struct net_device *dev)
 {
 	int i;
         int base_addr = dev ? dev->base_addr : 0;
@@ -252,7 +252,7 @@ int __init cops_probe(struct device *dev)
  *      probes on the ISA bus. A good device probes avoids doing writes, and
  *      verifies that the correct device exists and functions.
  */
-static int __init cops_probe1(struct device *dev, int ioaddr)
+static int __init cops_probe1(struct net_device *dev, int ioaddr)
 {
         struct cops_local *lp;
 	static unsigned version_printed = 0;
@@ -397,7 +397,7 @@ static int __init cops_irq (int ioaddr, int board)
  * Open/initialize the board. This is called (in the current kernel)
  * sometime after booting when the 'ifconfig' program is run.
  */
-static int cops_open(struct device *dev)
+static int cops_open(struct net_device *dev)
 {
     struct cops_local *lp = (struct cops_local *)dev->priv;
 
@@ -438,7 +438,7 @@ static int cops_open(struct device *dev)
 /*
  *	This allows for a dynamic start/restart of the entire card.
  */
-static int cops_jumpstart(struct device *dev)
+static int cops_jumpstart(struct net_device *dev)
 {
 	struct cops_local *lp = (struct cops_local *)dev->priv;
 
@@ -472,7 +472,7 @@ static void tangent_wait_reset(int ioaddr)
 /*
  *      Reset the LocalTalk board.
  */
-static void cops_reset(struct device *dev, int sleep)
+static void cops_reset(struct net_device *dev, int sleep)
 {
         struct cops_local *lp = (struct cops_local *)dev->priv;
         int ioaddr=dev->base_addr;
@@ -506,7 +506,7 @@ static void cops_reset(struct device *dev, int sleep)
 	return;
 }
 
-static void cops_load (struct device *dev)
+static void cops_load (struct net_device *dev)
 {
         struct ifreq ifr;
         struct ltfirmware *ltf= (struct ltfirmware *)&ifr.ifr_data;
@@ -601,7 +601,7 @@ static void cops_load (struct device *dev)
  *	address else we can specify 0 as the nodeid and the card
  *	will autoprobe for a nodeid.
  */
-static int cops_nodeid (struct device *dev, int nodeid)
+static int cops_nodeid (struct net_device *dev, int nodeid)
 {
 	struct cops_local *lp = (struct cops_local *) dev->priv;
 	int ioaddr = dev->base_addr;
@@ -678,7 +678,7 @@ static void cops_poll(unsigned long ltdev)
 	int ioaddr, status;
 	int boguscount = 0;
 
-	struct device *dev = (struct device *)ltdev;
+	struct net_device *dev = (struct net_device *)ltdev;
 
 	del_timer(&cops_timer);
 
@@ -707,7 +707,7 @@ static void cops_poll(unsigned long ltdev)
  */
 static void cops_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-        struct device *dev = dev_id;
+        struct net_device *dev = dev_id;
         struct cops_local *lp;
         int ioaddr, status;
         int boguscount = 0;
@@ -754,7 +754,7 @@ static void cops_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 /*
  *      We have a good packet(s), get it/them out of the buffers.
  */
-static void cops_rx(struct device *dev)
+static void cops_rx(struct net_device *dev)
 {
         int pkt_len = 0;
         int rsp_type = 0;
@@ -860,7 +860,7 @@ static void cops_rx(struct device *dev)
 /*
  *	Make the card transmit a LocalTalk packet.
  */
-static int cops_send_packet(struct sk_buff *skb, struct device *dev)
+static int cops_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
         struct cops_local *lp = (struct cops_local *)dev->priv;
         int ioaddr = dev->base_addr;
@@ -937,7 +937,7 @@ static int cops_send_packet(struct sk_buff *skb, struct device *dev)
  *	Dummy function to keep the Appletalk layer happy.
  */
  
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
         if(cops_debug >= 3)
 		printk("%s: set_multicast_list executed\n", dev->name);
@@ -947,7 +947,7 @@ static void set_multicast_list(struct device *dev)
  *      Another Dummy function to keep the Appletalk layer happy.
  */
  
-static int cops_hard_header(struct sk_buff *skb, struct device *dev,
+static int cops_hard_header(struct sk_buff *skb, struct net_device *dev,
 			    unsigned short type, void *daddr, void *saddr, 
 			    unsigned len)
 {
@@ -960,7 +960,7 @@ static int cops_hard_header(struct sk_buff *skb, struct device *dev,
  *      System ioctls for the COPS LocalTalk card.
  */
  
-static int cops_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+static int cops_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
         struct cops_local *lp = (struct cops_local *)dev->priv;
         struct sockaddr_at *sa=(struct sockaddr_at *)&ifr->ifr_addr;
@@ -996,7 +996,7 @@ static int cops_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
  *	The inverse routine to cops_open().
  */
  
-static int cops_close(struct device *dev)
+static int cops_close(struct net_device *dev)
 {
 	struct cops_local *lp = (struct cops_local *)dev->priv;
 
@@ -1019,7 +1019,7 @@ static int cops_close(struct device *dev)
  *      Get the current statistics.
  *      This may be called with the card open or closed.
  */
-static struct enet_statistics *cops_get_stats(struct device *dev)
+static struct enet_statistics *cops_get_stats(struct net_device *dev)
 {
         struct cops_local *lp = (struct cops_local *)dev->priv;
         return &lp->stats;
@@ -1028,7 +1028,7 @@ static struct enet_statistics *cops_get_stats(struct device *dev)
 #ifdef MODULE
 static char lt_name[16];
 
-static struct device cops0_dev =
+static struct net_device cops0_dev =
 {
 	lt_name,	/* device name */
         0, 0, 0, 0,

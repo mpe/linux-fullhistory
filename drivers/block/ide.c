@@ -39,7 +39,7 @@
  *  October, 1994 -- Complete line-by-line overhaul for linux 1.1.x, by:
  *
  *	Mark Lord	(mlord@pobox.com)		(IDE Perf.Pkg)
- *	Delman Lee	(delman@mipg.upenn.edu)		("Mr. atdisk2")
+ *	Delman Lee	(delman@ieee.org)		("Mr. atdisk2")
  *	Scott Snyder	(snyder@fnald0.fnal.gov)	(ATAPI IDE cd-rom)
  *
  *  This was a rewrite of just about everything from hd.c, though some original

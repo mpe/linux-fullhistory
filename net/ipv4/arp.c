@@ -195,7 +195,7 @@ struct neigh_table arp_tbl =
 	30*HZ, 128, 512, 1024,
 };
 
-int arp_mc_map(u32 addr, u8 *haddr, struct device *dev, int dir)
+int arp_mc_map(u32 addr, u8 *haddr, struct net_device *dev, int dir)
 {
 	switch (dev->type) {
 	case ARPHRD_ETHER:
@@ -217,7 +217,7 @@ int arp_mc_map(u32 addr, u8 *haddr, struct device *dev, int dir)
 static int arp_constructor(struct neighbour *neigh)
 {
 	u32 addr = *(u32*)neigh->primary_key;
-	struct device *dev = neigh->dev;
+	struct net_device *dev = neigh->dev;
 	struct in_device *in_dev = dev->ip_ptr;
 
 	if (in_dev == NULL)
@@ -307,7 +307,7 @@ static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb)
 {
 	u32 saddr;
 	u8  *dst_ha = NULL;
-	struct device *dev = neigh->dev;
+	struct net_device *dev = neigh->dev;
 	u32 target = *(u32*)neigh->primary_key;
 	int probes = atomic_read(&neigh->probes);
 
@@ -345,7 +345,7 @@ static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb)
  *	is allowed to use this function, it is scheduled to be removed. --ANK
  */
 
-static int arp_set_predefined(int addr_hint, unsigned char * haddr, u32 paddr, struct device * dev)
+static int arp_set_predefined(int addr_hint, unsigned char * haddr, u32 paddr, struct net_device * dev)
 {
 	switch (addr_hint) {
 	case RTN_LOCAL:
@@ -365,7 +365,7 @@ static int arp_set_predefined(int addr_hint, unsigned char * haddr, u32 paddr, s
 
 int arp_find(unsigned char *haddr, struct sk_buff *skb)
 {
-	struct device *dev = skb->dev;
+	struct net_device *dev = skb->dev;
 	u32 paddr;
 	struct neighbour *n;
 
@@ -401,7 +401,7 @@ int arp_find(unsigned char *haddr, struct sk_buff *skb)
 
 int arp_bind_neighbour(struct dst_entry *dst)
 {
-	struct device *dev = dst->dev;
+	struct net_device *dev = dst->dev;
 
 	if (dev == NULL)
 		return 0;
@@ -424,7 +424,7 @@ int arp_bind_neighbour(struct dst_entry *dst)
  */
 
 void arp_send(int type, int ptype, u32 dest_ip, 
-	      struct device *dev, u32 src_ip, 
+	      struct net_device *dev, u32 src_ip, 
 	      unsigned char *dest_hw, unsigned char *src_hw,
 	      unsigned char *target_hw)
 {
@@ -531,7 +531,7 @@ static void parp_redo(struct sk_buff *skb)
  *	Receive an arp request by the device layer.
  */
 
-int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+int arp_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 {
 	struct arphdr *arp = skb->nh.arph;
 	unsigned char *arp_ptr= (unsigned char *)(arp+1);
@@ -744,7 +744,7 @@ out:
  *	Set (create) an ARP cache entry.
  */
 
-int arp_req_set(struct arpreq *r, struct device * dev)
+int arp_req_set(struct arpreq *r, struct net_device * dev)
 {
 	u32 ip = ((struct sockaddr_in *) &r->arp_pa)->sin_addr.s_addr;
 	struct neighbour *neigh;
@@ -816,7 +816,7 @@ static unsigned arp_state_to_flags(struct neighbour *neigh)
  *	Get an ARP cache entry.
  */
 
-static int arp_req_get(struct arpreq *r, struct device *dev)
+static int arp_req_get(struct arpreq *r, struct net_device *dev)
 {
 	u32 ip = ((struct sockaddr_in *) &r->arp_pa)->sin_addr.s_addr;
 	struct neighbour *neigh;
@@ -836,7 +836,7 @@ static int arp_req_get(struct arpreq *r, struct device *dev)
 	return err;
 }
 
-int arp_req_delete(struct arpreq *r, struct device * dev)
+int arp_req_delete(struct arpreq *r, struct net_device * dev)
 {
 	int err;
 	u32 ip = ((struct sockaddr_in *)&r->arp_pa)->sin_addr.s_addr;
@@ -887,7 +887,7 @@ int arp_ioctl(unsigned int cmd, void *arg)
 {
 	int err;
 	struct arpreq r;
-	struct device * dev = NULL;
+	struct net_device * dev = NULL;
 
 	switch(cmd) {
 		case SIOCDARP:
@@ -973,7 +973,7 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 		struct neighbour *n;
 		read_lock_bh(&arp_tbl.lock);
 		for (n=arp_tbl.hash_buckets[i]; n; n=n->next) {
-			struct device *dev = n->dev;
+			struct net_device *dev = n->dev;
 			int hatype = dev->type;
 
 			/* Do not confuse users "arp -a" with magic entries */
@@ -1028,7 +1028,7 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 	for (i=0; i<=PNEIGH_HASHMASK; i++) {
 		struct pneigh_entry *n;
 		for (n=arp_tbl.phash_buckets[i]; n; n=n->next) {
-			struct device *dev = n->dev;
+			struct net_device *dev = n->dev;
 			int hatype = dev ? dev->type : 0;
 
 			size = sprintf(buffer+len,
@@ -1067,7 +1067,7 @@ done:
    It is necessary, that this routine was called after route cache will be
    flushed.
  */
-void arp_ifdown(struct device *dev)
+void arp_ifdown(struct net_device *dev)
 {
 	neigh_ifdown(&arp_tbl, dev);
 }

@@ -56,20 +56,20 @@ static unsigned int hppclan_portlist[] __initdata =
 #define HP_8BSTOP_PG	0x80	/* Last page +1 of RX ring */
 #define HP_16BSTOP_PG	0xFF	/* Same, for 16 bit cards. */
 
-int hp_probe(struct device *dev);
-int hp_probe1(struct device *dev, int ioaddr);
+int hp_probe(struct net_device *dev);
+int hp_probe1(struct net_device *dev, int ioaddr);
 
-static int hp_open(struct device *dev);
-static int hp_close(struct device *dev);
-static void hp_reset_8390(struct device *dev);
-static void hp_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+static int hp_open(struct net_device *dev);
+static int hp_close(struct net_device *dev);
+static void hp_reset_8390(struct net_device *dev);
+static void hp_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
 					int ring_page);
-static void hp_block_input(struct device *dev, int count,
+static void hp_block_input(struct net_device *dev, int count,
 					struct sk_buff *skb , int ring_offset);
-static void hp_block_output(struct device *dev, int count,
+static void hp_block_output(struct net_device *dev, int count,
 							const unsigned char *buf, int start_page);
 
-static void hp_init_card(struct device *dev);
+static void hp_init_card(struct net_device *dev);
 
 /* The map from IRQ number to HP_CONFIGURE register setting. */
 /* My default is IRQ5	             0  1  2  3  4  5  6  7  8  9 10 11 */
@@ -84,7 +84,7 @@ struct netdev_entry netcard_drv =
 {"hp", hp_probe1, HP_IO_EXTENT, hppclan_portlist};
 #else
 
-int __init hp_probe(struct device *dev)
+int __init hp_probe(struct net_device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -106,7 +106,7 @@ int __init hp_probe(struct device *dev)
 }
 #endif
 
-int __init hp_probe1(struct device *dev, int ioaddr)
+int __init hp_probe1(struct net_device *dev, int ioaddr)
 {
 	int i, board_id, wordmode;
 	const char *name;
@@ -215,7 +215,7 @@ int __init hp_probe1(struct device *dev, int ioaddr)
 }
 
 static int
-hp_open(struct device *dev)
+hp_open(struct net_device *dev)
 {
 	ei_open(dev);
 	MOD_INC_USE_COUNT;
@@ -223,7 +223,7 @@ hp_open(struct device *dev)
 }
 
 static int
-hp_close(struct device *dev)
+hp_close(struct net_device *dev)
 {
 	ei_close(dev);
 	MOD_DEC_USE_COUNT;
@@ -231,7 +231,7 @@ hp_close(struct device *dev)
 }
 
 static void
-hp_reset_8390(struct device *dev)
+hp_reset_8390(struct net_device *dev)
 {
 	int hp_base = dev->base_addr - NIC_OFFSET;
 	int saved_config = inb_p(hp_base + HP_CONFIGURE);
@@ -253,7 +253,7 @@ hp_reset_8390(struct device *dev)
 }
 
 static void
-hp_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+hp_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 	int nic_base = dev->base_addr;
 	int saved_config = inb_p(nic_base - NIC_OFFSET + HP_CONFIGURE);
@@ -280,7 +280,7 @@ hp_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
    out through the "remote DMA" dataport. */
 
 static void
-hp_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+hp_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
 	int nic_base = dev->base_addr;
 	int saved_config = inb_p(nic_base - NIC_OFFSET + HP_CONFIGURE);
@@ -315,7 +315,7 @@ hp_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offs
 }
 
 static void
-hp_block_output(struct device *dev, int count,
+hp_block_output(struct net_device *dev, int count,
 				const unsigned char *buf, int start_page)
 {
 	int nic_base = dev->base_addr;
@@ -374,7 +374,7 @@ hp_block_output(struct device *dev, int count,
 
 /* This function resets the ethercard if something screws up. */
 static void
-hp_init_card(struct device *dev)
+hp_init_card(struct net_device *dev)
 {
 	int irq = dev->irq;
 	NS8390_init(dev, 0);
@@ -387,7 +387,7 @@ hp_init_card(struct device *dev)
 #define MAX_HP_CARDS	4	/* Max number of HP cards per module */
 #define NAMELEN		8	/* # of chars for storing dev->name */
 static char namelist[NAMELEN * MAX_HP_CARDS] = { 0, };
-static struct device dev_hp[MAX_HP_CARDS] = {
+static struct net_device dev_hp[MAX_HP_CARDS] = {
 	{
 		NULL,		/* assign a chunk of namelist[] below */
 		0, 0, 0, 0,
@@ -410,7 +410,7 @@ init_module(void)
 	int this_dev, found = 0;
 
 	for (this_dev = 0; this_dev < MAX_HP_CARDS; this_dev++) {
-		struct device *dev = &dev_hp[this_dev];
+		struct net_device *dev = &dev_hp[this_dev];
 		dev->name = namelist+(NAMELEN*this_dev);
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
@@ -439,7 +439,7 @@ cleanup_module(void)
 	int this_dev;
 
 	for (this_dev = 0; this_dev < MAX_HP_CARDS; this_dev++) {
-		struct device *dev = &dev_hp[this_dev];
+		struct net_device *dev = &dev_hp[this_dev];
 		if (dev->priv != NULL) {
 			int ioaddr = dev->base_addr - NIC_OFFSET;
 			void *priv = dev->priv;

@@ -634,7 +634,7 @@ struct ace_private
 				__attribute__ ((aligned (L1_CACHE_BYTES)));
 	volatile u32		tx_csm
 				__attribute__ ((aligned (L1_CACHE_BYTES)));
-	struct device		*next
+	struct net_device		*next
 				__attribute__ ((aligned (L1_CACHE_BYTES)));
 	unsigned char		*trace_buf;
 	int			fw_running, fw_up, jumbo, promisc, mcast_all;
@@ -654,21 +654,21 @@ struct ace_private
 /*
  * Prototypes
  */
-static int ace_init(struct device *dev, int board_idx);
-static int ace_load_std_rx_ring(struct device *dev);
-static int ace_load_jumbo_rx_ring(struct device *dev);
-static int ace_flush_jumbo_rx_ring(struct device *dev);
+static int ace_init(struct net_device *dev, int board_idx);
+static int ace_load_std_rx_ring(struct net_device *dev);
+static int ace_load_jumbo_rx_ring(struct net_device *dev);
+static int ace_flush_jumbo_rx_ring(struct net_device *dev);
 static void ace_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static int ace_load_firmware(struct device *dev);
-static int ace_open(struct device *dev);
-static int ace_start_xmit(struct sk_buff *skb, struct device *dev);
-static int ace_close(struct device *dev);
+static int ace_load_firmware(struct net_device *dev);
+static int ace_open(struct net_device *dev);
+static int ace_start_xmit(struct sk_buff *skb, struct net_device *dev);
+static int ace_close(struct net_device *dev);
 static void ace_timer(unsigned long data);
 static void ace_dump_trace(struct ace_private *ap);
-static void ace_set_multicast_list(struct device *dev);
-static int ace_change_mtu(struct device *dev, int new_mtu);
-static int ace_set_mac_addr(struct device *dev, void *p);
-static struct net_device_stats *ace_get_stats(struct device *dev);
+static void ace_set_multicast_list(struct net_device *dev);
+static int ace_change_mtu(struct net_device *dev, int new_mtu);
+static int ace_set_mac_addr(struct net_device *dev, void *p);
+static struct net_device_stats *ace_get_stats(struct net_device *dev);
 static u8 read_eeprom_byte(struct ace_regs *regs, unsigned long offset);
 
 #endif /* _ACENIC_H_ */

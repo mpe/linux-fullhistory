@@ -46,12 +46,12 @@ struct sppp
 	u32		ibytes,obytes;	/* Bytes in/out */
 	u32		ipkts,opkts;	/* Packets in/out */
 	struct timer_list	pp_timer;
-	struct device	*pp_if;
+	struct net_device	*pp_if;
 };
 
 struct ppp_device
 {	
-	struct device dev;	/* Network device */
+	struct net_device dev;	/* Network device */
 	struct sppp sppp;	/* Synchronous PPP */
 };
 
@@ -73,15 +73,15 @@ struct ppp_device
 #define IPCP_STATE_OPENED       3       /* IPCP state: opened */
 
 void sppp_attach (struct ppp_device *pd);
-void sppp_detach (struct device *dev);
-void sppp_input (struct device *dev, struct sk_buff *m);
-int sppp_do_ioctl (struct device *dev, struct ifreq *ifr, int cmd);
-struct sk_buff *sppp_dequeue (struct device *dev);
-int sppp_isempty (struct device *dev);
-void sppp_flush (struct device *dev);
-int sppp_open (struct device *dev);
-int sppp_reopen (struct device *dev);
-int sppp_close (struct device *dev);
+void sppp_detach (struct net_device *dev);
+void sppp_input (struct net_device *dev, struct sk_buff *m);
+int sppp_do_ioctl (struct net_device *dev, struct ifreq *ifr, int cmd);
+struct sk_buff *sppp_dequeue (struct net_device *dev);
+int sppp_isempty (struct net_device *dev);
+void sppp_flush (struct net_device *dev);
+int sppp_open (struct net_device *dev);
+int sppp_reopen (struct net_device *dev);
+int sppp_close (struct net_device *dev);
 #endif
 
 #define SPPPIOCCISCO	(SIOCDEVPRIVATE)

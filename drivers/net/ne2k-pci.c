@@ -104,19 +104,19 @@ pci_clone_list[] __initdata = {
 #define NESM_START_PG	0x40	/* First page of TX buffer */
 #define NESM_STOP_PG	0x80	/* Last page +1 of RX ring */
 
-int ne2k_pci_probe(struct device *dev);
-static struct device *ne2k_pci_probe1(struct device *dev, int ioaddr, int irq,
+int ne2k_pci_probe(struct net_device *dev);
+static struct net_device *ne2k_pci_probe1(struct net_device *dev, int ioaddr, int irq,
 									  int chip_idx);
 
-static int ne2k_pci_open(struct device *dev);
-static int ne2k_pci_close(struct device *dev);
+static int ne2k_pci_open(struct net_device *dev);
+static int ne2k_pci_close(struct net_device *dev);
 
-static void ne2k_pci_reset_8390(struct device *dev);
-static void ne2k_pci_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+static void ne2k_pci_reset_8390(struct net_device *dev);
+static void ne2k_pci_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
 			  int ring_page);
-static void ne2k_pci_block_input(struct device *dev, int count,
+static void ne2k_pci_block_input(struct net_device *dev, int count,
 			  struct sk_buff *skb, int ring_offset);
-static void ne2k_pci_block_output(struct device *dev, const int count,
+static void ne2k_pci_block_output(struct net_device *dev, const int count,
 		const unsigned char *buf, const int start_page);
 
 
@@ -124,7 +124,7 @@ static void ne2k_pci_block_output(struct device *dev, const int count,
 /* No room in the standard 8390 structure for extra info we need. */
 struct ne2k_pci_card {
 	struct ne2k_pci_card *next;
-	struct device *dev;
+	struct net_device *dev;
 	struct pci_dev *pci_dev;
 };
 /* A list of all installed devices, for removing the driver module. */
@@ -150,7 +150,7 @@ init_module(void)
 void
 cleanup_module(void)
 {
-	struct device *dev;
+	struct net_device *dev;
 	struct ne2k_pci_card *this_card;
 
 	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
@@ -186,7 +186,7 @@ struct netdev_entry netcard_drv =
 {"ne2k_pci", ne2k_pci_probe1, NE_IO_EXTENT, 0};
 #endif
 
-int __init ne2k_pci_probe(struct device *dev)
+int __init ne2k_pci_probe(struct net_device *dev)
 {
 	struct pci_dev *pdev = NULL;
 	int cards_found = 0;
@@ -263,7 +263,7 @@ int __init ne2k_pci_probe(struct device *dev)
 	return cards_found ? 0 : -ENODEV;
 }
 
-static struct device __init *ne2k_pci_probe1(struct device *dev, int ioaddr, int irq, int chip_idx)
+static struct net_device __init *ne2k_pci_probe1(struct net_device *dev, int ioaddr, int irq, int chip_idx)
 {
 	int i;
 	unsigned char SA_prom[32];
@@ -397,7 +397,7 @@ static struct device __init *ne2k_pci_probe1(struct device *dev, int ioaddr, int
 }
 
 static int
-ne2k_pci_open(struct device *dev)
+ne2k_pci_open(struct net_device *dev)
 {
 	if (request_irq(dev->irq, ei_interrupt, SA_SHIRQ, dev->name, dev))
 		return -EAGAIN;
@@ -407,7 +407,7 @@ ne2k_pci_open(struct device *dev)
 }
 
 static int
-ne2k_pci_close(struct device *dev)
+ne2k_pci_close(struct net_device *dev)
 {
 	ei_close(dev);
 	free_irq(dev->irq, dev);
@@ -418,7 +418,7 @@ ne2k_pci_close(struct device *dev)
 /* Hard reset the card.  This used to pause for the same period that a
    8390 reset command required, but that shouldn't be necessary. */
 static void
-ne2k_pci_reset_8390(struct device *dev)
+ne2k_pci_reset_8390(struct net_device *dev)
 {
 	unsigned long reset_start_time = jiffies;
 
@@ -444,7 +444,7 @@ ne2k_pci_reset_8390(struct device *dev)
    the start of a page, so we optimize accordingly. */
 
 static void
-ne2k_pci_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+ne2k_pci_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 
 	int nic_base = dev->base_addr;
@@ -483,7 +483,7 @@ ne2k_pci_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_pa
    the packet out through the "remote DMA" dataport using outb. */
 
 static void
-ne2k_pci_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+ne2k_pci_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
 	int nic_base = dev->base_addr;
 	char *buf = skb->data;
@@ -527,7 +527,7 @@ ne2k_pci_block_input(struct device *dev, int count, struct sk_buff *skb, int rin
 }
 
 static void
-ne2k_pci_block_output(struct device *dev, int count,
+ne2k_pci_block_output(struct net_device *dev, int count,
 		const unsigned char *buf, const int start_page)
 {
 	int nic_base = NE_BASE;

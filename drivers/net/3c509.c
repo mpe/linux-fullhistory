@@ -129,7 +129,7 @@ enum RxFilter {
 
 struct el3_private {
 	struct enet_statistics stats;
-	struct device *next_dev;
+	struct net_device *next_dev;
 	spinlock_t lock;
 	/* skb send-queue */
 	int head, size;
@@ -137,18 +137,18 @@ struct el3_private {
 	char mca_slot;
 };
 static int id_port = 0x110;		/* Start with 0x110 to avoid new sound cards.*/
-static struct device *el3_root_dev = NULL;
+static struct net_device *el3_root_dev = NULL;
 
 static ushort id_read_eeprom(int index);
 static ushort read_eeprom(int ioaddr, int index);
-static int el3_open(struct device *dev);
-static int el3_start_xmit(struct sk_buff *skb, struct device *dev);
+static int el3_open(struct net_device *dev);
+static int el3_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void update_stats(struct device *dev);
-static struct enet_statistics *el3_get_stats(struct device *dev);
-static int el3_rx(struct device *dev);
-static int el3_close(struct device *dev);
-static void set_multicast_list(struct device *dev);
+static void update_stats(struct net_device *dev);
+static struct enet_statistics *el3_get_stats(struct net_device *dev);
+static int el3_rx(struct net_device *dev);
+static int el3_close(struct net_device *dev);
+static void set_multicast_list(struct net_device *dev);
 
 #ifdef CONFIG_MCA
 struct el3_mca_adapters_struct {
@@ -166,7 +166,7 @@ struct el3_mca_adapters_struct el3_mca_adapters[] = {
 };
 #endif
 
-int el3_probe(struct device *dev)
+int el3_probe(struct net_device *dev)
 {
 	short lrs_state = 0xff, i;
 	int ioaddr, irq, if_port;
@@ -425,7 +425,7 @@ static ushort id_read_eeprom(int index)
 
 
 static int
-el3_open(struct device *dev)
+el3_open(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	int i;
@@ -505,7 +505,7 @@ el3_open(struct device *dev)
 }
 
 static int
-el3_start_xmit(struct sk_buff *skb, struct device *dev)
+el3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct el3_private *lp = (struct el3_private *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -615,7 +615,7 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 static void
 el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)dev_id;
+	struct net_device *dev = (struct net_device *)dev_id;
 	struct el3_private *lp;
 	int ioaddr, status;
 	int i = max_interrupt_work;
@@ -708,7 +708,7 @@ el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 
 static struct enet_statistics *
-el3_get_stats(struct device *dev)
+el3_get_stats(struct net_device *dev)
 {
 	struct el3_private *lp = (struct el3_private *)dev->priv;
 	unsigned long flags;
@@ -729,7 +729,7 @@ el3_get_stats(struct device *dev)
 	operation, and it's simpler for the rest of the driver to assume that
 	window 1 is always valid rather than use a special window-state variable.
 	*/
-static void update_stats(struct device *dev)
+static void update_stats(struct net_device *dev)
 {
 	struct el3_private *lp = (struct el3_private *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -759,7 +759,7 @@ static void update_stats(struct device *dev)
 }
 
 static int
-el3_rx(struct device *dev)
+el3_rx(struct net_device *dev)
 {
 	struct el3_private *lp = (struct el3_private *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -829,7 +829,7 @@ el3_rx(struct device *dev)
  *     Set or clear the multicast filter for this adaptor.
  */
 static void
-set_multicast_list(struct device *dev)
+set_multicast_list(struct net_device *dev)
 {
 	unsigned long flags;
 	struct el3_private *lp = (struct el3_private *)dev->priv;
@@ -856,7 +856,7 @@ set_multicast_list(struct device *dev)
 }
 
 static int
-el3_close(struct device *dev)
+el3_close(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 
@@ -926,7 +926,7 @@ init_module(void)
 void
 cleanup_module(void)
 {
-	struct device *next_dev;
+	struct net_device *next_dev;
 
 	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 	while (el3_root_dev) {

@@ -168,7 +168,7 @@ static void x25_remove_socket(struct sock *sk)
 /*
  *	Kill all bound sockets on a dropped device.
  */
-static void x25_kill_by_device(struct device *dev)
+static void x25_kill_by_device(struct net_device *dev)
 {
 	struct sock *s;
 
@@ -183,7 +183,7 @@ static void x25_kill_by_device(struct device *dev)
  */
 static int x25_device_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
-	struct device *dev = (struct device *)ptr;
+	struct net_device *dev = (struct net_device *)ptr;
 
 	if (dev->type == ARPHRD_X25
 #if defined(CONFIG_LLC) || defined(CONFIG_LLC_MODULE)
@@ -589,7 +589,7 @@ static int x25_connect(struct socket *sock, struct sockaddr *uaddr, int addr_len
 {
 	struct sock *sk = sock->sk;
 	struct sockaddr_x25 *addr = (struct sockaddr_x25 *)uaddr;
-	struct device *dev;
+	struct net_device *dev;
 
 	if (sk->state == TCP_ESTABLISHED && sock->state == SS_CONNECTING) {
 		sock->state = SS_CONNECTED;
@@ -1179,7 +1179,7 @@ static int x25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 static int x25_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	struct sock *s;
-	struct device *dev;
+	struct net_device *dev;
 	const char *devname;
 	int len = 0;
 	off_t pos = 0;
@@ -1328,7 +1328,7 @@ MODULE_DESCRIPTION("The X.25 Packet Layer network layer protocol");
 
 int init_module(void)
 {
-	struct device *dev;
+	struct net_device *dev;
 
 	x25_proto_init(NULL);
 

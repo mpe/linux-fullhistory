@@ -663,7 +663,7 @@ static inline int solaris_i(unsigned int fd, unsigned int cmd, u32 arg)
 #endif		
 	case 87: /* SIOCGIFNUM */
 		{
-			struct device *d;
+			struct net_device *d;
 			int i = 0;
 			
 			read_lock_bh(&dev_base_lock);

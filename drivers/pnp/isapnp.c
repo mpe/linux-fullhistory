@@ -120,17 +120,13 @@ static int isapnp_config_prepare(struct pci_dev *dev);
 static int isapnp_config_activate(struct pci_dev *dev);
 static int isapnp_config_deactivate(struct pci_dev *dev);
 
-static int isapnp_debug = 0;
-
 static inline void write_data(unsigned char x)
 {
-// if (isapnp_debug) printk("<D:%02x>",x);
 	outb(x, _PNPWRP);
 }
 
 static inline void write_address(unsigned char x)
 {
-// if (isapnp_debug) printk("<A:%02x>",x);
 	outb(x, _PIDXR);
 	udelay(10);
 }
@@ -138,7 +134,6 @@ static inline void write_address(unsigned char x)
 static inline unsigned char read_data(void)
 {
 	unsigned char val = inb(isapnp_rdp);
-// if (isapnp_debug) printk("<R:%02x>",val);
 	return val;
 }
 
@@ -297,7 +292,8 @@ static int __init isapnp_isolate_rdp_select(void)
 	isapnp_wait();
 	isapnp_key();
 
-	isapnp_write_byte(0x02, 0x04);	/* Control: reset CSN */
+	/* Control: reset CSN and conditionally everything else too */
+	isapnp_write_byte(0x02, isapnp_reset ? 0x05 : 0x04);
 	mdelay(2);
 
 	isapnp_wait();
@@ -365,7 +361,6 @@ static int __init isapnp_isolate(void)
 		}
 		if (iteration == 1) {
 			isapnp_rdp += RDP_STEP;
-isapnp_debug = 0;
 			if (isapnp_isolate_rdp_select() < 0)
 				return -1;
 		} else if (iteration > 1) {
@@ -1022,7 +1017,7 @@ int isapnp_cfg_begin(int csn, int logdev)
 	isapnp_wait();
 	isapnp_key();
 	isapnp_wake(csn);
-#if 1	/* to avoid malfunction when isapnptools is used */
+#if 1	/* to avoid malfunction when the isapnptools package is used */
 	isapnp_set_rdp();
 	udelay(1000);	/* delay 1000us */
 	write_address(0x01);
@@ -2097,11 +2092,13 @@ int __init isapnp_init(void)
 		return -EBUSY;
 	}
 	if (isapnp_rdp >= 0x203 && isapnp_rdp <= 0x3ff) {
+		isapnp_rdp |= 3;
 		isapnp_rdp_res=request_region(isapnp_rdp, 1, "isapnp read");
 		if(!isapnp_rdp_res) {
 			printk("isapnp: Read Data Register 0x%x already used\n", isapnp_rdp);
 			return -EBUSY;
 		}
+		isapnp_set_rdp();
 	}
 	isapnp_detected = 1;
 	if (isapnp_rdp < 0x203 || isapnp_rdp > 0x3ff) {

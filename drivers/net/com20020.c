@@ -58,23 +58,23 @@
 
 /* Internal function declarations */
 
-static int arc20020_probe(struct device *dev);
-static void arc20020_rx(struct device *dev,int recbuf);
-static int arc20020_found(struct device *dev,int ioaddr,int airq);
-static void arc20020_inthandler (struct device *dev);
-static int arc20020_reset (struct device *dev, int reset_delay);
-static void arc20020_setmask (struct device *dev, u_char mask);
-static void arc20020_command (struct device *dev, u_char command);
-static u_char arc20020_status (struct device *dev);
-static void arc20020_en_dis_able_TX (struct device *dev, int enable); 
-static void arc20020_prepare_tx(struct device *dev,u_char *hdr,int hdrlen,
+static int arc20020_probe(struct net_device *dev);
+static void arc20020_rx(struct net_device *dev,int recbuf);
+static int arc20020_found(struct net_device *dev,int ioaddr,int airq);
+static void arc20020_inthandler (struct net_device *dev);
+static int arc20020_reset (struct net_device *dev, int reset_delay);
+static void arc20020_setmask (struct net_device *dev, u_char mask);
+static void arc20020_command (struct net_device *dev, u_char command);
+static u_char arc20020_status (struct net_device *dev);
+static void arc20020_en_dis_able_TX (struct net_device *dev, int enable); 
+static void arc20020_prepare_tx(struct net_device *dev,u_char *hdr,int hdrlen,
        		      char *data,int length,int daddr,int exceptA, int offset);
 static  void arc20020_openclose(int open);
-static void arc20020_set_mc_list(struct device *dev);
-static u_char get_buffer_byte (struct device *dev, unsigned offset);
-static void put_buffer_byte (struct device *dev, unsigned offset, u_char datum);
-static void get_whole_buffer (struct device *dev, unsigned offset, unsigned length, char *dest);
-static void put_whole_buffer (struct device *dev, unsigned offset, unsigned length, char *dest);
+static void arc20020_set_mc_list(struct net_device *dev);
+static u_char get_buffer_byte (struct net_device *dev, unsigned offset);
+static void put_buffer_byte (struct net_device *dev, unsigned offset, u_char datum);
+static void get_whole_buffer (struct net_device *dev, unsigned offset, unsigned length, char *dest);
+static void put_whole_buffer (struct net_device *dev, unsigned offset, unsigned length, char *dest);
 
 
 /* Module parameters */
@@ -97,7 +97,7 @@ MODULE_PARM(backplane,"i");
 MODULE_PARM(clock,"i");
 #else
 void __init com20020_setup (char *str, int *ints);
-extern struct device arcnet_devs[];
+extern struct net_device arcnet_devs[];
 extern char arcnet_dev_names[][10];
 extern int arcnet_num_devs;
 #endif
@@ -155,7 +155,7 @@ static char *clockrates[]={"2.5 Mb/s","1.25Mb/s","625 Kb/s","312.5 Kb/s",
  *                                                                          *
  ****************************************************************************/
 
-u_char get_buffer_byte (struct device *dev, unsigned offset)
+u_char get_buffer_byte (struct net_device *dev, unsigned offset)
 {
   int ioaddr=dev->base_addr;
 
@@ -165,7 +165,7 @@ u_char get_buffer_byte (struct device *dev, unsigned offset)
   return inb(_MEMDATA);
 }
 
-void put_buffer_byte (struct device *dev, unsigned offset, u_char datum)
+void put_buffer_byte (struct net_device *dev, unsigned offset, u_char datum)
 {
   int ioaddr=dev->base_addr;
 
@@ -179,7 +179,7 @@ void put_buffer_byte (struct device *dev, unsigned offset, u_char datum)
 #undef ONE_AT_A_TIME_TX
 #undef ONE_AT_A_TIME_RX
 
-void get_whole_buffer (struct device *dev, unsigned offset, unsigned length, char *dest)
+void get_whole_buffer (struct net_device *dev, unsigned offset, unsigned length, char *dest)
 {
   int ioaddr=dev->base_addr;
 
@@ -194,7 +194,7 @@ void get_whole_buffer (struct device *dev, unsigned offset, unsigned length, cha
 #endif
 }
 
-void put_whole_buffer (struct device *dev, unsigned offset, unsigned length, char *dest)
+void put_whole_buffer (struct net_device *dev, unsigned offset, unsigned length, char *dest)
 {
   int ioaddr=dev->base_addr;
 
@@ -224,7 +224,7 @@ static const char *version =
  * it's where we were told it was, and even autoirq
  */
 
-int __init arc20020_probe(struct device *dev)
+int __init arc20020_probe(struct net_device *dev)
 {
   int ioaddr=dev->base_addr,status,delayval;
   unsigned long airqmask;
@@ -324,10 +324,10 @@ int __init arc20020_probe(struct device *dev)
 }
 
 
-/* Set up the struct device associated with this card.  Called after
+/* Set up the struct net_device associated with this card.  Called after
  * probing succeeds.
  */
-int __init arc20020_found(struct device *dev,int ioaddr,int airq)
+int __init arc20020_found(struct net_device *dev,int ioaddr,int airq)
 {
   struct arcnet_local *lp;
   
@@ -444,7 +444,7 @@ int __init arc20020_found(struct device *dev,int ioaddr,int airq)
  *
  * However, it does make sure the card is in a defined state.
  */
-int arc20020_reset(struct device *dev,int reset_delay)
+int arc20020_reset(struct net_device *dev,int reset_delay)
 {
   struct arcnet_local *lp=(struct arcnet_local *)dev->priv;
   short ioaddr=dev->base_addr;
@@ -515,7 +515,7 @@ int arc20020_reset(struct device *dev,int reset_delay)
  *      FIX ME - do multicast stuff, not just promiscuous.
  */
 static void
-arc20020_set_mc_list(struct device *dev)
+arc20020_set_mc_list(struct net_device *dev)
 {
   struct arcnet_local *lp=dev->priv;
   int ioaddr=dev->base_addr;
@@ -550,7 +550,7 @@ static void arc20020_openclose(int open)
 }
 
 
-static void arc20020_en_dis_able_TX(struct device *dev, int enable)
+static void arc20020_en_dis_able_TX(struct net_device *dev, int enable)
 {
   struct arcnet_local *lp=(struct arcnet_local *)dev->priv;
   int ioaddr=dev->base_addr;
@@ -560,7 +560,7 @@ static void arc20020_en_dis_able_TX(struct device *dev, int enable)
 }
 
 
-static void arc20020_setmask(struct device *dev, u_char mask)
+static void arc20020_setmask(struct net_device *dev, u_char mask)
 {
   short ioaddr=dev->base_addr;
 
@@ -568,7 +568,7 @@ static void arc20020_setmask(struct device *dev, u_char mask)
 }
 
 
-static u_char arc20020_status(struct device *dev)
+static u_char arc20020_status(struct net_device *dev)
 {
   short ioaddr=dev->base_addr;
 
@@ -576,7 +576,7 @@ static u_char arc20020_status(struct device *dev)
 }
 
 
-static void arc20020_command(struct device *dev, u_char cmd)
+static void arc20020_command(struct net_device *dev, u_char cmd)
 {
   short ioaddr=dev->base_addr;
 
@@ -588,7 +588,7 @@ static void arc20020_command(struct device *dev, u_char cmd)
  * by the card.
  */
 static void
-arc20020_inthandler(struct device *dev)
+arc20020_inthandler(struct net_device *dev)
 {
   struct arcnet_local *lp=(struct arcnet_local *)dev->priv;
   int ioaddr=dev->base_addr, status, boguscount = 3, didsomething,
@@ -828,7 +828,7 @@ arc20020_inthandler(struct device *dev)
  */
 
 static void
-arc20020_rx(struct device *dev,int recbuf)
+arc20020_rx(struct net_device *dev,int recbuf)
 {
   struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
   int ioaddr=dev->base_addr;
@@ -885,7 +885,7 @@ arc20020_rx(struct device *dev,int recbuf)
  * by arcnet_go_tx.
  */
 static void
-arc20020_prepare_tx(struct device *dev,u_char *hdr,int hdrlen,
+arc20020_prepare_tx(struct net_device *dev,u_char *hdr,int hdrlen,
 		    char *data,int length,int daddr,int exceptA, int offset)
 {
   struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
@@ -957,19 +957,19 @@ arc20020_prepare_tx(struct device *dev,u_char *hdr,int hdrlen,
 
 #ifdef MODULE
 
-static struct device *cards[16]={NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+static struct net_device *cards[16]={NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
 			  NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL};
 
 
 int init_module(void)
 {
-  struct device *dev;
+  struct net_device *dev;
 
-  cards[0]=dev=(struct device *)kmalloc(sizeof(struct device), GFP_KERNEL);
+  cards[0]=dev=(struct net_device *)kmalloc(sizeof(struct net_device), GFP_KERNEL);
   if (!dev)
     return -ENOMEM;
 
-  memset(dev, 0, sizeof(struct device));
+  memset(dev, 0, sizeof(struct net_device));
 
   dev->name=(char *)kmalloc(9, GFP_KERNEL);
   if (!dev->name)
@@ -1006,7 +1006,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-  struct device *dev=cards[0];
+  struct net_device *dev=cards[0];
   int ioaddr=dev->base_addr;
 
   if (dev->start) (*dev->stop)(dev);
@@ -1037,7 +1037,7 @@ void cleanup_module(void)
 
 void __init com20020_setup (char *str, int *ints)
 {
-  struct device *dev;
+  struct net_device *dev;
 
   if (arcnet_num_devs == MAX_ARCNET_DEVS)
     {

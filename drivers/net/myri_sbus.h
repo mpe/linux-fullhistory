@@ -273,7 +273,7 @@ struct myri_eth {
 	struct recvq			*rqack;		/* Where we ack rx's.         */
 	struct recvq			*rq;		/* Where we put buffers.      */
 	struct sendq			*sq;		/* Where we stuff tx's.       */
-	struct device			*dev;		/* Linux/NET dev struct.      */
+	struct net_device			*dev;		/* Linux/NET dev struct.      */
 	int				tx_old;		/* To speed up tx cleaning.   */
 	struct lanai_regs		*lregs;		/* Quick ptr to LANAI regs.   */
 	struct sk_buff	       *rx_skbs[RX_RING_SIZE+1];/* RX skb's                   */

@@ -515,7 +515,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		case IP_MULTICAST_IF: 
 		{
 			struct ip_mreqn mreq;
-			struct device *dev = NULL;
+			struct net_device *dev = NULL;
 			
 			/*
 			 *	Check the arguments are allowable

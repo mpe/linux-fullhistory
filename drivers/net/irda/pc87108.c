@@ -107,7 +107,7 @@ static int  pc87108_probe(int iobase, int board_addr, int irq, int dma);
 static void pc87108_pio_receive(struct irda_device *idev);
 static int  pc87108_dma_receive(struct irda_device *idev); 
 static int  pc87108_dma_receive_complete(struct irda_device *idev, int iobase);
-static int  pc87108_hard_xmit(struct sk_buff *skb, struct device *dev);
+static int  pc87108_hard_xmit(struct sk_buff *skb, struct net_device *dev);
 static int  pc87108_pio_write(int iobase, __u8 *buf, int len, int fifo_size);
 static void pc87108_dma_write(struct irda_device *idev, int iobase);
 static void pc87108_change_speed(struct irda_device *idev, int baud);
@@ -117,9 +117,9 @@ static int  pc87108_is_receiving(struct irda_device *idev);
 static int  pc87108_read_dongle_id (int iobase);
 static void pc87108_init_dongle_interface (int iobase, int dongle_id);
 
-static int  pc87108_net_init(struct device *dev);
-static int  pc87108_net_open(struct device *dev);
-static int  pc87108_net_close(struct device *dev);
+static int  pc87108_net_init(struct net_device *dev);
+static int  pc87108_net_open(struct net_device *dev);
+static int  pc87108_net_close(struct net_device *dev);
 
 /*
  * Function pc87108_init ()
@@ -712,7 +712,7 @@ static void pc87108_change_speed( struct irda_device *idev, int speed)
  *    Transmit the frame!
  *
  */
-static int pc87108_hard_xmit( struct sk_buff *skb, struct device *dev)
+static int pc87108_hard_xmit( struct sk_buff *skb, struct net_device *dev)
 {
 	struct irda_device *idev;
 	int iobase;
@@ -1344,7 +1344,7 @@ static int pc87108_is_receiving( struct irda_device *idev)
  *    Initialize network device
  *
  */
-static int pc87108_net_init( struct device *dev)
+static int pc87108_net_init( struct net_device *dev)
 {
 	DEBUG( 4, __FUNCTION__ "()\n");
 
@@ -1363,7 +1363,7 @@ static int pc87108_net_init( struct device *dev)
  *    Start the device
  *
  */
-static int pc87108_net_open( struct device *dev)
+static int pc87108_net_open( struct net_device *dev)
 {
 	struct irda_device *idev;
 	int iobase;
@@ -1418,7 +1418,7 @@ static int pc87108_net_open( struct device *dev)
  *    Stop the device
  *
  */
-static int pc87108_net_close(struct device *dev)
+static int pc87108_net_close(struct net_device *dev)
 {
 	struct irda_device *idev;
 	int iobase;

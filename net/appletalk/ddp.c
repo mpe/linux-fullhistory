@@ -92,7 +92,7 @@ extern void aarp_unregister_proc_fs(void);
 
 extern void aarp_probe_network(struct atalk_iface *atif);
 extern int  aarp_proxy_probe_network(struct atalk_iface *atif, struct at_addr *sa);
-extern void aarp_proxy_remove(struct device *dev, struct at_addr *sa);
+extern void aarp_proxy_remove(struct net_device *dev, struct at_addr *sa);
 
 
 #undef APPLETALK_DEBUG
@@ -283,7 +283,7 @@ static struct atalk_route atrtr_default; /* For probing devices or in a routerle
  * Drop a device. Doesn't drop any of its routes - that is the caller's
  * problem. Called when we down the interface or delete the address.
  */
-static void atif_drop_device(struct device *dev)
+static void atif_drop_device(struct net_device *dev)
 {
 	struct atalk_iface **iface = &atalk_iface_list;
 	struct atalk_iface *tmp;
@@ -303,7 +303,7 @@ static void atif_drop_device(struct device *dev)
 
 }
 
-static struct atalk_iface *atif_add_device(struct device *dev, struct at_addr *sa)
+static struct atalk_iface *atif_add_device(struct net_device *dev, struct at_addr *sa)
 {
 	struct atalk_iface *iface = (struct atalk_iface *)
 		kmalloc(sizeof(*iface), GFP_KERNEL);
@@ -452,7 +452,7 @@ static int atif_proxy_probe_device(struct atalk_iface *atif, struct at_addr* pro
 }
 
 
-struct at_addr *atalk_find_dev_addr(struct device *dev)
+struct at_addr *atalk_find_dev_addr(struct net_device *dev)
 {
 	struct atalk_iface *iface=dev->atalk_ptr;
 
@@ -491,7 +491,7 @@ static struct at_addr *atalk_find_primary(void)
  * Find a match for 'any network' - ie any of our interfaces with that
  * node number will do just nicely.
  */
-static struct atalk_iface *atalk_find_anynet(int node, struct device *dev)
+static struct atalk_iface *atalk_find_anynet(int node, struct net_device *dev)
 {
 	struct atalk_iface *iface=dev->atalk_ptr;
 
@@ -589,7 +589,7 @@ static struct atalk_route *atrtr_find(struct at_addr *target)
  * Given an AppleTalk network, find the device to use. This can be
  * a simple lookup.
  */
-struct device *atrtr_get_dev(struct at_addr *sa)
+struct net_device *atrtr_get_dev(struct at_addr *sa)
 {
 	struct atalk_route *atr=atrtr_find(sa);
 
@@ -602,7 +602,7 @@ struct device *atrtr_get_dev(struct at_addr *sa)
 /*
  * Set up a default router.
  */
-static void atrtr_set_default(struct device *dev)
+static void atrtr_set_default(struct net_device *dev)
 {
 	atrtr_default.dev = dev;
 	atrtr_default.flags = RTF_UP;
@@ -615,7 +615,7 @@ static void atrtr_set_default(struct device *dev)
  * entry in the list. While it uses netranges we always set them to one
  * entry to work like netatalk.
  */
-static int atrtr_create(struct rtentry *r, struct device *devhint)
+static int atrtr_create(struct rtentry *r, struct net_device *devhint)
 {
 	struct sockaddr_at *ta=(struct sockaddr_at *)&r->rt_dst;
 	struct sockaddr_at *ga=(struct sockaddr_at *)&r->rt_gateway;
@@ -725,7 +725,7 @@ static int atrtr_delete( struct at_addr *addr )
  * Called when a device is downed. Just throw away any routes
  * via it.
  */
-void atrtr_device_down(struct device *dev)
+void atrtr_device_down(struct net_device *dev)
 {
 	struct atalk_route **r = &atalk_router_list;
 	struct atalk_route *tmp;
@@ -748,7 +748,7 @@ void atrtr_device_down(struct device *dev)
 /*
  * Actually down the interface.
  */
-static inline void atalk_dev_down(struct device *dev)
+static inline void atalk_dev_down(struct net_device *dev)
 {
 	atrtr_device_down(dev);	/* Remove all routes for the device */
 	aarp_device_down(dev);	/* Remove AARP entries for the device */
@@ -764,7 +764,7 @@ static int ddp_device_event(struct notifier_block *this, unsigned long event, vo
 	if(event == NETDEV_DOWN)
 	{
 		/* Discard any use of this */
-	        atalk_dev_down((struct device *) ptr);
+	        atalk_dev_down((struct net_device *) ptr);
 	}
 
 	return (NOTIFY_DONE);
@@ -783,7 +783,7 @@ int atif_ioctl(int cmd, void *arg)
 	static char aarp_mcast[6] = {0x09, 0x00, 0x00, 0xFF, 0xFF, 0xFF};
 	struct netrange *nr;
 	struct sockaddr_at *sa;
-	struct device *dev;
+	struct net_device *dev;
 	struct atalk_iface *atif;
 	int ct;
 	int limit;
@@ -1012,7 +1012,7 @@ int atif_ioctl(int cmd, void *arg)
 static int atrtr_ioctl(unsigned int cmd, void *arg)
 {
 	struct rtentry rt;
-	struct device *dev = NULL;
+	struct net_device *dev = NULL;
 
 	if(copy_from_user(&rt, arg, sizeof(rt)))
 		return (-EFAULT);
@@ -1422,7 +1422,7 @@ static int atalk_getname(struct socket *sock, struct sockaddr *uaddr,
  * extracted. PPP should probably pass frames marked as for this layer.
  * [ie ARPHRD_ETHERTALK]
  */
-static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+static int atalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 {
 	struct sock *sock;
 	struct ddpehdr *ddp=(void *)skb->h.raw;
@@ -1593,7 +1593,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
          */
         if(skb->data[12] == 22)
         {
-                struct device *dev;
+                struct net_device *dev;
 
 		/* This needs to be able to handle ipddp"N" devices */
                 if((dev = dev_get("ipddp0")) == NULL)
@@ -1645,7 +1645,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
  * Caller must provide enough headroom on the packet to pull the short
  * header and append a long one.
  */
-static int ltalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+static int ltalk_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 {
 	struct ddpehdr *ddp;
 	struct at_addr *ap;
@@ -1712,7 +1712,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	struct sockaddr_at *usat=(struct sockaddr_at *)msg->msg_name;
 	struct sockaddr_at local_satalk, gsat;
 	struct sk_buff *skb;
-	struct device *dev;
+	struct net_device *dev;
 	struct ddpehdr *ddp;
 	int size;
 	struct atalk_route *rt;

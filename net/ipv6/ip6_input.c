@@ -38,7 +38,7 @@
 #include <net/addrconf.h>
 
 
-int ipv6_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+int ipv6_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 {
 	struct ipv6hdr *hdr;
 	u32 		pkt_len;

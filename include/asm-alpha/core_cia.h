@@ -93,7 +93,7 @@
 #define CIA_DMA_WIN_BASE		alpha_mv.dma_win_base
 #define CIA_DMA_WIN_SIZE		alpha_mv.dma_win_size
 #else
-#define CIA_DMA_WIN_BASE		CIA_DMA_WIN_SIZE_DEFAULT
+#define CIA_DMA_WIN_BASE		CIA_DMA_WIN_BASE_DEFAULT
 #define CIA_DMA_WIN_SIZE		CIA_DMA_WIN_SIZE_DEFAULT
 #endif
 

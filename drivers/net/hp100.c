@@ -300,38 +300,38 @@ MODULE_PARM( hp100_mode, "1i" );
  */
 
 #ifdef LINUX_2_1
-static int  hp100_probe1( struct device *dev, int ioaddr, u_char bus, struct pci_dev *pci_dev );
+static int  hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, struct pci_dev *pci_dev );
 #else
-static int  hp100_probe1( struct device *dev, int ioaddr, u_char bus, u_char pci_bus, u_char pci_device_fn );
+static int  hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, u_char pci_bus, u_char pci_device_fn );
 #endif
-static int  hp100_open( struct device *dev );
-static int  hp100_close( struct device *dev );
-static int  hp100_start_xmit( struct sk_buff *skb, struct device *dev );
-static int  hp100_start_xmit_bm (struct sk_buff *skb, struct device *dev );
-static void hp100_rx( struct device *dev );
-static hp100_stats_t *hp100_get_stats( struct device *dev );
-static void hp100_misc_interrupt( struct device *dev );
-static void hp100_update_stats( struct device *dev );
+static int  hp100_open( struct net_device *dev );
+static int  hp100_close( struct net_device *dev );
+static int  hp100_start_xmit( struct sk_buff *skb, struct net_device *dev );
+static int  hp100_start_xmit_bm (struct sk_buff *skb, struct net_device *dev );
+static void hp100_rx( struct net_device *dev );
+static hp100_stats_t *hp100_get_stats( struct net_device *dev );
+static void hp100_misc_interrupt( struct net_device *dev );
+static void hp100_update_stats( struct net_device *dev );
 static void hp100_clear_stats( int ioaddr );
-static void hp100_set_multicast_list( struct device *dev);
+static void hp100_set_multicast_list( struct net_device *dev);
 static void hp100_interrupt( int irq, void *dev_id, struct pt_regs *regs );
-static void hp100_start_interface( struct device *dev );
-static void hp100_stop_interface( struct device *dev );
-static void hp100_load_eeprom( struct device *dev, u_short ioaddr );
-static int  hp100_sense_lan( struct device *dev );
-static int  hp100_login_to_vg_hub( struct device *dev, u_short force_relogin );
-static int  hp100_down_vg_link( struct device *dev );
-static void hp100_cascade_reset( struct device *dev, u_short enable );
-static void hp100_BM_shutdown( struct device *dev );
-static void hp100_mmuinit( struct device *dev );
-static void hp100_init_pdls( struct device *dev );
-static int  hp100_init_rxpdl( struct device *dev, register hp100_ring_t *ringptr, register u_int *pdlptr);
-static int  hp100_init_txpdl( struct device *dev, register hp100_ring_t *ringptr, register u_int *pdlptr);
-static void hp100_rxfill( struct device *dev );
-static void hp100_hwinit( struct device *dev );
-static void hp100_clean_txring( struct device *dev );
+static void hp100_start_interface( struct net_device *dev );
+static void hp100_stop_interface( struct net_device *dev );
+static void hp100_load_eeprom( struct net_device *dev, u_short ioaddr );
+static int  hp100_sense_lan( struct net_device *dev );
+static int  hp100_login_to_vg_hub( struct net_device *dev, u_short force_relogin );
+static int  hp100_down_vg_link( struct net_device *dev );
+static void hp100_cascade_reset( struct net_device *dev, u_short enable );
+static void hp100_BM_shutdown( struct net_device *dev );
+static void hp100_mmuinit( struct net_device *dev );
+static void hp100_init_pdls( struct net_device *dev );
+static int  hp100_init_rxpdl( struct net_device *dev, register hp100_ring_t *ringptr, register u_int *pdlptr);
+static int  hp100_init_txpdl( struct net_device *dev, register hp100_ring_t *ringptr, register u_int *pdlptr);
+static void hp100_rxfill( struct net_device *dev );
+static void hp100_hwinit( struct net_device *dev );
+static void hp100_clean_txring( struct net_device *dev );
 #ifdef HP100_DEBUG
-static void hp100_RegisterDump( struct device *dev );
+static void hp100_RegisterDump( struct net_device *dev );
 #endif
 
 /* TODO: This function should not really be needed in a good design... */
@@ -346,7 +346,7 @@ static void wait( void )
  *  since this could cause problems when the card is not installed.
  */
  
-int __init hp100_probe( struct device *dev )
+int __init hp100_probe( struct net_device *dev )
 {
   int base_addr = dev ? dev -> base_addr : 0;
   int ioaddr = 0;
@@ -523,9 +523,9 @@ int __init hp100_probe( struct device *dev )
 
 
 #ifdef LINUX_2_1
-static int __init hp100_probe1( struct device *dev, int ioaddr, u_char bus, struct pci_dev *pci_dev )
+static int __init hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, struct pci_dev *pci_dev )
 #else
-static int __init hp100_probe1( struct device *dev, int ioaddr, u_char bus, u_char pci_bus, u_char pci_device_fn )
+static int __init hp100_probe1( struct net_device *dev, int ioaddr, u_char bus, u_char pci_bus, u_char pci_device_fn )
 #endif
 {
   int i;
@@ -941,7 +941,7 @@ static int __init hp100_probe1( struct device *dev, int ioaddr, u_char bus, u_ch
 
 
 /* This procedure puts the card into a stable init state */
-static void hp100_hwinit( struct device *dev )
+static void hp100_hwinit( struct net_device *dev )
 {
   int ioaddr = dev->base_addr;
   struct hp100_private *lp = (struct hp100_private *)dev->priv;
@@ -1037,7 +1037,7 @@ static void hp100_hwinit( struct device *dev )
  * mmuinit - Reinitialise Cascade MMU and MAC settings.
  * Note: Must already be in reset and leaves card in reset. 
  */
-static void hp100_mmuinit( struct device *dev )
+static void hp100_mmuinit( struct net_device *dev )
 {
   int ioaddr = dev->base_addr;
   struct hp100_private *lp = (struct hp100_private *)dev->priv;
@@ -1230,7 +1230,7 @@ static void hp100_mmuinit( struct device *dev )
  *  open/close functions
  */
 
-static int hp100_open( struct device *dev )
+static int hp100_open( struct net_device *dev )
 {
   struct hp100_private *lp = (struct hp100_private *)dev->priv;
 #ifdef HP100_DEBUG_B
@@ -1274,7 +1274,7 @@ static int hp100_open( struct device *dev )
 
 
 /* The close function is called when the interface is to be brought down */
-static int hp100_close( struct device *dev )
+static int hp100_close( struct net_device *dev )
 {
   int ioaddr = dev->base_addr;
   struct hp100_private *lp = (struct hp100_private *)dev->priv;
@@ -1309,7 +1309,7 @@ static int hp100_close( struct device *dev )
 /*
  * Configure the PDL Rx rings and LAN 
  */
-static void hp100_init_pdls( struct device *dev )
+static void hp100_init_pdls( struct net_device *dev )
 {
   struct hp100_private *lp = (struct hp100_private *)dev->priv;
   hp100_ring_t         *ringptr;
@@ -1362,7 +1362,7 @@ static void hp100_init_pdls( struct device *dev )
 
 /* These functions "format" the entries in the pdl structure   */
 /* They return how much memory the fragments need.            */
-static int hp100_init_rxpdl( struct device *dev, register hp100_ring_t *ringptr, register u32 *pdlptr )
+static int hp100_init_rxpdl( struct net_device *dev, register hp100_ring_t *ringptr, register u32 *pdlptr )
 {
   /* pdlptr is starting address for this pdl */
 
@@ -1388,7 +1388,7 @@ static int hp100_init_rxpdl( struct device *dev, register hp100_ring_t *ringptr,
 }
 
 
-static int hp100_init_txpdl( struct device *dev, register hp100_ring_t *ringptr, register u32 *pdlptr )
+static int hp100_init_txpdl( struct net_device *dev, register hp100_ring_t *ringptr, register u32 *pdlptr )
 {
   if( 0!=( ((unsigned)pdlptr) & 0xf) )
     printk("hp100: %s: Init txpdl: Unaligned pdlptr 0x%x.\n",dev->name,(unsigned) pdlptr);
@@ -1408,7 +1408,7 @@ static int hp100_init_txpdl( struct device *dev, register hp100_ring_t *ringptr,
  * Returns: 0 if unable to allocate skb_buff
  *          1 if successful
  */
-int hp100_build_rx_pdl( hp100_ring_t *ringptr, struct device *dev )
+int hp100_build_rx_pdl( hp100_ring_t *ringptr, struct net_device *dev )
 {
 #ifdef HP100_DEBUG_B
   int ioaddr = dev->base_addr;
@@ -1492,7 +1492,7 @@ int hp100_build_rx_pdl( hp100_ring_t *ringptr, struct device *dev )
  *      b.  Put the physical address of the buffer into the PDL.
  *      c.  Output physical address of PDL to adapter.
  */
-static void hp100_rxfill( struct device *dev )
+static void hp100_rxfill( struct net_device *dev )
 {
   int ioaddr=dev->base_addr; 
 
@@ -1540,7 +1540,7 @@ static void hp100_rxfill( struct device *dev )
  * BM_shutdown - shutdown bus mastering and leave chip in reset state
  */
 
-static void hp100_BM_shutdown( struct device *dev )
+static void hp100_BM_shutdown( struct net_device *dev )
 {
   int ioaddr = dev->base_addr;
   struct hp100_private *lp = (struct hp100_private *)dev->priv;
@@ -1634,7 +1634,7 @@ static void hp100_BM_shutdown( struct device *dev )
  */
 
 /* tx function for busmaster mode */
-static int hp100_start_xmit_bm( struct sk_buff *skb, struct device *dev )
+static int hp100_start_xmit_bm( struct sk_buff *skb, struct net_device *dev )
 {
   unsigned long flags;
   int i, ok_flag;
@@ -1772,7 +1772,7 @@ static int hp100_start_xmit_bm( struct sk_buff *skb, struct device *dev )
  *
  * Needs the PERFORMANCE page selected. 
  */
-static void hp100_clean_txring( struct device *dev )
+static void hp100_clean_txring( struct net_device *dev )
 {
   struct hp100_private *lp = (struct hp100_private *)dev->priv;
   int    ioaddr = dev->base_addr;
@@ -1814,7 +1814,7 @@ static void hp100_clean_txring( struct device *dev )
 
 
 /* tx function for slave modes */
-static int hp100_start_xmit( struct sk_buff *skb, struct device *dev )
+static int hp100_start_xmit( struct sk_buff *skb, struct net_device *dev )
 {
   int i, ok_flag;
   int ioaddr = dev->base_addr;
@@ -1984,7 +1984,7 @@ static int hp100_start_xmit( struct sk_buff *skb, struct device *dev )
  * and netif_rx. 
  */
 
-static void hp100_rx( struct device *dev )
+static void hp100_rx( struct net_device *dev )
 {
   int packets, pkt_len;
   int ioaddr = dev->base_addr;
@@ -2103,7 +2103,7 @@ static void hp100_rx( struct device *dev )
 /* 
  * Receive Function for Busmaster Mode
  */
-static void hp100_rx_bm( struct device *dev )
+static void hp100_rx_bm( struct net_device *dev )
 {
   int ioaddr = dev->base_addr;
   struct hp100_private *lp = (struct hp100_private *)dev->priv;
@@ -2232,7 +2232,7 @@ static void hp100_rx_bm( struct device *dev )
 /*
  *  statistics
  */
-static hp100_stats_t *hp100_get_stats( struct device *dev )
+static hp100_stats_t *hp100_get_stats( struct net_device *dev )
 {
   int ioaddr = dev->base_addr;
 
@@ -2246,7 +2246,7 @@ static hp100_stats_t *hp100_get_stats( struct device *dev )
   return &((struct hp100_private *)dev->priv)->stats;
 }
 
-static void hp100_update_stats( struct device *dev )
+static void hp100_update_stats( struct net_device *dev )
 {
   int ioaddr = dev->base_addr;
   u_short val;
@@ -2271,7 +2271,7 @@ static void hp100_update_stats( struct device *dev )
   hp100_page( PERFORMANCE );
 }
 
-static void hp100_misc_interrupt( struct device *dev )
+static void hp100_misc_interrupt( struct net_device *dev )
 {
   struct hp100_private *lp = (struct hp100_private *)dev->priv;
 
@@ -2313,7 +2313,7 @@ static void hp100_clear_stats( int ioaddr )
  *  Set or clear the multicast filter for this adapter.
  */
                                                           
-static void hp100_set_multicast_list( struct device *dev )
+static void hp100_set_multicast_list( struct net_device *dev )
 {
   unsigned long flags;
   int ioaddr = dev->base_addr;
@@ -2468,7 +2468,7 @@ static void hp100_set_multicast_list( struct device *dev )
 
 static void hp100_interrupt( int irq, void *dev_id, struct pt_regs *regs )
 {
-  struct device *dev = (struct device *)dev_id;
+  struct net_device *dev = (struct net_device *)dev_id;
   struct hp100_private *lp = (struct hp100_private *)dev->priv;
 
   int ioaddr;
@@ -2609,7 +2609,7 @@ static void hp100_interrupt( int irq, void *dev_id, struct pt_regs *regs )
  *  some misc functions
  */
 
-static void hp100_start_interface( struct device *dev )
+static void hp100_start_interface( struct net_device *dev )
 {
   unsigned long flags;
   int ioaddr = dev->base_addr;
@@ -2676,7 +2676,7 @@ static void hp100_start_interface( struct device *dev )
 }
 
 
-static void hp100_stop_interface( struct device *dev )
+static void hp100_stop_interface( struct net_device *dev )
 {
   struct hp100_private *lp = (struct hp100_private *)dev->priv; 
   int ioaddr = dev->base_addr;
@@ -2714,7 +2714,7 @@ static void hp100_stop_interface( struct device *dev )
 }
 
 
-static void hp100_load_eeprom( struct device *dev, u_short probe_ioaddr )
+static void hp100_load_eeprom( struct net_device *dev, u_short probe_ioaddr )
 {
   int i;
   int ioaddr = probe_ioaddr > 0 ? probe_ioaddr : dev->base_addr;
@@ -2737,7 +2737,7 @@ static void hp100_load_eeprom( struct device *dev, u_short probe_ioaddr )
  *                 LAN_100 - Connected to 100Mbit/s network
  *                 LAN_ERR - not connected or 100Mbit/s Hub down
  */
-static int hp100_sense_lan( struct device *dev )
+static int hp100_sense_lan( struct net_device *dev )
 {
   int ioaddr = dev->base_addr;
   u_short val_VG, val_10;
@@ -2779,7 +2779,7 @@ static int hp100_sense_lan( struct device *dev )
 
 
 
-static int hp100_down_vg_link( struct device *dev )
+static int hp100_down_vg_link( struct net_device *dev )
 {
   struct hp100_private *lp = (struct hp100_private *)dev->priv;
   int ioaddr = dev->base_addr;
@@ -2873,7 +2873,7 @@ static int hp100_down_vg_link( struct device *dev )
 }
 
 
-static int hp100_login_to_vg_hub( struct device *dev, u_short force_relogin )
+static int hp100_login_to_vg_hub( struct net_device *dev, u_short force_relogin )
 {
   int ioaddr = dev->base_addr;
   struct hp100_private *lp = (struct hp100_private *)dev->priv;
@@ -3046,7 +3046,7 @@ static int hp100_login_to_vg_hub( struct device *dev, u_short force_relogin )
 }
 
 
-static void hp100_cascade_reset( struct device *dev, u_short enable )
+static void hp100_cascade_reset( struct net_device *dev, u_short enable )
 {
   int ioaddr = dev->base_addr;
   struct hp100_private *lp = (struct hp100_private *)dev->priv;
@@ -3083,7 +3083,7 @@ static void hp100_cascade_reset( struct device *dev, u_short enable )
 }
 
 #ifdef HP100_DEBUG		
-void hp100_RegisterDump( struct device *dev )
+void hp100_RegisterDump( struct net_device *dev )
 {
   int ioaddr=dev->base_addr;
   int Page;
@@ -3140,7 +3140,7 @@ static char *hp100_name[5] = { devname[0], devname[1],
 #endif
 
 /* List of devices */
-static struct device *hp100_devlist[5] = { NULL, NULL, NULL, NULL, NULL };
+static struct net_device *hp100_devlist[5] = { NULL, NULL, NULL, NULL, NULL };
 
 /*
  * Note: if you have more than five 100vg cards in your pc, feel free to
@@ -3166,8 +3166,8 @@ int init_module( void )
   while((hp100_port[++i] != -1) && (i < 5))
     {
       /* Create device and set basics args */
-      hp100_devlist[i] = kmalloc(sizeof(struct device), GFP_KERNEL);
-      memset(hp100_devlist[i], 0x00, sizeof(struct device));
+      hp100_devlist[i] = kmalloc(sizeof(struct net_device), GFP_KERNEL);
+      memset(hp100_devlist[i], 0x00, sizeof(struct net_device));
       hp100_devlist[i]->name = hp100_name[i];
       hp100_devlist[i]->base_addr = hp100_port[i];
       hp100_devlist[i]->init = &hp100_probe;
@@ -3177,8 +3177,8 @@ int init_module( void )
 	{
 	  /* DeAllocate everything */
 	  /* Note: if dev->priv is mallocated, there is no way to fail */
-	  kfree_s(hp100_devlist[i], sizeof(struct device));
-	  hp100_devlist[i] = (struct device *) NULL;
+	  kfree_s(hp100_devlist[i], sizeof(struct net_device));
+	  hp100_devlist[i] = (struct net_device *) NULL;
 	}
        else
         cards++;
@@ -3193,7 +3193,7 @@ void cleanup_module( void )
 
   /* TODO: Check if all skb's are released/freed. */
   for(i = 0; i < 5; i++)
-    if(hp100_devlist[i] != (struct device *) NULL)
+    if(hp100_devlist[i] != (struct net_device *) NULL)
       {
 	unregister_netdev( hp100_devlist[i] );
 	release_region( hp100_devlist[i]->base_addr, HP100_REGION_SIZE );
@@ -3203,8 +3203,8 @@ void cleanup_module( void )
 	  iounmap( ((struct hp100_private *)hp100_devlist[i]->priv) -> mem_ptr_virt );
 	kfree_s( hp100_devlist[i]->priv, sizeof( struct hp100_private ) );
 	hp100_devlist[i]->priv = NULL;
-	kfree_s(hp100_devlist[i], sizeof(struct device));
-	hp100_devlist[i] = (struct device *) NULL;
+	kfree_s(hp100_devlist[i], sizeof(struct net_device));
+	hp100_devlist[i] = (struct net_device *) NULL;
       }
 }
 

@@ -102,12 +102,12 @@ struct x25_route {
 	struct x25_route	*next;
 	x25_address		address;	/* Start of address range */
 	unsigned int		sigdigits;	/* Number of sig digits */
-	struct device		*dev;		/* More than one for MLP */
+	struct net_device		*dev;		/* More than one for MLP */
 };
 
 struct x25_neigh {
 	struct x25_neigh	*next;
-	struct device		*dev;
+	struct net_device		*dev;
 	unsigned int		state;
 	unsigned int		extended;
 	struct sk_buff_head	queue;
@@ -153,8 +153,8 @@ extern void x25_kill_by_neigh(struct x25_neigh *);
 
 /* x25_dev.c */
 extern void x25_send_frame(struct sk_buff *, struct x25_neigh *);
-extern int  x25_lapb_receive_frame(struct sk_buff *, struct device *, struct packet_type *);
-extern int  x25_llc_receive_frame(struct sk_buff *, struct device *, struct packet_type *);
+extern int  x25_lapb_receive_frame(struct sk_buff *, struct net_device *, struct packet_type *);
+extern int  x25_llc_receive_frame(struct sk_buff *, struct net_device *, struct packet_type *);
 extern void x25_establish_link(struct x25_neigh *);
 extern void x25_terminate_link(struct x25_neigh *);
 
@@ -169,8 +169,8 @@ extern int  x25_process_rx_frame(struct sock *, struct sk_buff *);
 
 /* x25_link.c */
 extern void x25_link_control(struct sk_buff *, struct x25_neigh *, unsigned short);
-extern void x25_link_device_up(struct device *);
-extern void x25_link_device_down(struct device *);
+extern void x25_link_device_up(struct net_device *);
+extern void x25_link_device_down(struct net_device *);
 extern void x25_link_established(struct x25_neigh *);
 extern void x25_link_terminated(struct x25_neigh *);
 extern void x25_transmit_restart_request(struct x25_neigh *);
@@ -179,7 +179,7 @@ extern void x25_transmit_diagnostic(struct x25_neigh *, unsigned char);
 extern void x25_transmit_clear_request(struct x25_neigh *, unsigned int, unsigned char);
 extern void x25_transmit_link(struct sk_buff *, struct x25_neigh *);
 extern int  x25_subscr_ioctl(unsigned int, void *);
-extern struct x25_neigh *x25_get_neigh(struct device *);
+extern struct x25_neigh *x25_get_neigh(struct net_device *);
 extern void x25_link_free(void);
 
 /* x25_out.c */
@@ -188,9 +188,9 @@ extern void x25_kick(struct sock *);
 extern void x25_enquiry_response(struct sock *);
 
 /* x25_route.c */
-extern struct device *x25_get_route(x25_address *);
-extern struct device *x25_dev_get(char *);
-extern void x25_route_device_down(struct device *);
+extern struct net_device *x25_get_route(x25_address *);
+extern struct net_device *x25_dev_get(char *);
+extern void x25_route_device_down(struct net_device *);
 extern int  x25_route_ioctl(unsigned int, void *);
 extern int  x25_routes_get_info(char *, char **, off_t, int, int);
 extern void x25_route_free(void);

@@ -221,7 +221,7 @@ static inline int inb_command(unsigned int base_addr)
 	return inb(base_addr + PORT_COMMAND);
 }
 
-static inline void outb_control(unsigned char val, struct device *dev)
+static inline void outb_control(unsigned char val, struct net_device *dev)
 {
 	outb(val, dev->base_addr + PORT_CONTROL);
 	((elp_device *)(dev->priv))->hcr_val = val;
@@ -276,16 +276,16 @@ static inline int get_status(unsigned int base_addr)
 	return stat1;
 }
 
-static inline void set_hsf(struct device *dev, int hsf)
+static inline void set_hsf(struct net_device *dev, int hsf)
 {
 	cli();
 	outb_control((HCR_VAL(dev) & ~HSF_PCB_MASK) | hsf, dev);
 	sti();
 }
 
-static int start_receive(struct device *, pcb_struct *);
+static int start_receive(struct net_device *, pcb_struct *);
 
-inline static void adapter_reset(struct device *dev)
+inline static void adapter_reset(struct net_device *dev)
 {
 	int timeout;
 	elp_device *adapter = dev->priv;
@@ -323,7 +323,7 @@ inline static void adapter_reset(struct device *dev)
  * never happen in theory, but seems to occur occasionally if the card gets
  * prodded at the wrong time.
  */
-static inline void check_3c505_dma(struct device *dev)
+static inline void check_3c505_dma(struct net_device *dev)
 {
 	elp_device *adapter = dev->priv;
 	if (adapter->dmaing && time_after(jiffies, adapter->current_dma.start_time + 10)) {
@@ -371,7 +371,7 @@ static inline unsigned int send_pcb_fast(unsigned int base_addr, unsigned char b
 }
 
 /* Check to see if the receiver needs restarting, and kick it if so */
-static inline void prime_rx(struct device *dev)
+static inline void prime_rx(struct net_device *dev)
 {
 	elp_device *adapter = dev->priv;
 	while (adapter->rx_active < ELP_RX_PCBS && dev->start) {
@@ -404,7 +404,7 @@ static inline void prime_rx(struct device *dev)
  * timeout is reduced to 500us).
  */
 
-static int send_pcb(struct device *dev, pcb_struct * pcb)
+static int send_pcb(struct net_device *dev, pcb_struct * pcb)
 {
 	int i;
 	int timeout;
@@ -487,7 +487,7 @@ static int send_pcb(struct device *dev, pcb_struct * pcb)
  *
  *****************************************************************/
 
-static int receive_pcb(struct device *dev, pcb_struct * pcb)
+static int receive_pcb(struct net_device *dev, pcb_struct * pcb)
 {
 	int i, j;
 	int total_length;
@@ -571,7 +571,7 @@ static int receive_pcb(struct device *dev, pcb_struct * pcb)
  *
  ******************************************************/
 
-static int start_receive(struct device *dev, pcb_struct * tx_pcb)
+static int start_receive(struct net_device *dev, pcb_struct * tx_pcb)
 {
 	int status;
 	elp_device *adapter = dev->priv;
@@ -599,7 +599,7 @@ static int start_receive(struct device *dev, pcb_struct * tx_pcb)
  *
  ******************************************************/
 
-static void receive_packet(struct device *dev, int len)
+static void receive_packet(struct net_device *dev, int len)
 {
 	int rlen;
 	elp_device *adapter = dev->priv;
@@ -668,7 +668,7 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 	int len;
 	int dlen;
 	int icount = 0;
-	struct device *dev;
+	struct net_device *dev;
 	elp_device *adapter;
 	int timeout;
 
@@ -885,7 +885,7 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
  *
  ******************************************************/
 
-static int elp_open(struct device *dev)
+static int elp_open(struct net_device *dev)
 {
 	elp_device *adapter;
 
@@ -1022,7 +1022,7 @@ static int elp_open(struct device *dev)
  *
  ******************************************************/
 
-static int send_packet(struct device *dev, struct sk_buff *skb)
+static int send_packet(struct net_device *dev, struct sk_buff *skb)
 {
 	elp_device *adapter = dev->priv;
 	unsigned long target;
@@ -1092,7 +1092,7 @@ static int send_packet(struct device *dev, struct sk_buff *skb)
  *
  ******************************************************/
 
-static int elp_start_xmit(struct sk_buff *skb, struct device *dev)
+static int elp_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	if (dev->interrupt) {
 		printk("%s: start_xmit aborted (in irq)\n", dev->name);
@@ -1157,7 +1157,7 @@ static int elp_start_xmit(struct sk_buff *skb, struct device *dev)
  *
  ******************************************************/
 
-static struct net_device_stats *elp_get_stats(struct device *dev)
+static struct net_device_stats *elp_get_stats(struct net_device *dev)
 {
 	elp_device *adapter = (elp_device *) dev->priv;
 
@@ -1194,7 +1194,7 @@ static struct net_device_stats *elp_get_stats(struct device *dev)
  *
  ******************************************************/
 
-static int elp_close(struct device *dev)
+static int elp_close(struct net_device *dev)
 {
 	elp_device *adapter;
 
@@ -1247,7 +1247,7 @@ static int elp_close(struct device *dev)
  *
  ************************************************************/
 
-static void elp_set_mc_list(struct device *dev)
+static void elp_set_mc_list(struct net_device *dev)
 {
 	elp_device *adapter = (elp_device *) dev->priv;
 	struct dev_mc_list *dmi = dev->mc_list;
@@ -1306,7 +1306,7 @@ static void elp_set_mc_list(struct device *dev)
  *
  ******************************************************/
 
-static inline void elp_init(struct device *dev)
+static inline void elp_init(struct net_device *dev)
 {
 	elp_device *adapter = dev->priv;
 
@@ -1339,7 +1339,7 @@ static inline void elp_init(struct device *dev)
  * Called only by elp_autodetect
  ************************************************************/
 
-static int __init elp_sense(struct device *dev)
+static int __init elp_sense(struct net_device *dev)
 {
 	int timeout;
 	int addr = dev->base_addr;
@@ -1406,7 +1406,7 @@ static int __init elp_sense(struct device *dev)
  * Called only by eplus_probe
  *************************************************************/
 
-static int __init elp_autodetect(struct device *dev)
+static int __init elp_autodetect(struct net_device *dev)
 {
 	int idx = 0;
 
@@ -1450,7 +1450,7 @@ static int __init elp_autodetect(struct device *dev)
  * work at all if it was in a weird state).
  */
 
-int __init elplus_probe(struct device *dev)
+int __init elplus_probe(struct net_device *dev)
 {
 	elp_device *adapter;
 	int i, tries, tries1, timeout, okay;
@@ -1654,7 +1654,7 @@ int __init elplus_probe(struct device *dev)
 #ifdef MODULE
 #define NAMELEN 9
 static char devicename[ELP_MAX_CARDS][NAMELEN] = {{0,}};
-static struct device dev_3c505[ELP_MAX_CARDS] =
+static struct net_device dev_3c505[ELP_MAX_CARDS] =
 {
 	{ NULL,		/* device name is inserted by net_init.c */
 	0, 0, 0, 0,
@@ -1674,7 +1674,7 @@ int init_module(void)
 	int this_dev, found = 0;
 
 	for (this_dev = 0; this_dev < ELP_MAX_CARDS; this_dev++) {
-		struct device *dev = &dev_3c505[this_dev];
+		struct net_device *dev = &dev_3c505[this_dev];
 		dev->name = devicename[this_dev];
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
@@ -1703,7 +1703,7 @@ void cleanup_module(void)
 	int this_dev;
 
 	for (this_dev = 0; this_dev < ELP_MAX_CARDS; this_dev++) {
-		struct device *dev = &dev_3c505[this_dev];
+		struct net_device *dev = &dev_3c505[this_dev];
 		if (dev->priv != NULL) {
 			unregister_netdev(dev);
 			kfree(dev->priv);

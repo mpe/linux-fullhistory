@@ -138,7 +138,7 @@ extern void ip_mr_init(void);
 
 struct vif_device
 {
-	struct device 	*dev;			/* Device we are using */
+	struct net_device 	*dev;			/* Device we are using */
 	unsigned long	bytes_in,bytes_out;
 	unsigned long	pkt_in,pkt_out;		/* Statistics 			*/
 	unsigned long	rate_limit;		/* Traffic shaping (NI) 	*/

@@ -83,7 +83,7 @@ static unsigned int valid_mem[]  __initdata = {
 
 #define SDLA_WINDOW(dev,addr) outb((((addr) >> 13) & 0x1F), (dev)->base_addr + SDLA_REG_Z80_WINDOW)
 
-static void sdla_read(struct device *dev, int addr, void *buf, short len)
+static void sdla_read(struct net_device *dev, int addr, void *buf, short len)
 {
 	unsigned long flags;
 	char          *temp, *base;
@@ -108,7 +108,7 @@ static void sdla_read(struct device *dev, int addr, void *buf, short len)
 	}  
 }
 
-static void sdla_write(struct device *dev, int addr, void *buf, short len)
+static void sdla_write(struct net_device *dev, int addr, void *buf, short len)
 {
 	unsigned long flags;
 	char          *temp, *base;
@@ -131,7 +131,7 @@ static void sdla_write(struct device *dev, int addr, void *buf, short len)
 	}
 }
 
-static void sdla_clear(struct device *dev)
+static void sdla_clear(struct net_device *dev)
 {
 	unsigned long flags;
 	char          *base;
@@ -155,7 +155,7 @@ static void sdla_clear(struct device *dev)
 	restore_flags(flags);
 }
 
-static char sdla_byte(struct device *dev, int addr)
+static char sdla_byte(struct net_device *dev, int addr)
 {
 	unsigned long flags;
 	char          byte, *temp;
@@ -171,7 +171,7 @@ static char sdla_byte(struct device *dev, int addr)
 	return(byte);
 }
 
-void sdla_stop(struct device *dev)
+void sdla_stop(struct net_device *dev)
 {
 	struct frad_local *flp;
 
@@ -198,7 +198,7 @@ void sdla_stop(struct device *dev)
 	}
 }
 
-void sdla_start(struct device *dev)
+void sdla_start(struct net_device *dev)
 {
 	struct frad_local *flp;
 
@@ -236,7 +236,7 @@ void sdla_start(struct device *dev)
  *
  ***************************************************/
 
-int sdla_z80_poll(struct device *dev, int z80_addr, int jiffs, char resp1, char resp2)
+int sdla_z80_poll(struct net_device *dev, int z80_addr, int jiffs, char resp1, char resp2)
 {
 	unsigned long start, done, now;
 	char          resp, *temp;
@@ -266,7 +266,7 @@ int sdla_z80_poll(struct device *dev, int z80_addr, int jiffs, char resp1, char 
 #define Z80_SCC_OK 		'3'	/* SCC is on board */
 #define Z80_SCC_BAD	 	'4'	/* SCC was not found */
 
-static int sdla_cpuspeed(struct device *dev, struct ifreq *ifr)
+static int sdla_cpuspeed(struct net_device *dev, struct ifreq *ifr)
 {
 	int  jiffs;
 	char data;
@@ -328,7 +328,7 @@ struct _frad_stat
 	struct _dlci_stat dlcis[SDLA_MAX_DLCI];
 };
 
-static void sdla_errors(struct device *dev, int cmd, int dlci, int ret, int len, void *data) 
+static void sdla_errors(struct net_device *dev, int cmd, int dlci, int ret, int len, void *data) 
 {
 	struct _dlci_stat *pstatus;
 	short             *pdlci;
@@ -411,7 +411,7 @@ static void sdla_errors(struct device *dev, int cmd, int dlci, int ret, int len,
 	}
 }
 
-static int sdla_cmd(struct device *dev, int cmd, short dlci, short flags, 
+static int sdla_cmd(struct net_device *dev, int cmd, short dlci, short flags, 
                         void *inbuf, short inlen, void *outbuf, short *outlen)
 {
 	static struct _frad_stat status;
@@ -492,9 +492,9 @@ static int sdla_cmd(struct device *dev, int cmd, short dlci, short flags,
  *
  ***********************************************/
 
-static int sdla_reconfig(struct device *dev);
+static int sdla_reconfig(struct net_device *dev);
 
-int sdla_activate(struct device *slave, struct device *master)
+int sdla_activate(struct net_device *slave, struct net_device *master)
 {
 	struct frad_local *flp;
 	int i;
@@ -516,7 +516,7 @@ int sdla_activate(struct device *slave, struct device *master)
 	return(0);
 }
 
-int sdla_deactivate(struct device *slave, struct device *master)
+int sdla_deactivate(struct net_device *slave, struct net_device *master)
 {
 	struct frad_local *flp;
 	int               i;
@@ -538,7 +538,7 @@ int sdla_deactivate(struct device *slave, struct device *master)
 	return(0);
 }
 
-int sdla_assoc(struct device *slave, struct device *master)
+int sdla_assoc(struct net_device *slave, struct net_device *master)
 {
 	struct frad_local *flp;
 	int               i;
@@ -575,7 +575,7 @@ int sdla_assoc(struct device *slave, struct device *master)
 	return(0);
 }
 
-int sdla_deassoc(struct device *slave, struct device *master)
+int sdla_deassoc(struct net_device *slave, struct net_device *master)
 {
 	struct frad_local *flp;
 	int               i;
@@ -604,7 +604,7 @@ int sdla_deassoc(struct device *slave, struct device *master)
 	return(0);
 }
 
-int sdla_dlci_conf(struct device *slave, struct device *master, int get)
+int sdla_dlci_conf(struct net_device *slave, struct net_device *master, int get)
 {
 	struct frad_local *flp;
 	struct dlci_local *dlp;
@@ -643,7 +643,7 @@ int sdla_dlci_conf(struct device *slave, struct device *master, int get)
  **************************/
 
 /* NOTE: the DLCI driver deals with freeing the SKB!! */
-static int sdla_transmit(struct sk_buff *skb, struct device *dev)
+static int sdla_transmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct frad_local *flp;
 	int               ret, addr, accept;
@@ -742,9 +742,9 @@ static int sdla_transmit(struct sk_buff *skb, struct device *dev)
 	return(ret);
 }
 
-static void sdla_receive(struct device *dev)
+static void sdla_receive(struct net_device *dev)
 {
-	struct device	  *master;
+	struct net_device	  *master;
 	struct frad_local *flp;
 	struct dlci_local *dlp;
 	struct sk_buff	 *skb;
@@ -872,7 +872,7 @@ static void sdla_receive(struct device *dev)
 
 static void sdla_isr(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device     *dev;
+	struct net_device     *dev;
 	struct frad_local *flp;
 	char              byte;
 
@@ -930,10 +930,10 @@ static void sdla_isr(int irq, void *dev_id, struct pt_regs * regs)
 
 static void sdla_poll(unsigned long device)
 {
-	struct device	  *dev;
+	struct net_device	  *dev;
 	struct frad_local *flp;
 
-	dev = (struct device *) device;
+	dev = (struct net_device *) device;
 	flp = dev->priv;
 
 	if (sdla_byte(dev, SDLA_502_RCV_BUF))
@@ -943,7 +943,7 @@ static void sdla_poll(unsigned long device)
 	add_timer(&flp->timer);
 }
 
-static int sdla_close(struct device *dev)
+static int sdla_close(struct net_device *dev)
 {
 	struct frad_local *flp;
 	struct intr_info  intr;
@@ -1005,7 +1005,7 @@ struct conf_data {
 	short            dlci[CONFIG_DLCI_MAX];
 };
 
-static int sdla_open(struct device *dev)
+static int sdla_open(struct net_device *dev)
 {
 	struct frad_local *flp;
 	struct dlci_local *dlp;
@@ -1105,7 +1105,7 @@ static int sdla_open(struct device *dev)
 	return(0);
 }
 
-static int sdla_config(struct device *dev, struct frad_conf *conf, int get)
+static int sdla_config(struct net_device *dev, struct frad_conf *conf, int get)
 {
 	struct frad_local *flp;
 	struct conf_data  data;
@@ -1203,7 +1203,7 @@ static int sdla_config(struct device *dev, struct frad_conf *conf, int get)
 	return(0);
 }
 
-static int sdla_xfer(struct device *dev, struct sdla_mem *info, int read)
+static int sdla_xfer(struct net_device *dev, struct sdla_mem *info, int read)
 {
 	struct sdla_mem mem;
 	char	*temp;
@@ -1234,7 +1234,7 @@ static int sdla_xfer(struct device *dev, struct sdla_mem *info, int read)
 	return(0);
 }
 
-static int sdla_reconfig(struct device *dev)
+static int sdla_reconfig(struct net_device *dev)
 {
 	struct frad_local *flp;
 	struct conf_data  data;
@@ -1258,7 +1258,7 @@ static int sdla_reconfig(struct device *dev)
 	return(0);
 }
 
-static int sdla_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+static int sdla_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	struct frad_local *flp;
 
@@ -1325,7 +1325,7 @@ NOTE:  This is rather a useless action right now, as the
 	return(0);
 }
 
-int sdla_change_mtu(struct device *dev, int new_mtu)
+int sdla_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct frad_local *flp;
 
@@ -1338,7 +1338,7 @@ int sdla_change_mtu(struct device *dev, int new_mtu)
 	return(-EOPNOTSUPP);
 }
 
-int sdla_set_config(struct device *dev, struct ifmap *map)
+int sdla_set_config(struct net_device *dev, struct ifmap *map)
 {
 	struct frad_local *flp;
 	int               i;
@@ -1616,7 +1616,7 @@ int sdla_set_config(struct device *dev, struct ifmap *map)
 	return(0);
 }
  
-static struct net_device_stats *sdla_stats(struct device *dev)
+static struct net_device_stats *sdla_stats(struct net_device *dev)
 {
 	struct frad_local *flp;
 	flp = dev->priv;
@@ -1624,7 +1624,7 @@ static struct net_device_stats *sdla_stats(struct device *dev)
 	return(&flp->stats);
 }
 
-int __init sdla_init(struct device *dev)
+int __init sdla_init(struct net_device *dev)
 {
 	struct frad_local *flp;
 
@@ -1673,7 +1673,7 @@ void __init sdla_setup(void)
 }
 
 #ifdef MODULE
-static struct device sdla0 = {"sdla0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, sdla_init};
+static struct net_device sdla0 = {"sdla0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, sdla_init};
 
 int init_module(void)
 {

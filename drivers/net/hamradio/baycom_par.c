@@ -105,7 +105,7 @@ KERN_INFO "baycom_par: version 0.6 compiled " __TIME__ " " __DATE__ "\n";
 
 #define NR_PORTS 4
 
-static struct device baycom_device[NR_PORTS];
+static struct net_device baycom_device[NR_PORTS];
 
 /* --------------------------------------------------------------------- */
 
@@ -202,7 +202,7 @@ static void __inline__ baycom_int_freq(struct baycom_state *bc)
 
 /* --------------------------------------------------------------------- */
 
-static __inline__ void par96_tx(struct device *dev, struct baycom_state *bc)
+static __inline__ void par96_tx(struct net_device *dev, struct baycom_state *bc)
 {
 	int i;
 	unsigned int data = hdlcdrv_getbits(&bc->hdrv);
@@ -225,7 +225,7 @@ static __inline__ void par96_tx(struct device *dev, struct baycom_state *bc)
 
 /* --------------------------------------------------------------------- */
 
-static __inline__ void par96_rx(struct device *dev, struct baycom_state *bc)
+static __inline__ void par96_rx(struct net_device *dev, struct baycom_state *bc)
 {
 	int i;
 	unsigned int data, mask, mask2, descx;
@@ -279,7 +279,7 @@ static __inline__ void par96_rx(struct device *dev, struct baycom_state *bc)
 
 static void par96_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)dev_id;
+	struct net_device *dev = (struct net_device *)dev_id;
 	struct baycom_state *bc = (struct baycom_state *)dev->priv;
 
 	if (!dev || !bc || bc->hdrv.magic != HDLCDRV_MAGIC)
@@ -309,7 +309,7 @@ static void par96_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 static void par96_wakeup(void *handle)
 {
-        struct device *dev = (struct device *)handle;
+        struct net_device *dev = (struct net_device *)handle;
 	struct baycom_state *bc = (struct baycom_state *)dev->priv;
 
 	printk(KERN_DEBUG "baycom_par: %s: why am I being woken up?\n", dev->name);
@@ -319,7 +319,7 @@ static void par96_wakeup(void *handle)
 
 /* --------------------------------------------------------------------- */
 
-static int par96_open(struct device *dev)
+static int par96_open(struct net_device *dev)
 {
 	struct baycom_state *bc = (struct baycom_state *)dev->priv;
 	struct parport *pp = parport_enumerate();
@@ -363,7 +363,7 @@ static int par96_open(struct device *dev)
 
 /* --------------------------------------------------------------------- */
 
-static int par96_close(struct device *dev)
+static int par96_close(struct net_device *dev)
 {
 	struct baycom_state *bc = (struct baycom_state *)dev->priv;
 
@@ -387,7 +387,7 @@ static int par96_close(struct device *dev)
  * ===================== hdlcdrv driver interface =========================
  */
 
-static int baycom_ioctl(struct device *dev, struct ifreq *ifr,
+static int baycom_ioctl(struct net_device *dev, struct ifreq *ifr,
 			struct hdlcdrv_ioctl *hi, int cmd);
 
 /* --------------------------------------------------------------------- */
@@ -415,7 +415,7 @@ static int baycom_setmode(struct baycom_state *bc, const char *modestr)
 
 /* --------------------------------------------------------------------- */
 
-static int baycom_ioctl(struct device *dev, struct ifreq *ifr,
+static int baycom_ioctl(struct net_device *dev, struct ifreq *ifr,
 			struct hdlcdrv_ioctl *hi, int cmd)
 {
 	struct baycom_state *bc;
@@ -506,7 +506,7 @@ int __init init_module(void)
 	 * register net devices
 	 */
 	for (i = 0; i < NR_PORTS; i++) {
-		struct device *dev = baycom_device+i;
+		struct net_device *dev = baycom_device+i;
 		sprintf(ifname, "bcp%d", i);
 
 		if (!mode[i])
@@ -547,7 +547,7 @@ void cleanup_module(void)
 	int i;
 
 	for(i = 0; i < NR_PORTS; i++) {
-		struct device *dev = baycom_device+i;
+		struct net_device *dev = baycom_device+i;
 		struct baycom_state *bc = (struct baycom_state *)dev->priv;
 
 		if (bc) {

@@ -131,7 +131,9 @@ static int state_unit = -1;
 static int irq_installed = 0;
 #endif /* MODULE */
 static char **sound_buffers = NULL;
+#ifdef CONFIG_PPC
 static char **sound_read_buffers = NULL;
+#endif
 
 #ifdef CONFIG_ATARI
 extern void atari_microwire_cmd(int cmd);
@@ -282,7 +284,9 @@ struct notifier_block awacs_sleep_notifier = {
 
 static int catchRadius = 0;
 static int numBufs = 4, bufSize = 32;
+#ifdef CONFIG_PPC
 static int numReadBufs = 4, readbufSize = 32;
+#endif
 
 MODULE_PARM(catchRadius, "i");
 MODULE_PARM(numBufs, "i");
@@ -796,10 +800,12 @@ static ssize_t sound_copy_translate(const u_char *userPtr,
 				    size_t userCount,
 				    u_char frame[], ssize_t *frameUsed,
 				    ssize_t frameLeft);
+#ifdef CONFIG_PPC
 static ssize_t sound_copy_translate_read(const u_char *userPtr,
 				    size_t userCount,
 				    u_char frame[], ssize_t *frameUsed,
 				    ssize_t frameLeft);
+#endif
 
 
 /*
@@ -846,7 +852,9 @@ struct sound_queue {
 };
 
 static struct sound_queue sq;
+#ifdef CONFIG_PPC
 static struct sound_queue read_sq;
+#endif
 
 #define sq_block_address(i)	(sq.buffers[i])
 #define SIGNAL_RECEIVED	(signal_pending(current))
@@ -877,7 +885,7 @@ static inline int ioctl_return(int *addr, int value)
 	if (value < 0)
 		return(value);
 
-	return put_user(value, addr)? -EFAULT: 0;
+	return put_user(value, addr);
 }
 
 
@@ -2728,8 +2736,8 @@ static void ata_sq_play_next_frame(int index)
 	start = sq_block_address(sq.front);
 	end = start+((sq.count == index) ? sq.rear_size : sq.block_size);
 	/* end might not be a legal virtual address. */
-	DMASNDSetEnd(VTOP(end - 1) + 1);
-	DMASNDSetBase(VTOP(start));
+	DMASNDSetEnd(virt_to_phys(end - 1) + 1);
+	DMASNDSetBase(virt_to_phys(start));
 	/* Since only an even number of samples per frame can
 	   be played, we might lose one byte here. (TO DO) */
 	sq.front = (sq.front+1) % sq.max_count;
@@ -4031,6 +4039,7 @@ static ssize_t sound_copy_translate(const u_char *userPtr,
 		return 0;
 }
 
+#ifdef CONFIG_PPC
 static ssize_t sound_copy_translate_read(const u_char *userPtr,
 				    size_t userCount,
 				    u_char frame[], ssize_t *frameUsed,
@@ -4069,6 +4078,7 @@ static ssize_t sound_copy_translate_read(const u_char *userPtr,
 	else
 		return 0;
 }
+#endif
 
 
 /*
@@ -4644,6 +4654,7 @@ static void sq_release_buffers(void)
 }
 
 
+#ifdef CONFIG_PPC
 static int sq_allocate_read_buffers(void)
 {
 	int i;
@@ -4680,15 +4691,12 @@ static void sq_release_read_buffers(void)
 	
 
 	if (sound_read_buffers) {
-
-#if CONFIG_PPC
 		cp = awacs_rx_cmds;
 		for (i = 0; i < numReadBufs; i++,cp++) {
 			st_le16(&cp->command, DBDMA_STOP);
 		}
 		/* We should probably wait for the thing to stop before we
 		   release the memory */
-#endif
 		for (i = 0; i < numBufs; i++)
 			sound.mach.dma_free (sound_read_buffers[i],
 					     bufSize << 10);
@@ -4696,6 +4704,7 @@ static void sq_release_read_buffers(void)
 		sound_read_buffers = 0;
 	}
 }
+#endif
 
 
 static void sq_setup(int numBufs, int bufSize, char **write_buffers)
@@ -4735,12 +4744,11 @@ static void sq_setup(int numBufs, int bufSize, char **write_buffers)
 #endif /* CONFIG_PPC */
 }
 
+#ifdef CONFIG_PPC
 static void read_sq_setup(int numBufs, int bufSize, char **read_buffers)
 {
-#ifdef CONFIG_PPC
 	int i;
 	volatile struct dbdma_cmd *cp;
-#endif /* CONFIG_PPC */
 
 	read_sq.max_count = numBufs;
 	read_sq.max_active = numBufs;
@@ -4753,14 +4761,6 @@ static void read_sq_setup(int numBufs, int bufSize, char **read_buffers)
 	read_sq.syncing = 0;
 	read_sq.active = 0;
 
-#ifdef CONFIG_ATARI
-	read_sq.ignore_int = 0;
-#endif /* CONFIG_ATARI */
-#ifdef CONFIG_AMIGA
-	read_sq.block_size_half = read_sq.block_size>>1;
-	read_sq.block_size_quarter = read_sq.block_size_half>>1;
-#endif /* CONFIG_AMIGA */
-#ifdef CONFIG_PPC
 	cp = awacs_rx_cmds;
 	memset((void *) cp, 0, (numBufs + 1) * sizeof(struct dbdma_cmd));
 
@@ -4784,8 +4784,8 @@ static void read_sq_setup(int numBufs, int bufSize, char **read_buffers)
 	out_le32(&awacs_rxdma->control, (RUN|PAUSE|FLUSH|WAKE) << 16);
 	out_le32(&awacs_rxdma->cmdptr, virt_to_bus(awacs_rx_cmds));
 
-#endif /* CONFIG_PPC */
 }
+#endif /* CONFIG_PPC */
 
 
 static void sq_play(void)
@@ -4868,6 +4868,8 @@ static ssize_t sq_write(struct file *file, const char *src, size_t uLeft,
 
 /***********/
 
+#ifdef CONFIG_PPC
+
 /* Here is how the values are used for reading.
  * The value 'active' simply indicates the DMA is running.  This is
  * done so the driver semantics are DMA starts when the first read is
@@ -4930,6 +4932,7 @@ static ssize_t sq_read(struct file *file, char *dst, size_t uLeft,
 	}
 	return uRead;
 }
+#endif
 
 static int sq_open(struct inode *inode, struct file *file)
 {
@@ -4957,6 +4960,7 @@ static int sq_open(struct inode *inode, struct file *file)
 	}
 
 
+#ifdef CONFIG_PCC
 	if (file->f_mode & FMODE_READ) {
 		if (read_sq.busy) {
 			rc = -EBUSY;
@@ -4976,6 +4980,7 @@ static int sq_open(struct inode *inode, struct file *file)
 		read_sq_setup(numReadBufs,readbufSize<<10, sound_read_buffers);
 		read_sq.open_mode = file->f_mode;
 	}                                                                      
+#endif
 
 #ifdef CONFIG_ATARI
 	sq.ignore_int = 1;
@@ -5004,10 +5009,12 @@ err_out_nobusy:
 		sq.busy = 0;
 		WAKE_UP(sq.open_queue);
 	}
+#ifdef CONFIG_PCC
 	if (file->f_mode & FMODE_READ) {
 		read_sq.busy = 0;
 		WAKE_UP(read_sq.open_queue);
 	}
+#endif
 err_out:
 	MOD_DEC_USE_COUNT;
 	return rc;
@@ -5056,16 +5063,20 @@ static int sq_release(struct inode *inode, struct file *file)
 	sound.hard = sound.dsp;
 	sound_silence();
 
+#ifdef CONFIG_PPC
 	sq_release_read_buffers();
+#endif
 	sq_release_buffers();
 	MOD_DEC_USE_COUNT;
 
 	/* There is probably a DOS atack here. They change the mode flag. */
 	/* XXX add check here */
+#ifdef CONFIG_PPC
 	if (file->f_mode & FMODE_READ) {
 		read_sq.busy = 0;
 		WAKE_UP(read_sq.open_queue);
 	}
+#endif
 
 	if (file->f_mode & FMODE_WRITE) {
 		sq.busy = 0;
@@ -5173,7 +5184,11 @@ static int sq_ioctl(struct inode *inode, struct file *file, u_int cmd,
 static struct file_operations sq_fops =
 {
 	sound_lseek,
+#ifdef CONFIG_PPC
 	sq_read,			/* sq_read */
+#else
+	NULL,			/* sq_read */
+#endif
 	sq_write,
 	NULL,			/* sq_readdir */
 	NULL,			/* sq_poll */
@@ -5198,12 +5213,16 @@ static void __init sq_init(void)
 	init_waitqueue_head(&sq.open_queue);
 	init_waitqueue_head(&sq.sync_queue);
 
+#ifdef CONFIG_PPC
 	init_waitqueue_head(&read_sq.action_queue);
 	init_waitqueue_head(&read_sq.open_queue);
 	init_waitqueue_head(&read_sq.sync_queue);
+#endif
 
 	sq.busy = 0;
+#ifdef CONFIG_PPC
 	read_sq.busy = 0;
+#endif
 
 	/* whatever you like as startup mode for /dev/dsp,
 	 * (/dev/audio hasn't got a startup mode). note that
@@ -5251,7 +5270,10 @@ static void __init sq_init(void)
 
 static int state_open(struct inode *inode, struct file *file)
 {
-	char *buffer = state.buf, *mach = "", awacs_buf[50];
+	char *buffer = state.buf, *mach = "";
+#ifdef CONFIG_PPC
+	char awacs_buf[50];
+#endif
 	int len = 0;
 
 	if (state.busy)

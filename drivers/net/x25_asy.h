@@ -19,7 +19,7 @@ struct x25_asy {
 
   /* Various fields. */
   struct tty_struct	*tty;		/* ptr to TTY structure		*/
-  struct device		*dev;		/* easy for intr handling	*/
+  struct net_device		*dev;		/* easy for intr handling	*/
 
   /* These are pointers to the malloc()ed frame buffers. */
   unsigned char		*rbuff;		/* receiver buffer		*/
@@ -53,6 +53,6 @@ struct x25_asy {
 
 #define X25_ASY_MAGIC 0x5303
 
-extern int x25_asy_init(struct device *dev);
+extern int x25_asy_init(struct net_device *dev);
 
 #endif	/* _LINUX_X25_ASY.H */

@@ -199,7 +199,7 @@ static inline void bigmac_clean_rings(struct bigmac *bp)
 static void bigmac_init_rings(struct bigmac *bp, int from_irq)
 {
 	struct bmac_init_block *bb = bp->bmac_block;
-	struct device *dev = bp->dev;
+	struct net_device *dev = bp->dev;
 	int i, gfp_flags = GFP_KERNEL;
 
 	if(from_irq || in_interrupt())
@@ -1014,7 +1014,7 @@ static void sun4c_bigmac_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 #endif
 
-static int bigmac_open(struct device *dev)
+static int bigmac_open(struct net_device *dev)
 {
 	struct bigmac *bp = (struct bigmac *) dev->priv;
 	int res;
@@ -1041,7 +1041,7 @@ static int bigmac_open(struct device *dev)
 	return res;
 }
 
-static int bigmac_close(struct device *dev)
+static int bigmac_close(struct net_device *dev)
 {
 	struct bigmac *bp = (struct bigmac *) dev->priv;
 
@@ -1057,7 +1057,7 @@ static int bigmac_close(struct device *dev)
 }
 
 /* Put a packet on the wire. */
-static int bigmac_start_xmit(struct sk_buff *skb, struct device *dev)
+static int bigmac_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct bigmac *bp = (struct bigmac *) dev->priv;
 	int len, entry;
@@ -1123,7 +1123,7 @@ static int bigmac_start_xmit(struct sk_buff *skb, struct device *dev)
 }
 
 #ifndef __sparc_v9__
-static int sun4c_bigmac_start_xmit(struct sk_buff *skb, struct device *dev)
+static int sun4c_bigmac_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct bigmac *bp = (struct bigmac *) dev->priv;
 	struct bigmac_buffers *bbufs = bp->sun4c_buffers;
@@ -1182,7 +1182,7 @@ static int sun4c_bigmac_start_xmit(struct sk_buff *skb, struct device *dev)
 }
 #endif
 
-static struct enet_statistics *bigmac_get_stats(struct device *dev)
+static struct enet_statistics *bigmac_get_stats(struct net_device *dev)
 {
 	struct bigmac *bp = (struct bigmac *) dev->priv;
 
@@ -1193,7 +1193,7 @@ static struct enet_statistics *bigmac_get_stats(struct device *dev)
 #define CRC_POLYNOMIAL_BE 0x04c11db7UL  /* Ethernet CRC, big endian */
 #define CRC_POLYNOMIAL_LE 0xedb88320UL  /* Ethernet CRC, little endian */
 
-static void bigmac_set_multicast(struct device *dev)
+static void bigmac_set_multicast(struct net_device *dev)
 {
 	struct bigmac *bp = (struct bigmac *) dev->priv;
 	struct BIG_MAC_regs *bregs = bp->bregs;
@@ -1253,7 +1253,7 @@ static void bigmac_set_multicast(struct device *dev)
 	bregs->rx_cfg |= BIGMAC_RXCFG_ENABLE;
 }
 
-static int __init bigmac_ether_init(struct device *dev, struct linux_sbus_device *qec_sdev)
+static int __init bigmac_ether_init(struct net_device *dev, struct linux_sbus_device *qec_sdev)
 {
 	static unsigned version_printed = 0;
 	struct bigmac *bp = 0;
@@ -1492,7 +1492,7 @@ fail_and_cleanup:
 	return res;	/* Return error code. */
 }
 
-int __init bigmac_probe(struct device *dev)
+int __init bigmac_probe(struct net_device *dev)
 {
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;

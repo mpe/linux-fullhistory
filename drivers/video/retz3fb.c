@@ -170,7 +170,10 @@ under "programs/Xserver/hw/xfree86/doc/modeDB.txt".
  *    Predefined Video Modes
  */
 
-static struct fb_videomode retz3fb_predefined[] __initdata = {
+static struct {
+    const char *name;
+    struct fb_var_screeninfo var;
+} retz3fb_predefined[] __initdata = {
     /*
      * NB: it is very important to adjust the pixel-clock to the color-depth.
      */

@@ -77,7 +77,7 @@ static struct ifmcaddr6		*inet6_mcast_lst[IN6_ADDR_HSIZE];
 
 int ipv6_sock_mc_join(struct sock *sk, int ifindex, struct in6_addr *addr)
 {
-	struct device *dev = NULL;
+	struct net_device *dev = NULL;
 	struct ipv6_mc_socklist *mc_lst;
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 	int err;
@@ -140,7 +140,7 @@ int ipv6_sock_mc_drop(struct sock *sk, int ifindex, struct in6_addr *addr)
 	for (lnk = &np->ipv6_mc_list; (mc_lst = *lnk) !=NULL ; lnk = &mc_lst->next) {
 		if (mc_lst->ifindex == ifindex &&
 		    ipv6_addr_cmp(&mc_lst->addr, addr) == 0) {
-			struct device *dev;
+			struct net_device *dev;
 
 			*lnk = mc_lst->next;
 			write_unlock_bh(&ipv6_sk_mc_lock);
@@ -163,7 +163,7 @@ void ipv6_sock_mc_close(struct sock *sk)
 
 	write_lock_bh(&ipv6_sk_mc_lock);
 	while ((mc_lst = np->ipv6_mc_list) != NULL) {
-		struct device *dev;
+		struct net_device *dev;
 
 		np->ipv6_mc_list = mc_lst->next;
 		write_unlock_bh(&ipv6_sk_mc_lock);
@@ -229,7 +229,7 @@ static int igmp6_group_dropped(struct ifmcaddr6 *mc)
 /*
  *	device multicast group inc (add if not found)
  */
-int ipv6_dev_mc_inc(struct device *dev, struct in6_addr *addr)
+int ipv6_dev_mc_inc(struct net_device *dev, struct in6_addr *addr)
 {
 	struct ifmcaddr6 *mc;
 	struct inet6_dev    *idev;
@@ -283,7 +283,7 @@ int ipv6_dev_mc_inc(struct device *dev, struct in6_addr *addr)
 	return 0;
 }
 
-static void ipv6_mca_remove(struct device *dev, struct ifmcaddr6 *ma)
+static void ipv6_mca_remove(struct net_device *dev, struct ifmcaddr6 *ma)
 {
 	struct inet6_dev *idev;
 
@@ -304,7 +304,7 @@ static void ipv6_mca_remove(struct device *dev, struct ifmcaddr6 *ma)
 /*
  *	device multicast group del
  */
-int ipv6_dev_mc_dec(struct device *dev, struct in6_addr *addr)
+int ipv6_dev_mc_dec(struct net_device *dev, struct in6_addr *addr)
 {
 	struct ifmcaddr6 *ma, **lnk;
 	int hash;
@@ -334,7 +334,7 @@ int ipv6_dev_mc_dec(struct device *dev, struct in6_addr *addr)
 /*
  *	check if the interface/address pair is valid
  */
-int ipv6_chk_mcast_addr(struct device *dev, struct in6_addr *addr)
+int ipv6_chk_mcast_addr(struct net_device *dev, struct in6_addr *addr)
 {
 	struct ifmcaddr6 *mc;
 	int hash;
@@ -433,7 +433,7 @@ int igmp6_event_report(struct sk_buff *skb, struct icmp6hdr *hdr, int len)
 {
 	struct ifmcaddr6 *ma;
 	struct in6_addr *addrp;
-	struct device *dev;
+	struct net_device *dev;
 	int hash;
 
 	/* Our own report looped back. Ignore it. */
@@ -474,7 +474,7 @@ int igmp6_event_report(struct sk_buff *skb, struct icmp6hdr *hdr, int len)
 	return 0;
 }
 
-void igmp6_send(struct in6_addr *addr, struct device *dev, int type)
+void igmp6_send(struct in6_addr *addr, struct net_device *dev, int type)
 {
 	struct sock *sk = igmp6_socket->sk;
         struct sk_buff *skb;
@@ -664,7 +664,7 @@ static int igmp6_read_proc(char *buffer, char **start, off_t offset,
 	off_t pos=0, begin=0;
 	struct ifmcaddr6 *im;
 	int len=0;
-	struct device *dev;
+	struct net_device *dev;
 	
 	read_lock(&dev_base_lock);
 	for (dev = dev_base; dev; dev = dev->next) {

@@ -72,7 +72,7 @@ extern __u32 sysctl_rmem_max;
 
 static int probed __initdata = 0;
 
-int __init rr_hippi_probe (struct device *dev)
+int __init rr_hippi_probe (struct net_device *dev)
 {
 	int boards_found = 0;
 	int version_disp;	/* was version info already displayed? */
@@ -202,7 +202,7 @@ int __init rr_hippi_probe (struct device *dev)
 #endif
 }
 
-static struct device *root_dev = NULL;
+static struct net_device *root_dev = NULL;
 
 #ifdef MODULE
 #if LINUX_VERSION_CODE > 0x20118
@@ -224,7 +224,7 @@ int init_module(void)
 void cleanup_module(void)
 {
 	struct rr_private *rr;
-	struct device *next;
+	struct net_device *next;
 
 	while (root_dev) {
 		next = ((struct rr_private *)root_dev->priv)->next;
@@ -286,7 +286,7 @@ static void rr_issue_cmd(struct rr_private *rrpriv, struct cmd *cmd)
  * Reset the board in a sensible manner. The NIC is already halted
  * when we get here and a spin-lock is held.
  */
-static int rr_reset(struct device *dev)
+static int rr_reset(struct net_device *dev)
 {
 	struct rr_private *rrpriv;
 	struct rr_regs *regs;
@@ -502,7 +502,7 @@ static unsigned int write_eeprom(struct rr_private *rrpriv,
 }
 
 
-static int __init rr_init(struct device *dev)
+static int __init rr_init(struct net_device *dev)
 {
 	struct rr_private *rrpriv;
 	struct rr_regs *regs;
@@ -552,7 +552,7 @@ static int __init rr_init(struct device *dev)
 }
 
 
-static int rr_init1(struct device *dev)
+static int rr_init1(struct net_device *dev)
 {
 	struct rr_private *rrpriv;
 	struct rr_regs *regs;
@@ -703,7 +703,7 @@ static int rr_init1(struct device *dev)
  * events) and are handled here, outside the main interrupt handler,
  * to reduce the size of the handler.
  */
-static u32 rr_handle_event(struct device *dev, u32 prodidx, u32 eidx)
+static u32 rr_handle_event(struct net_device *dev, u32 prodidx, u32 eidx)
 {
 	struct rr_private *rrpriv;
 	struct rr_regs *regs;
@@ -795,7 +795,7 @@ static u32 rr_handle_event(struct device *dev, u32 prodidx, u32 eidx)
 }
 
 
-static void rx_int(struct device *dev, u32 rxlimit, u32 index)
+static void rx_int(struct net_device *dev, u32 rxlimit, u32 index)
 {
 	struct rr_private *rrpriv = (struct rr_private *)dev->priv;
 	u32 pkt_len;
@@ -866,7 +866,7 @@ static void rr_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 {
 	struct rr_private *rrpriv;
 	struct rr_regs *regs;
-	struct device *dev = (struct device *)dev_id;
+	struct net_device *dev = (struct net_device *)dev_id;
 	u32 prodidx, rxindex, eidx, txcsmr, rxlimit, txcon;
 	unsigned long flags;
 
@@ -930,7 +930,7 @@ static void rr_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 }
 
 
-static int rr_open(struct device *dev)
+static int rr_open(struct net_device *dev)
 {
 	struct rr_private *rrpriv;
 	struct rr_regs *regs;
@@ -995,7 +995,7 @@ static int rr_open(struct device *dev)
 }
 
 
-static void rr_dump(struct device *dev)
+static void rr_dump(struct net_device *dev)
 {
 	struct rr_private *rrpriv;
 	struct rr_regs *regs;
@@ -1059,7 +1059,7 @@ static void rr_dump(struct device *dev)
 }
 
 
-static int rr_close(struct device *dev)
+static int rr_close(struct net_device *dev)
 {
 	struct rr_private *rrpriv;
 	struct rr_regs *regs;
@@ -1131,7 +1131,7 @@ static int rr_close(struct device *dev)
 }
 
 
-static int rr_start_xmit(struct sk_buff *skb, struct device *dev)
+static int rr_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct rr_private *rrpriv = (struct rr_private *)dev->priv;
 	struct rr_regs *regs = rrpriv->regs;
@@ -1197,7 +1197,7 @@ static int rr_start_xmit(struct sk_buff *skb, struct device *dev)
 }
 
 
-static struct net_device_stats *rr_get_stats(struct device *dev)
+static struct net_device_stats *rr_get_stats(struct net_device *dev)
 {
 	struct rr_private *rrpriv;
 
@@ -1214,7 +1214,7 @@ static struct net_device_stats *rr_get_stats(struct device *dev)
  * This operation requires the NIC to be halted and is performed with
  * interrupts disabled and with the spinlock hold.
  */
-static int rr_load_firmware(struct device *dev)
+static int rr_load_firmware(struct net_device *dev)
 {
 	struct rr_private *rrpriv;
 	struct rr_regs *regs;
@@ -1319,7 +1319,7 @@ out:
 }
 
 
-static int rr_ioctl(struct device *dev, struct ifreq *rq, int cmd)
+static int rr_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
 	struct rr_private *rrpriv;
 	unsigned char *image, *oldimage;

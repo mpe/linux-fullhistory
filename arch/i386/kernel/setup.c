@@ -491,7 +491,7 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 #endif
 }
 
-__initfunc(static int get_model_name(struct cpuinfo_x86 *c))
+static int __init get_model_name(struct cpuinfo_x86 *c)
 {
 	unsigned int n, dummy, *v;
 
@@ -519,7 +519,7 @@ __initfunc(static int get_model_name(struct cpuinfo_x86 *c))
 	return 1;
 }
 
-__initfunc(static int amd_model(struct cpuinfo_x86 *c))
+static int __init amd_model(struct cpuinfo_x86 *c)
 {
 	u32 l, h;
 	unsigned long flags;
@@ -648,7 +648,7 @@ static char Cx86_cb[] __initdata = "?.5x Core/Bus Clock";
 static char cyrix_model_mult1[] __initdata = "12??43";
 static char cyrix_model_mult2[] __initdata = "12233445";
 
-__initfunc(static void cyrix_model(struct cpuinfo_x86 *c))
+static void __init cyrix_model(struct cpuinfo_x86 *c)
 {
 	unsigned char dir0, dir0_msn, dir0_lsn, dir1 = 0;
 	char *buf = c->x86_model_id;
@@ -756,7 +756,7 @@ __initfunc(static void cyrix_model(struct cpuinfo_x86 *c))
 	return;
 }
 
-__initfunc(void get_cpu_vendor(struct cpuinfo_x86 *c))
+void __init get_cpu_vendor(struct cpuinfo_x86 *c)
 {
 	char *v = c->x86_vendor_id;
 
@@ -816,7 +816,7 @@ static struct cpu_model_info cpu_models[] __initdata = {
 	    NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
 };
 
-__initfunc(void identify_cpu(struct cpuinfo_x86 *c))
+void __init identify_cpu(struct cpuinfo_x86 *c)
 {
 	int i;
 	char *p = NULL;
@@ -927,7 +927,7 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
  *	Perform early boot up checks for a valid TSC. See arch/i386/kernel/time.c
  */
  
-__initfunc(void dodgy_tsc(void))
+void __init dodgy_tsc(void)
 {
 	get_cpu_vendor(&boot_cpu_data);
 	
@@ -944,7 +944,7 @@ static char *cpu_vendor_names[] __initdata = {
 	"Intel", "Cyrix", "AMD", "UMC", "NexGen", "Centaur" };
 
 
-__initfunc(void print_cpu_info(struct cpuinfo_x86 *c))
+void __init print_cpu_info(struct cpuinfo_x86 *c)
 {
 	char *vendor = NULL;
 

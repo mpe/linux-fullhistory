@@ -243,6 +243,7 @@ struct olympic_private {
 
 	__u8 *olympic_mmio;
 	__u8 *olympic_lap;
+	char *olympic_card_name ; 
 
 	volatile int srb_queued;    /* True if an SRB is still posted */	
 	wait_queue_head_t srb_wait;

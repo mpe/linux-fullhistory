@@ -58,7 +58,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 
-ax25_cb *ax25_send_frame(struct sk_buff *skb, int paclen, ax25_address *src, ax25_address *dest, ax25_digi *digi, struct device *dev)
+ax25_cb *ax25_send_frame(struct sk_buff *skb, int paclen, ax25_address *src, ax25_address *dest, ax25_digi *digi, struct net_device *dev)
 {
 	ax25_dev *ax25_dev;
 	ax25_cb *ax25;

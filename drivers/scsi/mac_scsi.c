@@ -685,7 +685,7 @@ const char * mac_scsi_info (struct Scsi_Host *host)
 unsigned long mac_scsi_dma_setup( struct Scsi_Host *instance, void *data,
 				   unsigned long count, int dir )
 {
-	unsigned long addr = VTOP( data );
+	unsigned long addr = virt_to_phys( data );
 
 	DMA_PRINTK("scsi%d: setting up dma, data = %p, phys = %lx, count = %ld, "
 		   "dir = %d\n", instance->host_no, data, addr, count, dir);
@@ -846,7 +846,7 @@ static unsigned long mac_dma_xfer_len( unsigned long wanted_len,
 	}
 
 	/* Last step: apply the hard limit on DMA transfers */
-	limit = (atari_dma_buffer && !STRAM_ADDR( VTOP(cmd->SCp.ptr) )) ?
+	limit = (atari_dma_buffer && !STRAM_ADDR( virt_to_phys(cmd->SCp.ptr) )) ?
 		    STRAM_BUFFER_SIZE : 255*512;
 	if (possible_len > limit)
 		possible_len = limit;

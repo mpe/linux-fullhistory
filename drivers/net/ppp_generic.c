@@ -94,7 +94,7 @@ struct ppp {
 	void		*rc_state;	/* its internal state */
 	unsigned long	last_xmit;	/* jiffies when last pkt sent */
 	unsigned long	last_recv;	/* jiffies when last pkt rcvd */
-	struct device	dev;		/* network interface device */
+	struct net_device	dev;		/* network interface device */
 	struct net_device_stats stats;	/* statistics */
 };
 
@@ -575,7 +575,7 @@ static struct file_operations ppp_device_fops = {
 /* Called at boot time if ppp is compiled into the kernel,
    or at module load time (from init_module) if compiled as a module. */
 int
-ppp_init(struct device *dev)
+ppp_init(struct net_device *dev)
 {
 	int err;
 #ifndef MODULE
@@ -605,7 +605,7 @@ ppp_init(struct device *dev)
  * Network interface unit routines.
  */
 static int
-ppp_start_xmit(struct sk_buff *skb, struct device *dev)
+ppp_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ppp *ppp = (struct ppp *) dev->priv;
 	int npi, proto;
@@ -678,7 +678,7 @@ ppp_start_xmit(struct sk_buff *skb, struct device *dev)
 }
 
 static struct net_device_stats *
-ppp_net_stats(struct device *dev)
+ppp_net_stats(struct net_device *dev)
 {
 	struct ppp *ppp = (struct ppp *) dev->priv;
 
@@ -686,7 +686,7 @@ ppp_net_stats(struct device *dev)
 }
 
 static int
-ppp_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+ppp_net_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	struct ppp *ppp = dev->priv;
 	int err = -EFAULT;
@@ -729,7 +729,7 @@ ppp_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 }
 
 int
-ppp_net_init(struct device *dev)
+ppp_net_init(struct net_device *dev)
 {
 	dev->hard_header_len = PPP_HDRLEN;
 	dev->mtu = PPP_MTU;

@@ -1,0 +1,59 @@
+
+		Framebuffer driver for Cirrus Logic chipsets
+		Copyright 1999 Jeff Garzik <jgarzik@pobox.com>
+
+
+
+{ just a little something to get people going; contributors welcome! }
+
+
+
+Chip families supported:
+	SD64
+	Piccolo
+	Picasso
+	Spectrum
+	Picasso4 (GD-5446)
+	Alpine (GD-543x/4x)
+	GD-5480
+
+Bus's supported:
+	PCI
+	Zorro
+
+Architectures supported:
+	i386
+	Alpha
+	PPC (Motorola Powerstack)
+	m68k (Amiga)
+
+
+
+Default video modes
+-------------------
+At the moment, there are two kernel command line arguments supported:
+
+mode:640x480
+	or
+mode:1024x768
+
+Full support for startup video modes (modedb) will be integrated soon.
+
+
+
+Version 1.9.4.1
+---------------
+Add compatibility support.  Now requires a 2.1.x, 2.2.x or 2.3.x kernel.
+
+
+Version 1.9.4
+-------------
+Several enhancements, smaller memory footprint, a few bugfixes.
+Requires kernel 2.3.14-pre1 or later.
+
+
+Version 1.9.3
+-------------
+Bundled with kernel 2.3.14-pre1 or later.
+
+

@@ -279,18 +279,18 @@ static unsigned short init_words[] = {
 
 /* Index to functions, as function prototypes. */
 
-extern int el16_probe(struct device *dev);	/* Called from Space.c */
+extern int el16_probe(struct net_device *dev);	/* Called from Space.c */
 
-static int	el16_probe1(struct device *dev, int ioaddr);
-static int	el16_open(struct device *dev);
-static int	el16_send_packet(struct sk_buff *skb, struct device *dev);
+static int	el16_probe1(struct net_device *dev, int ioaddr);
+static int	el16_open(struct net_device *dev);
+static int	el16_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void	el16_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void el16_rx(struct device *dev);
-static int	el16_close(struct device *dev);
-static struct net_device_stats *el16_get_stats(struct device *dev);
+static void el16_rx(struct net_device *dev);
+static int	el16_close(struct net_device *dev);
+static struct net_device_stats *el16_get_stats(struct net_device *dev);
 
-static void hardware_send_packet(struct device *dev, void *buf, short length);
-static void init_82586_mem(struct device *dev);
+static void hardware_send_packet(struct net_device *dev, void *buf, short length);
+static void init_82586_mem(struct net_device *dev);
 
 
 #ifdef HAVE_DEVLIST
@@ -305,7 +305,7 @@ struct netdev_entry netcard_drv =
 	device and return success.
 	*/
 
-int __init el16_probe(struct device *dev)
+int __init el16_probe(struct net_device *dev)
 {
 	int base_addr = dev ? dev->base_addr : 0;
 	int i;
@@ -326,7 +326,7 @@ int __init el16_probe(struct device *dev)
 	return ENODEV;
 }
 
-int __init el16_probe1(struct device *dev, int ioaddr)
+int __init el16_probe1(struct net_device *dev, int ioaddr)
 {
 	static unsigned char init_ID_done = 0, version_printed = 0;
 	int i, irq, irqval;
@@ -432,7 +432,7 @@ int __init el16_probe1(struct device *dev, int ioaddr)
 	return 0;
 }
 
-static int el16_open(struct device *dev)
+static int el16_open(struct net_device *dev)
 {
 	/* Initialize the 82586 memory and start it. */
 	init_82586_mem(dev);
@@ -446,7 +446,7 @@ static int el16_open(struct device *dev)
 	return 0;
 }
 
-static int el16_send_packet(struct sk_buff *skb, struct device *dev)
+static int el16_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -514,7 +514,7 @@ static int el16_send_packet(struct sk_buff *skb, struct device *dev)
 	Handle the network interface interrupts. */
 static void el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct net_local *lp;
 	int ioaddr, status, boguscount = 0;
 	ushort ack_cmd = 0;
@@ -592,7 +592,7 @@ static void el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	if ((status & 0x0070) != 0x0040  &&  dev->start) 
 	{
-		static void init_rx_bufs(struct device *);
+		static void init_rx_bufs(struct net_device *);
 		/* The Rx unit is not ready, it must be hung.  Restart the receiver by
 		   initializing the rx buffers, and issuing an Rx start command. */
 		if (net_debug)
@@ -616,7 +616,7 @@ static void el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	return;
 }
 
-static int el16_close(struct device *dev)
+static int el16_close(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	unsigned long shmem = dev->mem_start;
@@ -642,7 +642,7 @@ static int el16_close(struct device *dev)
 
 /* Get the current statistics.	This may be called with the card open or
    closed. */
-static struct net_device_stats *el16_get_stats(struct device *dev)
+static struct net_device_stats *el16_get_stats(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 
@@ -652,7 +652,7 @@ static struct net_device_stats *el16_get_stats(struct device *dev)
 }
 
 /* Initialize the Rx-block list. */
-static void init_rx_bufs(struct device *dev)
+static void init_rx_bufs(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned long write_ptr;
@@ -695,7 +695,7 @@ static void init_rx_bufs(struct device *dev)
 	writew(lp->rx_head,write_ptr+2);			/* Link */
 }
 
-static void init_82586_mem(struct device *dev)
+static void init_82586_mem(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	short ioaddr = dev->base_addr;
@@ -753,7 +753,7 @@ static void init_82586_mem(struct device *dev)
 	return;
 }
 
-static void hardware_send_packet(struct device *dev, void *buf, short length)
+static void hardware_send_packet(struct net_device *dev, void *buf, short length)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	short ioaddr = dev->base_addr;
@@ -798,7 +798,7 @@ static void hardware_send_packet(struct device *dev, void *buf, short length)
 		dev->tbusy = 0;
 }
 
-static void el16_rx(struct device *dev)
+static void el16_rx(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned long shmem = dev->mem_start;
@@ -869,7 +869,7 @@ static void el16_rx(struct device *dev)
 }
 #ifdef MODULE
 static char devicename[9] = { 0, };
-static struct device dev_3c507 = {
+static struct net_device dev_3c507 = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
 	0, 0, 0, 0,
 	0, 0,

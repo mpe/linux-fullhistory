@@ -293,7 +293,7 @@ struct boom_tx_desc {
 struct vortex_private {
 	char devname[8];			/* "ethN" string, also for kernel debug. */
 	const char *product_name;
-	struct device *next_module;
+	struct net_device *next_module;
 	/* The Rx and Tx rings are here to keep them quad-word-aligned. */
 	struct boom_rx_desc rx_ring[RX_RING_SIZE];
 	struct boom_tx_desc tx_ring[TX_RING_SIZE];
@@ -343,21 +343,21 @@ static struct media_table {
   { "Default",	 0,			0xFF, XCVR_10baseT, 10000},
 };
 
-static int vortex_scan(struct device *dev);
-static struct device *vortex_found_device(struct device *dev, int ioaddr,
+static int vortex_scan(struct net_device *dev);
+static struct net_device *vortex_found_device(struct net_device *dev, int ioaddr,
 										  int irq, int product_index,
 										  int options);
-static int vortex_probe1(struct device *dev);
-static int vortex_open(struct device *dev);
+static int vortex_probe1(struct net_device *dev);
+static int vortex_open(struct net_device *dev);
 static void vortex_timer(unsigned long arg);
-static int vortex_start_xmit(struct sk_buff *skb, struct device *dev);
-static int vortex_rx(struct device *dev);
-static int boomerang_rx(struct device *dev);
+static int vortex_start_xmit(struct sk_buff *skb, struct net_device *dev);
+static int vortex_rx(struct net_device *dev);
+static int boomerang_rx(struct net_device *dev);
 static void vortex_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs);
-static int vortex_close(struct device *dev);
-static void update_stats(int addr, struct device *dev);
-static struct enet_statistics *vortex_get_stats(struct device *dev);
-static void set_rx_mode(struct device *dev);
+static int vortex_close(struct net_device *dev);
+static void update_stats(int addr, struct net_device *dev);
+static struct enet_statistics *vortex_get_stats(struct net_device *dev);
+static void set_rx_mode(struct net_device *dev);
 
 
 /* Unlike the other PCI cards the 59x cards don't need a large contiguous
@@ -381,7 +381,7 @@ static int options[8] = { -1, -1, -1, -1, -1, -1, -1, -1,};
 #ifdef MODULE
 static int debug = -1;
 /* A list of all installed Vortex devices, for removing the driver module. */
-static struct device *root_vortex_dev = NULL;
+static struct net_device *root_vortex_dev = NULL;
 
 int
 init_module(void)
@@ -399,7 +399,7 @@ init_module(void)
 }
 
 #else
-int tc515_probe(struct device *dev)
+int tc515_probe(struct net_device *dev)
 {
 	int cards_found = 0;
 
@@ -412,7 +412,7 @@ int tc515_probe(struct device *dev)
 }
 #endif  /* not MODULE */
 
-static int vortex_scan(struct device *dev)
+static int vortex_scan(struct net_device *dev)
 {
 	int cards_found = 0;
 	static int ioaddr = 0x100;
@@ -452,7 +452,7 @@ static int vortex_scan(struct device *dev)
 	return cards_found;
 }
 
-static struct device *vortex_found_device(struct device *dev, int ioaddr,
+static struct net_device *vortex_found_device(struct net_device *dev, int ioaddr,
 										  int irq, int product_index,
 										  int options)
 {
@@ -460,13 +460,13 @@ static struct device *vortex_found_device(struct device *dev, int ioaddr,
 
 #ifdef MODULE
 	/* Allocate and fill new device structure. */
-	int dev_size = sizeof(struct device) +
+	int dev_size = sizeof(struct net_device) +
 		sizeof(struct vortex_private) + 15;		/* Pad for alignment */
 	
-	dev = (struct device *) kmalloc(dev_size, GFP_KERNEL);
+	dev = (struct net_device *) kmalloc(dev_size, GFP_KERNEL);
 	memset(dev, 0, dev_size);
 	/* Align the Rx and Tx ring entries.  */
-	dev->priv = (void *)(((long)dev + sizeof(struct device) + 15) & ~15);
+	dev->priv = (void *)(((long)dev + sizeof(struct net_device) + 15) & ~15);
 	vp = (struct vortex_private *)dev->priv;
 	dev->name = vp->devname; /* An empty string. */
 	dev->base_addr = ioaddr;
@@ -517,7 +517,7 @@ static struct device *vortex_found_device(struct device *dev, int ioaddr,
 	return dev;
 }
 
-static int vortex_probe1(struct device *dev)
+static int vortex_probe1(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
@@ -607,7 +607,7 @@ static int vortex_probe1(struct device *dev)
 
 
 static int
-vortex_open(struct device *dev)
+vortex_open(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
@@ -778,7 +778,7 @@ vortex_open(struct device *dev)
 static void vortex_timer(unsigned long data)
 {
 #ifdef AUTOMEDIA
-	struct device *dev = (struct device *)data;
+	struct net_device *dev = (struct net_device *)data;
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	int ioaddr = dev->base_addr;
 	unsigned long flags;
@@ -850,7 +850,7 @@ static void vortex_timer(unsigned long data)
 }
 
 static int
-vortex_start_xmit(struct sk_buff *skb, struct device *dev)
+vortex_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -1018,7 +1018,7 @@ vortex_start_xmit(struct sk_buff *skb, struct device *dev)
 static void vortex_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs)
 {
 	/* Use the now-standard shared IRQ implementation. */
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct vortex_private *lp;
 	int ioaddr, status;
 	int latency;
@@ -1162,7 +1162,7 @@ static void vortex_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 static int
-vortex_rx(struct device *dev)
+vortex_rx(struct net_device *dev)
 {
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -1232,7 +1232,7 @@ vortex_rx(struct device *dev)
 }
 
 static int
-boomerang_rx(struct device *dev)
+boomerang_rx(struct net_device *dev)
 {
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	int entry = vp->cur_rx % RX_RING_SIZE;
@@ -1322,7 +1322,7 @@ boomerang_rx(struct device *dev)
 }
 
 static int
-vortex_close(struct device *dev)
+vortex_close(struct net_device *dev)
 {
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -1388,7 +1388,7 @@ vortex_close(struct device *dev)
 }
 
 static struct enet_statistics *
-vortex_get_stats(struct device *dev)
+vortex_get_stats(struct net_device *dev)
 {
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	unsigned long flags;
@@ -1409,7 +1409,7 @@ vortex_get_stats(struct device *dev)
 	table.  This is done by checking that the ASM (!) code generated uses
 	atomic updates with '+='.
 	*/
-static void update_stats(int ioaddr, struct device *dev)
+static void update_stats(int ioaddr, struct net_device *dev)
 {
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 
@@ -1445,7 +1445,7 @@ static void update_stats(int ioaddr, struct device *dev)
    multicast setting is to receive all multicast frames.  At least
    the chip has a very clean way to set the mode, unlike many others. */
 static void
-set_rx_mode(struct device *dev)
+set_rx_mode(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	short new_mode;
@@ -1466,7 +1466,7 @@ set_rx_mode(struct device *dev)
 void
 cleanup_module(void)
 {
-	struct device *next_dev;
+	struct net_device *next_dev;
 
 	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 	while (root_vortex_dev) {

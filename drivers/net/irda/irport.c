@@ -79,9 +79,9 @@ static void irport_write_wakeup(struct irda_device *idev);
 static int  irport_write(int iobase, int fifo_size, __u8 *buf, int len);
 static void irport_receive(struct irda_device *idev);
 
-static int  irport_net_init(struct device *dev);
-static int  irport_net_open(struct device *dev);
-static int  irport_net_close(struct device *dev);
+static int  irport_net_init(struct net_device *dev);
+static int  irport_net_open(struct net_device *dev);
+static int  irport_net_close(struct net_device *dev);
 static int  irport_is_receiving(struct irda_device *idev);
 static void irport_set_dtr_rts(struct irda_device *idev, int dtr, int rts);
 static int  irport_raw_write(struct irda_device *idev, __u8 *buf, int len);
@@ -413,7 +413,7 @@ static int irport_write(int iobase, int fifo_size, __u8 *buf, int len)
  *    waits until the next transmitt interrupt, and continues until the
  *    frame is transmited.
  */
-int irport_hard_xmit(struct sk_buff *skb, struct device *dev)
+int irport_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct irda_device *idev;
 	unsigned long flags;
@@ -555,7 +555,7 @@ void irport_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	spin_unlock(&idev->lock);
 }
 
-static int irport_net_init(struct device *dev)
+static int irport_net_init(struct net_device *dev)
 {
 	/* Set up to be a normal IrDA network device driver */
 	irda_device_setup(dev);
@@ -571,7 +571,7 @@ static int irport_net_init(struct device *dev)
  *    
  *
  */
-static int irport_net_open(struct device *dev)
+static int irport_net_open(struct net_device *dev)
 {
 	struct irda_device *idev;
 	int iobase;
@@ -607,7 +607,7 @@ static int irport_net_open(struct device *dev)
  *    
  *
  */
-static int irport_net_close(struct device *dev)
+static int irport_net_close(struct net_device *dev)
 {
 	struct irda_device *idev;
 	int iobase;

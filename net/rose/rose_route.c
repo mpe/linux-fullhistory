@@ -63,7 +63,7 @@ static void rose_remove_neigh(struct rose_neigh *);
  *	Add a new route to a node, and in the process add the node and the
  *	neighbour if it is new.
  */
-static int rose_add_node(struct rose_route_struct *rose_route, struct device *dev)
+static int rose_add_node(struct rose_route_struct *rose_route, struct net_device *dev)
 {
 	struct rose_node  *rose_node, *rose_tmpn, *rose_tmpp;
 	struct rose_neigh *rose_neigh;
@@ -295,7 +295,7 @@ static void rose_remove_route(struct rose_route *rose_route)
  *	"Delete" a node. Strictly speaking remove a route to a node. The node
  *	is only deleted if no routes are left to it.
  */
-static int rose_del_node(struct rose_route_struct *rose_route, struct device *dev)
+static int rose_del_node(struct rose_route_struct *rose_route, struct net_device *dev)
 {
 	struct rose_node  *rose_node;
 	struct rose_neigh *rose_neigh;
@@ -433,7 +433,7 @@ void rose_del_loopback_node(rose_address *address)
 /*
  *	A device has been removed. Remove its routes and neighbours.
  */
-void rose_rt_device_down(struct device *dev)
+void rose_rt_device_down(struct net_device *dev)
 {
 	struct rose_neigh *s, *rose_neigh = rose_neigh_list;
 	struct rose_node  *t, *rose_node;
@@ -477,7 +477,7 @@ void rose_rt_device_down(struct device *dev)
 /*
  *	A device has been removed. Remove its links.
  */
-void rose_route_device_down(struct device *dev)
+void rose_route_device_down(struct net_device *dev)
 {
 	struct rose_route *s, *rose_route = rose_route_list;
 
@@ -523,9 +523,9 @@ static int rose_clear_routes(void)
 /*
  *	Check that the device given is a valid AX.25 interface that is "up".
  */
-struct device *rose_ax25_dev_get(char *devname)
+struct net_device *rose_ax25_dev_get(char *devname)
 {
-	struct device *dev;
+	struct net_device *dev;
 
 	if ((dev = dev_get(devname)) == NULL)
 		return NULL;
@@ -539,9 +539,9 @@ struct device *rose_ax25_dev_get(char *devname)
 /*
  *	Find the first active ROSE device, usually "rose0".
  */
-struct device *rose_dev_first(void)
+struct net_device *rose_dev_first(void)
 {
-	struct device *dev, *first = NULL;
+	struct net_device *dev, *first = NULL;
 
 	read_lock(&dev_base_lock);
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
@@ -557,9 +557,9 @@ struct device *rose_dev_first(void)
 /*
  *	Find the ROSE device for the given address.
  */
-struct device *rose_dev_get(rose_address *addr)
+struct net_device *rose_dev_get(rose_address *addr)
 {
-	struct device *dev;
+	struct net_device *dev;
 
 	read_lock(&dev_base_lock);
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
@@ -621,7 +621,7 @@ struct rose_neigh *rose_get_neigh(rose_address *addr, unsigned char *cause, unsi
 int rose_rt_ioctl(unsigned int cmd, void *arg)
 {
 	struct rose_route_struct rose_route;
-	struct device *dev;
+	struct net_device *dev;
 
 	switch (cmd) {
 
@@ -720,7 +720,7 @@ void rose_link_failed(ax25_cb *ax25, int reason)
  * 	A device has been "downed" remove its link status. Blow away all
  *	through routes and connections that use this device.
  */
-void rose_link_device_down(struct device *dev)
+void rose_link_device_down(struct net_device *dev)
 {
 	struct rose_neigh *rose_neigh;
 
@@ -745,7 +745,7 @@ int rose_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	unsigned short frametype;
 	unsigned int lci, new_lci;
 	unsigned char cause, diagnostic;
-	struct device *dev;
+	struct net_device *dev;
 	unsigned long flags;
 	int len;
 

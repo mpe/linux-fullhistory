@@ -111,7 +111,7 @@ static char *version =
 #undef READ
 #undef WRITE
 
-extern struct device *init_etherdev(struct device *dev, int sizeof_private);
+extern struct net_device *init_etherdev(struct net_device *dev, int sizeof_private);
 
 /* use 0 for production, 1 for verification, >2 for debug
  */
@@ -157,13 +157,13 @@ static int	send_1_5 (int lun, unsigned char *command, int dma);
 static int	get_status (void);
 static int	calc_received (void *start_address);
 
-extern int pamsnet_probe(struct device *dev);
+extern int pamsnet_probe(struct net_device *dev);
 
-static int pamsnet_open(struct device *dev);
-static int pamsnet_send_packet(struct sk_buff *skb, struct device *dev);
-static void pamsnet_poll_rx(struct device *);
-static int pamsnet_close(struct device *dev);
-static struct net_device_stats *net_get_stats(struct device *dev);
+static int pamsnet_open(struct net_device *dev);
+static int pamsnet_send_packet(struct sk_buff *skb, struct net_device *dev);
+static void pamsnet_poll_rx(struct net_device *);
+static int pamsnet_close(struct net_device *dev);
+static struct net_device_stats *net_get_stats(struct net_device *dev);
 static void pamsnet_tick(unsigned long);
 
 static void pamsnet_intr(int irq, void *data, struct pt_regs *fp);
@@ -563,7 +563,7 @@ bad:
 
 extern int __init 
 pamsnet_probe (dev)
-	struct device *dev;
+	struct net_device *dev;
 {
 	int i;
 	HADDR *hwaddr;
@@ -661,7 +661,7 @@ pamsnet_probe (dev)
    there is non-reboot way to recover if something goes wrong.
  */
 static int
-pamsnet_open(struct device *dev) {
+pamsnet_open(struct net_device *dev) {
 	struct net_local *lp = (struct net_local *)dev->priv;
 
 	if (pamsnet_debug > 0)
@@ -691,7 +691,7 @@ pamsnet_open(struct device *dev) {
 }
 
 static int
-pamsnet_send_packet(struct sk_buff *skb, struct device *dev) {
+pamsnet_send_packet(struct sk_buff *skb, struct net_device *dev) {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned long flags;
 
@@ -738,7 +738,7 @@ pamsnet_send_packet(struct sk_buff *skb, struct device *dev) {
 /* We have a good packet(s), get it/them out of the buffers.
  */
 static void
-pamsnet_poll_rx(struct device *dev) {
+pamsnet_poll_rx(struct net_device *dev) {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int boguscount;
 	int pkt_len;
@@ -813,7 +813,7 @@ pamsnet_poll_rx(struct device *dev) {
  */
 static void
 pamsnet_tick(unsigned long data) {
-	struct device	 *dev = (struct device *)data;
+	struct net_device	 *dev = (struct net_device *)data;
 	struct net_local *lp = (struct net_local *)dev->priv;
 
 	if( pamsnet_debug > 0 && (lp->open_time++ & 7) == 8 )
@@ -828,7 +828,7 @@ pamsnet_tick(unsigned long data) {
 /* The inverse routine to pamsnet_open().
  */
 static int
-pamsnet_close(struct device *dev) {
+pamsnet_close(struct net_device *dev) {
 	struct net_local *lp = (struct net_local *)dev->priv;
 
 	if (pamsnet_debug > 0)
@@ -855,7 +855,7 @@ pamsnet_close(struct device *dev) {
 /* Get the current statistics.
    This may be called with the card open or closed.
  */
-static struct net_device_stats *net_get_stats(struct device *dev) 
+static struct net_device_stats *net_get_stats(struct net_device *dev) 
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	return &lp->stats;
@@ -865,7 +865,7 @@ static struct net_device_stats *net_get_stats(struct device *dev)
 #ifdef MODULE
 
 static char devicename[9] = { 0, };
-static struct device pam_dev =
+static struct net_device pam_dev =
 	{
 		devicename,	/* filled in by register_netdev() */
 		0, 0, 0, 0,	/* memory */

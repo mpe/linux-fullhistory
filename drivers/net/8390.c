@@ -76,18 +76,18 @@ static const char *version =
 
 /* These are the operational function interfaces to board-specific
    routines.
-	void reset_8390(struct device *dev)
+	void reset_8390(struct net_device *dev)
 		Resets the board associated with DEV, including a hardware reset of
 		the 8390.  This is only called when there is a transmit timeout, and
 		it is always followed by 8390_init().
-	void block_output(struct device *dev, int count, const unsigned char *buf,
+	void block_output(struct net_device *dev, int count, const unsigned char *buf,
 					  int start_page)
 		Write the COUNT bytes of BUF to the packet buffer at START_PAGE.  The
 		"page" value uses the 8390's 256-byte pages.
-	void get_8390_hdr(struct device *dev, struct e8390_hdr *hdr, int ring_page)
+	void get_8390_hdr(struct net_device *dev, struct e8390_hdr *hdr, int ring_page)
 		Read the 4 byte, page aligned 8390 header. *If* there is a
 		subsequent read, it will be of the rest of the packet.
-	void block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+	void block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset)
 		Read COUNT bytes from the packet buffer into the skb data area. Start 
 		reading from RING_OFFSET, the address as the 8390 sees it.  This will always
 		follow the read of the 8390 header. 
@@ -103,16 +103,16 @@ int ei_debug = 1;
 #endif
 
 /* Index to functions. */
-static void ei_tx_intr(struct device *dev);
-static void ei_tx_err(struct device *dev);
-static void ei_receive(struct device *dev);
-static void ei_rx_overrun(struct device *dev);
+static void ei_tx_intr(struct net_device *dev);
+static void ei_tx_err(struct net_device *dev);
+static void ei_receive(struct net_device *dev);
+static void ei_rx_overrun(struct net_device *dev);
 
 /* Routines generic to NS8390-based boards. */
-static void NS8390_trigger_send(struct device *dev, unsigned int length,
+static void NS8390_trigger_send(struct net_device *dev, unsigned int length,
 								int start_page);
-static void set_multicast_list(struct device *dev);
-static void do_set_multicast_list(struct device *dev);
+static void set_multicast_list(struct net_device *dev);
+static void do_set_multicast_list(struct net_device *dev);
 
 /*
  *	SMP and the 8390 setup.
@@ -146,7 +146,7 @@ static void do_set_multicast_list(struct device *dev);
    up anew at each open, even though many of these registers should only
    need to be set once at boot.
    */
-int ei_open(struct device *dev)
+int ei_open(struct net_device *dev)
 {
 	unsigned long flags;
 	struct ei_device *ei_local = (struct ei_device *) dev->priv;
@@ -174,7 +174,7 @@ int ei_open(struct device *dev)
 }
 
 /* Opposite of above. Only used when "ifconfig <devname> down" is done. */
-int ei_close(struct device *dev)
+int ei_close(struct net_device *dev)
 {
 	struct ei_device *ei_local = (struct ei_device *) dev->priv;
 	unsigned long flags;
@@ -190,7 +190,7 @@ int ei_close(struct device *dev)
 	return 0;
 }
 
-static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
+static int ei_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	int e8390_base = dev->base_addr;
 	struct ei_device *ei_local = (struct ei_device *) dev->priv;
@@ -404,7 +404,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 
 void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	int e8390_base;
 	int interrupts, nr_serviced = 0;
 	struct ei_device *ei_local;
@@ -516,7 +516,7 @@ void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
  * Called with lock held
  */
 
-static void ei_tx_err(struct device *dev)
+static void ei_tx_err(struct net_device *dev)
 {
 	int e8390_base = dev->base_addr;
 	struct ei_device *ei_local = (struct ei_device *) dev->priv;
@@ -554,7 +554,7 @@ static void ei_tx_err(struct device *dev)
 /* We have finished a transmit: check for errors and then trigger the next
    packet to be sent. Called with lock held */
 
-static void ei_tx_intr(struct device *dev)
+static void ei_tx_intr(struct net_device *dev)
 {
 	int e8390_base = dev->base_addr;
 	struct ei_device *ei_local = (struct ei_device *) dev->priv;
@@ -644,7 +644,7 @@ static void ei_tx_intr(struct device *dev)
 /* We have a good packet(s), get it/them out of the buffers. 
    Called with lock held */
 
-static void ei_receive(struct device *dev)
+static void ei_receive(struct net_device *dev)
 {
 	int e8390_base = dev->base_addr;
 	struct ei_device *ei_local = (struct ei_device *) dev->priv;
@@ -773,7 +773,7 @@ static void ei_receive(struct device *dev)
  * computer will hate you - it takes 10mS or so. 
  */
 
-static void ei_rx_overrun(struct device *dev)
+static void ei_rx_overrun(struct net_device *dev)
 {
 	int e8390_base = dev->base_addr;
 	unsigned char was_txing, must_resend = 0;
@@ -842,7 +842,7 @@ static void ei_rx_overrun(struct device *dev)
  *	Collect the stats. This is called unlocked and from several contexts.
  */
  
-static struct net_device_stats *get_stats(struct device *dev)
+static struct net_device_stats *get_stats(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	struct ei_device *ei_local = (struct ei_device *) dev->priv;
@@ -888,7 +888,7 @@ static inline u32 update_crc(u8 byte, u32 current_crc)
  * associated with this dev structure.
  */
  
-static inline void make_mc_bits(u8 *bits, struct device *dev)
+static inline void make_mc_bits(u8 *bits, struct net_device *dev)
 {
 	struct dev_mc_list *dmi;
 
@@ -917,7 +917,7 @@ static inline void make_mc_bits(u8 *bits, struct device *dev)
  *	from a BH in 2.1.x. Must be called with lock held. 
  */
  
-static void do_set_multicast_list(struct device *dev)
+static void do_set_multicast_list(struct net_device *dev)
 {
 	int e8390_base = dev->base_addr;
 	int i;
@@ -972,7 +972,7 @@ static void do_set_multicast_list(struct device *dev)
  *	not called too often. Must protect against both bh and irq users
  */
  
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
 	unsigned long flags;
 	struct ei_device *ei_local = (struct ei_device*)dev->priv;
@@ -987,7 +987,7 @@ static void set_multicast_list(struct device *dev)
  * this, as it is used by 8390 based modular drivers too.
  */
 
-int ethdev_init(struct device *dev)
+int ethdev_init(struct net_device *dev)
 {
 	if (ei_debug > 1)
 		printk(version);
@@ -1022,7 +1022,7 @@ int ethdev_init(struct device *dev)
  *	Must be called with lock held.
  */
 
-void NS8390_init(struct device *dev, int startp)
+void NS8390_init(struct net_device *dev, int startp)
 {
 	int e8390_base = dev->base_addr;
 	struct ei_device *ei_local = (struct ei_device *) dev->priv;
@@ -1085,7 +1085,7 @@ void NS8390_init(struct device *dev, int startp)
 /* Trigger a transmit start, assuming the length is valid. 
    Always called with the page lock held */
    
-static void NS8390_trigger_send(struct device *dev, unsigned int length,
+static void NS8390_trigger_send(struct net_device *dev, unsigned int length,
 								int start_page)
 {
 	int e8390_base = dev->base_addr;

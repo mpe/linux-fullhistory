@@ -27,7 +27,7 @@
 static void p8023_datalink_header(struct datalink_proto *dl, 
 		struct sk_buff *skb, unsigned char *dest_node)
 {
-	struct device	*dev = skb->dev;
+	struct net_device	*dev = skb->dev;
 	dev->hard_header(skb, dev, ETH_P_802_3, dest_node, NULL, skb->len);
 }
 

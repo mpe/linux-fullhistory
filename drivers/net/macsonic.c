@@ -176,7 +176,7 @@ static unsigned char nibbletab[] = {0, 8, 4, 12, 2, 10, 6, 14,
 
 __initfunc(int mac_onboard_sonic_probe(void))
 {
-	struct device *dev;
+	struct net_device *dev;
 	unsigned int silicon_revision;
 	unsigned int val;
 	struct sonic_local *lp;

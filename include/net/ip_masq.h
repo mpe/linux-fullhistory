@@ -149,7 +149,7 @@ extern struct ip_masq *ip_masq_m_tab[IP_MASQ_TAB_SIZE];
 extern struct ip_masq *ip_masq_s_tab[IP_MASQ_TAB_SIZE];
 extern const char * ip_masq_state_name(int state);
 extern struct ip_masq_hook *ip_masq_user_hook;
-extern u32 ip_masq_select_addr(struct device *dev, u32 dst, int scope);
+extern u32 ip_masq_select_addr(struct net_device *dev, u32 dst, int scope);
 /*
  * 	
  *	IP_MASQ_APP: IP application masquerading definitions 

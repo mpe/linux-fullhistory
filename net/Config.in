@@ -23,6 +23,9 @@ if [ "$CONFIG_INET" = "y" ]; then
 	    source net/ipv6/Config.in
     fi
   fi
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+	source net/khttpd/Config.in
+  fi
 fi
 
 comment ' '

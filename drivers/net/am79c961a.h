@@ -114,15 +114,15 @@ struct dev_priv {
     unsigned long	txhdr;
 };
 
-extern int	am79c961_probe (struct device *dev);
-static int	am79c961_probe1 (struct device *dev);
-static int	am79c961_open (struct device *dev);
-static int	am79c961_sendpacket (struct sk_buff *skb, struct device *dev);
+extern int	am79c961_probe (struct net_device *dev);
+static int	am79c961_probe1 (struct net_device *dev);
+static int	am79c961_open (struct net_device *dev);
+static int	am79c961_sendpacket (struct sk_buff *skb, struct net_device *dev);
 static void	am79c961_interrupt (int irq, void *dev_id, struct pt_regs *regs);
-static void	am79c961_rx (struct device *dev, struct dev_priv *priv);
-static void	am79c961_tx (struct device *dev, struct dev_priv *priv);
-static int	am79c961_close (struct device *dev);
-static struct enet_statistics *am79c961_getstats (struct device *dev);
-static void	am79c961_setmulticastlist (struct device *dev);
+static void	am79c961_rx (struct net_device *dev, struct dev_priv *priv);
+static void	am79c961_tx (struct net_device *dev, struct dev_priv *priv);
+static int	am79c961_close (struct net_device *dev);
+static struct enet_statistics *am79c961_getstats (struct net_device *dev);
+static void	am79c961_setmulticastlist (struct net_device *dev);
 
 #endif

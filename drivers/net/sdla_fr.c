@@ -136,7 +136,7 @@
 
 /****** Data Structures *****************************************************/
 
-/* This is an extention of the 'struct device' we create for each network
+/* This is an extention of the 'struct net_device' we create for each network
  * interface to keep the rest of channel-specific data.
  */
 typedef struct fr_channel {
@@ -239,20 +239,20 @@ static int Intr_test_counter;
 
 /* WAN link driver entry points. These are called by the WAN router module. */
 static int update(wan_device_t * wandev);
-static int new_if(wan_device_t * wandev, struct device *dev,
+static int new_if(wan_device_t * wandev, struct net_device *dev,
 		  wanif_conf_t * conf);
-static int del_if(wan_device_t * wandev, struct device *dev);
+static int del_if(wan_device_t * wandev, struct net_device *dev);
 /* WANPIPE-specific entry points */
 static int wpf_exec(struct sdla *card, void *u_cmd, void *u_data);
 /* Network device interface */
-static int if_init(struct device *dev);
-static int if_open(struct device *dev);
-static int if_close(struct device *dev);
-static int if_header(struct sk_buff *skb, struct device *dev,
+static int if_init(struct net_device *dev);
+static int if_open(struct net_device *dev);
+static int if_close(struct net_device *dev);
+static int if_header(struct sk_buff *skb, struct net_device *dev,
 	    unsigned short type, void *daddr, void *saddr, unsigned len);
 static int if_rebuild_hdr(struct sk_buff *skb);
-static int if_send(struct sk_buff *skb, struct device *dev);
-static struct net_device_stats *if_stats(struct device *dev);
+static int if_send(struct sk_buff *skb, struct net_device *dev);
+static struct net_device_stats *if_stats(struct net_device *dev);
 /* Interrupt handlers */
 static void fr502_isr(sdla_t * card);
 static void fr508_isr(sdla_t * card);
@@ -281,9 +281,9 @@ static int fr_event(sdla_t * card, int event, fr_mbox_t * mbox);
 static int fr_modem_failure(sdla_t * card, fr_mbox_t * mbox);
 static int fr_dlci_change(sdla_t * card, fr_mbox_t * mbox);
 /* Miscellaneous functions */
-static int update_chan_state(struct device *dev);
-static void set_chan_state(struct device *dev, int state);
-static struct device *find_channel(sdla_t * card, unsigned dlci);
+static int update_chan_state(struct net_device *dev);
+static void set_chan_state(struct net_device *dev, int state);
+static struct net_device *find_channel(sdla_t * card, unsigned dlci);
 static int is_tx_ready(sdla_t * card, fr_channel_t * chan);
 static unsigned int dec_to_uint(unsigned char *str, int len);
 static int reply_udp(unsigned char *data, unsigned int mbox_len);
@@ -292,8 +292,8 @@ static void init_chan_statistics(fr_channel_t * chan);
 static void init_global_statistics(sdla_t * card);
 static void read_DLCI_IB_mapping(sdla_t * card, fr_channel_t * chan);
 /* Udp management functions */
-static int process_udp_mgmt_pkt(char udp_pkt_src, sdla_t * card, struct sk_buff *skb, struct device *dev, int dlci, fr_channel_t * chan);
-static int process_udp_driver_call(char udp_pkt_src, sdla_t * card, struct sk_buff *skb, struct device *dev, int dlci, fr_channel_t * chan);
+static int process_udp_mgmt_pkt(char udp_pkt_src, sdla_t * card, struct sk_buff *skb, struct net_device *dev, int dlci, fr_channel_t * chan);
+static int process_udp_driver_call(char udp_pkt_src, sdla_t * card, struct sk_buff *skb, struct net_device *dev, int dlci, fr_channel_t * chan);
 static int udp_pkt_type(struct sk_buff *skb, sdla_t * card);
 /* IPX functions */
 static void switch_net_numbers(unsigned char *sendpacket, unsigned long network_number, unsigned char incoming);
@@ -499,7 +499,7 @@ static int update(wan_device_t * wandev)
  *		< 0	failure (channel will not be created)
  */
 
-static int new_if(wan_device_t * wandev, struct device *dev, wanif_conf_t * conf)
+static int new_if(wan_device_t * wandev, struct net_device *dev, wanif_conf_t * conf)
 {
 	sdla_t *card = wandev->private;
 	fr_channel_t *chan;
@@ -570,7 +570,7 @@ static int new_if(wan_device_t * wandev, struct device *dev, wanif_conf_t * conf
 /*============================================================================
  * Delete logical channel.
  */
-static int del_if(wan_device_t * wandev, struct device *dev)
+static int del_if(wan_device_t * wandev, struct net_device *dev)
 {
 	if (dev->priv) 
 	{
@@ -627,7 +627,7 @@ static int wpf_exec(struct sdla *card, void *u_cmd, void *u_data)
  * interface registration.  Returning anything but zero will fail interface
  * registration.
  */
-static int if_init(struct device *dev)
+static int if_init(struct net_device *dev)
 {
 	fr_channel_t *chan = dev->priv;
 	sdla_t *card = chan->card;
@@ -668,11 +668,11 @@ static int if_init(struct device *dev)
  * Return 0 if O.k. or errno.
  */
 
-static int if_open(struct device *dev)
+static int if_open(struct net_device *dev)
 {
 	fr_channel_t *chan = dev->priv;
 	sdla_t *card = chan->card;
-	struct device *dev2;
+	struct net_device *dev2;
 	int err = 0;
 	fr508_flags_t *flags = card->flags;
 	struct timeval tv;
@@ -797,7 +797,7 @@ static int if_open(struct device *dev)
  * o reset flags.
  */
 
-static int if_close(struct device *dev)
+static int if_close(struct net_device *dev)
 {
 	fr_channel_t *chan = dev->priv;
 	sdla_t *card = chan->card;
@@ -826,7 +826,7 @@ static int if_close(struct device *dev)
  * Return:	media header length.
  */
 
-static int if_header(struct sk_buff *skb, struct device *dev,
+static int if_header(struct sk_buff *skb, struct net_device *dev,
 	     unsigned short type, void *daddr, void *saddr, unsigned len)
 {
 	int hdr_len = 0;
@@ -852,7 +852,7 @@ static int if_header(struct sk_buff *skb, struct device *dev,
 
 static int if_rebuild_hdr(struct sk_buff *skb)
 {
-	struct device *dev=skb->dev;
+	struct net_device *dev=skb->dev;
 	fr_channel_t *chan = dev->priv;
 	sdla_t *card = chan->card;
 	printk(KERN_INFO "%s: rebuild_header() called for interface %s!\n",
@@ -879,13 +879,13 @@ static int if_rebuild_hdr(struct sk_buff *skb)
  *    protocol stack and can be used for flow control with protocol layer.
  */
 
-static int if_send(struct sk_buff *skb, struct device *dev)
+static int if_send(struct sk_buff *skb, struct net_device *dev)
 {
 	fr_channel_t *chan = dev->priv;
 	sdla_t *card = chan->card;
 	int retry = 0, err;
 	unsigned char *sendpacket;
-	struct device *dev2;
+	struct net_device *dev2;
 	unsigned long check_braddr, check_mcaddr;
 	fr508_flags_t *adptr_flags = card->flags;
 	int udp_type, send_data;
@@ -1230,7 +1230,7 @@ static void switch_net_numbers(unsigned char *sendpacket, unsigned long network_
  * Return a pointer to struct net_device_stats.
  */
 
-static struct net_device_stats *if_stats(struct device *dev)
+static struct net_device_stats *if_stats(struct net_device *dev)
 {
 	fr_channel_t *chan = dev->priv;
 	if(chan==NULL)
@@ -1270,8 +1270,8 @@ static void fr508_isr(sdla_t * card)
 	fr508_flags_t *flags = card->flags;
 	fr_buf_ctl_t *bctl;
 	char *ptr = &flags->iflag;
-	struct device *dev = card->wandev.dev;
-	struct device *dev2;
+	struct net_device *dev = card->wandev.dev;
+	struct net_device *dev2;
 	int i;
 	unsigned long host_cpu_flags;
 	unsigned disable_tx_intr = 1;
@@ -1429,7 +1429,7 @@ static void fr502_rx_intr(sdla_t * card)
 {
 	fr_mbox_t *mbox = card->rxmb;
 	struct sk_buff *skb;
-	struct device *dev;
+	struct net_device *dev;
 	fr_channel_t *chan;
 	unsigned dlci, len;
 	void *buf;
@@ -1517,7 +1517,7 @@ static void fr508_rx_intr(sdla_t * card)
 {
 	fr_buf_ctl_t *frbuf = card->rxmb;
 	struct sk_buff *skb;
-	struct device *dev;
+	struct net_device *dev;
 	fr_channel_t *chan;
 	unsigned dlci, len, offs;
 	void *buf;
@@ -1653,7 +1653,7 @@ static void fr508_rx_intr(sdla_t * card)
  */
 static void tx_intr(sdla_t * card)
 {
-	struct device *dev = card->wandev.dev;
+	struct net_device *dev = card->wandev.dev;
 	if (card->intr_mode == BUFFER_INTR_MODE) 
 	{
 		for (; dev; dev = dev->slave) 
@@ -1801,7 +1801,7 @@ static int handle_IPXWAN(unsigned char *sendpacket, char *devname, unsigned char
 
 static void wpf_poll(sdla_t * card)
 {
-/*      struct device* dev = card->wandev.dev;  */
+/*      struct net_device* dev = card->wandev.dev;  */
 	fr508_flags_t *flags = card->flags;
 	unsigned long host_cpu_flags;
 	++card->statistics.poll_entry;
@@ -2246,11 +2246,11 @@ static int fr_dlci_change(sdla_t * card, fr_mbox_t * mbox)
 	int cnt = mbox->cmd.length / sizeof(dlci_status_t);
 	fr_dlc_conf_t cfg;
 	fr_channel_t *chan;
-	struct device *dev2;
+	struct net_device *dev2;
 	for (; cnt; --cnt, ++status) 
 	{
 		unsigned short dlci = status->dlci;
-		struct device *dev = find_channel(card, dlci);
+		struct net_device *dev = find_channel(card, dlci);
 		if (dev == NULL) 
 		{
 			printk(KERN_INFO
@@ -2325,7 +2325,7 @@ static int fr_dlci_change(sdla_t * card, fr_mbox_t * mbox)
 /*============================================================================
  * Update channel state. 
  */
-static int update_chan_state(struct device *dev)
+static int update_chan_state(struct net_device *dev)
 {
 	fr_channel_t *chan = dev->priv;
 	sdla_t *card = chan->card;
@@ -2365,7 +2365,7 @@ static int update_chan_state(struct device *dev)
 /*============================================================================
  * Set channel state.
  */
-static void set_chan_state(struct device *dev, int state)
+static void set_chan_state(struct net_device *dev, int state)
 {
 	fr_channel_t *chan = dev->priv;
 	sdla_t *card = chan->card;
@@ -2402,9 +2402,9 @@ static void set_chan_state(struct device *dev, int state)
 /*============================================================================
  * Find network device by its channel number.
  */
-static struct device *find_channel(sdla_t * card, unsigned dlci)
+static struct net_device *find_channel(sdla_t * card, unsigned dlci)
 {
-	struct device *dev;
+	struct net_device *dev;
 	for (dev = card->wandev.dev; dev; dev = dev->slave)
 		if (((fr_channel_t *) dev->priv)->dlci == dlci)
 			break;
@@ -2454,7 +2454,7 @@ static unsigned int dec_to_uint(unsigned char *str, int len)
  * Process UDP call of type FPIPE8ND
  */
 
-static int process_udp_mgmt_pkt(char udp_pkt_src, sdla_t * card, struct sk_buff *skb, struct device *dev, int dlci, fr_channel_t * chan)
+static int process_udp_mgmt_pkt(char udp_pkt_src, sdla_t * card, struct sk_buff *skb, struct net_device *dev, int dlci, fr_channel_t * chan)
 {
 	int c_retry = MAX_CMD_RETRY;
 	unsigned char *data;
@@ -2818,7 +2818,7 @@ static int intr_test(sdla_t * card)
 /*============================================================================
  * Process UDP call of type DRVSTATS.  
  */
-static int process_udp_driver_call(char udp_pkt_src, sdla_t * card, struct sk_buff *skb, struct device *dev, int dlci, fr_channel_t * chan)
+static int process_udp_driver_call(char udp_pkt_src, sdla_t * card, struct sk_buff *skb, struct net_device *dev, int dlci, fr_channel_t * chan)
 {
 	int c_retry = MAX_CMD_RETRY;
 	unsigned char *sendpacket;

@@ -48,7 +48,7 @@ struct sk_buff {
 	struct sk_buff_head * list;		/* List we are on				*/
 	struct sock	*sk;			/* Socket we are owned by 			*/
 	struct timeval	stamp;			/* Time we arrived				*/
-	struct device	*dev;			/* Device we arrived on/are leaving by		*/
+	struct net_device	*dev;			/* Device we arrived on/are leaving by		*/
 
 	/* Transport layer header */
 	union

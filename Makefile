@@ -364,6 +364,8 @@ clean:	archclean
 	rm -f drivers/char/consolemap_deftbl.c drivers/video/promcon_tbl.c
 	rm -f drivers/char/conmakehash
 	rm -f drivers/sound/bin2hex drivers/sound/hex2hex
+	rm -f net/khttpd/make_times_h
+	rm -f net/khttpd/times.h
 	if [ -d modules ]; then \
 		rm -f core `find modules/ -type f -print`; \
 	fi

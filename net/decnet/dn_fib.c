@@ -489,7 +489,7 @@ static int dn_fib_convert_rtm(struct dn_fib_action *fa,
 	dn_address dst, gw, mask = 0xffff;
 	int ifindex;
 	struct neighbour *neigh;
-	struct device *dev;
+	struct net_device *dev;
 	unsigned char addr[ETH_ALEN];
 
 	if (r->rtm_family != AF_DECnet)

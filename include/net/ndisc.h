@@ -62,13 +62,13 @@ extern void			ndisc_cleanup(void);
 
 extern int			ndisc_rcv(struct sk_buff *skb, unsigned long len);
 
-extern void			ndisc_send_ns(struct device *dev,
+extern void			ndisc_send_ns(struct net_device *dev,
 					      struct neighbour *neigh,
 					      struct in6_addr *solicit,
 					      struct in6_addr *daddr,
 					      struct in6_addr *saddr);
 
-extern void			ndisc_send_rs(struct device *dev,
+extern void			ndisc_send_rs(struct net_device *dev,
 					      struct in6_addr *saddr,
 					      struct in6_addr *daddr);
 
@@ -79,7 +79,7 @@ extern void			ndisc_send_redirect(struct sk_buff *skb,
 						    struct neighbour *neigh,
 						    struct in6_addr *target);
 
-extern int			ndisc_mc_map(struct in6_addr *addr, char *buf, struct device *dev, int dir);
+extern int			ndisc_mc_map(struct in6_addr *addr, char *buf, struct net_device *dev, int dir);
 
 
 struct rt6_info *		dflt_rt_lookup(void);
@@ -101,7 +101,7 @@ extern int			igmp6_event_report(struct sk_buff *skb,
 
 extern void			igmp6_cleanup(void);
 
-extern __inline__ struct neighbour * ndisc_get_neigh(struct device *dev, struct in6_addr *addr)
+extern __inline__ struct neighbour * ndisc_get_neigh(struct net_device *dev, struct in6_addr *addr)
 {
 
 	if (dev) {

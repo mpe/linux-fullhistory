@@ -43,17 +43,17 @@ static const char *version =
 #include <linux/etherdevice.h>
 #include "8390.h"
 
-int ne3210_probe(struct device *dev);
-int ne3210_probe1(struct device *dev, int ioaddr);
+int ne3210_probe(struct net_device *dev);
+int ne3210_probe1(struct net_device *dev, int ioaddr);
 
-static int ne3210_open(struct device *dev);
-static int ne3210_close(struct device *dev);
+static int ne3210_open(struct net_device *dev);
+static int ne3210_close(struct net_device *dev);
 
-static void ne3210_reset_8390(struct device *dev);
+static void ne3210_reset_8390(struct net_device *dev);
 
-static void ne3210_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page);
-static void ne3210_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset);
-static void ne3210_block_output(struct device *dev, int count, const unsigned char *buf, const int start_page);
+static void ne3210_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page);
+static void ne3210_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset);
+static void ne3210_block_output(struct net_device *dev, int count, const unsigned char *buf, const int start_page);
 
 #define NE3210_START_PG		0x00    /* First page of TX buffer	*/
 #define NE3210_STOP_PG		0x80    /* Last page +1 of RX ring	*/
@@ -95,7 +95,7 @@ static unsigned int shmem_map[] __initdata = {0xff0, 0xfe0, 0xfff0, 0xd8, 0xffe0
  *	PROM for a match against the value assigned to Novell.
  */
 
-int __init ne3210_probe(struct device *dev)
+int __init ne3210_probe(struct net_device *dev)
 {
 	unsigned short ioaddr = dev->base_addr;
 
@@ -122,7 +122,7 @@ int __init ne3210_probe(struct device *dev)
 	return ENODEV;
 }
 
-int __init ne3210_probe1(struct device *dev, int ioaddr)
+int __init ne3210_probe1(struct net_device *dev, int ioaddr)
 {
 	int i;
 	unsigned long eisa_id;
@@ -272,7 +272,7 @@ int __init ne3210_probe1(struct device *dev, int ioaddr)
  *	Reset by toggling the "Board Enable" bits (bit 2 and 0).
  */
 
-static void ne3210_reset_8390(struct device *dev)
+static void ne3210_reset_8390(struct net_device *dev)
 {
 	unsigned short ioaddr = dev->base_addr;
 
@@ -304,7 +304,7 @@ static void ne3210_reset_8390(struct device *dev)
  */
 
 static void
-ne3210_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+ne3210_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 	unsigned long hdr_start = dev->mem_start + ((ring_page - NE3210_START_PG)<<8);
 	memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
@@ -317,7 +317,7 @@ ne3210_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page
  *	be rounded up to a doubleword value via ne3210_get_8390_hdr() above.
  */
 
-static void ne3210_block_input(struct device *dev, int count, struct sk_buff *skb,
+static void ne3210_block_input(struct net_device *dev, int count, struct sk_buff *skb,
 						  int ring_offset)
 {
 	unsigned long xfer_start = dev->mem_start + ring_offset - (NE3210_START_PG<<8);
@@ -334,7 +334,7 @@ static void ne3210_block_input(struct device *dev, int count, struct sk_buff *sk
 	}
 }
 
-static void ne3210_block_output(struct device *dev, int count,
+static void ne3210_block_output(struct net_device *dev, int count,
 				const unsigned char *buf, int start_page)
 {
 	unsigned long shmem = dev->mem_start + ((start_page - NE3210_START_PG)<<8);
@@ -343,14 +343,14 @@ static void ne3210_block_output(struct device *dev, int count,
 	memcpy_toio(shmem, buf, count);
 }
 
-static int ne3210_open(struct device *dev)
+static int ne3210_open(struct net_device *dev)
 {
 	ei_open(dev);
 	MOD_INC_USE_COUNT;
 	return 0;
 }
 
-static int ne3210_close(struct device *dev)
+static int ne3210_close(struct net_device *dev)
 {
 
 	if (ei_debug > 1)
@@ -365,7 +365,7 @@ static int ne3210_close(struct device *dev)
 #define MAX_NE3210_CARDS	4	/* Max number of NE3210 cards per module */
 #define NAMELEN			8	/* # of chars for storing dev->name */
 static char namelist[NAMELEN * MAX_NE3210_CARDS] = { 0, };
-static struct device dev_ne3210[MAX_NE3210_CARDS] = {
+static struct net_device dev_ne3210[MAX_NE3210_CARDS] = {
 	{
 		NULL,		/* assign a chunk of namelist[] below */
 		0, 0, 0, 0,
@@ -387,7 +387,7 @@ int init_module(void)
 	int this_dev, found = 0;
 
 	for (this_dev = 0; this_dev < MAX_NE3210_CARDS; this_dev++) {
-		struct device *dev = &dev_ne3210[this_dev];
+		struct net_device *dev = &dev_ne3210[this_dev];
 		dev->name = namelist+(NAMELEN*this_dev);
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
@@ -414,7 +414,7 @@ void cleanup_module(void)
 	int this_dev;
 
 	for (this_dev = 0; this_dev < MAX_NE3210_CARDS; this_dev++) {
-		struct device *dev = &dev_ne3210[this_dev];
+		struct net_device *dev = &dev_ne3210[this_dev];
 		if (dev->priv != NULL) {
 			void *priv = dev->priv;
 			free_irq(dev->irq, dev);

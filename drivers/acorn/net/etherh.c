@@ -104,7 +104,7 @@ etherh_addr(char *addr, struct expansion_card *ec))
 }
 
 static void
-etherh_setif(struct device *dev)
+etherh_setif(struct net_device *dev)
 {
 	unsigned long addr;
 	unsigned long flags;
@@ -140,7 +140,7 @@ etherh_setif(struct device *dev)
 }
 
 static int
-etherh_getifstat(struct device *dev)
+etherh_getifstat(struct net_device *dev)
 {
 	int stat;
 
@@ -172,7 +172,7 @@ etherh_getifstat(struct device *dev)
  * Reset the 8390 (hard reset)
  */
 static void
-etherh_reset(struct device *dev)
+etherh_reset(struct net_device *dev)
 {
 	outb_p(E8390_NODMA+E8390_PAGE0+E8390_STOP, dev->base_addr);
 
@@ -183,7 +183,7 @@ etherh_reset(struct device *dev)
  * Write a block of data out to the 8390
  */
 static void
-etherh_block_output (struct device *dev, int count, const unsigned char *buf, int start_page)
+etherh_block_output (struct net_device *dev, int count, const unsigned char *buf, int start_page)
 {
 	unsigned int addr, dma_addr;
 	unsigned long dma_start;
@@ -241,7 +241,7 @@ etherh_block_output (struct device *dev, int count, const unsigned char *buf, in
  * Read a block of data from the 8390
  */
 static void
-etherh_block_input (struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+etherh_block_input (struct net_device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
 	unsigned int addr, dma_addr;
 	unsigned char *buf;
@@ -281,7 +281,7 @@ etherh_block_input (struct device *dev, int count, struct sk_buff *skb, int ring
  * Read a header from the 8390
  */
 static void
-etherh_get_header (struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+etherh_get_header (struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 	unsigned int addr, dma_addr;
 
@@ -322,7 +322,7 @@ etherh_get_header (struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
  * there is non-reboot way to recover if something goes wrong.
  */
 static int
-etherh_open(struct device *dev)
+etherh_open(struct net_device *dev)
 {
 	MOD_INC_USE_COUNT;
 
@@ -340,7 +340,7 @@ etherh_open(struct device *dev)
  * The inverse routine to etherh_open().
  */
 static int
-etherh_close(struct device *dev)
+etherh_close(struct net_device *dev)
 {
 	ei_close (dev);
 	free_irq (dev->irq, dev);
@@ -353,7 +353,7 @@ etherh_close(struct device *dev)
  * This is the real probe routine.
  */
 __initfunc(static int
-etherh_probe1(struct device *dev))
+etherh_probe1(struct net_device *dev))
 {
 	static int version_printed;
 	unsigned int addr, i, reg0, tmp;
@@ -464,7 +464,7 @@ static expansioncard_ops_t etherh_ops = {
 };
 
 __initfunc(static void
-etherh_initdev(ecard_t *ec, struct device *dev))
+etherh_initdev(ecard_t *ec, struct net_device *dev))
 {
 	ecard_claim (ec);
 	
@@ -497,7 +497,7 @@ etherh_initdev(ecard_t *ec, struct device *dev))
 
 #ifndef MODULE
 __initfunc(int
-etherh_probe(struct device *dev))
+etherh_probe(struct net_device *dev))
 {
 	if (!dev)
 		return ENODEV;
@@ -522,13 +522,13 @@ etherh_probe(struct device *dev))
 static int io[MAX_ETHERH_CARDS];
 static int irq[MAX_ETHERH_CARDS];
 static char ethernames[MAX_ETHERH_CARDS][9];
-static struct device *my_ethers[MAX_ETHERH_CARDS];
+static struct net_device *my_ethers[MAX_ETHERH_CARDS];
 static struct expansion_card *ec[MAX_ETHERH_CARDS];
 
 static int
 init_all_cards(void)
 {
-	struct device *dev = NULL;
+	struct net_device *dev = NULL;
 	int i, found = 0;
 
 	for (i = 0; i < MAX_ETHERH_CARDS; i++) {
@@ -541,9 +541,9 @@ init_all_cards(void)
 
 	for (i = 0; i < MAX_ETHERH_CARDS; i++) {
 		if (!dev)
-			dev = (struct device *)kmalloc (sizeof (struct device), GFP_KERNEL);
+			dev = (struct net_device *)kmalloc (sizeof (struct net_device), GFP_KERNEL);
 		if (dev)
-			memset (dev, 0, sizeof (struct device));
+			memset (dev, 0, sizeof (struct net_device));
 
 		if (!io[i]) {
 			if ((ec[i] = ecard_find (0, etherh_cids)) == NULL)

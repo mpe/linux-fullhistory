@@ -42,7 +42,7 @@
 #include <asm/lithium.h>
 #endif
 
-#include "irq.h"
+#include <linux/irq.h>
 
 asmlinkage int system_call(void);
 asmlinkage void lcall7(void);
@@ -480,7 +480,7 @@ asmlinkage void math_emulate(long arg)
 
 #endif /* CONFIG_MATH_EMULATION */
 
-__initfunc(void trap_init_f00f_bug(void))
+void __init trap_init_f00f_bug(void)
 {
 	unsigned long page;
 	pgd_t * pgd;

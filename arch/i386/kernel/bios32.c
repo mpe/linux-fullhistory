@@ -93,7 +93,7 @@
 #include <asm/smp.h>
 #include <asm/spinlock.h>
 
-#include "irq.h"
+#include <linux/irq.h>
 
 #undef DEBUG
 
@@ -353,7 +353,7 @@ static struct pci_access pci_direct_conf2 = {
  * This should be close to trivial, but it isn't, because there are buggy
  * chipsets (yes, you guessed it, by Intel and Compaq) that have no class ID.
  */
-__initfunc(int pci_sanity_check(struct pci_access *a))
+int __init pci_sanity_check(struct pci_access *a)
 {
 	u16 dfn, x;
 
@@ -373,7 +373,7 @@ __initfunc(int pci_sanity_check(struct pci_access *a))
 	return 0;
 }
 
-__initfunc(static struct pci_access *pci_check_direct(void))
+static struct pci_access * __init pci_check_direct(void)
 {
 	unsigned int tmp;
 	unsigned long flags;
@@ -528,7 +528,7 @@ static struct {
 
 static int pci_bios_present;
 
-__initfunc(static int check_pcibios(void))
+static int __init check_pcibios(void)
 {
 	u32 signature, eax, ebx, ecx;
 	u8 status, major_ver, minor_ver, hw_mech, last_bus;
@@ -602,8 +602,8 @@ static int pci_bios_find_class (unsigned int class_code, unsigned short index,
 
 #endif
 
-__initfunc(static int pci_bios_find_device (unsigned short vendor, unsigned short device_id,
-	unsigned short index, unsigned char *bus, unsigned char *device_fn))
+static int __init pci_bios_find_device (unsigned short vendor, unsigned short device_id,
+	unsigned short index, unsigned char *bus, unsigned char *device_fn)
 {
 	unsigned short bx;
 	unsigned short ret;
@@ -756,7 +756,7 @@ static struct pci_access pci_bios_access = {
  * Try to find PCI BIOS.
  */
 
-__initfunc(static struct pci_access *pci_find_bios(void))
+static struct pci_access * __init pci_find_bios(void)
 {
 	union bios32 *check;
 	unsigned char sum;
@@ -1194,7 +1194,7 @@ static void __init pcibios_fixup_devices(void)
  * Arch-dependent fixups.
  */
 
-__initfunc(void pcibios_fixup(void))
+void __init pcibios_fixup(void)
 {
 	if (!(pci_probe & PCI_NO_PEER_FIXUP))
 		pcibios_fixup_peer_bridges();
@@ -1206,7 +1206,7 @@ __initfunc(void pcibios_fixup(void))
 #endif
 }
 
-__initfunc(void pcibios_fixup_bus(struct pci_bus *b))
+void __init pcibios_fixup_bus(struct pci_bus *b)
 {
 	pcibios_fixup_ghosts(b);
 	pcibios_scan_buglist(b);
@@ -1219,7 +1219,7 @@ __initfunc(void pcibios_fixup_bus(struct pci_bus *b))
  * compatible with 2.0.X. This should go away in 2.3.
  */
 
-__initfunc(void pcibios_init(void))
+void __init pcibios_init(void)
 {
 	struct pci_access *bios = NULL;
 	struct pci_access *dir = NULL;

@@ -290,7 +290,7 @@ struct usb_operations {
 	int (*control_msg)(struct usb_device *, unsigned int, devrequest *, void *, int);
 	int (*bulk_msg)(struct usb_device *, unsigned int, void *, int,unsigned long *);
 	void* (*request_irq)(struct usb_device *, unsigned int, usb_device_irq, int, void *);
-	int (*release_irq)(void* handle);
+	int (*release_irq)(struct usb_device *, void* handle);
 	void *(*request_bulk)(struct usb_device *, unsigned int, usb_device_irq,
  void *, int, void *);
 	int (*terminate_bulk)(struct usb_device *, void *);

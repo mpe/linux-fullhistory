@@ -89,7 +89,7 @@ struct neighbour
 	struct neighbour	*next;
 	struct neigh_table	*tbl;
 	struct neigh_parms	*parms;
-	struct device		*dev;
+	struct net_device		*dev;
 	unsigned long		used;
 	unsigned long		confirmed;
 	unsigned long		updated;
@@ -123,7 +123,7 @@ struct neigh_ops
 struct pneigh_entry
 {
 	struct pneigh_entry	*next;
-	struct device		*dev;
+	struct net_device		*dev;
 	u8			key[0];
 };
 
@@ -168,29 +168,29 @@ extern void			neigh_table_init(struct neigh_table *tbl);
 extern int			neigh_table_clear(struct neigh_table *tbl);
 extern struct neighbour *	neigh_lookup(struct neigh_table *tbl,
 					     const void *pkey,
-					     struct device *dev);
+					     struct net_device *dev);
 extern struct neighbour *	neigh_create(struct neigh_table *tbl,
 					     const void *pkey,
-					     struct device *dev);
+					     struct net_device *dev);
 extern void			neigh_destroy(struct neighbour *neigh);
 extern int			__neigh_event_send(struct neighbour *neigh, struct sk_buff *skb);
 extern int			neigh_update(struct neighbour *neigh, u8 *lladdr, u8 new, int override, int arp);
-extern int			neigh_ifdown(struct neigh_table *tbl, struct device *dev);
+extern int			neigh_ifdown(struct neigh_table *tbl, struct net_device *dev);
 extern int			neigh_resolve_output(struct sk_buff *skb);
 extern int			neigh_connected_output(struct sk_buff *skb);
 extern int			neigh_compat_output(struct sk_buff *skb);
 extern struct neighbour 	*neigh_event_ns(struct neigh_table *tbl,
 						u8 *lladdr, void *saddr,
-						struct device *dev);
+						struct net_device *dev);
 
-extern struct neigh_parms	*neigh_parms_alloc(struct device *dev, struct neigh_table *tbl);
+extern struct neigh_parms	*neigh_parms_alloc(struct net_device *dev, struct neigh_table *tbl);
 extern void			neigh_parms_release(struct neigh_table *tbl, struct neigh_parms *parms);
 extern unsigned long		neigh_rand_reach_time(unsigned long base);
 
 extern void			pneigh_enqueue(struct neigh_table *tbl, struct neigh_parms *p,
 					       struct sk_buff *skb);
-extern struct pneigh_entry	*pneigh_lookup(struct neigh_table *tbl, const void *key, struct device *dev, int creat);
-extern int			pneigh_delete(struct neigh_table *tbl, const void *key, struct device *dev);
+extern struct pneigh_entry	*pneigh_lookup(struct neigh_table *tbl, const void *key, struct net_device *dev, int creat);
+extern int			pneigh_delete(struct neigh_table *tbl, const void *key, struct net_device *dev);
 
 struct netlink_callback;
 struct nlmsghdr;
@@ -199,7 +199,7 @@ extern int neigh_add(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg);
 extern int neigh_delete(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg);
 extern void neigh_app_ns(struct neighbour *n);
 
-extern int			neigh_sysctl_register(struct device *dev, struct neigh_parms *p,
+extern int			neigh_sysctl_register(struct net_device *dev, struct neigh_parms *p,
 						      int p_id, int pdev_id, char *p_name);
 extern void			neigh_sysctl_unregister(struct neigh_parms *p);
 
@@ -249,7 +249,7 @@ extern __inline__ int neigh_event_send(struct neighbour *neigh, struct sk_buff *
 }
 
 extern __inline__ struct neighbour *
-__neigh_lookup(struct neigh_table *tbl, const void *pkey, struct device *dev, int creat)
+__neigh_lookup(struct neigh_table *tbl, const void *pkey, struct net_device *dev, int creat)
 {
 	struct neighbour *n = neigh_lookup(tbl, pkey, dev);
 

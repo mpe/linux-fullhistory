@@ -557,7 +557,7 @@ static unsigned long get_wchan(struct task_struct *p)
 	    int count = 0;
 
 	    stack_page = (unsigned long)p;
-	    fp = ((struct switch_stack *)p->tss.ksp)->a6;
+	    fp = ((struct switch_stack *)p->thread.ksp)->a6;
 	    do {
 		    if (fp < stack_page+sizeof(struct task_struct) ||
 			fp >= 8184+stack_page)
@@ -650,11 +650,11 @@ static unsigned long get_wchan(struct task_struct *p)
 #define	KSTK_EIP(tsk)	\
     ({			\
 	unsigned long eip = 0;	 \
-	if ((tsk)->tss.esp0 > PAGE_SIZE && \
-	    MAP_NR((tsk)->tss.esp0) < max_mapnr) \
-	      eip = ((struct pt_regs *) (tsk)->tss.esp0)->pc;	 \
+	if ((tsk)->thread.esp0 > PAGE_SIZE && \
+	    MAP_NR((tsk)->thread.esp0) < max_mapnr) \
+	      eip = ((struct pt_regs *) (tsk)->thread.esp0)->pc; \
 	eip; })
-#define	KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->tss.usp)
+#define	KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->thread.usp)
 #elif defined(__powerpc__)
 #define KSTK_EIP(tsk)	((tsk)->tss.regs->nip)
 #define KSTK_ESP(tsk)	((tsk)->tss.regs->gpr[1])

@@ -37,33 +37,33 @@ static const char *version =
 #include <linux/etherdevice.h>
 #include "8390.h"
 
-int ns8390_probe1(struct device *dev, int word16, char *name, int id, int prom);
+int ns8390_probe1(struct net_device *dev, int word16, char *name, int id, int prom);
 
-static int ns8390_open(struct device *dev);
-static void ns8390_no_reset(struct device *dev);
-static int ns8390_close_card(struct device *dev);
+static int ns8390_open(struct net_device *dev);
+static void ns8390_no_reset(struct net_device *dev);
+static int ns8390_close_card(struct net_device *dev);
 
-static void interlan_reset(struct device *dev);
+static void interlan_reset(struct net_device *dev);
 
-static void dayna_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+static void dayna_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
 						int ring_page);
-static void dayna_block_input(struct device *dev, int count,
+static void dayna_block_input(struct net_device *dev, int count,
 						  struct sk_buff *skb, int ring_offset);
-static void dayna_block_output(struct device *dev, int count,
+static void dayna_block_output(struct net_device *dev, int count,
 						   const unsigned char *buf, const int start_page);
 
-static void sane_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+static void sane_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
 						int ring_page);
-static void sane_block_input(struct device *dev, int count,
+static void sane_block_input(struct net_device *dev, int count,
 						  struct sk_buff *skb, int ring_offset);
-static void sane_block_output(struct device *dev, int count,
+static void sane_block_output(struct net_device *dev, int count,
 						   const unsigned char *buf, const int start_page);
 
-static void slow_sane_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+static void slow_sane_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
 						int ring_page);
-static void slow_sane_block_input(struct device *dev, int count,
+static void slow_sane_block_input(struct net_device *dev, int count,
 						  struct sk_buff *skb, int ring_offset);
-static void slow_sane_block_output(struct device *dev, int count,
+static void slow_sane_block_output(struct net_device *dev, int count,
 						   const unsigned char *buf, const int start_page);
 
 
@@ -199,7 +199,7 @@ int apple_8390_mem_probe(volatile unsigned short *p)
 
 int ns8390_probe(struct nubus_device_specifier *d, int slot, struct nubus_type *match)
 {
-	struct device *dev;
+	struct net_device *dev;
 	volatile unsigned short *i;
 	volatile unsigned char *p;
 	int plen;
@@ -336,7 +336,7 @@ membad:
 	return -ENODEV;
 }
 
-int ns8390_probe1(struct device *dev, int word16, char *model_name, int type, int promoff)
+int ns8390_probe1(struct net_device *dev, int word16, char *model_name, int type, int promoff)
 {
 	static unsigned version_printed = 0;
 
@@ -469,14 +469,14 @@ int ns8390_probe1(struct device *dev, int word16, char *model_name, int type, in
 	return 0;
 }
 
-static int ns8390_open(struct device *dev)
+static int ns8390_open(struct net_device *dev)
 {
 	ei_open(dev);
 	MOD_INC_USE_COUNT;
 	return 0;
 }
 
-static void ns8390_no_reset(struct device *dev)
+static void ns8390_no_reset(struct net_device *dev)
 {
 	if (ei_debug > 1) 
 		printk("Need to reset the NS8390 t=%lu...", jiffies);
@@ -485,7 +485,7 @@ static void ns8390_no_reset(struct device *dev)
 	return;
 }
 
-static int ns8390_close_card(struct device *dev)
+static int ns8390_close_card(struct net_device *dev)
 {
 	if (ei_debug > 1)
 		printk("%s: Shutting down ethercard.\n", dev->name);
@@ -504,7 +504,7 @@ struct nubus_device_specifier nubus_8390={
  *    Interlan Specific Code Starts Here
  */
 
-static void interlan_reset(struct device *dev)
+static void interlan_reset(struct net_device *dev)
 {
 	unsigned char *target=nubus_slot_addr(dev->irq);
 	if (ei_debug > 1) 
@@ -531,7 +531,7 @@ static void interlan_reset(struct device *dev)
    The only complications are that the ring buffer wraps.
 */
 
-static void dayna_cpu_memcpy(struct device *dev, void *to, int from, int count)
+static void dayna_cpu_memcpy(struct net_device *dev, void *to, int from, int count)
 {
 	volatile unsigned short *ptr;
 	unsigned short *target=to;
@@ -554,7 +554,7 @@ static void dayna_cpu_memcpy(struct device *dev, void *to, int from, int count)
 	}
 }
 
-static void cpu_dayna_memcpy(struct device *dev, int to, const void *from, int count)
+static void cpu_dayna_memcpy(struct net_device *dev, int to, const void *from, int count)
 {
 	volatile unsigned short *ptr;
 	const unsigned short *src=from;
@@ -577,7 +577,7 @@ static void cpu_dayna_memcpy(struct device *dev, int to, const void *from, int c
 	}
 }
 
-static void dayna_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+static void dayna_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 	unsigned long hdr_start = (ring_page - WD_START_PG)<<8;
 	dayna_cpu_memcpy(dev, (void *)hdr, hdr_start, 4);
@@ -585,7 +585,7 @@ static void dayna_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, in
 	hdr->count=(hdr->count&0xFF)<<8|(hdr->count>>8);
 }
 
-static void dayna_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+static void dayna_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
 	unsigned long xfer_base = ring_offset - (WD_START_PG<<8);
 	unsigned long xfer_start = xfer_base+dev->mem_start;
@@ -610,7 +610,7 @@ static void dayna_block_input(struct device *dev, int count, struct sk_buff *skb
 	}
 }
 
-static void dayna_block_output(struct device *dev, int count, const unsigned char *buf,
+static void dayna_block_output(struct net_device *dev, int count, const unsigned char *buf,
 				int start_page)
 {
 	long shmem = (start_page - WD_START_PG)<<8;
@@ -623,7 +623,7 @@ static void dayna_block_output(struct device *dev, int count, const unsigned cha
  */
 
 
-static void sane_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+static void sane_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 	unsigned long hdr_start = (ring_page - WD_START_PG)<<8;
 	memcpy((void *)hdr, (char *)dev->mem_start+hdr_start, 4);
@@ -631,7 +631,7 @@ static void sane_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int
 	hdr->count=(hdr->count&0xFF)<<8|(hdr->count>>8);
 }
 
-static void sane_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+static void sane_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
 	unsigned long xfer_base = ring_offset - (WD_START_PG<<8);
 	unsigned long xfer_start = xfer_base+dev->mem_start;
@@ -652,7 +652,7 @@ static void sane_block_input(struct device *dev, int count, struct sk_buff *skb,
 }
 
 
-static void sane_block_output(struct device *dev, int count, const unsigned char *buf,
+static void sane_block_output(struct net_device *dev, int count, const unsigned char *buf,
 				int start_page)
 {
 	long shmem = (start_page - WD_START_PG)<<8;
@@ -684,7 +684,7 @@ static void word_memcpy_fromcard(void *tp, const void *fp, int count)
 		*to++=*from++;
 }
 
-static void slow_sane_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+static void slow_sane_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 	unsigned long hdr_start = (ring_page - WD_START_PG)<<8;
 	word_memcpy_fromcard((void *)hdr, (char *)dev->mem_start+hdr_start, 4);
@@ -692,7 +692,7 @@ static void slow_sane_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr
 	hdr->count=(hdr->count&0xFF)<<8|(hdr->count>>8);
 }
 
-static void slow_sane_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+static void slow_sane_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
 	unsigned long xfer_base = ring_offset - (WD_START_PG<<8);
 	unsigned long xfer_start = xfer_base+dev->mem_start;
@@ -712,7 +712,7 @@ static void slow_sane_block_input(struct device *dev, int count, struct sk_buff 
 	}
 }
 
-static void slow_sane_block_output(struct device *dev, int count, const unsigned char *buf,
+static void slow_sane_block_output(struct net_device *dev, int count, const unsigned char *buf,
 				int start_page)
 {
 	long shmem = (start_page - WD_START_PG)<<8;

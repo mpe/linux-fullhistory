@@ -240,9 +240,9 @@ static int dma=0;
 #include "ltpc.h"
 
 /* function prototypes */
-static int do_read(struct device *dev, void *cbuf, int cbuflen,
+static int do_read(struct net_device *dev, void *cbuf, int cbuflen,
 	void *dbuf, int dbuflen);
-static int sendup_buffer (struct device *dev);
+static int sendup_buffer (struct net_device *dev);
 
 /* Dma Memory related stuff, cribbed directly from 3c505.c */
 
@@ -348,7 +348,7 @@ static struct xmitQel qels[16];
 static unsigned char mailbox[16];
 static unsigned char mboxinuse[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 
-static int wait_timeout(struct device *dev, int c)
+static int wait_timeout(struct net_device *dev, int c)
 {
 	/* returns true if it stayed c */
 	/* this uses base+6, but it's ok */
@@ -383,7 +383,7 @@ static int getmbox(void)
 }
 
 /* read a command from the card */
-static void handlefc(struct device *dev)
+static void handlefc(struct net_device *dev)
 {
 	/* called *only* from idle, non-reentrant */
 	int dma = dev->dma;
@@ -407,7 +407,7 @@ static void handlefc(struct device *dev)
 }
 
 /* read data from the card */
-static void handlefd(struct device *dev)
+static void handlefd(struct net_device *dev)
 {
 	int dma = dev->dma;
 	int base = dev->base_addr;
@@ -429,7 +429,7 @@ static void handlefd(struct device *dev)
 	sendup_buffer(dev);
 } 
 
-static void handlewrite(struct device *dev)
+static void handlewrite(struct net_device *dev)
 {
 	/* called *only* from idle, non-reentrant */
 	/* on entry, 0xfb and ltdmabuf holds data */
@@ -457,7 +457,7 @@ static void handlewrite(struct device *dev)
 	}
 }
 
-static void handleread(struct device *dev)
+static void handleread(struct net_device *dev)
 {
 	/* on entry, 0xfb */
 	/* on exit, ltdmabuf holds data */
@@ -480,7 +480,7 @@ static void handleread(struct device *dev)
 	if ( wait_timeout(dev,0xfb) ) printk("timed out in handleread\n");
 }
 
-static void handlecommand(struct device *dev)
+static void handlecommand(struct net_device *dev)
 {
 	/* on entry, 0xfa and ltdmacbuf holds command */
 	int dma = dev->dma;
@@ -510,7 +510,7 @@ static int QInIdle=0;
  * an interrupt, or because the line is tri-stated
  */
 
-static void idle(struct device *dev)
+static void idle(struct net_device *dev)
 {
 	unsigned long flags;
 	int state;
@@ -665,7 +665,7 @@ done:
 }
 
 
-static int do_write(struct device *dev, void *cbuf, int cbuflen,
+static int do_write(struct net_device *dev, void *cbuf, int cbuflen,
 	void *dbuf, int dbuflen)
 {
 
@@ -689,7 +689,7 @@ static int do_write(struct device *dev, void *cbuf, int cbuflen,
 	return -1;
 }
 
-static int do_read(struct device *dev, void *cbuf, int cbuflen,
+static int do_read(struct net_device *dev, void *cbuf, int cbuflen,
 	void *dbuf, int dbuflen)
 {
 
@@ -717,10 +717,10 @@ static int do_read(struct device *dev, void *cbuf, int cbuflen,
 
 static struct timer_list ltpc_timer;
 
-static int ltpc_xmit(struct sk_buff *skb, struct device *dev);
-static struct net_device_stats *ltpc_get_stats(struct device *dev);
+static int ltpc_xmit(struct sk_buff *skb, struct net_device *dev);
+static struct net_device_stats *ltpc_get_stats(struct net_device *dev);
 
-static int ltpc_open(struct device *dev)
+static int ltpc_open(struct net_device *dev)
 {
 #ifdef MODULE
 	MOD_INC_USE_COUNT;
@@ -728,7 +728,7 @@ static int ltpc_open(struct device *dev)
 	return 0;
 }
 
-static int ltpc_close(struct device *dev)
+static int ltpc_close(struct net_device *dev)
 {
 #ifdef MODULE
 	MOD_DEC_USE_COUNT;
@@ -736,14 +736,14 @@ static int ltpc_close(struct device *dev)
 	return 0;
 }
 
-static int read_30 ( struct device *dev)
+static int read_30 ( struct net_device *dev)
 {
 	lt_command c;
 	c.getflags.command = LT_GETFLAGS;
 	return do_read(dev, &c, sizeof(c.getflags),&c,0);
 }
 
-static int set_30 (struct device *dev,int x)
+static int set_30 (struct net_device *dev,int x)
 {
 	lt_command c;
 	c.setflags.command = LT_SETFLAGS;
@@ -753,7 +753,7 @@ static int set_30 (struct device *dev,int x)
 
 /* LLAP to DDP translation */
 
-static int sendup_buffer (struct device *dev)
+static int sendup_buffer (struct net_device *dev)
 {
 	/* on entry, command is in ltdmacbuf, data in ltdmabuf */
 	/* called from idle, non-reentrant */
@@ -825,7 +825,7 @@ static int sendup_buffer (struct device *dev)
  
 static void ltpc_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 
 	if (dev==NULL) {
 		printk("ltpc_interrupt: unknown device.\n");
@@ -852,7 +852,7 @@ static void ltpc_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
  *
  ***/
 
-static int ltpc_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+static int ltpc_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	struct sockaddr_at *sa = (struct sockaddr_at *) &ifr->ifr_addr;
 	/* we'll keep the localtalk node address in dev->pa_addr */
@@ -897,13 +897,13 @@ static int ltpc_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 	}
 }
 
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
 	/* This needs to be present to keep netatalk happy. */
 	/* Actually netatalk needs fixing! */
 }
 
-static int ltpc_hard_header (struct sk_buff *skb, struct device *dev, 
+static int ltpc_hard_header (struct sk_buff *skb, struct net_device *dev, 
 	unsigned short type, void *daddr, void *saddr, unsigned len)
 {
 	if(debug&DEBUG_VERBOSE)
@@ -912,7 +912,7 @@ static int ltpc_hard_header (struct sk_buff *skb, struct device *dev,
 	return 0;
 }
 
-static int ltpc_init(struct device *dev)
+static int ltpc_init(struct net_device *dev)
 {
 	/* Initialize the device structure. */
   
@@ -947,7 +947,7 @@ static int ltpc_poll_counter = 0;
 
 static void ltpc_poll(unsigned long l)
 {
-	struct device *dev = (struct device *) l;
+	struct net_device *dev = (struct net_device *) l;
 
 	del_timer(&ltpc_timer);
 
@@ -970,7 +970,7 @@ static void ltpc_poll(unsigned long l)
 
 /* DDP to LLAP translation */
 
-static int ltpc_xmit(struct sk_buff *skb, struct device *dev)
+static int ltpc_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	/* in kernel 1.3.xx, on entry skb->data points to ddp header,
 	 * and skb->len is the length of the ddp data + ddp header
@@ -1010,7 +1010,7 @@ static int ltpc_xmit(struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
-static struct net_device_stats *ltpc_get_stats(struct device *dev)
+static struct net_device_stats *ltpc_get_stats(struct net_device *dev)
 {
 	struct net_device_stats *stats = &((struct ltpc_private *) dev->priv)->stats;
 	return stats;
@@ -1088,7 +1088,7 @@ int __init ltpc_probe_dma(int base)
 	return dma;
 }
 
-int __init ltpc_probe(struct device *dev)
+int __init ltpc_probe(struct net_device *dev)
 {
 	int err;
 	int x=0,y=0;
@@ -1281,7 +1281,7 @@ void __init ltpc_setup(char *str, int *ints)
 
 static char dev_name[8];
 
-static struct device dev_ltpc = {
+static struct net_device dev_ltpc = {
 		dev_name, 
 		0, 0, 0, 0,
 	 	0x0, 0,

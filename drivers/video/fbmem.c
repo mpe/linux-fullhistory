@@ -197,6 +197,8 @@ static struct {
 
 #define NUM_FB_DRIVERS	(sizeof(fb_drivers)/sizeof(*fb_drivers))
 
+extern const char *global_mode_option;
+
 static initcall_t pref_init_funcs[FB_MAX];
 static int num_pref_init_funcs __initdata = 0;
 
@@ -744,21 +746,12 @@ int __init video_setup(char *options)
 		    return 0;
 	    }
     }
-    /*
-     * If we get here no fb was specified and we default to pass the
-     * options to the first frame buffer that has an init and a setup
-     * function.
-     */
-    for (i = 0; i < NUM_FB_DRIVERS; i++) {
-	    if (fb_drivers[i].init && fb_drivers[i].setup) {
-		    pref_init_funcs[num_pref_init_funcs++] =
-			    fb_drivers[i].init;
-		    fb_drivers[i].init = NULL;
 
-		    fb_drivers[i].setup(options);
-		    return 0;
-	    }
-    }
+    /*
+     * If we get here no fb was specified.
+     * We consider the argument to be a global video mode option.
+     */
+    global_mode_option = options;
     return 0;
 }
 

@@ -1,13 +1,13 @@
 
 The OHCI HCD layer is a simple but nearly complete implementation of what the
 USB people would call a HCD  for the OHCI. 
- (ISO comming soon, Bulk disabled, INT u. CTRL transfers enabled)
+ (ISO comming soon, Bulk, INT u. CTRL transfers enabled)
 It is based on Linus Torvalds UHCI code and Gregory Smith OHCI fragments (0.03 source tree).
 The layer (functions) on top of it, is for interfacing to the alternate-usb device-drivers. 
 
 - Roman Weissgaerber <weissg@vienna.at>
 
-
+ * v4.0 1999/08/18 removed all dummy eds, unlink unused eds, code cleanup, bulk transfers 
  * v2.1 1999/05/09 ep_addr correction, code cleanup
  * v0.2.0 1999/05/04 
  * everything has been moved into 2 files (ohci-hcd.c, ohci-hub-root.c and headers)
@@ -21,16 +21,14 @@ The layer (functions) on top of it, is for interfacing to the alternate-usb devi
  * v0.1.0 1999/04/27 initial release
  
 to remove the module try:
-killall root-hub
-:
 rmmod usb-ohci-hcd
 
 Features:
 - virtual root hub, all basic hub descriptors and commands (state: complete) 
   this is an option now (v0.2.0)
   #define  CONFIG_USB_OHCI_VROOTHUB includes the virtual hub code, (VROOTHUB)
-  default is without. 
-  (at the moment: the Virtual Root Hub option is not recommended)
+  default is with. 
+  (at the moment: the Virtual Root Hub is included automatically)
   
   files: ohci-root-hub.c, ohci-root-hub.h 
  
@@ -41,6 +39,7 @@ Features:
  In the HCD layer the EDs has to be allocated manually either by calling a subroutine
  or by sending a USB root hub vendor specific command to the virtual root hub.
  At the alternate linux usb stack EDs will be added (allocated) at their first use.
+ ED will be unlinked from the HC chains if they are not bussy.
  
  files: ohci-hcd.c ohci-hcd.h
  routines:   (do not use for drivers, use the top layer alternate usb commands instead)
@@ -49,10 +48,10 @@ Features:
             int interval, int load, f_handler handler, int ep_size, int speed)
        adds an endpoint, (if the endpoint already exists some parameters will be updated)
        
- int usb_ohci_rm_ep(struct  usb_ohci_ed *ed, struct ohci * ohci) 
+ int usb_ohci_rm_ep( ) 
        removes an endpoint and all pending TDs of that EP
        
-  usb_ohci_rm_function( struct ohci * ohci, union ep_addr_ ep_addr)
+  usb_ohci_rm_function( )
        removes all Endpoints of a function (device)
 
 - Transfer Descriptors (TD): handling and allocation of TDs is transparent to the upper layers
@@ -62,7 +61,7 @@ Features:
 
   There is one basic command for all types of bus transfers (INT, BULK, ISO, CTRL):
   
-  int ohci_trans_req(struct ohci * ohci, int ep_addr, int ctrl_len, void  *ctrl, void * data, int data_len, __OHCI_BAG lw0, __OHCI_BAG lw1)
+  int ohci_trans_req(struct ohci * ohci, hcd_ed, int ctrl_len, void  *ctrl, void * data, int data_len, __OHCI_BAG lw0, __OHCI_BAG lw1)
   
   CTRL: ctrl, ctrl_len ... cmd buffer 
         data, data_len ... data buffer (in or out)
@@ -95,18 +94,5 @@ Features:
 - Done list handling: returns the requests (callback f_handler in ED) and does 
   some error handling, root-hub request dequeuing
   (files: ohci-done-list.c in ohci-hcd.c now(v0.2.0))
-
-ep_addr union or int  is for addressing devices&endpoints: 
-__u8 ep_addr.bep.ep ... bit 3..0  endpoint address
-						bit 4     0
-						bit 6,5  type: eg. 10 CTRL, 11 BULK, 01 INT, 00 ISO
-						bit 7	direction 1 IN, 0 OUT
-
-__u8 ep_addr.bep.fa ... bit 6..0  function address
-						bit 7	  0
-
-(__u8 ep_addr.bep.hc ... host controller nr) not used
-(__u8 ep_addr.bep.host ... host nr) not used
-
 
   

@@ -935,7 +935,7 @@ static void icmp_address(struct icmphdr *icmph, struct sk_buff *skb, int len)
 static void icmp_address_reply(struct icmphdr *icmph, struct sk_buff *skb, int len)
 {
 	struct rtable *rt = (struct rtable*)skb->dst;
-	struct device *dev = skb->dev;
+	struct net_device *dev = skb->dev;
 	struct in_device *in_dev = dev->ip_ptr;
 	struct in_ifaddr *ifa;
 	u32 mask;

@@ -85,7 +85,7 @@ static const card_ids __init ether1_cids[] = {
 #define ether1_outw(dev, val, addr, type, offset, svflgs) ether1_outw_p (dev, val, addr + (int)(&((type *)0)->offset), svflgs)
 
 static inline unsigned short
-ether1_inw_p (struct device *dev, int addr, int svflgs)
+ether1_inw_p (struct net_device *dev, int addr, int svflgs)
 {
 	unsigned long flags;
 	unsigned short ret;
@@ -101,7 +101,7 @@ ether1_inw_p (struct device *dev, int addr, int svflgs)
 }
 
 static inline void
-ether1_outw_p (struct device *dev, unsigned short val, int addr, int svflgs)
+ether1_outw_p (struct net_device *dev, unsigned short val, int addr, int svflgs)
 {
 	unsigned long flags;
 
@@ -211,7 +211,7 @@ ether1_outswb (unsigned int addr, void *data, unsigned int len)
 
 
 static void
-ether1_writebuffer (struct device *dev, void *data, unsigned int start, unsigned int length)
+ether1_writebuffer (struct net_device *dev, void *data, unsigned int start, unsigned int length)
 {
 	unsigned int page, thislen, offset;
 
@@ -233,7 +233,7 @@ ether1_writebuffer (struct device *dev, void *data, unsigned int start, unsigned
 }
 
 static void
-ether1_readbuffer (struct device *dev, void *data, unsigned int start, unsigned int length)
+ether1_readbuffer (struct net_device *dev, void *data, unsigned int start, unsigned int length)
 {
 	unsigned int page, thislen, offset;
 
@@ -255,7 +255,7 @@ ether1_readbuffer (struct device *dev, void *data, unsigned int start, unsigned 
 }
 
 __initfunc(static int
-ether1_ramtest (struct device *dev, unsigned char byte))
+ether1_ramtest (struct net_device *dev, unsigned char byte))
 {
 	unsigned char *buffer = kmalloc (BUFFER_SIZE, GFP_KERNEL);
 	int i, ret = BUFFER_SIZE;
@@ -302,14 +302,14 @@ ether1_ramtest (struct device *dev, unsigned char byte))
 }
 
 static int
-ether1_reset (struct device *dev)
+ether1_reset (struct net_device *dev)
 {
 	outb (CTRL_RST|CTRL_ACK, REG_CONTROL);
 	return BUS_16;
 }
 
 __initfunc(static int
-ether1_init_2 (struct device *dev))
+ether1_init_2 (struct net_device *dev))
 {
 	int i;
 	dev->mem_start = 0;
@@ -447,7 +447,7 @@ static rbd_t  init_rbd	= {
 #define TBD_SIZE	(0x08)
 
 static int
-ether1_init_for_open (struct device *dev)
+ether1_init_for_open (struct net_device *dev)
 {
 	struct ether1_priv *priv = (struct ether1_priv *)dev->priv;
 	int i, status, addr, next, next2;
@@ -613,7 +613,7 @@ ether1_init_for_open (struct device *dev)
 }
 
 __initfunc(static int
-ether1_probe1 (struct device *dev))
+ether1_probe1 (struct net_device *dev))
 {
 	static unsigned int version_printed = 0;
 	struct ether1_priv *priv;
@@ -665,7 +665,7 @@ ether1_probe1 (struct device *dev))
 /* ------------------------------------------------------------------------- */
 
 __initfunc(static void
-ether1_addr (struct device *dev))
+ether1_addr (struct net_device *dev))
 {
 	int i;
     
@@ -674,7 +674,7 @@ ether1_addr (struct device *dev))
 }
 
 __initfunc(int
-ether1_probe (struct device *dev))
+ether1_probe (struct net_device *dev))
 {
 #ifndef MODULE
 	struct expansion_card *ec;
@@ -702,7 +702,7 @@ ether1_probe (struct device *dev))
 /* ------------------------------------------------------------------------- */
 
 static int
-ether1_txalloc (struct device *dev, int size)
+ether1_txalloc (struct net_device *dev, int size)
 {
 	struct ether1_priv *priv = (struct ether1_priv *)dev->priv;
 	int start, tail;
@@ -728,7 +728,7 @@ ether1_txalloc (struct device *dev, int size)
 }
 
 static void
-ether1_restart (struct device *dev, char *reason)
+ether1_restart (struct net_device *dev, char *reason)
 {
 	struct ether1_priv *priv = (struct ether1_priv *)dev->priv;
 	priv->stats.tx_errors ++;
@@ -750,7 +750,7 @@ ether1_restart (struct device *dev, char *reason)
 }
 
 static int
-ether1_open (struct device *dev)
+ether1_open (struct net_device *dev)
 {
 	struct ether1_priv *priv = (struct ether1_priv *)dev->priv;
 
@@ -775,7 +775,7 @@ ether1_open (struct device *dev)
 }
 
 static int
-ether1_sendpacket (struct sk_buff *skb, struct device *dev)
+ether1_sendpacket (struct sk_buff *skb, struct net_device *dev)
 {
 	struct ether1_priv *priv = (struct ether1_priv *)dev->priv;
 
@@ -860,7 +860,7 @@ ether1_sendpacket (struct sk_buff *skb, struct device *dev)
 }
 
 static void
-ether1_xmit_done (struct device *dev)
+ether1_xmit_done (struct net_device *dev)
 {
 	struct ether1_priv *priv = (struct ether1_priv *)dev->priv;
 	nop_t nop;
@@ -963,7 +963,7 @@ again:
 }
 
 static void
-ether1_recv_done (struct device *dev)
+ether1_recv_done (struct net_device *dev)
 {
 	struct ether1_priv *priv = (struct ether1_priv *)dev->priv;
 	int status;
@@ -1020,7 +1020,7 @@ ether1_recv_done (struct device *dev)
 static void
 ether1_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)dev_id;
+	struct net_device *dev = (struct net_device *)dev_id;
 	struct ether1_priv *priv = (struct ether1_priv *)dev->priv;
 	int status;
 
@@ -1070,7 +1070,7 @@ ether1_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 }
 
 static int
-ether1_close (struct device *dev)
+ether1_close (struct net_device *dev)
 {
 	ether1_reset (dev);
 
@@ -1085,7 +1085,7 @@ ether1_close (struct device *dev)
 }
 
 static struct enet_statistics *
-ether1_getstats (struct device *dev)
+ether1_getstats (struct net_device *dev)
 {
 	struct ether1_priv *priv = (struct ether1_priv *)dev->priv;
 	return &priv->stats;
@@ -1099,7 +1099,7 @@ ether1_getstats (struct device *dev)
  *			best-effort filtering.
  */
 static void
-ether1_setmulticastlist (struct device *dev)
+ether1_setmulticastlist (struct net_device *dev)
 {
 }
 
@@ -1110,7 +1110,7 @@ ether1_setmulticastlist (struct device *dev)
 static struct ether_dev {
 	struct expansion_card	*ec;
 	char			name[9];
-	struct device		dev;
+	struct net_device		dev;
 } ether_devs[MAX_ECARDS];
 
 int

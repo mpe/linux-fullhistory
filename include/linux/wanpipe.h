@@ -104,7 +104,7 @@ typedef struct global_stats
  */
 typedef struct load_sharing
 {
-        struct device*  dev_ptr;
+        struct net_device*  dev_ptr;
         struct load_sharing* next;
 } load_sharing_t;
 

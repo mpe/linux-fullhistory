@@ -317,7 +317,7 @@ int ip_local_deliver(struct sk_buff *skb)
 /*
  * 	Main IP Receive routine.
  */ 
-int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 {
 	struct iphdr *iph = skb->nh.iph;
 #ifdef	CONFIG_FIREWALL

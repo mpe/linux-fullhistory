@@ -297,7 +297,7 @@ int unregister_wan_device(char* name)
  */
 
 
-int wanrouter_encapsulate (struct sk_buff* skb, struct device* dev)
+int wanrouter_encapsulate (struct sk_buff* skb, struct net_device* dev)
 {
 	int hdr_len = 0;
 
@@ -339,7 +339,7 @@ int wanrouter_encapsulate (struct sk_buff* skb, struct device* dev)
  */
 
 
-unsigned short wanrouter_type_trans (struct sk_buff* skb, struct device* dev)
+unsigned short wanrouter_type_trans (struct sk_buff* skb, struct net_device* dev)
 {
 	int cnt = skb->data[0] ? 0 : 1;	/* there may be a pad present */
 	unsigned short ethertype;
@@ -515,7 +515,7 @@ bail:
  
 static int device_shutdown (wan_device_t* wandev)
 {
-	struct device* dev;
+	struct net_device* dev;
 
 	if (wandev->state == WAN_UNCONFIGURED)
 		return 0;
@@ -569,7 +569,7 @@ static int device_stat (wan_device_t* wandev, wandev_stat_t* u_stat)
 static int device_new_if (wan_device_t* wandev, wanif_conf_t* u_conf)
 {
 	wanif_conf_t conf;
-	struct device* dev;
+	struct net_device* dev;
 	int err;
 
 	if ((wandev->state == WAN_UNCONFIGURED) || (wandev->new_if == NULL))
@@ -581,11 +581,11 @@ static int device_new_if (wan_device_t* wandev, wanif_conf_t* u_conf)
 	if (conf.magic != ROUTER_MAGIC)
 		return -EINVAL;
 		
-	dev = kmalloc(sizeof(struct device), GFP_KERNEL);
+	dev = kmalloc(sizeof(struct net_device), GFP_KERNEL);
 	if (dev == NULL)
 		return -ENOBUFS;
 		
-	memset(dev, 0, sizeof(struct device));
+	memset(dev, 0, sizeof(struct net_device));
 	err = wandev->new_if(wandev, dev, &conf);
 	if (!err)
 	{
@@ -678,7 +678,7 @@ static wan_device_t* find_device (char* name)
 
 static int delete_interface (wan_device_t* wandev, char* name, int force)
 {
-	struct device *dev, *prev;
+	struct net_device *dev, *prev;
 
 	for (dev = wandev->dev, prev = NULL;
 		dev && strcmp(name, dev->name);

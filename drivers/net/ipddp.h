@@ -13,7 +13,7 @@
 
 struct ipddp_route
 {
-        struct device *dev;             /* Carrier device */
+        struct net_device *dev;             /* Carrier device */
         __u32 ip;                       /* IP address */
         struct at_addr at;              /* Gateway appletalk address */
         int flags;

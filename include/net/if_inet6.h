@@ -74,7 +74,7 @@ struct ipv6_mc_socklist
 struct ifmcaddr6
 {
 	struct in6_addr		mca_addr;
-	struct device		*dev;
+	struct net_device		*dev;
 	struct ifmcaddr6	*next;
 	struct ifmcaddr6	*if_next;
 	struct timer_list	mca_timer;
@@ -105,7 +105,7 @@ struct ipv6_devconf
 
 struct inet6_dev 
 {
-	struct device		*dev;
+	struct net_device		*dev;
 
 	struct inet6_ifaddr	*addr_list;
 	struct ifmcaddr6	*mc_list;

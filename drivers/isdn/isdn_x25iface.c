@@ -57,7 +57,7 @@ typedef struct isdn_x25iface_proto_data {
 void isdn_x25iface_proto_del( struct concap_proto * );
 int isdn_x25iface_proto_close( struct concap_proto * );
 int isdn_x25iface_proto_restart( struct concap_proto *,
-				 struct device *,
+				 struct net_device *,
 				 struct concap_device_ops *);
 int isdn_x25iface_xmit( struct concap_proto *, struct sk_buff * );
 int isdn_x25iface_receive( struct concap_proto *, struct sk_buff * );
@@ -175,7 +175,7 @@ void isdn_x25iface_proto_del(struct concap_proto *cprot){
 /* (re-)initialize the data structures for x25iface encapsulation
  */
 int isdn_x25iface_proto_restart(struct concap_proto *cprot,
-				struct device *ndev, 
+				struct net_device *ndev, 
 				struct concap_device_ops *dops)
 {
 	ix25_pdata_t * pda = cprot -> proto_data ;

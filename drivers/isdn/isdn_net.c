@@ -357,8 +357,8 @@
 /* Prototypes */
 
 int isdn_net_force_dial_lp(isdn_net_local *);
-static int isdn_net_start_xmit(struct sk_buff *, struct device *);
-static int isdn_net_xmit(struct device *, isdn_net_local *, struct sk_buff *);
+static int isdn_net_start_xmit(struct sk_buff *, struct net_device *);
+static int isdn_net_xmit(struct net_device *, isdn_net_local *, struct sk_buff *);
 
 char *isdn_net_revision = "$Revision: 1.88 $";
 
@@ -367,7 +367,7 @@ char *isdn_net_revision = "$Revision: 1.88 $";
   */
 
 static void
-isdn_net_unreachable(struct device *dev, struct sk_buff *skb, char *reason)
+isdn_net_unreachable(struct net_device *dev, struct sk_buff *skb, char *reason)
 {
 
 	if(skb) {
@@ -389,7 +389,7 @@ isdn_net_unreachable(struct device *dev, struct sk_buff *skb, char *reason)
 }
 
 static void
-isdn_net_reset(struct device *dev)
+isdn_net_reset(struct net_device *dev)
 {
 #ifdef CONFIG_ISDN_X25
 	struct concap_device_ops * dops =
@@ -412,10 +412,10 @@ isdn_net_reset(struct device *dev)
 
 /* Open/initialize the board. */
 static int
-isdn_net_open(struct device *dev)
+isdn_net_open(struct net_device *dev)
 {
 	int i;
-	struct device *p;
+	struct net_device *p;
 	struct in_device *in_dev;
 
 	isdn_net_reset(dev);
@@ -602,7 +602,7 @@ isdn_net_stat_callback(int idx, isdn_ctrl *c)
 					lp->stats.tx_packets++;
 					lp->stats.tx_bytes += c->parm.length;
 					if (lp->p_encap == ISDN_NET_ENCAP_SYNCPPP && lp->sav_skb) {
-						struct device *mdev;
+						struct net_device *mdev;
 						if (lp->master)
 							mdev = lp->master;
 						else
@@ -1046,7 +1046,7 @@ isdn_net_dial(void)
  * Perform hangup for a net-interface.
  */
 void
-isdn_net_hangup(struct device *d)
+isdn_net_hangup(struct net_device *d)
 {
 	isdn_net_local *lp = (isdn_net_local *) d->priv;
 	isdn_ctrl cmd;
@@ -1177,7 +1177,7 @@ isdn_net_log_skb(struct sk_buff * skb, isdn_net_local * lp)
  * Side-effects: ndev->tbusy is cleared on success.
  */
 int
-isdn_net_send_skb(struct device *ndev, isdn_net_local * lp,
+isdn_net_send_skb(struct net_device *ndev, isdn_net_local * lp,
 		  struct sk_buff *skb)
 {
 	int ret;
@@ -1210,7 +1210,7 @@ isdn_net_send_skb(struct device *ndev, isdn_net_local * lp,
  */
 
 static int
-isdn_net_xmit(struct device *ndev, isdn_net_local * lp, struct sk_buff *skb)
+isdn_net_xmit(struct net_device *ndev, isdn_net_local * lp, struct sk_buff *skb)
 {
 	int ret;
 
@@ -1266,7 +1266,7 @@ isdn_net_xmit(struct device *ndev, isdn_net_local * lp, struct sk_buff *skb)
 }
 
 static void
-isdn_net_adjust_hdr(struct sk_buff *skb, struct device *dev)
+isdn_net_adjust_hdr(struct sk_buff *skb, struct net_device *dev)
 {
 	isdn_net_local *lp = (isdn_net_local *) dev->priv;
 	if (!skb)
@@ -1286,7 +1286,7 @@ isdn_net_adjust_hdr(struct sk_buff *skb, struct device *dev)
  * and start dialing.
  */
 static int
-isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
+isdn_net_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 {
 	isdn_net_local *lp = (isdn_net_local *) ndev->priv;
 #ifdef CONFIG_ISDN_X25
@@ -1438,9 +1438,9 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
  * Shutdown a net-interface.
  */
 static int
-isdn_net_close(struct device *dev)
+isdn_net_close(struct net_device *dev)
 {
-	struct device *p;
+	struct net_device *p;
 #ifdef CONFIG_ISDN_X25
 	struct concap_proto * cprot =
 		( (isdn_net_local *) dev->priv ) -> netdev -> cprot;
@@ -1476,7 +1476,7 @@ isdn_net_close(struct device *dev)
  * Get statistics
  */
 static struct enet_statistics *
-isdn_net_get_stats(struct device *dev)
+isdn_net_get_stats(struct net_device *dev)
 {
 	isdn_net_local *lp = (isdn_net_local *) dev->priv;
 	return &lp->stats;
@@ -1492,7 +1492,7 @@ isdn_net_get_stats(struct device *dev)
  */
 
 static unsigned short
-isdn_net_type_trans(struct sk_buff *skb, struct device *dev)
+isdn_net_type_trans(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ethhdr *eth;
 	unsigned char *rawp;
@@ -1630,7 +1630,7 @@ isdn_net_slarp_out(void)
  * Got a packet from ISDN-Channel.
  */
 static void
-isdn_net_receive(struct device *ndev, struct sk_buff *skb)
+isdn_net_receive(struct net_device *ndev, struct sk_buff *skb)
 {
 	isdn_net_local *lp = (isdn_net_local *) ndev->priv;
 	isdn_net_local *olp = lp;	/* original 'lp' */
@@ -1779,7 +1779,7 @@ isdn_net_rcv_skb(int idx, struct sk_buff *skb)
 }
 
 static int
-my_eth_header(struct sk_buff *skb, struct device *dev, unsigned short type,
+my_eth_header(struct sk_buff *skb, struct net_device *dev, unsigned short type,
 	      void *daddr, void *saddr, unsigned len)
 {
 	struct ethhdr *eth = (struct ethhdr *) skb_push(skb, ETH_HLEN);
@@ -1824,7 +1824,7 @@ my_eth_header(struct sk_buff *skb, struct device *dev, unsigned short type,
  */
 
 static int
-isdn_net_header(struct sk_buff *skb, struct device *dev, unsigned short type,
+isdn_net_header(struct sk_buff *skb, struct net_device *dev, unsigned short type,
 		void *daddr, void *saddr, unsigned plen)
 {
 	isdn_net_local *lp = dev->priv;
@@ -1880,7 +1880,7 @@ isdn_net_header(struct sk_buff *skb, struct device *dev, unsigned short type,
 static int
 isdn_net_rebuild_header(struct sk_buff *skb)
 {
-	struct device *dev = skb->dev;
+	struct net_device *dev = skb->dev;
 	isdn_net_local *lp = dev->priv;
 	int ret = 0;
 
@@ -1912,7 +1912,7 @@ isdn_net_rebuild_header(struct sk_buff *skb)
  * Interface-setup. (called just after registering a new interface)
  */
 static int
-isdn_net_init(struct device *ndev)
+isdn_net_init(struct net_device *ndev)
 {
 	ushort max_hlhdr_len = 0;
 	isdn_net_local *lp = (isdn_net_local *) ndev->priv;
@@ -2423,7 +2423,7 @@ isdn_net_force_dial(char *name)
  * Allocate a new network-interface and initialize its data structures.
  */
 char *
-isdn_net_new(char *name, struct device *master)
+isdn_net_new(char *name, struct net_device *master)
 {
 	isdn_net_dev *netdev;
 
@@ -2452,8 +2452,8 @@ isdn_net_new(char *name, struct device *master)
 	netdev->local->p_encap = ISDN_NET_ENCAP_RAWIP;
 	if (master) {
 		/* Device shall be a slave */
-		struct device *p = (((isdn_net_local *) master->priv)->slave);
-		struct device *q = master;
+		struct net_device *p = (((isdn_net_local *) master->priv)->slave);
+		struct net_device *q = master;
 
 		netdev->local->master = master;
 		/* Put device at end of slave-chain */
@@ -2990,7 +2990,7 @@ int
 isdn_net_force_hangup(char *name)
 {
 	isdn_net_dev *p = isdn_net_findif(name);
-	struct device *q;
+	struct net_device *q;
 
 	if (p) {
 		if (p->local->isdn_device < 0)

@@ -45,7 +45,7 @@ static unsigned int pcnet32_portlist[] __initdata = {0x300, 0x320, 0x340, 0x360,
 static int pcnet32_debug = 1;
 
 #ifdef MODULE
-static struct device *pcnet32_dev = NULL;
+static struct net_device *pcnet32_dev = NULL;
 #endif
 
 static const int max_interrupt_work = 20;
@@ -264,22 +264,22 @@ struct pcnet32_private {
          full_duplex:1,                     /* full duplex possible */
          mii:1;                             /* mii port available */
 #ifdef MODULE
-    struct device *next;
+    struct net_device *next;
 #endif    
 };
 
-int  pcnet32_probe(struct device *);
-static int  pcnet32_probe1(struct device *, unsigned long, unsigned char, int, int);
-static int  pcnet32_open(struct device *);
-static int  pcnet32_init_ring(struct device *);
-static int  pcnet32_start_xmit(struct sk_buff *, struct device *);
-static int  pcnet32_rx(struct device *);
+int  pcnet32_probe(struct net_device *);
+static int  pcnet32_probe1(struct net_device *, unsigned long, unsigned char, int, int);
+static int  pcnet32_open(struct net_device *);
+static int  pcnet32_init_ring(struct net_device *);
+static int  pcnet32_start_xmit(struct sk_buff *, struct net_device *);
+static int  pcnet32_rx(struct net_device *);
 static void pcnet32_interrupt(int, void *, struct pt_regs *);
-static int  pcnet32_close(struct device *);
-static struct net_device_stats *pcnet32_get_stats(struct device *);
-static void pcnet32_set_multicast_list(struct device *);
+static int  pcnet32_close(struct net_device *);
+static struct net_device_stats *pcnet32_get_stats(struct net_device *);
+static void pcnet32_set_multicast_list(struct net_device *);
 #ifdef HAVE_PRIVATE_IOCTL
-static int  pcnet32_mii_ioctl(struct device *, struct ifreq *, int);
+static int  pcnet32_mii_ioctl(struct net_device *, struct ifreq *, int);
 #endif
 
 enum pci_flags_bit {
@@ -291,7 +291,7 @@ struct pcnet32_pci_id_info {
     const char *name;
     u16 vendor_id, device_id, svid, sdid, flags;
     int io_size;
-    int (*probe1) (struct device *, unsigned long, unsigned char, int, int);
+    int (*probe1) (struct net_device *, unsigned long, unsigned char, int, int);
 };
 
 static struct pcnet32_pci_id_info pcnet32_tbl[] = {
@@ -419,7 +419,7 @@ static struct pcnet32_access pcnet32_dwio = {
 
 
 
-int __init pcnet32_probe (struct device *dev)
+int __init pcnet32_probe (struct net_device *dev)
 {
     unsigned long ioaddr = dev ? dev->base_addr: 0;
     unsigned int  irq_line = dev ? dev->irq : 0;
@@ -507,7 +507,7 @@ int __init pcnet32_probe (struct device *dev)
 
 /* pcnet32_probe1 */
 static int __init
-pcnet32_probe1(struct device *dev, unsigned long ioaddr, unsigned char irq_line, int shared, int card_idx)
+pcnet32_probe1(struct net_device *dev, unsigned long ioaddr, unsigned char irq_line, int shared, int card_idx)
 {
     struct pcnet32_private *lp;
     int i,media,fdx = 0, mii = 0;
@@ -699,7 +699,7 @@ pcnet32_probe1(struct device *dev, unsigned long ioaddr, unsigned char irq_line,
 
 
 static int
-pcnet32_open(struct device *dev)
+pcnet32_open(struct net_device *dev)
 {
     struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
     unsigned long ioaddr = dev->base_addr;
@@ -807,7 +807,7 @@ pcnet32_open(struct device *dev)
  */
 
 static void 
-pcnet32_purge_tx_ring(struct device *dev)
+pcnet32_purge_tx_ring(struct net_device *dev)
 {
     struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
     int i;
@@ -823,7 +823,7 @@ pcnet32_purge_tx_ring(struct device *dev)
 
 /* Initialize the PCNET32 Rx and Tx rings. */
 static int
-pcnet32_init_ring(struct device *dev)
+pcnet32_init_ring(struct net_device *dev)
 {
     struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
     int i;
@@ -861,7 +861,7 @@ pcnet32_init_ring(struct device *dev)
 }
 
 static void
-pcnet32_restart(struct device *dev, unsigned int csr0_bits)
+pcnet32_restart(struct net_device *dev, unsigned int csr0_bits)
 {
     struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
     unsigned long ioaddr = dev->base_addr;
@@ -882,7 +882,7 @@ pcnet32_restart(struct device *dev, unsigned int csr0_bits)
 }
 
 static int
-pcnet32_start_xmit(struct sk_buff *skb, struct device *dev)
+pcnet32_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
     struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
     unsigned int ioaddr = dev->base_addr;
@@ -972,7 +972,7 @@ pcnet32_start_xmit(struct sk_buff *skb, struct device *dev)
 static void
 pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-    struct device *dev = (struct device *)dev_id;
+    struct net_device *dev = (struct net_device *)dev_id;
     struct pcnet32_private *lp;
     unsigned long ioaddr;
     u16 csr0,rap;
@@ -1104,7 +1104,7 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 }
 
 static int
-pcnet32_rx(struct device *dev)
+pcnet32_rx(struct net_device *dev)
 {
     struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
     int entry = lp->cur_rx & RX_RING_MOD_MASK;
@@ -1195,7 +1195,7 @@ pcnet32_rx(struct device *dev)
 }
 
 static int
-pcnet32_close(struct device *dev)
+pcnet32_close(struct net_device *dev)
 {
     unsigned long ioaddr = dev->base_addr;
     struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
@@ -1241,7 +1241,7 @@ pcnet32_close(struct device *dev)
 }
 
 static struct net_device_stats *
-pcnet32_get_stats(struct device *dev)
+pcnet32_get_stats(struct net_device *dev)
 {
     struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
     unsigned long ioaddr = dev->base_addr;
@@ -1259,7 +1259,7 @@ pcnet32_get_stats(struct device *dev)
 }
 
 /* taken from the sunlance driver, which it took from the depca driver */
-static void pcnet32_load_multicast (struct device *dev)
+static void pcnet32_load_multicast (struct net_device *dev)
 {
     struct pcnet32_private *lp = (struct pcnet32_private *) dev->priv;
     volatile struct pcnet32_init_block *ib = &lp->init_block;
@@ -1311,7 +1311,7 @@ static void pcnet32_load_multicast (struct device *dev)
 /*
  * Set or clear the multicast filter for this adaptor.
  */
-static void pcnet32_set_multicast_list(struct device *dev)
+static void pcnet32_set_multicast_list(struct net_device *dev)
 {
     unsigned long ioaddr = dev->base_addr;
     struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;    
@@ -1331,7 +1331,7 @@ static void pcnet32_set_multicast_list(struct device *dev)
 }
 
 #ifdef HAVE_PRIVATE_IOCTL
-static int pcnet32_mii_ioctl(struct device *dev, struct ifreq *rq, int cmd)
+static int pcnet32_mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
     unsigned long ioaddr = dev->base_addr;
     struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;    
@@ -1387,7 +1387,7 @@ init_module(void)
 void
 cleanup_module(void)
 {
-    struct device *next_dev;
+    struct net_device *next_dev;
 
     /* No need to check MOD_IN_USE, as sys_delete_module() checks. */
     while (pcnet32_dev) {

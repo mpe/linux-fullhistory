@@ -100,7 +100,7 @@ typedef struct cisco_slarp {
 #define CISCO_SLARP_REQUEST   1
 #define CISCO_SLARP_KEEPALIVE 2
 
-extern char *isdn_net_new(char *, struct device *);
+extern char *isdn_net_new(char *, struct net_device *);
 extern char *isdn_net_newslave(char *);
 extern int isdn_net_rm(char *);
 extern int isdn_net_rmall(void);
@@ -112,13 +112,13 @@ extern int isdn_net_getphones(isdn_net_ioctl_phone *, char *);
 extern int isdn_net_getpeer(isdn_net_ioctl_phone *, isdn_net_ioctl_phone *);
 extern int isdn_net_delphone(isdn_net_ioctl_phone *);
 extern int isdn_net_find_icall(int, int, int, setup_parm);
-extern void isdn_net_hangup(struct device *);
+extern void isdn_net_hangup(struct net_device *);
 extern void isdn_net_dial(void);
 extern void isdn_net_autohup(void);
 extern int isdn_net_force_hangup(char *);
 extern int isdn_net_force_dial(char *);
 extern isdn_net_dev *isdn_net_findif(char *);
-extern int isdn_net_send_skb(struct device *, isdn_net_local *,
+extern int isdn_net_send_skb(struct net_device *, isdn_net_local *,
 			     struct sk_buff *);
 extern int isdn_net_rcv_skb(int, struct sk_buff *);
 extern void isdn_net_slarp_out(void);

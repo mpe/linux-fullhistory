@@ -129,15 +129,15 @@ const struct mca_adapters_t mc32_adapters[] = {
 
 /* Index to functions, as function prototypes. */
 
-extern int mc32_probe(struct device *dev);
+extern int mc32_probe(struct net_device *dev);
 
-static int	mc32_probe1(struct device *dev, int ioaddr);
-static int	mc32_open(struct device *dev);
-static int	mc32_send_packet(struct sk_buff *skb, struct device *dev);
+static int	mc32_probe1(struct net_device *dev, int ioaddr);
+static int	mc32_open(struct net_device *dev);
+static int	mc32_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void	mc32_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static int	mc32_close(struct device *dev);
-static struct	net_device_stats *mc32_get_stats(struct device *dev);
-static void	mc32_set_multicast_list(struct device *dev);
+static int	mc32_close(struct net_device *dev);
+static struct	net_device_stats *mc32_get_stats(struct net_device *dev);
+static void	mc32_set_multicast_list(struct net_device *dev);
 
 /*
  * Check for a network adaptor of this type, and return '0' iff one exists.
@@ -147,7 +147,7 @@ static void	mc32_set_multicast_list(struct device *dev);
  * (detachable devices only).
  */
 
-int __init mc32_probe(struct device *dev)
+int __init mc32_probe(struct net_device *dev)
 {
 	static int current_mca_slot = -1;
 	int i;
@@ -183,7 +183,7 @@ int __init mc32_probe(struct device *dev)
  * probes on the ISA bus. A good device probes avoids doing writes, and
  * verifies that the correct device exists and functions.
  */
-static int __init mc32_probe1(struct device *dev, int slot)
+static int __init mc32_probe1(struct net_device *dev, int slot)
 {
 	static unsigned version_printed = 0;
 	int i;
@@ -435,7 +435,7 @@ static int __init mc32_probe1(struct device *dev, int slot)
  *	Polled command stuff 
  */
  
-static void mc32_ring_poll(struct device *dev)
+static void mc32_ring_poll(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR));
@@ -446,7 +446,7 @@ static void mc32_ring_poll(struct device *dev)
  *	Send exec commands
  */
  
-static int mc32_command(struct device *dev, u16 cmd, void *data, int len)
+static int mc32_command(struct net_device *dev, u16 cmd, void *data, int len)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -488,7 +488,7 @@ static int mc32_command(struct device *dev, u16 cmd, void *data, int len)
  *	RX abort
  */
  
-static void mc32_rx_abort(struct device *dev)
+static void mc32_rx_abort(struct net_device *dev)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -504,7 +504,7 @@ static void mc32_rx_abort(struct device *dev)
  *	RX enable
  */
  
-static void mc32_rx_begin(struct device *dev)
+static void mc32_rx_begin(struct net_device *dev)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -518,7 +518,7 @@ static void mc32_rx_begin(struct device *dev)
 	lp->rx_halted=0;
 }
 
-static void mc32_tx_abort(struct device *dev)
+static void mc32_tx_abort(struct net_device *dev)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -565,7 +565,7 @@ static void mc32_tx_abort(struct device *dev)
  *	TX enable
  */
  
-static void mc32_tx_begin(struct device *dev)
+static void mc32_tx_begin(struct net_device *dev)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -588,7 +588,7 @@ static void mc32_tx_begin(struct device *dev)
  *	Load the rx ring
  */
  
-static int mc32_load_rx_ring(struct device *dev)
+static int mc32_load_rx_ring(struct net_device *dev)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
 	int i;
@@ -652,7 +652,7 @@ static void mc32_flush_tx_ring(struct mc32_local *lp)
  * sometime after booting when the 'ifconfig' program is run.
  */
 
-static int mc32_open(struct device *dev)
+static int mc32_open(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	u16 zero_word=0;
@@ -717,7 +717,7 @@ static int mc32_open(struct device *dev)
 	return 0;
 }
 
-static int mc32_send_packet(struct sk_buff *skb, struct device *dev)
+static int mc32_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
 
@@ -796,12 +796,12 @@ static int mc32_send_packet(struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
-static void mc32_update_stats(struct device *dev)
+static void mc32_update_stats(struct net_device *dev)
 {
 }
 
 
-static void mc32_rx_ring(struct device *dev)
+static void mc32_rx_ring(struct net_device *dev)
 {
 	struct mc32_local *lp=dev->priv;
 	int ioaddr = dev->base_addr;
@@ -879,7 +879,7 @@ static void mc32_rx_ring(struct device *dev)
  */
 static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct mc32_local *lp;
 	int ioaddr, status, boguscount = 0;
 	int rx_event = 0;
@@ -1002,7 +1002,7 @@ static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 /* The inverse routine to mc32_open(). */
 
-static int mc32_close(struct device *dev)
+static int mc32_close(struct net_device *dev)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -1050,7 +1050,7 @@ static int mc32_close(struct device *dev)
  * This may be called with the card open or closed.
  */
 
-static struct net_device_stats *mc32_get_stats(struct device *dev)
+static struct net_device_stats *mc32_get_stats(struct net_device *dev)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
 	return &lp->net_stats;
@@ -1063,7 +1063,7 @@ static struct net_device_stats *mc32_get_stats(struct device *dev)
  * num_addrs > 0	Multicast mode, receive normal and MC packets,
  *			and do best-effort filtering.
  */
-static void mc32_set_multicast_list(struct device *dev)
+static void mc32_set_multicast_list(struct net_device *dev)
 {
 	u16 filt;
 	if (dev->flags&IFF_PROMISC)
@@ -1110,7 +1110,7 @@ static void mc32_set_multicast_list(struct device *dev)
 #ifdef MODULE
 
 static char devicename[9] = { 0, };
-static struct device this_device = {
+static struct net_device this_device = {
 	devicename, /* will be inserted by linux/drivers/net/mc32_init.c */
 	0, 0, 0, 0,
 	0, 0,  /* I/O address, IRQ */

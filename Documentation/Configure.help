@@ -1,7 +1,7 @@
 # Maintained by Axel Boldt (boldt@math.ucsb.edu)
 #
 # This version of the Linux kernel configuration help texts
-# corresponds to the kernel versions 2.2.x.
+# corresponds to the kernel versions 2.3.x.
 #
 # Translations of this file available on the WWW:
 #
@@ -2009,10 +2009,12 @@ CONFIG_FB_RETINAZ3
   you have a Retina Z3 or plan to get one before you next recompile
   the kernel.
 
-Amiga CLgen driver (EXPERIMENTAL)
+Cirrus Logic generic driver (EXPERIMENTAL)
 CONFIG_FB_CLGEN
   This enables support for Cirrus Logic GD542x/543x based boards on
   Amiga: SD64, Piccolo, Picasso II/II+, Picasso IV, or EGS Spectrum.
+  If you have a PCI-based system, this enables support for these chips:
+  GD-543x, GD-544x, GD-5480.
   Say N unless you have such a graphics board or plan to get one
   before you next recompile the kernel.
 
@@ -12075,6 +12077,21 @@ CONFIG_PPDEV
   This is the parallel port equivalent of SCSI generic support (sg).
   It is safe to say N to this -- it is not needed for normal printing
   or parallel port CD-ROM/disk support.
+
+Kernel httpd acceleration (expirimental)
+CONFIG_KHTTPD
+  The kernel httpd acceleration daemon (kHTTPd) is a (limited) 
+  webserver build into the kernel. It is limited since it can only
+  serve files from the filesystem. Saying "M" here builds the
+  kHTTPd module; this is NOT enough to have a working kHTTPd. 
+  For safety reasons, the module has to be activated by doing a
+  "echo 1 > /proc/sys/net/khttpd/start" after inserting the module.
+
+  Before using this, read the README in /usr/src/linux/net/khttpd !
+
+  The kHTTPd is expirimental. Be careful when using it on a production
+  machine. Also note that kHTTPd doesn't support virtual servers yet.
+
 
 #
 # A couple of things I keep forgetting:

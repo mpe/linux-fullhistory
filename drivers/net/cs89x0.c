@@ -113,20 +113,20 @@ struct net_local {
 
 /* Index to functions, as function prototypes. */
 
-extern int cs89x0_probe(struct device *dev);
+extern int cs89x0_probe(struct net_device *dev);
 
-static int cs89x0_probe1(struct device *dev, int ioaddr);
-static int net_open(struct device *dev);
-static int	net_send_packet(struct sk_buff *skb, struct device *dev);
+static int cs89x0_probe1(struct net_device *dev, int ioaddr);
+static int net_open(struct net_device *dev);
+static int	net_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void net_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void set_multicast_list(struct device *dev);
-static void net_rx(struct device *dev);
-static int net_close(struct device *dev);
-static struct net_device_stats *net_get_stats(struct device *dev);
-static void reset_chip(struct device *dev);
-static int get_eeprom_data(struct device *dev, int off, int len, int *buffer);
+static void set_multicast_list(struct net_device *dev);
+static void net_rx(struct net_device *dev);
+static int net_close(struct net_device *dev);
+static struct net_device_stats *net_get_stats(struct net_device *dev);
+static void reset_chip(struct net_device *dev);
+static int get_eeprom_data(struct net_device *dev, int off, int len, int *buffer);
 static int get_eeprom_cksum(int off, int len, int *buffer);
-static int set_mac_address(struct device *dev, void *addr);
+static int set_mac_address(struct net_device *dev, void *addr);
 
 
 /* Example routines you must write ;->. */
@@ -146,7 +146,7 @@ struct netdev_entry netcard_drv =
 {"netcard", cs89x0_probe1, NETCARD_IO_EXTENT, netcard_portlist};
 #else
 int __init 
-cs89x0_probe(struct device *dev)
+cs89x0_probe(struct net_device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -169,14 +169,14 @@ cs89x0_probe(struct device *dev)
 #endif
 
 static int inline
-readreg(struct device *dev, int portno)
+readreg(struct net_device *dev, int portno)
 {
 	outw(portno, dev->base_addr + ADD_PORT);
 	return inw(dev->base_addr + DATA_PORT);
 }
 
 static void inline
-writereg(struct device *dev, int portno, int value)
+writereg(struct net_device *dev, int portno, int value)
 {
 	outw(portno, dev->base_addr + ADD_PORT);
 	outw(value, dev->base_addr + DATA_PORT);
@@ -184,19 +184,19 @@ writereg(struct device *dev, int portno, int value)
 
 
 static int inline
-readword(struct device *dev, int portno)
+readword(struct net_device *dev, int portno)
 {
 	return inw(dev->base_addr + portno);
 }
 
 static void inline
-writeword(struct device *dev, int portno, int value)
+writeword(struct net_device *dev, int portno, int value)
 {
 	outw(value, dev->base_addr + portno);
 }
 
 static int __init 
-wait_eeprom_ready(struct device *dev)
+wait_eeprom_ready(struct net_device *dev)
 {
 	int timeout = jiffies;
 	/* check to see if the EEPROM is ready, a timeout is used -
@@ -209,7 +209,7 @@ wait_eeprom_ready(struct device *dev)
 }
 
 static int __init 
-get_eeprom_data(struct device *dev, int off, int len, int *buffer)
+get_eeprom_data(struct net_device *dev, int off, int len, int *buffer)
 {
 	int i;
 
@@ -244,7 +244,7 @@ get_eeprom_cksum(int off, int len, int *buffer)
    probes on the ISA bus.  A good device probes avoids doing writes, and
    verifies that the correct device exists and functions.  */
 
-static int __init cs89x0_probe1(struct device *dev, int ioaddr)
+static int __init cs89x0_probe1(struct net_device *dev, int ioaddr)
 {
 	struct net_local *lp;
 	static unsigned version_printed = 0;
@@ -391,7 +391,7 @@ static int __init cs89x0_probe1(struct device *dev, int ioaddr)
 }
 
 void  __init 
-reset_chip(struct device *dev)
+reset_chip(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -421,7 +421,7 @@ reset_chip(struct device *dev)
 
 
 static void
-control_dc_dc(struct device *dev, int on_not_off)
+control_dc_dc(struct net_device *dev, int on_not_off)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned int selfcontrol;
@@ -442,7 +442,7 @@ control_dc_dc(struct device *dev, int on_not_off)
 }
 
 static int
-detect_tp(struct device *dev)
+detect_tp(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int timenow = jiffies;
@@ -487,7 +487,7 @@ detect_tp(struct device *dev)
 
 /* send a test packet - return true if carrier bits are ok */
 static int
-send_test_pkt(struct device *dev)
+send_test_pkt(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	char test_packet[] = { 0,0,0,0,0,0, 0,0,0,0,0,0,
@@ -532,7 +532,7 @@ send_test_pkt(struct device *dev)
 
 
 static int
-detect_aui(struct device *dev)
+detect_aui(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 
@@ -548,7 +548,7 @@ detect_aui(struct device *dev)
 }
 
 static int
-detect_bnc(struct device *dev)
+detect_bnc(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 
@@ -565,7 +565,7 @@ detect_bnc(struct device *dev)
 
 
 static void
-write_irq(struct device *dev, int chip_type, int irq)
+write_irq(struct net_device *dev, int chip_type, int irq)
 {
 	int i;
 
@@ -591,7 +591,7 @@ write_irq(struct device *dev, int chip_type, int irq)
    there is non-reboot way to recover if something goes wrong.
    */
 static int
-net_open(struct device *dev)
+net_open(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int result = 0;
@@ -728,7 +728,7 @@ net_open(struct device *dev)
 }
 
 static int
-net_send_packet(struct sk_buff *skb, struct device *dev)
+net_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	if (dev->tbusy) {
 		/* If we get here, some higher level has decided we are broken.
@@ -787,7 +787,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
    Handle the network interface interrupts. */
 static void net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct net_local *lp;
 	int ioaddr, status;
 
@@ -857,7 +857,7 @@ static void net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 /* We have a good packet(s), get it/them out of the buffers. */
 static void
-net_rx(struct device *dev)
+net_rx(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -904,7 +904,7 @@ net_rx(struct device *dev)
 
 /* The inverse routine to net_open(). */
 static int
-net_close(struct device *dev)
+net_close(struct net_device *dev)
 {
 
 	writereg(dev, PP_RxCFG, 0);
@@ -926,7 +926,7 @@ net_close(struct device *dev)
 /* Get the current statistics.	This may be called with the card open or
    closed. */
 static struct net_device_stats *
-net_get_stats(struct device *dev)
+net_get_stats(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 
@@ -939,7 +939,7 @@ net_get_stats(struct device *dev)
 	return &lp->stats;
 }
 
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 
@@ -964,7 +964,7 @@ static void set_multicast_list(struct device *dev)
 }
 
 
-static int set_mac_address(struct device *dev, void *addr)
+static int set_mac_address(struct net_device *dev, void *addr)
 {
 	int i;
 	if (dev->start)
@@ -983,7 +983,7 @@ static int set_mac_address(struct device *dev, void *addr)
 #ifdef MODULE
 
 static char namespace[16] = "";
-static struct device dev_cs89x0 = {
+static struct net_device dev_cs89x0 = {
         NULL,
         0, 0, 0, 0,
         0, 0,

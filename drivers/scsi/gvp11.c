@@ -34,6 +34,7 @@ static Scsi_Host_Template *gvp11_template;
 
 static void gvp11_intr (int irq, void *dummy, struct pt_regs *fp)
 {
+    unsigned long flags;
     unsigned int status;
     struct Scsi_Host *instance;
 
@@ -44,21 +45,10 @@ static void gvp11_intr (int irq, void *dummy, struct pt_regs *fp)
 	if (!(status & GVP11_DMAC_INT_PENDING))
 	    continue;
 
-	/* disable PORTS interrupt */
-	custom.intena = IF_PORTS;
+	spin_lock_irqsave(&io_request_lock, flags);
 	wd33c93_intr (instance);
-	/* enable PORTS interrupt */
-	custom.intena = IF_SETCLR | IF_PORTS;
+	spin_unlock_irqrestore(&io_request_lock, flags);
     }
-}
-
-static void do_gvp11_intr (int irq, void *dummy, struct pt_regs *fp)
-{
-    unsigned long flags;
-
-    spin_lock_irqsave(&io_request_lock, flags);
-    gvp11_intr(irq, dummy, fp);
-    spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 static int gvp11_xfer_mask = 0;
@@ -71,20 +61,24 @@ void gvp11_setup (char *str, int *ints)
 static int dma_setup (Scsi_Cmnd *cmd, int dir_in)
 {
     unsigned short cntr = GVP11_DMAC_INT_ENABLE;
-    unsigned long addr = VTOP(cmd->SCp.ptr);
+    unsigned long addr = virt_to_bus(cmd->SCp.ptr);
     int bank_mask;
+    static int scsi_alloc_out_of_range = 0;
 
-    /* don't allow DMA if the physical address is bad */
+    /* use bounce buffer if the physical address is bad */
     if (addr & HDATA(cmd->host)->dma_xfer_mask ||
 	(!dir_in && mm_end_of_chunk (addr, cmd->SCp.this_residual)))
     {
 	HDATA(cmd->host)->dma_bounce_len = (cmd->SCp.this_residual + 511)
 	    & ~0x1ff;
-	HDATA(cmd->host)->dma_bounce_buffer =
-	    scsi_malloc (HDATA(cmd->host)->dma_bounce_len);
-	HDATA(cmd->host)->dma_buffer_pool = BUF_SCSI_ALLOCED;
-	
-	if (!HDATA(cmd->host)->dma_bounce_buffer) {
+
+ 	if( !scsi_alloc_out_of_range ) {
+	    HDATA(cmd->host)->dma_bounce_buffer =
+		scsi_malloc (HDATA(cmd->host)->dma_bounce_len);
+	    HDATA(cmd->host)->dma_buffer_pool = BUF_SCSI_ALLOCED;
+	}
+
+	if ( scsi_alloc_out_of_range || !HDATA(cmd->host)->dma_bounce_buffer) {
 	    HDATA(cmd->host)->dma_bounce_buffer =
 		amiga_chip_alloc(HDATA(cmd->host)->dma_bounce_len);
 
@@ -98,15 +92,17 @@ static int dma_setup (Scsi_Cmnd *cmd, int dir_in)
 	}
 
 	/* check if the address of the bounce buffer is OK */
-	addr = VTOP(HDATA(cmd->host)->dma_bounce_buffer);
+	addr = virt_to_bus(HDATA(cmd->host)->dma_bounce_buffer);
 
 	if (addr & HDATA(cmd->host)->dma_xfer_mask) {
 	    /* fall back to Chip RAM if address out of range */
-	    if( HDATA(cmd->host)->dma_buffer_pool == BUF_SCSI_ALLOCED)
+	    if( HDATA(cmd->host)->dma_buffer_pool == BUF_SCSI_ALLOCED) {
 		scsi_free (HDATA(cmd->host)->dma_bounce_buffer,
 			   HDATA(cmd->host)->dma_bounce_len);
-	    else
+		scsi_alloc_out_of_range = 1;
+	    } else {
 		amiga_chip_free (HDATA(cmd->host)->dma_bounce_buffer);
+            }
 		
 	    HDATA(cmd->host)->dma_bounce_buffer =
 		amiga_chip_alloc(HDATA(cmd->host)->dma_bounce_len);
@@ -117,18 +113,14 @@ static int dma_setup (Scsi_Cmnd *cmd, int dir_in)
 		return 1;
 	    }
 
-	    addr = VTOP(HDATA(cmd->host)->dma_bounce_buffer);
+	    addr = virt_to_bus(HDATA(cmd->host)->dma_bounce_buffer);
 	    HDATA(cmd->host)->dma_buffer_pool = BUF_CHIP_ALLOCED;
 	}
 	    
 	if (!dir_in) {
 	    /* copy to bounce buffer for a write */
-	    if (cmd->use_sg)
-		memcpy (HDATA(cmd->host)->dma_bounce_buffer,
-				cmd->SCp.ptr, cmd->SCp.this_residual);
-	    else
-		memcpy (HDATA(cmd->host)->dma_bounce_buffer,
-			cmd->request_buffer, cmd->request_bufflen);
+	    memcpy (HDATA(cmd->host)->dma_bounce_buffer,
+		    cmd->SCp.ptr, cmd->SCp.this_residual);
 	}
     }
 
@@ -169,41 +161,19 @@ static void dma_stop (struct Scsi_Host *instance, Scsi_Cmnd *SCpnt,
 
     /* copy from a bounce buffer, if necessary */
     if (status && HDATA(instance)->dma_bounce_buffer) {
-	if (SCpnt && SCpnt->use_sg) {
-#if 0
-	    panic ("scsi%d: incomplete s/g support",
-		   instance->host_no);
-#else
-	    if( HDATA(instance)->dma_dir )
-		memcpy (SCpnt->SCp.ptr, 
-			HDATA(instance)->dma_bounce_buffer,
-			SCpnt->SCp.this_residual);
-
-	    if (HDATA(instance)->dma_buffer_pool == BUF_SCSI_ALLOCED)
-		scsi_free (HDATA(instance)->dma_bounce_buffer,
-			    HDATA(instance)->dma_bounce_len);
-	    else
-		amiga_chip_free(HDATA(instance)->dma_bounce_buffer);
-
-	    HDATA(instance)->dma_bounce_buffer = NULL;
-	    HDATA(instance)->dma_bounce_len = 0;
-	    
-#endif
-	} else {
-	    if (HDATA(instance)->dma_dir && SCpnt)
-		memcpy (SCpnt->request_buffer,
-			HDATA(instance)->dma_bounce_buffer,
-			SCpnt->request_bufflen);
-
-	    if (HDATA(instance)->dma_buffer_pool == BUF_SCSI_ALLOCED)
-		scsi_free (HDATA(instance)->dma_bounce_buffer,
-			    HDATA(instance)->dma_bounce_len);
-	    else
-		amiga_chip_free(HDATA(instance)->dma_bounce_buffer);
-
-	    HDATA(instance)->dma_bounce_buffer = NULL;
-	    HDATA(instance)->dma_bounce_len = 0;
-	}
+	if (HDATA(instance)->dma_dir && SCpnt)
+	    memcpy (SCpnt->SCp.ptr, 
+		    HDATA(instance)->dma_bounce_buffer,
+		    SCpnt->SCp.this_residual);
+	
+	if (HDATA(instance)->dma_buffer_pool == BUF_SCSI_ALLOCED)
+	    scsi_free (HDATA(instance)->dma_bounce_buffer,
+		       HDATA(instance)->dma_bounce_len);
+	else
+	    amiga_chip_free(HDATA(instance)->dma_bounce_buffer);
+	
+	HDATA(instance)->dma_bounce_buffer = NULL;
+	HDATA(instance)->dma_bounce_len = 0;
     }
 }
 
@@ -211,7 +181,7 @@ static int num_gvp11 = 0;
 
 #define CHECK_WD33C93
 
-__initfunc(int gvp11_detect(Scsi_Host_Template *tpnt))
+int __init gvp11_detect(Scsi_Host_Template *tpnt)
 {
     static unsigned char called = 0;
     struct Scsi_Host *instance;
@@ -371,7 +341,7 @@ __initfunc(int gvp11_detect(Scsi_Host_Template *tpnt))
 	if (num_gvp11++ == 0) {
 		first_instance = instance;
 		gvp11_template = instance->hostt;
-		request_irq(IRQ_AMIGA_PORTS, do_gvp11_intr, 0,
+		request_irq(IRQ_AMIGA_PORTS, gvp11_intr, SA_SHIRQ,
 			    "GVP11 SCSI", gvp11_intr);
 	}
 	DMA(instance)->CNTR = GVP11_DMAC_INT_ENABLE;

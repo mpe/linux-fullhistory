@@ -44,14 +44,14 @@ static struct tty_ldisc irda_ldisc;
 
 static int qos_mtt_bits = 0x03;      /* 5 ms or more */
 
-static int  irtty_hard_xmit(struct sk_buff *skb, struct device *dev);
+static int  irtty_hard_xmit(struct sk_buff *skb, struct net_device *dev);
 static void irtty_wait_until_sent(struct irda_device *driver);
 static int  irtty_is_receiving(struct irda_device *idev);
 static void irtty_set_dtr_rts(struct irda_device *idev, int dtr, int rts);
 static int  irtty_raw_write(struct irda_device *idev, __u8 *buf, int len);
-static int  irtty_net_init(struct device *dev);
-static int  irtty_net_open(struct device *dev);
-static int  irtty_net_close(struct device *dev);
+static int  irtty_net_init(struct net_device *dev);
+static int  irtty_net_open(struct net_device *dev);
+static int  irtty_net_close(struct net_device *dev);
 
 static int  irtty_open(struct tty_struct *tty);
 static void irtty_close(struct tty_struct *tty);
@@ -427,7 +427,7 @@ static void irtty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
  *    Transmit frame
  *
  */
-static int irtty_hard_xmit(struct sk_buff *skb, struct device *dev)
+static int irtty_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct irtty_cb *self;
 	struct irda_device *idev;
@@ -634,7 +634,7 @@ static int irtty_raw_write(struct irda_device *idev, __u8 *buf, int len)
 	return actual;
 }
 
-static int irtty_net_init(struct device *dev)
+static int irtty_net_init(struct net_device *dev)
 {
 	/* Set up to be a normal IrDA network device driver */
 	irda_device_setup(dev);
@@ -644,7 +644,7 @@ static int irtty_net_init(struct device *dev)
 	return 0;
 }
 
-static int irtty_net_open(struct device *dev)
+static int irtty_net_open(struct net_device *dev)
 {
 	ASSERT(dev != NULL, return -1;);
 
@@ -658,7 +658,7 @@ static int irtty_net_open(struct device *dev)
 	return 0;
 }
 
-static int irtty_net_close(struct device *dev)
+static int irtty_net_close(struct net_device *dev)
 {
 	ASSERT(dev != NULL, return -1;);
 	

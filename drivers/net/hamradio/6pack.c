@@ -53,7 +53,7 @@ typedef unsigned char byte;
 typedef struct sixpack_ctrl {
 	char		if_name[8];	/* "sp0\0" .. "sp99999\0"	*/
 	struct sixpack	ctrl;		/* 6pack things			*/
-	struct device	dev;		/* the device			*/
+	struct net_device	dev;		/* the device			*/
 } sixpack_ctrl_t;
 static sixpack_ctrl_t	**sixpack_ctrls = NULL;
 int sixpack_maxdev = SIXP_NRUNIT;	/* Can be overridden with insmod! */
@@ -327,7 +327,7 @@ static void sixpack_write_wakeup(struct tty_struct *tty)
 /* Encapsulate an IP datagram and kick it into a TTY queue. */
 
 static int
-sp_xmit(struct sk_buff *skb, struct device *dev)
+sp_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct sixpack *sp = (struct sixpack*)(dev->priv);
 
@@ -382,7 +382,7 @@ void sp_xmit_on_air(unsigned long channel)
 /* #if defined(CONFIG_6PACK) || defined(CONFIG_6PACK_MODULE) */
 
 /* Return the frame type ID */
-static int sp_header(struct sk_buff *skb, struct device *dev, unsigned short type,
+static int sp_header(struct sk_buff *skb, struct net_device *dev, unsigned short type,
 	  void *daddr, void *saddr, unsigned len)
 {
 #ifdef CONFIG_INET
@@ -406,7 +406,7 @@ static int sp_rebuild_header(struct sk_buff *skb)
 
 /* Open the low-level part of the 6pack channel. */
 static int
-sp_open(struct device *dev)
+sp_open(struct net_device *dev)
 {
 	struct sixpack *sp = (struct sixpack*)(dev->priv);
 	unsigned long len;
@@ -469,7 +469,7 @@ sp_open(struct device *dev)
 
 /* Close the low-level part of the 6pack channel. */
 static int
-sp_close(struct device *dev)
+sp_close(struct net_device *dev)
 {
 	struct sixpack *sp = (struct sixpack*)(dev->priv);
 
@@ -612,7 +612,7 @@ sixpack_close(struct tty_struct *tty)
 
 
 static struct net_device_stats *
-sp_get_stats(struct device *dev)
+sp_get_stats(struct net_device *dev)
 {
 	static struct net_device_stats stats;
 	struct sixpack *sp = (struct sixpack*)(dev->priv);
@@ -633,7 +633,7 @@ sp_get_stats(struct device *dev)
 
 
 int
-sp_set_mac_address(struct device *dev, void *addr)
+sp_set_mac_address(struct net_device *dev, void *addr)
 {
 	int err;
 
@@ -648,7 +648,7 @@ sp_set_mac_address(struct device *dev, void *addr)
 }
 
 static int
-sp_set_dev_mac_address(struct device *dev, void *addr)
+sp_set_dev_mac_address(struct net_device *dev, void *addr)
 {
 	struct sockaddr *sa=addr;
 	memcpy(dev->dev_addr, sa->sa_data, AX25_ADDR_LEN);
@@ -713,7 +713,7 @@ sixpack_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 	}
 }
 
-static int sp_open_dev(struct device *dev)
+static int sp_open_dev(struct net_device *dev)
 {
 	struct sixpack *sp = (struct sixpack*)(dev->priv);
 	if(sp->tty==NULL)
@@ -726,7 +726,7 @@ static int sp_open_dev(struct device *dev)
 #ifdef MODULE
 static int sixpack_init_ctrl_dev(void)
 #else	/* !MODULE */
-int __init sixpack_init_ctrl_dev(struct device *dummy)
+int __init sixpack_init_ctrl_dev(struct net_device *dummy)
 #endif	/* !MODULE */
 {
 	int status;
@@ -778,7 +778,7 @@ int __init sixpack_init_ctrl_dev(struct device *dummy)
 
 /* Initialize the 6pack driver.  Called by DDI. */
 int
-sixpack_init(struct device *dev)
+sixpack_init(struct net_device *dev)
 {
 	struct sixpack *sp = (struct sixpack*)(dev->priv);
 

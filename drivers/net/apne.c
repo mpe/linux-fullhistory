@@ -74,18 +74,18 @@
 #define NESM_STOP_PG	0x80	/* Last page +1 of RX ring */
 
 
-int apne_probe(struct device *dev);
-static int apne_probe1(struct device *dev, int ioaddr);
+int apne_probe(struct net_device *dev);
+static int apne_probe1(struct net_device *dev, int ioaddr);
 
-static int apne_open(struct device *dev);
-static int apne_close(struct device *dev);
+static int apne_open(struct net_device *dev);
+static int apne_close(struct net_device *dev);
 
-static void apne_reset_8390(struct device *dev);
-static void apne_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+static void apne_reset_8390(struct net_device *dev);
+static void apne_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
 			  int ring_page);
-static void apne_block_input(struct device *dev, int count,
+static void apne_block_input(struct net_device *dev, int count,
 								struct sk_buff *skb, int ring_offset);
-static void apne_block_output(struct device *dev, const int count,
+static void apne_block_output(struct net_device *dev, const int count,
 							const unsigned char *buf, const int start_page);
 static void apne_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
@@ -121,7 +121,7 @@ static const char *version =
 
 static int apne_owned = 0;	/* signal if card already owned */
 
-int __init apne_probe(struct device *dev)
+int __init apne_probe(struct net_device *dev)
 {
 #ifndef MANUAL_CONFIG
 	char tuple[8];
@@ -161,7 +161,7 @@ int __init apne_probe(struct device *dev)
 
 }
 
-static int __init apne_probe1(struct device *dev, int ioaddr)
+static int __init apne_probe1(struct net_device *dev, int ioaddr)
 {
     int i;
     unsigned char SA_prom[32];
@@ -338,7 +338,7 @@ static int __init apne_probe1(struct device *dev, int ioaddr)
 }
 
 static int
-apne_open(struct device *dev)
+apne_open(struct net_device *dev)
 {
     ei_open(dev);
     MOD_INC_USE_COUNT;
@@ -346,7 +346,7 @@ apne_open(struct device *dev)
 }
 
 static int
-apne_close(struct device *dev)
+apne_close(struct net_device *dev)
 {
     if (ei_debug > 1)
 	printk("%s: Shutting down ethercard.\n", dev->name);
@@ -358,7 +358,7 @@ apne_close(struct device *dev)
 /* Hard reset the card.  This used to pause for the same period that a
    8390 reset command required, but that shouldn't be necessary. */
 static void
-apne_reset_8390(struct device *dev)
+apne_reset_8390(struct net_device *dev)
 {
     unsigned long reset_start_time = jiffies;
 
@@ -385,7 +385,7 @@ apne_reset_8390(struct device *dev)
    the start of a page, so we optimize accordingly. */
 
 static void
-apne_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+apne_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 
     int nic_base = dev->base_addr;
@@ -434,7 +434,7 @@ apne_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
    the packet out through the "remote DMA" dataport using writeb. */
 
 static void
-apne_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+apne_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
     int nic_base = dev->base_addr;
     char *buf = skb->data;
@@ -476,7 +476,7 @@ apne_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_of
 }
 
 static void
-apne_block_output(struct device *dev, int count,
+apne_block_output(struct net_device *dev, int count,
 		const unsigned char *buf, const int start_page)
 {
     int nic_base = NE_BASE;
@@ -561,7 +561,7 @@ static void apne_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 #ifdef MODULE
 static char devicename[9] = {0, };
 
-static struct device apne_dev =
+static struct net_device apne_dev =
 {
 	devicename,
 	0, 0, 0, 0,

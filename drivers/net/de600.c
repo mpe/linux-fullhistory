@@ -243,24 +243,24 @@ typedef unsigned char byte;
  * Index to functions, as function prototypes.
  */
 /* Routines used internally. (See "convenience macros") */
-static byte	de600_read_status(struct device *dev);
-static byte	de600_read_byte(unsigned char type, struct device *dev);
+static byte	de600_read_status(struct net_device *dev);
+static byte	de600_read_byte(unsigned char type, struct net_device *dev);
 
 /* Put in the device structure. */
-static int	de600_open(struct device *dev);
-static int	de600_close(struct device *dev);
-static struct net_device_stats *get_stats(struct device *dev);
-static int	de600_start_xmit(struct sk_buff *skb, struct device *dev);
+static int	de600_open(struct net_device *dev);
+static int	de600_close(struct net_device *dev);
+static struct net_device_stats *get_stats(struct net_device *dev);
+static int	de600_start_xmit(struct sk_buff *skb, struct net_device *dev);
 
 /* Dispatch from interrupts. */
 static void	de600_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static int	de600_tx_intr(struct device *dev, int irq_status);
-static void	de600_rx_intr(struct device *dev);
+static int	de600_tx_intr(struct net_device *dev, int irq_status);
+static void	de600_rx_intr(struct net_device *dev);
 
 /* Initialization */
-static void	trigger_interrupt(struct device *dev);
-int		de600_probe(struct device *dev);
-static int	adapter_init(struct device *dev);
+static void	trigger_interrupt(struct net_device *dev);
+int		de600_probe(struct net_device *dev);
+static int	adapter_init(struct net_device *dev);
 
 /*
  * D-Link driver variables:
@@ -310,7 +310,7 @@ static int			was_down = 0;
 #define tx_page_adr(a) (((a) + 1) * MEM_2K)
 
 static inline byte
-de600_read_status(struct device *dev)
+de600_read_status(struct net_device *dev)
 {
 	byte status;
 
@@ -322,7 +322,7 @@ de600_read_status(struct device *dev)
 }
 
 static inline byte
-de600_read_byte(unsigned char type, struct device *dev) { /* dev used by macros */
+de600_read_byte(unsigned char type, struct net_device *dev) { /* dev used by macros */
 	byte lo;
 
 	(void)outb_p((type), DATA_PORT);
@@ -340,7 +340,7 @@ de600_read_byte(unsigned char type, struct device *dev) { /* dev used by macros 
  * there is a non-reboot way to recover if something goes wrong.
  */
 static int
-de600_open(struct device *dev)
+de600_open(struct net_device *dev)
 {
 	if (request_irq(DE600_IRQ, de600_interrupt, 0, "de600", dev)) {
 		printk ("%s: unable to get IRQ %d\n", dev->name, DE600_IRQ);
@@ -360,7 +360,7 @@ de600_open(struct device *dev)
  * The inverse routine to de600_open().
  */
 static int
-de600_close(struct device *dev)
+de600_close(struct net_device *dev)
 {
 	select_nic();
 	rx_page = 0;
@@ -378,13 +378,13 @@ de600_close(struct device *dev)
 }
 
 static struct net_device_stats *
-get_stats(struct device *dev)
+get_stats(struct net_device *dev)
 {
     return (struct net_device_stats *)(dev->priv);
 }
 
 static inline void
-trigger_interrupt(struct device *dev)
+trigger_interrupt(struct net_device *dev)
 {
 	de600_put_command(FLIP_IRQ);
 	select_prn();
@@ -398,7 +398,7 @@ trigger_interrupt(struct device *dev)
  * Start sending.
  */
 static int
-de600_start_xmit(struct sk_buff *skb, struct device *dev)
+de600_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	int	transmit_from;
 	int	len;
@@ -483,7 +483,7 @@ de600_start_xmit(struct sk_buff *skb, struct device *dev)
 static void
 de600_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device	*dev = dev_id;
+	struct net_device	*dev = dev_id;
 	byte		irq_status;
 	int		retrig = 0;
 	int		boguscount = 0;
@@ -532,7 +532,7 @@ de600_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 }
 
 static int
-de600_tx_intr(struct device *dev, int irq_status)
+de600_tx_intr(struct net_device *dev, int irq_status)
 {
 	/*
 	 * Returns 1 if tx still not done
@@ -568,7 +568,7 @@ de600_tx_intr(struct device *dev, int irq_status)
  * We have a good packet, get it out of the adapter.
  */
 static void
-de600_rx_intr(struct device *dev)
+de600_rx_intr(struct net_device *dev)
 {
 	struct sk_buff	*skb;
 	int		i;
@@ -628,7 +628,7 @@ de600_rx_intr(struct device *dev)
 }
 
 int __init 
-de600_probe(struct device *dev)
+de600_probe(struct net_device *dev)
 {
 	int	i;
 	static struct net_device_stats de600_netstats;
@@ -707,7 +707,7 @@ de600_probe(struct device *dev)
 }
 
 static int
-adapter_init(struct device *dev)
+adapter_init(struct net_device *dev)
 {
 	int	i;
 	long flags;
@@ -818,7 +818,7 @@ de600_rspace(struct sock *sk)
 
 #ifdef MODULE
 static char nullname[8];
-static struct device de600_dev = {
+static struct net_device de600_dev = {
 	nullname, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, de600_probe };
 
 int

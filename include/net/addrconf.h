@@ -52,11 +52,11 @@ extern int			addrconf_del_ifaddr(void *arg);
 extern int			addrconf_set_dstaddr(void *arg);
 
 extern struct inet6_ifaddr *	ipv6_chk_addr(struct in6_addr *addr,
-					      struct device *dev, int nd);
+					      struct net_device *dev, int nd);
 extern int			ipv6_get_saddr(struct dst_entry *dst, 
 					       struct in6_addr *daddr,
 					       struct in6_addr *saddr);
-extern int			ipv6_get_lladdr(struct device *dev, struct in6_addr *);
+extern int			ipv6_get_lladdr(struct net_device *dev, struct in6_addr *);
 
 /*
  *	multicast prototypes (mcast.c)
@@ -70,22 +70,22 @@ extern int			ipv6_sock_mc_drop(struct sock *sk,
 extern void			ipv6_sock_mc_close(struct sock *sk);
 extern int			inet6_mc_check(struct sock *sk, struct in6_addr *addr);
 
-extern int			ipv6_dev_mc_inc(struct device *dev,
+extern int			ipv6_dev_mc_inc(struct net_device *dev,
 						struct in6_addr *addr);
-extern int			ipv6_dev_mc_dec(struct device *dev,
+extern int			ipv6_dev_mc_dec(struct net_device *dev,
 						struct in6_addr *addr);
 extern void			ipv6_mc_up(struct inet6_dev *idev);
 extern void			ipv6_mc_down(struct inet6_dev *idev);
 extern void			ipv6_mc_destroy_dev(struct inet6_dev *idev);
 extern void			addrconf_dad_failure(struct inet6_ifaddr *ifp);
 
-extern int			ipv6_chk_mcast_addr(struct device *dev,
+extern int			ipv6_chk_mcast_addr(struct net_device *dev,
 						    struct in6_addr *addr);
 
-extern void			addrconf_prefix_rcv(struct device *dev,
+extern void			addrconf_prefix_rcv(struct net_device *dev,
 						    u8 *opt, int len);
 
-extern struct inet6_dev *	ipv6_get_idev(struct device *dev);
+extern struct inet6_dev *	ipv6_get_idev(struct net_device *dev);
 
 extern void			addrconf_forwarding_on(void);
 /*

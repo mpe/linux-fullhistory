@@ -44,17 +44,17 @@ static int seq = 0;
 
 #define BIF_MTU 10240
 
-static struct device *bif_device = 0;
+static struct net_device *bif_device = 0;
 static struct net_device_stats *bif_stats = 0;
 
-int bif_init(struct device *dev);
-int bif_open(struct device *dev);
-static int bif_xmit(struct sk_buff *skb, struct device *dev);
+int bif_init(struct net_device *dev);
+int bif_open(struct net_device *dev);
+static int bif_xmit(struct sk_buff *skb, struct net_device *dev);
 int bif_rx(struct sk_buff *skb);
-int bif_stop(struct device *dev);
-static struct net_device_stats *bif_get_stats(struct device *dev);
+int bif_stop(struct net_device *dev);
+static struct net_device_stats *bif_get_stats(struct net_device *dev);
 
-static int bif_hard_header(struct sk_buff *skb, struct device *dev,
+static int bif_hard_header(struct sk_buff *skb, struct net_device *dev,
 			   unsigned short type, void *daddr,
 			   void *saddr, unsigned len)
 {
@@ -70,7 +70,7 @@ static int bif_hard_header(struct sk_buff *skb, struct device *dev,
   return (dev->hard_header_len);
 }
 
-static int bif_rebuild_header(void *buff, struct device *dev,
+static int bif_rebuild_header(void *buff, struct net_device *dev,
 			      unsigned long raddr, struct sk_buff *skb)
 {
   /* this would normally be used to fill in hardware addresses after
@@ -82,24 +82,24 @@ static int bif_rebuild_header(void *buff, struct device *dev,
   return(0);
 }
 
-static int bif_set_mac_address(struct device *dev, void *addr)
+static int bif_set_mac_address(struct net_device *dev, void *addr)
 {
   printk("BIF: set_mac_address called\n");
   return (0);
 }
 
-static void bif_set_multicast_list(struct device *dev)
+static void bif_set_multicast_list(struct net_device *dev)
 {
   return;
 }
 
-static int bif_do_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+static int bif_do_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
   printk("BIF: Called do_ioctl\n");
   return (0);
 }
 
-static int bif_set_config(struct device *dev, struct ifmap *map)
+static int bif_set_config(struct net_device *dev, struct ifmap *map)
 {
   printk("BIF: Called bif_set_config\n");
   return (0);
@@ -108,7 +108,7 @@ static int bif_set_config(struct device *dev, struct ifmap *map)
 /*
  * Initialise bif network interface.
  */
-int bif_init(struct device *dev)
+int bif_init(struct net_device *dev)
 {
     int i;
 
@@ -149,7 +149,7 @@ int bif_init(struct device *dev)
     return(0);
 }
 
-int bif_open(struct device *dev)
+int bif_open(struct net_device *dev)
 {
     printk("In bif_open\n");
     dev->tbusy = 0;
@@ -189,7 +189,7 @@ static void dump_packet(char *action, char *buf, int len, int seq)
 #endif
 
 
-static int bif_xmit(struct sk_buff *skb, struct device *dev)
+static int bif_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	extern int bif_send_ip(int cid,struct sk_buff *skb);
 	extern int tnet_send_ip(int cid,struct sk_buff *skb);
@@ -260,7 +260,7 @@ int bif_rx(struct sk_buff *skb)
 	return 0;
 }
 
-int bif_stop(struct device *dev)
+int bif_stop(struct net_device *dev)
 {
 	printk("in bif_close\n");
 
@@ -273,7 +273,7 @@ int bif_stop(struct device *dev)
 /*
  * Return statistics of bif driver.
  */
-static struct net_device_stats *bif_get_stats(struct device *dev)
+static struct net_device_stats *bif_get_stats(struct net_device *dev)
 {
     return((struct net_device_stats *)dev->priv);
 }

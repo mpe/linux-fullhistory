@@ -33,19 +33,19 @@
  *	Index to functions.
  */
 
-int	    ethertap_probe(struct device *dev);
-static int  ethertap_open(struct device *dev);
-static int  ethertap_start_xmit(struct sk_buff *skb, struct device *dev);
-static int  ethertap_close(struct device *dev);
-static struct net_device_stats *ethertap_get_stats(struct device *dev);
+int	    ethertap_probe(struct net_device *dev);
+static int  ethertap_open(struct net_device *dev);
+static int  ethertap_start_xmit(struct sk_buff *skb, struct net_device *dev);
+static int  ethertap_close(struct net_device *dev);
+static struct net_device_stats *ethertap_get_stats(struct net_device *dev);
 static void ethertap_rx(struct sock *sk, int len);
 #ifdef CONFIG_ETHERTAP_MC
-static void set_multicast_list(struct device *dev);
+static void set_multicast_list(struct net_device *dev);
 #endif
 
 static int ethertap_debug = 0;
 
-static struct device *tap_map[32];	/* Returns the tap device for a given netlink */
+static struct net_device *tap_map[32];	/* Returns the tap device for a given netlink */
 
 /*
  *	Board-specific info in dev->priv.
@@ -65,7 +65,7 @@ struct net_local
  *	hardware it would have to check what was present.
  */
  
-int __init ethertap_probe(struct device *dev)
+int __init ethertap_probe(struct net_device *dev)
 {
 	memcpy(dev->dev_addr, "\xFE\xFD\x00\x00\x00\x00", 6);
 	if (dev->mem_start & 0xf)
@@ -109,7 +109,7 @@ int __init ethertap_probe(struct device *dev)
  *	Open/initialize the board.
  */
 
-static int ethertap_open(struct device *dev)
+static int ethertap_open(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local*)dev->priv;
 
@@ -142,7 +142,7 @@ static unsigned ethertap_mc_hash(__u8 *dest)
 	return 1U << (idx&0x1F);
 }
 
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
 	unsigned groups = ~0;
 	struct net_local *lp = (struct net_local *)dev->priv;
@@ -169,7 +169,7 @@ static void set_multicast_list(struct device *dev)
  *	it for 2.0 so that we dev_kfree_skb() the locked original.
  */
  
-static int ethertap_start_xmit(struct sk_buff *skb, struct device *dev)
+static int ethertap_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 #ifdef CONFIG_ETHERTAP_MC
@@ -227,7 +227,7 @@ static int ethertap_start_xmit(struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
-static __inline__ int ethertap_rx_skb(struct sk_buff *skb, struct device *dev)
+static __inline__ int ethertap_rx_skb(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 #ifdef CONFIG_ETHERTAP_MC
@@ -295,7 +295,7 @@ static __inline__ int ethertap_rx_skb(struct sk_buff *skb, struct device *dev)
 
 static void ethertap_rx(struct sock *sk, int len)
 {
-	struct device *dev = tap_map[sk->protocol];
+	struct net_device *dev = tap_map[sk->protocol];
 	struct sk_buff *skb;
 
 	if (dev==NULL) {
@@ -311,7 +311,7 @@ static void ethertap_rx(struct sock *sk, int len)
 		ethertap_rx_skb(skb, dev);
 }
 
-static int ethertap_close(struct device *dev)
+static int ethertap_close(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	struct sock *sk = lp->nl;
@@ -331,7 +331,7 @@ static int ethertap_close(struct device *dev)
 	return 0;
 }
 
-static struct net_device_stats *ethertap_get_stats(struct device *dev)
+static struct net_device_stats *ethertap_get_stats(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	return &lp->stats;
@@ -344,7 +344,7 @@ MODULE_PARM(unit,"i");
 
 static char devicename[9] = { 0, };
 
-static struct device dev_ethertap =
+static struct net_device dev_ethertap =
 {
 	devicename,
 	0, 0, 0, 0,

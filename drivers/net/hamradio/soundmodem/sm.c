@@ -140,7 +140,7 @@ static const struct hardware_info *sm_hardware_table[] = {
 
 #define NR_PORTS 4
 
-static struct device sm_device[NR_PORTS];
+static struct net_device sm_device[NR_PORTS];
 
 /* --------------------------------------------------------------------- */
 
@@ -357,9 +357,9 @@ static void sm_output_close(struct sm_state *sm)
 
 /* --------------------------------------------------------------------- */
 
-static int sm_open(struct device *dev);
-static int sm_close(struct device *dev);
-static int sm_ioctl(struct device *dev, struct ifreq *ifr,
+static int sm_open(struct net_device *dev);
+static int sm_close(struct net_device *dev);
+static int sm_ioctl(struct net_device *dev, struct ifreq *ifr,
 		    struct hdlcdrv_ioctl *hi, int cmd);
 
 /* --------------------------------------------------------------------- */
@@ -370,7 +370,7 @@ static const struct hdlcdrv_ops sm_ops = {
 
 /* --------------------------------------------------------------------- */
 
-static int sm_open(struct device *dev)
+static int sm_open(struct net_device *dev)
 {
 	struct sm_state *sm;
 	int err;
@@ -398,7 +398,7 @@ static int sm_open(struct device *dev)
 
 /* --------------------------------------------------------------------- */
 
-static int sm_close(struct device *dev)
+static int sm_close(struct net_device *dev)
 {
 	struct sm_state *sm;
 	int err = -ENODEV;
@@ -422,7 +422,7 @@ static int sm_close(struct device *dev)
 
 /* --------------------------------------------------------------------- */
 
-static int sethw(struct device *dev, struct sm_state *sm, char *mode)
+static int sethw(struct net_device *dev, struct sm_state *sm, char *mode)
 {
 	char *cp = strchr(mode, ':');
 	const struct hardware_info **hwp = sm_hardware_table;
@@ -451,7 +451,7 @@ static int sethw(struct device *dev, struct sm_state *sm, char *mode)
 
 /* --------------------------------------------------------------------- */
 
-static int sm_ioctl(struct device *dev, struct ifreq *ifr,
+static int sm_ioctl(struct net_device *dev, struct ifreq *ifr,
 		    struct hdlcdrv_ioctl *hi, int cmd)
 {
 	struct sm_state *sm;
@@ -626,7 +626,7 @@ int __init init_module(void)
 	 * register net devices
 	 */
 	for (i = 0; i < NR_PORTS; i++) {
-		struct device *dev = sm_device+i;
+		struct net_device *dev = sm_device+i;
 		sprintf(ifname, "sm%d", i);
 
 		if (!mode[i])
@@ -700,7 +700,7 @@ void cleanup_module(void)
 	printk(KERN_INFO "sm: cleanup_module called\n");
 
 	for(i = 0; i < NR_PORTS; i++) {
-		struct device *dev = sm_device+i;
+		struct net_device *dev = sm_device+i;
 		struct sm_state *sm = (struct sm_state *)dev->priv;
 
 		if (sm) {

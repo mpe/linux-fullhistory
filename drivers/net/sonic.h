@@ -465,14 +465,14 @@ struct sonic_local {
 
 /* Index to functions, as function prototypes. */
 
-static int sonic_open(struct device *dev);
-static int sonic_send_packet(struct sk_buff *skb, struct device *dev);
+static int sonic_open(struct net_device *dev);
+static int sonic_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void sonic_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void sonic_rx(struct device *dev);
-static int sonic_close(struct device *dev);
-static struct enet_statistics *sonic_get_stats(struct device *dev);
-static void sonic_multicast_list(struct device *dev);
-static int sonic_init(struct device *dev);
+static void sonic_rx(struct net_device *dev);
+static int sonic_close(struct net_device *dev);
+static struct enet_statistics *sonic_get_stats(struct net_device *dev);
+static void sonic_multicast_list(struct net_device *dev);
+static int sonic_init(struct net_device *dev);
 
 static const char *version =
 	"sonic.c:v0.92 20.9.98 tsbogend@alpha.franken.de\n";

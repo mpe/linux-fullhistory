@@ -143,20 +143,20 @@ static unsigned int net_debug = NET_DEBUG;
 #define PAR_CONTROL(dev)	((dev)->base_addr+2)
 
 /* Bottom halfs */
-static void plip_kick_bh(struct device *dev);
-static void plip_bh(struct device *dev);
+static void plip_kick_bh(struct net_device *dev);
+static void plip_bh(struct net_device *dev);
 
 /* Interrupt handler */
 static void plip_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
 /* Functions for DEV methods */
 static int plip_rebuild_header(struct sk_buff *skb);
-static int plip_tx_packet(struct sk_buff *skb, struct device *dev);
-static int plip_open(struct device *dev);
-static int plip_close(struct device *dev);
-static struct net_device_stats *plip_get_stats(struct device *dev);
-static int plip_config(struct device *dev, struct ifmap *map);
-static int plip_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
+static int plip_tx_packet(struct sk_buff *skb, struct net_device *dev);
+static int plip_open(struct net_device *dev);
+static int plip_close(struct net_device *dev);
+static struct net_device_stats *plip_get_stats(struct net_device *dev);
+static int plip_config(struct net_device *dev, struct ifmap *map);
+static int plip_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
 static int plip_preempt(void *handle);
 static void plip_wakeup(void *handle);
 
@@ -229,12 +229,12 @@ struct net_local {
 
    PLIP is rather weird, because of the way it interacts with the parport
    system.  It is _not_ initialised from Space.c.  Instead, plip_init()
-   is called, and that function makes up a "struct device" for each port, and
+   is called, and that function makes up a "struct net_device" for each port, and
    then calls us here.
 
    */
 int __init
-plip_init_dev(struct device *dev, struct parport *pb)
+plip_init_dev(struct net_device *dev, struct parport *pb)
 {
 	struct net_local *nl;
 	struct pardevice *pardev;
@@ -311,7 +311,7 @@ plip_init_dev(struct device *dev, struct parport *pb)
    This routine is kicked by do_timer().
    Request `plip_bh' to be invoked. */
 static void
-plip_kick_bh(struct device *dev)
+plip_kick_bh(struct net_device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
 
@@ -322,17 +322,17 @@ plip_kick_bh(struct device *dev)
 }
 
 /* Forward declarations of internal routines */
-static int plip_none(struct device *, struct net_local *,
+static int plip_none(struct net_device *, struct net_local *,
 		     struct plip_local *, struct plip_local *);
-static int plip_receive_packet(struct device *, struct net_local *,
+static int plip_receive_packet(struct net_device *, struct net_local *,
 			       struct plip_local *, struct plip_local *);
-static int plip_send_packet(struct device *, struct net_local *,
+static int plip_send_packet(struct net_device *, struct net_local *,
 			    struct plip_local *, struct plip_local *);
-static int plip_connection_close(struct device *, struct net_local *,
+static int plip_connection_close(struct net_device *, struct net_local *,
 				 struct plip_local *, struct plip_local *);
-static int plip_error(struct device *, struct net_local *,
+static int plip_error(struct net_device *, struct net_local *,
 		      struct plip_local *, struct plip_local *);
-static int plip_bh_timeout_error(struct device *dev, struct net_local *nl,
+static int plip_bh_timeout_error(struct net_device *dev, struct net_local *nl,
 				 struct plip_local *snd,
 				 struct plip_local *rcv,
 				 int error);
@@ -342,7 +342,7 @@ static int plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 #define ERROR     2
 #define HS_TIMEOUT	3
 
-typedef int (*plip_func)(struct device *dev, struct net_local *nl,
+typedef int (*plip_func)(struct net_device *dev, struct net_local *nl,
 			 struct plip_local *snd, struct plip_local *rcv);
 
 static plip_func connection_state_table[] =
@@ -356,7 +356,7 @@ static plip_func connection_state_table[] =
 
 /* Bottom half handler of PLIP. */
 static void
-plip_bh(struct device *dev)
+plip_bh(struct net_device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
 	struct plip_local *snd = &nl->snd_data;
@@ -374,7 +374,7 @@ plip_bh(struct device *dev)
 }
 
 static int
-plip_bh_timeout_error(struct device *dev, struct net_local *nl,
+plip_bh_timeout_error(struct net_device *dev, struct net_local *nl,
 		      struct plip_local *snd, struct plip_local *rcv,
 		      int error)
 {
@@ -450,7 +450,7 @@ plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 }
 
 static int
-plip_none(struct device *dev, struct net_local *nl,
+plip_none(struct net_device *dev, struct net_local *nl,
 	  struct plip_local *snd, struct plip_local *rcv)
 {
 	return OK;
@@ -509,7 +509,7 @@ plip_receive(unsigned short nibble_timeout, unsigned short status_addr,
 
 /* PLIP_RECEIVE_PACKET --- receive a packet */
 static int
-plip_receive_packet(struct device *dev, struct net_local *nl,
+plip_receive_packet(struct net_device *dev, struct net_local *nl,
 		    struct plip_local *snd, struct plip_local *rcv)
 {
 	unsigned short status_addr = PAR_STATUS(dev);
@@ -675,7 +675,7 @@ plip_send(unsigned short nibble_timeout, unsigned short data_addr,
 
 /* PLIP_SEND_PACKET --- send a packet */
 static int
-plip_send_packet(struct device *dev, struct net_local *nl,
+plip_send_packet(struct net_device *dev, struct net_local *nl,
 		 struct plip_local *snd, struct plip_local *rcv)
 {
 	unsigned short data_addr = PAR_DATA(dev);
@@ -791,7 +791,7 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 }
 
 static int
-plip_connection_close(struct device *dev, struct net_local *nl,
+plip_connection_close(struct net_device *dev, struct net_local *nl,
 		      struct plip_local *snd, struct plip_local *rcv)
 {
 	spin_lock_irq(&nl->lock);
@@ -810,7 +810,7 @@ plip_connection_close(struct device *dev, struct net_local *nl,
 
 /* PLIP_ERROR --- wait till other end settled */
 static int
-plip_error(struct device *dev, struct net_local *nl,
+plip_error(struct net_device *dev, struct net_local *nl,
 	   struct plip_local *snd, struct plip_local *rcv)
 {
 	unsigned char status;
@@ -838,7 +838,7 @@ plip_error(struct device *dev, struct net_local *nl,
 static void
 plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct net_local *nl;
 	struct plip_local *rcv;
 	unsigned char c0;
@@ -897,7 +897,7 @@ plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 static int
 plip_rebuild_header(struct sk_buff *skb)
 {
-	struct device *dev = skb->dev;
+	struct net_device *dev = skb->dev;
 	struct net_local *nl = (struct net_local *)dev->priv;
 	struct ethhdr *eth = (struct ethhdr *)skb->data;
 
@@ -910,7 +910,7 @@ plip_rebuild_header(struct sk_buff *skb)
 }
 
 static int
-plip_tx_packet(struct sk_buff *skb, struct device *dev)
+plip_tx_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
 	struct plip_local *snd = &nl->snd_data;
@@ -962,7 +962,7 @@ plip_tx_packet(struct sk_buff *skb, struct device *dev)
    its IRQ line.
  */
 static int
-plip_open(struct device *dev)
+plip_open(struct net_device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
 	struct in_device *in_dev;
@@ -1016,7 +1016,7 @@ plip_open(struct device *dev)
 
 /* The inverse routine to plip_open (). */
 static int
-plip_close(struct device *dev)
+plip_close(struct net_device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
 	struct plip_local *snd = &nl->snd_data;
@@ -1059,7 +1059,7 @@ plip_close(struct device *dev)
 static int
 plip_preempt(void *handle)
 {
-	struct device *dev = (struct device *)handle;
+	struct net_device *dev = (struct net_device *)handle;
 	struct net_local *nl = (struct net_local *)dev->priv;
 
 	/* Stand our ground if a datagram is on the wire */
@@ -1075,7 +1075,7 @@ plip_preempt(void *handle)
 static void
 plip_wakeup(void *handle)
 {
-	struct device *dev = (struct device *)handle;
+	struct net_device *dev = (struct net_device *)handle;
 	struct net_local *nl = (struct net_local *)dev->priv;
 
 	if (nl->port_owner) {
@@ -1102,7 +1102,7 @@ plip_wakeup(void *handle)
 }
 
 static struct net_device_stats *
-plip_get_stats(struct device *dev)
+plip_get_stats(struct net_device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
 	struct net_device_stats *r = &nl->enet_stats;
@@ -1111,7 +1111,7 @@ plip_get_stats(struct device *dev)
 }
 
 static int
-plip_config(struct device *dev, struct ifmap *map)
+plip_config(struct net_device *dev, struct ifmap *map)
 {
 	struct net_local *nl = (struct net_local *) dev->priv;
 	struct pardevice *pardev = nl->pardev;
@@ -1132,7 +1132,7 @@ plip_config(struct device *dev, struct ifmap *map)
 }
 
 static int
-plip_ioctl(struct device *dev, struct ifreq *rq, int cmd)
+plip_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
 	struct net_local *nl = (struct net_local *) dev->priv;
 	struct plipconf *pc = (struct plipconf *) &rq->ifr_data;
@@ -1158,7 +1158,7 @@ static int timid = 0;
 MODULE_PARM(parport, "1-" __MODULE_STRING(PLIP_MAX) "i");
 MODULE_PARM(timid, "1i");
 
-static struct device *dev_plip[PLIP_MAX] = { NULL, };
+static struct net_device *dev_plip[PLIP_MAX] = { NULL, };
 
 #ifdef MODULE
 void
@@ -1245,13 +1245,13 @@ plip_init(void)
 				printk(KERN_ERR "plip: too many devices\n");
 				break;
 			}
-			dev_plip[i] = kmalloc(sizeof(struct device),
+			dev_plip[i] = kmalloc(sizeof(struct net_device),
 					      GFP_KERNEL);
 			if (!dev_plip[i]) {
 				printk(KERN_ERR "plip: memory squeeze\n");
 				break;
 			}
-			memset(dev_plip[i], 0, sizeof(struct device));
+			memset(dev_plip[i], 0, sizeof(struct net_device));
 			dev_plip[i]->name = 
 				kmalloc(strlen("plipXXX"), GFP_KERNEL);
 			if (!dev_plip[i]->name) {

@@ -58,7 +58,7 @@
  * The higher levels take care of making this non-reentrant (it's
  * called with bh's disabled).
  */
-static int loopback_xmit(struct sk_buff *skb, struct device *dev)
+static int loopback_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_device_stats *stats = (struct net_device_stats *)dev->priv;
 
@@ -102,19 +102,19 @@ static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 	return(0);
 }
 
-static struct net_device_stats *get_stats(struct device *dev)
+static struct net_device_stats *get_stats(struct net_device *dev)
 {
 	return (struct net_device_stats *)dev->priv;
 }
 
-static int loopback_open(struct device *dev)
+static int loopback_open(struct net_device *dev)
 {
 	dev->flags|=IFF_LOOPBACK;
 	return 0;
 }
 
 /* Initialize the rest of the LOOPBACK device. */
-int __init loopback_init(struct device *dev)
+int __init loopback_init(struct net_device *dev)
 {
 	dev->mtu		= LOOPBACK_MTU;
 	dev->tbusy		= 0;

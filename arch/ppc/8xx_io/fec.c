@@ -106,14 +106,14 @@ struct fec_enet_private {
 	unsigned long lock;
 };
 
-static int fec_enet_open(struct device *dev);
-static int fec_enet_start_xmit(struct sk_buff *skb, struct device *dev);
-static int fec_enet_rx(struct device *dev);
-static void fec_enet_mii(struct device *dev);
+static int fec_enet_open(struct net_device *dev);
+static int fec_enet_start_xmit(struct sk_buff *skb, struct net_device *dev);
+static int fec_enet_rx(struct net_device *dev);
+static void fec_enet_mii(struct net_device *dev);
 static	void fec_enet_interrupt(int irq, void * dev_id, struct pt_regs * regs);
-static int fec_enet_close(struct device *dev);
-static struct net_device_stats *fec_enet_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev);
+static int fec_enet_close(struct net_device *dev);
+static struct net_device_stats *fec_enet_get_stats(struct net_device *dev);
+static void set_multicast_list(struct net_device *dev);
 
 static	ushort	my_enet_addr[] = { 0x0800, 0x3e26, 0x1559 };
 
@@ -142,7 +142,7 @@ static int	mii_queue(int request, void (*func)(int));
 						(VAL & 0xffff))
 
 static int
-fec_enet_open(struct device *dev)
+fec_enet_open(struct net_device *dev)
 {
 
 	/* I should reset the ring buffers here, but I don't yet know
@@ -157,7 +157,7 @@ fec_enet_open(struct device *dev)
 }
 
 static int
-fec_enet_start_xmit(struct sk_buff *skb, struct device *dev)
+fec_enet_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct fec_enet_private *fep = (struct fec_enet_private *)dev->priv;
 	volatile cbd_t	*bdp;
@@ -282,7 +282,7 @@ fec_enet_start_xmit(struct sk_buff *skb, struct device *dev)
 static	void
 fec_enet_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 {
-	struct	device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct	fec_enet_private *fep;
 	volatile cbd_t	*bdp;
 	volatile fec_t	*ep;
@@ -393,7 +393,7 @@ fec_enet_interrupt(int irq, void * dev_id, struct pt_regs * regs)
  * effectively tossing the packet.
  */
 static int
-fec_enet_rx(struct device *dev)
+fec_enet_rx(struct net_device *dev)
 {
 	struct	fec_enet_private *fep;
 	volatile cbd_t *bdp;
@@ -506,7 +506,7 @@ for (;;) {
 }
 
 static void
-fec_enet_mii(struct device *dev)
+fec_enet_mii(struct net_device *dev)
 {
 	struct	fec_enet_private *fep;
 	volatile fec_t	*ep;
@@ -676,7 +676,7 @@ mii_relink(uint mii_reg)
 static	void
 mii_link_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 {
-	struct	device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct	fec_enet_private *fep;
 	volatile fec_t	*ep;
 
@@ -696,7 +696,7 @@ mii_link_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 }
 
 static int
-fec_enet_close(struct device *dev)
+fec_enet_close(struct net_device *dev)
 {
 	/* Don't know what to do yet.
 	*/
@@ -704,7 +704,7 @@ fec_enet_close(struct device *dev)
 	return 0;
 }
 
-static struct net_device_stats *fec_enet_get_stats(struct device *dev)
+static struct net_device_stats *fec_enet_get_stats(struct net_device *dev)
 {
 	struct fec_enet_private *fep = (struct fec_enet_private *)dev->priv;
 
@@ -721,7 +721,7 @@ static struct net_device_stats *fec_enet_get_stats(struct device *dev)
  * this kind of feature?).
  */
 
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
 	struct	fec_enet_private *fep;
 	struct	dev_mc_list *dmi;
@@ -792,7 +792,7 @@ static void set_multicast_list(struct device *dev)
  */
 __initfunc(int m8xx_enet_init(void))
 {
-	struct device *dev;
+	struct net_device *dev;
 	struct fec_enet_private *fep;
 	int i, j;
 	unsigned char	*eap;

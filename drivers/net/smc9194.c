@@ -208,43 +208,43 @@ struct smc_local {
  .
  . NB:This shouldn't be static since it is referred to externally.
 */
-int smc_init(struct device *dev);
+int smc_init(struct net_device *dev);
 
 /*
  . The kernel calls this function when someone wants to use the device,
  . typically 'ifconfig ethX up'.
 */
-static int smc_open(struct device *dev);
+static int smc_open(struct net_device *dev);
 
 /*
  . This is called by the kernel to send a packet out into the net.  it's
  . responsible for doing a best-effort send, but if it's simply not possible
  . to send it, the packet gets dropped.
 */
-static int smc_send_packet(struct sk_buff *skb, struct device *dev);
+static int smc_send_packet(struct sk_buff *skb, struct net_device *dev);
 
 /*
  . This is called by the kernel in response to 'ifconfig ethX down'.  It
  . is responsible for cleaning up everything that the open routine
  . does, and maybe putting the card into a powerdown state.
 */
-static int smc_close(struct device *dev);
+static int smc_close(struct net_device *dev);
 
 /*
  . This routine allows the proc file system to query the driver's
  . statistics.
 */
-static struct net_device_stats * smc_query_statistics( struct device *dev);
+static struct net_device_stats * smc_query_statistics( struct net_device *dev);
 
 /*
  . Finally, a call to set promiscuous mode ( for TCPDUMP and related
  . programs ) and multicast modes.
 */
 #ifdef SUPPORT_OLD_KERNEL
-static void smc_set_multicast_list(struct device *dev, int num_addrs,
+static void smc_set_multicast_list(struct net_device *dev, int num_addrs,
 				 void *addrs);
 #else
-static void smc_set_multicast_list(struct device *dev);
+static void smc_set_multicast_list(struct net_device *dev);
 #endif
 
 /*---------------------------------------------------------------
@@ -265,12 +265,12 @@ static void smc_interrupt(int irq, struct pt_regs *regs);
  . This is a separate procedure to handle the receipt of a packet, to
  . leave the interrupt code looking slightly cleaner
 */
-inline static void smc_rcv( struct device *dev );
+inline static void smc_rcv( struct net_device *dev );
 /*
  . This handles a TX interrupt, which is only called when an error
  . relating to a packet is sent.
 */
-inline static void smc_tx( struct device * dev );
+inline static void smc_tx( struct net_device * dev );
 
 /*
  ------------------------------------------------------------
@@ -292,7 +292,7 @@ static int smc_probe( int ioaddr );
  . of a device parameter.
  . It will give an error if it can't initialize the card.
 */
-static int smc_initcard( struct device *, int ioaddr );
+static int smc_initcard( struct net_device *, int ioaddr );
 
 /*
  . A rather simple routine to print out a packet for debugging purposes.
@@ -304,13 +304,13 @@ static void print_packet( byte *, int );
 #define tx_done(dev) 1
 
 /* this is called to actually send the packet to the chip */
-static void smc_hardware_send_packet( struct device * dev );
+static void smc_hardware_send_packet( struct net_device * dev );
 
 /* Since I am not sure if I will have enough room in the chip's ram
  . to store the packet, I call this routine, which either sends it
  . now, or generates an interrupt when the card is ready for the
  . packet */
-static int  smc_wait_to_send_packet( struct sk_buff * skb, struct device *dev );
+static int  smc_wait_to_send_packet( struct sk_buff * skb, struct net_device *dev );
 
 /* this does a soft reset on the device */
 static void smc_reset( int ioaddr );
@@ -337,7 +337,7 @@ static int crc32( char *, int );
 #endif
 
 #ifdef SUPPORT_OLD_KERNEL
-extern struct device *init_etherdev(struct device *dev, int sizeof_private,
+extern struct net_device *init_etherdev(struct net_device *dev, int sizeof_private,
  			unsigned long *mem_startp );
 #endif
 
@@ -529,7 +529,7 @@ static int crc32( char * s, int length ) {
 
 
 /*
- . Function: smc_wait_to_send_packet( struct sk_buff * skb, struct device * )
+ . Function: smc_wait_to_send_packet( struct sk_buff * skb, struct net_device * )
  . Purpose:
  .    Attempt to allocate memory for a packet, if chip-memory is not
  .    available, then tell the card to generate an interrupt when it
@@ -544,7 +544,7 @@ static int crc32( char * s, int length ) {
  . o 	(NO): Enable interrupts and let the interrupt handler deal with it.
  . o	(YES):Send it now.
 */
-static int smc_wait_to_send_packet( struct sk_buff * skb, struct device * dev )
+static int smc_wait_to_send_packet( struct sk_buff * skb, struct net_device * dev )
 {
 	struct smc_local *lp 	= (struct smc_local *)dev->priv;
 	unsigned short ioaddr 	= dev->base_addr;
@@ -621,7 +621,7 @@ static int smc_wait_to_send_packet( struct sk_buff * skb, struct device * dev )
 }
 
 /*
- . Function:  smc_hardware_send_packet(struct device * )
+ . Function:  smc_hardware_send_packet(struct net_device * )
  . Purpose:
  .	This sends the actual packet to the SMC9xxx chip.
  .
@@ -638,7 +638,7 @@ static int smc_wait_to_send_packet( struct sk_buff * skb, struct device * dev )
  .	Enable the transmit interrupt, so I know if it failed
  . 	Free the kernel data if I actually sent it.
 */
-static void smc_hardware_send_packet( struct device * dev )
+static void smc_hardware_send_packet( struct net_device * dev )
 {
 	struct smc_local *lp = (struct smc_local *)dev->priv;
 	byte	 		packet_no;
@@ -737,7 +737,7 @@ static void smc_hardware_send_packet( struct device * dev )
 
 /*-------------------------------------------------------------------------
  |
- | smc_init( struct device * dev )
+ | smc_init( struct net_device * dev )
  |   Input parameters:
  |	dev->base_addr == 0, try to find all possible locations
  |	dev->base_addr == 1, return failure code
@@ -750,7 +750,7 @@ static void smc_hardware_send_packet( struct device * dev )
  |
  ---------------------------------------------------------------------------
 */
-int __init smc_init(struct device *dev)
+int __init smc_init(struct net_device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -942,7 +942,7 @@ static int __init smc_probe( int ioaddr )
  . o  GRAB the region
  .-----------------------------------------------------------------
 */
-static int __init smc_initcard(struct device *dev, int ioaddr)
+static int __init smc_initcard(struct net_device *dev, int ioaddr)
 {
 	int i;
 
@@ -1165,7 +1165,7 @@ static void print_packet( byte * buf, int length )
  * Set up everything, reset the card, etc ..
  *
  */
-static int smc_open(struct device *dev)
+static int smc_open(struct net_device *dev)
 {
 	int	ioaddr = dev->base_addr;
 
@@ -1220,7 +1220,7 @@ static int smc_open(struct device *dev)
  . skeleton.c, from Becker.
  .--------------------------------------------------------
 */
-static int smc_send_packet(struct sk_buff *skb, struct device *dev)
+static int smc_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	if (dev->tbusy) {
 		/* If we get here, some higher level has decided we are broken.
@@ -1272,7 +1272,7 @@ static void smc_interrupt(int irq, void * dev_id,  struct pt_regs * regs)
 static void smc_interrupt(int irq, struct pt_regs * regs)
 #endif
 {
-	struct device *dev 	= dev_id;
+	struct net_device *dev 	= dev_id;
 	int ioaddr 		= dev->base_addr;
 	struct smc_local *lp 	= (struct smc_local *)dev->priv;
 
@@ -1414,7 +1414,7 @@ static void smc_interrupt(int irq, struct pt_regs * regs)
  . o otherwise, read in the packet
  --------------------------------------------------------------
 */
-static void smc_rcv(struct device *dev)
+static void smc_rcv(struct net_device *dev)
 {
 	struct smc_local *lp = (struct smc_local *)dev->priv;
 	int 	ioaddr = dev->base_addr;
@@ -1553,7 +1553,7 @@ static void smc_rcv(struct device *dev)
  .	( resend?  Not really, since we don't want old packets around )
  .	Restore saved values
  ************************************************************************/
-static void smc_tx( struct device * dev )
+static void smc_tx( struct net_device * dev )
 {
 	int	ioaddr = dev->base_addr;
 	struct smc_local *lp = (struct smc_local *)dev->priv;
@@ -1614,7 +1614,7 @@ static void smc_tx( struct device * dev )
  . an 'ifconfig ethX down'
  .
  -----------------------------------------------------*/
-static int smc_close(struct device *dev)
+static int smc_close(struct net_device *dev)
 {
 	dev->tbusy = 1;
 	dev->start = 0;
@@ -1634,7 +1634,7 @@ static int smc_close(struct device *dev)
  . Get the current statistics.
  . This may be called with the card open or closed.
  .-------------------------------------------------------------*/
-static struct net_device_stats* smc_query_statistics(struct device *dev) {
+static struct net_device_stats* smc_query_statistics(struct net_device *dev) {
 	struct smc_local *lp = (struct smc_local *)dev->priv;
 
 	return &lp->stats;
@@ -1649,10 +1649,10 @@ static struct net_device_stats* smc_query_statistics(struct device *dev) {
  . a select set of multicast packets
 */
 #ifdef SUPPORT_OLD_KERNEL
-static void smc_set_multicast_list( struct device * dev,
+static void smc_set_multicast_list( struct net_device * dev,
 			int num_addrs, void * addrs )
 #else
-static void smc_set_multicast_list(struct device *dev)
+static void smc_set_multicast_list(struct net_device *dev)
 #endif
 {
 	short ioaddr = dev->base_addr;
@@ -1725,7 +1725,7 @@ static void smc_set_multicast_list(struct device *dev)
 #ifdef MODULE
 
 static char devicename[9] = { 0, };
-static struct device devSMC9194 = {
+static struct net_device devSMC9194 = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
 	0, 0, 0, 0,
 	0, 0,  /* I/O address, IRQ */

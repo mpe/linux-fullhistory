@@ -136,7 +136,7 @@ struct icmp6_filter {
 extern void				icmpv6_send(struct sk_buff *skb,
 						    int type, int code,
 						    __u32 info, 
-						    struct device *dev);
+						    struct net_device *dev);
 
 extern int				icmpv6_init(struct net_proto_family *ops);
 extern int				icmpv6_err_convert(int type, int code,

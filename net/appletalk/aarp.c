@@ -75,7 +75,7 @@ struct aarp_entry
 	int status;				/* Used for proxy AARP */
 	unsigned long expires_at;		/* Entry expiry time */
 	struct at_addr target_addr;		/* DDP Address */
-	struct device *dev;			/* Device to use */
+	struct net_device *dev;			/* Device to use */
 	char hwaddr[6];				/* Physical i/f address of target/router */
 	unsigned short xmit_count;		/* When this hits 10 we give up */
 	struct aarp_entry *next;		/* Next entry in chain */
@@ -113,7 +113,7 @@ static void aarp_expire(struct aarp_entry *a)
 static void aarp_send_query(struct aarp_entry *a)
 {
 	static char aarp_eth_multicast[ETH_ALEN]={ 0x09, 0x00, 0x07, 0xFF, 0xFF, 0xFF };
-	struct device *dev=a->dev;
+	struct net_device *dev=a->dev;
 	int len=dev->hard_header_len+sizeof(struct elapaarp)+aarp_dl->header_length;
 	struct sk_buff *skb=alloc_skb(len, GFP_ATOMIC);
 	struct elapaarp *eah;
@@ -173,7 +173,7 @@ static void aarp_send_query(struct aarp_entry *a)
 	a->xmit_count++;
 }
 
-static void aarp_send_reply(struct device *dev, struct at_addr *us, struct at_addr *them, unsigned char *sha)
+static void aarp_send_reply(struct net_device *dev, struct at_addr *us, struct at_addr *them, unsigned char *sha)
 {
 	int len=dev->hard_header_len+sizeof(struct elapaarp)+aarp_dl->header_length;
 	struct sk_buff *skb=alloc_skb(len, GFP_ATOMIC);
@@ -234,7 +234,7 @@ static void aarp_send_reply(struct device *dev, struct at_addr *us, struct at_ad
  *	Send probe frames. Called from aarp_probe_network and aarp_proxy_probe_network.
  */
  
-void aarp_send_probe(struct device *dev, struct at_addr *us)
+void aarp_send_probe(struct net_device *dev, struct at_addr *us)
 {
 	int len=dev->hard_header_len+sizeof(struct elapaarp)+aarp_dl->header_length;
 	struct sk_buff *skb=alloc_skb(len, GFP_ATOMIC);
@@ -340,7 +340,7 @@ static void aarp_kick(struct aarp_entry **n)
  *	and remove them.
  */
  
-static void aarp_expire_device(struct aarp_entry **n, struct device *dev)
+static void aarp_expire_device(struct aarp_entry **n, struct net_device *dev)
 {
 	struct aarp_entry *t;
 	while((*n)!=NULL)
@@ -412,7 +412,7 @@ static struct aarp_entry *aarp_alloc(void)
  * Find an entry. We might return an expired but not yet purged entry. We
  * don't care as it will do no harm.
  */
-static struct aarp_entry *aarp_find_entry(struct aarp_entry *list, struct device *dev, struct at_addr *sat)
+static struct aarp_entry *aarp_find_entry(struct aarp_entry *list, struct net_device *dev, struct at_addr *sat)
 {
 	unsigned long flags;
 	save_flags(flags);
@@ -428,7 +428,7 @@ static struct aarp_entry *aarp_find_entry(struct aarp_entry *list, struct device
 	return list;
 }
 
-void aarp_proxy_remove(struct device *dev, struct at_addr *sa)
+void aarp_proxy_remove(struct net_device *dev, struct at_addr *sa)
 {
 	struct aarp_entry *a;
 	int hash;
@@ -442,7 +442,7 @@ void aarp_proxy_remove(struct device *dev, struct at_addr *sa)
 	}
 }
 
-struct at_addr* aarp_proxy_find(struct device *dev, struct at_addr *sa)
+struct at_addr* aarp_proxy_find(struct net_device *dev, struct at_addr *sa)
 {
 	struct aarp_entry *a;
 	int hash;
@@ -581,7 +581,7 @@ int aarp_proxy_probe_network(struct atalk_iface *atif, struct at_addr *sa)
 /*
  *	Send a DDP frame
  */
-int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, void *hwaddr)
+int aarp_send_ddp(struct net_device *dev,struct sk_buff *skb, struct at_addr *sa, void *hwaddr)
 {
 	static char ddp_eth_multicast[ETH_ALEN]={ 0x09, 0x00, 0x07, 0xFF, 0xFF, 0xFF };
 	int hash;
@@ -806,7 +806,7 @@ static void aarp_resolved(struct aarp_entry **list, struct aarp_entry *a, int ha
  *	This is called by the SNAP driver whenever we see an AARP SNAP
  *	frame. We currently only support Ethernet.
  */
-static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+static int aarp_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 {
 	struct elapaarp *ea=(struct elapaarp *)skb->h.raw;
 	struct aarp_entry *a;
@@ -1038,7 +1038,7 @@ __initfunc(void aarp_proto_init(void))
 /*
  * Remove the AARP entries associated with a device.
  */
-void aarp_device_down(struct device *dev)
+void aarp_device_down(struct net_device *dev)
 {
 	int ct = 0;
 

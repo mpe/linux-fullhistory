@@ -235,7 +235,7 @@
 #include <asm/msr.h>
 
 #include <asm/hardirq.h>
-#include "irq.h"
+#include <linux/irq.h>
 
 #define MTRR_VERSION            "1.35 (19990512)"
 
@@ -731,8 +731,8 @@ struct mtrr_var_range
 
 
 /*  Get the MSR pair relating to a var range  */
-__initfunc(static void get_mtrr_var_range (unsigned int index,
-					   struct mtrr_var_range *vr))
+static void __init get_mtrr_var_range (unsigned int index,
+					   struct mtrr_var_range *vr)
 {
     rdmsr (MTRRphysBase_MSR (index), vr->base_lo, vr->base_hi);
     rdmsr (MTRRphysMask_MSR (index), vr->mask_lo, vr->mask_hi);
@@ -741,8 +741,8 @@ __initfunc(static void get_mtrr_var_range (unsigned int index,
 
 /*  Set the MSR pair relating to a var range. Returns TRUE if
     changes are made  */
-__initfunc(static int set_mtrr_var_range_testing (unsigned int index,
-						  struct mtrr_var_range *vr))
+static int __init set_mtrr_var_range_testing (unsigned int index,
+						  struct mtrr_var_range *vr)
 {
     unsigned int lo, hi;
     int changed = FALSE;
@@ -764,7 +764,7 @@ __initfunc(static int set_mtrr_var_range_testing (unsigned int index,
     return changed;
 }   /*  End Function set_mtrr_var_range_testing  */
 
-__initfunc(static void get_fixed_ranges(mtrr_type *frs))
+static void __init get_fixed_ranges(mtrr_type *frs)
 {
     unsigned long *p = (unsigned long *)frs;
     int i;
@@ -777,7 +777,7 @@ __initfunc(static void get_fixed_ranges(mtrr_type *frs))
 	rdmsr(MTRRfix4K_C0000_MSR + i, p[6 + i*2], p[7 + i*2]);
 }   /*  End Function get_fixed_ranges  */
 
-__initfunc(static int set_fixed_ranges_testing(mtrr_type *frs))
+static int __init set_fixed_ranges_testing(mtrr_type *frs)
 {
     unsigned long *p = (unsigned long *)frs;
     int changed = FALSE;
@@ -819,7 +819,7 @@ struct mtrr_state
 
 
 /*  Grab all of the MTRR state for this CPU into *state  */
-__initfunc(static void get_mtrr_state(struct mtrr_state *state))
+static void __init get_mtrr_state(struct mtrr_state *state)
 {
     unsigned int nvrs, i;
     struct mtrr_var_range *vrs;
@@ -842,14 +842,14 @@ __initfunc(static void get_mtrr_state(struct mtrr_state *state))
 
 
 /*  Free resources associated with a struct mtrr_state  */
-__initfunc(static void finalize_mtrr_state(struct mtrr_state *state))
+static void __init finalize_mtrr_state(struct mtrr_state *state)
 {
     if (state->var_ranges) kfree (state->var_ranges);
 }   /*  End Function finalize_mtrr_state  */
 
 
-__initfunc(static unsigned long set_mtrr_state (struct mtrr_state *state,
-						struct set_mtrr_context *ctxt))
+static unsigned long __init set_mtrr_state (struct mtrr_state *state,
+						struct set_mtrr_context *ctxt)
 /*  [SUMMARY] Set the MTRR state for this CPU.
     <state> The MTRR state information to read.
     <ctxt> Some relevant CPU context.
@@ -948,7 +948,7 @@ static void set_mtrr_smp (unsigned int reg, unsigned long base,
 
 
 /*  Some BIOS's are fucked and don't set all MTRRs the same!  */
-__initfunc(static void mtrr_state_warn (unsigned long mask))
+static void __init mtrr_state_warn(unsigned long mask)
 {
     if (!mask) return;
     if (mask & MTRR_CHANGE_MASK_FIXED)
@@ -1532,7 +1532,7 @@ arr_state_t arr_state[8] __initdata = {
 
 unsigned char ccr_state[7] __initdata = { 0, 0, 0, 0, 0, 0, 0 };
 
-__initfunc(static void cyrix_arr_init_secondary(void))
+static void __init cyrix_arr_init_secondary(void)
 {
     struct set_mtrr_context ctxt;
     int i;
@@ -1565,7 +1565,7 @@ __initfunc(static void cyrix_arr_init_secondary(void))
  *   - (maybe) disable ARR3
  * Just to be sure, we enable ARR usage by the processor (CCR5 bit 5 set)
  */
-__initfunc(static void cyrix_arr_init(void))
+static void __init cyrix_arr_init(void)
 {
     struct set_mtrr_context ctxt;
     unsigned char ccr[7];
@@ -1631,7 +1631,7 @@ __initfunc(static void cyrix_arr_init(void))
     if ( ccrc[6] ) printk ("mtrr: ARR3 was write protected, unprotected\n");
 }   /*  End Function cyrix_arr_init  */
 
-__initfunc(static void centaur_mcr_init (void))
+static void __init centaur_mcr_init(void)
 {
     unsigned i;
     struct set_mtrr_context ctxt;
@@ -1655,7 +1655,7 @@ __initfunc(static void centaur_mcr_init (void))
     set_mtrr_done (&ctxt);
 }   /*  End Function centaur_mcr_init  */
 
-__initfunc(static void mtrr_setup (void))
+static void __init mtrr_setup(void)
 {
     printk ("mtrr: v%s Richard Gooch (rgooch@atnf.csiro.au)\n", MTRR_VERSION);
     switch (boot_cpu_data.x86_vendor)
@@ -1685,7 +1685,7 @@ __initfunc(static void mtrr_setup (void))
 static volatile unsigned long smp_changes_mask __initdata = 0;
 static struct mtrr_state smp_mtrr_state __initdata = {0, 0};
 
-__initfunc(void mtrr_init_boot_cpu (void))
+void __init mtrr_init_boot_cpu(void)
 {
     if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return;
     mtrr_setup ();
@@ -1703,7 +1703,7 @@ __initfunc(void mtrr_init_boot_cpu (void))
     }
 }   /*  End Function mtrr_init_boot_cpu  */
 
-__initfunc(static void intel_mtrr_init_secondary_cpu (void))
+static void __init intel_mtrr_init_secondary_cpu(void)
 {
     unsigned long mask, count;
     struct set_mtrr_context ctxt;
@@ -1722,7 +1722,7 @@ __initfunc(static void intel_mtrr_init_secondary_cpu (void))
     }
 }   /*  End Function intel_mtrr_init_secondary_cpu  */
 
-__initfunc(void mtrr_init_secondary_cpu (void))
+void __init mtrr_init_secondary_cpu(void)
 {
     if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return;
     switch (boot_cpu_data.x86_vendor)
@@ -1746,7 +1746,7 @@ __initfunc(void mtrr_init_secondary_cpu (void))
 }   /*  End Function mtrr_init_secondary_cpu  */
 #endif  /*  __SMP__  */
 
-__initfunc(int mtrr_init(void))
+int __init mtrr_init(void)
 {
     if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return 0;
 #  ifdef __SMP__

@@ -1287,7 +1287,7 @@ void isdn_ppp_receive(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buf
 static void
 isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff *skb, int proto)
 {
-	struct device *dev = &net_dev->dev;
+	struct net_device *dev = &net_dev->dev;
 	struct ippp_struct *is = ippp_table[lp->ppp_slot];
 
 	if (is->debug & 0x10) {
@@ -1432,9 +1432,9 @@ static unsigned char *isdn_ppp_skb_push(struct sk_buff **skb_p,int len)
  */
 
 int
-isdn_ppp_xmit(struct sk_buff *skb, struct device *netdev)
+isdn_ppp_xmit(struct sk_buff *skb, struct net_device *netdev)
 {
-	struct device *mdev = ((isdn_net_local *) (netdev->priv))->master;	/* get master (for redundancy) */
+	struct net_device *mdev = ((isdn_net_local *) (netdev->priv))->master;	/* get master (for redundancy) */
 	isdn_net_local *lp,*mlp;
 	isdn_net_dev *nd;
 	unsigned int proto = PPP_IP;     /* 0x21 */
@@ -2008,7 +2008,7 @@ isdn_ppp_timer_timeout(void)
  */
 
 static int
-isdn_ppp_dev_ioctl_stats(int slot, struct ifreq *ifr, struct device *dev)
+isdn_ppp_dev_ioctl_stats(int slot, struct ifreq *ifr, struct net_device *dev)
 {
 	struct ppp_stats *res,
 	 t;
@@ -2048,7 +2048,7 @@ isdn_ppp_dev_ioctl_stats(int slot, struct ifreq *ifr, struct device *dev)
 }
 
 int
-isdn_ppp_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+isdn_ppp_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	int error=0;
 	char *r;
@@ -2111,7 +2111,7 @@ isdn_ppp_dial_slave(char *name)
 #ifdef CONFIG_ISDN_MPP
 	isdn_net_dev *ndev;
 	isdn_net_local *lp;
-	struct device *sdev;
+	struct net_device *sdev;
 
 	if (!(ndev = isdn_net_findif(name)))
 		return 1;
@@ -2142,7 +2142,7 @@ isdn_ppp_hangup_slave(char *name)
 #ifdef CONFIG_ISDN_MPP
 	isdn_net_dev *ndev;
 	isdn_net_local *lp;
-	struct device *sdev;
+	struct net_device *sdev;
 
 	if (!(ndev = isdn_net_findif(name)))
 		return 1;

@@ -61,17 +61,17 @@ static const char *version =
 #include <linux/etherdevice.h>
 #include "8390.h"
 
-int es_probe(struct device *dev);
-int es_probe1(struct device *dev, int ioaddr);
+int es_probe(struct net_device *dev);
+int es_probe1(struct net_device *dev, int ioaddr);
 
-static int es_open(struct device *dev);
-static int es_close(struct device *dev);
+static int es_open(struct net_device *dev);
+static int es_close(struct net_device *dev);
 
-static void es_reset_8390(struct device *dev);
+static void es_reset_8390(struct net_device *dev);
 
-static void es_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page);
-static void es_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset);
-static void es_block_output(struct device *dev, int count, const unsigned char *buf, int start_page);
+static void es_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page);
+static void es_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset);
+static void es_block_output(struct net_device *dev, int count, const unsigned char *buf, int start_page);
 
 #define ES_START_PG	0x00    /* First page of TX buffer		*/
 #define ES_STOP_PG	0x40    /* Last page +1 of RX ring		*/
@@ -124,7 +124,7 @@ static unsigned char hi_irq_map[] __initdata = {11, 12, 0, 14, 0, 0, 0, 15};
  *	PROM for a match against the Racal-Interlan assigned value.
  */
 
-int __init es_probe(struct device *dev)
+int __init es_probe(struct net_device *dev)
 {
 	unsigned short ioaddr = dev->base_addr;
 
@@ -151,7 +151,7 @@ int __init es_probe(struct device *dev)
 	return ENODEV;
 }
 
-int __init es_probe1(struct device *dev, int ioaddr)
+int __init es_probe1(struct net_device *dev, int ioaddr)
 {
 	int i;
 	unsigned long eisa_id;
@@ -284,7 +284,7 @@ int __init es_probe1(struct device *dev, int ioaddr)
  *	file, this just toggles the "Board Enable" bits (bit 2 and 0).
  */
 
-static void es_reset_8390(struct device *dev)
+static void es_reset_8390(struct net_device *dev)
 {
 	unsigned short ioaddr = dev->base_addr;
 	unsigned long end;
@@ -318,7 +318,7 @@ static void es_reset_8390(struct device *dev)
  */
 
 static void
-es_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+es_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 	unsigned long hdr_start = dev->mem_start + ((ring_page - ES_START_PG)<<8);
 	memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
@@ -331,7 +331,7 @@ es_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
  *	be rounded up to a doubleword value via es_get_8390_hdr() above.
  */
 
-static void es_block_input(struct device *dev, int count, struct sk_buff *skb,
+static void es_block_input(struct net_device *dev, int count, struct sk_buff *skb,
 						  int ring_offset)
 {
 	unsigned long xfer_start = dev->mem_start + ring_offset - (ES_START_PG<<8);
@@ -348,7 +348,7 @@ static void es_block_input(struct device *dev, int count, struct sk_buff *skb,
 	}
 }
 
-static void es_block_output(struct device *dev, int count,
+static void es_block_output(struct net_device *dev, int count,
 				const unsigned char *buf, int start_page)
 {
 	unsigned long shmem = dev->mem_start + ((start_page - ES_START_PG)<<8);
@@ -357,7 +357,7 @@ static void es_block_output(struct device *dev, int count,
 	memcpy_toio(shmem, buf, count);
 }
 
-static int es_open(struct device *dev)
+static int es_open(struct net_device *dev)
 {
 	ei_open(dev);
 
@@ -366,7 +366,7 @@ static int es_open(struct device *dev)
 	return 0;
 }
 
-static int es_close(struct device *dev)
+static int es_close(struct net_device *dev)
 {
 
 	if (ei_debug > 1)
@@ -383,7 +383,7 @@ static int es_close(struct device *dev)
 #define MAX_ES_CARDS	4	/* Max number of ES3210 cards per module */
 #define NAMELEN		8	/* # of chars for storing dev->name */
 static char namelist[NAMELEN * MAX_ES_CARDS] = { 0, };
-static struct device dev_es3210[MAX_ES_CARDS] = {
+static struct net_device dev_es3210[MAX_ES_CARDS] = {
 	{
 		NULL,		/* assign a chunk of namelist[] below */
 		0, 0, 0, 0,
@@ -406,7 +406,7 @@ init_module(void)
 	int this_dev, found = 0;
 
 	for (this_dev = 0; this_dev < MAX_ES_CARDS; this_dev++) {
-		struct device *dev = &dev_es3210[this_dev];
+		struct net_device *dev = &dev_es3210[this_dev];
 		dev->name = namelist+(NAMELEN*this_dev);
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
@@ -434,7 +434,7 @@ cleanup_module(void)
 	int this_dev;
 
 	for (this_dev = 0; this_dev < MAX_ES_CARDS; this_dev++) {
-		struct device *dev = &dev_es3210[this_dev];
+		struct net_device *dev = &dev_es3210[this_dev];
 		if (dev->priv != NULL) {
 			void *priv = dev->priv;
 			free_irq(dev->irq, dev);

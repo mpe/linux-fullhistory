@@ -43,7 +43,7 @@ struct netrange
 
 struct atalk_route
 {
-	struct device *dev;
+	struct net_device *dev;
 	struct at_addr target;
 	struct at_addr gateway;
 	int flags;
@@ -52,7 +52,7 @@ struct atalk_route
 
 struct atalk_iface
 {
-	struct device *dev;
+	struct net_device *dev;
 	struct at_addr address;		/* Our address */
 	int status;			/* What are we doing? */
 #define ATIF_PROBE	1		/* Probing for an address */
@@ -161,16 +161,16 @@ extern void aarp_proto_init(void);
  *	Give a device find its atif control structure
  */
 
-extern __inline__ struct atalk_iface *atalk_find_dev(struct device *dev)
+extern __inline__ struct atalk_iface *atalk_find_dev(struct net_device *dev)
 {
 	return dev->atalk_ptr;
 }
 
-extern struct at_addr *atalk_find_dev_addr(struct device *dev);
-extern struct device *atrtr_get_dev(struct at_addr *sa);
-extern int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, void *hwaddr);
-extern void aarp_send_probe(struct device *dev, struct at_addr *addr);
-extern void aarp_device_down(struct device *dev);
+extern struct at_addr *atalk_find_dev_addr(struct net_device *dev);
+extern struct net_device *atrtr_get_dev(struct at_addr *sa);
+extern int aarp_send_ddp(struct net_device *dev,struct sk_buff *skb, struct at_addr *sa, void *hwaddr);
+extern void aarp_send_probe(struct net_device *dev, struct at_addr *addr);
+extern void aarp_device_down(struct net_device *dev);
 
 #ifdef MODULE
 extern void aarp_cleanup_module(void);

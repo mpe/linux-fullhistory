@@ -68,7 +68,7 @@ static rwlock_t dev_mc_lock = RW_LOCK_UNLOCKED;
  *	Update the multicast list into the physical NIC controller.
  */
  
-void dev_mc_upload(struct device *dev)
+void dev_mc_upload(struct net_device *dev)
 {
 	/* Don't do anything till we up the interface
 	   [dev_open will call this function so the list will
@@ -97,7 +97,7 @@ void dev_mc_upload(struct device *dev)
  *	Delete a device level multicast
  */
  
-int dev_mc_delete(struct device *dev, void *addr, int alen, int glbl)
+int dev_mc_delete(struct net_device *dev, void *addr, int alen, int glbl)
 {
 	int err = 0;
 	struct dev_mc_list *dmi, **dmip;
@@ -144,7 +144,7 @@ done:
  *	Add a device level multicast
  */
  
-int dev_mc_add(struct device *dev, void *addr, int alen, int glbl)
+int dev_mc_add(struct net_device *dev, void *addr, int alen, int glbl)
 {
 	int err = 0;
 	struct dev_mc_list *dmi, *dmi1;
@@ -194,7 +194,7 @@ done:
  *	Discard multicast list when a device is downed
  */
 
-void dev_mc_discard(struct device *dev)
+void dev_mc_discard(struct net_device *dev)
 {
 	write_lock_bh(&dev_mc_lock);
 	while (dev->mc_list!=NULL) {
@@ -215,7 +215,7 @@ static int dev_mc_read_proc(char *buffer, char **start, off_t offset,
 	off_t pos=0, begin=0;
 	struct dev_mc_list *m;
 	int len=0;
-	struct device *dev;
+	struct net_device *dev;
 
 	read_lock(&dev_base_lock);
 	for (dev = dev_base; dev; dev = dev->next) {

@@ -267,7 +267,7 @@ toshoboe_initbuffs (struct toshoboe_cb *self)
 
 /*Transmit something */
 static int 
-toshoboe_hard_xmit (struct sk_buff *skb, struct device *dev)
+toshoboe_hard_xmit (struct sk_buff *skb, struct net_device *dev)
 {
   struct irda_device *idev;
   struct toshoboe_cb *self;
@@ -515,7 +515,7 @@ toshoboe_is_receiving (struct irda_device *idev)
 
 
 static int 
-toshoboe_net_init (struct device *dev)
+toshoboe_net_init (struct net_device *dev)
 {
   DEBUG (4, __FUNCTION__ "()\n");
 
@@ -530,7 +530,7 @@ toshoboe_net_init (struct device *dev)
 
 
 static int 
-toshoboe_net_open (struct device *dev)
+toshoboe_net_open (struct net_device *dev)
 {
   struct irda_device *idev;
   struct toshoboe_cb *self;
@@ -594,7 +594,7 @@ toshoboe_net_open (struct device *dev)
 }
 
 static int 
-toshoboe_net_close (struct device *dev)
+toshoboe_net_close (struct net_device *dev)
 {
   struct irda_device *idev;
   struct toshoboe_cb *self;

@@ -85,7 +85,7 @@ rwlock_t qdisc_tree_lock = RW_LOCK_UNLOCKED;
    NOTE: Called under dev->queue_lock with locally disabled BH.
 */
 
-int qdisc_restart(struct device *dev)
+int qdisc_restart(struct net_device *dev)
 {
 	struct Qdisc *q = dev->qdisc;
 	struct sk_buff *skb;
@@ -206,7 +206,7 @@ void qdisc_run_queues(void)
 
 	while ((h = lh.forw) != &lh) {
 		int res;
-		struct device *dev;
+		struct net_device *dev;
 		struct Qdisc *q = (struct Qdisc*)h;
 
 		qdisc_stop_run(q);
@@ -253,7 +253,7 @@ static void dev_do_watchdog(unsigned long dummy)
 		goto out;
 
 	while ((h = lh.forw) != &lh) {
-		struct device *dev;
+		struct net_device *dev;
 		struct Qdisc *q = (struct Qdisc*)h;
 
 		qdisc_stop_run(q);
@@ -447,7 +447,7 @@ static struct Qdisc_ops pfifo_fast_ops =
 	pfifo_fast_reset,
 };
 
-struct Qdisc * qdisc_create_dflt(struct device *dev, struct Qdisc_ops *ops)
+struct Qdisc * qdisc_create_dflt(struct net_device *dev, struct Qdisc_ops *ops)
 {
 	struct Qdisc *sch;
 	int size = sizeof(*sch) + ops->priv_size;
@@ -485,7 +485,7 @@ void qdisc_reset(struct Qdisc *qdisc)
 void qdisc_destroy(struct Qdisc *qdisc)
 {
 	struct Qdisc_ops *ops = qdisc->ops;
-	struct device *dev;
+	struct net_device *dev;
 
 	if (!atomic_dec_and_test(&qdisc->refcnt))
 		return;
@@ -515,7 +515,7 @@ void qdisc_destroy(struct Qdisc *qdisc)
 }
 
 
-void dev_activate(struct device *dev)
+void dev_activate(struct net_device *dev)
 {
 	/* No queueing discipline is attached to device;
 	   create default one i.e. pfifo_fast for devices,
@@ -552,7 +552,7 @@ void dev_activate(struct device *dev)
 	spin_unlock_bh(&dev->queue_lock);
 }
 
-void dev_deactivate(struct device *dev)
+void dev_deactivate(struct net_device *dev)
 {
 	struct Qdisc *qdisc;
 
@@ -569,7 +569,7 @@ void dev_deactivate(struct device *dev)
 	spin_unlock_bh(&dev->queue_lock);
 }
 
-void dev_init_scheduler(struct device *dev)
+void dev_init_scheduler(struct net_device *dev)
 {
 	write_lock(&qdisc_tree_lock);
 	spin_lock_bh(&dev->queue_lock);
@@ -580,7 +580,7 @@ void dev_init_scheduler(struct device *dev)
 	write_unlock(&qdisc_tree_lock);
 }
 
-void dev_shutdown(struct device *dev)
+void dev_shutdown(struct net_device *dev)
 {
 	struct Qdisc *qdisc;
 

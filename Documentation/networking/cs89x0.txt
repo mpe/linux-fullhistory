@@ -323,20 +323,20 @@ endif
 
 d.) In /linux/drivers/net/Space.c file, add the line:
 
-extern int cs89x0_probe(struct device *dev);
+extern int cs89x0_probe(struct net_device *dev);
 
 
 Example:
 
- extern int ultra_probe(struct device *dev);
- extern int wd_probe(struct device *dev);
- extern int el2_probe(struct device *dev);
+ extern int ultra_probe(struct net_device *dev);
+ extern int wd_probe(struct net_device *dev);
+ extern int el2_probe(struct net_device *dev);
 
- extern int cs89x0_probe(struct device *dev);
+ extern int cs89x0_probe(struct net_device *dev);
 
- extern int ne_probe(struct device *dev);
- extern int hp_probe(struct device *dev);
- extern int hp_plus_probe(struct device *dev);
+ extern int ne_probe(struct net_device *dev);
+ extern int hp_probe(struct net_device *dev);
+ extern int hp_plus_probe(struct net_device *dev);
 
 
 Also add:

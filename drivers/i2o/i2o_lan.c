@@ -54,7 +54,7 @@
 #endif
 
 #define MAX_LAN_CARDS 4
-static struct device *i2o_landevs[MAX_LAN_CARDS+1];
+static struct net_device *i2o_landevs[MAX_LAN_CARDS+1];
 static int unit = -1; 			/* device unit number */
 
 struct i2o_lan_local {
@@ -63,7 +63,7 @@ struct i2o_lan_local {
 	int reply_flag; 		/* needed by scalar/table queries */
 	u32 packet_tresh;		/* treshold for incoming skb's */	
 	struct fddi_statistics stats;   /* see also struct net_device_stats */ 
-	unsigned short (*type_trans)(struct sk_buff *, struct device *);
+	unsigned short (*type_trans)(struct sk_buff *, struct net_device *);
 	/* 
 	 * Due to way that interrupts can pile up, we need to keep track
  	 * of buckets ourselves.  Otherwise we'll end up flooding
@@ -73,8 +73,8 @@ struct i2o_lan_local {
 };
 
 /* function prototypes */
-static int i2o_lan_receive_post(struct device *dev);
-static int i2o_lan_receive_post_reply(struct device *dev, struct i2o_message *m);
+static int i2o_lan_receive_post(struct net_device *dev);
+static int i2o_lan_receive_post_reply(struct net_device *dev, struct i2o_message *m);
 static void i2o_lan_release_buckets(u32 *msg, struct i2o_lan_local *priv);
 
 /*
@@ -89,7 +89,7 @@ static void i2o_lan_reply(struct i2o_handler *h, struct i2o_controller *iop,
 {  
 	u32 *msg = (u32 *)m;
 	u8 unit  = (u8)(msg[2]>>16); // InitiatorContext
-	struct device *dev = i2o_landevs[unit];
+	struct net_device *dev = i2o_landevs[unit];
 	struct i2o_lan_local *priv; 
 
 	if(dev)
@@ -202,7 +202,7 @@ static struct i2o_handler i2o_lan_handler =
 static int lan_context;
 
 
-static int i2o_lan_receive_post_reply(struct device *dev, struct i2o_message *m)
+static int i2o_lan_receive_post_reply(struct net_device *dev, struct i2o_message *m)
 {
 	u32 *msg = (u32 *)m;
 	struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;
@@ -284,7 +284,7 @@ static int i2o_lan_receive_post_reply(struct device *dev, struct i2o_message *m)
 /* 
  * i2o_lan_receive_post(): Post buckets to receive packets.
  */
-static int i2o_lan_receive_post(struct device *dev)
+static int i2o_lan_receive_post(struct net_device *dev)
 {	
 	struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;	
 	struct i2o_device *i2o_dev = priv->i2o_dev;
@@ -343,7 +343,7 @@ static int i2o_lan_receive_post(struct device *dev)
  * i2o_lan_reset(): Reset the LAN adapter into the operational state and 
  * 	restore it to full operation.
  */
-static int i2o_lan_reset(struct device *dev) 
+static int i2o_lan_reset(struct net_device *dev) 
 {
 	struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;	
 	struct i2o_device *i2o_dev = priv->i2o_dev;
@@ -367,7 +367,7 @@ static int i2o_lan_reset(struct device *dev)
  * 	Reply to any LAN class message with status error_no_data_transfer 
  *	/ suspended.
  */
-static int i2o_lan_suspend(struct device *dev)
+static int i2o_lan_suspend(struct net_device *dev)
 {
 	struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;	
 	struct i2o_device *i2o_dev = priv->i2o_dev;
@@ -390,7 +390,7 @@ static int i2o_lan_suspend(struct device *dev)
 /*
  * Set DDM into batch mode.
  */
-static void i2o_set_batch_mode(struct device *dev)
+static void i2o_set_batch_mode(struct net_device *dev)
 {
 
 /* 
@@ -436,7 +436,7 @@ static void i2o_set_batch_mode(struct device *dev)
  * i2o_lan_open(): Open the device to send/receive packets via 
  * the network device.	
  */
-static int i2o_lan_open(struct device *dev)
+static int i2o_lan_open(struct net_device *dev)
 {
 	struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;	
 	struct i2o_device *i2o_dev = priv->i2o_dev;	
@@ -470,7 +470,7 @@ static int i2o_lan_open(struct device *dev)
 /*
  * i2o_lan_close(): End the transfering.
  */ 
-static int i2o_lan_close(struct device *dev)
+static int i2o_lan_close(struct net_device *dev)
 {
 	struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;	
 	struct i2o_device *i2o_dev = priv->i2o_dev;	
@@ -503,7 +503,7 @@ static int i2o_lan_close(struct device *dev)
  * Must be supported by Fibre Channel, optional for Ethernet/802.3, 
  * Token Ring, FDDI
  */
-static int i2o_lan_sdu_send(struct sk_buff *skb, struct device *dev)
+static int i2o_lan_sdu_send(struct sk_buff *skb, struct net_device *dev)
 {	
 #if 0
 /* not yet tested */
@@ -550,7 +550,7 @@ static int i2o_lan_sdu_send(struct sk_buff *skb, struct device *dev)
  * Must be supported by Ethernet/802.3, Token Ring, FDDI, optional for 
  * Fibre Channel
  */ 
-static int i2o_lan_packet_send(struct sk_buff *skb, struct device *dev)
+static int i2o_lan_packet_send(struct sk_buff *skb, struct net_device *dev)
 {
 	struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;	
 	struct i2o_device *i2o_dev = priv->i2o_dev;	
@@ -583,7 +583,7 @@ static int i2o_lan_packet_send(struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
-static struct net_device_stats *i2o_lan_get_stats(struct device *dev)
+static struct net_device_stats *i2o_lan_get_stats(struct net_device *dev)
 {
 	struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;	
 	struct i2o_device *i2o_dev = priv->i2o_dev;
@@ -709,7 +709,7 @@ static struct net_device_stats *i2o_lan_get_stats(struct device *dev)
  * i2o_lan_set_multicast_list(): Enable a network device to receive packets
  *	not send to the protocol address.
  */
-static void i2o_lan_set_multicast_list(struct device *dev)
+static void i2o_lan_set_multicast_list(struct net_device *dev)
 {
 	struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;	
 	struct i2o_device *i2o_dev = priv->i2o_dev;
@@ -805,13 +805,13 @@ return;
 	return;
 }
 
-struct device *i2o_lan_register_device(struct i2o_device *i2o_dev)
+struct net_device *i2o_lan_register_device(struct i2o_device *i2o_dev)
 {
-	struct device *dev = NULL;
+	struct net_device *dev = NULL;
 	struct i2o_lan_local *priv = NULL;
 	u8 hw_addr[8];
-	unsigned short (*type_trans)(struct sk_buff *, struct device *);
-	void (*unregister_dev)(struct device *dev);
+	unsigned short (*type_trans)(struct sk_buff *, struct net_device *);
+	void (*unregister_dev)(struct net_device *dev);
 
 	switch (i2o_dev->subclass)
 	{
@@ -844,10 +844,10 @@ struct device *i2o_lan_register_device(struct i2o_device *i2o_dev)
 #ifdef CONFIG_FDDI
 	case I2O_LAN_FDDI:
 	{
-		int size = sizeof(struct device) + sizeof(struct i2o_lan_local)
+		int size = sizeof(struct net_device) + sizeof(struct i2o_lan_local)
 			   + sizeof("fddi%d ");
 
-        	dev = (struct device *) kmalloc(size, GFP_KERNEL);
+        	dev = (struct net_device *) kmalloc(size, GFP_KERNEL);
         	memset((char *)dev, 0, size);
             	dev->priv = (void *)(dev + 1);
                 dev->name = (char *)(dev + 1) + sizeof(struct i2o_lan_local);
@@ -922,7 +922,7 @@ struct device *i2o_lan_register_device(struct i2o_device *i2o_dev)
 
 __init int i2o_lan_init(void)
 {
-	struct device *dev;
+	struct net_device *dev;
 	int i;
 
 	bucketpost = bucketpost - bucketthresh;
@@ -987,7 +987,7 @@ void cleanup_module(void)
 
 	for (i = 0; i <= unit; i++)
 	{
-		struct device *dev = i2o_landevs[i];
+		struct net_device *dev = i2o_landevs[i];
 		struct i2o_lan_local *priv = (struct i2o_lan_local *)dev->priv;	
 		struct i2o_device *i2o_dev = priv->i2o_dev;	
 

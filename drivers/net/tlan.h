@@ -156,7 +156,7 @@ typedef u8 TLanBuffer[TLAN_MAX_FRAME_SIZE];
 	 ****************************************************************/
 
 typedef struct tlan_private_tag {
-	struct device           *nextDevice;
+	struct net_device           *nextDevice;
 	void			*dmaStorage;
 	u8			*padBuffer;
 	TLanList                *rxList;

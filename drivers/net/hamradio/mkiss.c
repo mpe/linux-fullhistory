@@ -75,7 +75,7 @@ struct mkiss_channel {
 typedef struct ax25_ctrl {
 	char if_name[8];	/* "ax0\0" .. "ax99999\0"	*/
 	struct ax_disp ctrl;	/* 				*/
-	struct device  dev;	/* the device			*/
+	struct net_device  dev;	/* the device			*/
 } ax25_ctrl_t;
 
 static ax25_ctrl_t **ax25_ctrls = NULL;
@@ -90,7 +90,7 @@ static struct termios *mkiss_termios[NR_MKISS];
 static struct termios *mkiss_termios_locked[NR_MKISS];
 struct mkiss_channel MKISS_Info[NR_MKISS];
 
-static int ax25_init(struct device *);
+static int ax25_init(struct net_device *);
 static int mkiss_init(void);
 static int mkiss_write(struct tty_struct *, int, const unsigned char *, int);
 static int kiss_esc(unsigned char *, unsigned char *, int);
@@ -247,7 +247,7 @@ static inline void ax_free(struct ax_disp *ax)
 
 static void ax_changedmtu(struct ax_disp *ax)
 {
-	struct device *dev = ax->dev;
+	struct net_device *dev = ax->dev;
 	unsigned char *xbuff, *rbuff, *oxbuff, *orbuff;
 	int len;
 	unsigned long flags;
@@ -460,7 +460,7 @@ static void ax25_write_wakeup(struct tty_struct *tty)
 }
 
 /* Encapsulate an AX.25 packet and kick it into a TTY queue. */
-static int ax_xmit(struct sk_buff *skb, struct device *dev)
+static int ax_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ax_disp *ax = (struct ax_disp*)dev->priv;
 	struct mkiss_channel *mkiss = ax->tty->driver_data;
@@ -523,7 +523,7 @@ static int ax_xmit(struct sk_buff *skb, struct device *dev)
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 
 /* Return the frame type ID */
-static int ax_header(struct sk_buff *skb, struct device *dev, unsigned short type,
+static int ax_header(struct sk_buff *skb, struct net_device *dev, unsigned short type,
 	  void *daddr, void *saddr, unsigned len)
 {
 #ifdef CONFIG_INET
@@ -546,7 +546,7 @@ static int ax_rebuild_header(struct sk_buff *skb)
 #endif	/* CONFIG_{AX25,AX25_MODULE} */
 
 /* Open the low-level part of the AX25 channel. Easy! */
-static int ax_open(struct device *dev)
+static int ax_open(struct net_device *dev)
 {
 	struct ax_disp *ax = (struct ax_disp*)dev->priv;
 	unsigned long len;
@@ -600,7 +600,7 @@ norbuff:
 
 
 /* Close the low-level part of the AX25 channel. Easy! */
-static int ax_close(struct device *dev)
+static int ax_close(struct net_device *dev)
 {
 	struct ax_disp *ax = (struct ax_disp*)dev->priv;
 
@@ -737,7 +737,7 @@ static void ax25_close(struct tty_struct *tty)
 }
 
 
-static struct net_device_stats *ax_get_stats(struct device *dev)
+static struct net_device_stats *ax_get_stats(struct net_device *dev)
 {
 	static struct net_device_stats stats;
 	struct ax_disp *ax = (struct ax_disp*)dev->priv;
@@ -873,14 +873,14 @@ static void kiss_unesc(struct ax_disp *ax, unsigned char s)
 }
 
 
-int ax_set_mac_address(struct device *dev, void *addr)
+int ax_set_mac_address(struct net_device *dev, void *addr)
 {
 	if (copy_from_user(dev->dev_addr, addr, AX25_ADDR_LEN))
 		return -EFAULT;
 	return 0;
 }
 
-static int ax_set_dev_mac_address(struct device *dev, void *addr)
+static int ax_set_dev_mac_address(struct net_device *dev, void *addr)
 {
 	struct sockaddr *sa = addr;
 
@@ -926,7 +926,7 @@ static int ax25_disp_ioctl(struct tty_struct *tty, void *file, int cmd, void *ar
 	}
 }
 
-static int ax_open_dev(struct device *dev)
+static int ax_open_dev(struct net_device *dev)
 {
 	struct ax_disp *ax = (struct ax_disp*)dev->priv;
 
@@ -986,7 +986,7 @@ int __init mkiss_init_ctrl_dev(void)
 
 /* Initialize the driver.  Called by network startup. */
 
-static int ax25_init(struct device *dev)
+static int ax25_init(struct net_device *dev)
 {
 	struct ax_disp *ax = (struct ax_disp*)dev->priv;
 

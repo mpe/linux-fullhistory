@@ -116,16 +116,16 @@ static unsigned int netcard_portlist[] __initdata = {
  *	Index to functions.
  */
 
-int el1_probe(struct device *dev);
-static int  el1_probe1(struct device *dev, int ioaddr);
-static int  el_open(struct device *dev);
-static int  el_start_xmit(struct sk_buff *skb, struct device *dev);
+int el1_probe(struct net_device *dev);
+static int  el1_probe1(struct net_device *dev, int ioaddr);
+static int  el_open(struct net_device *dev);
+static int  el_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void el_receive(struct device *dev);
-static void el_reset(struct device *dev);
-static int  el1_close(struct device *dev);
-static struct net_device_stats *el1_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev);
+static void el_receive(struct net_device *dev);
+static void el_reset(struct net_device *dev);
+static int  el1_close(struct net_device *dev);
+static struct net_device_stats *el1_get_stats(struct net_device *dev);
+static void set_multicast_list(struct net_device *dev);
 
 #define EL1_IO_EXTENT	16
 
@@ -210,7 +210,7 @@ struct net_local
 struct netdev_entry el1_drv = {"3c501", el1_probe1, EL1_IO_EXTENT, netcard_portlist};
 #else
 
-int __init el1_probe(struct device *dev)
+int __init el1_probe(struct net_device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -237,7 +237,7 @@ int __init el1_probe(struct device *dev)
  *	The actual probe.
  */
 
-static int __init el1_probe1(struct device *dev, int ioaddr)
+static int __init el1_probe1(struct net_device *dev, int ioaddr)
 {
 	struct net_local *lp;
 	const char *mname;		/* Vendor name */
@@ -355,7 +355,7 @@ static int __init el1_probe1(struct device *dev, int ioaddr)
  *	Open/initialize the board.
  */
 
-static int el_open(struct device *dev)
+static int el_open(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 
@@ -374,7 +374,7 @@ static int el_open(struct device *dev)
 	return 0;
 }
 
-static int el_start_xmit(struct sk_buff *skb, struct device *dev)
+static int el_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -480,7 +480,7 @@ load_it_again_sam:
 
 static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct net_local *lp;
 	int ioaddr;
 	int axsr;			/* Aux. status reg. */
@@ -661,7 +661,7 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
  *	We must check everything to see if it is good.
  */
 
-static void el_receive(struct device *dev)
+static void el_receive(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -717,7 +717,7 @@ static void el_receive(struct device *dev)
 	return;
 }
 
-static void  el_reset(struct device *dev)
+static void  el_reset(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 
@@ -742,7 +742,7 @@ static void  el_reset(struct device *dev)
 	sti();
 }
 
-static int el1_close(struct device *dev)
+static int el1_close(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 
@@ -763,7 +763,7 @@ static int el1_close(struct device *dev)
 	return 0;
 }
 
-static struct net_device_stats *el1_get_stats(struct device *dev)
+static struct net_device_stats *el1_get_stats(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	return &lp->stats;
@@ -774,7 +774,7 @@ static struct net_device_stats *el1_get_stats(struct device *dev)
  *			best-effort filtering.
  */
 
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 
@@ -799,7 +799,7 @@ static void set_multicast_list(struct device *dev)
 
 static char devicename[9] = { 0, };
 
-static struct device dev_3c501 =
+static struct net_device dev_3c501 =
 {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
 	0, 0, 0, 0,

@@ -28,7 +28,7 @@
 
 /* Debug function */
 
-/* int  client_init( struct device *dev); */
+/* int  client_init( struct net_device *dev); */
 
 /*
  * if it's static, it doesn't go in here.

@@ -95,7 +95,7 @@ KERN_INFO "baycom_epp: version 0.5 compiled " __TIME__ " " __DATE__ "\n";
 
 #define NR_PORTS 4
 
-static struct device baycom_device[NR_PORTS];
+static struct net_device baycom_device[NR_PORTS];
 
 /* --------------------------------------------------------------------- */
 
@@ -698,7 +698,7 @@ static int transmit(struct baycom_state *bc, int cnt, unsigned char stat)
 
 /* ---------------------------------------------------------------------- */
 
-static void do_rxpacket(struct device *dev)
+static void do_rxpacket(struct net_device *dev)
 {
 	struct baycom_state *bc = (struct baycom_state *)dev->priv;
 	struct sk_buff *skb;
@@ -756,7 +756,7 @@ static void do_rxpacket(struct device *dev)
         goto enditer##j;                                                               \
 })
         
-static int receive(struct device *dev, int cnt)
+static int receive(struct net_device *dev, int cnt)
 {
 	struct baycom_state *bc = (struct baycom_state *)dev->priv;
 	struct parport *pp = bc->pdev->port;
@@ -832,7 +832,7 @@ static int receive(struct device *dev, int cnt)
 #define GETTICK(x)
 #endif /* __i386__ */
 
-static void epp_bh(struct device *dev)
+static void epp_bh(struct net_device *dev)
 {
 	struct baycom_state *bc;
 	struct parport *pp;
@@ -953,7 +953,7 @@ static void epp_bh(struct device *dev)
  * ===================== network driver interface =========================
  */
 
-static int baycom_send_packet(struct sk_buff *skb, struct device *dev)
+static int baycom_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct baycom_state *bc;
 
@@ -966,7 +966,7 @@ static int baycom_send_packet(struct sk_buff *skb, struct device *dev)
 
 /* --------------------------------------------------------------------- */
 
-static int baycom_set_mac_address(struct device *dev, void *addr)
+static int baycom_set_mac_address(struct net_device *dev, void *addr)
 {
 	struct sockaddr *sa = (struct sockaddr *)addr;
 
@@ -977,7 +977,7 @@ static int baycom_set_mac_address(struct device *dev, void *addr)
 
 /* --------------------------------------------------------------------- */
 
-static struct net_device_stats *baycom_get_stats(struct device *dev)
+static struct net_device_stats *baycom_get_stats(struct net_device *dev)
 {
 	struct baycom_state *bc;
 
@@ -994,7 +994,7 @@ static struct net_device_stats *baycom_get_stats(struct device *dev)
 
 static void epp_wakeup(void *handle)
 {
-        struct device *dev = (struct device *)handle;
+        struct net_device *dev = (struct net_device *)handle;
         struct baycom_state *bc;
 
 	baycom_paranoia_check_void(dev, "epp_wakeup");
@@ -1015,7 +1015,7 @@ static void epp_wakeup(void *handle)
  * there is non-reboot way to recover if something goes wrong.
  */
 
-static int epp_open(struct device *dev)
+static int epp_open(struct net_device *dev)
 {
 	struct baycom_state *bc;
         struct parport *pp;
@@ -1141,7 +1141,7 @@ static int epp_open(struct device *dev)
 
 /* --------------------------------------------------------------------- */
 
-static int epp_close(struct device *dev)
+static int epp_close(struct net_device *dev)
 {
 	struct baycom_state *bc;
 	struct parport *pp;
@@ -1209,7 +1209,7 @@ static int baycom_setmode(struct baycom_state *bc, const char *modestr)
 
 /* --------------------------------------------------------------------- */
 
-static int baycom_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+static int baycom_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	struct baycom_state *bc;
 	struct baycom_ioctl bi;
@@ -1348,7 +1348,7 @@ static int baycom_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
  * If dev->base_addr == 2, allocate space for the device and return success
  * (detachable devices only).
  */
-static int baycom_probe(struct device *dev)
+static int baycom_probe(struct net_device *dev)
 {
 	static char ax25_bcast[AX25_ADDR_LEN] = {
 		'Q' << 1, 'S' << 1, 'T' << 1, ' ' << 1, ' ' << 1, ' ' << 1, '0' << 1
@@ -1425,7 +1425,7 @@ static
 #endif
 int __init init_module(void)
 {
-	struct device *dev;
+	struct net_device *dev;
 	int i, found = 0;
 	char set_hw = 1;
 	struct baycom_state *bc;
@@ -1440,7 +1440,7 @@ int __init init_module(void)
 			set_hw = 0;
 		if (!set_hw)
 			iobase[i] = 0;
-		memset(dev, 0, sizeof(struct device));
+		memset(dev, 0, sizeof(struct net_device));
 		if (!(bc = dev->priv = kmalloc(sizeof(struct baycom_state), GFP_KERNEL)))
 			return -ENOMEM;
 		/*
@@ -1490,7 +1490,7 @@ MODULE_DESCRIPTION("Baycom epp amateur radio modem driver");
 
 void cleanup_module(void)
 {
-	struct device *dev;
+	struct net_device *dev;
 	struct baycom_state *bc;
 	int i;
 

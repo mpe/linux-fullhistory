@@ -448,7 +448,7 @@ void udpv6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 	       struct inet6_skb_parm *opt,
 	       int type, int code, unsigned char *buff, __u32 info)
 {
-	struct device *dev = skb->dev;
+	struct net_device *dev = skb->dev;
 	struct in6_addr *saddr = &hdr->saddr;
 	struct in6_addr *daddr = &hdr->daddr;
 	struct sock *sk;
@@ -579,7 +579,7 @@ int udpv6_rcv(struct sk_buff *skb, unsigned long len)
 {
 	struct sock *sk;
   	struct udphdr *uh;
-	struct device *dev = skb->dev;
+	struct net_device *dev = skb->dev;
 	struct in6_addr *saddr = &skb->nh.ipv6h->saddr;
 	struct in6_addr *daddr = &skb->nh.ipv6h->daddr;
 	u32 ulen;

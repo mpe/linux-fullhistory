@@ -94,7 +94,7 @@ static int x25_receive_data(struct sk_buff *skb, struct x25_neigh *neigh)
 	return 0;
 }
 
-int x25_lapb_receive_frame(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
+int x25_lapb_receive_frame(struct sk_buff *skb, struct net_device *dev, struct packet_type *ptype)
 {
 	struct x25_neigh *neigh;
 	int queued;
@@ -141,7 +141,7 @@ int x25_lapb_receive_frame(struct sk_buff *skb, struct device *dev, struct packe
 	}
 }
 
-int x25_llc_receive_frame(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
+int x25_llc_receive_frame(struct sk_buff *skb, struct net_device *dev, struct packet_type *ptype)
 {
 	struct x25_neigh *neigh;
 

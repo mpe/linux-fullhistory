@@ -101,7 +101,7 @@ void ip_build_and_send_pkt(struct sk_buff *skb, struct sock *sk,
 {
 	struct rtable *rt = (struct rtable *)skb->dst;
 	struct iphdr *iph;
-	struct device *dev;
+	struct net_device *dev;
 	
 	/* Build the IP header. */
 	if (opt)
@@ -159,7 +159,7 @@ int ip_mc_output(struct sk_buff *skb)
 {
 	struct sock *sk = skb->sk;
 	struct rtable *rt = (struct rtable*)skb->dst;
-	struct device *dev = rt->u.dst.dev;
+	struct net_device *dev = rt->u.dst.dev;
 
 	/*
 	 *	If the indicated interface is up and running, send the packet.
@@ -236,7 +236,7 @@ void ip_queue_xmit(struct sk_buff *skb)
 	struct sock *sk = skb->sk;
 	struct ip_options *opt = sk->opt;
 	struct rtable *rt;
-	struct device *dev;
+	struct net_device *dev;
 	struct iphdr *iph;
 	unsigned int tot_len;
 
@@ -728,7 +728,7 @@ void ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff*))
 	struct iphdr *iph;
 	unsigned char *raw;
 	unsigned char *ptr;
-	struct device *dev;
+	struct net_device *dev;
 	struct sk_buff *skb2;
 	unsigned int mtu, hlen, left, len; 
 	int offset;

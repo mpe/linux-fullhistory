@@ -125,7 +125,7 @@ static int tc_ctl_tfilter(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 	u32 prio = TC_H_MAJ(t->tcm_info);
 	u32 nprio = prio;
 	u32 parent = t->tcm_parent;
-	struct device *dev;
+	struct net_device *dev;
 	struct Qdisc  *q;
 	struct tcf_proto **back, **chain;
 	struct tcf_proto *tp = NULL;
@@ -352,7 +352,7 @@ static int tc_dump_tfilter(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	int t;
 	int s_t;
-	struct device *dev;
+	struct net_device *dev;
 	struct Qdisc *q;
 	struct tcf_proto *tp, **chain;
 	struct tcmsg *tcm = (struct tcmsg*)NLMSG_DATA(cb->nlh);

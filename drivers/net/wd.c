@@ -45,18 +45,18 @@ static const char *version =
 static unsigned int wd_portlist[] __initdata =
 {0x300, 0x280, 0x380, 0x240, 0};
 
-int wd_probe(struct device *dev);
-int wd_probe1(struct device *dev, int ioaddr);
+int wd_probe(struct net_device *dev);
+int wd_probe1(struct net_device *dev, int ioaddr);
 
-static int wd_open(struct device *dev);
-static void wd_reset_8390(struct device *dev);
-static void wd_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+static int wd_open(struct net_device *dev);
+static void wd_reset_8390(struct net_device *dev);
+static void wd_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
 						int ring_page);
-static void wd_block_input(struct device *dev, int count,
+static void wd_block_input(struct net_device *dev, int count,
 						  struct sk_buff *skb, int ring_offset);
-static void wd_block_output(struct device *dev, int count,
+static void wd_block_output(struct net_device *dev, int count,
 							const unsigned char *buf, int start_page);
-static int wd_close(struct device *dev);
+static int wd_close(struct net_device *dev);
 
 
 #define WD_START_PG		0x00	/* First page of TX buffer */
@@ -86,7 +86,7 @@ struct netdev_entry wd_drv =
 {"wd", wd_probe1, WD_IO_EXTENT, wd_portlist};
 #else
 
-int __init wd_probe(struct device *dev)
+int __init wd_probe(struct net_device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -108,7 +108,7 @@ int __init wd_probe(struct device *dev)
 }
 #endif
 
-int __init wd_probe1(struct device *dev, int ioaddr)
+int __init wd_probe1(struct net_device *dev, int ioaddr)
 {
 	int i;
 	int checksum = 0;
@@ -313,7 +313,7 @@ int __init wd_probe1(struct device *dev, int ioaddr)
 }
 
 static int
-wd_open(struct device *dev)
+wd_open(struct net_device *dev)
 {
   int ioaddr = dev->base_addr - WD_NIC_OFFSET; /* WD_CMDREG */
 
@@ -332,7 +332,7 @@ wd_open(struct device *dev)
 }
 
 static void
-wd_reset_8390(struct device *dev)
+wd_reset_8390(struct net_device *dev)
 {
 	int wd_cmd_port = dev->base_addr - WD_NIC_OFFSET; /* WD_CMDREG */
 
@@ -354,7 +354,7 @@ wd_reset_8390(struct device *dev)
    the start of a page, so we optimize accordingly. */
 
 static void
-wd_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+wd_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 
 	int wd_cmdreg = dev->base_addr - WD_NIC_OFFSET; /* WD_CMDREG */
@@ -379,7 +379,7 @@ wd_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
    switch between 8- and 16-bit modes. */
 
 static void
-wd_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+wd_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
 	int wd_cmdreg = dev->base_addr - WD_NIC_OFFSET; /* WD_CMDREG */
 	unsigned long xfer_start = dev->mem_start + ring_offset - (WD_START_PG<<8);
@@ -401,7 +401,7 @@ wd_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offs
 }
 
 static void
-wd_block_output(struct device *dev, int count, const unsigned char *buf,
+wd_block_output(struct net_device *dev, int count, const unsigned char *buf,
 				int start_page)
 {
 	int wd_cmdreg = dev->base_addr - WD_NIC_OFFSET; /* WD_CMDREG */
@@ -419,7 +419,7 @@ wd_block_output(struct device *dev, int count, const unsigned char *buf,
 
 
 static int
-wd_close(struct device *dev)
+wd_close(struct net_device *dev)
 {
 	int wd_cmdreg = dev->base_addr - WD_NIC_OFFSET; /* WD_CMDREG */
 
@@ -444,7 +444,7 @@ wd_close(struct device *dev)
 #define MAX_WD_CARDS	4	/* Max number of wd cards per module */
 #define NAMELEN		8	/* # of chars for storing dev->name */
 static char namelist[NAMELEN * MAX_WD_CARDS] = { 0, };
-static struct device dev_wd[MAX_WD_CARDS] = {
+static struct net_device dev_wd[MAX_WD_CARDS] = {
 	{
 		NULL,		/* assign a chunk of namelist[] below */
 		0, 0, 0, 0,
@@ -471,7 +471,7 @@ init_module(void)
 	int this_dev, found = 0;
 
 	for (this_dev = 0; this_dev < MAX_WD_CARDS; this_dev++) {
-		struct device *dev = &dev_wd[this_dev];
+		struct net_device *dev = &dev_wd[this_dev];
 		dev->name = namelist+(NAMELEN*this_dev);
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
@@ -502,7 +502,7 @@ cleanup_module(void)
 	int this_dev;
 
 	for (this_dev = 0; this_dev < MAX_WD_CARDS; this_dev++) {
-		struct device *dev = &dev_wd[this_dev];
+		struct net_device *dev = &dev_wd[this_dev];
 		if (dev->priv != NULL) {
 			void *priv = dev->priv;
 			int ioaddr = dev->base_addr - WD_NIC_OFFSET;

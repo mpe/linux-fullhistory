@@ -44,7 +44,7 @@
 
 extern int  irda_init(void);
 extern void irda_cleanup(void);
-extern int  irlap_driver_rcv(struct sk_buff *, struct device *, 
+extern int  irlap_driver_rcv(struct sk_buff *, struct net_device *, 
 			     struct packet_type *);
 
 static struct proto_ops irda_stream_ops;
@@ -1383,7 +1383,7 @@ static struct proto_ops irda_dgram_ops = {
 static int irda_device_event(struct notifier_block *this, unsigned long event,
 			     void *ptr)
 {
-	struct device *dev = (struct device *) ptr;
+	struct net_device *dev = (struct net_device *) ptr;
 	
 	DEBUG(3, __FUNCTION__ "()\n");
 	

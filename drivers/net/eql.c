@@ -150,27 +150,27 @@ static const char *version =
 #endif
 static unsigned int eql_debug = EQL_DEBUG;
 
-int        eql_init(struct device *dev); /*  */
-static int eql_open(struct device *dev); /*  */
-static int eql_close(struct device *dev); /*  */
-static int eql_ioctl(struct device *dev, struct ifreq *ifr, int cmd); /*  */
-static int eql_slave_xmit(struct sk_buff *skb, struct device *dev); /*  */
+int        eql_init(struct net_device *dev); /*  */
+static int eql_open(struct net_device *dev); /*  */
+static int eql_close(struct net_device *dev); /*  */
+static int eql_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd); /*  */
+static int eql_slave_xmit(struct sk_buff *skb, struct net_device *dev); /*  */
 
-static struct net_device_stats *eql_get_stats(struct device *dev); /*  */
+static struct net_device_stats *eql_get_stats(struct net_device *dev); /*  */
 
 /* ioctl() handlers
    ---------------- */
-static int eql_enslave(struct device *dev,  slaving_request_t *srq); /*  */
-static int eql_emancipate(struct device *dev, slaving_request_t *srq); /*  */
+static int eql_enslave(struct net_device *dev,  slaving_request_t *srq); /*  */
+static int eql_emancipate(struct net_device *dev, slaving_request_t *srq); /*  */
 
-static int eql_g_slave_cfg(struct device *dev, slave_config_t *sc); /*  */
-static int eql_s_slave_cfg(struct device *dev, slave_config_t *sc); /*  */
+static int eql_g_slave_cfg(struct net_device *dev, slave_config_t *sc); /*  */
+static int eql_s_slave_cfg(struct net_device *dev, slave_config_t *sc); /*  */
 
-static int eql_g_master_cfg(struct device *dev, master_config_t *mc); /*  */
-static int eql_s_master_cfg(struct device *dev, master_config_t *mc); /*  */
+static int eql_g_master_cfg(struct net_device *dev, master_config_t *mc); /*  */
+static int eql_s_master_cfg(struct net_device *dev, master_config_t *mc); /*  */
 
-static inline int eql_is_slave(struct device *dev); /*  */
-static inline int eql_is_master(struct device *dev); /*  */
+static inline int eql_is_slave(struct net_device *dev); /*  */
+static inline int eql_is_master(struct net_device *dev); /*  */
 
 static slave_t *eql_new_slave(void); /*  */
 static void eql_delete_slave(slave_t *slave); /*  */
@@ -181,16 +181,16 @@ static inline int eql_number_slaves(slave_queue_t *queue); /*  */
 static inline int eql_is_empty(slave_queue_t *queue); /*  */
 static inline int eql_is_full(slave_queue_t *queue); /*  */
 
-static slave_queue_t *eql_new_slave_queue(struct device *dev); /*  */
+static slave_queue_t *eql_new_slave_queue(struct net_device *dev); /*  */
 static void eql_delete_slave_queue(slave_queue_t *queue); /*  */
 
 static int eql_insert_slave(slave_queue_t *queue, slave_t *slave); /*  */
 static slave_t *eql_remove_slave(slave_queue_t *queue, slave_t *slave); /*  */
 
-/* static int eql_insert_slave_dev(slave_queue_t *queue, struct device *dev); -*  */
-static int eql_remove_slave_dev(slave_queue_t *queue, struct device *dev); /*  */
+/* static int eql_insert_slave_dev(slave_queue_t *queue, struct net_device *dev); -*  */
+static int eql_remove_slave_dev(slave_queue_t *queue, struct net_device *dev); /*  */
 
-static inline struct device *eql_best_slave_dev(slave_queue_t *queue); /*  */
+static inline struct net_device *eql_best_slave_dev(slave_queue_t *queue); /*  */
 static inline slave_t *eql_best_slave(slave_queue_t *queue); /*  */
 static inline slave_t *eql_first_slave(slave_queue_t *queue); /*  */
 static inline slave_t *eql_next_slave(slave_queue_t *queue, slave_t *slave); /*  */
@@ -198,18 +198,18 @@ static inline slave_t *eql_next_slave(slave_queue_t *queue, slave_t *slave); /* 
 static inline void eql_set_best_slave(slave_queue_t *queue, slave_t *slave); /*  */
 static inline void eql_schedule_slaves(slave_queue_t *queue); /*  */
 
-static slave_t *eql_find_slave_dev(slave_queue_t *queue, struct device *dev); /*  */
+static slave_t *eql_find_slave_dev(slave_queue_t *queue, struct net_device *dev); /*  */
 
 /* static inline eql_lock_slave_queue(slave_queue_t *queue); -*  */
 /* static inline eql_unlock_slave_queue(slave_queue_t *queue); -*  */
 
 static void eql_timer(unsigned long param);	/*  */
 
-/* struct device * interface functions 
+/* struct net_device * interface functions 
    ---------------------------------------------------------
    */
 
-int __init eql_init(struct device *dev)
+int __init eql_init(struct net_device *dev)
 {
 	static unsigned version_printed = 0;
 	/* static unsigned num_masters     = 0; */
@@ -268,7 +268,7 @@ int __init eql_init(struct device *dev)
 	return 0;
 }
 
-static int eql_open(struct device *dev)
+static int eql_open(struct net_device *dev)
 {
 	equalizer_t *eql = (equalizer_t *) dev->priv;
 	slave_queue_t *new_queue;
@@ -301,7 +301,7 @@ static int eql_open(struct device *dev)
 }
 
 
-static int eql_close(struct device *dev)
+static int eql_close(struct net_device *dev)
 {
 	equalizer_t *eql = (equalizer_t *) dev->priv;
 
@@ -327,7 +327,7 @@ static int eql_close(struct device *dev)
 }
 
 
-static int eql_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+static int eql_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {  
 	if(cmd!=EQL_GETMASTRCFG && cmd!=EQL_GETSLAVECFG && 
 	   !capable(CAP_NET_ADMIN))
@@ -352,10 +352,10 @@ static int eql_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 }
 
 
-static int eql_slave_xmit(struct sk_buff *skb, struct device *dev)
+static int eql_slave_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	equalizer_t *eql = (equalizer_t *) dev->priv;
-	struct device *slave_dev = 0;
+	struct net_device *slave_dev = 0;
 	slave_t *slave;
 
 	if (skb == NULL)
@@ -394,7 +394,7 @@ static int eql_slave_xmit(struct sk_buff *skb, struct device *dev)
 }
 
 
-static struct net_device_stats * eql_get_stats(struct device *dev)
+static struct net_device_stats * eql_get_stats(struct net_device *dev)
 {
 	equalizer_t *eql = (equalizer_t *) dev->priv;
 	return eql->stats;
@@ -404,10 +404,10 @@ static struct net_device_stats * eql_get_stats(struct device *dev)
  *	Private ioctl functions
  */
 
-static int eql_enslave(struct device *dev, slaving_request_t *srqp)
+static int eql_enslave(struct net_device *dev, slaving_request_t *srqp)
 {
-	struct device *master_dev;
-	struct device *slave_dev;
+	struct net_device *master_dev;
+	struct net_device *slave_dev;
 	slaving_request_t srq;
 	int err;
 
@@ -465,10 +465,10 @@ static int eql_enslave(struct device *dev, slaving_request_t *srqp)
 	return -EINVAL;
 }
 
-static int eql_emancipate(struct device *dev, slaving_request_t *srqp)
+static int eql_emancipate(struct net_device *dev, slaving_request_t *srqp)
 {
-	struct device *master_dev;
-	struct device *slave_dev;
+	struct net_device *master_dev;
+	struct net_device *slave_dev;
 	slaving_request_t srq;
 	int err;
 
@@ -494,11 +494,11 @@ static int eql_emancipate(struct device *dev, slaving_request_t *srqp)
 }
 
 
-static int eql_g_slave_cfg(struct device *dev, slave_config_t *scp)
+static int eql_g_slave_cfg(struct net_device *dev, slave_config_t *scp)
 {
 	slave_t *slave;
 	equalizer_t *eql;
-	struct device *slave_dev;
+	struct net_device *slave_dev;
 	slave_config_t sc;
 	int err;
 
@@ -530,11 +530,11 @@ static int eql_g_slave_cfg(struct device *dev, slave_config_t *scp)
 }
 
 
-static int eql_s_slave_cfg(struct device *dev, slave_config_t *scp)
+static int eql_s_slave_cfg(struct net_device *dev, slave_config_t *scp)
 {
 	slave_t *slave;
 	equalizer_t *eql;
-	struct device *slave_dev;
+	struct net_device *slave_dev;
 	slave_config_t sc;
 	int err;
 
@@ -566,7 +566,7 @@ static int eql_s_slave_cfg(struct device *dev, slave_config_t *scp)
 }
 
 
-static int eql_g_master_cfg(struct device *dev, master_config_t *mcp)
+static int eql_g_master_cfg(struct net_device *dev, master_config_t *mcp)
 {
 	equalizer_t *eql;
 	master_config_t mc;
@@ -591,7 +591,7 @@ static int eql_g_master_cfg(struct device *dev, master_config_t *mcp)
 }
 
 
-static int eql_s_master_cfg(struct device *dev, master_config_t *mcp)
+static int eql_s_master_cfg(struct net_device *dev, master_config_t *mcp)
 {
 	equalizer_t *eql;
 	master_config_t mc;
@@ -618,7 +618,7 @@ static int eql_s_master_cfg(struct device *dev, master_config_t *mcp)
  *	Private device support functions
  */
 
-static inline int eql_is_slave(struct device *dev)
+static inline int eql_is_slave(struct net_device *dev)
 {
 	if (dev)
 	{
@@ -629,7 +629,7 @@ static inline int eql_is_slave(struct device *dev)
 }
 
 
-static inline int eql_is_master(struct device *dev)
+static inline int eql_is_master(struct net_device *dev)
 {
 	if (dev)
 	{
@@ -695,7 +695,7 @@ static inline int eql_is_full(slave_queue_t *queue)
 	return 0;
 }
 
-static slave_queue_t *eql_new_slave_queue(struct device *dev)
+static slave_queue_t *eql_new_slave_queue(struct net_device *dev)
 {
 	slave_queue_t *queue;
 	slave_t *head_slave;
@@ -804,7 +804,7 @@ static slave_t *eql_remove_slave(slave_queue_t *queue, slave_t *slave)
 }
 
 
-static int eql_remove_slave_dev(slave_queue_t *queue, struct device *dev)
+static int eql_remove_slave_dev(slave_queue_t *queue, struct net_device *dev)
 {
 	slave_t *prev;
 	slave_t *curr;
@@ -832,7 +832,7 @@ static int eql_remove_slave_dev(slave_queue_t *queue, struct device *dev)
 }
 
 
-static inline struct device *eql_best_slave_dev(slave_queue_t *queue)
+static inline struct net_device *eql_best_slave_dev(slave_queue_t *queue)
 {
 	if (queue->best_slave != 0)
 	{
@@ -853,7 +853,7 @@ static inline slave_t *eql_best_slave(slave_queue_t *queue)
 
 static inline void eql_schedule_slaves(slave_queue_t *queue)
 {
-	struct device *master_dev = queue->master_dev;
+	struct net_device *master_dev = queue->master_dev;
 	slave_t *best_slave = 0;
 	slave_t *slave_corpse = 0;
 
@@ -937,7 +937,7 @@ static inline void eql_schedule_slaves(slave_queue_t *queue)
 }
 
 
-static slave_t * eql_find_slave_dev(slave_queue_t *queue, struct device *dev)
+static slave_t * eql_find_slave_dev(slave_queue_t *queue, struct net_device *dev)
 {
 	slave_t *slave = 0;
 	slave = eql_first_slave(queue);
@@ -1014,7 +1014,7 @@ static void eql_timer(unsigned long param)
 }
 
 #ifdef MODULE
-static struct device dev_eql = 
+static struct net_device dev_eql = 
 {
 	"eql", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, eql_init 
 };

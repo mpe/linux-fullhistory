@@ -6,7 +6,7 @@
 #define LTALK_ALEN		1
 
 #ifdef __KERNEL__
-extern void ltalk_setup(struct device *);
+extern void ltalk_setup(struct net_device *);
 #endif
 
 #endif

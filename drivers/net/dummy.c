@@ -53,34 +53,34 @@
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
-static int dummy_xmit(struct sk_buff *skb, struct device *dev);
-static struct net_device_stats *dummy_get_stats(struct device *dev);
+static int dummy_xmit(struct sk_buff *skb, struct net_device *dev);
+static struct net_device_stats *dummy_get_stats(struct net_device *dev);
 
-static int dummy_open(struct device *dev)
+static int dummy_open(struct net_device *dev)
 {
 	MOD_INC_USE_COUNT;
 	return 0;
 }
 
-static int dummy_close(struct device *dev)
+static int dummy_close(struct net_device *dev)
 {
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 /* fake multicast ability */
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
 }
 
 #ifdef CONFIG_NET_FASTROUTE
-static int dummy_accept_fastpath(struct device *dev, struct dst_entry *dst)
+static int dummy_accept_fastpath(struct net_device *dev, struct dst_entry *dst)
 {
 	return -1;
 }
 #endif
 
-int __init dummy_init(struct device *dev)
+int __init dummy_init(struct net_device *dev)
 {
 	/* Initialize the device structure. */
 	dev->hard_start_xmit	= dummy_xmit;
@@ -107,7 +107,7 @@ int __init dummy_init(struct device *dev)
 	return 0;
 }
 
-static int dummy_xmit(struct sk_buff *skb, struct device *dev)
+static int dummy_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_device_stats *stats;
 	dev_kfree_skb(skb);
@@ -119,7 +119,7 @@ static int dummy_xmit(struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
-static struct net_device_stats *dummy_get_stats(struct device *dev)
+static struct net_device_stats *dummy_get_stats(struct net_device *dev)
 {
 	struct net_device_stats *stats = (struct net_device_stats *) dev->priv;
 	return stats;
@@ -127,7 +127,7 @@ static struct net_device_stats *dummy_get_stats(struct device *dev)
 
 #ifdef MODULE
 
-static int __init dummy_probe(struct device *dev)
+static int __init dummy_probe(struct net_device *dev)
 {
 	dummy_init(dev);
 	return 0;
@@ -135,7 +135,7 @@ static int __init dummy_probe(struct device *dev)
 
 static char dummy_name[16];
 
-static struct device dev_dummy = {
+static struct net_device dev_dummy = {
 		dummy_name, 	/* Needs to be writeable */
 		0, 0, 0, 0,
 	 	0x0, 0,

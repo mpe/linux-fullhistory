@@ -70,7 +70,7 @@ int ip_chksock(struct sk_buff *skb)
 
 int ip_forward(struct sk_buff *skb)
 {
-	struct device *dev2;	/* Output device */
+	struct net_device *dev2;	/* Output device */
 	struct iphdr *iph;	/* Our header */
 	struct rtable *rt;	/* Route we use */
 	struct ip_options * opt	= &(IPCB(skb)->opt);

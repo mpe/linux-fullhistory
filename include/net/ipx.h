@@ -49,7 +49,7 @@ typedef struct ipx_interface {
 	unsigned char	if_node[IPX_NODE_LEN];
 
 	/* physical device info */
-	struct device	*if_dev;
+	struct net_device	*if_dev;
 	struct datalink_proto	*if_dlink;
 	unsigned short	if_dlink_type;
 

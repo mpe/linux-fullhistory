@@ -160,7 +160,7 @@ typedef struct {
 	unsigned short   designated_port;	  /* (4.5.5.7)	 */
 	unsigned int     top_change_ack;	  /* (4.5.5.8)	 */
 	unsigned int     config_pending;	  /* (4.5.5.9)	 */
-	struct device *dev;	
+	struct net_device *dev;	
 	struct fdb *fdb;	/* head of per port fdb chain */
 } Port_data;
 

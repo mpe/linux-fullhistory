@@ -466,28 +466,28 @@ static SK_RAM *board;  /* pointer to our memory mapped board components */
  * See for short explanation of each function its definitions header.
  */
 
-int          SK_init(struct device *dev);
-static int   SK_probe(struct device *dev, short ioaddr);
+int          SK_init(struct net_device *dev);
+static int   SK_probe(struct net_device *dev, short ioaddr);
 
-static int   SK_open(struct device *dev);
-static int   SK_send_packet(struct sk_buff *skb, struct device *dev);
+static int   SK_open(struct net_device *dev);
+static int   SK_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void  SK_interrupt(int irq, void *dev_id, struct pt_regs * regs);
-static void  SK_rxintr(struct device *dev);
-static void  SK_txintr(struct device *dev);
-static int   SK_close(struct device *dev);
+static void  SK_rxintr(struct net_device *dev);
+static void  SK_txintr(struct net_device *dev);
+static int   SK_close(struct net_device *dev);
 
-static struct net_device_stats *SK_get_stats(struct device *dev);
+static struct net_device_stats *SK_get_stats(struct net_device *dev);
 
 unsigned int SK_rom_addr(void);
 
-static void set_multicast_list(struct device *dev);
+static void set_multicast_list(struct net_device *dev);
 
 /*
  * LANCE Functions
  * ---------------
  */
 
-static int SK_lance_init(struct device *dev, unsigned short mode);
+static int SK_lance_init(struct net_device *dev, unsigned short mode);
 void   SK_reset_board(void);
 void   SK_set_RAP(int reg_number);
 int    SK_read_reg(int reg_number);
@@ -499,9 +499,9 @@ void   SK_write_reg(int reg_number, int value);
  * -------------------
  */
 
-void SK_print_pos(struct device *dev, char *text);
-void SK_print_dev(struct device *dev, char *text);
-void SK_print_ram(struct device *dev);
+void SK_print_pos(struct net_device *dev, char *text);
+void SK_print_dev(struct net_device *dev, char *text);
+void SK_print_ram(struct net_device *dev);
 
 
 /*-
@@ -513,7 +513,7 @@ void SK_print_ram(struct device *dev);
  *                  This function gets called by dev_init which initializes
  *                  all Network devices.
  *
- * Parameters     : I : struct device *dev - structure preconfigured 
+ * Parameters     : I : struct net_device *dev - structure preconfigured 
  *                                           from Space.c
  * Return Value   : 0 = Driver Found and initialized 
  * Errors         : ENODEV - no device found
@@ -531,7 +531,7 @@ void SK_print_ram(struct device *dev);
  *                         (detachable devices only).
  */
 
-int __init SK_init(struct device *dev)
+int __init SK_init(struct net_device *dev)
 {
 	int ioaddr         = 0;            /* I/O port address used for POS regs */
 	int *port, ports[] = SK_IO_PORTS;  /* SK_G16 supported ports */
@@ -603,7 +603,7 @@ int __init SK_init(struct device *dev)
  * Description    : This function is called by SK_init and 
  *                  does the main part of initialization.
  *                  
- * Parameters     : I : struct device *dev - SK_G16 device structure
+ * Parameters     : I : struct net_device *dev - SK_G16 device structure
  *                  I : short ioaddr       - I/O Port address where POS is.
  * Return Value   : 0 = Initialization done             
  * Errors         : ENODEV - No SK_G16 found
@@ -614,7 +614,7 @@ int __init SK_init(struct device *dev)
  *     94/06/30  pwe  SK_ADDR now checked and at the correct place
 -*/
 
-int __init SK_probe(struct device *dev, short ioaddr)
+int __init SK_probe(struct net_device *dev, short ioaddr)
 {
     int i,j;                /* Counters */
     int sk_addr_flag = 0;   /* SK ADDR correct? 1 - no, 0 - yes */
@@ -832,7 +832,7 @@ int __init SK_probe(struct device *dev, short ioaddr)
  *
  *                  (Called by dev_open() /net/inet/dev.c)
  *
- * Parameters     : I : struct device *dev - SK_G16 device structure
+ * Parameters     : I : struct net_device *dev - SK_G16 device structure
  * Return Value   : 0 - Device opened
  * Errors         : -EAGAIN - Open failed
  * Side Effects   : None
@@ -840,7 +840,7 @@ int __init SK_probe(struct device *dev, short ioaddr)
  *     YY/MM/DD  uid  Description
 -*/
 
-static int SK_open(struct device *dev)
+static int SK_open(struct net_device *dev)
 {
     int i = 0;
     int irqval = 0;
@@ -994,7 +994,7 @@ static int SK_open(struct device *dev)
  * Description    : Reset LANCE chip, fill RMD, TMD structures with
  *                  start values and Start LANCE.
  *
- * Parameters     : I : struct device *dev - SK_G16 device structure
+ * Parameters     : I : struct net_device *dev - SK_G16 device structure
  *                  I : int mode - put LANCE into "mode" see data-sheet for
  *                                 more info.
  * Return Value   : 0  - Init done
@@ -1003,7 +1003,7 @@ static int SK_open(struct device *dev)
  *     YY/MM/DD  uid  Description
 -*/
 
-static int SK_lance_init(struct device *dev, unsigned short mode)
+static int SK_lance_init(struct net_device *dev, unsigned short mode)
 {
     int i;
     unsigned long flags;
@@ -1161,7 +1161,7 @@ static int SK_lance_init(struct device *dev, unsigned short mode)
  *                  and starts transmission.
  *
  * Parameters     : I : struct sk_buff *skb - packet to transfer
- *                  I : struct device *dev  - SK_G16 device structure
+ *                  I : struct net_device *dev  - SK_G16 device structure
  * Return Value   : 0 - OK
  *                  1 - Could not transmit (dev_queue_xmit will queue it)
  *                      and try to sent it later
@@ -1171,7 +1171,7 @@ static int SK_lance_init(struct device *dev, unsigned short mode)
  *     YY/MM/DD  uid  Description
 -*/
 
-static int SK_send_packet(struct sk_buff *skb, struct device *dev)
+static int SK_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
     struct priv *p = (struct priv *) dev->priv;
     struct tmd *tmdp;
@@ -1278,7 +1278,7 @@ static int SK_send_packet(struct sk_buff *skb, struct device *dev)
 static void SK_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
     int csr0;
-    struct device *dev = dev_id;
+    struct net_device *dev = dev_id;
     struct priv *p = (struct priv *) dev->priv;
 
 
@@ -1342,7 +1342,7 @@ static void SK_interrupt(int irq, void *dev_id, struct pt_regs * regs)
  *                  statistics and relinquish ownership of transmit 
  *                  descriptor ring.
  *
- * Parameters     : I : struct device *dev - SK_G16 device structure
+ * Parameters     : I : struct net_device *dev - SK_G16 device structure
  * Return Value   : None
  * Errors         : None
  * Globals        : None
@@ -1350,7 +1350,7 @@ static void SK_interrupt(int irq, void *dev_id, struct pt_regs * regs)
  *     YY/MM/DD  uid  Description
 -*/
 
-static void SK_txintr(struct device *dev)
+static void SK_txintr(struct net_device *dev)
 {
     int tmdstat;
     struct tmd *tmdp;
@@ -1470,7 +1470,7 @@ static void SK_txintr(struct device *dev)
  *     YY/MM/DD  uid  Description
 -*/
 
-static void SK_rxintr(struct device *dev)
+static void SK_rxintr(struct net_device *dev)
 {
 
     struct rmd *rmdp;
@@ -1607,7 +1607,7 @@ static void SK_rxintr(struct device *dev)
  * Description    : close gets called from dev_close() and should
  *                  deinstall the card (free_irq, mem etc).
  *
- * Parameters     : I : struct device *dev - our device structure
+ * Parameters     : I : struct net_device *dev - our device structure
  * Return Value   : 0 - closed device driver
  * Errors         : None
  * Globals        : None
@@ -1619,7 +1619,7 @@ static void SK_rxintr(struct device *dev)
  * down' the system stops. So I don't shut set card to init state.
  */
 
-static int SK_close(struct device *dev)
+static int SK_close(struct net_device *dev)
 {
 
     PRINTK(("## %s: SK_close(). CSR0: %#06x\n", 
@@ -1648,7 +1648,7 @@ static int SK_close(struct device *dev)
  * Description    : Return current status structure to upper layers.
  *                  It is called by sprintf_stats (dev.c).
  *
- * Parameters     : I : struct device *dev   - our device structure
+ * Parameters     : I : struct net_device *dev   - our device structure
  * Return Value   : struct net_device_stats * - our current statistics
  * Errors         : None
  * Side Effects   : None
@@ -1656,7 +1656,7 @@ static int SK_close(struct device *dev)
  *     YY/MM/DD  uid  Description
 -*/
 
-static struct net_device_stats *SK_get_stats(struct device *dev)
+static struct net_device_stats *SK_get_stats(struct net_device *dev)
 {
 
     struct priv *p = (struct priv *) dev->priv;
@@ -1684,7 +1684,7 @@ static struct net_device_stats *SK_get_stats(struct device *dev)
  *                  but it is also a security problem. You have to remember
  *                  that all information on the net is not encrypted.
  *
- * Parameters     : I : struct device *dev - SK_G16 device Structure
+ * Parameters     : I : struct net_device *dev - SK_G16 device Structure
  * Return Value   : None
  * Errors         : None
  * Globals        : None
@@ -1697,7 +1697,7 @@ static struct net_device_stats *SK_get_stats(struct device *dev)
 /* Set or clear the multicast filter for SK_G16.
  */
 
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
 
     if (dev->flags&IFF_PROMISC)
@@ -1949,7 +1949,7 @@ void SK_write_reg(int reg_number, int value)
  * Description    : This function prints out the 4 POS (Programmable
  *                  Option Select) Registers. Used mainly to debug operation.
  *
- * Parameters     : I : struct device *dev - SK_G16 device structure
+ * Parameters     : I : struct net_device *dev - SK_G16 device structure
  *                  I : char * - Text which will be printed as title
  * Return Value   : None
  * Errors         : None
@@ -1957,7 +1957,7 @@ void SK_write_reg(int reg_number, int value)
  *     YY/MM/DD  uid  Description
 -*/
 
-void SK_print_pos(struct device *dev, char *text)
+void SK_print_pos(struct net_device *dev, char *text)
 {
     int ioaddr = dev->base_addr;
 
@@ -1984,7 +1984,7 @@ void SK_print_pos(struct device *dev, char *text)
  * Description    : This function simply prints out the important fields
  *                  of the device structure.
  *
- * Parameters     : I : struct device *dev  - SK_G16 device structure
+ * Parameters     : I : struct net_device *dev  - SK_G16 device structure
  *                  I : char *text - Title for printing
  * Return Value   : None
  * Errors         : None
@@ -1992,7 +1992,7 @@ void SK_print_pos(struct device *dev, char *text)
  *     YY/MM/DD  uid  Description
 -*/
 
-void SK_print_dev(struct device *dev, char *text)
+void SK_print_dev(struct net_device *dev, char *text)
 {
     if (dev == NULL)
     {
@@ -2027,7 +2027,7 @@ void SK_print_dev(struct device *dev, char *text)
  *                  It contains a minor bug in printing, but has no effect to the values
  *                  only newlines are not correct.
  *
- * Parameters     : I : struct device *dev - SK_G16 device structure
+ * Parameters     : I : struct net_device *dev - SK_G16 device structure
  * Return Value   : None
  * Errors         : None
  * Globals        : None
@@ -2035,7 +2035,7 @@ void SK_print_dev(struct device *dev, char *text)
  *     YY/MM/DD  uid  Description
 -*/
 
-void SK_print_ram(struct device *dev)
+void SK_print_ram(struct net_device *dev)
 {
 
     int i;    

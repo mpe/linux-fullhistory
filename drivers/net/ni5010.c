@@ -100,26 +100,26 @@ struct ni5010_local {
 
 /* Index to functions, as function prototypes. */
 
-extern int 	ni5010_probe(struct device *dev);
-static int	ni5010_probe1(struct device *dev, int ioaddr);
-static int	ni5010_open(struct device *dev);
-static int	ni5010_send_packet(struct sk_buff *skb, struct device *dev);
+extern int 	ni5010_probe(struct net_device *dev);
+static int	ni5010_probe1(struct net_device *dev, int ioaddr);
+static int	ni5010_open(struct net_device *dev);
+static int	ni5010_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void	ni5010_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void	ni5010_rx(struct device *dev);
-static int	ni5010_close(struct device *dev);
-static struct net_device_stats *ni5010_get_stats(struct device *dev);
-static void 	ni5010_set_multicast_list(struct device *dev);
-static void	reset_receiver(struct device *dev);
+static void	ni5010_rx(struct net_device *dev);
+static int	ni5010_close(struct net_device *dev);
+static struct net_device_stats *ni5010_get_stats(struct net_device *dev);
+static void 	ni5010_set_multicast_list(struct net_device *dev);
+static void	reset_receiver(struct net_device *dev);
 
-static int	process_xmt_interrupt(struct device *dev);
+static int	process_xmt_interrupt(struct net_device *dev);
 #define tx_done(dev) 1
-extern void	hardware_send_packet(struct device *dev, char *buf, int length);
-extern void 	chipset_init(struct device *dev, int startp);
+extern void	hardware_send_packet(struct net_device *dev, char *buf, int length);
+extern void 	chipset_init(struct net_device *dev, int startp);
 static void	dump_packet(void *buf, int len);
-static void 	show_registers(struct device *dev);
+static void 	show_registers(struct net_device *dev);
 
 
-int __init ni5010_probe(struct device *dev)
+int __init ni5010_probe(struct net_device *dev)
 {
 	int *port;
 
@@ -182,7 +182,7 @@ void __init trigger_irq(int ioaddr)
  *      verifies that the correct device exists and functions.
  */
 
-static int __init ni5010_probe1(struct device *dev, int ioaddr)
+static int __init ni5010_probe1(struct net_device *dev, int ioaddr)
 {
 	static unsigned version_printed = 0;
 	int i;
@@ -355,7 +355,7 @@ static int __init ni5010_probe1(struct device *dev, int ioaddr)
  * there is non-reboot way to recover if something goes wrong.
  */
    
-static int ni5010_open(struct device *dev)
+static int ni5010_open(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	int i;
@@ -414,7 +414,7 @@ static int ni5010_open(struct device *dev)
      	return 0;
 }
 
-static void reset_receiver(struct device *dev)
+static void reset_receiver(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	
@@ -426,7 +426,7 @@ static void reset_receiver(struct device *dev)
 	outb(0xff, EDLC_RMASK);	/* Enable all rcv interrupts */
 }
 
-static int ni5010_send_packet(struct sk_buff *skb, struct device *dev)
+static int ni5010_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	PRINTK2((KERN_DEBUG "%s: entering ni5010_send_packet\n", dev->name));
 	if (dev->tbusy) {
@@ -472,7 +472,7 @@ static int ni5010_send_packet(struct sk_buff *skb, struct device *dev)
 static void 
 ni5010_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct ni5010_local *lp;
 	int ioaddr, status;
 	int xmit_was_error = 0;
@@ -531,7 +531,7 @@ static void dump_packet(void *buf, int len)
 
 /* We have a good packet, get it out of the buffer. */
 static void
-ni5010_rx(struct device *dev)
+ni5010_rx(struct net_device *dev)
 {
 	struct ni5010_local *lp = (struct ni5010_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -594,7 +594,7 @@ ni5010_rx(struct device *dev)
 	
 }
 
-static int process_xmt_interrupt(struct device *dev)
+static int process_xmt_interrupt(struct net_device *dev)
 {
 	struct ni5010_local *lp = (struct ni5010_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -635,7 +635,7 @@ static int process_xmt_interrupt(struct device *dev)
 
 /* The inverse routine to ni5010_open(). */
 static int
-ni5010_close(struct device *dev)
+ni5010_close(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 
@@ -659,7 +659,7 @@ ni5010_close(struct device *dev)
 /* Get the current statistics.	This may be called with the card open or
    closed. */
 static struct net_device_stats *
-ni5010_get_stats(struct device *dev)
+ni5010_get_stats(struct net_device *dev)
 {
 	struct ni5010_local *lp = (struct ni5010_local *)dev->priv;
 
@@ -682,7 +682,7 @@ ni5010_get_stats(struct device *dev)
                         best-effort filtering.
 */
 static void
-ni5010_set_multicast_list(struct device *dev)
+ni5010_set_multicast_list(struct net_device *dev)
 {
 	short ioaddr = dev->base_addr;  
 
@@ -702,7 +702,7 @@ ni5010_set_multicast_list(struct device *dev)
 	}
 }
 
-extern void hardware_send_packet(struct device *dev, char *buf, int length)
+extern void hardware_send_packet(struct net_device *dev, char *buf, int length)
 {
 	struct ni5010_local *lp = (struct ni5010_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -751,13 +751,13 @@ extern void hardware_send_packet(struct device *dev, char *buf, int length)
 	if (NI5010_DEBUG) show_registers(dev);	
 }
 
-extern void chipset_init(struct device *dev, int startp)
+extern void chipset_init(struct net_device *dev, int startp)
 {
 	/* FIXME: Move some stuff here */
 	PRINTK3((KERN_DEBUG "%s: doing NOTHING in chipset_init\n", dev->name));
 }
 
-static void show_registers(struct device *dev)
+static void show_registers(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	
@@ -772,7 +772,7 @@ static void show_registers(struct device *dev)
 
 #ifdef MODULE
 static char devicename[9] = { 0, };
-static struct device dev_ni5010 = {
+static struct net_device dev_ni5010 = {
         devicename,
         0, 0, 0, 0,
         0, 0,

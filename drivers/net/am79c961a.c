@@ -36,7 +36,7 @@
 static unsigned int net_debug = NET_DEBUG;
 
 static void
-am79c961_setmulticastlist (struct device *dev);
+am79c961_setmulticastlist (struct net_device *dev);
 
 static char *version = "am79c961 ethernet driver (c) 1995 R.M.King v0.00\n";
 
@@ -69,7 +69,7 @@ write_ireg (unsigned long base, unsigned int reg, unsigned short val)
 		" : : "r" ((val) & 0xffff), "r" (0xe0000000 + ((off) << 1)));
 
 static inline void
-am_writebuffer(struct device *dev, unsigned int offset, unsigned char *buf, unsigned int length)
+am_writebuffer(struct net_device *dev, unsigned int offset, unsigned char *buf, unsigned int length)
 {
 	offset = 0xe0000000 + (offset << 1);
 	length = (length + 1) & ~1;
@@ -115,7 +115,7 @@ read_rreg (unsigned int base_addr, unsigned int reg)
 }
 
 static inline unsigned short
-am_readword (struct device *dev, unsigned long off)
+am_readword (struct net_device *dev, unsigned long off)
 {
 	unsigned long address = 0xe0000000 + (off << 1);
 	unsigned short val;
@@ -127,7 +127,7 @@ am_readword (struct device *dev, unsigned long off)
 }
 
 static inline void
-am_readbuffer(struct device *dev, unsigned int offset, unsigned char *buf, unsigned int length)
+am_readbuffer(struct net_device *dev, unsigned int offset, unsigned char *buf, unsigned int length)
 {
 	offset = 0xe0000000 + (offset << 1);
 	length = (length + 1) & ~1;
@@ -168,7 +168,7 @@ am_readbuffer(struct device *dev, unsigned int offset, unsigned char *buf, unsig
 }
 
 static int
-am79c961_ramtest(struct device *dev, unsigned int val)
+am79c961_ramtest(struct net_device *dev, unsigned int val)
 {
 	unsigned char *buffer = kmalloc (65536, GFP_KERNEL);
 	int i, error = 0, errorcount = 0;
@@ -196,7 +196,7 @@ am79c961_ramtest(struct device *dev, unsigned int val)
 }
 
 static void
-am79c961_init_for_open(struct device *dev)
+am79c961_init_for_open(struct net_device *dev)
 {
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 	unsigned long hdr_addr, first_free_addr;
@@ -264,7 +264,7 @@ am79c961_init_for_open(struct device *dev)
 }
 
 static int
-am79c961_init(struct device *dev)
+am79c961_init(struct net_device *dev)
 {
 	unsigned long flags;
 
@@ -286,7 +286,7 @@ am79c961_init(struct device *dev)
  * This is the real probe routine.
  */
 static int
-am79c961_probe1(struct device *dev)
+am79c961_probe1(struct net_device *dev)
 {
 	static unsigned version_printed = 0;
 	struct dev_priv *priv;
@@ -351,7 +351,7 @@ am79c961_probe1(struct device *dev)
 }
 
 int
-am79c961_probe(struct device *dev)
+am79c961_probe(struct net_device *dev)
 {
 	static int initialised = 0;
 
@@ -374,7 +374,7 @@ am79c961_probe(struct device *dev)
  * there is non-reboot way to recover if something goes wrong.
  */
 static int
-am79c961_open(struct device *dev)
+am79c961_open(struct net_device *dev)
 {
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 
@@ -397,7 +397,7 @@ am79c961_open(struct device *dev)
  * The inverse routine to am79c961_open().
  */
 static int
-am79c961_close(struct device *dev)
+am79c961_close(struct net_device *dev)
 {
 	dev->tbusy = 1;
 	dev->start = 0;
@@ -414,7 +414,7 @@ am79c961_close(struct device *dev)
  * Get the current statistics.	This may be called with the card open or
  * closed.
  */
-static struct enet_statistics *am79c961_getstats (struct device *dev)
+static struct enet_statistics *am79c961_getstats (struct net_device *dev)
 {
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 	return &priv->stats;
@@ -426,7 +426,7 @@ static struct enet_statistics *am79c961_getstats (struct device *dev)
  * We don't attempt any packet filtering.  The card may have a SEEQ 8004
  * in which does not have the other ethernet address registers present...
  */
-static void am79c961_setmulticastlist (struct device *dev)
+static void am79c961_setmulticastlist (struct net_device *dev)
 {
 	unsigned long flags;
 	int i;
@@ -446,7 +446,7 @@ static void am79c961_setmulticastlist (struct device *dev)
  * Transmit a packet
  */
 static int
-am79c961_sendpacket(struct sk_buff *skb, struct device *dev)
+am79c961_sendpacket(struct sk_buff *skb, struct net_device *dev)
 {
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 
@@ -494,7 +494,7 @@ again:
 static void
 am79c961_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)dev_id;
+	struct net_device *dev = (struct net_device *)dev_id;
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 	unsigned int status;
 
@@ -527,7 +527,7 @@ am79c961_interrupt(int irq, void *dev_id, struct pt_regs *regs)
  * If we have a good packet(s), get it/them out of the buffers.
  */
 static void
-am79c961_rx(struct device *dev, struct dev_priv *priv)
+am79c961_rx(struct net_device *dev, struct dev_priv *priv)
 {
 	unsigned long hdraddr;
 	unsigned long pktaddr;
@@ -589,7 +589,7 @@ am79c961_rx(struct device *dev, struct dev_priv *priv)
  * Update stats for the transmitted packet
  */
 static void
-am79c961_tx(struct device *dev, struct dev_priv *priv)
+am79c961_tx(struct net_device *dev, struct dev_priv *priv)
 {
 	do {
 		unsigned long hdraddr;

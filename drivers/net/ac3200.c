@@ -74,19 +74,19 @@ static const char *port_name[4] = { "10baseT", "invalid", "AUI", "10base2"};
 #define AC_START_PG		0x00	/* First page of 8390 TX buffer */
 #define AC_STOP_PG		0x80	/* Last page +1 of the 8390 RX ring */
 
-int ac3200_probe(struct device *dev);
-static int ac_probe1(int ioaddr, struct device *dev);
+int ac3200_probe(struct net_device *dev);
+static int ac_probe1(int ioaddr, struct net_device *dev);
 
-static int ac_open(struct device *dev);
-static void ac_reset_8390(struct device *dev);
-static void ac_block_input(struct device *dev, int count,
+static int ac_open(struct net_device *dev);
+static void ac_reset_8390(struct net_device *dev);
+static void ac_block_input(struct net_device *dev, int count,
 					struct sk_buff *skb, int ring_offset);
-static void ac_block_output(struct device *dev, const int count,
+static void ac_block_output(struct net_device *dev, const int count,
 							const unsigned char *buf, const int start_page);
-static void ac_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+static void ac_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
 					int ring_page);
 
-static int ac_close_card(struct device *dev);
+static int ac_close_card(struct net_device *dev);
 
 
 /*	Probe for the AC3200.
@@ -95,7 +95,7 @@ static int ac_close_card(struct device *dev);
 	or the unique value in the station address PROM.
 	*/
 
-int __init ac3200_probe(struct device *dev)
+int __init ac3200_probe(struct net_device *dev)
 {
 	unsigned short ioaddr = dev->base_addr;
 
@@ -117,7 +117,7 @@ int __init ac3200_probe(struct device *dev)
 	return ENODEV;
 }
 
-static int __init ac_probe1(int ioaddr, struct device *dev)
+static int __init ac_probe1(int ioaddr, struct net_device *dev)
 {
 	int i;
 
@@ -254,7 +254,7 @@ static int __init ac_probe1(int ioaddr, struct device *dev)
 	return 0;
 }
 
-static int ac_open(struct device *dev)
+static int ac_open(struct net_device *dev)
 {
 #ifdef notyet
 	/* Someday we may enable the IRQ and shared memory here. */
@@ -271,7 +271,7 @@ static int ac_open(struct device *dev)
 	return 0;
 }
 
-static void ac_reset_8390(struct device *dev)
+static void ac_reset_8390(struct net_device *dev)
 {
 	ushort ioaddr = dev->base_addr;
 
@@ -290,7 +290,7 @@ static void ac_reset_8390(struct device *dev)
    the start of a page, so we optimize accordingly. */
 
 static void
-ac_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+ac_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 	unsigned long hdr_start = dev->mem_start + ((ring_page - AC_START_PG)<<8);
 	memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
@@ -299,7 +299,7 @@ ac_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 /*  Block input and output are easy on shared memory ethercards, the only
 	complication is when the ring buffer wraps. */
 
-static void ac_block_input(struct device *dev, int count, struct sk_buff *skb,
+static void ac_block_input(struct net_device *dev, int count, struct sk_buff *skb,
 						  int ring_offset)
 {
 	unsigned long xfer_start = dev->mem_start + ring_offset - (AC_START_PG<<8);
@@ -316,7 +316,7 @@ static void ac_block_input(struct device *dev, int count, struct sk_buff *skb,
 	}
 }
 
-static void ac_block_output(struct device *dev, int count,
+static void ac_block_output(struct net_device *dev, int count,
 							const unsigned char *buf, int start_page)
 {
 	unsigned long shmem = dev->mem_start + ((start_page - AC_START_PG)<<8);
@@ -324,7 +324,7 @@ static void ac_block_output(struct device *dev, int count,
 	memcpy_toio(shmem, buf, count);
 }
 
-static int ac_close_card(struct device *dev)
+static int ac_close_card(struct net_device *dev)
 {
 	dev->start = 0;
 	dev->tbusy = 1;
@@ -349,7 +349,7 @@ static int ac_close_card(struct device *dev)
 #define MAX_AC32_CARDS	4	/* Max number of AC32 cards per module */
 #define NAMELEN		8	/* # of chars for storing dev->name */
 static char namelist[NAMELEN * MAX_AC32_CARDS] = { 0, };
-static struct device dev_ac32[MAX_AC32_CARDS] = {
+static struct net_device dev_ac32[MAX_AC32_CARDS] = {
 	{
 		NULL,		/* assign a chunk of namelist[] below */
 		0, 0, 0, 0,
@@ -371,7 +371,7 @@ init_module(void)
 	int this_dev, found = 0;
 
 	for (this_dev = 0; this_dev < MAX_AC32_CARDS; this_dev++) {
-		struct device *dev = &dev_ac32[this_dev];
+		struct net_device *dev = &dev_ac32[this_dev];
 		dev->name = namelist+(NAMELEN*this_dev);
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
@@ -399,7 +399,7 @@ cleanup_module(void)
 	int this_dev;
 
 	for (this_dev = 0; this_dev < MAX_AC32_CARDS; this_dev++) {
-		struct device *dev = &dev_ac32[this_dev];
+		struct net_device *dev = &dev_ac32[this_dev];
 		if (dev->priv != NULL) {
 			void *priv = dev->priv;
 			/* Someday free_irq may be in ac_close_card() */

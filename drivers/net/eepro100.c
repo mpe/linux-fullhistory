@@ -284,8 +284,8 @@ having to sign an Intel NDA when I'm helping Intel sell their own product!
 */
 
 /* This table drives the PCI probe routines. */
-static struct device *
-speedo_found1(int pci_bus, int pci_devfn, struct device *dev,
+static struct net_device *
+speedo_found1(int pci_bus, int pci_devfn, struct net_device *dev,
 			  long ioaddr, int irq, int chip_idx, int fnd_cnt);
 
 #ifdef USE_IO
@@ -312,7 +312,7 @@ struct pci_id_info {
 	const char *name;
 	u16	vendor_id, device_id, device_id_mask, flags;
 	int io_size;
-	struct device *(*probe1)(int pci_bus, int pci_devfn, struct device *dev,
+	struct net_device *(*probe1)(int pci_bus, int pci_devfn, struct net_device *dev,
 							 long ioaddr, int irq, int chip_idx, int fnd_cnt);
 } static pci_tbl[] = {
 	{ "Intel PCI EtherExpress Pro100",
@@ -455,7 +455,7 @@ struct speedo_private {
 	unsigned int cur_rx, dirty_rx;		/* The next free ring entry */
 	long last_rx_time;			/* Last Rx, in jiffies, to handle Rx hang. */
 	const char *product_name;
-	struct device *next_module;
+	struct net_device *next_module;
 	void *priv_addr;					/* Unaligned address for kfree */
 	struct enet_statistics stats;
 	struct speedo_stats lstats;
@@ -508,18 +508,18 @@ static const char is_mii[] = { 0, 1, 1, 0, 1, 1, 0, 1 };
 static int do_eeprom_cmd(long ioaddr, int cmd, int cmd_len);
 static int mdio_read(long ioaddr, int phy_id, int location);
 static int mdio_write(long ioaddr, int phy_id, int location, int value);
-static int speedo_open(struct device *dev);
-static void speedo_resume(struct device *dev);
+static int speedo_open(struct net_device *dev);
+static void speedo_resume(struct net_device *dev);
 static void speedo_timer(unsigned long data);
-static void speedo_init_rx_ring(struct device *dev);
-static void speedo_tx_timeout(struct device *dev);
-static int speedo_start_xmit(struct sk_buff *skb, struct device *dev);
-static int speedo_rx(struct device *dev);
+static void speedo_init_rx_ring(struct net_device *dev);
+static void speedo_tx_timeout(struct net_device *dev);
+static int speedo_start_xmit(struct sk_buff *skb, struct net_device *dev);
+static int speedo_rx(struct net_device *dev);
 static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
-static int speedo_close(struct device *dev);
-static struct enet_statistics *speedo_get_stats(struct device *dev);
-static int speedo_ioctl(struct device *dev, struct ifreq *rq, int cmd);
-static void set_rx_mode(struct device *dev);
+static int speedo_close(struct net_device *dev);
+static struct enet_statistics *speedo_get_stats(struct net_device *dev);
+static int speedo_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
+static void set_rx_mode(struct net_device *dev);
 
 
 
@@ -531,10 +531,10 @@ static int mii_ctrl[8] = { 0x3300, 0x3100, 0x0000, 0x0100,
 #endif
 
 /* A list of all installed Speedo devices, for removing the driver module. */
-static struct device *root_speedo_dev = NULL;
+static struct net_device *root_speedo_dev = NULL;
 
 #if ! defined(HAS_PCI_NETIF)
-int eepro100_init(struct device *dev)
+int eepro100_init(struct net_device *dev)
 {
 	int cards_found = 0;
 	static int pci_index = 0;
@@ -625,8 +625,8 @@ int eepro100_init(struct device *dev)
 }
 #endif
 
-static struct device *
-speedo_found1(int pci_bus, int pci_devfn, struct device *dev,
+static struct net_device *
+speedo_found1(int pci_bus, int pci_devfn, struct net_device *dev,
 			  long ioaddr, int irq, int chip_idx, int card_idx)
 {
 	struct speedo_private *sp;
@@ -896,7 +896,7 @@ static int mdio_write(long ioaddr, int phy_id, int location, int value)
 
 
 static int
-speedo_open(struct device *dev)
+speedo_open(struct net_device *dev)
 {
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -984,7 +984,7 @@ speedo_open(struct device *dev)
 }
 
 /* Start the chip hardware after a full reset. */
-static void speedo_resume(struct device *dev)
+static void speedo_resume(struct net_device *dev)
 {
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -1040,7 +1040,7 @@ static void speedo_resume(struct device *dev)
 /* Media monitoring and control. */
 static void speedo_timer(unsigned long data)
 {
-	struct device *dev = (struct device *)data;
+	struct net_device *dev = (struct net_device *)data;
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 	int phy_num = sp->phy[0] & 0x1f;
@@ -1087,7 +1087,7 @@ static void speedo_timer(unsigned long data)
 	add_timer(&sp->timer);
 }
 
-static void speedo_show_state(struct device *dev)
+static void speedo_show_state(struct net_device *dev)
 {
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -1122,7 +1122,7 @@ static void speedo_show_state(struct device *dev)
 
 /* Initialize the Rx and Tx rings, along with various 'dev' bits. */
 static void
-speedo_init_rx_ring(struct device *dev)
+speedo_init_rx_ring(struct net_device *dev)
 {
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
 	struct RxFD *rxf, *last_rxf = NULL;
@@ -1159,7 +1159,7 @@ speedo_init_rx_ring(struct device *dev)
 	sp->last_rxf = last_rxf;
 }
 
-static void speedo_tx_timeout(struct device *dev)
+static void speedo_tx_timeout(struct net_device *dev)
 {
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -1207,7 +1207,7 @@ static void speedo_tx_timeout(struct device *dev)
 }
 
 static int
-speedo_start_xmit(struct sk_buff *skb, struct device *dev)
+speedo_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -1278,7 +1278,7 @@ speedo_start_xmit(struct sk_buff *skb, struct device *dev)
    after the Tx thread. */
 static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)dev_instance;
+	struct net_device *dev = (struct net_device *)dev_instance;
 	struct speedo_private *sp;
 	long ioaddr, boguscnt = max_interrupt_work;
 	unsigned short status;
@@ -1401,7 +1401,7 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 }
 
 static int
-speedo_rx(struct device *dev)
+speedo_rx(struct net_device *dev)
 {
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
 	int entry = sp->cur_rx % RX_RING_SIZE;
@@ -1512,7 +1512,7 @@ speedo_rx(struct device *dev)
 }
 
 static int
-speedo_close(struct device *dev)
+speedo_close(struct net_device *dev)
 {
 	long ioaddr = dev->base_addr;
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
@@ -1585,7 +1585,7 @@ speedo_close(struct device *dev)
    Oh, and incoming frames are dropped while executing dump-stats!
    */
 static struct enet_statistics *
-speedo_get_stats(struct device *dev)
+speedo_get_stats(struct net_device *dev)
 {
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -1612,7 +1612,7 @@ speedo_get_stats(struct device *dev)
 	return &sp->stats;
 }
 
-static int speedo_ioctl(struct device *dev, struct ifreq *rq, int cmd)
+static int speedo_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -1659,7 +1659,7 @@ static int speedo_ioctl(struct device *dev, struct ifreq *rq, int cmd)
    loaded the link -- we convert the current command block, normally a Tx
    command, into a no-op and link it to the new command.
 */
-static void set_rx_mode(struct device *dev)
+static void set_rx_mode(struct net_device *dev)
 {
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -1853,7 +1853,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	struct device *next_dev;
+	struct net_device *next_dev;
 
 	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 	while (root_speedo_dev) {
@@ -1877,7 +1877,7 @@ void cleanup_module(void)
 
 #else   /* not MODULE */
 
-int eepro100_probe(struct device *dev)
+int eepro100_probe(struct net_device *dev)
 {
 	int cards_found = 0;
 

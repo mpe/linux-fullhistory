@@ -76,7 +76,7 @@
 #define X25_CHAN_MTU	2048	/* unfragmented logical channel MTU */
 
 /* Data Structures */
-/* This is an extention of the 'struct device' we create for each network
+/* This is an extention of the 'struct net_device' we create for each network
    interface to keep the rest of X.25 channel-specific data. */
 typedef struct x25_channel {
 	char name[WAN_IFNAME_SZ+1];	/* interface name, ASCIIZ */
@@ -99,19 +99,19 @@ typedef struct x25_channel {
 /* Function Prototypes */
 /* WAN link driver entry points. These are called by the WAN router module. */
 static int update (wan_device_t *wandev),
-	   new_if (wan_device_t *wandev, struct device *dev,wanif_conf_t *conf),
-	   del_if (wan_device_t *wandev, struct device *dev);
+	   new_if (wan_device_t *wandev, struct net_device *dev,wanif_conf_t *conf),
+	   del_if (wan_device_t *wandev, struct net_device *dev);
 
 /* Network device interface */
-static int if_init (struct device *dev),
-	   if_open (struct device *dev),
-	   if_close (struct device *dev),
-	   if_header (struct sk_buff *skb, struct device *dev,
+static int if_init (struct net_device *dev),
+	   if_open (struct net_device *dev),
+	   if_close (struct net_device *dev),
+	   if_header (struct sk_buff *skb, struct net_device *dev,
 		      u16 type, void *daddr, void *saddr, unsigned len),
 	   if_rebuild_hdr (struct sk_buff *skb),
-	   if_send (struct sk_buff *skb, struct device *dev);
+	   if_send (struct sk_buff *skb, struct net_device *dev);
 
-static struct net_device_stats * if_stats (struct device *dev);
+static struct net_device_stats * if_stats (struct net_device *dev);
 
 /* Interrupt handlers */
 static void cyx_isr (cycx_t *card),
@@ -133,13 +133,13 @@ static int x25_configure (cycx_t *card, TX25Config *conf),
 	   x25_disconnect_response (cycx_t *card, u8 link, u8 lcn);
 
 /* Miscellaneous functions */
-static int chan_connect (struct device *dev),
-	   chan_send (struct device *dev, struct sk_buff *skb);
+static int chan_connect (struct net_device *dev),
+	   chan_send (struct net_device *dev, struct sk_buff *skb);
 
-static void set_chan_state (struct device *dev, u8 state),
+static void set_chan_state (struct net_device *dev, u8 state),
 	    nibble_to_byte (u8 *s, u8 *d, u8 len, u8 nibble),
-	    reset_timer (struct device *dev),
-	    chan_disc (struct device *dev),
+	    reset_timer (struct net_device *dev),
+	    chan_disc (struct net_device *dev),
 	    chan_timer (unsigned long d);
 
 static u8 bps_to_speed_code (u32 bps);
@@ -147,8 +147,8 @@ static u8 log2 (u32 n);
 
 static unsigned dec_to_uint (u8 *str, int len);
 
-static struct device *get_dev_by_lcn (wan_device_t *wandev, s16 lcn);
-static struct device *get_dev_by_dte_addr (wan_device_t *wandev, char *dte);
+static struct net_device *get_dev_by_lcn (wan_device_t *wandev, s16 lcn);
+static struct net_device *get_dev_by_dte_addr (wan_device_t *wandev, char *dte);
 
 #ifdef CYCLOMX_X25_DEBUG
 static void hex_dump(char *msg, unsigned char *p, int len);
@@ -315,7 +315,7 @@ static int update (wan_device_t *wandev)
  *
  * Return:	0	o.k.
  *		< 0	failure (channel will not be created) */
-static int new_if (wan_device_t *wandev, struct device *dev, wanif_conf_t *conf)
+static int new_if (wan_device_t *wandev, struct net_device *dev, wanif_conf_t *conf)
 {
 	cycx_t *card = wandev->private;
 	x25_channel_t *chan;
@@ -402,7 +402,7 @@ static int new_if (wan_device_t *wandev, struct device *dev, wanif_conf_t *conf)
 }
 
 /* Delete logical channel. */
-static int del_if (wan_device_t *wandev, struct device *dev)
+static int del_if (wan_device_t *wandev, struct net_device *dev)
 {
 	if (!dev) {
 		printk(KERN_ERR "cycx_x25:del_if:dev == NULL!\n");
@@ -433,7 +433,7 @@ static int del_if (wan_device_t *wandev, struct device *dev)
  * This routine is called only once for each interface, during Linux network
  * interface registration.  Returning anything but zero will fail interface
  * registration. */
-static int if_init (struct device *dev)
+static int if_init (struct net_device *dev)
 {
 	x25_channel_t *chan = dev->priv;
 	cycx_t *card = chan->card;
@@ -478,7 +478,7 @@ static int if_init (struct device *dev)
  * o if link is disconnected then initiate connection
  *
  * Return 0 if O.k. or errno.  */
-static int if_open (struct device *dev)
+static int if_open (struct net_device *dev)
 {
 	x25_channel_t *chan = dev->priv;
 	cycx_t *card = chan->card;
@@ -497,7 +497,7 @@ static int if_open (struct device *dev)
 /* Close network interface.
  * o reset flags.
  * o if there's no more open channels then disconnect physical link. */
-static int if_close (struct device *dev)
+static int if_close (struct net_device *dev)
 {
 	x25_channel_t *chan = dev->priv;
 	cycx_t *card = chan->card;
@@ -519,7 +519,7 @@ static int if_close (struct device *dev)
  * set skb->protocol to 0 and discard packet later.
  *
  * Return:	media header length. */
-static int if_header (struct sk_buff *skb, struct device *dev,
+static int if_header (struct sk_buff *skb, struct net_device *dev,
 		      u16 type, void *daddr, void *saddr, unsigned len)
 {
 	skb->protocol = type;
@@ -549,7 +549,7 @@ static int if_rebuild_hdr (struct sk_buff *skb)
  *    bottom half" (with interrupts enabled).
  * 2. Setting tbusy flag will inhibit further transmit requests from the
  *    protocol stack and can be used for flow control with protocol layer. */
-static int if_send (struct sk_buff *skb, struct device *dev)
+static int if_send (struct sk_buff *skb, struct net_device *dev)
 {
 	x25_channel_t *chan = dev->priv;
 	cycx_t *card = chan->card;
@@ -597,7 +597,7 @@ static int if_send (struct sk_buff *skb, struct device *dev)
 
 /* Get Ethernet-style interface statistics.
  * Return a pointer to struct net_device_stats */
-static struct net_device_stats *if_stats (struct device *dev)
+static struct net_device_stats *if_stats (struct net_device *dev)
 {
         x25_channel_t *chan = dev->priv;
 
@@ -663,7 +663,7 @@ static void cyx_isr (cycx_t *card)
  *	o Clear 'tbusy' flag */
 static void tx_intr (cycx_t *card, TX25Cmd *cmd)
 {
-	struct device *dev;
+	struct net_device *dev;
 	wan_device_t *wandev = &card->wandev;
 	u8 lcn;
 
@@ -695,7 +695,7 @@ static void tx_intr (cycx_t *card, TX25Cmd *cmd)
 static void rx_intr (cycx_t *card, TX25Cmd *cmd)
 {
 	wan_device_t *wandev = &card->wandev;
-	struct device *dev;
+	struct net_device *dev;
 	x25_channel_t *chan;
 	struct sk_buff *skb;
 	u8 bitm, lcn;
@@ -775,7 +775,7 @@ static void rx_intr (cycx_t *card, TX25Cmd *cmd)
 static void connect_intr (cycx_t *card, TX25Cmd *cmd)
 {
 	wan_device_t *wandev = &card->wandev;
-	struct device *dev = NULL;
+	struct net_device *dev = NULL;
 	x25_channel_t *chan;
 	u8 d[32],
 	   loc[24],
@@ -816,7 +816,7 @@ static void connect_intr (cycx_t *card, TX25Cmd *cmd)
 static void connect_confirm_intr (cycx_t *card, TX25Cmd *cmd)
 {
 	wan_device_t *wandev = &card->wandev;
-	struct device *dev;
+	struct net_device *dev;
 	x25_channel_t *chan;
 	u8 lcn, key;
 
@@ -842,7 +842,7 @@ static void connect_confirm_intr (cycx_t *card, TX25Cmd *cmd)
 static void disconnect_confirm_intr (cycx_t *card, TX25Cmd *cmd)
 {
 	wan_device_t *wandev = &card->wandev;
-	struct device *dev;
+	struct net_device *dev;
 	u8 lcn;
 
 	cycx_peek(&card->hw, cmd->buf, &lcn, sizeof(lcn));
@@ -862,7 +862,7 @@ static void disconnect_confirm_intr (cycx_t *card, TX25Cmd *cmd)
 static void disconnect_intr (cycx_t *card, TX25Cmd *cmd)
 {
 	wan_device_t *wandev = &card->wandev;
-	struct device *dev;
+	struct net_device *dev;
 	u8 lcn;
 
 	cycx_peek(&card->hw, cmd->buf, &lcn, sizeof(lcn));
@@ -1201,9 +1201,9 @@ static int x25_send (cycx_t *card, u8 link, u8 lcn, u8 bitm, int len, void *buf)
 
 /* Miscellaneous */
 /* Find network device by its channel number.  */
-static struct device *get_dev_by_lcn (wan_device_t *wandev, s16 lcn)
+static struct net_device *get_dev_by_lcn (wan_device_t *wandev, s16 lcn)
 {
-	struct device *dev = wandev->dev;
+	struct net_device *dev = wandev->dev;
 
 	for (; dev; dev = dev->slave)
 		if (((x25_channel_t*)dev->priv)->lcn == lcn)
@@ -1212,9 +1212,9 @@ static struct device *get_dev_by_lcn (wan_device_t *wandev, s16 lcn)
 }
 
 /* Find network device by its remote dte address. */
-static struct device *get_dev_by_dte_addr (wan_device_t *wandev, char *dte)
+static struct net_device *get_dev_by_dte_addr (wan_device_t *wandev, char *dte)
 {
-	struct device *dev = wandev->dev;
+	struct net_device *dev = wandev->dev;
 
 	for (; dev; dev = dev->slave)
 		if (!strcmp (((x25_channel_t*)dev->priv)->addr, dte))
@@ -1229,7 +1229,7 @@ static struct device *get_dev_by_dte_addr (wan_device_t *wandev, char *dte)
  * Return:	0	connected
  *		>0	connection in progress
  *		<0	failure */
-static int chan_connect (struct device *dev)
+static int chan_connect (struct net_device *dev)
 {
 	x25_channel_t *chan = dev->priv;
 	cycx_t *card = chan->card;
@@ -1251,7 +1251,7 @@ static int chan_connect (struct device *dev)
 
 /* Disconnect logical channel.
  * o if SVC then clear X.25 call */
-static void chan_disc (struct device *dev)
+static void chan_disc (struct net_device *dev)
 {
 	x25_channel_t *chan = dev->priv;
 
@@ -1265,7 +1265,7 @@ static void chan_disc (struct device *dev)
 /* Called by kernel timer */
 static void chan_timer (unsigned long d)
 {
-	struct device *dev = (struct device*) d;
+	struct net_device *dev = (struct net_device*) d;
 	x25_channel_t *chan = dev->priv;
 	
 	switch (chan->state) {
@@ -1280,7 +1280,7 @@ static void chan_timer (unsigned long d)
 }
 
 /* Set logical channel state. */
-static void set_chan_state (struct device *dev, u8 state)
+static void set_chan_state (struct net_device *dev, u8 state)
 {
 	x25_channel_t *chan = dev->priv;
 	cycx_t *card = chan->card;
@@ -1345,7 +1345,7 @@ static void set_chan_state (struct device *dev, u8 state)
  *    the packet into 'complete sequence' using M-bit.
  * 2. When transmission is complete, an event notification should be issued
  *    to the router.  */
-static int chan_send (struct device *dev, struct sk_buff *skb)
+static int chan_send (struct net_device *dev, struct sk_buff *skb)
 {
 	x25_channel_t *chan = dev->priv;
 	cycx_t *card = chan->card;
@@ -1418,7 +1418,7 @@ static unsigned dec_to_uint (u8 *str, int len)
 	return val;
 }
 
-static void reset_timer(struct device *dev)
+static void reset_timer(struct net_device *dev)
 {
 	x25_channel_t *chan = dev->priv;
 
@@ -1470,7 +1470,7 @@ static void x25_dump_stats(TX25Stats *stats)
 
 static void x25_dump_devs(wan_device_t *wandev)
 {
-	struct device *dev = wandev->dev;
+	struct net_device *dev = wandev->dev;
 
 	printk (KERN_INFO "x25 dev states\n");
 	printk (KERN_INFO "name: addr:           tbusy:\n");

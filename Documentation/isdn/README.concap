@@ -118,7 +118,7 @@ struct concap_proto_ops{
 	   or when the device driver resets the interface. All services of the
 	   encapsulation protocol may be used after this*/
 	int (*restart)(struct concap_proto *cprot, 
-		       struct device *ndev,
+		       struct net_device *ndev,
 		       struct concap_device_ops *dops);
 
 	/* deactivate an encapsulation protocol instance. The encapsulation
@@ -174,7 +174,7 @@ because the encapsulation protocol directly calls netif_rx().
 
 An encapsulation protocol itself is actually the
 struct concap_proto{
-	struct device *net_dev;		/* net device using our service  */
+	struct net_device *net_dev;		/* net device using our service  */
 	struct concap_device_ops *dops; /* callbacks provided by device */
  	struct concap_proto_ops  *pops; /* callbacks provided by us */
 	int flags;
@@ -199,7 +199,7 @@ A possible extended device structure which uses the connection controlling
 encapsulation services could look like this:
 
 struct concap_device{
-	struct device net_dev;
+	struct net_device net_dev;
 	struct my_priv  /* device->local stuff */
 			/* the my_priv struct might contain a 
 			   struct concap_device_ops *dops;
@@ -225,9 +225,9 @@ ATM).
 
 
 If general linux network interfaces explicitly supported concap
-protocols (e.g. by a member struct concap_proto* in struct device)
+protocols (e.g. by a member struct concap_proto* in struct net_device)
 then the interface of the service function could be changed
-by passing a pointer of type (struct device*) instead of
+by passing a pointer of type (struct net_device*) instead of
 type (struct concap_proto*). Doing so would make many of the service
 functions compatible to network device support functions.
 
@@ -237,7 +237,7 @@ e.g. instead of the concap protocol's service function
 
 we could have
 
-  int (*encap_and_xmit)(struct device *ndev, struct sk_buff *skb);
+  int (*encap_and_xmit)(struct net_device *ndev, struct sk_buff *skb);
 
 As this is compatible to the dev->hard_start_xmit() method, the device
 driver could directly register the concap protocol's encap_and_xmit()
@@ -247,7 +247,7 @@ procedure call layer.
 
 The device's data request function could also be defined as
  
-  int (*data_req)(struct device *ndev, struct sk_buff *skb);
+  int (*data_req)(struct net_device *ndev, struct sk_buff *skb);
 
 This might even allow for some protocol stacking. And the network
 interface might even register the same data_req() function directly

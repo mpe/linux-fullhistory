@@ -207,6 +207,7 @@ struct fb_monspecs {
 #ifdef __KERNEL__
 
 #include <linux/fs.h>
+#include <linux/init.h>
 
 
 struct fb_info;
@@ -403,12 +404,6 @@ extern int fbgen_switch(int con, struct fb_info *info);
 extern void fbgen_blank(int blank, struct fb_info *info);
 
 
-struct fb_videomode {
-    const char *name;
-    struct fb_var_screeninfo var;
-};
-
-
 /* drivers/char/fbmem.c */
 extern int register_framebuffer(struct fb_info *fb_info);
 extern int unregister_framebuffer(const struct fb_info *fb_info);
@@ -444,6 +439,30 @@ extern void fb_invert_cmaps(void);
 #define VESA_VSYNC_SUSPEND	1
 #define VESA_HSYNC_SUSPEND	2
 #define VESA_POWERDOWN		3
+
+
+struct fb_videomode {
+    const char *name;	/* optional */
+    u32 refresh;	/* optional */
+    u32 xres;
+    u32 yres;
+    u32 pixclock;
+    u32 left_margin;
+    u32 right_margin;
+    u32 upper_margin;
+    u32 lower_margin;
+    u32 hsync_len;
+    u32 vsync_len;
+    u32 sync;
+    u32 vmode;
+};
+
+extern int __init fb_find_mode(struct fb_var_screeninfo *var,
+			       struct fb_info *info, const char *mode_option,
+			       const struct fb_videomode *db,
+			       unsigned int dbsize,
+			       const struct fb_videomode *default_mode,
+			       unsigned int default_bpp);
 
 #endif /* __KERNEL__ */
 

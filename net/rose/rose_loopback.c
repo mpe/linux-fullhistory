@@ -74,7 +74,7 @@ static void rose_set_loopback_timer(void)
 static void rose_loopback_timer(unsigned long param)
 {
 	struct sk_buff *skb;
-	struct device *dev;
+	struct net_device *dev;
 	rose_address *dest;
 	struct sock *sk;
 	unsigned short frametype;

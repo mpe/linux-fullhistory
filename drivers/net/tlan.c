@@ -46,12 +46,12 @@
 
 
 
-typedef u32 (TLanIntVectorFunc)( struct device *, u16 );
+typedef u32 (TLanIntVectorFunc)( struct net_device *, u16 );
 
 
 #ifdef MODULE
 
-static	struct device	*TLanDevices = NULL;
+static	struct net_device	*TLanDevices = NULL;
 static	int		TLanDevicesInstalled = 0;
 
 static	int		aui = 0;
@@ -159,57 +159,57 @@ static	TLanAdapterEntry TLanAdapterList[] = {
 
 
 static int	TLan_PciProbe( u8 *, u8 *, u8 *, u32 *, u32 * );
-static int	TLan_Init( struct device * );
-static int	TLan_Open(struct device *dev);
-static int	TLan_StartTx(struct sk_buff *, struct device *);
+static int	TLan_Init( struct net_device * );
+static int	TLan_Open(struct net_device *dev);
+static int	TLan_StartTx(struct sk_buff *, struct net_device *);
 static void	TLan_HandleInterrupt(int, void *, struct pt_regs *);
-static int	TLan_Close(struct device *);
-static struct	net_device_stats *TLan_GetStats( struct device * );
-static void	TLan_SetMulticastList( struct device * );
+static int	TLan_Close(struct net_device *);
+static struct	net_device_stats *TLan_GetStats( struct net_device * );
+static void	TLan_SetMulticastList( struct net_device * );
 
-static u32	TLan_HandleInvalid( struct device *, u16 );
-static u32	TLan_HandleTxEOF( struct device *, u16 );
-static u32	TLan_HandleStatOverflow( struct device *, u16 );
-static u32	TLan_HandleRxEOF( struct device *, u16 );
-static u32	TLan_HandleDummy( struct device *, u16 );
-static u32	TLan_HandleTxEOC( struct device *, u16 );
-static u32	TLan_HandleStatusCheck( struct device *, u16 );
-static u32	TLan_HandleRxEOC( struct device *, u16 );
+static u32	TLan_HandleInvalid( struct net_device *, u16 );
+static u32	TLan_HandleTxEOF( struct net_device *, u16 );
+static u32	TLan_HandleStatOverflow( struct net_device *, u16 );
+static u32	TLan_HandleRxEOF( struct net_device *, u16 );
+static u32	TLan_HandleDummy( struct net_device *, u16 );
+static u32	TLan_HandleTxEOC( struct net_device *, u16 );
+static u32	TLan_HandleStatusCheck( struct net_device *, u16 );
+static u32	TLan_HandleRxEOC( struct net_device *, u16 );
 
 static void	TLan_Timer( unsigned long );
 
-static void	TLan_ResetLists( struct device * );
-static void	TLan_FreeLists( struct device * );
+static void	TLan_ResetLists( struct net_device * );
+static void	TLan_FreeLists( struct net_device * );
 static void	TLan_PrintDio( u16 );
 static void	TLan_PrintList( TLanList *, char *, int );
-static void	TLan_ReadAndClearStats( struct device *, int );
-static void	TLan_ResetAdapter( struct device * );
-static void	TLan_FinishReset( struct device * );
-static void	TLan_SetMac( struct device *, int areg, char *mac );
+static void	TLan_ReadAndClearStats( struct net_device *, int );
+static void	TLan_ResetAdapter( struct net_device * );
+static void	TLan_FinishReset( struct net_device * );
+static void	TLan_SetMac( struct net_device *, int areg, char *mac );
 
-static void	TLan_PhyPrint( struct device * );
-static void	TLan_PhyDetect( struct device * );
-static void	TLan_PhyPowerDown( struct device * );
-static void	TLan_PhyPowerUp( struct device * );
-static void	TLan_PhyReset( struct device * );
-static void	TLan_PhyStartLink( struct device * );
-static void	TLan_PhyFinishAutoNeg( struct device * );
+static void	TLan_PhyPrint( struct net_device * );
+static void	TLan_PhyDetect( struct net_device * );
+static void	TLan_PhyPowerDown( struct net_device * );
+static void	TLan_PhyPowerUp( struct net_device * );
+static void	TLan_PhyReset( struct net_device * );
+static void	TLan_PhyStartLink( struct net_device * );
+static void	TLan_PhyFinishAutoNeg( struct net_device * );
 /*
-static int	TLan_PhyNop( struct device * );
-static int	TLan_PhyInternalCheck( struct device * );
-static int	TLan_PhyInternalService( struct device * );
-static int	TLan_PhyDp83840aCheck( struct device * );
+static int	TLan_PhyNop( struct net_device * );
+static int	TLan_PhyInternalCheck( struct net_device * );
+static int	TLan_PhyInternalService( struct net_device * );
+static int	TLan_PhyDp83840aCheck( struct net_device * );
 */
 
-static int	TLan_MiiReadReg( struct device *, u16, u16, u16 * );
+static int	TLan_MiiReadReg( struct net_device *, u16, u16, u16 * );
 static void	TLan_MiiSendData( u16, u32, unsigned );
 static void	TLan_MiiSync( u16 );
-static void	TLan_MiiWriteReg( struct device *, u16, u16, u16 );
+static void	TLan_MiiWriteReg( struct net_device *, u16, u16, u16 );
 
 static void	TLan_EeSendStart( u16 );
 static int	TLan_EeSendByte( u16, u8, int );
 static void	TLan_EeReceiveByte( u16, u8 *, int );
-static int	TLan_EeReadByte( struct device *, u8, u8 * );
+static int	TLan_EeReadByte( struct net_device *, u8, u8 * );
 
 
 static TLanIntVectorFunc *TLanIntVector[TLAN_INT_NUMBER_OF_INTS] = {
@@ -224,7 +224,7 @@ static TLanIntVectorFunc *TLanIntVector[TLAN_INT_NUMBER_OF_INTS] = {
 };
 
 static inline void
-TLan_SetTimer( struct device *dev, u32 ticks, u32 type )
+TLan_SetTimer( struct net_device *dev, u32 ticks, u32 type )
 {
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
 
@@ -275,7 +275,7 @@ TLan_SetTimer( struct device *dev, u32 ticks, u32 type )
 extern int init_module(void)
 {
 	TLanPrivateInfo	*priv;
-	struct device	*dev;
+	struct net_device	*dev;
 	size_t		dev_size;
 	u8		dfn;
 	u32		index;
@@ -299,17 +299,17 @@ extern int init_module(void)
 
 	memset( TLanPadBuffer, 0, TLAN_MIN_FRAME_SIZE );
 
-	dev_size = sizeof(struct device) + sizeof(TLanPrivateInfo);
+	dev_size = sizeof(struct net_device) + sizeof(TLanPrivateInfo);
 
 	while ( ( found = TLan_PciProbe( &dfn, &irq, &rev, &io_base, &index ) ) ) {
-		dev = (struct device *) kmalloc( dev_size, GFP_KERNEL );
+		dev = (struct net_device *) kmalloc( dev_size, GFP_KERNEL );
 		if ( dev == NULL ) {
 			printk( "TLAN:  Could not allocate memory for device.\n" );
 			continue;
 		}
 		memset( dev, 0, dev_size );
 
-		dev->priv = priv = ( (void *) dev ) + sizeof(struct device);
+		dev->priv = priv = ( (void *) dev ) + sizeof(struct net_device);
 		dev->name = priv->devName;
 		strcpy( priv->devName, "    " );
 		dev->base_addr = io_base;
@@ -376,7 +376,7 @@ extern int init_module(void)
 
 extern void cleanup_module(void)
 {
-	struct device	*dev;
+	struct net_device	*dev;
 	TLanPrivateInfo	*priv;
 
 	while ( TLanDevicesInstalled ) {
@@ -417,7 +417,7 @@ extern void cleanup_module(void)
 	 *
 	 **************************************************************/
 	 
-extern int tlan_probe( struct device *dev )
+extern int tlan_probe( struct net_device *dev )
 {
 	TLanPrivateInfo	*priv;
 	static int	pad_allocated = 0;
@@ -609,7 +609,7 @@ int TLan_PciProbe(u8 *pci_dfn, u8 *pci_irq, u8 *pci_rev, u32 *pci_io_base, u32 *
 	 *	
 	 **************************************************************/
 
-int TLan_Init( struct device *dev )
+int TLan_Init( struct net_device *dev )
 {
 	int		dma_size;
 	int		err;
@@ -697,7 +697,7 @@ int TLan_Init( struct device *dev )
 	 *
 	 **************************************************************/
 
-int TLan_Open( struct device *dev )
+int TLan_Open( struct net_device *dev )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	int		err;
@@ -757,7 +757,7 @@ int TLan_Open( struct device *dev )
 	 *
 	 **************************************************************/
 
-int TLan_StartTx( struct sk_buff *skb, struct device *dev )
+int TLan_StartTx( struct sk_buff *skb, struct net_device *dev )
 {
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
 	TLanList	*tail_list;
@@ -859,12 +859,12 @@ int TLan_StartTx( struct sk_buff *skb, struct device *dev )
 void TLan_HandleInterrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	u32		ack;
-	struct device	*dev;
+	struct net_device	*dev;
 	u32		host_cmd;
 	u16		host_int;
 	int		type;
 
-	dev = (struct device *) dev_id;
+	dev = (struct net_device *) dev_id;
 
 	cli();
 	if ( dev->interrupt ) {
@@ -907,7 +907,7 @@ void TLan_HandleInterrupt(int irq, void *dev_id, struct pt_regs *regs)
 	 *
 	 **************************************************************/
 
-int TLan_Close(struct device *dev)
+int TLan_Close(struct net_device *dev)
 {
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
 
@@ -946,7 +946,7 @@ int TLan_Close(struct device *dev)
 	 *
 	 **************************************************************/
 
-struct net_device_stats *TLan_GetStats( struct device *dev )
+struct net_device_stats *TLan_GetStats( struct net_device *dev )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	int i;
@@ -994,7 +994,7 @@ struct net_device_stats *TLan_GetStats( struct device *dev )
 	 *
 	 **************************************************************/
 
-void TLan_SetMulticastList( struct device *dev )
+void TLan_SetMulticastList( struct net_device *dev )
 {	
 	struct dev_mc_list	*dmi = dev->mc_list;
 	u32			hash1 = 0;
@@ -1068,7 +1068,7 @@ void TLan_SetMulticastList( struct device *dev )
 	 *
 	 **************************************************************/
 
-u32 TLan_HandleInvalid( struct device *dev, u16 host_int )
+u32 TLan_HandleInvalid( struct net_device *dev, u16 host_int )
 {
 	host_int = 0;
 	/* printk( "TLAN:  Invalid interrupt on %s.\n", dev->name ); */
@@ -1101,7 +1101,7 @@ u32 TLan_HandleInvalid( struct device *dev, u16 host_int )
 	 *
 	 **************************************************************/
 
-u32 TLan_HandleTxEOF( struct device *dev, u16 host_int )
+u32 TLan_HandleTxEOF( struct net_device *dev, u16 host_int )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	int		eoc = 0;
@@ -1174,7 +1174,7 @@ u32 TLan_HandleTxEOF( struct device *dev, u16 host_int )
 	 *
 	 **************************************************************/
 
-u32 TLan_HandleStatOverflow( struct device *dev, u16 host_int )
+u32 TLan_HandleStatOverflow( struct net_device *dev, u16 host_int )
 {
 	host_int = 0;
 	TLan_ReadAndClearStats( dev, TLAN_RECORD );
@@ -1211,7 +1211,7 @@ u32 TLan_HandleStatOverflow( struct device *dev, u16 host_int )
 	 *
 	 **************************************************************/
 
-u32 TLan_HandleRxEOF( struct device *dev, u16 host_int )
+u32 TLan_HandleRxEOF( struct net_device *dev, u16 host_int )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	u32		ack = 1;
@@ -1335,7 +1335,7 @@ u32 TLan_HandleRxEOF( struct device *dev, u16 host_int )
 	 *
 	 **************************************************************/
 
-u32 TLan_HandleDummy( struct device *dev, u16 host_int )
+u32 TLan_HandleDummy( struct net_device *dev, u16 host_int )
 {
 	host_int = 0;
 	printk( "TLAN:  Test interrupt on %s.\n", dev->name );
@@ -1366,7 +1366,7 @@ u32 TLan_HandleDummy( struct device *dev, u16 host_int )
 	 *
 	 **************************************************************/
 
-u32 TLan_HandleTxEOC( struct device *dev, u16 host_int )
+u32 TLan_HandleTxEOC( struct net_device *dev, u16 host_int )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	TLanList		*head_list;
@@ -1411,7 +1411,7 @@ u32 TLan_HandleTxEOC( struct device *dev, u16 host_int )
 	 *
 	 **************************************************************/
 
-u32 TLan_HandleStatusCheck( struct device *dev, u16 host_int )
+u32 TLan_HandleStatusCheck( struct net_device *dev, u16 host_int )
 {	
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	u32		ack;
@@ -1485,7 +1485,7 @@ u32 TLan_HandleStatusCheck( struct device *dev, u16 host_int )
 	 *
 	 **************************************************************/
 
-u32 TLan_HandleRxEOC( struct device *dev, u16 host_int )
+u32 TLan_HandleRxEOC( struct net_device *dev, u16 host_int )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	TLanList	*head_list;
@@ -1548,7 +1548,7 @@ u32 TLan_HandleRxEOC( struct device *dev, u16 host_int )
 
 void TLan_Timer( unsigned long data )
 {
-	struct device	*dev = (struct device *) data;
+	struct net_device	*dev = (struct net_device *) data;
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	u32		elapsed;
 
@@ -1620,7 +1620,7 @@ void TLan_Timer( unsigned long data )
 	 *
 	 **************************************************************/
 
-void TLan_ResetLists( struct device *dev )
+void TLan_ResetLists( struct net_device *dev )
 {
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
 	int		i;
@@ -1675,7 +1675,7 @@ void TLan_ResetLists( struct device *dev )
 } /* TLan_ResetLists */
 
 
-void TLan_FreeLists( struct device *dev )
+void TLan_FreeLists( struct net_device *dev )
 {
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
 	int		i;
@@ -1792,7 +1792,7 @@ void TLan_PrintList( TLanList *list, char *type, int num)
 	 *
 	 **************************************************************/
 
-void TLan_ReadAndClearStats( struct device *dev, int record )
+void TLan_ReadAndClearStats( struct net_device *dev, int record )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	u32		tx_good, tx_under;
@@ -1868,7 +1868,7 @@ void TLan_ReadAndClearStats( struct device *dev, int record )
 	 **************************************************************/
 
 void
-TLan_ResetAdapter( struct device *dev )
+TLan_ResetAdapter( struct net_device *dev )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	int		i;
@@ -1950,7 +1950,7 @@ TLan_ResetAdapter( struct device *dev )
 
 
 void
-TLan_FinishReset( struct device *dev )
+TLan_FinishReset( struct net_device *dev )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	u8		data;
@@ -2036,7 +2036,7 @@ TLan_FinishReset( struct device *dev )
 	 *
 	 **************************************************************/
 
-void TLan_SetMac( struct device *dev, int areg, char *mac )
+void TLan_SetMac( struct net_device *dev, int areg, char *mac )
 {
 	int i;
 			
@@ -2078,7 +2078,7 @@ void TLan_SetMac( struct device *dev, int areg, char *mac )
 	 *
 	 ********************************************************************/
 
-void TLan_PhyPrint( struct device *dev )
+void TLan_PhyPrint( struct net_device *dev )
 {
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
 	u16 i, data0, data1, data2, data3, phy;
@@ -2127,7 +2127,7 @@ void TLan_PhyPrint( struct device *dev )
 	 *
 	 ********************************************************************/
 
-void TLan_PhyDetect( struct device *dev )
+void TLan_PhyDetect( struct net_device *dev )
 {
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
 	u16		control;
@@ -2174,7 +2174,7 @@ void TLan_PhyDetect( struct device *dev )
 
 
 
-void TLan_PhyPowerDown( struct device *dev )
+void TLan_PhyPowerDown( struct net_device *dev )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	u16		value;
@@ -2199,7 +2199,7 @@ void TLan_PhyPowerDown( struct device *dev )
 
 
 
-void TLan_PhyPowerUp( struct device *dev )
+void TLan_PhyPowerUp( struct net_device *dev )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	u16		value;
@@ -2220,7 +2220,7 @@ void TLan_PhyPowerUp( struct device *dev )
 
 
 
-void TLan_PhyReset( struct device *dev )
+void TLan_PhyReset( struct net_device *dev )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	u16		phy;
@@ -2248,7 +2248,7 @@ void TLan_PhyReset( struct device *dev )
 
 
 
-void TLan_PhyStartLink( struct device *dev )
+void TLan_PhyStartLink( struct net_device *dev )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	u16		ability;
@@ -2329,7 +2329,7 @@ void TLan_PhyStartLink( struct device *dev )
 
 
 
-void TLan_PhyFinishAutoNeg( struct device *dev )
+void TLan_PhyFinishAutoNeg( struct net_device *dev )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	u16		an_adv;
@@ -2424,7 +2424,7 @@ void TLan_PhyFinishAutoNeg( struct device *dev )
 	 *
 	 **************************************************************/
 
-int TLan_MiiReadReg( struct device *dev, u16 phy, u16 reg, u16 *val )
+int TLan_MiiReadReg( struct net_device *dev, u16 phy, u16 reg, u16 *val )
 {
 	u8	nack;
 	u16	sio, tmp;
@@ -2595,7 +2595,7 @@ void TLan_MiiSync( u16 base_port )
 	 *
 	 **************************************************************/
 
-void TLan_MiiWriteReg( struct device *dev, u16 phy, u16 reg, u16 val )
+void TLan_MiiWriteReg( struct net_device *dev, u16 phy, u16 reg, u16 val )
 {
 	u16	sio;
 	int	minten;
@@ -2824,7 +2824,7 @@ void TLan_EeReceiveByte( u16 io_base, u8 *data, int stop )
 	 *
 	 **************************************************************/
 
-int TLan_EeReadByte( struct device *dev, u8 ee_addr, u8 *data )
+int TLan_EeReadByte( struct net_device *dev, u8 ee_addr, u8 *data )
 {
 	int err;
 

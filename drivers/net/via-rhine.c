@@ -250,12 +250,12 @@ struct pci_id_info {
 	const char *name;
 	u16	vendor_id, device_id, device_id_mask, flags;
 	int io_size;
-	struct device *(*probe1)(int pci_bus, int pci_devfn, struct device *dev,
+	struct net_device *(*probe1)(int pci_bus, int pci_devfn, struct net_device *dev,
 							 long ioaddr, int irq, int chip_idx, int fnd_cnt);
 };
 
-static struct device *via_probe1(int pci_bus, int pci_devfn,
-								 struct device *dev, long ioaddr, int irq,
+static struct net_device *via_probe1(int pci_bus, int pci_devfn,
+								 struct net_device *dev, long ioaddr, int irq,
 								 int chp_idx, int fnd_cnt);
 
 static struct pci_id_info pci_tbl[] = {
@@ -344,7 +344,7 @@ struct netdev_private {
 	struct sk_buff* tx_skbuff[TX_RING_SIZE];
 	unsigned char *tx_buf[TX_RING_SIZE];	/* Tx bounce buffers */
 	unsigned char *tx_bufs;				/* Tx bounce buffer region. */
-	struct device *next_module;			/* Link for devices of this type. */
+	struct net_device *next_module;			/* Link for devices of this type. */
 	struct net_device_stats stats;
 	struct timer_list timer;	/* Media monitoring timer. */
 	unsigned char pci_bus, pci_devfn;
@@ -369,33 +369,33 @@ struct netdev_private {
 	unsigned char phys[2];				/* MII device addresses. */
 };
 
-static int  mdio_read(struct device *dev, int phy_id, int location);
-static void mdio_write(struct device *dev, int phy_id, int location, int value);
-static int  netdev_open(struct device *dev);
-static void check_duplex(struct device *dev);
+static int  mdio_read(struct net_device *dev, int phy_id, int location);
+static void mdio_write(struct net_device *dev, int phy_id, int location, int value);
+static int  netdev_open(struct net_device *dev);
+static void check_duplex(struct net_device *dev);
 static void netdev_timer(unsigned long data);
-static void tx_timeout(struct device *dev);
-static void init_ring(struct device *dev);
-static int  start_tx(struct sk_buff *skb, struct device *dev);
+static void tx_timeout(struct net_device *dev);
+static void init_ring(struct net_device *dev);
+static int  start_tx(struct sk_buff *skb, struct net_device *dev);
 static void intr_handler(int irq, void *dev_instance, struct pt_regs *regs);
-static int  netdev_rx(struct device *dev);
-static void netdev_error(struct device *dev, int intr_status);
-static void set_rx_mode(struct device *dev);
-static struct net_device_stats *get_stats(struct device *dev);
-static int mii_ioctl(struct device *dev, struct ifreq *rq, int cmd);
-static int  netdev_close(struct device *dev);
+static int  netdev_rx(struct net_device *dev);
+static void netdev_error(struct net_device *dev, int intr_status);
+static void set_rx_mode(struct net_device *dev);
+static struct net_device_stats *get_stats(struct net_device *dev);
+static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
+static int  netdev_close(struct net_device *dev);
 
 
 
 /* A list of our installed devices, for removing the driver module. */
-static struct device *root_net_dev = NULL;
+static struct net_device *root_net_dev = NULL;
 
 /* Ideally we would detect all network cards in slot order.  That would
    be best done a central PCI probe dispatch, which wouldn't work
    well when dynamically adding drivers.  So instead we detect just the
    cards we know about in slot order. */
 
-static int pci_etherdev_probe(struct device *dev, struct pci_id_info pci_tbl[])
+static int pci_etherdev_probe(struct net_device *dev, struct pci_id_info pci_tbl[])
 {
 	int cards_found = 0;
 	int pci_index = 0;
@@ -503,15 +503,15 @@ static int pci_etherdev_probe(struct device *dev, struct pci_id_info pci_tbl[])
 }
 
 #ifndef MODULE
-int via_rhine_probe(struct device *dev)
+int via_rhine_probe(struct net_device *dev)
 {
 	printk(KERN_INFO "%s" KERN_INFO "%s", versionA, versionB);
 	return pci_etherdev_probe(dev, pci_tbl);
 }
 #endif
 
-static struct device *via_probe1(int pci_bus, int pci_devfn,
-								 struct device *dev, long ioaddr, int irq,
+static struct net_device *via_probe1(int pci_bus, int pci_devfn,
+								 struct net_device *dev, long ioaddr, int irq,
 								 int chip_id, int card_idx)
 {
 	struct netdev_private *np;
@@ -599,7 +599,7 @@ static struct device *via_probe1(int pci_bus, int pci_devfn,
 
 /* Read and write over the MII Management Data I/O (MDIO) interface. */
 
-static int mdio_read(struct device *dev, int phy_id, int regnum)
+static int mdio_read(struct net_device *dev, int phy_id, int regnum)
 {
 	long ioaddr = dev->base_addr;
 	int boguscnt = 1024;
@@ -617,7 +617,7 @@ static int mdio_read(struct device *dev, int phy_id, int regnum)
 	return readw(ioaddr + MIIData);
 }
 
-static void mdio_write(struct device *dev, int phy_id, int regnum, int value)
+static void mdio_write(struct net_device *dev, int phy_id, int regnum, int value)
 {
 	long ioaddr = dev->base_addr;
 	int boguscnt = 1024;
@@ -634,7 +634,7 @@ static void mdio_write(struct device *dev, int phy_id, int regnum, int value)
 }
 
 
-static int netdev_open(struct device *dev)
+static int netdev_open(struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -707,7 +707,7 @@ static int netdev_open(struct device *dev)
 	return 0;
 }
 
-static void check_duplex(struct device *dev)
+static void check_duplex(struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -733,7 +733,7 @@ static void check_duplex(struct device *dev)
 
 static void netdev_timer(unsigned long data)
 {
-	struct device *dev = (struct device *)data;
+	struct net_device *dev = (struct net_device *)data;
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 	int next_tick = 10*HZ;
@@ -748,7 +748,7 @@ static void netdev_timer(unsigned long data)
 	add_timer(&np->timer);
 }
 
-static void tx_timeout(struct device *dev)
+static void tx_timeout(struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -771,7 +771,7 @@ static void tx_timeout(struct device *dev)
 
 
 /* Initialize the Rx and Tx rings, along with various 'dev' bits. */
-static void init_ring(struct device *dev)
+static void init_ring(struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	int i;
@@ -818,7 +818,7 @@ static void init_ring(struct device *dev)
 	return;
 }
 
-static int start_tx(struct sk_buff *skb, struct device *dev)
+static int start_tx(struct sk_buff *skb, struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	unsigned entry;
@@ -877,7 +877,7 @@ static int start_tx(struct sk_buff *skb, struct device *dev)
    after the Tx thread. */
 static void intr_handler(int irq, void *dev_instance, struct pt_regs *rgs)
 {
-	struct device *dev = (struct device *)dev_instance;
+	struct net_device *dev = (struct net_device *)dev_instance;
 	struct netdev_private *np;
 	long ioaddr, boguscnt = max_interrupt_work;
 
@@ -988,7 +988,7 @@ static void intr_handler(int irq, void *dev_instance, struct pt_regs *rgs)
 
 /* This routine is logically part of the interrupt handler, but isolated
    for clarity and better register allocation. */
-static int netdev_rx(struct device *dev)
+static int netdev_rx(struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	int entry = np->cur_rx % RX_RING_SIZE;
@@ -1082,7 +1082,7 @@ static int netdev_rx(struct device *dev)
 	return 0;
 }
 
-static void netdev_error(struct device *dev, int intr_status)
+static void netdev_error(struct net_device *dev, int intr_status)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -1123,7 +1123,7 @@ static void netdev_error(struct device *dev, int intr_status)
 	}
 }
 
-static struct enet_statistics *get_stats(struct device *dev)
+static struct enet_statistics *get_stats(struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -1157,7 +1157,7 @@ static inline u32 ether_crc(int length, unsigned char *data)
     return crc;
 }
 
-static void set_rx_mode(struct device *dev)
+static void set_rx_mode(struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -1188,7 +1188,7 @@ static void set_rx_mode(struct device *dev)
 	writeb(np->rx_thresh | rx_mode, ioaddr + RxConfig);
 }
 
-static int mii_ioctl(struct device *dev, struct ifreq *rq, int cmd)
+static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
 	u16 *data = (u16 *)&rq->ifr_data;
 
@@ -1209,7 +1209,7 @@ static int mii_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	}
 }
 
-static int netdev_close(struct device *dev)
+static int netdev_close(struct net_device *dev)
 {
 	long ioaddr = dev->base_addr;
 	struct netdev_private *np = (struct netdev_private *)dev->priv;

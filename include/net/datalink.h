@@ -6,7 +6,7 @@ struct datalink_proto {
 	unsigned char	type[8];
 	const char	*string_name;
 	unsigned short	header_length;
-	int	(*rcvfunc)(struct sk_buff *, struct device *, 
+	int	(*rcvfunc)(struct sk_buff *, struct net_device *, 
 				struct packet_type *);
 	void	(*datalink_header)(struct datalink_proto *, struct sk_buff *,
 					unsigned char *);

@@ -222,7 +222,7 @@ struct resource mca_standard_resources[] = {
 
 #define MCA_STANDARD_RESOURCES	(sizeof(mca_standard_resources)/sizeof(struct resource))
 
-__initfunc(void mca_init(void))
+void __init mca_init(void)
 {
 	unsigned int i, j;
 	unsigned long flags;
@@ -698,7 +698,7 @@ int get_mca_info(char *buf)
 
 /*--------------------------------------------------------------------*/
 
-__initfunc(void mca_do_proc_init(void))
+void __init mca_do_proc_init(void)
 {
 	int i;
 	struct proc_dir_entry* node = NULL;

@@ -36,7 +36,7 @@
 #define EQL_SETMASTRCFG (SIOCDEVPRIVATE + 5)
 
 typedef struct slave {
-  struct device *dev;
+  struct net_device *dev;
   long priority;
   long priority_bps;
   long priority_Bps;
@@ -48,7 +48,7 @@ typedef struct slave_queue {
   slave_t *head;
   slave_t *best_slave;
   int num_slaves;
-  struct device *master_dev;
+  struct net_device *master_dev;
   char lock;
 } slave_queue_t;
 

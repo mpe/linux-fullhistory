@@ -95,7 +95,7 @@ static char bcast_addr[6]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 
 static char bpq_eth_addr[6];
 
-static int bpq_rcv(struct sk_buff *, struct device *, struct packet_type *);
+static int bpq_rcv(struct sk_buff *, struct net_device *, struct packet_type *);
 static int bpq_device_event(struct notifier_block *, unsigned long, void *);
 static char *bpq_print_ethaddr(unsigned char *);
 
@@ -118,8 +118,8 @@ static struct notifier_block bpq_dev_notifier = {
 static struct bpqdev {
 	struct bpqdev *next;
 	char   ethname[14];		/* ether device name */
-	struct device *ethdev;		/* link to ethernet device */
-	struct device axdev;		/* bpq device (bpq#) */
+	struct net_device *ethdev;		/* link to ethernet device */
+	struct net_device axdev;		/* bpq device (bpq#) */
 	struct net_device_stats stats;	/* some statistics */
 	char   dest_addr[6];		/* ether destination address */
 	char   acpt_addr[6];		/* accept ether frames from this address only */
@@ -132,7 +132,7 @@ static struct bpqdev {
 /*
  *	Get the ethernet device for a BPQ device
  */
-static __inline__ struct device *bpq_get_ether_dev(struct device *dev)
+static __inline__ struct net_device *bpq_get_ether_dev(struct net_device *dev)
 {
 	struct bpqdev *bpq;
 
@@ -144,7 +144,7 @@ static __inline__ struct device *bpq_get_ether_dev(struct device *dev)
 /*
  *	Get the BPQ device for the ethernet device
  */
-static __inline__ struct device *bpq_get_ax25_dev(struct device *dev)
+static __inline__ struct net_device *bpq_get_ax25_dev(struct net_device *dev)
 {
 	struct bpqdev *bpq;
 
@@ -155,7 +155,7 @@ static __inline__ struct device *bpq_get_ax25_dev(struct device *dev)
 	return NULL;
 }
 
-static __inline__ int dev_is_ethdev(struct device *dev)
+static __inline__ int dev_is_ethdev(struct net_device *dev)
 {
 	return (
 			dev->type == ARPHRD_ETHER
@@ -167,7 +167,7 @@ static __inline__ int dev_is_ethdev(struct device *dev)
  *	Sanity check: remove all devices that ceased to exists and
  *	return '1' if the given BPQ device was affected.
  */
-static int bpq_check_devices(struct device *dev)
+static int bpq_check_devices(struct net_device *dev)
 {
 	struct bpqdev *bpq, *bpq_prev;
 	int result = 0;
@@ -211,7 +211,7 @@ static int bpq_check_devices(struct device *dev)
 /*
  *	Receive an AX.25 frame via an ethernet interface.
  */
-static int bpq_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
+static int bpq_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *ptype)
 {
 	int len;
 	char * ptr;
@@ -264,7 +264,7 @@ static int bpq_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *
 /*
  * 	Send an AX.25 frame via an ethernet interface
  */
-static int bpq_xmit(struct sk_buff *skb, struct device *dev)
+static int bpq_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct sk_buff *newskb;
 	unsigned char *ptr;
@@ -331,7 +331,7 @@ static int bpq_xmit(struct sk_buff *skb, struct device *dev)
 /*
  *	Statistics
  */
-static struct net_device_stats *bpq_get_stats(struct device *dev)
+static struct net_device_stats *bpq_get_stats(struct net_device *dev)
 {
 	struct bpqdev *bpq;
 
@@ -343,7 +343,7 @@ static struct net_device_stats *bpq_get_stats(struct device *dev)
 /*
  *	Set AX.25 callsign
  */
-static int bpq_set_mac_address(struct device *dev, void *addr)
+static int bpq_set_mac_address(struct net_device *dev, void *addr)
 {
     struct sockaddr *sa = (struct sockaddr *)addr;
 
@@ -359,7 +359,7 @@ static int bpq_set_mac_address(struct device *dev, void *addr)
  *					source ethernet address (broadcast
  *					or multicast: accept all)
  */
-static int bpq_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+static int bpq_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	int err;
 	struct bpq_ethaddr *ethaddr = (struct bpq_ethaddr *)ifr->ifr_data;
@@ -403,7 +403,7 @@ static int bpq_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 /*
  * open/close a device
  */
-static int bpq_open(struct device *dev)
+static int bpq_open(struct net_device *dev)
 {
 	if (bpq_check_devices(dev))
 		return -ENODEV;		/* oops, it's gone */
@@ -416,7 +416,7 @@ static int bpq_open(struct device *dev)
 	return 0;
 }
 
-static int bpq_close(struct device *dev)
+static int bpq_close(struct net_device *dev)
 {
 	dev->tbusy = 1;
 	dev->start = 0;
@@ -429,7 +429,7 @@ static int bpq_close(struct device *dev)
 /*
  * currently unused
  */
-static int bpq_dev_init(struct device *dev)
+static int bpq_dev_init(struct net_device *dev)
 {
 	return 0;
 }
@@ -498,7 +498,7 @@ int bpq_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 /*
  *	Setup a new device.
  */
-static int bpq_new_device(struct device *dev)
+static int bpq_new_device(struct net_device *dev)
 {
 	int k;
 	unsigned char *buf;
@@ -521,7 +521,7 @@ static int bpq_new_device(struct device *dev)
 	buf = kmalloc(14, GFP_KERNEL);
 
 	for (k = 0; k < MAXBPQDEV; k++) {
-		struct device *odev;
+		struct net_device *odev;
 
 		sprintf(buf, "bpq%d", k);
 
@@ -589,7 +589,7 @@ static int bpq_new_device(struct device *dev)
  */
 static int bpq_device_event(struct notifier_block *this,unsigned long event, void *ptr)
 {
-	struct device *dev = (struct device *)ptr;
+	struct net_device *dev = (struct net_device *)ptr;
 
 	if (!dev_is_ethdev(dev))
 		return NOTIFY_DONE;
@@ -623,7 +623,7 @@ static int bpq_device_event(struct notifier_block *this,unsigned long event, voi
  */
 int __init bpq_init(void)
 {
-	struct device *dev;
+	struct net_device *dev;
 
 	bpq_packet_type.type  = htons(ETH_P_BPQ);
 	dev_add_pack(&bpq_packet_type);

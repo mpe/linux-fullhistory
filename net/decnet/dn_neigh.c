@@ -127,7 +127,7 @@ struct neigh_table dn_neigh_table = {
 
 static int dn_neigh_construct(struct neighbour *neigh)
 {
-	struct device *dev = neigh->dev;
+	struct net_device *dev = neigh->dev;
 	struct dn_neigh *dn = (struct dn_neigh *)neigh;
 	struct dn_dev *dn_db = (struct dn_dev *)dev->dn_ptr;
 
@@ -222,7 +222,7 @@ static int dn_long_output(struct sk_buff *skb)
 {
 	struct dst_entry *dst = skb->dst;
 	struct neighbour *neigh = dst->neighbour;
-	struct device *dev = neigh->dev;
+	struct net_device *dev = neigh->dev;
 	struct dn_dev *dn_db = dev->dn_ptr;
 	int headroom = dev->hard_header_len + sizeof(struct dn_long_packet) + 3;
 	unsigned char *data;
@@ -277,7 +277,7 @@ static int dn_short_output(struct sk_buff *skb)
 {
 	struct dst_entry *dst = skb->dst;
 	struct neighbour *neigh = dst->neighbour;
-	struct device *dev = neigh->dev;
+	struct net_device *dev = neigh->dev;
 	int headroom = dev->hard_header_len + sizeof(struct dn_short_packet) + 2;
 	struct dn_short_packet *sp;
 	unsigned char *data;
@@ -325,7 +325,7 @@ static int dn_phase3_output(struct sk_buff *skb)
 {
 	struct dst_entry *dst = skb->dst;
 	struct neighbour *neigh = dst->neighbour;
-	struct device *dev = neigh->dev;
+	struct net_device *dev = neigh->dev;
 	int headroom = dev->hard_header_len + sizeof(struct dn_short_packet) + 2;
 	struct dn_short_packet *sp;
 	unsigned char *data;
@@ -507,7 +507,7 @@ static char *dn_find_slot(char *base, int max, int priority)
 	return (*min < priority) ? (min - 6) : NULL;
 }
 
-int dn_neigh_elist(struct device *dev, unsigned char *ptr, int n)
+int dn_neigh_elist(struct net_device *dev, unsigned char *ptr, int n)
 {
 	int t = 0;
 	int i;

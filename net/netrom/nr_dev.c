@@ -58,7 +58,7 @@
  *	Only allow IP over NET/ROM frames through if the netrom device is up.
  */
 
-int nr_rx_ip(struct sk_buff *skb, struct device *dev)
+int nr_rx_ip(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_device_stats *stats = (struct net_device_stats *)dev->priv;
 
@@ -86,7 +86,7 @@ int nr_rx_ip(struct sk_buff *skb, struct device *dev)
 
 static int nr_rebuild_header(struct sk_buff *skb)
 {
-	struct device *dev = skb->dev;
+	struct net_device *dev = skb->dev;
 	struct net_device_stats *stats = (struct net_device_stats *)dev->priv;
 	struct sk_buff *skbn;
 	unsigned char *bp = skb->data;
@@ -134,7 +134,7 @@ static int nr_rebuild_header(struct sk_buff *skb)
 
 #endif
 
-static int nr_header(struct sk_buff *skb, struct device *dev, unsigned short type,
+static int nr_header(struct sk_buff *skb, struct net_device *dev, unsigned short type,
 	void *daddr, void *saddr, unsigned len)
 {
 	unsigned char *buff = skb_push(skb, NR_NETWORK_LEN + NR_TRANSPORT_LEN);
@@ -166,7 +166,7 @@ static int nr_header(struct sk_buff *skb, struct device *dev, unsigned short typ
 	return -37;
 }
 
-static int nr_set_mac_address(struct device *dev, void *addr)
+static int nr_set_mac_address(struct net_device *dev, void *addr)
 {
 	struct sockaddr *sa = addr;
 
@@ -179,7 +179,7 @@ static int nr_set_mac_address(struct device *dev, void *addr)
 	return 0;
 }
 
-static int nr_open(struct device *dev)
+static int nr_open(struct net_device *dev)
 {
 	dev->tbusy = 0;
 	dev->start = 1;
@@ -191,7 +191,7 @@ static int nr_open(struct device *dev)
 	return 0;
 }
 
-static int nr_close(struct device *dev)
+static int nr_close(struct net_device *dev)
 {
 	dev->tbusy = 1;
 	dev->start = 0;
@@ -203,7 +203,7 @@ static int nr_close(struct device *dev)
 	return 0;
 }
 
-static int nr_xmit(struct sk_buff *skb, struct device *dev)
+static int nr_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_device_stats *stats = (struct net_device_stats *)dev->priv;
 
@@ -238,12 +238,12 @@ static int nr_xmit(struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
-static struct net_device_stats *nr_get_stats(struct device *dev)
+static struct net_device_stats *nr_get_stats(struct net_device *dev)
 {
 	return (struct net_device_stats *)dev->priv;
 }
 
-int nr_init(struct device *dev)
+int nr_init(struct net_device *dev)
 {
 	dev->mtu		= NR_MAX_PACKET_SIZE;
 	dev->tbusy		= 0;

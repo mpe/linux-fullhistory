@@ -8,7 +8,6 @@
 
 
 #define __NO_VERSION__
-#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/sched.h>
@@ -26,23 +25,18 @@
 /* MS-DOS "device special files" */
 
 static const char *reserved_names[] = {
-#ifndef CONFIG_ATARI /* GEMDOS is less stupid */
     "CON     ","PRN     ","NUL     ","AUX     ",
     "LPT1    ","LPT2    ","LPT3    ","LPT4    ",
     "COM1    ","COM2    ","COM3    ","COM4    ",
-#endif
     NULL };
 
 
 /* Characters that are undesirable in an MS-DOS file name */
   
 static char bad_chars[] = "*?<>|\"";
-#ifdef CONFIG_ATARI
-/* GEMDOS is less restrictive */
-static char bad_if_strict[] = " ";
-#else
-static char bad_if_strict[] = "+=,; ";
-#endif
+static char bad_if_strict_pc[] = "+=,; ";
+static char bad_if_strict_atari[] = " "; /* GEMDOS is less restrictive */
+#define	bad_if_strict(opts) ((opts)->atari ? bad_if_strict_atari : bad_if_strict_pc)
 
 /* Must die */
 void msdos_put_super(struct super_block *sb)
@@ -51,8 +45,8 @@ void msdos_put_super(struct super_block *sb)
 }
 
 /***** Formats an MS-DOS file name. Rejects invalid names. */
-static int msdos_format_name(char conv,const char *name,int len,
-	char *res,char dotsOK)
+static int msdos_format_name(const char *name,int len,
+	char *res,struct fat_mount_options *opts)
 	/* conv is relaxed/normal/strict, name is proposed name,
 	 * len is the length of the proposed name, res is the result name,
 	 * dotsOK is if hidden files get dots.
@@ -62,23 +56,27 @@ static int msdos_format_name(char conv,const char *name,int len,
 	const char **reserved;
 	unsigned char c;
 	int space;
+
 	if (name[0] == '.') {  /* dotfile because . and .. already done */
-		if (!dotsOK) return -EINVAL;
-		/* Get rid of dot - test for it elsewhere */
-		name++; len--;
+		if (opts->dotsOK) {
+			/* Get rid of dot - test for it elsewhere */
+			name++; len--;
+		}
+		else if (!opts->atari) return -EINVAL;
 	}
-#ifndef CONFIG_ATARI
-	space = 1; /* disallow names that _really_ start with a dot */
-#else
-	space = 0; /* GEMDOS does not care */
-#endif
+	/* disallow names that _really_ start with a dot for MS-DOS, GEMDOS does
+	 * not care */
+	space = !opts->atari;
 	c = 0;
 	for (walk = res; len && walk-res < 8; walk++) {
 	    	c = *name++;
 		len--;
-		if (conv != 'r' && strchr(bad_chars,c)) return -EINVAL;
-		if (conv == 's' && strchr(bad_if_strict,c)) return -EINVAL;
-  		if (c >= 'A' && c <= 'Z' && conv == 's') return -EINVAL;
+		if (opts->conversion != 'r' && strchr(bad_chars,c))
+			return -EINVAL;
+		if (opts->conversion == 's' && strchr(bad_if_strict(opts),c))
+			return -EINVAL;
+  		if (c >= 'A' && c <= 'Z' && opts->conversion == 's')
+			return -EINVAL;
 		if (c < ' ' || c == ':' || c == '\\') return -EINVAL;
 /*  0xE5 is legal as a first character, but we must substitute 0x05     */
 /*  because 0xE5 marks deleted files.  Yes, DOS really does this.       */
@@ -90,7 +88,7 @@ static int msdos_format_name(char conv,const char *name,int len,
 		*walk = (c >= 'a' && c <= 'z') ? c-32 : c;
 	}
 	if (space) return -EINVAL;
-	if (conv == 's' && len && c != '.') {
+	if (opts->conversion == 's' && len && c != '.') {
 		c = *name++;
 		len--;
 		if (c != '.') return -EINVAL;
@@ -101,26 +99,31 @@ static int msdos_format_name(char conv,const char *name,int len,
 		while (len > 0 && walk-res < MSDOS_NAME) {
 			c = *name++;
 			len--;
-			if (conv != 'r' && strchr(bad_chars,c)) return -EINVAL;
-			if (conv == 's' && strchr(bad_if_strict,c))
+			if (opts->conversion != 'r' && strchr(bad_chars,c))
+				return -EINVAL;
+			if (opts->conversion == 's' &&
+			    strchr(bad_if_strict(opts),c))
 				return -EINVAL;
 			if (c < ' ' || c == ':' || c == '\\')
 				return -EINVAL;
 			if (c == '.') {
-				if (conv == 's')
+				if (opts->conversion == 's')
 					return -EINVAL;
 				break;
 			}
-			if (c >= 'A' && c <= 'Z' && conv == 's') return -EINVAL;
+			if (c >= 'A' && c <= 'Z' && opts->conversion == 's')
+				return -EINVAL;
 			space = c == ' ';
 			*walk++ = c >= 'a' && c <= 'z' ? c-32 : c;
 		}
 		if (space) return -EINVAL;
-		if (conv == 's' && len) return -EINVAL;
+		if (opts->conversion == 's' && len) return -EINVAL;
 	}
 	while (walk-res < MSDOS_NAME) *walk++ = ' ';
-	for (reserved = reserved_names; *reserved; reserved++)
-		if (!strncmp(res,*reserved,8)) return -EINVAL;
+	if (!opts->atari)
+		/* GEMDOS is less stupid and has no reserved names */
+		for (reserved = reserved_names; *reserved; reserved++)
+			if (!strncmp(res,*reserved,8)) return -EINVAL;
 	return 0;
 }
 
@@ -133,8 +136,7 @@ static int msdos_find(struct inode *dir,const char *name,int len,
 	char msdos_name[MSDOS_NAME];
 
 	dotsOK = MSDOS_SB(dir->i_sb)->options.dotsOK;
-	res = msdos_format_name(MSDOS_SB(dir->i_sb)->options.name_check,
-				name,len, msdos_name,dotsOK);
+	res = msdos_format_name(name,len, msdos_name,&MSDOS_SB(dir->i_sb)->options);
 	if (res < 0)
 		return -ENOENT;
 	res = fat_scan(dir,msdos_name,bh,de,ino);
@@ -163,8 +165,7 @@ static int msdos_hash(struct dentry *dentry, struct qstr *qstr)
 	int error;
 	char msdos_name[MSDOS_NAME];
 	
-	error = msdos_format_name(options->name_check, qstr->name, qstr->len,
-					msdos_name, options->dotsOK);
+	error = msdos_format_name(qstr->name, qstr->len, msdos_name, options);
 	if (!error)
 		qstr->hash = full_name_hash(msdos_name, MSDOS_NAME);
 	return 0;
@@ -180,12 +181,10 @@ static int msdos_cmp(struct dentry *dentry, struct qstr *a, struct qstr *b)
 	int error;
 	char a_msdos_name[MSDOS_NAME], b_msdos_name[MSDOS_NAME];
 
-	error = msdos_format_name(options->name_check, a->name, a->len,
-					a_msdos_name, options->dotsOK);
+	error = msdos_format_name(a->name, a->len, a_msdos_name, options);
 	if (error)
 		goto old_compare;
-	error = msdos_format_name(options->name_check, b->name, b->len,
-					b_msdos_name, options->dotsOK);
+	error = msdos_format_name(b->name, b->len, b_msdos_name, options);
 	if (error)
 		goto old_compare;
 	error = memcmp(a_msdos_name, b_msdos_name, MSDOS_NAME);
@@ -288,9 +287,8 @@ int msdos_create(struct inode *dir,struct dentry *dentry,int mode)
 	int ino,res,is_hid;
 	char msdos_name[MSDOS_NAME];
 
-	res = msdos_format_name(MSDOS_SB(sb)->options.name_check,
-				dentry->d_name.name,dentry->d_name.len,
-				msdos_name, MSDOS_SB(sb)->options.dotsOK);
+	res = msdos_format_name(dentry->d_name.name,dentry->d_name.len,
+				msdos_name, &MSDOS_SB(sb)->options);
 	if (res < 0)
 		return res;
 	is_hid = (dentry->d_name.name[0]=='.') && (msdos_name[0]!='.');
@@ -367,9 +365,8 @@ int msdos_mkdir(struct inode *dir,struct dentry *dentry,int mode)
 	struct msdos_dir_entry *de1;
 	int ino;
 
-	res = msdos_format_name(MSDOS_SB(sb)->options.name_check,
-				dentry->d_name.name,dentry->d_name.len,
-				msdos_name,MSDOS_SB(sb)->options.dotsOK);
+	res = msdos_format_name(dentry->d_name.name,dentry->d_name.len,
+				msdos_name, &MSDOS_SB(sb)->options);
 	if (res < 0)
 		return res;
 	is_hid = (dentry->d_name.name[0]=='.') && (msdos_name[0]!='.');
@@ -561,14 +558,14 @@ int msdos_rename(struct inode *old_dir,struct dentry *old_dentry,
 	int is_hid,old_hid; /* if new file and old file are hidden */
 	char old_msdos_name[MSDOS_NAME], new_msdos_name[MSDOS_NAME];
 
-	error = msdos_format_name(MSDOS_SB(sb)->options.name_check,
-				old_dentry->d_name.name, old_dentry->d_name.len,
-				old_msdos_name,MSDOS_SB(sb)->options.dotsOK);
+	error = msdos_format_name(old_dentry->d_name.name,
+				  old_dentry->d_name.len,old_msdos_name,
+				  &MSDOS_SB(old_dir->i_sb)->options);
 	if (error < 0)
 		goto rename_done;
-	error = msdos_format_name(MSDOS_SB(sb)->options.name_check,
-				new_dentry->d_name.name, new_dentry->d_name.len,
-				new_msdos_name,MSDOS_SB(sb)->options.dotsOK);
+	error = msdos_format_name(new_dentry->d_name.name,
+				  new_dentry->d_name.len,new_msdos_name,
+				  &MSDOS_SB(new_dir->i_sb)->options);
 	if (error < 0)
 		goto rename_done;
 

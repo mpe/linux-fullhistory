@@ -114,7 +114,7 @@ bmac_reg_entry_t reg_entries[N_REG_ENTRIES] = {
 	{"RXCV", RXCV}
 };
 
-struct device *bmac_devs = NULL;
+struct net_device *bmac_devs = NULL;
 static int is_bmac_plus;
 
 #if 0
@@ -135,25 +135,25 @@ static unsigned char dummy_buf[RX_BUFLEN];
 	+ sizeof(struct sk_buff_head))
 
 static unsigned char bitrev(unsigned char b);
-static int bmac_open(struct device *dev);
-static int bmac_close(struct device *dev);
-static int bmac_transmit_packet(struct sk_buff *skb, struct device *dev);
-static struct net_device_stats *bmac_stats(struct device *dev);
-static void bmac_set_multicast(struct device *dev);
-static int bmac_reset_and_enable(struct device *dev, int enable);
-static void bmac_start_chip(struct device *dev);
-static int bmac_init_chip(struct device *dev);
-static void bmac_init_registers(struct device *dev);
-static void bmac_reset_chip(struct device *dev);
-static int bmac_set_address(struct device *dev, void *addr);
+static int bmac_open(struct net_device *dev);
+static int bmac_close(struct net_device *dev);
+static int bmac_transmit_packet(struct sk_buff *skb, struct net_device *dev);
+static struct net_device_stats *bmac_stats(struct net_device *dev);
+static void bmac_set_multicast(struct net_device *dev);
+static int bmac_reset_and_enable(struct net_device *dev, int enable);
+static void bmac_start_chip(struct net_device *dev);
+static int bmac_init_chip(struct net_device *dev);
+static void bmac_init_registers(struct net_device *dev);
+static void bmac_reset_chip(struct net_device *dev);
+static int bmac_set_address(struct net_device *dev, void *addr);
 static void bmac_misc_intr(int irq, void *dev_id, struct pt_regs *regs);
 static void bmac_txdma_intr(int irq, void *dev_id, struct pt_regs *regs);
 static void bmac_rxdma_intr(int irq, void *dev_id, struct pt_regs *regs);
-static void bmac_set_timeout(struct device *dev);
+static void bmac_set_timeout(struct net_device *dev);
 static void bmac_tx_timeout(unsigned long data);
 static int bmac_proc_info ( char *buffer, char **start, off_t offset, int length, int dummy);
-static int bmac_output(struct sk_buff *skb, struct device *dev);
-static void bmac_start(struct device *dev);
+static int bmac_output(struct sk_buff *skb, struct net_device *dev);
+static void bmac_start(struct net_device *dev);
 
 #define	DBDMA_SET(x)	( ((x) | (x) << 16) )
 #define	DBDMA_CLEAR(x)	( (x) << 16)
@@ -214,20 +214,20 @@ dbdma_setcmd(volatile struct dbdma_cmd *cp,
 }
 
 static __inline__
-void bmwrite(struct device *dev, unsigned long reg_offset, unsigned data )
+void bmwrite(struct net_device *dev, unsigned long reg_offset, unsigned data )
 {
 	out_le16((void *)dev->base_addr + reg_offset, data);
 }
 
 
 static __inline__
-volatile unsigned short bmread(struct device *dev, unsigned long reg_offset )
+volatile unsigned short bmread(struct net_device *dev, unsigned long reg_offset )
 {
 	return in_le16((void *)dev->base_addr + reg_offset); 
 }
 
 static void
-bmac_reset_chip(struct device *dev)
+bmac_reset_chip(struct net_device *dev)
 {
 	struct bmac_data *bp = (struct bmac_data *) dev->priv;
 	volatile struct dbdma_regs *rd = bp->rx_dma;
@@ -247,7 +247,7 @@ bmac_reset_chip(struct device *dev)
 #define MIFDELAY	udelay(500)
 
 static unsigned int
-bmac_mif_readbits(struct device *dev, int nb)
+bmac_mif_readbits(struct net_device *dev, int nb)
 {
 	unsigned int val = 0;
 
@@ -267,7 +267,7 @@ bmac_mif_readbits(struct device *dev, int nb)
 }
 
 static void
-bmac_mif_writebits(struct device *dev, unsigned int val, int nb)
+bmac_mif_writebits(struct net_device *dev, unsigned int val, int nb)
 {
 	int b;
 
@@ -281,7 +281,7 @@ bmac_mif_writebits(struct device *dev, unsigned int val, int nb)
 }
 
 static unsigned int
-bmac_mif_read(struct device *dev, unsigned int addr)
+bmac_mif_read(struct net_device *dev, unsigned int addr)
 {
 	unsigned int val;
 
@@ -302,7 +302,7 @@ bmac_mif_read(struct device *dev, unsigned int addr)
 }
 
 static void
-bmac_mif_write(struct device *dev, unsigned int addr, unsigned int val)
+bmac_mif_write(struct net_device *dev, unsigned int addr, unsigned int val)
 {
 	bmwrite(dev, MIFCSR, 4);
 	MIFDELAY;
@@ -315,7 +315,7 @@ bmac_mif_write(struct device *dev, unsigned int addr, unsigned int val)
 }
 
 static void
-bmac_init_registers(struct device *dev)
+bmac_init_registers(struct net_device *dev)
 {
 	struct bmac_data *bp = (struct bmac_data *) dev->priv;
 	volatile unsigned short regValue;
@@ -396,13 +396,13 @@ bmac_init_registers(struct device *dev)
 
 #if 0
 static void
-bmac_disable_interrupts(struct device *dev)
+bmac_disable_interrupts(struct net_device *dev)
 {
 	bmwrite(dev, INTDISABLE, DisableAll);
 }
 
 static void
-bmac_enable_interrupts(struct device *dev)
+bmac_enable_interrupts(struct net_device *dev)
 {
 	bmwrite(dev, INTDISABLE, EnableNormal);
 }
@@ -410,7 +410,7 @@ bmac_enable_interrupts(struct device *dev)
 
 
 static void
-bmac_start_chip(struct device *dev)
+bmac_start_chip(struct net_device *dev)
 {
 	struct bmac_data *bp = (struct bmac_data *) dev->priv;
 	volatile struct dbdma_regs *rd = bp->rx_dma;
@@ -429,7 +429,7 @@ bmac_start_chip(struct device *dev)
 }
 
 static int
-bmac_init_chip(struct device *dev)
+bmac_init_chip(struct net_device *dev)
 {
 	if (is_bmac_plus && bmac_mif_read(dev, 2) == 0x7810) {
 		if (bmac_mif_read(dev, 4) == 0xa1) {
@@ -448,7 +448,7 @@ bmac_init_chip(struct device *dev)
 	return 1;
 }
 
-static int bmac_set_address(struct device *dev, void *addr)
+static int bmac_set_address(struct net_device *dev, void *addr)
 {
 	unsigned char *p = addr;
 	unsigned short *pWord16;
@@ -472,7 +472,7 @@ static int bmac_set_address(struct device *dev, void *addr)
 	return 0;
 }
 
-static inline void bmac_set_timeout(struct device *dev)
+static inline void bmac_set_timeout(struct net_device *dev)
 {
 	struct bmac_data *bp = (struct bmac_data *) dev->priv;
 	unsigned long flags;
@@ -580,7 +580,7 @@ bmac_init_rx_ring(struct bmac_data *bp)
 }
 
 
-static int bmac_transmit_packet(struct sk_buff *skb, struct device *dev)
+static int bmac_transmit_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct bmac_data *bp = (struct bmac_data *) dev->priv;
 	volatile struct dbdma_regs *td = bp->tx_dma;
@@ -616,7 +616,7 @@ static int rxintcount = 0;
 
 static void bmac_rxdma_intr(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *) dev_id;
+	struct net_device *dev = (struct net_device *) dev_id;
 	struct bmac_data *bp = (struct bmac_data *) dev->priv;
 	volatile struct dbdma_regs *rd = bp->rx_dma;
 	volatile struct dbdma_cmd *cp;
@@ -684,7 +684,7 @@ static int txintcount = 0;
 
 static void bmac_txdma_intr(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *) dev_id;
+	struct net_device *dev = (struct net_device *) dev_id;
 	struct bmac_data *bp = (struct bmac_data *) dev->priv;
 	volatile struct dbdma_cmd *cp;
 	int stat;
@@ -730,7 +730,7 @@ static void bmac_txdma_intr(int irq, void *dev_id, struct pt_regs *regs)
 	bmac_start(dev);
 }
 
-static struct net_device_stats *bmac_stats(struct device *dev)
+static struct net_device_stats *bmac_stats(struct net_device *dev)
 {
 	struct bmac_data *p = (struct bmac_data *) dev->priv;
 
@@ -833,7 +833,7 @@ bmac_removehash(struct bmac_data *bp, unsigned char *addr)
  */
 
 static void
-bmac_rx_off(struct device *dev)
+bmac_rx_off(struct net_device *dev)
 {
 	unsigned short rx_cfg;
 
@@ -846,7 +846,7 @@ bmac_rx_off(struct device *dev)
 }
 
 unsigned short
-bmac_rx_on(struct device *dev, int hash_enable, int promisc_enable)
+bmac_rx_on(struct net_device *dev, int hash_enable, int promisc_enable)
 {
 	unsigned short rx_cfg;
 
@@ -864,7 +864,7 @@ bmac_rx_on(struct device *dev, int hash_enable, int promisc_enable)
 }
 
 static void
-bmac_update_hash_table_mask(struct device *dev, struct bmac_data *bp)
+bmac_update_hash_table_mask(struct net_device *dev, struct bmac_data *bp)
 {
 	bmwrite(dev, BHASH3, bp->hash_table_mask[0]); /* bits 15 - 0 */
 	bmwrite(dev, BHASH2, bp->hash_table_mask[1]); /* bits 31 - 16 */
@@ -874,7 +874,7 @@ bmac_update_hash_table_mask(struct device *dev, struct bmac_data *bp)
 
 #if 0
 static void
-bmac_add_multi(struct device *dev,
+bmac_add_multi(struct net_device *dev,
 	       struct bmac_data *bp, unsigned char *addr)
 {
 	/* XXDEBUG(("bmac: enter bmac_add_multi\n")); */
@@ -886,7 +886,7 @@ bmac_add_multi(struct device *dev,
 }
 
 static void
-bmac_remove_multi(struct device *dev,
+bmac_remove_multi(struct net_device *dev,
 		  struct bmac_data *bp, unsigned char *addr)
 {
 	bmac_removehash(bp, addr);
@@ -902,7 +902,7 @@ bmac_remove_multi(struct device *dev,
     num_addrs > 0	Multicast mode, receive normal and MC packets, and do
 			best-effort filtering.
  */
-static void bmac_set_multicast(struct device *dev)
+static void bmac_set_multicast(struct net_device *dev)
 {
 	struct dev_mc_list *dmi;
 	struct bmac_data *bp = (struct bmac_data *) dev->priv;
@@ -946,7 +946,7 @@ static void bmac_set_multicast(struct device *dev)
 #define CRC_POLYNOMIAL_BE 0x04c11db7UL  /* Ethernet CRC, big endian */
 #define CRC_POLYNOMIAL_LE 0xedb88320UL  /* Ethernet CRC, little endian */
 
-static void bmac_set_multicast(struct device *dev)
+static void bmac_set_multicast(struct net_device *dev)
 {
 	struct dev_mc_list *dmi = dev->mc_list;
 	char *addrs;
@@ -1014,7 +1014,7 @@ static int miscintcount = 0;
 
 static void bmac_misc_intr(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *) dev_id;
+	struct net_device *dev = (struct net_device *) dev_id;
 	struct bmac_data *bp = (struct bmac_data *)dev->priv;
 	unsigned int status = bmread(dev, STATUS);
 	if (miscintcount++ < 10) {
@@ -1052,7 +1052,7 @@ static void bmac_misc_intr(int irq, void *dev_id, struct pt_regs *regs)
 #define EnetAddressOffset	20
 
 static unsigned char
-bmac_clock_out_bit(struct device *dev)
+bmac_clock_out_bit(struct net_device *dev)
 {
 	unsigned short         data;
 	unsigned short         val;
@@ -1071,7 +1071,7 @@ bmac_clock_out_bit(struct device *dev)
 }
 
 static void
-bmac_clock_in_bit(struct device *dev, unsigned int val)
+bmac_clock_in_bit(struct net_device *dev, unsigned int val)
 {
 	unsigned short		data;    
 
@@ -1089,7 +1089,7 @@ bmac_clock_in_bit(struct device *dev, unsigned int val)
 }
 
 static void
-reset_and_select_srom(struct device *dev)
+reset_and_select_srom(struct net_device *dev)
 {
 	/* first reset */
 	bmwrite(dev, SROMCSR, 0);
@@ -1102,7 +1102,7 @@ reset_and_select_srom(struct device *dev)
 }
 
 static unsigned short
-read_srom(struct device *dev, unsigned int addr, unsigned int addr_len)
+read_srom(struct net_device *dev, unsigned int addr, unsigned int addr_len)
 {
 	unsigned short data, val;
 	int i;
@@ -1131,7 +1131,7 @@ read_srom(struct device *dev, unsigned int addr, unsigned int addr_len)
  */
 
 static int
-bmac_verify_checksum(struct device *dev)
+bmac_verify_checksum(struct net_device *dev)
 {
 	unsigned short data, storedCS;
     
@@ -1144,7 +1144,7 @@ bmac_verify_checksum(struct device *dev)
 
 
 static void
-bmac_get_station_address(struct device *dev, unsigned char *ea)
+bmac_get_station_address(struct net_device *dev, unsigned char *ea)
 {
 	int i;
 	unsigned short data;
@@ -1158,7 +1158,7 @@ bmac_get_station_address(struct device *dev, unsigned char *ea)
 		}
 }
 
-static int bmac_reset_and_enable(struct device *dev, int enable)
+static int bmac_reset_and_enable(struct net_device *dev, int enable)
 {
 	struct bmac_data *bp = dev->priv;
 	unsigned long flags;
@@ -1191,7 +1191,7 @@ static int bmac_reset_and_enable(struct device *dev, int enable)
 }
 
 int
-bmac_probe(struct device *dev)
+bmac_probe(struct net_device *dev)
 {
 	int j, rev;
 	struct bmac_data *bp;
@@ -1322,7 +1322,7 @@ bmac_probe(struct device *dev)
 	return 0;
 }
 
-static int bmac_open(struct device *dev)
+static int bmac_open(struct net_device *dev)
 {
 	/* XXDEBUG(("bmac: enter open\n")); */
 	/* reset the chip */
@@ -1333,7 +1333,7 @@ static int bmac_open(struct device *dev)
 	return 0;
 }
 
-static int bmac_close(struct device *dev)
+static int bmac_close(struct net_device *dev)
 {
 	struct bmac_data *bp = (struct bmac_data *) dev->priv;
 	volatile struct dbdma_regs *rd = bp->rx_dma;
@@ -1379,7 +1379,7 @@ static int bmac_close(struct device *dev)
 }
 
 static void
-bmac_start(struct device *dev)
+bmac_start(struct net_device *dev)
 {
 	struct bmac_data *bp = dev->priv;
 	int i;
@@ -1399,7 +1399,7 @@ bmac_start(struct device *dev)
 }
 
 static int
-bmac_output(struct sk_buff *skb, struct device *dev)
+bmac_output(struct sk_buff *skb, struct net_device *dev)
 {
 	struct bmac_data *bp = dev->priv;
 	skb_queue_tail(bp->queue, skb);
@@ -1409,7 +1409,7 @@ bmac_output(struct sk_buff *skb, struct device *dev)
 
 static void bmac_tx_timeout(unsigned long data)
 {
-	struct device *dev = (struct device *) data;
+	struct net_device *dev = (struct net_device *) data;
 	struct bmac_data *bp = (struct bmac_data *) dev->priv;
 	volatile struct dbdma_regs *td = bp->tx_dma;
 	volatile struct dbdma_regs *rd = bp->rx_dma;

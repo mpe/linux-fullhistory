@@ -318,7 +318,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 				if (devname[0] == '\0') {
 					sk->bound_dev_if = 0;
 				} else {
-					struct device *dev = dev_get(devname);
+					struct net_device *dev = dev_get(devname);
 					if (!dev)
 						return -EINVAL;
 					sk->bound_dev_if = dev->ifindex;

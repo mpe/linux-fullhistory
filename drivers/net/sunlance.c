@@ -252,7 +252,7 @@ struct lance_private {
 	unsigned short busmaster_regval;
 	unsigned short pio_buffer;
 
-	struct device		 *dev;		  /* Backpointer	*/
+	struct net_device		 *dev;		  /* Backpointer	*/
 	struct lance_private	 *next_module;
 	struct linux_sbus        *sbus;
 	struct timer_list         multicast_timer;
@@ -311,7 +311,7 @@ static void load_csrs (struct lance_private *lp)
 
 /* Setup the Lance Rx and Tx rings */
 /* Sets dev->tbusy */
-static void lance_init_ring (struct device *dev)
+static void lance_init_ring (struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *) dev->priv;
 	volatile struct lance_init_block *ib = lp->init_block;
@@ -444,7 +444,7 @@ static int init_restart_lance (struct lance_private *lp)
 	return 0;
 }
 
-static int lance_rx (struct device *dev)
+static int lance_rx (struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *) dev->priv;
 	volatile struct lance_init_block *ib = lp->init_block;
@@ -518,7 +518,7 @@ static int lance_rx (struct device *dev)
 	return 0;
 }
 
-static int lance_tx (struct device *dev)
+static int lance_tx (struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *) dev->priv;
 	volatile struct lance_init_block *ib = lp->init_block;
@@ -599,7 +599,7 @@ static int lance_tx (struct device *dev)
 
 static void lance_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)dev_id;
+	struct net_device *dev = (struct net_device *)dev_id;
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	volatile struct lance_regs *ll = lp->ll;
 	int csr0;
@@ -660,9 +660,9 @@ static void lance_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 	dev->interrupt = 0;
 }
 
-struct device *last_dev = 0;
+struct net_device *last_dev = 0;
 
-static int lance_open (struct device *dev)
+static int lance_open (struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	volatile struct lance_regs *ll = lp->ll;
@@ -744,7 +744,7 @@ static int lance_open (struct device *dev)
 	return status;
 }
 
-static int lance_close (struct device *dev)
+static int lance_close (struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *) dev->priv;
 	volatile struct lance_regs *ll = lp->ll;
@@ -762,7 +762,7 @@ static int lance_close (struct device *dev)
 	return 0;
 }
 
-static inline int lance_reset (struct device *dev)
+static inline int lance_reset (struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	volatile struct lance_regs *ll = lp->ll;
@@ -793,7 +793,7 @@ static inline int lance_reset (struct device *dev)
 	return status;
 }
 
-static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
+static int lance_start_xmit (struct sk_buff *skb, struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	volatile struct lance_regs *ll = lp->ll;
@@ -861,7 +861,7 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
-static struct net_device_stats *lance_get_stats (struct device *dev)
+static struct net_device_stats *lance_get_stats (struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *) dev->priv;
 
@@ -869,7 +869,7 @@ static struct net_device_stats *lance_get_stats (struct device *dev)
 }
 
 /* taken from the depca driver */
-static void lance_load_multicast (struct device *dev)
+static void lance_load_multicast (struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *) dev->priv;
 	volatile struct lance_init_block *ib = lp->init_block;
@@ -915,7 +915,7 @@ static void lance_load_multicast (struct device *dev)
 	}
 }
 
-static void lance_set_multicast (struct device *dev)
+static void lance_set_multicast (struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *) dev->priv;
 	volatile struct lance_init_block *ib = lp->init_block;
@@ -966,7 +966,7 @@ static void lance_set_multicast (struct device *dev)
 }
 
 static int __init 
-sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
+sparc_lance_init (struct net_device *dev, struct linux_sbus_device *sdev,
 		  struct Linux_SBus_DMA *ledma,
 		  struct linux_sbus_device *lebuffer)
 {
@@ -1157,7 +1157,7 @@ find_ledma (struct linux_sbus_device *dev)
 #include <asm/sun4paddr.h>
 
 /* Find all the lance cards on the system and initialize them */
-int __init sparc_lance_probe (struct device *dev)
+int __init sparc_lance_probe (struct net_device *dev)
 {
 	static struct linux_sbus_device sdev;
 	static int called = 0;
@@ -1179,7 +1179,7 @@ int __init sparc_lance_probe (struct device *dev)
 #else /* !CONFIG_SUN4 */
 
 /* Find all the lance cards on the system and initialize them */
-int __init sparc_lance_probe (struct device *dev)
+int __init sparc_lance_probe (struct net_device *dev)
 {
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;

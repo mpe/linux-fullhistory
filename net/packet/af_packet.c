@@ -194,7 +194,7 @@ extern struct proto_ops packet_ops;
 #ifdef CONFIG_SOCK_PACKET
 extern struct proto_ops packet_ops_spkt;
 
-static int packet_rcv_spkt(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
+static int packet_rcv_spkt(struct sk_buff *skb, struct net_device *dev,  struct packet_type *pt)
 {
 	struct sock *sk;
 	struct sockaddr_pkt *spkt = (struct sockaddr_pkt*)skb->cb;
@@ -261,7 +261,7 @@ static int packet_sendmsg_spkt(struct socket *sock, struct msghdr *msg, int len,
 	struct sock *sk = sock->sk;
 	struct sockaddr_pkt *saddr=(struct sockaddr_pkt *)msg->msg_name;
 	struct sk_buff *skb;
-	struct device *dev;
+	struct net_device *dev;
 	unsigned short proto=0;
 	int err;
 	
@@ -364,7 +364,7 @@ out_unlock:
 }
 #endif
 
-static int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
+static int packet_rcv(struct sk_buff *skb, struct net_device *dev,  struct packet_type *pt)
 {
 	struct sock *sk;
 	struct sockaddr_ll *sll = (struct sockaddr_ll*)skb->cb;
@@ -428,7 +428,7 @@ static int packet_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	struct sock *sk = sock->sk;
 	struct sockaddr_ll *saddr=(struct sockaddr_ll *)msg->msg_name;
 	struct sk_buff *skb;
-	struct device *dev;
+	struct net_device *dev;
 	unsigned short proto;
 	unsigned char *addr;
 	int ifindex, err, reserve = 0;
@@ -595,7 +595,7 @@ static int packet_release(struct socket *sock, struct socket *peersock)
  *	Attach a packet hook.
  */
 
-static int packet_do_bind(struct sock *sk, struct device *dev, int protocol)
+static int packet_do_bind(struct sock *sk, struct net_device *dev, int protocol)
 {
 	/*
 	 *	Detach an existing hook if present.
@@ -640,7 +640,7 @@ static int packet_bind_spkt(struct socket *sock, struct sockaddr *uaddr, int add
 {
 	struct sock *sk=sock->sk;
 	char name[15];
-	struct device *dev;
+	struct net_device *dev;
 	
 	/*
 	 *	Check legality
@@ -662,7 +662,7 @@ static int packet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len
 {
 	struct sockaddr_ll *sll = (struct sockaddr_ll*)uaddr;
 	struct sock *sk=sock->sk;
-	struct device *dev = NULL;
+	struct net_device *dev = NULL;
 	
 	/*
 	 *	Check legality
@@ -846,7 +846,7 @@ out:
 static int packet_getname_spkt(struct socket *sock, struct sockaddr *uaddr,
 			       int *uaddr_len, int peer)
 {
-	struct device *dev;
+	struct net_device *dev;
 	struct sock *sk	= sock->sk;
 
 	if (peer)
@@ -867,7 +867,7 @@ static int packet_getname_spkt(struct socket *sock, struct sockaddr *uaddr,
 static int packet_getname(struct socket *sock, struct sockaddr *uaddr,
 			  int *uaddr_len, int peer)
 {
-	struct device *dev;
+	struct net_device *dev;
 	struct sock *sk = sock->sk;
 	struct sockaddr_ll *sll = (struct sockaddr_ll*)uaddr;
 
@@ -892,7 +892,7 @@ static int packet_getname(struct socket *sock, struct sockaddr *uaddr,
 }
 
 #ifdef CONFIG_PACKET_MULTICAST
-static void packet_dev_mc(struct device *dev, struct packet_mclist *i, int what)
+static void packet_dev_mc(struct net_device *dev, struct packet_mclist *i, int what)
 {
 	switch (i->type) {
 	case PACKET_MR_MULTICAST:
@@ -911,7 +911,7 @@ static void packet_dev_mc(struct device *dev, struct packet_mclist *i, int what)
 	}
 }
 
-static void packet_dev_mclist(struct device *dev, struct packet_mclist *i, int what)
+static void packet_dev_mclist(struct net_device *dev, struct packet_mclist *i, int what)
 {
 	for ( ; i; i=i->next) {
 		if (i->ifindex == dev->ifindex)
@@ -922,7 +922,7 @@ static void packet_dev_mclist(struct device *dev, struct packet_mclist *i, int w
 static int packet_mc_add(struct sock *sk, struct packet_mreq *mreq)
 {
 	struct packet_mclist *ml, *i;
-	struct device *dev;
+	struct net_device *dev;
 	int err;
 
 	rtnl_shlock();
@@ -978,7 +978,7 @@ static int packet_mc_drop(struct sock *sk, struct packet_mreq *mreq)
 		    ml->alen == mreq->mr_alen &&
 		    memcmp(ml->addr, mreq->mr_address, ml->alen) == 0) {
 			if (--ml->count == 0) {
-				struct device *dev;
+				struct net_device *dev;
 				*mlp = ml->next;
 				dev = dev_get_by_index(ml->ifindex);
 				if (dev)
@@ -996,7 +996,7 @@ static void packet_flush_mclist(struct sock *sk)
 	struct packet_mclist *ml;
 
 	while ((ml=sk->protinfo.af_packet->mclist) != NULL) {
-		struct device *dev;
+		struct net_device *dev;
 		sk->protinfo.af_packet->mclist = ml->next;
 		if ((dev = dev_get_by_index(ml->ifindex)) != NULL)
 			packet_dev_mc(dev, ml, -1);
@@ -1035,7 +1035,7 @@ static int packet_notifier(struct notifier_block *this, unsigned long msg, void 
 {
 	struct sock *sk;
 	struct packet_opt *po;
-	struct device *dev = (struct device*)data;
+	struct net_device *dev = (struct net_device*)data;
 
 	for (sk = packet_sklist; sk; sk = sk->next) {
 		po = sk->protinfo.af_packet;

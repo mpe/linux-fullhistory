@@ -46,6 +46,7 @@ struct cyber_dma_registers {
 #define CYBER_SLOW_CABLE 0x08	/* If *not* set, assume SLOW_CABLE */
 
 extern int cyber_esp_detect(struct SHT *);
+extern int cyber_esp_release(struct Scsi_Host *);
 extern const char *esp_info(struct Scsi_Host *);
 extern int esp_queue(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 extern int esp_command(Scsi_Cmnd *);
@@ -56,9 +57,10 @@ extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 
 
 #define SCSI_CYBERSTORM   { proc_dir:		&proc_scsi_esp, \
+			    proc_info:		esp_proc_info, \
 			    name:		"CyberStorm SCSI", \
 			    detect:		cyber_esp_detect, \
-			    release:		NULL, \
+			    release:		cyber_esp_release, \
 			    queuecommand:	esp_queue, \
 			    abort:		esp_abort, \
 			    reset:		esp_reset, \
@@ -66,7 +68,6 @@ extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 			    this_id:		7, \
 			    sg_tablesize:	SG_ALL, \
 			    cmd_per_lun:	1, \
-			    use_clustering:	DISABLE_CLUSTERING }
+			    use_clustering:	ENABLE_CLUSTERING }
 
 #endif /* CYBER_ESP_H */
-

@@ -27,6 +27,7 @@
 
 #include <video/fbcon.h>
 #include <video/fbcon-vga-planes.h>
+#include "vga.h"
 
 #define dac_reg	(0x3c8)
 #define dac_val	(0x3c9)
@@ -63,104 +64,12 @@ static struct vga16fb_info {
 	int vesa_blanked;
 } vga16fb;
 
-/* Some of the code below is taken from SVGAlib.  The original,
-   unmodified copyright notice for that code is below. */
-/* VGAlib version 1.2 - (c) 1993 Tommy Frandsen                    */
-/*                                                                 */
-/* This library is free software; you can redistribute it and/or   */
-/* modify it without any restrictions. This library is distributed */
-/* in the hope that it will be useful, but without any warranty.   */
-
-/* Multi-chipset support Copyright 1993 Harm Hanemaayer */
-/* partially copyrighted (C) 1993 by Hartmut Schirmer */
-
-/* VGA data register ports */
-#define CRT_DC  0x3D5		/* CRT Controller Data Register - color emulation */
-#define CRT_DM  0x3B5		/* CRT Controller Data Register - mono emulation */
-#define ATT_R   0x3C1		/* Attribute Controller Data Read Register */
-#define GRA_D   0x3CF		/* Graphics Controller Data Register */
-#define SEQ_D   0x3C5		/* Sequencer Data Register */
-#define MIS_R   0x3CC		/* Misc Output Read Register */
-#define MIS_W   0x3C2		/* Misc Output Write Register */
-#define IS1_RC  0x3DA		/* Input Status Register 1 - color emulation */
-#define IS1_RM  0x3BA		/* Input Status Register 1 - mono emulation */
-#define PEL_D   0x3C9		/* PEL Data Register */
-#define PEL_MSK 0x3C6		/* PEL mask register */
-
-/* EGA-specific registers */
-#define GRA_E0	0x3CC		/* Graphics enable processor 0 */
-#define GRA_E1	0x3CA		/* Graphics enable processor 1 */
-
-
-/* VGA index register ports */
-#define CRT_IC  0x3D4		/* CRT Controller Index - color emulation */
-#define CRT_IM  0x3B4		/* CRT Controller Index - mono emulation */
-#define ATT_IW  0x3C0		/* Attribute Controller Index & Data Write Register */
-#define GRA_I   0x3CE		/* Graphics Controller Index */
-#define SEQ_I   0x3C4		/* Sequencer Index */
-#define PEL_IW  0x3C8		/* PEL Write Index */
-#define PEL_IR  0x3C7		/* PEL Read Index */
-
-/* standard VGA indexes max counts */
-#define CRT_C   24		/* 24 CRT Controller Registers */
-#define ATT_C   21		/* 21 Attribute Controller Registers */
-#define GRA_C   9		/* 9  Graphics Controller Registers */
-#define SEQ_C   5		/* 5  Sequencer Registers */
-#define MIS_C   1		/* 1  Misc Output Register */
-
-#define CRTC_H_TOTAL		0
-#define CRTC_H_DISP		1
-#define CRTC_H_BLANK_START	2
-#define CRTC_H_BLANK_END	3
-#define CRTC_H_SYNC_START	4
-#define CRTC_H_SYNC_END		5
-#define CRTC_V_TOTAL		6
-#define CRTC_OVERFLOW		7
-#define CRTC_PRESET_ROW		8
-#define CRTC_MAX_SCAN		9
-#define CRTC_CURSOR_START	0x0A
-#define CRTC_CURSOR_END		0x0B
-#define CRTC_START_HI		0x0C
-#define CRTC_START_LO		0x0D
-#define CRTC_CURSOR_HI		0x0E
-#define CRTC_CURSOR_LO		0x0F
-#define CRTC_V_SYNC_START	0x10
-#define CRTC_V_SYNC_END		0x11
-#define CRTC_V_DISP_END		0x12
-#define CRTC_OFFSET		0x13
-#define CRTC_UNDERLINE		0x14
-#define CRTC_V_BLANK_START	0x15
-#define CRTC_V_BLANK_END	0x16
-#define CRTC_MODE		0x17
-#define CRTC_LINE_COMPARE	0x18
-#define CRTC_REGS		0x19
-
-#define ATC_MODE		0x10
-#define ATC_OVERSCAN		0x11
-#define ATC_PLANE_ENABLE	0x12
-#define ATC_PEL			0x13
-#define ATC_COLOR_PAGE		0x14
-
-#define SEQ_CLOCK_MODE		0x01
-#define SEQ_PLANE_WRITE		0x02
-#define SEQ_CHARACTER_MAP	0x03
-#define SEQ_MEMORY_MODE		0x04
-
-#define GDC_SR_VALUE		0x00
-#define GDC_SR_ENABLE		0x01
-#define GDC_COMPARE_VALUE	0x02
-#define GDC_DATA_ROTATE		0x03
-#define GDC_PLANE_READ		0x04
-#define GDC_MODE		0x05
-#define GDC_MISC		0x06
-#define GDC_COMPARE_MASK	0x07
-#define GDC_BIT_MASK		0x08
 
 struct vga16fb_par {
-	u8 crtc[CRTC_REGS];
-	u8 atc[ATT_C];
-	u8 gdc[GRA_C];
-	u8 seq[SEQ_C];
+	u8 crtc[VGA_CRT_C];
+	u8 atc[VGA_ATT_C];
+	u8 gdc[VGA_GFX_C];
+	u8 seq[VGA_SEQ_C];
 	u8 misc;
 	u8 vss;
 	struct fb_var_screeninfo var;
@@ -216,17 +125,17 @@ static int vga16fb_release(struct fb_info *info, int user)
 static void vga16fb_pan_var(struct fb_info *info, struct fb_var_screeninfo *var)
 {
 	u32 pos = (var->xres_virtual * var->yoffset + var->xoffset) >> 3;
-	outb(CRTC_START_HI, CRT_IC);
-	outb(pos >> 8, CRT_DC);
-	outb(CRTC_START_LO, CRT_IC);
-	outb(pos & 0xFF, CRT_DC);
+	outb(VGA_CRTC_START_HI, VGA_CRT_IC);
+	outb(pos >> 8, VGA_CRT_DC);
+	outb(VGA_CRTC_START_LO, VGA_CRT_IC);
+	outb(pos & 0xFF, VGA_CRT_DC);
 #if 0
 	/* if someone supports xoffset in bit resolution */
-	inb(IS1_RC);		/* reset flip-flop */
-	outb(ATC_PEL, ATT_IW);
-	outb(xoffset & 7, ATT_IW);
-	inb(IS1_RC);
-	outb(0x20, ATT_IW);
+	inb(VGA_IS1_RC);		/* reset flip-flop */
+	outb(VGA_ATC_PEL, VGA_ATT_IW);
+	outb(xoffset & 7, VGA_ATT_IW);
+	inb(VGA_IS1_RC);
+	outb(0x20, VGA_ATT_IW);
 #endif
 }
 
@@ -338,7 +247,7 @@ static void vga16fb_clock_chip(struct vga16fb_par *par,
 		}
 	}
 	par->misc |= best->misc;
-	par->seq[SEQ_CLOCK_MODE] |= best->seq_clock_mode;
+	par->seq[VGA_SEQ_CLOCK_MODE] |= best->seq_clock_mode;
 	par->var.pixclock = best->pixclock;		
 }
 			       
@@ -388,17 +297,17 @@ static int vga16fb_decode_var(const struct fb_var_screeninfo *var,
 		FAIL("hslen too big");
 	if (right + hslen + left > 64)
 		FAIL("hblank too big");
-	par->crtc[CRTC_H_TOTAL] = xtotal - 5;
-	par->crtc[CRTC_H_BLANK_START] = xres - 1;
-	par->crtc[CRTC_H_DISP] = xres - 1;
+	par->crtc[VGA_CRTC_H_TOTAL] = xtotal - 5;
+	par->crtc[VGA_CRTC_H_BLANK_START] = xres - 1;
+	par->crtc[VGA_CRTC_H_DISP] = xres - 1;
 	pos = xres + right;
-	par->crtc[CRTC_H_SYNC_START] = pos;
+	par->crtc[VGA_CRTC_H_SYNC_START] = pos;
 	pos += hslen;
-	par->crtc[CRTC_H_SYNC_END] = pos & 0x1F;
+	par->crtc[VGA_CRTC_H_SYNC_END] = pos & 0x1F;
 	pos += left - 2; /* blank_end + 2 <= total + 5 */
-	par->crtc[CRTC_H_BLANK_END] = (pos & 0x1F) | 0x80;
+	par->crtc[VGA_CRTC_H_BLANK_END] = (pos & 0x1F) | 0x80;
 	if (pos & 0x20)
-		par->crtc[CRTC_H_SYNC_END] |= 0x80;
+		par->crtc[VGA_CRTC_H_SYNC_END] |= 0x80;
 
 	yres = var->yres;
 	lower = var->lower_margin;
@@ -443,59 +352,59 @@ static int vga16fb_decode_var(const struct fb_var_screeninfo *var,
 		FAIL("ytotal too big");
 	if (vslen > 16)
 		FAIL("vslen too big");
-	par->crtc[CRTC_V_TOTAL] = ytotal - 2;
+	par->crtc[VGA_CRTC_V_TOTAL] = ytotal - 2;
 	r7 = 0x10;	/* disable linecompare */
 	if (ytotal & 0x100) r7 |= 0x01;
 	if (ytotal & 0x200) r7 |= 0x20;
-	par->crtc[CRTC_PRESET_ROW] = 0;
-	par->crtc[CRTC_MAX_SCAN] = 0x40;	/* 1 scanline, no linecmp */
+	par->crtc[VGA_CRTC_PRESET_ROW] = 0;
+	par->crtc[VGA_CRTC_MAX_SCAN] = 0x40;	/* 1 scanline, no linecmp */
 	par->var.vmode = var->vmode;
 	if (var->vmode & FB_VMODE_DOUBLE)
-		par->crtc[CRTC_MAX_SCAN] |= 0x80;
-	par->crtc[CRTC_CURSOR_START] = 0x20;
-	par->crtc[CRTC_CURSOR_END]   = 0x00;
+		par->crtc[VGA_CRTC_MAX_SCAN] |= 0x80;
+	par->crtc[VGA_CRTC_CURSOR_START] = 0x20;
+	par->crtc[VGA_CRTC_CURSOR_END]   = 0x00;
 	pos = yoffset * vxres + (xoffset >> 3);
-	par->crtc[CRTC_START_HI]     = pos >> 8;
-	par->crtc[CRTC_START_LO]     = pos & 0xFF;
-	par->crtc[CRTC_CURSOR_HI]    = 0x00;
-	par->crtc[CRTC_CURSOR_LO]    = 0x00;
+	par->crtc[VGA_CRTC_START_HI]     = pos >> 8;
+	par->crtc[VGA_CRTC_START_LO]     = pos & 0xFF;
+	par->crtc[VGA_CRTC_CURSOR_HI]    = 0x00;
+	par->crtc[VGA_CRTC_CURSOR_LO]    = 0x00;
 	pos = yres - 1;
-	par->crtc[CRTC_V_DISP_END] = pos & 0xFF;
-	par->crtc[CRTC_V_BLANK_START] = pos & 0xFF;
+	par->crtc[VGA_CRTC_V_DISP_END] = pos & 0xFF;
+	par->crtc[VGA_CRTC_V_BLANK_START] = pos & 0xFF;
 	if (pos & 0x100)
 		r7 |= 0x0A;	/* 0x02 -> DISP_END, 0x08 -> BLANK_START */
 	if (pos & 0x200) {
 		r7 |= 0x40;	/* 0x40 -> DISP_END */
-		par->crtc[CRTC_MAX_SCAN] |= 0x20; /* BLANK_START */
+		par->crtc[VGA_CRTC_MAX_SCAN] |= 0x20; /* BLANK_START */
 	}
 	pos += lower;
-	par->crtc[CRTC_V_SYNC_START] = pos & 0xFF;
+	par->crtc[VGA_CRTC_V_SYNC_START] = pos & 0xFF;
 	if (pos & 0x100)
 		r7 |= 0x04;
 	if (pos & 0x200)
 		r7 |= 0x80;
 	pos += vslen;
-	par->crtc[CRTC_V_SYNC_END] = (pos & 0x0F) | 0x10; /* disabled IRQ */
+	par->crtc[VGA_CRTC_V_SYNC_END] = (pos & 0x0F) | 0x10; /* disabled IRQ */
 	pos += upper - 1; /* blank_end + 1 <= ytotal + 2 */
-	par->crtc[CRTC_V_BLANK_END] = pos & 0xFF; /* 0x7F for original VGA,
+	par->crtc[VGA_CRTC_V_BLANK_END] = pos & 0xFF; /* 0x7F for original VGA,
                      but some SVGA chips requires all 8 bits to set */
 	if (vxres >= 512)
 		FAIL("vxres too long");
-	par->crtc[CRTC_OFFSET] = vxres >> 1;
-	par->crtc[CRTC_UNDERLINE] = 0x1F;
-	par->crtc[CRTC_MODE] = rMode | 0xE3;
-	par->crtc[CRTC_LINE_COMPARE] = 0xFF;
-	par->crtc[CRTC_OVERFLOW] = r7;
+	par->crtc[VGA_CRTC_OFFSET] = vxres >> 1;
+	par->crtc[VGA_CRTC_UNDERLINE] = 0x1F;
+	par->crtc[VGA_CRTC_MODE] = rMode | 0xE3;
+	par->crtc[VGA_CRTC_LINE_COMPARE] = 0xFF;
+	par->crtc[VGA_CRTC_OVERFLOW] = r7;
 
 	par->vss = 0x00;	/* 3DA */
 
 	for (i = 0x00; i < 0x10; i++)
 		par->atc[i] = i;
-	par->atc[ATC_MODE] = 0x81;
-	par->atc[ATC_OVERSCAN] = 0x00;	/* 0 for EGA, 0xFF for VGA */
-	par->atc[ATC_PLANE_ENABLE] = 0x0F;
-	par->atc[ATC_PEL] = xoffset & 7;
-	par->atc[ATC_COLOR_PAGE] = 0x00;
+	par->atc[VGA_ATC_MODE] = 0x81;
+	par->atc[VGA_ATC_OVERSCAN] = 0x00;	/* 0 for EGA, 0xFF for VGA */
+	par->atc[VGA_ATC_PLANE_ENABLE] = 0x0F;
+	par->atc[VGA_ATC_PEL] = xoffset & 7;
+	par->atc[VGA_ATC_COLOR_PAGE] = 0x00;
 	
 	par->misc = 0xC3;	/* enable CPU, ports 0x3Dx, positive sync */
 	par->var.sync = var->sync;
@@ -504,20 +413,20 @@ static int vga16fb_decode_var(const struct fb_var_screeninfo *var,
 	if (var->sync & FB_SYNC_VERT_HIGH_ACT)
 		par->misc &= ~0x80;
 	
-	par->seq[SEQ_CLOCK_MODE] = 0x01;
-	par->seq[SEQ_PLANE_WRITE] = 0x0F;
-	par->seq[SEQ_CHARACTER_MAP] = 0x00;
-	par->seq[SEQ_MEMORY_MODE] = 0x06;
+	par->seq[VGA_SEQ_CLOCK_MODE] = 0x01;
+	par->seq[VGA_SEQ_PLANE_WRITE] = 0x0F;
+	par->seq[VGA_SEQ_CHARACTER_MAP] = 0x00;
+	par->seq[VGA_SEQ_MEMORY_MODE] = 0x06;
 	
-	par->gdc[GDC_SR_VALUE] = 0x00;
-	par->gdc[GDC_SR_ENABLE] = 0x0F;
-	par->gdc[GDC_COMPARE_VALUE] = 0x00;
-	par->gdc[GDC_DATA_ROTATE] = 0x20;
-	par->gdc[GDC_PLANE_READ] = 0;
-	par->gdc[GDC_MODE] = 0x00;
-	par->gdc[GDC_MISC] = 0x05;
-	par->gdc[GDC_COMPARE_MASK] = 0x0F;
-	par->gdc[GDC_BIT_MASK] = 0xFF;
+	par->gdc[VGA_GFX_SR_VALUE] = 0x00;
+	par->gdc[VGA_GFX_SR_ENABLE] = 0x0F;
+	par->gdc[VGA_GFX_COMPARE_VALUE] = 0x00;
+	par->gdc[VGA_GFX_DATA_ROTATE] = 0x20;
+	par->gdc[VGA_GFX_PLANE_READ] = 0;
+	par->gdc[VGA_GFX_MODE] = 0x00;
+	par->gdc[VGA_GFX_MISC] = 0x05;
+	par->gdc[VGA_GFX_COMPARE_MASK] = 0x0F;
+	par->gdc[VGA_GFX_BIT_MASK] = 0xFF;
 
 	vga16fb_clock_chip(par, var->pixclock, info);
 
@@ -543,64 +452,64 @@ static int vga16fb_set_par(const struct vga16fb_par *par,
 {
 	int i;
 
-	outb(inb(MIS_R) | 0x01, MIS_W);
+	outb(inb(VGA_MIS_R) | 0x01, VGA_MIS_W);
 
 	/* Enable graphics register modification */
 	if (!info->isVGA) {
-		outb(0x00, GRA_E0);
-		outb(0x01, GRA_E1);
+		outb(0x00, EGA_GFX_E0);
+		outb(0x01, EGA_GFX_E1);
 	}
 	
 	/* update misc output register */
-	outb(par->misc, MIS_W);
+	outb(par->misc, VGA_MIS_W);
 	
 	/* synchronous reset on */
-	outb(0x00, SEQ_I);
-	outb(0x01, SEQ_D);
+	outb(0x00, VGA_SEQ_I);
+	outb(0x01, VGA_SEQ_D);
 	
 	/* write sequencer registers */
-	outb(1, SEQ_I);
-	outb(par->seq[1] | 0x20, SEQ_D);
-	for (i = 2; i < SEQ_C; i++) {
-		outb(i, SEQ_I);
-		outb(par->seq[i], SEQ_D);
+	outb(1, VGA_SEQ_I);
+	outb(par->seq[1] | 0x20, VGA_SEQ_D);
+	for (i = 2; i < VGA_SEQ_C; i++) {
+		outb(i, VGA_SEQ_I);
+		outb(par->seq[i], VGA_SEQ_D);
 	}
 	
 	/* synchronous reset off */
-	outb(0x00, SEQ_I);
-	outb(0x03, SEQ_D);
+	outb(0x00, VGA_SEQ_I);
+	outb(0x03, VGA_SEQ_D);
 	
 	/* deprotect CRT registers 0-7 */
-	outb(0x11, CRT_IC);
-	outb(par->crtc[0x11], CRT_DC);
+	outb(0x11, VGA_CRT_IC);
+	outb(par->crtc[0x11], VGA_CRT_DC);
 
 	/* write CRT registers */
-	for (i = 0; i < CRTC_REGS; i++) {
-		outb(i, CRT_IC);
-		outb(par->crtc[i], CRT_DC);
+	for (i = 0; i < VGA_CRT_C; i++) {
+		outb(i, VGA_CRT_IC);
+		outb(par->crtc[i], VGA_CRT_DC);
 	}
 	
 	/* write graphics controller registers */
-	for (i = 0; i < GRA_C; i++) {
-		outb(i, GRA_I);
-		outb(par->gdc[i], GRA_D);
+	for (i = 0; i < VGA_GFX_C; i++) {
+		outb(i, VGA_GFX_I);
+		outb(par->gdc[i], VGA_GFX_D);
 	}
 	
 	/* write attribute controller registers */
-	for (i = 0; i < ATT_C; i++) {
-		inb_p(IS1_RC);		/* reset flip-flop */
-		outb_p(i, ATT_IW);
-		outb_p(par->atc[i], ATT_IW);
+	for (i = 0; i < VGA_ATT_C; i++) {
+		inb_p(VGA_IS1_RC);		/* reset flip-flop */
+		outb_p(i, VGA_ATT_IW);
+		outb_p(par->atc[i], VGA_ATT_IW);
 	}
 
 	/* Wait for screen to stabilize. */
 	mdelay(50);
 
-	outb(0x01, SEQ_I);
-	outb(par->seq[1], SEQ_D);
+	outb(0x01, VGA_SEQ_I);
+	outb(par->seq[1], VGA_SEQ_D);
 
-	inb(IS1_RC);
-	outb(0x20, ATT_IW);
+	inb(VGA_IS1_RC);
+	outb(0x20, VGA_ATT_IW);
 	
 	return 0;
 }

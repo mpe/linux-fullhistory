@@ -152,13 +152,13 @@ struct cpm_enet_private {
 	unsigned long lock;
 };
 
-static int cpm_enet_open(struct device *dev);
-static int cpm_enet_start_xmit(struct sk_buff *skb, struct device *dev);
-static int cpm_enet_rx(struct device *dev);
+static int cpm_enet_open(struct net_device *dev);
+static int cpm_enet_start_xmit(struct sk_buff *skb, struct net_device *dev);
+static int cpm_enet_rx(struct net_device *dev);
 static void cpm_enet_interrupt(void *dev_id);
-static int cpm_enet_close(struct device *dev);
-static struct net_device_stats *cpm_enet_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev);
+static int cpm_enet_close(struct net_device *dev);
+static struct net_device_stats *cpm_enet_get_stats(struct net_device *dev);
+static void set_multicast_list(struct net_device *dev);
 
 /* Get this from various configuration locations (depends on board).
 */
@@ -181,7 +181,7 @@ static void set_multicast_list(struct device *dev);
 #endif
 
 static int
-cpm_enet_open(struct device *dev)
+cpm_enet_open(struct net_device *dev)
 {
 
 	/* I should reset the ring buffers here, but I don't yet know
@@ -196,7 +196,7 @@ cpm_enet_open(struct device *dev)
 }
 
 static int
-cpm_enet_start_xmit(struct sk_buff *skb, struct device *dev)
+cpm_enet_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct cpm_enet_private *cep = (struct cpm_enet_private *)dev->priv;
 	volatile cbd_t	*bdp;
@@ -326,7 +326,7 @@ cpm_enet_start_xmit(struct sk_buff *skb, struct device *dev)
 static void
 cpm_enet_interrupt(void *dev_id)
 {
-	struct	device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	volatile struct	cpm_enet_private *cep;
 	volatile cbd_t	*bdp;
 	ushort	int_events;
@@ -503,7 +503,7 @@ cpm_enet_interrupt(void *dev_id)
  * effectively tossing the packet.
  */
 static int
-cpm_enet_rx(struct device *dev)
+cpm_enet_rx(struct net_device *dev)
 {
 	struct	cpm_enet_private *cep;
 	volatile cbd_t	*bdp;
@@ -597,7 +597,7 @@ for (;;) {
 }
 
 static int
-cpm_enet_close(struct device *dev)
+cpm_enet_close(struct net_device *dev)
 {
 	/* Don't know what to do yet.
 	*/
@@ -605,7 +605,7 @@ cpm_enet_close(struct device *dev)
 	return 0;
 }
 
-static struct net_device_stats *cpm_enet_get_stats(struct device *dev)
+static struct net_device_stats *cpm_enet_get_stats(struct net_device *dev)
 {
 	struct cpm_enet_private *cep = (struct cpm_enet_private *)dev->priv;
 
@@ -622,7 +622,7 @@ static struct net_device_stats *cpm_enet_get_stats(struct device *dev)
  * this kind of feature?).
  */
 
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
 	struct	cpm_enet_private *cep;
 	struct	dev_mc_list *dmi;
@@ -701,7 +701,7 @@ static void set_multicast_list(struct device *dev)
 int __init cpm_enet_init() { m8xx_enet_init(); }
 int __init m8xx_enet_init(void)
 {
-	struct device *dev;
+	struct net_device *dev;
 	struct cpm_enet_private *cep;
 	int i, j;
 	unsigned char	*eap;

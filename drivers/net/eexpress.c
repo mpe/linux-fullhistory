@@ -236,34 +236,34 @@ static char irqrmap[] = { 0,0,1,2,3,4,0,0,0,1,5,6,0,0,0,0 };
  * Prototypes for Linux interface
  */
 
-extern int express_probe(struct device *dev);
-static int eexp_open(struct device *dev);
-static int eexp_close(struct device *dev);
-static struct net_device_stats *eexp_stats(struct device *dev);
-static int eexp_xmit(struct sk_buff *buf, struct device *dev);
+extern int express_probe(struct net_device *dev);
+static int eexp_open(struct net_device *dev);
+static int eexp_close(struct net_device *dev);
+static struct net_device_stats *eexp_stats(struct net_device *dev);
+static int eexp_xmit(struct sk_buff *buf, struct net_device *dev);
 
 static void eexp_irq(int irq, void *dev_addr, struct pt_regs *regs);
-static void eexp_set_multicast(struct device *dev);
+static void eexp_set_multicast(struct net_device *dev);
 
 /*
  * Prototypes for hardware access functions
  */
 
-static void eexp_hw_rx_pio(struct device *dev);
-static void eexp_hw_tx_pio(struct device *dev, unsigned short *buf,
+static void eexp_hw_rx_pio(struct net_device *dev);
+static void eexp_hw_tx_pio(struct net_device *dev, unsigned short *buf,
 		       unsigned short len);
-static int eexp_hw_probe(struct device *dev,unsigned short ioaddr);
+static int eexp_hw_probe(struct net_device *dev,unsigned short ioaddr);
 static unsigned short eexp_hw_readeeprom(unsigned short ioaddr,
 					 unsigned char location);
 
-static unsigned short eexp_hw_lasttxstat(struct device *dev);
-static void eexp_hw_txrestart(struct device *dev);
+static unsigned short eexp_hw_lasttxstat(struct net_device *dev);
+static void eexp_hw_txrestart(struct net_device *dev);
 
-static void eexp_hw_txinit    (struct device *dev);
-static void eexp_hw_rxinit    (struct device *dev);
+static void eexp_hw_txinit    (struct net_device *dev);
+static void eexp_hw_rxinit    (struct net_device *dev);
 
-static void eexp_hw_init586   (struct device *dev);
-static void eexp_setup_filter (struct device *dev);
+static void eexp_hw_init586   (struct net_device *dev);
+static void eexp_setup_filter (struct net_device *dev);
 
 static char *eexp_ifmap[]={"AUI", "BNC", "RJ45"};
 enum eexp_iftype {AUI=0, BNC=1, TPE=2};
@@ -275,37 +275,37 @@ enum eexp_iftype {AUI=0, BNC=1, TPE=2};
  * Primitive hardware access functions.
  */
 
-static inline unsigned short scb_status(struct device *dev)
+static inline unsigned short scb_status(struct net_device *dev)
 {
 	return inw(dev->base_addr + 0xc008);
 }
 
-static inline unsigned short scb_rdcmd(struct device *dev)
+static inline unsigned short scb_rdcmd(struct net_device *dev)
 {
 	return inw(dev->base_addr + 0xc00a);
 }
 
-static inline void scb_command(struct device *dev, unsigned short cmd)
+static inline void scb_command(struct net_device *dev, unsigned short cmd)
 {
 	outw(cmd, dev->base_addr + 0xc00a);
 }
 
-static inline void scb_wrcbl(struct device *dev, unsigned short val)
+static inline void scb_wrcbl(struct net_device *dev, unsigned short val)
 {
 	outw(val, dev->base_addr + 0xc00c);
 }
 
-static inline void scb_wrrfa(struct device *dev, unsigned short val)
+static inline void scb_wrrfa(struct net_device *dev, unsigned short val)
 {
 	outw(val, dev->base_addr + 0xc00e);
 }
 
-static inline void set_loopback(struct device *dev)
+static inline void set_loopback(struct net_device *dev)
 {
 	outb(inb(dev->base_addr + Config) | 2, dev->base_addr + Config);
 }
 
-static inline void clear_loopback(struct device *dev)
+static inline void clear_loopback(struct net_device *dev)
 {
 	outb(inb(dev->base_addr + Config) & ~2, dev->base_addr + Config);
 }
@@ -325,7 +325,7 @@ static inline unsigned short int SHADOW(short int addr)
  * checks for presence of EtherExpress card
  */
 
-int __init express_probe(struct device *dev)
+int __init express_probe(struct net_device *dev)
 {
 	unsigned short *port;
 	static unsigned short ports[] = { 0x300,0x310,0x270,0x320,0x340,0 };
@@ -356,7 +356,7 @@ int __init express_probe(struct device *dev)
  * open and initialize the adapter, ready for use
  */
 
-static int eexp_open(struct device *dev)
+static int eexp_open(struct net_device *dev)
 {
 	int irq = dev->irq;
 	unsigned short ioaddr = dev->base_addr;
@@ -397,7 +397,7 @@ static int eexp_open(struct device *dev)
  * close and disable the interface, leaving the 586 in reset.
  */
 
-static int eexp_close(struct device *dev)
+static int eexp_close(struct net_device *dev)
 {
 	unsigned short ioaddr = dev->base_addr;
 	struct net_local *lp = dev->priv;
@@ -426,7 +426,7 @@ static int eexp_close(struct device *dev)
  * Return interface stats
  */
 
-static struct net_device_stats *eexp_stats(struct device *dev)
+static struct net_device_stats *eexp_stats(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 
@@ -438,7 +438,7 @@ static struct net_device_stats *eexp_stats(struct device *dev)
  * nothing has become jammed in the CU.
  */
 
-static void unstick_cu(struct device *dev)
+static void unstick_cu(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned short ioaddr = dev->base_addr;
@@ -519,7 +519,7 @@ static void unstick_cu(struct device *dev)
  * Called to transmit a packet, or to allow us to right ourselves
  * if the kernel thinks we've died.
  */
-static int eexp_xmit(struct sk_buff *buf, struct device *dev)
+static int eexp_xmit(struct sk_buff *buf, struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned long flags;
@@ -601,7 +601,7 @@ static int eexp_xmit(struct sk_buff *buf, struct device *dev)
  * check to make sure we've not become wedged.
  */
 
-static unsigned short eexp_start_irq(struct device *dev,
+static unsigned short eexp_start_irq(struct net_device *dev,
 				     unsigned short status)
 {
 	unsigned short ack_cmd = SCB_ack(status);
@@ -659,7 +659,7 @@ static unsigned short eexp_start_irq(struct device *dev,
 	return ack_cmd;
 }
 
-static void eexp_cmd_clear(struct device *dev)
+static void eexp_cmd_clear(struct net_device *dev)
 {
 	unsigned long int oldtime = jiffies;
 	while (scb_rdcmd(dev) && ((jiffies-oldtime)<10));
@@ -670,7 +670,7 @@ static void eexp_cmd_clear(struct device *dev)
 	
 static void eexp_irq(int irq, void *dev_info, struct pt_regs *regs)
 {
-	struct device *dev = dev_info;
+	struct net_device *dev = dev_info;
 	struct net_local *lp;
 	unsigned short ioaddr,status,ack_cmd;
 	unsigned short old_read_ptr, old_write_ptr;
@@ -781,7 +781,7 @@ static void eexp_irq(int irq, void *dev_info, struct pt_regs *regs)
  * Set the cable type to use.
  */
 
-static void eexp_hw_set_interface(struct device *dev)
+static void eexp_hw_set_interface(struct net_device *dev)
 {
 	unsigned char oldval = inb(dev->base_addr + 0x300e);
 	oldval &= ~0x82;
@@ -802,7 +802,7 @@ static void eexp_hw_set_interface(struct device *dev)
  * descriptor, though we don't bother trying to fix broken ones.
  */
 
-static void eexp_hw_rx_pio(struct device *dev)
+static void eexp_hw_rx_pio(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned short rx_block = lp->rx_ptr;
@@ -897,7 +897,7 @@ static void eexp_hw_rx_pio(struct device *dev)
  * buffer region.
  */
 
-static void eexp_hw_tx_pio(struct device *dev, unsigned short *buf,
+static void eexp_hw_tx_pio(struct net_device *dev, unsigned short *buf,
 		       unsigned short len)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
@@ -961,7 +961,7 @@ static void eexp_hw_tx_pio(struct device *dev, unsigned short *buf,
  * than one card in a machine.
  */
 
-static int __init eexp_hw_probe(struct device *dev, unsigned short ioaddr)
+static int __init eexp_hw_probe(struct net_device *dev, unsigned short ioaddr)
 {
 	unsigned short hw_addr[3];
 	unsigned char buswidth;
@@ -1134,7 +1134,7 @@ static unsigned short __init eexp_hw_readeeprom(unsigned short ioaddr,
  * again
  */
 
-static unsigned short eexp_hw_lasttxstat(struct device *dev)
+static unsigned short eexp_hw_lasttxstat(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned short tx_block = lp->tx_reap;
@@ -1205,7 +1205,7 @@ static unsigned short eexp_hw_lasttxstat(struct device *dev)
  * we were working on, or the idle loop if we had finished for the time.
  */
 
-static void eexp_hw_txrestart(struct device *dev)
+static void eexp_hw_txrestart(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned short ioaddr = dev->base_addr;
@@ -1251,7 +1251,7 @@ static void eexp_hw_txrestart(struct device *dev)
  * the 586 command unit is continuously active.
  */
 
-static void eexp_hw_txinit(struct device *dev)
+static void eexp_hw_txinit(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned short tx_block = TX_BUF_START;
@@ -1293,7 +1293,7 @@ static void eexp_hw_txinit(struct device *dev)
  * "out of resources" messages).
  */
 
-static void eexp_hw_rxinit(struct device *dev)
+static void eexp_hw_rxinit(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned short rx_block = lp->rx_buf_start;
@@ -1352,7 +1352,7 @@ static void eexp_hw_rxinit(struct device *dev)
  * the hardware is configured correctly.
  */
 
-static void eexp_hw_init586(struct device *dev)
+static void eexp_hw_init586(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned short ioaddr = dev->base_addr;
@@ -1475,7 +1475,7 @@ static void eexp_hw_init586(struct device *dev)
 	return;
 }
 
-static void eexp_setup_filter(struct device *dev)
+static void eexp_setup_filter(struct net_device *dev)
 {
 	struct dev_mc_list *dmi = dev->mc_list;
 	unsigned short ioaddr = dev->base_addr;
@@ -1512,7 +1512,7 @@ static void eexp_setup_filter(struct device *dev)
  * Set or clear the multicast filter for this adaptor.
  */
 static void
-eexp_set_multicast(struct device *dev)
+eexp_set_multicast(struct net_device *dev)
 {
         unsigned short ioaddr = dev->base_addr;
         struct net_local *lp = (struct net_local *)dev->priv;
@@ -1564,7 +1564,7 @@ eexp_set_multicast(struct device *dev)
 
 static char namelist[NAMELEN * EEXP_MAX_CARDS] = { 0, };
 
-static struct device dev_eexp[EEXP_MAX_CARDS] =
+static struct net_device dev_eexp[EEXP_MAX_CARDS] =
 {
         { NULL,         /* will allocate dynamically */
 	  0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, express_probe },
@@ -1585,7 +1585,7 @@ int init_module(void)
 	int this_dev, found = 0;
 
 	for (this_dev = 0; this_dev < EEXP_MAX_CARDS; this_dev++) {
-		struct device *dev = &dev_eexp[this_dev];
+		struct net_device *dev = &dev_eexp[this_dev];
 		dev->name = namelist + (NAMELEN*this_dev);
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
@@ -1608,7 +1608,7 @@ void cleanup_module(void)
 	int this_dev;
 
 	for (this_dev = 0; this_dev < EEXP_MAX_CARDS; this_dev++) {
-		struct device *dev = &dev_eexp[this_dev];
+		struct net_device *dev = &dev_eexp[this_dev];
 		if (dev->priv != NULL) {
 			unregister_netdev(dev);
 			kfree(dev->priv);

@@ -44,6 +44,7 @@ struct blz2060_dma_registers {
 #define BLZ2060_DMA_LED    0x02		/* HD led control 1 = off */
 
 extern int blz2060_esp_detect(struct SHT *);
+extern int blz2060_esp_release(struct Scsi_Host *);
 extern const char *esp_info(struct Scsi_Host *);
 extern int esp_queue(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 extern int esp_command(Scsi_Cmnd *);
@@ -53,9 +54,10 @@ extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 			 int hostno, int inout);
 
 #define SCSI_BLZ2060      { proc_dir:		&proc_scsi_esp, \
+			    proc_info:		esp_proc_info, \
 			    name:		"Blizzard2060 SCSI", \
 			    detect:		blz2060_esp_detect, \
-			    release:		NULL, \
+			    release:		blz2060_esp_release, \
 			    queuecommand:	esp_queue, \
 			    abort:		esp_abort, \
 			    reset:		esp_reset, \
@@ -63,6 +65,6 @@ extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 			    this_id:		7, \
 			    sg_tablesize:	SG_ALL, \
 			    cmd_per_lun:	1, \
-			    use_clustering:	DISABLE_CLUSTERING }
+			    use_clustering:	ENABLE_CLUSTERING }
 
 #endif /* BLZ2060_H */

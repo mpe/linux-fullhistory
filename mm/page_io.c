@@ -18,8 +18,6 @@
 
 #include <asm/pgtable.h>
 
-static DECLARE_WAIT_QUEUE_HEAD(lock_queue);
-
 /*
  * Reads or writes a swap page.
  * wait=1: start I/O and wait for completion. wait=0: start asynchronous I/O.
@@ -167,24 +165,6 @@ void rw_swap_page(int rw, struct page *page, int wait)
 	if (page->inode != &swapper_inode)
 		PAGE_BUG(page);
 	rw_swap_page_base(rw, entry, page, wait, 1);
-}
-
-/*
- * Setting up a new swap file needs a simple wrapper just to read the 
- * swap signature.  SysV shared memory also needs a simple wrapper.
- */
-void rw_swap_page_nocache(int rw, unsigned long entry, char *buf)
-{
-	struct page *page = mem_map + MAP_NR(buf);
-	
-	if (TryLockPage(page))
-		PAGE_BUG(page);
-	if (PageSwapCache(page))
-		PAGE_BUG(page);
-	if (page->inode)
-		PAGE_BUG(page);
-	page->offset = entry;
-	rw_swap_page_base(rw, entry, page, 1, 1);
 }
 
 /*

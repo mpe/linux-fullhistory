@@ -153,7 +153,7 @@ void control_init(void);
 #ifdef CONFIG_FB_OF
 void control_of_init(struct device_node *dp);
 #endif
-void control_setup(char *options, int *ints);
+void control_setup(char *);
 
 static int read_control_sense(struct fb_info_control *p);
 static inline int control_vram_reqd(int video_mode, int color_mode);
@@ -1152,7 +1152,7 @@ static void control_init_info(struct fb_info *info, struct fb_info_control *p)
 }
 
 /* Parse user speficied options (`video=controlfb:') */
-void __init control_setup(char *options, int *ints)
+void __init control_setup(char *options)
 {
 	char *this_opt;
 

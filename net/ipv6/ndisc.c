@@ -150,7 +150,7 @@ static u8 *ndisc_fill_option(u8 *opt, int type, void *data, int data_len)
 	return opt + space;
 }
 
-int ndisc_mc_map(struct in6_addr *addr, char *buf, struct device *dev, int dir)
+int ndisc_mc_map(struct in6_addr *addr, char *buf, struct net_device *dev, int dir)
 {
 	switch (dev->type) {
 	case ARPHRD_ETHER:
@@ -170,7 +170,7 @@ int ndisc_mc_map(struct in6_addr *addr, char *buf, struct device *dev, int dir)
 static int ndisc_constructor(struct neighbour *neigh)
 {
 	struct in6_addr *addr = (struct in6_addr*)&neigh->primary_key;
-	struct device *dev = neigh->dev;
+	struct net_device *dev = neigh->dev;
 	struct inet6_dev *in6_dev = ipv6_get_idev(dev);
 	int addr_type;
 
@@ -219,7 +219,7 @@ static int pndisc_constructor(struct pneigh_entry *n)
 {
 	struct in6_addr *addr = (struct in6_addr*)&n->key;
 	struct in6_addr maddr;
-	struct device *dev = n->dev;
+	struct net_device *dev = n->dev;
 
 	if (dev == NULL || ipv6_get_idev(dev) == NULL)
 		return -EINVAL;
@@ -238,7 +238,7 @@ static void pndisc_destructor(struct pneigh_entry *n)
 {
 	struct in6_addr *addr = (struct in6_addr*)&n->key;
 	struct in6_addr maddr;
-	struct device *dev = n->dev;
+	struct net_device *dev = n->dev;
 
 	if (dev == NULL || ipv6_get_idev(dev) == NULL)
 		return;
@@ -255,7 +255,7 @@ static void pndisc_destructor(struct pneigh_entry *n)
 
 
 static int
-ndisc_build_ll_hdr(struct sk_buff *skb, struct device *dev,
+ndisc_build_ll_hdr(struct sk_buff *skb, struct net_device *dev,
 		   struct in6_addr *daddr, struct neighbour *neigh, int len)
 {
 	unsigned char ha[MAX_ADDR_LEN];
@@ -299,7 +299,7 @@ ndisc_build_ll_hdr(struct sk_buff *skb, struct device *dev,
  *	Send a Neighbour Advertisement
  */
 
-void ndisc_send_na(struct device *dev, struct neighbour *neigh,
+void ndisc_send_na(struct net_device *dev, struct neighbour *neigh,
 		   struct in6_addr *daddr, struct in6_addr *solicited_addr,
 		   int router, int solicited, int override, int inc_opt) 
 {
@@ -362,7 +362,7 @@ void ndisc_send_na(struct device *dev, struct neighbour *neigh,
 	icmpv6_statistics.Icmp6OutMsgs++;
 }        
 
-void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
+void ndisc_send_ns(struct net_device *dev, struct neighbour *neigh,
 		   struct in6_addr *solicit,
 		   struct in6_addr *daddr, struct in6_addr *saddr) 
 {
@@ -421,7 +421,7 @@ void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
 	icmpv6_statistics.Icmp6OutMsgs++;
 }
 
-void ndisc_send_rs(struct device *dev, struct in6_addr *saddr,
+void ndisc_send_rs(struct net_device *dev, struct in6_addr *saddr,
 		   struct in6_addr *daddr)
 {
 	struct sock *sk = ndisc_socket->sk;
@@ -510,7 +510,7 @@ static void ndisc_solicit(struct neighbour *neigh, struct sk_buff *skb)
 {
 	struct in6_addr *saddr = NULL;
 	struct in6_addr mcaddr;
-	struct device *dev = neigh->dev;
+	struct net_device *dev = neigh->dev;
 	struct in6_addr *target = (struct in6_addr *)&neigh->primary_key;
 	int probes = atomic_read(&neigh->probes);
 
@@ -782,7 +782,7 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 	struct icmp6hdr *icmph;
 	struct in6_addr saddr_buf;
 	struct in6_addr *addrp;
-	struct device *dev;
+	struct net_device *dev;
 	struct rt6_info *rt;
 	u8 *opt;
 	int rd_len;
@@ -922,7 +922,7 @@ static void pndisc_redo(struct sk_buff *skb)
 
 int ndisc_rcv(struct sk_buff *skb, unsigned long len)
 {
-	struct device *dev = skb->dev;
+	struct net_device *dev = skb->dev;
 	struct in6_addr *saddr = &skb->nh.ipv6h->saddr;
 	struct in6_addr *daddr = &skb->nh.ipv6h->daddr;
 	struct nd_msg *msg = (struct nd_msg *) skb->h.raw;

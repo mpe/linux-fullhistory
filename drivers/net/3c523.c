@@ -182,23 +182,23 @@ sizeof(nop_cmd) = 8;
       elmc_id_reset586(); } } }
 
 static void elmc_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr);
-static int elmc_open(struct device *dev);
-static int elmc_close(struct device *dev);
-static int elmc_send_packet(struct sk_buff *, struct device *);
-static struct net_device_stats *elmc_get_stats(struct device *dev);
+static int elmc_open(struct net_device *dev);
+static int elmc_close(struct net_device *dev);
+static int elmc_send_packet(struct sk_buff *, struct net_device *);
+static struct net_device_stats *elmc_get_stats(struct net_device *dev);
 #ifdef ELMC_MULTICAST
-static void set_multicast_list(struct device *dev);
+static void set_multicast_list(struct net_device *dev);
 #endif
 
 /* helper-functions */
-static int init586(struct device *dev);
-static int check586(struct device *dev, unsigned long where, unsigned size);
-static void alloc586(struct device *dev);
-static void startrecv586(struct device *dev);
-static void *alloc_rfa(struct device *dev, void *ptr);
-static void elmc_rcv_int(struct device *dev);
-static void elmc_xmt_int(struct device *dev);
-static void elmc_rnr_int(struct device *dev);
+static int init586(struct net_device *dev);
+static int check586(struct net_device *dev, unsigned long where, unsigned size);
+static void alloc586(struct net_device *dev);
+static void startrecv586(struct net_device *dev);
+static void *alloc_rfa(struct net_device *dev, void *ptr);
+static void elmc_rcv_int(struct net_device *dev);
+static void elmc_xmt_int(struct net_device *dev);
+static void elmc_rnr_int(struct net_device *dev);
 
 struct priv {
 	struct net_device_stats stats;
@@ -268,7 +268,7 @@ static void elmc_do_reset586(int ioaddr, int ints)
  * close device
  */
 
-static int elmc_close(struct device *dev)
+static int elmc_close(struct net_device *dev)
 {
 	elmc_id_reset586();	/* the hard way to stop the receiver */
 
@@ -288,7 +288,7 @@ static int elmc_close(struct device *dev)
  * open device
  */
 
-static int elmc_open(struct device *dev)
+static int elmc_open(struct net_device *dev)
 {
 
 	elmc_id_attn586();	/* disable interrupts */
@@ -319,7 +319,7 @@ static int elmc_open(struct device *dev)
  * Check to see if there's an 82586 out there.
  */
 
-static int __init check586(struct device *dev, unsigned long where, unsigned size)
+static int __init check586(struct net_device *dev, unsigned long where, unsigned size)
 {
 	struct priv *p = (struct priv *) dev->priv;
 	char *iscp_addrs[2];
@@ -359,7 +359,7 @@ static int __init check586(struct device *dev, unsigned long where, unsigned siz
  * set iscp at the right place, called by elmc_probe and open586.
  */
 
-void alloc586(struct device *dev)
+void alloc586(struct net_device *dev)
 {
 	struct priv *p = (struct priv *) dev->priv;
 
@@ -394,7 +394,7 @@ void alloc586(struct device *dev)
 static int elmc_getinfo(char *buf, int slot, void *d)
 {
 	int len = 0;
-	struct device *dev = (struct device *) d;
+	struct net_device *dev = (struct net_device *) d;
 	int i;
 
 	if (dev == NULL)
@@ -422,7 +422,7 @@ static int elmc_getinfo(char *buf, int slot, void *d)
 
 /*****************************************************************/
 
-int __init elmc_probe(struct device *dev)
+int __init elmc_probe(struct net_device *dev)
 {
 	static int slot = 0;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -593,7 +593,7 @@ int __init elmc_probe(struct device *dev)
  * needs a correct 'allocated' memory
  */
 
-static int init586(struct device *dev)
+static int init586(struct net_device *dev)
 {
 	void *ptr;
 	unsigned long s;
@@ -831,7 +831,7 @@ static int init586(struct device *dev)
  * It sets up the Receive Frame Area (RFA).
  */
 
-static void *alloc_rfa(struct device *dev, void *ptr)
+static void *alloc_rfa(struct net_device *dev, void *ptr)
 {
 	volatile struct rfd_struct *rfd = (struct rfd_struct *) ptr;
 	volatile struct rbd_struct *rbd;
@@ -877,7 +877,7 @@ static void *alloc_rfa(struct device *dev, void *ptr)
 
 static void elmc_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 {
-	struct device *dev = (struct device *) dev_id;
+	struct net_device *dev = (struct net_device *) dev_id;
 	unsigned short stat;
 	struct priv *p;
 
@@ -952,7 +952,7 @@ static void elmc_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
  * receive-interrupt
  */
 
-static void elmc_rcv_int(struct device *dev)
+static void elmc_rcv_int(struct net_device *dev)
 {
 	int status;
 	unsigned short totlen;
@@ -999,7 +999,7 @@ static void elmc_rcv_int(struct device *dev)
  * handle 'Receiver went not ready'.
  */
 
-static void elmc_rnr_int(struct device *dev)
+static void elmc_rnr_int(struct net_device *dev)
 {
 	struct priv *p = (struct priv *) dev->priv;
 
@@ -1021,7 +1021,7 @@ static void elmc_rnr_int(struct device *dev)
  * handle xmit - interrupt
  */
 
-static void elmc_xmt_int(struct device *dev)
+static void elmc_xmt_int(struct net_device *dev)
 {
 	int status;
 	struct priv *p = (struct priv *) dev->priv;
@@ -1066,7 +1066,7 @@ static void elmc_xmt_int(struct device *dev)
  * (re)start the receiver
  */
 
-static void startrecv586(struct device *dev)
+static void startrecv586(struct net_device *dev)
 {
 	struct priv *p = (struct priv *) dev->priv;
 
@@ -1080,7 +1080,7 @@ static void startrecv586(struct device *dev)
  * send frame
  */
 
-static int elmc_send_packet(struct sk_buff *skb, struct device *dev)
+static int elmc_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	int len;
 #ifndef NO_NOPCOMMANDS
@@ -1192,7 +1192,7 @@ static int elmc_send_packet(struct sk_buff *skb, struct device *dev)
  * Someone wanna have the statistics
  */
 
-static struct net_device_stats *elmc_get_stats(struct device *dev)
+static struct net_device_stats *elmc_get_stats(struct net_device *dev)
 {
 	struct priv *p = (struct priv *) dev->priv;
 	unsigned short crc, aln, rsc, ovrn;
@@ -1219,7 +1219,7 @@ static struct net_device_stats *elmc_get_stats(struct device *dev)
  */
 
 #ifdef ELMC_MULTICAST
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
 	if (!dev->start) {
 		/* without a running interface, promiscuous doesn't work */
@@ -1244,7 +1244,7 @@ static void set_multicast_list(struct device *dev)
 
 static char devicenames[NAMELEN * MAX_3C523_CARDS] = {0,};
 
-static struct device dev_elmc[MAX_3C523_CARDS] =
+static struct net_device dev_elmc[MAX_3C523_CARDS] =
 {	
 	{
 	NULL /*"3c523" */ , 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, NULL
@@ -1263,7 +1263,7 @@ int init_module(void)
 	/* Loop until we either can't find any more cards, or we have MAX_3C523_CARDS */	
 	for(this_dev=0; this_dev<MAX_3C523_CARDS; this_dev++) 
 		{
-		struct device *dev = &dev_elmc[this_dev];
+		struct net_device *dev = &dev_elmc[this_dev];
 		dev->name=devicenames+(NAMELEN*this_dev);
 		dev->irq=irq[this_dev];
 		dev->base_addr=io[this_dev];
@@ -1285,7 +1285,7 @@ void cleanup_module(void)
 	int this_dev;
 	for(this_dev=0; this_dev<MAX_3C523_CARDS; this_dev++) {
 
-		struct device *dev = &dev_elmc[this_dev];
+		struct net_device *dev = &dev_elmc[this_dev];
 		if(dev->priv) {
 			/* shutdown interrupts on the card */
 			elmc_id_reset586();

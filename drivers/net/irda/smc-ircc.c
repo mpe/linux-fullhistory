@@ -63,16 +63,16 @@ static int  ircc_close( struct irda_device *idev);
 static int  ircc_probe( int iobase, int board_addr);
 static int  ircc_dma_receive( struct irda_device *idev); 
 static int  ircc_dma_receive_complete(struct irda_device *idev, int iobase);
-static int  ircc_hard_xmit( struct sk_buff *skb, struct device *dev);
+static int  ircc_hard_xmit( struct sk_buff *skb, struct net_device *dev);
 static void ircc_dma_write( struct irda_device *idev, int iobase);
 static void ircc_change_speed( struct irda_device *idev, int baud);
 static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void ircc_wait_until_sent( struct irda_device *idev);
 static int  ircc_is_receiving( struct irda_device *idev);
 
-static int  ircc_net_init( struct device *dev);
-static int  ircc_net_open( struct device *dev);
-static int  ircc_net_close( struct device *dev);
+static int  ircc_net_init( struct net_device *dev);
+static int  ircc_net_open( struct net_device *dev);
+static int  ircc_net_close( struct net_device *dev);
 
 static int ircc_debug=3;
 static int ircc_irq=255;
@@ -448,7 +448,7 @@ static void ircc_change_speed( struct irda_device *idev, int speed)
  *    Transmit the frame!
  *
  */
-static int ircc_hard_xmit( struct sk_buff *skb, struct device *dev)
+static int ircc_hard_xmit( struct sk_buff *skb, struct net_device *dev)
 {
 	struct irda_device *idev;
 	int iobase;
@@ -835,7 +835,7 @@ static int ircc_is_receiving( struct irda_device *idev)
  *    Initialize network device
  *
  */
-static int ircc_net_init( struct device *dev)
+static int ircc_net_init( struct net_device *dev)
 {
 	DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 
@@ -855,7 +855,7 @@ static int ircc_net_init( struct device *dev)
  *    Start the device
  *
  */
-static int ircc_net_open( struct device *dev)
+static int ircc_net_open( struct net_device *dev)
 {
 	struct irda_device *idev;
 	int iobase;
@@ -902,7 +902,7 @@ static int ircc_net_open( struct device *dev)
  *    Stop the device
  *
  */
-static int ircc_net_close(struct device *dev)
+static int ircc_net_close(struct net_device *dev)
 {
 	struct irda_device *idev;
 	int iobase;

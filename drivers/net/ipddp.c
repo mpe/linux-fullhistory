@@ -75,15 +75,15 @@ static int ipddp_mode = IPDDP_DECAP;
 static unsigned int ipddp_debug = IPDDP_DEBUG;
 
 /* Index to functions, as function prototypes. */
-static int ipddp_xmit(struct sk_buff *skb, struct device *dev);
-static struct net_device_stats *ipddp_get_stats(struct device *dev);
+static int ipddp_xmit(struct sk_buff *skb, struct net_device *dev);
+static struct net_device_stats *ipddp_get_stats(struct net_device *dev);
 static int ipddp_create(struct ipddp_route *new_rt);
 static int ipddp_delete(struct ipddp_route *rt);
 static struct ipddp_route* ipddp_find_route(struct ipddp_route *rt);
-static int ipddp_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
+static int ipddp_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
 
 
-static int ipddp_open(struct device *dev)
+static int ipddp_open(struct net_device *dev)
 {
 #ifdef MODULE
         MOD_INC_USE_COUNT;
@@ -92,7 +92,7 @@ static int ipddp_open(struct device *dev)
         return 0;
 }
 
-static int ipddp_close(struct device *dev)
+static int ipddp_close(struct net_device *dev)
 {
 #ifdef MODULE
         MOD_DEC_USE_COUNT;
@@ -101,7 +101,7 @@ static int ipddp_close(struct device *dev)
         return 0;
 }
 
-int ipddp_init(struct device *dev)
+int ipddp_init(struct net_device *dev)
 {
 	static unsigned version_printed = 0;
 
@@ -149,7 +149,7 @@ int ipddp_init(struct device *dev)
 /*
  * Get the current statistics. This may be called with the card open or closed.
  */
-static struct net_device_stats *ipddp_get_stats(struct device *dev)
+static struct net_device_stats *ipddp_get_stats(struct net_device *dev)
 {
         return (struct net_device_stats *)dev->priv;
 }
@@ -157,7 +157,7 @@ static struct net_device_stats *ipddp_get_stats(struct device *dev)
 /*
  * Transmit LLAP/ELAP frame using aarp_send_ddp.
  */
-static int ipddp_xmit(struct sk_buff *skb, struct device *dev)
+static int ipddp_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	u32 paddr = ((struct rtable*)skb->dst)->rt_gateway;
         struct ddpehdr *ddp;
@@ -297,7 +297,7 @@ static struct ipddp_route* ipddp_find_route(struct ipddp_route *rt)
         return (NULL);
 }
 
-static int ipddp_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+static int ipddp_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
         struct ipddp_route *rt = (struct ipddp_route *)ifr->ifr_data;
 
@@ -324,7 +324,7 @@ static int ipddp_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 
 #ifdef MODULE	/* Module specific functions for ipddp.c */
 
-static struct device dev_ipddp=
+static struct net_device dev_ipddp=
 {
         "ipddp0\0   ",
                 0, 0, 0, 0,

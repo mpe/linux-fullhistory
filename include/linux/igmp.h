@@ -101,7 +101,7 @@ struct ip_mc_list
 	char			loaded;
 };
 
-extern int ip_check_mc(struct device *dev, u32 mc_addr);
+extern int ip_check_mc(struct net_device *dev, u32 mc_addr);
 extern int igmp_rcv(struct sk_buff *, unsigned short);
 extern int ip_mc_join_group(struct sock *sk, struct ip_mreqn *imr);
 extern int ip_mc_leave_group(struct sock *sk, struct ip_mreqn *imr);

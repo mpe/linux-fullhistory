@@ -87,7 +87,7 @@ static int  w83977af_close(struct irda_device *idev);
 static int  w83977af_probe(int iobase, int irq, int dma);
 static int  w83977af_dma_receive(struct irda_device *idev); 
 static int  w83977af_dma_receive_complete(struct irda_device *idev);
-static int  w83977af_hard_xmit(struct sk_buff *skb, struct device *dev);
+static int  w83977af_hard_xmit(struct sk_buff *skb, struct net_device *dev);
 static int  w83977af_pio_write(int iobase, __u8 *buf, int len, int fifo_size);
 static void w83977af_dma_write(struct irda_device *idev, int iobase);
 static void w83977af_change_speed(struct irda_device *idev, int baud);
@@ -95,9 +95,9 @@ static void w83977af_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void w83977af_wait_until_sent(struct irda_device *idev);
 static int  w83977af_is_receiving(struct irda_device *idev);
 
-static int  w83977af_net_init(struct device *dev);
-static int  w83977af_net_open(struct device *dev);
-static int  w83977af_net_close(struct device *dev);
+static int  w83977af_net_init(struct net_device *dev);
+static int  w83977af_net_open(struct net_device *dev);
+static int  w83977af_net_close(struct net_device *dev);
 
 /*
  * Function w83977af_init ()
@@ -460,7 +460,7 @@ void w83977af_change_speed(struct irda_device *idev, int speed)
  *    Sets up a DMA transfer to send the current frame.
  *
  */
-int w83977af_hard_xmit(struct sk_buff *skb, struct device *dev)
+int w83977af_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct irda_device *idev;
 	int iobase;
@@ -1155,7 +1155,7 @@ static int w83977af_is_receiving(struct irda_device *idev)
  *    
  *
  */
-static int w83977af_net_init(struct device *dev)
+static int w83977af_net_init(struct net_device *dev)
 {
 	DEBUG(0, __FUNCTION__ "()\n");
 
@@ -1174,7 +1174,7 @@ static int w83977af_net_init(struct device *dev)
  *    Start the device
  *
  */
-static int w83977af_net_open(struct device *dev)
+static int w83977af_net_open(struct net_device *dev)
 {
 	struct irda_device *idev;
 	int iobase;
@@ -1233,7 +1233,7 @@ static int w83977af_net_open(struct device *dev)
  *    Stop the device
  *
  */
-static int w83977af_net_close(struct device *dev)
+static int w83977af_net_close(struct net_device *dev)
 {
 	struct irda_device *idev;
 	int iobase;

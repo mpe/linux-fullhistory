@@ -1,46 +1,18 @@
-#ifndef __irq_h
-#define __irq_h
+#ifndef _ASM_HW_IRQ_H
+#define _ASM_HW_IRQ_H
+
+/*
+ *	linux/include/asm/hw_irq.h
+ *
+ *	(C) 1992, 1993 Linus Torvalds, (C) 1997 Ingo Molnar
+ *
+ *	moved some of the old arch/i386/kernel/irq.h to here. VY
+ *
+ *	IRQ/IPI changes taken from work by Thomas Radke
+ *	<tomsoft@informatik.tu-chemnitz.de>
+ */
 
 #include <asm/irq.h>
-
-/*
- * Interrupt controller descriptor. This is all we need
- * to describe about the low-level hardware.
- */
-struct hw_interrupt_type {
-	const char * typename;
-	void (*startup)(unsigned int irq);
-	void (*shutdown)(unsigned int irq);
-	void (*handle)(unsigned int irq, struct pt_regs * regs);
-	void (*enable)(unsigned int irq);
-	void (*disable)(unsigned int irq);
-};
-
-extern struct hw_interrupt_type no_irq_type;
-
-/*
- * IRQ line status.
- */
-#define IRQ_INPROGRESS	1	/* IRQ handler active - do not enter! */
-#define IRQ_DISABLED	2	/* IRQ disabled - do not enter! */
-#define IRQ_PENDING	4	/* IRQ pending - replay on enable */
-#define IRQ_REPLAY	8	/* IRQ has been replayed but not acked yet */
-#define IRQ_AUTODETECT	16	/* IRQ is being autodetected */
-#define IRQ_WAITING	32	/* IRQ not yet seen - for autodetection */
-
-/*
- * This is the "IRQ descriptor", which contains various information
- * about the irq, including what kind of hardware handling it has,
- * whether it is disabled etc etc.
- *
- * Pad this out to 32 bytes for cache and indexing reasons.
- */
-typedef struct {
-	unsigned int status;			/* IRQ status - IRQ_INPROGRESS, IRQ_DISABLED */
-	struct hw_interrupt_type *handler;	/* handle/enable/disable functions */
-	struct irqaction *action;		/* IRQ action list */
-	unsigned int depth;			/* Disable depth for nested irq disables */
-} irq_desc_t;
 
 /*
  * IDT vectors usable for external interrupt sources start
@@ -77,13 +49,10 @@ typedef struct {
  */
 #define SPURIOUS_APIC_VECTOR	0xff
 
-extern irq_desc_t irq_desc[NR_IRQS];
 extern int irq_vector[NR_IRQS];
 #define IO_APIC_VECTOR(irq)	irq_vector[irq]
 
 extern void init_IRQ_SMP(void);
-extern int handle_IRQ_event(unsigned int, struct pt_regs *, struct irqaction *);
-extern int setup_x86_irq(unsigned int, struct irqaction *);
 
 /*
  * Various low-level irq details needed by irq.c, process.c,
@@ -121,31 +90,11 @@ enum mp_bustype {
 extern int mp_bus_id_to_type [MAX_MP_BUSSES];
 extern int mp_bus_id_to_pci_bus [MAX_MP_BUSSES];
 
-extern spinlock_t irq_controller_lock;
 
 #ifdef __SMP__
-
-#include <asm/atomic.h>
-
-static inline void irq_enter(int cpu, unsigned int irq)
-{
-	hardirq_enter(cpu);
-	while (test_bit(0,&global_irq_lock)) {
-		/* nothing */;
-	}
-}
-
-static inline void irq_exit(int cpu, unsigned int irq)
-{
-	hardirq_exit(cpu);
-}
-
 #define IO_APIC_IRQ(x) (((x) >= 16) || ((1<<(x)) & io_apic_irqs))
 
 #else
-
-#define irq_enter(cpu, irq)	(++local_irq_count[cpu])
-#define irq_exit(cpu, irq)	(--local_irq_count[cpu])
 
 #define IO_APIC_IRQ(x)	(0)
 
@@ -182,25 +131,33 @@ static inline void irq_exit(int cpu, unsigned int irq)
  *	SMP has a few special interrupts for IPI messages
  */
 
-#define BUILD_SMP_INTERRUPT(x) \
+	/* there is a second layer of macro just to get the symbolic
+	   name for the vector evaluated. This change is for RTLinux */
+#define BUILD_SMP_INTERRUPT(x,v) XBUILD_SMP_INTERRUPT(x,v)
+#define XBUILD_SMP_INTERRUPT(x,v)\
 asmlinkage void x(void); \
+asmlinkage void call_##x(void); \
 __asm__( \
 "\n"__ALIGN_STR"\n" \
 SYMBOL_NAME_STR(x) ":\n\t" \
-	"pushl $-1\n\t" \
+	"pushl $"#v"\n\t" \
 	SAVE_ALL \
+	SYMBOL_NAME_STR(call_##x)":\n\t" \
 	"call "SYMBOL_NAME_STR(smp_##x)"\n\t" \
 	"jmp ret_from_intr\n");
 
-#define BUILD_SMP_TIMER_INTERRUPT(x) \
+#define BUILD_SMP_TIMER_INTERRUPT(x,v) XBUILD_SMP_TIMER_INTERRUPT(x,v)
+#define XBUILD_SMP_TIMER_INTERRUPT(x,v) \
 asmlinkage void x(struct pt_regs * regs); \
+asmlinkage void call_##x(void); \
 __asm__( \
 "\n"__ALIGN_STR"\n" \
 SYMBOL_NAME_STR(x) ":\n\t" \
-	"pushl $-1\n\t" \
+	"pushl $"#v"\n\t" \
 	SAVE_ALL \
 	"movl %esp,%eax\n\t" \
 	"pushl %eax\n\t" \
+	SYMBOL_NAME_STR(call_##x)":\n\t" \
 	"call "SYMBOL_NAME_STR(smp_##x)"\n\t" \
 	"addl $4,%esp\n\t" \
 	"jmp ret_from_intr\n");
@@ -208,20 +165,25 @@ SYMBOL_NAME_STR(x) ":\n\t" \
 #endif /* __SMP__ */
 
 #define BUILD_COMMON_IRQ() \
+asmlinkage void call_do_IRQ(void); \
 __asm__( \
 	"\n" __ALIGN_STR"\n" \
 	"common_interrupt:\n\t" \
 	SAVE_ALL \
 	"pushl $ret_from_intr\n\t" \
+	SYMBOL_NAME_STR(call_do_IRQ)":\n\t" \
 	"jmp "SYMBOL_NAME_STR(do_IRQ));
 
-/*
+/* 
  * subtle. orig_eax is used by the signal code to distinct between
  * system calls and interrupted 'random user-space'. Thus we have
  * to put a negative value into orig_eax here. (the problem is that
  * both system calls and IRQs want to have small integer numbers in
  * orig_eax, and the syscall code has won the optimization conflict ;)
+ *
+ * Subtle as a pigs ear.  VY
  */
+
 #define BUILD_IRQ(nr) \
 asmlinkage void IRQ_NAME(nr); \
 __asm__( \
@@ -236,7 +198,7 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
  */
 static inline void x86_do_profile (unsigned long eip)
 {
-	if (prof_buffer) {
+	if (prof_buffer && current->pid) {
 		eip -= (unsigned long) &_stext;
 		eip >>= prof_shift;
 		/*
@@ -250,4 +212,12 @@ static inline void x86_do_profile (unsigned long eip)
 	}
 }
 
+#ifdef __SMP__ /*more of this file should probably be ifdefed SMP */
+static inline void hw_resend_irq(struct hw_interrupt_type *h, unsigned int i) {
+		send_IPI_self(IO_APIC_VECTOR(i));
+}
+#else
+static inline void hw_resend_irq(struct hw_interrupt_type *h, unsigned int i) {}
 #endif
+
+#endif /* _ASM_HW_IRQ_H */

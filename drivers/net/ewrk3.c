@@ -288,36 +288,36 @@ struct ewrk3_private {
 /*
    ** Public Functions
  */
-static int ewrk3_open(struct device *dev);
-static int ewrk3_queue_pkt(struct sk_buff *skb, struct device *dev);
+static int ewrk3_open(struct net_device *dev);
+static int ewrk3_queue_pkt(struct sk_buff *skb, struct net_device *dev);
 static void ewrk3_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static int ewrk3_close(struct device *dev);
-static struct net_device_stats *ewrk3_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev);
-static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd);
+static int ewrk3_close(struct net_device *dev);
+static struct net_device_stats *ewrk3_get_stats(struct net_device *dev);
+static void set_multicast_list(struct net_device *dev);
+static int ewrk3_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 
 /*
    ** Private functions
  */
-static int ewrk3_hw_init(struct device *dev, u_long iobase);
-static void ewrk3_init(struct device *dev);
-static int ewrk3_rx(struct device *dev);
-static int ewrk3_tx(struct device *dev);
+static int ewrk3_hw_init(struct net_device *dev, u_long iobase);
+static void ewrk3_init(struct net_device *dev);
+static int ewrk3_rx(struct net_device *dev);
+static int ewrk3_tx(struct net_device *dev);
 
 static void EthwrkSignature(char *name, char *eeprom_image);
 static int DevicePresent(u_long iobase);
-static void SetMulticastFilter(struct device *dev);
+static void SetMulticastFilter(struct net_device *dev);
 static int EISA_signature(char *name, s32 eisa_id);
 
 static int Read_EEPROM(u_long iobase, u_char eaddr);
 static int Write_EEPROM(short data, u_long iobase, u_char eaddr);
-static u_char get_hw_addr(struct device *dev, u_char * eeprom_image, char chipType);
+static u_char get_hw_addr(struct net_device *dev, u_char * eeprom_image, char chipType);
 
-static void isa_probe(struct device *dev, u_long iobase);
-static void eisa_probe(struct device *dev, u_long iobase);
-static struct device *alloc_device(struct device *dev, u_long iobase);
+static void isa_probe(struct net_device *dev, u_long iobase);
+static void eisa_probe(struct net_device *dev, u_long iobase);
+static struct net_device *alloc_device(struct net_device *dev, u_long iobase);
 static int ewrk3_dev_index(char *s);
-static struct device *insert_device(struct device *dev, u_long iobase, int (*init) (struct device *));
+static struct net_device *insert_device(struct net_device *dev, u_long iobase, int (*init) (struct net_device *));
 
 
 #ifdef MODULE
@@ -343,7 +343,7 @@ static int num_ewrk3s = 0, num_eth = 0;
     mdelay(1);\
 }
 
-int __init ewrk3_probe(struct device *dev)
+int __init ewrk3_probe(struct net_device *dev)
 {
 	int tmp = num_ewrk3s, status = -ENODEV;
 	u_long iobase = dev->base_addr;
@@ -376,7 +376,7 @@ int __init ewrk3_probe(struct device *dev)
 }
 
 static int __init 
-ewrk3_hw_init(struct device *dev, u_long iobase)
+ewrk3_hw_init(struct net_device *dev, u_long iobase)
 {
 	struct ewrk3_private *lp;
 	int i, status = 0;
@@ -621,7 +621,7 @@ ewrk3_hw_init(struct device *dev, u_long iobase)
 }
 
 
-static int ewrk3_open(struct device *dev)
+static int ewrk3_open(struct net_device *dev)
 {
 	struct ewrk3_private *lp = (struct ewrk3_private *) dev->priv;
 	u_long iobase = dev->base_addr;
@@ -690,7 +690,7 @@ static int ewrk3_open(struct device *dev)
 /*
    ** Initialize the EtherWORKS 3 operating conditions
  */
-static void ewrk3_init(struct device *dev)
+static void ewrk3_init(struct net_device *dev)
 {
 	struct ewrk3_private *lp = (struct ewrk3_private *) dev->priv;
 	u_char csr, page;
@@ -724,7 +724,7 @@ static void ewrk3_init(struct device *dev)
 /*
    ** Writes a socket buffer to the free page queue
  */
-static int ewrk3_queue_pkt(struct sk_buff *skb, struct device *dev)
+static int ewrk3_queue_pkt(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ewrk3_private *lp = (struct ewrk3_private *) dev->priv;
 	u_long iobase = dev->base_addr;
@@ -873,7 +873,7 @@ static int ewrk3_queue_pkt(struct sk_buff *skb, struct device *dev)
  */
 static void ewrk3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct ewrk3_private *lp;
 	u_long iobase;
 	u_char icr, cr, csr;
@@ -934,7 +934,7 @@ static void ewrk3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	return;
 }
 
-static int ewrk3_rx(struct device *dev)
+static int ewrk3_rx(struct net_device *dev)
 {
 	struct ewrk3_private *lp = (struct ewrk3_private *) dev->priv;
 	u_long iobase = dev->base_addr;
@@ -1078,7 +1078,7 @@ static int ewrk3_rx(struct device *dev)
 /*
    ** Buffer sent - check for TX buffer errors.
  */
-static int ewrk3_tx(struct device *dev)
+static int ewrk3_tx(struct net_device *dev)
 {
 	struct ewrk3_private *lp = (struct ewrk3_private *) dev->priv;
 	u_long iobase = dev->base_addr;
@@ -1114,7 +1114,7 @@ static int ewrk3_tx(struct device *dev)
 	return 0;
 }
 
-static int ewrk3_close(struct device *dev)
+static int ewrk3_close(struct net_device *dev)
 {
 	struct ewrk3_private *lp = (struct ewrk3_private *) dev->priv;
 	u_long iobase = dev->base_addr;
@@ -1152,7 +1152,7 @@ static int ewrk3_close(struct device *dev)
 	return 0;
 }
 
-static struct net_device_stats *ewrk3_get_stats(struct device *dev)
+static struct net_device_stats *ewrk3_get_stats(struct net_device *dev)
 {
 	struct ewrk3_private *lp = (struct ewrk3_private *) dev->priv;
 
@@ -1163,7 +1163,7 @@ static struct net_device_stats *ewrk3_get_stats(struct device *dev)
 /*
    ** Set or clear the multicast filter for this adapter.
  */
-static void set_multicast_list(struct device *dev)
+static void set_multicast_list(struct net_device *dev)
 {
 	struct ewrk3_private *lp = (struct ewrk3_private *) dev->priv;
 	u_long iobase = dev->base_addr;
@@ -1196,7 +1196,7 @@ static void set_multicast_list(struct device *dev)
    ** Note that when clearing the table, the broadcast bit must remain asserted
    ** to receive broadcast messages.
  */
-static void SetMulticastFilter(struct device *dev)
+static void SetMulticastFilter(struct net_device *dev)
 {
 	struct ewrk3_private *lp = (struct ewrk3_private *) dev->priv;
 	struct dev_mc_list *dmi = dev->mc_list;
@@ -1282,7 +1282,7 @@ static void SetMulticastFilter(struct device *dev)
 /*
    ** ISA bus I/O device probe
  */
-static void __init isa_probe(struct device *dev, u_long ioaddr)
+static void __init isa_probe(struct net_device *dev, u_long ioaddr)
 {
 	int i = num_ewrk3s, maxSlots;
 	u_long iobase;
@@ -1322,7 +1322,7 @@ static void __init isa_probe(struct device *dev, u_long ioaddr)
    ** EISA bus I/O device probe. Probe from slot 1 since slot 0 is usually
    ** the motherboard.
  */
-static void __init eisa_probe(struct device *dev, u_long ioaddr)
+static void __init eisa_probe(struct net_device *dev, u_long ioaddr)
 {
 	int i, maxSlots;
 	u_long iobase;
@@ -1369,10 +1369,10 @@ static void __init eisa_probe(struct device *dev, u_long ioaddr)
    ** are not available then insert a new device structure at the end of
    ** the current list.
  */
-static struct device * __init 
-alloc_device(struct device *dev, u_long iobase)
+static struct net_device * __init 
+alloc_device(struct net_device *dev, u_long iobase)
 {
-	struct device *adev = NULL;
+	struct net_device *adev = NULL;
 	int fixed = 0, new_dev = 0;
 
 	num_eth = ewrk3_dev_index(dev->name);
@@ -1414,12 +1414,12 @@ alloc_device(struct device *dev, u_long iobase)
    ** If at end of eth device list and can't use current entry, malloc
    ** one up. If memory could not be allocated, print an error message.
  */
-static __init struct device *
-insert_device(struct device *dev, u_long iobase, int (*init) (struct device *))
+static __init struct net_device *
+insert_device(struct net_device *dev, u_long iobase, int (*init) (struct net_device *))
 {
-	struct device *new;
+	struct net_device *new;
 
-	new = (struct device *) kmalloc(sizeof(struct device) + 8, GFP_KERNEL);
+	new = (struct net_device *) kmalloc(sizeof(struct net_device) + 8, GFP_KERNEL);
 	if (new == NULL) {
 		printk("eth%d: Device not initialised, insufficient memory\n", num_eth);
 		return NULL;
@@ -1570,7 +1570,7 @@ static int __init DevicePresent(u_long iobase)
 	return status;
 }
 
-static u_char __init get_hw_addr(struct device *dev, u_char * eeprom_image, char chipType)
+static u_char __init get_hw_addr(struct net_device *dev, u_char * eeprom_image, char chipType)
 {
 	int i, j, k;
 	u_short chksum;
@@ -1658,7 +1658,7 @@ static int __init EISA_signature(char *name, s32 eisa_id)
    ** Perform IOCTL call functions here. Some are privileged operations and the
    ** effective uid is checked in those cases.
  */
-static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
+static int ewrk3_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
 	struct ewrk3_private *lp = (struct ewrk3_private *) dev->priv;
 	struct ewrk3_ioctl *ioc = (struct ewrk3_ioctl *) &rq->ifr_data;
@@ -1879,7 +1879,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 #ifdef MODULE
 static char devicename[9] =
 {0,};
-static struct device thisEthwrk =
+static struct net_device thisEthwrk =
 {
 	devicename,		/* device name is inserted by /linux/drivers/net/net_init.c */
 	0, 0, 0, 0,

@@ -141,11 +141,11 @@ struct hardware_info {
 	/*
 	 * mode specific open/close
 	 */
-	int (*open)(struct device *, struct sm_state *);
-	int (*close)(struct device *, struct sm_state *);
-	int (*ioctl)(struct device *, struct sm_state *, struct ifreq *,
+	int (*open)(struct net_device *, struct sm_state *);
+	int (*close)(struct net_device *, struct sm_state *);
+	int (*ioctl)(struct net_device *, struct sm_state *, struct ifreq *,
 		     struct hdlcdrv_ioctl *, int);
-	int (*sethw)(struct device *, struct sm_state *, char *);
+	int (*sethw)(struct net_device *, struct sm_state *, char *);
 };
 
 /* --------------------------------------------------------------------- */

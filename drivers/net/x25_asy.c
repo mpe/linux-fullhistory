@@ -34,7 +34,7 @@
 typedef struct x25_ctrl {
 	char		if_name[8];	/* "xasy0\0" .. "xasy99999\0"	*/
 	struct x25_asy	ctrl;		/* X.25 things			*/
-	struct device	dev;		/* the device			*/
+	struct net_device	dev;		/* the device			*/
 } x25_asy_ctrl_t;
 
 static x25_asy_ctrl_t	**x25_asy_ctrls = NULL;
@@ -139,7 +139,7 @@ static inline void x25_asy_free(struct x25_asy *sl)
 
 static void x25_asy_changed_mtu(struct x25_asy *sl)
 {
-	struct device *dev = sl->dev;
+	struct net_device *dev = sl->dev;
 	unsigned char *xbuff, *rbuff, *oxbuff, *orbuff;
 	int len;
 	unsigned long flags;
@@ -324,7 +324,7 @@ static void x25_asy_write_wakeup(struct tty_struct *tty)
 
 /* Encapsulate an IP datagram and kick it into a TTY queue. */
 
-static int x25_asy_xmit(struct sk_buff *skb, struct device *dev)
+static int x25_asy_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct x25_asy *sl = (struct x25_asy*)(dev->priv);
 	int err;
@@ -481,7 +481,7 @@ static void x25_asy_disconnected(void *token, int reason)
 
 /* Open the low-level part of the X.25 channel. Easy! */
 
-static int x25_asy_open(struct device *dev)
+static int x25_asy_open(struct net_device *dev)
 {
 	struct lapb_register_struct x25_asy_callbacks;
 	struct x25_asy *sl = (struct x25_asy*)(dev->priv);
@@ -542,7 +542,7 @@ norbuff:
 
 
 /* Close the low-level part of the X.25 channel. Easy! */
-static int x25_asy_close(struct device *dev)
+static int x25_asy_close(struct net_device *dev)
 {
 	struct x25_asy *sl = (struct x25_asy*)(dev->priv);
 	int err;
@@ -676,7 +676,7 @@ static void x25_asy_close_tty(struct tty_struct *tty)
 }
 
 
-static struct net_device_stats *x25_asy_get_stats(struct device *dev)
+static struct net_device_stats *x25_asy_get_stats(struct net_device *dev)
 {
 	static struct net_device_stats stats;
 	struct x25_asy *sl = (struct x25_asy*)(dev->priv);
@@ -806,7 +806,7 @@ static int x25_asy_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 	}
 }
 
-static int x25_asy_open_dev(struct device *dev)
+static int x25_asy_open_dev(struct net_device *dev)
 {
 	struct x25_asy *sl = (struct x25_asy*)(dev->priv);
 	if(sl->tty==NULL)
@@ -818,7 +818,7 @@ static int x25_asy_open_dev(struct device *dev)
 #ifdef MODULE
 static int x25_asy_init_ctrl_dev(void)
 #else	/* !MODULE */
-int __init x25_asy_init_ctrl_dev(struct device *dummy)
+int __init x25_asy_init_ctrl_dev(struct net_device *dummy)
 #endif	/* !MODULE */
 {
 	int status;
@@ -869,7 +869,7 @@ int __init x25_asy_init_ctrl_dev(struct device *dummy)
 
 /* Initialise the X.25 driver.  Called by the device init code */
 
-int x25_asy_init(struct device *dev)
+int x25_asy_init(struct net_device *dev)
 {
 	struct x25_asy *sl = (struct x25_asy*)(dev->priv);
 

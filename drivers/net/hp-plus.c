@@ -94,23 +94,23 @@ enum HP_Option {
 	EnableIRQ = 4, FakeIntr = 8, BootROMEnb = 0x10, IOEnb = 0x20,
 	MemEnable = 0x40, ZeroWait = 0x80, MemDisable = 0x1000, };
 
-int hp_plus_probe(struct device *dev);
-int hpp_probe1(struct device *dev, int ioaddr);
+int hp_plus_probe(struct net_device *dev);
+int hpp_probe1(struct net_device *dev, int ioaddr);
 
-static void hpp_reset_8390(struct device *dev);
-static int hpp_open(struct device *dev);
-static int hpp_close(struct device *dev);
-static void hpp_mem_block_input(struct device *dev, int count,
+static void hpp_reset_8390(struct net_device *dev);
+static int hpp_open(struct net_device *dev);
+static int hpp_close(struct net_device *dev);
+static void hpp_mem_block_input(struct net_device *dev, int count,
 						  struct sk_buff *skb, int ring_offset);
-static void hpp_mem_block_output(struct device *dev, int count,
+static void hpp_mem_block_output(struct net_device *dev, int count,
 							const unsigned char *buf, int start_page);
-static void hpp_mem_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+static void hpp_mem_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
 						  int ring_page);
-static void hpp_io_block_input(struct device *dev, int count,
+static void hpp_io_block_input(struct net_device *dev, int count,
 						  struct sk_buff *skb, int ring_offset);
-static void hpp_io_block_output(struct device *dev, int count,
+static void hpp_io_block_output(struct net_device *dev, int count,
 							const unsigned char *buf, int start_page);
-static void hpp_io_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+static void hpp_io_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
 						  int ring_page);
 
 
@@ -123,7 +123,7 @@ struct netdev_entry hpplus_drv =
 {"hpplus", hpp_probe1, HP_IO_EXTENT, hpplus_portlist};
 #else
 
-int __init hp_plus_probe(struct device *dev)
+int __init hp_plus_probe(struct net_device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -146,7 +146,7 @@ int __init hp_plus_probe(struct device *dev)
 #endif
 
 /* Do the interesting part of the probe at a single address. */
-int __init hpp_probe1(struct device *dev, int ioaddr)
+int __init hpp_probe1(struct net_device *dev, int ioaddr)
 {
 	int i;
 	unsigned char checksum = 0;
@@ -258,7 +258,7 @@ int __init hpp_probe1(struct device *dev, int ioaddr)
 }
 
 static int
-hpp_open(struct device *dev)
+hpp_open(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr - NIC_OFFSET;
 	int option_reg;
@@ -287,7 +287,7 @@ hpp_open(struct device *dev)
 }
 
 static int
-hpp_close(struct device *dev)
+hpp_close(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr - NIC_OFFSET;
 	int option_reg = inw(ioaddr + HPP_OPTION);
@@ -302,7 +302,7 @@ hpp_close(struct device *dev)
 }
 
 static void
-hpp_reset_8390(struct device *dev)
+hpp_reset_8390(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr - NIC_OFFSET;
 	int option_reg = inw(ioaddr + HPP_OPTION);
@@ -329,7 +329,7 @@ hpp_reset_8390(struct device *dev)
    Note that transfer with the EtherTwist+ must be on word boundaries. */
 
 static void
-hpp_io_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+hpp_io_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 	int ioaddr = dev->base_addr - NIC_OFFSET;
 
@@ -340,7 +340,7 @@ hpp_io_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page
 /* Block input and output, similar to the Crynwr packet driver. */
 
 static void
-hpp_io_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+hpp_io_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
 	int ioaddr = dev->base_addr - NIC_OFFSET;
 	char *buf = skb->data;
@@ -354,7 +354,7 @@ hpp_io_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_
 /* The corresponding shared memory versions of the above 2 functions. */
 
 static void
-hpp_mem_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+hpp_mem_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 	int ioaddr = dev->base_addr - NIC_OFFSET;
 	int option_reg = inw(ioaddr + HPP_OPTION);
@@ -367,7 +367,7 @@ hpp_mem_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_pag
 }
 
 static void
-hpp_mem_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+hpp_mem_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
 	int ioaddr = dev->base_addr - NIC_OFFSET;
 	int option_reg = inw(ioaddr + HPP_OPTION);
@@ -387,7 +387,7 @@ hpp_mem_block_input(struct device *dev, int count, struct sk_buff *skb, int ring
 /* A special note: we *must* always transfer >=16 bit words.
    It's always safe to round up, so we do. */
 static void
-hpp_io_block_output(struct device *dev, int count,
+hpp_io_block_output(struct net_device *dev, int count,
 					const unsigned char *buf, int start_page)
 {
 	int ioaddr = dev->base_addr - NIC_OFFSET;
@@ -397,7 +397,7 @@ hpp_io_block_output(struct device *dev, int count,
 }
 
 static void
-hpp_mem_block_output(struct device *dev, int count,
+hpp_mem_block_output(struct net_device *dev, int count,
 				const unsigned char *buf, int start_page)
 {
 	int ioaddr = dev->base_addr - NIC_OFFSET;
@@ -416,7 +416,7 @@ hpp_mem_block_output(struct device *dev, int count,
 #define MAX_HPP_CARDS	4	/* Max number of HPP cards per module */
 #define NAMELEN		8	/* # of chars for storing dev->name */
 static char namelist[NAMELEN * MAX_HPP_CARDS] = { 0, };
-static struct device dev_hpp[MAX_HPP_CARDS] = {
+static struct net_device dev_hpp[MAX_HPP_CARDS] = {
 	{
 		NULL,		/* assign a chunk of namelist[] below */
 		0, 0, 0, 0,
@@ -439,7 +439,7 @@ init_module(void)
 	int this_dev, found = 0;
 
 	for (this_dev = 0; this_dev < MAX_HPP_CARDS; this_dev++) {
-		struct device *dev = &dev_hpp[this_dev];
+		struct net_device *dev = &dev_hpp[this_dev];
 		dev->name = namelist+(NAMELEN*this_dev);
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
@@ -468,7 +468,7 @@ cleanup_module(void)
 	int this_dev;
 
 	for (this_dev = 0; this_dev < MAX_HPP_CARDS; this_dev++) {
-		struct device *dev = &dev_hpp[this_dev];
+		struct net_device *dev = &dev_hpp[this_dev];
 		if (dev->priv != NULL) {
 			int ioaddr = dev->base_addr - NIC_OFFSET;
 			void *priv = dev->priv;

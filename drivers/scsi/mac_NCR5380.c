@@ -490,9 +490,9 @@ static void merge_contiguous_buffers( Scsi_Cmnd *cmd )
     int		  cnt = 1;
 #endif
 
-    for (endaddr = VTOP(cmd->SCp.ptr + cmd->SCp.this_residual - 1) + 1;
+    for (endaddr = virt_to_phys(cmd->SCp.ptr + cmd->SCp.this_residual - 1) + 1;
 	 cmd->SCp.buffers_residual &&
-	 VTOP(cmd->SCp.buffer[1].address) == endaddr; ) {
+	 virt_to_phys(cmd->SCp.buffer[1].address) == endaddr; ) {
 	
 	MER_PRINTK("VTOP(%p) == %08lx -> merging\n",
 		   cmd->SCp.buffer[1].address, endaddr);

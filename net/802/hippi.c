@@ -57,7 +57,7 @@ void hippi_net_init(void)
  * daddr=NULL	means leave destination address (eg unresolved arp)
  */
 
-int hippi_header(struct sk_buff *skb, struct device *dev,
+int hippi_header(struct sk_buff *skb, struct net_device *dev,
 		 unsigned short type, void *daddr, void *saddr,
 		 unsigned len)
 {
@@ -133,7 +133,7 @@ int hippi_rebuild_header(struct sk_buff *skb)
  *	Determine the packet's protocol ID.
  */
  
-unsigned short hippi_type_trans(struct sk_buff *skb, struct device *dev)
+unsigned short hippi_type_trans(struct sk_buff *skb, struct net_device *dev)
 {
 	struct hippi_hdr *hip;
 	

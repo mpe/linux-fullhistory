@@ -45,7 +45,7 @@
 #include <asm/math_emu.h>
 #endif
 
-#include "irq.h"
+#include <linux/irq.h>
 
 spinlock_t semaphore_wake_lock = SPIN_LOCK_UNLOCKED;
 

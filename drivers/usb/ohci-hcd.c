@@ -17,8 +17,8 @@
  * [ $Log: ohci.c,v $ ]
  * [ Revision 1.1  1999/04/05 08:32:30  greg ]
  * 
- * 
- * v2.1 1999/05/09 ep_addr correction, code clean up
+ * v3.0 1999/06/25 
+ * v2.1 1999/05/09  code clean up
  * v2.0 1999/05/04 
  * virtual root hub is now an option, 
  * memory allocation based on kmalloc and kfree now, Bus error handling, 
@@ -31,7 +31,6 @@
  * ohci-hcd.c
  */
 
-/* #define OHCI_DBG  */  /* printk some debug information */
 
  
 #include <linux/config.h>
@@ -59,188 +58,233 @@
 static int handle_apm_event(apm_event_t event);
 static int apm_resume = 0;
 #endif
+static int ohci_link_ed(struct ohci * ohci, struct usb_ohci_ed *ed);
+ 
+static DECLARE_WAIT_QUEUE_HEAD(op_wakeup);
+ 
+void usb_pipe_to_hcd_ed(struct usb_device *usb_dev, unsigned int pipe, struct usb_hcd_ed  *hcd_ed) 
+{
+	hcd_ed->endpoint = usb_pipeendpoint(pipe);
+	hcd_ed->out      = usb_pipeout(pipe);
+	hcd_ed->function = usb_pipedevice(pipe);
+	hcd_ed->type     = usb_pipetype(pipe);
+	hcd_ed->slow     = usb_pipeslow(pipe);
+	hcd_ed->maxpack  = usb_maxpacket(usb_dev, pipe, usb_pipeout(pipe));
+	OHCI_DEBUG(printk("******* hcd_ed: endpoint: %4x, function: %4x, out: %4x, type: %4x, slow: %4x, maxpack: %4x\n", hcd_ed->endpoint, hcd_ed->function, hcd_ed->out, hcd_ed->type, hcd_ed->slow, hcd_ed->maxpack); )
+}
 
- 
-static DECLARE_WAIT_QUEUE_HEAD(bulk_wakeup);
-static DECLARE_WAIT_QUEUE_HEAD(control_wakeup);
-static DECLARE_WAIT_QUEUE_HEAD(root_hub);
- 
-static __u8 cc_to_status[16] = { /* mapping of the OHCI CC to the UHCI status codes; first guess */
-/* Activ, Stalled, Data Buffer Err, Babble Detected : NAK recvd, CRC/Timeout, Bitstuff, reservd */
-/* No  Error  */		0x00,
-/* CRC Error  */		0x04,
-/* Bit Stuff  */		0x02,
-/* Data Togg  */ 		0x40,
-/* Stall      */		0x40,
-/* DevNotResp */		0x04,
-/* PIDCheck   */		0x04,
-/* UnExpPID   */		0x40,
-/* DataOver   */		0x20,
-/* DataUnder  */ 		0x20,
-/* reservd    */		0x40,
-/* reservd    */		0x40,
-/* BufferOver */		0x20,
-/* BuffUnder  */		0x20,
-/* Not Access */		0x80,
-/* Not Access */		0x80
- };
- 
- 
+
 /********
  **** Interface functions
  ***********************************************/
  
-static int sohci_int_handler(void * ohci_in, unsigned int ep_addr, int ctrl_len, void * ctrl, void * data, int data_len, int status, __OHCI_BAG lw0, __OHCI_BAG lw1)
+static int sohci_blocking_handler(void * ohci_in, struct usb_ohci_ed *ed, void * data, int data_len, int status, __OHCI_BAG lw0, __OHCI_BAG lw1)
+{  
+	if(lw0 != NULL) {
+		((struct ohci_state * )lw0)->status = status;
+		((struct ohci_state * )lw0)->len = data_len;
+	}
+	if(lw1 != NULL) {
+		add_wait_queue(&op_wakeup, lw1);   
+		wake_up(&op_wakeup);
+	}
+	
+	OHCI_DEBUG( { int i; printk("USB HC bh <<<: %x: ", ed->hwINFO);)
+	OHCI_DEBUG( printk(" data(%d):", data_len);) 
+	OHCI_DEBUG( for(i=0; i < data_len; i++ ) printk(" %02x", ((__u8 *) data)[i]);)
+	OHCI_DEBUG( printk(" ret_status: %x\n", status); })
+	
+    return 0;                       
+}
+  
+static int sohci_int_handler(void * ohci_in, struct usb_ohci_ed *ed, void * data, int data_len, int status, __OHCI_BAG lw0, __OHCI_BAG lw1)
 {
 
 	struct ohci * ohci = ohci_in; 
 	usb_device_irq handler=(void *) lw0;
 	void *dev_id = (void *) lw1;
 	int ret;
-	
-	OHCI_DEBUG({ int i; printk("USB HC IRQ <<<: %x: data(%d):", ep_addr, data_len);)
+
+	OHCI_DEBUG({ int i; printk("USB HC IRQ <<<: %x: data(%d):", ed->hwINFO, data_len);)
 	OHCI_DEBUG( for(i=0; i < data_len; i++ ) printk(" %02x", ((__u8 *) data)[i]);)
 	OHCI_DEBUG( printk(" ret_status: %x\n", status); })
-	
- 	ret = handler(cc_to_status[status & 0xf], data, data_len, dev_id);
+ 
+	ret = handler(status, data, data_len, dev_id);
 	if(ret == 0) return 0; /* 0 .. do not requeue  */
 	if(status > 0) return -1; /* error occured do not requeue ? */
-	ohci_trans_req(ohci, ep_addr, 0, NULL, data, 8, (__OHCI_BAG) handler, (__OHCI_BAG) dev_id); /* requeue int request */
+	ohci_trans_req(ohci, ed, 0, NULL, data, (ed->hwINFO >> 16) & 0x3f, (__OHCI_BAG) handler, (__OHCI_BAG) dev_id, INT_IN, sohci_int_handler); /* requeue int request */
+ 
 	return 0;
 }
-
-static int sohci_ctrl_handler(void * ohci_in, unsigned int ep_addr, int ctrl_len, void * ctrl, void * data, int data_len, int status, __OHCI_BAG lw0, __OHCI_BAG lw)
-{  
-	*(int * )lw0 = status;
-	wake_up(&control_wakeup);
-
-	OHCI_DEBUG( { int i; printk("USB HC CTRL<<<: %x: ctrl(%d):", ep_addr, ctrl_len);)
-	OHCI_DEBUG( for(i=0; i < 8; i++ ) printk(" %02x", ((__u8 *) ctrl)[i]);)
-	OHCI_DEBUG( printk(" data(%d):", data_len);) 
-	OHCI_DEBUG( for(i=0; i < data_len; i++ ) printk(" %02x", ((__u8 *) data)[i]);)
-	OHCI_DEBUG( printk(" ret_status: %x\n", status); })
-    return 0;                       
-} 
-
-static int sohci_bulk_handler(void * ohci_in, unsigned int ep_addr, int ctrl_len, void * ctrl, void * data, int data_len, int status, __OHCI_BAG lw0, __OHCI_BAG lw)
-{  
-	*(int * )lw0 = status;
-	wake_up(&bulk_wakeup);
-
-	OHCI_DEBUG( { int i; printk("USB HC BULK<<<: %x:", ep_addr, ctrl_len);)
-	OHCI_DEBUG( printk(" data(%d):", data_len);) 
-	OHCI_DEBUG( for(i=0; i < data_len; i++ ) printk(" %02x", ((__u8 *) data)[i]);)
-	OHCI_DEBUG( printk(" ret_status: %x\n", status); })
-    return 0;                       
-}
-                                                           
-static int sohci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id)
+                                                         
+static void * sohci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id)
 {
 	struct ohci * ohci = usb_dev->bus->hcpriv;
-	union ep_addr_ ep_addr;
-	
-	ep_addr.iep = 0;
-	ep_addr.bep.ep = ((pipe >> 15) & 0x0f) 		/* endpoint address */
-				| (pipe  & 0x80)  	 			/* direction */
-				| (1 << 5);						/* type = int*/
-	ep_addr.bep.fa = ((pipe >> 8) & 0x7f);			/* device address */
+	struct ohci_device * dev = usb_to_ohci(usb_dev);
+	struct usb_hcd_ed hcd_ed;
+	struct usb_ohci_ed * ed;
 
-	OHCI_DEBUG( printk("USB HC IRQ >>>: %x: every %d ms\n", ep_addr.iep, period);) 
+#ifdef  VROOTHUB
+	if(usb_pipedevice(pipe) == ohci->rh.devnum) 
+		return root_hub_request_irq(usb_dev, pipe, handler, period, dev_id);
+#endif		
+
+	usb_pipe_to_hcd_ed(usb_dev, pipe, &hcd_ed);
+	hcd_ed.type = INT;
+	ed = usb_ohci_add_ep(usb_dev, &hcd_ed, period, 1);
 	
-	usb_ohci_add_ep(ohci, ep_addr.iep, period, 1, sohci_int_handler, 1 << ((pipe & 0x03) + 3) , (pipe >> 26) & 0x01);
+	OHCI_DEBUG( printk("USB HC IRQ>>>: %x: every %d ms\n", ed->hwINFO, period);) 
 	
-   	ohci_trans_req(ohci, ep_addr.iep, 0, NULL, ((struct ohci_device *) usb_dev->hcpriv)->data, 8, (__OHCI_BAG) handler, (__OHCI_BAG) dev_id);
+	ohci_trans_req(ohci, ed, 0, NULL, dev->data, hcd_ed.maxpack, (__OHCI_BAG) handler, (__OHCI_BAG) dev_id, INT_IN, sohci_int_handler);
+	if (ED_STATE(ed) != ED_OPER)  ohci_link_ed(ohci, ed);	
+	return ed;
+    
+}
+
+static int sohci_release_irq(struct usb_device *usb_dev, void * ed)
+{  
+	// struct usb_device *usb_dev = ((struct ohci_device *) ((unsigned int)ed & 0xfffff000))->usb;
+	struct ohci * ohci = usb_dev->bus->hcpriv; 
+	
+	OHCI_DEBUG( printk("USB HC RM_IRQ>>>:%4x\n", (unsigned int) ed);)
+	
+	if(ed == NULL) return 0;
+			 
+#ifdef  VROOTHUB
+	if(ed == ohci->rh.int_addr) 
+		return root_hub_release_irq(usb_dev, ed);
+#endif		
+	ED_setSTATE((struct usb_ohci_ed *)ed, ED_STOP);
+	 
+    usb_ohci_rm_ep(usb_dev, (struct usb_ohci_ed *) ed, NULL, NULL, NULL, 0);
+     
 	return 0;
 }
 
-
-static int sohci_control_msg(struct usb_device *usb_dev, unsigned int pipe, void *cmd, void *data, int len)
+static int sohci_control_msg(struct usb_device *usb_dev, unsigned int pipe, devrequest *cmd, void *data, int len)
 {
 	DECLARE_WAITQUEUE(wait, current);
+	struct ohci_state state = {0, TD_NOTACCESSED};
 	struct ohci * ohci = usb_dev->bus->hcpriv;
-	int status;
-	union ep_addr_ ep_addr;
+	struct usb_hcd_ed hcd_ed;
+	struct usb_ohci_ed *ed;
 
-    ep_addr.iep = 0;
-	ep_addr.bep.ep = ((pipe >> 15) & 0x0f) 		/* endpoint address */		
-				| (pipe  & 0x80)  				/* direction */
-				|  (1 << 6);					/* type = ctrl*/
-	ep_addr.bep.fa	= ((pipe >> 8) & 0x7f);				/* device address */
+#ifdef  VROOTHUB
+	if(usb_pipedevice(pipe) == ohci->rh.devnum) 
+		return root_hub_control_msg(usb_dev, pipe, cmd, data, len);
+#endif		
+
+	usb_pipe_to_hcd_ed(usb_dev, pipe, &hcd_ed);
+	hcd_ed.type = CTRL; 	
+ 	
+	ed = usb_ohci_add_ep(usb_dev, &hcd_ed, 0, 1);
 	
-	status = 0xf; /* CC not Accessed */
-	OHCI_DEBUG( { int i; printk("USB HC CTRL>>>: %x: ctrl(%d):", ep_addr.iep, 8);)
+ 	OHCI_DEBUG( { int i; printk("USB HC CTRL>>>: %x: ctrl(%d):", ed->hwINFO, 8);)
 	OHCI_DEBUG( for(i=0; i < 8; i++ ) printk(" %02x", ((__u8 *) cmd)[i]);)
 	OHCI_DEBUG( printk(" data(%d):", len);) 
 	OHCI_DEBUG( for(i=0; i < len; i++ ) printk(" %02x", ((__u8 *) data)[i]);)
 	OHCI_DEBUG( printk("\n"); })
-	
-	usb_ohci_add_ep(ohci, ep_addr.iep, 0, 1, sohci_ctrl_handler, 1 << ((pipe & 0x03) + 3) , (pipe >> 26) & 0x01);
-	
 	current->state = TASK_UNINTERRUPTIBLE;
-    add_wait_queue(&control_wakeup, &wait);   
- 
-	ohci_trans_req(ohci, ep_addr.iep, 8, cmd, data, len, (__OHCI_BAG) &status, 0);
+    
+	ohci_trans_req(ohci, ed, 8, cmd, data, len, (__OHCI_BAG) &state, (__OHCI_BAG) &wait, (usb_pipeout(pipe))?CTRL_OUT:CTRL_IN, sohci_blocking_handler);
 
-	schedule_timeout(HZ/10);
-
-    remove_wait_queue(&control_wakeup, &wait); 
-     
-    OHCI_DEBUG(printk("USB HC status::: %x\n", cc_to_status[status & 0x0f]);)
-     
-	return cc_to_status[status & 0x0f];
+    OHCI_DEBUG(printk("USB HC trans req ed %x: %x :", ed->hwINFO, (unsigned int ) ed); )
+ 	OHCI_DEBUG({ int i; for( i= 0; i<8 ;i++) printk(" %4x", ((unsigned int *) ed)[i]) ; printk("\n"); }; )
+ 	if (ED_STATE(ed) != ED_OPER)  ohci_link_ed(ohci, ed);
+ 	schedule_timeout(HZ/10);
+   
+    if(state.status == TD_NOTACCESSED) {	
+    	current->state = TASK_UNINTERRUPTIBLE;
+  		usb_ohci_rm_ep(usb_dev, ed, sohci_blocking_handler, NULL, NULL, 0);
+		schedule();
+  		state.status = USB_ST_TIMEOUT;
+  	}
+  	remove_wait_queue(&op_wakeup, &wait); 
+	return state.status;
 }
 
-static int sohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len)
+static int sohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, unsigned long *rval)
 {
 	DECLARE_WAITQUEUE(wait, current);
+	struct ohci_state state = {0, TD_NOTACCESSED};
 	struct ohci * ohci = usb_dev->bus->hcpriv;
-	int status;
-	union ep_addr_ ep_addr;
-
-    ep_addr.iep = 0;
-	ep_addr.bep.ep = ((pipe >> 15) & 0x0f) 		/* endpoint address */		
-				| (pipe  & 0x80)  				/* direction */
-				|  (11 << 5);					/* type = bulk*/
-	ep_addr.bep.fa	= ((pipe >> 8) & 0x7f);				/* device address */
+	struct usb_hcd_ed hcd_ed;
+	struct usb_ohci_ed *ed;
 	
-	status = 0xf; /* CC not Accessed */
-	OHCI_DEBUG( { int i; printk("USB HC BULK>>>: %x:", ep_addr.iep);)
+	usb_pipe_to_hcd_ed(usb_dev, pipe, &hcd_ed);
+	hcd_ed.type = BULK; 
+	ed = usb_ohci_add_ep(usb_dev, &hcd_ed, 0, 1);
+	OHCI_DEBUG( { int i; printk("USB HC BULK>>>: %x: ", ed->hwINFO);)
 	OHCI_DEBUG( printk(" data(%d):", len);) 
 	OHCI_DEBUG( for(i=0; i < len; i++ ) printk(" %02x", ((__u8 *) data)[i]);)
 	OHCI_DEBUG( printk("\n"); })
-	
-	usb_ohci_add_ep(ohci, ep_addr.iep, 0, 1, sohci_bulk_handler, 1 << ((pipe & 0x03) + 3) , (pipe >> 26) & 0x01);
-	
-	current->state = TASK_UNINTERRUPTIBLE;
-    add_wait_queue(&bulk_wakeup, &wait);   
+	current->state = TASK_UNINTERRUPTIBLE;  
  
-	ohci_trans_req(ohci, ep_addr.iep, 0, NULL, data, len, (__OHCI_BAG) &status, 0);
-
+	ohci_trans_req(ohci, ed, 0, NULL, data, len, (__OHCI_BAG) &state, (__OHCI_BAG) &wait,(usb_pipeout(pipe))?BULK_OUT:BULK_IN, sohci_blocking_handler);
+	if (ED_STATE(ed) != ED_OPER)  ohci_link_ed(ohci, ed);
+	
 	schedule_timeout(HZ/10);
 
-    remove_wait_queue(&bulk_wakeup, &wait); 
-     
-    OHCI_DEBUG(printk("USB HC status::: %x\n", cc_to_status[status & 0x0f]);)
-     
-	return cc_to_status[status & 0x0f];
+	if(state.status == TD_NOTACCESSED) {		
+    	current->state = TASK_UNINTERRUPTIBLE;
+  		usb_ohci_rm_ep(usb_dev, ed, sohci_blocking_handler, NULL, NULL, 0);
+  		schedule();
+  		state.status = USB_ST_TIMEOUT;
+	}
+	remove_wait_queue(&op_wakeup, &wait); 
+    *rval = state.len;
+	return state.status;
+}
+
+static void * sohci_request_bulk(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, void *data, int len, void *dev_id)
+{
+	struct ohci * ohci = usb_dev->bus->hcpriv;
+	struct usb_hcd_ed hcd_ed;
+	struct usb_ohci_ed * ed;
+ 
+	usb_pipe_to_hcd_ed(usb_dev, pipe, &hcd_ed);
+	hcd_ed.type = BULK;
+	ed = usb_ohci_add_ep(usb_dev, &hcd_ed, 0, 1);
+	
+	OHCI_DEBUG( printk("USB HC BULK_RQ>>>: %x \n", ed->hwINFO);) 
+	
+	ohci_trans_req(ohci, ed, 0, NULL, data, len, (__OHCI_BAG) handler, (__OHCI_BAG) dev_id, (usb_pipeout(pipe))?BULK_OUT:BULK_IN, sohci_int_handler);
+	if (ED_STATE(ed) != ED_OPER)  ohci_link_ed(ohci, ed);
+
+	return ed;   
+}
+ 
+static int sohci_terminate_bulk(struct usb_device *usb_dev, void * ed) 
+{
+	DECLARE_WAITQUEUE(wait, current);
+	
+	OHCI_DEBUG( printk("USB HC TERM_BULK>>>:%4x\n", (unsigned int) ed);)
+ 	
+	current->state = TASK_UNINTERRUPTIBLE;
+    usb_ohci_rm_ep(usb_dev, (struct usb_ohci_ed *) ed, sohci_blocking_handler, NULL, &wait, SEND);
+    schedule();
+    remove_wait_queue(&op_wakeup, &wait); 
+	return 1;
 }
 
 static int sohci_usb_deallocate(struct usb_device *usb_dev) {
+	int cnt;
+    DECLARE_WAITQUEUE(wait, current);
     struct ohci_device *dev = usb_to_ohci(usb_dev); 
-	union ep_addr_ ep_addr;
-
-	ep_addr.iep = 0;
 	
 	OHCI_DEBUG(printk("USB HC dealloc %x\n", usb_dev->devnum);)
-
-	/* wait_ms(20); */
-
-	if(usb_dev->devnum >=0) {
-		ep_addr.bep.fa = usb_dev->devnum;
-    	usb_ohci_rm_function(((struct ohci_device *)usb_dev->hcpriv)->ohci, ep_addr.iep);
+ 	 
+	if(usb_dev->devnum >= 0) {
+		current->state = TASK_UNINTERRUPTIBLE;
+    	cnt = usb_ohci_rm_function(usb_dev, sohci_blocking_handler, NULL, &wait);
+    	if(cnt > 0) {
+    		schedule();
+    		remove_wait_queue(&op_wakeup, &wait);
+    	}
 	}
-	
+ 	 		 
     USB_FREE(dev);
+    usb_destroy_configuration(usb_dev);
 	USB_FREE(usb_dev);
 
 	return 0;
@@ -251,7 +295,6 @@ static struct usb_device *sohci_usb_allocate(struct usb_device *parent) {
 	struct usb_device *usb_dev;
 	struct ohci_device *dev;
 	
-	
 	USB_ALLOC(usb_dev, sizeof(*usb_dev));
 	if (!usb_dev)
 		return NULL;
@@ -260,13 +303,14 @@ static struct usb_device *sohci_usb_allocate(struct usb_device *parent) {
 
 	USB_ALLOC(dev, sizeof(*dev));
 	if (!dev) {
+		usb_destroy_configuration(usb_dev);
 		USB_FREE(usb_dev);
 		return NULL;
 	}
 
 	/* Initialize "dev" */
 	memset(dev, 0, sizeof(*dev));
-
+	
 	usb_dev->hcpriv = dev;
 	dev->usb = usb_dev;
 
@@ -279,14 +323,35 @@ static struct usb_device *sohci_usb_allocate(struct usb_device *parent) {
 	return usb_dev;
 }
 
-
 static void *sohci_alloc_isochronous (struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int maxsze, usb_device_irq completed, void *dev_id)
 {
-	return NULL;
+	struct ohci * ohci = usb_dev->bus->hcpriv;
+	struct ohci_device * dev = usb_to_ohci(usb_dev);
+	struct usb_hcd_ed hcd_ed;
+	struct usb_ohci_ed * ed;
+ 	struct usb_ohci_td * td;
+ 	
+	usb_pipe_to_hcd_ed(usb_dev, pipe, &hcd_ed);
+	hcd_ed.type = ISO;
+	ed = usb_ohci_add_ep(usb_dev, &hcd_ed, 1, 1);
+	
+	OHCI_DEBUG( printk("USB HC ISO>>>: %x:  \n", ed->hwINFO);) 
+	
+	td = ohci_trans_req(ohci, ed, 0, NULL, dev->data, len, (__OHCI_BAG) completed, (__OHCI_BAG) dev_id, (usb_pipeout(pipe))?ISO_OUT:ISO_IN, sohci_int_handler);
+	return td;
 }
 
-static void sohci_delete_isochronous (struct usb_device *dev, void *_isodesc)
+static void sohci_delete_isochronous (struct usb_device *usb_dev, void *td)
 {
+	// struct ohci * ohci = usb_dev->bus->hcpriv; 
+	DECLARE_WAITQUEUE(wait, current);
+	
+	OHCI_DEBUG( printk("USB HC RM_ISO>>>:%4x\n", (unsigned int) td);)
+	 
+	current->state = TASK_UNINTERRUPTIBLE;
+    usb_ohci_rm_ep(usb_dev, ((struct usb_ohci_td *) td)->ed, sohci_blocking_handler, NULL, &wait, SEND);
+    schedule();
+    remove_wait_queue(&op_wakeup, &wait); 
 	return;
 }
 
@@ -305,14 +370,15 @@ static int sohci_compress_isochronous (struct usb_device *usb_dev, void *_isodes
 	return USB_ST_NOTSUPPORTED;
 }
 
-
 struct usb_operations sohci_device_operations = {
 	sohci_usb_allocate,
 	sohci_usb_deallocate,
 	sohci_control_msg,
 	sohci_bulk_msg,
 	sohci_request_irq,
-	NULL,	/* FIXME: should be release_irq/remove_irq */
+	sohci_release_irq,
+	sohci_request_bulk,
+	sohci_terminate_bulk,
 	sohci_alloc_isochronous,
 	sohci_delete_isochronous,
 	sohci_sched_isochronous,
@@ -325,357 +391,358 @@ struct usb_operations sohci_device_operations = {
  *** ED handling functions
  ************************************/
 
-
-
+/* just for debugging; prints all 32 branches of the int ed tree inclusive iso eds*/
+void print_int_eds(struct ohci * ohci) {int i; __u32 * ed_p;
+	for(i= 0; i < 32; i++) {
+			OHCI_DEBUG(printk("unlnk_branch int %2d(%2x): ", i,i); )
+			ed_p = &(ohci->hc_area->hcca.int_table[i]);
+			while (*ed_p != 0) {
+				OHCI_DEBUG(printk("ed: %4x; ", (((struct usb_ohci_ed *)bus_to_virt(*ed_p))->hwINFO));)
+				ed_p = &(((struct usb_ohci_ed *)bus_to_virt(*ed_p))->hwNextED);
+			}
+			OHCI_DEBUG(printk("\n");)
+		}
+}
+		
 /* 
- * search for the right place to insert an interrupt ed into the int tree 
- * do some load ballancing
+ * search for the right branch to insert an interrupt ed into the int tree 
+ * do some load ballancing 
+ * returns the branch and 
+ * sets the interval to interval = 2^integer(ld(interval))
  * */
 
-static int usb_ohci_int_ballance(struct ohci * ohci, int interval, int load) {
+static int usb_ohci_int_ballance(struct ohci * ohci, int * interval, int load) {
 
   int i,j;
   
   j = 0;   /* search for the least loaded interrupt endpoint branch of all 32 branches */
   for(i=0; i< 32; i++) if(ohci->ohci_int_load[j] > ohci->ohci_int_load[i]) j=i; 
-
-  if(interval < 1) interval = 1;
-  if(interval > 32) interval = 32;
-  for(i= 0; ((interval >> i) > 1 ); interval &= (0xfffe << i++ )); /* interval = 2^int(ld(interval)) */
   
-
-  for(i=j%interval; i< 32; i+=interval) ohci->ohci_int_load[i] += load;
-  j = interval + (j % interval); 
+  for(i= 0; ((*interval >> i) > 1 ) && (i < 5); i++ ); /* interval = 2^int(ld(interval)) */
+  *interval = 1 << i;
   
-  OHCI_DEBUG(printk("USB HC new int ed on pos : %x \n",j);)
+  j = j % (*interval);
+  for(i=j; i< 32; i+=(*interval)) ohci->ohci_int_load[i] += load;
+   
+  
+  OHCI_DEBUG(printk("USB HC new int ed on pos %d of interval %d \n",j, *interval);)
   
   return j;
 }
 
-/* get the ed from the endpoint / device adress */
+/* the int tree is a binary tree 
+ * in order to process it sequentielly the indexes of the branches have to be mapped 
+ * the mapping reverses the bits of a word of num_bits length
+ * */
+static int rev(int num_bits, int word) {
+	int i;
+	int wout = 0;
 
-struct usb_ohci_ed * ohci_find_ep(struct ohci *ohci, unsigned int ep_addr_in) {
-
-union ep_addr_ ep_addr;
-struct usb_ohci_ed *tmp;
-unsigned int mask;
-
-mask = 0;
-ep_addr.iep = ep_addr_in;
-
-#ifdef VROOTHUB
- if(ep_addr.bep.fa == ohci->root_hub_funct_addr) {
- 	if((ep_addr.bep.ep & 0x0f) == 0)
- 		return &ohci->ed_rh_ep0; /* root hub ep0 */
- 	else
- 		return &ohci->ed_rh_epi; /* root hub int ep */
- }
-#endif
-
- tmp = ohci->ed_func_ep0[ep_addr.bep.fa];
- mask = ((((ep_addr.bep.ep >> 5) & 0x03)==2)?0x7f:0xff); 
- ep_addr.bep.ep &= mask; /* mask out direction of ctrl ep */
- 
-  while (tmp != NULL) {
-    if (tmp->ep_addr.iep == ep_addr.iep) 
-      return tmp;
-    tmp = tmp->ed_list;
-  }
-  return NULL;
-}
- 
-spinlock_t usb_ed_lock = SPIN_LOCK_UNLOCKED;
-/* add a new endpoint ep_addr */
-struct usb_ohci_ed *usb_ohci_add_ep(struct ohci * ohci, unsigned int ep_addr_in, int interval, int load, f_handler handler, int ep_size, int speed) {
-   
-  struct usb_ohci_ed * ed; 
-  struct usb_ohci_td * td;
-  union ep_addr_ ep_addr;
- 
-   
-  int int_junk;
- 
-  struct usb_ohci_ed *tmp;
-
-  ep_addr.iep = ep_addr_in ;
-  ep_addr.bep.ep &= ((((ep_addr.bep.ep >> 5) & 0x03)==2)?0x7f:0xff); /* mask out direction of ctrl ep */
-
-  spin_lock(&usb_ed_lock);
-  
-  tmp =  ohci_find_ep(ohci, ep_addr.iep);
-  if (tmp != NULL) { 
-  
-#ifdef VROOTHUB
-  	if(ep_addr.bep.fa == ohci->root_hub_funct_addr) {
- 		if((ep_addr.bep.ep & 0x0f) != 0) { /* root hub int ep */
-			ohci->ed_rh_epi.handler = handler;
- 			ohci_init_rh_int_timer(ohci, interval);
- 		}
- 		else { /* root hub ep0 */
- 			 ohci->ed_rh_ep0.handler = handler;
- 		}			 	
- 	}
-
- 	else 
-#endif 
-
- 		{
- 		tmp->hw.info = ep_addr.bep.fa | ((ep_addr.bep.ep & 0xf) <<7)
-  		
-    	| (((ep_addr.bep.ep & 0x60) == 0)? 0x8000 : 0)
-    	| (speed << 13)
-    	| ep_size <<16;
- 
-  		tmp->handler = handler; 
-  	}
- 	spin_unlock(&usb_ed_lock);
-    return tmp;    /* ed  already in use */
-  }
-  
-  
-  OHCI_ALLOC(td, sizeof(td)); /* dummy td; end of td list for ed */
-  OHCI_ALLOC(ed, sizeof(ed));
-  td->prev_td = NULL;
-  
-  ed->hw.tail_td = virt_to_bus(&td->hw);
-  ed->hw.head_td = ed->hw.tail_td;
-  ed->hw.info = ep_addr.bep.fa | ((ep_addr.bep.ep & 0xf) <<7)
-  /*  | ((ep_addr.bep.port & 0x80)? 0x1000 : 0x0800 ) */
-    | (((ep_addr.bep.ep & 0x60) == 0)? 0x8000 : 0)
-    | (speed << 13)
-    | ep_size <<16;
-  
-  ed->handler = handler;
-
-  switch((ep_addr.bep.ep >> 5) & 0x03) {
-  case CTRL:
-    ed->hw.next_ed = 0;
-    if(ohci->ed_controltail == NULL) {
-      writel(virt_to_bus(&ed->hw), &ohci->regs->ed_controlhead);
-    }
-    else {
-      ohci->ed_controltail->hw.next_ed = virt_to_bus(&ed->hw);
-    }
-    ed->ed_prev = ohci->ed_controltail;
-    ohci->ed_controltail = ed;	  
-    break;
-  case BULK:  
-    ed->hw.next_ed = 0;
-    if(ohci->ed_bulktail == NULL) {
-      writel(virt_to_bus(&ed->hw), &ohci->regs->ed_bulkhead);
-    }
-    else {
-      ohci->ed_bulktail->hw.next_ed = virt_to_bus(&ed->hw);
-    }
-    ed->ed_prev = ohci->ed_bulktail;
-    ohci->ed_bulktail = ed;	  
-    break;
-  case INT:
-    int_junk = usb_ohci_int_ballance(ohci, interval, load);
-    ed->hw.next_ed = ohci->hc_area->ed[int_junk].next_ed; 
-    ohci->hc_area->ed[int_junk].next_ed = virt_to_bus(&ed->hw);
-    ed->ed_prev = (struct usb_ohci_ed *) &ohci->hc_area->ed[int_junk];
-    break;
-  case ISO:
-    ed->hw.next_ed = 0;
-    ohci->ed_isotail->hw.next_ed = virt_to_bus(&ed->hw);
-    ed->ed_prev = ohci->ed_isotail;
-    ohci->ed_isotail = ed;	  
-    break;
-  }
-  ed->ep_addr  = ep_addr;
-  
-  /* Add it to the "hash"-table of known endpoint descriptors */      
-  
-  ed->ed_list = ohci->ed_func_ep0[ed->ep_addr.bep.fa];
-  ohci->ed_func_ep0[ed->ep_addr.bep.fa] = ed; 
-
-  spin_unlock(&usb_ed_lock);
-  
-  OHCI_DEBUG(printk("USB HC new ed %x: %x :", ep_addr.iep, (unsigned int ) ed); )
-  OHCI_DEBUG({ int i; for( i= 0; i<8 ;i++) printk(" %4x", ((unsigned int *) ed)[i]) ; printk("\n"); }; )
-  return 0;
+	for(i = 0; i < num_bits; i++) wout |= (((word >> i) & 1) << (num_bits - i - 1));
+	return wout;
 }
 
-/*****
- * Request the removal of an endpoint
- * 
- * put the ep on the rm_list and request a stop of the bulk or ctrl list 
- * real removal is done at the next start of frame hardware interrupt 
- */
-int usb_ohci_rm_ep(struct ohci * ohci, struct  usb_ohci_ed *ed)
-{    
-  unsigned int flags;
-  struct usb_ohci_ed *tmp;
-  
-  OHCI_DEBUG(printk("USB HC remove ed %x: %x :\n", ed->ep_addr.iep, (unsigned int ) ed); )
+/* get the ed from the endpoint / usb_device address */
 
-  spin_lock_irqsave(&usb_ed_lock, flags);
-
-  tmp = ohci->ed_func_ep0[ed->ep_addr.bep.fa];
-  if (tmp == NULL) {
-  	spin_unlock_irqrestore(&usb_ed_lock, flags);
-    return 0;
-  }
-
-  if(tmp == ed) {
-     ohci->ed_func_ep0[ed->ep_addr.bep.fa] = ed->ed_list;
-  }
-  else {
-    while (tmp->ed_list != ed) {
-      if (tmp->ed_list == NULL) {
-        spin_unlock_irqrestore(&usb_ed_lock, flags);
-		return 0;
-	  }
-      tmp = tmp->ed_list;
-    }
-    tmp->ed_list = ed->ed_list;
-  }
-  ed->ed_list = ohci->ed_rm_list;
-  ohci->ed_rm_list = ed;
-  ed->hw.info  |=  OHCI_ED_SKIP;
-
-  switch((ed->ep_addr.bep.ep >> 5) & 0x03) {
-  	case CTRL:
-    	writel_mask(~(0x01<<4), &ohci->regs->control); /* stop CTRL list */
-    	break;
-  	case BULK:
-    	writel_mask(~(0x01<<5), &ohci->regs->control); /* stop BULK list */
-    	break;
-  }
-
-
-  writel( OHCI_INTR_SF, &ohci->regs->intrenable); /* enable sof interrupt */
-
-  spin_unlock_irqrestore(&usb_ed_lock, flags);
-
-  return 1;
+struct usb_ohci_ed * ohci_find_ep(struct usb_device *usb_dev, struct usb_hcd_ed *hcd_ed) {
+ 	return &(usb_to_ohci(usb_dev)->ed[hcd_ed->endpoint << 1 | ((hcd_ed->type == CTRL)? 0:hcd_ed->out)]);
 }
 
-/* we have requested to stop the bulk or CTRL list,
- * now we can remove the eds on the rm_list */
- 
-static int ohci_rm_eds(struct ohci * ohci) {
+/* link an ed into one of the HC chains */
+static int ohci_link_ed(struct ohci * ohci, struct usb_ohci_ed *ed) {	 
 
-  unsigned int flags;
-  struct usb_ohci_ed *ed;
-  struct usb_ohci_ed *ed_tmp;
-  struct usb_ohci_td *td;
-  __u32 td_hw_tmp;
-  __u32 td_hw;
-  
-  spin_lock_irqsave(&usb_ed_lock, flags);
+	int int_branch;
+	int i;
+	int inter;
+	int interval;
+	int load;
+	__u32 * ed_p;
+	
+	ED_setSTATE(ed, ED_OPER);
+	
+	switch(ED_TYPE(ed)) {
+	case CTRL:
+		ed->hwNextED = 0;
+		if(ohci->ed_controltail == NULL) {
+			writel(virt_to_bus(ed), &ohci->regs->ed_controlhead);
+		}
+		else {
+			ohci->ed_controltail->hwNextED = virt_to_bus(ed);
+		}
+		ed->ed_prev = ohci->ed_controltail;
+		ohci->ed_controltail = ed;	  
+		break;
+		
+	case BULK:  
+		ed->hwNextED = 0;
+		if(ohci->ed_bulktail == NULL) {
+			writel(virt_to_bus(ed), &ohci->regs->ed_bulkhead);
+		}
+		else {
+			ohci->ed_bulktail->hwNextED = virt_to_bus(ed);
+		}
+		ed->ed_prev = ohci->ed_bulktail;
+		ohci->ed_bulktail = ed;	  
+		break;
+		
+	case INT:
+		interval = ed->int_period;
+		load = ed->int_load;
+		int_branch = usb_ohci_int_ballance(ohci, &interval, load);
+		ed->int_interval = interval;
+		ed->int_branch = int_branch;
+		
+		for( i= 0; i < rev(6, interval); i += inter) {
+			inter = 1;
+			for(ed_p = &(ohci->hc_area->hcca.int_table[rev(5,i)+int_branch]); 
+				(*ed_p != 0) && (((struct usb_ohci_ed *)bus_to_virt(*ed_p))->int_interval >= interval); 
+				ed_p = &(((struct usb_ohci_ed *)bus_to_virt(*ed_p))->hwNextED)) 
+					inter = rev(6,((struct usb_ohci_ed *)bus_to_virt(*ed_p))->int_interval);
+			ed->hwNextED = *ed_p; 
+			*ed_p = virt_to_bus(ed);
+			OHCI_DEBUG(printk("int_link i: %2x, inter: %2x, ed: %4x\n", i, inter, ed->hwINFO);)
+		}
+		break;
+		
+	case ISO:
+		if(ohci->ed_isotail != NULL) {
+			ohci->ed_isotail->hwNextED = virt_to_bus(ed);
+			ed->ed_prev = ohci->ed_isotail;
+		}
+		else {
+			for( i= 0; i < 32; i += inter) {
+				inter = 1;
+				for(ed_p = &(ohci->hc_area->hcca.int_table[rev(5,i)]); 
+					*ed_p != 0; 
+					ed_p = &(((struct usb_ohci_ed *)bus_to_virt(*ed_p))->hwNextED)) 
+						inter = rev(6,((struct usb_ohci_ed *)bus_to_virt(*ed_p))->int_interval);
+				*ed_p = virt_to_bus(ed);	
+			}	
+			ed->ed_prev = NULL;
+		}	
+		ed->hwNextED = 0;
+		ohci->ed_isotail = ed;  
+		break;
+	}
+	
+   	
+	return 1;
+}
 
-  ed = ohci->ed_rm_list;
+/* unlink an ed from one of the HC chains. 
+ * just the link to the ed is unlinked.
+ * the link from the ed still points to another operational ed or 0
+ * so the HC can eventually finish the processing of the unlinked ed
+ * */
+static int ohci_unlink_ed(struct ohci * ohci, struct usb_ohci_ed *ed) {
 
-  while (ed != NULL) {
+	int int_branch;
+	int i;
+	int inter;
+	int interval;
+	__u32 * ed_p;
+	 
     
-    switch((ed->ep_addr.bep.ep >> 5) & 0x03) {
+    switch(ED_TYPE(ed)) {
     case CTRL: 
       if(ed->ed_prev == NULL) {
-		writel(ed->hw.next_ed, &ohci->regs->ed_controlhead);
+		writel(ed->hwNextED, &ohci->regs->ed_controlhead);
       }
       else {
-		ed->ed_prev->hw.next_ed = ed->hw.next_ed;
+		ed->ed_prev->hwNextED = ed->hwNextED;
       }
       if(ohci->ed_controltail == ed) {
 		ohci->ed_controltail = ed->ed_prev;
       }
+      else {
+      	((struct usb_ohci_ed *)bus_to_virt(ed->hwNextED))->ed_prev = ed->ed_prev;
+      }
       break;
+      
     case BULK: 
       if(ed->ed_prev == NULL) {
-		writel(ed->hw.next_ed, &ohci->regs->ed_bulkhead);
+		writel(ed->hwNextED, &ohci->regs->ed_bulkhead);
       }
       else {
-		ed->ed_prev->hw.next_ed = ed->hw.next_ed;
+		ed->ed_prev->hwNextED = ed->hwNextED;
       }
       if(ohci->ed_bulktail == ed) {
 		ohci->ed_bulktail = ed->ed_prev;
       }
-      break;
-    case INT: 
-      	ed->ed_prev->hw.next_ed = ed->hw.next_ed;
-      break;
-    case ISO:
-      ed->ed_prev->hw.next_ed = ed->hw.next_ed;
-      if(ohci->ed_isotail == ed) {
-		ohci->ed_isotail = ed->ed_prev;
+      else {
+      	((struct usb_ohci_ed *)bus_to_virt(ed->hwNextED))->ed_prev = ed->ed_prev;
       }
       break;
-    }
-    
-    if(ed->hw.next_ed != 0) ((struct usb_ohci_ed *) bus_to_virt(ed->hw.next_ed))->ed_prev = ed->ed_prev;
-    
+      
+    case INT: 
+      	int_branch = ed->int_branch;
+		interval = ed->int_interval;
 
-/* tds directly connected to ed */
- 
-	td_hw = ed->hw.head_td & 0xfffffff0;
-    while(td_hw != 0) {
-    	td = bus_to_virt(td_hw);
-    	td_hw_tmp = td_hw;
-    	td_hw = td->hw.next_td;
-    	OHCI_FREE(td); /* free pending tds */ 
-    	if(td_hw_tmp == ed->hw.tail_td) break;
-    	
+		for( i= 0; i < rev(6,interval); i += inter) {
+			for(ed_p = &(ohci->hc_area->hcca.int_table[rev(5,i)+int_branch]), inter = 1; 
+				(*ed_p != 0) && (*ed_p != ed->hwNextED); 
+				ed_p = &(((struct usb_ohci_ed *)bus_to_virt(*ed_p))->hwNextED), 
+				inter = rev(6, ((struct usb_ohci_ed *)bus_to_virt(*ed_p))->int_interval)) {				
+					if(((struct usb_ohci_ed *)bus_to_virt(*ed_p)) == ed) {
+			  			*ed_p = ed->hwNextED;		
+			  			break;
+			  		}
+			  }
+			  OHCI_DEBUG(printk("int_link i: %2x, inter: %2x, ed: %4x\n", i, inter, ed->hwINFO);)
+		}
+		for(i=int_branch; i< 32; i+=interval) ohci->ohci_int_load[i] -= ed->int_load;
+		break;
+		
+    case ISO:
+    	if(ohci->ed_isotail == ed)
+				ohci->ed_isotail = ed->ed_prev;
+		if(ed->hwNextED != 0) 
+				((struct usb_ohci_ed *)bus_to_virt(ed->hwNextED))->ed_prev = ed->ed_prev;
+				
+		if(ed->ed_prev != NULL) {
+			ed->ed_prev->hwNextED = ed->hwNextED;
+		}	
+		else {
+			for( i= 0; i < 32; i += inter) {
+				inter = 1;
+				for(ed_p = &(ohci->hc_area->hcca.int_table[rev(5,i)]); 
+					*ed_p != 0; 
+					ed_p = &(((struct usb_ohci_ed *)bus_to_virt(*ed_p))->hwNextED)) {
+						inter = rev(6,((struct usb_ohci_ed *)bus_to_virt(*ed_p))->int_interval);
+						if(((struct usb_ohci_ed *)bus_to_virt(*ed_p)) == ed) {
+			  				*ed_p = ed->hwNextED;		
+			  				break;
+			  			}
+			  	}
+			}	
+		}	
+		break;
     }
-     
-    /* mark TDs on the hc done list (if there are any) */      
-	td_hw = readl(&ohci->regs->donehead) & 0xfffffff0;
-    while(td_hw != 0) {
-    	td = bus_to_virt(td_hw);
-    	td_hw = td->hw.next_td;
-    	if(td->ep == ed) td->ep = 0;
-   	}
+    ED_setSTATE(ed, ED_UNLINK);
+    return 1;
+}
+
+spinlock_t usb_ed_lock = SPIN_LOCK_UNLOCKED;
+
+/* add/reinit an endpoint; this should be done once at the usb_set_configuration command,
+ * but the USB stack is a little bit stateless  so we do it at every transaction
+ * if the state of the ed is ED_NEW then a dummy td is added and the state is changed to ED_UNLINK
+ * in all other cases the state is left unchanged
+ * the ed info fields are setted anyway even though they should not change
+ * */
+struct usb_ohci_ed *usb_ohci_add_ep(struct usb_device * usb_dev, struct usb_hcd_ed * hcd_ed, int interval, int load) {
+
+   	// struct ohci * ohci = usb_dev->bus->hcpriv;
+	struct usb_ohci_td * td;  
+	struct usb_ohci_ed * ed; 
+	 
+ 	int ed_state;
  
-    /* mark TDs on the hcca done list (if there are any) */      
-	td_hw = ohci->hc_area->hcca.done_head & 0xfffffff0 ;
+	spin_lock(&usb_ed_lock);
+
+	ed = ohci_find_ep(usb_dev, hcd_ed);
+
+	ed_state = ED_STATE(ed); /* store state of ed */
 	
-    while(td_hw != 0) { 
-    	td = bus_to_virt(td_hw); 
-    	td_hw = td->hw.next_td;
-    	if(td->ep == ed) td->ep = 0;
-   	}
-
-    ed_tmp = ed;
-    ed = ed->ed_list;
-    OHCI_FREE(ed_tmp);  /* free ed */ 
-  }
-  writel(0, &ohci->regs->ed_controlcurrent); /* reset CTRL list */
-  writel(0, &ohci->regs->ed_bulkcurrent);    /* reset BULK list */
-  writel_set((0x03<<4), &ohci->regs->control);   /* start CTRL u. (BULK list) */ 
-
-  spin_unlock_irqrestore(&usb_ed_lock, flags);
-  
-  ohci->ed_rm_list = NULL;
-  OHCI_DEBUG(printk("USB HC after rm ed control: %4x  intrstat: %4x intrenable: %4x\n", readl(&ohci->regs->control),readl(&ohci->regs->intrstatus),readl(&ohci->regs->intrenable));)
+	if (ed_state == ED_NEW) {
+  		OHCI_ALLOC(td, sizeof(*td)); /* dummy td; end of td list for ed */
+		ed->hwTailP = virt_to_bus(td);
+		ed->hwHeadP = ed->hwTailP;	
+		ed_state = 	ED_UNLINK;
+	}
+	
+    ed->hwINFO = hcd_ed->function 
+ 			| hcd_ed->endpoint << 7
+    		| (hcd_ed->type == ISO? 0x8000 : 0)
+    		| (hcd_ed->type == CTRL? 0:(hcd_ed->out == 1? 0x800 : 0x1000 )) 
+    		| hcd_ed->slow << 13
+    		| hcd_ed->maxpack << 16
+    		| hcd_ed->type << 27
+    //		| 1 << 14
+    		| ed_state << 29 ;
  
-
-  return 0;
+  	if (ED_TYPE(ed) == INT && ed_state == ED_UNLINK) {
+  		ed->int_period = interval;
+  		ed->int_load = load;
+  	}
+  	
+	spin_unlock(&usb_ed_lock);
+	return ed; 
 }
 
-/* remove all endpoints of a function (device) */
-int usb_ohci_rm_function( struct ohci * ohci, unsigned int ep_addr_in)
+
+ 
+/*****
+ * Request the removal of an endpoint
+ * 
+ * put the ep on the rm_list and request a stop of the bulk or ctrl list 
+ * real removal is done at the next start of frame (SOF) hardware interrupt 
+ * the dummy td carries the essential information (handler, proc queue, ...)
+ */
+int usb_ohci_rm_ep(struct usb_device * usb_dev, struct usb_ohci_ed *ed, f_handler handler, __OHCI_BAG lw0, __OHCI_BAG lw1, int send)
 {    
-  struct usb_ohci_ed *ed;
-  struct usb_ohci_ed *tmp;
-  union ep_addr_ ep_addr;
-
- 
+	unsigned int flags;
+   
+	struct ohci * ohci = usb_dev->bus->hcpriv;
+	struct  usb_ohci_td *td; 
   
-  ep_addr.iep = ep_addr_in;
+	OHCI_DEBUG(printk("USB HC remove ed %x: %x :\n", ed->hwINFO, (unsigned int ) ed); )
 
-  for(ed = ohci->ed_func_ep0[ep_addr.bep.fa]; ed != NULL;) {
-	tmp = ed;
-    ed = ed->ed_list;
-    usb_ohci_rm_ep(ohci, tmp);
-  }
- 
+	spin_lock_irqsave(&usb_ed_lock, flags);
+	ed->hwINFO  |=  OHCI_ED_SKIP;
+	writel( OHCI_INTR_SF, &ohci->regs->intrenable); /* enable sof interrupt */
 
+	if(ED_STATE(ed) == ED_OPER) ohci_unlink_ed(ohci, ed);
+
+	td = (struct usb_ohci_td *) bus_to_virt(ed->hwTailP);
+	td->lw0 = lw0;
+	td->lw1 = lw1;
+	td->ed = ed;
+	td->hwINFO = TD_CC;
+	td->handler = handler;
+	td->type = send;
   
-  return 1;
+	ED_setSTATE(ed, ED_DEL);
+	ed->ed_prev = ohci->ed_rm_list;
+	ohci->ed_rm_list = ed;
+   
+	switch(ED_TYPE(ed)) {
+		case CTRL:
+			writel_mask(~(0x01<<4), &ohci->regs->control); /* stop CTRL list */
+  			break;
+		case BULK:
+			writel_mask(~(0x01<<5), &ohci->regs->control); /* stop BULK list */
+			break;
+	}
+
+	spin_unlock_irqrestore(&usb_ed_lock, flags);
+
+	return 1;
 }
 
-
+ 
+/* remove all endpoints of a function (device) 
+ * just the last ed sends a reply
+ * the last ed is ed0 as there always should be an ep0
+ * */
+int usb_ohci_rm_function(struct usb_device * usb_dev, f_handler handler,__OHCI_BAG tw0, __OHCI_BAG tw1)
+{   
+	struct usb_ohci_ed *ed;
+	int i;
+	int cnt = 0;
+	
+	
+  	for(i = NUM_EDS - 1 ; i >= 0; i--) {
+  		ed = &(usb_to_ohci(usb_dev)->ed[i]);
+  		if(ED_STATE(ed) != ED_NEW) {
+  		OHCI_DEBUG(printk("USB RM FUNCTION ed: %4x;\n", ed->hwINFO);)
+  			usb_ohci_rm_ep(usb_dev, ed, handler, tw0, tw1, i==0?SEND:0);
+  			cnt++;
+  		}
+  	}
+  	OHCI_DEBUG(printk("USB RM FUNCTION %d eds removed;\n", cnt);)
+  	return cnt;
+}
 
 
 
@@ -684,259 +751,292 @@ int usb_ohci_rm_function( struct ohci * ohci, unsigned int ep_addr_in)
  ************************************/
 
 
-#define FILL_TD(TD_PT, HANDLER, INFO, DATA, LEN, LW0, LW1)  \
-    td_pt = (TD_PT); \
-    td_pt1 = (struct usb_ohci_td *) bus_to_virt(usb_ep->hw.tail_td); \
-    td_pt1->ep = usb_ep; \
-    td_pt1->handler = (HANDLER); \
+#define FILL_TD(INFO, DATA, LEN, LW0, LW1, TYPE, HANDLER)  \
+	OHCI_ALLOC(td_pt, sizeof(*td_pt)); \
+    td_ret = (struct usb_ohci_td *) bus_to_virt(usb_ed->hwTailP & 0xfffffff0); \
+    td_pt1 = td_ret; \
+    td_pt1->ed = ed; \
     td_pt1->buffer_start = (DATA); \
+    td_pt1->type = (TYPE); \
+    td_pt1->handler = (HANDLER); \
     td_pt1->lw0 = (LW0); \
     td_pt1->lw1 = (LW1); \
-    td_pt1->hw.info = (INFO); \
-    td_pt1->hw.cur_buf = virt_to_bus(DATA); \
-    td_pt1->hw.buf_end = td_pt1->hw.cur_buf + (LEN) - 1; \
-    td_pt1->hw.next_td = virt_to_bus(td_pt); \
-    usb_ep->hw.tail_td = virt_to_bus(td_pt); \
-    td_pt->prev_td = td_pt1; \
-    td_pt->hw.next_td = 0
+    td_pt1->hwINFO = (INFO); \
+    td_pt1->hwCBP = (((DATA)==NULL)||((LEN)==0))?0:virt_to_bus(DATA); \
+    td_pt1->hwBE = (((DATA)==NULL)||((LEN)==0))?0:virt_to_bus((DATA) + (LEN) - 1); \
+    td_pt1->hwNextTD = virt_to_bus(td_pt); \
+    td_pt->hwNextTD = 0; \
+    usb_ed->hwTailP =  td_pt1->hwNextTD
 
+#define FILL_ISO_TD(INFO, DATA, LEN, LW0, LW1, TYPE, HANDLER)  \
+	OHCI_ALLOC(td_pt, sizeof(*td_pt)); \
+    td_ret = (struct usb_ohci_td *) bus_to_virt(usb_ed->hwTailP); \
+    td_pt1 = td_ret; \
+    td_pt1->ed = ed; \
+    td_pt1->buffer_start = (DATA); \
+    td_pt1->type = (TYPE); \
+    td_pt1->handler = (HANDLER); \
+    td_pt1->lw0 = (LW0); \
+    td_pt1->lw1 = (LW1); \
+    td_pt1->hwINFO = (INFO); \
+    td_pt1->hwCBP = (virt_to_bus(DATA) & 0xfffff000); \
+    td_pt1->hwBE = virt_to_bus((DATA) + (LEN) - 1); \
+    td_pt1->hwNextTD = virt_to_bus(td_pt); \
+    td_pt1->hwPSW[0] = virt_to_bus(DATA) & 0xfff; \
+    usb_ed->hwTailP = virt_to_bus(td_pt); \
+    td_pt->hwNextTD = 0
+    
 spinlock_t usb_req_lock = SPIN_LOCK_UNLOCKED;
 
-int ohci_trans_req(struct ohci * ohci, unsigned int ep_addr, int ctrl_len, void  *ctrl, void * data, int data_len, __OHCI_BAG lw0, __OHCI_BAG lw1) {
+struct usb_ohci_td * ohci_trans_req(struct ohci * ohci, struct usb_ohci_ed * ed, int ctrl_len, 
+			void  *ctrl, void * data, int data_len, __OHCI_BAG lw0, __OHCI_BAG lw1, unsigned int ed_type, f_handler handler) {
 
-  int ed_type;
+   
   unsigned int flags;
-  struct usb_ohci_td *td_pt;
-  struct usb_ohci_td *td_pt1;
-  struct usb_ohci_td *td_pt_a1, *td_pt_a2, *td_pt_a3;
-  struct usb_ohci_ed *usb_ep;
-  f_handler handler;
+  volatile struct usb_ohci_ed *usb_ed = ed;
+  volatile struct usb_ohci_td *td_pt;
+  volatile struct usb_ohci_td *td_pt1 = NULL;
 
-  
- td_pt_a1 =NULL;
- td_pt_a2 =NULL;
- td_pt_a3 =NULL;
-  
-  usb_ep = ohci_find_ep(ohci, ep_addr);
-  if(usb_ep == NULL ) return -1; /* not known ep */
-  
-  handler = usb_ep->handler;
+	struct usb_ohci_td *td_ret = NULL;
+	
+  int cnt = 0;
  
-#ifdef VROOTHUB 
-  if(usb_ep == &ohci->ed_rh_ep0) { /* root hub ep 0 control endpoint */  
-    root_hub_control_msg(ohci, 8, ctrl, data, data_len, lw0, lw1, handler);
-    return 0;
-  }
-
-  if(usb_ep == &ohci->ed_rh_epi) { /* root hub interrupt endpoint */
+   
+  if(usb_ed == NULL ) return NULL; /* not known ep */
   
-    root_hub_int_req(ohci, 8, ctrl, data, data_len, lw0, lw1, handler);  
-	return 0;
-  }
-#endif
-  /*  struct usb_ohci_ed * usb_ep = usb_ohci_add_ep(pipe, ohci, interval, 1); */
- 
-   ed_type = ((((union ep_addr_)ep_addr).bep.ep >> 5) & 0x07);
   
-  switch(ed_type) {
-  case BULK_IN:
-  case BULK_OUT:   
-  case INT_IN:
-  case INT_OUT:    
-    OHCI_ALLOC(td_pt_a1, sizeof(td_pt_a1));
-    break;
-
-  case CTRL_IN:
-  case CTRL_OUT:
-    OHCI_ALLOC(td_pt_a1, sizeof(td_pt_a1));
-    OHCI_ALLOC(td_pt_a3, sizeof(td_pt_a3));  
-    if(data_len > 0) {
-      OHCI_ALLOC(td_pt_a2, sizeof(td_pt_a2));
-    }
-    break;
-
-  case ISO_IN:
-  case ISO_OUT:
-
-  }
-    
   spin_lock_irqsave(&usb_req_lock, flags);
   
   switch(ed_type) {
-  case BULK_IN:
-    FILL_TD( td_pt_a1, handler, TD_CC | TD_R | TD_DP_IN | TD_T_TOGGLE, data, data_len, lw0, lw1 );
+  case BULK_IN: 
+  	while(data_len > 4096)
+	{	
+		FILL_TD( TD_CC | TD_R | TD_DP_IN | TD_T_TOGGLE, data, 4096, NULL, NULL, BULK_IN | ADD_LEN|(cnt++?0:ST_ADDR), NULL);
+		data += 4096; data_len -= 4096;
+	}
+    FILL_TD( TD_CC | TD_R | TD_DP_IN | TD_T_TOGGLE, data, data_len, lw0, lw1, BULK_IN |ADD_LEN|SEND|(cnt++?0:ST_ADDR), handler);
     writel( OHCI_BLF, &ohci->regs->cmdstatus); /* start bulk list */
     break;
 
   case BULK_OUT: 
-    FILL_TD( td_pt_a1, handler, TD_CC | TD_DP_OUT | TD_T_TOGGLE, data, data_len, lw0, lw1 );
+  	while(data_len > 4096)
+	{
+		FILL_TD( TD_CC | TD_DP_OUT | TD_T_TOGGLE, data, 4096, NULL, NULL, BULK_OUT | ADD_LEN|(cnt++?0:ST_ADDR), NULL);
+		data += 4096; data_len -= 4096;
+	}
+    FILL_TD( TD_CC | TD_DP_OUT | TD_T_TOGGLE, data, data_len, lw0, lw1, BULK_OUT |ADD_LEN|SEND|(cnt++?0:ST_ADDR), handler);
     writel( OHCI_BLF, &ohci->regs->cmdstatus); /* start bulk list */
     break;
 
   case INT_IN: 
-    FILL_TD( td_pt_a1, handler, TD_CC | TD_R | TD_DP_IN | TD_T_TOGGLE, data, data_len, lw0, lw1 );  
+    FILL_TD( TD_CC | TD_R | TD_DP_IN | TD_T_TOGGLE, data, data_len, lw0, lw1, INT_IN | ST_ADDR|ADD_LEN|SEND, handler);  
     break;
 
   case INT_OUT: 
-    FILL_TD( td_pt_a1, handler, TD_CC | TD_DP_OUT | TD_T_TOGGLE, data, data_len, lw0, lw1 );
+    FILL_TD( TD_CC | TD_DP_OUT | TD_T_TOGGLE, data, data_len, lw0, lw1, INT_OUT | ST_ADDR|ADD_LEN|SEND, handler);
     break;
 
-  case CTRL_IN: 
-    FILL_TD( td_pt_a1, NULL, TD_CC | TD_DP_SETUP | TD_T_DATA0, ctrl, ctrl_len, 0, 0 );  
-    if(data_len > 0) { 
-      FILL_TD( td_pt_a2, NULL, TD_CC | TD_R |  TD_DP_IN | TD_T_DATA1, data, data_len, 0, 0 );  
+  case CTRL_IN:
+    FILL_TD( TD_CC | TD_DP_SETUP | TD_T_DATA0, ctrl, ctrl_len, 0, 0, CTRL_SETUP |ST_ADDR, NULL);  
+    if(data_len > 0) {  
+      	FILL_TD( TD_CC | TD_R |  TD_DP_IN | TD_T_DATA1, data, data_len, 0, 0, CTRL_DATA_IN | ST_ADDR|ADD_LEN, NULL);  
     } 
-    FILL_TD( td_pt_a3, handler, TD_CC | TD_DP_OUT | TD_T_DATA1, NULL, 0, lw0, lw1 );
+    FILL_TD( TD_CC | TD_DP_OUT | TD_T_DATA1, NULL, 0, lw0, lw1, CTRL_STATUS_OUT |SEND, handler);
     writel( OHCI_CLF, &ohci->regs->cmdstatus); /* start Control list */
     break;
 
-  case CTRL_OUT:     
-    FILL_TD( td_pt_a1, NULL, TD_CC | TD_DP_SETUP | TD_T_DATA0, ctrl, ctrl_len, 0, 0 );  
-    if(data_len > 0) { 
-      FILL_TD( td_pt_a2, NULL, TD_CC | TD_R | TD_DP_OUT | TD_T_DATA1, data, data_len, 0, 0 );  
-    } 
-    FILL_TD( td_pt_a3, handler, TD_CC | TD_DP_IN | TD_T_DATA1, NULL, 0, lw0, lw1 );
+  case CTRL_OUT:
+    FILL_TD( TD_CC | TD_DP_SETUP | TD_T_DATA0, ctrl, ctrl_len, 0, 0, CTRL_SETUP |ST_ADDR, NULL);  
+    if(data_len > 0) {
+      	FILL_TD( TD_CC | TD_R | TD_DP_OUT | TD_T_DATA1, data, data_len, 0, 0, CTRL_DATA_OUT | ST_ADDR|ADD_LEN, NULL);  
+    }  
+    FILL_TD( TD_CC | TD_DP_IN | TD_T_DATA1, NULL, 0, lw0, lw1, CTRL_STATUS_IN |SEND, handler);
     writel( OHCI_CLF, &ohci->regs->cmdstatus); /* start Control list */
     break;
 
   case ISO_IN:
+   	FILL_ISO_TD( TD_CC|TD_ISO|(ctrl_len & 0xffff), data, data_len, lw0, lw1, ISO_IN | ST_ADDR|ADD_LEN|SEND, handler); 
+   	break;
+   	
   case ISO_OUT:
+  	FILL_ISO_TD( TD_CC|TD_ISO|(ctrl_len & 0xffff), data, data_len, lw0, lw1, ISO_OUT | ST_ADDR|ADD_LEN|SEND, handler); 
     break;
   }
-
-
   
-
- td_pt1 = (struct usb_ohci_td *) bus_to_virt(usb_ep->hw.tail_td); 
-
- 
-  if(td_pt_a3 != NULL) td_pt_a3->prev_td = NULL;
-  	else if (td_pt_a2 != NULL) td_pt_a2->prev_td = NULL;
-  	  	else if (td_pt_a1 != NULL) td_pt_a1->prev_td = NULL;
-  	  
-  spin_unlock_irqrestore(&usb_req_lock, flags);
-  return 0;
+  spin_unlock_irqrestore(&usb_req_lock, flags); 
+  return td_ret;
 }
 
 
 /******
  *** Done List handling functions
  ************************************/
+/* the HC halts an ED if an error occurs;  
+ * on error move all pending tds of a transaction (from ed) onto the done list 
+ * * */
+static struct usb_ohci_td * ohci_append_error_tds(struct usb_ohci_td * td_list, struct usb_ohci_td * td_rev) {
+
+	struct usb_ohci_td * tdl;
+	struct usb_ohci_td * tdx;
+	struct usb_ohci_td * tdt;
+	int cc;
+
+	tdl = (struct  usb_ohci_td *) bus_to_virt( td_list->ed->hwHeadP & 0xfffffff0);
+	tdt = (struct  usb_ohci_td *) bus_to_virt( td_list->ed->hwTailP);
+	cc = TD_CC_GET(td_list->hwINFO);
+	
+	for	( tdx = tdl; tdx != tdt; tdx = tdx->next_dl_td) {
+		if(tdx->type & SEND) break;
+		tdx->next_dl_td = bus_to_virt(tdx->hwNextTD & 0xfffffff0);	
+	}
+	tdx->next_dl_td = td_rev;
+	td_list->ed->hwHeadP = (tdx->hwNextTD & 0xfffffff0) | (td_list->ed->hwHeadP & 0x2);
+	TD_CC_SET(tdx->hwINFO, cc);
+	return tdl;
+}
 
 /* replies to the request have to be on a FIFO basis so
  * we reverse the reversed done-list */
  
 static struct usb_ohci_td * ohci_reverse_done_list(struct ohci * ohci) {
 
-  __u32 td_list_hc;
-  struct usb_ohci_td      * td_list = NULL;
-  struct usb_ohci_td      * td_rev = NULL;
+	__u32 td_list_hc;
+	struct usb_ohci_td * td_rev = NULL;
+	struct usb_ohci_td * td_list = NULL;
   	
 	td_list_hc = ohci->hc_area->hcca.done_head & 0xfffffff0;
-    ohci->hc_area->hcca.done_head = 0;
-    
- 	while(td_list_hc) {
+	ohci->hc_area->hcca.done_head = 0;
+
+ 
+	while(td_list_hc) {
 		
 		td_list = (struct  usb_ohci_td *) bus_to_virt(td_list_hc);
-		td_list->next_dl_td = td_rev;
+		if(TD_CC_GET(td_list->hwINFO) && !(td_list->type & SEND)) 
+			td_list->next_dl_td = ohci_append_error_tds(td_list, td_rev);
+		else
+			td_list->next_dl_td = td_rev;
 			
 		td_rev = td_list;
-		td_list_hc = td_list->hw.next_td & 0xfffffff0;
-	}
+		td_list_hc = td_list->hwNextTD & 0xfffffff0;
+		
+		
+	}	
  return td_list;
 }
 
-/* all done requests are replied here */
-static int usb_ohci_done_list(struct ohci *  ohci) {
-
-  struct usb_ohci_td      * td = NULL;
-  struct usb_ohci_td      * td_list; 
-  struct usb_ohci_td      * td_list_next = NULL;
-  struct usb_ohci_td      * td_err = NULL;
-	__u32 td_hw;
- 
+/* there are some pending requests to remove some of the eds 
+ * we process every td including the dummy td of these eds 
+ * and link them to a list
+ * */
+static struct usb_ohci_td * usb_ohci_del_list(struct ohci *  ohci) {
+	struct usb_ohci_ed * ed;
+	struct usb_ohci_td * td;
+	struct usb_ohci_td * td_tmp = NULL;
+	struct usb_ohci_td * td_list = NULL;
+	__u32 * td_hw; 
 	
-  td_list = ohci_reverse_done_list(ohci);
+	for(ed = ohci->ed_rm_list; ed != NULL; ed = ed->ed_prev) {
+		 OHCI_DEBUG(printk("USB HC ed_rm_list: %4x :\n", ed->hwINFO);)
+		  
+  			
+		for( td_hw = &(ed->hwHeadP); (*td_hw & 0xfffffff0) != ed->hwTailP; td_hw = &(td->hwNextTD)) {
+				td = (struct usb_ohci_td *)bus_to_virt(*td_hw & 0xfffffff0);
+   	 	 		if((ED_STATE(ed) == ED_DEL)	|| (td->type & DEL)) {
+   	 	 			*td_hw = td->hwNextTD;
+   	 	 			if(td_list == NULL)
+   	 	 				td_list = td; 
+   	 	 			else
+   	 	 				td_tmp->next_dl_td = td;
+   	 	 			td_tmp = td;
+   	 	 			OHCI_DEBUG(printk("USB HC ed_rm_list: td: %4x\n", (unsigned int) td);)
+   	 	 			td->next_dl_td = NULL; 
+   	 	 		}
+   	 	}
+   	 	if(ED_STATE(ed) == ED_DEL) { /* send dummy td */
+   	 		td = (struct usb_ohci_td *)bus_to_virt(*td_hw & 0xfffffff0);
+   	 		td->ed = ed;
+   	 		if(td_list == NULL)
+   	 	 		td_list = td; 
+   	 	 	else
+   	 	 		td_tmp->next_dl_td = td; 
+   	 	 	td_tmp = td;
+   	 	 	td->type |= DEL_ED;
+   	 	 	OHCI_DEBUG(printk("USB HC ed_rm_list: dummy (ED_DEL) td: %4x\n", (unsigned int) td);)
+   	 	 	ED_setSTATE(td->ed, ED_DEL| ED_NEW);
+   	 	 	td->next_dl_td = NULL;
+   	 	}	
+   	}  
+   	  
+  	writel(0, &ohci->regs->ed_controlcurrent); /* reset CTRL list */
+  	writel(0, &ohci->regs->ed_bulkcurrent);    /* reset BULK list */
+  	writel_set((0x03<<4), &ohci->regs->control);   /* start CTRL u. BULK list */ 
 
-  while(td_list) {
-   	td_list_next = td_list->next_dl_td;
-    td = td_list;
-
-    if(td->ep == NULL) { /* removed ep */
-   		OHCI_FREE(td_list);
-   		break;
-   	}
+   	ohci->ed_rm_list = NULL;
    	
-   	/* the HC halts an ED if an error occurs; put all pendings TDs of an halted ED on the
-   	 * done list; they are marked with an 0xf CC_error code 
-   	 */
-   	 
- 	if(TD_CC_GET(td_list->hw.info) != TD_CC_NOERROR) { /* on error move all pending tds of an ed into the done list */
- 		printk("******* USB BUS error %x @ep %x\n", TD_CC_GET(td_list->hw.info), td_list->ep->ep_addr.iep);
-    td_err= td_list;
-	td_hw = td_list->ep->hw.head_td & 0xfffffff0;
-    while(td_hw != 0) { 
-    	if(td_hw == td_list->ep->hw.tail_td) break;
-    	td = bus_to_virt(td_hw);
-    	td_err->next_dl_td = td;
-    	td_err= td;
-    	td_hw = td->hw.next_td;
-    }
-    td_list->ep->hw.head_td = td_list->ep->hw.tail_td;
-    td->next_dl_td = td_list_next;
-    td_list_next = td_list->next_dl_td;
- 	
-    }
-  /*  send the reply  */
- 	if(td_list->handler != NULL)  {
-    	if(td_list->prev_td == NULL) {
-			td_list->handler((void *) ohci,
-						td_list->ep->ep_addr.iep,
-						0, 
-						NULL, 
-						td_list->buffer_start, 
-						td_list->hw.buf_end-virt_to_bus(td_list->buffer_start)+1, 
-						TD_CC_GET(td_list->hw.info),
-						td_list->lw0,
-						td_list->lw1);
-			OHCI_FREE(td_list);			
-   	  	}
-      	else {
-      		if(td_list->prev_td->prev_td == NULL) { /* cntrl 2 Transactions dataless */
-	  		td_list->handler((void *) ohci,
-	  		            td_list->ep->ep_addr.iep,
-	  					td_list->prev_td->hw.buf_end-virt_to_bus(td_list->prev_td->buffer_start)+1,
-	  					td_list->prev_td->buffer_start, 
-	  					NULL,
-	  					0, 
-	  					(TD_CC_GET(td_list->prev_td->hw.info) > 0) ? TD_CC_GET(td_list->prev_td->hw.info) : TD_CC_GET(td_list->hw.info),
-						td_list->lw0,
-						td_list->lw1);
-			OHCI_FREE(td_list->prev_td);
-			OHCI_FREE(td_list);
-			}
-			else { /* cntrl 3 Transactions */
-	  			td_list->handler((void *) ohci,
-	  					td_list->ep->ep_addr.iep, 
-	  					td_list->prev_td->prev_td->hw.buf_end-virt_to_bus(td_list->prev_td->prev_td->buffer_start)+1, 
-	  					td_list->prev_td->prev_td->buffer_start, 
-	  					td_list->prev_td->buffer_start, 
-	  					td_list->prev_td->hw.buf_end-virt_to_bus(td_list->prev_td->buffer_start)+1, 
-	  					(TD_CC_GET(td_list->prev_td->prev_td->hw.info) > 0) ? TD_CC_GET(td_list->prev_td->prev_td->hw.info)
-	  						: (TD_CC_GET(td_list->prev_td->hw.info) > 0) ? TD_CC_GET(td_list->prev_td->hw.info) : TD_CC_GET(td_list->hw.info),
+ 
+   	return td_list;
+}
+
+
+/* all tds ever alive go through this loop
+ *  requests are replied here 
+ *  the handler is the 
+ *  interface handler (blocking/non blocking) the real reply-handler 
+ *  is called in the non blocking interface routine
+ * */
+static int usb_ohci_done_list(struct ohci * ohci, struct usb_ohci_td * td_list) {
+
+  	struct usb_ohci_td      * td_list_next = NULL;
+
+	int cc;
+	int i;
+ 
+  	while(td_list) {
+   		td_list_next = td_list->next_dl_td;
+  		 
+  		if(td_list->type & ST_ADDR) { /* remember start address of data buffer */
+ 			td_list->ed->buffer_start = td_list->buffer_start;
+ 			td_list->ed->len = 0;
+ 		}
+ 				
+ 		if(td_list->type & ADD_LEN) { /* accumulate length of multi td transfers */
+ 			if(td_list->hwINFO & TD_ISO) {
+				for(i= 0; i <= ((td_list->hwINFO >> 24) & 0x7); i++) 
+					if((td_list->hwPSW[i] >> 12) < 0xE)  td_list->ed->len += (td_list->hwPSW[i] & 0x3ff);
+ 			}
+ 			else {
+ 				if(td_list->hwBE != 0) {
+ 					if(td_list->hwCBP == 0)
+  			    		td_list->ed->len += (bus_to_virt(td_list->hwBE) - td_list->buffer_start + 1);
+  					else
+  			    		td_list->ed->len += (bus_to_virt(td_list->hwCBP) - td_list->buffer_start);
+  			    }
+  			}
+  		}
+  		/* error code of transfer */
+  		cc = (ED_STATE(td_list->ed) == ED_DEL || (td_list->type & DEL))? USB_ST_REMOVED : TD_CC_GET(td_list->hwINFO);
+
+  	 	if(td_list->type & DEL_ED) ED_setSTATE(td_list->ed, ED_NEW); /* remove ed */
+ 		
+  		if((td_list->type & SEND) && (ED_STATE(td_list->ed) != ED_STOP)) {  /*  send the reply  */	
+  			td_list->handler((void *) ohci,
+						td_list->ed,				  
+						td_list->ed->buffer_start, 
+						td_list->ed->len,
+						cc,
 						td_list->lw0,
 						td_list->lw1); 
-				OHCI_FREE(td_list->prev_td->prev_td);			
-				OHCI_FREE(td_list->prev_td);
-				OHCI_FREE(td_list);
-					
-			}
-      	} 
-    	
-    }
-    td_list = td_list_next;
-  }  
-  return 0; 
+			OHCI_DEBUG(if(cc != TD_CC_NOERROR) printk("******* USB BUS error %x @ep %x\n", TD_CC_GET(td_list->hwINFO), td_list->ed->hwINFO);)		
+			
+		}
+		
+     	if(((td_list->ed->hwHeadP & 0xfffffff0) == td_list->ed->hwTailP) && (ED_STATE(td_list->ed) > ED_UNLINK)) 
+     		ohci_unlink_ed(ohci, td_list->ed); 		/* unlink eds if they are not busy */
+      	
+    	OHCI_FREE(td_list);
+    	td_list = td_list_next;
+  	}  
+ 	return 0; 
 }
 
 
@@ -946,28 +1046,21 @@ static int usb_ohci_done_list(struct ohci *  ohci) {
  ************************************/
  
 
- 
+/* reset the HC not the BUS */
 void reset_hc(struct ohci *ohci) {
-	int retries = 5;
+
 	int timeout = 30;
-	int fminterval;
-	
+	 	
 	if(readl(&ohci->regs->control) & 0x100) { /* SMM owns the HC */
 		writel(0x08,  &ohci->regs->cmdstatus); /* request ownership */
 		printk("USB HC TakeOver from SMM\n");
-		do {
-			wait_ms(100);
-			if(--retries) { 
-				printk("USB HC TakeOver timed out!\n");
-				break;
-			}
-		}
-		while(readl(&ohci->regs->control) & 0x100); 
+		if(readl(&ohci->regs->control) & 0x100)
+			printk("USB HC TakeOver failed!\n");
 	}	
 		
 	writel((1<<31), &ohci->regs->intrdisable); /* Disable HC interrupts */
-	OHCI_DEBUG(printk("USB HC reset_hc: %x ; retries: %d\n", readl(&ohci->regs->control), 5-retries);)
-	fminterval = readl(&ohci->regs->fminterval) & 0x3fff;
+	OHCI_DEBUG(printk("USB HC reset_hc: %x ; \n", readl(&ohci->regs->control));)
+	
 	writel(1,  &ohci->regs->cmdstatus);	   /* HC Reset */
 	while ((readl(&ohci->regs->cmdstatus) & 0x01) != 0) { /* 10us Reset */
 		if (--timeout == 0) {
@@ -975,505 +1068,235 @@ void reset_hc(struct ohci *ohci) {
 			return;
 		}	
 		udelay(1);
-	}
-	/* set the timing */
-	fminterval |= (((fminterval -210) * 6)/7)<<16; 
-	writel(fminterval, &ohci->regs->fminterval);
-	writel(((fminterval&0x3fff)*9)/10, &ohci->regs->periodicstart);
+	}	 
 }
-
+static struct ohci *__ohci;
 
 /*
- * Reset and start an OHCI controller
- */
-void start_hc(struct ohci *ohci)
+ * Start an OHCI controller, set the BUS operational
+ * set and enable interrupts 
+ * connect the virtual root hub
+ * * */
+
+int start_hc(struct ohci *ohci)
 {
-   /*  int fminterval; */
     unsigned int mask;
-    int port_nr;
-  /*  fminterval = readl(&ohci->regs->fminterval) & 0x3fff;
-	reset_hc(ohci); */
- 
-
-	writel(virt_to_bus(&ohci->hc_area->hcca), &ohci->regs->hcca); /* a reset clears this */
- 
-	/* Choose the interrupts we care about now, others later on demand */
-	mask = OHCI_INTR_MIE | OHCI_INTR_WDH;
-	/* | OHCI_INTR_SO | OHCI_INTR_UE |OHCI_INTR_RHSC |OHCI_INTR_SF|  
-		OHCI_INTR_FNO */
-		
-	if(readl(&ohci->regs->roothub.a) & 0x100) /* global power on */
- 		writel( 0x10000, &ohci->regs->roothub.status); /* root hub power on */
-	else { /* port power on */
- 		for(port_nr=0; port_nr < (ohci->regs->roothub.a & 0xff); port_nr++)
-	     		 writel(0x100, &ohci->regs->roothub.portstatus[port_nr]);
-	}
-	wait_ms(50); 		
-	 
-	writel((0x00), &ohci->regs->control); /* USB Reset BUS */
-	wait_ms(10);
-	  
-	writel((0xB7), &ohci->regs->control); /* USB Operational  */
- 		
-	OHCI_DEBUG(printk("USB HC rstart_hc_operational: %x\n", readl(&ohci->regs->control)); )
- 	OHCI_DEBUG(printk("USB HC roothubstata: %x \n", readl( &(ohci->regs->roothub.a) )); )
- 	OHCI_DEBUG(printk("USB HC roothubstatb: %x \n", readl( &(ohci->regs->roothub.b) )); )
- 	OHCI_DEBUG(printk("USB HC roothubstatu: %x \n", readl( &(ohci->regs->roothub.status) )); )
- 	OHCI_DEBUG(printk("USB HC roothubstat1: %x \n", readl( &(ohci->regs->roothub.portstatus[0]) )); )
-   	OHCI_DEBUG(printk("USB HC roothubstat2: %x \n", readl( &(ohci->regs->roothub.portstatus[1]) )); )
-  
-	/* control_wakeup = NULL; */
-	writel(mask, &ohci->regs->intrenable);
-	writel(mask, &ohci->regs->intrstatus);
- 
-#ifdef VROOTHUB
-	{
-
-	struct usb_device * usb_dev;
-	struct ohci_device *dev;
-	struct ohci_device *tmp_root_hub= usb_to_ohci(ohci->bus->root_hub);
-	usb_dev = sohci_usb_allocate(tmp_root_hub->usb);
-	dev = usb_dev->hcpriv; 
-
-	dev->ohci = ohci; 
-
-	usb_connect(usb_dev);
-
-	tmp_root_hub->usb->children[0] = usb_dev;
-
-	usb_new_device(usb_dev);
-	}
-#endif
-
- 
-	
-}
-
-
-
-
-static void ohci_interrupt(int irq, void *__ohci, struct pt_regs *r)
-{
-  struct ohci *ohci = __ohci;
-  struct ohci_regs *regs = ohci->regs;
- 
-  int ints; 
-
- 
- if((ohci->hc_area->hcca.done_head != 0) && !(ohci->hc_area->hcca.done_head & 0x01)) {
-    ints =  OHCI_INTR_WDH;
-  }
-  else { 
-    if((ints = (readl(&regs->intrstatus) & readl(&regs->intrenable))) == 0)
-      return;
-   } 
-   
-  ohci->intrstatus |= ints;
-  OHCI_DEBUG(printk("USB HC interrupt: %x (%x) \n", ints, readl(&ohci->regs->intrstatus));)
-
-  /* ints &= ~(OHCI_INTR_WDH);  WH Bit will be set by done list subroutine */
- /*  if(ints & OHCI_INTR_FNO) {
-   	writel(OHCI_INTR_FNO,  &regs->intrstatus);
-   	if (waitqueue_active(&ohci_tasks)) wake_up(&ohci_tasks);
-  } */
-  
-  if(ints & OHCI_INTR_WDH) {
-   	writel(OHCI_INTR_WDH,  &regs->intrdisable);	
-   	ohci->intrstatus &= (~OHCI_INTR_WDH);
-	usb_ohci_done_list(ohci); /* prepare out channel list */
-	writel(OHCI_INTR_WDH, &ohci->regs->intrstatus);
-	writel(OHCI_INTR_WDH, &ohci->regs->intrenable);
-   	 
-  }
-  
-  if(ints & OHCI_INTR_SF) {
-  	writel(OHCI_INTR_SF,  &regs->intrdisable);	
-  	writel(OHCI_INTR_SF, &ohci->regs->intrstatus);
-	ohci->intrstatus &= (~OHCI_INTR_SF);
-  	if(ohci->ed_rm_list != NULL) {
-			ohci_rm_eds(ohci);
- 	 }
-  }
-#ifndef VROOTHUB 
-  if(ints & OHCI_INTR_RHSC) {  
-  	writel(OHCI_INTR_RHSC, &regs->intrdisable);
-  	writel(OHCI_INTR_RHSC, &ohci->regs->intrstatus);
-	wake_up(&root_hub);
-
-  }
- #endif
-
-  writel(OHCI_INTR_MIE, &regs->intrenable);
-	
-}
- 
-#ifndef VROOTHUB
-/*
- * This gets called if the connect status on the root
- * hub (and the root hub only) changes.
- */
-static void ohci_connect_change(struct ohci *ohci, unsigned int port_nr)
-{
-	struct usb_device *usb_dev;
-    struct ohci_device *dev;
-	struct ohci_device *tmp_root_hub=usb_to_ohci(ohci->bus->root_hub);
-	OHCI_DEBUG(printk("uhci_connect_change: called for %d stat %x\n", port_nr,readl(&ohci->regs->roothub.portstatus[port_nr]) );)
-
-	/*
-	 * Even if the status says we're connected,
-	 * the fact that the status bits changed may
-	 * that we got disconnected and then reconnected.
-	 *
-	 * So start off by getting rid of any old devices..
-	 */
-	usb_disconnect(&tmp_root_hub->usb->children[port_nr]);
-
-	 if(!(readl(&ohci->regs->roothub.portstatus[port_nr]) & RH_PS_CCS)) {
-	 	writel(RH_PS_CCS, &ohci->regs->roothub.portstatus[port_nr]);
-		return; /* nothing connected */
-	}
-	/*
-	 * Ok, we got a new connection. Allocate a device to it,
-	 * and find out what it wants to do..
-	 */
-	usb_dev = sohci_usb_allocate(tmp_root_hub->usb);
-	dev = usb_dev->hcpriv; 
-	dev->ohci = ohci; 
-	usb_connect(dev->usb);
-	tmp_root_hub->usb->children[port_nr] = usb_dev;
-	wait_ms(200); /* wait for powerup */
-    /* reset port/device */
- 	writel(RH_PS_PRS, &ohci->regs->roothub.portstatus[port_nr]); /* reset port */
- 	while(!(readl( &ohci->regs->roothub.portstatus[port_nr]) & RH_PS_PRSC)) wait_ms(10); /* reset active ? */
- 	writel(RH_PS_PES, &ohci->regs->roothub.portstatus[port_nr]); /* enable port */
- 	wait_ms(10);
-	/* Get speed information */
-	usb_dev->slow = (readl( &ohci->regs->roothub.portstatus[port_nr]) & RH_PS_LSDA) ? 1 : 0;
-
-	/*
-	 * Ok, all the stuff specific to the root hub has been done.
-	 * The rest is generic for any new USB attach, regardless of
-	 * hub type.
-	 */
-	usb_new_device(usb_dev);
-}
-#endif
- 
-
-
-/*
- * Allocate the resources required for running an OHCI controller.
- * Host controller interrupts must not be running while calling this
- * function.
- *
- * The mem_base parameter must be the usable -virtual- address of the
- * host controller's memory mapped I/O registers.
- *
- * This is where OHCI triumphs over UHCI, because good is dumb.
- * Note how much simpler this function is than in uhci.c.
- *
- * OHCI hardware takes care of most of the scheduling of different
- * transfer types with the correct prioritization for us.
- */
-
-
-static struct ohci *alloc_ohci(void* mem_base)
-{
-	int i,j;
-	struct ohci *ohci;
-	struct ohci_hc_area *hc_area;
-	struct usb_bus *bus;
-	struct ohci_device *dev;
-	struct usb_device *usb;
-
-	/*
-	 * Here we allocate some dummy  EDs as well as the
-	 * OHCI host controller communications area.  The HCCA is just
-	 * a nice pool of memory with pointers to endpoint descriptors
-	 * for the different interrupts.
-	 *
-	 * The first page of memory  contains the HCCA and ohci structure
-	 */
-	hc_area = (struct  ohci_hc_area *) __get_free_pages(GFP_KERNEL, 1);
-	if (!hc_area)
-		return NULL;
-	memset(hc_area, 0, sizeof(*hc_area));
-    ohci = &hc_area->ohci;
-	ohci->irq = -1;
-	ohci->regs = mem_base;
-    
-	ohci->hc_area = hc_area;
-	/* Tell the controller where the HCCA is */
-	writel(virt_to_bus(&hc_area->hcca), &ohci->regs->hcca);
-	
- 
-	/*
-	 * Initialize the ED polling "tree",  full tree;
-         * dummy eds ed[i] (hc should skip them) 
-         * i == 0 is the end of the iso list;
-		 * 1 is the   1ms node, 
-         * 2,3        2ms nodes,
-         * 4,5,6,7    4ms nodes,
-         * 8  ... 15  8ms nodes,
-         * 16 ... 31  16ms nodes,
-         * 32 ... 63  32ms nodes
-         * Sequenzes:
-		 * 32-16- 8-4-2-1-0
-         * 33-17- 9-5-3-1-0
-         * 34-18-10-6-2-1-0
-         * 35-19-11-7-3-1-0
-         * 36-20-12-4-2-1-0
-         * 37-21-13-5-3-1-0
-         * 38-22-14-6-2-1-0
-         * 39-23-15-7-3-1-0
-         * 40-24- 8-4-2-1-0
-         * 41-25- 9-5-3-1-0
-         * 42-26-10-6-2-1-0
-         *     :      :
-         * 63-31-15-7-3-1-0
-	 */
-        hc_area->ed[ED_ISO].info |=  OHCI_ED_SKIP; /* place holder, so skip it */
-        hc_area->ed[ED_ISO].next_ed =  0x0000;       /* end of iso list */
-
-        hc_area->ed[1].next_ed = virt_to_bus(&(hc_area->ed[ED_ISO]));
-        hc_area->ed[1].info |=  OHCI_ED_SKIP; /* place holder, skip it */
-	     
-        j=1;
-        for (i = 2; i < (NUM_INTS * 2); i++) {
-          	if (i >= NUM_INTS) 
-	   		 	hc_area->hcca.int_table[i - NUM_INTS] = virt_to_bus(&(hc_area->ed[i]));
-           
-          	if( i == j*4) j *= 2;
-	    	hc_area->ed[i].next_ed = virt_to_bus(&(hc_area->ed[j+ i%j]));
-            hc_area->ed[i].info |=  OHCI_ED_SKIP; /* place holder, skip it */
-        }
-
-
-	/*
-	 * for load ballancing of the interrupt branches 
-	 */
-	for (i = 0; i < NUM_INTS; i++) ohci->ohci_int_load[i] = 0;
-
-	/*
-	 * Store the end of control and bulk list eds. So, we know where we can add
-	 * elements to these lists.
-	 */
-	ohci->ed_isotail     = (struct usb_ohci_ed *) &(hc_area->ed[ED_ISO]);
-        ohci->ed_controltail = NULL;
-        ohci->ed_bulktail    = NULL;
-	
+  	int fminterval;
+  	
 	/*
 	 * Tell the controller where the control and bulk lists are
 	 * The lists are empty now.
 	 */	
 	writel(0, &ohci->regs->ed_controlhead);
 	writel(0, &ohci->regs->ed_bulkhead);
-
 	
-	USB_ALLOC(bus, sizeof(*bus));
-	if (!bus)
-		return NULL;
+	writel(virt_to_bus(&ohci->hc_area->hcca), &ohci->regs->hcca); /* a reset clears this */
+   
+	writel((0xB7), &ohci->regs->control); /* USB Operational */
+ 		
+  	fminterval = 0x2edf;
+	writel(((fminterval)*9)/10, &ohci->regs->periodicstart);
+	fminterval |= ((((fminterval -210) * 6)/7)<<16); 
+	writel(fminterval, &ohci->regs->fminterval);	
+	writel(0x628, &ohci->regs->lsthresh);
+	OHCI_DEBUG(printk("USB HC fminterval: %x \n", readl( &(ohci->regs->fminterval) )); )
+	OHCI_DEBUG(printk("USB HC periodicstart: %x \n", readl( &(ohci->regs->periodicstart) )); )
+	OHCI_DEBUG(printk("USB HC lsthresh: %x \n", readl( &(ohci->regs->lsthresh) )); )
+	OHCI_DEBUG(printk("USB HC control: %x\n", readl(&ohci->regs->control)); )
+ 	OHCI_DEBUG(printk("USB HC roothubstata: %x \n", readl( &(ohci->regs->roothub.a) )); )
+ 	OHCI_DEBUG(printk("USB HC roothubstatb: %x \n", readl( &(ohci->regs->roothub.b) )); )
+ 	OHCI_DEBUG(printk("USB HC roothubstatu: %x \n", readl( &(ohci->regs->roothub.status) )); )
+ 	OHCI_DEBUG(printk("USB HC roothubstat1: %x \n", readl( &(ohci->regs->roothub.portstatus[0]) )); )
+   	OHCI_DEBUG(printk("USB HC roothubstat2: %x \n", readl( &(ohci->regs->roothub.portstatus[1]) )); )
+	/* Choose the interrupts we care about now, others later on demand */
+	mask = OHCI_INTR_MIE | OHCI_INTR_WDH | OHCI_INTR_SO;
 
-	memset(bus, 0, sizeof(*bus));
+	writel(mask, &ohci->regs->intrenable);
+	writel(mask, &ohci->regs->intrstatus);
+ 
+#ifdef VROOTHUB
+  {
+	/* connect the virtual root hub */
+	struct usb_device * usb_dev;
+	struct ohci_device *dev;
+ 
+
+	usb_dev = sohci_usb_allocate(NULL);
+	if (!usb_dev) return -1;
+
+	dev = usb_to_ohci(usb_dev);
+	usb_dev->bus = ohci->bus;
+	ohci->bus->root_hub = usb_dev;
+	dev->ohci = ohci;
+	usb_connect(usb_dev);
+	if(usb_new_device(usb_dev) != 0) {
+		sohci_usb_deallocate(usb_dev); 
+		return -1;
+	}
+
+  }
+#endif	
+	return 0;
+}
+
+/* an interrupt happens */
+static void ohci_interrupt(int irq, void *__ohci, struct pt_regs *r)
+{
+	struct ohci *ohci = __ohci;
+	struct ohci_regs *regs = ohci->regs;
+ 	int ints; 
+
+	if((ohci->hc_area->hcca.done_head != 0) && !(ohci->hc_area->hcca.done_head & 0x01)) {
+		ints =  OHCI_INTR_WDH;
+	}
+	else { 
+ 		if((ints = (readl(&regs->intrstatus) & readl(&regs->intrenable))) == 0)
+		return;
+	} 
+   
+	OHCI_DEBUG(printk("USB HC interrupt: %x (%x) \n", ints, readl(&regs->intrstatus));)
+
+  
+	if(ints & OHCI_INTR_WDH) {
+		writel(OHCI_INTR_WDH, &regs->intrdisable);	
+		usb_ohci_done_list(ohci, ohci_reverse_done_list(ohci));
+		writel(OHCI_INTR_WDH, &regs->intrenable); 
+	}
+  
+	if(ints & OHCI_INTR_SO) {
+		printk("****  USB Schedule overrun ");
+		writel(OHCI_INTR_SO, &regs->intrenable); 	 
+	}
+
+	if(ints & OHCI_INTR_SF) {
+		writel(OHCI_INTR_SF,  &regs->intrdisable);	
+		if(ohci->ed_rm_list != NULL) {
+			usb_ohci_done_list(ohci, usb_ohci_del_list(ohci));
+		}
+	}
+	writel(ints, &regs->intrstatus);
+	writel(OHCI_INTR_MIE, &regs->intrenable);	
+}
+
+/* allocate OHCI */
+
+static struct ohci *alloc_ohci(void* mem_base)
+{
+	int i;
+	struct ohci *ohci;
+	struct ohci_hc_area *hc_area;
+	struct usb_bus *bus;
+
+	hc_area = (struct  ohci_hc_area *) __get_free_pages(GFP_KERNEL, 1);
+	if (!hc_area)
+		return NULL;
+		
+	memset(hc_area, 0, sizeof(*hc_area));
+    ohci = &hc_area->ohci;
+	ohci->irq = -1;
+	ohci->regs = mem_base;   
+	ohci->hc_area = hc_area;
+	__ohci = ohci;
+	/*
+	 * for load ballancing of the interrupt branches 
+	 */
+	for (i = 0; i < NUM_INTS; i++) ohci->ohci_int_load[i] = 0;
+	for (i = 0; i < NUM_INTS; i++) hc_area->hcca.int_table[i] = 0;
+	
+	/*
+	 * Store the end of control and bulk list eds. So, we know where we can add
+	 * elements to these lists.
+	 */
+	ohci->ed_isotail     = NULL;
+	ohci->ed_controltail = NULL;
+	ohci->ed_bulktail    = NULL;
+
+	bus = usb_alloc_bus(&sohci_device_operations);
+	if (!bus) {
+		free_pages((unsigned int) ohci->hc_area, 1);
+		return NULL;
+	}
 
 	ohci->bus = bus;
 	bus->hcpriv = (void *) ohci;
-	bus->op = &sohci_device_operations;
-
-	 
-	usb = sohci_usb_allocate(NULL);
-	if (!usb)
-		return NULL;
-
-	dev = usb_to_ohci(usb);
-	usb->bus = bus;
-	bus->root_hub = usb;
-	dev->ohci = ohci;
-	
-	/* Initialize the root hub */
-	 
-	usb->maxchild = readl(&ohci->regs->roothub.a) & 0xff;
-	usb_init_root_hub(usb);
-
+ 
 	return ohci;
 } 
 
 
 /*
  * De-allocate all resources..
- */
-
+ * */
 static void release_ohci(struct ohci *ohci)
 {
-	int i;
-	struct ohci_device *tmp_root_hub=usb_to_ohci(ohci->bus->root_hub);
-	union ep_addr_ ep_addr;
-	ep_addr.iep = 0;
 	
 	OHCI_DEBUG(printk("USB HC release ohci \n"););
-    
+     /* stop hc */
+  
+   
+		
+    /* disconnect all devices */    
+	if(ohci->bus->root_hub) usb_disconnect(&ohci->bus->root_hub);
+	
+	reset_hc(__ohci);
+	writel(OHCI_USB_RESET, &ohci->regs->control);
+	wait_ms(10);
+	
 	if (ohci->irq >= 0) {
 		free_irq(ohci->irq, ohci);
 		ohci->irq = -1;
 	}
 
-    /* stop hc */
-	writel(OHCI_USB_SUSPEND, &ohci->regs->control);
-		
-	/* deallocate all EDs and TDs */
-	for(i=0; i < 128; i ++) {
-		ep_addr.bep.fa = i;
-		usb_ohci_rm_function(ohci, ep_addr.iep);
-	}
-	ohci_rm_eds(ohci); /* remove eds */
-	
-    /* disconnect all devices */    
-	if(ohci->bus->root_hub)
-		for(i = 0; i < tmp_root_hub->usb->maxchild; i++)
-			usb_disconnect(tmp_root_hub->usb->children + i);
-	    
     usb_deregister_bus(ohci->bus);
-    USB_FREE(tmp_root_hub->usb);
-    USB_FREE(tmp_root_hub);
-    USB_FREE(ohci->bus);
+    usb_free_bus(ohci->bus);
     
 	/* unmap the IO address space */
 	iounmap(ohci->regs);
        
-	free_pages((unsigned int) ohci->hc_area, 1);
-	
+	free_pages((unsigned int) ohci->hc_area, 1);	
 }
 
-static int ohci_roothub_thread(void * __ohci)
-{
-        struct ohci *ohci = (struct ohci *)__ohci;
-        lock_kernel(); 
-
-        /*
-         * This thread doesn't need any user-level access,
-         * so get rid of all our resources..
-         */
-        printk("ohci_roothub_thread at %p\n", &ohci_roothub_thread);
-        exit_mm(current);
-        exit_files(current);
-        exit_fs(current);
-
-
-        strcpy(current->comm, "root-hub");
-
-         
-		start_hc(ohci);
-		writel( 0x10000, &ohci->regs->roothub.status);
-		wait_ms(50); /* root hub power on */
-	usb_register_bus(ohci->bus);
-         do {
-#ifdef CONFIG_APM
-		if (apm_resume) {
-			apm_resume = 0;
-			start_hc(ohci);
-			continue;
-		}
-#endif
- 	 
-		OHCI_DEBUG(printk("USB RH tasks: int: %x\n",ohci->intrstatus););
-#ifndef VROOTHUB
-		/*	if (ohci->intrstatus & OHCI_INTR_RHSC)  */
-			{
-				int port_nr;
-	     		for(port_nr=0; port_nr< ohci->root_hub->usb->maxchild; port_nr++)
-	     			if(readl(&ohci->regs->roothub.portstatus[port_nr]) & (RH_PS_CSC | RH_PS_PRSC)) {		
-	     		 		ohci_connect_change(ohci, port_nr);
-	     		 		writel(0xffff0000, &ohci->regs->roothub.portstatus[port_nr]);
-	     		 	}
-	     		 ohci->intrstatus &= ~(OHCI_INTR_RHSC);
-	     		 writel(OHCI_INTR_RHSC, &ohci->regs->intrenable);
-	    	}
-#endif
- 
-         interruptible_sleep_on(&root_hub);
- 
-      	} while (!signal_pending(current)); 
-             	
-#ifdef VROOTHUB
-		ohci_del_rh_int_timer(ohci);
-#endif
- 
-
-		cleanup_drivers();
-      /*  reset_hc(ohci); */
-	 
-        release_ohci(ohci);
-        MOD_DEC_USE_COUNT;
-
-	    printk("ohci_control_thread exiting\n");
-
-        return 0;
-}
 
 /*
  * Increment the module usage count, start the control thread and
  * return success.
- */
+ * */
 static int found_ohci(int irq, void* mem_base)
 {
-	int retval;
 	struct ohci *ohci;
     OHCI_DEBUG(printk("USB HC found  ohci: irq= %d membase= %x \n", irq, (int)mem_base);)
-	/* Allocate the running OHCI structures */
+    
 	ohci = alloc_ohci(mem_base);
 	if (!ohci) {
-	  return -ENOMEM;
-	}
-
-	reset_hc(ohci);
-
-	retval = -EBUSY;
-	if (request_irq(irq, ohci_interrupt, SA_SHIRQ, "ohci-usb", ohci) == 0) {
-		int pid;
-
-		MOD_INC_USE_COUNT; 
-		ohci->irq = irq;
-		 
-		pid = kernel_thread(ohci_roothub_thread, ohci, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
-		if (pid >= 0) 
-		 	return 0;
-		
-
-		MOD_DEC_USE_COUNT;
-		retval = pid;
+		return -ENOMEM;
 	}
 	
+	reset_hc(ohci);
+	writel(OHCI_USB_RESET, &ohci->regs->control);
+	wait_ms(10);
+	usb_register_bus(ohci->bus);
+	
+	if (request_irq(irq, ohci_interrupt, SA_SHIRQ, "ohci-usb", ohci) == 0) {
+		ohci->irq = irq;     
+		start_hc(ohci);
+		return 0;
+ 	}	
 	release_ohci(ohci);
-	return retval;
+	return -EBUSY;
 }
  
 static int start_ohci(struct pci_dev *dev)
 {
-	unsigned int mem_base = dev->resource[0].flags;
-
-	/* If its OHCI, its memory */
-	if (mem_base & PCI_BASE_ADDRESS_SPACE_IO)
-		return -ENODEV;
-
-	/* Get the memory address and map it for IO */
-	mem_base = dev->resource[0].start;
-
-	/* 
-	 * FIXME ioremap_nocache isn't implemented on all CPUs (such
-	 * as the Alpha) [?]  What should I use instead...
-	 *
-	 * The iounmap() is done on in release_ohci.
-	 */
+	unsigned int mem_base = dev->resource[0].start;
+	 
 	mem_base = (unsigned int) ioremap_nocache(mem_base, 4096);
 
 	if (!mem_base) {
 		printk("Error mapping OHCI memory\n");
 		return -EFAULT;
 	}
-
 	return found_ohci(dev->irq, (void *) mem_base);
 } 
-
 
 
 #ifdef CONFIG_APM
@@ -1497,10 +1320,7 @@ static int handle_apm_event(apm_event_t event)
 			break;
 		}
 		down = 0;
-		if (waitqueue_active(&root_hub)) {
-			apm_resume = 1;
-			wake_up(&root_hub);
-		}
+//		start_hc(ohci);
 		break;
 	}
 	return 0;
@@ -1508,41 +1328,34 @@ static int handle_apm_event(apm_event_t event)
 #endif
 
 #define PCI_CLASS_SERIAL_USB_OHCI 0x0C0310
-#define PCI_CLASS_SERIAL_USB_OHCI_PG 0x10
  
-
 int ohci_hcd_init(void)
 {
-  int retval;
-  struct pci_dev *dev = NULL;
+	struct pci_dev *dev = NULL;
  
-  retval = -ENODEV;
-   
-  dev = NULL;
-  while((dev = pci_find_class(PCI_CLASS_SERIAL_USB_OHCI, dev))) { /* OHCI */
-    retval = start_ohci(dev);
-    if (retval < 0) break;
-
+	while((dev = pci_find_class(PCI_CLASS_SERIAL_USB_OHCI, dev))) { 
+		if (start_ohci(dev) < 0) return -ENODEV;
+	}
     
 #ifdef CONFIG_APM
-		apm_register_callback(&handle_apm_event);
+	apm_register_callback(&handle_apm_event);
 #endif
   
     return 0;
-  }
-  return retval;
 }
 
 #ifdef MODULE
-int init_module(void){
+int init_module(void)
+{
 	return ohci_hcd_init();
 }
 
 void cleanup_module(void)
-{
+{	
 #	ifdef CONFIG_APM
 	apm_unregister_callback(&handle_apm_event);
 #	endif
+	release_ohci(__ohci);
 }
 #endif //MODULE
 

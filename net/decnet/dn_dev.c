@@ -49,17 +49,17 @@ static unsigned char dn_eco_version[3]    = {0x02,0x00,0x00};
 
 extern struct neigh_table dn_neigh_table;
 
-struct device *decnet_default_device = NULL;
+struct net_device *decnet_default_device = NULL;
 
-static struct dn_dev *dn_dev_create(struct device *dev, int *err);
-static void dn_dev_delete(struct device *dev);
+static struct dn_dev *dn_dev_create(struct net_device *dev, int *err);
+static void dn_dev_delete(struct net_device *dev);
 #ifdef CONFIG_RTNETLINK
 static void rtmsg_ifa(int event, struct dn_ifaddr *ifa);
 #endif
 
-static int dn_eth_up(struct device *);
-static void dn_send_brd_hello(struct device *dev);
-static void dn_send_ptp_hello(struct device *dev);
+static int dn_eth_up(struct net_device *);
+static void dn_send_brd_hello(struct net_device *dev);
+static void dn_send_ptp_hello(struct net_device *dev);
 static int dn_dev_eth_setsrc(struct sk_buff *skb);
 static int dn_dev_lo_setsrc(struct sk_buff *skb);
 static int dn_dev_ptp_setsrc(struct sk_buff *skb);
@@ -257,7 +257,7 @@ static struct dn_dev_sysctl_table {
 	{{CTL_NET, "net", NULL, 0, 0555, dn_dev_sysctl.dn_dev_proto_dir}, {0}}
 };
 
-static void dn_dev_sysctl_register(struct device *dev, struct dn_dev_parms *parms)
+static void dn_dev_sysctl_register(struct net_device *dev, struct dn_dev_parms *parms)
 {
 	struct dn_dev_sysctl_table *t;
 	int i;
@@ -361,7 +361,7 @@ static int dn_dev_insert_ifa(struct dn_dev *dn_db, struct dn_ifaddr *ifa)
 	return 0;
 }
 
-static int dn_dev_set_ifa(struct device *dev, struct dn_ifaddr *ifa)
+static int dn_dev_set_ifa(struct net_device *dev, struct dn_ifaddr *ifa)
 {
 	struct dn_dev *dn_db = dev->dn_ptr;
 
@@ -382,7 +382,7 @@ static int dn_dev_set_ifa(struct device *dev, struct dn_ifaddr *ifa)
 
 static struct dn_dev *dn_dev_by_index(int ifindex)
 {
-	struct device *dev;
+	struct net_device *dev;
 	dev = dev_get_by_index(ifindex);
 	if (dev)
 		return dev->dn_ptr;
@@ -397,7 +397,7 @@ int dn_dev_ioctl(unsigned int cmd, void *arg)
 	struct ifreq *ifr = (struct ifreq *)buffer;
 	struct sockaddr_dn *sdn = (struct sockaddr_dn *)&ifr->ifr_addr;
 	struct dn_dev *dn_db;
-	struct device *dev;
+	struct net_device *dev;
 	struct dn_ifaddr *ifa = NULL, **ifap = NULL;
 	int exclusive = 0;
 	int ret = 0;
@@ -503,7 +503,7 @@ static int dn_dev_rtm_deladdr(struct sk_buff *skb, struct nlmsghdr *nlh, void *a
 static int dn_dev_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg)
 {
 	struct rtattr **rta = arg;
-	struct device *dev;
+	struct net_device *dev;
 	struct dn_dev *dn_db;
 	struct ifaddrmsg *ifm = NLMSG_DATA(nlh);
 	struct dn_ifaddr *ifa;
@@ -581,7 +581,7 @@ static void rtmsg_ifa(int event, struct dn_ifaddr *ifa)
 	netlink_broadcast(rtnl, skb, 0, RTMGRP_DECnet_IFADDR, GFP_KERNEL);
 }
 
-static int dn_dev_fill_ifinfo(struct sk_buff *skb, struct device *dev,
+static int dn_dev_fill_ifinfo(struct sk_buff *skb, struct net_device *dev,
 				int type, u32 pid, u32 seq)
 {
 	struct ifinfomsg *r;
@@ -618,7 +618,7 @@ static int dn_dev_dump_ifaddr(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	int idx, dn_idx;
 	int s_idx, s_dn_idx;
-	struct device *dev;
+	struct net_device *dev;
 	struct dn_dev *dn_db;
 	struct dn_ifaddr *ifa;
 
@@ -651,7 +651,7 @@ static int dn_dev_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	int idx;
 	int s_idx = cb->args[0];
-	struct device *dev;
+	struct net_device *dev;
 
 	for(dev=dev_base, idx=0; dev; dev = dev->next) {
 		if (!dev->dn_ptr)
@@ -667,7 +667,7 @@ static int dn_dev_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 	return skb->len;
 }
 
-static void dn_dev_ifinfo(int type, struct device *dev)
+static void dn_dev_ifinfo(int type, struct net_device *dev)
 {
 	struct sk_buff *skb;
 	int size = NLMSG_GOODSIZE;
@@ -686,7 +686,7 @@ static void dn_dev_ifinfo(int type, struct device *dev)
 }
 #endif /* CONFIG_RTNETLINK */
 
-static void dn_send_endnode_hello(struct device *dev)
+static void dn_send_endnode_hello(struct net_device *dev)
 {
         struct endnode_hello_message *msg;
         struct sk_buff *skb = NULL;
@@ -760,7 +760,7 @@ static int dn_am_i_a_router(struct dn_neigh *dn, struct dn_dev *dn_db)
 	return 0;
 }
 
-static void dn_send_router_hello(struct device *dev)
+static void dn_send_router_hello(struct net_device *dev)
 {
 	int n;
 	struct dn_dev *dn_db = dev->dn_ptr;
@@ -838,7 +838,7 @@ static void dn_send_router_hello(struct device *dev)
 		kfree_skb(skb);
 }
 
-static void dn_send_brd_hello(struct device *dev)
+static void dn_send_brd_hello(struct net_device *dev)
 {
 	if (decnet_node_type == DN_RT_INFO_ENDN)
 		dn_send_endnode_hello(dev);
@@ -846,13 +846,13 @@ static void dn_send_brd_hello(struct device *dev)
 		dn_send_router_hello(dev);
 }
 #else
-static void dn_send_brd_hello(struct device *dev)
+static void dn_send_brd_hello(struct net_device *dev)
 {
 	dn_send_endnode_hello(dev);
 }
 #endif
 
-static void dn_send_ptp_hello(struct device *dev)
+static void dn_send_ptp_hello(struct net_device *dev)
 {
 	int tdlen = 16;
 	int size = dev->hard_header_len + 2 + 4 + tdlen;
@@ -897,7 +897,7 @@ static void dn_send_ptp_hello(struct device *dev)
 	dn_send_skb(skb);
 }
 
-static int dn_eth_up(struct device *dev)
+static int dn_eth_up(struct net_device *dev)
 {
 	struct dn_dev *dn_db = dev->dn_ptr;
 
@@ -947,7 +947,7 @@ static int dn_dev_eth_neigh_setup(struct neighbour *n)
 
 static int dn_dev_ptp_setsrc(struct sk_buff *skb)
 {
-	struct device *dev = skb->dev;
+	struct net_device *dev = skb->dev;
 	struct dn_dev *dn_db = dev->dn_ptr;
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
 
@@ -959,11 +959,11 @@ static int dn_dev_ptp_setsrc(struct sk_buff *skb)
 	return 0;
 }
 
-static void dn_dev_set_timer(struct device *dev);
+static void dn_dev_set_timer(struct net_device *dev);
 
 static void dn_dev_timer_func(unsigned long arg)
 {
-	struct device *dev = (struct device *)arg;
+	struct net_device *dev = (struct net_device *)arg;
 	struct dn_dev *dn_db = dev->dn_ptr;
 
 #ifdef CONFIG_DECNET_ROUTER
@@ -989,7 +989,7 @@ static void dn_dev_timer_func(unsigned long arg)
 	dn_dev_set_timer(dev);
 }
 
-static void dn_dev_set_timer(struct device *dev)
+static void dn_dev_set_timer(struct net_device *dev)
 {
 	struct dn_dev *dn_db = dev->dn_ptr;
 
@@ -1008,7 +1008,7 @@ static void dn_dev_set_timer(struct device *dev)
 	add_timer(&dn_db->timer);
 }
 
-struct dn_dev *dn_dev_create(struct device *dev, int *err)
+struct dn_dev *dn_dev_create(struct net_device *dev, int *err)
 {
 	int i;
 	struct dn_dev_parms *p = dn_dev_list;
@@ -1066,7 +1066,7 @@ struct dn_dev *dn_dev_create(struct device *dev, int *err)
  * MAC addreses automatically. Others must be started
  * specifically.
  */
-void dn_dev_up(struct device *dev)
+void dn_dev_up(struct net_device *dev)
 {
 	struct dn_ifaddr *ifa;
 
@@ -1088,7 +1088,7 @@ void dn_dev_up(struct device *dev)
 	dn_dev_set_ifa(dev, ifa);
 }
 
-static void dn_dev_delete(struct device *dev)
+static void dn_dev_delete(struct net_device *dev)
 {
 	struct dn_dev *dn_db = dev->dn_ptr;
 	unsigned long cpuflags;
@@ -1127,7 +1127,7 @@ static void dn_dev_delete(struct device *dev)
 	kfree(dn_db);
 }
 
-void dn_dev_down(struct device *dev)
+void dn_dev_down(struct net_device *dev)
 {
 	struct dn_dev *dn_db = dev->dn_ptr;
 	struct dn_ifaddr *ifa;
@@ -1160,7 +1160,7 @@ void dn_dev_hello(struct sk_buff *skb)
 
 void dn_dev_devices_off(void)
 {
-	struct device *dev;
+	struct net_device *dev;
 
 	for(dev = dev_base; dev; dev = dev->next)
 		dn_dev_down(dev);
@@ -1169,7 +1169,7 @@ void dn_dev_devices_off(void)
 
 void dn_dev_devices_on(void)
 {
-	struct device *dev;
+	struct net_device *dev;
 
 	for(dev = dev_base; dev; dev = dev->next) {
 		if (dev->flags & IFF_UP)
@@ -1185,7 +1185,7 @@ void dn_dev_devices_on(void)
  * it as a compile time option. Probably you should use the
  * rtnetlink interface instead.
  */
-int dnet_gifconf(struct device *dev, char *buf, int len)
+int dnet_gifconf(struct net_device *dev, char *buf, int len)
 {
 	struct dn_dev *dn_db = (struct dn_dev *)dev->dn_ptr;
 	struct dn_ifaddr *ifa;
@@ -1242,7 +1242,7 @@ static char *dn_type2asc(char type)
 static int decnet_dev_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
         struct dn_dev *dn_db;
-	struct device *dev;
+	struct net_device *dev;
         int len = 0;
         off_t pos = 0;
         off_t begin = 0;

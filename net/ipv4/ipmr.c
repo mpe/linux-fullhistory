@@ -85,9 +85,9 @@ static int ipmr_fill_mroute(struct sk_buff *skb, struct mfc_cache *c, struct rtm
 extern struct inet_protocol pim_protocol;
 
 static
-struct device *ipmr_new_tunnel(struct vifctl *v)
+struct net_device *ipmr_new_tunnel(struct vifctl *v)
 {
-	struct device  *dev = NULL;
+	struct net_device  *dev = NULL;
 
 	rtnl_lock();
 	dev = dev_get("tunl0");
@@ -136,9 +136,9 @@ failure:
 #ifdef CONFIG_IP_PIMSM
 
 static int reg_vif_num = -1;
-static struct device * reg_dev;
+static struct net_device * reg_dev;
 
-static int reg_vif_xmit(struct sk_buff *skb, struct device *dev)
+static int reg_vif_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	((struct net_device_stats*)dev->priv)->tx_bytes += skb->len;
 	((struct net_device_stats*)dev->priv)->tx_packets++;
@@ -147,15 +147,15 @@ static int reg_vif_xmit(struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
-static struct net_device_stats *reg_vif_get_stats(struct device *dev)
+static struct net_device_stats *reg_vif_get_stats(struct net_device *dev)
 {
 	return (struct net_device_stats*)dev->priv;
 }
 
 static
-struct device *ipmr_reg_vif(struct vifctl *v)
+struct net_device *ipmr_reg_vif(struct vifctl *v)
 {
-	struct device  *dev;
+	struct net_device  *dev;
 	struct in_device *in_dev;
 	int size;
 
@@ -213,7 +213,7 @@ failure:
 static int vif_delete(int vifi)
 {
 	struct vif_device *v;
-	struct device *dev;
+	struct net_device *dev;
 	struct in_device *in_dev;
 	
 	if (vifi < 0 || vifi >= maxvif || !(vifc_map&(1<<vifi)))
@@ -724,7 +724,7 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 			if(optname==MRT_ADD_VIF)
 			{
 				struct vif_device *v=&vif_table[vif.vifc_vifi];
-				struct device *dev;
+				struct net_device *dev;
 				struct in_device *in_dev;
 
 				/* Is vif busy ? */
@@ -1028,7 +1028,7 @@ static void ipmr_queue_xmit(struct sk_buff *skb, struct mfc_cache *c,
 {
 	struct iphdr *iph = skb->nh.iph;
 	struct vif_device *vif = &vif_table[vifi];
-	struct device *dev;
+	struct net_device *dev;
 	struct rtable *rt;
 	int    encap = 0;
 	struct sk_buff *skb2;
@@ -1135,7 +1135,7 @@ static void ipmr_queue_xmit(struct sk_buff *skb, struct mfc_cache *c,
 		ip_fragment(skb2, skb2->dst->output);
 }
 
-int ipmr_find_vif(struct device *dev)
+int ipmr_find_vif(struct net_device *dev)
 {
 	int ct;
 	for (ct=0; ct<maxvif; ct++) {
@@ -1383,7 +1383,7 @@ ipmr_fill_mroute(struct sk_buff *skb, struct mfc_cache *c, struct rtmsg *rtm)
 {
 	int ct;
 	struct rtnexthop *nhp;
-	struct device *dev = vif_table[c->mfc_parent].dev;
+	struct net_device *dev = vif_table[c->mfc_parent].dev;
 	u8 *b = skb->tail;
 	struct rtattr *mp_head;
 
@@ -1421,7 +1421,7 @@ int ipmr_get_route(struct sk_buff *skb, struct rtmsg *rtm, int nowait)
 	start_bh_atomic();
 	cache = ipmr_cache_find(rt->rt_src, rt->rt_dst);
 	if (cache==NULL || (cache->mfc_flags&MFC_QUEUED)) {
-		struct device *dev;
+		struct net_device *dev;
 		int vif;
 		int err;
 

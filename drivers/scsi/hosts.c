@@ -47,7 +47,7 @@
     defined(CONFIG_WARPENGINE_SCSI) || \
     defined(CONFIG_A4091_SCSI) || \
     defined (CONFIG_GVP_TURBO_SCSI) || \
-    defined (CONFIG_BLZ603E)
+    defined (CONFIG_BLZ603EPLUS_SCSI)
 #define AMIGA7XXCONFIG
 #endif
 

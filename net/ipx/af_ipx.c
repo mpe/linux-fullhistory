@@ -239,7 +239,7 @@ static void ipxitf_clear_primary_net(void)
 		ipx_primary_net = NULL;
 }
 
-static ipx_interface *ipxitf_find_using_phys(struct device *dev, unsigned short datalink)
+static ipx_interface *ipxitf_find_using_phys(struct net_device *dev, unsigned short datalink)
 {
 	ipx_interface	*i;
 
@@ -365,7 +365,7 @@ static void ipxitf_down(ipx_interface *intrfc)
 
 static int ipxitf_device_event(struct notifier_block *notifier, unsigned long event, void *ptr)
 {
-	struct device *dev = ptr;
+	struct net_device *dev = ptr;
 	ipx_interface *i, *tmp;
 
 	if(event != NETDEV_DOWN)
@@ -608,7 +608,7 @@ static struct sk_buff *ipxitf_adjust_skbuff(ipx_interface *intrfc, struct sk_buf
 static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 {
 	struct ipxhdr *ipx = skb->nh.ipxh;
-	struct device *dev = intrfc->if_dev;
+	struct net_device *dev = intrfc->if_dev;
 	struct datalink_proto *dl = intrfc->if_dlink;
 	char dest_node[IPX_NODE_LEN];
 	int send_to_wire = 1;
@@ -922,7 +922,7 @@ static int ipx_map_frame_type(unsigned char type)
 
 static int ipxitf_create(ipx_interface_definition *idef)
 {
-	struct device *dev;
+	struct net_device *dev;
 	unsigned short dlink_type = 0;
 	struct datalink_proto *datalink = NULL;
 	ipx_interface *intrfc;
@@ -1025,7 +1025,7 @@ static int ipxitf_create(ipx_interface_definition *idef)
 
 static int ipxitf_delete(ipx_interface_definition *idef)
 {
-	struct device *dev = NULL;
+	struct net_device *dev = NULL;
 	unsigned short dlink_type = 0;
 	ipx_interface *intrfc;
 
@@ -1057,7 +1057,7 @@ static int ipxitf_delete(ipx_interface_definition *idef)
 	return (-EINVAL);
 }
 
-static ipx_interface *ipxitf_auto_create(struct device *dev, 
+static ipx_interface *ipxitf_auto_create(struct net_device *dev, 
 	unsigned short dlink_type)
 {
 	struct datalink_proto *datalink = NULL;
@@ -1148,7 +1148,7 @@ static int ipxitf_ioctl(unsigned int cmd, void *arg)
 		{
 			struct sockaddr_ipx *sipx;
 			ipx_interface *ipxif;
-			struct device *dev;
+			struct net_device *dev;
 
 			if(copy_from_user(&ifr, arg, sizeof(ifr)))
 				return (-EFAULT);
@@ -2068,7 +2068,7 @@ static int ipx_getname(struct socket *sock, struct sockaddr *uaddr,
 	return (0);
 }
 
-int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+int ipx_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 {
 	/* NULL here for pt means the packet was looped back */
 	ipx_interface *intrfc;

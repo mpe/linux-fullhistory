@@ -125,7 +125,10 @@ const unsigned int bt463_cursor_source[4] = {
      *      fbcon should provide a general mechanism for doing something like this.
      */
 
-static struct fb_videomode tgafb_predefined[] __initdata = {
+static struct {
+    const char *name;
+    struct fb_var_screeninfo var;
+} tgafb_predefined[] __initdata = {
     { "640x480-60", {
 	640, 480, 640, 480, 0, 0, 0, 0,
 	{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
@@ -996,7 +999,7 @@ static struct fb_ops tgafb_ops = {
      *  Setup
      */
 
-__initfunc(int tgafb_setup(char *options)) {
+int __init tgafb_setup(char *options) {
     char *this_opt;
     int i;
     

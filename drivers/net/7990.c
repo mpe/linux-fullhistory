@@ -101,7 +101,7 @@ static void load_csrs (struct lance_private *lp)
 #define DEBUG_IRING 0
 /* Set up the Lance Rx and Tx rings and the init block */
 /* Sets dev->tbusy */
-static void lance_init_ring (struct device *dev)
+static void lance_init_ring (struct net_device *dev)
 {
         struct lance_private *lp = (struct lance_private *) dev->priv;
         volatile struct lance_init_block *ib = lp->init_block;
@@ -219,7 +219,7 @@ static int init_restart_lance (struct lance_private *lp)
         return 0;
 }
 
-static int lance_reset (struct device *dev)
+static int lance_reset (struct net_device *dev)
 {
         struct lance_private *lp = (struct lance_private *)dev->priv;
         int status;
@@ -242,7 +242,7 @@ static int lance_reset (struct device *dev)
         return status;
 }
 
-static int lance_rx (struct device *dev)
+static int lance_rx (struct net_device *dev)
 {
         struct lance_private *lp = (struct lance_private *) dev->priv;
         volatile struct lance_init_block *ib = lp->init_block;
@@ -320,7 +320,7 @@ static int lance_rx (struct device *dev)
         return 0;
 }
 
-static int lance_tx (struct device *dev)
+static int lance_tx (struct net_device *dev)
 {
         struct lance_private *lp = (struct lance_private *) dev->priv;
         volatile struct lance_init_block *ib = lp->init_block;
@@ -405,7 +405,7 @@ static int lance_tx (struct device *dev)
 
 static void lance_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 {
-        struct device *dev = (struct device *)dev_id;
+        struct net_device *dev = (struct net_device *)dev_id;
         struct lance_private *lp = (struct lance_private *)dev->priv;
         int csr0;
         DECLARE_LL;
@@ -460,7 +460,7 @@ static void lance_interrupt (int irq, void *dev_id, struct pt_regs *regs)
         dev->interrupt = 0;
 }
 
-int lance_open (struct device *dev)
+int lance_open (struct net_device *dev)
 {
         struct lance_private *lp = (struct lance_private *)dev->priv;
         DECLARE_LL;
@@ -472,7 +472,7 @@ int lance_open (struct device *dev)
         return lance_reset(dev);
 }
 
-int lance_close (struct device *dev)
+int lance_close (struct net_device *dev)
 {
         struct lance_private *lp = (struct lance_private *) dev->priv;
         DECLARE_LL;
@@ -489,7 +489,7 @@ int lance_close (struct device *dev)
         return 0;
 }
 
-int lance_start_xmit (struct sk_buff *skb, struct device *dev)
+int lance_start_xmit (struct sk_buff *skb, struct net_device *dev)
 {
         struct lance_private *lp = (struct lance_private *)dev->priv;
         volatile struct lance_init_block *ib = lp->init_block;
@@ -560,7 +560,7 @@ int lance_start_xmit (struct sk_buff *skb, struct device *dev)
         return status;
 }
 
-struct net_device_stats *lance_get_stats (struct device *dev)
+struct net_device_stats *lance_get_stats (struct net_device *dev)
 {
         struct lance_private *lp = (struct lance_private *) dev->priv;
 
@@ -568,7 +568,7 @@ struct net_device_stats *lance_get_stats (struct device *dev)
 }
 
 /* taken from the depca driver via a2065.c */
-static void lance_load_multicast (struct device *dev)
+static void lance_load_multicast (struct net_device *dev)
 {
         struct lance_private *lp = (struct lance_private *) dev->priv;
         volatile struct lance_init_block *ib = lp->init_block;
@@ -619,7 +619,7 @@ static void lance_load_multicast (struct device *dev)
 }
 
 
-void lance_set_multicast (struct device *dev)
+void lance_set_multicast (struct net_device *dev)
 {
         struct lance_private *lp = (struct lance_private *) dev->priv;
         volatile struct lance_init_block *ib = lp->init_block;

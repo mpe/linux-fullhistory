@@ -560,7 +560,7 @@ struct happy_meal {
 #ifdef CONFIG_PCI
 	struct pci_dev		 *happy_pci_dev;
 #endif
-	struct device            *dev;            /* Backpointer                       */
+	struct net_device            *dev;            /* Backpointer                       */
 	struct quattro		 *qfe_parent;	  /* For Quattro cards                 */
 	int			  qfe_ent;	  /* Which instance on quattro         */
 	struct happy_meal        *next_module;
@@ -587,7 +587,7 @@ struct happy_meal {
 /* Support for QFE/Quattro cards. */
 struct quattro {
 	volatile u32		 *irq_status[4];
-	struct device		 *happy_meals[4];
+	struct net_device		 *happy_meals[4];
 	void (*handler)(int, void *, struct pt_regs *);
 
 	struct linux_sbus_device *quattro_sbus_dev;

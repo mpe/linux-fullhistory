@@ -85,6 +85,7 @@ extern kmem_cache_t *tcp_bucket_cachep;
 extern struct tcp_bind_bucket *tcp_bucket_create(unsigned short snum);
 extern void tcp_bucket_unlock(struct sock *sk);
 extern int tcp_port_rover;
+extern struct sock *tcp_v4_lookup_listener(u32 addr, unsigned short hnum, int dif);						
 
 /* Level-1 socket-demux cache. */
 #define TCP_NUM_REGS		32

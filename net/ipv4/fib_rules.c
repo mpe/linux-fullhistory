@@ -179,7 +179,7 @@ int inet_rtm_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 		memcpy(&new_r->r_preference, RTA_DATA(rta[RTA_PRIORITY-1]), 4);
 	new_r->r_table = table_id;
 	if (rta[RTA_IIF-1]) {
-		struct device *dev;
+		struct net_device *dev;
 		memcpy(new_r->r_ifname, RTA_DATA(rta[RTA_IIF-1]), IFNAMSIZ);
 		new_r->r_ifname[IFNAMSIZ-1] = 0;
 		new_r->r_ifindex = -1;
@@ -251,7 +251,7 @@ u32 fib_rules_tclass(struct fib_result *res)
 #endif
 
 
-static void fib_rules_detach(struct device *dev)
+static void fib_rules_detach(struct net_device *dev)
 {
 	struct fib_rule *r;
 
@@ -264,7 +264,7 @@ static void fib_rules_detach(struct device *dev)
 	}
 }
 
-static void fib_rules_attach(struct device *dev)
+static void fib_rules_attach(struct net_device *dev)
 {
 	struct fib_rule *r;
 
@@ -349,7 +349,7 @@ void fib_select_default(const struct rt_key *key, struct fib_result *res)
 
 static int fib_rules_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
-	struct device *dev = ptr;
+	struct net_device *dev = ptr;
 
 	if (event == NETDEV_UNREGISTER)
 		fib_rules_detach(dev);

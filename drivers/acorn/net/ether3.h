@@ -159,13 +159,13 @@ struct dev_priv {
     int broken;				/* 0 = ok, 1 = something went wrong	 */
 };
 
-extern int	ether3_probe (struct device *dev);
-static int	ether3_probe1 (struct device *dev);
-static int	ether3_open (struct device *dev);
-static int	ether3_sendpacket (struct sk_buff *skb, struct device *dev);
+extern int	ether3_probe (struct net_device *dev);
+static int	ether3_probe1 (struct net_device *dev);
+static int	ether3_open (struct net_device *dev);
+static int	ether3_sendpacket (struct sk_buff *skb, struct net_device *dev);
 static void	ether3_interrupt (int irq, void *dev_id, struct pt_regs *regs);
-static int	ether3_close (struct device *dev);
-static struct enet_statistics *ether3_getstats (struct device *dev);
-static void	ether3_setmulticastlist (struct device *dev);
+static int	ether3_close (struct net_device *dev);
+static struct enet_statistics *ether3_getstats (struct net_device *dev);
+static void	ether3_setmulticastlist (struct net_device *dev);
 
 #endif

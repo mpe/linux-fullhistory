@@ -70,7 +70,7 @@ struct ptifddi {
 	struct dfddi_ram	*dpram;
 	unsigned char		*reset;
 	unsigned char		*unreset;
-	struct device		*dev;
+	struct net_device		*dev;
 	struct ptifddi		*next_module;
 };
 

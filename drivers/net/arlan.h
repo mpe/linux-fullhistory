@@ -45,7 +45,7 @@
 extern int 	init_arlan_proc(void);
 #endif
 
-extern struct device *arlan_device[MAX_ARLANS];
+extern struct net_device *arlan_device[MAX_ARLANS];
 static int	arlan_debug;
 static char *	siteName;
 static int	arlan_entry_debug;

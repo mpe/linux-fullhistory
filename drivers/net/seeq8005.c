@@ -78,22 +78,22 @@ struct net_local {
 
 /* Index to functions, as function prototypes. */
 
-extern int seeq8005_probe(struct device *dev);
+extern int seeq8005_probe(struct net_device *dev);
 
-static int seeq8005_probe1(struct device *dev, int ioaddr);
-static int seeq8005_open(struct device *dev);
-static int seeq8005_send_packet(struct sk_buff *skb, struct device *dev);
+static int seeq8005_probe1(struct net_device *dev, int ioaddr);
+static int seeq8005_open(struct net_device *dev);
+static int seeq8005_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void seeq8005_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void seeq8005_rx(struct device *dev);
-static int seeq8005_close(struct device *dev);
-static struct net_device_stats *seeq8005_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev);
+static void seeq8005_rx(struct net_device *dev);
+static int seeq8005_close(struct net_device *dev);
+static struct net_device_stats *seeq8005_get_stats(struct net_device *dev);
+static void set_multicast_list(struct net_device *dev);
 
 /* Example routines you must write ;->. */
 #define tx_done(dev)	(inw(SEEQ_STATUS) & SEEQSTAT_TX_ON)
-static void hardware_send_packet(struct device *dev, char *buf, int length);
-extern void seeq8005_init(struct device *dev, int startp);
-static inline void wait_for_buffer(struct device *dev);
+static void hardware_send_packet(struct net_device *dev, char *buf, int length);
+extern void seeq8005_init(struct net_device *dev, int startp);
+static inline void wait_for_buffer(struct net_device *dev);
 
 
 /* Check for a network adaptor of this type, and return '0' iff one exists.
@@ -109,7 +109,7 @@ struct netdev_entry seeq8005_drv =
 {"seeq8005", seeq8005_probe1, SEEQ8005_IO_EXTENT, seeq8005_portlist};
 #else
 int __init 
-seeq8005_probe(struct device *dev)
+seeq8005_probe(struct net_device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -135,7 +135,7 @@ seeq8005_probe(struct device *dev)
    probes on the ISA bus.  A good device probes avoids doing writes, and
    verifies that the correct device exists and functions.  */
 
-static int __init seeq8005_probe1(struct device *dev, int ioaddr)
+static int __init seeq8005_probe1(struct net_device *dev, int ioaddr)
 {
 	static unsigned version_printed = 0;
 	int i,j;
@@ -344,7 +344,7 @@ static int __init seeq8005_probe1(struct device *dev, int ioaddr)
    there is non-reboot way to recover if something goes wrong.
    */
 static int
-seeq8005_open(struct device *dev)
+seeq8005_open(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 
@@ -369,7 +369,7 @@ seeq8005_open(struct device *dev)
 }
 
 static int
-seeq8005_send_packet(struct sk_buff *skb, struct device *dev)
+seeq8005_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	struct net_local *lp = (struct net_local *)dev->priv;
@@ -412,7 +412,7 @@ seeq8005_send_packet(struct sk_buff *skb, struct device *dev)
 static void
 seeq8005_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct net_local *lp;
 	int ioaddr, status, boguscount = 0;
 
@@ -462,7 +462,7 @@ seeq8005_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 /* We have a good packet(s), get it/them out of the buffers. */
 static void
-seeq8005_rx(struct device *dev)
+seeq8005_rx(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int boguscount = 10;
@@ -561,7 +561,7 @@ seeq8005_rx(struct device *dev)
 
 /* The inverse routine to net_open(). */
 static int
-seeq8005_close(struct device *dev)
+seeq8005_close(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -584,7 +584,7 @@ seeq8005_close(struct device *dev)
 
 /* Get the current statistics.	This may be called with the card open or
    closed. */
-static struct net_device_stats *seeq8005_get_stats(struct device *dev)
+static struct net_device_stats *seeq8005_get_stats(struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 
@@ -598,7 +598,7 @@ static struct net_device_stats *seeq8005_get_stats(struct device *dev)
 			best-effort filtering.
  */
 static void
-set_multicast_list(struct device *dev)
+set_multicast_list(struct net_device *dev)
 {
 /*
  * I _could_ do up to 6 addresses here, but won't (yet?)
@@ -620,7 +620,7 @@ set_multicast_list(struct device *dev)
 #endif
 }
 
-void seeq8005_init(struct device *dev, int startp)
+void seeq8005_init(struct net_device *dev, int startp)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -677,7 +677,7 @@ void seeq8005_init(struct device *dev, int startp)
 }	
 
 
-static void hardware_send_packet(struct device * dev, char *buf, int length)
+static void hardware_send_packet(struct net_device * dev, char *buf, int length)
 {
 	int ioaddr = dev->base_addr;
 	int status = inw(SEEQ_STATUS);
@@ -722,7 +722,7 @@ static void hardware_send_packet(struct device * dev, char *buf, int length)
  * This routine waits for the SEEQ chip to assert that the FIFO is ready
  * by checking for a window interrupt, and then clearing it
  */
-inline void wait_for_buffer(struct device * dev)
+inline void wait_for_buffer(struct net_device * dev)
 {
 	int ioaddr = dev->base_addr;
 	int tmp;
@@ -740,7 +740,7 @@ inline void wait_for_buffer(struct device * dev)
 
 static char devicename[9] = { 0, };
 
-static struct device dev_seeq =
+static struct net_device dev_seeq =
 {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
 	0, 0, 0, 0,

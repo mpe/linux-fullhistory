@@ -42,7 +42,7 @@
 #include <asm/mtrr.h>
 #include <asm/msr.h>
 
-#include "irq.h"
+#include <linux/irq.h>
 
 #define JIFFIE_TIMEOUT 100
 
@@ -164,14 +164,6 @@ int skip_ioapic_setup = 0;				/* 1 if "noapic" boot option passed */
  *	SMP mode to <NUM>.
  */
 
-void __init smp_setup(char *str, int *ints)
-{
-	if (ints && ints[0] > 0)
-		max_cpus = ints[1];
-	else
-		max_cpus = 0;
-}
-
 static int __init nosmp(char *str)
 {
 	max_cpus = 0;
@@ -186,7 +178,7 @@ static int __init maxcpus(char *str)
 	return 1;
 }
 
-__setup("maxcpus", maxcpus);
+__setup("maxcpus=", maxcpus);
 
 void ack_APIC_irq(void)
 {
@@ -935,6 +927,14 @@ extern struct {
 	unsigned short ss;
 } stack_start;
 
+static int __init fork_by_hand(void)
+{
+	struct pt_regs regs;
+	/* don't care about the eip and regs settings since we'll never
+	   reschedule the forked task. */
+	return do_fork(CLONE_VM|CLONE_PID, 0, &regs);
+}
+
 static void __init do_boot_cpu(int i)
 {
 	unsigned long cfg;
@@ -944,11 +944,11 @@ static void __init do_boot_cpu(int i)
 	int timeout, num_starts, j;
 	unsigned long start_eip;
 
-	/*
-	 *	We need an idle process for each processor.
-	 */
-	kernel_thread(start_secondary, NULL, CLONE_PID);
 	cpucount++;
+	/* We can't use kernel_thread since we must _avoid_ to reschedule
+	   the child. */
+	if (fork_by_hand() < 0)
+		panic("failed fork for CPU %d", i);
 
 	/*
 	 * We remove it from the pidhash and the runqueue

@@ -183,7 +183,7 @@ int	dgrs_nicmode = 0;
  *	Chain of device structures
  */
 #ifdef MODULE
-	static struct device *dgrs_root_dev = NULL;
+	static struct net_device *dgrs_root_dev = NULL;
 #endif
 
 /*
@@ -195,7 +195,7 @@ typedef struct
 	 *	Stuff for generic ethercard I/F
 	 */
 	char			devname[8];	/* "ethN" string */
-	struct device		*next_dev;
+	struct net_device		*next_dev;
 	struct net_device_stats	stats;
 
 	/*
@@ -240,7 +240,7 @@ typedef struct
 	 */
 	int		nports;		/* Number of physical ports (4 or 6) */
 	int		chan;		/* Channel # (1-6) for this device */
-	struct device	*devtbl[6];	/* Ptrs to N device structs */
+	struct net_device	*devtbl[6];	/* Ptrs to N device structs */
 
 } DGRS_PRIV;
 
@@ -249,7 +249,7 @@ typedef struct
  *	reset or un-reset the IDT processor
  */
 static void
-proc_reset(struct device *dev0, int reset)
+proc_reset(struct net_device *dev0, int reset)
 {
 	DGRS_PRIV	*priv0 = (DGRS_PRIV *) dev0->priv;
 
@@ -273,7 +273,7 @@ proc_reset(struct device *dev0, int reset)
  *	See if the board supports bus master DMA
  */
 static int
-check_board_dma(struct device *dev0)
+check_board_dma(struct net_device *dev0)
 {
 	DGRS_PRIV	*priv0 = (DGRS_PRIV *) dev0->priv;
 	ulong	x;
@@ -347,7 +347,7 @@ check_board_dma(struct device *dev0)
  */
 static int
 do_plx_dma(
-	struct device *dev,
+	struct net_device *dev,
 	ulong pciaddr,
 	ulong lcladdr,
 	int len,
@@ -453,7 +453,7 @@ do_plx_dma(
  */
 void
 dgrs_rcv_frame(
-	struct device	*dev0,
+	struct net_device	*dev0,
 	DGRS_PRIV	*priv0,
 	I596_CB		*cbp
 )
@@ -463,7 +463,7 @@ dgrs_rcv_frame(
 	struct sk_buff	*skb;
 	uchar		*putp;
 	uchar		*p;
-	struct device	*devN;
+	struct net_device	*devN;
 	DGRS_PRIV	*privN;
 
 	/*
@@ -689,10 +689,10 @@ out:
  *	end of the traditional 82596 RFD structure.
  */
 
-static int dgrs_start_xmit(struct sk_buff *skb, struct device *devN)
+static int dgrs_start_xmit(struct sk_buff *skb, struct net_device *devN)
 {
 	DGRS_PRIV	*privN = (DGRS_PRIV *) devN->priv;
-	struct device	*dev0;
+	struct net_device	*dev0;
 	DGRS_PRIV	*priv0;
 	I596_RBD	*rbdp;
 	int		count;
@@ -788,7 +788,7 @@ no_resources:
  *	Open the interface
  */
 static int
-dgrs_open( struct device *dev )
+dgrs_open( struct net_device *dev )
 {
 	dev->tbusy = 0;
 	dev->interrupt = 0;
@@ -804,7 +804,7 @@ dgrs_open( struct device *dev )
 /*
  *	Close the interface
  */
-static int dgrs_close( struct device *dev )
+static int dgrs_close( struct net_device *dev )
 {
 	dev->start = 0;
 	dev->tbusy = 1;
@@ -819,7 +819,7 @@ static int dgrs_close( struct device *dev )
 /*
  *	Get statistics
  */
-static struct net_device_stats *dgrs_get_stats( struct device *dev )
+static struct net_device_stats *dgrs_get_stats( struct net_device *dev )
 {
 	DGRS_PRIV	*priv = (DGRS_PRIV *) dev->priv;
 
@@ -830,7 +830,7 @@ static struct net_device_stats *dgrs_get_stats( struct device *dev )
  *	Set multicast list and/or promiscuous mode
  */
 
-static void dgrs_set_multicast_list( struct device *dev)
+static void dgrs_set_multicast_list( struct net_device *dev)
 {
 	DGRS_PRIV	*priv = (DGRS_PRIV *) dev->priv;
 
@@ -840,7 +840,7 @@ static void dgrs_set_multicast_list( struct device *dev)
 /*
  *	Unique ioctl's
  */
-static int dgrs_ioctl(struct device *devN, struct ifreq *ifr, int cmd)
+static int dgrs_ioctl(struct net_device *devN, struct ifreq *ifr, int cmd)
 {
 	DGRS_PRIV	*privN = (DGRS_PRIV *) devN->priv;
 	DGRS_IOCTL	ioc;
@@ -905,7 +905,7 @@ static int dgrs_ioctl(struct device *devN, struct ifreq *ifr, int cmd)
 
 static void dgrs_intr(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device	*dev0 = (struct device *) dev_id;
+	struct net_device	*dev0 = (struct net_device *) dev_id;
 	DGRS_PRIV	*priv0 = (DGRS_PRIV *) dev0->priv;
 	I596_CB		*cbp;
 	int		cmd;
@@ -992,7 +992,7 @@ ack_intr:
  *	Download the board firmware
  */
 static int __init 
-dgrs_download(struct device *dev0)
+dgrs_download(struct net_device *dev0)
 {
 	DGRS_PRIV	*priv0 = (DGRS_PRIV *) dev0->priv;
 	int		is;
@@ -1151,7 +1151,7 @@ dgrs_download(struct device *dev0)
  *	Probe (init) a board
  */
 int __init 
-dgrs_probe1(struct device *dev)
+dgrs_probe1(struct net_device *dev)
 {
 	DGRS_PRIV	*priv = (DGRS_PRIV *) dev->priv;
 	int		i;
@@ -1225,7 +1225,7 @@ dgrs_probe1(struct device *dev)
 }
 
 int __init 
-dgrs_initclone(struct device *dev)
+dgrs_initclone(struct net_device *dev)
 {
 	DGRS_PRIV	*priv = (DGRS_PRIV *) dev->priv;
 	int		i;
@@ -1241,7 +1241,7 @@ dgrs_initclone(struct device *dev)
 
 static int __init 
 dgrs_found_device(
-	struct device	*dev,
+	struct net_device	*dev,
 	int		io,
 	ulong		mem,
 	int		irq,
@@ -1254,12 +1254,12 @@ dgrs_found_device(
 	#ifdef MODULE
 	{
 		/* Allocate and fill new device structure. */
-		int dev_size = sizeof(struct device) + sizeof(DGRS_PRIV);
+		int dev_size = sizeof(struct net_device) + sizeof(DGRS_PRIV);
 		int i;
 
-		dev = (struct device *) kmalloc(dev_size, GFP_KERNEL);
+		dev = (struct net_device *) kmalloc(dev_size, GFP_KERNEL);
 		memset(dev, 0, dev_size);
-		dev->priv = ((void *)dev) + sizeof(struct device);
+		dev->priv = ((void *)dev) + sizeof(struct net_device);
 		priv = (DGRS_PRIV *)dev->priv;
 
 		dev->name = priv->devname; /* An empty string. */
@@ -1291,15 +1291,15 @@ dgrs_found_device(
 		priv->nports = priv->bcomm->bc_nports;
 		for (i = 1; i < priv->nports; ++i)
 		{
-			struct device	*devN;
+			struct net_device	*devN;
 			DGRS_PRIV	*privN;
 
 			/* Allocate new dev and priv structures */
-			devN = (struct device *) kmalloc(dev_size, GFP_KERNEL);
+			devN = (struct net_device *) kmalloc(dev_size, GFP_KERNEL);
 
 			/* Make it an exact copy of dev[0]... */
 			memcpy(devN, dev, dev_size);
-			devN->priv = ((void *)devN) + sizeof(struct device);
+			devN->priv = ((void *)devN) + sizeof(struct net_device);
 			privN = (DGRS_PRIV *)devN->priv;
 
 			/* ... but seset devname to a NULL string */
@@ -1361,7 +1361,7 @@ dgrs_found_device(
 static int is2iv[8] __initdata = { 0, 3, 5, 7, 10, 11, 12, 15 };
 
 static int __init 
-dgrs_scan(struct device *dev)
+dgrs_scan(struct net_device *dev)
 {
 	int	cards_found = 0;
 	uint	io;
@@ -1574,7 +1574,7 @@ cleanup_module(void)
 {
         while (dgrs_root_dev)
 	{
-		struct device	*next_dev;
+		struct net_device	*next_dev;
 		DGRS_PRIV	*priv;
 
 		priv = (DGRS_PRIV *) dgrs_root_dev->priv;
@@ -1601,7 +1601,7 @@ cleanup_module(void)
 #else
 
 int __init 
-dgrs_probe(struct device *dev)
+dgrs_probe(struct net_device *dev)
 {
 	int	cards_found;
 

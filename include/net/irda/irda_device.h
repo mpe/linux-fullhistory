@@ -109,7 +109,7 @@ struct irda_device {
 	char description[32];  /* Something like "irda0 <-> ttyS0" */
 
 	struct irlap_cb *irlap; /* The link layer we are connected to  */
-	struct device netdev;   /* Yes! we are some kind of netdevice */
+	struct net_device netdev;   /* Yes! we are some kind of netdevice */
 	struct enet_statistics stats;
 
  	int flags;            /* Interface flags (see defs above) */
@@ -160,7 +160,7 @@ void irda_device_init_dongle(struct irda_device *self, int type);
 void irda_device_unregister_dongle(struct dongle *dongle);
 int irda_device_register_dongle(struct dongle *dongle);
 
-int irda_device_setup(struct device *dev);
+int irda_device_setup(struct net_device *dev);
 
 void setup_dma(int channel, char *buffer, int count, int mode);
 

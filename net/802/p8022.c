@@ -47,7 +47,7 @@ static struct datalink_proto *find_8022_client(unsigned char type)
 	return proto;
 }
 
-int p8022_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+int p8022_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 {
 	struct datalink_proto	*proto;
 
@@ -68,7 +68,7 @@ int p8022_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 static void p8022_datalink_header(struct datalink_proto *dl,
 		struct sk_buff *skb, unsigned char *dest_node)
 {
-	struct device	*dev = skb->dev;
+	struct net_device	*dev = skb->dev;
 	unsigned char	*rawp;
 
 	rawp = skb_push(skb,3);
@@ -96,7 +96,7 @@ __initfunc(void p8022_proto_init(struct net_proto *pro))
 	dev_add_pack(&p8022_packet_type);
 }
 
-struct datalink_proto *register_8022_client(unsigned char type, int (*rcvfunc)(struct sk_buff *, struct device *, struct packet_type *))
+struct datalink_proto *register_8022_client(unsigned char type, int (*rcvfunc)(struct sk_buff *, struct net_device *, struct packet_type *))
 {
 	struct datalink_proto	*proto;
 

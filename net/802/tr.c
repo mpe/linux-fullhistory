@@ -36,8 +36,8 @@
 #include <linux/init.h>
 #include <net/arp.h>
 
-static void tr_source_route(struct sk_buff *skb, struct trh_hdr *trh, struct device *dev);
-static void tr_add_rif_info(struct trh_hdr *trh, struct device *dev);
+static void tr_source_route(struct sk_buff *skb, struct trh_hdr *trh, struct net_device *dev);
+static void tr_add_rif_info(struct trh_hdr *trh, struct net_device *dev);
 static void rif_check_expire(unsigned long dummy);
 
 #define TR_SR_DEBUG 0
@@ -85,7 +85,7 @@ int sysctl_tr_rif_timeout = RIF_TIMEOUT;
  *	makes this a little more exciting than on ethernet.
  */
  
-int tr_header(struct sk_buff *skb, struct device *dev, unsigned short type,
+int tr_header(struct sk_buff *skb, struct net_device *dev, unsigned short type,
               void *daddr, void *saddr, unsigned len) 
 {
 	struct trh_hdr *trh;
@@ -144,7 +144,7 @@ int tr_rebuild_header(struct sk_buff *skb)
 {
 	struct trh_hdr *trh=(struct trh_hdr *)skb->data;
 	struct trllc *trllc=(struct trllc *)(skb->data+sizeof(struct trh_hdr));
-	struct device *dev = skb->dev;
+	struct net_device *dev = skb->dev;
 
 	/*
 	 *	FIXME: We don't yet support IPv6 over token rings
@@ -173,7 +173,7 @@ int tr_rebuild_header(struct sk_buff *skb)
  *	it via SNAP.
  */
  
-unsigned short tr_type_trans(struct sk_buff *skb, struct device *dev) 
+unsigned short tr_type_trans(struct sk_buff *skb, struct net_device *dev) 
 {
 
 	struct trh_hdr *trh=(struct trh_hdr *)skb->data;
@@ -225,7 +225,7 @@ unsigned short tr_type_trans(struct sk_buff *skb, struct device *dev)
  *	We try to do source routing... 
  */
 
-static void tr_source_route(struct sk_buff *skb,struct trh_hdr *trh,struct device *dev) 
+static void tr_source_route(struct sk_buff *skb,struct trh_hdr *trh,struct net_device *dev) 
 {
 	int i, slack;
 	unsigned int hash;
@@ -313,7 +313,7 @@ printk("source routing for %02X %02X %02X %02X %02X %02X\n",trh->daddr[0],
  *	routing.
  */
  
-static void tr_add_rif_info(struct trh_hdr *trh, struct device *dev)
+static void tr_add_rif_info(struct trh_hdr *trh, struct net_device *dev)
 {
 	int i;
 	unsigned int hash, rii_p = 0;

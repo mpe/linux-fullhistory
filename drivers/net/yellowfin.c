@@ -272,7 +272,7 @@ struct yellowfin_private {
 	struct yellowfin_desc rx_ring[RX_RING_SIZE];
 	struct yellowfin_desc tx_ring[TX_RING_SIZE*2];
 	const char *product_name;
-	struct device *next_module;
+	struct net_device *next_module;
 	/* The addresses of receive-in-place skbuffs. */
 	struct sk_buff* rx_skbuff[RX_RING_SIZE];
 	/* The saved address of a sent-in-place packet/buffer, for skfree(). */
@@ -316,32 +316,32 @@ MODULE_PARM(full_duplex, "1-" __MODULE_STRING(MAX_UNITS) "i");
 
 #endif
 
-static struct device *yellowfin_probe1(struct device *dev, long ioaddr,
+static struct net_device *yellowfin_probe1(struct net_device *dev, long ioaddr,
 									   int irq, int chip_id, int options);
 static int read_eeprom(long ioaddr, int location);
 static int mdio_read(long ioaddr, int phy_id, int location);
 static void mdio_write(long ioaddr, int phy_id, int location, int value);
 #ifdef HAVE_PRIVATE_IOCTL
-static int mii_ioctl(struct device *dev, struct ifreq *rq, int cmd);
+static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 #endif
-static int yellowfin_open(struct device *dev);
+static int yellowfin_open(struct net_device *dev);
 static void yellowfin_timer(unsigned long data);
-static void yellowfin_tx_timeout(struct device *dev);
-static void yellowfin_init_ring(struct device *dev);
-static int yellowfin_start_xmit(struct sk_buff *skb, struct device *dev);
+static void yellowfin_tx_timeout(struct net_device *dev);
+static void yellowfin_init_ring(struct net_device *dev);
+static int yellowfin_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static void yellowfin_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
-static int yellowfin_rx(struct device *dev);
-static void yellowfin_error(struct device *dev, int intr_status);
-static int yellowfin_close(struct device *dev);
-static struct enet_statistics *yellowfin_get_stats(struct device *dev);
-static void set_rx_mode(struct device *dev);
+static int yellowfin_rx(struct net_device *dev);
+static void yellowfin_error(struct net_device *dev, int intr_status);
+static int yellowfin_close(struct net_device *dev);
+static struct enet_statistics *yellowfin_get_stats(struct net_device *dev);
+static void set_rx_mode(struct net_device *dev);
 
 
 
 /* A list of all installed Yellowfin devices, for removing the driver module. */
-static struct device *root_yellowfin_dev = NULL;
+static struct net_device *root_yellowfin_dev = NULL;
 
-int yellowfin_probe(struct device *dev)
+int yellowfin_probe(struct net_device *dev)
 {
 	int cards_found = 0;
 	int pci_index = 0;
@@ -423,7 +423,7 @@ int yellowfin_probe(struct device *dev)
 	return cards_found ? 0 : -ENODEV;
 }
 
-static struct device *yellowfin_probe1(struct device *dev, long ioaddr,
+static struct net_device *yellowfin_probe1(struct net_device *dev, long ioaddr,
 									   int irq, int chip_id, int card_idx)
 {
 	static int did_version = 0;			/* Already printed version info. */
@@ -560,7 +560,7 @@ static void mdio_write(long ioaddr, int phy_id, int location, int value)
 }
 
 
-static int yellowfin_open(struct device *dev)
+static int yellowfin_open(struct net_device *dev)
 {
 	struct yellowfin_private *yp = (struct yellowfin_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -645,7 +645,7 @@ static int yellowfin_open(struct device *dev)
 
 static void yellowfin_timer(unsigned long data)
 {
-	struct device *dev = (struct device *)data;
+	struct net_device *dev = (struct net_device *)data;
 	struct yellowfin_private *yp = (struct yellowfin_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 	int next_tick = 0;
@@ -683,7 +683,7 @@ static void yellowfin_timer(unsigned long data)
 	}
 }
 
-static void yellowfin_tx_timeout(struct device *dev)
+static void yellowfin_tx_timeout(struct net_device *dev)
 {
 	struct yellowfin_private *yp = (struct yellowfin_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -717,7 +717,7 @@ static void yellowfin_tx_timeout(struct device *dev)
 
 
 /* Initialize the Rx and Tx rings, along with various 'dev' bits. */
-static void yellowfin_init_ring(struct device *dev)
+static void yellowfin_init_ring(struct net_device *dev)
 {
 	struct yellowfin_private *yp = (struct yellowfin_private *)dev->priv;
 	int i;
@@ -785,7 +785,7 @@ static void yellowfin_init_ring(struct device *dev)
 	return;
 }
 
-static int yellowfin_start_xmit(struct sk_buff *skb, struct device *dev)
+static int yellowfin_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct yellowfin_private *yp = (struct yellowfin_private *)dev->priv;
 	unsigned entry;
@@ -859,7 +859,7 @@ static int yellowfin_start_xmit(struct sk_buff *skb, struct device *dev)
    after the Tx thread. */
 static void yellowfin_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)dev_instance;
+	struct net_device *dev = (struct net_device *)dev_instance;
 	struct yellowfin_private *yp;
 	long ioaddr, boguscnt = max_interrupt_work;
 
@@ -1021,7 +1021,7 @@ static void yellowfin_interrupt(int irq, void *dev_instance, struct pt_regs *reg
 
 /* This routine is logically part of the interrupt handler, but separated
    for clarity and better register allocation. */
-static int yellowfin_rx(struct device *dev)
+static int yellowfin_rx(struct net_device *dev)
 {
 	struct yellowfin_private *yp = (struct yellowfin_private *)dev->priv;
 	int entry = yp->cur_rx % RX_RING_SIZE;
@@ -1155,7 +1155,7 @@ static int yellowfin_rx(struct device *dev)
 	return 0;
 }
 
-static void yellowfin_error(struct device *dev, int intr_status)
+static void yellowfin_error(struct net_device *dev, int intr_status)
 {
 	struct yellowfin_private *yp = (struct yellowfin_private *)dev->priv;
 
@@ -1168,7 +1168,7 @@ static void yellowfin_error(struct device *dev, int intr_status)
 		yp->stats.rx_errors++;
 }
 
-static int yellowfin_close(struct device *dev)
+static int yellowfin_close(struct net_device *dev)
 {
 	long ioaddr = dev->base_addr;
 	struct yellowfin_private *yp = (struct yellowfin_private *)dev->priv;
@@ -1260,7 +1260,7 @@ static int yellowfin_close(struct device *dev)
 	return 0;
 }
 
-static struct enet_statistics *yellowfin_get_stats(struct device *dev)
+static struct enet_statistics *yellowfin_get_stats(struct net_device *dev)
 {
 	struct yellowfin_private *yp = (struct yellowfin_private *)dev->priv;
 	return &yp->stats;
@@ -1291,7 +1291,7 @@ static inline unsigned ether_crc_le(int length, unsigned char *data)
 }
 
 
-static void set_rx_mode(struct device *dev)
+static void set_rx_mode(struct net_device *dev)
 {
 	struct yellowfin_private *yp = (struct yellowfin_private *)dev->priv;
 	long ioaddr = dev->base_addr;
@@ -1338,7 +1338,7 @@ static void set_rx_mode(struct device *dev)
 }
 
 #ifdef HAVE_PRIVATE_IOCTL
-static int mii_ioctl(struct device *dev, struct ifreq *rq, int cmd)
+static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
 	long ioaddr = dev->base_addr;
 	u16 *data = (u16 *)&rq->ifr_data;
@@ -1377,7 +1377,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	struct device *next_dev;
+	struct net_device *next_dev;
 
 	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 	while (root_yellowfin_dev) {

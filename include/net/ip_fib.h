@@ -36,7 +36,7 @@ struct kern_rta
 
 struct fib_nh
 {
-	struct device		*nh_dev;
+	struct net_device		*nh_dev;
 	unsigned		nh_flags;
 	unsigned char		nh_scope;
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
@@ -200,11 +200,11 @@ extern int inet_rtm_newroute(struct sk_buff *skb, struct nlmsghdr* nlh, void *ar
 extern int inet_rtm_getroute(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg);
 extern int inet_dump_fib(struct sk_buff *skb, struct netlink_callback *cb);
 extern int fib_validate_source(u32 src, u32 dst, u8 tos, int oif,
-			       struct device *dev, u32 *spec_dst, u32 *itag);
+			       struct net_device *dev, u32 *spec_dst, u32 *itag);
 extern void fib_select_multipath(const struct rt_key *key, struct fib_result *res);
 
 /* Exported by fib_semantics.c */
-extern int 		ip_fib_check_default(u32 gw, struct device *dev);
+extern int 		ip_fib_check_default(u32 gw, struct net_device *dev);
 extern void		fib_release_info(struct fib_info *);
 extern int		fib_semantic_match(int type, struct fib_info *,
 					   const struct rt_key *, struct fib_result*);
@@ -214,8 +214,8 @@ extern int fib_nh_match(struct rtmsg *r, struct nlmsghdr *, struct kern_rta *rta
 extern int fib_dump_info(struct sk_buff *skb, u32 pid, u32 seq, int event,
 			 u8 tb_id, u8 type, u8 scope, void *dst, int dst_len, u8 tos,
 			 struct fib_info *fi);
-extern int fib_sync_down(u32 local, struct device *dev, int force);
-extern int fib_sync_up(struct device *dev);
+extern int fib_sync_down(u32 local, struct net_device *dev, int force);
+extern int fib_sync_up(struct net_device *dev);
 extern int fib_convert_rtentry(int cmd, struct nlmsghdr *nl, struct rtmsg *rtm,
 			       struct kern_rta *rta, struct rtentry *r);
 extern void fib_node_get_info(int type, int dead, struct fib_info *fi, u32 prefix, u32 mask, char *buffer);

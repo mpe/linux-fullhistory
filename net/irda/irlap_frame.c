@@ -1185,7 +1185,7 @@ void irlap_recv_test_frame(struct irlap_cb *self, struct sk_buff *skb,
  *    for processing of the frame.
  *
  */
-int irlap_driver_rcv(struct sk_buff *skb, struct device *dev, 
+int irlap_driver_rcv(struct sk_buff *skb, struct net_device *dev, 
 		     struct packet_type *ptype)
 {
 	struct irlap_info info;

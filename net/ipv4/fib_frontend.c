@@ -142,7 +142,7 @@ fib_get_procinfo(char *buffer, char **start, off_t offset, int length, int dummy
  *	Find the first device with a given source address.
  */
 
-struct device * ip_dev_find(u32 addr)
+struct net_device * ip_dev_find(u32 addr)
 {
 	struct rt_key key;
 	struct fib_result res;
@@ -187,7 +187,7 @@ unsigned inet_addr_type(u32 addr)
  */
 
 int fib_validate_source(u32 src, u32 dst, u8 tos, int oif,
-			struct device *dev, u32 *spec_dst, u32 *itag)
+			struct net_device *dev, u32 *spec_dst, u32 *itag)
 {
 	struct in_device *in_dev = dev->ip_ptr;
 	struct rt_key key;
@@ -421,7 +421,7 @@ static void fib_magic(int cmd, int type, u32 dst, int dst_len, struct in_ifaddr 
 static void fib_add_ifaddr(struct in_ifaddr *ifa)
 {
 	struct in_device *in_dev = ifa->ifa_dev;
-	struct device *dev = in_dev->dev;
+	struct net_device *dev = in_dev->dev;
 	struct in_ifaddr *prim = ifa;
 	u32 mask = ifa->ifa_mask;
 	u32 addr = ifa->ifa_local;
@@ -460,7 +460,7 @@ static void fib_add_ifaddr(struct in_ifaddr *ifa)
 static void fib_del_ifaddr(struct in_ifaddr *ifa)
 {
 	struct in_device *in_dev = ifa->ifa_dev;
-	struct device *dev = in_dev->dev;
+	struct net_device *dev = in_dev->dev;
 	struct in_ifaddr *ifa1;
 	struct in_ifaddr *prim = ifa;
 	u32 brd = ifa->ifa_address|~ifa->ifa_mask;
@@ -526,7 +526,7 @@ static void fib_del_ifaddr(struct in_ifaddr *ifa)
 #undef BRD1_OK
 }
 
-static void fib_disable_ip(struct device *dev, int force)
+static void fib_disable_ip(struct net_device *dev, int force)
 {
 	if (fib_sync_down(0, dev, force))
 		fib_flush();
@@ -560,7 +560,7 @@ static int fib_inetaddr_event(struct notifier_block *this, unsigned long event, 
 
 static int fib_netdev_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
-	struct device *dev = ptr;
+	struct net_device *dev = ptr;
 	struct in_device *in_dev = dev->ip_ptr;
 
 	if (!in_dev)

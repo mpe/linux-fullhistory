@@ -155,12 +155,12 @@ struct frhdr
 struct dlci_local
 {
    struct enet_statistics stats;
-   struct device          *slave;
+   struct net_device          *slave;
    struct dlci_conf       config;
    int                    configured;
 
    /* callback function */
-   void              (*receive)(struct sk_buff *skb, struct device *);
+   void              (*receive)(struct sk_buff *skb, struct net_device *);
 };
 
 struct frad_local
@@ -168,7 +168,7 @@ struct frad_local
    struct enet_statistics stats;
 
    /* devices which this FRAD is slaved to */
-   struct device     *master[CONFIG_DLCI_MAX];
+   struct net_device     *master[CONFIG_DLCI_MAX];
    short             dlci[CONFIG_DLCI_MAX];
 
    struct frad_conf  config;
@@ -176,11 +176,11 @@ struct frad_local
    int               initialized;	/* mem_start, port, irq set ? */
 
    /* callback functions */
-   int               (*activate)(struct device *, struct device *);
-   int               (*deactivate)(struct device *, struct device *);
-   int               (*assoc)(struct device *, struct device *);
-   int               (*deassoc)(struct device *, struct device *);
-   int               (*dlci_conf)(struct device *, struct device *, int get);
+   int               (*activate)(struct net_device *, struct net_device *);
+   int               (*deactivate)(struct net_device *, struct net_device *);
+   int               (*assoc)(struct net_device *, struct net_device *);
+   int               (*deassoc)(struct net_device *, struct net_device *);
+   int               (*dlci_conf)(struct net_device *, struct net_device *, int get);
 
    /* fields that are used by the Sangoma SDLA cards */
    struct timer_list timer;

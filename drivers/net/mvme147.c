@@ -54,9 +54,9 @@ struct m147lance_private {
  * plus board-specific init, open and close actions.
  * Oh, and we need to tell the generic code how to read and write LANCE registers...
  */
-int mvme147lance_probe(struct device *dev);
-static int m147lance_open(struct device *dev);
-static int m147lance_close(struct device *dev);
+int mvme147lance_probe(struct net_device *dev);
+static int m147lance_open(struct net_device *dev);
+static int m147lance_close(struct net_device *dev);
 static void m147lance_writerap(struct m147lance_private *lp, unsigned short value);
 static void m147lance_writerdp(struct m147lance_private *lp, unsigned short value);
 static unsigned short m147lance_readrdp(struct m147lance_private *lp);
@@ -70,7 +70,7 @@ static struct m147lance_private *root_m147lance_dev = NULL;
 #endif
 
 /* Initialise the one and only on-board 7990 */
-__initfunc(int mvme147lance_probe(struct device *dev))
+__initfunc(int mvme147lance_probe(struct net_device *dev))
 {
 	static int called = 0;
 	static const char name[] = "MVME147 LANCE";
@@ -162,7 +162,7 @@ static unsigned short m147lance_readrdp(struct m147lance_private *lp)
 	return lp->lance.ll->rdp;
 }
 
-static int m147lance_open(struct device *dev)
+static int m147lance_open(struct net_device *dev)
 {
 	int status;
 
@@ -177,7 +177,7 @@ static int m147lance_open(struct device *dev)
 	return 0;
 }
 
-static int m147lance_close(struct device *dev)
+static int m147lance_close(struct net_device *dev)
 {
 	/* disable interrupts at boardlevel */
 	m147_pcc->lan_cntrl=0x0; /* disable interrupts */

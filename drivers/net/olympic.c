@@ -22,6 +22,9 @@
  *
  *  6/8/99  - Official Release 0.2.0   
  *            Merged into the kernel code 
+ *  8/18/99 - Updated driver for 2.3.13 kernel to use new pci
+ *	      resource. Driver also reports the card name returned by
+ *            the pci resource.
  *  
  *  To Do:
  *
@@ -83,7 +86,7 @@
  */
 
 static char *version = 
-"Olympic.c v0.2.0 6/8/99 - Peter De Schrijver & Mike Phillips" ; 
+"Olympic.c v0.3.0 8/18/99 - Peter De Schrijver & Mike Phillips" ; 
 
 static char *open_maj_error[]  = {"No error", "Lobe Media Test", "Physical Insertion",
 				   "Address Verification", "Neighbor Notification (Ring Poll)",
@@ -128,26 +131,26 @@ static int message_level[OLYMPIC_MAX_ADAPTERS] = {0,} ;
 
 MODULE_PARM(message_level, "1-" __MODULE_STRING(OLYMPIC_MAX_ADAPTERS) "i") ; 
 
-static int olympic_scan(struct device *dev);
-static int olympic_init(struct device *dev);
-static int olympic_open(struct device *dev);
-static int olympic_xmit(struct sk_buff *skb, struct device *dev);
-static int olympic_close(struct device *dev);
-static void olympic_set_rx_mode(struct device *dev);
+static int olympic_scan(struct net_device *dev);
+static int olympic_init(struct net_device *dev);
+static int olympic_open(struct net_device *dev);
+static int olympic_xmit(struct sk_buff *skb, struct net_device *dev);
+static int olympic_close(struct net_device *dev);
+static void olympic_set_rx_mode(struct net_device *dev);
 static void olympic_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static struct net_device_stats * olympic_get_stats(struct device *dev);
-static int olympic_set_mac_address(struct device *dev, void *addr) ; 
-static void olympic_arb_cmd(struct device *dev);
-static int olympic_change_mtu(struct device *dev, int mtu);
-static void olympic_srb_bh(struct device *dev) ; 
-static void olympic_asb_bh(struct device *dev) ; 
+static struct net_device_stats * olympic_get_stats(struct net_device *dev);
+static int olympic_set_mac_address(struct net_device *dev, void *addr) ; 
+static void olympic_arb_cmd(struct net_device *dev);
+static int olympic_change_mtu(struct net_device *dev, int mtu);
+static void olympic_srb_bh(struct net_device *dev) ; 
+static void olympic_asb_bh(struct net_device *dev) ; 
 #if OLYMPIC_NETWORK_MONITOR
 #ifdef CONFIG_PROC_FS
-static int sprintf_info(char *buffer, struct device *dev) ; 
+static int sprintf_info(char *buffer, struct net_device *dev) ; 
 #endif
 #endif
 
-__initfunc(int olympic_probe(struct device *dev)) 
+__initfunc(int olympic_probe(struct net_device *dev)) 
 {
 	int cards_found;
 
@@ -155,7 +158,7 @@ __initfunc(int olympic_probe(struct device *dev))
 	return cards_found ? 0 : -ENODEV;
 }
 
-__initfunc(static int olympic_scan(struct device *dev)) 
+__initfunc(static int olympic_scan(struct net_device *dev)) 
 {
 	struct pci_dev *pci_device = NULL ;
 	struct olympic_private *olympic_priv;
@@ -169,7 +172,7 @@ __initfunc(static int olympic_scan(struct device *dev))
 			/* Check to see if io has been allocated, if so, we've already done this card,
 			   so continue on the card discovery loop  */
 
-			if (check_region(pci_device->base_address[0] & (~3), OLYMPIC_IO_SPACE)) {
+			if (check_region(pci_device->resource[0].start, OLYMPIC_IO_SPACE)) {
 				card_no++ ; 
 				continue ; 
 			}
@@ -184,12 +187,13 @@ __initfunc(static int olympic_scan(struct device *dev))
 			dev->priv=(void *)olympic_priv;
 #if OLYMPIC_DEBUG  
 			printk("pci_device: %p, dev:%p, dev->priv: %p\n", pci_device, dev, dev->priv);
-#endif 
+#endif
 			dev->irq=pci_device->irq;
-			dev->base_addr=pci_device->base_address[0] & (~3);
+			dev->base_addr=pci_device->resource[0].start;
 			dev->init=&olympic_init;
-			olympic_priv->olympic_mmio=ioremap(pci_device->base_address[1],256);
-			olympic_priv->olympic_lap=ioremap(pci_device->base_address[2],2048);
+			olympic_priv->olympic_card_name = (char *)pci_device->resource[0].name ; 
+			olympic_priv->olympic_mmio=ioremap(pci_device->resource[1].start,256);
+			olympic_priv->olympic_lap=ioremap(pci_device->resource[2].start,2048);
 			
 			if ((pkt_buf_sz[card_no] < 100) || (pkt_buf_sz[card_no] > 18000) )
 				olympic_priv->pkt_buf_sz = PKT_BUF_SZ ; 
@@ -222,7 +226,7 @@ __initfunc(static int olympic_scan(struct device *dev))
 }
 
 
-__initfunc(static int olympic_init(struct device *dev)) 
+__initfunc(static int olympic_init(struct net_device *dev)) 
 {
     	struct olympic_private *olympic_priv;
 	__u8 *olympic_mmio, *init_srb,*adapter_addr;
@@ -233,7 +237,7 @@ __initfunc(static int olympic_init(struct device *dev))
 	olympic_mmio=olympic_priv->olympic_mmio;
 
 	printk("%s \n", version);
-	printk("%s: IBM PCI tokenring card. I/O at %hx, MMIO at %p, LAP at %p, using irq %d\n",dev->name, (unsigned int) dev->base_addr,olympic_priv->olympic_mmio, olympic_priv->olympic_lap, dev->irq);
+	printk("%s: %s. I/O at %hx, MMIO at %p, LAP at %p, using irq %d\n",dev->name, olympic_priv->olympic_card_name, (unsigned int) dev->base_addr,olympic_priv->olympic_mmio, olympic_priv->olympic_lap, dev->irq);
 
 	request_region(dev->base_addr, OLYMPIC_IO_SPACE, "olympic");
 	writel(readl(olympic_mmio+BCTL) | BCTL_SOFTRESET,olympic_mmio+BCTL);
@@ -337,7 +341,7 @@ __initfunc(static int olympic_init(struct device *dev))
 
 }
 
-static int olympic_open(struct device *dev) 
+static int olympic_open(struct net_device *dev) 
 {
 	struct olympic_private *olympic_priv=(struct olympic_private *)dev->priv;
 	__u8 *olympic_mmio=olympic_priv->olympic_mmio,*init_srb;
@@ -628,7 +632,7 @@ static int olympic_open(struct device *dev)
  *	of blindly processing the next frame.
  *	
  */
-static void olympic_rx(struct device *dev)
+static void olympic_rx(struct net_device *dev)
 {
 	struct olympic_private *olympic_priv=(struct olympic_private *)dev->priv;
 	__u8 *olympic_mmio=olympic_priv->olympic_mmio;
@@ -742,7 +746,7 @@ static void olympic_rx(struct device *dev)
 
 static void olympic_interrupt(int irq, void *dev_id, struct pt_regs *regs) 
 {
-	struct device *dev= (struct device *)dev_id;
+	struct net_device *dev= (struct net_device *)dev_id;
 	struct olympic_private *olympic_priv=(struct olympic_private *)dev->priv;
 	__u8 *olympic_mmio=olympic_priv->olympic_mmio;
 	__u32 sisr;
@@ -834,7 +838,7 @@ static void olympic_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 }	
 
-static int olympic_xmit(struct sk_buff *skb, struct device *dev) 
+static int olympic_xmit(struct sk_buff *skb, struct net_device *dev) 
 {
 	struct olympic_private *olympic_priv=(struct olympic_private *)dev->priv;
     __u8 *olympic_mmio=olympic_priv->olympic_mmio;
@@ -864,7 +868,7 @@ static int olympic_xmit(struct sk_buff *skb, struct device *dev)
 }
 	
 
-static int olympic_close(struct device *dev) 
+static int olympic_close(struct net_device *dev) 
 {
 	struct olympic_private *olympic_priv=(struct olympic_private *)dev->priv;
     	__u8 *olympic_mmio=olympic_priv->olympic_mmio,*srb;
@@ -928,7 +932,7 @@ static int olympic_close(struct device *dev)
 	
 }
 
-static void olympic_set_rx_mode(struct device *dev) 
+static void olympic_set_rx_mode(struct net_device *dev) 
 {
 	struct olympic_private *olympic_priv = (struct olympic_private *) dev->priv ; 
    	__u8 *olympic_mmio = olympic_priv->olympic_mmio ; 
@@ -1028,7 +1032,7 @@ static void olympic_set_rx_mode(struct device *dev)
 
 }
 
-static void olympic_srb_bh(struct device *dev) 
+static void olympic_srb_bh(struct net_device *dev) 
 { 
 	struct olympic_private *olympic_priv = (struct olympic_private *) dev->priv ; 
    	__u8 *olympic_mmio = olympic_priv->olympic_mmio ; 
@@ -1175,14 +1179,14 @@ static void olympic_srb_bh(struct device *dev)
 
 } 
 
-static struct net_device_stats * olympic_get_stats(struct device *dev)
+static struct net_device_stats * olympic_get_stats(struct net_device *dev)
 {
 	struct olympic_private *olympic_priv ;
 	olympic_priv=(struct olympic_private *) dev->priv;
 	return (struct net_device_stats *) &olympic_priv->olympic_stats; 
 }
 
-static int olympic_set_mac_address (struct device *dev, void *addr) 
+static int olympic_set_mac_address (struct net_device *dev, void *addr) 
 {
 	struct sockaddr *saddr = addr ; 
 	struct olympic_private *olympic_priv = (struct olympic_private *)dev->priv ; 
@@ -1204,7 +1208,7 @@ static int olympic_set_mac_address (struct device *dev, void *addr)
 	return 0 ; 
 }
 
-static void olympic_arb_cmd(struct device *dev)
+static void olympic_arb_cmd(struct net_device *dev)
 {
 	struct olympic_private *olympic_priv = (struct olympic_private *) dev->priv;
     	__u8 *olympic_mmio=olympic_priv->olympic_mmio;
@@ -1394,7 +1398,7 @@ static void olympic_arb_cmd(struct device *dev)
 		printk(KERN_WARNING "%s: Unknown arb command \n", dev->name);
 }
 
-static void olympic_asb_bh(struct device *dev) 
+static void olympic_asb_bh(struct net_device *dev) 
 {
 	struct olympic_private *olympic_priv = (struct olympic_private *) dev->priv ; 
 	__u8 *arb_block, *asb_block ; 
@@ -1434,7 +1438,7 @@ static void olympic_asb_bh(struct device *dev)
 	olympic_priv->asb_queued = 0 ; 
 }
  
-static int olympic_change_mtu(struct device *dev, int mtu) 
+static int olympic_change_mtu(struct net_device *dev, int mtu) 
 {
 	struct olympic_private *olympic_priv = (struct olympic_private *) dev->priv;
 	__u16 max_mtu ; 
@@ -1465,7 +1469,7 @@ static int olympic_proc_info(char *buffer, char **start, off_t offset, int lengt
 	off_t pos=0;
 	int size;
 	
-	struct device *dev;
+	struct net_device *dev;
 
 
 	size = sprintf(buffer, 
@@ -1479,7 +1483,7 @@ static int olympic_proc_info(char *buffer, char **start, off_t offset, int lengt
 	
 		for (dev = dev_base; dev != NULL; dev = dev->next) 
 		{
-			if (dev->base_addr == (pci_device->base_address[0] & (~3)) ) { /* Yep, an Olympic device */	
+			if (dev->base_addr == pci_device->resource[0].start ) { /* Yep, an Olympic device */	
 				size = sprintf_info(buffer+len, dev);
 				len+=size;
 				pos=begin+len;
@@ -1502,7 +1506,7 @@ static int olympic_proc_info(char *buffer, char **start, off_t offset, int lengt
 	return len;
 }
 
-static int sprintf_info(char *buffer, struct device *dev)
+static int sprintf_info(char *buffer, struct net_device *dev)
 {
 	struct olympic_private *olympic_priv=(struct olympic_private *)dev->priv;
 	__u8 *oat = (__u8 *)(olympic_priv->olympic_lap + olympic_priv->olympic_addr_table_addr) ; 
@@ -1602,7 +1606,7 @@ static int sprintf_info(char *buffer, struct device *dev)
 
 #ifdef MODULE
 
-static struct device* dev_olympic[OLYMPIC_MAX_ADAPTERS];
+static struct net_device* dev_olympic[OLYMPIC_MAX_ADAPTERS];
 
 int init_module(void)
 {
@@ -1625,7 +1629,7 @@ int init_module(void)
 		dev_olympic[i]->init      = &olympic_probe;
 
 	        if (register_trdev(dev_olympic[i]) != 0) {
-			kfree_s(dev_olympic[i], sizeof(struct device));
+			kfree_s(dev_olympic[i], sizeof(struct net_device));
 			dev_olympic[i] = NULL;
 		        if (i == 0) {
 			        printk("Olympic: No IBM PCI Token Ring cards found in system.\n");
@@ -1649,7 +1653,7 @@ void cleanup_module(void)
 			 unregister_trdev(dev_olympic[i]);
 			 release_region(dev_olympic[i]->base_addr, OLYMPIC_IO_SPACE);
 			 kfree_s(dev_olympic[i]->priv, sizeof(struct olympic_private));
-			 kfree_s(dev_olympic[i], sizeof(struct device));
+			 kfree_s(dev_olympic[i], sizeof(struct net_device));
 			 dev_olympic[i] = NULL;
                 }
 

@@ -66,7 +66,7 @@ struct ipq {
 	short		ihlen;		/* length of the IP header		*/	
 	struct timer_list timer;	/* when will this queue expire?		*/
 	struct ipq	**pprev;
-	struct device	*dev;		/* Device - for icmp replies */
+	struct net_device	*dev;		/* Device - for icmp replies */
 };
 
 #define IPQ_HASHSZ	64

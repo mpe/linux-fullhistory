@@ -54,10 +54,10 @@ struct hplance_private {
  * plus board-specific init, open and close actions. 
  * Oh, and we need to tell the generic code how to read and write LANCE registers...
  */
-int hplance_probe(struct device *dev);
-static int hplance_init(struct device *dev, int scode);
-static int hplance_open(struct device *dev);
-static int hplance_close(struct device *dev);
+int hplance_probe(struct net_device *dev);
+static int hplance_init(struct net_device *dev, int scode);
+static int hplance_open(struct net_device *dev);
+static int hplance_close(struct net_device *dev);
 static void hplance_writerap(struct hplance_private *lp, unsigned short value);
 static void hplance_writerdp(struct hplance_private *lp, unsigned short value);
 static unsigned short hplance_readrdp(struct hplance_private *lp);
@@ -67,7 +67,7 @@ static struct hplance_private *root_hplance_dev = NULL;
 #endif
 
 /* Find all the HP Lance boards and initialise them... */
-int __init hplance_probe(struct device *dev)
+int __init hplance_probe(struct net_device *dev)
 {
         int cards = 0, called = 0;
 
@@ -98,7 +98,7 @@ int __init hplance_probe(struct device *dev)
 }
 
 /* Initialise a single lance board at the given select code */
-static int __init hplance_init(struct device *dev, int scode)
+static int __init hplance_init(struct net_device *dev, int scode)
 {
         /* const char *name = dio_scodetoname(scode); */
         static const char name[] = "HP LANCE";
@@ -198,7 +198,7 @@ static unsigned short hplance_readrdp(struct hplance_private *lp)
         return val;
 }
 
-static int hplance_open(struct device *dev)
+static int hplance_open(struct net_device *dev)
 {
         int status;
         struct hplance_private *lp = (struct hplance_private *)dev->priv;
@@ -214,7 +214,7 @@ static int hplance_open(struct device *dev)
         return 0;
 }
 
-static int hplance_close(struct device *dev)
+static int hplance_close(struct net_device *dev)
 {
         struct hplance_private *lp = (struct hplance_private *)dev->priv;
         struct hplance_reg *hpregs = (struct hplance_reg *)lp->base;

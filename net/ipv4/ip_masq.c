@@ -2388,7 +2388,7 @@ __initfunc(static void masq_proc_init(void))
 /*
  *	Wrapper over inet_select_addr()
  */
-u32 ip_masq_select_addr(struct device *dev, u32 dst, int scope)
+u32 ip_masq_select_addr(struct net_device *dev, u32 dst, int scope)
 {
 	return inet_select_addr(dev, dst, scope);
 }

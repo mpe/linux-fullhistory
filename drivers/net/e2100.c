@@ -95,19 +95,19 @@ extern inline void mem_off(short port)
 #define E21_BIG_RX_STOP_PG	0xF0	/* Last page +1 of RX ring */
 #define E21_TX_START_PG		E21_RX_STOP_PG	/* First page of TX buffer */
 
-int e2100_probe(struct device *dev);
-int e21_probe1(struct device *dev, int ioaddr);
+int e2100_probe(struct net_device *dev);
+int e21_probe1(struct net_device *dev, int ioaddr);
 
-static int e21_open(struct device *dev);
-static void e21_reset_8390(struct device *dev);
-static void e21_block_input(struct device *dev, int count,
+static int e21_open(struct net_device *dev);
+static void e21_reset_8390(struct net_device *dev);
+static void e21_block_input(struct net_device *dev, int count,
 						   struct sk_buff *skb, int ring_offset);
-static void e21_block_output(struct device *dev, int count,
+static void e21_block_output(struct net_device *dev, int count,
 							 const unsigned char *buf, int start_page);
-static void e21_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+static void e21_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
 							int ring_page);
 
-static int e21_close(struct device *dev);
+static int e21_close(struct net_device *dev);
 
 
 /*  Probe for the E2100 series ethercards.  These cards have an 8390 at the
@@ -117,7 +117,7 @@ static int e21_close(struct device *dev);
 	station address).
  */
 
-int  __init e2100_probe(struct device *dev)
+int  __init e2100_probe(struct net_device *dev)
 {
 	int *port;
 	int base_addr = dev->base_addr;
@@ -137,7 +137,7 @@ int  __init e2100_probe(struct device *dev)
 	return ENODEV;
 }
 
-int __init e21_probe1(struct device *dev, int ioaddr)
+int __init e21_probe1(struct net_device *dev, int ioaddr)
 {
 	int i, status;
 	unsigned char *station_addr = dev->dev_addr;
@@ -254,7 +254,7 @@ int __init e21_probe1(struct device *dev, int ioaddr)
 }
 
 static int
-e21_open(struct device *dev)
+e21_open(struct net_device *dev)
 {
 	short ioaddr = dev->base_addr;
 
@@ -277,7 +277,7 @@ e21_open(struct device *dev)
 }
 
 static void
-e21_reset_8390(struct device *dev)
+e21_reset_8390(struct net_device *dev)
 {
 	short ioaddr = dev->base_addr;
 
@@ -295,7 +295,7 @@ e21_reset_8390(struct device *dev)
    appears at the start of the shared memory. */
 
 static void
-e21_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+e21_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 
 	short ioaddr = dev->base_addr;
@@ -319,7 +319,7 @@ e21_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 	The E21xx makes block_input() especially easy by wrapping the top
 	ring buffer to the bottom automatically. */
 static void
-e21_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+e21_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
 	short ioaddr = dev->base_addr;
 	char *shared_mem = (char *)dev->mem_start;
@@ -333,7 +333,7 @@ e21_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_off
 }
 
 static void
-e21_block_output(struct device *dev, int count, const unsigned char *buf,
+e21_block_output(struct net_device *dev, int count, const unsigned char *buf,
 				 int start_page)
 {
 	short ioaddr = dev->base_addr;
@@ -349,7 +349,7 @@ e21_block_output(struct device *dev, int count, const unsigned char *buf,
 }
 
 static int
-e21_close(struct device *dev)
+e21_close(struct net_device *dev)
 {
 	short ioaddr = dev->base_addr;
 
@@ -386,7 +386,7 @@ struct netdev_entry e21_drv =
 #define MAX_E21_CARDS	4	/* Max number of E21 cards per module */
 #define NAMELEN		8	/* # of chars for storing dev->name */
 static char namelist[NAMELEN * MAX_E21_CARDS] = { 0, };
-static struct device dev_e21[MAX_E21_CARDS] = {
+static struct net_device dev_e21[MAX_E21_CARDS] = {
 	{
 		NULL,		/* assign a chunk of namelist[] below */
 		0, 0, 0, 0,
@@ -413,7 +413,7 @@ init_module(void)
 	int this_dev, found = 0;
 
 	for (this_dev = 0; this_dev < MAX_E21_CARDS; this_dev++) {
-		struct device *dev = &dev_e21[this_dev];
+		struct net_device *dev = &dev_e21[this_dev];
 		dev->name = namelist+(NAMELEN*this_dev);
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
@@ -444,7 +444,7 @@ cleanup_module(void)
 	int this_dev;
 
 	for (this_dev = 0; this_dev < MAX_E21_CARDS; this_dev++) {
-		struct device *dev = &dev_e21[this_dev];
+		struct net_device *dev = &dev_e21[this_dev];
 		if (dev->priv != NULL) {
 			void *priv = dev->priv;
 			/* NB: e21_close() handles free_irq */

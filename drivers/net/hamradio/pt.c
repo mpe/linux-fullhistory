@@ -105,9 +105,9 @@ struct mbuf {
 /*
  * The actual PT devices we will use
  */
-static int pt0_preprobe(struct device *dev) {return 0;} /* Dummy probe function */
-static struct device pt0a = { "pt0a", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, pt0_preprobe };
-static struct device pt0b = { "pt0b", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, pt0_preprobe };
+static int pt0_preprobe(struct net_device *dev) {return 0;} /* Dummy probe function */
+static struct net_device pt0a = { "pt0a", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, pt0_preprobe };
+static struct net_device pt0b = { "pt0b", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, pt0_preprobe };
 
 /* Ok, they shouldn't be here, but both channels share them */
 /* The Images of the Serial and DMA config registers */
@@ -119,15 +119,15 @@ static unsigned char pt_dmacfg = 0;
 
 /* Index to functions, as function prototypes. */
 
-static int pt_probe(struct device *dev);
-static int pt_open(struct device *dev);
-static int pt_send_packet(struct sk_buff *skb, struct device *dev);
+static int pt_probe(struct net_device *dev);
+static int pt_open(struct net_device *dev);
+static int pt_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void pt_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static int pt_close(struct device *dev);
-static int pt_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
-static struct net_device_stats *pt_get_stats(struct device *dev);
+static int pt_close(struct net_device *dev);
+static int pt_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
+static struct net_device_stats *pt_get_stats(struct net_device *dev);
 static void pt_rts(struct pt_local *lp, int x);
-static void pt_rxisr(struct device *dev);
+static void pt_rxisr(struct net_device *dev);
 static void pt_txisr(struct pt_local *lp);
 static void pt_exisr(struct pt_local *lp);
 static void pt_tmrisr(struct pt_local *lp);
@@ -135,7 +135,7 @@ static char *get_dma_buffer(unsigned long *mem_ptr);
 static int valid_dma_page(unsigned long addr, unsigned long dev_buffsize);
 static int hw_probe(int ioaddr);
 static void tdelay(struct pt_local *lp, int time);
-static void chipset_init(struct device *dev);
+static void chipset_init(struct net_device *dev);
 
 static char ax25_bcast[7] =
 {'Q' << 1, 'S' << 1, 'T' << 1, ' ' << 1, ' ' << 1, ' ' << 1, '0' << 1};
@@ -179,7 +179,7 @@ static void hardware_send_packet(struct pt_local *lp, struct sk_buff *skb)
 	char kickflag;
 	unsigned long flags;
 	char *ptr;
-	struct device *dev;
+	struct net_device *dev;
 
 	/* First, let's see if this packet is actually a KISS packet */
 	ptr = skb->data;
@@ -322,7 +322,7 @@ static void setup_tx_dma(struct pt_local *lp, int length)
  * This sets up all the registers in the SCC for the given channel
  * based upon tsync_hwint()
  */
-static void scc_init(struct device *dev)
+static void scc_init(struct net_device *dev)
 {
 	unsigned long flags;
 	struct pt_local *lp = (struct pt_local*) dev->priv;
@@ -443,7 +443,7 @@ static void scc_init(struct device *dev)
 } /* scc_init() */
 
 /* Resets the given channel and whole SCC if both channels off */
-static void chipset_init(struct device *dev)
+static void chipset_init(struct net_device *dev)
 {
 
 	struct pt_local *lp = (struct pt_local*) dev->priv;
@@ -699,7 +699,7 @@ static int valid_dma_page(unsigned long addr, unsigned long dev_bufsize)
         return 0;
 }
 
-static int pt_set_mac_address(struct device *dev, void *addr)
+static int pt_set_mac_address(struct net_device *dev, void *addr)
 {
 	struct sockaddr *sa = (struct sockaddr *)addr;
 	memcpy(dev->dev_addr, sa->sa_data, dev->addr_len);		/* addr is an AX.25 shifted ASCII */
@@ -726,7 +726,7 @@ static char * get_dma_buffer(unsigned long *mem_ptr)
 /*
  * Sets up all the structures for the PT device
  */
-static int pt_probe(struct device *dev)
+static int pt_probe(struct net_device *dev)
 {
     short ioaddr;
     struct pt_local *lp;
@@ -878,7 +878,7 @@ static int pt_probe(struct device *dev)
  * a non-reboot way to recover if something goes wrong.
  * derived from last half of tsync_attach()
  */
-static int pt_open(struct device *dev)
+static int pt_open(struct net_device *dev)
 {
     unsigned long flags;
     struct pt_local *lp = dev->priv;
@@ -928,7 +928,7 @@ static int pt_open(struct device *dev)
     return 0;
 } /* pt_open() */
 
-static int pt_send_packet(struct sk_buff *skb, struct device *dev)
+static int pt_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct pt_local *lp = (struct pt_local *) dev->priv;
 
@@ -944,7 +944,7 @@ static int pt_send_packet(struct sk_buff *skb, struct device *dev)
 
 
 /* The inverse routine to pt_open() */
-static int pt_close(struct device *dev)
+static int pt_close(struct net_device *dev)
 {
 	unsigned long flags;
 	struct pt_local *lp = dev->priv;
@@ -980,7 +980,7 @@ static int pt_close(struct device *dev)
 } /* pt_close() */
 
 
-static int pt_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+static int pt_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
     unsigned long flags;
     struct pt_req rq;
@@ -1064,7 +1064,7 @@ static int pt_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
  *	This may be called with the card open or closed. 
  */
  
-static struct net_device_stats *pt_get_stats(struct device *dev)
+static struct net_device_stats *pt_get_stats(struct net_device *dev)
 {
 	struct pt_local *lp = (struct pt_local *) dev->priv;
 	return &lp->stats;
@@ -1219,7 +1219,7 @@ static void pt_txisr(struct pt_local *lp)
     restore_flags(flags);
 }
 
-static void pt_rxisr(struct device *dev)
+static void pt_rxisr(struct net_device *dev)
 {
     struct pt_local *lp = (struct pt_local*) dev->priv;
     int cmd = lp->base + CTL;
@@ -1432,7 +1432,7 @@ static void pt_tmrisr(struct pt_local *lp)
 static void pt_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
     /* It's a tad dodgy here, but we assume pt0a until proven otherwise */
-    struct device *dev = &pt0a;
+    struct net_device *dev = &pt0a;
     struct pt_local *lp = dev->priv;
     unsigned char intreg;
     unsigned char st;

@@ -145,7 +145,7 @@ static __inline__ struct rt6_info *rt6_device_match(struct rt6_info *rt,
 
 	if (oif) {
 		for (sprt = rt; sprt; sprt = sprt->u.next) {
-			struct device *dev = sprt->rt6i_dev;
+			struct net_device *dev = sprt->rt6i_dev;
 			if (dev->ifindex == oif)
 				return sprt;
 			if (dev->flags&IFF_LOOPBACK)
@@ -580,7 +580,7 @@ static void ipv6_wash_prefix(struct in6_addr *pfx, int plen)
 		pfx->s6_addr[plen>>3] &= (0xFF<<(8-b));
 }
 
-static int ipv6_get_mtu(struct device *dev)
+static int ipv6_get_mtu(struct net_device *dev)
 {
 	struct inet6_dev *idev;
 
@@ -591,7 +591,7 @@ static int ipv6_get_mtu(struct device *dev)
 		return IPV6_MIN_MTU;
 }
 
-static int ipv6_get_hoplimit(struct device *dev)
+static int ipv6_get_hoplimit(struct net_device *dev)
 {
 	struct inet6_dev *idev;
 
@@ -610,7 +610,7 @@ int ip6_route_add(struct in6_rtmsg *rtmsg)
 {
 	int err;
 	struct rt6_info *rt;
-	struct device *dev = NULL;
+	struct net_device *dev = NULL;
 	int addr_type;
 
 	if (rtmsg->rtmsg_dst_len > 128 || rtmsg->rtmsg_src_len > 128)
@@ -842,7 +842,7 @@ static void rt6_sndrtmsg(struct in6_rtmsg *rtmsg)
 }
 
 void rt6_sndmsg(int type, struct in6_addr *dst, struct in6_addr *src,
-		struct in6_addr *gw, struct device *dev, 
+		struct in6_addr *gw, struct net_device *dev, 
 		int dstlen, int srclen,	int metric, __u32 flags)
 {
 	struct sk_buff *skb;
@@ -996,7 +996,7 @@ out:
  */
 
 void rt6_pmtu_discovery(struct in6_addr *daddr, struct in6_addr *saddr,
-			struct device *dev, u32 pmtu)
+			struct net_device *dev, u32 pmtu)
 {
 	struct rt6_info *rt, *nrt;
 
@@ -1098,7 +1098,7 @@ static struct rt6_info * ip6_rt_copy(struct rt6_info *ort)
 	return rt;
 }
 
-struct rt6_info *rt6_get_dflt_router(struct in6_addr *addr, struct device *dev)
+struct rt6_info *rt6_get_dflt_router(struct in6_addr *addr, struct net_device *dev)
 {	
 	struct rt6_info *rt;
 	struct fib6_node *fn;
@@ -1118,7 +1118,7 @@ struct rt6_info *rt6_get_dflt_router(struct in6_addr *addr, struct device *dev)
 }
 
 struct rt6_info *rt6_add_dflt_router(struct in6_addr *gwaddr,
-				     struct device *dev)
+				     struct net_device *dev)
 {
 	struct in6_rtmsg rtmsg;
 
@@ -1210,7 +1210,7 @@ int ip6_pkt_discard(struct sk_buff *skb)
  *	Add address
  */
 
-int ip6_rt_addr_add(struct in6_addr *addr, struct device *dev)
+int ip6_rt_addr_add(struct in6_addr *addr, struct net_device *dev)
 {
 	struct rt6_info *rt;
 
@@ -1244,7 +1244,7 @@ int ip6_rt_addr_add(struct in6_addr *addr, struct device *dev)
    disappeared before calling this function.
  */
 
-int ip6_rt_addr_del(struct in6_addr *addr, struct device *dev)
+int ip6_rt_addr_del(struct in6_addr *addr, struct net_device *dev)
 {
 	struct rt6_info *rt;
 	int err = -ENOENT;
@@ -1384,14 +1384,14 @@ static int fib6_ifdown(struct rt6_info *rt, void *arg)
 	return 0;
 }
 
-void rt6_ifdown(struct device *dev)
+void rt6_ifdown(struct net_device *dev)
 {
 	fib6_clean_tree(&ip6_routing_table, fib6_ifdown, 0, dev);
 }
 
 struct rt6_mtu_change_arg
 {
-	struct device *dev;
+	struct net_device *dev;
 	unsigned mtu;
 };
 
@@ -1410,7 +1410,7 @@ static int rt6_mtu_change_route(struct rt6_info *rt, void *p_arg)
 	return 0;
 }
 
-void rt6_mtu_change(struct device *dev, unsigned mtu)
+void rt6_mtu_change(struct net_device *dev, unsigned mtu)
 {
 	struct rt6_mtu_change_arg arg;
 
@@ -1716,7 +1716,7 @@ int inet6_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void *arg)
 		memcpy(&iif, RTA_DATA(rta[RTA_IIF-1]), sizeof(int));
 
 	if (iif) {
-		struct device *dev;
+		struct net_device *dev;
 		dev = dev_get_by_index(iif);
 		if (!dev)
 			return -ENODEV;

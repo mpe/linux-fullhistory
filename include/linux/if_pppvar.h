@@ -127,7 +127,7 @@ struct ppp {
 	enum	NPmode sc_npmode[NUM_NP]; /* what to do with each NP */
 	int	 sc_xfer;		/* PID of reserved PPP table */
 	char	name[8];		/* space for unit name */
-	struct device	dev;		/* net device structure */
+	struct net_device	dev;		/* net device structure */
 	struct enet_statistics estats;	/* more detailed stats */
 
 	/* tty output buffer */

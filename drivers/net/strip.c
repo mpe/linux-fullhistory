@@ -311,7 +311,7 @@ struct strip
 
     struct tty_struct *tty;			/* ptr to TTY structure		*/
     char8              if_name;			/* Dynamically generated name	*/
-    struct device      dev;			/* Our device structure		*/
+    struct net_device      dev;			/* Our device structure		*/
 
     /*
      * Neighbour radio records
@@ -505,7 +505,7 @@ extern __inline__ void RestoreInterrupts(InterruptStatus x)
     restore_flags(x);
 }
 
-static int arp_query(unsigned char *haddr, u32 paddr, struct device * dev)
+static int arp_query(unsigned char *haddr, u32 paddr, struct net_device * dev)
 {
     struct neighbour *neighbor_entry;
 
@@ -932,7 +932,7 @@ static __u8 *radio_address_to_string(const MetricomAddress *addr, MetricomAddres
 
 static int allocate_buffers(struct strip *strip_info)
 {
-    struct device *dev = &strip_info->dev;
+    struct net_device *dev = &strip_info->dev;
     int sx_size    = MAX(STRIP_ENCAP_SIZE(MAX_RECV_MTU), 4096);
     int tx_size    = STRIP_ENCAP_SIZE(dev->mtu) + MaxCommandStringLength;
     __u8 *r = kmalloc(MAX_RECV_MTU, GFP_ATOMIC);
@@ -963,7 +963,7 @@ static int allocate_buffers(struct strip *strip_info)
 static void strip_changedmtu(struct strip *strip_info)
 {
     int old_mtu           = strip_info->mtu;
-    struct device *dev    = &strip_info->dev;
+    struct net_device *dev    = &strip_info->dev;
     unsigned char *orbuff = strip_info->rx_buff;
     unsigned char *osbuff = strip_info->sx_buff;
     unsigned char *otbuff = strip_info->tx_buff;
@@ -1636,7 +1636,7 @@ static void strip_send(struct strip *strip_info, struct sk_buff *skb)
 }
 
 /* Encapsulate a datagram and kick it into a TTY queue. */
-static int strip_xmit(struct sk_buff *skb, struct device *dev)
+static int strip_xmit(struct sk_buff *skb, struct net_device *dev)
 {
     struct strip *strip_info = (struct strip *)(dev->priv);
 
@@ -1693,7 +1693,7 @@ static int strip_xmit(struct sk_buff *skb, struct device *dev)
 
 static void strip_IdleTask(unsigned long parameter)
 {
-    strip_xmit(NULL, (struct device *)parameter);
+    strip_xmit(NULL, (struct net_device *)parameter);
 }
 
 /*
@@ -1707,7 +1707,7 @@ static void strip_IdleTask(unsigned long parameter)
  *                 rebuild_header later to fill in the address)
  */
 
-static int strip_header(struct sk_buff *skb, struct device *dev,
+static int strip_header(struct sk_buff *skb, struct net_device *dev,
         unsigned short type, void *daddr, void *saddr, unsigned len)
 {
     struct strip *strip_info = (struct strip *)(dev->priv);
@@ -2018,7 +2018,7 @@ static void process_Info(struct strip *strip_info, __u8 *ptr, __u8 *end)
     if (ptr+16 > end) RecvErr("Bad Info Msg:", strip_info);
 }
 
-static struct device *get_strip_dev(struct strip *strip_info)
+static struct net_device *get_strip_dev(struct strip *strip_info)
 {
     /* If our hardware address is *manually set* to zero, and we know our */
     /* real radio hardware address, try to find another strip device that has been */
@@ -2027,7 +2027,7 @@ static struct device *get_strip_dev(struct strip *strip_info)
         !memcmp(strip_info->dev.dev_addr, zero_address.c, sizeof(zero_address)) &&
         memcmp(&strip_info->true_dev_addr, zero_address.c, sizeof(zero_address)))
     {
-        struct device *dev;
+        struct net_device *dev;
 	read_lock_bh(&dev_base_lock);
 	dev = dev_base;
         while (dev)
@@ -2414,7 +2414,7 @@ static int set_mac_address(struct strip *strip_info, MetricomAddress *addr)
     return 0;
 }
 
-static int dev_set_mac_address(struct device *dev, void *addr)
+static int dev_set_mac_address(struct net_device *dev, void *addr)
 {
     struct strip *strip_info = (struct strip *)(dev->priv);
     struct sockaddr *sa = addr;
@@ -2423,7 +2423,7 @@ static int dev_set_mac_address(struct device *dev, void *addr)
     return 0;
 }
 
-static struct enet_statistics *strip_get_stats(struct device *dev)
+static struct enet_statistics *strip_get_stats(struct net_device *dev)
 {
     static struct enet_statistics stats;
     struct strip *strip_info = (struct strip *)(dev->priv);
@@ -2468,7 +2468,7 @@ static struct enet_statistics *strip_get_stats(struct device *dev)
 
 /* Open the low-level part of the STRIP channel. Easy! */
 
-static int strip_open_low(struct device *dev)
+static int strip_open_low(struct net_device *dev)
 {
     struct strip *strip_info = (struct strip *)(dev->priv);
     struct in_device *in_dev = dev->ip_ptr;
@@ -2509,7 +2509,7 @@ static int strip_open_low(struct device *dev)
  * Close the low-level part of the STRIP channel. Easy!
  */
 
-static int strip_close_low(struct device *dev)
+static int strip_close_low(struct net_device *dev)
 {
     struct strip *strip_info = (struct strip *)(dev->priv);
 
@@ -2546,7 +2546,7 @@ static int strip_close_low(struct device *dev)
  * (dynamically assigned) device is registered
  */
 
-static int strip_dev_init(struct device *dev)
+static int strip_dev_init(struct net_device *dev)
 {
     /*
      * Finish setting up the DEVICE info.
@@ -2821,7 +2821,7 @@ static int strip_ioctl(struct tty_struct *tty, struct file *file,
 #ifdef MODULE
 static
 #endif
-int strip_init_ctrl_dev(struct device *dummy)
+int strip_init_ctrl_dev(struct net_device *dummy)
 {
     static struct tty_ldisc strip_ldisc;
     int status;

@@ -13,6 +13,8 @@
  *    routines in this file used to be inline!
  */
 
+#include <linux/module.h>
+
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/types.h>
@@ -54,7 +56,7 @@ volatile unsigned char cmd_buffer[16];
 				 */
 
 /***************************************************************** Detection */
-int cyberII_esp_detect(Scsi_Host_Template *tpnt)
+int __init cyberII_esp_detect(Scsi_Host_Template *tpnt)
 {
 	struct NCR_ESP *esp;
 	const struct ConfigDev *esp_dev;
@@ -71,12 +73,15 @@ int cyberII_esp_detect(Scsi_Host_Template *tpnt)
 		address = (unsigned long)ZTWO_VADDR(esp_dev->cd_BoardAddr);
 		eregs = (struct ESP_regs *)(address + CYBERII_ESP_ADDR);
 
-		eregs->esp_cfg1 = (ESP_CONFIG1_PENABLE | 7);
-		udelay(5);
-		if(eregs->esp_cfg1 != (ESP_CONFIG1_PENABLE | 7))
-			return 0; /* Bail out if address did not hold data */
-
 		esp = esp_allocate(tpnt, (void *) esp_dev);
+
+		esp_write(eregs->esp_cfg1, (ESP_CONFIG1_PENABLE | 7));
+		udelay(5);
+		if(esp_read(eregs->esp_cfg1) != (ESP_CONFIG1_PENABLE | 7)) {
+			esp_deallocate(esp);
+			scsi_unregister(esp->ehost);
+			return 0; /* Bail out if address did not hold data */
+		}
 
 		/* Do command transfer with programmed I/O */
 		esp->do_pio_cmds = 1;
@@ -118,24 +123,24 @@ int cyberII_esp_detect(Scsi_Host_Template *tpnt)
 		
 		/* Set the command buffer */
 		esp->esp_command = (volatile unsigned char*) cmd_buffer;
-		esp->esp_command_dvma = virt_to_bus((unsigned long) cmd_buffer);
+		esp->esp_command_dvma = virt_to_bus(cmd_buffer);
 
 		esp->irq = IRQ_AMIGA_PORTS;
-		request_irq(IRQ_AMIGA_PORTS, esp_intr, 0, 
+		esp->slot = key;
+		request_irq(IRQ_AMIGA_PORTS, esp_intr, SA_SHIRQ,
 			    "CyberStorm SCSI Mk II", esp_intr);
 
 		/* Figure out our scsi ID on the bus */
 		esp->scsi_id = 7;
 		
-		/* Check for differential SCSI-bus */
-		/* What is this stuff? */
+		/* We don't have a differential SCSI-bus. */
 		esp->diff = 0;
 
 		esp_initialize(esp);
 
 		zorro_config_board(key, 0);
 
-		printk("\nESP: Total of %d ESP hosts found, %d actually in use.\n", nesps,esps_in_use);
+		printk("ESP: Total of %d ESP hosts found, %d actually in use.\n", nesps, esps_in_use);
 		esps_running = esps_in_use;
 		return esps_in_use;
 	}
@@ -214,7 +219,7 @@ static void dma_ints_on(struct NCR_ESP *esp)
 static int dma_irq_p(struct NCR_ESP *esp)
 {
 	/* It's important to check the DMA IRQ bit in the correct way! */
-	return (esp->eregs->esp_status & ESP_STAT_INTR);
+	return (esp_read(esp->eregs->esp_status) & ESP_STAT_INTR);
 }
 
 static void dma_led_off(struct NCR_ESP *esp)
@@ -242,4 +247,30 @@ static void dma_setup(struct NCR_ESP *esp, __u32 addr, int count, int write)
 	} else {
 		dma_init_write(esp, addr, count);
 	}
+}
+
+#ifdef MODULE
+
+#define HOSTS_C
+
+#include "cyberstormII.h"
+
+Scsi_Host_Template driver_template = SCSI_CYBERSTORMII;
+
+#include "scsi_module.c"
+
+#endif
+
+int cyberII_esp_release(struct Scsi_Host *instance)
+{
+#ifdef MODULE
+	unsigned int key;
+
+	key = ((struct NCR_ESP *)instance->hostdata)->slot;
+	esp_deallocate((struct NCR_ESP *)instance->hostdata); 
+	esp_release();
+	zorro_unconfig_board(key, 0);
+	free_irq(IRQ_AMIGA_PORTS, esp_intr);
+#endif
+	return 1;
 }

@@ -193,27 +193,27 @@ unsigned char ibmtr_debug_trace=0;
 #define TRC_INIT 0x01              /*  Trace initialization & PROBEs */
 #define TRC_INITV 0x02             /*  verbose init trace points     */
 
-int		ibmtr_probe(struct device *dev);
-static int	ibmtr_probe1(struct device *dev, int ioaddr);
+int		ibmtr_probe(struct net_device *dev);
+static int	ibmtr_probe1(struct net_device *dev, int ioaddr);
 static unsigned char	get_sram_size(struct tok_info *adapt_info);
 #ifdef PCMCIA
 extern unsigned char 	pcmcia_reality_check(unsigned char gss);
 #endif
-static int	tok_init_card(struct device *dev);
+static int	tok_init_card(struct net_device *dev);
 void		tok_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static int	trdev_init(struct device *dev);
-static void 	initial_tok_int(struct device *dev);
-static void 	open_sap(unsigned char type,struct device *dev);
+static int	trdev_init(struct net_device *dev);
+static void 	initial_tok_int(struct net_device *dev);
+static void 	open_sap(unsigned char type,struct net_device *dev);
 void		tok_open_adapter(unsigned long dev_addr);
-static		void tr_rx(struct device *dev);
-static		void tr_tx(struct device *dev);
-static int	tok_open(struct device *dev);
-static int	tok_close(struct device *dev);
-static int	tok_send_packet(struct sk_buff *skb, struct device *dev);
-static struct net_device_stats * tok_get_stats(struct device *dev);
-void		ibmtr_readlog(struct device *dev);
-void		ibmtr_reset_timer(struct timer_list *tmr, struct device *dev);
-int             ibmtr_change_mtu(struct device *dev, int mtu);
+static		void tr_rx(struct net_device *dev);
+static		void tr_tx(struct net_device *dev);
+static int	tok_open(struct net_device *dev);
+static int	tok_close(struct net_device *dev);
+static int	tok_send_packet(struct sk_buff *skb, struct net_device *dev);
+static struct net_device_stats * tok_get_stats(struct net_device *dev);
+void		ibmtr_readlog(struct net_device *dev);
+void		ibmtr_reset_timer(struct timer_list *tmr, struct net_device *dev);
+int             ibmtr_change_mtu(struct net_device *dev, int mtu);
 
 static unsigned int ibmtr_portlist[] __initdata = {
 	0xa20, 0xa24, 0
@@ -250,7 +250,7 @@ static void __init HWPrtChanID (__u32 pcid, short stride)
  *	which references it.
  */
  
-int __init ibmtr_probe(struct device *dev)
+int __init ibmtr_probe(struct net_device *dev)
 {
         int i;
         int base_addr = dev ? dev->base_addr : 0;
@@ -293,7 +293,7 @@ int __init ibmtr_probe(struct device *dev)
         return -ENODEV;
 }
 
-static int __init ibmtr_probe1(struct device *dev, int PIOaddr)
+static int __init ibmtr_probe1(struct net_device *dev, int PIOaddr)
 {
 	unsigned char segment=0, intr=0, irq=0, i=0, j=0, cardpresent=NOTOK,temp=0;
 	__u32 t_mmio=0;
@@ -767,7 +767,7 @@ static unsigned char __init get_sram_size(struct tok_info *adapt_info)
 		return 1<<((readb(adapt_info->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD)>>2)+4);
 }
 
-static int __init trdev_init(struct device *dev)
+static int __init trdev_init(struct net_device *dev)
 {
 	struct tok_info *ti=(struct tok_info *)dev->priv;
 
@@ -791,7 +791,7 @@ static int __init trdev_init(struct device *dev)
 
 
 
-static int tok_open(struct device *dev)
+static int tok_open(struct net_device *dev)
 {
 	struct tok_info *ti=(struct tok_info *)dev->priv;
 
@@ -815,7 +815,7 @@ static int tok_open(struct device *dev)
 
 }
 
-static int tok_close(struct device *dev)
+static int tok_close(struct net_device *dev)
 {
 
 	struct tok_info *ti=(struct tok_info *) dev->priv;
@@ -846,7 +846,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 {
 	unsigned char status;
 	struct tok_info *ti;
-	struct device *dev;
+	struct net_device *dev;
 
 	dev = dev_id;
 #if TR_VERBOSE
@@ -1220,7 +1220,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 	spin_unlock(&(ti->lock));
 }
 
-static void initial_tok_int(struct device *dev)
+static void initial_tok_int(struct net_device *dev)
 {
 
 	__u32 encoded_addr;
@@ -1288,7 +1288,7 @@ static void initial_tok_int(struct device *dev)
 	tok_open_adapter((unsigned long)dev);
 }
 
-static int tok_init_card(struct device *dev)
+static int tok_init_card(struct net_device *dev)
 {
 	struct tok_info *ti;
 	short PIOaddr;
@@ -1326,7 +1326,7 @@ static int tok_init_card(struct device *dev)
 	return 0;
 }
 
-static void open_sap(unsigned char type,struct device *dev)
+static void open_sap(unsigned char type,struct net_device *dev)
 {
 	int i;
 	struct tok_info *ti=(struct tok_info *) dev->priv;
@@ -1351,7 +1351,7 @@ static void open_sap(unsigned char type,struct device *dev)
 void tok_open_adapter(unsigned long dev_addr)
 {
 
-	struct device *dev=(struct device *)dev_addr;
+	struct net_device *dev=(struct net_device *)dev_addr;
 	struct tok_info *ti;
 	int i;
 
@@ -1400,7 +1400,7 @@ void tok_open_adapter(unsigned long dev_addr)
 
 }
 
-static void tr_tx(struct device *dev)
+static void tr_tx(struct net_device *dev)
 {
 	struct tok_info *ti=(struct tok_info *) dev->priv;
 	struct trh_hdr *trhdr=(struct trh_hdr *)ti->current_skb->data;
@@ -1475,7 +1475,7 @@ static void tr_tx(struct device *dev)
 	if (ti->readlog_pending) ibmtr_readlog(dev);
 }
 
-static void tr_rx(struct device *dev)
+static void tr_rx(struct net_device *dev)
 {
 	struct tok_info *ti=(struct tok_info *) dev->priv;
 	__u32 rbuffer, rbufdata;
@@ -1630,7 +1630,7 @@ static void tr_rx(struct device *dev)
 	netif_rx(skb);
 }
 
-static int tok_send_packet(struct sk_buff *skb, struct device *dev)
+static int tok_send_packet(struct sk_buff *skb, struct net_device *dev)
 {
 	struct tok_info *ti;
 	ti=(struct tok_info *) dev->priv;
@@ -1668,7 +1668,7 @@ static int tok_send_packet(struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
-void ibmtr_reset_timer(struct timer_list *tmr, struct device *dev) {
+void ibmtr_reset_timer(struct timer_list *tmr, struct net_device *dev) {
 	tmr->expires  = jiffies + TR_RETRY_INTERVAL;
 	tmr->data     = (unsigned long) dev;
 	tmr->function = tok_open_adapter;
@@ -1676,7 +1676,7 @@ void ibmtr_reset_timer(struct timer_list *tmr, struct device *dev) {
 	add_timer(tmr);
 }
 
-void ibmtr_readlog(struct device *dev) {
+void ibmtr_readlog(struct net_device *dev) {
 	 struct tok_info *ti;
 	 ti=(struct tok_info *) dev->priv;
 
@@ -1692,14 +1692,14 @@ void ibmtr_readlog(struct device *dev) {
    this device -- the tr.... structure is an ethnet look-alike
    so at least for this iteration may suffice.   */
 
-static struct net_device_stats * tok_get_stats(struct device *dev) {
+static struct net_device_stats * tok_get_stats(struct net_device *dev) {
 
 	struct tok_info *toki;
 	toki=(struct tok_info *) dev->priv;
 	return (struct net_device_stats *) &toki->tr_stats;
 }
 
-int ibmtr_change_mtu(struct device *dev, int mtu) {
+int ibmtr_change_mtu(struct net_device *dev, int mtu) {
 	struct tok_info *ti = (struct tok_info *) dev->priv;
 	
 	if (ti->ring_speed == 16 && mtu > ti->maxmtu16)
@@ -1713,7 +1713,7 @@ int ibmtr_change_mtu(struct device *dev, int mtu) {
 #ifdef MODULE
 
 /* 3COM 3C619C supports 8 interrupts, 32 I/O ports */
-static struct device* dev_ibmtr[IBMTR_MAX_ADAPTERS];
+static struct net_device* dev_ibmtr[IBMTR_MAX_ADAPTERS];
 static int io[IBMTR_MAX_ADAPTERS] = {0xa20,0xa24};
 static int irq[IBMTR_MAX_ADAPTERS] = {0,0};
 static int mem[IBMTR_MAX_ADAPTERS] = {0,0};
@@ -1739,7 +1739,7 @@ int init_module(void)
 		dev_ibmtr[i]->init      = &ibmtr_probe;
 
 	        if (register_trdev(dev_ibmtr[i]) != 0) {
-			kfree_s(dev_ibmtr[i], sizeof(struct device));
+			kfree_s(dev_ibmtr[i], sizeof(struct net_device));
 			dev_ibmtr[i] = NULL;
 		        if (i == 0) {
 			        printk("ibmtr: register_trdev() returned non-zero.\n");
@@ -1762,7 +1762,7 @@ void cleanup_module(void)
 			 free_irq(dev_ibmtr[i]->irq, dev_ibmtr[i]);
 			 release_region(dev_ibmtr[i]->base_addr, IBMTR_IO_EXTENT);
 			 kfree_s(dev_ibmtr[i]->priv, sizeof(struct tok_info));
-			 kfree_s(dev_ibmtr[i], sizeof(struct device));
+			 kfree_s(dev_ibmtr[i], sizeof(struct net_device));
 			 dev_ibmtr[i] = NULL;
                 }
 }

@@ -175,12 +175,10 @@ static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
 #define wmb()	__asm__ __volatile__ ("": : :"memory")
 
 /* interrupt control.. */
-#define __sti() __asm__ __volatile__ ("sti": : :"memory")
-#define __cli() __asm__ __volatile__ ("cli": : :"memory")
-#define __save_flags(x) \
-__asm__ __volatile__("pushfl ; popl %0":"=g" (x): /* no input */ :"memory")
-#define __restore_flags(x) \
-__asm__ __volatile__("pushl %0 ; popfl": /* no output */ :"g" (x):"memory")
+#define __save_flags(x)		__asm__ __volatile__("pushfl ; popl %0":"=g" (x): /* no input */ :"memory")
+#define __restore_flags(x) 	__asm__ __volatile__("pushl %0 ; popfl": /* no output */ :"g" (x):"memory")
+#define __cli() 		__asm__ __volatile__("cli": : :"memory")
+#define __sti()			__asm__ __volatile__("sti": : :"memory")
 
 /* For spinlocks etc */
 #define local_irq_save(x)	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=g" (x): /* no input */ :"memory")

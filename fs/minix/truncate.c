@@ -62,10 +62,7 @@ repeat:
 		}
 		*p = 0;
 		mark_inode_dirty(inode);
-		if (bh) {
-			mark_buffer_clean(bh);
-			brelse(bh);
-		}
+		bforget(bh);
 		minix_free_block(inode,tmp);
 	}
 	return retry;
@@ -113,7 +110,7 @@ repeat:
 		}
 		*ind = 0;
 		mark_buffer_dirty(ind_bh, 1);
-		brelse(bh);
+		bforget(bh);
 		minix_free_block(inode,tmp);
 	}
 	ind = (unsigned short *) ind_bh->b_data;
@@ -226,10 +223,7 @@ repeat:
 		}
 		*p = 0;
 		mark_inode_dirty(inode);
-		if (bh) {
-			mark_buffer_clean(bh);
-			brelse(bh);
-		}
+		bforget(bh);
 		minix_free_block(inode,tmp);
 	}
 	return retry;
@@ -277,7 +271,7 @@ repeat:
 		}
 		*ind = 0;
 		mark_buffer_dirty(ind_bh, 1);
-		brelse(bh);
+		bforget(bh);
 		minix_free_block(inode,tmp);
 	}
 	ind = (unsigned long *) ind_bh->b_data;
@@ -406,7 +400,8 @@ static void V2_minix_truncate(struct inode * inode)
 			(unsigned long *) inode->u.minix_i.u.i2_data + 9);
 		if (!retry)
 			break;
-		current->counter = 0;
+		run_task_queue(&tq_disk);
+		current->policy |= SCHED_YIELD;
 		schedule();
 	}
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;

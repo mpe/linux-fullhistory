@@ -609,7 +609,7 @@ static char reg_init[16]=
 };
 
 
-int z8530_sync_open(struct device *dev, struct z8530_channel *c)
+int z8530_sync_open(struct net_device *dev, struct z8530_channel *c)
 {
 	c->sync = 1;
 	c->mtu = dev->mtu+64;
@@ -631,7 +631,7 @@ int z8530_sync_open(struct device *dev, struct z8530_channel *c)
 
 EXPORT_SYMBOL(z8530_sync_open);
 
-int z8530_sync_close(struct device *dev, struct z8530_channel *c)
+int z8530_sync_close(struct net_device *dev, struct z8530_channel *c)
 {
 	u8 chk;
 	c->irqs = &z8530_nop;
@@ -646,7 +646,7 @@ int z8530_sync_close(struct device *dev, struct z8530_channel *c)
 
 EXPORT_SYMBOL(z8530_sync_close);
 
-int z8530_sync_dma_open(struct device *dev, struct z8530_channel *c)
+int z8530_sync_dma_open(struct net_device *dev, struct z8530_channel *c)
 {
 	unsigned long flags;
 	
@@ -766,7 +766,7 @@ int z8530_sync_dma_open(struct device *dev, struct z8530_channel *c)
 
 EXPORT_SYMBOL(z8530_sync_dma_open);
 
-int z8530_sync_dma_close(struct device *dev, struct z8530_channel *c)
+int z8530_sync_dma_close(struct net_device *dev, struct z8530_channel *c)
 {
 	u8 chk;
 	unsigned long flags;
@@ -832,7 +832,7 @@ int z8530_sync_dma_close(struct device *dev, struct z8530_channel *c)
 
 EXPORT_SYMBOL(z8530_sync_dma_close);
 
-int z8530_sync_txdma_open(struct device *dev, struct z8530_channel *c)
+int z8530_sync_txdma_open(struct net_device *dev, struct z8530_channel *c)
 {
 	unsigned long flags;
 
@@ -925,7 +925,7 @@ int z8530_sync_txdma_open(struct device *dev, struct z8530_channel *c)
 
 EXPORT_SYMBOL(z8530_sync_txdma_open);
 	
-int z8530_sync_txdma_close(struct device *dev, struct z8530_channel *c)
+int z8530_sync_txdma_close(struct net_device *dev, struct z8530_channel *c)
 {
 	unsigned long flags;
 	u8 chk;

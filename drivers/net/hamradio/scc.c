@@ -210,15 +210,15 @@ static void scc_isr(int irq, void *dev_id, struct pt_regs *regs);
 static void scc_init_timer(struct scc_channel *scc);
 
 static int scc_net_setup(struct scc_channel *scc, unsigned char *name, int addev);
-static int scc_net_init(struct device *dev);
-static int scc_net_open(struct device *dev);
-static int scc_net_close(struct device *dev);
+static int scc_net_init(struct net_device *dev);
+static int scc_net_open(struct net_device *dev);
+static int scc_net_close(struct net_device *dev);
 static void scc_net_rx(struct scc_channel *scc, struct sk_buff *skb);
-static int scc_net_tx(struct sk_buff *skb, struct device *dev);
-static int scc_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
-static int scc_net_set_mac_address(struct device *dev, void *addr);
-static int scc_net_header(struct sk_buff *skb, struct device *dev, unsigned short type, void *daddr, void *saddr, unsigned len);
-static struct net_device_stats * scc_net_get_stats(struct device *dev);
+static int scc_net_tx(struct sk_buff *skb, struct net_device *dev);
+static int scc_net_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
+static int scc_net_set_mac_address(struct net_device *dev, void *addr);
+static int scc_net_header(struct sk_buff *skb, struct net_device *dev, unsigned short type, void *daddr, void *saddr, unsigned len);
+static struct net_device_stats * scc_net_get_stats(struct net_device *dev);
 
 static unsigned char *SCC_DriverName = "scc";
 
@@ -1569,7 +1569,7 @@ static void z8530_init(void)
 static int scc_net_setup(struct scc_channel *scc, unsigned char *name, int addev)
 {
 	unsigned char *buf;
-	struct device *dev;
+	struct net_device *dev;
 
 	if (dev_get(name) != NULL)
 	{
@@ -1577,11 +1577,11 @@ static int scc_net_setup(struct scc_channel *scc, unsigned char *name, int addev
 		return -EEXIST;
 	}
 
-	if ((scc->dev = (struct device *) kmalloc(sizeof(struct device), GFP_KERNEL)) == NULL)
+	if ((scc->dev = (struct net_device *) kmalloc(sizeof(struct net_device), GFP_KERNEL)) == NULL)
 		return -ENOMEM;
 
 	dev = scc->dev;
-	memset(dev, 0, sizeof(struct device));
+	memset(dev, 0, sizeof(struct net_device));
 
 	buf = (unsigned char *) kmalloc(10, GFP_KERNEL);
 	strcpy(buf, name);
@@ -1612,7 +1612,7 @@ static unsigned char ax25_nocall[AX25_ADDR_LEN] =
 
 /* ----> Initialize device <----- */
 
-static int scc_net_init(struct device *dev)
+static int scc_net_init(struct net_device *dev)
 {
 	dev_init_buffers(dev);
 	
@@ -1643,7 +1643,7 @@ static int scc_net_init(struct device *dev)
 
 /* ----> open network device <---- */
 
-static int scc_net_open(struct device *dev)
+static int scc_net_open(struct net_device *dev)
 {
 	struct scc_channel *scc = (struct scc_channel *) dev->priv;
 
@@ -1668,7 +1668,7 @@ static int scc_net_open(struct device *dev)
 
 /* ----> close network device <---- */
 
-static int scc_net_close(struct device *dev)
+static int scc_net_close(struct net_device *dev)
 {
 	struct scc_channel *scc = (struct scc_channel *) dev->priv;
 	unsigned long flags;
@@ -1721,7 +1721,7 @@ static void scc_net_rx(struct scc_channel *scc, struct sk_buff *skb)
 
 /* ----> transmit frame <---- */
 
-static int scc_net_tx(struct sk_buff *skb, struct device *dev)
+static int scc_net_tx(struct sk_buff *skb, struct net_device *dev)
 {
 	struct scc_channel *scc = (struct scc_channel *) dev->priv;
 	unsigned long flags;
@@ -1799,7 +1799,7 @@ static int scc_net_tx(struct sk_buff *skb, struct device *dev)
  * SIOCSCCCAL		- send calib. pattern	arg: (struct scc_calibrate *) arg
  */
 
-static int scc_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+static int scc_net_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	struct scc_kiss_cmd kiss_cmd;
 	struct scc_mem_config memcfg;
@@ -2031,7 +2031,7 @@ static int scc_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 
 /* ----> set interface callsign <---- */
 
-static int scc_net_set_mac_address(struct device *dev, void *addr)
+static int scc_net_set_mac_address(struct net_device *dev, void *addr)
 {
 	struct sockaddr *sa = (struct sockaddr *) addr;
 	memcpy(dev->dev_addr, sa->sa_data, dev->addr_len);
@@ -2040,7 +2040,7 @@ static int scc_net_set_mac_address(struct device *dev, void *addr)
 
 /* ----> "hard" header <---- */
 
-static int  scc_net_header(struct sk_buff *skb, struct device *dev, 
+static int  scc_net_header(struct sk_buff *skb, struct net_device *dev, 
 	unsigned short type, void *daddr, void *saddr, unsigned len)
 {
 	return ax25_encapsulate(skb, dev, type, daddr, saddr, len);
@@ -2048,7 +2048,7 @@ static int  scc_net_header(struct sk_buff *skb, struct device *dev,
 
 /* ----> get statistics <---- */
 
-static struct net_device_stats *scc_net_get_stats(struct device *dev)
+static struct net_device_stats *scc_net_get_stats(struct net_device *dev)
 {
 	struct scc_channel *scc = (struct scc_channel *) dev->priv;
 	

@@ -619,7 +619,7 @@ restart:
 }
 
 void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
-		    u32 saddr, u8 tos, struct device *dev)
+		    u32 saddr, u8 tos, struct net_device *dev)
 {
 	int i, k;
 	struct in_device *in_dev = dev->ip_ptr;
@@ -1035,7 +1035,7 @@ static void rt_set_nexthop(struct rtable *rt, struct fib_result *res, u32 itag)
 
 static int
 ip_route_input_mc(struct sk_buff *skb, u32 daddr, u32 saddr,
-		  u8 tos, struct device *dev, int our)
+		  u8 tos, struct net_device *dev, int our)
 {
 	unsigned hash;
 	struct rtable *rth;
@@ -1111,7 +1111,7 @@ ip_route_input_mc(struct sk_buff *skb, u32 daddr, u32 saddr,
  */
 
 int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
-			u8 tos, struct device *dev)
+			u8 tos, struct net_device *dev)
 {
 	struct rt_key	key;
 	struct fib_result res;
@@ -1277,7 +1277,7 @@ int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 
 #ifdef CONFIG_NET_FASTROUTE
 	if (netdev_fastroute && !(flags&(RTCF_NAT|RTCF_MASQ|RTCF_DOREDIRECT))) {
-		struct device *odev = rth->u.dst.dev;
+		struct net_device *odev = rth->u.dst.dev;
 		if (odev != dev &&
 		    dev->accept_fastpath &&
 		    odev->mtu >= dev->mtu &&
@@ -1380,7 +1380,7 @@ martian_source:
 }
 
 int ip_route_input(struct sk_buff *skb, u32 daddr, u32 saddr,
-		   u8 tos, struct device *dev)
+		   u8 tos, struct net_device *dev)
 {
 	struct rtable * rth;
 	unsigned	hash;
@@ -1443,7 +1443,7 @@ int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int 
 	struct fib_result res;
 	unsigned flags = 0;
 	struct rtable *rth;
-	struct device *dev_out = NULL;
+	struct net_device *dev_out = NULL;
 	unsigned hash;
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 	u32 nochecksrc = (tos & RTO_TPROXY);
@@ -1845,7 +1845,7 @@ int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void *arg)
 		memcpy(&iif, RTA_DATA(rta[RTA_IIF-1]), sizeof(int));
 
 	if (iif) {
-		struct device *dev;
+		struct net_device *dev;
 		dev = dev_get_by_index(iif);
 		if (!dev)
 			return -ENODEV;

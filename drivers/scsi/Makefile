@@ -257,6 +257,22 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_MAC_SCSI_OLD),y)
+L_OBJS += mac_scsi.o
+else
+  ifeq ($(CONFIG_MAC_SCSI_OLD),m)
+  M_OBJS += mac_scsi.o
+  endif
+endif
+
+ifeq ($(CONFIG_SCSI_MAC_ESP),y)
+L_OBJS += mac_esp.o NCR53C9x.o
+else
+	ifeq ($(CONFIG_SCSI_MAC_ESP),m)
+	M_OBJS += mac_esp.o NCR53C9x.o
+	endif
+endif
+
 ifeq ($(CONFIG_SCSI_PPA),y)
 L_OBJS += ppa.o
 else
@@ -655,8 +671,7 @@ include $(TOPDIR)/Rules.make
 
 53c7xx_u.h: 53c7xx_d.h
 
-53c7xx.o : 53c7xx_d.h 53c7xx.c
-	$(CC) $(CFLAGS) -c 53c7xx.c
+53c7xx.o : 53c7xx_d.h
 
 initio.o: ini9100u.c i91uscsi.c
 	$(CC) $(CFLAGS) -c ini9100u.c -o ini9100u.o

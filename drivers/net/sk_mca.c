@@ -110,7 +110,7 @@ static unsigned char poly[] =
 /* dump parts of shared memory - only needed during debugging */
 
 #ifdef DEBUG
-static void dumpmem(struct device *dev, u32 start, u32 len)
+static void dumpmem(struct net_device *dev, u32 start, u32 len)
 {
   int z;
 
@@ -199,7 +199,7 @@ static int dofind(int *junior, int firstslot)
 
 /* reset the whole board */
 
-static void ResetBoard(struct device *dev)
+static void ResetBoard(struct net_device *dev)
 {
   skmca_priv *priv = (skmca_priv*) dev->priv;
 
@@ -210,7 +210,7 @@ static void ResetBoard(struct device *dev)
 
 /* set LANCE register - must be atomic */
 
-static void SetLANCE(struct device *dev, u16 addr, u16 value)
+static void SetLANCE(struct net_device *dev, u16 addr, u16 value)
 {
   skmca_priv *priv = (skmca_priv*) dev->priv;
   unsigned long flags;
@@ -247,7 +247,7 @@ static void SetLANCE(struct device *dev, u16 addr, u16 value)
 
 /* get LANCE register */
 
-static u16 GetLANCE(struct device *dev, u16 addr)
+static u16 GetLANCE(struct net_device *dev, u16 addr)
 {
   skmca_priv *priv = (skmca_priv*) dev->priv;
   unsigned long flags;
@@ -287,7 +287,7 @@ static u16 GetLANCE(struct device *dev, u16 addr)
 
 /* build up descriptors in shared RAM */
 
-static void InitDscrs(struct device *dev)
+static void InitDscrs(struct net_device *dev)
 {
   u32 bufaddr;
 
@@ -381,7 +381,7 @@ static unsigned int GetHash(char *address)
 
 /* feed ready-built initialization block into LANCE */
 
-static void InitLANCE(struct device *dev)
+static void InitLANCE(struct net_device *dev)
 {
   skmca_priv *priv = (skmca_priv*) dev->priv;
 
@@ -420,7 +420,7 @@ static void InitLANCE(struct device *dev)
 
 /* stop the LANCE so we can reinitialize it */
 
-static void StopLANCE(struct device *dev)
+static void StopLANCE(struct net_device *dev)
 {
   /* can't take frames any more */
 
@@ -433,7 +433,7 @@ static void StopLANCE(struct device *dev)
 
 /* initialize card and LANCE for proper operation */
 
-static void InitBoard(struct device *dev)
+static void InitBoard(struct net_device *dev)
 {
   LANCE_InitBlock block;
 
@@ -458,7 +458,7 @@ static void InitBoard(struct device *dev)
 
 /* deinitialize card and LANCE */
 
-static void DeinitBoard(struct device *dev)
+static void DeinitBoard(struct net_device *dev)
 {
   /* stop LANCE */
 
@@ -475,7 +475,7 @@ static void DeinitBoard(struct device *dev)
 
 /* LANCE has read initializazion block -> start it */
 
-static u16 irqstart_handler(struct device *dev, u16 oldcsr0)
+static u16 irqstart_handler(struct net_device *dev, u16 oldcsr0)
 {
   /* now we're ready to transmit */
 
@@ -489,7 +489,7 @@ static u16 irqstart_handler(struct device *dev, u16 oldcsr0)
 
 /* receive interrupt */
 
-static u16 irqrx_handler(struct device *dev, u16 oldcsr0)
+static u16 irqrx_handler(struct net_device *dev, u16 oldcsr0)
 {
   skmca_priv *priv = (skmca_priv*) dev->priv;
   LANCE_RxDescr descr;
@@ -575,7 +575,7 @@ static u16 irqrx_handler(struct device *dev, u16 oldcsr0)
 
 /* transmit interrupt */
 
-static u16 irqtx_handler(struct device *dev, u16 oldcsr0)
+static u16 irqtx_handler(struct net_device *dev, u16 oldcsr0)
 {
   skmca_priv *priv = (skmca_priv*) dev->priv;
   LANCE_TxDescr descr;
@@ -653,7 +653,7 @@ static u16 irqtx_handler(struct device *dev, u16 oldcsr0)
 
 static void irq_handler(int irq, void *device, struct pt_regs *regs)
 {
-  struct device *dev = (struct device*) device;
+  struct net_device *dev = (struct net_device*) device;
   u16 csr0val;
 
   /* read CSR0 to get interrupt cause */
@@ -692,7 +692,7 @@ static void irq_handler(int irq, void *device, struct pt_regs *regs)
 static int skmca_getinfo(char *buf, int slot, void *d)
 {
   int len = 0, i;
-  struct device *dev = (struct device*) d;
+  struct net_device *dev = (struct net_device*) d;
   skmca_priv *priv;
   
   /* can't say anything about an uninitialized device... */
@@ -721,7 +721,7 @@ static int skmca_getinfo(char *buf, int slot, void *d)
 
 /* open driver.  Means also initialization and start of LANCE */
 
-static int skmca_open(struct device *dev)
+static int skmca_open(struct net_device *dev)
 {
   int result;
   skmca_priv *priv = (skmca_priv*) dev->priv;
@@ -748,7 +748,7 @@ static int skmca_open(struct device *dev)
 
 /* close driver.  Shut down board and free allocated resources */
 
-static int skmca_close(struct device *dev)
+static int skmca_close(struct net_device *dev)
 {
   /* turn off board */
   DeinitBoard(dev);
@@ -767,7 +767,7 @@ static int skmca_close(struct device *dev)
 
 /* transmit a block. */
 
-static int skmca_tx(struct sk_buff *skb, struct device *dev)
+static int skmca_tx(struct sk_buff *skb, struct net_device *dev)
 {
   skmca_priv *priv = (skmca_priv*) dev->priv;
   LANCE_TxDescr descr;
@@ -864,7 +864,7 @@ tx_done:
 
 /* return pointer to Ethernet statistics */
 
-static struct enet_statistics *skmca_stats(struct device *dev)
+static struct enet_statistics *skmca_stats(struct net_device *dev)
 {
   skmca_priv *priv = (skmca_priv*) dev->priv;
 
@@ -874,7 +874,7 @@ static struct enet_statistics *skmca_stats(struct device *dev)
 /* we don't support runtime reconfiguration, since am MCA card can
    be unambigously identified by its POS registers. */
 
-static int skmca_config(struct device *dev, struct ifmap *map)
+static int skmca_config(struct net_device *dev, struct ifmap *map)
 {
   return 0;
 }
@@ -882,7 +882,7 @@ static int skmca_config(struct device *dev, struct ifmap *map)
 /* switch receiver mode.  We use the LANCE's multicast filter to prefilter
    multicast addresses. */
 
-static void skmca_set_multicast_list(struct device *dev)
+static void skmca_set_multicast_list(struct net_device *dev)
 {
   LANCE_InitBlock block;
 
@@ -929,7 +929,7 @@ static int startslot; /* counts through slots when probing multiple devices */
 #define startslot 0   /* otherwise a dummy, since there is only eth0 in-kern*/
 #endif
 
-int skmca_probe(struct device *dev)
+int skmca_probe(struct net_device *dev)
 {
   int force_detect = 0;
   int junior, slot, i;
@@ -1082,7 +1082,7 @@ int skmca_probe(struct device *dev)
 #define DEVMAX 5
 
 static char NameSpace[8 * DEVMAX];
-static struct device moddevs[DEVMAX] =
+static struct net_device moddevs[DEVMAX] =
        {{NameSpace +  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
         {NameSpace +  8, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
         {NameSpace + 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, skmca_probe},
@@ -1110,7 +1110,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-  struct device *dev;
+  struct net_device *dev;
   skmca_priv *priv;
   int z;
 

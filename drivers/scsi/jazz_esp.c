@@ -196,7 +196,7 @@ static void dma_ints_on(struct NCR_ESP *esp)
 
 static int dma_irq_p(struct NCR_ESP *esp)
 {
-    return (esp->eregs->esp_status & ESP_STAT_INTR);
+    return (esp_read(esp->eregs->esp_status) & ESP_STAT_INTR);
 }
 
 static int dma_ports_p(struct NCR_ESP *esp)

@@ -39,7 +39,7 @@ static struct datalink_proto *find_snap_client(unsigned char *desc)
  *	A SNAP packet has arrived
  */
 
-int snap_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+int snap_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 {
 	static struct packet_type psnap_packet_type =
 	{
@@ -100,7 +100,7 @@ __initfunc(void snap_proto_init(struct net_proto *pro))
  *	Register SNAP clients. We don't yet use this for IP.
  */
 
-struct datalink_proto *register_snap_client(unsigned char *desc, int (*rcvfunc)(struct sk_buff *, struct device *, struct packet_type *))
+struct datalink_proto *register_snap_client(unsigned char *desc, int (*rcvfunc)(struct sk_buff *, struct net_device *, struct packet_type *))
 {
 	struct datalink_proto	*proto;
 

@@ -805,138 +805,86 @@ static char amifb_name[16] = "Amiga ";
 	 *
 	 */
 
-static struct fb_videomode amifb_predefined[] __initdata = {
+static struct fb_videomode ami_modedb[] __initdata = {
 
     /*
      *  AmigaOS Video Modes
+     *
+     *  If you change these, make sure to update DEFMODE_* as well!
      */
 
     {
-	"ntsc", {		/* 640x200, 15 kHz, 60 Hz (NTSC) */
-	    640, 200, 640, 200, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_HIRES, 106, 86, 44, 16, 76, 2,
-	    FB_SYNC_BROADCAST, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}
+	/* 640x200, 15 kHz, 60 Hz (NTSC) */
+	"ntsc", 60, 640, 200, TAG_HIRES, 106, 86, 44, 16, 76, 2,
+	FB_SYNC_BROADCAST, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
     }, {
-	"ntsc-lace", {		/* 640x400, 15 kHz, 60 Hz interlaced (NTSC) */
-	    640, 400, 640, 400, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_HIRES, 106, 86, 88, 33, 76, 4,
-	    FB_SYNC_BROADCAST, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
-	}
+	/* 640x400, 15 kHz, 60 Hz interlaced (NTSC) */
+	"ntsc-lace", 60, 640, TAG_HIRES, 106, 86, 88, 33, 76, 4,
+	FB_SYNC_BROADCAST, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
     }, {
-	"pal", {		/* 640x256, 15 kHz, 50 Hz (PAL) */
-	    640, 256, 640, 256, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_HIRES, 106, 86, 40, 14, 76, 2,
-	    FB_SYNC_BROADCAST, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}
+	/* 640x256, 15 kHz, 50 Hz (PAL) */
+	"pal", 50, 640, 256, TAG_HIRES, 106, 86, 40, 14, 76, 2,
+	FB_SYNC_BROADCAST, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
     }, {
-	"pal-lace", {		/* 640x512, 15 kHz, 50 Hz interlaced (PAL) */
-	    640, 512, 640, 512, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_HIRES, 106, 86, 80, 29, 76, 4,
-	    FB_SYNC_BROADCAST, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
-	}
+	/* 640x512, 15 kHz, 50 Hz interlaced (PAL) */
+	"pal-lace", 50, 640, 512, TAG_HIRES, 106, 86, 80, 29, 76, 4,
+	FB_SYNC_BROADCAST, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
     }, {
-	"multiscan", {		/* 640x480, 29 kHz, 57 Hz */
-	    640, 480, 640, 480, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_SHRES, 96, 112, 29, 8, 72, 8,
-	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}
+	/* 640x480, 29 kHz, 57 Hz */
+	"multiscan", 57, 640, 480, TAG_SHRES, 96, 112, 29, 8, 72, 8,
+	0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
     }, {
-	"multiscan-lace", {	/* 640x960, 29 kHz, 57 Hz interlaced */
-	    640, 960, 640, 960, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_SHRES, 96, 112, 58, 16, 72, 16,
-	    0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
-	}
+	/* 640x960, 29 kHz, 57 Hz interlaced */
+	"multiscan-lace", 57, 640, 960, TAG_SHRES, 96, 112, 58, 16, 72, 16,
+	0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
     }, {
-	"euro36", {		/* 640x200, 15 kHz, 72 Hz */
-	    640, 200, 640, 200, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_HIRES, 92, 124, 6, 6, 52, 5,
-	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}
+	/* 640x200, 15 kHz, 72 Hz */
+	"euro36", 72, 640, 200, TAG_HIRES, 92, 124, 6, 6, 52, 5,
+	0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
     }, {
-	"euro36-lace", {	/* 640x400, 15 kHz, 72 Hz interlaced */
-	    640, 400, 640, 400, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_HIRES, 92, 124, 12, 12, 52, 10,
-	    0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
-	}
+	/* 640x400, 15 kHz, 72 Hz interlaced */
+	"euro36-lace", 72, 640, 400, TAG_HIRES, 92, 124, 12, 12, 52, 10,
+	0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
     }, {
-	"euro72", {		/* 640x400, 29 kHz, 68 Hz */
-	    640, 400, 640, 400, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_SHRES, 164, 92, 9, 9, 80, 8,
-	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}
+	/* 640x400, 29 kHz, 68 Hz */
+	"euro72", 68, 640, 400, TAG_SHRES, 164, 92, 9, 9, 80, 8,
+	0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
     }, {
-	"euro72-lace", {	/* 640x800, 29 kHz, 68 Hz interlaced */
-	    640, 800, 640, 800, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_SHRES, 164, 92, 18, 18, 80, 16,
-	    0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
-	}
+	/* 640x800, 29 kHz, 68 Hz interlaced */
+	"euro72-lace", 68, 640, 800, TAG_SHRES, 164, 92, 18, 18, 80, 16,
+	0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
     }, {
-	"super72", {		/* 800x300, 23 kHz, 70 Hz */
-	    800, 300, 800, 300, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_SHRES, 212, 140, 10, 11, 80, 7,
-	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}
+	/* 800x300, 23 kHz, 70 Hz */
+	"super72", 70, 800, 300, TAG_SHRES, 212, 140, 10, 11, 80, 7,
+	0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
     }, {
-	"super72-lace", {	/* 800x600, 23 kHz, 70 Hz interlaced */
-	    800, 600, 800, 600, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_SHRES, 212, 140, 20, 22, 80, 14,
-	    0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
-	}
+	/* 800x600, 23 kHz, 70 Hz interlaced */
+	"super72-lace", 70, 800, 600, TAG_SHRES, 212, 140, 20, 22, 80, 14,
+	0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
     }, {
-	"dblntsc", {		/* 640x200, 27 kHz, 57 Hz doublescan */
-	    640, 200, 640, 200, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_SHRES, 196, 124, 18, 17, 80, 4,
-	    0, FB_VMODE_DOUBLE | FB_VMODE_YWRAP
-	}
+	/* 640x200, 27 kHz, 57 Hz doublescan */
+	"dblntsc", 57, 640, 200, TAG_SHRES, 196, 124, 18, 17, 80, 4,
+	0, FB_VMODE_DOUBLE | FB_VMODE_YWRAP
     }, {
-	"dblntsc-ff", {		/* 640x400, 27 kHz, 57 Hz */
-	    640, 400, 640, 400, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_SHRES, 196, 124, 36, 35, 80, 7,
-	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}
+	/* 640x400, 27 kHz, 57 Hz */
+	"dblntsc-ff", 57, 640, 400, TAG_SHRES, 196, 124, 36, 35, 80, 7,
+	0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
     }, {
-	"dblntsc-lace", {	/* 640x800, 27 kHz, 57 Hz interlaced */
-	    640, 800, 640, 800, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_SHRES, 196, 124, 72, 70, 80, 14,
-	    0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
-	}
+	/* 640x800, 27 kHz, 57 Hz interlaced */
+	"dblntsc-lace", 57, 640, 800, TAG_SHRES, 196, 124, 72, 70, 80, 14,
+	0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
     }, {
-	"dblpal", {		/* 640x256, 27 kHz, 47 Hz doublescan */
-	    640, 256, 640, 256, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_SHRES, 196, 124, 14, 13, 80, 4,
-	    0, FB_VMODE_DOUBLE | FB_VMODE_YWRAP
-	}
+	/* 640x256, 27 kHz, 47 Hz doublescan */
+	"dblpal", 47, 640, 256, TAG_SHRES, 196, 124, 14, 13, 80, 4,
+	0, FB_VMODE_DOUBLE | FB_VMODE_YWRAP
     }, {
-	"dblpal-ff", {		/* 640x512, 27 kHz, 47 Hz */
-	    640, 512, 640, 512, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_SHRES, 196, 124, 28, 27, 80, 7,
-	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}
+	/* 640x512, 27 kHz, 47 Hz */
+	"dblpal-ff", 47, 640, 512, TAG_SHRES, 196, 124, 28, 27, 80, 7,
+	0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
     }, {
-	"dblpal-lace", {	/* 640x1024, 27 kHz, 47 Hz interlaced */
-	    640, 1024, 640, 1024, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_SHRES, 196, 124, 56, 54, 80, 14,
-	    0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
-	}
+	/* 640x1024, 27 kHz, 47 Hz interlaced */
+	"dblpal-lace", 47, 640, 1024, TAG_SHRES, 196, 124, 56, 54, 80, 14,
+	0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
     },
 
     /*
@@ -944,19 +892,13 @@ static struct fb_videomode amifb_predefined[] __initdata = {
      */
 
     {
-	"vga", {		/* 640x480, 31 kHz, 60 Hz (VGA) */
-	    640, 480, 640, 480, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_SHRES, 64, 96, 30, 9, 112, 2,
-	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}
+	/* 640x480, 31 kHz, 60 Hz (VGA) */
+	"vga", 60, 640, 480, TAG_SHRES, 64, 96, 30, 9, 112, 2,
+	0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
     }, {
-	"vga70", {		/* 640x400, 31 kHz, 70 Hz (VGA) */
-	    640, 400, 640, 400, 0, 0, 4, 0,
-	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_SHRES, 64, 96, 35, 12, 112, 2,
-	    FB_SYNC_VERT_HIGH_ACT | FB_SYNC_COMP_HIGH_ACT, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}
+	/* 640x400, 31 kHz, 70 Hz (VGA) */
+	"vga70", 70, 640, 400, TAG_SHRES, 64, 96, 35, 12, 112, 2,
+	FB_SYNC_VERT_HIGH_ACT | FB_SYNC_COMP_HIGH_ACT, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
     },
 
 #if 0
@@ -967,41 +909,36 @@ static struct fb_videomode amifb_predefined[] __initdata = {
      */
 
     {
-	"a2024-10", {		/* 1024x800, 10 Hz */
-	    1024, 800, 1024, 800, 0, 0, 2, 0,
-	    {0, 2, 0}, {0, 2, 0}, {0, 2, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_HIRES, 0, 0, 0, 0, 0, 0,
-	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}
+	/* 1024x800, 10 Hz */
+	"a2024-10", 10, 1024, 800, TAG_HIRES, 0, 0, 0, 0, 0, 0,
+	0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
     }, {
-	"a2024-15", {		/* 1024x800, 15 Hz */
-	    1024, 800, 1024, 800, 0, 0, 2, 0,
-	    {0, 2, 0}, {0, 2, 0}, {0, 2, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, TAG_HIRES, 0, 0, 0, 0, 0, 0,
-	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}
+	/* 1024x800, 15 Hz */
+	"a2024-15", 10, 1024, 800, TAG_HIRES, 0, 0, 0, 0, 0, 0,
+	0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
     }
 #endif
 };
 
-#define NUM_TOTAL_MODES  arraysize(amifb_predefined)
+#define NUM_TOTAL_MODES  arraysize(ami_modedb)
 
-static int amifb_ilbm = 0;	/* interleaved or normal bitplanes */
-static int amifb_inverse = 0;
-static int amifb_usermode __initdata = 0;
-static int amifb_userdepth __initdata = -1;
+static const char *mode_option __initdata = NULL;
+static int round_down_bpp = 1;	/* for mode probing */
 
 	/*
 	 * Some default modes
 	 */
 
-#define DEFMODE_PAL        "pal"	/* for PAL OCS/ECS */
-#define DEFMODE_NTSC       "ntsc"	/* for NTSC OCS/ECS */
-#define DEFMODE_AMBER_PAL  "pal-lace"	/* for flicker fixed PAL (A3000) */
-#define DEFMODE_AMBER_NTSC "ntsc-lace"	/* for flicker fixed NTSC (A3000) */
-#define DEFMODE_AGA        "vga70"	/* for AGA */
 
-static struct fb_var_screeninfo amifb_default;
+#define DEFMODE_PAL	    2	/* "pal" for PAL OCS/ECS */
+#define DEFMODE_NTSC	    0	/* "ntsc" for NTSC OCS/ECS */
+#define DEFMODE_AMBER_PAL   3	/* "pal-lace" for flicker fixed PAL (A3000) */
+#define DEFMODE_AMBER_NTSC  1	/* "ntsc-lace" for flicker fixed NTSC (A3000) */
+#define DEFMODE_AGA	    19	/* "vga70" for AGA */
+
+
+static int amifb_ilbm = 0;	/* interleaved or normal bitplanes */
+static int amifb_inverse = 0;
 
 
 	/*
@@ -1205,8 +1142,6 @@ static void amifbcon_blank(int blank, struct fb_info *info);
 static void do_install_cmap(int con, struct fb_info *info);
 static int flash_cursor(void);
 static void amifb_interrupt(int irq, void *dev_id, struct pt_regs *fp);
-static void get_video_mode(const char *name);
-static void check_default_mode(void);
 static u_long chipalloc(u_long size);
 static char *strtoke(char *s,const char *ct);
 
@@ -1271,8 +1206,6 @@ int __init amifb_setup(char *options)
 		return 0;
 
 	for (this_opt = strtok(options, ","); this_opt; this_opt = strtok(NULL, ",")) {
-		char *p;
-
 		if (!strcmp(this_opt, "inverse")) {
 			amifb_inverse = 1;
 			fb_invert_cmaps();
@@ -1284,54 +1217,8 @@ int __init amifb_setup(char *options)
 			strcpy(fb_info.fontname, this_opt+5);
 		else if (!strncmp(this_opt, "fstart:", 7))
 			min_fstrt = simple_strtoul(this_opt+7, NULL, 0);
-		else if (!strncmp(this_opt, "depth:", 6))
-			amifb_userdepth = simple_strtoul(this_opt+6, NULL, 0);
-		else if (!strncmp(this_opt, "size:", 5)) {
-			p = this_opt + 5;
-			if (*p != ';')
-				amifb_default.xres = simple_strtoul(p, NULL, 0);
-			if (!(p = strchr(p, ';')))
-				continue;
-			if (*++p != ';')
-				amifb_default.yres = simple_strtoul(p, NULL, 0);
-			if (!(p = strchr(p, ';')))
-				continue;
-			if (*++p != ';')
-				amifb_default.xres_virtual = simple_strtoul(p, NULL, 0);
-			if (!(p = strchr(p, ';')))
-				continue;
-			if (*++p != ';')
-				amifb_default.yres_virtual = simple_strtoul(p, NULL, 0);
-			if (!(p = strchr(p, ';')))
-				continue;
-			if (*++p)
-				amifb_default.bits_per_pixel = simple_strtoul(p, NULL, 0);
-		} else if (!strncmp(this_opt, "timing:", 7)) {
-			p = this_opt + 7;
-			if (*p != ';')
-				amifb_default.left_margin = simple_strtoul(p, NULL, 0);
-			if (!(p = strchr(p, ';')))
-				continue;
-			if (*++p != ';')
-				amifb_default.right_margin = simple_strtoul(p, NULL, 0);
-			if (!(p = strchr(p, ';')))
-				continue;
-			if (*++p != ';')
-				amifb_default.upper_margin = simple_strtoul(p, NULL, 0);
-			if (!(p = strchr(p, ';')))
-				continue;
-			if (*++p)
-				amifb_default.lower_margin = simple_strtoul(p, NULL, 0);
-		} else if (!strncmp(this_opt, "sync:", 5)) {
-			p = this_opt + 5;
-			if (*p != ';')
-				amifb_default.hsync_len = simple_strtoul(p, NULL, 0);
-			if (!(p = strchr(p, ';')))
-				continue;
-			if (*++p)
-				amifb_default.vsync_len = simple_strtoul(p, NULL, 0);
-		} else
-			get_video_mode(this_opt);
+		else
+			mode_option = this_opt;
 	}
 
 	if (min_fstrt < 48)
@@ -1719,6 +1606,8 @@ int __init amifb_init(void)
 {
 	int tag, i;
 	u_long chipptr;
+	u_int defmode;
+	struct fb_var_screeninfo var;
 
 	if (!MACH_IS_AMIGA || !AMIGAHW_PRESENT(AMI_VIDEO))
 		return -ENXIO;
@@ -1748,9 +1637,8 @@ default_chipset:
 			maxdepth[TAG_HIRES] = 4;
 			maxdepth[TAG_LORES] = 6;
 			maxfmode = TAG_FMODE_1;
-			if (!amifb_usermode)		/* Set the Default Video Mode */
-				get_video_mode(amiga_vblank == 50 ?
-				               DEFMODE_PAL : DEFMODE_NTSC);
+			defmode = amiga_vblank == 50 ? DEFMODE_PAL
+						     : DEFMODE_NTSC;
 			videomemorysize = VIDEOMEMSIZE_OCS;
 			break;
 #endif /* CONFIG_FB_AMIGA_OCS */
@@ -1763,14 +1651,12 @@ default_chipset:
 			maxdepth[TAG_HIRES] = 4;
 			maxdepth[TAG_LORES] = 6;
 			maxfmode = TAG_FMODE_1;
-			if (!amifb_usermode) {		/* Set the Default Video Mode */
-				if (AMIGAHW_PRESENT(AMBER_FF))
-					get_video_mode(amiga_vblank == 50 ?
-					               DEFMODE_AMBER_PAL : DEFMODE_AMBER_NTSC);
-				else
-					get_video_mode(amiga_vblank == 50 ?
-					               DEFMODE_PAL : DEFMODE_NTSC);
-			}
+			if (AMIGAHW_PRESENT(AMBER_FF))
+			    defmode = amiga_vblank == 50 ? DEFMODE_AMBER_PAL
+							 : DEFMODE_AMBER_NTSC;
+			else
+			    defmode = amiga_vblank == 50 ? DEFMODE_PAL
+							 : DEFMODE_NTSC;
 			if (amiga_chip_avail()-CHIPRAM_SAFETY_LIMIT >
 			    VIDEOMEMSIZE_ECS_1M)
 				videomemorysize = VIDEOMEMSIZE_ECS_2M;
@@ -1787,8 +1673,7 @@ default_chipset:
 			maxdepth[TAG_HIRES] = 8;
 			maxdepth[TAG_LORES] = 8;
 			maxfmode = TAG_FMODE_4;
-			if (!amifb_usermode)		/* Set the Default Video Mode */
-				get_video_mode(DEFMODE_AGA);
+			defmode = DEFMODE_AGA;
 			if (amiga_chip_avail()-CHIPRAM_SAFETY_LIMIT >
 			    VIDEOMEMSIZE_AGA_1M)
 				videomemorysize = VIDEOMEMSIZE_AGA_2M;
@@ -1824,22 +1709,12 @@ default_chipset:
 	 * Replace the Tag Values with the Real Pixel Clock Values
 	 */
 
-	if (amifb_userdepth != -1)
-		amifb_default.bits_per_pixel = amifb_userdepth;
 	for (i = 0; i < NUM_TOTAL_MODES; i++) {
-		struct fb_var_screeninfo *var = &amifb_predefined[i].var;
-		tag = var->pixclock;
+		struct fb_videomode *mode = &ami_modedb[i];
+		tag = mode->pixclock;
 		if (tag == TAG_SHRES || tag == TAG_HIRES || tag == TAG_LORES) {
-			var->pixclock = pixclock[tag];
-			if (var->bits_per_pixel > maxdepth[tag])
-				var->bits_per_pixel = maxdepth[tag];
+			mode->pixclock = pixclock[tag];
 		}
-	}
-	tag = amifb_default.pixclock;
-	if (tag == TAG_SHRES || tag == TAG_HIRES || tag == TAG_LORES) {
-		amifb_default.pixclock = pixclock[tag];
-		if (amifb_default.bits_per_pixel > maxdepth[tag])
-			amifb_default.bits_per_pixel = maxdepth[tag];
 	}
 
 	/*
@@ -1862,6 +1737,11 @@ default_chipset:
 	fb_info.blank = &amifbcon_blank;
 	fb_info.flags = FBINFO_FLAG_DEFAULT;
 
+	if (!fb_find_mode(&var, &fb_info, mode_option, ami_modedb,
+			  NUM_TOTAL_MODES, &ami_modedb[defmode], 4))
+	    panic("Can't find any usable video mode");
+
+	round_down_bpp = 0;
 	chipptr = chipalloc(videomemorysize+
 	                    SPRITEMEMSIZE+
 	                    DUMMYSPRITEMEMSIZE+
@@ -1904,9 +1784,7 @@ default_chipset:
 
 	ami_init_copper();
 
-	check_default_mode();
-
-	if (request_irq(IRQ_AMIGA_AUTO_3, amifb_interrupt, IRQ_FLG_LOCK,
+	if (request_irq(IRQ_AMIGA_AUTO_3, amifb_interrupt, 0,
 	                "fb vertb handler", NULL))
 		panic("Couldn't add vblank interrupt\n");
 	ami_intena_vals[IRQ_AMIGA_VERTB] = IF_COPER;
@@ -1914,7 +1792,7 @@ default_chipset:
 	custom.intena = IF_VERTB;
 	custom.intena = IF_SETCLR | IF_COPER;
 
-	amifb_set_var(&amifb_default, -1, &fb_info);
+	amifb_set_var(&var, -1, &fb_info);
 
 	if (register_framebuffer(&fb_info) < 0)
 		return -EINVAL;
@@ -2052,43 +1930,6 @@ static void amifb_interrupt(int irq, void *dev_id, struct pt_regs *fp)
 }
 
 	/*
-	 * Get a Video Mode
-	 */
-
-static void __init get_video_mode(const char *name)
-{
-	int i;
-
-	for (i = 0; i < NUM_TOTAL_MODES; i++) {
-		if (!strcmp(name, amifb_predefined[i].name)) {
-			amifb_default = amifb_predefined[i].var;
-			amifb_usermode = i;
-			return;
-		}
-	}
-}
-
-	/*
-	 *  Probe the Video Modes
-	 */
-
-static void __init check_default_mode(void)
-{
-	struct amifb_par par;
-	int mode;
-
-	if (!ami_decode_var(&amifb_default, &par))
-		return;
-	printk("Can't use default video mode. Probing video modes...\n");
-	for (mode = 0; mode < NUM_TOTAL_MODES; mode++)
-		if (!ami_decode_var(&amifb_predefined[mode].var, &par)) {
-			amifb_default = amifb_predefined[mode].var;
-			return;
-		}
-	panic("Can't find any usable video mode");
-}
-
-	/*
 	 * Allocate, Clear and Align a Block of Chip Memory
 	 */
 
@@ -2217,8 +2058,12 @@ static int ami_decode_var(struct fb_var_screeninfo *var,
 		if (par->bpp < 1)
 			par->bpp = 1;
 		if (par->bpp > maxdepth[clk_shift]) {
-			DPRINTK("invalid bpp\n");
-			return -EINVAL;
+			if (round_down_bpp && maxdepth[clk_shift])
+				par->bpp = maxdepth[clk_shift];
+			else {
+				DPRINTK("invalid bpp\n");
+				return -EINVAL;
+			}
 		}
 	} else if (var->nonstd == FB_NONSTD_HAM) {
 		if (par->bpp < 6)

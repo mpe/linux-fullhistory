@@ -355,12 +355,12 @@ typedef struct wan_device
 	int (*update) (struct wan_device* wandev);
 	int (*ioctl) (struct wan_device* wandev, unsigned cmd,
 		unsigned long arg);
-	int (*new_if) (struct wan_device* wandev, struct device* dev,
+	int (*new_if) (struct wan_device* wandev, struct net_device* dev,
 		wanif_conf_t* conf);
-	int (*del_if) (struct wan_device* wandev, struct device* dev);
+	int (*del_if) (struct wan_device* wandev, struct net_device* dev);
 					/****** maintained by the router ****/
 	struct wan_device* next;	/* -> next device */
-	struct device* dev;		/* list of network interfaces */
+	struct net_device* dev;		/* list of network interfaces */
 	unsigned ndev;			/* number of interfaces */
 	struct proc_dir_entry dent;	/* proc filesystem entry */
 } wan_device_t;
@@ -368,8 +368,8 @@ typedef struct wan_device
 /* Public functions available for device drivers */
 extern int register_wan_device(wan_device_t* wandev);
 extern int unregister_wan_device(char* name);
-unsigned short wanrouter_type_trans(struct sk_buff* skb, struct device* dev);
-int wanrouter_encapsulate(struct sk_buff* skb, struct device* dev);
+unsigned short wanrouter_type_trans(struct sk_buff* skb, struct net_device* dev);
+int wanrouter_encapsulate(struct sk_buff* skb, struct net_device* dev);
 
 /* Proc interface functions. These must not be called by the drivers! */
 extern int wanrouter_proc_init (void);

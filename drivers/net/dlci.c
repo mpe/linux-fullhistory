@@ -60,11 +60,11 @@
 static const char *devname = "dlci";
 static const char *version = "DLCI driver v0.35, 4 Jan 1997, mike.mclagan@linux.org";
 
-static struct device *open_dev[CONFIG_DLCI_COUNT];
+static struct net_device *open_dev[CONFIG_DLCI_COUNT];
 
 static char *basename[16];
 
-int dlci_init(struct device *dev);
+int dlci_init(struct net_device *dev);
 
 /* allow FRAD's to register their name as a valid FRAD */
 int register_frad(const char *name)
@@ -122,7 +122,7 @@ int unregister_frad(const char *name)
  * the upper network layers 
  */
 
-static int dlci_header(struct sk_buff *skb, struct device *dev, 
+static int dlci_header(struct sk_buff *skb, struct net_device *dev, 
                            unsigned short type, void *daddr, void *saddr, 
                            unsigned len)
 {
@@ -161,7 +161,7 @@ static int dlci_header(struct sk_buff *skb, struct device *dev,
 	return(hlen);
 }
 
-static void dlci_receive(struct sk_buff *skb, struct device *dev)
+static void dlci_receive(struct sk_buff *skb, struct net_device *dev)
 {
 	struct dlci_local *dlp;
 	struct frhdr		*hdr;
@@ -234,7 +234,7 @@ static void dlci_receive(struct sk_buff *skb, struct device *dev)
 		dev_kfree_skb(skb);
 }
 
-static int dlci_transmit(struct sk_buff *skb, struct device *dev)
+static int dlci_transmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct dlci_local *dlp;
 	int					ret;
@@ -284,7 +284,7 @@ static int dlci_transmit(struct sk_buff *skb, struct device *dev)
 	return(ret);
 }
 
-int dlci_config(struct device *dev, struct dlci_conf *conf, int get)
+int dlci_config(struct net_device *dev, struct dlci_conf *conf, int get)
 {
 	struct dlci_conf	config;
 	struct dlci_local	*dlp;
@@ -318,7 +318,7 @@ int dlci_config(struct device *dev, struct dlci_conf *conf, int get)
 	return(0);
 }
 
-int dlci_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+int dlci_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	struct dlci_local *dlp;
 
@@ -350,7 +350,7 @@ int dlci_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 	return(0);
 }
 
-static int dlci_change_mtu(struct device *dev, int new_mtu)
+static int dlci_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct dlci_local *dlp;
 
@@ -359,7 +359,7 @@ static int dlci_change_mtu(struct device *dev, int new_mtu)
 	return((*dlp->slave->change_mtu)(dlp->slave, new_mtu));
 }
 
-static int dlci_open(struct device *dev)
+static int dlci_open(struct net_device *dev)
 {
 	struct dlci_local	*dlp;
 	struct frad_local	*flp;
@@ -386,7 +386,7 @@ static int dlci_open(struct device *dev)
 	return 0;
 }
 
-static int dlci_close(struct device *dev)
+static int dlci_close(struct net_device *dev)
 {
 	struct dlci_local	*dlp;
 	struct frad_local	*flp;
@@ -403,7 +403,7 @@ static int dlci_close(struct device *dev)
 	return 0;
 }
 
-static struct net_device_stats *dlci_get_stats(struct device *dev)
+static struct net_device_stats *dlci_get_stats(struct net_device *dev)
 {
 	struct dlci_local *dlp;
 
@@ -414,7 +414,7 @@ static struct net_device_stats *dlci_get_stats(struct device *dev)
 
 int dlci_add(struct dlci_add *dlci)
 {
-	struct device		*master, *slave;
+	struct net_device		*master, *slave;
 	struct dlci_local	*dlp;
 	struct frad_local	*flp;
 	int			err, i;
@@ -500,7 +500,7 @@ int dlci_del(struct dlci_add *dlci)
 {
 	struct dlci_local	*dlp;
 	struct frad_local	*flp;
-	struct device		*master, *slave;
+	struct net_device		*master, *slave;
 	int			i, err;
 
 	/* validate slave device */
@@ -569,7 +569,7 @@ int dlci_ioctl(unsigned int cmd, void *arg)
 	return(err);
 }
 
-int dlci_init(struct device *dev)
+int dlci_init(struct net_device *dev)
 {
 	struct dlci_local *dlp;
 

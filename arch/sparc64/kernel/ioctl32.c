@@ -421,7 +421,7 @@ struct ifconf32 {
 
 static int dev_ifname32(unsigned int fd, unsigned long arg)
 {
-	struct device *dev;
+	struct net_device *dev;
 	struct ifreq32 ifr32;
 	int err;
 

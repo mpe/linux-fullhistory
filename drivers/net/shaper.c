@@ -378,7 +378,7 @@ static void shaper_flush(struct shaper *shaper)
  *	bind.
  */
 
-static int shaper_open(struct device *dev)
+static int shaper_open(struct net_device *dev)
 {
 	struct shaper *shaper=dev->priv;
 	
@@ -400,7 +400,7 @@ static int shaper_open(struct device *dev)
  *	Closing a shaper flushes the queues.
  */
  
-static int shaper_close(struct device *dev)
+static int shaper_close(struct net_device *dev)
 {
 	struct shaper *shaper=dev->priv;
 	shaper_flush(shaper);
@@ -418,19 +418,19 @@ static int shaper_close(struct device *dev)
  */
 
 
-static int shaper_start_xmit(struct sk_buff *skb, struct device *dev)
+static int shaper_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct shaper *sh=dev->priv;
 	return shaper_qframe(sh, skb);
 }
 
-static struct net_device_stats *shaper_get_stats(struct device *dev)
+static struct net_device_stats *shaper_get_stats(struct net_device *dev)
 {
      	struct shaper *sh=dev->priv;
 	return &sh->stats;
 }
 
-static int shaper_header(struct sk_buff *skb, struct device *dev, 
+static int shaper_header(struct sk_buff *skb, struct net_device *dev, 
 	unsigned short type, void *daddr, void *saddr, unsigned len)
 {
 	struct shaper *sh=dev->priv;
@@ -446,7 +446,7 @@ static int shaper_header(struct sk_buff *skb, struct device *dev,
 static int shaper_rebuild_header(struct sk_buff *skb)
 {
 	struct shaper *sh=skb->dev->priv;
-	struct device *dev=skb->dev;
+	struct net_device *dev=skb->dev;
 	int v;
 	if(sh_debug)
 		printk("Shaper rebuild header\n");
@@ -460,7 +460,7 @@ static int shaper_rebuild_header(struct sk_buff *skb)
 static int shaper_cache(struct neighbour *neigh, struct hh_cache *hh)
 {
 	struct shaper *sh=neigh->dev->priv;
-	struct device *tmp;
+	struct net_device *tmp;
 	int ret;
 	if(sh_debug)
 		printk("Shaper header cache bind\n");
@@ -471,7 +471,7 @@ static int shaper_cache(struct neighbour *neigh, struct hh_cache *hh)
 	return ret;
 }
 
-static void shaper_cache_update(struct hh_cache *hh, struct device *dev,
+static void shaper_cache_update(struct hh_cache *hh, struct net_device *dev,
 	unsigned char *haddr)
 {
 	struct shaper *sh=dev->priv;
@@ -490,7 +490,7 @@ static int shaper_neigh_setup(struct neighbour *n)
 	return 0;
 }
 
-static int shaper_neigh_setup_dev(struct device *dev, struct neigh_parms *p)
+static int shaper_neigh_setup_dev(struct net_device *dev, struct neigh_parms *p)
 {
 	if (p->tbl->family == AF_INET) {
 		p->neigh_setup = shaper_neigh_setup;
@@ -500,7 +500,7 @@ static int shaper_neigh_setup_dev(struct device *dev, struct neigh_parms *p)
 	return 0;
 }
 
-static int shaper_attach(struct device *shdev, struct shaper *sh, struct device *dev)
+static int shaper_attach(struct net_device *shdev, struct shaper *sh, struct net_device *dev)
 {
 	sh->dev = dev;
 	sh->hard_start_xmit=dev->hard_start_xmit;
@@ -553,7 +553,7 @@ static int shaper_attach(struct device *shdev, struct shaper *sh, struct device 
 	return 0;
 }
 
-static int shaper_ioctl(struct device *dev,  struct ifreq *ifr, int cmd)
+static int shaper_ioctl(struct net_device *dev,  struct ifreq *ifr, int cmd)
 {
 	struct shaperconf *ss= (struct shaperconf *)&ifr->ifr_data;
 	struct shaper *sh=dev->priv;
@@ -561,7 +561,7 @@ static int shaper_ioctl(struct device *dev,  struct ifreq *ifr, int cmd)
 	{
 		case SHAPER_SET_DEV:
 		{
-			struct device *them=dev_get(ss->ss_name);
+			struct net_device *them=dev_get(ss->ss_name);
 			if(them==NULL)
 				return -ENODEV;
 			if(sh->dev)
@@ -584,7 +584,7 @@ static int shaper_ioctl(struct device *dev,  struct ifreq *ifr, int cmd)
 	}
 }
 
-static struct shaper *shaper_alloc(struct device *dev)
+static struct shaper *shaper_alloc(struct net_device *dev)
 {
 	struct shaper *sh=kmalloc(sizeof(struct shaper), GFP_KERNEL);
 	if(sh==NULL)
@@ -602,7 +602,7 @@ static struct shaper *shaper_alloc(struct device *dev)
  *	Add a shaper device to the system
  */
  
-int __init shaper_probe(struct device *dev)
+int __init shaper_probe(struct net_device *dev)
 {
 	/*
 	 *	Set up the shaper.
@@ -655,7 +655,7 @@ int __init shaper_probe(struct device *dev)
 
 static char devicename[9];
 
-static struct device dev_shape = 
+static struct net_device dev_shape = 
 {
 	devicename,
 	0, 0, 0, 0,
@@ -696,7 +696,7 @@ void cleanup_module(void)
 
 #else
 
-static struct device dev_sh0 = 
+static struct net_device dev_sh0 = 
 {
 	"shaper0",
 	0, 0, 0, 0,
@@ -705,7 +705,7 @@ static struct device dev_sh0 =
 };
 
 
-static struct device dev_sh1 = 
+static struct net_device dev_sh1 = 
 {
 	"shaper1",
 	0, 0, 0, 0,
@@ -714,7 +714,7 @@ static struct device dev_sh1 =
 };
 
 
-static struct device dev_sh2 = 
+static struct net_device dev_sh2 = 
 {
 	"shaper2",
 	0, 0, 0, 0,
@@ -722,7 +722,7 @@ static struct device dev_sh2 =
 	0, 0, 0, NULL, shaper_probe 
 };
 
-static struct device dev_sh3 = 
+static struct net_device dev_sh3 = 
 {
 	"shaper3",
 	0, 0, 0, 0,

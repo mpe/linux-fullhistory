@@ -133,12 +133,12 @@ static int hold_timer_expired(int port_no);
 static int br_device_event(struct notifier_block *dnot, unsigned long event, void *ptr);
 static void br_tick(unsigned long arg);
 static int br_forward(struct sk_buff *skb, int port);	/* 3.7 */
-static int br_port_cost(struct device *dev);	/* 4.10.2 */
+static int br_port_cost(struct net_device *dev);	/* 4.10.2 */
 static void br_bpdu(struct sk_buff *skb, int port); /* consumes skb */
 static int br_cmp(unsigned int *a, unsigned int *b);
 static int send_tcn_bpdu(int port_no, Tcn_bpdu *bpdu);
 static int send_config_bpdu(int port_no, Config_bpdu *config_bpdu);
-static int find_port(struct device *dev);
+static int find_port(struct net_device *dev);
 static void br_add_local_mac(unsigned char *mac);
 static int br_flood(struct sk_buff *skb, int port);
 static int br_drop(struct sk_buff *skb);
@@ -1175,7 +1175,7 @@ static int hold_timer_expired(int port_no)
 static struct sk_buff *alloc_bridge_skb(int port_no, int pdu_size, char *pdu_name)
 {
 	struct sk_buff *skb;
-	struct device *dev = port_info[port_no].dev;
+	struct net_device *dev = port_info[port_no].dev;
 	struct ethhdr *eth;
 	int size = dev->hard_header_len + BRIDGE_LLC1_HS + pdu_size;
 	unsigned char *llc_buffer;
@@ -1297,7 +1297,7 @@ static int send_tcn_bpdu(int port_no, Tcn_bpdu *bpdu)
 
 static int br_device_event(struct notifier_block *unused, unsigned long event, void *ptr)
 {
-	struct device *dev = ptr;
+	struct net_device *dev = ptr;
 	int i;
 
 	/* check for loopback devices */
@@ -1838,7 +1838,7 @@ static int br_flood(struct sk_buff *skb, int port)
 	return(0);
 }
 
-static int find_port(struct device *dev)
+static int find_port(struct net_device *dev)
 {
 	int i;
 
@@ -1853,7 +1853,7 @@ static int find_port(struct device *dev)
  *	10,100,1Gbit ethernet.
  */
  
-static int br_port_cost(struct device *dev)	/* 4.10.2 */
+static int br_port_cost(struct net_device *dev)	/* 4.10.2 */
 {
 	if (strncmp(dev->name, "lec", 3) == 0)	/* ATM Lan Emulation (LANE) */
 		return(7);                      /* 155 Mbs */

@@ -19,11 +19,11 @@ struct firewall_ops
 {
 	struct firewall_ops *next;
 	int (*fw_forward)(struct firewall_ops *this, int pf, 
-			struct device *dev, void *phdr, void *arg, struct sk_buff **pskb);
+			struct net_device *dev, void *phdr, void *arg, struct sk_buff **pskb);
 	int (*fw_input)(struct firewall_ops *this, int pf, 
-			struct device *dev, void *phdr, void *arg, struct sk_buff **pskb);
+			struct net_device *dev, void *phdr, void *arg, struct sk_buff **pskb);
 	int (*fw_output)(struct firewall_ops *this, int pf, 
-			struct device *dev, void *phdr, void *arg, struct sk_buff **pskb);
+			struct net_device *dev, void *phdr, void *arg, struct sk_buff **pskb);
 	/* Data falling in the second 486 cache line isn't used directly
 	   during a firewall call and scan, only by insert/delete and other
 	   unusual cases
@@ -37,21 +37,21 @@ extern int register_firewall(int pf, struct firewall_ops *fw);
 extern int unregister_firewall(int pf, struct firewall_ops *fw);
 extern void fwchain_init(void);
 #ifdef CONFIG_FIREWALL
-extern int call_fw_firewall(int pf, struct device *dev, void *phdr, void *arg, struct sk_buff **pskb);
-extern int call_in_firewall(int pf, struct device *dev, void *phdr, void *arg, struct sk_buff **pskb);
-extern int call_out_firewall(int pf, struct device *dev, void *phdr, void *arg, struct sk_buff **pskb);
+extern int call_fw_firewall(int pf, struct net_device *dev, void *phdr, void *arg, struct sk_buff **pskb);
+extern int call_in_firewall(int pf, struct net_device *dev, void *phdr, void *arg, struct sk_buff **pskb);
+extern int call_out_firewall(int pf, struct net_device *dev, void *phdr, void *arg, struct sk_buff **pskb);
 #else
-extern __inline__ int call_fw_firewall(int pf, struct device *dev, void *phdr, void *arg, struct sk_buff **skb)
+extern __inline__ int call_fw_firewall(int pf, struct net_device *dev, void *phdr, void *arg, struct sk_buff **skb)
 {
 	return FW_ACCEPT;
 }
 
-extern __inline__ int call_in_firewall(int pf, struct device *dev, void *phdr, void *arg, struct sk_buff **skb)
+extern __inline__ int call_in_firewall(int pf, struct net_device *dev, void *phdr, void *arg, struct sk_buff **skb)
 {
 	return FW_ACCEPT;
 }
 
-extern __inline__ int call_out_firewall(int pf, struct device *dev, void *phdr, void *arg, struct sk_buff **skb)
+extern __inline__ int call_out_firewall(int pf, struct net_device *dev, void *phdr, void *arg, struct sk_buff **skb)
 {
 	return FW_ACCEPT;
 }

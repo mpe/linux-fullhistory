@@ -63,7 +63,7 @@
 static int __init eth_setup(char *str)
 {
 	int ints[5];
-	struct device *d;
+	struct net_device *d;
 
 	str = get_options(str, ARRAY_SIZE(ints), ints);
 
@@ -99,7 +99,7 @@ __setup("ether=", eth_setup);
  *	daddr=NULL	means leave destination address (eg unresolved arp)
  */
 
-int eth_header(struct sk_buff *skb, struct device *dev, unsigned short type,
+int eth_header(struct sk_buff *skb, struct net_device *dev, unsigned short type,
 	   void *daddr, void *saddr, unsigned len)
 {
 	struct ethhdr *eth = (struct ethhdr *)skb_push(skb,ETH_HLEN);
@@ -155,7 +155,7 @@ int eth_header(struct sk_buff *skb, struct device *dev, unsigned short type,
 int eth_rebuild_header(struct sk_buff *skb)
 {
 	struct ethhdr *eth = (struct ethhdr *)skb->data;
-	struct device *dev = skb->dev;
+	struct net_device *dev = skb->dev;
 
 	switch (eth->h_proto)
 	{
@@ -182,7 +182,7 @@ int eth_rebuild_header(struct sk_buff *skb)
  *	This is normal practice and works for any 'now in use' protocol.
  */
  
-unsigned short eth_type_trans(struct sk_buff *skb, struct device *dev)
+unsigned short eth_type_trans(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ethhdr *eth;
 	unsigned char *rawp;
@@ -244,7 +244,7 @@ int eth_header_cache(struct neighbour *neigh, struct hh_cache *hh)
 {
 	unsigned short type = hh->hh_type;
 	struct ethhdr *eth = (struct ethhdr*)(((u8*)hh->hh_data) + 2);
-	struct device *dev = neigh->dev;
+	struct net_device *dev = neigh->dev;
 
 	if (type == __constant_htons(ETH_P_802_3))
 		return -1;
@@ -260,7 +260,7 @@ int eth_header_cache(struct neighbour *neigh, struct hh_cache *hh)
  * Called by Address Resolution module to notify changes in address.
  */
 
-void eth_header_cache_update(struct hh_cache *hh, struct device *dev, unsigned char * haddr)
+void eth_header_cache_update(struct hh_cache *hh, struct net_device *dev, unsigned char * haddr)
 {
 	memcpy(((u8*)hh->hh_data) + 2, haddr, dev->addr_len);
 }

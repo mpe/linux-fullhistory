@@ -65,23 +65,23 @@
 
 #define WORDSWAP(a)	((((a)>>8)&0xff) | ((a)<<8))
 
-int ariadne2_probe(struct device *dev);
-static int ariadne2_init(struct device *dev, unsigned int key,
+int ariadne2_probe(struct net_device *dev);
+static int ariadne2_init(struct net_device *dev, unsigned int key,
 			 unsigned long board);
 
-static int ariadne2_open(struct device *dev);
-static int ariadne2_close(struct device *dev);
+static int ariadne2_open(struct net_device *dev);
+static int ariadne2_close(struct net_device *dev);
 
-static void ariadne2_reset_8390(struct device *dev);
-static void ariadne2_get_8390_hdr(struct device *dev,
+static void ariadne2_reset_8390(struct net_device *dev);
+static void ariadne2_get_8390_hdr(struct net_device *dev,
 				  struct e8390_pkt_hdr *hdr, int ring_page);
-static void ariadne2_block_input(struct device *dev, int count,
+static void ariadne2_block_input(struct net_device *dev, int count,
 				 struct sk_buff *skb, int ring_offset);
-static void ariadne2_block_output(struct device *dev, const int count,
+static void ariadne2_block_output(struct net_device *dev, const int count,
 				  const unsigned char *buf,
 				  const int start_page);
 
-int __init ariadne2_probe(struct device *dev)
+int __init ariadne2_probe(struct net_device *dev)
 {
     unsigned int key;
     const struct ConfigDev *cd;
@@ -100,7 +100,7 @@ int __init ariadne2_probe(struct device *dev)
     return -ENODEV;
 }
 
-static int __init ariadne2_init(struct device *dev, unsigned int key,
+static int __init ariadne2_init(struct net_device *dev, unsigned int key,
 				    unsigned long board)
 {
     int i;
@@ -221,14 +221,14 @@ static int __init ariadne2_init(struct device *dev, unsigned int key,
     return 0;
 }
 
-static int ariadne2_open(struct device *dev)
+static int ariadne2_open(struct net_device *dev)
 {
     ei_open(dev);
     MOD_INC_USE_COUNT;
     return 0;
 }
 
-static int ariadne2_close(struct device *dev)
+static int ariadne2_close(struct net_device *dev)
 {
     if (ei_debug > 1)
 	printk("%s: Shutting down ethercard.\n", dev->name);
@@ -239,7 +239,7 @@ static int ariadne2_close(struct device *dev)
 
 /* Hard reset the card.  This used to pause for the same period that a
    8390 reset command required, but that shouldn't be necessary. */
-static void ariadne2_reset_8390(struct device *dev)
+static void ariadne2_reset_8390(struct net_device *dev)
 {
     unsigned long reset_start_time = jiffies;
 
@@ -264,7 +264,7 @@ static void ariadne2_reset_8390(struct device *dev)
    we don't need to be concerned with ring wrap as the header will be at
    the start of a page, so we optimize accordingly. */
 
-static void ariadne2_get_8390_hdr(struct device *dev,
+static void ariadne2_get_8390_hdr(struct net_device *dev,
 				  struct e8390_pkt_hdr *hdr, int ring_page)
 {
     int nic_base = dev->base_addr;
@@ -304,7 +304,7 @@ static void ariadne2_get_8390_hdr(struct device *dev,
    The NEx000 doesn't share the on-board packet memory -- you have to put
    the packet out through the "remote DMA" dataport using writeb. */
 
-static void ariadne2_block_input(struct device *dev, int count,
+static void ariadne2_block_input(struct net_device *dev, int count,
 				 struct sk_buff *skb, int ring_offset)
 {
     int nic_base = dev->base_addr;
@@ -338,7 +338,7 @@ static void ariadne2_block_input(struct device *dev, int count,
     ei_status.dmaing &= ~0x01;
 }
 
-static void ariadne2_block_output(struct device *dev, int count,
+static void ariadne2_block_output(struct net_device *dev, int count,
 				  const unsigned char *buf,
 				  const int start_page)
 {
@@ -395,7 +395,7 @@ static void ariadne2_block_output(struct device *dev, int count,
 #ifdef MODULE
 static char devicename[9] = { 0, };
 
-static struct device ariadne2_dev =
+static struct net_device ariadne2_dev =
 {
     devicename,
     0, 0, 0, 0,

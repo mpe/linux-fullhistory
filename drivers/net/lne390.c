@@ -46,17 +46,17 @@ static const char *version =
 #include <linux/etherdevice.h>
 #include "8390.h"
 
-int lne390_probe(struct device *dev);
-int lne390_probe1(struct device *dev, int ioaddr);
+int lne390_probe(struct net_device *dev);
+int lne390_probe1(struct net_device *dev, int ioaddr);
 
-static int lne390_open(struct device *dev);
-static int lne390_close(struct device *dev);
+static int lne390_open(struct net_device *dev);
+static int lne390_close(struct net_device *dev);
 
-static void lne390_reset_8390(struct device *dev);
+static void lne390_reset_8390(struct net_device *dev);
 
-static void lne390_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page);
-static void lne390_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset);
-static void lne390_block_output(struct device *dev, int count, const unsigned char *buf, const int start_page);
+static void lne390_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page);
+static void lne390_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset);
+static void lne390_block_output(struct net_device *dev, int count, const unsigned char *buf, const int start_page);
 
 #define LNE390_START_PG		0x00    /* First page of TX buffer	*/
 #define LNE390_STOP_PG		0x80    /* Last page +1 of RX ring	*/
@@ -100,7 +100,7 @@ static unsigned int shmem_mapB[] __initdata = {0xff, 0xfe, 0x0e, 0xfff, 0xffe, 0
  *	PROM for a match against the value assigned to Mylex.
  */
 
-int __init lne390_probe(struct device *dev)
+int __init lne390_probe(struct net_device *dev)
 {
 	unsigned short ioaddr = dev->base_addr;
 
@@ -127,7 +127,7 @@ int __init lne390_probe(struct device *dev)
 	return ENODEV;
 }
 
-int __init lne390_probe1(struct device *dev, int ioaddr)
+int __init lne390_probe1(struct net_device *dev, int ioaddr)
 {
 	int i, revision;
 	unsigned long eisa_id;
@@ -281,7 +281,7 @@ int __init lne390_probe1(struct device *dev, int ioaddr)
  *	file, this just toggles the "Board Enable" bits (bit 2 and 0).
  */
 
-static void lne390_reset_8390(struct device *dev)
+static void lne390_reset_8390(struct net_device *dev)
 {
 	unsigned short ioaddr = dev->base_addr;
 
@@ -313,7 +313,7 @@ static void lne390_reset_8390(struct device *dev)
  */
 
 static void
-lne390_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+lne390_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 	unsigned long hdr_start = dev->mem_start + ((ring_page - LNE390_START_PG)<<8);
 	memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
@@ -326,7 +326,7 @@ lne390_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page
  *	be rounded up to a doubleword value via lne390_get_8390_hdr() above.
  */
 
-static void lne390_block_input(struct device *dev, int count, struct sk_buff *skb,
+static void lne390_block_input(struct net_device *dev, int count, struct sk_buff *skb,
 						  int ring_offset)
 {
 	unsigned long xfer_start = dev->mem_start + ring_offset - (LNE390_START_PG<<8);
@@ -343,7 +343,7 @@ static void lne390_block_input(struct device *dev, int count, struct sk_buff *sk
 	}
 }
 
-static void lne390_block_output(struct device *dev, int count,
+static void lne390_block_output(struct net_device *dev, int count,
 				const unsigned char *buf, int start_page)
 {
 	unsigned long shmem = dev->mem_start + ((start_page - LNE390_START_PG)<<8);
@@ -352,14 +352,14 @@ static void lne390_block_output(struct device *dev, int count,
 	memcpy_toio(shmem, buf, count);
 }
 
-static int lne390_open(struct device *dev)
+static int lne390_open(struct net_device *dev)
 {
 	ei_open(dev);
 	MOD_INC_USE_COUNT;
 	return 0;
 }
 
-static int lne390_close(struct device *dev)
+static int lne390_close(struct net_device *dev)
 {
 
 	if (ei_debug > 1)
@@ -374,7 +374,7 @@ static int lne390_close(struct device *dev)
 #define MAX_LNE_CARDS	4	/* Max number of LNE390 cards per module */
 #define NAMELEN		8	/* # of chars for storing dev->name */
 static char namelist[NAMELEN * MAX_LNE_CARDS] = { 0, };
-static struct device dev_lne[MAX_LNE_CARDS] = {
+static struct net_device dev_lne[MAX_LNE_CARDS] = {
 	{
 		NULL,		/* assign a chunk of namelist[] below */
 		0, 0, 0, 0,
@@ -396,7 +396,7 @@ int init_module(void)
 	int this_dev, found = 0;
 
 	for (this_dev = 0; this_dev < MAX_LNE_CARDS; this_dev++) {
-		struct device *dev = &dev_lne[this_dev];
+		struct net_device *dev = &dev_lne[this_dev];
 		dev->name = namelist+(NAMELEN*this_dev);
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
@@ -423,7 +423,7 @@ void cleanup_module(void)
 	int this_dev;
 
 	for (this_dev = 0; this_dev < MAX_LNE_CARDS; this_dev++) {
-		struct device *dev = &dev_lne[this_dev];
+		struct net_device *dev = &dev_lne[this_dev];
 		if (dev->priv != NULL) {
 			void *priv = dev->priv;
 			free_irq(dev->irq, dev);

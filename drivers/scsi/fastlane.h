@@ -39,6 +39,7 @@ struct fastlane_dma_registers {
 #define FASTLANE_DMA_ESI   0x01	/* Enable SCSI IRQ */
 
 extern int fastlane_esp_detect(struct SHT *);
+extern int fastlane_esp_release(struct Scsi_Host *);
 extern const char *esp_info(struct Scsi_Host *);
 extern int esp_queue(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 extern int esp_command(Scsi_Cmnd *);
@@ -48,9 +49,10 @@ extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 			 int hostno, int inout);
 
 #define SCSI_FASTLANE     { proc_dir:		&proc_scsi_esp, \
+			    proc_info:		esp_proc_info, \
 			    name:		"Fastlane SCSI", \
 			    detect:		fastlane_esp_detect, \
-			    release:		NULL, \
+			    release:		fastlane_esp_release, \
 			    queuecommand:	esp_queue, \
 			    abort:		esp_abort, \
 			    reset:		esp_reset, \
@@ -58,6 +60,6 @@ extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 			    this_id:		7, \
 			    sg_tablesize:	SG_ALL, \
 			    cmd_per_lun:	1, \
-			    use_clustering:	DISABLE_CLUSTERING }
+			    use_clustering:	ENABLE_CLUSTERING }
 
 #endif /* FASTLANE_H */

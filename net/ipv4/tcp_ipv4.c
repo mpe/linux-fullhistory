@@ -362,7 +362,7 @@ static void tcp_v4_unhash(struct sock *sk)
  * connection.  So always assume those are both wildcarded
  * during the search since they can never be otherwise.
  */
-static struct sock *tcp_v4_lookup_listener(u32 daddr, unsigned short hnum, int dif)
+struct sock *tcp_v4_lookup_listener(u32 daddr, unsigned short hnum, int dif)
 {
 	struct sock *sk;
 	struct sock *result = NULL;
@@ -452,7 +452,7 @@ __inline__ struct sock *tcp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport
  */
 static struct sock *tcp_v4_proxy_lookup(unsigned short num, unsigned long raddr,
 					unsigned short rnum, unsigned long laddr,
-					struct device *dev, unsigned short pnum,
+					struct net_device *dev, unsigned short pnum,
 					int dif)
 {
 	struct sock *s, *result = NULL;

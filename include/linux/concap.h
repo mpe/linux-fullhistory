@@ -25,7 +25,7 @@ struct concap_device_ops;
 /* this manages all data needed by the encapsulation protocol
  */
 struct concap_proto{
-	struct device *net_dev;		/* net device using our service  */
+	struct net_device *net_dev;		/* net device using our service  */
 	struct concap_device_ops *dops; /* callbacks provided by device */
  	struct concap_proto_ops  *pops; /* callbacks provided by us */
 	int flags;
@@ -72,7 +72,7 @@ struct concap_proto_ops{
 	   or when the device driver resets the interface. All services of the
 	   encapsulation protocol may be used after this*/
 	int (*restart)(struct concap_proto *cprot, 
-		       struct device *ndev,
+		       struct net_device *ndev,
 		       struct concap_device_ops *dops);
 
 	/* inactivate an encapsulation protocol instance. The encapsulation

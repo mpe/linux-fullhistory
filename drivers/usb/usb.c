@@ -1041,7 +1041,7 @@ int usb_compress_isochronous (struct usb_device *usb_dev, void *_isodesc)
 
 int usb_release_irq(struct usb_device *dev, void* handle)
 {
-	return dev->bus->op->release_irq(handle);
+	return dev->bus->op->release_irq(dev, handle);
 }
 
 #ifdef CONFIG_PROC_FS

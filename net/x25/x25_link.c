@@ -277,7 +277,7 @@ void x25_link_terminated(struct x25_neigh *neigh)
 /*
  *	Add a new device.
  */
-void x25_link_device_up(struct device *dev)
+void x25_link_device_up(struct net_device *dev)
 {
 	struct x25_neigh *x25_neigh;
 	unsigned long flags;
@@ -337,7 +337,7 @@ static void x25_remove_neigh(struct x25_neigh *x25_neigh)
 /*
  *	A device has been removed, remove its links.
  */
-void x25_link_device_down(struct device *dev)
+void x25_link_device_down(struct net_device *dev)
 {
 	struct x25_neigh *neigh, *x25_neigh = x25_neigh_list;
 
@@ -353,7 +353,7 @@ void x25_link_device_down(struct device *dev)
 /*
  *	Given a device, return the neighbour address.
  */
-struct x25_neigh *x25_get_neigh(struct device *dev)
+struct x25_neigh *x25_get_neigh(struct net_device *dev)
 {
 	struct x25_neigh *x25_neigh;
 
@@ -371,7 +371,7 @@ int x25_subscr_ioctl(unsigned int cmd, void *arg)
 {
 	struct x25_subscrip_struct x25_subscr;
 	struct x25_neigh *x25_neigh;
-	struct device *dev;
+	struct net_device *dev;
 
 	switch (cmd) {
 

@@ -466,7 +466,7 @@ static void *uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb
  *
  * This function can NOT be called from an interrupt.
  */
-int uhci_release_irq(void *handle)
+int uhci_release_irq(struct usb_device *usb, void *handle)
 {
 	struct uhci_td *td;
 	struct uhci_qh *qh;

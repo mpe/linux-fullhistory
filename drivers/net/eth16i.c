@@ -407,9 +407,9 @@ struct eth16i_local {
 
 /* Function prototypes */
 
-extern int     eth16i_probe(struct device *dev);
+extern int     eth16i_probe(struct net_device *dev);
 
-static int     eth16i_probe1(struct device *dev, int ioaddr);
+static int     eth16i_probe1(struct net_device *dev, int ioaddr);
 static int     eth16i_check_signature(int ioaddr);
 static int     eth16i_probe_port(int ioaddr);
 static void    eth16i_set_port(int ioaddr, int porttype);
@@ -419,26 +419,26 @@ static int     eth16i_get_irq(int ioaddr);
 static int     eth16i_read_eeprom(int ioaddr, int offset);
 static int     eth16i_read_eeprom_word(int ioaddr);
 static void    eth16i_eeprom_cmd(int ioaddr, unsigned char command);
-static int     eth16i_open(struct device *dev);
-static int     eth16i_close(struct device *dev);
-static int     eth16i_tx(struct sk_buff *skb, struct device *dev);
-static void    eth16i_rx(struct device *dev);
+static int     eth16i_open(struct net_device *dev);
+static int     eth16i_close(struct net_device *dev);
+static int     eth16i_tx(struct sk_buff *skb, struct net_device *dev);
+static void    eth16i_rx(struct net_device *dev);
 static void    eth16i_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void    eth16i_reset(struct device *dev);
-static void    eth16i_skip_packet(struct device *dev);
-static void    eth16i_multicast(struct device *dev); 
+static void    eth16i_reset(struct net_device *dev);
+static void    eth16i_skip_packet(struct net_device *dev);
+static void    eth16i_multicast(struct net_device *dev); 
 static void    eth16i_select_regbank(unsigned char regbank, int ioaddr);
-static void    eth16i_initialize(struct device *dev);
+static void    eth16i_initialize(struct net_device *dev);
 
 #if 0
-static int     eth16i_set_irq(struct device *dev);
+static int     eth16i_set_irq(struct net_device *dev);
 #endif
 
 #ifdef MODULE
 static ushort  eth16i_parse_mediatype(const char* s);
 #endif
 
-static struct enet_statistics *eth16i_get_stats(struct device *dev);
+static struct enet_statistics *eth16i_get_stats(struct net_device *dev);
 
 static char *cardname = "ICL EtherTeam 16i/32";
 
@@ -450,7 +450,7 @@ static char *cardname = "ICL EtherTeam 16i/32";
 
 #else  /* Not HAVE_DEVLIST */
 
-int __init eth16i_probe(struct device *dev)
+int __init eth16i_probe(struct net_device *dev)
 {
 	int i;
 	int ioaddr;
@@ -484,7 +484,7 @@ int __init eth16i_probe(struct device *dev)
 }
 #endif  /* Not HAVE_DEVLIST */
 
-static int __init eth16i_probe1(struct device *dev, int ioaddr)
+static int __init eth16i_probe1(struct net_device *dev, int ioaddr)
 {
 	static unsigned version_printed = 0;
 	boot = 1;  /* To inform initilization that we are in boot probe */
@@ -593,7 +593,7 @@ static int __init eth16i_probe1(struct device *dev, int ioaddr)
 }
 
 
-static void eth16i_initialize(struct device *dev)
+static void eth16i_initialize(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	int i, node_w = 0;
@@ -824,7 +824,7 @@ static int eth16i_receive_probe_packet(int ioaddr)
 }
 
 #if 0
-static int eth16i_set_irq(struct device* dev)
+static int eth16i_set_irq(struct net_device* dev)
 {
 	const int ioaddr = dev->base_addr;
 	const int irq = dev->irq;
@@ -966,7 +966,7 @@ static void eth16i_eeprom_cmd(int ioaddr, unsigned char command)
 	} 
 }
 
-static int eth16i_open(struct device *dev)
+static int eth16i_open(struct net_device *dev)
 {
 	struct eth16i_local *lp = (struct eth16i_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -1007,7 +1007,7 @@ static int eth16i_open(struct device *dev)
 	return 0;
 }
 
-static int eth16i_close(struct device *dev)
+static int eth16i_close(struct net_device *dev)
 {
 	struct eth16i_local *lp = (struct eth16i_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -1036,7 +1036,7 @@ static int eth16i_close(struct device *dev)
 	return 0;
 }
 
-static int eth16i_tx(struct sk_buff *skb, struct device *dev)
+static int eth16i_tx(struct sk_buff *skb, struct net_device *dev)
 {
 	struct eth16i_local *lp = (struct eth16i_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -1185,7 +1185,7 @@ static int eth16i_tx(struct sk_buff *skb, struct device *dev)
 	return status;
 }
 
-static void eth16i_rx(struct device *dev)
+static void eth16i_rx(struct net_device *dev)
 {
 	struct eth16i_local *lp = (struct eth16i_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -1300,7 +1300,7 @@ static void eth16i_rx(struct device *dev)
 
 static void eth16i_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct eth16i_local *lp;
 	int ioaddr = 0,
 		status;
@@ -1406,7 +1406,7 @@ static void eth16i_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	return;
 }
 
-static void eth16i_skip_packet(struct device *dev)
+static void eth16i_skip_packet(struct net_device *dev)
 {	 
 	int ioaddr = dev->base_addr;
 
@@ -1418,7 +1418,7 @@ static void eth16i_skip_packet(struct device *dev)
 	while( inb( ioaddr + FILTER_SELF_RX_REG ) != 0);
 }
 
-static void eth16i_reset(struct device *dev)
+static void eth16i_reset(struct net_device *dev)
 {
 	struct eth16i_local *lp = (struct eth16i_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -1441,7 +1441,7 @@ static void eth16i_reset(struct device *dev)
 	BITCLR(ioaddr + CONFIG_REG_0, DLC_EN);
 }
 
-static void eth16i_multicast(struct device *dev)
+static void eth16i_multicast(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
   
@@ -1454,7 +1454,7 @@ static void eth16i_multicast(struct device *dev)
 	}
 }
 
-static struct enet_statistics *eth16i_get_stats(struct device *dev)
+static struct enet_statistics *eth16i_get_stats(struct net_device *dev)
 {
 	struct eth16i_local *lp = (struct eth16i_local *)dev->priv;
 
@@ -1492,7 +1492,7 @@ static ushort eth16i_parse_mediatype(const char* s)
 #define NAMELEN          8  /* number of chars for storing dev->name */
 
 static char namelist[NAMELEN * MAX_ETH16I_CARDS] = { 0, };
-static struct device dev_eth16i[MAX_ETH16I_CARDS] = {
+static struct net_device dev_eth16i[MAX_ETH16I_CARDS] = {
 	{
 		NULL,
 		0, 0, 0, 0,
@@ -1533,7 +1533,7 @@ int init_module(void)
 
 	for(this_dev = 0; this_dev < MAX_ETH16I_CARDS; this_dev++)
 	{
-		struct device *dev = &dev_eth16i[this_dev];
+		struct net_device *dev = &dev_eth16i[this_dev];
 	
 		dev->name = namelist + (NAMELEN*this_dev);
 		dev->irq = 0; /* irq[this_dev]; */
@@ -1575,7 +1575,7 @@ void cleanup_module(void)
 
 	for(this_dev = 0; this_dev < MAX_ETH16I_CARDS; this_dev++)
 	{
-		struct device* dev = &dev_eth16i[this_dev];
+		struct net_device* dev = &dev_eth16i[this_dev];
 		
 		if(dev->priv != NULL)
 		{

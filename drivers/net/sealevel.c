@@ -73,7 +73,7 @@ static void sealevel_input(struct z8530_channel *c, struct sk_buff *skb)
  *	We've been placed in the UP state
  */ 
  
-static int sealevel_open(struct device *d)
+static int sealevel_open(struct net_device *d)
 {
 	struct slvl_device *slvl=d->priv;
 	int err = -1;
@@ -123,7 +123,7 @@ static int sealevel_open(struct device *d)
 	return 0;
 }
 
-static int sealevel_close(struct device *d)
+static int sealevel_close(struct net_device *d)
 {
 	struct slvl_device *slvl=d->priv;
 	int unit = slvl->channel;
@@ -156,14 +156,14 @@ static int sealevel_close(struct device *d)
 	return 0;
 }
 
-static int sealevel_ioctl(struct device *d, struct ifreq *ifr, int cmd)
+static int sealevel_ioctl(struct net_device *d, struct ifreq *ifr, int cmd)
 {
 	/* struct slvl_device *slvl=d->priv;
 	   z8530_ioctl(d,&slvl->sync.chanA,ifr,cmd) */
 	return sppp_do_ioctl(d, ifr,cmd);
 }
 
-static struct enet_statistics *sealevel_get_stats(struct device *d)
+static struct enet_statistics *sealevel_get_stats(struct net_device *d)
 {
 	struct slvl_device *slvl=d->priv;
 	if(slvl)
@@ -176,7 +176,7 @@ static struct enet_statistics *sealevel_get_stats(struct device *d)
  *	Passed PPP frames, fire them downwind.
  */
  
-static int sealevel_queue_xmit(struct sk_buff *skb, struct device *d)
+static int sealevel_queue_xmit(struct sk_buff *skb, struct net_device *d)
 {
 	struct slvl_device *slvl=d->priv;
 	return z8530_queue_xmit(slvl->chan, skb);
@@ -192,7 +192,7 @@ static int sealevel_neigh_setup(struct neighbour *n)
 	return 0;
 }
 
-static int sealevel_neigh_setup_dev(struct device *dev, struct neigh_parms *p)
+static int sealevel_neigh_setup_dev(struct net_device *dev, struct neigh_parms *p)
 {
 	if (p->tbl->family == AF_INET) {
 		p->neigh_setup = sealevel_neigh_setup;
@@ -204,7 +204,7 @@ static int sealevel_neigh_setup_dev(struct device *dev, struct neigh_parms *p)
 
 #else
 
-static int return_0(struct device *d)
+static int return_0(struct net_device *d)
 {
 	return 0;
 }
@@ -342,7 +342,7 @@ static struct slvl_board *slvl_init(int iobase, int irq, int txdma, int rxdma, i
 			sprintf(sv->name,"hdlc%d", i);
 			if(dev_get(sv->name)==NULL)
 			{
-				struct device *d=sv->chan->netdevice;
+				struct net_device *d=sv->chan->netdevice;
 	
 				/* 
 				 *	Initialise the PPP components

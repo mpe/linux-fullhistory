@@ -25,19 +25,19 @@ struct shaper
 				   an empty queue */
         unsigned long locked;
         struct net_device_stats stats;
-	struct device *dev;
+	struct net_device *dev;
 	int  (*hard_start_xmit) (struct sk_buff *skb,
-		struct device *dev);
+		struct net_device *dev);
 	int  (*hard_header) (struct sk_buff *skb,
-		struct device *dev,
+		struct net_device *dev,
 		unsigned short type,
 		void *daddr,
 		void *saddr,
 		unsigned len);
 	int  (*rebuild_header)(struct sk_buff *skb);
 	int (*hard_header_cache)(struct neighbour *neigh, struct hh_cache *hh);
-	void (*header_cache_update)(struct hh_cache *hh, struct device *dev, unsigned char *  haddr);
-	struct net_device_stats* (*get_stats)(struct device *dev);
+	void (*header_cache_update)(struct hh_cache *hh, struct net_device *dev, unsigned char *  haddr);
+	struct net_device_stats* (*get_stats)(struct net_device *dev);
 	wait_queue_head_t  wait_queue;
 	struct timer_list timer;
 };

@@ -10,7 +10,7 @@
 
 static const char *arlan_version = "C.Jennigs 97 & Elmer.Joandi@ut.ee  Oct'98, http://www.ylenurme.ee/~elmer/655/";
 
-struct device *arlan_device[MAX_ARLANS];
+struct net_device *arlan_device[MAX_ARLANS];
 int last_arlan = 0;
 
 static int SID = SIDUNKNOWN;
@@ -87,20 +87,20 @@ EXPORT_SYMBOL(last_arlan);
 struct arlan_conf_stru arlan_conf[MAX_ARLANS];
 int arlans_found = 0;
 
-static  int 	arlan_probe_here(struct device *dev, int ioaddr);
-static  int 	arlan_open(struct device *dev);
-static  int 	arlan_tx(struct sk_buff *skb, struct device *dev);
+static  int 	arlan_probe_here(struct net_device *dev, int ioaddr);
+static  int 	arlan_open(struct net_device *dev);
+static  int 	arlan_tx(struct sk_buff *skb, struct net_device *dev);
 static  void 	arlan_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static  int 	arlan_close(struct device *dev);
+static  int 	arlan_close(struct net_device *dev);
 static  struct enet_statistics *
-		arlan_statistics		(struct device *dev);
-static  void 	arlan_set_multicast		(struct device *dev);
-static  int 	arlan_hw_tx			(struct device* dev, char *buf, int length );
-static  int	arlan_hw_config			(struct device * dev);
-static  void 	arlan_tx_done_interrupt		(struct device * dev, int status);
-static  void	arlan_rx_interrupt		(struct device * dev, u_char rxStatus, u_short, u_short);
-static  void	arlan_process_interrupt		(struct device * dev);
-static  int	arlan_command(struct device * dev, int command);
+		arlan_statistics		(struct net_device *dev);
+static  void 	arlan_set_multicast		(struct net_device *dev);
+static  int 	arlan_hw_tx			(struct net_device* dev, char *buf, int length );
+static  int	arlan_hw_config			(struct net_device * dev);
+static  void 	arlan_tx_done_interrupt		(struct net_device * dev, int status);
+static  void	arlan_rx_interrupt		(struct net_device * dev, u_char rxStatus, u_short, u_short);
+static  void	arlan_process_interrupt		(struct net_device * dev);
+static  int	arlan_command(struct net_device * dev, int command);
 
 EXPORT_SYMBOL(arlan_command);
 
@@ -162,7 +162,7 @@ extern inline long long arlan_time(void)
 
 
 
-extern inline int arlan_drop_tx(struct device *dev)
+extern inline int arlan_drop_tx(struct net_device *dev)
 {
 	struct arlan_private *priv = ((struct arlan_private *) dev->priv);
 
@@ -189,7 +189,7 @@ extern inline int arlan_drop_tx(struct device *dev)
 };
 
 
-static int arlan_command(struct device *dev, int command_p)
+static int arlan_command(struct net_device *dev, int command_p)
 {
 
 	volatile struct arlan_shmem *arlan = ((struct arlan_private *) dev->priv)->card;
@@ -532,7 +532,7 @@ command_busy_end:
 
 };
 
-extern inline void arlan_command_process(struct device *dev)
+extern inline void arlan_command_process(struct net_device *dev)
 {
 	struct arlan_private *priv = ((struct arlan_private *) dev->priv);
 
@@ -553,7 +553,7 @@ extern inline void arlan_command_process(struct device *dev)
 }
 
 
-extern inline void arlan_retransmit_now(struct device *dev)
+extern inline void arlan_retransmit_now(struct net_device *dev)
 {
 	struct arlan_private *priv = ((struct arlan_private *) dev->priv);
 
@@ -596,7 +596,7 @@ extern inline void arlan_retransmit_now(struct device *dev)
 
 static void arlan_registration_timer(unsigned long data)
 {
-	struct device *dev = (struct device *) data;
+	struct net_device *dev = (struct net_device *) data;
 	struct arlan_private *priv = (struct arlan_private *) dev->priv;
 
 	int lostTime = ((int) (jiffies - priv->registrationLastSeen)) * 1000 / HZ;
@@ -696,7 +696,7 @@ static void arlan_registration_timer(unsigned long data)
 
 
 
-static void arlan_print_registers(struct device *dev, int line)
+static void arlan_print_registers(struct net_device *dev, int line)
 {
 	volatile struct arlan_shmem *arlan = ((struct arlan_private *) dev->priv)->card;
 
@@ -722,7 +722,7 @@ static void arlan_print_registers(struct device *dev, int line)
 }
 
 
-static int arlan_hw_tx(struct device *dev, char *buf, int length)
+static int arlan_hw_tx(struct net_device *dev, char *buf, int length)
 {
 	int i;
 
@@ -827,7 +827,7 @@ static int arlan_hw_tx(struct device *dev, char *buf, int length)
 }
 
 
-static int arlan_hw_config(struct device *dev)
+static int arlan_hw_config(struct net_device *dev)
 {
 	volatile struct arlan_shmem *arlan = ((struct arlan_private *) dev->priv)->card;
 	struct arlan_conf_stru *conf = ((struct arlan_private *) dev->priv)->Conf;
@@ -909,7 +909,7 @@ static int arlan_hw_config(struct device *dev)
 }
 
 
-static int arlan_read_card_configuration(struct device *dev)
+static int arlan_read_card_configuration(struct net_device *dev)
 {
 	u_char tlx415;
 	volatile struct arlan_shmem *arlan = ((struct arlan_private *) dev->priv)->card;
@@ -1056,7 +1056,7 @@ __initfunctio(static int arlan_check_fingerprint(int memaddr))
 
 }
 
-__initfunctio(int arlan_probe_everywhere(struct device *dev))
+__initfunctio(int arlan_probe_everywhere(struct net_device *dev))
 {
 	int m;
 	int probed = 0;
@@ -1113,7 +1113,7 @@ __initfunctio(int arlan_find_devices(void))
 }
 
 
-static int arlan_change_mtu(struct device *dev, int new_mtu)
+static int arlan_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct arlan_conf_stru *conf = ((struct arlan_private *) dev->priv)->Conf;
 
@@ -1134,7 +1134,7 @@ static int arlan_change_mtu(struct device *dev, int new_mtu)
 	return 0;
 }
 
-static int arlan_mac_addr(struct device *dev, void *p)
+static int arlan_mac_addr(struct net_device *dev, void *p)
 {
 	struct sockaddr *addr = p;
 
@@ -1154,10 +1154,10 @@ static int arlan_mac_addr(struct device *dev, void *p)
 
 
 __initfunctio(static int
-	      arlan_allocate_device(int num, struct device *devs))
+	      arlan_allocate_device(int num, struct net_device *devs))
 {
 
-	struct device *dev;
+	struct net_device *dev;
 
 	ARLAN_DEBUG_ENTRY("arlan_allocate_device");
 
@@ -1214,7 +1214,7 @@ __initfunctio(static int
 }
 
 
-__initfunctio(int arlan_probe_here(struct device *dev, int memaddr))
+__initfunctio(int arlan_probe_here(struct net_device *dev, int memaddr))
 {
 	volatile struct arlan_shmem *arlan;
 
@@ -1249,7 +1249,7 @@ __initfunctio(int arlan_probe_here(struct device *dev, int memaddr))
 
 
 
-static int arlan_open(struct device *dev)
+static int arlan_open(struct net_device *dev)
 {
 	struct arlan_private *priv = (struct arlan_private *) dev->priv;
 	volatile struct arlan_shmem *arlan = priv->card;
@@ -1323,7 +1323,7 @@ static int arlan_open(struct device *dev)
 
 
 
-static int arlan_tx(struct sk_buff *skb, struct device *dev)
+static int arlan_tx(struct sk_buff *skb, struct net_device *dev)
 {
 	struct arlan_private *priv = ((struct arlan_private *) dev->priv);
 	struct arlan_conf_stru *conf = ((struct arlan_private *) dev->priv)->Conf;
@@ -1399,7 +1399,7 @@ bad_end:
 }
 
 
-extern inline int DoNotReTransmitCrap(struct device *dev)
+extern inline int DoNotReTransmitCrap(struct net_device *dev)
 {
 	struct arlan_private *priv = ((struct arlan_private *) dev->priv);
 
@@ -1409,7 +1409,7 @@ extern inline int DoNotReTransmitCrap(struct device *dev)
 
 }
 
-extern inline int DoNotWaitReTransmitCrap(struct device *dev)
+extern inline int DoNotWaitReTransmitCrap(struct net_device *dev)
 {
 	struct arlan_private *priv = ((struct arlan_private *) dev->priv);
 
@@ -1418,7 +1418,7 @@ extern inline int DoNotWaitReTransmitCrap(struct device *dev)
 	return 0;
 }
 
-extern inline void arlan_queue_retransmit(struct device *dev)
+extern inline void arlan_queue_retransmit(struct net_device *dev)
 {
 	struct arlan_private *priv = ((struct arlan_private *) dev->priv);
 
@@ -1433,7 +1433,7 @@ extern inline void arlan_queue_retransmit(struct device *dev)
 	ARLAN_DEBUG_EXIT("arlan_queue_retransmit");
 };
 
-extern inline void RetryOrFail(struct device *dev)
+extern inline void RetryOrFail(struct net_device *dev)
 {
 	struct arlan_private *priv = ((struct arlan_private *) dev->priv);
 
@@ -1454,7 +1454,7 @@ extern inline void RetryOrFail(struct device *dev)
 }
 
 
-static void arlan_tx_done_interrupt(struct device *dev, int status)
+static void arlan_tx_done_interrupt(struct net_device *dev, int status)
 {
 	struct arlan_private *priv = ((struct arlan_private *) dev->priv);
 
@@ -1596,7 +1596,7 @@ static void arlan_tx_done_interrupt(struct device *dev, int status)
 }
 
 
-static void arlan_rx_interrupt(struct device *dev, u_char rxStatus, u_short rxOffset, u_short pkt_len)
+static void arlan_rx_interrupt(struct net_device *dev, u_char rxStatus, u_short rxOffset, u_short pkt_len)
 {
 	char *skbtmp;
 	int i = 0;
@@ -1749,7 +1749,7 @@ static void arlan_rx_interrupt(struct device *dev, u_char rxStatus, u_short rxOf
 	ARLAN_DEBUG_EXIT("arlan_rx_interrupt");
 }
 
-static void arlan_process_interrupt(struct device *dev)
+static void arlan_process_interrupt(struct net_device *dev)
 {
 	struct arlan_private *priv = (struct arlan_private *) dev->priv;
 	volatile struct arlan_shmem *arlan = priv->card;
@@ -1859,7 +1859,7 @@ end_int_process:
 
 static void arlan_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = dev_id;
+	struct net_device *dev = dev_id;
 	struct arlan_private *priv = (struct arlan_private *) dev->priv;
 	volatile struct arlan_shmem *arlan = priv->card;
 	u_char rxStatus = READSHMB(arlan->rxStatus);
@@ -1883,7 +1883,7 @@ static void arlan_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 
-static int arlan_close(struct device *dev)
+static int arlan_close(struct net_device *dev)
 {
 	struct arlan_private *priv = (struct arlan_private *) dev->priv;
 
@@ -1929,7 +1929,7 @@ static long alignLong(volatile u_char * ptr)
  * This may be called with the card open or closed.
  */
 
-static struct enet_statistics *arlan_statistics(struct device *dev)
+static struct enet_statistics *arlan_statistics(struct net_device *dev)
 {
 	struct arlan_private *priv = (struct arlan_private *) dev->priv;
 	volatile struct arlan_shmem *arlan = ((struct arlan_private *) dev->priv)->card;
@@ -1959,7 +1959,7 @@ static struct enet_statistics *arlan_statistics(struct device *dev)
 }
 
 
-static void arlan_set_multicast(struct device *dev)
+static void arlan_set_multicast(struct net_device *dev)
 {
 	volatile struct arlan_shmem *arlan = ((struct arlan_private *) dev->priv)->card;
 	struct arlan_conf_stru *conf = ((struct arlan_private *) dev->priv)->Conf;
@@ -1992,7 +1992,7 @@ static void arlan_set_multicast(struct device *dev)
 }
 
 
-__initfunctio(int arlan_probe(struct device *dev))
+__initfunctio(int arlan_probe(struct net_device *dev))
 {
 	printk("Arlan driver %s\n", arlan_version);
 

@@ -49,7 +49,7 @@ static void neigh_timer_handler(unsigned long arg);
 #ifdef CONFIG_ARPD
 static void neigh_app_notify(struct neighbour *n);
 #endif
-static int pneigh_ifdown(struct neigh_table *tbl, struct device *dev);
+static int pneigh_ifdown(struct neigh_table *tbl, struct net_device *dev);
 
 static int neigh_glbl_allocs;
 static struct neigh_table *neigh_tables;
@@ -156,7 +156,7 @@ static int neigh_forced_gc(struct neigh_table *tbl)
 	return shrunk;
 }
 
-int neigh_ifdown(struct neigh_table *tbl, struct device *dev)
+int neigh_ifdown(struct neigh_table *tbl, struct net_device *dev)
 {
 	int i;
 
@@ -244,7 +244,7 @@ static struct neighbour *neigh_alloc(struct neigh_table *tbl)
 }
 
 struct neighbour *neigh_lookup(struct neigh_table *tbl, const void *pkey,
-			       struct device *dev)
+			       struct net_device *dev)
 {
 	struct neighbour *n;
 	u32 hash_val;
@@ -269,7 +269,7 @@ struct neighbour *neigh_lookup(struct neigh_table *tbl, const void *pkey,
 }
 
 struct neighbour * neigh_create(struct neigh_table *tbl, const void *pkey,
-				struct device *dev)
+				struct net_device *dev)
 {
 	struct neighbour *n, *n1;
 	u32 hash_val;
@@ -324,7 +324,7 @@ struct neighbour * neigh_create(struct neigh_table *tbl, const void *pkey,
 }
 
 struct pneigh_entry * pneigh_lookup(struct neigh_table *tbl, const void *pkey,
-				    struct device *dev, int creat)
+				    struct net_device *dev, int creat)
 {
 	struct pneigh_entry *n;
 	u32 hash_val;
@@ -362,7 +362,7 @@ struct pneigh_entry * pneigh_lookup(struct neigh_table *tbl, const void *pkey,
 }
 
 
-int pneigh_delete(struct neigh_table *tbl, const void *pkey, struct device *dev)
+int pneigh_delete(struct neigh_table *tbl, const void *pkey, struct net_device *dev)
 {
 	struct pneigh_entry *n, **np;
 	u32 hash_val;
@@ -387,7 +387,7 @@ int pneigh_delete(struct neigh_table *tbl, const void *pkey, struct device *dev)
 	return -ENOENT;
 }
 
-static int pneigh_ifdown(struct neigh_table *tbl, struct device *dev)
+static int pneigh_ifdown(struct neigh_table *tbl, struct net_device *dev)
 {
 	struct pneigh_entry *n, **np;
 	u32 h;
@@ -724,7 +724,7 @@ int __neigh_event_send(struct neighbour *neigh, struct sk_buff *skb)
 static __inline__ void neigh_update_hhs(struct neighbour *neigh)
 {
 	struct hh_cache *hh;
-	void (*update)(struct hh_cache*, struct device*, unsigned char*) =
+	void (*update)(struct hh_cache*, struct net_device*, unsigned char*) =
 		neigh->dev->header_cache_update;
 
 	if (update) {
@@ -752,7 +752,7 @@ int neigh_update(struct neighbour *neigh, u8 *lladdr, u8 new, int override, int 
 	u8 old;
 	int err;
 	int notify = 0;
-	struct device *dev = neigh->dev;
+	struct net_device *dev = neigh->dev;
 
 	write_lock_bh(&neigh->lock);
 	old = neigh->nud_state;
@@ -858,7 +858,7 @@ out:
 
 struct neighbour * neigh_event_ns(struct neigh_table *tbl,
 				  u8 *lladdr, void *saddr,
-				  struct device *dev)
+				  struct net_device *dev)
 {
 	struct neighbour *neigh;
 
@@ -871,7 +871,7 @@ struct neighbour * neigh_event_ns(struct neigh_table *tbl,
 static void neigh_hh_init(struct neighbour *n, struct dst_entry *dst, u16 protocol)
 {
 	struct hh_cache	*hh = NULL;
-	struct device *dev = dst->dev;
+	struct net_device *dev = dst->dev;
 
 	for (hh=n->hh; hh; hh = hh->hh_next)
 		if (hh->hh_type == protocol)
@@ -908,7 +908,7 @@ static void neigh_hh_init(struct neighbour *n, struct dst_entry *dst, u16 protoc
 
 int neigh_compat_output(struct sk_buff *skb)
 {
-	struct device *dev = skb->dev;
+	struct net_device *dev = skb->dev;
 
 	__skb_pull(skb, skb->nh.raw - skb->data);
 
@@ -934,7 +934,7 @@ int neigh_resolve_output(struct sk_buff *skb)
 
 	if (neigh_event_send(neigh, skb) == 0) {
 		int err;
-		struct device *dev = neigh->dev;
+		struct net_device *dev = neigh->dev;
 		if (dev->hard_header_cache && dst->hh == NULL) {
 			write_lock_bh(&neigh->lock);
 			if (dst->hh == NULL)
@@ -966,7 +966,7 @@ int neigh_connected_output(struct sk_buff *skb)
 	int err;
 	struct dst_entry *dst = skb->dst;
 	struct neighbour *neigh = dst->neighbour;
-	struct device *dev = neigh->dev;
+	struct net_device *dev = neigh->dev;
 
 	__skb_pull(skb, skb->nh.raw - skb->data);
 
@@ -1032,7 +1032,7 @@ void pneigh_enqueue(struct neigh_table *tbl, struct neigh_parms *p,
 }
 
 
-struct neigh_parms *neigh_parms_alloc(struct device *dev, struct neigh_table *tbl)
+struct neigh_parms *neigh_parms_alloc(struct net_device *dev, struct neigh_table *tbl)
 {
 	struct neigh_parms *p;
 	p = kmalloc(sizeof(*p), GFP_KERNEL);
@@ -1135,7 +1135,7 @@ int neigh_delete(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg)
 	struct ndmsg *ndm = NLMSG_DATA(nlh);
 	struct rtattr **nda = arg;
 	struct neigh_table *tbl;
-	struct device *dev = NULL;
+	struct net_device *dev = NULL;
 
 	if (ndm->ndm_ifindex) {
 		if ((dev = dev_get_by_index(ndm->ndm_ifindex)) == NULL)
@@ -1178,7 +1178,7 @@ int neigh_add(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg)
 	struct ndmsg *ndm = NLMSG_DATA(nlh);
 	struct rtattr **nda = arg;
 	struct neigh_table *tbl;
-	struct device *dev = NULL;
+	struct net_device *dev = NULL;
 
 	if (ndm->ndm_ifindex) {
 		if ((dev = dev_get_by_index(ndm->ndm_ifindex)) == NULL)
@@ -1443,7 +1443,7 @@ struct neigh_sysctl_table
 	{{CTL_NET, "net", NULL, 0, 0555, NULL},{0}}
 };
 
-int neigh_sysctl_register(struct device *dev, struct neigh_parms *p,
+int neigh_sysctl_register(struct net_device *dev, struct neigh_parms *p,
 			  int p_id, int pdev_id, char *p_name)
 {
 	struct neigh_sysctl_table *t;

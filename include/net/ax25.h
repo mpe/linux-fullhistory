@@ -148,7 +148,7 @@ typedef struct {
 typedef struct ax25_route {
 	struct ax25_route	*next;
 	ax25_address		callsign;
-	struct device		*dev;
+	struct net_device		*dev;
 	ax25_digi		*digipeat;
 	char			ip_mode;
 } ax25_route;
@@ -165,8 +165,8 @@ typedef struct {
 
 typedef struct ax25_dev {
 	struct ax25_dev		*next;
-	struct device		*dev;
-	struct device		*forward;
+	struct net_device		*dev;
+	struct net_device		*forward;
 	struct ctl_table	systable[AX25_MAX_VALUES+1];
 	int			values[AX25_MAX_VALUES];
 #if defined(CONFIG_AX25_DAMA_SLAVE) || defined(CONFIG_AX25_DAMA_MASTER)
@@ -200,9 +200,9 @@ typedef struct ax25_cb {
 extern ax25_cb *volatile ax25_list;
 extern void ax25_free_cb(ax25_cb *);
 extern void ax25_insert_socket(ax25_cb *);
-struct sock *ax25_find_listener(ax25_address *, int, struct device *, int);
+struct sock *ax25_find_listener(ax25_address *, int, struct net_device *, int);
 struct sock *ax25_find_socket(ax25_address *, ax25_address *, int);
-extern ax25_cb *ax25_find_cb(ax25_address *, ax25_address *, ax25_digi *, struct device *);
+extern ax25_cb *ax25_find_cb(ax25_address *, ax25_address *, ax25_digi *, struct net_device *);
 extern struct sock *ax25_addr_match(ax25_address *);
 extern void ax25_send_to_raw(struct sock *, struct sk_buff *, int);
 extern void ax25_destroy_socket(ax25_cb *);
@@ -224,12 +224,12 @@ extern void ax25_digi_invert(ax25_digi *, ax25_digi *);
 
 /* ax25_dev.c */
 extern ax25_dev *ax25_dev_list;
-extern ax25_dev *ax25_dev_ax25dev(struct device *);
+extern ax25_dev *ax25_dev_ax25dev(struct net_device *);
 extern ax25_dev *ax25_addr_ax25dev(ax25_address *);
-extern void ax25_dev_device_up(struct device *);
-extern void ax25_dev_device_down(struct device *);
+extern void ax25_dev_device_up(struct net_device *);
+extern void ax25_dev_device_down(struct net_device *);
 extern int  ax25_fwd_ioctl(unsigned int, struct ax25_fwd_struct *);
-extern struct device *ax25_fwd_dev(struct device *);
+extern struct net_device *ax25_fwd_dev(struct net_device *);
 extern void ax25_dev_free(void);
 
 /* ax25_ds_in.c */
@@ -260,23 +260,23 @@ extern int  ax25_protocol_register(unsigned int, int (*)(struct sk_buff *, ax25_
 extern void ax25_protocol_release(unsigned int);
 extern int  ax25_linkfail_register(void (*)(ax25_cb *, int));
 extern void ax25_linkfail_release(void (*)(ax25_cb *, int));
-extern int  ax25_listen_register(ax25_address *, struct device *);
-extern void ax25_listen_release(ax25_address *, struct device *);
+extern int  ax25_listen_register(ax25_address *, struct net_device *);
+extern void ax25_listen_release(ax25_address *, struct net_device *);
 extern int  (*ax25_protocol_function(unsigned int))(struct sk_buff *, ax25_cb *);
-extern int  ax25_listen_mine(ax25_address *, struct device *);
+extern int  ax25_listen_mine(ax25_address *, struct net_device *);
 extern void ax25_link_failed(ax25_cb *, int);
 extern int  ax25_protocol_is_registered(unsigned int);
 
 /* ax25_in.c */
 extern int  ax25_rx_iframe(ax25_cb *, struct sk_buff *);
-extern int  ax25_kiss_rcv(struct sk_buff *, struct device *, struct packet_type *);
+extern int  ax25_kiss_rcv(struct sk_buff *, struct net_device *, struct packet_type *);
 
 /* ax25_ip.c */
-extern int  ax25_encapsulate(struct sk_buff *, struct device *, unsigned short, void *, void *, unsigned int);
+extern int  ax25_encapsulate(struct sk_buff *, struct net_device *, unsigned short, void *, void *, unsigned int);
 extern int  ax25_rebuild_header(struct sk_buff *);
 
 /* ax25_out.c */
-extern ax25_cb *ax25_send_frame(struct sk_buff *, int, ax25_address *, ax25_address *, ax25_digi *, struct device *);
+extern ax25_cb *ax25_send_frame(struct sk_buff *, int, ax25_address *, ax25_address *, ax25_digi *, struct net_device *);
 extern void ax25_output(ax25_cb *, int, struct sk_buff *);
 extern void ax25_kick(ax25_cb *);
 extern void ax25_transmit_buffer(ax25_cb *, struct sk_buff *, int);
@@ -284,11 +284,11 @@ extern void ax25_queue_xmit(struct sk_buff *);
 extern int  ax25_check_iframes_acked(ax25_cb *, unsigned short);
 
 /* ax25_route.c */
-extern void ax25_rt_device_down(struct device *);
+extern void ax25_rt_device_down(struct net_device *);
 extern int  ax25_rt_ioctl(unsigned int, void *);
 extern int  ax25_rt_get_info(char *, char **, off_t, int, int);
 extern int  ax25_rt_autobind(ax25_cb *, ax25_address *);
-extern ax25_route *ax25_rt_find_route(ax25_address *, struct device *);
+extern ax25_route *ax25_rt_find_route(ax25_address *, struct net_device *);
 extern struct sk_buff *ax25_rt_build_path(struct sk_buff *, ax25_address *, ax25_address *, ax25_digi *);
 extern void ax25_rt_free(void);
 
@@ -316,7 +316,7 @@ extern void ax25_requeue_frames(ax25_cb *);
 extern int  ax25_validate_nr(ax25_cb *, unsigned short);
 extern int  ax25_decode(ax25_cb *, struct sk_buff *, int *, int *, int *);
 extern void ax25_send_control(ax25_cb *, int, int, int);
-extern void ax25_return_dm(struct device *, ax25_address *, ax25_address *, ax25_digi *);
+extern void ax25_return_dm(struct net_device *, ax25_address *, ax25_address *, ax25_digi *);
 extern void ax25_calculate_t1(ax25_cb *);
 extern void ax25_calculate_rtt(ax25_cb *);
 extern void ax25_disconnect(ax25_cb *, int);

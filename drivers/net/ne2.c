@@ -126,19 +126,19 @@ const struct ne2_adapters_t ne2_adapters[] = {
 	{ 0x0000, NULL }
 };
 
-extern int netcard_probe(struct device *dev);
+extern int netcard_probe(struct net_device *dev);
 
-static int ne2_probe1(struct device *dev, int slot);
+static int ne2_probe1(struct net_device *dev, int slot);
 
-static int ne_open(struct device *dev);
-static int ne_close(struct device *dev);
+static int ne_open(struct net_device *dev);
+static int ne_close(struct net_device *dev);
 
-static void ne_reset_8390(struct device *dev);
-static void ne_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+static void ne_reset_8390(struct net_device *dev);
+static void ne_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
 		int ring_page);
-static void ne_block_input(struct device *dev, int count,
+static void ne_block_input(struct net_device *dev, int count,
 		struct sk_buff *skb, int ring_offset);
-static void ne_block_output(struct device *dev, const int count,
+static void ne_block_output(struct net_device *dev, const int count,
 		const unsigned char *buf, const int start_page);
 
 
@@ -146,7 +146,7 @@ static void ne_block_output(struct device *dev, const int count,
  * Note that at boot, this probe only picks up one card at a time.
  */
 
-int __init ne2_probe(struct device *dev)
+int __init ne2_probe(struct net_device *dev)
 {
 	static int current_mca_slot = -1;
 	int i;
@@ -175,7 +175,7 @@ int __init ne2_probe(struct device *dev)
 }
 
 
-static int ne2_procinfo(char *buf, int slot, struct device *dev)
+static int ne2_procinfo(char *buf, int slot, struct net_device *dev)
 {
 	int len=0;
 
@@ -198,7 +198,7 @@ static int ne2_procinfo(char *buf, int slot, struct device *dev)
 	return len;
 }
 
-static int __init ne2_probe1(struct device *dev, int slot)
+static int __init ne2_probe1(struct net_device *dev, int slot)
 {
 	int i, base_addr, irq;
 	unsigned char POS;
@@ -370,14 +370,14 @@ static int __init ne2_probe1(struct device *dev, int slot)
 	return 0;
 }
 
-static int ne_open(struct device *dev)
+static int ne_open(struct net_device *dev)
 {
 	ei_open(dev);
 	MOD_INC_USE_COUNT;
 	return 0;
 }
 
-static int ne_close(struct device *dev)
+static int ne_close(struct net_device *dev)
 {
 	if (ei_debug > 1)
 		printk("%s: Shutting down ethercard.\n", dev->name);
@@ -388,7 +388,7 @@ static int ne_close(struct device *dev)
 
 /* Hard reset the card.  This used to pause for the same period that a
    8390 reset command required, but that shouldn't be necessary. */
-static void ne_reset_8390(struct device *dev)
+static void ne_reset_8390(struct net_device *dev)
 {
 	unsigned long reset_start_time = jiffies;
 
@@ -415,7 +415,7 @@ static void ne_reset_8390(struct device *dev)
    we don't need to be concerned with ring wrap as the header will be at
    the start of a page, so we optimize accordingly. */
 
-static void ne_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, 
+static void ne_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, 
 		int ring_page)
 {
 
@@ -455,7 +455,7 @@ static void ne_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
    hints. The NEx000 doesn't share the on-board packet memory -- you have
    to put the packet out through the "remote DMA" dataport using outb. */
 
-static void ne_block_input(struct device *dev, int count, struct sk_buff *skb, 
+static void ne_block_input(struct net_device *dev, int count, struct sk_buff *skb, 
 		int ring_offset)
 {
 #ifdef NE_SANITY_CHECK
@@ -518,7 +518,7 @@ static void ne_block_input(struct device *dev, int count, struct sk_buff *skb,
 	ei_status.dmaing &= ~0x01;
 }
 
-static void ne_block_output(struct device *dev, int count,
+static void ne_block_output(struct net_device *dev, int count,
 		const unsigned char *buf, const int start_page)
 {
 	int nic_base = NE_BASE;
@@ -624,7 +624,7 @@ retry:
 #define MAX_NE_CARDS	4	/* Max number of NE cards per module */
 #define NAMELEN		8	/* # of chars for storing dev->name */
 static char namelist[NAMELEN * MAX_NE_CARDS] = { 0, };
-static struct device dev_ne[MAX_NE_CARDS] = {
+static struct net_device dev_ne[MAX_NE_CARDS] = {
 	{
 		NULL,		/* assign a chunk of namelist[] below */
 		0, 0, 0, 0,
@@ -650,7 +650,7 @@ int init_module(void)
 	int this_dev, found = 0;
 
 	for (this_dev = 0; this_dev < MAX_NE_CARDS; this_dev++) {
-		struct device *dev = &dev_ne[this_dev];
+		struct net_device *dev = &dev_ne[this_dev];
 		dev->name = namelist+(NAMELEN*this_dev);
 		dev->irq = irq[this_dev];
 		dev->mem_end = bad[this_dev];
@@ -672,7 +672,7 @@ void cleanup_module(void)
 	int this_dev;
 
 	for (this_dev = 0; this_dev < MAX_NE_CARDS; this_dev++) {
-		struct device *dev = &dev_ne[this_dev];
+		struct net_device *dev = &dev_ne[this_dev];
 		if (dev->priv != NULL) {
 			mca_mark_as_unused(ei_status.priv);
 			mca_set_adapter_procfn( ei_status.priv, NULL, NULL);

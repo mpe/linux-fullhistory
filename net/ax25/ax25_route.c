@@ -66,7 +66,7 @@
 
 static ax25_route *ax25_route_list = NULL;
 
-static ax25_route *ax25_find_route(ax25_address *, struct device *);
+static ax25_route *ax25_find_route(ax25_address *, struct net_device *);
 
 /*
  * small macro to drop non-digipeated digipeaters and reverse path
@@ -84,7 +84,7 @@ static inline void ax25_route_invert(ax25_digi *in, ax25_digi *out)
 	ax25_digi_invert(in, out);
 }
 
-void ax25_rt_device_down(struct device *dev)
+void ax25_rt_device_down(struct net_device *dev)
 {
 	ax25_route *s, *t, *ax25_rt = ax25_route_list;
 	
@@ -300,7 +300,7 @@ int ax25_rt_get_info(char *buffer, char **start, off_t offset, int length, int d
 /*
  *	Find AX.25 route
  */
-static ax25_route *ax25_find_route(ax25_address *addr, struct device *dev)
+static ax25_route *ax25_find_route(ax25_address *addr, struct net_device *dev)
 {
 	ax25_route *ax25_spe_rt = NULL;
 	ax25_route *ax25_def_rt = NULL;
@@ -387,7 +387,7 @@ int ax25_rt_autobind(ax25_cb *ax25, ax25_address *addr)
  *	dl1bke 960117: build digipeater path
  *	dl1bke 960301: use the default route if it exists
  */
-ax25_route *ax25_rt_find_route(ax25_address *addr, struct device *dev)
+ax25_route *ax25_rt_find_route(ax25_address *addr, struct net_device *dev)
 {
 	static ax25_route route;
 	ax25_route *ax25_rt;

@@ -299,7 +299,7 @@ ppp_first_time(void)
  * Called at boot time if the PPP driver is compiled into the kernel.
  */
 int
-ppp_init(struct device *dev)
+ppp_init(struct net_device *dev)
 {
 	static int first_time = 1;
 	int    answer = 0;
@@ -1450,12 +1450,12 @@ ppp_tty_receive (struct tty_struct *tty, const __u8 * data,
  * Network device driver callback routines
  */
 
-static int ppp_init_dev(struct device *dev);
-static int ppp_dev_open(struct device *);
-static int ppp_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
-static int ppp_dev_close(struct device *);
-static int ppp_dev_xmit(struct sk_buff *, struct device *);
-static struct net_device_stats *ppp_dev_stats (struct device *);
+static int ppp_init_dev(struct net_device *dev);
+static int ppp_dev_open(struct net_device *);
+static int ppp_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
+static int ppp_dev_close(struct net_device *);
+static int ppp_dev_xmit(struct sk_buff *, struct net_device *);
+static struct net_device_stats *ppp_dev_stats (struct net_device *);
 
 /*
  * Information for the protocol decoder
@@ -1493,7 +1493,7 @@ ppp_proto_type proto_list[] = {
  * Called when the PPP network interface device is actually created.
  */
 static int
-ppp_init_dev (struct device *dev)
+ppp_init_dev (struct net_device *dev)
 {
 	dev->hard_header_len  = PPP_HDRLEN;
 
@@ -1520,7 +1520,7 @@ ppp_init_dev (struct device *dev)
  */
 
 static int
-ppp_dev_open (struct device *dev)
+ppp_dev_open (struct net_device *dev)
 {
 	struct ppp *ppp = dev2ppp(dev);
 
@@ -1539,7 +1539,7 @@ ppp_dev_open (struct device *dev)
  */
 
 static int
-ppp_dev_close (struct device *dev)
+ppp_dev_close (struct net_device *dev)
 {
 	struct ppp *ppp = dev2ppp (dev);
 
@@ -1567,7 +1567,7 @@ get_vj_stats(struct vjstat *vj, struct slcompress *slc)
  * Callback from the network layer to process the sockioctl functions.
  */
 static int
-ppp_dev_ioctl (struct device *dev, struct ifreq *ifr, int cmd)
+ppp_dev_ioctl (struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	struct ppp *ppp = dev2ppp(dev);
 	int nb;
@@ -2611,7 +2611,7 @@ ppp_send_ctrl(struct ppp *ppp, struct sk_buff *skb)
  * Returns 1 iff the frame was not accepted.
  */
 static int
-ppp_dev_xmit(struct sk_buff *skb, struct device *dev)
+ppp_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ppp *ppp = dev2ppp(dev);
 	struct tty_struct *tty = ppp2tty(ppp);
@@ -2758,7 +2758,7 @@ ppp_dev_xmit(struct sk_buff *skb, struct device *dev)
  * Generate the statistic information for the /proc/net/dev listing.
  */
 static struct net_device_stats *
-ppp_dev_stats (struct device *dev)
+ppp_dev_stats (struct net_device *dev)
 {
 	struct ppp *ppp = dev2ppp (dev);
 
@@ -2799,7 +2799,7 @@ ppp_alloc(void)
 {
 	int		if_num;
 	int		status;
-	struct device	*dev;
+	struct net_device	*dev;
 	struct ppp	*ppp;
 
 	/* try to find an free device */
