@@ -1,7 +1,7 @@
 /*
  * linux/arch/arm/mm/proc-arm6,7.S: MMU functions for ARM6
  *
- * (C) 1997-1999 Russell King
+ * (C) 1997-2000 Russell King
  *
  * These are the low level assembler for performing cache and TLB
  * functions on the ARM6 & ARM7.
@@ -342,15 +342,17 @@ ENTRY(cpu_arm7_set_pte)
 
 /*
  * Function: _arm6_7_reset
- *
+ * Params  : r0 = address to jump to
  * Notes   : This sets up everything for a reset
  */
 ENTRY(cpu_arm6_reset)
 ENTRY(cpu_arm7_reset)
-		mov	r0, #0
-		mcr	p15, 0, r0, c7, c0, 0		@ flush cache
-		mcr	p15, 0, r0, c5, c0, 0		@ flush TLB
-		mov	pc, lr
+		mov	r1, #0
+		mcr	p15, 0, r1, c7, c0, 0		@ flush cache
+		mcr	p15, 0, r1, c5, c0, 0		@ flush TLB
+		mov	r1, #0x30
+		mcr	p15, 0, r1, c1, c0, 0		@ turn off MMU etc
+		mov	pc, r0
 
 cpu_armvlsi_name:
 		.asciz	"ARM/VLSI"

@@ -33,10 +33,10 @@ startup_32:
 	cld
 	cli
 	movl $(__KERNEL_DS),%eax
-	movl %ax,%ds
-	movl %ax,%es
-	movl %ax,%fs
-	movl %ax,%gs
+	movl %eax,%ds
+	movl %eax,%es
+	movl %eax,%fs
+	movl %eax,%gs
 
 	lss SYMBOL_NAME(stack_start),%esp
 	xorl %eax,%eax

@@ -62,7 +62,7 @@ extern void cpu_flush_tlb_page(unsigned long address, int flags);
 extern void cpu_set_pgd(unsigned long pgd_phys);
 extern void cpu_set_pmd(pmd_t *pmdp, pmd_t pmd);
 extern void cpu_set_pte(pte_t *ptep, pte_t pte);
-extern unsigned long cpu_reset(void);
+extern volatile void cpu_reset(unsigned long addr);
 extern void cpu_flush_icache_area(unsigned long start, unsigned long size);
 extern void cpu_cache_wback_area(unsigned long start, unsigned long end);
 extern void cpu_cache_purge_area(unsigned long start, unsigned long end);

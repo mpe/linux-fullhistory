@@ -164,7 +164,52 @@ void __init pcibios_update_irq(struct pci_dev *dev, int irq)
 void __init pcibios_fixup_bus(struct pci_bus *bus)
 {
 	struct list_head *walk = &bus->devices;
+	struct arm_pci_sysdata *sysdata =
+			(struct arm_pci_sysdata *)bus->sysdata;
+	struct arm_bus_sysdata *busdata;
 
+	if (bus->number < MAX_NR_BUS)
+		busdata = sysdata->bus + bus->number;
+	else
+		BUG();
+
+	/*
+	 * Walk the devices on this bus, working out what we can
+	 * and can't support.
+	 */
+	for (walk = walk->next; walk != &bus->devices; walk = walk->next) {
+		struct pci_dev *dev = pci_dev_b(walk);
+		u16 status;
+
+		pci_read_config_word(dev, PCI_STATUS, &status);
+
+		/*
+		 * If this device does not support fast back to back
+		 * transfers, the bus as a whole cannot support them.
+		 */
+		if (!(status & PCI_STATUS_FAST_BACK))
+			busdata->features &= ~PCI_COMMAND_FAST_BACK;
+
+		/*
+		 * Calculate the maximum devsel latency.
+		 */
+		if (busdata->maxdevsel < (status & PCI_STATUS_DEVSEL_MASK))
+			busdata->maxdevsel = (status & PCI_STATUS_DEVSEL_MASK);
+
+		/*
+		 * If this device is an ISA bridge, set the have_isa_bridge
+		 * flag.  We will then go looking for things like keyboard,
+		 * etc
+		 */
+		if (dev->class >> 8 == PCI_CLASS_BRIDGE_ISA ||
+		    dev->class >> 8 == PCI_CLASS_BRIDGE_EISA)
+			have_isa_bridge = !0;
+	}
+
+	/*
+	 * Now walk the devices again, this time setting them up.
+	 */
+	walk = &bus->devices;
 	for (walk = walk->next; walk != &bus->devices; walk = walk->next) {
 		struct pci_dev *dev = pci_dev_b(walk);
 		u16 cmd;
@@ -182,25 +227,15 @@ void __init pcibios_fixup_bus(struct pci_bus *bus)
 			pci_write_config_dword(dev, 0x40, 0x80000000);
 
 		/*
-		 * If this device is an ISA bridge, set the have_isa_bridge
-		 * flag.  We will then go looking for things like keyboard,
-		 * etc
-		 */
-		if (dev->class >> 8 == PCI_CLASS_BRIDGE_ISA ||
-		    dev->class >> 8 == PCI_CLASS_BRIDGE_EISA)
-			have_isa_bridge = !0;
-			
-		/*
 		 * Set latency timer to 32, and a cache line size to 32 bytes.
-		 * Also, set system error enable, parity error enable, and
-		 * fast back to back transaction enable.  Disable ROM.
+		 * Also, set system error enable, parity error enable.
+		 * Disable ROM.
 		 */
 		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 32);
 		pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE, 8);
 		pci_read_config_word(dev, PCI_COMMAND, &cmd);
 
-		cmd |= PCI_COMMAND_FAST_BACK | PCI_COMMAND_SERR |
-		       PCI_COMMAND_PARITY;
+		cmd |= busdata->features;
 
 		pci_write_config_word(dev, PCI_COMMAND, cmd);
 		pci_read_config_word(dev, PCI_COMMAND, &cmd);
@@ -254,7 +289,7 @@ static struct hw_pci ebsa285_pci __initdata = {
 };
 #endif
 
-#ifdef CONFIG_CATS
+#ifdef CONFIG_ARCH_CATS
 /* cats host-specific stuff */
 static int irqmap_cats[] __initdata = { IRQ_PCI, IRQ_IN0, IRQ_IN1, IRQ_IN3 };
 
@@ -323,7 +358,7 @@ static struct hw_pci netwinder_pci __initdata = {
 };
 #endif
 
-#ifdef CONFIG_PERSONAL_SERVER
+#ifdef CONFIG_ARCH_PERSONAL_SERVER
 static int irqmap_personal_server[] __initdata = {
 	IRQ_IN0, IRQ_IN1, IRQ_IN2, IRQ_IN3, 0, 0, 0,
 	IRQ_DOORBELLHOST, IRQ_DMA1, IRQ_DMA2, IRQ_PCI
@@ -399,7 +434,7 @@ void __init pcibios_init(void)
 			break;
 		}
 #endif
-#ifdef CONFIG_CATS
+#ifdef CONFIG_ARCH_CATS
 		if (machine_is_cats()) {
 			hw_pci = &cats_pci;
 			break;
@@ -411,7 +446,7 @@ void __init pcibios_init(void)
 			break;
 		}
 #endif
-#ifdef CONFIG_PERSONAL_SERVER
+#ifdef CONFIG_ARCH_PERSONAL_SERVER
 		if (machine_is_personal_server()) {
 			hw_pci = &personal_server_pci;
 			break;

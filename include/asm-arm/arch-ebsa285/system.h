@@ -14,10 +14,10 @@
 extern __inline__ void arch_reset(char mode)
 {
 	if (mode == 's') {
-		__asm__ volatile (
-		"mcr	p15, 0, %0, c1, c0, 0	@ MMU off
-		 mov	pc, #0x41000000		@ jump to ROM" : :
-		"r" (cpu_reset()) : "cc");
+		/*
+		 * Jump into the ROM
+		 */
+		cpu_reset(0x41000000);
 	} else {
 		if (machine_is_netwinder()) {
 			/* open up the SuperIO chip

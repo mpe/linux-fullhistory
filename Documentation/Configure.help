@@ -14211,7 +14211,7 @@ CONFIG_ARCH_NETWINDER
   Say Y here if you intend to run this kernel on the NetWinder.
 
 Include support for the Compaq Personal Server
-CONFIG_PERSONAL_SERVER
+CONFIG_ARCH_PERSONAL_SERVER
   Say Y here if you intend to run this kernel on the Compaq
   Personal Server.
   

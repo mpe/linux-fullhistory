@@ -31,7 +31,7 @@ if [ "$CONFIG_ATARI" = "y" ]; then
    fi
 fi
 tristate 'XT hard disk support' CONFIG_BLK_DEV_XD
-dep_tristate 'Parallel port IDE device support' CONFIG_PARIDE $CONFIG_PARIDE_PARPORT
+dep_tristate 'Parallel port IDE device support' CONFIG_PARIDE $CONFIG_PARPORT
 if [ "$CONFIG_PARIDE" = "y" -o "$CONFIG_PARIDE" = "m" ]; then
    source drivers/block/paride/Config.in
 fi

@@ -1,10 +1,14 @@
 /*                                              -*- linux-c -*-
- * dtlk.c - DoubleTalk PC driver for Linux kernel 2.0.29
- * 
- * $Id: dtlk.c,v 1.19 1999/02/28 12:13:13 jrv Exp jrv $
+ * dtlk.c - DoubleTalk PC driver for Linux
  *
  * Original author: Chris Pallotta <chris@allmedia.com>
  * Current maintainer: Jim Van Zandt <jrv@vanzandt.mv.com>
+ * 
+ * 2000-03-18 Jim Van Zandt: Fix polling.
+ *  Eliminate dtlk_timer_active flag and separate dtlk_stop_timer
+ *  function.  Don't restart timer in dtlk_timer_tick.  Restart timer
+ *  in dtlk_poll after every poll.  dtlk_poll returns mask (duh).
+ *  Eliminate unused function dtlk_write_byte.  Misc. code cleanups.
  */
 
 /* This driver is for the DoubleTalk PC, a speech synthesizer
@@ -79,7 +83,6 @@ static int dtlk_major;
 static int dtlk_port_lpc;
 static int dtlk_port_tts;
 static int dtlk_busy;
-static int dtlk_timer_active;
 static int dtlk_has_indexing;
 static unsigned int dtlk_portlist[] =
 {0x25e, 0x29e, 0x2de, 0x31e, 0x35e, 0x39e, 0};
@@ -114,13 +117,11 @@ static struct dtlk_settings *dtlk_interrogate(void);
 static int dtlk_readable(void);
 static char dtlk_read_lpc(void);
 static char dtlk_read_tts(void);
-static void dtlk_stop_timer(void);
 static int dtlk_writeable(void);
 static char dtlk_write_bytes(const char *buf, int n);
 static char dtlk_write_tts(char);
 /*
    static void dtlk_handle_error(char, char, unsigned int);
-   static char dtlk_write_byte(unsigned int, const char*);
  */
 static void dtlk_timer_tick(unsigned long data);
 
@@ -250,43 +251,27 @@ static unsigned int dtlk_poll(struct file *file, poll_table * wait)
 	poll_wait(file, &dtlk_process_list, wait);
 
 	if (dtlk_has_indexing && dtlk_readable()) {
-		dtlk_stop_timer();
+	        del_timer(&dtlk_timer);
 		mask = POLLIN | POLLRDNORM;
 	}
 	if (dtlk_writeable()) {
-		dtlk_stop_timer();
+	        del_timer(&dtlk_timer);
 		mask |= POLLOUT | POLLWRNORM;
 	}
 	/* there are no exception conditions */
 
-	if (mask == 0 && !dtlk_timer_active) {
-		/* not ready just yet.  There won't be any interrupts,
-		   so we set a timer instead. */
-		dtlk_timer_active = 1;
-		dtlk_timer.expires = jiffies + HZ / 100;
-		add_timer(&dtlk_timer);
-	}
-	return 0;
-}
+	/* There won't be any interrupts, so we set a timer instead. */
+	del_timer(&dtlk_timer);
+	dtlk_timer.expires = jiffies + 3*HZ / 100;
+	add_timer(&dtlk_timer);
 
-static void dtlk_stop_timer()
-{
-	if (dtlk_timer_active) {
-		dtlk_timer_active = 0;
-		del_timer(&dtlk_timer);
-	}
+	return mask;
 }
 
 static void dtlk_timer_tick(unsigned long data)
 {
-
+	TRACE_TEXT(" dtlk_timer_tick");
 	wake_up_interruptible(&dtlk_process_list);
-
-	if (dtlk_timer_active) {
-		del_timer(&dtlk_timer);
-		dtlk_timer.expires = jiffies + HZ / 100;
-		add_timer(&dtlk_timer);
-	}
 }
 
 static int dtlk_ioctl(struct inode *inode,
@@ -348,7 +333,7 @@ static int dtlk_release(struct inode *inode, struct file *file)
 	}
 	TRACE_RET;
 
-	dtlk_stop_timer();
+	del_timer(&dtlk_timer);
 
 	return 0;
 }
@@ -360,7 +345,6 @@ static int __init dtlk_init(void)
 	dtlk_port_lpc = 0;
 	dtlk_port_tts = 0;
 	dtlk_busy = 0;
-	dtlk_timer_active = 0;
 	dtlk_major = devfs_register_chrdev(0, "dtlk", &dtlk_fops);
 	if (dtlk_major == 0) {
 		printk(KERN_ERR "DoubleTalk PC - cannot register device\n");
@@ -410,15 +394,17 @@ static void dtlk_delay(int ms)
 
 static int dtlk_readable(void)
 {
-	TRACE_TEXT(" dtlk_readable");
+#ifdef TRACING
+	printk(" dtlk_readable=%u@%u", inb_p(dtlk_port_lpc) != 0x7f, jiffies);
+#endif
 	return inb_p(dtlk_port_lpc) != 0x7f;
 }
 
 static int dtlk_writeable(void)
 {
 	/* TRACE_TEXT(" dtlk_writeable"); */
-#ifdef TRACING
-	printk(" dtlk_writeable(%02x)", inb_p(dtlk_port_tts));
+#ifdef TRACINGMORE
+	printk(" dtlk_writeable=%u", (inb_p(dtlk_port_tts) & TTS_WRITABLE)!=0);
 #endif
 	return inb_p(dtlk_port_tts) & TTS_WRITABLE;
 }
@@ -465,7 +451,9 @@ static int __init dtlk_dev_probe(void)
 			   appears. */
 			dtlk_delay(100);
 			dtlk_has_indexing = dtlk_readable();
-
+#ifdef TRACING
+			printk(", indexing %d\n", dtlk_has_indexing);
+#endif
 #ifdef INSCOPE
 			{
 /* This macro records ten samples read from the LPC port, for later display */
@@ -479,17 +467,17 @@ for (i = 0; i < 10; i++)			\
 				int b = 0, i, j;
 
 				LOOK
-				    outb_p(0xff, dtlk_port_lpc);
+				outb_p(0xff, dtlk_port_lpc);
 				buffer[b++] = 0;
 				LOOK
-				    dtlk_write_bytes("\0012I\r", 4);
+				dtlk_write_bytes("\0012I\r", 4);
 				buffer[b++] = 0;
 				__delay(50 * loops_per_sec / 1000);
 				outb_p(0xff, dtlk_port_lpc);
 				buffer[b++] = 0;
 				LOOK
 
-				    printk("\n");
+				printk("\n");
 				for (j = 0; j < b; j++)
 					printk(" %02x", buffer[j]);
 				printk("\n");
@@ -510,12 +498,12 @@ for (i = 0; i < 10; i++)			\
 
 				__delay(loops_per_sec / 100);	/* 10 ms */
 				LOOK
-				    outb_p(0x03, dtlk_port_tts);
+				outb_p(0x03, dtlk_port_tts);
 				buffer[b++] = 0;
 				LOOK
-				    LOOK
+				LOOK
 
-				    printk("\n");
+				printk("\n");
 				for (j = 0; j < b; j++)
 					printk(" %02x", buffer[j]);
 				printk("\n");
@@ -555,7 +543,7 @@ static struct dtlk_settings *dtlk_interrogate(void)
 		if (total > 2 && buf[total] == 0x7f)
 			break;
 		if (total < sizeof(struct dtlk_settings))
-			 total++;
+			total++;
 	}
 	/*
 	   if (i==50) printk("interrogate() read overrun\n");
@@ -606,7 +594,8 @@ static char dtlk_read_tts(void)
 	/* verify DT is ready, read char, wait for ACK */
 	do {
 		portval = inb_p(dtlk_port_tts);
-	} while ((portval & TTS_READABLE) == 0 && retries++ < DTLK_MAX_RETRIES);
+	} while ((portval & TTS_READABLE) == 0 &&
+		 retries++ < DTLK_MAX_RETRIES);
 	if (retries == DTLK_MAX_RETRIES)
 		printk(KERN_ERR "dtlk_read_tts() timeout\n");
 
@@ -617,7 +606,8 @@ static char dtlk_read_tts(void)
 	retries = 0;
 	do {
 		portval = inb_p(dtlk_port_tts);
-	} while ((portval & TTS_READABLE) != 0 && retries++ < DTLK_MAX_RETRIES);
+	} while ((portval & TTS_READABLE) != 0 &&
+		 retries++ < DTLK_MAX_RETRIES);
 	if (retries == DTLK_MAX_RETRIES)
 		printk(KERN_ERR "dtlk_read_tts() timeout\n");
 
@@ -649,22 +639,6 @@ static char dtlk_read_lpc(void)
 	return ch;
 }
 
-#ifdef NEVER
-static char dtlk_write_byte(unsigned int minor, const char *buf)
-{
-	char ch;
-	int err;
-	/* TRACE_TEXT("(dtlk_write_byte"); */
-	err = get_user(ch, buf);
-	/* printk("  dtlk_write_byte(%d, 0x%02x)", minor, (int)ch); */
-
-	ch = dtlk_write_tts(ch);
-	/* 
-	   TRACE_RET; */
-	return ch;
-}
-#endif				/* NEVER */
-
 /* write n bytes to tts port */
 static char dtlk_write_bytes(const char *buf, int n)
 {
@@ -680,7 +654,7 @@ static char dtlk_write_bytes(const char *buf, int n)
 static char dtlk_write_tts(char ch)
 {
 	int retries = 0;
-#ifdef TRACING
+#ifdef TRACINGMORE
 	printk("  dtlk_write_tts(");
 	if (' ' <= ch && ch <= '~')
 		printk("'%c'", ch);
@@ -702,7 +676,7 @@ static char dtlk_write_tts(char ch)
 		if ((inb_p(dtlk_port_tts) & TTS_WRITABLE) == 0)
 			break;
 
-#ifdef TRACING
+#ifdef TRACINGMORE
 	printk(")\n");
 #endif
 	return 0;

@@ -192,6 +192,7 @@ fixup_sa1100(struct machine_desc *desc, struct param_struct *params,
  * in head-armv.S.
  */
 static struct machine_desc machine_desc[] __attribute__ ((__section__ (".arch.info"))) = {
+#ifdef CONFIG_ARCH_EBSA110
 	{
 		MACH_TYPE_EBSA110,
 		"EBSA110",	/* RMK			*/
@@ -199,119 +200,160 @@ static struct machine_desc machine_desc[] __attribute__ ((__section__ (".arch.in
 		NO_VIDEO,
 		1, 0, 1, 1, 1,
 		NULL
-	}, {
+	},
+#endif
+#ifdef CONFIG_ARCH_RPC
+	{
 		MACH_TYPE_RISCPC,
 		"Acorn-RiscPC",	/* RMK			*/
 		0x10000100,
 		NO_VIDEO,
 		1, 1, 0, 0, 0,
 		fixup_acorn
-	}, {
-		2,
-		"unknown",
-		NO_PARAMS,
-		NO_VIDEO,
-		0, 0, 0, 0, 0,
-		NULL
-	}, {
+	},
+#endif
+#ifdef CONFIG_ARCH_NEXUSPCI
+	{
 		MACH_TYPE_NEXUSPCI,
 		"FTV/PCI",	/* Philip Blundell	*/
 		NO_PARAMS,
 		NO_VIDEO,
 		0, 0, 0, 0, 0,
 		NULL
-	}, {
+	},
+#endif
+#ifdef CONFIG_ARCH_EBSA285
+	{
 		MACH_TYPE_EBSA285,
 		"EBSA285",		/* RMK			*/
 		0x00000100,
 		0x000a0000, 0x000bffff,
 		0, 0, 0, 0, 0,
 		fixup_ebsa285
-	}, {
+	},
+#endif
+#ifdef CONFIG_ARCH_NETWINDER
+	{
 		MACH_TYPE_NETWINDER,
 		"Rebel-NetWinder",	/* RMK			*/
 		0x00000100,
 		0x000a0000, 0x000bffff,
 		1, 0, 1, 0, 0,
 		fixup_netwinder
-	}, {
+	},
+#endif
+#ifdef CONFIG_ARCH_CATS
+	{
 		MACH_TYPE_CATS,
 		"Chalice-CATS",	/* Philip Blundell	*/
 		NO_PARAMS,
 		0x000a0000, 0x000bffff,
 		0, 0, 0, 0, 1,
 		fixup_cats
-	}, {
+	},
+#endif
+#ifdef CONFIG_ARCH_TBOX
+	{
 		MACH_TYPE_TBOX,
 		"unknown-TBOX",	/* Philip Blundell	*/
 		NO_PARAMS,
 		NO_VIDEO,
 		0, 0, 0, 0, 0,
 		NULL
-	}, {
+	},
+#endif
+#ifdef CONFIG_ARCH_CO285
+	{
 		MACH_TYPE_CO285,
 		"co-EBSA285",	/* Mark van Doesburg	*/
 		NO_PARAMS,
 		NO_VIDEO,
 		0, 0, 0, 0, 0,
 		fixup_coebsa285
-	}, {
+	},
+#endif
+#ifdef CONFIG_ARCH_CLPS7110
+	{
 		MACH_TYPE_CLPS7110,
 		"CL-PS7110",	/* Werner Almesberger	*/
 		NO_PARAMS,
 		NO_VIDEO,
 		0, 0, 0, 0, 0,
 		NULL
-	}, {
+	},
+#endif
+#ifdef CONFIG_ARCH_ARC
+	{
 		MACH_TYPE_ARCHIMEDES,
 		"Acorn-Archimedes",/* RMK/DAG		*/
 		0x0207c000,
 		NO_VIDEO,
 		0, 0, 0, 0, 0,
 		fixup_acorn
-	}, {
+	},
+#endif
+#ifdef CONFIG_ARCH_A5K
+	{
 		MACH_TYPE_A5K,
 		"Acorn-A5000",	/* RMK/PB		*/
 		0x0207c000,
 		NO_VIDEO,
 		0, 0, 0, 0, 0,
 		fixup_acorn
-	}, {
+	},
+#endif
+#ifdef CONFIG_ARCH_ETOILE
+	{
 		MACH_TYPE_ETOILE,
 		"Etoile",		/* Alex de Vries	*/
 		NO_PARAMS,
 		NO_VIDEO,
 		0, 0, 0, 0, 0,
 		NULL
-	}, {
+	},
+#endif
+#ifdef CONFIG_ARCH_LACIE_NAS
+	{
 		MACH_TYPE_LACIE_NAS,
 		"LaCie_NAS",	/* Benjamin Herrenschmidt */
 		NO_PARAMS,
 		NO_VIDEO,
 		0, 0, 0, 0, 0,
 		NULL
-	}, {
+	},
+#endif
+#ifdef CONFIG_ARCH_CLPS7500
+	{
 		MACH_TYPE_CLPS7500,
 		"CL-PS7500",	/* Philip Blundell	*/
 		NO_PARAMS,
 		NO_VIDEO,
 		0, 0, 0, 0, 0,
 		NULL
-	}, {
+	},
+#endif
+#ifdef CONFIG_ARCH_SHARK
+	{
 		MACH_TYPE_SHARK,
 		"Shark",		/* Alexander Schulz	*/
 		NO_PARAMS,
 		0x06000000, 0x06000000+0x001fffff,
 		0, 0, 0, 0, 0,
 		NULL
-	}, {
+	},
+#endif
+#ifdef CONFIG_ARCH_SA1100
+	{
 		MACH_TYPE_SA1100,
 		"SA1100-based",	/* Nicolas Pitre	*/
 		NO_PARAMS,
 		NO_VIDEO,
 		0, 0, 0, 0, 0,
 		fixup_sa1100
-	}, {
+	},
+#endif
+#ifdef CONFIG_ARCH_PERSONAL_SERVER
+	{
 		MACH_TYPE_PERSONAL_SERVER,
 		"Compaq Personal Server",
 		NO_PARAMS,
@@ -319,4 +361,5 @@ static struct machine_desc machine_desc[] __attribute__ ((__section__ (".arch.in
 		0, 0, 0, 0, 0,
 		NULL
 	}
+#endif
 };

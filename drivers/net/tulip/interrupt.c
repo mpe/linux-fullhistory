@@ -16,6 +16,7 @@
 #include "tulip.h"
 #include <asm/io.h>
 #include <linux/etherdevice.h>
+#include <linux/pci.h>
 
 
 int tulip_rx_copybreak;
@@ -32,13 +33,20 @@ static int tulip_refill_rx(struct net_device *dev)
 	/* Refill the Rx ring buffers. */
 	for (; tp->cur_rx - tp->dirty_rx > 0; tp->dirty_rx++) {
 		entry = tp->dirty_rx % RX_RING_SIZE;
-		if (tp->rx_skbuff[entry] == NULL) {
+		if (tp->rx_buffers[entry].skb == NULL) {
 			struct sk_buff *skb;
-			skb = tp->rx_skbuff[entry] = dev_alloc_skb(PKT_BUF_SZ);
+			dma_addr_t mapping;
+
+			skb = tp->rx_buffers[entry].skb = dev_alloc_skb(PKT_BUF_SZ);
 			if (skb == NULL)
 				break;
+
+			mapping = pci_map_single(tp->pdev, skb->tail, PKT_BUF_SZ,
+						 PCI_DMA_FROMDEVICE);
+			tp->rx_buffers[entry].mapping = mapping;
+
 			skb->dev = dev;			/* Mark as being used by this device. */
-			tp->rx_ring[entry].buffer1 = virt_to_le32desc(skb->tail);
+			tp->rx_ring[entry].buffer1 = cpu_to_le32(mapping);
 			refilled++;
 		}
 		tp->rx_ring[entry].status = cpu_to_le32(DescOwned);
@@ -106,24 +114,39 @@ static int tulip_rx(struct net_device *dev)
 				&& (skb = dev_alloc_skb(pkt_len + 2)) != NULL) {
 				skb->dev = dev;
 				skb_reserve(skb, 2);	/* 16 byte align the IP header */
+				pci_dma_sync_single(tp->pdev,
+						    tp->rx_buffers[entry].mapping,
+						    pkt_len, PCI_DMA_FROMDEVICE);
 #if ! defined(__alpha__)
-				eth_copy_and_sum(skb, tp->rx_skbuff[entry]->tail, pkt_len, 0);
+				eth_copy_and_sum(skb, tp->rx_buffers[entry].skb->tail,
+						 pkt_len, 0);
 				skb_put(skb, pkt_len);
 #else
-				memcpy(skb_put(skb, pkt_len), tp->rx_skbuff[entry]->tail,
-					   pkt_len);
+				memcpy(skb_put(skb, pkt_len),
+				       tp->rx_buffers[entry].skb->tail,
+				       pkt_len);
 #endif
 			} else { 	/* Pass up the skb already on the Rx ring. */
-				char *temp = skb_put(skb = tp->rx_skbuff[entry], pkt_len);
-				tp->rx_skbuff[entry] = NULL;
+				char *temp = skb_put(skb = tp->rx_buffers[entry].skb,
+						     pkt_len);
+
 #ifndef final_version
-				if (le32desc_to_virt(tp->rx_ring[entry].buffer1) != temp)
+				if (tp->rx_buffers[entry].mapping !=
+				    le32_to_cpu(tp->rx_ring[entry].buffer1)) {
 					printk(KERN_ERR "%s: Internal fault: The skbuff addresses "
-						   "do not match in tulip_rx: %p vs. %p / %p.\n",
-						   dev->name,
-						   le32desc_to_virt(tp->rx_ring[entry].buffer1),
-						   skb->head, temp);
+					       "do not match in tulip_rx: %08x vs. %08x %p / %p.\n",
+					       dev->name,
+					       le32_to_cpu(tp->rx_ring[entry].buffer1),
+					       tp->rx_buffers[entry].mapping,
+					       skb->head, temp);
+				}
 #endif
+
+				pci_unmap_single(tp->pdev, tp->rx_buffers[entry].mapping,
+						 PKT_BUF_SZ, PCI_DMA_FROMDEVICE);
+
+				tp->rx_buffers[entry].skb = NULL;
+				tp->rx_buffers[entry].mapping = 0;
 			}
 			skb->protocol = eth_type_trans(skb, dev);
 			netif_rx(skb);
@@ -189,8 +212,13 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				if (status < 0)
 					break;			/* It still has not been Txed */
 				/* Check for Rx filter setup frames. */
-				if (tp->tx_skbuff[entry] == NULL)
+				if (tp->tx_buffers[entry].skb == NULL) {
+					pci_unmap_single(tp->pdev,
+							 tp->tx_buffers[entry].mapping,
+							 sizeof(tp->setup_frame),
+							 PCI_DMA_TODEVICE);
 					continue;
+				}
 				
 				if (status & 0x8000) {
 					/* There was an major error, log it. */
@@ -213,14 +241,20 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 #ifdef ETHER_STATS
 					if (status & 0x0001) tp->stats.tx_deferred++;
 #endif
-					tp->stats.tx_bytes += tp->tx_skbuff[entry]->len;
+					tp->stats.tx_bytes +=
+						tp->tx_buffers[entry].skb->len;
 					tp->stats.collisions += (status >> 3) & 15;
 					tp->stats.tx_packets++;
 				}
 
+				pci_unmap_single(tp->pdev, tp->tx_buffers[entry].mapping,
+						 tp->tx_buffers[entry].skb->len,
+						 PCI_DMA_TODEVICE);
+
 				/* Free the original skb. */
-				dev_kfree_skb_irq(tp->tx_skbuff[entry]);
-				tp->tx_skbuff[entry] = 0;
+				dev_kfree_skb_irq(tp->tx_buffers[entry].skb);
+				tp->tx_buffers[entry].skb = NULL;
+				tp->tx_buffers[entry].mapping = 0;
 				tx++;
 			}
 
@@ -311,7 +345,7 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 
 	/* check if we card is in suspend mode */
 	entry = tp->dirty_rx % RX_RING_SIZE;
-	if (tp->rx_skbuff[entry] == NULL) {
+	if (tp->rx_buffers[entry].skb == NULL) {
 		if (tulip_debug > 1)
 			printk(KERN_WARNING "%s: in rx suspend mode: (%lu) (tp->cur_rx = %u, ttimer = %d, rx = %d) go/stay in suspend mode\n", dev->name, tp->nir, tp->cur_rx, tp->ttimer, rx);
 		if (tp->ttimer == 0 || (inl(ioaddr + CSR11) & 0xffff) == 0) {

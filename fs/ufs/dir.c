@@ -106,9 +106,9 @@ revalidate:
 						   bh, offset)) {
 				/* On error, skip the f_pos to the
 				   next block. */
-				filp->f_pos = (filp->f_pos &
+				filp->f_pos = (filp->f_pos |
 				              (sb->s_blocksize - 1)) +
-					       sb->s_blocksize;
+					       1;
 				brelse (bh);
 				return stored;
 			}

@@ -1,7 +1,7 @@
 /*
  *  linux/arch/arm/kernel/process.c
  *
- *  Copyright (C) 1996-1999 Russell King - Converted to ARM.
+ *  Copyright (C) 1996-2000 Russell King - Converted to ARM.
  *  Origional Copyright (C) 1995  Linus Torvalds
  */
 
@@ -32,6 +32,7 @@
 #include <asm/io.h>
 
 extern char *processor_modes[];
+extern void setup_mm_for_reboot(char mode);
 
 asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
 
@@ -96,15 +97,28 @@ __setup("reboot=", reboot_setup);
 void machine_restart(char * __unused)
 {
 	/*
-	 * Turn off caches, interrupts, etc
+	 * Clean and disable cache, and turn off interrupts
 	 */
 	cpu_proc_fin();
 
+	/*
+	 * Tell the mm system that we are going to reboot -
+	 * we may need it to insert some 1:1 mappings so that
+	 * soft boot works.
+	 */
+	setup_mm_for_reboot(reboot_mode);
+
+	/*
+	 * Now call the architecture specific reboot code.
+	 */
 	arch_reset(reboot_mode);
 
+	/*
+	 * Whoops - the architecture was unable to reboot.
+	 * Tell the user!
+	 */
 	mdelay(1000);
 	printk("Reboot failed -- System halted\n");
-	cli();
 	while (1);
 }
 

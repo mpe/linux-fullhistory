@@ -16,11 +16,7 @@
 
 #else
 
-#define arch_reset(x) {						\
-	__asm__ volatile (					\
-"	mcr	p15, 0, %0, c1, c0	@ MMU off\n"		\
-"	mov	pc, #0\n" : : "r" (cpu_reset()) : "cc");	\
-	}
+#define arch_reset(x)	cpu_reset(0)
 
 #endif
 

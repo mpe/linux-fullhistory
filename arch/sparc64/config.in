@@ -226,6 +226,7 @@ if [ "$CONFIG_NET" = "y" ]; then
       tristate '  Sun QuadEthernet support' CONFIG_SUNQE
       if [ "$CONFIG_PCI" = "y" ]; then
 	 tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
+	 tristate 'DECchip Tulip (dc21x4x) PCI support' CONFIG_TULIP
 	 tristate '3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
 	 tristate 'RealTek RTL-8139 support' CONFIG_8139TOO
 	 tristate 'PCI NE2000 support' CONFIG_NE2K_PCI

@@ -1,7 +1,7 @@
 /*
  * linux/arch/arm/mm/proc-sa110.S: MMU functions for SA110
  *
- * (C) 1997-1999 Russell King
+ * (C) 1997-2000 Russell King
  *
  * These are the low level assembler for performing cache and TLB
  * functions on the StrongARM-110 and StrongARM-1100
@@ -225,9 +225,9 @@ ENTRY(cpu_sa1100_flush_ram_page)
 		.align	5
 ENTRY(cpu_sa110_flush_tlb_all)
 ENTRY(cpu_sa1100_flush_tlb_all)
-		mov	r0, #0
-		mcr	p15, 0, r0, c7, c10, 4		@ drain WB
-		mcr	p15, 0, r0, c8, c7, 0		@ flush I & D tlbs
+		mov	ip, #0
+		mcr	p15, 0, ip, c7, c10, 4		@ drain WB
+		mcr	p15, 0, ip, c8, c7, 0		@ flush I & D tlbs
 		mov	pc, lr
 
 /*
@@ -421,16 +421,18 @@ ENTRY(cpu_sa1100_proc_init)
 
 ENTRY(cpu_sa110_proc_fin)
 ENTRY(cpu_sa1100_proc_fin)
+		stmfd	sp!, {r1, lr}
 		mrs	r0, cpsr
 		orr	r0, r0, #F_BIT | I_BIT
 		msr	cpsr, r0
+		bl	cpu_sa110_flush_cache_all	@ clean caches
 		mov	r0, #0
 		mcr	p15, 0, r0, c15, c2, 2		@ Disable clock switching
 		mrc	p15, 0, r0, c1, c0, 0
-		bic	r0, r0, #0x1100			@ ...i...s........
+		bic	r0, r0, #0x1000			@ ...i............
 		bic	r0, r0, #0x000e			@ ............wca.
 		mcr	p15, 0, r0, c1, c0, 0		@ disable caches
-		mov	pc, lr
+		ldmfd	sp!, {r1, pc}
 
 		.align	5
 ENTRY(cpu_sa110_do_idle)
@@ -448,18 +450,21 @@ ENTRY(cpu_sa1100_do_idle)
 
 /*
  * Function: sa110_reset
+ * Params  : r0 = address to jump to
  * Notes   : This sets up everything for a reset
  */
+		.align	5
 ENTRY(cpu_sa110_reset)
 ENTRY(cpu_sa1100_reset)
-		stmfd	sp!, {r1, lr}
-		bl	cpu_sa110_flush_cache_all
-		bl	cpu_sa110_flush_tlb_all
+		mov	ip, #0
 		mcr	p15, 0, ip, c7, c7, 0		@ flush I,D caches
-		mrc	p15, 0, r0, c1, c0, 0		@ ctrl register
-		bic	r0, r0, #0x000f			@ ............wcam
-		bic	r0, r0, #0x1100			@ ...i...s........
-		ldmfd	sp!, {r1, pc}
+		mcr	p15, 0, ip, c7, c10, 4		@ drain WB
+		mcr	p15, 0, ip, c8, c7, 0		@ flush I & D tlbs
+		mrc	p15, 0, ip, c1, c0, 0		@ ctrl register
+		bic	ip, ip, #0x000f			@ ............wcam
+		bic	ip, ip, #0x1100			@ ...i...s........
+		mcr	p15, 0, ip, c1, c0, 0		@ ctrl register
+		mov	pc, r0
 /*
  * Purpose : Function pointers used to access above functions - all calls
  *	     come through these

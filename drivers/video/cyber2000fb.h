@@ -50,8 +50,9 @@ struct cyber2000fb_par {
 	unsigned int	palette_size;
 	  signed int	currcon;
 	char		dev_name[32];
-	unsigned int	initialised;
+	struct pci_dev	*dev;
 	unsigned int	dev_id;
+	unsigned int	initialised:1;
 	unsigned int	bus_64bit:1;
 
 	/*
@@ -276,6 +277,7 @@ struct cyber2000fb_par {
 #define CO_REG_DEST_WIDTH	0xbf218
 
 struct cyberpro_info {
+	struct pci_dev	*dev;
 	unsigned char	*regs;
 	char		*fb;
 	char		dev_name[32];

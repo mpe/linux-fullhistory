@@ -204,12 +204,6 @@ enum desc_status_bits {
 #define get_u16(ptr) (((u8*)(ptr))[0] + (((u8*)(ptr))[1]<<8))
 #endif
 
-
-/* Condensed operations for readability. */
-#define virt_to_le32desc(addr)  cpu_to_le32(virt_to_bus(addr))
-#define le32desc_to_virt(addr)  bus_to_virt(le32_to_cpu(addr))
-
-
 struct medialeaf {
 	u8 type;
 	u8 media;
@@ -237,6 +231,10 @@ struct mediainfo {
 	unsigned char *info;
 };
 
+struct ring_info {
+	struct sk_buff	*skb;
+	dma_addr_t	mapping;
+};
 
 struct tulip_private {
 	const char *product_name;
@@ -246,10 +244,9 @@ struct tulip_private {
 	dma_addr_t rx_ring_dma;
 	dma_addr_t tx_ring_dma;
 	/* The saved address of a sent-in-place packet/buffer, for skfree(). */
-	struct sk_buff *tx_skbuff[TX_RING_SIZE];
+	struct ring_info tx_buffers[TX_RING_SIZE];
 	/* The addresses of receive-in-place skbuffs. */
-	struct sk_buff *rx_skbuff[RX_RING_SIZE];
-	char *rx_buffs;		/* Address of temporary Rx buffers. */
+	struct ring_info rx_buffers[RX_RING_SIZE];
 	u16 setup_frame[96];	/* Pseudo-Tx frame to init address table. */
 	int chip_id;
 	int revision;

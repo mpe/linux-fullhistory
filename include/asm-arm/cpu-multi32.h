@@ -75,7 +75,7 @@ extern struct processor {
 	/*
 	 * Special stuff for a reset
 	 */
-	unsigned long (*reset)(void);
+	volatile void (*reset)(unsigned long addr);
 	/*
 	 * flush an icached page
 	 */
@@ -123,7 +123,7 @@ extern const struct processor sa110_processor_functions;
 #define cpu_set_pgd(pgd)			processor._set_pgd(pgd)
 #define cpu_set_pmd(pmdp, pmd)			processor._set_pmd(pmdp, pmd)
 #define cpu_set_pte(ptep, pte)			processor._set_pte(ptep, pte)
-#define cpu_reset()				processor.reset()
+#define cpu_reset(addr)				processor.reset(addr)
 #define cpu_flush_icache_area(start,end)	processor._flush_icache_area(start,end)
 #define cpu_cache_wback_area(start,end)		processor._cache_wback_area(start,end)
 #define cpu_cache_purge_area(start,end)		processor._cache_purge_area(start,end)

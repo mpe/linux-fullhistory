@@ -695,10 +695,13 @@
 	ac18  PCI1260
 	ac19  PCI1221
 	ac1a  PCI1210
-	ac1b  PCI1221
+	ac1b  PCI1450
 	ac1c  PCI1225
-	ac1d  PCI1251
+	ac1d  PCI1251A
+	ac1e  PCI1211
+	ac1f  PCI1251B
 	ac20  TI 2030
+	ac51  PCI1420
 	fe00  FireWire Host Controller
 	fe03  12C01A FireWire Host Controller
 104d  Sony Corporation

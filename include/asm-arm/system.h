@@ -96,7 +96,7 @@ extern unsigned int __machine_arch_type;
 # define machine_is_netwinder()	(0)
 #endif
 
-#ifdef CONFIG_CATS
+#ifdef CONFIG_ARCH_CATS
 # ifdef machine_arch_type
 #  undef machine_arch_type
 #  define machine_arch_type	__machine_arch_type
@@ -180,7 +180,7 @@ extern unsigned int __machine_arch_type;
 # define machine_is_sa1100()	(0)
 #endif
 
-#ifdef CONFIG_PERSONAL_SERVER
+#ifdef CONFIG_ARCH_PERSONAL_SERVER
 # ifdef machine_arch_type
 #  undef machine_arch_type
 #  define machine_arch_type	__machine_arch_type

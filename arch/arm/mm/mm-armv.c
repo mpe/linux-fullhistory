@@ -3,7 +3,7 @@
  *
  *  Page table sludge for ARM v3 and v4 processor architectures.
  *
- *  Copyright (C) 1998-1999 Russell King
+ *  Copyright (C) 1998-2000 Russell King
  */
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -283,6 +283,25 @@ static void __init create_mapping(struct map_desc *md)
 
 		virt   += PAGE_SIZE;
 		length -= PAGE_SIZE;
+	}
+}
+
+/*
+ * In order to soft-boot, we need to insert a 1:1 mapping in place of
+ * the user-mode pages.  This will then ensure that we have predictable
+ * results when turning the mmu off
+ */
+void setup_mm_for_reboot(char mode)
+{
+	pgd_t *pgd = current->mm->pgd;
+	pmd_t pmd;
+	int i;
+
+	for (i = 0; i < FIRST_USER_PGD_NR + USER_PTRS_PER_PGD; i++) {
+		pmd_val(pmd) = (i << PGDIR_SHIFT) |
+			PMD_SECT_AP_WRITE | PMD_SECT_AP_READ |
+			PMD_TYPE_SECT;
+		set_pmd(pmd_offset(pgd + i, i << PGDIR_SHIFT), pmd);
 	}
 }
 

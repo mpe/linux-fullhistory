@@ -98,7 +98,7 @@ static int riscix_partition(struct gendisk *hd, kdev_t dev, unsigned long first_
 			}
 		}
 
-		printk(" >");
+		printk(" >\n");
 
 		if (hd->part[riscix_minor].nr_sects > 2)
 			hd->part[riscix_minor].nr_sects = 2;
@@ -139,7 +139,7 @@ static int linux_partition(struct gendisk *hd, kdev_t dev, unsigned long first_s
 				 le32_to_cpu(linuxp->nr_sects));
 		linuxp ++;
 	}
-	printk(" >");
+	printk(" >\n");
 	/*
 	 * Prevent someone doing a mkswap or mkfs on this partition
 	 */

@@ -478,7 +478,9 @@ void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		outb_p(E8390_NODMA+E8390_PAGE0+E8390_START, e8390_base + E8390_CMD);
 		if (nr_serviced >= MAX_SERVICE) 
 		{
-			printk(KERN_WARNING "%s: Too much work at interrupt, status %#2.2x\n",
+			/* 0xFF is valid for a card removal */
+			if(interrupts!=0xFF)
+				printk(KERN_WARNING "%s: Too much work at interrupt, status %#2.2x\n",
 				   dev->name, interrupts);
 			outb_p(ENISR_ALL, e8390_base + EN0_ISR); /* Ack. most intrs. */
 		} else {
@@ -588,8 +590,8 @@ static void ei_tx_intr(struct net_device *dev)
 		else
 			ei_local->lasttx = 10, ei_local->txing = 0;
 	}
-	else printk(KERN_WARNING "%s: unexpected TX-done interrupt, lasttx=%d.\n",
-			dev->name, ei_local->lasttx);
+//	else printk(KERN_WARNING "%s: unexpected TX-done interrupt, lasttx=%d.\n",
+//			dev->name, ei_local->lasttx);
 
 #else	/* EI_PINGPONG */
 	/*
@@ -651,8 +653,12 @@ static void ei_receive(struct net_device *dev)
 			this_frame = ei_local->rx_start_page;
 		
 		/* Someday we'll omit the previous, iff we never get this message.
-		   (There is at least one clone claimed to have a problem.)  */
-		if (ei_debug > 0  &&  this_frame != ei_local->current_page)
+		   (There is at least one clone claimed to have a problem.)  
+		   
+		   Keep quiet if it looks like a card removal. One problem here
+		   is that some clones crash in roughly the same way.
+		 */
+		if (ei_debug > 0  &&  this_frame != ei_local->current_page && (this_frame!=0x0 || rxing_page!=0xFF))
 			printk(KERN_ERR "%s: mismatched read page pointers %2x vs %2x.\n",
 				   dev->name, this_frame, ei_local->current_page);
 		

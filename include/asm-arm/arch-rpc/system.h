@@ -18,8 +18,8 @@ extern __inline__ void arch_reset(char mode)
 
 	outb(0, IOMD_ROMCR0);
 
-	__asm__ __volatile__(
-		"mcr p15, 0, %0, c1, c0, 0\n\t"
-		"mov pc, #0"
-		 : : "r" (cpu_reset()));
+	/*
+	 * Jump into the ROM
+	 */
+	cpu_reset(0);
 }

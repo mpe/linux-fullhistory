@@ -51,7 +51,7 @@ const char * const medianame[] = {
 };
 
 /* Set the copy breakpoint for the copy-only-tiny-buffer Rx structure. */
-#if defined(__alpha__) || defined(__arm__)
+#if defined(__alpha__) || defined(__arm__) || defined(__sparc__)
 static int rx_copybreak = 1518;
 #else
 static int rx_copybreak = 100;
@@ -72,8 +72,14 @@ static int rx_copybreak = 100;
 
 #if defined(__alpha__)
 static int csr0 = 0x01A00000 | 0xE000;
-#elif defined(__i386__) || defined(__powerpc__) || defined(__sparc__)
+#elif defined(__i386__) || defined(__powerpc__)
 static int csr0 = 0x01A00000 | 0x8000;
+#elif defined(__sparc__)
+/* The UltraSparc PCI controllers will disconnect at every 64-byte
+ * crossing anyways so it makes no sense to tell Tulip to burst
+ * any more than that.
+ */
+static int csr0 = 0x01A00000 | 0x9000;
 #elif defined(__arm__)
 static int csr0 = 0x01A00000 | 0x4800;
 #else
@@ -285,6 +291,7 @@ static void tulip_up(struct net_device *dev)
 		/* This is set_rx_mode(), but without starting the transmitter. */
 		u16 *eaddrs = (u16 *)dev->dev_addr;
 		u16 *setup_frm = &tp->setup_frame[15*6];
+		dma_addr_t mapping;
 
 		/* 21140 bug: you must add the broadcast address. */
 		memset(tp->setup_frame, 0xff, sizeof(tp->setup_frame));
@@ -292,9 +299,16 @@ static void tulip_up(struct net_device *dev)
 		*setup_frm++ = eaddrs[0]; *setup_frm++ = eaddrs[0];
 		*setup_frm++ = eaddrs[1]; *setup_frm++ = eaddrs[1];
 		*setup_frm++ = eaddrs[2]; *setup_frm++ = eaddrs[2];
+
+		mapping = pci_map_single(tp->pdev, tp->setup_frame,
+					 sizeof(tp->setup_frame),
+					 PCI_DMA_TODEVICE);
+		tp->tx_buffers[0].skb = NULL;
+		tp->tx_buffers[0].mapping = mapping;
+
 		/* Put the setup frame on the Tx list. */
 		tp->tx_ring[0].length = cpu_to_le32(0x08000000 | 192);
-		tp->tx_ring[0].buffer1 = virt_to_le32desc(tp->setup_frame);
+		tp->tx_ring[0].buffer1 = cpu_to_le32(mapping);
 		tp->tx_ring[0].status = cpu_to_le32(DescOwned);
 
 		tp->cur_tx++;
@@ -569,30 +583,37 @@ static void tulip_init_ring(struct net_device *dev)
 		tp->rx_ring[i].status = 0x00000000;
 		tp->rx_ring[i].length = cpu_to_le32(PKT_BUF_SZ);
 		tp->rx_ring[i].buffer2 = cpu_to_le32(tp->rx_ring_dma + sizeof(struct tulip_rx_desc) * (i + 1));
-		tp->rx_skbuff[i] = NULL;
+		tp->rx_buffers[i].skb = NULL;
+		tp->rx_buffers[i].mapping = 0;
 	}
 	/* Mark the last entry as wrapping the ring. */
 	tp->rx_ring[i-1].length = cpu_to_le32(PKT_BUF_SZ | DESC_RING_WRAP);
 	tp->rx_ring[i-1].buffer2 = cpu_to_le32(tp->rx_ring_dma);
 
 	for (i = 0; i < RX_RING_SIZE; i++) {
+		dma_addr_t mapping;
+
 		/* Note the receive buffer must be longword aligned.
 		   dev_alloc_skb() provides 16 byte alignment.  But do *not*
 		   use skb_reserve() to align the IP header! */
 		struct sk_buff *skb = dev_alloc_skb(PKT_BUF_SZ);
-		tp->rx_skbuff[i] = skb;
+		tp->rx_buffers[i].skb = skb;
 		if (skb == NULL)
 			break;
+		mapping = pci_map_single(tp->pdev, skb->tail,
+					 PKT_BUF_SZ, PCI_DMA_FROMDEVICE);
+		tp->rx_buffers[i].mapping = mapping;
 		skb->dev = dev;			/* Mark as being used by this device. */
 		tp->rx_ring[i].status = cpu_to_le32(DescOwned);	/* Owned by Tulip chip */
-		tp->rx_ring[i].buffer1 = virt_to_le32desc(skb->tail);
+		tp->rx_ring[i].buffer1 = cpu_to_le32(mapping);
 	}
 	tp->dirty_rx = (unsigned int)(i - RX_RING_SIZE);
 
 	/* The Tx buffer descriptor is filled in as needed, but we
 	   do need to clear the ownership bit. */
 	for (i = 0; i < TX_RING_SIZE; i++) {
-		tp->tx_skbuff[i] = 0;
+		tp->tx_buffers[i].skb = NULL;
+		tp->tx_buffers[i].mapping = 0;
 		tp->tx_ring[i].status = 0x00000000;
 		tp->tx_ring[i].buffer2 = cpu_to_le32(tp->tx_ring_dma + sizeof(struct tulip_tx_desc) * (i + 1));
 	}
@@ -605,6 +626,7 @@ tulip_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	int entry;
 	u32 flag;
+	dma_addr_t mapping;
 	unsigned long cpuflags;
 
 	/* Caution: the write order is important here, set the field
@@ -615,8 +637,11 @@ tulip_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* Calculate the next Tx descriptor entry. */
 	entry = tp->cur_tx % TX_RING_SIZE;
 
-	tp->tx_skbuff[entry] = skb;
-	tp->tx_ring[entry].buffer1 = virt_to_le32desc(skb->data);
+	tp->tx_buffers[entry].skb = skb;
+	mapping = pci_map_single(tp->pdev, skb->data,
+				 skb->len, PCI_DMA_TODEVICE);
+	tp->tx_buffers[entry].mapping = mapping;
+	tp->tx_ring[entry].buffer1 = cpu_to_le32(mapping);
 
 	if (tp->cur_tx - tp->dirty_tx < TX_RING_SIZE/2) {/* Typical path */
 		flag = 0x60000000; /* No interrupt */
@@ -697,19 +722,31 @@ static int tulip_close (struct net_device *dev)
 
 	/* Free all the skbuffs in the Rx queue. */
 	for (i = 0; i < RX_RING_SIZE; i++) {
-		struct sk_buff *skb = tp->rx_skbuff[i];
-		tp->rx_skbuff[i] = 0;
+		struct sk_buff *skb = tp->rx_buffers[i].skb;
+		dma_addr_t mapping = tp->rx_buffers[i].mapping;
+
+		tp->rx_buffers[i].skb = NULL;
+		tp->rx_buffers[i].mapping = 0;
+
 		tp->rx_ring[i].status = 0;	/* Not owned by Tulip chip. */
 		tp->rx_ring[i].length = 0;
 		tp->rx_ring[i].buffer1 = 0xBADF00D0;	/* An invalid address. */
 		if (skb) {
+			pci_unmap_single(tp->pdev, mapping, PKT_BUF_SZ,
+					 PCI_DMA_FROMDEVICE);
 			dev_kfree_skb (skb);
 		}
 	}
 	for (i = 0; i < TX_RING_SIZE; i++) {
-		if (tp->tx_skbuff[i])
-			dev_kfree_skb (tp->tx_skbuff[i]);
-		tp->tx_skbuff[i] = 0;
+		struct sk_buff *skb = tp->tx_buffers[i].skb;
+
+		if (skb != NULL) {
+			pci_unmap_single(tp->pdev, tp->tx_buffers[i].mapping,
+					 skb->len, PCI_DMA_TODEVICE);
+			dev_kfree_skb (skb);
+		}
+		tp->tx_buffers[i].skb = NULL;
+		tp->tx_buffers[i].mapping = 0;
 	}
 
 	MOD_DEC_USE_COUNT;
@@ -937,7 +974,8 @@ static void set_rx_mode(struct net_device *dev)
 
 			if (entry != 0) {
 				/* Avoid a chip errata by prefixing a dummy entry. */
-				tp->tx_skbuff[entry] = 0;
+				tp->tx_buffers[entry].skb = NULL;
+				tp->tx_buffers[entry].mapping = 0;
 				tp->tx_ring[entry].length =
 					(entry == TX_RING_SIZE-1) ? cpu_to_le32(DESC_RING_WRAP) : 0;
 				tp->tx_ring[entry].buffer1 = 0;
@@ -945,12 +983,17 @@ static void set_rx_mode(struct net_device *dev)
 				entry = tp->cur_tx++ % TX_RING_SIZE;
 			}
 
-			tp->tx_skbuff[entry] = 0;
+			tp->tx_buffers[entry].skb = NULL;
+			tp->tx_buffers[entry].mapping =
+				pci_map_single(tp->pdev, tp->setup_frame,
+					       sizeof(tp->setup_frame),
+					       PCI_DMA_TODEVICE);
 			/* Put the setup frame on the Tx list. */
 			if (entry == TX_RING_SIZE-1)
 				tx_flags |= DESC_RING_WRAP;		/* Wrap ring. */
 			tp->tx_ring[entry].length = cpu_to_le32(tx_flags);
-			tp->tx_ring[entry].buffer1 = virt_to_le32desc(tp->setup_frame);
+			tp->tx_ring[entry].buffer1 =
+				cpu_to_le32(tp->tx_buffers[entry].mapping);
 			tp->tx_ring[entry].status = cpu_to_le32(DescOwned);
 			if (tp->cur_tx - tp->dirty_tx >= TX_RING_SIZE - 2) {
 				netif_stop_queue(dev);
@@ -1163,8 +1206,10 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 	   And the ASIX must have a burst limit or horrible things happen. */
 	if (chip_idx == DC21143  &&  chip_rev == 65)
 		tp->csr0 &= ~0x01000000;
-	else if (chip_idx == AX88140)
-		tp->csr0 |= 0x2000;
+	else if (chip_idx == AX88140) {
+		if ((tp->csr0 & 0x3f00) == 0)
+			tp->csr0 |= 0x2000;
+	}
 
 	/* The lower four bits are the media type. */
 	if (board_idx >= 0  &&  board_idx < MAX_UNITS) {

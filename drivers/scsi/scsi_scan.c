@@ -108,6 +108,8 @@ static struct dev_info device_list[] =
 	{"YAMAHA", "CDR100", "1.00", BLIST_NOLUN},		/* Locks up if polled for lun != 0 */
 	{"YAMAHA", "CDR102", "1.00", BLIST_NOLUN},		/* Locks up if polled for lun != 0  
 								 * extra reset */
+	{"YAMAHA", "CRW8424S", "1.0", BLIST_NOLUN},		/* Locks up if polled for lun != 0 */
+	{"YAMAHA", "CRW6416S", "1.0c", BLIST_NOLUN},		/* Locks up if polled for lun != 0 */
 	{"MITSUMI", "CD-R CR-2201CS", "6119", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 	{"RELISYS", "Scorpio", "*", BLIST_NOLUN},		/* responds to all LUN */
 	{"MICROTEK", "ScanMaker II", "5.61", BLIST_NOLUN},	/* responds to all LUN */
@@ -137,10 +139,12 @@ static struct dev_info device_list[] =
 	{"iomega", "jaz 1GB", "J.86", BLIST_NOTQ | BLIST_NOLUN},
  	{"CREATIVE","DVD-RAM RAM","*", BLIST_GHOST},
  	{"MATSHITA","PD-2 LF-D100","*", BLIST_GHOST},
+	{"AOpen", "PD-2 DVD-520S", "*", BLIST_GHOST},
  	{"HITACHI", "GF-1050","*", BLIST_GHOST},  /* Hitachi SCSI DVD-RAM */
  	{"TOSHIBA","CDROM","*", BLIST_ISROM},
 	{"TOSHIBA","DVD-RAM SD-W1101","*", BLIST_GHOST},
 	{"TOSHIBA","DVD-RAM SD-W1111","*", BLIST_GHOST},
+	{"MegaRAID", "LD", "*", BLIST_FORCELUN},
 
 	/*
 	 * Must be at end of list...

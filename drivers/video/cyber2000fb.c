@@ -1175,6 +1175,7 @@ static struct fb_ops cyber2000fb_ops =
 int cyber2000fb_attach(struct cyberpro_info *info)
 {
 	if (current_par.initialised) {
+		info->dev     = current_par.dev;
 		info->regs    = CyberRegs;
 		info->fb      = current_par.screen_base;
 		info->fb_size = current_par.screen_size;
@@ -1402,7 +1403,15 @@ int __init cyber2000fb_init(void)
 
 	smem_base = dev->resource[0].start;
 	mmio_base = dev->resource[0].start + 0x00800000;
+	current_par.dev    = dev;
 	current_par.dev_id = dev->device;
+
+	err = pci_enable_device(dev);
+	if (err) {
+		printk("%s: unable to enable device: %d\n",
+			current_par.dev_name, err);
+		return err;
+	}
 
 	/*
 	 * Map in the registers

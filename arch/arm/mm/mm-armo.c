@@ -3,7 +3,7 @@
  *
  * Page table sludge for older ARM processor architectures.
  *
- * Copyright (C) 1998-1999 Russell King
+ * Copyright (C) 1998-2000 Russell King
  */
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -135,6 +135,13 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 }
 
 /*
+ * No special code is required here.
+ */
+void setup_mm_for_reboot(char mode)
+{
+}
+
+/*
  * This contains the code to setup the memory map on an ARM2/ARM250/ARM3
  * machine. This is both processor & architecture specific, and requires
  * some more work to get it to fit into our separate processor and
@@ -155,6 +162,9 @@ void __init pagetable_init(void)
 		pgd_val(swapper_pg_dir[i]) = 0;
 }
 
+/*
+ * We never have holes in the memmap
+ */
 void __init create_memmap_holes(void)
 {
 }

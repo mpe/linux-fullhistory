@@ -1497,16 +1497,17 @@ asmlinkage long sys_rename(const char * oldname, const char * newname)
 
 int vfs_readlink(struct dentry *dentry, char *buffer, int buflen, const char *link)
 {
-	u32 len;
+	int len;
 
 	len = PTR_ERR(link);
 	if (IS_ERR(link))
 		goto out;
 
 	len = strlen(link);
-	if (len > buflen)
+	if (len > (unsigned) buflen)
 		len = buflen;
-	copy_to_user(buffer, link, len);
+	if (copy_to_user(buffer, link, len))
+		len = -EFAULT;
 out:
 	return len;
 }

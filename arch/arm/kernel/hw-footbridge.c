@@ -613,7 +613,7 @@ EXPORT_SYMBOL(cpld_modify);
 /*
  * CATS stuff
  */
-#ifdef CONFIG_CATS
+#ifdef CONFIG_ARCH_CATS
 
 #define CONFIG_PORT	0x370
 #define INDEX_PORT	(CONFIG_PORT)
@@ -698,7 +698,7 @@ void __init hw_init(void)
 #endif
 	}
 #endif
-#ifdef CONFIG_CATS
+#ifdef CONFIG_ARCH_CATS
 	if (machine_is_cats())
 		cats_hw_init();
 #endif

@@ -379,7 +379,8 @@ static const struct fsr_info {
  */
 #define BUG_PROC_MSG \
   KERN_DEBUG "Weird data abort (%08X).\n" \
-  KERN_DEBUG "Please see http://www.arm.linux.org.uk/state.html for more information"
+  KERN_DEBUG "Please see http://www.arm.linux.org.uk/state.html for " \
+	"more information\n"
 
 asmlinkage void
 do_DataAbort(unsigned long addr, int fsr, int error_code, struct pt_regs *regs)

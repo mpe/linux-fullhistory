@@ -793,7 +793,7 @@ static int __init get_model_name(struct cpuinfo_x86 *c)
 	unsigned int n, dummy, *v, ecx, edx;
 
 	/* Actually we must have cpuid or we could never have
-	 * figured out that this was AMD from the vendor info :-).
+	 * figured out that this was AMD/Cyrix from the vendor info :-).
 	 */
 
 	cpuid(0x80000000, &n, &dummy, &dummy, &dummy);
@@ -806,23 +806,27 @@ static int __init get_model_name(struct cpuinfo_x86 *c)
 	cpuid(0x80000004, &v[8], &v[9], &v[10], &v[11]);
 	c->x86_model_id[48] = 0;
 	/*  Set MTRR capability flag if appropriate  */
-	if(boot_cpu_data.x86 == 5) {
-		if((boot_cpu_data.x86_model == 9) ||
-		   ((boot_cpu_data.x86_model == 8) && 
-		    (boot_cpu_data.x86_mask >= 8)))
-			c->x86_capability |= X86_FEATURE_MTRR;
-	}
-
-	if (n >= 0x80000005){
-		cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
-		printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n",
-			ecx>>24, edx>>24);
-		c->x86_cache_size=(ecx>>24)+(edx>>24);
-	}
-	if (n >= 0x80000006){
-		cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
-		printk("CPU: L2 Cache: %dK\n", ecx>>16);
-		c->x86_cache_size=(ecx>>16);
+	
+	if(c->x86_vendor==X86_VENDOR_AMD)
+	{
+		if(boot_cpu_data.x86 == 5) {
+			if((boot_cpu_data.x86_model == 9) ||
+			   ((boot_cpu_data.x86_model == 8) && 
+			    (boot_cpu_data.x86_mask >= 8)))
+				c->x86_capability |= X86_FEATURE_MTRR;
+		}
+	
+		if (n >= 0x80000005){
+			cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
+			printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n",
+				ecx>>24, edx>>24);
+			c->x86_cache_size=(ecx>>24)+(edx>>24);	
+		}
+		if (n >= 0x80000006){
+			cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
+			printk("CPU: L2 Cache: %dK\n", ecx>>16);
+			c->x86_cache_size=(ecx>>16);
+		}
 	}
 	return 1;
 }
@@ -1034,6 +1038,8 @@ static void __init cyrix_model(struct cpuinfo_x86 *c)
 		printk(KERN_INFO "Working around Cyrix MediaGX virtual DMA bugs.\n");
 		isa_dma_bridge_buggy = 2;
 #endif		
+		c->x86_cache_size=16;	/* Yep 16K integrated cache thats it */
+		
 		/* GXm supports extended cpuid levels 'ala' AMD */
 		if (c->cpuid_level == 2) {
 			get_model_name(c);  /* get CPU marketing name */

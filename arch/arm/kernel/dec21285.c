@@ -206,8 +206,11 @@ static struct irqaction dc21285_error_action = {
 void __init dc21285_init(void)
 {
 	static struct resource csrmem, csrio;
-	unsigned int mem_size;
+	struct arm_pci_sysdata sysdata;
 	unsigned long cntl;
+	unsigned int mem_size, pci_cmd = PCI_COMMAND_IO | PCI_COMMAND_MEMORY |
+				PCI_COMMAND_MASTER | PCI_COMMAND_INVALIDATE;
+	int i;
 
 	mem_size = (unsigned int)high_memory - PAGE_OFFSET;
 	*CSR_SDRAMBASEMASK    = (mem_size - 1) & 0x0ffc0000;
@@ -240,25 +243,34 @@ void __init dc21285_init(void)
 	*CSR_PCICSRIOBASE     = csrio.start;
 	*CSR_PCISDRAMBASE     = virt_to_bus((void *)PAGE_OFFSET);
 	*CSR_PCIROMBASE       = 0;
-	*CSR_PCICMD           = PCI_COMMAND_IO | PCI_COMMAND_MEMORY |
-				PCI_COMMAND_MASTER | PCI_COMMAND_FAST_BACK |
-				PCI_COMMAND_INVALIDATE | PCI_COMMAND_PARITY |
+	*CSR_PCICMD           = pci_cmd |
 				(1 << 31) | (1 << 29) | (1 << 28) | (1 << 24);
 #endif
 
 	printk(KERN_DEBUG "PCI: DC21285 footbridge, revision %02lX\n",
 		*CSR_CLASSREV & 0xff);
 
-	pci_scan_bus(0, &dc21285_ops, NULL);
+	for (i = 0; i < MAX_NR_BUS; i++) {
+		sysdata.bus[i].features  = PCI_COMMAND_FAST_BACK |
+					   PCI_COMMAND_SERR |
+					   PCI_COMMAND_PARITY;
+		sysdata.bus[i].maxdevsel = PCI_STATUS_DEVSEL_FAST;
+	}
+
+	pci_scan_bus(0, &dc21285_ops, &sysdata);
+
+	pci_cmd |= sysdata.bus[0].features;
+
+	printk("Fast back to back PCI transfers %sabled\n",
+	       (sysdata.bus[0].features & PCI_COMMAND_FAST_BACK) ? "en" : "dis");
 
 	/*
 	 * Clear any existing errors - we aren't
 	 * interested in historical data...
 	 */
-	cntl = *CSR_SA110_CNTL & 0xffffde07;
-	*CSR_SA110_CNTL = cntl | SA110_CNTL_RXSERR;
-	cntl = *CSR_PCICMD & 0x0000ffff;
-	*CSR_PCICMD = cntl | 1 << 31 | 1 << 29 | 1 << 28 | 1 << 24;
+	cntl		= *CSR_SA110_CNTL & 0xffffde07;
+	*CSR_SA110_CNTL	= cntl | SA110_CNTL_RXSERR;
+	*CSR_PCICMD	= pci_cmd | 1 << 31 | 1 << 29 | 1 << 28 | 1 << 24;
 
 	/*
 	 * Initialise PCI error IRQ after we've finished probing

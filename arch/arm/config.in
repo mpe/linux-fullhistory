@@ -35,9 +35,9 @@ fi
 
 if [ "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
    bool '  Include support for EBSA285' CONFIG_ARCH_EBSA285
-   bool '  Include support for CATS' CONFIG_CATS
+   bool '  Include support for CATS' CONFIG_ARCH_CATS
    bool '  Include support for NetWinder' CONFIG_ARCH_NETWINDER
-   bool '  Include support for Compaq Personal Server' CONFIG_PERSONAL_SERVER
+   bool '  Include support for Compaq Personal Server' CONFIG_ARCH_PERSONAL_SERVER
 fi
 
 if [ "$CONFIG_ADDIN_FOOTBRIDGE" = "y" ]; then
@@ -124,7 +124,7 @@ fi
 #
 # These machines have ISA-DMA
 #
-if [ "$CONFIG_CATS" = "y" -o \
+if [ "$CONFIG_ARCH_CATS" = "y" -o \
      "$CONFIG_ARCH_SHARK" = "y" -o \
      "$CONFIG_ARCH_NETWINDER" = "y" ]; then
    define_bool CONFIG_ISA_DMA y
@@ -171,8 +171,8 @@ source drivers/parport/Config.in
 if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
      "$CONFIG_ARCH_SA1100" = "y" -o \
      "$CONFIG_ARCH_NETWINDER" = "y" -o \
-     "$CONFIG_PERSONAL_SERVER" = "y" -o \
-     "$CONFIG_CATS" = "y" ]; then
+     "$CONFIG_ARCH_PERSONAL_SERVER" = "y" -o \
+     "$CONFIG_ARCH_CATS" = "y" ]; then
    string 'Initial kernel command string' CONFIG_CMDLINE
 fi
 if [ "$CONFIG_ARCH_NETWINDER" = "y" -o \

@@ -8,15 +8,6 @@
 
 #define arch_do_idle()		cpu_do_idle()
 #define arch_power_off()	do { } while (0)
-
-extern __inline__ void arch_reset(char mode)
-{
-	if (mode == 's') {
-		__asm__ volatile(
-		"mcr	p15, 0, %0, c1, c0, 0	@ MMU off
-		 mov	pc, #0x80000000		@ jump to flash"
-		: : "r" (cpu_reset()) : "cc");
-	}
-}
+#define arch_reset(mode)	cpu_reset(0x80000000)
 
 #endif
