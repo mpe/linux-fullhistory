@@ -800,6 +800,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
    	iph = skb->h.iph;
    	iph->frag_off = 0;
    	iph->tot_len = htons((iph->ihl * sizeof(unsigned long)) + count);
+   	skb->ip_hdr = iph;
    	return(skb);
 }
  

@@ -208,8 +208,15 @@ tcp_retransmit(struct sock *sk, int all)
 	return;
   }
 
-  if (sk->cong_window > 4)
-       sk->cong_window = sk->cong_window / 2;
+/*
+ *  If we had the full V-J mechanism, this might be right.  But
+ *  for the moment we want simple slow start after error.
+ *
+ *  if (sk->cong_window > 4)
+ *       sk->cong_window = sk->cong_window / 2;
+ */
+ 
+  sk->cong_window = 1;
   sk->exp_growth = 0;
 
   /* Do the actuall retransmit. */
@@ -613,6 +620,7 @@ tcp_send_partial(struct sock *sk)
   
   skb->h.seq = sk->send_seq;
   if (after(sk->send_seq , sk->window_seq) ||
+      sk->retransmits ||
       sk->packets_out >= sk->cong_window) {
 	DPRINTF((DBG_TCP, "sk->cong_window = %d, sk->packets_out = %d\n",
 					sk->cong_window, sk->packets_out));
@@ -833,67 +841,75 @@ tcp_write(struct sock *sk, unsigned char *from,
 
 	/* Now we need to check if we have a half built packet. */
 	if (sk->send_tmp != NULL) {
-		/* If sk->mss has been changed this could cause problems. */
+	        int hdrlen;
+
+		skb = sk->send_tmp;
+
+		         /* IP header + TCP header */
+		hdrlen = ((unsigned long)skb->h.th - (unsigned long)(skb+1))
+		         + sizeof(struct tcphdr);
+
+		/* If sk->mtu has been changed this could cause problems. */
 
 		/* Add more stuff to the end of skb->len */
-		skb = sk->send_tmp;
 		if (!(flags & MSG_OOB)) {
-			copy = min(sk->mss - skb->len + 128 +
-				   prot->max_header, len);
-	      
-		/* FIXME: this is really a bug. */
-		if (copy <= 0) {
-			printk("TCP: **bug**: \"copy\" <= 0!!\n");
-			copy = 0;
-		}
+			copy = min(sk->mtu - (skb->len - hdrlen), len);
+			/* FIXME: this is really a bug. */
+			if (copy <= 0) {
+			  printk("TCP: **bug**: \"copy\" <= 0!!\n");
+			  copy = 0;
+			}
 	  
-		memcpy_fromfs((unsigned char *)(skb+1) + skb->len, from, copy);
-		skb->len += copy;
-		from += copy;
-		copied += copy;
-		len -= copy;
-		sk->send_seq += copy;
+			memcpy_fromfs((unsigned char *)(skb+1) + skb->len, 
+				      from, copy);
+			skb->len += copy;
+			from += copy;
+			copied += copy;
+			len -= copy;
+			sk->send_seq += copy;
+		      }
+
+		if ((skb->len - hdrlen) > sk->mtu || (flags & MSG_OOB)) {
+		  tcp_send_partial(sk);
+		}
+		continue;
 	}
 
-	if (skb->len -(unsigned long)skb->h.th +
-	   (unsigned long)(skb+1) >= sk->mss ||(flags & MSG_OOB)) {
-		tcp_send_partial(sk);
-	}
-	continue;
-  }
+	/*
+	 * We also need to worry about the window.
+	 * If window < 1/4 offered window, don't use it.  That's
+	 *   silly window prevention.  What we actually do is 
+	 *   use the whole MTU.  Since the results in the right
+	 *   edge of the packet being outside the window, it will
+	 *   be queued for later rather than sent.
+	 */
 
-  /*
-   * We also need to worry about the window.
-   * The smallest we will send is about 200 bytes.
-   * This is a bit sad for TCP/AMPR people running
-   * 196 byte windows! - FIXME
-   */
-  copy = min(sk->mtu, diff(sk->window_seq, sk->send_seq));
-
-  /* FIXME: redundent check here. */
-  if (copy < 200 || copy > sk->mtu) copy = sk->mtu;
-  copy = min(copy, len);
+	copy = diff(sk->window_seq, sk->send_seq);
+	if (copy < (diff(sk->window_seq, sk->rcv_ack_seq) >> 2))
+	  copy = sk->mtu;
+	copy = min(copy, sk->mtu);
+	copy = min(copy, len);
 
   /* We should really check the window here also. */
-  if (sk->packets_out && copy < sk->mss && !(flags & MSG_OOB)) {
+	if (sk->packets_out && copy < sk->mtu && !(flags & MSG_OOB)) {
 	/* We will release the socket incase we sleep here. */
-	release_sock(sk);
-	skb = (struct sk_buff *) prot->wmalloc(sk,
-			sk->mss + 128 + prot->max_header +
+	  release_sock(sk);
+	  skb = (struct sk_buff *) prot->wmalloc(sk,
+			sk->mtu + 128 + prot->max_header +
 			sizeof(*skb), 0, GFP_KERNEL);
-	sk->inuse = 1;
-	sk->send_tmp = skb;
-	if (skb != NULL)
-		skb->mem_len = sk->mss + 128 + prot->max_header + sizeof(*skb);
+	  sk->inuse = 1;
+	  sk->send_tmp = skb;
+	  if (skb != NULL)
+		skb->mem_len = sk->mtu + 128 + prot->max_header + sizeof(*skb);
 	} else {
 		/* We will release the socket incase we sleep here. */
-		release_sock(sk);
-		skb = (struct sk_buff *) prot->wmalloc(sk,
-				copy + prot->max_header +
-				sizeof(*skb), 0, GFP_KERNEL);
-		sk->inuse = 1;
-		if (skb != NULL)
-			skb->mem_len = copy+prot->max_header + sizeof(*skb);
+	  release_sock(sk);
+	  skb = (struct sk_buff *) prot->wmalloc(sk,
+						 copy + prot->max_header +
+						 sizeof(*skb), 0, GFP_KERNEL);
+	  sk->inuse = 1;
+	  if (skb != NULL)
+	    skb->mem_len = copy+prot->max_header + sizeof(*skb);
 	}
 
 	/* If we didn't get any memory, we need to sleep. */
@@ -980,6 +996,7 @@ tcp_write(struct sock *sk, unsigned char *from,
 
 	skb->h.seq = sk->send_seq;
 	if (after(sk->send_seq , sk->window_seq) ||
+	          sk->retransmits ||
 		  sk->packets_out >= sk->cong_window) {
 		DPRINTF((DBG_TCP, "sk->cong_window = %d, sk->packets_out = %d\n",
 					sk->cong_window, sk->packets_out));
@@ -998,8 +1015,23 @@ tcp_write(struct sock *sk, unsigned char *from,
 	}
   }
   sk->err = 0;
+
+/*
+ * In its original form, the following code implements
+ * Nagle's rule.  Everybody recommends it, and probably
+ * production code should use it.  But it slows down response enough
+ * that I dont' like it.  So as long as we're not bumping into 
+ * the window, I go ahead and send it.  If you want Nagle, just
+ * define USE_NAGLE  --C. Hedrick
+ */
+
   /* Avoid possible race on send_tmp - c/o Johannes Stille */
-  if(sk->send_tmp && !sk->packets_out)
+  if(sk->send_tmp && 
+     ((!sk->packets_out) 
+#ifndef USE_NAGLE
+      || before(sk->send_seq , sk->window_seq)
+#endif
+      ))
   	tcp_send_partial(sk);
   /* -- */
   release_sock(sk);
@@ -1696,7 +1728,6 @@ tcp_options(struct sock *sk, struct tcphdr *th)
 {
   unsigned char *ptr;
   int length=(th->doff*4)-sizeof(struct tcphdr);
-  int mtuset=0;
     
   ptr = (unsigned char *)(th + 1);
   
@@ -1721,7 +1752,6 @@ tcp_options(struct sock *sk, struct tcphdr *th)
   					if(opsize==4)
   					{
   						sk->mtu=min(sk->mtu,ntohs(*(unsigned short *)ptr));
-  						mtuset=1;
   					}
   					break;
   				/* Add other options here as people feel the urge to implement stuff like large windows */
@@ -1730,12 +1760,7 @@ tcp_options(struct sock *sk, struct tcphdr *th)
   			length-=opsize;
   	}
   }
-  					
-  if (!mtuset) 
-  {
-	sk->mtu = min(sk->mtu, 576 - HEADER_SIZE);
-	return;
-  }
+
 }
 
 /*
@@ -1857,6 +1882,16 @@ tcp_conn_request(struct sock *sk, struct sk_buff *skb,
   newsk->ip_ttl=sk->ip_ttl;
   newsk->ip_tos=skb->ip_hdr->tos;
 
+/* use 512 or whatever user asked for */
+/* note use of sk->mss, since user has no direct access to newsk */
+  if (sk->mss)
+    newsk->mtu = sk->mss;
+  else
+    newsk->mtu = 576 - HEADER_SIZE;
+/* but not bigger than device MTU */
+  newsk->mtu = min(newsk->mtu, dev->mtu - HEADER_SIZE);
+
+/* this will min with what arrived in the packet */
   tcp_options(newsk,skb->h.th);
 
   buff = (struct sk_buff *) newsk->prot->wmalloc(newsk, MAX_SYN_SIZE, 1, GFP_ATOMIC);
@@ -1916,8 +1951,8 @@ tcp_conn_request(struct sock *sk, struct sk_buff *skb,
   ptr =(unsigned char *)(t1+1);
   ptr[0] = 2;
   ptr[1] = 4;
-  ptr[2] =((dev->mtu - HEADER_SIZE) >> 8) & 0xff;
-  ptr[3] =(dev->mtu - HEADER_SIZE) & 0xff;
+  ptr[2] = ((newsk->mtu) >> 8) & 0xff;
+  ptr[3] =(newsk->mtu) & 0xff;
 
   tcp_send_check(t1, daddr, saddr, sizeof(*t1)+4, newsk);
   newsk->prot->queue_xmit(newsk, dev, buff, 0);
@@ -2097,7 +2132,8 @@ tcp_write_xmit(struct sock *sk)
 
   while(sk->wfront != NULL &&
         before(sk->wfront->h.seq, sk->window_seq) &&
-        sk->packets_out < sk->cong_window) {
+	(sk->retransmits == 0 || before(sk->wfront->h.seq, sk->rcv_ack_seq +1))
+        && sk->packets_out < sk->cong_window) {
 		skb = sk->wfront;
 		IS_SKB(skb);
 		sk->wfront =(struct sk_buff *)skb->next;
@@ -2270,8 +2306,25 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 	if (before(sk->send_head->h.seq, ack+1)) {
 		struct sk_buff *oskb;
 
-		sk->retransmits = 0;
+		if (sk->retransmits) {
 
+		  /* if we're retransmitting, don't start any new
+		   * packets until after everything in retransmit queue
+		   * is acked.  That's as close as I can come at the
+		   * moment to slow start the way this code is organized
+		   */
+		  if (sk->send_head->link3)
+		    sk->retransmits = 1;
+		  else
+		    sk->retransmits = 0;
+		}
+
+		/*
+		 * need to restart backoff whenever we get a response,
+		 * or things get impossible if we lose a window-full of
+		 * data with very small MSS
+		 */
+		sk->backoff = 0;
 		/* We have one less packet out there. */
 		if (sk->packets_out > 0) sk->packets_out --;
 		DPRINTF((DBG_TCP, "skb=%X skb->h.seq = %d acked ack=%d\n",
@@ -2282,13 +2335,22 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 
 		oskb = sk->send_head;
 
-		/* Estimate the RTT. Ignore the ones right after a retransmit. */
-		if (sk->retransmits == 0 && !(flag&2)) {
+		/* 
+		 * In theory we're supposed to ignore rtt's when there's
+		 * retransmission in process.  Unfortunately this means
+		 * that if there's a sharp increase in RTT, we may 
+		 * never get out of retransmission.  For the moment
+		 * ignore the test.
+		 */
+
+		if (/* sk->retransmits == 0 && */ !(flag&2)) {
 		  long abserr, rtt = jiffies - oskb->when;
 
-		  if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV)
+		  if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV) {
 		    /* first ack, so nothing else to average with */
 		    sk->rtt = rtt;
+		    sk->mdev = rtt; /* overcautious initial estimate */
+		  }
 		  else {
 		    abserr = (rtt > sk->rtt) ? rtt - sk->rtt : sk->rtt - rtt;
 		    sk->rtt = (7 * sk->rtt + rtt) >> 3;
@@ -2328,7 +2390,9 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
    */
   if (sk->wfront != NULL) {
 	if (after (sk->window_seq, sk->wfront->h.seq) &&
-		sk->packets_out < sk->cong_window) {
+	        (sk->retransmits == 0 || 
+		 before(sk->wfront->h.seq, sk->rcv_ack_seq +1))
+		&& sk->packets_out < sk->cong_window) {
 		flag |= 1;
 		tcp_write_xmit(sk);
 	}
@@ -2390,7 +2454,7 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
       (sk->send_head->when + backoff(sk->backoff) * (2 * sk->mdev + sk->rtt)
        < jiffies)) {
 	sk->exp_growth = 0;
-	ip_retransmit(sk, 0);
+	ip_retransmit(sk, 1);
   }
 
   DPRINTF((DBG_TCP, "leaving tcp_ack\n"));
@@ -2855,13 +2919,20 @@ tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
   t1->urg_ptr = 0;
   t1->doff = 6;
 
+/* use 512 or whatever user asked for */
+  if (sk->mss)
+    sk->mtu = sk->mss;
+  else
+    sk->mtu = 576 - HEADER_SIZE;
+/* but not bigger than device MTU */
+  sk->mtu = min(sk->mtu, dev->mtu - HEADER_SIZE);
+
   /* Put in the TCP options to say MTU. */
   ptr = (unsigned char *)(t1+1);
   ptr[0] = 2;
   ptr[1] = 4;
-  ptr[2] = (dev->mtu- HEADER_SIZE) >> 8;
-  ptr[3] = (dev->mtu- HEADER_SIZE) & 0xff;
-  sk->mtu = dev->mtu - HEADER_SIZE;
+  ptr[2] = (sk->mtu) >> 8;
+  ptr[3] = (sk->mtu) & 0xff;
   tcp_send_check(t1, sk->saddr, sk->daddr,
 		  sizeof(struct tcphdr) + 4, sk);
 

@@ -158,7 +158,7 @@ void * vmalloc(unsigned long size)
 	area->size = size + PAGE_SIZE;
 	area->next = NULL;
 	for (p = &vmlist; (tmp = *p) ; p = &tmp->next) {
-		if (size + (unsigned long) addr <= (unsigned long) tmp->addr)
+		if (size + (unsigned long) addr < (unsigned long) tmp->addr)
 			break;
 		addr = (void *) (tmp->size + (unsigned long) tmp->addr);
 	}

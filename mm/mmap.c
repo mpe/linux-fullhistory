@@ -137,17 +137,20 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 asmlinkage int sys_mmap(unsigned long *buffer)
 {
 	int error;
-	unsigned long fd;
-	struct file * file;
+	unsigned long flags;
+	struct file * file = NULL;
 
 	error = verify_area(VERIFY_READ, buffer, 6*4);
 	if (error)
 		return error;
-	fd = get_fs_long(buffer+4);
-	if (fd >= NR_OPEN || !(file = current->filp[fd]))
-		return -EBADF;
+	flags = get_fs_long(buffer+3);
+	if (!(flags & MAP_ANONYMOUS)) {
+		unsigned long fd = get_fs_long(buffer+4);
+		if (fd >= NR_OPEN || !(file = current->filp[fd]))
+			return -EBADF;
+	}
 	return do_mmap(file, get_fs_long(buffer), get_fs_long(buffer+1),
-		get_fs_long(buffer+2), get_fs_long(buffer+3), get_fs_long(buffer+5));
+		get_fs_long(buffer+2), flags, get_fs_long(buffer+5));
 }
 
 /*
