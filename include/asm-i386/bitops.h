@@ -20,11 +20,26 @@
 #endif
 
 /*
+ * Function prototypes to keep gcc -Wall happy
+ */
+extern void set_bit(int nr, volatile void * addr);
+extern void clear_bit(int nr, volatile void * addr);
+extern void change_bit(int nr, volatile void * addr);
+extern int test_and_set_bit(int nr, volatile void * addr);
+extern int test_and_clear_bit(int nr, volatile void * addr);
+extern int test_and_change_bit(int nr, volatile void * addr);
+extern int __constant_test_bit(int nr, const volatile void * addr);
+extern int __test_bit(int nr, volatile void * addr);
+extern int find_first_zero_bit(void * addr, unsigned size);
+extern int find_next_zero_bit (void * addr, int size, int offset);
+extern unsigned long ffz(unsigned long word);
+
+/*
  * Some hacks to defeat gcc over-optimizations..
  */
 struct __dummy { unsigned long a[100]; };
-#define ADDR (*(struct __dummy *) addr)
-#define CONST_ADDR (*(const struct __dummy *) addr)
+#define ADDR (*(volatile struct __dummy *) addr)
+#define CONST_ADDR (*(volatile const struct __dummy *) addr)
 
 extern __inline__ void set_bit(int nr, volatile void * addr)
 {

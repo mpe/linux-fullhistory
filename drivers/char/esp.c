@@ -932,6 +932,20 @@ static int startup(struct esp_struct * info)
 	IRQ_ports[info->irq] = info;
 
 	/*
+	 * Set up the tty->alt_speed kludge
+	 */
+	if (info->tty) {
+		if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_HI)
+			info->tty->alt_speed = 57600;
+		if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_VHI)
+			info->tty->alt_speed = 115200;
+		if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_SHI)
+			info->tty->alt_speed = 230400;
+		if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_WARP)
+			info->tty->alt_speed = 460800;
+	}
+	
+	/*
 	 * set the speed of the serial port
 	 */
 	change_speed(info);
@@ -1118,7 +1132,8 @@ static void change_speed(struct esp_struct *info)
 #endif
 
 	baud = tty_get_baud_rate(info->tty);
-	if (baud == 38400)
+	if (baud == 38400 &&
+	    ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST))
 		quot = info->custom_divisor;
 	else {
 		if (baud == 134)

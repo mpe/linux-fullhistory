@@ -461,7 +461,7 @@ asmlinkage int sys_ustat(dev_t dev, struct ustat * ubuf)
         struct super_block *s;
         struct ustat tmp;
         struct statfs sbuf;
-        unsigned long old_fs;
+        mm_segment_t old_fs;
 	int err = -EINVAL;
 
 	lock_kernel();

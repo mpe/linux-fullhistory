@@ -74,7 +74,7 @@ CONFIG_BLK_DEV_IDEDMA=y
 #
 # Networking options
 #
-# CONFIG_PACKET is not set
+CONFIG_PACKET=y
 # CONFIG_NETLINK is not set
 # CONFIG_FIREWALL is not set
 # CONFIG_NET_ALIAS is not set

@@ -5,7 +5,6 @@
  * User space memory access functions
  */
 #include <linux/sched.h>
-#include <asm/segment.h>
 
 #define VERIFY_READ 0
 #define VERIFY_WRITE 1
@@ -18,24 +17,21 @@
  * For historical reasons, these macros are grossly misnamed.
  */
 
-extern unsigned long __bad_fs_size(void);
+#define MAKE_MM_SEG(s)	((mm_segment_t) { (s) })
+#define KERNEL_DS	MAKE_MM_SEG(0)
+#define USER_DS		MAKE_MM_SEG(3)
 
-#define get_fs()	(current->tss.segment)
 #define get_ds()	(KERNEL_DS)
+#define get_fs()	(current->tss.segment)
+#define set_fs(x)	(current->tss.segment = (x))
 
-/* Some architectures -- Alpha for one -- use "segment" schemes that 
-   require all bits to be preserved, thus the i386 traditional `ushort'
-   doesn't work.  To head off problems early, force the Intel folks
-   to do it Right as well.  */
+#define segment_eq(a,b)	((a).seg == (b).seg)
 
-#define set_fs(x)	(current->tss.segment =				\
-			 sizeof(x) == sizeof(unsigned long) ? (x) 	\
-			 : __bad_fs_size())
 
 /*
  * Address Ok:
  *
- *			    low two bits of segment
+ *				     segment
  *			00 (kernel)		11 (user)
  *
  * high		00	1			1
@@ -44,12 +40,12 @@ extern unsigned long __bad_fs_size(void);
  * address	11	1			0
  */
 #define __addr_ok(x) \
-	((((unsigned long)(x)>>30)&get_fs()) != 3)
+	((((unsigned long)(x)>>30)&get_fs().seg) != 3)
 
 #define __user_ok(addr,size) \
 	((size <= 0xC0000000UL) && (addr <= 0xC0000000UL - size))
 #define __kernel_ok \
-	(!(get_fs() & 3))
+	(!get_fs().seg)
 
 extern int __verify_write(const void *, unsigned long);
 

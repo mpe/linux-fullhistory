@@ -229,7 +229,7 @@ __initfunc(static int
 root_dev_chg_route(int op, struct device *dev, __u32 dest, __u32 mask, __u32 gw))
 {
 	struct rtentry	route;
-	unsigned long	oldfs;
+	mm_segment_t	oldfs;
 	int		err;
 
 	memset(&route, 0, sizeof(struct rtentry));	/* or else! */
@@ -608,7 +608,7 @@ root_bind_udp_sock(struct socket *sock, u32 addr, u16 port))
  */
 static inline int root_send_udp(struct socket *sock, void *buf, int size)
 {
-	u32 oldfs;
+	mm_segment_t oldfs;
 	int result;
 	struct msghdr msg;
 	struct iovec iov;
@@ -632,7 +632,7 @@ static inline int root_send_udp(struct socket *sock, void *buf, int size)
  */
 static inline int root_recv_udp(struct socket *sock, void *buf, int size)
 {
-	u32 oldfs;
+	mm_segment_t oldfs;
 	int result;
 	struct msghdr msg;
 	struct iovec iov;

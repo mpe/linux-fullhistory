@@ -29,7 +29,7 @@ startup_32:
  * Set segments to known values
  */
 	cld
-	movl $(KERNEL_DS),%eax
+	movl $(__KERNEL_DS),%eax
 	mov %ax,%ds
 	mov %ax,%es
 	mov %ax,%fs
@@ -227,14 +227,14 @@ is386:	pushl %ecx		# restore original EFLAGS
 #endif
 	lgdt gdt_descr
 	lidt idt_descr
-	ljmp $(KERNEL_CS),$1f
-1:	movl $(KERNEL_DS),%eax	# reload all the segment registers
+	ljmp $(__KERNEL_CS),$1f
+1:	movl $(__KERNEL_DS),%eax# reload all the segment registers
 	mov %ax,%ds		# after changing gdt.
 	mov %ax,%es
 	mov %ax,%fs
 	mov %ax,%gs
 #ifdef __SMP__
-	movl $(KERNEL_DS), %eax
+	movl $(__KERNEL_DS), %eax
 	mov  %ax,%ss		# Reload the stack pointer (segment only)
 #else
 	lss stack_start,%esp	# Load processor stack
@@ -285,7 +285,7 @@ check_x87:
  */
 setup_idt:
 	lea ignore_int,%edx
-	movl $(KERNEL_CS << 16),%eax
+	movl $(__KERNEL_CS << 16),%eax
 	movw %dx,%ax		/* selector = 0x0010 = cs */
 	movw $0x8E00,%dx	/* interrupt gate - dpl=0, present */
 
@@ -301,7 +301,7 @@ rp_sidt:
 
 ENTRY(stack_start)
 	.long SYMBOL_NAME(init_task_union)+8192
-	.long KERNEL_DS
+	.long __KERNEL_DS
 
 /* This is the default interrupt "handler" :-) */
 int_msg:
@@ -314,7 +314,7 @@ ignore_int:
 	pushl %edx
 	push %es
 	push %ds
-	movl $(KERNEL_DS),%eax
+	movl $(__KERNEL_DS),%eax
 	mov %ax,%ds
 	mov %ax,%es
 	pushl $int_msg

@@ -179,11 +179,11 @@ asmlinkage void math_emulate(long arg)
       FPU_EIP += code_base = FPU_CS << 4;
       code_limit = code_base + 0xffff;  /* Assumes code_base <= 0xffff0000 */
     }
-  else if ( FPU_CS == USER_CS && FPU_DS == USER_DS )
+  else if ( FPU_CS == __USER_CS && FPU_DS == __USER_DS )
     {
       addr_modes.default_mode = 0;
     }
-  else if ( FPU_CS == KERNEL_CS )
+  else if ( FPU_CS == __KERNEL_CS )
     {
       printk("math_emulate: %04x:%08lx\n",FPU_CS,FPU_EIP);
       panic("Math emulation needed in kernel");

@@ -44,7 +44,7 @@ static inline void irq_exit(int cpu, int irq)
 	"pushl %edx\n\t" \
 	"pushl %ecx\n\t" \
 	"pushl %ebx\n\t" \
-	"movl $" STR(KERNEL_DS) ",%edx\n\t" \
+	"movl $" STR(__KERNEL_DS) ",%edx\n\t" \
 	"mov %dx,%ds\n\t" \
 	"mov %dx,%es\n\t"
 

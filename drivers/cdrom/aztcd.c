@@ -1,8 +1,9 @@
-#define AZT_VERSION "2.50"
-/*      $Id: aztcd.c,v 1.16 1997/01/26 07:12:53 davem Exp $
+#define AZT_VERSION "2.60"
+
+/*      $Id: aztcd.c,v 2.60 1997/11/29 09:51:19 root Exp root $
 	linux/drivers/block/aztcd.c - Aztech CD268 CDROM driver
 
-	Copyright (C) 1994,95,96 Werner Zimmermann(zimmerma@rz.fht-esslingen.de)
+	Copyright (C) 1994-98 Werner Zimmermann(Werner.Zimmermann@fht-esslingen.de)
 
 	based on Mitsumi CDROM driver by  Martin Hariss and preworks by
 	Eberhard Moenkeberg; contains contributions by Joe Nardone and Robby 
@@ -154,7 +155,16 @@
         V2.50   Heiko Eissfeldt suggested to remove some VERIFY_READs in 
                 aztcd_ioctl; check_aztcd_media_change modified 
                 Werner Zimmermann, May 16, 96       
+	V2.60   Implemented Auto-Probing; made changes for kernel's 2.1.xx blocksize
+                Adaption to linux kernel > 2.1.0
+		Werner Zimmermann, Nov 29, 97
 */
+
+#define MAJOR_NR AZTECH_CDROM_MAJOR 
+
+#include <linux/blk.h>
+#include <linux/aztcd.h>
+
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
@@ -166,16 +176,21 @@
 #include <linux/ioport.h>
 #include <linux/string.h>
 #include <linux/major.h>
+
+#ifndef AZT_KERNEL_PRIOR_2_1
 #include <linux/init.h>
+#endif
 
 #include <asm/system.h>
 #include <asm/io.h>
+
+#ifdef AZT_KERNEL_PRIOR_2_1
+#include <asm/segment.h>
+#else
 #include <asm/uaccess.h>
+static int aztcd_blocksizes[1] = {2048};
+#endif
 
-#define MAJOR_NR AZTECH_CDROM_MAJOR 
-
-#include <linux/blk.h>
-#include <linux/aztcd.h>
 
 /*###########################################################################
   Defines
@@ -221,6 +236,11 @@
 #define READ_TIMEOUT 3000
 
 #define azt_port aztcd  /*needed for the modutils*/
+
+#ifndef AZT_KERNEL_PRIOR_2_1 
+#define  memcpy_fromfs copy_from_user
+#define  memcpy_tofs   copy_to_user
+#endif
 
 /*##########################################################################
   Type Definitions
@@ -269,7 +289,12 @@ static int azt_mode = -1;
 static volatile int azt_read_count = 1;
 
 static int azt_port = AZT_BASE_ADDR;
+
+#ifndef AZT_KERNEL_PRIOR_2_1
 MODULE_PARM(azt_port, "i");
+#endif
+
+static int azt_port_auto[16] = AZT_BASE_AUTO;
 
 static char  azt_cont = 0;
 static char  azt_init_end = 0;
@@ -331,7 +356,13 @@ static void azt_transfer(void);
 static void do_aztcd_request(void);
 static void azt_invalidate_buffers(void);
 int         aztcd_open(struct inode *ip, struct file *fp);
+
+#ifdef AZT_KERNEL_PRIOR_2_1
+static void aztcd_release(struct inode * inode, struct file * file);
+#else
 static int  aztcd_release(struct inode * inode, struct file * file);
+#endif
+
 int         aztcd_init(void);
 #ifdef MODULE
  int        init_module(void);
@@ -786,7 +817,7 @@ static int aztUpdateToc()
            } 
         DiskInfo.xa = getAztStatus() & AST_MODE;
         if (DiskInfo.xa) 
-           { printk("aztcd: XA support experimental - mail results to zimmerma@rz.fht-esslingen.de\n");
+           { printk("aztcd: XA support experimental - mail results to Werner.Zimmermann@fht-esslingen.de\n");
            }
         
         /*multisession detection
@@ -1050,7 +1081,11 @@ static int aztGetToc(int multi)
   Kernel Interface Functions
   ##########################################################################
 */
+#ifdef AZT_KERNEL_PRIOR_2_1
+void aztcd_setup(char *str, int *ints)
+#else
 __initfunc(void aztcd_setup(char *str, int *ints))
+#endif
 {  if (ints[0] > 0)
       azt_port = ints[1];
    if (ints[0] > 1)
@@ -1139,7 +1174,7 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 #endif
 		  st = verify_area(VERIFY_WRITE, (void*) arg, sizeof(struct cdrom_multisession));
 		  if (st) return st;
-		  copy_from_user(&ms, (void*) arg, sizeof(struct cdrom_multisession));
+		  memcpy_fromfs(&ms, (void*) arg, sizeof(struct cdrom_multisession));
 		  if (ms.addr_format == CDROM_MSF) 
 		     { ms.addr.msf.minute = azt_bcd2bin(DiskInfo.lastSession.min);
 		       ms.addr.msf.second = azt_bcd2bin(DiskInfo.lastSession.sec);
@@ -1150,7 +1185,7 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 		  else
 		       return -EINVAL;
 		  ms.xa_flag = DiskInfo.xa;
-	  	  copy_to_user((void*) arg, &ms, sizeof(struct cdrom_multisession));
+	  	  memcpy_tofs((void*) arg, &ms, sizeof(struct cdrom_multisession));
 #ifdef AZT_DEBUG 
  		  if (ms.addr_format == CDROM_MSF) 
                       printk("aztcd multisession xa:%d, msf:%02x:%02x.%02x [%02x:%02x.%02x])\n",
@@ -1167,7 +1202,7 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 	case CDROMPLAYTRKIND:     /* Play a track.  This currently ignores index. */
 		st = verify_area(VERIFY_READ, (void *) arg, sizeof ti);
 		if (st) return st;
-		copy_from_user(&ti, (void *) arg, sizeof ti);
+		memcpy_fromfs(&ti, (void *) arg, sizeof ti);
 		if (ti.cdti_trk0 < DiskInfo.first
 			|| ti.cdti_trk0 > DiskInfo.last
 			|| ti.cdti_trk1 < ti.cdti_trk0)
@@ -1198,7 +1233,7 @@ printk("aztcd play: %02x:%02x.%02x to %02x:%02x.%02x\n",
 */
 		st = verify_area(VERIFY_READ, (void *) arg, sizeof msf);
 		if (st) return st;
-		copy_from_user(&msf, (void *) arg, sizeof msf);
+		memcpy_fromfs(&msf, (void *) arg, sizeof msf);
 		/* convert to bcd */
 		azt_bin2bcd(&msf.cdmsf_min0);
 		azt_bin2bcd(&msf.cdmsf_sec0);
@@ -1230,12 +1265,12 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		if (st) return st;
 		tocHdr.cdth_trk0 = DiskInfo.first;
 		tocHdr.cdth_trk1 = DiskInfo.last;
-		copy_to_user((void *) arg, &tocHdr, sizeof tocHdr);
+		memcpy_tofs((void *) arg, &tocHdr, sizeof tocHdr);
 		break;
 	case CDROMREADTOCENTRY:      /* Read an entry in the table of contents */
 		st = verify_area(VERIFY_WRITE, (void *) arg, sizeof entry);
 		if (st) return st;
-		copy_from_user(&entry, (void *) arg, sizeof entry);
+		memcpy_fromfs(&entry, (void *) arg, sizeof entry);
 		if ((!aztTocUpToDate)||aztDiskChanged) aztUpdateToc();
 		if (entry.cdte_track == CDROM_LEADOUT)
 		  tocPtr = &Toc[DiskInfo.last + 1];
@@ -1257,7 +1292,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		else
 		{ return -EINVAL;
 		}
-		copy_to_user((void *) arg, &entry, sizeof entry);
+		memcpy_tofs((void *) arg, &entry, sizeof entry);
 		break;
 	case CDROMSUBCHNL:   /* Get subchannel info */
 		st = verify_area(VERIFY_WRITE, (void *) arg, sizeof(struct cdrom_subchnl));
@@ -1267,7 +1302,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 #endif
 		          return st;
 		        }  
-		copy_from_user(&subchnl, (void *) arg, sizeof (struct cdrom_subchnl));
+		memcpy_fromfs(&subchnl, (void *) arg, sizeof (struct cdrom_subchnl));
 		if (aztGetQChannelInfo(&qInfo) < 0)
 		if (st) { 
 #ifdef AZT_DEBUG
@@ -1293,7 +1328,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		  subchnl.cdsc_reladdr.msf.second = azt_bcd2bin(qInfo.trackTime.sec);
 		  subchnl.cdsc_reladdr.msf.frame  = azt_bcd2bin(qInfo.trackTime.frame);
 		}
-		copy_to_user((void *) arg, &subchnl, sizeof (struct cdrom_subchnl));
+		memcpy_tofs((void *) arg, &subchnl, sizeof (struct cdrom_subchnl));
 		break;
 	case CDROMVOLCTRL:   /* Volume control 
 	 * With my Aztech CD268-01A volume control does not work, I can only
@@ -1301,7 +1336,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
            works better with your drive */
                 st=verify_area(VERIFY_READ,(void *) arg, sizeof(volctrl));
                 if (st) return (st);
-                copy_from_user(&volctrl,(char *) arg,sizeof(volctrl));
+                memcpy_fromfs(&volctrl,(char *) arg,sizeof(volctrl));
 		azt_Play.start.min = 0x21;
 		azt_Play.start.sec = 0x84;
 		azt_Play.start.frame = volctrl.channel0;
@@ -1341,7 +1376,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 	case CDROMREADRAW:    /*read data in mode 2 (2336 Bytes)*/
 		{ st = verify_area(VERIFY_WRITE, (void *) arg, sizeof buf);
 		  if (st) return st;
-		  copy_from_user(&msf, (void *) arg, sizeof msf);
+		  memcpy_fromfs(&msf, (void *) arg, sizeof msf);
 		  /* convert to bcd */
 		  azt_bin2bcd(&msf.cdmsf_min0);
 		  azt_bin2bcd(&msf.cdmsf_sec0);
@@ -1363,21 +1398,21 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		       { if (sendAztCmd(ACMD_PLAY_READ_RAW, &azt_Play)) return -1;
 		         DTEN_LOW;
 		         insb(DATA_PORT,buf,CD_FRAMESIZE_RAW);
-		         copy_to_user((void *) arg, &buf, CD_FRAMESIZE_RAW);
+		         memcpy_tofs((void *) arg, &buf, CD_FRAMESIZE_RAW);
 		       }  
 		  }
 		  else /*CDROMREADCOOKED*/
 		  { if (sendAztCmd(ACMD_PLAY_READ, &azt_Play)) return -1;
 		    DTEN_LOW;
 		    insb(DATA_PORT,buf,CD_FRAMESIZE);
-		    copy_to_user((void *) arg, &buf, CD_FRAMESIZE);
+		    memcpy_tofs((void *) arg, &buf, CD_FRAMESIZE);
 		  }
 		 } 
                 break;
 	case CDROMSEEK:    /*seek msf address*/
 		st = verify_area(VERIFY_READ,  (void *) arg, sizeof msf);
 		if (st) return st;
-		copy_from_user(&msf, (void *) arg, sizeof msf);
+		memcpy_fromfs(&msf, (void *) arg, sizeof msf);
 		/* convert to bcd */
 		azt_bin2bcd(&msf.cdmsf_min0);
 		azt_bin2bcd(&msf.cdmsf_sec0);
@@ -1543,7 +1578,11 @@ int aztcd_open(struct inode *ip, struct file *fp)
 /*
  * On close, we flush all azt blocks from the buffer cache.
  */
-static int aztcd_release(struct inode * inode, struct file * file)
+#ifdef AZT_KERNEL_PRIOR_2_1
+static void aztcd_release(struct inode * inode, struct file * file)
+#else
+static int  aztcd_release(struct inode * inode, struct file * file)
+#endif
 { 
 #ifdef AZT_DEBUG
   printk("aztcd: executing aztcd_release\n");
@@ -1559,7 +1598,11 @@ static int aztcd_release(struct inode * inode, struct file * file)
            aztSendCmd(ACMD_EJECT);
         CLEAR_TIMER;
   }
+#ifdef AZT_KERNEL_PRIOR_2_1
+  return;
+#else
   return 0;
+#endif
 }
 
 
@@ -1568,29 +1611,31 @@ static int aztcd_release(struct inode * inode, struct file * file)
  * Test for presence of drive and initialize it.  Called at boot time.
  */
 
+#ifdef AZT_KERNEL_PRIOR_2_1
+int aztcd_init(void)
+#else
 __initfunc(int aztcd_init(void))
+#endif
 {       long int count, max_count;
 	unsigned char result[50];
 	int st;
+	int i = 0;
 
-	if (azt_port <= 0) {
-	  printk("aztcd: no Aztech CD-ROM Initialization");
+	if (azt_port == 0) 
+	{ printk("aztcd: no Aztech CD-ROM Initialization");
           return -EIO;
 	}
+
 	printk("aztcd: AZTECH, ORCHID, OKANO, WEARNES, TXC, CyDROM CD-ROM Driver\n"); 
-	printk("aztcd: (C) 1994-96 W.Zimmermann\n");
-	printk("aztcd: DriverVersion=%s BaseAddress=0x%x  For IDE/ATAPI-drives use ide-cd.c\n",AZT_VERSION,azt_port);
+	printk("aztcd: (C) 1994-98 W.Zimmermann\n");
+	if (azt_port == -1) 
+	{ printk("aztcd: KernelVersion=%s DriverVersion=%s For IDE/ATAPI-drives use ide-cd.c\n",UTS_RELEASE,AZT_VERSION);
+	}
+        else
+	  printk("aztcd: DriverVersion=%s BaseAddress=0x%x  For IDE/ATAPI-drives use ide-cd.c\n",AZT_VERSION,azt_port);
 	printk("aztcd: If you have problems, read /usr/src/linux/Documentation/cdrom/aztcd\n");
 
-        if ((azt_port==0x1f0)||(azt_port==0x170))  
-          st = check_region(azt_port, 8);  /*IDE-interfaces need 8 bytes*/
-        else
-          st = check_region(azt_port, 4);  /*proprietary interfaces need 4 bytes*/
-	if (st) 
-	{ printk("aztcd: conflict, I/O port (%X) already used\n",azt_port);
-          return -EIO;
-	}
-
+ 
 #ifdef AZT_SW32   /*CDROM connected to Soundwave32 card*/
         if ((0xFF00 & inw(AZT_SW32_ID_REG)) != 0x4500)
            { printk("aztcd: no Soundwave32 card detected at base:%x init:%x config:%x id:%x\n",
@@ -1606,69 +1651,105 @@ __initfunc(int aztcd_init(void))
 #endif	
 
 	/* check for presence of drive */
+
+        if (azt_port == -1) 			/* autoprobing */
+        { for (i=0;(azt_port_auto[i]!=0)&&(i<16);i++)
+          { azt_port = azt_port_auto[i];
+            printk("aztcd: Autoprobing BaseAddress=0x%x \n",azt_port);
+            st = check_region(azt_port, 4);  /*proprietary interfaces need 4 bytes*/
+  	    if (st) continue;
+
+	    outb(POLLED,MODE_PORT);              
+	    inb(CMD_PORT);
+	    inb(CMD_PORT);
+	    outb(ACMD_GET_VERSION,CMD_PORT); /*Try to get version info*/
+
+            aztTimeOutCount=0;   
+  	    do { aztIndatum=inb(STATUS_PORT);
+	         aztTimeOutCount++; 
+	         if (aztTimeOutCount>=AZT_FAST_TIMEOUT) break; 
+	       } while (aztIndatum&AFL_STATUS); 
+	    if (inb(DATA_PORT)==AFL_OP_OK) 
+	      break;
+          }
+          if ((azt_port_auto[i]==0)||(i==16))  
+          { printk("aztcd: no AZTECH CD-ROM drive found\n");
+            return -EIO;
+          }
+        } 
+        else					/* no autoprobing */
+        { if ((azt_port==0x1f0)||(azt_port==0x170))  
+            st = check_region(azt_port, 8);  /*IDE-interfaces need 8 bytes*/
+          else
+            st = check_region(azt_port, 4);  /*proprietary interfaces need 4 bytes*/
+	  if (st) 
+	  { printk("aztcd: conflict, I/O port (%X) already used\n",azt_port);
+            return -EIO;
+	  }
 	
-        if ((azt_port==0x1f0)||(azt_port==0x170))  
+          if ((azt_port==0x1f0)||(azt_port==0x170))  
             SWITCH_IDE_SLAVE;  /*switch IDE interface to slave configuration*/
+        
+          outb(POLLED,MODE_PORT);              
+	  inb(CMD_PORT);
+	  inb(CMD_PORT);
+	  outb(ACMD_GET_VERSION,CMD_PORT); /*Try to get version info*/
 
-	outb(POLLED,MODE_PORT);              
-	inb(CMD_PORT);
-	inb(CMD_PORT);
-	outb(ACMD_GET_VERSION,CMD_PORT); /*Try to get version info*/
+          aztTimeOutCount=0;   
+	  do { aztIndatum=inb(STATUS_PORT);
+	       aztTimeOutCount++; 
+	       if (aztTimeOutCount>=AZT_FAST_TIMEOUT) break; 
+	     } while (aztIndatum&AFL_STATUS); 
 
-/*	STEN_LOW  - special implementation for drive recognition
-*/      aztTimeOutCount=0;   
-	do { aztIndatum=inb(STATUS_PORT);
-	     aztTimeOutCount++; 
-	     if (aztTimeOutCount>=AZT_FAST_TIMEOUT) break; 
-	   } while (aztIndatum&AFL_STATUS); 
-
-	if (inb(DATA_PORT)!=AFL_OP_OK) /*OP_OK? If not, reset and try again*/
-           { 
+  	  if (inb(DATA_PORT)!=AFL_OP_OK) /*OP_OK? If not, reset and try again*/
+             { 
 #ifndef MODULE
-             if (azt_cont!=0x79)   
-	        { printk("aztcd: no AZTECH CD-ROM drive found-Try boot parameter aztcd=<BaseAddress>,0x79\n");
-	          return -EIO;
-                }
+               if (azt_cont!=0x79)   
+	          { printk("aztcd: no AZTECH CD-ROM drive found-Try boot parameter aztcd=<BaseAddress>,0x79\n");
+	            return -EIO;
+                  }
 #else        
-             if (0)
-                {
-                }
+               if (0)
+                  {
+                  }
 #endif	     
-             else   
-       	        { printk("aztcd: drive reset - please wait\n");
-	          for (count=0;count<50;count++)
-	            { inb(STATUS_PORT);    /*removing all data from earlier tries*/
-	              inb(DATA_PORT);
-	            }
-	          outb(POLLED,MODE_PORT);          
-	          inb(CMD_PORT);
-	          inb(CMD_PORT);
-		  getAztStatus(); 		    /*trap errors*/
-	          outb(ACMD_SOFT_RESET,CMD_PORT);   /*send reset*/
-	          STEN_LOW;
-	          if (inb(DATA_PORT)!=AFL_OP_OK)    /*OP_OK?*/
-	             { printk("aztcd: no AZTECH CD-ROM drive found\n");
-                       return -EIO;
-	             } 
-	          for (count = 0; count < AZT_TIMEOUT; count++); 
-	             { count=count*2;          /* delay a bit */
-	               count=count/2;
-	             }                        
-	          if ((st=getAztStatus())==-1)
-	             { printk("aztcd: Drive Status Error Status=%x\n",st);
-                       return -EIO;
-	             }
+               else   
+       	          { printk("aztcd: drive reset - please wait\n");
+	            for (count=0;count<50;count++)
+	              { inb(STATUS_PORT);    /*removing all data from earlier tries*/
+	                inb(DATA_PORT);
+	              }
+	            outb(POLLED,MODE_PORT);          
+	            inb(CMD_PORT);
+	            inb(CMD_PORT);
+		    getAztStatus(); 		    /*trap errors*/
+	            outb(ACMD_SOFT_RESET,CMD_PORT); /*send reset*/
+	            STEN_LOW;
+	            if (inb(DATA_PORT)!=AFL_OP_OK)    /*OP_OK?*/
+	               { printk("aztcd: no AZTECH CD-ROM drive found\n");
+                         return -EIO;
+	               } 
+	            for (count = 0; count < AZT_TIMEOUT; count++); 
+	               { count=count*2;          /* delay a bit */
+	                 count=count/2;
+	               }                        
+	            if ((st=getAztStatus())==-1)
+	               { printk("aztcd: Drive Status Error Status=%x\n",st);
+                         return -EIO;
+	               }
 #ifdef AZT_DEBUG
-	          printk("aztcd: Status = %x\n",st);
+	            printk("aztcd: Status = %x\n",st);
 #endif
-	          outb(POLLED,MODE_PORT);            
-	          inb(CMD_PORT);
-	          inb(CMD_PORT);
-	          outb(ACMD_GET_VERSION,CMD_PORT); /*GetVersion*/
-	          STEN_LOW;
-	          OP_OK;
-	        } 
-           }
+	            outb(POLLED,MODE_PORT);            
+	            inb(CMD_PORT);
+	            inb(CMD_PORT);
+	            outb(ACMD_GET_VERSION,CMD_PORT); /*GetVersion*/
+	            STEN_LOW;
+	            OP_OK;
+	          } 
+             }
+	}
+	
 	azt_init_end=1;
 	STEN_LOW;
 	result[0]=inb(DATA_PORT);        /*reading in a null byte???*/
@@ -1715,6 +1796,9 @@ __initfunc(int aztcd_init(void))
                 return -EIO;
 	}
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+#ifndef AZT_KERNEL_PRIOR_2_1
+	blksize_size[MAJOR_NR] = aztcd_blocksizes;
+#endif
 	read_ahead[MAJOR_NR] = 4;
 
         if ((azt_port==0x1f0)||(azt_port==0x170))  
@@ -1725,8 +1809,7 @@ __initfunc(int aztcd_init(void))
 	azt_invalidate_buffers();
 	aztPresent = 1;
 	aztCloseDoor();
-/*	printk("aztcd: End Init\n");
-*/      return (0);
+        return (0);
 }
 
 #ifdef MODULE

@@ -168,7 +168,7 @@ char* env_transl(void)
 	int i;
 
 	if(current && current->mm && (env = (char*)current->mm->env_start)
-	   && get_ds() != get_fs()
+	   && !segment_eq(get_ds(), get_fs())
 	   && current->mm->env_end>=current->mm->env_start+10
 	   && !verify_area(VERIFY_READ,env,10)) {
 		for(i=0; i<10; i++) {

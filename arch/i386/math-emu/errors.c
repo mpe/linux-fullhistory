@@ -42,7 +42,7 @@ void Un_impl(void)
   RE_ENTRANT_CHECK_OFF;
   /* No need to verify_area(), we have previously fetched these bytes. */
   printk("Unimplemented FPU Opcode at eip=%p : ", (void *) address);
-  if ( FPU_CS == USER_CS )
+  if ( FPU_CS == __USER_CS )
     {
       while ( 1 )
 	{
@@ -93,7 +93,7 @@ void emu_printall(void)
   RE_ENTRANT_CHECK_OFF;
   /* No need to verify_area(), we have previously fetched these bytes. */
   printk("At %p:", (void *) address);
-  if ( FPU_CS == USER_CS )
+  if ( FPU_CS == __USER_CS )
     {
 #define MAX_PRINTED_BYTES 20
       for ( i = 0; i < MAX_PRINTED_BYTES; i++ )

@@ -53,7 +53,7 @@ r_base = .
 	lmsw	%ax		# into protected mode
 	jmp	flush_instr
 flush_instr:
-	ljmp	$KERNEL_CS, $0x00100000
+	ljmp	$__KERNEL_CS, $0x00100000
 				# jump to startup_32
 
 idt_48:

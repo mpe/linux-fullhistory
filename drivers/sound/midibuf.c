@@ -93,7 +93,7 @@ drain_midi_queue(int dev)
 	 */
 
 	if (midi_devs[dev]->buffer_status != NULL)
-		while (!(current->signal & ~current->blocked) &&
+		while (!signal_pending(current) &&
 		       midi_devs[dev]->buffer_status(dev))
 
 		  {
@@ -283,7 +283,7 @@ MIDIbuf_release(int dev, struct fileinfo *file)
 							   * devices
 							 */
 
-		  while (!(current->signal & ~current->blocked) &&
+		  while (!signal_pending(current) &&
 			 DATA_AVAIL(midi_out_buf[dev]))
 
 		    {
@@ -364,7 +364,7 @@ MIDIbuf_write(int dev, struct fileinfo *file, const char *buf, int count)
 				      }
 				    midi_sleep_flag[dev].opts &= ~WK_SLEEP;
 			    };
-			    if ((current->signal & ~current->blocked))
+			    if (signal_pending(current))
 			      {
 				      restore_flags(flags);
 				      return -EINTR;
@@ -421,7 +421,7 @@ MIDIbuf_read(int dev, struct fileinfo *file, char *buf, int count)
 			    }
 			  input_sleep_flag[dev].opts &= ~WK_SLEEP;
 		  };
-		  if ((current->signal & ~current->blocked))
+		  if (signal_pending(current))
 			  c = -EINTR;	/*
 					   * The user is getting restless
 					 */

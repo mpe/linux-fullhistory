@@ -92,7 +92,7 @@ ENOSYS = 38
 	pushl %edx; \
 	pushl %ecx; \
 	pushl %ebx; \
-	movl $(KERNEL_DS),%edx; \
+	movl $(__KERNEL_DS),%edx; \
 	mov %dx,%ds; \
 	mov %dx,%es;
 
@@ -251,7 +251,7 @@ error_code:
 	xchgl %ecx, ES(%esp)		# get the address and save es.
 	pushl %eax			# push the error code
 	pushl %edx
-	movl $(KERNEL_DS),%edx
+	movl $(__KERNEL_DS),%edx
 	mov %dx,%ds
 	mov %dx,%es
 	GET_CURRENT(%ebx)
@@ -532,6 +532,9 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_rt_sigtimedwait)
 	.long SYMBOL_NAME(sys_rt_sigqueueinfo)
 	.long SYMBOL_NAME(sys_rt_sigsuspend)
-	.rept NR_syscalls-179
+	.long SYMBOL_NAME(sys_pread)		/* 180 */
+	.long SYMBOL_NAME(sys_pwrite)
+	
+	.rept NR_syscalls-181
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

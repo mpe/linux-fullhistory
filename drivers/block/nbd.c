@@ -70,7 +70,7 @@ static int nbd_open(struct inode *inode, struct file *file)
 static
 int nbd_xmit(int send, struct socket *sock, char *buf, int size)
 {
-	unsigned long oldfs;
+	mm_segment_t oldfs;
 	int result;
 	struct msghdr msg;
 	struct iovec iov;

@@ -446,7 +446,7 @@ __initfunc(static void rd_load_image(kdev_t device,int offset))
  	struct inode inode, out_inode;
 	struct file infile, outfile;
 	struct dentry in_dentry, out_dentry;
-	unsigned long fs;
+	mm_segment_t fs;
 	kdev_t ram_device;
 	int nblocks, i;
 	char *buf;

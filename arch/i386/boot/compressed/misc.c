@@ -285,7 +285,7 @@ long user_stack [STACK_SIZE];
 struct {
 	long * a;
 	short b;
-	} stack_start = { & user_stack [STACK_SIZE] , KERNEL_DS };
+	} stack_start = { & user_stack [STACK_SIZE] , __KERNEL_DS };
 
 void setup_normal_output_buffer()
 {

@@ -536,8 +536,8 @@ CONFIG_NET
 Packet socket
 CONFIG_PACKET
   Packet protocol is used by applications directly communicating
-  to network devices f.e. tcpdump. You want that they worked,
-  so that choose Y. If you run kerneld, option M is the best solution.
+  to network devices f.e. tcpdump. You want them to work, choose Y.
+  If you run kerneld, you might want to choose M.
 
 Kernel/User netlink socket
 CONFIG_NETLINK

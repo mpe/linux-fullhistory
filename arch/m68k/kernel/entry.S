@@ -569,6 +569,8 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_poll)
 	.long SYMBOL_NAME(sys_nfsservctl)
 	.long SYMBOL_NAME(sys_prctl)
+	.long SYMBOL_NAME(sys_pread)
+	.long SYMBOL_NAME(sys_pwrite)
 	.rept NR_syscalls-(.-SYMBOL_NAME(sys_call_table))/4
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

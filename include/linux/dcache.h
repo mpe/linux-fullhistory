@@ -1,6 +1,8 @@
 #ifndef __LINUX_DCACHE_H
 #define __LINUX_DCACHE_H
 
+#ifdef __KERNEL__
+
 /*
  * linux/include/linux/dcache.h
  *
@@ -25,14 +27,14 @@ struct qstr {
 #define init_name_hash()		0
 
 /* partial hash update function. Assume roughly 4 bits per character */
-static inline unsigned long partial_name_hash(unsigned char c, unsigned long prevhash)
+static __inline__ unsigned long partial_name_hash(unsigned char c, unsigned long prevhash)
 {
 	prevhash = (prevhash << 4) | (prevhash >> (8*sizeof(unsigned long)-4));
 	return prevhash ^ c;
 }
 
 /* Finally: cut down the number of bits to a int value (and try to avoid losing bits) */
-static inline unsigned long end_name_hash(unsigned long hash)
+static __inline__ unsigned long end_name_hash(unsigned long hash)
 {
 	if (sizeof(hash) > sizeof(unsigned int))
 		hash += hash >> 4*sizeof(hash);
@@ -40,7 +42,7 @@ static inline unsigned long end_name_hash(unsigned long hash)
 }
 
 /* Compute the hash for a name string. */
-static inline unsigned int full_name_hash(const char * name, unsigned int len)
+static __inline__ unsigned int full_name_hash(const char * name, unsigned int len)
 {
 	unsigned long hash = init_name_hash();
 	while (len--)
@@ -102,7 +104,7 @@ struct dentry_operations {
  * to invalidate a dentry for some reason (NFS
  * timeouts or autofs deletes).
  */
-static inline void d_drop(struct dentry * dentry)
+static __inline__ void d_drop(struct dentry * dentry)
 {
 	list_del(&dentry->d_hash);
 	INIT_LIST_HEAD(&dentry->d_hash);
@@ -152,7 +154,7 @@ extern int d_validate(struct dentry *dentry, struct dentry *dparent,
 extern char * d_path(struct dentry * entry, char * buf, int buflen);
 
 /* Allocation counts.. */
-static inline struct dentry * dget(struct dentry *dentry)
+static __inline__ struct dentry * dget(struct dentry *dentry)
 {
 	if (dentry)
 		dentry->d_count++;
@@ -160,5 +162,7 @@ static inline struct dentry * dget(struct dentry *dentry)
 }
 
 extern void dput(struct dentry *);
+
+#endif /* __KERNEL__ */
 
 #endif	/* __LINUX_DCACHE_H */

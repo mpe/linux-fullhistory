@@ -360,7 +360,7 @@ nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset, char *buf,
 	struct dentry	*dentry;
 	struct inode	*inode;
 	struct file	file;
-	unsigned long	oldfs;
+	mm_segment_t	oldfs;
 	int		err;
 
 	if ((err = nfsd_open(rqstp, fhp, S_IFREG, OPEN_READ, &file)) != 0)
@@ -420,7 +420,7 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	struct file		file;
 	struct dentry		*dentry;
 	struct inode		*inode;
-	unsigned long		oldfs;
+	mm_segment_t		oldfs;
 	int			err;
 
 	if (!cnt)
@@ -668,7 +668,7 @@ nfsd_readlink(struct svc_rqst *rqstp, struct svc_fh *fhp, char *buf, int *lenp)
 {
 	struct dentry	*dentry;
 	struct inode	*inode;
-	unsigned long	oldfs;
+	mm_segment_t	oldfs;
 	int		err;
 
 	if ((err = fh_verify(rqstp, fhp, S_IFLNK, MAY_READ)) != 0)
@@ -1019,7 +1019,7 @@ nfsd_statfs(struct svc_rqst *rqstp, struct svc_fh *fhp, struct statfs *stat)
 	struct dentry		*dentry;
 	struct inode		*inode;
 	struct super_block	*sb;
-	unsigned long		oldfs;
+	mm_segment_t		oldfs;
 	int			err;
 
 	err = fh_verify(rqstp, fhp, 0, MAY_NOP);

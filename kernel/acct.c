@@ -74,7 +74,7 @@ void acct_timeout(unsigned long unused)
  */
 static void check_free_space(void)
 {
-	unsigned long fs;
+	mm_segment_t fs;
 	struct statfs sbuf;
 
 	if (!acct_file || !acct_needcheck)
@@ -253,7 +253,7 @@ static comp_t encode_comp_t(unsigned long value)
 int acct_process(long exitcode)
 {
 	struct acct ac;
-	unsigned long fs;
+	mm_segment_t fs;
 	unsigned long vsize;
 
 	/*

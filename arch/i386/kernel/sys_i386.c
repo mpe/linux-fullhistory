@@ -180,7 +180,7 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 			}
 			case 1:	/* iBCS2 emulator entry point */
 				ret = -EINVAL;
-				if (get_fs() != get_ds())
+				if (!segment_eq(get_fs(), get_ds()))
 					goto out;
 				ret = sys_shmat (first, (char *) ptr, second, (ulong *) third);
 				goto out;

@@ -96,7 +96,7 @@ maui_wait(int mask)
 			    }
 			  maui_sleep_flag.opts &= ~WK_SLEEP;
 		  };
-		  if ((current->signal & ~current->blocked))
+		  if (signal_pending(current))
 		    {
 			    return 0;
 		    }

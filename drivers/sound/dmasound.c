@@ -657,7 +657,7 @@ struct sound_queue
 static struct sound_queue sq;
 
 #define sq_block_address(i)	(sq.buffers[i])
-#define SIGNAL_RECEIVED	(current->signal & ~current->blocked)
+#define SIGNAL_RECEIVED	(signal_pending(current))
 #define NON_BLOCKING(open_mode)	(open_mode & O_NONBLOCK)
 #define ONE_SECOND	HZ	/* in jiffies (100ths of a second) */
 #define NO_TIME_LIMIT	0xffffffff

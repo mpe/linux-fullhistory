@@ -81,7 +81,7 @@ get_mod_name(const char *user_name, char **buf)
 	long retval;
 
 	if ((unsigned long)user_name >= TASK_SIZE
-	    && get_fs () != KERNEL_DS)
+	    && !segment_eq(get_fs (), KERNEL_DS))
 		return -EFAULT;
 
 	page = __get_free_page(GFP_KERNEL);

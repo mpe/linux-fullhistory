@@ -49,7 +49,7 @@ static int do_mod_firmware_load(const char *fn, char **fp)
 int  mod_firmware_load(const char *fn, char **fp)
 {
 	int r;
-	unsigned long fs = get_fs();
+	mm_segment_t fs = get_fs();
 
 	set_fs(get_ds());
 	r = do_mod_firmware_load(fn, fp);

@@ -131,7 +131,7 @@ static inline int do_getname(const char *filename, char *page)
 	unsigned long len = PAGE_SIZE;
 
 	if ((unsigned long) filename >= TASK_SIZE) {
-		if (get_fs() != KERNEL_DS)
+		if (!segment_eq(get_fs(), KERNEL_DS))
 			return -EFAULT;
 	} else if (TASK_SIZE - (unsigned long) filename < PAGE_SIZE)
 		len = TASK_SIZE - (unsigned long) filename;

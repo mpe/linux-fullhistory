@@ -17,7 +17,7 @@
  * on us. We need to use _exactly_ the address the user gave us,
  * not some alias that contains the same information.
  */
-#define __atomic_fool_gcc(x) (*(struct { int a[100]; } *)x)
+#define __atomic_fool_gcc(x) (*(volatile struct { int a[100]; } *)x)
 
 #ifdef __SMP__
 typedef struct { volatile int counter; } atomic_t;

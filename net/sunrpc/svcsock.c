@@ -226,7 +226,7 @@ svc_wake_up(struct svc_serv *serv)
 static int
 svc_sendto(struct svc_rqst *rqstp, struct iovec *iov, int nr)
 {
-	unsigned long	oldfs;
+	mm_segment_t	oldfs;
 	struct socket	*sock = rqstp->rq_sock->sk_sock;
 	struct msghdr	msg;
 	int		i, buflen, len;
@@ -268,7 +268,7 @@ svc_sendto(struct svc_rqst *rqstp, struct iovec *iov, int nr)
 static int
 svc_recv_available(struct svc_sock *svsk)
 {
-	unsigned long	oldfs;
+	mm_segment_t	oldfs;
 	struct socket	*sock = svsk->sk_sock;
 	int		avail, err;
 
@@ -285,7 +285,7 @@ svc_recv_available(struct svc_sock *svsk)
 static int
 svc_recvfrom(struct svc_rqst *rqstp, struct iovec *iov, int nr, int buflen)
 {
-	unsigned long	oldfs;
+	mm_segment_t	oldfs;
 	struct msghdr	msg;
 	struct socket	*sock;
 	int		len;

@@ -397,7 +397,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	unsigned int interpreter_type = INTERPRETER_NONE;
 	unsigned char ibcs2_interpreter;
 	int i;
-	unsigned long old_fs;
+	mm_segment_t old_fs;
 	unsigned long error;
 	struct elf_phdr * elf_ppnt, *elf_phdata;
 	int elf_exec_fileno;
@@ -1045,7 +1045,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 	struct file file;
 	struct dentry *dentry;
 	struct inode *inode;
-	unsigned long fs;
+	mm_segment_t fs;
 	char corefile[6+sizeof(current->comm)];
 	int segs;
 	int i;

@@ -1210,6 +1210,20 @@ static int startup(struct async_struct * info)
 	timer_active |= 1 << RS_TIMER;
 
 	/*
+	 * Set up the tty->alt_speed kludge
+	 */
+	if (info->tty) {
+		if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_HI)
+			info->tty->alt_speed = 57600;
+		if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_VHI)
+			info->tty->alt_speed = 115200;
+		if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_SHI)
+			info->tty->alt_speed = 230400;
+		if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_WARP)
+			info->tty->alt_speed = 460800;
+	}
+	
+	/*
 	 * and set the speed of the serial port
 	 */
 	change_speed(info);
@@ -1376,7 +1390,8 @@ static void change_speed(struct async_struct *info)
 	/* Determine divisor based on baud rate */
 	baud = tty_get_baud_rate(info->tty);
 	baud_base = info->state->baud_base;
-	if (baud == 38400)
+	if (baud == 38400 &&
+	    ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST))
 		quot = info->state->custom_divisor;
 	else {
 		if (baud == 134)

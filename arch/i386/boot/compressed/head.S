@@ -37,7 +37,7 @@
 startup_32:
 	cld
 	cli
-	movl $(KERNEL_DS),%eax
+	movl $(__KERNEL_DS),%eax
 	mov %ax,%ds
 	mov %ax,%es
 	mov %ax,%fs
@@ -56,7 +56,7 @@ startup_32:
 	movl %eax,%esp
 	pushl 0				# Clear NT
 	popfl
-	ljmp $(KERNEL_CS), $0x100000    # Into C and sanity
+	ljmp $(__KERNEL_CS), $0x100000    # Into C and sanity
 
 2:
 #endif
@@ -92,7 +92,7 @@ startup_32:
 	orl  %eax,%eax 
 	jnz  3f
 	xorl %ebx,%ebx
-	ljmp $(KERNEL_CS), $0x100000
+	ljmp $(__KERNEL_CS), $0x100000
 
 /*
  * We come here, if we were loaded high.
@@ -116,7 +116,7 @@ startup_32:
 	popl %eax	# hcount
 	movl $0x100000,%edi
 	cli		# make sure we don't get interrupted
-	ljmp $(KERNEL_CS), $0x1000 # and jump to the move routine
+	ljmp $(__KERNEL_CS), $0x1000 # and jump to the move routine
 
 /*
  * Routine (template) for moving the decompressed kernel in place,
@@ -136,5 +136,5 @@ move_routine_start:
  * so we set esp here.
  */
 	mov  $0x90000,%esp
-	ljmp $(KERNEL_CS), $0x100000
+	ljmp $(__KERNEL_CS), $0x100000
 move_routine_end:

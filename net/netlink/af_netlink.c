@@ -377,7 +377,7 @@ retry:
 			netlink_unlock(sk);
 			sti();
 
-			if (current->signal & ~current->blocked) {
+			if (signal_pending(current)) {
 				kfree_skb(skb, 0);
 				return -ERESTARTSYS;
 			}

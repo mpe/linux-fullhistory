@@ -127,7 +127,7 @@ static void show_registers(struct pt_regs *regs)
 	extern char _stext, _etext;
 
 	esp = (unsigned long) &regs->esp;
-	ss = KERNEL_DS;
+	ss = __KERNEL_DS;
 	if (regs->xcs & 3) {
 		esp = regs->esp;
 		ss = regs->xss & 0xffff;
@@ -184,7 +184,7 @@ static void show_registers(struct pt_regs *regs)
 
 spinlock_t die_lock;
 
-/*static*/ void die_if_kernel(const char * str, struct pt_regs * regs, long err)
+void die_if_kernel(const char * str, struct pt_regs * regs, long err)
 {
 	if ((regs->eflags & VM_MASK) || (3 & regs->xcs) == 3)
 		return;

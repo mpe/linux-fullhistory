@@ -19,7 +19,7 @@
 #include <linux/ptrace.h>
 #include <linux/unistd.h>
 #include <linux/stddef.h>
-
+#include <asm/ucontext.h>
 #include <asm/uaccess.h>
 
 #define DEBUG_SIG 0
@@ -372,7 +372,7 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 	/* XXX: Check here if we need to switch stacks.. */
 
 	/* This is legacy signal stack switching.  */
-	if ((regs->xss & 0xffff) != USER_DS
+	if ((regs->xss & 0xffff) != __USER_DS
 	    && !(ka->sa.sa_flags & SA_RESTORER) && ka->sa.sa_restorer)
 		frame = (struct sigframe *) ka->sa.sa_restorer;
 
@@ -409,13 +409,13 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 	regs->esp = (unsigned long) frame;
 	regs->eip = (unsigned long) ka->sa.sa_handler;
 	{
-		unsigned long seg = USER_DS;
+		unsigned long seg = __USER_DS;
 		__asm__("mov %w0,%%fs ; mov %w0,%%gs": "=r"(seg) : "0"(seg));
-		set_fs(seg);
+		set_fs(MAKE_MM_SEG(seg));
 		regs->xds = seg;
 		regs->xes = seg;
 		regs->xss = seg;
-		regs->xcs = USER_CS;
+		regs->xcs = __USER_CS;
 	}
 	regs->eflags &= ~TF_MASK;
 
@@ -441,7 +441,7 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	/* XXX: Check here if we need to switch stacks.. */
 
 	/* This is legacy signal stack switching.  */
-	if ((regs->xss & 0xffff) != USER_DS
+	if ((regs->xss & 0xffff) != __USER_DS
 	    && !(ka->sa.sa_flags & SA_RESTORER) && ka->sa.sa_restorer)
 		frame = (struct rt_sigframe *) ka->sa.sa_restorer;
 
@@ -481,13 +481,13 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	regs->esp = (unsigned long) frame;
 	regs->eip = (unsigned long) ka->sa.sa_handler;
 	{
-		unsigned long seg = USER_DS;
+		unsigned long seg = __USER_DS;
 		__asm__("mov %w0,%%fs ; mov %w0,%%gs": "=r"(seg) : "0"(seg));
-		set_fs(seg);
+		set_fs(MAKE_MM_SEG(seg));
 		regs->xds = seg;
 		regs->xes = seg;
 		regs->xss = seg;
-		regs->xcs = USER_CS;
+		regs->xcs = __USER_CS;
 	}
 	regs->eflags &= ~TF_MASK;
 
@@ -560,9 +560,7 @@ handle_signal(unsigned long sig, struct k_sigaction *ka,
  */
 asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs)
 {
-	sigset_t _oldset;
 	siginfo_t info;
-	unsigned long signr, core = 0;
 	struct k_sigaction *ka;
 
 	/*
@@ -574,13 +572,18 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs)
 	if ((regs->xcs & 3) != 3)
 		return 1;
 
-	spin_lock_irq(&current->sigmask_lock);
-	if (!oldset) {
-		_oldset = current->blocked;
-		oldset = &_oldset;
-	}
- 	while ((signr = dequeue_signal(&current->blocked, &info)) != 0) {
+	if (!oldset)
+		oldset = &current->blocked;
+
+	for (;;) {
+		unsigned long signr;
+
+		spin_lock_irq(&current->sigmask_lock);
+		signr = dequeue_signal(&current->blocked, &info);
 		spin_unlock_irq(&current->sigmask_lock);
+
+		if (!signr)
+			break;
 
 		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
 			/* Let the debugger run.  */
@@ -591,12 +594,12 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs)
 
 			/* We're back.  Did the debugger cancel the sig?  */
 			if (!(signr = current->exit_code))
-				goto skip_signal;
+				continue;
 			current->exit_code = 0;
 
 			/* The debugger continued.  Ignore SIGSTOP.  */
 			if (signr == SIGSTOP)
-				goto skip_signal;
+				continue;
 
 			/* Update the siginfo structure.  Is this good?  */
 			if (signr != info.si_signo) {
@@ -610,41 +613,51 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs)
 			/* If the (new) signal is now blocked, requeue it.  */
 			if (sigismember(&current->blocked, signr)) {
 				send_sig_info(signr, &info, current);
-				goto skip_signal;
+				continue;
 			}
 		}
 
 		ka = &current->sig->action[signr-1];
+		if (ka->sa.sa_handler == SIG_IGN) {
+			if (signr != SIGCHLD)
+				continue;
+			/* Check for SIGCHLD: it's special.  */
+			while (sys_wait4(-1, NULL, WNOHANG, NULL) > 0)
+				/* nothing */;
+			continue;
+		}
+
 		if (ka->sa.sa_handler == SIG_DFL) {
+			int exit_code = signr;
+
 			/* Init gets no signals it doesn't want.  */
 			if (current->pid == 1)
-				goto skip_signal;
+				continue;
 
 			switch (signr) {
 			case SIGCONT: case SIGCHLD: case SIGWINCH:
-				goto skip_signal;
+				continue;
 
 			case SIGTSTP: case SIGTTIN: case SIGTTOU:
 				if (is_orphaned_pgrp(current->pgrp))
-					goto skip_signal;
+					continue;
 				/* FALLTHRU */
 
 			case SIGSTOP:
 				current->state = TASK_STOPPED;
 				current->exit_code = signr;
-				if (!(current->p_pptr->sig->action[SIGCHLD-1]
-				      .sa.sa_flags & SA_NOCLDSTOP))
+				if (!(current->p_pptr->sig->action[SIGCHLD-1].sa.sa_flags & SA_NOCLDSTOP))
 					notify_parent(current, SIGCHLD);
 				schedule();
-				break;
+				continue;
 
 			case SIGQUIT: case SIGILL: case SIGTRAP:
 			case SIGABRT: case SIGFPE: case SIGSEGV:
 				lock_kernel();
 				if (current->binfmt
 				    && current->binfmt->core_dump
-				    &&current->binfmt->core_dump(signr, regs))
-					core = 0x80;
+				    && current->binfmt->core_dump(signr, regs))
+					exit_code |= 0x80;
 				unlock_kernel();
 				/* FALLTHRU */
 
@@ -652,21 +665,14 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs)
 				lock_kernel();
 				sigaddset(&current->signal, signr);
 				current->flags |= PF_SIGNALED;
-				do_exit((signr & 0x7f) | core);
+				do_exit(exit_code);
+				/* NOTREACHED */
 			}
-		} else if (ka->sa.sa_handler == SIG_IGN) {
-			if (signr == SIGCHLD) {
-				/* Check for SIGCHLD: it's special.  */
-				while (sys_wait4(-1, NULL, WNOHANG, NULL) > 0)
-					/* nothing */;
-			}
-		} else {
-			/* Whee!  Actually deliver the signal.  */
-			handle_signal(signr, ka, &info, oldset, regs);
-			return 1;
 		}
-	skip_signal:
-		spin_lock_irq(&current->sigmask_lock);
+
+		/* Whee!  Actually deliver the signal.  */
+		handle_signal(signr, ka, &info, oldset, regs);
+		return 1;
 	}
 
 	/* Did we come from a system call? */

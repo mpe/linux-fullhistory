@@ -1742,8 +1742,13 @@ int tty_get_baud_rate(struct tty_struct *tty)
 		else
 			i += 15;
 	}
-	if (i==15 && tty->alt_speed)
+	if (i==15 && tty->alt_speed) {
+		if (!tty->warned) {
+			printk("Use of setserial/setrocket to set SPD_* flags is deprecated\n");
+			tty->warned = 1;
+		}
 		return(tty->alt_speed);
+	}
 	
 	return baud_table[i];
 }

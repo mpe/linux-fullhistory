@@ -42,7 +42,8 @@ void autofs_catatonic_mode(struct autofs_sb_info *sbi)
 
 static int autofs_write(struct file *file, const void *addr, int bytes)
 {
-	unsigned long fs, sigpipe, flags;
+	unsigned long sigpipe, flags;
+	mm_segment_t fs;
 	const char *data = (const char *)addr;
 	ssize_t wr = 0;
 

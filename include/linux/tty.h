@@ -224,7 +224,7 @@ struct tty_struct {
 	int count;
 	struct winsize winsize;
 	unsigned char stopped:1, hw_stopped:1, flow_stopped:1, packet:1;
-	unsigned char low_latency:1;
+	unsigned char low_latency:1, warned:1;
 	unsigned char ctrl_status;
 
 	struct tty_struct *link;

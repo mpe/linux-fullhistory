@@ -222,7 +222,7 @@ static void write_dquot(struct dquot *dquot)
 {
 	short type = dquot->dq_type;
 	struct file *filp = dquot->dq_mnt->mnt_quotas[type];
-	unsigned long fs;
+	mm_segment_t fs;
 	loff_t offset;
 
 	if (!(dquot->dq_flags & DQ_MOD) || (filp == (struct file *)NULL))
@@ -246,7 +246,7 @@ static void read_dquot(struct dquot *dquot)
 {
 	short type = dquot->dq_type;
 	struct file *filp = dquot->dq_mnt->mnt_quotas[type];
-	unsigned long fs;
+	mm_segment_t fs;
 	loff_t offset;
 
 	if (filp == (struct file *)NULL)

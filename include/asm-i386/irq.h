@@ -9,9 +9,6 @@
  *	IRQ/IPI changes taken from work by Thomas Radke <tomsoft@informatik.tu-chemnitz.de>
  */
 
-#include <linux/linkage.h>
-#include <asm/segment.h>
-
 #define NR_IRQS 16
 
 #define TIMER_IRQ 0

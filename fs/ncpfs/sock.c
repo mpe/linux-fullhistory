@@ -80,7 +80,7 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size)
 	struct file *file;
 	struct inode *inode;
 	struct socket *sock;
-	unsigned long fs;
+	mm_segment_t fs;
 	int result;
 	char *start = server->packet;
 	poll_table wait_table;

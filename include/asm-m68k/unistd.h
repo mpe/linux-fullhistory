@@ -175,6 +175,8 @@
 #define __NR_poll		168
 #define __NR_nfsservctl		169
 #define __NR_prctl		170
+#define __NR_pread		171
+#define __NR_pwrite		172
 
 /* user-visible error numbers are in the range -1 - -122: see
    <asm-m68k/errno.h> */

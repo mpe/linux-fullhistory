@@ -22,6 +22,7 @@
 #include <asm/bitops.h>
 #include <asm/uaccess.h>
 #include <asm/sigcontext.h>
+#include <asm/ucontext.h>
 
 #define DEBUG_SIG 0
 

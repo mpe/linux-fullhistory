@@ -257,7 +257,7 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 		unsigned long p, int from_kmem)
 {
 	char *str;
-	unsigned long old_fs;
+	mm_segment_t old_fs;
 
 	if (!p)
 		return 0;	/* bullet-proofing */
@@ -370,7 +370,7 @@ int read_exec(struct dentry *dentry, unsigned long offset,
 	} else
 		file.f_pos = offset;
 	if (to_kmem) {
-		unsigned long old_fs = get_fs();
+		mm_segment_t old_fs = get_fs();
 		set_fs(get_ds());
 		result = file.f_op->read(&file, addr, count, &file.f_pos);
 		set_fs(old_fs);

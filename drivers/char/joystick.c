@@ -470,7 +470,7 @@ static ssize_t js_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 					retval = -EAGAIN;
 					break;
 				}
-				if (current->signal & ~current->blocked) {
+				if (signal_pending(current)) {
 					retval = -ERESTARTSYS;
 					break;
 				}

@@ -397,7 +397,7 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
  */
 
 int kernel_scsi_ioctl (Scsi_Device *dev, int cmd, void *arg) {
-    unsigned long oldfs;
+    mm_segment_t oldfs;
     int tmp;
     oldfs = get_fs();
     set_fs(get_ds());

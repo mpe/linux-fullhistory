@@ -9,6 +9,7 @@
 
 #include <asm/vm86.h>
 #include <asm/math_emu.h>
+#include <asm/segment.h>
 
 /*
  * System setup and hardware bug flags..
@@ -87,6 +88,10 @@ union i387_union {
 	struct i387_soft_struct soft;
 };
 
+typedef struct {
+	unsigned long seg;
+} mm_segment_t;
+
 struct thread_struct {
 	unsigned short	back_link,__blh;
 	unsigned long	esp0;
@@ -113,7 +118,8 @@ struct thread_struct {
 	unsigned short	trace, bitmap;
 	unsigned long	io_bitmap[IO_BITMAP_SIZE+1];
 	unsigned long	tr;
-	unsigned long	cr2, trap_no, error_code, segment;
+	unsigned long	cr2, trap_no, error_code;
+	mm_segment_t	segment;
 /* floating point info */
 	union i387_union i387;
 /* virtual 86 mode info */
@@ -128,11 +134,12 @@ struct thread_struct {
 #define INIT_TSS  { \
 	0,0, \
 	sizeof(init_stack) + (long) &init_stack, \
-	KERNEL_DS, 0, \
+	__KERNEL_DS, 0, \
 	0,0,0,0,0,0, \
 	(long) &swapper_pg_dir - PAGE_OFFSET, \
 	0,0,0,0,0,0,0,0,0,0, \
-	USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0, \
+	__USER_DS,0,__USER_DS,0,__USER_DS,0, \
+	__USER_DS,0,__USER_DS,0,__USER_DS,0, \
 	_LDT(0),0, \
 	0, 0x8000, \
 	{~0, }, /* ioperm */ \
@@ -142,13 +149,13 @@ struct thread_struct {
 }
 
 #define start_thread(regs, new_eip, new_esp) do {\
-	unsigned long seg = USER_DS; \
+	unsigned long seg = __USER_DS; \
 	__asm__("mov %w0,%%fs ; mov %w0,%%gs":"=r" (seg) :"0" (seg)); \
-	set_fs(seg); \
+	set_fs(MAKE_MM_SEG(seg)); \
 	regs->xds = seg; \
 	regs->xes = seg; \
 	regs->xss = seg; \
-	regs->xcs = USER_CS; \
+	regs->xcs = __USER_CS; \
 	regs->eip = new_eip; \
 	regs->esp = new_esp; \
 } while (0)

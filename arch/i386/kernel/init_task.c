@@ -1,6 +1,7 @@
 #include <linux/mm.h>
 #include <linux/sched.h>
 
+#include <asm/uaccess.h>
 #include <asm/pgtable.h>
 
 static struct vm_area_struct init_mmap = INIT_MMAP;

@@ -141,7 +141,7 @@ xprt_sendmsg(struct rpc_xprt *xprt)
 {
 	struct socket	*sock = xprt->sock;
 	struct msghdr	msg;
-	unsigned long	oldfs;
+	mm_segment_t	oldfs;
 	int		result;
 
 	xprt_pktdump("packet data:",
@@ -205,7 +205,7 @@ xprt_recvmsg(struct rpc_xprt *xprt, struct iovec *iov, int nr, int len)
 	struct socket	*sock = xprt->sock;
 	struct sockaddr_in sin;
 	struct msghdr	msg;
-	unsigned long	oldfs;
+	mm_segment_t	oldfs;
 	int		result;
 
 #if LINUX_VERSION_CODE >= 0x020100
@@ -528,7 +528,7 @@ udp_data_ready(struct sock *sk, int len)
 	struct rpc_rqst *rovr;
 	struct sk_buff	*skb;
 	struct iovec	iov[MAX_IOVEC];
-	unsigned long	oldfs;
+	mm_segment_t	oldfs;
 	int		err, repsize, copied;
 
 	dprintk("RPC:      udp_data_ready...\n");

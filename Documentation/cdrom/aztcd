@@ -1,10 +1,10 @@
-$Id: README.aztcd,v 2.50 1996/05/16 18:31:22 root Exp root $
+$Id: README.aztcd,v 2.60 1997/11/29 09:51:25 root Exp root $
           Readme-File /usr/src/Documentation/cdrom/aztcd
            			for 
 	     AZTECH CD-ROM CDA268-01A, ORCHID CD-3110,
       OKANO/WEARNES CDD110, CONRAD TXC, CyCDROM CR520, CR540
                            CD-ROM Drives 
-                       Version 2.5 and newer
+                       Version 2.6 and newer
                    (for other drives see 6.-8.)
 
 NOTE: THIS DRIVER WILL WORK WITH THE CD-ROM DRIVES LISTED, WHICH HAVE
@@ -43,9 +43,9 @@ Contents of this file:
 1. NOTE 
 This software has been successfully in alpha and beta test and is part of
 the standard kernel since kernel 1.1.8x since December 1994. It works with
-with AZTECH CDA268-01A, ORCHID CDS-3110, ORCHID/WEARNES CDD110 and
-CONRAD TXC (Nr.99 31 23 -series 04) and has proven to be stable with kernel 
-versions 1.0.9 to 1.3.72. But with any software there still may be bugs in it. 
+AZTECH CDA268-01A, ORCHID CDS-3110, ORCHID/WEARNES CDD110 and CONRAD TXC 
+(Nr.99 31 23 -series 04) and has proven to be stable with kernel 
+versions 1.0.9 and newer. But with any software there still may be bugs in it. 
 So if you encounter problems, you are invited to help us improve this software. 
 Please send me a detailed bug report (see chapter BUG REPORTS). You are also 
 invited in helping us to increase the number of drives, which are supported.
@@ -82,6 +82,8 @@ start Linux with boot parameter aztcd=<base address>, e.g. aztcd=0x320. If
 you do not know the base address, start your PC with DOS and look at the boot 
 message of your CD-ROM's DOS driver. If that still does not help, use boot
 parameter aztcd=<base address>,0x79 , this tells aztcd to try a little harder.
+aztcd may be configured to use autoprobing the base address by recompiling
+it (see chapter 4.).
 
 If the message looks correct, as user 'root' you should be able to mount the 
 drive by
@@ -112,8 +114,14 @@ filesystem, you have to recompile your kernel:
   have to set up. If you have a soundcard, read chapter 4.2.
   Users of other drives should read chapter OTHER DRIVES of this file.
   You also can configure that address by kernel boot parameter aztcd=... 
+- aztcd may be configured to use autoprobing the base address by setting
+  AZT_BASE_ADDR to '-1'. In that case aztcd probes the addresses listed 
+  under AZT_BASE_AUTO. But please remember, that autoprobing always may 
+  incorrectly influence other hardware components too!
 - There are some other points, which may be configured, e.g. auto-eject the
   CD when unmounting a drive, tray locking etc., see aztcd.h for details.
+- If you're using a linux kernel version prior to 2.1.0, in aztcd.h
+  uncomment the line '#define AZT_KERNEL_PRIOR_2_1'
 - Build a new kernel, configure it for 'Aztech/Orchid/Okano/Wearnes support' 
   (if you want aztcd to be part of the kernel). Do not configure it for
   'Aztech... support', if you want to use aztcd as a run time loadable module. 
@@ -149,10 +157,14 @@ your boot kernel is not the same than the source kernel version, from which
 you create the modules. So rebuild your kernel, if necessary. 
 
 Now edit the base address of your AZTECH interface card in
-/usr/src/linux/include/linux/aztcd.h to the appropriate value. There are
-also some special features which may be configured, e.g. auto-eject a CD
-when unmounting the drive etc; see aztcd.h for details. Then change
-to /usr/src/linux and do a 
+/usr/src/linux/include/linux/aztcd.h to the appropriate value. 
+aztcd may be configured to use autoprobing the base address by setting
+AZT_BASE_ADDR to '-1'. In that case aztcd probes the addresses listed 
+under AZT_BASE_AUTO. But please remember, that autoprobing always may 
+incorrectly influence other hardware components too!
+There are also some special features which may be configured, e.g. 
+auto-eject a CD when unmounting the drive etc; see aztcd.h for details. 
+Then change to /usr/src/linux and do a 
                     make modules  
 	            make modules_install
 After that you can run-time load the driver via
@@ -161,6 +173,7 @@ and remove it via   rmmod  aztcd.
 If you did not set the correct base address in aztcd.h, you can also supply the
 base address when loading the driver via
                     insmod /lib/modules/X.X.X/misc/aztcd.o aztcd=<base address>
+Again specifing aztcd=-1 will cause autoprobing.
 If you do not have the iso9660-filesystem in your boot kernel, you also have
 to load it before you can mount the CDROM:
                     insmod /lib/modules/X.X.X/fs/isofs.o
@@ -239,7 +252,7 @@ README.CDROM.
 6. BUG REPORTS
 Please send detailed bug reports and bug fixes via EMail to
 
-        zimmerma@rz.fht-esslingen.de
+        Werner.Zimmermann@fht-esslingen.de
 
 Please include a description of your CD-ROM drive type and interface card, 
 the exact firmware message during Linux bootup, the version number of the 
@@ -516,15 +529,15 @@ features for testing CDROM-drives can be found in
 
 Werner Zimmermann
 Fachhochschule fuer Technik Esslingen
-(EMail: zimmerma@rz.fht-esslingen.de)
-Maerz 16, 1995
+(EMail: Werner.Zimmermann@fht-esslingen.de)
+October, 1997
 
 ---------------------------------------------------------------------------
 APPENDIX: Source code of cdplay.c
 
 /* Tiny Audio CD Player
 
-   Copyright 1994, 1995, 1996 Werner Zimmermann (zimmerma@rz.fht-esslingen.de)
+   Copyright 1994, 1995, 1996 Werner Zimmermann (Werner.Zimmermann@fht-esslingen.de)
 
 This program originally was written to test the audio functions of the
 AZTECH.CDROM-driver, but it should work with every CD-ROM drive. Before 

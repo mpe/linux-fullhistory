@@ -237,7 +237,7 @@ static unsigned int isofs_get_last_session(kdev_t dev)
        * we would destroy the kernels idea about FS on root
        * mount in read_super... [chexum]
        */
-      unsigned long old_fs=get_fs();
+      mm_segment_t old_fs=get_fs();
       inode_fake.i_rdev=dev;
       ms_info.addr_format=CDROM_LBA;
       set_fs(KERNEL_DS);

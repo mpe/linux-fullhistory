@@ -17,23 +17,18 @@
  * For historical reasons, these macros are grossly misnamed.
  */
 
-#define KERNEL_DS	(0UL)
-#define USER_DS		(-0x40000000000UL)
+#define KERNEL_DS	((mm_segment_t) { 0UL })
+#define USER_DS		((mm_segment_t) { -0x40000000000UL })
 
 #define VERIFY_READ	0
 #define VERIFY_WRITE	1
 
 #define get_fs()  (current->tss.fs)
 #define get_ds()  (KERNEL_DS)
+#define set_fs(x) (current->tss.fs = (x))
 
-/* Our scheme relies on all bits being preserved.  Trap those evil 
-   Intellists in their plot to use unsigned short.  */
+#define segment_eq(a,b)	((a).seg == (b).seg)
 
-extern unsigned long __bad_fs_size(void);
-
-#define set_fs(x) (current->tss.fs =				\
-		   sizeof(x) == sizeof(unsigned long) ? (x) 	\
-		   : __bad_fs_size())
 
 /*
  * Is a address valid? This does a straighforward calculation rather
@@ -45,12 +40,11 @@ extern unsigned long __bad_fs_size(void);
  *  - AND "addr+size" doesn't have any high-bits set
  *  - OR we are in kernel mode.
  */
-#define __access_ok(addr,size,mask) \
-	(((mask) & (addr | size | (addr+size))) == 0)
-#define __access_mask get_fs()
+#define __access_ok(addr,size,segment) \
+	(((segment).seg & (addr | size | (addr+size))) == 0)
 
 #define access_ok(type,addr,size) \
-	__access_ok(((unsigned long)(addr)),(size),__access_mask)
+	__access_ok(((unsigned long)(addr)),(size),get_fs())
 
 extern inline int verify_area(int type, const void * addr, unsigned long size)
 {
@@ -70,9 +64,9 @@ extern inline int verify_area(int type, const void * addr, unsigned long size)
  * (b) require any knowledge of processes at this stage
  */
 #define put_user(x,ptr) \
-  __put_user_check((__typeof__(*(ptr)))(x),(ptr),sizeof(*(ptr)),__access_mask)
+  __put_user_check((__typeof__(*(ptr)))(x),(ptr),sizeof(*(ptr)),get_fs())
 #define get_user(x,ptr) \
-  __get_user_check((x),(ptr),sizeof(*(ptr)),__access_mask)
+  __get_user_check((x),(ptr),sizeof(*(ptr)),get_fs())
 
 /*
  * The "__xxx" versions do not do address space checking, useful when
@@ -125,11 +119,11 @@ extern void __get_user_unknown(void);
 	__gu_err;						\
 })
 
-#define __get_user_check(x,ptr,size,mask)			\
+#define __get_user_check(x,ptr,size,segment)			\
 ({								\
 	long __gu_err = -EFAULT, __gu_val = 0;			\
 	const __typeof__(*(ptr)) *__gu_addr = (ptr);		\
-	if (__access_ok((long)__gu_addr,size,mask)) {		\
+	if (__access_ok((long)__gu_addr,size,segment)) {	\
 		__gu_err = 0;					\
 		switch (size) {					\
 		  case 1: __get_user_8(__gu_addr); break;	\
@@ -238,11 +232,11 @@ extern void __put_user_unknown(void);
 	__pu_err;						\
 })
 
-#define __put_user_check(x,ptr,size,mask)			\
+#define __put_user_check(x,ptr,size,segment)			\
 ({								\
 	long __pu_err = -EFAULT;				\
 	__typeof__(*(ptr)) *__pu_addr = (ptr);			\
-	if (__access_ok((long)__pu_addr,size,mask)) {		\
+	if (__access_ok((long)__pu_addr,size,segment)) {	\
 		__pu_err = 0;					\
 		switch (size) {					\
 		  case 1: __put_user_8(x,__pu_addr); break;	\
@@ -391,7 +385,7 @@ extern void __copy_user(void);
 	register void * __cu_to __asm__("$6") = (to);			    \
 	register const void * __cu_from __asm__("$7") = (from);		    \
 	register long __cu_len __asm__("$0") = (n);			    \
-	if (__access_ok(((long)(v)),__cu_len,__access_mask)) {		    \
+	if (__access_ok(((long)(v)),__cu_len,get_fs())) {		    \
 		__asm__ __volatile__(					    \
 			"jsr $28,(%3),__copy_user"			    \
 			: "=r" (__cu_len), "=r" (__cu_from), "=r" (__cu_to) \
@@ -430,7 +424,7 @@ extern void __do_clear_user(void);
 ({									\
 	register void * __cl_to __asm__("$6") = (to);			\
 	register long __cl_len __asm__("$0") = (n);			\
-	if (__access_ok(((long)__cl_to),__cl_len,__access_mask)) {	\
+	if (__access_ok(((long)__cl_to),__cl_len,get_fs())) {		\
 		__asm__ __volatile__(					\
 			"jsr $28,(%2),__do_clear_user"			\
 			: "=r"(__cl_len), "=r"(__cl_to)			\
@@ -450,7 +444,7 @@ extern long __strncpy_from_user(char *__to, const char *__from, long __to_len);
 	char * __sfu_to = (to);						   \
 	const char * __sfu_from = (from);				   \
 	long __sfu_ret = -EFAULT;			      		   \
-	if (__access_ok(((long)__sfu_from),0,__access_mask))		   \
+	if (__access_ok(((long)__sfu_from),0,get_fs()))			   \
 		__sfu_ret = __strncpy_from_user(__sfu_to,__sfu_from,(n));  \
 	__sfu_ret;							   \
 })

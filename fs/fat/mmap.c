@@ -60,7 +60,7 @@ static unsigned long fat_file_mmap_nopage(
 		filp.f_pos = pos;
 		need_read = PAGE_SIZE - clear;
 		{
-			unsigned long cur_fs = get_fs();
+			mm_segment_t cur_fs = get_fs();
 			set_fs (KERNEL_DS);
 			cur_read = fat_file_read (&filp, (char*)page,
 						  need_read, &filp.f_pos);

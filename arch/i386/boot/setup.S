@@ -594,7 +594,7 @@ flush_instr:
 	xor	bx,bx		! Flag to indicate a boot
 
 ! NOTE: For high loaded big kernels we need a
-!	jmpi    0x100000,KERNEL_CS
+!	jmpi    0x100000,__KERNEL_CS
 !
 !	but we yet haven't reloaded the CS register, so the default size 
 !	of the target offset still is 16 bit.
@@ -603,7 +603,7 @@ flush_instr:
 !	Manual, Mixing 16-bit and 32-bit code, page 16-6)
 	db	0x66,0xea	! prefix + jmpi-opcode
 code32:	dd	0x1000		! will be set to 0x100000 for big kernels
-	dw	KERNEL_CS
+	dw	__KERNEL_CS
 
 
 kernel_version:	.ascii	UTS_RELEASE

@@ -89,6 +89,7 @@ typedef struct {
 #define SA_RESTORER	0x04000000
 
 #ifdef __KERNEL__
+
 /*
  * These values of sa_flags are used only by the kernel as part of the
  * irq handling routines.
@@ -138,7 +139,6 @@ typedef struct sigaltstack {
 
 #ifdef __KERNEL__
 #include <asm/sigcontext.h>
-#endif
 
 #define __HAVE_ARCH_SIG_BITOPS
 
@@ -178,5 +178,7 @@ extern __inline__ int sigfindinword(unsigned long word)
 	__asm__("bsfl %1,%0" : "=r"(word) : "rm"(word) : "cc");
 	return word;
 }
+
+#endif
 
 #endif

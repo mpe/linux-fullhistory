@@ -1219,7 +1219,7 @@ seq_drain_midi_queues(void)
 
 	n = 1;
 
-	while (!(current->signal & ~current->blocked) && n)
+	while (!signal_pending(current) && n)
 	  {
 		  n = 0;
 
@@ -1271,7 +1271,7 @@ sequencer_release(int dev, struct fileinfo *file)
 
 	if (mode != OPEN_READ && !(file->flags & (O_NONBLOCK) ?
 				   1 : 0))
-		while (!(current->signal & ~current->blocked) && qlen > 0)
+		while (!signal_pending(current) && qlen > 0)
 		  {
 			  seq_sync();
 
@@ -1335,7 +1335,7 @@ seq_sync(void)
 {
 	unsigned long   flags;
 
-	if (qlen && !seq_playing && !(current->signal & ~current->blocked))
+	if (qlen && !seq_playing && !signal_pending(current))
 		seq_startplay();
 
 	save_flags(flags);
@@ -1563,7 +1563,7 @@ sequencer_ioctl(int dev, struct fileinfo *file,
 
 		  if (mode == OPEN_READ)
 			  return 0;
-		  while (qlen > 0 && !(current->signal & ~current->blocked))
+		  while (qlen > 0 && !signal_pending(current))
 			  seq_sync();
 		  if (qlen)
 			  return -EINTR;

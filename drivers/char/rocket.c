@@ -622,7 +622,7 @@ static void init_r_port(int board, int aiop, int chan)
 	rp_table[line] = info;
 }
 
-#if (LINUX_VERSION_CODE < 131393) /* Linux 2.1.65 */
+#if (LINUX_VERSION_CODE < 131394) /* Linux 2.1.66 */
 static int baud_table[] = {
 	0, 50, 75, 110, 134, 150, 200, 300,
 	600, 1200, 1800, 2400, 4800, 9600, 19200,
@@ -673,7 +673,7 @@ static void configure_r_port(struct r_port *info)
 	}
 	
 	/* baud rate */
-#if (LINUX_VERSION_CODE < 131393) /* Linux 2.1.65 */
+#if (LINUX_VERSION_CODE < 131394) /* Linux 2.1.66 */
 	i = cflag & CBAUD;
 	if (i & CBAUDEX) {
 		i &= ~CBAUDEX;
@@ -974,7 +974,21 @@ static int rp_open(struct tty_struct *tty, struct file * filp)
 	sEnTransmit(cp);
 
 	info->flags |= ROCKET_INITIALIZED;
-	
+
+#if (LINUX_VERSION_CODE >= 131394) /* Linux 2.1.66 */
+	/*
+	 * Set up the tty->alt_speed kludge
+	 */
+	if ((info->flags & ROCKET_SPD_MASK) == ROCKET_SPD_HI)
+		info->tty->alt_speed = 57600;
+	if ((info->flags & ROCKET_SPD_MASK) == ROCKET_SPD_VHI)
+		info->tty->alt_speed = 115200;
+	if ((info->flags & ROCKET_SPD_MASK) == ROCKET_SPD_SHI)
+		info->tty->alt_speed = 230400;
+	if ((info->flags & ROCKET_SPD_MASK) == ROCKET_SPD_WARP)
+		info->tty->alt_speed = 460800;
+#endif
+
 	configure_r_port(info);
 	if (tty->termios->c_cflag & CBAUD) {
 		sSetDTR(cp);
@@ -1190,7 +1204,7 @@ static void rp_set_termios(struct tty_struct *tty, struct termios *old_termios)
 /*
  * Here are the routines used by rp_ioctl
  */
-#if (LINUX_VERSION_CODE < 131393) /* Linux 2.1.65 */
+#if (LINUX_VERSION_CODE < 131394) /* Linux 2.1.66 */
 static void send_break(	struct r_port * info, int duration)
 {
 	current->state = TASK_INTERRUPTIBLE;
@@ -1316,7 +1330,7 @@ static int set_config(struct r_port * info, struct rocket_config * new_info)
 	info->close_delay = new_serial.close_delay;
 	info->closing_wait = new_serial.closing_wait;
 
-#if (LINUX_VERSION_CODE >= 131393) /* Linux 2.1.65 */
+#if (LINUX_VERSION_CODE >= 131394) /* Linux 2.1.66 */
 	if ((info->flags & ROCKET_SPD_MASK) == ROCKET_SPD_HI)
 		info->tty->alt_speed = 57600;
 	if ((info->flags & ROCKET_SPD_MASK) == ROCKET_SPD_VHI)
@@ -1357,7 +1371,7 @@ static int rp_ioctl(struct tty_struct *tty, struct file * file,
 		    unsigned int cmd, unsigned long arg)
 {
 	struct r_port * info = (struct r_port *)tty->driver_data;
-#if (LINUX_VERSION_CODE < 131393) /* Linux 2.1.65 */
+#if (LINUX_VERSION_CODE < 131394) /* Linux 2.1.66 */
 	int retval, tmp;
 #endif
 
@@ -1366,7 +1380,7 @@ static int rp_ioctl(struct tty_struct *tty, struct file * file,
 		return -ENODEV;
 
 	switch (cmd) {
-#if (LINUX_VERSION_CODE < 131393) /* Linux 2.1.65 */
+#if (LINUX_VERSION_CODE < 131394) /* Linux 2.1.66 */
 		case TCSBRK:	/* SVID version: non-zero arg --> no break */
 			retval = tty_check_change(tty);
 			if (retval)
@@ -2133,7 +2147,7 @@ __initfunc(int rp_init(void))
 	rocket_driver.stop = rp_stop;
 	rocket_driver.start = rp_start;
 	rocket_driver.hangup = rp_hangup;
-#if (LINUX_VERSION_CODE >= 131393) /* Linux 2.1.65 */
+#if (LINUX_VERSION_CODE >= 131394) /* Linux 2.1.66 */
 	rocket_driver.break_ctl = rp_break;
 #endif
 #if (LINUX_VERSION_CODE >= 131343)
