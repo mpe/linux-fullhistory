@@ -4,9 +4,10 @@
  *  Written by Theodore Ts'o, 12/2/91
  */
 
-#include <linux/string.h>
 
 #include <linux/config.h>
+#ifdef RAMDISK
+#include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/fs.h>
@@ -21,11 +22,12 @@
 char	*rd_start;
 int	rd_length = 0;
 
-void do_rd_request(void)
+static void do_rd_request(void)
 {
 	int	len;
 	char	*addr;
 
+repeat:
 	INIT_REQUEST;
 	addr = rd_start + (CURRENT->sector << 9);
 	len = CURRENT->nr_sectors << 9;
@@ -52,9 +54,10 @@ static struct file_operations rd_fops = {
 	block_read,		/* read - general block-dev read */
 	block_write,		/* write - general block-dev write */
 	NULL,			/* readdir - bad */
-	NULL,			/* close - default */
 	NULL,			/* select */
-	NULL			/* ioctl */
+	NULL,			/* ioctl */
+	NULL,			/* no special open code */
+	NULL			/* no special release code */
 };
 
 /*
@@ -83,7 +86,7 @@ long rd_init(long mem_start, int length)
 void rd_load(void)
 {
 	struct buffer_head *bh;
-	struct super_block	s;
+	struct minix_super_block s;
 	int		block = 256;	/* Start at block 256 */
 	int		i = 1;
 	int		nblocks;
@@ -111,14 +114,14 @@ void rd_load(void)
 			nblocks, rd_length >> BLOCK_SIZE_BITS);
 		return;
 	}
-	printk("Loading %d bytes into ram disk... 0000k", 
+	printk("Loading %d bytes into ram disk\n",
 		nblocks << BLOCK_SIZE_BITS);
 	cp = rd_start;
 	while (nblocks) {
 		if (nblocks > 2) 
 			bh = breada(ROOT_DEV, block, block+1, block+2, -1);
 		else
-			bh = bread(ROOT_DEV, block);
+			bh = bread(ROOT_DEV, block, BLOCK_SIZE);
 		if (!bh) {
 			printk("I/O error on block %d, aborting load\n", 
 				block);
@@ -126,12 +129,13 @@ void rd_load(void)
 		}
 		(void) memcpy(cp, bh->b_data, BLOCK_SIZE);
 		brelse(bh);
-		printk("\010\010\010\010\010%4dk",i);
+		if (!(nblocks-- & 15))
+			printk(".");
 		cp += BLOCK_SIZE;
 		block++;
-		nblocks--;
 		i++;
 	}
-	printk("\010\010\010\010\010done \n");
+	printk("\ndone\n");
 	ROOT_DEV=0x0101;
 }
+#endif

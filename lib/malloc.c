@@ -99,7 +99,7 @@ static inline void init_bucket_desc()
 	struct bucket_desc *bdesc, *first;
 	int	i;
 	
-	first = bdesc = (struct bucket_desc *) get_free_page();
+	first = bdesc = (struct bucket_desc *) get_free_page(GFP_KERNEL);
 	if (!bdesc)
 		panic("Out of memory in init_bucket_desc()");
 	for (i = PAGE_SIZE/sizeof(struct bucket_desc); i > 1; i--) {
@@ -153,7 +153,7 @@ void *malloc(unsigned int len)
 		free_bucket_desc = bdesc->next;
 		bdesc->refcnt = 0;
 		bdesc->bucket_size = bdir->size;
-		bdesc->page = bdesc->freeptr = (void *) cp = get_free_page();
+		bdesc->page = bdesc->freeptr = (void *) cp = get_free_page(GFP_KERNEL);
 		if (!cp)
 			panic("Out of memory in kernel malloc()");
 		/* Set up the chain of free objects */

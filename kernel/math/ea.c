@@ -1,16 +1,16 @@
 /*
  * linux/kernel/math/ea.c
  *
- * (C) 1991 Linus Torvalds
+ * Copyright (C) 1991, 1992 Linus Torvalds
  */
 
 /*
  * Calculate the effective address.
  */
 
-#include <stddef.h>
-
+#include <linux/stddef.h>
 #include <linux/math_emu.h>
+
 #include <asm/segment.h>
 
 static int __regoffset[] = {
@@ -58,7 +58,7 @@ static char * sib(struct info * info, int mod)
 char * ea(struct info * info, unsigned short code)
 {
 	unsigned char mod,rm;
-	long * tmp = &EAX;
+	long * tmp;
 	int offset = 0;
 
 	mod = (code >> 6) & 3;
@@ -84,7 +84,7 @@ char * ea(struct info * info, unsigned short code)
 			EIP += 4;
 			break;
 		case 3:
-			math_abort(info,1<<(SIGILL-1));
+			math_abort(info,SIGILL);
 	}
 	I387.foo = offset;
 	I387.fos = 0x17;

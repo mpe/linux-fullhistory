@@ -1,7 +1,7 @@
 /*
  * linux/kernel/math/mul.c
  *
- * (C) 1991 Linus Torvalds
+ * Copyright (C) 1991, 1992 Linus Torvalds
  */
 
 /*

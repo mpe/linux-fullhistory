@@ -1,5 +1,5 @@
-#ifndef _TIMER_H
-#define _TIMER_H
+#ifndef _LINUX_TIMER_H
+#define _LINUX_TIMER_H
 
 /*
  * DON'T CHANGE THESE!! Most of them are hardcoded into some assembly language
@@ -20,6 +20,8 @@
  * HD_TIMER		harddisk timer
  *
  * FLOPPY_TIMER		floppy disk timer (not used right now)
+ * 
+ * SCSI_TIMER		scsi.c timeout timer
  */
 
 #define BLANK_TIMER	0
@@ -37,6 +39,7 @@
 
 #define HD_TIMER	16
 #define FLOPPY_TIMER	17
+#define SCSI_TIMER 	18
 
 struct timer_struct {
 	unsigned long expires;

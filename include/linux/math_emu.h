@@ -1,8 +1,3 @@
-/*
- * linux/include/linux/math_emu.h
- *
- * (C) 1991 Linus Torvalds
- */
 #ifndef _LINUX_MATH_EMU_H
 #define _LINUX_MATH_EMU_H
 
@@ -176,6 +171,10 @@ void fmul(const temp_real *, const temp_real *, temp_real *);
 /* div.c */
 
 void fdiv(const temp_real *, const temp_real *, temp_real *);
+
+/* sqrt.c */
+
+void fsqrt(const temp_real *, temp_real *);
 
 /* compare.c */
 

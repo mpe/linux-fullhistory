@@ -1,10 +1,10 @@
+#ifndef _LINUX_FDREG_H
+#define _LINUX_FDREG_H
 /*
  * This file contains some defines for the floppy disk controller.
  * Various sources. Mostly "IBM Microcomputers: A Programmers
  * Handbook", Sanches and Canton.
  */
-#ifndef _FDREG_H
-#define _FDREG_H
 
 extern int ticks_to_floppy_on(unsigned int nr);
 extern void floppy_on(unsigned int nr);
@@ -57,15 +57,23 @@ extern void floppy_deselect(unsigned int nr);
 #define ST3_WP		0x40		/* Write Protect */
 
 /* Values for FD_COMMAND */
-#define FD_RECALIBRATE	0x07		/* move to track 0 */
-#define FD_SEEK		0x0F		/* seek track */
-#define FD_READ		0xE6		/* read with MT, MFM, SKip deleted */
-#define FD_WRITE	0xC5		/* write with MT, MFM */
-#define FD_SENSEI	0x08		/* Sense Interrupt Status */
-#define FD_SPECIFY	0x03		/* specify HUT etc */
+#define FD_RECALIBRATE		0x07	/* move to track 0 */
+#define FD_SEEK			0x0F	/* seek track */
+#define FD_READ			0xE6	/* read with MT, MFM, SKip deleted */
+#define FD_WRITE		0xC5	/* write with MT, MFM */
+#define FD_SENSEI		0x08	/* Sense Interrupt Status */
+#define FD_SPECIFY		0x03	/* specify HUT etc */
+#define FD_FORMAT		0x4D	/* format one track */
+#define FD_VERSION		0x10	/* get version code */
+#define FD_CONFIGURE		0x13	/* configure FIFO operation */
+#define FD_PERPENDICULAR	0x12	/* perpendicular r/w mode */
 
 /* DMA commands */
 #define DMA_READ	0x46
 #define DMA_WRITE	0x4A
+
+/* FDC version return types */
+#define FDC_TYPE_STD	0x80	/* normal 8272A clone FDC */
+#define FDC_TYPE_82077	0x90	/* FIFO + perpendicular support */
 
 #endif

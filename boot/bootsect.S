@@ -6,7 +6,7 @@
 #include <linux/config.h>
 SYSSIZE = DEF_SYSSIZE
 !
-!	bootsect.s		(C) 1991 Linus Torvalds
+!	bootsect.s		Copyright (C) 1991, 1992 Linus Torvalds
 !	modified by Drew Eckhardt
 !	modified by Bruce Evans (bde)
 !
@@ -224,8 +224,7 @@ got_sectors:
 	mov	ax,#0x021c		! /dev/PS0 - 1.44Mb
 	cmp	bx,#18
 	je	root_defined
-undef_root:
-	jmp undef_root
+	mov	ax,#0x0200		! /dev/fd0 - autodetect
 root_defined:
 	seg cs
 	mov	root_dev,ax

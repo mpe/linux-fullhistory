@@ -1,7 +1,7 @@
 /*
  * linux/kernel/math/emulate.c
  *
- * (C) 1991 Linus Torvalds
+ * Copyright (C) 1991, 1992 Linus Torvalds
  */
 
 /*
@@ -32,7 +32,7 @@
 
 #ifdef KERNEL_MATH_EMULATION
 
-#include <signal.h>
+#include <linux/signal.h>
 
 #define __ALIGNED_TEMP_REAL 1
 #include <linux/math_emu.h>
@@ -79,7 +79,7 @@ static void do_emu(struct info * info)
 			return;
 		case 0x1d1: case 0x1d2: case 0x1d3:
 		case 0x1d4: case 0x1d5: case 0x1d6: case 0x1d7:
-			math_abort(info,1<<(SIGILL-1));
+			math_abort(info,SIGILL);
 		case 0x1e0:
 			ST(0).exponent ^= 0x8000;
 			return;
@@ -87,15 +87,15 @@ static void do_emu(struct info * info)
 			ST(0).exponent &= 0x7fff;
 			return;
 		case 0x1e2: case 0x1e3:
-			math_abort(info,1<<(SIGILL-1));
+			math_abort(info,SIGILL);
 		case 0x1e4:
 			ftst(PST(0));
 			return;
 		case 0x1e5:
 			printk("fxam not implemented\n\r");
-			math_abort(info,1<<(SIGILL-1));
+			math_abort(info,SIGILL);
 		case 0x1e6: case 0x1e7:
-			math_abort(info,1<<(SIGILL-1));
+			math_abort(info,SIGILL);
 		case 0x1e8:
 			fpush();
 			ST(0) = CONST1;
@@ -125,13 +125,17 @@ static void do_emu(struct info * info)
 			ST(0) = CONSTZ;
 			return;
 		case 0x1ef:
-			math_abort(info,1<<(SIGILL-1));
+			math_abort(info,SIGILL);
+		case 0x1fa:
+			fsqrt(PST(0),&tmp);
+			real_to_real(&tmp,&ST(0));
+			return;
 		case 0x1f0: case 0x1f1: case 0x1f2: case 0x1f3:
 		case 0x1f4: case 0x1f5: case 0x1f6: case 0x1f7:
-		case 0x1f8: case 0x1f9: case 0x1fa: case 0x1fb:
-		case 0x1fd: case 0x1fe: case 0x1ff:
+		case 0x1f8: case 0x1f9: case 0x1fb: case 0x1fd:
+		case 0x1fe: case 0x1ff:
 			printk("%04x fxxx not implemented\n\r",code + 0xd800);
-			math_abort(info,1<<(SIGILL-1));
+			math_abort(info,SIGILL);
 		case 0x1fc:
 			frndint(PST(0),&tmp);
 			real_to_real(&tmp,&ST(0));
@@ -242,7 +246,7 @@ static void do_emu(struct info * info)
 			return;
 		case 0xb8:
 			printk("ffree not implemented\n\r");
-			math_abort(info,1<<(SIGILL-1));
+			math_abort(info,SIGILL);
 		case 0xb9:
 			fxchg(&ST(0),&ST(code & 7));
 			return;
@@ -299,7 +303,7 @@ static void do_emu(struct info * info)
 			return;
 		case 0xf8:
 			printk("ffree not implemented\n\r");
-			math_abort(info,1<<(SIGILL-1));
+			math_abort(info,SIGILL);
 			fpop();
 			return;
 		case 0xf9:
@@ -474,7 +478,7 @@ static void do_emu(struct info * info)
 			return;
 	}
 	printk("Unknown math-insns: %04x:%08x %04x\n\r",CS,EIP,code);
-	math_abort(info,1<<(SIGFPE-1));
+	math_abort(info,SIGFPE);
 }
 
 void math_emulate(long ___false)
@@ -491,7 +495,7 @@ void math_emulate(long ___false)
 void __math_abort(struct info * info, unsigned int signal)
 {
 	EIP = ORIG_EIP;
-	current->signal |= signal;
+	send_sig(signal,current,1);
 	__asm__("movl %0,%%esp ; ret"::"g" (((long) info)-4));
 }
 
@@ -533,12 +537,12 @@ static temp_real_unaligned * __st(int i)
 
 #else /* no math emulation */
 
-#include <signal.h>
+#include <linux/signal.h>
 #include <linux/sched.h>
 
 void math_emulate(long ___false)
 {
-	current->signal |= 1<<(SIGFPE-1);
+	send_sig(SIGFPE,current,1);
 	schedule();
 }
 

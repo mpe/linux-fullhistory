@@ -1,7 +1,7 @@
 /*
  *  linux/tools/build.c
  *
- *  (C) 1991  Linus Torvalds
+ *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
 /*
@@ -25,14 +25,14 @@
 #include <stdlib.h>	/* contains exit */
 #include <sys/types.h>	/* unistd.h needs this */
 #include <sys/stat.h>
-#include <linux/fs.h>
+#include <sys/sysmacros.h>
 #include <unistd.h>	/* contains read/write */
 #include <fcntl.h>
 
 #define MINIX_HEADER 32
 #define GCC_HEADER 1024
 
-#define SYS_SIZE 0x4000
+#define SYS_SIZE 0x5000
 
 #define DEFAULT_MAJOR_ROOT 0
 #define DEFAULT_MINOR_ROOT 0
@@ -69,8 +69,8 @@ int main(int argc, char ** argv)
 				perror(argv[4]);
 				die("Couldn't stat root device.");
 			}
-			major_root = MAJOR(sb.st_rdev);
-			minor_root = MINOR(sb.st_rdev);
+			major_root = major(sb.st_rdev);
+			minor_root = minor(sb.st_rdev);
 		} else {
 			major_root = 0;
 			minor_root = 0;
@@ -81,7 +81,7 @@ int main(int argc, char ** argv)
 	}
 	fprintf(stderr, "Root device is (%d, %d)\n", major_root, minor_root);
 	if ((major_root != 2) && (major_root != 3) &&
-	    (major_root != 0)) {
+	    (major_root != 8) && (major_root != 0)) {
 		fprintf(stderr, "Illegal root device (major = %d)\n",
 			major_root);
 		die("Bad root device --- major #");

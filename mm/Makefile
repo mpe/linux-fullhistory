@@ -7,20 +7,12 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-AS	=as
-AR	=ar
-LD	=ld
-CC	=gcc -nostdinc -I../include
-CPP	=cpp -nostdinc -I../include
-
 .c.o:
-	$(CC) $(CFLAGS) \
-	-c -o $*.o $<
+	$(CC) $(CFLAGS) -c $<
 .s.o:
 	$(AS) -o $*.o $<
 .c.s:
-	$(CC) $(CFLAGS) \
-	-S -o $*.s $<
+	$(CC) $(CFLAGS) -S $<
 
 OBJS	= memory.o swap.o mmap.o
 
@@ -33,21 +25,32 @@ clean:
 
 dep:
 	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
-	(for i in *.c;do $(CPP) -M $$i;done) >> tmp_make
+	for i in *.c;do $(CPP) -M $$i;done >> tmp_make
 	cp tmp_make Makefile
 
 ### Dependencies:
-memory.o : memory.c ../include/signal.h ../include/sys/types.h ../include/asm/system.h \
-  ../include/linux/sched.h ../include/linux/head.h ../include/linux/fs.h ../include/sys/dirent.h \
-  ../include/limits.h ../include/linux/mm.h ../include/linux/kernel.h ../include/sys/param.h \
-  ../include/sys/time.h ../include/time.h ../include/sys/resource.h 
-mmap.o : mmap.c ../include/sys/stat.h ../include/sys/types.h ../include/linux/sched.h \
-  ../include/linux/head.h ../include/linux/fs.h ../include/sys/dirent.h ../include/limits.h \
-  ../include/linux/mm.h ../include/linux/kernel.h ../include/signal.h ../include/sys/param.h \
-  ../include/sys/time.h ../include/time.h ../include/sys/resource.h ../include/asm/segment.h \
-  ../include/asm/system.h ../include/errno.h ../include/sys/mman.h 
-swap.o : swap.c ../include/errno.h ../include/sys/stat.h ../include/sys/types.h \
-  ../include/linux/mm.h ../include/linux/fs.h ../include/sys/dirent.h ../include/limits.h \
-  ../include/linux/kernel.h ../include/signal.h ../include/linux/string.h ../include/linux/sched.h \
-  ../include/linux/head.h ../include/sys/param.h ../include/sys/time.h ../include/time.h \
-  ../include/sys/resource.h 
+memory.o : memory.c /usr/src/linux/include/asm/system.h /usr/src/linux/include/linux/signal.h \
+  /usr/src/linux/include/linux/sched.h /usr/src/linux/include/linux/head.h /usr/src/linux/include/linux/fs.h \
+  /usr/src/linux/include/linux/limits.h /usr/src/linux/include/linux/wait.h /usr/src/linux/include/linux/types.h \
+  /usr/src/linux/include/linux/dirent.h /usr/src/linux/include/linux/vfs.h /usr/src/linux/include/linux/minix_fs_sb.h \
+  /usr/src/linux/include/linux/ext_fs_sb.h /usr/src/linux/include/linux/msdos_fs_sb.h \
+  /usr/src/linux/include/linux/mm.h /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/linux/time.h \
+  /usr/src/linux/include/linux/param.h /usr/src/linux/include/linux/resource.h \
+  /usr/src/linux/include/linux/string.h 
+mmap.o : mmap.c /usr/src/linux/include/linux/stat.h /usr/src/linux/include/linux/sched.h \
+  /usr/src/linux/include/linux/head.h /usr/src/linux/include/linux/fs.h /usr/src/linux/include/linux/limits.h \
+  /usr/src/linux/include/linux/wait.h /usr/src/linux/include/linux/types.h /usr/src/linux/include/linux/dirent.h \
+  /usr/src/linux/include/linux/vfs.h /usr/src/linux/include/linux/minix_fs_sb.h \
+  /usr/src/linux/include/linux/ext_fs_sb.h /usr/src/linux/include/linux/msdos_fs_sb.h \
+  /usr/src/linux/include/linux/mm.h /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/linux/signal.h \
+  /usr/src/linux/include/linux/time.h /usr/src/linux/include/linux/param.h /usr/src/linux/include/linux/resource.h \
+  /usr/src/linux/include/linux/errno.h /usr/src/linux/include/asm/segment.h /usr/src/linux/include/asm/system.h \
+  /usr/src/linux/include/sys/mman.h 
+swap.o : swap.c /usr/src/linux/include/linux/mm.h /usr/src/linux/include/linux/fs.h \
+  /usr/src/linux/include/linux/limits.h /usr/src/linux/include/linux/wait.h /usr/src/linux/include/linux/types.h \
+  /usr/src/linux/include/linux/dirent.h /usr/src/linux/include/linux/vfs.h /usr/src/linux/include/linux/minix_fs_sb.h \
+  /usr/src/linux/include/linux/ext_fs_sb.h /usr/src/linux/include/linux/msdos_fs_sb.h \
+  /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/linux/signal.h \
+  /usr/src/linux/include/linux/sched.h /usr/src/linux/include/linux/head.h /usr/src/linux/include/linux/time.h \
+  /usr/src/linux/include/linux/param.h /usr/src/linux/include/linux/resource.h \
+  /usr/src/linux/include/linux/errno.h /usr/src/linux/include/linux/string.h /usr/src/linux/include/linux/stat.h 

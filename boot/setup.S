@@ -1,5 +1,5 @@
 !
-!	setup.s		(C) 1991 Linus Torvalds
+!	setup.s		Copyright (C) 1991, 1992 Linus Torvalds
 !
 ! setup.s is responsible for getting the system data from the BIOS,
 ! and putting them into the appropriate places in system memory.
@@ -14,6 +14,7 @@
 
 ! NOTE! These had better be the same as in bootsect.s!
 #include <linux/config.h>
+#define NORMAL_VGA 0xffff
 
 INITSEG  = DEF_INITSEG	! we move boot here - out of the way
 SYSSEG   = DEF_SYSSEG	! system loaded at 0x10000 (65536).
@@ -189,9 +190,10 @@ end_move:
 	out	#0xA1,al
 	.word	0x00eb,0x00eb
 	mov	al,#0xFF		! mask off all interrupts for now
-	out	#0x21,al
-	.word	0x00eb,0x00eb
 	out	#0xA1,al
+	.word	0x00eb,0x00eb
+	mov	al,#0xFB		! mask all irq's but irq2 which
+	out	#0x21,al		! is cascaded
 
 ! well, that certainly wasn't fun :-(. Hopefully it works, and we don't
 ! need no steenking BIOS anyway (except for the initial loading :-).
@@ -245,6 +247,7 @@ chsvga:	cld
 	mov	es,ax
 	lea	si,msg1
 	call	prtstr
+#ifndef SVGA_MODE
 flush:	in	al,#0x60		! Flush the keyboard buffer
 	cmp	al,#0x82
 	jb	nokey
@@ -256,9 +259,12 @@ nokey:	call getkey
 	ja	nokey
 	cmp	al,#0x9c
 	je	svga
+#endif
+#if !defined(SVGA_MODE) || SVGA_MODE == NORMAL_VGA
 	mov	ax,#0x5019
 	pop	ds
 	ret
+#endif
 svga:	cld
 	lea 	si,idati		! Check ATI 'clues'
 	mov	di,#0x31
@@ -497,6 +503,9 @@ tbl:	pop	bx
 	call	prtstr
 	pop	si
 	add	cl,#0x80
+#if defined(SVGA_MODE) && SVGA_MODE != NORMAL_VGA
+	mov	al,#SVGA_MODE		! Preset SVGA mode 
+#else
 nonum:	call	getkey
 	cmp	al,#0x82
 	jb	nonum
@@ -508,6 +517,7 @@ nonum:	call	getkey
 zero:	sub	al,#0x0a
 nozero:	sub	al,#0x80
 	dec	al
+#endif
 	xor	ah,ah
 	add	di,ax
 	inc	di

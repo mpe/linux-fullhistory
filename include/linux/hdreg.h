@@ -1,10 +1,11 @@
+#ifndef _LINUX_HDREG_H
+#define _LINUX_HDREG_H
+
 /*
  * This file contains some defines for the AT-hd-controller.
  * Various sources. Check out some definitions (see comments with
  * a ques).
  */
-#ifndef _HDREG_H
-#define _HDREG_H
 
 /* Hd controller regs. Ref: IBM AT Bios-listing */
 #define HD_DATA		0x1f0	/* _CTL when writing */
@@ -49,25 +50,12 @@
 #define ECC_ERR		0x40	/* ? */
 #define	BBD_ERR		0x80	/* ? */
 
-#define EXTENDED_PARTITION 5
-
-struct partition {
-	unsigned char boot_ind;		/* 0x80 - active */
-	unsigned char head;		/* starting head */
-	unsigned char sector;		/* starting sector */
-	unsigned char cyl;		/* starting cylinder */
-	unsigned char sys_ind;		/* What partition type */
-	unsigned char end_head;		/* end head */
-	unsigned char end_sector;	/* end sector */
-	unsigned char end_cyl;		/* end cylinder */
-	unsigned int start_sect;	/* starting sector counting from 0 */
-	unsigned int nr_sects;		/* nr of sectors in partition */
-};
 
 #define HDIO_REQ 0x301
 struct hd_geometry {
       unsigned char heads;
       unsigned char sectors;
       unsigned short cylinders;
+      unsigned long start;
 };
 #endif

@@ -1,7 +1,7 @@
 /*
  *  linux/kernel/traps.c
  *
- *  (C) 1991  Linus Torvalds
+ *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
 /*
@@ -10,16 +10,15 @@
  * to mainly kill the offending process (probably by giving it a signal,
  * but possibly by killing it outright if necessary).
  */
-#include <linux/string.h>
-
 #include <linux/head.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/string.h>
+#include <linux/errno.h>
+
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <asm/io.h>
-#include <errno.h>
-
 
 #define get_seg_byte(seg,addr) ({ \
 register char __res; \
@@ -57,121 +56,126 @@ void general_protection(void);
 void page_fault(void);
 void coprocessor_error(void);
 void reserved(void);
-void parallel_interrupt(void);
-void irq13(void);
 void alignment_check(void);
-int send_sig(long, struct task_struct *, int);
 
-static void die(char * str,long esp_ptr,long nr)
+static void die_if_kernel(char * str,long esp_ptr,long nr)
 {
 	long * esp = (long *) esp_ptr;
 	int i;
 
+	if ((0xffff & esp[1]) == 0xf)
+		return;
 	printk("%s: %04x\n\r",str,nr&0xffff);
 	printk("EIP:    %04x:%p\nEFLAGS: %p\n", 0xffff & esp[1],esp[0],esp[2]);
-	if ((0xffff & esp[1]) == 0xf)
-		printk("ESP:    %04x:%p\n",0xffff & esp[4],esp[3]);
 	printk("fs: %04x\n",_fs());
 	printk("base: %p, limit: %p\n",get_base(current->ldt[1]),get_limit(0x17));
-	if ((0xffff & esp[1]) == 0xf) {
-		printk("Stack: ");
-		for (i=0;i<4;i++)
-			printk("%p ",get_seg_long(0x17,i+(long *)esp[3]));
-		printk("\n");
-	}
 	str(i);
 	printk("Pid: %d, process nr: %d\n\r",current->pid,0xffff & i);
 	for(i=0;i<10;i++)
 		printk("%02x ",0xff & get_seg_byte(esp[1],(i+(char *)esp[0])));
 	printk("\n\r");
-	do_exit(11);		/* play segment exception */
+	do_exit(SIGSEGV);
 }
 
 void do_double_fault(long esp, long error_code)
 {
-	die("double fault",esp,error_code);
+	send_sig(SIGSEGV, current, 1);
+	die_if_kernel("double fault",esp,error_code);
 }
 
 void do_general_protection(long esp, long error_code)
 {
-	die("general protection",esp,error_code);
+	send_sig(SIGSEGV, current, 1);
+	die_if_kernel("general protection",esp,error_code);
 }
 
 void do_alignment_check(long esp, long error_code)
 {
-    die("alignment check",esp,error_code);
+	send_sig(SIGSEGV, current, 1);
+	die_if_kernel("alignment check",esp,error_code);
 }
 
 void do_divide_error(long esp, long error_code)
 {
-	die("divide error",esp,error_code);
+	send_sig(SIGFPE, current, 1);
+	die_if_kernel("divide error",esp,error_code);
 }
 
 void do_int3(long esp, long error_code)
 {
-	send_sig(SIGTRAP, current, 0);
+	send_sig(SIGTRAP, current, 1);
+	die_if_kernel("int3",esp,error_code);
 }
 
 void do_nmi(long esp, long error_code)
 {
-	die("nmi",esp,error_code);
+	printk("Uhhuh. NMI received. Dazed and confused, but trying to continue\n");
 }
 
 void do_debug(long esp, long error_code)
 {
-  send_sig(SIGTRAP, current, 0);
+	send_sig(SIGTRAP, current, 1);
+	die_if_kernel("debug",esp,error_code);
 }
 
 void do_overflow(long esp, long error_code)
 {
-	die("overflow",esp,error_code);
+	send_sig(SIGSEGV, current, 1);
+	die_if_kernel("overflow",esp,error_code);
 }
 
 void do_bounds(long esp, long error_code)
 {
-	die("bounds",esp,error_code);
+	send_sig(SIGSEGV, current, 1);
+	die_if_kernel("bounds",esp,error_code);
 }
 
 void do_invalid_op(long esp, long error_code)
 {
-	die("invalid operand",esp,error_code);
+	send_sig(SIGILL, current, 1);
+	die_if_kernel("invalid operand",esp,error_code);
 }
 
 void do_device_not_available(long esp, long error_code)
 {
-	die("device not available",esp,error_code);
+	send_sig(SIGSEGV, current, 1);
+	die_if_kernel("device not available",esp,error_code);
 }
 
 void do_coprocessor_segment_overrun(long esp, long error_code)
 {
-	die("coprocessor segment overrun",esp,error_code);
+	send_sig(SIGFPE, last_task_used_math, 1);
+	die_if_kernel("coprocessor segment overrun",esp,error_code);
 }
 
 void do_invalid_TSS(long esp,long error_code)
 {
-	die("invalid TSS",esp,error_code);
+	send_sig(SIGSEGV, current, 1);
+	die_if_kernel("invalid TSS",esp,error_code);
 }
 
 void do_segment_not_present(long esp,long error_code)
 {
-	die("segment not present",esp,error_code);
+	send_sig(SIGSEGV, current, 1);
+	die_if_kernel("segment not present",esp,error_code);
 }
 
 void do_stack_segment(long esp,long error_code)
 {
-	die("stack segment",esp,error_code);
+	send_sig(SIGSEGV, current, 1);
+	die_if_kernel("stack segment",esp,error_code);
 }
 
 void do_coprocessor_error(long esp, long error_code)
 {
-	if (last_task_used_math != current)
-		return;
-	die("coprocessor error",esp,error_code);
+	send_sig(SIGFPE, last_task_used_math, 1);
+	__asm__("fnclex");
 }
 
 void do_reserved(long esp, long error_code)
 {
-	die("reserved (15,17-47) error",esp,error_code);
+	send_sig(SIGSEGV, current, 1);
+	die_if_kernel("reserved (15,17-47) error",esp,error_code);
 }
 
 void trap_init(void)
@@ -198,8 +202,4 @@ void trap_init(void)
 	set_trap_gate(17,&alignment_check);
 	for (i=18;i<48;i++)
 		set_trap_gate(i,&reserved);
-	set_trap_gate(45,&irq13);
-	outb_p(inb_p(0x21)&0xfb,0x21);
-	outb(inb_p(0xA1)&0xdf,0xA1);
-	set_trap_gate(39,&parallel_interrupt);
 }

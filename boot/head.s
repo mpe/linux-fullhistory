@@ -1,7 +1,7 @@
 /*
  *  linux/boot/head.s
  *
- *  (C) 1991  Linus Torvalds
+ *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
 /*
@@ -13,6 +13,9 @@
  */
 .text
 .globl _idt,_gdt,_pg_dir,_tmp_floppy_area,_floppy_track_buffer
+/*
+ * pg_dir is the main page directory, address 0x00000000
+ */
 _pg_dir:
 startup_32:
 	cld
@@ -147,6 +150,23 @@ pg2:
 pg3:
 
 .org 0x5000
+/*
+ * empty_bad_page is a bogus page that will be used when out of memory,
+ * so that a process isn't accidentally killed due to a page fault when
+ * it is running in kernel mode..
+ */
+.globl _empty_bad_page
+_empty_bad_page:
+
+.org 0x6000
+/*
+ * empty_bad_page_table is similar to the above, but is used when the
+ * system needs a bogus page-table
+ */
+.globl _empty_bad_page_table
+_empty_bad_page_table:
+
+.org 0x7000
 /*
  * tmp_floppy_area is used by the floppy-driver when DMA cannot
  * reach to a buffer-block. It needs to be aligned, so that it isn't

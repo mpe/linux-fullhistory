@@ -1,31 +1,29 @@
 /*
  *  kernel/chr_drv/vt.c
  *
- *  (C) 1992 obz under the linux copyright
+ *  Copyright (C) 1992 obz under the linux copyright
  */
 
-#include <errno.h>
-
-#include <sys/types.h>
-#include <sys/kd.h>
-#include <sys/vt.h>
+#include <linux/types.h>
+#include <linux/errno.h>
+#include <linux/sched.h>
+#include <linux/tty.h>
+#include <linux/timer.h>
+#include <linux/kernel.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>
 
-#include <linux/sched.h>
-#include <linux/tty.h>
-#include <linux/kernel.h>
-
 #include "vt_kern.h"
+#include <sys/kd.h>
+#include <sys/vt.h>
 
 /*
  * console (vt and kd) routines, as defined by usl svr4 manual
  */
 
-struct vt_info vt_info[MAX_CONSOLES];
+struct vt_cons vt_cons[NR_CONSOLES];
 
-extern int NR_CONSOLES;
 extern unsigned char kleds;
 extern unsigned char kraw;
 extern unsigned char ke0;
@@ -64,14 +62,27 @@ kiocsound(unsigned int freq)
 	return 0;
 }
 
+/*
+ * all the vt ioctls affect only consoles, so we reject all other ttys.
+ * we also have the capability to modify any console, not just the fg_console.
+ */
 int
 vt_ioctl(struct tty_struct *tty, int dev, int cmd, int arg)
 {
+	int console = dev ? dev - 1 : fg_console;
+	unsigned char ucval;
+
+	if (!IS_A_CONSOLE(dev) || console < 0 || console >= NR_CONSOLES)
+		return -EINVAL;
+
 	switch (cmd) {
 	case KIOCSOUND:
 		return kiocsound((unsigned int)arg);
 
 	case KDGKBTYPE:
+		/*
+		 * this is naive.
+		 */
 		verify_area((void *) arg, sizeof(unsigned char));
 		put_fs_byte(KB_101, (unsigned char *) arg);
 		return 0;
@@ -88,7 +99,8 @@ vt_ioctl(struct tty_struct *tty, int dev, int cmd, int arg)
 
 	case KDENABIO:
 	case KDDISABIO:
-		return sys_ioperm(GPFIRST, GPNUM, (cmd == KDENABIO)) ? -ENXIO : 0;
+		return sys_ioperm(GPFIRST, GPNUM,
+				  (cmd == KDENABIO)) ? -ENXIO : 0;
 
 	case KDSETMODE:
 		/*
@@ -107,11 +119,21 @@ vt_ioctl(struct tty_struct *tty, int dev, int cmd, int arg)
 		default:
 			return -EINVAL;
 		}
-		vt_info[fg_console].mode = arg;
+		if (vt_cons[console].vt_mode == (unsigned char) arg)
+			return 0;
+		vt_cons[console].vt_mode = (unsigned char) arg;
+		if (console != fg_console)
+			return 0;
+		if (arg == KD_TEXT)
+			unblank_screen();
+		else {
+			timer_active &= 1<<BLANK_TIMER;
+			blank_screen();
+		}
 		return 0;
 	case KDGETMODE:
 		verify_area((void *) arg, sizeof(unsigned long));
-		put_fs_long(vt_info[fg_console].mode, (unsigned long *) arg);
+		put_fs_long(vt_cons[console].vt_mode, (unsigned long *) arg);
 		return 0;
 
 	case KDMAPDISP:
@@ -124,47 +146,55 @@ vt_ioctl(struct tty_struct *tty, int dev, int cmd, int arg)
 
 	case KDSKBMODE:
 		if (arg == K_RAW) {
-			kraw = 1;
-			ke0 = 0;
+			if (console == fg_console) {
+				kraw = 1;
+				ke0 = 0;
+			} else {
+				vt_cons[console].vc_kbdraw = 1;
+				vt_cons[console].vc_kbde0 = 0;
+			}
 		}
 		else if (arg == K_XLATE) {
-			kraw = 0;
+			if (console == fg_console)
+				kraw = 0;
+			else
+				vt_cons[console].vc_kbdraw = 0;
 		}
 		else
 			return -EINVAL;
+		flush_input(tty);
 		return 0;
 	case KDGKBMODE:
 		verify_area((void *) arg, sizeof(unsigned long));
-		put_fs_long(kraw ? K_RAW : K_XLATE, (unsigned long *) arg);
+		ucval = (console == fg_console) ? kraw :
+			vt_cons[console].vc_kbdraw;
+		put_fs_long(ucval ? K_RAW : K_XLATE, (unsigned long *) arg);
 		return 0;
 
 	case KDGETLED:
 		verify_area((void *) arg, sizeof(unsigned char));
-		put_fs_byte((((kleds & 1) ? LED_SCR : 0) |
-			     ((kleds & 2) ? LED_NUM : 0) |
-			     ((kleds & 4) ? LED_CAP : 0)),
+		ucval = (console == fg_console) ? kleds :
+			vt_cons[console].vc_kbdleds;
+		put_fs_byte((((ucval & 1) ? LED_SCR : 0) |
+			     ((ucval & 2) ? LED_NUM : 0) |
+			     ((ucval & 4) ? LED_CAP : 0)),
 			    (unsigned char *) arg);
 		return 0;
 	case KDSETLED:
 		if (arg & ~7)
 			return -EINVAL;
-		kleds = (((arg & LED_SCR) ? 1 : 0) |
+		ucval = (((arg & LED_SCR) ? 1 : 0) |
 			 ((arg & LED_NUM) ? 2 : 0) |
 			 ((arg & LED_CAP) ? 4 : 0));
-		set_leds();
+		if (console == fg_console) {
+			kleds = ucval;
+			set_leds();
+		}
+		else
+			vt_cons[console].vc_kbdleds = ucval;
 		return 0;
 
 	default:
 		return -EINVAL;
-	}
-}
-
-void
-vt_init(void)
-{
-	int i;
-
-	for (i = 0; i < NR_CONSOLES; ++i) {
-		vt_info[i].mode = KD_TEXT;
 	}
 }

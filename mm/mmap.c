@@ -3,12 +3,15 @@
  *
  * Written by obz.
  */
-#include <sys/stat.h>
+#include <linux/stat.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/mm.h>
+#include <linux/errno.h>
+
 #include <asm/segment.h>
 #include <asm/system.h>
-#include <errno.h>
+
 #include <sys/mman.h>
 
 /*
@@ -37,16 +40,11 @@
 #define CODE_SPACE(addr) ((((addr)+4095)&~4095) < \
 			  current->start_code + current->end_code)
 
-extern int remap_page_range(unsigned long from, unsigned long to,
-			    unsigned long size, int permiss);
-extern int unmap_page_range(unsigned long from, unsigned long size);
-
 static caddr_t
 mmap_chr(unsigned long addr, size_t len, int prot, int flags,
 	 struct inode *inode, unsigned long off)
 {
 	int major, minor;
-	extern unsigned long HIGH_MEMORY;
 
 	major = MAJOR(inode->i_rdev);
 	minor = MINOR(inode->i_rdev);
@@ -61,7 +59,7 @@ mmap_chr(unsigned long addr, size_t len, int prot, int flags,
 		return (caddr_t)-ENODEV;
 
 	/*
-	 * we only allow mappings from address 0 to HIGH_MEMORY, since thats
+	 * we only allow mappings from address 0 to high_memory, since thats
 	 * the range of our memory [actually this is a lie. the buffer cache
 	 * and ramdisk occupy higher memory, but the paging stuff won't
 	 * let us map to it anyway, so we break it here].
@@ -75,7 +73,7 @@ mmap_chr(unsigned long addr, size_t len, int prot, int flags,
 	 * truly useful.
 	 */
 
-	if (len > HIGH_MEMORY || off > HIGH_MEMORY - len) /* avoid overflow */
+	if (len > high_memory || off > high_memory - len) /* avoid overflow */
 		return (caddr_t)-ENXIO;
 
 	if (remap_page_range(addr, off, len, PERMISS(flags, prot)))

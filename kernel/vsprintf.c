@@ -1,7 +1,7 @@
 /*
  *  linux/kernel/vsprintf.c
  *
- *  (C) 1991  Linus Torvalds
+ *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
 /* vsprintf.c -- Lars Wirzenius & Linus Torvalds. */
@@ -10,6 +10,7 @@
  */
 
 #include <stdarg.h>
+#include <linux/types.h>
 #include <linux/string.h>
 
 /* we use this so that we can do without the ctype library */

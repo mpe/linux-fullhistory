@@ -1,7 +1,7 @@
 /*
  * linux/kernel/math/get_put.c
  *
- * (C) 1991 Linus Torvalds
+ * Copyright (C) 1991, 1992 Linus Torvalds
  */
 
 /*
@@ -9,8 +9,7 @@
  * ints/reals/BCD etc. This is the only part that concerns itself with
  * other than temporary real format. All other cals are strictly temp_real.
  */
-#include <signal.h>
-
+#include <linux/signal.h>
 #include <linux/math_emu.h>
 #include <linux/kernel.h>
 #include <asm/segment.h>

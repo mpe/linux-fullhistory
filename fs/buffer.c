@@ -1,7 +1,7 @@
 /*
  *  linux/fs/buffer.c
  *
- *  (C) 1991  Linus Torvalds
+ *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
 /*
@@ -23,15 +23,18 @@
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/string.h>
+
 #include <asm/system.h>
 #include <asm/io.h>
 
-extern int end;
-static struct buffer_head * start_buffer = (struct buffer_head *) &end;
 static struct buffer_head * hash_table[NR_HASH];
-static struct buffer_head * free_list;
-static struct task_struct * buffer_wait = NULL;
-int NR_BUFFERS = 0;
+static struct buffer_head * free_list = NULL;
+static struct buffer_head * unused_list = NULL;
+static struct wait_queue * buffer_wait = NULL;
+
+int nr_buffers = 0;
+int nr_buffer_heads = 0;
 
 static inline void wait_on_buffer(struct buffer_head * bh)
 {
@@ -47,23 +50,25 @@ static void sync_buffers(int dev)
 	struct buffer_head * bh;
 
 	bh = free_list;
-	for (i=0 ; i<NR_BUFFERS ; i++,bh = bh->b_next_free) {
-#if 0
-		if (dev && (bh->b_dev != dev))
+	for (i = nr_buffers*2 ; i-- > 0 ; bh = bh->b_next_free) {
+		if (bh->b_lock)
 			continue;
-#endif
-		wait_on_buffer(bh);
-#if 0
-		if (dev && (bh->b_dev != dev))
+		if (!bh->b_dirt)
 			continue;
-#endif
-		if (bh->b_dirt)
-			ll_rw_block(WRITE,bh);
+		ll_rw_block(WRITE,bh);
 	}
 }
 
 int sys_sync(void)
 {
+	int i;
+
+	for (i=0 ; i<NR_SUPER ; i++)
+		if (super_block[i].s_dev
+		    && super_block[i].s_op 
+		    && super_block[i].s_op->write_super 
+		    && super_block[i].s_dirt)
+			super_block[i].s_op->write_super(&super_block[i]);
 	sync_inodes();		/* write out inodes into buffers */
 	sync_buffers(0);
 	return 0;
@@ -71,6 +76,11 @@ int sys_sync(void)
 
 int sync_dev(int dev)
 {
+	struct super_block * sb;
+
+	if (sb = get_super (dev))
+		if (sb->s_op && sb->s_op->write_super && sb->s_dirt)
+			sb->s_op->write_super (sb);
 	sync_buffers(dev);
 	sync_inodes();
 	sync_buffers(dev);
@@ -82,8 +92,8 @@ void inline invalidate_buffers(int dev)
 	int i;
 	struct buffer_head * bh;
 
-	bh = start_buffer;
-	for (i=0 ; i<NR_BUFFERS ; i++,bh++) {
+	bh = free_list;
+	for (i = nr_buffers*2 ; --i > 0 ; bh = bh->b_next_free) {
 		if (bh->b_dev != dev)
 			continue;
 		wait_on_buffer(bh);
@@ -113,7 +123,7 @@ void check_disk_change(int dev)
 
 	if (MAJOR(dev) != 2)
 		return;
-	if (!(bh = getblk(dev,0)))
+	if (!(bh = getblk(dev,0,1024)))
 		return;
 	i = floppy_change(bh);
 	brelse(bh);
@@ -204,13 +214,18 @@ static inline void insert_into_queues(struct buffer_head * bh)
 		bh->b_next->b_prev = bh;
 }
 
-static struct buffer_head * find_buffer(int dev, int block)
+static struct buffer_head * find_buffer(int dev, int block, int size)
 {		
 	struct buffer_head * tmp;
 
 	for (tmp = hash(dev,block) ; tmp != NULL ; tmp = tmp->b_next)
 		if (tmp->b_dev==dev && tmp->b_blocknr==block)
-			return tmp;
+			if (tmp->b_size == size)
+				return tmp;
+			else {
+				printk("wrong block-size on device %04x\n",dev);
+				return NULL;
+			}
 	return NULL;
 }
 
@@ -221,16 +236,16 @@ static struct buffer_head * find_buffer(int dev, int block)
  * will force it bad). This shouldn't really happen currently, but
  * the code is ready.
  */
-struct buffer_head * get_hash_table(int dev, int block)
+struct buffer_head * get_hash_table(int dev, int block, int size)
 {
 	struct buffer_head * bh;
 
 	for (;;) {
-		if (!(bh=find_buffer(dev,block)))
+		if (!(bh=find_buffer(dev,block,size)))
 			return NULL;
 		bh->b_count++;
 		wait_on_buffer(bh);
-		if (bh->b_dev == dev && bh->b_blocknr == block) {
+		if (bh->b_dev == dev && bh->b_blocknr == block && bh->b_size == size) {
 			put_last_free(bh);
 			return bh;
 		}
@@ -249,45 +264,55 @@ struct buffer_head * get_hash_table(int dev, int block)
  * when the filesystem starts to get full of dirty blocks (I hope).
  */
 #define BADNESS(bh) (((bh)->b_dirt<<1)+(bh)->b_lock)
-struct buffer_head * getblk(int dev,int block)
+struct buffer_head * getblk(int dev, int block, int size)
 {
 	struct buffer_head * bh, * tmp;
 	int buffers;
 
 repeat:
-	if (bh = get_hash_table(dev,block))
+	if (bh = get_hash_table(dev, block, size))
 		return bh;
-	buffers = NR_BUFFERS;
-	tmp = free_list;
-	do {
-		tmp = tmp->b_next_free;
-		if (tmp->b_count)
+
+	if (nr_free_pages > 30)
+		grow_buffers(size);
+
+	buffers = nr_buffers;
+	bh = NULL;
+
+	for (tmp = free_list; buffers-- > 0 ; tmp = tmp->b_next_free) {
+		if (tmp->b_count || tmp->b_size != size)
 			continue;
 		if (!bh || BADNESS(tmp)<BADNESS(bh)) {
 			bh = tmp;
 			if (!BADNESS(tmp))
 				break;
 		}
+#if 0
 		if (tmp->b_dirt)
 			ll_rw_block(WRITEA,tmp);
+#endif
+	}
+
+	if (!bh && nr_free_pages > 5) {
+		grow_buffers(size);
+		goto repeat;
+	}
+	
 /* and repeat until we find something good */
-	} while (buffers--);
 	if (!bh) {
 		sleep_on(&buffer_wait);
 		goto repeat;
 	}
 	wait_on_buffer(bh);
-	if (bh->b_count)
+	if (bh->b_count || bh->b_size != size)
 		goto repeat;
-	while (bh->b_dirt) {
-		sync_dev(bh->b_dev);
-		wait_on_buffer(bh);
-		if (bh->b_count)
-			goto repeat;
+	if (bh->b_dirt) {
+		sync_buffers(bh->b_dev);
+		goto repeat;
 	}
 /* NOTE!! While we slept waiting for this block, somebody else might */
 /* already have added "this" block to the cache. check it */
-	if (find_buffer(dev,block))
+	if (find_buffer(dev,block,size))
 		goto repeat;
 /* OK, FINALLY we know that this buffer is the only one of it's kind, */
 /* and that it's unused (b_count=0), unlocked (b_lock=0), and clean */
@@ -315,12 +340,14 @@ void brelse(struct buffer_head * buf)
  * bread() reads a specified block and returns the buffer that contains
  * it. It returns NULL if the block was unreadable.
  */
-struct buffer_head * bread(int dev,int block)
+struct buffer_head * bread(int dev, int block, int size)
 {
 	struct buffer_head * bh;
 
-	if (!(bh=getblk(dev,block)))
-		panic("bread: getblk returned NULL\n");
+	if (!(bh = getblk(dev, block, size))) {
+		printk("bread: getblk returned NULL\n");
+		return NULL;
+	}
 	if (bh->b_uptodate)
 		return bh;
 	ll_rw_block(READ,bh);
@@ -351,7 +378,7 @@ void bread_page(unsigned long address,int dev,int b[4])
 
 	for (i=0 ; i<4 ; i++)
 		if (b[i]) {
-			if (bh[i] = getblk(dev,b[i]))
+			if (bh[i] = getblk(dev, b[i], 1024))
 				if (!bh[i]->b_uptodate)
 					ll_rw_block(READ,bh[i]);
 		} else
@@ -376,15 +403,17 @@ struct buffer_head * breada(int dev,int first, ...)
 	struct buffer_head * bh, *tmp;
 
 	va_start(args,first);
-	if (!(bh=getblk(dev,first)))
-		panic("bread: getblk returned NULL\n");
+	if (!(bh = getblk(dev, first, 1024))) {
+		printk("breada: getblk returned NULL\n");
+		return NULL;
+	}
 	if (!bh->b_uptodate)
 		ll_rw_block(READ,bh);
 	while ((first=va_arg(args,int))>=0) {
-		tmp=getblk(dev,first);
+		tmp = getblk(dev, first, 1024);
 		if (tmp) {
 			if (!tmp->b_uptodate)
-				ll_rw_block(READA,bh);
+				ll_rw_block(READA,tmp);
 			tmp->b_count--;
 		}
 	}
@@ -396,41 +425,201 @@ struct buffer_head * breada(int dev,int first, ...)
 	return (NULL);
 }
 
-void buffer_init(long buffer_end)
+static void put_unused_buffer_head(struct buffer_head * bh)
 {
-	struct buffer_head * h = start_buffer;
-	void * b;
+	memset((void *) bh,0,sizeof(*bh));
+	bh->b_next_free = unused_list;
+	unused_list = bh;
+}
+
+static void get_more_buffer_heads(void)
+{
+	unsigned long page;
+	struct buffer_head * bh;
+
+	if (unused_list)
+		return;
+	page = get_free_page(GFP_KERNEL);
+	if (!page)
+		return;
+	bh = (struct buffer_head *) page;
+	while ((unsigned long) (bh+1) <= page+4096) {
+		put_unused_buffer_head(bh);
+		bh++;
+		nr_buffer_heads++;
+	}
+}
+
+static struct buffer_head * get_unused_buffer_head(void)
+{
+	struct buffer_head * bh;
+
+	get_more_buffer_heads();
+	if (!unused_list)
+		return NULL;
+	bh = unused_list;
+	unused_list = bh->b_next_free;
+	bh->b_next_free = NULL;
+	bh->b_data = NULL;
+	bh->b_size = 0;
+	return bh;
+}
+
+/*
+ * Try to increase the number of buffers available: the size argument
+ * is used to determine what kind of buffers we want. Currently only
+ * 1024-byte buffers are supported by the rest of the system, but I
+ * think this will change eventually.
+ */
+void grow_buffers(int size)
+{
+	unsigned long page;
+	int i;
+	struct buffer_head *bh, *tmp;
+
+	if ((size & 511) || (size > 4096)) {
+		printk("grow_buffers: size = %d\n",size);
+		return;
+	}
+	page = get_free_page(GFP_BUFFER);
+	if (!page)
+		return;
+	tmp = NULL;
+	i = 0;
+	for (i = 0 ; i+size <= 4096 ; i += size) {
+		bh = get_unused_buffer_head();
+		if (!bh)
+			goto no_grow;
+		bh->b_this_page = tmp;
+		tmp = bh;
+		bh->b_data = (char * ) (page+i);
+		bh->b_size = size;
+		i += size;
+	}
+	tmp = bh;
+	while (1) {
+		tmp->b_next_free = free_list;
+		tmp->b_prev_free = free_list->b_prev_free;
+		free_list->b_prev_free->b_next_free = tmp;
+		free_list->b_prev_free = tmp;
+		free_list = tmp;
+		++nr_buffers;
+		if (tmp->b_this_page)
+			tmp = tmp->b_this_page;
+		else
+			break;
+	}
+	tmp->b_this_page = bh;
+	return;
+/*
+ * In case anything failed, we just free everything we got.
+ */
+no_grow:
+	bh = tmp;
+	while (bh) {
+		tmp = bh;
+		bh = bh->b_this_page;
+		put_unused_buffer_head(tmp);
+	}	
+	free_page(page);
+}
+
+/*
+ * try_to_free() checks if all the buffers on this particular page
+ * are unused, and free's the page if so.
+ */
+static int try_to_free(struct buffer_head * bh)
+{
+	unsigned long page;
+	struct buffer_head * tmp, * p;
+
+	tmp = bh;
+	do {
+		if (!tmp)
+			return 0;
+		if (tmp->b_count || tmp->b_dirt || tmp->b_lock)
+			return 0;
+		tmp = tmp->b_this_page;
+	} while (tmp != bh);
+	page = (unsigned long) bh->b_data;
+	page &= 0xfffff000;
+	tmp = bh;
+	do {
+		p = tmp;
+		tmp = tmp->b_this_page;
+		nr_buffers--;
+		remove_from_queues(p);
+		put_unused_buffer_head(p);
+	} while (tmp != bh);
+	free_page(page);
+	return 1;
+}
+
+/*
+ * Try to free up some pages by shrinking the buffer-cache
+ */
+int shrink_buffers(void)
+{
+	struct buffer_head *bh;
 	int i;
 
-	if (buffer_end == 1<<20)
-		b = (void *) (640*1024);
-	else
-		b = (void *) buffer_end;
-	while ( (b -= BLOCK_SIZE) >= ((void *) (h+1)) ) {
-		if (((unsigned long) (h+1)) > 0xA0000) {
-			printk("buffer-list doesn't fit in low meg - contact Linus\n");
-			break;
+	bh = free_list;
+	for (i = nr_buffers*2 ; i-- > 0 ; bh = bh->b_next_free) {
+		wait_on_buffer(bh);
+		if (bh->b_count || !bh->b_this_page)
+			continue;
+		if (bh->b_dirt) {
+			ll_rw_block(WRITEA,bh);
+			continue;
 		}
-		h->b_dev = 0;
-		h->b_dirt = 0;
-		h->b_count = 0;
-		h->b_lock = 0;
-		h->b_uptodate = 0;
-		h->b_wait = NULL;
-		h->b_next = NULL;
-		h->b_prev = NULL;
-		h->b_data = (char *) b;
-		h->b_prev_free = h-1;
-		h->b_next_free = h+1;
-		h++;
-		NR_BUFFERS++;
-		if (b == (void *) 0x100000)
-			b = (void *) 0xA0000;
+		if (try_to_free(bh))
+			return 1;
 	}
-	h--;
-	free_list = start_buffer;
-	free_list->b_prev_free = h;
-	h->b_next_free = free_list;
-	for (i=0;i<NR_HASH;i++)
+	return 0;
+}
+
+/*
+ * This initializes the low 1M that isn't used by the kernel to buffer
+ * cache. It should really be used for paging memory, but it takes a lot
+ * of special-casing, which I don't want to do.
+ *
+ * The biggest problem with this approach is that all low-mem buffers
+ * have a fixed size of 1024 chars: not good if/when the other sizes
+ * are implemented.
+ */
+void buffer_init(void)
+{
+	struct buffer_head * bh;
+	extern int end;
+	unsigned long mem;
+	int i;
+
+	for (i = 0 ; i < NR_HASH ; i++)
 		hash_table[i] = NULL;
-}	
+	mem = (unsigned long) & end;
+	mem += BLOCK_SIZE-1;
+	mem &= ~(BLOCK_SIZE-1);
+	free_list = get_unused_buffer_head();
+	if (!free_list)
+		panic("unable to get a single buffer-head");
+	free_list->b_prev_free = free_list;
+	free_list->b_next_free = free_list;
+	free_list->b_data = (char *) mem;
+	free_list->b_size = BLOCK_SIZE;
+	mem += BLOCK_SIZE;
+	while (mem + 1024 < 0xA0000) {
+		bh = get_unused_buffer_head();
+		if (!bh)
+			break;
+		bh->b_data = (char *) mem;
+		bh->b_size = BLOCK_SIZE;
+		mem += BLOCK_SIZE;
+		bh->b_next_free = free_list;
+		bh->b_prev_free = free_list->b_prev_free;
+		free_list->b_prev_free->b_next_free = bh;
+		free_list->b_prev_free = bh;
+		free_list = bh;
+		++nr_buffers;
+	}
+	return;
+}

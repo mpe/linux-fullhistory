@@ -1,17 +1,17 @@
 /*
  *  linux/fs/fcntl.c
  *
- *  (C) 1991  Linus Torvalds
+ *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <linux/string.h>
-#include <errno.h>
-#include <linux/sched.h>
-#include <linux/kernel.h>
 #include <asm/segment.h>
 
-#include <fcntl.h>
-#include <sys/stat.h>
+#include <linux/sched.h>
+#include <linux/kernel.h>
+#include <linux/errno.h>
+#include <linux/stat.h>
+#include <linux/fcntl.h>
+#include <linux/string.h>
 
 extern int sys_close(int fd);
 
@@ -35,6 +35,8 @@ static int dupfd(unsigned int fd, unsigned int arg)
 
 int sys_dup2(unsigned int oldfd, unsigned int newfd)
 {
+	if (oldfd >= NR_OPEN || !current->filp[oldfd])
+		return -EBADF;
 	if (newfd == oldfd)
 		return newfd;
 	sys_close(newfd);

@@ -1,16 +1,9 @@
-#ifndef _STRING_H_
-#define _STRING_H_
+#ifndef _LINUX_STRING_H_
+#define _LINUX_STRING_H_
 
 #ifndef NULL
 #define NULL ((void *) 0)
 #endif
-
-#ifndef _SIZE_T
-#define _SIZE_T
-typedef unsigned int size_t;
-#endif
-
-extern char * strerror(int errno);
 
 /*
  * This string-include defines all string functions as inline
@@ -21,7 +14,7 @@ extern char * strerror(int errno);
  * set, making the functions fast and clean. String instructions have been
  * used through-out, making for "slightly" unclear code :-)
  *
- *		(C) 1991 Linus Torvalds
+ *		Copyright (C) 1991, 1992 Linus Torvalds
  */
  
 extern inline char * strcpy(char * dest,const char *src)
@@ -276,7 +269,7 @@ extern char * ___strtok;
 
 extern inline char * strtok(char * s,const char * ct)
 {
-register char * __res __asm__("si");
+register char * __res;
 __asm__("testl %1,%1\n\t"
 	"jne 1f\n\t"
 	"testl %0,%0\n\t"
@@ -327,12 +320,7 @@ __asm__("testl %1,%1\n\t"
 	"jne 8f\n\t"
 	"movl %0,%1\n"
 	"8:"
-#if __GNUC__ == 2
-	:"=r" (__res)
-#else
-	:"=b" (__res)
-#endif
-	,"=S" (___strtok)
+	:"=b" (__res),"=S" (___strtok)
 	:"0" (___strtok),"1" (s),"g" (ct)
 	:"ax","cx","dx","di");
 return __res;

@@ -94,6 +94,6 @@ extern inline unsigned long get_ds()
 
 extern inline void set_fs(unsigned long val)
 {
-	__asm__("mov %0,%%fs"::"r" ((unsigned short) val));
+	__asm__ __volatile__("mov %0,%%fs"::"r" ((unsigned short) val));
 }
 

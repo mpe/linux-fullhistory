@@ -1,7 +1,7 @@
 /*
  *  linux/mm/memory.c
  *
- *  (C) 1991  Linus Torvalds
+ *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
 /*
@@ -28,43 +28,59 @@
  * 20.12.91  -  Ok, making the swap-device changeable like the root.
  */
 
-#include <signal.h>
-
 #include <asm/system.h>
 
+#include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/head.h>
 #include <linux/kernel.h>
+#include <linux/string.h>
 
 #define CODE_SPACE(addr) ((((addr)+4095)&~4095) < \
 current->start_code + current->end_code)
 
-unsigned long HIGH_MEMORY = 0;
+unsigned long low_memory = 0;
+unsigned long high_memory = 0;
+unsigned long paging_pages = 0;
 
 #define copy_page(from,to) \
 __asm__("cld ; rep ; movsl"::"S" (from),"D" (to),"c" (1024):"cx","di","si")
 
-#define CHECK_LAST_NR	16
+unsigned char * mem_map = NULL;
 
-static unsigned long last_pages[CHECK_LAST_NR] = { 0, };
+/*
+ * oom() prints a message (so that the user knows why the process died),
+ * and gives the process an untrappable SIGSEGV.
+ */
+void oom(struct task_struct * task)
+{
+	printk("\nout of memory\n");
+	task->sigaction[SIGSEGV-1].sa_handler = NULL;
+	task->blocked &= ~(1<<(SIGSEGV-1));
+	send_sig(SIGSEGV,task,1);
+}
 
-unsigned char mem_map [ PAGING_PAGES ] = {0,};
-
+int nr_free_pages = 0;
 /*
  * Free a page of memory at physical address 'addr'. Used by
  * 'free_page_tables()'
  */
 void free_page(unsigned long addr)
 {
-	if (addr < LOW_MEM) return;
-	if (addr < HIGH_MEMORY) {
-		addr -= LOW_MEM;
-		addr >>= 12;
-		if (mem_map[addr]--)
+	unsigned long i;
+
+	if (addr < low_memory)
+		return;
+	if (addr < high_memory) {
+		i = addr - low_memory;
+		i >>= 12;
+		if (mem_map[i] == 1)
+			++nr_free_pages;
+		if (mem_map[i]--)
 			return;
-		mem_map[addr]=0;
+		mem_map[i] = 0;
 	}
-	printk("trying to free free page: memory probably corrupted");
+	printk("trying to free free page (%08x): memory probably corrupted\n",addr);
 }
 
 /*
@@ -105,8 +121,6 @@ int free_page_tables(unsigned long from,unsigned long size)
 		free_page(0xfffff000 & page_dir);
 	}
 	invalidate();
-	for (page = 0; page < CHECK_LAST_NR ; page++)
-		last_pages[page] = 0;
 	return 0;
 }
 
@@ -154,30 +168,36 @@ int copy_page_tables(unsigned long from,unsigned long to,long size)
 			continue;
 		}
 		from_page_table = (unsigned long *) (0xfffff000 & *from_dir);
-		if (!(to_page_table = (unsigned long *) get_free_page()))
+		if (!(to_page_table = (unsigned long *) get_free_page(GFP_KERNEL)))
 			return -1;	/* Out of memory, see freeing */
 		*to_dir = ((unsigned long) to_page_table) | 7;
 		nr = (from==0)?0xA0:1024;
 		for ( ; nr-- > 0 ; from_page_table++,to_page_table++) {
+repeat:
 			this_page = *from_page_table;
 			if (!this_page)
 				continue;
 			if (!(1 & this_page)) {
-				if (!(new_page = get_free_page()))
+				if (!(new_page = get_free_page(GFP_KERNEL)))
 					return -1;
 				++current->rss;
 				read_swap_page(this_page>>1, (char *) new_page);
+				if (*from_page_table != this_page) {
+					free_page(new_page);
+					goto repeat;
+				}
 				*to_page_table = this_page;
 				*from_page_table = new_page | (PAGE_DIRTY | 7);
 				continue;
 			}
 			this_page &= ~2;
 			*to_page_table = this_page;
-			if (this_page > LOW_MEM) {
+			if (this_page > low_memory) {
 				*from_page_table = this_page;
-				this_page -= LOW_MEM;
+				this_page -= low_memory;
 				this_page >>= 12;
-				mem_map[this_page]++;
+				if (!mem_map[this_page]++)
+					--nr_free_pages;
 			}
 		}
 	}
@@ -189,8 +209,7 @@ int copy_page_tables(unsigned long from,unsigned long to,long size)
  * a more complete version of free_page_tables which performs with page
  * granularity.
  */
-int
-unmap_page_range(unsigned long from, unsigned long size)
+int unmap_page_range(unsigned long from, unsigned long size)
 {
 	unsigned long page, page_dir;
 	unsigned long *page_table, *dir;
@@ -237,8 +256,6 @@ unmap_page_range(unsigned long from, unsigned long size)
 		}
 	}
 	invalidate();
-	for (page = 0; page < CHECK_LAST_NR ; page++)
-		last_pages[page] = 0;
 	return 0;
 }
 
@@ -256,12 +273,12 @@ unmap_page_range(unsigned long from, unsigned long size)
  * write/copy:	yes/copy	copy/copy
  * exec:	yes		yes
  */
-int
-remap_page_range(unsigned long from, unsigned long to, unsigned long size,
+int remap_page_range(unsigned long from, unsigned long to, unsigned long size,
 		 int permiss)
 {
 	unsigned long *page_table, *dir;
 	unsigned long poff, pcnt;
+	unsigned long page;
 
 	if ((from & 0xfff) || (to & 0xfff))
 		panic("remap_page_range called with wrong alignment");
@@ -273,7 +290,7 @@ remap_page_range(unsigned long from, unsigned long to, unsigned long size,
 
 	while (size > 0) {
 		if (!(1 & *dir)) {
-			if (!(page_table = (unsigned long *)get_free_page())) {
+			if (!(page_table = (unsigned long *)get_free_page(GFP_KERNEL))) {
 				invalidate();
 				return -1;
 			}
@@ -301,12 +318,13 @@ remap_page_range(unsigned long from, unsigned long to, unsigned long size,
 			if (permiss & 4)
 				mask |= 1;
 
-			if (*page_table) {
+			if (page = *page_table) {
+				*page_table = 0;
 				--current->rss;
-				if (1 & *page_table)
-					free_page(0xfffff000 & *page_table);
+				if (1 & page)
+					free_page(0xfffff000 & page);
 				else
-					swap_free(*page_table >> 1);
+					swap_free(page >> 1);
 			}
 
 			/*
@@ -316,16 +334,17 @@ remap_page_range(unsigned long from, unsigned long to, unsigned long size,
 			 * when the page is referenced. current assumptions
 			 * cause it to be treated as demand allocation.
 			 */
-			if (mask == 4 || to >= HIGH_MEMORY)
+			if (mask == 4 || to >= high_memory)
 				*page_table++ = 0;	/* not present */
 			else {
 				++current->rss;
 				*page_table++ = (to | mask);
-				if (to > LOW_MEM) {
+				if (to > low_memory) {
 					unsigned long frame;
-					frame = to - LOW_MEM;
+					frame = to - low_memory;
 					frame >>= 12;
-					mem_map[frame]++;
+					if (!mem_map[frame]++)
+						--nr_free_pages;
 				}
 			}
 			to += PAGE_SIZE;
@@ -333,8 +352,6 @@ remap_page_range(unsigned long from, unsigned long to, unsigned long size,
 		pcnt = (size > 1024 ? 1024 : size);
 	}
 	invalidate();
-	for (to = 0; to < CHECK_LAST_NR ; to++)
-		last_pages[to] = 0;
 	return 0;
 }
 
@@ -350,22 +367,25 @@ static unsigned long put_page(unsigned long page,unsigned long address)
 
 /* NOTE !!! This uses the fact that _pg_dir=0 */
 
-	if (page < LOW_MEM || page >= HIGH_MEMORY) {
+	if (page >= high_memory) {
 		printk("put_page: trying to put page %p at %p\n",page,address);
 		return 0;
 	}
-	if (mem_map[(page-LOW_MEM)>>12] != 1) {
-		printk("mem_map disagrees with %p at %p\n",page,address);
+	if (page >= low_memory && mem_map[(page-low_memory)>>12] != 1) {
+		printk("put_page: mem_map disagrees with %p at %p\n",page,address);
 		return 0;
 	}
 	page_table = (unsigned long *) ((address>>20) & 0xffc);
 	if ((*page_table)&1)
 		page_table = (unsigned long *) (0xfffff000 & *page_table);
 	else {
-		if (!(tmp=get_free_page()))
-			return 0;
+		tmp = get_free_page(GFP_KERNEL);
+		if (!tmp) {
+			oom(current);
+			tmp = BAD_PAGETABLE;
+		}
 		*page_table = tmp | 7;
-		page_table = (unsigned long *) tmp;
+		return 0;
 	}
 	page_table += (address>>12) & 0x3ff;
 	if (*page_table) {
@@ -390,15 +410,15 @@ unsigned long put_dirty_page(unsigned long page, unsigned long address)
 
 /* NOTE !!! This uses the fact that _pg_dir=0 */
 
-	if (page < LOW_MEM || page >= HIGH_MEMORY)
+	if (page < low_memory || page >= high_memory)
 		printk("put_dirty_page: trying to put page %p at %p\n",page,address);
-	if (mem_map[(page-LOW_MEM)>>12] != 1)
+	if (mem_map[(page-low_memory)>>12] != 1)
 		printk("mem_map disagrees with %p at %p\n",page,address);
 	page_table = (unsigned long *) ((address>>20) & 0xffc);
 	if ((*page_table)&1)
 		page_table = (unsigned long *) (0xfffff000 & *page_table);
 	else {
-		if (!(tmp=get_free_page()))
+		if (!(tmp=get_free_page(GFP_KERNEL)))
 			return 0;
 		*page_table = tmp|7;
 		page_table = (unsigned long *) tmp;
@@ -414,7 +434,7 @@ unsigned long put_dirty_page(unsigned long page, unsigned long address)
 	return page;
 }
 
-void un_wp_page(unsigned long * table_entry)
+static void un_wp_page(unsigned long * table_entry, struct task_struct * task)
 {
 	unsigned long old_page;
 	unsigned long new_page = 0;
@@ -422,32 +442,36 @@ void un_wp_page(unsigned long * table_entry)
 
 repeat:
 	old_page = *table_entry;
-	dirty = old_page & PAGE_DIRTY;
 	if (!(old_page & 1)) {
 		if (new_page)
 			free_page(new_page);
 		return;
 	}
+	dirty = old_page & PAGE_DIRTY;
 	old_page &= 0xfffff000;
-	if (old_page >= HIGH_MEMORY) {
+	if (old_page >= high_memory) {
 		if (new_page)
 			free_page(new_page);
 		printk("bad page address\n\r");
-		do_exit(SIGSEGV);
+		send_sig(SIGSEGV, task, 1);
+		*table_entry = BAD_PAGE | 7;
+		return;
 	}
-	if (old_page >= LOW_MEM && mem_map[MAP_NR(old_page)]==1) {
+	if (old_page >= low_memory && mem_map[MAP_NR(old_page)]==1) {
 		*table_entry |= 2;
 		invalidate();
 		if (new_page)
 			free_page(new_page);
 		return;
 	}
-	if (!new_page) {
-		if (!(new_page=get_free_page()))
-			oom();
+	if (!new_page && (new_page=get_free_page(GFP_KERNEL)))
 		goto repeat;
+	if (new_page)
+		copy_page(old_page,new_page);
+	else {
+		new_page = BAD_PAGE;
+		send_sig(SIGSEGV,task,1);
 	}
-	copy_page(old_page,new_page);
 	*table_entry = new_page | dirty | 7;
 	free_page(old_page);
 	invalidate();
@@ -460,43 +484,63 @@ repeat:
  *
  * If it's in code space we exit with a segment error.
  */
-void do_wp_page(unsigned long error_code,unsigned long address)
+void do_wp_page(unsigned long error_code, unsigned long address,
+	struct task_struct * tsk, unsigned long user_esp)
 {
-	if (address < TASK_SIZE) {
-		printk("\n\rBAD! KERNEL MEMORY WP-ERR!\n\r");
-		do_exit(SIGSEGV);
+	unsigned long pde, pte, page;
+
+	pde = (address>>20) & 0xffc;
+	pte = *(unsigned long *) pde;
+	if ((pte & 3) != 3) {
+		printk("do_wp_page: bogus page-table at address %08x (%08x)\n",address,pte);
+		*(unsigned long *) pde = BAD_PAGETABLE | 7;
+		send_sig(SIGSEGV, tsk, 1);
+		return;
 	}
-	if (address - current->start_code >= TASK_SIZE) {
-		printk("Bad things happen: page error in do_wp_page\n\r");
-		do_exit(SIGSEGV);
+	if (address < TASK_SIZE) {
+		printk("do_wp_page: kernel WP error at address %08x (%08x)\n",address,pte);
+		*(unsigned long *) pde = BAD_PAGETABLE | 7;
+		send_sig(SIGSEGV, tsk, 1);
+		return;
+	}
+	pte &= 0xfffff000;
+	pte += (address>>10) & 0xffc;
+	page = *(unsigned long *) pte;
+	if ((page & 3) != 1) {
+		printk("do_wp_page: bogus page at address %08x (%08x)\n",address,page);
+		*(unsigned long *) pte = BAD_PAGE | 7;
+		send_sig(SIGSEGV, tsk, 1);
+		return;
 	}
 	++current->min_flt;
-	un_wp_page((unsigned long *)
-		(((address>>10) & 0xffc) + (0xfffff000 &
-		*((unsigned long *) ((address>>20) &0xffc)))));
+	un_wp_page((unsigned long *) pte, tsk);
 }
 
 void write_verify(unsigned long address)
 {
 	unsigned long page;
 
-	if (!( (page = *((unsigned long *) ((address>>20) & 0xffc)) )&1))
+	page = *(unsigned long *) ((address>>20) & 0xffc);
+	if (!(page & PAGE_PRESENT))
 		return;
 	page &= 0xfffff000;
 	page += ((address>>10) & 0xffc);
 	if ((3 & *(unsigned long *) page) == 1)  /* non-writeable, present */
-		un_wp_page((unsigned long *) page);
+		un_wp_page((unsigned long *) page, current);
 	return;
 }
 
-void get_empty_page(unsigned long address)
+static void get_empty_page(unsigned long address)
 {
 	unsigned long tmp;
 
-	if (!(tmp=get_free_page()) || !put_page(tmp,address)) {
-		free_page(tmp);		/* 0 is ok - ignored */
-		oom();
+	tmp = get_free_page(GFP_KERNEL);
+	if (!tmp) {
+		oom(current);
+		tmp = BAD_PAGE;
 	}
+	if (!put_page(tmp,address))
+		free_page(tmp);
 }
 
 /*
@@ -529,14 +573,14 @@ static int try_to_share(unsigned long address, struct task_struct * p)
 	if ((phys_addr & 0x41) != 0x01)
 		return 0;
 	phys_addr &= 0xfffff000;
-	if (phys_addr >= HIGH_MEMORY || phys_addr < LOW_MEM)
+	if (phys_addr >= high_memory || phys_addr < low_memory)
 		return 0;
 	to = *(unsigned long *) to_page;
 	if (!(to & 1)) {
-		if (to = get_free_page())
-			*(unsigned long *) to_page = to | 7;
-		else
-			oom();
+		to = get_free_page(GFP_KERNEL);
+		if (!to)
+			return 0;
+		*(unsigned long *) to_page = to | 7;
 	}
 	to &= 0xfffff000;
 	to_page = to + ((address>>10) & 0xffc);
@@ -546,9 +590,10 @@ static int try_to_share(unsigned long address, struct task_struct * p)
 	*(unsigned long *) from_page &= ~2;
 	*(unsigned long *) to_page = *(unsigned long *) from_page;
 	invalidate();
-	phys_addr -= LOW_MEM;
+	phys_addr -= low_memory;
 	phys_addr >>= 12;
-	mem_map[phys_addr]++;
+	if (!mem_map[phys_addr]++)
+		--nr_free_pages;
 	return 1;
 }
 
@@ -565,7 +610,7 @@ static int share_page(struct inode * inode, unsigned long address)
 	struct task_struct ** p;
 	int i;
 
-	if (inode->i_count < 2 || !inode)
+	if (!inode || inode->i_count < 2)
 		return 0;
 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
 		if (!*p)
@@ -588,26 +633,42 @@ static int share_page(struct inode * inode, unsigned long address)
 	return 0;
 }
 
-void do_no_page(unsigned long error_code, unsigned long address,
-	struct task_struct *tsk)
+/*
+ * fill in an empty page-table if none exists
+ */
+static unsigned long get_empty_pgtable(unsigned long * p)
 {
-	static unsigned int last_checked = 0;
+	unsigned long page = 0;
+
+repeat:
+	if (1 & *p) {
+		free_page(page);
+		return *p;
+	}
+	if (*p) {
+		printk("get_empty_pgtable: bad page-directory entry \n");
+		*p = 0;
+	}
+	if (page) {
+		*p = page | 7;
+		return *p;
+	}
+	if (page = get_free_page(GFP_KERNEL))
+		goto repeat;
+	oom(current);
+	*p = BAD_PAGETABLE | 7;
+	return 0;
+}
+
+void do_no_page(unsigned long error_code, unsigned long address,
+	struct task_struct *tsk, unsigned long user_esp)
+{
 	int nr[4];
 	unsigned long tmp;
 	unsigned long page;
-	int block,i;
+	unsigned int block,i;
 	struct inode * inode;
 
-	/* Thrashing ? Make it interruptible, but don't penalize otherwise */
-	for (i = 0; i < CHECK_LAST_NR; i++)
-		if ((address & 0xfffff000) == last_pages[i]) {
-			current->counter = 0;
-			schedule();
-		}
-	last_checked++;
-	if (last_checked >= CHECK_LAST_NR)
-		last_checked = 0;
-	last_pages[last_checked] = address & 0xfffff000;
 	if (address < TASK_SIZE) {
 		printk("\n\rBAD!! KERNEL PAGE MISSING\n\r");
 		do_exit(SIGSEGV);
@@ -616,54 +677,52 @@ void do_no_page(unsigned long error_code, unsigned long address,
 		printk("Bad things happen: nonexistent page error in do_no_page\n\r");
 		do_exit(SIGSEGV);
 	}
+	page = get_empty_pgtable((unsigned long *) ((address >> 20) & 0xffc));
+	if (!page)
+		return;
+	page &= 0xfffff000;
+	page += (address >> 10) & 0xffc;
+	tmp = *(unsigned long *) page;
+	if (tmp & 1) {
+		printk("bogus do_no_page\n");
+		return;
+	}
 	++tsk->rss;
-	page = *(unsigned long *) ((address >> 20) & 0xffc);
-/* check the page directory: make a page dir entry if no such exists */
-	if (page & 1) {
-		page &= 0xfffff000;
-		page += (address >> 10) & 0xffc;
-		tmp = *(unsigned long *) page;
-		if (tmp && !(1 & tmp)) {
-			++tsk->maj_flt;
-			swap_in((unsigned long *) page);
-			return;
-		}
-	} else {
-		if (page)
-			printk("do_no_page: bad page directory\n");
-		if (!(page = get_free_page()))
-			oom();
-		page |= 7;
-		*(unsigned long *) ((address >> 20) & 0xffc) = page;
+	if (tmp) {
+		++tsk->maj_flt;
+		swap_in((unsigned long *) page);
+		return;
 	}
 	address &= 0xfffff000;
 	tmp = address - tsk->start_code;
-	if (tmp >= LIBRARY_OFFSET ) {
-		inode = NULL;
-		block = 1;
-		i = tsk->numlibraries;
-		while (i-- > 0) {
-			if (tmp < (tsk->libraries[i].start +
-			   tsk->libraries[i].length)) {	
-				inode = tsk->libraries[i].library;
-				block = 1 + (tmp - tsk->libraries[i].start) / 
-					BLOCK_SIZE;
-				break;
-			}
-		}
-	} else if (tmp < tsk->end_data) {
+	inode = NULL;
+	block = 0;
+	if (tmp < tsk->end_data) {
 		inode = tsk->executable;
 		block = 1 + tmp / BLOCK_SIZE;
 	} else {
-		inode = NULL;
-		block = 0;
+		i = tsk->numlibraries;
+		while (i-- > 0) {
+			if (tmp < tsk->libraries[i].start)
+				continue;
+			block = tmp - tsk->libraries[i].start;
+			if (block >= tsk->libraries[i].length)
+				continue;
+			inode = tsk->libraries[i].library;
+			block = 1 + block / BLOCK_SIZE;
+			break;
+		}
 	}
 	if (!inode) {
 		++tsk->min_flt;
-		if (tmp < LIBRARY_OFFSET && tmp > tsk->brk && tsk == current && 
-			LIBRARY_OFFSET - tmp > tsk->rlim[RLIMIT_STACK].rlim_max)
-				do_exit(SIGSEGV);
 		get_empty_page(address);
+		if (tsk != current)
+			return;
+		if (tmp >= LIBRARY_OFFSET || tmp < tsk->brk)
+			return;
+		if (tmp+8192 >= (user_esp & 0xfffff000))
+			return;
+		send_sig(SIGSEGV,tsk,1);
 		return;
 	}
 	if (tsk == current)
@@ -672,9 +731,12 @@ void do_no_page(unsigned long error_code, unsigned long address,
 			return;
 		}
 	++tsk->maj_flt;
-	if (!(page = get_free_page()))
-		oom();
-/* remember that 1 block is used for header */
+	page = get_free_page(GFP_KERNEL);
+	if (!page) {
+		oom(current);
+		put_page(BAD_PAGE,address);
+		return;
+	}
 	for (i=0 ; i<4 ; block++,i++)
 		nr[i] = bmap(inode,block);
 	bread_page(page,inode->i_dev,nr);
@@ -682,30 +744,14 @@ void do_no_page(unsigned long error_code, unsigned long address,
 	if (i>4095)
 		i = 0;
 	tmp = page + 4096;
-	while (i-- > 0) {
+	while (i--) {
 		tmp--;
 		*(char *)tmp = 0;
 	}
 	if (put_page(page,address))
 		return;
 	free_page(page);
-	oom();
-}
-
-void mem_init(long start_mem, long end_mem)
-{
-	int i;
-
-	swap_device = 0;
-	swap_file = NULL;
-	HIGH_MEMORY = end_mem;
-	for (i=0 ; i<PAGING_PAGES ; i++)
-		mem_map[i] = USED;
-	i = MAP_NR(start_mem);
-	end_mem -= start_mem;
-	end_mem >>= 12;
-	while (end_mem-->0)
-		mem_map[i++]=0;
+	oom(current);
 }
 
 void show_mem(void)
@@ -715,9 +761,10 @@ void show_mem(void)
 	unsigned long * pg_tbl;
 
 	printk("Mem-info:\n\r");
-	for(i=0 ; i<PAGING_PAGES ; i++) {
-		if (mem_map[i] == USED)
-			continue;
+	printk("Free pages:    %6d\n",nr_free_pages);
+	printk("Buffer heads:  %6d\n",nr_buffer_heads);
+	printk("Buffer blocks: %6d\n",nr_buffers);
+	for (i = 0 ; i < paging_pages ; i++) {
 		total++;
 		if (!mem_map[i])
 			free++;
@@ -726,21 +773,22 @@ void show_mem(void)
 	}
 	printk("%d free pages of %d\n\r",free,total);
 	printk("%d pages shared\n\r",shared);
+	printk("%d free pages via nr_free_pages\n\r", nr_free_pages);
 	k = 0;
 	for(i=4 ; i<1024 ;) {
 		if (1&pg_dir[i]) {
-			if (pg_dir[i]>HIGH_MEMORY) {
+			if (pg_dir[i]>high_memory) {
 				printk("page directory[%d]: %08X\n\r",
 					i,pg_dir[i]);
 				i++;
 				continue;
 			}
-			if (pg_dir[i]>LOW_MEM)
+			if (pg_dir[i]>low_memory)
 				free++,k++;
 			pg_tbl=(unsigned long *) (0xfffff000 & pg_dir[i]);
 			for(j=0 ; j<1024 ; j++)
-				if ((pg_tbl[j]&1) && pg_tbl[j]>LOW_MEM)
-					if (pg_tbl[j]>HIGH_MEMORY)
+				if ((pg_tbl[j]&1) && pg_tbl[j]>low_memory)
+					if (pg_tbl[j]>high_memory)
 						printk("page_dir[%d][%d]: %08X\n\r",
 							i,j, pg_tbl[j]);
 					else
@@ -763,14 +811,37 @@ void show_mem(void)
 void do_page_fault(unsigned long *esp, unsigned long error_code)
 {
 	unsigned long address;
-	/* get the address */
+	unsigned long user_esp;
 
+	if ((0xffff & esp[1]) == 0xf)
+		user_esp = esp[3];
+	else
+		user_esp = 0;
+	/* get the address */
 	__asm__("movl %%cr2,%0":"=r" (address));
 	if (!(error_code & 1)) {
-		do_no_page(error_code, address, current);
+		do_no_page(error_code, address, current, user_esp);
 		return;
 	} else {
-		do_wp_page(error_code, address);
+		do_wp_page(error_code, address, current, user_esp);
 		return;
 	}
+}
+
+unsigned long mem_init(unsigned long start_mem, unsigned long end_mem)
+{
+	end_mem &= 0xfffff000;
+	high_memory = end_mem;
+	mem_map = (char *) start_mem;
+	paging_pages = (end_mem - start_mem) >> 12;
+	start_mem += paging_pages;
+	start_mem += 0xfff;
+	start_mem &= 0xfffff000;
+	low_memory = start_mem;
+	paging_pages = (high_memory - low_memory) >> 12;
+	swap_device = 0;
+	swap_file = NULL;
+	memset(mem_map,0,paging_pages);
+	nr_free_pages = paging_pages;
+	return start_mem;
 }

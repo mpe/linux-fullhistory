@@ -9,31 +9,22 @@
 # parent makes..
 #
 
-AR	=ar
-AS	=as
-LD	=ld
-LDFLAGS	=-s -x
-CC	=gcc -nostdinc -I../../include
-CPP	=cpp -nostdinc -I../../include
-
 .c.s:
-	$(CC) $(CFLAGS) \
-	-S -o $*.s $<
+	$(CC) $(CFLAGS) -S $<
 .s.o:
 	$(AS) -c -o $*.o $<
 .c.o:
-	$(CC) $(CFLAGS) \
-	-c -o $*.o $<
+	$(CC) $(CFLAGS) -c $<
 
-OBJS  = tty_io.o console.o keyboard.o serial.o rs_io.o \
-	tty_ioctl.o pty.o lp.o vt.o mem.o
+OBJS  = tty_io.o console.o keyboard.o serial.o \
+	tty_ioctl.o pty.o lp.o vt.o mem.o mouse.o
 
 chr_drv.a: $(OBJS)
 	$(AR) rcs chr_drv.a $(OBJS)
 	sync
 
-keyboard.s: keyboard.S
-	$(CPP) $(KEYBOARD) -traditional keyboard.S -o keyboard.s
+keyboard.o: keyboard.c
+	$(CC) $(CFLAGS) $(KEYBOARD) -c -o keyboard.o keyboard.c
 
 clean:
 	rm -f core *.o *.a tmp_make keyboard.s
@@ -41,61 +32,103 @@ clean:
 
 dep:
 	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
-	(for i in *.c;do echo -n `echo $$i | sed 's,\.c,\.s,'`" "; \
-		$(CPP) -M $$i;done) >> tmp_make
+	for i in *.c;do $(CPP) -M -DKBD_FINNISH $$i;done >> tmp_make
 	cp tmp_make Makefile
 
 ### Dependencies:
-console.s console.o : console.c ../../include/linux/sched.h ../../include/linux/head.h \
-  ../../include/linux/fs.h ../../include/sys/types.h ../../include/sys/dirent.h \
-  ../../include/limits.h ../../include/linux/mm.h ../../include/linux/kernel.h \
-  ../../include/signal.h ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
-  ../../include/sys/resource.h ../../include/linux/timer.h ../../include/linux/tty.h \
-  ../../include/termios.h ../../include/linux/config.h ../../include/linux/config_rel.h \
-  ../../include/linux/config_ver.h ../../include/asm/io.h ../../include/asm/system.h \
-  ../../include/asm/segment.h ../../include/linux/string.h ../../include/errno.h \
-  ../../include/sys/kd.h vt_kern.h 
-lp.s lp.o : lp.c ../../include/linux/sched.h ../../include/linux/head.h ../../include/linux/fs.h \
-  ../../include/sys/types.h ../../include/sys/dirent.h ../../include/limits.h \
-  ../../include/linux/mm.h ../../include/linux/kernel.h ../../include/signal.h \
-  ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h ../../include/sys/resource.h \
-  ../../include/linux/lp.h ../../include/errno.h ../../include/asm/io.h ../../include/asm/segment.h 
-mem.s mem.o : mem.c ../../include/errno.h ../../include/sys/types.h ../../include/linux/sched.h \
-  ../../include/linux/head.h ../../include/linux/fs.h ../../include/sys/dirent.h \
-  ../../include/limits.h ../../include/linux/mm.h ../../include/linux/kernel.h \
-  ../../include/signal.h ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
-  ../../include/sys/resource.h ../../include/linux/tty.h ../../include/termios.h \
-  ../../include/asm/segment.h ../../include/asm/io.h 
-pty.s pty.o : pty.c ../../include/linux/sched.h ../../include/linux/head.h ../../include/linux/fs.h \
-  ../../include/sys/types.h ../../include/sys/dirent.h ../../include/limits.h \
-  ../../include/linux/mm.h ../../include/linux/kernel.h ../../include/signal.h \
-  ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h ../../include/sys/resource.h \
-  ../../include/linux/tty.h ../../include/termios.h ../../include/asm/system.h \
-  ../../include/asm/io.h 
-serial.s serial.o : serial.c ../../include/linux/sched.h ../../include/linux/head.h ../../include/linux/fs.h \
-  ../../include/sys/types.h ../../include/sys/dirent.h ../../include/limits.h \
-  ../../include/linux/mm.h ../../include/linux/kernel.h ../../include/signal.h \
-  ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h ../../include/sys/resource.h \
-  ../../include/linux/timer.h ../../include/linux/tty.h ../../include/termios.h \
-  ../../include/asm/system.h ../../include/asm/io.h 
-tty_io.s tty_io.o : tty_io.c ../../include/linux/ctype.h ../../include/errno.h ../../include/signal.h \
-  ../../include/sys/types.h ../../include/unistd.h ../../include/sys/stat.h ../../include/sys/time.h \
-  ../../include/time.h ../../include/sys/times.h ../../include/sys/utsname.h ../../include/sys/param.h \
-  ../../include/sys/resource.h ../../include/utime.h ../../include/fcntl.h ../../include/linux/sched.h \
-  ../../include/linux/head.h ../../include/linux/fs.h ../../include/sys/dirent.h \
-  ../../include/limits.h ../../include/linux/mm.h ../../include/linux/kernel.h \
-  ../../include/linux/tty.h ../../include/termios.h ../../include/asm/segment.h \
-  ../../include/asm/system.h 
-tty_ioctl.s tty_ioctl.o : tty_ioctl.c ../../include/errno.h ../../include/termios.h ../../include/sys/types.h \
-  ../../include/linux/sched.h ../../include/linux/head.h ../../include/linux/fs.h \
-  ../../include/sys/dirent.h ../../include/limits.h ../../include/linux/mm.h ../../include/linux/kernel.h \
-  ../../include/signal.h ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
-  ../../include/sys/resource.h ../../include/linux/tty.h ../../include/asm/io.h \
-  ../../include/asm/segment.h ../../include/asm/system.h 
-vt.s vt.o : vt.c ../../include/errno.h ../../include/sys/types.h ../../include/sys/kd.h \
-  ../../include/sys/vt.h ../../include/asm/io.h ../../include/asm/segment.h ../../include/linux/sched.h \
-  ../../include/linux/head.h ../../include/linux/fs.h ../../include/sys/dirent.h \
-  ../../include/limits.h ../../include/linux/mm.h ../../include/linux/kernel.h \
-  ../../include/signal.h ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
-  ../../include/sys/resource.h ../../include/linux/tty.h ../../include/termios.h \
-  vt_kern.h 
+console.o : console.c /usr/src/linux/include/linux/sched.h /usr/src/linux/include/linux/head.h \
+  /usr/src/linux/include/linux/fs.h /usr/src/linux/include/linux/limits.h /usr/src/linux/include/linux/wait.h \
+  /usr/src/linux/include/linux/types.h /usr/src/linux/include/linux/dirent.h /usr/src/linux/include/linux/vfs.h \
+  /usr/src/linux/include/linux/minix_fs_sb.h /usr/src/linux/include/linux/ext_fs_sb.h \
+  /usr/src/linux/include/linux/msdos_fs_sb.h /usr/src/linux/include/linux/mm.h \
+  /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/linux/signal.h \
+  /usr/src/linux/include/linux/time.h /usr/src/linux/include/linux/param.h /usr/src/linux/include/linux/resource.h \
+  /usr/src/linux/include/linux/timer.h /usr/src/linux/include/linux/tty.h /usr/src/linux/include/linux/termios.h \
+  /usr/src/linux/include/asm/system.h /usr/src/linux/include/linux/config.h /usr/src/linux/include/linux/config_rel.h \
+  /usr/src/linux/include/linux/config_ver.h /usr/src/linux/include/linux/config.dist.h \
+  /usr/src/linux/include/linux/string.h /usr/src/linux/include/linux/errno.h /usr/src/linux/include/asm/io.h \
+  /usr/src/linux/include/asm/segment.h /usr/src/linux/include/sys/kd.h vt_kern.h 
+keyboard.o : keyboard.c /usr/src/linux/include/linux/sched.h /usr/src/linux/include/linux/head.h \
+  /usr/src/linux/include/linux/fs.h /usr/src/linux/include/linux/limits.h /usr/src/linux/include/linux/wait.h \
+  /usr/src/linux/include/linux/types.h /usr/src/linux/include/linux/dirent.h /usr/src/linux/include/linux/vfs.h \
+  /usr/src/linux/include/linux/minix_fs_sb.h /usr/src/linux/include/linux/ext_fs_sb.h \
+  /usr/src/linux/include/linux/msdos_fs_sb.h /usr/src/linux/include/linux/mm.h \
+  /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/linux/signal.h \
+  /usr/src/linux/include/linux/time.h /usr/src/linux/include/linux/param.h /usr/src/linux/include/linux/resource.h \
+  /usr/src/linux/include/linux/ctype.h /usr/src/linux/include/linux/tty.h /usr/src/linux/include/linux/termios.h \
+  /usr/src/linux/include/asm/system.h /usr/src/linux/include/linux/ptrace.h /usr/src/linux/include/asm/io.h 
+lp.o : lp.c /usr/src/linux/include/linux/sched.h /usr/src/linux/include/linux/head.h \
+  /usr/src/linux/include/linux/fs.h /usr/src/linux/include/linux/limits.h /usr/src/linux/include/linux/wait.h \
+  /usr/src/linux/include/linux/types.h /usr/src/linux/include/linux/dirent.h /usr/src/linux/include/linux/vfs.h \
+  /usr/src/linux/include/linux/minix_fs_sb.h /usr/src/linux/include/linux/ext_fs_sb.h \
+  /usr/src/linux/include/linux/msdos_fs_sb.h /usr/src/linux/include/linux/mm.h \
+  /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/linux/signal.h \
+  /usr/src/linux/include/linux/time.h /usr/src/linux/include/linux/param.h /usr/src/linux/include/linux/resource.h \
+  /usr/src/linux/include/linux/lp.h /usr/src/linux/include/linux/errno.h /usr/src/linux/include/asm/io.h \
+  /usr/src/linux/include/asm/segment.h 
+mem.o : mem.c /usr/src/linux/include/linux/types.h /usr/src/linux/include/linux/errno.h \
+  /usr/src/linux/include/linux/sched.h /usr/src/linux/include/linux/head.h /usr/src/linux/include/linux/fs.h \
+  /usr/src/linux/include/linux/limits.h /usr/src/linux/include/linux/wait.h /usr/src/linux/include/linux/dirent.h \
+  /usr/src/linux/include/linux/vfs.h /usr/src/linux/include/linux/minix_fs_sb.h \
+  /usr/src/linux/include/linux/ext_fs_sb.h /usr/src/linux/include/linux/msdos_fs_sb.h \
+  /usr/src/linux/include/linux/mm.h /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/linux/signal.h \
+  /usr/src/linux/include/linux/time.h /usr/src/linux/include/linux/param.h /usr/src/linux/include/linux/resource.h \
+  /usr/src/linux/include/linux/tty.h /usr/src/linux/include/linux/termios.h /usr/src/linux/include/asm/system.h \
+  /usr/src/linux/include/linux/mouse.h /usr/src/linux/include/asm/segment.h /usr/src/linux/include/asm/io.h 
+mouse.o : mouse.c /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/linux/sched.h \
+  /usr/src/linux/include/linux/head.h /usr/src/linux/include/linux/fs.h /usr/src/linux/include/linux/limits.h \
+  /usr/src/linux/include/linux/wait.h /usr/src/linux/include/linux/types.h /usr/src/linux/include/linux/dirent.h \
+  /usr/src/linux/include/linux/vfs.h /usr/src/linux/include/linux/minix_fs_sb.h \
+  /usr/src/linux/include/linux/ext_fs_sb.h /usr/src/linux/include/linux/msdos_fs_sb.h \
+  /usr/src/linux/include/linux/mm.h /usr/src/linux/include/linux/signal.h /usr/src/linux/include/linux/time.h \
+  /usr/src/linux/include/linux/param.h /usr/src/linux/include/linux/resource.h \
+  /usr/src/linux/include/linux/mouse.h /usr/src/linux/include/linux/tty.h /usr/src/linux/include/linux/termios.h \
+  /usr/src/linux/include/asm/system.h /usr/src/linux/include/linux/errno.h /usr/src/linux/include/asm/io.h \
+  /usr/src/linux/include/asm/segment.h /usr/src/linux/include/asm/irq.h 
+pty.o : pty.c /usr/src/linux/include/linux/errno.h /usr/src/linux/include/linux/sched.h \
+  /usr/src/linux/include/linux/head.h /usr/src/linux/include/linux/fs.h /usr/src/linux/include/linux/limits.h \
+  /usr/src/linux/include/linux/wait.h /usr/src/linux/include/linux/types.h /usr/src/linux/include/linux/dirent.h \
+  /usr/src/linux/include/linux/vfs.h /usr/src/linux/include/linux/minix_fs_sb.h \
+  /usr/src/linux/include/linux/ext_fs_sb.h /usr/src/linux/include/linux/msdos_fs_sb.h \
+  /usr/src/linux/include/linux/mm.h /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/linux/signal.h \
+  /usr/src/linux/include/linux/time.h /usr/src/linux/include/linux/param.h /usr/src/linux/include/linux/resource.h \
+  /usr/src/linux/include/linux/tty.h /usr/src/linux/include/linux/termios.h /usr/src/linux/include/asm/system.h \
+  /usr/src/linux/include/linux/fcntl.h /usr/src/linux/include/asm/io.h 
+serial.o : serial.c /usr/src/linux/include/linux/errno.h /usr/src/linux/include/linux/signal.h \
+  /usr/src/linux/include/linux/sched.h /usr/src/linux/include/linux/head.h /usr/src/linux/include/linux/fs.h \
+  /usr/src/linux/include/linux/limits.h /usr/src/linux/include/linux/wait.h /usr/src/linux/include/linux/types.h \
+  /usr/src/linux/include/linux/dirent.h /usr/src/linux/include/linux/vfs.h /usr/src/linux/include/linux/minix_fs_sb.h \
+  /usr/src/linux/include/linux/ext_fs_sb.h /usr/src/linux/include/linux/msdos_fs_sb.h \
+  /usr/src/linux/include/linux/mm.h /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/linux/time.h \
+  /usr/src/linux/include/linux/param.h /usr/src/linux/include/linux/resource.h \
+  /usr/src/linux/include/linux/timer.h /usr/src/linux/include/linux/tty.h /usr/src/linux/include/linux/termios.h \
+  /usr/src/linux/include/asm/system.h /usr/src/linux/include/asm/io.h /usr/src/linux/include/asm/segment.h 
+tty_io.o : tty_io.c /usr/src/linux/include/linux/types.h /usr/src/linux/include/linux/errno.h \
+  /usr/src/linux/include/linux/signal.h /usr/src/linux/include/linux/fcntl.h /usr/src/linux/include/linux/sched.h \
+  /usr/src/linux/include/linux/head.h /usr/src/linux/include/linux/fs.h /usr/src/linux/include/linux/limits.h \
+  /usr/src/linux/include/linux/wait.h /usr/src/linux/include/linux/dirent.h /usr/src/linux/include/linux/vfs.h \
+  /usr/src/linux/include/linux/minix_fs_sb.h /usr/src/linux/include/linux/ext_fs_sb.h \
+  /usr/src/linux/include/linux/msdos_fs_sb.h /usr/src/linux/include/linux/mm.h \
+  /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/linux/time.h /usr/src/linux/include/linux/param.h \
+  /usr/src/linux/include/linux/resource.h /usr/src/linux/include/linux/tty.h /usr/src/linux/include/linux/termios.h \
+  /usr/src/linux/include/asm/system.h /usr/src/linux/include/linux/ctype.h /usr/src/linux/include/asm/io.h \
+  /usr/src/linux/include/asm/segment.h /usr/src/linux/include/sys/kd.h vt_kern.h 
+tty_ioctl.o : tty_ioctl.c /usr/src/linux/include/linux/types.h /usr/src/linux/include/linux/termios.h \
+  /usr/src/linux/include/linux/errno.h /usr/src/linux/include/linux/sched.h /usr/src/linux/include/linux/head.h \
+  /usr/src/linux/include/linux/fs.h /usr/src/linux/include/linux/limits.h /usr/src/linux/include/linux/wait.h \
+  /usr/src/linux/include/linux/dirent.h /usr/src/linux/include/linux/vfs.h /usr/src/linux/include/linux/minix_fs_sb.h \
+  /usr/src/linux/include/linux/ext_fs_sb.h /usr/src/linux/include/linux/msdos_fs_sb.h \
+  /usr/src/linux/include/linux/mm.h /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/linux/signal.h \
+  /usr/src/linux/include/linux/time.h /usr/src/linux/include/linux/param.h /usr/src/linux/include/linux/resource.h \
+  /usr/src/linux/include/linux/tty.h /usr/src/linux/include/asm/system.h /usr/src/linux/include/linux/fcntl.h \
+  /usr/src/linux/include/asm/io.h /usr/src/linux/include/asm/segment.h 
+vt.o : vt.c /usr/src/linux/include/linux/types.h /usr/src/linux/include/linux/errno.h \
+  /usr/src/linux/include/linux/sched.h /usr/src/linux/include/linux/head.h /usr/src/linux/include/linux/fs.h \
+  /usr/src/linux/include/linux/limits.h /usr/src/linux/include/linux/wait.h /usr/src/linux/include/linux/dirent.h \
+  /usr/src/linux/include/linux/vfs.h /usr/src/linux/include/linux/minix_fs_sb.h \
+  /usr/src/linux/include/linux/ext_fs_sb.h /usr/src/linux/include/linux/msdos_fs_sb.h \
+  /usr/src/linux/include/linux/mm.h /usr/src/linux/include/linux/kernel.h /usr/src/linux/include/linux/signal.h \
+  /usr/src/linux/include/linux/time.h /usr/src/linux/include/linux/param.h /usr/src/linux/include/linux/resource.h \
+  /usr/src/linux/include/linux/tty.h /usr/src/linux/include/linux/termios.h /usr/src/linux/include/asm/system.h \
+  /usr/src/linux/include/linux/timer.h /usr/src/linux/include/asm/io.h /usr/src/linux/include/asm/segment.h \
+  vt_kern.h /usr/src/linux/include/sys/kd.h /usr/src/linux/include/sys/vt.h 

@@ -1,5 +1,5 @@
-#ifndef _HEAD_H
-#define _HEAD_H
+#ifndef _LINUX_HEAD_H
+#define _LINUX_HEAD_H
 
 typedef struct desc_struct {
 	unsigned long a,b;

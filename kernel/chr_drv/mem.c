@@ -1,15 +1,15 @@
 /*
  *  linux/kernel/chr_drv/mem.c
  *
- *  (C) 1991  Linus Torvalds
+ *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <errno.h>
-#include <sys/types.h>
-
+#include <linux/types.h>
+#include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/tty.h>
+#include <linux/mouse.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>
@@ -36,17 +36,17 @@ static int read_mem(struct inode * inode, struct file * file,char * buf, int cou
 	addr = file->f_pos;
 	tmp = buf;
 	while (count > 0) {
+		if (current->signal & ~current->blocked)
+			break;
 		pde = (unsigned long) pg_dir + (addr >> 20 & 0xffc);
-		if (!((pte = *((unsigned long *) pde)) & 1))
+		pte = *(unsigned long *) pde;
+		if (!(pte & PAGE_PRESENT))
 			break;
 		pte &= 0xfffff000;
 		pte += (addr >> 10) & 0xffc;
-		if (((page = *((unsigned long *) pte)) & 1) == 0)
+		page = *(unsigned long *) pte;
+		if (!(page & 1))
 			break;
-/*
-		if ((page & 2) == 0)
-			un_wp_page((unsigned long *) pte);
-*/
 		page &= 0xfffff000;
 		page += addr & 0xfff;
 		i = 4096-(addr & 0xfff);
@@ -73,15 +73,21 @@ static int write_mem(struct inode * inode, struct file * file,char * buf, int co
 	addr = file->f_pos;
 	tmp = buf;
 	while (count > 0) {
+		if (current->signal & ~current->blocked)
+			break;
 		pde = (unsigned long) pg_dir + (addr >> 20 & 0xffc);
-		if (!((pte = *((unsigned long *) pde)) & 1))
+		pte = *(unsigned long *) pde;
+		if (!(pte & PAGE_PRESENT))
 			break;
 		pte &= 0xfffff000;
 		pte += (addr >> 10) & 0xffc;
-		if (((page = *((unsigned long *) pte)) & 1) == 0)
+		page = *(unsigned long *) pte;
+		if (!(page & PAGE_PRESENT))
 			break;
-		if ((page & 2) == 0)
-			un_wp_page((unsigned long *) pte);
+		if (!(page & 2)) {
+			do_wp_page(0,addr,current,0);
+			continue;
+		}
 		page &= 0xfffff000;
 		page += addr & 0xfff;
 		i = 4096-(addr & 0xfff);
@@ -93,7 +99,11 @@ static int write_mem(struct inode * inode, struct file * file,char * buf, int co
 		count -= i;
 	}
 	file->f_pos = addr;
-	return tmp-buf;
+	if (tmp != buf)
+		return tmp-buf;
+	if (current->signal & ~current->blocked)
+		return -ERESTARTSYS;
+	return 0;
 }
 
 static int read_kmem(struct inode * inode, struct file * file,char * buf, int count)
@@ -102,10 +112,10 @@ static int read_kmem(struct inode * inode, struct file * file,char * buf, int co
 
 	if (count < 0)
 		return -EINVAL;
-	if (p >= HIGH_MEMORY)
+	if (p >= high_memory)
 		return 0;
-	if (count > HIGH_MEMORY - p)
-		count = HIGH_MEMORY - p;
+	if (count > high_memory - p)
+		count = high_memory - p;
 	memcpy_tofs(buf,(void *) p,count);
 	file->f_pos += count;
 	return count;
@@ -117,10 +127,10 @@ static int write_kmem(struct inode * inode, struct file * file,char * buf, int c
 
 	if (count < 0)
 		return -EINVAL;
-	if (p >= HIGH_MEMORY)
+	if (p >= high_memory)
 		return 0;
-	if (count > HIGH_MEMORY - p)
-		count = HIGH_MEMORY - p;
+	if (count > high_memory - p)
+		count = high_memory - p;
 	memcpy_fromfs((void *) p,buf,count);
 	file->f_pos += count;
 	return count;
@@ -152,6 +162,17 @@ static int write_port(struct inode * inode,struct file * file,char * buf, int co
 	}
 	file->f_pos = i;
 	return tmp-buf;
+}
+
+static int read_zero(struct inode *node,struct file *file,char *buf,int count)
+{
+	int left;
+
+	for (left = count; left > 0; left--) {
+		put_fs_byte(0,buf);
+		buf++;
+	}
+	return count;
 }
 
 /*
@@ -192,6 +213,8 @@ static int mem_read(struct inode * inode, struct file * file, char * buf, int co
 			return 0;	/* /dev/null */
 		case 4:
 			return read_port(inode,file,buf,count);
+		case 5:
+			return read_zero(inode,file,buf,count);
 		default:
 			return -ENODEV;
 	}
@@ -210,29 +233,29 @@ static int mem_write(struct inode * inode, struct file * file, char * buf, int c
 			return count;	/* /dev/null */
 		case 4:
 			return write_port(inode,file,buf,count);
+		case 5:
+			return count; /* /dev/zero */
 		default:
 			return -ENODEV;
 	}
-}
-
-static int mem_readdir(struct inode * inode, struct file * file, struct dirent * de, int count)
-{
-	return -ENOTDIR;
 }
 
 static struct file_operations mem_fops = {
 	mem_lseek,
 	mem_read,
 	mem_write,
-	mem_readdir,
-	NULL,		/* mem_close */
+	NULL,		/* mem_readdir */
 	NULL,		/* mem_select */
-	NULL		/* mem_ioctl */
+	NULL,		/* mem_ioctl */
+	NULL,		/* no special open code */
+	NULL		/* no special release code */
 };
 
-void chr_dev_init(void)
+long chr_dev_init(long mem_start, long mem_end)
 {
 	chrdev_fops[1] = &mem_fops;
-	tty_init();
-	lp_init();
+	mem_start = tty_init(mem_start);
+	mem_start = lp_init(mem_start);
+	mem_start = mouse_init(mem_start);
+	return mem_start;
 }
