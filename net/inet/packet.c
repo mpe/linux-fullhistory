@@ -134,6 +134,7 @@ packet_sendto(struct sock *sk, unsigned char *from, int len,
   memcpy_fromfs(skb->data, from, len);
   skb->len = len;
   skb->next = NULL;
+  skb->arp = 1;
   if (dev->flags & IFF_UP) dev->queue_xmit(skb, dev, sk->priority);
     else kfree_skb(skb, FREE_WRITE);
   return(len);

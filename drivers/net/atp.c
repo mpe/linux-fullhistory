@@ -12,7 +12,7 @@
 */
 
 static char *version =
-	"atp.c:v0.02 12/22/93 Donald Becker (becker@super.org)\n";
+	"atp.c:v0.03 1/19/94 Donald Becker (becker@super.org)\n";
 
 /*
 	This file is a device driver for the RealTek (aka AT-Lan-Tec) pocket
@@ -622,6 +622,12 @@ net_interrupt(int reg_ptr)
 		} else
 			break;
     }
+
+	{
+		int i;
+		for (i = 0; i < 6; i++)
+			write_reg_byte(ioaddr, PAR0 + i, dev->dev_addr[i]);
+	}
 
 	/* Tell the adaptor that it can go back to using the output line as IRQ. */
     write_reg(ioaddr, CMR2, CMR2_IRQOUT);

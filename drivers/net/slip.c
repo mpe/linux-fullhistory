@@ -583,57 +583,8 @@ sl_header(unsigned char *buff, struct device *dev, unsigned short type,
 {
 #ifdef CONFIG_AX25
   struct slip *sl=&sl_ctrl[dev->base_addr];
-  unsigned long flags;
   if((sl->mode&SL_MODE_AX25) && type!=NET16(ETH_P_AX25))
-  {
-  	/* header is an AX.25 UI frame from us to them */
-  	if(chk_addr(daddr) == IS_BROADCAST)
-  	{
-  		*buff++=0;
-	  	memcpy(buff,dev->broadcast,dev->addr_len);	/* QST-0 */
-	}
-	else
-	{
-		if(type!=ETH_P_IP)
-			printk("AX25 Encap: Non IP frame to encapsulate directed\n");
-		save_flags(flags);
-		cli();
-		*buff++=0;	/* KISS DATA */
-		memcpy(buff,&daddr,4);	/* In case arp fails */
-		if(arp_find(buff,daddr,dev, saddr))
-		{
-			memcpy(buff+7,&saddr,4);
-			buff+=14;
-		  	*buff++=LAPB_UI;	/* UI */
-  			/* Append a suitable AX.25 PID */
-  			*buff++=PID_IP;	/* AX25 IP */
-			restore_flags(flags);
-			return ( -dev->hard_header_len);
-		}
-	}
-  	buff[6]&=~LAPB_C;
-  	buff[6]&=~LAPB_E;
-  	buff+=7;
-  	memcpy(buff,dev->dev_addr,dev->addr_len);
-  	buff[6]&=~LAPB_C;
-  	buff[6]|=LAPB_E;
-  	buff+=7;
-  	*buff++=LAPB_UI;	/* UI */
-  	/* Append a suitable AX.25 PID */
-  	switch(type)
-  	{
-  		case ETH_P_IP:
-  			*buff++=PID_IP;	/* AX25 IP */
- 			break;
-  		case ETH_P_ARP:
-  			*buff++=PID_ARP;
-  			break;
-  		default:
-  			*buff++=0;
- 	}
-  	
-  	return (17);
-  }
+  	return ax25_encapsulate_ip(buff,dev,type,daddr,saddr,len);
 #endif  
 
   return(0);
@@ -661,19 +612,7 @@ sl_rebuild_header(void *buff, struct device *dev)
   struct slip *sl=&sl_ctrl[dev->base_addr];
   
   if(sl->mode&SL_MODE_AX25)
-  {
-  	unsigned char *bp=(unsigned char *)buff;
-  	long dest=*(long *)(bp+1);
-  	long src=*(long *)(bp+8);
-  	if(arp_find(bp+1,dest,dev,src))
-  		return 1;
-  	memcpy(bp+8,dev->dev_addr,7);
-  	bp[7]&=~LAPB_C;
-  	bp[7]&=~LAPB_E;
-  	bp[14]&=~LAPB_C;
-  	bp[14]|=LAPB_E;
-  	return(0);
-  }
+  	return ax25_rebuild_header(buff,dev);
 #endif  
   return(0);
 }

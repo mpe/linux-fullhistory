@@ -2926,6 +2926,10 @@ tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	return(-ENETUNREACH);
   }
   
+  /* Connect back to the same socket: Blows up so disallow it */
+  if(sk->saddr == sin.sin_addr.s_addr && sk->num==ntohs(sin.sin_port))
+	return -EBUSY;
+
   sk->inuse = 1;
   sk->daddr = sin.sin_addr.s_addr;
   sk->send_seq = jiffies * SEQ_TICK - seq_offset;

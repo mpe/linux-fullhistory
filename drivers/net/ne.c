@@ -17,7 +17,7 @@
 /* Routines for the NatSemi-based designs (NE[12]000). */
 
 static char *version =
-    "ne.c:v0.99-14a 12/3/93 Donald Becker (becker@super.org)\n";
+    "ne.c:v0.99-15 1/19/93 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -123,6 +123,10 @@ static int neprobe1(int ioaddr, struct device *dev, int verbose)
 
     printk("NE*000 ethercard probe at %#3x:", ioaddr);
 
+    /* First hard-reset the ethercard. */
+    i = inb_p(ioaddr + NE_RESET);
+    outb_p(i, ioaddr + NE_RESET);
+
     /* Read the 16 bytes of station address prom, returning 1 for
        an eight-bit interface and 2 for a 16-bit interface.
        We must first initialize registers, similar to NS8390_init(eifdev, 0).
@@ -158,8 +162,8 @@ static int neprobe1(int ioaddr, struct device *dev, int verbose)
 	/* We must set the 8390 for word mode, AND RESET IT. */
 	int tmp;
 	outb_p(0x49, ioaddr + EN0_DCFG);
-	tmp = inb_p(NE_BASE + NE_RESET);
-	outb(tmp, NE_BASE + NE_RESET);
+	tmp = inb_p(ioaddr + NE_RESET);
+	outb(tmp, ioaddr + NE_RESET);
 	/* Un-double the SA_prom values. */
 	for (i = 0; i < 16; i++)
 	    SA_prom[i] = SA_prom[i+i];

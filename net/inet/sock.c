@@ -1157,7 +1157,7 @@ inet_connect(struct socket *sock, struct sockaddr * uaddr,
 	sock->state = SS_UNCONNECTED;
 	err=sk->err;
 	sk->err=0;
-	return(err);
+	return(-err);
   }
   return(0);
 }
