@@ -1,8 +1,6 @@
 #ifndef _I386_CHECKSUM_H
 #define _I386_CHECKSUM_H
 
-#include <asm/uaccess.h>
-
 /*
  * computes the checksum of a memory block at buff, length len,
  * and adds in "sum" (32-bit)
@@ -15,9 +13,7 @@
  *
  * it's best to have buff aligned on a 32-bit boundary
  */
-
-extern
-unsigned int csum_partial (const unsigned char * buff, int len, unsigned int sum);
+unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum);
 
 /*
  * the same as csum_partial, but copies from src while it
@@ -27,7 +23,7 @@ unsigned int csum_partial (const unsigned char * buff, int len, unsigned int sum
  * better 64-bit) boundary
  */
 
-unsigned int __csum_partial_copy_i386_generic( const char *src, char *dst, int len, int sum,
+unsigned int csum_partial_copy_generic( const char *src, char *dst, int len, int sum,
 					int *src_err_ptr, int *dst_err_ptr);
 
 extern __inline__
@@ -36,7 +32,7 @@ unsigned int csum_partial_copy_nocheck ( const char *src, char *dst,
 {
 	int *src_err_ptr=NULL, *dst_err_ptr=NULL;
 
-	return __csum_partial_copy_i386_generic ( src, dst, len, sum, src_err_ptr, dst_err_ptr);
+	return csum_partial_copy_generic ( src, dst, len, sum, src_err_ptr, dst_err_ptr);
 }
 
 extern __inline__
@@ -45,15 +41,7 @@ unsigned int csum_partial_copy_from_user ( const char *src, char *dst,
 {
 	int *dst_err_ptr=NULL;
 
-/*
- * If the source address is invalid, force an exception via NULL pointer.
- * The point of this solution is to make the code smaller. The exception path
- * doesnt have to be fast.
- */
-	if (!access_ok(VERIFY_READ, src, len))
-		src = NULL;
-
-	return __csum_partial_copy_i386_generic ( src, dst, len, sum, err_ptr, dst_err_ptr);
+	return csum_partial_copy_generic ( src, dst, len, sum, err_ptr, dst_err_ptr);
 }
 
 /*
@@ -66,10 +54,7 @@ unsigned int csum_partial_copy_to_user ( const char *src, char *dst,
 {
 	int *src_err_ptr=NULL;
 
-	if (!access_ok(VERIFY_WRITE, dst, len))
-		dst = NULL;
-
-	return __csum_partial_copy_i386_generic ( src, dst, len, sum, src_err_ptr, err_ptr);
+	return csum_partial_copy_generic ( src, dst, len, sum, src_err_ptr, err_ptr);
 }
 
 /*
